@@ -15,14 +15,14 @@
  * ⚠️ 줄 추가·삭제·시기 이동은 여기 없다 — 오늘 칸은 **이미 있는 줄을 채우는 자리**다. 구조 변경은
  *    주간 시트에서(같은 화면에 두 개의 구조 편집 경로를 두면 line_no 정합을 두 곳에서 지켜야 한다).
  */
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
 import { SUBJECT_BORDER, SUBJECT_SOFT } from "@/features/owner/subjects";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
-import { flushSheetPatches } from "../server/actions";
+import { flushSheetPatches, setSlotShouting } from "../server/actions";
 import { buildSaveKey } from "../lib/save-keys";
 import { ecsPresenceScope } from "../lib/presence-scope";
 import type { PlanPatchField } from "../lib/plan-codec";
@@ -145,6 +145,8 @@ export function TodayPlanEditor({
   userId,
   tenantId,
   onCarried,
+  isEie = false,
+  initialShouting,
 }: {
   classId: string;
   className: string;
@@ -158,7 +160,25 @@ export function TodayPlanEditor({
   tenantId: string;
   /** JJ 이어받기로 채워진 학생 칸 — 보드가 마크 상태에 머지한다(TodayCopySlot 각주 참조). */
   onCarried?: (slotStart: string, patches: CarryPatch[]) => void;
+  /** EiE 반인가 — Shouting 체크(0230a)를 그리는 조건(원장 2026-08-27, 인재원 영어는 안 쓴다). */
+  isEie?: boolean;
+  /** 오늘 이미 체크된 교시 시각 — 서버 스냅샷(주간 시트와 같은 표). */
+  initialShouting?: readonly string[];
 }) {
+  // Shouting 체크는 **이 컴포넌트가 소유**한다(반+날짜+교시가 앵커라 보드까지 올릴 이유가 없다).
+  // 낙관 반영 후 실패하면 되돌리고 이유를 띄운다 — 주간 시트와 같은 처방.
+  const [shouting, setShouting] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries((initialShouting ?? []).map((t) => [t, true])),
+  );
+  const toggleShouting = (slotStart: string, next: boolean) => {
+    setShouting((prev) => ({ ...prev, [slotStart]: next }));
+    void setSlotShouting({ classId, date, slotStart, value: next }).then((r) => {
+      if (!r.ok) {
+        setShouting((prev) => ({ ...prev, [slotStart]: !next }));
+        toast.error(r.error);
+      }
+    });
+  };
   // ① 저널 — 창이 닫혀도 미전송 입력이 IndexedDB에 남는다. 주간 시트와 **같은 문서 키**(반+주차).
   const doc = useSheetDoc({ tenantId, userId, classId, week: weekMonday });
   const send = useCallback((patches: Parameters<typeof flushSheetPatches>[1]) => flushSheetPatches(classId, patches), [classId]);
@@ -222,6 +242,22 @@ export function TodayPlanEditor({
                 store={store}
                 onCarried={onCarried}
               />
+            ) : null}
+            {/* Shouting 체크 — **EiE 반만**. 교시 줄 오른쪽 끝(주간 시트 교시 카드와 같은 자리·같은 표). */}
+            {isEie ? (
+              <label
+                className={`ml-auto flex shrink-0 items-center gap-1 ${canEdit ? "cursor-pointer" : "cursor-default opacity-60"}`}
+                title="이 교시에 Shouting을 했으면 체크하세요"
+              >
+                <input
+                  type="checkbox"
+                  className="accent-primary size-3.5 shrink-0"
+                  checked={!!shouting[slot.slotStart]}
+                  disabled={!canEdit}
+                  onChange={(e) => toggleShouting(slot.slotStart, e.target.checked)}
+                />
+                <span className={shouting[slot.slotStart] ? "text-primary" : "text-text-dim"}>Shouting</span>
+              </label>
             ) : null}
           </p>
           {slot.lines.length === 0 ? (

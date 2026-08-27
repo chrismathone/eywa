@@ -339,6 +339,8 @@ function ClassCard({
               slots={card.slots}
               skillAreas={skillAreas}
               canEdit={canWrite}
+              isEie={card.isEie}
+              initialShouting={card.shoutingSlots}
               userId={userId}
               tenantId={tenantId}
               // JJ 이어받기 — 복사가 채운 듣기 레벨·누적 암기 단어수를 **화면 상태에 옮긴다**.

@@ -19,6 +19,8 @@ import { mondayOf } from "@/features/timetable/lib/week";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { hiddenSeatOf } from "../lib/grid";
+import { readEnglishTrack } from "@/features/classes/english-track";
+import { shoutingKey } from "../shouting";
 import { rosterFormOf, type RosterForm, type SheetMark } from "../lib/roster-form";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { dowKeyOf, normalizeSlotTime, YMD_RE } from "../lib/week";
@@ -142,6 +144,10 @@ export type TodayClassCard = {
    * 남의 반 게시로 '게시됨'이 켜져 **그날 알림장을 건너뛰게 만든다** → 둘 다 `untracked`(배지 미표시).
    */
   classnoteToday: "posted" | "pending" | "untracked";
+  /** EiE 프로그램 반인가 — Shouting 체크(0230a)를 그리는 조건. 컬럼(`english_track`)만 본다. */
+  isEie: boolean;
+  /** 오늘 **Shouting을 했다**고 체크된 교시 시각(HH:MM) 목록. 0230a 미적용이면 항상 빈 배열([[#95]]). */
+  shoutingSlots: string[];
   /**
    * 오늘 화면이 **안 그리는** 계획 행 수 — 살아있는 배치에 없는 시각(시간 변경된 기록)이거나 자리(LAB·숨긴 JJ).
    * ⚠️ 0이 아니면 반드시 각주로 알린다. 화면에서 빼는 것과 DB에서 지우는 건 다르고, 침묵하면
@@ -200,7 +206,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const [{ data: allClasses, error: classError }, prefsRes] = await Promise.all([
     supabase
       .from("classes")
-      .select("id, class_name, teacher_id")
+      // english_track = Shouting 체크를 그릴지 판정(EiE 전용, 0230a) — 반 이름으로 추측 금지(english-track.ts).
+      .select("id, class_name, teacher_id, english_track")
       .eq("subject", "english")
       .eq("is_active", true)
       .or(`closed_at.is.null,closed_at.gte.${date}`)
@@ -254,6 +261,30 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   if (todayIds.length === 0) {
     return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize };
   }
+
+  // 오늘 Shouting 체크(0230a) — EiE 카드의 교시 줄에 그린다.
+  // 🔴 **여기가 강사 전원의 홈**이라 실패해도 죽으면 안 된다([[#95]]) — 표가 없으면 빈 맵으로 떨어진다.
+  //    그래서 fetchInChunks(throw 규약)가 아니라 직접 청크를 돌며 error를 삼킨다.
+  // ⚠️ 아래 큰 Promise.all과 **함께** 달리게 프라미스만 만들어 둔다(직렬 왕복을 얹지 않는다, B4).
+  const shoutingPromise = (async () => {
+    const out = new Map<string, string[]>();
+    for (let i = 0; i < todayIds.length; i += 100) {
+      const chunk = todayIds.slice(i, i + 100);
+      const { data } = await admin
+        .from("class_sheet_slot_flags")
+        .select("class_id, slot_start, shouting")
+        .eq("tenant_id", user.tenantId)
+        .eq("flag_date", date)
+        .in("class_id", chunk);
+      for (const r of data ?? []) {
+        if (!r.shouting) continue;
+        const list = out.get(r.class_id as string) ?? [];
+        list.push(shoutingKey(date, String(r.slot_start)).split("|")[1]!);
+        out.set(r.class_id as string, list);
+      }
+    }
+    return out;
+  })();
 
   // ── 계획·학생기록·수강·출결·보고서·강의실·담당자 — 서로 독립이라 한 번에(B4) ────────────────────
   const [planLines, marks, enrollments, attendanceRaw, rooms, teachers, classnotePosts, classnoteBoards] = await Promise.all([
@@ -570,6 +601,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     marksByStudent.set(key, cur);
   }
 
+  const shoutingByClass = await shoutingPromise;
+
   const linesByKey = new Map<string, typeof planLines>();
   for (const l of planLines) {
     const key = `${l.class_id}|${normalizeSlotTime(l.slot_start)}`;
@@ -702,6 +735,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         // 담임이 나면 위임이 아니다 — 주간 시트·랜딩 카드와 같은 판정.
         delegated: delegatedSet.has(classId) && cls.teacher_id !== user.id,
         classnoteToday: classnoteStateOf(cls.class_name as string),
+        isEie: readEnglishTrack(cls) === "eie",
+        shoutingSlots: shoutingByClass.get(classId) ?? [],
         // 그 반의 오늘 계획 행 중 위 slots에 실리지 않은 것 = 안 그리는 기록(고아 시각 or 자리).
         hiddenLines:
           planLines.filter((l) => l.class_id === classId).length -
