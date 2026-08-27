@@ -68,6 +68,45 @@ export const MENU_KEYS = [
   "my_learning",
   "kiosk_settings",
 ] as const;
+
+/**
+ * 메뉴 한글 라벨 — **단일 소스**. 권한 편집기(화면)와 감사로그(설정 변경 상세)가 같은 말을 써야
+ * "무엇이 열렸는지"가 두 곳에서 갈리지 않는다(2026-08-27, 전엔 권한 편집기 안에만 있었다).
+ * ⚠️ 새 메뉴키를 추가하면 여기도 함께 — 빠지면 화면·감사로그에 영문 키가 그대로 샌다(raw 노출 금지).
+ */
+export const MENU_LABEL: Record<MenuKey, string> = {
+  dashboard: "운영실",
+  timetable: "시간표",
+  attendance: "출석부",
+  seat_attendance: "랩실·JJ실 출석부",
+  classes: "수업목록",
+  students: "학생목록",
+  exams: "성적관리",
+  enrollment: "등록상담",
+  consultations: "학생상담",
+  withdrawals: "퇴원관리",
+  retention: "이탈 방어",
+  ecs: "영어 강사 시트",
+  lesson_reports: "수업보고서",
+  staff: "직원관리",
+  billing: "수납관리",
+  textbook_requests: "교재 요청",
+  expense_requests: "지출결의서",
+  meetings: "회의록",
+  documents: "데이터베이스",
+  class_review: "수업 평가",
+  approvals: "전자결재",
+  calendar: "캘린더",
+  shuttle: "셔틀",
+  integrations: "makeedu 연동",
+  sheet_sync: "구글 시트 연동",
+  help: "도움말",
+  admin: "관리자 도구",
+  owner: "학원 설정",
+  teacher_onescreen: "선생님 원스크린",
+  my_learning: "내 학습",
+  kiosk_settings: "키오스크 설정",
+};
 export type MenuKey = (typeof MENU_KEYS)[number];
 
 /**

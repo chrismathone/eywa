@@ -8,6 +8,7 @@ import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
 import { logAction } from "@/features/audit/server/log";
+import { diffSettingsSection } from "../settings-diff";
 import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey } from "../settings-types";
 
@@ -109,11 +110,18 @@ export async function saveOwnerSection(
   );
   if (error) return { error: error.message };
 
+  // 🔴 **무엇이 바뀌었는지**를 함께 남긴다(원장 점검 2026-08-27) — 종전엔 `{section}`뿐이라
+  //    "누가 언제 운영 체계를 저장했다"만 남고 되짚을 근거가 없었다. 비밀값·미등록 필드는 실리지 않는다.
+  const diff = diffSettingsSection(section, (base as Record<string, unknown>)[section], result.data);
   await logAction({
     action: "owner_settings_update",
     targetType: "tenant_settings",
     targetLabel: SECTION_LABELS[section],
-    metadata: { section },
+    metadata: {
+      section,
+      ...(diff.changes.length ? { changes: diff.changes } : {}),
+      ...(diff.others ? { others: diff.others } : {}),
+    },
   });
 
   // 설정 캐시(unstable_cache, tenantId별) 무효화 — updateTag는 server action 전용 read-your-writes

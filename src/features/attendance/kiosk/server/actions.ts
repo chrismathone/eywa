@@ -1,6 +1,7 @@
 "use server";
 
 import { randomBytes, createHash } from "node:crypto";
+import { logAction } from "@/features/audit/server/log";
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -62,6 +63,14 @@ export async function registerKioskDevice(
     maxAge: 60 * 60 * 24 * 365,
   });
 
+  // 🔴 키오스크 기기는 **출결을 찍을 수 있는 물건**이라 등록·폐기가 남아야 한다(2026-08-27 점검).
+  //    토큰·해시는 절대 남기지 않는다(감사로그가 자격증명 사본이 되면 안 된다).
+  await logAction({
+    action: "kiosk_device_register",
+    targetType: "kiosk_device",
+    targetLabel: name,
+  });
+
   revalidatePath("/kiosk-settings");
   return { ok: "이 기기가 키오스크로 등록되었습니다." };
 }
@@ -76,12 +85,20 @@ export async function revokeKioskDevice(
   if (!id) return { error: "기기 ID가 필요합니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("kiosk_devices")
     .update({ is_active: false })
     .eq("id", id)
-    .eq("tenant_id", user.tenantId);
+    .eq("tenant_id", user.tenantId)
+    .select("name")
+    .maybeSingle();
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "kiosk_device_revoke",
+    targetType: "kiosk_device",
+    targetLabel: (data?.name as string | undefined) ?? "키오스크 기기",
+  });
 
   revalidatePath("/kiosk-settings");
   return { ok: "기기를 폐기했습니다." };
@@ -162,6 +179,14 @@ export async function saveKakaoChannel(
     { onConflict: "tenant_id" },
   );
   if (error) return { error: error.message };
+
+  // 발신 프로필·템플릿 ID는 **값 없이** 변경 사실만(외부 발신 자격 계열).
+  await logAction({
+    action: "kakao_channel_save",
+    targetType: "integration",
+    targetLabel: "카카오 알림톡 채널",
+    metadata: { smsFallback },
+  });
 
   revalidatePath("/kiosk-settings");
   return { ok: "카카오 알림톡 연동 정보를 저장했습니다." };

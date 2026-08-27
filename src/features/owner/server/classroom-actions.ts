@@ -69,12 +69,30 @@ export async function updateClassroom(
   if (!name) return { error: "강의실 이름을 입력해주세요" };
 
   const supabase = await createClient();
+  // ⚠️ 이전 값은 **바꾸기 전에만** 알 수 있다 — classrooms엔 updated_by·updated_at이 없어서
+  //    이 로그가 개명·정원 변경의 유일한 근거다(2026-08-27 감사 커버리지 점검).
+  const { data: before } = await supabase
+    .from("classrooms")
+    .select("name, capacity")
+    .eq("id", id)
+    .eq("tenant_id", g.user.tenantId)
+    .maybeSingle();
   const { error } = await supabase
     .from("classrooms")
     .update({ name, capacity })
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId);
   if (error) return { error: error.code === "23505" ? "같은 이름의 강의실이 이미 있습니다" : error.message };
+
+  await logAction({
+    action: "classroom_update",
+    targetType: "classroom",
+    targetLabel: name,
+    metadata: {
+      ...(before?.name && before.name !== name ? { from: before.name, to: name } : {}),
+      ...(before?.capacity !== capacity ? { capacity: capacity === null ? "없음" : `${before?.capacity ?? "없음"} → ${capacity}` } : {}),
+    },
+  });
 
   refresh();
   return { ok: true };
@@ -97,12 +115,27 @@ export async function updateClassroomCapacity(
   const capacity = capRaw !== "" && Number.isFinite(n) ? Math.max(0, Math.min(9999, Math.round(n))) : null;
 
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("classrooms")
+    .select("name, capacity")
+    .eq("id", id)
+    .eq("tenant_id", g.user.tenantId)
+    .maybeSingle();
   const { error } = await supabase
     .from("classrooms")
     .update({ capacity })
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId);
   if (error) return { error: error.message };
+
+  if (before?.capacity !== capacity) {
+    await logAction({
+      action: "classroom_update",
+      targetType: "classroom",
+      targetLabel: before?.name ?? "강의실",
+      metadata: { capacity: `${before?.capacity ?? "없음"} → ${capacity ?? "없음"}` },
+    });
+  }
 
   refresh();
   return { ok: true };

@@ -1,6 +1,7 @@
 "use server";
 
 import { spawn } from "node:child_process";
+import { logAction } from "@/features/audit/server/log";
 import { existsSync, openSync, closeSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -12,6 +13,7 @@ import { isPushableConsultation } from "@/features/integrations/push-eligibility
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { overwriteTimetableSheet, applySheetFormulas } from "@/features/integrations/google-sheets";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
 import { buildEnglishTimetableBuffer, INTEGRATED_SHEET_NAME } from "@/features/exports/english-timetable/build-buffer";
@@ -78,6 +80,21 @@ export async function checkSheetSyncBusy(subject: string): Promise<boolean> {
  * ⚠️ 켜기만으로 데이터가 나가진 않음 — 실제 **내보내기 실행**(syncSheetsNow, 테넌트 전체 시간표를 외부
  * 시트로)은 여전히 master 전용(B5 PII). 대상 스프레드시트·서비스 계정은 운영자 설정.
  */
+/**
+ * 감사로그 대상 이름용 과목 한글 라벨 — 화면에 raw 키(`english`)를 내보내지 않는다.
+ * ⚠️ **저장 시점에 굳힌다**(감사로그는 시점 스냅샷) — 나중에 과목명이 바뀌어도 그때 무엇을 했는지가 남는다.
+ * 설정 조회 실패 등으로 못 풀면 라벨 없이 둔다(영문 키를 대신 넣지 않는다).
+ */
+async function subjectLabelForAudit(subject: string): Promise<string> {
+  try {
+    const settings = await getTenantSettings();
+    const label = buildSubjectMaps(settings.operations.subjects).labelOf(subject);
+    return label && label !== subject ? ` · ${label}` : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function setSheetsExportEnabled(
   subject: string,
   enabled: boolean,
@@ -99,6 +116,15 @@ export async function setSheetsExportEnabled(
     { onConflict: "tenant_id,provider" },
   );
   if (error) return { error: error.message };
+
+  // 🔴 연동 설정은 **외부로 데이터가 나가는 문**이라 누가 언제 열고 닫았는지가 남아야 한다
+  //    (2026-08-27 점검 전까지 이 계열은 감사로그가 통째로 없었고, user_integrations엔 updated_by도 없다).
+  await logAction({
+    action: "integration_sheets_toggle",
+    targetType: "integration",
+    targetLabel: `구글 시트 내보내기${await subjectLabelForAudit(subject)}`,
+    metadata: { subject, enabled },
+  });
 
   // 시간표 '시트' 버튼 노출이 이 값에 달려 있으므로 둘 다 재검증.
   revalidatePath("/owner");
@@ -132,6 +158,14 @@ export async function setSubjectSheetTarget(
   );
   if (error) return { error: error.message };
 
+  // ⚠️ 시트 ID(외부 문서 식별자)는 **값을 남기지 않는다** — 지정/해제 사실만.
+  await logAction({
+    action: "integration_sheet_target",
+    targetType: "integration",
+    targetLabel: `구글 시트 대상${await subjectLabelForAudit(subject)}`,
+    metadata: { subject, cleared: spreadsheetId.trim() === "" },
+  });
+
   revalidatePath("/owner");
   revalidatePath("/timetable");
   return { ok: true };
@@ -160,6 +194,13 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
     { onConflict: "tenant_id,provider" },
   );
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "integration_sync_toggle",
+    targetType: "integration",
+    targetLabel: "makeedu 자동 동기화",
+    metadata: { enabled },
+  });
 
   revalidatePath("/owner");
   return { enabled };
@@ -203,7 +244,18 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
   const script = path.join("scripts", "_makeedu", "sync-all.cjs");
   // 서버리스/원격(Vercel 등)에선 로컬 스크립트를 spawn할 수 없다 → 요청 큐로 릴레이(동기화 PC 워처가 실행).
   if (process.env.VERCEL || !existsSync(path.join(cwd, script))) {
-    return enqueueSyncRequest(user.tenantId, user.id);
+    const relayed = await enqueueSyncRequest(user.tenantId, user.id);
+    // 오류(=요청이 안 들어간 경우)만 뺀다. 이미 대기 중이어서 새 행이 안 생긴 경우도 남긴다 —
+    // 누가 버튼을 눌렀는지가 사실이고, 그 사실을 감추면 '누가 동기화를 돌렸나'가 갈린다.
+    if (relayed && "ok" in relayed && relayed.ok) {
+      await logAction({
+        action: "integration_sync_now",
+        targetType: "integration",
+        targetLabel: "makeedu 지금 동기화",
+        metadata: { mode: "relay" },
+      });
+    }
+    return relayed;
   }
 
   // 중복 실행 방지(중복 makeedu 로그인·DB 경합) — 90초 디바운스(마커 파일 mtime 기준).
@@ -236,6 +288,12 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
     });
     child.unref();
     closeSync(logFd); // 자식이 fd를 dup했으므로 부모 핸들은 닫아 누수 방지.
+    await logAction({
+      action: "integration_sync_now",
+      targetType: "integration",
+      targetLabel: "makeedu 지금 동기화",
+      metadata: { mode: "local" },
+    });
     return {
       ok: true,
       message: "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다.",
@@ -346,6 +404,14 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
   );
   if (insErr) return { error: `전송 요청 접수 실패: ${insErr.message}` };
 
+  // 🔴 **외부(makeedu)로 학생·상담이 나가는 경로**라 누가 몇 건을 보냈는지 남긴다.
+  await logAction({
+    action: "intake_push_enqueue",
+    targetType: "integration",
+    targetLabel: "makeedu 상담 역동기화",
+    metadata: { count: toQueue.length },
+  });
+
   revalidatePath("/owner");
   revalidatePath("/enrollment"); // 전송 카드가 등록상담 화면에도 뜬다(2026-07-03)
   return {
@@ -427,6 +493,14 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
       },
       { onConflict: "tenant_id,provider" },
     );
+
+    // 🔴 학원 시간표가 **외부 구글 시트로 나가는 실행**이라 누가 언제 눌렀는지 남긴다.
+    await logAction({
+      action: "sheets_sync_now",
+      targetType: "integration",
+      targetLabel: `구글 시트 내보내기${await subjectLabelForAudit(subject)}`,
+      metadata: { subject },
+    });
 
     revalidatePath("/owner");
     return { ok: true };

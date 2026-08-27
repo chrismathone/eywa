@@ -1,6 +1,7 @@
 // 운영 감사로그(audit_logs) metadata → 한글 상세 — 순수 함수(서버/클라 공용, activity.ts와 동일 원칙).
 // UI 규칙: raw JSON·uuid·영문 enum을 셀에 그대로 노출하지 말 것 — 한글 요약을 보여주고 원문은 title 툴팁으로만.
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import { formatSettingChange, type SettingChange } from "@/features/owner/settings-diff";
 import { SECTION_LABELS } from "@/features/owner/settings-types";
 import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/features/approvals/types";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
@@ -56,6 +57,10 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 회의록·학생상담(2026-08-25) — 없으면 '대상' 칸에 영문 "meeting"·"student_consultation"이 그대로 뜬다.
   meeting: "회의록",
   student_consultation: "학생 상담",
+  // 연동·AI 프롬프트(2026-08-27 감사 커버리지 점검) — 없으면 '대상' 칸에 영문 키가 그대로 뜬다.
+  integration: "외부 연동",
+  ai_prompt: "AI 프롬프트",
+  kiosk_device: "키오스크 기기",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -265,7 +270,18 @@ export function auditDetail(
     case "owner_settings_update": {
       const s = str(m.section);
       const label = s ? ((SECTION_LABELS as Record<string, string>)[s] ?? s) : null;
-      if (label) return `「${label}」 설정 저장`;
+      // 무엇이 바뀌었는지(2026-08-27~) — 저장 시점에 굳힌 한글 요약이라 과거 행도 그대로 읽힌다.
+      // ⚠️ 이 키가 없는 옛 행은 종전대로 섹션명만 나온다(빈칸으로 만들지 않는다).
+      const changes = arr(m.changes)
+        .map((c) => (c && typeof c === "object" ? formatSettingChange(c as SettingChange) : null))
+        .filter((v): v is string => !!v);
+      const others = num(m.others);
+      const detail = changes.length
+        ? `${changes.slice(0, 6).join(" · ")}${changes.length > 6 ? ` 외 ${changes.length - 6}건` : ""}${
+            others ? ` (그 외 ${others}건)` : ""
+          }`
+        : null;
+      if (label) return detail ? `「${label}」 ${detail}` : `「${label}」 설정 저장`;
       // 권한 스크립트가 남긴 행에는 section이 없고 **한글 note가 통째로** 들어 있다(누가 어떤 메뉴를
       // 누구에게 열었는지가 여기에만 있다). 종전엔 이걸 버려서 화면엔 "설정 저장"만 떴다.
       const note = str(m.note);
@@ -279,6 +295,37 @@ export function auditDetail(
       }
       return "설정 저장";
     }
+    case "integration_sync_toggle":
+    case "integration_sheets_toggle":
+      return m.enabled === true ? "켜기" : m.enabled === false ? "끄기" : null;
+    case "integration_sheet_target": {
+      // 시트 ID는 외부 문서 식별자라 값 자체를 남기지 않는다(설정 변경 요약과 같은 규약).
+      return m.cleared === true ? "대상 시트 해제" : "대상 시트 지정";
+    }
+    case "integration_sync_now":
+      return "지금 동기화 실행";
+    case "sheets_sync_now": {
+      const rows = num(m.rows);
+      return rows === null ? "시트 내보내기 실행" : `시트 내보내기 실행 (${rows.toLocaleString("ko-KR")}행)`;
+    }
+    case "intake_push_enqueue": {
+      const n = num(m.count);
+      return n === null ? "상담 역동기화 요청" : `상담 ${n}건 역동기화 요청`;
+    }
+    case "ai_prompt_save":
+      return "프롬프트 저장(새 버전)";
+    case "ai_prompt_reset":
+      return "기본 프롬프트로 복원";
+    case "classroom_update": {
+      const from = str(m.from);
+      const to = str(m.to);
+      const cap = str(m.capacity);
+      return join(from && to && from !== to ? `이름 ${from} → ${to}` : null, cap ? `정원 ${cap}` : null);
+    }
+    case "notice_popup_update":
+      return "내용 수정";
+    case "notice_popup_toggle":
+      return m.active === true ? "노출 켜기" : m.active === false ? "노출 끄기" : null;
     case "owner_subject_absorb": {
       const moved = num(m.moved);
       return moved === null ? "연결 데이터 이동" : `연결 데이터 ${moved.toLocaleString("ko-KR")}건 이동`;

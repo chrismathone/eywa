@@ -127,6 +127,14 @@ export async function updateNoticePopup(
     .eq("tenant_id", g.user.tenantId);
   if (error) return { error: error.message };
 
+  // 생성·삭제만 남기고 **수정은 빠져 있었다**(2026-08-27 점검) — 팝업은 전 직원·학부모가 보는 글이라
+  // 내용이 언제 누구 손에 바뀌었는지가 남아야 한다.
+  await logAction({
+    action: "notice_popup_update",
+    targetType: "notice_popup",
+    targetLabel: input.title,
+  });
+
   invalidate(g.user.tenantId);
   return { ok: true };
 }
@@ -142,12 +150,21 @@ export async function toggleNoticePopupActive(
   if (!id) return { error: "팝업 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("notice_popups")
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("tenant_id", g.user.tenantId);
+    .eq("tenant_id", g.user.tenantId)
+    .select("title")
+    .maybeSingle();
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "notice_popup_toggle",
+    targetType: "notice_popup",
+    targetLabel: (data?.title as string | undefined) ?? "팝업 공지",
+    metadata: { active: isActive },
+  });
 
   invalidate(g.user.tenantId);
   return { ok: true };

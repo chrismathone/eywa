@@ -6,6 +6,7 @@ import { SectionForm } from "./section-form";
 import {
   MENU_ACCESS,
   MENU_KEYS,
+  MENU_LABEL,
   SYSTEM_ROLES,
   TEACHER_MENU_KEYS,
   isPermissionLocked,
@@ -17,40 +18,6 @@ import {
   type SystemRole,
 } from "@/lib/permissions";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
-
-const MENU_LABEL: Record<MenuKey, string> = {
-  dashboard: "운영실",
-  timetable: "시간표",
-  attendance: "출석부",
-  seat_attendance: "랩실·JJ실 출석부",
-  classes: "수업목록",
-  students: "학생목록",
-  exams: "성적관리",
-  enrollment: "등록상담",
-  consultations: "학생상담",
-  withdrawals: "퇴원관리",
-  retention: "이탈 방어",
-  ecs: "영어 강사 시트",
-  lesson_reports: "수업보고서",
-  staff: "직원관리",
-  billing: "수납관리",
-  textbook_requests: "교재 요청",
-  expense_requests: "지출결의서",
-  meetings: "회의록",
-  documents: "데이터베이스",
-  class_review: "수업 평가",
-  approvals: "전자결재",
-  calendar: "캘린더",
-  shuttle: "셔틀",
-  integrations: "makeedu 연동",
-  sheet_sync: "구글 시트 연동",
-  help: "도움말",
-  admin: "관리자 도구",
-  owner: "학원 설정",
-  teacher_onescreen: "선생님 원스크린",
-  my_learning: "내 학습",
-  kiosk_settings: "키오스크 설정",
-};
 
 const ROLE_LABEL: Record<SystemRole, string> = {
   master: "원장",

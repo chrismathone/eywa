@@ -3,6 +3,7 @@
 // AI 멘트 프롬프트 오버라이드 — 원장 콘솔에서 멘트/추세 프롬프트를 런타임 편집·테스트(edutrix aiSettingsActions 이식).
 // 저장은 append-only(활성 비활성화 후 새 활성 insert = 버전 이력). 읽기는 로그인, 쓰기는 owner 메뉴 쓰기 게이트.
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
@@ -122,6 +123,14 @@ export async function savePrompt(type: string, text: string): Promise<{ ok: bool
     created_by: user.id,
   });
   if (error) return { ok: false, error: error.message };
+  // 🔴 프롬프트는 **AI 산출물의 내용을 바꾸는 설정**이라 누가 언제 바꿨는지가 남아야 한다
+  //    (본문은 남기지 않는다 — 이력은 ai_prompt_overrides 버전 목록이 들고 있다).
+  await logAction({
+    action: "ai_prompt_save",
+    targetType: "ai_prompt",
+    targetLabel: PROMPT_TYPE_LABELS[type] ?? type,
+    metadata: { type, length: trimmed.length },
+  });
   return { ok: true };
 }
 
@@ -139,6 +148,13 @@ export async function resetPrompt(type: string): Promise<{ ok: boolean; error?: 
     .eq("prompt_type", type)
     .eq("is_active", true);
   if (error) return { ok: false, error: error.message };
+  // ⚠️ 복원은 행을 **비활성화만** 하므로 DB엔 "누가 껐는지"가 남지 않는다 — 그 사실이 여기에만 남는다.
+  await logAction({
+    action: "ai_prompt_reset",
+    targetType: "ai_prompt",
+    targetLabel: PROMPT_TYPE_LABELS[type] ?? type,
+    metadata: { type },
+  });
   return { ok: true };
 }
 

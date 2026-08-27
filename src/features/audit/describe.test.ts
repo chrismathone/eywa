@@ -17,6 +17,61 @@ const ctx = (names: Record<string, string> = {}) => ({
   subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key,
 });
 
+describe("auditDetail — 학원 설정 변경 내역(2026-08-27 감사 커버리지)", () => {
+  it("무엇이 바뀌었는지가 섹션명과 함께 나온다", () => {
+    const detail = auditDetail(
+      "owner_settings_update",
+      { section: "billing", changes: [{ label: "납부일", from: "10", to: "5" }] },
+      ctx(),
+    );
+    expect(detail).toBe("「수납·청구 기본값」 납부일 10 → 5");
+  });
+
+  it("여러 건은 가운뎃점으로 잇고, 많으면 '외 N건'으로 접는다", () => {
+    const changes = Array.from({ length: 8 }, (_, i) => ({ label: `항목${i}`, note: "변경됨" }));
+    const detail = auditDetail("owner_settings_update", { section: "profile", changes }, ctx());
+    expect(detail).toContain("항목0 변경됨");
+    expect(detail).toContain("외 2건");
+  });
+
+  it("라벨 없는 필드 개수(others)도 함께 알린다 — 조용히 숨기지 않는다", () => {
+    const detail = auditDetail(
+      "owner_settings_update",
+      { section: "operations", changes: [{ label: "과목", note: "내용 변경" }], others: 2 },
+      ctx(),
+    );
+    expect(detail).toContain("(그 외 2건)");
+  });
+
+  it("🔴 옛 행(changes 없음)은 종전대로 섹션명만 — 빈칸이 되지 않는다", () => {
+    expect(auditDetail("owner_settings_update", { section: "operations" }, ctx())).toBe(
+      "「운영 체계」 설정 저장",
+    );
+  });
+
+  it("연동·프롬프트·강의실·팝업 액션 상세", () => {
+    expect(auditDetail("integration_sync_toggle", { enabled: false }, ctx())).toBe("끄기");
+    expect(auditDetail("integration_sheets_toggle", { enabled: true }, ctx())).toBe("켜기");
+    expect(auditDetail("integration_sheet_target", { cleared: true }, ctx())).toBe("대상 시트 해제");
+    expect(auditDetail("integration_sync_now", { mode: "relay" }, ctx())).toBe("지금 동기화 실행");
+    expect(auditDetail("intake_push_enqueue", { count: 3 }, ctx())).toBe("상담 3건 역동기화 요청");
+    expect(auditDetail("ai_prompt_save", { type: "comment" }, ctx())).toBe("프롬프트 저장(새 버전)");
+    expect(auditDetail("classroom_update", { from: "본원302", to: "본원303" }, ctx())).toBe(
+      "이름 본원302 → 본원303",
+    );
+    expect(auditDetail("notice_popup_toggle", { active: true }, ctx())).toBe("노출 켜기");
+  });
+
+  it("🔴 시트 ID·프롬프트 본문 같은 값은 상세에 안 실린다(감사로그가 사본이 되면 안 된다)", () => {
+    const detail = auditDetail(
+      "integration_sheet_target",
+      { subject: "english", cleared: false, spreadsheetId: "1-secret-id" },
+      ctx(),
+    );
+    expect(detail).not.toContain("1-secret-id");
+  });
+});
+
 describe("auditDetail — 액션별 한글 상세", () => {
   it("owner_settings_update: 섹션 키를 한글 라벨로", () => {
     expect(auditDetail("owner_settings_update", { section: "report" }, ctx())).toBe("「보고서」 설정 저장");
