@@ -273,7 +273,7 @@ export function OffboardDialog({
           title="수업목록"
           className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
         >
-          수업목록에서 이 강사의 반 모두 보기
+          수업목록에서 이 강사의 반 보기
           <ExternalLink className="size-3" />
         </WindowLink>
 

@@ -21,12 +21,14 @@ import {
 import { Pagination } from "@/components/pagination";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
+import Link from "next/link";
 import { NewClassTrigger } from "./_components/new-class-trigger";
 import { ClassroomAssignButton } from "./_components/classroom-assign-dialog";
 import { ClassFilterBar } from "./_components/class-filter-bar";
 import {
   buildClassHref,
   DAY_KEYS,
+  parseClassStatus,
   type ClassFilterState,
   type ViewMode,
 } from "./_components/filter-shared";
@@ -55,6 +57,7 @@ export default async function ClassesPage({
     q?: string;
     view?: ViewMode;
     sort?: string;
+    status?: string;
     page?: string;
   }>;
 }) {
@@ -74,6 +77,9 @@ export default async function ClassesPage({
   const view: ViewMode = sp.view === "cards" ? "cards" : "table";
   const sort: ClassSort =
     sp.sort === "students" || sp.sort === "teacher" ? sp.sort : "name";
+  // 상태 — **미지정이면 '운영'**(원장 2026-08-27 "디폴트로 폐지나 종강된 수업은 안보이고").
+  // 판정은 filter-shared 단일 소스라 필터바가 만드는 URL과 여기 해석이 갈리지 않는다.
+  const status = parseClassStatus(sp.status);
   const page = Math.max(1, Number(sp.page) || 1);
 
   // 강사 스코프(내 수업)면 `getClassesPage`가 teacher_id를 **강제**해 전 행이 내 반이다 → 강사 필터·담임 열은
@@ -81,7 +87,7 @@ export default async function ClassesPage({
   // ⚠️ 위임(delegation)은 진입 자격만 열 뿐 classIds를 넓히지 않으므로 남의 이름이 섞일 여지도 없다.
   const scopedTeacherId = await effectiveTeacherId();
   const [{ rows: classes, total }, teachers, stats, settings] = await Promise.all([
-    getClassesPage({ subject, teacherId, days, q, sort }, page, PAGE_SIZE),
+    getClassesPage({ subject, teacherId, days, q, sort, status }, page, PAGE_SIZE),
     // 스코프에선 조회 자체를 건너뛴다(고를 수 없는 목록이라 왕복 낭비).
     scopedTeacherId ? [] : getClassTeacherFilterOptions(), // 필터 전용 — 배정용과 다르다(admin·퇴직 담임도 포함)
     getClassesStats(),
@@ -93,7 +99,7 @@ export default async function ClassesPage({
   const totalSeats = stats.totalSeats;
   const active = stats.active;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const current: ClassFilterState = { subject, teacher: teacherId, days, q, view, sort };
+  const current: ClassFilterState = { subject, teacher: teacherId, days, q, view, sort, status };
 
   const pageHref = (p: number) => {
     const base = new URLSearchParams(buildClassHref(current, {}).split("?")[1] ?? "");
@@ -159,7 +165,25 @@ export default async function ClassesPage({
       </p>
 
       {total === 0 ? (
-        <EmptyState image="classes" icon={() => <SearchX size={32} strokeWidth={1.8} />} title="결과 없음" />
+        <EmptyState
+          image="classes"
+          icon={() => <SearchX size={32} strokeWidth={1.8} />}
+          title="결과 없음"
+          // 기본 필터가 숨긴 것일 수 있다 — "왜 그 반이 없지?"의 답을 여기서 준다(폐지 42 · 종강 5 실재).
+          description={
+            status === "all" ? undefined : "폐지·종강된 반은 기본으로 숨깁니다. 상태를 바꾸면 함께 보입니다."
+          }
+          action={
+            status === "all" ? undefined : (
+              <Link
+                href={buildClassHref(current, { status: "all" })}
+                className="border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-[13px] font-medium"
+              >
+                전체 상태로 보기
+              </Link>
+            )
+          }
+        />
       ) : (
         <>
           {view === "table" ? (

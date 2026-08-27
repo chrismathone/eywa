@@ -41,13 +41,25 @@ export type ClassListRow = {
 /** 수업목록 정렬 기준 — ijw 패리티(수업명/학생수/강사명). */
 export type ClassSort = "name" | "students" | "teacher";
 
+/**
+ * 수업 상태 필터 — 화면의 '상태' 배지와 **같은 세 갈래**다(page.tsx TableView/CardsView와 한 몸).
+ *  · operating(운영) = `is_active` && `closed_at` 없음  · ended(종강) = `is_active` && `closed_at` 있음
+ *  · retired(폐지)   = `is_active=false`                · all(전체)  = 안 좁힘
+ * ⚠️ 아래 레거시 `active`와 **다른 축**이다 — `active:"active"`는 종강 반까지 포함한다(is_active만 본다).
+ *    새 코드는 이쪽(status)을 쓸 것. 실측(2026-08-27 injaewon): 전체 152 = 운영 105 · 종강 5 · 폐지 42.
+ */
+export type ClassStatusFilter = "all" | "operating" | "ended" | "retired";
+
 export type ClassListFilters = {
   subject?: string; // "all" | "math" | ...
   teacherId?: string; // "all" | uuid
   day?: string; // "all" | "mon" | ... (getClassesList 단일 요일 — 레거시)
   days?: string[]; // 다중 요일(getClassesPage) — 하나라도 포함하면 매칭(ijw 의미)
   q?: string;
+  /** @deprecated is_active만 보는 옛 축(종강 반 포함) — 새 코드는 `status`를 쓸 것. */
   active?: "all" | "active" | "closed";
+  /** 상태(운영/종강/폐지/전체) — 수업목록 기본값은 화면에서 "operating"으로 넘긴다. */
+  status?: ClassStatusFilter;
   sort?: ClassSort; // 미지정 시 "name"
 };
 
@@ -276,6 +288,10 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
 /**
  * 수업목록 Stat 카드용 경량 집계 — head:true 카운트만(행 fetch 없이, 전건 enrollment 절단도 회피).
  * totalSeats = end_date null 활성 수강 총합.
+ *
+ * ⚠️ `active`("운영 중" 카드)는 **종강 반을 뺀다**(is_active && closed_at is null) — 목록 기본 필터
+ * (status=operating)와 같은 판정이어야 "운영 중 110개"인데 목록은 105개인 어긋남이 안 생긴다
+ * (2026-08-27 실측: 종강 5개가 카드에만 섞여 있었다).
  */
 export async function getClassesStats(): Promise<{ total: number; active: number; totalSeats: number }> {
   const supabase = await createClient();
@@ -293,7 +309,7 @@ export async function getClassesStats(): Promise<{ total: number; active: number
   }
   const [total, active, seats] = await Promise.all([
     classBase(),
-    classBase().eq("is_active", true),
+    classBase().eq("is_active", true).is("closed_at", null),
     seatsQuery,
   ]);
   return { total: total.count ?? 0, active: active.count ?? 0, totalSeats: seats.count ?? 0 };
@@ -354,6 +370,10 @@ export async function getClassesPage(
   if (teacherFilter) qb = qb.eq("teacher_id", teacherFilter);
   if (options.active === "active") qb = qb.eq("is_active", true);
   if (options.active === "closed") qb = qb.eq("is_active", false);
+  // 상태(운영/종강/폐지) — 화면 배지와 같은 판정. `closed_at`은 종강일이라 **있으면 종강**이다.
+  if (options.status === "operating") qb = qb.eq("is_active", true).is("closed_at", null);
+  if (options.status === "ended") qb = qb.eq("is_active", true).not("closed_at", "is", null);
+  if (options.status === "retired") qb = qb.eq("is_active", false);
   if (options.q) {
     const term = sanitizeTerm(options.q);
     if (term) {

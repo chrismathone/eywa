@@ -6,14 +6,16 @@ import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
+  CLASS_STATUS_DEFAULT,
   DAY_FILTERS,
   DAY_KEYS,
   SORT_OPTIONS,
+  STATUS_FILTERS,
   teacherTeaches,
   buildClassHref,
   type ClassFilterState,
 } from "./filter-shared";
-import type { ClassSort } from "@/features/classes/server/queries";
+import type { ClassSort, ClassStatusFilter } from "@/features/classes/server/queries";
 
 type Teacher = { id: string; name: string; subjects: string[] };
 
@@ -48,7 +50,10 @@ function saveCurrent(c: ClassFilterState): void {
   }
 }
 
-// 저장값 → 완전한 필터 상태(검색어 제외). 알 수 없는 값은 기본값으로 안전화.
+// 저장값 → 완전한 필터 상태(검색어·상태 제외). 알 수 없는 값은 기본값으로 안전화.
+// 🔴 **상태(status)는 일부러 복원하지 않는다** — 원장 지시 2026-08-27 *"기본 세팅은 운영"*.
+//    저장해 두면 폐지 반을 한 번 본 사람은 다음에 열 때도 폐지 반이 섞인 목록을 받는다.
+//    (같은 이유로 saveCurrent도 status를 안 담는다. 화면 안에서는 URL이 들고 다닌다 — 페이지 이동 포함.)
 function savedToState(s: Saved): ClassFilterState {
   return {
     subject: typeof s.subject === "string" ? s.subject : "all",
@@ -57,6 +62,7 @@ function savedToState(s: Saved): ClassFilterState {
     q: "",
     view: s.view === "cards" ? "cards" : "table",
     sort: s.sort === "students" || s.sort === "teacher" ? s.sort : "name",
+    status: CLASS_STATUS_DEFAULT,
   };
 }
 
@@ -67,6 +73,7 @@ function isDefault(c: ClassFilterState): boolean {
     c.days.length === 0 &&
     c.sort === "name" &&
     c.view === "table" &&
+    c.status === CLASS_STATUS_DEFAULT &&
     !c.q
   );
 }
@@ -200,6 +207,19 @@ export function ClassFilterBar({
   return (
     <div className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
+        {/* 상태 — 기본 '운영'(폐지·종강 숨김). 맨 앞에 두는 이유: 목록이 기본적으로 좁혀져 있다는 사실을
+            가장 먼저 보여야 "왜 그 반이 없지?"가 안 생긴다. */}
+        <div className="flex items-center gap-1.5">
+          <span className="micro mr-1">상태</span>
+          <SearchableSelect
+            className="w-24"
+            value={current.status}
+            onValueChange={(v) => go({ status: v as ClassStatusFilter })}
+            options={STATUS_FILTERS}
+            ariaLabel="상태 필터"
+          />
+        </div>
+
         {/* 과목 */}
         <div className="flex items-center gap-1.5">
           <span className="micro mr-1">과목</span>
