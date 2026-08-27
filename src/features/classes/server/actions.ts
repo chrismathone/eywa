@@ -7,6 +7,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { PERIOD_NO_SLOT_ERROR } from "@/features/classes/period-notice";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { parseSeatValue } from "@/features/timetable/lib/teacher-label";
@@ -194,6 +195,14 @@ function validate(input: ReturnType<typeof readForm>): Record<string, string> | 
   // 운영 기간은 뒤집힐 수 없다(종료일 < 시작일이면 그 스케줄은 하루도 안 열린다 = 조용히 사라짐).
   if (input.validFrom && input.validTo && input.validTo < input.validFrom) {
     errors.validTo = "종료일이 시작일보다 빠릅니다";
+  }
+  // 🔴 운영 기간은 **교시 행에** 저장된다(class_schedules.valid_from/valid_to) — 폼이 교시를 하나도
+  //    안 실어 보내면 날짜를 적을 자리가 없어 저장이 **아무 일도 안 한다**. 지금까지 그게 조용해서
+  //    "저장이 안 되는데 왜인지 알 수 없다"였다(원장 제보 2026-08-27). 이유를 말하고 거절한다.
+  //    ⚠️ 여기(쓰기 전)에서 막는 게 중요하다 — 아래 updateClass는 이미 delete를 끝낸 뒤라 늦게 돌아가면
+  //    그 반의 교시가 통째로 사라진다.
+  if (input.periodProvided && (input.validFrom || input.validTo) && input.schedules.length === 0) {
+    errors.period = PERIOD_NO_SLOT_ERROR;
   }
   return Object.keys(errors).length > 0 ? errors : null;
 }

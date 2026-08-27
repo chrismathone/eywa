@@ -35,6 +35,14 @@ export type ClassListRow = {
   isSpecial: boolean;
   studentCount: number;
   days: ClassDaySlot[]; // 운영 요일(+시작시각), 요일순 정렬
+  /**
+   * 위 `days`가 **지금 유효하지 않은 배치**인가(운영 기간이 끝났거나 아직 시작 전).
+   * 🔴 `class_schedules`는 운영 이력을 함께 담아서([[#88]]) 전 행을 그냥 그리면 **끝난 교시가 현재처럼**
+   *    보인다(실측 2026-08-27: 종료일을 넣어 교시가 전부 만료된 활성 반 7개가 목록에선 월~금 운영 중으로
+   *    보였다 — "운영 종료일이 작동 안 한다"의 정체). 유효 행이 하나도 없을 때만 지난 배치를 흐리게 보여
+   *    준다(통째로 감추면 요일 칸이 빈다).
+   */
+  daysStale: boolean;
   notes: string | null;
 };
 
@@ -192,6 +200,32 @@ function buildDaySlots(
   return byClass;
 }
 
+/**
+ * 목록 요일 칩의 재료 — **지금 유효한 교시**(valid_from ≤ 오늘 ≤ valid_to)를 우선한다.
+ * 유효 행이 하나도 없으면(운영 종료·시작 전) 지난 배치라도 보여주되 `stale`로 표시한다([[#88]]).
+ */
+function buildDayView(
+  scheds:
+    | {
+        class_id: string;
+        day_of_week: string;
+        start_time?: string | null;
+        valid_from?: string | null;
+        valid_to?: string | null;
+      }[]
+    | null,
+  today: string,
+): { live: Map<string, Map<string, string | null>>; any: Map<string, Map<string, string | null>> } {
+  const rows = scheds ?? [];
+  const isLive = (r: { valid_from?: string | null; valid_to?: string | null }) => {
+    const to = r.valid_to ? String(r.valid_to).slice(0, 10) : null;
+    if (to && to < today) return false;
+    const from = r.valid_from ? String(r.valid_from).slice(0, 10) : null;
+    return !(from && from > today);
+  };
+  return { live: buildDaySlots(rows.filter(isLive)), any: buildDaySlots(rows) };
+}
+
 /** (요일→시작시각) 맵 → 요일순 정렬된 ClassDaySlot[]. */
 function sortedDaySlots(m: Map<string, string | null> | undefined): ClassDaySlot[] {
   return [...(m?.entries() ?? [])]
@@ -239,19 +273,25 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
   }
 
   // 요일 + 시작시각 — 동일하게 청크 조회(반 많아지면 단일 .in()이 414, 스케줄 1000행 절단).
-  let daysByClass = new Map<string, Map<string, string | null>>();
+  let dayView = {
+    live: new Map<string, Map<string, string | null>>(),
+    any: new Map<string, Map<string, string | null>>(),
+  };
   if (classIds.length > 0) {
     const scheds = await fetchInChunks<{
       class_id: string;
       day_of_week: string;
       start_time: string | null;
+      valid_from: string | null;
+      valid_to: string | null;
     }>(classIds, (chunk) =>
       supabase
         .from("class_schedules")
-        .select("class_id, day_of_week, start_time")
+        .select("class_id, day_of_week, start_time, valid_from, valid_to")
         .in("class_id", chunk),
     );
-    daysByClass = buildDaySlots(scheds);
+    // 운영 기간이 지난 교시를 현재처럼 그리지 않는다([[#88]]) — 유효 행 우선, 없으면 흐리게.
+    dayView = buildDayView(scheds, kstToday());
   }
 
   let rows = classes.map((c) => {
@@ -272,7 +312,9 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
       closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
       isSpecial: (c as { is_special?: boolean | null }).is_special ?? false,
       studentCount: counts.get(c.id) ?? 0,
-      days: sortedDaySlots(daysByClass.get(c.id)),
+      // 유효 교시가 있으면 그것만, 하나도 없으면 지난 배치를 흐리게(daysStale) — 통째로 감추면 요일 칸이 빈다.
+      days: sortedDaySlots(dayView.live.get(c.id) ?? dayView.any.get(c.id)),
+      daysStale: !dayView.live.get(c.id) && !!dayView.any.get(c.id),
       notes: c.notes ?? null,
     } satisfies ClassListRow;
   });
@@ -390,23 +432,31 @@ export async function getClassesPage(
 
   // 학생수·요일 — 매칭 수업 id를 청크로 조회(전건 .in() 414/1000행 절단 회피).
   const counts = new Map<string, number>();
-  let daysByClass = new Map<string, Map<string, string | null>>();
+  let dayView = {
+    live: new Map<string, Map<string, string | null>>(),
+    any: new Map<string, Map<string, string | null>>(),
+  };
   if (classIds.length > 0) {
     const [enrollments, scheds] = await Promise.all([
       fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
         supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
       ),
-      fetchInChunks<{ class_id: string; day_of_week: string; start_time: string | null }>(
-        classIds,
-        (chunk) =>
-          supabase
-            .from("class_schedules")
-            .select("class_id, day_of_week, start_time")
-            .in("class_id", chunk),
+      fetchInChunks<{
+        class_id: string;
+        day_of_week: string;
+        start_time: string | null;
+        valid_from: string | null;
+        valid_to: string | null;
+      }>(classIds, (chunk) =>
+        supabase
+          .from("class_schedules")
+          .select("class_id, day_of_week, start_time, valid_from, valid_to")
+          .in("class_id", chunk),
       ),
     ]);
     for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
-    daysByClass = buildDaySlots(scheds);
+    // 운영 기간이 지난 교시를 현재처럼 그리지 않는다([[#88]]).
+    dayView = buildDayView(scheds, kstToday());
   }
 
   const rows = matched.map((c) => {
@@ -427,7 +477,9 @@ export async function getClassesPage(
       closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
       isSpecial: (c as { is_special?: boolean | null }).is_special ?? false,
       studentCount: counts.get(c.id) ?? 0,
-      days: sortedDaySlots(daysByClass.get(c.id)),
+      // 유효 교시가 있으면 그것만, 하나도 없으면 지난 배치를 흐리게(daysStale) — 통째로 감추면 요일 칸이 빈다.
+      days: sortedDaySlots(dayView.live.get(c.id) ?? dayView.any.get(c.id)),
+      daysStale: !dayView.live.get(c.id) && !!dayView.any.get(c.id),
       notes: c.notes ?? null,
     } satisfies ClassListRow;
   });

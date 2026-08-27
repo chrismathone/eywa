@@ -202,22 +202,40 @@ export default async function ClassesPage({
  * 운영 요일 칩 + 시작시각. 모든 요일이 같은 시각이면 시각 1개만(월·수·금 14:30),
  * 요일마다 다르면 요일별로(월14:30 목16:20). 시각 정보가 목록에서 사라지던 격차 보강.
  */
-function DayChips({ days, barClass }: { days: ClassDaySlot[]; barClass: string }) {
+function DayChips({
+  days,
+  barClass,
+  stale = false,
+}: {
+  days: ClassDaySlot[];
+  barClass: string;
+  /**
+   * 지금 유효하지 않은 배치(운영 기간이 끝났거나 시작 전) — 흐리게 + 이유를 툴팁으로.
+   * 🔴 진하게 그리면 "종료일을 넣었는데도 월~금 운영 중"으로 보인다([[#88]], 실측 7반).
+   */
+  stale?: boolean;
+}) {
   if (days.length === 0) return <span className="text-text-faint text-xs">—</span>;
   const starts = days.map((d) => d.start).filter((s): s is string => !!s);
   const uniform = starts.length === days.length && new Set(starts).size === 1;
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <div className="flex gap-0.5 text-[11px] font-bold">
+    <div
+      className="flex flex-wrap items-center gap-x-2 gap-y-1"
+      {...(stale ? { title: "지금은 운영하지 않는 배치입니다 (운영 기간이 끝났거나 아직 시작 전)" } : {})}
+    >
+      <div className={`flex gap-0.5 text-[11px] font-bold ${stale ? "opacity-45" : ""}`}>
         {days.map((d) => (
           <span
             key={d.day}
-            className={`inline-flex size-5 items-center justify-center rounded-full ${barClass} text-white`}
+            className={`inline-flex size-5 items-center justify-center rounded-full ${
+              stale ? "bg-text-faint" : barClass
+            } text-white`}
           >
             {DAY_LABEL[d.day] ?? d.day}
           </span>
         ))}
       </div>
+      {stale ? <span className="text-text-faint text-[11px]">운영 기간 밖</span> : null}
       {uniform ? (
         <span className="text-text-dim num text-[12px]">{starts[0]}</span>
       ) : starts.length > 0 ? (
@@ -290,7 +308,7 @@ function TableView({
                   {c.classroomName ?? "—"}
                 </td>
                 <td className="px-4 py-2.5">
-                  <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} />
+                  <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
                 </td>
                 <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
                   {c.studentCount}명
@@ -379,7 +397,7 @@ function CardsView({
               </p>
             </div>
             <div className="mt-auto pt-1">
-              <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} />
+              <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
             </div>
           </WindowLink>
         );

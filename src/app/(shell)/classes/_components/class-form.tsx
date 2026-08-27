@@ -110,6 +110,7 @@ export function ClassForm({
   subjectOptions,
   periodsConfig,
   scope,
+  today,
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
@@ -120,6 +121,8 @@ export function ClassForm({
   periodsConfig?: PeriodsConfig;
   /** 동시 편집 가드 스코프(예: `class:123`). 수정 모드에서만 — 다른 창 저장 시 경고. */
   scope?: string;
+  /** KST 오늘(`YYYY-MM-DD`) — 운영 기간 고지 계산용. **서버가 넘긴다**([[#108]] 하이드레이션). */
+  today: string;
 }) {
   const subjects = subjectOptions ?? DEFAULT_SUBJECT_OPTIONS;
   const action = mode === "create" ? createClass : updateClass;
@@ -374,6 +377,12 @@ export function ClassForm({
         onSpecialChange={setIsSpecial}
         defaultValidFrom={defaults?.validFrom ?? ""}
         defaultValidTo={defaults?.validTo ?? ""}
+        today={today}
+        // 운영 기간은 교시 행에 저장된다 — 폼이 교시를 하나도 안 들고 있으면 날짜를 넣어도 적을 자리가 없다.
+        // ⚠️ 그리드에서 방금 고른 칸은 여기 안 세어진다(그리드가 개수를 알리지 않는다) — 사전 고지가
+        //    조금 늦게 사라질 뿐이고, 실제 거절은 서버가 제출 값으로 판정한다.
+        hasSlots={(defaults?.schedules?.length ?? 0) + customCount > 0}
+        {...(fieldErrs.period ? { periodError: fieldErrs.period } : {})}
         {...(defaults?.periodMixed ? { periodMixed: defaults.periodMixed } : {})}
         {...(defaults?.historyCount ? { historyCount: defaults.historyCount } : {})}
         {...(fieldErrs.validTo ? { validToError: fieldErrs.validTo } : {})}

@@ -5,6 +5,7 @@ import { getClassroomOptions } from "@/features/enrollments/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
+import { kstToday } from "@/lib/date-kst";
 import { ClassForm } from "../_components/class-form";
 
 export const metadata = { title: "새 반 — eywa" };
@@ -34,6 +35,7 @@ export default async function NewClassPage() {
 
       <ClassForm
         mode="create"
+        today={kstToday()}
         teacherOptions={teachers}
         classroomOptions={classrooms}
         subjectOptions={subjectOptions}
