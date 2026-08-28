@@ -8,7 +8,7 @@
  *    조회는 화면이, 저장은 서버 액션이 한다. 비교 규칙이 화면마다 갈리는 것을 막는 단일 소스다.
  *
  * ## 매칭 앵커 = `classId + dayOfWeek + startTime`
- * DB 유니크(0231a: `tenant_id, plan_month, class_id, day_of_week, start_time`)에서 **달만 뺀 축**이다.
+ * DB 유니크(0232a: `tenant_id, plan_month, class_id, day_of_week, start_time`)에서 **달만 뺀 축**이다.
  * 달을 빼야 "9월의 이 칸"과 "10월의 이 칸"이 같은 칸으로 만난다.
  *
  * ⚠️ **시각은 반드시 `hhmm()`으로 정규화한 뒤 비교한다.** DB는 `time`이라 'HH:MM:SS'로 오고 폼은

@@ -15,7 +15,7 @@ import { requireTimetablePlanAccess } from "./access";
 /**
  * 시간표(개발중) 월별 계획 조회.
  *
- * 🔴 `timetable_plan_slots`는 RLS 정책 0개 + service_role 전용(0231a)이라 **세션 클라이언트로는 에러 없이
+ * 🔴 `timetable_plan_slots`는 RLS 정책 0개 + service_role 전용(0232a)이라 **세션 클라이언트로는 에러 없이
  *    0행**이 온다([[#104]]) → admin 클라이언트로 읽되 **`tenant_id` 명시 필터가 필수**다(RLS 우회이므로
  *    빠뜨리면 전 학원 데이터가 섞인다). 권한은 DB가 아니라 `requireTimetablePlanAccess`가 유일하게 판정한다.
  *
@@ -37,7 +37,7 @@ const MONTH_COLUMNS = "plan_month, class_id, updated_at";
  * 있는 달 목록(최신순) — 달마다 칸 수·반 수·마지막 수정 시각.
  *
  * **B2 근거(왜 전건을 읽어도 되는가)**: 집계 축이 "존재하는 모든 달"이라 어떤 필터로도 미리 좁힐 수 없다
- * (달 목록 자체가 결과다). group-by RPC가 정석이지만 0231a는 RPC를 만들지 않았고, 대신 이 조회는
+ * (달 목록 자체가 결과다). group-by RPC가 정석이지만 0232a는 RPC를 만들지 않았고, 대신 이 조회는
  *  ① **`fetchAllPaged`로 `.range` 페이지네이션** — PostgREST 1000행 silent 절단이 구조적으로 불가능하고
  *  ② 컬럼을 **3개로 좁혀** 읽는다(격자 전체가 아니라 집계에 필요한 것만)
  *  ③ 규모 상한이 명확하다 — 한 달 계획은 본 시간표 슬롯 수(실측 `class_schedules` 1,068행, 그중 현재

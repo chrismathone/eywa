@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * (격리 — 계획이 `class_schedules`·본 시간표로 새지 않는가 — 는 [`../isolation.test.ts`]가 전담한다.
  *  여기선 그 표에 닿는 **경로 자체**가 안전한지만 본다.)
  *
- * ① **게이트**: `timetable_plan_slots`는 RLS를 켜고 정책이 0개다(0231a) — 세션 클라이언트로는 에러 없이
+ * ① **게이트**: `timetable_plan_slots`는 RLS를 켜고 정책이 0개다(0232a) — 세션 클라이언트로는 에러 없이
  *    0행이 오고([[#104]]) 실제 접근은 전부 service_role(admin)로 이뤄진다. 즉 **DB가 아무도 안 막는다**.
  *    권한을 판정하는 것은 앱의 `requireTimetablePlanAccess` 하나뿐이라, 액션이 하나라도 그걸 안 거치면
  *    로그인만 하면 누구나 학원 시간표 계획을 지울 수 있다(#77 — 화면에서 숨기는 건 게이트가 아니다).

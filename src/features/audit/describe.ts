@@ -61,7 +61,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   integration: "외부 연동",
   ai_prompt: "AI 프롬프트",
   kiosk_device: "키오스크 기기",
-  // 시간표(개발중) 월별 계획(0231a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
+  // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
   timetable_plan_slot: "시간표 계획 칸",
 };

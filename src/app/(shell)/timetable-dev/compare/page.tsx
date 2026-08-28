@@ -3,7 +3,7 @@
  *
  * 원장 지시(2026-08-28): 9월·10월 시간표를 미리 만들어 관리하고 **월별 시간표를 비교**할 수 있게.
  * 🔴 본 시간표(`/timetable`·`class_schedules`)는 읽지도 쓰지도 않는다 — 이 화면은 계획 표
- *    (`timetable_plan_slots`, 0231a)만 본다(격리 가드 `timetable-dev/isolation.test.ts`).
+ *    (`timetable_plan_slots`, 0232a)만 본다(격리 가드 `timetable-dev/isolation.test.ts`).
  *
  * 비교 규칙은 전부 순수 함수 [`comparePlans`](src/features/timetable-dev/lib/compare.ts)에 있다.
  * 여기는 **조회 → 이름 붙이기 → 그리기**만 한다.

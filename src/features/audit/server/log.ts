@@ -172,7 +172,7 @@ export const AUDIT_ACTIONS = {
   student_consultation_delete: "학생상담 기록 삭제",
   student_consultation_follow_up: "학생상담 후속조치 처리",
   student_care_analysis: "AI 케어 분석 실행",
-  // 시간표(개발중) 월별 계획(0231a) — class_schedules와 분리된 별도 표라, 본 시간표 감사 키와 섞이지
+  // 시간표(개발중) 월별 계획(0232a) — class_schedules와 분리된 별도 표라, 본 시간표 감사 키와 섞이지
   // 않게 timetable_plan_ 접두로 갈라 둔다("계획"이라는 말을 라벨에 반드시 남길 것 — 원장이 감사로그에서
   // 본 시간표가 바뀐 줄로 읽으면 안 된다).
   timetable_plan_seed: "시간표 계획 만들기(현재 시간표 복사)",

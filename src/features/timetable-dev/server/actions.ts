@@ -25,12 +25,12 @@ import { requireTimetablePlanAccess } from "./access";
  *
  * 🔴 **이 파일은 `class_schedules`에 절대 쓰지 않는다**(원장 지시 2026-08-28: *"시간표에는 적용하지말고
  *    시간표(개발중)이라는곳에서만"*). 원본은 시드에서 **읽기만** 한다 — 그 표는 출결·청구·급여·ECS 등
- *    73곳이 함께 읽는 운영 표라, 계획을 그쪽으로 미는 순간 이 기능의 격리가 무너진다(0231a 주석).
+ *    73곳이 함께 읽는 운영 표라, 계획을 그쪽으로 미는 순간 이 기능의 격리가 무너진다(0232a 주석).
  *    "계획을 실제로 적용" 경로는 일부러 없다.
  *
  * 🔴 `timetable_plan_slots`는 RLS 정책 0개 + service_role 전용이라([[#104]]) admin 클라이언트로만 닿는다 →
  *    **모든 select/insert/update/delete에 `tenant_id` 명시 필터**(RLS 우회이므로 빠뜨리면 타 학원 침범).
- * ⚠️ 0231a는 `updated_at` 갱신 트리거를 만들지 않았다 → 쓰기마다 **직접 넣는다**(안 넣으면 월 목록의
+ * ⚠️ 0232a는 `updated_at` 갱신 트리거를 만들지 않았다 → 쓰기마다 **직접 넣는다**(안 넣으면 월 목록의
  *    '마지막 수정'이 생성 시각에 굳는다).
  */
 
@@ -222,7 +222,7 @@ export async function seedPlanFromLive(
       return { ok: false, error: `${planMonthLabel(month)}에 유효한 시간표 칸이 없습니다` };
     }
 
-    // ⚠️ 지우고-넣기는 원자적이지 않다(트랜잭션 RPC가 0231a에 없다) — 중간에 실패하면 그 달이 비어 버린다.
+    // ⚠️ 지우고-넣기는 원자적이지 않다(트랜잭션 RPC가 0232a에 없다) — 중간에 실패하면 그 달이 비어 버린다.
     //    그래서 **넣을 것이 있는지 먼저 확인한 뒤에** 지운다(rows.length === 0 조기 반환이 바로 위에 있는 이유).
     //    남는 위험은 INSERT 자체의 실패뿐이고, 그때는 같은 버튼을 다시 눌러 복구된다(원본은 그대로다).
     const replaced = existing > 0 ? await deleteMonth(admin, tenantId, month) : 0;
@@ -356,7 +356,7 @@ export async function deletePlanMonth(month: string): Promise<PlanMutationResult
 
 /**
  * 계획 칸 하나를 만들거나 고친다.
- * 앵커는 `(tenant, month, class, day, start)` — 같은 앵커면 갱신, 없으면 생성(0231a의 **온전한** 유니크
+ * 앵커는 `(tenant, month, class, day, start)` — 같은 앵커면 갱신, 없으면 생성(0232a의 **온전한** 유니크
  * 제약이라 `on conflict` 추론이 된다. 부분 인덱스였다면 42P10으로 전건 실패했을 것 — [[#113]]).
  *
  * ⚠️ 시작시각을 옮기는 편집은 여기서 "다른 칸 생성"이 된다(앵커가 바뀌므로) — 화면이 옛 칸을

@@ -2,7 +2,7 @@ import type { PlanSlot } from "@/features/timetable-dev/types";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 
 /**
- * 월별 **계획 슬롯**(0231a `timetable_plan_slots`) → 기존 시간표 격자가 먹는 모양(`ScheduleSlotWithStudents`).
+ * 월별 **계획 슬롯**(0232a `timetable_plan_slots`) → 기존 시간표 격자가 먹는 모양(`ScheduleSlotWithStudents`).
  *
  * 🔴 왜 어댑터인가: 시간표(개발중)은 본 시간표 화면을 **그대로 복사**한 것이라, 격자·셀·hover·검색·집계가
  *    전부 `ScheduleSlotWithStudents`를 전제로 짜여 있다(복사본의 가치가 거기 있다). 계획 슬롯은 반 id와

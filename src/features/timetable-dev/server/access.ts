@@ -5,7 +5,7 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 /**
  * 시간표(개발중) 월별 계획의 **유일한 권한 게이트**.
  *
- * `timetable_plan_slots`(0231a)는 RLS를 켜고 **정책 0개 + service_role 전용**이라, 세션 클라이언트로는
+ * `timetable_plan_slots`(0232a)는 RLS를 켜고 **정책 0개 + service_role 전용**이라, 세션 클라이언트로는
  * 에러 없이 0행이 오고([[#104]]) 실제 접근은 전부 admin 클라이언트로 이뤄진다 = **DB가 아무도 안 막는다.**
  * 그래서 조회·모든 서버 액션이 예외 없이 이 함수를 통과해야 한다(#77 "한 레코드의 모든 표면이 공용 게이트를").
  * 화면에서만 버튼을 숨기는 것은 게이트가 아니다.

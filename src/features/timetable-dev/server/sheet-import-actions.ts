@@ -32,7 +32,7 @@ import { requireTimetablePlanAccess } from "./access";
  * 가져오기힘듬"* — 맞다. 본 시간표의 구조 import는 탭 이름이 상수(`TEACHER_SHEET_NAME`)라 '9월시간표' 같은
  * 미래 탭을 가리킬 방법이 아예 없었다. 여기서는 **원장이 주소를 붙여넣어 탭을 고른다**.
  *
- * 🔴 **이 파일은 `class_schedules`에 한 행도 쓰지 않는다.** 계획은 `timetable_plan_slots`(0231a)에만 산다 —
+ * 🔴 **이 파일은 `class_schedules`에 한 행도 쓰지 않는다.** 계획은 `timetable_plan_slots`(0232a)에만 산다 —
  *    본 시간표 표는 출결·급여·청구 73곳이 함께 읽어서, 거기에 미래 달 배치가 섞이면 그 전부가 조용히 틀린
  *    답을 낸다(원장 확인: *"적용되면 지금 급여랑 출결이 모두 꼬이게 되자나"*). 구조 가드 = `isolation.test.ts`.
  *    본 시간표를 쓰는 공유 액션(`features/timetable/server/{import,structure-import}-actions`)도 **부르지 않는다**.
@@ -47,7 +47,7 @@ import { requireTimetablePlanAccess } from "./access";
 
 const PLAN_TABLE = "timetable_plan_slots";
 const INSERT_CHUNK = 500; // 한 문장이 지나치게 커지지 않게(타임아웃·메모리 방어)
-/** 계획을 그 달에 쓸 때 쓰는 유니크 앵커 — 0231a의 **온전한** 유니크라 on conflict 추론이 된다([[#113]]). */
+/** 계획을 그 달에 쓸 때 쓰는 유니크 앵커 — 0232a의 **온전한** 유니크라 on conflict 추론이 된다([[#113]]). */
 const PLAN_CONFLICT = "tenant_id,plan_month,class_id,day_of_week,start_time";
 
 // ── 공용 결과 모양 ────────────────────────────────────────────────────────────
@@ -423,7 +423,7 @@ export async function applyPlanSheetImport(args: {
       period_label: r.input.periodLabel,
       merge_group: r.input.mergeGroup,
       source_schedule_id: r.input.sourceScheduleId,
-      // ⚠️ 0231a는 updated_at 갱신 트리거가 없다 → 쓰기마다 직접 넣는다(안 넣으면 월 목록의 '마지막 수정'이
+      // ⚠️ 0232a는 updated_at 갱신 트리거가 없다 → 쓰기마다 직접 넣는다(안 넣으면 월 목록의 '마지막 수정'이
       //    생성 시각에 굳는다).
       updated_at: now,
     }));

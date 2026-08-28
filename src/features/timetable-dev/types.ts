@@ -9,7 +9,7 @@
  * 앵커가 날짜가 아니라 **달(plan_month)**이다. 둘을 같은 함수에 섞어 넣지 말 것.
  */
 
-/** 'YYYY-MM' — 계획의 앵커. DB check 제약과 같은 모양(0231a). */
+/** 'YYYY-MM' — 계획의 앵커. DB check 제약과 같은 모양(0232a). */
 export const PLAN_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export function isPlanMonth(v: string | null | undefined): v is string {

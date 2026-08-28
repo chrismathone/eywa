@@ -7,7 +7,7 @@ import { PlanSheetImportDialog } from "./plan-sheet-import-dialog";
 /**
  * 시간표(개발중) **월 선택** 네비 — 본 시간표의 주간 이동(WeekNav) 자리를 대신한다.
  *
- * 🔴 계획(0231a `timetable_plan_slots`)의 앵커는 날짜가 아니라 **달**이다(9월·10월 시간표를 미리 만든다).
+ * 🔴 계획(0232a `timetable_plan_slots`)의 앵커는 날짜가 아니라 **달**이다(9월·10월 시간표를 미리 만든다).
  *    그래서 이 화면엔 '주'가 없다 — 주 이동을 남겨 두면 눌러도 계획이 안 바뀌는 죽은 컨트롤이 된다.
  *
  * ⚠️ 링크는 전부 [ParamLink](./param-link.tsx) — `<Link>`를 쓰면 searchParam 전환마다 `loading.tsx`

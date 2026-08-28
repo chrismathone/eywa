@@ -42,7 +42,7 @@ import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-g
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
 import { shouldSerializeView, subjectDefaultView, viewForSubjectSwitch } from "@/features/timetable/lib/view-default";
 import { thisMonday } from "@/features/timetable/lib/week";
-// 월별 계획(0231a) — 이 화면만의 축. 표는 `timetable_plan_slots`이고 본 시간표(class_schedules)와 완전 분리다.
+// 월별 계획(0232a) — 이 화면만의 축. 표는 `timetable_plan_slots`이고 본 시간표(class_schedules)와 완전 분리다.
 import {
   addMonths,
   isPlanMonth,
@@ -147,7 +147,7 @@ export default async function TimetablePage({
             ? "basic"
             : null;
 
-  // 월 선택(개발중 전용) — 계획의 앵커는 **날짜가 아니라 달**(0231a)이라 주간 이동을 월 이동으로 바꿨다.
+  // 월 선택(개발중 전용) — 계획의 앵커는 **날짜가 아니라 달**(0232a)이라 주간 이동을 월 이동으로 바꿨다.
   // 잘못된 값(`?month=abc`·`2026-13`)은 조용히 이번 달로 떨어진다(빈 화면 대신 언제나 뭔가를 보여준다).
   // 기준 '오늘'은 KST(서버 UTC라 새벽 시간대 하루 밀림 방지).
   const today = kstToday();
@@ -173,14 +173,14 @@ export default async function TimetablePage({
   let planError = planAccess.ok ? null : planAccess.error;
   /**
    * 계획 조회 실패를 화면이 말하게 한다 — 던지면 창이 통째로 검게 죽어 단서가 0이 된다([[#109]]).
-   * 가장 흔한 사유는 **0231a 미적용**(표 없음)이라 그 문장을 앞세우되, 원문은 배너 툴팁으로 남긴다
+   * 가장 흔한 사유는 **0232a 미적용**(표 없음)이라 그 문장을 앞세우되, 원문은 배너 툴팁으로 남긴다
    * (UI에 raw 에러 원문 노출 금지 규약).
    */
   const planLoadFailed = <T,>(e: unknown): T[] => {
     const raw = e instanceof Error ? e.message : String(e);
     planError =
       /does not exist|schema cache|42P01|PGRST205/i.test(raw)
-        ? "월별 계획 표가 아직 없습니다 — 데이터베이스에 0231a SQL을 적용하면 이 화면이 열립니다"
+        ? "월별 계획 표가 아직 없습니다 — 데이터베이스에 0232a SQL을 적용하면 이 화면이 열립니다"
         : `계획을 불러오지 못했습니다 — ${raw}`;
     return [];
   };

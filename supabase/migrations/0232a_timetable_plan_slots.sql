@@ -1,4 +1,4 @@
--- 0231a — 시간표(개발중) 월별 계획 슬롯
+-- 0232a — 시간표(개발중) 월별 계획 슬롯
 --
 -- 원장 지시(2026-08-28): *"현재 이후는 히스토리 — 9월 10월 시간표를 넣을 방법이 없음. 디비에서 월별로
 -- 구분하게 컬럼 추가로 만들고 다음달 다다음달 시간표도 미리 만들어서 관리하고싶음"* + *"해당 기능은
@@ -73,7 +73,7 @@ revoke all on table timetable_plan_slots from public, anon, authenticated;
 grant all on table timetable_plan_slots to service_role;
 
 comment on table timetable_plan_slots is
-  '시간표(개발중) 월별 계획 슬롯(0231a). 앵커=테넌트+월(YYYY-MM)+반+요일+시작시각. class_schedules와 완전 분리 — 본 시간표·출결·급여·청구는 이 표를 읽지 않는다. service_role 전용(RLS 정책 0), 게이트는 앱.';
+  '시간표(개발중) 월별 계획 슬롯(0232a). 앵커=테넌트+월(YYYY-MM)+반+요일+시작시각. class_schedules와 완전 분리 — 본 시간표·출결·급여·청구는 이 표를 읽지 않는다. service_role 전용(RLS 정책 0), 게이트는 앱.';
 comment on column timetable_plan_slots.plan_month is
   '이 계획이 적용될 달(YYYY-MM). 미래 달을 미리 만들어 두는 것이 이 표의 존재 이유다.';
 comment on column timetable_plan_slots.source_schedule_id is
