@@ -174,6 +174,19 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
     expect(screen.getByText("교시 작성")).toHaveTextContent("6/12");
   });
 
+  it("🔴 창이 좁으면 **1단 상하** — 두 단이 위아래로 쌓이고 단 안도 한 열이다(원장 2026-08-28)", () => {
+    render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
+    const grid = panel("EiE").parentElement!;
+    // 기본이 1열(상하), 넓어지면 좌우.
+    expect(grid.className).toContain("grid-cols-1");
+    expect(grid.className).toContain("md:grid-cols-2");
+    const flow = panel("EiE").querySelector("div[class*='columns-']")!;
+    expect(flow.className).toContain("columns-1");
+    // 좁은 폭에 열을 더 쪼개는 변형이 붙으면 그 지시가 깨진다 — 2열은 xl(1280px)부터만.
+    expect(flow.className).not.toMatch(/(sm|md|lg):columns-/);
+    expect(flow.className).toContain("xl:columns-2");
+  });
+
   it("한 담임이 두 프로그램을 맡으면 **양쪽 단에 묶음이 하나씩**, 머리 줄 담임 수는 1명", () => {
     render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
     // 단 안에서는 담임이 프로그램 아래 층(h4)이다.
