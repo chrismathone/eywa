@@ -3,6 +3,7 @@
 // 시트 그리드에서 파싱한다. 파서(parse-grid.ts)는 순수함수라 이 타입만 의존(Sheets/DB 비의존).
 
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
+import type { ScheduleConflict } from "./conflicts";
 
 /**
  * Sheets `spreadsheets.get(includeGridData:true)`의 한 탭을 옮긴 격자 스냅샷.
@@ -196,14 +197,6 @@ export interface ApplyClassUpdate {
   prevClassroomId: string | null;
 }
 
-/** 강의실 중복(같은 방·요일·시간 겹침 + 다른 수업/강사). */
-export interface RoomConflict {
-  room: string;
-  day: DayOfWeek;
-  a: { className: string; teachers: string[]; startTime: string; endTime: string | null };
-  b: { className: string; teachers: string[]; startTime: string; endTime: string | null };
-}
-
 export interface DryRunReport {
   slotsParsed: number;
   targetSchedules: number;
@@ -211,7 +204,11 @@ export interface DryRunReport {
   matched: { classes: number; teachers: number; rooms: number };
   plan: { create: number; update: number; keep: number; remove: number };
   planItems: SchedulePlanItem[];
-  conflicts: RoomConflict[];
+  /**
+   * 적용 후 배치의 물리적 충돌([`conflicts.ts`](./conflicts.ts)) — 한 방에 두 반·한 강사가 두 방·한 반이
+   * 두 줄·합반 의심. 합반만 경고이고 나머지는 **확인 체크 없이는 적용을 막는다**(원장 2026-08-28).
+   */
+  conflicts: ScheduleConflict[];
   warnings: string[];
   /** 계획(변경분)의 결정적 해시 — Phase 2 apply가 서버 재계산 결과와 대조해 스테일/조작 차단. */
   hash: string;

@@ -32,6 +32,7 @@ function Reason({ text }: { text: string }) {
 
 export function TimetableToolbarActions({
   subject,
+  today,
   kind = DEFAULT_TIMETABLE_KIND,
   canSync = false,
   canManageImport = false,
@@ -39,6 +40,11 @@ export function TimetableToolbarActions({
   compact1h = [],
 }: {
   subject?: string;
+  /**
+   * KST 오늘(서버 계산) — 가져오기 **적용일**의 하한이자 기본값. 🔴 클라에서 `new Date()`로 뽑지 말 것:
+   * 브라우저 타임존이 다르면 "오늘"이 하루 어긋나 과거 적용이 되거나 오늘이 거절된다.
+   */
+  today: string;
   /** 화면의 정규/특강/전체 구분. 정규가 아니면 내보내기·시트 버튼을 잠근다(화면과 파일 불일치 방지). */
   kind?: TimetableKind;
   /** 구글 시트 동기화(=테넌트 전체 시간표 외부 push)는 sheet_sync 권한 + 지원 과목 + 연동 ON일 때만. */
@@ -124,6 +130,7 @@ export function TimetableToolbarActions({
       {openDialog === "file" && canFileImport ? (
         <TimetableImportDialog
           subject={subjectKey}
+          today={today}
           hideTrigger
           open
           onOpenChange={(o) => {
@@ -134,6 +141,7 @@ export function TimetableToolbarActions({
       {openDialog === "sheet" && canSync && canStructureImport ? (
         <EnglishImportDialog
           subject={subjectKey}
+          today={today}
           hideTrigger
           open
           onOpenChange={(o) => {
@@ -145,6 +153,7 @@ export function TimetableToolbarActions({
         <TimetableImportDialog
           mode="sheet"
           subject={subjectKey}
+          today={today}
           hideTrigger
           open
           onOpenChange={(o) => {

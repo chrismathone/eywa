@@ -790,6 +790,7 @@ export default async function TimetablePage({
         <span className="bg-line h-4 w-px" aria-hidden />
         <TimetableToolbarActions
           subject={subject}
+          today={today}
           kind={kind}
           canSync={canSync}
           canManageImport={canManageImport}

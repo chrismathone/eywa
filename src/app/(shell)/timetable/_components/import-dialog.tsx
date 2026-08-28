@@ -13,6 +13,8 @@ import {
 } from "@/features/timetable/server/import-actions";
 import { supportsStructureImport } from "@/features/integrations/sheets-provider";
 import type { ImportDiff } from "@/features/timetable/import/types";
+import { effectiveDateLabel, isImmediate } from "@/features/timetable/import/effective-date";
+import { EffectiveDateField } from "./effective-date-field";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 
 const LARGE_CHANGE = 30;
@@ -26,6 +28,7 @@ const LARGE_CHANGE = 30;
 export function TimetableImportDialog({
   mode = "file",
   subject = "math",
+  today,
   label,
   disabled = false,
   disabledTitle,
@@ -35,6 +38,8 @@ export function TimetableImportDialog({
 }: {
   mode?: "file" | "sheet";
   subject?: string;
+  /** KST 오늘(서버 계산) — 적용일의 기본값이자 하한. 클라 `new Date()`는 타임존이 어긋난다. */
+  today: string;
   label?: string;
   /** 시트 리스 진행 중(새벽 자동 반영·타 관리자 실행) 트리거 선제 비활성 — 사유는 마우스오버(title). */
   disabled?: boolean;
@@ -67,6 +72,8 @@ export function TimetableImportDialog({
   const [result, setResult] = useState<ApplyState | null>(null);
   const [previewing, startPreview] = useTransition();
   const [applying, startApply] = useTransition();
+  // 적용일 — 기본은 오늘(종전 동작). 반이동은 이 날짜로 옛 수강을 끝내고 새 수강을 시작한다.
+  const [effective, setEffective] = useState(today);
 
   const total = diff ? diff.moves.length + diff.removes.length + diff.adds.length : 0;
   // 미리보기했으나 아직 적용/닫기 전 = 휘발 위험 상태.
@@ -136,9 +143,12 @@ export function TimetableImportDialog({
     const rm = diff.removes.length;
     const warn = diff.warnings.length;
     // 한 번 더 확인 — 대량/삭제/무시 항목이 있으면 무엇이 적용·제외되는지 요약해 물어본다.
-    const needConfirm = total >= LARGE_CHANGE || rm >= 10 || warn > 0;
+    // ⚠️ 예약 적용(오늘이 아님)은 규모와 무관하게 항상 묻는다 — 날짜를 바꿔 둔 걸 잊고 누르면
+    //    "왜 시간표가 안 바뀌지"가 되고, 그 사이 며칠이 옛 배치로 남는다.
+    const needConfirm = total >= LARGE_CHANGE || rm >= 10 || warn > 0 || !isImmediate(effective, today);
     if (needConfirm) {
-      const lines = [`이동 ${diff.moves.length} · 추가 ${diff.adds.length} · 삭제 ${rm}건을 적용합니다.`];
+      const when = isImmediate(effective, today) ? "지금" : `${effectiveDateLabel(effective)}부터`;
+      const lines = [`이동 ${diff.moves.length} · 추가 ${diff.adds.length} · 삭제 ${rm}건을 ${when} 적용합니다.`];
       if (rm > 0) lines.push("· 삭제는 시트/파일에서 빠진 수강을 종료합니다.");
       if (warn > 0) lines.push(`· ${warn}건은 매칭 실패/모호로 무시(미적용)됩니다.`);
       lines.push("진행할까요?");
@@ -149,11 +159,11 @@ export function TimetableImportDialog({
       // subject 전달 = 그 과목 시트 리스 선점('시트 반영'과 교차 실행 직렬화). 파일 경로도 무해(미연동=스킵).
       let res: ApplyState;
       if (sheet) {
-        res = await applySheetImport(hash, subject);
+        res = await applySheetImport(hash, subject, effective);
       } else {
         const fd = new FormData();
         fd.set("file", file!);
-        res = await applyTimetableImport(hash, fd, subject);
+        res = await applyTimetableImport(hash, fd, subject, effective);
       }
       if (res.staleHash) {
         // 미리보기 이후 수강/시트 변경 감지 — 오래된 미리보기를 지우고 재미리보기 유도.
@@ -276,6 +286,15 @@ export function TimetableImportDialog({
                 ) : null}
               </>
             )}
+
+            {/* 적용일 — 두 경로(시트·파일)가 같은 규칙을 쓴다. 바꿔도 미리보기는 유효하다: 반이동 diff는
+                "누가 어느 반인가"라 날짜에 안 매인다(구조 import와 다른 점 — 그쪽은 날짜별로 다시 계산한다). */}
+            <EffectiveDateField
+              value={effective}
+              onChange={setEffective}
+              today={today}
+              disabled={applying || !!result?.applied}
+            />
 
             {error ? <p className="text-chart-4 mt-3 text-[12px]">{error}</p> : null}
 
