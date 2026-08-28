@@ -106,10 +106,11 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 | Tier | Upstage (폴백) | Anthropic | DeepSeek | 용도 |
 |---|---|---|---|---|
-| `fast` | `solar-pro3` | `claude-haiku-4-5` | `deepseek-v4-flash` | 짧은 분류, 태깅, 간단 요약 (현재 미사용) |
+| `fast` | `solar-pro3` | `claude-haiku-4-5` | **`deepseek-v4-pro`** | **학부모 멘트 전용**(유일한 소비처 = `classnote_ment`). ⚠️ deepseek은 경량 v4-flash가 아니라 **v4-pro**(원장 2026-08-28 *"flash 말고 v4 pro"* — 학부모에게 그대로 나가는 문장이라 품질을 걸 자리가 아니다). |
 | `balanced` | `solar-pro3` | `claude-sonnet-5` | **`deepseek-v4-pro`** | 경량 호출 기본값 + **전사 분석 3종 기본**(아래). |
 | `reasoning` | — (없음) | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
+- **폴백 사다리 = anthropic → deepseek → upstage(Solar)** ([`FALLBACK_LADDER`](src/lib/ai/models.ts), 원장 2026-08-28). 한 provider가 **인증·한도·잔액 소진**으로 막히면 다음으로 넘어간다 — 🔴 **크레딧 소진은 400이라 예전엔 사다리를 안 탔다**([[#118]]: 2026-08-27 멘트 AI가 이틀간 전건 실패). Solar가 맨 뒤인 건 품질 A/B 탈락이라 마지막 보루이기 때문. ⚠️ 새 provider 오류 모양(402·`insufficient_quota` 등)을 만나면 `isCreditExhaustedError`에 추가할 것.
 - **전역 기본 provider = Anthropic Claude Sonnet 5** (`AI_PROVIDER=anthropic`, 2026-07-13~) — 품질 A/B에서 Solar가
   상담 분석의 warnings를 통째로 놓치고 잡담(주식 등)을 섞어 전환. ⚠️ **코드 기본값(env 미설정)은 여전히 `upstage`(Solar)** —
   Vercel env가 안 걸리면 프로덕션이 Solar로 동작하니 확인. 롤백 = `AI_PROVIDER=upstage` 또는 호출부 `provider:"upstage"`.

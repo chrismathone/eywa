@@ -11,8 +11,12 @@ export type AiKeyName = "default" | "consultations";
 // deepseek: v4-pro(고품질 추론, 전사 분석 기본)·v4-flash(경량). v4-pro는 balanced로 라우팅(reasoning 티어는
 // Anthropic 고정 정책 유지 — deepseek reasoning 슬롯은 null로 미사용). 실측 A/B(2026-07-16): v4-pro가
 // 등록상담 warnings를 Sonnet급으로 생성(경량 v4-flash/chat·Solar는 warnings 붕괴). 배경 = docs/changelog.
+// 🔴 fast tier의 deepseek = **v4-pro**(원장 2026-08-28: *"flash 말고 v4 pro"*). 경량 v4-flash가 아니다 —
+//    fast tier를 쓰는 곳은 학부모 멘트 하나뿐이고(그 외 0곳), 그 문장은 **학부모에게 그대로 나간다**.
+//    v4-flash는 전사 분석 A/B에서 warnings를 붕괴시킨 전력이 있어 품질을 걸 자리가 아니다.
+//    ⚠️ 트레이드오프: v4-pro는 추론형이라 느리다(실측 폴백 1건 ~7초). 폴백 경로라 평소엔 안 탄다.
 export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
-  fast: { anthropic: "claude-haiku-4-5", upstage: "solar-pro3", deepseek: "deepseek-v4-flash" },
+  fast: { anthropic: "claude-haiku-4-5", upstage: "solar-pro3", deepseek: "deepseek-v4-pro" },
   balanced: { anthropic: "claude-sonnet-5", upstage: "solar-pro3", deepseek: "deepseek-v4-pro" },
   reasoning: { anthropic: "claude-opus-4-7", upstage: null, deepseek: null },
 };

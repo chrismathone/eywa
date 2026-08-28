@@ -13,10 +13,20 @@
    둘 다 본다. 마지막 후보까지 막히면 `rethrowAi`가 한글로 "AI 잔액 소진 … 크레딧을 충전해야 합니다".
 2. **폴백 사다리 = anthropic → deepseek → upstage(Solar)** 명시(`FALLBACK_LADDER`, 원장 2026-08-28
    *"anthropic -> deepseek"*, *"deepseek 소진시 solar 폴백"*). Solar는 품질 A/B 탈락이라 마지막 보루.
+   fast tier의 deepseek 모델도 **v4-pro로 올렸다**(원장 *"flash 말고 v4 pro"*) — fast tier 소비처는
+   학부모 멘트 하나뿐이고 그 문장은 학부모에게 그대로 나간다. ⚠️ **느리다**: 실측 폴백 1건이
+   v4-flash 7.3초 → **v4-pro 28초**(추론형). 폴백 경로라 평소엔 안 타지만, Anthropic 크레딧이 빈
+   동안은 **모든 멘트가 이 경로**라 일괄 자동작성이 눈에 띄게 느려진다 → 크레딧 충전이 근본 해결.
+   (truncate 위험은 이미 `DEEPSEEK_MIN_MAX_TOKENS` floor가 막는다 — reasoning_content가 max_tokens를
+   함께 먹는 문제, 2026-07-16.)
 3. **폴백 템플릿(`buildSubjectReport`)이 사실을 흘리던 것** — ① 특이사항 칸이 아예 없어
    "내일 4시에 보강입니다"가 증발했고 ② 태도·점수·과제를 학생 값으로 읽어(2026-08-13 행 단위 전환 누락)
    전부 빈 채 나갔다. 이제 `resolveRowFields`로 행 값을 읽고 특이사항을 **원문 그대로 줄 단위**로 싣는다
    (마무리는 여전히 "오늘 과제는 ~입니다").
+
+4. **`maxDuration` 300** — `/onescreen`·`/lesson-reports` 세그먼트. 서버 액션은 호출된 세그먼트의
+   maxDuration을 따르는데 둘 다 미설정(기본 15초)이라, v4-pro 폴백(~28초)이 **플랫폼에 잘려 또 템플릿으로
+   떨어질** 참이었다(고쳐 놓고 같은 증상을 다시 만드는 꼴). 등록상담 상세(300)·웹훅(300) 선례와 같은 값.
 
 피해 실측: 이 축약 문구로 발송된 보고서 **8/27 40건 · 8/28 9건**. 드라이런으로 그 21+2건에 새 템플릿을
 돌려 특이사항·점수·태도가 전부 복원되는 것을 확인. 검증 typecheck0/lint0/**test6753**.

@@ -24,6 +24,13 @@ import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — eywa" };
 
+/**
+ * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다 — 직접발송 면의 자동작성
+ * (`generateReportComment`)이 폴백으로 DeepSeek v4-pro(추론형, 실측 ~28초)를 타면 기본값(15초)에서
+ * 잘려 멘트가 템플릿으로 떨어진다([[#118]]). 원스크린 세그먼트와 같은 이유·같은 값.
+ */
+export const maxDuration = 300;
+
 type Sp = Record<string, string | undefined>;
 // 관리 5면(작성률·반 구성·목록·공지·직접발송) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
 // (미매핑 탭은 2026-07-29 제거 — Edutrix 소등으로 원본이 사라져 매핑 자체가 불가능해졌다.)

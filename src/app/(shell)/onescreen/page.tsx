@@ -13,6 +13,14 @@ import { TodayAttendanceStrip } from "@/features/attendance/live/components/toda
 export const metadata = { title: "선생님 원스크린 — eywa" };
 
 /**
+ * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다(등록상담 상세 선례). 자동작성
+ * (`generateReportComment`)이 폴백으로 DeepSeek v4-pro(추론형, 실측 ~28초)를 타면 기본값(15초)에서
+ * 플랫폼이 죽여 **멘트가 또 템플릿으로 떨어진다** — [[#118]]을 고쳐 놓고 같은 증상을 다시 만드는 셈이다.
+ * (Anthropic Haiku가 살아 있을 땐 2~3초라 안 걸리지만, 크레딧이 비면 **전건이 이 경로**다.)
+ */
+export const maxDuration = 300;
+
+/**
  * 선생님 원스크린 — 강사 전용 수업 마감 화면.
  * 서버 컴포넌트: 권한 게이트 + 강사 본인의 오늘 반·학생 실데이터 조회(roster).
  * 진도·테스트·태도는 클라이언트 state로 입력하고, 보고서 발송은 lesson_reports에 영속화한다.
