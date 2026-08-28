@@ -29,6 +29,8 @@ import { ClassLevelAction } from "./_components/class-level-action";
 import { ArchiveClassButton } from "./_components/archive-class-button";
 import { ClassTermButton } from "./_components/class-term-button";
 import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
+import { ScheduledTeacherBanner } from "./_components/scheduled-teacher-banner";
+import { getScheduledClassChange } from "@/features/timetable/server/scheduled-class-change";
 import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
 import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
@@ -92,6 +94,8 @@ export default async function ClassDetailPage({
     .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
   const today = todayIso();
   const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= today;
+  // 가져오기가 미뤄 둔 담임 변경(있으면 배너). 예약이 없으면 쿼리 한 번으로 끝난다.
+  const scheduledTeacher = await getScheduledClassChange(klass.id, klass.teacherId);
   // 위임 가능 판정 = 서버 게이트(requireDelegationWrite)와 **같은 모양**이어야 한다.
   // full(원장·부원장·실장)은 학원 전체 반, scoped(강사)는 자기 담당 반만 — 결근을 아는 사람은 본인이라
   // 미리 맡기고 갈 수 있어야 한다. 두 판정이 갈라지면 "버튼은 보이는데 누르면 거절"이 된다.
@@ -232,6 +236,15 @@ export default async function ClassDetailPage({
         todayYmd={today}
         canRevoke={canDelegate}
       />
+
+      {/* 시간표 가져오기가 예약해 둔 담임 변경(읽기 전용) — 수동 인수인계와 별개 축이라 함께 설 수 있다. */}
+      {scheduledTeacher ? (
+        <ScheduledTeacherBanner
+          currentTeacherName={klass.teacherName}
+          teacherName={scheduledTeacher.teacherName}
+          effectiveDate={scheduledTeacher.effectiveDate}
+        />
+      ) : null}
 
       {klass.pendingTeacherId ? (
         <HandoverBanner
