@@ -18,7 +18,7 @@
  */
 import postgres from "postgres";
 import { randomUUID } from "node:crypto";
-import { google } from "googleapis";
+import ExcelJS from "exceljs";
 import { parseTeacherGrid } from "../../src/features/timetable/import/structure/parse-grid";
 import { matchStructure } from "../../src/features/timetable/import/structure/match";
 import { computeStructureDiff } from "../../src/features/timetable/import/structure/diff";
@@ -30,17 +30,54 @@ import type {
 } from "../../src/features/timetable/import/structure/types";
 import type { DayOfWeek } from "../../src/features/timetable/lib/periods";
 import { canonicalSlotTeacherLabel } from "../../src/features/timetable/lib/teacher-label";
+import {
+  blocksApply,
+  conflictChecklist,
+  describeConflict,
+} from "../../src/features/timetable/import/structure/conflicts";
 
-const MASTER_ID = "1-1JHCw36iWPku782DXMhqYbEMBUFL7bElfJjSQekoWA";
+/** 기본 마스터(`2026 영어시간표_인재원 본원`) — `--sheet`로 다른 스프레드시트를 넣을 수 있다. */
+const DEFAULT_MASTER_ID = "1-1JHCw36iWPku782DXMhqYbEMBUFL7bElfJjSQekoWA";
 const TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
 const SUBJECT = "english";
 /** RPC는 security invoker + auth_tenant_id()(=auth.uid() 조회) — 스크립트 실행엔 세션 클레임 주입이 필요. */
 const ACTOR = "fcf735fa-edf7-4095-8fa6-724285a018ed"; // 박소선(master)
 
 const args = process.argv.slice(2);
-const TAB = args.find((a) => !a.startsWith("--")) ?? "강사별영어시간표(7/9~)";
-const CUTOVER = (args.find((a) => a.startsWith("--cutover="))?.split("=")[1] ?? "2026-07-09").trim();
+const opt = (k: string) => args.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3)?.trim();
+/**
+ * URL이면 `/d/<id>/`에서 뽑고, 아니면 id 그대로. 주소를 통째로 붙여넣을 수 있게 하는 것이 목적.
+ * 🔴 주소를 줬는데 id를 못 뽑으면 **기본 시트로 떨어뜨리지 않고 중단**한다 — 그대로 진행하면
+ *    "내가 준 시트"가 아니라 엉뚱한 시트를 읽고, 그 결과로 `--apply`가 남의 배치를 갈아엎는다.
+ */
+function sheetIdOf(v: string | undefined): string {
+  if (!v) return DEFAULT_MASTER_ID;
+  if (!/^https?:/i.test(v)) return v;
+  const id = /\/d\/([A-Za-z0-9_-]+)/.exec(v)?.[1];
+  if (!id) {
+    console.error(`--sheet 주소에서 스프레드시트 id를 찾지 못했습니다: ${v}`);
+    process.exit(1);
+  }
+  return id;
+}
+/** URL의 `gid=`(쿼리든 해시든). 탭 이름을 안 줬을 때 이 값으로 탭을 찾는다. */
+function gidOf(v: string | undefined): number | null {
+  const raw = opt("gid") ?? (v ? /[?#&]gid=(\d+)/.exec(v)?.[1] : undefined);
+  return raw === undefined ? null : Number(raw);
+}
+const SHEET_ARG = opt("sheet");
+const MASTER_ID = sheetIdOf(SHEET_ARG);
+const GID = gidOf(SHEET_ARG);
+const XLSX = opt("xlsx");
+const LIST = args.includes("--list");
+const ACK_CONFLICTS = args.includes("--ack-conflicts");
+const TAB_ARG = opt("tab") ?? args.find((a) => !a.startsWith("--"));
+const CUTOVER = (opt("cutover") ?? "2026-07-09").trim();
 const APPLY = args.includes("--apply");
+if (!/^\d{4}-\d{2}-\d{2}$/.test(CUTOVER)) {
+  console.error(`--cutover 형식이 올바르지 않습니다: "${CUTOVER}" (YYYY-MM-DD)`);
+  process.exit(1);
+}
 
 /**
  * 시트엔 반명처럼 보이지만 실제 반이 아닌 셀(메모)이 섞여 있다 — 숫자·시각·"쉬는 시간"·사람 이름 등.
@@ -68,15 +105,107 @@ function creds(): { client_email: string; private_key: string } {
   return JSON.parse(s);
 }
 
-async function readMasterGrid(tab: string): Promise<SheetGrid> {
+/**
+ * ⚠️ `googleapis`는 **여기서만 지연 로드**한다 — `--xlsx` 경로는 구글 키도 이 패키지도 필요 없는데,
+ * 최상위 import면 그 경로에서도 통째로 로드된다(2026-08-28 실측: 이 PC의 pnpm 스토어에 있는
+ * `googleapis/.../storagebatchoperations/index.js`가 NUL로 깨져 있어 xlsx 드라이런까지 못 돌았다).
+ */
+async function sheetsApi() {
+  const { google } = await import("googleapis");
   const c = creds();
   const auth = new google.auth.JWT({
     email: c.client_email,
     key: c.private_key,
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
   });
-  const sheets = google.sheets({ version: "v4", auth });
-  const res = await sheets.spreadsheets.get({
+  return google.sheets({ version: "v4", auth });
+}
+
+/** 그 스프레드시트의 탭 목록(gid → 이름). `--list`와 "탭 못 찾음" 안내에 쓴다. */
+async function listTabs(): Promise<{ gid: number; title: string }[]> {
+  if (XLSX) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(XLSX);
+    // xlsx엔 gid가 없다 — 순서를 대신 보여준다(탭은 이름으로 고른다).
+    return wb.worksheets.map((w, i) => ({ gid: i, title: w.name }));
+  }
+  const res = await (await sheetsApi()).spreadsheets.get({
+    spreadsheetId: MASTER_ID,
+    fields: "sheets.properties(sheetId,title)",
+  });
+  return (res.data.sheets ?? []).map((sh) => ({
+    gid: sh.properties!.sheetId!,
+    title: sh.properties!.title!,
+  }));
+}
+
+/**
+ * 내려받은 `.xlsx`에서 그리드를 만든다 — **구글 서비스계정 키가 없을 때의 경로**.
+ * 🔴 ExcelJS는 **병합에 덮인 셀에도 대표값을 복제**해 돌려준다(Sheets API는 좌상단에만 값이 있다).
+ *    그대로 두면 한 반이 10분 조각으로 쪼개지고 강사 블록이 열 수만큼 생긴다(실측: 17블록 → 180블록).
+ *    그래서 덮인 칸을 직접 비운다.
+ * ⚠️ 색은 신뢰하지 않는다 — 밴딩·조건부 서식이 xlsx에 셀별로 굳지 않아 실제 칠해진 칸이 통째로 빠진다
+ *    (실측 9월 탭: 색 규칙을 켜면 406슬롯 중 60개만 남았다). 메모 방어는 색이 아니라 아래
+ *    "DB에 없는 이름은 버린다"가 맡는다(NEW_CLASSES_TO_CREATE 화이트리스트만 생성).
+ */
+/**
+ * 셀 값 → Sheets API `formattedValue`에 준하는 문자열.
+ * 🔴 모르는 모양은 **빈 문자열**로 떨어뜨린다 — `String(obj)`로 두면 `[object Object]`가 반 이름 후보로
+ *    올라와 "슬롯 65칸짜리 반"으로 보인다(2026-08-28 실측). 이름이 아닌 건 없는 것이 정직하다.
+ * 🔴 시각 셀은 Date로 온다 — 그대로 문자열화하면 `Sat Dec 30 1899 …`가 되므로 `HH:MM`으로 맞춘다
+ *    (엑셀의 시각은 1899-12-30 기준 날짜라 연/월/일은 의미가 없다).
+ */
+function cellText(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Date)
+    return `${String(v.getUTCHours()).padStart(2, "0")}:${String(v.getUTCMinutes()).padStart(2, "0")}`;
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if (Array.isArray(o.richText)) return (o.richText as { text?: string }[]).map((x) => x.text ?? "").join("");
+    if ("result" in o) return cellText(o.result);
+    if ("text" in o) return cellText(o.text);
+    if ("error" in o) return ""; // #REF! 등 — 이름이 아니다
+  }
+  return "";
+}
+
+async function readXlsxGrid(tab: string | undefined): Promise<SheetGrid> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(XLSX!);
+  const ws = tab ? wb.worksheets.find((w) => w.name === tab) : wb.worksheets[0];
+  if (!ws) throw new Error(`xlsx에 탭 "${tab}"이 없습니다`);
+  const cells: string[][] = [];
+  for (let r = 1; r <= ws.rowCount; r++) {
+    const row: string[] = [];
+    for (let c = 1; c <= ws.columnCount; c++) {
+      row.push(cellText(ws.getCell(r, c).value));
+    }
+    cells.push(row);
+  }
+  const merges = ((ws.model as unknown as { merges?: string[] }).merges ?? []).map((m) => {
+    const at = (ref: string) => {
+      const mm = /^([A-Z]+)(\d+)$/.exec(ref)!;
+      let col = 0;
+      for (const ch of mm[1]!) col = col * 26 + (ch.charCodeAt(0) - 64);
+      return { r: Number(mm[2]) - 1, c: col - 1 };
+    };
+    const [a, b] = m.split(":");
+    const A = at(a!), B = at(b ?? a!);
+    return { startRowIndex: A.r, endRowIndex: B.r + 1, startColumnIndex: A.c, endColumnIndex: B.c + 1 };
+  });
+  for (const mg of merges)
+    for (let r = mg.startRowIndex; r < mg.endRowIndex; r++)
+      for (let c = mg.startColumnIndex; c < mg.endColumnIndex; c++)
+        if (!(r === mg.startRowIndex && c === mg.startColumnIndex) && cells[r]) cells[r]![c] = "";
+  // fills 미지정 = parse-grid가 색 규칙을 건너뛴다(위 ⚠️).
+  return { tabName: ws.name, cells, merges };
+}
+
+async function readMasterGrid(tab: string): Promise<SheetGrid> {
+  if (XLSX) return readXlsxGrid(tab);
+  const res = await (await sheetsApi()).spreadsheets.get({
     spreadsheetId: MASTER_ID,
     ranges: [tab],
     includeGridData: true,
@@ -119,7 +248,15 @@ function isFilled(ef: CellFormatish): boolean {
 const sql = postgres(process.env.DATABASE_URL!, { ssl: "require", max: 1 });
 const hm = (t: unknown) => (t ? String(t).slice(0, 5) : null);
 
-async function loadContext(): Promise<{ ctx: ExistingContext; existing: ExistingSchedule[] }> {
+/** 컷오버보다 늦게 시작하도록 이미 예약된 슬롯 — 새로 넣는 행의 `valid_to` 상한(앱과 같은 규약). */
+type PendingLater = { classId: string; day: DayOfWeek; startTime: string; validFrom: string };
+const slotKey = (x: { classId: string; day: string; startTime: string }) => `${x.classId}|${x.day}|${x.startTime}`;
+
+async function loadContext(): Promise<{
+  ctx: ExistingContext;
+  existing: ExistingSchedule[];
+  pendingLater: PendingLater[];
+}> {
   const [classes, users, rooms, sched] = await Promise.all([
     sql`select id, class_name, subject, teacher_id, classroom_id from classes
         where tenant_id = ${TENANT} and subject = ${SUBJECT} and is_active = true`,
@@ -131,9 +268,21 @@ async function loadContext(): Promise<{ ctx: ExistingContext; existing: Existing
                cs.valid_from::text as valid_from, cs.valid_to::text as valid_to, c.class_name
         from class_schedules cs join classes c on c.id = cs.class_id
         where c.tenant_id = ${TENANT} and c.subject = ${SUBJECT} and c.is_active = true
-          and cs.valid_to is null`,
+          and (cs.valid_to is null or cs.valid_to >= ${CUTOVER}::date)`,
   ]);
+  // 🔴 유효 판정은 "지금 열려 있나"가 아니라 **컷오버 시점 기준**이다(앱 loadStructureContext와 같은 규약).
+  //    옛 코드(`valid_to is null`)는 ① 컷오버 뒤에 끝나도록 이미 마감된 행을 놓쳐 같은 슬롯을 또 만들고,
+  //    ② 컷오버보다 늦게 시작하는 예약 행을 마감 대상에 넣어 0231a가 그걸 **삭제**하게 만든다.
+  const asOf = (v: unknown) => String(v).slice(0, 10);
+  const live = sched.filter((s) => asOf(s.valid_from) <= CUTOVER);
+  const pendingLater: PendingLater[] = sched
+    .filter((s) => asOf(s.valid_from) > CUTOVER)
+    .map((s) => ({
+      classId: s.class_id, day: s.day_of_week as DayOfWeek,
+      startTime: hm(s.start_time)!, validFrom: asOf(s.valid_from),
+    }));
   return {
+    pendingLater,
     ctx: {
       classes: classes.map((c) => ({
         id: c.id, className: c.class_name, subject: c.subject,
@@ -144,7 +293,7 @@ async function loadContext(): Promise<{ ctx: ExistingContext; existing: Existing
       })),
       classrooms: rooms.map((r) => ({ id: r.id, name: r.name })),
     },
-    existing: sched.map((s) => ({
+    existing: live.map((s) => ({
       id: s.id, classId: s.class_id, className: s.class_name, day: s.day_of_week as DayOfWeek,
       startTime: hm(s.start_time)!, endTime: hm(s.end_time), teacherId: s.teacher_id,
       classroomId: s.classroom_id, slotTeacherLabel: s.slot_teacher_label,
@@ -153,6 +302,31 @@ async function loadContext(): Promise<{ ctx: ExistingContext; existing: Existing
     })),
   };
 }
+
+// ── 0. 대상 탭 확정 — 이름(--tab/위치인자) > 주소의 gid > 안내 후 중단 ─────────
+const tabs = await listTabs();
+if (LIST) {
+  console.log(`스프레드시트 ${XLSX ? XLSX : MASTER_ID} — 탭 ${tabs.length}개`);
+  for (const t of tabs) console.log(`  ${XLSX ? "" : `gid=${String(t.gid).padStart(10)} `}"${t.title}"`);
+  await sql.end();
+  process.exit(0);
+}
+function resolveTab(): string {
+  if (TAB_ARG) {
+    if (tabs.some((t) => t.title === TAB_ARG)) return TAB_ARG;
+    console.error(`탭 "${TAB_ARG}"을 찾을 수 없습니다. --list 로 목록을 확인하세요.`);
+    process.exit(1);
+  }
+  if (GID !== null && !XLSX) {
+    const hit = tabs.find((t) => t.gid === GID);
+    if (hit) return hit.title;
+    console.error(`gid=${GID} 탭이 없습니다. --list 로 목록을 확인하세요.`);
+    process.exit(1);
+  }
+  console.error("대상 탭을 정하지 못했습니다 — --tab=\"이름\" 또는 gid가 있는 --sheet 주소를 주세요(--list로 확인).");
+  process.exit(1);
+}
+const TAB = resolveTab();
 
 // ── 1. 시트 파싱 ──────────────────────────────────────────────────────────────
 const grid = await readMasterGrid(TAB);
@@ -200,7 +374,7 @@ for (const name of [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
 }
 
 // ── 3. 매칭 + diff (반 생성 후 다시 읽어야 새 반이 해석된다) ──────────────────
-const { ctx, existing } = await loadContext();
+const { ctx, existing, pendingLater } = await loadContext();
 const match = matchStructure(parsed, ctx);
 const report = computeStructureDiff(match, existing);
 
@@ -214,6 +388,30 @@ if (dropped.length) {
   console.log(`    ${dropped.map((n) => `${n}(${slotsByName.get(n) ?? 0})`).join(" / ")}`);
 }
 console.log(`계획: 생성 ${report.plan.create} · 변경 ${report.plan.update} · 유지 ${report.plan.keep} · 마감 ${report.plan.remove}`);
+
+// ── 3-b. 적용 후 배치가 물리적으로 성립하는가 — 앱 '시트에서 가져오기'와 **같은 판정**(conflicts.ts).
+//    자리(LAB·JJ)는 제외되고, 합반(같은 강사·같은 방)은 경고일 뿐 막지 않는다(원장 2026-08-28).
+const mustAck = conflictChecklist(report.conflicts);
+if (report.conflicts.length) {
+  console.log(`
+충돌 ${report.conflicts.length}건 (확인 필요 ${mustAck.length}건)`);
+  for (const c of report.conflicts) {
+    const tag = !blocksApply(c.kind) ? "합반(경고)" : c.touched ? "확인필요" : "옛충돌";
+    console.log(`  [${tag}] ${describeConflict(c)}`);
+  }
+}
+if (APPLY && mustAck.length > 0 && !ACK_CONFLICTS) {
+  console.error(
+    `
+중단: 이번 변경이 만든 물리적 충돌 ${mustAck.length}건을 확인해야 적용할 수 있습니다.` +
+      `
+  시트를 고쳐 다시 돌리거나, 의도한 배치라면 --ack-conflicts 를 붙이세요.` +
+      `
+  (배치는 하나도 안 썼습니다. 위의 반 생성·재활성만 이미 반영됐을 수 있습니다.)`,
+  );
+  await sql.end();
+  process.exit(1);
+}
 
 // ── 비수업 블록(감독·준비·회의·연차) — 반이 아니라 teacher_schedule_blocks(0138a) ─────────────
 // 수업 슬롯과 **같은 날짜 경계**로 갈아끼운다: 기존 유효행 마감(valid_to=컷오버−1) + 신규 삽입(valid_from=컷오버).
@@ -277,11 +475,28 @@ const validToById = new Map(existing.map((e) => [e.id, e.validTo]));
 const closes = report.planItems
   .filter((p) => (p.action === "update" || p.action === "remove") && p.scheduleId)
   .map((p) => ({ id: p.scheduleId!, prevValidTo: validToById.get(p.scheduleId!) ?? null }));
+// 같은 칸에 **더 늦은 날짜로 예약된 배치**가 있으면 새 행을 그 하루 전까지만 연다 — 안 닫으면 그
+// 예약일부터 옛/새 행이 둘 다 살아 같은 칸이 두 번 그려진다(앱 applyStructureImport와 같은 규약, 0231a).
+const laterByKey = new Map<string, string>();
+for (const r of pendingLater) {
+  const k = slotKey(r);
+  const cur = laterByKey.get(k);
+  if (cur === undefined || r.validFrom < cur) laterByKey.set(k, r.validFrom);
+}
+const dayBeforeOf = (d: string) => {
+  const dt = new Date(`${d}T00:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().slice(0, 10);
+};
 const inserts = report.planItems
   .filter((p) => (p.action === "create" || p.action === "update") && p.classId)
   .map((p) => ({
     id: randomUUID(),
     classId: p.classId!,
+    validTo: (() => {
+      const until = laterByKey.get(slotKey({ classId: p.classId!, day: p.day, startTime: p.startTime }));
+      return until ? dayBeforeOf(until) : null;
+    })(),
     day: p.day,
     startTime: p.startTime,
     endTime: p.endTime,
