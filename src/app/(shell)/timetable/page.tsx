@@ -79,6 +79,8 @@ import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
 import { StudentTally } from "./_components/student-tally";
 import { WeekNav } from "./_components/week-nav";
+import { ScheduledImportBadge } from "./_components/scheduled-import-badge";
+import { getScheduledImports } from "@/features/timetable/server/scheduled-import-queries";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TeacherGridView } from "./_components/teacher-grid";
 import { TeacherOrderDialog } from "./_components/teacher-order-dialog";
@@ -262,6 +264,9 @@ export default async function TimetablePage({
   // '가져오기'(파일 업로드) 버튼 = classes "full"만. 서버 액션도 같은 canManageTimetableImport로 이중 방어
   // (업로드 시트가 테넌트 전체 수강이라 담당 개념이 없다 — 시트 경로와 동일 규약).
   const canManageImport = await canManageTimetableImport(user.systemRole);
+  // 미래 날짜로 적용해 둔 가져오기(예약) — 툴바 배지의 재료. 예약이 없으면 0행이라 비용이 사실상 없고,
+  // 권한자에게만 도는 쿼리다(배지의 × 가 권한자 전용이라 남에게 보여줄 이유가 없다).
+  const scheduled = canSync && canManageImport ? await getScheduledImports() : [];
   // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(그 과목 전용 시트).
   const sheetUrl = sheetsStatus?.spreadsheetId
     ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
@@ -512,6 +517,17 @@ export default async function TimetablePage({
           today={today}
           hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
+        {/* 미래 날짜로 적용해 둔 변경 — 이번 주 화면엔 흔적이 없어 여기 상시로 붙인다(원장 2026-08-28).
+            라벨=시트 열기 · ×=예약 취소. 예약이 없으면 아무것도 안 그린다(평소 비용 0). */}
+        {scheduled.map((g) => (
+          <ScheduledImportBadge
+            key={g.effectiveDate}
+            effectiveDate={g.effectiveDate}
+            today={today}
+            sheetUrl={sheetUrl}
+            canCancel={canSync && canManageImport}
+          />
+        ))}
         <span className="bg-line h-4 w-px" aria-hidden />
 
         {/* 교실뷰는 과목·구분 칩을 접는다 — 전 과목·전 구분이 한 지도에 그려져야 참이다(요일·과목
