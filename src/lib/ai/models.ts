@@ -47,6 +47,13 @@ export function defaultProvider(): AiProvider {
 export type ResolvedModel = { provider: AiProvider; model: string; keyName: AiKeyName };
 
 /**
+ * 폴백 사다리 — **anthropic → deepseek → upstage(Solar)**(원장 2026-08-28: *"anthropic -> deepseek"*,
+ * *"deepseek 소진시 solar 폴백"*). Solar가 맨 뒤인 이유는 품질 A/B 탈락(상담 분석 warnings 통째 누락)이라
+ * **마지막 보루**로만 쓰기 때문이다. 이 배열 순서가 곧 사다리라, 순서를 바꾸면 폴백 대상이 바뀐다.
+ */
+const FALLBACK_LADDER: readonly AiProvider[] = ["anthropic", "deepseek", "upstage"];
+
+/**
  * 후보 provider 순서(reasoning=Anthropic 고정, 그 외 AI_PROVIDER 기본을 맨 앞, 나머지는 폴백, prefer를 최우선).
  * resolveModelChain이 이 순서에서 "모델+키가 실제 있는" 후보만 남기므로, 선호/기본 provider 키가 없어도
  * 다음 provider로 무중단 폴백된다(전사 분석은 prefer:"deepseek" → 키 없으면 anthropic/upstage로).
@@ -56,7 +63,7 @@ function providerOrder(tier: AiTier, prefer?: AiProvider): AiProvider[] {
   const base: AiProvider[] =
     tier === "reasoning"
       ? ["anthropic"] // reasoning은 Anthropic 고정(정책)
-      : [def, ...(["anthropic", "upstage", "deepseek"] as AiProvider[]).filter((p) => p !== def)];
+      : [def, ...FALLBACK_LADDER.filter((p) => p !== def)];
   return prefer ? [prefer, ...base.filter((p) => p !== prefer)] : base;
 }
 

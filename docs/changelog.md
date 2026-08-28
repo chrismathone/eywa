@@ -1,5 +1,26 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-08-28 (9) — 크레딧 소진에도 **폴백이 안 탔다** + 폴백 문구가 특이사항을 삼켰다 (#118)
+
+강사 제보 *"수업보고서에서 '내일 보강'이라는 멘트가 안 적힌다"* → **특정 문구 차단은 없었다.**
+2026-08-27 16:08(KST)부터 Anthropic 크레딧 소진으로 멘트 AI가 전건 실패(`ai_usage_logs` 8/27 77·8/28 32,
+전부 `ok=false`). 오류가 **400** `invalid_request_error`("credit balance is too low")라
+`isRetryableProviderError`(401·403·429·키무효)를 통과 못 해 **폴백 사다리를 아예 안 탔다.**
+
+세 곳을 고쳤다.
+1. **`isCreditExhaustedError` 신설** → 폴백 대상에 포함. Anthropic=400 `credit balance` /
+   DeepSeek=**402** `Insufficient Balance` / OpenAI 호환=429 `insufficient_quota`로 모양이 달라 **상태코드+문구**를
+   둘 다 본다. 마지막 후보까지 막히면 `rethrowAi`가 한글로 "AI 잔액 소진 … 크레딧을 충전해야 합니다".
+2. **폴백 사다리 = anthropic → deepseek → upstage(Solar)** 명시(`FALLBACK_LADDER`, 원장 2026-08-28
+   *"anthropic -> deepseek"*, *"deepseek 소진시 solar 폴백"*). Solar는 품질 A/B 탈락이라 마지막 보루.
+3. **폴백 템플릿(`buildSubjectReport`)이 사실을 흘리던 것** — ① 특이사항 칸이 아예 없어
+   "내일 4시에 보강입니다"가 증발했고 ② 태도·점수·과제를 학생 값으로 읽어(2026-08-13 행 단위 전환 누락)
+   전부 빈 채 나갔다. 이제 `resolveRowFields`로 행 값을 읽고 특이사항을 **원문 그대로 줄 단위**로 싣는다
+   (마무리는 여전히 "오늘 과제는 ~입니다").
+
+피해 실측: 이 축약 문구로 발송된 보고서 **8/27 40건 · 8/28 9건**. 드라이런으로 그 21+2건에 새 템플릿을
+돌려 특이사항·점수·태도가 전부 복원되는 것을 확인. 검증 typecheck0/lint0/**test6753**.
+
 ## 2026-08-28 (8) — 예약 적용이면 **담임도 그날 바뀐다** (0234a + 기한 cron)
 
 원장: *"담임도 미래에 바뀌도록 해야겠는데, 인수인계 시스템 있잖아."* → 자동 적용 선택.

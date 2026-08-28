@@ -411,3 +411,99 @@ describe("진도 중단 상태 4종 문장", () => {
     expect(r).toContain("수학 월말평가, 영어 모의고사를 진행했습니다.");
   });
 });
+
+// 🔴 2026-08-27~28 프로덕션 사고. Anthropic 크레딧이 소진돼 멘트 AI가 이틀간 전건 실패했고
+//    (8/27 77건·8/28 32건), 호출부가 이 템플릿으로 폴백했는데 템플릿이 두 가지를 빠뜨렸다:
+//      ① 특이사항이 아예 없다 — "내일 4시에 보강입니다."가 통째로 증발(원장 제보의 그 증상)
+//      ② 태도·점수·과제를 **학생 값**으로 읽는다 — 2026-08-13에 행 값으로 갈렸는데 안 따라왔다
+//    실측(김근호 8/28): 21/25·매우 좋음·100%가 다 입력됐는데 멘트엔 진도 한 줄 + 과제뿐이었다.
+describe("🔴 폴백 템플릿 — 특이사항과 행 값(2026-08-27 사고)", () => {
+  /** 사고 당일 실데이터와 같은 모양: 평가값이 전부 **행**에 있고 학생 값은 비어 있다. */
+  const rowOnly = makeStudent({
+    name: "김근호",
+    subjects: [
+      {
+        name: "수학",
+        subjectLabel: "수학",
+        prev: "",
+        today: "삼각비의 뜻",
+        homeworkToday: "개념의 숲 16-23p",
+        note: "내일 4시에 보강입니다.",
+        attitude: "매우 좋음",
+        homework: "100%",
+        dailyScore: 21,
+        dailyMax: 25,
+      },
+    ],
+    tests: {
+      daily: { score: null, max: 20, prevScore: null },
+      check: { score: null, max: 20, prevScore: null },
+    },
+    attitude: null,
+    homework: "",
+  });
+
+  it("특이사항을 원문 그대로 싣는다 — 약속이 증발하면 학부모가 보강을 모른다", () => {
+    expect(buildSubjectReport(rowOnly, 0)).toContain("내일 4시에 보강입니다.");
+  });
+
+  it("태도·점수·과제를 그 행 값으로 읽는다(학생 값이 비어 있어도)", () => {
+    const r = buildSubjectReport(rowOnly, 0);
+    expect(r).toContain("일일테스트에서 25문제 중 21개 맞음"); // 행 dailyScore 21/25 (학생 값은 null)
+    expect(r).toContain("수업 태도는 매우 좋았고, 지난 과제는 다 해왔습니다."); // 행 attitude·homework
+  });
+
+  it("마무리는 여전히 '오늘 과제' — 특이사항은 그 앞에 온다", () => {
+    const lines = buildSubjectReport(rowOnly, 0).split("\n");
+    expect(lines[lines.length - 1]).toBe("오늘 과제는 개념의 숲 16-23p입니다.");
+    expect(lines.indexOf("내일 4시에 보강입니다.")).toBe(lines.length - 2);
+  });
+
+  it("여러 줄 특이사항은 접지 않고 줄 그대로(', '로 이으면 '…습니다., …습니다.'가 된다)", () => {
+    const st = makeStudent({
+      subjects: [
+        {
+          name: "수학",
+          subjectLabel: "수학",
+          prev: "",
+          today: "이차함수",
+          note: "  곱셈공식 17문제 중 14개 맞았습니다.  \n\n9월부터 3학년 2학기 진도 시작합니다.\n",
+        },
+      ],
+    });
+    const r = buildSubjectReport(st, 0);
+    expect(r).toContain("곱셈공식 17문제 중 14개 맞았습니다.\n9월부터 3학년 2학기 진도 시작합니다.");
+    expect(r).not.toContain("맞았습니다., ");
+  });
+
+  it("특이사항이 없으면 빈 줄을 만들지 않는다", () => {
+    const st = makeStudent({
+      subjects: [{ name: "수학", subjectLabel: "수학", prev: "", today: "이차함수", note: "   " }],
+    });
+    expect(buildSubjectReport(st, 0)).not.toMatch(/\n\s*\n/);
+  });
+
+  it("행 값이 없는 옛 세션은 학생 값을 그대로 쓴다(하위호환 — row-fields 폴백)", () => {
+    const legacy = makeStudent({
+      subjects: [{ name: "수학", subjectLabel: "수학", prev: "", today: "이차함수" }],
+      tests: {
+        daily: { score: 18, max: 20, prevScore: null },
+        check: { score: null, max: 20, prevScore: null },
+      },
+      attitude: "아주 좋음",
+      homework: "완료",
+      note: "다음 주 화요일에 월말평가 있습니다.",
+    });
+    const r = buildSubjectReport(legacy, 0);
+    expect(r).toContain("일일테스트에서 20문제 중 18개 맞음");
+    expect(r).toContain("수업 태도는 아주 좋음");
+    expect(r).toContain("다음 주 화요일에 월말평가 있습니다.");
+  });
+
+  it("합본(buildReport)은 학생 값 그대로 — 학생 포털용이라 특이사항을 싣지 않는다", () => {
+    const st = makeStudent({ attitude: "보통", homework: "완료", note: "내일 4시에 보강입니다." });
+    const r = buildReport(st);
+    expect(r).toContain("수업 태도는 보통");
+    expect(r).not.toContain("보강");
+  });
+});

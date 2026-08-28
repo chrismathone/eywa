@@ -12,7 +12,13 @@ vi.mock("./anthropic", () => ({
   getAnthropic: () => ({ messages: { create: anthropicCreate } }),
 }));
 
-import { generateJSON, isRetryableProviderError, isTemperatureDeprecatedError, parseJsonLoose } from "./generate";
+import {
+  generateJSON,
+  isCreditExhaustedError,
+  isRetryableProviderError,
+  isTemperatureDeprecatedError,
+  parseJsonLoose,
+} from "./generate";
 import { resolveModel, resolveModelChain } from "./models";
 
 // usage 포함 — generateJSON이 usage를 캡처(0113a 계측)해도 파싱·폴백이 안 깨짐을 함께 검증.
@@ -139,6 +145,80 @@ describe("isRetryableProviderError", () => {
   });
 });
 
+describe("isCreditExhaustedError — 2026-08-27 크레딧 소진 사고 재발 방지", () => {
+  // ai_usage_logs에 실제로 쌓인 원문(8/27 77건·8/28 32건 전부 이것). 상태가 **400**이라
+  // 401/403/429만 보던 판정을 통과 못 해 폴백 사다리를 안 탔고, 학부모 49명에게 특이사항이
+  // 빠진 폴백 템플릿 문구가 나갔다.
+  const ANTHROPIC_CREDIT =
+    '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."},"request_id":"req_011CeV1dhy7E4u5PgkxdWLo7"}';
+
+  it("🔴 Anthropic 크레딧 소진(400)은 폴백 대상", () => {
+    expect(isCreditExhaustedError(new Error(ANTHROPIC_CREDIT))).toBe(true);
+    expect(isRetryableProviderError(new Error(ANTHROPIC_CREDIT))).toBe(true);
+    expect(isRetryableProviderError(Object.assign(new Error(ANTHROPIC_CREDIT), { status: 400 }))).toBe(true);
+  });
+
+  it("plain object로 온 오류도 message를 읽는다(String(obj)='[object Object]' 함정)", () => {
+    expect(isCreditExhaustedError({ status: 400, message: ANTHROPIC_CREDIT })).toBe(true);
+  });
+
+  it("provider마다 모양이 다르다 — DeepSeek 402·잔액 문구·OpenAI 호환 quota", () => {
+    expect(isCreditExhaustedError({ status: 402 })).toBe(true); // DeepSeek Payment Required
+    expect(isCreditExhaustedError(new Error("Insufficient Balance"))).toBe(true);
+    expect(isRetryableProviderError(new Error('{"code":"insufficient_quota"}'))).toBe(true);
+    expect(isRetryableProviderError(new Error("You exceeded your current quota, please check your plan"))).toBe(true);
+  });
+
+  it("잔액과 무관한 400/5xx·파싱 실패는 그대로 폴백 안 함(오탐 금지)", () => {
+    expect(isCreditExhaustedError({ status: 400, message: "bad request" })).toBe(false);
+    expect(isCreditExhaustedError(new Error("JSON parse error"))).toBe(false);
+    expect(isCreditExhaustedError({ status: 500 })).toBe(false);
+    expect(isRetryableProviderError({ status: 400, message: "bad request" })).toBe(false);
+  });
+});
+
+describe("폴백 사다리 = anthropic → deepseek → upstage(Solar)", () => {
+  // 원장 2026-08-28: "anthropic -> deepseek", "deepseek 소진시 solar 폴백".
+  const KEYS = [
+    "AI_PROVIDER",
+    "ANTHROPIC_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_API_KEY_CONSULTATIONS",
+    "UPSTAGE_API_KEY",
+  ];
+  let saved: Record<string, string | undefined>;
+  beforeEach(() => {
+    saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+    KEYS.forEach((k) => delete process.env[k]);
+  });
+  afterEach(() => {
+    KEYS.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k])));
+  });
+
+  it("🔴 Anthropic이 기본이면 다음은 DeepSeek, Solar는 마지막", () => {
+    process.env.AI_PROVIDER = "anthropic";
+    process.env.ANTHROPIC_API_KEY = "an";
+    process.env.DEEPSEEK_API_KEY = "ds";
+    process.env.UPSTAGE_API_KEY = "up";
+    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["anthropic", "deepseek", "upstage"]);
+    expect(resolveModelChain("balanced").map((c) => c.provider)).toEqual(["anthropic", "deepseek", "upstage"]);
+  });
+
+  it("DeepSeek 키가 없으면 Solar로 건너뛴다(무중단)", () => {
+    process.env.AI_PROVIDER = "anthropic";
+    process.env.ANTHROPIC_API_KEY = "an";
+    process.env.UPSTAGE_API_KEY = "up";
+    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["anthropic", "upstage"]);
+  });
+
+  it("기본이 Solar여도 그 다음은 Anthropic → DeepSeek 순", () => {
+    process.env.ANTHROPIC_API_KEY = "an";
+    process.env.DEEPSEEK_API_KEY = "ds";
+    process.env.UPSTAGE_API_KEY = "up";
+    expect(resolveModelChain("fast").map((c) => c.provider)).toEqual(["upstage", "anthropic", "deepseek"]);
+  });
+});
+
 describe("isTemperatureDeprecatedError", () => {
   const PROD_MESSAGE =
     '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_x"}';
@@ -212,6 +292,21 @@ describe("generateJSON 폴백", () => {
     const { data } = await generateJSON<{ x: number }>({ prompt: "JSON 주세요", maxTokens: 100 });
     expect(data).toEqual({ x: 1 });
     expect(anthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("🔴 크레딧 소진(400)도 다음 provider로 폴백한다 — 2026-08-27 사고의 정확한 재현", async () => {
+    upstageCreate.mockRejectedValueOnce(
+      Object.assign(
+        new Error(
+          '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}',
+        ),
+        { status: 400 },
+      ),
+    );
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    const { data } = await generateJSON<{ ok: boolean }>({ prompt: "JSON 주세요", maxTokens: 100 });
+    expect(data).toEqual({ ok: true }); // 종전엔 여기서 throw → 호출부가 폴백 템플릿으로 떨어졌다
+    expect(anthropicCreate).toHaveBeenCalledOnce();
   });
 
   it("폴백 불가 오류(400)는 즉시 throw, 다음 provider 시도 안 함", async () => {

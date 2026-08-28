@@ -13,6 +13,7 @@ import { attitudeClause } from "./attitude";
 import { isSkipStatus, skipStatusOf } from "./progress-status";
 import { PROGRESS_MODES, asProgressMode, progressPredicate } from "./progress-mode";
 import { progressInline } from "./progress-range";
+import { resolveRowFields, type RowEvalFields } from "./row-fields";
 
 /**
  * 템플릿 문장 사이 구분자 — **줄바꿈**(원장 2026-07-30: "줄바꿈도 필요하면 적절히 반영").
@@ -94,13 +95,20 @@ function testClause(label: string, t: TestScore): string | null {
  *    같은 문장을 붙였다(2026-07-30 감사: 발송분 50건에 포함). **강사가 하지 않은 평가·조언이 강사
  *    이름으로 학부모에게 나가는 것**이고, AI 멘트 프롬프트가 금지한 바로 그 종류의 문장이다
  *    (전망·조언·격려 금지). 템플릿은 AI가 실패했을 때의 **사실 요약**이지 평가서가 아니다.
+ *
+ * 🔴 재료는 **그 행의 값**이다(`RowEvalFields` — row-fields.ts 단일 소스).
+ * 2026-08-13에 태도·점수·지난 과제가 학생 단위에서 **행 단위**로 갈렸는데, AI 멘트 경로
+ * (`buildReportCommentInput`)만 `resolveRowFields`를 타고 이 템플릿은 학생 값을 그대로 읽고 있었다.
+ * 그 결과 실패 폴백에서 **점수·태도·과제가 통째로 빈 채** 진도 한 줄만 나갔다
+ * (2026-08-28 실측: 21/25·매우 좋음·100%가 다 입력돼 있는데 멘트엔 하나도 없었다).
+ * 학생 값이 필요한 합본(`buildReport`)은 `resolveRowFields(st, undefined)`가 그대로 돌려주므로 동작 불변.
  */
-function testAndClosingLines(st: OneScreenStudent): string[] {
+function testAndClosingLines(ev: RowEvalFields): string[] {
   const lines: string[] = [];
 
   const tparts: string[] = [];
-  const dPart = testClause("일일테스트", st.tests.daily);
-  const cPart = testClause("확인테스트", st.tests.check);
+  const dPart = testClause("일일테스트", ev.tests.daily);
+  const cPart = testClause("확인테스트", ev.tests.check);
   if (dPart) tparts.push(dPart);
   if (cPart) tparts.push(cPart);
   if (tparts.length) lines.push(tparts.join(", ") + ".");
@@ -108,15 +116,34 @@ function testAndClosingLines(st: OneScreenStudent): string[] {
   // 태도·과제를 독립 처리 — 빈 값(과제 미입력 "" / "—")은 문장에서 생략(무의미한 "과제는 — 상태입니다" 방지).
   // "없음"(과제가 없던 날, 원장 2026-07-23)도 문장에선 생략한다 — "과제는 없음 상태입니다"는 어색하고,
   //  없던 과제를 굳이 언급할 이유도 없다. 학부모 카드엔 '지난 과제: 없음'으로 그대로 보인다.
-  const hasHomework = !!st.homework && st.homework !== "—" && !isNoneValue(st.homework);
+  const hasHomework = !!ev.homework && ev.homework !== "—" && !isNoneValue(ev.homework);
   // 값이 퍼센트(90%)라 "지난 과제는 90%입니다"로는 무엇의 90%인지 모호하다 → homeworkRateClause 단일 소스.
   // 태도도 마찬가지 — 선택지가 "안좋음"이라 그대로 이으면 "태도는 안좋음입니다"가 된다(attitudeClause).
-  const hwClause = hasHomework ? `지난 과제는 ${homeworkRateClause(st.homework)}` : null;
-  if (st.attitude && hwClause) lines.push(`수업 태도는 ${attitudeClause(st.attitude, "join")}, ${hwClause}.`);
-  else if (st.attitude) lines.push(`수업 태도는 ${attitudeClause(st.attitude)}.`);
+  const hwClause = hasHomework ? `지난 과제는 ${homeworkRateClause(ev.homework)}` : null;
+  if (ev.attitude && hwClause) lines.push(`수업 태도는 ${attitudeClause(ev.attitude, "join")}, ${hwClause}.`);
+  else if (ev.attitude) lines.push(`수업 태도는 ${attitudeClause(ev.attitude)}.`);
   else if (hwClause) lines.push(`${hwClause}.`);
 
   return lines;
+}
+
+/**
+ * 특이사항(강사 메모)을 **원문 그대로** 줄 단위로 — 폴백 템플릿의 마지막 구멍(2026-08-27 사고).
+ *
+ * 🔴 왜 원문인가: 이 템플릿이 도는 순간은 **AI가 죽은 순간**이라 다듬어 줄 사람이 없다. 강사가
+ *    "내일 4시에 보강입니다."라고 적었는데 통째로 사라지면 학부모는 보강 자체를 모른다 —
+ *    문장이 조금 거친 것보다 **약속이 증발하는 쪽이 훨씬 나쁘다**. AI 경로는 같은 값을 프롬프트
+ *    사실로 받아 문장에 녹이므로(report-comment.ts `specialNote`), 두 경로가 전할 내용은 같다.
+ * ⚠️ 줄바꿈을 `flatten`으로 접지 않는다 — 실데이터의 특이사항은 여러 사실을 줄로 나눠 적은 나열형이라
+ *    ", "로 이으면 "…맞았습니다., …맞았습니다."가 된다. LINE_BREAK 규약대로 **사실 한 덩이 = 한 줄**.
+ * ⚠️ 반 전체 안내(같은 반 전원 동일 메모)를 여기서 가르지 않는다 — 갈라도 학부모에게 갈 문장은 같고,
+ *    템플릿엔 "지어내지 마세요" 같은 모델 가드가 필요 없다(붙이는 게 아니라 그대로 옮기는 것이라).
+ */
+function noteLines(note: string | null | undefined): string[] {
+  return (note ?? "")
+    .split(/\n+/)
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 /** 오늘 진도·테스트·태도를 합친 학부모 보고서 초안 (전 과목 합본 — 학생 데일리 리포트용) */
@@ -143,7 +170,8 @@ export function buildReport(st: OneScreenStudent): string {
   if (exams.length) clauses.push(`${examText}를 진행했`);
   // ⚠️ 학생 호칭('○○ 학생,')을 쓰지 않는다 — AI 멘트 프롬프트가 금지한 것과 같은 규칙(수신인은 학부모).
   const head = clauses.length ? `오늘은 ${clauses.join("고, ")}습니다.` : "";
-  return [head, ...testAndClosingLines(st)].filter(Boolean).join(LINE_BREAK);
+  // 합본엔 행이 없다 — 학생 값을 그대로 쓴다(resolveRowFields는 행 미지정이면 학생 값 반환 = 동작 불변).
+  return [head, ...testAndClosingLines(resolveRowFields(st, undefined))].filter(Boolean).join(LINE_BREAK);
 }
 
 /** 과목별 학부모 보고서 초안 — 해당 과목 진도만 언급(과목별로 따로 발송용). */
@@ -151,6 +179,7 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
   const su = st.subjects[subjectIndex];
   if (!su) return buildReport(st);
   const label = su.subjectLabel || su.name;
+  const ev = resolveRowFields(st, su); // 그 행의 태도·점수·과제·특이사항(학생 값은 폴백)
   const lines = [
     // 학부모 문장 — 반 이름이 섞이지 않는 subjectLabel(위 buildReport와 같은 이유).
     // 진도가 중단된 날은 차시가 없어 "진도를 진행했습니다"가 거짓 — 전용 문장으로 간다.
@@ -158,7 +187,9 @@ export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): 
       ? `오늘은 ${label} ${skipStatusOf(su.today)}를 진행했습니다.`
       : // 성격(복습·문제풀이)이 붙으면 술어가 바뀐다 — "진도를 진행했" ↔ "복습을 진행했".
         `오늘은 ${label} ${progressInline(su.today)} ${progressPredicate(asProgressMode(su.progressMode))}습니다.`,
-    ...testAndClosingLines(st),
+    ...testAndClosingLines(ev),
+    // 특이사항 — 강사가 쓴 원문 그대로. **오늘 과제 앞**에 둔다(마무리 문장은 과제라는 규약 유지).
+    ...noteLines(ev.note),
   ];
   // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.
   // 오늘 과제 — "없음"이면 "오늘 과제는 없음입니다"가 되지 않게 전용 문장으로(원장 2026-07-23).

@@ -184,6 +184,13 @@ function rethrowAi(provider: AiProvider, err: unknown): never {
       ? Number((err as { status?: unknown }).status)
       : undefined;
   const raw = err instanceof Error ? err.message : String(err);
+  // 🔴 잔액 소진을 **가장 먼저** 판정한다 — 키 오류·429보다 구체적이고, 조치가 다르다(갱신·대기가 아니라 **충전**).
+  //    여기까지 왔다는 건 폴백 사다리의 provider가 전부 막혔다는 뜻이라, 원문 영문 대신 할 일을 한글로 말한다.
+  if (isCreditExhaustedError(err)) {
+    throw new Error(
+      `AI 잔액 소진: ${label} 크레딧이 모두 소진되어 호출할 수 없습니다. 관리자가 해당 서비스에 크레딧을 충전해야 합니다.`,
+    );
+  }
   if (status === 401 || status === 403 || /invalid.*api key|unauthorized|api key/i.test(raw)) {
     throw new Error(
       `AI 키 오류: ${label} API 키가 유효하지 않습니다(${status ?? "인증 거부"}). 관리자가 환경변수의 AI API 키를 확인·갱신해야 합니다.`,
@@ -195,6 +202,17 @@ function rethrowAi(provider: AiProvider, err: unknown): never {
   throw err instanceof Error ? err : new Error(raw);
 }
 
+/**
+ * provider 호출 에러의 사람이 읽는 본문 — SDK가 던지는 Error뿐 아니라 **plain object로 온 오류**도
+ * `message`를 읽는다(`String(obj)`는 "[object Object]"라 어떤 판정에도 안 걸린다).
+ */
+function providerErrorText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err)
+    return String((err as { message?: unknown }).message ?? "");
+  return String(err);
+}
+
 /** provider 호출 에러의 HTTP 상태코드(SDK가 status를 안 주면 undefined). */
 function providerErrorStatus(err: unknown): number | undefined {
   return typeof err === "object" && err !== null && "status" in err
@@ -202,12 +220,33 @@ function providerErrorStatus(err: unknown): number | undefined {
     : undefined;
 }
 
-/** 다른 provider로 폴백할 가치가 있는 오류인가 — 인증(401/403)·한도(429), 또는 키 무효 메시지. */
+/**
+ * 크레딧·잔액 소진인가 — **폴백해야 마땅한데 상태코드가 400/402라 인증 오류로 안 잡히던** 구멍.
+ *
+ * 🔴 2026-08-27 프로덕션 사고: Anthropic 크레딧이 바닥나자 학부모 멘트 AI가 이틀간 **전건 실패**했다
+ *    (8/27 77건·8/28 32건 모두 ok=false). 오류가 `400 invalid_request_error`
+ *    ("Your credit balance is too low to access the Anthropic API")라 401/403/429만 보던
+ *    `isRetryableProviderError`를 **통과하지 못해 다른 provider로 넘어가지 않았고**, 호출부는 곧장
+ *    폴백 템플릿으로 떨어져 특이사항("내일 4시에 보강입니다")이 빠진 문구가 학부모 49명에게 나갔다.
+ *    폴백 사다리(anthropic→deepseek→solar)는 그때도 있었다 — **이 판정 하나가 없어서 안 탔다.**
+ *
+ * ⚠️ provider마다 모양이 다르다: Anthropic=400 + "credit balance", DeepSeek=402 "Insufficient Balance",
+ *    OpenAI 호환(Upstage)=429 + `insufficient_quota`. 그래서 **상태코드와 문구를 둘 다** 본다.
+ * ⚠️ 오탐의 대가는 작다(다음 provider로 한 번 더 시도할 뿐) — 미탐은 이번처럼 기능이 조용히 죽는다.
+ */
+export function isCreditExhaustedError(err: unknown): boolean {
+  if (providerErrorStatus(err) === 402) return true; // Payment Required(DeepSeek 잔액 0)
+  return /credit balance|insufficient[\s_-]*(balance|quota|funds?|credits?)|(exceed|exceeded).{0,20}quota|purchase credits|payment required/i.test(
+    providerErrorText(err),
+  );
+}
+
+/** 다른 provider로 폴백할 가치가 있는 오류인가 — 인증(401/403)·한도(429)·**잔액 소진**, 또는 키 무효 메시지. */
 export function isRetryableProviderError(err: unknown): boolean {
   const status = providerErrorStatus(err);
   if (status === 401 || status === 403 || status === 429) return true;
-  const raw = err instanceof Error ? err.message : String(err);
-  return /invalid.*api key|unauthorized|api key/i.test(raw);
+  if (isCreditExhaustedError(err)) return true;
+  return /invalid.*api key|unauthorized|api key/i.test(providerErrorText(err));
 }
 
 /**
@@ -373,6 +412,8 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
           provider,
           model,
           status: providerErrorStatus(e),
+          // 잔액 소진은 저절로 안 풀린다(충전 전까지 매 호출 폴백) — 인증·한도와 구분해 로그에 남긴다.
+          reason: isCreditExhaustedError(e) ? "credit_exhausted" : "auth_or_rate_limit",
         });
         continue;
       }
