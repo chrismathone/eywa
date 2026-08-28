@@ -74,6 +74,12 @@ const ACK_CONFLICTS = args.includes("--ack-conflicts");
 const TAB_ARG = opt("tab") ?? args.find((a) => !a.startsWith("--"));
 const CUTOVER = (opt("cutover") ?? "2026-07-09").trim();
 const APPLY = args.includes("--apply");
+/**
+ * 컷오버가 오늘 이하인가 — **미리보기 문구 전용**(예약인지 즉시인지 사람에게 알려 주는 라벨).
+ * ⚠️ 실제 판정에 쓰지 말 것: RPC는 UTC `current_date`로 가르는데 여기는 KST라 자정 근처에서 갈린다.
+ *    적용 경로는 RPC가 돌려주는 `classUpdatesDeferred`를 본다(단일 소스).
+ */
+const IMMEDIATE = CUTOVER <= new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 if (!/^\d{4}-\d{2}-\d{2}$/.test(CUTOVER)) {
   console.error(`--cutover 형식이 올바르지 않습니다: "${CUTOVER}" (YYYY-MM-DD)`);
   process.exit(1);
@@ -98,6 +104,32 @@ const NEW_CLASSES_TO_CREATE = [
 ];
 const EXTRA_NEW_CLASSES = (args.find((a) => a.startsWith("--new-class="))?.split("=")[1] ?? "")
   .split(",").map((s) => s.trim()).filter(Boolean);
+
+/**
+ * **반 이름 변경**(원장 2026-08-28 *"자동으로 반이름 변경되게 이력 남길 수 없나"* → *"반이름 변경도 9/1에
+ * 예약되도록 시스템화"*). 형식 `--rename="구반:새반,구반2:새반2"` — **적은 순서대로** 적용된다.
+ *
+ * 🔴 왜 신설이 아니라 이름 변경인가: 레벨 승급은 **같은 아이들이 그대로 올라가는 것**이라, 신설하면 그 반의
+ *    수강·성적·출결·보고서 이력이 통째로 끊긴다. 이름만 바꾸면 반 id가 유지돼 전부 그대로 붙어 있다.
+ * 🔴 **순서가 중요하다** — 레벨 사다리는 회전한다(실측 2026-09: `LS6→LE1`로 이름을 비운 다음 `LS5→LS6`,
+ *    `JP2→JP3` 다음 `PJ1→PJ2`). 거꾸로 하면 이미 쓰는 이름과 부딪친다. 그래서 정렬하지 않고 **입력 순서 보존**.
+ * 🔴 매칭에는 **새 이름을 미리 반영**한다(아래 aliasing) — 시트엔 새 이름이 적혀 있는데 DB는 아직 옛 이름이라,
+ *    그대로 두면 그 반이 "DB에 없는 이름"으로 버려지고 배치가 통째로 마감돼 버린다.
+ * ⚠️ 미래 컷오버면 이름 변경도 **그날로 예약**된다(classUpdates에 실려 스냅샷에만 남고 cron이 재생).
+ *    그래서 예약 취소(배지 ×)로 이름 변경까지 함께 없던 일이 된다. 오늘 컷오버면 여기서 즉시 바꾼다.
+ */
+const RENAMES: { from: string; to: string }[] = (opt("rename") ?? "")
+  .split(",")
+  .map((pair) => pair.trim())
+  .filter(Boolean)
+  .map((pair) => {
+    const i = pair.lastIndexOf(":"); // 반 이름에 ':'이 들어갈 수 있어 **마지막** 콜론에서 가른다
+    if (i <= 0 || i === pair.length - 1) {
+      console.error(`--rename 형식이 올바르지 않습니다: "${pair}" (구반:새반)`);
+      process.exit(1);
+    }
+    return { from: pair.slice(0, i).trim(), to: pair.slice(i + 1).trim() };
+  });
 
 function creds(): { client_email: string; private_key: string } {
   let s = (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "").trim();
@@ -329,7 +361,41 @@ function resolveTab(): string {
 const TAB = resolveTab();
 
 // ── 1. 시트 파싱 ──────────────────────────────────────────────────────────────
-const grid = await readMasterGrid(TAB);
+
+/**
+ * 마지막으로 읽을 열(A1 문자, 포함). 원장 2026-08-28: *"EU열 뒤로는 필요없어 버려"*.
+ *
+ * 🔴 왜 필요한가: 9월 탭 **EV2** 머리글이 `이주희 T LAB (603호) / 8/1~8/14` — **8월 구간 블록이
+ *    통째로 남아 있다**. 그 안에 옛 반 이름 38칸(LS3a·DP6·JP2…)이 있어, 그대로 읽으면 8월 배치가
+ *    9월로 흘러든다. 이름 변경(`--rename`) 뒤엔 대부분 매칭이 안 돼 무시되지만 **이름이 안 바뀐 반
+ *    (RTT4·LS6)은 그 옛 블록에서 계속 매칭된다** — 잘라내는 편이 확실하다.
+ * ⚠️ 기본값 없음(무제한) — 시트 구조가 바뀌면 이 값도 바뀌므로 **명령줄에 적어 보이게** 둔다.
+ * ⚠️ merges·fills도 함께 잘라야 한다(cells만 자르면 색·병합이 없는 열을 가리켜 판정이 어긋난다).
+ */
+const MAX_COL = (() => {
+  const v = opt("max-col");
+  if (!v) return null;
+  if (!/^[A-Za-z]{1,3}$/.test(v)) {
+    console.error(`--max-col 형식이 올바르지 않습니다: "${v}" (A1 열 문자, 예: EU)`);
+    process.exit(1);
+  }
+  let n = 0;
+  for (const ch of v.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1; // 0-based, 포함
+})();
+function clipGrid(g: SheetGrid): SheetGrid {
+  if (MAX_COL === null) return g;
+  const end = MAX_COL + 1;
+  const widest = g.cells.reduce((a, r) => Math.max(a, r.length), 0);
+  if (widest > end) console.log(`  ${opt("max-col")!.toUpperCase()}열까지만 읽음 — 오른쪽 ${widest - end}열 무시(8월 잔재 블록).`);
+  return {
+    ...g,
+    cells: g.cells.map((r) => r.slice(0, end)),
+    merges: g.merges.filter((m) => m.startColumnIndex < end).map((m) => ({ ...m, endColumnIndex: Math.min(m.endColumnIndex, end) })),
+    ...(g.fills ? { fills: g.fills.map((r) => r.slice(0, end)) } : {}),
+  };
+}
+const grid = clipGrid(await readMasterGrid(TAB));
 const raw = parseTeacherGrid(grid);
 // 자리(LAB·JJ)는 담당자 이름이 아니라 **자리 이름으로 굳혀** 저장한다(원장 2026-08-04, canonicalSlotTeacherLabel).
 // 시트가 `이주희`(LAB 아르바이트)로 그려도 eywa엔 `LAB` — 담당이 바뀌어도 자리는 그대로다.
@@ -375,6 +441,51 @@ for (const name of [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
 
 // ── 3. 매칭 + diff (반 생성 후 다시 읽어야 새 반이 해석된다) ──────────────────
 const { ctx, existing, pendingLater } = await loadContext();
+
+// ── 3-a. 반 이름 변경(--rename) — **매칭 전에 가상 적용**한다 ────────────────────
+// 시트엔 새 이름(LS4a)이 적혀 있는데 DB는 아직 옛 이름(LS3a)이다. 그대로 매칭하면 그 반이
+// "DB에 없는 이름"으로 버려지고 **옛 반의 배치가 통째로 마감**된다 — 이름만 바꾸려다 반을 비우는 셈.
+// 그래서 여기서 ctx의 이름을 새 이름으로 갈아 끼워 매칭시키고, **실제 DB 변경은 뒤로 미룬다**
+// (미래 컷오버면 cron이, 오늘 컷오버면 이 스크립트가 RPC 성공 뒤에).
+const renamePlan: { classId: string; from: string; to: string }[] = [];
+if (RENAMES.length) {
+  // 순차 시뮬레이션 — 사다리 회전(LS6→LE1 뒤 LS5→LS6)이 정상 경로라 **적은 순서 그대로** 검사한다.
+  const nameToId = new Map(ctx.classes.map((c) => [c.className, c.id]));
+  for (const r of RENAMES) {
+    const id = nameToId.get(r.from);
+    if (!id) {
+      console.error(`--rename 중단: "${r.from}" 이라는 활성 영어 반이 없습니다(이미 바꿨거나 오타).`);
+      await sql.end();
+      process.exit(1);
+    }
+    const taken = nameToId.get(r.to);
+    if (taken && taken !== id) {
+      console.error(
+        `--rename 중단: "${r.to}" 는 이미 다른 반이 쓰고 있습니다. 그 반을 먼저 비우도록 순서를 바꾸세요` +
+          ` (예: "${r.to}:다른이름"을 앞에 두기).`,
+      );
+      await sql.end();
+      process.exit(1);
+    }
+    nameToId.delete(r.from);
+    nameToId.set(r.to, id);
+    renamePlan.push({ classId: id, from: r.from, to: r.to });
+  }
+  // 가상 적용 — ctx(매칭 대상)와 existing(충돌 메시지의 반 이름)을 함께 갈아 끼운다.
+  const newNameById = new Map(renamePlan.map((r) => [r.classId, r.to]));
+  for (const c of ctx.classes) {
+    const n = newNameById.get(c.id);
+    if (n) c.className = n;
+  }
+  for (const e of existing) {
+    const n = newNameById.get(e.classId);
+    if (n) e.className = n;
+  }
+  console.log(`
+반 이름 변경 ${renamePlan.length}건 (${APPLY ? (IMMEDIATE ? "지금 적용" : `${CUTOVER} 예약`) : "dry-run"})`);
+  for (const r of renamePlan) console.log(`  ${r.from} → ${r.to}`);
+}
+
 const match = matchStructure(parsed, ctx);
 const report = computeStructureDiff(match, existing);
 
@@ -465,6 +576,18 @@ async function syncBlocks(): Promise<void> {
 // ── 4. payload = applyStructureImport(server action)과 동일 구조 ──────────────
 const changeItems = report.planItems.filter((p) => p.action !== "keep");
 if (changeItems.length === 0) {
+  // 🔴 이름 변경은 **스냅샷을 타고** 예약된다(classUpdates) — 배치 변경이 0건이면 RPC를 안 불러
+  //    스냅샷이 안 생기고, 그러면 예약도 취소 수단도 없다. 조용히 넘기면 "바꿨는데 안 바뀌었다"가 된다.
+  if (renamePlan.length) {
+    console.error(
+      `
+중단: 배치 변경이 0건이라 스냅샷이 만들어지지 않습니다 — 이름 변경 ${renamePlan.length}건을 예약할 그릇이 없습니다.` +
+        `
+  시트가 이미 반영된 상태이니, 이름만 바꾸려면 반 관리 화면에서 직접 바꾸세요(감사로그는 동일하게 남습니다).`,
+    );
+    await sql.end();
+    process.exit(1);
+  }
   // 배치가 같아도 **비수업 블록은 따로** 갈아끼운다 — 수업은 그대로인데 감독만 바뀔 수 있다(독립).
   console.log("\n배치 변경 없음 — 시트와 일치합니다.");
   await syncBlocks();
@@ -509,6 +632,30 @@ const changedClassIds = new Set(
   report.planItems.filter((p) => p.action !== "keep" && p.classId).map((p) => p.classId!),
 );
 const classUpdates = buildClassUpdates(match, ctx, changedClassIds);
+// 반 이름 변경을 같은 레코드에 얹는다 — 미래 컷오버면 0234a가 classUpdates를 통째로 미뤄 스냅샷에만
+// 남기므로 **이름 변경도 함께 예약**되고, 예약 취소(배지 ×)로 함께 없던 일이 된다.
+// ⚠️ 배치가 안 바뀐 반은 buildClassUpdates가 항목을 안 만든다 → 이름만 바꾸는 반은 여기서 새로 넣는다.
+if (renamePlan.length) {
+  const byId = new Map(ctx.classes.map((c) => [c.id, c]));
+  for (const r of renamePlan) {
+    const prev = byId.get(r.classId);
+    const hit = classUpdates.find((u) => u.classId === r.classId);
+    if (hit) {
+      hit.className = r.to;
+      hit.prevClassName = r.from;
+    } else {
+      classUpdates.push({
+        classId: r.classId,
+        teacherId: null,
+        classroomId: null,
+        prevTeacherId: prev?.teacherId ?? null,
+        prevClassroomId: prev?.classroomId ?? null,
+        className: r.to,
+        prevClassName: r.from,
+      });
+    }
+  }
+}
 const payload = {
   label: `영어 마스터시트 컷오버 ${CUTOVER} (${grid.tabName})`,
   hash: report.hash,
@@ -536,9 +683,41 @@ const [res] = await sql.begin(async (tx) => {
   // 타입만 안 맞아 캐스팅한다(런타임은 검증됨 — 이 경로로 마감 108·삽입 64가 실제로 적용됐다).
   return tx`select public.apply_english_structure(${sql.json(payload as never)}::jsonb, ${CUTOVER}::date) as r`;
 });
-const r = (res as { r: { snapshotId: string; closed: number; inserted: number; classUpdated: number } }).r;
+const r = (res as { r: { snapshotId: string; closed: number; inserted: number; classUpdated: number; classUpdatesDeferred: number } }).r;
 console.log(`\n✅ 적용 완료 — 마감 ${r.closed} · 삽입 ${r.inserted} · 반 갱신 ${r.classUpdated}`);
 console.log(`   되돌리기: select public.rollback_english_structure('${r.snapshotId}');`);
+
+// ── 5-b. 반 이름 변경 ────────────────────────────────────────────────────────
+// 🔴 RPC(0234a)는 `className`을 **읽지 않는다** — jsonb라 스냅샷엔 그대로 보존되고, 적용은
+//    미래 컷오버면 cron(`apply-due-class-updates`)이, **오늘 컷오버면 여기서** 한다.
+//    이 분기를 빼면 즉시 컷오버에서 이름이 조용히 안 바뀐다(가장 위험한 실패 모양).
+if (renamePlan.length) {
+  // 🔴 즉시/예약 판정은 **RPC가 알려준 값**을 쓴다 — 스크립트가 따로 계산하면 UTC(`current_date`)와
+  //    KST 사이 경계에서 어긋나, 담임은 미뤄졌는데 이름만 지금 바뀌는 반쪽 적용이 난다.
+  if (r.classUpdatesDeferred > 0) {
+    console.log(`📅 반 이름 변경 ${renamePlan.length}건은 ${CUTOVER}에 적용됩니다(cron). 그 전엔 옛 이름 그대로이고,`);
+    console.log("   시간표 툴바의 예약 배지 ×를 누르면 이름 변경까지 함께 취소됩니다.");
+  } else {
+    await sql.begin(async (tx) => {
+      for (const rn of renamePlan) {
+        // 사람이 그 사이 손댔으면 덮지 않는다 — cron의 shouldApplyName과 **같은 규칙**.
+        const [row] = await tx<{ class_name: string }[]>`
+          update public.classes set class_name = ${rn.to}
+           where id = ${rn.classId} and tenant_id = ${TENANT} and class_name = ${rn.from}
+          returning class_name`;
+        if (!row) {
+          console.log(`  ⏭ "${rn.from}" → "${rn.to}" 건너뜀 — 현재 이름이 예약 시점과 다릅니다(사람이 손댐).`);
+          continue;
+        }
+        // 감사로그 — 화면 `class_update` 렌더와 같은 모양(field/from/to). 이름의 이력이 남는 유일한 자리.
+        await tx`insert into public.audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)
+          values (${TENANT}, ${ACTOR}, '마스터시트 컷오버', 'class_update', 'class', ${rn.to},
+                  ${sql.json({ classId: rn.classId, changed: ["반 이름"], changes: [{ field: "반 이름", from: rn.from, to: rn.to }], snapshotId: r.snapshotId } as never)}::jsonb)`;
+        console.log(`  ✔ ${rn.from} → ${rn.to}`);
+      }
+    });
+  }
+}
 await syncBlocks();
 
 // ⚠️ 소급 컷오버의 부작용 점검 — 컷오버 이후에 만들어진 행(valid_from > 마감일)을 마감하면

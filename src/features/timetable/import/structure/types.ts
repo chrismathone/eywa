@@ -188,13 +188,27 @@ export interface SchedulePlanItem {
   before?: { endTime: string | null; room: string | null; teacherNames: string[] };
 }
 
-/** classes 담임/기본강의실 갱신 계획 1건(apply payload) — teacherId/classroomId=null이면 그 필드 미변경. */
+/** classes 담임/기본강의실/반이름 갱신 계획 1건(apply payload) — 각 필드 null이면 그 필드 미변경. */
 export interface ApplyClassUpdate {
   classId: string;
   teacherId: string | null;
   classroomId: string | null;
   prevTeacherId: string | null; // 롤백 복원용
   prevClassroomId: string | null;
+  /**
+   * 반 이름 변경(원장 2026-08-28 *"반이름 변경도 9/1에 예약되도록 시스템화"*) — **컷오버 스크립트의
+   * `--rename` 전용**이고 앱의 `buildClassUpdates`는 채우지 않는다(시트 가져오기는 이름을 안 바꾼다).
+   *
+   * 🔴 왜 여기에 얹었나: 이름은 반 단위 단일 값이라 **시간 축이 없다** — 담임과 정확히 같은 문제이고,
+   *    0234a가 이미 "미래 적용이면 classUpdates를 적용하지 않고 스냅샷에만 남기고 그날 cron이 재생"하는
+   *    장치를 갖고 있다. 같은 레코드에 얹으면 **예약 취소(배지 ×)로 이름 변경까지 함께 무효**가 된다
+   *    (스냅샷을 되돌리면 아직 적용 안 된 이름 변경도 사라진다 = "아무 일도 없던 것처럼").
+   * ⚠️ RPC(0234a)는 이 키를 **읽지 않는다** — jsonb라 그대로 통과해 스냅샷에 보존되고, 적용은
+   *    cron(`apply-due-class-updates`)이 한다. 즉시 컷오버(오늘 날짜)면 스크립트가 직접 바꾼다.
+   * ⚠️ 옛 스냅샷엔 이 키가 없다 → **선택 필드**로 두어 그대로 읽힌다.
+   */
+  className?: string | null;
+  prevClassName?: string | null;
 }
 
 export interface DryRunReport {

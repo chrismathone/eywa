@@ -17,6 +17,12 @@ export type ClassUpdate = {
   /** 예약 시점의 값 — 그 사이 사람이 바꿨는지 판별하는 기준. */
   prevTeacherId: string | null;
   prevClassroomId: string | null;
+  /**
+   * 반 이름(원장 2026-08-28 *"반이름 변경도 9/1에 예약되도록 시스템화"*). 컷오버 스크립트 `--rename`만 채운다.
+   * ⚠️ **옛 스냅샷엔 없다** — 선택 필드로 두어야 그대로 읽힌다(있는 것처럼 다루면 전 스냅샷이 깨진다).
+   */
+  className?: string | null;
+  prevClassName?: string | null;
 };
 
 export type SnapshotClassUpdates = {
@@ -57,6 +63,19 @@ export function dueClassUpdates(
 export function shouldApplyTeacher(u: ClassUpdate, currentTeacherId: string | null): boolean {
   if (u.teacherId === null) return false; // 이 필드는 변경 대상이 아니었다
   return currentTeacherId === u.prevTeacherId;
+}
+
+/**
+ * 반 이름을 지금 바꿔도 되는가 — 담임과 **같은 규칙**(현재 값이 아직 예약 시점 그대로일 때만).
+ *
+ * 🔴 이름은 시트 매칭 키라 더 조심한다: 그 사이 사람이 이름을 손봤다면 그 이름으로 시트가 매칭되고
+ *    있을 수 있다. 예약이 그걸 덮으면 다음 가져오기가 그 반을 못 찾아 **신설 후보로 떨어진다**.
+ * ⚠️ `className`이 없는 옛 스냅샷은 항상 false — 이름 변경 대상이 아니었다는 뜻이다.
+ */
+export function shouldApplyName(u: ClassUpdate, currentClassName: string | null): boolean {
+  const next = u.className ?? null;
+  if (!next) return false; // 이 필드는 변경 대상이 아니었다(옛 스냅샷 포함)
+  return currentClassName === (u.prevClassName ?? null);
 }
 
 /** 강의실도 같은 규칙(필드 독립 — 한쪽만 바뀐 반의 다른 쪽을 덮어쓰지 않는다). */

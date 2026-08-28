@@ -7,6 +7,7 @@ import {
   SCHEDULED_CLASS_UPDATE_FLOOR,
   dueClassUpdates,
   shouldApplyClassroom,
+  shouldApplyName,
   shouldApplyTeacher,
   type ClassUpdate,
   type SnapshotClassUpdates,
@@ -95,14 +96,26 @@ export async function GET(req: Request) {
       // 현재 값을 읽어 "예약 시점 그대로인가"를 본다 — 사람이 손댄 반은 그대로 둔다.
       const { data: cur } = await supabase
         .from("classes")
-        .select("teacher_id, classroom_id")
+        .select("teacher_id, classroom_id, class_name")
         .eq("id", u.classId)
         .eq("tenant_id", tenantId)
         .maybeSingle();
       if (!cur) continue;
       const patch: Record<string, string> = {};
-      if (shouldApplyTeacher(u, cur.teacher_id)) patch.teacher_id = u.teacherId!;
-      if (shouldApplyClassroom(u, cur.classroom_id)) patch.classroom_id = u.classroomId!;
+      // 감사로그 `class_update`와 **같은 모양**(field/from/to) — 화면이 "변경: 반 이름 A → B"로 렌더한다.
+      const changes: { field: string; from: string | null; to: string | null }[] = [];
+      if (shouldApplyTeacher(u, cur.teacher_id)) {
+        patch.teacher_id = u.teacherId!;
+        changes.push({ field: "담임", from: cur.teacher_id, to: u.teacherId! });
+      }
+      if (shouldApplyClassroom(u, cur.classroom_id)) {
+        patch.classroom_id = u.classroomId!;
+        changes.push({ field: "강의실", from: cur.classroom_id, to: u.classroomId! });
+      }
+      if (shouldApplyName(u, cur.class_name)) {
+        patch.class_name = u.className!;
+        changes.push({ field: "반 이름", from: cur.class_name, to: u.className! });
+      }
       if (Object.keys(patch).length === 0) continue;
       const { error } = await supabase
         .from("classes")
@@ -113,6 +126,29 @@ export async function GET(req: Request) {
         reportError(error, { where: "apply-due-class-updates:update", classId: u.classId });
         continue;
       }
+      // 🔴 감사로그는 **선택이 아니다**. ① 반 이름 변경은 이력이 남는 유일한 자리다(이름 컬럼엔 시간 축이
+      //    없어 지난 화면에도 새 이름이 보인다 — "그때는 무엇이었나"가 여기에만 남는다).
+      //    ② 담임 전이는 지난 주 담임 복원(`teacher-as-of`)이 `class_handover_apply`·`class_update` 로그를
+      //    읽어 되살린다 — cron이 조용히 바꾸면 그 전이가 이력에서 통째로 빠진다.
+      // ⚠️ `logAction`은 세션 사용자가 있어야 동작한다(cron엔 없다) → admin으로 직접 넣고 actor는 시스템.
+      const { error: auditErr } = await supabase.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_id: null,
+        actor_name: "시스템(시간표 예약 적용)",
+        action: "class_update",
+        target_type: "class",
+        target_label: patch.class_name ?? cur.class_name,
+        metadata: {
+          classId: u.classId,
+          changed: changes.map((c) => c.field),
+          changes,
+          scheduledFrom: snap.effectiveDate,
+          snapshotId: snap.snapshotId,
+          ...(patch.teacher_id ? { newTeacherId: patch.teacher_id } : {}),
+        },
+      });
+      // 기록 실패가 본 작업을 되돌리진 않는다(logAction과 같은 best-effort) — 대신 보이게 남긴다.
+      if (auditErr) reportError(auditErr, { where: "apply-due-class-updates:audit", classId: u.classId });
       applied += 1;
       appliedHere += 1;
     }
