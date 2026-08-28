@@ -45,6 +45,12 @@ export interface MoveChange {
   fromClassName: string;
   toClassName: string;
   toClassId: string;
+  /**
+   * 적용이 **실제로 만든** 새 수강의 id — 되돌리기(0236a)가 좌표 추측 없이 이 행만 지운다.
+   * 🔴 diff 계산 시점엔 없다(아직 안 만들었다). `applyDiff`가 RPC 결과로 채워 스냅샷을 갱신한다.
+   * ⚠️ 옛 스냅샷엔 이 값이 없어 롤백이 좌표 폴백을 탄다 — 그 경우 누가 날짜·반을 바꿨으면 못 찾는다.
+   */
+  newEnrollmentId?: string;
 }
 export interface RemoveChange {
   enrollmentId: string;
@@ -58,6 +64,8 @@ export interface AddChange {
   className: string;
   classId: string;
   studentId: string;
+  /** 적용이 만든 수강 id — MoveChange.newEnrollmentId와 같은 이유(되돌리기가 id로 지운다). */
+  enrollmentId?: string;
 }
 
 export interface ImportDiff {

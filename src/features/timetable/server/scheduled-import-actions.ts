@@ -53,11 +53,18 @@ export async function cancelScheduledImport(effectiveDate: string): Promise<Canc
     if (error) {
       // SQL 미적용(0233a)이면 함수가 없다 — 원문 대신 무엇을 해야 하는지 한글로 알린다([[#95]]).
       const missing = /could not find the function|does not exist/i.test(error.message);
+      // 🔴 부분 실패를 **정확히** 알린다(2026-08-29 적대 리뷰 codex): 취소는 스냅샷별 순차 RPC라
+      //    중간에 멈추면 배치와 명단이 갈린 채 남는다. "다시 눌러 주세요"가 실제 복구 수단인 이유는
+      //    되돌리기가 **멱등**이기 때문 — 이미 되돌린 스냅샷은 0건 처리된다. 그 사실을 문구에 담는다.
+      const rest = group.snapshotIds.length - done;
+      console.error("[scheduled-import] 취소 실패:", error);
       return {
         error: missing
-          ? "취소에 필요한 DB 함수가 아직 적용되지 않았습니다(0233a). 관리자에게 SQL 적용을 요청하세요."
-          : `취소 실패: ${error.message}` +
-            (done > 0 ? ` (${done}건은 이미 되돌렸습니다 — 다시 눌러 주세요.)` : ""),
+          ? "취소에 필요한 DB 함수가 아직 적용되지 않았습니다. 관리자에게 SQL 적용(0233a·0236a)을 요청하세요."
+          : done > 0
+            ? `취소를 ${done}건 되돌리고 ${rest}건에서 멈췄습니다 — 시간표와 명단이 어긋난 상태입니다. ` +
+              `같은 ×를 다시 눌러 주세요(이미 되돌린 건은 건너뜁니다).`
+            : "취소하지 못했습니다(변경 없음). 잠시 후 다시 시도해 주세요.",
       };
     }
     done += 1;

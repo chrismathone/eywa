@@ -346,7 +346,11 @@ async function applyDiff(
   ];
   let snapshotId: string | undefined;
   if (affectedIds.length > 0 || diff.adds.length > 0) {
-    const { data: snap } = await supabase
+    // 🔴 오류를 반드시 확인한다(2026-08-29 적대 리뷰 codex). 예전엔 `{ data: snap }`만 받아서, 스냅샷
+    //    insert가 실패해도 `snapshotId=undefined`인 채 **이동·삭제·추가를 그대로 적용**했다 —
+    //    되돌릴 수 없는 적용이 조용히 생긴다("취소" 배지가 되돌릴 대상 자체를 못 찾는다).
+    //    스냅샷은 이 기능의 안전벨트라, 못 매면 출발하지 않는다.
+    const { data: snap, error: snapErr } = await supabase
       .from("timetable_snapshots")
       .insert({
         tenant_id: user.tenantId,
@@ -362,7 +366,14 @@ async function applyDiff(
       })
       .select("id")
       .single();
-    snapshotId = snap?.id;
+    if (snapErr || !snap?.id) {
+      console.error("[timetable-import] 스냅샷 저장 실패:", snapErr);
+      return {
+        error:
+          "되돌리기용 스냅샷을 저장하지 못해 적용을 중단했습니다(변경 없음). 잠시 후 다시 시도해 주세요.",
+      };
+    }
+    snapshotId = snap.id;
   }
 
   let failed = 0;
@@ -390,7 +401,18 @@ async function applyDiff(
       })),
     });
     if (error) return { error: error.message, snapshotId };
-    failed += ((data ?? []) as { ok: boolean }[]).filter((r) => !r.ok).length;
+    const results = (data ?? []) as { enrollmentId: string; newEnrollmentId?: string; ok: boolean }[];
+    failed += results.filter((r) => !r.ok).length;
+    // 🔑 RPC(0235a)가 준 **새 수강 id**를 diff에 적어 둔다 — 아래에서 스냅샷 payload를 갱신하면
+    //    되돌리기가 좌표(학생+반+시작일) 추측 없이 이 행만 정확히 지운다(0236a).
+    //    ⚠️ 0235a 적용 전 DB에선 이 키가 없다 → undefined로 남고 롤백은 옛 좌표 폴백을 탄다(무중단).
+    const newIdByOld = new Map(
+      results.filter((r) => r.ok && r.newEnrollmentId).map((r) => [r.enrollmentId, r.newEnrollmentId!]),
+    );
+    for (const m of diff.moves) {
+      const id = newIdByOld.get(m.enrollmentId);
+      if (id) m.newEnrollmentId = id;
+    }
   }
 
   // 3) 삭제 — end_date 세팅
@@ -433,16 +455,35 @@ async function applyDiff(
 
     for (const a of diff.adds) {
       const onHold = enrollmentOnHoldForStatus(statusById.get(a.studentId));
-      const { error } = await supabase.from("enrollments").insert({
-        tenant_id: user.tenantId,
-        student_id: a.studentId,
-        class_id: a.classId,
-        start_date: today,
-        on_hold: onHold,
-      });
+      // `.select("id")` — 만들어진 수강 id를 되돌리기용으로 적어 둔다(moves와 같은 이유).
+      const { data: made, error } = await supabase
+        .from("enrollments")
+        .insert({
+          tenant_id: user.tenantId,
+          student_id: a.studentId,
+          class_id: a.classId,
+          start_date: today,
+          on_hold: onHold,
+        })
+        .select("id")
+        .single();
       if (error) failed += 1;
-      else if (onHold) heldAdds += 1;
+      else {
+        if (made?.id) a.enrollmentId = made.id as string;
+        if (onHold) heldAdds += 1;
+      }
     }
+  }
+
+  // 4-b) 스냅샷 payload 갱신 — 위에서 채운 새 수강 id를 되돌리기가 읽을 수 있게 적는다.
+  // ⚠️ 실패해도 **적용을 되돌리지 않는다**(이미 쓴 것을 다시 지우는 편이 더 위험하다). 롤백은 옛 좌표
+  //    폴백으로 여전히 동작하므로, 여기 실패는 "되돌리기가 조금 덜 정확해지는" 정도의 열화다 — 로그만 남긴다.
+  if (snapshotId && (diff.moves.some((m) => m.newEnrollmentId) || diff.adds.some((a) => a.enrollmentId))) {
+    const { error: patchErr } = await supabase
+      .from("timetable_snapshots")
+      .update({ payload: diff })
+      .eq("id", snapshotId);
+    if (patchErr) console.error("[timetable-import] 스냅샷 id 기록 실패(롤백은 좌표 폴백):", patchErr);
   }
 
   // 5) 이력 로그 — ⚠️ `week_label`은 이제 **적용 기준일**이다(누른 날이 아니라). 예약 적용이면 둘이 다르고,
