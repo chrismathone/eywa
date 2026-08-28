@@ -115,9 +115,13 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
                 className={p.key === "injaewon" ? "md:border-line-faint md:border-l md:pl-5" : undefined}
               >
                 <div className="border-line mb-2 flex items-baseline gap-1.5 border-b px-1 pb-1.5">
-                  {/* 프로그램 라벨은 **알약**으로 — 담임 묶음 머리(굵은 글씨)와 형태로 갈라야
-                      크기 경쟁 없이 위계가 선다. 모양은 위 '프로그램' 필터 칩과 같은 어휘. */}
-                  <h3 className="border-line-strong text-foreground rounded-pill border px-2 py-0.5 text-[11px] font-bold">
+                  {/* 프로그램 라벨은 **알약**으로 — 담임 묶음 머리와 형태로 갈라야 크기 경쟁 없이
+                      위계가 선다. 모양은 위 '프로그램' 필터 칩과 같은 어휘.
+                      원장 2026-08-28 *"EiE 및 선생님 이름은 폰트를 더 크게하고 강조 처리"* → 이 단의
+                      **간판**이라 목록에서 가장 큰 글씨(16px·800)에 브랜드색을 입힌다. 🔴 채우기는
+                      `-soft`(연한 틴트)까지다 — 꽉 찬 네이비는 위 활성 필터 칩과 같은 모양이라
+                      "눌러서 고르는 것"으로 읽힌다(이건 라벨이지 버튼이 아니다). */}
+                  <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-[16px] font-extrabold">
                     {p.label}
                   </h3>
                   <span className="text-text-dim text-[11px]">
@@ -179,8 +183,11 @@ function TeacherGroupFlow({
         // break-inside-avoid = 한 담임의 반들이 두 열에 쪼개지지 않게(묶음이 열보다 길면 어쩔 수 없이 쪼개진다).
         <section key={g.key} className="mb-3 break-inside-avoid">
           <div className="border-line-strong flex items-baseline gap-1.5 border-b px-1 pb-0.5">
+            {/* 담임 이름 = 이 화면의 두 번째 축(원장 2026-08-28 *"선생님 이름은 폰트를 더 크게하고
+                강조 처리"*) — 15px·800으로 올린다. 프로그램 알약(16px)보다 한 단계 작아야 포함 관계가
+                크기로도 읽힌다. 🔴 다시 13px로 줄이지 말 것. '담임 미지정'만 색을 죽인다(사람이 아니라 상태). */}
             <Heading
-              className={`truncate text-[13px] font-bold ${g.unassigned ? "text-text-dim" : "text-foreground"}`}
+              className={`truncate text-[15px] font-extrabold ${g.unassigned ? "text-text-dim" : "text-foreground"}`}
             >
               {g.label}
             </Heading>

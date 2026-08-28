@@ -187,6 +187,20 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
     expect(flow.className).toContain("xl:columns-2");
   });
 
+  it("🔴 프로그램 라벨·담임 이름은 **크게 + 강조**(원장 2026-08-28) — 다시 줄이지 말 것", () => {
+    render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
+    // 크기는 **하한만** 잠근다(더 키우는 건 자유, 되돌리는 것만 막는다).
+    const px = (el: Element) => Number(/text-\[(\d+)px\]/.exec(el.className)?.[1] ?? 0);
+    const label = screen.getByRole("heading", { level: 3, name: "EiE" });
+    expect(px(label)).toBeGreaterThanOrEqual(16);
+    expect(label.className).toContain("font-extrabold");
+    const teacher = screen.getAllByRole("heading", { level: 4, name: "김태건" })[0]!;
+    expect(px(teacher)).toBeGreaterThanOrEqual(15);
+    expect(teacher.className).toContain("font-extrabold");
+    // 포함 관계가 크기로도 읽혀야 한다 — 간판(프로그램)이 담임보다 작아지면 위계가 뒤집힌다.
+    expect(px(label)).toBeGreaterThan(px(teacher));
+  });
+
   it("한 담임이 두 프로그램을 맡으면 **양쪽 단에 묶음이 하나씩**, 머리 줄 담임 수는 1명", () => {
     render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
     // 단 안에서는 담임이 프로그램 아래 층(h4)이다.
