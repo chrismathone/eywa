@@ -7,6 +7,7 @@
  */
 import type { OneScreenStudent } from "./types";
 import { normalizeHomeworkPages } from "./homework-pages";
+import { homeworkFactValue } from "./homework-rate";
 import { resolveRowFields } from "./row-fields";
 import { splitNoticeFromNote } from "./class-notice";
 
@@ -150,7 +151,9 @@ export function buildFactBlock(input: ReportCommentInput): string {
   if (input.dailyTest) facts.push(`일일테스트: ${input.dailyTest}`);
   if (input.checkTest) facts.push(`확인테스트: ${input.checkTest}`);
   if (input.attitude) facts.push(`수업 태도: ${flatten(input.attitude)}`);
-  if (input.homework) facts.push(`과제: ${flatten(input.homework)}`);
+  // 🔴 `0%`(하나도 해오지 못함)와 `미제출`(안 냄)은 **말로 갈라서** 준다 — 숫자만 주면 모델이 뒤바꿔 쓴다
+  //    (2026-08-28 실측). 판정·표기는 homework-rate.ts 단일 소스(폴백 템플릿 homeworkRateClause와 같은 뜻).
+  if (input.homework) facts.push(`과제: ${homeworkFactValue(flatten(input.homework))}`);
   if (input.homeworkToday) facts.push(`오늘 과제: ${flatten(input.homeworkToday)}`); // 마무리 문장 재료(0096a)
   if (input.specialNote) facts.push(`특이사항: ${flatten(input.specialNote)}`);
   // 반 전체 안내 — 라벨에 **취급법까지** 적는다(프롬프트 본문은 원장이 편집 가능해 사라질 수 있다).
@@ -192,6 +195,9 @@ export function buildP1FactBlock(input: ReportCommentInput): string | null {
   if (input.textbook) facts.push(`교재: ${flatten(input.textbook)}`);
   const prog = progressFact(input, "진도");
   if (prog) facts.push(prog);
+  // ⚠️ 여기 '과제'는 **오늘 내준 숙제**다(P1 템플릿의 "오늘 과제는 ~입니다" 재료). 그래서 모드 A의
+  //    `homeworkFactValue`(지난 과제 수행률을 말로 가르는 것)를 여기에 붙이면 안 된다 — 오늘 과제 자리에
+  //    "하나도 해오지 못함"이 들어가 뜻이 뒤집힌다. (수행률 폴백 자체가 의미상 어색하나 모드 B는 현재 미사용.)
   const hw = flatten(input.homeworkToday || input.homework);
   if (hw) facts.push(`과제: ${hw}`);
   // 반 공통 서술(G6)은 수업 내용 문단(P1)에만 — P2(태도·특이사항)에 새면 "항목 섞지 마세요" 규칙 위반.

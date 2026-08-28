@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   formatHomeworkRate,
+  homeworkFactValue,
   homeworkRateClause,
   parseHomeworkRate,
   toHomeworkRateChoice,
@@ -101,5 +102,47 @@ describe("homeworkRateClause(폴백 템플릿 문장)", () => {
 
   it("옛 정성값은 기존대로", () => {
     expect(homeworkRateClause("완료")).toBe("완료입니다");
+  });
+});
+
+// 🔴 2026-08-28: 프롬프트에 "0%와 미제출을 바꿔 쓰지 마세요"가 있는데도 모델이 `0%`를
+//    "제출하지 않았습니다"로 바꿔 썼다(Haiku 실측). 규칙은 편집 가능한 프롬프트 본문에 있고
+//    데이터는 코드에 있다 — 데이터 쪽에서 가른다.
+describe("homeworkFactValue — AI 입력에서 0%와 미제출을 말로 가른다", () => {
+  it("🔴 0%는 '하나도 해오지 못함' (미제출로 오독되지 않게)", () => {
+    expect(homeworkFactValue("0%")).toBe("하나도 해오지 못함");
+    expect(homeworkFactValue("0")).toBe("하나도 해오지 못함");
+    expect(homeworkFactValue(" 0 % ")).toBe("하나도 해오지 못함");
+  });
+
+  it("🔴 미제출은 '제출하지 않음' — 0%와 다른 사실이다", () => {
+    expect(homeworkFactValue("미제출")).toBe("제출하지 않음");
+  });
+
+  it("0이 아닌 퍼센트는 숫자 그대로 (프롬프트가 '적힌 그대로 쓰라'고 못박은 값)", () => {
+    expect(homeworkFactValue("90%")).toBe("90%");
+    expect(homeworkFactValue("100%")).toBe("100%");
+    expect(homeworkFactValue("70%")).toBe("70%");
+  });
+
+  it("'없음'(과제가 없던 날)은 건드리지 않는다 — 프롬프트가 따로 다룬다", () => {
+    expect(homeworkFactValue("없음")).toBe("없음");
+    expect(homeworkFactValue("-")).toBe("-");
+  });
+
+  it("옛 정성값은 그대로 통과(완료·일부 미흡)", () => {
+    expect(homeworkFactValue("완료")).toBe("완료");
+    expect(homeworkFactValue("일부 미흡")).toBe("일부 미흡");
+  });
+
+  it("괄호 설명을 달지 않는다 — 모델이 괄호째 베껴 학부모 문장에 넣는다", () => {
+    for (const v of ["0%", "미제출", "90%", "없음"]) expect(homeworkFactValue(v)).not.toMatch(/[()]/);
+  });
+
+  it("폴백 템플릿(homeworkRateClause)과 **같은 뜻**을 말한다 — 두 경로가 갈리면 안 된다", () => {
+    expect(homeworkRateClause("0%")).toBe("하지 못했습니다"); // 못 했다
+    expect(homeworkFactValue("0%")).toBe("하나도 해오지 못함");
+    expect(homeworkRateClause("미제출")).toBe("제출하지 않았습니다"); // 안 냈다
+    expect(homeworkFactValue("미제출")).toBe("제출하지 않음");
   });
 });
