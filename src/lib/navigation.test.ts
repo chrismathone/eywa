@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { menuKeyForPath } from "./permissions";
 import {
   activeSubTabHref,
   findNavGroup,
@@ -52,8 +53,24 @@ describe("영어 강사 시트(ECS) — 독립 사이드바 탭 (원장 2026-08-
     expect(findNavItem("/ecs/abc-123")?.menuKey).toBe("ecs");
   });
 
-  it("시간표엔 이제 하부탭이 없다 — ECS가 떠나며 subOf 사용처 0(메커니즘은 보존)", () => {
-    expect(subTabsForMenu("timetable")).toEqual([]);
+  // ECS가 떠난 뒤 한동안 시간표엔 하부탭이 0이었다(subOf 사용처 0 — 메커니즘만 보존).
+  // 2026-08-28 원장 지시로 **정적 면 둘**이 생겼다: 본 시간표 / 시간표(개발중, 월별 계획 시험 면).
+  // 🔴 개발중 면은 **본 시간표와 같은 menuKey**를 쓴다 — 새 키를 만들면 auth_menu_access DEFAULTS에
+  //    없어 master 빼고 전원 차단이 된다(#92). 여기서 그 사실을 함께 잠근다.
+  it("시간표 하부탭 = 본 시간표 + 개발중 두 면(권한은 시간표 하나로 공유)", () => {
+    expect(subTabsForMenu("timetable")).toEqual([
+      { label: "시간표", href: "/timetable" },
+      { label: "시간표(개발중)", href: "/timetable-dev" },
+      { label: "월별 비교", href: "/timetable-dev/compare" },
+    ]);
+    // 🔴 긴 경로가 이긴다 — 비교 화면에서 '시간표(개발중)'이 같이 켜지면 지금 어디인지 알 수 없다.
+    const tabs = subTabsForMenu("timetable");
+    expect(activeSubTabHref(tabs, "/timetable-dev/compare")).toBe("/timetable-dev/compare");
+    expect(activeSubTabHref(tabs, "/timetable-dev")).toBe("/timetable-dev");
+    expect(activeSubTabHref(tabs, "/timetable")).toBe("/timetable");
+    // 정적 면이라 자기 menuKey를 들지 않는다(부모 창에서 전환) — 들면 별도 권한 키가 필요해진다.
+    expect(subTabsForMenu("timetable").every((t) => !("menuKey" in t) || !t.menuKey)).toBe(true);
+    expect(menuKeyForPath("/timetable-dev")).toBe("timetable");
   });
 });
 

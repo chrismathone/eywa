@@ -39,6 +39,8 @@ export const DEFAULT_WINDOW = { w: 480, h: 560 };
  */
 export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
+  // 시간표(개발중) — 같은 격자를 그리므로 같은 크기. 없으면 기본 480×560으로 열려 표가 통째로 접힌다.
+  "timetable-dev": { w: 1040, h: 680 },
   classes: { w: 1100, h: 700 }, // 8열 표 + 필터바(과목·강사·요일·정렬·검색) — 넓으면 한 줄
   billing: { w: 760, h: 620 }, // 수납/교재/지출 책갈피 + 다열 표라 폭이 넓음
   // 학생×30~31일 매트릭스. 폭이 좁으면 이름 칼럼이 글자당 줄바꿈돼 행이 2배로 커지고(세로 스크롤

@@ -297,6 +297,10 @@ export function roleHome(role: SystemRole, matrix: AccessMatrix = MENU_ACCESS): 
 const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   dashboard: "dashboard",
   timetable: "timetable",
+  // 시간표(개발중) — 본 시간표를 복사한 개발 면(2026-08-28). **같은 menuKey를 공유한다**:
+  // 새 키를 만들면 auth_menu_access DEFAULTS에 없어 master 빼고 전원 'none'이 된다(#92 fail-closed).
+  // 권한을 따로 떼야 할 이유가 생기면 그때 SQL DEFAULTS까지 함께 추가할 것.
+  "timetable-dev": "timetable",
   attendance: "attendance",
   classes: "classes",
   students: "students",
