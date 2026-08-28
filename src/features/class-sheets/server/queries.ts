@@ -13,7 +13,7 @@ import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
-import { shoutingMapOf } from "../shouting";
+import { shoutingKey, shoutingMapOf } from "../shouting";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 // 출결 쓰기의 담당 반 축 — **출결 서버 액션과 같은 함수**(담임 ∪ 위임 ∪ 교시 담당, write-gate-axis).
@@ -36,7 +36,7 @@ import {
 } from "../landing-teacher";
 import type { RosterGroupKey } from "../lib/roster-order";
 import type { SheetMark } from "../lib/roster-form";
-import { keepEnglishTrack, type EnglishTrackFilter } from "@/features/classes/english-track";
+import { keepEnglishTrack, readEnglishTrack, type EnglishTrackFilter } from "@/features/classes/english-track";
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
@@ -641,6 +641,14 @@ export type SheetLandingCard = {
   filledSlots: number;
   orphanSlots: number;
   /**
+   * 그 주 Shouting 체크가 들어간 교시 수(0230a) — 분모는 `totalSlots`(작성률과 **같은 분모**라
+   * `2/6 · 4/6`이 한 줄에서 바로 대조된다). 원장 2026-08-28 *"EiE반은 그 왼쪽에 샤우팅 체킹을
+   * 했나 안했나 확인 바로 가능하게"* + *"샤우팅도 주단위 체크"*.
+   * 🔴 **EiE가 아니면 `null`**(0이 아니다) — 인재원 영어는 Shouting 자체가 없어 `0/6`으로 그리면
+   *    "해야 하는데 안 했다"는 거짓말이 된다. 화면은 null이면 칸을 비우되 폭은 잡는다.
+   */
+  shoutingSlots: number | null;
+  /**
    * 임시 위임(0173a)으로 지금 대신 맡은 반인가 — 내 담당 반이면 false.
    * 원스크린 반 칩과 **같은 규약**으로 시각 구분한다(원장 지시 2026-08-03) — 남의 반 시트를 내 반인 줄
    * 알고 고치는 일이 없게. 카드의 `teacherName`은 원 담임이라 배지와 함께 읽으면 관계가 분명해진다.
@@ -789,7 +797,13 @@ export async function getSheetLanding(
     };
   }
 
-  const [schedules, lines] = await Promise.all([
+  // Shouting은 EiE 반에만 있다(원장 2026-08-27) — 대상 id를 **미리** 갈라 두면 조회량도 그만큼 준다.
+  const eieClassIds = classes
+    .filter((c) => readEnglishTrack({ english_track: c.english_track as string | null }) === "eie")
+    .map((c) => c.id as string);
+  const eieIdSet = new Set(eieClassIds);
+
+  const [schedules, lines, shoutFlags] = await Promise.all([
     fetchInChunks<{
       class_id: string;
       day_of_week: DowKey;
@@ -828,6 +842,30 @@ export async function getSheetLanding(
         .order("id")
         .range(from, to),
     ),
+    // 주간 Shouting 체크(0230a) — **EiE 반만** 조회한다(대상이 아닌 반은 화면에서도 칸이 빈다).
+    // ⚠️ 에러를 일부러 삼킨다(아래 어느 게이트에도 안 넣는다) — 마이그레이션보다 앱이 먼저 배포되면
+    //    표가 없어 400이 나는데, 그때 **랜딩이 통째로 안 열리면 안 된다**([[#95]]. 시트 상세도 같은 처방).
+    //    표가 생기면 정상 조회된다. 체크가 잠깐 안 보이는 것과 42반 목록이 죽는 것은 급이 다르다.
+    // ⚠️ RLS 정책이 0개인 표라 **admin + tenant_id 명시 필터**가 필수다([[#104]]).
+    // 🔴 실패는 **빈 배열이 아니라 `null`**로 떨어뜨린다. 빈 배열로 삼키면 EiE 반이 전부 `0/6`으로
+    //    그려져 *"아무도 샤우팅을 안 했다"* 는 거짓 사실이 화면에 뜬다 — 모르는 것은 모른다고
+    //    (칸을 비워) 말해야 한다(위 landing-shouting.ts 🔴와 같은 규약).
+    eieClassIds.length > 0
+      ? fetchAllPagedInChunks<{ class_id: string; flag_date: string; slot_start: string }>(
+          eieClassIds,
+          (chunk, from, to) =>
+            admin
+              .from("class_sheet_slot_flags")
+              .select("class_id, flag_date, slot_start")
+              .eq("tenant_id", user.tenantId)
+              .eq("shouting", true)
+              .in("class_id", chunk)
+              .gte("flag_date", weekMonday)
+              .lte("flag_date", weekSunday)
+              .order("id")
+              .range(from, to),
+        ).catch(() => null)
+      : Promise.resolve([]),
   ]);
 
   // JJ 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다(LAB은 양쪽 다 제외).
@@ -851,6 +889,15 @@ export async function getSheetLanding(
       set.add(key);
       meaningfulKeysByClass.set(l.class_id, set);
     }
+  }
+
+  // 반별 Shouting 체크 키 — 분자는 아래에서 **배정 교시 안의 것만** 센다(옛 시간표의 체크로 `7/6`이
+  // 뜨지 않게. 작성률 `filled`가 `scheduled`로 거르는 것과 같은 규약).
+  const shoutKeysByClass = new Map<string, Set<string>>();
+  for (const f of shoutFlags ?? []) {
+    const set = shoutKeysByClass.get(f.class_id) ?? new Set<string>();
+    set.add(shoutingKey(String(f.flag_date).slice(0, 10), String(f.slot_start)));
+    shoutKeysByClass.set(f.class_id, set);
   }
 
   const cards: SheetLandingCard[] = (classes ?? []).map((c) => {
@@ -885,6 +932,14 @@ export async function getSheetLanding(
     );
     let orphan = 0;
     for (const key of all) if (!scheduled.has(key) && !seatKeys.has(key)) orphan += 1;
+    // Shouting — EiE 반만 숫자를 낸다(그 외는 null = 화면에서 칸을 비운다).
+    // 조회가 실패했으면(shoutFlags === null) EiE 반도 null이다 — "0회"가 아니라 "모름"이다.
+    let shout: number | null = null;
+    if (shoutFlags !== null && eieIdSet.has(c.id as string)) {
+      const keys = shoutKeysByClass.get(c.id as string);
+      shout = 0;
+      if (keys) for (const key of scheduled) if (keys.has(key)) shout += 1;
+    }
     return {
       classId: c.id as string,
       className: c.class_name as string,
@@ -893,6 +948,7 @@ export async function getSheetLanding(
       totalSlots: scheduled.size,
       filledSlots: filled,
       orphanSlots: orphan,
+      shoutingSlots: shout,
       // 담임이 나면 위임이 아니다 — 내 반이 남에게 위임돼 있어도 내 화면에선 그냥 내 반이다.
       delegated: delegatedIdSet.has(c.id as string) && c.teacher_id !== user.id,
     };

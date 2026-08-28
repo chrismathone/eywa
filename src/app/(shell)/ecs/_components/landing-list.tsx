@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { SheetLandingCard } from "@/features/class-sheets/server/queries";
 import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
 import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landing-summary";
+import { shoutingCountOf, summarizeShouting } from "@/features/class-sheets/landing-shouting";
+import { TONE_SOFT } from "@/lib/design/semantic-color";
 
 /**
  * ECS 주간 랜딩 목록 — **한 장의 시트, 열마다 담임**.
@@ -21,6 +23,14 @@ import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landin
  */
 export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLandingCard[]; weekMonday: string }) {
   const s = summarizeLanding(cards);
+  const shout = summarizeShouting(cards);
+  /**
+   * 지금 목록에 EiE 반이 **하나라도** 있을 때만 구역을 만든다.
+   * 🔑 정렬 요구("길이에 따라 흐트러지지 않게")는 **한 화면 안에서** 성립하면 된다 — 그래서 구역은
+   *    전 행에 있거나 전 행에 없거나 둘 중 하나다. '인재원 영어'만 걸러 보는 중이면 52px을 통째로
+   *    비워 둘 이유가 없다(그 뷰엔 Shouting이라는 지표 자체가 없다).
+   */
+  const showShouting = shout.classes > 0;
   const groups = groupLandingByTeacher(cards);
   return (
     <section className="bg-card shadow-card rounded-2xl px-3 py-2.5">
@@ -39,6 +49,19 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
           </span>{" "}
           <span className="num">({s.pct}%)</span>
         </p>
+        {/* Shouting(0230a) — **행의 새 칸이 무엇인지 이름을 붙이는 자리**이기도 하다(행엔 열 머리가 없다). */}
+        {showShouting ? (
+          <p
+            className="text-text-dim text-[12px]"
+            title="EiE 반의 이번 주 Shouting 체크 — 분모는 작성률과 같은 '이 주 배정 교시'입니다"
+          >
+            Shouting{" "}
+            <span className="num text-foreground font-bold">
+              {shout.checked}/{shout.scheduled}
+            </span>{" "}
+            <span className="num">({shout.pct}%)</span>
+          </p>
+        ) : null}
         {s.untouched > 0 ? (
           <p className="text-text-dim text-[12px]">
             미작성 <span className="num text-foreground font-bold">{s.untouched}</span>반
@@ -81,6 +104,8 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
               {g.cards.map((card) => {
                 const pct = landingCardPct(card);
                 const idle = card.totalSlots === 0;
+                // EiE만 숫자가 있다(그 외 null = 칸을 비운다). 분모를 넘지 않게 자르는 것도 여기 한 곳.
+                const shoutCount = shoutingCountOf(card);
                 // 🔴 압축의 대가 — "교시 작성"이라는 **단위**가 행에서 사라졌다. 눈으로는 열 머리가
                 // 설명하지만 스크린리더는 행만 읽어 "0/5"가 무엇의 5인지 알 수 없다. 접근성 이름에 되돌린다.
                 const srLabel = [
@@ -91,6 +116,8 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
                     : null,
                   `담임 ${card.teacherName ?? "미지정"}`,
                   idle ? "이 주에 배정된 교시 없음" : `작성 교시 ${card.filledSlots}/${card.totalSlots}`,
+                  // 화면에서 알약이 말하는 것을 스크린리더에도 되돌린다(행에는 열 머리가 없다).
+                  shoutCount !== null && !idle ? `Shouting 체크 ${shoutCount}/${card.totalSlots}교시` : null,
                 ]
                   .filter(Boolean)
                   .join(", ");
@@ -119,6 +146,31 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
                           title={`시간표가 바뀌어 지금 시간표에 없는 기록 ${card.orphanSlots}건`}
                         >
                           시간변경 <span className="num">{card.orphanSlots}</span>
+                        </span>
+                      ) : null}
+                      {/* Shouting 구역(0230a) — **폭을 항상 잡는다**(원장 2026-08-28 *"영역 구분해서 열 정렬되서
+                          길이에 따라 정렬이 흐트러지지 않게 shouting 구역 따로"*). 알약 길이가 `2/6`이든 `12/12`든
+                          오른쪽 정렬이라 뒤따르는 작성률·막대의 자리는 그대로다.
+                          🔴 EiE가 아닌 반은 **빈 칸**이다(`0/6`이 아니다) — 인재원 영어는 Shouting 자체가 없어
+                             0으로 그리면 "해야 하는데 안 했다"는 거짓말이 된다. 그래도 폭은 잡아 둔다. */}
+                      {showShouting ? (
+                        <span className="w-[52px] shrink-0 text-right">
+                          {shoutCount !== null && !idle ? (
+                            <span
+                              // 색은 **의미 캐논**(팔레트 v4)에서 고른다 — 전 교시 체크 = positive(green).
+                              // 남은 것은 '주의'가 아니라 진행 중이라 색을 안 쓴다(amber는 뜻이 다르다).
+                              className={`num rounded-pill border px-1 py-px text-[10.5px] font-bold ${
+                                shoutCount === card.totalSlots
+                                  ? `border-green ${TONE_SOFT.positive}`
+                                  : shoutCount > 0
+                                    ? "border-line-strong text-foreground"
+                                    : "border-line text-text-faint"
+                              }`}
+                              title={`Shouting 체크 ${shoutCount}/${card.totalSlots}교시 (이번 주)`}
+                            >
+                              {shoutCount}/{card.totalSlots}
+                            </span>
+                          ) : null}
                         </span>
                       ) : null}
                       {idle ? (
