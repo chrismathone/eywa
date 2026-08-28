@@ -11,6 +11,11 @@ import {
 import { applySheetImport, previewSheetImport } from "@/features/timetable/server/import-actions";
 import type { DryRunReport, SchedulePlanItem } from "@/features/timetable/import/structure/types";
 import type { ImportDiff } from "@/features/timetable/import/types";
+import { conflictChecklist } from "@/features/timetable/import/structure/conflicts";
+import { effectiveDateLabel, isImmediate } from "@/features/timetable/import/effective-date";
+import { mondayOf } from "@/features/timetable/lib/week";
+import { EffectiveDateField } from "./effective-date-field";
+import { ConflictChecklist } from "./conflict-checklist";
 
 const KO_DAY: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 const dayT = (p: SchedulePlanItem) => `${KO_DAY[p.day] ?? p.day} ${p.startTime}${p.endTime ? `~${p.endTime}` : ""}`;
@@ -23,6 +28,7 @@ const tch = (names: string[]) => (names.length ? names.join(", ") : "—");
  */
 export function EnglishImportDialog({
   subject = "english",
+  today,
   disabled = false,
   disabledTitle,
   open: openProp,
@@ -30,6 +36,8 @@ export function EnglishImportDialog({
   hideTrigger = false,
 }: {
   subject?: string;
+  /** KST 오늘(서버 계산) — 적용일의 기본값이자 하한. */
+  today: string;
   /** 시트 리스 진행 중(새벽 자동 반영·타 관리자 실행) 트리거 선제 비활성 — 사유는 마우스오버(title). */
   disabled?: boolean;
   disabledTitle?: string;
@@ -52,6 +60,11 @@ export function EnglishImportDialog({
     if (!isControlled) setInternalOpen(v);
     onOpenChange?.(v);
   };
+  // 적용일 — 기본은 오늘(종전 동작). 바꾸면 미리보기를 지운다: 구조 diff는 **그 날짜 기준**으로 다시
+  // 계산돼야 하고(예약해 둔 배치가 이미 있으면 그게 '현재'다), 충돌 목록도 함께 달라진다.
+  const [effective, setEffective] = useState(today);
+  // 확인 체크된 충돌 키 — 적용의 전제조건(서버가 같은 목록으로 재검증).
+  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   const [struct, setStruct] = useState<DryRunReport | null>(null);
   const [structErr, setStructErr] = useState<string | null>(null);
   const [enroll, setEnroll] = useState<ImportDiff | null>(null);
@@ -83,18 +96,26 @@ export function EnglishImportDialog({
     setReverted(null);
   }
   function clearPreview() {
+    setChecked(new Set());
     setStruct(null);
     setStructErr(null);
     setEnroll(null);
     setEnrollHash(null);
     setEnrollErr(null);
   }
+  /** 적용일이 바뀌면 미리보기는 무효 — 그 날짜 기준으로 다시 불러와야 한다. */
+  function changeEffective(next: string) {
+    setEffective(next);
+    setError(null);
+    clearPreview();
+    resetResult();
+  }
   function preview() {
     setError(null);
     clearPreview();
     resetResult();
     startPreview(async () => {
-      const [s, e] = await Promise.all([previewStructureImport(subject), previewSheetImport(subject)]);
+      const [s, e] = await Promise.all([previewStructureImport(subject, effective), previewSheetImport(subject)]);
       // 둘 다 실패해야 하드 에러 — 하나만 실패면 그 섹션에만 안내(다른 쪽은 정상 진행).
       if (s.error && e.error) {
         setError(`불러오기 실패 — 배치: ${s.error} · 반이동: ${e.error}`);
@@ -113,10 +134,11 @@ export function EnglishImportDialog({
       let sRes: typeof structRes = null;
       // ① 구조 먼저(원자 RPC). 스테일이면 전체 중단(재불러오기 유도).
       if (struct && structChanges > 0) {
-        const r = await applyStructureImport(struct.hash, subject);
+        const r = await applyStructureImport(struct.hash, subject, effective, [...checked]);
         if (r.error) {
           setError((r.staleHash ? "시트 또는 시간표가 변경됐습니다 — 다시 불러오세요. " : "배치 적용 실패: ") + r.error);
-          if (r.staleHash) clearPreview();
+          // 충돌 목록이 서버 재계산과 어긋났으면(확인 이후 시트가 바뀐 경우) 미리보기를 지워 다시 받게 한다.
+          if (r.staleHash || r.staleConflicts) clearPreview();
           setConfirming(false);
           return;
         }
@@ -133,7 +155,7 @@ export function EnglishImportDialog({
           setConfirming(false);
           return;
         }
-        const r = await applySheetImport(enrollHash, subject);
+        const r = await applySheetImport(enrollHash, subject, effective);
         if (r.error) {
           if (r.staleHash) {
             // 반이동 미리보기만 무효화(구조는 이미 적용됐을 수 있음 — 결과·롤백은 유지).
@@ -176,6 +198,23 @@ export function EnglishImportDialog({
     resetResult();
   }
 
+  // 확인이 필요한 충돌(= 이번 변경이 건드린 물리적 불가능). 합반은 여기 안 들어온다(경고만).
+  const mustAck = struct ? conflictChecklist(struct.conflicts) : [];
+  const ackDone = mustAck.every((c) => checked.has(c.key));
+  const scheduled = !isImmediate(effective, today);
+  const toggleAck = (key: string) =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  /** 적용한 날짜가 속한 주로 이동 — 예약 적용은 그 주로 넘겨야 결과가 보인다. */
+  function goToEffectiveWeek() {
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("week", mondayOf(effective));
+    router.push(`${window.location.pathname}?${sp.toString()}`);
+  }
+
   const creates = struct?.planItems.filter((p) => p.action === "create") ?? [];
   const updates = struct?.planItems.filter((p) => p.action === "update") ?? [];
   const removes = struct?.planItems.filter((p) => p.action === "remove") ?? [];
@@ -215,6 +254,14 @@ export function EnglishImportDialog({
               <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
               <span>편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b>(전체 덮어쓰기라 편집분이 사라집니다).</span>
             </p>
+            {/* ⚠️ 적용 뒤에는 잠근다 — changeEffective가 resetResult를 부르는데, 거기 있는 snapshotId가
+                되돌리기의 **유일한 경로**라 날짜를 한 번 건드리면 되돌릴 길이 조용히 사라진다. */}
+            <EffectiveDateField
+              value={effective}
+              onChange={changeEffective}
+              today={today}
+              disabled={applying || applied}
+            />
             <div className="mt-3">
               <button
                 type="button"
@@ -290,6 +337,16 @@ export function EnglishImportDialog({
                   )}
                 </section>
 
+                {/* 적용 후 배치의 물리적 충돌 — 확인 체크리스트 + 합반 경고 + 원래 있던 충돌 */}
+                {struct ? (
+                  <ConflictChecklist
+                    conflicts={struct.conflicts}
+                    checked={checked}
+                    onToggle={toggleAck}
+                    disabled={applying || applied}
+                  />
+                ) : null}
+
                 {/* 경고(구조) */}
                 {struct && struct.warnings.length > 0 ? (
                   <div className="bg-amber-soft text-amber rounded-sm p-2 text-[11px]">
@@ -301,14 +358,28 @@ export function EnglishImportDialog({
                 {/* 적용 / 결과 / 롤백 */}
                 {applied ? (
                   <div className="bg-blue-soft text-blue space-y-2 rounded-sm p-2 text-[12px]">
-                    <p className="flex items-center gap-1 font-bold"><Check className="size-3" /> 적용 완료</p>
+                    <p className="flex items-center gap-1 font-bold">
+                      <Check className="size-3" /> {scheduled ? `${effectiveDateLabel(effective)}부터 적용 예약됨` : "적용 완료"}
+                    </p>
                     {structRes ? <p className="text-text-dim text-[11px]">· 배치: 마감 {structRes.closed} · 삽입 {structRes.inserted} · 반 {structRes.classUpdated}</p> : null}
                     {enrollRes ? <p className="text-text-dim text-[11px]">· 반이동: 이동 {enrollRes.moved} · 삭제 {enrollRes.removed} · 추가 {enrollRes.added}{enrollRes.failed ? ` · 실패 ${enrollRes.failed}` : ""}</p> : null}
-                    {snapshotId ? (
-                      <button type="button" onClick={rollback} disabled={rolling} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-40">
-                        {rolling ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />} 배치 변경 되돌리기
-                      </button>
+                    {scheduled ? (
+                      <p className="text-text-dim text-[11px]">
+                        지금 화면(이번 주)은 그대로입니다 — 바뀐 배치는 그 주로 넘겨야 보입니다.
+                      </p>
                     ) : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {scheduled ? (
+                        <button type="button" onClick={goToEffectiveWeek} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition">
+                          <ArrowRight className="size-3" /> 그 주 시간표 보기
+                        </button>
+                      ) : null}
+                      {snapshotId ? (
+                        <button type="button" onClick={rollback} disabled={rolling} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-40">
+                          {rolling ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />} 배치 변경 되돌리기
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 ) : reverted ? (
                   <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[12px]">{reverted}</p>
@@ -316,7 +387,10 @@ export function EnglishImportDialog({
                   <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">변경 사항이 없습니다 — 시트와 시간표가 일치합니다.</p>
                 ) : confirming ? (
                   <div className="border-amber/40 bg-amber-soft space-y-2 rounded-sm border p-2 text-[12px]">
-                    <p className="text-amber flex items-center gap-1 font-bold"><AlertTriangle className="size-3" /> 배치 {structChanges}건 · 반이동 {enrollChanges}건을 적용합니다. 계속할까요?</p>
+                    <p className="text-amber flex items-center gap-1 font-bold">
+                      <AlertTriangle className="size-3" /> 배치 {structChanges}건 · 반이동 {enrollChanges}건을{" "}
+                      {scheduled ? `${effectiveDateLabel(effective)}부터` : "지금"} 적용합니다. 계속할까요?
+                    </p>
                     <div className="flex items-center gap-2">
                       <button type="button" onClick={apply} disabled={applying} className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40">
                         {applying ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />} 적용 확정
@@ -325,9 +399,23 @@ export function EnglishImportDialog({
                     </div>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setConfirming(true)} className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition">
-                    <Check className="size-3" /> {totalChanges}건 적용 (배치 {structChanges} · 반이동 {enrollChanges})
-                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(true)}
+                      disabled={!ackDone}
+                      className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
+                    >
+                      <Check className="size-3" /> {totalChanges}건 적용 (배치 {structChanges} · 반이동 {enrollChanges})
+                      {scheduled ? ` · ${effectiveDateLabel(effective)}부터` : ""}
+                    </button>
+                    {/* ⚠️ 비활성 사유는 title이 아니라 **보이는 문구**로 — disabled button의 툴팁은 안 뜬다(툴바 Reason과 같은 규약). */}
+                    {!ackDone ? (
+                      <p className="text-text-faint mt-1 text-[11px]">
+                        위 <b>확인 필요</b> {mustAck.length}건을 모두 체크해야 적용할 수 있습니다.
+                      </p>
+                    ) : null}
+                  </div>
                 )}
               </div>
             ) : null}

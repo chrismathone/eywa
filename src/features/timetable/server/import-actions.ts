@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { EDIT_SHEET_NAME, parseEditSheet, rowsToEditRows } from "@/features/timetable/import/parse";
 import { computeImportDiff, importDiffHash } from "@/features/timetable/import/diff";
+import { normalizeEffectiveDate } from "@/features/timetable/import/effective-date";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { readSheetTabRows } from "@/features/integrations/google-sheets";
 import { sheetsProvider, supportsTimetableImport } from "@/features/integrations/sheets-provider";
@@ -224,6 +225,8 @@ export type ApplyState = {
   /** 추가분 중 **휴원 학생이라 휴원 표식을 달고 들어간** 건수 — 조용히 넘어가면 나중에 "왜 안 뜨지"가 된다. */
   heldAdds?: number;
   failed?: number;
+  /** 실제로 적용된 날짜 — 오늘이 아닐 수 있다(예약 적용). 화면이 "며칠부터"를 이 값으로 말한다. */
+  effectiveDate?: string;
   snapshotId?: string;
 };
 
@@ -239,6 +242,7 @@ export async function applyTimetableImport(
   expectedHash: string,
   formData: FormData,
   subject?: string,
+  effectiveDateRaw?: string,
 ): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -246,6 +250,9 @@ export async function applyTimetableImport(
   if (!(await canManageTimetableImport(user.systemRole))) return { error: TIMETABLE_IMPORT_DENIED_MSG };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일이 없습니다 — 다시 선택 후 미리보기하세요" };
+  // 🔴 적용일은 클라 값을 그대로 쓰지 않는다 — 서버가 같은 순수 규칙으로 재검증(과거·상한 초과 거절).
+  const eff = normalizeEffectiveDate(effectiveDateRaw, kstToday());
+  if ("error" in eff) return { error: eff.error };
 
   const supabase = await createClient();
   const provider = subject ? sheetsProvider(subject) : null;
@@ -267,7 +274,7 @@ export async function applyTimetableImport(
     const hash = importDiffHash(fresh.diff);
     if (hash !== expectedHash)
       return { error: "수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
-    return await applyDiff(user, supabase, fresh.diff);
+    return await applyDiff(user, supabase, fresh.diff, eff.date);
   } finally {
     // ⚠️ return await 필수(위) — 프로미스만 반환하면 적용 완료 전에 리스가 풀린다.
     if (provider && lease === "claimed") await releaseSheetSyncLease(supabase, provider);
@@ -279,12 +286,18 @@ export async function applyTimetableImport(
  * (protectNewerThan 포함, preview와 동일 계산). 게이트는 previewSheetImport와 대칭(master 전용).
  * 시트 리스(0098a)를 잡고 재읽기~적용까지 수행 — '시트 반영'·다른 가져오기와 교차 실행 직렬화.
  */
-export async function applySheetImport(expectedHash: string, subject: string = "math"): Promise<ApplyState> {
+export async function applySheetImport(
+  expectedHash: string,
+  subject: string = "math",
+  effectiveDateRaw?: string,
+): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageSheetSync(user.systemRole))) return { error: SHEET_ACCESS_DENIED_MSG };
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   if (!supportsTimetableImport(subject)) return { error: "이 과목은 학생 반이동 가져오기를 지원하지 않습니다" };
+  const eff = normalizeEffectiveDate(effectiveDateRaw, kstToday());
+  if ("error" in eff) return { error: eff.error };
 
   const supabase = await createClient();
   const provider = sheetsProvider(subject);
@@ -303,7 +316,7 @@ export async function applySheetImport(expectedHash: string, subject: string = "
     const hash = importDiffHash(fresh.diff);
     if (hash !== expectedHash)
       return { error: "시트 또는 수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
-    return await applyDiff(user, supabase, fresh.diff);
+    return await applyDiff(user, supabase, fresh.diff, eff.date);
   } finally {
     if (lease === "claimed") await releaseSheetSyncLease(supabase, provider);
   }
@@ -313,13 +326,18 @@ export async function applySheetImport(expectedHash: string, subject: string = "
  * 서버가 재계산·hash 검증한 diff를 실제 적용(내부 전용 — 클라 diff는 받지 않음, 리스는 호출부가 보유).
  * 적용 직전 영향 enrollment를 timetable_snapshots에 백업하고 timetable_import_logs에 이력 기록.
  * moves는 일괄이동 RPC, removes는 end_date, adds는 insert. 모든 쓰기는 RLS(테넌트 격리) 하.
+ *
+ * `effective` = **적용 기준일**(호출부가 서버 검증을 마쳐 넘긴다). 오늘이면 종전과 완전히 같고,
+ * 미래면 그 날짜부터 반이 갈린다: 옛 수강은 그날 종료(`end_date`), 새 수강은 그날 시작(`start_date`).
+ * ⚠️ 이 함수는 날짜를 스스로 정하지 않는다 — 세 쓰기(이동·종료·추가)가 **한 날짜**를 써야 하기 때문이다.
  */
 async function applyDiff(
   user: { id: string; tenantId: string },
   supabase: Awaited<ReturnType<typeof createClient>>,
   diff: ImportDiff,
+  effective: string,
 ): Promise<ApplyState> {
-  const today = kstToday();
+  const today = effective;
 
   // 1) 스냅샷 — 영향 enrollment의 before 상태(이동·삭제 대상) 백업
   const affectedIds = [
@@ -362,6 +380,9 @@ async function applyDiff(
     const daysByEnrollment = new Map(dayRows.map((r) => [r.id, r.attendance_days ?? []]));
 
     const { data, error } = await supabase.rpc("move_enrollments_batch", {
+      // ⚠️ 넘기지 않으면 RPC 기본값 `current_date`(DB 서버 시각)로 떨어진다 — KST 자정 근처에서 하루가
+      //    어긋나고, 예약 적용은 아예 불가능하다. 적용일은 항상 명시한다.
+      p_effective_date: effective,
       p_moves: diff.moves.map((m) => ({
         enrollmentId: m.enrollmentId,
         newClassId: m.toClassId,
@@ -424,7 +445,8 @@ async function applyDiff(
     }
   }
 
-  // 5) 이력 로그
+  // 5) 이력 로그 — ⚠️ `week_label`은 이제 **적용 기준일**이다(누른 날이 아니라). 예약 적용이면 둘이 다르고,
+  //    "언제 눌렀나"는 행의 created_at에 남는다. 화면 소비처는 없다(쓰기 전용 이력).
   await supabase.from("timetable_import_logs").insert({
     tenant_id: user.tenantId,
     week_label: today,
@@ -449,6 +471,7 @@ async function applyDiff(
     },
     heldAdds,
     failed,
+    effectiveDate: today,
     snapshotId,
   };
 }

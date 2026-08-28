@@ -2,11 +2,11 @@
 // create/update/keep/remove로 분류하고 강의실 충돌·경고를 모은다. **쓰기 없음** — 미리보기/드라이런 전용.
 // 키 = (classId, day, startTime): 한 반은 요일·시작시각당 하나의 슬롯. 같은 키 복수 강사 = 합반(teachers[] 병합).
 
+import { detectScheduleConflicts } from "./conflicts";
 import type {
   DryRunReport,
   ExistingSchedule,
   MatchResult,
-  RoomConflict,
   SchedulePlanItem,
   TargetSchedule,
 } from "./types";
@@ -15,10 +15,6 @@ import type {
 function roomTok(r: string | null): string {
   if (!r) return "";
   return (r.match(/\b(\d{3}|SKY)\b/i)?.[1] ?? r.trim()).toUpperCase();
-}
-function toMin(t: string): number {
-  const [h, m] = t.split(":").map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
 }
 /** 결정적 FNV-1a 해시(env 무관) — 변경분 조작/스테일 차단(Phase 2 apply 재검증용). */
 function fnv1a(s: string): string {
@@ -114,29 +110,9 @@ export function computeStructureDiff(match: MatchResult, existing: ExistingSched
     counts.remove++;
   }
 
-  // 4. 강의실 충돌(같은 방·요일·시간 겹침 + 다른 반). LAB 데스크(단자리)·SKY는 방토큰이 달라 자연 분리.
-  const byRoomDay = new Map<string, TargetSchedule[]>();
-  for (const t of targetByKey.values()) {
-    const rt = roomTok(t.room);
-    if (!rt) continue;
-    const k = `${rt}|${t.day}`;
-    (byRoomDay.get(k) ?? byRoomDay.set(k, []).get(k)!).push(t);
-  }
-  const conflicts: RoomConflict[] = [];
-  for (const [k, arr] of byRoomDay) {
-    for (let i = 0; i < arr.length; i++)
-      for (let j = i + 1; j < arr.length; j++) {
-        const a = arr[i]!, b = arr[j]!;
-        if (a.classId === b.classId) continue;
-        const aEnd = a.endTime ?? a.startTime, bEnd = b.endTime ?? b.startTime;
-        if (toMin(a.startTime) < toMin(bEnd) && toMin(b.startTime) < toMin(aEnd))
-          conflicts.push({
-            room: k.split("|")[0]!, day: a.day,
-            a: { className: a.className, teachers: a.teachers.map((x) => x.name), startTime: a.startTime, endTime: a.endTime },
-            b: { className: b.className, teachers: b.teachers.map((x) => x.name), startTime: b.startTime, endTime: b.endTime },
-          });
-      }
-  }
+  // 4. 적용 후 배치의 물리적 충돌 — 판정·자리(LAB/JJ) 제외·합반 구분은 conflicts.ts 단일 소스.
+  //    ⚠️ 여기서 다시 세지 말 것: 예전엔 이 자리에서 방만 봤고 자리 슬롯을 안 걸러 76쌍이 나왔다(전부 오탐).
+  const conflicts = detectScheduleConflicts([...targetByKey.values()], planItems);
 
   // 5. 경고.
   for (const n of [...newClasses].sort((a, b) => a.localeCompare(b, "ko")))
