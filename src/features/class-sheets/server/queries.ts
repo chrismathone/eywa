@@ -36,7 +36,12 @@ import {
 } from "../landing-teacher";
 import type { RosterGroupKey } from "../lib/roster-order";
 import type { SheetMark } from "../lib/roster-form";
-import { keepEnglishTrack, readEnglishTrack, type EnglishTrackFilter } from "@/features/classes/english-track";
+import {
+  keepEnglishTrack,
+  readEnglishTrack,
+  type EnglishTrack,
+  type EnglishTrackFilter,
+} from "@/features/classes/english-track";
 import {
   buildWeekGrid,
   scheduledSlotKeySet,
@@ -637,6 +642,13 @@ export type SheetLandingCard = {
    */
   teacherId: string | null;
   teacherName: string | null;
+  /**
+   * 프로그램 구분(0176a `classes.english_track`) — 목록 **좌우 분단**의 기준(원장 2026-08-28
+   * *"EiE와 인재원 영어를 분리해서 좌 우로 2단"*). null = 미분류이며 화면에선 인재원 쪽에 든다
+   * (필터와 같은 비대칭 — [`landing-programs.ts`](../landing-programs) 참조).
+   * ⚠️ `shoutingSlots`로 프로그램을 되짚지 말 것: 조회가 실패해도 null이라 "EiE가 아님"과 구분이 안 된다.
+   */
+  englishTrack: EnglishTrack | null;
   totalSlots: number;
   filledSlots: number;
   orphanSlots: number;
@@ -801,7 +813,6 @@ export async function getSheetLanding(
   const eieClassIds = classes
     .filter((c) => readEnglishTrack({ english_track: c.english_track as string | null }) === "eie")
     .map((c) => c.id as string);
-  const eieIdSet = new Set(eieClassIds);
 
   const [schedules, lines, shoutFlags] = await Promise.all([
     fetchInChunks<{
@@ -932,10 +943,13 @@ export async function getSheetLanding(
     );
     let orphan = 0;
     for (const key of all) if (!scheduled.has(key) && !seatKeys.has(key)) orphan += 1;
+    // 프로그램 구분 — 카드에 실어 보낸다(화면이 좌우로 가르는 기준). 위 `eieClassIds`와 **같은 술어**라
+    // 조회 대상과 표시가 갈리지 않는다.
+    const track = readEnglishTrack({ english_track: c.english_track as string | null });
     // Shouting — EiE 반만 숫자를 낸다(그 외는 null = 화면에서 칸을 비운다).
     // 조회가 실패했으면(shoutFlags === null) EiE 반도 null이다 — "0회"가 아니라 "모름"이다.
     let shout: number | null = null;
-    if (shoutFlags !== null && eieIdSet.has(c.id as string)) {
+    if (shoutFlags !== null && track === "eie") {
       const keys = shoutKeysByClass.get(c.id as string);
       shout = 0;
       if (keys) for (const key of scheduled) if (keys.has(key)) shout += 1;
@@ -945,6 +959,7 @@ export async function getSheetLanding(
       className: c.class_name as string,
       teacherId: (c.teacher_id as string | null) ?? null,
       teacherName: c.teacher_id ? (teacherName.get(c.teacher_id as string) ?? null) : null,
+      englishTrack: track,
       totalSlots: scheduled.size,
       filledSlots: filled,
       orphanSlots: orphan,

@@ -11,6 +11,7 @@ function card(over: Partial<SheetLandingCard> = {}): SheetLandingCard {
     className: "LS3b",
     teacherId: "t1",
     teacherName: "김태건",
+    englishTrack: null,
     totalSlots: 6,
     filledSlots: 0,
     orphanSlots: 0,
@@ -20,6 +21,14 @@ function card(over: Partial<SheetLandingCard> = {}): SheetLandingCard {
   };
 }
 
+/**
+ * EiE 반 한 장 — 서버 불변식대로 `englishTrack`과 `shoutingSlots`가 **함께** 온다.
+ * (둘을 따로 두면 실제로는 나올 수 없는 상태를 테스트하게 된다: 트랙은 인재원인데 체크 수가 있는 반.)
+ */
+function eie(over: Partial<SheetLandingCard> = {}): SheetLandingCard {
+  return card({ englishTrack: "eie", shoutingSlots: 0, ...over });
+}
+
 /** 행 링크 하나 = 반 한 줄. aria-label로 찾는다(행에는 열 머리가 없어 접근성 이름이 곧 계약이다). */
 function row(className: string) {
   const link = screen.getAllByRole("link").find((a) => a.getAttribute("aria-label")?.startsWith(className));
@@ -27,53 +36,82 @@ function row(className: string) {
   return link;
 }
 
+/**
+ * Shouting 구역(폭 52px) 셀렉터. ⚠️ `.w-\[52px\]`처럼 **클래스 셀렉터로 쓰지 말 것** — 역슬래시가
+ * 한 겹만 남으면 jsdom이 조용히 0개를 돌려줘 "빈 칸이다" 쪽 단언이 거짓으로 통과한다(실제로 밟았다).
+ * 속성 셀렉터는 값이 따옴표 안이라 대괄호를 그대로 쓴다.
+ */
+const ZONE = "[class~='w-[52px]']";
+
+/** 프로그램 단 하나 — 제목(h3)에서 거슬러 올라간다(담임 묶음은 단 안에서 h4다). */
+function panel(label: string) {
+  return screen.getByRole("heading", { level: 3, name: label }).closest("section")!;
+}
+
+/** 그 단에 실제로 들어간 반 이름들. */
+function classNamesIn(el: HTMLElement) {
+  return within(el)
+    .getAllByRole("link")
+    .map((a) => a.getAttribute("aria-label")!.split(",")[0]);
+}
+
 describe("EcsLandingList — Shouting 구역", () => {
   it("EiE 반은 그 주 체크 수를 작성률과 **같은 분모**로 보여준다", () => {
-    render(<EcsLandingList cards={[card({ shoutingSlots: 4, totalSlots: 6 })]} weekMonday="2026-08-24" />);
+    render(<EcsLandingList cards={[eie({ shoutingSlots: 4, totalSlots: 6 })]} weekMonday="2026-08-24" />);
     expect(within(row("LS3b")).getByTitle("Shouting 체크 4/6교시 (이번 주)")).toHaveTextContent("4/6");
   });
 
-  it("EiE가 아닌 반은 **빈 칸**이다 — 0/6으로 그리면 '해야 하는데 안 했다'는 거짓말", () => {
+  it("EiE가 아닌 반엔 Shouting이 아예 안 붙는다 — `0/6`으로 그리면 '해야 하는데 안 했다'는 거짓말", () => {
     render(
       <EcsLandingList
-        cards={[card({ classId: "a", className: "JP2", shoutingSlots: 2 }), card({ classId: "b", className: "중등E_중1 TOP" })]}
+        cards={[
+          eie({ classId: "a", className: "JP2", shoutingSlots: 2 }),
+          card({ classId: "b", className: "중등E_중1 TOP", englishTrack: "injaewon" }),
+        ]}
         weekMonday="2026-08-24"
       />,
     );
     const r = row("중등E_중1 TOP");
     // ⚠️ 행 전체 텍스트로 판정하지 말 것 — 옆 작성률 칸도 `0/6`이라 같은 문자열이 나온다(첫 시도가 여기 걸렸다).
-    expect(r.querySelector(".w-\\[52px\\]")!.textContent).toBe("");
     expect(within(r).queryByTitle(/Shouting/)).toBeNull();
     expect(r.getAttribute("aria-label")).not.toContain("Shouting");
+    // 좌우로 갈리면 인재원 단엔 EiE가 한 반도 없다 → 52px 구역 자체가 없다(그 폭은 긴 반 이름에 돌아간다).
+    expect(r.querySelector(ZONE)).toBeNull();
   });
 
   it("EiE 반이 하나도 없는 뷰('인재원 영어' 필터)엔 구역 자체를 안 만든다 — 52px을 통째로 비울 이유가 없다", () => {
     render(<EcsLandingList cards={[card({ className: "중등E_중1 TOP" })]} weekMonday="2026-08-24" />);
-    expect(row("중등E_중1 TOP").querySelector(".w-\\[52px\\]")).toBeNull();
+    expect(row("중등E_중1 TOP").querySelector(ZONE)).toBeNull();
   });
 
-  it("🔴 EiE가 아닌 반도 **구역 폭은 그대로 잡는다** — 섞인 목록에서 오른쪽 숫자가 한 줄로 서야 한다", () => {
+  it("🔴 같은 단 안에선 숫자가 없는 반도 **구역 폭을 그대로 잡는다** — 한 줄만 짧아지면 열이 어긋난다", () => {
     render(
       <EcsLandingList
-        cards={[card({ classId: "a", className: "JP2", shoutingSlots: 2 }), card({ classId: "b", className: "중등E_중1 TOP" })]}
+        cards={[
+          eie({ classId: "a", className: "JP2", shoutingSlots: 2 }),
+          eie({ classId: "b", className: "LS5", totalSlots: 0, shoutingSlots: 0 }),
+        ]}
         weekMonday="2026-08-24"
       />,
     );
-    // 두 행 모두 같은 자리에 같은 폭의 칸이 있다(한쪽만 있으면 열이 어긋난다).
-    for (const name of ["JP2", "중등E_중1 TOP"]) {
-      expect(row(name).querySelectorAll(".w-\\[52px\\]")).toHaveLength(1);
+    for (const name of ["JP2", "LS5"]) {
+      expect(row(name).querySelectorAll(ZONE)).toHaveLength(1);
     }
+    expect(row("LS5").querySelector(ZONE)!.textContent).toBe("");
   });
 
   it("이 주 수업이 없는 EiE 반은 숫자를 안 낸다(작성률 칸이 '—'인 것과 같은 규약)", () => {
-    render(<EcsLandingList cards={[card({ totalSlots: 0, shoutingSlots: 0 })]} weekMonday="2026-08-24" />);
-    expect(row("LS3b").querySelector(".w-\\[52px\\]")!.textContent).toBe("");
+    render(<EcsLandingList cards={[eie({ totalSlots: 0, shoutingSlots: 0 })]} weekMonday="2026-08-24" />);
+    expect(row("LS3b").querySelector(ZONE)!.textContent).toBe("");
   });
 
   it("전 교시 체크는 초록(의미 캐논 positive) — 남았으면 색을 안 쓴다", () => {
     render(
       <EcsLandingList
-        cards={[card({ classId: "a", className: "JP2", shoutingSlots: 6 }), card({ classId: "b", className: "PJ1", shoutingSlots: 3 })]}
+        cards={[
+          eie({ classId: "a", className: "JP2", shoutingSlots: 6 }),
+          eie({ classId: "b", className: "PJ1", shoutingSlots: 3 }),
+        ]}
         weekMonday="2026-08-24"
       />,
     );
@@ -82,7 +120,7 @@ describe("EcsLandingList — Shouting 구역", () => {
   });
 
   it("머리 줄이 이 칸의 이름을 대신 말한다 — EiE 반이 없으면 항목 자체가 없다", () => {
-    const { unmount } = render(<EcsLandingList cards={[card({ shoutingSlots: 2 })]} weekMonday="2026-08-24" />);
+    const { unmount } = render(<EcsLandingList cards={[eie({ shoutingSlots: 2 })]} weekMonday="2026-08-24" />);
     expect(screen.getByText("Shouting").parentElement).toHaveTextContent("2/6");
     unmount();
     render(<EcsLandingList cards={[card()]} weekMonday="2026-08-24" />);
@@ -90,7 +128,56 @@ describe("EcsLandingList — Shouting 구역", () => {
   });
 
   it("스크린리더에도 되돌린다 — 행에는 열 머리가 없다", () => {
-    render(<EcsLandingList cards={[card({ shoutingSlots: 4 })]} weekMonday="2026-08-24" />);
+    render(<EcsLandingList cards={[eie({ shoutingSlots: 4 })]} weekMonday="2026-08-24" />);
     expect(row("LS3b").getAttribute("aria-label")).toContain("Shouting 체크 4/6교시");
+  });
+});
+
+describe("EcsLandingList — 프로그램 좌우 분단", () => {
+  const mixed = [
+    eie({ classId: "a", className: "JP2", shoutingSlots: 2, filledSlots: 6, totalSlots: 6 }),
+    card({ classId: "b", className: "중등E_중1 TOP", englishTrack: "injaewon", filledSlots: 0, totalSlots: 6 }),
+  ];
+
+  it("섞이면 두 단이 서고 **EiE가 왼쪽** — 각 단은 자기 프로그램 반만 담는다", () => {
+    render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      "EiE",
+      "인재원 영어",
+    ]);
+    expect(classNamesIn(panel("EiE"))).toEqual(["JP2"]);
+    expect(classNamesIn(panel("인재원 영어"))).toEqual(["중등E_중1 TOP"]);
+  });
+
+  it("한 프로그램뿐이면 나누지 않는다 — 반쪽을 비워 둘 이유가 없다", () => {
+    render(<EcsLandingList cards={[eie({ className: "JP2", shoutingSlots: 2 })]} weekMonday="2026-08-24" />);
+    expect(screen.queryByRole("heading", { level: 3, name: "EiE" })).toBeNull();
+    // 담임 묶음은 단 밖이라 h3 그대로(제목 층이 안 뜬다).
+    expect(screen.getByRole("heading", { level: 3, name: "김태건" })).toBeTruthy();
+  });
+
+  it("미분류 반도 사라지지 않는다 — 인재원 단에 든다", () => {
+    render(
+      <EcsLandingList
+        cards={[eie({ classId: "a", className: "JP2", shoutingSlots: 2 }), card({ classId: "b", className: "미분류반" })]}
+        weekMonday="2026-08-24"
+      />,
+    );
+    expect(classNamesIn(panel("인재원 영어"))).toEqual(["미분류반"]);
+  });
+
+  it("단 머리의 작성률은 **그 단 몫만** 센다(옆 단 숫자가 섞이면 프로그램별로 못 읽는다)", () => {
+    render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
+    expect(within(panel("EiE")).getByText("작성")).toHaveTextContent("6/6");
+    expect(within(panel("인재원 영어")).getByText("작성")).toHaveTextContent("0/6");
+    // 머리 줄(전체)은 둘을 합한 값 그대로.
+    expect(screen.getByText("교시 작성")).toHaveTextContent("6/12");
+  });
+
+  it("한 담임이 두 프로그램을 맡으면 **양쪽 단에 묶음이 하나씩**, 머리 줄 담임 수는 1명", () => {
+    render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
+    // 단 안에서는 담임이 프로그램 아래 층(h4)이다.
+    expect(screen.getAllByRole("heading", { level: 4, name: "김태건" })).toHaveLength(2);
+    expect(screen.getByText(/^담임/)).toHaveTextContent("담임 1명");
   });
 });
