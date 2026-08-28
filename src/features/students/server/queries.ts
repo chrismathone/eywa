@@ -33,6 +33,7 @@ import { canViewStudentDetail } from "./read-scope";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { mergeTimeRanges } from "@/features/classes/schedule-summary";
+import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 
 /** 임포트된 상담/메모 텍스트("[제목]\n본문\n[등록자: 이름]")를 제목·본문·등록자로 분리. */
 function parseImportedNote(raw: string | null | undefined): {
@@ -665,14 +666,18 @@ export type StudentEnrollment = {
   startDate: string;
   endDate: string | null;
   onHold: boolean;
+  /** 반이동으로 끝났는가 — 종료 규약(`isEnrollmentEndedOn`)이 이 값으로 당일 포함/배타를 가른다. */
+  isTransferred: boolean;
 };
 
 export async function getStudentEnrollments(studentId: string): Promise<StudentEnrollment[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("enrollments")
+    // `is_transferred`는 **종료 규약에 필요하다** — 반이동은 종료일 당일에 이미 새 반 소속이고
+    // 일반 종료는 그날까지 재원이라, 이 값 없이는 `isEnrollmentEndedOn`을 정확히 부를 수 없다.
     .select(
-      `id, start_date, end_date, on_hold,
+      `id, start_date, end_date, on_hold, is_transferred,
        class:class_id ( id, class_name, subject, teacher:teacher_id ( display_name ) )`,
     )
     .eq("student_id", studentId)
@@ -696,6 +701,7 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
       startDate: r.start_date,
       endDate: r.end_date,
       onHold: r.on_hold,
+      isTransferred: (r.is_transferred as boolean | null) ?? false,
     };
   });
 }
@@ -1694,6 +1700,12 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
   if (!detail) return null;
 
   const today = kstToday();
+  /** 오늘 명단에 있는 수강인가 — 시작 전(예약)도, 이미 끝난 것도 아니다. 판정은 eligibility 단일 소스. */
+  const onRoster = (e: StudentEnrollment) =>
+    isEnrollmentOnRosterOn(
+      { startDate: e.startDate, endDate: e.endDate, isTransferred: e.isTransferred },
+      today,
+    );
   // 미납 판정은 수납 단일 공식(invoiceOutstanding — paid/void/refunded 제외)으로. status!=="paid" 재구현은
   // void(makeedu 무효)·refunded까지 미납으로 세어 실데이터에서 미납 건수가 부풀었다(2026-07-17 적대 리뷰 확정).
   const unpaid = invoices.filter((i) => invoiceOutstanding(i) > 0);
@@ -1707,7 +1719,13 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
     grade: detail.grade,
     status: detail.status,
     teacherNames: [
-      ...new Set(enrollments.filter((e) => e.endDate == null && e.teacherName).map((e) => e.teacherName as string)),
+      // 🔴 `endDate == null`로 자르지 않는다(2026-08-29) — 반이동을 예약하면 **지금 다니는 반**에
+      //    미래 종료일이 붙어 그 반 강사가 요약에서 사라진다(그리고 아직 시작도 안 한 반의 강사가 뜬다).
+      ...new Set(
+        enrollments
+          .filter((e) => onRoster(e) && e.teacherName)
+          .map((e) => e.teacherName as string),
+      ),
     ].sort(),
     attendance: {
       rate: attendance.rate,
@@ -1717,7 +1735,7 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
       late: attendance.late,
     },
     enrollments: enrollments
-      .filter((e) => e.endDate == null)
+      .filter(onRoster)
       .map((e) => ({ className: e.className, subject: e.subject, teacherName: e.teacherName, onHold: e.onHold })),
     billing: {
       unpaidCount: unpaid.length,

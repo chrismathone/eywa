@@ -41,11 +41,26 @@ describe("반 상세 명단 — 종료 규약", () => {
       ).toBe(false);
     });
 
-    it(`${fn}은 isEnrollmentEndedOn 단일 소스로 판정한다`, () => {
+    it(`${fn}은 eligibility 단일 소스로 판정한다`, () => {
+      // `enrollmentPhaseOn`은 내부에서 `isEnrollmentEndedOn`을 부른다 — 둘 중 무엇을 쓰든
+      // **호출부에서 규약을 다시 구현하지 않는 것**이 이 가드의 요지다.
       expect(
-        code,
+        /isEnrollmentEndedOn|enrollmentPhaseOn/.test(code),
         `종료 규약(일반=당일 포함 / 반이동=당일 배타)을 ${fn}에서 다시 구현하지 말 것.`,
-      ).toContain("isEnrollmentEndedOn");
+      ).toBe(true);
+    });
+
+    it(`${fn}은 시작일 축도 본다`, () => {
+      // 🔴 2026-08-29: 미래 시작 수강이 이미 DB에 있는데(실측 28건) 종료만 보고 있어서
+      //    **9/1부터 올 학생이 오늘 명단·재원생 수에 섞였다**. 두 경계를 다 봐야 한다.
+      expect(
+        code.includes("start_date"),
+        `${fn}이 start_date를 조회하지 않으면 아직 오지 않은 학생이 오늘 명단에 선다.`,
+      ).toBe(true);
+      expect(
+        code.includes("enrollmentPhaseOn"),
+        `${fn}은 시작·종료 두 경계를 enrollmentPhaseOn 단일 소스로 판정할 것.`,
+      ).toBe(true);
     });
 
     it(`${fn}은 전출 판정에 필요한 is_transferred를 실제로 조회한다`, () => {
@@ -55,4 +70,31 @@ describe("반 상세 명단 — 종료 규약", () => {
       );
     });
   }
+});
+
+/**
+ * **인원 카운트도 상세와 같은 규약** — 목록과 상세가 갈리지 않게.
+ *
+ * 2026-08-29: 반이동을 예약하면 옛 수강에 미래 종료일이 붙는데, 목록 카운트는 `.is("end_date", null)`로
+ * 세고 있어 **아직 다니는 학생이 목록에서만 빠졌다**. 반대로 미래 시작(예약된 합류)은 목록에 섞였다.
+ * 🔴 그렇다고 서버측 필터를 통째로 빼면 전 이력을 끌어와 1000행 캡에 걸린다([[#54]], 실측 1,338행).
+ */
+describe("수업목록 인원 — 상세와 같은 규약", () => {
+  const src = readFileSync(join(process.cwd(), "src", "features", "classes", "server", "queries.ts"), "utf8");
+  const code = stripComments(src);
+
+  it("카운트 쿼리가 .is(\"end_date\", null)로 세지 않는다", () => {
+    const bad = code.match(/\.select\("class_id"\)\s*\.is\(\s*["']end_date["']\s*,\s*null\s*\)/g) ?? [];
+    expect(bad, "종료일이 잡힌 학생(아직 다니는 중)이 목록 인원에서 빠진다").toEqual([]);
+  });
+
+  it("카운트는 onRosterRow 단일 소스로 거른다", () => {
+    const n = (code.match(/onRosterRow\(e, rosterToday\)/g) ?? []).length;
+    expect(n, "인원 카운트 3곳이 모두 같은 규약을 써야 목록과 상세가 안 갈린다").toBe(3);
+  });
+
+  it("카운트 쿼리는 끝난 수강을 서버에서 자른다(1000행 캡 회피)", () => {
+    const n = (code.match(/end_date\.is\.null,end_date\.gte\./g) ?? []).length;
+    expect(n, "필터를 빼면 전 이력을 끌어와 학생 수가 조용히 과소집계된다(#54)").toBeGreaterThanOrEqual(3);
+  });
 });

@@ -69,7 +69,39 @@ describe("0236a — 되돌리기는 id 우선, 좌표는 폴백", () => {
   });
 
   it("미래 예약분만 되돌린다", () => {
-    expect(sql).toContain("v_eff <= current_date");
+    expect(sql).toContain("v_eff <= v_today");
+  });
+
+  it("기준일이 KST다(current_date 금지)", () => {
+    // 🔴 이 DB의 timezone은 UTC다(0220a·0124a). `current_date`를 쓰면 KST 00~09시에 하루 어긋나,
+    //    "아직 시작 안 함" 가드가 **오늘 시작한 행**에까지 적용돼 출결이 붙은 수강을 지운다.
+    expect(sql).toContain("(now() at time zone 'Asia/Seoul')::date");
+    expect(sql).not.toMatch(/current_date/);
+  });
+
+  it("id로 지울 때도 **아직 시작 안 한 행만** 지운다", () => {
+    // 옛 좌표 경로는 `start_date = v_eff`(미래)라 이 보호가 공짜로 있었다. id로 바꾸면서 사라지면,
+    // 누가 시작일을 앞당겨 놓은 행(출결이 붙었을 수 있다)을 지운다.
+    const idDeletes = sql.match(/delete from public\.enrollments\s+where id = v_new_id[^;]*/g) ?? [];
+    // moves·adds 두 경로 모두 — 한쪽만 걸면 그쪽이 조용히 옛 동작으로 남는다.
+    expect(idDeletes.length).toBe(2);
+    for (const d of idDeletes) expect(d).toContain("start_date > v_today");
+  });
+
+  it("못 지운 건수를 moves·adds 양쪽에서 센다", () => {
+    // adds만 빼먹으면 부분 취소가 `skipped=0`으로 묻혀 호출부가 "전부 되돌렸다"고 말한다.
+    expect((sql.match(/v_skipped := v_skipped \+ 1;/g) ?? []).length).toBe(2);
+  });
+
+  it("완전히 되돌렸을 때만 복원 표식을 찍는다", () => {
+    // 부분 취소에도 찍으면 그 스냅샷이 예약 목록에서 빠져 **다시 취소할 길이 사라진다**.
+    expect(sql).toMatch(/if v_skipped = 0 then[\s\S]*restored_at = now\(\)/);
+  });
+
+  it("새 수강을 못 지웠는데 살아 있으면 옛 수강도 되살리지 않는다", () => {
+    // 한쪽만 되돌리면(옛 반 재개방 + 새 반 잔존) 그 학생이 두 반에 동시에 있게 된다.
+    expect(sql).toMatch(/v_skipped/);
+    expect(sql).toMatch(/continue;/);
   });
 
   it("행 수를 get diagnostics로 센다(분기 밖 found 금지)", () => {

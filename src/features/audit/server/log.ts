@@ -122,6 +122,10 @@ export const AUDIT_ACTIONS = {
   enrollment_assign: "반 배정",
   enrollment_move: "반 이동",
   enrollment_move_batch: "반 이동(시간표 일괄)",
+  // 예약된(아직 시작 안 한) 수강 변경을 배너에서 고치거나 되돌린 기록 — 되돌릴 수 없는 이력이 아니라
+  // "누가 언제 예약을 손댔나"의 역검수용이다(학생 기록을 바꾸는 경로는 전부 감사로그를 남긴다).
+  enrollment_reschedule: "예약 변경(날짜·반)",
+  enrollment_schedule_cancel: "예약 취소",
   enrollment_days_update: "등원 요일 수정",
   enrollment_dates_update: "수강 기간 수정",
   student_merge: "학생 병합",

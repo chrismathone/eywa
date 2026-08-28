@@ -1,6 +1,8 @@
 import { Sparkles } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { formatCreatedAt } from "@/lib/utils";
+import { kstToday } from "@/lib/date-kst";
+import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import {
   getStudentAttendanceStats,
   getStudentEnrollments,
@@ -44,7 +46,14 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const hasCareAi = student.aiCareSummary !== null;
 
-  const activeClasses = enrollments.filter((e) => !e.endDate);
+  // 🔴 `!endDate`로 자르면 안 된다(2026-08-29) — 반이동을 예약하면 옛 수강에 **미래 종료일**이
+  //    붙는데, 그 학생은 그날까지 그 반에 다닌다. 잘라 버리면 지금 다니는 반이 개요에서 증발하고,
+  //    아직 시작도 안 한 새 반만 보였다(실측 김준서A: MS2B가 사라지고 MS2A만 뜸).
+  //    판정은 enrollmentPhaseOn 단일 소스 — 오늘 명단(active∪leaving)만 '수강 중'이다.
+  const today = kstToday();
+  const activeClasses = enrollments.filter((e) =>
+    isEnrollmentOnRosterOn({ startDate: e.startDate, endDate: e.endDate, isTransferred: e.isTransferred }, today),
+  );
   // 미납 = unpaid/partial만(refunded/void 제외) + 행 레벨 clamp — calc.ts 단일 공식(수납관리 KPI와 일치).
   const unpaid = invoices.filter((i) => i.status === "unpaid" || i.status === "partial");
   const unpaidTotal = unpaid.reduce((s, i) => s + invoiceOutstanding(i), 0);

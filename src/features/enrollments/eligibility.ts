@@ -27,6 +27,49 @@ export function isEnrollmentActiveOn(
 }
 
 /**
+ * 기준일에서 본 수강의 **시간 축 위치** — 명단·배너가 "지금"과 "예정"을 가르는 단일 소스.
+ *
+ * 🔴 왜 필요한가(2026-08-29 실측): 미래 시작 수강 28건·미래 종료 15건이 이미 DB에 있는데
+ *    화면마다 답이 달랐다. 반 상세 명단은 **종료만 보고 시작을 안 봐서** 9/3부터인 학생이
+ *    오늘 명단에 있었고, 학생 개요는 `!endDate`로 잘라 **아직 다니는 반이 증발**했다.
+ *    출결 계열만 두 경계를 다 봐서 정확했다.
+ *
+ * 🔴 **`on_hold`는 이 축에 넣지 않는다.** 휴원은 시간이 아니라 상태이고, 반 명단은 휴원 학생을
+ *    (배지를 달아) **남겨 둔다**([classes/server/queries.ts]). 여기에 섞으면 휴원 학생이 명단에서
+ *    통째로 증발한다. 출결용 판정은 `isEnrollmentActiveOn`이 따로 있고 그쪽은 휴원을 뺀다 —
+ *    두 함수는 **쓰는 자리가 다르다**(명단 표시 vs 출결 대상).
+ *
+ * `active`와 `leaving`은 **둘 다 "오늘 수강 중"** 이다 — 세는 자리에선 합쳐야 한다.
+ */
+export type EnrollmentPhase =
+  /** 아직 시작 안 함(예약된 배정·이동의 도착지). */
+  | "upcoming"
+  /** 수강 중이고 끝날 날짜가 없다. */
+  | "active"
+  /** 수강 중이지만 끝날 날짜가 잡혀 있다(예약된 이동의 출발지·종료 예정). */
+  | "leaving"
+  /** 이미 끝났다. */
+  | "ended";
+
+export function enrollmentPhaseOn(
+  enrollment: { startDate: string; endDate: string | null; isTransferred?: boolean },
+  date: string,
+): EnrollmentPhase {
+  if (enrollment.startDate > date) return "upcoming";
+  if (isEnrollmentEndedOn(enrollment.endDate, date, enrollment.isTransferred)) return "ended";
+  return enrollment.endDate ? "leaving" : "active";
+}
+
+/** 기준일에 **명단에 있는가**(휴원 포함 — 위 주석의 이유). `active` ∪ `leaving`. */
+export function isEnrollmentOnRosterOn(
+  enrollment: { startDate: string; endDate: string | null; isTransferred?: boolean },
+  date: string,
+): boolean {
+  const phase = enrollmentPhaseOn(enrollment, date);
+  return phase === "active" || phase === "leaving";
+}
+
+/**
  * 같은 (학생, 반)의 두 수강 기간이 겹치는가 — **DB GiST `enrollments_no_overlap`과 같은 규칙**.
  *
  * 제약은 `daterange(start_date, coalesce(end_date,'infinity'), '[)')`라 **종료일은 제외(반열림)**다.

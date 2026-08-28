@@ -39,6 +39,8 @@ export async function cancelScheduledImport(effectiveDate: string): Promise<Canc
 
   const supabase = await createClient();
   let done = 0;
+  // 되돌리지 못하고 남긴 수강 수(이미 시작된 것) — 0이 아니면 취소가 부분적이다.
+  let leftover = 0;
   for (const id of group.snapshotIds) {
     // 종류는 스냅샷 payload가 정한다 — 배치는 0087a/0231a, 반이동은 0233a.
     const { data: snap } = await supabase
@@ -49,7 +51,7 @@ export async function cancelScheduledImport(effectiveDate: string): Promise<Canc
     const payload = snap?.payload as Record<string, unknown> | null | undefined;
     const isStructure = !!payload && "kind" in payload;
     const fn = isStructure ? "rollback_english_structure" : "rollback_enrollment_import";
-    const { error } = await supabase.rpc(fn, { p_snapshot_id: id });
+    const { data: res, error } = await supabase.rpc(fn, { p_snapshot_id: id });
     if (error) {
       // SQL 미적용(0233a)이면 함수가 없다 — 원문 대신 무엇을 해야 하는지 한글로 알린다([[#95]]).
       const missing = /could not find the function|does not exist/i.test(error.message);
@@ -67,9 +69,21 @@ export async function cancelScheduledImport(effectiveDate: string): Promise<Canc
             : "취소하지 못했습니다(변경 없음). 잠시 후 다시 시도해 주세요.",
       };
     }
+    // 🔴 0236a는 **이미 시작된 행은 손대지 않고** `skipped`로 알린다(그 사이 출결이 붙었을 수 있다).
+    //    그걸 성공으로 삼키면 "모든 게 무로 돌아갔다"가 거짓말이 된다 — 남은 것을 정확히 말한다.
+    const skipped = Number((res as { skipped?: number } | null)?.skipped ?? 0);
+    if (skipped > 0) leftover += skipped;
     done += 1;
   }
 
   revalidatePath("/timetable");
+  if (leftover > 0) {
+    return {
+      reverted: { snapshots: done },
+      error:
+        `예약을 되돌렸지만 ${leftover}건은 이미 시작돼 그대로 두었습니다 — ` +
+        `그 사이 출결이 붙었을 수 있어 지우지 않습니다. 학생 상세 수업 탭에서 확인해 주세요.`,
+    };
+  }
   return { reverted: { snapshots: done } };
 }

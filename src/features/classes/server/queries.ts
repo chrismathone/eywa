@@ -5,7 +5,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
-import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
+import { enrollmentPhaseOn, isEnrollmentOnRosterOn, type EnrollmentPhase } from "@/features/enrollments/eligibility";
 import { kstToday } from "@/lib/date-kst";
 import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
@@ -112,7 +112,10 @@ export type ClassDetail = {
   pendingTeacherDate: string | null;
   pendingTeacherReason: string | null;
   scheduleSlots: ClassScheduleSlot[];
+  /** **오늘** 명단에 있는 학생 수(휴원 포함, 미래 시작 제외). */
   studentCount: number;
+  /** 아직 시작 안 한 수강 수 — 배너가 "N/N부터 합류 N명"으로 보여 준다(숫자를 잃지 않는다). */
+  upcomingCount: number;
 };
 
 export type ClassStudentRow = {
@@ -124,6 +127,11 @@ export type ClassStudentRow = {
   enrolledAt: string;
   /** 수강 종료일. null=무기한. **오늘 이후(당일 포함)** 는 아직 수강 중이라 목록에 남는다. */
   endDate: string | null;
+  /**
+   * 오늘 기준 위치 — `upcoming`(아직 안 옴) · `active` · `leaving`(끝날 날짜가 잡힘).
+   * 🔴 화면은 `upcoming`을 **오늘 명단과 섞어 세지 말 것**(그러면 아직 안 온 학생이 재원생이 된다).
+   */
+  phase: Exclude<EnrollmentPhase, "ended">;
   onHold: boolean;
   /** 분리등원 요일 — []=수업 전 요일 등원, ['mon','thu']=월·목만. */
   attendanceDays: string[];
@@ -139,6 +147,35 @@ export type ClassAttendanceStats = {
 };
 
 const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/**
+ * 목록·카운트용 "오늘 명단에 있는 수강인가" — 상세와 **같은 규약**(eligibility 단일 소스).
+ *
+ * 🔴 예전엔 `.is("end_date", null)`로 셌다. 그러면 두 방향으로 틀린다:
+ *    ① 미래 시작(예약된 합류)이 **오늘 인원에 섞이고** ② 종료일이 잡힌 학생이 아직 다니는데 **빠진다**.
+ *    ②는 반이동을 예약하는 순간 생기므로(옛 수강에 미래 종료일이 붙는다) 목록과 상세가 갈렸다.
+ */
+type EnrollmentCountRow = {
+  class_id: string;
+  start_date: string | null;
+  end_date: string | null;
+  is_transferred: boolean | null;
+};
+
+function onRosterRow(
+  e: { start_date?: string | null; end_date?: string | null; is_transferred?: boolean | null },
+  today: string,
+): boolean {
+  if (!e.start_date) return false;
+  return isEnrollmentOnRosterOn(
+    {
+      startDate: String(e.start_date),
+      endDate: e.end_date ? String(e.end_date) : null,
+      isTransferred: e.is_transferred ?? false,
+    },
+    today,
+  );
+}
 
 /** PostgREST .or()/ilike 안전화 — 구분자·와일드카드 제거(한글/공백 보존). search/queries.ts와 동일. */
 function sanitizeTerm(q: string): string {
@@ -264,10 +301,19 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
   const classIds = classes.map((c) => c.id);
   const counts = new Map<string, number>();
   if (classIds.length > 0) {
-    const enrollments = await fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
-      supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
+    const enrollments = await fetchInChunks<EnrollmentCountRow>(classIds, (chunk) =>
+      supabase
+        .from("enrollments")
+        .select("class_id, start_date, end_date, is_transferred")
+        // 🔴 **이미 끝난 수강은 서버에서 자른다**(B2·[[#54]]). 필터를 빼면 전 이력을 끌어와
+        //    (실측 1,338행 vs 유효 602행) 100개 반 청크가 1000행 캡에 걸려 **학생 수가 조용히
+        //    과소집계**된다. 종료 판정 자체는 아래 onRosterRow가 하므로 여기선 넉넉히 자르기만 한다.
+        .or(`end_date.is.null,end_date.gte.${kstToday()}`)
+        .in("class_id", chunk),
     );
+    const rosterToday = kstToday();
     for (const e of enrollments) {
+      if (!onRosterRow(e, rosterToday)) continue;
       counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
     }
   }
@@ -343,7 +389,17 @@ export async function getClassesStats(): Promise<{ total: number; active: number
     const q = supabase.from("classes").select("*", { count: "exact", head: true });
     return tId ? q.eq("teacher_id", tId) : q;
   };
-  let seatsQuery = supabase.from("enrollments").select("*", { count: "exact", head: true }).is("end_date", null);
+  // 🔴 `is("end_date", null)`만 보면 두 방향으로 틀린다(2026-08-29): 반이동을 예약하면 **아직 다니는**
+  //    학생에게 미래 종료일이 붙어 빠지고, 예약된 합류(미래 시작)는 오늘 수에 섞인다.
+  //    ⚠️ 여기는 집계라 행을 받지 않는다(B2 — `count:exact head:true`) → `is_transferred`를 행마다 볼 수
+  //    없어 목록·상세의 `onRosterRow`와 **완전히 같지는 않다**: 전출 종료일이 '오늘'인 행 하나가 더
+  //    세어질 수 있다(전출은 당일 배타). 총합 지표의 오차 1 vs 전건 fetch를 견준 선택이다.
+  const seatToday = kstToday();
+  let seatsQuery = supabase
+    .from("enrollments")
+    .select("*", { count: "exact", head: true })
+    .lte("start_date", seatToday)
+    .or(`end_date.is.null,end_date.gte.${seatToday}`);
   if (tId) {
     const { classIds } = await getTeacherScope(tId);
     if (classIds.length === 0) return { total: 0, active: 0, totalSeats: 0 };
@@ -438,8 +494,15 @@ export async function getClassesPage(
   };
   if (classIds.length > 0) {
     const [enrollments, scheds] = await Promise.all([
-      fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
-        supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
+      fetchInChunks<EnrollmentCountRow>(classIds, (chunk) =>
+        supabase
+        .from("enrollments")
+        .select("class_id, start_date, end_date, is_transferred")
+        // 🔴 **이미 끝난 수강은 서버에서 자른다**(B2·[[#54]]). 필터를 빼면 전 이력을 끌어와
+        //    (실측 1,338행 vs 유효 602행) 100개 반 청크가 1000행 캡에 걸려 **학생 수가 조용히
+        //    과소집계**된다. 종료 판정 자체는 아래 onRosterRow가 하므로 여기선 넉넉히 자르기만 한다.
+        .or(`end_date.is.null,end_date.gte.${kstToday()}`)
+        .in("class_id", chunk),
       ),
       fetchInChunks<{
         class_id: string;
@@ -454,7 +517,11 @@ export async function getClassesPage(
           .in("class_id", chunk),
       ),
     ]);
-    for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    const rosterToday = kstToday();
+    for (const e of enrollments) {
+      if (!onRosterRow(e, rosterToday)) continue;
+      counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    }
     // 운영 기간이 지난 교시를 현재처럼 그리지 않는다([[#88]]).
     dayView = buildDayView(scheds, kstToday());
   }
@@ -618,13 +685,25 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       .order("start_time"),
     supabase
       .from("enrollments")
-      .select("end_date, is_transferred")
+      .select("start_date, end_date, is_transferred")
       .eq("class_id", id)
       .or(`end_date.is.null,end_date.gte.${today}`),
   ]);
-  const studentCount = (enrollRows ?? []).filter(
-    (e) => !isEnrollmentEndedOn(e.end_date as string | null, today, (e.is_transferred as boolean | null) ?? false),
-  ).length;
+  // 🔴 시작일도 봐야 한다(2026-08-29): 미래 시작 수강이 이미 DB에 있어서(실측 28건) 종료만 보면
+  //    **9/1부터 올 학생이 오늘 재원생 수에 섞인다**. 판정은 enrollmentPhaseOn 단일 소스.
+  //    예정분은 따로 세어 배너가 "9/1부터 합류 N명"으로 보여 준다(숫자를 잃지 않는다).
+  const phases = (enrollRows ?? []).map((e) =>
+    enrollmentPhaseOn(
+      {
+        startDate: String(e.start_date),
+        endDate: (e.end_date as string | null) ?? null,
+        isTransferred: (e.is_transferred as boolean | null) ?? false,
+      },
+      today,
+    ),
+  );
+  const studentCount = phases.filter((p) => p === "active" || p === "leaving").length;
+  const upcomingCount = phases.filter((p) => p === "upcoming").length;
 
   const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
     | { display_name?: string }
@@ -670,6 +749,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       slotTeacherLabel: (s.slot_teacher_label as string | null) ?? null,
     })),
     studentCount,
+    upcomingCount,
   };
 }
 
@@ -706,11 +786,14 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
         | undefined;
       if (!s) return null;
       const endDate = (e.end_date as string | null) ?? null;
+      const isTransferred = (e.is_transferred as boolean | null) ?? false;
       // 반이동(전출)은 종료일 당일에 이미 새 반 소속 — 그날 이 반 명단에 남기면 두 반에 겹쳐 뜬다.
-      if (isEnrollmentEndedOn(endDate, today, (e.is_transferred as boolean | null) ?? false)) {
-        return null;
-      }
+      // 🔴 시작일도 본다(2026-08-29): 미래 시작 수강이 이미 DB에 있어(실측 28건) 종료만 보면
+      //    **아직 안 온 학생이 오늘 명단에 선다**. 예정분은 `phase`로 표시해 화면이 구분해 보여 준다.
+      const phase = enrollmentPhaseOn({ startDate: String(e.start_date), endDate, isTransferred }, today);
+      if (phase === "ended") return null;
       return {
+        phase,
         enrollmentId: e.id,
         studentId: s.id,
         name: s.name,
@@ -749,8 +832,15 @@ export async function getClassroomAssignmentData(): Promise<ClassroomAssignData>
 
   if (classIds.length > 0) {
     const [enrollments, scheds] = await Promise.all([
-      fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
-        supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
+      fetchInChunks<EnrollmentCountRow>(classIds, (chunk) =>
+        supabase
+        .from("enrollments")
+        .select("class_id, start_date, end_date, is_transferred")
+        // 🔴 **이미 끝난 수강은 서버에서 자른다**(B2·[[#54]]). 필터를 빼면 전 이력을 끌어와
+        //    (실측 1,338행 vs 유효 602행) 100개 반 청크가 1000행 캡에 걸려 **학생 수가 조용히
+        //    과소집계**된다. 종료 판정 자체는 아래 onRosterRow가 하므로 여기선 넉넉히 자르기만 한다.
+        .or(`end_date.is.null,end_date.gte.${kstToday()}`)
+        .in("class_id", chunk),
       ),
       fetchInChunks<{
         class_id: string;
@@ -768,7 +858,11 @@ export async function getClassroomAssignmentData(): Promise<ClassroomAssignData>
           .or(liveValidTo(kstToday())),
       ),
     ]);
-    for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    const rosterToday = kstToday();
+    for (const e of enrollments) {
+      if (!onRosterRow(e, rosterToday)) continue;
+      counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    }
     for (const s of scheds) {
       const arr = slotsByClass.get(s.class_id) ?? [];
       arr.push({

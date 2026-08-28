@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Pencil } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStudentEnrollment } from "@/features/students/server/enrollment-gate";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { BackLink } from "@/components/back-link";
@@ -14,6 +14,10 @@ import { Pill } from "@/components/atoms/pill";
 import { DupSuspectNotice } from "./_components/dup-suspect-notice";
 import { RunCareAiButton } from "./run-care-ai-button";
 import { StudentTabsNav, isStudentTabKey } from "./_components/tabs-nav";
+import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
+import { ScheduledChangeActions } from "@/components/scheduled-change-actions";
+import { getScheduledForStudent } from "@/features/enrollments/server/scheduled-queries";
+import { kstToday } from "@/lib/date-kst";
 import { StatusAction } from "./_components/status-action";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { OverviewTab } from "./_tabs/overview-tab";
@@ -110,6 +114,16 @@ export default async function StudentDetailPage({
   const canSeeEnrollment = await canSeeStudentEnrollment(user.systemRole, student.id);
   const canOpenEnrollmentDetail = enrollmentAccess;
 
+  // 예정된 반 변경(합류·이동·종료 예정) — 탭 위 배너. 예약이 없으면 빈 배열이라 아무것도 안 그린다.
+  // 🔴 **열람은 막지 않는다**(강사도 자기 담당 학생의 예정은 알아야 한다). 수정·취소 버튼만 게이트.
+  // 🔴 그 게이트는 **서버 액션과 같은 축**이어야 한다 — `canManageTenant("classes")`(반 이동을 *만드는*
+  //    것과 같은 게이트). 학생 권한(students full)으로 버튼을 열면 상담사에게 버튼은 보이는데 서버가
+  //    거절한다(#77의 반대 꼴 — 화면과 게이트가 갈리면 어느 쪽이든 거짓말이 된다).
+  const [scheduled, canManageScheduled] = await Promise.all([
+    getScheduledForStudent(student.id),
+    canManageTenant(user.systemRole, "classes"),
+  ]);
+
   return (
     <div className="space-y-6">
       <BackLink href="/students" label="학생목록으로" />
@@ -167,6 +181,19 @@ export default async function StudentDetailPage({
           </div>
         </div>
       </header>
+
+      {/* 예정된 변경 — 원장 지시(2026-08-28): 탭 위에 경고처럼 띄우고 우측에서 수정·취소.
+          미래 예약은 오늘 화면에 흔적이 없어 잊힌다(실측: 미래 시작 수강 28건이 어디에도 안 보였다). */}
+      <ScheduledChangeBanner
+        changes={scheduled}
+        today={kstToday()}
+        subject="student"
+        actions={
+          canManageScheduled
+            ? (c) => <ScheduledChangeActions change={c} today={kstToday()} />
+            : undefined
+        }
+      />
 
       <StudentTabsNav studentId={student.id} active={tab} canSeeBilling={canSeeBilling} />
 

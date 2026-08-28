@@ -40,7 +40,7 @@ function isOverlapConflict(error: DbError): boolean {
  * (`conflicting key value violates exclusion constraint "enrollments_no_overlap"`가 배정
  * 다이얼로그에 그대로 떴던 2026-07-28 제보의 재발 방지.)
  */
-function toKoreanDbError(error: DbError, fallback: string): string {
+export function toKoreanDbError(error: DbError, fallback: string): string {
   const msg = error?.message ?? "";
   if (isOverlapConflict(error)) return "이미 이 반에 기간이 겹치는 수강이 있습니다.";
   if (msg.includes("conflicting_period")) {

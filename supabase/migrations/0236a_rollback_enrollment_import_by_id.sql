@@ -35,6 +35,10 @@ declare
   v_student  uuid;
   v_new_id   uuid;
   v_n        int;
+  v_skipped  int := 0;
+  -- 🔴 `current_date`를 쓰지 말 것 — **이 DB의 timezone은 UTC다**(0220a·0124a와 같은 함정).
+  --    KST 00~09시엔 하루 어긋나, "아직 시작 안 함"을 오늘 시작한 행에까지 적용해 지워 버린다.
+  v_today    date := (now() at time zone 'Asia/Seoul')::date;
 begin
   if v_tenant is null then
     raise exception 'rollback_enrollment_import: 인증된 테넌트가 없습니다';
@@ -50,7 +54,7 @@ begin
   if v_diff ? 'kind' then
     raise exception 'rollback_enrollment_import: 반이동 스냅샷이 아닙니다';
   end if;
-  if v_eff is null or v_eff <= current_date then
+  if v_eff is null or v_eff <= v_today then
     raise exception '이미 시작된 반이동은 되돌릴 수 없습니다(적용일 %). 미래 예약분만 취소할 수 있습니다', v_eff;
   end if;
 
@@ -61,9 +65,20 @@ begin
     v_n := 0;
     if v_new_id is not null then
       -- 🔑 id 경로 — 그 사이 누가 날짜·반을 바꿨어도 **바로 그 행**을 지운다.
+      -- 🔴 단 **아직 시작 안 한 행만**. 옛 좌표 경로는 `start_date = v_eff`(미래)라 이 보호가 공짜로
+      --    있었는데, id로 바꾸면서 사라졌다. 누가 시작일을 오늘 이전으로 당겨 놓았으면 그 사이 출결이
+      --    붙었을 수 있어, 지우면 기록이 존재하지 않는 수강에 매달린다(이 함수의 전제와 같은 이유).
       delete from public.enrollments
-       where id = v_new_id and tenant_id = v_tenant;
+       where id = v_new_id and tenant_id = v_tenant and start_date > v_today;
       get diagnostics v_n = row_count;
+      -- 🔴 못 지웠는데 **행이 아직 살아 있으면** 옛 수강도 건드리지 않는다 — 한쪽만 되돌리면
+      --    (옛 반 재개방 + 새 반 잔존) 그 학생이 두 반에 동시에 있게 된다. 둘 다 되돌리거나 둘 다 둔다.
+      if v_n = 0 and exists (
+        select 1 from public.enrollments where id = v_new_id and tenant_id = v_tenant
+      ) then
+        v_skipped := v_skipped + 1;
+        continue;
+      end if;
     else
       -- 폴백(옛 스냅샷) — 좌표 추측. 날짜·반이 바뀌었으면 못 찾는다(그래서 id를 쓰게 된 것).
       select student_id into v_student
@@ -116,23 +131,40 @@ begin
   loop
     v_new_id := nullif(rec->>'enrollmentId','')::uuid;
     if v_new_id is not null then
+      -- moves와 같은 이유로 **아직 시작 안 한 행만** 지운다.
       delete from public.enrollments
-       where id = v_new_id and tenant_id = v_tenant;
+       where id = v_new_id and tenant_id = v_tenant and start_date > v_today;
+      get diagnostics v_n = row_count;
+      -- 🔴 moves와 **같은 집계**를 해야 한다 — 여기만 빼면 못 지운 행이 `skipped=0`으로 묻혀
+      --    호출부가 "전부 되돌렸다"고 말한다(부분 취소가 침묵한다).
+      if v_n = 0 and exists (
+        select 1 from public.enrollments where id = v_new_id and tenant_id = v_tenant
+      ) then
+        v_skipped := v_skipped + 1;
+      end if;
     else
       delete from public.enrollments
        where tenant_id = v_tenant
          and student_id = (rec->>'studentId')::uuid
          and class_id = (rec->>'classId')::uuid
          and start_date = v_eff;
+      get diagnostics v_n = row_count;
     end if;
-    get diagnostics v_n = row_count;
     v_deleted := v_deleted + v_n;
   end loop;
 
-  update public.timetable_import_logs
-     set restored_at = now()
-   where snapshot_id = p_snapshot_id and tenant_id = v_tenant and restored_at is null;
+  -- 🔴 **완전히 되돌렸을 때만** 복원 표식을 찍는다. 부분 취소에도 찍으면 그 스냅샷이 예약 목록에서
+  --    빠져(scheduled-import-queries가 restored_at을 제외한다) **다시 취소할 길이 사라진다** —
+  --    남은 행은 그대로인데 화면엔 "예약 없음"으로 보인다.
+  if v_skipped = 0 then
+    update public.timetable_import_logs
+       set restored_at = now()
+     where snapshot_id = p_snapshot_id and tenant_id = v_tenant and restored_at is null;
+  end if;
 
-  return jsonb_build_object('deleted', v_deleted, 'reopened', v_reopened, 'effectiveDate', v_eff);
+  -- `skipped` = 이미 시작돼 손대지 않은 건수. 0이 아니면 취소가 **부분적**이라 호출부가 알려야 한다.
+  return jsonb_build_object(
+    'deleted', v_deleted, 'reopened', v_reopened, 'skipped', v_skipped, 'effectiveDate', v_eff
+  );
 end;
 $$;

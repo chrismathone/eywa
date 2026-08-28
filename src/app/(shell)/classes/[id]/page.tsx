@@ -29,8 +29,9 @@ import { ClassLevelAction } from "./_components/class-level-action";
 import { ArchiveClassButton } from "./_components/archive-class-button";
 import { ClassTermButton } from "./_components/class-term-button";
 import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
-import { ScheduledTeacherBanner } from "./_components/scheduled-teacher-banner";
-import { getScheduledClassChange } from "@/features/timetable/server/scheduled-class-change";
+import { getScheduledClassChanges, scheduledClassChangeLabel } from "@/features/timetable/server/scheduled-class-change";
+import { getScheduledForClass } from "@/features/enrollments/server/scheduled-queries";
+import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
 import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
 import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
@@ -65,6 +66,12 @@ export default async function ClassDetailPage({
     ]);
   if (!klass) notFound();
 
+  // 아직 시작 안 한 수강(예약된 합류) — 목록엔 함께 두되 **오늘 수와 섞어 세지 않는다**.
+  const upcoming = students.filter((s) => s.phase === "upcoming");
+  // 폐지 확인 다이얼로그가 "N명이 수강 중입니다"라고 경고하는 수 — 예정분을 세면 **오늘은 아무도 없는
+  // 반**을 "학생이 있다"며 못 지우게 막는다(반대로도 위험: 실제 재원생을 못 보고 지우는 것).
+  const onRosterCount = students.length - upcoming.length;
+
   // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
   // 분리등원 요일 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
@@ -94,8 +101,16 @@ export default async function ClassDetailPage({
     .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
   const today = todayIso();
   const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= today;
-  // 가져오기가 미뤄 둔 담임 변경(있으면 배너). 예약이 없으면 쿼리 한 번으로 끝난다.
-  const scheduledTeacher = await getScheduledClassChange(klass.id, klass.teacherId);
+  // 가져오기가 미뤄 둔 반 자체 변경(담임·강의실·**반 이름**) + 예약된 명단 변동. 둘 다 예약이
+  // 없으면 각각 쿼리 한 번으로 끝난다. 독립이라 병렬(B4).
+  const [scheduledClass, scheduledRoster] = await Promise.all([
+    getScheduledClassChanges(klass.id, {
+      teacherId: klass.teacherId,
+      classroomId: klass.classroomId,
+      className: klass.className,
+    }),
+    getScheduledForClass(klass.id),
+  ]);
   // 위임 가능 판정 = 서버 게이트(requireDelegationWrite)와 **같은 모양**이어야 한다.
   // full(원장·부원장·실장)은 학원 전체 반, scoped(강사)는 자기 담당 반만 — 결근을 아는 사람은 본인이라
   // 미리 맡기고 갈 수 있어야 한다. 두 판정이 갈라지면 "버튼은 보이는데 누르면 거절"이 된다.
@@ -218,7 +233,7 @@ export default async function ClassDetailPage({
               classId={klass.id}
               isActive={klass.isActive}
               className={klass.className}
-              enrolledCount={students.length}
+              enrolledCount={onRosterCount}
             />
           ) : null}
         </div>
@@ -237,14 +252,32 @@ export default async function ClassDetailPage({
         canRevoke={canDelegate}
       />
 
-      {/* 시간표 가져오기가 예약해 둔 담임 변경(읽기 전용) — 수동 인수인계와 별개 축이라 함께 설 수 있다. */}
-      {scheduledTeacher ? (
-        <ScheduledTeacherBanner
-          currentTeacherName={klass.teacherName}
-          teacherName={scheduledTeacher.teacherName}
-          effectiveDate={scheduledTeacher.effectiveDate}
-        />
+      {/* 시간표 가져오기가 예약해 둔 반 자체 변경(담임·강의실·반 이름) — **읽기 전용**.
+          적용은 기한 cron이, 취소는 시간표 툴바 배지의 ×가 한다(배치·명단까지 한 덩이라 반 하나만
+          되돌리면 어긋난다). 수동 인수인계와는 별개 축이라 함께 설 수 있다. */}
+      {scheduledClass.length > 0 ? (
+        <div className="border-blue/30 bg-blue-soft/50 rounded-xl border px-4 py-3">
+          <p className="text-blue inline-flex items-center gap-1.5 text-[13px] font-bold">
+            <CalendarClock className="size-4" aria-hidden="true" />
+            시간표 예약
+          </p>
+          <ul className="mt-2 space-y-1">
+            {scheduledClass.map((c) => (
+              <li key={`${c.kind}:${c.effectiveDate}`} className="text-foreground text-sm">
+                {scheduledClassChangeLabel(c)}
+              </li>
+            ))}
+          </ul>
+          <p className="text-text-dim mt-1.5 text-xs">
+            그날 자동으로 바뀝니다. 되돌리려면 시간표 화면의 적용 예정 배지에서 취소하세요.
+          </p>
+        </div>
       ) : null}
+
+      {/* 예약된 명단 변동(합류·이동·종료 예정) — 학생 상세와 같은 컴포넌트·같은 문구.
+          🔴 여기선 수정·취소를 주지 않는다: 한 반에서 여러 학생을 한꺼번에 다루는 자리라
+             오클릭 피해가 크고, 개별 정정은 그 학생 상세에서 하는 것이 원장 확정 규약이다. */}
+      <ScheduledChangeBanner changes={scheduledRoster} today={today} subject="class" />
 
       {klass.pendingTeacherId ? (
         <HandoverBanner
@@ -293,7 +326,14 @@ export default async function ClassDetailPage({
               <Users className="text-primary size-4" />
               <h2 className="text-foreground text-sm font-bold">수강 중인 학생</h2>
             </div>
-            <p className="text-muted-foreground num text-xs">{students.length}명</p>
+            {/* 🔴 예정(아직 안 온 학생)을 오늘 수와 **합쳐 세지 않는다**(2026-08-29) — 미래 시작 수강이
+                이미 DB에 있어서(실측 28건) 합치면 9/1부터 올 학생이 오늘 재원생으로 보인다. */}
+            <p className="text-muted-foreground num text-xs">
+              {students.filter((s) => s.phase !== "upcoming").length}명
+              {upcoming.length > 0 ? (
+                <span className="text-blue ml-1.5 font-medium">· 예정 {upcoming.length}</span>
+              ) : null}
+            </p>
           </header>
           <section className="bg-card border-border rounded-2xl border">
             {students.length === 0 ? (
@@ -309,7 +349,15 @@ export default async function ClassDetailPage({
                       title={s.name}
                       className="hover:underline"
                     >
-                      <p className="text-foreground text-sm font-medium">{s.name}</p>
+                      <p className="text-foreground flex items-center gap-1.5 text-sm font-medium">
+                        {s.name}
+                        {/* 아직 안 온 학생 — 표시가 없으면 오늘 다니는 학생과 구분이 안 된다. */}
+                        {s.phase === "upcoming" ? (
+                          <span className="text-blue bg-blue-soft num rounded-md px-1.5 py-0.5 text-[11px] font-semibold">
+                            {s.enrolledAt.slice(5).replace("-", "/")}부터
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="text-muted-foreground text-xs">
                         {s.grade ?? "—"}
                         {s.school ? ` · ${s.school}` : ""}
