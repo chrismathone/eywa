@@ -14,6 +14,7 @@ import {
   jjSeatTextCols,
   type JjMarkField,
 } from "@/features/attendance/seat/jj-fields";
+import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
@@ -172,17 +173,22 @@ function SeatJjClass({
         <tbody className="divide-line divide-y">
           {r.students.map((s) => {
             const cur = statusOf(r.classId, s);
+            // 사유 메모는 줄 전체의 툴팁(원장 2026-08-28 "마우스 오버시 결석사유") — 출결 버튼처럼
+            // 자기 title이 없는 칸은 이걸 물려받는다. 자기 title을 가진 칸(이름)은 여기서 이어 붙인다.
+            const noteTitle = seatNoteTitle(cur, s.note);
             return (
-              <tr key={s.id}>
+              <tr key={s.id} title={noteTitle ?? undefined}>
                 <td className="px-2 py-1.5">
-                  <p className="truncate font-bold" title={s.name}>
+                  <p className="truncate font-bold" title={noteTitle ? `${s.name} · ${noteTitle}` : s.name}>
                     {s.name}
                   </p>
                   <p className="text-text-dim truncate text-[11.5px]">
                     {schoolGradeLabel(s.school, s.grade) || " "}
                   </p>
                 </td>
-                <td className="px-1 py-1.5">
+                {/* 출결 칸에도 같은 툴팁을 명시로 단다 — `<tr>` 하나만 믿지 않는다(줄에 건 title은
+                    자식이 자기 title을 안 가질 때만 올라오고, 여기가 사유를 보러 오는 첫 자리다). */}
+                <td className="px-1 py-1.5" title={noteTitle ?? undefined}>
                   <div className="flex flex-wrap items-center justify-center gap-1">
                     <button
                       type="button"

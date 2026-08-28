@@ -2,6 +2,7 @@
 
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { fitSeatName, SEAT_CHIP_NAME_LADDER } from "@/features/attendance/seat/name-fit";
+import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
@@ -48,8 +49,11 @@ export function SeatLabGrid({
                 const cur = statusOf(r.classId, s);
                 // 긴 이름(동명이인 알파벳 접미사)은 잘라내지 않고 그 칩만 글씨를 줄인다.
                 const fit = fitSeatName(s.name, SEAT_CHIP_NAME_LADDER);
+                // 사유 메모는 카드 전체의 툴팁이다(원장 2026-08-28 "마우스 오버시 결석사유") — 카드 안
+                // 어디에 올려도 뜨도록 <li>에 단다. 자기 title을 가진 자식(잘린 이름)만 자기 것을 띄운다.
+                const noteTitle = seatNoteTitle(cur, s.note);
                 return (
-                  <li key={s.id} className="relative">
+                  <li key={s.id} className="relative" title={noteTitle ?? undefined}>
                     <button
                       type="button"
                       disabled={readOnly || pending}
@@ -63,7 +67,10 @@ export function SeatLabGrid({
                           그대로. 하한(12px)에서도 넘칠 때만 말줄임 + 전체 이름 툴팁. */}
                       <span
                         className={`w-full truncate pr-5 leading-5 font-bold ${fit.className}`}
-                        title={fit.clipped ? s.name : undefined}
+                        // 이름이 잘린 칩에서는 이름 툴팁이 <li>의 사유를 가린다 → 둘을 이어 붙인다.
+                        title={
+                          fit.clipped ? (noteTitle ? `${s.name} · ${noteTitle}` : s.name) : (noteTitle ?? undefined)
+                        }
                       >
                         {s.name}
                       </span>

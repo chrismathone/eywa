@@ -168,7 +168,9 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                   </th>
                 ))}
                 {/* 머리는 가운데 — 주간 시트와 **같은 규약**(둘이 갈리면 같은 표로 안 읽힌다). */}
-                <th className="py-0.5 text-center font-bold">특이사항</th>
+                {/* ⚠️ 주간 표와 같은 이유로 `whitespace-nowrap`(roster-table 주석 참조) — 좁아진 열에서
+                    라벨이 두 줄로 접히면 그 교시만 머리 높이가 달라져 위층 카드 레일과 어긋난다. */}
+                <th className="py-0.5 text-center font-bold whitespace-nowrap">특이사항</th>
               </Fragment>
             ))}
           </tr>

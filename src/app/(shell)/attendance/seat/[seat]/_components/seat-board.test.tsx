@@ -43,6 +43,7 @@ const rosters: SeatClassRoster[] = [
         status: "present",
         recordedBy: null,
         fromSeat: false,
+      note: null,
         listeningLevel: null,
         memorizedWords: null,
       },

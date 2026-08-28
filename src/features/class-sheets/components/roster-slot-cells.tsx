@@ -35,6 +35,7 @@ import {
 import { SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
 import { AttendanceCheck } from "./attendance-check";
 import { AttitudeCheck } from "./attitude-check";
+import { NoteCell } from "./note-cell";
 import type { SheetHandlers } from "./sheet-client";
 
 export type StudentMeta = {
@@ -260,21 +261,18 @@ export function RosterSlotCells({
           />
         </td>
       ))}
-      {/* pr-1 없음 — 주간 표 원본과 동일(옮기며 폭을 바꾸지 않는다). */}
-      <td className="py-px">
-        <input
-          className={SHEET_INPUT}
-          defaultValue={mark?.progressNote ?? ""}
-          disabled={!rowEditable}
-          aria-label={`${meta?.name ?? ""} 특이사항`}
-          data-nav-col={`ecs-note${navColSuffix}`}
-          data-nav-row={navRow}
-          onKeyDown={handleGridNavKey}
-          onChange={(e) =>
-            handlers.saveMark(entry.studentId, date, slotStart, mark?.status ?? null, e.target.value)
-          }
-        />
-      </td>
+      {/* 특이사항 — 열은 좁고(80%, 원장 2026-08-28) 적을 때만 스티커 메모처럼 펼쳐진다.
+          ⚠️ 여기서 다시 맨 `<input>`으로 되돌리지 말 것: 좁힌 열 폭의 보상이 그 펼침이다. */}
+      <NoteCell
+        defaultValue={mark?.progressNote ?? ""}
+        disabled={!rowEditable}
+        label={`${meta?.name ?? ""} 특이사항`}
+        navCol={`ecs-note${navColSuffix}`}
+        navRow={navRow}
+        onChange={(next) =>
+          handlers.saveMark(entry.studentId, date, slotStart, mark?.status ?? null, next)
+        }
+      />
     </>
   );
 }

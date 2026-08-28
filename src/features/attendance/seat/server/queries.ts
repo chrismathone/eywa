@@ -18,6 +18,11 @@ export type SeatStudent = {
   recordedBy: string | null;
   /** 자리에서 찍힌 기록인가 — 반 출석부에서 찍힌 기록과 구분해 보여준다(시수 귀속이 다르다). */
   fromSeat: boolean;
+  /**
+   * 그 칸에 적힌 사유 메모(`attendance_records.note`) — 카드 마우스 오버로만 보인다(원장 2026-08-28).
+   * 🔴 **비로그인 PIN 경로는 항상 null이다** — 아래 select 분기 주석 참조(병원·수술·가족 일정이 그대로 적힌다).
+   */
+  note: string | null;
   /** JJ 전용(0206a). 랩실·공개 PIN은 항상 null. */
   listeningLevel: string | null;
   memorizedWords: string | null;
@@ -45,6 +50,7 @@ function toSeatStudent(
     | {
         status: "present" | "absent" | "late";
         seat_label: string | null;
+        note?: string | null;
         recorder?: { display_name: string | null }[] | { display_name: string | null };
       }
     | undefined,
@@ -58,6 +64,7 @@ function toSeatStudent(
     status: rec?.status ?? null,
     recordedBy: recorder?.display_name ?? null,
     fromSeat: !!rec?.seat_label,
+    note: rec?.note ?? null,
     listeningLevel: null,
     memorizedWords: null,
   };
@@ -148,11 +155,15 @@ async function loadSeatDay(
       status: "present" | "absent" | "late";
       seat_label: string | null;
       recorded_at: string;
+      /** 사유 메모 — 로그인 화면에서만 채워진다(공개 PIN은 조회조차 안 한다, 아래 분기 주석). */
+      note?: string | null;
       /** 로그인 화면에서만 채워진다 — 공개(PIN) 경로는 아예 조회하지 않는다(아래 주석). */
       recorder?: { display_name: string | null }[];
     }>(classIds, (chunk) =>
-      // 🔴 공개(PIN) 경로에선 **직원 이름을 아예 안 가져온다** — 지금 화면이 안 그린다고 해도,
-      //    로그인 없이 열리는 페이지로 직원 신상이 건너가는 것 자체를 막는다(나중에 누가 그리면 끝).
+      // 🔴 공개(PIN) 경로에선 **직원 이름도 사유 메모도 아예 안 가져온다** — 지금 화면이 안 그린다고 해도,
+      //    로그인 없이 열리는 페이지로 직원 신상·학생 신상이 건너가는 것 자체를 막는다(나중에 누가 그리면 끝).
+      //    ⚠️ 사유 메모(`note`)엔 `병원`·`수술`·`가족여행`이 그대로 적혀 있다(실데이터) — 직원 이름보다
+      //       오히려 더 민감하다. 로그인 분기에만 싣는다.
       //    tenantId가 넘어온 경로 = admin 클라이언트 = 공개 경로다.
       //    ⚠️ select 문자열을 삼항으로 만들면 PostgREST 타입 파서가 못 읽는다 → 분기를 통째로 나눈다.
       tenantId
@@ -165,7 +176,7 @@ async function loadSeatDay(
         : supabase
             .from("attendance_records")
             .select(
-              "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, recorder:recorded_by ( display_name )",
+              "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, note, recorder:recorded_by ( display_name )",
             )
             .in("class_id", chunk)
             .eq("session_date", date),
