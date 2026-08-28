@@ -26,8 +26,8 @@ export const metadata = { title: "수업보고서 — eywa" };
 
 /**
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다 — 직접발송 면의 자동작성
- * (`generateReportComment`)이 폴백으로 DeepSeek v4-pro(추론형, 실측 ~28초)를 타면 기본값(15초)에서
- * 잘려 멘트가 템플릿으로 떨어진다([[#118]]). 원스크린 세그먼트와 같은 이유·같은 값.
+ * (`generateReportComment`)이 폴백을 타면 기본값(15초)에서 잘려 멘트가 템플릿으로 떨어진다([[#118]]).
+ * 원스크린 세그먼트와 같은 이유·같은 값(실측치는 그쪽 주석).
  */
 export const maxDuration = 300;
 

@@ -106,7 +106,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 | Tier | Upstage (폴백) | Anthropic | DeepSeek | 용도 |
 |---|---|---|---|---|
-| `fast` | `solar-pro3` | `claude-haiku-4-5` | **`deepseek-v4-pro`** | **학부모 멘트 전용**(유일한 소비처 = `classnote_ment`). ⚠️ deepseek은 경량 v4-flash가 아니라 **v4-pro**(원장 2026-08-28 *"flash 말고 v4 pro"* — 학부모에게 그대로 나가는 문장이라 품질을 걸 자리가 아니다). |
+| `fast` | `solar-pro3` | **`claude-haiku-4-5`** | `deepseek-v4-flash` | **학부모 멘트 전용**(유일한 소비처 = `classnote_ment`). 🔴 deepseek 폴백은 **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"*) — v4-pro를 걸었더니 자동작성 한 번에 **86초**(추론 6,505토큰)라 폴백이 또 다른 장애가 됐다. flash는 7.3초. **되돌리지 말 것**(같은 날 *"flash 말고 v4 pro"*를 실측 보고 뒤집은 것). |
 | `balanced` | `solar-pro3` | `claude-sonnet-5` | **`deepseek-v4-pro`** | 경량 호출 기본값 + **전사 분석 3종 기본**(아래). |
 | `reasoning` | — (없음) | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 

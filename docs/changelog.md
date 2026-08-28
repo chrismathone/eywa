@@ -13,12 +13,14 @@
    둘 다 본다. 마지막 후보까지 막히면 `rethrowAi`가 한글로 "AI 잔액 소진 … 크레딧을 충전해야 합니다".
 2. **폴백 사다리 = anthropic → deepseek → upstage(Solar)** 명시(`FALLBACK_LADDER`, 원장 2026-08-28
    *"anthropic -> deepseek"*, *"deepseek 소진시 solar 폴백"*). Solar는 품질 A/B 탈락이라 마지막 보루.
-   fast tier의 deepseek 모델도 **v4-pro로 올렸다**(원장 *"flash 말고 v4 pro"*) — fast tier 소비처는
-   학부모 멘트 하나뿐이고 그 문장은 학부모에게 그대로 나간다. ⚠️ **느리다**: 실측 폴백 1건이
-   v4-flash 7.3초 → **v4-pro 28초**(추론형). 폴백 경로라 평소엔 안 타지만, Anthropic 크레딧이 빈
-   동안은 **모든 멘트가 이 경로**라 일괄 자동작성이 눈에 띄게 느려진다 → 크레딧 충전이 근본 해결.
-   (truncate 위험은 이미 `DEEPSEEK_MIN_MAX_TOKENS` floor가 막는다 — reasoning_content가 max_tokens를
-   함께 먹는 문제, 2026-07-16.)
+   fast tier의 deepseek 모델은 **v4-flash**다. 같은 날 *"flash 말고 v4 pro"* → v4-pro로 올렸다가
+   **프로덕션 실측을 보고 되돌렸다**(원장 *"haiku -> 폴백 deepseek v4 flash"*): 강사가 자동작성을
+   누르자 20:34:27 anthropic 실패 → 20:35:53 v4-pro 성공 = **86초**, output 6,505토큰이 거의 전부
+   추론이었다(멘트 본문은 100토큰 남짓). 멘트는 멘트+추세 통합 1회 호출이라 프롬프트가 길어 추론이
+   더 붇는다. 🔑 **폴백이 느리면 폴백이 아니라 또 다른 장애다** — 크레딧이 빈 동안은 전건이 그 경로로 온다.
+   ⚠️ v4-flash의 warnings 붕괴 전력은 **balanced tier(등록상담·회의록)** 이야기이고 거긴 여전히 v4-pro다.
+   (truncate 위험은 `DEEPSEEK_MIN_MAX_TOKENS` floor가 막는다 — 2026-07-16.)
+   **1순위는 계속 Haiku**(원장 선택) — 근본 해결은 Anthropic 크레딧 충전.
 3. **폴백 템플릿(`buildSubjectReport`)이 사실을 흘리던 것** — ① 특이사항 칸이 아예 없어
    "내일 4시에 보강입니다"가 증발했고 ② 태도·점수·과제를 학생 값으로 읽어(2026-08-13 행 단위 전환 누락)
    전부 빈 채 나갔다. 이제 `resolveRowFields`로 행 값을 읽고 특이사항을 **원문 그대로 줄 단위**로 싣는다

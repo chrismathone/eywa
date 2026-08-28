@@ -11,12 +11,16 @@ export type AiKeyName = "default" | "consultations";
 // deepseek: v4-pro(고품질 추론, 전사 분석 기본)·v4-flash(경량). v4-pro는 balanced로 라우팅(reasoning 티어는
 // Anthropic 고정 정책 유지 — deepseek reasoning 슬롯은 null로 미사용). 실측 A/B(2026-07-16): v4-pro가
 // 등록상담 warnings를 Sonnet급으로 생성(경량 v4-flash/chat·Solar는 warnings 붕괴). 배경 = docs/changelog.
-// 🔴 fast tier의 deepseek = **v4-pro**(원장 2026-08-28: *"flash 말고 v4 pro"*). 경량 v4-flash가 아니다 —
-//    fast tier를 쓰는 곳은 학부모 멘트 하나뿐이고(그 외 0곳), 그 문장은 **학부모에게 그대로 나간다**.
-//    v4-flash는 전사 분석 A/B에서 warnings를 붕괴시킨 전력이 있어 품질을 걸 자리가 아니다.
-//    ⚠️ 트레이드오프: v4-pro는 추론형이라 느리다(실측 폴백 1건 ~7초). 폴백 경로라 평소엔 안 탄다.
+// 🔴 fast tier의 deepseek = **v4-flash**(원장 2026-08-28 *"haiku -> 폴백 deepseek v4 flash"* — 같은 날
+//    *"flash 말고 v4 pro"*에서 **프로덕션 실측을 보고 뒤집은 것**이라 되돌리지 말 것).
+//    근거: v4-pro를 폴백에 걸었더니 강사가 자동작성 한 번에 **86초**를 기다렸다(실측 20:34:27 anthropic 실패
+//    → 20:35:53 v4-pro 성공, output 6,505 토큰이 거의 전부 추론). 멘트 호출은 멘트+추세 통합 1회라
+//    프롬프트가 길어 추론이 더 붇는다. v4-flash는 같은 조건 7.3초.
+//    ⚠️ **폴백이 느리면 폴백이 아니라 또 다른 장애다** — 크레딧이 빈 동안은 전건이 이 경로로 오기 때문이다.
+//    ⚠️ v4-flash가 전사 분석 A/B에서 warnings를 붕괴시킨 건 사실이나 그건 **balanced tier(등록상담·회의록)**
+//    이야기다. 거긴 지금도 v4-pro이고, 여기는 사실 나열형 한 단락이라 급이 다르다.
 export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
-  fast: { anthropic: "claude-haiku-4-5", upstage: "solar-pro3", deepseek: "deepseek-v4-pro" },
+  fast: { anthropic: "claude-haiku-4-5", upstage: "solar-pro3", deepseek: "deepseek-v4-flash" },
   balanced: { anthropic: "claude-sonnet-5", upstage: "solar-pro3", deepseek: "deepseek-v4-pro" },
   reasoning: { anthropic: "claude-opus-4-7", upstage: null, deepseek: null },
 };
