@@ -8,6 +8,8 @@
 //    옛 담임 → 새 담임으로 옮기는데, 영어는 요일·교시마다 담당이 달라 시트대로 넣어 둔 슬롯을 뭉갠다.
 //    여기서는 **담임 필드만** 바꾼다(슬롯은 이미 정확하다).
 
+import type { ScheduledGroupPlan } from "./scheduled-groups";
+
 /** 스냅샷 payload의 `apply.classUpdates` 한 건. */
 export type ClassUpdate = {
   classId: string;
@@ -29,6 +31,12 @@ export type SnapshotClassUpdates = {
   snapshotId: string;
   effectiveDate: string;
   updates: ClassUpdate[];
+  /**
+   * 같은 스냅샷에 실린 **통합뷰 그룹 배치 예약**(원장 2026-08-29). 담임·반 이름과 똑같이 시간 축이
+   * 없어 그날 재생해야 하는 값이라 여기에 함께 태운다 — 규칙은 [`scheduled-groups.ts`](./scheduled-groups.ts).
+   * ⚠️ 옛 스냅샷엔 없다(선택 필드).
+   */
+  groups?: ScheduledGroupPlan | null;
 };
 
 /**
@@ -49,7 +57,9 @@ export function dueClassUpdates(
       (r) =>
         r.effectiveDate > SCHEDULED_CLASS_UPDATE_FLOOR &&
         r.effectiveDate <= today &&
-        r.updates.length > 0,
+        // 🔴 "할 일이 있나"는 **둘 중 하나라도**다 — 담임·이름 없이 그룹 배치만 예약된 스냅샷을
+        //    `updates.length > 0`으로 거르면 그 예약이 조용히 영원히 안 돈다.
+        (r.updates.length > 0 || r.groups != null),
     )
     .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
 }

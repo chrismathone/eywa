@@ -14276,3 +14276,24 @@ FK가 `on delete set null`이라 지우면 그 반·슬롯이 **전부 미지정
   `main:has(.sticky-save-bar) { padding-bottom: 0 }` — 저장 바 있는 화면만 pb 자동 제거, 없는 화면은
   08-14 여백 유지. 적용 = `FormActionBar`(공용, 소비처 7곳 자동) + 수제 바 2곳(시간표 통합편집
   보드·수업평가 점수판). ⚠️ 새 하단 고정 저장 바는 반드시 이 클래스를 붙일 것.
+
+## 2026-08-29 — 통합뷰 **그룹 배치(줄)도 9/1로 예약** (원장 *"그룹설정까지 예약걸면 안되는거야? 시스템 새로 설계해서?"*)
+- 문제: 그룹 배치는 `tenant_settings.data.operations.subjects[].integrationGroups` **한 벌**이라 시간 축이 없다.
+  담임·반 이름과 똑같은 모양의 문제 → 똑같은 해법(스냅샷에 싣고 그날 cron이 재생).
+- **저장 자리 = 배치 스냅샷 `payload.apply.integrationGroups`**. 새 표를 파지 않은 이유 = 취소(×)가 날짜 단위로
+  스냅샷을 되돌리는데 그룹만 딴 곳에 있으면 "취소하면 아무 일도 없던 것처럼"이 깨진다. 게다가 취소는 미래분만
+  되므로 그 시점엔 아직 아무것도 안 바뀐 상태다(되돌릴 것 자체가 없다).
+- 규칙(순수·Vitest) = [`scheduled-groups.ts`](../src/features/timetable/scheduled-groups.ts):
+  `groupLayoutSignature`(키 순서·제목 없는 줄 정규화) · `shouldApplyGroups`(현재가 **예약 시점 그대로일 때만**
+  적용 — 사람이 손댄 배치를 덮지 않는다) · `readScheduledGroupPlan`(옛 스냅샷엔 키가 없어 null).
+- 쓰기는 owner 단일 진입점 [`applyScheduledGroupPlan`](../src/features/owner/server/scheduled-groups.ts)
+  (cron엔 세션이 없어 `saveOwnerSection`을 못 탄다 · admin이라 read/write 둘 다 `tenant_id` 필터 · 0080a 트리거는
+  `auth.uid()` null이면 통과). 적용 후 `revalidateTag(tenantSettingsTag, "max")` + 감사로그.
+- 스크립트 [`sync-integration-groups.mts`](../scripts/_english_sync/sync-integration-groups.mts)에
+  **`--as-of`**(그 날짜 시점 반 이름으로 시트 매칭 — 9월 탭은 개명 뒤 이름이라 오늘 이름으론 16반이 ❌,
+  게다가 사슬 회전 `LS5→LS6` 때문에 시트의 `LS6`이 **엉뚱한 반**에 조용히 붙는다)과
+  **`--schedule`**(그 날짜 배치 스냅샷에 싣기) 추가 + 지금 저장된 배치와의 diff 출력.
+- 실측: 9월 탭 44반 → 6줄에 **44/44 배정**, 지금 배치 대비 달라지는 반 **4개**(신설 2 + 이동 2).
+- 곁가지 발견: 영어 작성률이 쓰는 **ClassNote 보드 이름 매칭이 9/1 개명으로 5건 끊긴다**(40/44 → 35/44) —
+  점검표에 표로 남김(`docs/english-timetable-2026-09-checklist.md`).
+

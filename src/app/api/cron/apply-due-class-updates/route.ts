@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { kstToday } from "@/lib/date-kst";
@@ -12,9 +13,12 @@ import {
   type ClassUpdate,
   type SnapshotClassUpdates,
 } from "@/features/timetable/due-class-updates";
+import { readScheduledGroupPlan } from "@/features/timetable/scheduled-groups";
+import { applyScheduledGroupPlan } from "@/features/owner/server/scheduled-groups";
+import { tenantSettingsTag } from "@/features/owner/server/queries";
 
 /**
- * 예약 적용이 미뤄 둔 **담임·기본 강의실**을 기한이 된 날 반영하는 cron.
+ * 예약 적용이 미뤄 둔 **담임·기본 강의실·반 이름·통합뷰 그룹 배치**를 기한이 된 날 반영하는 cron.
  *
  * 원장 2026-08-28: *"담임도 미래에 바뀌도록 해야겠는데"* + 자동 적용 선택. 배치는 `valid_from`으로 그날
  * 저절로 갈리지만 담임은 반 단위 단일 값이라 축이 없어, 0234a가 예약 적용 시 **안 바꾸고 스냅샷에만
@@ -25,6 +29,8 @@ import {
  * 🔴 **현재 값이 아직 예약 시점 그대로일 때만** 바꾼다 — 그 사이 사람이 손으로 정한 담임을 덮어쓰지 않는다.
  * ⚠️ 되돌린 스냅샷(`restored_at`)은 건너뛴다. 이미 재생한 스냅샷은 표식 로그로 거른다(두 번 안 돈다).
  * ⚠️ admin 클라이언트 = RLS 우회 → 모든 쓰기에 **tenant_id 명시 필터**.
+ * ⚠️ 통합뷰 그룹 배치(원장 2026-08-29 *"그룹설정까지 예약걸면 안되는거야?"*)도 시간 축이 없어 같은 문제다 —
+ *    같은 스냅샷에 실어 여기서 함께 재생한다(취소 ×가 스냅샷을 되돌리면 이 예약도 같이 사라진다).
  */
 export const dynamic = "force-dynamic";
 
@@ -43,7 +49,9 @@ export async function GET(req: Request) {
   // 기한이 됐고 아직 안 되돌린 배치 스냅샷. payload는 필요한 가지만 뽑는다(before/apply 전체는 무겁다).
   const { data: snapRows, error: snapErr } = await supabase
     .from("timetable_snapshots")
-    .select("id, tenant_id, reference_date, updates:payload->apply->classUpdates")
+    .select(
+      "id, tenant_id, reference_date, updates:payload->apply->classUpdates, groups:payload->apply->integrationGroups",
+    )
     .lte("reference_date", today)
     .gt("reference_date", SCHEDULED_CLASS_UPDATE_FLOOR) // ⚠️ 바닥은 순수 모듈이 단일 소스(여기 숫자를 박지 말 것)
     .order("reference_date")
@@ -57,6 +65,7 @@ export async function GET(req: Request) {
     tenant_id: string;
     reference_date: string;
     updates: ClassUpdate[] | null;
+    groups: unknown;
   }[];
   if (rows.length === 0) return NextResponse.json({ ok: true, applied: 0, snapshots: 0 });
 
@@ -83,11 +92,14 @@ export async function GET(req: Request) {
         snapshotId: r.id,
         effectiveDate: String(r.reference_date).slice(0, 10),
         updates: Array.isArray(r.updates) ? r.updates : [],
+        // 옛 스냅샷엔 이 키가 없어 PostgREST가 null을 준다 — 모양이 안 맞으면 null(있는 척 금지).
+        groups: readScheduledGroupPlan(r.groups),
       })),
     today,
   );
 
   let applied = 0;
+  let groupsApplied = 0;
   for (const snap of due) {
     const tenantId = rows.find((r) => r.id === snap.snapshotId)!.tenant_id;
     let appliedHere = 0;
@@ -152,15 +164,61 @@ export async function GET(req: Request) {
       applied += 1;
       appliedHere += 1;
     }
+    // ── 통합뷰 그룹 배치(줄) 예약 ────────────────────────────────────────────
+    // 🔴 **반 이름 재생 뒤에** 돈다. 배치는 반 **id**로 가리키므로 순서가 결과를 바꾸진 않지만,
+    //    이름이 먼저 정리돼야 실패 시 로그를 사람이 읽고 판단할 수 있다.
+    // ⚠️ 그룹 적용 실패가 담임·이름 재생을 되돌리지 않는다(각자 독립) — 대신 표식에 남긴다.
+    let groupResult: { status: string; reason?: string; groups?: number } | null = null;
+    if (snap.groups) {
+      try {
+        groupResult = await applyScheduledGroupPlan(supabase, tenantId, snap.groups);
+        if (groupResult.status === "applied") {
+          groupsApplied += 1;
+          // 학원 설정은 tenantId별 `unstable_cache`라 비워야 창들이 새 배치를 본다(B6).
+          // ⚠️ Route Handler에선 `updateTag`를 못 쓴다 — `revalidateTag(tag, "max")`가 정본.
+          //    이게 실패해도 캐시 TTL(300초) 백스톱이 있어 00:30 기준 몇 분 안에 반영된다.
+          revalidateTag(tenantSettingsTag(tenantId), "max");
+          await supabase.from("audit_logs").insert({
+            tenant_id: tenantId,
+            actor_id: null,
+            actor_name: "시스템(시간표 예약 적용)",
+            action: "owner_integration_groups_update",
+            target_type: "tenant_settings",
+            target_label: snap.groups.subject,
+            metadata: {
+              subject: snap.groups.subject,
+              groups: snap.groups.groups.length,
+              scheduledFrom: snap.effectiveDate,
+              snapshotId: snap.snapshotId,
+            },
+          });
+        } else if (groupResult.status !== "skipped") {
+          reportError(new Error(groupResult.reason ?? "그룹 배치 예약 적용 실패"), {
+            where: "apply-due-class-updates:groups",
+            snapshotId: snap.snapshotId,
+          });
+        }
+      } catch (e) {
+        // 🔴 그룹 하나 때문에 cron 전체가 죽으면 담임·이름 재생 표식이 안 남아 다음 날 통째로 다시 돈다.
+        groupResult = { status: "error", reason: "그룹 배치 적용 중 오류" };
+        reportError(e, { where: "apply-due-class-updates:groups", snapshotId: snap.snapshotId });
+      }
+    }
+
     // 표식 — 실패한 반이 있어도 남긴다(다음 날 같은 걸 통째로 다시 시도하면 사람이 손댄 값을 덮을 위험).
     await supabase.from("timetable_import_logs").insert({
       tenant_id: tenantId,
       week_label: snap.effectiveDate,
       snapshot_id: snap.snapshotId,
-      result: { kind: CLASS_UPDATES_APPLIED_KIND, classes: snap.updates.length, applied: appliedHere },
+      result: {
+        kind: CLASS_UPDATES_APPLIED_KIND,
+        classes: snap.updates.length,
+        applied: appliedHere,
+        ...(groupResult ? { groups: groupResult } : {}),
+      },
       actor_id: null,
     });
   }
 
-  return NextResponse.json({ ok: true, snapshots: due.length, applied });
+  return NextResponse.json({ ok: true, snapshots: due.length, applied, groupsApplied });
 }
