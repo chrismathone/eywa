@@ -7,6 +7,8 @@ import {
   type EffectiveAttendanceRecord,
 } from "@/features/attendance/effective-records";
 import { HUMAN_RESOLVED_STATUSES, STUCK_MINUTES } from "@/features/report-admin/classnote-queue";
+import { getTenantSettings, getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { isReportTrackedSubject } from "../report-subjects";
 import { getUnassignedEnrolledStudents } from "./queries";
 import {
   enrollmentAttendsOnDay,
@@ -252,12 +254,15 @@ async function unrecordedClassesSignal(
  * 오늘 미작성 보고서 신호.
  * 시작된 활성 수업의 기준일 유효 수강생을 학생×과목으로 만들고, 그 과목 반이 전부 결석인 학생은 제외한다.
  * lesson_reports에는 class_id가 없으므로 같은 과목 여러 반은 한 대상으로 합친다.
+ * ⚠️ **eywa에 보고서를 쓰는 과목만** 센다(report-subjects.ts) — 영어는 ClassNote에 직접 쓰므로
+ *    여기선 늘 0건이라, 세면 신호가 아니라 소음이 된다.
  */
 async function unwrittenReportsSignal(
   supabase: Supabase,
   today: string,
   nowMinutes: number,
   db?: TenantScope,
+  trackedSubjects?: readonly string[] | null,
 ): Promise<TodayActionsRaw["unwrittenReportsToday"]> {
   const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
     new Date(`${today}T00:00:00Z`).getUTCDay()
@@ -284,6 +289,10 @@ async function unwrittenReportsSignal(
     //    **완전히 별도 경로**라, 여기를 빼먹으면 표에선 사라진 반을 대시보드·일일 브리핑이 계속 재촉해
     //    두 화면이 서로 다른 말을 한다(2026-07-22 재발 패턴).
     if (!klass?.subject || (klass.closed_at && klass.closed_at < today) || klass.report_optout) continue;
+    // 🔴 eywa에 보고서를 쓰지 않는 과목은 세지 않는다(원장 2026-08-29 "영어보고서는 운영실에서 제외").
+    //    영어 강사는 ClassNote에 직접 쓰므로 lesson_reports가 늘 0건 — 세면 매일 140명이 '미작성'으로
+    //    잡혀 진짜 미작성(수학 32명)이 그 안에 묻힌다. 축은 학원설정(report.classnoteSubjects).
+    if (!isReportTrackedSubject(klass.subject, trackedSubjects)) continue;
     const [hour, minute] = row.start_time.slice(0, 5).split(":").map(Number);
     const startMinutes = (hour ?? Number.NaN) * 60 + (minute ?? Number.NaN);
     if (!Number.isFinite(startMinutes) || nowMinutes < startMinutes) continue;
@@ -423,6 +432,13 @@ export async function getTodayActionSignals(
   const sevenDayStart = inclusiveDateWindowStart(today, 7);
   const failedCutoff = `${sevenDayStart}T00:00:00+09:00`;
   const enabled = (key: keyof TodayActionSignalScope) => scope[key] !== false;
+  // 보고서 신호가 셀 과목(학원설정 report.classnoteSubjects). 🔴 fail-soft — 설정 조회가 실패해도
+  //    신호를 죽이지 않는다. null이면 isReportTrackedSubject가 전부 센다(지금까지의 동작).
+  const trackedSubjects = enabled("lessonReports")
+    ? await (db ? getTenantSettingsByTenantId(db.tenantId) : getTenantSettings())
+        .then((st) => st.report.classnoteSubjects ?? null)
+        .catch(() => null)
+    : null;
   const staffApprovalsEnabled = scope.staffApprovals ?? enabled("staff");
 
   const failedCount = async (
@@ -671,7 +687,7 @@ export async function getTodayActionSignals(
         requiredAccess: "read",
       },
       { count: 0, names: [], bySubject: [] },
-      () => unwrittenReportsSignal(supabase, today, nowMinutes, db),
+      () => unwrittenReportsSignal(supabase, today, nowMinutes, db, trackedSubjects),
     ),
     collectSignal(
       enabled("students"),

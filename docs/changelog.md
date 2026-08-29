@@ -14311,3 +14311,16 @@ FK가 `on delete set null`이라 지우면 그 반·슬롯이 **전부 미지정
   알 수 없다 — 가드가 `build-buffer.ts`에 `pickScheduledGroupsForWeek`·`futureNames`를 금지한다.
 - 지나간 주는 조회조차 안 한다(`weekSundayOf(week) >= today`). 실측: 8/24 주=8월 배치 · 8/31 주·9/7 주=9월 배치.
 
+## 2026-08-29 — 운영실 '미작성 보고서'에서 **영어 제외** (원장 *"영어보고서는 운영실에서 제외"*)
+- 실측: 최근 30일 `lesson_reports` **1,666건 전부 수학 · 영어 0건**. 8/28 하루 = 영어 수업 학생 140명·보고서 0건 /
+  수학 95명·63건 → 운영실이 **매일 영어 140명을 '미작성'으로** 세고 있었다(진짜 미작성 수학 32명이 그 안에 묻힘).
+- 영어 강사는 eywa가 아니라 **ClassNote에 직접** 알림장을 쓴다 — 안 쓴 게 아니라 **다른 데 쓴다**.
+  (어제 붙인 과목 라벨 `[영어 140 · 수학 32]`이 이걸 드러냈다.)
+- 축은 **학원설정 `report.classnoteSubjects`**(현 운영 `['math']`) — 코드에 'english'를 박지 않는다.
+  영어를 eywa로 옮기게 되면 그 목록에 넣는 것만으로 신호가 따라온다.
+  규칙 = [`report-subjects.ts`](../src/features/dashboard/report-subjects.ts).
+- 🔴 발송 게이트(`isClassnoteSubjectEnabled`)를 그대로 쓰지 않았다 — 그쪽은 fail-closed라 목록이 비면
+  **아무것도 안 센다**("오늘 미작성 0명"은 거짓 안심). 집계는 fail-open(미설정=전부)이 맞다.
+- 적용 지점 = `unwrittenReportsSignal` 한 곳 → 대시보드 '오늘 미작성 보고서'·일일 브리핑 '어제 미작성 보고서'·
+  운영실 '보고서 작성'이 같은 소스라 함께 고쳐진다. 설정 조회는 fail-soft(실패해도 신호를 안 죽인다).
+
