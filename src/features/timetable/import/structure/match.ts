@@ -35,7 +35,7 @@ function roomKey(name: string): string {
  * 안 막으면 시트를 재동기할 때마다 `이주희` 라벨이 **실제 이주희 직원 계정**에 다시 붙어
  * 출석부·직원명부·급여표에 "가짜 강사"가 되살아난다. `existed: true`로 돌려 '신규 강사' 후보에서도 뺀다.
  */
-function resolveTeacher(
+export function resolveTeacher(
   name: string,
   teachers: ExistingTeacherRef[],
 ): { ref: ExistingTeacherRef | null; existed: boolean } {
