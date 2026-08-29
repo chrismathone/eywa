@@ -15,10 +15,14 @@ function slot(p: {
     classId: p.classId, teacherId: p.teacherId ?? null, classroomId: p.classroomId ?? null,
   };
 }
-function ctxOf(classes: { id: string; teacherId?: string | null; classroomId?: string | null }[]): ExistingContext {
+function ctxOf(
+  classes: { id: string; teacherId?: string | null; classroomId?: string | null }[],
+  teachers: { id: string; displayName: string }[] = [],
+): ExistingContext {
   return {
     classes: classes.map((c) => ({ id: c.id, className: c.id, subject: "english", teacherId: c.teacherId ?? null, classroomId: c.classroomId ?? null })),
-    teachers: [], classrooms: [],
+    teachers: teachers.map((t) => ({ id: t.id, displayName: t.displayName, englishName: null })),
+    classrooms: [],
   };
 }
 function match(resolved: ResolvedSlot[]): MatchResult {
@@ -64,5 +68,50 @@ describe("buildClassUpdates — 변경된 반만 갱신(수학과 동일 원칙)
     expect(u[0]!.teacherId).toBeNull(); // 담임 미변경
     expect(u[0]!.classroomId).toBe("r2");
     expect(u[0]!.prevClassroomId).toBe("r1");
+  });
+});
+
+describe("buildClassUpdates — 원어민은 담임 후보가 아니다 (원장 2026-08-29)", () => {
+  // 이름에 한글이 없으면 원어민(teacher-label.ts `isKoreanTeacherName` 단일 소스).
+  const TEACHERS = [
+    { id: "tk", displayName: "송지혜" },
+    { id: "tf", displayName: "KRISTINE DRIVER" },
+  ];
+
+  it("원어민이 최다여도 담임이 되지 않고, 한국인 최다가 담임이 된다", () => {
+    const m = match([
+      slot({ classId: "c1", day: "mon", startTime: "15:00", teacherName: "Kristine", teacherId: "tf" }),
+      slot({ classId: "c1", day: "tue", startTime: "15:00", teacherName: "Kristine", teacherId: "tf" }),
+      slot({ classId: "c1", day: "wed", startTime: "15:00", teacherName: "Kristine", teacherId: "tf" }),
+      slot({ classId: "c1", day: "thu", startTime: "15:00", teacherName: "Song", teacherId: "tk" }),
+    ]);
+    const u = buildClassUpdates(m, ctxOf([{ id: "c1", teacherId: null }], TEACHERS), new Set(["c1"]));
+    expect(u).toHaveLength(1);
+    expect(u[0]!.teacherId).toBe("tk"); // 3칸짜리 원어민이 아니라 1칸짜리 한국인
+  });
+
+  it("원어민만 들어가는 반은 담임을 비운 채 둔다(아무나 넣지 않는다)", () => {
+    const m = match([
+      slot({ classId: "c1", day: "mon", startTime: "15:00", teacherName: "Kristine", teacherId: "tf" }),
+      slot({ classId: "c1", day: "tue", startTime: "15:00", teacherName: "Kristine", teacherId: "tf" }),
+    ]);
+    expect(buildClassUpdates(m, ctxOf([{ id: "c1", teacherId: null }], TEACHERS), new Set(["c1"]))).toHaveLength(0);
+  });
+
+  it("⚠️ 강의실 최빈값은 원어민 교시도 센다(방은 누가 가르치든 그 방이다)", () => {
+    const m = match([
+      slot({ classId: "c1", day: "mon", startTime: "15:00", teacherName: "Kristine", teacherId: "tf", classroomId: "r2" }),
+      slot({ classId: "c1", day: "tue", startTime: "15:00", teacherName: "Kristine", teacherId: "tf", classroomId: "r2" }),
+    ]);
+    const u = buildClassUpdates(m, ctxOf([{ id: "c1", teacherId: null, classroomId: "r1" }], TEACHERS), new Set(["c1"]));
+    expect(u).toHaveLength(1);
+    expect(u[0]!.teacherId).toBeNull(); // 담임은 여전히 안 정한다
+    expect(u[0]!.classroomId).toBe("r2");
+  });
+
+  it("teachers 목록에 없는 강사는 예전대로 센다(모르면 빼지 않는다)", () => {
+    const m = match([slot({ classId: "c1", day: "mon", startTime: "15:00", teacherName: "Jane", teacherId: "t1" })]);
+    const u = buildClassUpdates(m, ctxOf([{ id: "c1", teacherId: null }], TEACHERS), new Set(["c1"]));
+    expect(u[0]!.teacherId).toBe("t1");
   });
 });

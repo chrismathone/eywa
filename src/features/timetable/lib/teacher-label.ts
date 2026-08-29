@@ -188,16 +188,27 @@ export function resolveTeacherLabels(
  * 잘못 붙이는 것보다 닉네임 그대로 두는 편이 낫다.
  * 특수 자리는 `resolveTeacherLabel`이 먼저 처리하므로 여기서 굳이 거르지 않는다.
  */
-/** 한글 음절이 하나라도 있으면 **한국인 이름**으로 본다 — 원어민은 이름 자체가 로마자다. */
 const HANGUL = /[가-힣]/;
 
 /**
- * 표시 이름 → 영어 닉네임 맵. **한국인 강사만**(원장 2026-08-13 *"원어민강사 제외"*).
+ * 이 표시 이름이 **한국인 강사**인가 — 한글 음절이 하나라도 있으면 그렇다(원어민은 이름 자체가 로마자).
  *
- * 원어민을 어떻게 아나: 직급(`job_title`)에 "원어민"이라고 적혀 있긴 하지만 그건 학원설정 운영 enum이라
- * 라벨이 바뀌면 판정이 조용히 뒤집힌다. 대신 **이름에 한글이 있나**로 가른다 — 실측(injaewon 활성
- * 12명)에서 닉네임 보유자 중 `KRISTINE DRIVER`·`Florence Park` 둘만 로마자 이름이고, 그 둘이 원어민이다.
- * 덤으로 "이름이 곧 영어인 사람에게 (영어이름)을 또 붙이는" 중복이 구조적으로 안 생긴다.
+ * 원어민을 어떻게 아나: 직급(`job_title`)에 "원어민"이라 적혀 있긴 하지만 그건 학원설정 운영 enum이라
+ * 라벨이 바뀌면 판정이 조용히 뒤집힌다. 대신 이름으로 가른다 — 실측(injaewon 활성 12명)에서 로마자
+ * 이름은 `KRISTINE DRIVER`·`Florence Park` 둘뿐이고 그 둘이 원어민이다.
+ *
+ * 🔴 소비처가 둘이고 **뜻이 다르다**: ① 시간표 닉네임 표기(한국인만 `한글이름(영어이름)`, 원장 2026-08-13)
+ *    ② **담임 후보**(원어민은 담임을 맡지 않는다, 원장 2026-08-29 *"외국인은 담임시키지말고 한국인
+ *    선생님중에서 가장 많이 들어가는 선생님이 담당으로"*). 판정이 갈리면 표기와 배정이 어긋나므로 한 곳에서 한다.
+ */
+export function isKoreanTeacherName(displayName: string | null | undefined): boolean {
+  return HANGUL.test((displayName ?? "").trim());
+}
+
+/**
+ * 표시 이름 → 영어 닉네임 맵. **한국인 강사만**(원장 2026-08-13 *"원어민강사 제외"*) — 판정은 위
+ * `isKoreanTeacherName` 단일 소스. 덤으로 "이름이 곧 영어인 사람에게 (영어이름)을 또 붙이는" 중복이
+ * 구조적으로 안 생긴다.
  *
  * ⚠️ 모호하면 안 붙인다 — 같은 한글 이름을 쓰는 사람이 둘 이상이면(동명이인) 재직자를 우선하고,
  *    그래도 하나로 안 좁혀지면 그 이름은 맵에서 뺀다(`buildTeacherLabelMap`과 같은 규약).
@@ -210,7 +221,7 @@ export function buildTeacherNicknameMap(
     const name = u.displayName?.trim();
     const nick = u.englishName?.trim();
     if (!name || !nick || nick === name) continue;
-    if (!HANGUL.test(name)) continue; // 원어민(로마자 이름) 제외
+    if (!isKoreanTeacherName(name)) continue; // 원어민(로마자 이름) 제외
     (byName.get(name) ?? byName.set(name, []).get(name)!).push({ nick, active: u.active });
   }
   const map: TeacherNicknameMap = {};

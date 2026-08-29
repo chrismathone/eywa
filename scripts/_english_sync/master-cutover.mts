@@ -127,12 +127,32 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(CUTOVER)) {
  * 누적 기록(컷오버별로 무엇이 신설됐는지 git에 남긴다 — 이미 활성인 이름은 자동 skip이라 지울 필요 없음):
  *   · 2026-07-09 컷오버: 중고E_중2 최상위 · 중등E_중2 정규 D
  *   · 2026-08-03 컷오버: EiE 레벨 진급 13개(DP6·JP2·KW2·LS3a·LS3b·LS6·LT3·LT5·MEC1-4·PJ1·PJ6·PL3·RTT4)
+ *   · 2026-09-01 컷오버: PL1b(EiE) · 중등E_초6 MED b(인재원)
  * 임시 추가는 `--new-class=A,B` 로도 가능(코드 수정 없이 1회성).
+ *
+ * 🔴 **이름 뒤에 `:eie` / `:injaewon`으로 프로그램 구분을 함께 적는다**(`--new-class=PL1b:eie`).
+ *    안 적으면 `english_track`이 비고, 그 반은 ECS 반 목록·시간표 필터에서 **"EiE가 아닌 전부"** 쪽으로
+ *    간다(미분류는 인재원 영어로 통과하는 비대칭 — english-track.ts). 2026-08-29 실측: 그래서 EiE 반
+ *    `PL1b`가 '인재원 영어' 단에 서 있었다. 판정은 컬럼뿐이고 **이름으로 추측하지 않으므로**
+ *    (반 이름을 고치면 분류가 조용히 뒤집힌다) 만들 때 사람이 적어 주는 것이 유일한 경로다.
  */
+type NewClassSpec = { name: string; track: "eie" | "injaewon" | null };
+/** 로그에 raw enum을 흘리지 않는다 — `ENGLISH_TRACK_LABEL`과 같은 말을 쓴다. */
+const TRACK_LABEL = { eie: "EiE", injaewon: "인재원 영어" } as const;
+/** `"PL1b:eie"` → `{ name: "PL1b", track: "eie" }`. 접미사가 없거나 모르는 값이면 이름 전체로 본다. */
+function parseNewClass(entry: string): NewClassSpec {
+  const i = entry.lastIndexOf(":");
+  if (i < 0) return { name: entry.trim(), track: null };
+  const t = entry.slice(i + 1).trim().toLowerCase();
+  if (t !== "eie" && t !== "injaewon") return { name: entry.trim(), track: null };
+  return { name: entry.slice(0, i).trim(), track: t };
+}
 const NEW_CLASSES_TO_CREATE = [
-  "중고E_중2 최상위",
-  "중등E_중2 정규 D",
-  "DP6", "JP2", "KW2", "LS3a", "LS3b", "LS6", "LT3", "LT5", "MEC1-4", "PJ1", "PJ6", "PL3", "RTT4",
+  "중고E_중2 최상위:injaewon",
+  "중등E_중2 정규 D:injaewon",
+  "DP6:eie", "JP2:eie", "KW2:eie", "LS3a:eie", "LS3b:eie", "LS6:eie", "LT3:eie", "LT5:eie",
+  "MEC1-4:eie", "PJ1:eie", "PJ6:eie", "PL3:eie", "RTT4:eie", "PL1b:eie",
+  "중등E_초6 MED b:injaewon",
 ];
 const EXTRA_NEW_CLASSES = (args.find((a) => a.startsWith("--new-class="))?.split("=")[1] ?? "")
   .split(",").map((s) => s.trim()).filter(Boolean);
@@ -474,9 +494,12 @@ const sheetNames = new Set(parsed.slots.map((s) => s.className));
 // (그 반으로 갈 학생들이 안 보인다) 원래 반에 남은 것으로 읽혀 **종료후보가 부풀려진다**(실측 9명·+9건).
 const dryCreated: string[] = [];
 const dryRevived: { id: string; name: string }[] = [];
+/** 이번 실행이 **만들거나 되살린** 반 — 끝에서 빈 칸(담임·프로그램 구분)을 되짚는다. */
+const touchedClassIds: string[] = [];
 for (const w of parsed.warnings) console.log(`  · ${w}`);
 // --roster-only는 반을 만들지 않는다 — 명단만 맞추는 모드에서 반이 새로 생기면 놀란다.
-for (const name of ROSTER_ONLY ? [] : [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
+for (const entry of ROSTER_ONLY ? [] : [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
+  const { name, track } = parseNewClass(entry);
   if (!sheetNames.has(name)) {
     console.log(`  ⏭ 신설 예정 반 "${name}"이 이 탭에 없음 — 건너뜀`);
     continue;
@@ -489,14 +512,50 @@ for (const name of ROSTER_ONLY ? [] : [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CL
   if (dup) {
     // ⚠️ 재활성도 --apply에서만 일어난다 — 미리보기에 안 넣으면 그 반 명단이 통째로 제외된다(신규 생성과 같은 함정).
     if (!APPLY) { console.log(`  [dry] 폐지 반 재활성: "${name}" (${dup.id}) — 과거 수강 이력 보존`); dryRevived.push({ id: dup.id, name }); continue; }
-    await sql`update classes set is_active = true where id = ${dup.id} and tenant_id = ${TENANT}`;
+    // ⚠️ 되살린 반의 프로그램 구분은 **비어 있을 때만** 채운다 — 이미 값이 있으면 그게 사람이 정한 것이다.
+    await sql`update classes set is_active = true, english_track = coalesce(english_track, ${track})
+      where id = ${dup.id} and tenant_id = ${TENANT}`;
     console.log(`  ✓ 폐지 반 재활성: "${name}" (${dup.id})`);
+    touchedClassIds.push(dup.id);
     continue;
   }
-  if (!APPLY) { console.log(`  [dry] 반 신규 생성: "${name}"`); dryCreated.push(name); continue; }
-  const [row] = await sql`insert into classes (tenant_id, class_name, subject, is_active)
-    values (${TENANT}, ${name}, ${SUBJECT}, true) returning id`;
-  console.log(`  ✓ 반 신규 생성: "${name}" (${row!.id})`);
+  if (!APPLY) {
+    console.log(`  [dry] 반 신규 생성: "${name}"${track ? ` [${TRACK_LABEL[track]}]` : " ⚠️ 프로그램 구분 미지정"}`);
+    dryCreated.push(name);
+    continue;
+  }
+  const [row] = await sql<{ id: string }[]>`insert into classes (tenant_id, class_name, subject, is_active, english_track)
+    values (${TENANT}, ${name}, ${SUBJECT}, true, ${track}) returning id`;
+  console.log(`  ✓ 반 신규 생성: "${name}" (${row!.id})${track ? ` [${TRACK_LABEL[track]}]` : ""}`);
+  touchedClassIds.push(row!.id);
+}
+
+// 🔴 **만들어 놓고 반쯤 빈 반을 조용히 남기지 않는다**(2026-08-29 원장 제보 *"9/1 미래주차 이동시에
+//    담임미지정건은 왜 그렇지?"*). 시트엔 담임 줄이 없어 신설 반은 **항상** 담임이 빈 채로 태어나는데,
+//    가져오기의 담임 자동채움(교시 강사 최빈값)은 자리 칸(LAB·JJ)까지 사람과 같이 세기 때문에
+//    자리가 최다이거나 동률이면 "모호"로 떨어져 끝내 안 채워진다(PL1b = LAB 6칸 최다,
+//    중등E_초6 MED b = Song 2 : JJ 2 동률). 그러면 그 반 학생들은 담임 없이 개강한다.
+//    ⚠️ 여기서 담임을 **추측해 넣지는 않는다** — 이 학원은 담임과 교시 강사가 원래 다르고(실측: 자리
+//    칸을 후보에서 빼면 기존 13개 반의 담임이 뒤집힌다), 담임은 사람이 정하는 자리다. 알리기만 한다.
+if (APPLY && touchedClassIds.length > 0) {
+  const gaps = await sql<{ class_name: string; teacher_id: string | null; english_track: string | null }[]>`
+    select class_name, teacher_id, english_track from classes
+     where tenant_id = ${TENANT} and id = any(${touchedClassIds}::uuid[])
+       and (teacher_id is null or english_track is null)
+     order by class_name`;
+  if (gaps.length > 0) {
+    console.log(`\n⚠️ 신설·재활성 반 ${gaps.length}개에 빈 칸이 있습니다 — 반 상세 → 수정에서 채우세요:`);
+    for (const g of gaps) {
+      const miss: string[] = [];
+      if (!g.teacher_id) miss.push("담임");
+      if (!g.english_track) miss.push("프로그램 구분");
+      console.log(`   · ${g.class_name} — ${miss.join(" · ")} 없음`);
+    }
+    console.log(`   담임은 **한국인 강사 중 그 반에 가장 많이 들어가는 사람**으로 정합니다`);
+    console.log(`   (원장 2026-08-29 — 원어민은 담임을 맡지 않습니다).`);
+    console.log(`   담임이 비면 영어 강사 시트에서 '담임 미지정'으로 묶이고,`);
+    console.log(`   프로그램 구분이 비면 EiE 반이라도 '인재원 영어' 쪽에 섭니다(미분류는 EiE가 아닌 쪽으로 갑니다).`);
+  }
 }
 
 // ── 3. 매칭 + diff (반 생성 후 다시 읽어야 새 반이 해석된다) ──────────────────
