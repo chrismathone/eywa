@@ -1646,3 +1646,26 @@ IJW 1교시(16:20) 칸에 가 있었다. 함께 제보된 두 번째 증상 — 
 사실 손실이다. 새 입력 칸을 만들 때 AI 경로만 배선하고 템플릿을 잊으면 이 사고가 그대로 재현된다.
 ⚠️ plain object로 오는 오류는 `String(err)`가 `"[object Object]"`라 **어떤 문구 판정에도 안 걸린다**
 (`providerErrorText`가 `message`를 먼저 읽는다).
+
+## #119 **`"use server"` 파일은 async 함수만 export할 수 있다** — typecheck·lint·테스트를 다 통과하고 **빌드만** 깨진다 (2026-08-29)
+
+**증상.** 배포가 실패한다. 로컬에선 아무 신호가 없다 — `tsc --noEmit` 0, `eslint` 0, `vitest` 6,832개 전부 초록.
+
+**무엇을 했나.** 수강 관련 DB 오류를 한글로 바꾸는 동기 헬퍼 `toKoreanDbError`가
+`features/enrollments/server/actions.ts` 안에 있었고, 다른 화면에서도 쓰려고 `export`를 붙였다.
+그 파일 맨 위는 `"use server"`다.
+
+**왜.** `"use server"` 파일의 export는 전부 **클라이언트에서 부를 수 있는 서버 액션**이 된다 —
+네트워크 경계를 넘으므로 반드시 Promise를 돌려줘야 한다. 그래서 번들러가 **빌드 시점에** 동기 export를
+거절한다. 타입 시스템은 이걸 모르고(그냥 함수다), lint 규칙도 없다.
+
+**고침.** 공유용 동기 헬퍼는 서버 액션 파일 **밖**의 평범한 모듈로 옮긴다
+([`features/enrollments/db-errors.ts`](../src/features/enrollments/db-errors.ts)).
+⚠️ 거기에 `import "server-only"`를 붙이지 말 것 — 순수 문자열 매핑이라 클라가 import해도 안전해야 한다([[#61]]).
+
+**가드.** [`src/lib/server-action-exports.test.ts`](../src/lib/server-action-exports.test.ts)가 `src` 전체를 훑어
+`"use server"` 파일의 값 export가 전부 async인지 검사한다(타입 export는 컴파일에서 지워지므로 제외).
+
+🔑 **교훈**: 이 리포에서 **빌드만 잡는 오류 부류**가 있다([[#61]]과 같은 결). 로컬 게이트 3종이 초록이어도
+`"use server"`·`"use client"` 경계를 건드렸으면 배포 결과를 확인할 것 —
+`gh api .../status --jq '.statuses[].description'`([[#85]]).
