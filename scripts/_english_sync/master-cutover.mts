@@ -29,12 +29,22 @@ import type {
   SheetGrid,
 } from "../../src/features/timetable/import/structure/types";
 import type { DayOfWeek } from "../../src/features/timetable/lib/periods";
+import type { ImportDiff } from "../../src/features/timetable/import/types";
 import { canonicalSlotTeacherLabel } from "../../src/features/timetable/lib/teacher-label";
 import {
   blocksApply,
   conflictChecklist,
   describeConflict,
 } from "../../src/features/timetable/import/structure/conflicts";
+import { parseIntegratedRoster } from "../../src/features/timetable/import/roster/parse-roster";
+import { matchRosterStudent, type RosterStudentRef } from "../../src/features/timetable/import/roster/match-roster";
+import {
+  computeRosterDiff,
+  type RosterDesiredRow,
+  type RosterEnrollmentRow,
+} from "../../src/features/timetable/import/roster/roster-diff";
+import { norm } from "../../src/features/timetable/import/match";
+import { enrollmentOnHoldForStatus } from "../../src/features/enrollments/eligibility";
 
 /** 기본 마스터(`2026 영어시간표_인재원 본원`) — `--sheet`로 다른 스프레드시트를 넣을 수 있다. */
 const DEFAULT_MASTER_ID = "1-1JHCw36iWPku782DXMhqYbEMBUFL7bElfJjSQekoWA";
@@ -74,6 +84,18 @@ const ACK_CONFLICTS = args.includes("--ack-conflicts");
 const TAB_ARG = opt("tab") ?? args.find((a) => !a.startsWith("--"));
 const CUTOVER = (opt("cutover") ?? "2026-07-09").trim();
 const APPLY = args.includes("--apply");
+/**
+ * **반별 학생 명단이 있는 탭**(원장 2026-08-29 *"통합영어시간표(9월)에 학생 명단이 있음.
+ * 학생 명단을 보고 학생도 전부 이동시켜야함."*). 주면 배치 컷오버에 이어 **명단 이동**까지 한다.
+ * 안 주면 종전과 완전히 같다(배치만).
+ */
+const ROSTER_TAB = opt("roster");
+/**
+ * 🔴 **명단에서 사라진 학생의 수강 종료는 기본으로 하지 않는다.** 시트에서 빠진 이유가 퇴원인지
+ *    누락인지 시트만으론 모르고, 잘못 종료하면 그 학생이 출석부에서 사라진다. 드라이런이 목록을
+ *    보여 주고, 사람이 확인한 뒤에만 이 플래그로 연다.
+ */
+const APPLY_REMOVES = args.includes("--apply-removes");
 /**
  * 컷오버가 오늘 이하인가 — **미리보기 문구 전용**(예약인지 즉시인지 사람에게 알려 주는 라벨).
  * ⚠️ 실제 판정에 쓰지 말 것: RPC는 UTC `current_date`로 가르는데 여기는 KST라 자정 근처에서 갈린다.
@@ -414,8 +436,34 @@ dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
 const CLOSE_AT = dayBefore.toISOString().slice(0, 10);
 console.log(`컷오버: ~${CLOSE_AT} 옛 배치 마감 · ${CUTOVER}부터 새 배치  ${APPLY ? "【적용】" : "(dry-run)"}`);
 
+// ── 1-b. 명단 파싱 + 인원 검산 — 🔴 **어떤 쓰기보다도 먼저** ────────────────────
+// 적대 리뷰(2026-08-29)에서 잡힌 것: 검산 중단을 planRoster 안에 두면 그보다 **먼저** 도는
+// 신설 반 생성(`insert into classes`)이 이미 써 버린 뒤에 멈춘다. 검산은 시트를 잘못 읽었다는
+// 신호라, 그 상태로 만든 반이 남으면 사람이 치워야 한다. 그래서 읽기 단계에서 끝낸다.
+const rosterParsed = ROSTER_TAB
+  ? await (async () => {
+      const rGrid = await readMasterGrid(ROSTER_TAB);
+      const r = parseIntegratedRoster(rGrid.cells);
+      const n = r.blocks.reduce((acc, b) => acc + b.entries.length, 0);
+      console.log(`명단 탭 "${ROSTER_TAB}" — 반 ${r.blocks.length} · 학생 ${n}명`);
+      if (r.mismatches.length) {
+        console.error(`❌ 인원 검산 불일치 ${r.mismatches.length}건 — 중단합니다(아무것도 쓰지 않음):`);
+        for (const m of r.mismatches)
+          console.error(`   · ${m.className}: 파싱 ${m.parsed}명 ≠ 시트 '인원' ${m.declared}명`);
+        await sql.end();
+        process.exit(1);
+      }
+      return r;
+    })()
+  : null;
+
 // ── 2. 신설 반 생성(화이트리스트만) ───────────────────────────────────────────
 const sheetNames = new Set(parsed.slots.map((s) => s.className));
+// 드라이런에서 "만들었을 반" — 🔴 미리보기가 **사실을 말하게** 하려면 이게 필요하다. 신설 반은 --apply
+// 에서만 실제로 생기므로, 넣지 않으면 드라이런의 ctx에 그 반이 없어 명단 블록이 통째로 제외되고
+// (그 반으로 갈 학생들이 안 보인다) 원래 반에 남은 것으로 읽혀 **종료후보가 부풀려진다**(실측 9명·+9건).
+const dryCreated: string[] = [];
+const dryRevived: { id: string; name: string }[] = [];
 for (const w of parsed.warnings) console.log(`  · ${w}`);
 for (const name of [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
   if (!sheetNames.has(name)) {
@@ -428,12 +476,13 @@ for (const name of [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
     where tenant_id = ${TENANT} and subject = ${SUBJECT} and replace(class_name, ' ', '') = replace(${name}, ' ', '')`;
   if (dup?.is_active) { console.log(`  ⏭ 반 "${name}" 이미 활성 — 건너뜀`); continue; }
   if (dup) {
-    if (!APPLY) { console.log(`  [dry] 폐지 반 재활성: "${name}" (${dup.id}) — 과거 수강 이력 보존`); continue; }
+    // ⚠️ 재활성도 --apply에서만 일어난다 — 미리보기에 안 넣으면 그 반 명단이 통째로 제외된다(신규 생성과 같은 함정).
+    if (!APPLY) { console.log(`  [dry] 폐지 반 재활성: "${name}" (${dup.id}) — 과거 수강 이력 보존`); dryRevived.push({ id: dup.id, name }); continue; }
     await sql`update classes set is_active = true where id = ${dup.id} and tenant_id = ${TENANT}`;
     console.log(`  ✓ 폐지 반 재활성: "${name}" (${dup.id})`);
     continue;
   }
-  if (!APPLY) { console.log(`  [dry] 반 신규 생성: "${name}"`); continue; }
+  if (!APPLY) { console.log(`  [dry] 반 신규 생성: "${name}"`); dryCreated.push(name); continue; }
   const [row] = await sql`insert into classes (tenant_id, class_name, subject, is_active)
     values (${TENANT}, ${name}, ${SUBJECT}, true) returning id`;
   console.log(`  ✓ 반 신규 생성: "${name}" (${row!.id})`);
@@ -441,6 +490,16 @@ for (const name of [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
 
 // ── 3. 매칭 + diff (반 생성 후 다시 읽어야 새 반이 해석된다) ──────────────────
 const { ctx, existing, pendingLater } = await loadContext();
+// 🔴 드라이런 전용 — 위에서 "만들었을" 반을 ctx에 가짜로 얹는다. id는 randomUUID라 만에 하나 쓰기
+//    경로로 새면 FK 위반으로 **시끄럽게** 실패한다(조용히 엉뚱한 반에 넣히지 않는다). --apply는 이 분기를 안 탄다.
+if (!APPLY && (dryCreated.length || dryRevived.length)) {
+  for (const name of dryCreated)
+    ctx.classes.push({ id: randomUUID(), className: name, subject: SUBJECT, teacherId: null, classroomId: null });
+  for (const r of dryRevived)
+    ctx.classes.push({ id: r.id, className: r.name, subject: SUBJECT, teacherId: null, classroomId: null });
+  const names = [...dryCreated, ...dryRevived.map((r) => r.name)];
+  console.log(`  (dry) 신설·재활성 예정 반 ${names.length}개를 미리보기에 반영: ${names.join(" · ")}`);
+}
 
 // ── 3-a. 반 이름 변경(--rename) — **매칭 전에 가상 적용**한다 ────────────────────
 // 시트엔 새 이름(LS4a)이 적혀 있는데 DB는 아직 옛 이름(LS3a)이다. 그대로 매칭하면 그 반이
@@ -573,6 +632,259 @@ async function syncBlocks(): Promise<void> {
   });
 }
 
+// ── 3-b. 명단 이동(--roster) ─────────────────────────────────────────────────
+// 원장 2026-08-29: *"통합영어시간표(9월)에 학생 명단이 있음. 학생 명단을 보고 학생도 전부 이동시켜야함."*
+//
+// 🔴 쓰기는 **앱의 적용 경로와 같은 재료**를 쓴다 — 스냅샷(`timetable_snapshots`) + 반이동 RPC
+//    (`move_enrollments_batch` 0228a/0235a) + 이력(`timetable_import_logs`). 직접 insert/update로
+//    흉내 내면 `attendance_days`(분리등원)·`on_hold`(휴원) 승계와 **되돌리기**가 통째로 빠진다.
+// 🔴 스냅샷 payload는 `ImportDiff` **그대로**여야 한다 — `groupScheduledImports`가 payload에 `kind`가
+//    있으면 배치, 없으면 반이동으로 가른다. 그래야 툴바 배지 ×가 배치와 명단을 **함께** 되돌린다.
+// ⚠️ 계획(읽기)과 적용(쓰기)을 나눈 이유: 명단이 이상하면 **배치를 쓰기 전에** 멈춰야 하기 때문이다.
+
+type RosterPlan = {
+  diff: ImportDiff;
+  /** 적용하지 않고 사람에게 넘기는 것들(퇴원·미매칭·모호·반 미해석). */
+  excluded: string[];
+};
+
+async function planRoster(): Promise<RosterPlan | null> {
+  if (!ROSTER_TAB) return null;
+  console.log(`\n── 명단 이동 — 탭 "${ROSTER_TAB}" ───────────────────────────────`);
+  const roster = rosterParsed!;
+
+  const [studentRows, enrollRows] = await Promise.all([
+    sql<{ id: string; name: string; school: string | null; grade: string | null; status: string | null }[]>`
+      select id, name, school, grade, status from students where tenant_id = ${TENANT}`,
+    sql<{ id: string; student_id: string; class_id: string; class_name: string; student_name: string }[]>`
+      select e.id, e.student_id, e.class_id, c.class_name, s.name as student_name
+        from enrollments e
+        join classes c on c.id = e.class_id
+        join students s on s.id = e.student_id
+       where e.tenant_id = ${TENANT} and c.subject = ${SUBJECT} and c.is_active = true
+         and e.start_date <= ${CUTOVER}::date
+         and (e.end_date is null or e.end_date > ${CUTOVER}::date)`,
+  ]);
+  const students: RosterStudentRef[] = studentRows.map((s) => ({
+    studentId: s.id, name: s.name, school: s.school, grade: s.grade, status: s.status,
+  }));
+  const current: RosterEnrollmentRow[] = enrollRows.map((e) => ({
+    enrollmentId: e.id, studentId: e.student_id, studentName: e.student_name,
+    classId: e.class_id, className: e.class_name,
+  }));
+  console.log(`  DB: ${CUTOVER} 기준 영어 수강 ${current.length}건`);
+
+  // 반 이름 → id. ⚠️ `ctx.classes`는 **이름 변경이 이미 가상 적용된** 상태다(3-a) — 시트엔 새 이름이,
+  //    DB엔 아직 옛 이름이 있으므로 이 맵이 유일하게 옳은 다리다.
+  const idByClassName = new Map<string, string>();
+  for (const c of ctx.classes) idByClassName.set(norm(c.className), c.id);
+
+  const desired: RosterDesiredRow[] = [];
+  const excluded: string[] = [];
+  const excludedStudentIds = new Set<string>();
+  const removableClassIds = new Set<string>();
+  const weakBasis: string[] = [];
+
+  for (const block of roster.blocks) {
+    const classId = idByClassName.get(norm(block.className));
+    if (!classId) {
+      // 🔴 반을 못 찾으면 그 블록 전원을 **건드리지 않는다**(removableClassIds에도 안 넣는다) —
+      //    넣으면 그 반 학생들이 종료 후보가 된다.
+      excluded.push(`반 "${block.className}"(${block.entries.length}명) — 활성 영어 반에 없음`);
+      continue;
+    }
+    removableClassIds.add(classId);
+    for (const entry of block.entries) {
+      const m = matchRosterStudent(entry.name, entry.school, entry.grade, students);
+      if (m.status === "none") {
+        excluded.push(`${entry.name}(${entry.raw}) → ${block.className}: 학생 미매칭`);
+        continue;
+      }
+      if (m.status === "ambiguous") {
+        excluded.push(
+          `${entry.name}(${entry.raw}) → ${block.className}: 동명이인 ${m.candidates.length}명 모호` +
+            ` [${m.candidates.map((c) => `${c.name}/${c.school ?? "?"}${c.grade ?? ""}/${c.status ?? "?"}`).join(" · ")}]`,
+        );
+        // 🔴 후보 **전원**을 종료 대상에서 뺀다 — 누가 그 사람인지 모른다는 건 "그만뒀다"가 아니다.
+        //    빼지 않으면 그 학생이 명단에 있는데도 수강이 끝난다(조용한 퇴출, [[#77]]의 결).
+        for (const c of m.candidates) excludedStudentIds.add(c.studentId);
+        continue;
+      }
+      const hit = students.find((s) => s.studentId === m.studentId)!;
+      // 🔴 퇴원 학생은 **자동으로 되살리지 않는다**(원장 방침: 학생 상태를 자동으로 바꾸는 경로는 안 만든다).
+      if (hit.status === "withdrawn") {
+        excluded.push(`${entry.name}(${entry.raw}) → ${block.className}: DB 퇴원 상태 — 사람이 확인 후 복구`);
+        excludedStudentIds.add(hit.studentId);
+        continue;
+      }
+      if (m.basis !== "unique") weakBasis.push(`${entry.name}(${entry.raw}) → ${hit.name} [${m.basis}]`);
+      desired.push({
+        studentId: hit.studentId, studentName: entry.name,
+        school: entry.school, grade: entry.grade,
+        classId, className: block.className,
+      });
+    }
+  }
+
+  const diff = computeRosterDiff(desired, current, removableClassIds);
+  // 퇴원·미매칭으로 뺀 학생이 종료 후보로 넘어가지 않게 한다 — 뺀 것이 곧 "그만둔다"는 뜻은 아니다.
+  const dropped = diff.removes.filter((r) => {
+    const row = current.find((c) => c.enrollmentId === r.enrollmentId);
+    return row ? excludedStudentIds.has(row.studentId) : false;
+  });
+  if (dropped.length) {
+    diff.removes = diff.removes.filter((r) => !dropped.includes(r));
+    for (const r of dropped)
+      diff.warnings.push(`"${r.studentName}"(${r.className})은 위 제외 목록에 있어 종료하지 않았습니다.`);
+  }
+
+  console.log(
+    `\n  변경: 이동 ${diff.moves.length} · 추가 ${diff.adds.length} · 종료후보 ${diff.removes.length} · 그대로 ${diff.unchanged}`,
+  );
+  for (const m of diff.moves) console.log(`    ↪ ${m.studentName}: ${m.fromClassName} → ${m.toClassName}`);
+  for (const a of diff.adds) console.log(`    ＋ ${a.studentName}(${a.school ?? "?"} ${a.grade ?? ""}) → ${a.className}`);
+  for (const r of diff.removes) console.log(`    － ${r.studentName}: ${r.className} 수강 종료`);
+  if (weakBasis.length) {
+    console.log(`\n  ⚠️ 이름 완전일치가 아니어서 다른 근거로 고른 ${weakBasis.length}명 — 눈으로 확인하세요:`);
+    for (const w of weakBasis) console.log(`     · ${w}`);
+  }
+  if (diff.warnings.length) {
+    console.log(`\n  경고 ${diff.warnings.length}건:`);
+    for (const w of diff.warnings) console.log(`     · ${w}`);
+  }
+  if (excluded.length) {
+    console.log(`\n  ⛔ 적용 제외 ${excluded.length}건(사람이 처리):`);
+    for (const e of excluded) console.log(`     · ${e}`);
+  }
+  if (diff.removes.length && !APPLY_REMOVES) {
+    console.log(`\n  ℹ️ 종료후보 ${diff.removes.length}건은 **적용하지 않습니다**(기본값). 확인 후 --apply-removes 로 여세요.`);
+  }
+  // 🔴 제외가 남은 채로 종료를 열지 않는다 — 제외는 "시트와 DB를 아직 못 이었다"는 뜻이고,
+  //    종료는 바로 그 미완성이 피해로 바뀌는 자리다(이름을 못 읽은 학생이 명단에 있는데도 잘린다).
+  if (APPLY_REMOVES && excluded.length) {
+    console.error(
+      `
+❌ 적용 제외 ${excluded.length}건이 남아 있어 --apply-removes 를 받지 않습니다(아무것도 쓰지 않음).` +
+        `
+   위 제외 목록을 시트나 학생 정보에서 먼저 해결한 뒤 다시 실행하세요.`,
+    );
+    await sql.end();
+    process.exit(1);
+  }
+  return { diff, excluded };
+}
+
+/**
+ * 계획을 실제로 쓴다 — 스냅샷 → 이동 RPC → (선택)종료 → 추가 → 스냅샷 id 되쓰기 → 이력.
+ * 🔴 **스냅샷을 못 만들면 아무것도 쓰지 않는다**(applyDiff와 같은 규약) — 되돌릴 수 없는 적용 금지.
+ */
+async function applyRoster(plan: RosterPlan | null): Promise<void> {
+  if (!plan || !APPLY) return;
+  const diff: ImportDiff = { ...plan.diff, removes: APPLY_REMOVES ? plan.diff.removes : [] };
+  if (diff.moves.length + diff.adds.length + diff.removes.length === 0) {
+    console.log("\n명단 변경 없음 — 시트와 일치합니다.");
+    return;
+  }
+
+  const [snap] = await sql<{ id: string }[]>`
+    insert into public.timetable_snapshots (tenant_id, label, reference_date, summary, payload, created_by)
+    values (${TENANT}, ${`영어 마스터시트 명단 ${CUTOVER}`}, ${CUTOVER}::date,
+            ${sql.json({ moves: diff.moves.length, removes: diff.removes.length, adds: diff.adds.length } as never)}::jsonb,
+            ${sql.json(diff as never)}::jsonb, ${ACTOR})
+    returning id`;
+  if (!snap?.id) {
+    console.error("❌ 되돌리기용 스냅샷을 저장하지 못해 명단 적용을 중단합니다(명단 변경 없음).");
+    return;
+  }
+
+  let failed = 0;
+  // 1) 이동 — 분리등원(attendance_days) 승계는 RPC 인자로만 가능하다(미지정이면 전 요일이 된다).
+  if (diff.moves.length) {
+    const dayRows = await sql<{ id: string; attendance_days: string[] | null }[]>`
+      select id, attendance_days from enrollments
+       where tenant_id = ${TENANT} and id = any(${diff.moves.map((m) => m.enrollmentId)}::uuid[])`;
+    const daysBy = new Map(dayRows.map((r) => [r.id, r.attendance_days ?? []]));
+    const moves = diff.moves.map((m) => ({
+      enrollmentId: m.enrollmentId,
+      newClassId: m.toClassId,
+      attendanceDays: daysBy.get(m.enrollmentId) ?? [],
+    }));
+    const [res] = await sql.begin(async (tx) => {
+      await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: ACTOR, role: "authenticated" })}, true)`;
+      // 🔴 **이름 지정 호출**(`=>`) — 0235a의 인자 순서는 `(p_moves, p_effective_date)`라 위치 인자로
+      //    쓰면 뒤집힌다(실제로 뒤집혀 있었다). 날짜를 안 넘기면 기본값 `current_date`(UTC)로 떨어져
+      //    **예약이 아니라 오늘 이동**이 된다 — 자리 순서에 기대지 않는다.
+      return tx`select public.move_enrollments_batch(
+        p_moves => ${sql.json(moves as never)}::jsonb,
+        p_effective_date => ${CUTOVER}::date) as r`;
+    });
+    const results = (((res as { r: unknown }).r ?? []) as {
+      enrollmentId: string; newEnrollmentId?: string; ok: boolean; error?: string;
+    }[]);
+    for (const r of results)
+      if (!r.ok) { failed += 1; console.error(`  ✗ 이동 실패 ${r.enrollmentId}: ${r.error ?? ""}`); }
+    // 🔑 0235a가 준 새 수강 id를 적어 둔다 — 되돌리기가 좌표 추측 없이 이 행만 지운다(0236a).
+    const newIdBy = new Map(
+      results.filter((r) => r.ok && r.newEnrollmentId).map((r) => [r.enrollmentId, r.newEnrollmentId!]),
+    );
+    for (const m of diff.moves) { const id = newIdBy.get(m.enrollmentId); if (id) m.newEnrollmentId = id; }
+    console.log(`  ✓ 이동 ${results.filter((r) => r.ok).length}/${diff.moves.length}`);
+  }
+
+  // 2) 종료(--apply-removes 일 때만)
+  let removeFailed = 0;
+  for (const r of diff.removes) {
+    const [row] = await sql<{ id: string }[]>`update public.enrollments
+        set end_date = ${CUTOVER}::date, withdrawal_reason = '시트 명단 반영'
+      where id = ${r.enrollmentId} and tenant_id = ${TENANT} returning id`;
+    if (!row) { failed += 1; removeFailed += 1; console.error(`  ✗ 종료 실패 ${r.studentName}(${r.className})`); }
+  }
+  if (diff.removes.length) console.log(`  ✓ 종료 ${diff.removes.length - removeFailed}/${diff.removes.length}`);
+
+  // 3) 추가 — 🔴 휴원 표식 승계(applyDiff와 같은 규약). 시트는 "어느 반인가"의 진실이지 "휴원인가"가 아니다.
+  let heldAdds = 0;
+  let addFailed = 0;
+  if (diff.adds.length) {
+    const statusRows = await sql<{ id: string; status: string | null }[]>`
+      select id, status from students
+       where tenant_id = ${TENANT} and id = any(${[...new Set(diff.adds.map((a) => a.studentId))]}::uuid[])`;
+    const statusBy = new Map(statusRows.map((r) => [r.id, r.status]));
+    for (const a of diff.adds) {
+      const onHold = enrollmentOnHoldForStatus(statusBy.get(a.studentId));
+      try {
+        const [row] = await sql<{ id: string }[]>`
+          insert into public.enrollments (tenant_id, student_id, class_id, start_date, on_hold)
+          values (${TENANT}, ${a.studentId}, ${a.classId}, ${CUTOVER}::date, ${onHold})
+          returning id`;
+        if (row?.id) a.enrollmentId = row.id;
+        if (onHold) heldAdds += 1;
+      } catch (e) {
+        failed += 1;
+        addFailed += 1;
+        console.error(`  ✗ 추가 실패 ${a.studentName} → ${a.className}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    console.log(`  ✓ 추가 ${diff.adds.length - addFailed}/${diff.adds.length}${heldAdds ? ` (휴원 승계 ${heldAdds})` : ""}`);
+  }
+
+  // 4) 스냅샷 payload 되쓰기 — 새 수강 id가 여기 있어야 되돌리기가 정확하다(실패해도 좌표 폴백은 남는다).
+  await sql`update public.timetable_snapshots set payload = ${sql.json(diff as never)}::jsonb
+             where id = ${snap.id} and tenant_id = ${TENANT}`;
+  await sql`insert into public.timetable_import_logs (tenant_id, week_label, snapshot_id, result, details, actor_id)
+    values (${TENANT}, ${CUTOVER}, ${snap.id},
+            ${sql.json({ moved: diff.moves.length, removed: diff.removes.length, added: diff.adds.length, heldAdds, failed } as never)}::jsonb,
+            ${sql.json(diff as never)}::jsonb, ${ACTOR})`;
+
+  console.log(
+    `\n✅ 명단 적용 완료 — 이동 ${diff.moves.length} · 추가 ${diff.adds.length} · 종료 ${diff.removes.length}${failed ? ` · 실패 ${failed}` : ""}`,
+  );
+  console.log(`   되돌리기: select public.rollback_enrollment_import('${snap.id}');`);
+}
+
+// 🔴 명단 계획은 **어떤 쓰기보다도 먼저** 세운다 — 인원 검산이 어긋나면
+// 배치를 쓰기 전에 멈춰야 하기 때문이다(planRoster가 그 자리에서 process.exit한다).
+const rosterPlan = await planRoster();
+
 // ── 4. payload = applyStructureImport(server action)과 동일 구조 ──────────────
 const changeItems = report.planItems.filter((p) => p.action !== "keep");
 if (changeItems.length === 0) {
@@ -591,6 +903,7 @@ if (changeItems.length === 0) {
   // 배치가 같아도 **비수업 블록은 따로** 갈아끼운다 — 수업은 그대로인데 감독만 바뀔 수 있다(독립).
   console.log("\n배치 변경 없음 — 시트와 일치합니다.");
   await syncBlocks();
+  await applyRoster(rosterPlan);
   await sql.end();
   process.exit(0);
 }
@@ -719,6 +1032,7 @@ if (renamePlan.length) {
   }
 }
 await syncBlocks();
+await applyRoster(rosterPlan);
 
 // ⚠️ 소급 컷오버의 부작용 점검 — 컷오버 이후에 만들어진 행(valid_from > 마감일)을 마감하면
 // valid_to < valid_from 인 **역전 범위**가 된다. 조회식이 둘 다 만족할 수 없어 화면엔 안 보이지만(무해),
