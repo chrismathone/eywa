@@ -328,8 +328,11 @@ async function fetchSlots(
   // 🔴 **미래 주는 그 주의 반 이름으로 그린다**(원장 2026-08-29: *"선생님들이 미래조회시에 지금 반으로
   //    보면 착각할 수 있을거같은데"*). 담임 되살리기(위)의 거울상 — 그쪽은 지난 주를 기록으로, 이쪽은
   //    다음 주를 예약으로. ⚠️ 지난 주엔 예약이 닿지 않으므로 **조회 자체를 안 한다**(왕복 0).
+  // 🔴 게이트는 담임(위)과 **정확히 대칭**이어야 한다 — `weekSundayOf`(그 주의 일요일)를 쓴다.
+  //    ⚠️ `weekEndOf`는 주의 끝이 아니라 **ref+6 롤링 창**이라(week.ts 주석) 지난 주에서도 오늘을
+  //    넘겨 참이 된다 = 예약이 닿지도 않는 과거 주에서 조회를 한 번 더 하게 된다.
   const nameIndex =
-    opts?.futureNames && weekEnd >= todayStr()
+    opts?.futureNames && weekSundayOf(referenceDate) >= todayStr()
       ? db
         ? await getClassNameAsOfIndexWith(db.supabase, db.tenantId)
         : await getClassNameAsOfIndex()

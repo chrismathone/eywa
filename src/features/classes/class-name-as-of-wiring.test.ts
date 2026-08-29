@@ -23,7 +23,7 @@ describe("🔴 미래 이름은 사람이 읽는 화면에만 — 시트·엑셀
   // 시트에선 반 이름이 **매칭 키**다. 아직 DB에 없는 이름(9/1부터 쓸 PL1a)이 적히면, 그 시트를 되읽는
   // 구조 가져오기가 그 반을 "DB에 없는 이름"으로 버리고 **배치를 통째로 마감한다**.
   it("기본값은 꺼짐이다(새 소비처가 모르고 켜지지 않게)", () => {
-    expect(queries).toMatch(/opts\?\.futureNames && weekEnd >= todayStr\(\)/);
+    expect(queries).toMatch(/opts\?\.futureNames && weekSundayOf\(referenceDate\) >= todayStr\(\)/);
   });
 
   it("시간표 화면만 명시적으로 켠다", () => {
@@ -42,9 +42,14 @@ describe("🔴 미래 이름은 사람이 읽는 화면에만 — 시트·엑셀
 });
 
 describe("미래 주 반 이름 — 조회", () => {
-  it("지난 주엔 조회하지 않는다(왕복 0)", () => {
-    // 예약은 언제나 미래라 지난 주엔 닿지 않는다. 담임 되살리기의 거울상.
-    expect(queries).toMatch(/weekEnd >= todayStr\(\)/);
+  it("지난 주엔 조회하지 않는다 — 담임 게이트와 정확히 대칭", () => {
+    // 예약은 언제나 미래라 지난 주엔 닿지 않는다. 담임 되살리기의 거울상이어야 한다:
+    //   담임(과거) weekSundayOf(ref) <  today
+    //   이름(미래) weekSundayOf(ref) >= today
+    // 🔴 `weekEndOf`(=ref+6 롤링 창)를 쓰면 지난 주에서도 참이 된다(week.ts 주석의 옛 버그와 같은 축).
+    expect(queries).toMatch(/weekSundayOf\(referenceDate\) < todayStr\(\)/);
+    expect(queries).toMatch(/weekSundayOf\(referenceDate\) >= todayStr\(\)/);
+    expect(queries).not.toMatch(/futureNames && weekEnd >=/);
   });
 
   it("주입된 db가 있으면 그 클라이언트로 읽는다", () => {
