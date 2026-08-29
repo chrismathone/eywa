@@ -22,7 +22,7 @@ import { canAccess, resolveMatrix } from "@/lib/permissions";
 import { summarizeRoster } from "@/features/retention/roster";
 import { addIsoDateDays } from "@/features/consultations/follow-up-urgency";
 import { getTodayActionSignals, type DashboardSignalsDb } from "./action-signals";
-import { getAbsenceRiskAnchor, getAbsenceRiskStudents, getAbsenceSubjectBreakdown } from "./queries";
+import { getAbsenceBreakdown, getAbsenceRiskAnchor, getAbsenceRiskStudents } from "./queries";
 import {
   buildDailyBriefingPayload,
   shouldGenerateNarrative,
@@ -209,14 +209,14 @@ export async function generateDailyBriefing(
     // 결석 위험 "N회"의 과목 분해(원장 2026-08-29 "과목별 표기"). 위험 학생 id가 나와야 좁힐 수 있어
     // 위 배치 뒤에 온다(진짜 의존). 🔴 실패해도 브리핑 본체는 살린다 — 과목은 있으면 더 좋은 정보이지,
     // 없다고 "결석 8회"가 틀려지는 것은 아니다(사유 없는 '확인 불가' 줄을 늘리지 않는다).
-    const absenceSubjects =
+    const absenceBreakdown =
       absenceAnchor && absenceRisks.length > 0
-        ? await getAbsenceSubjectBreakdown(
+        ? await getAbsenceBreakdown(
             db,
             absenceRisks.map((risk) => risk.studentId),
             absenceAnchor,
           ).catch((e: unknown) => {
-            reportWarning("브리핑 결석 과목 분해 실패 — 과목 표기 없이 진행", {
+            reportWarning("브리핑 결석 과목·사유 분해 실패 — 과목·사유 표기 없이 진행", {
               scope: "briefing.absenceSubjects",
               tenantId,
               error: e instanceof Error ? e.message : String(e),
@@ -237,7 +237,8 @@ export async function generateDailyBriefing(
         studentId: risk.studentId,
         studentName: risk.studentName,
         absences: risk.absences,
-        bySubject: absenceSubjects?.get(risk.studentId),
+        bySubject: absenceBreakdown?.subjects.get(risk.studentId),
+        reasonSummary: absenceBreakdown?.reasons.get(risk.studentId),
       })),
       retention,
       retentionTop,

@@ -130,6 +130,9 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                         ) : null}
                         <span className="text-text-dim min-w-0 flex-1 truncate text-[12.5px]">
                           {s.reasons.slice(0, 2).join(" · ")}
+                          {/* 사유 원문은 **화면에만** 나온다 — payload의 reasons엔 숫자만 담겨 AI로 나간다.
+                              원장 2026-08-29 *"사유까지 정리해서"*. 사전 통보 건수는 위 reasons가 이미 말한다. */}
+                          {s.reasonText ? <span className="text-text-faint"> · {s.reasonText}</span> : null}
                         </span>
                         {s.action ? (
                           <span className="bg-primary-soft text-primary hidden shrink-0 items-center rounded-pill px-2.5 py-1 text-[11px] font-bold sm:inline-flex">
@@ -149,7 +152,7 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                           <WindowLink
                             href={`/students/${s.studentId}`}
                             title={s.name}
-                            ariaLabel={`${s.name}${subjects ? ` (${subjects})` : ""} — ${s.reasons.join(", ")}`}
+                            ariaLabel={`${s.name}${subjects ? ` (${subjects})` : ""} — ${s.reasons.join(", ")}${s.reasonText ? ` · ${s.reasonText}` : ""}`}
                             className="group hover:bg-bg-soft -mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition"
                           >
                             {body}

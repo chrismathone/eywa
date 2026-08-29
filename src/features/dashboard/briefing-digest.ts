@@ -6,6 +6,7 @@
  * - LLM 프롬프트에는 개인 이름을 넣지 않고(라벨+수치만), 응답은 validateNarrative(숫자 grounding·
  *   영문 토큰 금지·길이)를 통과한 것만 저장 — 실패 시 buildFallbackNarrative(결정론 요약)로 대체.
  */
+import { absenceReasonTail, type AbsenceReasonSummary } from "./absence-reasons";
 import {
   buildTodayActions,
   labelSubjectCounts,
@@ -39,6 +40,16 @@ export type DailyBriefingPayload = {
     reasons: string[];
     action: string | null;
     bySubject: { label: string; count: number }[];
+    /**
+     * 사전 통보(양해된) 결석 건수 — 매니저 보고가 "위험 신호인가"를 가르는 재료.
+     * ⚠️ 옛 payload엔 없다(`?? 0`). 사유 **원문**은 payload에 싣지 않는다(AI 전송 규약).
+     */
+    preNotified?: number;
+    /**
+     * 사유 요약 문자열(`가족여행·병결`) — **화면 전용**.
+     * 🔴 프롬프트를 만드는 `buildTeamPrompt`는 이 필드를 읽지 않는다(읽으면 자유 텍스트가 외부로 나간다).
+     */
+    reasonText?: string;
   }[];
   /** 조회 실패 도메인(확인 불가 정직성) — 라벨만 */
   sourceIssueLabels: string[];
@@ -70,6 +81,11 @@ export type BuildDailyBriefingInput = {
     studentName: string;
     absences: number;
     bySubject?: { subject: string; count: number }[];
+    /**
+     * 사유 요약 + 사전 통보 건수. 🔴 `absences`는 **깎지 않는다**(원장 2026-08-29 선택) — 그 숫자는
+     * RPC의 사실이고 결석 마일스톤 알림도 같은 값을 쓴다. 대신 옆에 갈라 보여 준다.
+     */
+    reasonSummary?: AbsenceReasonSummary;
   }[];
   retention: { total: number; risk: number; warn: number; revenueRisk: number } | null;
   /** retention 상위 위험 학생(위험도 내림차순, 사유·권장 조치 포함) — 서버가 roster에서 추출. */
@@ -129,10 +145,18 @@ function buildSpotlights(input: BuildDailyBriefingInput): DailyBriefingPayload["
     spotlights.push({
       studentId: risk.studentId ?? null,
       name: risk.studentName,
-      reasons: [`최근 14일 결석 ${risk.absences}회`],
+      // 🔴 `reasons`엔 **숫자만** 담는다 — 이 배열은 AI 프롬프트로 그대로 나간다. 사유 원문은
+      //    자유 텍스트라 `병결(입원)` 같은 건강 정보가 섞여 있어 아래 reasonText로 갈라 둔다.
+      reasons: [`최근 14일 결석 ${risk.absences}회${absenceReasonTail(risk.reasonSummary, { forPrompt: true })}`],
       action: null,
       // 라벨은 학원설정 단일 소스 — 리졸버가 없으면 분해를 통째로 생략한다(raw 키 노출 금지).
       bySubject: labelSubjectCounts(groundedSubjects(risk), input.subjectLabel),
+      // 🔴 사유 원문은 안 싣는다 — payload는 AI 프롬프트로도 나가고, 사유엔 `병결(입원)` 같은
+      //    건강 정보가 자유 텍스트로 들어 있다. 판단에 필요한 건 "양해된 결석인가"뿐이다.
+      preNotified: risk.reasonSummary?.preNotified ?? 0,
+      // 화면 전용 — 위 reasons와 달리 프롬프트에 나가지 않는다(파일 주석 참조).
+      // 값이 없으면 **키 자체를 안 넣는다**(payload는 jsonb로 저장돼 undefined 키가 노이즈가 된다).
+      ...(risk.reasonSummary?.reasons.length ? { reasonText: risk.reasonSummary.reasons.join("·") } : {}),
     });
   }
   return spotlights;
@@ -240,6 +264,8 @@ export function narrativeNumberWhitelist(payload: DailyBriefingPayload): Set<str
     }
     // 과목 분해 수치("수학 6 · 영어 2")도 프롬프트에 나간다 — 빠뜨리면 정상 보고가 탈락한다.
     for (const bucket of spotlight.bySubject ?? []) add(bucket.count);
+    // 사전 통보 건수도 프롬프트에 나간다(사유 원문은 안 나간다 — absence-reasons.ts 주석).
+    if (spotlight.preNotified !== undefined) add(spotlight.preNotified);
   }
   return numbers;
 }

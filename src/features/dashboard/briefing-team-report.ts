@@ -23,6 +23,8 @@ export function buildTeamPrompt(payload: DailyBriefingPayload): string {
     // 과목 분해가 있으면 이름 뒤 대괄호로("[수학 6 · 영어 2]") — 매니저가 "어느 과목부터"를 짚는 근거다.
     // 옛 payload엔 bySubject가 없다(?? []). 라벨·수치 모두 화이트리스트에 이미 들어 있어 인용해도 안 걸린다.
     const subjects = subjectBreakdownText(s.bySubject ?? []);
+    // 🔴 `reasons`엔 애초에 **숫자만** 담겨 있다(사유 원문은 payload의 reasonText로 갈라 뒀다) —
+    //    여기서 문자열을 되파싱해 걸러내는 방식은 한 글자만 달라져도 새므로 쓰지 않는다.
     return `- ${s.name}${subjects ? ` [${subjects}]` : ""}: ${s.reasons.join(", ")}${
       s.action ? ` → 권장 조치: ${s.action}` : ""
     }`;
@@ -33,6 +35,7 @@ export function buildTeamPrompt(payload: DailyBriefingPayload): string {
     "규칙(반드시 준수):",
     "- 각 매니저 보고는 1~3문장 한국어 존댓말. 사실 나열이 아니라 **판단**(왜 중요한지)과 **오늘 할 일 1가지 제안**을 담을 것.",
     "- 괄호·대괄호 안 과목별 수치가 있으면 **어느 과목이 문제인지 짚고** 그 과목부터 처리하도록 제안할 것.",
+    "- '사전 통보 N'은 학부모가 미리 알린 결석이다. 그 수가 결석 회수와 같거나 대부분이면 위험 신호로 다루지 말 것.",
     "- 아래 요약·명단에 있는 숫자만 그대로 사용. 새 숫자·비율·합산·추정 금지.",
     spotlightLines.length > 0
       ? "- 학생 이름은 아래 위험 학생 명단에 있는 이름만 언급 가능. 명단 밖 이름 창작 금지."

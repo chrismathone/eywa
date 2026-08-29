@@ -9,6 +9,10 @@ import {
   type AbsenceSubjectCounts,
   type AbsenceSubjectRow,
 } from "@/features/dashboard/absence-subjects";
+import {
+  summarizeAbsenceReasons,
+  type AbsenceReasonSummary,
+} from "@/features/dashboard/absence-reasons";
 import { attendanceRate } from "@/lib/calc/attendance";
 import type { SystemRole } from "@/lib/permissions";
 import { summarizeInvoices } from "@/features/billing/calc";
@@ -752,7 +756,7 @@ export async function getAbsenceRiskAnchor(db: {
 }
 
 /**
- * 결석 위험 학생의 "N회"를 **과목별로 쪼갠다**(원장 2026-08-29 "과목별 표기").
+ * 결석 위험 학생의 "N회"를 **과목별로 쪼개고 사유를 요약한다**(원장 2026-08-29).
  *
  * 🔴 status로 미리 거르지 않는다 — 유효 행은 (학생,반,수업일,교시)별 **최신 1건**이라, 결석을 출석으로
  *    정정한 날은 새 행이 있어야 그 결석이 사라진다. `eq("status","absent")`로 좁히면 정정 전 결석이 되살아나
@@ -760,16 +764,16 @@ export async function getAbsenceRiskAnchor(db: {
  * B2/B3: 학생 id로 좁힌 뒤 `fetchAllPagedInChunks`(청크 + range 페이징) — 영어는 하루가 2~3행이라
  * 위험 학생 십수 명 × 14일이면 청크당 1,000행에 닿을 수 있다.
  */
-export async function getAbsenceSubjectBreakdown(
+export async function getAbsenceBreakdown(
   db: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
   studentIds: string[],
   anchorDate: string,
-): Promise<AbsenceSubjectCounts> {
-  if (studentIds.length === 0) return new Map();
+): Promise<{ subjects: AbsenceSubjectCounts; reasons: Map<string, AbsenceReasonSummary> }> {
+  if (studentIds.length === 0) return { subjects: new Map(), reasons: new Map() };
   const rows = await fetchAllPagedInChunks(studentIds, (chunk, from, to) =>
     db.supabase
       .from("attendance_records")
-      .select("id, student_id, class_id, session_date, slot_start, status, recorded_at, class:class_id ( subject )")
+      .select("id, student_id, class_id, session_date, slot_start, status, recorded_at, note, class:class_id ( subject )")
       .eq("tenant_id", db.tenantId)
       .in("student_id", chunk)
       .gte("session_date", inclusiveDateWindowStart(anchorDate, 14))
@@ -777,13 +781,13 @@ export async function getAbsenceSubjectBreakdown(
       .order("id", { ascending: true }) // OFFSET 페이지가 흔들리지 않도록 unique tie-break
       .range(from, to),
   );
-  return countAbsencesBySubject(
-    (rows as RawAbsenceRow[]).map((row) => {
-      // PostgREST 임베드는 1:1이라도 배열로 올 수 있다(retention queries 선례).
-      const cls = Array.isArray(row.class) ? row.class[0] : row.class;
-      return { ...row, subject: cls?.subject ?? null };
-    }),
-  );
+  const flat = (rows as RawAbsenceRow[]).map((row) => {
+    // PostgREST 임베드는 1:1이라도 배열로 올 수 있다(retention queries 선례).
+    const cls = Array.isArray(row.class) ? row.class[0] : row.class;
+    return { ...row, subject: cls?.subject ?? null };
+  });
+  // 과목 분해와 사유 요약은 **같은 행**에서 나온다 — 왕복을 늘리지 않고, 세는 단위가 갈릴 여지도 없앤다.
+  return { subjects: countAbsencesBySubject(flat), reasons: summarizeAbsenceReasons(flat) };
 }
 
 /** 위 select가 돌려주는 모양 — 과목은 임베드 안에 있어 순수 함수 입력으로 평탄화한다. */

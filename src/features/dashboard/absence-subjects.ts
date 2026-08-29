@@ -24,6 +24,8 @@ export type AbsenceSubjectRow = {
   id: string;
   /** 그 반의 과목 키(학원설정 키). 미설정 반은 null — 버리지 않고 "과목 미상"으로 접힌다. */
   subject: string | null;
+  /** 결석 사유(자유 텍스트). 사유 요약이 쓴다 — 과목 집계는 안 본다. */
+  note?: string | null;
 };
 
 /** 학생별 과목 분해(건수 desc, 동수는 키순). 합 = 그 학생의 결석 N회. */
@@ -42,7 +44,14 @@ function isNewer(a: AbsenceSubjectRow, b: AbsenceSubjectRow): boolean {
  *
  * 창(anchor−13일 ~ anchor) 필터는 **호출부(쿼리)**가 이미 걸었다고 본다 — 여기서 또 자르면 규칙이 두 곳이 된다.
  */
-export function countAbsencesBySubject(rows: readonly AbsenceSubjectRow[]): AbsenceSubjectCounts {
+/**
+ * **세는 단위 한 개 = 이 배열의 원소 하나.** 원시 행 → (학생·반·수업일)당 하나인 결석 행.
+ *
+ * 🔴 과목 분해와 사유 요약이 **같은 단위**를 세야 한다 — 갈리면 "결석 5회"인데 "사전 통보 6"이 되어
+ *    화면에서 바로 거짓이 드러난다. 그래서 두 소비처가 이 함수 하나를 공유한다.
+ * 정렬은 (수업일, 반) 오름차순 — 사유 요약이 실행마다 흔들리지 않게(결정론).
+ */
+export function effectiveAbsences(rows: readonly AbsenceSubjectRow[]): AbsenceSubjectRow[] {
   // ① 유효 행 — (학생,반,수업일,교시)별 최신 1건. 교시 null은 그 자체로 하나의 그룹(RPC의 distinct on과 동일).
   const effective = new Map<string, AbsenceSubjectRow>();
   for (const row of rows) {
@@ -51,14 +60,24 @@ export function countAbsencesBySubject(rows: readonly AbsenceSubjectRow[]): Abse
     if (!prev || isNewer(row, prev)) effective.set(key, row);
   }
 
-  // ② 결석인 유효 행의 (반, 수업일) 쌍을 학생×과목으로 센다. 같은 날 두 반을 빠지면 2회(0221a 주석).
+  // ② 결석인 유효 행의 (반, 수업일) 쌍 하나당 한 건. 같은 날 두 반을 빠지면 2회(0221a 주석).
   const seenPairs = new Set<string>();
-  const perStudent = new Map<string, Map<string, number>>();
+  const out: AbsenceSubjectRow[] = [];
   for (const row of effective.values()) {
     if (row.status !== "absent") continue;
     const pair = `${row.student_id} ${row.class_id} ${row.session_date}`;
     if (seenPairs.has(pair)) continue; // 교시가 여럿이어도 그 반의 그날은 1회
     seenPairs.add(pair);
+    out.push(row);
+  }
+  return out.sort(
+    (a, b) => a.session_date.localeCompare(b.session_date) || a.class_id.localeCompare(b.class_id),
+  );
+}
+
+export function countAbsencesBySubject(rows: readonly AbsenceSubjectRow[]): AbsenceSubjectCounts {
+  const perStudent = new Map<string, Map<string, number>>();
+  for (const row of effectiveAbsences(rows)) {
     const subject = row.subject?.trim() ? row.subject.trim() : "";
     const bucket = perStudent.get(row.student_id) ?? new Map<string, number>();
     bucket.set(subject, (bucket.get(subject) ?? 0) + 1);

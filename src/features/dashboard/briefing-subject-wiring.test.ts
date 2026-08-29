@@ -26,7 +26,7 @@ describe("부가 조회가 브리핑을 죽이지 않는다", () => {
   });
 
   it("분해 조회도 fail-soft다", () => {
-    expect(briefing).toMatch(/getAbsenceSubjectBreakdown\([\s\S]{0,200}\)\.catch\(/);
+    expect(briefing).toMatch(/getAbsenceBreakdown\([\s\S]{0,200}\)\.catch\(/);
   });
 
   it("실패를 조용히 삼키지 않고 알린다", () => {
@@ -44,6 +44,38 @@ describe("과목 수치는 총계와 합이 같을 때만 내보낸다", () => {
     // labelSubjectCounts가 리졸버 없으면 []를 돌려준다 — 화면에 `english`가 그대로 나가지 않게.
     const todayActions = strip(read("src", "features", "dashboard", "today-actions.ts"));
     expect(todayActions).toMatch(/if \(!subjectLabel \|\| rows\.length === 0\) return \[\]/);
+  });
+});
+
+describe("🔴 결석 사유 원문은 AI 프롬프트로 나가지 않는다", () => {
+  // 사유는 자유 텍스트라 무엇이 적힐지 통제할 수 없고, 실제로 `병결(입원)`·`병원 진료` 같은 건강 정보가
+  // 들어 있다. 매니저 보고가 판단할 재료는 "양해된 결석인가"(사전 통보 건수)이지 "왜"가 아니다.
+  const prompt = strip(read("src", "features", "dashboard", "briefing-team-report.ts"));
+
+  it("프롬프트 조립부가 reasonText를 읽지 않는다", () => {
+    expect(prompt).not.toContain("reasonText");
+  });
+
+  it("payload의 reasons엔 숫자만 담는다(사유 원문은 reasonText로 갈라 둔다)", () => {
+    expect(digest).toMatch(/absenceReasonTail\(risk\.reasonSummary, \{ forPrompt: true \}\)/);
+    expect(digest).toMatch(/reasonText: risk\.reasonSummary\.reasons\.join/);
+  });
+
+  it("forPrompt면 사유를 빼는 규칙이 단일 소스에 있다", () => {
+    const mod = strip(read("src", "features", "dashboard", "absence-reasons.ts"));
+    expect(mod).toMatch(/!opts\.forPrompt && summary\.reasons\.length > 0/);
+  });
+});
+
+describe("사전 통보는 총계를 깎지 않는다", () => {
+  it("absences에서 preNotified를 빼는 계산이 없다", () => {
+    // 원장 2026-08-29 선택 = 깎지 말고 갈라서 보여주기. 깎으면 결석 마일스톤 알림(같은 RPC 값)과 갈린다.
+    expect(digest).not.toMatch(/absences\s*-\s*[^;]*preNotified/);
+  });
+
+  it("세는 단위가 과목 분해와 같다(공용 effectiveAbsences)", () => {
+    const mod = strip(read("src", "features", "dashboard", "absence-reasons.ts"));
+    expect(mod).toContain("effectiveAbsences");
   });
 });
 

@@ -116,7 +116,15 @@ describe("spotlights (매니저 팀 보고 재료)", () => {
         bySubject: [],
       },
       { studentId: "r2", name: "박지율", reasons: ["결석 2회"], action: null, bySubject: [] },
-      { studentId: "a2", name: "정호준", reasons: ["최근 14일 결석 4회"], action: null, bySubject: [] },
+      // 사전 통보 건수는 결석 재료에 항상 실린다(없으면 0) — 매니저 보고가 "양해된 결석인가"를 가르는 값.
+      {
+        studentId: "a2",
+        name: "정호준",
+        reasons: ["최근 14일 결석 4회"],
+        action: null,
+        bySubject: [],
+        preNotified: 0,
+      },
     ]);
   });
 
