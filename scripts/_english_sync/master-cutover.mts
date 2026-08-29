@@ -97,6 +97,16 @@ const ROSTER_TAB = opt("roster");
  */
 const APPLY_REMOVES = args.includes("--apply-removes");
 /**
+ * **명단만** 다시 맞춘다 — 배치·비수업 블록·반 이름은 건드리지 않는다(스냅샷도 명단 것 하나만 생긴다).
+ *
+ * 쓰임새: 컷오버를 이미 걸어 둔 뒤 **한두 명이 늦게 확정될 때**(복학·신규). 컷오버 전체를 다시 돌리면
+ * 배치 변경이 0건이라 중단되고, 이름 변경은 이미 예약돼 있어 두 번 걸린다.
+ * 🔑 그래도 `--rename`은 **같이 넘겨야 한다** — 시트엔 새 이름(JP3)이 적혀 있는데 DB는 아직 옛 이름
+ *    (JP2)이라, 그 다리가 없으면 그 반이 "없는 반"이 되어 명단이 통째로 제외된다.
+ * ⚠️ 적용일이 같으면 스냅샷이 같은 날짜 묶음에 붙어 **툴바 배지 × 한 번에 함께** 되돌아간다.
+ */
+const ROSTER_ONLY = args.includes("--roster-only");
+/**
  * 컷오버가 오늘 이하인가 — **미리보기 문구 전용**(예약인지 즉시인지 사람에게 알려 주는 라벨).
  * ⚠️ 실제 판정에 쓰지 말 것: RPC는 UTC `current_date`로 가르는데 여기는 KST라 자정 근처에서 갈린다.
  *    적용 경로는 RPC가 돌려주는 `classUpdatesDeferred`를 본다(단일 소스).
@@ -465,7 +475,8 @@ const sheetNames = new Set(parsed.slots.map((s) => s.className));
 const dryCreated: string[] = [];
 const dryRevived: { id: string; name: string }[] = [];
 for (const w of parsed.warnings) console.log(`  · ${w}`);
-for (const name of [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
+// --roster-only는 반을 만들지 않는다 — 명단만 맞추는 모드에서 반이 새로 생기면 놀란다.
+for (const name of ROSTER_ONLY ? [] : [...NEW_CLASSES_TO_CREATE, ...EXTRA_NEW_CLASSES]) {
   if (!sheetNames.has(name)) {
     console.log(`  ⏭ 신설 예정 반 "${name}"이 이 탭에 없음 — 건너뜀`);
     continue;
@@ -884,6 +895,19 @@ async function applyRoster(plan: RosterPlan | null): Promise<void> {
 // 🔴 명단 계획은 **어떤 쓰기보다도 먼저** 세운다 — 인원 검산이 어긋나면
 // 배치를 쓰기 전에 멈춰야 하기 때문이다(planRoster가 그 자리에서 process.exit한다).
 const rosterPlan = await planRoster();
+
+// --roster-only: 여기서 끝낸다(배치·블록·이름은 손대지 않는다).
+if (ROSTER_ONLY) {
+  if (!rosterPlan) {
+    console.error("--roster-only 에는 --roster=<탭> 이 필요합니다.");
+    await sql.end();
+    process.exit(1);
+  }
+  console.log("\n(--roster-only) 배치·비수업 블록·반 이름은 건드리지 않습니다.");
+  await applyRoster(rosterPlan);
+  await sql.end();
+  process.exit(0);
+}
 
 // ── 4. payload = applyStructureImport(server action)과 동일 구조 ──────────────
 const changeItems = report.planItems.filter((p) => p.action !== "keep");

@@ -76,6 +76,26 @@ describe("명단 이동 — 종료(수강 끊기)는 좁게", () => {
   });
 });
 
+describe("--roster-only — 명단만 맞추는 모드", () => {
+  it("--roster 없이는 거절한다", () => {
+    expect(src).toContain("--roster-only 에는 --roster=<탭> 이 필요합니다");
+  });
+
+  it("반을 새로 만들지 않는다", () => {
+    // 명단만 맞추는 모드에서 반이 생기면 놀란다 — 신설은 컷오버 본 경로의 일이다.
+    expect(src).toMatch(/ROSTER_ONLY \? \[\] : \[\.\.\.NEW_CLASSES_TO_CREATE/);
+  });
+
+  it("배치를 쓰기 전에 끝낸다", () => {
+    // 🔴 exit이 구조 RPC보다 뒤면 배치까지 한 번 더 적용돼 스냅샷이 두 벌 생긴다.
+    const only = code.indexOf("if (ROSTER_ONLY) {");
+    const structureApply = code.indexOf("apply_english_structure(");
+    expect(only).toBeGreaterThan(-1);
+    expect(structureApply).toBeGreaterThan(-1);
+    expect(only).toBeLessThan(structureApply);
+  });
+});
+
 describe("명단 이동 — 미리보기가 사실을 말하는가", () => {
   it("드라이런이 신설·재활성 예정 반을 미리보기에 반영한다", () => {
     // 안 넣으면 그 반 명단이 통째로 '반 없음'으로 제외되고, 그 학생들이 원래 반에 남은 것으로 읽혀
