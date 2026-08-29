@@ -33,6 +33,14 @@ export type ClassDetailQuick = {
   classTextColor?: string | null;
   /** 강사 인수인계 예약(0044a) — 있으면 명단 영역 배경 틴트 + hover 상세. null=예약 없음. */
   pendingHandover?: { teacherName: string | null; date: string | null } | null;
+  /**
+   * 미래 주를 볼 때 — `className`은 **그 주에 불릴 이름**이고 이건 오늘 이름이다(둘이 다를 때만 채워진다).
+   * 🔴 셀이 오늘 이름을 그리면 강사가 "그 반이 그대로구나"로 읽는다(원장 2026-08-29). 판정은
+   *    [`class-name-as-of.ts`](../../../../features/classes/class-name-as-of.ts) 단일 소스.
+   */
+  classNameBefore?: string;
+  /** 그 이름이 되는 날(`YYYY-MM-DD`). `classNameBefore`와 짝. */
+  classNameChangeDate?: string;
   students: StudentQuick[];
 };
 
@@ -112,6 +120,12 @@ export function ClassCell({
 
   // 재원/대기/퇴원 분리 — ijw 셀처럼 섹션별 표시. status 없으면(구버전) 재원으로 간주.
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
+  // 예약된 이름 변경이 이 칸의 날짜엔 이미 적용돼 있다 — 무엇이 무엇으로 바뀌는지 한 줄로.
+  // ⚠️ 한글 문장은 여기서만 만든다(화면에 raw 날짜·영문 키가 새지 않게).
+  const renameNote = slot.classNameBefore
+    ? `${slot.classNameChangeDate?.slice(5).replace("-", "/") ?? ""}부터 ${slot.classNameBefore} → ${slot.className}` +
+      (slot.classroomName ? ` · ${slot.classroomName}` : "")
+    : null;
   // 분리등원 — 이 셀이 덮는 요일(coveringDays)이 2일+이고 '일부 요일만 오는' 재원생이 있으면 요일 칸으로 분할.
   // attendance_days가 비면(=전 요일) 전원 '공통'이라 분할 UI가 아예 안 뜬다(분리등원 없는 반은 화면 무변경, ijw ClassCard 방식).
   const covers = coveringDays ?? [];
@@ -173,12 +187,20 @@ export function ClassCell({
           >
             <WindowLink
               href={`/classes/${slot.classId ?? slot.id}`}
-              title={slot.classroomName ? `${slot.className} · ${slot.classroomName}` : slot.className}
+              title={renameNote ?? (slot.classroomName ? `${slot.className} · ${slot.classroomName}` : slot.className)}
               ariaLabel={`${slot.className} 반 정보`}
               className="block h-full w-full px-2 py-1 text-left"
             >
               <div className="flex items-baseline justify-between gap-1.5">
-                <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
+                <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">
+                  {slot.className}
+                  {/* 🔴 미래 주는 **그 주에 불릴 이름**을 쓴다(원장 2026-08-29) — 오늘 이름으로 그리면
+                      "그 반이 그대로구나"로 읽힌다. 다만 오늘 그 이름을 아는 사람이 없으므로 바뀐 것임을
+                      표시하고, 옛 이름은 title로 준다(칸이 좁아 둘 다 적으면 반 이름이 잘린다). */}
+                  {slot.classNameBefore ? (
+                    <span className="ml-1 align-middle text-[10px] font-semibold opacity-70">개명</span>
+                  ) : null}
+                </span>
                 {/* 반교시(1행)면 아래 줄이 없으니 강의실을 이름과 같은 줄에 붙인다(정보 손실 방지). */}
                 {subSlot !== "full" && slot.classroomName ? (
                   <span className="shrink-0 whitespace-nowrap text-[11px] opacity-75">{slot.classroomName}</span>

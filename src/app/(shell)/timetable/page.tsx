@@ -168,7 +168,10 @@ export default async function TimetablePage({
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
   const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap] = await Promise.all([
-    getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
+    // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
+    // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
+    //    그 시트를 되읽는 구조 가져오기가 그 반을 버리고 배치를 마감한다(fetchSlots 주석).
+    getWeeklyScheduleWithStudents({ referenceDate, teacherId, futureNames: true }),
     getTenantSettings(),
     // 강사색 맵은 통합뷰(셀·담임색)·강사뷰(헤더색)에서만 필요. **명시적으로** 기본뷰일 때만 생략한다 —
     // 파라미터가 없으면 이 시점엔 과목(=그 과목의 기본 뷰)을 아직 모르기 때문. 여기서 아끼려고 나중에

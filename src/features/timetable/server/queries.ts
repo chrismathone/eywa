@@ -16,6 +16,11 @@ import {
   shiftDays,
 } from "../lib/week";
 import { getTeacherAsOfIndex } from "@/features/classes/server/teacher-as-of-queries";
+import {
+  getClassNameAsOfIndex,
+  getClassNameAsOfIndexWith,
+} from "@/features/classes/server/class-name-as-of-queries";
+import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
 import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
@@ -174,6 +179,14 @@ export type ScheduleSlot = {
    */
   englishTrack: string | null;
   /**
+   * 이 칸의 날짜에 **예약된 이름 변경이 이미 적용돼 있으면** 그 전 이름(=오늘 이름). 없으면 undefined.
+   * 🔴 `className`은 그때 **불릴 이름**이다 — 미래 주를 열었을 때 오늘 이름이 뜨면 "그 반이 그대로구나"로
+   *    읽힌다(원장 2026-08-29). 화면은 이 값으로 "9/1부터 바뀐 이름"임을 밝힌다.
+   */
+  classNameBefore?: string;
+  /** 그 이름이 되는 날(`YYYY-MM-DD`). `classNameBefore`와 짝이다. */
+  classNameChangeDate?: string;
+  /**
    * 비수업 블록(감독·준비·회의·연차·쉬는 시간, 0138a)이면 그 종류. 수업 슬롯은 항상 undefined.
    * ⚠️ **강사뷰 렌더 전용** — 반이 아니라서 classId가 없고, 학생·수강·청구·급여 어디에도 안 걸린다.
    * 다른 뷰·집계는 이 값이 있는 항목을 세지 말 것(수업 수가 부풀어 보인다).
@@ -221,6 +234,15 @@ async function fetchSlots(
      * ⚠️ 생략하면 studentCount=0으로 나가니, 이 옵션은 **직후에 카운트를 재기입하는 호출부만** 쓸 것.
      */
     skipCounts?: boolean;
+    /**
+     * 미래 주 칸을 **그 주에 불릴 반 이름**으로 그린다(예약된 이름 변경 반영, 원장 2026-08-29).
+     *
+     * 🔴 **기본값 false = 사람이 보는 화면만 켠다.** 시트·엑셀은 반 이름이 곧 **매칭 키**라서, 아직
+     *    DB에 없는 이름(9/1부터 쓸 `PL1a`)이 적히면 그 시트를 되읽는 **구조 가져오기가 그 반을 "DB에
+     *    없는 이름"으로 버리고 배치를 통째로 마감한다**(master-cutover의 `--rename` 주석과 같은 함정).
+     *    새 소비처는 기본값(꺼짐)을 그대로 두고, 사람이 읽는 화면일 때만 켤 것.
+     */
+    futureNames?: boolean;
   },
 ): Promise<ScheduleSlot[]> {
   const supabase = db?.supabase ?? (await createClient());
@@ -303,6 +325,15 @@ async function fetchSlots(
   //    슬롯에 담당이 아예 없어 슬롯 분할로도 안 잡힌다). 인수인계 로그(사실) → 그 달 보고서 작성자(추정) 순.
   //    ⚠️ 이번 주·미래는 현재 담임이 정답이라 **조회 자체를 안 한다**(왕복 0).
   const asOfIndex = weekSundayOf(referenceDate) < todayStr() ? await getTeacherAsOfIndex() : null;
+  // 🔴 **미래 주는 그 주의 반 이름으로 그린다**(원장 2026-08-29: *"선생님들이 미래조회시에 지금 반으로
+  //    보면 착각할 수 있을거같은데"*). 담임 되살리기(위)의 거울상 — 그쪽은 지난 주를 기록으로, 이쪽은
+  //    다음 주를 예약으로. ⚠️ 지난 주엔 예약이 닿지 않으므로 **조회 자체를 안 한다**(왕복 0).
+  const nameIndex =
+    opts?.futureNames && weekEnd >= todayStr()
+      ? db
+        ? await getClassNameAsOfIndexWith(db.supabase, db.tenantId)
+        : await getClassNameAsOfIndex()
+      : null;
 
   return visible.map((r) => {
     const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
@@ -340,7 +371,17 @@ async function fetchSlots(
       // 조인 미스(스케줄이 가리키는 반이 삭제됨) 폴백. ⚠️ 화면에 그대로 나가는 값이라 "?" 같은 기호 대신
       // 사람이 읽는 한글로(UI에 raw 값 노출 금지 규약). subject는 어떤 과목 칩과도 안 맞아 필터 뷰에선
       // 자연히 빠지고, 여기 라벨은 전체 뷰에서 셀 제목으로 보인다.
-      className: klass?.class_name ?? "(삭제된 반)",
+      ...(() => {
+        // 셀 날짜 기준 — 주 중간에 적용일이 끼면 그 요일부터 새 이름이다(주 단위로 뭉뚱그리지 않는다).
+        const d = nameIndex ? dateOfDowInWeek(referenceDate, r.day_of_week as string) : null;
+        const renamed =
+          nameIndex && d
+            ? resolveClassNameAsOf(nameIndex, r.class_id as string, d, klass?.class_name ?? null)
+            : null;
+        return renamed
+          ? { className: renamed.name, classNameBefore: renamed.before, classNameChangeDate: renamed.date }
+          : { className: klass?.class_name ?? "(삭제된 반)" };
+      })(),
       subject: klass?.subject ?? "",
       dayOfWeek: r.day_of_week,
       startTime: r.start_time,
@@ -480,7 +521,14 @@ function latestReportsCached(tenantId: string, studentIds: string[]): Promise<un
 
 export async function getWeeklyScheduleWithStudents(
   // db = 세션 없는 호출(cron) 주입 — teacherId 스코핑은 세션 전제(getTeacherScope)라 db와 병용 불가.
-  opts?: { referenceDate?: string; teacherId?: string; subject?: string; db?: TimetableDb },
+  opts?: {
+    referenceDate?: string;
+    teacherId?: string;
+    subject?: string;
+    db?: TimetableDb;
+    /** 사람이 읽는 화면만 켠다 — 시트·엑셀은 이름이 매칭 키다(fetchSlots 주석). */
+    futureNames?: boolean;
+  },
 ): Promise<ScheduleSlotWithStudents[]> {
   // 주차 기준일(미지정=오늘) 기준으로 그 시점의 반 명단을 재구성 — ijw 시간표 주간 이동(타임머신).
   const referenceDate = opts?.referenceDate ?? todayStr();
@@ -493,7 +541,7 @@ export async function getWeeklyScheduleWithStudents(
 
   // skipCounts — 이 함수는 바로 아래에서 정확한 로스터를 조회하므로 근사 카운트 쿼리(전 enrollment)를
   // 생략하고, 반환 직전에 로스터 재원 수로 studentCount를 다시 채운다(같은 데이터 2회 조회 제거).
-  let slots = await fetchSlots(referenceDate, db, { skipCounts: true });
+  let slots = await fetchSlots(referenceDate, db, { skipCounts: true, futureNames: opts?.futureNames });
   // 과목 스코핑(선택) — 한 과목만 필요한 호출부(과목별 익스포터 등)는 classIds를 먼저 좁혀
   // 무거운 학생/수강/진도 조회량을 줄인다(전 과목 로딩 방지, B2). 필터 후 빈 결과는 아래 조기반환.
   if (subject) slots = slots.filter((s) => s.subject === subject);
