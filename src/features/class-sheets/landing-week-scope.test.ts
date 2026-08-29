@@ -52,16 +52,39 @@ describe("주 배정 0인 반은 목록에서 뺀다", () => {
 
   it("빈 목록 사유를 '담당 반 없음'과 구분한다(고칠 수 없는 일을 시키지 않는다)", () => {
     expect(queries).toContain('"no-week-classes"');
-    expect(queries).toMatch(/running\.length > 0\s*\?\s*"filtered"\s*:\s*inScope\.length > 0\s*\?\s*"no-week-classes"/);
+    expect(queries).toMatch(
+      /running\.length > 0\s*\?\s*"filtered"\s*:\s*emptyOnlyThisWeek\s*\?\s*"no-week-classes"/,
+    );
     // 화면이 그 사유를 실제로 말해야 한다 — 타입만 늘리고 안내가 없으면 옛 문구로 떨어진다.
     expect(page).toContain('res.emptyReason === "no-week-classes"');
     expect(page).toContain("위 주 이동으로 다른 주를 확인하세요");
   });
 
-  it("⚠️ 게이트엔 주 필터를 걸지 않는다 — 과거 주차 시트 열람은 유지된다", () => {
+  it("부담임 갈래도 그 주로 좁힌다 — 관계가 끝난 반은 미래 주차에서 사라진다", () => {
+    // 원장 2026-08-29 *"미래 시간이동할때 9/1 이후에 수업하는 반이 아니면 사라져야하는데"*.
+    // 반은 계속 도는데 **내 슬롯만** 끝난 경우라, 위 `running`(반 단위)으로는 안 잡힌다.
+    expect(queries).toMatch(/ecsVisibleClassFilter\(weekMonday\)/);
+    expect(access).toMatch(/englishAssistantClassIdsOf\(teacherId, weekMonday\)/);
+    // 좁힘은 **부담임 갈래만** — 담임은 시간 축이 없고(9/1 cron 몫), 위임은 이미 오늘 ±7일 창이다.
+    expect(access).toMatch(/englishAssistantClassIdsOf\(\s*teacherId: string,/);
+  });
+
+  it("🔴 부담임만 하는 강사에게 '담당 반이 없습니다'라고 하지 않는다", () => {
+    // 스코프가 그 주에만 비었을 뿐이면 주를 옮기면 보인다 — 반 배정을 문의하라는 건 거짓 안내다.
+    expect(access).toContain("hasScopeAnyWeek");
+    expect(queries).toMatch(/const emptyOnlyThisWeek = inScope\.length > 0 \|\| \(scopeSet !== null && hasScopeAnyWeek\)/);
+  });
+
+  it("⚠️ 게이트는 주로 좁히지 않는다 — 과거 주차 시트 열람은 유지된다", () => {
     // 목록에서 빠져도 URL로 그 주를 여는 건 그대로여야 한다(빈 시트가 뜰 뿐).
     // 게이트에 주를 끼워 넣으면 지난 주 시트가 통째로 "담당 반이 아닙니다"가 된다.
-    expect(access).not.toContain("weekMonday");
-    expect(access).not.toContain("weekSunday");
+    const gate = access.slice(
+      access.search(/export async function requireEcsClassAccess/),
+      access.search(/export const ecsAssistantClassIds/),
+    );
+    expect(gate.length).toBeGreaterThan(200);
+    expect(gate).not.toContain("weekMonday");
+    // 게이트가 쓰는 부담임 스코프는 **인자 없는** 캐시판이어야 한다(전 기간).
+    expect(gate).toMatch(/ecsAssistantClassIds\(\)/);
   });
 });

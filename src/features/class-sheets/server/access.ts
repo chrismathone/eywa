@@ -11,6 +11,9 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { readEnglishTrack, type EnglishTrack } from "@/features/classes/english-track";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
+import { hasLiveSlotInWeek } from "../lib/grid";
+import { shiftDays } from "@/features/timetable/lib/week";
+import type { DowKey } from "../lib/week";
 
 /**
  * ECS(English Class Sheet) 공용 접근 게이트 — 조회·모든 서버 액션·RPC 호출부가 **전부** 이 함수를
@@ -112,7 +115,11 @@ export async function requireEcsClassAccess(
  * - **JJ·LAB 당번 슬롯 제외는 구조적으로 자동**: 그 슬롯들은 teacher_id가 전부 null(2026-07-29 실측
  *   90/90 — 라벨만 있는 자리)이라 FK 기반 확장에 애초에 안 걸린다. 라벨 검사를 넣지 말 것.
  * - 전역 teacher-scope.ts는 **불변**(출석·학생·시간표 전 화면 파급) — ECS만 이 보조 스코프를 합집합.
- * - 유효기간 지난 슬롯도 포함(반담당 스코프와 동일 의미론 — 과거 주차 시트 열람 유지).
+ * - **게이트에서는 유효기간 지난 슬롯도 포함**(반담당 스코프와 동일 의미론 — 과거 주차 시트 열람 유지).
+ *   ⚠️ 단 **주 단위 목록**은 그 주로 좁힌다(아래 `weekMonday` 인자) — 원장 2026-08-29
+ *   *"미래 시간이동할때 9/1 이후에 수업하는 반이 아니면 사라져야하는데"*. 실측: 이다교의 `LT3`·
+ *   `중고E_중1 의치대` 슬롯은 **8/31에 끝나는데** 9월 주차 목록에 그대로 떠 있었다(관계가 끝난 반).
+ *   🔴 **게이트는 좁히지 않는다** — 목록에서 빠져도 URL로 그 주를 여는 건 그대로여야 한다.
  * - 조회 실패는 [](보조 스코프만 소실 = 기존 반담당 동작으로 강등, fail-closed) — 확장이 죽어도
  *   본 게이트는 안 죽는다.
  */
@@ -126,15 +133,41 @@ export const ecsAssistantClassIds = cache(async (): Promise<string[]> => {
  * 임의 강사의 영어 부담임(슬롯) 반 — 위 규칙의 파라미터판. '다른 강사 뷰' 진입 액션이 대상 강사의
  * 착지(ECS 여부)를 정할 때도 **같은 판정**을 쓴다(두 벌이면 확장 조건이 갈라진다).
  */
-export async function englishAssistantClassIdsOf(teacherId: string): Promise<string[]> {
+export async function englishAssistantClassIdsOf(
+  teacherId: string,
+  /**
+   * 주면 **그 주에 실제로 도는 내 슬롯**만 센다(주 단위 목록용). 안 주면 예전대로 전 기간(게이트용).
+   * 🔴 유효기간(`valid_from`/`valid_to`)만 보지 않고 [`hasLiveSlotInWeek`](../lib/grid)로 **실날짜**까지
+   *    본다 — 랜딩의 반 필터와 **같은 판정**이라 "반은 뜨는데 내 칸은 없는 주"가 안 생긴다.
+   */
+  weekMonday?: string,
+): Promise<string[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("class_schedules")
-    .select("class_id, classes!inner(subject)")
+    .select("class_id, day_of_week, valid_from, valid_to, classes!inner(subject)")
     .eq("teacher_id", teacherId)
     .eq("classes.subject", "english");
+  if (weekMonday) {
+    // 먼저 DB에서 그 주와 겹치는 행만 — 뒤의 실날짜 판정은 이 안에서만 돌면 된다.
+    query = query.lte("valid_from", shiftDays(weekMonday, 6)).or(`valid_to.is.null,valid_to.gte.${weekMonday}`);
+  }
+  const { data, error } = await query;
   if (error) return [];
-  return [...new Set((data ?? []).map((r) => r.class_id as string))];
+  const rows = (data ?? []) as {
+    class_id: string;
+    day_of_week: DowKey;
+    valid_from: string;
+    valid_to: string | null;
+  }[];
+  if (!weekMonday) return [...new Set(rows.map((r) => r.class_id))];
+  const byClass = new Map<string, { dayOfWeek: DowKey; validFrom: string; validTo: string | null }[]>();
+  for (const r of rows) {
+    const arr = byClass.get(r.class_id) ?? [];
+    arr.push({ dayOfWeek: r.day_of_week, validFrom: r.valid_from, validTo: r.valid_to });
+    byClass.set(r.class_id, arr);
+  }
+  return [...byClass].filter(([, slots]) => hasLiveSlotInWeek(weekMonday, slots)).map(([id]) => id);
 }
 
 /**
@@ -172,10 +205,39 @@ export const ecsDelegatedClassIds = cache(async (): Promise<string[]> => {
  * ECS 랜딩 스코프 — 현재 사용자가 볼 수 있는 english 반 id 목록 필터.
  * 강사(스코프 有)면 담당 반 ∪ 부담임 반 ∪ **위임 반**, 아니면 전체. 랜딩 쿼리·반 전환 드롭다운이 재사용.
  * ⚠️ 게이트(`requireEcsClassAccess`)와 **같은 세 갈래**여야 한다 — 갈라지면 "목록엔 뜨는데 열면 거절"이 된다.
+ *
+ * `weekMonday`를 주면 **부담임 갈래만** 그 주로 좁힌다(원장 2026-08-29 *"미래 시간이동할때 9/1 이후에
+ * 수업하는 반이 아니면 사라져야하는데"*). 좁히는 방향이라 게이트보다 **넓어지지 않는다** — "목록엔 뜨는데
+ * 열면 거절"은 여전히 구조적으로 불가능하다(반대 방향은 무해: 목록에 없어도 URL로 열린다).
+ * 🔴 **담임 갈래는 안 좁힌다** — 담임은 반 단위 단일 값이라 시간 축이 없다(미래 담임 변경은 9/1 cron 몫).
+ * 🔴 **위임 갈래도 안 좁힌다** — 위임은 이미 `오늘 ±7일` 창이라 그 자체로 한시적이고, 위임받은 사람은
+ *    그 반의 지난 주차도 보는 게 규약이다(위 `ecsDelegatedClassIds` 주석).
  */
-export async function ecsVisibleClassFilter(): Promise<{ classIds: string[] | null }> {
+export async function ecsVisibleClassFilter(weekMonday?: string): Promise<{
+  classIds: string[] | null;
+  /**
+   * **다른 주에는** 볼 반이 있나 — 빈 목록의 사유를 가르는 데만 쓴다.
+   * 🔴 없으면 부담임만 하는 강사가 자기 슬롯이 없는 주를 열 때 *"담당하고 계신 영어 반이 없습니다.
+   *    반 배정은 사무실에 문의하세요"* 라는 **거짓 안내**를 받는다(고칠 수 없는 일을 시키는 안내).
+   */
+  hasScopeAnyWeek: boolean;
+}> {
   const scope = await effectiveTeacherScope();
-  if (!scope) return { classIds: null };
-  const [assistant, delegated] = await Promise.all([ecsAssistantClassIds(), ecsDelegatedClassIds()]);
-  return { classIds: [...new Set([...scope.classIds, ...assistant, ...delegated])] };
+  if (!scope) return { classIds: null, hasScopeAnyWeek: true };
+  const teacherId = weekMonday ? await effectiveTeacherId() : null;
+  const [assistantWeek, assistantAnyWeek, delegated] = await Promise.all([
+    teacherId && weekMonday ? englishAssistantClassIdsOf(teacherId, weekMonday) : ecsAssistantClassIds(),
+    // 전 기간판은 **요청 캐시**라(레이아웃이 ECS 메뉴 판정에 이미 부른다) 여기서 또 불러도 왕복 0.
+    weekMonday ? ecsAssistantClassIds() : Promise.resolve<string[]>([]),
+    ecsDelegatedClassIds(),
+  ]);
+  const classIds = [...new Set([...scope.classIds, ...assistantWeek, ...delegated])];
+  return {
+    classIds,
+    // ⚠️ 주를 안 받았으면 좁힌 게 없다 — 그땐 목록 자체가 곧 "다른 주"의 답이다(따로 세면
+    //    `assistantAnyWeek`가 빈 배열이라 **볼 반이 있는데 없다고** 말하게 된다).
+    hasScopeAnyWeek: weekMonday
+      ? new Set([...scope.classIds, ...assistantAnyWeek, ...delegated]).size > 0
+      : classIds.length > 0,
+  };
 }

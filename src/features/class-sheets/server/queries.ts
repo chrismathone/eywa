@@ -790,8 +790,11 @@ export async function getSheetLanding(
   // 그 주의 배정 교시 — **필터보다 먼저** 알아야 한다(아래 `running` 주석). 대상은 스코프 이전
   // `allClasses`(영어 반 44개 규모)라 스코프 조회와 **같은 묶음**에 태울 수 있다(B4).
   const allClassIds = (allClasses ?? []).map((c) => c.id as string);
-  const [{ classIds: visibleIds }, delegatedIds, teachers, nameIndex, schedules] = await Promise.all([
-    ecsVisibleClassFilter(),
+  const [{ classIds: visibleIds, hasScopeAnyWeek }, delegatedIds, teachers, nameIndex, schedules] =
+    await Promise.all([
+    // 🔴 **주를 넘긴다** — 부담임 갈래를 그 주로 좁혀야 "관계가 끝난 반"이 미래 주차에서 사라진다
+    //    (원장 2026-08-29. 실측: 이다교의 LT3·중고E_중1 슬롯은 8/31에 끝나는데 9월 목록에 떠 있었다).
+    ecsVisibleClassFilter(weekMonday),
     ecsDelegatedClassIds(),
     fetchInChunks<{ id: string; display_name: string | null }>(
       [...new Set((allClasses ?? []).map((c) => c.teacher_id as string | null).filter((v): v is string => !!v))],
@@ -868,6 +871,10 @@ export async function getSheetLanding(
   const teacherFilter = resolveTeacherFilter(storedTeacher, teacherOptions);
   const classes = keepTeacher(tracked, teacherFilter).map((t) => t.row);
   const classIds = classes.map((c) => c.id as string);
+  // 빈 목록이 "이 주만 빈 것"인가 — 스코프 자체가 그 주에만 빌 수도 있다(부담임만 하는 강사가 자기
+  // 슬롯이 없는 주를 연 경우). 그때 "담당 반이 없습니다"라고 하면 그 사람에겐 거짓이고, 고칠 수 없는
+  // 일(반 배정 문의)을 시키는 안내가 된다.
+  const emptyOnlyThisWeek = inScope.length > 0 || (scopeSet !== null && hasScopeAnyWeek);
   if (classIds.length === 0) {
     return {
       ok: true,
@@ -886,7 +893,7 @@ export async function getSheetLanding(
       emptyReason:
         running.length > 0
           ? "filtered"
-          : inScope.length > 0
+          : emptyOnlyThisWeek
             ? "no-week-classes"
             : scopeSet && (allClasses ?? []).length > 0
               ? "no-scoped-classes"
