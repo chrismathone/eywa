@@ -29,7 +29,7 @@ import {
   matchesStudentSearch,
 } from "@/features/attendance/student-search";
 import { SEAT_MARK_LABEL, SEAT_MARK_TONE } from "../mark-state";
-import { NOW_BAND_LABEL, splitByNowBand, type NowBand } from "../now-band";
+import { NOW_BAND_LABEL, laterStartPrefix, splitByNowBand, type NowBand } from "../now-band";
 import { groupSeatPeriods, isSeatRoom } from "../seating-bands";
 import { foldSeating, seatingSummary, type SeatingClass } from "../seating";
 import { groupSeatingFloors, type SeatingRoom as SeatingRoomGroup } from "../seating-floors";
@@ -88,7 +88,7 @@ export function SeatingChart({
    *    "처음 열릴 띠"가 그 과목에 없는 띠로 잡혀 **모든 띠가 접힌 채** 열린다(빈 화면처럼 보인다).
    */
   const subjectClasses = classes.filter((c) => matchesSubjectFilter(subject.value, c.subject));
-  // 머리줄의 '지금 수업 중 N개 반'·'2시간 뒤 N개 반'은 위 미출결·입력과 **같은 자**여야 한다 =
+  // 머리줄의 '지금 수업 중 N개 반'·'HH:MM부터 N개 반'은 위 미출결·입력과 **같은 자**여야 한다 =
   // 하루 전체(학생 검색도 이 숫자를 안 건드린다). 좁힌 사실은 아래 범위 칩이 말한다.
   const dayGroups = splitByNowBand(classes);
   const allGroups = splitByNowBand(subjectClasses);
@@ -101,7 +101,11 @@ export function SeatingChart({
    */
   const groups = allGroups.filter((g) => g.band !== "later");
   const nowCount = dayGroups.find((g) => g.band === "now")?.items.length ?? 0;
-  const laterCount = dayGroups.find((g) => g.band === "later")?.items.length ?? 0;
+  const laterItems = dayGroups.find((g) => g.band === "later")?.items ?? [];
+  const laterCount = laterItems.length;
+  // 🔴 "2시간 뒤"라고 적지 않는다 — 그건 접는 기준(앞창)의 이름이지 그 수업이 언제인지가 아니다.
+  //    새벽 2시에 오후 2시 수업을 "2시간 뒤"라고 말했다(원장 2026-08-30). 문구는 now-band 단일 소스.
+  const laterPrefix = laterStartPrefix(laterItems.map((c) => c.firstStart));
   // 처음 열릴 띠 = 지금 → (없으면) 예정 → (없으면) 지난. 밤늦게 열어도 빈 화면이 되지 않는다.
   const firstBand = groups[0]?.band;
   /**
@@ -147,7 +151,7 @@ export function SeatingChart({
               {laterCount > 0 && (
                 <span className="text-text-faint">
                   <span className="mx-1.5">·</span>
-                  2시간 뒤 <span className="num">{laterCount}</span>개 반
+                  {laterPrefix} <span className="num">{laterCount}</span>개 반
                 </span>
               )}
             </>
@@ -206,7 +210,7 @@ export function SeatingChart({
         )
       ) : /* 지난 날짜엔 '지금'이 없다 — 놓친 날을 메우러 여는 자리라 띠로 나누지 않고 그대로 편다. */
       subjectClasses.length === 0 ? (
-        // 이 과목에 그날 수업 자체가 없을 때만 — 띠가 비는 건(전부 '2시간 뒤') 종전에도 정상 상태다.
+        // 이 과목에 그날 수업 자체가 없을 때만 — 띠가 비는 건(전부 '이후 수업') 종전에도 정상 상태다.
         <EmptySubjectNotice onReset={() => subject.pick("all")} />
       ) : board.isToday ? (
         groups.map((group) => (

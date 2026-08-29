@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   foldNowBands,
@@ -6,8 +8,7 @@ import {
   NOW_BAND_LABEL,
   NOW_BAND_ORDER,
   NOW_LEAD_MIN,
-  NOW_TAIL_MIN,
-} from "./now-band";
+  NOW_TAIL_MIN, laterStartPrefix } from "./now-band";
 
 const min = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 
@@ -117,5 +118,33 @@ describe("splitByNowBand", () => {
   it("빈 묶음은 빼고 준다", () => {
     expect(splitByNowBand([{ band: "now" as const }]).map((g) => g.band)).toEqual(["now"]);
     expect(splitByNowBand([])).toEqual([]);
+  });
+});
+
+describe("laterStartPrefix — '이후 수업' 머리줄 앞말 (원장 2026-08-30)", () => {
+  it("🔴 접는 기준(2시간)을 시각인 것처럼 말하지 않는다 — 가장 이른 시작 시각을 적는다", () => {
+    // 제보: 일요일 새벽 2시에 그날 유일한 수업(14:00)을 "2시간 뒤"라고 불렀다.
+    expect(laterStartPrefix(["17:00", "14:00", "20:20"])).toBe("14:00부터");
+    expect(laterStartPrefix(["14:00"])).not.toContain("2시간");
+  });
+
+  it("시각을 모르면 지어내지 않는다 — 세기만 한다", () => {
+    expect(laterStartPrefix([])).toBe("이후");
+    expect(laterStartPrefix([null, undefined, ""])).toBe("이후");
+  });
+
+  it("아는 것만 골라 가장 이른 것을 쓴다", () => {
+    expect(laterStartPrefix([null, "19:00", undefined, "16:20"])).toBe("16:20부터");
+  });
+});
+
+describe("🔴 머리줄 문구가 앞창 이름으로 되돌아가지 않게", () => {
+  it("좌석표에 '2시간 뒤'라는 문구가 없다", () => {
+    const src = readFileSync(
+      join(process.cwd(), "src", "features", "attendance", "live", "components", "seating-chart.tsx"),
+      "utf8",
+    );
+    expect(src).not.toContain("2시간 뒤 <span");
+    expect(src).toContain("laterStartPrefix");
   });
 });

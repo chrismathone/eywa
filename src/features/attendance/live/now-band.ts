@@ -52,6 +52,24 @@ export const NOW_BAND_LABEL: Record<NowBand, string> = {
   past: "지난 수업",
 };
 
+/**
+ * 머리줄의 '이후 수업' 개수 앞에 붙는 말 — **언제부터인지 알면 그 시각**, 모르면 "이후".
+ *
+ * 🔴 앞창 이름(`SOON_WINDOW_MIN` = 2시간)을 문구로 쓰지 말 것. 종전 문구가 **"2시간 뒤 N개 반"**이었는데
+ *    그건 "2시간 안에 시작하는 수업을 접고 남은 나머지"라는 **내부 기준의 이름**일 뿐 언제인지가 아니다.
+ *    원장 제보 2026-08-30: *"일요일 새벽 2시에 수업이 없는데 2시간 뒤래"* — 그날 유일한 수업(고등M_일
+ *    개별진도)은 **12시간 뒤인 14:00**이었다. 개수는 맞았고 시각만 거짓이었다.
+ * ⚠️ 시각을 모르면 **지어내지 않는다** — 숫자만 세고 "이후"라고만 한다.
+ */
+export function laterStartPrefix(starts: readonly (string | null | undefined)[]): string {
+  let earliest: string | null = null;
+  for (const s of starts) {
+    if (!s) continue;
+    if (earliest === null || s < earliest) earliest = s;
+  }
+  return earliest ? `${earliest}부터` : "이후";
+}
+
 /** 묶음 배열 순서 — 지금이 맨 앞. 정렬·렌더 순서를 두 곳에서 따로 적지 않는다. */
 export const NOW_BAND_ORDER: readonly NowBand[] = ["now", "upcoming", "later", "past"];
 
