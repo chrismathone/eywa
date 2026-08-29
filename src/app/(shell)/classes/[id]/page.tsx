@@ -30,6 +30,7 @@ import { ArchiveClassButton } from "./_components/archive-class-button";
 import { ClassTermButton } from "./_components/class-term-button";
 import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
 import { getScheduledClassChanges, scheduledClassChangeLabel } from "@/features/timetable/server/scheduled-class-change";
+import { monthDay } from "@/features/timetable/scheduled-import";
 import { getScheduledForClass } from "@/features/enrollments/server/scheduled-queries";
 import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
 import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
@@ -354,7 +355,7 @@ export default async function ClassDetailPage({
                         {/* 아직 안 온 학생 — 표시가 없으면 오늘 다니는 학생과 구분이 안 된다. */}
                         {s.phase === "upcoming" ? (
                           <span className="text-blue bg-blue-soft num rounded-md px-1.5 py-0.5 text-[11px] font-semibold">
-                            {s.enrolledAt.slice(5).replace("-", "/")}부터
+                            {monthDay(s.enrolledAt)}부터
                           </span>
                         ) : null}
                       </p>

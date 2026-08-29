@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
+import { monthDay } from "@/features/timetable/scheduled-import";
 import { shouldApplyName, type ClassUpdate } from "@/features/timetable/due-class-updates";
 
 /** 반 자체에 예약된 변경 한 줄. `kind`로 문구가 갈린다(화면에서 문장을 새로 만들지 않는다). */
@@ -123,5 +124,5 @@ export function scheduledClassChangeLabel(c: ScheduledClassChange): string {
   const what = c.kind === "teacher" ? "담임" : c.kind === "classroom" ? "강의실" : "반 이름";
   const from = c.fromLabel ?? "미정";
   const to = c.toLabel ?? "—";
-  return `${c.effectiveDate.slice(5).replace("-", "/")}부터 ${what} ${from} → ${to}`;
+  return `${monthDay(c.effectiveDate)}부터 ${what} ${from} → ${to}`;
 }

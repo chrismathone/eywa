@@ -1,4 +1,5 @@
 "use client";
+import { monthDay } from "@/features/timetable/scheduled-import";
 
 import { useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -123,7 +124,7 @@ export function ClassCell({
   // 예약된 이름 변경이 이 칸의 날짜엔 이미 적용돼 있다 — 무엇이 무엇으로 바뀌는지 한 줄로.
   // ⚠️ 한글 문장은 여기서만 만든다(화면에 raw 날짜·영문 키가 새지 않게).
   const renameNote = slot.classNameBefore
-    ? `${slot.classNameChangeDate?.slice(5).replace("-", "/") ?? ""}부터 ${slot.classNameBefore} → ${slot.className}` +
+    ? `${slot.classNameChangeDate ? monthDay(slot.classNameChangeDate) : ""}부터 ${slot.classNameBefore} → ${slot.className}` +
       (slot.classroomName ? ` · ${slot.classroomName}` : "")
     : null;
   // 분리등원 — 이 셀이 덮는 요일(coveringDays)이 2일+이고 '일부 요일만 오는' 재원생이 있으면 요일 칸으로 분할.

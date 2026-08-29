@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { monthDay } from "@/features/timetable/scheduled-import";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { PageHeader } from "@/components/page-header";
@@ -57,7 +58,18 @@ export default async function EcsSheetPage({
         <PageHeader
           eyebrow="수업 운영"
           title={`영어 강사 시트 — ${res.data.className}`}
-          description={`${res.data.weekLabel} · 계획 ${res.data.fill.filledSlots}/${res.data.fill.totalSlots}교시`}
+          description={[
+            res.data.weekLabel,
+            `계획 ${res.data.fill.filledSlots}/${res.data.fill.totalSlots}교시`,
+            // 예약된 개명을 헤더에 한 줄로 — 시트를 열어 놓고도 "이 반이 곧 뭐가 되는지" 알 수 있게.
+            res.data.classNameUpcoming
+              ? `${monthDay(res.data.classNameUpcoming.date)}부터 ${res.data.className} → ${res.data.classNameUpcoming.name}`
+              : res.data.classNameBefore
+                ? `이전 이름 ${res.data.classNameBefore}`
+                : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
       </div>
       <div className="min-h-0 flex-1">

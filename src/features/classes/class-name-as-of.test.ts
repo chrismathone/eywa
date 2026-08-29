@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classNameForWeek,
   buildClassNameAsOfIndex,
   resolveClassNameAsOf,
   type PendingRename,
@@ -75,5 +76,43 @@ describe("resolveClassNameAsOf", () => {
 
   it("to가 비면 색인에 넣지 않는다", () => {
     expect(buildClassNameAsOfIndex([r({ classId: "c1", to: "", date: "2026-09-01" })]).size).toBe(0);
+  });
+});
+
+describe("classNameForWeek — 주 단위 표면(ECS)", () => {
+  const idx = buildClassNameAsOfIndex([
+    r({ classId: "c1", from: "DP6", to: "PL1a", date: "2026-09-01" }),
+  ]);
+
+  it("개명 전 주는 아무 말도 하지 않는다(null = DB 이름 그대로)", () => {
+    expect(classNameForWeek(idx, "c1", "2026-08-24", "2026-08-30", "DP6")).toBeNull();
+  });
+
+  it("🔴 전환 주는 **옛 이름으로 부르고** 그 주 안에 온다고 예고한다", () => {
+    // 9/1(화)에 바뀐다 = 월요일엔 아직 DP6다. 새 이름으로 먼저 부르면 하루 앞서 간다.
+    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", "DP6")).toEqual({
+      name: "DP6",
+      upcoming: { name: "PL1a", date: "2026-09-01" },
+    });
+  });
+
+  it("그 다음 주부터는 새 이름이고 예고는 없다", () => {
+    expect(classNameForWeek(idx, "c1", "2026-09-07", "2026-09-13", "DP6")).toEqual({
+      name: "PL1a",
+      before: "DP6",
+    });
+  });
+
+  it("주 시작일에 딱 맞으면 그 주부터 새 이름이다", () => {
+    const mon = buildClassNameAsOfIndex([r({ classId: "c1", from: "A", to: "B", date: "2026-09-07" })]);
+    expect(classNameForWeek(mon, "c1", "2026-09-07", "2026-09-13", "A")).toEqual({ name: "B", before: "A" });
+  });
+
+  it("사람이 손댔으면 예고도 하지 않는다", () => {
+    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", "손댄이름")).toBeNull();
+  });
+
+  it("이름 없는 반은 판정하지 않는다", () => {
+    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", null)).toBeNull();
   });
 });

@@ -30,8 +30,19 @@ export type ScheduledImportGroup = {
 export function shortDate(date: string, today: string): string {
   const [y, m, d] = date.split("-");
   if (!y || !m || !d) return date;
-  const md = `${Number(m)}/${Number(d)}`;
+  const md = monthDay(date);
   return y === today.slice(0, 4) ? md : `${y.slice(2)}. ${md}`;
+}
+
+/**
+ * "9/1" — 월/일만(연도 판단 없음). 예약 배지·배너처럼 **가까운 미래**를 가리키는 짧은 라벨용.
+ * 🔴 `${d.slice(5).replace("-","/")}`로 직접 만들지 말 것 — 그러면 `09/01`이 되어 툴바 배지(`9/1`)와
+ *    같은 화면에서 형식이 갈린다. 앞자리 0 제거 규칙은 여기 한 곳에만 있다.
+ */
+export function monthDay(date: string): string {
+  const [, m, d] = date.split("-");
+  if (!m || !d) return date;
+  return `${Number(m)}/${Number(d)}`;
 }
 
 /** 툴바에 그대로 찍히는 문구. */

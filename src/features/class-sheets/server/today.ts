@@ -8,6 +8,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 // 액션보다 좁으면 "서버는 허락하는데 화면이 막는" 거짓 잠금이 된다(write-gate-axis.test.ts).
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { addDays, kstToday } from "@/lib/date-kst";
+import { getClassNameAsOfIndex } from "@/features/classes/server/class-name-as-of-queries";
+import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
@@ -118,7 +120,12 @@ export type TodayStudent = {
 
 export type TodayClassCard = {
   classId: string;
+  /** 🔴 **그 날짜에 불릴 이름**(예약된 개명 반영). DB의 오늘 이름은 `classNameBefore`. */
   className: string;
+  /** 개명이 이미 적용된 날짜면 그 전 이름. 안 바뀌었으면 undefined. */
+  classNameBefore?: string;
+  /** 그 이름이 되는 날. */
+  classNameChangeDate?: string;
   teacherName: string | null;
   /** 그 날 첫 교시 시작(정렬 키이자 카드 머리 시각). */
   startsAt: string;
@@ -203,7 +210,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const admin = createAdminClient();
 
   // 반 목록 + 내 보기 설정(JJ 표시) — 서로 독립이라 병렬(B4). 필터가 뒤의 무거운 조회를 좁힌다.
-  const [{ data: allClasses, error: classError }, prefsRes] = await Promise.all([
+  const [{ data: allClasses, error: classError }, prefsRes, nameIndex] = await Promise.all([
     supabase
       .from("classes")
       // english_track = Shouting 체크를 그릴지 판정(EiE 전용, 0230a) — 반 이름으로 추측 금지(english-track.ts).
@@ -213,6 +220,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       .or(`closed_at.is.null,closed_at.gte.${date}`)
       .order("class_name"),
     admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
+    // 예약된 개명 — 위 둘과 독립이라 같은 묶음(B4). 요청 캐시라 다른 뷰가 또 물어도 왕복 0.
+    getClassNameAsOfIndex(),
   ]);
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
 
@@ -722,9 +731,12 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         };
       });
 
+      // 🔴 이 화면은 **날짜 단위**라 그 날짜의 이름으로 정확히 가른다(주 단위인 랜딩·시트와 다른 축).
+      const renamed = resolveClassNameAsOf(nameIndex, classId, date, cls.class_name as string);
       return {
         classId,
-        className: cls.class_name as string,
+        className: renamed?.name ?? (cls.class_name as string),
+        ...(renamed ? { classNameBefore: renamed.before, classNameChangeDate: renamed.date } : {}),
         teacherName: cls.teacher_id ? (teacherName.get(cls.teacher_id as string) ?? null) : null,
         startsAt: slots[0]?.slotStart ?? "00:00",
         endsAt: slots.at(-1)?.slotEnd ?? null,
@@ -734,6 +746,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         canMarkAttendance: attendanceWritable && (teachingSet === null || teachingSet.has(classId)),
         // 담임이 나면 위임이 아니다 — 주간 시트·랜딩 카드와 같은 판정.
         delegated: delegatedSet.has(classId) && cls.teacher_id !== user.id,
+        // 🔴 **DB 이름 그대로** 넘긴다 — 이 값은 표시가 아니라 ClassNote **보드 매칭 키**다(classKey).
+        //    미래 이름을 먹이면 그 반 보드를 못 찾아 배지가 조용히 '연동 없음'이 된다.
         classnoteToday: classnoteStateOf(cls.class_name as string),
         isEie: readEnglishTrack(cls) === "eie",
         shoutingSlots: shoutingByClass.get(classId) ?? [],

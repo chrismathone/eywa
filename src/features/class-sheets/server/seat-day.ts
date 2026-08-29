@@ -6,6 +6,8 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { kstToday } from "@/lib/date-kst";
+import { getClassNameAsOfIndex } from "@/features/classes/server/class-name-as-of-queries";
+import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
@@ -38,7 +40,7 @@ export async function getEcsSeatDay(
   const date = dateRaw && YMD_RE.test(dateRaw) ? dateRaw : today;
   const dow = dowKeyOf(date);
   const supabase = await createClient();
-  const [{ classIds: visibleIds }, settings, prefsRes, sched] = await Promise.all([
+  const [{ classIds: visibleIds }, settings, prefsRes, sched, nameIndex] = await Promise.all([
     ecsVisibleClassFilter(),
     getTenantSettings(),
     supabase.from("users").select("ui_prefs").eq("id", user.id).maybeSingle(),
@@ -57,6 +59,10 @@ export async function getEcsSeatDay(
         .order("id")
         .range(from, to),
     ),
+    // 🔴 자리판은 **날짜 단위**라 그 날짜의 이름으로 부른다(예약된 개명 반영, 원장 2026-08-29).
+    //    여기 className은 표시 전용(`shortClassLabel`·title)이라 키로 새지 않는다.
+    //    위 넷과 독립이라 같은 묶음(B4) — 요청 캐시라 같은 요청의 '오늘' 뷰가 또 물어도 왕복 0.
+    getClassNameAsOfIndex(),
   ]);
 
   const seatSched = sched.filter((s) => isSeatLabel(s.slot_teacher_label, seat));
@@ -81,7 +87,7 @@ export async function getEcsSeatDay(
     if (cls.closed_at && cls.closed_at < date) continue;
     slots.push({
       classId: s.class_id,
-      className: cls.class_name,
+      className: resolveClassNameAsOf(nameIndex, s.class_id, date, cls.class_name)?.name ?? cls.class_name,
       startTime: s.start_time,
       endTime: s.end_time,
       slotTeacherLabel: s.slot_teacher_label,

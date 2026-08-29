@@ -68,3 +68,27 @@ export function resolveClassNameAsOf(
   if (!appliedAt || name === currentName) return null;
   return { name, before: currentName, date: appliedAt };
 }
+
+/**
+ * **주 단위 표면용**(ECS 랜딩·시트 헤더) — 그 주에 이 반을 뭐라고 부르나 + 그 주 안에 개명이 오는가.
+ *
+ * 🔴 시간표(칸 단위)와 축이 다르다. 시간표는 칸마다 실제 날짜가 있어 `resolveClassNameAsOf`로 정확히
+ *    가르지만, ECS의 한 주는 이름 한 개로 부른다. 그래서 **주 시작 시점의 이름**을 쓰고(넘겨짚지 않는다),
+ *    그 주 **안에** 개명이 오면 `upcoming`으로 따로 알린다 — 전환 주엔 두 이름이 다 사실이기 때문이다.
+ *    (주 끝 이름을 쓰면 월요일에 이미 새 이름으로 불러 앞서 가고, 예고를 안 하면 원장 지적대로 착각한다.)
+ */
+export function classNameForWeek(
+  index: ClassNameAsOfIndex,
+  classId: string,
+  weekStart: string,
+  weekEnd: string,
+  currentName: string | null,
+): { name: string; before?: string; upcoming?: { name: string; date: string } } | null {
+  if (!currentName) return null;
+  const atStart = resolveClassNameAsOf(index, classId, weekStart, currentName);
+  const atEnd = resolveClassNameAsOf(index, classId, weekEnd, currentName);
+  const name = atStart?.name ?? currentName;
+  const upcoming = atEnd && atEnd.name !== name ? { name: atEnd.name, date: atEnd.date } : undefined;
+  if (!atStart && !upcoming) return null; // 이 주엔 아무 일도 없다 — 호출부가 DB 이름을 그대로 쓴다
+  return { name, ...(atStart ? { before: atStart.before } : {}), ...(upcoming ? { upcoming } : {}) };
+}

@@ -35,6 +35,8 @@ import {
   type LandingTeacherOption,
 } from "../landing-teacher";
 import type { RosterGroupKey } from "../lib/roster-order";
+import { getClassNameAsOfIndex } from "@/features/classes/server/class-name-as-of-queries";
+import { classNameForWeek } from "@/features/classes/class-name-as-of";
 import type { SheetMark } from "../lib/roster-form";
 import {
   keepEnglishTrack,
@@ -79,7 +81,12 @@ export type SheetGoalDTO = {
 
 export type ClassSheetWeekData = {
   classId: string;
+  /** 🔴 **그 주에 불릴 이름**(예약된 개명 반영). DB의 오늘 이름은 `classNameBefore`. */
   className: string;
+  /** 그 주 시작 전에 이미 개명이 적용됐으면 그 전 이름(=오늘 DB 이름). */
+  classNameBefore?: string;
+  /** 그 주 **안에** 개명이 오면 그 예고 — 전환 주엔 두 이름이 다 사실이라 이름은 옛것으로 부른다. */
+  classNameUpcoming?: { name: string; date: string };
   weekMonday: string;
   weekLabel: string;
   weekRelation: "past" | "current" | "future";
@@ -593,11 +600,24 @@ export async function getClassSheetWeek(
   const memos: Record<string, string> = {};
   for (const m of memoRows) memos[m.memoKey] = m.body;
 
+  // 🔴 **그 주에 불릴 이름으로 부른다**(원장 2026-08-29 — 시간표와 같은 이유). 이름 컬럼엔 시간 축이 없어
+  //    9/1로 예약해 둔 개명이 있어도 9월 주 시트가 오늘 이름으로 떴다. 전환 주(개명이 주 중간에 오는 주)는
+  //    **옛 이름으로 부르고** `classNameUpcoming`으로 예고한다 — 그 주엔 두 이름이 다 사실이다.
+  const renameForWeek = classNameForWeek(
+    await getClassNameAsOfIndex(),
+    classId,
+    weekMonday,
+    weekSunday,
+    access.className,
+  );
+
   return {
     ok: true,
     data: {
       classId,
-      className: access.className,
+      className: renameForWeek?.name ?? access.className,
+      classNameBefore: renameForWeek?.before,
+      classNameUpcoming: renameForWeek?.upcoming,
       weekMonday,
       weekLabel: weekLabel(weekMonday),
       weekRelation: weekRelation(weekMonday, today),
@@ -635,7 +655,12 @@ export async function getClassSheetWeek(
 
 export type SheetLandingCard = {
   classId: string;
+  /** 🔴 **그 주에 불릴 이름**(예약된 개명 반영). DB의 오늘 이름은 `classNameBefore`. */
   className: string;
+  /** 그 주 시작 전에 이미 개명이 적용됐으면 그 전 이름(=오늘 DB 이름). 안 바뀌었으면 undefined. */
+  classNameBefore?: string;
+  /** 그 주 **안에** 개명이 오면 그 예고. 전환 주엔 두 이름이 다 사실이라 이름은 옛것으로 부른다. */
+  classNameUpcoming?: { name: string; date: string };
   /**
    * 담임 **id** — 목록을 담임별로 묶을 때 쓴다(2026-08-11 "열마다 담임 구분해서 놓자").
    * ⚠️ 이름으로 묶지 말 것: 동명이인이면 두 사람의 반이 한 덩어리가 된다(이름은 표시용 라벨일 뿐).
@@ -756,13 +781,15 @@ export async function getSheetLanding(
   // 옵션이 있어야 저장된 담임 필터가 지금 고를 수 있는 값인지 판정할 수 있다 — 그런데 이 셋은 서로
   // 독립이라 **직렬로 세우면 왕복이 합산된다**(B4). 대상 id를 스코프 이후가 아니라 `allClasses`에서
   // 뽑으면(어차피 영어 담임 십수 명) 스코프 조회와 **동시에** 던질 수 있다.
-  const [{ classIds: visibleIds }, delegatedIds, teachers] = await Promise.all([
+  const [{ classIds: visibleIds }, delegatedIds, teachers, nameIndex] = await Promise.all([
     ecsVisibleClassFilter(),
     ecsDelegatedClassIds(),
     fetchInChunks<{ id: string; display_name: string | null }>(
       [...new Set((allClasses ?? []).map((c) => c.teacher_id as string | null).filter((v): v is string => !!v))],
       (chunk) => supabase.from("users").select("id, display_name").in("id", chunk),
     ),
+    // 예약된 개명 — 이것도 위 셋과 독립이라 **같은 묶음**에 태운다(B4). 요청 캐시라 시트 헤더가 또 물어도 왕복 0.
+    getClassNameAsOfIndex(),
   ]);
   const scopeSet = visibleIds ? new Set(visibleIds) : null;
   // 카드에 '위임' 배지를 달기 위한 집합 — 게이트와 **같은 소스**(ecsDelegatedClassIds)라 배지와 접근이 안 갈린다.
@@ -954,9 +981,21 @@ export async function getSheetLanding(
       shout = 0;
       if (keys) for (const key of scheduled) if (keys.has(key)) shout += 1;
     }
+    // ⚠️ 카드 **순서는 DB의 `class_name` 그대로 둔다**(위 .order). 표시 이름으로 다시 정렬하고 싶겠지만,
+    //    Postgres 정렬은 로마자→한글인데 `localeCompare("ko")`는 정반대라([[#84]]) 개명과 무관한 반들의
+    //    순서까지 통째로 뒤집힌다. 바뀜 이름은 아래 배지가 알린다.
+    const renamed = classNameForWeek(
+      nameIndex,
+      c.id as string,
+      weekMonday,
+      weekSunday,
+      c.class_name as string,
+    );
     return {
       classId: c.id as string,
-      className: c.class_name as string,
+      className: renamed?.name ?? (c.class_name as string),
+      ...(renamed?.before ? { classNameBefore: renamed.before } : {}),
+      ...(renamed?.upcoming ? { classNameUpcoming: renamed.upcoming } : {}),
       teacherId: (c.teacher_id as string | null) ?? null,
       teacherName: c.teacher_id ? (teacherName.get(c.teacher_id as string) ?? null) : null,
       englishTrack: track,

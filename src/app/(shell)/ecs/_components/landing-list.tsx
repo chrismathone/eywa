@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { monthDay } from "@/features/timetable/scheduled-import";
 import type { SheetLandingCard } from "@/features/class-sheets/server/queries";
 import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
 import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landing-summary";
@@ -232,6 +233,26 @@ function TeacherGroupFlow({
                     <span className="text-foreground min-w-0 flex-1 truncate text-[13px] font-semibold">
                       {card.className}
                     </span>
+                    {/* 예약된 반 이름 변경(원장 2026-08-29 *"미래조회시에 지금 반으로 보면 착각할 수
+                        있을거같은데"*). 두 경우가 **다른 사실**이라 표시도 갈린다:
+                        · upcoming = 그 주 **안에** 바뀐다 → 언제 무엇이 되는지 예고(앰버 = 주의)
+                        · before   = 그 주엔 이미 바뀐 이름이다 → 옛 이름을 알려 준다(찾을 수 있게)
+                        ⚠️ 칸이 좁아 이름 옆엔 짧게만 두고 전문은 title로(문구는 여기서만 만든다). */}
+                    {card.classNameUpcoming ? (
+                      <span
+                        className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-[10px] font-bold"
+                        title={`${monthDay(card.classNameUpcoming.date)}부터 ${card.className} → ${card.classNameUpcoming.name}`}
+                      >
+                        {monthDay(card.classNameUpcoming.date)}→{card.classNameUpcoming.name}
+                      </span>
+                    ) : card.classNameBefore ? (
+                      <span
+                        className="text-text-faint shrink-0 text-[10px] font-bold"
+                        title={`이전 이름 ${card.classNameBefore}`}
+                      >
+                        개명
+                      </span>
+                    ) : null}
                     {/* 임시 위임(0173a) — 원스크린 반 칩과 같은 앰버 규약. 남의 반 시트를 내 반인 줄 알고
                         고치는 일이 없게, 목록에서부터 갈라 보인다(원장 지시 2026-08-03). */}
                     {card.delegated ? (
