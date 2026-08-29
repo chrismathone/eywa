@@ -62,6 +62,7 @@ export default async function EcsSheetPage({
             res.data.weekLabel,
             `계획 ${res.data.fill.filledSlots}/${res.data.fill.totalSlots}교시`,
             // 예약된 개명을 헤더에 한 줄로 — 시트를 열어 놓고도 "이 반이 곧 뭐가 되는지" 알 수 있게.
+            // 예고는 전환 주뿐 아니라 **예약된 때부터 그날까지 내내** 뜬다(원장 2026-08-29).
             res.data.classNameUpcoming
               ? `${monthDay(res.data.classNameUpcoming.date)}부터 ${res.data.className} → ${res.data.classNameUpcoming.name}`
               : res.data.classNameBefore

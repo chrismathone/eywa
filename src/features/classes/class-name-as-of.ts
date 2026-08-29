@@ -54,28 +54,49 @@ export function resolveClassNameAsOf(
   date: string,
   currentName: string | null,
 ): { name: string; before: string; date: string } | null {
-  const list = index.get(classId);
-  if (!list || !currentName) return null;
-
-  let name = currentName;
-  let appliedAt: string | null = null;
-  for (const r of list) {
-    if (r.date > date) break; // 아직 오지 않은 예약
-    if ((r.from ?? null) !== name) break; // 사슬이 끊겼다 — cron도 여기서 건너뛴다
-    name = r.to;
-    appliedAt = r.date;
-  }
-  if (!appliedAt || name === currentName) return null;
-  return { name, before: currentName, date: appliedAt };
+  if (!currentName) return null;
+  const w = walkRenames(index, classId, date, currentName);
+  if (!w.appliedAt || w.name === currentName) return null;
+  return { name: w.name, before: currentName, date: w.appliedAt };
 }
 
 /**
- * **주 단위 표면용**(ECS 랜딩·시트 헤더) — 그 주에 이 반을 뭐라고 부르나 + 그 주 안에 개명이 오는가.
+ * 사슬을 `date`까지 걸어 **그 시점 이름**과 **바로 다음에 올 예약 한 건**을 함께 돌려준다.
+ * `next`는 아직 오지 않은 예약 중 **가장 이른 것**이다(더 뒤엣것을 먼저 알리면 코앞의 변경을 가린다).
+ */
+function walkRenames(
+  index: ClassNameAsOfIndex,
+  classId: string,
+  date: string,
+  currentName: string,
+): { name: string; appliedAt: string | null; next: { name: string; date: string } | null } {
+  const list = index.get(classId);
+  if (!list) return { name: currentName, appliedAt: null, next: null };
+  let name = currentName;
+  let appliedAt: string | null = null;
+  for (const r of list) {
+    if ((r.from ?? null) !== name) break; // 사슬이 끊겼다 — cron도 여기서 건너뛴다
+    if (r.date > date) return { name, appliedAt, next: { name: r.to, date: r.date } }; // 아직 오지 않은 예약
+    name = r.to;
+    appliedAt = r.date;
+  }
+  return { name, appliedAt, next: null };
+}
+
+/**
+ * **주 단위 표면용**(ECS 랜딩·시트 헤더) — 그 주에 이 반을 뭐라고 부르나 + 곧 무엇이 되는가.
  *
  * 🔴 시간표(칸 단위)와 축이 다르다. 시간표는 칸마다 실제 날짜가 있어 `resolveClassNameAsOf`로 정확히
- *    가르지만, ECS의 한 주는 이름 한 개로 부른다. 그래서 **주 시작 시점의 이름**을 쓰고(넘겨짚지 않는다),
- *    그 주 **안에** 개명이 오면 `upcoming`으로 따로 알린다 — 전환 주엔 두 이름이 다 사실이기 때문이다.
- *    (주 끝 이름을 쓰면 월요일에 이미 새 이름으로 불러 앞서 가고, 예고를 안 하면 원장 지적대로 착각한다.)
+ *    가르지만, ECS의 한 주는 이름 한 개로 부른다. 그래서 **주 시작 시점의 이름**을 쓴다(넘겨짚지 않는다 —
+ *    주 끝 이름을 쓰면 9/1 화요일 개명을 월요일부터 새 이름으로 불러 하루 앞서 간다).
+ *
+ * 🔴 **예고(`upcoming`)는 개명이 오는 그 주에만 붙이지 않는다 — 예약이 잡힌 때부터 그날까지 내내 붙인다**
+ *    (원장 2026-08-29: *"예약한 순간부터 지금부터 변경날까지 계속 달아줘. 왜냐면 이동당일에 달려있으면
+ *    실제로 이전의 담임은 볼 기회가 없음"*). 개명은 담임 교체와 같은 날 오는 일이 잦은데, 전환 주에만
+ *    알리면 **그때 그 반은 이미 남의 반**이라 옛 담임 화면엔 뜨지 않는다 — 정작 알아야 할 사람이 못 본다.
+ *    ⚠️ 이미 지나간 주(주 끝 < 오늘)엔 안 붙인다. 지난 주 시트는 기록이라 앞으로의 일로 어지럽히지 않는다.
+ *    ⚠️ 예고와 옛 이름(`before`)이 함께 나올 수 있다(개명이 사슬로 두 번 예약된 반) — 호출부는 **예고를
+ *       먼저** 보인다(옛 이름은 찾기용, 예고는 대비용이라 급한 쪽이 다르다).
  */
 export function classNameForWeek(
   index: ClassNameAsOfIndex,
@@ -83,12 +104,13 @@ export function classNameForWeek(
   weekStart: string,
   weekEnd: string,
   currentName: string | null,
+  /** 오늘(KST) — 지나간 주에는 예고를 붙이지 않기 위해서만 쓴다. */
+  today: string,
 ): { name: string; before?: string; upcoming?: { name: string; date: string } } | null {
   if (!currentName) return null;
-  const atStart = resolveClassNameAsOf(index, classId, weekStart, currentName);
-  const atEnd = resolveClassNameAsOf(index, classId, weekEnd, currentName);
-  const name = atStart?.name ?? currentName;
-  const upcoming = atEnd && atEnd.name !== name ? { name: atEnd.name, date: atEnd.date } : undefined;
-  if (!atStart && !upcoming) return null; // 이 주엔 아무 일도 없다 — 호출부가 DB 이름을 그대로 쓴다
-  return { name, ...(atStart ? { before: atStart.before } : {}), ...(upcoming ? { upcoming } : {}) };
+  const w = walkRenames(index, classId, weekStart, currentName);
+  const before = w.appliedAt && w.name !== currentName ? currentName : undefined;
+  const upcoming = weekEnd >= today ? (w.next ?? undefined) : undefined;
+  if (!before && !upcoming) return null; // 이 주엔 아무 일도 없다 — 호출부가 DB 이름을 그대로 쓴다
+  return { name: w.name, ...(before ? { before } : {}), ...(upcoming ? { upcoming } : {}) };
 }

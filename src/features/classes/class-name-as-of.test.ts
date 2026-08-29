@@ -83,36 +83,66 @@ describe("classNameForWeek — 주 단위 표면(ECS)", () => {
   const idx = buildClassNameAsOfIndex([
     r({ classId: "c1", from: "DP6", to: "PL1a", date: "2026-09-01" }),
   ]);
+  const TODAY = "2026-08-29"; // 예약을 넣은 날
 
-  it("개명 전 주는 아무 말도 하지 않는다(null = DB 이름 그대로)", () => {
-    expect(classNameForWeek(idx, "c1", "2026-08-24", "2026-08-30", "DP6")).toBeNull();
+  it("🔴 개명 전 주에도 **미리** 예고한다 — 예약된 때부터 그날까지 내내", () => {
+    // 원장 2026-08-29: 전환 주에만 붙이면 그땐 이미 남의 반이라 옛 담임은 볼 기회가 없다.
+    expect(classNameForWeek(idx, "c1", "2026-08-24", "2026-08-30", "DP6", TODAY)).toEqual({
+      name: "DP6",
+      upcoming: { name: "PL1a", date: "2026-09-01" },
+    });
   });
 
-  it("🔴 전환 주는 **옛 이름으로 부르고** 그 주 안에 온다고 예고한다", () => {
+  it("🔴 전환 주는 **옛 이름으로 부르고** 온다고 예고한다", () => {
     // 9/1(화)에 바뀐다 = 월요일엔 아직 DP6다. 새 이름으로 먼저 부르면 하루 앞서 간다.
-    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", "DP6")).toEqual({
+    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", "DP6", TODAY)).toEqual({
       name: "DP6",
       upcoming: { name: "PL1a", date: "2026-09-01" },
     });
   });
 
   it("그 다음 주부터는 새 이름이고 예고는 없다", () => {
-    expect(classNameForWeek(idx, "c1", "2026-09-07", "2026-09-13", "DP6")).toEqual({
+    expect(classNameForWeek(idx, "c1", "2026-09-07", "2026-09-13", "DP6", TODAY)).toEqual({
       name: "PL1a",
       before: "DP6",
     });
   });
 
+  it("⚠️ 이미 지나간 주에는 예고를 안 붙인다(지난 주 시트는 기록이다)", () => {
+    expect(classNameForWeek(idx, "c1", "2026-08-17", "2026-08-23", "DP6", TODAY)).toBeNull();
+  });
+
   it("주 시작일에 딱 맞으면 그 주부터 새 이름이다", () => {
     const mon = buildClassNameAsOfIndex([r({ classId: "c1", from: "A", to: "B", date: "2026-09-07" })]);
-    expect(classNameForWeek(mon, "c1", "2026-09-07", "2026-09-13", "A")).toEqual({ name: "B", before: "A" });
+    expect(classNameForWeek(mon, "c1", "2026-09-07", "2026-09-13", "A", TODAY)).toEqual({
+      name: "B",
+      before: "A",
+    });
+  });
+
+  it("사슬이 둘이면 **가장 이른 것**을 예고하고, 지나간 것은 옛 이름으로 남긴다", () => {
+    const chain = buildClassNameAsOfIndex([
+      r({ classId: "c1", from: "A", to: "B", date: "2026-09-01" }),
+      r({ classId: "c1", from: "B", to: "C", date: "2026-10-01" }),
+    ]);
+    // 개명 전: 코앞의 9/1만 알린다(10/1을 먼저 알리면 급한 쪽이 가린다).
+    expect(classNameForWeek(chain, "c1", "2026-08-24", "2026-08-30", "A", TODAY)).toEqual({
+      name: "A",
+      upcoming: { name: "B", date: "2026-09-01" },
+    });
+    // 9/1 뒤: 이름은 B(옛 이름 A)이고 다음 예약 10/1을 예고한다 — 둘 다 사실이다.
+    expect(classNameForWeek(chain, "c1", "2026-09-07", "2026-09-13", "A", TODAY)).toEqual({
+      name: "B",
+      before: "A",
+      upcoming: { name: "C", date: "2026-10-01" },
+    });
   });
 
   it("사람이 손댔으면 예고도 하지 않는다", () => {
-    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", "손댄이름")).toBeNull();
+    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", "손댄이름", TODAY)).toBeNull();
   });
 
   it("이름 없는 반은 판정하지 않는다", () => {
-    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", null)).toBeNull();
+    expect(classNameForWeek(idx, "c1", "2026-08-31", "2026-09-06", null, TODAY)).toBeNull();
   });
 });

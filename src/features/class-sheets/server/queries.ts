@@ -86,7 +86,7 @@ export type ClassSheetWeekData = {
   className: string;
   /** 그 주 시작 전에 이미 개명이 적용됐으면 그 전 이름(=오늘 DB 이름). */
   classNameBefore?: string;
-  /** 그 주 **안에** 개명이 오면 그 예고 — 전환 주엔 두 이름이 다 사실이라 이름은 옛것으로 부른다. */
+  /** 앞으로 올 개명 예고 — **예약된 때부터 그날까지 내내** 붙는다(옛 담임이 볼 기회를 갖도록). */
   classNameUpcoming?: { name: string; date: string };
   weekMonday: string;
   weekLabel: string;
@@ -602,14 +602,16 @@ export async function getClassSheetWeek(
   for (const m of memoRows) memos[m.memoKey] = m.body;
 
   // 🔴 **그 주에 불릴 이름으로 부른다**(원장 2026-08-29 — 시간표와 같은 이유). 이름 컬럼엔 시간 축이 없어
-  //    9/1로 예약해 둔 개명이 있어도 9월 주 시트가 오늘 이름으로 떴다. 전환 주(개명이 주 중간에 오는 주)는
-  //    **옛 이름으로 부르고** `classNameUpcoming`으로 예고한다 — 그 주엔 두 이름이 다 사실이다.
+  //    9/1로 예약해 둔 개명이 있어도 9월 주 시트가 오늘 이름으로 떴다. 개명 전 주는 **옛 이름으로 부르고**
+  //    `classNameUpcoming`으로 예고한다 — 예고는 전환 주뿐 아니라 **예약된 때부터 그날까지 내내** 붙는다
+  //    (원장 2026-08-29: 전환 주엔 이미 남의 반이라 옛 담임은 볼 기회가 없다).
   const renameForWeek = classNameForWeek(
     await getClassNameAsOfIndex(),
     classId,
     weekMonday,
     weekSunday,
     access.className,
+    today,
   );
 
   return {
@@ -660,7 +662,7 @@ export type SheetLandingCard = {
   className: string;
   /** 그 주 시작 전에 이미 개명이 적용됐으면 그 전 이름(=오늘 DB 이름). 안 바뀌었으면 undefined. */
   classNameBefore?: string;
-  /** 그 주 **안에** 개명이 오면 그 예고. 전환 주엔 두 이름이 다 사실이라 이름은 옛것으로 부른다. */
+  /** 앞으로 올 개명 예고 — **예약된 때부터 그날까지 내내** 붙는다(옛 담임이 볼 기회를 갖도록). */
   classNameUpcoming?: { name: string; date: string };
   /**
    * 담임 **id** — 목록을 담임별로 묶을 때 쓴다(2026-08-11 "열마다 담임 구분해서 놓자").
@@ -1031,6 +1033,7 @@ export async function getSheetLanding(
       weekMonday,
       weekSunday,
       c.class_name as string,
+      today,
     );
     return {
       classId: c.id as string,
