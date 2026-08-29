@@ -13,7 +13,6 @@ const EMPTY_RAW: TodayActionsRaw = {
   yesterday: "2026-07-15",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
-  pendingExpenses: { total: 0, recent: 0 },
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
@@ -198,5 +197,26 @@ describe("shouldGenerateNarrative", () => {
         buildDailyBriefingPayload({ ...BASE, retentionTop: [{ studentId: "r1", name: "a", reasons: ["r"], action: null }] }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("사전 통보로 전부 설명되는 결석은 스포트라이트에서 뺀다", () => {
+  // 원장 2026-08-29 후속 *"결석과 사전통보가 똑같은데 의미 없음"*.
+  const payload = buildDailyBriefingPayload({
+    ...BASE,
+    absenceRisks: [
+      // 실데이터 모양(2026-08-29 화면): 이지호A 5/5 · 윤채민 6회 중 2회 통보 · 하은결 8회 통보 없음
+      { studentId: "a1", studentName: "이지호A", absences: 5, reasonSummary: { preNotified: 5, reasons: ["가족여행"], withoutReason: 0 } },
+      { studentId: "a2", studentName: "윤채민", absences: 6, reasonSummary: { preNotified: 2, reasons: ["제주도 여행"], withoutReason: 1 } },
+      { studentId: "a3", studentName: "하은결", absences: 8 },
+    ],
+  });
+
+  it("전부 통보된 학생만 빠진다", () => {
+    expect(payload.spotlights.map((s) => s.name)).toEqual(["윤채민", "하은결"]);
+  });
+
+  it("🔴 남은 학생의 'N회'는 깎지 않는다 — RPC 값·마일스톤 알림과 갈리지 않게", () => {
+    expect(payload.spotlights[0]!.reasons[0]).toContain("결석 6회");
   });
 });

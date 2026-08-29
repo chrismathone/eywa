@@ -68,9 +68,13 @@ describe("🔴 결석 사유 원문은 AI 프롬프트로 나가지 않는다", 
 });
 
 describe("사전 통보는 총계를 깎지 않는다", () => {
-  it("absences에서 preNotified를 빼는 계산이 없다", () => {
-    // 원장 2026-08-29 선택 = 깎지 말고 갈라서 보여주기. 깎으면 결석 마일스톤 알림(같은 RPC 값)과 갈린다.
-    expect(digest).not.toMatch(/absences\s*-\s*[^;]*preNotified/);
+  it("표시되는 N회는 여전히 안 깎는다 — 빼기는 **목록 편입 판정**에서만", () => {
+    // 원장 2026-08-29 후속 *"사전통보는 살펴볼 학생 리스트에서 배제시켜"* — 목록에서만 빼고
+    // 숫자는 그대로 둔다(RPC 0221a 값·결석 마일스톤 알림과 갈리지 않게).
+    expect(digest).toMatch(/최근 14일 결석 \$\{risk\.absences\}회/);
+    expect(digest).toMatch(/unexplainedAbsences\(risk\.absences, risk\.reasonSummary\) === 0\) continue/);
+    // 판정은 단일 소스에만 있다 — 화면·보고가 따로 계산하면 목록과 숫자가 갈린다.
+    expect(digest).not.toMatch(/risk\.absences\s*-\s*[^;]*preNotified/);
   });
 
   it("세는 단위가 과목 분해와 같다(공용 effectiveAbsences)", () => {

@@ -4,6 +4,7 @@ import {
   isPreNotified,
   normalizeReason,
   summarizeAbsenceReasons,
+  unexplainedAbsences,
 } from "./absence-reasons";
 import type { AbsenceSubjectRow } from "./absence-subjects";
 
@@ -136,5 +137,28 @@ describe("absenceReasonTail", () => {
   it("아무것도 없으면 빈 문자열(줄이 지저분해지지 않게)", () => {
     expect(absenceReasonTail({ preNotified: 0, reasons: [], withoutReason: 3 })).toBe("");
     expect(absenceReasonTail(undefined)).toBe("");
+  });
+});
+
+/**
+ * 사전 통보로 **전부** 설명되는 결석은 "살펴볼 학생"에서 뺀다 — 원장 2026-08-29 후속
+ * *"사전통보는 살펴볼 학생 리스트에서 배제시켜. 결석과 사전통보가 똑같은데 의미 없음."*
+ * 실측 그날 화면: 이강우·이지호A가 `결석 5회 · 사전 통보 5`로 상위에 앉아 있었다.
+ */
+describe("unexplainedAbsences", () => {
+  it("전부 사전 통보면 0(= 목록에서 뺀다)", () => {
+    expect(unexplainedAbsences(5, { preNotified: 5, reasons: ["가족여행"], withoutReason: 0 })).toBe(0);
+  });
+
+  it("일부만 통보면 나머지가 남는다(= 목록에 남긴다)", () => {
+    expect(unexplainedAbsences(6, { preNotified: 2, reasons: ["제주도 여행"], withoutReason: 0 })).toBe(4);
+  });
+
+  it("🔴 요약이 없으면 안 뺀다 — 모르는 것을 '양해됐다'로 읽지 않는다", () => {
+    expect(unexplainedAbsences(8, undefined)).toBe(8);
+  });
+
+  it("⚠️ 두 숫자는 출처가 달라 음수가 될 수 있다 — 0으로 바닥", () => {
+    expect(unexplainedAbsences(2, { preNotified: 3, reasons: [], withoutReason: 0 })).toBe(0);
   });
 });

@@ -107,3 +107,24 @@ export function absenceReasonTail(
   if (!opts.forPrompt && summary.reasons.length > 0) parts.push(summary.reasons.join("·"));
   return parts.length > 0 ? ` · ${parts.join(" · ")}` : "";
 }
+
+/**
+ * **사전 통보로 설명되지 않는 결석 수** — "살펴볼 학생" 목록에 올릴지 정하는 값.
+ *
+ * 원장 2026-08-29(후속): *"사전통보는 살펴볼 학생 리스트에서 배제시켜. 결석과 사전통보가 똑같은데
+ * 의미 없음."* 같은 날 앞선 결정("숫자는 깎지 말고 옆에 갈라서 보여주기")을 화면으로 확인한 뒤의
+ * 판단이다 — 갈라서 보여줘도 `결석 5회 · 사전 통보 5`가 상위에 앉아 있으면 볼 게 없다.
+ *
+ * 🔴 **표시되는 "N회"는 여전히 안 깎는다.** 그 숫자는 RPC(0221a)의 사실이고 결석 마일스톤 알림도
+ *    같은 값을 쓴다 — 깎으면 화면과 알림이 갈린다. 바뀌는 건 **목록에 넣을지**뿐이다.
+ * 🔴 요약이 없으면(조회 실패·미조회) **빼지 않는다** — 모르는 것을 "양해됐다"로 읽으면 진짜 위험한
+ *    학생이 조용히 사라진다(사전 통보 0으로 떨어져 그대로 남는다).
+ * ⚠️ 두 숫자는 **출처가 다르다**(N회 = RPC, 사전 통보 = 출결 행) — 창이 어긋나 음수가 될 수 있어
+ *    0으로 바닥을 친다.
+ */
+export function unexplainedAbsences(
+  absences: number,
+  summary: AbsenceReasonSummary | undefined,
+): number {
+  return Math.max(0, absences - (summary?.preNotified ?? 0));
+}

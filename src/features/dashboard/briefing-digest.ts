@@ -6,7 +6,7 @@
  * - LLM 프롬프트에는 개인 이름을 넣지 않고(라벨+수치만), 응답은 validateNarrative(숫자 grounding·
  *   영문 토큰 금지·길이)를 통과한 것만 저장 — 실패 시 buildFallbackNarrative(결정론 요약)로 대체.
  */
-import { absenceReasonTail, type AbsenceReasonSummary } from "./absence-reasons";
+import { absenceReasonTail, unexplainedAbsences, type AbsenceReasonSummary } from "./absence-reasons";
 import {
   buildTodayActions,
   labelSubjectCounts,
@@ -141,6 +141,10 @@ function buildSpotlights(input: BuildDailyBriefingInput): DailyBriefingPayload["
   for (const risk of input.absenceRisks) {
     if (spotlights.length >= SPOTLIGHT_MAX) break;
     if (seen.has(risk.studentName)) continue;
+    // 🔴 사전 통보로 **전부** 설명되는 결석은 목록에 올리지 않는다(원장 2026-08-29 후속
+    //    *"결석과 사전통보가 똑같은데 의미 없음"*). 판정은 `unexplainedAbsences` 단일 소스이고,
+    //    **표시되는 "N회"는 그대로**다(RPC 값·마일스톤 알림과 갈리지 않게).
+    if (unexplainedAbsences(risk.absences, risk.reasonSummary) === 0) continue;
     seen.add(risk.studentName);
     spotlights.push({
       studentId: risk.studentId ?? null,
