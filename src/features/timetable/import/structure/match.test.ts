@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { matchStructure } from "./match";
 import { parseTeacherGrid } from "./parse-grid";
 import fixtureJson from "./fixtures/teacher-grid.sample.json";
-import type { ExistingContext, SheetGrid } from "./types";
+import type { ExistingContext, ParsedStructure, SheetGrid } from "./types";
 
 const parsed = parseTeacherGrid(fixtureJson as unknown as SheetGrid);
 
@@ -80,5 +80,34 @@ describe("🔴 특수 자리(LAB 603 · JJ 305)는 사람으로 해석하지 않
 
   it("'신규 강사'로도 올라가지 않는다(계정 생성 유도 금지)", () => {
     for (const n of ["이주희", "JJ", "LAB"]) expect(out.newTeacherNames).not.toContain(n);
+  });
+});
+
+/**
+ * 시트가 직책으로 적은 칸(`부원장`)도 **저장 라벨과 같은 정본**으로 계정에 붙어야 한다.
+ * 여기만 빼먹으면 라벨은 `Yoojin`으로 저장되는데 teacher_id가 안 붙어 주인 없는 슬롯이 된다
+ * (실측 2026-08-29: 그렇게 4칸이 떠 있었다).
+ */
+describe("직책 라벨(부원장)도 계정에 붙는다", () => {
+  const parsedOne = {
+    ...parsed,
+    slots: [{ ...parsed.slots[0]!, teacherName: "부원장" }],
+  } as ParsedStructure;
+  const withYoojin: ExistingContext = {
+    ...ctx,
+    teachers: [...ctx.teachers, { id: "t9", englishName: "Yoojin", displayName: "정유진" }],
+  };
+
+  it("englishName Yoojin으로 해석된다", () => {
+    const res = matchStructure(parsedOne, withYoojin);
+    expect(res.resolved[0]!.teacherId).toBe("t9");
+    expect(res.newTeacherNames).not.toContain("부원장");
+  });
+
+  it("그 닉네임을 쓰는 계정이 없으면 신규 강사로 뜬다(조용히 삼키지 않는다)", () => {
+    const res = matchStructure(parsedOne, ctx);
+    expect(res.resolved[0]!.teacherId).toBeNull();
+    // 안내는 **시트 원문**으로 뜬다 — 사람이 시트에서 그 칸을 찾을 수 있어야 한다.
+    expect(res.newTeacherNames).toContain("부원장");
   });
 });

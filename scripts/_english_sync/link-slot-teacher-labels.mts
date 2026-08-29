@@ -7,7 +7,7 @@
  * **이미 저장된 행엔 소급되지 않는다** — 그 소급을 이 스크립트가 한다.
  *
  * 실제 사고(2026-08-29): 9/1 배치에 `Song` 라벨 29칸이 들어왔는데 송지혜의 영어 닉네임이 비어 있어
- * 전부 미연결 → **9/1부터 송지혜의 ECS·강사뷰가 통째로 빈다**(20개 반에 들어가는데 한 반도 안 뜸).
+ * 전부 미연결 → **9/1부터 송지혜의 ECS·강사뷰가 통째로 빈다**(16개 반에 들어가는데 한 반도 안 뜸 — 실측 정정).
  *
  * 🔴 판정은 가져오기와 **같은 함수**(`resolveTeacher`)를 쓴다 — 여기서 규칙을 새로 쓰면 다음 가져오기가
  *    다시 풀어 버리는 값을 만들게 된다. 특수 자리(`LAB`·`JJ`)는 그 함수가 사람으로 해석하지 않는다.
@@ -28,16 +28,10 @@ const APPLY = args.includes("--apply");
 const SUBJECT = (args.find((a) => a.startsWith("--subject="))?.slice("--subject=".length) ?? "english").trim();
 
 /**
- * **직책 라벨 별칭** — 시트가 사람 이름 대신 직책을 적은 자리(원장 확인 2026-08-29 *"부원장 = 정유진"*).
- *
- * 🔴 이건 **임시방편**이다. 매칭 정본(`resolveTeacher`)은 `english_name`·`display_name`만 보므로,
- *    시트가 계속 `부원장`이라고 적는 한 **가져오기할 때마다 다시 풀린다**(이 스크립트를 또 돌려야 한다).
- *    정공법은 시트에 닉네임(`Yoojin`)을 적는 것이다.
- * ⚠️ 별칭은 **원장이 확인해 준 것만** 넣을 것 — 추측으로 넣으면 남의 시간표에 슬롯이 붙는다.
+ * **직책 라벨은 정본이 푼다** — 2026-08-29부터 `canonicalSlotTeacherLabel`이 `부원장 → Yoojin`으로
+ * 굳히므로(teacher-label.ts `TITLE_LABEL_ALIASES`), 여기 따로 표를 두지 않는다.
+ * 🔴 두 벌로 두면 가져오기와 이 소급 도구가 갈려서, 고친 다음 가져오기에 도로 풀린다.
  */
-const LABEL_ALIASES: Record<string, string> = {
-  부원장: "정유진",
-};
 
 const sql = postgres(process.env.DATABASE_URL!, { ssl: "require", max: 1 });
 
@@ -66,7 +60,7 @@ type Plan = { ids: string[]; teacherId: string; teacherName: string };
 const plans = new Map<string, Plan>();
 const skipped = new Map<string, number>();
 for (const r of rows) {
-  const { ref } = resolveTeacher(LABEL_ALIASES[r.label] ?? r.label, teachers);
+  const { ref } = resolveTeacher(r.label, teachers);
   if (!ref) {
     skipped.set(r.label, (skipped.get(r.label) ?? 0) + 1);
     continue;

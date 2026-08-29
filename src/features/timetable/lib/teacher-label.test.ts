@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTeacherNicknameMap } from "./teacher-label";
 import {
   buildTeacherLabelMap,
+  canonicalSlotTeacherLabel,
   isSpecialSlotLabel,
   resolveTeacherLabel,
   resolveTeacherLabels,
@@ -161,5 +162,42 @@ describe("buildTeacherNicknameMap — 한국인 강사만 (원어민 제외)", (
 
   it("퇴사자만 있어도 닉네임이 하나면 담는다(옛 시간표도 이름으로 읽히게)", () => {
     expect(buildTeacherNicknameMap([u("박나연", "Zoe", false)])).toEqual({ 박나연: "Zoe" });
+  });
+});
+
+/**
+ * 시트가 사람을 **직책으로 적는 칸**(`부원장`) — 가져오는 순간 닉네임으로 바꾼다
+ * (원장 2026-08-29 *"시트를 바꾸라는게 아님. 우리로 가져올때 yoojin 처리하라는것."*).
+ */
+describe("직책 라벨(부원장) → 닉네임", () => {
+  const map = buildTeacherLabelMap([
+    ...USERS,
+    { displayName: "정유진", englishName: "Yoojin", active: true },
+  ]);
+
+  it("저장 라벨은 닉네임으로 굳는다", () => {
+    expect(canonicalSlotTeacherLabel("부원장")).toBe("Yoojin");
+    expect(canonicalSlotTeacherLabel(" 부원장 ")).toBe("Yoojin");
+  });
+
+  it("멱등 — 이미 닉네임이면 그대로", () => {
+    expect(canonicalSlotTeacherLabel("Yoojin")).toBe("Yoojin");
+    expect(canonicalSlotTeacherLabel(canonicalSlotTeacherLabel("부원장"))).toBe("Yoojin");
+  });
+
+  it("자리(LAB·JJ) 판정을 밀어내지 않는다", () => {
+    expect(canonicalSlotTeacherLabel("이주희")).toBe("LAB");
+    expect(canonicalSlotTeacherLabel("JJ")).toBe("JJ");
+  });
+
+  it("표시도 같은 별칭을 타 **한 열로 합쳐진다** — 이미 저장된 옛 라벨과 새 라벨이 같은 이름", () => {
+    expect(resolveTeacherLabel("부원장", map)).toBe("정유진");
+    expect(resolveTeacherLabel("Yoojin", map)).toBe("정유진");
+    expect(resolveTeacherLabels(["부원장", "Yoojin"], map)).toEqual(["정유진"]);
+  });
+
+  it("🔴 닉네임이 users에 없으면 원본 유지 — 사람이 못 알아보는 라벨로 바꾸지 않는다", () => {
+    const noYoojin = buildTeacherLabelMap(USERS);
+    expect(resolveTeacherLabel("부원장", noYoojin)).toBe("부원장");
   });
 });

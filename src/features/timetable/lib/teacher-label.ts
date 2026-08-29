@@ -71,6 +71,28 @@ const SPECIAL_BY_ALIAS = new Map<string, SpecialSlotLabel>([
   ["자율실", SELF_STUDY_ROOM_LABEL],
 ]);
 
+/**
+ * **시트가 사람을 직책으로 적는 칸** → 그 사람의 닉네임 라벨.
+ *
+ * 원장 2026-08-29: *"시트를 바꾸라는게 아님. 우리로 가져올때 yoojin 처리하라는것."*
+ * 마스터 시트는 학원 문서라 우리가 못 고친다(서비스계정은 실제로 읽기 전용 — 쓰기 시도가 403이다).
+ * 고칠 수 있어도 `부원장`은 지난 달 탭·급여 정산용·출석부까지 158칸에 흩어져 있어 건드릴 자리가 아니다.
+ * → **가져오는 순간 우리 표기로 바꾼다.** 자리(LAB·JJ)를 굳히는 것과 같은 결이다.
+ *
+ * 🔴 값은 그 직원의 `users.english_name`과 **글자까지 같아야 한다** — 매칭 앵커가 그 컬럼이라
+ *    (`match.ts` `resolveTeacher`), 어긋나면 라벨만 바뀌고 계정엔 안 붙어 슬롯이 주인 없이 남는다.
+ *    닉네임을 바꾸면 여기도 같이 바꿀 것(실측 2026-08-29: 정유진 = `Yoojin`).
+ * ⚠️ 직책은 사람이 바뀐다 — 부원장이 교체되면 이 표의 값도 새 사람의 닉네임으로 바꿔야 한다.
+ *    (그래서 직책을 `users.job_title`로 되짚지 않는다: 같은 직책을 여럿이 달 수 있고, 그러면
+ *     조용히 엉뚱한 사람 시간표에 슬롯이 붙는다 — 라벨-only로 떨어지는 것보다 나쁘다.)
+ */
+const TITLE_LABEL_ALIASES = new Map<string, string>([["부원장", "Yoojin"]]);
+
+/** 직책으로 적힌 라벨이면 닉네임 라벨, 아니면 null. */
+function titleAlias(label: string): string | null {
+  return TITLE_LABEL_ALIASES.get(label.trim().toLowerCase()) ?? null;
+}
+
 /** 라벨이 특수 자리면 그 자리 이름, 아니면 null. 원 라벨·해석된 이름 둘 다 받는다. */
 export function specialSlotLabel(label: string | null | undefined): SpecialSlotLabel | null {
   if (label == null) return null;
@@ -112,7 +134,9 @@ export function canonicalSlotTeacherLabel(label: string | null | undefined): str
   const special = specialSlotLabel(label);
   if (special) return special;
   const raw = label?.trim();
-  return raw ? raw : null;
+  if (!raw) return null;
+  // 직책 칸(`부원장`)은 닉네임으로 굳힌다 — 멱등(`Yoojin`은 키가 아니라 그대로 통과).
+  return titleAlias(raw) ?? raw;
 }
 
 /**
@@ -128,6 +152,15 @@ export function resolveTeacherLabel(
   if (!raw) return label;
   const special = specialSlotLabel(raw);
   if (special) return special;
+  // 직책 칸은 **닉네임을 거쳐** 해석한다 — 이미 저장된 `부원장` 행과 앞으로 들어올 `Yoojin` 행이
+  // 같은 이름으로 떨어져야 한 열로 합쳐진다(이 파일 상단 ⚠️ "한쪽만 고치면 열이 쪼개진다").
+  // ⚠️ 닉네임이 users에 없으면 **원본을 유지한다** — 계정이 사라진 뒤에 `Yoojin`만 남기면
+  //    사람이 못 알아보는 라벨이 된다("지어내지 않는다" 규약).
+  const alias = titleAlias(raw);
+  if (alias) {
+    const named = map?.[alias];
+    if (named) return named;
+  }
   return map?.[raw] ?? raw;
 }
 

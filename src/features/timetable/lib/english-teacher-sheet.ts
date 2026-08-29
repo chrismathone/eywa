@@ -1,7 +1,7 @@
 // 인재원 "강사별영어시간표(7월)" 시트 미러 — 강사뷰(teacher-major)의 컬럼 순서·헤더색 단일 소스.
 // 슬롯 강사 라벨(slot_teacher_label = 시트의 강사 약칭) → { order, color }.
 // ⚠️ 이건 학원설정 운영 enum이 아니라 **외부 시트의 표현 데이터를 그대로 옮긴 것**(강사 물리 배치 순서·색).
-//    일부 강사(Elsa·Anna·Dom·부원장 등)와 자리 2개(JJ·LAB)는 DB 색이 없어, 그 폴백으로 쓴다.
+//    일부 강사(Elsa·Anna·Dom 등)와 자리 2개(JJ·LAB)는 DB 색이 없어, 그 폴백으로 쓴다.
 //    → 강사가 직원 등록되고 users.bg_color가 채워지면 getTeacherColorMap(DB)이 우선하고 이 맵은 미등록분만 커버.
 //    출처: scripts/_english_sync/read-teacher-grid.cjs 로 시트 강사 헤더 병합·배경색 실측(2026-07-04).
 //    갱신하려면 그 스크립트를 재실행해 teacher_grid_blocks.json 대조.
@@ -16,7 +16,11 @@ export const ENGLISH_SHEET_TEACHERS: Record<string, SheetTeacherMeta> = {
   Hannah: { order: 2, color: "#f9b3d1" },
   Elsa: { order: 3, color: "#674ea7" },
   Charlie: { order: 4, color: "#f6b26b" },
-  부원장: { order: 5, color: "#d9ead3" },
+  // ⚠️ 키가 **해석된 이름**인 유일한 사람 — 시트가 `부원장`이라고 적는 자리라 옛날엔 users로 해석이
+  //    안 돼 원문이 곧 키였다. 2026-08-29에 `부원장 → Yoojin → 정유진`으로 해석되기 시작해
+  //    (teacher-label.ts `TITLE_LABEL_ALIASES`) 키를 함께 옮긴다 — **안 옮기면 열이 맨 앞에서
+  //    가나다순 자리로 이동한다**(원장이 시키지 않은 배치 변경). 색은 DB(users.bg_color)가 이긴다.
+  정유진: { order: 5, color: "#d9ead3" },
   Dom: { order: 6, color: "#76a5af" },
   Anna: { order: 7, color: "#4285f4" },
   Florence: { order: 8, color: "#cc0000" },
@@ -41,7 +45,7 @@ export function compareSheetTeachers(a: string, b: string): number {
  * 강사뷰 컬럼 정렬 비교를 만든다 — **학원설정 순서 > 자리 뒤로 > 시트 미러 > 이름순**.
  *
  * 🔴 왜 설정이 필요한가: 위 시트 미러는 key가 **닉네임**(Jane·Hannah…)인데 2026-07-27부터 라벨이 한글
- * 이름으로 해석되면서 10명이 통째로 "시트 밖"으로 떨어져 **가나다순**이 됐다(부원장·JJ·LAB만 순서 유지).
+ * 이름으로 해석되면서 10명이 통째로 "시트 밖"으로 떨어져 **가나다순**이 됐다(정유진·JJ·LAB만 순서 유지).
  * 하드코딩 미러를 계속 고치는 대신 사람이 정하게 한다(운영 배치는 학원마다·달마다 바뀐다).
  *
  * ⚠️ **자리(JJ·LAB)는 기본이 최우측**(원장 2026-08-04). 사람이 아니라 방이라 강사 목록 사이에 끼면
