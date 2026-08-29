@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+// 🔴 DB 오류 한글 매핑은 **이 파일 밖**에 산다 — `"use server"` 파일은 async 함수만 export할 수
+//    있어서, 동기 헬퍼를 여기서 내보내면 프로덕션 빌드가 깨진다(2026-08-29 실측).
+import { isOverlapConflict, toKoreanDbError } from "../db-errors";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
@@ -22,36 +25,6 @@ const VALID_DAYS = new Set<string>(DAY_ORDER);
 const DAY_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
 };
-
-type DbError = { message?: string; code?: string } | null | undefined;
-
-/** GiST `enrollments_no_overlap`(같은 학생·같은 반 기간 겹침) 위반인가 — Postgres 23P01. */
-function isOverlapConflict(error: DbError): boolean {
-  if (!error) return false;
-  return (
-    error.code === "23P01" ||
-    /enrollments_no_overlap|exclusion constraint/i.test(error.message ?? "")
-  );
-}
-
-/**
- * DB 원문(영문) 에러 → 화면용 한글. **UI에 raw 노출 금지**(작업 선호) —
- * 매핑 못 한 원문은 서버 로그로만 남기고 화면엔 일반 문구를 준다.
- * (`conflicting key value violates exclusion constraint "enrollments_no_overlap"`가 배정
- * 다이얼로그에 그대로 떴던 2026-07-28 제보의 재발 방지.)
- */
-export function toKoreanDbError(error: DbError, fallback: string): string {
-  const msg = error?.message ?? "";
-  if (isOverlapConflict(error)) return "이미 이 반에 기간이 겹치는 수강이 있습니다.";
-  if (msg.includes("conflicting_period")) {
-    return "이 학생이 같은 시간대 다른 반에 이미 배정되어 있습니다.";
-  }
-  if (msg.includes("range lower bound")) {
-    return "종료일이 시작일보다 빠릅니다. 날짜를 확인해 주세요.";
-  }
-  console.error("[enrollments] 미매핑 DB 에러:", error?.code, msg);
-  return fallback;
-}
 
 /**
  * 겹친 **기존 수강을 실제로 찾아** "언제부터·무슨 요일"까지 알려준다.

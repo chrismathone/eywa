@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 // 겹침·기간 오류의 한글 매핑은 배정 경로와 **같은 함수**를 쓴다(화면마다 문구가 갈리지 않게).
-import { toKoreanDbError } from "./actions";
+import { toKoreanDbError } from "../db-errors";
 
 /**
  * **예약된 수강 변경의 수정·취소** — 학생 상세·반 상세 배너의 버튼이 부른다.
