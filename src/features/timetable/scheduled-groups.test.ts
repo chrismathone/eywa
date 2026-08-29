@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   groupLayoutSignature,
+  pickScheduledGroupsForWeek,
   readScheduledGroupPlan,
   shouldApplyGroups,
   type ScheduledGroup,
@@ -114,5 +115,53 @@ describe("readScheduledGroupPlan — 방어적 파싱", () => {
   it("showOthers는 boolean일 때만 싣는다(미지정이면 현재 설정 유지)", () => {
     expect(readScheduledGroupPlan({ ...plan, showOthers: "yes" })).not.toHaveProperty("showOthers");
     expect(readScheduledGroupPlan({ ...plan, showOthers: false })?.showOthers).toBe(false);
+  });
+});
+
+describe("pickScheduledGroupsForWeek — 미래 주는 그 주에 쓸 줄로", () => {
+  const aug: ScheduledGroup[] = [g("1", "오후 2:20", ["c1", "c2"])];
+  const sep: ScheduledGroup[] = [g("1", "오후 2:20", ["c1", "c2", "c3"])];
+  const plan = { subject: "english", groups: sep, from: aug };
+  const plans = [{ date: "2026-09-01", plan }];
+
+  it("예약이 이 주 안에 시작되면 그 배치를 쓴다(주 끝 축)", () => {
+    // 8/31~9/6 주 — 9/1이 이 주 안이다.
+    expect(pickScheduledGroupsForWeek(plans, "2026-09-06", "english", aug)?.groups).toEqual(sep);
+  });
+
+  it("예약 전 주면 지금 배치 그대로(null)", () => {
+    expect(pickScheduledGroupsForWeek(plans, "2026-08-30", "english", aug)).toBeNull();
+  });
+
+  it("🔴 사람이 그 사이 배치를 손봤으면 아무 말도 하지 않는다 — cron도 건너뛴다", () => {
+    expect(pickScheduledGroupsForWeek(plans, "2026-09-06", "english", [g("1", "손댐", ["c1"])])).toBeNull();
+  });
+
+  it("다른 과목 예약은 안 본다", () => {
+    expect(pickScheduledGroupsForWeek(plans, "2026-09-06", "math", aug)).toBeNull();
+  });
+
+  it("예약이 여럿이면 사슬을 걸어 마지막 것을 쓴다", () => {
+    const oct: ScheduledGroup[] = [g("1", "오후 2:20", ["c9"])];
+    const two = [
+      { date: "2026-10-01", plan: { subject: "english", groups: oct, from: sep } },
+      { date: "2026-09-01", plan },
+    ];
+    expect(pickScheduledGroupsForWeek(two, "2026-10-04", "english", aug)?.groups).toEqual(oct);
+    // 9월 주에서는 9월 것까지만
+    expect(pickScheduledGroupsForWeek(two, "2026-09-06", "english", aug)?.groups).toEqual(sep);
+  });
+
+  it("🔴 사슬 중간이 끊기면 거기서 멈춘다(억지로 이어 붙이지 않는다)", () => {
+    const two = [
+      { date: "2026-09-01", plan },
+      // from이 sep가 아니라 엉뚱한 값 — 9월 것이 적용된 뒤에도 이어지지 않는다
+      { date: "2026-10-01", plan: { subject: "english", groups: [g("1", "X", [])], from: [g("9", "다름", [])] } },
+    ];
+    expect(pickScheduledGroupsForWeek(two, "2026-10-04", "english", aug)?.groups).toEqual(sep);
+  });
+
+  it("예약이 없으면 null", () => {
+    expect(pickScheduledGroupsForWeek([], "2026-09-06", "english", aug)).toBeNull();
   });
 });

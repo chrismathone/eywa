@@ -45,7 +45,9 @@ import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
 import { shouldSerializeView, subjectDefaultView, viewForSubjectSwitch } from "@/features/timetable/lib/view-default";
-import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation, weekTitle } from "@/features/timetable/lib/week";
+import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation, weekSundayOf, weekTitle } from "@/features/timetable/lib/week";
+import { pickScheduledGroupsForWeek } from "@/features/timetable/scheduled-groups";
+import { getScheduledGroupPlans } from "@/features/timetable/server/scheduled-groups-queries";
 import { buildTimetableSearchIndex, timetableSearchScope } from "@/features/timetable/lib/student-search";
 import {
   TimetableSearchBox,
@@ -300,7 +302,24 @@ export default async function TimetablePage({
     (await canAccessTenant(user.systemRole, "ecs"));
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
-  const customGroups = resolveIntegrationGroups(subjectRow);
+  // 🔴 **미래 주는 그 주에 쓸 줄로 그린다**(원장 2026-08-29 *"통합뷰 그룹설정(줄)은 반영안된거같은데?"*).
+  //    반 이름은 이미 미래 이름으로 그리므로(futureNames), 줄만 옛 배치로 두면 9월 주 화면에서
+  //    **9월 반 이름이 8월 줄에 서 있다**. 판정·조회는 예약 스냅샷 단일 소스.
+  // ⚠️ 지나간 주는 물어보지도 않는다(왕복 0) — 예약은 미래분만 있다.
+  const scheduledGroups =
+    subjectRow && weekSundayOf(week) >= today
+      ? pickScheduledGroupsForWeek(
+          await getScheduledGroupPlans(),
+          weekSundayOf(week),
+          subject,
+          subjectRow.integrationGroups,
+        )
+      : null;
+  const customGroups = resolveIntegrationGroups(
+    // 🔴 **읽기 뷰에만** 갈아끼운다 — 배치 편집 모드는 아래에서 `subjectRow`를 직접 읽는다.
+    //    편집기에 미래 배치를 넣으면 저장 한 번에 그 배치가 **오늘부터** 굳어 버린다.
+    scheduledGroups && subjectRow ? { ...subjectRow, integrationGroups: scheduledGroups.groups } : subjectRow,
+  );
   // 저장해 둔 배치 보관함(과목별) — 그룹 설정(배치 편집) 모드가 읽는다.
   const groupPresets = normalizePresets(
     subjectRow?.integrationGroupPresets,

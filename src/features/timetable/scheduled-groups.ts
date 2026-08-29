@@ -112,3 +112,38 @@ export function readScheduledGroupPlan(value: unknown): ScheduledGroupPlan | nul
     ...(typeof raw.showOthers === "boolean" ? { showOthers: raw.showOthers } : {}),
   };
 }
+
+/** 적용일이 붙은 예약 한 건(조회 결과). */
+export type DatedGroupPlan = { date: string; plan: ScheduledGroupPlan };
+
+/**
+ * **그 주 화면에 그릴 배치** — 예약이 이 주 안(또는 그 전)에 시작되면 미리 그 배치로 보여 준다.
+ *
+ * 🔴 [`class-name-as-of.ts`](../classes/class-name-as-of.ts)의 거울상이다. 반 이름은 미래 주에 새 이름으로
+ *    그리면서 줄만 옛 배치로 두면, 강사가 9월 주를 열고 **9월 반 이름이 8월 줄에 서 있는** 화면을 본다
+ *    (원장 제보 2026-08-29 *"통합뷰 그룹설정(줄)은 반영안된거같은데?"*).
+ * 🔴 **cron이 실제로 적용할 때만 미리 보여 준다** — 사람이 그 사이 배치를 손봤으면 cron은 건너뛰므로
+ *    화면도 아무 말 하지 않아야 한다(오지 않을 미래를 약속하지 않는다).
+ * ⚠️ 배치는 사슬이 아니라 **통째 교체**라, 예약이 여럿이면 앞에서부터 이어지는지 확인하며 걸어간다.
+ * ⚠️ 축이 **주 끝**인 이유: 9/1(화)이 든 주는 5일 중 4일이 9월이다. 주 시작으로 잡으면 그 주 내내
+ *    옛 줄로 보여 정작 전환 주에 가장 헷갈린다(이름은 칸마다 날짜가 있어 주 시작 축을 쓸 수 있다).
+ */
+export function pickScheduledGroupsForWeek(
+  plans: readonly DatedGroupPlan[],
+  weekEnd: string,
+  subject: string,
+  current: unknown,
+): ScheduledGroupPlan | null {
+  const due = plans
+    .filter((p) => p.plan.subject === subject && p.date <= weekEnd)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  let running: unknown = current;
+  let picked: ScheduledGroupPlan | null = null;
+  for (const p of due) {
+    if (!shouldApplyGroups(p.plan, running)) break; // 사슬이 끊겼다 — cron도 여기서 멈춘다
+    running = p.plan.groups;
+    picked = p.plan;
+  }
+  return picked;
+}

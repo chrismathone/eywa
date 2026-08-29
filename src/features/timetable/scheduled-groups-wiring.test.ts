@@ -15,6 +15,10 @@ const cron = strip(read("src", "app", "api", "cron", "apply-due-class-updates", 
 const applier = strip(read("src", "features", "owner", "server", "scheduled-groups.ts"));
 const due = strip(read("src", "features", "timetable", "due-class-updates.ts"));
 const script = strip(read("scripts", "_english_sync", "sync-integration-groups.mts"));
+const pages = [
+  ["시간표", strip(read("src", "app", "(shell)", "timetable", "page.tsx"))],
+  ["시간표(dev)", strip(read("src", "app", "(shell)", "timetable-dev", "page.tsx"))],
+] as const;
 
 describe("cron이 그룹 예약을 읽고 적용한다", () => {
   it("스냅샷 payload에서 그룹 예약을 함께 조회한다", () => {
@@ -91,3 +95,36 @@ describe("예약을 싣는 스크립트", () => {
     expect(script).toMatch(/from: curGroups/);
   });
 });
+
+describe("미래 주 화면이 그 주에 쓸 줄로 그린다", () => {
+  for (const [label, page] of pages) {
+    it(`${label}: 예약 배치를 읽어 통합뷰 그룹에 갈아끼운다`, () => {
+      expect(page).toMatch(/pickScheduledGroupsForWeek\(\s*await getScheduledGroupPlans\(\)/);
+      expect(page).toMatch(/resolveIntegrationGroups\(/);
+    });
+
+    it(`${label}: 🔴 배치 편집기엔 미래 배치를 넣지 않는다 — 저장 한 번에 오늘부터 굳는다`, () => {
+      // 편집기는 반드시 저장된 값(subjectRow)을 그대로 읽어야 한다.
+      expect(page).toMatch(/initialGroups=\{\(subjectRow\?\.integrationGroups \?\? \[\]\)/);
+      // 갈아끼운 값은 읽기 뷰가 쓰는 customGroups 한 곳에만 들어간다.
+      expect(page).not.toMatch(/initialGroups=\{[^}]*scheduledGroups/);
+    });
+
+    it(`${label}: 지나간 주는 조회하지 않는다(왕복 0)`, () => {
+      expect(page).toMatch(/weekSundayOf\([A-Za-z]+\) >= today/);
+    });
+  }
+});
+
+describe("🔴 엑셀·시트는 지금 배치 그대로 — 화면과 짝이 맞아야 한다", () => {
+  // 화면은 미래 주에 **미래 이름 + 미래 줄**을 함께 쓰고, 내보내기는 **지금 이름 + 지금 줄**을 함께 쓴다.
+  // 한쪽만 미래로 가면 "9월 이름이 8월 줄에" 또는 그 반대가 되어 받는 사람이 무엇을 보는지 알 수 없다.
+  const excel = strip(read("src", "features", "exports", "english-timetable", "build-buffer.ts"));
+
+  it("엑셀 빌더는 예약 배치를 쓰지 않는다", () => {
+    expect(excel).toContain("resolveIntegrationGroups(subjectRow)");
+    expect(excel).not.toContain("pickScheduledGroupsForWeek");
+    expect(excel).not.toContain("futureNames");
+  });
+});
+
