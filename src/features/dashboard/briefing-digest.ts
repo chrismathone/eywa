@@ -8,6 +8,7 @@
  */
 import {
   buildTodayActions,
+  labelSubjectCounts,
   subjectBreakdownText,
   type SubjectLabelResolver,
   type TodayActionItem,
@@ -28,8 +29,17 @@ export type DailyBriefingPayload = {
    * 위험 학생 스포트라이트(결정론) — retention 상위 + 반복 결석 병합, 최대 6명.
    * 이름·사유·권장 조치 전부 시스템 산출(retention risk.reasons·primaryAction) = 카드가 이걸 직접 렌더하고
    * LLM은 이 명단 안에서만 언급 가능(매니저 팀 보고의 grounding 재료).
+   *
+   * `bySubject` = **그 사유가 관측된 과목**(원장 2026-08-29 "운영실 보고시에 과목별 표기되도록 과목 라벨").
+   * ⚠️ 옛 payload(2026-08-29 이전 저장분)엔 이 키가 없다 — 읽는 쪽은 항상 `?? []`로 받을 것.
    */
-  spotlights: { studentId: string | null; name: string; reasons: string[]; action: string | null }[];
+  spotlights: {
+    studentId: string | null;
+    name: string;
+    reasons: string[];
+    action: string | null;
+    bySubject: { label: string; count: number }[];
+  }[];
   /** 조회 실패 도메인(확인 불가 정직성) — 라벨만 */
   sourceIssueLabels: string[];
 };
@@ -51,7 +61,16 @@ export type BuildDailyBriefingInput = {
   /** 지금(실제 오늘) 수집 — 어제 미기록 반·오늘 휴가·승인 대기만 소비 */
   todayRaw: TodayActionsRaw;
   followUps: { overdue: number; dueSoon: number };
-  absenceRisks: { studentId?: string | null; studentName: string; absences: number }[];
+  /**
+   * 반복 결석 위험 학생. `bySubject`(과목 키 단위 raw 집계)는 서버가 붙인다 —
+   * 합은 반드시 `absences`와 같다(같은 세는 규칙, absence-subjects.ts). 없으면 과목 표기를 생략한다.
+   */
+  absenceRisks: {
+    studentId?: string | null;
+    studentName: string;
+    absences: number;
+    bySubject?: { subject: string; count: number }[];
+  }[];
   retention: { total: number; risk: number; warn: number; revenueRisk: number } | null;
   /** retention 상위 위험 학생(위험도 내림차순, 사유·권장 조치 포함) — 서버가 roster에서 추출. */
   retentionTop: { studentId: string; name: string; reasons: string[]; action: string | null }[];
@@ -67,13 +86,40 @@ export type BuildDailyBriefingInput = {
 
 const SPOTLIGHT_MAX = 6;
 
-/** retention 상위 + 반복 결석 병합(이름 중복 제거) — 결석만 걸린 학생은 결석 사유로 추가. */
+/**
+ * 분해 합이 "N회"와 다르면 **분해를 통째로 버린다**.
+ *
+ * 총계(RPC)와 분해(별도 조회)는 창 기준일을 각각 계산하므로, 두 조회 사이에 더 나중 날짜의 출결이
+ * 들어오면 창이 하루 어긋나 합이 갈릴 수 있다(아침 cron에선 사실상 없지만 0은 아니다). 그때 나란히
+ * 놓인 "8회"와 "수학 6 · 영어 1"은 둘 중 하나가 거짓인데 화면만 봐선 알 수 없다 — 비우는 쪽이 낫다.
+ */
+function groundedSubjects(risk: BuildDailyBriefingInput["absenceRisks"][number]): { subject: string; count: number }[] {
+  const buckets = risk.bySubject ?? [];
+  if (buckets.length === 0) return [];
+  const sum = buckets.reduce((total, bucket) => total + bucket.count, 0);
+  return sum === risk.absences ? buckets : [];
+}
+
+/**
+ * retention 상위 + 반복 결석 병합(이름 중복 제거) — 결석만 걸린 학생은 결석 사유로 추가.
+ *
+ * ■ 과목 표기(원장 2026-08-29)는 **사유가 관측된 과목**만 붙인다. 두 재료의 사정이 다르다:
+ *   · **반복 결석** = 어느 반에서 빠졌는지가 행에 그대로 있다 → 과목별 건수를 정확히 쪼갤 수 있고
+ *     합이 "N회"와 일치한다(absence-subjects.ts). 실데이터(injaewon 2026-08-29, 위험 12명)에서
+ *     **9명이 영어·수학 양쪽에 결석이 걸려 있다**("수학 6 · 영어 2" 하은결) — 그래서 한 과목만 고르면
+ *     나머지가 사라진다. 전부, 건수와 함께 보여준다(원장이 "어느 과목부터"를 고를 수 있게).
+ *   · **retention 위험**은 성적·숙제·상담공백·학부모 신호가 뒤섞인 점수라 **어느 과목의 문제인지
+ *     데이터가 말해주지 않는다**(risk.ts는 과목 축을 아예 갖고 있지 않다). 수강 과목을 대신 붙이면
+ *     같은 자리에 "문제 난 과목"과 "그냥 듣는 과목"이 섞여 거짓말이 된다 → **비운다**.
+ *     (실사용 영향 0: injaewon은 retention 메뉴가 꺼져 있어 스포트라이트가 전부 결석 재료다.)
+ */
 function buildSpotlights(input: BuildDailyBriefingInput): DailyBriefingPayload["spotlights"] {
   const spotlights: DailyBriefingPayload["spotlights"] = input.retentionTop.slice(0, SPOTLIGHT_MAX).map((s) => ({
     studentId: s.studentId,
     name: s.name,
     reasons: s.reasons,
     action: s.action,
+    bySubject: [],
   }));
   const seen = new Set(spotlights.map((s) => s.name));
   for (const risk of input.absenceRisks) {
@@ -85,6 +131,8 @@ function buildSpotlights(input: BuildDailyBriefingInput): DailyBriefingPayload["
       name: risk.studentName,
       reasons: [`최근 14일 결석 ${risk.absences}회`],
       action: null,
+      // 라벨은 학원설정 단일 소스 — 리졸버가 없으면 분해를 통째로 생략한다(raw 키 노출 금지).
+      bySubject: labelSubjectCounts(groundedSubjects(risk), input.subjectLabel),
     });
   }
   return spotlights;
@@ -190,6 +238,8 @@ export function narrativeNumberWhitelist(payload: DailyBriefingPayload): Set<str
     for (const text of [...spotlight.reasons, spotlight.action ?? ""]) {
       for (const token of text.match(/\d+/g) ?? []) numbers.add(String(Number(token)));
     }
+    // 과목 분해 수치("수학 6 · 영어 2")도 프롬프트에 나간다 — 빠뜨리면 정상 보고가 탈락한다.
+    for (const bucket of spotlight.bySubject ?? []) add(bucket.count);
   }
   return numbers;
 }
@@ -218,6 +268,8 @@ export function narrativeWordWhitelist(payload: DailyBriefingPayload): Set<strin
     harvest(spotlight.name);
     harvest(spotlight.action);
     for (const reason of spotlight.reasons) harvest(reason);
+    // 과목 라벨이 영문일 수 있다(학원이 "EIE" 같은 이름을 쓰면) — 위 attention과 같은 이유로 인용 허용.
+    for (const bucket of spotlight.bySubject ?? []) harvest(bucket.label);
   }
   for (const label of payload.sourceIssueLabels) harvest(label);
   return words;

@@ -108,10 +108,51 @@ describe("spotlights (매니저 팀 보고 재료)", () => {
       ],
     });
     expect(payload.spotlights).toEqual([
-      { studentId: "r1", name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" },
-      { studentId: "r2", name: "박지율", reasons: ["결석 2회"], action: null },
-      { studentId: "a2", name: "정호준", reasons: ["최근 14일 결석 4회"], action: null },
+      {
+        studentId: "r1",
+        name: "김보민",
+        reasons: ["성적 15점 하락", "상담 공백 45일"],
+        action: "학부모 상담 예약",
+        bySubject: [],
+      },
+      { studentId: "r2", name: "박지율", reasons: ["결석 2회"], action: null, bySubject: [] },
+      { studentId: "a2", name: "정호준", reasons: ["최근 14일 결석 4회"], action: null, bySubject: [] },
     ]);
+  });
+
+  it("결석 사유엔 과목 분해가 붙고(라벨은 학원설정), retention 사유엔 안 붙는다", () => {
+    const payload = buildDailyBriefingPayload({
+      ...BASE,
+      // retention 위험은 성적·숙제·상담이 뒤섞인 점수라 '어느 과목'이 데이터에 없다 → 비운다.
+      retentionTop: [{ studentId: "r1", name: "김보민", reasons: ["성적 15점 하락"], action: null }],
+      absenceRisks: [
+        { studentId: "a1", studentName: "하은결", absences: 8, bySubject: [{ subject: "math", count: 6 }, { subject: "english", count: 2 }] },
+      ],
+      subjectLabel: (key) => ({ math: "수학", english: "영어" })[key] ?? key,
+    });
+    expect(payload.spotlights[0]!.bySubject).toEqual([]);
+    expect(payload.spotlights[1]!.bySubject).toEqual([
+      { label: "수학", count: 6 },
+      { label: "영어", count: 2 },
+    ]);
+  });
+
+  it("분해 합이 N회와 다르면 분해를 버린다(나란히 놓인 두 숫자가 서로를 부정하지 않게)", () => {
+    const payload = buildDailyBriefingPayload({
+      ...BASE,
+      absenceRisks: [{ studentName: "하은결", absences: 8, bySubject: [{ subject: "math", count: 6 }] }],
+      subjectLabel: (key) => key,
+    });
+    expect(payload.spotlights[0]!.reasons).toEqual(["최근 14일 결석 8회"]);
+    expect(payload.spotlights[0]!.bySubject).toEqual([]);
+  });
+
+  it("과목 라벨 리졸버가 없으면 분해를 통째로 생략한다(raw 키 노출 금지)", () => {
+    const payload = buildDailyBriefingPayload({
+      ...BASE,
+      absenceRisks: [{ studentName: "하은결", absences: 8, bySubject: [{ subject: "math", count: 8 }] }],
+    });
+    expect(payload.spotlights[0]!.bySubject).toEqual([]);
   });
 
   it("6명 상한 — retention 5명 + 결석 학생은 남는 자리만", () => {

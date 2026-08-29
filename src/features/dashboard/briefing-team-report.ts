@@ -19,15 +19,20 @@ export type TeamReport = {
 };
 
 export function buildTeamPrompt(payload: DailyBriefingPayload): string {
-  const spotlightLines = payload.spotlights.map(
-    (s) => `- ${s.name}: ${s.reasons.join(", ")}${s.action ? ` → 권장 조치: ${s.action}` : ""}`,
-  );
+  const spotlightLines = payload.spotlights.map((s) => {
+    // 과목 분해가 있으면 이름 뒤 대괄호로("[수학 6 · 영어 2]") — 매니저가 "어느 과목부터"를 짚는 근거다.
+    // 옛 payload엔 bySubject가 없다(?? []). 라벨·수치 모두 화이트리스트에 이미 들어 있어 인용해도 안 걸린다.
+    const subjects = subjectBreakdownText(s.bySubject ?? []);
+    return `- ${s.name}${subjects ? ` [${subjects}]` : ""}: ${s.reasons.join(", ")}${
+      s.action ? ` → 권장 조치: ${s.action}` : ""
+    }`;
+  });
   return [
     "당신은 학원 원장을 보좌하는 매니저 팀(수업·학생·상담·수납·운영)입니다. 아래 결정론 수치 요약과 위험 학생 명단만 근거로, 각 영역 매니저가 아침 회의에서 원장에게 보고하듯 JSON으로만 답하세요.",
     "",
     "규칙(반드시 준수):",
     "- 각 매니저 보고는 1~3문장 한국어 존댓말. 사실 나열이 아니라 **판단**(왜 중요한지)과 **오늘 할 일 1가지 제안**을 담을 것.",
-    "- 괄호 안 과목별 수치가 있으면 **어느 과목이 문제인지 짚고** 그 과목부터 처리하도록 제안할 것.",
+    "- 괄호·대괄호 안 과목별 수치가 있으면 **어느 과목이 문제인지 짚고** 그 과목부터 처리하도록 제안할 것.",
     "- 아래 요약·명단에 있는 숫자만 그대로 사용. 새 숫자·비율·합산·추정 금지.",
     spotlightLines.length > 0
       ? "- 학생 이름은 아래 위험 학생 명단에 있는 이름만 언급 가능. 명단 밖 이름 창작 금지."
@@ -40,7 +45,9 @@ export function buildTeamPrompt(payload: DailyBriefingPayload): string {
     "",
     `[${payload.date} 아침 기준 운영 요약]`,
     ...digestFactLines(payload),
-    ...(spotlightLines.length > 0 ? ["", "[위험 학생 (사유·권장 조치는 시스템 산출)]", ...spotlightLines] : []),
+    ...(spotlightLines.length > 0
+      ? ["", "[위험 학생 (대괄호=과목별 건수. 과목·사유·권장 조치 모두 시스템 산출)]", ...spotlightLines]
+      : []),
   ].join("\n");
 }
 

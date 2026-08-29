@@ -2,8 +2,13 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchInChunks, fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchInChunks, fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { inclusiveDateWindowStart, kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
+import {
+  countAbsencesBySubject,
+  type AbsenceSubjectCounts,
+  type AbsenceSubjectRow,
+} from "@/features/dashboard/absence-subjects";
 import { attendanceRate } from "@/lib/calc/attendance";
 import type { SystemRole } from "@/lib/permissions";
 import { summarizeInvoices } from "@/features/billing/calc";
@@ -721,6 +726,70 @@ export async function getAbsenceRiskStudents(
     absences: Number(r.absences),
   }));
 }
+
+/**
+ * 결석 위험 14일 창의 **기준일**(anchor) — `dashboard_absence_risk*`가 쓰는 값과 같은 정의:
+ * 그 테넌트의 `max(session_date)` 중 **오늘(KST) 이하**(0220a — 미리 찍은 미래 결석이 창을 밀지 않게).
+ *
+ * 행을 모아 JS에서 max를 구하지 않고 **정렬 1행만** 받는다(B2). 실측 4ms(injaewon 12,910행 —
+ * index-only scan + top-N heapsort). 아침 cron에서 1회라 이 이상 조일 이유가 없다.
+ * 출결이 한 건도 없으면 null → 호출부는 과목 분해를 포기한다(창을 임의로 지어내지 않는다).
+ */
+export async function getAbsenceRiskAnchor(db: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  tenantId: string;
+}): Promise<string | null> {
+  const { data, error } = await db.supabase
+    .from("attendance_records")
+    .select("session_date")
+    .eq("tenant_id", db.tenantId)
+    .lte("session_date", kstToday())
+    .order("session_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`getAbsenceRiskAnchor: ${error.message}`);
+  return (data?.session_date as string | undefined) ?? null;
+}
+
+/**
+ * 결석 위험 학생의 "N회"를 **과목별로 쪼갠다**(원장 2026-08-29 "과목별 표기").
+ *
+ * 🔴 status로 미리 거르지 않는다 — 유효 행은 (학생,반,수업일,교시)별 **최신 1건**이라, 결석을 출석으로
+ *    정정한 날은 새 행이 있어야 그 결석이 사라진다. `eq("status","absent")`로 좁히면 정정 전 결석이 되살아나
+ *    분해 합이 총계보다 커진다. 세는 규칙은 [absence-subjects.ts](../absence-subjects.ts) 단일 소스.
+ * B2/B3: 학생 id로 좁힌 뒤 `fetchAllPagedInChunks`(청크 + range 페이징) — 영어는 하루가 2~3행이라
+ * 위험 학생 십수 명 × 14일이면 청크당 1,000행에 닿을 수 있다.
+ */
+export async function getAbsenceSubjectBreakdown(
+  db: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
+  studentIds: string[],
+  anchorDate: string,
+): Promise<AbsenceSubjectCounts> {
+  if (studentIds.length === 0) return new Map();
+  const rows = await fetchAllPagedInChunks(studentIds, (chunk, from, to) =>
+    db.supabase
+      .from("attendance_records")
+      .select("id, student_id, class_id, session_date, slot_start, status, recorded_at, class:class_id ( subject )")
+      .eq("tenant_id", db.tenantId)
+      .in("student_id", chunk)
+      .gte("session_date", inclusiveDateWindowStart(anchorDate, 14))
+      .lte("session_date", anchorDate)
+      .order("id", { ascending: true }) // OFFSET 페이지가 흔들리지 않도록 unique tie-break
+      .range(from, to),
+  );
+  return countAbsencesBySubject(
+    (rows as RawAbsenceRow[]).map((row) => {
+      // PostgREST 임베드는 1:1이라도 배열로 올 수 있다(retention queries 선례).
+      const cls = Array.isArray(row.class) ? row.class[0] : row.class;
+      return { ...row, subject: cls?.subject ?? null };
+    }),
+  );
+}
+
+/** 위 select가 돌려주는 모양 — 과목은 임베드 안에 있어 순수 함수 입력으로 평탄화한다. */
+type RawAbsenceRow = Omit<AbsenceSubjectRow, "subject"> & {
+  class: { subject: string | null } | { subject: string | null }[] | null;
+};
 
 /** 결석 위험 학생 — 위 `getTopOutstandingCached`와 같은 계약(권한은 호출부가 확인, 60초 캐시). */
 export const getAbsenceRiskCached = (tenantId: string): Promise<AbsenceRisk[]> =>

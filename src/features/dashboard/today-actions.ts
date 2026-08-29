@@ -147,7 +147,7 @@ function groupBySubject(
 }
 
 /** 이미 집계된 `{subject,count}`에 라벨만 입힌다(같은 라벨로 접히면 합산 — 폐지 과목 흡수 대비). */
-function labelSubjectCounts(
+export function labelSubjectCounts(
   rows: readonly { subject: string; count: number }[],
   subjectLabel: SubjectLabelResolver | undefined,
 ): { label: string; count: number }[] {

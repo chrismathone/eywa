@@ -2,6 +2,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { DailyBriefingRow } from "@/features/dashboard/server/briefing";
 import { buildFallbackTeamReport, type TeamReport } from "@/features/dashboard/briefing-team-report";
+import { subjectBreakdownText } from "@/features/dashboard/today-actions";
 import { DailyBriefingRegen } from "./daily-briefing-regen";
 
 /**
@@ -115,9 +116,18 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                   }`}
                 >
                   {payload.spotlights.map((s, i) => {
+                    // 과목 라벨(원장 2026-08-29) — 라벨은 생성 시점에 학원설정에서 확정돼 payload에 들어 있다.
+                    // ⚠️ 옛 payload엔 이 키가 없다(?? []). 🔴 과목 색을 여기서 고르지 말 것 — 색은 학원설정 축이고
+                    //    이 자리는 스냅샷이라 키가 없다. 뜻(tone) 색도 아니므로 중립 알약으로 둔다.
+                    const subjects = subjectBreakdownText(s.bySubject ?? []);
                     const body = (
                       <>
                         <span className="text-foreground shrink-0 text-[13.5px] font-bold">{s.name}</span>
+                        {subjects ? (
+                          <span className="bg-bg-soft text-text-dim ring-line shrink-0 rounded-pill px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset">
+                            {subjects}
+                          </span>
+                        ) : null}
                         <span className="text-text-dim min-w-0 flex-1 truncate text-[12.5px]">
                           {s.reasons.slice(0, 2).join(" · ")}
                         </span>
@@ -139,7 +149,7 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                           <WindowLink
                             href={`/students/${s.studentId}`}
                             title={s.name}
-                            ariaLabel={`${s.name} — ${s.reasons.join(", ")}`}
+                            ariaLabel={`${s.name}${subjects ? ` (${subjects})` : ""} — ${s.reasons.join(", ")}`}
                             className="group hover:bg-bg-soft -mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition"
                           >
                             {body}

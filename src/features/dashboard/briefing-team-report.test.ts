@@ -45,6 +45,23 @@ const RICH = buildDailyBriefingPayload({
   retentionTop: [{ studentId: "r1", name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" }],
 });
 
+/** 과목 분해가 붙은 결석 스포트라이트(injaewon 실데이터 모양 — 하은결 8회 = 수학 6 · 영어 2). */
+const SUBJECT_SPOTLIGHT = buildDailyBriefingPayload({
+  ...BASE,
+  absenceRisks: [
+    {
+      studentId: "a1",
+      studentName: "하은결",
+      absences: 8,
+      bySubject: [
+        { subject: "math", count: 6 },
+        { subject: "english", count: 2 },
+      ],
+    },
+  ],
+  subjectLabel: (key) => ({ math: "수학", english: "영어" })[key] ?? key,
+});
+
 describe("buildTeamPrompt", () => {
   it("위험 학생 명단(이름·사유·권장 조치)을 프롬프트에 포함한다", () => {
     const prompt = buildTeamPrompt(RICH);
@@ -56,6 +73,24 @@ describe("buildTeamPrompt", () => {
   });
   it("스포트라이트가 없으면 명단 섹션을 생략한다", () => {
     expect(buildTeamPrompt(buildDailyBriefingPayload(BASE))).not.toContain("[위험 학생");
+  });
+
+  // 원장 2026-08-29 "운영실 보고시에 과목별 표기되도록 과목 라벨".
+  it("결석 위험 학생 줄에 과목 분해를 대괄호로 싣는다", () => {
+    const prompt = buildTeamPrompt(SUBJECT_SPOTLIGHT);
+    expect(prompt).toContain("하은결 [수학 6 · 영어 2]");
+  });
+
+  // 🔴 회귀: 프롬프트가 사실로 준 숫자를 인용한 정상 보고가 후검증에서 탈락하면 안 된다(#89 계열).
+  it("프롬프트에 실린 과목별 수치를 인용해도 검증을 통과한다", () => {
+    const result = validateTeamReport(
+      {
+        headline: "하은결 학생 수학 결석부터 확인해 주세요",
+        managers: [{ area: "학생", report: "하은결 학생이 수학 6회 · 영어 2회 결석했습니다. 수학부터 연락을 권합니다." }],
+      },
+      SUBJECT_SPOTLIGHT,
+    );
+    expect(result.ok).toBe(true);
   });
 });
 
