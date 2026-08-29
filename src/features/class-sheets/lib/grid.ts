@@ -283,6 +283,32 @@ function slotMinutes(start: string, end: string): number {
 }
 
 /**
+ * 그 주에 **실제로 도는 교시가 하나라도 있나** — ECS 랜딩이 "이 주엔 없는 반"을 목록에서 뺄 때 쓴다
+ * (원장 2026-08-29 *"9/1 이후에 수업 없을때 차단… 미래보기의 경우"*).
+ *
+ * 🔴 **자리(LAB·JJ)도 세고 표시 토글도 안 본다.** 여기서 자리를 빼면 그 주에 LAB만 도는 반이
+ *    목록에서 사라지고, 토글을 보면 **개인 보기 설정 한 번에 반이 없어진다**(사용자가 예측 못 한다).
+ *    "안 그리는 자리"는 작성률 분모(`scheduledSlotKeySet`)의 문제이지 **반의 존재** 문제가 아니다.
+ * 🔴 행의 유무로 세지 말 것 — `valid_from`이 그 주 **수요일**이면 월요일 행은 살아 있어도 그 주엔
+ *    한 번도 안 돈다. 날짜별 판정을 위 두 함수와 **같은 규칙**으로 돌린다(따로 구현하면 갈린다).
+ */
+export function hasLiveSlotInWeek(
+  weekMonday: string,
+  schedules: readonly Pick<GridScheduleRow, "dayOfWeek" | "validFrom" | "validTo">[],
+): boolean {
+  for (const date of weekDatesOf(weekMonday)) {
+    const dow = dowKeyOf(date);
+    for (const s of schedules) {
+      if (s.dayOfWeek !== dow) continue;
+      if (s.validFrom > date) continue;
+      if (s.validTo && s.validTo < date) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 그 주의 **자리(LAB·JJ) 슬롯 키** 집합 — 랜딩이 "고아(시간 변경됨)"를 셀 때 빼기 위한 것.
  *
  * 🔴 자리 교시는 스케줄에 **있다**. 우리가 화면에서 안 그릴 뿐이다. 그래서 `scheduledSlotKeySet`에서

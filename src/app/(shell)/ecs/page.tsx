@@ -148,11 +148,14 @@ export default async function EcsLandingPage({
           {res.emptyReason === "filtered"
             ? // 되돌릴 수 있는 원인 — 무엇을 누르면 되는지까지 말한다(막다른 안내 금지).
               `지금 보기가 '${ENGLISH_TRACK_FILTER_LABEL[res.trackFilter]}'로 좁혀져 있어 표시할 반이 없습니다. 위 '프로그램'에서 전체를 누르면 ${res.trackCounts.all}개 반이 모두 보입니다.`
-            : res.emptyReason === "no-scoped-classes"
-              ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
-              : res.emptyReason === "not-configured"
-                ? "영어 과목의 수업계획(영어 강사 시트) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
-                : "이 주에 운영 중인 영어 반이 없습니다."}
+            : res.emptyReason === "no-week-classes"
+              ? // 반은 있는데 그 주만 비었다 — 주를 옮기면 보인다는 것까지 말한다(막다른 안내 금지).
+                "이 주에 수업이 배정된 영어 반이 없습니다. 위 주 이동으로 다른 주를 확인하세요."
+              : res.emptyReason === "no-scoped-classes"
+                ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
+                : res.emptyReason === "not-configured"
+                  ? "영어 과목의 수업계획(영어 강사 시트) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
+                  : "이 주에 운영 중인 영어 반이 없습니다."}
         </p>
       ) : (
         // 카드 벽 → **한 장의 시트**(2026-08-11 원장 "이름에 걸맞게 컴팩트하게"). 상세는 landing-list.tsx.

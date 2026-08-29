@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildWeekGrid,
+  hasLiveSlotInWeek,
   hiddenSeatOf,
   scheduledSlotKeySet,
   scheduledUnitsByDate,
@@ -704,5 +705,47 @@ describe("scheduledUnitsByDate — 유닛 자동값(트랙별 규칙·표시 설
       p("mon", "15:00", "15:40", { validFrom: "2026-07-21" }),
     ];
     expect(scheduledUnitsByDate(MON, s, "periods")).toEqual({});
+  });
+});
+
+/**
+ * 그 주에 도는 교시가 있나 — ECS 랜딩이 "이 주엔 없는 반"을 빼는 판정(원장 2026-08-29).
+ * 실측 표본: 9/1 신설 반 `PL1b`는 모든 슬롯이 `valid_from = 2026-09-01`이라, 그 전 주차엔 한 번도 안 돈다.
+ */
+describe("hasLiveSlotInWeek", () => {
+  const from0901 = [
+    { dayOfWeek: "mon" as const, validFrom: "2026-09-01", validTo: null },
+    { dayOfWeek: "wed" as const, validFrom: "2026-09-01", validTo: null },
+  ];
+
+  it("시작 전 주차는 false(= 목록에서 뺀다)", () => {
+    expect(hasLiveSlotInWeek("2026-08-24", from0901)).toBe(false);
+  });
+
+  it("시작일이 낀 주차는 true — 9/1(화)이 든 주의 수요일 교시가 산다", () => {
+    expect(hasLiveSlotInWeek("2026-08-31", from0901)).toBe(true);
+  });
+
+  it("끝난 뒤 주차는 false", () => {
+    const ended = [{ dayOfWeek: "mon" as const, validFrom: "2026-06-01", validTo: "2026-08-31" }];
+    expect(hasLiveSlotInWeek("2026-08-31", ended)).toBe(true);
+    expect(hasLiveSlotInWeek("2026-09-07", ended)).toBe(false);
+  });
+
+  it("🔴 행은 살아 있어도 그 주엔 안 도는 경우를 잡는다(행 유무로 세면 틀린다)", () => {
+    // valid_from = 그 주 수요일인데 요일은 월요일 → 그 주엔 한 번도 안 돈다.
+    const wedStartMonSlot = [{ dayOfWeek: "mon" as const, validFrom: "2026-09-02", validTo: null }];
+    expect(wedStartMonSlot.length).toBe(1); // 행은 있다
+    expect(hasLiveSlotInWeek("2026-08-31", wedStartMonSlot)).toBe(false);
+    expect(hasLiveSlotInWeek("2026-09-07", wedStartMonSlot)).toBe(true);
+  });
+
+  it("🔴 자리(LAB·JJ)만 도는 주도 true — 화면에서 안 그릴 뿐 반은 존재한다", () => {
+    const labOnly = [{ dayOfWeek: "fri" as const, validFrom: "2026-01-01", validTo: null }];
+    expect(hasLiveSlotInWeek("2026-08-31", labOnly)).toBe(true);
+  });
+
+  it("슬롯이 없으면 false", () => {
+    expect(hasLiveSlotInWeek("2026-08-31", [])).toBe(false);
   });
 });

@@ -46,6 +46,7 @@ import {
 } from "@/features/classes/english-track";
 import {
   buildWeekGrid,
+  hasLiveSlotInWeek,
   scheduledSlotKeySet,
   scheduledUnitsByDate,
   seatSlotKeySet,
@@ -703,6 +704,11 @@ export type SheetLandingEmptyReason =
   | "no-classes"
   /** 반은 있는데 **보기 필터**(전체/EiE/인재원 영어) 때문에 빈 것 — 되돌릴 수 있는 원인이라 따로 안내한다. */
   | "filtered"
+  /**
+   * 담당 반은 있는데 **그 주에 배정된 교시가 하나도 없는** 것 — 주를 옮기면 보이므로 따로 안내한다.
+   * (신설 반의 시작 전 주차·종강 반의 이후 주차가 여기 걸린다.)
+   */
+  | "no-week-classes"
   | null;
 
 export async function getSheetLanding(
@@ -781,7 +787,10 @@ export async function getSheetLanding(
   // 옵션이 있어야 저장된 담임 필터가 지금 고를 수 있는 값인지 판정할 수 있다 — 그런데 이 셋은 서로
   // 독립이라 **직렬로 세우면 왕복이 합산된다**(B4). 대상 id를 스코프 이후가 아니라 `allClasses`에서
   // 뽑으면(어차피 영어 담임 십수 명) 스코프 조회와 **동시에** 던질 수 있다.
-  const [{ classIds: visibleIds }, delegatedIds, teachers, nameIndex] = await Promise.all([
+  // 그 주의 배정 교시 — **필터보다 먼저** 알아야 한다(아래 `running` 주석). 대상은 스코프 이전
+  // `allClasses`(영어 반 44개 규모)라 스코프 조회와 **같은 묶음**에 태울 수 있다(B4).
+  const allClassIds = (allClasses ?? []).map((c) => c.id as string);
+  const [{ classIds: visibleIds }, delegatedIds, teachers, nameIndex, schedules] = await Promise.all([
     ecsVisibleClassFilter(),
     ecsDelegatedClassIds(),
     fetchInChunks<{ id: string; display_name: string | null }>(
@@ -790,21 +799,68 @@ export async function getSheetLanding(
     ),
     // 예약된 개명 — 이것도 위 셋과 독립이라 **같은 묶음**에 태운다(B4). 요청 캐시라 시트 헤더가 또 물어도 왕복 0.
     getClassNameAsOfIndex(),
+    fetchInChunks<{
+      class_id: string;
+      day_of_week: DowKey;
+      start_time: string;
+      valid_from: string;
+      valid_to: string | null;
+      // 자리(LAB·JJ) 판정용 — 작성률 분모에서 빼려면 라벨이 필요하다(빼먹으면 랜딩만 옛 분모로 남는다).
+      slot_teacher_label: string | null;
+    }>(allClassIds, (chunk) =>
+      supabase
+        .from("class_schedules")
+        .select("class_id, day_of_week, start_time, valid_from, valid_to, slot_teacher_label")
+        .in("class_id", chunk)
+        .lte("valid_from", weekSunday)
+        .or(`valid_to.is.null,valid_to.gte.${weekMonday}`),
+    ),
   ]);
   const scopeSet = visibleIds ? new Set(visibleIds) : null;
   // 카드에 '위임' 배지를 달기 위한 집합 — 게이트와 **같은 소스**(ecsDelegatedClassIds)라 배지와 접근이 안 갈린다.
   const delegatedIdSet = new Set(delegatedIds);
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
   const inScope = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
+  const schedulesByClass = new Map<string, typeof schedules>();
+  for (const row of schedules) {
+    const arr = schedulesByClass.get(row.class_id) ?? [];
+    arr.push(row);
+    schedulesByClass.set(row.class_id, arr);
+  }
+  /**
+   * 🔴 **그 주에 배정된 교시가 하나도 없는 반은 목록에서 뺀다**(원장 2026-08-29 *"9/1 이후에 수업
+   * 없을때 차단할 수 있는지 … 미래보기의 경우"*). 시간표는 칸을 슬롯에서 그리니 저절로 사라지지만
+   * 랜딩은 **반을 먼저 세워 놓고** 그 주 교시를 세는 구조라, 안 걸러내면 `0/0` 카드가 남는다.
+   * 실측(2026-08-29): 9/1 신설 반 `PL1b`·`중등E_초6 MED b`가 6월 말부터 **매주** 0교시로 떠 있었고,
+   * 6월 중순엔 그런 반이 17개였다 — 분모가 0인 카드는 담임에게 할 수 없는 일을 재촉한다.
+   *
+   * 🔴 판정은 [`hasLiveSlotInWeek`](../lib/grid) — **자리(LAB·JJ)도 세고 표시 토글도 안 본다.**
+   *    작성률 분모(`scheduled`)로 세면 LAB만 도는 반이 사라지고 JJ 토글 한 번에 반이 없어진다.
+   *    행의 유무로 세도 안 된다 — `valid_from`이 그 주 수요일이면 월요일 행은 살아 있어도 안 돈다.
+   * ⚠️ 게이트(`requireEcsClassAccess`)는 건드리지 않는다 — 목록에서 빠져도 URL로 그 주를 여는 건
+   *    그대로 된다(빈 시트가 뜰 뿐이고, 과거 주차 열람은 유지되어야 한다).
+   */
+  const running = inScope.filter((c) =>
+    hasLiveSlotInWeek(
+      weekMonday,
+      (schedulesByClass.get(c.id as string) ?? []).map((r) => ({
+        dayOfWeek: r.day_of_week,
+        validFrom: r.valid_from,
+        validTo: r.valid_to,
+      })),
+    ),
+  );
   // 프로그램 보기 필터(전체/EiE/인재원 영어) — 개수는 **필터 전** 집합에서 세야 토글에 진짜 숫자가 뜬다.
+  // (여기서 '필터 전'은 프로그램·담임 필터 전이다. 위 주 배정은 필터가 아니라 **존재 여부**라
+  //  숫자에도 반영해야 한다 — 안 그러면 "전체 9"를 눌렀는데 7장이 뜬다.)
   const trackCounts = {
-    all: inScope.length,
-    eie: keepEnglishTrack(inScope, "eie").length,
-    injaewon: keepEnglishTrack(inScope, "injaewon").length,
+    all: running.length,
+    eie: keepEnglishTrack(running, "eie").length,
+    injaewon: keepEnglishTrack(running, "injaewon").length,
   };
   // 담임 필터는 프로그램 필터 **다음**에 걸린다(둘은 곱해진다). 옵션도 프로그램 적용 후 집합에서 만들어
   // "골랐는데 0개"가 구조적으로 안 나오게 한다 — 상세 규약은 landing-teacher.ts 주석.
-  const tracked = keepEnglishTrack(inScope, trackFilter).map((c) => ({
+  const tracked = keepEnglishTrack(running, trackFilter).map((c) => ({
     row: c,
     teacherId: (c.teacher_id as string | null) ?? null,
   }));
@@ -828,11 +884,13 @@ export async function getSheetLanding(
       // ⚠️ 여기서 말하는 '필터'는 **프로그램뿐**이다 — 담임 필터는 지금 목록에 있는 담임만 옵션이라
       //    고른 값이 목록을 비울 수 없다(그래서 안내가 담임을 지목하지 않는다).
       emptyReason:
-        inScope.length > 0
+        running.length > 0
           ? "filtered"
-          : scopeSet && (allClasses ?? []).length > 0
-            ? "no-scoped-classes"
-            : "no-classes",
+          : inScope.length > 0
+            ? "no-week-classes"
+            : scopeSet && (allClasses ?? []).length > 0
+              ? "no-scoped-classes"
+              : "no-classes",
     };
   }
 
@@ -841,25 +899,7 @@ export async function getSheetLanding(
     .filter((c) => readEnglishTrack({ english_track: c.english_track as string | null }) === "eie")
     .map((c) => c.id as string);
 
-  const [schedules, lines, shoutFlags] = await Promise.all([
-    fetchInChunks<{
-      class_id: string;
-      day_of_week: DowKey;
-      start_time: string;
-      valid_from: string;
-      valid_to: string | null;
-      // 자리(LAB·JJ) 판정용 — 작성률 분모에서 빼려면 라벨이 필요하다(빼먹으면 랜딩만 옛 분모로 남는다).
-      slot_teacher_label: string | null;
-    }>(
-      classIds,
-      (chunk) =>
-        supabase
-          .from("class_schedules")
-          .select("class_id, day_of_week, start_time, valid_from, valid_to, slot_teacher_label")
-          .in("class_id", chunk)
-          .lte("valid_from", weekSunday)
-          .or(`valid_to.is.null,valid_to.gte.${weekMonday}`),
-    ),
+  const [lines, shoutFlags] = await Promise.all([
     // 주간 계획 행 — 랜딩 집계용(28반 × 슬롯 × 행이라 1000행 초과 가능 → 페이지네이션, B2)
     fetchAllPagedInChunks<{
       class_id: string;
@@ -909,12 +949,6 @@ export async function getSheetLanding(
   // JJ 표시 설정 — 시트 화면과 **같은 값**으로 세야 두 화면의 작성률이 갈리지 않는다(LAB은 양쪽 다 제외).
   // (프로그램 필터와 함께 위에서 한 번만 읽는다 — 같은 행을 두 번 조회하지 않게.)
   const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
-  const schedulesByClass = new Map<string, typeof schedules>();
-  for (const s of schedules) {
-    const arr = schedulesByClass.get(s.class_id) ?? [];
-    arr.push(s);
-    schedulesByClass.set(s.class_id, arr);
-  }
   const meaningfulKeysByClass = new Map<string, Set<string>>();
   const allKeysByClass = new Map<string, Set<string>>();
   for (const l of lines) {
