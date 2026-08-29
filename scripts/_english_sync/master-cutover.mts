@@ -521,10 +521,35 @@ const renamePlan: { classId: string; from: string; to: string }[] = [];
 if (RENAMES.length) {
   // 순차 시뮬레이션 — 사다리 회전(LS6→LE1 뒤 LS5→LS6)이 정상 경로라 **적은 순서 그대로** 검사한다.
   const nameToId = new Map(ctx.classes.map((c) => [c.className, c.id]));
+  // 🔴 **폐지된 반도 이름을 붙들고 있다**(2026-08-29 실측으로 확인). 유니크 인덱스
+  //    `classes_tenant_name_subject_idx (tenant_id, class_name, subject)`엔 `WHERE is_active`가 **없어서**,
+  //    지난 학기 종강 반이 쥔 이름으로는 개명이 **23505로 거절**된다. 그런데 이 검사가 활성 반만 보고
+  //    있어서 예약은 성사되고, 정작 그날 cron이 그 항목에서만 실패한다 — 게다가 cron은 실패해도
+  //    '적용함' 표식을 남겨 **다시 시도하지 않는다**(9/1 실측 시뮬: 17건 중 PJ1·KW2 영구 미적용).
+  //    ⚠️ 이 학원은 레벨 사다리가 해마다 회전해 이름이 재활용된다 — 비활성이 쥔 영어 반 이름이 19개다.
+  const heldByInactive = new Map(
+    (
+      await sql<{ id: string; class_name: string; closed_at: string | null }[]>`
+        select id, class_name, closed_at::text from classes
+         where tenant_id = ${TENANT} and subject = ${SUBJECT} and is_active = false`
+    ).map((c) => [c.class_name, c]),
+  );
   for (const r of RENAMES) {
     const id = nameToId.get(r.from);
     if (!id) {
       console.error(`--rename 중단: "${r.from}" 이라는 활성 영어 반이 없습니다(이미 바꿨거나 오타).`);
+      await sql.end();
+      process.exit(1);
+    }
+    const dead = heldByInactive.get(r.to);
+    if (dead && dead.id !== id) {
+      console.error(
+        `--rename 중단: "${r.to}" 는 **폐지된 반**이 이미 쓰고 있습니다(id ${dead.id.slice(0, 8)}, 종강 ${dead.closed_at ?? "-"}).
+` +
+          `  반 이름 유니크 인덱스엔 is_active 조건이 없어 개명이 DB에서 거절됩니다.
+` +
+          `  그 폐지 반의 이름을 먼저 비우세요(예: "${r.to} (~${(dead.closed_at ?? "").slice(0, 7)})").`,
+      );
       await sql.end();
       process.exit(1);
     }
