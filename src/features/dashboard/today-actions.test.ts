@@ -15,7 +15,6 @@ const EMPTY: TodayActionsRaw = {
   yesterday: "2026-07-01",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
-  pendingExpenses: { total: 0, recent: 0 },
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
@@ -291,15 +290,13 @@ describe("buildTodayActions", () => {
     const items = buildTodayActions({
       ...EMPTY,
       absentToday: [{ studentId: "1", name: "a", subject: "math" }],
-      pendingExpenses: { total: 9, recent: 9 },
-      requestedTextbooks: 2,
+      requestedTextbooks: 9,
       makeeduIssue: { kind: "stale", detail: "30시간째 미동기" },
       leavesToday: [{ name: "박지훈" }],
     });
     expect(items.map((i) => i.key)).toEqual([
       "absent", // danger
-      "expenses", // amber 9
-      "textbooks", // amber 2
+      "textbooks", // amber 9
       "makeedu", // amber count null → 뒤
       "leaves-today", // info
     ]);

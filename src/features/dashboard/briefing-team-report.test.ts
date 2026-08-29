@@ -9,7 +9,6 @@ const EMPTY_RAW: TodayActionsRaw = {
   yesterday: "2026-07-15",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
-  pendingExpenses: { total: 0, recent: 0 },
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
@@ -39,7 +38,10 @@ const RICH = buildDailyBriefingPayload({
       { studentId: "s2", name: "박서연", subject: "math" },
       { studentId: "s3", name: "정호", subject: "math" },
     ],
-    pendingExpenses: { total: 18, recent: 5 },
+    // 수납 영역 재료 — '지출 결재 대기'는 운영실에서 뺐다(2026-08-29)라 교재 신청이 그 자리를 맡는다.
+    requestedTextbooks: 4,
+    // note(범위·내역)에 숫자가 실리는 신호 — 아래 "note에 실린 수치" 검증이 이걸 근거로 본다.
+    classnoteAttention: { failed: 5, tooOld: 0, humanHold: 0, stuck: 0 },
   },
   followUps: { overdue: 2, dueSoon: 1 },
   retentionTop: [{ studentId: "r1", name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" }],
@@ -169,7 +171,7 @@ describe("validateTeamReport", () => {
 
   it("note에 실린 수치도 근거로 인정한다(범위가 붙은 숫자)", () => {
     const result = validateTeamReport(
-      { headline: "지출 결재를 확인해 주세요", managers: [{ area: "수납", report: "최근 7일에만 5건이 새로 쌓였습니다." }] },
+      { headline: "리포트 발송을 확인해 주세요", managers: [{ area: "수업", report: "발송 실패 5건이 남아 있습니다." }] },
       RICH,
     );
     expect(result.ok).toBe(true);
@@ -182,7 +184,7 @@ describe("buildFallbackTeamReport", () => {
     expect(report.headline).toContain("어제 결석");
     const areas = report.managers.map((m) => m.area);
     expect(areas).toContain("수업"); // 결석
-    expect(areas).toContain("수납"); // 지출 결재
+    expect(areas).toContain("수납"); // 교재 신청(지출 결재는 2026-08-29에 운영실에서 뺐다)
     expect(areas).toContain("학생"); // 스포트라이트
     expect(areas).toContain("상담"); // 후속조치
     const student = report.managers.find((m) => m.area === "학생");

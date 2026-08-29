@@ -32,12 +32,11 @@ export type TodayActionsRaw = {
   failedAnalysis: { meetings: number; enrollment: number; consultations: number };
   /** makeedu 동기화 이상(자동 동기화 ON일 때만) — 없으면 null */
   makeeduIssue: { kind: "error" | "stale"; detail: string } | null;
-  /**
-   * 지출 결재 대기 — `total`은 **미결 전건**, `recent`는 최근 7일분.
-   * ⚠️ 예전엔 최근 7일분만 세어 그 숫자를 총건수처럼 보고했다(2026-07-31 실측: 화면 13건 / 실제 미결 171건,
-   * 가장 오래된 건 2026-03-30). 창 밖에 잠긴 미결이 더 많은 신호라 **총건수를 세고 7일분은 단서로** 붙인다.
-   */
-  pendingExpenses: { total: number; recent: number };
+  // 🔴 `pendingExpenses`(지출 결재 대기)는 **운영실에서 뺐다**(원장 2026-08-29 *"운영실에서
+  //    수납-지출결제대기 관련건은 빼버려"*) — 필드·수집·카드를 함께 지웠다. 결재는 /billing 지출 탭
+  //    그대로다. 되살릴 땐 `action-signals.ts`의 `pending-expenses` 수집부터 복구할 것
+  //    (필드만 되살리면 항상 0이다). 옛 주의사항: 총건수를 세야 한다(7일분만 세어 총건수처럼
+  //    보고한 적이 있다 — 2026-07-31 실측 화면 13건 / 실제 미결 171건).
   /** 교재 신청 미처리(주문 전) */
   requestedTextbooks: number;
   /** 휴가 승인 대기(아직 안 끝난 휴가만) */
@@ -382,22 +381,9 @@ export function buildTodayActions(
     });
   }
 
-  if (raw.pendingExpenses.total > 0) {
-    items.push({
-      key: "expenses",
-      severity: "amber",
-      label: "지출 결재 대기",
-      // ⚠️ 미결 **전건**. 최근 7일만 세면 창 밖에 몇 달째 잠긴 결재가 통째로 안 보인다(raw 주석).
-      count: raw.pendingExpenses.total,
-      unit: "건",
-      detail: null,
-      note: `최근 7일 ${raw.pendingExpenses.recent}건`,
-      bySubject: [],
-      href: "/billing?tab=expenses",
-      menuKey: "billing",
-      requiredAccess: "write",
-    });
-  }
+  // 🔴 '지출 결재 대기'는 **운영실에서 뺐다**(원장 2026-08-29 *"운영실에서 수납-지출결제대기
+  //    관련건은 빼버려"*). 결재 자체는 /billing 지출 탭에서 그대로 한다 — 운영실이 매일 재촉할 일이
+  //    아니라는 판단이다. 되살릴 땐 이 카드와 `action-signals.ts`의 `pending-expenses` 수집을 **함께**.
 
   if (raw.requestedTextbooks > 0) {
     items.push({

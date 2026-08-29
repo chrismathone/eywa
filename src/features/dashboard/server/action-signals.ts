@@ -463,7 +463,6 @@ export async function getTodayActionSignals(
     failedEnrollment,
     failedConsultations,
     makeedu,
-    expenses,
     textbooks,
     leavesPending,
     leavesToday,
@@ -577,39 +576,9 @@ export async function getTodayActionSignals(
         };
       },
     ),
-    collectSignal(
-      enabled("billing"),
-      {
-        key: "pending-expenses",
-        label: "지출 결재",
-        href: "/billing?tab=expenses",
-        menuKey: "billing",
-        requiredAccess: "write",
-      },
-      { total: 0, recent: 0 },
-      async () => {
-        // ⚠️ 총건수와 최근 7일분을 **둘 다** 센다. 예전엔 7일분만 세고 그걸 총건수처럼 표시해,
-        // 몇 달째 잠긴 결재가 통째로 안 보였다(2026-07-31 실측: 표시 13건 / 실제 미결 171건).
-        const [totalRes, recentRes] = await Promise.all([
-          scopeTenant(
-            supabase.from("expenses").select("*", { count: "exact", head: true }).eq("approval_status", "pending"),
-            db,
-          ),
-          scopeTenant(
-            supabase
-              .from("expenses")
-              .select("*", { count: "exact", head: true })
-              .eq("approval_status", "pending")
-              .gte("expense_date", sevenDayStart),
-            db,
-          ),
-        ]);
-        return {
-          total: countOrThrow(totalRes, "pending expenses"),
-          recent: countOrThrow(recentRes, "pending expenses (7d)"),
-        };
-      },
-    ),
+    // 🔴 '지출 결재 대기'는 **운영실에서 뺐다**(원장 2026-08-29). 카드를 지우면서 조회도 함께 지운다 —
+    //    안 쓰는 신호를 계속 세면 왕복만 늘고, 남아 있으면 다음 사람이 "왜 안 보이지"로 헤맨다.
+    //    결재 자체는 /billing 지출 탭 그대로. 되살릴 땐 여기 수집 + today-actions.ts 카드를 함께.
     collectSignal(
       enabled("billing"),
       {
@@ -801,7 +770,6 @@ export async function getTodayActionSignals(
     failedEnrollment,
     failedConsultations,
     makeedu,
-    expenses,
     textbooks,
     leavesPending,
     leavesToday,
@@ -820,7 +788,6 @@ export async function getTodayActionSignals(
       consultations: failedConsultations.value,
     },
     makeeduIssue,
-    pendingExpenses: { total: expenses.value.total, recent: expenses.value.recent },
     requestedTextbooks: textbooks.value,
     leavesPending: leavesPending.value,
     leavesToday: leavesToday.value.map((row) => {
