@@ -101,10 +101,11 @@ function Dialog({ studentId, onClose }: { studentId: string; onClose: () => void
               {(SUBSCORE_KEYS[subject] ?? []).map((k) => (
                 <label key={k} className="flex items-center gap-2">
                   <span className="text-muted-foreground w-16 text-xs">{k}</span>
+                  {/* step="1"이면 브라우저가 67.5를 유효하지 않다고 막는다(서버는 Number로 이미 소수를 받는다). */}
                   <input
                     name={`sub_${k}`}
                     type="number"
-                    step="1"
+                    step="0.01"
                     className={`${inputCls} num text-right`}
                   />
                 </label>

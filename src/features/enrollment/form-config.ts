@@ -29,7 +29,8 @@ export const REGISTRATION_STATUSES = [
 
 // ── 과목별 점수 탭(subject_details jsonb) ──
 // ijw ConsultationForm 과목 탭 이식. 데이터 주도 — 폼이 이 config를 map해 입력 렌더(필드 수기 나열 회피).
-// type: text=1행 · date=날짜 · textarea=여러 줄(히스토리/상담류) · score=3자리 좁은 점수칸(최대 100점)
+// type: text=1행 · date=날짜 · textarea=여러 줄(히스토리/상담류)
+//     · score=좁은 점수칸(정수 3자리 + 소수 2자리까지 — 정규화는 score-input.ts `sanitizeScoreInput`)
 export type FieldDef = { key: string; label: string; type?: "text" | "date" | "textarea" | "score" };
 export type FieldGroup = { title?: string; cols?: number; fields: FieldDef[] };
 

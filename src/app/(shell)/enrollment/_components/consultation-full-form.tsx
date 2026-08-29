@@ -18,6 +18,7 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
+import { sanitizeScoreInput } from "@/features/enrollment/score-input";
 import { ChecklistView } from "./checklist-view";
 import { AudioRecorderField } from "./audio-recorder-field";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
@@ -811,7 +812,7 @@ function GroupInputs({
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${group.cols ?? 2}, minmax(0, 1fr))` }}>
         {group.fields.map((f) => {
           const val = details[subjectKey]?.[f.key] ?? "";
-          // 히스토리·진도·성적·상담내역·기타 = 여러 줄(full-width). 점수 = 3자리 좁은 칸. 나머지 = 1행.
+          // 히스토리·진도·성적·상담내역·기타 = 여러 줄(full-width). 점수 = 좁은 칸(소수 허용). 나머지 = 1행.
           if (f.type === "textarea") {
             return (
               <label key={f.key} className="col-span-full block space-y-1">
@@ -828,11 +829,11 @@ function GroupInputs({
             return (
               <label key={f.key} className="block space-y-1">
                 <span className="text-text-dim text-[11px]">{f.label}</span>
+                {/* 소수 허용(67.5·55.93). inputMode=decimal이라야 폰 키패드에 소수점이 뜬다. */}
                 <input
-                  inputMode="numeric"
-                  maxLength={3}
+                  inputMode="decimal"
                   value={val}
-                  onChange={(e) => onChange(subjectKey, f.key, e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+                  onChange={(e) => onChange(subjectKey, f.key, sanitizeScoreInput(e.target.value))}
                   className={`${input} max-w-[5rem] text-center`}
                 />
               </label>
