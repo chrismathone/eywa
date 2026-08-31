@@ -144,9 +144,10 @@ function readMonth(dir) {
         continue;
       }
       const inMonth = got.lines.filter((l) => l.period === m);
-      const short = got.totalReported != null && got.lines.length < got.totalReported;
-      coverage[m] = short ? 0 : 1; // 절단된 달은 판정하지 않는다
-      monthLog.push(`${m}:${inMonth.length}${short ? `(절단 ${got.totalReported})` : ""}`);
+      // 🔴 이름·청구월이 있는 줄만 센다(합계행은 여기서 이미 빠진다) → 화면 총건수와 그대로 비교된다.
+      const ok = P.countMatches(got.lines.length, got.totalReported);
+      coverage[m] = ok ? 1 : 0; // 수가 안 맞는 달은 판정하지 않는다(부재도 초과도 못 믿는다)
+      monthLog.push(`${m}:${inMonth.length}${ok ? "" : `(화면 ${got.totalReported}과 불일치)`}`);
       lineTotal += got.lines.length;
       for (const l of got.lines) {
         const sid = resolve(l);

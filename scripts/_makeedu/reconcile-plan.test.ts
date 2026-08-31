@@ -236,3 +236,29 @@ describe("🔴 첫 실전 실행에서 잡힌 두 가지 — 월별 스크랩 ·
     expect(src()).toMatch(/unmatchedNames\.has\(L\.normalizeName\(s\.name\)\)/);
   });
 });
+
+describe("countMatches — 화면이 말한 수와 맞나(양쪽 다 본다)", () => {
+  // 2026-08-31 연동 PC 실측: 2026-03이 "화면 906건인데 1,226행 수집"으로 나왔다. 덜 걷힌 것만 막으면
+  // 이 회차가 그대로 판정에 쓰이고, 페이지 경계 중복이 섞였다면 그 학생 금액이 부풀어 저장된다.
+  it("딱 맞으면 통과", () => {
+    expect(P.countMatches(1306, 1306)).toBe(true);
+  });
+
+  it("합계행 몇 줄(5줄·0.5% 이내)은 통과", () => {
+    expect(P.countMatches(1310, 1306)).toBe(true);
+    expect(P.countMatches(1300, 1306)).toBe(true);
+  });
+
+  it("🔴 크게 넘치면 막는다(중복 수집 = 금액 부풀림)", () => {
+    expect(P.countMatches(1226, 906)).toBe(false);
+  });
+
+  it("🔴 크게 모자라면 막는다(절단 = 삭제 오판)", () => {
+    expect(P.countMatches(5012, 6227)).toBe(false);
+    expect(P.countMatches(33, 1300)).toBe(false);
+  });
+
+  it("화면이 총건수를 안 알려주면 이 판정은 안 한다(다른 가드에 맡긴다)", () => {
+    expect(P.countMatches(10, null)).toBe(true);
+  });
+});

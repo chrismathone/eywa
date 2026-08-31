@@ -90,6 +90,21 @@ function withMarker(marker, notes) {
 }
 
 /**
+ * 그 달 수집이 **화면이 말한 총건수와 맞는가**. 어긋나면 그 달은 판정하지 않는다(보류).
+ *
+ * 🔴 **양쪽 다 본다** — 처음엔 "덜 걷힌 것"만 막았는데, 실측(2026-08-31 연동 PC)에서 2026-03이
+ *    *화면 906건인데 1,226행 수집*으로 나왔다(같은 줄의 `(현재 청구월 202609)` — 하이픈이 빠진 값 =
+ *    **화면이 덜 그려진 채로 총건수를 읽었다**는 신호). 많이 걷힌 쪽도 위험하다: 페이지 경계에서 같은 줄이
+ *    다시 잡히면(맨 앞 `No` 열이 달라 중복 제거를 빠져나간다) 그 학생 금액이 **부풀어 저장된다**.
+ * ⚠️ 합계·소계 행 몇 줄은 정상이라 약간의 여유(5줄 또는 0.5%)를 둔다.
+ */
+function countMatches(collected, reported) {
+  if (reported == null) return true; // 화면이 말해 주지 않으면 이 판정은 못 한다(다른 가드에 맡긴다)
+  const tolerance = Math.max(5, Math.round(reported * 0.005));
+  return Math.abs(collected - reported) <= tolerance;
+}
+
+/**
  * 재대조 대상 (학생,월) 고르기.
  *
  * @param invoices  [{ id, student_id, period, status, amount_total, amount_discount, amount_paid, notes }]
@@ -182,4 +197,5 @@ module.exports = {
   withMarker,
   pickTargets,
   planOutcomes,
+  countMatches,
 };
