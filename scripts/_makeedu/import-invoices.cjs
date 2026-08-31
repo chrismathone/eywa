@@ -172,7 +172,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
           paid: l.paid, unpaid: l.unpaid });
         continue;
       }
-      matchedLines.push(l);
+      matchedLines.push({ ...l, sid }); // sid = 층 2 대조에서 제한 모드 범위를 좁히는 데 쓴다
       const key = `${sid}|${l.period}`;
       let a = inv.get(key);
       if (!a) {
@@ -324,12 +324,16 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     // 지금까지 동기화는 "넣고 끝"이라 틀려도 배지가 초록불이었다. 여기서 어긋나면 sync_state.error에
     // 실려 화면 배지가 amber '확인 필요'로 바뀐다 — 사람이 모르고 지나가는 경로를 없앤다.
     // ⚠️ 스크랩에 나타난 (학생,월)만 비교한다 — eywa 자체 수동 청구는 makeedu에 없는 게 정상이라 대조 대상이 아니다.
+    // 🔴 제한 모드(--only-pairs)에서는 **이번에 저장한 (학생,월)만** 비교한다. 안 그러면 그 달 전체 라인과
+    //    한두 건만 저장한 결과를 맞대어 늘 🔴가 뜬다(2026-08-31 첫 반영에서 실제로 거짓 경보가 다섯 달 전부).
+    //    범위를 맞추면 이 대조는 제한 모드에서도 진짜 검산이 된다 — "내가 저장한 그 행이 makeedu와 같은가".
+    const inScope = (key) => !ONLY_PAIRS || ONLY_PAIRS.has(key);
     const storedRows = await sql`
       select student_id, period, amount_total, amount_discount, amount_paid, points_used
       from invoices
       where tenant_id = ${tenantId} and period = any(${scrapedPeriods}) and status <> 'void'`;
     reconcile = S.reconcilePeriods({
-      scraped: S.aggregateByPeriod(matchedLines, {
+      scraped: S.aggregateByPeriod(matchedLines.filter((l) => inScope(`${l.sid}|${l.period}`)), {
         period: (l) => l.period, total: (l) => l.total, discount: (l) => l.discount,
         paid: (l) => l.paid, points: (l) => l.point,
       }),
@@ -338,7 +342,9 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
         paid: (i) => i.paid, points: (i) => i.point,
       }),
       stored: S.aggregateByPeriod(
-        storedRows.filter((r) => inv.has(`${r.student_id}|${r.period}`)),
+        storedRows.filter(
+          (r) => inv.has(`${r.student_id}|${r.period}`) && inScope(`${r.student_id}|${r.period}`),
+        ),
         {
           period: (r) => r.period, total: (r) => r.amount_total, discount: (r) => r.amount_discount,
           paid: (r) => r.amount_paid, points: (r) => r.points_used,
