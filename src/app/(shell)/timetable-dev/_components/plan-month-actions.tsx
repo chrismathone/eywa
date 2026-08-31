@@ -2,13 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CopyPlus, Download, Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
-import { addMonths, planMonthLabel } from "@/features/timetable-dev/types";
-import {
-  copyPlanMonth,
-  deletePlanMonth,
-  seedPlanFromLive,
-} from "@/features/timetable-dev/server/actions";
+import { Download, Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { planMonthLabel } from "@/features/timetable-dev/types";
+import { deletePlanMonth, seedPlanFromLive } from "@/features/timetable-dev/server/actions";
+// ⚠️ `copyPlanMonth`(달 복제)는 서버에 그대로 남아 있다 — 화면에서만 뺐다(원장 지시로 '다음 달
+//    만들기'가 시트 기반이 됐다). 되살릴 일이 생기면 액션은 이미 있고 테스트도 통과 중이다.
 
 /**
  * 월별 계획 만들기/복사/삭제 진입 버튼.
@@ -34,8 +32,6 @@ const BTN =
 export function PlanMonthActions({
   month,
   hasPlan,
-  nextMonthHasPlan,
-  nextMonthHref,
   canManage,
   compact = false,
 }: {
@@ -43,10 +39,6 @@ export function PlanMonthActions({
   month: string;
   /** 이 달에 계획 칸이 하나라도 있는지 — 문구·확인 창·삭제 버튼 노출이 갈린다. */
   hasPlan: boolean;
-  /** 다음 달에 이미 계획이 있는지(있으면 덮어쓰기 확인부터). */
-  nextMonthHasPlan: boolean;
-  /** 복사 후 이동할 다음 달 주소(페이지가 만든 링크 — 클라에서 파라미터를 새로 조립하지 않는다). */
-  nextMonthHref: string;
   /** 계획 쓰기 권한(반 관리 = classes full). 없으면 버튼을 아예 안 그린다. */
   canManage: boolean;
   /** 빈 상태 카드 안에서 쓸 때 — 세로로 크게. 툴바에선 false(한 줄). */
@@ -56,7 +48,6 @@ export function PlanMonthActions({
   const [pending, start] = useTransition();
   /** 화면에 보이는 건 항상 한글 요약(`text`) — 기술 원문은 툴팁(`detail`)으로만(raw 노출 금지 규약). */
   const [msg, setMsg] = useState<{ text: string; detail?: string } | null>(null);
-  const nextMonth = addMonths(month, 1);
 
   if (!canManage) return null;
 
@@ -98,20 +89,6 @@ export function PlanMonthActions({
     run(() => seedPlanFromLive(month));
   };
 
-  const onCopyNext = () => {
-    if (nextMonthHasPlan) {
-      if (
-        !window.confirm(
-          `${planMonthLabel(nextMonth)}에 이미 계획이 있습니다.\n그 계획을 지우고 ${planMonthLabel(month)} 계획으로 새로 만들까요? 되돌릴 수 없습니다.`,
-        )
-      )
-        return;
-      run(() => copyPlanMonth(month, nextMonth, { overwrite: true }), nextMonthHref);
-      return;
-    }
-    run(() => copyPlanMonth(month, nextMonth), nextMonthHref);
-  };
-
   const onDelete = () => {
     if (!window.confirm(`${planMonthLabel(month)} 계획을 통째로 지웁니다. 되돌릴 수 없습니다. 계속할까요?`))
       return;
@@ -130,33 +107,14 @@ export function PlanMonthActions({
         {pending ? <Loader2 size={11} strokeWidth={1.8} className="animate-spin" /> : <Download size={11} strokeWidth={1.8} />}
         현재 시간표에서 가져오기
       </button>
-      <button
-        type="button"
-        onClick={onCopyNext}
-        disabled={pending || !hasPlan}
-        className={BTN}
-        title={
-          hasPlan
-            ? `${planMonthLabel(month)} 계획을 ${planMonthLabel(nextMonth)}로 복사합니다`
-            : "복사할 계획이 아직 없습니다 — 먼저 현재 시간표에서 가져오세요"
-        }
-      >
-        <CopyPlus size={11} strokeWidth={1.8} />
-        다음 달 만들기
-      </button>
       {hasPlan ? (
         <button type="button" onClick={onDelete} disabled={pending} className={`${BTN} hover:text-danger`} title={`${planMonthLabel(month)} 계획을 삭제합니다`}>
           <Trash2 size={11} strokeWidth={1.8} />
           이 달 계획 삭제
         </button>
       ) : null}
-      {/* ⚠️ 비활성 사유는 **보이는 문구**로 — disabled 버튼의 `title`은 브라우저마다 안 뜬다(툴바에선
-          자리가 없어 title로 두지만, 빈 상태 카드 안(compact)에서는 한 줄로 적는다). */}
-      {compact && !hasPlan ? (
-        <p className="text-text-faint text-[10px] leading-snug break-keep">
-          &lsquo;다음 달 만들기&rsquo;는 이 달 계획이 있어야 쓸 수 있습니다 — 먼저 가져오기로 채우세요.
-        </p>
-      ) : null}
+      {/* '다음 달 만들기'는 이제 **시트 가져오기**가 담당한다(대상 달만 다음 달로 열린다, month-nav).
+          계획 복제는 새 달에 옛 배치를 그대로 복사할 뿐이라 "달마다 같은 시간표"가 되던 원인이었다. */}
       {msg ? (
         <span
           className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-[11px] break-keep"
