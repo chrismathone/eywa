@@ -17,6 +17,7 @@ import {
   type StudentGoalMap,
 } from "../lib/student-goals";
 import { DEFAULT_STALL_RUN, stalledDatesOf } from "../lib/progress-stall";
+import { isOnMathRoster, rosterAnchorOf, type MathEnrollmentWindow } from "../lib/roster";
 import { readMcsMonthView, type McsMonthView } from "../view-prefs";
 import { requireMcsClassAccess } from "./access";
 
@@ -126,7 +127,7 @@ export async function getMathSheetMonth(
       .eq("class_id", classId),
     admin
       .from("enrollments")
-      .select("student_id, start_date, end_date")
+      .select("student_id, start_date, end_date, is_transferred")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId),
     // 한 반 한 달이면 수백 행이지만 상한을 두지 않는다(B2) — 큰 반 × 긴 달이면 1,000에 닿을 수 있다.
@@ -199,13 +200,15 @@ export async function getMathSheetMonth(
   }
 
   // 로스터 — 이 달 안에 한 번이라도 명단이었던 학생. 수강 구간은 학생마다 여러 건일 수 있다.
-  const enrByStudent = new Map<string, { startDate: string | null; endDate: string | null }[]>();
+  const enrByStudent = new Map<string, MathEnrollmentWindow[]>();
   for (const e of enrRes.data ?? []) {
     const sid = String(e.student_id);
     const list = enrByStudent.get(sid) ?? [];
     list.push({
       startDate: e.start_date ? String(e.start_date).slice(0, 10) : null,
       endDate: e.end_date ? String(e.end_date).slice(0, 10) : null,
+      // 🔴 반이동 전출은 종료일 **당일에** 끝난다 — 이 플래그를 안 넘기면 옛 반에 하루 더 남는다.
+      isTransferred: e.is_transferred === true,
     });
     enrByStudent.set(sid, list);
   }
@@ -213,7 +216,11 @@ export async function getMathSheetMonth(
   const studentIds = [...enrByStudent.keys()];
   const students = studentIds.length
     ? await fetchInChunks(studentIds, (chunk) =>
-        admin.from("students").select("id, name, school, grade").eq("tenant_id", tenantId).in("id", chunk),
+        admin
+          .from("students")
+          .select("id, name, school, grade, status, withdrawn_at")
+          .eq("tenant_id", tenantId)
+          .in("id", chunk),
       )
     : [];
   const studentById = new Map(students.map((s) => [String(s.id), s]));
@@ -236,18 +243,25 @@ export async function getMathSheetMonth(
     recordByKey.set(`${String(r.student_id)}|${date}`, r);
   }
 
+  // 🔴 **재원생만 세운다**(원장 2026-08-31) — 기준일은 보고 있는 달 안으로 접은 오늘이다.
+  //    수강 종료·반이동 전출·학원 퇴원 셋을 함께 보고, 하나라도 끝났으면 행을 만들지 않는다.
+  const anchor = rosterAnchorOf(month, today);
+
   const rows: MathStudentRow[] = [];
   const allStates: MathCellState[] = [];
   for (const sid of studentIds) {
     const info = studentById.get(sid);
     if (!info) continue; // 학생 행이 없으면(삭제 등) 그릴 것이 없다
     const enrollments = enrByStudent.get(sid) ?? [];
+    const withdrawnAt = info.withdrawn_at ? String(info.withdrawn_at).slice(0, 10) : null;
+    if (!isOnMathRoster(enrollments, withdrawnAt, anchor)) continue;
     const cells: Record<string, MathCellState> = {};
     const records: Record<string, MathDayRecord> = {};
     for (const date of dayDates) {
       const rec = recordByKey.get(`${sid}|${date}`);
       const state = cellStateOf({
         enrollments,
+        withdrawnAt,
         date,
         attendance: foldDayAttendance(attByKey.get(`${sid}|${date}`) ?? []),
         hasReport: Boolean(rec),
@@ -267,8 +281,6 @@ export async function getMathSheetMonth(
         };
       }
     }
-    // 명단에 한 번도 안 걸린 학생은 행을 만들지 않는다(달 전체가 off-roster).
-    if (dayDates.length > 0 && dayDates.every((d) => cells[d] === "off-roster")) continue;
     rows.push({
       studentId: sid,
       name: String(info.name),

@@ -10,12 +10,13 @@
  *    886을 미작성이라 부르면 실제의 3.2배이고, 그 숫자를 본 사람은 화면을 믿지 않게 된다.
  *
  * 🔴 **수강 기간 밖은 아예 칸이 아니다.** 달 중간에 들어온 학생에게 그 전 날짜를 '흔적 없음'으로
- *    칠하면 오지도 않은 날을 빠뜨린 것처럼 보인다. 판정은 `isEnrollmentOnRosterOn` 단일 소스.
+ *    칠하면 오지도 않은 날을 빠뜨린 것처럼 보인다. 판정은 [`roster.ts`](./roster.ts) 단일 소스 —
+ *    수강 종료·**반이동 전출**·**학원 퇴원**을 함께 본다(셋 다 봐야 "재원"이 참이 된다).
  *
  * ⚠️ 출결 상태는 `AttendanceStatusKey`(코드 고정)를 그대로 쓴다 — 여기서 새 enum을 만들지 말 것.
  *    `excused`(사유 결석)는 결석과 같은 취급(둘 다 "안 왔다")이고, `early_leave`는 온 것이다.
  */
-import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
+import { isOnMathRoster, type MathEnrollmentWindow } from "./roster";
 import type { AttendanceStatusKey } from "@/features/attendance/status-color";
 
 /** 칸 하나가 놓일 수 있는 자리. */
@@ -42,24 +43,20 @@ const ATTENDED: ReadonlySet<string> = new Set<AttendanceStatusKey>([
 /** 안 온 것으로 치는 상태 — 기록이 없어도 미작성이 아니다. */
 const MISSED: ReadonlySet<string> = new Set<AttendanceStatusKey>(["absent", "excused"]);
 
-export type EnrollmentWindow = {
-  startDate: string | null;
-  endDate: string | null;
-};
+export type { MathEnrollmentWindow } from "./roster";
 
 export function cellStateOf(args: {
   /** 그 학생의 이 반 수강 구간(여러 건일 수 있다 — 나갔다 돌아온 경우). */
-  enrollments: readonly EnrollmentWindow[];
+  enrollments: readonly MathEnrollmentWindow[];
+  /** `students.withdrawn_at` — 수강에 종료일이 안 찍힌 채 퇴원한 경우를 여기서 잡는다. */
+  withdrawnAt: string | null;
   date: string;
   /** 그 날 그 학생의 출결 상태. 여러 교시면 호출부가 대표 하나로 접어서 넘긴다. */
   attendance: string | null | undefined;
   /** 그 날 그 학생의 수업 기록이 있는가. */
   hasReport: boolean;
 }): MathCellState {
-  const onRoster = args.enrollments.some(
-    (e) => e.startDate != null && isEnrollmentOnRosterOn({ startDate: e.startDate, endDate: e.endDate }, args.date),
-  );
-  if (!onRoster) return "off-roster";
+  if (!isOnMathRoster(args.enrollments, args.withdrawnAt, args.date)) return "off-roster";
   if (args.hasReport) return "written";
   const att = args.attendance ?? null;
   if (att && MISSED.has(att)) return "absent";

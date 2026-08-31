@@ -3,8 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
-import { kstMonth, monthLabel, monthRange } from "@/lib/date-kst";
+import { kstMonth, kstToday, monthLabel } from "@/lib/date-kst";
 import { classDaysOf, normalizeMonth, type MathScheduleRow } from "../lib/class-days";
+import { isOnMathRoster, rosterAnchorOf, type MathEnrollmentWindow } from "../lib/roster";
 import { mcsVisibleClassFilter } from "./access";
 
 /**
@@ -46,6 +47,7 @@ type LandingEnrRow = {
   student_id: string;
   start_date: string | null;
   end_date: string | null;
+  is_transferred: boolean | null;
 };
 
 export type MathLandingResult = { ok: true; data: MathLandingData } | { ok: false; error: string };
@@ -57,7 +59,9 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };
 
   const month = normalizeMonth(monthRaw, kstMonth());
-  const { from, to } = monthRange(month);
+  // 카드 인원도 시트와 **같은 기준일**로 센다 — 갈리면 카드엔 6명인데 열면 5명이 된다.
+  const anchor = rosterAnchorOf(month, kstToday());
+  const monthStart = `${month}-01`;
   const admin = createAdminClient();
   const tenantId = user.tenantId;
 
@@ -69,7 +73,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
       .eq("subject", "math")
       .eq("is_active", true)
       // 종강한 반은 그 달 시작 전에 닫혔으면 뺀다(ECS 랜딩과 같은 조건).
-      .or(`closed_at.is.null,closed_at.gte.${from}`)
+      .or(`closed_at.is.null,closed_at.gte.${monthStart}`)
       .order("class_name"),
     mcsVisibleClassFilter(),
   ]);
@@ -102,7 +106,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     fetchAllPaged<LandingEnrRow>((f, t) =>
       admin
         .from("enrollments")
-        .select("class_id, student_id, start_date, end_date")
+        .select("class_id, student_id, start_date, end_date, is_transferred")
         .eq("tenant_id", tenantId)
         .order("id")
         .range(f, t),
@@ -134,15 +138,27 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     schedByClass.set(cid, list);
   }
 
-  // 그 달 안에 한 번이라도 명단이었던 학생 수(카드의 인원). 달 전체가 지난 수강은 안 센다.
-  const studentCount = new Map<string, number>();
+  // 🔴 **재원 학생만** 센다(원장 2026-08-31) — 시트가 세우는 행과 같은 규칙(`isOnMathRoster`).
+  //    ⚠️ 여기선 학원 퇴원(`students.withdrawn_at`)까지는 안 본다(반 66개 × 학생 조회는 목록 화면에
+  //    무겁다). 실측 2026-08-31 기준 **어긋나는 학생 0명**(수학 수강이 열린 채 퇴원한 사람이 없다) —
+  //    그런 사람이 생기면 카드 인원만 1명 많아진다. 정확한 명단은 시트가 낸다.
+  const enrByStudentClass = new Map<string, MathEnrollmentWindow[]>();
   for (const e of enrRows) {
     const cid = String(e.class_id);
     if (!classIds.has(cid)) continue;
-    const start = e.start_date ? String(e.start_date).slice(0, 10) : null;
-    const end = e.end_date ? String(e.end_date).slice(0, 10) : null;
-    if (start && start > to) continue;
-    if (end && end < from) continue;
+    const key = `${cid}|${String(e.student_id)}`;
+    const list = enrByStudentClass.get(key) ?? [];
+    list.push({
+      startDate: e.start_date ? String(e.start_date).slice(0, 10) : null,
+      endDate: e.end_date ? String(e.end_date).slice(0, 10) : null,
+      isTransferred: e.is_transferred === true,
+    });
+    enrByStudentClass.set(key, list);
+  }
+  const studentCount = new Map<string, number>();
+  for (const [key, list] of enrByStudentClass) {
+    if (!isOnMathRoster(list, null, anchor)) continue;
+    const cid = key.split("|")[0]!;
     studentCount.set(cid, (studentCount.get(cid) ?? 0) + 1);
   }
 
