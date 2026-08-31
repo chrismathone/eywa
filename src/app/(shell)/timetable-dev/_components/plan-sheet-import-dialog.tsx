@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, Sheet, X } from "@/components/icons/eywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -87,8 +87,6 @@ export function PlanSheetImportDialog({
   );
   const tabOptions = useMemo(() => tabs.map((t) => ({ value: t.title, label: t.title })), [tabs]);
 
-  if (!canManage) return null;
-
   const clearResult = () => {
     setPlan(null);
     setApplied(null);
@@ -114,6 +112,33 @@ export function PlanSheetImportDialog({
       setTabName(res.tabName || res.tabs[0]?.title || "");
     });
   };
+
+  /**
+   * 🔴 주소를 붙여넣으면 **자동으로** 탭을 다시 읽는다(원장 제보 2026-08-31:
+   * *"다음달 만들기해도 똑같은 그냥 기존 시트만 계속 가져와지지"*).
+   *
+   * 종전엔 열자마자 **연동 시트(기존 시간표 시트)**의 탭이 채워지고 탭까지 미리 골라져 있었고,
+   * 주소를 붙여넣어도 '탭 불러오기'를 따로 누르지 않으면 목록이 그대로였다. 그 상태로 미리보기를
+   * 누르면 **기존 시트가 그대로** 들어온다 — 새 달 자료를 넣으러 온 사람이 옛 시간표를 복제하게 된다.
+   * 사람이 눌러야만 반영되는 단계는 결국 안 눌린다 → 값이 바뀌면 코드가 따라가게 한다.
+   */
+  const lastLoadedRef = useRef<string>("");
+  useEffect(() => {
+    if (!open) return;
+    const key = url.trim();
+    if (key === lastLoadedRef.current) return;
+    const t = setTimeout(() => {
+      lastLoadedRef.current = key;
+      loadTabs();
+    }, 500); // 붙여넣기 중간 상태로 매 글자 조회하지 않게
+    return () => clearTimeout(t);
+    // loadTabs는 매 렌더 새로 만들어지므로 의존성에 넣지 않는다(넣으면 무한 재조회).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, open]);
+
+  // 🔴 조기 반환은 **모든 훅 아래**에 둔다 — 위로 올리면 권한 없는 렌더에서 훅 개수가 달라져
+  //    rules-of-hooks 위반이다(권한 없으면 트리거를 안 그린다는 동작 자체는 그대로).
+  if (!canManage) return null;
 
   const preview = () => {
     clearResult();
@@ -202,6 +227,26 @@ export function PlanSheetImportDialog({
             ) : null}
 
             <div className="mt-3 space-y-2">
+              {/* 🔴 출처를 눈에 보이게 — 이게 없으면 "무엇이 들어오는지 모른 채" 적용하게 된다.
+                  주소가 비어 있으면 **기존 연동 시트**를 읽는다는 사실을 그 자리에서 말한다. */}
+              <p
+                className={`rounded-lg border px-2 py-1.5 text-[11px] break-keep ${
+                  url.trim()
+                    ? "border-primary/30 bg-primary-soft text-foreground"
+                    : "border-amber/30 bg-amber-soft text-foreground"
+                }`}
+              >
+                {url.trim() ? (
+                  <>
+                    <b>붙여넣은 시트</b>에서 가져옵니다 — 아래 탭 목록도 그 문서의 것입니다.
+                  </>
+                ) : (
+                  <>
+                    지금은 <b>기존 연동 시트</b>(본 시간표가 쓰는 문서)에서 가져옵니다. 9월·10월처럼{" "}
+                    <b>새 자료</b>를 넣으려면 그 시트 주소를 아래에 붙여넣으세요.
+                  </>
+                )}
+              </p>
               <div className="flex items-end gap-2">
                 <label className="flex-1">
                   <span className="text-text-faint text-[11px]">시트 주소</span>
@@ -212,9 +257,10 @@ export function PlanSheetImportDialog({
                     className={FIELD}
                   />
                 </label>
-                <button type="button" onClick={loadTabs} disabled={busy} className={`${BTN} py-1.5`}>
+                {/* 자동 조회가 기본이고, 이 버튼은 실패했을 때의 수동 재시도다(공유 권한을 그 사이에 준 경우). */}
+                <button type="button" onClick={loadTabs} disabled={busy} className={`${BTN} py-1.5`} title="자동으로 읽지 못했을 때 다시 시도">
                   {loadingTabs ? <Loader2 size={11} strokeWidth={1.8} className="animate-spin" /> : <Sheet size={11} strokeWidth={1.8} />}
-                  탭 불러오기
+                  다시 읽기
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
