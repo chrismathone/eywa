@@ -22,8 +22,20 @@ const item = (p: Partial<OutstandingItem> = {}): OutstandingItem => ({
 describe("OutstandingCard — 월 라벨", () => {
   it("2개월 합산이면 두 달이 다 붙는다", () => {
     render(<OutstandingCard items={[item()]} canOpenStudents={false} />);
-    expect(screen.getByText("26.03·26.04")).toBeTruthy();
+    expect(screen.getByText("26.03")).toBeTruthy();
+    expect(screen.getByText("26.04")).toBeTruthy();
     expect(screen.getByText("미납")).toBeTruthy();
+  });
+
+  it("🔴 달마다 따로 둔 테두리 칩(원장 2026-08-31 \"월마다 구분되게\")", () => {
+    render(<OutstandingCard items={[item()]} canOpenStudents={false} />);
+    for (const m of ["26.03", "26.04"]) {
+      const chip = screen.getByText(m);
+      expect(chip.className).toContain("rounded-md");
+      expect(chip.className).toContain("border");
+    }
+    // 한 덩어리로 이은 문자열은 사라졌다(가운데 점 연결 폐기).
+    expect(screen.queryByText("26.03·26.04")).toBeNull();
   });
 
   it("한 달이면 그 달만", () => {
@@ -38,7 +50,10 @@ describe("OutstandingCard — 월 라벨", () => {
         canOpenStudents={false}
       />,
     );
-    expect(screen.getByText("26.03·26.04 외 1")).toBeTruthy();
+    expect(screen.getByText("26.03")).toBeTruthy();
+    expect(screen.getByText("26.04")).toBeTruthy();
+    expect(screen.getByText("외 1")).toBeTruthy();
+    expect(screen.queryByText("26.05")).toBeNull();
   });
 
   it("🔴 라벨이 금액보다 **앞**에 온다(원장 2026-08-31 \"라벨을 앞으로 보내고 금액을 뒤로. 열정렬\")", () => {
@@ -46,8 +61,8 @@ describe("OutstandingCard — 월 라벨", () => {
     const row = screen.getByText("윤나연").closest("li");
     const text = row?.textContent ?? "";
     // 라벨 폭은 행마다 다르다(26.09 vs 26.08·26.09) — 금액 뒤에 두면 그만큼 금액 열이 밀린다.
-    expect(text.indexOf("26.03·26.04")).toBeGreaterThanOrEqual(0);
-    expect(text.indexOf("26.03·26.04")).toBeLessThan(text.indexOf("41.1만"));
+    expect(text.indexOf("26.03")).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("26.03")).toBeLessThan(text.indexOf("41.1만"));
   });
 
   it("금액 칸은 고정 폭 우측 정렬(행마다 한 열로 서야 한다)", () => {
