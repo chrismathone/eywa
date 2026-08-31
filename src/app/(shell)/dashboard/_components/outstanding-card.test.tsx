@@ -41,6 +41,22 @@ describe("OutstandingCard — 월 라벨", () => {
     expect(screen.getByText("26.03·26.04 외 1")).toBeTruthy();
   });
 
+  it("🔴 라벨이 금액보다 **앞**에 온다(원장 2026-08-31 \"라벨을 앞으로 보내고 금액을 뒤로. 열정렬\")", () => {
+    render(<OutstandingCard items={[item()]} canOpenStudents={false} />);
+    const row = screen.getByText("윤나연").closest("li");
+    const text = row?.textContent ?? "";
+    // 라벨 폭은 행마다 다르다(26.09 vs 26.08·26.09) — 금액 뒤에 두면 그만큼 금액 열이 밀린다.
+    expect(text.indexOf("26.03·26.04")).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("26.03·26.04")).toBeLessThan(text.indexOf("41.1만"));
+  });
+
+  it("금액 칸은 고정 폭 우측 정렬(행마다 한 열로 서야 한다)", () => {
+    render(<OutstandingCard items={[item()]} canOpenStudents={false} />);
+    const amount = screen.getByText("41.1만");
+    expect(amount.className).toContain("text-right");
+    expect(amount.className).toMatch(/min-w-\[\d+px\]/);
+  });
+
   it("🔴 달을 모르면 라벨을 만들지 않는다(빈 칸이지 거짓말이 아니다)", () => {
     render(<OutstandingCard items={[item({ periods: [] })]} canOpenStudents={false} />);
     expect(screen.queryByText(/^\d{2}\.\d{2}/)).toBeNull();

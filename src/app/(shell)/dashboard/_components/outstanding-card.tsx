@@ -53,21 +53,27 @@ export function OutstandingCard({
                   </span>
                 </WindowLink>
               ) : (
-                <span className="text-foreground group-hover:text-primary block truncate text-[13px] font-medium">
+                <span
+                  title={p.studentName}
+                  className="text-foreground block min-w-0 flex-1 truncate text-[13px] font-medium"
+                >
                   {p.studentName}
                 </span>
               )}
-              <span className="text-danger num shrink-0 text-[12px] font-bold">
-                {man(p.amount)}
-              </span>
               {/* 몇 월분 미납인가(원장 2026-08-31) — 이 카드 금액은 **전 기간 합산**이라 달을 안 적으면
                   이번 달치로 읽힌다(실측: 윤나연 81.8만 = 3월+4월). 두 달까지 적고 나머지는 접는다.
-                  문구는 [`outstandingPeriodLabels`](src/features/dashboard/outstanding-periods.ts) 한 곳에서만. */}
+                  문구는 [`outstandingPeriodLabels`](src/features/dashboard/outstanding-periods.ts) 한 곳에서만.
+                  🔴 라벨은 금액 **앞**(원장 2026-08-31: *"라벨을 앞으로 보내고 금액을 뒤로. 열정렬"*) —
+                  라벨 폭이 행마다 다르므로(`26.09` vs `26.08·26.09`) 금액 뒤에 두면 금액 열이 그만큼
+                  밀려 어긋난다. 앞으로 보내고 금액을 고정 폭 우측 정렬로 잡아야 금액·배지가 한 열로 선다. */}
               {periodLabel ? (
                 <span className="text-text-dim num shrink-0 text-[11px]" title={periodTitle}>
                   {periodLabel}
                 </span>
               ) : null}
+              <span className="text-danger num min-w-[52px] shrink-0 text-right text-[12px] font-bold">
+                {man(p.amount)}
+              </span>
               <Pill color={p.status === "partial" ? "amber" : "danger"}>
                 {p.status === "partial" ? "부분" : "미납"}
               </Pill>
