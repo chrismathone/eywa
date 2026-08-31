@@ -396,8 +396,14 @@ export default async function TodayPage() {
         }}
       />
 
-      <section aria-labelledby="operations-context-title" className="space-y-3">
-        <header className="flex flex-wrap items-end justify-between gap-2 px-1">
+      {/* 카드 안의 카드 — 학원 펄스와 같은 결(원장 2026-08-31: *"카드 안에 단 구분 시키던지해서 깔끔해지게"*).
+          세 장이 따로 떠 있으면 내용이 짧은 쪽(공지)이 위로 붙어 아래가 휑했다. 하나로 감싸고
+          안쪽은 패널로 낮춰(그림자 없는 rounded-xl) 높이를 맞춘다 — 빈 패널도 같은 높이로 늘어난다. */}
+      <section
+        aria-labelledby="operations-context-title"
+        className="bg-card border-line shadow-card rounded-2xl border px-5 py-4"
+      >
+        <header className="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="text-text-dim text-[12px] font-bold">
               참고 지표
@@ -408,8 +414,10 @@ export default async function TodayPage() {
           </div>
           <p className="text-text-dim text-[12px]">결정 뒤에 참고할 수납·등록·팀 공지입니다.</p>
         </header>
+        {/* 안쪽 패널: 그림자를 빼고 모서리를 한 단 낮춘다(바깥 카드가 이미 떠 있으므로 두 번 띄우지 않는다).
+            높이는 grid 기본(stretch)에 맡긴다 — `items-start`를 두면 짧은 패널이 위로 붙는다. */}
         <div
-          className="grid items-start gap-4"
+          className="grid gap-4 [&>section]:rounded-xl [&>section]:shadow-none"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 19rem), 1fr))" }}
         >
           {access.read.billing ? (

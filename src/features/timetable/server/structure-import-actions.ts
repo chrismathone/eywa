@@ -74,7 +74,15 @@ async function loadStructureContext(
     fetchAllPaged<{ id: string; display_name: string; english_name: string | null; system_role: string }>(
       (from, to) => supabase.from("users").select("id, display_name, english_name, system_role").eq("status", "active").range(from, to),
     ),
-    fetchAllPaged<{ id: string; name: string }>((from, to) => supabase.from("classrooms").select("id, name").range(from, to)),
+    // 🔴 **보관된 강의실은 후보에서 뺀다**(원장 2026-08-31 *"바른602는 더이상 사용하지 않는 강의실임.
+    //    절대 그럴일이 없어야함"*). 시트는 방을 **번호만으로** 적는데(`602`) 그 번호를 쓰는 방이 둘이면
+    //    (`바른602`·`본원602`) 매칭 맵이 뒤엣것으로 덮여 **폐강의실에 배치가 붙는다** — 실측 2026-08-31:
+    //    원장이 8/6에 보관해 둔 `바른602`에 9월 배치 6칸이 붙었다. 보관은 이미 눌러 두셨는데 가져오기만
+    //    그 표시를 안 보고 있었다. ⚠️ 이름 조회(id→이름)에는 이 필터를 걸지 말 것 — 지난 배치가 쓰던
+    //    보관 강의실 이름이 화면에서 빈칸이 된다(여긴 **후보 목록**이라 거른다).
+    fetchAllPaged<{ id: string; name: string }>((from, to) =>
+      supabase.from("classrooms").select("id, name").is("archived_at", null).range(from, to),
+    ),
     fetchAllPaged<{
       id: string; class_id: string; day_of_week: string; start_time: string; end_time: string;
       teacher_id: string | null; classroom_id: string | null; slot_teacher_label: string | null;

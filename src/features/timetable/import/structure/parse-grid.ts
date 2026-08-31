@@ -10,6 +10,7 @@
 // 파서는 throw하지 않는다 — 인식 못한 셀은 건너뛰고 warnings에 남긴다(자유 편집 시트 방어).
 
 import { enumDayToKo, koDayToEnum, type DayOfWeek } from "@/features/timetable/lib/periods";
+import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type {
   ParsedScheduleBlock,
   ScheduleBlockKind,
@@ -207,7 +208,18 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
 
         // ⚠️ 방은 **반명을 뺀 잔여**에서만 탐색 — 반명에 "SKY"가 든 반(중등E_초6 SKY)에서 raw 전체를
         // 매칭하면 실제 방(303)보다 이름의 SKY가 먼저 걸린다(2026-07-06 — 원 임포트 '본원SKY' 오류의 근본 원인).
-        const room = raw.replace(className(raw), "").match(ROOM_RE)?.[1] ?? block.homeRoom;
+        //
+        // 🔴 **머리글 방(`homeRoom`)은 자리(LAB·JJ) 블록에서만 물려받는다**(원장 2026-08-31
+        //    *"강사 블록 머리글 방 무시하고 다시 이동했을때 검수"* → *"JJ와 LAB은 가져와도 된다. 305와 603"*).
+        //    두 블록은 셀이 `반이름/ 학생수` 꼴이라 방이 **원래 안 적힌다** — 머리글의 603·305가 진짜 방이다.
+        //    반면 일반 강사 칸은 방을 셀마다 적는 것이 규칙이라, 비어 있으면 **아직 안 정한 것**이다.
+        //    그걸 머리글로 채우면 **없는 사실을 만든다** — 실측(2026-08-31 9월 탭): 방을 안 적은 칸은
+        //    자리 117칸을 빼면 신설 반 `PL1b` 다섯 칸뿐인데, 그 다섯이 남의 기본 방(601·602·605)을
+        //    물려받아 **강의실 충돌 3건**을 만들었다(원장이 적은 적 없는 겹침 = 가짜 경고).
+        // ⚠️ 자리 판정은 [`isSpecialSlotLabel`](../../lib/teacher-label.ts) 단일 소스 — `이주희`·`랩실` 같은
+        //    옛 표기도 같이 걸린다. 여기에 이름을 따로 적지 말 것(갈리면 자리 방이 통째로 빈다).
+        const cellRoom = raw.replace(className(raw), "").match(ROOM_RE)?.[1] ?? null;
+        const room = cellRoom ?? (isSpecialSlotLabel(block.name) ? block.homeRoom : null);
         // 반명이 비면(별표만 있는 표식 셀 등) 슬롯이 아니다 — 빈 이름은 어떤 반과도 매칭될 수 없다.
         if (className(raw) === "") {
           warnings.push(`반명 없는 셀 건너뜀: (${r},${c}) "${raw.replace(/\n/g, "⏎").slice(0, 30)}"`);

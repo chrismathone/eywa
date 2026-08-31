@@ -4,6 +4,7 @@
  */
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
+import { outstandingPeriodLabels } from "@/features/dashboard/outstanding-periods";
 import { DashCard, DashEmpty } from "./dash-card";
 import type { OutstandingItem } from "@/features/dashboard/server/queries";
 
@@ -33,7 +34,12 @@ export function OutstandingCard({
           {/* 13/12px 한 줄 = baseline 정렬. truncate는 flex 자식에 두면 baseline이 박스 하단으로
               합성돼 어긋남 → 내부 block span으로 이동. Pill(inline-flex+텍스트)도 baseline에 직접
               — self-center로 띄우면 텍스트 그룹과 배지 중심이 ~3px 갈라진다(실측). */}
-          {items.map((p) => (
+          {items.map((p) => {
+            const { labels, more } = outstandingPeriodLabels(p.periods ?? []);
+            // 접힌 달까지 전부는 툴팁으로(칸이 좁아 화면엔 두 개까지만 적는다).
+            const periodTitle =
+              more > 0 ? outstandingPeriodLabels(p.periods ?? [], (p.periods ?? []).length).labels.join(" · ") : undefined;
+            return (
             <li key={p.studentId} className="flex items-baseline justify-between gap-2 py-1.5">
               {canOpenStudents ? (
                 <WindowLink
@@ -46,18 +52,44 @@ export function OutstandingCard({
                   </span>
                 </WindowLink>
               ) : (
-                <span className="text-foreground group-hover:text-primary block truncate text-[13px] font-medium">
+                <span
+                  title={p.studentName}
+                  className="text-foreground block min-w-0 flex-1 truncate text-[13px] font-medium"
+                >
                   {p.studentName}
                 </span>
               )}
-              <span className="text-danger num shrink-0 text-[12px] font-bold">
+              {/* 몇 월분 미납인가(원장 2026-08-31) — 이 카드 금액은 **전 기간 합산**이라 달을 안 적으면
+                  이번 달치로 읽힌다(실측: 윤나연 81.8만 = 3월+4월). 두 달까지 적고 나머지는 접는다.
+                  문구는 [`outstandingPeriodLabels`](src/features/dashboard/outstanding-periods.ts) 한 곳에서만.
+                  달마다 **테두리 칩 하나**(원장 2026-08-31: *"둥근 테두리 넣어주면 좋겠네 … 월마다 구분되게"*) —
+                  가운데 점으로 이으면 `26.08·26.09`가 한 덩어리로 읽힌다. 상태 배지(Pill)와 헷갈리지 않게
+                  둥근 모서리(`rounded-md`)·무채색 테두리로 한 단 낮춘다(원장: *"라운드 적당히"*).
+                  🔴 라벨은 금액 **앞**(원장 2026-08-31: *"라벨을 앞으로 보내고 금액을 뒤로. 열정렬"*) —
+                  라벨 폭이 행마다 다르므로(`26.09` vs `26.08·26.09`) 금액 뒤에 두면 금액 열이 그만큼
+                  밀려 어긋난다. 앞으로 보내고 금액을 고정 폭 우측 정렬로 잡아야 금액·배지가 한 열로 선다. */}
+              {labels.length > 0 ? (
+                <span className="flex shrink-0 items-baseline gap-1" title={periodTitle}>
+                  {labels.map((m) => (
+                    <span
+                      key={m}
+                      className="border-line text-text-dim num rounded-md border px-1.5 py-px text-[11px] font-medium"
+                    >
+                      {m}
+                    </span>
+                  ))}
+                  {more > 0 ? <span className="text-text-faint num text-[11px]">외 {more}</span> : null}
+                </span>
+              ) : null}
+              <span className="text-danger num min-w-[52px] shrink-0 text-right text-[12px] font-bold">
                 {man(p.amount)}
               </span>
               <Pill color={p.status === "partial" ? "amber" : "danger"}>
                 {p.status === "partial" ? "부분" : "미납"}
               </Pill>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </DashCard>

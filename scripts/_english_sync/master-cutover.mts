@@ -346,7 +346,9 @@ async function loadContext(): Promise<{
         where tenant_id = ${TENANT} and subject = ${SUBJECT} and is_active = true`,
     sql`select id, display_name, english_name, system_role from users
         where tenant_id = ${TENANT} and status = 'active'`,
-    sql`select id, name from classrooms where tenant_id = ${TENANT}`,
+    // 🔴 보관된 강의실은 후보에서 뺀다 — 앱 loadStructureContext와 **같은 규약**(그쪽 주석 참조).
+    //    번호만 적힌 시트(`602`)가 폐강의실(`바른602`)에 붙는 사고를 막는다.
+    sql`select id, name from classrooms where tenant_id = ${TENANT} and archived_at is null`,
     sql`select cs.id, cs.class_id, cs.day_of_week, cs.start_time, cs.end_time, cs.teacher_id,
                cs.classroom_id, cs.slot_teacher_label, cs.slot_room_label, cs.merge_group,
                cs.valid_from::text as valid_from, cs.valid_to::text as valid_to, c.class_name
