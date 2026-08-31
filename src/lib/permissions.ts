@@ -48,6 +48,7 @@ export const MENU_KEYS = [
   "withdrawals",
   "retention",
   "ecs",
+  "mcs",
   "lesson_reports",
   "staff",
   "billing",
@@ -87,6 +88,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   withdrawals: "퇴원관리",
   retention: "이탈 방어",
   ecs: "영어 강사 시트",
+  mcs: "수학 강사 시트",
   lesson_reports: "수업보고서",
   staff: "직원관리",
   billing: "수납관리",
@@ -117,6 +119,7 @@ export type MenuKey = (typeof MENU_KEYS)[number];
 export const TEACHER_MENU_KEYS = [
   "teacher_onescreen",
   "ecs", // English Class Sheet — 영어 강사 주간 수업계획서/출석부(scoped: 담당 반만)
+  "mcs", // Math Class Sheet — 수학 반별 월간 진도표(scoped: 담당 반만)
   "students",
   "attendance",
   "classes",
@@ -163,6 +166,13 @@ export const MENU_ACCESS: AccessMatrix = {
   // 게이트는 requireEcsClassAccess 공용 함수 — effectiveTeacherScope 상시 적용). viewer=readonly(열람만).
   // 출석 체크 쓰기는 이 키가 아니라 attendance 게이트(비파괴 markPresentIfAbsent)가 별도 판정.
   ecs: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
+  // Math Class Sheet(MCS) — 수학 반별 **월간 진도표**(학생 × 수업일). ECS와 축이 다르다: 영어는 반 전체가
+  // 같은 진도를 나가지만 수학은 학생마다 제 교재·제 진도라(실측 2026-08: 같은 반 같은 날 묶음의 79%에서
+  // 교재가 갈린다) 행이 학생이다. 권한 모양은 ecs와 같게 둔다 — 같은 성격의 화면이고, 다르게 두면
+  // "영어 담임은 되는데 수학 담임은 안 되는" 이유를 아무도 설명할 수 없다.
+  // ⚠️ SQL auth_menu_access DEFAULTS엔 넣지 않는다(0170a는 SQL 정책이 참조하는 4개만 담는다 —
+  //    math_month_goals는 service_role 전용이라 SQL이 이 키를 묻지 않는다. ecs도 같은 이유로 없다).
+  mcs: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
   // 수업보고서(발송 관리) — 학원 전체 보고서 발송 큐·작성률·목록 총괄(오버사이트). 구 학원설정 ?tab=report_mgmt에서
   // 좌측 독립 메뉴로 승격(옛 Edutrix 외부링크 대체). 사무실(master/admin/manager)이 관리(재발송 등 쓰기 포함),
   // 뷰어는 열람만. 강사=none(작성은 /onescreen 원스크린 담당, 여기는 전체 오버사이트라 스코핑 없음).
@@ -310,6 +320,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   withdrawals: "withdrawals",
   retention: "retention",
   ecs: "ecs",
+  mcs: "mcs",
   "lesson-reports": "lesson_reports",
   staff: "staff",
   billing: "billing",

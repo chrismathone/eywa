@@ -1134,6 +1134,7 @@ export const MENU_ICON = {
   withdrawals: "userMinus",
   retention: "shield",
   ecs: "spreadsheet", // English Class Sheet — 시트 이식 정체성(sheet_sync와 아이콘 공유 허용 선례: owner/kiosk=settings)
+  mcs: "spreadsheet", // Math Class Sheet — ECS와 같은 성격(시트)이라 같은 글리프를 쓴다
   lesson_reports: "report",
   staff: "userSettings",
   billing: "wallet",

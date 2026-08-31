@@ -185,6 +185,9 @@ export const AUDIT_ACTIONS = {
   timetable_plan_slot_upsert: "시간표 계획 칸 저장",
   timetable_plan_slot_delete: "시간표 계획 칸 삭제",
   timetable_plan_sheet_import: "시간표 계획 시트에서 가져오기",
+
+  // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
+  mcs_goal_update: "수학 시트 학생 월간 목표 저장",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

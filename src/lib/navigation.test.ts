@@ -37,15 +37,41 @@ describe("navigation presentation", () => {
   });
 });
 
-describe("영어 강사 시트(ECS) — 독립 사이드바 탭 (원장 2026-08-17 승격)", () => {
+describe("강사 시트 — 독립 사이드바 탭 (원장 2026-08-17 승격 · 08-31 영어/수학 묶음)", () => {
   // 2026-07-29~08-16엔 시간표의 subOf 하위 카테고리였다. 승격은 사이드바 위치만 바꾼다 —
   // 라우트(/ecs)·menuKey(권한)·창 크기·강사 미니셸 진입은 전부 그대로다.
+  // 2026-08-31: 수학 시트(MCS)가 생기면서 **라벨만** "강사 시트"로 바뀌고 하부탭 둘이 붙었다
+  // (원장: *"영어 강사 시트와 수학 강사 시트를 함께 묶어서 강사 시트의 세부 탭으로 2개 배정"*).
+  // 승격 성질(최상위·subOf 없음·수업 그룹)은 그대로여야 한다.
   it("시간표와 같은 급의 최상위 항목이다 — subOf 없음, 수업 그룹 소속", () => {
     const ecs = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === "/ecs");
-    expect(ecs).toMatchObject({ label: "영어 강사 시트", menuKey: "ecs" });
+    expect(ecs).toMatchObject({ label: "강사 시트", menuKey: "ecs" });
     expect(ecs!.subOf).toBeUndefined();
     expect(ecs!.hidden).not.toBe(true);
     expect(findNavGroup("/ecs")?.label).toBe("수업");
+  });
+
+  it("🔴 하부탭은 영어·수학 둘이고 수학은 **자기 menuKey**를 갖는다(별도 권한·별도 창)", () => {
+    const tabs = subTabsForMenu("ecs");
+    expect(tabs.map((t) => t.label)).toEqual(["영어", "수학"]);
+    // 영어는 부모 라우트 자신이라 menuKey가 없다(부모 창의 면 전환).
+    expect(tabs[0]).toMatchObject({ href: "/ecs" });
+    expect(tabs[0]!.menuKey).toBeUndefined();
+    // 수학은 독립 메뉴 — 여기서 menuKey를 빼면 사이드바가 권한을 안 보고 부모 창에서 열려 버린다.
+    expect(tabs[1]).toMatchObject({ href: "/mcs", menuKey: "mcs" });
+  });
+
+  it("수학 시트는 자기 권한키로 풀린다 — 상세 경로도 같은 키", () => {
+    expect(menuKeyForPath("/mcs")).toBe("mcs");
+    expect(menuKeyForPath("/mcs/abc-123/month")).toBe("mcs");
+  });
+
+  it("두 시트의 활성 하부탭이 서로 섞이지 않는다", () => {
+    const tabs = subTabsForMenu("ecs");
+    expect(activeSubTabHref(tabs, "/mcs")).toBe("/mcs");
+    expect(activeSubTabHref(tabs, "/mcs/abc-123/month?month=2026-08")).toBe("/mcs");
+    expect(activeSubTabHref(tabs, "/ecs")).toBe("/ecs");
+    expect(activeSubTabHref(tabs, "/ecs/abc-123/month")).toBe("/ecs");
   });
 
   it("창 해석(findNavItem)은 불변 — 지우면 WindowLink가 창을 못 연다", () => {

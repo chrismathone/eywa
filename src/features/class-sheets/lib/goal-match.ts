@@ -28,14 +28,39 @@ export function normalizeBookName(v: string | null | undefined): string {
 }
 
 /**
+ * 낱말 단위로 쪼갠 비교 키(정렬) — 어절 순서만 바뀐 같은 책을 잡는다.
+ * ⚠️ **낱말 다중집합이지 글자 다중집합이 아니다.** 글자로 비교하면 `가우스 중1-1 2권`과
+ *    `가우스 중2-1 1권`이 같아지고(학년이 다른 책!) `중1-2`와 `중2-1`도 합쳐진다 — 실측으로 확인한
+ *    함정이라 낱말 경계를 반드시 지킨다.
+ */
+function bookTokens(v: string | null | undefined): string[] {
+  return String(v ?? "")
+    .toLowerCase()
+    .split(/[\s·・,/]+/u)
+    .map((w) => normalizeBookName(w))
+    .filter(Boolean)
+    .sort();
+}
+
+/**
  * 같은 책인가 — 한쪽이 비면 **비교 불가라 `true`**(경고를 만들지 않는다).
- * 포함 관계면 같은 책으로 본다(`그래머인사이드` ⊂ `그래머인사이드LV3`).
+ * 판정은 둘 중 하나라도 맞으면 같은 책:
+ *  · 포함 관계(`그래머인사이드` ⊂ `그래머인사이드LV3`)
+ *  · **낱말이 같고 순서만 다름**(`초6-2 쎈` ↔ `쎈 초6-2`) — 2026-08-31 추가.
+ *
+ * 순서 규칙을 더한 근거(실측): 수학은 학년 표기를 앞뒤 어디에나 붙여서 같은 책이 `초6-2 쎈`·`쎈 초6-2`,
+ * `3-2 바이블`·`바이블 3-2`처럼 갈린다(같은 학생 한 달 안에서만 17쌍). 반면 **영어(ECS) 계획 줄
+ * 868개에서는 판정이 바뀌는 줄이 0개**라 기존 화면에 영향이 없음을 확인하고 넣었다.
  */
 export function sameBookName(a: string | null | undefined, b: string | null | undefined): boolean {
   const x = normalizeBookName(a);
   const y = normalizeBookName(b);
   if (!x || !y) return true;
-  return x.includes(y) || y.includes(x);
+  if (x.includes(y) || y.includes(x)) return true;
+  const ta = bookTokens(a);
+  const tb = bookTokens(b);
+  if (ta.length < 2 || ta.length !== tb.length) return false;
+  return ta.every((tok, i) => tok === tb[i]);
 }
 
 /** 그 달 목표 — `skill_area` → 교재/목표 진도. 빈 칸도 키가 있을 수 있다(입력만 하고 지운 경우). */

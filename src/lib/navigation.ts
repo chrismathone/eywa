@@ -92,6 +92,15 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "출결 모드", href: "/attendance/quick", teacherOnly: true },
     { label: "월별 출석부", href: "/attendance" },
   ],
+  // 강사 시트 — 영어/수학 두 시트(원장 2026-08-31). 부모 href·기본 착지는 **영어**(/ecs, 종전 그대로).
+  // 🔴 수학은 `menuKey`를 달아 **독립 메뉴**로 둔다 — 별도 라우트·별도 창·**별도 권한**이라
+  //    수학 담임에게만 열거나 닫는 게 가능하다(하부탭 라벨만 바꾼 게 아니다).
+  // ⚠️ 폰엔 사이드바가 없어 하부탭으로 갈 길이 없다 — 두 시트를 폰에서 오가야 하면 화면 안 탭이
+  //    따로 필요하다(셔틀 faces.ts 선례, 출석부에 남아 있는 같은 함정).
+  ecs: [
+    { label: "영어", href: "/ecs" },
+    { label: "수학", href: "/mcs", menuKey: "mcs" },
+  ],
   // 셔틀 — 부모 href·기본 착지는 **노선 편성**(/shuttle). 매일 찍는 건 '오늘 등하원'이지만
   // 편성이 셔틀의 본체라 출석부(월별 착지)와 같은 결로 둔다.
   shuttle: [
@@ -144,7 +153,13 @@ export const NAV_GROUPS: NavGroup[] = [
       // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 라벨은 원장 확정 명칭.
       // 시간표 하위 카테고리(subOf, 2026-07-29)였다가 **독립 사이드바 탭으로 승격**(원장 지시 2026-08-17)
       // — 시간표와 같은 급. 권한은 기존 menuKey "ecs" 그대로(사이드바 canAccess + 페이지 requireEcsClassAccess).
-      { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs" },
+      // 강사 시트 — 영어(ECS)·수학(MCS)을 **한 줄로 묶고 하부탭으로 가른다**(원장 2026-08-31:
+      // *"영어 강사 시트와 수학 강사 시트를 함께 묶어서 강사 시트의 세부 탭으로 2개 배정"*).
+      // 둘은 축이 다른 화면이지만(영어=영역×날짜 / 수학=학생×날짜) 사이드바에서 같은 성격으로 읽힌다.
+      // ⚠️ **부모의 권한키는 `ecs`다** — `ecs`가 none인 사람은 이 줄 자체가 안 보여 수학 시트로도
+      //    못 간다(두 키의 기본값이 같아서 지금은 그런 사람이 없다). 영어만 닫을 일이 생기면
+      //    그때 부모를 중립 라우트로 빼야 한다.
+      { href: "/ecs", label: "강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs" },
       { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
       // 🔴 자리 출석부(랩실·JJ실)는 **사이드바 항목이 아니다**(원장 2026-08-14: "따로 빼지말고").
       //    출석부 안 강사 드롭다운에서 [선생님] / [LAB·JJ] / [퇴직] 그룹으로 고른다 — 자리는 메뉴가
