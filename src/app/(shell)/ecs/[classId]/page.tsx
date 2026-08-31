@@ -63,11 +63,11 @@ export default async function EcsSheetPage({
             `계획 ${res.data.fill.filledSlots}/${res.data.fill.totalSlots}교시`,
             // 예약된 개명을 헤더에 한 줄로 — 시트를 열어 놓고도 "이 반이 곧 뭐가 되는지" 알 수 있게.
             // 예고는 전환 주뿐 아니라 **예약된 때부터 그날까지 내내** 뜬다(원장 2026-08-29).
+            // 🔴 **이미 지나간 개명은 안 적는다**(원장 2026-08-31) — 제목이 이미 그 주 이름이라
+            //    '이전 이름 …'은 되짚을 일 없는 군더더기다. 랜딩 목록 배지와 같은 규약.
             res.data.classNameUpcoming
               ? `${monthDay(res.data.classNameUpcoming.date)}부터 ${res.data.className} → ${res.data.classNameUpcoming.name}`
-              : res.data.classNameBefore
-                ? `이전 이름 ${res.data.classNameBefore}`
-                : null,
+              : null,
           ]
             .filter(Boolean)
             .join(" · ")}

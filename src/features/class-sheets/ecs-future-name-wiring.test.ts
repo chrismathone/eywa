@@ -60,6 +60,32 @@ describe("날짜 단위 표면 — 오늘 카드·자리판", () => {
   });
 });
 
+describe("🔴 이미 지나간 개명엔 표식을 남기지 않는다", () => {
+  // 원장 2026-08-31: *"반이름 변경된 반에 '개명'이라고 남는데 필요없어 그냥 날짜 지나면 반이름
+  // 변경되었으면 됨"*. 그 주 이름이 **이미 새 이름**이라 '개명'·'이전 이름'은 알려 주는 것 없이
+  // 목록 44줄을 어지럽힌다. 예고(`classNameUpcoming`)는 남는다 — 그건 **아직 오지 않은** 일이라
+  // 이름만 봐서는 알 수 없다(그래서 둘은 지우고 하나는 지키는 게 이 가드의 전부다).
+  const surfaces = [
+    ["src", "app", "(shell)", "ecs", "_components", "landing-list.tsx"],
+    ["src", "app", "(shell)", "ecs", "[classId]", "page.tsx"],
+    ["src", "app", "(shell)", "timetable", "_components", "class-cell.tsx"],
+  ];
+
+  it("세 표면 어디에도 '개명'·'이전 이름' 표식이 없다", () => {
+    for (const f of surfaces) {
+      const src = strip(read(...f));
+      expect(src, f.join("/")).not.toContain("개명");
+      expect(src, f.join("/")).not.toContain("이전 이름");
+    }
+  });
+
+  it("앞으로 올 변경 예고는 그대로 남는다(주 단위 두 표면)", () => {
+    for (const f of surfaces.slice(0, 2)) {
+      expect(strip(read(...f)), f.join("/")).toContain("classNameUpcoming");
+    }
+  });
+});
+
 describe("날짜 라벨은 한 곳에서만 만든다", () => {
   it("예약 배지·배너가 monthDay를 쓴다(09/01이 아니라 9/1)", () => {
     // 🔴 `slice(5).replace("-","/")`로 직접 만들면 `09/01`이 되어 툴바 배지(`9/1`)와 같은 화면에서

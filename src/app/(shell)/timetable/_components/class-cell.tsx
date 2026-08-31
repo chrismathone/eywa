@@ -196,11 +196,9 @@ export function ClassCell({
                 <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">
                   {slot.className}
                   {/* 🔴 미래 주는 **그 주에 불릴 이름**을 쓴다(원장 2026-08-29) — 오늘 이름으로 그리면
-                      "그 반이 그대로구나"로 읽힌다. 다만 오늘 그 이름을 아는 사람이 없으므로 바뀐 것임을
-                      표시하고, 옛 이름은 title로 준다(칸이 좁아 둘 다 적으면 반 이름이 잘린다). */}
-                  {slot.classNameBefore ? (
-                    <span className="ml-1 align-middle text-[10px] font-semibold opacity-70">개명</span>
-                  ) : null}
+                      "그 반이 그대로구나"로 읽힌다. 🔴 다만 '개명' 표식은 붙이지 않는다(원장 2026-08-31:
+                      *"그냥 날짜 지나면 반이름 변경되었으면 됨"*) — 바뀐 이름 자체가 답이다. 무엇이 무엇이
+                      됐는지는 칸 hover의 title(renameNote)에 그대로 남는다(칸이 좁아 화면엔 못 적는다). */}
                 </span>
                 {/* 반교시(1행)면 아래 줄이 없으니 강의실을 이름과 같은 줄에 붙인다(정보 손실 방지). */}
                 {subSlot !== "full" && slot.classroomName ? (
