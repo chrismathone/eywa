@@ -213,3 +213,26 @@ describe("🔴 다른 스크립트에 넘기는 플래그는 그쪽이 실제로
     }
   });
 });
+
+describe("🔴 첫 실전 실행에서 잡힌 두 가지 — 월별 스크랩 · 이름 매칭", () => {
+  // 2026-08-31 실측: ① 5개월을 한 번에 요청했더니 makeedu 목록이 **10페이지(≈5,000행)** 에서 멈춰
+  //    6,227행 중 5,012행만 걷혔다(뒤쪽 달 2026-06은 33행). ② 화면 표엔 `원생고유번호` 열이 **없다**
+  //    (엑셀에만 있다) — 그래서 존재 확인이 전부 빗나가 '있음 0'이 됐다. 둘 다 조용히 틀리는 자리라 잠근다.
+  const src = () => readFileSync(join(process.cwd(), "scripts", "_makeedu", "reconcile-invoices.cjs"), "utf8");
+
+  it("한 달씩 따로 긁는다(범위를 한 번에 넘기지 않는다)", () => {
+    const code = src();
+    expect(code).toMatch(/MAKEEDU_INVOICE_FROM: m,\s*MAKEEDU_INVOICE_TO: m/);
+    expect(code, "targetMonths를 돌며 스크랩").toMatch(/for \(const m of targetMonths\)/);
+  });
+
+  it("학생 매칭은 이름+학년 매처를 쓴다(원생고유번호에만 기대지 않는다)", () => {
+    const code = src();
+    expect(code).toContain("L.tieredMatcher");
+    expect(code).toContain("L.normalizeName");
+  });
+
+  it("이름 매칭에 실패한 학생은 그 회차에 판정하지 않는다", () => {
+    expect(src()).toMatch(/unmatchedNames\.has\(L\.normalizeName\(s\.name\)\)/);
+  });
+});
