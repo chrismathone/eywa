@@ -40,7 +40,6 @@ export function MonthNav({
 }) {
   const isThisMonth = current === thisMonth;
   const nextMonth = addMonths(current, 1);
-  const nextRow = months.find((m) => m.month === nextMonth);
   const iconBtn =
     "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-full border p-1 transition";
   const chip = (active: boolean) =>
@@ -88,8 +87,6 @@ export function MonthNav({
       <PlanMonthActions
         month={current}
         hasPlan={hasPlan}
-        nextMonthHasPlan={(nextRow?.slotCount ?? 0) > 0}
-        nextMonthHref={hrefForMonth(nextMonth)}
         canManage={canManage}
       />
       {/* 시트에서 가져오기 — 원장 지시(2026-08-28): "URL 주거나 사본 업로드 중 빠른 쪽" → URL 붙여넣기.
@@ -98,6 +95,11 @@ export function MonthNav({
              다이얼로그의 성공 부수효과가 재오픈을 즉시 닫던 함정은 [[#67]] — 그 컴포넌트가 자기 트리거를
              그린다). 권한 없으면 컴포넌트가 스스로 트리거를 숨긴다(canManage). */}
       <PlanSheetImportDialog month={current} canManage={canManage} />
+      {/* '다음 달 만들기'도 **시트에서** 가져온다(원장 지시 2026-08-31: *"다음달 만들기를 시트에서
+          가져오는 형식이어야함 — 자동으로 연결된곳에서 가져오는것이 아닌"*).
+          종전엔 이번 달 계획을 그대로 복제해서, 새 달을 만들어도 내용이 늘 같았다.
+          같은 다이얼로그를 **대상 달만 다음 달로** 열어 준다(달 선택은 안에서 바꿀 수 있다). */}
+      <PlanSheetImportDialog month={nextMonth} canManage={canManage} triggerLabel="다음 달 만들기" />
     </div>
   );
 }

@@ -46,18 +46,29 @@ export function navPresentation(item: Pick<NavItem, "presentation">): "desktop" 
 // 담당 반이 0인 사무실 계정에게 눌러도 빈 화면이라, 사이드바가 `canTeacherView`(겸직 판정)로 감춘다.
 // 라우트는 그대로 열려 있다(URL·강사 미니셸 '내 메뉴'는 불변) — 여기서 지우는 건 **사이드바 줄 하나**뿐.
 export type SubTab = { label: string; href: string; menuKey?: MenuKey; teacherOnly?: boolean };
+/**
+ * 시간표(개발중) 사이드바 노출 스위치 — **원장 지시 2026-08-31로 일단 숨김**.
+ *
+ * 🔴 숨김은 **잠금이 아니다**([[#77]]) — 라우트(`/timetable-dev`)·권한(`menuKeyForPath` → timetable)·
+ *    격리 가드는 그대로 살아 있어서, 주소를 직접 치면 지금도 들어간다(개발 중 확인용으로 그게 맞다).
+ *    "아무도 못 들어가게" 하려면 그때는 라우트 게이트를 따로 걸어야 한다.
+ * 되돌리기 = 이 값을 true로. 아래 배열은 그대로 두므로 한 글자만 바꾸면 하부탭 3면이 다시 선다.
+ */
+const TIMETABLE_DEV_NAV_VISIBLE = false;
+
+/** 시간표 하부탭(본 시간표 / 개발중 / 월별 비교) — 위 스위치가 켜졌을 때만 사이드바에 선다. */
+const TIMETABLE_SUBTABS: SubTab[] = [
+  { label: "시간표", href: "/timetable" },
+  { label: "시간표(개발중)", href: "/timetable-dev" },
+  // 월별 비교 — 개발중의 하위 면. activeSubTabHref가 **가장 긴 경로**를 이기게 두므로
+  // `/timetable-dev/compare`에서 '시간표(개발중)'이 같이 켜지지 않는다(출석부 월별/오늘과 같은 규약).
+  { label: "월별 비교", href: "/timetable-dev/compare" },
+];
+
 export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
-  // 시간표 — 부모 href·기본 착지는 본 시간표(`/timetable`). '개발중'은 월별 계획을 시험하는 면이라
-  // 아래 줄로만 간다(원장 지시 2026-08-28: "시간표 밑에 버튼"). 권한은 시간표와 같은 키를 쓴다.
   // ⚠️ 폰엔 사이드바가 없어 하부탭으로 갈 길이 없다 — 개발중 면이 상시 기능이 되면 화면 안 탭도 필요하다
   //    (셔틀에서 겪은 그대로, faces.ts 선례).
-  timetable: [
-    { label: "시간표", href: "/timetable" },
-    { label: "시간표(개발중)", href: "/timetable-dev" },
-    // 월별 비교 — 개발중의 하위 면. activeSubTabHref가 **가장 긴 경로**를 이기게 두므로
-    // `/timetable-dev/compare`에서 '시간표(개발중)'이 같이 켜지지 않는다(출석부 월별/오늘과 같은 규약).
-    { label: "월별 비교", href: "/timetable-dev/compare" },
-  ],
+  ...(TIMETABLE_DEV_NAV_VISIBLE ? { timetable: TIMETABLE_SUBTABS } : {}),
   billing: [
     { label: "수납", href: "/billing" },
     { label: "교재", href: "/billing?tab=textbooks" },

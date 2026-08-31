@@ -34,6 +34,7 @@ export function PlanSheetImportDialog({
   open: openProp,
   onOpenChange,
   hideTrigger = false,
+  triggerLabel = "시트에서 가져오기",
 }: {
   /** 지금 보고 있는 계획 달(YYYY-MM) — 가져올 달의 기본값. */
   month: string;
@@ -42,6 +43,8 @@ export function PlanSheetImportDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   hideTrigger?: boolean;
+  /** 트리거 글자 — '다음 달 만들기'처럼 같은 다이얼로그를 다른 뜻으로 열 때(대상 달만 다름). */
+  triggerLabel?: string;
 }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -188,6 +191,16 @@ export function PlanSheetImportDialog({
   };
 
   const changes = plan ? plan.counts.add + plan.counts.update : 0;
+  /**
+   * 적용 가능 여부와 **못 누르는 사유**를 한 곳에서 만든다 — 비활성 버튼은 이유를 말해야 쓸모가 있다.
+   * 통째 교체가 켜져 있으면 '시트에 없는 칸을 지우는 것'만으로도 할 일이 있으므로 orphan도 센다.
+   */
+  const applyBlockedReason = !plan
+    ? "먼저 미리보기를 눌러 무엇이 들어오는지 확인하세요"
+    : changes === 0 && !(replace && plan.counts.orphan > 0)
+      ? "시트 내용이 지금 계획과 같습니다 — 바뀔 것이 없습니다"
+      : null;
+  const canApply = !applyBlockedReason;
   const busy = loadingTabs || previewing || applying;
 
   return (
@@ -195,7 +208,7 @@ export function PlanSheetImportDialog({
       {hideTrigger ? null : (
         <button type="button" onClick={() => setOpen(true)} className={BTN} title="구글 시트 탭 하나를 그 달 계획으로 가져옵니다">
           <Sheet size={11} strokeWidth={1.8} />
-          시트에서 가져오기
+          {triggerLabel}
         </button>
       )}
 
@@ -298,16 +311,35 @@ export function PlanSheetImportDialog({
                   이 달 계획을 <b>통째로 교체</b>합니다(시트에 없는 칸은 지움). 꺼두면 시트에 있는 칸만 더하거나 고치고 나머지는 그대로 둡니다.
                 </span>
               </label>
-              <button
-                type="button"
-                onClick={preview}
-                disabled={busy || !tabName}
-                className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
-                title={tabName ? undefined : "가져올 탭을 먼저 고르세요"}
-              >
-                {previewing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
-                미리보기
-              </button>
+              {/* 🔴 두 단계를 **둘 다 보이게** 둔다(원장 제보 2026-08-31: *"서브밋 할수있는 방법이 없는데"*).
+                  종전엔 '적용'이 미리보기 성공 뒤에야, 그것도 변경분이 있을 때만 렌더돼서 — 미리보기를
+                  누르기 전에는 제출 수단이 **아예 없는 화면**으로 보였고, 변경분이 0이면 끝내 안 나타났다.
+                  버튼을 감추는 대신 **왜 못 누르는지 말하는 비활성 버튼**으로 둔다. */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={preview}
+                  disabled={busy || !tabName}
+                  className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                  title={tabName ? undefined : "가져올 탭을 먼저 고르세요"}
+                >
+                  {previewing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
+                  ① 미리보기
+                </button>
+                <button
+                  type="button"
+                  onClick={apply}
+                  disabled={busy || !canApply}
+                  className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition disabled:opacity-40"
+                  title={applyBlockedReason ?? `${planMonthLabel(target)} 계획에 적용합니다`}
+                >
+                  {applying ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                  ② 적용
+                </button>
+                {applyBlockedReason ? (
+                  <span className="text-text-faint text-[11px] break-keep">{applyBlockedReason}</span>
+                ) : null}
+              </div>
             </div>
 
             {msg ? (
@@ -397,17 +429,8 @@ export function PlanSheetImportDialog({
                   </div>
                 ) : null}
 
-                {changes > 0 || (replace && plan.counts.orphan > 0) ? (
-                  <button
-                    type="button"
-                    onClick={apply}
-                    disabled={applying}
-                    className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
-                  >
-                    {applying ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
-                    {planMonthLabel(target)} 계획에 적용
-                  </button>
-                ) : null}
+                {/* 적용 버튼은 위 ①② 줄로 올렸다 — 미리보기 결과를 끝까지 스크롤해야 제출할 수 있으면
+                    긴 목록에서 "제출 버튼이 없다"가 된다. */}
               </div>
             ) : null}
           </div>

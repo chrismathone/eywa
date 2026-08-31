@@ -45,13 +45,7 @@ import { thisMonday, weekSundayOf } from "@/features/timetable/lib/week";
 import { pickScheduledGroupsForWeek } from "@/features/timetable/scheduled-groups";
 import { getScheduledGroupPlans } from "@/features/timetable/server/scheduled-groups-queries";
 // 월별 계획(0232a) — 이 화면만의 축. 표는 `timetable_plan_slots`이고 본 시간표(class_schedules)와 완전 분리다.
-import {
-  addMonths,
-  isPlanMonth,
-  planMonthLabel,
-  type PlanMonthSummary,
-  type PlanSlot,
-} from "@/features/timetable-dev/types";
+import { isPlanMonth, planMonthLabel, type PlanMonthSummary, type PlanSlot } from "@/features/timetable-dev/types";
 import { getPlanMonths, getPlanSlots } from "@/features/timetable-dev/server/queries";
 import { requireTimetablePlanAccess } from "@/features/timetable-dev/server/access";
 import { MonthNav } from "./_components/month-nav";
@@ -930,8 +924,6 @@ export default async function TimetablePage({
           <PlanMonthActions
             month={month}
             hasPlan={false}
-            nextMonthHasPlan={planMonths.some((m) => m.month === addMonths(month, 1) && m.slotCount > 0)}
-            nextMonthHref={buildHref({ view: effView, subject, defaultSubject, kind, month: addMonths(month, 1), thisMonth, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
             canManage={canManagePlan}
             compact
           />
