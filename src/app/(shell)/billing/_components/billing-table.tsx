@@ -1,5 +1,14 @@
+"use client";
+
+// 수납 표 — 청구서 한 건(학생x청구월)이 **라인마다 한 줄**이라 4항목짜리 하나가 화면 넉 줄을 먹었다.
+// 기본은 **접어서 합계 한 줄**, 줄을 누르거나 '전체 펼치기'로 세부 항목을 편다(원장 2026-08-31:
+// *"기본적으로 접어진상태로 합계금액이 보이도록, 클릭하거나 펼쳤을때 세부내역"*).
+// 🔴 접힌 줄의 값은 순수 함수 [`summarizeLines`](src/features/billing/line-summary.ts) **한 곳**에서만
+//    만든다 - 표 안에서 또 더하면 아래 '이 페이지 합계'와 조용히 갈린다.
+import { useState } from "react";
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
+import { summarizeLines } from "@/features/billing/line-summary";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import { overdueLinesOnly } from "@/features/billing/sync-window";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
@@ -126,6 +135,21 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
     return { r, lines: overdueOnly ? overdueLinesOnly(lines) : lines };
   });
 
+  // 접힘 상태 - **기본은 전부 접힘**. 라인이 하나뿐인 청구서는 접어도 같은 줄이라 늘 펼친 채로 둔다
+  // (누를 것이 없는 화살표를 놓지 않는다). 페이지·정렬이 바뀌면 id가 달라 자연히 다시 접힌다.
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const foldable = groups.filter((g) => g.lines.length > 1);
+  const allOpen = foldable.length > 0 && foldable.every((g) => openIds.has(g.r.id));
+  const toggleAll = () =>
+    setOpenIds(allOpen ? new Set<string>() : new Set(foldable.map((g) => g.r.id)));
+  const toggleOne = (id: string) =>
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   // 페이지 합계(라인 기준)
   let pageBilled = 0, pageDiscount = 0, pagePoints = 0, pagePaid = 0, pageUnpaid = 0, lineCount = 0;
   for (const g of groups)
@@ -140,10 +164,29 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
 
   const numTh = "eyebrow num px-3 py-3 text-right font-normal";
   return (
-    <div className="bg-card border-border overflow-x-auto rounded-2xl border">
+    <div className="bg-card border-border rounded-2xl border">
+      {/* 표 위 한 줄 - 지금 몇 건을 보고 있는지 + 전체 펼치기. 접을 것이 없으면(전부 1항목) 버튼도 없다. */}
+      <div className="border-border flex items-center justify-between gap-2 border-b px-3 py-2">
+        <span className="text-text-dim text-xs">
+          청구서 <span className="num">{groups.length}</span>건 · 항목{" "}
+          <span className="num">{lineCount}</span>개
+        </span>
+        {foldable.length > 0 ? (
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition"
+          >
+            <EyIcon name={allOpen ? "chevronUp" : "chevronDown"} size={12} />
+            {allOpen ? "전체 접기" : "전체 펼치기"}
+          </button>
+        ) : null}
+      </div>
+      <div className="overflow-x-auto rounded-b-2xl">
       <table className="w-full min-w-[1080px] text-sm [&_td]:whitespace-nowrap">
         <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
           <tr>
+            <th className="w-7 px-1 py-3" />
             <th className="eyebrow px-3 py-3 font-normal">학년</th>
             <th className="eyebrow px-3 py-3 font-normal">
               <SortHeader col="name" label="이름" current={current} />
@@ -165,8 +208,119 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
           </tr>
         </thead>
         <tbody>
-          {groups.map(({ r, lines }) =>
-            lines.map((li, i) => {
+          {groups.map(({ r, lines }) => {
+            const open = lines.length <= 1 || openIds.has(r.id);
+            if (!open) {
+              const sum = summarizeLines(lines);
+              return (
+                <tr
+                  key={`${r.id}-fold`}
+                  onClick={() => toggleOne(r.id)}
+                  className="border-border hover:bg-accent/30 cursor-pointer border-t transition-colors"
+                >
+                  <td className="px-1 py-2.5 text-center">
+                    {/* 줄 전체가 눌리지만 버튼도 둔다 - 키보드·스크린리더가 쓰는 진짜 조작부는 이쪽이다. */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleOne(r.id);
+                      }}
+                      aria-expanded={false}
+                      aria-label={`${r.studentName} ${r.period} 세부 항목 ${sum.count}개 펼치기`}
+                      className="text-text-faint hover:text-foreground inline-flex size-5 items-center justify-center rounded transition"
+                    >
+                      <EyIcon name="chevronRight" size={12} />
+                    </button>
+                  </td>
+                  <td className="text-muted-foreground px-3 py-2.5">{r.studentGrade ?? "—"}</td>
+                  {/* 🔴 이름 칸은 줄 펼치기를 삼킨다 - 학생을 열려고 누른 클릭이 접힘까지 건드리면
+                      창이 열리면서 표가 함께 튀어 "뭘 누른 건지" 알 수 없다. */}
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <span className="inline-flex items-center">
+                      <WindowLink
+                        href={`/students/${r.studentId}`}
+                        title={r.studentName}
+                        className="text-foreground font-medium hover:underline"
+                      >
+                        {r.studentName}
+                      </WindowLink>
+                      {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
+                    </span>
+                  </td>
+                  <td className="text-muted-foreground num px-3 py-2.5 text-xs">{r.period}</td>
+                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">
+                    {sum.dueDay ?? dayOfMonth(r.billedAt) ?? "—"}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {/* 구분이 섞인 청구서는 한 칩으로 뭉치지 않는다 - '수업'이라 적어 놓고 교재가 섞이면 거짓말. */}
+                    {sum.kind ? (
+                      <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${KIND_STYLE[kindLabel(sum.kind)] ?? "text-text-dim bg-bg-soft"}`}>
+                        {kindLabel(sum.kind) || "수업"}
+                      </span>
+                    ) : (
+                      <span className="text-text-dim bg-bg-soft inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium">
+                        여러 구분
+                      </span>
+                    )}
+                  </td>
+                  <td
+                    className="text-foreground max-w-[280px] px-3 py-2.5"
+                    title={lines.map((l) => l.description).filter(Boolean).join(", ")}
+                  >
+                    <span className="inline-block max-w-[200px] truncate align-bottom">
+                      {sum.description || "—"}
+                    </span>
+                    <span className="text-text-dim ml-1 text-xs">
+                      외 <span className="num">{sum.count - 1}</span>건
+                    </span>
+                  </td>
+                  <td className="text-foreground num px-3 py-2.5 text-right font-medium">{won(sum.amount)}</td>
+                  <td className="num px-3 py-2.5 text-right text-xs">
+                    {sum.discount > 0 ? (
+                      <span className="text-amber">-{won(sum.discount)}</span>
+                    ) : (
+                      <span className="text-text-faint">—</span>
+                    )}
+                  </td>
+                  <td className="num px-3 py-2.5 text-right text-xs">
+                    {sum.points > 0 ? (
+                      <span className="text-text-dim">{won(sum.points)}</span>
+                    ) : (
+                      <span className="text-text-faint">—</span>
+                    )}
+                  </td>
+                  <td className="num px-3 py-2.5 text-right">
+                    <span className={sum.paid > 0 ? "text-green" : "text-text-faint"}>{dash(sum.paid)}</span>
+                  </td>
+                  <td className="num px-3 py-2.5 text-right">
+                    {sum.unpaid === undefined ? (
+                      <span className="text-text-faint">—</span>
+                    ) : sum.unpaid > 0 ? (
+                      <span className="text-danger font-medium">{won(sum.unpaid)}</span>
+                    ) : (
+                      <span className="text-green">완납</span>
+                    )}
+                  </td>
+                  <td className="text-muted-foreground px-3 py-2.5 text-xs">
+                    {sum.method ? (PAYMENT_METHOD_LABEL[sum.method] ?? sum.method) : "—"}
+                  </td>
+                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">
+                    {shortDate(sum.paidDate)}
+                  </td>
+                  <td className="text-text-dim px-3 py-2.5 text-xs">
+                    {r.notes ? (
+                      <span className="line-clamp-1" title={r.notes}>
+                        {r.notes}
+                      </span>
+                    ) : (
+                      <span className="text-text-faint">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            }
+            return lines.map((li, i) => {
               const first = i === 0;
               // undefined = 라인별 미납 미상(구형 데이터의 2번째+ 라인) — 0(완납)과 구분해 "—"로.
               const unpaid = li.unpaid;
@@ -175,6 +329,19 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                   key={`${r.id}-${i}`}
                   className={`hover:bg-accent/30 transition-colors ${first ? "border-border border-t" : ""}`}
                 >
+                  <td className="px-1 py-2.5 text-center">
+                    {first && lines.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleOne(r.id)}
+                        aria-expanded={true}
+                        aria-label={`${r.studentName} ${r.period} 세부 항목 접기`}
+                        className="text-text-faint hover:text-foreground inline-flex size-5 items-center justify-center rounded transition"
+                      >
+                        <EyIcon name="chevronDown" size={12} />
+                      </button>
+                    ) : null}
+                  </td>
                   <td className="text-muted-foreground px-3 py-2.5">{first ? (r.studentGrade ?? "—") : ""}</td>
                   <td className="px-3 py-2.5">
                     {first ? (
@@ -250,12 +417,12 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                   </td>
                 </tr>
               );
-            }),
-          )}
+            });
+          })}
         </tbody>
         <tfoot>
           <tr className="border-border bg-bg-soft border-t font-bold">
-            <td className="text-muted-foreground px-3 py-3 text-xs" colSpan={6}>
+            <td className="text-muted-foreground px-3 py-3 text-xs" colSpan={7}>
               이 페이지 합계 · <span className="num">{lineCount}</span>개 항목 / {groups.length}건
             </td>
             <td className="text-foreground num px-3 py-3 text-right">{won(pageBilled)}</td>
@@ -267,6 +434,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
   );
 }
