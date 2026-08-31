@@ -29,9 +29,10 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
   // 통째로 건너뛰고 있었다(병합 셀은 좌상단에만 값 → 나머지 레인이 "요일 없음"). 55슬롯 = 2026-07-06에
   // `import-lab-parallel-slots.cjs`로 따로 이식해야 했던 그 병렬 수업들 — 이제 파서가 직접 읽는다.
   // 2026-07-22 2차: 비수업 칸(감독·쉬는 시간·수업준비·회의·연차)이 slots에서 blocks로 빠졌다(0138a).
-  // 합계는 보존된다 — 한 칸은 수업이거나 블록이지 둘 다일 수 없다.
-  it("인식 칸 330건 = 수업 슬롯 + 비수업 블록(상호배타·합계 보존)", () => {
-    expect(parsed.slots.length + parsed.blocks.length).toBe(330);
+  // 한 칸은 수업이거나 블록이지 둘 다일 수 없다(상호배타). 다만 **합반 칸은 반마다 슬롯**이라
+  // 슬롯 수가 칸 수보다 많을 수 있다(2026-08-31) — 이 픽스처엔 합반이 1칸 있어 330칸 → 331슬롯.
+  it("인식 칸 330건 = 수업 슬롯 + 비수업 블록 (합반 1칸이 두 반이 되어 331)", () => {
+    expect(parsed.slots.length + parsed.blocks.length).toBe(331);
     expect(parsed.slots.length).toBeGreaterThan(0);
     expect(parsed.blocks.length).toBeGreaterThan(0);
   });
@@ -208,6 +209,35 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
       const p = parseTeacherGrid({ ...base, fills } as unknown as SheetGrid);
       expect(p.blocks.map((b) => b.kind)).toContain("break");
     });
+  });
+});
+
+describe("합반 칸 — 반마다 슬롯 (원장 2026-08-31 \"합반으로 존재하는데 뭔소리야\")", () => {
+  const parsed = parseTeacherGrid(fixture);
+
+  it("🔴 한 칸에 반 이름이 둘이면 슬롯도 둘 — 같은 시간·같은 방·같은 강사", () => {
+    const byCell = new Map<string, typeof parsed.slots>();
+    for (const s of parsed.slots) {
+      const k = `${s.grid.r1},${s.grid.c1}`;
+      byCell.set(k, [...(byCell.get(k) ?? []), s]);
+    }
+    const shared = [...byCell.values()].filter((v) => v.length > 1);
+    expect(shared).toHaveLength(1); // 이 픽스처의 합반 1칸
+    const pair = shared[0]!;
+    expect(pair).toHaveLength(2);
+    expect(new Set(pair.map((s) => s.className)).size).toBe(2); // 서로 다른 반
+    // 합반의 뜻 — 나머지는 전부 같아야 한다(다르면 합반이 아니라 진짜 충돌이다).
+    for (const key of ["day", "startTime", "endTime", "room", "teacherName"] as const)
+      expect(new Set(pair.map((s) => s[key])).size, key).toBe(1);
+  });
+
+  it("이름이 하나뿐인 평범한 칸은 예전과 같다 — 칸 하나에 슬롯 하나", () => {
+    const byCell = new Map<string, number>();
+    for (const s of parsed.slots) {
+      const k = `${s.grid.r1},${s.grid.c1}`;
+      byCell.set(k, (byCell.get(k) ?? 0) + 1);
+    }
+    expect([...byCell.values()].filter((n) => n === 1).length).toBeGreaterThan(300);
   });
 });
 

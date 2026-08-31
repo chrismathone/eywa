@@ -76,6 +76,30 @@ function className(raw: string): string {
 }
 
 /**
+ * 한 칸에 적힌 **반 이름 전부**. 보통 하나지만 **합반은 둘 이상**이다
+ * (`중등E_중3 정규 A/ 고등E_중3 최상위/ 304` — 같은 강사·같은 방·같은 시간에 두 반).
+ *
+ * 🔴 종전엔 `className()`(첫 조각)만 봐서 **둘째 반이 통째로 사라졌다**(원장 제보 2026-08-31
+ *    *"합반으로 존재하는데 뭔소리야"*). 실측(9월 탭): 합반 5칸에서 `고등E_중3 최상위` 4칸 ·
+ *    `중등E_초5 MED` 1칸이 버려졌고, 앞 반은 단독 칸이 JJ 2개뿐이라 **정은지 수업이 통째로**
+ *    시간표에서 없어졌다(재적 학생이 있는 반인데도). 게다가 가져오기는 그걸 "시트에 없는 슬롯"으로
+ *    읽어 9/1부터 **마감**까지 했다 — 없는 것으로 만든 셈이다.
+ * ⚠️ 방번호(`304`·`SKY`)와 자리 칸의 **학생 수**(`JJ`·`LAB` 블록의 `/ 8`)는 이름이 아니라 뺀다.
+ * ⚠️ 순서를 지킨다 — 첫 이름이 그 칸의 대표다(방 탐색·비수업 판정이 그걸 쓴다).
+ */
+function classNames(raw: string): string[] {
+  const out: string[] = [];
+  for (const seg of raw.split(/[/\n]/)) {
+    const t = seg.replace(/^\*+/, "").trim();
+    if (!t) continue;
+    if (/^\d{1,3}$/.test(t)) continue; // 방번호 또는 학생 수
+    if (/^SKY$/i.test(t)) continue; // 방 이름
+    out.push(t);
+  }
+  return out;
+}
+
+/**
  * 비수업 칸 분류 — 시트가 강사의 하루 전체를 그리므로 수업 사이에 이런 칸이 섞인다(0138a).
  * ⚠️ 감독('supervise')은 여기서 못 정한다 — 셀이 **다른 강사 이름 한 단어**인지 알려면 블록 목록이
  * 다 모여야 해서, 파싱 2패스 뒤에 판정한다. 여기선 문구로 바로 아는 것만.
@@ -238,22 +262,27 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
           });
           continue;
         }
-        const slot: ParsedStructureSlot = {
-          teacherIndex: block.index,
-          teacherName: block.name,
-          teacherHeader: block.header,
-          day,
-          koDay,
-          className: className(raw),
-          room,
-          startTime: start,
-          endTime: end,
-          rawTimeLabel: topLabel.trim(),
-          starred: raw.trimStart().startsWith("*"),
-          raw,
-          grid: mg,
-        };
-        slots.push(slot);
+        // 🔴 **합반이면 반마다 슬롯을 만든다** — 한 칸에 이름이 둘이면 두 반이 같은 시간·같은 방에서
+        //    같은 강사에게 배운다는 뜻이다(`classNames` 주석). 첫 이름만 쓰면 둘째 반이 사라진다.
+        //    이름이 하나뿐인 평범한 칸은 예전과 완전히 같다(배열 길이 1).
+        const names = classNames(raw);
+        for (const nm of names.length > 0 ? names : [className(raw)]) {
+          slots.push({
+            teacherIndex: block.index,
+            teacherName: block.name,
+            teacherHeader: block.header,
+            day,
+            koDay,
+            className: nm,
+            room,
+            startTime: start,
+            endTime: end,
+            rawTimeLabel: topLabel.trim(),
+            starred: raw.trimStart().startsWith("*"),
+            raw,
+            grid: mg,
+          });
+        }
       }
     }
   });
