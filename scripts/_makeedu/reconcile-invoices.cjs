@@ -68,7 +68,7 @@ const won = (n) => `${Number(n || 0).toLocaleString("ko-KR")}원`;
     // ── 스크랩(그 범위만) ─────────────────────────────────────────────
     fs.mkdirSync(OUT, { recursive: true });
     if (!SKIP_SCRAPE) {
-      const r = spawnSync(process.execPath, [path.join(HERE, "scrape.cjs"), "--lists=invoices"], {
+      const r = spawnSync(process.execPath, [path.join(HERE, "scrape.cjs"), "--list=invoices"], {
         stdio: "inherit",
         env: { ...process.env, MAKEEDU_OUT: OUT, MAKEEDU_INVOICE_FROM: from, MAKEEDU_INVOICE_TO: to },
       });

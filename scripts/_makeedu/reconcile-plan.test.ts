@@ -4,6 +4,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const require_ = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -180,5 +182,34 @@ describe("메모 다루기 — 사용자 메모를 먹지 않는다", () => {
     expect(P.parseMissCount(null)).toBe(0);
     expect(P.parseMissCount("분납 약속")).toBe(0);
     expect(P.parseMissCount("[동기화] 2026-08-24 makeedu에서 확인 안 됨 3/4회")).toBe(3);
+  });
+});
+
+describe("🔴 다른 스크립트에 넘기는 플래그는 그쪽이 실제로 읽는 이름이어야 한다", () => {
+  // 2026-08-31 실측: `--lists=invoices`로 적었는데 scrape는 `--list=`(단수)만 읽는다 →
+  // **에러 없이 무시**되어 전 목록을 긁었다(결과는 맞고 시간만 몇 배). 오타가 조용히 넘어가는 자리라 잠근다.
+  const read = (f: string) => readFileSync(join(process.cwd(), "scripts", "_makeedu", f), "utf8");
+
+  it("scrape에 넘기는 목록 플래그", () => {
+    const caller = read("reconcile-invoices.cjs");
+    const flag = /scrape\.cjs"\), "(--[a-z-]+)=/.exec(caller)?.[1];
+    expect(flag, "reconcile-invoices가 scrape에 넘기는 플래그").toBeTruthy();
+    expect(read("scrape.cjs")).toContain(`startsWith("${flag}=")`);
+  });
+
+  it("import-invoices에 넘기는 플래그들", () => {
+    const caller = read("reconcile-invoices.cjs");
+    const importer = read("import-invoices.cjs");
+    expect(caller).toContain("--only-pairs=");
+    expect(importer).toContain('startsWith("--only-pairs=")');
+    expect(caller).toContain("--no-void-stale");
+    expect(importer).toContain('includes("--no-void-stale")');
+  });
+
+  it("스크랩 범위 env 이름이 양쪽에서 같다", () => {
+    for (const key of ["MAKEEDU_INVOICE_FROM", "MAKEEDU_INVOICE_TO"]) {
+      expect(read("reconcile-invoices.cjs"), key).toContain(key);
+      expect(read("scrape.cjs"), key).toContain(key);
+    }
   });
 });
