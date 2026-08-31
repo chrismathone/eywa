@@ -210,3 +210,43 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
     });
   });
 });
+
+describe("머리글 방 상속 — 자리(LAB·JJ)에만 (원장 2026-08-31)", () => {
+  /**
+   * 최소 그리드: 1행 블록번호 · 2행 강사머리글(+방) · 3행 메모 · 4행 요일 · 5행부터 데이터.
+   * A열은 시각 라벨 자리라 비워 둔다(파서는 행 인덱스로 시각을 만든다).
+   */
+  const grid = (header: string, cellText: string): SheetGrid => ({
+    tabName: "t",
+    cells: [
+      ["", "1"],
+      ["", header],
+      ["", ""],
+      ["", "월"],
+      ["", cellText],
+    ],
+    merges: [],
+  });
+
+  it("일반 강사 칸에 방이 없으면 **null** — 머리글 방을 물려받지 않는다", () => {
+    // PL1b가 남의 기본 방(602)을 물려받아 있지도 않은 강의실 충돌을 만들었다(2026-08-31 실측 3건).
+    const p = parseTeacherGrid(grid("Kristine 602", "PL1b/"));
+    expect(p.teachers[0]!.homeRoom).toBe("602"); // 머리글 자체는 그대로 읽는다
+    expect(p.slots[0]!.className).toBe("PL1b");
+    expect(p.slots[0]!.room).toBeNull();
+  });
+
+  it("셀에 방이 적혀 있으면 그 방을 쓴다(머리글과 달라도)", () => {
+    expect(parseTeacherGrid(grid("Kristine 602", "PL1b/ 606")).slots[0]!.room).toBe("606");
+  });
+
+  it("🔴 자리(LAB·JJ) 블록은 머리글 방을 그대로 물려받는다 — 셀엔 학생 수만 적힌다", () => {
+    // 원장: "JJ와 LAB은 가져와도 된다. 305와 603". 끄면 자리 117칸이 통째로 방을 잃는다.
+    expect(parseTeacherGrid(grid("LAB 603", "LT4/ 7")).slots[0]!.room).toBe("603");
+    expect(parseTeacherGrid(grid("JJ 305", "중등E_중1 TOP/ 6")).slots[0]!.room).toBe("305");
+  });
+
+  it("자리 판정은 옛 표기(이주희)도 함께 — teacher-label 단일 소스", () => {
+    expect(parseTeacherGrid(grid("이주희 603", "LT4/ 7")).slots[0]!.room).toBe("603");
+  });
+});

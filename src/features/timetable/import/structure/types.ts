@@ -51,7 +51,8 @@ export interface ParsedStructureSlot {
   day: DayOfWeek; // mon..sat
   koDay: string; // 월..토
   className: string; // "중등E_중2 심화" | "LT2"
-  room: string | null; // "301" | "SKY" | null(담임방 폴백 후에도 없으면)
+  // 셀에 적힌 방. 비어 있으면 null — **자리(LAB·JJ) 블록에서만** 머리글 방을 물려받는다(parse-grid 주석).
+  room: string | null; // "301" | "SKY" | null(셀에 안 적혔고 자리 블록도 아님 = 아직 안 정한 방)
   startTime: string; // "HH:MM" 24h
   endTime: string | null; // "HH:MM" 24h (라벨에서 끝시각 못 구하면 null)
   rawTimeLabel: string; // A열 원문 "4:20~5:00"
