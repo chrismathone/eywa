@@ -21,8 +21,12 @@ import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font
 import { ECS_TEACHER_ALL, normalizeEcsTeacher } from "../landing-teacher";
 import {
   DEFAULT_ECS_ENGLISH_TRACK,
+  DEFAULT_ECS_MONTH_DISPLAY,
+  DEFAULT_ECS_MONTH_VIEW,
   DEFAULT_ECS_SHOW_SELF_STUDY,
   normalizeCollapsedRosterGroups,
+  normalizeEcsMonthView,
+  type EcsMonthView,
 } from "../view-prefs";
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 import { normalizePlanText, SKILL_AREA_SLUG_RE } from "../lib/plan-codec";
@@ -873,4 +877,54 @@ export async function setMyEcsEnglishTrack(
 export async function setMyEcsTeacher(value: string): Promise<{ ok: boolean; error?: string }> {
   if (normalizeEcsTeacher(value) !== value) return { ok: false, error: "잘못된 값입니다" };
   return patchMyEcsPrefs({ teacher: value === ECS_TEACHER_ALL ? undefined : value });
+}
+
+/**
+ * 월간 뷰의 **보기**(달력/진도표)를 본인 계정에 저장 — `users.ui_prefs.ecs.monthView`(2026-08-31).
+ *
+ * ⚠️ 글씨 크기와 같은 부류다(**클라가 진실**) — 두 보기는 같은 자료를 다르게 그린 것뿐이라 전환에
+ *    재조회가 없다. 이 저장은 다음 방문용 영속화일 뿐이라 `router.refresh()`가 필요 없다.
+ */
+export async function setMyEcsMonthView(view: string): Promise<{ ok: boolean; error?: string }> {
+  if (normalizeEcsMonthView(view) !== view) return { ok: false, error: "잘못된 값입니다" };
+  return patchMyEcsPrefs({ monthView: view === DEFAULT_ECS_MONTH_VIEW ? undefined : view });
+}
+
+/**
+ * 월간 뷰의 **표시 토글**(과제·자리 교시)을 보기별로 저장 — `users.ui_prefs.ecs.monthDisplay.{cal,rail}`.
+ *
+ * ⚠️ 보기마다 따로 담는 이유는 [`view-prefs.ts`](../view-prefs.ts) `DEFAULT_ECS_MONTH_DISPLAY` 주석 참조
+ *    (한 벌로 묶으면 한쪽에서 켠 것이 다른 쪽을 망친다).
+ * ⚠️ 기본값과 같으면 키를 지운다 — 나중에 기본값을 바꿨을 때 옛 계정만 옛 기본에 묶이지 않게.
+ */
+export async function setMyEcsMonthDisplay(
+  view: string,
+  display: { homework: boolean; seat: boolean },
+): Promise<{ ok: boolean; error?: string }> {
+  if (normalizeEcsMonthView(view) !== view) return { ok: false, error: "잘못된 값입니다" };
+  if (typeof display?.homework !== "boolean" || typeof display?.seat !== "boolean") {
+    return { ok: false, error: "잘못된 값입니다" };
+  }
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const admin = createAdminClient();
+  const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).maybeSingle();
+  const prefs = (data?.ui_prefs ?? {}) as Record<string, unknown>;
+  const ecs = { ...((prefs.ecs as Record<string, unknown>) ?? {}) };
+  const stored = { ...((ecs.monthDisplay as Record<string, unknown>) ?? {}) };
+  const fallback = DEFAULT_ECS_MONTH_DISPLAY[view as EcsMonthView];
+  if (display.homework === fallback.homework && display.seat === fallback.seat) delete stored[view];
+  else stored[view] = display;
+  if (Object.keys(stored).length === 0) delete ecs.monthDisplay;
+  else ecs.monthDisplay = stored;
+  const merged = { ...prefs };
+  if (Object.keys(ecs).length === 0) delete merged.ecs;
+  else merged.ecs = ecs;
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: merged })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

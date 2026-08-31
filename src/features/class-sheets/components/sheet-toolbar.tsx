@@ -150,6 +150,16 @@ export function SheetToolbar({
           {rel === "past" ? "지난 주 조회" : "다음 주 조회"}
         </span>
       ) : null}
+      {/* 월간 뷰로 — 같은 반의 한 달을 달력/진도표로 훑는 화면(2026-08-31). 주 네비 바로 옆에 두는 이유는
+          여기가 "지금 어느 기간을 보고 있나"를 다루는 자리이기 때문이다. 이동 전 flush는 onNavigate가 한다. */}
+      <button
+        type="button"
+        className={pill(false)}
+        title={`${data.className} 반의 한 달을 달력·진도표로 봅니다`}
+        onClick={() => onNavigate(`/ecs/${data.classId}/month?month=${data.weekMonday.slice(0, 7)}`)}
+      >
+        월간
+      </button>
       <span className="bg-line h-4 w-px" aria-hidden />
 
       <span className="text-foreground text-[11px] font-bold">요일</span>

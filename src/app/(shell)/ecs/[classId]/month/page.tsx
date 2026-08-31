@@ -1,0 +1,73 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
+import { getSheetLanding } from "@/features/class-sheets/server/queries";
+import { getClassSheetMonth } from "@/features/class-sheets/server/month-queries";
+import { MonthClient } from "@/features/class-sheets/components/month-client";
+
+export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — eywa" };
+
+/**
+ * ECS **월간 뷰** — 반 1개 × 달 1개(달력 ↔ 진도표).
+ *
+ * 주간 시트와 **별도 라우트**인 이유: 주간은 출결·로스터·저장 큐를 든 무거운 클라 화면이고 월간은
+ * 훑는 화면이라, 한 페이지에서 갈라 놓으면 월간을 여는 데도 주간의 짐이 딸려 온다.
+ * 게이트는 조회 안의 `requireEcsClassAccess`(주간과 같은 함수 — #77 "모든 표면이 같은 게이트를").
+ */
+export default async function EcsMonthPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ classId: string }>;
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const { classId } = await params;
+  const { month } = await searchParams;
+  const [res, landing] = await Promise.all([
+    getClassSheetMonth(classId, month ?? null),
+    getSheetLanding(null), // 반 전환 드롭다운(주간 시트와 같은 스코프)
+  ]);
+
+  if (!res.ok) {
+    return (
+      <div className="space-y-4">
+        <PageHeader eyebrow="수업 운영" title="영어 강사 시트 · 월간" description="반별 월간 진도" />
+        <div className="bg-card shadow-card space-y-2 rounded-2xl px-4 py-6 text-sm">
+          <p className="text-text-dim">{res.error}</p>
+          <Link href="/ecs" className="text-primary font-bold underline-offset-2 hover:underline">
+            반 목록으로
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 필터 밖의 반으로 바로 들어와도 드롭다운이 "지금 보는 반"을 잃지 않게 맨 앞에 끼운다(주간 시트 규약).
+  const listed = landing.ok ? landing.cards.map((c) => ({ id: c.classId, name: c.className })) : [];
+  const classOptions = listed.some((o) => o.id === classId)
+    ? listed
+    : [{ id: classId, name: res.data.className }, ...listed];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="shrink-0 compact-chrome:hidden">
+        <PageHeader
+          eyebrow="수업 운영"
+          title={`영어 강사 시트 · 월간 — ${res.data.className}`}
+          description={`${res.data.monthLabel} · 계획 ${res.data.fill.filled}/${res.data.fill.total}교시`}
+        />
+      </div>
+      <div className="min-h-0 flex-1">
+        <MonthClient
+          // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
+          // 새 달 화면에 남의 값이 잠깐 비친다.
+          key={`${classId}:${res.data.month}`}
+          data={res.data}
+          classOptions={classOptions}
+          initialView={res.data.view}
+          initialDisplay={res.data.display}
+        />
+      </div>
+    </div>
+  );
+}
