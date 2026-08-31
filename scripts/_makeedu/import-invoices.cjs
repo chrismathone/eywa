@@ -40,6 +40,16 @@ const L = require("./lib.cjs");
 const S = require("./invoice-stale.cjs");
 
 const APPLY = process.argv.includes("--apply");
+// 🔴 **제한 모드**(`--only-pairs=<json>`) — 묵은 미납 재대조가 쓴다. 파일은 `["<studentId>|<period>", …]`.
+// 이 모드에서는 ① 그 (학생,월)만 upsert ② 삭제 판정(stale/void)·'지난 동기화 신규' 라벨 리셋·
+// 도메인 동기화 상태 기록을 **전부 건너뛴다** — 옛 달만 보는 실행이 매일 도는 동기화의 상태를 덮어쓰면
+// 화면이 "방금 정상 동기화됨"으로 위장한다(수납은 돈이라 침묵 실패를 허용하지 않는다).
+const ONLY_PAIRS = (() => {
+  const arg = process.argv.find((a) => a.startsWith("--only-pairs="));
+  if (!arg) return null;
+  const raw = JSON.parse(require("fs").readFileSync(arg.slice("--only-pairs=".length), "utf8"));
+  return new Set(Array.isArray(raw) ? raw.map(String) : []);
+})();
 // 삭제 반영은 **기본 ON**(원장 승인 2026-07-30). 끄려면 MAKEEDU_VOID_STALE=false 또는 --no-void-stale.
 // ⚠️ 예전엔 기본 OFF + 연동 PC .env.local 의존이라 **한 번도 켜진 적이 없었다**(void 0행 실측).
 // 안전은 플래그가 아니라 classifyStale의 4중 가드(makeedu형·미완납·7일+ 연속부재·활성수강 없음)가 진다.
@@ -186,7 +196,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       }
       if (!a.discReason && l.discReason) a.discReason = l.discReason;
     }
-    const invoices = [...inv.values()].map((a) => {
+    let invoices = [...inv.values()].map((a) => {
       // 완납 판정은 makeedu 미납 합(할인·적립 반영). 미납<=0=완납 / 실납<=0=미수 / 그 외 부분.
       const status = a.paid <= 0 ? "unpaid" : a.unpaid <= 0 ? "paid" : "partial";
       const topKind = Object.entries(a.kindAmt).sort((x, y) => y[1] - x[1])[0]?.[0];
@@ -246,7 +256,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       scrapeVerified,
       now: new Date(),
     });
-    S.printIssues({ stale, unmatchedLines });
+    if (!ONLY_PAIRS) S.printIssues({ stale, unmatchedLines });
     let voided = 0;
     let reconcile = []; // 층 2 대조 결과(APPLY에서만 채워진다 — dry-run은 저장을 안 하므로 비교 대상이 없다)
     const writeReport = () => {
@@ -258,8 +268,18 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     if (!APPLY) { writeReport(); console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
     // ↻ 동기화 배지 = "지난 동기화가 새로 추가한 청구". 이 성공 실행 시작에 지난 신규 표시를 클리어(0062a).
     // upsert라 신규(insert)만 배지, 기존월 갱신(update)은 배지 없음(위에서 이미 null 처리됨).
-    const cleared = await sql`update invoices set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
-    if (cleared.count) console.log(`  지난 동기화 라벨 클리어: ${cleared.count}`);
+    if (!ONLY_PAIRS) {
+      const cleared = await sql`update invoices set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
+      if (cleared.count) console.log(`  지난 동기화 라벨 클리어: ${cleared.count}`);
+    }
+    // 제한 모드 — 대상 (학생,월)만 남긴다(나머지 행은 이 실행이 손대지 않는다).
+    // ⚠️ 자르는 자리는 **외부 대조 뒤**여야 한다 — 그 대조는 "스크랩이 완전한가"를 보는 것이라,
+    //    줄인 집합으로 비교하면 멀쩡한 실행이 늘 '대조 실패'로 찍힌다.
+    if (ONLY_PAIRS) {
+      const before = invoices.length;
+      invoices = invoices.filter((i) => ONLY_PAIRS.has(`${i.student_id}|${i.period}`));
+      console.log(`제한 모드(--only-pairs): ${before} → ${invoices.length}건만 반영 (대상 ${ONLY_PAIRS.size})`);
+    }
     let upserted = 0, inserted = 0;
     for (const i of invoices) {
       const res = await sql`
@@ -285,7 +305,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       if (res[0] && res[0].inserted) inserted++;
     }
     // (a) --void-stale: makeedu 부재가 확실한 미완납만 무효 전환. 직전 상태·금액은 notes 마커 + 리포트 JSON에 보존.
-    if (VOID_STALE && stale.voidable.length) {
+    if (VOID_STALE && !ONLY_PAIRS && stale.voidable.length) {
       const today = new Date().toISOString().slice(0, 10);
       for (const e of stale.voidable) {
         const marker = S.voidMarker(e, today);
@@ -328,8 +348,11 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     S.printReconcile(reconcile);
 
     writeReport();
-    await L.recordSync(sql, tenantId, "invoices", inserted, "ok",
-      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided, reconcile, truncation, external }));
+    // 제한 모드는 도메인 동기화 상태를 **안 건드린다** — 옛 달만 본 실행이 "방금 정상 동기화됨"으로 덮어쓰면
+    // 매일 도는 동기화가 멈춰도 화면 배지가 초록으로 남는다(2026-07 실측 사고와 같은 위장).
+    if (!ONLY_PAIRS)
+      await L.recordSync(sql, tenantId, "invoices", inserted, "ok",
+        S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided, reconcile, truncation, external }));
     console.log(`upsert ${upserted}건 (신규 ${inserted} · 갱신 ${upserted - inserted}).`);
   } finally {
     await sql.end();

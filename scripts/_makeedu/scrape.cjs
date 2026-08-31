@@ -216,10 +216,22 @@ async function prepareInvoices(page) {
     applied.push("원생상태=전체");
   }
   const months = Number(process.env.MAKEEDU_INVOICE_MONTHS || 3);
+  // 🔴 범위 직접 지정(`MAKEEDU_INVOICE_FROM`/`TO`, `YYYY-MM`) — **묵은 미납 재대조** 전용 통로다.
+  //    매일 도는 동기화는 최근 N개월만 보는데, 그 창 밖 청구는 최초 임포트 값에서 얼어붙는다.
+  //    ⚠️ 이 통로로 범위를 넓히더라도 반영은 재대조 스크립트가 **대상 (학생,월)만** 한다
+  //       (범위를 넓힌 채 전건을 반영하면 2026-07-31처럼 대량 오탐이 난다).
+  const fixedFrom = /^\d{4}-\d{2}$/.test(process.env.MAKEEDU_INVOICE_FROM || "")
+    ? process.env.MAKEEDU_INVOICE_FROM
+    : null;
+  const fixedTo = /^\d{4}-\d{2}$/.test(process.env.MAKEEDU_INVOICE_TO || "")
+    ? process.env.MAKEEDU_INVOICE_TO
+    : null;
   // 🔴 앵커는 **화면이 말하는 현재 청구월**이다 — 달력 월이 아니다. makeedu는 선청구라 달력 7월에
   //    이미 청구월이 2026-08이고, 달력으로 계산하면 정작 살아있는 달이 범위에서 빠진다(2026-07-31 사고).
   const anchor = await page.inputValue("#fromYm").catch(() => null);
-  const { from, to } = L.billingMonthRange({ anchor, months, today: new Date() });
+  const auto = L.billingMonthRange({ anchor, months, today: new Date() });
+  const from = fixedFrom || auto.from;
+  const to = fixedTo || auto.to;
   if ((await page.locator("#fromYm").count()) > 0) {
     await page.fill("#fromYm", from).catch(() => {});
     await page.fill("#toYm", to).catch(() => {});
