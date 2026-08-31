@@ -94,6 +94,53 @@ export function normalizeCollapsedRosterGroups(raw: unknown): RosterGroupKey[] {
   return ROSTER_GROUP_KEYS.filter((k) => raw.includes(k));
 }
 
+/**
+ * `ui_prefs.ecs.monthView` → 월간 뷰에서 마지막에 본 **보기**(달력 / 진도표, 2026-08-31).
+ *
+ * 기본은 **달력**(원장 2026-08-31 "처음열었을때 B뷰") — 강사가 더 자주 보는 화면이다. 진도표로 바꾸면
+ * 그 선택이 계정에 남아, 담임·원장 화면은 다음에도 진도표로 열린다.
+ * ⚠️ 계정 귀속(원장 2026-08-04 *"모든 뷰 세팅은 계정에 귀속"*) — 다른 PC에서도 같은 보기로 열린다.
+ * ⚠️ 이 값은 **표현 방식만** 바꾼다 — 작성률 분모·경고 판정은 보기와 무관하게 같다(둘이 갈리면
+ *    같은 달이 화면마다 다른 숫자를 말한다).
+ */
+export type EcsMonthView = "cal" | "rail";
+export const DEFAULT_ECS_MONTH_VIEW: EcsMonthView = "cal";
+
+export function readEcsMonthView(uiPrefs: unknown): EcsMonthView {
+  return normalizeEcsMonthView(ecsScope(uiPrefs)?.monthView);
+}
+
+/** 모르는 값은 기본(달력) — 저장값이 깨졌다고 화면이 비면 안 된다. */
+export function normalizeEcsMonthView(raw: unknown): EcsMonthView {
+  return raw === "rail" ? "rail" : DEFAULT_ECS_MONTH_VIEW;
+}
+
+/**
+ * 월간 뷰의 **표시 토글**(과제 / 자리 교시)은 보기마다 따로 기억한다 — 달력은 하루가 완성돼야 해서
+ * 둘 다 켠 채로, 진도표는 영역 줄에 반 진도와 개별 진도가 섞이면 흐름이 끊겨 둘 다 끈 채로 연다
+ * (한 벌로 묶으면 한쪽에서 켠 것이 다른 쪽을 망친다 — 원장 시안 확인 2026-08-31).
+ * 🔴 이 토글은 **표시만** 바꾼다. 작성률과 진도표 맨 아랫줄은 배정된 전 교시로 세므로 토글을 따라가지
+ *    않는다 — 접는 것만으로 숫자가 좋아 보이면 계획을 안 쓴 자리 교시가 조용히 사라진다.
+ */
+export type EcsMonthDisplay = { homework: boolean; seat: boolean };
+export const DEFAULT_ECS_MONTH_DISPLAY: Record<EcsMonthView, EcsMonthDisplay> = {
+  cal: { homework: true, seat: true },
+  rail: { homework: false, seat: false },
+};
+
+export function readEcsMonthDisplay(uiPrefs: unknown, view: EcsMonthView): EcsMonthDisplay {
+  const raw = ecsScope(uiPrefs)?.monthDisplay;
+  const fallback = DEFAULT_ECS_MONTH_DISPLAY[view];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback;
+  const scoped = (raw as Record<string, unknown>)[view];
+  if (!scoped || typeof scoped !== "object" || Array.isArray(scoped)) return fallback;
+  const rec = scoped as Record<string, unknown>;
+  return {
+    homework: typeof rec.homework === "boolean" ? rec.homework : fallback.homework,
+    seat: typeof rec.seat === "boolean" ? rec.seat : fallback.seat,
+  };
+}
+
 function ecsScope(uiPrefs: unknown): Record<string, unknown> | null {
   if (!uiPrefs || typeof uiPrefs !== "object" || Array.isArray(uiPrefs)) return null;
   const scope = (uiPrefs as Record<string, unknown>).ecs;
