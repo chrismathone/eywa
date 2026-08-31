@@ -206,13 +206,14 @@ function TeacherGroupFlow({
               const idle = card.totalSlots === 0;
               // EiE만 숫자가 있다(그 외 null = 칸을 비운다). 분모를 넘지 않게 자르는 것도 여기 한 곳.
               const shoutCount = shoutingCountOf(card);
-              // 예약된 개명 문구 — **한 곳에서만 만든다**. 아래 배지 title과 접근성 이름이 같은 말을 해야
-              // 하는데 따로 적으면 한쪽만 고쳐진다(배지는 10px 두 글자라 문구가 곧 설명 전부다).
+              // 예약된 개명 **예고** 문구 — 한 곳에서만 만든다. 아래 배지 title과 접근성 이름이 같은 말을
+              // 해야 하는데 따로 적으면 한쪽만 고쳐진다(배지는 10px라 문구가 곧 설명 전부다).
+              // 🔴 **이미 지나간 개명은 아무 말도 하지 않는다**(원장 2026-08-31: *"반이름 변경된 반에
+              //    '개명'이라고 남는데 필요없어 그냥 날짜 지나면 반이름 변경되었으면 됨"*). 그 주 이름을
+              //    그대로 부르는 것이 곧 답이라, 표식은 앞으로 올 변경(upcoming)에만 남긴다.
               const renameNote = card.classNameUpcoming
                 ? `${monthDay(card.classNameUpcoming.date)}부터 ${card.className} → ${card.classNameUpcoming.name}`
-                : card.classNameBefore
-                  ? `이전 이름 ${card.classNameBefore}`
-                  : null;
+                : null;
               // 🔴 압축의 대가 — "교시 작성"이라는 **단위**가 행에서 사라졌다. 눈으로는 열 머리가
               // 설명하지만 스크린리더는 행만 읽어 "0/5"가 무엇의 5인지 알 수 없다. 접근성 이름에 되돌린다.
               const srLabel = [
@@ -241,10 +242,11 @@ function TeacherGroupFlow({
                     <span className="text-foreground min-w-0 flex-1 truncate text-[13px] font-semibold">
                       {card.className}
                     </span>
-                    {/* 예약된 반 이름 변경(원장 2026-08-29 *"미래조회시에 지금 반으로 보면 착각할 수
-                        있을거같은데"*). 두 경우가 **다른 사실**이라 표시도 갈린다:
+                    {/* 예약된 반 이름 변경 **예고**만 표시한다(원장 2026-08-29 *"미래조회시에 지금 반으로
+                        보면 착각할 수 있을거같은데"* → 2026-08-31 *"날짜 지나면 반이름 변경되었으면 됨"*).
                         · upcoming = 앞으로 바뀐다 → 언제 무엇이 되는지 예고(앰버 = 주의)
-                        · before   = 그 주엔 이미 바뀐 이름이다 → 옛 이름을 알려 준다(찾을 수 있게)
+                        · 🔴 이미 바뀐 반엔 **아무 표식도 붙이지 않는다** — 그 주 이름이 이미 새 이름이라
+                          '개명' 두 글자는 알려 주는 것 없이 44줄을 어지럽혔다(2026-08-31 제거).
                         🔴 예고는 **예약된 때부터 그날까지 내내** 붙는다(원장 2026-08-29 후속) — 전환 주에만
                            붙이면 그때 그 반은 이미 남의 반이라 **옛 담임 화면엔 안 뜬다**. 판정은
                            [`classNameForWeek`](src/features/classes/class-name-as-of.ts) 단일 소스.
@@ -255,13 +257,6 @@ function TeacherGroupFlow({
                         title={renameNote ?? undefined}
                       >
                         {monthDay(card.classNameUpcoming.date)}→{card.classNameUpcoming.name}
-                      </span>
-                    ) : card.classNameBefore ? (
-                      <span
-                        className="text-text-faint shrink-0 text-[10px] font-bold"
-                        title={renameNote ?? undefined}
-                      >
-                        개명
                       </span>
                     ) : null}
                     {/* 임시 위임(0173a) — 원스크린 반 칩과 같은 앰버 규약. 남의 반 시트를 내 반인 줄 알고
