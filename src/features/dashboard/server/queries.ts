@@ -2,6 +2,10 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  groupOutstandingPeriods,
+  type OutstandingPeriodRow,
+} from "@/features/dashboard/outstanding-periods";
 import { fetchInChunks, fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { inclusiveDateWindowStart, kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
 import {
@@ -640,6 +644,12 @@ export type OutstandingItem = {
   studentName: string;
   amount: number; // 잔액(미납)
   status: string; // unpaid | partial
+  /**
+   * 그 잔액이 **어느 달 몫인지**(`YYYY-MM`, 오래된 순). 원장 2026-08-31: *"몇월분이 미납인건지
+   * 26.08 이런식으로 월미납 붙여놓자"* — 이 카드 금액은 전 기간 합산이라 달을 안 적으면 이번 달치로 읽힌다.
+   * ⚠️ 라벨은 부가 정보라 조회가 실패해도 **빈 배열**로 두고 카드는 그대로 띄운다(수치가 먼저다).
+   */
+  periods: string[];
 };
 
 /**
@@ -651,13 +661,30 @@ export async function getTopOutstanding(limit = 8): Promise<OutstandingItem[]> {
   // 학생별 미납 잔액 합산 top N — DB group-by RPC 1쿼리(구: 전건 fetch + JS 집계, 0039a).
   const { data, error } = await supabase.rpc("dashboard_top_outstanding", { p_limit: limit });
   if (error) throw new Error(`getTopOutstanding: ${error.message}`);
-  return (
-    (data ?? []) as Array<{ student_id: string; student_name: string; amount: number | string; status: string }>
-  ).map((r) => ({
+  const rows = (data ?? []) as Array<{
+    student_id: string;
+    student_name: string;
+    amount: number | string;
+    status: string;
+  }>;
+  // 명단이 8명 남짓이라 한 번의 조회로 끝난다(B2/B3 안전). 실패해도 라벨만 비고 카드는 그대로.
+  const ids = rows.map((r) => r.student_id);
+  const detail = ids.length
+    ? await supabase
+        .from("invoices")
+        .select("student_id, period, amount_total, amount_discount, amount_paid")
+        .in("student_id", ids)
+        .in("status", ["unpaid", "partial"])
+    : { data: [], error: null };
+  const byStudent = groupOutstandingPeriods(
+    (detail.error ? [] : (detail.data ?? [])) as OutstandingPeriodRow[],
+  );
+  return rows.map((r) => ({
     studentId: r.student_id,
     studentName: r.student_name,
     amount: Number(r.amount),
     status: r.status,
+    periods: byStudent.get(r.student_id) ?? [],
   }));
 }
 
@@ -691,13 +718,31 @@ export const getTopOutstandingCached = (tenantId: string, limit = 8): Promise<Ou
         p_tenant: tenantId,
       });
       if (error) throw new Error(`getTopOutstandingCached: ${error.message}`);
-      return (
-        (data ?? []) as Array<{ student_id: string; student_name: string; amount: number | string; status: string }>
-      ).map((r) => ({
+      const rows = (data ?? []) as Array<{
+        student_id: string;
+        student_name: string;
+        amount: number | string;
+        status: string;
+      }>;
+      // ⚠️ admin은 RLS를 우회하므로 **tenant 필터가 필수**(캐시 안엔 쿠키가 없다 — 위 주석의 규약).
+      const ids = rows.map((r) => r.student_id);
+      const detail = ids.length
+        ? await admin
+            .from("invoices")
+            .select("student_id, period, amount_total, amount_discount, amount_paid")
+            .eq("tenant_id", tenantId)
+            .in("student_id", ids)
+            .in("status", ["unpaid", "partial"])
+        : { data: [], error: null };
+      const byStudent = groupOutstandingPeriods(
+        (detail.error ? [] : (detail.data ?? [])) as OutstandingPeriodRow[],
+      );
+      return rows.map((r) => ({
         studentId: r.student_id,
         studentName: r.student_name,
         amount: Number(r.amount),
         status: r.status,
+        periods: byStudent.get(r.student_id) ?? [],
       }));
     },
     ["dashboard-top-outstanding", tenantId, String(limit)],
