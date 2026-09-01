@@ -19,10 +19,10 @@ export default async function EcsMonthPage({
   searchParams,
 }: {
   params: Promise<{ classId: string }>;
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; view?: string }>;
 }) {
   const { classId } = await params;
-  const { month } = await searchParams;
+  const { month, view } = await searchParams;
   const [res, landing] = await Promise.all([
     getClassSheetMonth(classId, month ?? null),
     getSheetLanding(null), // 반 전환 드롭다운(주간 시트와 같은 스코프)
@@ -48,6 +48,14 @@ export default async function EcsMonthPage({
     ? listed
     : [{ id: classId, name: res.data.className }, ...listed];
 
+  /**
+   * 보기(달력/진도표)는 **계정에 저장된 값이 기본**이고, 주소에 실려 오면 이번 방문만 그것을 따른다 —
+   * 주간 시트의 `주간 | 달력 | 진도표` 전환이 "진도표로 가자"를 이 파라미터로 말한다.
+   * ⚠️ 모르는 값은 **저장값으로 떨어진다**(`normalizeEcsMonthView`를 쓰면 달력으로 눌러 버려서, 진도표를
+   *    쓰는 사람이 주소 한 글자 때문에 달력으로 열린다).
+   */
+  const initialView = view === "cal" || view === "rail" ? view : res.data.view;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="shrink-0 compact-chrome:hidden">
@@ -61,10 +69,13 @@ export default async function EcsMonthPage({
         <MonthClient
           // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
           // 새 달 화면에 남의 값이 잠깐 비친다.
+          // 🔴 보기(`view`)는 key에 **넣지 않는다** — 화면 안에서 보기를 바꾸면 주소만 조용히 따라
+          //    고치는데(month-client `chooseView`), key에 넣으면 그 다음 `router.refresh()`가 이 껍데기를
+          //    통째로 다시 마운트해 **열려 있던 '그 날 고치기' 창이 사라진다**.
           key={`${classId}:${res.data.month}`}
           data={res.data}
           classOptions={classOptions}
-          initialView={res.data.view}
+          initialView={initialView}
           initialDisplay={res.data.display}
         />
       </div>

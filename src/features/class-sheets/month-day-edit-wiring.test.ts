@@ -11,8 +11,9 @@ import { describe, expect, it } from "vitest";
  *    새로 짜면 같은 표를 서로 다른 규칙(줄 번호·CAS 기대값)으로 쓰게 된다(use-plan-handlers 🔴).
  *  ② 줄은 **월간 조회가 아니라 `getEcsDayPlan`이 다시 읽는다** — 월간 조회는 빈 줄·고아 줄을 걸러서
  *    주므로 그대로 심으면 CAS 기대값이 어긋나 첫 저장이 충돌로 뜬다(day-plan.ts 🔴).
- *  ③ 달력 칸의 **단일 클릭 이동을 미룬다** — 안 미루면 첫 클릭이 이미 페이지를 떠나서 두 번째 클릭이
- *    닿을 곳이 없다(더블클릭이 영원히 안 걸린다).
+ *  ③ 달력 칸은 **그 자리에서 창만 연다** — 2026-09-01 원장 지시로 "클릭하면 주간으로" 이동을 지웠다
+ *    (*"클릭 주간 이동은 기능 삭제할것. 상단에 주간 선택이 있으니 해당 기능으로 대체."*). 이동을
+ *    되살리면 첫 클릭이 페이지를 떠나 버려 **더블클릭을 미루는 편법**(타이머)이 함께 돌아온다.
  *  ④ 닫을 때 **저장 큐를 비운 뒤** 다시 읽는다 — 안 비우면 방금 친 글자가 서버에 닿기 전에 옛 값을
  *    다시 그려 "고쳤는데 그대로"가 된다.
  */
@@ -71,18 +72,16 @@ describe("월간 뷰 · 그 날짜 고치기 배선", () => {
     expect(dayPlan).not.toContain("isMeaningfulPlanLine");
   });
 
-  it("③ 달력 칸은 단일 클릭 이동을 미루고 더블클릭에서 취소한다", () => {
-    expect(calendar).toContain("onDoubleClick");
-    expect(calendar).toContain("DBLCLICK_MS");
-    expect(calendar).toContain("setTimeout");
-    // 미룬 타이머를 언마운트에서 반드시 정리한다(떠난 뒤 이동이 튀지 않게).
-    expect(calendar).toContain("clearTimeout");
-    expect(calendar).toContain("useEffect(() => cancelNav");
+  it("③ 달력 칸은 누르면 그 자리에서 창을 연다", () => {
+    expect(calendar).toContain("onClick={() => onOpenDay(date)}");
+    // 버튼이라 탭·엔터로도 열린다(링크였을 땐 키보드로 편집 창에 닿을 길이 아예 없었다).
+    expect(calendar).toContain('type="button"');
   });
 
-  it("③ 키보드·새 탭 클릭은 가로채지 않는다", () => {
-    expect(calendar).toContain("e.detail === 0");
-    expect(calendar).toMatch(/metaKey|ctrlKey/);
+  it("③ 칸에서 주간으로 새어 나가지 않는다 — 미루기 편법도 함께 사라졌다", () => {
+    for (const gone of ["DBLCLICK_MS", "setTimeout", "clearTimeout", "router.push", "<Link", "href="]) {
+      expect(calendar).not.toContain(gone);
+    }
   });
 
   it("④ 닫을 때 등록된 flush를 모두 기다린 뒤 다시 읽는다", () => {
@@ -98,7 +97,7 @@ describe("월간 뷰 · 그 날짜 고치기 배선", () => {
     expect(block).toContain("registerFlush(null)");
   });
 
-  it("두 보기 모두 같은 창을 연다(달력=더블클릭 · 진도표=날짜 열 머리)", () => {
+  it("두 보기 모두 같은 창을 연다(달력=칸 클릭 · 진도표=날짜 열 머리)", () => {
     const rail = code(read("features/class-sheets/components/month-rail.tsx"));
     expect(calendar).toContain("onOpenDay");
     expect(rail).toContain("onOpenDay(date)");
@@ -146,5 +145,51 @@ describe("주간 이동 네비", () => {
     // 시간표·ECS 랜딩은 `startTransition`이라 Promise가 없다 → PeriodNav에 pending을 직접 넘겨야 한다.
     expect(weekNavClient).toContain("pending={pending}");
     expect(code(read("components/period-nav.tsx"))).toContain("externalPending");
+  });
+});
+
+/**
+ * 구조 가드 — ECS **상단 바가 주간·월간에서 갈리지 않는다**(원장 2026-09-01 *"상단 헤더가 전체적으로
+ * 영어 ecs의 경우 월간과 주간 차이가 너무 심함. 일관성있게 디자인 통일할 필요성이 있음."*).
+ *
+ * 갈렸던 자리는 셋이었다 — 껍데기(주간만 카드) · 반 선택(주간만 노란 표기 + 목록·반 정보 보기) ·
+ * 보기 전환(주간은 `[월간]` 버튼 하나, 월간은 3분할). 셋 다 공용 조각으로 합쳤다.
+ */
+describe("ECS 상단 바 · 주간/월간 통일", () => {
+  const toolbar = code(read("features/class-sheets/components/sheet-toolbar.tsx"));
+  const month = code(read("features/class-sheets/components/month-client.tsx"));
+  const monthPage = code(read("app/(shell)/ecs/[classId]/month/page.tsx"));
+
+  it("두 화면이 같은 껍데기·같은 왼쪽 덩어리·같은 보기 전환을 쓴다", () => {
+    for (const src of [toolbar, month]) {
+      expect(src).toContain("SHEET_BAR");
+      expect(src).toContain("<SheetClassPicker");
+      expect(src).toContain("<SheetFaceSwitch");
+    }
+  });
+
+  it("표기를 화면마다 다시 적지 않는다(노란 반 선택·알약은 공용 한 벌)", () => {
+    for (const src of [toolbar, month]) {
+      expect(src).not.toContain("MARKER_TRIGGER");
+      expect(src).not.toContain("SearchableSelect");
+    }
+    // 월간의 표시 토글도 주간 알약과 같은 표기를 쓴다(전엔 자기만의 소프트 칩이었다).
+    expect(month).toContain("sheetPill(");
+  });
+
+  it("🔴 보기를 바꿔도 보고 있던 기간을 잃지 않는다", () => {
+    // 주간 → 월간: 이번 달이 아니라 **보고 있던 주가 속한 달**.
+    expect(toolbar).toContain("data.weekMonday.slice(0, 7)");
+    // 월간 → 주간: 이번 주가 아니라 **보고 있던 달 안의 주**.
+    expect(month).toContain("weekHref");
+  });
+
+  it("🔴 월간의 보기 선택이 주소에 남고, 주소가 저장값을 덮지 않는다", () => {
+    // 주소만 조용히 고친다 — 라우터를 태우면 열려 있는 창·목표 편집 큐가 흔들린다.
+    expect(month).toContain("history.replaceState");
+    expect(month).not.toContain("router.replace");
+    // 모르는 값은 계정 저장값으로 떨어진다(normalizeEcsMonthView를 쓰면 달력으로 눌러 버린다).
+    expect(monthPage).toContain('view === "cal"');
+    expect(monthPage).not.toContain("normalizeEcsMonthView");
   });
 });

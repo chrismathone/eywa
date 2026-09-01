@@ -1,0 +1,114 @@
+"use client";
+
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { WindowLink } from "@/components/workspace/window-link";
+import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
+import { SHEET_FACES, SHEET_FACE_LABEL, SHEET_FACE_TITLE, sheetPill, type SheetFace } from "../chrome";
+
+/**
+ * ECS 상단 바의 **공용 조각** — 표기는 [`chrome.ts`](../chrome.ts), 여기는 그리는 쪽.
+ * 주간 시트([sheet-toolbar](./sheet-toolbar.tsx))와 월간 뷰([month-client](./month-client.tsx))가
+ * 이 둘을 그대로 쓴다(원장 2026-09-01 *"일관성있게 디자인 통일"*).
+ */
+
+/** 덩어리 사이 세로 실선 — 두 화면이 같은 자리에서 끊어 읽히게. */
+export function SheetBarDivider() {
+  return <span className="bg-line h-4 w-px" aria-hidden />;
+}
+
+/**
+ * 왼쪽 덩어리 — **목록 · 반 선택 · 반 정보 보기**.
+ *
+ * ⚠️ 반 선택은 [marker-trigger](@/components/ui/marker-trigger)의 노란 표기다 — "반을 골라 그 반의
+ *    내용이 아래에 채워지는" 드롭다운이라는 조건에 월간도 똑같이 해당한다(그 파일의 🔑 조건).
+ *    월간이 평범한 셀렉트였던 것이 두 화면이 가장 크게 갈려 보이던 지점이다.
+ * 🔴 이동은 **호출부가 책임진다**(`onNavigate`) — 주간은 저장 큐, 월간은 목표 편집 큐를 먼저 비워야
+ *    해서 순서가 화면마다 다르다. 여기서 `router.push`를 부르면 그 순서를 건너뛴다.
+ */
+export function SheetClassPicker({
+  classId,
+  classLabel,
+  classOptions,
+  onNavigate,
+  hrefForClass,
+}: {
+  classId: string;
+  /** 지금 보고 있는 반 이름 — 툴팁·스크린리더 라벨에 쓴다. */
+  classLabel: string;
+  classOptions: { id: string; name: string }[];
+  onNavigate: (href: string) => void | Promise<void>;
+  /** 반을 바꿨을 때 갈 곳 — 주간은 보던 주를, 월간은 보던 달을 유지한다. */
+  hrefForClass: (classId: string) => string;
+}) {
+  return (
+    <>
+      <button type="button" className={sheetPill(false)} onClick={() => void onNavigate("/ecs")}>
+        목록
+      </button>
+      <span className={`${MARKER_WIDTH} shrink-0`}>
+        <SearchableSelect
+          options={classOptions.map((c) => ({ value: c.id, label: c.name }))}
+          value={classId}
+          onValueChange={(v) => {
+            if (v && v !== classId) void onNavigate(hrefForClass(v));
+          }}
+          placeholder="반 선택"
+          ariaLabel="반 전환"
+          // ⚠️ `compact`를 안 쓴다 — 그건 쉐브론을 10px로 줄이는데(gap도 1) 21px 글자 옆에선
+          //    흔적만 남는다.
+          triggerClassName={MARKER_TRIGGER}
+          // 반이 수십 개라 목록에서 **지금 보고 있는 반**을 눈으로 못 찾겠다는 지적(원장 2026-08-06).
+          highlightSelected
+        />
+      </span>
+      {/* 반 정보 보기 — 드롭다운 **바로 옆**이라 "지금 고른 그 반"이라는 게 자리로 읽힌다.
+          WindowLink라 창 안에선 드릴인, 최상위에선 새 창. */}
+      <WindowLink
+        href={`/classes/${classId}`}
+        title={classLabel}
+        className={`${sheetPill(false)} inline-flex items-center`}
+        ariaLabel={`${classLabel} 반 정보 보기`}
+      >
+        반 정보 보기
+      </WindowLink>
+    </>
+  );
+}
+
+/**
+ * **주간 | 달력 | 진도표** — 같은 반을 보는 세 면의 전환.
+ *
+ * 기간 네비 **바로 옆**에 둔다: 여기가 "지금 이 반을 어느 기간·어느 모양으로 보고 있나"를 다루는 자리다.
+ * 🔴 지금 보고 있는 면은 눌러도 아무 일도 안 한다 — 같은 화면을 다시 부르면 저장 flush만 도는 헛걸음이다.
+ */
+export function SheetFaceSwitch({
+  current,
+  onSelect,
+}: {
+  current: SheetFace;
+  onSelect: (face: SheetFace) => void;
+}) {
+  return (
+    <span className="border-line-strong inline-flex shrink-0 overflow-hidden rounded-lg border [&>button+button]:border-l [&>button+button]:border-[var(--line-strong)]">
+      {SHEET_FACES.map((face) => {
+        const active = face === current;
+        return (
+          <button
+            key={face}
+            type="button"
+            aria-pressed={active}
+            title={SHEET_FACE_TITLE[face]}
+            onClick={() => {
+              if (!active) onSelect(face);
+            }}
+            className={`cursor-pointer px-3.5 py-1 text-[13px] font-bold transition ${
+              active ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+            }`}
+          >
+            {SHEET_FACE_LABEL[face]}
+          </button>
+        );
+      })}
+    </span>
+  );
+}

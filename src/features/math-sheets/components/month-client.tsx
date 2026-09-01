@@ -44,8 +44,11 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
       type="button"
       aria-pressed={key === view}
       onClick={() => chooseView(key)}
-      className={`cursor-pointer px-3 py-1 text-xs font-bold transition ${
-        key === view ? "bg-primary text-primary-foreground" : "text-text-faint hover:bg-bg-soft"
+      // ⚠️ ECS의 [SheetFaceSwitch](@/features/class-sheets/components/sheet-chrome) 칸과 **같은 값**
+      //    (2026-09-01 ECS 상단 바 통일 때 함께 맞췄다) — 두 시트를 오가는 사람이 다시 배우지 않게.
+      //    MCS는 '주간' 면이 없어 그 컴포넌트를 그대로 쓰진 않는다.
+      className={`cursor-pointer px-3.5 py-1 text-[13px] font-bold transition ${
+        key === view ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
       }`}
     >
       {label}

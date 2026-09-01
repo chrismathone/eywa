@@ -4,15 +4,18 @@
 // 주 네비 모양은 앱 전역 단일 소스 PeriodNav(원장 2026-09-01 "주차이동을 월간처럼 깔끔한 스타일로").
 // WeekNav(ParamLink)가 아니라 PeriodNav를 **직접** 쓰는 이유는 그대로다: 이동 전 store.flush()를
 // await해야 해서(§F) `onNavigate`로 가로챈다 — PeriodNav가 그 동안 "가는 중"을 그린다.
+//
+// 🔴 상단 바의 **껍데기·왼쪽 덩어리·보기 전환은 월간 뷰와 같은 것**을 쓴다([chrome.ts](../chrome.ts) +
+//    [sheet-chrome](./sheet-chrome.tsx), 원장 2026-09-01 "월간과 주간 차이가 너무 심함 · 일관성있게
+//    디자인 통일"). 여기에 알약·셀렉트 표기를 다시 적지 말 것 — 그게 두 화면이 갈렸던 이유다.
 import { ClipboardCheck } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday, WEEK_LABEL_W } from "@/features/timetable/lib/week";
 import { PeriodNav } from "@/components/period-nav";
 
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { ecsPresenceScope } from "../lib/presence-scope";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { WindowLink } from "@/components/workspace/window-link";
-import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
+import { SHEET_BAR, sheetPill } from "../chrome";
+import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
 import type { ClassSheetWeekData } from "../server/queries";
 import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
 import { attHref } from "@/app/(shell)/attendance/_components/att-href";
@@ -20,17 +23,8 @@ import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 import { EcsMakeupAdder } from "./ecs-makeup-adder";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
-// ⚠️ cursor-pointer 명시 — Tailwind v4 preflight엔 v3의 `button{cursor:pointer}`가 없어서
-// 안 적으면 클릭 가능한 버튼이 화살표로 보인다(이 앱 globals.css에도 cursor 규칙 0건).
-// 테두리는 line-strong — 헤어라인(9%)이면 눌 수 있는 알약인지 글자인지 구분이 안 된다(가독성 07-31).
-// ⚠️ 테두리는 잉크 고정(원장 2026-08-10 "모든 박스에 진한 검은색 테두리") — line-strong(18%)조차 흰 카드
-// 위에선 "눌 수 있는 알약인지 글자인지" 구분이 안 됐다(07-31 가독성 지적의 연장). 글자도 dim→foreground 굵게.
-const pill = (on: boolean) =>
-  `shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-[12px] font-bold transition ${
-    on
-      ? "border-primary bg-primary text-primary-foreground"
-      : "border-line-strong text-foreground hover:bg-bg-soft"
-  }`;
+// 알약 표기는 [chrome.ts](../chrome.ts) 한 곳 — 월간 뷰의 표시 토글도 같은 것을 쓴다.
+const pill = sheetPill;
 
 export function SheetToolbar({
   data,
@@ -78,38 +72,15 @@ export function SheetToolbar({
   const rel = data.weekRelation;
 
   return (
-    <div className="bg-card shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl px-4 py-2.5">
-      <button type="button" className={pill(false)} onClick={() => onNavigate("/ecs")}>
-        목록
-      </button>
-      <span className={`${MARKER_WIDTH} shrink-0`}>
-        <SearchableSelect
-          options={classOptions.map((c) => ({ value: c.id, label: c.name }))}
-          value={data.classId}
-          onValueChange={(v) => {
-            if (v && v !== data.classId) onNavigate(hrefFor(v, data.weekMonday));
-          }}
-          placeholder="반 선택"
-          ariaLabel="반 전환"
-          // 🔴 **이 화면에서 가장 크고, 유일하게 노란 것** — 표기 규약·근거는 한 곳에 모아 뒀다
-          //    ([marker-trigger.ts](@/components/ui/marker-trigger)). 출석부(반 모드)·시험 상세도 같은 상수를 쓴다.
-          // ⚠️ `compact`를 안 쓴다 — 그건 쉐브론을 10px로 줄이는데(gap도 1) 21px 글자 옆에선 흔적만 남는다.
-          triggerClassName={MARKER_TRIGGER}
-          // 반이 수십 개라 목록에서 **지금 보고 있는 반**을 눈으로 못 찾겠다는 지적(원장 2026-08-06).
-          // 체크 아이콘만으론 약해서 노란 배경 + 굵은 글씨로 또렷하게.
-          highlightSelected
-        />
-      </span>
-      {/* 반 정보 보기(원장 2026-08-06) — 시트에서 보던 반의 상세로 바로 간다. 드롭다운 **바로 옆**이라
-          "지금 고른 그 반"이라는 게 자리로 읽힌다. WindowLink라 창 안에선 드릴인, 최상위에선 새 창. */}
-      <WindowLink
-        href={`/classes/${data.classId}`}
-        title={data.className}
-        className={`${pill(false)} inline-flex items-center`}
-        ariaLabel={`${data.className} 반 정보 보기`}
-      >
-        반 정보 보기
-      </WindowLink>
+    <div className={SHEET_BAR}>
+      {/* 목록 · 반 선택(노란 표기) · 반 정보 보기 — 월간 뷰와 **같은 조각**(sheet-chrome.tsx). */}
+      <SheetClassPicker
+        classId={data.classId}
+        classLabel={data.className}
+        classOptions={classOptions}
+        onNavigate={onNavigate}
+        hrefForClass={(id) => hrefFor(id, data.weekMonday)}
+      />
       {/* 임시 위임(0173a) — 지금 **남의 반 시트**를 고치는 중이라는 사실이 열고 나서도 보여야 한다.
           창(embed)에선 상단 PageHeader가 통째로 숨겨지므로 배지 자리는 여기가 유일하다. */}
       {data.delegated ? (
@@ -120,7 +91,7 @@ export function SheetToolbar({
           위임{data.classTeacherName ? ` · ${data.classTeacherName} 선생님 반` : ""}
         </span>
       ) : null}
-      <span className="bg-line h-4 w-px" aria-hidden />
+      <SheetBarDivider />
 
       {/* 🔴 '이번주' 알약이 하던 두 일은 PeriodNav가 나눠 맡는다 — 이번 주로 돌아가기는 **가운데 라벨
           클릭**, "지금 이번 주인가"는 **과거/미래 조회 배지**. 배지를 지우면 지난 주를 보면서 이번 주로
@@ -137,17 +108,17 @@ export function SheetToolbar({
         labelWidth={WEEK_LABEL_W}
         onNavigate={onNavigate}
       />
-      {/* 월간 뷰로 — 같은 반의 한 달을 달력/진도표로 훑는 화면(2026-08-31). 주 네비 바로 옆에 두는 이유는
-          여기가 "지금 어느 기간을 보고 있나"를 다루는 자리이기 때문이다. 이동 전 flush는 onNavigate가 한다. */}
-      <button
-        type="button"
-        className={pill(false)}
-        title={`${data.className} 반의 한 달을 달력·진도표로 봅니다`}
-        onClick={() => onNavigate(`/ecs/${data.classId}/month?month=${data.weekMonday.slice(0, 7)}`)}
-      >
-        월간
-      </button>
-      <span className="bg-line h-4 w-px" aria-hidden />
+      {/* 주간 | 달력 | 진도표 — 월간 뷰와 **같은 세 칸**(원장 2026-09-01). 전엔 여기가 `[월간]` 버튼
+          하나뿐이라 진도표로 가려면 월간을 거쳐 한 번 더 눌러야 했다.
+          🔴 어느 달을 여는가 = **지금 보고 있는 주가 속한 달**(그냥 이번 달을 열면 과거 주를 보다가
+             아무 예고 없이 오늘로 튄다). 이동 전 flush는 onNavigate가 한다. */}
+      <SheetFaceSwitch
+        current="week"
+        onSelect={(face) =>
+          onNavigate(`/ecs/${data.classId}/month?month=${data.weekMonday.slice(0, 7)}&view=${face}`)
+        }
+      />
+      <SheetBarDivider />
 
       <span className="text-foreground text-[11px] font-bold">요일</span>
       <div className="flex items-center gap-1">

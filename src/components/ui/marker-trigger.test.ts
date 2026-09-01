@@ -18,7 +18,12 @@ const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
  * 새로 켜려면 그게 정말 이 성격인지 먼저 판단하고 여기에 적을 것(적기 싫으면 켜지 말 것).
  */
 const MARKED = [
-  { path: "src/features/class-sheets/components/sheet-toolbar.tsx", why: "ECS 주간 시트 — 반 전환" },
+  {
+    // 2026-09-01 상단 바 통일로 **주간·월간이 같은 조각**을 쓴다 — 그래서 표기도 여기 한 곳에서 켜진다
+    // (화면마다는 여전히 하나뿐이다: 주간 시트에 하나, 월간 뷰에 하나).
+    path: "src/features/class-sheets/components/sheet-chrome.tsx",
+    why: "ECS 시트(주간·월간) — 반 전환",
+  },
   { path: "src/app/(shell)/attendance/page.tsx", why: "출석부 — 반을 고르면 그 반 월 시트" },
   { path: "src/app/(shell)/exams/[id]/page.tsx", why: "시험 상세 — 고른 반의 점수 행" },
 ];
