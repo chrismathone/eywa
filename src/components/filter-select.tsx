@@ -26,6 +26,7 @@ export function FilterSelect({
   allValue = "",
   ariaLabel,
   className,
+  triggerClassName,
   cap,
   marker = false,
 }: {
@@ -37,6 +38,11 @@ export function FilterSelect({
   /** 트리거 버튼 접근성 이름(예: "강사 필터") — 없으면 paramName으로 폴백. */
   ariaLabel?: string;
   className?: string;
+  /**
+   * 트리거 박스 클래스 override — 툴바 한 줄에서 **높이를 맞출 때** 쓴다(원장 2026-09-01 "버튼높이 통일").
+   * ⚠️ 톤(배경·테두리)까지 통째로 대체된다 — 반쪽만 덮어쓰면 색이 갈린다(SearchableSelect 주석).
+   */
+  triggerClassName?: string;
   /**
    * 팝업 렌더 상한(기본 50). ⚠️ 옵션이 수십 개를 넘고 **정렬이 카테고리와 상관**되면 기본값이
    * 한 카테고리를 통째로 가린다(gotcha #84) — 예: 반 목록은 이름순이라 로마자 영어반이 앞을 독점해
@@ -80,7 +86,7 @@ export function FilterSelect({
       ariaLabel={ariaLabel ?? paramName}
       cap={cap}
       // undefined면 SearchableSelect가 기본 박스를 그린다 — 반쪽만 덮어쓰지 않는다(톤은 한 벌).
-      triggerClassName={markerOn ? MARKER_TRIGGER : undefined}
+      triggerClassName={markerOn ? MARKER_TRIGGER : triggerClassName}
       options={[{ value: allValue, label: allLabel }, ...options]}
     />
   );

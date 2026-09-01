@@ -43,7 +43,12 @@ export function PageHeader({
   // 없으면 title 자체를 13px dim으로 강등해 라벨로 쓴다(빈 행 방지 — 미래 소비처 안전망).
   const hasCompactLabel = Boolean(embedLabel ?? description);
   return (
-    <header className="flex flex-col gap-4 compact-chrome:gap-3">
+    // 🔴 **상단 헤더와 본문 사이 가벼운 구분선 하나**(원장 2026-09-01: *"상단 헤더랑 본문 사이에
+    //    '구분선' 하나만 가볍게 넣어줘"* + *"이 구분선 스타일은 웹앱 전체에 통일"*).
+    //    ⚠️ 종전 규약은 "구분선 대신 여백 리듬"이었다 — 원장이 명시로 뒤집은 것이라, 화면마다 자기
+    //    선을 새로 긋지 말고 **여기 한 줄**만 쓴다(굵기·색이 갈리면 통일이 아니다).
+    //    가장 옅은 선(`--line-faint`)이다: 존재를 알리되 칸 테두리·표 선보다 앞서지 않는다.
+    <header className="border-line-faint flex flex-col gap-4 border-b pb-3 compact-chrome:gap-3 compact-chrome:pb-2">
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between compact-chrome:flex-row compact-chrome:flex-wrap compact-chrome:items-baseline compact-chrome:gap-x-3 compact-chrome:gap-y-1">
         <div className="min-w-0 compact-chrome:flex compact-chrome:min-w-0 compact-chrome:flex-wrap compact-chrome:items-baseline compact-chrome:gap-x-2">
           {eyebrow ? <p className="editorial-eyebrow compact-chrome:hidden">{eyebrow}</p> : null}

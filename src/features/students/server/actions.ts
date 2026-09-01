@@ -9,6 +9,7 @@ import {
 } from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { canonicalSchoolName } from "@/features/schools/school-name";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
@@ -66,7 +67,8 @@ function readForm(formData: FormData) {
     englishName: get("englishName") || null,
     classnoteName: get("classnoteName") || null,
     grade: get("grade") || null,
-    school: get("school") || null,
+    // 저장 표기 강제(원장 2026-09-01) — 학생 자연키가 학교를 쓰므로 표기가 갈리면 중복도 갈린다.
+    school: canonicalSchoolName(get("school")),
     studentCode: get("studentCode") || null,
     attendanceCode: get("attendanceCode") || null,
     gender: gender === "male" || gender === "female" ? gender : null,

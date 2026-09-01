@@ -15,11 +15,24 @@ export type PillColor =
   | "danger"
   | "neutral";
 
+/**
+ * 크기 — 기본 `sm`(11px, 앱 전역 알약). `md`는 **글씨를 키운 화면**(등록상담 칸반 카드)에서 배지만
+ * 작게 남아 균형이 깨지는 걸 막는다. 🔴 className으로 `text-*`를 덮지 말 것 — 여긴 twMerge를 안 타서
+ * 충돌 유틸의 승자가 문자열 순서가 아니라 **생성된 CSS 순서**로 정해진다([[#116]]).
+ */
+type PillSize = "sm" | "md";
+
 type Props = {
   color?: PillColor;
   soft?: boolean;
+  size?: PillSize;
   children: ReactNode;
   className?: string;
+};
+
+const SIZE_CLASS: Record<PillSize, string> = {
+  sm: "px-2.5 py-[3px] text-[11px]",
+  md: "px-3 py-[5px] text-[14px]",
 };
 
 const SOFT_CLASS: Record<PillColor, string> = {
@@ -46,11 +59,11 @@ const SOLID_CLASS: Record<PillColor, string> = {
   neutral: "bg-ink text-background",
 };
 
-export function Pill({ color = "neutral", soft = true, children, className }: Props) {
+export function Pill({ color = "neutral", soft = true, size = "sm", children, className }: Props) {
   const cls = soft ? SOFT_CLASS[color] : SOLID_CLASS[color];
   return (
     <span
-      className={`inline-flex items-center justify-center whitespace-nowrap rounded-pill px-2.5 py-[3px] text-[11px] font-bold ${cls} ${className ?? ""}`}
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-pill font-bold ${SIZE_CLASS[size]} ${cls} ${className ?? ""}`}
     >
       {children}
     </span>

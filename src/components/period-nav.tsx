@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { cn } from "@/lib/utils";
 
 /**
  * 기간 이동 네비 **단일 소스** — `‹ 2026년 8월 ›` 한 덩어리.
@@ -84,6 +85,14 @@ export function PeriodNav({
   const [handing, setHanding] = useState(false);
   const isCurrent = relation === "current";
   const badge = isCurrent ? null : RELATION_BADGE[relation];
+  /**
+   * 🔴 **지금 어느 쪽으로 벗어나 있는지 화살표에 칠한다**(원장 2026-09-01, 앱 전체 규칙):
+   * 미래를 보는 중이면 **오른쪽**, 과거를 보는 중이면 **왼쪽** 화살표가 학원 색(primary)으로 찬다.
+   * 배지와 같은 사실을 말하지만 배지는 글자라 눈이 늦게 가고, 화살표는 손이 가는 자리다.
+   * ⚠️ '이번 기간'이면 둘 다 평범하다(항상 하나가 칠해져 있으면 신호가 아니다).
+   */
+  const litPrev = relation === "past";
+  const litNext = relation === "future";
 
   const go = (href: string) => {
     if (onNavigate) {
@@ -100,19 +109,25 @@ export function PeriodNav({
     startTransition(() => router.push(href));
   };
 
+  // 🔴 높이는 **h-8(32px) 고정** — 공용 `<Button>` 기본 크기와 같은 값이다(원장 2026-09-01
+  //    *"전체적으로 버튼높이 등을 통일"*). 툴바 한 줄에 버튼·드롭다운·기간 네비가 나란히 서므로
+  //    하나라도 다르면 줄이 울퉁불퉁해 보인다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
   const arrow =
-    "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex cursor-pointer items-center justify-center px-2.5 py-1.5 transition disabled:cursor-default disabled:opacity-50";
+    "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex h-full cursor-pointer items-center justify-center px-2.5 transition disabled:cursor-default disabled:opacity-50";
+
+  // 칠해진 화살표 — hover 톤까지 덮어써야 마우스를 얹었을 때 색이 도로 풀리지 않는다.
+  const lit = "bg-primary text-primary-foreground hover:bg-primary-deep hover:text-primary-foreground";
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <div
-        className={`border-line-strong inline-flex items-center overflow-hidden rounded-lg border ${
+        className={`border-line-strong inline-flex h-8 items-center overflow-hidden rounded-lg border ${
           pending || handing || externalPending ? "opacity-70" : ""
         }`}
       >
         <button
           type="button"
-          className={arrow}
+          className={cn(arrow, litPrev && lit)}
           aria-label={prevAriaLabel ?? "이전"}
           onClick={() => go(prevHref)}
         >
@@ -122,7 +137,7 @@ export function PeriodNav({
           type="button"
           // 이미 이번 기간이면 눌러도 갈 곳이 없다 — 비활성으로 그 사실을 모양에 담는다.
           disabled={isCurrent}
-          className={`border-line-faint num shrink-0 border-x px-2 py-1 text-center text-[13px] font-bold whitespace-nowrap transition ${
+          className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-[13px] font-bold whitespace-nowrap transition ${
             isCurrent ? "text-foreground cursor-default" : "text-foreground hover:bg-bg-soft cursor-pointer"
           }`}
           style={{ width: labelWidth }}
@@ -133,7 +148,7 @@ export function PeriodNav({
         </button>
         <button
           type="button"
-          className={arrow}
+          className={cn(arrow, litNext && lit)}
           aria-label={nextAriaLabel ?? "다음"}
           onClick={() => go(nextHref)}
         >

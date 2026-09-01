@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { canonicalSchoolName } from "@/features/schools/school-name";
 import { resolveUniqueStudentNameFor } from "./unique-name";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
@@ -85,7 +86,8 @@ export async function previewStudentImport(formData: FormData): Promise<StudentI
         rowNum: r,
         name: f.name ?? "",
         grade: f.grade || null,
-        school: f.school || null,
+        // 🔴 미리보기 단계에서 정규화해야 중복 판정(자연키)이 실제 저장값과 같은 기준이 된다.
+        school: canonicalSchoolName(f.school),
         status: normalizeStatus(f.status),
         parentPhone: f.parentPhone || null,
         studentPhone: f.studentPhone || null,
@@ -156,7 +158,7 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
     const { error: insErr } = await supabase.from("students").insert({
       tenant_id: user.tenantId,
       name: uniqueName.name,
-      school: r.school?.trim() || null,
+      school: canonicalSchoolName(r.school),
       grade: r.grade?.trim() || null,
       status: normalizeStatus(r.status),
       parent_phone: normalizePhone(r.parentPhone),

@@ -6,6 +6,7 @@ import type { ExtractedConsultationForm } from "../form-fill";
 import type { IntakeChecklist } from "../intake-checklist";
 import type { PrepBriefRecord } from "../prep-brief";
 import { DEFAULT_RANGE, RANGE_MONTHS, type RangePreset } from "../range";
+import { outcomesOfStage, type BoardStageKey } from "../board-stages";
 
 /** prep_brief jsonb 방어 — 형태가 맞을 때만 통과(옛 스냅샷·수기 편집으로 깨진 값이 렌더를 죽이지 않게). */
 function isPrepBriefRecord(v: unknown): v is PrepBriefRecord {
@@ -138,7 +139,14 @@ export type ConsultationFilter = {
   range?: RangePreset | null; // month가 없을 때 적용되는 기간 프리셋(기본 3개월)
   consultantId?: string | null; // UUID or null/undefined for all
   q?: string | null; // 이름·전화·학교 텍스트 검색
-  outcome?: string | null; // 진행 상태(pending/scheduled/consulted/ai_done/enrolled/declined/no_show) or null=전체
+  outcome?: string | null; // 진행 상태 **원값** 하나(내부용 — 예: AI 완료 건수 head 카운트). 화면 필터는 아래 stage.
+  /**
+   * 진행 단계(칸반 4칸) — 화면의 '상태' 드롭다운이 고르는 값(원장 2026-09-01, 칸반과 같은 4단계).
+   * 그 칸에 묶인 outcome 원값들로 `.in()` 한다(단계당 1~2개라 URL이 길어지지 않는다).
+   * ⚠️ **파생 '반 배정 완료'는 표현하지 못한다** — 배정은 연결 학생의 수강에서 나오는 값이라 SQL로
+   *    못 거른다. 즉 '등록 완료'로 걸러도 outcome이 enrolled가 아닌 배정 카드는 안 담긴다(드묾).
+   */
+  stage?: BoardStageKey | null;
 };
 
 function monthBounds(month: string): { startIso: string; endIso: string } {
@@ -167,6 +175,8 @@ function applyConsultationFilter<T extends { gte: unknown }>(q: T, filter?: Cons
   }
   if (filter?.consultantId) out = out.eq("consultant_id", filter.consultantId);
   if (filter?.outcome) out = out.eq("outcome", filter.outcome);
+  // 단계 필터는 그 칸의 원값 묶음으로(칸반과 같은 board-stages 단일 소스).
+  if (filter?.stage) out = out.in("outcome", outcomesOfStage(filter.stage));
   if (filter?.q) {
     // 이름·전화·학교는 enrollment_consultations에 직접 있어 학생 id 조인 불필요(학생상담보다 단순).
     const safe = filter.q.trim().replace(/[(),]/g, " ");
@@ -182,6 +192,7 @@ type PostgrestFilterLike = {
   gte: (c: string, v: string) => PostgrestFilterLike;
   lt: (c: string, v: string) => PostgrestFilterLike;
   eq: (c: string, v: string) => PostgrestFilterLike;
+  in: (c: string, v: string[]) => PostgrestFilterLike;
   or: (f: string) => PostgrestFilterLike;
 };
 
@@ -971,4 +982,49 @@ export async function getConsultantOptions(): Promise<{ id: string; name: string
     .eq("status", "active")
     .order("display_name");
   return (data ?? []).map((u) => ({ id: u.id, name: u.display_name }));
+}
+
+/**
+ * 병합으로 사라진 상담 → **남은(병합된) 상담 id**. 없으면 null.
+ *
+ * 원장 2026-09-01 제보: *"병합 처리시 이렇게 404가 나오는데 자동으로 병합된 곳으로 이동하도록."*
+ * 병합은 진 쪽 행을 지우므로 그 주소는 404가 된다 — 병합 다이얼로그는 자기 창을 옮기지만, **그 상담을
+ * 열어 둔 다른 창·뒤로가기·북마크·복원된 창**은 지워진 id를 그대로 들고 있다.
+ *
+ * 🔑 근거는 병합이 남긴 **감사로그**뿐이다(별도 매핑 표를 새로 만들지 않는다 — 병합은 `metadata`에
+ *    `{winnerId, loserIds}`를 이미 적는다). jsonb 포함 검색이라 인덱스 없이도 소량이고, 실패하면
+ *    그냥 null(=평소대로 404)이라 화면을 죽이지 않는다.
+ * ⚠️ **사슬을 따라간다** — A→B로 합친 뒤 B→C로 또 합칠 수 있다. 무한 루프를 막으려고 걸음 수를 막고
+ *    (MERGE_CHAIN_MAX) 이미 지나온 id는 다시 안 본다.
+ */
+const MERGE_CHAIN_MAX = 5;
+
+export async function findMergeSuccessor(lostId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const seen = new Set<string>([lostId]);
+  let cur = lostId;
+  for (let hop = 0; hop < MERGE_CHAIN_MAX; hop += 1) {
+    const { data, error } = await supabase
+      .from("audit_logs")
+      .select("metadata")
+      .eq("action", "consultation_merge")
+      .contains("metadata", { loserIds: [cur] })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    const winner = (data.metadata as { winnerId?: string } | null)?.winnerId;
+    // 자기 자신·이미 지나온 id면 사슬이 꼬인 것 — 더 가지 않는다(무한 리다이렉트 방지).
+    if (!winner || seen.has(winner)) return null;
+    // 살아 있는 행일 때만 보낸다 — 승자가 또 지워졌으면 그 승자의 승자를 계속 찾는다.
+    const { data: alive } = await supabase
+      .from("enrollment_consultations")
+      .select("id")
+      .eq("id", winner)
+      .maybeSingle();
+    if (alive) return winner;
+    seen.add(winner);
+    cur = winner;
+  }
+  return null;
 }

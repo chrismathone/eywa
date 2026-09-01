@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { enrollmentHref, formatMonthLabel, type EnrollmentQuery } from "./enrollment-query";
+import { enrollmentHref, type EnrollmentQuery } from "./enrollment-query";
 
 type Props = {
   /** 지금 보고 있는 달("YYYY-MM"). 전체 보기여도 표시는 이 달로 한다(기존 동작 유지). */
@@ -26,8 +26,14 @@ type Props = {
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 /**
- * 연·월 직접 선택 — 라벨을 눌러 연도 이동 + 12개월 격자에서 고른다.
+ * 연·월 직접 선택 — 달력 아이콘을 눌러 연도 이동 + 12개월 격자에서 고른다.
  * 배경(원장 2026-08-04): 화살표만 있어서 2023년까지 가려면 40번 넘게 눌러야 했다(이관으로 2023-01까지 생김).
+ *
+ * 🔑 **트리거가 라벨에서 아이콘으로 바뀌었다**(2026-09-01) — 달 라벨은 이제 앱 전역 단일 소스
+ *    [PeriodNav](@/components/period-nav)가 그리고, 그 라벨은 "눌러서 이번 달로"라는 **다른 뜻**을
+ *    갖는다. 한 글자에 두 동작을 얹으면 어느 쪽도 예측이 안 되므로 선택은 옆 칸으로 뺐다
+ *    (ECS 오늘 면이 하루 이동 옆에 달력을 두는 것과 같은 배치).
+ * ⚠️ 남은 자리는 좁으니 라벨을 다시 트리거로 되돌리지 말 것.
  */
 export function MonthPicker({ displayMonth, monthFilterActive, base, minYear, todayMonth }: Props) {
   const [open, setOpen] = useState(false);
@@ -47,13 +53,15 @@ export function MonthPicker({ displayMonth, monthFilterActive, base, minYear, to
       }}
     >
       <DropdownMenuTrigger
-        className={`num inline-flex min-w-[92px] items-center justify-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-bold transition ${
-          monthFilterActive ? "text-foreground hover:bg-bg-soft" : "text-text-dim hover:bg-bg-soft"
+        className={`border-line hover:bg-bg-soft inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border transition ${
+          // 달 필터가 실제로 걸려 있을 때만 진하게 — 기간 프리셋(3개월 등)으로 보는 중엔 옆 라벨이
+          // "그냥 이번 달"이라는 뜻이라 아이콘까지 강조하면 고른 달처럼 읽힌다.
+          monthFilterActive ? "text-foreground" : "text-text-dim hover:text-foreground"
         }`}
         aria-label="연·월 선택"
+        title="연·월 직접 선택"
       >
-        {formatMonthLabel(displayMonth)}
-        <EyIcon name="chevronDown" size={12} />
+        <EyIcon name="calendar" size={13} strokeWidth={2.5} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 p-2">
         {/* 연도 이동 — 데이터가 있는 범위 밖으로는 못 나간다(빈 화면으로 걸어 들어가지 않게). */}

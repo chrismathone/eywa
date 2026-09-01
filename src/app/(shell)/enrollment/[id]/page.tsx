@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   AlertCircle, ClipboardCheck, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
   type LucideIcon,
@@ -13,6 +13,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
+  findMergeSuccessor,
   getEnrollmentConsultationById,
   getSiblingConsultations,
   type AiAnalysisDetail,
@@ -82,7 +83,14 @@ export default async function EnrollmentDetailPage({
     getSiblingConsultations(id), // 같은 학생의 다른 등록상담(반복 접수) — 없으면 빈 배열
     canWriteTenant(user.systemRole, "enrollment"), // 읽기 전용 역할엔 브리프 생성 버튼을 안 준다
   ]);
-  if (!consult) notFound();
+  if (!consult) {
+    // 🔴 병합으로 사라진 상담이면 **404 대신 남은 쪽으로 보낸다**(원장 2026-09-01 제보) — 병합
+    // 다이얼로그는 자기 창만 옮기므로, 그 상담을 열어 둔 다른 창·뒤로가기·복원된 창은 지워진 id를
+    // 그대로 들고 있다가 빈 404를 만난다.
+    const successor = await findMergeSuccessor(id);
+    if (successor) redirect(`/enrollment/${successor}`);
+    notFound();
+  }
 
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const f = consult.fields;

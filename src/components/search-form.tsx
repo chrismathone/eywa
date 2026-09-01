@@ -47,7 +47,8 @@ export function SearchForm({
 
   return (
     <form onSubmit={onSubmit} className={className}>
-      <div className="border-border bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
+      {/* 높이 h-8 = 공용 Button 기본 크기(툴바 한 줄 정렬, 원장 2026-09-01). */}
+      <div className="border-border bg-bg-soft text-text-dim flex h-8 items-center gap-2 rounded-lg border px-2.5">
         <EyIcon name="search" size={13} />
         <input
           ref={inputRef}
@@ -58,7 +59,7 @@ export function SearchForm({
           className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent text-xs focus:outline-none`}
         />
       </div>
-      <Button type="submit" variant="outline" size="sm" disabled={pending}>
+      <Button type="submit" variant="outline" disabled={pending}>
         {pending ? "검색 중…" : "검색"}
       </Button>
     </form>

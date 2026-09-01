@@ -13,6 +13,8 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { generateJSON } from "@/lib/ai/generate";
 import { after } from "next/server";
+import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
+import { canonicalSchoolName } from "@/features/schools/school-name";
 import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
 import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
@@ -93,7 +95,9 @@ function buildConsultationRow(d: FullForm) {
   return {
     prospect_name: d.prospectName,
     prospect_grade: d.prospectGrade || null,
-    prospect_school: d.prospectSchool || null,
+    // 🔴 학교 표기는 **저장 시 강제 정규화**(원장 2026-09-01) — "옥산초등학교"·"일 중"이 그대로
+    // 들어오면 같은 학교가 두 표기로 갈린다. 정본 = features/schools/school-name.ts.
+    prospect_school: canonicalSchoolName(d.prospectSchool),
     english_name: d.englishName || null,
     gender: d.gender || null,
     blood_type: d.bloodType || null,
@@ -494,11 +498,9 @@ export async function setEnrollmentOutcome(
   if (!cur) return { error: "상담을 찾을 수 없습니다" };
   const isConverted = cur.outcome === "enrolled";
   if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
-    return {
-      error:
-        // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.
-        "이미 '재원생 등록'으로 처리된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
-    };
+    // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.
+    // 칸반 드롭도 같은 상수를 미리 보여 준다(board-stages.dropBlockReason) — 문장은 한 곳에서만 온다.
+    return { error: ENROLLED_REVERT_BLOCKED };
   }
 
   const { error } = await supabase
@@ -791,6 +793,7 @@ export async function convertConsultationToStudent(
   // 동명이인 접미사(A·B·C…) — 수동 등록과 **같은 규칙**. 이 경로에 없어서 상담에서 전환한 학생이
   // 같은 이름으로 들어왔고, 그 결과 동명이인 가드가 정상 보고서를 조용히 막았다(2026-07-29 김수아 건).
   const uniqueName = await resolveUniqueStudentNameFor(supabase, c.tenant_id, studentName ?? "");
+  // 상담 → 학생 전환도 같은 규칙(옛 상담 행이 긴 표기여도 학생엔 짧은 표기로 들어간다).
   const studentSchool = overrideSchool ?? c.prospect_school;
   const studentGrade = overrideGrade ?? c.prospect_grade;
 
@@ -801,7 +804,7 @@ export async function convertConsultationToStudent(
       tenant_id: c.tenant_id,
       name: uniqueName.name,
       grade: studentGrade,
-      school: studentSchool,
+      school: canonicalSchoolName(studentSchool),
       parent_name: overrideParentName ?? c.parent_name,
       parent_phone: overrideParentPhone ?? c.parent_phone,
       status: "enrolled",
