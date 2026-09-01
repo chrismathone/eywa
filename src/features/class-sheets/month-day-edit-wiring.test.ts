@@ -78,6 +78,20 @@ describe("월간 뷰 · 그 날짜 고치기 배선", () => {
     expect(calendar).toContain('type="button"');
   });
 
+  it("🔴 ③ 칸 버튼에 items-stretch가 있다 — 브라우저 기본값이 flex-start라 속줄이 칸을 안 채운다", () => {
+    // 빼면 머리 줄의 `ml-auto`가 죽어 배지가 날짜 옆에 붙고, 교시 구분 점선이 내용 폭까지만 그려진다.
+    // `<a>`일 땐 그 기본 스타일이 없어 저절로 stretch였다 → a→button 전환이 만든 회귀였다.
+    expect(calendar).toContain("items-stretch");
+  });
+
+  it("🔴 ③ 열자마자 날아온 바깥 클릭으로는 안 닫힌다(더블클릭의 두 번째 클릭)", () => {
+    // 이 창은 09-01 아침까지 더블클릭 전용이었어서 사람들이 여전히 두 번 누른다. 두 번째 클릭이
+    // backdrop에 떨어지면 방금 연 창이 닫히고, 팝업 위면 안 닫혀서 자리에 따라 되기도 안 되기도 한다.
+    expect(editor).toContain("OUTSIDE_CLOSE_GRACE_MS");
+    // 판정은 추측이 아니라 Base UI가 주는 reason으로 — Esc·닫기 버튼은 안 걸린다.
+    expect(editor).toContain('details.reason === "outside-press"');
+  });
+
   it("③ 칸에서 주간으로 새어 나가지 않는다 — 미루기 편법도 함께 사라졌다", () => {
     for (const gone of ["DBLCLICK_MS", "setTimeout", "clearTimeout", "router.push", "<Link", "href="]) {
       expect(calendar).not.toContain(gone);
@@ -177,17 +191,29 @@ describe("ECS 상단 바 · 주간/월간 통일", () => {
     expect(month).toContain("sheetPill(");
   });
 
-  it("🔴 보기를 바꿔도 보고 있던 기간을 잃지 않는다", () => {
-    // 주간 → 월간: 이번 달이 아니라 **보고 있던 주가 속한 달**.
-    expect(toolbar).toContain("data.weekMonday.slice(0, 7)");
-    // 월간 → 주간: 이번 주가 아니라 **보고 있던 달 안의 주**.
-    expect(month).toContain("weekHref");
+  it("🔴 왕복이 기간을 잃지 않는다 — 규칙은 순수 모듈 한 곳(face-nav)", () => {
+    // 주간 → 월간: **그 주가 속한 달**(월요일의 달이 아니다 — 2026-08-31 주는 9월이다).
+    expect(toolbar).toContain("monthOfWeek(data.weekMonday)");
+    // 왔던 주를 주소에 실어 보내고, 월간이 그걸 받아 그 주로 정확히 돌아간다.
+    expect(toolbar).toContain("week=${data.weekMonday}");
+    expect(monthPage).toContain("readFromWeek(week)");
+    expect(month).toContain("weekForMonth({");
+    expect(month).toContain("fromWeek,");
+    // 🔴 판정을 화면에서 다시 짜지 말 것 — 두 방향이 서로의 역함수여야 왕복이 닫힌다(face-nav.test.ts).
+    expect(month).not.toContain("firstClassWeek");
+  });
+
+  it("🔴 주간·월간의 같은 라벨 버튼이 같은 일을 한다(보기 선택은 양쪽 다 계정에 남는다)", () => {
+    for (const src of [toolbar, month]) expect(src).toContain("setMyEcsMonthView(");
   });
 
   it("🔴 월간의 보기 선택이 주소에 남고, 주소가 저장값을 덮지 않는다", () => {
     // 주소만 조용히 고친다 — 라우터를 태우면 열려 있는 창·목표 편집 큐가 흔들린다.
     expect(month).toContain("history.replaceState");
     expect(month).not.toContain("router.replace");
+    // 🔴 주소를 새로 짓지 않고 **지금 주소를 고친다** — 새로 지으면 week=(왔던 주)와 embed=1(창 표식)이
+    //    같이 떨어져 나간다.
+    expect(month).toContain("new URL(window.location.href)");
     // 모르는 값은 계정 저장값으로 떨어진다(normalizeEcsMonthView를 쓰면 달력으로 눌러 버린다).
     expect(monthPage).toContain('view === "cal"');
     expect(monthPage).not.toContain("normalizeEcsMonthView");

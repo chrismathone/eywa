@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * 월간 뷰의 **그 날짜 고치기** 창 — 달력 칸을 더블클릭하면 열린다(원장 2026-09-01
- * *"ecs 월간뷰에서도 더블클릭으로 해당날짜 수정가능하게"*).
+ * 월간 뷰의 **그 날짜 고치기** 창 — 달력은 칸을, 진도표는 날짜 열 머리를 누르면 열린다
+ * (원장 2026-09-01 *"ecs 월간뷰에서도 더블클릭으로 해당날짜 수정가능하게"* → 같은 날 *"클릭 주간
+ * 이동은 기능 삭제할것"* 으로 칸에서 다투던 이동이 사라져 **한 번만 눌러도** 열린다).
  *
  * 🔑 **계획 편집기를 새로 만들지 않는다.** 교시 하나당 [`SlotPlanBlock`](./slot-plan-block.tsx) 한 장을
  *    세울 뿐이고, 그 안의 표·기계·저장 경로(CAS·`ecs_*` RPC·저널·presence)는 주간 시트·자리 출석부와
@@ -31,6 +32,17 @@ const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
 /** 닫을 때 저장이 끝나기를 기다리는 상한 — 넘으면 그냥 닫는다(못 나간 입력은 저널에 남는다). */
 const FLUSH_WAIT_MS = 5000;
+
+/**
+ * 열린 직후 잠깐은 **바깥 클릭으로 안 닫힌다**.
+ *
+ * 🔴 이 창은 2026-09-01 아침까지 **더블클릭 전용**이었어서 사람들이 여전히 두 번 누른다. 이제 첫
+ *    클릭이 창을 여는데, 두 번째 클릭은 ~100ms 뒤 **backdrop**(`fixed inset-0`)에 떨어져 방금 연
+ *    창을 그대로 닫는다 — 게다가 팝업 위(가운데 칸)면 안 닫혀서 **누른 자리에 따라 되기도 안 되기도**
+ *    하는 가장 나쁜 모양이 된다. 그 사이만 바깥 클릭을 무시한다.
+ * ⚠️ 사람이 일부러 닫는 데엔 영향이 없다(이 시간 안에 의도적으로 닫는 일은 없고, 닫기 버튼은 그대로).
+ */
+const OUTSIDE_CLOSE_GRACE_MS = 400;
 
 /** "2026-09-03" → "9/3 (목)" — 창 제목은 짧게, 연도는 월간 툴바가 이미 말하고 있다. */
 function dayLabel(date: string): string {
@@ -65,6 +77,8 @@ export function MonthDayEditor({
   const [closing, setClosing] = useState(false);
   // 블록마다 저장 큐 flush를 등록받는다(닫기 전에 함께 비운다). 언마운트 시 스스로 지운다.
   const flushers = useRef(new Map<string, () => Promise<unknown>>());
+  // 열린 직후 바깥 클릭을 무시하는 창(위 OUTSIDE_CLOSE_GRACE_MS 주석 — 더블클릭의 두 번째 클릭).
+  const outsideArmedRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -76,6 +90,14 @@ export function MonthDayEditor({
       alive = false;
     };
   }, [classId, date]);
+
+  // 바깥 클릭 닫기를 조금 늦게 켠다(위 OUTSIDE_CLOSE_GRACE_MS 🔴).
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      outsideArmedRef.current = true;
+    }, OUTSIDE_CLOSE_GRACE_MS);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const registerFlush = useCallback((slotStart: string, flush: (() => Promise<unknown>) | null) => {
     if (flush) flushers.current.set(slotStart, flush);
@@ -118,8 +140,14 @@ export function MonthDayEditor({
   return (
     <Dialog
       open
-      onOpenChange={(next) => {
-        if (!next) close();
+      onOpenChange={(next, details) => {
+        if (next) return;
+        // 열자마자 날아온 **바깥 클릭**은 무시한다 — 더블클릭의 두 번째 클릭이 backdrop에 떨어져
+        // 방금 연 창을 닫는 것(위 🔴). 판정은 Base UI가 주는 `reason`이라 추측이 없다:
+        // Esc(`escape-key`)·닫기 버튼(자체 onClick)은 이 창에 안 걸린다.
+        const outside = details.reason === "outside-press" || details.reason === "focus-out";
+        if (outside && !outsideArmedRef.current) return;
+        close();
       }}
     >
       <DialogContent className="max-h-[88vh] overflow-y-auto px-2 sm:max-w-3xl" showCloseButton={false}>

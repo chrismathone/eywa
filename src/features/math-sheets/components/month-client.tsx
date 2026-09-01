@@ -119,7 +119,8 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
         />
         <div className="border-line-strong inline-flex overflow-hidden rounded-lg border">
           {seg("sheet", "진도표")}
-          <span className="bg-line-faint w-px" />
+          {/* 구분선 농도도 ECS와 같은 값(line-strong) — 나란히 두면 옅은 쪽이 눈에 띈다. */}
+          <span className="bg-line-strong w-px" />
           {seg("track", "진도 레일")}
         </div>
         {data.teacherName ? (
