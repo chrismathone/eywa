@@ -5,7 +5,15 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
 import { classDaysOf, normalizeMonth, type MathScheduleRow } from "../lib/class-days";
-import { isOnMathRoster, rosterAnchorOf, type MathEnrollmentWindow } from "../lib/roster";
+import {
+  countRosterPhases,
+  rosterExtraTitle,
+  isOnMathRosterAnyDay,
+  rosterAnchorOf,
+  rosterPhaseOf,
+  type MathEnrollmentWindow,
+  type MathRosterPhase,
+} from "../lib/roster";
 import { cellStateOf, foldDayAttendance, tallyCells, type MathCellState } from "../lib/cell-state";
 import { mcsVisibleClassFilter } from "./access";
 
@@ -27,7 +35,16 @@ export type MathClassCard = {
    *    둘을 안 가르면 그 반이 '아직 수업 전'으로 보인다(사실은 전원 결석이다).
    */
   elapsedDays: number;
+  /**
+   * **기준일 현재 재원** — 화면이 "학생 N명"이라고 적는 수.
+   * 🔴 시트 줄 수와 다르다(`studentCount + extraCount` = 줄 수). 줄 수를 그대로 "학생 N명"이라
+   *    적었더니 현재 재원 0명인 특강이 "학생 7명"이 됐다(적대적 리뷰 2026-09-01).
+   */
   studentCount: number;
+  /** 이 달 중 나갔거나 아직 안 들어온 행 — 시트엔 회색 줄로 남는다. 0이면 표시하지 않는다. */
+  extraCount: number;
+  /** 꼬리표 툴팁 문구(없으면 null) — 카드·시트 헤더가 같은 문장을 쓴다. */
+  extraTitle: string | null;
   /** 수업 기록이 있는 학생-수업일. */
   written: number;
   /**
@@ -78,7 +95,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };
 
   const month = normalizeMonth(monthRaw, kstMonth());
-  // 카드 인원도 시트와 **같은 기준일**로 센다 — 갈리면 카드엔 6명인데 열면 5명이 된다.
+  // 카드 인원도 시트와 **같은 규칙·같은 함수**로 센다 — 갈리면 카드엔 6명인데 열면 5명이 된다.
   const today = kstToday();
   const anchor = rosterAnchorOf(month, today);
   const { from: monthStart, to: monthEnd } = monthRange(month);
@@ -182,7 +199,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     schedByClass.set(cid, list);
   }
 
-  // 🔴 **재원 학생만** 센다(원장 2026-08-31) — 시트가 세우는 행과 같은 규칙(`isOnMathRoster`).
+  // 🔴 시트가 세우는 행과 같은 규칙(`isOnMathRosterAnyDay`) — 달 중간 입·퇴반도 그 달 시트엔 선다.
   const enrByClass = new Map<string, Map<string, MathEnrollmentWindow[]>>();
   for (const e of enrRows) {
     const cid = String(e.class_id);
@@ -228,12 +245,14 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     if (days.length === 0) continue; // 🔴 그 달에 안 도는 반은 카드를 만들지 않는다
     const byStudent = enrByClass.get(cid) ?? new Map<string, MathEnrollmentWindow[]>();
 
-    let studentCount = 0;
+    const dayDates = days.map((d) => d.date);
+    const phases: MathRosterPhase[] = [];
     const states: MathCellState[] = [];
     for (const [sid, list] of byStudent) {
       const withdrawnAt = withdrawnById.get(sid) ?? null;
-      if (!isOnMathRoster(list, withdrawnAt, anchor)) continue;
-      studentCount += 1;
+      // 🔴 시트가 행을 세우는 규칙과 **같은 함수** — 갈리면 카드 인원과 시트 줄 수가 어긋난다.
+      if (!isOnMathRosterAnyDay(list, withdrawnAt, dayDates)) continue;
+      phases.push(rosterPhaseOf(list, withdrawnAt, anchor, dayDates));
       for (const day of days) {
         states.push(
           cellStateOf({
@@ -248,13 +267,16 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     }
     // 🔴 시트 툴바와 **같은 산식**(`tallyCells`) — 카드와 시트가 다른 수를 말하면 둘 다 못 믿는다.
     const fill = tallyCells(states);
+    const counts = countRosterPhases(phases);
     cards.push({
       classId: cid,
       className: String(c.class_name),
       teacherName: c.teacher_id ? (teacherName.get(String(c.teacher_id)) ?? null) : null,
       dayCount: days.length,
       elapsedDays: days.filter((d) => d.date <= today).length,
-      studentCount,
+      studentCount: counts.on,
+      extraCount: counts.extra,
+      extraTitle: rosterExtraTitle(counts),
       written: fill.written,
       shown: fill.written + fill.unwritten,
       pct: fill.pct,

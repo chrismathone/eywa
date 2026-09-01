@@ -123,6 +123,16 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         canAccess(user.systemRole, "ecs", permMatrix))
       : false;
 
+  // Math Class Sheet 메뉴는 **수학 반 담당 강사**에게만(영어와 대칭). 이 줄이 없어서 수학만 맡은
+  // 강사에게는 MCS로 가는 길이 아예 없었다(원장 2026-09-01 "크리티컬한건 바로 수정").
+  // ⚠️ MCS엔 부담임 갈래가 없다(수학 슬롯 teacher_id가 전부 null) — 영어의 assistant 폴백은 안 쓴다.
+  // 위 ecsForTeacher와 **같은 캐시**(effectiveTeacherScope)를 재사용하므로 추가 쿼리 0.
+  const mcsForTeacher =
+    view === "teacher"
+      ? (((await effectiveTeacherScope())?.subjects.includes("math") ?? true) &&
+        canAccess(user.systemRole, "mcs", permMatrix))
+      : false;
+
   // 강사 홈(= '내 메뉴'에서 맨 위로 올릴 항목) — 영어 전담이면 ECS, 그 외 원스크린(원장 지시 2026-08-07).
   // 위 ecsForTeacher와 **같은 캐시**(effectiveTeacherScope·ecsAssistantClassIds)를 재사용하므로 추가 쿼리 0.
   const teacherHome = view === "teacher" ? await teacherViewHome() : null;
@@ -172,6 +182,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                 permMatrix={permMatrix}
                 canReturnToAdmin={isFullShellRole(user.systemRole)}
                 showEcs={ecsForTeacher}
+                showMcs={mcsForTeacher}
                 home={teacherHome}
               />
             ) : null}
@@ -202,6 +213,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // 겸직(관리자 계열 + 실제 담당 반) → 사이드바 하단에 '강사뷰로 전환' 노출. head:true 카운트라 저비용.
   const canTeacherView = await canUseTeacherView();
+
   // '다른 강사 뷰'(열람 전용) 진입 자격 — master는 쿼리 0, 그 외 요청 캐시된 PK 조회 1회(0224a 토글).
   const canOtherTeacherView = await canUseOtherTeacherView();
 

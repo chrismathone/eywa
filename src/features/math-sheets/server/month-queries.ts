@@ -17,7 +17,16 @@ import {
   type StudentGoalMap,
 } from "../lib/student-goals";
 import { DEFAULT_STALL_RUN, stalledDatesOf } from "../lib/progress-stall";
-import { isOnMathRoster, rosterAnchorOf, type MathEnrollmentWindow } from "../lib/roster";
+import {
+  isOnMathRosterAnyDay,
+  mathSpansOf,
+  rosterAnchorOf,
+  rosterPhaseOf,
+  type MathEnrollmentWindow,
+  type MathRosterPhase,
+} from "../lib/roster";
+import type { EnrollSpan, LifecycleBadge } from "@/features/attendance/enrollment-span";
+import { mathLifecycleBadges } from "./lifecycle";
 import { readMcsMonthView, type McsMonthView } from "../view-prefs";
 import { describePosition } from "@/features/progress/curriculum-position";
 import { readMcsFontSize, type McsFontSize } from "../font-size";
@@ -47,6 +56,18 @@ export type MathStudentRow = {
   stalledDates: string[];
   /** 활성 진도 컨테이너(현행·선행) — 수학에만 있는 재료. 없으면 빈 배열. */
   tracks: MathTrack[];
+  /**
+   * 기준일(그 달 안으로 접은 오늘)에서 본 자리 — `ended`면 회색 줄로 가라앉힌다
+   * (원장 2026-09-01 *"퇴원처리형식으로 회색 줄로"*).
+   * 🔴 `upcoming`(아직 안 들어온 신입)을 `ended`와 한 덩어리로 묶지 말 것 — 앞으로 올 사람을
+   *    나간 사람처럼 칠하게 된다.
+   */
+  rosterPhase: MathRosterPhase;
+  /**
+   * 그 달의 신입·퇴원·반이동 표식 — **출석부와 같은 판정**(`lifecycleBadgesInRange`).
+   * 대부분의 학생은 빈 배열이고, 그 달에 경계가 있는 학생만 1~2개를 갖는다.
+   */
+  badges: LifecycleBadge[];
 };
 
 export type MathDayRecord = {
@@ -260,18 +281,25 @@ export async function getMathSheetMonth(
     recordByKey.set(`${String(r.student_id)}|${date}`, r);
   }
 
-  // 🔴 **재원생만 세운다**(원장 2026-08-31) — 기준일은 보고 있는 달 안으로 접은 오늘이다.
-  //    수강 종료·반이동 전출·학원 퇴원 셋을 함께 보고, 하나라도 끝났으면 행을 만들지 않는다.
+  // 🔴 **그 달 수업일에 하루라도 명단이었으면 세운다**(원장 2026-09-01 *"중간에 나가면 퇴원처리형식으로
+  //    회색 줄로 남기는게 합리적. 중간에 들어와도 마찬가지. 출석부랑 비슷하게."*).
+  //    통째로 빼면 그 학생이 실제로 다닌 날의 기록까지 사라진다(실측 2026-08: 감춘 행 52개에 **이미
+  //    작성된 기록 113칸**이 들어 있었다). 수강 밖 날짜는 아래 `cellStateOf`가 칸 단위로 끈다.
+  // ⚠️ 기준일(`anchor`)은 이제 "지금도 다니나"(회색 처리 여부)만 정한다.
   const anchor = rosterAnchorOf(month, today);
 
   const rows: MathStudentRow[] = [];
   const allStates: MathCellState[] = [];
+  const spansByStudent = new Map<string, EnrollSpan[]>();
+  const withdrawnByStudent = new Map<string, string | null>();
   for (const sid of studentIds) {
     const info = studentById.get(sid);
     if (!info) continue; // 학생 행이 없으면(삭제 등) 그릴 것이 없다
     const enrollments = enrByStudent.get(sid) ?? [];
     const withdrawnAt = info.withdrawn_at ? String(info.withdrawn_at).slice(0, 10) : null;
-    if (!isOnMathRoster(enrollments, withdrawnAt, anchor)) continue;
+    if (!isOnMathRosterAnyDay(enrollments, withdrawnAt, dayDates)) continue;
+    spansByStudent.set(sid, mathSpansOf(enrollments, withdrawnAt));
+    withdrawnByStudent.set(sid, withdrawnAt);
     const cells: Record<string, MathCellState> = {};
     const records: Record<string, MathDayRecord> = {};
     for (const date of dayDates) {
@@ -312,7 +340,22 @@ export async function getMathSheetMonth(
         DEFAULT_STALL_RUN,
       ),
       tracks: [],
+      rosterPhase: rosterPhaseOf(enrollments, withdrawnAt, anchor, dayDates),
+      badges: [],
     });
+  }
+
+  // 신입·퇴원·반이동 표식 — **화면에 세운 학생만**. 경계가 없는 달이면 추가 쿼리가 0이다.
+  if (rows.length > 0) {
+    const badgeMap = await mathLifecycleBadges({
+      admin,
+      tenantId,
+      classId: access.classId,
+      range: { first: from, last: to },
+      spansByStudent,
+      withdrawnByStudent,
+    });
+    for (const row of rows) row.badges = badgeMap.get(row.studentId) ?? [];
   }
 
   // 진도 컨테이너(현행·선행) — 수학에만 있는 재료. 조회 실패는 빈 배열로 강등(화면은 산다).
