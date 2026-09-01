@@ -19,6 +19,8 @@ import {
 import { DEFAULT_STALL_RUN, stalledDatesOf } from "../lib/progress-stall";
 import { isOnMathRoster, rosterAnchorOf, type MathEnrollmentWindow } from "../lib/roster";
 import { readMcsMonthView, type McsMonthView } from "../view-prefs";
+import { describePosition } from "@/features/progress/curriculum-position";
+import { readMcsFontSize, type McsFontSize } from "../font-size";
 import { requireMcsClassAccess } from "./access";
 
 /**
@@ -62,6 +64,13 @@ export type MathTrack = {
   startPosition: number | null;
   lastPosition: number | null;
   chapterCount: number;
+  /**
+   * 지금 위치의 **차시 이름**(원장 2026-09-01 *"세부 차시 보이면 더 좋겠네"*).
+   * ⚠️ 커리큘럼(초1~중3 전 차시)은 큰 데이터라 **서버에서 풀어** 문자열만 내려보낸다 — 클라로 import하면
+   *    번들에 통째로 실린다(B5). 매칭이 안 되면 null(교재가 '프린트'면 원래 위치가 없다).
+   */
+  lastLesson: string | null;
+  lastUnit: string | null;
 };
 
 export type MathSheetMonthData = {
@@ -73,6 +82,12 @@ export type MathSheetMonthData = {
   teacherName: string | null;
   /** 열 — 그 달에 이 반이 도는 날. 비면 "이 달엔 수업이 없다". */
   days: ClassDay[];
+  /**
+   * 그 달 수업일 중 **이미 지난 날** 수(오늘 포함). 0이면 아직 한 번도 안 한 달이다.
+   * 🔴 이걸 안 보면 다음 달 화면이 전부 빨간 '기록 0건'으로 뜬다 — 아직 안 온 수업을 안 적었다고
+   *    재촉하는 거짓 경보다(원장 2026-09-01 9월 화면에서 실제로 그렇게 보였다).
+   */
+  elapsedDays: number;
   students: MathStudentRow[];
   goals: StudentGoalMap;
   /** 날짜 → 목표 밖 기록 수(열 머리 강조). */
@@ -87,6 +102,8 @@ export type MathSheetMonthData = {
    */
   goalsStatus: GoalsStatus;
   view: McsMonthView;
+  /** 글씨 크기(작음·보통·큼) — 계정 귀속. 원스크린·ECS와 같은 어휘·같은 배율. */
+  fontSize: McsFontSize;
 };
 
 export type GoalsStatus = "ok" | "missing-table" | "failed";
@@ -315,6 +332,7 @@ export async function getMathSheetMonth(
       for (const c of containers) {
         const sid = String(c.student_id);
         const list = byStudent.get(sid) ?? [];
+        const at = c.last_position != null ? describePosition(Number(c.last_position)) : null;
         list.push({
           track: String(c.track),
           trackLabel: TRACK_LABEL[String(c.track)] ?? String(c.track),
@@ -322,6 +340,8 @@ export async function getMathSheetMonth(
           startPosition: c.start_position ?? null,
           lastPosition: c.last_position ?? null,
           chapterCount: Number(c.chapter_count ?? 0),
+          lastLesson: at?.lesson ?? null,
+          lastUnit: at?.unit ?? null,
         });
         byStudent.set(sid, list);
       }
@@ -374,7 +394,9 @@ export async function getMathSheetMonth(
       fill: tallyCells(allStates),
       canEdit: access.canWrite,
       goalsStatus,
+      elapsedDays: dayDates.filter((d) => d <= today).length,
       view: readMcsMonthView((prefRes.data as { ui_prefs?: unknown } | null)?.ui_prefs),
+      fontSize: readMcsFontSize((prefRes.data as { ui_prefs?: unknown } | null)?.ui_prefs),
     },
   };
 }

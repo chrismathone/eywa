@@ -7,6 +7,7 @@ import type { MathCellState } from "../lib/cell-state";
 import { actualBooksOf, type MathRecordLike, type StudentGoalMap } from "../lib/student-goals";
 import type { MathSheetMonthData } from "../server/month-queries";
 import type { GoalField } from "./use-student-goals";
+import { GoalCell } from "./goal-cell";
 
 /**
  * A안 — **학생 × 수업일 진도표**. MCS의 기본 보기.
@@ -63,10 +64,10 @@ export function MonthSheet({
 
   return (
     <div className="overflow-x-auto px-1">
-      <table className="border-line-faint w-full min-w-[860px] border-collapse text-xs">
+      <table className="border-line-faint w-full min-w-[940px] border-collapse text-[13px]">
         <thead>
           <tr>
-            <th className="bg-bg-soft border-line-faint text-text-dim sticky left-0 z-10 w-[210px] border p-2 text-left text-[11.5px] font-extrabold">
+            <th className="bg-bg-soft border-line-faint text-text-dim sticky left-0 z-10 w-[232px] border p-2 text-left text-[12.5px] font-extrabold">
               학생 · 이 달 목표
             </th>
             {data.days.map((day) => {
@@ -74,7 +75,7 @@ export function MonthSheet({
               return (
                 <th
                   key={day.date}
-                  className={`border-line-faint num border p-2 text-center text-[11.5px] font-extrabold whitespace-nowrap ${
+                  className={`border-line-faint num border p-2 text-center text-[12.5px] font-extrabold whitespace-nowrap ${
                     warn ? "bg-amber-soft text-amber" : "bg-bg-soft text-text-dim"
                   }`}
                 >
@@ -97,39 +98,22 @@ export function MonthSheet({
                   <div className="flex items-center gap-1.5">
                     <Link
                       href={`/students/${stu.studentId}`}
-                      className="hover:text-primary min-w-0 truncate text-[13px] font-extrabold"
+                      className="hover:text-primary min-w-0 truncate text-[14px] font-extrabold"
                     >
                       {stu.name}
                     </Link>
-                    <span className="text-text-faint shrink-0 text-[11px]">
+                    <span className="text-text-faint shrink-0 text-[11.5px]">
                       {schoolGradeLabel(stu.school, stu.grade)}
                     </span>
                   </div>
-                  <div className="border-line mt-1.5 rounded-lg border border-dashed p-1.5">
-                    <div className="text-text-faint mb-1 text-[9.5px] font-extrabold tracking-wider">
-                      이 달 목표
-                    </div>
-                    <input
-                      className="border-line-faint mb-1 w-full rounded border px-1.5 py-0.5 text-[11.5px] font-bold disabled:bg-transparent"
-                      list="mcs-book-options"
-                      placeholder="교재"
-                      defaultValue={goal?.textbook ?? ""}
-                      disabled={!canEdit}
-                      onChange={(e) => onGoalChange(stu.studentId, "textbook", e.target.value)}
-                    />
-                    <input
-                      className="border-line-faint text-text-dim w-full rounded border px-1.5 py-0.5 text-[11px] disabled:bg-transparent"
-                      placeholder="목표 진도"
-                      defaultValue={goal?.targetProgress ?? ""}
-                      disabled={!canEdit}
-                      onChange={(e) => onGoalChange(stu.studentId, "targetProgress", e.target.value)}
-                    />
-                    {actual.length > 0 ? (
-                      <div className="text-text-faint mt-1 text-[10.5px] leading-snug">
-                        실제 {actual.join(" · ")}
-                      </div>
-                    ) : null}
-                  </div>
+                  <GoalCell
+                    studentId={stu.studentId}
+                    studentGrade={stu.grade ?? ""}
+                    goal={goal}
+                    actualBooks={actual}
+                    canEdit={canEdit}
+                    onChange={onGoalChange}
+                  />
                 </td>
                 {data.days.map((day) => {
                   const state = stu.cells[day.date] ?? "untracked";
@@ -138,7 +122,7 @@ export function MonthSheet({
                   return (
                     <td
                       key={day.date}
-                      className={`border-line-faint min-w-[168px] border p-2 align-top ${CELL_TONE[state]} ${
+                      className={`border-line-faint min-w-[178px] border p-2 align-top ${CELL_TONE[state]} ${
                         rec?.offGoal ? "border-l-amber bg-amber-soft/40 border-l-[3px]" : ""
                       }`}
                     >
@@ -146,25 +130,25 @@ export function MonthSheet({
                         <>
                           {rec.textbook ? (
                             <div
-                              className={`mb-0.5 text-[11px] leading-tight font-bold ${
+                              className={`mb-0.5 text-[12px] leading-tight font-bold ${
                                 rec.offGoal ? "text-amber" : "text-primary"
                               }`}
                             >
                               {rec.textbook}
                             </div>
                           ) : null}
-                          <div className="text-text-dim text-[11.5px] leading-snug whitespace-pre-line">
+                          <div className="text-text-dim text-[13px] leading-snug whitespace-pre-line">
                             {rec.progress ?? "—"}
                           </div>
                           {stalled ? (
-                            <div className="text-amber mt-1 flex items-center gap-1 text-[10.5px] font-bold">
+                            <div className="text-amber mt-1 flex items-center gap-1 text-[11.5px] font-bold">
                               <EyIcon name="alert" size={11} />
                               같은 진도 반복
                             </div>
                           ) : null}
                         </>
                       ) : (
-                        <div className="text-text-faint text-[10.5px] font-bold">
+                        <div className="text-text-faint text-[11.5px] font-bold">
                           {CELL_NOTE[state as Exclude<MathCellState, "written">]}
                         </div>
                       )}
@@ -177,7 +161,7 @@ export function MonthSheet({
         </tbody>
         <tfoot>
           <tr>
-            <td className="bg-bg-soft border-line-faint text-text-dim sticky left-0 z-10 border p-1.5 text-[11px] font-bold">
+            <td className="bg-bg-soft border-line-faint text-text-dim sticky left-0 z-10 border p-1.5 text-[12px] font-bold">
               그날 기록 / 온 학생
             </td>
             {data.days.map((day) => {
@@ -188,7 +172,7 @@ export function MonthSheet({
               return (
                 <td
                   key={day.date}
-                  className="bg-bg-soft border-line-faint text-text-dim num border p-1.5 text-center text-[11px] font-bold"
+                  className="bg-bg-soft border-line-faint text-text-dim num border p-1.5 text-center text-[12px] font-bold"
                 >
                   {written} / {came}
                 </td>
