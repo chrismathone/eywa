@@ -137,6 +137,16 @@ describe("mathSpansOf — 출석부와 같은 모양(끝 포함)으로 편다", 
   });
 });
 
+describe("mathSpansOf — 전출 하루 당김을 두 번 적용하지 않는다", () => {
+  it("🔴 구간에 isTransferred를 싣지 않는다 — 실으면 판정이 하루를 두 번 당긴다", () => {
+    // origin이 `EnrollSpan`에 `isTransferred`를 얹었다([[#125]]). 출석부는 원본 end_date + 플래그로
+    // 가르고, MCS는 **펼 때 미리 당긴다** — 둘을 함께 쓰면 전출이 이틀 일찍 끝난다.
+    const spans = mathSpansOf([E("2026-05-04", "2026-08-19", true)], null);
+    expect(spans).toEqual([{ start: "2026-05-04", end: "2026-08-18" }]);
+    expect(spans[0]).not.toHaveProperty("isTransferred");
+  });
+});
+
 describe("isOnMathRosterAnyDay — 행을 세울까(달 중간 입·퇴반은 남긴다)", () => {
   const DAYS = ["2026-08-04", "2026-08-11", "2026-08-18", "2026-08-25"];
 

@@ -55,14 +55,16 @@ export function effectiveEndDate(endDate: string | null, withdrawnAt: string | n
  * 수강 구간을 **출석부와 같은 모양**(`EnrollSpan`, 끝 포함)으로 편다 — 날짜 판정과 신입·퇴원·반이동
  * 표식이 **같은 구간**을 읽게 하는 단일 소스.
  *
- * 🔴 전출(`isTransferred`)은 종료일 **하루 전**이 마지막 날이다(그날은 이미 새 반). 출석부는 원본
- *    `end_date`를 그대로 끝으로 쓰지만 MCS는 이 규약이 더 엄격하다 — 그래서 여기서 하루를 당긴다.
- *    부수 효과로 반이동 판정이 **더 정확해진다**: 반이동 RPC는 `옛 반.end_date = 새 반.start_date`로
- *    저장하므로, 당기지 않으면 `transferTo`의 "나간 다음날 이후 시작" 조건에 걸리지 않아 진짜
- *    반이동이 '퇴원'으로 표시된다.
+ * 🔴 전출(`isTransferred`)은 종료일 **하루 전**이 마지막 날이다(그날은 이미 새 반).
+ *    출석부는 원본 `end_date`를 끝으로 들고 `isTransferred`를 **구간에 함께 실어** 날짜 판정에서
+ *    가르지만([[#125]]), MCS는 **구간을 펼 때 미리 당긴다.** 끝값은 같지만(= `end_date` − 1일)
+ *    당겨 두어야 날짜 판정을 안 거치는 `transferTo`/`transferFrom`이 **끝점을 직접 비교**해도 맞는다:
+ *    반이동 RPC가 `옛 반.end_date = 새 반.start_date`로 저장하므로, 안 당기면 "나간 다음날 이후 시작"
+ *    조건에 걸리지 않아 **진짜 반이동이 '퇴원'으로** 표시된다.
+ *    ⚠️ 그래서 이 구간엔 `isTransferred`를 **싣지 않는다** — 실으면 하루를 두 번 당긴다.
  * ⚠️ `startDate`가 없는 행은 근거로 쓰지 않는다(언제부터인지 모르는 것을 "다닌다"로 읽지 않는다).
- *    그래서 구간이 **하나도 없으면 명단이 아니다** — 출석부 `isEnrolledOn`의 "구간 없음 = 표시 안 함"
- *    (fail-open)과 반대 방향이므로, 이 파일 밖에서 그 함수로 MCS 구간을 판정하지 말 것.
+ *    그래서 구간이 **하나도 없으면 명단이 아니다** — 구간 없음을 `true`로 보는 출석부 `isEnrolledOn`
+ *    (fail-open)과 **반대 방향**이므로, 이 파일 밖에서 그 함수로 MCS 구간을 판정하지 말 것.
  */
 export function mathSpansOf(
   enrollments: readonly MathEnrollmentWindow[],
