@@ -219,3 +219,54 @@ describe("ECS 상단 바 · 주간/월간 통일", () => {
     expect(monthPage).not.toContain("normalizeEcsMonthView");
   });
 });
+
+/**
+ * 구조 가드 — 좁은 폭에서 **목록·반 정보 보기가 접히되 사라지지는 않는다**
+ * (원장 2026-09-01 *"좁은 폭에서 목록/반 정보 보기 접어줘"*).
+ *
+ * 🔴 접기와 숨기기는 다르다 — '반 정보 보기'는 이 화면에서 그 반으로 가는 **유일한 문**이라,
+ *    좁은 폭에서 지우면 폰·좁은 창에선 갈 길이 아예 없어진다(하부탭에만 있던 셔틀 '오늘 등하원'이
+ *    폰에서 끊겼던 것과 같은 함정). 그래서 글자만 접고 **아이콘 알약은 남긴다**.
+ * 🔴 접히면 보이는 글자가 없어 **접근성 이름이 aria-label에만 남는다** — 그걸 빼면 스크린리더·음성
+ *    조작에서 이름 없는 버튼이 된다.
+ */
+describe("ECS 상단 바 · 좁은 폭에서 접기", () => {
+  const chrome = code(read("features/class-sheets/components/sheet-chrome.tsx"));
+
+  it("글자는 접히고 아이콘이 대신 선다(둘 다 사라지는 폭이 없다)", () => {
+    // 아이콘 자리 = 좁은 폭 전용, 글자 자리 = md부터. 한 쌍이라 어느 폭에서도 정확히 하나가 보인다.
+    expect(chrome).toContain('className="flex h-[18px] items-center md:hidden"');
+    expect(chrome).toContain('className="hidden md:inline"');
+    expect(chrome).toContain('<PillGlyph icon="list"');
+    expect(chrome).toContain('<PillGlyph icon="info"');
+  });
+
+  it("🔴 알약을 통째로 숨기지 않는다 — 접는 것이지 없애는 것이 아니다", () => {
+    // 알약 자체에 md 숨김이 붙으면 좁은 폭에서 '반 정보 보기'로 가는 유일한 문이 닫힌다.
+    expect(chrome).not.toContain("sheetPill(false)} hidden");
+    expect(chrome).not.toContain("hidden md:inline-flex");
+  });
+
+  it("🔴 접혔을 때 이름이 남는다(두 알약 다 aria-label)", () => {
+    expect(chrome).toContain('aria-label="반 목록"');
+    expect(chrome).toContain("ariaLabel={`${classLabel} 반 정보 보기`}");
+  });
+
+  it("⚠️ 아이콘 자리 높이가 글자 줄상자와 같다 — 접힌 알약만 낮아지지 않게", () => {
+    // 12px 글자 × preflight line-height 1.5 = 18px. 이 값을 지우면 옆 요일 알약과 밑줄이 어긋난다.
+    expect(chrome).toContain("h-[18px]");
+  });
+
+  it("🔴 접기는 공용 조각 한 곳에서만 — 화면마다 라벨을 다시 그리지 않는다", () => {
+    // 주간·월간은 `SheetClassPicker`를 그대로 쓴다(상단 바 통일 규약). 화면 파일이 이 두 알약을
+    // 스스로 그리기 시작하면 접히는 폭이 화면마다 갈려, 통일 직전 상태로 되돌아간다.
+    // ⚠️ 라벨 문자열로 본다 — `md:` 사용 자체를 막으면 이 알약과 무관한 반응형까지 못 쓴다.
+    for (const src of [
+      code(read("features/class-sheets/components/sheet-toolbar.tsx")),
+      code(read("features/class-sheets/components/month-client.tsx")),
+    ]) {
+      expect(src).not.toContain("반 정보 보기");
+      expect(src).not.toContain("PillGlyph");
+    }
+  });
+});
