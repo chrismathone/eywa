@@ -5,10 +5,11 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
+import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
 import { kstToday } from "@/lib/date-kst";
 import {
   getClassAttendanceStats,
@@ -120,8 +121,10 @@ export default async function ClassDetailPage({
     classLevel === "full" || (classLevel === "scoped" && klass.teacherId === user.id);
   // 반 배정 = 학생 기록 변경 — 서버 createEnrollment 게이트(classes full ∥ students full)와 같은 모양(#77).
   // 강사(양쪽 scoped)는 열람 전용(원장 2026-08-18)이라 버튼 자체를 숨긴다.
-  const canAssign =
-    classLevel === "full" || (await accessLevelTenant(user.systemRole, "students")) === "full";
+  // 수강 종료 = 학생 기록 변경 — 서버 endSingleEnrollment의 게이트(canManageStudentRecords =
+  // students full)와 **같은 모양**이어야 한다(#77: 버튼은 보이는데 누르면 거절 방지).
+  const canManageStudents = await canManageTenant(user.systemRole, "students");
+  const canAssign = classLevel === "full" || canManageStudents;
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
@@ -403,6 +406,21 @@ export default async function ClassDetailPage({
                         <span className="text-amber bg-amber-soft border-amber/25 rounded-md border px-2 py-0.5 text-xs font-medium">
                           휴원
                         </span>
+                      ) : null}
+                      {/* 반에서 바로 수강 종료(원장 2026-09-01) — 학생 상세까지 들어가지 않게.
+                          학생 상세 수업 탭과 **같은 한 벌**을 쓴다(같은 질문·같은 서버 액션).
+                          ⚠️ 아직 시작 안 한 배정(upcoming)은 제외 — 종료일이 시작일로 클램프되어 두 갈래가
+                             같은 결과가 된다(그건 종료가 아니라 배정 취소라 학생 상세가 맡는다). */}
+                      {canManageStudents && s.phase !== "upcoming" ? (
+                        <EndEnrollmentAction
+                          enrollmentId={s.enrollmentId}
+                          studentId={s.studentId}
+                          studentName={s.name}
+                          className={klass.className}
+                          currentEndDate={s.endDate}
+                          startDate={s.enrolledAt}
+                          today={today}
+                        />
                       ) : null}
                     </div>
                   </li>
