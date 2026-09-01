@@ -89,7 +89,6 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
       {/* 🔴 문서 **바깥 테두리만 굵다**(시트 3px) — 안쪽 격자는 전부 1px이다. */}
       <div className="w-fit" style={{ border: MP_SHEET_OUTER }}>
 
-      {/* 시트 1~7행 — 로고(A·B열, 7행 높이) · 제목 띠(C~J) · 강사(K1) · 안내(C~J) · 범례(K3~K7). */}
       {/* 시트 1~7행 — 로고(A·B) · 제목+안내(C~J) · 강사+범례(K). 세 칸을 나란히 둬야
           강사 칸(2행)이 제목 높이(3행)에 끌려가 빈틈이 생기지 않는다. */}
       <header className="flex items-stretch" style={{ width: docWidth, height: MP_SHEET_PX.head }}>
