@@ -104,6 +104,7 @@ function ClassCard({
   userId,
   tenantId,
   nowHm,
+  isHoliday,
 }: {
   card: TodayClassCard;
   weekMonday: string;
@@ -115,6 +116,12 @@ function ClassCard({
   tenantId: string;
   /** 지금 시각(KST HH:mm) — 오늘이 아니거나 아직 마운트 전이면 null(진행 중 표시 없음). */
   nowHm: string | null;
+  /**
+   * 학원 휴일인가 — 배지의 **재촉 색만** 걷는다(숫자·입력·저장은 그대로).
+   * 🔴 요약 스트립과 **함께** 걷어야 한다 — 위는 무채색인데 카드마다 앰버 "계획 0/2"가 서면 한 화면이
+   *    스스로 모순된다(절반만 옮긴 규칙이 안 옮긴 것보다 나쁘다).
+   */
+  isHoliday: boolean;
 }) {
   const { att, setAtt, marks, setMarks, attInflight } = state;
   const [open, setOpen] = useState(true);
@@ -287,13 +294,13 @@ function ClassCard({
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {/* 상태 배지 = WeekNav '과거/미래 조회'와 **같은 규약**(rounded-full · 10px · bold).
               ⚠️ 색은 **못 한 일에만** 쓴다 — 다 한 줄까지 물들면 눈이 갈 곳을 잃는다. */}
-          <Badge done={planMissing === 0} title="오늘 교시 중 수업계획이 채워진 교시">
+          <Badge done={isHoliday || planMissing === 0} title="오늘 교시 중 수업계획이 채워진 교시">
             계획 {card.fill.filled}/{card.fill.total}
           </Badge>
-          <Badge done={marked >= card.students.length} title="출결을 기록한 학생 수">
+          <Badge done={isHoliday || marked >= card.students.length} title="출결을 기록한 학생 수">
             출결 {marked}/{card.students.length}
           </Badge>
-          <Badge done={written >= card.students.length} title="수업보고서를 작성한 학생 수">
+          <Badge done={isHoliday || written >= card.students.length} title="수업보고서를 작성한 학생 수">
             보고서 {written}/{card.students.length}
           </Badge>
           {/* 영어 알림장의 실제 채널은 ClassNote 반 보드다(eywa 발송 아님) — 워커 적재값(0140a)으로
@@ -301,7 +308,7 @@ function ClassCard({
               untracked(보드 없음·키 모호)는 배지를 아예 안 단다 — 지울 수 없는 거짓 할 일 금지(적대 리뷰). */}
           {card.classnoteToday !== "untracked" ? (
             <Badge
-              done={card.classnoteToday === "posted"}
+              done={isHoliday || card.classnoteToday === "posted"}
               title="ClassNote 반 보드에 이 날짜 알림장이 올라왔는지 — 연동 PC가 최대 30분 지연으로 반영합니다"
             >
               알림장 {card.classnoteToday === "posted" ? "게시됨" : "미게시"}
@@ -463,6 +470,7 @@ export function TodayBoard({
   tenantId,
   fontSize: initialFontSize,
   isToday,
+  isHoliday = false,
 }: {
   cards: TodayClassCard[];
   date: string;
@@ -473,6 +481,12 @@ export function TodayBoard({
   tenantId: string;
   fontSize: EcsFontSize;
   isToday: boolean;
+  /**
+   * 이 날짜가 학원 휴일인가 — **요약 스트립의 재촉 색만** 걷는다(숫자·카드·입력은 그대로).
+   * 🔴 카드를 지우거나 저장을 막는 값이 아니다(원장 2026-09-01 *"입력은 가능하도록"*). 사유는 페이지
+   *    맨 위 한 줄이 말하고, 여기선 "계획 0/6"이 앰버로 서서 거짓 재촉이 되는 것만 막는다.
+   */
+  isHoliday?: boolean;
 }) {
   const [att, setAtt] = useState<AttState>(() => initialAtt(cards));
   const [marks, setMarks] = useState<MarkState>(() => initialMarks(cards));
@@ -568,7 +582,7 @@ export function TodayBoard({
   const state: BoardState = { att, setAtt, marks, setMarks, attInflight };
   return (
     <div className="space-y-3">
-      <TodaySummary stats={stats} fontSize={fontSize} onFontSize={changeFontSize} />
+      <TodaySummary stats={stats} fontSize={fontSize} onFontSize={changeFontSize} holiday={isHoliday} />
       {/* 배율은 주간 시트와 같은 zoom 방식(font-size.ts 주석) — 기본(1)은 스타일 자체를 안 붙인다. */}
       <div className="space-y-3" style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
         {cards.map((card) => (
@@ -583,6 +597,7 @@ export function TodayBoard({
             userId={userId}
             tenantId={tenantId}
             nowHm={nowHm}
+            isHoliday={isHoliday}
           />
         ))}
       </div>

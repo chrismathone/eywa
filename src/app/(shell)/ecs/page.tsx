@@ -242,6 +242,26 @@ function EcsTodayFace({
         <EcsQuickAttendanceLink />
       </div>
 
+      {/* 휴일 한 줄(원장 2026-09-01 *"ecs/mcs 휴일참조"* + *"대신 입력은 가능하도록"*).
+          🔴 **재촉이 아니라 사실 전달**이다 — 수업 카드도, 출결도, 계획도 그대로 뜨고 그대로 저장된다.
+             그래서 문구가 "쓰지 마세요"가 아니라 "그대로 쓰시면 됩니다"로 끝난다.
+          ⚠️ 카드가 0개여도 띄운다 — 그때야말로 "왜 오늘 아무것도 없지"의 답이 이 줄이다.
+          ⚠️ 색은 danger 틴트(달력에서 공휴일이 빨간 것과 같은 관행)지만 실패가 아니므로 아이콘·굵기로
+             경고를 더 세우지 않는다. */}
+      {res.holidayName ? (
+        <p className="border-danger/30 bg-danger-soft/40 text-foreground rounded-2xl border px-4 py-2.5 text-[13px]">
+          {/* ⚠️ 날짜를 "09/24은"처럼 적지 않는다 — 조사가 어긋난다. '일'로 끝나면 '은'이 맞다. */}
+          <b className="text-danger">
+            {isToday
+              ? "오늘은"
+              : `${Number(res.date.slice(5, 7))}월 ${Number(res.date.slice(8, 10))}일은`}{" "}
+            {res.holidayName}
+          </b>{" "}
+          — 학원 휴일입니다. 수업이 있었다면 계획·출결·보고서를 <b>평소처럼 그대로</b> 쓰실 수 있고, 쓰지 않은
+          휴일은 작성률에 잡히지 않습니다.
+        </p>
+      ) : null}
+
       {/* 오늘 시트는 **본인 담당 교시만** 그린다(2026-08-19) — 그래서 "그 교시가 왜 없지"가 생긴다.
           종전엔 반마다 각주를 길게 달았는데 반이 셋이면 같은 문장이 셋 쌓였다 → 원장 지시로 각주를 빼고
           (*"이 멘트 필요없음"*) **되돌릴 곳만 화면 맨 위 한 줄**로 알린다(*"적당히 크게"*).
@@ -319,6 +339,8 @@ function EcsTodayFace({
           tenantId={res.tenantId}
           fontSize={res.fontSize}
           isToday={isToday}
+          // 휴일이면 요약 스트립의 **재촉 색**만 걷는다(숫자는 그대로) — 위 한 줄이 이미 사유를 말한다.
+          isHoliday={res.holidayName !== null}
         />
       )}
     </div>

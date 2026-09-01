@@ -28,7 +28,7 @@ function slot(over: Partial<GridSlot> & { slotStart: string }): GridSlot {
 }
 
 function dayOf(slots: GridSlot[], date = DATE): GridDay {
-  return { date, dow: "wed", slots };
+  return { date, dow: "wed", slots, holiday: null };
 }
 
 const SLOTS: GridSlot[] = [
@@ -39,7 +39,7 @@ const SLOTS: GridSlot[] = [
 ];
 
 const day = dayOf(SLOTS);
-const otherDay: GridDay = { date: "2026-08-20", dow: "thu", slots: [slot({ slotStart: "14:20" })] };
+const otherDay: GridDay = { date: "2026-08-20", dow: "thu", slots: [slot({ slotStart: "14:20" })], holiday: null };
 
 const startsOf = (slots: readonly GridSlot[]) => slots.map((s) => s.slotStart);
 
