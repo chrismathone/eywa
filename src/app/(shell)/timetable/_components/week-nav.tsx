@@ -1,11 +1,22 @@
-import { ParamLink } from "./param-link";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday, weekLabel, weekRelation } from "@/features/timetable/lib/week";
+import { WeekPeriodNav } from "./week-period-nav";
 
 /**
- * 시간표 주간 이동(타임머신) 네비 — ijw TimetableHeader 이식.
- * ◀ / 이번주 / ▶ + 주차 라벨. 과거/미래 조회 중이면 배지로 명시(편집은 그 주에선 비활성).
- * searchParam(`?week=`) 링크 — 과목/뷰 토글과 동일 패턴(hrefForWeek가 그 둘을 보존).
+ * 시간표·ECS의 **주간 이동(타임머신)** — `‹ 2026년 9월 3주차 (14일~20일) ›` 한 덩어리.
+ *
+ * 원장 2026-09-01: *"주차이동을 월간처럼 깔끔한 스타일로 바꾸자."* 08-31에 *"웹앱내에서 비슷한 곳은 다
+ * 방금 지시한 것으로"*라며 정한 [`PeriodNav`](@/components/period-nav) 모양을 여기까지 끌고 온 것이다.
+ * 종전엔 `주 ◀ [이번주] ▶ 라벨`이라 한 줄에 조각이 넷이었고, 같은 일을 하는 월간 네비와 안 닮았다.
+ *
+ * 🔴 **'이번주' 알약은 사라졌지만 그 두 가지 일은 남는다** — 이번 주로 돌아가기는 **가운데 라벨 클릭**,
+ *    "지금 이번 주인가"는 **과거/미래 조회 배지**(PeriodNav 🔴). 배지를 지우지 말 것: 없으면 지난 주
+ *    화면을 보면서 이번 주로 착각한다.
+ * ⚠️ 라벨 문자열은 `weekLabel` 단일 소스 그대로 — 여기서 줄이면 같은 주가 화면마다 다르게 적힌다.
+ * ⚠️ 미저장 이탈 가드·무플래시 이동은 클라 절반([`week-period-nav`](./week-period-nav.tsx))이 맡는다.
+ * ⚠️ **트레이드오프**: PeriodNav는 `<a href>`가 아니라 버튼이라 화살표를 Ctrl/가운데 클릭해도 새 탭이
+ *    안 열린다(ParamLink는 열렸다). 이 앱에서 다른 주를 따로 띄우는 정식 경로는 사이드바 shift-클릭
+ *    창이라 실사용 손실은 없다고 보고 모양의 일관성을 택했다 — 되살릴 땐 PeriodNav 쪽을 고칠 것
+ *    (여기만 링크로 되돌리면 월간과 다시 갈린다).
  */
 export function WeekNav({
   currentWeek,
@@ -18,41 +29,13 @@ export function WeekNav({
   /** 월요일 → /timetable?... (view·subject 보존). */
   hrefForWeek: (monday: string) => string;
 }) {
-  const rel = weekRelation(currentWeek, today);
-  const isCurrent = rel === "current";
-  const iconBtn =
-    "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-full border p-1 transition";
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="micro mr-0.5">주</span>
-      <div className="flex items-center gap-0.5">
-        <ParamLink href={hrefForWeek(addWeeks(currentWeek, -1))} ariaLabel="이전 주" className={iconBtn}>
-          <ChevronLeft size={13} strokeWidth={2.5} />
-        </ParamLink>
-        <ParamLink
-          href={hrefForWeek(thisMonday(today))}
-          className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium transition ${
-            isCurrent
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-          }`}
-        >
-          이번주
-        </ParamLink>
-        <ParamLink href={hrefForWeek(addWeeks(currentWeek, 1))} ariaLabel="다음 주" className={iconBtn}>
-          <ChevronRight size={13} strokeWidth={2.5} />
-        </ParamLink>
-      </div>
-      <span className="text-text-dim num text-[11px] whitespace-nowrap">{weekLabel(currentWeek)}</span>
-      {!isCurrent ? (
-        <span
-          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
-            rel === "future" ? "bg-blue-soft text-blue" : "bg-amber-soft text-amber"
-          }`}
-        >
-          {rel === "future" ? "미래 조회" : "과거 조회"}
-        </span>
-      ) : null}
-    </div>
+    <WeekPeriodNav
+      label={weekLabel(currentWeek)}
+      prevHref={hrefForWeek(addWeeks(currentWeek, -1))}
+      nextHref={hrefForWeek(addWeeks(currentWeek, 1))}
+      currentHref={hrefForWeek(thisMonday(today))}
+      relation={weekRelation(currentWeek, today)}
+    />
   );
 }

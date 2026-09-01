@@ -11,6 +11,7 @@ import { setMyEcsMonthDisplay, setMyEcsMonthView } from "../server/actions";
 import type { EcsMonthDisplay, EcsMonthView } from "../view-prefs";
 import type { ClassSheetMonthData } from "../server/month-queries";
 import { MonthCalendar } from "./month-calendar";
+import { MonthDayEditor } from "./month-day-editor";
 import { MonthGoalStrip } from "./month-goal-strip";
 import { MonthRail } from "./month-rail";
 import { useMonthGoals, type GoalRole } from "./use-month-goals";
@@ -39,6 +40,11 @@ export function MonthClient({
   const [view, setView] = useState<EcsMonthView>(initialView);
   const [display, setDisplay] = useState(initialDisplay);
   const [role, setRole] = useState<GoalRole>("homeroom");
+  /**
+   * 그 자리에서 고치는 창이 열린 날짜 — 달력은 **더블클릭**, 진도표는 날짜 열 머리 클릭으로 연다
+   * (원장 2026-09-01 *"더블클릭으로 해당날짜 수정가능하게"*).
+   */
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const { goals, setField, flushAll, savedAt, error, dismissError } = useMonthGoals({
     classId: data.classId,
     periodStart: `${data.month}-01`,
@@ -53,6 +59,12 @@ export function MonthClient({
 
   const hrefFor = (month: string) => `/ecs/${data.classId}/month?month=${month}`;
   const thisMonth = data.today.slice(0, 7);
+
+  /**
+   * 🔴 목표 편집 큐를 **먼저 비우고** 연다 — 창을 닫으면 화면을 다시 읽는데(`router.refresh`), 그때
+   *    아직 안 나간 목표 글자가 있으면 옛 값으로 되돌아온다(달 이동·반 전환과 같은 규약).
+   */
+  const openDayEditor = (date: string) => void flushAll().then(() => setOpenDay(date));
 
   const chooseView = (next: EcsMonthView) => {
     if (next === view) return;
@@ -186,7 +198,7 @@ export function MonthClient({
             savedAt={savedAt}
             onField={setField}
           />
-          <MonthCalendar data={data} goals={warnGoals} display={cur} />
+          <MonthCalendar data={data} goals={warnGoals} display={cur} onOpenDay={openDayEditor} />
         </>
       ) : (
         <MonthRail
@@ -196,8 +208,23 @@ export function MonthClient({
           canEdit={data.canEdit}
           savedAt={savedAt}
           onField={setField}
+          onOpenDay={openDayEditor}
         />
       )}
+
+      {openDay ? (
+        <MonthDayEditor
+          // 날짜가 바뀌면 창 안의 계획 상태를 새로 세운다(블록은 마운트당 1회 시드다).
+          key={openDay}
+          classId={data.classId}
+          className={data.className}
+          date={openDay}
+          slots={data.slotsByDate[openDay] ?? []}
+          periodLabelBySlot={data.periodLabelBySlot}
+          onClose={() => setOpenDay(null)}
+          onSaved={() => router.refresh()}
+        />
+      ) : null}
     </div>
   );
 }

@@ -29,6 +29,7 @@ export function MonthRail({
   canEdit,
   savedAt,
   onField,
+  onOpenDay,
 }: {
   data: ClassSheetMonthData;
   /**
@@ -42,6 +43,12 @@ export function MonthRail({
   /** 마지막 저장 시각 — 이 보기엔 목표 스트립이 없어서 저장 피드백이 첫 열 머리에 붙는다. */
   savedAt: number | null;
   onField: (role: GoalRole, skillArea: string, field: GoalField, value: string) => void;
+  /**
+   * 날짜 열 머리를 누르면 그 날 계획을 그 자리에서 연다(달력의 더블클릭과 **같은 창**).
+   * ⚠️ 여기선 **한 번만 눌러도** 열린다 — 달력 칸과 달리 이 머리엔 다투는 동작(주간 시트로 이동)이
+   *    없어서, 더블클릭만 받으면 아무도 못 찾는 기능이 된다.
+   */
+  onOpenDay: (date: string) => void;
 }) {
   // 열 = 계획 줄이 하나라도 있는 날(수업은 있는데 아무것도 안 쓴 날까지 세우면 표가 빈 열로 길어진다).
   // ⚠️ **지금 보여 줄 줄**로 센다 — 자리 교시에만 계획이 있는 날은 자리를 접었을 때 셀이 전부 비므로,
@@ -87,13 +94,20 @@ export function MonthRail({
             {days.map((date) => (
               <th
                 key={date}
-                className={`border-line-faint sticky top-0 z-[2] border-r border-b px-2 py-1.5 text-center text-[11.5px] font-bold whitespace-nowrap ${
+                className={`border-line-faint sticky top-0 z-[2] border-r border-b p-0 text-center text-[11.5px] font-bold whitespace-nowrap ${
                   offDays.has(date) ? "text-amber bg-amber-soft shadow-[inset_0_-2px_0_var(--amber)]" : "bg-bg-soft"
                 }`}
               >
-                <span className="num">{date.slice(5).replace("-", "/")}</span>
-                <br />
-                <span className="text-text-faint font-semibold">{dowKo(date)}</span>
+                <button
+                  type="button"
+                  onClick={() => onOpenDay(date)}
+                  title={`누르면 이 날 계획을 여기서 ${canEdit ? "고칩니다" : "봅니다"}`}
+                  className="hover:text-primary w-full cursor-pointer px-2 py-1.5 font-bold"
+                >
+                  <span className="num">{date.slice(5).replace("-", "/")}</span>
+                  <br />
+                  <span className="text-text-faint font-semibold">{dowKo(date)}</span>
+                </button>
               </th>
             ))}
           </tr>

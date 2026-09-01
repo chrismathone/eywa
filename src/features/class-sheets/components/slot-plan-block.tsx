@@ -55,6 +55,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   showExamTerm,
   onCarried,
   flushHost,
+  registerFlush,
 }: {
   classId: string;
   /**
@@ -79,6 +80,15 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   onCarried?: (patches: CarryPatch[]) => void;
   /** 호스트가 따로 들고 있는 저장 큐(자리 출석부의 듣기·단어 디바운스)를 복사 전에 함께 비운다. */
   flushHost?: () => Promise<unknown>;
+  /**
+   * 이 블록의 저장 큐를 **호스트가 명시적으로 비울 수 있게** 등록한다(언마운트 때 `null`).
+   *
+   * 🔴 닫고 나서 **곧바로 다시 읽는** 화면(월간 뷰의 그 날짜 고치기 창)에만 필요하다 — 언마운트 flush는
+   *    best-effort라 기다릴 수 없고, 안 기다리면 방금 친 글자가 서버에 닿기 전에 옛 값을 다시 그려
+   *    "고쳤는데 그대로"가 된다. 그대로 머무는 화면(주간 시트·자리 출석부)은 안 넘겨도 된다.
+   * ⚠️ 안정 참조로 넘길 것(이 컴포넌트는 `memo`다).
+   */
+  registerFlush?: (flush: (() => Promise<unknown>) | null) => void;
 }) {
   // ① 저널 — 시트와 같은 문서 키(반+주차).
   const doc = useSheetDoc({ tenantId, userId, classId, week: weekMonday });
@@ -92,6 +102,11 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   // ② CAS 저장 큐(디바운스 + 충돌 감지).
   const store = useSheetSaveStore(send, doc.journal, canEdit);
   useFlushOnUnmount(store);
+  useEffect(() => {
+    if (!registerFlush) return;
+    registerFlush(() => store.flush());
+    return () => registerFlush(null);
+  }, [registerFlush, store]);
   useEffect(() => {
     store.setCallbacks({
       onError: (m) => toast.error(m),

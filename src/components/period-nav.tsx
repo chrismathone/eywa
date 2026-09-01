@@ -38,6 +38,7 @@ export function PeriodNav({
   nextAriaLabel,
   currentTitle,
   minLabelWidth = 104,
+  pending: externalPending = false,
   onNavigate,
 }: {
   /** 가운데에 적을 기간 — "2026년 8월" · "8월 3일~9일". 호출부의 포맷 함수를 그대로. */
@@ -54,6 +55,13 @@ export function PeriodNav({
   currentTitle?: string;
   /** 라벨 칸 최소 폭(px) — 기간이 바뀌어도 화살표가 움찔거리지 않게. */
   minLabelWidth?: number;
+  /**
+   * 호출부가 **자기 전환**을 도는 동안 "가는 중"으로 그린다.
+   * 🔴 `onNavigate`를 주면 이 컴포넌트의 자체 transition이 안 돌아 **아무 반응이 없다** — 가로챈 화면이
+   *    Promise를 안 돌려주는 경우(시간표 주 이동은 `startTransition`이라 thenable이 없다) 이 prop이
+   *    유일한 피드백이다. 없으면 사람이 화살표를 두 번 누른다(ParamLink가 pulse로 하던 일).
+   */
+  pending?: boolean;
   /**
    * 이동을 가로챈다(저장 flush 등). 주면 링크 대신 이 콜백만 부른다 —
    * 🔴 가로챈 화면은 **자기 순서를 다 지킨 뒤** 실제 이동까지 책임진다(안 하면 버튼이 먹통이 된다).
@@ -88,7 +96,7 @@ export function PeriodNav({
     <div className="flex shrink-0 items-center gap-1.5">
       <div
         className={`border-line-strong inline-flex items-center overflow-hidden rounded-lg border ${
-          pending || handing ? "opacity-70" : ""
+          pending || handing || externalPending ? "opacity-70" : ""
         }`}
       >
         <button

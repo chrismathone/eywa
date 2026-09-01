@@ -1,6 +1,8 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
@@ -22,18 +24,43 @@ const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu
  *    판정은 [`goal-match`](../lib/goal-match.ts) 하나뿐이라 진도표·목표 스트립과 답이 갈리지 않는다.
  * ⚠️ 경고 기준은 **담임 목표**다 — 반의 진도 목표는 담임이 세우고, 부담임 칸은 보조 기록이다
  *    (실측 `class_sheet_goals` assistant 행 0건). 스트립에서 부담임 탭을 봐도 경고는 안 흔들린다.
- * ⚠️ 칸을 누르면 그 주 주간 시트로 간다 — 고치는 자리는 지금도 거기 하나다(월간은 읽는 화면).
+ * ⚠️ 칸의 동작이 **둘**이다 — 한 번 누르면 그 주 주간 시트로 가고, **더블클릭하면 그 날 계획을 이 화면에서
+ *    연다**(원장 2026-09-01 *"월간뷰에서도 더블클릭으로 해당날짜 수정가능하게"*).
+ * 🔴 그래서 단일 클릭 이동을 **잠깐 미룬다**(`DBLCLICK_MS`) — 링크를 그냥 두면 첫 클릭이 이미 페이지를
+ *    떠나 버려서 두 번째 클릭이 닿을 곳이 없다(더블클릭이 영원히 안 걸린다). 미루는 티가 안 나게 그 사이
+ *    칸을 눌린 모양으로 바꿔 두고, 두 번째 클릭이 오면 취소하고 편집 창을 연다.
+ * ⚠️ 키보드(Enter)·새 탭(Ctrl/⌘·가운데 버튼)은 **미루지 않는다** — 더블클릭이 없는 경로다.
+ *    그래서 키보드만 쓰는 사람에겐 이 창으로 가는 지름길이 없다 — 대신 Enter가 **주간 시트**(고치는
+ *    자리)로 데려가고, 진도표 보기에선 날짜 열 머리가 버튼이라 탭·엔터로 같은 창이 열린다.
+ *    ⚠️ 안 보이는 단축키(Shift+Enter 같은 것)를 새로 만들지 말 것 — 아무도 못 찾는다.
  */
+
+/** 두 번째 클릭을 기다리는 시간 — 브라우저 기본 더블클릭 간격(보통 500ms)보다 짧게, 체감은 안 나게. */
+const DBLCLICK_MS = 240;
+
+/**
+ * 지금 이동을 기다리는 칸의 **취소 함수 하나**를 담는 그릇 — 미뤄 둔 이동은 달력 전체에서 하나뿐이다.
+ * 칸마다 따로 두면 기다리는 240ms 안에 다른 칸을 눌렀을 때 타이머가 둘 살아남아 **두 번 이동한다**
+ * (첫 칸으로 갔다가 곧바로 둘째 칸으로 튄다).
+ * ⚠️ 모듈 스코프 변수가 아니라 **부모의 ref**다 — 창(iframe)마다 문서가 달라 섞이진 않지만, 모듈 변수를
+ *    훅 안에서 고치면 리액트 규칙(react-hooks/immutability)에 걸린다.
+ */
+type ArmedRef = { current: (() => void) | null };
 export function MonthCalendar({
   data,
   goals,
   display,
+  onOpenDay,
 }: {
   data: ClassSheetMonthData;
   /** 담임 월간 목표(경고 기준). */
   goals: MonthGoalMap;
   display: { homework: boolean; seat: boolean };
+  /** 더블클릭 — 그 날 계획을 이 화면에서 연다. */
+  onOpenDay: (date: string) => void;
 }) {
+  // 🔴 훅은 조기 반환보다 **앞**에 둔다 — 아래 "수업 없음" 분기 뒤에 두면 훅 순서가 조건부가 된다.
+  const armedRef = useRef<(() => void) | null>(null);
   const dows = data.dows.filter((d) => DOW_ORDER.includes(d));
   if (dows.length === 0) {
     return (
@@ -79,6 +106,8 @@ export function MonthCalendar({
                 goals={goals}
                 display={display}
                 skillAreas={data.skillAreas}
+                onOpenDay={onOpenDay}
+                armedRef={armedRef}
               />
             );
           })}
@@ -94,12 +123,17 @@ function DayCell({
   goals,
   display,
   skillAreas,
+  onOpenDay,
+  armedRef,
 }: {
   date: string;
   data: ClassSheetMonthData;
   goals: MonthGoalMap;
   display: { homework: boolean; seat: boolean };
   skillAreas: SkillAreaSetting[];
+  onOpenDay: (date: string) => void;
+  /** 달력 전체에서 **하나뿐인** 미뤄 둔 이동(위 ArmedRef 주석). */
+  armedRef: ArmedRef;
 }) {
   const allSlots = data.slotsByDate[date] ?? [];
   const shown = allSlots.filter((s) => display.seat || s.seat === null);
@@ -110,6 +144,22 @@ function DayCell({
     return n + lines.filter((l) => isOffGoalLine({ ...l, seat: slot.seat !== null }, goals)).length;
   }, 0);
   const isToday = date === data.today;
+  const router = useRouter();
+  const href = `/ecs/${data.classId}?week=${mondayOf(date)}&day=${date}`;
+  // 미룬 이동 — 두 번째 클릭이 오면 취소하고 편집 창을 연다(파일 머리 🔴).
+  const navTimer = useRef<number | null>(null);
+  const [arming, setArming] = useState(false);
+  // 이 칸이 기다리던 이동을 접는다. `useCallback`이라 참조가 고정 — 부모의 `armedRef`가 "지금 기다리는
+  // 칸이 나인가"를 이 함수의 동일성으로 판별한다.
+  const cancelNav = useCallback(() => {
+    if (navTimer.current !== null) {
+      window.clearTimeout(navTimer.current);
+      navTimer.current = null;
+    }
+    setArming(false);
+  }, []);
+  // 언마운트(달 이동·보기 전환)에 타이머를 남기면 떠난 뒤에 이동이 튄다.
+  useEffect(() => cancelNav, [cancelNav]);
 
   if (allSlots.length === 0) {
     return <div className="border-line rounded-[10px] border bg-[#fafbfc]" />;
@@ -117,9 +167,35 @@ function DayCell({
 
   return (
     <Link
-      href={`/ecs/${data.classId}?week=${mondayOf(date)}&day=${date}`}
-      title="누르면 이 날이 열린 채로 주간 시트로 갑니다"
+      href={href}
+      // ⚠️ 편집 권한이 없으면 "고칩니다"라고 하지 않는다 — 눌러 보기 전엔 모르는 거짓 약속이 된다.
+      title={`누르면 이 날이 열린 채로 주간 시트로 갑니다 · 더블클릭하면 이 날 계획을 여기서 ${
+        data.canEdit ? "고칩니다" : "봅니다"
+      }`}
+      onClick={(e) => {
+        // 키보드(detail 0)·새 탭·가운데 버튼은 브라우저에 맡긴다 — 더블클릭이 없는 경로다.
+        if (e.detail === 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        if (navTimer.current !== null) return; // 두 번째 클릭은 onDoubleClick이 받는다
+        armedRef.current?.(); // 다른 칸이 기다리는 중이었으면 그쪽을 접는다(이중 이동 방지)
+        armedRef.current = cancelNav;
+        setArming(true);
+        navTimer.current = window.setTimeout(() => {
+          navTimer.current = null;
+          if (armedRef.current === cancelNav) armedRef.current = null;
+          setArming(false);
+          router.push(href);
+        }, DBLCLICK_MS);
+      }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        if (armedRef.current === cancelNav) armedRef.current = null;
+        cancelNav();
+        onOpenDay(date);
+      }}
       className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] border bg-white px-2 py-1.5 transition ${
+        arming ? "scale-[0.985] opacity-80" : ""
+      } ${
         offGoal > 0
           ? "border-amber shadow-[0_0_0_1px_var(--amber)] hover:shadow-[0_0_0_2px_var(--amber)]"
           : isToday

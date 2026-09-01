@@ -1,9 +1,12 @@
 "use client";
 
 // ECS 툴바 — 주 네비(flush 후 이동)·반 전환·요일 알약·패널 토글·저장 인디케이터·동시편집 배지.
-// WeekNav(ParamLink)를 안 쓰는 이유: 이동 전 store.flush()를 await해야 해서(§F) 버튼+onNavigate로 처리.
-import { ChevronLeft, ChevronRight, ClipboardCheck } from "@/components/icons/eywa-icon-compat";
+// 주 네비 모양은 앱 전역 단일 소스 PeriodNav(원장 2026-09-01 "주차이동을 월간처럼 깔끔한 스타일로").
+// WeekNav(ParamLink)가 아니라 PeriodNav를 **직접** 쓰는 이유는 그대로다: 이동 전 store.flush()를
+// await해야 해서(§F) `onNavigate`로 가로챈다 — PeriodNav가 그 동안 "가는 중"을 그린다.
+import { ClipboardCheck } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
+import { PeriodNav } from "@/components/period-nav";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { ecsPresenceScope } from "../lib/presence-scope";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -21,8 +24,6 @@ const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu
 // 테두리는 line-strong — 헤어라인(9%)이면 눌 수 있는 알약인지 글자인지 구분이 안 된다(가독성 07-31).
 // ⚠️ 테두리는 잉크 고정(원장 2026-08-10 "모든 박스에 진한 검은색 테두리") — line-strong(18%)조차 흰 카드
 // 위에선 "눌 수 있는 알약인지 글자인지" 구분이 안 됐다(07-31 가독성 지적의 연장). 글자도 dim→foreground 굵게.
-const iconBtn =
-  "border-line-strong text-foreground hover:bg-bg-soft inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition";
 const pill = (on: boolean) =>
   `shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-[12px] font-bold transition ${
     on
@@ -52,7 +53,8 @@ export function SheetToolbar({
   onDayFilter: (day: string | null) => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
-  onNavigate: (href: string) => void;
+  /** 이동 전 저장 flush를 기다린다 — Promise를 돌려주면 네비가 그 동안 "가는 중"을 그린다. */
+  onNavigate: (href: string) => void | Promise<void>;
   /** 글씨 크기(내 계정) — 아래 계획 패널·주간 그리드를 통째로 확대. 상단 바는 그대로. */
   fontSize: EcsFontSize;
   onFontSize: (size: EcsFontSize) => void;
@@ -119,37 +121,21 @@ export function SheetToolbar({
       ) : null}
       <span className="bg-line h-4 w-px" aria-hidden />
 
-      <div className="flex items-center gap-0.5">
-        <button
-          type="button"
-          className={iconBtn}
-          aria-label="이전 주"
-          onClick={() => onNavigate(hrefFor(data.classId, addWeeks(data.weekMonday, -1)))}
-        >
-          <ChevronLeft size={13} strokeWidth={2.5} />
-        </button>
-        <button
-          type="button"
-          className={pill(rel === "current")}
-          onClick={() => onNavigate(hrefFor(data.classId, thisMonday(data.today)))}
-        >
-          이번주
-        </button>
-        <button
-          type="button"
-          className={iconBtn}
-          aria-label="다음 주"
-          onClick={() => onNavigate(hrefFor(data.classId, addWeeks(data.weekMonday, 1)))}
-        >
-          <ChevronRight size={13} strokeWidth={2.5} />
-        </button>
-      </div>
-      <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{data.weekLabel}</span>
-      {rel !== "current" ? (
-        <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-[12px] font-bold whitespace-nowrap">
-          {rel === "past" ? "지난 주 조회" : "다음 주 조회"}
-        </span>
-      ) : null}
+      {/* 🔴 '이번주' 알약이 하던 두 일은 PeriodNav가 나눠 맡는다 — 이번 주로 돌아가기는 **가운데 라벨
+          클릭**, "지금 이번 주인가"는 **과거/미래 조회 배지**. 배지를 지우면 지난 주를 보면서 이번 주로
+          착각한다(그 알약이 색으로 말하던 사실이다). */}
+      <PeriodNav
+        label={data.weekLabel}
+        prevHref={hrefFor(data.classId, addWeeks(data.weekMonday, -1))}
+        nextHref={hrefFor(data.classId, addWeeks(data.weekMonday, 1))}
+        currentHref={hrefFor(data.classId, thisMonday(data.today))}
+        relation={rel}
+        prevAriaLabel="이전 주"
+        nextAriaLabel="다음 주"
+        currentTitle="눌러서 이번 주로"
+        minLabelWidth={188}
+        onNavigate={onNavigate}
+      />
       {/* 월간 뷰로 — 같은 반의 한 달을 달력/진도표로 훑는 화면(2026-08-31). 주 네비 바로 옆에 두는 이유는
           여기가 "지금 어느 기간을 보고 있나"를 다루는 자리이기 때문이다. 이동 전 flush는 onNavigate가 한다. */}
       <button
