@@ -3,6 +3,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
 import { SearchForm } from "@/components/search-form";
+import { TOOLBAR_CHIP } from "@/components/toolbar-controls";
 import { Pagination } from "@/components/pagination";
 import { SessionTermGroups, RefreshPlanButton, type ClassGroup } from "./session-term-table";
 import Link from "next/link";
@@ -91,7 +92,7 @@ export async function SessionTermsFace({
         <div className="flex items-center gap-2">
           <Link
             href={`/billing?tab=sessions&period=${shiftPeriod(p, -1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
             aria-label="이전 달"
           >
             <EyIcon name="chevronLeft" size={14} />
@@ -101,7 +102,7 @@ export async function SessionTermsFace({
           </span>
           <Link
             href={`/billing?tab=sessions&period=${shiftPeriod(p, 1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
             aria-label="다음 달"
           >
             <EyIcon name="chevronRight" size={14} />
@@ -128,7 +129,7 @@ export async function SessionTermsFace({
         <nav className="flex flex-wrap items-center gap-1.5" aria-label="과목별 보기">
           <Link
             href={`/billing?tab=sessions&period=${p}`}
-            className={`rounded-full border px-2.5 py-1 text-xs transition ${!activeSubject ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
+            className={`${TOOLBAR_CHIP} ${!activeSubject ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
           >
             전체
           </Link>
@@ -136,7 +137,7 @@ export async function SessionTermsFace({
             <Link
               key={sk}
               href={`/billing?tab=sessions&period=${p}&subject=${sk}`}
-              className={`rounded-full border px-2.5 py-1 text-xs transition ${activeSubject === sk ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
+              className={`${TOOLBAR_CHIP} ${activeSubject === sk ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
             >
               {subjects.labelOf(sk)}
             </Link>

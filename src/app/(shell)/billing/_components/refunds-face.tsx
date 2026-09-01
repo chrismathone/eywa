@@ -93,11 +93,12 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
       ) : (
         <>
           {/* 월 navigator (지출 패널과 동일 스타일) */}
-          <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+          {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01). */}
+          <div className="flex flex-wrap items-center gap-3 px-1 py-1">
             <div className="flex items-center gap-1.5">
               <Link
                 href={monthHref(shiftPeriod(period, -1))}
-                className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
+                className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
                 aria-label="이전 달"
               >
                 <EyIcon name="chevronLeft" size={14} />
@@ -107,7 +108,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
               </span>
               <Link
                 href={monthHref(shiftPeriod(period, 1))}
-                className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
+                className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
                 aria-label="다음 달"
               >
                 <EyIcon name="chevronRight" size={14} />

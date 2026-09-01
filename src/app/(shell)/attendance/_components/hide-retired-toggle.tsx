@@ -1,5 +1,6 @@
 "use client";
 
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveAttendanceHideRetired } from "@/features/attendance/server/prefs-actions";
@@ -31,11 +32,7 @@ export function HideRetiredToggle({ hidden, count }: { hidden: boolean; count: n
           router.refresh();
         })
       }
-      className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-        hidden
-          ? "border-primary bg-primary text-primary-foreground font-medium"
-          : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-      } ${pending ? "opacity-60" : ""}`}
+      className={`${TOOLBAR_CHIP} ${hidden ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF} ${pending ? "opacity-60" : ""}`}
     >
       퇴직자 숨김{count > 0 ? ` ${count}` : ""}
     </button>

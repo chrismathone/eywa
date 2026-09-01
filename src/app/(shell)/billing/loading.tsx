@@ -30,15 +30,16 @@ export default function BillingLoading() {
           </div>
           {/* 월 네비 2개 — compact에서만(넓은 화면은 위 3줄 옆에 붙어 높이를 안 늘린다) */}
           <div className="hidden shrink-0 items-center gap-2 compact-chrome:flex">
-            <div className="bg-bg-soft size-8 animate-pulse rounded-full" />
-            <div className="bg-bg-soft size-8 animate-pulse rounded-full" />
+            <div className="bg-bg-soft size-8 animate-pulse rounded-lg" />
+            <div className="bg-bg-soft size-8 animate-pulse rounded-lg" />
           </div>
         </header>
         {/* 툴바(월 칩 + 검색 + 액션) */}
-        <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+        {/* 실제 툴바는 카드 껍데기가 없고 컨트롤이 h-8이다(툴바 규약 2026-09-01). */}
+        <div className="flex flex-wrap items-center gap-3 px-1 py-1">
           <div className="flex items-center gap-1">
             {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="bg-bg-soft h-5 w-[72px] shrink-0 animate-pulse rounded-pill" />
+              <div key={i} className="bg-bg-soft h-8 w-[72px] shrink-0 animate-pulse rounded-lg" />
             ))}
           </div>
           <div className="bg-bg-soft h-8 w-36 animate-pulse rounded-lg" />

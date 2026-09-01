@@ -1,5 +1,7 @@
 "use client";
 
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+
 // 담임 보기 필터(전체 / 담임별 / 담임 미지정) — ECS 랜딩 헤더. 원장 2026-08-11 *"담임 필터링 가능하게."*
 //
 // ⚠️ **서버가 진실**이다(목록을 서버가 좁혀 내려준다) → 저장 후 `router.refresh()`. 프로그램 필터와 같은 규약
@@ -62,9 +64,12 @@ export function EcsTeacherFilter({
           { value: ECS_TEACHER_ALL, label: "전체", hint: `${totalCount}` },
           ...options.map((o) => ({ value: o.value, label: o.label, hint: `${o.count}` })),
         ]}
-        // 같은 툴바의 알약(보기·주·프로그램)과 같은 모양 — 여기만 네모 박스면 그 줄이 통째로 어긋난다.
-        triggerClassName={`border-line bg-card text-foreground rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-          value === ECS_TEACHER_ALL ? "" : "border-foreground"
+        // 같은 툴바의 다른 컨트롤(보기·주·프로그램)과 같은 높이·라운드 — 여기만 알약이면 그 줄이
+        // 통째로 어긋난다(원장 2026-09-01 툴바 통일). 고른 값 표시는 종전대로 테두리 강조.
+        // 🔴 고른 값 표시는 `!`로 확정한다 — TOOLBAR_SELECT의 `border-border`와 같은 축이라
+        //    그냥 덧붙이면 승자를 문자열 순서가 아니라 생성된 CSS 순서가 정한다([[#116]]).
+        triggerClassName={`${TOOLBAR_SELECT} font-medium ${
+          value === ECS_TEACHER_ALL ? "" : "border-foreground!"
         } ${pending ? "opacity-60" : ""}`}
       />
     </span>

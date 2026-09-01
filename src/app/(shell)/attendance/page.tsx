@@ -3,6 +3,15 @@ import { redirect } from "next/navigation";
 import { Users } from "@/components/icons/eywa-icon-compat";
 import { PeriodNav } from "@/components/period-nav";
 import {
+  TOOLBAR_CHIP,
+  TOOLBAR_CHIP_OFF,
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+  TOOLBAR_SELECT,
+} from "@/components/toolbar-controls";
+import {
   USABLE_SEAT_KEYS,
   SEAT_KEYS,
   SEAT_NAME,
@@ -666,7 +675,9 @@ export default async function AttendancePage({
     >
       <div className="flex h-full min-h-0 flex-col gap-3 pb-3">
       {/* Toolbar — 월/범위/보기(+관리자 필터) 좌측, 살아있는 합계 우측. 이 화면의 유일한 크롬 줄. */}
-      <div className="bg-card shadow-card relative flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-2.5">
+      {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 격자가 자기 테두리를 갖고
+          있어 선이 이중으로 겹쳐 보였다. `relative`는 남긴다(우측 '안내' 패널의 기준 상자). */}
+      <div className="relative flex shrink-0 flex-wrap items-center gap-3 px-1 py-1">
         {/* 과목 → 강사 → 반 계층 필터(넓→좁). 위를 고르면 아래 선택지가 좁혀지고, 반을 골라야 출석부가 뜬다.
             반 선택 시 과목·강사는 그 반의 값으로 자동 표시(누구 선생님인지 바로 보이게). */}
         {showSubjectFilter ? (
@@ -679,6 +690,7 @@ export default async function AttendancePage({
                 options={subjectOptions}
                 ariaLabel="과목 필터"
                 allLabel="전체 과목"
+                triggerClassName={TOOLBAR_SELECT}
               />
             </div>
             <span className="bg-line h-4 w-px" aria-hidden />
@@ -695,6 +707,7 @@ export default async function AttendancePage({
                 options={teacherOptions}
                 ariaLabel="강사 필터"
                 allLabel="전체 강사"
+                triggerClassName={TOOLBAR_SELECT}
               />
               {/* 퇴직 담임 숨김 — 감춘 인원을 칩에 적어 "강사가 없어졌다"로 읽히지 않게 한다. */}
               {retiredCount > 0 || !viewPrefs.hideRetired ? (
@@ -718,6 +731,8 @@ export default async function AttendancePage({
             ariaLabel="반 필터"
             allLabel={isTeacherView ? "전체 반(내 반 전부)" : "전체 반"}
             cap={300}
+            // 형광 표기가 꺼진 상태("전체 반")에서만 쓰인다 — 켜지면 MARKER_TRIGGER가 이긴다.
+            triggerClassName={TOOLBAR_SELECT}
             // 반을 고르면 그 반의 시트가 아래를 채운다 = "지금 어느 반을 보고 있나"의 자리라 형광 표기
             // (원장 2026-08-18 "수업에 들어가서 세부 내용을 보는 곳에 전부 적용"). 옆 과목·강사 필터는
             // 목록을 좁힐 뿐이라 **켜지 않는다** — 노란 게 둘이 되면 첫째가 안 보인다.
@@ -760,9 +775,10 @@ export default async function AttendancePage({
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">보기</span>
+              <span className="micro shrink-0">보기</span>
               {effectiveTeacher ? (
-                ([
+                <div className={TOOLBAR_SEG_BOX}>
+                {([
                   ["class", "반별"],
                   ["teacher", "강사 전체"],
                 ] as const).map(([key, label]) => (
@@ -775,15 +791,12 @@ export default async function AttendancePage({
                       subjectId: effectiveSubject,
                       mode: key,
                     })}
-                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                      mode === key
-                        ? "border-primary bg-primary text-primary-foreground font-medium"
-                        : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                    }`}
+                    className={`${TOOLBAR_SEG_ITEM} shrink-0 ${mode === key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
                   >
                     {label}
                   </Link>
-                ))
+                ))}
+                </div>
               ) : (
                 <span className="text-text-faint text-xs">강사를 고르면 전체 보기</span>
               )}
@@ -851,10 +864,10 @@ export default async function AttendancePage({
           {notices.length > 0 ? (
             // `<details>`라 클라 JS가 없다. 패널은 absolute라 열려도 격자를 밀어내지 않는다(높이 0 유지).
             <details className="[&_summary::-webkit-details-marker]:hidden">
-              <summary className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft list-none cursor-pointer rounded-full border px-2.5 py-0.5 text-xs">
+              <summary className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} list-none cursor-pointer`}>
                 안내 {notices.length}
               </summary>
-              <div className="border-line bg-card absolute top-full right-4 z-40 mt-1 w-[min(560px,calc(100vw-3rem))] space-y-2 rounded-2xl border p-3 shadow-lg">
+              <div className="border-line bg-card absolute top-full right-1 z-40 mt-1 w-[min(560px,calc(100vw-3rem))] space-y-2 rounded-2xl border p-3 shadow-lg">
                 {notices}
               </div>
             </details>

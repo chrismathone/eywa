@@ -6,6 +6,12 @@ import { BackLink } from "@/components/back-link";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { SearchForm } from "@/components/search-form";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
@@ -94,12 +100,13 @@ export default async function StaffPayrollPage({
       </section>
 
       {/* Filter bar */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         {/* 월 이동 */}
         <div className="flex items-center gap-1">
           <Link
             href={buildHref({ period: shiftPeriod(period, -1) })}
-            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border p-1 transition"
+            className="border-line text-text-dim hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border transition"
             aria-label="이전 달"
           >
             <ChevronLeft className="size-4" />
@@ -107,7 +114,7 @@ export default async function StaffPayrollPage({
           <span className="text-foreground num min-w-[88px] text-center text-sm font-bold">{period}</span>
           <Link
             href={buildHref({ period: shiftPeriod(period, 1) })}
-            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border p-1 transition"
+            className="border-line text-text-dim hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border transition"
             aria-label="다음 달"
           >
             <ChevronRight className="size-4" />
@@ -117,21 +124,19 @@ export default async function StaffPayrollPage({
         <span className="bg-line h-4 w-px" aria-hidden />
 
         {/* 상태 칩 */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="micro mr-1">상태</span>
+        <div className="flex items-center gap-1.5">
+          <span className="micro shrink-0">상태</span>
+          <div className={TOOLBAR_SEG_BOX}>
           {STATUS_FILTERS.map((f) => (
             <Link
               key={f.key}
               href={buildHref({ status: f.key })}
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
-                status === f.key
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${status === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               {f.label}
             </Link>
           ))}
+          </div>
         </div>
 
         {/* 검색 — 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체(period·status 자동 보존) */}

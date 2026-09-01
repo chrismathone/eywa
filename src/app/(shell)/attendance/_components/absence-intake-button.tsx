@@ -20,7 +20,7 @@ export function AbsenceIntakeButton({ today }: { today: string }) {
       <button
         type="button"
         onClick={() => setOpen(Date.now())}
-        className="border-line text-text-dim hover:bg-bg-soft flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition"
+        className="border-line text-text-dim hover:bg-bg-soft flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold transition"
         title="학부모 전화로 받은 결석을 한 번에 등록합니다"
       >
         <EyIcon name="calendarOff" size={14} />

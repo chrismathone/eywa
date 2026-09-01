@@ -3,6 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { TOOLBAR_CHIP } from "@/components/toolbar-controls";
 import { dotProps } from "@/features/calendar/color";
 import {
   getCalendarTags,
@@ -104,12 +105,13 @@ export default async function CalendarPage({
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
       {/* 뷰 전환(알약) + 연간·목록·분석의 연도 이동 — 월 이동은 월 보기(CalendarClient)가 담당. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <nav className="bg-bg-soft flex items-center gap-0.5 rounded-full p-0.5" aria-label="캘린더 보기 방식">
+        {/* 툴바 라운드 통일(원장 2026-09-01) — 알약 대신 덜 둥근 묶음 상자. 색은 종전 그대로. */}
+        <nav className="bg-bg-soft flex h-8 items-center gap-0.5 rounded-lg p-0.5" aria-label="캘린더 보기 방식">
           {VIEWS.map((vd) => (
             <Link
               key={vd.key}
               href={viewHref(vd.key)}
-              className={`rounded-full px-3 py-1 text-[12.5px] transition ${
+              className={`rounded-md px-3 py-1 text-[12.5px] transition ${
                 view === vd.key
                   ? "bg-card text-foreground font-semibold shadow-sm"
                   : "text-text-dim hover:text-foreground"
@@ -147,7 +149,7 @@ export default async function CalendarPage({
             {year !== thisYear ? (
               <Link
                 href={yearHref(thisYear)}
-                className="border-line text-text-dim hover:text-foreground hover:border-primary/50 rounded-lg border px-2.5 py-1.5 text-[12px] transition"
+                className="border-line text-text-dim hover:text-foreground hover:border-primary/50 inline-flex h-8 items-center rounded-lg border px-2.5 text-[12px] transition"
               >
                 올해
               </Link>
@@ -163,7 +165,7 @@ export default async function CalendarPage({
             <>
               <Link
                 href={tagHref()}
-                className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                className={`${TOOLBAR_CHIP} ${
                   tagParam === undefined
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
@@ -178,7 +180,7 @@ export default async function CalendarPage({
                   <Link
                     key={t.id}
                     href={tagHref(t.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                    className={`${TOOLBAR_CHIP} gap-1.5 ${
                       tagParam === t.id
                         ? "border-primary bg-primary text-primary-foreground font-medium"
                         : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
@@ -195,7 +197,7 @@ export default async function CalendarPage({
               })}
               <Link
                 href={tagHref("none")}
-                className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                className={`${TOOLBAR_CHIP} ${
                   tagParam === "none"
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
