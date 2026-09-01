@@ -15,6 +15,7 @@ import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
 import { SpotlightStrip } from "./spotlight-strip";
 import { WorkspaceOnboarding } from "./workspace-onboarding";
+import { useDeepLinkWindow } from "./deep-link-window";
 import { snapTarget, templateSlots } from "./window-geometry";
 
 // 콘텐츠 스테이지 상단 오프셋 — 데스크톱(캔버스가 뜨는 유일한 조건: useIsDesktop = ≥lg + pointer:fine)에선
@@ -93,6 +94,12 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
     const unsub = useWindowStore.persist.onFinishHydration(() => adoptOwner(owner));
     return unsub;
   }, [owner, adoptOwner]);
+
+  // 딥링크(주소창·외부 링크·북마크)로 들어온 라우트를 창으로 열어 준다(원장 지시 2026-09-01).
+  // 조건은 **아래 바탕이 main을 덮는 조건과 같다** — 안 덮는 화면(운영실)에서 열면 배경과 겹친다.
+  // ⚠️ adoptOwner(영속 복원·계정 채택) **뒤**에 두는 것이 중요하다 — 먼저 열면 다른 계정의 레이아웃을
+  //    지우는 초기화가 방금 연 창까지 함께 쓸어간다(효과·하이드레이션 리스너 둘 다 선언 순서로 돈다).
+  useDeepLinkWindow(isDesktop && !isDesktopSurface);
 
   // 창 안에서 녹음 등 끊기면 안 되는 작업이 진행 중이면 탭 전체 새로고침/이탈을 막는다(부모 탭은
   // iframe의 beforeunload가 못 막으므로 최상위 프레임에서 별도 가드). 마지막 busy 해제 시 제거.
