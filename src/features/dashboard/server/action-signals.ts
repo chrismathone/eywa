@@ -305,28 +305,43 @@ async function unwrittenReportsSignal(
   // B2: 이 조회는 end_date 필터 없이 과거 수강 이력까지 받아 JS로 거른다 — 청크 1개 응답이 1000행을
   // 넘으면 silent 절단돼 '오늘 미작성 보고서' 명단이 조용히 샌다. 같은 데이터를 읽는
   // unrecordedClassesSignal·getDailyProcessingStatus와 동일하게 fetchAllPagedInChunks(페이징)로.
-  const enrollmentRows = await fetchAllPagedInChunks<{
-    student_id: string;
-    class_id: string;
-    start_date: string;
-    end_date: string | null;
-    on_hold: boolean;
-    is_transferred: boolean;
-    attendance_days: string[] | null;
-  }>(classIds, (chunk, from, to) =>
-    scopeTenant(
-      supabase
-        .from("enrollments")
-        .select("student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
-        .lte("start_date", today)
-        .in("class_id", chunk),
-      db,
-    )
-      // OFFSET 페이지 안정화 — unique tie-break order 필수(batch.ts 계약)
-      .order("id")
-      .range(from, to),
-  );
+  const [enrollmentRows, testStudentRows] = await Promise.all([
+    fetchAllPagedInChunks<{
+      student_id: string;
+      class_id: string;
+      start_date: string;
+      end_date: string | null;
+      on_hold: boolean;
+      is_transferred: boolean;
+      attendance_days: string[] | null;
+    }>(classIds, (chunk, from, to) =>
+      scopeTenant(
+        supabase
+          .from("enrollments")
+          .select("student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
+          .lte("start_date", today)
+          .in("class_id", chunk),
+        db,
+      )
+        // OFFSET 페이지 안정화 — unique tie-break order 필수(batch.ts 계약)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{ id: string }>((from, to) =>
+      scopeTenant(supabase.from("students").select("id").eq("is_test", true), db)
+        .order("id")
+        .range(from, to),
+    ).catch(() => [] as { id: string }[]),
+  ]);
+  // 🔴 테스트 학생(`students.is_test` — 예: ClassNote 발송 시험용 '학원이')은 세지 않는다.
+  //    2026-09-01 원장 지시로 "모든 선생님이 테스트할 수 있게" 학원이가 반 15개(수학 9)에 배정되면서,
+  //    안 빼면 요일에 따라 **매일 2~5명이 '미작성'으로 잡혀** 진짜 미작성(수학 30여 명)이 그 안에 묻힌다.
+  //    리포의 다른 집계는 이미 같은 축으로 뺀다(report-admin 작성률·todays-math·failed-notify-sweep).
+  // ⚠️ **fail-open** — 조회가 실패하면 아무도 빼지 않는다(집계는 fail-open이 규약, report-subjects 주석
+  //    참조). 여기서 throw하면 테스트 학생 명단 한 번 못 읽었다고 그날 '미작성' 신호가 통째로 사라진다.
+  const testStudentIds = new Set(testStudentRows.map((row) => row.id));
   const targets = enrollmentRows
+    .filter((row) => !testStudentIds.has(row.student_id))
     .filter(
       (row) =>
         isEnrollmentActiveOn(
