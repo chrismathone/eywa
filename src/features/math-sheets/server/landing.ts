@@ -16,6 +16,8 @@ import {
 } from "../lib/roster";
 import { cellStateOf, foldDayAttendance, tallyCells, type MathCellState } from "../lib/cell-state";
 import { mcsVisibleClassFilter } from "./access";
+import { isSpecialLecture } from "@/features/classes/special-lecture";
+import { groupMathCardsByTeacher } from "../landing-tracks";
 
 /**
  * MCS 랜딩 — 그 달에 **수업이 있는 수학 반**만 세운다.
@@ -45,6 +47,12 @@ export type MathClassCard = {
   extraCount: number;
   /** 꼬리표 툴팁 문구(없으면 null) — 카드·시트 헤더가 같은 문장을 쓴다. */
   extraTitle: string | null;
+  /**
+   * 방학 단기강좌인가 — 랜딩의 **정규/특강 좌우 분단** 축(원장 2026-09-01).
+   * 🔴 판정은 여기서 짓지 않고 시간표와 같은 [`isSpecialLecture`](@/features/classes/special-lecture)를
+   *    통과시킨 값이다(컬럼 `is_special`이 이기고, 없으면 반 이름의 '특강' 폴백).
+   */
+  isSpecial: boolean;
   /** 수업 기록이 있는 학생-수업일. */
   written: number;
   /**
@@ -105,7 +113,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
   const [classRes, filter] = await Promise.all([
     admin
       .from("classes")
-      .select("id, class_name, teacher_id")
+      .select("id, class_name, teacher_id, is_special")
       .eq("tenant_id", tenantId)
       .eq("subject", "math")
       .eq("is_active", true)
@@ -277,22 +285,19 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
       studentCount: counts.on,
       extraCount: counts.extra,
       extraTitle: rosterExtraTitle(counts),
+      isSpecial: isSpecialLecture({
+        isSpecial: c.is_special === true,
+        className: String(c.class_name),
+      }),
       written: fill.written,
       shown: fill.written + fill.unwritten,
       pct: fill.pct,
     });
   }
 
-  const byTeacherMap = new Map<string, MathClassCard[]>();
-  for (const card of cards) {
-    const key = card.teacherName ?? "담임 미지정";
-    const list = byTeacherMap.get(key) ?? [];
-    list.push(card);
-    byTeacherMap.set(key, list);
-  }
-  const byTeacher = [...byTeacherMap.entries()]
-    .map(([name, list]) => ({ teacherName: name, cards: list }))
-    .sort((a, b) => a.teacherName.localeCompare(b.teacherName, "ko"));
+  // 화면이 좌우로 나눌 땐 단마다 다시 묶으므로 **같은 함수**를 쓴다(두 벌이면 정렬과
+  // '담임 미지정' 라벨이 갈린다).
+  const byTeacher = groupMathCardsByTeacher(cards);
 
   return {
     ok: true,
