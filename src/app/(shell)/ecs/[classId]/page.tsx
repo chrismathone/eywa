@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { PageHeader } from "@/components/page-header";
 import { getClassSheetWeek, getSheetLanding } from "@/features/class-sheets/server/queries";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
+import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-gate";
 
 export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
 
@@ -73,7 +74,8 @@ export default async function EcsSheetPage({
             .join(" · ")}
         />
       </div>
-      <div className="min-h-0 flex-1">
+      {/* 못 쓰는 폭(≈하루 한 칸도 안 들어감)에선 시트 대신 "넓혀 주세요" 안내 — 판정은 CSS 한 곳. */}
+      <SheetWidthGate>
         <SheetClient
           // JJ 표시도 key에 넣는다 — 토글은 서버 재조회라, 재마운트하지 않으면 클라가 들고 있는
           // 계획 행 state가 옛 슬롯 구성 그대로 남아 새로 열린 교시가 빈 칸으로 보인다.
@@ -84,7 +86,7 @@ export default async function EcsSheetPage({
           userId={user.id}
           tenantId={user.tenantId}
         />
-      </div>
+      </SheetWidthGate>
     </div>
   );
 }

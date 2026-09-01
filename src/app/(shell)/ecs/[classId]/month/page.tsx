@@ -5,6 +5,7 @@ import { getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getClassSheetMonth } from "@/features/class-sheets/server/month-queries";
 import { MonthClient } from "@/features/class-sheets/components/month-client";
 import { readFromWeek } from "@/features/class-sheets/face-nav";
+import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-gate";
 
 export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — eywa" };
 
@@ -68,7 +69,8 @@ export default async function EcsMonthPage({
           description={`${res.data.monthLabel} · 계획 ${res.data.fill.filled}/${res.data.fill.total}교시`}
         />
       </div>
-      <div className="min-h-0 flex-1">
+      {/* 주간 시트와 **같은 폭 게이트** — 두 화면이 같은 폭에서 같은 말을 해야 한다. */}
+      <SheetWidthGate>
         <MonthClient
           // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
           // 새 달 화면에 남의 값이 잠깐 비친다.
@@ -84,7 +86,7 @@ export default async function EcsMonthPage({
           // 돌아간다(왕복이 제자리로). 모양이 아니면 버린다(face-nav `readFromWeek`).
           fromWeek={readFromWeek(week)}
         />
-      </div>
+      </SheetWidthGate>
     </div>
   );
 }
