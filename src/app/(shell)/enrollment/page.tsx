@@ -7,8 +7,6 @@ import { NewConsultationWatcher } from "./_components/new-consultation-watcher";
 import { getConsultationTotalCount } from "@/features/enrollment/server/poll-actions";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
-import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
-import { getUnpushedIntakeConsultations } from "@/features/integrations/server/makeedu-sync";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
@@ -31,7 +29,7 @@ import { StatsView } from "./_components/stats-view";
 import type { EnrollmentView } from "./_components/enrollment-query";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
-import { EnrollmentKanban, type KanbanColumn } from "./_components/enrollment-kanban";
+import { EnrollmentKanban } from "./_components/enrollment-kanban";
 import { EnrollmentTable } from "./_components/enrollment-table";
 import { IntakeQrSection } from "./_components/intake-qr-section";
 
@@ -40,27 +38,9 @@ export const metadata = { title: "등록상담 — eywa" };
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;
 
-// outcome 기반 4컬럼 + 파생 5번째 "배정 완료"(수업≥1). 배정 완료는 outcome이 아니라
-// 연결 학생의 미종료 수강 수(assignedClassCount)로 판정하므로 build 단계에서 별도 추가(상호배타).
-const COLUMNS: {
-  key: string;
-  label: string;
-  outcomes: string[];
-  color: KanbanColumn["color"];
-}[] = [
-  { key: "queue", label: "대기 · 예약", outcomes: ["pending", "scheduled"], color: "amber" },
-  { key: "consulted", label: "상담 완료", outcomes: ["consulted"], color: "blue" },
-  { key: "ai_done", label: "AI 분석 완료", outcomes: ["ai_done"], color: "primary" },
-  {
-    // 🔴 "등록 · 종료"였다 — 원장 지적: "등록"은 수강등록(반 배정), "종료"는 학생의 수강종료/퇴원으로
-    // 읽힌다. 실제 뜻은 **상담 파이프라인이 끝난 건**(재원생 등록 결정·거절·노쇼)이고, 그중 반까지
-    // 배정된 건은 옆 열로 빠지므로 여기 남는 등록 건은 아직 배정이 없는 것이다.
-    key: "closed",
-    label: "상담 종료",
-    outcomes: ["enrolled", "declined", "no_show"],
-    color: "neutral",
-  },
-];
+// 🔴 칸 정의는 [board-stages](@/features/enrollment/board-stages) 단일 소스로 옮겼다(원장 2026-09-01,
+// 5칸 → 4칸). 칸 판정·드롭 대표값·카드 표식이 한 모듈에서 나오고 Vitest가 잠근다 — 여기 배열로
+// 되돌리지 말 것(옛 5칸은 이 파일이 칸을, 카드 컴포넌트가 배지를 따로 정해 규칙이 두 벌이었다).
 
 export default async function EnrollmentPage({
   searchParams,
@@ -110,13 +90,13 @@ export default async function EnrollmentPage({
     q: searchQuery,
   };
 
-  // makeedu 역동기화 카드 노출 — `integrations` 쓰기 권한(기본 master/admin/manager)일 때만 후보 조회.
-  // (권한 판정은 캐시된 매트릭스 재사용 = 추가 쿼리 0. 후보 조회는 권한자에게만 1쿼리, 아래 병렬 B4.)
-  const canPushMakeedu = await canWriteTenant(user.systemRole, "integrations");
+  // 칸반 드래그(상태 변경) 가능 여부 — 권한 판정은 캐시된 매트릭스 재사용이라 추가 쿼리 0.
+  // ⚠️ 이건 **화면을 줄이는 용도**일 뿐이고 진짜 게이트는 setEnrollmentOutcome 안에 있다([[#77]]).
+  const canWriteEnrollment = await canWriteTenant(user.systemRole, "enrollment");
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
-  const [kanbanItems, tablePage, headerCounts, statsYears, _unused, schoolPrefs, consultants, minYear, pushCandidates, totalCount] =
+  const [kanbanItems, tablePage, headerCounts, statsYears, _unused, schoolPrefs, consultants, minYear, totalCount] =
     await Promise.all([
       view === "kanban" ? getEnrollmentConsultations(filter) : Promise.resolve(null),
       view === "table" ? getEnrollmentConsultationsPage(filter, page, PAGE_SIZE) : Promise.resolve(null),
@@ -129,7 +109,6 @@ export default async function EnrollmentPage({
       view === "stats" ? loadSchoolStatsPrefs() : Promise.resolve(null),
       getConsultantOptions(),
       getConsultationMinYear(),
-      canPushMakeedu && view !== "stats" ? getUnpushedIntakeConsultations() : Promise.resolve([]),
       // 자동 갱신 기준선 — 필터와 무관한 **전체 건수**(head 카운트라 행 미수신). 필터가 걸려 있어도
       // 새 접수가 들어오면 화면을 갱신해야 하므로 필터된 items.length를 기준으로 쓰면 안 된다.
       getConsultationTotalCount(),
@@ -161,7 +140,6 @@ export default async function EnrollmentPage({
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
   // "배정 완료" = 상담 → 수업 배정으로 학생이 생기고 수업이 1개 이상 붙은 진짜 완료(outcome 라벨과 별개).
   const assigned = items.filter((i) => i.assignedClassCount >= 1);
-  const assignedIds = new Set(assigned.map((i) => i.id));
 
   const filterActive = !!selectedMonth || !!selectedConsultant || !!selectedOutcome || !!searchQuery;
 
@@ -183,19 +161,6 @@ export default async function EnrollmentPage({
     if (p > 1) params.set("page", String(p));
     return `/enrollment?${params.toString()}`;
   };
-
-  const columns: KanbanColumn[] = [
-    // outcome 컬럼 — 배정 완료로 옮겨간 카드는 제외(상호배타, 중복 표시 방지).
-    ...COLUMNS.map((col) => ({
-      key: col.key,
-      label: col.label,
-      color: col.color,
-      cards: items.filter((i) => col.outcomes.includes(i.outcome) && !assignedIds.has(i.id)),
-    })),
-    // "반 배정 완료" — 옆 열의 "재원생 등록"(상담 결과)과 확실히 갈리게 '반'을 붙인다.
-    // 판정도 outcome이 아니라 연결 학생의 상담 과목 수강 여부다(AI 비서 표현과 통일).
-    { key: "assigned", label: "반 배정 완료", color: "primary" as const, cards: assigned },
-  ];
 
   return (
     <div className="space-y-5">
@@ -307,13 +272,10 @@ export default async function EnrollmentPage({
         minYear={minYear}
       />
 
-      {/* 역동기화 — makeedu에 아직 없는 QR 접수 상담. 후보가 있을 때만(빈 상태는 owner 연동 면 담당),
-          integrations 쓰기 권한자에게만. 처리하면(전송/등록) 사라지는 액션 큐라 보드 위에 노출.
-          🔴 통계뷰엔 안 그린다(원장 2026-08-05) — 통계는 집계를 읽는 화면이지 건별 처리를 하는
-          곳이 아니라, 액션 큐가 끼면 화면 목적이 흐려진다. 조회 자체도 건너뛴다(쿼리 1개 절약). */}
-      {view !== "stats" && pushCandidates.length > 0 ? (
-        <MakeeduPushCard candidates={pushCandidates} />
-      ) : null}
+      {/* 🔴 makeedu '보내기' 수동 카드는 **감췄다**(원장 2026-09-01) — 이제 매주 일요일 06:00(KST)에
+          동기화 PC 워처가 같은 큐(makeedu_push_requests)로 자동 전송한다(scripts/_makeedu/weekly-push.cjs).
+          카드 자체는 지우지 않았다: 연동 면(/owner 시트·연동 탭)에 그대로 있어 실패 건 재전송·수동
+          처리는 거기서 한다. 동기화 상태 배지는 위 필터 바에 그대로 있다. */}
 
       {/* 통계뷰는 빈 상태 사진 대신 자기 안에서 "집계할 상담이 없습니다"를 말한다(연도 선택을 남겨야 하므로). */}
       {view === "stats" && stats && dist && schoolPrefs ? (
@@ -346,7 +308,7 @@ export default async function EnrollmentPage({
           />
         </>
       ) : (
-        <EnrollmentKanban columns={columns} nowMs={nowMs} />
+        <EnrollmentKanban items={items} nowMs={nowMs} canWrite={canWriteEnrollment} />
       )}
     </div>
   );

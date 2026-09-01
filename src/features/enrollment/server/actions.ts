@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { generateJSON } from "@/lib/ai/generate";
 import { after } from "next/server";
+import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
 import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
 import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
@@ -494,11 +495,9 @@ export async function setEnrollmentOutcome(
   if (!cur) return { error: "상담을 찾을 수 없습니다" };
   const isConverted = cur.outcome === "enrolled";
   if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
-    return {
-      error:
-        // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.
-        "이미 '재원생 등록'으로 처리된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
-    };
+    // ⚠️ 클라 안내문(consultation-manage.tsx)과 **같은 문장**을 유지할 것 — 한쪽만 고치면 갈린다.
+    // 칸반 드롭도 같은 상수를 미리 보여 준다(board-stages.dropBlockReason) — 문장은 한 곳에서만 온다.
+    return { error: ENROLLED_REVERT_BLOCKED };
   }
 
   const { error } = await supabase
