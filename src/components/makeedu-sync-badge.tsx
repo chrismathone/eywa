@@ -1,7 +1,4 @@
 import { getMakeeduSyncState, type MakeeduSyncDomain } from "@/features/integrations/server/makeedu-sync";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { MakeeduSyncNowButton } from "@/components/makeedu-sync-now-button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
 function relativeKo(iso: string): string {
@@ -24,15 +21,15 @@ function kstFull(iso: string): string {
  * 도메인마다 동기화 주기가 달라 각 화면이 자기 도메인의 시각을 표시한다. 동기화 이력 없으면 미표시
  * (= makeedu 연동이 없는 테넌트엔 버튼도 안 뜬다).
  *
- * `integrations` 쓰기 권한(기본 master/admin/manager, 역할·권한 면에서 조정)이 있으면 배지 옆에
- * 컴팩트 '지금 동기화' 버튼을 함께 렌더 — owner 연동 면까지 안 가도 목록 화면에서 바로 동기화.
- * 권한 판정은 요청당 캐시된 getCurrentUser/getPermMatrix 재사용이라 추가 쿼리 0 (반응속도 B6).
+ * 🔴 옛 '지금 동기화' 버튼은 **없앴다**(원장 2026-09-01: *"지금 동기화 삭제해버려 … 필요없다"*).
+ * 동기화는 담당 PC 워처가 스스로 돌고(정방향은 스케줄러, 역방향은 매주 일요일 06:00) 손으로 돌릴 일이
+ * 남으면 **연동 면(/owner)의 동기화 카드**가 그 자리다 — 목록 화면마다 같은 버튼을 두면 "눌러야 하나"가
+ * 된다. 여기 남는 건 "마지막 동기화 언제였나"라는 **사실 표시**뿐이다.
+ * ⚠️ 되살릴 땐 이 배지가 아니라 연동 면에서.
  */
 export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }) {
   const state = await getMakeeduSyncState(domain);
   if (!state) return null;
-  const user = await getCurrentUser();
-  const canSync = user ? await canWriteTenant(user.systemRole, "integrations") : false;
   const failed = state.status !== "ok";
   // status='ok'인데 이슈 요약이 있는 경우 = "동기화는 됐지만 반영 못 한 게 있다"(삭제 보류·학생 미매칭 등).
   // 실패와는 다른 축이라 amber '확인 필요'로 구분해 보여준다 — 예전엔 이 값이 화면에 전혀 안 나와서
@@ -45,7 +42,6 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
       : "text-[color:var(--text-faint)]";
   return (
     <div className="flex items-center justify-end gap-2">
-      {canSync ? <MakeeduSyncNowButton /> : null}
       <span
         className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] ${issue || failed ? tone : "text-[color:var(--text-faint)]"}`}
         title={`makeedu 동기화: ${kstFull(state.syncedAt)}${state.rowCount != null ? ` · 신규 ${state.rowCount}건` : ""}${

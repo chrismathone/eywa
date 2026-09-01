@@ -22,11 +22,17 @@ export function MergeDialog({
   ids,
   currentId,
   onClose,
+  onMerged,
 }: {
   ids: string[];
   /** 지금 보고 있는 상담 id — 이게 합쳐져 사라지면 페이지가 유령이 되므로 남은 쪽으로 보낸다. */
   currentId: string;
   onClose: () => void;
+  /**
+   * 병합 성공 뒤 할 일을 **호출부가 정한다**. 없으면 종전대로(진 쪽이면 남은 쪽으로 이동, 이긴 쪽이면 닫기).
+   * 🔑 칸반 카드에서 열면 상세로 튕겨 나가면 안 된다 — 보드에 남아 새로고침만 하면 된다.
+   */
+  onMerged?: (winnerId: string) => void;
 }) {
   const [plan, setPlan] = useState<MergePlan | null>(null);
   const [rows, setRows] = useState<RowRef[]>([]);
@@ -74,6 +80,11 @@ export function MergeDialog({
         return;
       }
       toast.success(`상담 ${plan.loserIds.length + 1}건을 1건으로 합쳤습니다`);
+      if (onMerged) {
+        onMerged(res.winnerId ?? winnerId);
+        onClose();
+        return;
+      }
       // 🔴 지금 페이지가 지워진 쪽이면 그대로 두면 안 된다 — 없는 레코드를 계속 보여주게 된다.
       //    ⚠️ 서버 액션 직후의 router.push는 액션 응답이 덮어써 삼켜진다(gotcha #102) → location.assign.
       if (res.winnerId && res.winnerId !== currentId) {

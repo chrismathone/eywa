@@ -30,6 +30,7 @@ import type { EnrollmentView } from "./_components/enrollment-query";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
 import { EnrollmentKanban } from "./_components/enrollment-kanban";
+import { parseBoardStage } from "@/features/enrollment/board-stages";
 import { EnrollmentTable } from "./_components/enrollment-table";
 import { IntakeQrSection } from "./_components/intake-qr-section";
 
@@ -69,7 +70,9 @@ export default async function EnrollmentPage({
   } = await searchParams;
   const selectedMonth = month ?? null;
   const selectedConsultant = consultant ?? null;
-  const selectedOutcome = outcome ?? null;
+  // 상태 필터 = 칸반과 **같은 4단계**(원장 2026-09-01). 파라미터 이름은 `outcome` 그대로이고 값만
+  // 칸 키다 — 옛 링크(`?outcome=ai_done`)는 그 값이 속한 칸으로 넓혀 받는다(parseBoardStage).
+  const selectedStage = parseBoardStage(outcome);
   const searchQuery = q?.trim() || null;
   const view: EnrollmentView =
     viewParam === "table" ? "table" : viewParam === "stats" ? "stats" : "kanban";
@@ -86,7 +89,7 @@ export default async function EnrollmentPage({
     month: selectedMonth,
     range: selectedRange,
     consultantId: selectedConsultant,
-    outcome: selectedOutcome,
+    stage: selectedStage,
     q: searchQuery,
   };
 
@@ -141,7 +144,7 @@ export default async function EnrollmentPage({
   // "배정 완료" = 상담 → 수업 배정으로 학생이 생기고 수업이 1개 이상 붙은 진짜 완료(outcome 라벨과 별개).
   const assigned = items.filter((i) => i.assignedClassCount >= 1);
 
-  const filterActive = !!selectedMonth || !!selectedConsultant || !!selectedOutcome || !!searchQuery;
+  const filterActive = !!selectedMonth || !!selectedConsultant || !!selectedStage || !!searchQuery;
 
   // 필터는 보존하고 page만 갈아끼운다. p===1이면 page= 자체를 안 넣어야 필터 변경 href와 모양이 같아진다
   // (필터·검색·월이동 href는 page를 안 넣으므로 자동으로 1페이지로 리셋된다 — 페이지네이션 표준).
@@ -152,7 +155,7 @@ export default async function EnrollmentPage({
     const params = new URLSearchParams();
     if (selectedMonth) params.set("month", selectedMonth);
     if (selectedConsultant) params.set("consultant", selectedConsultant);
-    if (selectedOutcome) params.set("outcome", selectedOutcome);
+    if (selectedStage) params.set("outcome", selectedStage);
     if (searchQuery) params.set("q", searchQuery);
     // 기간은 검색어와 **독립**이다(else로 묶으면 검색 중에 기간이 사라져 3개월로 되돌아간다).
     // 특정 달을 보고 있을 때만 프리셋이 무의미해서 뺀다.
@@ -163,7 +166,9 @@ export default async function EnrollmentPage({
   };
 
   return (
-    <div className="space-y-5">
+    // 세로 간격 4(=16px) — 🔴 5(20px)였는데 원장이 *"창을 가장 크게 해도 하단에 스크롤"*을 지적했다.
+    // 여백은 세 곳(이 간격 · 칸 머리 py · 카드 py)에서 함께 줄여야 한 칸이 창 안에 들어온다.
+    <div className="space-y-4">
       {/* Editorial 문법 ① — eyebrow→헤드라인 + 인라인 스탯 행(시간표 패턴: BigStat 카드 대신 밀도 우선).
           '등록 전환율'(outcome=enrolled 라벨 기반)은 실제 학생 미생성 건까지 세어 과대였음 →
           진짜 완료 지표인 '배정 완료(수업≥1)' 건수 유지(정직). */}
@@ -173,13 +178,13 @@ export default async function EnrollmentPage({
       <PageHeader
         eyebrow="등록 상담"
         title="등록상담"
-        // 창 컴팩트 라벨 겸용 — 없으면 title 폴백이 창 타이틀바와 중복(적대 리뷰).
-        description="접수부터 배정 완료까지 상담 흐름을 관리합니다"
+        // 🔴 설명 문장은 뺐다(원장 2026-09-01 *"멘트 제거"*) — 매일 보는 화면에서 같은 문장이
+        // 한 줄을 계속 먹는다. 숫자(전체·AI·배정)는 아래 툴바 검색창 왼쪽으로 옮겼다.
         actions={
           <>
             <Suspense
               fallback={
-                <Button variant="outline" size="sm" disabled>
+                <Button variant="outline" disabled>
                   <QrCode className="size-4" />
                   공개 접수 QR
                 </Button>
@@ -193,36 +198,38 @@ export default async function EnrollmentPage({
         // 🔴 통계뷰에선 이 줄을 아예 안 그린다. 통계뷰는 목록을 안 불러오므로 여기 숫자가 전부 0이
         // 되는데, 실제로는 2,197건이라 **화면이 거짓말을 한다**(2026-08-05 원장 스크린샷). 게다가
         // 통계뷰는 바로 아래에 자기 헤드라인 카드(상담·등록·전환율·결제액)를 갖고 있어 중복이기도 하다.
-        stats={
-          view === "stats" ? undefined : (
-          <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-1 whitespace-nowrap">
-            <span className="text-[13px]">
-              <b className="num text-foreground text-[17px] font-bold">
-                {headerCounts ? headerCounts.total : items.length}
-              </b>{" "}
-              <span className="text-text-dim">{filterActive ? "필터 결과" : "전체"}</span>
-            </span>
-            <span className="text-[13px]">
-              <b className="num text-gold text-[17px] font-bold">
-                {headerCounts ? headerCounts.aiDone : aiDone}
-              </b>{" "}
-              <span className="text-text-dim">AI 분석 완료</span>
-            </span>
-            {/* '배정 완료'는 연결 학생의 수강까지 봐야 나오는 파생값이라 count 한 방으로 못 센다.
-                목록(페이지) 뷰에서 페이지 50행으로 세면 거짓말이 되므로 아예 안 띄운다(#89). */}
-            {headerCounts ? null : (
-              <span className="text-[13px]">
-                <b className="num text-primary text-[17px] font-bold">{assigned.length}</b>{" "}
-                <span className="text-text-dim">배정 완료</span>
-              </span>
-            )}
-          </div>
-          )
-        }
       />
 
       <KanbanFilters
         syncBadge={<MakeeduSyncBadge domain="prospects" />}
+        stats={
+          view === "stats" ? undefined : (
+            // 🔴 헤더에 있던 숫자 줄 — 검색창 바로 왼쪽으로 옮겼다(원장 2026-09-01).
+            // 통계뷰는 자기 헤드라인 카드가 같은 숫자를 갖고 있고 목록을 안 불러와 전부 0이 된다(안 그린다).
+            <div className="flex items-baseline gap-x-3 whitespace-nowrap">
+              <span className="text-[12.5px]">
+                <b className="num text-foreground text-[15px] font-bold">
+                  {headerCounts ? headerCounts.total : items.length}
+                </b>{" "}
+                <span className="text-text-dim">{filterActive ? "필터 결과" : "전체"}</span>
+              </span>
+              <span className="text-[12.5px]">
+                <b className="num text-gold text-[15px] font-bold">
+                  {headerCounts ? headerCounts.aiDone : aiDone}
+                </b>{" "}
+                <span className="text-text-dim">AI 분석 완료</span>
+              </span>
+              {/* '배정 완료'는 연결 학생의 수강까지 봐야 나오는 파생값이라 count 한 방으로 못 센다.
+                  목록(페이지) 뷰에서 페이지 50행으로 세면 거짓말이 되므로 아예 안 띄운다(#89). */}
+              {headerCounts ? null : (
+                <span className="text-[12.5px]">
+                  <b className="num text-primary text-[15px] font-bold">{assigned.length}</b>{" "}
+                  <span className="text-text-dim">배정 완료</span>
+                </span>
+              )}
+            </div>
+          )
+        }
         yearChips={
           view === "stats" && statsYears.length > 0 ? (
             <div className="flex items-center gap-1.5">
@@ -263,7 +270,7 @@ export default async function EnrollmentPage({
         }
         selectedMonth={selectedMonth}
         selectedConsultant={selectedConsultant}
-        selectedOutcome={selectedOutcome}
+        selectedStage={selectedStage}
         searchQuery={searchQuery}
         view={view}
         consultants={consultants}

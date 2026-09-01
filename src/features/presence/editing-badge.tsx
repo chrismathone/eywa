@@ -5,8 +5,14 @@ import { dedupeEditors } from "./presence-state";
 import { useEditingOthers } from "./edit-presence";
 
 /**
- * 목록 행/카드에 인라인으로 붙는 "수정중" 배지 — 그 레코드를 **다른 사람이 지금 편집 중**이면 앰버로 표시.
- * userId dedupe(같은 사람 여러 탭=1명). 아무도 없으면 렌더 0. 스타일은 MakeeduOriginTag 미러.
+ * 목록 행/카드에 인라인으로 붙는 "수정중" 배지 — 그 레코드를 **다른 사람이 지금 편집 중**이면 표시.
+ * userId dedupe(같은 사람 여러 탭=1명). 아무도 없으면 렌더 0.
+ *
+ * 🔴 **꽉 찬 앰버**다(원장 2026-09-01: *"수정중 상태를 더 확실히 티가나게 색깔을 바꿔버려"*).
+ *    종전엔 `bg-amber-soft`(연한 틴트) + 10px라 옆의 다른 연한 배지들과 구분이 안 됐다 — 이 배지는
+ *    "지금 누가 만지고 있으니 동시에 저장하면 덮어쓴다"는 **경고**라 눈에 걸려야 한다.
+ * ⚠️ 색상(앰버)은 그대로 두고 **채도만** 올렸다 — 같은 뜻의 편집 폼 배너(EditingBanner)도 앰버라,
+ *    여기만 다른 색으로 바꾸면 같은 사실이 화면마다 다른 색이 된다(의미색 캐논: 색은 뜻마다 하나).
  */
 export function EditingBadge({ scope, className }: { scope: string; className?: string }) {
   const others = dedupeEditors(useEditingOthers(scope));
@@ -15,7 +21,7 @@ export function EditingBadge({ scope, className }: { scope: string; className?: 
   const label = others.length === 1 ? `수정중 · ${first}` : `수정중 · ${first} 외 ${others.length - 1}명`;
   return (
     <span
-      className={`bg-amber-soft text-amber inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1 py-[1px] align-middle text-[10px] font-medium ${className ?? ""}`}
+      className={`bg-amber inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-[2px] align-middle text-[11px] font-bold text-white ${className ?? ""}`}
       title={`${others.map((o) => o.userName || "누군가").join(", ")}님이 지금 이 항목을 수정 중입니다`}
     >
       <Pencil className="size-2.5" strokeWidth={2.5} aria-hidden />

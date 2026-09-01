@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSchoolLikeKey, normalizeSchoolName } from "./school-name";
+import { canonicalSchoolName, isSchoolLikeKey, normalizeSchoolName } from "./school-name";
 
 // 아래 이름은 전부 **실제 값**이다 — 왼쪽은 학교알리미 2026 공시(대구), 오른쪽은 eywa 학생 입력값.
 // 지어낸 예시로 테스트하면 실데이터에서 어떻게 깨지는지 영영 모른다.
@@ -88,5 +88,59 @@ describe("normalizeSchoolName — 두 소스를 같은 키로", () => {
   it("급이 없는 입력은 그대로 둔다 — 추측해서 붙이지 않는다", () => {
     // 실측 미매칭 2건: "침산"(급 없음)·"마이스터고"(학교명이 아니라 유형).
     expect(normalizeSchoolName("침산")).toBe("침산");
+  });
+});
+
+// ── 저장 표기(canonicalSchoolName) ─────────────────────────────────────────────
+// 원장 2026-09-01: "~초등학교도 -> ~초 로 변경해야함 · 저장할때 강제 변경" + "일중 -> 대구일중".
+describe("canonicalSchoolName — DB에 남는 표기", () => {
+  it("긴 접미는 줄인다(초등학교→초·중학교→중·고등학교→고)", () => {
+    expect(canonicalSchoolName("옥산초등학교")).toBe("옥산초");
+    expect(canonicalSchoolName("종로초등학교")).toBe("종로초");
+    expect(canonicalSchoolName("침산중학교")).toBe("침산중");
+    expect(canonicalSchoolName("칠성고등학교")).toBe("칠성고");
+    expect(canonicalSchoolName("경명여자중학교")).toBe("경명여중");
+  });
+
+  it("이미 짧은 표기는 그대로 — 여러 번 통과해도 같다(멱등)", () => {
+    expect(canonicalSchoolName("칠성초")).toBe("칠성초");
+    expect(canonicalSchoolName(canonicalSchoolName("옥산초등학교"))).toBe("옥산초");
+  });
+
+  it("🔴 지역 접두는 **지우지 않는다** — 매칭 키와 방향이 반대다", () => {
+    expect(canonicalSchoolName("대구일중")).toBe("대구일중");
+    expect(canonicalSchoolName("대구동신초등학교")).toBe("대구동신초");
+    // 같은 값이 매칭 키로는 여전히 지역 접두 없이 합쳐진다(점유율이 안 쪼개진다).
+    expect(normalizeSchoolName("대구일중")).toBe(normalizeSchoolName("일중"));
+  });
+
+  it("원장이 확정한 별칭: 일중 → 대구일중(입력이 무엇이든 저장은 하나)", () => {
+    expect(canonicalSchoolName("일중")).toBe("대구일중");
+    expect(canonicalSchoolName("일중학교")).toBe("대구일중");
+    expect(canonicalSchoolName("  일중  ")).toBe("대구일중"); // 양끝 공백만 다듬는다
+    expect(canonicalSchoolName("대구일중학교")).toBe("대구일중");
+  });
+
+  it("학교가 아닌 값은 손대지 않는다(접수 원문 보존)", () => {
+    expect(canonicalSchoolName("7세")).toBe("7세");
+    expect(canonicalSchoolName("예비중1")).toBe("예비중1");
+    expect(canonicalSchoolName("영어문의")).toBe("영어문의");
+  });
+
+  // 🔴 실데이터 드라이런에서 잡힌 것들 — 이 칸엔 학교가 아닌 메모가 섞여 있다.
+  //    가운데 공백을 지우면 읽을 수 없는 값이 된다(칠성초2 7세 → 칠성초27세).
+  it("가운데 공백은 건드리지 않는다", () => {
+    expect(canonicalSchoolName("칠성초2 7세")).toBe("칠성초2 7세");
+    expect(canonicalSchoolName("달산초6, 예비일중")).toBe("달산초6, 예비일중");
+    expect(canonicalSchoolName("국제학교 (중국)")).toBe("국제학교 (중국)");
+    expect(canonicalSchoolName("구미 해마루중")).toBe("구미 해마루중");
+    expect(canonicalSchoolName("예비 침산초")).toBe("예비 침산초");
+  });
+
+  it("빈 값은 null(빈 문자열로 저장하지 않는다)", () => {
+    expect(canonicalSchoolName("")).toBeNull();
+    expect(canonicalSchoolName("   ")).toBeNull();
+    expect(canonicalSchoolName(null)).toBeNull();
+    expect(canonicalSchoolName(undefined)).toBeNull();
   });
 });

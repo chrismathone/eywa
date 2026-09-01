@@ -8,6 +8,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { canonicalSchoolName } from "@/features/schools/school-name";
 import { generatePrepBriefOnIntake } from "@/features/enrollment/server/prep-generate";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -245,7 +246,8 @@ export async function submitPublicIntake(
     tenant_id: tok.tenant_id,
     prospect_name: prospectName,
     prospect_grade: prospectGrade,
-    prospect_school: prospectSchool,
+    // 학부모가 "칠성초등학교"라 적어도 저장은 앱 표기 하나로(원장 2026-09-01).
+    prospect_school: canonicalSchoolName(prospectSchool),
     gender,
     blood_type: bloodType,
     student_phone: clip(formData.get("studentPhone"), 20) || null,

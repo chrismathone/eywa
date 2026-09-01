@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useDraggable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
@@ -31,15 +32,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { MergeDialog } from "../[id]/merge-dialog";
 
 /**
  * 한 페이지에 그릴 카드 수.
  *
- * 8 → 10 (2026-09-01, 글씨 1.5배 + 4칸 통합과 함께 다시 계산): 카드에서 **요약 2줄과 상담사 줄이
- * 빠져**(마우스 오버로 옮김) 카드 높이는 오히려 낮아졌고, 반대로 칸이 5개→4개로 합쳐져 한 칸에 카드가
- * 더 몰린다. 8장을 유지하면 페이지 수만 늘어난다.
+ * 8 → 10 → **8**(2026-09-01). 요약·상담사 줄을 마우스 오버로 내리며 10장까지 늘렸다가, 원장이
+ * *"창을 가장 크게 해서 스크롤이 필요없을거같음에도 하단에 스크롤이 있네"*라고 해 되돌렸다.
+ * 🔑 기준은 페이지 수가 아니라 **가장 긴 칸이 창 안에 들어가는가**다 — 여백을 함께 줄였으므로(카드
+ *    px-3.5 py-2.5 · 줄간격 6px) 같은 8장이라도 옛 보드보다 훨씬 낮다. 더 늘리려면 창 높이부터 재 볼 것.
  */
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 8;
 
 /**
  * 등록상담 칸반 컬럼 카드 목록 — 한 컬럼에 100+ 카드가 쏟아져 페이지가 끝없이 길어지는 걸 막는다.
@@ -95,7 +98,9 @@ export function ColumnCards({
             컬럼이 **가장 긴 컬럼 높이로 늘어나는데**(페이지네이션이 없는 컬럼이 대개 더 길다) 목록만
             56vh에서 멈춰서 그 아래가 통째로 빈다(원장 2026-08-05 스크린샷). 남는 공간을 목록이 먹고
             페이저는 컬럼 바닥에 붙는다. */}
-      <ul className={`space-y-2 p-3 ${totalPages > 1 ? "min-h-[56vh] flex-1 overflow-y-auto" : ""}`}>
+      <ul
+        className={`space-y-1.5 px-2.5 pt-2.5 pb-2 ${totalPages > 1 ? "min-h-[56vh] flex-1 overflow-y-auto" : ""}`}
+      >
         {visible.map((c) => (
           <ConsultationCard
             key={c.id}
@@ -113,7 +118,7 @@ export function ColumnCards({
         // 글씨만 카드에 맞춰 한 단계 키운다. 🔴 상수를 그대로 이어 붙이면 `text-xs`와 충돌해 승자가
         // CSS 순서로 정해지므로([[#116]]) 반드시 `cn`(tailwind-merge)을 통과시킨다.
         <nav
-          className="border-line flex items-center justify-between gap-2 border-t px-3 py-2.5"
+          className="border-line flex items-center justify-between gap-2 border-t px-3 py-1.5"
           aria-label="페이지 이동"
         >
           <button
@@ -184,6 +189,10 @@ function ConsultationCard({
   // 드래그가 끝난 자리에서 나는 click은 창을 연다 — 눌러 내린 지점과 5px 이상 떨어졌으면 이동을 막는다
   // (dnd-kit이 click까지 삼켜 주지는 않는다). 상태가 아니라 ref라 리렌더가 없다.
   const downAt = useRef<{ x: number; y: number } | null>(null);
+  const router = useRouter();
+  // '상담 N건' 팝오버에서 바로 병합(원장 2026-09-01 *"여기서 바로 병합할 수 있게 우상단 병합버튼"*).
+  // 중복을 발견하는 자리가 곧 정리하는 자리 — 상세로 들어갔다 나올 이유가 없다.
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   const mark = cardMarkOf(c, stage);
   const gradeLabel = schoolGradeLabel(c.prospectSchool, c.prospectGrade);
@@ -192,6 +201,8 @@ function ConsultationCard({
   //    "반 배정 완료"만 남아 몇 개인지 알 길이 사라진다).
   const hover =
     [
+      // 🔑 이름 줄은 한 줄로 잘릴 수 있다 — 전문을 여기 맨 앞에 둬야 잘린 글자가 사라지지 않는다.
+      gradeLabel ? `${c.prospectName} (${gradeLabel})` : c.prospectName,
       c.consultantName ? `상담사 ${c.consultantName}` : null,
       c.assignedClassCount >= 1 ? `수업 ${c.assignedClassCount}개` : null,
       c.parentRequest?.trim() || null,
@@ -227,13 +238,21 @@ function ConsultationCard({
         <WindowLink
           href={`/enrollment/${c.id}`}
           title={c.prospectName}
-          className="bg-bg-soft/60 hover:bg-bg-soft block rounded-xl p-3.5 transition"
+          // 🔴 카드마다 실선 테두리(원장 2026-09-01 *"각 카드별 테두리"*) — 연한 면(bg-bg-soft/60)만으론
+          //    카드끼리 경계가 녹아 한 덩어리로 읽혔다. 칸 테두리(칸 색)보다 한 단계 중립적인 선이라
+          //    "칸 안의 카드"라는 위계가 유지된다(팔레트 v4: 면은 화이트, 구분은 테두리).
+          className="border-line bg-bg-soft/60 hover:bg-bg-soft hover:border-line-strong block rounded-xl border px-3.5 py-2.5 transition"
         >
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
+          {/* 🔴 **카드 높이를 통일한다**(원장 2026-09-01 *"카드 크기 통일시켜줘"*): 이름 줄을 **한 줄 고정
+              높이**로 못 박는다. 그전엔 배지(QR·반 배정·상담 N건·수정중)와 긴 학교명이 줄을 접어서
+              같은 칸 안에서도 카드가 들쭉날쭉했다. 접히지 않게 이름만 잘리고(`truncate`), 잘린 전문은
+              마우스 오버(title 첫 줄)에 그대로 있다.
+              ⚠️ `flex-wrap`을 다시 넣지 말 것 — 한 장만 두 줄이 되면 그 카드만 키가 커진다. */}
+          <div className="flex h-7 items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center">
               {/* 이름 + (학교학년) 한 줄 — 옛 두 줄("백시후" / "초3 수창초")을 합친 것. */}
-              <p className="text-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[19px] leading-snug font-bold">
-                <span className="break-keep">
+              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-[19px] leading-none font-bold">
+                <span className="min-w-0 truncate">
                   {c.prospectName}
                   {gradeLabel ? (
                     <span className="text-text-dim ml-1 text-[15px] font-semibold">({gradeLabel})</span>
@@ -253,16 +272,33 @@ function ConsultationCard({
                             e.preventDefault();
                             e.stopPropagation();
                           }}
-                          className="bg-amber-soft text-amber cursor-pointer rounded-full px-2 py-0.5 text-[13px] leading-none font-bold hover:brightness-95"
+                          className="bg-amber-soft text-amber shrink-0 cursor-pointer rounded-full px-2 py-0.5 text-[13px] leading-none font-bold hover:brightness-95"
                         />
                       }
                     >
                       상담 {c.personConsultCount}건
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-60 p-1.5">
-                      <p className="text-text-faint px-1 pb-1 text-[11px] font-medium">
-                        이 학생의 등록상담 {c.personConsultCount}건
-                      </p>
+                    <DropdownMenuContent align="start" className="w-64 p-1.5">
+                      <div className="flex items-center justify-between gap-2 px-1 pb-1">
+                        <p className="text-text-faint text-[11px] font-medium">
+                          이 학생의 등록상담 {c.personConsultCount}건
+                        </p>
+                        {/* 🔴 쓰기 권한이 있을 때만 — 병합은 되돌릴 수 없다(서버도 같은 게이트를 다시 본다). */}
+                        {draggable ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setMergeOpen(true);
+                            }}
+                            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-bold transition"
+                            title="이 학생의 등록상담을 한 건으로 합칩니다"
+                          >
+                            병합
+                          </button>
+                        ) : null}
+                      </div>
                       {c.personConsults.map((s) => {
                         const op = OUTCOME_PILL[s.outcome] ?? OUTCOME_PILL.pending!;
                         const sl = s.subject ? subjectLabelOf(s.subject) : null;
@@ -288,20 +324,37 @@ function ConsultationCard({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 ) : null}
-                {c.syncAddedAt ? <MakeeduOriginTag /> : null}
-                <EditingBadge scope={`consultation:${c.id}`} />
+                {/* 출처·동시편집 표식 — 이름이 아니라 이것들이 줄어들면 뜻이 사라진다(shrink-0). */}
+                {c.syncAddedAt ? (
+                  <span className="shrink-0">
+                    <MakeeduOriginTag />
+                  </span>
+                ) : null}
+                <span className="shrink-0">
+                  <EditingBadge scope={`consultation:${c.id}`} />
+                </span>
               </p>
             </div>
             <CardMarkBadge mark={mark} hasAiAnalysis={c.hasAiAnalysis || c.outcome === "ai_done"} />
           </div>
           {/* 감춘 줄들의 자리 — 시각만 남긴다(상담사·요약은 위 title). */}
-          <div className="text-text-faint mt-2 flex items-center justify-end text-[13px]">
+          <div className="text-text-faint mt-1 flex items-center justify-end text-[13px]">
             <span className="num">
               <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
             </span>
           </div>
         </WindowLink>
       </div>
+      {/* ⚠️ 링크(WindowLink) **바깥**에 둔다 — 안에 있으면 다이얼로그 클릭이 카드 창 열기로 샌다.
+          병합 뒤에는 보드에 남아 새로고침만 한다(상세로 튕기지 않는다 — onMerged). */}
+      {mergeOpen ? (
+        <MergeDialog
+          ids={c.personConsults.map((s) => s.id)}
+          currentId={c.id}
+          onClose={() => setMergeOpen(false)}
+          onMerged={() => router.refresh()}
+        />
+      ) : null}
     </li>
   );
 }
@@ -313,18 +366,21 @@ function ConsultationCard({
  *    `mic` 글리프를 쓴다 — 아이콘 자리에 이모지를 넣는 것은 전역 가드가 막는 규칙이라
  *    (`eywa-icon-mapping.test.ts`) 이모지를 넣으면 다음 사람이 다시 걷어낸다. 지시의 핵심인
  *    **"녹음기 + AI 두 개를 달지 말 것"**은 그대로다 — 녹음이 있으면 이 표식 하나뿐이다.
+ *
+ * ⚠️ 어느 모양이든 **28px(이름 줄 높이) 안에** 들어가야 한다 — 넘치면 그 카드만 키가 커져 "카드 크기
+ *    통일"이 깨진다(그래서 알약엔 `leading-none`, 마이크는 `size-7`).
  */
 function CardMarkBadge({ mark, hasAiAnalysis }: { mark: CardMark; hasAiAnalysis: boolean }) {
   if (mark === "assigned") {
     return (
-      <Pill color="primary" size="md">
+      <Pill color="primary" size="md" className="shrink-0 leading-none">
         {ASSIGNED_LABEL}
       </Pill>
     );
   }
   if (mark === "qr") {
     return (
-      <Pill color="primary" size="md">
+      <Pill color="primary" size="md" className="shrink-0 leading-none">
         {QR_INTAKE_LABEL}
       </Pill>
     );
@@ -333,7 +389,7 @@ function CardMarkBadge({ mark, hasAiAnalysis }: { mark: CardMark; hasAiAnalysis:
     // 라벨·색은 outcome 정본에서(화면 파일에 상태 색 맵을 새로 만들지 않는다).
     const ai = outcomePill("ai_done");
     return (
-      <Pill color={ai.color} size="md">
+      <Pill color={ai.color} size="md" className="shrink-0 leading-none">
         {ai.label}
       </Pill>
     );

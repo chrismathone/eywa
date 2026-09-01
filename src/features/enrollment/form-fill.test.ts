@@ -127,7 +127,9 @@ describe("buildFormPatch — 후보정 하네스(약한 모델 오류 차단)", 
 
   it("학교명도 전사에 등장해야 통과(약어 prefix 허용)", () => {
     expect(buildFormPatch({ schoolName: "유령중" }, {}, ctx("신암초 6학년이에요")).prospect_school).toBeUndefined();
-    expect(buildFormPatch({ schoolName: "신암초등학교" }, {}, ctx("신암초 6학년이에요")).prospect_school).toBe("신암초등학교");
+    // 🔴 통과한 값은 **저장 표기로 강제 정규화**된다(원장 2026-09-01) — 전사에 "신암초등학교"라고
+    //    나왔어도 DB엔 앱 표기 하나(`신암초`)만 남는다. grounding(전사에 있었나) 판정은 그대로다.
+    expect(buildFormPatch({ schoolName: "신암초등학교" }, {}, ctx("신암초 6학년이에요")).prospect_school).toBe("신암초");
   });
 
   it("한 글자/잡음 점수는 거부", () => {

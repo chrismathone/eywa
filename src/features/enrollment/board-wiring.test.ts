@@ -42,7 +42,31 @@ describe("드래그와 드롭다운은 같은 서버 액션을 탄다", () => {
   it("전환 잠금 문구는 상수 하나에서 온다 — 서버가 리터럴을 따로 들지 않는다", () => {
     const actions = read(ACTIONS);
     expect(actions).toContain("ENROLLED_REVERT_BLOCKED");
-    expect(actions).not.toContain("이미 '재원생 등록'으로 처리된 상담은 대기·예약");
+    expect(actions).not.toContain("이미 '등록 완료'로 처리된 상담은");
+  });
+});
+
+describe("상태 선택은 어디서나 4단계", () => {
+  it("툴바 필터가 옛 outcome 7종(OUTCOME_OPTIONS)이 아니라 칸 4단계를 쓴다", () => {
+    const bar = read("src/app/(shell)/enrollment/_components/kanban-filters.tsx");
+    expect(bar).toContain("BOARD_STAGE_OPTIONS");
+    expect(bar).not.toContain("OUTCOME_OPTIONS");
+  });
+
+  it("상세 '상태 변경' 다이얼로그도 같은 4단계 + 같은 대표값 규칙", () => {
+    const manage = read(MANAGE);
+    expect(manage).toContain("BOARD_STAGE_OPTIONS");
+    expect(manage).toContain("outcomeForDrop"); // 드래그와 같은 대표값 함수
+    expect(manage).not.toContain("OUTCOME_OPTIONS");
+  });
+});
+
+describe("월 이동은 앱 전역 PeriodNav", () => {
+  it("등록상담 툴바가 자기 화살표를 다시 만들지 않는다", () => {
+    const bar = read("src/app/(shell)/enrollment/_components/kanban-filters.tsx");
+    expect(bar).toContain("PeriodNav");
+    // 손수 만든 화살표 링크의 흔적(PeriodNav는 `prevAriaLabel`로 넘긴다).
+    expect(bar).not.toContain('aria-label="이전 달"');
   });
 });
 

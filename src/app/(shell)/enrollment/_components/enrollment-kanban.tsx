@@ -28,11 +28,27 @@ import {
   type BoardStageKey,
 } from "@/features/enrollment/board-stages";
 
-const ICON_BG: Record<BoardStageColor, string> = {
-  green: "bg-green-soft text-green",
-  blue: "bg-blue-soft text-blue",
-  amber: "bg-amber-soft text-amber",
-  neutral: "bg-bg-soft text-text-dim",
+/**
+ * 칸 색 — 🔴 **아이콘이 아니라 머리 줄 배경**이 색을 갖는다(원장 2026-09-01 *"상단부분 아이콘 색상을
+ * 두지말고 배경색상으로 교체하자"*). 종전엔 26px짜리 색 칩 하나뿐이라 네 칸이 멀리서 보면 다 똑같았다.
+ */
+const HEADER_BG: Record<BoardStageColor, string> = {
+  green: "bg-green-soft",
+  blue: "bg-blue-soft",
+  amber: "bg-amber-soft",
+  neutral: "bg-bg-soft",
+};
+
+/**
+ * 칸 테두리 — 원장 2026-09-01 *"테두리 더 진하게 각 칸반별로"*. 카드의 기본 헤어라인 링(팔레트 v4
+ * `--shadow-card` 첫 레이어)만으론 칸 경계가 거의 안 보였다 → 칸 색을 **띤 실선**을 한 겹 더 두른다.
+ * ⚠️ 색은 머리 배경과 **같은 색상**이다(같은 칸이 두 색을 갖지 않게).
+ */
+const COLUMN_BORDER: Record<BoardStageColor, string> = {
+  green: "border-green/45",
+  blue: "border-blue/45",
+  amber: "border-amber/45",
+  neutral: "border-line-strong",
 };
 
 function columnIcon(key: BoardStageKey) {
@@ -201,7 +217,7 @@ export function EnrollmentKanban({
       ) : null}
 
       {/* 좁은 화면 전용 탭바 — xl(4열)부터 숨김 */}
-      <div className="mb-3 flex gap-1.5 overflow-x-auto xl:hidden">
+      <div className="mb-2.5 flex gap-1.5 overflow-x-auto xl:hidden">
         {columns.map((col, i) => (
           <button
             key={col.stage.key}
@@ -221,7 +237,7 @@ export function EnrollmentKanban({
       </div>
 
       {/* 컬럼 그리드 — xl에서 4열, 좁으면 활성 탭 1개만 노출 */}
-      <div className="grid grid-cols-1 gap-3.5 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
         {columns.map((col, i) => (
           <StageColumn
             key={col.stage.key}
@@ -286,19 +302,24 @@ function StageColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "bg-card shadow-card min-h-[300px] flex-col rounded-3xl transition-shadow xl:flex",
+        "bg-card shadow-card min-h-[280px] flex-col rounded-3xl border transition-shadow xl:flex",
+        COLUMN_BORDER[color],
         visible ? "flex" : "hidden",
-        // 끌고 있을 때만 놓을 자리를 표시 — 평소엔 카드 432곳과 같은 헤어라인 링 그대로.
+        // 끌고 있을 때만 놓을 자리를 표시 — 평소엔 위 칸 색 테두리 그대로.
         dragging && canWrite && "ring-line ring-2",
         isOver && "ring-primary ring-2",
       )}
     >
-      {/* 컬럼 헤더 위계 — 라벨 bold + 건수 num(카드 글씨를 키운 만큼 함께 올렸다) */}
-      <header className="border-line flex items-center justify-between border-b px-4 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`flex size-8 items-center justify-center rounded-lg ${ICON_BG[color]}`}>
-            {columnIcon(stageKey)}
-          </span>
+      {/* 컬럼 헤더 — 칸 색을 **띠로** 깐다(위 HEADER_BG 주석). 아이콘은 색 칩을 벗고 라벨과 같은 톤으로.
+          ⚠️ `rounded-t-3xl`은 컨테이너(rounded-3xl)와 같은 반경 — 안 맞추면 띠가 모서리를 네모로 덮는다. */}
+      <header
+        className={cn(
+          "border-line flex items-center justify-between rounded-t-3xl border-b px-4 py-2.5",
+          HEADER_BG[color],
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-text-dim flex items-center justify-center">{columnIcon(stageKey)}</span>
           <h3 className="text-foreground text-[16px] font-bold">{label}</h3>
         </div>
         <span className="flex items-baseline gap-0.5">

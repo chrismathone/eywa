@@ -53,6 +53,30 @@ export function stageOfOutcome(outcome: string): BoardStageKey {
   return STAGE_BY_OUTCOME.get(outcome) ?? "before";
 }
 
+/** 상태 필터(툴바 드롭다운) 선택지 — 🔴 칸반과 **같은 4단계**여야 한다(원장 2026-09-01). */
+export const BOARD_STAGE_OPTIONS: { value: BoardStageKey; label: string }[] = BOARD_STAGES.map(
+  (s) => ({ value: s.key, label: s.label }),
+);
+
+/** 그 칸에 묶인 outcome 원값들 — 쿼리가 `.in("outcome", …)`으로 쓴다. */
+export function outcomesOfStage(key: BoardStageKey): string[] {
+  return BOARD_STAGES.find((s) => s.key === key)?.outcomes ?? [];
+}
+
+/**
+ * URL의 `outcome` 파라미터 → 칸.
+ *
+ * ⚠️ 파라미터 **이름은 `outcome` 그대로**이고 값만 칸 키가 된다(원장 2026-09-01, 상태 드롭다운 4단계
+ * 통일). 이름까지 바꾸면 '전체'가 옛 파라미터를 못 지워 필터가 유령처럼 남는다.
+ * 🔑 **옛 링크(`?outcome=ai_done`)는 그 값이 속한 칸으로 넓혀 받는다** — 북마크가 조용히 '전체'로
+ *    풀리거나 빈 화면이 되지 않게. 아는 값이 아니면 null(=전체)이다.
+ */
+export function parseBoardStage(v: string | null | undefined): BoardStageKey | null {
+  if (!v) return null;
+  if (BOARD_STAGES.some((s) => s.key === v)) return v as BoardStageKey;
+  return STAGE_BY_OUTCOME.get(v) ?? null;
+}
+
 /** 칸 판정에 필요한 최소 재료(ConsultationListRow가 구조적으로 만족). */
 export type StageInput = { outcome: string; assignedClassCount: number };
 
@@ -114,12 +138,14 @@ export function cardMarkOf(card: MarkInput, stage: BoardStageKey = stageOfCard(c
 }
 
 /**
- * '재원생 등록'을 이전 단계로 되돌리는 것을 막는 문구.
+ * '등록 완료'(outcome=enrolled)를 이전 단계로 되돌리는 것을 막는 문구.
+ * ⚠️ 문구는 **칸 이름**으로 말한다(2026-09-01) — 보드도 상세 '상태 변경'도 4단계라, 옛 outcome 라벨
+ *    ('재원생 등록'·'거절')로 안내하면 화면에 없는 이름을 가리키게 된다.
  * ⚠️ [setEnrollmentOutcome](./server/actions.ts)이 **같은 상수**를 던진다 — 드롭(칸반)과 드롭다운
  * (상세 '상태 변경')이 같은 서버 액션을 타므로 안내도 한 문장이어야 한다(한쪽만 고치면 갈린다).
  */
 export const ENROLLED_REVERT_BLOCKED =
-  "이미 '재원생 등록'으로 처리된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.";
+  "이미 '등록 완료'로 처리된 상담은 '상담 전'·'상담 완료'로 되돌릴 수 없습니다. 취소하려면 '미등록'으로 옮기거나 학생을 퇴원 처리하세요.";
 
 /** '반 배정 완료' 카드를 드래그로 못 옮기는 이유(화면에 그대로 띄운다 — 무반응은 고장으로 읽힌다). */
 export const ASSIGNED_DRAG_BLOCKED =
