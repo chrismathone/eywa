@@ -3,6 +3,14 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/atoms/pill";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import {
+  TOOLBAR_SEARCH_BOX,
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_BOX_WRAP,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -91,45 +99,42 @@ export default async function ExamsPage({
       />
 
       {/* Filter bar */}
-      <div className="bg-card shadow-card flex flex-col gap-3 rounded-2xl px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="flex flex-col gap-2 px-1 py-1">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">과목</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">과목</span>
+            <div className={TOOLBAR_SEG_BOX_WRAP}>
             {subjects.filters.map((f) => (
               <a
                 key={f.value}
                 href={buildHref({ subject: f.value })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  subject === f.value
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </a>
             ))}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">유형</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">유형</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {TYPE_FILTERS.map((f) => (
               <a
                 key={f.value}
                 href={buildHref({ type: f.value })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  examType === f.value
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${examType === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </a>
             ))}
+            </div>
           </div>
         </div>
         <form action="/exams" method="get" className="flex flex-wrap items-center gap-2">
           {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
           {examType !== "all" ? <input type="hidden" name="type" value={examType} /> : null}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
+          <div className={TOOLBAR_SEARCH_BOX}>
             <EyIcon name="search" size={13} />
             <input
               type="search"
@@ -141,11 +146,11 @@ export default async function ExamsPage({
           </div>
           <label className="text-text-dim flex items-center gap-1 text-xs">
             기간
-            <input type="date" name="from" defaultValue={from} className="border-line bg-bg-soft rounded-lg border px-1.5 py-1 text-xs" />
+            <input type="date" name="from" defaultValue={from} className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs" />
             <span>~</span>
-            <input type="date" name="to" defaultValue={to} className="border-line bg-bg-soft rounded-lg border px-1.5 py-1 text-xs" />
+            <input type="date" name="to" defaultValue={to} className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs" />
           </label>
-          <Button type="submit" variant="outline" size="sm">검색</Button>
+          <Button type="submit" variant="outline">검색</Button>
           {q || from || to ? (
             <a href={buildHref({ q: "", from: "", to: "" })} className="text-text-faint hover:text-foreground text-xs underline">
               초기화

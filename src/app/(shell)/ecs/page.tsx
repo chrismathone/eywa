@@ -142,7 +142,9 @@ export default async function EcsLandingPage({
         embedLabel={`영어 강사 시트 · ${res.weekLabel}`}
       />
 
-      <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+      {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 반 카드가 자기 테두리를
+          갖고 있어 선이 이중으로 겹쳐 보였다. 컨트롤 자체가 테두리를 가져 줄은 그대로 읽힌다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         {/* '오늘'은 강사 스코프만 — 사무실이 눌러도 주간으로 떨어지는 탭은 거짓 어포던스.
             305는 사무실 본업(그 시각 여러 반)이라 스코프 없어도 단다. */}
         <EcsFaceTabs face="week" showToday={scoped} />
@@ -234,7 +236,7 @@ function EcsTodayFace({
       />
 
       {/* 좁은 화면(모바일·좁은 창)은 칩 툴바를 가로 레일로 — 시간표 툴바와 같은 .toolbar-rail 규약. */}
-      <div className="bg-card shadow-card toolbar-rail flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+      <div className="toolbar-rail flex flex-wrap items-center gap-3 px-1 py-1">
         <EcsFaceTabs face="today" showToday />
         <EcsTodayModeTabs mode={mode} date={res.date} />
         <EcsDayNav date={res.date} today={res.today} mode={mode} />

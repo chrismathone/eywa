@@ -1,5 +1,6 @@
 "use client";
 
+import { TOOLBAR_SEG_BOX } from "@/components/toolbar-controls";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveAttendancePeriodMode } from "@/features/attendance/server/prefs-actions";
@@ -40,7 +41,7 @@ export function PeriodModeToggle({
   return (
     <div className="flex items-center gap-1.5" title={disabledReason ?? windowLabel}>
       <div
-        className={`border-line flex items-center rounded-full border p-0.5 ${pending ? "opacity-60" : ""}`}
+        className={`${TOOLBAR_SEG_BOX} ${pending ? "opacity-60" : ""}`}
         role="group"
         aria-label="날짜축 전환"
       >
@@ -51,7 +52,7 @@ export function PeriodModeToggle({
             onClick={() => pick(m)}
             disabled={!!disabledReason || pending}
             aria-pressed={mode === m}
-            className={`rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors ${
+            className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors ${
               mode === m ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
             } ${disabledReason ? "cursor-not-allowed" : ""}`}
           >

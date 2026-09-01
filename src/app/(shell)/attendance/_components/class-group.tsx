@@ -1,5 +1,6 @@
 "use client";
 
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 import { ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { useOptionalCollapse } from "./collapse-source";
 import { useGridCollapse } from "./grid-context";
@@ -124,7 +125,7 @@ export function CollapseAllChip({ classIds }: { classIds: string[] }) {
     <button
       type="button"
       onClick={() => ctx.setAllCollapsed(!expand)}
-      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition"
+      className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}
     >
       {label}
       {collapsedCount > 0 ? <span className="text-text-faint ml-1 num">{collapsedCount}</span> : null}

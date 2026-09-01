@@ -4,6 +4,13 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  TOOLBAR_CHIP,
+  TOOLBAR_CHIP_OFF,
+  TOOLBAR_CHIP_ON,
+  TOOLBAR_SEARCH_BOX,
+  TOOLBAR_SELECT,
+} from "@/components/toolbar-controls";
 
 export type StudentFilterState = {
   status: string; // enrolled(디폴트) | all | consulted | on_hold | withdrawn — 무param=재원
@@ -134,7 +141,9 @@ export function StudentFilterBar({
   };
 
   return (
-    <div className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
+    // 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 목록 카드가 자기 테두리를 갖고
+    // 있어 선이 이중으로 겹쳐 보였다. 컨트롤 자체가 테두리를 가져 줄은 그대로 읽힌다.
+    <div className="px-1 py-1">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         <FilterGroup label="상태">
           <SearchableSelect
@@ -143,6 +152,7 @@ export function StudentFilterBar({
             onValueChange={(v) => go({ status: v })}
             options={STATUS_FILTERS}
             ariaLabel="상태 필터"
+            triggerClassName={TOOLBAR_SELECT}
           />
         </FilterGroup>
         {hideSubjectFilter ? null : (
@@ -153,6 +163,7 @@ export function StudentFilterBar({
               onValueChange={(v) => go({ subject: v })}
               options={subjectFilters}
               ariaLabel="과목 필터"
+            triggerClassName={TOOLBAR_SELECT}
             />
           </FilterGroup>
         )}
@@ -163,6 +174,7 @@ export function StudentFilterBar({
             onValueChange={(v) => go({ grade: v })}
             options={gradeFilters}
             ariaLabel="학년 필터"
+            triggerClassName={TOOLBAR_SELECT}
           />
         </FilterGroup>
         {hideTeacherFilter ? null : (
@@ -173,6 +185,7 @@ export function StudentFilterBar({
               onValueChange={(v) => go({ teacher: v })}
               options={[{ value: "all", label: "전체" }, ...teachers]}
               ariaLabel="담임 필터"
+            triggerClassName={TOOLBAR_SELECT}
             />
           </FilterGroup>
         )}
@@ -186,6 +199,7 @@ export function StudentFilterBar({
               onValueChange={(v) => go({ field: v })}
               options={FIELD_FILTERS}
               ariaLabel="검색 필드"
+              triggerClassName={TOOLBAR_SELECT}
             />
           </FilterGroup>
           <FilterGroup label="정렬">
@@ -195,6 +209,7 @@ export function StudentFilterBar({
               onValueChange={(v) => go({ sort: v })}
               options={SORT_FILTERS}
               ariaLabel="정렬 기준"
+              triggerClassName={TOOLBAR_SELECT}
             />
           </FilterGroup>
           {/* 상태=퇴원에선 숨김 — 퇴원생은 활성 수강이 없어 이 토글이 켜져 있으면 전원이 걸러져
@@ -204,11 +219,7 @@ export function StudentFilterBar({
               type="button"
               onClick={() => go({ noenr: !current.noenr })}
               aria-pressed={current.noenr}
-              className={`shrink-0 rounded-full border px-2.5 py-2 text-xs transition ${
-                current.noenr
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_CHIP} ${current.noenr ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
             >
               미수강 제외
             </button>
@@ -221,7 +232,7 @@ export function StudentFilterBar({
             }}
             className="flex items-center gap-2"
           >
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
+            <div className={TOOLBAR_SEARCH_BOX}>
               <EyIcon name="search" size={13} />
               <input
                 type="search"

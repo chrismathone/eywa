@@ -17,6 +17,13 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
 import { SearchForm } from "@/components/search-form";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_BOX_WRAP,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
 import { StaffTableScaleBox, StaffTableScaleControl } from "./_components/table-scale";
 import { StaffColumnPicker } from "./_components/staff-column-picker";
@@ -265,51 +272,45 @@ export default async function StaffPage({
       ) : null}
 
       {/* Filter bar */}
-      <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="space-y-2 px-1 py-1">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">역할</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">역할</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {ROLE_FILTERS.map((f) => (
               <Link
                 key={f.key}
                 href={buildStaffHref({ ...current, role: f.key })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  role === f.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${role === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
           <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">상태</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">상태</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {STATUS_FILTERS.map((f) => (
               <Link
                 key={f.key}
                 href={buildStaffHref({ ...current, status: f.key })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  status === f.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${status === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
           <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">과목</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">과목</span>
+            <div className={TOOLBAR_SEG_BOX_WRAP}>
             <Link
               href={buildStaffHref({ ...current, subject: "all" })}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                subject === "all"
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === "all" ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               전체
             </Link>
@@ -317,49 +318,45 @@ export default async function StaffPage({
               <Link
                 key={o.value}
                 href={buildStaffHref({ ...current, subject: o.value })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  subject === o.value
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === o.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {o.label}
               </Link>
             ))}
+            </div>
           </div>
           <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">근무형태</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">근무형태</span>
+            <div className={TOOLBAR_SEG_BOX_WRAP}>
             {["all", ...EMPLOYMENT_TYPES].map((t) => (
               <Link
                 key={t}
                 href={buildStaffHref({ ...current, emp: t })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  emp === t
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${emp === t ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {t === "all" ? "전체" : t}
               </Link>
             ))}
+            </div>
           </div>
           <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">정렬</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">정렬</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {SORT_FILTERS.map((f) => (
               <Link
                 key={f.key}
                 href={buildStaffHref({ ...current, sort: f.key })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  sort === f.key
-                    ? "border-primary bg-primary-soft text-primary font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                // 정렬은 종전부터 soft 톤 — 색은 그대로 두고 모양·높이만 맞춘다.
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${
+                  sort === f.key ? "bg-primary-soft text-primary font-medium" : TOOLBAR_SEG_OFF
                 }`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
           <SearchForm
             placeholder="이름·이메일·연락처"

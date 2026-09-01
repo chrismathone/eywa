@@ -1,4 +1,10 @@
 import Link from "next/link";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
 import { PeriodNav } from "@/components/period-nav";
 import { EcsDatePicker } from "./today-date-picker";
@@ -13,13 +19,12 @@ import { EcsDatePicker } from "./today-date-picker";
  *    "강사뷰 서식만 다르면 이상함"). 칩=`rounded-full`·소라벨=`.micro`·날짜=`.num`.
  */
 
-/** 필터/토글 칩 공통(문법 ⑦ 알약) — 활성은 WeekNav '이번주'와 같은 foreground 반전. */
+/**
+ * 면·모드 전환 칩 — 묶음 상자(TOOLBAR_SEG_BOX) 안에 서므로 자기 테두리·알약을 갖지 않는다
+ * (원장 2026-09-01 툴바 라운드 통일). 활성 색(학원색)은 종전 그대로다.
+ */
 const chip = (active: boolean) =>
-  `shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium transition ${
-    active
-      ? "border-primary bg-primary text-primary-foreground"
-      : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-  }`;
+  `${TOOLBAR_SEG_ITEM} shrink-0 font-medium ${active ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`;
 
 /** 오늘 면 입력 모드 — 기본 = 시트(URL 무표기). cards만 파라미터로 남긴다. */
 export type EcsTodayMode = "sheet" | "cards";
@@ -35,7 +40,7 @@ export function EcsTodayModeTabs({ mode, date }: { mode: EcsTodayMode; date: str
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">모드</span>
-      <div className="flex items-center gap-0.5">
+      <div className={TOOLBAR_SEG_BOX}>
         <Link href={base} className={chip(mode === "sheet")} aria-current={mode === "sheet" ? "page" : undefined}>
           시트
         </Link>
@@ -64,7 +69,7 @@ export function EcsQuickAttendanceLink() {
     <Link
       href="/attendance/quick"
       title="오늘 내 수업의 출결만 터치로 빠르게 입력합니다"
-      className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground shrink-0 rounded-lg border px-2.5 py-1 text-xs font-bold whitespace-nowrap"
+      className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground inline-flex h-8 shrink-0 items-center rounded-lg border px-2.5 text-xs font-bold whitespace-nowrap"
     >
       출결 모드
     </Link>
@@ -77,7 +82,7 @@ export function EcsFaceTabs({ face, showToday = true }: { face: EcsFace; showTod
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">보기</span>
-      <div className="flex items-center gap-0.5">
+      <div className={TOOLBAR_SEG_BOX}>
         {showToday ? (
           <Link href="/ecs?view=today" className={chip(face === "today")} aria-current={face === "today" ? "page" : undefined}>
             오늘

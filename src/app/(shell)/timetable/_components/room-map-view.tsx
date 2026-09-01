@@ -1,5 +1,16 @@
 "use client";
 
+import {
+  TOOLBAR_CHIP,
+  TOOLBAR_CHIP_OFF,
+  TOOLBAR_CHIP_ON,
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_BOX_WRAP,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
+
 import { useMemo, useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
@@ -119,18 +130,15 @@ export function RoomMapView({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* 요일·과목 선택 + 요약 스탯 — 지도 위 한 줄 레일 */}
-      <div className="bg-card shadow-card toolbar-rail flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-2.5">
-        <div className="flex flex-wrap items-center gap-1">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 지도가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="toolbar-rail flex shrink-0 flex-wrap items-center gap-3 px-1 py-1">
+        <div className={TOOLBAR_SEG_BOX}>
           {ROOM_DAY_ORDER.map((d) => (
             <button
               key={d}
               type="button"
               onClick={() => setDay(d)}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                day === d
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${day === d ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               {DAY_LABEL[d] ?? d}
               {dayDates[d] ? <span className="num ml-1 text-[10px] opacity-70">{dayDates[d]}</span> : null}
@@ -138,15 +146,11 @@ export function RoomMapView({
           ))}
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
-        <div className="flex flex-wrap items-center gap-1">
+        <div className={TOOLBAR_SEG_BOX_WRAP}>
           <button
             type="button"
             onClick={() => setFocusSubject(null)}
-            className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-              focusSubject === null
-                ? "border-primary bg-primary text-primary-foreground font-medium"
-                : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-            }`}
+            className={`${TOOLBAR_SEG_ITEM} shrink-0 ${focusSubject === null ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
           >
             전체
           </button>
@@ -155,11 +159,7 @@ export function RoomMapView({
               key={k}
               type="button"
               onClick={() => setFocusSubject(focusSubject === k ? null : k)}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                focusSubject === k
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${focusSubject === k ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               {subjects.labelOf(k)}
             </button>
@@ -172,11 +172,7 @@ export function RoomMapView({
             <button
               type="button"
               onClick={() => setHideSpecial((v) => !v)}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                hideSpecial
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_CHIP} ${hideSpecial ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
             >
               특강 숨김
             </button>

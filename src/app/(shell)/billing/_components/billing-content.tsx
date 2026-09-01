@@ -22,6 +22,7 @@ import {
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { getMakeeduSyncState } from "@/features/integrations/server/makeedu-sync";
 import { SearchForm } from "@/components/search-form";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { BillingTable } from "./billing-table";
 import { CreateInvoiceTrigger } from "./create-invoice-dialog";
 import { Pagination } from "@/components/pagination";
@@ -195,14 +196,14 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           <>
             <Link
               href={buildHref({ period: prevPeriod, q, sort, desc })}
-              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-full border"
+              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
               aria-label="이전 달"
             >
               <EyIcon name="chevronLeft" size={14} />
             </Link>
             <Link
               href={buildHref({ period: nextPeriod, q, sort, desc })}
-              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-full border"
+              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
               aria-label="다음 달"
             >
               <EyIcon name="chevronRight" size={14} />
@@ -212,17 +213,14 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       />
 
       {/* 툴바 — 최근 월 알약 칩 + 검색 + 액션(신규 청구·엑셀) */}
-      <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
           {periods.slice(0, 6).map((p) => (
             <Link
               key={p}
               href={buildHref({ period: p, q, sort, desc })}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                p === period
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_CHIP} ${p === period ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
             >
               {formatPeriod(p)}
             </Link>

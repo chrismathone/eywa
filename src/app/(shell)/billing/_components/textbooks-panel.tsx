@@ -3,6 +3,7 @@ import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { BookText, Clock, CircleDollarSign, Receipt } from "@/components/icons/eywa-icon-compat";
 import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import {
   getStudentOptions,
   getTextbookOrdersPage,
@@ -68,14 +69,11 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   return (
     <div className="space-y-4">
       {/* 필터 바 */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="flex flex-wrap items-center gap-2 px-1 py-1">
         <Link
           href={chipHref("all")}
-          className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
-            status === "all"
-              ? "border-primary bg-primary text-primary-foreground font-medium"
-              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-          }`}
+          className={`${TOOLBAR_CHIP} ${status === "all" ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
         >
           전체 {stats.total}
         </Link>
@@ -84,11 +82,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
             key={s.key}
             href={chipHref(s.key)}
             title={s.title}
-            className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
-              status === s.key
-                ? "border-primary bg-primary text-primary-foreground font-medium"
-                : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-            }`}
+            className={`${TOOLBAR_CHIP} ${status === s.key ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
           >
             {s.label} {s.count(stats)}
           </Link>

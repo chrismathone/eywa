@@ -36,7 +36,7 @@ export function AttendanceSortSelect({ value }: { value: AttendanceSortKey }) {
           router.refresh();
         });
       }}
-      className="border-line bg-card text-foreground hover:bg-bg-soft h-7 rounded-lg border px-2 text-xs disabled:opacity-60"
+      className="border-line bg-card text-foreground hover:bg-bg-soft h-8 rounded-lg border px-2 text-xs disabled:opacity-60"
     >
       {ATTENDANCE_SORT_KEYS.map((k) => (
         <option key={k} value={k}>

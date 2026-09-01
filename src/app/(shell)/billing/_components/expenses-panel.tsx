@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Wallet, PieChart, Tags } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import {
   getExpensesForMonth,
   getExpenseMonths,
@@ -57,16 +58,17 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
   return (
     <div className="space-y-4">
       {/* 월 navigator + 카테고리 필터 */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         <div className="flex items-center gap-1.5">
-          <Link href={hrefFor({ period: prevPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="이전 달"><EyIcon name="chevronLeft" size={14} /></Link>
+          <Link href={hrefFor({ period: prevPeriod })} className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border" aria-label="이전 달"><EyIcon name="chevronLeft" size={14} /></Link>
           <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">{formatPeriod(period)}</span>
-          <Link href={hrefFor({ period: nextPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="다음 달"><EyIcon name="chevronRight" size={14} /></Link>
+          <Link href={hrefFor({ period: nextPeriod })} className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border" aria-label="다음 달"><EyIcon name="chevronRight" size={14} /></Link>
         </div>
         <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
-          <Link href={hrefFor({ cat: "all" })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === "all" ? "border-primary bg-primary text-primary-foreground font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>전체</Link>
+          <Link href={hrefFor({ cat: "all" })} className={`${TOOLBAR_CHIP} ${cat === "all" ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}>전체</Link>
           {CATS.map((c) => (
-            <Link key={c} href={hrefFor({ cat: c })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === c ? "border-primary bg-primary text-primary-foreground font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>{c}</Link>
+            <Link key={c} href={hrefFor({ cat: c })} className={`${TOOLBAR_CHIP} ${cat === c ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}>{c}</Link>
           ))}
         </div>
         {months.length > 0 ? (

@@ -14,6 +14,14 @@ import { BigStat } from "@/components/atoms/big-stat";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_BOX_WRAP,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+  TOOLBAR_SELECT,
+} from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { relativeDayKo } from "@/lib/relative-time";
 import {
@@ -234,28 +242,25 @@ export default async function WithdrawalsPage({
         description="퇴원·수강 종료 내역과 사후 상담을 관리합니다"
       />
       {/* 유형 토글 — 퇴원(완전) / 수강종료(과목 이탈) */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="micro mr-1">유형</span>
+      <div className="flex items-center gap-1.5">
+        <span className="micro shrink-0">유형</span>
+        <div className={TOOLBAR_SEG_BOX}>
         <Link
           href="/withdrawals"
-          className={`shrink-0 rounded-full border px-3 py-0.5 text-xs transition ${
-            viewType === "withdrawn"
-              ? "border-primary bg-primary text-primary-foreground font-medium"
-              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-          }`}
+          className={`${TOOLBAR_SEG_ITEM} shrink-0 ${viewType === "withdrawn" ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
         >
           퇴원 <span className="num">({all.length})</span>
         </Link>
         <Link
           href="/withdrawals?type=subject-ended"
-          className={`shrink-0 rounded-full border px-3 py-0.5 text-xs transition ${
-            viewType === "subject-ended"
-              ? "border-amber bg-amber text-white font-medium"
-              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+          // 앰버는 의미색(주의)이라 그대로 둔다 — 모양·높이만 묶음 칩으로 맞춘다.
+          className={`${TOOLBAR_SEG_ITEM} shrink-0 ${
+            viewType === "subject-ended" ? "bg-amber text-white font-medium" : TOOLBAR_SEG_OFF
           }`}
         >
           수강종료{viewType === "subject-ended" ? <span className="num"> ({subjectEnded.length})</span> : null}
         </Link>
+        </div>
       </div>
 
       {viewType === "subject-ended" ? (
@@ -278,23 +283,23 @@ export default async function WithdrawalsPage({
       </section>
 
       {/* Filter bar — 소프트 패널 + 알약 칩 */}
-      <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
+      {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 표가 자기 테두리를 갖고
+          있어 선이 이중으로 겹쳐 보였다. 컨트롤 자체가 테두리를 가져 줄은 그대로 읽힌다. */}
+      <div className="space-y-2 px-1 py-1">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">기간</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">기간</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {RANGE_FILTERS.map((f) => (
               <Link
                 key={f.key}
                 href={buildWdHref({ ...current, range: f.key })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  range === f.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${range === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
           <SearchForm placeholder="학생명" defaultValue={q} resetParams={["type"]} />
         </div>
@@ -306,39 +311,39 @@ export default async function WithdrawalsPage({
               value={reason === "all" ? null : reason}
               options={reasonChips.filter((f) => f.key !== "all").map((f) => ({ value: f.key, label: f.label }))}
               ariaLabel="사유 필터"
+              triggerClassName={TOOLBAR_SELECT}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">과목</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">과목</span>
+            <div className={TOOLBAR_SEG_BOX_WRAP}>
             {subjectMaps.filters.map((f) => (
               <Link
                 key={f.value}
                 href={buildWdHref({ ...current, subject: f.value })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  subject === f.value
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">상담</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">상담</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {CONSULT_FILTERS.map((f) => (
               <Link
                 key={f.key}
                 href={buildWdHref({ ...current, consult: f.key })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  consult === f.key
-                    ? "border-amber bg-amber text-white font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                // 앰버는 의미색(주의)이라 그대로 둔다 — 모양·높이만 묶음 칩으로 맞춘다.
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${
+                  consult === f.key ? "bg-amber text-white font-medium" : TOOLBAR_SEG_OFF
                 }`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
           {filterActive ? (
             <Link href="/withdrawals" className="text-text-faint hover:text-foreground text-xs underline">

@@ -9,6 +9,12 @@ import { BigStat } from "@/components/atoms/big-stat";
 import { PageHeader } from "@/components/page-header";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { SearchForm } from "@/components/search-form";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstMonth } from "@/lib/date-kst";
 import {
@@ -232,40 +238,38 @@ export default async function MeetingsPage({
       </section>
 
       {/* Filter bar */}
-      <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
+      {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 목록이 자기 테두리를 갖고
+          있어 선이 이중으로 겹쳐 보였다. 컨트롤 자체가 테두리를 가져 줄은 그대로 읽힌다. */}
+      <div className="space-y-2 px-1 py-1">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">기간</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">기간</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {RANGE_FILTERS.map((f) => (
               <Link
                 key={f.key}
                 href={buildHref({ ...current, range: f.key })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  range === f.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${range === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
           <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">상태</span>
+          <div className="flex items-center gap-1.5">
+            <span className="micro shrink-0">상태</span>
+            <div className={TOOLBAR_SEG_BOX}>
             {STATUS_FILTERS.map((f) => (
               <Link
                 key={f.key}
                 href={buildHref({ ...current, status: f.key })}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  status === f.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${status === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </Link>
             ))}
+            </div>
           </div>
           <SearchForm placeholder="제목·참석자" defaultValue={q} />
         </div>
