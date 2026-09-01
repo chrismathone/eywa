@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 import { PeriodNav } from "@/components/period-nav";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -95,10 +96,10 @@ export default async function SeatMonthlyPage({
           description={view.window.label}
           actions={
             <div className="flex items-center gap-1.5">
-              <Link href={`/attendance/seat/${seat}`} className="border-line hover:bg-bg-soft rounded-full border px-2.5 py-0.5 text-xs">
+              <Link href={`/attendance/seat/${seat}`} className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
                 하루
               </Link>
-              <Link href="/attendance" className="border-line hover:bg-bg-soft rounded-full border px-2.5 py-0.5 text-xs">
+              <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
                 출석부로
               </Link>
               <MonthlyPrintButton seat={seat} month={month} title={`${SEAT_NAME[seat]} ${formatMonth(month)}`} />

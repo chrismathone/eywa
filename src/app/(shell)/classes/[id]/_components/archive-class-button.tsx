@@ -39,7 +39,7 @@ export function ArchiveClassButton({
     >
       <input type="hidden" name="id" value={classId} />
       <input type="hidden" name="isActive" value={isActive ? "false" : "true"} />
-      <Button type="submit" variant="outline" size="sm">
+      <Button type="submit" variant="outline">
         {isActive ? <Archive className="size-4" /> : <RotateCcw className="size-4" />}
         {isActive ? "반 폐지" : "재운영"}
       </Button>

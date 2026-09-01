@@ -1,4 +1,5 @@
 "use client";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
@@ -84,6 +85,7 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
           </button>
           <SearchableSelect
             className="w-40"
+            triggerClassName={TOOLBAR_SELECT}
             ariaLabel="월 선택"
             value={String(safeIdx)}
             onValueChange={(v) => setIdx(Number(v))}

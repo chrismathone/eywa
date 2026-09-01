@@ -1,4 +1,5 @@
 "use client";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 
 import { Fragment, useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -34,7 +35,7 @@ export function RefreshPlanButton({ period }: { period: string }) {
           else router.refresh();
         })
       }
-      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition disabled:opacity-50"
+      className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} disabled:opacity-50`}
       title="시간표·수강 기간·공휴일 기준으로 반별 계획 회차를 다시 계산합니다 (확정된 값은 유지)"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}

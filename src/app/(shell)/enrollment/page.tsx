@@ -3,6 +3,12 @@ import Link from "next/link";
 import { QrCode } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON,
+} from "@/components/toolbar-controls";
 import { NewConsultationWatcher } from "./_components/new-consultation-watcher";
 import { getConsultationTotalCount } from "@/features/enrollment/server/poll-actions";
 import { PhotoCard } from "@/components/atoms/photo-card";
@@ -234,7 +240,7 @@ export default async function EnrollmentPage({
           view === "stats" && statsYears.length > 0 ? (
             <div className="flex items-center gap-1.5">
               <span className="micro shrink-0">연도</span>
-              <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
+              <div className={TOOLBAR_SEG_BOX}>
                 {/* 기간 프리셋 — 최대 3개년(원장 2026-08-05). '전체'는 없앴다: 해가 갈수록 구간이
                     무한히 길어져 화면이 계속 빽빽해진다. 상한을 두면 눈금 압축(월→분기)과 맞물려
                     몇 년이 지나도 같은 밀도로 읽힌다. */}
@@ -242,10 +248,8 @@ export default async function EnrollmentPage({
                   <Link
                     key={`${n}y`}
                     href={yearHref(`${n}y`)}
-                    className={`rounded-full px-2.5 py-1 text-xs transition ${
-                      statsPeriod.kind === "span" && statsPeriod.years === n
-                        ? "bg-foreground text-background font-medium"
-                        : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                    className={`${TOOLBAR_SEG_ITEM} ${
+                      statsPeriod.kind === "span" && statsPeriod.years === n ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF
                     }`}
                   >
                     {n}개년
@@ -255,11 +259,7 @@ export default async function EnrollmentPage({
                   <Link
                     key={y}
                     href={yearHref(y)}
-                    className={`num rounded-full px-2.5 py-1 text-xs transition ${
-                      y === statsYear
-                        ? "bg-foreground text-background font-medium"
-                        : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-                    }`}
+                    className={`${TOOLBAR_SEG_ITEM} num ${y === statsYear ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF}`}
                   >
                     {y}
                   </Link>

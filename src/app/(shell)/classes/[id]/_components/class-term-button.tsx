@@ -34,7 +34,7 @@ export function ClassTermButton({
         }}
       >
         <input type="hidden" name="id" value={classId} />
-        <Button type="submit" variant="outline" size="sm" disabled={reopenPending}>
+        <Button type="submit" variant="outline" disabled={reopenPending}>
           <RotateCcw className="size-4" />
           재개강
         </Button>
@@ -46,7 +46,7 @@ export function ClassTermButton({
   // 운영중 → 종강(날짜 지정)
   if (!open) {
     return (
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
         <CalendarCheck className="size-4" />
         종강
       </Button>
@@ -62,9 +62,9 @@ export function ClassTermButton({
         defaultValue={today}
         max={today}
         aria-label="종강일"
-        className="border-line rounded-lg border px-2 py-1 text-xs"
+        className="border-line h-8 rounded-lg border px-2 text-xs"
       />
-      <Button type="submit" size="sm" disabled={endPending}>
+      <Button type="submit" disabled={endPending}>
         종강 확정
       </Button>
       <button

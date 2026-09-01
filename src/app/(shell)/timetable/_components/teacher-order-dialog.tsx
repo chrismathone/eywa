@@ -1,4 +1,5 @@
 "use client";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -72,7 +73,7 @@ export function TeacherOrderDialog({
           setList(teachers);
           setOpen(true);
         }}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition"
+        className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF}`}
       >
         <Users className="size-3" />
         강사 순서

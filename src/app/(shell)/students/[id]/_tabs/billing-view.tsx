@@ -1,4 +1,5 @@
 "use client";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "@/components/icons/eywa-icon-compat";
@@ -120,6 +121,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
         </div>
         <SearchableSelect
           className="ml-auto w-24"
+          triggerClassName={TOOLBAR_SELECT}
           value={statusFilter}
           onValueChange={(v) => {
             setStatusFilter(v);
@@ -133,11 +135,21 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
           ariaLabel="납부 상태 필터"
         />
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => setYearReset(year - 1)} className="hover:bg-bg-soft rounded p-1" aria-label="이전 연도">
+          <button
+            type="button"
+            onClick={() => setYearReset(year - 1)}
+            className="hover:bg-bg-soft inline-flex h-8 w-8 items-center justify-center rounded-md"
+            aria-label="이전 연도"
+          >
             <ChevronLeft className="size-4" />
           </button>
           <span className="num text-foreground min-w-[4rem] text-center text-sm font-medium">{year}년</span>
-          <button type="button" onClick={() => setYearReset(year + 1)} className="hover:bg-bg-soft rounded p-1" aria-label="다음 연도">
+          <button
+            type="button"
+            onClick={() => setYearReset(year + 1)}
+            className="hover:bg-bg-soft inline-flex h-8 w-8 items-center justify-center rounded-md"
+            aria-label="다음 연도"
+          >
             <ChevronRight className="size-4" />
           </button>
         </div>

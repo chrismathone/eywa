@@ -1,4 +1,10 @@
 "use client";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 
 // 직원 상세 '월간일정' 탭(Notion 업무, 읽기 전용) — 그리드⇄리스트 토글 + 월 이동 + 미매핑 시 연결 UI.
 // 근무일정 탭을 대체(근무시간 편집기는 휴면). 초기 데이터는 서버 탭에서 주입, 월 이동은 서버 액션 재호출.
@@ -270,30 +276,30 @@ export function MonthlyScheduleView({
       {/* 툴바 — 월 이동 + 그리드/리스트 토글 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" aria-label="이전 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, -1))}>
+          <Button variant="ghost" aria-label="이전 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, -1))}>
             <ChevronLeft className="size-4" />
           </Button>
           <span className="text-foreground min-w-[92px] text-center text-[14px] font-bold">{monthLabel(month)}</span>
-          <Button size="sm" variant="ghost" aria-label="다음 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, 1))}>
+          <Button variant="ghost" aria-label="다음 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, 1))}>
             <ChevronRight className="size-4" />
           </Button>
-          <Button size="sm" variant="outline" className="ml-1" disabled={pending} onClick={() => goMonth(today.slice(0, 7))}>
+          <Button variant="outline" className="ml-1" disabled={pending} onClick={() => goMonth(today.slice(0, 7))}>
             오늘
           </Button>
           {pending ? <span className="text-text-faint ml-1 text-[11px]">불러오는 중…</span> : null}
         </div>
         <div className="flex items-center gap-2">
           {canManage ? (
-            <Button size="sm" variant="outline" onClick={() => setOpenNew(true)}>
+            <Button variant="outline" onClick={() => setOpenNew(true)}>
               <Plus className="size-3.5" /> 새 업무
             </Button>
           ) : null}
-          <div className="border-line inline-flex overflow-hidden rounded-full border">
+          <div className={TOOLBAR_SEG_BOX}>
             <button
               type="button"
               onClick={() => pickView("grid")}
               aria-pressed={view === "grid"}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 text-[12px] ${view === "grid" ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
+              className={`${TOOLBAR_SEG_ITEM} inline-flex items-center gap-1 ${view === "grid" ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               <LayoutGrid size={13} /> 달력
             </button>
@@ -301,7 +307,7 @@ export function MonthlyScheduleView({
               type="button"
               onClick={() => pickView("list")}
               aria-pressed={view === "list"}
-              className={`border-line inline-flex items-center gap-1 border-l px-2.5 py-1 text-[12px] ${view === "list" ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
+              className={`${TOOLBAR_SEG_ITEM} inline-flex items-center gap-1 ${view === "list" ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               <List size={13} /> 목록
             </button>

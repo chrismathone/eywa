@@ -1,5 +1,6 @@
 "use client";
 
+import { TOOLBAR_SEARCH_BOX } from "@/components/toolbar-controls";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
@@ -105,7 +106,7 @@ export function DocumentToolbar({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* 검색 — GET 폼(현재 폴더 유지, page 리셋) */}
-      <form action="/documents" className="relative">
+      <form action="/documents" className="flex shrink-0 items-center">
         {keepCat ? <input type="hidden" name="cat" value={keepCat} /> : null}
         {sortParam ? (
           <>
@@ -114,15 +115,20 @@ export function DocumentToolbar({
           </>
         ) : null}
         {embed ? <input type="hidden" name="embed" value="1" /> : null}
-        <Search className="text-text-faint pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-        <input
-          type="search"
-          name="q"
-          defaultValue={initialQuery}
-          placeholder="문서 검색..."
-          className={`${inputCls} h-8 w-48 pl-8`}
-          aria-label="문서 검색"
-        />
+        {/* ⚠️ 다이얼로그 입력(inputCls)이 아니라 **툴바 검색 박스** — 공용 SearchForm과 같은 값
+            (TOOLBAR_SEARCH_BOX). 이 폼은 cat/sort/dir/embed를 hidden으로 함께 커밋해 SearchForm을
+            그대로 쓰진 못하지만, 모양은 같아야 옆 버튼들과 한 줄로 선다. */}
+        <span className={`${TOOLBAR_SEARCH_BOX} w-56`}>
+          <Search className="text-text-faint pointer-events-none size-4 shrink-0" />
+          <input
+            type="search"
+            name="q"
+            defaultValue={initialQuery}
+            placeholder="문서 검색..."
+            className="text-foreground placeholder:text-text-faint w-full bg-transparent text-xs focus:outline-none"
+            aria-label="문서 검색"
+          />
+        </span>
       </form>
       {canWrite ? (
         <>

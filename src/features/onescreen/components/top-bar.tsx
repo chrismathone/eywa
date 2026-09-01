@@ -1,6 +1,16 @@
 import { useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { Toolbar } from "@/components/toolbar";
+import {
+  TOOLBAR_CHIP,
+  TOOLBAR_CHIP_OFF,
+  TOOLBAR_CHIP_ON,
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { addDays } from "@/lib/date-kst";
 import {
   ONESCREEN_FONT_SIZES,
@@ -97,7 +107,7 @@ export function OneScreenTopBar({
   const dateRef = useRef<HTMLInputElement>(null);
   const isToday = date >= todayYmd; // 오늘(또는 이상) = 다음날 이동 막고 '오늘' 버튼 숨김
   return (
-    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border px-3 py-2">
+    <Toolbar rail={false} gap="gap-x-3 gap-y-2">
       {/* ── 줄 ①(데스크톱 순서 그대로) — 날짜 · 반/작성 필터 · 진행 통계 · 드물게 만지는 설정.
              모바일에선 아래 줄 ②가 위로 올라가므로 **화면에선 두 번째 줄**이다(rail-row-first). */}
       <div className="toolbar-rail toolbar-rail-row items-center gap-x-2">
@@ -111,7 +121,7 @@ export function OneScreenTopBar({
               type="button"
               onClick={() => onDateChange(addDays(date, -1))}
               aria-label="이전 날짜"
-              className="text-text-dim hover:bg-bg-soft rounded-sm px-1 py-1"
+              className="text-text-dim hover:bg-bg-soft inline-flex h-8 w-7 items-center justify-center rounded-md"
             >
               <EyIcon name="chevronLeft" size={16} />
             </button>
@@ -151,7 +161,7 @@ export function OneScreenTopBar({
               onClick={() => onDateChange(addDays(date, 1))}
               disabled={isToday}
               aria-label="다음 날짜"
-              className="text-text-dim hover:bg-bg-soft rounded-sm px-1 py-1 disabled:opacity-30"
+              className="text-text-dim hover:bg-bg-soft inline-flex h-8 w-7 items-center justify-center rounded-md disabled:opacity-30"
             >
               <EyIcon name="chevronRight" size={16} />
             </button>
@@ -159,7 +169,7 @@ export function OneScreenTopBar({
               <button
                 type="button"
                 onClick={() => onDateChange(todayYmd)}
-                className="border-line text-primary hover:bg-bg-soft ml-1 rounded-lg border px-1.5 py-0.5 text-[11px] font-bold"
+                className="border-line text-primary hover:bg-bg-soft ml-1 inline-flex h-8 items-center rounded-lg border px-2 text-xs font-medium"
               >
                 오늘
               </button>
@@ -179,11 +189,7 @@ export function OneScreenTopBar({
             type="button"
             onClick={() => onFilter("전체")}
             aria-pressed={classFilter === "전체"}
-            className={`rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
-              classFilter === "전체"
-                ? "bg-primary text-primary-foreground"
-                : "border-line text-text-dim hover:bg-bg-soft border"
-            }`}
+            className={`${TOOLBAR_CHIP} ${classFilter === "전체" ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
           >
             전체
           </button>
@@ -215,9 +221,7 @@ export function OneScreenTopBar({
                 type="button"
                 onClick={() => onFilter(tag)}
                 aria-pressed={on}
-                className={`rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
-                  on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
-                }`}
+                className={`${TOOLBAR_CHIP} ${on ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
               >
                 {tag}
               </button>
@@ -228,7 +232,7 @@ export function OneScreenTopBar({
         {/* 작성 상태 필터 — "아직 안 쓴 학생만" 추려 마저 쓰기 위한 것(반 필터 바로 옆 = 둘 다 '무엇을 보여줄지').
             판정은 학부모 문구 기준(write-filter.ts). 같은 값을 다시 누르면 목록을 새로 계산한다. */}
         <div
-          className="border-line flex items-center rounded-full border p-0.5"
+          className={TOOLBAR_SEG_BOX}
           title="학부모 문구 기준 — 모든 행에 문구가 있거나 이미 발송됐으면 '작성', 한 행이라도 비어 있으면 '미작성'입니다(결석 행은 발송 대상이 아니라 판정에서 제외). 필터를 켠 뒤 입력해도 카드·행이 사라지지 않으며, 같은 버튼을 다시 누르면 목록을 정리합니다."
         >
           {writeOptions.map((o) => {
@@ -239,9 +243,7 @@ export function OneScreenTopBar({
                 type="button"
                 onClick={() => onWriteFilter(o.value)}
                 aria-pressed={on}
-                className={`rounded-full px-2 py-1 text-[11px] font-bold transition ${
-                  on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} ${on ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {o.label}
                 {o.count != null ? (
@@ -279,7 +281,7 @@ export function OneScreenTopBar({
           {/* AI 멘트 모드(내 계정) — 학원 기본 / 단일 A / 2문단 B. 강사별 저장(users.report_notice_mode).
               바꾸면 아래 보고서 입력이 1칸(A) ↔ 2칸(B, 수업 내용 / 태도·특이사항)으로 함께 바뀐다. */}
           <div
-            className="border-line flex items-center rounded-full border p-0.5"
+            className={TOOLBAR_SEG_BOX}
             title="학부모 멘트 문단 구성(내 계정) — A는 한 문단, B는 '수업 내용'과 '태도·특이사항' 2문단. 아래 보고서 입력칸과 자동 작성 결과가 함께 바뀝니다."
           >
             {noticeOptions.map((o) => {
@@ -290,9 +292,7 @@ export function OneScreenTopBar({
                   type="button"
                   onClick={() => onNoticeMode(o.value)}
                   aria-pressed={on}
-                  className={`rounded-full px-1.5 py-1 text-[11px] font-bold transition ${
-                    on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-                  }`}
+                  className={`${TOOLBAR_SEG_ITEM} ${on ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
                 >
                   {o.label}
                 </button>
@@ -303,27 +303,27 @@ export function OneScreenTopBar({
           {/* 글씨 크기(내 계정) — 원장 지시 2026-07-30. 지금 크기가 '작음'이라 기본은 화면 무변경.
               표뷰는 칸마다 px 글자가 박힌 조밀한 스프레드시트라 **표 전체를 같은 비율로** 확대한다
               (글자만 키우면 칸·체크박스와 어긋난다). 저장은 계정 = 다른 PC에서도 같은 크기. */}
-          <div
-            className="border-line flex items-center rounded-full border p-0.5"
-            title="아래 목록·표의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
-          >
-            <span className="text-text-faint px-1.5 text-[11px] font-bold">글씨 크기</span>
-            {ONESCREEN_FONT_SIZES.map((s) => {
-              const on = fontSize === s;
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => onFontSize(s)}
-                  aria-pressed={on}
-                  className={`rounded-full px-1.5 py-1 text-[11px] font-bold transition ${
-                    on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-                  }`}
-                >
-                  {ONESCREEN_FONT_SIZE_LABEL[s]}
-                </button>
-              );
-            })}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="micro shrink-0">글씨 크기</span>
+            <div
+              className={TOOLBAR_SEG_BOX}
+              title="아래 목록·표의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
+            >
+              {ONESCREEN_FONT_SIZES.map((s) => {
+                const on = fontSize === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => onFontSize(s)}
+                    aria-pressed={on}
+                    className={`${TOOLBAR_SEG_ITEM} ${on ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
+                  >
+                    {ONESCREEN_FONT_SIZE_LABEL[s]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -344,13 +344,13 @@ export function OneScreenTopBar({
           <Link
             href="/attendance/quick"
             title="오늘 내 수업의 출결만 터치로 빠르게 입력합니다"
-            className="bg-primary text-primary-foreground hover:opacity-90 rounded-full px-3 py-1 text-[11px] font-bold whitespace-nowrap"
+            className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex h-8 shrink-0 items-center rounded-lg px-2.5 text-xs font-medium whitespace-nowrap transition"
           >
             출결 모드
           </Link>
         )}
         {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 뷰 전환 */}
-        <div className="border-line flex items-center rounded-full border p-0.5">
+        <div className={TOOLBAR_SEG_BOX}>
           {/* 열람 전용은 공지 탭 제외 — 공지는 순수 작성 화면이라 열람에서 열 이유가 없다(진입 가드와 짝). */}
           {(readonlyView
             ? (["card", "grid", "status", "history"] as const)
@@ -363,8 +363,8 @@ export function OneScreenTopBar({
               aria-pressed={view === v}
               // 레일(가로 스크롤) 안이라 `whitespace-nowrap` — '발송 현황'·'월간 발송'이 두 줄로 접히면
               // 그 줄만 키가 두 배가 된다(칩 폭이 아니라 **줄 높이**가 크롬을 먹는다).
-              className={`rounded-full px-2 py-1 text-[11px] font-bold whitespace-nowrap transition ${
-                view === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+              className={`${TOOLBAR_SEG_ITEM} whitespace-nowrap ${
+                view === v ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF
               }`}
             >
               {v === "card"
@@ -380,7 +380,7 @@ export function OneScreenTopBar({
           ))}
         </div>
       </div>
-    </div>
+    </Toolbar>
   );
 }
 
@@ -398,14 +398,15 @@ function ClassChip({
   on: boolean;
   onFilter: (tag: string) => void;
 }) {
-  const base = "rounded-pill inline-flex items-center gap-1 px-2.5 py-1 text-[12px] font-bold whitespace-nowrap transition";
+  const base = `${TOOLBAR_CHIP} gap-1 whitespace-nowrap`;
+  // ⚠️ 위임 반은 앰버 — 톤만 갈리고 **모양(높이·라운드·테두리)은 툴바 칩 그대로**다.
   const tone = c.delegated
     ? on
-      ? "bg-amber text-white"
-      : "border-amber bg-amber-soft text-amber hover:bg-amber/15 border"
+      ? "border-amber bg-amber text-white"
+      : "border-amber bg-amber-soft text-amber hover:bg-amber/15"
     : on
-      ? "bg-primary text-primary-foreground"
-      : "border-line text-text-dim hover:bg-bg-soft border";
+      ? TOOLBAR_CHIP_ON
+      : TOOLBAR_CHIP_OFF;
   const timeTone = on
     ? c.delegated
       ? "text-white/75"

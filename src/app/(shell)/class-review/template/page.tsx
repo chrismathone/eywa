@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Plus } from "@/components/icons/eywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
@@ -52,21 +53,15 @@ export default async function ClassReviewTemplatePage({
             key={t.id}
             href={`/class-review/template?set=${t.id}`}
             aria-current={selected?.id === t.id ? "true" : undefined}
-            className={`rounded-full px-3 py-1 text-xs font-bold transition ${
-              selected?.id === t.id
-                ? "bg-primary text-primary-foreground"
-                : "bg-card text-text-dim hover:text-primary shadow-card"
-            }`}
+            className={`${TOOLBAR_CHIP} ${selected?.id === t.id ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
           >
             {t.name}
           </Link>
         ))}
         <Link
           href="/class-review/template?new=1"
-          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition ${
-            creating
-              ? "bg-primary text-primary-foreground"
-              : "border-line-strong text-text-dim hover:text-primary border border-dashed"
+          className={`${TOOLBAR_CHIP} gap-1 ${
+            creating ? TOOLBAR_CHIP_ON : "border-line-strong text-text-dim hover:text-primary border-dashed"
           }`}
         >
           <Plus className="size-3" /> 새 세트

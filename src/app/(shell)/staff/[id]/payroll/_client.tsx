@@ -76,11 +76,12 @@ export function PayrollClient({
   return (
     <div className="space-y-6">
       {/* 월 selector */}
-      <div className="bg-card border-border flex items-center justify-between rounded-2xl border px-4 py-3">
+      {/* ⚠️ 툴바엔 카드 껍데기를 두지 않는다(툴바 규약). */}
+      <div className="flex items-center justify-between px-1 py-1">
         <div className="flex items-center gap-2">
           <Link
             href={`?period=${shiftMonth(period, -1)}`}
-            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-lg border"
+            className="text-muted-foreground hover:text-foreground border-line inline-flex size-8 items-center justify-center rounded-lg border"
             aria-label="이전 달"
           >
             <EyIcon name="chevronLeft" size={14} />
@@ -88,7 +89,7 @@ export function PayrollClient({
           <h2 className="text-foreground num text-base font-bold">{period}</h2>
           <Link
             href={`?period=${shiftMonth(period, 1)}`}
-            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-lg border"
+            className="text-muted-foreground hover:text-foreground border-line inline-flex size-8 items-center justify-center rounded-lg border"
             aria-label="다음 달"
           >
             <EyIcon name="chevronRight" size={14} />

@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import type { SeatKey } from "@/features/attendance/seat/seat";
 import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { seatPlanApi } from "@/features/attendance/seat/seat-plan-api";
@@ -99,11 +100,7 @@ export function SeatBoard({
           <Link
             key={p.start}
             href={`${hrefFor}${p.start}`}
-            className={`shrink-0 rounded-full border px-3 py-1 text-[13px] font-semibold tabular-nums transition ${
-              p.start === activeStart
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-line text-text-dim hover:bg-bg-soft"
-            }`}
+            className={`${TOOLBAR_CHIP} tabular-nums ${p.start === activeStart ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
           >
             {p.start}
             <span className="ml-1.5 text-[11px] font-medium opacity-80">{p.classIds.length}개 반</span>

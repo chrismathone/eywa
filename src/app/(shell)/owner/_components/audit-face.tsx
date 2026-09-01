@@ -1,5 +1,6 @@
 import { ScrollText } from "@/components/icons/eywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
 import { EmptyState } from "@/components/empty-state";
@@ -100,9 +101,16 @@ export async function AuditFace({
         <h2 className="text-foreground mt-1 text-lg font-bold">작업 이력</h2>
       </header>
 
-      <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-2.5">
-        <span className="text-text-dim text-xs">액션</span>
-        <FilterSelect paramName="action" value={action ?? null} options={ACTION_FILTERS} ariaLabel="액션 필터" />
+      {/* ⚠️ 툴바엔 카드 껍데기를 두지 않는다(앱 전역 툴바 규약). */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
+        <span className="micro shrink-0">액션</span>
+        <FilterSelect
+          paramName="action"
+          triggerClassName={TOOLBAR_SELECT}
+          value={action ?? null}
+          options={ACTION_FILTERS}
+          ariaLabel="액션 필터"
+        />
         {/* 텍스트+기간 검색(GET) — 서버 컴포넌트라 클라 JS 없이 폼 제출로 필터. tab·embed·action은
             hidden으로 동행(안 실으면 제출 순간 audit 면·창 모드·액션 필터가 풀린다). 페이지는 1로 리셋. */}
         <form method="get" action="/owner" className="flex flex-wrap items-center gap-2">

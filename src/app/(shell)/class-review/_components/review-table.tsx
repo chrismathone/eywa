@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  TOOLBAR_SEG_BOX_WRAP,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -68,25 +74,27 @@ export function ReviewTable({
 
   return (
     <div className="space-y-3">
-      <span
-        className="border-line-strong inline-flex flex-wrap items-center rounded-full border p-0.5"
-        title="목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
-      >
-        <span className="text-text-dim px-1.5 text-[11px] font-bold">보기</span>
-        {CLASS_REVIEW_FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => pick(f)}
-            aria-pressed={filter === f}
-            className={`cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap transition ${
-              filter === f ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-            }`}
-          >
-            {CLASS_REVIEW_FILTER_LABEL[f]}
-            <span className={`num ml-1 ${filter === f ? "opacity-80" : "opacity-60"}`}>{counts[f]}</span>
-          </button>
-        ))}
+      <span className="flex flex-wrap items-center gap-1.5 px-1">
+        <span className="micro shrink-0">보기</span>
+        <span
+          className={TOOLBAR_SEG_BOX_WRAP}
+          title="목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
+        >
+          {CLASS_REVIEW_FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => pick(f)}
+              aria-pressed={filter === f}
+              className={`${TOOLBAR_SEG_ITEM} cursor-pointer whitespace-nowrap ${
+                filter === f ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF
+              }`}
+            >
+              {CLASS_REVIEW_FILTER_LABEL[f]}
+              <span className={`num ml-1 ${filter === f ? "opacity-80" : "opacity-60"}`}>{counts[f]}</span>
+            </button>
+          ))}
+        </span>
       </span>
 
       {visible.length === 0 ? (

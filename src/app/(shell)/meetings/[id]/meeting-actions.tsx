@@ -16,7 +16,7 @@ import {
 function DeleteSubmit() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+    <Button type="submit" variant="destructive" disabled={pending}>
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
       삭제 확인
     </Button>
@@ -30,7 +30,7 @@ export function MeetingDeleteButton({ meetingId }: { meetingId: string }) {
 
   if (!armed) {
     return (
-      <Button variant="outline" size="sm" onClick={() => setArmed(true)}>
+      <Button variant="outline" onClick={() => setArmed(true)}>
         <Trash2 className="size-4" />
         삭제
       </Button>
@@ -42,7 +42,7 @@ export function MeetingDeleteButton({ meetingId }: { meetingId: string }) {
       <input type="hidden" name="id" value={meetingId} />
       <input type="hidden" name="redirectTo" value="/meetings" />
       <DeleteSubmit />
-      <Button type="button" variant="ghost" size="sm" onClick={() => setArmed(false)}>
+      <Button type="button" variant="ghost" onClick={() => setArmed(false)}>
         취소
       </Button>
       {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
@@ -53,7 +53,7 @@ export function MeetingDeleteButton({ meetingId }: { meetingId: string }) {
 function RetrySubmit({ label, variant }: { label: string; variant: "default" | "outline" }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" size="sm" variant={variant} disabled={pending}>
+    <Button type="submit" variant={variant} disabled={pending}>
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
       {label}
     </Button>
@@ -63,7 +63,7 @@ function RetrySubmit({ label, variant }: { label: string; variant: "default" | "
 function RegenerateSubmit({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" size="sm" variant="outline" disabled={pending}>
+    <Button type="submit" variant="outline" disabled={pending}>
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
       {label}
     </Button>

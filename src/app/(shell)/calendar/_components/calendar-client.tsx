@@ -69,7 +69,7 @@ export function CalendarClient({
             <EyIcon name="chevronRight" size={16} />
           </Link>
           {!isCurrentMonth ? (
-            <Button variant="outline" size="sm" render={<Link href="/calendar" />}>
+            <Button variant="outline" render={<Link href="/calendar" />}>
               오늘
             </Button>
           ) : null}

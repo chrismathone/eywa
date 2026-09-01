@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { BookMarked, BookOpen, Eye, User, X } from "@/components/icons/eywa-icon-compat";
+import { BookOpen, Eye, User, X } from "@/components/icons/eywa-icon-compat";
+import { PageHeader } from "@/components/page-header";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { kstToday } from "@/lib/date-kst";
@@ -215,17 +216,16 @@ export function TextbookRequestClient({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <header className="flex items-center gap-2">
-        <BookMarked className="text-primary size-5" />
-        <div>
-          <h1 className="text-foreground text-[19px] font-bold">교재 요청</h1>
-          <p className="text-text-dim text-[13px]">
-            {isTeacher
-              ? "담당 학생의 교재를 요청하면 사무실에서 등록·납부·주문을 처리합니다."
-              : "교재 요청 목록 — 사무실은 수납관리 › 교재에서 등록·납부·주문을 처리합니다."}
-          </p>
-        </div>
-      </header>
+      {/* ⚠️ 수제 헤더가 아니라 공용 PageHeader — 창(embed)·모바일 컴팩트 행과 구분선이 여기 한 곳에서 온다. */}
+      <PageHeader
+        eyebrow="운영"
+        title="교재 요청"
+        description={
+          isTeacher
+            ? "담당 학생의 교재를 요청하면 사무실에서 등록·납부·주문을 처리합니다."
+            : "교재 요청 목록 — 사무실은 수납관리 › 교재에서 등록·납부·주문을 처리합니다."
+        }
+      />
 
       {students.length === 0 ? (
         <p className="text-text-dim border-line rounded-2xl border p-4 text-[13px]">

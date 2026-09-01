@@ -10,7 +10,7 @@ export function MonthlyPrintButton({ seat, month, title }: { seat: SeatKey; mont
       href={`/attendance/seat/${seat}/month/print?month=${month}`}
       title={title}
       variant="outline"
-      className="h-7 rounded-full px-2.5 text-xs"
+      className="h-8 rounded-lg px-2.5 text-xs"
     >
       인쇄
     </PrintWindowButton>

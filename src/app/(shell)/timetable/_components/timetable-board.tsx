@@ -1,4 +1,5 @@
 "use client";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -725,7 +726,7 @@ export function TimetableEditControls() {
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition"
+          className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF}`}
         >
           <Pencil className="size-3" />
           편집
@@ -747,14 +748,14 @@ export function TimetableEditControls() {
               value={scheduledDate ?? anchorDate}
               onChange={(e) => setScheduledDate(e.target.value || null)}
               disabled={saving}
-              className="border-line rounded-lg border px-1.5 py-0.5 text-xs disabled:opacity-50"
+              className="border-line h-8 rounded-lg border px-1.5 text-xs disabled:opacity-50"
             />
           </label>
           <button
             type="button"
             onClick={save}
             disabled={saving}
-            className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 font-medium transition disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
             저장
@@ -763,7 +764,7 @@ export function TimetableEditControls() {
             type="button"
             onClick={cancel}
             disabled={saving}
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition disabled:opacity-50"
+            className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} disabled:opacity-50`}
           >
             <X className="size-3" />
             취소

@@ -9,24 +9,48 @@
  *
  * ⚠️ 이 파일에 `"use client"`를 붙이지 말 것 — 서버 컴포넌트가 import하면 런타임에 값이 사라진다([[#81]]).
  */
+import { TOOLBAR_CHIP, TOOLBAR_SEG_BOX, TOOLBAR_SEG_ITEM } from "@/components/toolbar-controls";
 import type { EcsMonthView } from "./view-prefs";
 
-/** 상단 바 한 벌(카드). 두 화면이 같은 여백·같은 그림자·같은 줄바꿈 규칙을 쓴다. */
+/**
+ * 상단 바 한 벌. 두 화면이 같은 여백·같은 줄바꿈 규칙을 쓴다.
+ *
+ * 🔴 **카드 껍데기를 두지 않는다**(앱 전역 툴바 규약 — [`toolbar-controls.ts`](@/components/toolbar-controls)).
+ *    원장 2026-09-01: *"지금 강사 시트 뿐만 아니라 eywa 웹앱의 모든 헤더 스타일을 일관성있게."*
+ *    종전엔 `bg-card shadow-card rounded-2xl px-4 py-2.5`라 ECS만 카드 안에 툴바가 든 모양이었다.
+ * 🔴 **`.toolbar-rail`을 붙이지 말 것** — 이 줄엔 반 선택 드롭다운(`SheetClassPicker` → `SearchableSelect`)이
+ *    있고 그건 **Portal이 아니라 인라인 absolute**다. 레일은 모바일에서 `overflow-x:auto`라 목록이
+ *    통째로 잘린다(globals.css `.toolbar-rail` 주석의 경고 그대로). 좁은 화면에선 종전처럼 감긴다.
+ */
 export const SHEET_BAR =
-  "bg-card shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl px-4 py-2.5";
+  "flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 px-1 py-1 compact-chrome:gap-x-2 compact-chrome:px-0.5";
 
 /**
- * 알약 한 벌(목록·반 정보 보기·요일·표시 토글…).
+ * 홀로 선 칩 한 벌(목록·반 정보 보기·요일·표시 토글…) — 앱 전역 [`TOOLBAR_CHIP`] 모양.
+ *
+ * 🔴 모양(높이 h-8 · `rounded-lg`)은 규약이 정하고 **색만 이 화면 것**이다.
+ * ⚠️ 테두리는 **잉크 고정**(원장 2026-08-10 *"모든 박스에 진한 검은색 테두리"*) — 헤어라인(9%)이면
+ *    흰 배경에서 "눌 수 있는 칩인지 글자인지" 구분이 안 된다(07-31 가독성 지적의 연장).
  * ⚠️ `cursor-pointer` 명시 — Tailwind v4 preflight엔 v3의 `button{cursor:pointer}`가 없어서
  *    안 적으면 클릭 가능한 버튼이 화살표로 보인다(이 앱 globals.css에도 cursor 규칙 0건).
- * ⚠️ 테두리는 **잉크 고정**(원장 2026-08-10 *"모든 박스에 진한 검은색 테두리"*) — 헤어라인(9%)이면
- *    흰 카드 위에서 "눌 수 있는 알약인지 글자인지" 구분이 안 된다(07-31 가독성 지적의 연장).
  */
 export const sheetPill = (on: boolean) =>
-  `shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-[12px] font-bold transition ${
-    on
-      ? "border-primary bg-primary text-primary-foreground"
-      : "border-line-strong text-foreground hover:bg-bg-soft"
+  `${TOOLBAR_CHIP} cursor-pointer font-bold ${
+    on ? "border-primary bg-primary text-primary-foreground" : "border-line-strong text-foreground hover:bg-bg-soft"
+  }`;
+
+/**
+ * 이 화면의 **세그먼트 묶음**(JJ 표시·글씨 크기) — 앱 전역 [`TOOLBAR_SEG_BOX`]에 잉크 테두리만 얹는다.
+ * ⚠️ `border-line`(규약 기본)과 `border-line-strong`이 겹치면 승자를 CSS 순서가 정한다([[#116]]) →
+ *    규약 상수에서 색만 빼고 다시 적는 대신, 여기서 **뒤에 오는 클래스로 덮지 않고** 색을 분리해 둔다.
+ */
+export const SHEET_SEG_BOX = TOOLBAR_SEG_BOX.replace("border-line ", "border-line-strong ");
+export const sheetSegItem = (on: boolean) =>
+  // 🔴 톤을 `TOOLBAR_SEG_ON_PRIMARY`로 잇지 말 것 — 그 상수엔 `font-medium`이 들어 있어 이 화면의
+  //    `font-bold`와 **같은 축에서 겹친다**. 겹치면 승자를 문자열 순서가 아니라 생성된 CSS 순서가
+  //    정해서 눈으로 못 읽는 버그가 된다([[#116]]). 색만 같은 값으로 다시 적는다.
+  `${TOOLBAR_SEG_ITEM} cursor-pointer font-bold ${
+    on ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-bg-soft"
   }`;
 
 /**

@@ -1,4 +1,6 @@
 "use client";
+// 툴바 모양은 ECS 시트와 **같은 상수**를 쓴다 — 두 시트를 오가는 사람이 다시 배우지 않게(앱 전역 툴바 규약).
+import { SHEET_SEG_BOX, sheetPill, sheetSegItem } from "@/features/class-sheets/chrome";
 
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -98,9 +100,7 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
       // ⚠️ ECS의 [SheetFaceSwitch](@/features/class-sheets/components/sheet-chrome) 칸과 **같은 값**
       //    (2026-09-01 ECS 상단 바 통일 때 함께 맞췄다) — 두 시트를 오가는 사람이 다시 배우지 않게.
       //    MCS는 '주간' 면이 없어 그 컴포넌트를 그대로 쓰진 않는다.
-      className={`cursor-pointer px-3.5 py-1 text-[13px] font-bold transition ${
-        key === view ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-      }`}
+      className={`${sheetSegItem(key === view)}`}
     >
       {label}
     </button>
@@ -108,7 +108,7 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="toolbar-rail flex shrink-0 flex-wrap items-center gap-2 px-1 py-1">
         <PeriodNav
           label={data.monthLabel}
           prevHref={hrefFor(shiftMonth(data.month, -1))}
@@ -121,10 +121,8 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
           // 저장 flush를 끝낸 뒤 직접 이동한다(가로챈 화면의 책임 — PeriodNav 주석 참조).
           onNavigate={(href) => flushAll().then(() => window.location.assign(href))}
         />
-        <div className="border-line-strong inline-flex overflow-hidden rounded-lg border">
+        <div className={SHEET_SEG_BOX}>
           {seg("sheet", "진도표")}
-          {/* 구분선 농도도 ECS와 같은 값(line-strong) — 나란히 두면 옅은 쪽이 눈에 띈다. */}
-          <span className="bg-line-strong w-px" />
           {seg("track", "진도 레일")}
         </div>
         {data.teacherName ? (
@@ -138,23 +136,21 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
             onClick={() => void copyPrev()}
             disabled={copying}
             title="지난 달 목표를 이 달의 빈 칸에만 채웁니다(이미 적은 것은 그대로)"
-            className="border-line-strong hover:bg-bg-soft cursor-pointer rounded-lg border px-2.5 py-1 text-xs font-bold disabled:opacity-60"
+            className={`${sheetPill(false)} disabled:opacity-60`}
           >
             {copying ? "가져오는 중…" : "지난 달 목표 가져오기"}
           </button>
         ) : null}
         <span className="flex-1" />
         {/* 글씨 크기 — 원스크린·ECS와 **같은 어휘·같은 배율**(원장이 화면을 오가며 쓴다). */}
-        <span className="border-line-strong inline-flex overflow-hidden rounded-lg border">
-          {MCS_FONT_SIZES.map((f, i) => (
+        <span className={SHEET_SEG_BOX}>
+          {MCS_FONT_SIZES.map((f) => (
             <button
               key={f}
               type="button"
               aria-pressed={f === fontSize}
               onClick={() => chooseFont(f)}
-              className={`cursor-pointer px-2 py-1 text-[12px] font-bold transition ${
-                i > 0 ? "border-line-faint border-l" : ""
-              } ${f === fontSize ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
+              className={sheetSegItem(f === fontSize)}
             >
               {MCS_FONT_SIZE_LABEL[f]}
             </button>

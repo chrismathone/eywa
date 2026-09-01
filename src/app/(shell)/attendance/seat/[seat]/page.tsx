@@ -3,6 +3,14 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import {
+  TOOLBAR_CHIP,
+  TOOLBAR_CHIP_OFF,
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { PeriodNav } from "@/components/period-nav";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -121,27 +129,22 @@ export default async function SeatAttendancePage({
         actions={
           <div className="flex items-center gap-1.5">
             {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). */}
-            <Link
-              href="/attendance"
-              className="border-line hover:bg-bg-soft mr-1 rounded-full border px-2.5 py-0.5 text-xs"
-            >
+            <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}>
               출석부로
             </Link>
             <Link
               href={`/attendance/seat/${seat}/month?month=${date.slice(0, 7)}`}
-              className="border-line hover:bg-bg-soft mr-1 rounded-full border px-2.5 py-0.5 text-xs"
+              className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}
             >
               월간
             </Link>
             {USABLE_SEAT_KEYS.length > 1 ? (
-              <div className="bg-bg-soft mr-1 inline-flex rounded-full p-0.5">
+              <div className={`${TOOLBAR_SEG_BOX} mr-1`}>
                 {USABLE_SEAT_KEYS.map((k) => (
                   <Link
                     key={k}
                     href={`/attendance/seat/${k}?date=${date}`}
-                    className={`rounded-full px-3 py-1 text-[13px] font-semibold ${
-                      k === seat ? "bg-primary text-primary-foreground" : "text-text-dim"
-                    }`}
+                    className={`${TOOLBAR_SEG_ITEM} ${k === seat ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
                   >
                     {SEAT_NAME[k]}
                   </Link>

@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  TOOLBAR_SEG_BOX_WRAP,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
+
 /**
  * 오늘 출결 **과목별 필터 칩** — 세 탭(좌석표·확인 필요·어제 출결)이 같이 쓰는 하나
  * (원장 2026-08-20: *"오늘의 출결에서 과목별 필터링 되도록"*).
@@ -70,25 +77,29 @@ export function SubjectFilterChips({
   // 설정 과목이 없으면(빈 학원) 칩 줄 자체가 노이즈다 — '전체' 하나만 있는 토글은 아무 일도 못 한다.
   if (subjects.filters.length <= 1) return null;
   return (
-    <span
-      className="border-line-strong flex shrink-0 items-center rounded-full border p-0.5"
-      title="과목별로 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
-    >
-      <span className="text-text-dim px-1.5 text-[11px] font-bold">과목</span>
-      {subjects.filters.map((f) => (
-        <button
-          key={f.value}
-          type="button"
-          disabled={pending}
-          onClick={() => onPick(f.value)}
-          aria-pressed={value === f.value}
-          className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${
-            value === f.value ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-          }`}
-        >
-          {f.label}
-        </button>
-      ))}
+    // 항목 수가 **학원설정을 따라 늘어나므로** 줄바꿈되는 묶음(TOOLBAR_SEG_BOX_WRAP)이다.
+    // 소라벨('과목')은 묶음 밖 — 칩이 아닌 것이 칩 자리에 있으면 묶음이 삐뚤어 보인다.
+    <span className="flex shrink-0 items-center gap-1.5">
+      <span className="micro shrink-0">과목</span>
+      <span
+        className={TOOLBAR_SEG_BOX_WRAP}
+        title="과목별로 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
+      >
+        {subjects.filters.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            disabled={pending}
+            onClick={() => onPick(f.value)}
+            aria-pressed={value === f.value}
+            className={`${TOOLBAR_SEG_ITEM} cursor-pointer disabled:cursor-wait disabled:opacity-60 ${
+              value === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </span>
     </span>
   );
 }

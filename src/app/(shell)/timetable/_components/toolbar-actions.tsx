@@ -1,4 +1,5 @@
 "use client";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 
 import { useEffect, useState, useTransition } from "react";
 import { Popover } from "@base-ui/react/popover";
@@ -110,8 +111,8 @@ export function TimetableToolbarActions({
     });
   }
 
-  const btnCls =
-    "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-50";
+  // 툴바 줄에 서는 버튼 — 높이는 h-8 한 값(세로 패딩으로 만들지 않는다).
+  const btnCls = `${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} disabled:opacity-50`;
 
   // 팝오버에 담을 항목 수 — 권한이 없어 '엑셀' 하나뿐이면 접는 게 순손해라 평면으로 둔다.
   const canFileImport = canImport && exportsAllowed;
@@ -187,7 +188,7 @@ export function TimetableToolbarActions({
     <div className="print:hidden flex items-center gap-1">
       <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <Popover.Trigger
-          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft data-[popup-open]:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition"
+          className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} data-[popup-open]:bg-bg-soft`}
           title="엑셀 내보내기·가져오기, 구글 시트 반영·가져오기"
         >
           {/* 진행 중이면 트리거에서 바로 보이게 — 접으면 안쪽 스피너가 안 보인다. */}

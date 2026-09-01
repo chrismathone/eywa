@@ -12,6 +12,12 @@ import {
 } from "@/features/retention/server/queries";
 import { RetentionTabs } from "@/features/retention/components/retention-tabs";
 import { BoardList } from "@/features/retention/components/board-list";
+import {
+  TOOLBAR_CHIP,
+  TOOLBAR_CHIP_OFF,
+  TOOLBAR_CHIP_ON,
+  TOOLBAR_SELECT,
+} from "@/components/toolbar-controls";
 import { Pagination } from "@/components/pagination";
 import { formatWonShort } from "@/features/retention/format";
 
@@ -110,7 +116,9 @@ export default async function RetentionBoardPage({
         <Stat label="매출 위험" value={formatWonShort(stats.revenueRisk)} icon={TrendingDown} color="rose" />
       </section>
 
-      <div className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
+      {/* ⚠️ 툴바엔 카드 껍데기를 두지 않는다(앱 전역 툴바 규약) — 컨트롤이 저마다 테두리를 갖고 있어
+          줄은 그대로 읽히고, 아래 목록 카드와 선이 겹치지 않는다. */}
+      <div className="space-y-3 px-1 py-1">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">등급</span>
@@ -118,11 +126,7 @@ export default async function RetentionBoardPage({
               <Link
                 key={f.key}
                 href={buildHref({ ...state, level: f.key })}
-                className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
-                  state.level === f.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_CHIP} ${state.level === f.key ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
               >
                 {f.label}
               </Link>
@@ -135,6 +139,7 @@ export default async function RetentionBoardPage({
             <span className="micro mr-1">담당강사</span>
             <FilterSelect
               paramName="teacher"
+              triggerClassName={TOOLBAR_SELECT}
               value={state.teacher || null}
               options={teacherNames.map((n) => ({ value: n, label: n }))}
               ariaLabel="담당강사 필터"
@@ -144,6 +149,7 @@ export default async function RetentionBoardPage({
             <span className="micro mr-1">정렬</span>
             <FilterSelect
               paramName="sort"
+              triggerClassName={TOOLBAR_SELECT}
               value={state.sort === "risk" ? null : state.sort}
               allLabel="위험도순"
               options={SORTS.filter((s) => s.value !== "risk")}

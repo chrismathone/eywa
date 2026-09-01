@@ -2,8 +2,12 @@ import { ParamLink } from "./_components/param-link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
+import { Toolbar } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
 import {
+  TOOLBAR_CHIP,
+  TOOLBAR_CHIP_OFF,
+  TOOLBAR_CHIP_ON,
   TOOLBAR_SEG_BOX,
   TOOLBAR_SEG_BOX_WRAP,
   TOOLBAR_SEG_ITEM,
@@ -539,7 +543,7 @@ export default async function TimetablePage({
       </div>
       {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
-      <div className="toolbar-rail flex shrink-0 flex-wrap items-center gap-3 px-1 py-1 compact-chrome:gap-2 compact-chrome:px-0.5 compact-chrome:py-0.5">
+      <Toolbar>
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
@@ -728,11 +732,7 @@ export default async function TimetablePage({
             <ParamLink
               href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
               title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition ${
-                groupEditing
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_CHIP} gap-1.5 ${groupEditing ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
             >
               <Layers size={11} strokeWidth={1.8} />
               그룹 설정
@@ -871,7 +871,7 @@ export default async function TimetablePage({
             <TimetableEditControls />
           </>
         ) : null}
-      </div>
+      </Toolbar>
 
       {/* 검색 결과 0건 — 빈 격자만 남기면 "시간표가 고장났다"로 읽힌다. 왜 비었는지(어느 주·어느 과목에
           없는지)를 한 줄로 말하고, 그 자리에서 지울 수 있게 한다. */}

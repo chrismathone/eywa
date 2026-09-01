@@ -14,7 +14,7 @@ import { PeriodNav } from "@/components/period-nav";
 
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { ecsPresenceScope } from "../lib/presence-scope";
-import { SHEET_BAR, sheetFacesFor, sheetPill } from "../chrome";
+import { SHEET_BAR, SHEET_SEG_BOX, sheetFacesFor, sheetPill, sheetSegItem } from "../chrome";
 import { monthOfWeek } from "../face-nav";
 import { setMyEcsMonthView } from "../server/actions";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
@@ -183,46 +183,46 @@ export function SheetToolbar({
                면 켜도 LAB이 안 나오는 거짓 스위치가 된다.
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
                때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
-        <span
-          className="border-line-strong flex items-center rounded-full border p-0.5"
-          title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
-        >
-          <span className="text-foreground px-1.5 text-[11px] font-bold">JJ</span>
-          {[true, false].map((v) => (
-            <button
-              key={String(v)}
-              type="button"
-              disabled={selfStudyPending}
-              onClick={() => onShowSelfStudy(v)}
-              aria-pressed={showSelfStudy === v}
-              className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[11px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${
-                showSelfStudy === v ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {v ? "표시" : "숨김"}
-            </button>
-          ))}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="text-foreground shrink-0 text-[11px] font-bold">JJ</span>
+          <span
+            className={SHEET_SEG_BOX}
+            title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
+          >
+            {[true, false].map((v) => (
+              <button
+                key={String(v)}
+                type="button"
+                disabled={selfStudyPending}
+                onClick={() => onShowSelfStudy(v)}
+                aria-pressed={showSelfStudy === v}
+                className={`${sheetSegItem(showSelfStudy === v)} disabled:cursor-wait disabled:opacity-60`}
+              >
+                {v ? "표시" : "숨김"}
+              </button>
+            ))}
+          </span>
         </span>
         {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31).
             지금 크기가 '작음'이라 기본은 화면 무변경. 저장은 계정이라 다른 PC에서도 같은 크기. */}
-        <span
-          className="border-line-strong flex items-center rounded-full border p-0.5"
-          title="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
-        >
-          <span className="text-foreground px-1.5 text-[11px] font-bold">글씨</span>
-          {ECS_FONT_SIZES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onFontSize(s)}
-              aria-pressed={fontSize === s}
-              className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[11px] font-bold transition ${
-                fontSize === s ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {ECS_FONT_SIZE_LABEL[s]}
-            </button>
-          ))}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="text-foreground shrink-0 text-[11px] font-bold">글씨</span>
+          <span
+            className={SHEET_SEG_BOX}
+            title="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
+          >
+            {ECS_FONT_SIZES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onFontSize(s)}
+                aria-pressed={fontSize === s}
+                className={sheetSegItem(fontSize === s)}
+              >
+                {ECS_FONT_SIZE_LABEL[s]}
+              </button>
+            ))}
+          </span>
         </span>
         <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
         {conflicts > 0 ? (

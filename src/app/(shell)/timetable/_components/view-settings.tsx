@@ -1,4 +1,5 @@
 "use client";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 
 import { useState, useTransition } from "react";
 import { ParamLink } from "./param-link";
@@ -126,11 +127,7 @@ export function TimetableViewSettings({
       }}
     >
       <Popover.Trigger
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
-          badge
-            ? "border-primary bg-primary text-primary-foreground font-medium"
-            : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-        }`}
+        className={`${TOOLBAR_CHIP} gap-1.5 ${badge ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
         title="학제·학년으로 보이는 학생을 고른다 (내 계정에 저장)"
       >
         <Filter size={11} strokeWidth={1.8} aria-hidden />

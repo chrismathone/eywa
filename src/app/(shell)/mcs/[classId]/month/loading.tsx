@@ -10,7 +10,13 @@ export default function McsMonthLoading() {
         <div className="bg-bg-soft mt-2 h-6 w-80 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-4 w-56 animate-pulse rounded" />
       </div>
-      <div className="bg-card shadow-card h-[38px] shrink-0 animate-pulse rounded-lg" />
+      {/* 툴바 스켈레톤 — 실제 툴바는 **카드 껍데기가 없고** 컨트롤이 h-8이다(스켈레톤=실표면 동일 캐논).
+          껍데기를 그리면 로딩→본문에서 카드가 사라지며 화면이 튄다. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-1 py-1">
+        <div className="bg-bg-soft h-8 w-36 shrink-0 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-8 w-40 shrink-0 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-8 w-28 shrink-0 animate-pulse rounded-lg" />
+      </div>
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         {Array.from({ length: 6 }, (_, i) => (
           <div key={i} className="bg-card shadow-card h-[74px] shrink-0 animate-pulse rounded-[10px]" />

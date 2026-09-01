@@ -55,18 +55,18 @@ export default async function ClassReviewPage() {
         actions={
           <span className="flex items-center gap-2">
             {priv.seeNames ? (
-              <Button variant="outline" size="sm" render={<Link href="/class-review/board" />}>
+              <Button variant="outline" render={<Link href="/class-review/board" />}>
                 종합 보기
               </Button>
             ) : null}
             {priv.editTemplate ? (
-              <Button variant="outline" size="sm" render={<Link href="/class-review/template" />}>
+              <Button variant="outline" render={<Link href="/class-review/template" />}>
                 문항 편집
               </Button>
             ) : null}
             {/* 평가 건 개설은 사무실 몫 — 강사에겐 서버 액션이 거절하므로 버튼 자체를 안 그린다(#77). */}
             {selfOnly ? null : (
-              <Button size="sm" render={<Link href="/class-review/new" />}>
+              <Button render={<Link href="/class-review/new" />}>
                 + 새 평가
               </Button>
             )}

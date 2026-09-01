@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -70,17 +71,14 @@ export default async function EnrollmentDashboardPage({
       </header>
 
       {/* Month selector */}
-      <div className="border-border bg-card flex flex-wrap items-center gap-1.5 rounded-2xl border px-4 py-2.5">
-        <span className="text-muted-foreground shrink-0 text-xs">월 선택</span>
+      {/* ⚠️ 툴바엔 카드 껍데기를 두지 않는다 — 칩이 저마다 테두리를 갖고 있어 줄은 그대로 읽힌다. */}
+      <div className="flex flex-wrap items-center gap-1.5 px-1 py-1">
+        <span className="micro shrink-0">월 선택</span>
         {monthOptions(monthsBack).map((m) => (
           <Link
             key={m.key}
             href={`/enrollment/dashboard?month=${m.key}`}
-            className={`rounded-full border px-2 py-0.5 text-xs transition ${
-              selectedMonth === m.key
-                ? "border-primary bg-primary text-primary-foreground font-medium"
-                : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/30"
-            }`}
+            className={`${TOOLBAR_CHIP} ${selectedMonth === m.key ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
           >
             {m.label}
           </Link>

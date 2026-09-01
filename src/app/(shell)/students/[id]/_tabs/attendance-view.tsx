@@ -1,4 +1,11 @@
 "use client";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+  TOOLBAR_SELECT,
+} from "@/components/toolbar-controls";
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays, List } from "@/components/icons/eywa-icon-compat";
@@ -61,7 +68,7 @@ export function AttendanceView({
           <CalendarDays className="text-primary size-4" />
           <h2 className="text-foreground text-sm font-bold">출결 현황</h2>
         </div>
-        <div className="border-line flex items-center gap-0.5 rounded-full border p-0.5">
+        <div className={TOOLBAR_SEG_BOX}>
           <ViewBtn active={view === "calendar"} onClick={() => setView("calendar")} icon={<CalendarDays className="size-3.5" />}>
             달력
           </ViewBtn>
@@ -72,6 +79,7 @@ export function AttendanceView({
         {subjectOptions.length > 1 ? (
           <SearchableSelect
             className="w-36"
+            triggerClassName={TOOLBAR_SELECT}
             value={subject}
             onValueChange={(v) => {
               setSubject(v);
@@ -84,6 +92,7 @@ export function AttendanceView({
         {classOptions.length > 0 ? (
           <SearchableSelect
             className="w-40"
+            triggerClassName={TOOLBAR_SELECT}
             value={activeClassId}
             onValueChange={setClassId}
             options={[{ value: "all", label: "전체 수업" }, ...classOptions]}
@@ -92,13 +101,23 @@ export function AttendanceView({
         ) : null}
         {ym ? (
           <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={() => navMonth(-1)} className="hover:bg-bg-soft rounded-full p-1" aria-label="이전 달">
+            <button
+              type="button"
+              onClick={() => navMonth(-1)}
+              className="hover:bg-bg-soft inline-flex h-8 w-8 items-center justify-center rounded-md"
+              aria-label="이전 달"
+            >
               <ChevronLeft className="size-4" />
             </button>
             <span className="num text-foreground min-w-[5.5rem] text-center text-sm font-medium">
               {yy}년 {mm}월
             </span>
-            <button type="button" onClick={() => navMonth(1)} className="hover:bg-bg-soft rounded-full p-1" aria-label="다음 달">
+            <button
+              type="button"
+              onClick={() => navMonth(1)}
+              className="hover:bg-bg-soft inline-flex h-8 w-8 items-center justify-center rounded-md"
+              aria-label="다음 달"
+            >
               <ChevronRight className="size-4" />
             </button>
           </div>
@@ -147,8 +166,8 @@ function ViewBtn({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs transition ${
-        active ? "bg-primary text-primary-foreground font-medium" : "text-text-dim hover:bg-bg-soft"
+      className={`${TOOLBAR_SEG_ITEM} inline-flex items-center gap-1 ${
+        active ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF
       }`}
     >
       {icon}

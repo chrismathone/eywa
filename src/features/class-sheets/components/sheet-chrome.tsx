@@ -4,7 +4,15 @@ import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WindowLink } from "@/components/workspace/window-link";
 import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
-import { SHEET_FACES, SHEET_FACE_LABEL, SHEET_FACE_TITLE, sheetPill, type SheetFace } from "../chrome";
+import {
+  SHEET_FACES,
+  SHEET_FACE_LABEL,
+  SHEET_FACE_TITLE,
+  SHEET_SEG_BOX,
+  sheetPill,
+  sheetSegItem,
+  type SheetFace,
+} from "../chrome";
 
 /**
  * ECS 상단 바의 **공용 조각** — 표기는 [`chrome.ts`](../chrome.ts), 여기는 그리는 쪽.
@@ -139,7 +147,7 @@ export function SheetFaceSwitch({
   onSelect: (face: SheetFace) => void;
 }) {
   return (
-    <span className="border-line-strong inline-flex shrink-0 overflow-hidden rounded-lg border [&>button+button]:border-l [&>button+button]:border-[var(--line-strong)]">
+    <span className={`${SHEET_SEG_BOX} shrink-0`}>
       {faces.map((face) => {
         const active = face === current;
         return (
@@ -151,9 +159,7 @@ export function SheetFaceSwitch({
             onClick={() => {
               if (!active) onSelect(face);
             }}
-            className={`cursor-pointer px-3.5 py-1 text-[13px] font-bold transition ${
-              active ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
-            }`}
+            className={`${sheetSegItem(active)}`}
           >
             {SHEET_FACE_LABEL[face]}
           </button>

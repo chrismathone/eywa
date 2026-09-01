@@ -1,3 +1,4 @@
+import { Toolbar } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
 import { formatKoreanDate } from "@/lib/date-kst";
 import { EcsFaceTabs, EcsDayNav } from "@/app/(shell)/ecs/_components/today-nav";
@@ -28,10 +29,11 @@ export function EcsSeatDayFace({ res, showToday }: { res: SeatDayResult; showTod
         description={`${isToday ? "오늘" : formatKoreanDate(data.date)} · 집중자율수업실 · ${data.periods.length}타임 · ${n}명`}
         embedLabel={`305 · JJ실 · ${isToday ? "오늘" : data.date.slice(5)}`}
       />
-      <div className="bg-card shadow-card toolbar-rail flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
+      {/* ⚠️ 툴바엔 카드 껍데기를 두지 않는다(앱 전역 툴바 규약) — 주간 시트 상단 바(SHEET_BAR)와 같은 모양. */}
+      <Toolbar>
         <EcsFaceTabs face="room" showToday={showToday} />
         <EcsDayNav date={data.date} today={data.today} view="room" />
-      </div>
+      </Toolbar>
       {data.periods.length === 0 ? (
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
           {isToday ? "오늘은" : "이 날은"} 305호 JJ 수업이 없습니다. 다른 날짜를 보시거나 주간 시트에서 반별로
