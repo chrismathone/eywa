@@ -6,7 +6,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
 import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
 import { positionFrozen } from "../lib/progress-stall";
-import type { MathCellState } from "../lib/cell-state";
+import { CELL_STATE_LABEL, type MathCellState } from "../lib/cell-state";
 import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries";
 
 /**
@@ -26,6 +26,8 @@ const DOT_TONE: Record<MathCellState, string> = {
     "border-line-faint text-danger bg-[repeating-linear-gradient(135deg,transparent,transparent_4px,rgba(188,56,56,.08)_4px,rgba(188,56,56,.08)_8px)]",
   absent: "bg-bg-soft text-text-faint border-transparent",
   untracked: "bg-muted text-text-faint border-line-faint",
+  // 🔴 아직 안 지난 날은 **빈 알약**(칸과 같은 규약) — 지난 날의 무기록(회색 채움)과 눈으로 갈린다.
+  upcoming: "bg-white text-text-faint border-line-faint",
   "off-roster": "bg-transparent text-text-faint border-dashed border-line-faint",
 };
 
@@ -40,13 +42,10 @@ function moveWidth(row: { startPosition: number | null; lastPosition: number | n
 function StudentCard({
   stu,
   days,
-  elapsedDays,
   classLabel,
 }: {
   stu: MathStudentRow;
   days: MathSheetMonthData["days"];
-  /** 그 달 수업일 중 이미 지난 날 — 0이면 아직 한 번도 안 한 달이다. */
-  elapsedDays: number;
   /** 반 이름 — 반이동 툴팁("가반 → 나반")에만 쓴다.
    *  ⚠️ 이름이 `className`이면 다음 사람이 CSS 클래스로 알고 그대로 툴팁에 밀어 넣는다
    *     (출석부 `MatrixRow`와 같은 이름으로 맞춘다). */
@@ -57,12 +56,19 @@ function StudentCard({
   const unwritten = days.filter((d) => stu.cells[d.date] === "unwritten").length;
   // 🔴 **아직 안 지난 달을 경고로 칠하지 않는다**(원장 2026-09-01 9월 화면이 전부 빨간 '기록 0건'이었다).
   //    수업이 한 번도 안 지났으면 '안 적은 것'이 아니라 '아직 안 한 것'이다.
-  const notStarted = elapsedDays === 0;
+  // 🔴 판정은 **판정할 수 있는 날**만 본다 — 아직 안 지난 날(`upcoming`)과 수강 밖(`off-roster`)을
+  //    섞으면 달 중간엔 미래 칸이 결론을 흐리고(경고가 사라지고), 달 초엔 전부 경고가 된다.
+  const judged = days.filter((d) => {
+    const c = stu.cells[d.date];
+    return c !== "upcoming" && c !== "off-roster";
+  });
+  // 판정할 날이 하나도 없으면 **아직 아무 일도 안 일어났다** — `elapsedDays === 0`보다 정확하다
+  // (달 중간에 들어오는 학생은 달이 절반 지났어도 자기 몫은 아직 안 시작했다).
+  const notStarted = judged.length === 0;
   const noTrace =
     stu.rosterPhase === "on" &&
-    !notStarted &&
-    days.length > 0 &&
-    days.every((d) => stu.cells[d.date] === "untracked");
+    judged.length > 0 &&
+    judged.every((d) => stu.cells[d.date] === "untracked");
 
   return (
     <div
@@ -170,7 +176,12 @@ function StudentCard({
           return (
             <span
               key={d.date}
-              title={`${d.date} · ${state === "written" ? (stu.records[d.date]?.textbook ?? "기록 있음") : state === "unwritten" ? "출석 · 기록 없음" : state === "absent" ? "결석" : state === "off-roster" ? "수강 전/후" : "출결도 기록도 없음"}`}
+              // 라벨은 진도표 칸과 **같은 표**(CELL_STATE_LABEL) — 사본을 두면 새 상태가 한쪽에만 반영된다.
+              title={`${d.date} · ${
+                state === "written"
+                  ? (stu.records[d.date]?.textbook ?? CELL_STATE_LABEL.written)
+                  : CELL_STATE_LABEL[state]
+              }`}
               className={`num flex h-6 flex-1 items-center justify-center rounded-md border text-[9.5px] font-extrabold ${
                 stu.records[d.date]?.offGoal ? "bg-amber-soft text-amber border-transparent" : DOT_TONE[state]
               }`}
@@ -205,7 +216,6 @@ export function MonthTrack({ data }: { data: MathSheetMonthData }) {
           key={stu.studentId}
           stu={stu}
           days={data.days}
-          elapsedDays={data.elapsedDays}
           classLabel={data.className}
         />
       ))}
