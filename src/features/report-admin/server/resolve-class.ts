@@ -1,4 +1,5 @@
 import "server-only";
+import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import type { createClient } from "@/lib/supabase/server";
 
 /**
@@ -31,16 +32,22 @@ export async function resolveReportClassId(
 
   const { data, error } = await supabase
     .from("enrollments")
-    .select("class_id, classes!inner(id, subject, teacher_id, users:teacher_id(display_name))")
+    .select(
+      "class_id, end_date, is_transferred, classes!inner(id, subject, teacher_id, users:teacher_id(display_name))",
+    )
     .eq("student_id", input.studentId)
     .eq("classes.subject", input.subject)
     .or(`start_date.is.null,start_date.lte.${input.reportDate}`)
+    // ⚠️ 넓은 프리필터 — 종료 판정은 아래 `isEnrollmentEndedOn`이 한다(반이동은 종료일 당일 배타).
     .or(`end_date.is.null,end_date.gte.${input.reportDate}`);
   if (error || !data) return null;
 
   const wanted = input.teacherName?.trim();
   const ids = new Set<string>();
   for (const row of data) {
+    // 반이동한 학생의 **옛 반**이 적용일 당일 후보로 남으면 그날 보고서가 떠난 반에 붙는다.
+    if (isEnrollmentEndedOn(row.end_date as string | null, input.reportDate, row.is_transferred === true))
+      continue;
     const cls = (Array.isArray(row.classes) ? row.classes[0] : row.classes) as
       | { id: string; users?: { display_name?: string | null } | { display_name?: string | null }[] | null }
       | null;

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { groupByStart, hhmm, isPayrollSeat, SEAT_DB_LABEL, type SeatKey, type SeatPeriod, type SeatSlot } from "../seat";
@@ -131,13 +132,24 @@ async function loadSeatDay(
     // ⚠️ PostgREST 임베드는 타입상 **배열**로 온다(실제로는 1건) — 아래에서 첫 원소로 접는다.
     fetchInChunks<{
       class_id: string;
+      start_date: string;
+      end_date: string | null;
+      on_hold: boolean | null;
+      is_transferred: boolean | null;
       attendance_days: string[] | null;
       student: { id: string; name: string; school: string | null; grade: string | null }[];
     }>(classIds, (chunk) =>
       (() => {
+        // 🔴 아래 날짜 조건은 **넓은 프리필터**일 뿐이다(1000행 캡 회피, [[#54]]) — 최종 판정은
+        //    `isEnrollmentActiveOn`이 한다. `end_date >= 오늘`만 걸면 **반이동 학생이 옛 반에 하루 더
+        //    남는다**: 이동 RPC가 옛 수강을 `end_date = 적용일`로 닫는데(daterange가 `[start, end)`)
+        //    이 비교는 종료일을 포함하기 때문이다. 2026-09-01 실측 — 9/1 이동 12명이 JJ·LAB 명단에
+        //    옛 반·새 반 양쪽으로 섰다(반 상세·반별 출석부는 이미 규약을 타서 갈렸다).
         let q = supabase
           .from("enrollments")
-          .select("class_id, attendance_days, student:student_id ( id, name, school, grade )")
+          .select(
+            "class_id, start_date, end_date, on_hold, is_transferred, attendance_days, student:student_id ( id, name, school, grade )",
+          )
           .in("class_id", chunk)
           .not("on_hold", "is", true)
           .lte("start_date", date)
@@ -207,6 +219,19 @@ async function loadSeatDay(
   for (const e of enrollments) {
     const s = (Array.isArray(e.student) ? e.student[0] : e.student) as Enrolled | null | undefined;
     if (!s) continue;
+    // 종료·시작 규약은 eligibility 단일 소스가 판정한다(위 쿼리 주석 참조) — 여기서 다시 쓰지 말 것.
+    if (
+      !isEnrollmentActiveOn(
+        {
+          startDate: e.start_date,
+          endDate: e.end_date,
+          onHold: e.on_hold === true,
+          isTransferred: e.is_transferred === true,
+        },
+        date,
+      )
+    )
+      continue;
     const dows = resolveAttendDows(e.attendance_days, classDows.get(e.class_id) ?? []);
     if (dows.length > 0 && !dows.includes(todayIdx)) continue;
     const list = studentsByClass.get(e.class_id) ?? [];
