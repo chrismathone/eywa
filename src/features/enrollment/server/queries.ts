@@ -42,7 +42,7 @@ export type PrintPayload = {
     parentName: string | null;
     parentPhone: string | null;
   };
-  // ⚠️ 아래는 **텍스트 분석 경로(runAiAnalysis)만** 채운다 — 녹음 웹훅 경로는
+  // ⚠️ 아래는 **옛 텍스트 분석 경로(runAiAnalysis, 2026-09-01 삭제)만** 채웠다 — 녹음 웹훅 경로는
   // `{prospect, audioReport, speakerRoles, formSuggestions}`만 저장해 이 필드들이 통째로 없다
   // (2026-07-22 실측: 프로덕션 6행 전부 없음). print_payload는 jsonb라 타입이 강제되지 않으므로
   // **optional이 진실**이다 — 필수로 적어 두면 인쇄 페이지가 `p.diagnosis.level`을 무방비로

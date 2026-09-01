@@ -16,7 +16,6 @@ const card = (over: Partial<Parameters<typeof cardMarkOf>[0]> = {}) => ({
   assignedClassCount: 0,
   fromPublicIntake: false,
   hasAudio: false,
-  hasAiAnalysis: false,
   ...over,
 });
 
@@ -106,15 +105,15 @@ describe("카드 표식 — 칸마다 최대 하나", () => {
     expect(cardMarkOf(card({ outcome: "scheduled" }))).toBeNull();
   });
 
-  it("상담 완료: 녹음이 있으면 녹음 표식 하나만(녹음+AI 두 개 금지)", () => {
-    expect(cardMarkOf(card({ outcome: "ai_done", hasAudio: true, hasAiAnalysis: true }))).toBe("audio");
+  it("상담 완료: 녹음이 있으면 녹음 표식 하나만", () => {
+    expect(cardMarkOf(card({ outcome: "ai_done", hasAudio: true }))).toBe("audio");
     // 분석이 아직 안 끝난 녹음 건도 같은 표식 — 녹음이 끝나면 분석은 자동으로 이어진다.
     expect(cardMarkOf(card({ outcome: "consulted", hasAudio: true }))).toBe("audio");
   });
 
-  it("상담 완료: 녹음 없이 텍스트로 분석한 건만 'AI 완료'", () => {
-    expect(cardMarkOf(card({ outcome: "ai_done" }))).toBe("ai");
-    expect(cardMarkOf(card({ outcome: "consulted", hasAiAnalysis: true }))).toBe("ai");
+  // 🔴 'AI 완료' 배지는 없앴다(원장 2026-09-01) — 텍스트 분석 버튼을 없애 분석 경로가 녹음 하나가 됐다.
+  it("녹음이 없으면 아무 표식도 안 단다(AI 완료 배지 폐기)", () => {
+    expect(cardMarkOf(card({ outcome: "ai_done" }))).toBeNull();
     expect(cardMarkOf(card({ outcome: "consulted" }))).toBeNull();
   });
 

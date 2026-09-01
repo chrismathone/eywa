@@ -28,7 +28,6 @@ import { getClassesList } from "@/features/classes/server/queries";
 import { TranscriptSection } from "@/components/transcript-section";
 import { RecordingsSection } from "./recordings-section";
 import { MergeButton } from "./merge-button";
-import { RunAiButton } from "./run-ai-button";
 import { ConsultationReportEditor } from "./consultation-report-editor";
 import { ConsultationContentActions } from "./consultation-content-actions";
 import { ConsultationStatusWatcher } from "./status-watcher";
@@ -174,8 +173,6 @@ export default async function EnrollmentDetailPage({
               <Printer className="size-4" />
               인쇄 미리보기
             </PrintWindowButton>
-          ) : !consult.hasAudio ? (
-            <RunAiButton consultationId={id} />
           ) : null}
           <ConvertToStudentDialog
             consultationId={consult.id}

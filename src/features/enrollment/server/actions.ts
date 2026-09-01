@@ -11,7 +11,6 @@ import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
-import { generateJSON } from "@/lib/ai/generate";
 import { after } from "next/server";
 import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
 import { canonicalSchoolName } from "@/features/schools/school-name";
@@ -567,160 +566,11 @@ export async function deleteEnrollmentConsultation(
   return undefined;
 }
 
-type AnalysisShape = {
-  diagnosis: {
-    strengths: string[];
-    weaknesses: string[];
-    level: string;
-    summary: string;
-  };
-  learningPlan: {
-    immediate: string[];
-    semester: string[];
-    longTerm: string[];
-  };
-};
-
-// ⚠️ 여기 있던 stubAnalysis()는 2026-07-22 전수검사로 제거했다(재도입 금지).
-// AI 호출이 실패하면 "기초 학력 양호·성실한 학습 태도" 같은 **아무 학생에게나 통하는 가짜 진단**을
-// 만들어 DB에 커밋하고 outcome까지 'ai_done'으로 바꿨다. 그 값은 담임 인수인계 인쇄물에 그대로 실린다
-// (analyzeMeeting·analyzeStudentConsultation·재분석 등 형제 액션은 전부 실패를 실패로 표면화한다).
-// 실데이터 확인 결과 model_version='stub*' 행은 0건 — 한 번도 안 터졌을 뿐 배선은 살아 있었다.
-
-export type RunAiState = { error?: string } | undefined;
-
-export async function runAiAnalysis(
-  _prev: RunAiState,
-  formData: FormData,
-): Promise<RunAiState> {
-  // 역할 게이트 — 유료 AI 호출은 등록상담 접근권이 있는 역할만(비용통제, #S5). 데이터 누수는 RLS가 막지만
-  // enrollment:none 역할도 호출 자체는 트리거할 수 있어 막는다.
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) {
-    return { error: "등록상담 권한이 없습니다" };
-  }
-
-  const consultationId = String(formData.get("consultationId") ?? "");
-  if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
-
-  const supabase = await createClient();
-
-  const { data: c } = await supabase
-    .from("enrollment_consultations")
-    .select(
-      "id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, parent_request, learning_history, consultation_date, consulted_at, consultant_id",
-    )
-    .eq("id", consultationId)
-    .single();
-
-  if (!c) return { error: "상담을 찾을 수 없습니다" };
-
-  // 상담사 이름 — print_payload.consultantName의 소스. consultant_id는 예전부터 select만 하고
-  // 한 번도 안 썼다(인쇄물 '상담사' 칸이 항상 "—"였던 원인, 2026-07-22 전수검사).
-  const [{ data: classes }, { data: consultant }] = await Promise.all([
-    supabase.from("classes").select("id, class_name, subject").eq("is_active", true),
-    c.consultant_id
-      ? supabase.from("users").select("display_name").eq("id", c.consultant_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
-
-  const gradePrefix = (c.prospect_grade ?? "").slice(0, 2);
-  const matchingClasses = (classes ?? []).filter((cl) =>
-    gradePrefix ? cl.class_name.includes(gradePrefix) : false,
-  );
-
-  let analysis: AnalysisShape;
-  let modelId: string;
-  try {
-    const { data, model } = await generateJSON<AnalysisShape>({
-      maxTokens: 2048,
-      meta: { feature: "enrollment_text_analysis" },
-      prompt: [
-        `다음 신입생 상담 정보를 분석해 JSON으로만 답해주세요.`,
-        ``,
-        `학생: ${c.prospect_name}`,
-        `학년: ${c.prospect_grade ?? "미상"}`,
-        `학교: ${c.prospect_school ?? "미상"}`,
-        `학부모 요구사항: ${c.parent_request ?? "없음"}`,
-        `학습 이력: ${JSON.stringify(c.learning_history ?? {})}`,
-        ``,
-        `JSON schema:`,
-        `{`,
-        `  "diagnosis": {`,
-        `    "strengths": string[3],`,
-        `    "weaknesses": string[2],`,
-        `    "level": "최상위권" | "상위권" | "중상위권" | "중위권" | "기초",`,
-        `    "summary": string (2-3문장)`,
-        `  },`,
-        `  "learningPlan": {`,
-        `    "immediate": string[2-3] (4주 안 할 일),`,
-        `    "semester": string[2-3] (이번 학기),`,
-        `    "longTerm": string[2-3] (장기 목표)`,
-        `  }`,
-        `}`,
-        ``,
-        `JSON만 출력하고 다른 설명은 일체 붙이지 마세요.`,
-      ].join("\n"),
-    });
-    analysis = data;
-    modelId = model;
-  } catch (e) {
-    // 실패는 실패로 — 가짜 분석을 만들어 저장하지 않는다(위 stubAnalysis 주석 참조).
-    // 원문은 서버 로그로만(UI에 기술 원문 노출 금지), 화면엔 한글 안내 + 재시도 유도.
-    console.error("[runAiAnalysis] AI 분석 실패", e);
-    return { error: "AI 분석에 실패했습니다 — 잠시 후 다시 시도해 주세요" };
-  }
-
-  const printPayload = {
-    prospect: {
-      name: c.prospect_name,
-      grade: c.prospect_grade,
-      school: c.prospect_school,
-      // ⚠️ 예전엔 셋 다 null 리터럴이라 인수인계 인쇄물의 '학부모 (연락처)'·'상담사' 칸이 항상 "—"였다
-      // (녹음 웹훅 경로는 채우고 있어 "어떤 상담은 되고 어떤 상담은 안 되는" 형태였음).
-      parentName: c.parent_name,
-      parentPhone: c.parent_phone,
-    },
-    // ⚠️ 상담일 = 사람이 편집하는 consultation_date(date). consulted_at은 정렬용 레코드 타임스탬프라
-    // 3월 상담을 7월에 입력하거나 makeedu에서 넘어온 건이면 화면 '상담일'과 인쇄물이 어긋난다
-    // (화면: f.consultationDate ?? consulted_at 폴백과 같은 순서로 맞춘 것).
-    consultedAt: c.consultation_date ?? c.consulted_at,
-    consultantName: consultant?.display_name ?? null,
-    parentRequest: c.parent_request,
-    learningHistory: c.learning_history,
-    diagnosis: analysis.diagnosis,
-    learningPlan: analysis.learningPlan,
-    recommendedClasses: matchingClasses.slice(0, 2).map((cl) => cl.class_name),
-  };
-
-  const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
-
-  const { error: aiError } = await supabase.from("consultation_ai_analysis").upsert(
-    {
-      consultation_id: consultationId,
-      model_version: modelVersion,
-      recommended_class_ids: matchingClasses.slice(0, 2).map((cl) => cl.id),
-      diagnosis: analysis.diagnosis,
-      learning_plan: analysis.learningPlan,
-      print_payload: printPayload,
-      // 같은 날·같은 모델 재분석은 onConflict DO UPDATE라 DEFAULT가 안 먹는다 → 명시 갱신(인쇄물 '생성일' 정확).
-      generated_at: new Date().toISOString(),
-    },
-    { onConflict: "consultation_id,model_version" },
-  );
-
-  if (aiError) return { error: aiError.message };
-
-  await supabase
-    .from("enrollment_consultations")
-    .update({ outcome: "ai_done" })
-    .eq("id", consultationId);
-
-  revalidatePath(`/enrollment/${consultationId}`);
-  revalidatePath("/enrollment");
-  return undefined;
-}
+// 🔴 텍스트 기반 'AI 분석 실행'(runAiAnalysis)은 **삭제했다**(원장 2026-09-01: *"버튼 자체를 없애버리자.
+// 거의 안사용하는듯. 어차피 녹음 분석을 돌리고 있으니까"*). 상담 분석은 이제 **녹음 경로 하나**다 —
+// 전사 웹훅이 runConsultationAnalysis로 13섹션을 만들고, 다시 만들려면 regenerateConsultationAnalysis.
+// ⚠️ 서버 액션은 export만 돼 있어도 **호출 가능한 엔드포인트**라, 화면에서 뺀 김에 액션도 같이 지웠다
+// (아무도 못 여는 유료 AI 호출구를 남겨 두지 않는다). 되살릴 일이 생기면 git 이력에 있다.
 
 // ────────────────── 상담 → 학생 자동 전환 ──────────────────
 

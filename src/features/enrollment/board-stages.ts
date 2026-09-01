@@ -107,16 +107,16 @@ export function outcomeForDrop(target: BoardStageKey, current: string): string {
  * 카드에 붙는 표식 — **칸마다 최대 하나**(칸 이름이 이미 단계를 말하므로, 배지는 "그 칸 안에서 특별한
  * 것"만 말한다). 원장 2026-09-01 지시를 그대로 옮긴 규칙:
  *  · 상담 전 = QR 접수 건만 'QR 접수'(그 외엔 아무 라벨도 안 붙인다)
- *  · 상담 완료 = 녹음이 있으면 녹음 표식 **하나만**(녹음이 끝나면 자동 분석이라 '녹음+AI' 두 개는 금지).
- *    녹음 없이 텍스트로 분석한 건만 'AI 완료'.
+ *  · 상담 완료 = 녹음이 있으면 녹음 표식 **하나만**. 🔴 'AI 완료' 배지는 **없앴다**(원장 2026-09-01) —
+ *    텍스트 분석 버튼을 없애 상담 분석 경로가 **녹음 하나**가 됐으므로, 마이크가 곧 "분석되는 건"이다
+ *    (두 배지는 같은 사실을 두 번 말하게 된다). 되살리지 말 것.
  *  · 등록 완료 = 반 배정까지 끝난 건만 '반 배정 완료'
  *  · 미등록 = 없음
  */
-export type CardMark = "assigned" | "qr" | "audio" | "ai" | null;
+export type CardMark = "assigned" | "qr" | "audio" | null;
 
 /**
  * 표식 라벨 — outcome이 아니라 **파생 사실**이라 outcome-meta에 없다(그래서 여기, 규칙 옆에 둔다).
- * 'AI 완료'는 outcome 라벨이므로 정본(`outcomePill("ai_done")`)에서 가져온다 — 여기 적지 말 것.
  */
 export const ASSIGNED_LABEL = "반 배정 완료";
 export const QR_INTAKE_LABEL = "QR 접수";
@@ -124,16 +124,12 @@ export const QR_INTAKE_LABEL = "QR 접수";
 export type MarkInput = StageInput & {
   fromPublicIntake: boolean;
   hasAudio: boolean;
-  hasAiAnalysis: boolean;
 };
 
 export function cardMarkOf(card: MarkInput, stage: BoardStageKey = stageOfCard(card)): CardMark {
   if (card.assignedClassCount >= 1) return "assigned";
   if (stage === "before") return card.fromPublicIntake ? "qr" : null;
-  if (stage === "consulted") {
-    if (card.hasAudio) return "audio";
-    return card.hasAiAnalysis || card.outcome === "ai_done" ? "ai" : null;
-  }
+  if (stage === "consulted") return card.hasAudio ? "audio" : null;
   return null;
 }
 

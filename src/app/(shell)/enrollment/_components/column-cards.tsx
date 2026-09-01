@@ -17,7 +17,7 @@ import type { ConsultationListRow } from "@/features/enrollment/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { RelativeTime } from "@/components/relative-time";
-import { OUTCOME_PILL, outcomePill } from "./outcome-meta";
+import { OUTCOME_PILL } from "./outcome-meta";
 import {
   ASSIGNED_LABEL,
   QR_INTAKE_LABEL,
@@ -383,15 +383,6 @@ function CardMarkBadge({ mark, hasAiAnalysis }: { mark: CardMark; hasAiAnalysis:
     return (
       <Pill color="primary" size="md" className="shrink-0 leading-none">
         {QR_INTAKE_LABEL}
-      </Pill>
-    );
-  }
-  if (mark === "ai") {
-    // 라벨·색은 outcome 정본에서(화면 파일에 상태 색 맵을 새로 만들지 않는다).
-    const ai = outcomePill("ai_done");
-    return (
-      <Pill color={ai.color} size="md" className="shrink-0 leading-none">
-        {ai.label}
       </Pill>
     );
   }
