@@ -10,6 +10,7 @@
  */
 import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import { specialSlotLabel, type SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { fillPct, isHolidayOn, tallyHolidayFill, type HolidayMap } from "./holiday";
 import { dowKeyOf, normalizeSlotTime } from "./week";
 
 export type MonthScheduleRow = {
@@ -80,27 +81,34 @@ export function slotsByDateOf(
  *    좋아 보이면 계획을 안 쓴 자리 교시(실측 8/31 JJ)가 조용히 사라진다. 주간 시트의
  *    `showSelfStudy`가 분모까지 바꾸는 것과 **일부러 다르다**: 저쪽은 "보이는 교시 = 세는 교시"가
  *    계약이지만, 월간의 이 숫자는 한 달 전체를 대표하는 사실이라 보기에 따라 흔들리면 안 된다.
+ * 🔴 **휴일은 [`holiday.ts`](./holiday.ts) 규약**을 탄다(안 쓴 휴일=분모 밖 · 쓴 휴일=대상=작성).
+ *    맵을 안 넘기면 종전과 같다(전부 평일 취급).
  */
 export function monthFillStats(
   slotsByDate: Record<string, MonthSlot[]>,
   hasLines: (date: string, slotStart: string) => boolean,
+  holidays?: HolidayMap | null,
 ): { filled: number; total: number; pct: number } {
-  let filled = 0;
-  let total = 0;
+  const cells: { holiday: boolean; written: boolean }[] = [];
   for (const [date, slots] of Object.entries(slotsByDate)) {
-    for (const slot of slots) {
-      total += 1;
-      if (hasLines(date, slot.slotStart)) filled += 1;
-    }
+    const holiday = isHolidayOn(holidays, date);
+    for (const slot of slots) cells.push({ holiday, written: hasLines(date, slot.slotStart) });
   }
-  return { filled, total, pct: total === 0 ? 0 : Math.round((filled / total) * 100) };
+  const fill = tallyHolidayFill(cells);
+  return { filled: fill.filled, total: fill.total, pct: fillPct(fill) };
 }
 
-/** 그 날 계획을 안 쓴 교시 수 — 달력 칸의 `미작성 N` 배지. */
+/**
+ * 그 날 계획을 안 쓴 교시 수 — 달력 칸의 `미작성 N` 배지.
+ * 🔴 **휴일엔 0이다** — 안 쓴 휴일은 의무가 없어 재촉할 게 없다(작성률 분모에서 빼는 것과 같은 사실을
+ *    칸에서 말하는 것뿐이다. 한쪽만 고치면 배지와 툴바 숫자가 서로 다른 말을 한다).
+ */
 export function unwrittenCountOf(
   slots: readonly MonthSlot[],
   date: string,
   hasLines: (date: string, slotStart: string) => boolean,
+  holidays?: HolidayMap | null,
 ): number {
+  if (isHolidayOn(holidays, date)) return 0;
   return slots.filter((s) => !hasLines(date, s.slotStart)).length;
 }

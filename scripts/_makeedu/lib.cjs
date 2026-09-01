@@ -146,6 +146,24 @@ function tieredMatcher(ijwRows, keyFns) {
   };
 }
 
+/**
+ * 역동기화(eywa→makeedu) 푸시 대상 판정 — **앱과 같은 규칙**을 CJS 쪽에서 한 벌로 갖는다.
+ * 앱 단일 소스 = src/features/integrations/push-eligibility.ts (`isPushableConsultation`).
+ *
+ * - enrolled 아님 → 보낼 수 있다.
+ * - enrolled + 학생이 makeedu 원생(students.makeedu_id) → **제외**(이미 다니는 학생을 신규 문의로
+ *   밀어넣는 군더더기).
+ * - enrolled + makeedu에 학생 기록 없음 → **보낼 수 있다**(2026-07-21 권도현 케이스: 어느 경로로도
+ *   안 나가 청구까지 안 잡혔다). 사무실이 makeedu에서 예비→원생 전환한다.
+ *
+ * ⚠️ 예전엔 push-consultations.cjs가 이 조건을 인라인으로 갖고 있었다 — 주간 자동 적재
+ *    (weekly-push.cjs)가 생기며 두 벌이 될 뻔해 여기로 올렸다. 앱과 갈리지 않게 함께 고칠 것.
+ */
+function isPushableConsultation(outcome, studentMakeeduId) {
+  if (outcome !== "enrolled") return true;
+  return !studentMakeeduId;
+}
+
 // 단일 테넌트 해석(현재 인재원 1개). 멀티테넌트면 env MAKEEDU_TENANT_ID로 고정 주입.
 async function resolveTenantId(sql) {
   if (process.env.MAKEEDU_TENANT_ID) return process.env.MAKEEDU_TENANT_ID;
@@ -258,5 +276,6 @@ module.exports = {
   subjectFromName,
   paymentMethod,
   resolveTenantId,
+  isPushableConsultation,
   billingMonthRange,
 };

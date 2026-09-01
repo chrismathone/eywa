@@ -5,6 +5,7 @@
 //
 // 🔴 클라이언트가 보낸 값을 그대로 저장하지 않는다. 화면은 "어느 행의 값을 쓸지"(행 id)만 보내고
 //    서버가 계획을 **다시 계산**해 그 행에서 값을 꺼낸다 — 임의 값 주입 경로를 아예 만들지 않는다.
+import { consultOriginLabel } from "../consult-origin";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -67,8 +68,18 @@ export type MergePreview =
       rows: { id: string; label: string; outcome: string; consultedAt: string; source: string }[];
     };
 
+/**
+ * 출처 라벨은 [consult-origin.ts](../consult-origin.ts) 단일 소스.
+ * 🔴 예전엔 여기서 `makeedu_id`만 보고 정해서, **우리가 makeedu로 보내고 받아 적은 counselSeq**까지
+ *    "makeedu 연동"으로 불렀다 — 원장이 그걸 보고 왕복(되가져오기) 버그로 의심했다(2026-09-01).
+ */
 const sourceOf = (r: ConsultRow): string =>
-  r.legacy_key ? "옛 시트 이관" : r.makeedu_id ? "makeedu 연동" : r.from_public_intake ? "QR 접수" : "직접 입력";
+  consultOriginLabel({
+    legacyKey: (r.legacy_key as string | null) ?? null,
+    makeeduId: (r.makeedu_id as string | null) ?? null,
+    makeeduPushedAt: (r.makeedu_pushed_at as string | null) ?? null,
+    fromPublicIntake: (r.from_public_intake as boolean | null) ?? null,
+  });
 
 /** 미리보기 — 화면이 그릴 계획을 서버에서 만든다(화면은 이 결과만 그린다). */
 export async function previewConsultationMerge(ids: string[], forceWinnerId?: string): Promise<MergePreview> {

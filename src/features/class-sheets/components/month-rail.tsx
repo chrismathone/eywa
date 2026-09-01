@@ -3,6 +3,7 @@
 import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { slotKey } from "../lib/month-assemble";
+import { holidayNameOn, isHolidayOn } from "../lib/holiday";
 import { isOffGoalLine, type MonthGoalMap } from "../lib/goal-match";
 import { SHEET_BOX_FRAME, SHEET_INPUT } from "../ui-box";
 import type { ClassSheetMonthData, MonthPlanLine } from "../server/month-queries";
@@ -91,25 +92,47 @@ export function MonthRail({
                 {savedAt ? "저장됨" : "주간 시트와 같은 칸"}
               </span>
             </th>
-            {days.map((date) => (
-              <th
-                key={date}
-                className={`border-line-faint sticky top-0 z-[2] border-r border-b p-0 text-center text-[11.5px] font-bold whitespace-nowrap ${
-                  offDays.has(date) ? "text-amber bg-amber-soft shadow-[inset_0_-2px_0_var(--amber)]" : "bg-bg-soft"
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpenDay(date)}
-                  title={`누르면 이 날 계획을 여기서 ${canEdit ? "고칩니다" : "봅니다"}`}
-                  className="hover:text-primary w-full cursor-pointer px-2 py-1.5 font-bold"
+            {days.map((date) => {
+              // 🔴 휴일은 **열을 지우지 않는다** — 그 날 쓴 진도가 여기 그대로 서야 한다(원장 2026-09-01).
+              //    톤은 월별 출석부와 같은 회색(`--att-weekend`)이고, 목표 밖 경고가 있으면 그쪽이 이긴다
+              //    (경고는 고칠 일이 있다는 뜻이라 회색으로 덮으면 안 된다).
+              const holiday = holidayNameOn(data.holidays, date);
+              return (
+                <th
+                  key={date}
+                  className={`border-line-faint sticky top-0 z-[2] border-r border-b p-0 text-center text-[11.5px] font-bold whitespace-nowrap ${
+                    offDays.has(date)
+                      ? "text-amber bg-amber-soft shadow-[inset_0_-2px_0_var(--amber)]"
+                      : holiday
+                        ? "bg-att-weekend"
+                        : "bg-bg-soft"
+                  }`}
                 >
-                  <span className="num">{date.slice(5).replace("-", "/")}</span>
-                  <br />
-                  <span className="text-text-faint font-semibold">{dowKo(date)}</span>
-                </button>
-              </th>
-            ))}
+                  <button
+                    type="button"
+                    onClick={() => onOpenDay(date)}
+                    title={
+                      holiday
+                        ? `${holiday} — 휴일입니다. 누르면 이 날 계획을 여기서 ${canEdit ? "고칩니다" : "봅니다"}`
+                        : `누르면 이 날 계획을 여기서 ${canEdit ? "고칩니다" : "봅니다"}`
+                    }
+                    className="hover:text-primary w-full cursor-pointer px-2 py-1.5 font-bold"
+                  >
+                    <span className={`num ${holiday && !offDays.has(date) ? "text-danger" : ""}`}>
+                      {date.slice(5).replace("-", "/")}
+                    </span>
+                    <br />
+                    {/* 휴일이면 요일 자리에 **공휴일명**을 적는다 — 열이 좁아 두 줄을 더 쓸 수 없고,
+                        "이 날이 왜 회색인가"의 답이 요일보다 훨씬 유용하다. */}
+                    <span
+                      className={`font-semibold ${holiday && !offDays.has(date) ? "text-danger" : "text-text-faint"}`}
+                    >
+                      {holiday ?? dowKo(date)}
+                    </span>
+                  </button>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -200,7 +223,8 @@ export function MonthRail({
             {days.map((date) => {
               const slots = data.slotsByDate[date] ?? [];
               const filled = slots.filter((s) => (data.linesBySlot[slotKey(date, s.slotStart)]?.length ?? 0) > 0).length;
-              const short = filled < slots.length;
+              // 🔴 휴일엔 앰버(재촉)를 쓰지 않는다 — 안 쓴 휴일은 작성률 분모에도 없다. 수는 사실이라 그대로 적는다.
+              const short = filled < slots.length && !isHolidayOn(data.holidays, date);
               return (
                 <td key={date} className="border-line-strong border-t px-2 py-1.5 text-center">
                   <span className={`num text-[11.5px] ${short ? "text-amber font-bold" : "text-text-faint"}`}>

@@ -3,6 +3,7 @@ import {
   buildWeekGrid,
   hasLiveSlotInWeek,
   hiddenSeatOf,
+  holidaySlotKeySet,
   scheduledSlotKeySet,
   scheduledUnitsByDate,
   sheetFillStats,
@@ -572,14 +573,14 @@ describe("buildWeekGrid — LAB은 항상 제외, JJ만 설정이 정한다(기�
       slotMemoKeys: [],
     };
     // 표시 = 분모에 들어간다(랜딩도 같은 키셋).
-    expect(sheetFillStats(buildWeekGrid(input))).toEqual({ totalSlots: 2, filledSlots: 2, orphanSlots: 0 });
+    expect(sheetFillStats(buildWeekGrid(input))).toEqual({ totalSlots: 2, filledSlots: 2, orphanSlots: 0, holidayFilledSlots: 0 });
     expect([...scheduledSlotKeySet(MON, schedules)].sort()).toEqual([
       "2026-07-20|16:20",
       "2026-07-22|15:00",
     ]);
     // 숨김 = 분모에서도 빠진다(화면에서 뺀 교시를 분모에 남기면 100%에 못 닿는다).
     const hidden = buildWeekGrid({ ...input, includeSelfStudy: false });
-    expect(sheetFillStats(hidden)).toEqual({ totalSlots: 1, filledSlots: 1, orphanSlots: 0 });
+    expect(sheetFillStats(hidden)).toEqual({ totalSlots: 1, filledSlots: 1, orphanSlots: 0, holidayFilledSlots: 0 });
     expect(hidden.hiddenSpecial).toEqual([{ seat: "JJ", slots: 1, records: 1 }]);
     expect([...scheduledSlotKeySet(MON, schedules, { includeSelfStudy: false })]).toEqual([
       "2026-07-22|15:00",
@@ -625,7 +626,7 @@ describe("sheetFillStats — 작성률(placeholder 제외·고아 분모 제외)
       attendance: [],
       slotMemoKeys: [],
     });
-    expect(sheetFillStats(grid)).toEqual({ totalSlots: 3, filledSlots: 1, orphanSlots: 1 });
+    expect(sheetFillStats(grid)).toEqual({ totalSlots: 3, filledSlots: 1, orphanSlots: 1, holidayFilledSlots: 0 });
   });
 
   it("공백만 있는 행은 의미 행이 아니다(trim)", () => {
@@ -747,5 +748,99 @@ describe("hasLiveSlotInWeek", () => {
 
   it("슬롯이 없으면 false", () => {
     expect(hasLiveSlotInWeek("2026-08-31", [])).toBe(false);
+  });
+});
+
+/**
+ * 휴일 — 규약은 [`holiday.ts`](./holiday.ts) 하나이고 여기서는 **그리드가 그 규약을 타는지**만 본다.
+ * 🔴 세 문장: 안 쓴 휴일=분모 밖 · 쓴 휴일=100% 인정 · 평일 불변. 그리고 **칸은 그대로 있다.**
+ */
+describe("휴일 — 표시는 하되 칸·입력은 그대로", () => {
+  // 2026-07-22(수)를 휴일로 잡는다. 반은 월(자리)·수(수업)에 돈다.
+  const HOLIDAY = { "2026-07-22": "임시 휴원" };
+  const schedules = [sched("mon", "16:20"), sched("wed", "15:00")];
+
+  it("🔴 휴일이어도 그 날 카드·교시·로스터는 그대로 만들어진다(칸을 없애지 않는다)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules,
+      enrollments: [enr("s1")],
+      planLines: [],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+      holidays: HOLIDAY,
+    });
+    const wed = grid.days.find((d) => d.date === "2026-07-22");
+    expect(wed).toBeDefined();
+    expect(wed!.slots.map((x) => x.slotStart)).toEqual(["15:00"]);
+    expect(wed!.slots[0].roster.map((r) => r.studentId)).toEqual(["s1"]);
+    expect(wed!.holiday).toBe("임시 휴원");
+    expect(grid.days.find((d) => d.date === MON)!.holiday).toBeNull();
+  });
+
+  it("🔴 안 쓴 휴일은 작성률 분모에서 빠진다 — 평일만 남는다", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules,
+      enrollments: [],
+      planLines: [line({ progress: "Ch1" })], // 월요일 16:20이 아니라 15:00이라 고아
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+      holidays: HOLIDAY,
+    });
+    // 월(평일) 1교시만 분모. 수(휴일)는 계획이 없어 통째로 빠진다.
+    expect(sheetFillStats(grid)).toMatchObject({ totalSlots: 1, filledSlots: 0, holidayFilledSlots: 0 });
+  });
+
+  it("🔴 쓴 휴일은 대상=작성으로 되돌아온다(한 일로 인정 — 감점 없음)", () => {
+    const grid = buildWeekGrid({
+      weekMonday: MON,
+      schedules,
+      enrollments: [],
+      planLines: [line({ planDate: "2026-07-22", slotStart: "15:00", progress: "Ch1" })],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+      holidays: HOLIDAY,
+    });
+    // 월(평일, 미작성) + 수(휴일이지만 작성) = 2/1... 이 아니라 분모 2·분자 1.
+    expect(sheetFillStats(grid)).toMatchObject({
+      totalSlots: 2,
+      filledSlots: 1,
+      holidayFilledSlots: 1,
+      orphanSlots: 0,
+    });
+  });
+
+  it("🔴 휴일 맵을 안 넘기면 종전과 글자 그대로 같다(평일 불변)", () => {
+    const input = {
+      weekMonday: MON,
+      schedules,
+      enrollments: [],
+      planLines: [line({ planDate: "2026-07-22", slotStart: "15:00", progress: "Ch1" })],
+      marks: [],
+      attendance: [],
+      slotMemoKeys: [],
+    };
+    expect(sheetFillStats(buildWeekGrid(input))).toMatchObject({ totalSlots: 2, filledSlots: 1 });
+    expect(buildWeekGrid(input).days.every((d) => d.holiday === null)).toBe(true);
+  });
+
+  it("🔴 키셋은 갈라지되 **합치면 종전과 같다** — 휴일 교시가 사라지는 게 아니라 옮겨간다", () => {
+    const plain = scheduledSlotKeySet(MON, schedules);
+    const weekdays = scheduledSlotKeySet(MON, schedules, { holidays: HOLIDAY });
+    const holidays = holidaySlotKeySet(MON, schedules, HOLIDAY);
+    expect([...plain].sort()).toEqual(["2026-07-20|16:20", "2026-07-22|15:00"]);
+    expect([...weekdays]).toEqual(["2026-07-20|16:20"]);
+    expect([...holidays]).toEqual(["2026-07-22|15:00"]);
+    expect([...weekdays, ...holidays].sort()).toEqual([...plain].sort());
+  });
+
+  it("🔴 휴일뿐인 주에도 반은 목록에 남는다(`hasLiveSlotInWeek`는 휴일을 보지 않는다)", () => {
+    const wedOnly = [sched("wed", "15:00")];
+    expect(scheduledSlotKeySet(MON, wedOnly, { holidays: HOLIDAY }).size).toBe(0);
+    expect(hasLiveSlotInWeek(MON, wedOnly)).toBe(true);
   });
 });

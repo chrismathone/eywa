@@ -16,6 +16,10 @@ import {
 } from "../lib/roster";
 import { cellStateOf, foldDayAttendance, tallyCells, type MathCellState } from "../lib/cell-state";
 import { mcsVisibleClassFilter } from "./access";
+import { getTenantSettings } from "@/features/owner/server/queries";
+// 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
+import { buildHolidayMap } from "@/features/attendance/calendar";
+import { isHolidayOn } from "@/features/class-sheets/lib/holiday";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { groupMathCardsByTeacher } from "../landing-tracks";
 
@@ -110,7 +114,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
   const admin = createAdminClient();
   const tenantId = user.tenantId;
 
-  const [classRes, filter] = await Promise.all([
+  const [classRes, filter, settings] = await Promise.all([
     admin
       .from("classes")
       .select("id, class_name, teacher_id, is_special")
@@ -121,7 +125,12 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
       .or(`closed_at.is.null,closed_at.gte.${monthStart}`)
       .order("class_name"),
     mcsVisibleClassFilter(),
+    // 휴일 — 테넌트 단위 read-mostly라 요청 캐시를 탄다(추가 왕복 없음, B4·B6).
+    getTenantSettings(),
   ]);
+
+  // 🔴 시트와 **같은 맵**을 읽는다 — 갈리면 카드 작성률과 시트 툴바가 다른 수를 말한다(이 파일의 상시 규약).
+  const holidays = buildHolidayMap(settings.operations.holidays);
 
   const all = classRes.data ?? [];
   if (all.length === 0) {
@@ -270,6 +279,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
             attendance: foldDayAttendance(attByKey.get(`${cid}|${day.date}|${sid}`) ?? []),
             hasReport: reportKeys.has(`${cid}|${day.date}|${sid}`),
             today,
+            holiday: isHolidayOn(holidays, day.date),
           }),
         );
       }

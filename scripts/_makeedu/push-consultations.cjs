@@ -234,8 +234,9 @@ async function captureCounselSeq(page, c) {
       // 단계를 지난 학생을 신규 문의로 넣는 군더더기 방지(액션 쪽 가드와 이중).
       // ⚠️ 단, **학생이 makeedu 원생일 때만** 스킵한다(2026-07-21 권도현 케이스). makeedu 어디에도 없는
       // 등록 학생은 예비상담으로라도 들어가야 사무실이 원생 전환→청구로 이을 수 있다.
-      // 앱 쪽 단일 규칙 = src/features/integrations/push-eligibility.ts (여기와 같은 판정을 유지할 것).
-      if (c.outcome === "enrolled" && c.student_makeedu_id) {
+      // 판정은 lib.isPushableConsultation 한 벌(주간 자동 적재 weekly-push.cjs와 공유) —
+      // 앱 쪽 단일 규칙은 src/features/integrations/push-eligibility.ts(같은 판정을 유지할 것).
+      if (!L.isPushableConsultation(c.outcome, c.student_makeedu_id)) {
         console.log(`⏭  ${label} — 등록완료 + makeedu 원생(${c.student_makeedu_id}) 스킵`);
         if (requestId) await finish(sql, requestId, "skipped", null, "학원 등록 완료 + makeedu 원생으로 이미 존재");
         results.push({ label, skip: "enrolled" });

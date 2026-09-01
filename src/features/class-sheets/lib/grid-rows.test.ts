@@ -15,7 +15,7 @@ function slot(slotStart: string): GridSlot {
   };
 }
 function day(date: string, dow: GridDay["dow"], starts: string[]): GridDay {
-  return { date, dow, slots: starts.map(slot) };
+  return { date, dow, slots: starts.map(slot), holiday: null };
 }
 
 describe("isWeekendDow", () => {

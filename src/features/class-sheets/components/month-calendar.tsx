@@ -5,7 +5,8 @@ import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { cellDateOf, DOW_ORDER } from "../lib/month";
 import { hasClassOnDate } from "../face-nav";
-import { slotKey } from "../lib/month-assemble";
+import { slotKey, unwrittenCountOf } from "../lib/month-assemble";
+import { holidayNameOn } from "../lib/holiday";
 import { isOffGoalLine, type MonthGoalMap } from "../lib/goal-match";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SHEET_BOX_FRAME } from "../ui-box";
@@ -122,8 +123,18 @@ function DayCell({
 }) {
   const allSlots = data.slotsByDate[date] ?? [];
   const shown = allSlots.filter((s) => display.seat || s.seat === null);
-  // 🔴 배지 숫자는 **배정된 전 교시** 기준(표시 토글과 무관) — 접는 것만으로 좋아 보이면 안 된다.
-  const unwritten = allSlots.filter((s) => (data.linesBySlot[slotKey(date, s.slotStart)]?.length ?? 0) === 0).length;
+  /**
+   * 🔴 배지 숫자는 **배정된 전 교시** 기준(표시 토글과 무관) — 접는 것만으로 좋아 보이면 안 된다.
+   * 🔴 판정은 [`unwrittenCountOf`](../lib/month-assemble.ts) 단일 소스다 — 여기서 다시 세면 툴바
+   *    작성률과 배지가 휴일을 서로 다르게 읽는다(**휴일엔 `미작성 N`이 안 뜬다** — 의무가 없다).
+   */
+  const holiday = holidayNameOn(data.holidays, date);
+  const hasLines = (d: string, t: string) => (data.linesBySlot[slotKey(d, t)]?.length ?? 0) > 0;
+  // 재촉("미작성 N") — **휴일이면 0**. 의무가 없는 날을 앰버로 세우지 않는다.
+  const unwritten = unwrittenCountOf(allSlots, date, hasLines, data.holidays);
+  // 사실("이 날 계획이 다 있나") — 휴일 규약을 **빼고** 센다. 아래 초록 체크는 재촉이 아니라 확인이라,
+  // 계획이 하나도 없는 휴일에 "다 있습니다"라고 하면 그건 그냥 거짓말이다.
+  const missing = unwrittenCountOf(allSlots, date, hasLines);
   const offGoal = allSlots.reduce((n, slot) => {
     const lines = data.linesBySlot[slotKey(date, slot.slotStart)] ?? [];
     return n + lines.filter((l) => isOffGoalLine({ ...l, seat: slot.seat !== null }, goals)).length;
@@ -138,9 +149,17 @@ function DayCell({
     <button
       type="button"
       // ⚠️ 편집 권한이 없으면 "고칩니다"라고 하지 않는다 — 눌러 보기 전엔 모르는 거짓 약속이 된다.
-      title={`누르면 이 날 계획을 여기서 ${data.canEdit ? "고칩니다" : "봅니다"}`}
+      // 🔴 휴일이어도 **누르면 그 날 계획이 열린다**(원장 2026-09-01 *"입력은 가능하도록"*) — 톤만 회색이다.
+      title={
+        holiday
+          ? `${holiday} — 휴일입니다. 수업했다면 이 날 계획을 그대로 ${data.canEdit ? "고칠 수 있습니다" : "볼 수 있습니다"}`
+          : `누르면 이 날 계획을 여기서 ${data.canEdit ? "고칩니다" : "봅니다"}`
+      }
       onClick={() => onOpenDay(date)}
-      className={`flex min-w-0 cursor-pointer flex-col items-stretch gap-1.5 rounded-[10px] border bg-white px-2 py-1.5 text-left transition ${
+      className={`flex min-w-0 cursor-pointer flex-col items-stretch gap-1.5 rounded-[10px] border px-2 py-1.5 text-left transition ${
+        // 회색 톤은 월별 출석부와 **같은 토큰**(`--att-weekend`) — 새 색을 만들지 않는다(의미색 캐논).
+        holiday ? "bg-att-weekend" : "bg-white"
+      } ${
         offGoal > 0
           ? "border-amber shadow-[0_0_0_1px_var(--amber)] hover:shadow-[0_0_0_2px_var(--amber)]"
           : isToday
@@ -149,8 +168,14 @@ function DayCell({
       }`}
     >
       <div className="flex items-center gap-1.5">
-        <span className="num text-[13px] font-bold">{date.slice(5).replace("-", "/")}</span>
-        <span className="ml-auto flex gap-1">
+        <span className={`num text-[13px] font-bold ${holiday ? "text-danger" : ""}`}>
+          {date.slice(5).replace("-", "/")}
+        </span>
+        {/* 공휴일명 — 이름이 곧 사유다. 좁은 칸이라 넘치면 줄인다(전문은 칸 title). */}
+        {holiday ? (
+          <span className="text-danger min-w-0 shrink truncate text-[10.5px] font-bold">{holiday}</span>
+        ) : null}
+        <span className="ml-auto flex shrink-0 gap-1">
           {isToday ? (
             <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-[10.5px] leading-4 font-bold">
               오늘
@@ -160,7 +185,7 @@ function DayCell({
             <span className="border-amber/40 bg-amber-soft text-amber num rounded-full border px-1.5 text-[10.5px] leading-4 font-bold">
               미작성 {unwritten}
             </span>
-          ) : offGoal === 0 && !isToday ? (
+          ) : missing === 0 && offGoal === 0 && !isToday ? (
             <span
               className="border-green/30 bg-green-soft text-green inline-flex items-center rounded-full border px-1.5 leading-4"
               title="이 날은 배정된 교시에 계획이 다 있습니다"
@@ -191,8 +216,13 @@ function DayCell({
             </span>
             <div className="flex min-w-0 flex-col gap-0.5">
               {lines.length === 0 ? (
-                <span className="border-amber/45 text-amber self-start rounded border border-dashed px-1.5 text-[10.5px] leading-4 font-bold">
-                  미작성 · {slot.teacherLabel ?? "담당 미지정"}
+                // 🔴 휴일엔 '미작성'이라 부르지 않는다 — 안 쓴 게 아니라 쓸 의무가 없던 것이다(앰버=재촉).
+                <span
+                  className={`self-start rounded border border-dashed px-1.5 text-[10.5px] leading-4 font-bold ${
+                    holiday ? "border-line-strong text-text-faint" : "border-amber/45 text-amber"
+                  }`}
+                >
+                  {holiday ? "계획 없음" : "미작성"} · {slot.teacherLabel ?? "담당 미지정"}
                 </span>
               ) : (
                 lines.map((line) => {

@@ -21,6 +21,8 @@ import { mondayOf } from "@/features/timetable/lib/week";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { hiddenSeatOf } from "../lib/grid";
+import { holidayNameOn } from "../lib/holiday";
+import { buildHolidayMap } from "@/features/attendance/calendar";
 import { readEnglishTrack } from "@/features/classes/english-track";
 import { shoutingKey } from "../shouting";
 import { rosterFormOf, type RosterForm, type SheetMark } from "../lib/roster-form";
@@ -183,6 +185,13 @@ export type EcsTodayResult =
       tenantId: string;
       /** 내 글씨 크기(users.ui_prefs.ecs.fontSize) — 주간 시트와 같은 계정 귀속 값·같은 배율. */
       fontSize: EcsFontSize;
+      /**
+       * 보고 있는 날짜가 학원 휴일이면 그 이름(아니면 null) — 화면이 그 사실을 한 줄로 알린다.
+       * 🔴 **카드를 지우거나 입력을 막는 값이 아니다**(원장 2026-09-01 *"입력은 가능하도록"*).
+       *    수업이 있으면 그대로 뜨고 출결·계획도 그대로 저장된다. 달라지는 건 안내 한 줄과
+       *    요약 스트립의 **재촉 색**뿐이다(휴일에 "계획 0/6"을 앰버로 세우면 거짓 재촉이다).
+       */
+      holidayName: string | null;
     }
   | { ok: false; error: string };
 
@@ -199,11 +208,13 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const dow = dowKeyOf(date);
 
   const settings = await getTenantSettings();
+  // 휴일 판정은 학원설정 하나뿐([[holiday.ts]]) — 내장 법정공휴일 표는 쓰지 않는다(학원이 공휴일에 수업한다).
+  const holidayName = holidayNameOn(buildHolidayMap(settings.operations.holidays), date);
   const english = settings.operations.subjects.find((s) => s.key === "english");
   const skillAreas = resolveSkillAreas(english);
   if (skillAreas.length === 0) {
     // 카드 0개 조기 반환 — 보드가 안 그려지므로 글씨 크기는 기본값이면 충분(ui_prefs 조회 전이다).
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize: DEFAULT_ECS_FONT_SIZE };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize: DEFAULT_ECS_FONT_SIZE, holidayName };
   }
 
   const supabase = await createClient();
@@ -237,7 +248,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
   const fontSize = readEcsFontSize(prefsRes.data?.ui_prefs);
   if (scoped.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, holidayName };
   }
   const scopedIds = scoped.map((c) => c.id as string);
 
@@ -268,7 +279,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   }
   const todayIds = scopedIds.filter((id) => (slotsByClass.get(id)?.length ?? 0) > 0);
   if (todayIds.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, holidayName };
   }
 
   // 오늘 Shouting 체크(0230a) — EiE 카드의 교시 줄에 그린다.
@@ -766,5 +777,5 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     // 시간표 순서 = 그 날 일과 순서. 같은 시각이면 반 이름으로 안정 정렬.
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.className.localeCompare(b.className, "ko"));
 
-  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize };
+  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, holidayName };
 }

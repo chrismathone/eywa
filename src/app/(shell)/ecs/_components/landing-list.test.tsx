@@ -15,6 +15,7 @@ function card(over: Partial<SheetLandingCard> = {}): SheetLandingCard {
     totalSlots: 6,
     filledSlots: 0,
     orphanSlots: 0,
+    holidaySlots: 0,
     shoutingSlots: null,
     delegated: false,
     ...over,

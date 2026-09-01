@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
+// 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
+import { buildHolidayMap } from "@/features/attendance/calendar";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
@@ -24,7 +26,6 @@ import {
   type EcsMonthDisplay,
   type EcsMonthView,
 } from "../view-prefs";
-import { buildHolidayMap } from "@/features/attendance/calendar";
 import type { MpCell, MpColKind } from "../lib/month-plan";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { planLineFromRow } from "../lib/plan-line";
@@ -63,8 +64,16 @@ export type ClassSheetMonthData = {
   goals: { homeroom: MonthGoalMap; assistant: MonthGoalMap };
   skillAreas: SkillAreaSetting[];
   canEdit: boolean;
-  /** 배정된 전 교시 기준(표시 토글과 무관 — month-assemble 🔴 참조). */
+  /** 배정된 전 교시 기준(표시 토글과 무관 — month-assemble 🔴 참조). 휴일은 [[holiday.ts]] 규약. */
   fill: { filled: number; total: number; pct: number };
+  /**
+   * 학원 지정 휴일(`YYYY-MM-DD` → 이름) — 이 달 범위로 좁힌 것. **한 벌을 셋이 쓴다**:
+   * 달력·진도표의 휴일 표식 · 작성률 분모([[holiday.ts]] 규약) · 계획(MP)의 휴강 기본 판정.
+   * 🔴 **칸을 없애는 값이 아니다**(원장 2026-09-01) — 달력 칸·진도표 열은 그대로 서고 계획도 그대로
+   *    고칠 수 있다. 달라지는 건 표식과 작성률 분모뿐이다.
+   * ⚠️ MP만 여기에 **반별 예외**(`col_kind='off'`)를 한 겹 더 얹는다(그건 MP 칸에만 있다).
+   */
+  holidays: Record<string, string>;
   /** 마지막에 본 보기 + 보기별 표시 토글(계정 귀속 — `users.ui_prefs.ecs`). */
   view: EcsMonthView;
   display: Record<EcsMonthView, EcsMonthDisplay>;
@@ -78,11 +87,6 @@ export type ClassSheetMonthData = {
    * 🔴 0239a 미적용이어도 화면은 산다(`missing-table` → 한글 배너, 달력·진도표는 이 값을 아예 안 읽는다).
    */
   mp: { cells: MpCell[]; status: MpDataStatus };
-  /**
-   * 학원설정 공휴일(그 달 범위) — **MP의 휴강 기본 판정에만** 쓴다.
-   * ⚠️ 주간 시트·달력·진도표는 지금도 휴일을 안 본다 — 거기까지 같이 고치면 작성률 분모가 조용히 바뀐다.
-   */
-  holidays: Record<string, string>;
 };
 
 /**
@@ -252,6 +256,12 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
 
   const hasLines = (date: string, slotStart: string) => (linesBySlot[slotKey(date, slotStart)]?.length ?? 0) > 0;
 
+  // 이 달 범위로 좁힌 휴일 — 전 연도를 클라로 내려보낼 이유가 없다(설정엔 2027년까지 들어 있다).
+  const holidays: Record<string, string> = {};
+  for (const [date, name] of Object.entries(buildHolidayMap(settings.operations.holidays))) {
+    if (date >= from && date <= to) holidays[date] = name;
+  }
+
   return {
     ok: true,
     data: {
@@ -272,7 +282,8 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       goals,
       skillAreas: access.skillAreas,
       canEdit: access.canWrite,
-      fill: monthFillStats(slotsByDate, hasLines),
+      fill: monthFillStats(slotsByDate, hasLines, holidays),
+      holidays,
       // 🔴 계정에 저장된 보기가 `mp`인데 인재원 영어 반을 열면 **달력으로 떨어뜨린다** — 저장값을
       //    그대로 믿으면 없는 보기가 빈 화면으로 선다(주소 `?view=mp`도 page.tsx에서 같은 함수를 탄다).
       view: clampEcsMonthView(readEcsMonthView(prefsRes.data?.ui_prefs), isEie),
@@ -283,13 +294,6 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       },
       isEie,
       mp: { cells: mpCells, status: mpStatus },
-      // 그 달 범위로 좁힌 휴일 맵 — 학원설정이 단일 소스다(`features/calendar/holidays.ts`의 내장
-      // 법정공휴일 표는 캘린더 탭 전용이라 여기서 쓰지 않는다).
-      holidays: Object.fromEntries(
-        Object.entries(buildHolidayMap(settings.operations.holidays)).filter(
-          ([d]) => d >= from && d <= to,
-        ),
-      ),
     },
   };
 }

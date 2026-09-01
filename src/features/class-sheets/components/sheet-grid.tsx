@@ -80,11 +80,17 @@ export const SheetGrid = memo(function SheetGrid({
       >
         {days.map((day) => {
           const isToday = day.date === data.today;
+          // 🔴 휴일은 **알아보게만** 한다 — 카드·교시·로스터·입력은 평일과 글자 그대로 같다(원장
+          //    2026-09-01 *"입력은 가능하도록 해줘 출석부처럼"*). 톤도 월별 출석부와 같은 회색
+          //    (`--att-weekend`)·같은 빨간 날짜라 두 화면이 같은 날을 같은 모양으로 말한다.
+          const holiday = day.holiday;
           return (
             <header
               key={day.date}
               // cursor-default — DragScrollArea의 cursor-grab이 헤더까지 덮지 않게(period-block과 동일)
-              className="bg-card shadow-card flex cursor-default items-center gap-2 rounded-2xl px-3 py-2"
+              className={`shadow-card flex cursor-default items-center gap-2 rounded-2xl px-3 py-2 ${
+                holiday ? "bg-att-weekend" : "bg-card"
+              }`}
             >
               {/* 요일 = 원본 시트의 검정 반전 머리글(월/화/수). 오늘은 브랜드 네이비로 대체. */}
               <span
@@ -94,12 +100,22 @@ export const SheetGrid = memo(function SheetGrid({
               >
                 {DOW_KO[day.dow]}
               </span>
-              <span className="text-foreground num text-[13px] font-semibold">
+              <span className={`num text-[13px] font-semibold ${holiday ? "text-danger" : "text-foreground"}`}>
                 {day.date.slice(5).replace("-", "/")}
               </span>
               {isToday ? (
                 <span className="border-primary text-primary rounded-full border px-1.5 py-0.5 text-[11px] font-bold">
                   오늘
+                </span>
+              ) : null}
+              {/* 공휴일명 — 이름이 곧 설명이라 본문에 적는다(툴팁은 모바일에서 없는 것과 같다).
+                  ⚠️ 폭이 모자라면 이름만 줄인다(`min-w-0`) — 뒤의 일괄 버튼이 밀리면 그 날 입력이 막힌다. */}
+              {holiday ? (
+                <span
+                  className="text-danger min-w-0 shrink truncate text-[11px] font-bold"
+                  title={`${holiday} — 휴일이지만 수업했다면 그대로 쓰실 수 있습니다`}
+                >
+                  {holiday}
                 </span>
               ) : null}
               {/* 일괄 = **요일 머리**(원장 2026-08-14 "요일 옆에 넣어도 될듯. 어차피 일괄이니까").

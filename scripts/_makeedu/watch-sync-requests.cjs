@@ -8,6 +8,8 @@
  * - 연타/다중 요청: pending 전부를 한 번에 claim → 동기화 1회로 합침(additive·멱등이라 안전).
  * - PC가 꺼져 있던 동안 쌓인 pending도 켜지면 즉시 따라잡음.
  * - DB 연결 오류는 연결을 버리고 다음 폴에서 재시도(무한 상주 — 작업 스케줄러가 로그온 시 시작).
+ * - **주간 자동 역동기화**(원장 2026-09-01): 매주 일요일 06:00(KST) 버킷이 열리면 QR 접수 상담을
+ *   makeedu_push_requests에 적재한다(weekly-push.cjs) → 아래 푸시 단계가 같은 큐를 그대로 제출한다.
  *
  * 실행: node --env-file=.env.local scripts/_makeedu/watch-sync-requests.cjs
  * 등록: 작업 스케줄러 "eywa-makeedu-sync-watcher" (run-watch-requests.ps1, 로그온 트리거 + 상시 실행)
@@ -19,6 +21,7 @@ const os = require("os");
 const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const { runWeeklyPushEnqueue, weeklyBucketOf } = require("./weekly-push.cjs");
 
 const POLL_MS = 15_000;
 const HERE = __dirname;
@@ -97,6 +100,45 @@ async function pendingPushCount() {
   return row ? row.n : 0;
 }
 
+// ───────── 주간 자동 역동기화 적재(원장 2026-09-01) ─────────
+// 🔴 실제 dedup 정본은 DB(makeedu_push_batches 기본키 claim)다. 아래 두 변수는 **폴마다 나가는 쓰기를
+//    줄이는 캐시**일 뿐이라, 프로세스를 재시작해도 DB가 같은 주를 두 번 밀지 않게 막는다.
+let weeklyBucketDone = null;   // 이 프로세스가 처리를 마친 버킷(queued/empty/done)
+let weeklyNoTableLogged = null; // 0238a 미적용 안내를 버킷당 한 번만 찍는다(15초마다 로그 폭탄 방지)
+
+async function weeklyPush() {
+  const bucket = weeklyBucketOf(new Date());
+  if (weeklyBucketDone === bucket) return;
+  let r;
+  try {
+    // 테넌트는 심장박동이 이미 해석해 뒀다(추가 쿼리 0). 아직이면 모듈이 스스로 해석한다.
+    r = await runWeeklyPushEnqueue(db(), { tenantId: heartbeatTenantId || undefined });
+  } catch (e) {
+    log(`주간 자동 전송 적재 실패(다음 폴에서 재시도): ${e.message}`);
+    return;
+  }
+  if (r.status === "no-table") {
+    // 마이그레이션 0238a가 아직 안 들어왔다 — dedup을 못 하므로 **보내지 않는다**(fail-closed).
+    // 버킷은 소모하지 않아, 적용되는 순간 그 주에 바로 따라잡는다.
+    if (weeklyNoTableLogged !== bucket) {
+      log(`주간 자동 전송 대기: 마이그레이션 0238a(makeedu_push_batches) 미적용 — 적용되면 자동 시작 (${bucket})`);
+      weeklyNoTableLogged = bucket;
+    }
+    return;
+  }
+  weeklyBucketDone = bucket;
+  if (r.status === "queued") {
+    // 상한(WEEKLY_MAX_QUEUE)에 걸려 남은 건이 있으면 **반드시 적는다** — 안 적으면 "다 보냈다"로 읽힌다.
+    log(
+      `주간 자동 전송: ${r.queued}건 큐 적재 (${bucket})` +
+        (r.deferred ? ` · ${r.deferred}건은 다음 배치로 미룸(상한)` : ""),
+    );
+  } else if (r.status === "empty") {
+    log(`주간 자동 전송: 보낼 상담 없음 (${bucket})`);
+  }
+  // "done" = 다른 폴/다른 PC가 이미 이번 주를 처리 → 조용히 넘어간다.
+}
+
 // 심장박동(0073a) — 이 PC가 동기화 담당·살아있음을 매 폴마다 기록 → 웹 연동 면에서 온라인/오프라인 표시.
 // best-effort: 실패해도 요청 처리를 막지 않는다. 테넌트는 시작 시 1회 해석(단일 테넌트 배포).
 let heartbeatTenantId = null;
@@ -137,7 +179,10 @@ async function heartbeat() {
         await finish(claimed, ok, ok ? null : tail || "sync-all 실패");
         log(ok ? "✅ 동기화 완료 (done)" : `✖ 동기화 실패 (error): ${tail}`);
       }
-      // 2) 역동기화 푸시 요청(eywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
+      // 2) 주간 자동 역동기화 적재 — 일요일 06:00(KST) 버킷이 열렸으면 큐에 넣는다(주 1회).
+      //    제출은 새 경로가 아니라 바로 아래 3)이 그대로 한다.
+      await weeklyPush();
+      // 3) 역동기화 푸시 요청(eywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
       if ((await pendingPushCount()) > 0) {
         log(`푸시 요청 감지 → push-consultations 실행`);
         await beat();

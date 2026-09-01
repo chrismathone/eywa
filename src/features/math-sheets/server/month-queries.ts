@@ -31,6 +31,10 @@ import { readMcsMonthView, type McsMonthView } from "../view-prefs";
 import { describePosition } from "@/features/progress/curriculum-position";
 import { readMcsFontSize, type McsFontSize } from "../font-size";
 import { requireMcsClassAccess } from "./access";
+import { getTenantSettings } from "@/features/owner/server/queries";
+// 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
+import { buildHolidayMap } from "@/features/attendance/calendar";
+import { isHolidayOn } from "@/features/class-sheets/lib/holiday";
 
 /**
  * MCS **월간 뷰** 조회 — 반 1개 × 달 1개, 축은 **학생 × 수업일**.
@@ -125,6 +129,12 @@ export type MathSheetMonthData = {
   view: McsMonthView;
   /** 글씨 크기(작음·보통·큼) — 계정 귀속. 원스크린·ECS와 같은 어휘·같은 배율. */
   fontSize: McsFontSize;
+  /**
+   * 이 달 범위의 학원 휴일(`YYYY-MM-DD` → 이름).
+   * 🔴 **열을 없애는 값이 아니다**(원장 2026-09-01 *"입력은 가능하도록"*) — 그 날 열은 그대로 서고
+   *    기록도 그대로 보인다. 달라지는 건 열 머리 표식과 칸 상태(`holiday`)뿐이다.
+   */
+  holidays: Record<string, string>;
 };
 
 export type GoalsStatus = "ok" | "missing-table" | "failed";
@@ -157,7 +167,7 @@ export async function getMathSheetMonth(
   const tenantId = access.tenantId;
 
   // 독립 조회는 병렬(B4).
-  const [schedRes, enrRes, reportRows, attRows, goalRes, prefRes, teacherRes] = await Promise.all([
+  const [schedRes, enrRes, reportRows, attRows, goalRes, prefRes, teacherRes, settings] = await Promise.all([
     admin
       .from("class_schedules")
       .select("day_of_week, start_time, end_time, valid_from, valid_to")
@@ -203,7 +213,15 @@ export async function getMathSheetMonth(
     access.teacherId
       ? admin.from("users").select("display_name").eq("id", access.teacherId).maybeSingle()
       : Promise.resolve({ data: null }),
+    // 휴일 — 테넌트 단위 read-mostly라 요청 캐시를 탄다(추가 왕복 없음, B4·B6).
+    getTenantSettings(),
   ]);
+
+  // 이 달 범위로 좁힌 휴일 — 전 연도를 클라로 내려보낼 이유가 없다(설정엔 2027년까지 들어 있다).
+  const holidays: Record<string, string> = {};
+  for (const [date, name] of Object.entries(buildHolidayMap(settings.operations.holidays))) {
+    if (date >= from && date <= to) holidays[date] = name;
+  }
 
   const days = classDaysOf(
     month,
@@ -311,6 +329,8 @@ export async function getMathSheetMonth(
         attendance: foldDayAttendance(attByKey.get(`${sid}|${date}`) ?? []),
         hasReport: Boolean(rec),
         today,
+        // 🔴 학원이 안 연 날 — 결석·무기록과 **다른 이유**로 비어 있다(cell-state.ts 규약).
+        holiday: isHolidayOn(holidays, date),
       });
       cells[date] = state;
       allStates.push(state);
@@ -439,6 +459,7 @@ export async function getMathSheetMonth(
       canEdit: access.canWrite,
       goalsStatus,
       elapsedDays: dayDates.filter((d) => d <= today).length,
+      holidays,
       view: readMcsMonthView((prefRes.data as { ui_prefs?: unknown } | null)?.ui_prefs),
       fontSize: readMcsFontSize((prefRes.data as { ui_prefs?: unknown } | null)?.ui_prefs),
     },

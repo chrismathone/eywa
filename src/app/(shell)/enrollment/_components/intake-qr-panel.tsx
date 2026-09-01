@@ -171,7 +171,9 @@ export function IntakeQrButton({ tokens }: { tokens: IntakeTokenView[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      {/* 우상단 액션은 공용 Button **기본 크기**로 통일(원장 2026-09-01 *"우상단 버튼크기 통일"*) —
+          옆 '신규 등록'이 기본 크기라 여기만 sm이면 두 버튼 키가 다르다. */}
+      <Button variant="outline" onClick={() => setOpen(true)}>
         <QrCode className="size-4" />
         공개 접수 QR
       </Button>

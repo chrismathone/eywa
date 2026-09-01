@@ -102,6 +102,7 @@ describe("오늘 면 시트 — 모든 층이 같은 day.slots를 본다", () =>
     renderDay({
       date: "2026-08-19",
       dow: "wed",
+      holiday: null,
       slots: [slot("15:20", ["s1", "s2"]), slot("16:20", ["s1"])],
     });
     expect(seen.periods).toEqual(["15:20", "16:20"]);
@@ -111,7 +112,7 @@ describe("오늘 면 시트 — 모든 층이 같은 day.slots를 본다", () =>
 
   it("🔴 오케스트레이터가 교시를 걸러 내려보내면 세 층이 **함께** 줄어든다(일괄 라벨의 근거)", () => {
     // 위 케이스에서 '14:20'(남의 교시)이 빠진 모양 — 층마다 따로 거르면 여기서 수가 갈린다.
-    renderDay({ date: "2026-08-19", dow: "wed", slots: [slot("15:20", ["s1", "s2"])] });
+    renderDay({ date: "2026-08-19", dow: "wed", holiday: null, slots: [slot("15:20", ["s1", "s2"])] });
     expect(seen.periods).toEqual(["15:20"]);
     expect(seen.roster).toEqual(["15:20"]);
     expect(seen.bulk).toEqual(["15:20"]);
@@ -121,6 +122,7 @@ describe("오늘 면 시트 — 모든 층이 같은 day.slots를 본다", () =>
     renderDay({
       date: "2026-08-19",
       dow: "wed",
+      holiday: null,
       slots: [slot("15:20", ["s1", "s2"]), slot("16:20", ["s3"])],
     });
     expect([...seen.makeupExisting].sort()).toEqual(["s1", "s2", "s3"]);

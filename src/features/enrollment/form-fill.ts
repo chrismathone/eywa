@@ -1,6 +1,7 @@
 // 등록상담 녹음 분석 → 폼 자동입력 매핑 (순수 함수, ⚠️ server-only 금지 [[#61]] — Vitest 대상).
 // ijw processRegistrationRecording의 "폼 필드 추출 → ConsultationRecord 자동 채우기"를 eywa 컬럼에 이식.
 // 핵심 규칙: 비어있는 필드만 채운다(상담사 수기 입력을 절대 덮어쓰지 않음).
+import { canonicalSchoolName } from "@/features/schools/school-name";
 import {
   RELATION_OPTIONS,
   CONSULTATION_PATHS,
@@ -151,7 +152,11 @@ export function buildFormPatch(
     v && (/(초|중|고|교|원)$/.test(v.trim()) || /(학교|초등|중등|고등)/.test(v)) ? v : undefined;
 
   fill("prospect_grade", cur.prospectGrade, gradeOk(clean(ex.grade)));
-  fill("prospect_school", cur.prospectSchool, grounded(schoolShape(notUncertain(notEcho(clean(ex.schoolName))))));
+  // 🔴 AI 자동입력도 **저장 표기로 강제 정규화**한다(원장 2026-09-01) — 이 경로는 buildConsultationRow를
+  // 안 거치고 웹훅이 DB에 바로 쓰므로, 여기를 빼면 전사에서 뽑은 "칠성초등학교"가 그대로 남는다.
+  // ⚠️ 정규화는 **grounding 뒤**에 한다(전사에 실제로 나온 값인지 먼저 확인하고, 표기만 다듬는다).
+  const schoolValue = grounded(schoolShape(notUncertain(notEcho(clean(ex.schoolName)))));
+  fill("prospect_school", cur.prospectSchool, canonicalSchoolName(schoolValue) ?? undefined);
   fill("parent_name", cur.parentName, grounded(realName(notUncertain(notEcho(clean(ex.parentName))))));
   fill("parent_phone", cur.parentPhone, phoneOk(clean(ex.parentPhone)));
   fill("parent_relation", cur.parentRelation, pickEnum(clean(ex.parentRelation), RELATION_OPTIONS));

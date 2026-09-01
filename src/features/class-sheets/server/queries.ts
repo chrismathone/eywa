@@ -47,6 +47,7 @@ import {
 import {
   buildWeekGrid,
   hasLiveSlotInWeek,
+  holidaySlotKeySet,
   scheduledSlotKeySet,
   scheduledUnitsByDate,
   seatSlotKeySet,
@@ -55,6 +56,8 @@ import {
   type GridPlanLine,
   type WeekGrid,
 } from "../lib/grid";
+// 휴일 판정은 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
+import { buildHolidayMap } from "@/features/attendance/calendar";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { normalizeSlotTime, weekDatesOf, YMD_RE, type DowKey } from "../lib/week";
 import { ecsDelegatedClassIds, ecsVisibleClassFilter, requireEcsClassAccess } from "./access";
@@ -452,6 +455,8 @@ export async function getClassSheetWeek(
     slotMemoKeys: memoRows.map((m) => m.memoKey).filter((k) => k.startsWith("slot:")),
     includeSelfStudy: showSelfStudy,
     activeElsewhereSameSubject,
+    // 휴일 — **표시와 작성률 분모에만** 닿는다(칸·입력·출결은 평일과 똑같다, [[holiday.ts]] 규약).
+    holidays: buildHolidayMap(settings.operations.holidays),
   });
 
   // 학생 메타 — enrollment 조인분 + (마크·출석만 있는 historical) 부족분 보충 조회
@@ -677,9 +682,19 @@ export type SheetLandingCard = {
    * ⚠️ `shoutingSlots`로 프로그램을 되짚지 말 것: 조회가 실패해도 null이라 "EiE가 아님"과 구분이 안 된다.
    */
   englishTrack: EnglishTrack | null;
+  /**
+   * 작성률 분모 — 그 주 배정 교시 중 **평일 전부 + 쓴 휴일**([[holiday.ts]] 규약).
+   * ⚠️ 배정이 있어도 그 주가 통째로 휴일이면 0이 된다. 그때 반은 목록에 **그대로 남는다**
+   *    (`hasLiveSlotInWeek`는 휴일을 보지 않는다) — 화면은 `holidaySlots`로 사유를 가려 적는다.
+   */
   totalSlots: number;
   filledSlots: number;
   orphanSlots: number;
+  /**
+   * 그 주 **휴일에 배정된** 교시 수(쓴 것·안 쓴 것 모두). 0이 아닌데 `totalSlots`가 0이면
+   * "배정이 없는 주"가 아니라 "휴일뿐인 주"다 — 두 사유를 같은 문구로 적으면 화면이 거짓말을 한다.
+   */
+  holidaySlots: number;
   /**
    * 그 주 Shouting 체크가 들어간 교시 수(0230a) — 분모는 `totalSlots`(작성률과 **같은 분모**라
    * `2/6 · 4/6`이 한 줄에서 바로 대조된다). 원장 2026-08-28 *"EiE반은 그 왼쪽에 샤우팅 체킹을
@@ -981,38 +996,43 @@ export async function getSheetLanding(
     shoutKeysByClass.set(f.class_id, set);
   }
 
+  // 휴일 — 랜딩·주간 시트·월간이 **같은 맵**을 읽는다(설정 단일 소스, [[holiday.ts]]).
+  const holidayMap = buildHolidayMap(settings.operations.holidays);
+
   const cards: SheetLandingCard[] = (classes ?? []).map((c) => {
-    const scheduled = scheduledSlotKeySet(
-      weekMonday,
-      (schedulesByClass.get(c.id as string) ?? []).map((s) => ({
-        dayOfWeek: s.day_of_week,
-        startTime: s.start_time,
-        validFrom: s.valid_from,
-        validTo: s.valid_to,
-        slotTeacherLabel: s.slot_teacher_label,
-      })),
-      { includeSelfStudy: showSelfStudy },
-    );
+    const slotRows = (schedulesByClass.get(c.id as string) ?? []).map((s) => ({
+      dayOfWeek: s.day_of_week,
+      startTime: s.start_time,
+      validFrom: s.valid_from,
+      validTo: s.valid_to,
+      slotTeacherLabel: s.slot_teacher_label,
+    }));
+    // 🔴 휴일 교시는 `scheduled`에서 빠지고 여기로 온다 — **쓴 것만** 아래에서 분모·분자로 돌아간다
+    //    (안 쓴 휴일 = 대상 0). 고아 판정은 **둘 다** 스케줄로 보므로 휴일에 쓴 계획이 "시간표에 없는
+    //    기록"으로 둔갑하지 않는다.
+    const scheduled = scheduledSlotKeySet(weekMonday, slotRows, {
+      includeSelfStudy: showSelfStudy,
+      holidays: holidayMap,
+    });
+    const holidayKeys = holidaySlotKeySet(weekMonday, slotRows, holidayMap, {
+      includeSelfStudy: showSelfStudy,
+    });
     const meaningful = meaningfulKeysByClass.get(c.id as string) ?? new Set<string>();
     const all = allKeysByClass.get(c.id as string) ?? new Set<string>();
+    // 세는 대상 = 평일 배정 전부 + **쓴 휴일**. 작성률·Shouting이 같은 분모를 읽어야 한 줄에서 대조된다.
+    const counted = new Set(scheduled);
+    for (const key of holidayKeys) if (meaningful.has(key)) counted.add(key);
     let filled = 0;
-    for (const key of scheduled) if (meaningful.has(key)) filled += 1;
+    for (const key of counted) if (meaningful.has(key)) filled += 1;
     // 🔴 고아 = "시간표가 바뀌어 스케줄에 없는 기록". **안 그리기로 한 자리(LAB·숨긴 JJ)는 고아가 아니다** —
     //    스케줄엔 멀쩡히 있고 우리가 화면에서 뺐을 뿐이다. 빼면 `scheduled`에서 사라지므로 그냥 세면 LAB
     //    기록 전부가 "시간 변경된 기록 N건"으로 둔갑한다(시트 상세는 같은 걸 'LAB 각주'로 말한다 —
     //    두 화면이 같은 데이터를 다르게 설명하면 하나는 반드시 거짓말이다).
-    const seatKeys = seatSlotKeySet(
-      weekMonday,
-      (schedulesByClass.get(c.id as string) ?? []).map((s) => ({
-        dayOfWeek: s.day_of_week,
-        startTime: s.start_time,
-        validFrom: s.valid_from,
-        validTo: s.valid_to,
-        slotTeacherLabel: s.slot_teacher_label,
-      })),
-    );
+    const seatKeys = seatSlotKeySet(weekMonday, slotRows);
     let orphan = 0;
-    for (const key of all) if (!scheduled.has(key) && !seatKeys.has(key)) orphan += 1;
+    // 🔴 휴일 교시(`holidayKeys`)는 스케줄에 **멀쩡히 있다** — 분모에서만 뺐을 뿐이다. 여기서 안 빼면
+    //    추석에 쓴 계획이 전부 "시간표가 바뀌어 없는 기록"으로 뜬다(LAB이 그렇게 둔갑했던 것과 같은 함정).
+    for (const key of all) if (!scheduled.has(key) && !holidayKeys.has(key) && !seatKeys.has(key)) orphan += 1;
     // 프로그램 구분 — 카드에 실어 보낸다(화면이 좌우로 가르는 기준). 위 `eieClassIds`와 **같은 술어**라
     // 조회 대상과 표시가 갈리지 않는다.
     const track = readEnglishTrack({ english_track: c.english_track as string | null });
@@ -1022,7 +1042,9 @@ export async function getSheetLanding(
     if (shoutFlags !== null && track === "eie") {
       const keys = shoutKeysByClass.get(c.id as string);
       shout = 0;
-      if (keys) for (const key of scheduled) if (keys.has(key)) shout += 1;
+      // 분모(`totalSlots`)와 **같은 집합**을 센다 — 안 쓴 휴일이 분모에서 빠졌는데 분자만 그 날 체크를
+      // 세면 `7/6`이 뜬다(옛 시간표 체크를 거르는 것과 같은 규약).
+      if (keys) for (const key of counted) if (keys.has(key)) shout += 1;
     }
     // ⚠️ 카드 **순서는 DB의 `class_name` 그대로 둔다**(위 .order). 표시 이름으로 다시 정렬하고 싶겠지만,
     //    Postgres 정렬은 로마자→한글인데 `localeCompare("ko")`는 정반대라([[#84]]) 개명과 무관한 반들의
@@ -1043,9 +1065,10 @@ export async function getSheetLanding(
       teacherId: (c.teacher_id as string | null) ?? null,
       teacherName: c.teacher_id ? (teacherName.get(c.teacher_id as string) ?? null) : null,
       englishTrack: track,
-      totalSlots: scheduled.size,
+      totalSlots: counted.size,
       filledSlots: filled,
       orphanSlots: orphan,
+      holidaySlots: holidayKeys.size,
       shoutingSlots: shout,
       // 담임이 나면 위임이 아니다 — 내 반이 남에게 위임돼 있어도 내 화면에선 그냥 내 반이다.
       delegated: delegatedIdSet.has(c.id as string) && c.teacher_id !== user.id,

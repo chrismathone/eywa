@@ -176,6 +176,17 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
             흔적 없음 {data.fill.untracked}칸
           </span>
         ) : null}
+        {/* 🔴 휴일 칸은 어느 수에도 안 들어가므로 **여기서 말하지 않으면 조용히 사라진다** — 그러면
+            "이 달 칸이 왜 이렇게 적지"의 답이 화면에 없다. 재촉이 아니라 사유라 무채색이다.
+            ⚠️ 휴일에 **쓴** 칸은 여기 없다(그건 `기록`에 들어가 100%로 인정된다 — [[holiday.ts]]). */}
+        {data.fill.holiday > 0 ? (
+          <span
+            className="bg-att-weekend text-text-dim rounded-full px-2 py-0.5 text-[11px] font-bold"
+            title="학원 휴일이라 기록 의무가 없는 칸입니다 — 작성률 분모에 들어가지 않습니다(그날 쓴 기록은 그대로 인정됩니다)"
+          >
+            휴일 {data.fill.holiday}칸
+          </span>
+        ) : null}
         {data.elapsedDays > 0 ? (
           <span className="bg-muted text-text-faint num rounded-full px-2 py-0.5 text-[11px] font-bold">
             기록 {data.fill.written} / {data.fill.written + data.fill.unwritten}
