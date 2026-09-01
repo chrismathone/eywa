@@ -515,10 +515,14 @@ function AbsorbDialog({
 /**
  * 월간 계획서(MP) 인쇄물 문구 편집기 — 머리말(교재 약어 범례 · 안내)과 꼬리말(Prep 안내).
  *
- * 🔴 **소비처가 곧 존재 이유다**: `(print)/ecs/[classId]/month-plan`이 이 값을 읽어 학부모 인쇄물을
- *    그린다(소비처 없는 설정 금지 — CLAUDE.md 학원 설정 절). 빈 칸은 인쇄에서 그 블록이 통째로 빠진다.
- * ⚠️ 저장은 **네 칸을 함께** 담는다(부분 객체를 저장하면 Zod가 거절한다). 네 칸이 전부 비면 키를
+ * 🔴 **소비처가 곧 존재 이유다**: 계획(MP) 화면과 `(print)/ecs/[classId]/month-plan`이 **같은 값**을
+ *    읽어 같은 문서를 그린다(소비처 없는 설정 금지 — CLAUDE.md 학원 설정 절).
+ * ⚠️ **빈 칸 = 미설정**이다(그 블록이 빠지는 게 아니라 **코드 기본값**이 들어간다 — 기본값이 원본 시트
+ *    문구라 그게 맞는 동작이다). 블록을 정말 없애야 하는 요구가 생기면 끄는 길을 따로 낼 것.
+ * ⚠️ 저장은 **다섯 칸을 함께** 담는다(부분 객체를 저장하면 Zod가 거절한다). 다섯 칸이 전부 비면 키를
  *    지워 미설정으로 되돌린다 — 그래야 나중에 코드 기본값을 고쳤을 때 옛 계정만 옛 값에 묶이지 않는다.
+ * ⚠️ `slogan`은 나중에 생긴 칸이라 스키마에서 `.optional()`이다 — 옛 저장 행엔 없을 수 있으니
+ *    읽을 때 `?? ""`로 받는다(안 그러면 controlled/uncontrolled가 뒤바뀐다).
  */
 function MonthPlanTextsEditor({
   value,
@@ -531,7 +535,7 @@ function MonthPlanTextsEditor({
   const patch = (key: keyof MonthPlanTextsSetting, v: string) => {
     const next = { ...cur, [key]: v };
     const allEmpty = (Object.keys(next) as (keyof MonthPlanTextsSetting)[]).every(
-      (k) => next[k].trim() === "",
+      (k) => (next[k] ?? "").trim() === "",
     );
     onChange(allEmpty ? undefined : next);
   };
@@ -544,19 +548,25 @@ function MonthPlanTextsEditor({
     {
       key: "bookLegend",
       label: "교재 약어 범례",
-      hint: "표 위 오른쪽. 예: SB: Student Book / WB: Workbook / PB: Practice book",
+      hint: "표 위 오른쪽. 한 줄에 하나씩. 비우면 기본 문구가 들어갑니다",
       rows: 2,
     },
-    { key: "notices", label: "표 위 안내", hint: "한 줄에 하나씩. 비우면 인쇄에서 빠집니다", rows: 4 },
+    { key: "notices", label: "표 위 안내", hint: "한 줄에 하나씩. 비우면 기본 문구가 들어갑니다", rows: 4 },
+    {
+      key: "slogan",
+      label: "꼬리말 한 줄",
+      hint: "세션 기간 줄 바로 아래. 예: 발음은 정확하게! 큰 소리로! 자신감있게!",
+      rows: 1,
+    },
     { key: "prepTitle", label: "꼬리말 제목", hint: "예: Prep 안내", rows: 1 },
-    { key: "prepNotes", label: "꼬리말 본문", hint: "한 줄에 하나씩. 비우면 인쇄에서 빠집니다", rows: 3 },
+    { key: "prepNotes", label: "꼬리말 본문", hint: "한 줄에 하나씩. 비우면 기본 문구가 들어갑니다", rows: 3 },
   ];
   return (
     <div className="space-y-2">
       <h4 className="text-foreground text-[12px] font-bold">월간 계획서(MP) 인쇄 문구</h4>
       <p className="text-text-faint text-[11px]">
-        영어 강사 시트 · 계획(MP) 보기에서 인쇄하는 학부모 배포용 문서의 머리말·꼬리말입니다. 반마다 같은
-        문구라 여기서 한 번만 적습니다.
+        영어 강사 시트 · 계획(MP) 보기와 그 인쇄물이 함께 쓰는 문서 문구입니다(화면과 인쇄가 같은 값을
+        읽습니다). 반마다 같은 문구라 여기서 한 번만 적습니다.
       </p>
       <div className="grid gap-2 lg:grid-cols-2">
         {fields.map((f) => (
@@ -565,7 +575,7 @@ function MonthPlanTextsEditor({
             <textarea
               className={`${cellCls} resize-y`}
               rows={f.rows}
-              value={cur[f.key]}
+              value={cur[f.key] ?? ""}
               onChange={(e) => patch(f.key, e.target.value)}
               aria-label={`월간 계획서 ${f.label}`}
             />

@@ -106,6 +106,10 @@ export type SkillAreaSetting = z.infer<typeof skillAreaSchema>;
 export const monthPlanTextsSchema = z.object({
   bookLegend: z.string().max(200),
   notices: z.string().max(600),
+  // 세션 줄 바로 아래 한 줄(시트: "발음은 정확하게! 큰 소리로! 자신감있게!").
+  // ⚠️ `.optional()` — 이 칸이 생기기 전에 저장된 monthPlan 행이 통째로 검증에 걸리지 않게 한다
+  //    (미설정은 resolveMonthPlanTexts가 기본값으로 채운다).
+  slogan: z.string().max(120).optional(),
   prepTitle: z.string().max(80),
   prepNotes: z.string().max(600),
 });

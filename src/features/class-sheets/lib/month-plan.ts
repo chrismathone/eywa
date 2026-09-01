@@ -14,8 +14,12 @@
 import type { DowKey } from "./week";
 import { dowKeyOf } from "./week";
 
-/** DB `class_month_plan_cells.col_kind`. `off`는 열이 아니라 그 날의 상태 표식이다. */
-export type MpColKind = "in_class" | "homework" | "ebook" | "test" | "off";
+/**
+ * DB `class_month_plan_cells.col_kind`.
+ * `off`는 열이 아니라 **그 날의 상태 표식**이고, `footer`는 칸이 아니라 **문서 아래 한 덩어리**다
+ * (둘 다 격자에 서지 않는다 — 그래서 `MP_ALL_COLUMNS`와 따로 둔다).
+ */
+export type MpColKind = "in_class" | "homework" | "ebook" | "test" | "off" | "footer";
 
 /**
  * 화면·인쇄에 실제로 열로 서는 칸 — **순서가 곧 열 순서**다(원본 시트 그대로).
@@ -43,6 +47,14 @@ export const MP_COLUMN_HINT: Record<MpColumnKind, string> = {
   ebook: "e-book 과제(요일마다 있을 수도, 없을 수도)",
   test: "그 날 단어시험 범위(없으면 NO TEST)",
 };
+
+/**
+ * EiE 프로그램 로고 — 원본 시트 1행 왼쪽에 박혀 있는 것과 같은 그림(원장이 2026-09-01에 파일로 줬다).
+ * 🔴 **화면(계획 보기)과 인쇄가 같은 경로를 쓴다** — 한쪽만 바꾸면 두 문서가 갈린다.
+ * ⚠️ 지금은 `public/` 정적 자산이다(학원 설정에 이미지 자리가 아직 없다 — CLAUDE.md "DB가 필요한데
+ *    없는 것"). 학원마다 다른 로고가 필요해지면 Storage + 설정 경로로 올리고 **이 상수만** 고친다.
+ */
+export const MP_LOGO_SRC = "/eie-logo.png";
 
 export const MP_DOW_LABEL_EN: Record<DowKey, string> = {
   mon: "Monday",
@@ -162,6 +174,106 @@ export function mpPeriodRangeLabel(window: { start: string; end: string }): stri
   const one = (iso: string) => `${Number(iso.slice(5, 7))}월 ${Number(iso.slice(8, 10))}일`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(window.start) || !/^\d{4}-\d{2}-\d{2}$/.test(window.end)) return "";
   return `${one(window.start)} ~ ${one(window.end)}`;
+}
+
+/**
+ * 문서 제목의 **영문 월** — 원본 시트가 `Let's Express 1 (September 2026)`로 적는다.
+ * 🔴 화면·인쇄 어디서도 이 배열을 다시 적지 말 것(같은 문서가 두 표기를 쓰면 안 된다).
+ */
+const MP_MONTH_EN = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+/**
+ * EiE 레벨 약자 → **풀네임**. 원본 시트는 제목에 풀네임을 쓴다(`Let's Express 1 (September 2026)`).
+ *
+ * 🔴 **아는 것만 적는다.** 모르는 약자는 반 이름을 그대로 내보낸다 — 지어낸 이름이 학부모 문서에
+ *    나가는 것보다 약자가 낫다(원장 2026-09-01 *"풀네임 모르면 질문할것"*).
+ * 출처 = ① 원장이 준 원본 시트 탭(`LE1` → `Let's Express 1` · `PL3` → `Pre Let's 3`)
+ *        ② **청구 항목 `[EiE]` 태그**(원장 2026-09-02 *"약어 모르겟는건 수납에 봐봐"* — 실데이터
+ *           청구서 3,593건에서 48종을 모아 대조했다: `[EiE] Let's Speak 4b` · `[EiE] Ready To Talk 5` ·
+ *           `[EiE] Middle School English Course 1-5` · `[EiE] Kopi Wang 6` · `[EiE] Dr.Phonics 6` …).
+ *        ③ **JP = Junior Plus · PJ = Pre Junior**는 원장이 직접 알려줬다(2026-09-02). 청구로는
+ *           못 풀렸다 — 그 반 학생들의 청구가 `Kopi Wang`·`Let's Express`로 엇갈렸다(반을 옮긴 학생들).
+ * ⚠️ 사전에 없는 약자가 새로 생기면 **반 이름 그대로** 나간다(지어내지 않는다) — 여기만 채우면 된다.
+ */
+const MP_LEVEL_FULL_NAME: Record<string, string> = {
+  DP: "Dr.Phonics",
+  JP: "Junior Plus",
+  KW: "Kopi Wang",
+  LE: "Let's Express",
+  LS: "Let's Speak",
+  LT: "Let's Talk",
+  MEC: "Middle School English Course",
+  PJ: "Pre Junior",
+  PL: "Pre Let's",
+  RTT: "Ready To Talk",
+};
+
+/**
+ * 반 이름을 문서 제목용 풀네임으로 — `LE1` → `Let's Express 1`, `PL1a` → `Pre Let's 1a`.
+ * 사전에 없으면 **그대로** 돌려준다.
+ */
+export function mpLevelFullName(className: string): string {
+  const m = /^([A-Za-z]+)(.*)$/u.exec(className.trim());
+  if (!m) return className;
+  const full = MP_LEVEL_FULL_NAME[m[1]!.toUpperCase()];
+  if (!full) return className;
+  const rest = m[2]!.trim();
+  return rest ? `${full} ${rest}` : full;
+}
+
+/**
+ * 문서 제목 — `Let's Express 1 (September 2026)`.
+ *
+ * ⚠️ 달 표기는 시트와 같은 영문이다(`monthLabel`의 `2026년 9월`이 아니다) — 이 문서는 시트를
+ *    그대로 대신하는 학부모 문서라 같은 글자를 쓴다.
+ */
+export function mpDocTitle(className: string, month: string): string {
+  const name = mpLevelFullName(className);
+  const m = Number(month.slice(5, 7));
+  const en = MP_MONTH_EN[m - 1];
+  if (!/^\d{4}-\d{2}$/.test(month) || !en) return name;
+  return `${name} (${en} ${month.slice(0, 4)})`;
+}
+
+/**
+ * 꼬리말 세션 줄 — `❤ 9월 세션 : 9월 1일 ~ 9월 30일 ❤`(시트 표기 그대로, 하트 포함).
+ * ⚠️ **연도를 넣지 않는다**(시트가 `9월 세션`이라 적는다) · 기간을 못 구하면 빈 문자열 → 그 줄을 생략.
+ */
+export function mpSessionLine(month: string, periodRange: string): string {
+  const m = Number(month.slice(5, 7));
+  if (!periodRange.trim() || !Number.isFinite(m) || m < 1 || m > 12) return "";
+  return `❤ ${m}월 세션 : ${periodRange} ❤`;
+}
+
+/**
+ * 꼬리말이 앉는 날짜 — **그 달 1일**(0240a). 꼬리말은 날짜 축이 없지만 표의 grain이 날짜라
+ * 한 자리를 정해 둔다. 조회가 이미 그 달 범위를 긁으므로 따로 조회하지 않는다.
+ */
+export function mpFooterDate(month: string): string {
+  return `${month}-01`;
+}
+
+/**
+ * 그 반의 꼬리말 — 저장된 값이 있으면 그것, 없으면 학원설정 기본값.
+ * 🔴 **빈 문자열은 "지웠다"**로 읽는다(기본값으로 되살리지 않는다) — 반마다 문구가 다르다는 것이
+ *    이 기능의 이유라, 일부러 비운 반에 남의 문구가 다시 뜨면 안 된다.
+ */
+export function mpResolveFooter(cells: MpCellMap, month: string, fallback: string): string {
+  const saved = cells[mpCellKey(mpFooterDate(month), "footer")];
+  return typeof saved === "string" ? saved : fallback;
 }
 
 /** 그 달에서 이 반이 실제로 쓰는 날 — 배정이 있고(수업일) 휴강이 아닌 날. */

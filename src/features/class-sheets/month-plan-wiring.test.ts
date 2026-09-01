@@ -19,11 +19,15 @@ const chrome = strip(read("src", "features", "class-sheets", "chrome.ts"));
 const monthQueries = strip(read("src", "features", "class-sheets", "server", "month-queries.ts"));
 const planActions = strip(read("src", "features", "class-sheets", "server", "month-plan-actions.ts"));
 const planPrint = strip(read("src", "features", "class-sheets", "server", "month-plan-print.ts"));
+const planChrome = strip(read("src", "features", "class-sheets", "server", "month-plan-chrome.ts"));
+const planView = strip(read("src", "features", "class-sheets", "components", "month-plan-view.tsx"));
+const planTexts = strip(read("src", "features", "owner", "month-plan-texts.ts"));
 const monthPage = strip(read("src", "app", "(shell)", "ecs", "[classId]", "month", "page.tsx"));
 const monthClient = strip(read("src", "features", "class-sheets", "components", "month-client.tsx"));
 const toolbar = strip(read("src", "features", "class-sheets", "components", "sheet-toolbar.tsx"));
 const landing = strip(read("src", "app", "(shell)", "ecs", "_components", "landing-list.tsx"));
 const migration = read("supabase", "migrations", "0239a_class_month_plan_cells.sql");
+const migrationFooter = read("supabase", "migrations", "0240a_class_month_plan_footer.sql");
 
 describe("🔴 EiE 판정 — 표면 넷이 같은 근거를 본다", () => {
   it("탭은 `sheetFacesFor(isEie)`로만 선다(두 상단 바가 같은 함수를 쓴다)", () => {
@@ -126,14 +130,69 @@ describe("🔴 인쇄물은 학부모 문서다 — 신호가 실리지 않는�
   });
 
   it("머리말·꼬리말은 학원설정이 단일 소스다(문구를 코드에 박지 않는다)", () => {
-    expect(planPrint).toContain("resolveMonthPlanTexts(subject)");
+    expect(planChrome).toContain("resolveMonthPlanTexts(subject)");
     expect(paper).toContain("texts.bookLegend");
     expect(paper).toContain("monthPlanLines(texts.notices)");
   });
 
   it("꼬리말 기간은 `operating_periods` 해석값에서 온다(문자열 하드코딩 금지)", () => {
-    expect(planPrint).toContain("getPeriodWindow(");
-    expect(planPrint).toContain("mpPeriodRangeLabel(period)");
+    expect(planChrome).toContain("getPeriodWindow(");
+    expect(planChrome).toContain("mpPeriodRangeLabel(period)");
+  });
+
+  it("🔴 화면과 인쇄가 **같은 껍데기 함수**를 쓴다(두 문서가 갈리지 않게)", () => {
+    // 인쇄물과 계획 화면이 각자 조회하면 언젠가 문구·강사·기간이 어긋난다.
+    expect(planPrint).toContain("getMonthPlanChrome(");
+    expect(monthPage).toContain("getMonthPlanChrome(");
+    expect(planChrome).toContain("export async function getMonthPlanChrome");
+    // 화면은 서버가 준 값만 그린다 — 자기가 다시 해석하지 않는다.
+    expect(planView).not.toContain("resolveMonthPlanTexts");
+  });
+
+  it("🔴 계획 화면도 시트 문서 모양을 그린다(머리말·안내·범례·꼬리말)", () => {
+    expect(planView).toContain("mpDocTitle(");
+    expect(planView).toContain("mpSessionLine(");
+    expect(planView).toContain("monthPlanLines(chrome.texts.notices)");
+    expect(planView).toContain("chrome.texts.bookLegend");
+    expect(planView).toContain("defaultMonthPlanFooter(chrome.texts)");
+  });
+
+  it("🔴 꼬리말은 **반이 적은 것이 이긴다**(0240a) — 화면·인쇄가 같은 규칙", () => {
+    // 학원설정 문구는 **기본값**일 뿐이고, 반이 고쳐 적었으면 그 값이 나가야 한다.
+    for (const src of [planView, paper]) {
+      expect(src).toContain("mpResolveFooter(");
+      expect(src).toContain("defaultMonthPlanFooter(");
+    }
+    // 저장 경로를 새로 만들지 않는다 — 같은 액션·같은 표(col_kind='footer').
+    expect(planActions).toContain('"footer"');
+    expect(migrationFooter).toContain("'footer'");
+    // 🔴 세션 줄은 편집 대상이 아니다(날짜라 글자로 굳히면 거짓이 된다).
+    expect(planTexts).not.toContain("mpSessionLine");
+    expect(planTexts).toContain("export function defaultMonthPlanFooter");
+  });
+
+  it("🔴 열 라벨은 **주 블록마다** 다시 그린다(시트 그대로) — 화면·인쇄 둘 다", () => {
+    // 그 주에 수업이 없는 요일의 라벨이 그 주에서만 사라지는 모양이 여기서 나온다.
+    // 라벨이 thead에 한 번만 있으면 그 주만 비울 길이 없다.
+    for (const src of [planView, paper]) {
+      expect(src).toContain("MP_COLUMN_LABEL[col]");
+      // 주 루프(`weeks.map`) 안에서 라벨을 그린다 — thead에는 요일만 선다.
+      const head = src.slice(src.indexOf("<thead>"), src.indexOf("</thead>"));
+      expect(head).not.toContain("MP_COLUMN_LABEL");
+    }
+  });
+
+  it("🔴 문서 기본 문구가 비어 있지 않다(비면 그 블록이 인쇄에서 통째로 사라진다)", () => {
+    // 2026-09-01 원본 시트에서 옮긴 값 — 되돌려 비우면 학부모 문서에서 안내·Prep이 조용히 빠진다.
+    for (const key of ["bookLegend", "notices", "slogan", "prepTitle", "prepNotes"]) {
+      expect(planTexts).toContain(`${key}:`);
+    }
+    expect(planTexts).toContain("Prep 시간에 마무리 못한 온라인 학습은");
+    expect(planTexts).toContain("발음은 정확하게!");
+    expect(planTexts).toContain("Prep 안내");
+    expect(planTexts).not.toContain('notices: ""');
+    expect(planTexts).not.toContain('prepTitle: ""');
+    expect(planTexts).not.toContain('prepNotes: ""');
   });
 });
 
@@ -143,7 +202,7 @@ describe("🔴 휴일 판정은 MP만 들인다", () => {
   });
 
   it("⚠️ 캘린더 탭의 내장 법정공휴일 표를 쓰지 않는다(학원 휴원일이 아니다)", () => {
-    for (const src of [monthQueries, planPrint, monthClient]) {
+    for (const src of [monthQueries, planPrint, planChrome, planView, monthClient]) {
       expect(src).not.toContain("features/calendar/holidays");
     }
   });

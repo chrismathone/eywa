@@ -8,9 +8,12 @@ import {
   mpCellMapOf,
   mpColumnsForDow,
   mpDayIsOff,
+  mpDocTitle,
   mpHasBody,
+  mpLevelFullName,
   mpOffOverrideOf,
   mpOffToggleValue,
+  mpSessionLine,
   readMpOffOverride,
   type MpCell,
 } from "./month-plan";
@@ -102,5 +105,59 @@ describe("mpActiveDates — 배정이 있고 휴강이 아닌 날", () => {
     const hasClass = (d: string) => d !== "2026-09-02";
     const isOff = (d: string) => d === "2026-09-25";
     expect(mpActiveDates(dates, hasClass, isOff)).toEqual(["2026-09-01"]);
+  });
+});
+
+describe("mpDocTitle — 문서 제목은 시트 표기(영문 월)", () => {
+  it("약자를 풀네임으로 편 뒤 영문 월을 붙인다", () => {
+    expect(mpDocTitle("LE1", "2026-09")).toBe("Let's Express 1 (September 2026)");
+    expect(mpDocTitle("PL3", "2026-08")).toBe("Pre Let's 3 (August 2026)");
+    expect(mpDocTitle("PL1a", "2026-01")).toBe("Pre Let's 1a (January 2026)");
+    expect(mpDocTitle("LE1", "2026-12")).toBe("Let's Express 1 (December 2026)");
+  });
+
+  it("달 모양이 아니면 이름만 — 달을 지어내지 않는다", () => {
+    expect(mpDocTitle("LE1", "")).toBe("Let's Express 1");
+    expect(mpDocTitle("LE1", "2026-9")).toBe("Let's Express 1");
+    expect(mpDocTitle("LE1", "2026-13")).toBe("Let's Express 1");
+    expect(mpDocTitle("LE1", "2026-00")).toBe("Let's Express 1");
+  });
+
+  it("EiE 레벨 10종 — 청구 항목·원장 확인으로 채운 사전", () => {
+    // 출처: 청구 `[EiE]` 태그(실데이터) + 원장 직접 확인(JP·PJ).
+    expect(mpLevelFullName("RTT5")).toBe("Ready To Talk 5");
+    expect(mpLevelFullName("MEC1-5")).toBe("Middle School English Course 1-5");
+    expect(mpLevelFullName("KW3")).toBe("Kopi Wang 3");
+    expect(mpLevelFullName("LS4a")).toBe("Let's Speak 4a");
+    expect(mpLevelFullName("LT6")).toBe("Let's Talk 6");
+    expect(mpLevelFullName("JP1")).toBe("Junior Plus 1");
+    expect(mpLevelFullName("PJ2")).toBe("Pre Junior 2");
+    expect(mpLevelFullName("DP6")).toBe("Dr.Phonics 6");
+    // 숫자 없이 약자만이면 이름만.
+    expect(mpLevelFullName("LE")).toBe("Let's Express");
+  });
+
+  it("🔴 사전에 없는 약자는 반 이름 그대로 — 지어내지 않는다", () => {
+    // 원장 2026-09-01 *"풀네임 모르면 질문할것"* — 없는 이름을 만들어 학부모 문서에 내보내지 않는다.
+    expect(mpLevelFullName("ZZ9")).toBe("ZZ9");
+    expect(mpDocTitle("ZZ9", "2026-09")).toBe("ZZ9 (September 2026)");
+    expect(mpLevelFullName("중등E_중1")).toBe("중등E_중1");
+    expect(mpLevelFullName("")).toBe("");
+  });
+});
+
+describe("mpSessionLine — 꼬리말 세션 줄(시트 표기 그대로)", () => {
+  it("하트로 감싸고 **연도를 넣지 않는다**", () => {
+    expect(mpSessionLine("2026-09", "9월 1일 ~ 9월 30일")).toBe("❤ 9월 세션 : 9월 1일 ~ 9월 30일 ❤");
+  });
+
+  it("기간을 못 구하면 빈 문자열 — 그 줄을 통째로 생략한다", () => {
+    expect(mpSessionLine("2026-09", "")).toBe("");
+    expect(mpSessionLine("2026-09", "   ")).toBe("");
+  });
+
+  it("달이 모양이 아니면 만들지 않는다", () => {
+    expect(mpSessionLine("", "9월 1일 ~ 9월 30일")).toBe("");
+    expect(mpSessionLine("2026-13", "9월 1일 ~ 9월 30일")).toBe("");
   });
 });

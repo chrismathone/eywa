@@ -17,7 +17,7 @@ import { MonthCalendar } from "./month-calendar";
 import { MonthDayEditor } from "./month-day-editor";
 import { MonthGoalStrip } from "./month-goal-strip";
 import { MonthPlanBar } from "./month-plan-bar";
-import { MonthPlanView } from "./month-plan-view";
+import { MonthPlanView, type MonthPlanChromeProps } from "./month-plan-view";
 import { MonthRail } from "./month-rail";
 import { useMonthGoals, type GoalRole } from "./use-month-goals";
 import { useMonthPlan } from "./use-month-plan";
@@ -38,12 +38,18 @@ import { useMonthPlan } from "./use-month-plan";
  */
 export function MonthClient({
   data,
+  mpChrome,
   classOptions,
   initialView,
   initialDisplay,
   fromWeek,
 }: {
   data: ClassSheetMonthData;
+  /**
+   * 계획(MP) 문서의 껍데기(제목·안내·범례·꼬리말) — **인쇄물과 같은 값**이 서버에서 온다
+   * (`getMonthPlanChrome`). EiE가 아니면 null이고, 그 반엔 MP 보기 자체가 없다.
+   */
+  mpChrome: MonthPlanChromeProps | null;
   classOptions: { id: string; name: string }[];
   initialView: EcsMonthView;
   initialDisplay: Record<EcsMonthView, EcsMonthDisplay>;
@@ -285,6 +291,7 @@ export function MonthClient({
       {view === "mp" ? (
         <MonthPlanView
           data={data}
+          chrome={mpChrome}
           cells={plan.cells}
           showActual={cur.actual}
           canEdit={data.canEdit && data.mp.status === "ok"}

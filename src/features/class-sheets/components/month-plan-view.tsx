@@ -1,19 +1,45 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
+import {
+  defaultMonthPlanFooter,
+  monthPlanLines,
+  type MonthPlanTexts,
+} from "@/features/owner/month-plan-texts";
 import { cellDateOf } from "../lib/month";
 import {
   MP_COLUMN_HINT,
   MP_COLUMN_LABEL,
   MP_DOW_LABEL_EN,
+  MP_LOGO_SRC,
   mpCellKey,
   mpColumnsForDow,
   mpDayIsOff,
+  mpDocTitle,
+  mpFooterDate,
   mpOffOverrideOf,
+  mpResolveFooter,
+  mpSessionLine,
   type MpCell,
+  type MpColKind,
   type MpColumnKind,
 } from "../lib/month-plan";
+import {
+  MP_SHEET_COLOR,
+  MP_SHEET_FONT,
+  MP_SHEET_LEADING,
+  MP_SHEET_OUTER,
+  MP_SHEET_PX,
+  MP_SHEET_SIZE,
+  mpDocWidth,
+  mpBandCellStyle,
+  mpGridBorder,
+  mpHeadCellStyle,
+  mpTitleStyle,
+  mpValueCellStyle,
+  mpValueInputStyle,
+} from "../lib/month-plan-sheet-style";
 import {
   MP_STATUS_HINT,
   MP_STATUS_LABEL,
@@ -23,27 +49,172 @@ import {
   mpLinesOfDate,
 } from "../lib/month-plan-compare";
 import { dowKeyOf, type DowKey } from "../lib/week";
-import { SHEET_TEXTAREA } from "../ui-box";
 import type { ClassSheetMonthData } from "../server/month-queries";
 
 const monthDay = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
+
+/** 문서 껍데기(머리말·안내·범례·꼬리말) — 인쇄물과 **같은 값**이 서버에서 내려온다. */
+export type MonthPlanChromeProps = {
+  texts: MonthPlanTexts;
+  teacherLabel: string | null;
+  periodRange: string;
+};
+
+/** 왼쪽 고정 열(시트의 A열) — sticky만 여기서, 색·글꼴은 시트 스타일이 준다. */
+const STICKY_LEFT = "sticky left-0 z-[3]";
+/** 라벨 열(A)·데이터 열 — 시트는 A~K가 **전부 81px**이다. */
+const SHEET_COL = { width: MP_SHEET_PX.col, minWidth: MP_SHEET_PX.col } as const;
+
+/**
+ * 계획 칸 하나 — **평소엔 시트처럼 위아래 가운데**, 쓸 때만 위에서부터 적힌다
+ * (원장 2026-09-02 *"작성시에는 중간 정렬 하지말고, 작성 완료되면 중간정렬"*).
+ *
+ * 🔑 `textarea`는 글이 늘 위에서 시작해 시트의 세로 가운데 모양이 안 난다. 그래서 **볼 때는 div**,
+ *    **누르면 textarea**로 바꾼다 — 커서가 가운데에서 튀지 않고, 다 쓰고 나면 시트와 같은 모양이 된다.
+ * ⚠️ 저장은 손대지 않는다(`onChange`가 그대로 디바운스 저장을 탄다). 포커스를 잃으면 보기로 돌아간다.
+ * ⚠️ 빈 칸도 눌러서 쓸 수 있어야 하므로 보기 상태의 div가 칸을 꽉 채운다(`h-full`).
+ */
+function PlanCell({
+  value,
+  col,
+  disabled,
+  label,
+  hint,
+  onChange,
+}: {
+  value: string;
+  col: MpColumnKind;
+  disabled: boolean;
+  label: string;
+  hint: string;
+  onChange: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const text = mpValueInputStyle(col);
+
+  if (editing && !disabled) {
+    return (
+      <textarea
+        autoFocus
+        className="h-full w-full resize-none overflow-auto border-0 bg-white/70 p-0.5 outline-none"
+        spellCheck={false}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setEditing(false)}
+        aria-label={label}
+        title={hint}
+        style={text}
+      />
+    );
+  }
+  return (
+    <div
+      role={disabled ? undefined : "textbox"}
+      tabIndex={disabled ? -1 : 0}
+      aria-label={label}
+      aria-readonly={disabled || undefined}
+      title={hint}
+      onClick={() => !disabled && setEditing(true)}
+      onFocus={() => !disabled && setEditing(true)}
+      className={`flex h-full w-full items-center justify-center overflow-hidden px-0.5 whitespace-pre-line ${
+        disabled ? "" : "cursor-text"
+      }`}
+      style={text}
+    >
+      {value}
+    </div>
+  );
+}
+
+/**
+ * 문서 아래 문구 — **반마다 고쳐 쓴다**(원장 2026-09-02 *"하단은 수정가능하게. 고정 멘트 아님.
+ * LE1 멘트는 이것이 맞음."*). 안 고친 반은 학원설정 기본값이 그대로 나온다.
+ *
+ * 🔑 값 칸과 **같은 모양**이다 — 볼 때는 글자, 누르면 입력칸(`PlanCell` 규약). 저장도 같은 길
+ *    (`col_kind='footer'`, 0240a)이라 새 경로가 없다.
+ * ⚠️ 0240a 미적용이면 저장이 거절되고 한글 사유가 뜬다(읽기는 그대로 기본값).
+ */
+function FooterBlock({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  /**
+   * 🔴 보기(div)와 입력(textarea)이 **같은 상자**여야 한다 — 글꼴·크기·굵기·줄간격·정렬·패딩까지.
+   *    `textarea`의 기본 `line-height`는 `normal`이라, 이걸 안 맞추면 누르는 순간 줄간격이 미세하게
+   *    달라져 글이 흔들린다(원장 제보 2026-09-02).
+   */
+  const box = "w-full whitespace-pre-line px-1 py-0.5 text-center";
+  const text: React.CSSProperties = {
+    fontFamily: "inherit",
+    fontSize: "inherit",
+    fontWeight: "inherit",
+    lineHeight: MP_SHEET_LEADING.footer,
+  };
+  const lines = Math.max(4, value.split("\n").length);
+
+  if (editing && !disabled) {
+    return (
+      <textarea
+        autoFocus
+        className={`${box} resize-y border-0 bg-white/70 outline-none`}
+        rows={lines}
+        spellCheck={false}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setEditing(false)}
+        aria-label="월간 계획서 하단 문구"
+        style={text}
+      />
+    );
+  }
+  return (
+    <div
+      role={disabled ? undefined : "textbox"}
+      tabIndex={disabled ? -1 : 0}
+      aria-label="월간 계획서 하단 문구"
+      aria-readonly={disabled || undefined}
+      title={disabled ? undefined : "눌러서 이 반의 하단 문구를 고칩니다"}
+      onClick={() => !disabled && setEditing(true)}
+      onFocus={() => !disabled && setEditing(true)}
+      className={`${box} ${disabled ? "" : "cursor-text"}`}
+      style={text}
+    >
+      {value || (disabled ? "" : "눌러서 하단 문구를 적으세요")}
+    </div>
+  );
+}
+
+/** 그 요일의 열이 몇 개든 한 칸으로 자리만 지킬 때(휴강 주). */
+const BLANK = { backgroundColor: MP_SHEET_COLOR.paper } as const;
 
 /**
  * ECS **계획(MP)** 보기 — 미리 쓰는 월간 계획서와 실제 진도의 대조 화면.
  *
  * 원장 2026-09-01: *"미리 입력하는 월간 뷰와, 실제로 수업진행하면서 입력하는 주간뷰를 비교할 수 있게
- * 하려고 함. 그래서 과연 진도가 제대로 나가고 있는지도 점검하기 위해서임."*
+ * 하려고 함."* → *"최대한 시트 디자인을 그대로 MP 월별 세팅에서 볼 수 있게"* → *"글씨체부터 하나하나
+ * 그대로 카피해올것"*.
  *
- * 표의 골격은 **원본 구글 시트 그대로**다 — 열은 그 반이 실제로 도는 요일뿐이고, 요일마다 열 구성이
- * 다르며(화요일만 e-book), 행은 주 단위다. 그 규칙은 전부 [`lib/month-plan`](../lib/month-plan.ts)에
- * 있고 여기는 그리기만 한다.
+ * 그래서 이 화면은 **원본 구글 시트를 그대로 복제한 문서**다 — 로고 · 파란 제목 띠(Impact 24pt) ·
+ * 안내 4줄(마지막 줄만 빨강) · 범례 · `Day / Date / Week N` 골격 · 열마다 다른 바탕색 · 검정 격자 ·
+ * 꼬리말까지 인쇄물과 같다. 다른 점은 **칸이 입력칸이고 대조 신호가 얹힌다**는 것뿐이다.
  *
+ * 🔴 색·글꼴·pt는 [`month-plan-sheet-style`](../lib/month-plan-sheet-style.ts) 단일 소스다 —
+ *    여기에 hex나 pt를 다시 적지 말 것(적는 순간 화면과 인쇄가 갈린다).
+ * 🔴 **열 라벨은 주 블록마다 다시 그린다**(시트 그대로) — 그 주에 수업이 없는 요일은 그 주에서만
+ *    라벨이 사라진다(추석이 낀 주에 목·금이 비는 모양).
  * 🔴 **대조·경고는 이 화면에만 있다** — 인쇄물은 학부모 문서라 신호를 싣지 않는다.
- * 🔴 **판정은 [`mpCompareDay`](../lib/month-plan-compare.ts) 한 곳**이다(칸 테두리·배지·툴바 숫자가
- *    같은 답을 내야 한다 — 달력의 `goal-match`가 같은 이유로 단일 소스다).
+ * 🔴 **판정은 [`mpCompareDay`](../lib/month-plan-compare.ts) 한 곳**이다.
+ * ⚠️ 문구는 **학원설정**이 단일 소스다(`getMonthPlanChrome`) — 여기 하드코딩하지 말 것.
  */
 export function MonthPlanView({
   data,
+  chrome,
   cells,
   showActual,
   canEdit,
@@ -52,11 +223,14 @@ export function MonthPlanView({
   onDayOff,
 }: {
   data: ClassSheetMonthData;
+  /** 없으면(조회 실패 등) 문서 껍데기 없이 표만 그린다 — 표가 사라지는 것보다 낫다. */
+  chrome: MonthPlanChromeProps | null;
   /** `YYYY-MM-DD|col_kind` → 내용(빈 문자열 가능 — 그 칸이 섰다는 뜻). */
   cells: Record<string, string>;
   showActual: boolean;
   canEdit: boolean;
-  onCell: (date: string, colKind: MpColumnKind, body: string) => void;
+  /** ⚠️ `footer`도 같은 길로 저장한다(0240a) — 저장 경로를 새로 만들지 않는다. */
+  onCell: (date: string, colKind: Exclude<MpColKind, "off">, body: string) => void;
   onEbookColumn: (dates: string[], show: boolean) => void;
   onDayOff: (date: string, off: boolean) => void;
 }) {
@@ -64,11 +238,7 @@ export function MonthPlanView({
     () =>
       Object.entries(cells).map(([key, body]) => {
         const [planDate, colKind] = key.split("|");
-        return {
-          planDate: planDate!,
-          colKind: colKind as MpCell["colKind"],
-          body,
-        };
+        return { planDate: planDate!, colKind: colKind as MpCell["colKind"], body };
       }),
     [cells],
   );
@@ -89,8 +259,7 @@ export function MonthPlanView({
 
   /**
    * e-book 열 세우기/내리기.
-   * 🔴 **내릴 땐 적어 둔 내용이 함께 사라진다** — 되돌릴 수 없으므로 내용이 있으면 먼저 묻는다
-   *    (칸을 비우는 것과 열을 내리는 것은 다른 결심이다).
+   * 🔴 **내릴 땐 적어 둔 내용이 함께 사라진다** — 되돌릴 수 없으므로 내용이 있으면 먼저 묻는다.
    */
   const toggleEbook = (dow: DowKey, hasEbook: boolean) => {
     const dates = classDatesOfDow(dow);
@@ -109,7 +278,6 @@ export function MonthPlanView({
   };
 
   const linesOfDate = (date: string) => mpLinesOfDate(data, date);
-
   const verdictOf = (date: string) =>
     mpCompareDay({ date, cells, lines: linesOfDate(date), isOff: isOff(date) });
 
@@ -123,17 +291,111 @@ export function MonthPlanView({
 
   // 수업이 하루도 없는 주는 행을 만들지 않는다(달력 보기와 같은 규칙 — 빈 띠가 서지 않게).
   const weeks = data.weeks.filter((w) => w.dates.some(hasClassOn));
+  const notices = chrome ? monthPlanLines(chrome.texts.notices) : [];
+  const legend = chrome ? monthPlanLines(chrome.texts.bookLegend) : [];
+  const sessionLine = chrome ? mpSessionLine(data.month, chrome.periodRange) : "";
+  // 꼬리말은 **반이 적은 것이 이긴다**(0240a) — 안 적었으면 학원설정 기본값.
+  const footerText = chrome
+    ? mpResolveFooter(cells, data.month, defaultMonthPlanFooter(chrome.texts))
+    : "";
+  // 머리말·꼬리말과 표의 오른쪽 끝을 맞춘다(머리말은 flex라 안 박으면 창 폭을 다 먹는다).
+  const docWidth = mpDocWidth(data.dows.reduce((n, dow) => n + columnsByDow[dow].length, 0));
 
   return (
-    <div className="border-line overflow-x-auto rounded-xl border">
-      <table className="w-max min-w-full border-separate border-spacing-0 text-[12px]">
+    <div className="overflow-x-auto p-3">
+      {/* 🔴 문서 **바깥 테두리만 굵다**(시트 3px) — 안쪽 격자는 전부 1px이다. */}
+      <div className="w-fit" style={{ background: MP_SHEET_COLOR.paper, border: MP_SHEET_OUTER }}>
+      {chrome ? (
+        /* 시트 1~7행 — 로고(A·B) · 제목+안내(C~J) · 강사+범례(K).
+           🔴 **세 칸을 나란히** 둔다. 제목 줄과 강사 줄을 한 행으로 묶으면 강사 칸(2행)이 제목
+           높이(3행)에 끌려가 그 아래에 빈틈이 생긴다(원장 제보 2026-09-02). */
+        <div className="flex items-stretch" style={{ width: docWidth, height: MP_SHEET_PX.head }}>
+          <div
+            className="flex shrink-0 items-center justify-center p-1"
+            style={{ ...mpGridBorder(), width: MP_SHEET_PX.logo }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- 인쇄물과 같은 정적 자산이라 최적화 파이프라인을 태우지 않는다(두 문서가 같은 그림이어야 한다) */}
+            <img src={MP_LOGO_SRC} alt="EiE" className="max-h-full object-contain" />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <h2
+              className="flex items-center justify-center px-2 text-center"
+              style={{ ...mpGridBorder(), ...mpTitleStyle() }}
+            >
+              {mpDocTitle(data.className, data.month)}
+            </h2>
+            <div className="flex flex-1 flex-col justify-center px-2 py-1" style={mpGridBorder()}>
+              {notices.map((n, i) => (
+                <p
+                  key={i}
+                  className="text-center"
+                  style={{
+                    fontFamily: MP_SHEET_FONT.body,
+                    fontSize: MP_SHEET_SIZE.body,
+                    lineHeight: MP_SHEET_LEADING.cell,
+                    // 🔴 **마지막 한 줄만** 굵은 빨강 — 시트가 "본 일정은 학사일정에 따라…"만 그렇게 칠했다.
+                    color: i === notices.length - 1 ? MP_SHEET_COLOR.alertFg : "#000000",
+                    fontWeight: i === notices.length - 1 ? 700 : 400,
+                  }}
+                >
+                  {n}
+                </p>
+              ))}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col" style={{ width: MP_SHEET_PX.side }}>
+            <div
+              className="flex items-center justify-center"
+              style={{
+                ...mpGridBorder(),
+                height: MP_SHEET_PX.teacher,
+                color: MP_SHEET_COLOR.teacherFg,
+                fontFamily: MP_SHEET_FONT.teacher,
+                fontSize: MP_SHEET_SIZE.teacher,
+                fontWeight: 700,
+              }}
+            >
+              {chrome.teacherLabel ?? ""}
+            </div>
+            {/* 범례 — 남은 높이를 똑같이 나눠 갖는다(20px로 못박으면 두 줄짜리가 잘린다). */}
+            {legend.map((l, i) => (
+              <p
+                key={i}
+                className="flex items-center justify-center px-0.5 text-center"
+                style={{
+                  ...mpGridBorder(),
+                  backgroundColor: MP_SHEET_COLOR.legendBg,
+                  fontFamily: MP_SHEET_FONT.body,
+                  fontSize: MP_SHEET_SIZE.legend,
+                  fontWeight: 700,
+                  lineHeight: 1.15,
+                  flex: "1 1 0",
+                  minHeight: MP_SHEET_PX.band,
+                }}
+              >
+                {l}
+              </p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <table
+        className="border-separate border-spacing-0"
+        style={{ width: docWidth }}
+      >
         <thead>
           <tr>
             <th
-              rowSpan={2}
-              className="border-line-faint bg-bg-soft sticky left-0 z-[4] w-[52px] min-w-[52px] border-r border-b px-2 py-1.5 text-[11.5px] font-bold shadow-[1px_0_0_var(--line)]"
+              scope="col"
+              className={`${STICKY_LEFT} z-[4] px-1 py-1`}
+              style={{
+                ...mpBandCellStyle("day"),
+                backgroundColor: MP_SHEET_COLOR.paper,
+                ...SHEET_COL,
+              }}
             >
-              주
+              Day
             </th>
             {data.dows.map((dow) => {
               const cols = columnsByDow[dow];
@@ -142,7 +404,8 @@ export function MonthPlanView({
                 <th
                   key={dow}
                   colSpan={cols.length}
-                  className="border-line-faint border-r border-b px-2 py-1.5 text-[12px] font-extrabold"
+                  className="px-2 py-1"
+                  style={mpBandCellStyle("day")}
                 >
                   <span className="inline-flex items-center gap-2">
                     {/* 요일 표기는 원본 시트 그대로 영문 — 학부모 인쇄물과 화면이 같은 글자를 쓴다. */}
@@ -157,7 +420,7 @@ export function MonthPlanView({
                             ? "이 요일의 e-book 열을 내립니다(적어 둔 내용도 함께 지워집니다)"
                             : "이 요일에 e-book 열을 세웁니다"
                         }
-                        className="border-line-strong text-text-dim hover:bg-bg-soft cursor-pointer rounded-full border px-1.5 py-px text-[10.5px] font-bold"
+                        className="text-text-dim hover:bg-bg-soft cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold"
                       >
                         {hasEbook ? "e-book 열 내리기" : "+ e-book 열"}
                       </button>
@@ -167,159 +430,209 @@ export function MonthPlanView({
               );
             })}
           </tr>
-          <tr>
-            {data.dows.flatMap((dow) =>
-              columnsByDow[dow].map((col, i) => (
-                <th
-                  key={`${dow}:${col}`}
-                  title={MP_COLUMN_HINT[col]}
-                  className={`bg-bg-soft border-line-faint min-w-[124px] border-b px-2 py-1 text-[11px] font-bold ${
-                    i === columnsByDow[dow].length - 1 ? "border-r" : ""
-                  }`}
-                >
-                  {MP_COLUMN_LABEL[col]}
-                </th>
-              )),
-            )}
-          </tr>
         </thead>
-        {/* ⚠️ 주마다 `<tbody>` 하나 — 한 주가 2~3행이라 `<tbody>`를 겹치면 안 되고(중첩은 무효 HTML),
-            여러 개를 나란히 두는 것은 표준이다. 주 라벨의 rowSpan이 그 안에서만 걸린다. */}
-        {weeks.map((week) => {
-          const rows = showActual ? 3 : 2;
-          return (
-            <tbody key={week.monday}>
+        {/* ⚠️ 주마다 `<tbody>` 하나 — 한 주가 3~4행이라 겹칠 수 없고, 나란히 두는 것은 표준이다. */}
+        {weeks.map((week) => (
+          <tbody key={week.monday}>
+            {/* ① Date 행 — 날짜 · 휴일 이름 · 대조 배지 · 휴강 토글 */}
+            <tr>
+              <th
+                scope="row"
+                className={`${STICKY_LEFT} px-1 py-1`}
+                style={{
+                  ...mpBandCellStyle("date"),
+                  backgroundColor: MP_SHEET_COLOR.paper,
+                  ...SHEET_COL,
+                }}
+              >
+                Date
+              </th>
+              {data.dows.map((dow) => {
+                const cols = columnsByDow[dow];
+                const date = cellDateOf(week, dow, data.month);
+                const teaches = date ? hasClassOn(date) : false;
+                const off = date ? isOff(date) : false;
+                const holidayName = date ? data.holidays[date] : undefined;
+                const v = date && teaches ? verdictOf(date) : null;
+                const tone = v ? MP_STATUS_TONE[v.status] : null;
+                return (
+                  <td
+                    key={dow}
+                    colSpan={cols.length}
+                    className="relative px-2 py-1"
+                    style={mpBandCellStyle("date")}
+                  >
+                    {/* 날짜는 **가운데**(시트 그대로). 휴강 버튼만 오른쪽에 띄워서 날짜를 밀지 않게 한다. */}
+                    <span className="flex flex-wrap items-center justify-center gap-1.5 pr-10">
+                      <span className="num">{date ? monthDay(date) : "—"}</span>
+                      {date && !teaches ? <span className="text-[10px]">수업 없음</span> : null}
+                      {holidayName ? (
+                        <span
+                          className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT.inert}`}
+                        >
+                          {holidayName}
+                        </span>
+                      ) : null}
+                      {v && tone && v.status !== "ok" && v.status !== "empty" ? (
+                        <span
+                          title={MP_STATUS_HINT[v.status]}
+                          className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT[tone]}`}
+                        >
+                          {MP_STATUS_LABEL[v.status]}
+                        </span>
+                      ) : null}
+                      {date && teaches && canEdit ? (
+                        <button
+                          type="button"
+                          aria-pressed={off}
+                          onClick={() => onDayOff(date, !off)}
+                          title={
+                            off
+                              ? "이 날 수업을 되살립니다(인쇄에도 다시 나옵니다)"
+                              : "이 날을 휴강으로 표시합니다(인쇄에서 빠집니다)"
+                          }
+                          className="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold hover:bg-white"
+                        >
+                          {off ? "수업함으로" : "휴강"}
+                        </button>
+                      ) : null}
+                    </span>
+                  </td>
+                );
+              })}
+            </tr>
+
+            {/* ② Week N 행 = 열 라벨(시트 그대로 주마다 반복). 그 주에 수업이 없는 요일은 라벨 없음. */}
+            <tr>
+              <th
+                scope="row"
+                rowSpan={showActual ? 3 : 2}
+                className={`${STICKY_LEFT} px-1`}
+                style={{ ...mpBandCellStyle("week"), ...SHEET_COL }}
+              >
+                Week <span className="num">{week.index}</span>
+              </th>
+              {data.dows.flatMap((dow) => {
+                const cols = columnsByDow[dow];
+                const date = cellDateOf(week, dow, data.month);
+                const live = date ? hasClassOn(date) && !isOff(date) : false;
+                if (!live) {
+                  return [
+                    <td
+                      key={`h:${dow}:${week.monday}`}
+                      colSpan={cols.length}
+                      style={{ ...mpBandCellStyle("week"), ...BLANK }}
+                    />,
+                  ];
+                }
+                return cols.map((col) => (
+                  <th
+                    key={`h:${dow}:${col}:${week.monday}`}
+                    scope="col"
+                    title={MP_COLUMN_HINT[col]}
+                    className="px-1 py-1"
+                    style={{ ...mpHeadCellStyle(col), ...SHEET_COL }}
+                  >
+                    {MP_COLUMN_LABEL[col]}
+                  </th>
+                ));
+              })}
+            </tr>
+
+            {/* ③ 값 행 — 시트에서도 이 행의 A열은 비어 있다. */}
+            <tr>
+              {data.dows.flatMap((dow) => {
+                const date = cellDateOf(week, dow, data.month);
+                const teaches = date ? hasClassOn(date) : false;
+                const off = date ? isOff(date) : false;
+                const cols = columnsByDow[dow];
+                const v = date && teaches && !off ? verdictOf(date) : null;
+                // 🔴 칸에 테두리를 주는 신호는 **'교재 다름' 하나뿐**이다. '미작성'은 이 칸이 아니라
+                //    주간 시트를 고쳐야 하는 일이라, 계획 칸을 칠하면 엉뚱한 곳을 가리킨다.
+                const warnBook = v?.status === "off-book";
+                return cols.map((col) => (
+                  <td
+                    key={`${dow}:${col}:${week.monday}`}
+                    className="p-0 align-top"
+                    style={{
+                      ...mpValueCellStyle(col),
+                      ...SHEET_COL,
+                      height: MP_SHEET_PX.value,
+                      ...(off || !teaches ? BLANK : null),
+                      ...(warnBook && col === "in_class"
+                        ? { boxShadow: "inset 0 0 0 2px var(--amber)" }
+                        : null),
+                    }}
+                  >
+                    {date && teaches ? (
+                      <PlanCell
+                        col={col}
+                        disabled={!canEdit || off}
+                        value={cells[mpCellKey(date, col)] ?? ""}
+                        onChange={(next) => onCell(date, col, next)}
+                        label={`${monthDay(date)} ${MP_COLUMN_LABEL[col]}`}
+                        hint={MP_COLUMN_HINT[col]}
+                      />
+                    ) : null}
+                  </td>
+                ));
+              })}
+            </tr>
+
+            {showActual ? (
               <tr>
-                <td
-                  rowSpan={rows}
-                  className="border-line-faint bg-bg-soft sticky left-0 z-[3] border-r border-b px-2 py-1 text-center text-[11.5px] font-bold shadow-[1px_0_0_var(--line)]"
-                >
-                  <span className="num">{week.index}</span>주
-                </td>
                 {data.dows.map((dow) => {
                   const cols = columnsByDow[dow];
                   const date = cellDateOf(week, dow, data.month);
                   const teaches = date ? hasClassOn(date) : false;
-                  const off = date ? isOff(date) : false;
-                  const holidayName = date ? data.holidays[date] : undefined;
-                  const v = date && teaches ? verdictOf(date) : null;
-                  const tone = v ? MP_STATUS_TONE[v.status] : null;
+                  const summary = date && teaches ? mpActualSummary(linesOfDate(date)) : [];
                   return (
                     <td
-                      key={dow}
+                      key={`actual:${dow}:${week.monday}`}
                       colSpan={cols.length}
-                      className={`border-line-faint border-r border-b px-2 py-1 ${off ? "bg-bg-soft" : ""}`}
+                      className="px-2 py-1 text-left align-top"
+                      style={{
+                        ...mpBandCellStyle("week"),
+                        backgroundColor: "#f3f3f3",
+                        fontWeight: 400,
+                        textAlign: "left",
+                      }}
                     >
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <span className={`num text-[12px] font-bold ${teaches ? "" : "text-text-faint"}`}>
-                          {date ? monthDay(date) : "—"}
-                        </span>
-                        {date && !teaches ? (
-                          <span className="text-text-faint text-[10.5px]">수업 없음</span>
-                        ) : null}
-                        {holidayName ? (
-                          <span
-                            className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT.inert}`}
-                          >
-                            {holidayName}
-                          </span>
-                        ) : null}
-                        {v && tone && v.status !== "ok" && v.status !== "empty" ? (
-                          <span
-                            title={MP_STATUS_HINT[v.status]}
-                            className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT[tone]}`}
-                          >
-                            {MP_STATUS_LABEL[v.status]}
-                          </span>
-                        ) : null}
-                        {date && teaches && canEdit ? (
-                          <button
-                            type="button"
-                            aria-pressed={off}
-                            onClick={() => onDayOff(date, !off)}
-                            title={
-                              off
-                                ? "이 날 수업을 되살립니다(인쇄에도 다시 나옵니다)"
-                                : "이 날을 휴강으로 표시합니다(인쇄에서 빠집니다)"
-                            }
-                            className="border-line-strong text-text-dim hover:bg-bg-soft ml-auto cursor-pointer rounded-full border px-1.5 py-px text-[10px] font-bold"
-                          >
-                            {off ? "수업함으로" : "휴강"}
-                          </button>
-                        ) : null}
-                      </span>
+                      {summary.length === 0 ? (
+                        <span className="text-black/40">{date && teaches ? "기록 없음" : ""}</span>
+                      ) : (
+                        <span className="text-black/70">{summary.join(" / ")}</span>
+                      )}
                     </td>
                   );
                 })}
               </tr>
-              <tr>
-                {data.dows.flatMap((dow) => {
-                  const date = cellDateOf(week, dow, data.month);
-                  const teaches = date ? hasClassOn(date) : false;
-                  const off = date ? isOff(date) : false;
-                  const cols = columnsByDow[dow];
-                  const v = date && teaches && !off ? verdictOf(date) : null;
-                  // 🔴 칸에 테두리를 주는 신호는 **'교재 다름' 하나뿐**이다. '미작성'은 이 칸이 아니라
-                  //    주간 시트를 고쳐야 하는 일이라, 계획 칸을 칠하면 엉뚱한 곳을 가리킨다
-                  //    (그 사실은 날짜 줄 배지가 이미 말한다).
-                  const warnBook = v?.status === "off-book";
-                  return cols.map((col, i) => (
-                    <td
-                      key={`${dow}:${col}:${week.monday}`}
-                      className={`border-line-faint border-b p-1 align-top ${
-                        i === cols.length - 1 ? "border-r" : ""
-                      } ${off || !teaches ? "bg-bg-soft" : ""} ${
-                        // 테두리는 **In-class 칸에만** — 대조의 근거가 그 칸이라, 네 칸을 다 칠하면
-                        // 어디를 고쳐야 하는지가 사라진다.
-                        warnBook && col === "in_class" ? "shadow-[inset_0_0_0_1px_var(--amber)]" : ""
-                      }`}
-                    >
-                      {date && teaches ? (
-                        <textarea
-                          className={`${SHEET_TEXTAREA} min-h-[52px]`}
-                          rows={3}
-                          spellCheck={false}
-                          disabled={!canEdit || off}
-                          value={cells[mpCellKey(date, col)] ?? ""}
-                          onChange={(e) => onCell(date, col, e.target.value)}
-                          aria-label={`${monthDay(date)} ${MP_COLUMN_LABEL[col]}`}
-                          title={MP_COLUMN_HINT[col]}
-                        />
-                      ) : null}
-                    </td>
-                  ));
-                })}
-              </tr>
-              {showActual ? (
-                <tr>
-                  {data.dows.map((dow) => {
-                    const cols = columnsByDow[dow];
-                    const date = cellDateOf(week, dow, data.month);
-                    const teaches = date ? hasClassOn(date) : false;
-                    const summary = date && teaches ? mpActualSummary(linesOfDate(date)) : [];
-                    return (
-                      <td
-                        key={`actual:${dow}:${week.monday}`}
-                        colSpan={cols.length}
-                        className="border-line-faint bg-bg-soft/60 border-r border-b px-2 py-1 align-top"
-                      >
-                        <span className="text-text-faint mr-1.5 text-[10px] font-bold">실제</span>
-                        {summary.length === 0 ? (
-                          <span className="text-text-faint text-[11px]">
-                            {date && teaches ? "기록 없음" : ""}
-                          </span>
-                        ) : (
-                          <span className="text-text-dim text-[11px]">{summary.join(" / ")}</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ) : null}
-            </tbody>
-          );
-        })}
+            ) : null}
+          </tbody>
+        ))}
       </table>
+
+      {chrome ? (
+        <div
+          className="px-3 py-2 text-center"
+          style={{
+            width: docWidth,
+            fontFamily: MP_SHEET_FONT.body,
+            fontSize: MP_SHEET_SIZE.footer,
+            fontWeight: 700,
+            lineHeight: MP_SHEET_LEADING.footer,
+          }}
+        >
+          {/* 🔴 세션 줄만 자동(날짜)이고, 그 아래는 **반마다 고쳐 쓴다**. */}
+          {sessionLine ? <p>{sessionLine}</p> : null}
+          <FooterBlock
+            value={footerText}
+            disabled={!canEdit}
+            onChange={(next) => onCell(mpFooterDate(data.month), "footer", next)}
+          />
+        </div>
+      ) : null}
+    </div>
     </div>
   );
 }

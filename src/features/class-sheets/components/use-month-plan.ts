@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { mpCellKey, mpCellMapOf, mpOffToggleValue, type MpCell, type MpColumnKind } from "../lib/month-plan";
+import {
+  mpCellKey,
+  mpCellMapOf,
+  mpOffToggleValue,
+  type MpCell,
+  type MpColKind,
+} from "../lib/month-plan";
 import { saveMonthPlanCells, type MpCellPatch } from "../server/month-plan-actions";
 
 /**
@@ -90,9 +96,13 @@ export function useMonthPlan(input: {
     [send],
   );
 
-  /** 칸 한 개 타이핑 — 디바운스. 빈 문자열도 그대로 저장한다(칸은 남기고 내용만 비운다). */
+  /**
+   * 칸 한 개 타이핑 — 디바운스. 빈 문자열도 그대로 저장한다(칸은 남기고 내용만 비운다).
+   * ⚠️ `footer`(문서 아래 한 덩어리, 0240a)도 같은 길을 탄다 — 저장 경로를 새로 만들지 않는다.
+   *    `off`만 제외한다(자유 텍스트가 아니라 상태 표식이고 전용 토글이 있다).
+   */
   const setCell = useCallback(
-    (date: string, colKind: MpColumnKind, body: string) => {
+    (date: string, colKind: Exclude<MpColKind, "off">, body: string) => {
       const key = mpCellKey(date, colKind);
       const next = { ...cellsRef.current, [key]: body };
       cellsRef.current = next;

@@ -53,7 +53,8 @@ export async function saveMonthPlanCells(input: {
   if (patches.length === 0) return { ok: true };
   if (patches.length > MAX_PATCHES) return { ok: false, error: "한 번에 저장할 칸이 너무 많습니다" };
 
-  const kinds = new Set<MpColKind>([...MP_ALL_COLUMNS, "off"]);
+  // `off`(상태 표식)·`footer`(문서 아래 한 덩어리, 0240a)는 격자 열이 아니지만 같은 표에 산다.
+  const kinds = new Set<MpColKind>([...MP_ALL_COLUMNS, "off", "footer"]);
   for (const p of patches) {
     if (!YMD_RE.test(p?.date ?? "")) return { ok: false, error: "잘못된 요청입니다(날짜)" };
     if (!kinds.has(p?.colKind)) return { ok: false, error: "잘못된 요청입니다(칸 종류)" };

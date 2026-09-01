@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getClassSheetMonth } from "@/features/class-sheets/server/month-queries";
+import { getMonthPlanChrome } from "@/features/class-sheets/server/month-plan-chrome";
 import { MonthClient } from "@/features/class-sheets/components/month-client";
 import { readFromWeek } from "@/features/class-sheets/face-nav";
 import { clampEcsMonthView } from "@/features/class-sheets/view-prefs";
@@ -66,6 +67,22 @@ export default async function EcsMonthPage({
     res.data.isEie,
   );
 
+  /**
+   * 계획(MP) 문서의 껍데기(제목·안내·범례·꼬리말) — **인쇄물과 같은 값**을 화면도 읽는다
+   * (원장 2026-09-01 *"최대한 시트 디자인을 그대로 MP 월별 세팅에서 볼 수 있게"*).
+   * 🔴 **EiE 반에서만** 부른다 — 다른 반엔 MP 보기 자체가 없어 왕복이 순수 낭비다.
+   * 🔴 보기(`initialView`)로 좁히지 **않는다** — 보기 전환은 클라에서 재조회 없이 일어나므로,
+   *    달력으로 열었다가 계획으로 넘어가는 순간 문서 껍데기만 빈 화면이 된다.
+   * ⚠️ **fail-soft** — 문구·기간을 못 구해도 표는 떠야 한다(계획 칸이 진짜 재료다).
+   */
+  const mpChrome = res.data.isEie
+    ? await getMonthPlanChrome({
+        classId,
+        month: res.data.month,
+        teacherId: res.data.teacherId,
+      }).catch(() => null)
+    : null;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="shrink-0 compact-chrome:hidden">
@@ -85,6 +102,7 @@ export default async function EcsMonthPage({
           //    통째로 다시 마운트해 **열려 있던 '그 날 고치기' 창이 사라진다**.
           key={`${classId}:${res.data.month}`}
           data={res.data}
+          mpChrome={mpChrome}
           classOptions={classOptions}
           initialView={initialView}
           initialDisplay={res.data.display}
