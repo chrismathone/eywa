@@ -55,7 +55,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
         <div className="flex items-center gap-2">
           <Link
             href={`/billing?tab=payroll&period=${shiftPeriod(p, -1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
             aria-label="이전 달"
           >
             <EyIcon name="chevronLeft" size={14} />
@@ -65,7 +65,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           </span>
           <Link
             href={`/billing?tab=payroll&period=${shiftPeriod(p, 1)}`}
-            className="border-line text-text-dim hover:text-foreground rounded-full border px-2 py-1 text-xs"
+            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
             aria-label="다음 달"
           >
             <EyIcon name="chevronRight" size={14} />

@@ -27,7 +27,7 @@ export function EcsDatePicker({
       : `/ecs?view=today&date=${ymd}${mode === "cards" ? "&mode=cards" : ""}`;
   return (
     <label
-      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft relative inline-flex shrink-0 cursor-pointer items-center rounded-full border p-1 transition"
+      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft relative inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border transition"
       title="달력에서 날짜 선택"
       onClick={() => {
         // showPicker는 사용자 제스처 밖이거나 미지원이면 throw — 실패해도 아래 CSS 폴백이 받는다.

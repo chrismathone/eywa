@@ -29,7 +29,8 @@ export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         <p className="text-foreground inline-flex items-center gap-1.5 text-sm font-bold">
           <FileText className="text-primary size-4" />
           저장된 청구서 <span className="num text-text-dim font-normal">{total}건</span>

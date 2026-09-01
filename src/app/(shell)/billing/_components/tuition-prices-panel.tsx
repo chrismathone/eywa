@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Coins, CheckCircle2 } from "@/components/icons/eywa-icon-compat";
 import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import {
   getTuitionCatalogPage,
   getTuitionCatalogStats,
@@ -80,7 +81,8 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
       ) : null}
 
       {/* 필터 바 */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="micro mr-1">분류</span>
           {CATEGORY_FILTERS.map((f) => (
@@ -131,11 +133,7 @@ function Chip({ href, on, children }: { href: string; on: boolean; children: Rea
   return (
     <Link
       href={href}
-      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
-        on
-          ? "border-primary bg-primary text-primary-foreground font-medium"
-          : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-      }`}
+      className={`${TOOLBAR_CHIP} ${on ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
     >
       {children}
     </Link>

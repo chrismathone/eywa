@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON,
+} from "@/components/toolbar-controls";
+
 import { useMemo, useState, useTransition } from "react";
 import { Check, FileDown, Pencil, Search, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -282,8 +289,8 @@ export function RequestHistory({
         setTab(key);
         setPageState(1);
       }}
-      className={`rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
-        tab === key ? "bg-foreground text-background" : "text-text-dim hover:bg-bg-soft"
+      className={`${TOOLBAR_SEG_ITEM} font-medium whitespace-nowrap ${
+        tab === key ? TOOLBAR_SEG_ON : TOOLBAR_SEG_OFF
       }`}
     >
       {label} <span className="num">{n}</span>
@@ -295,8 +302,10 @@ export function RequestHistory({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1">
           <h2 className="text-text-dim mr-2 text-[12px] font-bold">요청 내역</h2>
-          {tabBtn("incomplete", "미완료", counts.incomplete)}
-          {tabBtn("complete", "완료", counts.complete)}
+          <div className={TOOLBAR_SEG_BOX}>
+            {tabBtn("incomplete", "미완료", counts.incomplete)}
+            {tabBtn("complete", "완료", counts.complete)}
+          </div>
           {capNote ? <span className="text-text-faint ml-1 text-[11px]">({capNote})</span> : null}
         </div>
         <div className="relative">

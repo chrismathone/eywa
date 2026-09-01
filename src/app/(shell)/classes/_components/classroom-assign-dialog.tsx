@@ -272,7 +272,7 @@ export function ClassroomAssignButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
         <Sparkles className="size-4" />
         강의실 자동배정
       </Button>

@@ -6,6 +6,14 @@ import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
+  TOOLBAR_SEARCH_BOX,
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+  TOOLBAR_SELECT,
+} from "@/components/toolbar-controls";
+import {
   CLASS_STATUS_DEFAULT,
   DAY_FILTERS,
   DAY_KEYS,
@@ -78,8 +86,8 @@ function isDefault(c: ClassFilterState): boolean {
   );
 }
 
-const triggerCls =
-  "border-border bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm";
+// 요일 트리거 — 높이·톤은 툴바 드롭다운 단일 소스(TOOLBAR_SELECT)에서, 폭·양끝정렬만 얹는다.
+const triggerCls = `${TOOLBAR_SELECT} w-full justify-between gap-2`;
 
 // 요일 칩(팝오버 내부). 활성 = ink 솔리드. Editorial 문법 ⑦ — 알약(rounded-full).
 const chipCls = (active: boolean) =>
@@ -89,13 +97,9 @@ const chipCls = (active: boolean) =>
       : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
 
-// 뷰 토글. 활성 = primary. 알약(rounded-full).
+// 뷰 토글 — 묶음 상자(TOOLBAR_SEG_BOX) 안의 칩. 알약을 쓰지 않는다(툴바 라운드 규약).
 const viewCls = (active: boolean) =>
-  `shrink-0 rounded-full border px-2.5 py-1 text-xs transition ${
-    active
-      ? "border-primary bg-primary text-primary-foreground font-medium"
-      : "border-line text-text-dim hover:bg-bg-soft"
-  }`;
+  `${TOOLBAR_SEG_ITEM} shrink-0 ${active ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`;
 
 /** 요일 다중선택 드롭다운 — 트리거는 요약 라벨, 팝오버에서 토글. */
 function DayMultiSelect({ days, onGo }: { days: string[]; onGo: (patch: Partial<ClassFilterState>) => void }) {
@@ -205,7 +209,9 @@ export function ClassFilterBar({
   }
 
   return (
-    <div className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
+    // 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 갖고
+    // 있어 선이 이중으로 겹쳐 보였다. 컨트롤 자체가 테두리를 가져 줄은 그대로 읽힌다.
+    <div className="px-1 py-1">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         {/* 상태 — 기본 '운영'(폐지·종강 숨김). 맨 앞에 두는 이유: 목록이 기본적으로 좁혀져 있다는 사실을
             가장 먼저 보여야 "왜 그 반이 없지?"가 안 생긴다. */}
@@ -217,6 +223,7 @@ export function ClassFilterBar({
             onValueChange={(v) => go({ status: v as ClassStatusFilter })}
             options={STATUS_FILTERS}
             ariaLabel="상태 필터"
+            triggerClassName={TOOLBAR_SELECT}
           />
         </div>
 
@@ -229,6 +236,7 @@ export function ClassFilterBar({
             onValueChange={onSubject}
             options={subjectFilters}
             ariaLabel="과목 필터"
+            triggerClassName={TOOLBAR_SELECT}
           />
         </div>
 
@@ -249,6 +257,7 @@ export function ClassFilterBar({
                 onValueChange={(v) => go({ teacher: v })}
                 options={[{ value: "all", label: "전체" }, ...teacherOpts]}
                 ariaLabel="강사 필터"
+                triggerClassName={TOOLBAR_SELECT}
               />
             </div>
           )}
@@ -267,6 +276,7 @@ export function ClassFilterBar({
                   : SORT_OPTIONS
               }
               ariaLabel="정렬 기준"
+              triggerClassName={TOOLBAR_SELECT}
             />
           </div>
 
@@ -278,7 +288,7 @@ export function ClassFilterBar({
             }}
             className="flex items-center gap-2"
           >
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
+            <div className={TOOLBAR_SEARCH_BOX}>
               <EyIcon name="search" size={13} />
               <input
                 type="search"
@@ -291,7 +301,7 @@ export function ClassFilterBar({
             </div>
           </form>
 
-          <div className="flex items-center gap-1">
+          <div className={TOOLBAR_SEG_BOX}>
             <button type="button" onClick={() => go({ view: "table" })} className={viewCls(current.view === "table")}>
               테이블
             </button>

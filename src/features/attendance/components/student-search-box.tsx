@@ -28,7 +28,9 @@ export function StudentSearchBox({
   const active = isSearchActive(value);
   return (
     <div
-      className={`border-line focus-within:border-primary flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 ${className}`}
+      // 높이 h-8 = 공용 `<Button>` 기본 크기(툴바 한 줄 정렬, 원장 2026-09-01 *"전체적으로 버튼높이 등을
+      // 통일"*). 🔴 `py-*`로 높이를 만들지 말 것 — 글자 크기가 바뀌면(폰 16px 자동확대 방지) 이 칸만 흔들린다.
+      className={`border-line focus-within:border-primary flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2 ${className}`}
     >
       <EyIcon name="search" size={13} className="text-text-faint shrink-0" />
       <input

@@ -111,10 +111,9 @@ export default async function StaffDetailPage({
             {canManage ? (
               <Button
                 variant="outline"
-                size="sm"
                 render={<WindowLink href={`/staff/${staff.id}/edit`} title={`${staff.displayName} 근무 설정`} />}
               >
-                <Pencil className="size-3.5" />
+                <Pencil className="size-4" />
                 근무 설정
               </Button>
             ) : null}
@@ -123,20 +122,18 @@ export default async function StaffDetailPage({
                 {PAYROLL_ENABLED ? (
                   <Button
                     variant="outline"
-                    size="sm"
                     render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}
                   >
-                    <Wallet className="size-3.5" />
+                    <Wallet className="size-4" />
                     급여
                   </Button>
                 ) : null}
                 {STAFF_LEAVES_ENABLED ? (
                   <Button
                     variant="outline"
-                    size="sm"
                     render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}
                   >
-                    <CalendarDays className="size-3.5" />
+                    <CalendarDays className="size-4" />
                     휴가
                   </Button>
                 ) : null}

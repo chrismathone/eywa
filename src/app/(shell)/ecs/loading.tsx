@@ -11,7 +11,13 @@ export default function EcsLandingLoading() {
         <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-4 w-72 animate-pulse rounded" />
       </div>
-      <div className="bg-card shadow-card h-[52px] animate-pulse rounded-2xl" />
+      {/* 툴바 스켈레톤 — 실제 툴바는 카드 껍데기가 없고 컨트롤이 h-8이다(툴바 규약 2026-09-01).
+          껍데기를 그리면 로딩→본문에서 카드가 사라지며 화면이 튄다(스켈레톤=실표면 동일 캐논). */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
+        <div className="bg-bg-soft h-8 w-40 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-8 w-44 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-8 w-36 animate-pulse rounded-lg" />
+      </div>
       <div className="bg-card shadow-card rounded-2xl px-3 py-2.5">
         <div className="border-line border-b px-1 pb-2">
           <div className="bg-bg-soft h-4 w-64 animate-pulse rounded" />

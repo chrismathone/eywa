@@ -3,6 +3,13 @@ import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
+import {
+  TOOLBAR_SEG_BOX,
+  TOOLBAR_SEG_BOX_WRAP,
+  TOOLBAR_SEG_ITEM,
+  TOOLBAR_SEG_OFF,
+  TOOLBAR_SEG_ON_PRIMARY,
+} from "@/components/toolbar-controls";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -532,7 +539,7 @@ export default async function TimetablePage({
       </div>
       {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
-      <div className="bg-card shadow-card toolbar-rail flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-3 compact-chrome:gap-2 compact-chrome:px-3 compact-chrome:py-2">
+      <div className="toolbar-rail flex shrink-0 flex-wrap items-center gap-3 px-1 py-1 compact-chrome:gap-2 compact-chrome:px-0.5 compact-chrome:py-0.5">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
@@ -559,8 +566,10 @@ export default async function TimetablePage({
         {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰 비허용 과목으로 전환 시 기본뷰로.
             ⚠️ flex-wrap 필수 — 과목이 많은 학원(과학·국어·사회…)에서 칩이 한 줄로 강제되면 툴바가
             가로로 넘친다(칩 자체가 shrink-0이라 줄지도 않음). 형제인 toolbar-actions와 동일 규약. */}
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="micro mr-1 compact-chrome:hidden">과목</span>
+        <div className="flex items-center gap-1.5">
+          <span className="micro shrink-0 compact-chrome:hidden">과목</span>
+          {/* 과목 수는 학원설정을 따라 늘어난다 — 묶음 안에서 줄바꿈되는 변형(그 상수 주석). */}
+          <div className={TOOLBAR_SEG_BOX_WRAP}>
           {available.map((k) => (
             <ParamLink
               key={k}
@@ -590,22 +599,20 @@ export default async function TimetablePage({
                 // 반이 전부 english_track=null이라 'eie'에서 화면이 통째로 빈다). 영어로 돌아올 땐 계정값 복원.
                 englishTrack: k === "english" ? englishTrack : undefined,
               })}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                subject === k
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === k ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               {subjectMaps.labelOf(k)}
             </ParamLink>
           ))}
+          </div>
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
 
         {/* 정규 / 특강 / 전체 — 특강(방학 단기강좌)을 정규 주간표와 분리해 본다(원장 요구 2026-07-22).
             기본은 정규라 파라미터 없는 URL = 지금까지의 화면. 과목 칩은 이 구분에 실제 있는 과목만 뜬다. */}
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="micro mr-1 compact-chrome:hidden">구분</span>
+        <div className="flex items-center gap-1.5">
+          <span className="micro shrink-0 compact-chrome:hidden">구분</span>
+          <div className={TOOLBAR_SEG_BOX}>
           {TIMETABLE_KINDS.map((k) => (
             <ParamLink
               key={k}
@@ -622,15 +629,12 @@ export default async function TimetablePage({
                 collapseEmptyPeriods,
                 englishTrack: carriedTrack,
               })}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                kind === k
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
+              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${kind === k ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               {TIMETABLE_KIND_LABEL[k]}
             </ParamLink>
           ))}
+          </div>
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -639,8 +643,9 @@ export default async function TimetablePage({
             ⚠️ 라벨·비대칭 계약은 english-track.ts 단일 소스에서 온다 — 여기서 문자열을 새로 적지 말 것. */}
         {trackApplies ? (
           <>
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="micro mr-1 compact-chrome:hidden">프로그램</span>
+            <div className="flex items-center gap-1.5">
+              <span className="micro shrink-0 compact-chrome:hidden">프로그램</span>
+              <div className={TOOLBAR_SEG_BOX}>
               {ENGLISH_TRACK_FILTERS.map((t) => (
                 <ParamLink
                   key={t}
@@ -657,15 +662,12 @@ export default async function TimetablePage({
                     collapseEmptyPeriods,
                     englishTrack: t,
                   })}
-                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                    englishTrack === t
-                      ? "border-primary bg-primary text-primary-foreground font-medium"
-                      : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                  }`}
+                  className={`${TOOLBAR_SEG_ITEM} shrink-0 ${englishTrack === t ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
                 >
                   {ENGLISH_TRACK_FILTER_LABEL[t]}
                 </ParamLink>
               ))}
+              </div>
             </div>
             <span className="bg-line h-4 w-px" aria-hidden />
           </>
@@ -674,8 +676,9 @@ export default async function TimetablePage({
         )}
 
         {/* 뷰 토글 — 강사뷰는 허용 과목(영어 또는 강사별시간표 설정 보유)에서만 노출. */}
-        <div className="flex items-center gap-1">
-          <span className="micro mr-1 compact-chrome:hidden">뷰</span>
+        <div className="flex items-center gap-1.5">
+          <span className="micro shrink-0 compact-chrome:hidden">뷰</span>
+          <div className={TOOLBAR_SEG_BOX}>
           {([
             { key: "basic", label: "기본뷰", icon: Columns3 },
             { key: "integrated", label: "통합뷰", icon: LayoutGrid },
@@ -692,17 +695,14 @@ export default async function TimetablePage({
               <ParamLink
                 key={v.key}
                 href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
-                  effView === v.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
+                className={`${TOOLBAR_SEG_ITEM} inline-flex shrink-0 items-center gap-1.5 ${effView === v.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 <Icon size={11} strokeWidth={1.8} />
                 {v.label}
               </ParamLink>
             );
           })}
+          </div>
         </div>
 
         {/* 학생 검색 — 이름을 치면 **그 학생이 든 수업(칸)만** 남는다(원장 2026-08-20).
