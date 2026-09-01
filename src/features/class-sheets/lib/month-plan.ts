@@ -116,8 +116,11 @@ export function readMpOffOverride(raw: string | null | undefined): MpOffOverride
  *
  * ⚠️ 법정공휴일인데 학원이 수업하는 날이 실제로 있다(2026-08-17 대체공휴일에 출결 21행) → 그래서
  *    반별 명시 예외가 설정을 이긴다. 반대로 설정에 없는 날을 강사가 끌 수도 있다.
- * ⚠️ 이 판정은 **MP만** 쓴다 — 주간 시트·달력·진도표는 지금도 휴일을 안 본다(작성률 분모가
- *    조용히 바뀌지 않게 그쪽에 옮겨 붙이지 말 것).
+ * ⚠️ 휴일 **목록**은 앱 전체가 한 벌을 본다(`buildHolidayMap(settings.operations.holidays)`) —
+ *    2026-09-01 오후 원장 지시(*"ecs/mcs 휴일참조 시켜"*)로 주간 시트·달력·진도표·MCS도 같은 맵을
+ *    읽는다(규약 = [`holiday.ts`](./holiday.ts): 안 쓴 휴일=분모 밖 · 쓴 휴일=100% 인정).
+ * ⚠️ **다른 것은 반별 예외(`override`)뿐이다** — 그건 MP 칸에만 있고 저쪽엔 없다. 그러니 저쪽 판정에
+ *    이 함수를 끌어다 쓰지 말 것(같은 날을 두 화면이 다르게 부르게 된다).
  */
 export function mpDayIsOff(
   date: string,
