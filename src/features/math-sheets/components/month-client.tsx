@@ -61,7 +61,11 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
       const res = await copyGoalsFromPreviousMonth({
         classId: data.classId,
         month: data.month,
-        studentIds: data.students.map((s) => s.studentId),
+        // 🔴 **나간 학생은 뺀다** — 회색 줄로 남아 있을 뿐이라 그 사람에게 이 달 목표를 새로 만들어
+        //    주면 안 된다. 아직 안 들어온 신입(`upcoming`)은 **넣는다**(그 달에 나갈 진도가 있다).
+        studentIds: data.students
+          .filter((s) => s.rosterPhase !== "ended")
+          .map((s) => s.studentId),
       });
       if (!res.ok) {
         setCopyMsg(`가져오지 못했습니다: ${res.error}`);

@@ -30,6 +30,10 @@ const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[
   { href: "/onescreen", label: "수업 마감 (원스크린)", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
   // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
   { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menu: "ecs" },
+  // Math Class Sheet — 수학 반별 월간 진도표(scoped: 담당 반만. requireMcsClassAccess 게이트).
+  // 🔴 이 줄이 없어서 **수학만 맡은 강사 9명에게는 MCS로 가는 길이 아예 없었다**(폰엔 사이드바가 없고
+  //    이 드롭다운이 강사의 유일한 진입로다). 노출 조건은 영어와 대칭(`showMcs`).
+  { href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.mcs, menu: "mcs" },
   { href: "/students", label: "내 학생", icon: MENU_ICON.students, menu: "students" },
   { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menu: "attendance" },
   { href: "/classes", label: "내 수업", icon: MENU_ICON.classes, menu: "classes" },
@@ -56,6 +60,7 @@ export function TeacherMenu({
   permMatrix,
   canReturnToAdmin = false,
   showEcs = true,
+  showMcs = true,
   home = null,
 }: {
   permMatrix: AccessMatrix;
@@ -68,6 +73,13 @@ export function TeacherMenu({
    */
   showEcs?: boolean;
   /**
+   * Math Class Sheet는 **수학 반 담당일 때만** 보인다(영어와 대칭). 권한(mcs=scoped)은 전 강사가
+   * 갖고 있어 그것만으론 못 거른다 — 담당 과목은 서버에서만 안다. 모르면 표시(fail-open).
+   * ⚠️ MCS엔 **부담임 갈래가 없다**(수학 슬롯의 `teacher_id`가 전부 null — access.ts 주석) —
+   *    그래서 영어처럼 `ecsAssistantClassIds` 같은 폴백을 두지 않는다.
+   */
+  showMcs?: boolean;
+  /**
    * 이 강사의 홈 경로([teacherViewHome](src/lib/auth/teacher-home.ts)) — 그 항목이 **맨 위**로 올라온다.
    * 영어 전담은 `/ecs`, 그 외는 `/onescreen`(원장 지시 2026-08-07 "영어 강사는 ECS 기반 원스크린").
    * ⚠️ 홈이 아닌 쪽을 **숨기지는 않는다** — 영어 강사도 보강·대타로 원스크린이 필요할 수 있고, 안 보이면
@@ -78,7 +90,10 @@ export function TeacherMenu({
   // 학원 권한 매트릭스에서 강사 접근이 '없음'인 탭은 숨긴다(설정 반영). teacher_onescreen은 항상 통과(locked full).
   // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
   const visible = LINKS.filter(
-    (l) => canAccess("teacher", l.menu, permMatrix) && (l.menu !== "ecs" || showEcs),
+    (l) =>
+      canAccess("teacher", l.menu, permMatrix) &&
+      (l.menu !== "ecs" || showEcs) &&
+      (l.menu !== "mcs" || showMcs),
   );
   // 홈을 첫 줄로. 나머지는 원래 순서를 그대로 보존한다(가장 위 한 줄만 바뀌는 최소 변화).
   const links = home ? [...visible.filter((l) => l.href === home), ...visible.filter((l) => l.href !== home)] : visible;

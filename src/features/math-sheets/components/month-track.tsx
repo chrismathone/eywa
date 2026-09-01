@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
+import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
 import { positionFrozen } from "../lib/progress-stall";
 import type { MathCellState } from "../lib/cell-state";
 import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries";
@@ -39,11 +41,16 @@ function StudentCard({
   stu,
   days,
   elapsedDays,
+  classLabel,
 }: {
   stu: MathStudentRow;
   days: MathSheetMonthData["days"];
   /** 그 달 수업일 중 이미 지난 날 — 0이면 아직 한 번도 안 한 달이다. */
   elapsedDays: number;
+  /** 반 이름 — 반이동 툴팁("가반 → 나반")에만 쓴다.
+   *  ⚠️ 이름이 `className`이면 다음 사람이 CSS 클래스로 알고 그대로 툴팁에 밀어 넣는다
+   *     (출석부 `MatrixRow`와 같은 이름으로 맞춘다). */
+  classLabel: string;
 }) {
   const stalled = stu.stalledDates.length > 0;
   const written = days.filter((d) => stu.cells[d.date] === "written").length;
@@ -51,19 +58,43 @@ function StudentCard({
   // 🔴 **아직 안 지난 달을 경고로 칠하지 않는다**(원장 2026-09-01 9월 화면이 전부 빨간 '기록 0건'이었다).
   //    수업이 한 번도 안 지났으면 '안 적은 것'이 아니라 '아직 안 한 것'이다.
   const notStarted = elapsedDays === 0;
-  const noTrace = !notStarted && days.length > 0 && days.every((d) => stu.cells[d.date] === "untracked");
+  const noTrace =
+    stu.rosterPhase === "on" &&
+    !notStarted &&
+    days.length > 0 &&
+    days.every((d) => stu.cells[d.date] === "untracked");
 
   return (
     <div
-      className={`rounded-xl border bg-white p-3 ${
-        noTrace ? "border-danger" : stalled ? "border-amber" : "border-line"
+      // 달 중간에 나간 학생은 카드를 지우지 않고 **가라앉힌다**(원장 2026-09-01) — 다닌 동안의 기록은
+      // 그대로 읽히고, 테두리 경고는 걷는다(이미 없는 사람을 빨갛게 재촉하지 않는다).
+      className={`rounded-xl border p-3 ${
+        stu.rosterPhase === "ended"
+          ? "border-line-faint bg-bg-soft"
+          : noTrace
+            ? "border-danger bg-white"
+            : stalled
+              ? "border-amber bg-white"
+              : "border-line bg-white"
       }`}
     >
       <div className="mb-2.5 flex items-baseline gap-1.5">
-        <Link href={`/students/${stu.studentId}`} className="hover:text-primary text-[13.5px] font-extrabold">
+        <Link
+          href={`/students/${stu.studentId}`}
+          className={`hover:text-primary text-[13.5px] font-extrabold ${stu.rosterPhase === "ended" ? "text-text-dim" : ""}`}
+        >
           {stu.name}
         </Link>
         <span className="text-text-faint text-[11px]">{schoolGradeLabel(stu.school, stu.grade)}</span>
+        {stu.badges.map((b) => (
+          <span
+            key={`${b.kind}-${b.date}`}
+            title={badgeTitle(b, classLabel)}
+            className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
+          >
+            {BADGE_LABEL[b.kind]}
+          </span>
+        ))}
         <span className="flex-1" />
         {notStarted ? (
           <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
@@ -170,7 +201,13 @@ export function MonthTrack({ data }: { data: MathSheetMonthData }) {
   return (
     <div className="grid gap-3 px-1 sm:grid-cols-2 xl:grid-cols-3">
       {data.students.map((stu) => (
-        <StudentCard key={stu.studentId} stu={stu} days={data.days} elapsedDays={data.elapsedDays} />
+        <StudentCard
+          key={stu.studentId}
+          stu={stu}
+          days={data.days}
+          elapsedDays={data.elapsedDays}
+          classLabel={data.className}
+        />
       ))}
     </div>
   );

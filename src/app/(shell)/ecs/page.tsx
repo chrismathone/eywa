@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
@@ -33,6 +34,22 @@ type TodaySheet = {
 };
 
 export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
+
+/**
+ * 담당 영어 반이 0개일 때의 안내 — **막다른 안내 금지.**
+ * 수학만 맡은 사람에겐 반 배정이 멀쩡하고 시트를 잘못 연 것뿐이라, 갈 곳을 적는다
+ * (실측 2026-09-01: 수학만 10명 · 영어만 8명). ⚠️ 담당 과목을 여기서 조회하지 않으므로
+ * **단정하지 않고 조건문**으로 적는다.
+ */
+const ecsMathHint = (
+  <>
+    담당하고 계신 영어 반이 없습니다. 수학 반을 맡고 계시면{" "}
+    <Link href="/mcs" className="text-primary font-bold underline underline-offset-2">
+      수학 강사 시트
+    </Link>
+    를 열어 주세요. 반 배정 문의는 사무실로.
+  </>
+);
 
 /**
  * ECS 랜딩 — 면 세 개.
@@ -152,7 +169,7 @@ export default async function EcsLandingPage({
               ? // 반은 있는데 그 주만 비었다 — 주를 옮기면 보인다는 것까지 말한다(막다른 안내 금지).
                 "이 주에 수업이 배정된 영어 반이 없습니다. 위 주 이동으로 다른 주를 확인하세요."
               : res.emptyReason === "no-scoped-classes"
-                ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
+                ? ecsMathHint
                 : res.emptyReason === "not-configured"
                   ? "영어 과목의 수업계획(영어 강사 시트) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
                   : "이 주에 운영 중인 영어 반이 없습니다."}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { getMathSheetMonth } from "@/features/math-sheets/server/month-queries";
+import { countRosterPhases, rosterExtraParts } from "@/features/math-sheets/lib/roster";
 import { MonthClient } from "@/features/math-sheets/components/month-client";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — eywa" };
@@ -40,13 +41,23 @@ export default async function McsMonthPage({
   }
 
   const { data } = res;
+  // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
+  //    섞여 있다(카드와 **같은 함수**로 센다).
+  const counts = countRosterPhases(data.students.map((s) => s.rosterPhase));
+  // 카드 툴팁과 **같은 문구**로 적는다(각자 지으면 같은 수를 다른 이름으로 부른다).
+  const extraLabel = rosterExtraParts(counts);
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title={`수학 강사 시트 · 월간 — ${data.className}`}
-          description={`${data.monthLabel} · 수업 ${data.days.length}일 · 학생 ${data.students.length}명`}
+          description={[
+            data.monthLabel,
+            `수업 ${data.days.length}일`,
+            `학생 ${counts.on}명`,
+            ...extraLabel,
+          ].join(" · ")}
         />
       </div>
       <div className="min-h-0 flex-1">

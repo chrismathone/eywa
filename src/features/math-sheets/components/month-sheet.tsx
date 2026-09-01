@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
+import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
 import type { MathCellState } from "../lib/cell-state";
 import { actualBooksOf, type MathRecordLike, type StudentGoalMap } from "../lib/student-goals";
 import type { MathSheetMonthData } from "../server/month-queries";
@@ -15,6 +17,9 @@ import { GoalCell } from "./goal-cell";
  * 🔴 칸이 비는 이유 셋을 **다른 무늬**로 그린다(`cell-state.ts` 참조) — 왔는데 안 적힌 칸(빗금)과
  *    출결조차 없는 칸(회색)과 결석(연회색 라벨)을 한 색으로 뭉치면 "미작성 969건" 같은 거짓말이 된다.
  * 🔴 목표 칸은 **왼쪽 고정열**에 둔다 — 목표와 실제가 한 줄에서 만나야 어긋남이 눈에 들어온다.
+ * 🔴 **달 중간에 나간 학생은 지우지 않고 회색 줄로 남긴다**(원장 2026-09-01, 출석부와 같은 문법):
+ *    이름 칸이 회색으로 내려앉고 `퇴원`·`반이동` 표식이 붙는다. 나간 뒤의 칸은 이미 `off-roster`
+ *    회색이라, 지운 것과 달리 **그 학생이 실제로 다닌 날의 기록이 그대로 남는다**.
  * ⚠️ 교재 입력은 `datalist`로 **이 달에 실제로 쓴 책**을 제안한다. 표기 흔들림(`쎈 6-2` vs `쎈 초6-2`)은
  *    판정으로 다 접을 수 없으므로(학년 표기가 빠지면 다른 책과 구분이 안 된다) 입력 단계에서 줄인다.
  */
@@ -94,17 +99,38 @@ export function MonthSheet({
             const actual = actualBooksOf(flat, stu.studentId);
             return (
               <tr key={stu.studentId}>
-                <td className="border-line-faint sticky left-0 z-10 border bg-white p-2 align-top">
+                <td
+                  // ⚠️ 고정열은 **불투명**이어야 한다 — 반투명 배경이면 스크롤한 본문이 비친다([[#74]]).
+                  className={`border-line-faint sticky left-0 z-10 border p-2 align-top ${
+                    stu.rosterPhase === "ended" ? "bg-bg-soft" : "bg-white"
+                  }`}
+                >
                   <div className="flex items-center gap-1.5">
                     <Link
                       href={`/students/${stu.studentId}`}
-                      className="hover:text-primary min-w-0 truncate text-[14px] font-extrabold"
+                      className={`hover:text-primary min-w-0 truncate text-[14px] font-extrabold ${
+                        stu.rosterPhase === "ended" ? "text-text-faint" : ""
+                      }`}
                     >
                       {stu.name}
                     </Link>
                     <span className="text-text-faint shrink-0 text-[11.5px]">
                       {schoolGradeLabel(stu.school, stu.grade)}
                     </span>
+                    {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 판정·라벨·툴팁 모두 출석부와 같은 소스. */}
+                    {stu.badges.length > 0 ? (
+                      <span className="ml-auto flex shrink-0 items-center gap-1">
+                        {stu.badges.map((b) => (
+                          <span
+                            key={`${b.kind}-${b.date}`}
+                            title={badgeTitle(b, data.className)}
+                            className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
+                          >
+                            {BADGE_LABEL[b.kind]}
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
                   </div>
                   <GoalCell
                     studentId={stu.studentId}

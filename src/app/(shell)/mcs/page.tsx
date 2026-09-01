@@ -93,8 +93,12 @@ export default async function McsLandingPage({
                     className="border-line hover:border-primary flex flex-col gap-1 rounded-xl border bg-white p-3 transition"
                   >
                     <span className="truncate text-[13.5px] font-extrabold">{card.className}</span>
-                    <span className="text-text-faint num text-[11.5px]">
+                    {/* 🔴 "학생 N명" = **현재 재원**이다. 시트 줄 수(= N + 회색·예정)를 그대로 적으면
+                        현재 재원 0명인 특강이 "학생 7명"이 된다(적대적 리뷰 2026-09-01). 남는 줄은
+                        `+N`으로 따로 적어 둘을 더하면 시트 줄 수가 되게 한다. */}
+                    <span className="text-text-faint num text-[11.5px]" title={card.extraTitle ?? undefined}>
                       수업 {card.dayCount}일 · 학생 {card.studentCount}명
+                      {card.extraCount > 0 ? <span className="text-text-faint"> +{card.extraCount}</span> : null}
                     </span>
                     {/* 작성도 — 원장 2026-09-01 "영어처럼 작성도를 프로그레스바처럼 볼 수 있으면".
                         🔴 분모는 **온 칸**(기록 + 왔는데 안 적힘)이라 시트 툴바와 같은 수를 말한다.
