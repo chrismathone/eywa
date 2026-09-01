@@ -148,10 +148,16 @@ describe("🔴 휴일 판정은 MP만 들인다", () => {
     }
   });
 
-  it("⚠️ 주간 시트·오늘 보드는 휴일을 여전히 안 본다(작성률 분모가 조용히 바뀌지 않게)", () => {
+  /**
+   * ⚠️ 이 자리엔 원래 "주간 시트·오늘 보드는 휴일을 **안** 본다"는 가드가 있었다 — 같은 날 오후
+   *    원장 지시(*"ecs/mcs 휴일참조 시켜"* → *"대신 입력은 가능하도록 해줘 출석부처럼"*)로 **뒤집혔다**.
+   *    지금 잠글 것은 "안 본다"가 아니라 **"보되 같은 자료를 본다"**이다(규약은 [[holiday.ts]]).
+   */
+  it("🔴 주간 시트·오늘 보드도 **학원설정 하나만** 본다(내장 법정공휴일 표 금지)", () => {
     for (const f of ["queries.ts", "today.ts"]) {
       const src = strip(read("src", "features", "class-sheets", "server", f));
-      expect(src).not.toContain("buildHolidayMap");
+      expect(src).toContain("buildHolidayMap(settings.operations.holidays)");
+      expect(src).not.toContain("features/calendar/holidays");
     }
   });
 });
