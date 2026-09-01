@@ -29,11 +29,30 @@ function eie(over: Partial<SheetLandingCard> = {}): SheetLandingCard {
   return card({ englishTrack: "eie", shoutingSlots: 0, ...over });
 }
 
+/**
+ * **행 링크만** — 2026-09-01부터 EiE 행에는 계획(MP) 링크가 형제로 하나 더 붙는다(주간 시트로 가는
+ * 행 링크와 월간 계획서로 가는 알약이 같은 `<li>` 안에 나란히 선다). 둘을 안 가르면 "반이 두 번 셌다"가
+ * 되므로, 여기서는 **가는 곳**으로 가른다(행=`?week=`, MP=`/month`).
+ */
+const isRowLink = (a: Element) => !(a.getAttribute("href") ?? "").includes("/month");
+
 /** 행 링크 하나 = 반 한 줄. aria-label로 찾는다(행에는 열 머리가 없어 접근성 이름이 곧 계약이다). */
 function row(className: string) {
-  const link = screen.getAllByRole("link").find((a) => a.getAttribute("aria-label")?.startsWith(className));
+  const link = screen
+    .getAllByRole("link")
+    .filter(isRowLink)
+    .find((a) => a.getAttribute("aria-label")?.startsWith(className));
   if (!link) throw new Error(`행을 못 찾음: ${className}`);
   return link;
+}
+
+/** 그 반의 계획(MP) 링크 — 없으면 null(인재원 영어·미분류 반은 이 문이 없다). */
+function mpLink(className: string) {
+  return (
+    screen
+      .getAllByRole("link")
+      .find((a) => !isRowLink(a) && a.getAttribute("aria-label")?.startsWith(className)) ?? null
+  );
 }
 
 /**
@@ -52,6 +71,7 @@ function panel(label: string) {
 function classNamesIn(el: HTMLElement) {
   return within(el)
     .getAllByRole("link")
+    .filter(isRowLink)
     .map((a) => a.getAttribute("aria-label")!.split(",")[0]);
 }
 
@@ -206,5 +226,33 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
     // 단 안에서는 담임이 프로그램 아래 층(h4)이다.
     expect(screen.getAllByRole("heading", { level: 4, name: "김태건" })).toHaveLength(2);
     expect(screen.getByText(/^담임/)).toHaveTextContent("담임 1명");
+  });
+});
+
+/**
+ * 계획(MP) 진입로 — 🔴 **여기 없으면 주소를 아는 사람만 쓴다**(MCS에서 수학만 맡은 강사 9명에게
+ * 링크가 0개였던 것과 같은 구멍). 그리고 MP는 **EiE 반에만** 있다(원장 2026-09-01).
+ */
+describe("EcsLandingList — 계획(MP) 진입로", () => {
+  it("EiE 반에는 MP 링크가 붙고, 여는 달은 그 주가 속한 달이다", () => {
+    // 2026-08-31(월) 주는 목요일이 9/3이라 **9월** 주다(monthOfWeek — 월요일의 달이 아니다).
+    render(<EcsLandingList cards={[eie({ className: "JP2" })]} weekMonday="2026-08-31" />);
+    const link = mpLink("JP2");
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe("/ecs/c1/month?month=2026-09&week=2026-08-31&view=mp");
+  });
+
+  it("🔴 인재원 영어·미분류 반에는 붙지 않는다(정확히 일치하는 반에만 연다)", () => {
+    render(
+      <EcsLandingList
+        cards={[
+          card({ classId: "c2", className: "중등E_중1 TOP", englishTrack: "injaewon" }),
+          card({ classId: "c3", className: "미분류반", englishTrack: null }),
+        ]}
+        weekMonday="2026-08-24"
+      />,
+    );
+    expect(mpLink("중등E_중1 TOP")).toBeNull();
+    expect(mpLink("미분류반")).toBeNull();
   });
 });

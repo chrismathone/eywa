@@ -13,10 +13,12 @@ import {
   SUBJECT_COLORS,
   TEACHER_VIEW_STEPS,
   type BreakRangeSetting,
+  type MonthPlanTextsSetting,
   type OperationsSettings,
   type SkillAreaSetting,
   type SubjectSetting,
 } from "@/features/owner/settings-types";
+import { DEFAULT_MONTH_PLAN_TEXTS } from "@/features/owner/month-plan-texts";
 import { DEFAULT_ENGLISH_SKILL_AREAS, skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
@@ -207,6 +209,13 @@ export function SubjectsSection({
                       </>
                     )}
                   </div>
+
+                  {/* 월간 계획서(MP) 인쇄물 문구 — 반이 달라도 같은 문구라 과목 단위(원본 구글 시트 그대로).
+                      🔴 소비처 = (print)/ecs/[classId]/month-plan. 비운 블록은 인쇄에서 통째로 생략된다. */}
+                  <MonthPlanTextsEditor
+                    value={s.monthPlan}
+                    onChange={(v) => patchSubject(i, { monthPlan: v })}
+                  />
 
                   {/* 평일 교시(과목 전용) — 미설정이면 전역(운영 체계 탭) 폴백. 주말 교시는 전역 공통. */}
                   <div className="space-y-2">
@@ -500,6 +509,71 @@ function AbsorbDialog({
         )}
       </div>
     </dialog>
+  );
+}
+
+/**
+ * 월간 계획서(MP) 인쇄물 문구 편집기 — 머리말(교재 약어 범례 · 안내)과 꼬리말(Prep 안내).
+ *
+ * 🔴 **소비처가 곧 존재 이유다**: `(print)/ecs/[classId]/month-plan`이 이 값을 읽어 학부모 인쇄물을
+ *    그린다(소비처 없는 설정 금지 — CLAUDE.md 학원 설정 절). 빈 칸은 인쇄에서 그 블록이 통째로 빠진다.
+ * ⚠️ 저장은 **네 칸을 함께** 담는다(부분 객체를 저장하면 Zod가 거절한다). 네 칸이 전부 비면 키를
+ *    지워 미설정으로 되돌린다 — 그래야 나중에 코드 기본값을 고쳤을 때 옛 계정만 옛 값에 묶이지 않는다.
+ */
+function MonthPlanTextsEditor({
+  value,
+  onChange,
+}: {
+  value: MonthPlanTextsSetting | undefined;
+  onChange: (v: MonthPlanTextsSetting | undefined) => void;
+}) {
+  const cur: MonthPlanTextsSetting = value ?? DEFAULT_MONTH_PLAN_TEXTS;
+  const patch = (key: keyof MonthPlanTextsSetting, v: string) => {
+    const next = { ...cur, [key]: v };
+    const allEmpty = (Object.keys(next) as (keyof MonthPlanTextsSetting)[]).every(
+      (k) => next[k].trim() === "",
+    );
+    onChange(allEmpty ? undefined : next);
+  };
+  const fields: {
+    key: keyof MonthPlanTextsSetting;
+    label: string;
+    hint: string;
+    rows: number;
+  }[] = [
+    {
+      key: "bookLegend",
+      label: "교재 약어 범례",
+      hint: "표 위 오른쪽. 예: SB: Student Book / WB: Workbook / PB: Practice book",
+      rows: 2,
+    },
+    { key: "notices", label: "표 위 안내", hint: "한 줄에 하나씩. 비우면 인쇄에서 빠집니다", rows: 4 },
+    { key: "prepTitle", label: "꼬리말 제목", hint: "예: Prep 안내", rows: 1 },
+    { key: "prepNotes", label: "꼬리말 본문", hint: "한 줄에 하나씩. 비우면 인쇄에서 빠집니다", rows: 3 },
+  ];
+  return (
+    <div className="space-y-2">
+      <h4 className="text-foreground text-[12px] font-bold">월간 계획서(MP) 인쇄 문구</h4>
+      <p className="text-text-faint text-[11px]">
+        영어 강사 시트 · 계획(MP) 보기에서 인쇄하는 학부모 배포용 문서의 머리말·꼬리말입니다. 반마다 같은
+        문구라 여기서 한 번만 적습니다.
+      </p>
+      <div className="grid gap-2 lg:grid-cols-2">
+        {fields.map((f) => (
+          <label key={f.key} className="flex flex-col gap-1">
+            <span className="text-text-dim text-[11px] font-semibold">{f.label}</span>
+            <textarea
+              className={`${cellCls} resize-y`}
+              rows={f.rows}
+              value={cur[f.key]}
+              onChange={(e) => patch(f.key, e.target.value)}
+              aria-label={`월간 계획서 ${f.label}`}
+            />
+            <span className="text-text-faint text-[11px]">{f.hint}</span>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 

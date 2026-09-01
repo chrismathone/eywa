@@ -102,8 +102,11 @@ export function normalizeCollapsedRosterGroups(raw: unknown): RosterGroupKey[] {
  * ⚠️ 계정 귀속(원장 2026-08-04 *"모든 뷰 세팅은 계정에 귀속"*) — 다른 PC에서도 같은 보기로 열린다.
  * ⚠️ 이 값은 **표현 방식만** 바꾼다 — 작성률 분모·경고 판정은 보기와 무관하게 같다(둘이 갈리면
  *    같은 달이 화면마다 다른 숫자를 말한다).
+ * 🔴 `mp`(계획)는 **EiE 반에만 있는 보기**다(원장 2026-09-01 *"일단은 EiE 수업에만 적용될거고"*).
+ *    저장값이 `mp`인 계정이 인재원 영어 반을 열 수도 있으므로, **화면이 열 때 한 번 더 좁힌다**
+ *    (`clampEcsMonthView`) — 여기서 값 자체를 막지 않는 이유는 이 함수가 반을 모르기 때문이다.
  */
-export type EcsMonthView = "cal" | "rail";
+export type EcsMonthView = "cal" | "rail" | "mp";
 export const DEFAULT_ECS_MONTH_VIEW: EcsMonthView = "cal";
 
 export function readEcsMonthView(uiPrefs: unknown): EcsMonthView {
@@ -112,7 +115,15 @@ export function readEcsMonthView(uiPrefs: unknown): EcsMonthView {
 
 /** 모르는 값은 기본(달력) — 저장값이 깨졌다고 화면이 비면 안 된다. */
 export function normalizeEcsMonthView(raw: unknown): EcsMonthView {
-  return raw === "rail" ? "rail" : DEFAULT_ECS_MONTH_VIEW;
+  return raw === "rail" || raw === "mp" ? raw : DEFAULT_ECS_MONTH_VIEW;
+}
+
+/**
+ * 이 반에서 **실제로 열 수 있는 보기**로 좁힌다 — EiE가 아니면 계획(MP)은 없다.
+ * 🔴 화면에서 탭만 숨기면 주소를 직접 치면 열린다(#77) → 서버 조회가 이 함수를 통과시킨다.
+ */
+export function clampEcsMonthView(view: EcsMonthView, isEie: boolean): EcsMonthView {
+  return view === "mp" && !isEie ? DEFAULT_ECS_MONTH_VIEW : view;
 }
 
 /**
@@ -121,11 +132,17 @@ export function normalizeEcsMonthView(raw: unknown): EcsMonthView {
  * (한 벌로 묶으면 한쪽에서 켠 것이 다른 쪽을 망친다 — 원장 시안 확인 2026-08-31).
  * 🔴 이 토글은 **표시만** 바꾼다. 작성률과 진도표 맨 아랫줄은 배정된 전 교시로 세므로 토글을 따라가지
  *    않는다 — 접는 것만으로 숫자가 좋아 보이면 계획을 안 쓴 자리 교시가 조용히 사라진다.
+ *
+ * `actual`(실제 함께 보기)은 **계획(MP) 보기에만** 있는 칸이다(기본 켬 — 대조가 그 보기의 존재
+ * 이유라 끈 채로 열면 절반만 보인다). 달력·진도표는 이 값을 안 읽지만 같은 그릇에 담는다 — 토글
+ * 저장 경로를 한 벌로 두려는 것이고, 보기별로 나뉘어 있어 서로 간섭하지 않는다.
+ * ⚠️ 신호(미작성·교재 다름) 집계는 이 토글을 따라가지 않는다 — 접는 것으로 숫자가 좋아 보이면 안 된다.
  */
-export type EcsMonthDisplay = { homework: boolean; seat: boolean };
+export type EcsMonthDisplay = { homework: boolean; seat: boolean; actual: boolean };
 export const DEFAULT_ECS_MONTH_DISPLAY: Record<EcsMonthView, EcsMonthDisplay> = {
-  cal: { homework: true, seat: true },
-  rail: { homework: false, seat: false },
+  cal: { homework: true, seat: true, actual: true },
+  rail: { homework: false, seat: false, actual: true },
+  mp: { homework: false, seat: false, actual: true },
 };
 
 export function readEcsMonthDisplay(uiPrefs: unknown, view: EcsMonthView): EcsMonthDisplay {
@@ -138,6 +155,7 @@ export function readEcsMonthDisplay(uiPrefs: unknown, view: EcsMonthView): EcsMo
   return {
     homework: typeof rec.homework === "boolean" ? rec.homework : fallback.homework,
     seat: typeof rec.seat === "boolean" ? rec.seat : fallback.seat,
+    actual: typeof rec.actual === "boolean" ? rec.actual : fallback.actual,
   };
 }
 

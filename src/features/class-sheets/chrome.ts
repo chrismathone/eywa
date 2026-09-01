@@ -45,9 +45,23 @@ export const SHEET_FACE_LABEL: Record<SheetFace, string> = {
   week: "주간",
   cal: "달력",
   rail: "진도표",
+  mp: "계획(MP)",
 };
 
 export const SHEET_FACES: readonly SheetFace[] = ["week", "cal", "rail"];
+
+/**
+ * 이 반이 실제로 열 수 있는 면 — **계획(MP)은 EiE 반에만 붙는다**
+ * (원장 2026-09-01: *"일단은 EiE 수업에만 적용될거고, 추후에 인재원 영어에 적용할지는 당장 결정 안 할 예정임."*).
+ *
+ * 🔴 판정은 호출부가 넘기는 `english_track` 한 줄이고(`readEnglishTrack(...) === "eie"`), **반 이름으로
+ *    추측하지 않는다** — 이름을 고치면 분류가 조용히 뒤집힌다.
+ * 🔴 여기서의 판정은 필터 칩과 달리 **정확히 일치**하는 반만 연다(미분류 반은 인재원 영어와 같은 취급).
+ * 🔴 화면에서 칸을 감추는 것은 게이트가 아니다(#77) — 서버 조회·저장·인쇄가 각자 같은 판정을 한 번 더 한다.
+ */
+export function sheetFacesFor(isEie: boolean): readonly SheetFace[] {
+  return isEie ? [...SHEET_FACES, "mp"] : SHEET_FACES;
+}
 
 /**
  * 칸마다 **무엇을 여는지** 한 줄로 — 라벨 세 글자만으로는 진도표가 뭔지 눌러 봐야 안다
@@ -57,4 +71,5 @@ export const SHEET_FACE_TITLE: Record<SheetFace, string> = {
   week: "그 주의 출결·태도·수업계획을 함께 쓰는 화면",
   cal: "한 달을 달력으로 — 날짜 칸을 누르면 그 날 계획을 그 자리에서 엽니다",
   rail: "한 달을 진도표로 — 영역별로 무엇을 언제 나갔는지 가로로 훑습니다",
+  mp: "학부모에게 나가는 월간 계획서 — 미리 쓴 계획과 실제 진도를 나란히 대조하고 인쇄합니다",
 };

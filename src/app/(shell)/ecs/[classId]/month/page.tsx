@@ -5,6 +5,7 @@ import { getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getClassSheetMonth } from "@/features/class-sheets/server/month-queries";
 import { MonthClient } from "@/features/class-sheets/components/month-client";
 import { readFromWeek } from "@/features/class-sheets/face-nav";
+import { clampEcsMonthView } from "@/features/class-sheets/view-prefs";
 import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-gate";
 
 export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — eywa" };
@@ -57,8 +58,13 @@ export default async function EcsMonthPage({
    * 주간 시트의 `주간 | 달력 | 진도표` 전환이 "진도표로 가자"를 이 파라미터로 말한다.
    * ⚠️ 모르는 값은 **저장값으로 떨어진다**(`normalizeEcsMonthView`를 쓰면 달력으로 눌러 버려서, 진도표를
    *    쓰는 사람이 주소 한 글자 때문에 달력으로 열린다).
+   * 🔴 마지막에 **이 반이 열 수 있는 보기로 좁힌다**(`clampEcsMonthView`) — 계획(MP)은 EiE 반에만
+   *    있으므로, 주소에 `?view=mp`를 직접 쳐도 인재원 영어 반에서는 달력으로 떨어진다(#77).
    */
-  const initialView = view === "cal" || view === "rail" ? view : res.data.view;
+  const initialView = clampEcsMonthView(
+    view === "cal" || view === "rail" || view === "mp" ? view : res.data.view,
+    res.data.isEie,
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

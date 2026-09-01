@@ -127,14 +127,20 @@ export function SheetClassPicker({
  */
 export function SheetFaceSwitch({
   current,
+  faces = SHEET_FACES,
   onSelect,
 }: {
   current: SheetFace;
+  /**
+   * 이 반이 열 수 있는 면 — 호출부가 [`sheetFacesFor(isEie)`](../chrome.ts)로 만든다.
+   * 🔴 기본값은 **계획(MP) 없는 세 칸**이다 — 안 넘기면 EiE 아닌 반에 없는 문이 생긴다.
+   */
+  faces?: readonly SheetFace[];
   onSelect: (face: SheetFace) => void;
 }) {
   return (
     <span className="border-line-strong inline-flex shrink-0 overflow-hidden rounded-lg border [&>button+button]:border-l [&>button+button]:border-[var(--line-strong)]">
-      {SHEET_FACES.map((face) => {
+      {faces.map((face) => {
         const active = face === current;
         return (
           <button

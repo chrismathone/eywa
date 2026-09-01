@@ -105,6 +105,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "print/payslip": { w: 1120, h: 1120 },
   // 자리 월간 별지(가로 A4, 출석부 서식 재사용).
   "print/seat-month": { w: 1120, h: 840 },
+  // EiE 월간 계획서(가로 A4) — 요일 3개 × 최대 4열이라 세로로는 칸이 잘린다.
+  "print/ecs-mp": { w: 1120, h: 840 },
 };
 
 /**

@@ -14,7 +14,7 @@ import { PeriodNav } from "@/components/period-nav";
 
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { ecsPresenceScope } from "../lib/presence-scope";
-import { SHEET_BAR, sheetPill } from "../chrome";
+import { SHEET_BAR, sheetFacesFor, sheetPill } from "../chrome";
 import { monthOfWeek } from "../face-nav";
 import { setMyEcsMonthView } from "../server/actions";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
@@ -110,10 +110,13 @@ export function SheetToolbar({
         labelWidth={WEEK_LABEL_W}
         onNavigate={onNavigate}
       />
-      {/* 주간 | 달력 | 진도표 — 월간 뷰와 **같은 세 칸**(원장 2026-09-01). 전엔 여기가 `[월간]` 버튼
-          하나뿐이라 진도표로 가려면 월간을 거쳐 한 번 더 눌러야 했다. 이동 전 flush는 onNavigate가 한다. */}
+      {/* 주간 | 달력 | 진도표 (+ EiE면 계획(MP)) — 월간 뷰와 **같은 칸**(원장 2026-09-01). 전엔 여기가
+          `[월간]` 버튼 하나뿐이라 진도표로 가려면 월간을 거쳐 한 번 더 눌러야 했다.
+          🔴 계획(MP)은 EiE 반에만 선다 — 판정은 서버가 준 `isEie`(english_track 컬럼) 하나다.
+          이동 전 flush는 onNavigate가 한다. */}
       <SheetFaceSwitch
         current="week"
+        faces={sheetFacesFor(data.isEie)}
         onSelect={(face) => {
           if (face === "week") return;
           // 🔴 보기 선택은 **계정에도 남긴다** — 안 남기면 라벨·모양이 같은 두 버튼(주간 바의 '달력'과

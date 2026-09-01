@@ -18,11 +18,14 @@ import {
 } from "../lib/month-assemble";
 import type { MonthGoalMap } from "../lib/goal-match";
 import {
+  clampEcsMonthView,
   readEcsMonthDisplay,
   readEcsMonthView,
   type EcsMonthDisplay,
   type EcsMonthView,
 } from "../view-prefs";
+import { buildHolidayMap } from "@/features/attendance/calendar";
+import type { MpCell, MpColKind } from "../lib/month-plan";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { planLineFromRow } from "../lib/plan-line";
 import type { PlanLineDTO } from "./actions";
@@ -42,6 +45,8 @@ export type MonthPlanLine = PlanLineDTO & { seat: boolean };
 export type ClassSheetMonthData = {
   classId: string;
   className: string;
+  /** 반 담임(`classes.teacher_id`) — 계획서 인쇄물 머리말의 강사 닉네임을 찾는 키. */
+  teacherId: string | null;
   month: string;
   monthLabel: string;
   today: string;
@@ -63,7 +68,29 @@ export type ClassSheetMonthData = {
   /** 마지막에 본 보기 + 보기별 표시 토글(계정 귀속 — `users.ui_prefs.ecs`). */
   view: EcsMonthView;
   display: Record<EcsMonthView, EcsMonthDisplay>;
+  /**
+   * EiE 반인가 — **계획(MP) 보기가 서는 유일한 조건**(원장 2026-09-01). 판정은 `classes.english_track`
+   * 컬럼 하나고 반 이름으로 추측하지 않는다. 화면은 이 값으로 탭을 세우고, 저장·인쇄는 서버에서 다시 본다(#77).
+   */
+  isEie: boolean;
+  /**
+   * 월간 계획서(MP)의 칸들 — **EiE 반일 때만** 담는다(그 외는 빈 배열 + `status: "off"`).
+   * 🔴 0239a 미적용이어도 화면은 산다(`missing-table` → 한글 배너, 달력·진도표는 이 값을 아예 안 읽는다).
+   */
+  mp: { cells: MpCell[]; status: MpDataStatus };
+  /**
+   * 학원설정 공휴일(그 달 범위) — **MP의 휴강 기본 판정에만** 쓴다.
+   * ⚠️ 주간 시트·달력·진도표는 지금도 휴일을 안 본다 — 거기까지 같이 고치면 작성률 분모가 조용히 바뀐다.
+   */
+  holidays: Record<string, string>;
 };
+
+/**
+ * MP 칸 조회의 결말 — 표가 아직 없는 것과 그냥 실패한 것은 **다른 사실**이라 한 문구로 뭉치지 않는다
+ * (MCS `GoalsStatus`와 같은 규약: 권한·네트워크 실패를 "SQL 미적용"이라 부르면 화면이 거짓말을 한다).
+ * `off` = 이 반은 MP 대상이 아니다(EiE 아님) — 조회를 아예 안 했다는 뜻.
+ */
+export type MpDataStatus = "ok" | "off" | "missing-table" | "failed";
 
 export type MonthResult = { ok: true; data: ClassSheetMonthData } | { ok: false; error: string };
 
@@ -76,9 +103,12 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
   const month = normalizeMonth(monthRaw, kstMonth());
   const { from, to } = monthRange(month);
   const admin = createAdminClient();
+  // 🔴 계획(MP)은 **EiE 반에만** 있다(원장 2026-09-01) — 판정은 `english_track` 컬럼 하나고 게이트가
+  //    이미 읽어 왔다. EiE가 아니면 조회 자체를 안 한다(쓸데없는 왕복 0 + 화면에 탭도 안 선다).
+  const isEie = access.englishTrack === "eie";
 
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, prefsRes] = await Promise.all([
+  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes] = await Promise.all([
     admin
       .from("class_schedules")
       .select("day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label")
@@ -109,10 +139,43 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       .eq("period_start", from),
     getTenantSettings(),
     admin.from("users").select("ui_prefs").eq("id", access.user.id).eq("tenant_id", access.tenantId).maybeSingle(),
+    // 0239a. 한 반 한 달이 수업일 ~13일 × 칸 5종이라 페이지네이션 불요(B2 상한 근처에도 못 간다).
+    // ⚠️ admin은 RLS 우회라 `tenant_id` 필터가 필수다([[#104]]).
+    isEie
+      ? admin
+          .from("class_month_plan_cells")
+          .select("plan_date, col_kind, body")
+          .eq("tenant_id", access.tenantId)
+          .eq("class_id", classId)
+          .gte("plan_date", from)
+          .lte("plan_date", to)
+      : Promise.resolve(null),
   ]);
 
   if (scheduleRes.error) return { ok: false, error: "시간표를 불러오지 못했습니다" };
   if (goalRes.error) return { ok: false, error: "월간 목표를 불러오지 못했습니다" };
+
+  /**
+   * MP 칸 — 🔴 **여기서 throw하지 않는다.** 0239a는 원장이 손으로 적용하므로 앱 배포와 적용 사이에
+   * 항상 간격이 있고([[#95]]), 그 사이에 이 조회가 화면을 죽이면 **달력·진도표까지 함께** 못 쓰게 된다.
+   * ⚠️ 원인을 단정하지 않는다 — 표가 없는 것(42P01·PGRST205)과 조회 실패는 다른 사실이다.
+   */
+  const mpErr = mpRes?.error ?? null;
+  const mpCode = mpErr ? String(mpErr.code ?? "") : "";
+  const mpStatus: MpDataStatus = !isEie
+    ? "off"
+    : !mpErr
+      ? "ok"
+      : mpCode === "42P01" ||
+          mpCode === "PGRST205" ||
+          /does not exist|could not find the table/i.test(mpErr.message ?? "")
+        ? "missing-table"
+        : "failed";
+  const mpCells: MpCell[] = (mpRes?.data ?? []).map((r) => ({
+    planDate: String(r.plan_date).slice(0, 10),
+    colKind: String(r.col_kind) as MpColKind,
+    body: typeof r.body === "string" ? r.body : "",
+  }));
 
   const scheduleRows: MonthScheduleRow[] = (scheduleRes.data ?? []).map((r) => ({
     dayOfWeek: String(r.day_of_week),
@@ -196,6 +259,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       // ⚠️ 예약된 개명 예고는 아직 안 붙인다 — 그 규약은 **주 단위 축**(`classNameForWeek`)이라
       //    달 중간에 이름이 바뀌는 경우 헤더를 어느 이름으로 쓸지가 새 결정이다. 필요해지면 그때.
       className: access.className,
+      teacherId: access.teacherId,
       month,
       monthLabel: monthLabel(month),
       today,
@@ -209,11 +273,23 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       skillAreas: access.skillAreas,
       canEdit: access.canWrite,
       fill: monthFillStats(slotsByDate, hasLines),
-      view: readEcsMonthView(prefsRes.data?.ui_prefs),
+      // 🔴 계정에 저장된 보기가 `mp`인데 인재원 영어 반을 열면 **달력으로 떨어뜨린다** — 저장값을
+      //    그대로 믿으면 없는 보기가 빈 화면으로 선다(주소 `?view=mp`도 page.tsx에서 같은 함수를 탄다).
+      view: clampEcsMonthView(readEcsMonthView(prefsRes.data?.ui_prefs), isEie),
       display: {
         cal: readEcsMonthDisplay(prefsRes.data?.ui_prefs, "cal"),
         rail: readEcsMonthDisplay(prefsRes.data?.ui_prefs, "rail"),
+        mp: readEcsMonthDisplay(prefsRes.data?.ui_prefs, "mp"),
       },
+      isEie,
+      mp: { cells: mpCells, status: mpStatus },
+      // 그 달 범위로 좁힌 휴일 맵 — 학원설정이 단일 소스다(`features/calendar/holidays.ts`의 내장
+      // 법정공휴일 표는 캘린더 탭 전용이라 여기서 쓰지 않는다).
+      holidays: Object.fromEntries(
+        Object.entries(buildHolidayMap(settings.operations.holidays)).filter(
+          ([d]) => d >= from && d <= to,
+        ),
+      ),
     },
   };
 }

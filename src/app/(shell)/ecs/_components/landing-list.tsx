@@ -5,6 +5,7 @@ import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
 import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landing-summary";
 import { shoutingCountOf, summarizeShouting } from "@/features/class-sheets/landing-shouting";
 import { splitLandingByProgram } from "@/features/class-sheets/landing-programs";
+import { monthOfWeek } from "@/features/class-sheets/face-nav";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 
 /**
@@ -231,13 +232,13 @@ function TeacherGroupFlow({
                 .filter(Boolean)
                 .join(", ");
               return (
-                <li key={card.classId} className="border-line-faint border-b">
+                <li key={card.classId} className="border-line-faint flex items-center border-b">
                   <Link
                     href={`/ecs/${card.classId}?week=${weekMonday}`}
                     aria-label={srLabel}
                     // 좁은 화면에선 행을 더 눕히지 않는다 — 한 줄로 줄인 대가로 **손가락이 못 누르는 줄**이
                     // 되면 압축이 아니라 고장이다(1열일 땐 어차피 세로가 남는다). 넓은 화면은 마우스라 7px.
-                    className="hover:bg-bg-soft flex items-center gap-2 rounded-lg px-1.5 py-2.5 transition sm:py-[7px]"
+                    className="hover:bg-bg-soft flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-2.5 transition sm:py-[7px]"
                   >
                     <span className="text-foreground min-w-0 flex-1 truncate text-[13px] font-semibold">
                       {card.className}
@@ -315,6 +316,20 @@ function TeacherGroupFlow({
                       <span className="bg-primary block h-full rounded-full" style={{ width: `${pct}%` }} />
                     </span>
                   </Link>
+                  {/* 계획(MP) 진입로 — 🔴 **여기 없으면 주소를 아는 사람만 쓴다**(MCS에서 수학만 맡은
+                      강사 9명에게 링크가 0개였던 것과 같은 구멍). EiE 반에만 붙고, 여는 달은 주간 시트의
+                      '달력' 버튼과 **같은 규칙**([monthOfWeek](@/features/class-sheets/face-nav))이다.
+                      🔴 `<a>` 안에 `<a>`를 넣을 수 없어 행 링크의 **형제**로 둔다(행 전체는 여전히 주간). */}
+                  {card.englishTrack === "eie" ? (
+                    <Link
+                      href={`/ecs/${card.classId}/month?month=${monthOfWeek(weekMonday)}&week=${weekMonday}&view=mp`}
+                      title={`${card.className} 월간 계획서(MP) 열기`}
+                      aria-label={`${card.className} 월간 계획서 열기`}
+                      className="border-line-strong text-text-dim hover:bg-bg-soft hover:text-foreground ml-1 shrink-0 rounded-full border px-1.5 py-px text-[10px] font-bold transition"
+                    >
+                      MP
+                    </Link>
+                  ) : null}
                 </li>
               );
             })}

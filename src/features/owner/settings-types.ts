@@ -100,6 +100,17 @@ export const skillAreaSchema = z.object({
 });
 export type SkillAreaSetting = z.infer<typeof skillAreaSchema>;
 
+// 월간 계획서(MP) 인쇄물의 머리말·꼬리말 — 원본 구글 시트가 반이 달라도 같은 문구를 쓰므로 과목 단위로
+// 둔다. 미설정 폴백은 resolveMonthPlanTexts(month-plan-texts.ts) — skillAreas와 같은 규약.
+// 🔴 소비처 = (print)/ecs/[classId]/month-plan. 소비처 없이 칸만 늘리지 말 것.
+export const monthPlanTextsSchema = z.object({
+  bookLegend: z.string().max(200),
+  notices: z.string().max(600),
+  prepTitle: z.string().max(80),
+  prepNotes: z.string().max(600),
+});
+export type MonthPlanTextsSetting = z.infer<typeof monthPlanTextsSchema>;
+
 export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
@@ -144,6 +155,9 @@ export const subjectSchema = z.object({
   // ECS 수업계획 '구분' 영역 목록(과목별). 미설정 = english만 기본 6영역 프리필(resolveSkillAreas),
   // 그 외 과목은 빈 목록(= ECS 진입 대상 아님). (.optional() — 예외 필드 관례, weekdayPeriods와 동일.)
   skillAreas: z.array(skillAreaSchema).max(20).optional(),
+  // 월간 계획서(MP) 인쇄물 문구. 미설정 = resolveMonthPlanTexts의 기본값(범례만 채워져 있고 나머지는
+  // 빈 채라 그 블록이 인쇄에서 통째로 생략된다). (.optional() — 예외 필드 관례, skillAreas와 동일.)
+  monthPlan: monthPlanTextsSchema.optional(),
 });
 export type SubjectSetting = z.infer<typeof subjectSchema>;
 

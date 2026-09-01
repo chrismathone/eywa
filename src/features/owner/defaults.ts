@@ -3,6 +3,7 @@
 // profile.name은 여기서 비우고 resolver가 tenants.name으로 채운다(테넌트별 실제 학원명).
 import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
 import { DEFAULT_TEACHER_VIEW_LINES } from "@/features/timetable/lib/ten-minute-grid";
+import { DEFAULT_MONTH_PLAN_TEXTS } from "./month-plan-texts";
 import type { TenantSettings } from "./settings-types";
 
 // 평일 표준 교시(8교시·55분) — periods.ts MATH_PERIODS 이식.
@@ -145,6 +146,10 @@ export const DEFAULT_SETTINGS: TenantSettings = {
         teacherViewLines: DEFAULT_TEACHER_VIEW_LINES,
         teacherViewStep: 10,
         testMax: 5,
+        // 월간 계획서(MP) 인쇄물 문구 — 소비처는 (print)/ecs/[classId]/month-plan.
+        // ⚠️ 안내·Prep 문구는 원문을 확인 못 해 **빈 채**로 둔다(인쇄에서 그 블록이 생략된다).
+        //    지어낸 문장이 학부모에게 나가는 것보다 빈 것이 낫다 — 원장이 과목 운영 탭에서 채운다.
+        monthPlan: DEFAULT_MONTH_PLAN_TEXTS,
       },
       { key: "science", label: "과학", color: "purple", weekdayGrouping: "none", testMax: 5 },
       { key: "korean", label: "국어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },

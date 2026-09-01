@@ -26,6 +26,7 @@ import {
   DEFAULT_ECS_SHOW_SELF_STUDY,
   normalizeCollapsedRosterGroups,
   normalizeEcsMonthView,
+  type EcsMonthDisplay,
   type EcsMonthView,
 } from "../view-prefs";
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
@@ -899,10 +900,14 @@ export async function setMyEcsMonthView(view: string): Promise<{ ok: boolean; er
  */
 export async function setMyEcsMonthDisplay(
   view: string,
-  display: { homework: boolean; seat: boolean },
+  display: EcsMonthDisplay,
 ): Promise<{ ok: boolean; error?: string }> {
   if (normalizeEcsMonthView(view) !== view) return { ok: false, error: "잘못된 값입니다" };
-  if (typeof display?.homework !== "boolean" || typeof display?.seat !== "boolean") {
+  if (
+    typeof display?.homework !== "boolean" ||
+    typeof display?.seat !== "boolean" ||
+    typeof display?.actual !== "boolean"
+  ) {
     return { ok: false, error: "잘못된 값입니다" };
   }
   const user = await getCurrentUser();
@@ -913,8 +918,14 @@ export async function setMyEcsMonthDisplay(
   const ecs = { ...((prefs.ecs as Record<string, unknown>) ?? {}) };
   const stored = { ...((ecs.monthDisplay as Record<string, unknown>) ?? {}) };
   const fallback = DEFAULT_ECS_MONTH_DISPLAY[view as EcsMonthView];
-  if (display.homework === fallback.homework && display.seat === fallback.seat) delete stored[view];
-  else stored[view] = display;
+  // ⚠️ **세 칸을 다** 비교한다 — 하나라도 빠뜨리면 그 칸만 기본값과 달라진 계정에서 저장이 조용히 지워진다.
+  if (
+    display.homework === fallback.homework &&
+    display.seat === fallback.seat &&
+    display.actual === fallback.actual
+  ) {
+    delete stored[view];
+  } else stored[view] = display;
   if (Object.keys(stored).length === 0) delete ecs.monthDisplay;
   else ecs.monthDisplay = stored;
   const merged = { ...prefs };
