@@ -87,7 +87,7 @@ export async function loadIntakePreview(input: {
     //    "수업이 없다"로 보인다(setAttendanceCell의 수강 판정도 같은 이유로 `.or`를 쓴다).
     supabase
       .from("enrollments")
-      .select("class_id, start_date, end_date, on_hold, attendance_days")
+      .select("class_id, start_date, end_date, is_transferred, on_hold, attendance_days")
       .eq("student_id", studentId)
       .or(`start_date.is.null,start_date.lte.${to}`)
       .or(`end_date.is.null,end_date.gte.${from}`),
@@ -188,6 +188,7 @@ export async function loadIntakePreview(input: {
       subject: cls?.subject ?? null,
       startDate: (e.start_date as string | null) ?? null,
       endDate: (e.end_date as string | null) ?? null,
+      isTransferred: e.is_transferred === true,
       attendanceDays: (e.attendance_days as string[] | null) ?? null,
     };
   });

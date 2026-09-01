@@ -20,6 +20,7 @@ const enroll = (over: Partial<SeatEnrollRow> = {}): SeatEnrollRow => ({
   grade: "중2",
   startDate: "2026-03-01",
   endDate: null,
+  isTransferred: false,
   onHold: false,
   attendanceDays: null,
   ...over,

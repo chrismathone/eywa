@@ -1,4 +1,5 @@
 import "server-only";
+import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -66,15 +67,33 @@ async function reflectPresent(
   const nowMin = timeToMinutes(nowTime);
 
   // 활성 enrollment → class_id
+  // ⚠️ 아래 날짜 조건은 넓은 프리필터다 — 최종 판정은 `isEnrollmentActiveOn`이 한다.
+  //    `end_date >= 오늘`만 걸면 반이동 **당일에 옛 반이 후보로 남아** 체크인이 떠난 반에 붙는다.
   const { data: enrs } = await admin
     .from("enrollments")
-    .select("class_id")
+    .select("class_id, start_date, end_date, on_hold, is_transferred")
     .eq("tenant_id", tenantId)
     .eq("student_id", studentId)
     .eq("on_hold", false)
     .lte("start_date", date)
     .or(`end_date.is.null,end_date.gte.${date}`);
-  const classIds = [...new Set((enrs ?? []).map((e) => e.class_id as string))];
+  const classIds = [
+    ...new Set(
+      (enrs ?? [])
+        .filter((e) =>
+          isEnrollmentActiveOn(
+            {
+              startDate: e.start_date as string,
+              endDate: (e.end_date as string | null) ?? null,
+              onHold: e.on_hold === true,
+              isTransferred: e.is_transferred === true,
+            },
+            date,
+          ),
+        )
+        .map((e) => e.class_id as string),
+    ),
+  ];
   if (classIds.length === 0) return null;
 
   // 오늘·유효한 스케줄(수업명 포함)

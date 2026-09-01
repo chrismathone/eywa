@@ -15,6 +15,7 @@
  *    결석이 되어 아이가 오는 날 안 온 것으로 표시된다. 날짜는 **목록**으로 다룬다.
  * ⚠️ 공휴일(학원설정 `operations.holidays`)은 애초에 칸을 만들지 않는다 — 쉬는 날 결석은 거짓이다.
  */
+import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { weekdayIndexOf } from "@/lib/date-kst";
 import { DOW_KEYS } from "../calendar";
 import { isPerSlotSubject } from "../live/slot-axis";
@@ -32,6 +33,8 @@ export type IntakeEnrollment = {
   subject: string | null;
   startDate: string | null;
   endDate: string | null;
+  /** 반이동으로 끝난 구간인가 — 종료일 당일은 이미 새 반이다([eligibility](@/features/enrollments/eligibility)). */
+  isTransferred?: boolean;
   /** 분리등원(`enrollments.attendance_days`). 비면 그 반 수업요일 전부. */
   attendanceDays: readonly (string | null)[] | null;
 };
@@ -130,7 +133,9 @@ export function buildAbsenceCells(input: {
     if (!dow) continue;
     for (const e of input.enrollments) {
       if (e.startDate && date < e.startDate) continue;
-      if (e.endDate && date > e.endDate) continue;
+      // 종료 규약은 eligibility 단일 소스 — `date > e.endDate`로 직접 쓰면 **반이동 학생의 옛 반이
+      // 적용일에 후보로 남아** 데스크가 이미 떠난 반에 결석을 찍는다(2026-09-01 실측).
+      if (isEnrollmentEndedOn(e.endDate, date, e.isTransferred)) continue;
       const own = (e.attendanceDays ?? [])
         .map((k) => String(k ?? "").trim().toLowerCase())
         .filter(Boolean);

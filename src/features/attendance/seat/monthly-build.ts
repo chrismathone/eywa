@@ -217,7 +217,7 @@ function foldEnrollments(enrollments: readonly SeatEnrollRow[], classId: string,
     if (e.classId !== classId || e.onHold) continue;
     if (e.startDate > window.end || (e.endDate && e.endDate < window.start)) continue;
     const cur = byStudent.get(e.studentId);
-    const span = { start: e.startDate, end: e.endDate };
+    const span = { start: e.startDate, end: e.endDate, isTransferred: e.isTransferred };
     if (cur) cur.spans.push(span);
     else byStudent.set(e.studentId, { row: e, spans: [span] });
   }

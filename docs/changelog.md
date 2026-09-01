@@ -1,5 +1,42 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-01 (5) — 반이동한 학생이 **옛 반 명단에 하루 더** 남던 것 (JJ·LAB 자리 출석부 제보)
+
+원장 제보: *"9/1 이동건에 대해서 JJ / LAB 출석부가 일치하지 않는다는데 확인"*. 실제 버그였고,
+**이동 적용일 하루만** 나는 증상이다. 프로덕션 실측으로 재현했다 — 9/1자 이동 12명이 자리 출석부에
+**옛 반·새 반 양쪽**에 섰다(JJ 87행 중 8 · LAB 62행 중 4). 곽경찬·김민서G·김태현·백승윤·이재용은
+`중등E_초6 MED a`와 `b`에 동시에, 박규은·정서윤·이예원은 **교시까지 다른 옛 칸**에, 이연서는
+**오늘 자리 수업이 아예 없는데** LAB 16:20에 서 있었다.
+
+🔑 **뿌리 = 종료 규약을 안 거친 쿼리.** 이동 RPC는 옛 수강을 `end_date = 적용일`로 닫는다 —
+GiST `daterange`가 `[start, end)`라 **그날은 이미 새 반**이고, 앱에는 그 규약의 단일 소스
+[`isEnrollmentEndedOn`](src/features/enrollments/eligibility.ts)이 이미 있다(반이동 `end <= date` /
+일반 종료 `end < date`). 반 상세·수업목록·반별 일별 출석부는 2026-08-29에 이걸로 배선됐는데
+**`end_date >= 오늘`이라는 넓은 SQL 필터로 끝내는 화면들이 남아 있었다.** 넓은 필터는 1000행 캡
+회피용([[#54]])이라 **필요하지만**, 그 뒤에 판정이 따라오지 않으면 종료일 하루가 겹친다.
+
+고친 자리 여섯 — 전부 "판정을 다시 쓰지 않고 eligibility에 넘긴다":
+- **자리(JJ·LAB) 일별 출석부**([seat/server/queries.ts](src/features/attendance/seat/server/queries.ts)) —
+  제보된 화면. `is_transferred`를 **select조차 안 해** 좁힐 수가 없었다 → 날짜 3개를 받아
+  `isEnrollmentActiveOn`으로 거른다. 🔑 **쓰기도 같이 닫혔다** — `rosterKeys`가 이 함수를 재사용해
+  명단을 만들므로, 배포 전부터 열려 있던 탭에서 유령을 눌러도 **서버가 거절**한다([[#77]]).
+- **`isEnrolledOn`**([enrollment-span.ts](src/features/attendance/enrollment-span.ts))이 `date <= s.end`를
+  직접 쓰던 것 → `EnrollSpan`에 `isTransferred`를 얹고 규약을 eligibility에 위임. 이 한 곳으로
+  **자리 월별 · 반별 월별(매트릭스) · 급여명세서 출결 별지**가 함께 낫는다(셋 다 같은 구간을 쓴다).
+  ⚠️ 돈은 안 움직인다 — 별지의 `outside`는 빗금(표시)이고 시수·회차는 출결 행에서 센다.
+- **자리 월별**·**반별 월별** 쿼리가 `is_transferred`를 실어 보낸다(안 실으면 판정이 항상 '일반 종료').
+- **키오스크 체크인** — 이동 당일 체크인이 **떠난 반에 붙던** 것.
+- **결석 접수**([absence-intake.ts](src/features/attendance/intake/absence-intake.ts)) — 데스크가 학부모
+  전화를 받아 결석을 찍을 때 **옛 반 칸이 후보로 남던** 것.
+- **수업보고서 반 해석**([resolve-class.ts](src/features/report-admin/server/resolve-class.ts)) —
+  그날 보고서가 옛 반에 붙을 수 있었다.
+
+⚠️ 모르면(`isTransferred` undefined) **일반 종료로 본다** — 근거 없이 하루 일찍 지우지 않는다.
+⚠️ 스키마 변경 0([[#95]] 무관) — `is_transferred`는 이미 있는 컬럼이고 다른 화면이 이미 읽고 있다.
+가드: [roster-transfer.test.ts](src/features/attendance/roster-transfer.test.ts) — 규약 자체(왕복이
+겹치지 않는지)를 실제 날짜로 재고, **select 문자열과 판정 호출을 둘 다** 본다(이름만 보는 가드는
+같은 종류의 결함을 한 번 놓친 적이 있다).
+
 ## 2026-09-01 (7) — 예정(대기) 학생은 종료가 아니라 **배정 취소**
 
 원장: *"대기학생은 '수강 종료' 대신 '배정 취소' 버튼 추가해줘. 배정 취소 하면 아무일도 없던것처럼 되는거지."*

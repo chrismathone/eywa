@@ -74,6 +74,8 @@ export type SeatEnrollRow = {
   grade: string | null;
   startDate: string;
   endDate: string | null;
+  /** 반이동으로 끝난 구간인가 — 종료 규약이 갈린다([EnrollSpan](@/features/attendance/enrollment-span)). */
+  isTransferred: boolean;
   onHold: boolean;
   attendanceDays: string[] | null;
 };
