@@ -5,7 +5,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
 import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
-import type { MathCellState } from "../lib/cell-state";
+import { CELL_STATE_LABEL, type MathCellState } from "../lib/cell-state";
 import { actualBooksOf, type MathRecordLike, type StudentGoalMap } from "../lib/student-goals";
 import type { MathSheetMonthData } from "../server/month-queries";
 import type { GoalField } from "./use-student-goals";
@@ -28,16 +28,21 @@ const CELL_TONE: Record<MathCellState, string> = {
   unwritten:
     "bg-[repeating-linear-gradient(135deg,transparent,transparent_5px,rgba(188,56,56,.07)_5px,rgba(188,56,56,.07)_10px)]",
   absent: "bg-bg-soft/60",
+  // 🔴 **지난 칸의 무기록**만 회색으로 채운다 — 아직 안 지난 칸은 **빈 칸**이다(원장 2026-09-01:
+  //    9월을 열면 전 칸이 회색 "출결도 기록도 없음"이라 아무도 잘못 안 했는데 다 틀린 것처럼 보였다).
   untracked: "bg-muted",
+  upcoming: "",
   "off-roster": "bg-muted/40",
 };
 
-const CELL_NOTE: Record<Exclude<MathCellState, "written">, string> = {
-  unwritten: "출석 · 기록 없음",
-  absent: "결석",
-  untracked: "출결도 기록도 없음",
-  "off-roster": "수강 전/후",
-};
+/**
+ * 칸 안에 적는 문구 — 이름은 [`CELL_STATE_LABEL`](../lib/cell-state) 단일 소스에서 가져온다.
+ * ⚠️ 아직 안 지난 날만 **아무 말도 하지 않는다**(빈 칸이 곧 "아직"이고, 30칸에 같은 문장을 반복하면
+ *    그게 소음이다 — 무엇인지는 칸 툴팁이 말한다).
+ */
+function cellNote(state: MathCellState): string {
+  return state === "upcoming" ? "" : CELL_STATE_LABEL[state];
+}
 
 export function MonthSheet({
   data,
@@ -148,6 +153,8 @@ export function MonthSheet({
                   return (
                     <td
                       key={day.date}
+                      // 상태 이름을 그대로 노출하지 않는다 — 한글 문구는 CELL_NOTE 단일 소스.
+                      title={state === "upcoming" ? `${day.date} · ${CELL_STATE_LABEL.upcoming}` : undefined}
                       className={`border-line-faint min-w-[178px] border p-2 align-top ${CELL_TONE[state]} ${
                         rec?.offGoal ? "border-l-amber bg-amber-soft/40 border-l-[3px]" : ""
                       }`}
@@ -174,9 +181,7 @@ export function MonthSheet({
                           ) : null}
                         </>
                       ) : (
-                        <div className="text-text-faint text-[11.5px] font-bold">
-                          {CELL_NOTE[state as Exclude<MathCellState, "written">]}
-                        </div>
+                        <div className="text-text-faint text-[11.5px] font-bold">{cellNote(state)}</div>
                       )}
                     </td>
                   );

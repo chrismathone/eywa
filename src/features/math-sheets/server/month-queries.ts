@@ -310,6 +310,7 @@ export async function getMathSheetMonth(
         date,
         attendance: foldDayAttendance(attByKey.get(`${sid}|${date}`) ?? []),
         hasReport: Boolean(rec),
+        today,
       });
       cells[date] = state;
       allStates.push(state);

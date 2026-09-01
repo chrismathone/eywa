@@ -269,6 +269,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
             date: day.date,
             attendance: foldDayAttendance(attByKey.get(`${cid}|${day.date}|${sid}`) ?? []),
             hasReport: reportKeys.has(`${cid}|${day.date}|${sid}`),
+            today,
           }),
         );
       }

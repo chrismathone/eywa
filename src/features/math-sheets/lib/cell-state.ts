@@ -1,13 +1,19 @@
 /**
  * MCS 칸 상태 판정 — **단일 소스**(순수, Vitest). 진도표 칸·진도 레일 점·툴바 요약이 전부 이걸 통과한다.
  *
- * 🔴 **"기록이 없다"는 이유가 셋이고, 셋을 한 색으로 뭉치면 거짓 숫자가 나온다.**
+ * 🔴 **"기록이 없다"는 이유가 넷이고, 넷을 한 색으로 뭉치면 거짓 숫자가 나온다.**
  *    실측(2026-08 수학 전체, 수강 기간을 지켜서 센 값): 학생-수업일 2,533칸 중 보고서가 없는 칸이
  *    886개인데 그중
  *    · 203칸은 **결석**(안 온 사람의 수업 기록을 요구하는 건 거짓 재촉이다)
  *    · 410칸은 **출결 기록조차 없다**(8/15 광복절·8/17이 대부분 — 그날은 반 전체가 비어 있다)
  *    · 남는 **273칸**만이 "왔는데 안 적힌" 진짜 미작성이다(작성률 86%).
  *    886을 미작성이라 부르면 실제의 3.2배이고, 그 숫자를 본 사람은 화면을 믿지 않게 된다.
+ *
+ * 🔴 **넷째 이유 = 아직 그날이 안 왔다**(원장 2026-09-01 제보: 9월 시트가 칸마다 *"출결도 기록도 없음"*).
+ *    앞의 셋은 전부 **지난 일에 대한 사실**인데 미래 날짜를 거기 섞으면 아무도 잘못한 게 없는 칸이
+ *    "아무 흔적이 없다"고 적힌다 — 9월을 9/1에 열면 전 칸이 그 문장이었다. `upcoming`은 **그 칸을
+ *    판정에서 빼는 것**이지 새 실패가 아니다(작성률 분모에도 '흔적 없음' 수에도 안 들어간다).
+ *    ⚠️ 순서가 중요하다 — **미리 찍힌 출결·기록이 있으면 그게 이긴다**(사실이 달력을 이긴다).
  *
  * 🔴 **수강 기간 밖은 아예 칸이 아니다.** 달 중간에 들어온 학생에게 그 전 날짜를 '흔적 없음'으로
  *    칠하면 오지도 않은 날을 빠뜨린 것처럼 보인다. 판정은 [`roster.ts`](./roster.ts) 단일 소스 —
@@ -29,8 +35,27 @@ export type MathCellState =
   | "absent"
   /** 출결도 수업 기록도 없다 — 그날 반이 안 돌았거나 아무도 안 찍었다. */
   | "untracked"
+  /** 아직 그 수업일이 안 지났다 — 비어 있는 게 정상이라 어떤 수에도 안 들어간다. */
+  | "upcoming"
   /** 그 날짜에 이 학생은 이 반 소속이 아니었다 — 칸을 만들지 않는다. */
   | "off-roster";
+
+/**
+ * 칸 상태의 한글 라벨 — **진도표 칸 문구와 진도 레일 툴팁이 같은 표를 읽는다.**
+ *
+ * 🔴 화면마다 사본을 두지 말 것. 이 파일에 `upcoming`을 더했을 때 두 화면의 사본을 각각 고쳐야 했고,
+ *    한쪽만 고쳤으면 레일엔 계속 "출결도 기록도 없음"이 떴을 것이다(사본은 새 상태를 따라오지 않는다 —
+ *    학생 상세 진도 탭의 `classnoteBadge` 사본이 회수 3종을 통째로 "—"로 삼킨 것과 같은 함정).
+ * ⚠️ `written`은 보통 실제 교재·진도 문자열로 덮어쓴다 — 이 값은 그게 비었을 때의 폴백이다.
+ */
+export const CELL_STATE_LABEL: Record<MathCellState, string> = {
+  written: "기록 있음",
+  unwritten: "출석 · 기록 없음",
+  absent: "결석",
+  untracked: "출결도 기록도 없음",
+  upcoming: "아직 수업 전",
+  "off-roster": "수강 전/후",
+};
 
 /** 온 것으로 치는 출결 상태 — 이 상태에서 기록이 없으면 미작성이다. */
 const ATTENDED: ReadonlySet<string> = new Set<AttendanceStatusKey>([
@@ -55,12 +80,17 @@ export function cellStateOf(args: {
   attendance: string | null | undefined;
   /** 그 날 그 학생의 수업 기록이 있는가. */
   hasReport: boolean;
+  /** 오늘(KST). 이 날짜보다 뒤면 아직 안 지난 수업일이다. */
+  today: string;
 }): MathCellState {
   if (!isOnMathRoster(args.enrollments, args.withdrawnAt, args.date)) return "off-roster";
   if (args.hasReport) return "written";
   const att = args.attendance ?? null;
   if (att && MISSED.has(att)) return "absent";
   if (att && ATTENDED.has(att)) return "unwritten";
+  // 🔴 여기까지 왔으면 흔적이 하나도 없는 칸이다 — 그게 **지난 일인지 앞일인지**를 가른다.
+  //    (미리 찍힌 출결·기록은 위에서 이미 이겼다: 사실이 달력을 이긴다.)
+  if (args.date > args.today) return "upcoming";
   // 출결이 없거나 모르는 상태값이면 '왔다'로 넘겨짚지 않는다 — 없는 미작성을 만드는 쪽이 더 나쁘다.
   return "untracked";
 }
@@ -87,16 +117,32 @@ export type MathFillStats = {
   unwritten: number;
   absent: number;
   untracked: number;
-  /** written + unwritten + absent + untracked (off-roster 제외). */
+  /** 아직 안 지난 수업일 — 어떤 판단에도 안 쓴다(세어만 둔다). */
+  upcoming: number;
+  /** written + unwritten + absent + untracked (off-roster·upcoming 제외 = **지난 칸만**). */
   total: number;
   /** 왔는데 안 적힌 칸이 하나도 없으면 100. 분모는 **온 칸만**(written + unwritten). */
   pct: number;
 };
 
 export function tallyCells(states: readonly MathCellState[]): MathFillStats {
-  const out: MathFillStats = { written: 0, unwritten: 0, absent: 0, untracked: 0, total: 0, pct: 0 };
+  const out: MathFillStats = {
+    written: 0,
+    unwritten: 0,
+    absent: 0,
+    untracked: 0,
+    upcoming: 0,
+    total: 0,
+    pct: 0,
+  };
   for (const s of states) {
     if (s === "off-roster") continue;
+    // 🔴 아직 안 지난 칸은 `total`에도 안 넣는다 — 넣으면 "이 달 칸 N개 중 M개 작성"이 달 초에
+    //    항상 처참해 보인다(아무 일도 안 일어난 것을 실패로 세는 꼴).
+    if (s === "upcoming") {
+      out.upcoming += 1;
+      continue;
+    }
     out.total += 1;
     if (s === "written") out.written += 1;
     else if (s === "unwritten") out.unwritten += 1;
