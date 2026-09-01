@@ -17,6 +17,10 @@ import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
  *    (없애면 과거 화면을 보면서 오늘로 착각한다 — WeekNav가 이 신호를 갖고 있던 이유).
  * ⚠️ 라벨 문자열은 **호출부가 만든다**(`monthLabel`·`weekLabel` 등 앱 전역 단일 소스) — 여기서 포맷을
  *    새로 정하면 같은 달이 화면마다 다르게 적힌다.
+ * ⚠️ **화살표는 `<a href>`가 아니라 버튼이다** — Ctrl/⌘·가운데 클릭으로 새 탭이 안 열린다(옮겨 오기 전
+ *    시간표 주 네비는 열렸다). 이 앱에서 다른 기간을 따로 띄우는 정식 경로는 **사이드바 shift-클릭 창**이라
+ *    실사용 손실이 없다고 보고 모양의 일관성을 택했다. 되살릴 땐 **여기**를 고칠 것(호출부에서 링크로
+ *    되돌리면 화면마다 다시 갈린다).
  * ⚠️ 이동은 `startTransition` + `router.push`라 **이전 화면을 유지한 채** 새 데이터를 받는다
  *    (`<Link>`면 `loading.tsx` 스켈레톤이 떠서 보고 있던 표가 지워졌다 다시 그려진다 — ParamLink 선례).
  *    저장 flush가 필요한 화면(ECS 주간 시트)은 `onNavigate`로 가로채 자기 순서를 지킨다.
@@ -37,7 +41,7 @@ export function PeriodNav({
   prevAriaLabel,
   nextAriaLabel,
   currentTitle,
-  minLabelWidth = 104,
+  labelWidth = 112,
   pending: externalPending = false,
   onNavigate,
 }: {
@@ -53,8 +57,15 @@ export function PeriodNav({
   nextAriaLabel?: string;
   /** 라벨 버튼 툴팁 — 기본은 "눌러서 이번 기간으로". */
   currentTitle?: string;
-  /** 라벨 칸 최소 폭(px) — 기간이 바뀌어도 화살표가 움찔거리지 않게. */
-  minLabelWidth?: number;
+  /**
+   * 라벨 칸 **고정** 폭(px) — 원장 2026-09-01 *"처음부터 디폴트 크기를 적당히 잡아서 이동해도 크기
+   * 변동안되고 고정되게"*.
+   * 🔴 **최소 폭이 아니라 고정 폭이다.** 최소 폭이면 "9월 2주차 (7일~13일)"과 "12월 5주차 (28일~1/3일)"의
+   *    글자 수가 달라 **주를 옮길 때마다 화살표가 좌우로 흔들린다**(원장이 지적한 그 움직임).
+   * ⚠️ 그래서 값은 그 화면 라벨의 **가장 긴 경우**에 맞춘다 — 좁게 잡으면 글자가 칸을 넘는다
+   *    (잘라내지 않는다: 날짜가 잘린 라벨은 흔들리는 것보다 나쁘다).
+   */
+  labelWidth?: number;
   /**
    * 호출부가 **자기 전환**을 도는 동안 "가는 중"으로 그린다.
    * 🔴 `onNavigate`를 주면 이 컴포넌트의 자체 transition이 안 돌아 **아무 반응이 없다** — 가로챈 화면이
@@ -111,10 +122,10 @@ export function PeriodNav({
           type="button"
           // 이미 이번 기간이면 눌러도 갈 곳이 없다 — 비활성으로 그 사실을 모양에 담는다.
           disabled={isCurrent}
-          className={`border-line-faint num min-w-0 border-x px-2 py-1 text-[13px] font-bold whitespace-nowrap transition ${
+          className={`border-line-faint num shrink-0 border-x px-2 py-1 text-center text-[13px] font-bold whitespace-nowrap transition ${
             isCurrent ? "text-foreground cursor-default" : "text-foreground hover:bg-bg-soft cursor-pointer"
           }`}
-          style={{ minWidth: minLabelWidth }}
+          style={{ width: labelWidth }}
           title={isCurrent ? undefined : (currentTitle ?? "눌러서 이번 기간으로")}
           onClick={() => go(currentHref)}
         >

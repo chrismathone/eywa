@@ -141,7 +141,7 @@ export function MonthClient({
           prevAriaLabel="이전 달"
           nextAriaLabel="다음 달"
           currentTitle="눌러서 이번 달로"
-          minLabelWidth={110}
+          labelWidth={116}
           onNavigate={(href) => flushAll().then(() => router.push(href))}
         />
         <span

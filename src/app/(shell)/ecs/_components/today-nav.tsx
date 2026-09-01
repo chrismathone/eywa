@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
+import { PeriodNav } from "@/components/period-nav";
 import { EcsDatePicker } from "./today-date-picker";
 
 /**
@@ -99,7 +99,15 @@ export function EcsFaceTabs({ face, showToday = true }: { face: EcsFace; showTod
   );
 }
 
-/** 날짜 이동(하루씩) + '오늘' 복귀 — WeekNav와 같은 배열·같은 아이콘 버튼. mode는 이동해도 유지한다. */
+/**
+ * 날짜 이동(하루씩) — 앱 전역 단일 소스 [`PeriodNav`](@/components/period-nav)(원장 2026-09-01
+ * *"출결 날짜 이동도 바꿔줘"*). 주간 이동과 같은 모양이라 같은 툴바에 나란히 서도 안 어긋난다.
+ *
+ * 🔴 '오늘' 알약이 하던 **두 일**은 라벨 클릭(오늘로) + 지난/미래 조회 배지로 나뉜다 —
+ *    배지를 지우지 말 것(없으면 지난 날을 보면서 오늘로 착각한다).
+ * ⚠️ 날짜 **선택**(달력)은 PeriodNav 밖에 그대로 남는다 — 하루씩 이동만으로는 먼 날짜에 못 간다
+ *    (◀를 열두 번 누르게 된다, today-date-picker 주석). mode는 이동해도 유지한다.
+ */
 export function EcsDayNav({
   date,
   today,
@@ -113,34 +121,21 @@ export function EcsDayNav({
 }) {
   const q = view === "room" ? "" : modeQ(mode);
   const base = `/ecs?view=${view}`;
-  const iconBtn =
-    "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-full border p-1 transition";
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="micro mr-0.5">날짜</span>
-      <div className="flex items-center gap-0.5">
-        <Link href={`${base}&date=${addDays(date, -1)}${q}`} aria-label="이전 날" className={iconBtn}>
-          <ChevronLeft size={13} strokeWidth={2.5} />
-        </Link>
-        <Link href={`${base}${q}`} className={chip(date === today)}>
-          오늘
-        </Link>
-        <Link href={`${base}&date=${addDays(date, 1)}${q}`} aria-label="다음 날" className={iconBtn}>
-          <ChevronRight size={13} strokeWidth={2.5} />
-        </Link>
-        <EcsDatePicker date={date} mode={mode} view={view} />
-      </div>
-      <span className="text-text-dim num text-[11px] whitespace-nowrap">{formatKoreanDate(date)}</span>
-      {/* 오늘이 아니면 무슨 날을 보는지 명시 — WeekNav의 '과거/미래 조회' 배지와 같은 규약. */}
-      {date !== today ? (
-        <span
-          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
-            date > today ? "bg-blue-soft text-blue" : "bg-amber-soft text-amber"
-          }`}
-        >
-          {date > today ? "미래 조회" : "지난 날 조회"}
-        </span>
-      ) : null}
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+      <PeriodNav
+        label={formatKoreanDate(date)}
+        prevHref={`${base}&date=${addDays(date, -1)}${q}`}
+        nextHref={`${base}&date=${addDays(date, 1)}${q}`}
+        currentHref={`${base}${q}`}
+        relation={date === today ? "current" : date < today ? "past" : "future"}
+        prevAriaLabel="이전 날"
+        nextAriaLabel="다음 날"
+        currentTitle="눌러서 오늘로"
+        // "2026년 12월 26일 (수)"(최장)까지 안 넘치는 고정 폭 — 넉넉히 잡는다(좁아서 넘치는 쪽이 더 나쁘다).
+        labelWidth={180}
+      />
+      <EcsDatePicker date={date} mode={mode} view={view} />
     </div>
   );
 }

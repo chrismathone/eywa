@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Users } from "@/components/icons/eywa-icon-compat";
+import { Users } from "@/components/icons/eywa-icon-compat";
+import { PeriodNav } from "@/components/period-nav";
 import {
   USABLE_SEAT_KEYS,
   SEAT_KEYS,
@@ -726,26 +727,19 @@ export default async function AttendancePage({
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 월 navigator */}
-        <div className="flex items-center gap-1.5">
-          <Link
-            href={attHref({ classId: effectiveClassId, month: prevMonth, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
-            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
-            aria-label="이전 달"
-          >
-            <ChevronLeft className="size-3.5" />
-          </Link>
-          <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">
-            {formatMonth(month)}
-          </span>
-          <Link
-            href={attHref({ classId: effectiveClassId, month: nextMonth, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
-            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
-            aria-label="다음 달"
-          >
-            <ChevronRight className="size-3.5" />
-          </Link>
-        </div>
+        {/* 월 이동 — 앱 전역 단일 소스 PeriodNav(원장 2026-09-01 "출결 날짜 이동도 바꿔줘").
+            🔑 종전엔 라벨이 그냥 글자라 **이번 달로 돌아갈 길이 없었다**(◀를 누른 만큼 ▶를 눌러야 했다).
+               이제 라벨을 누르면 이번 달로 오고, 다른 달을 보는 중이면 과거/미래 조회 배지가 선다. */}
+        <PeriodNav
+          label={formatMonth(month)}
+          prevHref={attHref({ classId: effectiveClassId, month: prevMonth, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
+          nextHref={attHref({ classId: effectiveClassId, month: nextMonth, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
+          currentHref={attHref({ classId: effectiveClassId, month: currentMonthKey(), teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
+          relation={month === currentMonthKey() ? "current" : month < currentMonthKey() ? "past" : "future"}
+          prevAriaLabel="이전 달"
+          nextAriaLabel="다음 달"
+          currentTitle="눌러서 이번 달로"
+        />
 
         {/* 날짜축(세션/월) — 같은 줄에 붙인다. ⚠️ 새 줄을 얹지 말 것(그 높이는 학생 행에서 빼 온다). */}
         <PeriodModeToggle

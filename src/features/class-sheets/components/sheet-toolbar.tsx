@@ -5,8 +5,9 @@
 // WeekNav(ParamLink)가 아니라 PeriodNav를 **직접** 쓰는 이유는 그대로다: 이동 전 store.flush()를
 // await해야 해서(§F) `onNavigate`로 가로챈다 — PeriodNav가 그 동안 "가는 중"을 그린다.
 import { ClipboardCheck } from "@/components/icons/eywa-icon-compat";
-import { addWeeks, thisMonday } from "@/features/timetable/lib/week";
+import { addWeeks, thisMonday, WEEK_LABEL_W } from "@/features/timetable/lib/week";
 import { PeriodNav } from "@/components/period-nav";
+
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { ecsPresenceScope } from "../lib/presence-scope";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -133,7 +134,7 @@ export function SheetToolbar({
         prevAriaLabel="이전 주"
         nextAriaLabel="다음 주"
         currentTitle="눌러서 이번 주로"
-        minLabelWidth={188}
+        labelWidth={WEEK_LABEL_W}
         onNavigate={onNavigate}
       />
       {/* 월간 뷰로 — 같은 반의 한 달을 달력/진도표로 훑는 화면(2026-08-31). 주 네비 바로 옆에 두는 이유는

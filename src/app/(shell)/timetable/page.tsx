@@ -862,14 +862,13 @@ export default async function TimetablePage({
         )}
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰·강사뷰=읽기전용, 과거=조회 전용).
-            미래 주 편집은 그 주에 이동 예약(Phase B). */}
+            ⚠️ 옛 '· 이 주에 이동 예약' 꼬리표는 뺐다(원장 2026-09-01 *"하단 '이 주에 이동 예약'은 지워"*) —
+               같은 사실을 주 네비의 **미래 조회 배지**가 이미 말하고 있어 한 줄 아래 같은 말이 또 있었다.
+               되살리지 말 것. */}
         {effView === "basic" && slots.length > 0 && canEdit ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <TimetableEditControls />
-            {isFutureWeek ? (
-              <span className="text-blue text-[11px] whitespace-nowrap">· 이 주에 이동 예약</span>
-            ) : null}
           </>
         ) : null}
       </div>

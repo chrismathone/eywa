@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { PeriodNav } from "@/components/period-nav";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -116,7 +116,8 @@ export default async function SeatAttendancePage({
         eyebrow="출석부"
         title={`${SEAT_NAME[seat]} ${SEAT_ROOM[seat]}`}
         embedLabel={`${SEAT_NAME[seat]} · ${dateLabel(date)}`}
-        description={dateLabel(date)}
+        // ⚠️ 부제로 날짜를 또 적지 않는다 — 아래 날짜 네비가 같은 줄에서 이미 말하고 있다(둘이 나란히
+        //    같은 날짜를 적으면 어느 쪽이 진짜인지 헷갈린다). 창(embed) 한 줄 라벨엔 그대로 들어간다.
         actions={
           <div className="flex items-center gap-1.5">
             {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). */}
@@ -147,28 +148,21 @@ export default async function SeatAttendancePage({
                 ))}
               </div>
             ) : null}
-            <Link
-              href={href({ date: shiftDate(date, -1), start: undefined })}
-              className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
-              aria-label="이전 날"
-            >
-              <ChevronLeft className="size-3.5" />
-            </Link>
-            <Link
-              href={href({ date: today, start: undefined })}
-              className={`rounded-full border px-2.5 py-0.5 text-xs ${
-                date === today ? "border-primary bg-primary text-primary-foreground" : "border-line text-text-dim"
-              }`}
-            >
-              오늘
-            </Link>
-            <Link
-              href={href({ date: shiftDate(date, 1), start: undefined })}
-              className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
-              aria-label="다음 날"
-            >
-              <ChevronRight className="size-3.5" />
-            </Link>
+            {/* 날짜 이동 — 앱 전역 단일 소스 PeriodNav(원장 2026-09-01). '오늘' 알약이 하던 두 일은
+                라벨 클릭(오늘로)과 지난/미래 조회 배지로 나뉜다.
+                🔑 종전엔 **화살표 사이에 날짜가 없어서** 어느 날을 보는지 헤더까지 눈을 옮겨야 했다. */}
+            <PeriodNav
+              label={dateLabel(date)}
+              prevHref={href({ date: shiftDate(date, -1), start: undefined })}
+              nextHref={href({ date: shiftDate(date, 1), start: undefined })}
+              currentHref={href({ date: today, start: undefined })}
+              relation={date === today ? "current" : date < today ? "past" : "future"}
+              prevAriaLabel="이전 날"
+              nextAriaLabel="다음 날"
+              currentTitle="눌러서 오늘로"
+              // "12월 26일 (수)"(최장)까지 안 넘치는 고정 폭 — 넉넉히 잡는다.
+              labelWidth={140}
+            />
           </div>
         }
       />

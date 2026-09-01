@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { PeriodNav, type PeriodRelation } from "@/components/period-nav";
+import { WEEK_LABEL_W } from "@/features/timetable/lib/week";
 import { confirmTimetableNav } from "./timetable-unsaved";
 
 /**
@@ -44,9 +45,8 @@ export function WeekPeriodNav({
       prevAriaLabel="이전 주"
       nextAriaLabel="다음 주"
       currentTitle="눌러서 이번 주로"
-      // 주 라벨은 "2026년 9월 3주차 (14일~20일)"까지 길어진다 — 달 라벨보다 넓게 잡아야
-      // 주가 바뀔 때 화살표가 좌우로 움찔거리지 않는다.
-      minLabelWidth={188}
+      // 주 라벨의 최장은 달을 걸치는 주 "2026년 12월 5주차 (28일~1/3일)" — 그 폭으로 **고정**한다.
+      labelWidth={WEEK_LABEL_W}
       // 🔴 가로챈 이동은 PeriodNav의 자체 transition을 안 태우므로 "가는 중"을 여기서 넘긴다 —
       //    안 넘기면 누른 뒤 새 주가 올 때까지(1~3초) 화면에 아무 반응이 없다(ParamLink는 pulse였다).
       pending={pending}

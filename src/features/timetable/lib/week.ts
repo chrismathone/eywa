@@ -85,6 +85,15 @@ export function weekTitle(monday: string): string {
  * "2026년 6월 4주차 (22일~28일)" — 달 경계면 "29일~7/5일". (ijw TimetableManager.tsx:2320-2335)
  * @param monday 그 주 월요일(YYYY-MM-DD)
  */
+/**
+ * 주 라벨 칸의 **고정** 폭(px) — `PeriodNav labelWidth`에 그대로 넣는다(원장 2026-09-01 *"이동해도 크기
+ * 변동안되고 고정되게"*). 최장 경우는 달을 걸치는 주 `2026년 12월 5주차 (28일~1/3일)`이고 그 폭에 맞췄다.
+ * ⚠️ `weekLabel` 포맷을 바꾸면 **이 값도 같이** 재어 볼 것(좁으면 글자가 칸을 넘는다).
+ * ⚠️ 여기 두는 이유: 라벨을 만드는 자리와 그 폭이 같은 파일에 있어야 한쪽만 바뀌지 않는다. 그리고 이 파일은
+ *    순수 모듈이라 서버·클라 어디서 읽어도 값이 산다(`"use client"` 파일의 상수는 서버에서 undefined다 [[#81]]).
+ */
+export const WEEK_LABEL_W = 232;
+
 export function weekLabel(monday: string): string {
   const m = parse(monday);
   const month = m.getUTCMonth() + 1;

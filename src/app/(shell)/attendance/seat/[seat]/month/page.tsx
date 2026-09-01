@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { PeriodNav } from "@/components/period-nav";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstMonth } from "@/lib/date-kst";
@@ -102,13 +102,17 @@ export default async function SeatMonthlyPage({
                 출석부로
               </Link>
               <MonthlyPrintButton seat={seat} month={month} title={`${SEAT_NAME[seat]} ${formatMonth(month)}`} />
-              <Link href={href(shiftMonth(month, -1))} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="이전 달">
-                <ChevronLeft className="size-3.5" />
-              </Link>
-              <span className="min-w-[90px] text-center text-[13px] font-bold">{formatMonth(month)}</span>
-              <Link href={href(shiftMonth(month, 1))} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="다음 달">
-                <ChevronRight className="size-3.5" />
-              </Link>
+              {/* 월 이동 — 월별 출석부·시간표와 같은 PeriodNav(원장 2026-09-01). 라벨 클릭 = 이번 달. */}
+              <PeriodNav
+                label={formatMonth(month)}
+                prevHref={href(shiftMonth(month, -1))}
+                nextHref={href(shiftMonth(month, 1))}
+                currentHref={href(kstMonth())}
+                relation={month === kstMonth() ? "current" : month < kstMonth() ? "past" : "future"}
+                prevAriaLabel="이전 달"
+                nextAriaLabel="다음 달"
+                currentTitle="눌러서 이번 달로"
+              />
               {view.groups.length > 0 ? <CollapseAllChip classIds={view.groups.map((g) => g.classId)} /> : null}
             </div>
           }
