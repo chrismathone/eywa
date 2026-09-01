@@ -15462,3 +15462,9 @@ FK가 `on delete set null`이라 지우면 그 반·슬롯이 **전부 미지정
   실데이터도 맞췄다: **상담 296행 · 학생 36행**(`scripts/_oneoff/normalize-school-names.cjs`, 드라이런→적용,
   자연키 충돌 0). ⚠️ 드라이런이 잡은 것: 가운데 공백을 지우면 `칠성초2 7세`→`칠성초27세`가 된다 →
   **양끝 trim만** 한다. ⚠️ 매칭 키(`normalizeSchoolName`)와 **방향이 반대**다(키는 지역 접두를 지운다).
+- **출처 라벨 단일 소스**([`consult-origin.ts`](../src/features/enrollment/consult-origin.ts)) — 병합 화면이
+  `makeedu_id`만 보고 라벨을 정해서, **우리가 makeedu로 보내고 받아 적은 counselSeq**까지 "makeedu 연동"으로
+  불렀다(원장이 왕복 버그로 의심). 🔑 실측으로 왕복은 **0건**이다: 푸시 35건 전부 counselSeq를 확보했고
+  중복 짝 5쌍은 전부 `sync_added_at`이 비어 있다(= 임포터가 만든 행이 아니라 **QR 접수 + 데스크 직접
+  입력**이 겹친 것). 이제 `makeedu_pushed_at`을 **먼저** 봐서 "QR 접수 · makeedu 전송함"으로 적는다.
+- 카드 한 페이지 **10장** + 목록 위·아래 여백 동일(`p-2.5`, `min-h` 제거).
