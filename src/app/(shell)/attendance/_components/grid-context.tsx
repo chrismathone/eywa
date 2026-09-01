@@ -241,8 +241,13 @@ export function GridProvider({
   useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
   /**
    * 타이핑 값 → 칸에 보여 줄 값.
-   * ⚠️ 교시가 여럿인 칸은 시수를 **교시 수만큼 곱한다** — 서버가 그날 모든 교시에 같은 값을 쓰므로
-   *    다시 읽으면 합이 그만큼이다(위 slotCounts 주석). 결석(시수 없음)은 곱할 게 없다.
+   *
+   * 🔴 **친 숫자는 그날 합계다**(원장 2026-09-01: *"입력된 숫자가 입력되도록 해야해"*) — 교시가 여럿이어도
+   *    곱하지 않는다. 서버가 그 합을 교시별로 나눠 담으므로(`splitUnitsAcrossSlots`) 다시 읽어도 합은 그대로다.
+   *    ⚠️ 종전엔 여기서 교시 수만큼 곱했다 — 서버가 같은 값을 교시마다 썼기 때문인데, 그게 부풀림의 정체였다
+   *       (3교시 반에 4를 치면 12). 서버와 **함께** 고쳐야 화면과 DB가 안 갈린다.
+   * ⚠️ 빈칸·"1"(=기본 배수)은 여전히 "교시마다 정상"이라 그날 합이 교시 수다(원장 확정 — 클릭으로 찍는
+   *    출석과 같은 값을 유지한다). 결석은 시수가 없어 곱할 것도 나눌 것도 없다.
    */
   const toValue = useCallback(
     (key: string, v: TypedValue | null): GridValue => {
@@ -250,7 +255,10 @@ export function GridProvider({
       const raw = v.units === "" ? null : Number(v.units);
       const n = slotCounts?.[key] ?? 1;
       if (n <= 1 || !COUNTABLE_STATUSES.has(v.status)) return { s: v.status, u: raw };
-      return { s: v.status, u: Math.round((raw ?? 1) * n * 10) / 10 };
+      // 명시 숫자 = 그날 합계 → 그대로 보여 준다.
+      if (raw !== null) return { s: v.status, u: raw };
+      // 기본(빈칸·1) = 교시마다 1 → 그날 합은 교시 수.
+      return { s: v.status, u: n };
     },
     [slotCounts],
   );

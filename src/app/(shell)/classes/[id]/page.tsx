@@ -5,10 +5,12 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
+import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
+import { CancelAssignmentButton } from "@/features/enrollments/components/cancel-assignment-button";
 import { kstToday } from "@/lib/date-kst";
 import {
   getClassAttendanceStats,
@@ -120,8 +122,10 @@ export default async function ClassDetailPage({
     classLevel === "full" || (classLevel === "scoped" && klass.teacherId === user.id);
   // 반 배정 = 학생 기록 변경 — 서버 createEnrollment 게이트(classes full ∥ students full)와 같은 모양(#77).
   // 강사(양쪽 scoped)는 열람 전용(원장 2026-08-18)이라 버튼 자체를 숨긴다.
-  const canAssign =
-    classLevel === "full" || (await accessLevelTenant(user.systemRole, "students")) === "full";
+  // 수강 종료 = 학생 기록 변경 — 서버 endSingleEnrollment의 게이트(canManageStudentRecords =
+  // students full)와 **같은 모양**이어야 한다(#77: 버튼은 보이는데 누르면 거절 방지).
+  const canManageStudents = await canManageTenant(user.systemRole, "students");
+  const canAssign = classLevel === "full" || canManageStudents;
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
@@ -403,6 +407,33 @@ export default async function ClassDetailPage({
                         <span className="text-amber bg-amber-soft border-amber/25 rounded-md border px-2 py-0.5 text-xs font-medium">
                           휴원
                         </span>
+                      ) : null}
+                      {/* 반에서 바로 끝낸다(원장 2026-09-01) — 학생 상세까지 들어가지 않게.
+                          다니는 학생 = **수강 종료**(학생 상세 수업 탭과 같은 한 벌) /
+                          예정 학생 = **배정 취소**(행 삭제). 둘을 섞지 말 것 — 종료는 기록을 남기고
+                          취소는 없던 일로 되돌린다. */}
+                      {canManageStudents ? (
+                        s.phase === "upcoming" ? (
+                          /* 예정(대기) 줄은 종료가 아니라 **배정 취소**다(원장 2026-09-01:
+                             *"배정 취소 하면 아무일도 없던것처럼 되는거지"*) — 아직 아무 기록도 안 붙었으므로
+                             행 자체를 지운다. 종료로 닫으면 시작일로 클램프돼 "하루짜리 수강"이 남는다. */
+                          <CancelAssignmentButton
+                            enrollmentId={s.enrollmentId}
+                            className={klass.className}
+                            startDate={s.enrolledAt}
+                            studentName={s.name}
+                          />
+                        ) : (
+                          <EndEnrollmentAction
+                            enrollmentId={s.enrollmentId}
+                            studentId={s.studentId}
+                            studentName={s.name}
+                            className={klass.className}
+                            currentEndDate={s.endDate}
+                            startDate={s.enrolledAt}
+                            today={today}
+                          />
+                        )
                       ) : null}
                     </div>
                   </li>

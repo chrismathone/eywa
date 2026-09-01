@@ -745,7 +745,9 @@ export async function getMonthlyAttendanceMatrix(
     supabase
       .from("enrollments")
       .select(
-        `id, start_date, end_date, on_hold, attendance_days,
+        // is_transferred = 반이동 종료 표식. 없으면 `isEnrolledOn`이 일반 종료로 보고
+        // **옮겨간 학생을 옛 반에 적용일 하루 더 남긴다**(2026-09-01 실측).
+        `id, start_date, end_date, on_hold, is_transferred, attendance_days,
        student:student_id ( id, name, grade, school )`,
       )
       .eq("class_id", classId)
@@ -806,7 +808,7 @@ export async function getMonthlyAttendanceMatrix(
   const studentMap = new Map<string, MatrixStudent>();
   // 파생 판정용 수강 구간 — 한 학생이 같은 반에 재등록해 여러 행일 수 있어 **전 구간**을 모은다
   // (studentMap은 첫 행만 담으므로 그것만 보면 재등록 이전 기간을 통째로 결석 처리한다).
-  const rangesById = new Map<string, { start: string; end: string | null }[]>();
+  const rangesById = new Map<string, EnrollSpan[]>();
   for (const e of enrollments ?? []) {
     if (e.on_hold) continue;
     if (e.end_date && e.end_date < startIso) continue;
@@ -815,7 +817,11 @@ export async function getMonthlyAttendanceMatrix(
       | undefined;
     if (!s) continue;
     const list = rangesById.get(s.id) ?? [];
-    list.push({ start: e.start_date as string, end: (e.end_date as string | null) ?? null });
+    list.push({
+      start: e.start_date as string,
+      end: (e.end_date as string | null) ?? null,
+      isTransferred: e.is_transferred === true,
+    });
     rangesById.set(s.id, list);
     if (!studentMap.has(s.id)) {
       studentMap.set(s.id, {

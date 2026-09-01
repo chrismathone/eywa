@@ -36,3 +36,38 @@ export function formatSessionUnits(n: number): string {
 export function effectiveUnits(sessionUnits: number | null | undefined): number {
   return sessionUnits ?? 1;
 }
+
+/** 0.1 단위 반올림 — 1.5를 여러 번 더할 때 생기는 부동소수 꼬리를 자른다(cell-display와 같은 규약). */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * **그날 합계 시수 → 교시별 시수**(합이 정확히 total).
+ *
+ * 원장 2026-09-01: *"출석부에서 5를 적으면 시수가 곱하기되서 … 입력된 숫자가 입력되도록 해야해"* +
+ * 확정: *"그날 합계 · '1'은 지금처럼"*. 출석부 격자는 **학생×날짜** 한 칸이라 거기 친 숫자는
+ * 그날 전체의 사실이다 — 그런데 그 칸 뒤에는 교시가 여럿일 수 있고, 화면 숫자는 교시 합
+ * ([`rollupDay`](./cell-display.ts))이다. 그래서 같은 값을 교시마다 쓰면 **교시 수만큼 부풀었다**
+ * (실측 2026-09-01: 3교시 반에 4를 친 칸이 12로 저장·표시, 급여로 흘러감).
+ *
+ * 🔴 나머지는 **첫 교시**가 갖는다 — 균등 분배가 소수 한 자리로 안 떨어져도(4÷3) 합은 정확히 total.
+ * 🔴 교시당 최소 0.1 — 더 잘게 못 나누면 null(호출부가 거절하고 사유를 띄운다). 값을 지어내지 않는다.
+ * ⚠️ **빈칸·"1"(=기본 배수)은 이 함수를 타지 않는다** — 그건 "교시마다 정상"이라는 뜻이고 그 규약은
+ *    그대로 둔다(원장 확정). 클릭으로 찍는 출석과도 같은 값이 유지된다.
+ */
+export function splitUnitsAcrossSlots(total: number, slots: number): number[] | null {
+  if (!Number.isFinite(total) || total <= 0) return null;
+  if (!Number.isInteger(slots) || slots < 1) return null;
+  if (slots === 1) return [round1(total)];
+  const per = Math.floor((total / slots) * 10) / 10;
+  if (per < 0.1) return null;
+  const first = round1(total - per * (slots - 1));
+  if (first <= 0 || first > MAX_SESSION_UNITS) return null;
+  return [first, ...Array<number>(slots - 1).fill(per)];
+}
+
+/** 저장값으로 정규화 — 1은 null(기본 배수)로 둔다(`parseSessionUnits`와 같은 규약). */
+export function toStoredUnits(n: number): number | null {
+  return n === 1 ? null : n;
+}

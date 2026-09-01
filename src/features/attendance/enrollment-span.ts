@@ -11,9 +11,20 @@
  *    막으면 이미 들어와 있는 기록을 고칠 길이 사라진다.
  */
 
+import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { addDays } from "@/lib/date-kst";
 
-export type EnrollSpan = { start: string; end: string | null };
+export type EnrollSpan = {
+  start: string;
+  end: string | null;
+  /**
+   * 이 구간이 **반 이동으로** 끝났나(`enrollments.is_transferred`) — 종료 규약이 갈린다.
+   * 반이동은 종료일 **당일에 이미 새 반**이고(RPC가 `old.end_date = new.start_date`로 닫는다),
+   * 일반 퇴원·수강 종료는 그날까지 재원이다.
+   * ⚠️ 모르면(undefined) **일반 종료로 본다** — 근거 없이 하루 일찍 지우지 않는다.
+   */
+  isTransferred?: boolean;
+};
 
 /** 반이동으로 볼 최대 공백(일). 이보다 벌어지면 '쉬었다 재등록'이지 이동이 아니다. */
 export const TRANSFER_GAP_DAYS = 14;
@@ -26,7 +37,10 @@ export const TRANSFER_GAP_DAYS = 14;
  */
 export function isEnrolledOn(date: string, spans: readonly EnrollSpan[]): boolean {
   if (spans.length === 0) return true;
-  return spans.some((s) => s.start <= date && (s.end === null || date <= s.end));
+  // 🔴 종료 규약을 여기서 다시 쓰지 않는다 — `date <= s.end`로 직접 판정하면 **반이동한 학생이
+  //    옛 반에 적용일 하루 더 남는다**(2026-09-01 실측: 자리·반별 월간 표에서 12명이 옛 반·새 반
+  //    양쪽에 섰다). [eligibility](@/features/enrollments/eligibility)가 유일한 판정자다.
+  return spans.some((s) => s.start <= date && !isEnrollmentEndedOn(s.end, date, s.isTransferred));
 }
 
 /** "2026-08" → 그 달의 첫날·마지막날. 말일은 다음 달 0일로 구해 28/29/30/31을 안 따진다. */

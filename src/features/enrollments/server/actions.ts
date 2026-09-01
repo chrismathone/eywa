@@ -594,10 +594,15 @@ export async function deleteEnrollment(
   // 🔴 super_admin은 새로 만드는 어떤 게이트도 **항상 통과**한다(원장 2026-08-13 결정).
   //    나머지는 owner(원장) 콘솔 권한 = full — 수강 날짜 정정(updateEnrollmentDates)과 같은 자물쇠다.
   //    화면도 같은 판정으로 버튼을 감추지만 화면 조건은 게이트가 아니다(#77 — 여기가 진짜 게이트).
-  const allowed =
+  const ownerLevel =
     (await isCurrentUserSuperAdmin()) ||
     (await accessLevelTenant(user.systemRole, "owner")) === "full";
-  if (!allowed) return { error: "수업 이력 삭제 권한이 없습니다 (원장 전용)" };
+  // **배정 취소** 경로(원장 2026-09-01: *"대기학생은 '수강 종료' 대신 '배정 취소'… 아무일도 없던것처럼"*) —
+  // 아직 **시작도 안 한** 배정은 배정을 만들 수 있는 사람(students full = 사무실)이 되돌릴 수 있다.
+  // 🔴 넓히는 범위를 좁게 못박는다: 아래에서 `start_date > 오늘`을 **다시 확인**하고, 붙은 기록이 있으면
+  //    공통 판정(enrollmentDeleteBlockReason)이 그대로 거절한다. 시작한 수강 삭제는 여전히 원장 전용이다.
+  const assignLevel = await canManageTenant(user.systemRole, "students");
+  if (!ownerLevel && !assignLevel) return { error: "수업 이력 삭제 권한이 없습니다 (원장 전용)" };
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
@@ -620,6 +625,15 @@ export async function deleteEnrollment(
 
   const studentId = enr.student_id as string;
   const classId = enr.class_id as string;
+
+  // 🔴 배정 취소 경로의 **진짜 자물쇠** — 원장이 아니면 **아직 시작 안 한 배정만** 지울 수 있다.
+  //    (화면은 '예정' 줄에만 버튼을 그리지만 화면 조건은 게이트가 아니다 — #77.)
+  //    시작한 수강은 되돌리는 게 아니라 끝내는 것이라 '수강 종료'로 보낸다(대안을 말해 준다).
+  if (!ownerLevel && !(String(enr.start_date) > kstToday())) {
+    return {
+      error: "이미 시작한 수강은 삭제할 수 없습니다 — 다니던 수업은 '수강 종료'로 끝내주세요(기록은 남습니다).",
+    };
+  }
 
   // 반 이름(스냅샷용) + 같은 (학생,반)의 다른 수강 + 붙은 기록 수. 서로 독립이라 병렬(B4).
   // 🔴 형제 수강은 **개수만이 아니라 `salary_tier`까지** 읽는다 — 정산 매핑(collectTierRows)이 티어가
@@ -691,6 +705,9 @@ export async function deleteEnrollment(
       },
       // 지울 때 붙어 있던 기록 수(0이 아니면 형제 수강이 있어 허용된 것) — 사후 역검수 재료.
       recordCounts: counts,
+      // '배정 취소'(아직 시작 전)로 지운 것인가 — 원장이 아닌 사람이 지울 수 있는 유일한 경우라
+      // 역검수에서 이 표식으로 두 경로를 가른다(감사로그가 유일한 흔적이다).
+      cancelledBeforeStart: String(enr.start_date) > kstToday(),
       hadSiblingEnrollment: hadSibling,
       // 급여 단가(티어) 판정 근거 — 정산이 줄었다는 제보가 오면 여기부터 본다.
       thisRowHasTier,

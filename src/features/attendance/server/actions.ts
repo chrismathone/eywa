@@ -23,7 +23,7 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
-import { parseSessionUnits } from "../session-units";
+import { parseSessionUnits, splitUnitsAcrossSlots, toStoredUnits } from "../session-units";
 import { hasSaveTarget, pickSaveTargets, type SaveTargets } from "../save-targets";
 import {
   absenceMemo,
@@ -568,15 +568,44 @@ export async function setAttendanceCell(input: {
       via,
     );
     if (noteProvided) patch.note = noteVal;
-    if (unitsProvided) patch.session_units = unitsVal;
+    /**
+     * 🔴 **그날 칸(교시 미지정)에 명시한 시수는 그날 합계다**(원장 2026-09-01 확정) — 교시가 여럿이면
+     *    같은 값을 교시마다 쓰면 안 된다. 화면 숫자가 교시 **합**이라(`rollupDay`) 교시 수만큼 부풀고,
+     *    그 값이 급여·회차 소비로 흘러간다(실측: 3교시 반에 4를 친 칸이 12로 저장·표시).
+     *    → 교시별로 **나눠 담아** 합이 정확히 친 숫자가 되게 한다(`splitUnitsAcrossSlots`).
+     * ⚠️ 나누는 건 **그날 칸(slot === null)일 때뿐**이다. 교시를 지정한 저장(ECS)의 대상 2건은
+     *    "그 교시 + 옛 day-level 행"이라 **같은 한 수업**이다 — 거기서 나누면 진짜로 반이 된다.
+     * ⚠️ 빈칸·"1"(unitsVal === null)은 "교시마다 기본"이라는 뜻이라 종전 그대로 둔다(원장 확정).
+     */
+    const daySplitNeeded = unitsProvided && unitsVal !== null && slot === null && updateIds.length > 1;
+    const dayCellSplit = daySplitNeeded ? splitUnitsAcrossSlots(unitsVal!, updateIds.length) : null;
+    if (daySplitNeeded && !dayCellSplit) {
+      // 교시당 0.1도 안 되게 잘게 쪼개야 하는 값 — 값을 지어내지 않고 사유를 돌려준다.
+      return {
+        error: `이 날은 교시가 ${updateIds.length}개라 시수 ${unitsVal}을(를) 교시별로 나눌 수 없습니다 — 더 큰 값을 넣거나 교시별로 입력해 주세요.`,
+      };
+    }
+    if (unitsProvided && !dayCellSplit) patch.session_units = unitsVal;
     if (promoteIds.length > 0) {
       // 승격(옛 "그날 전체" 행 → 그 교시). 승격 대상만 있을 때만 발생하므로 한 문장으로 끝난다.
       const wrote = await updateWithVia(supabase, { ...patch, slot_start: slot }, promoteIds);
       if (wrote.error) return { error: wrote.error };
     }
     if (updateIds.length > 0) {
-      const wrote = await updateWithVia(supabase, patch, updateIds);
-      if (wrote.error) return { error: wrote.error };
+      if (dayCellSplit) {
+        // 교시마다 값이 달라 한 문장으로 못 쓴다 — 행별로(대상이 그날 교시 수라 많아야 서너 건).
+        for (let i = 0; i < updateIds.length; i++) {
+          const wrote = await updateWithVia(
+            supabase,
+            { ...patch, session_units: toStoredUnits(dayCellSplit[i]!) },
+            [updateIds[i]!],
+          );
+          if (wrote.error) return { error: wrote.error };
+        }
+      } else {
+        const wrote = await updateWithVia(supabase, patch, updateIds);
+        if (wrote.error) return { error: wrote.error };
+      }
     }
   } else {
     const row = withVia(
@@ -1237,11 +1266,12 @@ export async function setAttendanceRange(input: {
     class_id: string;
     student_id: string;
     session_date: string;
+    slot_start: string | null;
     recorded_at: string | null;
   }>(studentIds, (chunk, from, to) =>
     supabase
       .from("attendance_records")
-      .select("id, class_id, student_id, session_date, recorded_at")
+      .select("id, class_id, student_id, session_date, slot_start, recorded_at")
       .in("session_date", dates)
       .in("class_id", classIds)
       .in("student_id", chunk)
@@ -1263,16 +1293,26 @@ export async function setAttendanceRange(input: {
     return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
   }
 
-  const latestId = new Map<string, string>();
+  /**
+   * 칸(학생·반·날짜)마다 **교시별 최신 1행**. 청크별 desc 정렬이라 각 (칸,교시)의 첫 행이 최신이다
+   * (`pickSaveTargets`의 교시 미지정 가지와 **같은 규칙** — 출석부 한 칸 = 그날 하나의 사실).
+   * 🔴 종전엔 칸당 **한 행**만 고쳐서, 교시가 여럿인 날은 나머지 교시가 옛 상태·옛 시수로 남았다
+   *    (범위로 결석을 되돌려도 한 교시만 돌아오는 꼴). 단건 저장·반별 폼과 규칙을 맞춘다.
+   */
+  const cellSlotIds = new Map<string, string[]>();
+  const seenSlot = new Set<string>();
   for (const r of mine) {
     const k = `${r.student_id}::${r.class_id}::${r.session_date}`;
-    if (!latestId.has(k)) latestId.set(k, r.id); // 청크별 desc 정렬 → 각 조합의 첫 행이 최신
+    const slotKey = `${k}::${r.slot_start ? String(r.slot_start).slice(0, 5) : "DAY"}`;
+    if (seenSlot.has(slotKey)) continue;
+    seenSlot.add(slotKey);
+    (cellSlotIds.get(k) ?? cellSlotIds.set(k, []).get(k)!).push(r.id);
   }
   const nowIso = new Date().toISOString();
-  const updateIds = allowed
-    .map((c) => latestId.get(`${c.studentId}::${c.classId}::${c.sessionDate}`))
-    .filter((id): id is string => !!id);
-  const inserts = allowed.filter((c) => !latestId.has(`${c.studentId}::${c.classId}::${c.sessionDate}`));
+  const updateIds = allowed.flatMap(
+    (c) => cellSlotIds.get(`${c.studentId}::${c.classId}::${c.sessionDate}`) ?? [],
+  );
+  const inserts = allowed.filter((c) => !cellSlotIds.has(`${c.studentId}::${c.classId}::${c.sessionDate}`));
 
   const rangeViaByClass = new Map<string, RecordedVia>();
   for (const classId of classIds) {
@@ -1280,20 +1320,40 @@ export async function setAttendanceRange(input: {
   }
 
   if (updateIds.length > 0) {
-    const byVia = new Map<RecordedVia, string[]>();
+    /**
+     * 🔴 명시한 시수는 **그날 합계**다(원장 2026-09-01 확정) — 교시가 여럿인 칸은 나눠 담는다.
+     *    단건 저장(setAttendanceCell)과 **같은 규칙**이어야 타이핑과 붙여넣기가 다른 숫자를 남기지 않는다.
+     * ⚠️ 빈칸·"1"(unitsVal === null)은 종전대로 "교시마다 기본".
+     * ⚠️ 교시당 0.1도 안 되게 쪼개야 하는 칸은 **시수만 건드리지 않는다**(상태는 넣는다) — 범위 작업은
+     *    수십 칸을 한 번에 다루므로 한 칸 때문에 전부 거절하면 더 나쁘다. 값을 지어내지도 않는다.
+     * 기준이 행마다 달라 (via, 시수)로 묶어 배치한다 — 칸이 많아도 문장 수는 몇 개다.
+     */
+    const byKey = new Map<string, { via: RecordedVia; units: number | null | undefined; ids: string[] }>();
     for (const c of allowed) {
-      const id = latestId.get(`${c.studentId}::${c.classId}::${c.sessionDate}`);
-      if (!id) continue;
-      const via = rangeViaByClass.get(c.classId) ?? "teacher";
+      const ids = cellSlotIds.get(`${c.studentId}::${c.classId}::${c.sessionDate}`) ?? [];
+      if (ids.length === 0) continue;
       // 범위 채우기는 월간 격자 전용 — 데스크 게이트를 걸지 않는다(오클릭 결석을 여기서 되돌린다).
-      (byVia.get(via) ?? byVia.set(via, []).get(via)!).push(id);
+      const via = rangeViaByClass.get(c.classId) ?? "teacher";
+      const splitNeeded = unitsProvided && unitsVal !== null && ids.length > 1;
+      const parts = splitNeeded ? splitUnitsAcrossSlots(unitsVal!, ids.length) : null;
+      ids.forEach((id, i) => {
+        const units = !unitsProvided
+          ? undefined
+          : parts
+            ? toStoredUnits(parts[i]!)
+            : splitNeeded
+              ? undefined // 못 나눈 칸 — 시수는 그대로 둔다
+              : unitsVal;
+        const k = `${via}::${units === undefined ? "keep" : String(units)}`;
+        (byKey.get(k) ?? byKey.set(k, { via, units, ids: [] }).get(k)!).ids.push(id);
+      });
     }
-    for (const [via, ids] of byVia) {
+    for (const { via, units, ids } of byKey.values()) {
       const patch: Record<string, unknown> = withVia(
         { status, recorded_by: user.id, recorded_at: nowIso },
         via,
       );
-      if (unitsProvided) patch.session_units = unitsVal;
+      if (units !== undefined) patch.session_units = units;
       for (let i = 0; i < ids.length; i += CHUNK) {
         const wrote = await updateWithVia(supabase, patch, ids.slice(i, i + CHUNK));
         if (wrote.error) return { error: wrote.error };

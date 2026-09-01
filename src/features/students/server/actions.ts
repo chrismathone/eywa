@@ -687,6 +687,10 @@ export async function endSingleEnrollment(
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");
+  // 반 상세에서도 바로 종료하므로(원장 2026-09-01) 그 반 화면·목록도 함께 갱신한다 —
+  // 호출부의 router.refresh()는 그 문서 하나만 다시 그린다(창이 여러 개면 나머지는 stale).
+  if (res.classId) revalidatePath(`/classes/${res.classId}`);
+  revalidatePath("/classes");
   return undefined;
 }
 

@@ -14,7 +14,7 @@ import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
 import { StudentAssignAction } from "../_components/student-assign-action";
-import { EndEnrollmentButton } from "../_components/end-enrollment-button";
+import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
 import { DeleteEnrollmentButton } from "../_components/delete-enrollment-button";
 import { MoveEnrollmentButton } from "../_components/move-enrollment-button";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
@@ -274,7 +274,13 @@ function Section({
                                 classes={moveTargets}
                               />
                             ) : null}
-                            <EndEnrollmentButton enrollmentId={r.enrollmentId} studentId={studentId} className={r.className} />
+                            <EndEnrollmentAction
+                              enrollmentId={r.enrollmentId}
+                              studentId={studentId}
+                              className={r.className}
+                              currentEndDate={r.endDate}
+                              startDate={r.startDate}
+                            />
                           </>
                         ) : null}
                         {canDeleteEnrollment ? (

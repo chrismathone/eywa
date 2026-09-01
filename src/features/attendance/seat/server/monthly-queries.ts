@@ -142,13 +142,17 @@ async function fetchEnrollments(
     class_id: string;
     start_date: string;
     end_date: string | null;
+    is_transferred: boolean | null;
     on_hold: boolean;
     attendance_days: string[] | null;
     student: { id: string; name: string; school: string | null; grade: string | null }[] | { id: string; name: string; school: string | null; grade: string | null } | null;
   }>(classIds, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("class_id, start_date, end_date, on_hold, attendance_days, student:student_id ( id, name, school, grade )")
+      // is_transferred 없이는 반이동 종료를 일반 종료로 오인해 **옛 반 칸이 적용일 하루 더 재원**으로 그려진다.
+      .select(
+        "class_id, start_date, end_date, is_transferred, on_hold, attendance_days, student:student_id ( id, name, school, grade )",
+      )
       .in("class_id", chunk)
       .lte("start_date", end)
       .or(`end_date.is.null,end_date.gte.${start}`)
@@ -167,6 +171,7 @@ async function fetchEnrollments(
       grade: s.grade,
       startDate: e.start_date,
       endDate: e.end_date,
+      isTransferred: e.is_transferred === true,
       onHold: e.on_hold,
       attendanceDays: e.attendance_days,
     });
