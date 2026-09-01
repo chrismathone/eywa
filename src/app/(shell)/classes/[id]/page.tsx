@@ -10,6 +10,7 @@ import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
 import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
+import { CancelAssignmentButton } from "@/features/enrollments/components/cancel-assignment-button";
 import { kstToday } from "@/lib/date-kst";
 import {
   getClassAttendanceStats,
@@ -407,20 +408,32 @@ export default async function ClassDetailPage({
                           휴원
                         </span>
                       ) : null}
-                      {/* 반에서 바로 수강 종료(원장 2026-09-01) — 학생 상세까지 들어가지 않게.
-                          학생 상세 수업 탭과 **같은 한 벌**을 쓴다(같은 질문·같은 서버 액션).
-                          ⚠️ 아직 시작 안 한 배정(upcoming)은 제외 — 종료일이 시작일로 클램프되어 두 갈래가
-                             같은 결과가 된다(그건 종료가 아니라 배정 취소라 학생 상세가 맡는다). */}
-                      {canManageStudents && s.phase !== "upcoming" ? (
-                        <EndEnrollmentAction
-                          enrollmentId={s.enrollmentId}
-                          studentId={s.studentId}
-                          studentName={s.name}
-                          className={klass.className}
-                          currentEndDate={s.endDate}
-                          startDate={s.enrolledAt}
-                          today={today}
-                        />
+                      {/* 반에서 바로 끝낸다(원장 2026-09-01) — 학생 상세까지 들어가지 않게.
+                          다니는 학생 = **수강 종료**(학생 상세 수업 탭과 같은 한 벌) /
+                          예정 학생 = **배정 취소**(행 삭제). 둘을 섞지 말 것 — 종료는 기록을 남기고
+                          취소는 없던 일로 되돌린다. */}
+                      {canManageStudents ? (
+                        s.phase === "upcoming" ? (
+                          /* 예정(대기) 줄은 종료가 아니라 **배정 취소**다(원장 2026-09-01:
+                             *"배정 취소 하면 아무일도 없던것처럼 되는거지"*) — 아직 아무 기록도 안 붙었으므로
+                             행 자체를 지운다. 종료로 닫으면 시작일로 클램프돼 "하루짜리 수강"이 남는다. */
+                          <CancelAssignmentButton
+                            enrollmentId={s.enrollmentId}
+                            className={klass.className}
+                            startDate={s.enrolledAt}
+                            studentName={s.name}
+                          />
+                        ) : (
+                          <EndEnrollmentAction
+                            enrollmentId={s.enrollmentId}
+                            studentId={s.studentId}
+                            studentName={s.name}
+                            className={klass.className}
+                            currentEndDate={s.endDate}
+                            startDate={s.enrolledAt}
+                            today={today}
+                          />
+                        )
                       ) : null}
                     </div>
                   </li>

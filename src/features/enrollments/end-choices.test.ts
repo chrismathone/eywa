@@ -63,10 +63,30 @@ describe("배선 — 수강 종료 표면 둘이 같은 한 벌을 쓴다", () =
     }
   });
 
-  it("🔴 반 상세 버튼은 학생 쓰기(full) + 시작한 수강에만 — 서버 게이트와 같은 모양(#77)", () => {
+  it("🔴 반 상세 버튼은 학생 쓰기(full)만 — 서버 게이트와 같은 모양(#77)", () => {
     const src = read("app/(shell)/classes/[id]/page.tsx");
     expect(src).toContain('canManageTenant(user.systemRole, "students")');
-    expect(src).toContain('canManageStudents && s.phase !== "upcoming"');
+    expect(src).toContain("{canManageStudents ? (");
+  });
+
+  it("🔴 다니는 학생=수강 종료 / 예정 학생=배정 취소로 갈라진다(원장 2026-09-01)", () => {
+    const src = read("app/(shell)/classes/[id]/page.tsx");
+    expect(src).toContain('s.phase === "upcoming" ? (');
+    expect(src).toContain("<CancelAssignmentButton");
+    expect(src).toContain("<EndEnrollmentAction");
+  });
+
+  it("🔴 배정 취소는 서버 단일 진입점(deleteEnrollment)만 부른다", () => {
+    const src = read("features/enrollments/components/cancel-assignment-button.tsx");
+    expect(src).toContain("deleteEnrollment");
+    expect(src).not.toContain('from("enrollments")');
+  });
+
+  it("🔴 서버가 '아직 시작 안 한 배정인가'를 다시 확인한다(화면 조건은 게이트가 아니다)", () => {
+    const src = read("features/enrollments/server/actions.ts");
+    expect(src).toContain("if (!ownerLevel && !(String(enr.start_date) > kstToday()))");
+    // 원장 전용 자물쇠를 통째로 푸는 것이 아니다 — 시작한 수강은 여전히 원장만.
+    expect(src).toContain("const ownerLevel =");
   });
 
   it("🔴 종료는 서버 단일 진입점(endSingleEnrollment)만 부른다", () => {
