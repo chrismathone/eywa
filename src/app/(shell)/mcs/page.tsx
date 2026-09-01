@@ -63,6 +63,17 @@ export default async function McsLandingPage({
           currentTitle="눌러서 이번 달로"
         />
         <span className="text-text-faint text-xs font-bold">반 {data.cards.length}개</span>
+        {(() => {
+          // 화면에서 세지 않고 여기서 한 번만 센다 — 0으로 나누는 자리를 흩으면 하나는 함정이 된다.
+          const written = data.cards.reduce((a, c) => a + c.written, 0);
+          const shown = data.cards.reduce((a, c) => a + c.shown, 0);
+          if (shown === 0) return null;
+          return (
+            <span className="text-text-dim num text-xs font-bold">
+              작성 {written}/{shown} ({Math.round((written / shown) * 100)}%)
+            </span>
+          );
+        })()}
       </div>
 
       {data.emptyReason ? (
@@ -84,6 +95,45 @@ export default async function McsLandingPage({
                     <span className="truncate text-[13.5px] font-extrabold">{card.className}</span>
                     <span className="text-text-faint num text-[11.5px]">
                       수업 {card.dayCount}일 · 학생 {card.studentCount}명
+                    </span>
+                    {/* 작성도 — 원장 2026-09-01 "영어처럼 작성도를 프로그레스바처럼 볼 수 있으면".
+                        🔴 분모는 **온 칸**(기록 + 왔는데 안 적힘)이라 시트 툴바와 같은 수를 말한다.
+                        🔴 `shown === 0`이면 아직 아무도 안 온 달이라 **막대를 그리지 않는다** —
+                           0을 100%로 그리면 다음 달 목록이 전부 꽉 찬 막대가 된다(ECS의 `—`와 같은 결). */}
+                    <span className="mt-1 flex items-center gap-1.5">
+                      {card.elapsedDays === 0 ? (
+                        <span
+                          className="text-text-faint text-[11.5px]"
+                          title="이 달에 아직 수업이 지나지 않았습니다"
+                        >
+                          아직 수업 전
+                        </span>
+                      ) : card.shown === 0 ? (
+                        // 달은 지났는데 온 학생이 없다 — '아직 수업 전'과 다른 사실이라 다르게 적는다.
+                        <span
+                          className="text-text-faint text-[11.5px]"
+                          title="이 달 수업일에 출석 기록이 없습니다(전원 결석이거나 출결을 안 찍었습니다)"
+                        >
+                          출결 기록 없음
+                        </span>
+                      ) : (
+                        <>
+                          <span className="num text-foreground w-12 shrink-0 text-[12px] font-bold">
+                            {card.written}/{card.shown}
+                          </span>
+                          <span className="bg-bg-soft h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
+                            <span
+                              className={`block h-full rounded-full ${
+                                card.pct === 100 ? "bg-green" : "bg-primary"
+                              }`}
+                              style={{ width: `${card.pct}%` }}
+                            />
+                          </span>
+                          <span className="num text-text-faint w-9 shrink-0 text-right text-[11.5px]">
+                            {card.pct}%
+                          </span>
+                        </>
+                      )}
                     </span>
                   </Link>
                 ))}

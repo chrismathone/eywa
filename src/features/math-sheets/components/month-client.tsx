@@ -3,7 +3,13 @@
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PeriodNav } from "@/components/period-nav";
-import { setMyMcsMonthView } from "../server/actions";
+import { copyGoalsFromPreviousMonth, setMyMcsFontSize, setMyMcsMonthView } from "../server/actions";
+import {
+  MCS_FONT_SIZES,
+  MCS_FONT_SIZE_LABEL,
+  MCS_FONT_SIZE_ZOOM,
+  type McsFontSize,
+} from "../font-size";
 import type { McsMonthView } from "../view-prefs";
 import type { MathSheetMonthData } from "../server/month-queries";
 import { MonthSheet } from "./month-sheet";
@@ -22,6 +28,9 @@ import { useState } from "react";
  */
 export function MonthClient({ data }: { data: MathSheetMonthData }) {
   const [view, setView] = useState<McsMonthView>(data.view);
+  const [fontSize, setFontSize] = useState<McsFontSize>(data.fontSize);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [copying, setCopying] = useState(false);
   const { goals, setField, flushAll, savedAt, error, dismissError } = useStudentGoals({
     classId: data.classId,
     month: data.month,
@@ -31,6 +40,44 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
   const hrefFor = (month: string) => `/mcs/${data.classId}/month?month=${month}`;
   const thisMonth = data.today.slice(0, 7);
   const relation = data.month === thisMonth ? "current" : data.month < thisMonth ? "past" : "future";
+
+  const chooseFont = (next: McsFontSize) => {
+    if (next === fontSize) return;
+    setFontSize(next);
+    void setMyMcsFontSize(next);
+  };
+
+  /**
+   * 지난 달 목표 가져오기 — **빈 칸만** 채운다(서버가 다시 판정한다).
+   * 🔴 화면을 새로 그려야 값이 보이므로 저장 flush 뒤 하드 내비게이션으로 다시 읽는다
+   *    (서버 액션 직후의 router.push는 삼켜진다 — [[#102]]).
+   */
+  const copyPrev = async () => {
+    if (copying) return;
+    setCopying(true);
+    setCopyMsg(null);
+    try {
+      await flushAll();
+      const res = await copyGoalsFromPreviousMonth({
+        classId: data.classId,
+        month: data.month,
+        studentIds: data.students.map((s) => s.studentId),
+      });
+      if (!res.ok) {
+        setCopyMsg(`가져오지 못했습니다: ${res.error}`);
+        return;
+      }
+      if (res.copied === 0) {
+        setCopyMsg("가져올 목표가 없습니다(지난 달 목표가 없거나 이미 다 적혀 있습니다).");
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setCopyMsg("가져오지 못했습니다.");
+    } finally {
+      setCopying(false);
+    }
+  };
 
   const chooseView = (next: McsMonthView) => {
     if (next === view) return;
@@ -80,20 +127,55 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
             담임 {data.teacherName}
           </span>
         ) : null}
+        {view === "sheet" && data.canEdit && data.goalsStatus === "ok" ? (
+          <button
+            type="button"
+            onClick={() => void copyPrev()}
+            disabled={copying}
+            title="지난 달 목표를 이 달의 빈 칸에만 채웁니다(이미 적은 것은 그대로)"
+            className="border-line-strong hover:bg-bg-soft cursor-pointer rounded-lg border px-2.5 py-1 text-xs font-bold disabled:opacity-60"
+          >
+            {copying ? "가져오는 중…" : "지난 달 목표 가져오기"}
+          </button>
+        ) : null}
         <span className="flex-1" />
-        {data.fill.unwritten > 0 ? (
+        {/* 글씨 크기 — 원스크린·ECS와 **같은 어휘·같은 배율**(원장이 화면을 오가며 쓴다). */}
+        <span className="border-line-strong inline-flex overflow-hidden rounded-lg border">
+          {MCS_FONT_SIZES.map((f, i) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={f === fontSize}
+              onClick={() => chooseFont(f)}
+              className={`cursor-pointer px-2 py-1 text-[12px] font-bold transition ${
+                i > 0 ? "border-line-faint border-l" : ""
+              } ${f === fontSize ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
+            >
+              {MCS_FONT_SIZE_LABEL[f]}
+            </button>
+          ))}
+        </span>
+        {/* 🔴 아직 한 번도 안 지난 달은 '미작성'이 아니다 — 안 온 수업을 안 적었다고 재촉하지 않는다. */}
+        {data.elapsedDays === 0 ? (
+          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
+            아직 수업 전
+          </span>
+        ) : null}
+        {data.elapsedDays > 0 && data.fill.unwritten > 0 ? (
           <span className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-[11px] font-bold">
             미작성 {data.fill.unwritten}칸
           </span>
         ) : null}
-        {data.fill.untracked > 0 ? (
+        {data.elapsedDays > 0 && data.fill.untracked > 0 ? (
           <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
             흔적 없음 {data.fill.untracked}칸
           </span>
         ) : null}
-        <span className="bg-muted text-text-faint num rounded-full px-2 py-0.5 text-[11px] font-bold">
-          기록 {data.fill.written} / {data.fill.written + data.fill.unwritten}
-        </span>
+        {data.elapsedDays > 0 ? (
+          <span className="bg-muted text-text-faint num rounded-full px-2 py-0.5 text-[11px] font-bold">
+            기록 {data.fill.written} / {data.fill.written + data.fill.unwritten}
+          </span>
+        ) : null}
         {savedAt ? <span className="text-green text-[11px] font-bold">저장됨</span> : null}
       </div>
 
@@ -109,6 +191,16 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
         </p>
       ) : null}
 
+      {copyMsg ? (
+        <button
+          type="button"
+          onClick={() => setCopyMsg(null)}
+          className="border-line-strong bg-bg-soft text-text-dim cursor-pointer rounded-lg border-l-[3px] px-3 py-2 text-left text-xs"
+        >
+          {copyMsg} (눌러서 닫기)
+        </button>
+      ) : null}
+
       {error ? (
         <button
           type="button"
@@ -120,6 +212,7 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
         </button>
       ) : null}
 
+      <div style={fontSize === "sm" ? undefined : { zoom: MCS_FONT_SIZE_ZOOM[fontSize] }}>
       {view === "sheet" ? (
         <MonthSheet
           data={data}
@@ -130,6 +223,7 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
       ) : (
         <MonthTrack data={data} />
       )}
+      </div>
     </div>
   );
 }

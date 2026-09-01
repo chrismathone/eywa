@@ -1,11 +1,12 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
-import { kstMonth, kstToday, monthLabel } from "@/lib/date-kst";
+import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
 import { classDaysOf, normalizeMonth, type MathScheduleRow } from "../lib/class-days";
 import { isOnMathRoster, rosterAnchorOf, type MathEnrollmentWindow } from "../lib/roster";
+import { cellStateOf, foldDayAttendance, tallyCells, type MathCellState } from "../lib/cell-state";
 import { mcsVisibleClassFilter } from "./access";
 
 /**
@@ -19,9 +20,24 @@ export type MathClassCard = {
   classId: string;
   className: string;
   teacherName: string | null;
-  /** 그 달 수업일 수 — 카드의 유일한 숫자(작성률은 반을 열어야 알 수 있다). */
   dayCount: number;
+  /**
+   * 그 달 수업일 중 **이미 지난 날**. 0이면 아직 한 번도 안 한 달이다.
+   * 🔴 `shown === 0`과 뜻이 다르다 — 달은 지났는데 아무도 안 온 반도 `shown === 0`이라,
+   *    둘을 안 가르면 그 반이 '아직 수업 전'으로 보인다(사실은 전원 결석이다).
+   */
+  elapsedDays: number;
   studentCount: number;
+  /** 수업 기록이 있는 학생-수업일. */
+  written: number;
+  /**
+   * 작성률의 **분모** = 온 칸(기록 있음 + 왔는데 안 적힘).
+   * 🔴 결석·무기록은 뺀다 — 시트 툴바와 **같은 산식**이라야 카드와 시트가 같은 수를 말한다.
+   * 🔴 이 값이 0이면 아직 아무도 안 온 것이라 **막대를 그리지 않는다**(`—`). 0을 100%로 그리면
+   *    다음 달 목록이 전부 꽉 찬 막대로 보인다(9월을 8/31에 여는 것이 정확히 그 경우다).
+   */
+  shown: number;
+  pct: number;
 };
 
 export type MathLandingEmptyReason = "no-classes" | "no-scoped-classes" | "no-month-classes";
@@ -33,6 +49,9 @@ export type MathLandingData = {
   emptyReason: MathLandingEmptyReason | null;
   byTeacher: { teacherName: string; cards: MathClassCard[] }[];
 };
+
+type LandingReportRow = { class_id: string; student_id: string; report_date: string };
+type LandingAttRow = { class_id: string; student_id: string; session_date: string; status: string | null };
 
 type LandingSchedRow = {
   class_id: string;
@@ -60,8 +79,9 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
 
   const month = normalizeMonth(monthRaw, kstMonth());
   // 카드 인원도 시트와 **같은 기준일**로 센다 — 갈리면 카드엔 6명인데 열면 5명이 된다.
-  const anchor = rosterAnchorOf(month, kstToday());
-  const monthStart = `${month}-01`;
+  const today = kstToday();
+  const anchor = rosterAnchorOf(month, today);
+  const { from: monthStart, to: monthEnd } = monthRange(month);
   const admin = createAdminClient();
   const tenantId = user.tenantId;
 
@@ -94,7 +114,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
   const classIds = new Set(scoped.map((c) => String(c.id)));
   const teacherIds = [...new Set(scoped.map((c) => c.teacher_id).filter(Boolean))].map(String);
 
-  const [schedRows, enrRows, teacherRows] = await Promise.all([
+  const [schedRows, enrRows, teacherRows, reportRows, attRows] = await Promise.all([
     fetchAllPaged<LandingSchedRow>((f, t) =>
       admin
         .from("class_schedules")
@@ -114,6 +134,30 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     teacherIds.length
       ? admin.from("users").select("id, display_name").eq("tenant_id", tenantId).in("id", teacherIds)
       : Promise.resolve({ data: [] as { id: string; display_name: string | null }[] }),
+    // 🔴 작성률은 시트와 **같은 재료**로 센다 — 보고서만 보면 결석이 미작성으로 둔갑한다.
+    //    반 id로 좁혀서 청크+페이지네이션(B2·B3): 62개 반을 한 `.in()`에 넣으면 URL이 길어진다.
+    fetchAllPagedInChunks<LandingReportRow>([...classIds], (chunk, f, t) =>
+      admin
+        .from("lesson_reports")
+        .select("class_id, student_id, report_date")
+        .eq("tenant_id", tenantId)
+        .in("class_id", chunk)
+        .gte("report_date", monthStart)
+        .lte("report_date", monthEnd)
+        .order("id")
+        .range(f, t),
+    ),
+    fetchAllPagedInChunks<LandingAttRow>([...classIds], (chunk, f, t) =>
+      admin
+        .from("attendance_records")
+        .select("class_id, student_id, session_date, status")
+        .eq("tenant_id", tenantId)
+        .in("class_id", chunk)
+        .gte("session_date", monthStart)
+        .lte("session_date", monthEnd)
+        .order("id")
+        .range(f, t),
+    ),
   ]);
 
   const teacherName = new Map(
@@ -139,27 +183,42 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
   }
 
   // 🔴 **재원 학생만** 센다(원장 2026-08-31) — 시트가 세우는 행과 같은 규칙(`isOnMathRoster`).
-  //    ⚠️ 여기선 학원 퇴원(`students.withdrawn_at`)까지는 안 본다(반 66개 × 학생 조회는 목록 화면에
-  //    무겁다). 실측 2026-08-31 기준 **어긋나는 학생 0명**(수학 수강이 열린 채 퇴원한 사람이 없다) —
-  //    그런 사람이 생기면 카드 인원만 1명 많아진다. 정확한 명단은 시트가 낸다.
-  const enrByStudentClass = new Map<string, MathEnrollmentWindow[]>();
+  const enrByClass = new Map<string, Map<string, MathEnrollmentWindow[]>>();
   for (const e of enrRows) {
     const cid = String(e.class_id);
     if (!classIds.has(cid)) continue;
-    const key = `${cid}|${String(e.student_id)}`;
-    const list = enrByStudentClass.get(key) ?? [];
+    const byStudent = enrByClass.get(cid) ?? new Map<string, MathEnrollmentWindow[]>();
+    const sid = String(e.student_id);
+    const list = byStudent.get(sid) ?? [];
     list.push({
       startDate: e.start_date ? String(e.start_date).slice(0, 10) : null,
       endDate: e.end_date ? String(e.end_date).slice(0, 10) : null,
       isTransferred: e.is_transferred === true,
     });
-    enrByStudentClass.set(key, list);
+    byStudent.set(sid, list);
+    enrByClass.set(cid, byStudent);
   }
-  const studentCount = new Map<string, number>();
-  for (const [key, list] of enrByStudentClass) {
-    if (!isOnMathRoster(list, null, anchor)) continue;
-    const cid = key.split("|")[0]!;
-    studentCount.set(cid, (studentCount.get(cid) ?? 0) + 1);
+
+  // 퇴원까지 봐야 카드와 시트가 **같은 명단**을 센다(시트는 이미 본다 — 갈리면 카드 6명·시트 5명이 된다).
+  const rosterStudentIds = [...new Set([...enrByClass.values()].flatMap((m) => [...m.keys()]))];
+  const studentRows = rosterStudentIds.length
+    ? await fetchInChunks(rosterStudentIds, (chunk) =>
+        admin.from("students").select("id, withdrawn_at").eq("tenant_id", tenantId).in("id", chunk),
+      )
+    : [];
+  const withdrawnById = new Map(
+    studentRows.map((r) => [String(r.id), r.withdrawn_at ? String(r.withdrawn_at).slice(0, 10) : null]),
+  );
+
+  const reportKeys = new Set(
+    reportRows.map((r) => `${String(r.class_id)}|${String(r.report_date).slice(0, 10)}|${String(r.student_id)}`),
+  );
+  const attByKey = new Map<string, string[]>();
+  for (const a of attRows) {
+    const key = `${String(a.class_id)}|${String(a.session_date).slice(0, 10)}|${String(a.student_id)}`;
+    const list = attByKey.get(key) ?? [];
+    list.push(String(a.status));
+    attByKey.set(key, list);
   }
 
   const cards: MathClassCard[] = [];
@@ -167,12 +226,38 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
     const cid = String(c.id);
     const days = classDaysOf(month, schedByClass.get(cid) ?? []);
     if (days.length === 0) continue; // 🔴 그 달에 안 도는 반은 카드를 만들지 않는다
+    const byStudent = enrByClass.get(cid) ?? new Map<string, MathEnrollmentWindow[]>();
+
+    let studentCount = 0;
+    const states: MathCellState[] = [];
+    for (const [sid, list] of byStudent) {
+      const withdrawnAt = withdrawnById.get(sid) ?? null;
+      if (!isOnMathRoster(list, withdrawnAt, anchor)) continue;
+      studentCount += 1;
+      for (const day of days) {
+        states.push(
+          cellStateOf({
+            enrollments: list,
+            withdrawnAt,
+            date: day.date,
+            attendance: foldDayAttendance(attByKey.get(`${cid}|${day.date}|${sid}`) ?? []),
+            hasReport: reportKeys.has(`${cid}|${day.date}|${sid}`),
+          }),
+        );
+      }
+    }
+    // 🔴 시트 툴바와 **같은 산식**(`tallyCells`) — 카드와 시트가 다른 수를 말하면 둘 다 못 믿는다.
+    const fill = tallyCells(states);
     cards.push({
       classId: cid,
       className: String(c.class_name),
       teacherName: c.teacher_id ? (teacherName.get(String(c.teacher_id)) ?? null) : null,
       dayCount: days.length,
-      studentCount: studentCount.get(cid) ?? 0,
+      elapsedDays: days.filter((d) => d.date <= today).length,
+      studentCount,
+      written: fill.written,
+      shown: fill.written + fill.unwritten,
+      pct: fill.pct,
     });
   }
 

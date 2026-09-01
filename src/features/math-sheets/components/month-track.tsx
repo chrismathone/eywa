@@ -35,11 +35,23 @@ function moveWidth(row: { startPosition: number | null; lastPosition: number | n
   return Math.min(100, Math.round((moved / 20) * 100));
 }
 
-function StudentCard({ stu, days }: { stu: MathStudentRow; days: MathSheetMonthData["days"] }) {
+function StudentCard({
+  stu,
+  days,
+  elapsedDays,
+}: {
+  stu: MathStudentRow;
+  days: MathSheetMonthData["days"];
+  /** 그 달 수업일 중 이미 지난 날 — 0이면 아직 한 번도 안 한 달이다. */
+  elapsedDays: number;
+}) {
   const stalled = stu.stalledDates.length > 0;
   const written = days.filter((d) => stu.cells[d.date] === "written").length;
   const unwritten = days.filter((d) => stu.cells[d.date] === "unwritten").length;
-  const noTrace = days.length > 0 && days.every((d) => stu.cells[d.date] === "untracked");
+  // 🔴 **아직 안 지난 달을 경고로 칠하지 않는다**(원장 2026-09-01 9월 화면이 전부 빨간 '기록 0건'이었다).
+  //    수업이 한 번도 안 지났으면 '안 적은 것'이 아니라 '아직 안 한 것'이다.
+  const notStarted = elapsedDays === 0;
+  const noTrace = !notStarted && days.length > 0 && days.every((d) => stu.cells[d.date] === "untracked");
 
   return (
     <div
@@ -53,7 +65,11 @@ function StudentCard({ stu, days }: { stu: MathStudentRow; days: MathSheetMonthD
         </Link>
         <span className="text-text-faint text-[11px]">{schoolGradeLabel(stu.school, stu.grade)}</span>
         <span className="flex-1" />
-        {noTrace ? (
+        {notStarted ? (
+          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
+            아직 수업 전
+          </span>
+        ) : noTrace ? (
           <span className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-[11px] font-bold">
             기록 0건
           </span>
@@ -89,9 +105,7 @@ function StudentCard({ stu, days }: { stu: MathStudentRow; days: MathSheetMonthD
                   {t.gradeScope ? ` · ${t.gradeScope}` : ""}
                 </b>
                 <span className={`num ${frozen ? "text-amber font-bold" : ""}`}>
-                  {t.startPosition != null && t.lastPosition != null
-                    ? `${t.startPosition} → ${t.lastPosition}${moved != null ? ` (+${moved}차시)` : ""}`
-                    : "위치 미상"}
+                  {moved != null ? `+${moved}차시` : "위치 미상"}
                 </span>
               </div>
               <div className="bg-muted h-2 overflow-hidden rounded-full">
@@ -102,6 +116,16 @@ function StudentCard({ stu, days }: { stu: MathStudentRow; days: MathSheetMonthD
                   />
                 ) : null}
               </div>
+              {/* 🔴 위치 숫자(387 → 399)만으로는 어디까지 나갔는지 아무도 모른다 — **차시 이름**을 적는다
+                  (원장 2026-09-01 "세부 차시 보이면 더 좋겠네"). 커리큘럼 매칭이 안 되면(교재가 프린트인
+                  경우 등) 그 줄을 아예 안 그린다 — 없는 것을 지어내지 않는다. */}
+              {t.lastLesson ? (
+                <div className="text-text-dim mt-1 text-[11.5px] leading-snug">
+                  <span className="text-text-faint">지금 </span>
+                  {t.lastLesson}
+                  {t.lastUnit ? <span className="text-text-faint"> · {t.lastUnit}</span> : null}
+                </div>
+              ) : null}
             </div>
           );
         })
@@ -146,7 +170,7 @@ export function MonthTrack({ data }: { data: MathSheetMonthData }) {
   return (
     <div className="grid gap-3 px-1 sm:grid-cols-2 xl:grid-cols-3">
       {data.students.map((stu) => (
-        <StudentCard key={stu.studentId} stu={stu} days={data.days} />
+        <StudentCard key={stu.studentId} stu={stu} days={data.days} elapsedDays={data.elapsedDays} />
       ))}
     </div>
   );
