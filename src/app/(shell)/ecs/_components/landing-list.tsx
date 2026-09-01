@@ -66,7 +66,11 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
         <p className="text-text-dim text-[12px]">
           담임 <span className="num text-foreground font-bold">{teacherCount}</span>명
         </p>
-        <p className="text-text-dim text-[12px]">
+        <p
+          className="text-text-dim text-[12px]"
+          // 분모가 왜 그 수인지 화면에 적어 둔다 — 안 적으면 추석 주에 "교시가 줄었다"만 보인다.
+          title="분모는 이 주 배정 교시입니다. 학원 휴일은 쓸 의무가 없어 분모에서 빠지고, 휴일에 쓴 계획은 그대로 인정됩니다."
+        >
           교시 작성{" "}
           <span className="num text-foreground font-bold">
             {s.filled}/{s.scheduled}
@@ -96,9 +100,14 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
             완료 <span className="num text-foreground font-bold">{s.done}</span>반
           </p>
         ) : null}
-        {/* 배정 교시가 0인 반은 '미작성'과 갈라 말한다 — 사무실이 못 고칠 일을 재촉받지 않게. */}
+        {/* 배정 교시가 0인 반은 '미작성'과 갈라 말한다 — 사무실이 못 고칠 일을 재촉받지 않게.
+            ⚠️ 여기엔 **수업일이 전부 휴일인 반**도 든다(행에서는 `휴`로 갈라 보인다). 한 줄로 뭉치는 대신
+               사유를 툴팁에 적는다 — 머리 줄에 상태를 하나 더 세우면 다섯 숫자가 여섯이 된다. */}
         {s.idle > 0 ? (
-          <p className="text-text-dim text-[12px]">
+          <p
+            className="text-text-dim text-[12px]"
+            title="이 주에 쓸 교시가 없는 반 — 배정이 없거나, 수업일이 모두 학원 휴일인 반입니다(행의 `휴` 표시)."
+          >
             이 주 수업 없음 <span className="num text-foreground font-bold">{s.idle}</span>반
           </p>
         ) : null}
@@ -204,6 +213,16 @@ function TeacherGroupFlow({
             {g.cards.map((card) => {
               const pct = landingCardPct(card);
               const idle = card.totalSlots === 0;
+              /**
+               * 🔴 배정이 0인 것과 **휴일뿐인 것**은 다른 사실이다 — 한 문구로 뭉치면 추석 주에
+               *    "이 주에 배정된 교시 없음"이 뜬다(수업일은 멀쩡히 있는데 쓸 의무가 없는 것뿐이다).
+               *    표기는 작성률 규약과 같은 글자 "휴"([`writing-rate`](src/features/report-admin/writing-rate.ts)).
+               * ⚠️ 반은 그대로 목록에 남는다 — 휴일은 반을 지우는 값이 아니다([[holiday.ts]]).
+               */
+              const holidayOnly = idle && card.holidaySlots > 0;
+              const idleTitle = holidayOnly
+                ? "이 주 수업일이 모두 휴일입니다 — 쓸 교시가 없습니다(수업했다면 계획을 그대로 쓰실 수 있습니다)"
+                : "이 주에 배정된 교시가 없습니다";
               // EiE만 숫자가 있다(그 외 null = 칸을 비운다). 분모를 넘지 않게 자르는 것도 여기 한 곳.
               const shoutCount = shoutingCountOf(card);
               // 예약된 개명 **예고** 문구 — 한 곳에서만 만든다. 아래 배지 title과 접근성 이름이 같은 말을
@@ -224,7 +243,7 @@ function TeacherGroupFlow({
                   ? `시간표가 바뀌어 지금 시간표에 없는 기록 ${card.orphanSlots}건`
                   : null,
                 `담임 ${card.teacherName ?? "미지정"}`,
-                idle ? "이 주에 배정된 교시 없음" : `작성 교시 ${card.filledSlots}/${card.totalSlots}`,
+                idle ? idleTitle : `작성 교시 ${card.filledSlots}/${card.totalSlots}`,
                 // 화면에서 알약이 말하는 것을 스크린리더에도 되돌린다(행에는 열 머리가 없다).
                 shoutCount !== null && !idle ? `Shouting 체크 ${shoutCount}/${card.totalSlots}교시` : null,
               ]
@@ -300,11 +319,8 @@ function TeacherGroupFlow({
                       </span>
                     ) : null}
                     {idle ? (
-                      <span
-                        className="text-text-dim w-11 shrink-0 text-right text-[12px]"
-                        title="이 주에 배정된 교시가 없습니다"
-                      >
-                        —
+                      <span className="text-text-dim w-11 shrink-0 text-right text-[12px]" title={idleTitle}>
+                        {holidayOnly ? "휴" : "—"}
                       </span>
                     ) : (
                       <span className="num text-foreground w-11 shrink-0 text-right text-[12px] font-bold">

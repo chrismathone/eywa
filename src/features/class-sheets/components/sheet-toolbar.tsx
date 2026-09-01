@@ -139,9 +139,12 @@ export function SheetToolbar({
             key={d.date}
             type="button"
             className={pill(dayFilter === d.date)}
+            // 휴일이면 요일 글자만 빨갛게(달력 관행) — 칩을 지우거나 막지 않는다. 이름은 title로.
+            // ⚠️ 눌린 칩은 배경이 네이비라 빨강을 얹으면 안 읽힌다 → 안 눌렸을 때만.
+            title={d.holiday ? `${d.date.slice(5)} ${d.holiday}` : undefined}
             onClick={() => onDayFilter(dayFilter === d.date ? null : d.date)}
           >
-            {DOW_KO[d.dow]}
+            <span className={d.holiday && dayFilter !== d.date ? "text-danger" : undefined}>{DOW_KO[d.dow]}</span>
             {d.date === data.today ? <span className="ml-0.5 align-middle text-[8px]">●</span> : null}
           </button>
         ))}

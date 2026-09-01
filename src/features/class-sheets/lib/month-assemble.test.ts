@@ -93,3 +93,43 @@ describe("unwrittenCountOf — 달력 칸의 '미작성 N'", () => {
     expect(unwrittenCountOf(slots, "2026-08-03", (d, t) => written.has(slotKey(d, t)))).toBe(1);
   });
 });
+
+/**
+ * 휴일 — 규약은 [`holiday.ts`](./holiday.ts) 하나이고 여기서는 **월간 조립기가 그 규약을 타는지**만 본다.
+ */
+describe("휴일 — 안 쓴 휴일은 분모 밖, 쓴 휴일은 100% 인정, 평일 불변", () => {
+  // 8/3(월) 15:00·16:20(JJ) · 8/5(수) 14:20 — 위 describe와 같은 배정.
+  const slots = slotsByDateOf(
+    ["2026-08-03", "2026-08-05"],
+    [
+      row(),
+      row({ startTime: "16:20:00", slotTeacherLabel: "JJ" }),
+      row({ dayOfWeek: "wed", startTime: "14:20:00", slotTeacherLabel: "Florence" }),
+    ],
+  );
+  const HOLIDAY = { "2026-08-05": "임시 휴원" };
+
+  it("🔴 안 쓴 휴일은 분모에서 빠진다(3교시 → 2교시)", () => {
+    expect(monthFillStats(slots, () => false, HOLIDAY)).toEqual({ filled: 0, total: 2, pct: 0 });
+  });
+
+  it("🔴 쓴 휴일은 대상=작성 — 안 쓴 평일이 있어도 그 칸이 작성률을 깎지 않는다", () => {
+    const written = new Set([slotKey("2026-08-05", "14:20")]); // 휴일에만 썼다
+    const fill = monthFillStats(slots, (d, t) => written.has(slotKey(d, t)), HOLIDAY);
+    // 평일 2교시(미작성) + 휴일 1교시(작성) = 1/3
+    expect(fill).toEqual({ filled: 1, total: 3, pct: 33 });
+  });
+
+  it("🔴 휴일 맵을 안 넘기면 종전과 같다(평일 불변)", () => {
+    expect(monthFillStats(slots, () => false)).toEqual({ filled: 0, total: 3, pct: 0 });
+  });
+
+  it("🔴 휴일 칸엔 '미작성 N' 배지가 안 뜬다 — 의무가 없어 재촉할 게 없다", () => {
+    const wed = slots["2026-08-05"]!;
+    expect(unwrittenCountOf(wed, "2026-08-05", () => false)).toBe(1); // 맵 없으면 종전대로
+    expect(unwrittenCountOf(wed, "2026-08-05", () => false, HOLIDAY)).toBe(0);
+    // 평일은 그대로 재촉한다.
+    const mon = slots["2026-08-03"]!;
+    expect(unwrittenCountOf(mon, "2026-08-03", () => false, HOLIDAY)).toBe(2);
+  });
+});

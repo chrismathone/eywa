@@ -28,6 +28,8 @@ const DOT_TONE: Record<MathCellState, string> = {
   untracked: "bg-muted text-text-faint border-line-faint",
   // 🔴 아직 안 지난 날은 **빈 알약**(칸과 같은 규약) — 지난 날의 무기록(회색 채움)과 눈으로 갈린다.
   upcoming: "bg-white text-text-faint border-line-faint",
+  // 휴일 — 진도표 칸과 같은 토큰(`--att-weekend`). 사람이 아니라 **학원이** 안 연 날이라 무기록과 갈린다.
+  holiday: "bg-att-weekend text-danger border-transparent",
   "off-roster": "bg-transparent text-text-faint border-dashed border-line-faint",
 };
 
@@ -43,6 +45,7 @@ function StudentCard({
   stu,
   days,
   classLabel,
+  holidays,
 }: {
   stu: MathStudentRow;
   days: MathSheetMonthData["days"];
@@ -50,6 +53,8 @@ function StudentCard({
    *  ⚠️ 이름이 `className`이면 다음 사람이 CSS 클래스로 알고 그대로 툴팁에 밀어 넣는다
    *     (출석부 `MatrixRow`와 같은 이름으로 맞춘다). */
   classLabel: string;
+  /** 날짜 → 공휴일명 — 점 툴팁이 "학원 휴일" 대신 실제 이름("추석")을 말하게. */
+  holidays: Record<string, string>;
 }) {
   const stalled = stu.stalledDates.length > 0;
   const written = days.filter((d) => stu.cells[d.date] === "written").length;
@@ -58,9 +63,11 @@ function StudentCard({
   //    수업이 한 번도 안 지났으면 '안 적은 것'이 아니라 '아직 안 한 것'이다.
   // 🔴 판정은 **판정할 수 있는 날**만 본다 — 아직 안 지난 날(`upcoming`)과 수강 밖(`off-roster`)을
   //    섞으면 달 중간엔 미래 칸이 결론을 흐리고(경고가 사라지고), 달 초엔 전부 경고가 된다.
+  // ⚠️ 휴일도 **판정에서 뺀다** — 쓸 의무가 없던 날을 판정에 넣으면 '흔적 없음'이 휴일 하나에 꺼진다
+  //    (그 반은 정말로 한 달 내내 아무 기록이 없는데도).
   const judged = days.filter((d) => {
     const c = stu.cells[d.date];
-    return c !== "upcoming" && c !== "off-roster";
+    return c !== "upcoming" && c !== "off-roster" && c !== "holiday";
   });
   // 판정할 날이 하나도 없으면 **아직 아무 일도 안 일어났다** — `elapsedDays === 0`보다 정확하다
   // (달 중간에 들어오는 학생은 달이 절반 지났어도 자기 몫은 아직 안 시작했다).
@@ -180,7 +187,9 @@ function StudentCard({
               title={`${d.date} · ${
                 state === "written"
                   ? (stu.records[d.date]?.textbook ?? CELL_STATE_LABEL.written)
-                  : CELL_STATE_LABEL[state]
+                  : state === "holiday"
+                    ? (holidays[d.date] ?? CELL_STATE_LABEL.holiday)
+                    : CELL_STATE_LABEL[state]
               }`}
               className={`num flex h-6 flex-1 items-center justify-center rounded-md border text-[9.5px] font-extrabold ${
                 stu.records[d.date]?.offGoal ? "bg-amber-soft text-amber border-transparent" : DOT_TONE[state]
@@ -217,6 +226,7 @@ export function MonthTrack({ data }: { data: MathSheetMonthData }) {
           stu={stu}
           days={data.days}
           classLabel={data.className}
+          holidays={data.holidays}
         />
       ))}
     </div>

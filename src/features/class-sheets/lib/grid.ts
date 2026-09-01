@@ -26,6 +26,7 @@ import {
   type SpecialSlotLabel,
 } from "@/features/timetable/lib/teacher-label";
 import { isMeaningfulPlanLine } from "./plan-codec";
+import { holidayNameOn, isHolidayOn, tallyHolidayFill, type HolidayMap } from "./holiday";
 import { dowKeyOf, normalizeSlotTime, weekDatesOf, type DowKey } from "./week";
 
 /**
@@ -138,6 +139,12 @@ export type GridDay = {
   date: string;
   dow: DowKey;
   slots: GridSlot[];
+  /**
+   * 학원이 지정한 휴일이면 그 이름(아니면 null) — 헤더 표식과 작성률 분모가 **같은 값**을 읽는다.
+   * 🔴 **칸을 없애거나 잠그는 값이 아니다**(원장 2026-09-01 *"입력은 가능하도록"*) — 슬롯·로스터는
+   *    평일과 글자 그대로 같게 만들어진다. 판정 규약은 [`holiday.ts`](./holiday.ts) 한 곳.
+   */
+  holiday: string | null;
 };
 
 export type WeekGrid = {
@@ -182,21 +189,26 @@ export function hiddenSeatOf(
   return includeSelfStudy ? null : seat;
 }
 
-/**
- * 그 주에 **실날짜별로 유효한** (date, "HH:MM") 스케줄 키 집합 — buildWeekGrid와 랜딩 작성률이 공유
- * (슬롯 유효성 판정을 두 곳에서 따로 구현하지 않는다).
- */
-export function scheduledSlotKeySet(
+type SlotKeyOpts = {
+  /** JJ 교시를 분모에 넣을지 — 시트 화면과 **같은 값**을 넘긴다(보이는 교시 = 세는 교시). LAB은 항상 제외. */
+  includeSelfStudy?: boolean;
+  /**
+   * 학원 지정 휴일(`YYYY-MM-DD` → 이름) — 넘기면 **휴일 날짜가 `scheduledSlotKeySet`에서 빠지고**
+   * `holidaySlotKeySet`으로 옮겨진다. 안 넘기면 종전과 글자 그대로 같다(휴일 개념이 없던 때).
+   */
+  holidays?: HolidayMap | null;
+};
+
+/** 그 주의 유효 슬롯을 한 번만 훑는다 — 아래 두 함수가 **같은 유효성 규칙**을 쓰도록(따로 적으면 갈린다). */
+function eachScheduledSlot(
   weekMonday: string,
   schedules: readonly Pick<
     GridScheduleRow,
     "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
   >[],
-  /** JJ 교시를 분모에 넣을지 — 시트 화면과 **같은 값**을 넘긴다(보이는 교시 = 세는 교시). LAB은 항상 제외. */
-  opts: { includeSelfStudy?: boolean } = {},
-): Set<string> {
-  const includeSelfStudy = opts.includeSelfStudy ?? true;
-  const out = new Set<string>();
+  includeSelfStudy: boolean,
+  visit: (date: string, key: string) => void,
+): void {
   for (const date of weekDatesOf(weekMonday)) {
     const dow = dowKeyOf(date);
     for (const s of schedules) {
@@ -206,9 +218,53 @@ export function scheduledSlotKeySet(
       // 안 그리는 자리는 분모에서도 뺀다 — 화면에서 뺀 교시를 분모에 남기면 작성률이 영영 100%에 못 닿는다.
       // 같은 시각에 진짜 강사 슬롯이 겹치면 그쪽이 키를 넣으므로 수업은 그대로 세어진다.
       if (hiddenSeatOf(s.slotTeacherLabel, includeSelfStudy)) continue;
-      out.add(slotKey(date, normalizeSlotTime(s.startTime)));
+      visit(date, slotKey(date, normalizeSlotTime(s.startTime)));
     }
   }
+}
+
+/**
+ * 그 주에 **실날짜별로 유효한** (date, "HH:MM") 스케줄 키 집합 — buildWeekGrid와 랜딩 작성률이 공유
+ * (슬롯 유효성 판정을 두 곳에서 따로 구현하지 않는다).
+ *
+ * 🔴 `opts.holidays`를 넘기면 **휴일 날짜의 교시는 여기서 빠진다**(그 날은 쓸 의무가 없다 —
+ *    [`holiday.ts`](./holiday.ts) 규약). 그 키는 사라지는 게 아니라 `holidaySlotKeySet`으로 간다:
+ *    호출부는 둘을 함께 읽어 **쓴 휴일만** 분모·분자에 도로 넣고, 고아 판정에서는 **둘 다** 제외한다
+ *    (안 그러면 휴일에 쓴 계획이 "시간표에 없는 기록"으로 둔갑한다).
+ */
+export function scheduledSlotKeySet(
+  weekMonday: string,
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
+  opts: SlotKeyOpts = {},
+): Set<string> {
+  const out = new Set<string>();
+  eachScheduledSlot(weekMonday, schedules, opts.includeSelfStudy ?? true, (date, key) => {
+    if (isHolidayOn(opts.holidays, date)) return;
+    out.add(key);
+  });
+  return out;
+}
+
+/**
+ * 그 주 **휴일에 배정된** 교시 키 집합 — `scheduledSlotKeySet`에서 빠진 바로 그 키들이다.
+ * 🔴 반을 목록에서 지우는 값이 아니다(`hasLiveSlotInWeek`는 휴일을 보지 않는다 — 휴일뿐인 주에도 반은 남는다).
+ */
+export function holidaySlotKeySet(
+  weekMonday: string,
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
+  holidays: HolidayMap | null | undefined,
+  opts: { includeSelfStudy?: boolean } = {},
+): Set<string> {
+  const out = new Set<string>();
+  eachScheduledSlot(weekMonday, schedules, opts.includeSelfStudy ?? true, (date, key) => {
+    if (isHolidayOn(holidays, date)) out.add(key);
+  });
   return out;
 }
 
@@ -363,6 +419,11 @@ export function buildWeekGrid(input: {
    * 집합 산출은 서버(queries.ts) — 같은 과목 한정(다른 과목만 남은 학생은 이 과목에선 진짜 그만둔 것).
    */
   activeElsewhereSameSubject?: readonly string[];
+  /**
+   * 학원 지정 휴일(`YYYY-MM-DD` → 이름) — **표시에만 쓴다**. 슬롯·로스터·마크는 평일과 똑같이 만들어지고
+   * (원장 2026-09-01 *"입력은 가능하도록"*), 달라지는 건 `GridDay.holiday`와 `sheetFillStats` 분모뿐이다.
+   */
+  holidays?: HolidayMap | null;
 }): WeekGrid {
   const includeSelfStudy = input.includeSelfStudy ?? true;
   const dates = weekDatesOf(input.weekMonday);
@@ -575,7 +636,7 @@ export function buildWeekGrid(input: {
       continue;
     }
 
-    days.push({ date, dow, slots });
+    days.push({ date, dow, slots, holiday: holidayNameOn(input.holidays, date) });
   }
 
   // 표시 순서 = SPECIAL_SLOT_LABELS(LAB → JJ) 고정 — Map 삽입순(요일 순회 결과)이면 주마다 문장이 뒤바뀐다.
@@ -592,22 +653,25 @@ export function buildWeekGrid(input: {
  * 스케줄 교시 수. placeholder-only 슬롯은 미작성으로 센다.
  * 자리는 `hiddenSeatOf`를 따른다 — 그린 자리만 분모에 들어가고, 안 그린 자리(LAB 항상·JJ 설정)는 애초에
  * `days`에 없어 빠진다. 랜딩 카드의 `scheduledSlotKeySet`에도 **같은 설정값**을 넘겨야 숫자가 안 갈린다.
+ *
+ * 🔴 **휴일은 [`holiday.ts`](./holiday.ts) 규약**을 탄다(안 쓴 휴일=분모 밖 · 쓴 휴일=대상=작성). 랜딩이
+ *    같은 규약을 쓰므로 두 화면이 같은 반을 두고 다른 작성률을 말하지 않는다.
  */
 export function sheetFillStats(grid: WeekGrid): {
   totalSlots: number;
   filledSlots: number;
   orphanSlots: number;
+  /** 휴일인데 계획이 있어 **한 일로 인정**된 교시 수(분모·분자에 함께 들어간 수). */
+  holidayFilledSlots: number;
 } {
-  let total = 0;
-  let filled = 0;
   let orphan = 0;
+  const cells: { holiday: boolean; written: boolean }[] = [];
   for (const day of grid.days) {
     for (const slot of day.slots) {
       if (!slot.scheduled) {
         orphan += 1;
         continue;
       }
-      total += 1;
       const meaningful = slot.lines.some((l) =>
         isMeaningfulPlanLine({
           textbook: l.textbook,
@@ -616,8 +680,14 @@ export function sheetFillStats(grid: WeekGrid): {
           homework: l.homework,
         }),
       );
-      if (meaningful) filled += 1;
+      cells.push({ holiday: day.holiday !== null, written: meaningful });
     }
   }
-  return { totalSlots: total, filledSlots: filled, orphanSlots: orphan };
+  const fill = tallyHolidayFill(cells);
+  return {
+    totalSlots: fill.total,
+    filledSlots: fill.filled,
+    orphanSlots: orphan,
+    holidayFilledSlots: fill.holidayWritten,
+  };
 }

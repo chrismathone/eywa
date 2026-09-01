@@ -10,7 +10,7 @@ const enr = [E("2026-03-01")];
 /** 이 파일의 날짜는 전부 2026-08이라 "지난 날"이다 — 미래 칸(`upcoming`)은 아래 전용 describe에서. */
 const TODAY = "2026-09-01";
 
-describe("cellStateOf — 기록이 없는 이유 넷을 가른다", () => {
+describe("cellStateOf — 기록이 없는 이유를 가른다(휴일은 아래 전용 describe)", () => {
   it("기록이 있으면 written", () => {
     expect(cellStateOf({ enrollments: enr, withdrawnAt: null, date: "2026-08-05", attendance: "present", hasReport: true, today: TODAY })).toBe(
       "written",
@@ -208,5 +208,60 @@ describe("cellStateOf — 아직 안 지난 수업일(upcoming)", () => {
     expect(t.total).toBe(0);
     expect(t.upcoming).toBe(2);
     expect(t.pct).toBe(100);
+  });
+});
+
+/**
+ * 휴일 — 규약은 [`holiday.ts`](@/features/class-sheets/lib/holiday) 하나이고, 여기서는 **MCS 칸이 그
+ * 규약을 타는지**와 **결석·무기록과 안 섞이는지**를 본다(cell-state.ts의 상시 규약).
+ */
+describe("휴일 — 넷과 섞지 않는 다섯째 이유", () => {
+  const base = { enrollments: enr, withdrawnAt: null, date: "2026-08-17", today: TODAY };
+
+  it("🔴 휴일이면 holiday — 결석·무기록과 다른 상태다", () => {
+    expect(cellStateOf({ ...base, attendance: null, hasReport: false, holiday: true })).toBe("holiday");
+    // 같은 칸이라도 휴일이 아니면 종전대로 untracked(평일 불변).
+    expect(cellStateOf({ ...base, attendance: null, hasReport: false })).toBe("untracked");
+  });
+
+  it("🔴 **사실이 달력을 이긴다** — 휴일에 수업하고 적었으면 written이다(한 일로 인정)", () => {
+    expect(cellStateOf({ ...base, attendance: "present", hasReport: true, holiday: true })).toBe("written");
+  });
+
+  it("🔴 휴일은 결석·출석보다 먼저 이긴다 — 학원이 안 연 날에 '미작성'은 성립하지 않는다", () => {
+    // 실측 2026-08-17(대체공휴일)엔 출결 21행이 있다. 그래도 쓸 의무는 없었다.
+    expect(cellStateOf({ ...base, attendance: "present", hasReport: false, holiday: true })).toBe("holiday");
+    expect(cellStateOf({ ...base, attendance: "absent", hasReport: false, holiday: true })).toBe("holiday");
+  });
+
+  it("🔴 수강 밖은 여전히 off-roster — 휴일이 로스터 판정을 덮지 않는다(축이 다르다)", () => {
+    expect(
+      cellStateOf({
+        enrollments: [E("2026-09-01")],
+        withdrawnAt: null,
+        date: "2026-08-17",
+        attendance: null,
+        hasReport: false,
+        today: TODAY,
+        holiday: true,
+      }),
+    ).toBe("off-roster");
+  });
+
+  it("🔴 안 쓴 휴일은 분모에도 '흔적 없음'에도 안 들어간다 — 따로 센다", () => {
+    const t = tallyCells(["holiday", "holiday", "written", "unwritten"] as MathCellState[]);
+    expect(t.holiday).toBe(2);
+    expect(t.untracked).toBe(0);
+    expect(t.absent).toBe(0);
+    expect(t.total).toBe(2); // written + unwritten만
+    expect(t.pct).toBe(50);
+  });
+
+  it("🔴 추석이 낀 달이라고 작성률이 나빠지지 않는다(안 쓴 휴일은 없는 칸과 같다)", () => {
+    const without = tallyCells(["written", "written"] as MathCellState[]);
+    const with_ = tallyCells(["written", "written", "holiday", "holiday", "holiday"] as MathCellState[]);
+    expect(with_.pct).toBe(without.pct);
+    expect(with_.pct).toBe(100);
+    expect(with_.total).toBe(2);
   });
 });

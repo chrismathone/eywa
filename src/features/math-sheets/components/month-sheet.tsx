@@ -32,6 +32,9 @@ const CELL_TONE: Record<MathCellState, string> = {
   //    9월을 열면 전 칸이 회색 "출결도 기록도 없음"이라 아무도 잘못 안 했는데 다 틀린 것처럼 보였다).
   untracked: "bg-muted",
   upcoming: "",
+  // 🔴 휴일 회색은 월별 출석부와 **같은 토큰**(`--att-weekend`) — 새 색을 만들지 않는다(의미색 캐논).
+  //    무기록 회색(`bg-muted`)과 구분되는 이유: 이건 사람이 아니라 **학원이** 안 연 날이다.
+  holiday: "bg-att-weekend",
   "off-roster": "bg-muted/40",
 };
 
@@ -40,8 +43,11 @@ const CELL_TONE: Record<MathCellState, string> = {
  * ⚠️ 아직 안 지난 날만 **아무 말도 하지 않는다**(빈 칸이 곧 "아직"이고, 30칸에 같은 문장을 반복하면
  *    그게 소음이다 — 무엇인지는 칸 툴팁이 말한다).
  */
-function cellNote(state: MathCellState): string {
-  return state === "upcoming" ? "" : CELL_STATE_LABEL[state];
+function cellNote(state: MathCellState, holidayName?: string | null): string {
+  if (state === "upcoming") return "";
+  // 휴일은 **이름이 곧 사유**라 "학원 휴일"보다 "추석"이 낫다(라벨은 이름이 없을 때의 폴백).
+  if (state === "holiday") return holidayName || CELL_STATE_LABEL.holiday;
+  return CELL_STATE_LABEL[state];
 }
 
 export function MonthSheet({
@@ -82,16 +88,25 @@ export function MonthSheet({
             </th>
             {data.days.map((day) => {
               const warn = (data.offGoalByDate[day.date] ?? 0) > 0;
+              // 🔴 휴일 열은 **지우지 않는다** — 그날 실제로 한 수업 기록이 여기 그대로 서야 한다
+              //    (원장 2026-09-01 *"입력은 가능하도록"*). 목표 밖 경고가 있으면 그쪽이 이긴다.
+              const holiday = data.holidays[day.date] ?? null;
               return (
                 <th
                   key={day.date}
+                  title={holiday ? `${day.date} · ${holiday} — 학원 휴일` : undefined}
                   className={`border-line-faint num border p-2 text-center text-[12.5px] font-extrabold whitespace-nowrap ${
-                    warn ? "bg-amber-soft text-amber" : "bg-bg-soft text-text-dim"
+                    warn
+                      ? "bg-amber-soft text-amber"
+                      : holiday
+                        ? "bg-att-weekend text-danger"
+                        : "bg-bg-soft text-text-dim"
                   }`}
                 >
                   {Number(day.date.slice(5, 7))}/{Number(day.date.slice(8, 10))}
+                  {/* 휴일이면 요일 자리에 공휴일명 — "이 열이 왜 회색인가"의 답이 요일보다 유용하다. */}
                   <span className="ml-1 font-semibold opacity-70">
-                    {"일월화수목금토"[new Date(`${day.date}T00:00:00Z`).getUTCDay()]}
+                    {holiday ?? "일월화수목금토"[new Date(`${day.date}T00:00:00Z`).getUTCDay()]}
                   </span>
                 </th>
               );
@@ -154,7 +169,13 @@ export function MonthSheet({
                     <td
                       key={day.date}
                       // 상태 이름을 그대로 노출하지 않는다 — 한글 문구는 CELL_NOTE 단일 소스.
-                      title={state === "upcoming" ? `${day.date} · ${CELL_STATE_LABEL.upcoming}` : undefined}
+                      title={
+                        state === "upcoming"
+                          ? `${day.date} · ${CELL_STATE_LABEL.upcoming}`
+                          : state === "holiday"
+                            ? `${day.date} · ${data.holidays[day.date] ?? CELL_STATE_LABEL.holiday} — 학원 휴일이라 기록 의무가 없습니다`
+                            : undefined
+                      }
                       className={`border-line-faint min-w-[178px] border p-2 align-top ${CELL_TONE[state]} ${
                         rec?.offGoal ? "border-l-amber bg-amber-soft/40 border-l-[3px]" : ""
                       }`}
@@ -181,7 +202,9 @@ export function MonthSheet({
                           ) : null}
                         </>
                       ) : (
-                        <div className="text-text-faint text-[11.5px] font-bold">{cellNote(state)}</div>
+                        <div className="text-text-faint text-[11.5px] font-bold">
+                          {cellNote(state, data.holidays[day.date])}
+                        </div>
                       )}
                     </td>
                   );

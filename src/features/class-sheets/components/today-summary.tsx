@@ -35,20 +35,30 @@ export function TodaySummary({
   stats,
   fontSize,
   onFontSize,
+  holiday = false,
 }: {
   stats: TodayStats;
   fontSize: EcsFontSize;
   onFontSize: (s: EcsFontSize) => void;
+  /**
+   * 학원 휴일인가 — **색만** 걷는다(숫자는 그대로 보인다).
+   * 🔴 휴일엔 쓸 의무가 없으므로 "계획 0/6"을 앰버로 세우면 고칠 것이 없는 일을 재촉하는 거짓 신호다
+   *    ([`holiday.ts`](../lib/holiday.ts) 규약 — 안 쓴 휴일은 작성률 분모에도 안 들어간다).
+   * ⚠️ 숫자를 감추거나 0으로 만들지 않는다 — 그날 실제로 수업했다면 그 진행이 그대로 보여야 한다.
+   */
+  holiday?: boolean;
 }) {
+  // `done` = "재촉하지 않는다". 휴일이면 무엇을 얼마나 했든 재촉할 일이 없다.
+  const done = (ok: boolean) => holiday || ok;
   return (
     <div className="bg-card shadow-card flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl px-4 py-2.5">
       <Stat label="수업" value={`${stats.classes}개`} done />
-      <Stat label="계획" value={`${stats.plan.filled}/${stats.plan.total}`} done={stats.plan.filled >= stats.plan.total} />
-      <Stat label="출결" value={`${stats.att.marked}/${stats.att.total}`} done={stats.att.marked >= stats.att.total} />
-      <Stat label="보고서" value={`${stats.report.written}/${stats.report.total}`} done={stats.report.written >= stats.report.total} />
+      <Stat label="계획" value={`${stats.plan.filled}/${stats.plan.total}`} done={done(stats.plan.filled >= stats.plan.total)} />
+      <Stat label="출결" value={`${stats.att.marked}/${stats.att.total}`} done={done(stats.att.marked >= stats.att.total)} />
+      <Stat label="보고서" value={`${stats.report.written}/${stats.report.total}`} done={done(stats.report.written >= stats.report.total)} />
       {/* 분모 = ClassNote 보드가 확인된 반만 — 0/0(연동 반 없음)이면 숫자 자체를 안 그린다. */}
       {stats.classnote.total > 0 ? (
-        <Stat label="알림장" value={`${stats.classnote.posted}/${stats.classnote.total}반`} done={stats.classnote.posted >= stats.classnote.total} />
+        <Stat label="알림장" value={`${stats.classnote.posted}/${stats.classnote.total}반`} done={done(stats.classnote.posted >= stats.classnote.total)} />
       ) : null}
       {/* 글씨 크기 — 주간 시트 툴바와 같은 3칩(aria-pressed). 저장은 부모가 한다(낙관 적용 + 계정 저장). */}
       <span className="ml-auto flex items-center gap-0.5">

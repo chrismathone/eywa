@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
+// 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
+import { buildHolidayMap } from "@/features/attendance/calendar";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
@@ -58,8 +60,14 @@ export type ClassSheetMonthData = {
   goals: { homeroom: MonthGoalMap; assistant: MonthGoalMap };
   skillAreas: SkillAreaSetting[];
   canEdit: boolean;
-  /** 배정된 전 교시 기준(표시 토글과 무관 — month-assemble 🔴 참조). */
+  /** 배정된 전 교시 기준(표시 토글과 무관 — month-assemble 🔴 참조). 휴일은 [[holiday.ts]] 규약. */
   fill: { filled: number; total: number; pct: number };
+  /**
+   * 학원 지정 휴일(`YYYY-MM-DD` → 이름) — 이 달 범위로 좁힌 것.
+   * 🔴 **칸을 없애는 값이 아니다**(원장 2026-09-01) — 달력 칸·진도표 열은 그대로 서고 계획도 그대로
+   *    고칠 수 있다. 달라지는 건 표식과 작성률 분모뿐이다.
+   */
+  holidays: Record<string, string>;
   /** 마지막에 본 보기 + 보기별 표시 토글(계정 귀속 — `users.ui_prefs.ecs`). */
   view: EcsMonthView;
   display: Record<EcsMonthView, EcsMonthDisplay>;
@@ -189,6 +197,12 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
 
   const hasLines = (date: string, slotStart: string) => (linesBySlot[slotKey(date, slotStart)]?.length ?? 0) > 0;
 
+  // 이 달 범위로 좁힌 휴일 — 전 연도를 클라로 내려보낼 이유가 없다(설정엔 2027년까지 들어 있다).
+  const holidays: Record<string, string> = {};
+  for (const [date, name] of Object.entries(buildHolidayMap(settings.operations.holidays))) {
+    if (date >= from && date <= to) holidays[date] = name;
+  }
+
   return {
     ok: true,
     data: {
@@ -208,7 +222,8 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       goals,
       skillAreas: access.skillAreas,
       canEdit: access.canWrite,
-      fill: monthFillStats(slotsByDate, hasLines),
+      fill: monthFillStats(slotsByDate, hasLines, holidays),
+      holidays,
       view: readEcsMonthView(prefsRes.data?.ui_prefs),
       display: {
         cal: readEcsMonthDisplay(prefsRes.data?.ui_prefs, "cal"),
