@@ -15,6 +15,8 @@ import { PeriodNav } from "@/components/period-nav";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { ecsPresenceScope } from "../lib/presence-scope";
 import { SHEET_BAR, sheetPill } from "../chrome";
+import { monthOfWeek } from "../face-nav";
+import { setMyEcsMonthView } from "../server/actions";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
 import type { ClassSheetWeekData } from "../server/queries";
 import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
@@ -109,14 +111,21 @@ export function SheetToolbar({
         onNavigate={onNavigate}
       />
       {/* 주간 | 달력 | 진도표 — 월간 뷰와 **같은 세 칸**(원장 2026-09-01). 전엔 여기가 `[월간]` 버튼
-          하나뿐이라 진도표로 가려면 월간을 거쳐 한 번 더 눌러야 했다.
-          🔴 어느 달을 여는가 = **지금 보고 있는 주가 속한 달**(그냥 이번 달을 열면 과거 주를 보다가
-             아무 예고 없이 오늘로 튄다). 이동 전 flush는 onNavigate가 한다. */}
+          하나뿐이라 진도표로 가려면 월간을 거쳐 한 번 더 눌러야 했다. 이동 전 flush는 onNavigate가 한다. */}
       <SheetFaceSwitch
         current="week"
-        onSelect={(face) =>
-          onNavigate(`/ecs/${data.classId}/month?month=${data.weekMonday.slice(0, 7)}&view=${face}`)
-        }
+        onSelect={(face) => {
+          if (face === "week") return;
+          // 🔴 보기 선택은 **계정에도 남긴다** — 안 남기면 라벨·모양이 같은 두 버튼(주간 바의 '달력'과
+          //    월간 바의 '달력')이 한쪽만 기억하는, 눌러 보기 전엔 모르는 차이가 생긴다.
+          //    이번 방문은 아래 `view=`가 확정하므로 이 저장은 왕복을 기다리지 않아도 된다.
+          void setMyEcsMonthView(face);
+          // 🔴 여는 달 = **지금 보고 있는 주가 속한 달**([monthOfWeek](../face-nav.ts) — 월요일의 달이
+          //    아니다). `week=`는 "왔던 주"라 월간에서 '주간'을 누르면 이 주로 정확히 돌아온다.
+          onNavigate(
+            `/ecs/${data.classId}/month?month=${monthOfWeek(data.weekMonday)}&week=${data.weekMonday}&view=${face}`,
+          );
+        }}
       />
       <SheetBarDivider />
 

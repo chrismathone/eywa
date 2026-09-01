@@ -4,6 +4,7 @@ import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { cellDateOf, DOW_ORDER } from "../lib/month";
+import { hasClassOnDate } from "../face-nav";
 import { slotKey } from "../lib/month-assemble";
 import { isOffGoalLine, type MonthGoalMap } from "../lib/goal-match";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -27,6 +28,10 @@ const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu
  *    삭제할것. 상단에 주간 선택이 있으니 해당 기능으로 대체."*).
  * ⚠️ 그래서 이 칸은 **링크가 아니라 버튼**이다 — 갈 곳이 없으므로 `href`를 되살리지 말 것(되살리는
  *    순간 미루기 편법도 함께 돌아온다). 주간 시트로 가는 문은 상단 `주간 | 달력 | 진도표` 전환이다.
+ * 🔴 버튼이라 **`items-stretch`를 반드시 적는다** — 브라우저 기본 스타일이 `button`에
+ *    `align-items: flex-start`를 걸고 Tailwind preflight엔 그 리셋이 없다. 빼면 세로 flex인 이 칸의
+ *    속줄이 칸 폭을 안 채워서 **머리 줄의 `ml-auto`가 죽고**(배지가 날짜 옆에 붙는다) 교시 구분
+ *    점선도 내용 폭까지만 그려진다. `<a>`일 땐 그 기본 스타일이 없어 저절로 stretch였다.
  * ⚠️ 더블클릭해도 탈은 없다 — 두 번째 클릭은 이미 열린 창이 받는다.
  * ⚠️ 버튼이라 탭·엔터로도 열린다(전엔 키보드로는 편집 창에 닿을 길이 아예 없었다).
  */
@@ -53,7 +58,9 @@ export function MonthCalendar({
   }
   const cols = `44px repeat(${dows.length}, minmax(0, 1fr))`;
   // 수업이 하나도 없는 주는 행 자체를 안 만든다 — 8월처럼 1일이 토요일이면 첫 주가 통째로 빈 띠가 된다.
-  const weeksWithClass = data.weeks.filter((w) => w.dates.some((d) => (data.slotsByDate[d]?.length ?? 0) > 0));
+  // ⚠️ 판정은 [face-nav](../face-nav.ts) 한 곳 — 여기서 다시 적으면 **달력이 안 그리는 주로**
+  //    상단 '주간'이 보내는 상태가 된다(둘이 같은 판정을 써야 한다).
+  const weeksWithClass = data.weeks.filter((w) => w.dates.some((d) => hasClassOnDate(data.slotsByDate, d)));
 
   return (
     <div className="grid gap-1.5">
@@ -133,7 +140,7 @@ function DayCell({
       // ⚠️ 편집 권한이 없으면 "고칩니다"라고 하지 않는다 — 눌러 보기 전엔 모르는 거짓 약속이 된다.
       title={`누르면 이 날 계획을 여기서 ${data.canEdit ? "고칩니다" : "봅니다"}`}
       onClick={() => onOpenDay(date)}
-      className={`flex min-w-0 cursor-pointer flex-col gap-1.5 rounded-[10px] border bg-white px-2 py-1.5 text-left transition ${
+      className={`flex min-w-0 cursor-pointer flex-col items-stretch gap-1.5 rounded-[10px] border bg-white px-2 py-1.5 text-left transition ${
         offGoal > 0
           ? "border-amber shadow-[0_0_0_1px_var(--amber)] hover:shadow-[0_0_0_2px_var(--amber)]"
           : isToday

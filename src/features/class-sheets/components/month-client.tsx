@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PeriodNav } from "@/components/period-nav";
-import { mondayOf } from "@/features/timetable/lib/week";
 import { offGoalCountByDate } from "../lib/goal-match";
 import { setMyEcsMonthDisplay, setMyEcsMonthView } from "../server/actions";
 import { SHEET_BAR, sheetPill } from "../chrome";
+import { hasClassOnDate, weekForMonth } from "../face-nav";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
 import type { EcsMonthDisplay, EcsMonthView } from "../view-prefs";
 import type { ClassSheetMonthData } from "../server/month-queries";
@@ -35,11 +35,14 @@ export function MonthClient({
   classOptions,
   initialView,
   initialDisplay,
+  fromWeek,
 }: {
   data: ClassSheetMonthData;
   classOptions: { id: string; name: string }[];
   initialView: EcsMonthView;
   initialDisplay: Record<EcsMonthView, EcsMonthDisplay>;
+  /** 주소가 들고 온 **"왔던 주"** — 주간 시트에서 넘어왔을 때만 있다(없으면 null). */
+  fromWeek: string | null;
 }) {
   const router = useRouter();
   const [view, setView] = useState<EcsMonthView>(initialView);
@@ -73,16 +76,17 @@ export function MonthClient({
     `/ecs/${data.classId}/month?month=${month}&view=${v}`;
   const thisMonth = data.today.slice(0, 7);
   /**
-   * '주간'으로 갈 때 여는 주 — **지금 보고 있는 달 안의 주**다(이번 달이면 오늘 주, 아니면 아래 첫 주).
+   * '주간'으로 갈 때 여는 주 — 규칙과 근거는 [face-nav](../face-nav.ts) 한 곳(순수·Vitest).
    * 🔴 `/ecs/{반}`으로 그냥 보내면 8월을 훑다가 이번 주로 튄다 — 원장이 지운 "칸 클릭 → 그 주" 이동을
    *    상단 전환이 대신하려면 **보고 있던 기간**을 들고 가야 한다.
    */
-  const firstClassWeek = data.weeks.find((w) =>
-    w.dates.some((d) => (data.slotsByDate[d]?.length ?? 0) > 0),
-  );
-  // ⚠️ 그 달 **첫 주**가 아니라 **수업이 있는 첫 주** — 8월처럼 1일이 토요일이면 첫 주는 통째로 비어 있고
-  //    (달력이 그 행을 아예 안 그린다) 그 빈 주로 보내면 "왜 아무것도 없지"가 된다.
-  const weekMonday = data.month === thisMonth ? mondayOf(data.today) : (firstClassWeek?.monday ?? null);
+  const weekMonday = weekForMonth({
+    month: data.month,
+    today: data.today,
+    fromWeek,
+    weeks: data.weeks,
+    hasClassOn: (d) => hasClassOnDate(data.slotsByDate, d),
+  });
   const weekHref = `/ecs/${data.classId}${weekMonday ? `?week=${weekMonday}` : ""}`;
 
   /**
@@ -99,9 +103,13 @@ export function MonthClient({
      * 주소도 따라 고친다 — 안 고치면 새로고침·공유 링크가 방금 고른 보기를 잃는다(주소가 이겨서).
      * 🔴 `router.replace`가 아니라 **`history.replaceState`** 다: 라우터를 태우면 이 화면이 서버를 다시
      *    타고, 그 사이 목표 편집 큐와 열려 있는 창이 흔들린다. 여기선 주소만 맞추면 된다(재조회 불요 —
-     *    두 보기는 같은 자료를 다르게 그린 것뿐이다).
+     *    두 보기는 같은 자료를 다르게 그린 것뿐이다). 주간 시트의 요일 필터와 같은 규약.
+     * 🔴 주소를 **새로 짓지 않고 지금 주소를 고친다** — 새로 지으면 `week=`(왔던 주)와 `embed=1`(플로팅
+     *    창 표식)이 같이 떨어져 나가서, 보기만 바꿨는데 '주간'이 엉뚱한 주로 가고 창 안에 셸이 되살아난다.
      */
-    window.history.replaceState(null, "", hrefFor(data.month, next));
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", next);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
   const toggle = (key: keyof EcsMonthDisplay) => {

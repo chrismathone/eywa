@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getClassSheetMonth } from "@/features/class-sheets/server/month-queries";
 import { MonthClient } from "@/features/class-sheets/components/month-client";
+import { readFromWeek } from "@/features/class-sheets/face-nav";
 
 export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — eywa" };
 
@@ -19,10 +20,12 @@ export default async function EcsMonthPage({
   searchParams,
 }: {
   params: Promise<{ classId: string }>;
-  searchParams: Promise<{ month?: string; view?: string }>;
+  // ⚠️ 값은 `string | string[]`이다(`?view=cal&view=rail`이면 배열) — 아래 판정은 문자열 일치라
+  //    배열이 와도 안전하게 저장값으로 떨어진다. 타입을 좁게 적어 두면 나중에 `.trim()` 한 줄에 터진다.
+  searchParams: Promise<{ month?: string; view?: string | string[]; week?: string | string[] }>;
 }) {
   const { classId } = await params;
-  const { month, view } = await searchParams;
+  const { month, view, week } = await searchParams;
   const [res, landing] = await Promise.all([
     getClassSheetMonth(classId, month ?? null),
     getSheetLanding(null), // 반 전환 드롭다운(주간 시트와 같은 스코프)
@@ -77,6 +80,9 @@ export default async function EcsMonthPage({
           classOptions={classOptions}
           initialView={initialView}
           initialDisplay={res.data.display}
+          // 주간 시트에서 넘어왔으면 **왔던 주**를 들고 온다 — '주간'을 누르면 그 주로 정확히
+          // 돌아간다(왕복이 제자리로). 모양이 아니면 버린다(face-nav `readFromWeek`).
+          fromWeek={readFromWeek(week)}
         />
       </div>
     </div>
