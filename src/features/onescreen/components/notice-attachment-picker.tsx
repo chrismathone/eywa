@@ -33,9 +33,15 @@ export function NoticeAttachmentPicker({
 }) {
   const full = attachments.length >= NOTICE_ATTACHMENT_MAX;
 
-  /** 순차 업로드 — 티켓 발급이 실패하면 그 자리에서 멈춰 원인을 보여준다(조용히 건너뛰지 않음). */
-  async function addFiles(list: FileList | null) {
-    const picked = Array.from(list ?? []);
+  /**
+   * 순차 업로드 — 티켓 발급이 실패하면 그 자리에서 멈춰 원인을 보여준다(조용히 건너뛰지 않음).
+   *
+   * 🔴 **`FileList`가 아니라 `File[]`을 받는다.** `e.target.files`는 입력 요소에 매인 **라이브
+   *    FileList**라, 호출부가 `value=""`로 입력을 비우는 순간 그 참조도 **함께 비어 버린다**.
+   *    그래서 예전엔 여기 첫 줄에서 빈 배열을 받아 **아무 말도 없이 끝났다**(토스트도 네트워크 요청도 0건 —
+   *    2026-09-01 실브라우저 재현). 배열 복사는 **호출부가 value를 비우기 전에** 해야 한다.
+   */
+  async function addFiles(picked: File[]) {
     if (!picked.length) return;
     const room = NOTICE_ATTACHMENT_MAX - attachments.length;
     if (room <= 0) {
@@ -103,9 +109,11 @@ export function NoticeAttachmentPicker({
             className="hidden"
             disabled={uploading || full || disabled}
             onChange={(e) => {
-              const list = e.target.files;
+              // 🔴 **복사 먼저, 비우기 나중** — 순서를 바꾸면 첨부가 통째로 죽는다(위 addFiles 주석).
+              //    수업보고서 첨부(report-attachments.tsx)가 원래 이 순서였고, 공지 쪽만 반대였다.
+              const files = Array.from(e.target.files ?? []);
               e.target.value = ""; // 같은 파일 다시 고를 수 있게 초기화
-              void addFiles(list);
+              if (files.length) void addFiles(files);
             }}
           />
         </label>

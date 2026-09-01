@@ -1,5 +1,6 @@
 "use client";
 
+import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WindowLink } from "@/components/workspace/window-link";
 import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
@@ -14,6 +15,40 @@ import { SHEET_FACES, SHEET_FACE_LABEL, SHEET_FACE_TITLE, sheetPill, type SheetF
 /** 덩어리 사이 세로 실선 — 두 화면이 같은 자리에서 끊어 읽히게. */
 export function SheetBarDivider() {
   return <span className="bg-line h-4 w-px" aria-hidden />;
+}
+
+/**
+ * 알약 **속살** — 좁은 폭에선 글자를 접고 아이콘만, `md`(768px)부터 원래 라벨
+ * (원장 2026-09-01 *"좁은 폭에서 목록/반 정보 보기 접어줘"*). 768px은 ECS 반 목록이 좌우로
+ * 갈리는 축과 **같은 값**이다(landing-list `md:grid-cols-2`) — ECS 안에서 좁고 넓음의 경계는 하나다.
+ *
+ * 🔴 **접는 것이지 없애는 것이 아니다** — 아이콘 알약은 그대로 눌린다. 좁은 폭에서 통째로 숨기면
+ *    '반 정보 보기'는 이 화면에서 그 반으로 가는 **유일한 문**이라 갈 길이 사라진다(하부탭에만 있던
+ *    셔틀 '오늘 등하원'이 폰에서 끊겼던 것과 같은 함정 — features/shuttle/faces.ts).
+ * 🔴 두 상태 다 한쪽이 `display:none`이라 **접근성 이름이 비어 버린다** → 호출부가 `aria-label`을
+ *    반드시 준다(이 조각 혼자로는 못 읽힌다). 넘기는 `hint`는 그 이름과 같은 말이어야 한다 —
+ *    보이는 글자와 읽히는 이름이 갈리면 음성으로 조작하는 사람이 못 부른다.
+ * ⚠️ 아이콘 자리는 `h-[18px]` — 12px 글자의 줄상자(preflight `line-height: 1.5`)와 **같은 높이**다.
+ *    안 맞추면 접힌 알약만 4px 낮아져 바로 옆 요일 알약과 밑줄이 어긋난다.
+ */
+function PillGlyph({
+  icon,
+  hint,
+  children,
+}: {
+  icon: EywaIconName;
+  /** 접혔을 때의 툴팁 — `WindowLink`의 `title`은 **창 제목**이라 툴팁으로 안 쓰인다. */
+  hint: string;
+  children: string;
+}) {
+  return (
+    <>
+      <span className="flex h-[18px] items-center md:hidden" title={hint}>
+        <EyIcon name={icon} size={14} />
+      </span>
+      <span className="hidden md:inline">{children}</span>
+    </>
+  );
 }
 
 /**
@@ -42,8 +77,15 @@ export function SheetClassPicker({
 }) {
   return (
     <>
-      <button type="button" className={sheetPill(false)} onClick={() => void onNavigate("/ecs")}>
-        목록
+      <button
+        type="button"
+        className={`${sheetPill(false)} inline-flex items-center`}
+        onClick={() => void onNavigate("/ecs")}
+        aria-label="반 목록"
+      >
+        <PillGlyph icon="list" hint="반 목록">
+          목록
+        </PillGlyph>
       </button>
       <span className={`${MARKER_WIDTH} shrink-0`}>
         <SearchableSelect
@@ -69,7 +111,9 @@ export function SheetClassPicker({
         className={`${sheetPill(false)} inline-flex items-center`}
         ariaLabel={`${classLabel} 반 정보 보기`}
       >
-        반 정보 보기
+        <PillGlyph icon="info" hint={`${classLabel} 반 정보 보기`}>
+          반 정보 보기
+        </PillGlyph>
       </WindowLink>
     </>
   );
