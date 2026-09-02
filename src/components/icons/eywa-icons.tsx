@@ -1146,6 +1146,7 @@ export const MENU_ICON = {
   approvals: "scrollText", // 전자결재 — 결재 문서(두루마리) 정체성
   calendar: "calendar", // 캘린더 — 학원 공용 일정
   shuttle: "bus", // 셔틀(노랑버스) — 노선 편성·등하원 기록
+  inventory: "archive", // 재고 관리 — 보관·대장 정체성(자산관리대장)
   integrations: "sync",
   sheet_sync: "spreadsheet",
   help: "help",

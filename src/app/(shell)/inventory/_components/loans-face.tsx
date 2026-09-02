@@ -1,0 +1,80 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { ToolbarButton } from "@/components/toolbar";
+import { matchesTextQuery } from "@/features/inventory/filter";
+import { loanStatusLabel } from "@/features/inventory/loan-status";
+import type { AssetOption, InventoryLoan } from "@/features/inventory/types";
+import { dashIfEmpty, unknownIfEmpty } from "@/features/inventory/unknown-value";
+import { ListToolbar } from "./list-toolbar";
+import { LoanDialog } from "./loan-dialog";
+import { ReturnDialog } from "./return-dialog";
+import { SortableTable, type Column } from "./sortable-table";
+import { LoanStatusPill } from "./status-pill";
+import { useSort } from "./use-sort";
+
+type Dialog = { kind: "start" } | { kind: "return"; loan: InventoryLoan } | null;
+
+/** 대여이력 면 — `이력ID · 자산ID · 대여자 · 소속 · 대여일 · 반납예정 · 반납일 · 상태 · 비고`. 대여중 행에만 '반납'. */
+export function LoansFace({ loans, assets, canWrite, today }: { loans: InventoryLoan[]; assets: AssetOption[]; canWrite: boolean; today: string }) {
+  const [query, setQuery] = useState("");
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const { sort, toggle } = useSort();
+  const rows = useMemo(
+    () => loans.filter((l) => matchesTextQuery([l.loanCode, l.assetCode, l.assetModel, l.borrowerName, l.dept, l.note], query)),
+    [loans, query],
+  );
+  const columns = useMemo((): Column<InventoryLoan>[] => [
+    { key: "loanCode", label: "이력ID", render: (l) => <span className="font-mono text-[11.5px]">{l.loanCode}</span>, className: "whitespace-nowrap" },
+    { key: "assetCode", label: "자산ID", render: (l) => <span className="font-mono text-[11.5px] font-bold">{l.assetCode}</span>, className: "whitespace-nowrap" },
+    { key: "borrowerName", label: "대여자", render: (l) => l.borrowerName, className: "whitespace-nowrap" },
+    { key: "dept", label: "소속", render: (l) => <Faint v={l.dept} f={dashIfEmpty} />, className: "whitespace-nowrap" },
+    { key: "lentOn", label: "대여일", render: (l) => <Faint v={l.lentOn} f={unknownIfEmpty} num />, className: "whitespace-nowrap" },
+    {
+      key: "dueOn", label: "반납예정",
+      render: (l) => (l.dueOn ? <span className="num">{l.dueOn}</span> : <Faint v={l.dueNote} f={unknownIfEmpty} />),
+      sortValue: (l) => l.dueOn ?? l.dueNote, className: "whitespace-nowrap",
+    },
+    { key: "returnedOn", label: "반납일", render: (l) => <Faint v={l.returnedOn} f={dashIfEmpty} num />, className: "whitespace-nowrap" },
+    { key: "status", label: "상태", render: (l) => <LoanStatusPill status={l.status} />, sortValue: (l) => loanStatusLabel(l.status), className: "whitespace-nowrap" },
+    { key: "note", label: "비고", render: (l) => <span className="text-text-dim">{l.note ?? ""}</span>, className: "min-w-40" },
+  ], []);
+
+  return (
+    <section className="flex flex-col gap-2">
+      <ListToolbar
+        query={query}
+        onQueryChange={setQuery}
+        placeholder="이력ID, 자산ID, 대여자 검색"
+        summary={`${rows.length}건`}
+        actions={canWrite ? <ToolbarButton variant="primary" onClick={() => setDialog({ kind: "start" })}>+ 대여 시작</ToolbarButton> : null}
+      />
+      <div className="bg-card shadow-card rounded-2xl p-2">
+        <SortableTable
+          columns={columns}
+          rows={rows}
+          rowKey={(l) => l.id}
+          sort={sort}
+          onSort={toggle}
+          emptyText={loans.length === 0 ? "대여 이력이 없습니다" : "조건에 맞는 이력이 없습니다"}
+          actions={
+            canWrite
+              ? (l) =>
+                  l.status === "out" ? (
+                    <button type="button" className="text-primary px-1 text-[11.5px] font-medium hover:underline" onClick={() => setDialog({ kind: "return", loan: l })}>
+                      반납
+                    </button>
+                  ) : null
+              : undefined
+          }
+        />
+      </div>
+      {dialog?.kind === "start" ? <LoanDialog assets={assets} today={today} onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === "return" ? <ReturnDialog loan={dialog.loan} today={today} onClose={() => setDialog(null)} /> : null}
+    </section>
+  );
+}
+
+function Faint({ v, f, num = false }: { v: string | null; f: (v: string | null) => string; num?: boolean }) {
+  return v ? <span className={num ? "num" : ""}>{v}</span> : <span className="text-text-faint">{f(v)}</span>;
+}

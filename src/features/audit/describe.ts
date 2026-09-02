@@ -23,6 +23,9 @@ import {
 } from "@/features/consultations/labels";
 import { meetingReportSectionLabel } from "@/features/meetings/report-sections";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
+import { assetStatusLabel } from "@/features/inventory/status";
+import { assetCategoryLabel } from "@/features/inventory/category";
+import { auditResultLabel } from "@/features/inventory/audit-result";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
@@ -64,6 +67,11 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
   timetable_plan_slot: "시간표 계획 칸",
+  // 재고 관리(0242a) — 없으면 '대상' 칸에 영문 "inventory_asset"이 그대로 뜬다.
+  inventory_asset: "자산",
+  inventory_loan: "자산 대여",
+  inventory_audit: "자산 실사",
+  inventory_supply: "소모품",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -691,6 +699,68 @@ export function auditDetail(
       const on = str(m.boardedOn);
       const parts = [on, isBoardingStatus(status) ? BOARDING_STATUS_LABEL[status] : null].filter(Boolean);
       return parts.length ? parts.join(" · ") : null;
+    }
+    // ── 재고 관리(0242a) ────────────────────────────────────────────────────────────
+    // 🔴 case가 없으면 폴백이 `status: on_loan` · `category: laptop`을 **영문 그대로** 내보낸다.
+    case "inventory_asset_create": {
+      const code = str(m.assetCode);
+      return join(
+        code ? `「${code}」` : null,
+        assetCategoryLabel(str(m.category)) || null,
+        assetStatusLabel(str(m.status)) || null,
+      );
+    }
+    case "inventory_asset_update": {
+      const code = str(m.assetCode);
+      // 바뀐 칸은 호출부가 **한글 라벨**로 넘긴다(컬럼명 아님).
+      const changed = arr(m.changed).map(str).filter((v): v is string => !!v);
+      return join(code ? `「${code}」 수정` : "수정", changed.length ? changed.join("·") : null);
+    }
+    case "inventory_asset_status": {
+      const code = str(m.assetCode);
+      const from = assetStatusLabel(str(m.from));
+      const to = assetStatusLabel(str(m.to));
+      const on = str(m.disposedOn);
+      return join(code ? `「${code}」` : null, from && to ? `${from} → ${to}` : to || null, on ? `폐기일 ${on}` : null);
+    }
+    case "inventory_loan_out": {
+      const code = str(m.assetCode);
+      const who = str(m.borrowerName);
+      const dept = str(m.dept);
+      const lent = str(m.lentOn);
+      const due = str(m.dueOn) ?? str(m.dueNote);
+      return join(
+        code ? `「${code}」` : null,
+        who ? `${who}${dept ? `(${dept})` : ""}에게 대여` : null,
+        lent ? `${lent}${due ? ` ~ ${due}` : ""}` : due ? `반납예정 ${due}` : null,
+      );
+    }
+    case "inventory_loan_return": {
+      const code = str(m.assetCode);
+      const who = str(m.borrowerName);
+      const on = str(m.returnedOn);
+      const restored = assetStatusLabel(str(m.restoredStatus));
+      return join(code ? `「${code}」` : null, who ? `${who} 반납` : "반납", on, restored ? `${restored}으로 되돌림` : null);
+    }
+    case "inventory_audit": {
+      const code = str(m.assetCode);
+      const on = str(m.auditedOn);
+      const result = auditResultLabel(str(m.result));
+      const loc = str(m.location);
+      const act = str(m.action);
+      return join(code ? `「${code}」` : null, on, result || null, loc, act ? `조치 ${act}` : null);
+    }
+    case "inventory_supply_update": {
+      const code = str(m.itemCode);
+      const name = str(m.name);
+      const from = num(m.qtyFrom);
+      const to = num(m.qtyTo);
+      const on = str(m.checkedOn);
+      return join(
+        [code ? `「${code}」` : null, name].filter(Boolean).join(" ") || null,
+        from !== null && to !== null ? `수량 ${from} → ${to}` : to !== null ? `수량 ${to}` : null,
+        on ? `확인 ${on}` : null,
+      );
     }
     // ── 수업 평가(class_review) ──────────────────────────────────────────────────────
     // 🔴 case가 없으면 폴백이 `slot: observer` · `observerMode: assigned`를 **영문 그대로** 내보낸다

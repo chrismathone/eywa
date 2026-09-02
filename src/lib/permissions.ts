@@ -60,6 +60,7 @@ export const MENU_KEYS = [
   "approvals",
   "calendar",
   "shuttle",
+  "inventory",
   "integrations",
   "sheet_sync",
   "help",
@@ -100,6 +101,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   approvals: "전자결재",
   calendar: "캘린더",
   shuttle: "셔틀",
+  inventory: "재고 관리",
   integrations: "makeedu 연동",
   sheet_sync: "구글 시트 연동",
   help: "도움말",
@@ -207,6 +209,11 @@ export const MENU_ACCESS: AccessMatrix = {
   // 강사·상담·회계·뷰어는 **열람만**: 담임이 "우리 반 누가 셔틀 타나"를 봐야 결석 판단이 되는데,
   // 편성을 만지면 그 학생의 등하원 동선이 조용히 바뀐다(학생 레코드 잠금과 같은 결, CLAUDE.md).
   shuttle: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 재고 관리(전자기기 자산관리대장, 원장 2026-09-02 — 0242a). 자산대장은 **경영지원팀 도구**다(원본 시트의
+  // 분배관리 = 경영지원팀). 회계는 자산 현황을 볼 일이 있어 열람만. 강사·상담·뷰어에게 열면 사이드바 줄만
+  // 늘고 쓸 일이 없다. 쓰기 게이트는 canWriteTenant("inventory")(회계 readonly는 자산을 못 고친다).
+  // ⚠️ 기본값이 full인 셀이 있으므로 super_admin은 mergeMostPermissive로 자동 통과한다(별도 처리 불요).
+  inventory: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "readonly", viewer: "none", student: "none" },
   // 전자결재(기안·결재함, 원장 지시 2026-08-14 — 첫 양식 = 휴가신청서) — **테스트 단계라 기본 전원 차단**.
   // 개방은 코드 명단([`access.ts`](../features/approvals/access.ts) = 이승엽·김예원)이 개인 예외로
   // 얹는다(class_review와 같은 결이되, 그쪽은 tenant_settings 데이터·이쪽은 코드 상수 — 이 PC에서
@@ -332,6 +339,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   approvals: "approvals",
   calendar: "calendar",
   shuttle: "shuttle",
+  inventory: "inventory",
   help: "help",
   admin: "admin",
   owner: "owner",
