@@ -1,5 +1,24 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-02 (5) — MCS **목표 레일**(Start·Plan·Now·End) 시안 3종 — dev 비교 중, main 미반영
+
+원장이 옛 수학 프로그램 초안(able, `수학프로그램1-1.pdf`)을 주며 *"우리 mcs에 적용할 방법 모색"* + *"바로 main에
+적용하지 않고 dev서버에서 … 비교 시안보면서 적용할 계획"*. 초안의 핵심 = 과정 위의 네 점 `Start ─ Plan ─ Now ─ End`와
+"진행률 52% · 계획과의 차이 5블럭 빠름". 우리 자리로 옮기면 과정=**그 달 목표 구간**(`math_month_goals`의 가장 뒤 차시가
+End · 달 시작 전 이 반 마지막 위치가 Start) · 블럭=커리큘럼 **차시** · Plan=Start~End를 **수업일 수로 등분** · Now=이 달 마지막 기록.
+
+- 판정 단일 소스 [`goal-rail.ts`](../src/features/math-sheets/lib/goal-rail.ts)(순수·숫자만, ±1차시=계획대로 · 목표 없음/위치 미상/
+  아직 수업 전은 **경고 아님**) + 위치 접기 [`lesson-position.ts`](../src/features/math-sheets/lib/lesson-position.ts)(커리큘럼을 끌어와
+  **서버 전용**, 한 칸에 차시가 여럿이면 **가장 뒤**) + [`report-metrics.ts`](../src/features/math-sheets/lib/report-metrics.ts)
+  (일일테스트·과제 평균 — 기존 `parseExamPercent`·`parseHomeworkRate` 재사용. 확인테스트는 8월 기입 0건, 3LT·오답은 대응물 없어 열을 안 세움).
+- 보기 넷: `진도표 | 진도 레일(종전) | 목표 레일(A 카드) | 현황 표(B 초안의 반별 진도 현황)` + 진도표 고정열 **미니 레일**(C).
+  툴바에 "계획보다 느림 N · 목표 도달 N · 목표 없음 N"(학생마다 대표 레일 하나, `pickPrimaryRail`).
+- 🔴 **종전 '진도 레일'(progress_containers)은 거짓이었다** — MS2A 전원이 8월에 중3 인수분해를 나갔는데 컨테이너는 `중2 · 상자그림 ·
+  7.통계`에 멈춰 있었다(8월 보고서 1,814건 중 progress_entries 매칭 591건). 새 레일은 `lesson_reports.progress`에서 직접 접는다.
+- 🔴 **Start는 이 반으로 좁힌다** — 정규(중3-1)와 특강(중3-2)을 동시에 다니는 학생은 반을 안 가리면 특강 위치가 Start가 되어
+  정규 목표가 "현재보다 앞이 아님"이 된다(실측 MS2A 3명).
+- ⚠️ 시연용 목표 8행을 `math_month_goals`에 넣어 뒀다(MS2A 2026-08·09, `updated_by IS NULL`) — 시안 결정 뒤 지운다.
+
 ## 2026-09-02 (4) — 보강을 **어느 반에서 했는지 반드시 남긴다**(출석부 미기록 수리)
 
 원장 제보: *"보강건으로 보고서 발송한 학생들에 대해서 출석부에 입력되지 않는 문제 해결 (담당배정이 아닌

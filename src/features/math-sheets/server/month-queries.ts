@@ -1,7 +1,17 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { addDays, kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
+import {
+  buildGoalRail,
+  pickPrimaryRail,
+  type GoalRail,
+  type GoalRailStatus,
+  type RailPoint,
+  type RailTrack,
+} from "../lib/goal-rail";
+import { dayPositionsOf, goalEndsOf } from "../lib/lesson-position";
+import { summarizeReportMetrics, type ReportMetrics } from "../lib/report-metrics";
 import { classDaysOf, normalizeMonth, type ClassDay, type MathScheduleRow } from "../lib/class-days";
 import {
   cellStateOf,
@@ -61,6 +71,15 @@ export type MathStudentRow = {
   /** 활성 진도 컨테이너(현행·선행) — 수학에만 있는 재료. 없으면 빈 배열. */
   tracks: MathTrack[];
   /**
+   * **목표 레일**(Start·Plan·Now·End) — 트랙(현행·선행)마다 하나. 초안(able 2026-09-02)의 "목표 대비
+   * 현재 진도" 그림. 판정은 [`goal-rail.ts`](../lib/goal-rail) 단일 소스이고 위치는 서버가
+   * [`lesson-position.ts`](../lib/lesson-position)로 접어 숫자·차시명만 내려보낸다(B5).
+   * 위치가 한 번도 안 잡히고 목표도 없는 트랙은 아예 없다(빈 배열 = 말할 것이 없다).
+   */
+  rails: StudentRail[];
+  /** 이 달 일일테스트 정답률·과제 수행률 평균 — 없으면 null(0이 아니다). */
+  metrics: ReportMetrics;
+  /**
    * 기준일(그 달 안으로 접은 오늘)에서 본 자리 — `ended`면 회색 줄로 가라앉힌다
    * (원장 2026-09-01 *"퇴원처리형식으로 회색 줄로"*).
    * 🔴 `upcoming`(아직 안 들어온 신입)을 `ended`와 한 덩어리로 묶지 말 것 — 앞으로 올 사람을
@@ -78,9 +97,30 @@ export type MathDayRecord = {
   textbook: string | null;
   progress: string | null;
   homework: string | null;
+  /** 일일테스트 원문("5문제 중 4개 맞음") — 숫자 변환은 report-metrics.ts가 한다. */
+  dailyTest: string | null;
+  /** 지난 과제 수행률 원문("100%"·"미제출"). */
+  homeworkScore: string | null;
   /** 목표 밖 교재인가(목표가 없으면 항상 false). */
   offGoal: boolean;
 };
+
+export type StudentRail = {
+  track: RailTrack;
+  trackLabel: string;
+  rail: GoalRail;
+  /** Start를 준 기록의 날짜(달 전 마지막 기록, 없으면 이 달 첫 기록). 위치 미상이면 null. */
+  startDate: string | null;
+  /** 네 점의 차시 이름(커리큘럼 범위 밖이면 null). */
+  startLesson: string | null;
+  nowLesson: string | null;
+  /** Now 차시의 학년("중2") — 선행 트랙에서 "어느 학년을 나가는지"를 말한다. */
+  nowGrade: string | null;
+  planLesson: string | null;
+  endLesson: string | null;
+};
+
+export type RailSummary = Record<GoalRailStatus, number>;
 
 export type MathTrack = {
   track: string;
@@ -120,6 +160,11 @@ export type MathSheetMonthData = {
   /** 이 달에 실제로 나간 교재 전체(목표 입력 자동완성 후보 — 표기 흔들림을 입력 단계에서 줄인다). */
   bookOptions: string[];
   fill: MathFillStats;
+  /**
+   * 학생마다 **대표 레일 하나**(`pickPrimaryRail`)의 상태를 센 것 — 툴바 "느림 N · 계획대로 N".
+   * 🔴 달 중간에 나간 학생(`ended`)은 안 센다(이미 없는 사람을 재촉하지 않는다).
+   */
+  railSummary: RailSummary;
   canEdit: boolean;
   /**
    * 목표를 읽을 수 있었나 — 화면이 그 사실을 조용히 삼키지 않게.
@@ -142,6 +187,12 @@ export type GoalsStatus = "ok" | "missing-table" | "failed";
 export type MathMonthResult = { ok: true; data: MathSheetMonthData } | { ok: false; error: string };
 
 const TRACK_LABEL: Record<string, string> = { current: "현행", ahead: "선행" };
+const RAIL_TRACKS: readonly RailTrack[] = ["current", "ahead"];
+/**
+ * 레일의 Start(달 시작 전 마지막 위치)를 찾는 창 — 달 시작 전 이만큼의 기록을 본다.
+ * 수학 반은 주 1~2회라 45일이면 6~12번의 기록이고, 그 안에 위치가 하나도 없으면 이 달 첫 기록이 Start다.
+ */
+const PRIOR_WINDOW_DAYS = 45;
 
 type MathReportRow = {
   student_id: string;
@@ -149,7 +200,18 @@ type MathReportRow = {
   textbook: string | null;
   progress: string | null;
   homework_today: string | null;
+  daily_test: string | null;
+  homework_score: string | null;
 };
+type PriorReportRow = { student_id: string; report_date: string; progress: string | null };
+
+function lessonNameOf(position: number | null): string | null {
+  return position == null ? null : (describePosition(position)?.lesson ?? null);
+}
+
+function emptyRailSummary(): RailSummary {
+  return { "no-data": 0, "no-goal": 0, "goal-behind": 0, "not-started": 0, done: 0, ahead: 0, on: 0, behind: 0 };
+}
 type MathAttRow = { student_id: string; session_date: string; status: string | null };
 
 export async function getMathSheetMonth(
@@ -183,7 +245,7 @@ export async function getMathSheetMonth(
     fetchAllPaged<MathReportRow>((f, t) =>
       admin
         .from("lesson_reports")
-        .select("student_id, report_date, textbook, progress, homework_today")
+        .select("student_id, report_date, textbook, progress, homework_today, daily_test, homework_score")
         .eq("tenant_id", tenantId)
         .eq("class_id", classId)
         .gte("report_date", from)
@@ -270,16 +332,43 @@ export async function getMathSheetMonth(
   }
 
   const studentIds = [...enrByStudent.keys()];
-  const students = studentIds.length
-    ? await fetchInChunks(studentIds, (chunk) =>
-        admin
-          .from("students")
-          .select("id, name, school, grade, status, withdrawn_at")
-          .eq("tenant_id", tenantId)
-          .in("id", chunk),
-      )
-    : [];
+  // 학생 행과 **달 시작 전 기록**(레일의 Start 재료)은 서로 독립이라 함께 띄운다(B4).
+  // 🔴 달 전 기록도 **이 반**으로 좁힌다 — 한 학생이 정규(중3-1)와 특강(중3-2)을 **동시에** 다녀서 반을
+  //    안 가리면 특강의 위치(삼각비)가 정규 반의 Start가 되고, 정규 목표(이차함수)가 "현재보다 앞이 아님"이
+  //    된다(실측 2026-09-02 MS2A 3명). 레일은 **이 반의 진도선**이다(초안의 과정(course) 단위와 같다).
+  //    ⚠️ 그래서 달 초에 반이동해 온 학생은 옛 반의 위치를 안 잇는다 — 이 달 첫 기록이 Start가 된다.
+  //    100명 × 45일이면 1,000행을 넘을 수 있어 청크+페이지네이션(B2·B3).
+  const [students, priorRows] = studentIds.length
+    ? await Promise.all([
+        fetchInChunks(studentIds, (chunk) =>
+          admin
+            .from("students")
+            .select("id, name, school, grade, status, withdrawn_at")
+            .eq("tenant_id", tenantId)
+            .in("id", chunk),
+        ),
+        fetchAllPagedInChunks<PriorReportRow>(studentIds, (chunk, f, t) =>
+          admin
+            .from("lesson_reports")
+            .select("student_id, report_date, progress")
+            .eq("tenant_id", tenantId)
+            .eq("class_id", classId)
+            .in("student_id", chunk)
+            .gte("report_date", addDays(from, -PRIOR_WINDOW_DAYS))
+            .lt("report_date", from)
+            .order("report_date")
+            .order("id")
+            .range(f, t),
+        ),
+      ])
+    : [[], []];
   const studentById = new Map(students.map((s) => [String(s.id), s]));
+  const priorByStudent = new Map<string, PriorReportRow[]>();
+  for (const r of priorRows) {
+    const list = priorByStudent.get(String(r.student_id)) ?? [];
+    list.push(r);
+    priorByStudent.set(String(r.student_id), list);
+  }
 
   // 그 학생·그 날의 출결(교시 여럿이면 대표 하나로 접는다 — 결석이 이긴다).
   const attByKey = new Map<string, string[]>();
@@ -339,6 +428,8 @@ export async function getMathSheetMonth(
           textbook: rec.textbook ?? null,
           progress: rec.progress ?? null,
           homework: rec.homework_today ?? null,
+          dailyTest: rec.daily_test ?? null,
+          homeworkScore: rec.homework_score ?? null,
           // 칸 테두리·열 머리·툴바 요약이 **같은 함수**를 통과한다(갈리면 한 화면에서 서로 다른 답이 된다).
           offGoal: isOffGoalRecord(
             { studentId: sid, date, textbook: rec.textbook ?? null, progress: rec.progress ?? null },
@@ -347,13 +438,67 @@ export async function getMathSheetMonth(
         };
       }
     }
+    // ── 목표 레일(Start·Plan·Now·End) — 트랙별 재료를 숫자로 접는다. 판정은 goal-rail.ts.
+    const grade = info.grade ? String(info.grade) : null;
+    const ends = goalEndsOf(goals[sid]?.targetProgress, grade);
+    const pointsBy: Record<RailTrack, RailPoint[]> = { current: [], ahead: [] };
+    for (const date of dayDates) {
+      const rec = records[date];
+      if (!rec) continue;
+      const day = dayPositionsOf(rec.progress, grade);
+      for (const t of RAIL_TRACKS) {
+        const p = day[t];
+        if (p) pointsBy[t].push({ date, position: p.position });
+      }
+    }
+    // 달 시작 전 마지막 위치(+그 날짜) — 날짜 오름차순으로 왔으니 마지막에 본 것이 남는다.
+    const prior: Partial<Record<RailTrack, { position: number; date: string }>> = {};
+    for (const r of priorByStudent.get(sid) ?? []) {
+      const day = dayPositionsOf(r.progress, grade);
+      for (const t of RAIL_TRACKS) {
+        if (day[t]) prior[t] = { position: day[t]!.position, date: String(r.report_date).slice(0, 10) };
+      }
+    }
+    const rails: StudentRail[] = [];
+    for (const t of RAIL_TRACKS) {
+      const goalEnd = ends[t]?.position ?? null;
+      // 위치도 목표도 없는 트랙은 말할 것이 없다 — 빈 레일을 세우지 않는다.
+      if (pointsBy[t].length === 0 && prior[t] == null && goalEnd == null) continue;
+      const rail = buildGoalRail({
+        startBefore: prior[t]?.position ?? null,
+        goalEnd,
+        points: pointsBy[t],
+        dayDates,
+        today,
+      });
+      rails.push({
+        track: t,
+        trackLabel: TRACK_LABEL[t] ?? t,
+        rail,
+        // Start를 준 기록의 날짜 — 이 달 기록이 없을 때 "8/27 이후 기록 없음"이라 말하기 위해.
+        startDate: prior[t]?.date ?? pointsBy[t].find((p) => p.date <= today)?.date ?? null,
+        startLesson: lessonNameOf(rail.start),
+        nowLesson: lessonNameOf(rail.now),
+        nowGrade: rail.now == null ? null : (describePosition(rail.now)?.grade ?? null),
+        planLesson: lessonNameOf(rail.plan),
+        endLesson: lessonNameOf(rail.end),
+      });
+    }
+    const metrics = summarizeReportMetrics(
+      dayDates
+        .filter((d) => records[d])
+        .map((d) => ({ dailyTest: records[d]!.dailyTest, homework: records[d]!.homeworkScore })),
+    );
+
     rows.push({
       studentId: sid,
       name: String(info.name),
       school: info.school ? String(info.school) : null,
-      grade: info.grade ? String(info.grade) : null,
+      grade,
       cells,
       records,
+      rails,
+      metrics,
       stalledDates: stalledDatesOf(
         dayDates
           .filter((d) => records[d])
@@ -422,6 +567,14 @@ export async function getMathSheetMonth(
 
   rows.sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
+  // 툴바 집계 — 학생마다 대표 레일 하나(카드 배지·현황 표와 **같은 함수**로 고른다).
+  const railSummary = emptyRailSummary();
+  for (const row of rows) {
+    if (row.rosterPhase === "ended") continue;
+    const primary = pickPrimaryRail(row.rails);
+    railSummary[primary?.rail.status ?? "no-data"] += 1;
+  }
+
   // 🔴 열 머리 경고는 **화면에 실제로 그려지는 행**에서만 센다. 기록 전체로 세면 표에 없는 학생
   //    (그 달 내내 수강 밖인데 기록만 남은 경우)까지 세어 **경고 표시된 열에 정작 경고 칸이 없다**.
   const shownRecords: MathRecordLike[] = rows.flatMap((row) =>
@@ -456,6 +609,7 @@ export async function getMathSheetMonth(
       offGoalByDate,
       bookOptions,
       fill: tallyCells(allStates),
+      railSummary,
       canEdit: access.canWrite,
       goalsStatus,
       elapsedDays: dayDates.filter((d) => d <= today).length,

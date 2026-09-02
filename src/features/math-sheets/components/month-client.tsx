@@ -12,10 +12,15 @@ import {
   MCS_FONT_SIZE_ZOOM,
   type McsFontSize,
 } from "../font-size";
-import type { McsMonthView } from "../view-prefs";
+import { MCS_MONTH_VIEWS, MCS_MONTH_VIEW_LABEL, type McsMonthView } from "../view-prefs";
 import type { MathSheetMonthData } from "../server/month-queries";
 import { MonthSheet } from "./month-sheet";
 import { MonthTrack } from "./month-track";
+import { MonthGoalRail } from "./month-goal-rail";
+import { MonthStatus } from "./month-status";
+import { RAIL_STATUS_LABEL } from "../lib/goal-rail";
+import { RAIL_TONE } from "./goal-rail-bar";
+import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { useStudentGoals } from "./use-student-goals";
 import { useState } from "react";
 
@@ -121,10 +126,7 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
           // 저장 flush를 끝낸 뒤 직접 이동한다(가로챈 화면의 책임 — PeriodNav 주석 참조).
           onNavigate={(href) => flushAll().then(() => window.location.assign(href))}
         />
-        <div className={SHEET_SEG_BOX}>
-          {seg("sheet", "진도표")}
-          {seg("track", "진도 레일")}
-        </div>
+        <div className={SHEET_SEG_BOX}>{MCS_MONTH_VIEWS.map((v) => seg(v, MCS_MONTH_VIEW_LABEL[v]))}</div>
         {data.teacherName ? (
           <span className="bg-primary-soft text-primary rounded-full px-2 py-0.5 text-[11px] font-bold">
             담임 {data.teacherName}
@@ -188,6 +190,20 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
             기록 {data.fill.written} / {data.fill.written + data.fill.unwritten}
           </span>
         ) : null}
+        {/* 목표 대비 집계 — 학생마다 대표 레일 하나(카드·현황 표와 같은 함수). 0인 상태는 안 적는다. */}
+        {data.elapsedDays > 0
+          ? (["behind", "on", "ahead", "done", "no-goal"] as const).map((s) =>
+              data.railSummary[s] > 0 ? (
+                <span
+                  key={s}
+                  className={`num rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE_SOFT[RAIL_TONE[s]]}`}
+                  title="이 달 목표(시작 → 목표 차시)에 견준 현재 위치 — 학생마다 대표 트랙 하나"
+                >
+                  {RAIL_STATUS_LABEL[s]} {data.railSummary[s]}
+                </span>
+              ) : null,
+            )
+          : null}
         {savedAt ? <span className="text-green text-[11px] font-bold">저장됨</span> : null}
       </div>
 
@@ -232,6 +248,10 @@ export function MonthClient({ data }: { data: MathSheetMonthData }) {
           onGoalChange={setField}
           canEdit={data.canEdit && data.goalsStatus === "ok"}
         />
+      ) : view === "rail" ? (
+        <MonthGoalRail data={data} />
+      ) : view === "status" ? (
+        <MonthStatus data={data} />
       ) : (
         <MonthTrack data={data} />
       )}

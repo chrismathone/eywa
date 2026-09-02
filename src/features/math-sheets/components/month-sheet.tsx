@@ -6,10 +6,13 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
 import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
 import { CELL_STATE_LABEL, type MathCellState } from "../lib/cell-state";
+import { pickPrimaryRail, railDiffLabel, RAIL_STATUS_LABEL } from "../lib/goal-rail";
 import { actualBooksOf, type MathRecordLike, type StudentGoalMap } from "../lib/student-goals";
 import type { MathSheetMonthData } from "../server/month-queries";
 import type { GoalField } from "./use-student-goals";
 import { GoalCell } from "./goal-cell";
+import { GoalRailBar, RAIL_TONE } from "./goal-rail-bar";
+import { TONE_TEXT } from "@/lib/design/semantic-color";
 
 /**
  * A안 — **학생 × 수업일 진도표**. MCS의 기본 보기.
@@ -160,6 +163,42 @@ export function MonthSheet({
                     canEdit={canEdit}
                     onChange={onGoalChange}
                   />
+                  {/* 시안 C — 목표 칸 바로 아래 **미니 레일**(시작·계획·지금·목표). 진도표를 떠나지 않고
+                      "계획 대비 어디인가"를 본다. 레일·판정·문구는 카드/현황 표와 같은 부품이다. */}
+                  {(() => {
+                    const primary = pickPrimaryRail(stu.rails);
+                    if (!primary || primary.rail.start == null || stu.rosterPhase === "ended") return null;
+                    const tone = RAIL_TONE[primary.rail.status];
+                    const diff = railDiffLabel(primary.rail);
+                    return (
+                      <div className="mt-1.5 px-0.5">
+                        <GoalRailBar
+                          rail={primary.rail}
+                          size="sm"
+                          title={[
+                            primary.startLesson ? `시작 ${primary.startLesson}` : null,
+                            primary.planLesson ? `계획 ${primary.planLesson}` : null,
+                            primary.nowLesson ? `지금 ${primary.nowLesson}` : null,
+                            primary.endLesson ? `목표 ${primary.endLesson}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        />
+                        <div className="num mt-0.5 flex items-baseline gap-1.5 text-[10.5px]">
+                          {primary.rail.progressPct != null ? (
+                            <b className={`font-extrabold ${TONE_TEXT[tone]}`}>{primary.rail.progressPct}%</b>
+                          ) : primary.rail.moved != null && primary.rail.moved > 0 ? (
+                            <b className="text-text-dim font-extrabold">+{primary.rail.moved}차시</b>
+                          ) : null}
+                          {diff ? <span className={`font-bold ${TONE_TEXT[tone]}`}>{diff}</span> : null}
+                          {/* 판정이 안 서는 상태는 그 이유를 적는다(라벨은 RAIL_STATUS_LABEL 단일 소스). */}
+                          {primary.rail.status === "no-goal" || primary.rail.status === "goal-behind" ? (
+                            <span className="text-text-faint">{RAIL_STATUS_LABEL[primary.rail.status]}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </td>
                 {data.days.map((day) => {
                   const state = stu.cells[day.date] ?? "untracked";
