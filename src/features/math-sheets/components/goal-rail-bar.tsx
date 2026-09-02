@@ -66,29 +66,30 @@ function RailLine({
   /** 막대 아래 한 줄(차시 이름 등). 좁은 고정열이라 넘치면 자른다. */
   text: string | null;
 }) {
+  // 굵기는 원장 2026-09-02 *"레일 텍스트 굵은 글씨 해주고, 레일바도 굵기 현재 2배로"* — 선 3px→6px, 글자는 전부 굵게.
   return (
     <div>
       <div className="flex items-center gap-1.5">
-        <span className="text-text-faint w-[46px] shrink-0 text-[10.5px] font-bold">{label}</span>
-        <div className="relative h-[11px] min-w-0 flex-1">
+        <span className="text-text-dim w-[52px] shrink-0 text-[11.5px] font-extrabold">{label}</span>
+        <div className="relative h-[14px] min-w-0 flex-1">
           <div
             className={`absolute top-[4px] right-0 left-0 ${
-              dashed ? "border-line-strong h-0 border-t-2 border-dashed" : "bg-line h-[3px] rounded-full"
+              dashed ? "border-line-strong h-0 border-t-[3px] border-dashed" : "bg-line h-[6px] rounded-full"
             }`}
           />
           {x != null ? (
-            <div className={`absolute top-[4px] left-0 h-[3px] rounded-full ${fill}`} style={{ width: `${x}%` }} />
+            <div className={`absolute top-[4px] left-0 h-[6px] rounded-full ${fill}`} style={{ width: `${x}%` }} />
           ) : null}
           {/* 점 — 양 끝에서 레일 밖으로 삐져나오지 않게 점 지름만큼 안쪽으로 당긴다. */}
           {dot && x != null ? (
             <div
-              className={`absolute top-0 h-[11px] w-[11px] rounded-full border-2 border-white ${fill}`}
-              style={{ left: `calc(${x}% - ${(11 * x) / 100}px)` }}
+              className={`absolute top-0 h-[14px] w-[14px] rounded-full border-2 border-white ${fill}`}
+              style={{ left: `calc(${x}% - ${(14 * x) / 100}px)` }}
             />
           ) : null}
         </div>
       </div>
-      {text ? <div className="text-text-dim truncate pl-[52px] text-[10.5px] leading-tight">{text}</div> : null}
+      {text ? <div className="text-foreground truncate pl-[58px] text-[11.5px] leading-tight font-bold">{text}</div> : null}
     </div>
   );
 }

@@ -75,6 +75,7 @@ export function SheetClassPicker({
   onNavigate,
   hrefForClass,
   listHref = "/ecs",
+  teacherName = null,
 }: {
   classId: string;
   /** 지금 보고 있는 반 이름 — 툴팁·스크린리더 라벨에 쓴다. */
@@ -83,6 +84,12 @@ export function SheetClassPicker({
   onNavigate: (href: string) => void | Promise<void>;
   /** 반을 바꿨을 때 갈 곳 — 주간은 보던 주를, 월간은 보던 달을 유지한다. */
   hrefForClass: (classId: string) => string;
+  /**
+   * 담임 이름 — 노란 반 표기 **안, 가장 오른쪽**에 이름만 적는다(원장 2026-09-02 *"담임을 반 옆에 적을것.
+   * 반 이름 표기된 곳 가장 우측정렬로"* → *"ecs도 마찬가지"* → *"담임 이수진 → 이수진 정도만"*).
+   * 🔴 '담임' 접두·별도 알약 금지. null이면 아무것도 안 그린다(담임 없는 반은 빈 자리).
+   */
+  teacherName?: string | null;
   /**
    * '목록'이 가는 곳 — 기본은 영어 랜딩(`/ecs`). 수학 시트(MCS 월간)는 **같은 조각**을 `/mcs`로 쓴다
    * (원장 2026-09-02 *"영어 ECS처럼 수학 MCS에 반정보가 있어야하는데 상단 헤더에 없음"*) —
@@ -102,7 +109,7 @@ export function SheetClassPicker({
           목록
         </PillGlyph>
       </button>
-      <span className={`${MARKER_WIDTH} shrink-0`}>
+      <span className={`${MARKER_WIDTH} relative shrink-0`}>
         <SearchableSelect
           options={classOptions.map((c) => ({ value: c.id, label: c.name }))}
           value={classId}
@@ -117,6 +124,16 @@ export function SheetClassPicker({
           // 반이 수십 개라 목록에서 **지금 보고 있는 반**을 눈으로 못 찾겠다는 지적(원장 2026-08-06).
           highlightSelected
         />
+        {/* 담임 이름 — 표기 안 오른쪽 끝, 쉐브론 바로 왼쪽. 같은 노란 바탕이라 긴 반 이름이 밑으로
+            지나가도 이름이 앞에 선다(트리거 위에 얹힌 것이라 클릭은 그대로 트리거로 간다). */}
+        {teacherName ? (
+          <span
+            className="bg-marker text-text-dim pointer-events-none absolute top-1/2 right-[38px] -translate-y-1/2 pl-2 text-[15px] leading-none font-extrabold whitespace-nowrap"
+            title={`담임 ${teacherName}`}
+          >
+            {teacherName}
+          </span>
+        ) : null}
       </span>
       {/* 반 정보 보기 — 드롭다운 **바로 옆**이라 "지금 고른 그 반"이라는 게 자리로 읽힌다.
           WindowLink라 창 안에선 드릴인, 최상위에선 새 창. */}

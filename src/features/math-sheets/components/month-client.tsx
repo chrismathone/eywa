@@ -8,17 +8,15 @@ import { SheetBarDivider, SheetClassPicker } from "@/features/class-sheets/compo
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PeriodNav } from "@/components/period-nav";
-import { copyGoalsFromPreviousMonth, setMyMcsFontSize, setMyMcsMonthView } from "../server/actions";
+import { copyGoalsFromPreviousMonth, setMyMcsFontSize } from "../server/actions";
 import {
   MCS_FONT_SIZES,
   MCS_FONT_SIZE_LABEL,
   MCS_FONT_SIZE_ZOOM,
   type McsFontSize,
 } from "../font-size";
-import { MCS_MONTH_VIEWS, MCS_MONTH_VIEW_LABEL, type McsMonthView } from "../view-prefs";
 import type { MathSheetMonthData } from "../server/month-queries";
 import { MonthGrid } from "./month-grid";
-import { sortBySlow } from "../lib/student-order";
 import { RAIL_STATUS_LABEL } from "../lib/goal-rail";
 import { RAIL_TONE } from "./goal-rail-bar";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
@@ -26,13 +24,13 @@ import { useStudentGoals } from "./use-student-goals";
 import { useState } from "react";
 
 /**
- * MCS 월간 뷰 껍데기 — **진도표 ↔ 현황 표 전환**·행 순서·목표 편집 상태를 소유한다(표 자체는 month-grid.tsx 하나).
+ * MCS 월간 뷰 껍데기 — 상단 바·글씨 크기·목표 편집 상태를 소유한다(표 자체는 month-grid.tsx 하나).
  *
- * 🔴 전환에 재조회가 없다 — 두 보기는 같은 자료를 다르게 그린 것뿐이라 서버를 다시 부르면
- *    "보기만 바꿨는데 화면이 깜빡"인다. 달 이동만 서버 왕복(`PeriodNav`).
+ * 🔴 **보기는 진도표 하나다**(원장 2026-09-02: *"현황표도 제거. 그냥 진도표 하나만 남겨"* · *"느린순 제거"* ·
+ *    *"탭 구분 자체를 없애고 진도표 화면만"*) — 같은 날 오전에 만든 진도 레일·목표 레일·현황 표 보기와
+ *    '느린 순' 정렬을 전부 걷었다. 레일은 탭이 아니라 고정열의 목표 칸 아래 두 줄이다. **보기 탭을 다시 만들지 말 것.**
  * 🔴 달을 옮기기 전에 **밀린 목표 저장을 끝까지 기다린다** — 안 기다리면 방금 친 글자가 언마운트에
  *    쓸려 간다(ECS 월간 뷰에서 적대적 리뷰로 잡은 결함과 같은 자리).
- * ⚠️ 전환 버튼의 모양·자리는 ECS와 **똑같이** 둔다 — 두 시트를 오가는 사람이 다시 배우지 않게.
  */
 export function MonthClient({
   data,
@@ -42,13 +40,9 @@ export function MonthClient({
   /** 반 전환 드롭다운 — 서버가 지금 보는 반을 맨 앞에 끼워 준다(`getMathClassOptions` + 페이지). */
   classOptions: { id: string; name: string }[];
 }) {
-  const [view, setView] = useState<McsMonthView>(data.view);
   const [fontSize, setFontSize] = useState<McsFontSize>(data.fontSize);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
-  // '느린 순' — 세 보기가 **같은 순서**를 쓴다(높이만이 아니라 순서도 같아야 전환 때 눈이 같은 줄에 머문다).
-  const [bySlow, setBySlow] = useState(false);
-  const students = bySlow ? sortBySlow(data.students) : data.students;
   const { goals, setField, flushAll, savedAt, error, dismissError } = useStudentGoals({
     classId: data.classId,
     month: data.month,
@@ -106,27 +100,6 @@ export function MonthClient({
     }
   };
 
-  const chooseView = (next: McsMonthView) => {
-    if (next === view) return;
-    setView(next);
-    void setMyMcsMonthView(next);
-  };
-
-  const seg = (key: McsMonthView, label: string) => (
-    <button
-      key={key}
-      type="button"
-      aria-pressed={key === view}
-      onClick={() => chooseView(key)}
-      // ⚠️ ECS의 [SheetFaceSwitch](@/features/class-sheets/components/sheet-chrome) 칸과 **같은 값**
-      //    (2026-09-01 ECS 상단 바 통일 때 함께 맞췄다) — 두 시트를 오가는 사람이 다시 배우지 않게.
-      //    MCS는 '주간' 면이 없어 그 컴포넌트를 그대로 쓰진 않는다.
-      className={`${sheetSegItem(key === view)}`}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className="flex flex-col gap-3">
       <div className="toolbar-rail flex shrink-0 flex-wrap items-center gap-2 px-1 py-1">
@@ -134,6 +107,8 @@ export function MonthClient({
           classId={data.classId}
           classLabel={data.className}
           classOptions={classOptions}
+          // 담임은 반 이름 표기(노란 표기) 안 **가장 오른쪽**(원장 2026-09-02 *"담임을 반 옆에 적을것 … 가장 우측정렬"*).
+          teacherName={data.teacherName}
           listHref="/mcs"
           onNavigate={navigate}
           // 반을 바꿔도 **보던 달**은 유지한다(ECS 월간과 같은 규약).
@@ -152,22 +127,7 @@ export function MonthClient({
           // 저장 flush를 끝낸 뒤 직접 이동한다(가로챈 화면의 책임 — PeriodNav 주석 참조).
           onNavigate={navigate}
         />
-        <div className={SHEET_SEG_BOX}>{MCS_MONTH_VIEWS.map((v) => seg(v, MCS_MONTH_VIEW_LABEL[v]))}</div>
-        <button
-          type="button"
-          aria-pressed={bySlow}
-          onClick={() => setBySlow((v) => !v)}
-          title="계획보다 느린 학생부터 — 세 보기가 함께 정렬됩니다"
-          className={sheetPill(bySlow)}
-        >
-          느린 순
-        </button>
-        {data.teacherName ? (
-          <span className="bg-primary-soft text-primary rounded-full px-2 py-0.5 text-[11px] font-bold">
-            담임 {data.teacherName}
-          </span>
-        ) : null}
-        {view === "sheet" && data.canEdit && data.goalsStatus === "ok" ? (
+        {data.canEdit && data.goalsStatus === "ok" ? (
           <button
             type="button"
             onClick={() => void copyPrev()}
@@ -206,7 +166,7 @@ export function MonthClient({
         ) : null}
         {data.elapsedDays > 0 && data.fill.untracked > 0 ? (
           <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
-            흔적 없음 {data.fill.untracked}칸
+            입력 없음 {data.fill.untracked}칸
           </span>
         ) : null}
         {/* 🔴 휴일 칸은 어느 수에도 안 들어가므로 **여기서 말하지 않으면 조용히 사라진다** — 그러면
@@ -276,11 +236,8 @@ export function MonthClient({
       ) : null}
 
       <div style={fontSize === "sm" ? undefined : { zoom: MCS_FONT_SIZE_ZOOM[fontSize] }}>
-        {/* 표 하나에 보기 셋 — 왼쪽 고정열은 늘 같고 오른쪽 칸만 갈린다(진도표가 기준 행, month-grid.tsx). */}
         <MonthGrid
           data={data}
-          view={view}
-          students={students}
           goals={goals}
           onGoalChange={setField}
           canEdit={data.canEdit && data.goalsStatus === "ok"}

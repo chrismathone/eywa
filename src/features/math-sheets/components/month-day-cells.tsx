@@ -23,10 +23,11 @@ const CELL_TONE: Record<MathCellState, string> = {
   absent: "bg-bg-soft/60",
   // 🔴 **지난 칸의 무기록**만 회색으로 채운다 — 아직 안 지난 칸은 **빈 칸**이다(원장 2026-09-01:
   //    9월을 열면 전 칸이 회색 "출결도 기록도 없음"이라 아무도 잘못 안 했는데 다 틀린 것처럼 보였다).
-  untracked: "bg-muted",
+  //    색은 휴일과 **같은 회색**(원장 2026-09-02 *"기록 없는 셀과 휴강 셀 색상 통일 (공휴일 기준)"*) —
+  //    둘을 가르는 건 색이 아니라 칸 안의 문구(공휴일명 / "기록 없음")다.
+  untracked: "bg-att-weekend",
   upcoming: "",
   // 🔴 휴일 회색은 월별 출석부와 **같은 토큰**(`--att-weekend`) — 새 색을 만들지 않는다(의미색 캐논).
-  //    무기록 회색(`bg-muted`)과 구분되는 이유: 이건 사람이 아니라 **학원이** 안 연 날이다.
   holiday: "bg-att-weekend",
   "off-roster": "bg-muted/40",
 };
@@ -140,30 +141,5 @@ export function DayCells({ stu, data }: { stu: MathStudentRow; data: MathSheetMo
         );
       })}
     </>
-  );
-}
-
-/** 바닥 합계 행 — 그날 기록 / 온 학생. 정렬 토글과 무관하게 **전 학생**을 센다. */
-export function DayFootRow({ data }: { data: MathSheetMonthData }) {
-  return (
-    <tr>
-      <td className="bg-bg-soft border-line-faint text-text-dim sticky left-0 z-10 border p-1.5 text-[12px] font-bold">
-        그날 기록 / 온 학생
-      </td>
-      {data.days.map((day) => {
-        const written = data.students.filter((s) => s.cells[day.date] === "written").length;
-        const came = data.students.filter(
-          (s) => s.cells[day.date] === "written" || s.cells[day.date] === "unwritten",
-        ).length;
-        return (
-          <td
-            key={day.date}
-            className="bg-bg-soft border-line-faint text-text-dim num border p-1.5 text-center text-[12px] font-bold"
-          >
-            {written} / {came}
-          </td>
-        );
-      })}
-    </tr>
   );
 }

@@ -19,13 +19,19 @@ End · 달 시작 전 이 반 마지막 위치가 Start) · 블럭=커리큘럼 
   🔴 라벨 없는 옛 `"4/5"`는 "시험"으로만 적고 일일 평균에 안 넣는다(무엇의 점수인지 모른다). 평균(현황 표·카드)도 같은 함수를 탄다.
 - **(같은 날 후속) 목표 밖 교재 칸 = 네 변 테두리 + `목표 밖` 칩**(원장 *"다른진도 테두리 더 확실하게"*) — 왼쪽 3px 선만으론 칸 하나가
   눈에 안 들어왔다. border-collapse 표라 `border`를 굵히면 이웃과 선을 나눠 갖고 행이 밀리므로 **`outline-2 -outline-offset-2`**로 칸 안에 그린다.
-- **(같은 날 후속, 시안 확정) 보기 넷 → 둘(진도표 · 현황 표), 표 하나·행 하나** — 원장이 화면을 보며 확정: *"목표레일과 진도레일을
-  … 굳이 탭을 2개로 두지말고 하나로"* → *"어떤 탭을 고르던 해당 학생의 행높이가 똑같아서 전환이 자연스러워 보이도록"* → *"진도표가
-  기준 행이 되도록"* → *"진도레일 탭 없애고 진도표 하단으로 이동"*. 왼쪽 고정열([`student-head-cell.tsx`](../src/features/math-sheets/components/student-head-cell.tsx):
-  이름·목표 칸·목표 레일)이 두 보기에 똑같이 서고 오른쪽 칸만 갈린다([`month-grid.tsx`](../src/features/math-sheets/components/month-grid.tsx) —
-  진도표 `month-day-cells` / 현황 표 `month-status-cells`). 행 `key`=학생 id라 보기를 바꿔도 목표 입력칸이 살아남는다. 실측 행 높이
-  진도표 251px = 현황 표 251px. '느린 순'은 툴바로 올려 두 보기를 함께 정렬([`student-order.ts`](../src/features/math-sheets/lib/student-order.ts)).
-  종전 카드 보기 셋(`month-track`·`month-goal-rail`·`month-status`)은 삭제, `progress_containers` 조회도 제거(왕복 −1).
+- **(같은 날 후속, 시안 확정) 보기 넷 → 진도표 하나, 탭 없음** — 원장이 화면을 보며 순서대로: *"목표레일과 진도레일을 … 탭 하나로"*
+  → *"어떤 탭을 고르던 해당 학생의 행높이가 똑같아서 전환이 자연스러워 보이도록"* → *"진도표가 기준 행이 되도록"* → *"진도레일 탭
+  없애고 진도표 하단으로 이동"* → (재고관리 세션에 잘못 적혀 넘어온 12건) *"현황표도 제거. 그냥 진도표 하나만"* · *"느린순 제거"* ·
+  *"탭 구분 자체를 없애고 진도표 화면만"*. 표는 [`month-grid.tsx`](../src/features/math-sheets/components/month-grid.tsx) 하나 — 왼쪽 고정열
+  ([`student-head-cell.tsx`](../src/features/math-sheets/components/student-head-cell.tsx): 이름·목표 칸·목표 레일) + 수업일 칸(`month-day-cells`).
+  카드 보기 셋(`month-track`·`month-goal-rail`·`month-status`)·`view-prefs`·`setMyMcsMonthView`·'느린 순'(`student-order`)은 삭제,
+  `progress_containers` 조회도 제거(왕복 −1). ⚠️ 계정에 남은 `ui_prefs.mcs.monthView`는 아무도 안 읽는다.
+- **같은 12건의 나머지** — 툴바 칩 *"흔적 없음 → 입력 없음"* · 칸 문구 *"출결도 기록도 없음 → 기록 없음"*(`CELL_STATE_LABEL`) ·
+  *"기록 없는 셀과 휴강 셀 색상 통일 (공휴일 기준)"*(무기록 `bg-att-weekend`) · *"레일 텍스트 굵은 글씨, 레일바 굵기 2배"*(6px) ·
+  *"하단 행 제거, 대신 여백"*(바닥 합계 행 삭제 + `pb-6`) · *"담임을 반 옆에 … 가장 우측정렬 · ecs도 마찬가지 · 이수진 정도만"*
+  (`SheetClassPicker teacherName` — 노란 표기 안 오른쪽, ECS 주간·월간도 같은 조각. ECS 월간 조회에 `teacherName` 추가) ·
+  *"학생 이름과 학교학년을 2배로, 같은 서식"* → 곧이어 *"너무 커졌네 70%로 줄이고. 이달목표는 50%로"* → 이름·학교 **20px**·'이 달 목표' **14px**
+  (`NAME_TEXT` 한 벌) · *"학생 사이 행 구분을 더 진한선으로"*(`<tr>` 2px `line-strong`).
 - **목표 레일 = 두 줄**(원장 *"목표와 지금을 같은 레일에 놓지말고, 이중으로 지금을 1행, 목표를 2행. 지금 → 현재진도, 목표 → 목표진도"*) —
   [`GoalRailRows`](../src/features/math-sheets/components/goal-rail-bar.tsx): 1행 현재진도(시작→지금, 판정 색) / 2행 목표진도(시작→계획, 끝이
   목표, 옅은 정보색). 같은 눈금이라 길이 차가 곧 계획 대비. 각 줄 아래 차시 이름(+날짜). 어휘는 `RAIL_ROW_LABEL` 한 곳(현황 표 머리도 같은 값).

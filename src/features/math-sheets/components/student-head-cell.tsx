@@ -14,6 +14,11 @@ import { GoalRailRows, RAIL_ROW_LABEL, RAIL_TONE } from "./goal-rail-bar";
 
 /** 고정열 폭 — 머리 칸(`month-grid`)과 같은 값. */
 export const HEAD_CELL_W = "w-[232px]";
+/**
+ * 이름·학교학년의 서식 한 벌 — 원장 2026-09-02 *"현재 크기 2배로"*(14→28px) 뒤 *"너무 커졌네 70%로 줄이고"*
+ * → 28×0.7 ≈ **20px**. '이 달 목표' 라벨은 같은 서식에서 크기만 절반(*"이달목표는 50%로"* → 14px, goal-cell.tsx).
+ */
+export const NAME_TEXT = "text-[20px] leading-tight font-extrabold break-keep";
 
 function fmtDate(d: string | null): string {
   return d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "";
@@ -73,14 +78,18 @@ export function StudentHeadCell({
         ended ? "bg-bg-soft" : "bg-white"
       }`}
     >
-      <div className="flex items-center gap-1.5">
+      {/* 이름·학교학년은 **같은 서식**(원장 2026-09-02 *"학교학년도 이름과 같은 서식으로"*, 크기는 NAME_TEXT 주석).
+          고정열 폭에 안 들어가면 자르지 않고 줄을 바꾼다. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <Link
           href={`/students/${stu.studentId}`}
-          className={`hover:text-primary min-w-0 truncate text-[14px] font-extrabold ${ended ? "text-text-faint" : ""}`}
+          className={`hover:text-primary ${NAME_TEXT} ${ended ? "text-text-faint" : "text-foreground"}`}
         >
           {stu.name}
         </Link>
-        <span className="text-text-faint shrink-0 text-[11.5px]">{schoolGradeLabel(stu.school, stu.grade)}</span>
+        <span className={`${NAME_TEXT} ${ended ? "text-text-faint" : "text-foreground"}`}>
+          {schoolGradeLabel(stu.school, stu.grade)}
+        </span>
         {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 판정·라벨·툴팁 모두 출석부와 같은 소스. */}
         {stu.badges.length > 0 ? (
           <span className="ml-auto flex shrink-0 items-center gap-1">

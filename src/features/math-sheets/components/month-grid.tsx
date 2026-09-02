@@ -2,36 +2,30 @@
 
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { actualBooksOf, type MathRecordLike, type StudentGoalMap } from "../lib/student-goals";
-import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries";
-import type { McsMonthView } from "../view-prefs";
+import type { MathSheetMonthData } from "../server/month-queries";
 import type { GoalField } from "./use-student-goals";
 import { HEAD_CELL_W, StudentHeadCell } from "./student-head-cell";
-import { DayCells, DayFootRow, DayHeadCells } from "./month-day-cells";
-import { StatusCells, StatusHeadCells } from "./month-status-cells";
+import { DayCells, DayHeadCells } from "./month-day-cells";
 
 /**
- * MCS 월간 뷰의 **표 껍데기 하나** — 두 보기(진도표·현황 표)가 같은 표·같은 행을 쓴다.
+ * MCS 월간 뷰의 **진도표** — 학생 × 수업일 표 하나. 왼쪽 고정열([`StudentHeadCell`](./student-head-cell.tsx):
+ * 이름·목표 칸·목표 레일 두 줄) + 오른쪽 수업일 칸([`month-day-cells`](./month-day-cells.tsx)).
  *
- * 🔴 **진도표가 기준 행이다**(원장 2026-09-02) — 행마다 왼쪽 고정열([`StudentHeadCell`](./student-head-cell.tsx):
- *    이름·목표 칸·미니 레일)은 보기와 무관하게 똑같고, 오른쪽 칸만 갈린다. 행 높이를 정하는 것이 그 고정열이라
- *    보기를 바꿔도 같은 학생이 같은 높이·같은 자리에 선다(*"전환이 자연스러워 보이도록"*). 행 순서도 한 벌
- *    (`students` — 툴바 '느린 순'이 세 보기를 함께 정렬한다).
- * 🔴 행 `key`는 학생 id — 보기를 바꿔도 `<tr>`이 살아남아 목표 입력칸(비제어)의 상태가 유지된다.
- * ⚠️ 잡고 끌기(원장 2026-09-02 *"마우스 드래그로도 좌우 이동"*) — 앱 규약의 DragScrollArea(폼 컨트롤·링크
- *    위에선 팬을 안 시작하고 끈 뒤의 click 1회는 삼킨다). px-1은 고정열 그림자 링이 잘리지 않게([[#114]]).
+ * 🔴 **보기는 이것 하나다**(원장 2026-09-02 *"탭 구분 자체를 없애고 진도표 화면만"*) — 카드·현황 표·레일 탭은
+ *    같은 날 걷었다. 행 `key`는 학생 id.
+ * 🔴 **바닥 합계 행은 없다**(원장 *"하단 행 제거 필요없음. 대신 여백 조금 남겨줄것"*) — 툴바 칩이 같은 수를 말한다.
+ * 🔴 학생과 학생 사이는 **진한 선**(원장 *"행 구분을 좀 더 진한선으로"*) — 칸 테두리(`line-faint`)보다 굵고 진하게
+ *    `<tr>`에 긋는다(border-collapse라 더 굵은 쪽이 이긴다).
+ * ⚠️ 잡고 끌기(원장 *"마우스 드래그로도 좌우 이동"*) — 앱 규약의 DragScrollArea(폼 컨트롤·링크 위에선 팬을
+ *    안 시작하고 끈 뒤의 click 1회는 삼킨다). px-1은 고정열 그림자 링이 잘리지 않게([[#114]]).
  */
 export function MonthGrid({
   data,
-  view,
-  students,
   goals,
   onGoalChange,
   canEdit,
 }: {
   data: MathSheetMonthData;
-  view: McsMonthView;
-  /** 그릴 순서의 행 — 정렬은 호출부(툴바)가 정한다. 바닥 합계는 이 순서와 무관하게 `data.students`를 센다. */
-  students: readonly MathStudentRow[];
   goals: StudentGoalMap;
   onGoalChange: (studentId: string, field: GoalField, value: string) => void;
   canEdit: boolean;
@@ -55,7 +49,7 @@ export function MonthGrid({
   );
 
   return (
-    <DragScrollArea className="px-1">
+    <DragScrollArea className="px-1 pb-6">
       <table className="border-line-faint w-full min-w-[940px] border-collapse text-[13px]">
         <thead>
           <tr>
@@ -64,11 +58,11 @@ export function MonthGrid({
             >
               학생 · 이 달 목표
             </th>
-            {view === "sheet" ? <DayHeadCells data={data} /> : <StatusHeadCells />}
+            <DayHeadCells data={data} />
           </tr>
         </thead>
-        <tbody>
-          {students.map((stu) => (
+        <tbody className="[&>tr]:border-line-strong [&>tr]:border-t-2 [&>tr:last-child]:border-b-2">
+          {data.students.map((stu) => (
             <tr key={stu.studentId}>
               <StudentHeadCell
                 stu={stu}
@@ -78,15 +72,10 @@ export function MonthGrid({
                 onGoalChange={onGoalChange}
                 classLabel={data.className}
               />
-              {view === "sheet" ? <DayCells stu={stu} data={data} /> : <StatusCells stu={stu} data={data} />}
+              <DayCells stu={stu} data={data} />
             </tr>
           ))}
         </tbody>
-        {view === "sheet" ? (
-          <tfoot>
-            <DayFootRow data={data} />
-          </tfoot>
-        ) : null}
       </table>
       {/* 이 달에 실제로 쓴 교재 — 목표 입력 자동완성(표기 흔들림을 입력 단계에서 줄인다). */}
       <datalist id="mcs-book-options">

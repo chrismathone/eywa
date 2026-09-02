@@ -37,7 +37,6 @@ import {
 } from "../lib/roster";
 import type { EnrollSpan, LifecycleBadge } from "@/features/attendance/enrollment-span";
 import { mathLifecycleBadges } from "./lifecycle";
-import { readMcsMonthView, type McsMonthView } from "../view-prefs";
 import { describePosition } from "@/features/progress/curriculum-position";
 import { readMcsFontSize, type McsFontSize } from "../font-size";
 import { requireMcsClassAccess } from "./access";
@@ -157,7 +156,6 @@ export type MathSheetMonthData = {
    * `missing-table` = 0237a 미적용 / `failed` = 그 밖의 조회 실패(원인 단정 금지).
    */
   goalsStatus: GoalsStatus;
-  view: McsMonthView;
   /** 글씨 크기(작음·보통·큼) — 계정 귀속. 원스크린·ECS와 같은 어휘·같은 배율. */
   fontSize: McsFontSize;
   /**
@@ -574,7 +572,6 @@ export async function getMathSheetMonth(
       goalsStatus,
       elapsedDays: dayDates.filter((d) => d <= today).length,
       holidays,
-      view: readMcsMonthView((prefRes.data as { ui_prefs?: unknown } | null)?.ui_prefs),
       fontSize: readMcsFontSize((prefRes.data as { ui_prefs?: unknown } | null)?.ui_prefs),
     },
   };
