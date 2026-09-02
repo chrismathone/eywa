@@ -35,6 +35,7 @@ import {
   deriveMarksFromReports,
   isDerivedAttendanceSubject,
   REQUIRE_SENT_REPORT,
+  reportEvidenceKind,
 } from "@/features/attendance/derive-from-reports";
 import { getTenantSettings } from "@/features/owner/server/queries";
 
@@ -1081,12 +1082,17 @@ export async function getMonthlyAttendanceMatrix(
       // ⚠️ 반으로 **거르지 않고** 그 달 보고서를 다 가져온 뒤 JS에서 세 갈래로 나눈다
       //    (이 반 것 / 같은 과목 다른 반 것 / 무관). 쿼리를 반으로 좁히면 "짝 반이 썼는지"를
       //    알 수 없어 판정 보류를 못 한다 — 그게 거짓 결석의 원인이었다(아래 sibling 주석).
-      fetchAllPagedInChunks<{ student_id: string; report_date: string; class_id: string | null }>(
+      fetchAllPagedInChunks<{
+        student_id: string;
+        report_date: string;
+        class_id: string | null;
+        makeup: boolean | null;
+      }>(
         studentIds,
         (chunk, from, to) => {
           let q = supabase
             .from("lesson_reports")
-            .select("student_id, report_date, class_id")
+            .select("student_id, report_date, class_id, makeup")
             .in("student_id", chunk)
             .gte("report_date", startIso)
             .lte("report_date", endIso);
@@ -1129,11 +1135,15 @@ export async function getMonthlyAttendanceMatrix(
     const reportsByStudent = new Map<string, Set<string>>();
     const siblingByStudent = new Map<string, Set<string>>();
     for (const r of reports) {
-      const cid = r.class_id;
-      const mine = !cid || cid === selectedClass.id;
-      const sibling = !mine && sameSubjectClassIds.has(cid);
-      if (!mine && !sibling) continue; // 다른 과목 보고서 — 이 출석부와 무관
-      const target = mine ? reportsByStudent : siblingByStudent;
+      // 🔑 분류는 순수 단일 소스 `reportEvidenceKind`가 한다(보강=보류 규칙과 근거는 그 주석).
+      const kind = reportEvidenceKind({
+        makeup: r.makeup,
+        classId: r.class_id,
+        selectedClassId: selectedClass.id,
+        sameSubjectClassIds,
+      });
+      if (kind === "ignore") continue; // 다른 과목 보고서 — 이 출석부와 무관
+      const target = kind === "own" ? reportsByStudent : siblingByStudent;
       const set = target.get(r.student_id) ?? new Set<string>();
       set.add(r.report_date);
       target.set(r.student_id, set);

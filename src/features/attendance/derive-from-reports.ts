@@ -81,3 +81,32 @@ export function deriveMarksFromReports(input: {
   }
   return out;
 }
+
+/**
+ * 보고서 한 건이 **이 반 출석부에 무엇으로 쓰이나** — 파생 근거 분류의 단일 소스.
+ *
+ * - `own`   = 이 반의 정규 수업 근거(출석으로 파생)
+ * - `hold`  = **판정 보류**(출석도 결석도 아님 — 빈 칸으로 두고 사람이 채운다)
+ * - `ignore`= 이 출석부와 무관(다른 과목)
+ *
+ * 🔴 **보강 보고서(`makeup`)는 언제나 `hold`다.** 보강은 그 반의 정규 수업이 아니고, 이제
+ *    **보이지 않는 '보강' 반**(0241a)에 제 칸이 따로 선다. 파생이 같은 보고서를 정규 반 출석으로도
+ *    세면 한 수업이 두 칸이 된다 — 원장 제보 2026-09-02: *"결론적으로는 수업을 1회 했는데,
+ *    보강1, 본수업1로 되어버렸네"*(이윤 9/2: 보강 반 보라 1 + JJ2I 초록 1).
+ *    반이 비어 있다(`classId === null`)는 이유로 '이 반 것'으로 보던 종전 규약의 구멍이었다.
+ * 🔴 그렇다고 **결석으로 보내지 않는다** — 그날 정규 수업이 실제로 있었는지 여기선 알 수 없다.
+ *    "모르면 아무 말도 하지 않는다"(짝 반 보류와 같은 자리).
+ * ⚠️ 반이 박힌 보강(반 보강)도 같다 — 그쪽은 그 반에 `makeup` 출결이 **직접** 찍힌다.
+ * ⚠️ 반 미상(`classId === null`)이면서 보강이 **아닌** 보고서는 종전대로 `own`이다
+ *    (이관분·관리자 작성 — 그게 유일한 근거인 날이 많다).
+ */
+export function reportEvidenceKind(input: {
+  makeup: boolean | null | undefined;
+  classId: string | null;
+  selectedClassId: string;
+  sameSubjectClassIds: ReadonlySet<string>;
+}): "own" | "hold" | "ignore" {
+  if (input.makeup === true) return "hold";
+  if (!input.classId || input.classId === input.selectedClassId) return "own";
+  return input.sameSubjectClassIds.has(input.classId) ? "hold" : "ignore";
+}
