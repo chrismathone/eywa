@@ -480,11 +480,22 @@ export default async function AttendancePage({
         }
       : null;
 
+  /**
+   * 이 화면의 **모든** 묶음 = 담당 반 + 보강 반. 아래 스탯·정렬·격자·검색·빈화면 판정이 **전부**
+   * 이 배열 하나를 본다.
+   *
+   * 🔴 예전엔 보강 묶음을 표(JSX)에만 붙였다 — 그래서 행은 서는데 **칸이 통째로 비고**(격자 초기값을
+   *    만드는 `buildGridSource`가 그 묶음을 몰랐다) 시수가 0으로 나왔고, 학생 검색도 못 찾았다
+   *    (원장 제보 2026-09-02: *"이윤 9/1 왜 0개?"*). 표에 넣을 목록과 값·좌표를 만드는 목록이
+   *    갈리면 화면이 **행만 있고 값이 없는** 거짓 상태가 된다 — 하나로 묶어 둘 것.
+   */
+  const allGroups = makeupGroup ? [...groups, makeupGroup] : groups;
+
   // 상단 스탯 — 강사 전체 보기는 반들을 합산(학생은 반 중복을 제거한 실인원).
   // ⚠️ 출결 수치는 **격자와 같은 함수**(`countMarks`)로 센다. 화면이 입력 즉시 다시 셀 때 서버 첫 렌더가
   //    다른 식을 쓰면 첫 타이핑에 숫자가 한 번 튄다 — 합계는 `grid/totals.ts` 한 곳만 거친다.
   const statsCount = sumCounts(
-    groups.map((g) =>
+    allGroups.map((g) =>
       sumCounts(
         g.matrix.students.map((s) =>
           countMarks(g.matrix.marks[s.id] ?? {}, g.matrix.units[s.id] ?? {}),
@@ -547,14 +558,14 @@ export default async function AttendancePage({
   const roleAnchorTeacher = effectiveTeacher ?? selectedClass?.teacherId ?? null;
   // 담임·부담임 정렬일 때만 남의 반까지 조회한다 — 평소 출석부에 쿼리 3개를 얹지 않는다(반응속도 1순위).
   const roleSessions =
-    sortKey === "role" && roleAnchorTeacher && groups.length > 0
+    sortKey === "role" && roleAnchorTeacher && allGroups.length > 0
       ? await getSubjectSessionsByStudent(
-          [...new Set(groups.flatMap((g) => g.matrix.students.map((s) => s.id)))],
+          [...new Set(allGroups.flatMap((g) => g.matrix.students.map((s) => s.id)))],
           kstToday(),
         )
       : null;
   const orderedRows = sortAttendanceRows(
-    groups.flatMap((g) =>
+    allGroups.flatMap((g) =>
       g.matrix.students.map((s) => ({
         classId: g.classId,
         className: g.className,
@@ -585,16 +596,16 @@ export default async function AttendancePage({
    * ⚠️ 게이트·스코프 판정은 조회 본체가 한다(클라 액션과 **같은 함수**, #77).
    */
   const hubSearchSeeded =
-    groups.length === 0 && searchSeed ? await loadHubStudentSearch({ query: searchSeed, month }) : null;
+    allGroups.length === 0 && searchSeed ? await loadHubStudentSearch({ query: searchSeed, month }) : null;
 
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
-  const gridSource = buildGridSource(groups, visibleDays, orderedRows);
+  const gridSource = buildGridSource(allGroups, visibleDays, orderedRows);
 
   /**
    * 학생 검색(원장 2026-08-19)이 볼 재료 — **화면에 이미 그려진 값만**(이름·학교·학년 + 붙여 쓴 압축 표기).
    * 🔴 조회를 새로 붙이지 않는다: 강사는 담당 반만 보는데 검색이 학원 전체를 뒤지면 그 범위가 뚫린다([[#77]]).
    */
-  const searchRows = groups.flatMap((g) =>
+  const searchRows = allGroups.flatMap((g) =>
     g.matrix.students.map((s) => ({
       row: rowKey(g.classId, s.id),
       studentId: s.id,
@@ -622,7 +633,7 @@ export default async function AttendancePage({
    */
   const noticeClass = "text-text-dim bg-bg-soft/60 border-line rounded-xl border px-3 py-2 text-xs break-keep";
   const notices =
-    groups.length === 0 || totalStudents === 0
+    allGroups.length === 0 || totalStudents === 0
       ? []
       : [
           lockBefore ? (
@@ -643,7 +654,7 @@ export default async function AttendancePage({
           ) : null,
           // 기록이 하나도 없는 화면은 **왜 비어 있는지**를 말해야 한다 — 빈 표 + "—"만 두면 고장으로 읽힌다.
           // 파생도 안 도는 과목(현재 영어)이 여기 해당한다.
-          statsCount.recorded === 0 && !groups.some((g) => g.matrix.derivedActive) ? (
+          statsCount.recorded === 0 && !allGroups.some((g) => g.matrix.derivedActive) ? (
             <p key="empty" className={noticeClass}>
               {/* ⚠️ 강사 전체 보기는 반이 여럿이라 "이 반"이 거짓말이 된다(적대검증) — 모드에 맞춰 주어를 바꾼다. */}
               {/* ⚠️ 강사 전체 보기의 '없음'은 **선생님 몫 기준**이다 — 남의 교시·자리 기록은 빗금으로
@@ -656,7 +667,7 @@ export default async function AttendancePage({
             </p>
           ) : null,
           // 파생 반(수학)은 표가 "누가 찍은 값인지"를 스스로 밝혀야 한다 — 셀 툴팁만으론 안 보인다.
-          groups.some((g) => g.matrix.derivedActive) ? (
+          allGroups.some((g) => g.matrix.derivedActive) ? (
             <p key="derived" className={noticeClass}>
               수업보고서가 있는 등원일은 <strong className="text-foreground">출석</strong>, 보고서가 없는 등원일은{" "}
               <strong className="text-foreground">결석</strong>으로 자동 표시됩니다. 오늘과 이후 날짜는 아직 판정하지
@@ -836,7 +847,7 @@ export default async function AttendancePage({
         ) : null}
 
         {/* 정렬 — 계정 귀속 설정(URL 아님). 반별 외엔 반 구분 없이 한 덩어리로 그린다. */}
-        {groups.length > 0 ? (
+        {allGroups.length > 0 ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <div className="flex items-center gap-1.5">
@@ -844,7 +855,7 @@ export default async function AttendancePage({
               <AttendanceSortSelect value={sortKey} />
               {/* 반 머리행이 있는 보기에서만 — 이름 칸의 작은 화살표와 같은 동작을 글자로 한 번 더 낸다
                   (아이콘만 있으면 있는 줄 모른다). 접힌 수까지 적어 "몇 개가 숨었는지"를 감추지 않는다. */}
-              {showGroups ? <CollapseAllChip classIds={groups.map((g) => g.classId)} /> : null}
+              {showGroups ? <CollapseAllChip classIds={allGroups.map((g) => g.classId)} /> : null}
             </div>
             <span className="bg-line h-4 w-px" aria-hidden />
             {/* 학생 검색(원장 2026-08-19) — **클라 필터**라 서버 왕복 0, 친 즉시 표가 좁아진다.
@@ -883,7 +894,7 @@ export default async function AttendancePage({
               (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
               ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. 아래 '안내'는 `<details>`라
               기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
-          {mode === "teacher" && groups.length > 0 ? (
+          {mode === "teacher" && allGroups.length > 0 ? (
             <span
               className="border-line text-text-dim rounded-full border px-2.5 py-0.5 text-xs"
               title="칸 숫자는 이 선생님이 맡은 교시만 셉니다. 다른 선생님 교시와 자리(JJ·랩)는 빗금으로만 표시되고 시수·출석률에는 들어가지 않습니다 — 반 전체 숫자는 반별 보기에서 봅니다."
@@ -891,7 +902,7 @@ export default async function AttendancePage({
               칸 = 이 선생님 교시
             </span>
           ) : null}
-          {groups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
+          {allGroups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
           {notices.length > 0 ? (
             // `<details>`라 클라 JS가 없다. 패널은 absolute라 열려도 격자를 밀어내지 않는다(높이 0 유지).
             <details className="[&_summary::-webkit-details-marker]:hidden">
@@ -906,7 +917,7 @@ export default async function AttendancePage({
         </div>
       </div>
 
-      {groups.length === 0 ? (
+      {allGroups.length === 0 ? (
         // 강사 미선택 허브 = **출석부 요약**(원장 2026-08-10). 무거운 매트릭스는 여전히 안 불러온다.
         // 강사를 고르면 바로 그 강사 전체 출석부(기본 보기 = 강사 전체, resolveViewMode).
         <AttendanceHub
@@ -954,7 +965,7 @@ export default async function AttendancePage({
         // 툴바 드롭다운·셀 팝오버를 헤더가 덮는다(스택 컨텍스트만 만들 뿐 fixed 탈출은 막지 않는다).
         <div className="isolate min-h-0 flex-1">
           <MatrixTable
-            groups={makeupGroup ? [...groups, makeupGroup] : groups}
+            groups={allGroups}
             days={visibleDays}
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.

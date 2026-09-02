@@ -35,6 +35,16 @@ describe("보이지 않는 '보강' 반", () => {
     expect(insertAt).toBeGreaterThan(readAt); // 조회가 먼저다(빈 칸 판정 없이 쓰지 않는다)
     expect(fn.slice(readAt, insertAt)).toMatch(/exists[\s\S]{0,120}return \{ ok: true/);
     expect(server).toContain('status: "makeup"');
+    /**
+     * ③ 그리고 **어느 반이든** 그 (학생,날짜)에 이미 makeup 칸이 있으면 안 만든다(2026-09-02) — 강사가 자기
+     *    반에 손으로 찍어 둔 보강에 한 칸 더 서면 시수가 두 배다. 반으로 좁히지 않은 조회가 insert **앞**에 있다.
+     */
+    const between = fn.slice(readAt, insertAt);
+    const elsewhereAt = between.indexOf('.eq("status", "makeup")');
+    expect(elsewhereAt).toBeGreaterThan(-1);
+    expect(between.slice(between.lastIndexOf('.from("attendance_records")', elsewhereAt), elsewhereAt)).not.toContain(
+      '.eq("class_id"',
+    );
   });
 
   it("🔴 출석부는 이 반을 **일부러** 불러온다(활성 목록엔 절대 안 들어오므로)", () => {
@@ -65,5 +75,21 @@ describe("보이지 않는 '보강' 반", () => {
     for (const src of [server, page]) {
       expect(src).not.toMatch(/class_name.*보강|보강.*class_name/);
     }
+  });
+
+  it("🔴 라이브 훅은 **저장자가 아니라 보고서 소유자**에게 귀속한다(사무실 대리 저장 예방, 2026-09-02)", () => {
+    const os = read("features", "onescreen", "server", "actions.ts");
+    // 저장된 행의 소유 컬럼을 되받아 규칙(resolveMakeupOwner → pickMakeupOwner)에 넘긴다.
+    expect(os).toContain('.select("id, share_token, teacher_name, created_by")');
+    expect(os).toContain("resolveMakeupOwner(");
+    const hook = os.slice(os.indexOf("await ensureMakeupAttendanceForReport({"));
+    const call = hook.slice(0, hook.indexOf("});"));
+    expect(call).not.toContain("teacherId: user.id"); // 저장자 귀속으로 되돌리지 말 것
+    expect(call).toContain("teacherId: owner.id");
+    // 소유자를 못 풀면 훅을 건너뛴다(잘못된 반을 만드는 것보다 안 만드는 게 낫다).
+    expect(os).toMatch(/if \(owner\) \{\s*await ensureMakeupAttendanceForReport/);
+    // 서버 해석은 created_by가 비었을 때만 이름을 보고, 활성·학생 제외로 좁힌다(resolveReportAuthorName 규약).
+    expect(server).toContain('.eq("status", "active")');
+    expect(server).toContain('.neq("system_role", "student")');
   });
 });

@@ -80,6 +80,8 @@ export function SheetToolbar({
         classId={data.classId}
         classLabel={data.className}
         classOptions={classOptions}
+        // 담임 이름을 반 표기 안 오른쪽에(원장 2026-09-02 *"ecs도 마찬가지"*) — MCS와 같은 조각·같은 자리.
+        teacherName={data.classTeacherName}
         onNavigate={onNavigate}
         hrefForClass={(id) => hrefFor(id, data.weekMonday)}
       />
