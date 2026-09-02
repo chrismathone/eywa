@@ -235,17 +235,57 @@ export function mpLevelFullName(className: string): string {
 }
 
 /**
- * 문서 제목 — `Let's Express 1 (September 2026)`.
+ * 문서 제목의 **두 줄** — 반 이름(`Let's Express 1`)과 월(`(September 2026)`).
  *
+ * 원장 2026-09-02: *"`(September 2026)`은 다음줄로 처리하고 글씨 크기 조정 필요함"* — 한 줄로 두면
+ * 실측상 **반 이름이 짧아도** 제목 칸을 넘겼다(주 3일 반의 제목 칸 557px vs
+ * `Let's Express 1 (September 2026)` 590.8px). 그래서 월을 아래 줄로 내린다.
+ *
+ * 🔴 **제목 문자열을 만드는 곳은 여기 하나다** — 화면·인쇄가 각자 조립하면 같은 문서가 두 표기를 쓴다.
+ *    한 줄짜리가 필요한 자리(문서 제목·스크린리더 이름)는 `mpDocTitle`이 이 값을 이어 붙인다.
  * ⚠️ 달 표기는 시트와 같은 영문이다(`monthLabel`의 `2026년 9월`이 아니다) — 이 문서는 시트를
- *    그대로 대신하는 학부모 문서라 같은 글자를 쓴다.
+ *    그대로 대신하는 학부모 문서라 같은 글자를 쓴다. 달이 모양이 아니면 **월 줄을 통째로 생략**한다.
  */
-export function mpDocTitle(className: string, month: string): string {
+export function mpTitleLines(className: string, month: string): { name: string; period: string } {
   const name = mpLevelFullName(className);
   const m = Number(month.slice(5, 7));
   const en = MP_MONTH_EN[m - 1];
-  if (!/^\d{4}-\d{2}$/.test(month) || !en) return name;
-  return `${name} (${en} ${month.slice(0, 4)})`;
+  if (!/^\d{4}-\d{2}$/.test(month) || !en) return { name, period: "" };
+  return { name, period: `(${en} ${month.slice(0, 4)})` };
+}
+
+/** 제목 한 줄 표기 — 두 줄을 이어 붙인 것(문서 제목 문자열·스크린리더 이름용). */
+export function mpDocTitle(className: string, month: string): string {
+  const { name, period } = mpTitleLines(className, month);
+  return period ? `${name} ${period}` : name;
+}
+
+/**
+ * 격자 한 칸(요일 × 주)의 상태 — **셋뿐이다.**
+ *  · `live` = 그 날 이 반 수업이 있고 휴강이 아니다(평소 칸).
+ *  · `off`  = 수업일인데 **휴강**이다 → 회색으로 표시한다.
+ *  · `none` = 그 날은 애초에 이 반 수업이 없다(달 밖 · 배정 없음) → 빈 칸.
+ *
+ * 🔴 **휴일인데 원래 수업도 없는 날은 `off`가 아니다**(`none`) — 안 그러면 안 오는 요일까지 회색으로
+ *    칠해져 "쉬는 날"이 사방에 깔린다. **취소할 수업이 있어야 휴강이다.**
+ * 🔴 화면(계획 보기)과 인쇄가 **이 함수 하나**를 통과한다 — 한쪽만 고치면 같은 날이 두 문서에서
+ *    다르게 보인다(원장 2026-09-02 *"휴강에 대해 셀을 회색처리하는 등 더 적극적인 휴강 표기"*의 핵심).
+ * ⚠️ 판정 자체는 여전히 `mpDayIsOff` 하나다 — 이 함수는 그 답을 **그리는 세 갈래로 접는 것**뿐이다.
+ */
+export type MpDayKind = "live" | "off" | "none";
+
+export function mpDayKindOf(date: string | null, hasClass: boolean, off: boolean): MpDayKind {
+  if (!date || !hasClass) return "none";
+  return off ? "off" : "live";
+}
+
+/**
+ * 휴강 칸에 적는 글자 — `휴강` 또는 `휴강 · 추석`.
+ * ⚠️ 이름은 **학원설정 휴일 목록**에서 온다(반별 예외로 끈 날은 이름이 없어 `휴강`만 적힌다).
+ */
+export function mpOffLabel(holidayName: string | null | undefined): string {
+  const name = (holidayName ?? "").trim();
+  return name ? `휴강 · ${name}` : "휴강";
 }
 
 /**

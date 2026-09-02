@@ -201,3 +201,37 @@ describe("subjectMatchesAnchor", () => {
     expect(subjectMatchesAnchor(" math ", "math")).toBe(true);
   });
 });
+
+/**
+ * 앵커가 **없을 때**(반 보강이 아닌 그냥 보강) — 강사 본인 과목으로 좁힌다.
+ * 원장 2026-09-02: *"수학선생님이나 영어선생님이 보강 추가할때 본인 과목만 팝업되게 해줘."*
+ */
+describe("앵커 없는 보강 — 강사 과목 폴백", () => {
+  const rows = [
+    { classId: "m1", className: "중등M 초6", date: "2026-08-20", subject: "math" },
+    { classId: "e1", className: "중등E_초6 MED", date: "2026-08-19", subject: "english" },
+    { classId: "x1", className: "미분류반", date: "2026-08-18", subject: null },
+  ];
+
+  it("🔴 수학 강사는 영어 결석을 안 본다(뺀 건수는 함께 돌려준다)", () => {
+    const r = buildAbsenceOptions(rows, "2026-09-02", new Set(), null, ["math"]);
+    expect(r.options.map((o) => o.classId)).toEqual(["m1", "x1"]);
+    expect(r.hiddenBySubject).toBe(1);
+  });
+
+  it("겸직(두 과목)은 둘 다 본다", () => {
+    const r = buildAbsenceOptions(rows, "2026-09-02", new Set(), null, ["math", "english"]);
+    expect(r.options).toHaveLength(3);
+    expect(r.hiddenBySubject).toBe(0);
+  });
+
+  it("🔴 과목을 모르면(사무실 계정·담당 반 0개) 아무것도 안 거른다 — 후보가 사라지는 쪽이 더 나쁘다", () => {
+    expect(buildAbsenceOptions(rows, "2026-09-02", new Set(), null, []).options).toHaveLength(3);
+    expect(buildAbsenceOptions(rows, "2026-09-02", new Set(), null, null).options).toHaveLength(3);
+  });
+
+  it("🔴 앵커가 있으면 앵커가 이긴다(폴백은 무시)", () => {
+    const r = buildAbsenceOptions(rows, "2026-09-02", new Set(), "english", ["math"]);
+    expect(r.options.map((o) => o.classId)).toEqual(["e1", "x1"]);
+  });
+});

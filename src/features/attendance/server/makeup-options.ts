@@ -38,6 +38,12 @@ export async function getMakeupAbsenceOptions(
   studentId: string,
   makeupDate: string,
   anchorClassId?: string | null,
+  /**
+   * 앵커가 **없을 때만** 쓰는 폴백 과목 — 그 강사가 가르치는 과목들(원장 2026-09-02:
+   * *"수학선생님이나 영어선생님이 보강 추가할때 본인 과목만 팝업되게"*).
+   * 🔴 호출부(액션)가 세션에서 읽어 넘긴다 — 클라가 준 문자열은 믿지 않는다(앵커 규칙과 같은 결).
+   */
+  teacherSubjects?: readonly string[] | null,
 ): Promise<MakeupAbsenceList> {
   if (!studentId || !/^\d{4}-\d{2}-\d{2}$/.test(makeupDate)) return EMPTY;
   const supabase = await createClient();
@@ -64,8 +70,8 @@ export async function getMakeupAbsenceOptions(
     supabase.from("enrollments").select("class_id").eq("student_id", studentId).is("end_date", null),
     // 🔴 기준 과목은 **서버가 반 id로 읽는다** — 클라가 준 과목 문자열을 믿으면 필터가 없는 것과 같다.
     loadAnchorSubject(supabase, anchorClassId),
-    // 과목 라벨은 학원설정이 단일 소스 — 필터가 걸릴 때만 필요하다(앵커가 없으면 조회도 안 한다).
-    loadSettings(!!anchorClassId),
+    // 과목 라벨은 학원설정이 단일 소스 — 필터가 걸릴 때만 필요하다(앵커도 폴백도 없으면 조회 안 함).
+    loadSettings(!!anchorClassId || (teacherSubjects ?? []).length > 0),
   ]);
   if (error) {
     // 조용히 빈 목록으로 두면 "결석이 없네?"로 오해된다 — 로그를 남기고 화면은 직접 입력으로 폴백한다.
@@ -90,8 +96,11 @@ export async function getMakeupAbsenceOptions(
       slotStart: (r.slot_start as string | null) ?? null,
     };
   });
-  const list = buildAbsenceOptions(raw, makeupDate, current, anchorSubject);
-  return { ...list, ...(subjectLabelOf(anchorSubject, settings) ?? {}) };
+  const list = buildAbsenceOptions(raw, makeupDate, current, anchorSubject, teacherSubjects);
+  // 라벨은 **실제로 거른 기준**을 가리켜야 한다 — 앵커가 없으면 강사 과목이 기준이고, 그게 하나일 때만
+  // 이름을 댈 수 있다(둘 이상이면 "이 과목"이라 부를 대상이 없어 라벨을 비운다).
+  const labelKey = anchorSubject ?? ((teacherSubjects ?? []).length === 1 ? teacherSubjects![0]! : null);
+  return { ...list, ...(subjectLabelOf(labelKey, settings) ?? {}) };
 }
 
 /**

@@ -19,6 +19,8 @@ import {
   parseSeatFilterValue,
   seatFilterValue,
 } from "@/features/attendance/seat/seat";
+import { findMakeupPoolClass } from "@/features/attendance/server/makeup-pool";
+import { MAKEUP_POOL_PREFIX } from "@/features/classes/makeup-pool";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { kstMonth, kstToday } from "@/lib/date-kst";
@@ -448,6 +450,35 @@ export default async function AttendancePage({
             },
           ]
         : [];
+
+  /**
+   * **보이지 않는 '보강' 반**을 이 강사의 출석부에 한 묶음으로 붙인다(0241a).
+   *
+   * 🔑 여기서 하는 일은 **반 하나를 목록에 더하는 것뿐**이다 — 명단·칸·시수·수정·게이트는 전부
+   *    평소 쓰는 `getMonthlyAttendanceMatrix`가 그대로 처리한다(보강 학생은 수강행이 없어도
+   *    `makeupStudentIds`가 이미 명단에 올린다). 그래서 이 화면에 특별한 코드가 없다.
+   * 🔴 이 반은 `is_active=false`라 위 `teacherClasses`(활성만)에는 **절대 안 들어온다** — 그게
+   *    "어디에도 안 보이게" 하는 장치다. 출석부만 이렇게 **일부러** 불러온다.
+   * ⚠️ 보강을 한 적 없는 강사는 반 자체가 없어(lazy 생성) 묶음도 안 선다 — 정상이다.
+   * ⚠️ 반별 보기(mode !== "teacher")엔 안 붙인다. 그 화면은 고른 반의 책이라 남의 보강이 낄 자리가 아니다.
+   */
+  const makeupPoolClassId =
+    mode === "teacher" && effectiveTeacher
+      ? await findMakeupPoolClass(user.tenantId, effectiveTeacher)
+      : null;
+  const makeupPoolMatrix = makeupPoolClassId
+    ? await getMonthlyAttendanceMatrix(month, makeupPoolClassId, "month", null, null, makeupPoolClassId)
+    : null;
+  const makeupGroup: MatrixGroup | null =
+    makeupPoolMatrix && makeupPoolMatrix.students.length > 0
+      ? {
+          classId: makeupPoolClassId!,
+          className: MAKEUP_POOL_PREFIX,
+          // 과목 라벨은 비운다 — 이 묶음은 한 과목이 아니다(그 강사가 한 보강 전부가 여기 모인다).
+          subjectLabel: "",
+          matrix: makeupPoolMatrix,
+        }
+      : null;
 
   // 상단 스탯 — 강사 전체 보기는 반들을 합산(학생은 반 중복을 제거한 실인원).
   // ⚠️ 출결 수치는 **격자와 같은 함수**(`countMarks`)로 센다. 화면이 입력 즉시 다시 셀 때 서버 첫 렌더가
@@ -923,7 +954,7 @@ export default async function AttendancePage({
         // 툴바 드롭다운·셀 팝오버를 헤더가 덮는다(스택 컨텍스트만 만들 뿐 fixed 탈출은 막지 않는다).
         <div className="isolate min-h-0 flex-1">
           <MatrixTable
-            groups={groups}
+            groups={makeupGroup ? [...groups, makeupGroup] : groups}
             days={visibleDays}
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.

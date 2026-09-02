@@ -7,6 +7,7 @@
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getMakeupAbsenceOptions } from "./makeup-options";
 import type { MakeupAbsenceList } from "../makeup-options";
 
@@ -30,5 +31,9 @@ export async function fetchMakeupAbsences(
   if (!user) return EMPTY;
   // 보강 추가와 같은 권한(출결 쓰기) — 읽기 전용 계정이 남의 결석 이력을 훑는 경로를 열지 않는다.
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return EMPTY;
-  return getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null);
+  // 🔴 앵커(보강을 넣는 반)가 없으면 **그 강사의 과목**으로 좁힌다(원장 2026-09-02) — 반 보강이 아닌
+  //    보강 추가에서 전 과목 결석이 뜨던 것. 사무실 계정은 담당 반이 없어 scope가 null이라 안 걸러진다
+  //    (전 학원을 보는 자리라 그게 맞다). 강사뷰·겸직은 effectiveTeacherId를 그대로 따른다.
+  const teacherSubjects = anchorClassId ? null : ((await effectiveTeacherScope())?.subjects ?? null);
+  return getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null, teacherSubjects);
 }

@@ -33,6 +33,7 @@ import { isRecallInFlight } from "@/features/report-admin/report-recall";
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
 import { hasAnyAttendance, isStudentAbsentForSend } from "./absence-gate";
 import { isReportOptout } from "@/features/classes/report-optout";
+import { ensureMakeupAttendanceForReport } from "@/features/attendance/server/makeup-pool";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
@@ -234,6 +235,30 @@ export async function saveLessonReport(
     });
   } catch {
     /* 진도 반영 실패는 보고서 저장을 막지 않음 */
+  }
+
+  /**
+   * **보강 보고서를 쓰면 출석부에 칸이 선다**(원장 2026-09-02: *"보고서 발송건에 대해서는 자동 입력
+   * 되어야지"* · *"실제로 수업을 했는데 출석부에 시수가 없으면 이상하지"*).
+   *
+   * 🔴 **반 없는 보강만**이다(`makeup && !classId`). 반이 붙은 보고서는 그 반 출석부에 이미 칸이 있다.
+   * 🔴 어느 반에서 했는지는 **묻지 않는다**(원장: *"반 보강이 아니니까"*) — 그 강사의 **보이지 않는
+   *    '보강' 반**([`makeup-pool.ts`](@/features/classes/makeup-pool))에 앉힌다. 그래야 시수 주인이 생긴다.
+   * ⚠️ 있는 칸은 안 덮는다 · 실패해도 보고서 저장은 그대로다(출결은 보고서 위의 기록이다).
+   */
+  if (input.makeup && !input.classId) {
+    try {
+      await ensureMakeupAttendanceForReport({
+        tenantId: user.tenantId,
+        teacherId: user.id,
+        teacherName: user.displayName ?? null,
+        studentId: input.studentId,
+        subject: input.subject || LEGACY_REPORT_SUBJECT,
+        date: reportDate,
+      });
+    } catch {
+      /* 출결 칸 생성 실패는 보고서 저장을 막지 않는다(로그는 헬퍼가 남긴다) */
+    }
   }
 
   return { ok: true, id: data.id, shareToken: data.share_token };

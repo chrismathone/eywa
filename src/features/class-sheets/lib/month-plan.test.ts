@@ -13,7 +13,10 @@ import {
   mpLevelFullName,
   mpOffOverrideOf,
   mpOffToggleValue,
+  mpDayKindOf,
+  mpOffLabel,
   mpSessionLine,
+  mpTitleLines,
   readMpOffOverride,
   type MpCell,
 } from "./month-plan";
@@ -159,5 +162,63 @@ describe("mpSessionLine — 꼬리말 세션 줄(시트 표기 그대로)", () =
   it("달이 모양이 아니면 만들지 않는다", () => {
     expect(mpSessionLine("", "9월 1일 ~ 9월 30일")).toBe("");
     expect(mpSessionLine("2026-13", "9월 1일 ~ 9월 30일")).toBe("");
+  });
+});
+
+describe("mpTitleLines — 제목은 두 줄(반 이름 / 월)", () => {
+  it("반 이름은 풀네임, 월은 괄호까지 붙여 따로", () => {
+    expect(mpTitleLines("LE1", "2026-09")).toEqual({
+      name: "Let's Express 1",
+      period: "(September 2026)",
+    });
+  });
+
+  it("🔴 한 줄 표기는 두 줄을 이어 붙인 것이다(문자열을 두 곳에서 만들지 않는다)", () => {
+    for (const [cls, month] of [
+      ["LE1", "2026-09"],
+      ["MEC1-5", "2026-01"],
+      ["ZZ9", "2026-12"],
+      ["LE1", "2026-13"],
+    ] as const) {
+      const { name, period } = mpTitleLines(cls, month);
+      expect(mpDocTitle(cls, month)).toBe(period ? `${name} ${period}` : name);
+    }
+  });
+
+  it("달이 모양이 아니면 월 줄을 통째로 생략한다(빈 문자열)", () => {
+    expect(mpTitleLines("LE1", "2026-13").period).toBe("");
+    expect(mpTitleLines("LE1", "").period).toBe("");
+    expect(mpTitleLines("LE1", "2026-13").name).toBe("Let's Express 1");
+  });
+});
+
+describe("mpDayKindOf — 칸의 상태는 셋뿐", () => {
+  it("수업이 있고 휴강이 아니면 live", () => {
+    expect(mpDayKindOf("2026-09-01", true, false)).toBe("live");
+  });
+
+  it("수업일인데 휴강이면 off", () => {
+    expect(mpDayKindOf("2026-09-24", true, true)).toBe("off");
+  });
+
+  it("🔴 원래 수업이 없는 날은 휴일이어도 off가 아니다(안 오는 요일이 회색으로 깔린다)", () => {
+    expect(mpDayKindOf("2026-09-24", false, true)).toBe("none");
+    expect(mpDayKindOf("2026-09-02", false, false)).toBe("none");
+  });
+
+  it("달 밖 칸(날짜 없음)은 none", () => {
+    expect(mpDayKindOf(null, true, true)).toBe("none");
+  });
+});
+
+describe("mpOffLabel — 휴강 칸에 적는 글자", () => {
+  it("휴일 이름이 있으면 함께 적는다", () => {
+    expect(mpOffLabel("추석")).toBe("휴강 · 추석");
+  });
+
+  it("이름이 없거나 공백뿐이면 `휴강`만", () => {
+    expect(mpOffLabel(null)).toBe("휴강");
+    expect(mpOffLabel(undefined)).toBe("휴강");
+    expect(mpOffLabel("   ")).toBe("휴강");
   });
 });
