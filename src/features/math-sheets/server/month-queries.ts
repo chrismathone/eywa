@@ -68,8 +68,6 @@ export type MathStudentRow = {
   records: Record<string, MathDayRecord>;
   /** 정체로 판정된 날짜(진도 문자열이 임계만큼 연속으로 같은 날). */
   stalledDates: string[];
-  /** 활성 진도 컨테이너(현행·선행) — 수학에만 있는 재료. 없으면 빈 배열. */
-  tracks: MathTrack[];
   /**
    * **목표 레일**(Start·Plan·Now·End) — 트랙(현행·선행)마다 하나. 초안(able 2026-09-02)의 "목표 대비
    * 현재 진도" 그림. 판정은 [`goal-rail.ts`](../lib/goal-rail) 단일 소스이고 위치는 서버가
@@ -125,22 +123,6 @@ export type StudentRail = {
 };
 
 export type RailSummary = Record<GoalRailStatus, number>;
-
-export type MathTrack = {
-  track: string;
-  trackLabel: string;
-  gradeScope: string | null;
-  startPosition: number | null;
-  lastPosition: number | null;
-  chapterCount: number;
-  /**
-   * 지금 위치의 **차시 이름**(원장 2026-09-01 *"세부 차시 보이면 더 좋겠네"*).
-   * ⚠️ 커리큘럼(초1~중3 전 차시)은 큰 데이터라 **서버에서 풀어** 문자열만 내려보낸다 — 클라로 import하면
-   *    번들에 통째로 실린다(B5). 매칭이 안 되면 null(교재가 '프린트'면 원래 위치가 없다).
-   */
-  lastLesson: string | null;
-  lastUnit: string | null;
-};
 
 export type MathSheetMonthData = {
   classId: string;
@@ -521,7 +503,6 @@ export async function getMathSheetMonth(
           .map((d) => ({ date: d, progress: records[d]!.progress })),
         DEFAULT_STALL_RUN,
       ),
-      tracks: [],
       rosterPhase: rosterPhaseOf(enrollments, withdrawnAt, anchor, dayDates),
       badges: [],
     });
@@ -540,46 +521,9 @@ export async function getMathSheetMonth(
     for (const row of rows) row.badges = badgeMap.get(row.studentId) ?? [];
   }
 
-  // 진도 컨테이너(현행·선행) — 수학에만 있는 재료. 조회 실패는 빈 배열로 강등(화면은 산다).
-  if (rows.length > 0) {
-    try {
-      const containers = await fetchInChunks(
-        rows.map((r) => r.studentId),
-        (chunk) =>
-          admin
-            .from("progress_containers")
-            .select("student_id, track, grade_scope, start_position, last_position, chapter_count")
-            .eq("tenant_id", tenantId)
-            .eq("status", "active")
-            .in("student_id", chunk),
-      );
-      const byStudent = new Map<string, MathTrack[]>();
-      for (const c of containers) {
-        const sid = String(c.student_id);
-        const list = byStudent.get(sid) ?? [];
-        const at = c.last_position != null ? describePosition(Number(c.last_position)) : null;
-        list.push({
-          track: String(c.track),
-          trackLabel: TRACK_LABEL[String(c.track)] ?? String(c.track),
-          gradeScope: c.grade_scope ? String(c.grade_scope) : null,
-          startPosition: c.start_position ?? null,
-          lastPosition: c.last_position ?? null,
-          chapterCount: Number(c.chapter_count ?? 0),
-          lastLesson: at?.lesson ?? null,
-          lastUnit: at?.unit ?? null,
-        });
-        byStudent.set(sid, list);
-      }
-      for (const row of rows) {
-        // 현행 먼저, 그 다음 선행 — 화면 순서를 조회 순서에 맡기지 않는다.
-        row.tracks = (byStudent.get(row.studentId) ?? []).sort((a, b) =>
-          a.track === b.track ? 0 : a.track === "current" ? -1 : 1,
-        );
-      }
-    } catch {
-      // 보조 재료라 없어도 A안(진도표)은 온전하다.
-    }
-  }
+  // ⚠️ 종전 '진도 레일'이 읽던 `progress_containers`(현행·선행)는 더 이상 조회하지 않는다(2026-09-02) —
+  //    컨테이너 위치가 실제와 어긋나 있었고(MS2A 전원 중3 인수분해 vs 컨테이너 중2 통계), 레일은
+  //    `lesson_reports`에서 직접 접는다(위 rails). 왕복 하나가 줄었다(B4).
 
   rows.sort((a, b) => a.name.localeCompare(b.name, "ko"));
 

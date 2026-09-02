@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { getMathSheetMonth } from "@/features/math-sheets/server/month-queries";
+import { getMathClassOptions } from "@/features/math-sheets/server/landing";
 import { countRosterPhases, rosterExtraParts } from "@/features/math-sheets/lib/roster";
 import { MonthClient } from "@/features/math-sheets/components/month-client";
 
@@ -24,7 +25,11 @@ export default async function McsMonthPage({
 }) {
   const { classId } = await params;
   const { month } = await searchParams;
-  const res = await getMathSheetMonth(classId, month ?? null);
+  // 반 전환 드롭다운 목록은 시트와 **독립**이라 나란히 받는다(B4) — 가벼운 목록이지 랜딩 집계가 아니다.
+  const [res, options] = await Promise.all([
+    getMathSheetMonth(classId, month ?? null),
+    getMathClassOptions(month ?? null),
+  ]);
 
   if (!res.ok) {
     return (
@@ -46,6 +51,10 @@ export default async function McsMonthPage({
   const counts = countRosterPhases(data.students.map((s) => s.rosterPhase));
   // 카드 툴팁과 **같은 문구**로 적는다(각자 지으면 같은 수를 다른 이름으로 부른다).
   const extraLabel = rosterExtraParts(counts);
+  // 필터 밖의 반으로 바로 들어와도 드롭다운이 "지금 보는 반"을 잃지 않게 맨 앞에 끼운다(ECS 월간과 같은 규약).
+  const classOptions = options.some((o) => o.id === classId)
+    ? options
+    : [{ id: classId, name: data.className }, ...options];
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="shrink-0 compact-chrome:hidden">
@@ -66,6 +75,7 @@ export default async function McsMonthPage({
           // 새 달 화면에 남의 값이 잠깐 비친다.
           key={`${classId}:${data.month}`}
           data={data}
+          classOptions={classOptions}
         />
       </div>
     </div>

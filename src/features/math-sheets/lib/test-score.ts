@@ -27,10 +27,13 @@ export type TestKind = "daily" | "check" | "legacy";
 
 export type TestScoreView = {
   kind: TestKind;
-  /** 저장된 원문(옛 합본에서 라벨을 떼어 낸 조각 포함) — 화면은 이걸 그대로 적는다. */
+  /** 저장된 원문(옛 합본에서 라벨을 떼어 낸 조각 포함) — 툴팁은 이걸 그대로 적는다. */
   raw: string;
-  /** 정답률(0~100). 읽을 수 없는 표기면 null(원문만 보인다). */
+  /** 정답률(0~100) — 평균(현황 표·카드)의 재료. 읽을 수 없는 표기면 null. */
   pct: number | null;
+  /** 맞은 개수 · 전체 개수 — 칸에는 이 둘만 `13/22`로 적는다(원장 2026-09-02 *"%는 제외하고 정답 개수/전체 개수만"*). */
+  correct: number | null;
+  total: number | null;
 };
 
 /** 칸에 붙는 짧은 라벨. */
@@ -52,12 +55,32 @@ const LEGACY_LABELS: readonly { kind: TestKind; label: string }[] = [
   { kind: "check", label: "확인" },
 ];
 
+/** "22문제 중 21개(맞음)" · "21/22" → 맞은 개수·전체 개수. 둘 다 못 읽으면 null(`parseExamPercent`와 같은 두 모양). */
+function parseCounts(raw: string): { correct: number; total: number } | null {
+  const korean = raw.match(/(\d+)\s*문제\s*중\s*(\d+)\s*개/);
+  if (korean) return { total: parseInt(korean[1]!, 10), correct: parseInt(korean[2]!, 10) };
+  const fraction = raw.match(/(\d+)\s*\/\s*(\d+)/);
+  if (fraction) return { correct: parseInt(fraction[1]!, 10), total: parseInt(fraction[2]!, 10) };
+  return null;
+}
+
+function view(kind: TestKind, raw: string): TestScoreView {
+  const counts = parseCounts(raw);
+  return {
+    kind,
+    raw,
+    pct: parseExamPercent(raw),
+    correct: counts?.correct ?? null,
+    total: counts?.total ?? null,
+  };
+}
+
 export function testScoresOf(src: TestScoreSource): TestScoreView[] {
   const out: TestScoreView[] = [];
   const daily = clean(src.dailyTest);
   const check = clean(src.checkTest);
-  if (daily) out.push({ kind: "daily", raw: daily, pct: parseExamPercent(daily) });
-  if (check) out.push({ kind: "check", raw: check, pct: parseExamPercent(check) });
+  if (daily) out.push(view("daily", daily));
+  if (check) out.push(view("check", check));
   if (out.length > 0) return out;
 
   const legacy = clean(src.examInfo);
@@ -65,13 +88,15 @@ export function testScoresOf(src: TestScoreSource): TestScoreView[] {
   for (const { kind, label } of LEGACY_LABELS) {
     // "일일 18/20" — 라벨 뒤의 분수 조각만 원문으로 남긴다(onescreen/exam-info.ts와 같은 모양을 읽는다).
     const m = legacy.match(new RegExp(`${label}\\s*(\\d+\\s*/\\s*\\d+)`));
-    if (m) {
-      const raw = m[1]!.replace(/\s+/g, "");
-      out.push({ kind, raw, pct: parseExamPercent(raw) });
-    }
+    if (m) out.push(view(kind, m[1]!.replace(/\s+/g, "")));
   }
-  if (out.length === 0) out.push({ kind: "legacy", raw: legacy, pct: parseExamPercent(legacy) });
+  if (out.length === 0) out.push(view("legacy", legacy));
   return out;
+}
+
+/** 칸에 적는 짧은 형태 — `13/22`(맞은 개수/전체). 개수를 못 읽는 표기("미응시")는 원문 그대로. */
+export function testCountLabel(t: TestScoreView): string {
+  return t.correct != null && t.total != null ? `${t.correct}/${t.total}` : t.raw;
 }
 
 /**

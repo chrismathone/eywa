@@ -74,6 +74,7 @@ export function SheetClassPicker({
   classOptions,
   onNavigate,
   hrefForClass,
+  listHref = "/ecs",
 }: {
   classId: string;
   /** 지금 보고 있는 반 이름 — 툴팁·스크린리더 라벨에 쓴다. */
@@ -82,13 +83,19 @@ export function SheetClassPicker({
   onNavigate: (href: string) => void | Promise<void>;
   /** 반을 바꿨을 때 갈 곳 — 주간은 보던 주를, 월간은 보던 달을 유지한다. */
   hrefForClass: (classId: string) => string;
+  /**
+   * '목록'이 가는 곳 — 기본은 영어 랜딩(`/ecs`). 수학 시트(MCS 월간)는 **같은 조각**을 `/mcs`로 쓴다
+   * (원장 2026-09-02 *"영어 ECS처럼 수학 MCS에 반정보가 있어야하는데 상단 헤더에 없음"*) —
+   * 조각을 복사하면 두 시트의 상단 바가 다시 갈린다.
+   */
+  listHref?: string;
 }) {
   return (
     <>
       <button
         type="button"
         className={`${sheetPill(false)} inline-flex items-center`}
-        onClick={() => void onNavigate("/ecs")}
+        onClick={() => void onNavigate(listHref)}
         aria-label="반 목록"
       >
         <PillGlyph icon="list" hint="반 목록">

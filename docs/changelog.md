@@ -19,6 +19,21 @@ End · 달 시작 전 이 반 마지막 위치가 Start) · 블럭=커리큘럼 
   🔴 라벨 없는 옛 `"4/5"`는 "시험"으로만 적고 일일 평균에 안 넣는다(무엇의 점수인지 모른다). 평균(현황 표·카드)도 같은 함수를 탄다.
 - **(같은 날 후속) 목표 밖 교재 칸 = 네 변 테두리 + `목표 밖` 칩**(원장 *"다른진도 테두리 더 확실하게"*) — 왼쪽 3px 선만으론 칸 하나가
   눈에 안 들어왔다. border-collapse 표라 `border`를 굵히면 이웃과 선을 나눠 갖고 행이 밀리므로 **`outline-2 -outline-offset-2`**로 칸 안에 그린다.
+- **(같은 날 후속, 시안 확정) 보기 넷 → 둘(진도표 · 현황 표), 표 하나·행 하나** — 원장이 화면을 보며 확정: *"목표레일과 진도레일을
+  … 굳이 탭을 2개로 두지말고 하나로"* → *"어떤 탭을 고르던 해당 학생의 행높이가 똑같아서 전환이 자연스러워 보이도록"* → *"진도표가
+  기준 행이 되도록"* → *"진도레일 탭 없애고 진도표 하단으로 이동"*. 왼쪽 고정열([`student-head-cell.tsx`](../src/features/math-sheets/components/student-head-cell.tsx):
+  이름·목표 칸·목표 레일)이 두 보기에 똑같이 서고 오른쪽 칸만 갈린다([`month-grid.tsx`](../src/features/math-sheets/components/month-grid.tsx) —
+  진도표 `month-day-cells` / 현황 표 `month-status-cells`). 행 `key`=학생 id라 보기를 바꿔도 목표 입력칸이 살아남는다. 실측 행 높이
+  진도표 251px = 현황 표 251px. '느린 순'은 툴바로 올려 두 보기를 함께 정렬([`student-order.ts`](../src/features/math-sheets/lib/student-order.ts)).
+  종전 카드 보기 셋(`month-track`·`month-goal-rail`·`month-status`)은 삭제, `progress_containers` 조회도 제거(왕복 −1).
+- **목표 레일 = 두 줄**(원장 *"목표와 지금을 같은 레일에 놓지말고, 이중으로 지금을 1행, 목표를 2행. 지금 → 현재진도, 목표 → 목표진도"*) —
+  [`GoalRailRows`](../src/features/math-sheets/components/goal-rail-bar.tsx): 1행 현재진도(시작→지금, 판정 색) / 2행 목표진도(시작→계획, 끝이
+  목표, 옅은 정보색). 같은 눈금이라 길이 차가 곧 계획 대비. 각 줄 아래 차시 이름(+날짜). 어휘는 `RAIL_ROW_LABEL` 한 곳(현황 표 머리도 같은 값).
+- **상단 바에 반 정보**(원장 *"영어 ECS처럼 수학 MCS에 반정보가 있어야하는데 상단 헤더에 없음"*) — ECS의 `SheetClassPicker`를 그대로
+  쓰되 `listHref="/mcs"` 한 prop만 추가(조각 복사 금지). 드롭다운 목록은 [`getMathClassOptions`](../src/features/math-sheets/server/landing.ts)
+  (가벼운 반 목록 — 랜딩 집계를 부르면 반 하나 여는 데 전 반 보고서·출결이 딸려 온다, B7). **잡고 끌기**(원장 *"스크롤이 하단에
+  있어서 불편하니까 마우스 드래그로도 좌우 이동"*) — 표를 `DragScrollArea`로 감쌈. 시험 점수는 %를 빼고 `일일 13/22`(맞은 개수/전체)만
+  (원장 *"정답 개수/전체 개수 정도만"*), 칸 글씨는 13.5~15px로 키움(*"공간 많으므로 가독성"*).
 - 🔴 **종전 '진도 레일'(progress_containers)은 거짓이었다** — MS2A 전원이 8월에 중3 인수분해를 나갔는데 컨테이너는 `중2 · 상자그림 ·
   7.통계`에 멈춰 있었다(8월 보고서 1,814건 중 progress_entries 매칭 591건). 새 레일은 `lesson_reports.progress`에서 직접 접는다.
 - 🔴 **Start는 이 반으로 좁힌다** — 정규(중3-1)와 특강(중3-2)을 동시에 다니는 학생은 반을 안 가리면 특강 위치가 Start가 되어
