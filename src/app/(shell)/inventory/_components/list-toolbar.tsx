@@ -14,6 +14,7 @@ export function ListToolbar({
   onQueryChange,
   placeholder,
   filters,
+  extra,
   actions,
   summary,
 }: {
@@ -22,6 +23,8 @@ export function ListToolbar({
   placeholder: string;
   /** 필터 칩 묶음(`<ToolbarSegment>`). */
   filters?: ReactNode;
+  /** 묶음 뒤에 홀로 서는 토글 칩(`<ToolbarChip>`) — 예: 폐기 숨김. */
+  extra?: ReactNode;
   /** 우측 동작 버튼(`<ToolbarButton>`). */
   actions?: ReactNode;
   /** "N건 표시" 같은 읽기 전용 요약. */
@@ -41,6 +44,7 @@ export function ListToolbar({
         />
       </label>
       {filters}
+      {extra}
       {summary ? <span className="text-text-faint num shrink-0 text-[11.5px]">{summary}</span> : null}
       {actions ? <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div> : null}
     </Toolbar>

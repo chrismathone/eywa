@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ToolbarButton, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { ToolbarButton, ToolbarChip, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { assetFilterChips, filterAssets, type AssetFilterKey } from "@/features/inventory/filter";
+import { saveInventoryPrefs } from "@/features/inventory/server/prefs";
 import { needsAction } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
 import { assetColumns } from "./asset-columns";
@@ -32,13 +33,34 @@ type Dialog =
  * 툴바 우측 = [엑셀](서식 내려받기·올리기) · [인쇄](QR 라벨 시트) · [+ 자산 등록]. QR 열의 [보기]는 열람만으로도 된다.
  * 서버 액션이 **같은 게이트**를 다시 지나므로 `canWrite`는 진입로만 정한다.
  */
-export function AssetsFace({ assets, canWrite, today }: { assets: InventoryAsset[]; canWrite: boolean; today: string }) {
+export function AssetsFace({
+  assets,
+  canWrite,
+  today,
+  hideDisposed: hideDisposedInitial,
+}: {
+  assets: InventoryAsset[];
+  canWrite: boolean;
+  today: string;
+  /** 저장된 보기 설정(users.ui_prefs.inventory) — 토글은 바꾸는 순간 저장한다([[#90]]). */
+  hideDisposed: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<AssetFilterKey>("all");
+  const [hideDisposed, setHideDisposed] = useState(hideDisposedInitial);
   const [dialog, setDialog] = useState<Dialog>(null);
   const { sort, toggle } = useSort();
   const chips = useMemo(() => assetFilterChips(assets), [assets]);
-  const rows = useMemo(() => filterAssets(assets, chip, query), [assets, chip, query]);
+  // 폐기 숨김(원장 2026-09-02) — '폐기' 칩을 고른 동안은 토글과 무관하게 보인다(숨긴 채 폐기 필터가 빈 표면 "왜 없지").
+  const rows = useMemo(() => {
+    const base = filterAssets(assets, chip, query);
+    return hideDisposed && chip !== "disposed" ? base.filter((a) => a.status !== "disposed") : base;
+  }, [assets, chip, query, hideDisposed]);
+  function toggleHideDisposed() {
+    const next = !hideDisposed;
+    setHideDisposed(next);
+    void saveInventoryPrefs({ hideDisposed: next });
+  }
   // 고정 번호(No) — 마스터 순서(서버 정렬 = sort_order·자산ID)로 1부터. 필터·정렬해도 그 자산의 번호는 그대로.
   const noById = useMemo(() => new Map(assets.map((a, i) => [a.id, i + 1])), [assets]);
   const columns = useMemo(
@@ -68,6 +90,11 @@ export function AssetsFace({ assets, canWrite, today }: { assets: InventoryAsset
             ))}
           </ToolbarSegment>
         }
+        extra={
+          <ToolbarChip active={hideDisposed} onClick={toggleHideDisposed} title="폐기 자산을 표에서 감춥니다('폐기' 필터를 고르면 보입니다)">
+            폐기 숨김
+          </ToolbarChip>
+        }
         summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정 · 상태 칸 더블클릭 = 상태 변경" : ""}`}
         actions={
           <>
@@ -89,7 +116,7 @@ export function AssetsFace({ assets, canWrite, today }: { assets: InventoryAsset
           emptyText={assets.length === 0 ? "등록된 자산이 없습니다" : "조건에 맞는 자산이 없습니다"}
           onRowDoubleClick={canWrite ? (asset) => setDialog({ kind: "edit", asset }) : undefined}
           // 조치필요 행 = 붉은 틴트(원장 2026-09-02). 🔴 판정은 스탯·칩·조치 목록과 **같은 `needsAction`** — 상태가 바뀌면 색도 따라간다.
-          rowClassName={(asset) => (needsAction(asset.status) ? "bg-danger-soft/45 hover:bg-danger-soft/70" : "")}
+          rowClassName={(asset) => (needsAction(asset.status) ? "bg-danger/15 hover:bg-danger/25" : "")}
         />
       </div>
 

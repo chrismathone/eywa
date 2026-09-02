@@ -13,6 +13,7 @@ import {
   type FaceData,
   type TableStatus,
 } from "@/features/inventory/server/queries";
+import { loadInventoryPrefs } from "@/features/inventory/server/prefs";
 import { actionNeededAssets, computeAssetStats } from "@/features/inventory/stats";
 import type { AssetOption, InventoryAudit, InventoryLoan, InventorySupply } from "@/features/inventory/types";
 import { ActionNeeded } from "./_components/action-needed";
@@ -68,11 +69,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const tab = resolveInventoryTab((await searchParams).tab);
 
   // 서로 독립 — 함께 받는다(B4).
-  const [canWrite, counts, assets, face] = await Promise.all([
+  const [canWrite, counts, assets, face, prefs] = await Promise.all([
     canWriteTenant(user.systemRole, "inventory"),
     getInventoryCounts(),
     getAssets(),
     loadFace(tab),
+    // 보기 설정(폐기 숨김) — 계정 귀속(users.ui_prefs.inventory).
+    loadInventoryPrefs(),
   ]);
 
   // 표 없음(missing-table)이 그냥 실패보다 먼저 — 원인을 말하는 문구가 뜬다.
@@ -102,7 +105,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       <NotReadyBanner status={status} />
       {action.length > 0 ? <ActionNeeded assets={action} /> : null}
       <FaceTabs faces={inventoryFaces(counts)} active={tab} ariaLabel="재고관리 면 전환" />
-      {face.kind === "assets" ? <AssetsFace assets={assets.rows} canWrite={editable} today={today} /> : null}
+      {face.kind === "assets" ? <AssetsFace assets={assets.rows} canWrite={editable} today={today} hideDisposed={prefs.hideDisposed} /> : null}
       {face.kind === "loans" ? <LoansFace loans={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
       {face.kind === "audits" ? <AuditsFace audits={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
       {face.kind === "supplies" ? (
