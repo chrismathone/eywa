@@ -22,8 +22,18 @@ describe("보이지 않는 '보강' 반", () => {
   });
 
   it("🔴 자동 입력은 **빈 칸만** 채운다(사람이 고친 값을 안 덮는다)", () => {
-    // 먼저 조회해서 있으면 그대로 둔다.
-    expect(server).toMatch(/if \(\(exists \?\? \[\]\)\.length > 0\) return \{ ok: true/);
+    /**
+     * ⚠️ 가드는 **코드 모양이 아니라 성질**을 잡는다 — 들여쓰기·줄바꿈까지 문자열로 잡으면 포맷 한 번에
+     *    빨개진다(2026-09-02에 실제로 그렇게 main이 잠깐 빨갰다). 여기서 확인하는 것은 두 가지다:
+     *    ① insert 전에 **먼저 읽는다**  ② 그 조회가 있으면 **일찍 돌아간다**.
+     */
+    // ⚠️ 반 생성(ensureMakeupPoolClass)에도 insert가 있어서 **출결 함수 안으로 좁혀** 본다.
+    const fn = server.slice(server.indexOf("export async function ensureMakeupAttendanceForReport"));
+    const readAt = fn.indexOf('.from("attendance_records")');
+    const insertAt = fn.indexOf(".insert({");
+    expect(readAt).toBeGreaterThan(-1);
+    expect(insertAt).toBeGreaterThan(readAt); // 조회가 먼저다(빈 칸 판정 없이 쓰지 않는다)
+    expect(fn.slice(readAt, insertAt)).toMatch(/exists[\s\S]{0,120}return \{ ok: true/);
     expect(server).toContain('status: "makeup"');
   });
 
@@ -35,7 +45,9 @@ describe("보이지 않는 '보강' 반", () => {
      * 🔴 스코프 통과 인자를 **반드시** 함께 넘긴다 — 이 반은 활성 목록에 없어서, 안 넘기면 강사 화면에서
      *    classId가 조용히 null이 되고 묶음이 통째로 빈다(에러도 안 난다).
      */
-    expect(page).toContain('"month", null, null, makeupPoolClassId)');
+    // 인자 위치가 아니라 **그 값이 그 호출에 실렸는지**만 본다(포맷·인자 추가에 안 부서지게).
+    const call = page.slice(page.indexOf("getMonthlyAttendanceMatrix(month, makeupPoolClassId,"));
+    expect(call.slice(0, call.indexOf(")") + 1)).toContain("makeupPoolClassId)");
   });
 
   it("⚠️ 0241a 미적용이어도 안 죽는다 — 컬럼 없으면 null/빈 배열로 조용히 넘어간다", () => {
