@@ -60,11 +60,6 @@ export type MatrixGroup = {
    * 빗금으로 남기는데, 표식이 없으면 "왜 8월 초가 비었지"가 된다. null이면 종전과 같은 표기.
    */
   sinceLabel?: string | null;
-  /**
-   * 이 덩어리가 **파생 표시**라 입력을 안 받는 이유 — '보강' 임시 반 전용(원장 2026-09-02).
-   * 🔴 값이 있으면 ① 칸이 전부 잠기고 ② 머리행에 **시수를 안 적는다**(DB에 없는 수라 세면 거짓말이다).
-   */
-  lockReason?: string | null;
 };
 
 /** 그룹(반)의 집계 — 시수는 급여 계산의 기본 단위라 그룹 헤더에 그대로 노출한다. */
@@ -338,7 +333,6 @@ export function MatrixTable({
                 money={money ? money.byStudent[s.id] ?? null : undefined}
                 lockBefore={lockBefore}
                 classLabel={g.className}
-                lockReason={g.lockReason ?? null}
                 tierMissing={tierMissingIds.has(s.id)}
                 tierLabel={tierByStudent[s.id] ?? null}
               />
@@ -376,17 +370,10 @@ export function MatrixTable({
                   <ClassSearchCount rowKeys={groupRowKeys} />
                   {/* 검색 중이면 `시수 12 / 53`(검색분 / 전체) — 옆의 "검색 N명"과 같은 규약이다.
                       한 머리행에서 인원만 검색 기준이고 시수는 전체이면 그게 제일 나쁘다. */}
-                  {/* 🔴 파생 덩어리('보강')엔 시수를 안 적는다 — DB에 없는 수라 적으면 거짓말이 된다. */}
-                  {g.lockReason ? (
-                    <span className="text-text-faint text-[11px]" title={g.lockReason}>
-                      수업보고서에서 따온 표시 · 입력 불가
-                    </span>
-                  ) : (
-                    <span className="text-text-dim num text-[11px]">
-                      시수{" "}
-                      <LiveUnits rows={groupRowKeys} countByRow={countByRow} fallback={groupCount(g.matrix)} />
-                    </span>
-                  )}
+                  <span className="text-text-dim num text-[11px]">
+                    시수{" "}
+                    <LiveUnits rows={groupRowKeys} countByRow={countByRow} fallback={groupCount(g.matrix)} />
+                  </span>
                 </>
               }
             >

@@ -9,6 +9,7 @@ import { enrollmentPhaseOn, isEnrollmentOnRosterOn, type EnrollmentPhase } from 
 import { kstToday } from "@/lib/date-kst";
 import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
+import { listMakeupPoolClassIds } from "@/features/attendance/server/makeup-pool";
 
 /**
  * "만료되지 않은 스케줄" PostgREST `or` 절 — `valid_to`가 무기한(null)이거나 오늘 이후(**포함**).
@@ -483,7 +484,15 @@ export async function getClassesPage(
 
   const { data: classes, error } = await qb;
   if (error) throw new Error(`getClassesPage: ${error.message}`);
-  const matched = classes ?? [];
+  /**
+   * 🔴 **보이지 않는 '보강' 반은 목록에서 뺀다**(0241a). 그 반은 `is_active=false`라 기본(운영) 목록엔
+   *    애초에 안 들어오지만, **'폐지'·'전체'를 고르면 보인다** — 원장 지시가 *"어디에서도 확인할 수 없는"*
+   *    이라 그 한 곳을 여기서 막는다.
+   * ⚠️ 쿼리 필터가 아니라 **뺄 id를 따로 받아 거른다** — 0241a 미적용일 때 컬럼 이름이 select·필터에
+   *    들어가면 PostgREST 400으로 이 화면이 통째로 죽는다([[#95]]). 조회 실패는 빈 배열이라 fail-open.
+   */
+  const poolIds = new Set(await listMakeupPoolClassIds());
+  const matched = (classes ?? []).filter((c) => !poolIds.has(c.id as string));
   const classIds = matched.map((c) => c.id);
 
   // 학생수·요일 — 매칭 수업 id를 청크로 조회(전건 .in() 414/1000행 절단 회피).
