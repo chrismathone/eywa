@@ -3,16 +3,25 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Pill } from "@/components/atoms/pill";
+import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_ACTION, SHUTTLE_INPUT } from "@/features/shuttle/control-size";
 import {
   DIRECTION_LABEL,
+  hasCoords,
   runTitle,
   type ShuttleRun,
   type ShuttleStop,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
-import { archiveStop, createStop, updateStop } from "@/features/shuttle/server/actions";
+import {
+  archiveStop,
+  createStop,
+  saveStopLocation,
+  updateStop,
+} from "@/features/shuttle/server/actions";
+import { StopLocationEditor } from "./stop-location-editor";
 
 /**
  * 정류장 마스터 관리 — **여기가 정류장 이름의 유일한 자리**다.
@@ -37,6 +46,7 @@ export function StopMasterDialog({
   runs,
   vehicles,
   seasonLabel,
+  coordsReady,
   onClose,
   onError,
 }: {
@@ -44,6 +54,11 @@ export function StopMasterDialog({
   runs: ShuttleRun[];
   vehicles: ShuttleVehicle[];
   seasonLabel: string;
+  /**
+   * 0243a(좌표 컬럼) 적용 여부. 🔴 false면 위치 입력을 **아예 그리지 않는다** — 없는 기능을 버튼으로
+   * 약속하면 눌렀을 때 한글 에러만 나온다([[#95]], 0229a `exceptionsReady`와 같은 규약).
+   */
+  coordsReady: boolean;
   onClose: () => void;
   onError: (msg: string | null) => void;
 }) {
@@ -51,6 +66,17 @@ export function StopMasterDialog({
   const [busy, startTransition] = useTransition();
   const [editing, setEditing] = useState<string | null>(null);
   const [openStop, setOpenStop] = useState<string | null>(null);
+  /** 위치 패널을 편 정류장 — 이름 수정(`editing`)과 다른 축이라 따로 둔다(둘을 같이 열 수 있다). */
+  const [locating, setLocating] = useState<string | null>(null);
+
+  /**
+   * 좌표를 아직 안 찍은 정류장 수 — 실측 23곳 중 대부분이 미지정이라 **몇 곳 남았는지**가 보여야
+   * 한 번에 훑어 채울 수 있다(하나씩 열어 확인하면 끝이 안 난다).
+   */
+  const missingCoords = useMemo(
+    () => (coordsReady ? stops.filter((s) => !hasCoords(s)).length : 0),
+    [stops, coordsReady],
+  );
 
   /** 정류장 → 그 정류장을 쓰는 노선 칸들(차량·회차·시각·인원). 보드가 이미 실어 온 값이라 왕복 0. */
   const usageByStop = useMemo(() => {
@@ -102,6 +128,14 @@ export function StopMasterDialog({
           이름은 여기서만 고칩니다 — 고치면 이 정류장을 쓰는 모든 노선이 함께 바뀝니다. 같은 아파트
           앞이라도 승차 지점이 반대편이면 각각 만들고 메모로 구분하세요.
         </p>
+        {/* 🔑 미지정이 몇 곳인지 먼저 말한다 — 좌표는 한 번에 다 못 찍으므로 "얼마나 남았나"가
+            이 화면을 다시 여는 이유가 된다. 다 찍었으면 굳이 말하지 않는다(빈 잔소리 금지). */}
+        {coordsReady && missingCoords > 0 && (
+          <p className="text-text-dim text-[11.5px]">
+            위치 미지정 <span className="num font-bold">{missingCoords}</span>곳 — 좌표를 찍어 두면
+            같은 아파트 앞 반대편 정류장이 말이 아니라 지도로 구분됩니다.
+          </p>
+        )}
 
         <form
           className="border-line flex flex-wrap items-center gap-2 rounded-xl border border-dashed p-2"
@@ -172,6 +206,12 @@ export function StopMasterDialog({
                     {s.name}
                     {s.memo && <span className="text-text-faint font-normal"> · {s.memo}</span>}
                   </span>
+                  {/* 좌표 유무 — 🔑 **미지정만 표식을 단다**. 다 찍은 정류장에까지 알약을 붙이면
+                      목록이 알약 밭이 되어 정작 남은 곳이 안 보인다(주소는 아래 패널에서 본다).
+                      색은 의미색 캐논: 아직 안 한 일 = caution(amber). */}
+                  {coordsReady && !hasCoords(s) && (
+                    <Pill color={TONE_COLOR.caution}>위치 미지정</Pill>
+                  )}
                   {/* 🔴 여기가 "정렬이 떨어진다"의 대표 자리였다 — 한 줄에 수제 버튼(11px·py-1)과
                       `size="sm"` Button(h-7)이 섞여 셋의 밑선이 서로 달랐다. 셋 다 공용 `<Button>`
                       + 같은 크기 상수로 맞춘다(design-conventions "한 액션 행은 공용 Button"). */}
@@ -200,6 +240,19 @@ export function StopMasterDialog({
                   <Button variant="ghost" className={SHUTTLE_ACTION} onClick={() => setEditing(s.id)}>
                     수정
                   </Button>
+                  {/* 🔴 0243a 미적용이면 이 버튼 자체가 없다 — 없는 기능을 약속하면 눌렀을 때
+                      한글 에러만 나온다([[#95]]). */}
+                  {coordsReady && (
+                    <Button
+                      variant="ghost"
+                      className={SHUTTLE_ACTION}
+                      aria-expanded={locating === s.id}
+                      title="지도에서 위치를 고르거나 위경도를 직접 입력합니다"
+                      onClick={() => setLocating((v) => (v === s.id ? null : s.id))}
+                    >
+                      위치
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     className={SHUTTLE_ACTION}
@@ -218,6 +271,15 @@ export function StopMasterDialog({
                     정리
                   </Button>
                 </div>
+
+                {coordsReady && locating === s.id && (
+                  <StopLocationEditor
+                    stop={s}
+                    busy={busy}
+                    onSubmit={(fd) => submit(fd, saveStopLocation)}
+                    onClose={() => setLocating(null)}
+                  />
+                )}
 
                 {openStop === s.id && (
                   <ul className="border-line bg-muted/40 mx-2 mb-1.5 flex flex-col gap-0.5 rounded-lg border p-1.5">

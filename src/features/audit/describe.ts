@@ -692,6 +692,21 @@ export function auditDetail(
       const parts = [on, isBoardingStatus(status) ? BOARDING_STATUS_LABEL[status] : null].filter(Boolean);
       return parts.length ? parts.join(" · ") : null;
     }
+    // 운행 단위(0242a) — 날짜만 있으면 그날 어느 운행인지가 목록에서 바로 읽힌다.
+    case "shuttle_trip_start":
+    case "shuttle_trip_end":
+    case "shuttle_trip_reopen": {
+      return str(m.ranOn);
+    }
+    /**
+     * 정류장 위치(0243a) — 🔴 **좌표를 상세에 적지 않는다.** 감사로그는 목록에서 훑는 자리라
+     * `35.8714, 128.6014`가 붙으면 읽을 수 없는 숫자만 길게 남고, 위치 자체는 정류장 화면이 진실이다.
+     * 지운 것인지 찍은 것인지만 가른다(되돌린 기록이 필요한 유일한 축).
+     */
+    case "shuttle_stop_location": {
+      return m.cleared === true ? "위치 지움" : "위치 지정";
+    }
+
     // ── 수업 평가(class_review) ──────────────────────────────────────────────────────
     // 🔴 case가 없으면 폴백이 `slot: observer` · `observerMode: assigned`를 **영문 그대로** 내보낸다
     //    (원장 제보 2026-08-20). 라벨은 화면(new-review-form·[id]/page)이 쓰는 말과 같게 맞춘다.

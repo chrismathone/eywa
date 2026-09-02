@@ -5,10 +5,17 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_ROW } from "@/features/shuttle/control-size";
-import { DIRECTION_LABEL, runTimeRange, runTitle, type ShuttleRun } from "@/features/shuttle/types";
+import {
+  DIRECTION_LABEL,
+  runTimeRange,
+  runTitle,
+  type ShuttleRun,
+  type ShuttleTrip,
+} from "@/features/shuttle/types";
 import type { RideRow } from "@/features/shuttle/roster";
 import { firstTime, progressState, type Progress } from "@/features/shuttle/today-board";
 import { RideRowItem } from "./ride-row-item";
+import { TripControl } from "./trip-control";
 
 /**
  * 회차 한 판 — 머리(접기 버튼) + 그날 줄. 머리는 **접힌 채로도 남은 일이 보여야** 한다.
@@ -25,6 +32,10 @@ export function RunPanel({
   canEditException,
   onError,
   onDone,
+  trip,
+  tripsReady,
+  today,
+  onTripDone,
 }: {
   run: ShuttleRun;
   rows: RideRow[];
@@ -38,6 +49,14 @@ export function RunPanel({
   canEditException: boolean;
   onError: (msg: string | null) => void;
   onDone: () => void;
+  /** 그 회차의 운행 기록(0242a) — 아직 출발 안 했거나 표가 없으면 null. */
+  trip: ShuttleTrip | null;
+  /** 0242a 적용 여부. false면 출발/종료 줄이 통째로 안 그려진다. */
+  tripsReady: boolean;
+  /** KST 오늘 — 출발·종료는 오늘 것만 찍는다. */
+  today: string;
+  /** 출발·종료가 성공했을 때(등하원 기록과 **다른 종류**라 신호를 따로 보낸다). */
+  onTripDone: () => void;
 }) {
   const state = progressState(progress);
   const start = firstTime(run);
@@ -81,6 +100,19 @@ export function RunPanel({
           />
         </span>
       </button>
+
+      {/* 출발/종료 — 회차 머리(접기 버튼) 안에 넣을 수 없다(버튼 안에 버튼). 바로 아래 한 줄로 둔다.
+          🔴 0242a 미적용이면 이 줄 자체가 없다 — 없는 기능을 약속하지 않는다([[#95]]). */}
+      <TripControl
+        trip={trip}
+        ready={tripsReady}
+        runId={run.id}
+        date={date}
+        today={today}
+        canWrite={canWrite}
+        onError={onError}
+        onDone={onTripDone}
+      />
 
       {open && (
         <ul className="flex flex-col gap-1.5 px-2.5 pb-2.5">

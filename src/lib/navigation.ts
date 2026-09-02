@@ -106,6 +106,9 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   shuttle: [
     { label: "노선 편성", href: "/shuttle" },
     { label: "오늘 등하원", href: "/shuttle/today" },
+    // 관제(2026-09-02) — '오늘 등하원'이 **찍는 화면**이라면 이쪽은 **보는 화면**이다. 관리자는
+    // 회차를 펼쳐 한 줄씩 다루는 게 아니라 차 전체를 한눈에 보고 이상한 것만 짚는다.
+    { label: "운행 현황", href: "/shuttle/live" },
   ],
   // 직원 이력서 면은 2026-07-28 직원 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 하위 메뉴 제거.
   // ⚠️ 면이 이거 하나뿐이라 **사이드바엔 안 나온다**(subTabsForMenu의 "면 하나 = 하부탭 아님" 규칙).
