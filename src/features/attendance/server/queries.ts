@@ -667,6 +667,16 @@ export async function getMonthlyAttendanceMatrix(
    *    그 사람이 실제로 가르쳤으므로 대상이 아니고, 근거가 없으면 null이라 종전대로 전부 보인다.
    */
   scopeSince: string | null = null,
+  /**
+   * **스코프 검사를 통과시킬 반 하나** — 강사에게 보이는 활성 반 목록엔 없지만 그 사람 것이 확실한 반.
+   *
+   * 🔴 지금 유일한 소비처 = 보이지 않는 '보강' 반(0241a). 그 반은 `is_active=false`라 아래
+   *    `loadVisibleClassAxisRows`(활성만)에 절대 안 들어오고, 그러면 강사 화면에서 이 함수가
+   *    **classId를 조용히 null로 떨어뜨려** 보강 묶음이 통째로 빈다(에러도 안 난다).
+   * ⚠️ 호출부가 **그 반이 이 사람 것임을 이미 확인**했을 때만 넘긴다(`findMakeupPoolClass`는
+   *    `teacher_id = 그 강사`로 조회한다). 남의 반 id를 여기 실으면 스코프가 뚫린다.
+   */
+  allowClassId: string | null = null,
 ): Promise<AttendanceMatrix> {
   const supabase = await createClient();
 
@@ -695,9 +705,13 @@ export async function getMonthlyAttendanceMatrix(
     }));
 
   // 강사가 본인 반이 아닌 classId를 URL로 넘기면 선택 무시(스코프 위반 차단).
-  const classId = tId && requestedClassId && !classes.some((c) => c.id === requestedClassId)
-    ? null
-    : requestedClassId;
+  const classId =
+    tId &&
+    requestedClassId &&
+    requestedClassId !== allowClassId &&
+    !classes.some((c) => c.id === requestedClassId)
+      ? null
+      : requestedClassId;
 
   // 날짜축 = 세션 기간(반이 정해졌고 그 과목에 세션이 있을 때) 또는 달력월. 폴백은 resolve가 책임진다.
   const selectedSubject = classId ? (classes.find((c) => c.id === classId)?.subject ?? null) : null;

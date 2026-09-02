@@ -39,6 +39,12 @@ describe("담당 반 판정 단일 소스", () => {
       for (const file of sourceFiles(root)) {
         // teacher-money = 돈 계산(위 주석의 의도적 예외).
         if (file.includes("teacher-money")) continue;
+        /**
+         * makeup-pool = **담당 반 판정이 아니라** 그 강사의 보이지 않는 '보강' 반을 id로 찾는 조회다
+         * (0241a, 강사당 1개 유니크). 여기서 위임을 볼 이유가 없다 — 위임받은 강사가 자기 보강을 남기면
+         * **자기** 보강 반에 남아야 하고(시수 주인이 그 사람이다), 남의 보강 반에 얹히면 안 된다.
+         */
+        if (file.includes("makeup-pool")) continue;
         const code = stripComments(readFileSync(file, "utf8")).replace(/\s+/g, " ");
         // `from("classes")` 와 같은 체인 안의 `.eq("teacher_id"` — 사이에 select/filter가 끼어도 잡히게 넉넉히.
         if (/from\(\s*["']classes["']\s*\)[^;]{0,400}?\.eq\(\s*["']teacher_id["']/.test(code)) {

@@ -23,7 +23,6 @@ export function MatrixRow({
   holidays,
   money,
   lockBefore,
-  lockReason,
   classLabel,
   tierMissing,
   tierLabel,
@@ -40,11 +39,6 @@ export function MatrixRow({
   money?: StudentMoney | null;
   /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
   lockBefore?: string | null;
-  /**
-   * 이 행 전체가 입력을 안 받는 이유 — '보강' 임시 반처럼 **DB가 아니라 보고서에서 파생된** 줄.
-   * 🔴 `lockBefore`(7일 창)보다 **먼저** 이긴다: 날짜와 무관하게 못 고치는 줄이라 사유가 다르다.
-   */
-  lockReason?: string | null;
   /** 단가(수업 티어) 미지정 — 정산액에서 빠진 학생. 이름 칸 「단가」 라벨로 드러낸다. */
   tierMissing?: boolean;
   /** 이 학생의 단가 티어 라벨(원장 전용 금액 열이 있을 때만) — 학교·학년 열 아랫줄에 표시. */
@@ -156,9 +150,7 @@ export function MatrixRow({
               muted={!!holiday || (!attend && d.isWeekend)}
               outside={outside}
               locked={
-                lockReason
-                  ? lockReason
-                  : lockBefore && d.date < lockBefore
+                lockBefore && d.date < lockBefore
                   ? lockedMessage(d.date, lockBefore)
                   : notMine
                     ? NOT_MINE_MESSAGE
