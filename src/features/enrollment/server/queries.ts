@@ -163,6 +163,16 @@ const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
    processing_status, audio_path, from_public_intake, sync_added_at, student_id,
    consultant:consultant_id ( display_name )`;
 
+/**
+ * 목록(시트) 뷰 전용 열 — 옛 콜앤상담 시트의 열(콜일자·수신자·유입경로·상담일·주소·결제·조치·비고)이
+ * 대응하는 컬럼(원장 2026-09-02 *"칸반뷰를 시트처럼 목록뷰화"*). 🔴 칸반의 LIST_COLS엔 얹지 않는다 —
+ * 칸반은 전건 로딩이라 열 하나가 최대 2,000행분 payload가 되고 카드는 이 칸을 그리지도 않는다.
+ * 전부 0064a 이전에 있던 컬럼(실DB information_schema 확인 2026-09-02)이라 새 마이그레이션 없이 읽는다.
+ */
+const TABLE_COLS = `${LIST_COLS}, received_date, consultation_date, receiver, counselor,
+   consultation_path, address, registration_status, payment_amount, payment_date,
+   follow_up_date, follow_up_content, non_registration_reason`;
+
 /** 목록·칸반 공용 필터 적용. 두 경로가 갈라지면 "칸반엔 있는데 목록엔 없는 건"이 생긴다 — 한 함수로 묶는다. */
 function applyConsultationFilter<T extends { gte: unknown }>(q: T, filter?: ConsultationFilter): T {
   let out = q as unknown as PostgrestFilterLike;
@@ -337,7 +347,28 @@ export async function getEnrollmentConsultations(
  * 상한 걸린 목록의 길이를 건수로 쓰면 영원히 거짓말). 표는 이 배지를 안 그리므로 아예 안 준다:
  * 나중에 누가 표에 배지를 붙이려 하면 컴파일이 막는다(주석은 강제력이 없다).
  */
-export type ConsultationTableRow = Omit<ConsultationListRow, "personConsultCount" | "personConsults">;
+/**
+ * 시트형 목록뷰가 칸반 행보다 **더 읽는 칸** — 옛 시트의 열에 대응(전부 nullable 문자열, date는 "YYYY-MM-DD").
+ * 표기 규칙은 [sheet-cells.ts](../sheet-cells.ts)(순수)가 맡고 여기는 원값만 나른다.
+ */
+export type ConsultationSheetFields = {
+  subject: string | null; // 문의 과목 — 키("math") 또는 옛 시트 한글("영어, 수학") 혼재
+  receivedDate: string | null; // 콜일자(접수일)
+  consultationDate: string | null; // 상담일자
+  receiver: string | null; // 전화수신자(작성자)
+  counselor: string | null; // 상담자 텍스트(계정 연결이 없을 때의 폴백 — consultantName이 우선)
+  consultationPath: string | null; // 유입경로 원문
+  address: string | null;
+  registrationStatus: string | null; // 등록현황 자유 텍스트("영어등록"·"이번달 등록예정"…)
+  paymentAmount: string | null;
+  paymentDate: string | null;
+  followUpDate: string | null;
+  followUpContent: string | null;
+  nonRegistrationReason: string | null;
+};
+
+export type ConsultationTableRow = Omit<ConsultationListRow, "personConsultCount" | "personConsults"> &
+  ConsultationSheetFields;
 
 /**
  * 연·월 피커의 하한 — 데이터가 있는 가장 이른 연도. 1행만 받는다(정렬은 ec_tenant_consulted_idx가 덮는다).
@@ -388,7 +419,7 @@ export async function getEnrollmentConsultationsPage(
   const supabase = await createClient();
   const from = Math.max(0, (page - 1) * pageSize);
   const { data, count, error } = await applyConsultationFilter(
-    supabase.from("enrollment_consultations").select(LIST_COLS, { count: "exact" }),
+    supabase.from("enrollment_consultations").select(TABLE_COLS, { count: "exact" }),
     filter,
   )
     .order("consulted_at", { ascending: false })
@@ -423,6 +454,20 @@ export async function getEnrollmentConsultationsPage(
         syncAddedAt: c.sync_added_at ?? null,
         studentId: c.student_id ?? null,
         assignedClassCount: assignedCountFor(c.student_id, c.subject ?? null),
+        // 시트 열(ConsultationSheetFields) — 원값만 나른다. 표기(M/D·원·요일)는 sheet-cells.ts.
+        subject: s(c.subject),
+        receivedDate: s(c.received_date),
+        consultationDate: s(c.consultation_date),
+        receiver: s(c.receiver),
+        counselor: s(c.counselor),
+        consultationPath: s(c.consultation_path),
+        address: s(c.address),
+        registrationStatus: s(c.registration_status),
+        paymentAmount: s(c.payment_amount),
+        paymentDate: s(c.payment_date),
+        followUpDate: s(c.follow_up_date),
+        followUpContent: s(c.follow_up_content),
+        nonRegistrationReason: s(c.non_registration_reason),
       };
     }),
   };
