@@ -56,6 +56,36 @@ function paperHtml(input: {
   return renderToStaticMarkup(<MonthPlanPaper data={data} />);
 }
 
+describe("🔴 휴강 없는 보통 달은 종전대로 격자를 그린다", () => {
+  // 이번 변경이 낼 수 있는 가장 나쁜 회귀 = **빈 문서**. 아래가 그 바닥을 잠근다.
+  const html = paperHtml({
+    className: "LS4b",
+    cells: [
+      { planDate: "2026-09-03", colKind: "in_class", body: "SB p.10-14" },
+      { planDate: "2026-09-03", colKind: "homework", body: "WB p.8" },
+    ],
+  });
+
+  it("열 라벨 · 요일 · 주 · 날짜 · 칸 내용이 다 있다", () => {
+    for (const t of ["In-class", "Homework", "Test", "Tuesday", "Thursday", "Friday", "Week 1"]) {
+      expect(html).toContain(t);
+    }
+    expect(html).toContain("9/3");
+    expect(html).toContain("SB p.10-14");
+    expect(html).toContain("WB p.8");
+  });
+
+  it("휴강이 없으면 회색도 없다", () => {
+    expect(html).not.toContain("휴강");
+    expect(html).not.toContain("background-color:#d9d9d9");
+  });
+
+  it("머리말·꼬리말(학원설정 문구 · 세션 줄)도 그대로 실린다", () => {
+    expect(html).toContain("Daniella");
+    expect(html).toContain("9월 세션");
+  });
+});
+
 describe("🔴 제목 — 두 줄 + 길이에 따라 줄어든다", () => {
   it("반 이름과 월이 **다른 줄**에 서고, 보통 반은 시트 크기(24pt) 그대로", () => {
     const html = paperHtml({ className: "LS4b" });
