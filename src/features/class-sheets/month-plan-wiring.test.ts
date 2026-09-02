@@ -220,3 +220,92 @@ describe("🔴 휴일 판정은 MP만 들인다", () => {
     }
   });
 });
+
+/**
+ * 원장 2026-09-02 두 건 — *"반이 너무 길어서 칸 밖으로 나감. `(September 2026)`은 다음줄로 처리하고
+ * 글씨 크기 조정 필요함"* · *"휴강에 대해 셀을 회색처리하는 등 더 적극적인 휴강 표기 필요함"*.
+ *
+ * 둘 다 **화면(계획 보기)과 인쇄물이 같아야** 뜻이 산다 — 한쪽만 고치면 같은 달이 두 문서에서
+ * 다르게 보인다. 그래서 두 파일이 **같은 함수·같은 스타일**을 통과하는지를 여기서 잠근다.
+ */
+describe("🔴 제목은 두 줄 + 길이에 따라 축소 (2026-09-02)", () => {
+  const paper = strip(
+    read("src", "app", "(print)", "ecs", "[classId]", "month-plan", "print", "month-plan-paper.tsx"),
+  );
+  const fit = strip(read("src", "features", "class-sheets", "lib", "month-plan-title-fit.ts"));
+
+  it("화면·인쇄가 같은 두 함수를 쓴다(제목 조립 · 크기 사다리)", () => {
+    for (const src of [planView, paper]) {
+      expect(src).toContain("mpTitleLines(");
+      expect(src).toContain("mpFitTitle(");
+      expect(src).toContain("mpTitleBoxPx(");
+      expect(src).toContain("mpTitleNameStyle(");
+      expect(src).toContain("mpTitlePeriodStyle(");
+    }
+  });
+
+  it("🔴 축소는 순수 함수 한 곳에서만 — 화면 파일에 pt 분기를 흩지 않는다", () => {
+    for (const src of [planView, paper]) {
+      expect(src).not.toMatch(/\d+pt/);
+    }
+    expect(fit).toContain("MP_TITLE_NAME_STEPS_PT");
+  });
+
+  it("⚠️ 한 줄 문자열은 남는다(툴팁·문서 제목) — 다만 본문은 두 줄로 그린다", () => {
+    for (const src of [planView, paper]) {
+      expect(src).toContain("title={mpDocTitle(");
+      // 두 줄이므로 제목 칸은 세로 배치다(가로 한 줄로 되돌리면 다시 넘친다).
+      expect(src).toContain("flex flex-col");
+    }
+  });
+});
+
+describe("🔴 휴강은 감추지 않고 회색으로 표시한다 (2026-09-02)", () => {
+  const paper = strip(
+    read("src", "app", "(print)", "ecs", "[classId]", "month-plan", "print", "month-plan-paper.tsx"),
+  );
+  const style = strip(read("src", "features", "class-sheets", "lib", "month-plan-sheet-style.ts"));
+
+  it("화면·인쇄가 같은 판정(`mpDayKindOf`)과 같은 스타일을 쓴다", () => {
+    for (const src of [planView, paper]) {
+      expect(src).toContain("mpDayKindOf(");
+      expect(src).toContain("mpOffBandCellStyle()");
+      expect(src).toContain("mpOffValueCellStyle()");
+      expect(src).toContain("mpOffLabel(");
+    }
+  });
+
+  it("🔴 판정 근거는 여전히 `mpDayIsOff` 하나다(새 판정을 만들지 않았다)", () => {
+    for (const src of [planView, paper]) {
+      expect(src).toContain("mpDayIsOff(");
+      // 날짜를 직접 비교해 휴일을 다시 정하는 코드가 없어야 한다.
+      expect(src).not.toContain("features/calendar/holidays");
+    }
+  });
+
+  it("🔴 회색 값을 컴포넌트에 다시 적지 않는다(시트 서식 단일 소스)", () => {
+    for (const src of [planView, paper]) {
+      for (const hex of ["#d9d9d9", "#5a5a5a"]) expect(src).not.toContain(hex);
+    }
+    expect(style).toContain("offBg:");
+    expect(style).toContain("offFg:");
+  });
+
+  it("🔴 인쇄물의 격자 범위가 화면과 같아졌다 — 휴강이라고 주·요일을 빼지 않는다", () => {
+    // 그전엔 인쇄만 `liveOn`(휴강 제외)으로 걸러서, 화면엔 있는 주가 인쇄물에서 통째로 사라졌다.
+    expect(paper).toContain("month.weeks.filter((w) => w.dates.some(hasClassOn))");
+    expect(paper).not.toContain("liveOn");
+  });
+
+  it("⚠️ 그래도 **전부 휴강인 달**은 표 대신 그 사실을 적는다", () => {
+    expect(paper).toContain("mpActiveDates(allDates, hasClassOn, isOff)");
+    expect(paper).toContain("전부 휴강");
+  });
+
+  it("🔴 저장 경로는 한 줄도 안 건드렸다(회색은 표시일 뿐)", () => {
+    // 휴강 표기 때문에 새 액션·새 col_kind가 생기면 안 된다.
+    expect((planActions.match(/^export async function /gm) ?? []).length).toBe(1);
+    expect(planActions).not.toContain("mpOffLabel");
+    expect(planActions).not.toContain("mpDayKindOf");
+  });
+});

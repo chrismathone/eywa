@@ -28,6 +28,15 @@ export const MP_SHEET_COLOR = {
   /** 마지막 안내 한 줄만 굵은 빨강("본 일정은 학사일정에 따라…"). */
   alertFg: "#ff0000",
   paper: "#ffffff",
+  /**
+   * **휴강 칸** — 원장 2026-09-02: *"휴강에 대해 셀을 회색처리하는 등 더 적극적인 휴강 표기 필요함."*
+   * 🔴 시트에서 뽑은 값이 아니라 **이번에 정한 값**이다(원본 시트는 휴강 날을 아예 안 그렸다).
+   *    학부모 문서라 요란하게 칠하지 않고 **옅은 회색 + 옅은 대각선**까지만 간다.
+   * ⚠️ 인쇄에서도 나온다 — globals.css가 `print-color-adjust: exact`를 전역으로 강제한다.
+   */
+  offBg: "#d9d9d9",
+  /** 회색 바탕 위에서 읽히는 글자색(대비 5.4:1 — 종이에서도 읽힌다). */
+  offFg: "#5a5a5a",
 } as const;
 
 /**
@@ -47,6 +56,10 @@ export const MP_SHEET_FONT = {
 
 /** 글자 크기 — 전부 시트 값(pt). */
 export const MP_SHEET_SIZE = {
+  /**
+   * 제목 — 시트 값이자 **축소 사다리의 첫 단계**다([`MP_TITLE_NAME_STEPS_PT`](./month-plan-title-fit.ts)).
+   * ⚠️ 여기를 고치면 사다리도 함께 고칠 것(가드가 둘이 같은지 잠근다).
+   */
   title: "24pt",
   teacher: "12pt",
   legend: "7pt",
@@ -65,6 +78,13 @@ export const MP_SHEET_LEADING = {
   cell: 1.3,
   /** 문서 아래 문구(10pt) — 여러 줄이라 조금 넉넉하게. */
   footer: 1.5,
+  /**
+   * 제목 두 줄(반 이름 / 월) — **꽉 조인다.**
+   * 🔴 두 줄이 제목 띠 60px 안에 들어가야 한다: 24pt(32px)×1.05 + 12pt(16px)×1.15 ≈ 52px.
+   *    넉넉하게 잡으면 두 줄이 띠를 넘어 표가 아래로 밀린다(= A4 장수가 늘어난다).
+   */
+  titleName: 1.05,
+  titlePeriod: 1.15,
 } as const;
 
 /** 열마다 다른 바탕·글자색 — 시트에서 뽑은 그대로(머리 칸과 값 칸이 다르다). */
@@ -179,16 +199,70 @@ export const MP_CLIP: React.CSSProperties = {
  * 제목 띠 — 파란 바탕에 흰 글자. **굵게**(원장 2026-09-02 *"볼드"*).
  * 🔴 시트의 Impact는 글꼴 자체가 두꺼워 `font-weight`가 없었다. 평범한 Arial로 바꾸면서
  *    그 무게가 사라졌으므로 **여기서 명시**한다 — 화면·인쇄가 같이 굵어져야 한다.
+ * 🔴 **글자 크기는 여기서 정하지 않는다** — 제목이 두 줄(반 이름 / 월)이고 줄마다 크기가 다르며,
+ *    반 이름은 길이에 따라 줄어든다([`mpFitTitle`](./month-plan-title-fit.ts)). 띠 높이는 그대로 60px다.
  */
 export function mpTitleStyle(): React.CSSProperties {
   return {
     backgroundColor: MP_SHEET_COLOR.titleBg,
     color: MP_SHEET_COLOR.titleFg,
     fontFamily: MP_SHEET_FONT.title,
-    fontSize: MP_SHEET_SIZE.title,
     fontWeight: 800,
     height: MP_SHEET_PX.title,
     ...MP_CLIP,
+  };
+}
+
+/**
+ * 제목 첫 줄(반 이름) — 크기는 `mpFitTitle`이 길이를 보고 정한 값을 받는다.
+ * ⚠️ 줄간격을 여기서 고정하는 이유는 두 줄 합이 띠 60px를 넘지 않게 하기 위해서다(`MP_SHEET_LEADING`).
+ */
+export function mpTitleNameStyle(size: string): React.CSSProperties {
+  return { fontSize: size, lineHeight: MP_SHEET_LEADING.titleName };
+}
+
+/** 제목 둘째 줄(`(September 2026)`) — 첫 줄보다 작고 줄간격이 조금 넉넉하다. */
+export function mpTitlePeriodStyle(size: string): React.CSSProperties {
+  return { fontSize: size, lineHeight: MP_SHEET_LEADING.titlePeriod };
+}
+
+/**
+ * **휴강 표시** — 원장 2026-09-02: *"휴강에 대해 셀을 회색처리하는 등 더 적극적인 휴강 표기 필요함."*
+ *
+ * 그전에는 인쇄물에서 그 날이 **통째로 빈 칸**이라(날짜도 라벨도 없음) "아직 안 적은 평일"과 구분되지
+ * 않았다. 이제 Date 줄 · 라벨 줄 · 값 칸이 **모두 회색**이 되고 라벨 줄에 `휴강 · 추석`이 적힌다.
+ *
+ * 🔴 **칸을 없애지 않는다.** 회색은 표시일 뿐이라 격자·열 수·저장 경로는 평일과 글자 그대로 같다
+ *    (마이그레이션 0건). 이미 적어 둔 계획이 있으면 회색 위에 **그대로 보인다** — 안 보여 주면
+ *    화면엔 있는 글이 인쇄물에서만 사라지는 조용한 손실이 된다.
+ * 🔴 판정은 [`mpDayIsOff`](./month-plan.ts) **단일 소스**다(학원설정 휴일 + 반별 예외). 여기서 날짜를
+ *    다시 보지 않는다.
+ */
+export const MP_OFF_HATCH =
+  "repeating-linear-gradient(45deg, rgba(0,0,0,0.10) 0 2px, rgba(0,0,0,0) 2px 8px)";
+
+export function mpOffBandCellStyle(): React.CSSProperties {
+  return {
+    ...MP_CLIP,
+    ...mpGridBorder(),
+    backgroundColor: MP_SHEET_COLOR.offBg,
+    color: MP_SHEET_COLOR.offFg,
+    fontFamily: MP_SHEET_FONT.body,
+    fontSize: MP_SHEET_SIZE.body,
+    fontWeight: 700,
+    textAlign: "center",
+  };
+}
+
+/**
+ * 휴강 **값 칸**(큰 칸) — 회색 + 옅은 대각선. 대각선이 있어야 한 눈에 "이 날은 없다"로 읽힌다.
+ * ⚠️ 흑백 인쇄에서도 대각선은 남는다(회색만이면 옅은 톤으로 뭉개진다).
+ */
+export function mpOffValueCellStyle(): React.CSSProperties {
+  return {
+    ...mpOffBandCellStyle(),
+    lineHeight: MP_SHEET_LEADING.cell,
+    backgroundImage: MP_OFF_HATCH,
   };
 }
 

@@ -16,11 +16,14 @@ import {
   mpCellKey,
   mpColumnsForDow,
   mpDayIsOff,
+  mpDayKindOf,
   mpDocTitle,
   mpFooterDate,
+  mpOffLabel,
   mpOffOverrideOf,
   mpResolveFooter,
   mpSessionLine,
+  mpTitleLines,
   type MpCell,
   type MpColKind,
   type MpColumnKind,
@@ -36,10 +39,15 @@ import {
   mpBandCellStyle,
   mpGridBorder,
   mpHeadCellStyle,
+  mpOffBandCellStyle,
+  mpOffValueCellStyle,
+  mpTitleNameStyle,
+  mpTitlePeriodStyle,
   mpTitleStyle,
   mpValueCellStyle,
   mpValueInputStyle,
 } from "../lib/month-plan-sheet-style";
+import { mpFitTitle, mpTitleBoxPx } from "../lib/month-plan-title-fit";
 import {
   MP_STATUS_HINT,
   MP_STATUS_LABEL,
@@ -78,6 +86,7 @@ function PlanCell({
   value,
   col,
   disabled,
+  muted,
   label,
   hint,
   onChange,
@@ -85,12 +94,20 @@ function PlanCell({
   value: string;
   col: MpColumnKind;
   disabled: boolean;
+  /**
+   * 휴강 칸 — 글자도 회색으로 죽인다.
+   * ⚠️ 안 죽이면 회색 바탕 위에 Homework의 굵은 빨강이 그대로 떠서, 같은 칸이 인쇄물(회색 글자)과
+   *    다른 모양이 된다.
+   */
+  muted?: boolean;
   label: string;
   hint: string;
   onChange: (next: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const text = mpValueInputStyle(col);
+  const text = muted
+    ? { ...mpValueInputStyle(col), color: MP_SHEET_COLOR.offFg }
+    : mpValueInputStyle(col);
 
   if (editing && !disabled) {
     return (
@@ -190,7 +207,7 @@ function FooterBlock({
   );
 }
 
-/** 그 요일의 열이 몇 개든 한 칸으로 자리만 지킬 때(휴강 주). */
+/** 그 요일에 **수업이 아예 없을 때**(달 밖·배정 밖) 한 칸으로 자리만 지킨다. ⚠️ 휴강은 회색이라 여기가 아니다. */
 const BLANK = { backgroundColor: MP_SHEET_COLOR.paper } as const;
 
 /**
@@ -200,16 +217,19 @@ const BLANK = { backgroundColor: MP_SHEET_COLOR.paper } as const;
  * 하려고 함."* → *"최대한 시트 디자인을 그대로 MP 월별 세팅에서 볼 수 있게"* → *"글씨체부터 하나하나
  * 그대로 카피해올것"*.
  *
- * 그래서 이 화면은 **원본 구글 시트를 그대로 복제한 문서**다 — 로고 · 파란 제목 띠(Impact 24pt) ·
+ * 그래서 이 화면은 **원본 구글 시트를 그대로 복제한 문서**다 — 로고 · 파란 제목 띠(두 줄) ·
  * 안내 4줄(마지막 줄만 빨강) · 범례 · `Day / Date / Week N` 골격 · 열마다 다른 바탕색 · 검정 격자 ·
  * 꼬리말까지 인쇄물과 같다. 다른 점은 **칸이 입력칸이고 대조 신호가 얹힌다**는 것뿐이다.
  *
  * 🔴 색·글꼴·pt는 [`month-plan-sheet-style`](../lib/month-plan-sheet-style.ts) 단일 소스다 —
  *    여기에 hex나 pt를 다시 적지 말 것(적는 순간 화면과 인쇄가 갈린다).
- * 🔴 **열 라벨은 주 블록마다 다시 그린다**(시트 그대로) — 그 주에 수업이 없는 요일은 그 주에서만
- *    라벨이 사라진다(추석이 낀 주에 목·금이 비는 모양).
+ * 🔴 **열 라벨은 주 블록마다 다시 그린다**(시트 그대로) — 그 주에 이 반 수업이 **아예 없는** 요일은
+ *    그 주에서만 라벨이 사라진다(배정이 달 중간에 시작·종료한 요일). ⚠️ 휴강은 사라지는 게 아니라
+ *    회색으로 남는다(아래 항목).
  * 🔴 **대조·경고는 이 화면에만 있다** — 인쇄물은 학부모 문서라 신호를 싣지 않는다.
  * 🔴 **판정은 [`mpCompareDay`](../lib/month-plan-compare.ts) 한 곳**이다.
+ * 🔴 **휴강은 회색 + 빗금**이고 라벨 자리에 `휴강 · 추석`이 적힌다(원장 2026-09-02) — 판정은
+ *    `mpDayIsOff` → `mpDayKindOf`를 타고, 인쇄물이 **같은 함수·같은 스타일**을 쓴다.
  * ⚠️ 문구는 **학원설정**이 단일 소스다(`getMonthPlanChrome`) — 여기 하드코딩하지 말 것.
  */
 export function MonthPlanView({
@@ -299,7 +319,11 @@ export function MonthPlanView({
     ? mpResolveFooter(cells, data.month, defaultMonthPlanFooter(chrome.texts))
     : "";
   // 머리말·꼬리말과 표의 오른쪽 끝을 맞춘다(머리말은 flex라 안 박으면 창 폭을 다 먹는다).
-  const docWidth = mpDocWidth(data.dows.reduce((n, dow) => n + columnsByDow[dow].length, 0));
+  const dataColumnCount = data.dows.reduce((n, dow) => n + columnsByDow[dow].length, 0);
+  const docWidth = mpDocWidth(dataColumnCount);
+  // 제목은 두 줄(반 이름 / 월)이고 반 이름은 폭에 맞춰 줄어든다 — 인쇄물과 **같은 함수**를 쓴다.
+  const title = mpTitleLines(data.className, data.month);
+  const titleFit = mpFitTitle(title.name, title.period, mpTitleBoxPx(dataColumnCount));
 
   return (
     <div className="overflow-x-auto p-3">
@@ -318,11 +342,16 @@ export function MonthPlanView({
             <img src={MP_LOGO_SRC} alt="EiE" className="max-h-full object-contain" />
           </div>
           <div className="flex min-w-0 flex-1 flex-col">
+            {/* 🔴 두 줄(반 이름 / 월) — 인쇄물과 같은 규칙이다(한 줄이면 띠 밖으로 깨져 나간다). */}
             <h2
-              className="flex items-center justify-center px-2 text-center"
+              className="flex flex-col items-center justify-center px-2 text-center"
               style={{ ...mpGridBorder(), ...mpTitleStyle() }}
+              title={mpDocTitle(data.className, data.month)}
             >
-              {mpDocTitle(data.className, data.month)}
+              <span style={mpTitleNameStyle(titleFit.nameSize)}>{title.name}</span>
+              {title.period ? (
+                <span style={mpTitlePeriodStyle(titleFit.periodSize)}>{title.period}</span>
+              ) : null}
             </h2>
             <div className="flex flex-1 flex-col justify-center px-2 py-1" style={mpGridBorder()}>
               {notices.map((n, i) => (
@@ -452,6 +481,7 @@ export function MonthPlanView({
                 const date = cellDateOf(week, dow, data.month);
                 const teaches = date ? hasClassOn(date) : false;
                 const off = date ? isOff(date) : false;
+                const kind = mpDayKindOf(date, teaches, off);
                 const holidayName = date ? data.holidays[date] : undefined;
                 const v = date && teaches ? verdictOf(date) : null;
                 const tone = v ? MP_STATUS_TONE[v.status] : null;
@@ -460,13 +490,16 @@ export function MonthPlanView({
                     key={dow}
                     colSpan={cols.length}
                     className="relative px-2 py-1"
-                    style={mpBandCellStyle("date")}
+                    style={kind === "off" ? mpOffBandCellStyle() : mpBandCellStyle("date")}
                   >
                     {/* 날짜는 **가운데**(시트 그대로). 휴강 버튼만 오른쪽에 띄워서 날짜를 밀지 않게 한다. */}
                     <span className="flex flex-wrap items-center justify-center gap-1.5 pr-10">
                       <span className="num">{date ? monthDay(date) : "—"}</span>
                       {date && !teaches ? <span className="text-[10px]">수업 없음</span> : null}
-                      {holidayName ? (
+                      {/* ⚠️ 휴강 날은 아래 라벨 줄이 이미 `휴강 · 추석`을 적는다 — 여기 또 붙이면 같은
+                          말이 두 번이다. 휴일인데 **수업하는 날**(반별 예외 `open`)에는 이 알약이
+                          유일한 표시라 그때는 남긴다. */}
+                      {holidayName && kind !== "off" ? (
                         <span
                           className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT.inert}`}
                         >
@@ -488,8 +521,8 @@ export function MonthPlanView({
                           onClick={() => onDayOff(date, !off)}
                           title={
                             off
-                              ? "이 날 수업을 되살립니다(인쇄에도 다시 나옵니다)"
-                              : "이 날을 휴강으로 표시합니다(인쇄에서 빠집니다)"
+                              ? "이 날 수업을 되살립니다(계획을 다시 적을 수 있습니다)"
+                              : "이 날을 휴강으로 표시합니다(인쇄물에 회색 '휴강'으로 나옵니다)"
                           }
                           className="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold hover:bg-white"
                         >
@@ -515,8 +548,25 @@ export function MonthPlanView({
               {data.dows.flatMap((dow) => {
                 const cols = columnsByDow[dow];
                 const date = cellDateOf(week, dow, data.month);
-                const live = date ? hasClassOn(date) && !isOff(date) : false;
-                if (!live) {
+                const kind = mpDayKindOf(
+                  date,
+                  date ? hasClassOn(date) : false,
+                  date ? isOff(date) : false,
+                );
+                // 🔴 휴강 날은 라벨 자리에 **`휴강 · 추석`**을 적는다(인쇄물과 같은 모양).
+                if (kind === "off") {
+                  return [
+                    <td
+                      key={`h:${dow}:${week.monday}`}
+                      colSpan={cols.length}
+                      className="px-1"
+                      style={mpOffBandCellStyle()}
+                    >
+                      {mpOffLabel(date ? data.holidays[date] : null)}
+                    </td>,
+                  ];
+                }
+                if (kind === "none") {
                   return [
                     <td
                       key={`h:${dow}:${week.monday}`}
@@ -545,6 +595,7 @@ export function MonthPlanView({
                 const date = cellDateOf(week, dow, data.month);
                 const teaches = date ? hasClassOn(date) : false;
                 const off = date ? isOff(date) : false;
+                const kind = mpDayKindOf(date, teaches, off);
                 const cols = columnsByDow[dow];
                 const v = date && teaches && !off ? verdictOf(date) : null;
                 // 🔴 칸에 테두리를 주는 신호는 **'교재 다름' 하나뿐**이다. '미작성'은 이 칸이 아니라
@@ -555,10 +606,12 @@ export function MonthPlanView({
                     key={`${dow}:${col}:${week.monday}`}
                     className="p-0 align-top"
                     style={{
-                      ...mpValueCellStyle(col),
+                      // 🔴 휴강은 **회색 + 빗금**(인쇄물과 같은 함수) — 그전엔 평일과 똑같은 흰 칸이라
+                      //    "아직 안 적음"과 구분되지 않았다(원장 2026-09-02).
+                      ...(kind === "off" ? mpOffValueCellStyle() : mpValueCellStyle(col)),
                       ...SHEET_COL,
                       height: MP_SHEET_PX.value,
-                      ...(off || !teaches ? BLANK : null),
+                      ...(kind === "none" ? BLANK : null),
                       ...(warnBook && col === "in_class"
                         ? { boxShadow: "inset 0 0 0 2px var(--amber)" }
                         : null),
@@ -568,6 +621,7 @@ export function MonthPlanView({
                       <PlanCell
                         col={col}
                         disabled={!canEdit || off}
+                        muted={kind === "off"}
                         value={cells[mpCellKey(date, col)] ?? ""}
                         onChange={(next) => onCell(date, col, next)}
                         label={`${monthDay(date)} ${MP_COLUMN_LABEL[col]}`}
