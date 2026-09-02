@@ -19,7 +19,6 @@ import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClasses } from "@/features/classes/server/delegation";
-import { isTestClassName } from "@/features/classes/test-class";
 import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
 import { parseExamScores, parseExamMaxes } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
@@ -414,14 +413,6 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       ? allClasses
       : []
     : allClasses.filter((c) => todayIds.has(c.id));
-  // ClassNote 발송 테스트 전용 반 — **교시(class_schedules)가 없어** 위 요일 필터엔 절대 안 걸린다.
-  // 교시를 만들면 출석부 반 목록·'미입력 반' 신호에 매일 걸려 사무실 화면에 가짜 경고가 쌓이므로,
-  // 요일 필터를 통과시키는 대신 **여기서 뒤에 덧붙인다**([test-class.ts](@/features/classes/test-class)).
-  // ⚠️ `todayIds`·`noClassesToday`에는 **넣지 않는다** — 넣으면 "오늘 수업 없음"이 영영 false가 되어
-  //    수업 없는 날의 빈 화면 신호와 전체보기 폴백이 통째로 죽는다(2026-07-22 이수진 회귀와 같은 자리).
-  //    그래서 수업이 하나도 없는 날엔 이 반도 안 보인다(전체 보기로는 보인다) — 의도된 트레이드오프.
-  const testClass = allClasses.find((c) => isTestClassName(c.class_name));
-  if (testClass && !activeClasses.some((c) => c.id === testClass.id)) activeClasses.push(testClass);
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
   const activeIds = activeClasses.map((c) => c.id);
 

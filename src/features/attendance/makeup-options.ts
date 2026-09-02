@@ -77,6 +77,28 @@ const MADE_UP_RE = /\d{1,2}\/\d{1,2}\s*보강\s*(예정|완료)/;
  *  · 결석이 난 반의 과목이 비어 있으면(미분류) **항상 통과**시킨다.
  *  · 둘 다 있을 때만 같은 과목인지 본다.
  */
+/**
+ * 앵커가 **없을 때**(반 보강이 아니라 그냥 보강 추가) 쓰는 기준 — **그 강사가 가르치는 과목**.
+ *
+ * 원장 2026-09-02: *"수학선생님이나 영어선생님이 보강 추가할때 본인 과목만 팝업되게 해줘. 전과목
+ * 팝업되는데"* — 수학 강사 화면에 영어 반 결석이 줄줄이 떠서 잘못 고르면 영어 결석 칸에 메모가 갔다
+ * (앵커가 있을 때는 2026-08-19에 이미 막았는데, 앵커가 없는 경로가 남아 있었다).
+ *
+ * 🔴 **비대칭은 위와 같다 — 모르면 통과**시킨다(후보가 사라지면 보강을 못 넣는데, 화면엔 "결석이
+ *    없다"로만 보여 원인을 알 수 없다): 과목 목록이 비면(사무실 계정·담당 반 0개) 안 거르고,
+ *    결석 반의 과목이 비어 있으면(미분류) 통과시킨다.
+ */
+export function subjectMatchesTeacher(
+  teacherSubjects: readonly string[] | null | undefined,
+  rowSubject: string | null | undefined,
+): boolean {
+  const allowed = (teacherSubjects ?? []).map((x) => (x ?? "").trim()).filter(Boolean);
+  if (allowed.length === 0) return true;
+  const row = (rowSubject ?? "").trim();
+  if (!row) return true;
+  return allowed.includes(row);
+}
+
 export function subjectMatchesAnchor(
   anchorSubject: string | null | undefined,
   rowSubject: string | null | undefined,
@@ -100,6 +122,11 @@ export function buildAbsenceOptions(
   makeupDate: string,
   currentClassIds: ReadonlySet<string> = new Set(),
   anchorSubject?: string | null,
+  /**
+   * 앵커 과목이 **없을 때만** 쓰는 폴백 — 그 강사가 가르치는 과목들(원장 2026-09-02).
+   * ⚠️ 앵커가 있으면 이 값은 무시된다(앵커가 더 정확한 기준이다 — 그 반의 과목이 곧 답이다).
+   */
+  teacherSubjects?: readonly string[] | null,
 ): MakeupAbsenceList {
   // 같은 (반,날짜)의 교시별 행을 **접으면서** 교시를 모은다 — 첫 행만 보고 버리면 "어느 수업의
   // 결석인지"가 사라지고, 보강 메모가 뒤 행에만 있는 경우 '보강 완료' 표시도 놓친다.
@@ -136,7 +163,10 @@ export function buildAbsenceOptions(
   // 과목이 다른 후보는 **뺀 건수를 세어** 함께 돌려준다 — 조용히 사라지면 화면이 "결석이 없다"고
   // 거짓말하게 된다(수학 보강인데 영어 결석뿐인 학생이 실측 29명).
   const all = [...folded.values()];
-  const kept = all.filter((f) => subjectMatchesAnchor(anchorSubject, f.subject));
+  const anchor = (anchorSubject ?? "").trim();
+  const kept = all.filter((f) =>
+    anchor ? subjectMatchesAnchor(anchor, f.subject) : subjectMatchesTeacher(teacherSubjects, f.subject),
+  );
   const out: MakeupAbsenceOption[] = kept.map(({ option, slots, madeUp }) => ({
     ...option,
     ...(madeUp ? { alreadyMadeUp: true } : {}),
