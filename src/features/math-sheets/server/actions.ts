@@ -8,7 +8,6 @@ import { logAction } from "@/features/audit/server/log";
 import { MONTH_RE } from "@/features/class-sheets/lib/month";
 import { shiftMonth } from "@/lib/date-kst";
 import { parseMcsFontSize } from "../font-size";
-import { normalizeMcsMonthView, type McsMonthView } from "../view-prefs";
 import { requireMcsClassAccess } from "./access";
 
 /**
@@ -219,11 +218,8 @@ async function patchMyMcsPrefs(patch: Record<string, unknown>): Promise<{ ok: bo
   return { ok: true };
 }
 
-/** 마지막에 본 보기(진도표 / 진도 레일) — 계정 귀속. 반 게이트가 아니라 로그인만 본다. */
-export async function setMyMcsMonthView(raw: string): Promise<{ ok: boolean; error?: string }> {
-  const view: McsMonthView = normalizeMcsMonthView(raw);
-  return patchMyMcsPrefs({ monthView: view });
-}
+// ⚠️ 옛 `setMyMcsMonthView`(보기 저장)는 2026-09-02 보기 탭 폐기와 함께 지웠다 — `ui_prefs.mcs.monthView`가
+//    남아 있는 계정이 있어도 아무도 안 읽는다(진도표 하나뿐).
 
 /** 글씨 크기(작음·보통·큼) — 원스크린·ECS와 같은 어휘·같은 배율, 저장만 `mcs` 네임스페이스. */
 export async function setMyMcsFontSize(raw: string): Promise<{ ok: boolean; error?: string }> {

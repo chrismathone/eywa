@@ -62,7 +62,8 @@ export const CELL_STATE_LABEL: Record<MathCellState, string> = {
   written: "기록 있음",
   unwritten: "출석 · 기록 없음",
   absent: "결석",
-  untracked: "출결도 기록도 없음",
+  // 원장 2026-09-02 *"출결도 기록도 없음 → 기록 없음"*(툴바 칩은 *"흔적 없음 → 입력 없음"*).
+  untracked: "기록 없음",
   upcoming: "아직 수업 전",
   // ⚠️ 폴백이다 — 화면은 보통 실제 공휴일명("추석")으로 덮어쓴다(이름이 곧 사유라 훨씬 유용하다).
   holiday: "학원 휴일",

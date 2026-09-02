@@ -48,6 +48,8 @@ export type ClassSheetMonthData = {
   className: string;
   /** 반 담임(`classes.teacher_id`) — 계획서 인쇄물 머리말의 강사 닉네임을 찾는 키. */
   teacherId: string | null;
+  /** 담임 표시 이름 — 상단 반 표기 오른쪽(`SheetClassPicker teacherName`). 담임 없음·조회 실패면 null. */
+  teacherName: string | null;
   month: string;
   monthLabel: string;
   today: string;
@@ -112,7 +114,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
   const isEie = access.englishTrack === "eie";
 
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes] = await Promise.all([
+  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes] = await Promise.all([
     admin
       .from("class_schedules")
       .select("day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label")
@@ -153,6 +155,15 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
           .eq("class_id", classId)
           .gte("plan_date", from)
           .lte("plan_date", to)
+      : Promise.resolve(null),
+    // 담임 이름 — 상단 반 표기 오른쪽에 이름만(원장 2026-09-02 *"ecs도 마찬가지"*). 담임 없는 반은 조회도 없다.
+    access.teacherId
+      ? admin
+          .from("users")
+          .select("display_name")
+          .eq("id", access.teacherId)
+          .eq("tenant_id", access.tenantId)
+          .maybeSingle()
       : Promise.resolve(null),
   ]);
 
@@ -270,6 +281,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       //    달 중간에 이름이 바뀌는 경우 헤더를 어느 이름으로 쓸지가 새 결정이다. 필요해지면 그때.
       className: access.className,
       teacherId: access.teacherId,
+      teacherName: (teacherRes?.data?.display_name as string | null | undefined) ?? null,
       month,
       monthLabel: monthLabel(month),
       today,
