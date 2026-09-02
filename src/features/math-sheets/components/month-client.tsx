@@ -1,6 +1,6 @@
 "use client";
 // 툴바 모양은 ECS 시트와 **같은 상수**를 쓴다 — 두 시트를 오가는 사람이 다시 배우지 않게(앱 전역 툴바 규약).
-import { SHEET_SEG_BOX, sheetPill, sheetSegItem } from "@/features/class-sheets/chrome";
+import { SHEET_BAR, SHEET_SEG_BOX, sheetPill, sheetSegItem } from "@/features/class-sheets/chrome";
 // 목록 · 반 선택(노란 표기) · 반 정보 보기 — ECS 주간·월간과 **같은 조각**(원장 2026-09-02 *"영어 ECS처럼
 // 수학 MCS에 반정보가 있어야하는데 상단 헤더에 없음"*). 다른 점은 목록이 `/mcs`로 간다는 것뿐이다.
 import { SheetBarDivider, SheetClassPicker } from "@/features/class-sheets/components/sheet-chrome";
@@ -102,7 +102,9 @@ export function MonthClient({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="toolbar-rail flex shrink-0 flex-wrap items-center gap-2 px-1 py-1">
+      {/* 🔴 `.toolbar-rail`이 아니라 ECS와 같은 SHEET_BAR — 이 줄엔 반 선택 드롭다운(인라인 absolute)이 있어
+          레일(좁은 화면·터치에서 overflow-x:auto)이면 목록이 통째로 잘린다(chrome.ts 주석, 적대적 리뷰 2026-09-02). */}
+      <div className={SHEET_BAR}>
         <SheetClassPicker
           classId={data.classId}
           classLabel={data.className}

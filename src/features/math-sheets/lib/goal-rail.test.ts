@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGoalRail, pickPrimaryRail, railDiffLabel, railX, RAIL_TOLERANCE } from "./goal-rail";
+import { buildGoalRail, railDiffLabel, railX, RAIL_TOLERANCE } from "./goal-rail";
 
 const DAYS = ["2026-08-03", "2026-08-06", "2026-08-10", "2026-08-13", "2026-08-17", "2026-08-20", "2026-08-24", "2026-08-27"];
 const P = (date: string, position: number) => ({ date, position });
@@ -122,21 +122,18 @@ describe("buildGoalRail — Start·Plan·Now·End", () => {
     expect(noPoints.nowDate).toBeNull();
   });
 
-  it("pickPrimaryRail — 목표 붙은 트랙 > 위치 잡힌 트랙 > 첫 트랙", () => {
-    const mk = (goalEnd: number | null, points: { date: string; position: number }[]) => ({
-      rail: buildGoalRail({ startBefore: null, goalEnd, points, dayDates: DAYS, today: "2026-08-13" }),
+  it("🔴 학년을 건너는 목표도 한 줄로 선다 — 중2 위치에서 중3 목표(트랙을 갈라 '목표 없음'이 되면 안 된다)", () => {
+    // 글로벌 위치라 시작 400(중2) → 목표 420(중3)은 그냥 20차시 구간이다. 4/8일 지남 → 계획 410.
+    const r = buildGoalRail({
+      startBefore: 400,
+      goalEnd: 420,
+      points: [P("2026-08-13", 408)],
+      dayDates: DAYS,
+      today: "2026-08-13",
     });
-    const noData = mk(null, []);
-    const noGoal = mk(null, [P("2026-08-03", 100)]);
-    const withGoal = mk(120, [P("2026-08-03", 100)]);
-    expect(pickPrimaryRail([noGoal, withGoal])).toBe(withGoal);
-    expect(pickPrimaryRail([noData, noGoal])).toBe(noGoal);
-    expect(pickPrimaryRail([noData])).toBe(noData);
-    expect(pickPrimaryRail([])).toBeNull();
-    // 🔴 목표만 있고 위치가 없는 트랙이, 위치가 잡힌 트랙을 가리면 안 된다(다른 학년에 목표를 적은 경우).
-    const goalNoData = mk(120, []);
-    expect(pickPrimaryRail([goalNoData, noGoal])).toBe(noGoal);
-    expect(pickPrimaryRail([goalNoData, withGoal])).toBe(withGoal);
+    expect(r.status).toBe("behind");
+    expect(r.plan).toBe(410);
+    expect(r.progressPct).toBe(40);
   });
 
   it("달 전 기록이 없으면 이 달 첫 기록이 Start다", () => {

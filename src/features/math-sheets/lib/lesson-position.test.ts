@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { positionOf } from "@/features/progress/curriculum-position";
-import { dayPositionsOf, goalEndsOf, lessonPointsOf } from "./lesson-position";
+import { dayPositionOf, dayPositionsOf, goalEndOf, lessonPointsOf } from "./lesson-position";
 
 // 실데이터에서 온 차시 이름(2026-08 lesson_reports). 커리큘럼에 있는지 먼저 확인해 테스트 재료로 쓴다.
 const 중3_곱셈 = "다항식의 곱셈";
@@ -45,10 +45,17 @@ describe("lessonPointsOf — 진도 문자열의 차시들", () => {
     expect(lessonPointsOf(null, "중2")).toEqual([]);
   });
 
-  it("goalEndsOf — 여러 차시를 골랐으면 가장 뒤가 End", () => {
+  it("goalEndOf — 여러 차시를 골랐으면 가장 뒤가 End", () => {
     const a = positionOf(중3_곱셈)!.position;
     const b = positionOf(중3_인수분해)!.position;
-    const ends = goalEndsOf(`${중3_곱셈}\n${중3_인수분해}`, "중3");
-    expect(ends.current?.position).toBe(Math.max(a, b));
+    expect(goalEndOf(`${중3_곱셈}\n${중3_인수분해}`, "중3")?.position).toBe(Math.max(a, b));
+    expect(goalEndOf("프린트", "중3")).toBeNull();
+  });
+
+  it("🔴 dayPositionOf는 트랙을 가르지 않는다 — 중1 차시와 중3 차시가 한 칸에 있으면 가장 뒤(중3)가 그날 위치", () => {
+    // 종전엔 트랙별로 갈라 '현행'과 '선행'에 각각 세웠다 — 그러면 다음 학년 목표를 적은 학생이 "목표 없음"이 됐다.
+    const day = dayPositionOf(`수학 ${중1_방정식}\n${중3_곱셈}`, "중2");
+    expect(day?.position).toBe(positionOf(중3_곱셈)!.position);
+    expect(day?.grade).toBe("중3");
   });
 });

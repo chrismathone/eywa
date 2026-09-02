@@ -2,16 +2,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
-import {
-  buildGoalRail,
-  pickPrimaryRail,
-  type GoalRail,
-  type GoalRailStatus,
-  type RailPoint,
-  type RailTrack,
-} from "../lib/goal-rail";
-import { dayPositionsOf, goalEndsOf } from "../lib/lesson-position";
-import { summarizeReportMetrics, type ReportMetrics } from "../lib/report-metrics";
+import { buildGoalRail, type GoalRail, type GoalRailStatus, type RailPoint } from "../lib/goal-rail";
+import { dayPositionOf, goalEndOf } from "../lib/lesson-position";
 import { classDaysOf, normalizeMonth, type ClassDay, type MathScheduleRow } from "../lib/class-days";
 import {
   cellStateOf,
@@ -68,14 +60,12 @@ export type MathStudentRow = {
   /** 정체로 판정된 날짜(진도 문자열이 임계만큼 연속으로 같은 날). */
   stalledDates: string[];
   /**
-   * **목표 레일**(Start·Plan·Now·End) — 트랙(현행·선행)마다 하나. 초안(able 2026-09-02)의 "목표 대비
-   * 현재 진도" 그림. 판정은 [`goal-rail.ts`](../lib/goal-rail) 단일 소스이고 위치는 서버가
-   * [`lesson-position.ts`](../lib/lesson-position)로 접어 숫자·차시명만 내려보낸다(B5).
-   * 위치가 한 번도 안 잡히고 목표도 없는 트랙은 아예 없다(빈 배열 = 말할 것이 없다).
+   * **목표 레일**(Start·Plan·Now·End) — 학생마다 하나(트랙을 가르지 않는다, lesson-position.ts). 초안(able
+   * 2026-09-02)의 "목표 대비 현재 진도" 그림. 판정은 [`goal-rail.ts`](../lib/goal-rail) 단일 소스이고 위치는 서버가
+   * [`lesson-position.ts`](../lib/lesson-position)로 접어 숫자·차시명만 내려보낸다.
+   * 위치가 한 번도 안 잡히고 목표도 없으면 null(= 말할 것이 없다).
    */
-  rails: StudentRail[];
-  /** 이 달 일일테스트 정답률·과제 수행률 평균 — 없으면 null(0이 아니다). */
-  metrics: ReportMetrics;
+  rail: StudentRail | null;
   /**
    * 기준일(그 달 안으로 접은 오늘)에서 본 자리 — `ended`면 회색 줄로 가라앉힌다
    * (원장 2026-09-01 *"퇴원처리형식으로 회색 줄로"*).
@@ -107,15 +97,13 @@ export type MathDayRecord = {
 };
 
 export type StudentRail = {
-  track: RailTrack;
-  trackLabel: string;
   rail: GoalRail;
   /** Start를 준 기록의 날짜(달 전 마지막 기록, 없으면 이 달 첫 기록). 위치 미상이면 null. */
   startDate: string | null;
   /** 네 점의 차시 이름(커리큘럼 범위 밖이면 null). */
   startLesson: string | null;
   nowLesson: string | null;
-  /** Now 차시의 학년("중2") — 선행 트랙에서 "어느 학년을 나가는지"를 말한다. */
+  /** Now 차시의 학년("중2") — 학생 학년과 다르면 "어느 학년을 나가는지"를 말한다. */
   nowGrade: string | null;
   planLesson: string | null;
   endLesson: string | null;
@@ -146,7 +134,7 @@ export type MathSheetMonthData = {
   bookOptions: string[];
   fill: MathFillStats;
   /**
-   * 학생마다 **대표 레일 하나**(`pickPrimaryRail`)의 상태를 센 것 — 툴바 "느림 N · 계획대로 N".
+   * 학생마다 레일 하나의 상태를 센 것 — 툴바 "느림 N · 계획대로 N"(나간 학생은 뺀다).
    * 🔴 달 중간에 나간 학생(`ended`)은 안 센다(이미 없는 사람을 재촉하지 않는다).
    */
   railSummary: RailSummary;
@@ -170,8 +158,6 @@ export type GoalsStatus = "ok" | "missing-table" | "failed";
 
 export type MathMonthResult = { ok: true; data: MathSheetMonthData } | { ok: false; error: string };
 
-const TRACK_LABEL: Record<string, string> = { current: "현행", ahead: "선행" };
-const RAIL_TRACKS: readonly RailTrack[] = ["current", "ahead"];
 /**
  * 레일의 Start(달 시작 전 마지막 위치)를 찾는 창 — 달 시작 전 이만큼의 기록을 본다.
  * 수학 반은 주 1~2회라 45일이면 6~12번의 기록이고, 그 안에 위치가 하나도 없으면 이 달 첫 기록이 Start다.
@@ -262,7 +248,13 @@ export async function getMathSheetMonth(
       .eq("period_start", from),
     admin.from("users").select("ui_prefs").eq("id", access.user.id).maybeSingle(),
     access.teacherId
-      ? admin.from("users").select("display_name").eq("id", access.teacherId).maybeSingle()
+      ? admin
+          .from("users")
+          .select("display_name")
+          .eq("id", access.teacherId)
+          // admin은 RLS 우회라 tenant 필터가 규약이다([[#104]]) — ECS 월간 조회와 같은 모양.
+          .eq("tenant_id", tenantId)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
     // 휴일 — 테넌트 단위 read-mostly라 요청 캐시를 탄다(추가 왕복 없음, B4·B6).
     getTenantSettings(),
@@ -429,62 +421,39 @@ export async function getMathSheetMonth(
         };
       }
     }
-    // ── 목표 레일(Start·Plan·Now·End) — 트랙별 재료를 숫자로 접는다. 판정은 goal-rail.ts.
+    // ── 목표 레일(Start·Plan·Now·End) — 재료를 숫자로 접는다. 판정은 goal-rail.ts.
+    //    🔴 트랙(현행·선행)을 가르지 않는다 — 위치는 학년 관통 값이라 "중2 끝 → 중3 첫 단원" 목표도 한 줄로 서고,
+    //    갈랐더니 다음 학년 목표를 적은 학생이 "목표 없음"으로 보였다(적대적 리뷰 2026-09-02, lesson-position.ts).
     const grade = info.grade ? String(info.grade) : null;
-    const ends = goalEndsOf(goals[sid]?.targetProgress, grade);
-    const pointsBy: Record<RailTrack, RailPoint[]> = { current: [], ahead: [] };
+    const goalEnd = goalEndOf(goals[sid]?.targetProgress, grade)?.position ?? null;
+    const points: RailPoint[] = [];
     for (const date of dayDates) {
       const rec = records[date];
       if (!rec) continue;
-      const day = dayPositionsOf(rec.progress, grade);
-      for (const t of RAIL_TRACKS) {
-        const p = day[t];
-        if (p) pointsBy[t].push({ date, position: p.position });
-      }
+      const p = dayPositionOf(rec.progress, grade);
+      if (p) points.push({ date, position: p.position });
     }
     // 달 시작 전 마지막 위치(+그 날짜) — 날짜 오름차순으로 왔으니 마지막에 본 것이 남는다.
-    const prior: Partial<Record<RailTrack, { position: number; date: string }>> = {};
+    let prior: { position: number; date: string } | null = null;
     for (const r of priorByStudent.get(sid) ?? []) {
-      const day = dayPositionsOf(r.progress, grade);
-      for (const t of RAIL_TRACKS) {
-        if (day[t]) prior[t] = { position: day[t]!.position, date: String(r.report_date).slice(0, 10) };
-      }
+      const p = dayPositionOf(r.progress, grade);
+      if (p) prior = { position: p.position, date: String(r.report_date).slice(0, 10) };
     }
-    const rails: StudentRail[] = [];
-    for (const t of RAIL_TRACKS) {
-      const goalEnd = ends[t]?.position ?? null;
-      // 위치도 목표도 없는 트랙은 말할 것이 없다 — 빈 레일을 세우지 않는다.
-      if (pointsBy[t].length === 0 && prior[t] == null && goalEnd == null) continue;
-      const rail = buildGoalRail({
-        startBefore: prior[t]?.position ?? null,
-        goalEnd,
-        points: pointsBy[t],
-        dayDates,
-        today,
-      });
-      rails.push({
-        track: t,
-        trackLabel: TRACK_LABEL[t] ?? t,
-        rail,
+    let rail: StudentRail | null = null;
+    // 위치도 목표도 없으면 말할 것이 없다 — 빈 레일을 세우지 않는다.
+    if (points.length > 0 || prior != null || goalEnd != null) {
+      const built = buildGoalRail({ startBefore: prior?.position ?? null, goalEnd, points, dayDates, today });
+      rail = {
+        rail: built,
         // Start를 준 기록의 날짜 — 이 달 기록이 없을 때 "8/27 이후 기록 없음"이라 말하기 위해.
-        startDate: prior[t]?.date ?? pointsBy[t].find((p) => p.date <= today)?.date ?? null,
-        startLesson: lessonNameOf(rail.start),
-        nowLesson: lessonNameOf(rail.now),
-        nowGrade: rail.now == null ? null : (describePosition(rail.now)?.grade ?? null),
-        planLesson: lessonNameOf(rail.plan),
-        endLesson: lessonNameOf(rail.end),
-      });
+        startDate: prior?.date ?? points.find((p) => p.date <= today)?.date ?? null,
+        startLesson: lessonNameOf(built.start),
+        nowLesson: lessonNameOf(built.now),
+        nowGrade: built.now == null ? null : (describePosition(built.now)?.grade ?? null),
+        planLesson: lessonNameOf(built.plan),
+        endLesson: lessonNameOf(built.end),
+      };
     }
-    const metrics = summarizeReportMetrics(
-      dayDates
-        .filter((d) => records[d])
-        .map((d) => ({
-          dailyTest: records[d]!.dailyTest,
-          checkTest: records[d]!.checkTest,
-          examInfo: records[d]!.examInfo,
-          homework: records[d]!.homeworkScore,
-        })),
-    );
 
     rows.push({
       studentId: sid,
@@ -493,8 +462,7 @@ export async function getMathSheetMonth(
       grade,
       cells,
       records,
-      rails,
-      metrics,
+      rail,
       stalledDates: stalledDatesOf(
         dayDates
           .filter((d) => records[d])
@@ -525,12 +493,11 @@ export async function getMathSheetMonth(
 
   rows.sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
-  // 툴바 집계 — 학생마다 대표 레일 하나(카드 배지·현황 표와 **같은 함수**로 고른다).
+  // 툴바 집계 — 학생마다 레일 하나의 상태(고정열 레일과 같은 값). 나간 학생은 뺀다.
   const railSummary = emptyRailSummary();
   for (const row of rows) {
     if (row.rosterPhase === "ended") continue;
-    const primary = pickPrimaryRail(row.rails);
-    railSummary[primary?.rail.status ?? "no-data"] += 1;
+    railSummary[row.rail?.rail.status ?? "no-data"] += 1;
   }
 
   // 🔴 열 머리 경고는 **화면에 실제로 그려지는 행**에서만 센다. 기록 전체로 세면 표에 없는 학생

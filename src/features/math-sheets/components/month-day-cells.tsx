@@ -6,7 +6,7 @@ import { TEST_KIND_LABEL, TEST_KIND_TITLE, testCountLabel, testScoresOf } from "
 import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries";
 
 /**
- * 진도표 보기의 **오른쪽 칸들** — 수업일 머리 · 학생 × 수업일 칸 · 바닥 합계. 왼쪽 고정열은
+ * 진도표의 **오른쪽 칸들** — 수업일 머리 · 학생 × 수업일 칸(바닥 합계 행은 없다 — 툴바 칩이 같은 수). 왼쪽 고정열은
  * [`StudentHeadCell`](./student-head-cell.tsx)이고 표 껍데기는 [`MonthGrid`](./month-grid.tsx)다.
  *
  * 🔴 칸이 비는 이유 셋을 **다른 무늬**로 그린다(`cell-state.ts` 참조) — 왔는데 안 적힌 칸(빗금)과
@@ -91,8 +91,9 @@ export function DayCells({ stu, data }: { stu: MathStudentRow; data: MathSheetMo
                   ? `${day.date} · ${data.holidays[day.date] ?? CELL_STATE_LABEL.holiday} — 학원 휴일이라 기록 의무가 없습니다`
                   : undefined
             }
-            className={`border-line-faint min-w-[178px] border p-2 align-top ${CELL_TONE[state]} ${
-              rec?.offGoal ? "bg-amber-soft/40 outline-amber outline-2 -outline-offset-2" : ""
+            // 배경은 한 축에서 하나만 — 목표 밖이면 그 색이 상태 색을 대신한다(둘을 같이 적으면 승자는 CSS 순서, [[#116]]).
+            className={`border-line-faint min-w-[178px] border p-2 align-top ${
+              rec?.offGoal ? "bg-amber-soft/40 outline-amber outline-2 -outline-offset-2" : CELL_TONE[state]
             }`}
           >
             {rec ? (

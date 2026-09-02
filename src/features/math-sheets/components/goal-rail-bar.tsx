@@ -1,4 +1,4 @@
-import { TONE_SOFT, type SemanticTone } from "@/lib/design/semantic-color";
+import type { SemanticTone } from "@/lib/design/semantic-color";
 import { railX, RAIL_STATUS_LABEL, type GoalRail, type GoalRailStatus } from "../lib/goal-rail";
 
 /**
@@ -9,7 +9,7 @@ import { railX, RAIL_STATUS_LABEL, type GoalRail, type GoalRailStatus } from "..
  * (왼쪽 끝 = 이 달 시작 위치, 오른쪽 끝 = 목표 차시)에 놓으면 두 막대의 길이 차가 곧 "계획 대비 얼마나"다.
  *
  * 채움 색은 **의미색 캐논** — 현재진도는 판정 색(느림=caution · 계획대로=positive · 빠름=info), 목표진도는
- * 계획을 뜻하는 정보색(파랑)을 옅게. 새 색을 고르지 않는다.
+ * 계획을 뜻하는 정보색(파랑)을 옅게. 새 색을 고르지 않는다. 툴바 집계 칩도 같은 `RAIL_TONE`을 읽는다.
  * 🔴 목표가 없으면 2행은 **점선 빈 줄**이고 1행은 20차시 눈금으로 채움만 그린다 — 경고색을 쓰지 않는다
  *    (목표 부재는 잘못이 아니다). 🔴 위치를 모르면 레일 대신 글자("위치 미상")다 — 0%짜리 막대는 없는 사실을 만든다.
  */
@@ -35,17 +35,8 @@ const FILL: Record<SemanticTone, string> = {
   brand: "bg-primary",
 };
 
-/** 두 줄의 이름 — 화면·툴팁·표 머리가 같은 말을 쓴다(원장 지정 어휘). */
+/** 두 줄의 이름 — 화면·툴팁이 같은 말을 쓴다(원장 지정 어휘). */
 export const RAIL_ROW_LABEL = { now: "현재진도", goal: "목표진도" } as const;
-
-/** 상태 배지 — 라벨은 `RAIL_STATUS_LABEL` 단일 소스. */
-export function RailStatusPill({ status, className = "" }: { status: GoalRailStatus; className?: string }) {
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE_SOFT[RAIL_TONE[status]]} ${className}`}>
-      {RAIL_STATUS_LABEL[status]}
-    </span>
-  );
-}
 
 function RailLine({
   label,

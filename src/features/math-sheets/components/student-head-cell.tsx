@@ -5,7 +5,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { TONE_TEXT } from "@/lib/design/semantic-color";
 import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
 import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
-import { pickPrimaryRail, railDiffLabel, RAIL_STATUS_LABEL } from "../lib/goal-rail";
+import { railDiffLabel, RAIL_STATUS_LABEL } from "../lib/goal-rail";
 import type { StudentGoalMap } from "../lib/student-goals";
 import type { MathStudentRow, StudentRail } from "../server/month-queries";
 import type { GoalField } from "./use-student-goals";
@@ -42,13 +42,10 @@ function goalTextOf(r: StudentRail): string | null {
 }
 
 /**
- * MCS 월간 뷰의 **왼쪽 고정열** — 이름·표식 · 이 달 목표 칸 · 목표 레일 두 줄.
+ * MCS 진도표의 **왼쪽 고정열** — 이름·표식 · 이 달 목표 칸 · 목표 레일 두 줄.
  *
- * 🔴 두 보기(진도표·현황 표)가 **이 칸을 그대로 공유한다** — 행 높이는 이 칸이 정하므로 어느 보기를
- *    골라도 같은 학생이 같은 높이·같은 자리에 선다(원장 2026-09-02 *"어떤 탭을 고르던 해당 학생의
- *    행높이가 똑같아서 전환이 자연스러워 보이도록"* · *"진도표가 기준 행이 되도록"*). 오른쪽 칸은 이 높이
- *    안에 들어오게 짠다(넘치면 그 보기에서만 그 행이 자란다).
- * 🔴 레일은 별도 탭이 아니라 **여기, 목표 칸 아래**다(원장 2026-09-02 *"진도레일 탭 없애고 진도표 하단으로"*).
+ * 🔴 행 높이는 이 칸이 정한다(원장 2026-09-02 *"진도표가 기준 행이 되도록"*) — 오른쪽 수업일 칸은 이 높이
+ *    안에 들어오게 짠다. 🔴 레일은 별도 탭이 아니라 **여기, 목표 칸 아래**다(*"진도레일 탭 없애고 진도표 하단으로"*).
  * ⚠️ 고정열은 **불투명**이어야 한다 — 반투명 배경이면 스크롤한 본문이 비친다([[#74]]).
  */
 export function StudentHeadCell({
@@ -68,10 +65,10 @@ export function StudentHeadCell({
   classLabel: string;
 }) {
   const ended = stu.rosterPhase === "ended";
-  const primary = pickPrimaryRail(stu.rails);
-  const showRail = primary != null && primary.rail.start != null && !ended;
-  const tone = primary ? RAIL_TONE[primary.rail.status] : null;
-  const diff = primary ? railDiffLabel(primary.rail) : null;
+  const r = stu.rail;
+  const showRail = r != null && r.rail.start != null && !ended;
+  const tone = r ? RAIL_TONE[r.rail.status] : null;
+  const diff = r ? railDiffLabel(r.rail) : null;
   return (
     <td
       className={`border-line-faint sticky left-0 z-10 border p-2 align-top ${HEAD_CELL_W} ${
@@ -109,28 +106,37 @@ export function StudentHeadCell({
         canEdit={canEdit}
         onChange={onGoalChange}
       />
-      {/* 목표 칸 바로 아래 **레일 두 줄**(현재진도 / 목표진도) — 어느 보기에서든 "계획 대비 어디인가"가
-          고정열에 있다. 판정·문구는 현황 표와 같은 부품(goal-rail.ts)이다. */}
-      {showRail && primary && tone ? (
+      {/* 목표 칸 바로 아래 **레일 두 줄**(현재진도 / 목표진도) — 판정·문구는 툴바 집계와 같은 부품(goal-rail.ts)이다. */}
+      {showRail && r && tone ? (
         <div className="mt-2 px-0.5">
           <GoalRailRows
-            rail={primary.rail}
-            nowText={nowTextOf(primary)}
-            goalText={goalTextOf(primary)}
+            rail={r.rail}
+            nowText={nowTextOf(r)}
+            goalText={goalTextOf(r)}
             title={[
-              primary.startLesson ? `시작 ${primary.startLesson}` : null,
-              primary.planLesson ? `계획 ${primary.planLesson}` : null,
-              primary.nowLesson ? `${RAIL_ROW_LABEL.now} ${primary.nowLesson}` : null,
-              primary.endLesson ? `${RAIL_ROW_LABEL.goal} ${primary.endLesson}` : null,
+              r.startLesson ? `시작 ${r.startLesson}` : null,
+              r.planLesson ? `계획 ${r.planLesson}` : null,
+              r.nowLesson ? `${RAIL_ROW_LABEL.now} ${r.nowLesson}` : null,
+              r.endLesson ? `${RAIL_ROW_LABEL.goal} ${r.endLesson}` : null,
             ]
               .filter(Boolean)
               .join(" · ")}
           />
           <div className="num mt-1 flex items-baseline gap-1.5 text-[10.5px]">
-            {primary.rail.progressPct != null ? (
-              <b className={`font-extrabold ${TONE_TEXT[tone]}`}>{primary.rail.progressPct}%</b>
-            ) : primary.rail.moved != null && primary.rail.moved > 0 ? (
-              <b className="text-text-dim font-extrabold">+{primary.rail.moved}차시</b>
+            {r.rail.status === "not-started" ? (
+              // 🔴 아직 수업이 한 번도 안 지난 달은 **판정하지 않는다** — "0%"는 거짓 진행률이다(적대적 리뷰 2026-09-02).
+              <span className="text-text-faint font-bold">{RAIL_STATUS_LABEL["not-started"]}</span>
+            ) : r.rail.progressPct != null ? (
+              <b className={`font-extrabold ${TONE_TEXT[tone]}`}>{r.rail.progressPct}%</b>
+            ) : r.rail.moved != null && r.rail.moved > 0 ? (
+              // 목표가 없어 %를 못 낼 때 — "이 달 시작 위치에서 지금까지 몇 차시 나갔나"(원장 2026-09-02 *"이 +3차시는
+              // 무얼 뜻하나"* → 뜻이 글자에 없어서 '이 달'을 앞에 붙이고 툴팁을 달았다).
+              <b
+                className="text-text-dim font-extrabold"
+                title="이 달 시작 위치에서 지금까지 나간 차시 수 — 목표가 없어 진행률(%) 대신 적습니다"
+              >
+                이 달 +{r.rail.moved}차시
+              </b>
             ) : null}
             {diff ? <span className={`font-bold ${TONE_TEXT[tone]}`}>{diff}</span> : null}
           </div>

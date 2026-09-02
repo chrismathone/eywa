@@ -14,8 +14,9 @@
  *    같은 규약). 아직 수업이 한 번도 안 지난 달도 판정하지 않는다(`not-started`).
  * 🔴 **차이 1차시는 소음이다** — 수학 반은 한 달에 4~9번 도는데 한 차시를 두 번에 나눠 하는 게 정상이라
  *    (progress-stall.ts 실측: 직전과 같은 진도가 학생 절반) ±1은 `on`(계획대로)으로 본다.
- * ⚠️ 위치를 여기서 풀지 않는다 — 커리큘럼(초1~중3 전 차시)은 큰 데이터라 **서버가 숫자로 접어 내려보내고**
- *    (`lesson-position.ts`) 이 파일은 숫자만 받는다. 클라 컴포넌트가 이 파일을 import해도 번들이 안 는다(B5).
+ * ⚠️ 위치를 여기서 풀지 않는다 — 커리큘럼 매칭은 **서버가 한 번**(`lesson-position.ts`) 하고 이 파일은 숫자만
+ *    받는다(같은 판정을 두 곳에서 하지 않는다). 🔴 트랙(현행·선행)으로 레일을 가르지 않는다 — 위치는 학년 관통
+ *    글로벌 값이라 한 줄로 충분하고, 갈랐더니 다음 학년 목표가 "목표 없음"으로 보였다(2026-09-02).
  */
 
 export type RailTrack = "current" | "ahead";
@@ -144,7 +145,7 @@ export function railX(rail: GoalRail, position: number | null): number | null {
   return clampPct(((position - rail.start) / span) * 100);
 }
 
-/** 상태 한글 라벨 — 화면마다 문구를 새로 짓지 않는다(진도표·현황 표·카드가 같은 표를 읽는다). */
+/** 상태 한글 라벨 — 화면마다 문구를 새로 짓지 않는다(고정열 레일·툴바 집계가 같은 표를 읽는다). */
 export const RAIL_STATUS_LABEL: Record<GoalRailStatus, string> = {
   "no-data": "위치 미상",
   "no-goal": "목표 없음",
@@ -155,22 +156,6 @@ export const RAIL_STATUS_LABEL: Record<GoalRailStatus, string> = {
   on: "계획대로",
   behind: "계획보다 느림",
 };
-
-/**
- * 학생의 **대표 레일** 하나 — 트랙(현행·선행)이 둘이어도 카드 배지·현황 표·툴바 집계는 한 상태를 말해야 한다.
- * 목표가 붙은 트랙이 있으면 그것, 없으면 위치가 잡힌 첫 트랙, 그것도 없으면 null.
- */
-export function pickPrimaryRail<T extends { rail: GoalRail }>(rails: readonly T[]): T | null {
-  return (
-    // 목표가 있고 위치도 잡힌 트랙이 으뜸 — 목표만 있고 위치가 없는 트랙(다른 학년에 목표를 적은 경우)이
-    // 실제로 나가고 있는 트랙을 가리면 "위치 미상"이 거짓이 된다.
-    rails.find((r) => r.rail.end != null && r.rail.start != null) ??
-    rails.find((r) => r.rail.status !== "no-data") ??
-    rails.find((r) => r.rail.end != null) ??
-    rails[0] ??
-    null
-  );
-}
 
 /** "+3차시 빠름" · "2차시 느림" · "계획대로" — 차이 문구 한 벌. 판정 불가면 null. */
 export function railDiffLabel(rail: GoalRail): string | null {

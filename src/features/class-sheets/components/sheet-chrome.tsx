@@ -109,7 +109,7 @@ export function SheetClassPicker({
           목록
         </PillGlyph>
       </button>
-      <span className={`${MARKER_WIDTH} relative shrink-0`}>
+      <span className={`${MARKER_WIDTH} shrink-0`}>
         <SearchableSelect
           options={classOptions.map((c) => ({ value: c.id, label: c.name }))}
           value={classId}
@@ -121,19 +121,18 @@ export function SheetClassPicker({
           // ⚠️ `compact`를 안 쓴다 — 그건 쉐브론을 10px로 줄이는데(gap도 1) 21px 글자 옆에선
           //    흔적만 남는다.
           triggerClassName={MARKER_TRIGGER}
+          // 담임 이름 — 표기 안 오른쪽 끝, 쉐브론 바로 왼쪽. 트리거 **안**의 꼬리표라 긴 반 이름은 남은 폭에서
+          // 말줄임되고(위에 얹으면 끝이 덮여 사라졌다), 툴팁·클릭도 트리거의 것 그대로다.
+          trailing={
+            teacherName ? (
+              <span className="text-text-dim text-[15px] font-extrabold whitespace-nowrap" title={`담임 ${teacherName}`}>
+                {teacherName}
+              </span>
+            ) : undefined
+          }
           // 반이 수십 개라 목록에서 **지금 보고 있는 반**을 눈으로 못 찾겠다는 지적(원장 2026-08-06).
           highlightSelected
         />
-        {/* 담임 이름 — 표기 안 오른쪽 끝, 쉐브론 바로 왼쪽. 같은 노란 바탕이라 긴 반 이름이 밑으로
-            지나가도 이름이 앞에 선다(트리거 위에 얹힌 것이라 클릭은 그대로 트리거로 간다). */}
-        {teacherName ? (
-          <span
-            className="bg-marker text-text-dim pointer-events-none absolute top-1/2 right-[38px] -translate-y-1/2 pl-2 text-[15px] leading-none font-extrabold whitespace-nowrap"
-            title={`담임 ${teacherName}`}
-          >
-            {teacherName}
-          </span>
-        ) : null}
       </span>
       {/* 반 정보 보기 — 드롭다운 **바로 옆**이라 "지금 고른 그 반"이라는 게 자리로 읽힌다.
           WindowLink라 창 안에선 드릴인, 최상위에선 새 창. */}
