@@ -8,6 +8,7 @@ import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
 import { CELL_STATE_LABEL, type MathCellState } from "../lib/cell-state";
 import { pickPrimaryRail, railDiffLabel, RAIL_STATUS_LABEL } from "../lib/goal-rail";
 import { actualBooksOf, type MathRecordLike, type StudentGoalMap } from "../lib/student-goals";
+import { TEST_KIND_LABEL, TEST_KIND_TITLE, testScoresOf } from "../lib/test-score";
 import type { MathSheetMonthData } from "../server/month-queries";
 import type { GoalField } from "./use-student-goals";
 import { GoalCell } from "./goal-cell";
@@ -215,24 +216,57 @@ export function MonthSheet({
                             ? `${day.date} · ${data.holidays[day.date] ?? CELL_STATE_LABEL.holiday} — 학원 휴일이라 기록 의무가 없습니다`
                             : undefined
                       }
+                      // 🔴 목표 밖 교재는 **네 변 테두리**(원장 2026-09-02 *"다른진도 테두리 더 확실하게"* — 왼쪽 3px
+                      //    선만으론 칸 하나가 눈에 안 들어왔다). border-collapse 표라 border를 굵히면 이웃 칸과
+                      //    선을 나눠 갖고 행 높이가 밀리므로 **outline(안쪽 오프셋)**으로 칸 안에 그린다.
                       className={`border-line-faint min-w-[178px] border p-2 align-top ${CELL_TONE[state]} ${
-                        rec?.offGoal ? "border-l-amber bg-amber-soft/40 border-l-[3px]" : ""
+                        rec?.offGoal ? "bg-amber-soft/40 outline-amber outline-2 -outline-offset-2" : ""
                       }`}
                     >
                       {rec ? (
                         <>
                           {rec.textbook ? (
                             <div
-                              className={`mb-0.5 text-[12px] leading-tight font-bold ${
+                              className={`mb-0.5 flex items-center gap-1 text-[12px] leading-tight font-bold ${
                                 rec.offGoal ? "text-amber" : "text-primary"
                               }`}
                             >
-                              {rec.textbook}
+                              <span className="min-w-0">{rec.textbook}</span>
+                              {rec.offGoal ? (
+                                <span
+                                  title="이 달 목표에 적은 교재와 다릅니다"
+                                  className="bg-amber shrink-0 rounded px-1 text-[10px] leading-4 font-extrabold text-white"
+                                >
+                                  목표 밖
+                                </span>
+                              ) : null}
                             </div>
                           ) : null}
                           <div className="text-text-dim text-[13px] leading-snug whitespace-pre-line">
                             {rec.progress ?? "—"}
                           </div>
+                          {/* 시험 점수 — 원문 그대로 + 정답률(원장 2026-09-02 *"일일테스트 점수(확인테스트 등) 연동"*).
+                              종류·순서·옛 합본 폴백은 test-score.ts 단일 소스(학부모 카드와 같은 우선순위). */}
+                          {(() => {
+                            const tests = testScoresOf(rec);
+                            if (tests.length === 0) return null;
+                            return (
+                              <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-tight">
+                                {tests.map((t) => (
+                                  <span
+                                    key={t.kind}
+                                    title={`${TEST_KIND_TITLE[t.kind]} ${t.raw}`}
+                                    className="num inline-flex items-baseline gap-1"
+                                  >
+                                    <b className="bg-muted text-foreground rounded px-1 py-px font-extrabold">
+                                      {TEST_KIND_LABEL[t.kind]} {t.pct != null ? `${t.pct}%` : t.raw}
+                                    </b>
+                                    {t.pct != null ? <span className="text-text-faint">{t.raw}</span> : null}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {stalled ? (
                             <div className="text-amber mt-1 flex items-center gap-1 text-[11.5px] font-bold">
                               <EyIcon name="alert" size={11} />

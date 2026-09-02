@@ -97,8 +97,12 @@ export type MathDayRecord = {
   textbook: string | null;
   progress: string | null;
   homework: string | null;
-  /** 일일테스트 원문("5문제 중 4개 맞음") — 숫자 변환은 report-metrics.ts가 한다. */
+  /** 일일테스트 원문("5문제 중 4개 맞음") — 칸 표시·숫자 변환은 test-score.ts가 한다. */
   dailyTest: string | null;
+  /** 확인테스트 원문(실측상 거의 비어 있다 — 있으면 칸에 적힌다). */
+  checkTest: string | null;
+  /** 옛 합본(`exam_info`, "일일 4/5") — 분리값이 없는 edutrix 이관분에서만 읽힌다. */
+  examInfo: string | null;
   /** 지난 과제 수행률 원문("100%"·"미제출"). */
   homeworkScore: string | null;
   /** 목표 밖 교재인가(목표가 없으면 항상 false). */
@@ -201,6 +205,8 @@ type MathReportRow = {
   progress: string | null;
   homework_today: string | null;
   daily_test: string | null;
+  check_test: string | null;
+  exam_info: string | null;
   homework_score: string | null;
 };
 type PriorReportRow = { student_id: string; report_date: string; progress: string | null };
@@ -245,7 +251,10 @@ export async function getMathSheetMonth(
     fetchAllPaged<MathReportRow>((f, t) =>
       admin
         .from("lesson_reports")
-        .select("student_id, report_date, textbook, progress, homework_today, daily_test, homework_score")
+        // 시험 세 칸(0082a 분리값 + 옛 합본) — 칸의 점수 표시·평균 재료(test-score.ts). 셋 다 2026-07 이전 컬럼(#95 무관).
+        .select(
+          "student_id, report_date, textbook, progress, homework_today, daily_test, check_test, exam_info, homework_score",
+        )
         .eq("tenant_id", tenantId)
         .eq("class_id", classId)
         .gte("report_date", from)
@@ -429,6 +438,8 @@ export async function getMathSheetMonth(
           progress: rec.progress ?? null,
           homework: rec.homework_today ?? null,
           dailyTest: rec.daily_test ?? null,
+          checkTest: rec.check_test ?? null,
+          examInfo: rec.exam_info ?? null,
           homeworkScore: rec.homework_score ?? null,
           // 칸 테두리·열 머리·툴바 요약이 **같은 함수**를 통과한다(갈리면 한 화면에서 서로 다른 답이 된다).
           offGoal: isOffGoalRecord(
@@ -487,7 +498,12 @@ export async function getMathSheetMonth(
     const metrics = summarizeReportMetrics(
       dayDates
         .filter((d) => records[d])
-        .map((d) => ({ dailyTest: records[d]!.dailyTest, homework: records[d]!.homeworkScore })),
+        .map((d) => ({
+          dailyTest: records[d]!.dailyTest,
+          checkTest: records[d]!.checkTest,
+          examInfo: records[d]!.examInfo,
+          homework: records[d]!.homeworkScore,
+        })),
     );
 
     rows.push({
