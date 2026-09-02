@@ -306,7 +306,9 @@ export default async function EnrollmentPage({
         </div>
       ) : view === "table" && tablePage ? (
         <>
-          <EnrollmentTable rows={tablePage.rows} nowMs={nowMs} />
+          {/* 시트형 표(원장 2026-09-02) — 필터·연월 피커는 칸반과 **같은 툴바**(위 KanbanFilters)이고 여기서
+              바뀌는 건 본문뿐. '번호'는 페이지를 넘어 이어진다(1페이지 1~50 · 2페이지 51~). */}
+          <EnrollmentTable rows={tablePage.rows} nowMs={nowMs} startIndex={(page - 1) * PAGE_SIZE} />
           <Pagination
             page={page}
             totalPages={Math.max(1, Math.ceil(tablePage.total / PAGE_SIZE))}
