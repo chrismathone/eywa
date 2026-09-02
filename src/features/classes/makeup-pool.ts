@@ -59,3 +59,36 @@ export function makeupPoolName(teacherName: string | null | undefined): string {
 export function isMakeupPoolClass(row: { is_makeup_pool?: boolean | null } | null | undefined): boolean {
   return row?.is_makeup_pool === true;
 }
+
+export type MakeupOwnerPick = { id: string; via: "created_by" | "teacher_name" | "saver" };
+
+/**
+ * 보강 보고서 한 건이 **누구의 보강 반**에 앉는가 — 저장한 사람이 아니라 **보고서의 소유자**다.
+ *
+ * 사무실이 강사 대신 저장하면 저장자(`user`)로 귀속했을 때 보강 반이 사무실 계정 앞으로 생기고, 그 강사
+ * 출석부엔 안 뜬다(2026-09-02 점검 — 실측 그런 건은 0건이라 **예방**이다). 규칙은 셋이고 순서가 있다:
+ *   ① `created_by` — 0172a가 정한 **소유 계정**("누구 원스크린에 뜨는가"). 갱신 때도 DB 트리거가
+ *      원 작성자를 보존하므로 남이 고쳐 저장해도 안 바뀐다. 있으면 이것이 답이다.
+ *   ② `teacher_name` — 표시용 이름이라 저장자가 덮어쓰는 값(보존 트리거 없음). ①이 비었을 때만,
+ *      같은 학원의 **활성 직원(학생 계정 제외)** 중 표시 이름이 **정확히 하나** 일치할 때만 쓴다.
+ *      🔴 동명이인·미등록(옛 별명 '수진'·'희영1')이면 **귀속하지 않는다** — 이름으로 남의 계정에 붙이는
+ *      것보다 안 만드는 게 낫다([[#93]]과 같은 결. 나중에 스크립트로 채울 수 있다).
+ *   ③ 저장자 — 소유자 정보가 **아예 없을 때만**(①·② 둘 다 빈 값). 스크립트엔 저장자가 없어 null.
+ * ⚠️ 소급 스크립트(`scripts/_oneoff/backfill-makeup-attendance.mjs`)가 같은 규칙의 CJS/ESM 사본을 든다 —
+ *    여기를 바꾸면 그쪽도 함께.
+ */
+export function pickMakeupOwner(input: {
+  createdBy: string | null | undefined;
+  teacherName: string | null | undefined;
+  /** `teacherName`과 표시 이름이 **정확히** 같은 활성 직원(학생 계정 제외) — 호출부가 조회해 넘긴다. */
+  sameName: readonly { id: string }[];
+  /** 저장한 계정 — 소유자 정보가 아예 없을 때만 쓴다. */
+  saver: string | null | undefined;
+}): MakeupOwnerPick | null {
+  if (input.createdBy) return { id: input.createdBy, via: "created_by" };
+  const name = input.teacherName ?? "";
+  if (name.trim()) {
+    return input.sameName.length === 1 ? { id: input.sameName[0]!.id, via: "teacher_name" } : null;
+  }
+  return input.saver ? { id: input.saver, via: "saver" } : null;
+}

@@ -13,7 +13,67 @@ import "server-only";
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { makeupPoolName } from "@/features/classes/makeup-pool";
+import { makeupPoolName, pickMakeupOwner } from "@/features/classes/makeup-pool";
+
+/**
+ * 보강 보고서 한 건의 **귀속 강사**(누구의 보강 반에 앉는가) — 규칙은 순수부 `pickMakeupOwner` 주석.
+ *
+ * 🔴 저장자(`user`)를 그대로 넘기지 말 것 — 사무실이 강사 대신 저장하면 보강 반이 사무실 앞으로 생긴다.
+ *    저장된 행의 `created_by`(트리거 보존)·`teacher_name`을 넘기고, 못 풀면 **null = 훅을 건너뛴다**
+ *    (잘못된 반을 만드는 것보다 안 만드는 게 낫다 — 소급 스크립트가 같은 규칙으로 채울 수 있다).
+ * ⚠️ admin은 RLS 우회라 모든 조회에 `tenant_id` 필터([[#104]]). 조회 실패는 null(보고서 저장은 이미 끝났다).
+ */
+export async function resolveMakeupOwner(input: {
+  tenantId: string;
+  createdBy: string | null | undefined;
+  teacherName: string | null | undefined;
+  saver: { id: string; name: string | null };
+}): Promise<{ id: string; name: string | null } | null> {
+  const admin = createAdminClient();
+  const name = input.teacherName ?? "";
+  // 이름 조회는 created_by가 비었을 때만(그때만 규칙이 이름을 본다) — 평소 왕복 0.
+  let sameName: { id: string; display_name: string | null }[] = [];
+  if (!input.createdBy && name.trim()) {
+    // 🔴 raw 정확 일치·활성·학생 계정 제외 — resolveReportAuthorName과 같은 직원 풀 규약. 2명이면 모호.
+    const { data, error } = await admin
+      .from("users")
+      .select("id, display_name")
+      .eq("tenant_id", input.tenantId)
+      .eq("display_name", name)
+      .eq("status", "active")
+      .neq("system_role", "student")
+      .limit(2);
+    if (error) {
+      console.error("[makeup-pool] 소유자 이름 조회 실패", error.message);
+      return null;
+    }
+    sameName = (data ?? []) as { id: string; display_name: string | null }[];
+  }
+  const pick = pickMakeupOwner({
+    createdBy: input.createdBy,
+    teacherName: input.teacherName,
+    sameName,
+    saver: input.saver.id,
+  });
+  if (!pick) return null;
+  if (pick.via === "saver") return { id: input.saver.id, name: input.saver.name };
+  if (pick.via === "teacher_name") {
+    return { id: pick.id, name: sameName.find((u) => u.id === pick.id)?.display_name ?? name };
+  }
+  // created_by — 반 이름에 쓸 표시 이름을 그 계정에서 읽는다. 이 학원에 없는 계정이면(삭제·타 테넌트) 만들지 않는다.
+  const { data: owner, error } = await admin
+    .from("users")
+    .select("id, display_name")
+    .eq("tenant_id", input.tenantId)
+    .eq("id", pick.id)
+    .maybeSingle();
+  if (error) {
+    console.error("[makeup-pool] 소유자 계정 조회 실패", error.message);
+    return null;
+  }
+  if (!owner?.id) return null;
+  return { id: owner.id as string, name: (owner.display_name as string | null) ?? null };
+}
 
 /** 0241a 미적용 판별 — PostgREST는 없는 컬럼을 42703(또는 PGRST204)로 돌려준다. */
 function isMissingColumn(e: { code?: string; message?: string } | null | undefined): boolean {
@@ -123,6 +183,28 @@ export async function ensureMakeupAttendanceForReport(input: {
   /** 확인창에서 고른 시수(원스크린 경로) — 없으면 기본 1(컬럼을 비워 둔다). */
   units?: number | null;
 }): Promise<{ ok: boolean; classId?: string }> {
+  const admin = createAdminClient();
+
+  // ② **어느 반이든** 그 (학생, 날짜)에 이미 `makeup` 칸이 있으면 만들지 않는다 — 강사가 반 보강으로
+  //    자기 반에 손으로 찍어 둔 경우가 실제로 있다(실측 2026-09-01 정채민: 이수진이 자기 반에 `makeup`).
+  //    여기 한 칸 더 만들면 같은 수업이 **시수 두 배**가 된다. 소급 스크립트(backfill-makeup-attendance.mjs)의
+  //    규칙 ②와 같은 판정. ⚠️ 옛 정정본(append-only)의 makeup까지 잡혀 건너뛸 수 있다 — 안 만드는 쪽이
+  //    두 번 세는 쪽보다 낫다(칸은 사람이 월별 표에서 채울 수 있다).
+  // 🔑 반을 만들기 **전**에 본다 — 안 그러면 보강을 전부 자기 반에 찍는 강사에게 빈 보강 반이 생긴다(lazy 원칙).
+  const { data: elsewhere, error: elseErr } = await admin
+    .from("attendance_records")
+    .select("id")
+    .eq("tenant_id", input.tenantId)
+    .eq("student_id", input.studentId)
+    .eq("session_date", input.date)
+    .eq("status", "makeup")
+    .limit(1);
+  if (elseErr) {
+    console.error("[makeup-pool] 타 반 보강 칸 조회 실패", elseErr.message);
+    return { ok: false };
+  }
+  if ((elsewhere ?? []).length > 0) return { ok: true }; // 이미 어딘가에 보강 칸이 있다 — 그대로 둔다.
+
   const classId = await ensureMakeupPoolClass({
     tenantId: input.tenantId,
     teacherId: input.teacherId,
@@ -131,7 +213,7 @@ export async function ensureMakeupAttendanceForReport(input: {
   });
   if (!classId) return { ok: false }; // 0241a 미적용 등 — 조용히 넘어간다(보고서는 이미 저장됐다).
 
-  const admin = createAdminClient();
+  // ① 그 보강 반의 (학생, 날짜) 칸 — 상태 불문(결석·시수로 고쳐 둔 값일 수 있다).
   const { data: exists, error: readErr } = await admin
     .from("attendance_records")
     .select("id")

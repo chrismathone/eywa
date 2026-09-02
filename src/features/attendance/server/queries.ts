@@ -9,6 +9,11 @@ import {
   isEnrollmentActiveOn,
 } from "@/features/enrollments/eligibility";
 import { includeInAttendanceInput, makeupStudentIds } from "@/features/attendance/input-roster";
+// 월별 명단에 **수강행 없는 기록자**를 합치는 규약(2026-09-02) — 일별 로스터와 같은 판정 함수를 감싼 것.
+import {
+  recordedOnlyMatrixRow,
+  recordedOnlyStudentIds,
+} from "@/features/attendance/monthly-makeup-roster";
 import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
@@ -754,8 +759,8 @@ export async function getMonthlyAttendanceMatrix(
   const startIso = days[0]!.date;
   const endIso = days[days.length - 1]!.date;
 
-  // 해당 반의 활성 학생 + 그 반의 수업요일 — 서로 독립이라 병렬로(B4).
-  const [{ data: enrollments }, { data: schedules }] = await Promise.all([
+  // 해당 반의 활성 학생 + 그 반의 수업요일 + 이 기간에 기록을 남긴 학생 — 서로 독립이라 병렬로(B4).
+  const [{ data: enrollments }, { data: schedules }, recordedRows] = await Promise.all([
     supabase
       .from("enrollments")
       .select(
@@ -774,6 +779,24 @@ export async function getMonthlyAttendanceMatrix(
       .eq("class_id", classId)
       .lte("valid_from", endIso)
       .or(`valid_to.is.null,valid_to.gte.${startIso}`),
+    /**
+     * 이 반·이 기간에 **기록이 있는 학생 id** — 수강행이 없어도 명단에 세우기 위해(아래 합치기).
+     * 🔴 보이지 않는 '보강' 반(0241a)은 **일부러 수강행이 없다** — 이 조회가 없으면 그 반은 영원히
+     *    0명이라 출석부 묶음이 통째로 안 선다(에러도 안 난다. 원장 제보 2026-09-02: *"김은정 선생님의
+     *    이윤 학생이 9/1 자 출석부에 나와야하는데 목록에도 안보이네"*).
+     * B2: 명단을 만드는 조회라 무페이징 select 금지 → 페이지네이션(반 1개·한 기간이라 가볍다).
+     *     PostgREST엔 distinct가 없어 행을 받아 코드에서 접는다(tie-break `id`로 OFFSET 안정).
+     */
+    fetchAllPaged<{ student_id: string }>((from, to) =>
+      supabase
+        .from("attendance_records")
+        .select("student_id")
+        .eq("class_id", classId)
+        .gte("session_date", startIso)
+        .lte("session_date", endIso)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
   ]);
 
   const classDows = dowsFromKeys((schedules ?? []).map((s) => s.day_of_week as string));
@@ -864,6 +887,43 @@ export async function getMonthlyAttendanceMatrix(
     classId,
     selectedSubject,
   );
+
+  // ── 보강(수업외) 참석 ── 그 반 수강행은 없는데 그 기간에 출결 기록이 있는 학생.
+  //
+  // 🔴 일별 입력 명단(위 `getAttendanceInputRows`)은 예전부터 이 학생들을 합쳐서 보여 준다 — 그래야
+  //    저장 뒤에도 보이고 **수정·삭제가 된다**. 그런데 **월별 표엔 그 합치기가 없었다**: 기록이 있고
+  //    시수도 세는데 장부에서만 사라져 있었다(실측 2026-09-02: 최근 90일 (반,학생) 10쌍 · 출결 13행).
+  // 🔴 그리고 이게 없으면 **보이지 않는 '보강' 반**(0241a)이 통째로 빈다 — 그 반은 일부러 수강행을
+  //    만들지 않으므로(강사당 1개·교시 0·수강 0) 명단이 **항상 0명**이고, 에러도 없이 묶음이 안 선다.
+  // ⚠️ 생애주기 뱃지를 붙인 **뒤에** 합친다(수강 구간 없는 학생에게 신입·퇴원 판정을 시키지 않는다).
+  //    그리고 아래 출결 조회(`studentIds`)보다는 **앞**이어야 합친 학생의 칸이 찬다.
+  // 🔑 규약(같은 판정 함수 · 빈 spans · 빈 attendDows)은 `monthly-makeup-roster.ts`에 있다.
+  // 🔴 "수강행이 있나"의 기준은 **받아 온 수강행 전부**다 — `studentMap`이 아니다. studentMap은
+  //    이미 `on_hold`·기간 전 종료를 걸러낸 뒤라, 그걸 기준으로 삼으면 **휴원 중인데 기록이 있는
+  //    학생이 '보강'으로 둔갑**해 구간 없는 행으로 되살아난다(휴원은 숨기는 게 맞다). 일별 입력
+  //    로스터(`getAttendanceInputRows`)도 같은 집합을 쓴다 — 두 화면이 같은 말을 해야 한다.
+  const enrolledStudentIds = (enrollments ?? [])
+    .map((e) => (Array.isArray(e.student) ? e.student[0] : e.student) as { id: string } | undefined)
+    .filter((s): s is { id: string } => !!s)
+    .map((s) => s.id);
+  const extraIds = recordedOnlyStudentIds(
+    recordedRows.map((r) => r.student_id),
+    enrolledStudentIds,
+  );
+  if (extraIds.length > 0) {
+    const extras = await fetchInChunks<{
+      id: string;
+      name: string;
+      grade: string | null;
+      school: string | null;
+    }>(extraIds, (chunk) =>
+      supabase.from("students").select("id, name, grade, school").in("id", chunk),
+    );
+    for (const s of extras) {
+      if (studentMap.has(s.id)) continue;
+      studentMap.set(s.id, recordedOnlyMatrixRow(s));
+    }
+  }
 
   const students = Array.from(studentMap.values()).sort((a, b) => {
     const ga = a.grade ?? "";
