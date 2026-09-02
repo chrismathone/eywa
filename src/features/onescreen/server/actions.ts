@@ -33,7 +33,10 @@ import { isRecallInFlight } from "@/features/report-admin/report-recall";
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
 import { hasAnyAttendance, isStudentAbsentForSend } from "./absence-gate";
 import { isReportOptout } from "@/features/classes/report-optout";
-import { ensureMakeupAttendanceForReport } from "@/features/attendance/server/makeup-pool";
+import {
+  ensureMakeupAttendanceForReport,
+  resolveMakeupOwner,
+} from "@/features/attendance/server/makeup-pool";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
@@ -217,7 +220,8 @@ export async function saveLessonReport(
     )
     // teacher_name은 진도 점프 경고의 "같은 선생님" 축(2026-08-20) — 넘길 값을 여기서 다시 조립하지 말고
     // **저장된 그 값**을 되받는다(갱신 시 DB가 원 작성자를 보존하는 경로가 있어 화면 값과 갈릴 수 있다).
-    .select("id, share_token, teacher_name")
+    // created_by도 되받는다 — 보강 출석부 칸의 **귀속 강사**(아래 훅)는 저장자가 아니라 이 소유 계정이다.
+    .select("id, share_token, teacher_name, created_by")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
 
@@ -244,18 +248,30 @@ export async function saveLessonReport(
    * 🔴 **반 없는 보강만**이다(`makeup && !classId`). 반이 붙은 보고서는 그 반 출석부에 이미 칸이 있다.
    * 🔴 어느 반에서 했는지는 **묻지 않는다**(원장: *"반 보강이 아니니까"*) — 그 강사의 **보이지 않는
    *    '보강' 반**([`makeup-pool.ts`](@/features/classes/makeup-pool))에 앉힌다. 그래야 시수 주인이 생긴다.
+   * 🔴 **귀속은 저장자가 아니라 보고서의 소유자**(저장된 행의 `created_by` → `teacher_name`, 규칙은
+   *    `pickMakeupOwner`). 사무실이 강사 대신 저장하면 저장자로 귀속했을 때 보강 반이 사무실 계정 앞으로
+   *    생겨 그 강사 출석부엔 안 뜬다(2026-09-02 점검 — 실측 0건이라 예방). 소유자를 계정으로 못 풀면
+   *    (동명이인·미등록) **훅을 건너뛴다** — 소급 스크립트가 같은 규칙으로 채울 수 있다.
    * ⚠️ 있는 칸은 안 덮는다 · 실패해도 보고서 저장은 그대로다(출결은 보고서 위의 기록이다).
    */
   if (input.makeup && !input.classId) {
     try {
-      await ensureMakeupAttendanceForReport({
+      const owner = await resolveMakeupOwner({
         tenantId: user.tenantId,
-        teacherId: user.id,
-        teacherName: user.displayName ?? null,
-        studentId: input.studentId,
-        subject: input.subject || LEGACY_REPORT_SUBJECT,
-        date: reportDate,
+        createdBy: (data.created_by as string | null | undefined) ?? null,
+        teacherName: data.teacher_name ?? null,
+        saver: { id: user.id, name: user.displayName ?? null },
       });
+      if (owner) {
+        await ensureMakeupAttendanceForReport({
+          tenantId: user.tenantId,
+          teacherId: owner.id,
+          teacherName: owner.name,
+          studentId: input.studentId,
+          subject: input.subject || LEGACY_REPORT_SUBJECT,
+          date: reportDate,
+        });
+      }
     } catch {
       /* 출결 칸 생성 실패는 보고서 저장을 막지 않는다(로그는 헬퍼가 남긴다) */
     }
