@@ -297,12 +297,37 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
   이수연(Hannah) 10 · 이희영 10 · 이지은 8. ⚠️ ClassNote 교사명↔eywa 직원은 **이름 추정 매칭**(ID 링크 없음) —
   해제 전 사람이 확인 필요.
 - **eywa 기준 교사 배정 동기화 가능성**(원장 검토 지시): **추가는 API로 가능** —
-  `POST /api/v1/employments/ {teacher, belong_to_class}`(빈 본문 → 400 `teacher_required`로 확인. 학생 배정
-  `POST /api/v1/enrollments/`와 동일 패턴). **해제는 REST 불가** — `/api/v1/employments/{id}/`는 GET 200인데
+  `POST /api/v1/employments/ {teacher, **class_in_charge**}`.
+  🔴 **필드는 `class_in_charge`다**(2026-09-02 실측으로 정정). 여기 오래 적혀 있던 `belong_to_class`는
+  학생 배정(`enrollments`)의 필드를 미검증으로 옮겨 적은 것이고 **HTTP 500**을 낸다:
+  `{}`→400 `teacher_required` · `{teacher}`→**500** · `{teacher, belong_to_class}`→**500** ·
+  `{teacher, class_in_charge}`→**201**(응답이 그대로 employments 행). 500은 본문이 비어 있어
+  "서버 장애"로 오인하기 쉽다 — 필드 이름 문제다.
+  ⚠️ 교사 프로필 화면(`/service/setting/teacher/{id}`)이 쓰는
+  `POST /v1_2/teachers/{id}/employments {teacher, class_in_charge:[...]}`는 **배열을 통째로** 보내는 모양이라
+  그 교사의 다른 보드를 지울 수 있다 — 한 건 추가에는 쓰지 말 것. **해제는 REST 불가** — `/api/v1/employments/{id}/`는 GET 200인데
   **DELETE만 405**, 교사 제거 라우트(`/api/v1/teachers/{id}/`·`/api/v1/centers/{c}/teachers/{id}/`)는 **부재**(404).
   = 학생 배정과 **정확히 같은 제약**(§3 "배정 해제는 UI에서만"). 해제 자동화는 DOM(Playwright)만 남는다.
   ⚠️ **선행 조건**: "eywa 기준"이 성립하려면 이름 추정이 아니라 **ID 매핑**이 필요 —
   `users.classnote_teacher_id`(센터 교사 24명, 1회 확정) 신설 후에야 안전하다.
+
+### ✅ 실행 기록 — 테스트 보드 `(수학)학원이`에 **교사 전원 연결** (2026-09-02)
+
+원장 지시: *"학원이는 배정 제외하고 classnote에 전부 배정해야돼 … 테스트 공지 등을 확인하기 위해서
+classnote상에서 학원이를 모든 선생님에게 배정하라는 뜻이였음."* (전날 eywa 반 배정으로 잘못 읽었던 것을 정정 —
+eywa 쪽 특례는 같은 날 전부 걷어냈다.)
+
+- 스크립트 = [`assign-hakwoni-teachers.mjs`](../scripts/_classnote/assign-hakwoni-teachers.mjs)(드라이런 기본 ·
+  `--canary` 1명 먼저 · 매 실행 뒤 재조회 검증) + 조사 [`survey-hakwoni-teachers.mjs`](../scripts/_classnote/survey-hakwoni-teachers.mjs)(GET only).
+- 결과: 보드 `(수학)학원이`(id 1291581) 교사 **1명 → 18명**. 🔑 검증은 "붙었나"만 보지 않고 **각 교사의
+  보드 수가 줄지 않았는지**까지 봤다(전원 정확히 +1 — 배열 교체형 API였다면 여기서 드러난다).
+- ⚠️ 이름이 `.`인 계정(teacher 1763863, 가입 잔재)은 **일부러 제외**했다 — 사람이 아니라 테스트 대상이 아니다.
+- ⚠️ `(영어)학원이` 보드는 **더 이상 없다**(보드 정리로 사라짐, 현재 327개). 발송 대상 과목이 math뿐이라
+  (`report.classnoteSubjects`) 테스트에 지장 없다 — 영어를 켤 때 다시 만든다.
+- 🔴 **되돌리기는 ClassNote UI 수동뿐**이다(해제 REST 없음). 사람이 바뀌어도 이 보드는 그대로 두는 것이 기본.
+
+⚠️ v1_2 `employments`는 **DRF가 아니라 평배열**이다(실측 975건, 239KB) — `fetchAllDrf`로 읽으면 `.results`가
+없어 **조용히 0건**이 된다(처음 조사에서 실제로 그렇게 오판했다). 교사 목록 `/api/v1_2/centers/{c}/teachers`는 DRF다.
 
 ## 4. Cloud Run 함수(submitToClassNoteV2) 요점 — 소스: D:\edutrix\functions\index.js
 

@@ -3,7 +3,6 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { delegationOverlapsRange, isDelegationActiveOn } from "../delegation-window";
-import { TEST_CLASS_NAME } from "../test-class";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -95,22 +94,12 @@ export async function getTeachingClassIds(
   userId: string,
   date: string = kstToday(),
 ): Promise<TeachingClassIds> {
-  const [ownRes, active, testRes] = await Promise.all([
+  const [ownRes, active] = await Promise.all([
     supabase.from("classes").select("id").eq("teacher_id", userId),
     fetchActiveDelegations(supabase, date),
-    // ClassNote 발송 테스트 전용 반(담임 없음) — 모든 강사가 자기 반처럼 쓴다([test-class.ts](../test-class.ts)).
-    // 조회가 실패하면 그냥 안 보일 뿐(fail-soft) — 게이트가 죽어 저장이 막히는 쪽이 훨씬 나쁘다.
-    supabase.from("classes").select("id").eq("class_name", TEST_CLASS_NAME).eq("is_active", true),
   ]);
   const own = (ownRes.data ?? []).map((c) => c.id as string);
   const ownSet = new Set(own);
-  for (const c of testRes.data ?? []) {
-    const id = c.id as string;
-    if (!ownSet.has(id)) {
-      own.push(id);
-      ownSet.add(id);
-    }
-  }
   const delegated = [
     ...new Set(active.filter((r) => r.delegate_user_id === userId).map((r) => r.class_id)),
   ];
@@ -126,29 +115,16 @@ export async function getTeachingClasses(
   userId: string,
   date: string = kstToday(),
 ): Promise<TeachingClassRow[]> {
-  const [ownRes, active, testRes] = await Promise.all([
+  const [ownRes, active] = await Promise.all([
     supabase
       .from("classes")
       .select("id, class_name, subject, is_special, report_optout")
       .eq("teacher_id", userId)
       .eq("is_active", true),
     fetchActiveDelegations(supabase, date),
-    // 테스트 전용 반 — 담임이 없어 위 조회엔 절대 안 잡힌다. 게이트(getTeachingClassIds)와 **같은 집합**을
-    // 만들어야 "화면엔 뜨는데 저장하면 거절"이 안 난다. 실패는 fail-soft(안 보일 뿐).
-    supabase
-      .from("classes")
-      .select("id, class_name, subject, is_special, report_optout")
-      .eq("class_name", TEST_CLASS_NAME)
-      .eq("is_active", true),
   ]);
-  const ownRows = [...(ownRes.data ?? [])];
+  const ownRows = ownRes.data ?? [];
   const ownSet = new Set(ownRows.map((c) => c.id as string));
-  for (const c of testRes.data ?? []) {
-    if (!ownSet.has(c.id as string)) {
-      ownRows.push(c);
-      ownSet.add(c.id as string);
-    }
-  }
   // 내가 받은 위임 / 내 반이 남에게 넘어간 것 — 같은 한 번의 조회에서 방향만 갈라 읽는다.
   const wanted = [
     ...new Set(
