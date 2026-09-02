@@ -203,3 +203,45 @@ describe("영어(ECS)는 **어느 교시**인지도 묻는다", () => {
     expect(code(read("app/(shell)/attendance/[date]/[classId]/input-form.tsx"))).not.toContain("slotOptions=");
   });
 });
+
+/**
+ * 구조 가드 — **보강은 반드시 어느 반에서 했는지 남는다**(원장 2026-09-02: *"보강건으로 보고서 발송한
+ * 학생들에 대해서 출석부에 입력되지 않는 문제 해결 (담당배정이 아닌 보강추가로 보강했는 경우)"*).
+ *
+ * 실측 배경(45일): 순수 보강 보고서 100건 중 **58건이 그날 출결 0행**이었다. 원인은 원스크린에서 반
+ * 필터가 '전체'면 앵커가 없어 `persistAnchorMakeup`이 **조용히 건너뛰던 것**(사과 토스트만 남겼다).
+ * 이제 창이 반을 묻고, 그 답이 출결 칸과 보고서 앵커(0171a)를 함께 만든다.
+ */
+describe("보강은 어느 반에서 했는지를 반드시 남긴다", () => {
+  const client = code(read("features/onescreen/components/onescreen-client.tsx"));
+  const dialog = code(read("features/attendance/components/makeup-confirm-dialog.tsx"));
+
+  it("🔴 앵커를 모를 때는 창이 반을 묻는다(알 때는 묻지 않는다)", () => {
+    expect(client).toContain("hostClasses={makeupAsk.anchorId ? undefined : todayClasses}");
+  });
+
+  it("🔴 고르기 전에는 확인이 막힌다 — 안 막으면 그 보강이 출석부에 안 남는다", () => {
+    expect(dialog).toContain("const hostUnpicked =");
+    expect(dialog).toMatch(/const blocked =[\s\S]{0,200}hostUnpicked/);
+  });
+
+  it("고른 반은 **출결 칸과 보고서 앵커 둘 다**에 쓰인다(한쪽만 쓰면 화면과 기록이 갈린다)", () => {
+    expect(dialog).toContain("hostClassId: hostPick");
+    expect(client).toContain("choice.hostClassId ?? ask.anchorId");
+    // 앵커가 결정되면 그 값이 곧 `persistAnchorMakeup`이 쓰는 반이다.
+    expect(client).toMatch(/const anchorIdNew = hostId/);
+    expect(client).toContain("makeupClassId: hostId");
+  });
+
+  it("⚠️ 창이 떠 있는 동안 반 필터가 바뀌어도 물어본 반으로 저장한다(앵커를 상태에 굳힌다)", () => {
+    expect(client).toMatch(/anchorId: string \| null;/);
+  });
+
+  it("🔴 '반 필터가 전체라 출결에 안 남겼다'는 사과 문구는 남기지 않는다(이제 묻는다)", () => {
+    expect(client).not.toContain("반 필터가 '전체'라 출결에는 남기지 않았습니다");
+  });
+
+  it("⚠️ 반이 하나뿐이면 묻지 않고 확정한다(교시와 같은 규약 — 없는 질문을 만들지 않는다)", () => {
+    expect(dialog).toMatch(/hostClasses && hostClasses\.length === 1/);
+  });
+});

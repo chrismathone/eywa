@@ -339,6 +339,11 @@ export function OneScreenClient({
     studentId: string;
     studentName: string;
     mk: OneScreenStudent;
+    /**
+     * 창을 연 그 순간의 앵커 반(보고 있는 반 필터) — null이면 **창이 반을 묻는다**.
+     * 🔴 여기 굳혀 두는 이유: 창이 떠 있는 동안 필터가 바뀌어도 물어본 것과 저장하는 것이 갈리면 안 된다.
+     */
+    anchorId: string | null;
     candidates: MergeCandidate[];
     sentSubjects: string[];
     /** 목록에 없던 학생(그날 내 정규 수업 없음) — 확인 후에 카드를 만든다. */
@@ -850,6 +855,7 @@ export function OneScreenClient({
       setMakeupAsk({
         studentId,
         studentName: mk.name,
+        anchorId,
         mk,
         candidates: [],
         sentSubjects: [],
@@ -896,6 +902,7 @@ export function OneScreenClient({
       setMakeupAsk({
         studentId,
         studentName: existing.name,
+        anchorId,
         mk,
         candidates: plan.candidates,
         sentSubjects,
@@ -912,6 +919,7 @@ export function OneScreenClient({
     setMakeupAsk({
       studentId,
       studentName: existing.name,
+      anchorId,
       mk,
       candidates: [],
       sentSubjects: [],
@@ -995,10 +1003,32 @@ export function OneScreenClient({
     const ask = makeupAsk;
     setMakeupAsk(null);
     if (!ask) return;
-    const anchorIdNew = ask.mk.subjects.find((su) => su.makeupClassId)?.makeupClassId ?? null;
+    /**
+     * 보강을 한 반 = 앵커(보고 있던 반) **또는 창에서 고른 반**.
+     * 🔴 예전엔 앵커가 없으면 여기서 끝이었다 — 보고서만 남고 **출석부엔 한 줄도 안 남았다**
+     *    (원장 2026-09-02 제보. 실측 45일 순수 보강 100건 중 58건이 그날 출결 0행).
+     *    이제 창이 반을 물어 그 답이 여기로 온다. 그래도 없으면(그날 수업 0개) 종전대로 사유를 밝힌다.
+     */
+    const hostId = choice.hostClassId ?? ask.anchorId ?? null;
+    const hostName = hostId ? (todayClasses.find((c) => c.id === hostId)?.name ?? null) : null;
+    /** 창에서 고른 반은 보고서 앵커(0171a)이기도 하다 — 그래야 그 반 필터에서 이 보강 행이 보인다. */
+    const withHost = (st: OneScreenStudent): OneScreenStudent =>
+      choice.hostClassId
+        ? {
+            ...st,
+            tag: hostName ?? st.tag,
+            className: hostName ?? st.className,
+            subjects: st.subjects.map((su) => ({
+              ...su,
+              makeupClassId: hostId,
+              makeupClassName: hostName,
+            })),
+          }
+        : st;
+    const anchorIdNew = hostId;
     if (ask.isNew) {
       // 목록에 없던 학생 — 확인을 받았으니 이제 카드를 만든다(취소했으면 여기 안 온다).
-      const mk = ask.mk;
+      const mk = withHost(ask.mk);
       setStudents((prev) => (prev.some((s) => s.id === mk.id) ? prev : [...prev, mk]));
       setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
       setSelId(mk.id);
@@ -1010,7 +1040,7 @@ export function OneScreenClient({
         toast.success(
           anchorIdNew
             ? `${mk.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
-            : `${mk.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+            : `${mk.name} (보강) 추가됨 — 오늘 이 선생님의 수업이 없어 출결에는 남기지 않았습니다(출석부에서 보강으로 추가하면 기록됩니다).`,
         );
       }
       return;
@@ -1022,7 +1052,7 @@ export function OneScreenClient({
     }
     if (!choice.candidate) {
       // 합칠 정규 행이 없는 보강(그날 결석·다른 강사 과목) — 보강 행만 만들고 시수·결석분은 앵커 반에 적는다.
-      addSeparateMakeupRows(existing, ask.mk);
+      addSeparateMakeupRows(existing, withHost(ask.mk));
       persistAnchorMakeup(
         existing.id,
         anchorIdNew,
@@ -1035,7 +1065,7 @@ export function OneScreenClient({
         toast.success(
           anchorIdNew
             ? `${existing.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
-            : `${existing.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+            : `${existing.name} (보강) 추가됨 — 오늘 이 선생님의 수업이 없어 출결에는 남기지 않았습니다(출석부에서 보강으로 추가하면 기록됩니다).`,
         );
       }
       return;
@@ -1047,7 +1077,7 @@ export function OneScreenClient({
       // 🔴 **고른 과목의 보강 행만** 만든다. 안 좁히면 그 강사가 가르치는 학생의 다른 과목까지 "(보강)" 행이
       //    딸려 붙어(예: 영어가 오늘 결석이라 후보엔 없어도 행은 생겼다) 보고서가 2건이 아니라 3건 나간다 —
       //    다이얼로그가 "모두 2건" 이라고 약속한 것과 어긋난다. 강사가 어느 수업인지 이미 골랐으니 추측할 게 없다.
-      if (addSeparateMakeupRows(existing, ask.mk, true, choice.candidate!.subjectKey)) {
+      if (addSeparateMakeupRows(existing, withHost(ask.mk), true, choice.candidate!.subjectKey)) {
         // 🔴 결석일은 **선택**이다(원장 2026-08-07 *"오늘 날짜에 추가 보강할 수도 있잖아"*). 없으면
         //    결석분 연결 없이 시수만 얹는다. 예전엔 이 분기가 없어 날짜가 비면 **조용히 '합침'으로**
         //    떨어졌다 — 강사는 '분리'를 골랐는데 보고서가 1건만 나가는, 화면과 다른 결과였다.
@@ -3229,6 +3259,10 @@ export function OneScreenClient({
           absences={makeupAsk.absences}
           absenceLoading={makeupAsk.absencesLoading}
           makeupDate={activeDate}
+          /* 🔴 앵커(보고 있는 반)를 모를 때만 묻는다 — 안 물으면 그 보강은 출석부에 한 줄도 안 남는다
+             (원장 2026-09-02: *"보강건으로 보고서 발송한 학생들에 대해서 출석부에 입력되지 않는 문제"*).
+             그날 수업이 없으면 후보가 0개라 창은 종전과 같고, 아래에서 사유를 밝힌다. */
+          hostClasses={makeupAsk.anchorId ? undefined : todayClasses}
           onConfirm={resolveMakeupAsk}
           onCancel={() => setMakeupAsk(null)}
         />
