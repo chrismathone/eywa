@@ -67,7 +67,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
   timetable_plan_slot: "시간표 계획 칸",
-  // 재고 관리(0242a) — 없으면 '대상' 칸에 영문 "inventory_asset"이 그대로 뜬다.
+  // 재고관리(0242a) — 없으면 '대상' 칸에 영문 "inventory_asset"이 그대로 뜬다.
   inventory_asset: "자산",
   inventory_loan: "자산 대여",
   inventory_audit: "자산 실사",
@@ -700,7 +700,7 @@ export function auditDetail(
       const parts = [on, isBoardingStatus(status) ? BOARDING_STATUS_LABEL[status] : null].filter(Boolean);
       return parts.length ? parts.join(" · ") : null;
     }
-    // ── 재고 관리(0242a) ────────────────────────────────────────────────────────────
+    // ── 재고관리(0242a) ────────────────────────────────────────────────────────────
     // 🔴 case가 없으면 폴백이 `status: on_loan` · `category: laptop`을 **영문 그대로** 내보낸다.
     case "inventory_asset_create": {
       const code = str(m.assetCode);
@@ -749,6 +749,19 @@ export function auditDetail(
       const loc = str(m.location);
       const act = str(m.action);
       return join(code ? `「${code}」` : null, on, result || null, loc, act ? `조치 ${act}` : null);
+    }
+    case "inventory_excel_import": {
+      const mode = str(m.mode);
+      const parts = [
+        mode === "overwrite" ? "덮어쓰기" : mode === "append" ? "추가" : null,
+        num(m.assetsInserted) ? `자산 추가 ${num(m.assetsInserted)}` : null,
+        num(m.assetsUpdated) ? `자산 갱신 ${num(m.assetsUpdated)}` : null,
+        num(m.assetsSkipped) ? `자산 건너뜀 ${num(m.assetsSkipped)}` : null,
+        num(m.suppliesInserted) ? `소모품 추가 ${num(m.suppliesInserted)}` : null,
+        num(m.suppliesUpdated) ? `소모품 갱신 ${num(m.suppliesUpdated)}` : null,
+        num(m.suppliesSkipped) ? `소모품 건너뜀 ${num(m.suppliesSkipped)}` : null,
+      ];
+      return join(...parts);
     }
     case "inventory_supply_update": {
       const code = str(m.itemCode);

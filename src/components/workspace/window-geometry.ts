@@ -77,7 +77,7 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 기본 480px로 열리면 데스크톱 창인데도 폰용 3탭 레이아웃이 떠서 드래그 편성을 할 수 없었다.
   // (`shuttle/today`는 longest-prefix로 이 크기를 상속 — 회차 카드가 한 열로 시원하게 선다.)
   shuttle: { w: 1180, h: 760 },
-  // 재고 관리 — 자산 표가 11열(자산ID·분류·제조사·모델명·입고일·상태·현위치·사용자·최종실사·폐기일·비고) +
+  // 재고관리 — 자산 표가 11열(자산ID·분류·제조사·모델명·입고일·상태·현위치·사용자·최종실사·폐기일·비고) +
   // 툴바(검색·필터 칩 11개). 기본 480이면 표가 통째로 접힌다.
   inventory: { w: 1180, h: 760 },
 
@@ -110,6 +110,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "print/seat-month": { w: 1120, h: 840 },
   // EiE 월간 계획서(가로 A4) — 요일 3개 × 최대 4열이라 세로로는 칸이 잘린다.
   "print/ecs-mp": { w: 1120, h: 840 },
+  // 자산 QR 라벨 시트(세로 A4, 4열 × 7행) — 기기에 붙일 라벨.
+  "print/inventory-qr": { w: 840, h: 1120 },
 };
 
 /**

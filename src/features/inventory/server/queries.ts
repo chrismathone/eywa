@@ -8,7 +8,7 @@ import type { InventoryAsset, InventoryAudit, InventoryLoan, InventorySupply } f
 import { isMissingInventoryTable } from "./access";
 
 /**
- * 재고 관리 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원 select, 0242a). 쓰기는 서버 액션(`*-actions.ts`).
+ * 재고관리 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원 select, 0242a). 쓰기는 서버 액션(`*-actions.ts`).
  *
  * ⚠️ 0242a 미적용 배포에서도 죽지 않는다([[#95]]) — 표가 없으면 `status:"missing-table"`로 접고 화면이
  *    한글 배너를 띄운다. 🔴 원인을 단정하지 않는다: 표 없음(42P01·PGRST205)과 그냥 실패는 다른 사실이다.

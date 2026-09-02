@@ -171,7 +171,7 @@ const MENUS: { id: MenuKey; label: string; href: string; description: string }[]
   },
   {
     id: "inventory",
-    label: "재고 관리",
+    label: "재고관리",
     href: "/inventory",
     description:
       "전자기기 자산관리대장. 자산 1대가 영구 행 1개라 월별 시트를 복사하지 않고, 대여·실사 이력을 그 자산에 누적합니다. 소모품(키보드·마우스)은 수량으로 셉니다.",

@@ -698,6 +698,7 @@ describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", (
     { action: "inventory_loan_return", meta: { loanId: DOC, assetId: DOC2, assetCode: "NB-005", borrowerName: "김태건", returnedOn: "2026-09-02", restoredStatus: "check" }, banned: ["check", "restoredStatus", "returnedOn"] },
     { action: "inventory_audit", meta: { auditId: DOC, assetId: DOC2, assetCode: "NB-006", auditedOn: "2026-07-23", result: "missing", location: null, action: "사용자 연락" }, banned: ["missing", "result", "auditedOn", "auditId"] },
     { action: "inventory_supply_update", meta: { supplyId: DOC, itemCode: "SP-01", name: "키보드", qtyFrom: 20, qtyTo: 18, checkedOn: "2026-09-02" }, banned: ["qtyFrom", "qtyTo", "checkedOn", "supplyId"] },
+    { action: "inventory_excel_import", meta: { mode: "overwrite", assetsInserted: 3, assetsUpdated: 96, assetsSkipped: 0, suppliesInserted: 0, suppliesUpdated: 11, suppliesSkipped: 0 }, banned: ["overwrite", "assetsInserted", "suppliesUpdated", "mode"] },
   ];
 
   for (const s of SAMPLES) {

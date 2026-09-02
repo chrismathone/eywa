@@ -9,7 +9,7 @@ export function NotReadyBanner({ status }: { status: TableStatus }) {
   if (status === "missing-table") {
     return (
       <p className="border-amber bg-amber-soft/40 text-amber rounded-lg border-l-[3px] px-3 py-2 text-xs">
-        재고 관리 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">0242a</span>를 적용해 주세요.
+        재고관리 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">0242a</span>를 적용해 주세요.
         적용 전엔 목록이 비어 있고 편집이 잠깁니다.
       </p>
     );

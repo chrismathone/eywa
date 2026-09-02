@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 
 /**
- * 재고 관리 **쓰기** 게이트 — 모든 서버 액션이 첫 줄에서 이걸 지난다([[#77]] — 화면 조건은 게이트가 아니다).
+ * 재고관리 **쓰기** 게이트 — 모든 서버 액션이 첫 줄에서 이걸 지난다([[#77]] — 화면 조건은 게이트가 아니다).
  *
  * 🔴 `canWriteTenant("inventory")`다. `canAccess`/`canAccessTenant`는 **readonly를 통과시킨다** —
  *    회계(accountant)는 열람만인데 그걸 쓰면 자산을 고치게 된다. '다른 강사 뷰'(열람 전용) 캡도 이 함수 안에 있다.
@@ -15,7 +15,7 @@ export async function requireInventoryWrite(): Promise<InventoryWriteCtx | { err
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "inventory"))) {
-    return { error: "재고 관리를 수정할 권한이 없습니다" };
+    return { error: "재고관리를 수정할 권한이 없습니다" };
   }
   return { tenantId: user.tenantId, userId: user.id, displayName: user.displayName };
 }
@@ -40,7 +40,7 @@ export function friendlyInventoryError(
   duplicate = "이미 같은 값이 있습니다",
 ): string {
   if (isMissingInventoryTable(error)) {
-    return "재고 관리 표가 아직 만들어지지 않았습니다 — 마이그레이션 0242a를 적용해 주세요";
+    return "재고관리 표가 아직 만들어지지 않았습니다 — 마이그레이션 0242a를 적용해 주세요";
   }
   if (error.code === "23505") return duplicate;
   if (error.code === "23503") return "다른 기록이 참조하고 있어 처리할 수 없습니다";

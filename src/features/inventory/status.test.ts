@@ -7,7 +7,7 @@ import { DASH, UNKNOWN_LABEL, dashIfEmpty, nullIfUnknown, unknownIfEmpty } from 
 
 const HANGUL = /[가-힣]/;
 
-describe("재고 관리 enum — 모든 키에 한글 라벨(raw 코드 노출 금지)", () => {
+describe("재고관리 enum — 모든 키에 한글 라벨(raw 코드 노출 금지)", () => {
   it("자산 상태 7종", () => {
     for (const k of ASSET_STATUSES) expect(ASSET_STATUS_LABEL[k]).toMatch(HANGUL);
     expect(assetStatusLabel("on_loan")).toBe("대여중");

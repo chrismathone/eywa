@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { ToolbarButton, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { PrintWindowButton } from "@/components/workspace/print-window";
 import { assetFilterChips, filterAssets, type AssetFilterKey } from "@/features/inventory/filter";
-import type { AssetOption, InventoryAsset } from "@/features/inventory/types";
+import { needsAction } from "@/features/inventory/status";
+import type { InventoryAsset } from "@/features/inventory/types";
 import { assetColumns } from "./asset-columns";
 import { AssetDialog } from "./asset-dialog";
-import { AuditDialog } from "./audit-dialog";
+import { ExcelDialog } from "./excel-dialog";
 import { ListToolbar } from "./list-toolbar";
-import { LoanDialog } from "./loan-dialog";
+import { QrDialog } from "./qr-dialog";
 import { SortableTable } from "./sortable-table";
 import { StatusDialog } from "./status-dialog";
 import { useSort } from "./use-sort";
@@ -17,16 +19,18 @@ type Dialog =
   | { kind: "create" }
   | { kind: "edit"; asset: InventoryAsset }
   | { kind: "status"; asset: InventoryAsset }
-  | { kind: "loan"; asset: InventoryAsset }
-  | { kind: "audit"; asset: InventoryAsset }
+  | { kind: "qr"; asset: InventoryAsset }
+  | { kind: "excel" }
   | null;
-
-const ROW_BTN = "text-primary hover:underline px-1 text-[11.5px] font-medium";
 
 /**
  * 자산 마스터 면 — 검색 + 필터 칩(단일 선택, 시안 순서) + 전 열 정렬. 전부 **클라 필터**다(96행 전건을
  * 서버가 한 번에 내려준다 — searchParam 네비면 필터 전환마다 스켈레톤이 번쩍인다, B7 트레이드오프).
- * 쓰기 동작(등록·수정·상태·대여·실사)은 `canWrite`일 때만 그려지고, 서버 액션이 **같은 게이트**를 다시 지난다.
+ *
+ * 쓰기 진입(원장 2026-09-02 *"우측 제거 · 상태 더블클릭시 변경 · 수정도 행 더블클릭시"*): 행 더블클릭 = 수정,
+ * 상태 칸 더블클릭 = 상태 변경. 우측 동작 열은 없다. 대여 시작·실사 기록은 각 면(대여·실사)의 버튼에서.
+ * 툴바 우측 = [엑셀](서식 내려받기·올리기) · [인쇄](QR 라벨 시트) · [+ 자산 등록]. QR 열의 [보기]는 열람만으로도 된다.
+ * 서버 액션이 **같은 게이트**를 다시 지나므로 `canWrite`는 진입로만 정한다.
  */
 export function AssetsFace({ assets, canWrite, today }: { assets: InventoryAsset[]; canWrite: boolean; today: string }) {
   const [query, setQuery] = useState("");
@@ -35,12 +39,18 @@ export function AssetsFace({ assets, canWrite, today }: { assets: InventoryAsset
   const { sort, toggle } = useSort();
   const chips = useMemo(() => assetFilterChips(assets), [assets]);
   const rows = useMemo(() => filterAssets(assets, chip, query), [assets, chip, query]);
-  const columns = useMemo(() => assetColumns(), []);
-  const existingCodes = useMemo(() => assets.map((a) => a.assetCode), [assets]);
-  const options: AssetOption[] = useMemo(
-    () => assets.map((a) => ({ id: a.id, assetCode: a.assetCode, category: a.category, model: a.model, status: a.status, location: a.location })),
-    [assets],
+  // 고정 번호(No) — 마스터 순서(서버 정렬 = sort_order·자산ID)로 1부터. 필터·정렬해도 그 자산의 번호는 그대로.
+  const noById = useMemo(() => new Map(assets.map((a, i) => [a.id, i + 1])), [assets]);
+  const columns = useMemo(
+    () =>
+      assetColumns({
+        noOf: (asset) => noById.get(asset.id) ?? null,
+        onStatusDoubleClick: canWrite ? (asset) => setDialog({ kind: "status", asset }) : undefined,
+        onQrClick: (asset) => setDialog({ kind: "qr", asset }),
+      }),
+    [canWrite, noById],
   );
+  const existingCodes = useMemo(() => assets.map((a) => a.assetCode), [assets]);
   const close = () => setDialog(null);
 
   return (
@@ -58,8 +68,16 @@ export function AssetsFace({ assets, canWrite, today }: { assets: InventoryAsset
             ))}
           </ToolbarSegment>
         }
-        summary={`${rows.length}건`}
-        actions={canWrite ? <ToolbarButton variant="primary" onClick={() => setDialog({ kind: "create" })}>+ 자산 등록</ToolbarButton> : null}
+        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정 · 상태 칸 더블클릭 = 상태 변경" : ""}`}
+        actions={
+          <>
+            {canWrite ? <ToolbarButton onClick={() => setDialog({ kind: "excel" })}>엑셀</ToolbarButton> : null}
+            <PrintWindowButton id="print/inventory-qr" href="/inventory/qr/print" title="자산 QR 라벨 인쇄" variant="outline" className="h-8 rounded-lg px-2.5 text-xs">
+              인쇄
+            </PrintWindowButton>
+            {canWrite ? <ToolbarButton variant="primary" onClick={() => setDialog({ kind: "create" })}>+ 자산 등록</ToolbarButton> : null}
+          </>
+        }
       />
       <div className="bg-card shadow-card rounded-2xl p-2">
         <SortableTable
@@ -69,30 +87,17 @@ export function AssetsFace({ assets, canWrite, today }: { assets: InventoryAsset
           sort={sort}
           onSort={toggle}
           emptyText={assets.length === 0 ? "등록된 자산이 없습니다" : "조건에 맞는 자산이 없습니다"}
-          actions={
-            canWrite
-              ? (a) => (
-                  <span className="inline-flex flex-wrap gap-0.5">
-                    <button type="button" className={ROW_BTN} onClick={() => setDialog({ kind: "edit", asset: a })}>수정</button>
-                    <button type="button" className={ROW_BTN} onClick={() => setDialog({ kind: "status", asset: a })}>상태</button>
-                    {a.status !== "disposed" && a.status !== "on_loan" ? (
-                      <button type="button" className={ROW_BTN} onClick={() => setDialog({ kind: "loan", asset: a })}>대여</button>
-                    ) : null}
-                    {a.status !== "disposed" ? (
-                      <button type="button" className={ROW_BTN} onClick={() => setDialog({ kind: "audit", asset: a })}>실사</button>
-                    ) : null}
-                  </span>
-                )
-              : undefined
-          }
+          onRowDoubleClick={canWrite ? (asset) => setDialog({ kind: "edit", asset }) : undefined}
+          // 조치필요 행 = 붉은 틴트(원장 2026-09-02). 🔴 판정은 스탯·칩·조치 목록과 **같은 `needsAction`** — 상태가 바뀌면 색도 따라간다.
+          rowClassName={(asset) => (needsAction(asset.status) ? "bg-danger-soft/45 hover:bg-danger-soft/70" : "")}
         />
       </div>
 
       {dialog?.kind === "create" ? <AssetDialog mode="create" existingCodes={existingCodes} today={today} onClose={close} /> : null}
       {dialog?.kind === "edit" ? <AssetDialog mode="edit" asset={dialog.asset} existingCodes={existingCodes} today={today} onClose={close} /> : null}
       {dialog?.kind === "status" ? <StatusDialog asset={dialog.asset} today={today} onClose={close} /> : null}
-      {dialog?.kind === "loan" ? <LoanDialog assets={options} presetAssetId={dialog.asset.id} today={today} onClose={close} /> : null}
-      {dialog?.kind === "audit" ? <AuditDialog assets={options} presetAssetId={dialog.asset.id} today={today} onClose={close} /> : null}
+      {dialog?.kind === "qr" ? <QrDialog asset={dialog.asset} onClose={close} /> : null}
+      {dialog?.kind === "excel" ? <ExcelDialog onClose={close} /> : null}
     </section>
   );
 }

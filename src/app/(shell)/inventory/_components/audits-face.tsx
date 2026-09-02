@@ -5,8 +5,8 @@ import { ToolbarButton } from "@/components/toolbar";
 import { auditResultLabel } from "@/features/inventory/audit-result";
 import { matchesTextQuery } from "@/features/inventory/filter";
 import type { AssetOption, InventoryAudit } from "@/features/inventory/types";
-import { dashIfEmpty } from "@/features/inventory/unknown-value";
 import { AuditDialog } from "./audit-dialog";
+import { DashCell } from "./cell-bits";
 import { ListToolbar } from "./list-toolbar";
 import { SortableTable, type Column } from "./sortable-table";
 import { AuditResultPill } from "./status-pill";
@@ -22,13 +22,13 @@ export function AuditsFace({ audits, assets, canWrite, today }: { audits: Invent
     [audits, query],
   );
   const columns = useMemo((): Column<InventoryAudit>[] => [
-    { key: "auditCode", label: "실사ID", render: (d) => <span className="font-mono text-[11.5px]">{d.auditCode}</span>, className: "whitespace-nowrap" },
-    { key: "assetCode", label: "자산ID", render: (d) => <span className="font-mono text-[11.5px] font-bold">{d.assetCode}</span>, className: "whitespace-nowrap" },
-    { key: "auditedOn", label: "실사일", render: (d) => <span className="num">{d.auditedOn}</span>, className: "whitespace-nowrap" },
-    { key: "result", label: "결과", render: (d) => <AuditResultPill result={d.result} />, sortValue: (d) => auditResultLabel(d.result), className: "whitespace-nowrap" },
-    { key: "location", label: "확인위치", render: (d) => (d.location ? d.location : <span className="text-text-faint">{dashIfEmpty(null)}</span>), className: "whitespace-nowrap" },
-    { key: "auditorName", label: "확인자", render: (d) => (d.auditorName ? d.auditorName : <span className="text-text-faint">{dashIfEmpty(null)}</span>), className: "whitespace-nowrap" },
-    { key: "action", label: "조치", render: (d) => <span className="text-text-dim">{d.action ?? ""}</span>, className: "min-w-32" },
+    { key: "auditCode", label: "실사ID", width: 110, render: (d) => <span className="font-mono text-[11.5px]">{d.auditCode}</span>, className: "whitespace-nowrap" },
+    { key: "assetCode", label: "자산ID", width: 88, render: (d) => <span className="font-mono text-[11.5px] font-bold">{d.assetCode}</span>, className: "whitespace-nowrap" },
+    { key: "auditedOn", label: "실사일", width: 100, render: (d) => <span className="num">{d.auditedOn}</span>, className: "whitespace-nowrap" },
+    { key: "result", label: "결과", width: 84, render: (d) => <AuditResultPill result={d.result} />, sortValue: (d) => auditResultLabel(d.result), className: "whitespace-nowrap" },
+    { key: "location", label: "확인위치", width: 128, render: (d) => <DashCell v={d.location} />, className: "whitespace-nowrap" },
+    { key: "auditorName", label: "확인자", width: 88, render: (d) => <DashCell v={d.auditorName} />, className: "whitespace-nowrap" },
+    { key: "action", label: "조치", minWidth: 160, render: (d) => (d.action ? <span className="text-text-dim" title={d.action}>{d.action}</span> : <DashCell v={null} />), className: "whitespace-nowrap" },
   ], []);
 
   return (

@@ -107,15 +107,8 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "노선 편성", href: "/shuttle" },
     { label: "오늘 등하원", href: "/shuttle/today" },
   ],
-  // 재고 관리 — 시안(자산관리대장 개편)의 시트 4개 = 면 4개. 부모 href·기본 착지는 **자산**.
-  // 🔴 여기 라벨·순서가 화면 안 FaceTabs의 단일 소스다(`features/inventory/faces.ts`가 파생) —
-  //    폰엔 사이드바가 없어 화면 안 탭이 유일한 통로다(셔틀 faces.ts 선례).
-  inventory: [
-    { label: "자산", href: "/inventory" },
-    { label: "대여", href: "/inventory?tab=loans" },
-    { label: "실사", href: "/inventory?tab=audits" },
-    { label: "소모품", href: "/inventory?tab=supplies" },
-  ],
+  // 재고관리 — 면 4개(자산·대여·실사·소모품)는 **여기 두지 않는다**(원장 2026-09-02: *"재고관리 내부탭은 왼쪽 탭에서
+  //    안보여도 돼. 의미 없음. 그냥 '재고관리' 1개"*). 면은 화면 안 탭바(`features/inventory/faces.ts`)로만 오간다.
   // 직원 이력서 면은 2026-07-28 직원 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 하위 메뉴 제거.
   // ⚠️ 면이 이거 하나뿐이라 **사이드바엔 안 나온다**(subTabsForMenu의 "면 하나 = 하부탭 아님" 규칙).
   //    면을 하나 더 만들면 그때 자동으로 다시 보인다.
@@ -198,8 +191,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/billing", label: "수납관리", icon: MENU_ICON.billing, menuKey: "billing" },
       // 셔틀 — 노선 편성(행선지·승하차 배정)과 일별 등하원 기록. makeedu 노랑버스에서 이관(원장 2026-08-19).
       { href: "/shuttle", label: "셔틀", icon: MENU_ICON.shuttle, menuKey: "shuttle" },
-      // 재고 관리 — 전자기기 자산관리대장(자산·대여·실사·소모품). 구글시트 시안 이식(원장 2026-09-02).
-      { href: "/inventory", label: "재고 관리", icon: MENU_ICON.inventory, menuKey: "inventory" },
+      // 재고관리 — 전자기기 자산관리대장(자산·대여·실사·소모품). 구글시트 시안 이식(원장 2026-09-02). 하부탭 없음.
+      { href: "/inventory", label: "재고관리", icon: MENU_ICON.inventory, menuKey: "inventory" },
       // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
       { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menuKey: "textbook_requests", hidden: true },
       // 지출결의서(강사 제출) = 강사 '내 메뉴' 전용 진입. 사이드바엔 숨김(사무실은 /billing 지출 면), 창/타이틀 해석용 유지.

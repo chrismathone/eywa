@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /**
- * 재고 관리 다이얼로그 공용 부품 — 입력 클래스 한 벌 + 껍데기 + 제출 훅.
+ * 재고관리 다이얼로그 공용 부품 — 입력 클래스 한 벌 + 껍데기 + 제출 훅.
  *
  * 입력 글씨는 **폰 16px**(iOS는 16px 미만 입력에 포커스하면 화면을 자동 확대하고 되돌리지 않는다) /
  * 데스크톱 12.5px. 높이는 공용 `<Input>`과 같은 h-8.

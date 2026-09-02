@@ -1,5 +1,5 @@
 /**
- * 재고 관리 배선 가드 — **성질**을 검사한다(소스의 들여쓰기·따옴표 모양을 문자열로 잡지 않는다).
+ * 재고관리 배선 가드 — **성질**을 검사한다(소스의 들여쓰기·따옴표 모양을 문자열로 잡지 않는다).
  *
  * 1. 메뉴키 `inventory`가 MENU_KEYS·MENU_LABEL·MENU_ICON·MENU_ACCESS·경로 해석에 **전부** 있다.
  * 2. 상태·분류·대여상태·실사결과의 모든 키에 한글 라벨(status.test.ts가 잠근다 — 여기선 요약만).
@@ -27,7 +27,7 @@ const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8")
 describe("① 메뉴키 inventory — 다섯 자리 전부", () => {
   it("MENU_KEYS · MENU_LABEL(한글) · MENU_ICON · MENU_ACCESS · 경로 해석", () => {
     expect(MENU_KEYS).toContain("inventory");
-    expect(MENU_LABEL.inventory).toBe("재고 관리");
+    expect(MENU_LABEL.inventory).toBe("재고관리");
     expect(MENU_ICON.inventory).toBe("archive");
     expect(MENU_ACCESS.inventory).toBeDefined();
     expect(menuKeyForPath("/inventory")).toBe("inventory");
@@ -35,8 +35,8 @@ describe("① 메뉴키 inventory — 다섯 자리 전부", () => {
   it("사이드바 항목 라벨 = 페이지 metadata.title 접두(창 타이틀바 동기)", () => {
     const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.menuKey === "inventory");
     expect(item?.href).toBe("/inventory");
-    expect(item?.label).toBe("재고 관리");
-    expect(read("src", "app", "(shell)", "inventory", "page.tsx")).toContain('"재고 관리');
+    expect(item?.label).toBe("재고관리");
+    expect(read("src", "app", "(shell)", "inventory", "page.tsx")).toContain('"재고관리');
   });
   it("권한 기본값 — 사무실 full · 회계 readonly · 강사·상담·뷰어·학생 none", () => {
     for (const r of ["master", "admin", "manager"] as const) expect(canWrite(r, "inventory")).toBe(true);
@@ -47,8 +47,8 @@ describe("① 메뉴키 inventory — 다섯 자리 전부", () => {
   it("창 크기가 등록돼 있다(기본 480이면 11열 표가 통째로 접힌다)", () => {
     expect(routeWindowSize("inventory")?.w).toBeGreaterThanOrEqual(1100);
   });
-  it("하부탭 4면 = 자산·대여·실사·소모품", () => {
-    expect((SUBTABS_BY_MENU.inventory ?? []).map((s) => s.label)).toEqual(["자산", "대여", "실사", "소모품"]);
+  it("🔴 사이드바 하부탭은 없다 — 원장 2026-09-02 \"그냥 '재고관리' 1개\" (면은 화면 안 탭바 faces.ts)", () => {
+    expect(SUBTABS_BY_MENU.inventory).toBeUndefined();
   });
 });
 
@@ -118,10 +118,10 @@ describe("⑦ 툴바 캐논 · 감사로그 등록", () => {
     const canon = read("src", "components", "toolbar-canon.test.ts");
     expect(canon).toContain("src/app/(shell)/inventory/_components/assets-face.tsx");
   });
-  it("감사로그 액션 7종이 레지스트리·상세 한글화에 있다", () => {
+  it("감사로그 액션 8종이 레지스트리·상세 한글화에 있다", () => {
     const log = read("src", "features", "audit", "server", "log.ts");
     const describeSrc = read("src", "features", "audit", "describe.ts");
-    for (const k of ["inventory_asset_create", "inventory_asset_update", "inventory_asset_status", "inventory_loan_out", "inventory_loan_return", "inventory_audit", "inventory_supply_update"]) {
+    for (const k of ["inventory_asset_create", "inventory_asset_update", "inventory_asset_status", "inventory_loan_out", "inventory_loan_return", "inventory_audit", "inventory_supply_update", "inventory_excel_import"]) {
       expect(log).toMatch(new RegExp(`^\\s{2}${k}:`, "m"));
       expect(describeSrc).toContain(`case "${k}"`);
     }

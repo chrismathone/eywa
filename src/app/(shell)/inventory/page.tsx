@@ -27,11 +27,11 @@ type Sp = Record<string, string | undefined>;
 
 const TITLE_SUFFIX: Record<InventoryTab, string> = { assets: "", loans: " · 대여", audits: " · 실사", supplies: " · 소모품" };
 
-// 면마다 문서 제목을 달리해 창 타이틀바가 "재고 관리 · 대여"로 라이브 갱신된다(route-window 관찰).
-// ⚠️ 접두 "재고 관리"는 사이드바 라벨(navigation.ts)과 같아야 한다.
+// 면마다 문서 제목을 달리해 창 타이틀바가 "재고관리 · 대여"로 라이브 갱신된다(route-window 관찰).
+// ⚠️ 접두 "재고관리"는 사이드바 라벨(navigation.ts)과 같아야 한다.
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const tab = resolveInventoryTab((await searchParams).tab);
-  return { title: `재고 관리${TITLE_SUFFIX[tab]} — eywa` };
+  return { title: `재고관리${TITLE_SUFFIX[tab]} — eywa` };
 }
 
 /** 활성 면의 데이터 — 자산 면은 자산 전건(항상 받는 것)만으로 그린다. */
@@ -55,7 +55,7 @@ function loadFace(tab: InventoryTab): Promise<FaceLoad> {
 }
 
 /**
- * 재고 관리 — 전자기기 자산관리대장(원장 2026-09-02, 구글시트 개편 시안 이식). 시안의 시트 4개 = 면 4개
+ * 재고관리 — 전자기기 자산관리대장(원장 2026-09-02, 구글시트 개편 시안 이식). 시안의 시트 4개 = 면 4개
  * (자산 · 대여 · 실사 · 소모품). "자산 1대 = 영구 행 1개"라 상단 스탯은 수기 숫자가 아니라 **자산 표에서 센다**.
  *
  * 접근 = `inventory` 메뉴(사무실 full / 회계 readonly). 쓰기 판정은 화면·액션이 **같은 함수**(canWriteTenant)를
@@ -94,14 +94,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     <div className="flex min-h-full w-full flex-col gap-4 p-3 md:px-5 md:py-4">
       <PageHeader
         eyebrow="운영"
-        title="재고 관리"
+        title="재고관리"
         description="자산 1대 = 영구 행 1개. 월별 시트 복사 대신 대여·실사 이력을 누적합니다."
         embedLabel="전자기기 자산관리대장 — 자산 · 대여 · 실사 · 소모품"
         stats={<StatsRow stats={stats} />}
       />
       <NotReadyBanner status={status} />
       {action.length > 0 ? <ActionNeeded assets={action} /> : null}
-      <FaceTabs faces={inventoryFaces(counts)} active={tab} ariaLabel="재고 관리 면 전환" />
+      <FaceTabs faces={inventoryFaces(counts)} active={tab} ariaLabel="재고관리 면 전환" />
       {face.kind === "assets" ? <AssetsFace assets={assets.rows} canWrite={editable} today={today} /> : null}
       {face.kind === "loans" ? <LoansFace loans={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
       {face.kind === "audits" ? <AuditsFace audits={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}

@@ -5,7 +5,7 @@ import { ToolbarButton } from "@/components/toolbar";
 import { matchesTextQuery } from "@/features/inventory/filter";
 import { loanStatusLabel } from "@/features/inventory/loan-status";
 import type { AssetOption, InventoryLoan } from "@/features/inventory/types";
-import { dashIfEmpty, unknownIfEmpty } from "@/features/inventory/unknown-value";
+import { DashCell, UnknownCell } from "./cell-bits";
 import { ListToolbar } from "./list-toolbar";
 import { LoanDialog } from "./loan-dialog";
 import { ReturnDialog } from "./return-dialog";
@@ -25,19 +25,19 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
     [loans, query],
   );
   const columns = useMemo((): Column<InventoryLoan>[] => [
-    { key: "loanCode", label: "이력ID", render: (l) => <span className="font-mono text-[11.5px]">{l.loanCode}</span>, className: "whitespace-nowrap" },
-    { key: "assetCode", label: "자산ID", render: (l) => <span className="font-mono text-[11.5px] font-bold">{l.assetCode}</span>, className: "whitespace-nowrap" },
-    { key: "borrowerName", label: "대여자", render: (l) => l.borrowerName, className: "whitespace-nowrap" },
-    { key: "dept", label: "소속", render: (l) => <Faint v={l.dept} f={dashIfEmpty} />, className: "whitespace-nowrap" },
-    { key: "lentOn", label: "대여일", render: (l) => <Faint v={l.lentOn} f={unknownIfEmpty} num />, className: "whitespace-nowrap" },
+    { key: "loanCode", label: "이력ID", width: 84, render: (l) => <span className="font-mono text-[11.5px]">{l.loanCode}</span>, className: "whitespace-nowrap" },
+    { key: "assetCode", label: "자산ID", width: 88, render: (l) => <span className="font-mono text-[11.5px] font-bold">{l.assetCode}</span>, className: "whitespace-nowrap" },
+    { key: "borrowerName", label: "대여자", width: 96, render: (l) => l.borrowerName, className: "whitespace-nowrap" },
+    { key: "dept", label: "소속", width: 100, render: (l) => <DashCell v={l.dept} />, className: "whitespace-nowrap" },
+    { key: "lentOn", label: "대여일", width: 100, render: (l) => <UnknownCell v={l.lentOn} num />, className: "whitespace-nowrap" },
     {
-      key: "dueOn", label: "반납예정",
-      render: (l) => (l.dueOn ? <span className="num">{l.dueOn}</span> : <Faint v={l.dueNote} f={unknownIfEmpty} />),
+      key: "dueOn", label: "반납예정", width: 100,
+      render: (l) => (l.dueOn ? <span className="num">{l.dueOn}</span> : <UnknownCell v={l.dueNote} />),
       sortValue: (l) => l.dueOn ?? l.dueNote, className: "whitespace-nowrap",
     },
-    { key: "returnedOn", label: "반납일", render: (l) => <Faint v={l.returnedOn} f={dashIfEmpty} num />, className: "whitespace-nowrap" },
-    { key: "status", label: "상태", render: (l) => <LoanStatusPill status={l.status} />, sortValue: (l) => loanStatusLabel(l.status), className: "whitespace-nowrap" },
-    { key: "note", label: "비고", render: (l) => <span className="text-text-dim">{l.note ?? ""}</span>, className: "min-w-40" },
+    { key: "returnedOn", label: "반납일", width: 100, render: (l) => <DashCell v={l.returnedOn} num />, className: "whitespace-nowrap" },
+    { key: "status", label: "상태", width: 92, render: (l) => <LoanStatusPill status={l.status} />, sortValue: (l) => loanStatusLabel(l.status), className: "whitespace-nowrap" },
+    { key: "note", label: "비고", minWidth: 160, render: (l) => <span className="text-text-dim" title={l.note ?? undefined}>{l.note ?? ""}</span>, className: "whitespace-nowrap" },
   ], []);
 
   return (
@@ -73,8 +73,4 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
       {dialog?.kind === "return" ? <ReturnDialog loan={dialog.loan} today={today} onClose={() => setDialog(null)} /> : null}
     </section>
   );
-}
-
-function Faint({ v, f, num = false }: { v: string | null; f: (v: string | null) => string; num?: boolean }) {
-  return v ? <span className={num ? "num" : ""}>{v}</span> : <span className="text-text-faint">{f(v)}</span>;
 }
