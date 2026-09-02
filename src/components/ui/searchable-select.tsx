@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
 export type ComboOption = { value: string; label: string; hint?: string };
@@ -24,6 +24,7 @@ export function SearchableSelect({
   cap = 50,
   className,
   triggerClassName,
+  trailing,
   ariaLabel,
   highlightSelected = false,
   compact = false,
@@ -44,6 +45,11 @@ export function SearchableSelect({
    * 클래스를 넘길 것. 미지정이면 기존 기본값 그대로(다른 화면 영향 없음).
    */
   triggerClassName?: string;
+  /**
+   * 라벨과 쉐브론 **사이**에 서는 꼬리표(예: 반 표기 안의 담임 이름). 트리거 **안**에 두므로 라벨의 `truncate`가
+   * 남은 폭에서 실제로 동작한다 — 위에 겹쳐 얹으면 긴 라벨의 끝이 말줄임 없이 덮여 사라진다(2026-09-02 적대적 리뷰).
+   */
+  trailing?: ReactNode;
   /** 트리거 버튼의 접근성 이름 — 선택값만으론 무엇의 드롭다운인지 불명할 때(필터 등) 서술 라벨 제공. */
   ariaLabel?: string;
   /**
@@ -118,6 +124,8 @@ export function SearchableSelect({
         >
           {selected ? selected.label : placeholder}
         </span>
+        {/* 꼬리표는 라벨 뒤·쉐브론 앞, 줄어들지 않는다 — 라벨만 남은 폭에서 접힌다. */}
+        {trailing ? <span className="ml-auto shrink-0">{trailing}</span> : null}
         {compact ? (
           <EyIcon name="chevronDown" size={10} className="size-2.5 shrink-0 opacity-60" />
         ) : (

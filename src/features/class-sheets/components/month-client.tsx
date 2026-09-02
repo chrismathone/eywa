@@ -171,6 +171,8 @@ export function MonthClient({
           classId={data.classId}
           classLabel={data.className}
           classOptions={classOptions}
+          // 담임 이름을 반 표기 안 오른쪽에(원장 2026-09-02 *"ecs도 마찬가지"*) — 주간 시트·MCS와 같은 자리.
+          teacherName={data.teacherName}
           onNavigate={navigate}
           hrefForClass={(id) => `/ecs/${id}/month?month=${data.month}&view=${view}`}
         />

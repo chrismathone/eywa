@@ -100,6 +100,39 @@ type LandingEnrRow = {
 
 export type MathLandingResult = { ok: true; data: MathLandingData } | { ok: false; error: string };
 
+/**
+ * 반 전환 드롭다운용 **가벼운 목록** — 월간 뷰 상단의 `목록 · 반 선택 · 반 정보 보기`(ECS와 같은 조각,
+ * 원장 2026-09-02 *"영어 ECS처럼 수학 MCS에 반정보가 있어야하는데 상단 헤더에 없음"*)가 쓴다.
+ * 🔴 `getMathSheetLanding`을 부르지 않는다 — 그건 전 반의 보고서·출결을 달 단위로 긁어 작성률을 세는
+ *    무거운 조회라, 반 하나를 여는 데 전 반 집계를 딸려 오게 하면 첫 페인트가 늦는다(B7).
+ * 스코프·반 조건은 랜딩과 **같다**(`mcsVisibleClassFilter` 두 갈래 + 그 달 시작 전에 닫힌 반 제외) —
+ * 랜딩에 없는 반이 드롭다운에만 서면 안 된다. ⚠️ 그 달에 수업이 있는지는 보지 않는다(랜딩은 본다) —
+ * 드롭다운은 "갈 수 있는 반"이지 "이 달 카드"가 아니다(호출부가 지금 보는 반은 어차피 맨 앞에 끼운다).
+ */
+export async function getMathClassOptions(monthRaw: string | null): Promise<{ id: string; name: string }[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const level = await accessLevelTenant(user.systemRole, "mcs");
+  if (level === "none") return [];
+  const month = normalizeMonth(monthRaw, kstMonth());
+  const { from: monthStart } = monthRange(month);
+  const admin = createAdminClient();
+  const [classRes, filter] = await Promise.all([
+    admin
+      .from("classes")
+      .select("id, class_name")
+      .eq("tenant_id", user.tenantId)
+      .eq("subject", "math")
+      .eq("is_active", true)
+      .or(`closed_at.is.null,closed_at.gte.${monthStart}`)
+      .order("class_name"),
+    mcsVisibleClassFilter(),
+  ]);
+  const all = classRes.data ?? [];
+  const scoped = filter ? all.filter((c) => filter(String(c.id))) : all;
+  return scoped.map((c) => ({ id: String(c.id), name: String(c.class_name) }));
+}
+
 export async function getMathSheetLanding(monthRaw: string | null): Promise<MathLandingResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };

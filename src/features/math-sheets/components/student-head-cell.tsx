@@ -1,0 +1,147 @@
+"use client";
+
+import Link from "next/link";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { TONE_TEXT } from "@/lib/design/semantic-color";
+import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
+import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
+import { railDiffLabel, RAIL_STATUS_LABEL } from "../lib/goal-rail";
+import type { StudentGoalMap } from "../lib/student-goals";
+import type { MathStudentRow, StudentRail } from "../server/month-queries";
+import type { GoalField } from "./use-student-goals";
+import { GoalCell } from "./goal-cell";
+import { GoalRailRows, RAIL_ROW_LABEL, RAIL_TONE } from "./goal-rail-bar";
+
+/** 고정열 폭 — 머리 칸(`month-grid`)과 같은 값. */
+export const HEAD_CELL_W = "w-[232px]";
+/**
+ * 이름·학교학년의 서식 한 벌 — 원장 2026-09-02 *"현재 크기 2배로"*(14→28px) 뒤 *"너무 커졌네 70%로 줄이고"*
+ * → 28×0.7 ≈ **20px**. '이 달 목표' 라벨은 같은 서식에서 크기만 절반(*"이달목표는 50%로"* → 14px, goal-cell.tsx).
+ */
+export const NAME_TEXT = "text-[20px] leading-tight font-extrabold break-keep";
+
+function fmtDate(d: string | null): string {
+  return d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "";
+}
+
+/** 1행(현재진도) 아래 글 — 차시 이름 + 날짜. 이 달 기록이 없으면 "이후 기록 없음"을 숨기지 않는다. */
+function nowTextOf(r: StudentRail): string | null {
+  if (!r.nowLesson) return null;
+  if (r.rail.nowDate) return `${r.nowLesson} (${fmtDate(r.rail.nowDate)})`;
+  if (r.startDate) return `${r.nowLesson} (${fmtDate(r.startDate)} 이후 기록 없음)`;
+  return r.nowLesson;
+}
+
+/**
+ * 2행(목표진도) 아래 글 — 목표 차시 이름. 목표가 없거나 견줄 수 없으면 **이유가 이름보다 먼저다**(라벨 단일 소스) —
+ * 목표 차시 자체는 바로 위 목표 칸에 적혀 있어서, 여기서 이름을 되풀이하면 "왜 막대가 비었나"의 답이 사라진다.
+ */
+function goalTextOf(r: StudentRail): string | null {
+  if (r.rail.status === "no-goal" || r.rail.status === "goal-behind") return RAIL_STATUS_LABEL[r.rail.status];
+  return r.endLesson;
+}
+
+/**
+ * MCS 진도표의 **왼쪽 고정열** — 이름·표식 · 이 달 목표 칸 · 목표 레일 두 줄.
+ *
+ * 🔴 행 높이는 이 칸이 정한다(원장 2026-09-02 *"진도표가 기준 행이 되도록"*) — 오른쪽 수업일 칸은 이 높이
+ *    안에 들어오게 짠다. 🔴 레일은 별도 탭이 아니라 **여기, 목표 칸 아래**다(*"진도레일 탭 없애고 진도표 하단으로"*).
+ * ⚠️ 고정열은 **불투명**이어야 한다 — 반투명 배경이면 스크롤한 본문이 비친다([[#74]]).
+ */
+export function StudentHeadCell({
+  stu,
+  goal,
+  actualBooks,
+  canEdit,
+  onGoalChange,
+  classLabel,
+}: {
+  stu: MathStudentRow;
+  goal: StudentGoalMap[string] | undefined;
+  actualBooks: string[];
+  canEdit: boolean;
+  onGoalChange: (studentId: string, field: GoalField, value: string) => void;
+  /** 반 이름 — 반이동 툴팁("가반 → 나반")에만 쓴다. */
+  classLabel: string;
+}) {
+  const ended = stu.rosterPhase === "ended";
+  const r = stu.rail;
+  const showRail = r != null && r.rail.start != null && !ended;
+  const tone = r ? RAIL_TONE[r.rail.status] : null;
+  const diff = r ? railDiffLabel(r.rail) : null;
+  return (
+    <td
+      className={`border-line-faint sticky left-0 z-10 border p-2 align-top ${HEAD_CELL_W} ${
+        ended ? "bg-bg-soft" : "bg-white"
+      }`}
+    >
+      {/* 이름·학교학년은 **같은 서식**(원장 2026-09-02 *"학교학년도 이름과 같은 서식으로"*, 크기는 NAME_TEXT 주석).
+          고정열 폭에 안 들어가면 자르지 않고 줄을 바꾼다. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <Link
+          href={`/students/${stu.studentId}`}
+          className={`hover:text-primary ${NAME_TEXT} ${ended ? "text-text-faint" : "text-foreground"}`}
+        >
+          {stu.name}
+        </Link>
+        <span className={`${NAME_TEXT} ${ended ? "text-text-faint" : "text-foreground"}`}>
+          {schoolGradeLabel(stu.school, stu.grade)}
+        </span>
+        {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 판정·라벨·툴팁 모두 출석부와 같은 소스. */}
+        {stu.badges.length > 0 ? (
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            {stu.badges.map((b) => (
+              <span key={`${b.kind}-${b.date}`} title={badgeTitle(b, classLabel)} className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}>
+                {BADGE_LABEL[b.kind]}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </div>
+      <GoalCell
+        studentId={stu.studentId}
+        studentGrade={stu.grade ?? ""}
+        goal={goal}
+        actualBooks={actualBooks}
+        canEdit={canEdit}
+        onChange={onGoalChange}
+      />
+      {/* 목표 칸 바로 아래 **레일 두 줄**(현재진도 / 목표진도) — 판정·문구는 툴바 집계와 같은 부품(goal-rail.ts)이다. */}
+      {showRail && r && tone ? (
+        <div className="mt-2 px-0.5">
+          <GoalRailRows
+            rail={r.rail}
+            nowText={nowTextOf(r)}
+            goalText={goalTextOf(r)}
+            title={[
+              r.startLesson ? `시작 ${r.startLesson}` : null,
+              r.planLesson ? `계획 ${r.planLesson}` : null,
+              r.nowLesson ? `${RAIL_ROW_LABEL.now} ${r.nowLesson}` : null,
+              r.endLesson ? `${RAIL_ROW_LABEL.goal} ${r.endLesson}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          />
+          <div className="num mt-1 flex items-baseline gap-1.5 text-[10.5px]">
+            {r.rail.status === "not-started" ? (
+              // 🔴 아직 수업이 한 번도 안 지난 달은 **판정하지 않는다** — "0%"는 거짓 진행률이다(적대적 리뷰 2026-09-02).
+              <span className="text-text-faint font-bold">{RAIL_STATUS_LABEL["not-started"]}</span>
+            ) : r.rail.progressPct != null ? (
+              <b className={`font-extrabold ${TONE_TEXT[tone]}`}>{r.rail.progressPct}%</b>
+            ) : r.rail.moved != null && r.rail.moved > 0 ? (
+              // 목표가 없어 %를 못 낼 때 — "이 달 시작 위치에서 지금까지 몇 차시 나갔나"(원장 2026-09-02 *"이 +3차시는
+              // 무얼 뜻하나"* → 뜻이 글자에 없어서 '이 달'을 앞에 붙이고 툴팁을 달았다).
+              <b
+                className="text-text-dim font-extrabold"
+                title="이 달 시작 위치에서 지금까지 나간 차시 수 — 목표가 없어 진행률(%) 대신 적습니다"
+              >
+                이 달 +{r.rail.moved}차시
+              </b>
+            ) : null}
+            {diff ? <span className={`font-bold ${TONE_TEXT[tone]}`}>{diff}</span> : null}
+          </div>
+        </div>
+      ) : null}
+    </td>
+  );
+}
