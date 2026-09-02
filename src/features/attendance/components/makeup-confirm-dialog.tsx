@@ -40,13 +40,6 @@ export type MakeupConfirmChoice = {
    * (원스크린·반별 출석부의 축).
    */
   slotStart?: string;
-  /**
-   * 보강을 **어느 반 시간에** 했는가 — 호출부가 그걸 모를 때만 물어서 받는다(원스크린에서 반 필터가
-   * '전체'이거나 동명 반이라 특정이 안 되는 경우). 🔴 이 값이 없으면 출결에 남길 칸이 없어 **보강이
-   * 출석부에 아예 안 남는다**(원장 2026-09-02 제보: *"보강건으로 보고서 발송한 학생들에 대해서
-   * 출석부에 입력되지 않는 문제"*). 출석부·ECS는 화면 자체가 반이라 이 값을 안 쓴다.
-   */
-  hostClassId?: string;
 };
 
 /**
@@ -74,7 +67,6 @@ export function MakeupConfirmDialog({
   absences,
   absenceLoading,
   slotOptions,
-  hostClasses,
   defaultUnits,
   onConfirm,
   onCancel,
@@ -98,12 +90,6 @@ export function MakeupConfirmDialog({
    * (영어는 하루 한 교시인 반이 없어서, 안 물으면 보강이 늘 첫 교시로 밀린다).
    */
   slotOptions?: readonly MakeupSlotOption[];
-  /**
-   * 보강을 한 반의 후보 — **호출부가 반을 모를 때만** 넘긴다(원스크린 '전체' 필터). 넘기면 고르기 전엔
-   * 확인을 막는다: 안 물으면 그 보강은 출석부에 한 줄도 안 남는다(그전 동작 = 토스트로 사과만 했다).
-   * ⚠️ 비었거나 안 넘기면 종전과 글자 그대로 같다(출석부·ECS는 화면이 곧 반이라 물을 것이 없다).
-   */
-  hostClasses?: readonly { id: string; name: string }[];
   /** 정규 수업이 없을 때의 시수 기본값(보통 1). */
   defaultUnits?: number;
   onConfirm: (choice: MakeupConfirmChoice) => void;
@@ -125,10 +111,6 @@ export function MakeupConfirmDialog({
   const [slotPick, setSlotPick] = useState<string | null>(
     slotOptions && slotOptions.length === 1 ? (slotOptions[0]?.start ?? null) : null,
   );
-  // 반이 하나뿐이면 고를 것이 없다(교시와 같은 규약) — 둘 이상은 추측하지 않는다.
-  const [hostPick, setHostPick] = useState<string | null>(
-    hostClasses && hostClasses.length === 1 ? (hostClasses[0]?.id ?? null) : null,
-  );
 
   const chosen = candidates.find((c) => c.name === pick) ?? null;
   const baseUnits = chosen?.attendanceUnits ?? defaultUnits ?? 1;
@@ -149,10 +131,7 @@ export function MakeupConfirmDialog({
   const customEmpty = asksAbsence && absencePick === PICK_CUSTOM && !customDate;
   /** 교시를 물어야 하는 화면인데 아직 안 골랐다 — 첫 교시로 조용히 밀어 넣지 않는다. */
   const slotUnpicked = !!slotOptions && slotOptions.length > 0 && !slotPick;
-  /** 반을 물어야 하는 화면인데 아직 안 골랐다 — 고르지 않으면 출결에 남길 칸이 없다. */
-  const hostUnpicked = !!hostClasses && hostClasses.length > 0 && !hostPick;
-  const blocked =
-    (canMerge && !chosen) || addUnits === null || customEmpty || slotUnpicked || hostUnpicked;
+  const blocked = (canMerge && !chosen) || addUnits === null || customEmpty || slotUnpicked;
 
   // 🔴 **portal로 body에 붙인다** — ECS 오늘 보드는 카드가 `zoom` 래퍼(글씨 크게) 안이라, 그 안에서
   //    `position:fixed`를 쓰면 좌표가 배율만큼 곱해져 모달이 화면 밖으로 밀린다([[#98]] 사촌 함정).
@@ -329,28 +308,6 @@ export function MakeupConfirmDialog({
           </div>
         ) : null}
 
-        {/* ①-b 보강을 한 반 — 호출부가 모를 때만 뜬다. 🔴 이걸 안 고르면 출결에 남길 칸이 없다. */}
-        {hostClasses && hostClasses.length > 0 ? (
-          <div className="mt-3">
-            <label htmlFor="makeup-host-class" className="text-text-faint mb-1.5 block text-[12px]">
-              보강을 한 반 <span className="text-amber">(출석부에 이 반으로 기록됩니다)</span>
-            </label>
-            <select
-              id="makeup-host-class"
-              value={hostPick ?? PICK_NONE}
-              onChange={(e) => setHostPick(e.target.value === PICK_NONE ? null : e.target.value)}
-              className="border-line bg-bg-soft focus:border-primary h-8 w-full rounded-lg border px-2 text-[13px] outline-none"
-            >
-              <option value={PICK_NONE}>고르세요</option>
-              {hostClasses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-
         {/* ② 시수 — 🔴 1로 박지 않는다(0.5 = 1시간). */}
         <div className="mt-3">
           <label htmlFor="makeup-add-units" className="text-text-faint mb-1.5 block text-[12px]">
@@ -376,8 +333,6 @@ export function MakeupConfirmDialog({
         >
           {canMerge && !chosen
             ? "어느 수업의 보강인지 골라 주세요."
-            : hostUnpicked
-              ? "보강을 한 반을 골라 주세요 — 그래야 출석부에 보강으로 남습니다."
             : customEmpty
               ? "결석 날짜를 고르거나, 결석분이 아니면 '결석분 아님'을 고르세요."
             : addUnits === null
@@ -411,7 +366,6 @@ export function MakeupConfirmDialog({
                 ...(mode === "separate" && absentDate ? { absentDate } : {}),
                 ...(mode === "separate" && absentClassId ? { absentClassId } : {}),
                 ...(slotPick ? { slotStart: slotPick } : {}),
-                ...(hostPick ? { hostClassId: hostPick } : {}),
               })
             }
           >

@@ -19,6 +19,8 @@ import {
   parseSeatFilterValue,
   seatFilterValue,
 } from "@/features/attendance/seat/seat";
+import { getMakeupGroupStudents } from "@/features/attendance/server/makeup-group";
+import { MAKEUP_GROUP_ID, MAKEUP_GROUP_LOCK, MAKEUP_GROUP_NAME } from "@/features/attendance/makeup-group";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { kstMonth, kstToday } from "@/lib/date-kst";
@@ -424,6 +426,23 @@ export default async function AttendancePage({
         ? await getMonthlyAttendanceMatrix(month, effectiveClassId, viewPrefs.periodMode)
         : base;
 
+  /**
+   * '보강' 임시 반 — 반 없는 보강 보고서를 학생×날짜로 모은 **가짜 덩어리**(원장 2026-09-02:
+   * *"그냥 출석부에 '보강' 반을 임시로 만들어서 그 아래에 학생이 있으면 돼. 그날만 출석한것처럼"*).
+   * 🔴 DB에 쓰지 않는다 — 읽기 시점 파생이라 시수·급여에 닿지 않고, 칸은 잠겨 입력을 안 받는다.
+   * ⚠️ 강사 전체 보기에서만 세운다(반별 보기는 그 반의 책이라 남의 보강이 낄 자리가 아니다).
+   */
+  const makeupStudents =
+    mode === "teacher" && effectiveTeacher
+      ? await getMakeupGroupStudents({
+          tenantId: user.tenantId,
+          teacherId: effectiveTeacher,
+          teacherName: user.displayName ?? null,
+          from: base.window.start,
+          to: base.window.end,
+        })
+      : [];
+
   const groups: MatrixGroup[] =
     mode === "teacher"
       ? teacherClasses.map((c, i) => ({
@@ -448,6 +467,55 @@ export default async function AttendancePage({
             },
           ]
         : [];
+
+  /**
+   * '보강' 임시 반을 **표시용 그룹**으로 만든다 — 실제 반이 아니라 보고서에서 파생한 덩어리다.
+   * 🔴 아래 `statsCount`·`totalStudents`·시수 합계에는 **안 들어간다**(이 배열이 아니라 `groups`를 센다) —
+   *    DB에 없는 수를 합계에 얹으면 급여·정산 재료와 화면이 어긋난다.
+   * 🔴 칸은 `lockReason`으로 전부 잠근다(입력을 받으면 가짜 반 id로 저장이 나간다).
+   */
+  const makeupGroup: MatrixGroup | null = makeupStudents.length
+    ? {
+        classId: MAKEUP_GROUP_ID,
+        className: MAKEUP_GROUP_NAME,
+        subjectLabel: "",
+        lockReason: MAKEUP_GROUP_LOCK,
+        matrix: {
+          ...base,
+          students: makeupStudents.map((s) => ({
+            id: s.id,
+            name: s.name,
+            grade: s.grade,
+            school: s.school,
+            enrolledAt: null,
+            /**
+             * 등원요일은 없다(보강엔 요일이 없다) — 칸은 '수업일 아님'으로 담백하게 그려지고,
+             * 보강한 날만 색이 든다("그날만 출석한것처럼", 원장 2026-09-02).
+             * 🔴 수강 구간은 **보고 있는 기간 전체**로 준다. 비워 두면 격자가 모든 칸을 '재원 밖'으로
+             *    읽어 빗금을 치고, 그러면 정작 보강한 칸까지 지워진 것처럼 보인다.
+             *    (이 덩어리는 수강이 아니라 파생 표시라 '재원 기간'이라는 개념 자체가 없다.)
+             */
+            attendDows: [],
+            spans: [{ start: base.window.start, end: base.window.end }],
+            badges: [],
+          })),
+          // 그날만 출석한 것처럼 — 상태는 `makeup`(출석부가 이미 아는 색·이미 아는 뜻).
+          marks: Object.fromEntries(
+            makeupStudents.map((s) => [
+              s.id,
+              Object.fromEntries(Object.keys(s.dates).map((d) => [d, "makeup" as const])),
+            ]),
+          ),
+          notes: {},
+          units: {},
+          slots: {},
+          ghosts: {},
+          dayAxis: {},
+          derived: {},
+          derivedActive: false,
+        },
+      }
+    : null;
 
   // 상단 스탯 — 강사 전체 보기는 반들을 합산(학생은 반 중복을 제거한 실인원).
   // ⚠️ 출결 수치는 **격자와 같은 함수**(`countMarks`)로 센다. 화면이 입력 즉시 다시 셀 때 서버 첫 렌더가
@@ -923,7 +991,7 @@ export default async function AttendancePage({
         // 툴바 드롭다운·셀 팝오버를 헤더가 덮는다(스택 컨텍스트만 만들 뿐 fixed 탈출은 막지 않는다).
         <div className="isolate min-h-0 flex-1">
           <MatrixTable
-            groups={groups}
+            groups={makeupGroup ? [...groups, makeupGroup] : groups}
             days={visibleDays}
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.

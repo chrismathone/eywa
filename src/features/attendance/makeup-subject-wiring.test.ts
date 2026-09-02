@@ -69,20 +69,31 @@ describe("🔴 과목은 **서버가** 반 id로 읽는다 — 클라가 준 과
   const action = read("features/attendance/server/makeup-actions.ts");
   const query = read("features/attendance/server/makeup-options.ts");
 
-  it("서버 액션은 과목이 아니라 반 id를 받고 그대로 넘긴다", () => {
+  it("서버 액션은 **클라에서 과목을 받지 않는다** — 반 id만 받고 나머지는 세션에서 읽는다", () => {
     const body = code(action);
     expect(body).toContain("anchorClassId?: string | null");
-    // 과목 문자열을 인자로 받기 시작하면 화면마다 기준이 갈리고, 그 반과 무관한 과목으로 목록을 열 수 있다.
-    // ⚠️ 이건 **목록 기준**을 한 곳에 모으는 것이지 쓰기 강제가 아니다(저장 액션은 과목을 안 본다).
-    expect(body).not.toContain("subject");
-    expect(body).toContain("getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null)");
+    // 🔴 인자 목록에 과목이 없어야 한다 — 클라가 과목을 주기 시작하면 그 반과 무관한 과목으로 목록을 연다.
+    //    ⚠️ 2026-09-02부터 **앵커가 없을 때의 폴백**으로 강사 과목을 쓰는데, 그 값도 클라가 아니라
+    //    세션(`effectiveTeacherScope`)에서 읽는다 — 규칙은 "클라를 믿지 않는다"로 그대로다.
+    const params = body.slice(body.indexOf("fetchMakeupAbsences("), body.indexOf("): Promise<"));
+    expect(params).not.toContain("subject");
+    expect(body).toContain("effectiveTeacherScope()");
+    expect(body).toContain("getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null, teacherSubjects)");
   });
 
   it("조회부가 `classes.subject`를 직접 읽어 기준으로 삼는다", () => {
     const body = code(query);
     expect(body).toContain('.from("classes")');
     expect(body).toContain('.select("subject")');
-    expect(body).toContain("buildAbsenceOptions(raw, makeupDate, current, anchorSubject)");
+    expect(body).toContain("buildAbsenceOptions(raw, makeupDate, current, anchorSubject, teacherSubjects)");
+  });
+
+  it("🔴 앵커가 있으면 강사 과목 폴백은 **무시된다**(앵커가 더 정확한 기준이다)", () => {
+    const pure = code(read("features/attendance/makeup-options.ts"));
+    expect(pure).toMatch(/anchor\s*\?\s*subjectMatchesAnchor\(anchor, f\.subject\)/);
+    expect(pure).toContain("subjectMatchesTeacher(teacherSubjects, f.subject)");
+    // 액션도 앵커가 있으면 폴백을 아예 안 읽는다(추가 조회 0).
+    expect(code(action)).toContain("anchorClassId ? null : ((await effectiveTeacherScope())?.subjects ?? null)");
   });
 
   it("결석 행 임베드가 과목까지 가져온다(FK 힌트는 그대로 — #94)", () => {
