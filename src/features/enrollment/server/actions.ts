@@ -26,6 +26,7 @@ import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -507,6 +508,99 @@ export async function setEnrollmentOutcome(
     .update({ outcome, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return { error: error.message };
+
+  revalidatePath("/enrollment");
+  revalidatePath(`/enrollment/${id}`);
+  return { ok: true };
+}
+
+/**
+ * 목록뷰 인라인(엑셀식 더블클릭) 수정이 고칠 수 있는 칸 — **카드가 보여 주는 칸만**(원장 2026-09-02
+ * *"나머지는 더블클릭하면 엑셀처럼 수정하게"*). 여기 없는 필드는 상세 '수정' 폼(updateEnrollmentConsultation)
+ * 몫이다. 🔴 `consulted_at`은 없다 — 정렬용 timestamptz라 폼도 절대 건드리지 않는다(buildConsultationRow 주석).
+ */
+// 🔴 메시지는 전부 한글로 — zod 기본 문구("Too big: …")가 그대로 토스트에 뜨면 raw 노출이다.
+const tooLong = (what: string) => `${what}이(가) 너무 깁니다`;
+const cellPatchSchema = z
+  .object({
+    prospectName: z.string().trim().min(1, "학생 이름을 입력해주세요").max(60, tooLong("학생 이름")),
+    prospectSchool: z.string().trim().max(60, tooLong("학교")).nullable(),
+    prospectGrade: z.string().trim().max(24, tooLong("학년")).nullable(),
+    parentPhone: z.string().trim().max(40, tooLong("연락처")).nullable(),
+    consultantId: z.string().uuid("상담사 값이 올바르지 않습니다").nullable(),
+    subject: z.string().trim().max(40, tooLong("과목")).nullable(),
+    // 옛 시트 이관 행은 원문이 길 수 있다 — 상세 폼(text, 상한 없음)과 어긋나 편집이 막히지 않게 넉넉히.
+    parentRequest: z.string().max(20000, tooLong("상담 내용")).nullable(),
+  })
+  .partial()
+  .strict();
+
+export type ConsultationCellPatch = z.infer<typeof cellPatchSchema>;
+export type PatchCellsState = { ok: true } | { error: string };
+
+/**
+ * 등록상담 **칸 단위** 수정 — 시트형 목록뷰의 더블클릭 인라인 편집 저장 경로.
+ *
+ * 상세 폼과 같은 게이트(등록상담 쓰기)·같은 정규화(학교 표기 `canonicalSchoolName`)를 타되, 준 칸만
+ * 바꾼다(보내지 않은 칸은 손대지 않는다 — 폼처럼 전 필드를 다시 쓰면 열려 있던 다른 창의 저장과 서로 덮는다).
+ * 🔴 과목은 **학원설정 키만** 받는다(운영 enum 단일 소스) — 옛 시트 자유 텍스트('영어 수학')가 든 행도
+ *    고칠 땐 설정 과목 중 하나로만 바꿀 수 있다(그대로 두면 옛 값이 유지된다). 비우기(null)는 허용.
+ * 🔴 상담사는 **이 학원의 직원 id만** — RLS 스코프 조회로 확인한다(다른 학원 id·퇴사자 id를 클라가 실어 보내도
+ *    거절). 상태(outcome)는 여기가 아니라 `setEnrollmentOutcome`(칸반 드롭·상세와 같은 경로)이다.
+ */
+export async function patchConsultationCells(id: string, patch: ConsultationCellPatch): Promise<PatchCellsState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!id?.trim()) return { error: "상담 ID가 누락되었습니다" };
+
+  // 객체가 아니거나 모르는 칸이 섞였으면(strict) zod 기본 영문 문구가 아니라 한글로 — 화면에 그대로 뜨는 문장이다.
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return { error: "입력값을 확인해주세요" };
+  const parsed = cellPatchSchema.safeParse(patch);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const known = issue && (issue.code === "too_small" || issue.code === "too_big" || issue.code === "invalid_format");
+    return { error: known ? issue.message : "입력값을 확인해주세요" };
+  }
+  const d = parsed.data;
+  if (Object.keys(d).length === 0) return { error: "바꿀 칸이 없습니다" };
+
+  const supabase = await createClient();
+  const row: Record<string, unknown> = {};
+  if (d.prospectName !== undefined) row.prospect_name = d.prospectName;
+  if (d.prospectSchool !== undefined) row.prospect_school = canonicalSchoolName(d.prospectSchool);
+  if (d.prospectGrade !== undefined) row.prospect_grade = d.prospectGrade || null;
+  if (d.parentPhone !== undefined) row.parent_phone = d.parentPhone || null;
+  if (d.parentRequest !== undefined) row.parent_request = d.parentRequest?.trim() ? d.parentRequest : null;
+  if (d.subject !== undefined) {
+    if (d.subject) {
+      const settings = await getTenantSettings();
+      if (!settings.operations.subjects.some((s) => s.key === d.subject)) return { error: "학원설정에 없는 과목입니다" };
+    }
+    row.subject = d.subject || null;
+  }
+  if (d.consultantId !== undefined) {
+    if (d.consultantId) {
+      const { data: staff } = await supabase
+        .from("users")
+        .select("id")
+        .eq("id", d.consultantId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!staff) return { error: "상담사를 찾을 수 없습니다" };
+    }
+    row.consultant_id = d.consultantId;
+  }
+
+  // RLS 밖(다른 학원)·삭제된 id면 0행 갱신인데 에러가 없다 — select로 실제로 바뀐 행을 확인한다.
+  const { data: updated, error } = await supabase
+    .from("enrollment_consultations")
+    .update({ ...row, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!updated) return { error: "상담을 찾을 수 없습니다" };
 
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${id}`);

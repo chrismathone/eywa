@@ -158,8 +158,10 @@ function monthBounds(month: string): { startIso: string; endIso: string } {
   return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
+// consultant_id(스칼라)는 목록뷰 인라인 수정(상담사 선택)의 현재값 — 임베드(display_name)와 별개로 함께 받는다.
+// 0002 마이그레이션부터 있는 컬럼이라 옛/새 스키마 분기(#95)가 필요 없다.
 const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
-   parent_phone, parent_request, outcome, consulted_at, subject,
+   parent_phone, parent_request, outcome, consulted_at, subject, consultant_id,
    processing_status, audio_path, from_public_intake, sync_added_at, student_id,
    consultant:consultant_id ( display_name )`;
 
@@ -337,7 +339,12 @@ export async function getEnrollmentConsultations(
  * 상한 걸린 목록의 길이를 건수로 쓰면 영원히 거짓말). 표는 이 배지를 안 그리므로 아예 안 준다:
  * 나중에 누가 표에 배지를 붙이려 하면 컴파일이 막는다(주석은 강제력이 없다).
  */
-export type ConsultationTableRow = Omit<ConsultationListRow, "personConsultCount" | "personConsults">;
+export type ConsultationTableRow = Omit<ConsultationListRow, "personConsultCount" | "personConsults"> & {
+  /** 상담 과목 원값(학원설정 키 또는 옛 시트 자유 텍스트) — '과목' 열·인라인 수정의 현재값. 표시는 labelOf. */
+  subject: string | null;
+  /** 상담사 user id — 인라인 '상담사' 선택의 현재값(이름은 consultantName). */
+  consultantId: string | null;
+};
 
 /**
  * 연·월 피커의 하한 — 데이터가 있는 가장 이른 연도. 1행만 받는다(정렬은 ec_tenant_consulted_idx가 덮는다).
@@ -423,6 +430,8 @@ export async function getEnrollmentConsultationsPage(
         syncAddedAt: c.sync_added_at ?? null,
         studentId: c.student_id ?? null,
         assignedClassCount: assignedCountFor(c.student_id, c.subject ?? null),
+        subject: c.subject ?? null,
+        consultantId: (c as { consultant_id?: string | null }).consultant_id ?? null,
       };
     }),
   };

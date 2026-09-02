@@ -10,6 +10,7 @@
  * ⚠️ 일반 모듈이어야 한다 — 클라(표)와 테스트가 같이 읽는다(`server-only` 금지, [[#61]]).
  */
 import type { PillColor } from "@/components/atoms/pill";
+import type { SubjectMaps } from "@/features/owner/subjects";
 import { BOARD_STAGES, stageOfCard } from "./board-stages";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -43,4 +44,28 @@ export function statusCellOf(row: { outcome: string; assignedClassCount: number 
   const key = stageOfCard(row);
   const stage = BOARD_STAGES.find((s) => s.key === key) ?? BOARD_STAGES[0]!;
   return { label: stage.label, color: stage.color };
+}
+
+/**
+ * 과목 칸(원장 2026-09-02 *"수업 -> 과목으로 전환하고 영어 수학 라벨 넣어"*) — 라벨·색은 **학원설정 과목 맵**
+ * (`useSubjectMaps`/`buildSubjectMaps`)에서만 온다(운영 enum 하드코딩 금지).
+ *
+ * `subject` 컬럼엔 설정 키(`math`)와 **옛 시트의 자유 텍스트**('수학'·'EIE'·'영어 수학' — 실측 2026-09-02:
+ * 2,224행 중 키는 202행뿐)가 섞여 있다. 그래서 세 갈래:
+ *  · 설정 키 → 그 과목의 라벨·색 알약
+ *  · 설정 과목의 **라벨과 글자까지 같은** 텍스트('수학') → 같은 과목으로 보고 같은 색(옛 행이 회색으로 갈리지 않게)
+ *  · 그 외('영어 수학'·'매쓰몽') → 원문 그대로 **색 없는 글자**(`color: null`) — 모르는 것을 한 과목으로 우기지 않는다.
+ * 빈 값은 null(칸을 비운다).
+ */
+export function subjectCellOf(
+  raw: string | null | undefined,
+  maps: Pick<SubjectMaps, "labelOf" | "colorOf" | "options">,
+): { label: string; color: PillColor | null } | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  const byKey = maps.options.find((o) => o.value === v);
+  if (byKey) return { label: byKey.label, color: maps.colorOf(byKey.value) };
+  const byLabel = maps.options.find((o) => o.label === v);
+  if (byLabel) return { label: byLabel.label, color: maps.colorOf(byLabel.value) };
+  return { label: v, color: null };
 }

@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { BOARD_STAGES, stageOfCard } from "./board-stages";
-import { SHEET_LEGEND, sheetDate, statusCellOf } from "./sheet-cells";
+import { SHEET_LEGEND, sheetDate, statusCellOf, subjectCellOf } from "./sheet-cells";
+
+/** 학원설정 과목 맵 흉내 — 라벨·색·선택지가 전부 여기서만 온다(하드코딩 없음). */
+const MAPS = {
+  labelOf: (k: string) => ({ math: "수학", english: "영어" })[k] ?? k,
+  colorOf: (k: string) => (({ math: "blue", english: "green" })[k] ?? "neutral") as "blue" | "green" | "neutral",
+  options: [
+    { value: "math", label: "수학" },
+    { value: "english", label: "영어" },
+  ],
+};
+
+describe("과목 칸 — 학원설정 라벨·색(원장 2026-09-02 '수업 -> 과목')", () => {
+  it("설정 키는 그 과목의 라벨·색", () => {
+    expect(subjectCellOf("math", MAPS)).toEqual({ label: "수학", color: "blue" });
+    expect(subjectCellOf(" english ", MAPS)).toEqual({ label: "영어", color: "green" });
+  });
+  it("옛 시트 텍스트가 설정 과목의 라벨과 같으면 같은 과목으로(색도 같다) — 옛 행이 회색으로 갈리지 않게", () => {
+    expect(subjectCellOf("수학", MAPS)).toEqual({ label: "수학", color: "blue" });
+  });
+  it("모르는 텍스트('영어 수학'·'매쓰몽')는 원문 그대로 + 색 없음 — 한 과목으로 우기지 않는다", () => {
+    expect(subjectCellOf("영어 수학", MAPS)).toEqual({ label: "영어 수학", color: null });
+    expect(subjectCellOf("매쓰몽", MAPS)).toEqual({ label: "매쓰몽", color: null });
+  });
+  it("빈 값은 null(칸을 비운다)", () => {
+    expect(subjectCellOf(null, MAPS)).toBeNull();
+    expect(subjectCellOf("  ", MAPS)).toBeNull();
+  });
+});
 
 describe("시트 날짜 표기 — M/D", () => {
   it("YYYY-MM-DD를 시트의 M/D로 적는다(0을 뗀다)", () => {

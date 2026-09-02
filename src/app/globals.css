@@ -1352,7 +1352,12 @@ html[data-stage="on"] main {
     color: var(--text-dim);
     margin-bottom: 2px;
   }
-  .consult-sheet td:empty {
-    display: none; /* 시트에선 빈 칸이 자리를 지키지만 카드에선 라벨만 남는 빈 줄이 된다 */
+  .consult-sheet td:empty,
+  .consult-sheet td[data-empty="true"] {
+    /* 시트에선 빈 칸이 자리를 지키지만 카드에선 라벨만 남는 빈 줄이 된다. 수정 가능한 칸은 빈 값이어도 더블클릭
+       버튼이 서서 :empty가 아니라 표가 td에 data-empty를 단다. ⚠️ `td:has(> [data-empty])`로 적었더니 dev 빌드 산출 CSS에서
+       그 선택자만 조용히 사라졌다(2026-09-02 실측 — lightningcss 단독 변환은 보존하니 Tailwind v4 파이프라인 어딘가다).
+       :has()를 여기 다시 쓰지 말 것 — 표식은 td에 직접 단다. */
+    display: none;
   }
 }

@@ -310,8 +310,16 @@ export default async function EnrollmentPage({
       ) : view === "table" && tablePage ? (
         <>
           {/* 시트형 표(원장 2026-09-02) — 필터·연월 피커는 칸반과 **같은 툴바**(위 KanbanFilters)이고 여기서
-              바뀌는 건 본문뿐. '번호'는 페이지를 넘어 이어진다(1페이지 1~50 · 2페이지 51~). */}
-          <EnrollmentTable rows={tablePage.rows} nowMs={nowMs} startIndex={(page - 1) * PAGE_SIZE} />
+              바뀌는 건 본문뿐. '번호'는 페이지를 넘어 이어진다(1페이지 1~50 · 2페이지 51~).
+              canWrite = 더블클릭 인라인 수정 노출(칸반 드래그와 같은 판정) — 게이트는 서버 액션이 다시 본다(#77).
+              consultants = '상담사' 칸 선택지(툴바 상담사 필터와 같은 목록). */}
+          <EnrollmentTable
+            rows={tablePage.rows}
+            nowMs={nowMs}
+            startIndex={(page - 1) * PAGE_SIZE}
+            canWrite={canWriteEnrollment}
+            consultants={consultants}
+          />
           <Pagination
             page={page}
             totalPages={Math.max(1, Math.ceil(tablePage.total / PAGE_SIZE))}
