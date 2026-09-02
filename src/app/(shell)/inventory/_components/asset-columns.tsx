@@ -1,0 +1,57 @@
+import { assetCategoryLabel } from "@/features/inventory/category";
+import { assetStatusLabel } from "@/features/inventory/status";
+import type { InventoryAsset } from "@/features/inventory/types";
+import { DashCell, UnknownCell } from "./cell-bits";
+import type { Column } from "./sortable-table";
+import { AssetStatusPill } from "./status-pill";
+
+/**
+ * 자산 마스터 열 — 시안 그대로 `자산ID · 분류 · 제조사 · 모델명 · 입고일 · 상태 · 현위치 · 사용자 · 최종실사 · 폐기일 · 비고`
+ * + **QR**(원장 2026-09-02: *"QR 열 하나 더 비고 옆에 추가 · 보기 버튼 누르면 QR 보여줘"*).
+ * 시리얼번호는 컬럼만 있고 열로 내지 않는다(원본 전건 비어 있어 빈 열이 된다 — 폼에서만 적는다).
+ * "미기재" 규약: 제조사·모델명·입고일 = 미기재 / 사용자·최종실사·폐기일·현위치 = —(빈 값은 가운데 정렬).
+ * 폭은 `colgroup` 고정(모델명·비고만 가변) — 필터로 행이 바뀌어도 열이 안 밀린다.
+ * `onStatusDoubleClick` — 상태 칸 더블클릭 = 상태 변경. `onQrClick` — QR 열 [보기].
+ */
+export function assetColumns(
+  opts: {
+    /** 자산 마스터 순서의 고정 번호(1부터) — 정렬·필터해도 그 자산의 번호는 그대로(라벨 인쇄 범위가 이 번호를 가리킨다). */
+    noOf?: (a: InventoryAsset) => number | null;
+    onStatusDoubleClick?: (a: InventoryAsset) => void;
+    onQrClick?: (a: InventoryAsset) => void;
+  } = {},
+): Column<InventoryAsset>[] {
+  return [
+    { key: "no", label: "No", width: 56, render: (a) => <span className="num text-text-dim">{opts.noOf?.(a) ?? ""}</span>, sortValue: (a) => opts.noOf?.(a) ?? null, className: "whitespace-nowrap" },
+    { key: "assetCode", label: "자산ID", width: 88, render: (a) => <span className="font-mono text-[11.5px] font-bold">{a.assetCode}</span>, className: "whitespace-nowrap" },
+    { key: "category", label: "분류", width: 78, render: (a) => assetCategoryLabel(a.category), sortValue: (a) => assetCategoryLabel(a.category), className: "whitespace-nowrap" },
+    { key: "maker", label: "제조사", width: 96, render: (a) => <UnknownCell v={a.maker} />, className: "whitespace-nowrap" },
+    { key: "model", label: "모델명", minWidth: 150, render: (a) => <UnknownCell v={a.model} />, className: "whitespace-nowrap" },
+    { key: "acquiredOn", label: "입고일", width: 100, render: (a) => <UnknownCell v={a.acquiredOn} num />, className: "whitespace-nowrap" },
+    {
+      key: "status", label: "상태", width: 92,
+      render: (a) => <AssetStatusPill status={a.status} />,
+      sortValue: (a) => assetStatusLabel(a.status),
+      className: "whitespace-nowrap",
+      onDoubleClick: opts.onStatusDoubleClick,
+    },
+    // 폐기 자산은 값이 남아 있어도 "—"(브리프 규약) — 지난 위치는 수정 폼에서 보인다.
+    { key: "location", label: "현위치", width: 128, render: (a) => <DashCell v={a.status === "disposed" ? null : a.location} />, sortValue: (a) => (a.status === "disposed" ? null : a.location), className: "whitespace-nowrap" },
+    { key: "holderName", label: "사용자", width: 88, render: (a) => <DashCell v={a.holderName} />, className: "whitespace-nowrap" },
+    { key: "lastAuditedOn", label: "최종실사", width: 100, render: (a) => <DashCell v={a.lastAuditedOn} num />, className: "whitespace-nowrap" },
+    { key: "disposedOn", label: "폐기일", width: 100, render: (a) => <DashCell v={a.disposedOn} num />, className: "whitespace-nowrap" },
+    { key: "note", label: "비고", minWidth: 160, render: (a) => <span className="text-text-dim" title={a.note ?? undefined}>{a.note ?? ""}</span>, className: "whitespace-nowrap" },
+    {
+      key: "qr", label: "QR", width: 64,
+      // QR은 자산ID에서 파생하므로 새 자산도 자동으로 있다 — 정렬 값은 없음(전부 같다).
+      render: (a) =>
+        opts.onQrClick ? (
+          <button type="button" className="text-primary block w-full text-center text-[11.5px] font-medium hover:underline" onClick={() => opts.onQrClick?.(a)}>
+            보기
+          </button>
+        ) : null,
+      sortValue: () => null,
+      className: "whitespace-nowrap",
+    },
+  ];
+}

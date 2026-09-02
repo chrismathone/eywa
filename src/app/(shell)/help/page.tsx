@@ -170,6 +170,13 @@ const MENUS: { id: MenuKey; label: string; href: string; description: string }[]
       "학원 서식 저장소. 폴더로 정리된 양식을 찾아 내려받고, 작성된 문서(이력서·환불요청서 등)를 함께 보관합니다.",
   },
   {
+    id: "inventory",
+    label: "재고관리",
+    href: "/inventory",
+    description:
+      "전자기기 자산관리대장. 자산 1대가 영구 행 1개라 월별 시트를 복사하지 않고, 대여·실사 이력을 그 자산에 누적합니다. 소모품(키보드·마우스)은 수량으로 셉니다.",
+  },
+  {
     id: "owner",
     label: "학원 설정",
     href: "/owner",

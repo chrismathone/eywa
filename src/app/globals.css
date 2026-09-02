@@ -1312,6 +1312,46 @@ html[data-stage="on"] main {
 }
 
 /* ───────────────────────────────────────────────
+ * 데이터 표 **좁은 화면 카드 스택** — `.stack-table` (2026-09-02, 재고관리에서 신설·범용).
+ * 위 `.resume-sheet`와 같은 규약(design-conventions "종이 서식 표는 좁은 화면에서 카드로 쌓는다")을
+ * 문서가 아닌 **데이터 표**에도 쓰기 위한 범용 스코프다. 5열 이상인 표(자산 11열·대여 9열)는 375px에서
+ * 열이 글자 한 자 폭으로 짜부라진다. 각 `<td data-label="열 이름">`이 카드 안의 "라벨 위 / 값 아래"가 된다.
+ * ⚠️ `@media screen` 한정 — 인쇄엔 걸지 않는다. ⚠️ 레이어 밖(unlayered)이라 Tailwind 유틸을 확실히 덮는다.
+ * ─────────────────────────────────────────────── */
+@media screen and (max-width: 639px) {
+  .stack-table table,
+  .stack-table tbody,
+  .stack-table tr,
+  .stack-table td {
+    display: block;
+    width: auto !important;
+    text-align: left !important;
+  }
+  .stack-table thead {
+    display: none;
+  }
+  .stack-table tr {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px 10px 8px;
+    margin-bottom: 6px;
+  }
+  .stack-table td {
+    border: 0 !important;
+    padding: 3px 0 !important;
+    background: transparent !important;
+  }
+  .stack-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+}
+
+/* ───────────────────────────────────────────────
  * 등록상담 **시트형 목록**(.consult-sheet) 좁은 화면 재배치 — 17열 표를 폰 폭에 그대로 두면 열이
  * 글자 한 자 폭으로 짜부라진다. 이력서(.resume-sheet)와 같은 어법: 행을 카드로 쌓고 열 이름은 각 칸의
  * `data-label`로 옮긴다(원장 2026-09-02 시트형 목록뷰). 값이 없는 칸(자식 없음)은 카드에서 감춰 짧게.
