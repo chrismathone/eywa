@@ -98,7 +98,7 @@ describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트�
       "app/(shell)/documents/_components/document-toolbar.tsx",
       "app/(shell)/exams/page.tsx",
       "app/(shell)/inventory/_components/list-toolbar.tsx",
-      "app/(shell)/students/_components/student-filter-bar.tsx",
+      // 학생목록 필터바는 2026-09-03 열 머리 필터로 바뀌며 사라졌다(검색은 공용 SearchToggle → search-form.tsx).
     ]) {
       const src = readFileSync(join(SRC, r), "utf8");
       // TOOLBAR_SEARCH_BOX 안의 <input>마다 h-full leading-normal.

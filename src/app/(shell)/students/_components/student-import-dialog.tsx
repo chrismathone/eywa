@@ -28,10 +28,26 @@ const KIND_TONE: Record<string, string> = {
   error: "text-danger",
 };
 
-/** 학생 엑셀 일괄등록 — 내보낸(또는 같은 형식의) xlsx 업로드 → 미리보기 → 신규만 등록. */
-export function StudentImportDialog() {
+/**
+ * 학생 엑셀 일괄등록 — 내보낸(또는 같은 형식의) xlsx 업로드 → 미리보기 → 신규만 등록.
+ * `open`을 넘기면 **제어 모드**(트리거 버튼 없음, 여닫기는 호출부 — 학생목록 '엑셀' 메뉴가 연다). 안 넘기면 종전처럼
+ * 제 버튼을 그린다.
+ */
+export function StudentImportDialog({
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : openState;
+  const setOpen = (next: boolean) => {
+    if (controlled) onOpenChange?.(next);
+    else setOpenState(next);
+  };
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<ClassifiedRow[] | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
@@ -96,10 +112,12 @@ export function StudentImportDialog() {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        <EyIcon name="arrowUp" size={13} />
-        엑셀 가져오기
-      </Button>
+      {controlled ? null : (
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          <EyIcon name="arrowUp" size={13} />
+          엑셀 가져오기
+        </Button>
+      )}
 
       {open ? (
         <>

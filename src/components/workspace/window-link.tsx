@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { MouseEvent, ReactNode } from "react";
-import { findNavItem } from "@/lib/navigation";
+import { findNavItem, navPresentation } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
 import { useIsDesktop } from "./use-is-desktop";
 import { useInFrame } from "./use-in-frame";
@@ -24,6 +24,10 @@ const EXTRA_WINDOW_ROUTES: Record<string, string> = { "/me": "내 정보" };
  * - 상세·서브 라우트(/students/123, /staff/45/edit, /consultations/stats): id = 경로 기반 고유
  *   id("students/123" …) → 메뉴 창과 충돌하지 않음(첫 세그먼트 = menuKey라 아이콘도 부모 메뉴를 따름).
  * - 메뉴 영역 밖(외부·다운로드 등): null → 기본 네비게이션.
+ * - 🔴 `presentation:"desktop"`(운영실 `/dashboard`)도 null — main 자체가 작업면이라 **창이 아니다**. 창으로 열면 배경과
+ *   창에 같은 화면이 겹치고 스토어가 그 창을 레거시로 보고 지운다(`isLegacyDashboardWindow`, deep-link-window와 같은 규약).
+ *   게다가 `withEmbed`는 `?`로만 쪼개서 `/dashboard#daily-briefing`이 `…#daily-briefing?embed=1`이 되어 창 안에 풀 셸이 떴다
+ *   (알림 "브리핑 준비됐습니다"의 착지 링크 — 적대적 리뷰 2026-09-03). 호출부(WindowLink·알림 벨)는 null이면 기본 이동으로 떨어진다.
  */
 export function windowIdForHref(href: string): { id: string; navLabel?: string } | null {
   const path = href.split("?")[0].split("#")[0];
@@ -31,6 +35,7 @@ export function windowIdForHref(href: string): { id: string; navLabel?: string }
   if (extra) return { id: path.replace(/^\//, ""), navLabel: extra };
   const item = findNavItem(path);
   if (!item) return null;
+  if (navPresentation(item) === "desktop") return null;
   if (item.href === path) return { id: item.menuKey, navLabel: item.label };
   return { id: path.replace(/^\//, ""), navLabel: item.label };
 }

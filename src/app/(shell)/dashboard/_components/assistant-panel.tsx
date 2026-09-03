@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { askAssistant, resetAssistantConversation } from "@/features/assistant/server/actions";
 import { AnswerBody } from "@/features/assistant/components/answer-body";
 import { answerHasTable, parseAnswerBlocks } from "@/features/assistant/rich-answer";
@@ -53,7 +53,18 @@ export function AssistantPanel({
 
   useEffect(() => {
     // 새 턴·생각 중 표시가 항상 보이게 아래로 — DOM 스크롤만(상태 변경 없음, #25 무관).
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    const el = scrollRef.current;
+    el?.scrollTo({ top: el.scrollHeight });
+    // 이 패널은 접힌 <details>(운영실 2차 줄) 안에서 마운트된다 — 닫힌 본문은 상자가 없어 위 scrollTo가 no-op이고
+    // 사용자가 줄을 펼칠 때는 effect가 다시 돌지 않아 지난 대화가 **첫 질문부터** 보였다(적대적 리뷰 2026-09-03).
+    // 펼침(toggle) 때 한 번 더 끝으로.
+    const details = el?.closest("details");
+    if (!el || !details) return;
+    const onToggle = () => {
+      if (details.open) el.scrollTo({ top: el.scrollHeight });
+    };
+    details.addEventListener("toggle", onToggle);
+    return () => details.removeEventListener("toggle", onToggle);
   }, [turns, pending]);
 
   const submit = () => {
@@ -96,28 +107,11 @@ export function AssistantPanel({
   };
 
   return (
-    <section
-      className="bg-card border-line/60 shadow-card overflow-hidden rounded-2xl border"
-      aria-labelledby="assistant-panel-title"
-    >
-      <header className="border-line/70 flex items-center justify-between gap-3 border-b px-5 py-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3.5">
-          <span
-            className="bg-primary-soft text-primary flex size-10 shrink-0 items-center justify-center rounded-2xl"
-            aria-hidden="true"
-          >
-            <EyIcon name="message" size={18} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-primary text-xs font-bold">
-              대화형 비서
-            </p>
-            <h2 id="assistant-panel-title" className="text-foreground mt-0.5 text-base font-bold tracking-tight">
-              매니저 팀에게 물어보기
-            </h2>
-          </div>
-        </div>
-        {turns.length > 0 ? (
+    // 2026-09-03(디자인 v5): 운영실 **2차 구역**(접힌 줄 "매니저 팀에게 물어보기") 안에 선다 — 카드 껍데기·아이콘 칩·제목은
+    // 접힌 줄이 대신하고, 여기엔 대화·입력·초기화만 남는다.
+    <section aria-label="매니저 팀에게 물어보기">
+      {turns.length > 0 ? (
+        <div className="flex justify-end pb-1">
           <Button
             type="button"
             variant="ghost"
@@ -127,13 +121,13 @@ export function AssistantPanel({
           >
             대화 초기화
           </Button>
-        ) : null}
-      </header>
+        </div>
+      ) : null}
 
       {turns.length > 0 || pending ? (
         <div
           ref={scrollRef}
-          className="max-h-[clamp(24rem,60vh,44rem)] space-y-3 overflow-y-auto px-5 py-4 sm:px-6"
+          className="max-h-[clamp(24rem,60vh,44rem)] space-y-3 overflow-y-auto py-2"
         >
           {turns.map((turn, index) => {
             const blocks = rendered[index];
@@ -172,15 +166,16 @@ export function AssistantPanel({
           ) : null}
         </div>
       ) : (
-        <div className="px-5 py-4 sm:px-6">
-          <p className="text-text-dim text-sm">학원 데이터를 조회해 바로 답해드려요.</p>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <div className="py-1">
+          {/* 안내 문장("학원 데이터를 조회해 바로 답해드려요")은 뺐다 — 지시서 §4. 예시 질문 칩이 곧 안내다. */}
+          <div className="flex flex-wrap gap-1.5">
             {EXAMPLE_QUESTIONS.map((q) => (
               <button
                 key={q}
                 type="button"
                 onClick={() => setInput(q)}
-                className="border-line bg-card text-text-dim hover:border-primary/35 hover:text-foreground rounded-pill border px-3 py-1.5 text-xs transition"
+                // 치수는 control-scale(높이 = 라벨 + 4) — 세로 패딩으로 높이를 만들지 않는다.
+                className={`${CONTROL_H} ${CONTROL_LABEL} border-line bg-card text-text-dim hover:border-primary/35 hover:text-foreground inline-flex items-center rounded-lg border px-3 whitespace-nowrap transition`}
               >
                 {q}
               </button>
@@ -189,7 +184,7 @@ export function AssistantPanel({
         </div>
       )}
 
-      <div className="border-line/70 border-t px-5 py-4 sm:px-6">
+      <div className="pt-3">
         <div className="flex items-end gap-2">
           <textarea
             value={input}

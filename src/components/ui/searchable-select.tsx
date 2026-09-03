@@ -31,6 +31,7 @@ export function SearchableSelect({
   defaultOpen,
   onOpenChange,
   valuePrefix,
+  prefixOnlyFor,
 }: {
   options: ComboOption[];
   value?: string;
@@ -67,6 +68,11 @@ export function SearchableSelect({
    * 학생상담 리뷰 확정 결함(2026-09-03). FilterSelect `axisLabel`이 넘긴다.
    */
   valuePrefix?: string;
+  /**
+   * 이 값이 골라져 있으면 트리거에 **축 이름만** 적는다(`학년` — `학년: 전체`가 아니라). 열 머리 필터(HeaderFilter)가 "안 걸린
+   * 축"에 쓴다: 값을 비워 placeholder로 흉내 내면 글자가 옅어지고 목록에 ✓가 안 선다(리뷰 2026-09-03). 값은 진짜로 골라져 있다.
+   */
+  prefixOnlyFor?: string;
   /**
    * 촘촘한 표 안(높이 24px 안팎)에 놓일 때 — 화살표와 좌우 간격을 줄인다. 기본 화살표(16px)는 24px 박스에서
    * 글자 자리를 먹어 값이 잘린다. ⚠️ 레이아웃 클래스를 **분기해서 한 벌만** 내보낼 것(`gap-2`와 `gap-1`을
@@ -146,7 +152,13 @@ export function SearchableSelect({
         <span
           className={`truncate ${selected ? "" : "text-text-faint"} ${highlightOn ? "font-bold" : ""}`}
         >
-          {selected ? (valuePrefix ? `${valuePrefix}: ${selected.label}` : selected.label) : placeholder}
+          {selected
+            ? valuePrefix
+              ? prefixOnlyFor !== undefined && selected.value === prefixOnlyFor
+                ? valuePrefix
+                : `${valuePrefix}: ${selected.label}`
+              : selected.label
+            : placeholder}
         </span>
         {/* 꼬리표는 라벨 뒤·쉐브론 앞, 줄어들지 않는다 — 라벨만 남은 폭에서 접힌다. */}
         {trailing ? <span className="ml-auto shrink-0">{trailing}</span> : null}

@@ -198,7 +198,27 @@ export function NotificationBell() {
     // "알림을 눌렀는데 아무런 출력이 없다"의 진짜 원인). 데스크톱 풀셸은 메뉴가 전부 창이라 화면이 창으로 덮여
     // 있는 게 정상 상태고, 그 밑에서 배경이 바뀌어봐야 **눈에 보이는 변화가 0**이다. WindowLink와 같은 경로·
     // 같은 가드를 쓴다(창 시스템 없는 강사 미니셸·모바일·임베드는 아래 router.push로 자연 폴백).
-    const resolved = isDesktop && workspaceEnabled && isTopFrame() ? windowIdForHref(n.link) : null;
+    const onWorkspace = isDesktop && workspaceEnabled && isTopFrame();
+    // 🔴 운영실(`/dashboard`)은 창이 아니라 셸 main 자체인 **데스크톱 작업면**이다(windowIdForHref도 null을 돌려준다) — 창을
+    //    열면 스토어가 레거시로 지우고, 해시가 붙은 링크(`/dashboard#daily-briefing`, 브리핑 알림)는 withEmbed가 embed를 잃어
+    //    창 안에 풀 셸이 떴다(적대적 리뷰 2026-09-03). 대신 열린 창을 내려(showDesktop) 배경 main을 그 주소로 보낸다.
+    //    이미 운영실이면 **해시만** 바꾼다 — router.push(pushState)는 `hashchange`를 안 내서 접힌 2차 줄(DetailsHashOpen)이 안 펴진다.
+    const linkPath = n.link.split("?")[0].split("#")[0];
+    if (linkPath === "/dashboard") {
+      if (onWorkspace) useWindowStore.getState().showDesktop();
+      const hashAt = n.link.indexOf("#");
+      const hash = hashAt >= 0 ? n.link.slice(hashAt) : "";
+      if (hash && window.location.pathname === "/dashboard") {
+        const same = window.location.hash === hash;
+        window.location.assign(hash); // 같은 문서의 프래그먼트 이동(재로드 없음) — hashchange가 난다.
+        // 같은 해시를 다시 누르면 브라우저가 이벤트를 안 낸다(접었다가 다시 알림을 누른 경우) — 직접 알린다.
+        if (same) window.dispatchEvent(new HashChangeEvent("hashchange"));
+        return;
+      }
+      router.push(n.link);
+      return;
+    }
+    const resolved = onWorkspace ? windowIdForHref(n.link) : null;
     if (resolved) {
       useWindowStore
         .getState()

@@ -31,6 +31,8 @@ export function FilterSelect({
   marker = false,
   clearParams,
   axisLabel,
+  explicitAll = false,
+  prefixOnlyFor,
 }: {
   paramName: string;
   value: string | null | undefined;
@@ -74,6 +76,14 @@ export function FilterSelect({
    *    트리거에 '완료'만 남아 어느 축인지 사라진다(학생상담 리뷰 확정 결함, 2026-09-03).
    */
   axisLabel?: string;
+  /**
+   * "전체"를 골라도 파라미터를 **지우지 않고 `allValue`로 적는다**. 서버가 "파라미터 없음 = 계정에 저장된 보기 설정"으로
+   * 읽는 화면(학생목록 `users.ui_prefs.students`)에서 쓴다 — 지우면 "전체로 되돌림"과 "처음 들어옴"이 같은 URL이 되어
+   * 저장된 필터가 되살아나 전체를 고를 길이 없어진다. 저장이 없는 화면에선 켜지 말 것(URL만 길어진다).
+   */
+  explicitAll?: boolean;
+  /** 이 값(보통 `allValue`)이 골라져 있으면 트리거에 축 이름만 — SearchableSelect 주석. */
+  prefixOnlyFor?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
@@ -81,8 +91,10 @@ export function FilterSelect({
 
   const navigate = (v: string) => {
     const params = new URLSearchParams(currentParams?.toString() ?? "");
-    if (v === allValue || v === "") params.delete(paramName);
-    else params.set(paramName, v);
+    if (v === allValue || v === "") {
+      if (explicitAll && allValue !== "") params.set(paramName, allValue);
+      else params.delete(paramName);
+    } else params.set(paramName, v);
     for (const k of clearParams ?? []) params.delete(k);
     params.delete("page"); // 필터 변경은 결과집합이 바뀌므로 1페이지로 리셋(stale page 방지).
     const s = params.toString();
@@ -99,6 +111,7 @@ export function FilterSelect({
       onValueChange={navigate}
       placeholder={axisLabel ?? allLabel}
       valuePrefix={axisLabel}
+      prefixOnlyFor={prefixOnlyFor}
       ariaLabel={ariaLabel ?? paramName}
       cap={cap}
       // undefined면 SearchableSelect가 기본 박스를 그린다 — 반쪽만 덮어쓰지 않는다(톤은 한 벌).

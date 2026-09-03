@@ -7,6 +7,23 @@ import { trendDelta } from "@/features/dashboard/metrics";
 import type { TrendPoint, EnrollmentChangeSummary, SubjectChange } from "@/features/dashboard/server/queries";
 import type { SubjectMaps } from "@/features/owner/subjects";
 
+type TrendVisible = { attendance: boolean; billing: boolean; enrollment: boolean };
+
+/**
+ * 그릴 패널이 하나라도 있는가 — 페이지가 2차 구역(접힌 줄)을 세울지 정할 때 같은 판정을 쓴다
+ * (여기서 null을 돌려주면 접힌 줄만 남고 열면 비어 있다).
+ */
+export function hasTrendContent(data: TrendPoint[], change: EnrollmentChangeSummary, visible: TrendVisible): boolean {
+  const panelCount = Number(visible.enrollment) + Number(visible.attendance) + Number(visible.billing);
+  if (panelCount === 0) return false;
+  if (data.length === 0 && (!visible.enrollment || (change.newCount === 0 && change.withdrawnCount === 0))) return false;
+  return true;
+}
+
+/**
+ * 2026-09-03(디자인 v5): 운영실 **2차 구역** 안에 선다 — 카드 껍데기·"학원 펄스" 머리는 뺐고(접힌 줄이 제목·기간을
+ * 나른다) 패널 셋만 남는다.
+ */
 export function SlimTrend({
   data,
   change,
@@ -16,26 +33,19 @@ export function SlimTrend({
   data: TrendPoint[];
   change: EnrollmentChangeSummary;
   subjects: SubjectMaps;
-  visible: { attendance: boolean; billing: boolean; enrollment: boolean };
+  visible: TrendVisible;
 }) {
+  if (!hasTrendContent(data, change, visible)) return null;
   const panelCount = Number(visible.enrollment) + Number(visible.attendance) + Number(visible.billing);
-  if (panelCount === 0) return null;
-  if (data.length === 0 && (!visible.enrollment || (change.newCount === 0 && change.withdrawnCount === 0))) return null;
   const attendance = data.map((point) => ({ date: point.date, value: point.attendance }));
   const payment = data.map((point) => ({ date: point.date, value: point.payment }));
-  const range = data.length ? `${data[0].date} – ${data[data.length - 1].date}` : `최근 ${change.days}일`;
+  const range = data.length ? `${data[0].date} – ${data[data.length - 1].date}` : null;
   const panelGrid =
     panelCount >= 3 ? "lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]" : panelCount === 2 ? "lg:grid-cols-2" : "grid-cols-1";
 
   return (
-    <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
-      <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <p className="text-primary text-xs font-bold">최근 추세</p>
-          <h2 className="text-foreground mt-0.5 text-base font-bold">학원 펄스</h2>
-        </div>
-        <span className="text-text-dim text-xs">최근 {change.days}일 · {range}</span>
-      </header>
+    <div>
+      {range ? <p className="text-text-dim num mb-2 text-sm">{range}</p> : null}
       {/* 전체 폭을 3개 지표 패널로 채운다(우측 빈 공간 제거): 학생증감(1.5fr) + 출석률·수납률(각 1fr).
           items-stretch로 세 패널 높이 일치, 트렌드 패널의 sparkline이 flex-1로 커져 높이를 채운다.
           트렌드 데이터가 없으면(초기) 학생증감만 전폭. */}
@@ -48,7 +58,7 @@ export function SlimTrend({
       ) : (
         visible.enrollment ? <StudentChange change={change} subjects={subjects} /> : null
       )}
-    </section>
+    </div>
   );
 }
 

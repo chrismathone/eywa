@@ -77,6 +77,12 @@ const RIGHT_COLS_REM = [3.5, 4, 5.5, 6.5] as const;
 const RIGHT_GAP_REM = 0.25; // = gap-1
 const RIGHT_W_REM = RIGHT_COLS_REM.reduce<number>((a, b) => a + b, 0) + RIGHT_GAP_REM * (RIGHT_COLS_REM.length - 1);
 /** 행 그리드: 이름(9~13rem) | 과목·상담사(6~11rem) | 요약(남는 폭, 행 56rem 이상에서만 보임) | 오른쪽 고정 열. */
+/**
+ * 제목 행을 몇 벌 그려 두나 — 단마다 하나씩 서야 하는데 단 수는 폭이 정한다(CSS 다단). 그래서 제목 행은 다단과 **같은
+ * 식**으로 단을 세는 `repeat(auto-fill, minmax(44rem, 1fr))` 격자에 여섯 벌을 넣고 첫 줄만 보이게 잘라 낸다(둘 다
+ * `floor((폭 + 간격) ÷ (44rem + 간격))`이라 단 수·단 폭이 정확히 겹친다). 6벌 = 6단(약 4,400px)까지.
+ */
+const LIST_HEADER_COPIES = 6;
 const ROW_GRID_VARS = {
   "--row-cols": `minmax(9rem,13rem) minmax(6rem,11rem) minmax(0,1fr) ${RIGHT_W_REM}rem`,
   "--right-cols": RIGHT_COLS_REM.map((r) => `${r}rem`).join(" "),
@@ -246,6 +252,44 @@ export default async function ConsultationsPage({
               행 사이는 헤어라인(§11 — 카드로 싸지 않는다), 행 전체가 상세 링크(§10 — 행 안 아이콘 버튼 금지, 삭제는 상세에).
               🔴 **단 수는 폭이 정한다**(CSS 다단, 한 단 최소 44rem): 최소 창 760 = 1단, ~1,500 = 2단, ~2,200 = 3단. 위→아래→다음 단.
               🔴 **행 수는 높이가 정한다**(AutoPageSize → ?size=N). 창=iframe이라 둘 다 창 크기에 그대로 반응한다. */}
+          <div className="relative">
+          {/* 단마다 테두리(원장 2026-09-03 *"단 구분선 말고 단마다 테두리"*) — 다단의 단은 요소가 아니라 테두리를 두를 수 없다. 제목 행과
+              같은 auto-fill 격자로 **단 크기의 빈 상자**를 뒤에 깔고(제목 + 목록 높이) 그 위에 제목·목록을 얹는다 — 식이 같아 상자와 단이
+              정확히 겹친다. 남는 벌은 auto-rows-[100%]로 둘째 줄에 밀려 잘린다. 링(shadow-card)은 상자 밖에 그려져 overflow에 잘리므로
+              여기만 border([[#114]]). 행 선은 border-t·제목 행은 선 없음 — 마지막 행 밑에 선이 겹치지 않게. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 grid auto-rows-[100%] grid-cols-[repeat(auto-fill,minmax(min(44rem,100%),1fr))] gap-x-8 overflow-hidden"
+          >
+            {Array.from({ length: LIST_HEADER_COPIES }, (_, i) => (
+              <div key={i} className="border-line rounded-xl border" />
+            ))}
+          </div>
+          {/* 제목 행(원장 2026-09-03 *"학생 상담 제목행은 추가해주고"*) — 아래 행과 같은 열 격자(--row-cols/--right-cols)라 글자가
+              열 위에 정확히 선다. 단마다 한 벌씩: 위 LIST_HEADER_COPIES 주석. 🔴 AutoPageSize **밖**에 둔다 — 안에 두면 첫 자식이
+              목록이 아니라 단 수를 못 읽고, 밖에 두면 제목 높이만큼 목록 위가 내려가 행 수가 저절로 준다. 첫 벌만 접근성 트리에. */}
+          <div
+            // auto-rows-[100%] — 둘째 줄(남는 벌)이 상자 높이(36px)에서 시작해야 잘려 나간다. 행 높이가 내용(24px)이면 둘째 줄 위 12px이 비친다(실측).
+            className="relative grid h-9 auto-rows-[100%] grid-cols-[repeat(auto-fill,minmax(min(44rem,100%),1fr))] gap-x-8 overflow-hidden"
+            style={ROW_GRID_VARS}
+            data-list-header=""
+          >
+            {Array.from({ length: LIST_HEADER_COPIES }, (_, i) => (
+              <div key={i} aria-hidden={i > 0 ? "true" : undefined} className="@container/row">
+                <div className="text-text-dim grid h-full grid-cols-(--row-cols) items-center gap-3 px-2 text-sm font-bold">
+                  <span className="text-center">학생</span>
+                  <span className="text-center">과목 · 상담사</span>
+                  <span className="hidden text-center @4xl/row:block">요약</span>
+                  <div className="col-start-4 grid grid-cols-(--right-cols) items-center justify-items-center gap-1 whitespace-nowrap">
+                    <span>카테고리</span>
+                    <span>후속</span>
+                    <span>녹음·AI</span>
+                    <span>시각</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
           <AutoPageSize size={size} rowPx={ROW_PX} storageKey={PAGE_SIZE_KEY}>
             {/* 열 폭은 CSS 변수 두 개(위 ROW_GRID_VARS)로 한 번만 내려보내고 행·오른쪽 블록이 `grid-cols-(--var)`로 읽는다. */}
             <ul className="columns-[44rem] gap-x-8 [&>li]:break-inside-avoid" style={ROW_GRID_VARS}>
@@ -257,7 +301,7 @@ export default async function ConsultationsPage({
                 return (
                   // @container/row — 요약 열은 이 행이 56rem(896px) 이상일 때만 선다(이름·과목 최대폭 + 오른쪽 열 + 간격 = 46.5rem이라
                   // 그보다 좁으면 요약 칸이 몇 글자짜리 토막이 된다). 단이 좁으면 이름·과목·배지만.
-                  <li key={c.id} title={hoverTextOf(c)} className="@container/row border-line border-b">
+                  <li key={c.id} title={hoverTextOf(c)} className="@container/row border-line border-t">
                     {/* aria-label을 달지 않는다 — 달면 보조기기엔 이름만 남고 배지·시각이 사라진다(리뷰 확정 결함). 링크 본문이 곧 이름이다. */}
                     <WindowLink
                       href={`/consultations/${c.id}`}
@@ -312,6 +356,7 @@ export default async function ConsultationsPage({
               })}
             </ul>
           </AutoPageSize>
+          </div>
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}

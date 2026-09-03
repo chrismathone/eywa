@@ -185,7 +185,8 @@ describe("Eywa icon compatibility mapping", () => {
       // 절대 개수 트립와이어(위 toEqual과 별개로 대량 유실을 잡는다). 별칭을 의도적으로 늘리거나
       // 줄였을 때만 갱신할 것 — 143→142는 2026-07-29 `Lock` 제거분(소비처가 1beee908 '재인증 제거'에서 사라짐).
       // 142→141은 2026-09-03 `BarChart3` 제거분(등록상담 보기 토글이 아이콘 칩 3개 → 드롭다운 하나가 되며 소비처 0, 디자인 v5 §10).
-      expect(mapped.size).toBe(141);
+      // 141→139는 2026-09-03 `BookPlus`·`MessageSquarePlus` 제거분(운영실 '빠른 작업'이 §10 "같은 동작 두 곳 금지"로 사라지며 소비처 0).
+      expect(mapped.size).toBe(139);
     },
     // src/ 전건을 ts.createSourceFile로 파싱한다 — 단독 실행 14초라 15초는 여유가 없었고
     // 전 스위트 병렬(파일 증가 + CPU 경합)에서 실제로 터졌다. 파일 수는 계속 는다.

@@ -32,17 +32,16 @@ import { buildBriefingLinks } from "@/features/dashboard/briefing-links";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
-import { QuickActions } from "./_components/quick-actions";
 import { OperationsBriefing } from "./_components/operations-briefing";
-import { DailyBriefingCard } from "./_components/daily-briefing-card";
+import { DailyBriefingCard, dailyBriefingSummary } from "./_components/daily-briefing-card";
+import { SecondarySection } from "./_components/secondary-section";
 import { AssistantPanel } from "./_components/assistant-panel";
 import { NowCockpit } from "./_components/now-cockpit";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
-import { SlimTrend } from "./_components/slim-trend";
-import type { QuickActionKey } from "./_components/quick-actions";
+import { SlimTrend, hasTrendContent } from "./_components/slim-trend";
 
 const EMPTY_ENROLLMENT_CHANGES = {
   newCount: 0,
@@ -304,12 +303,15 @@ export default async function TodayPage() {
   }
   const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
   const unpaidCount = payment?.unpaidCount ?? 0;
-  const quickActions: QuickActionKey[] = [];
-  if (access.write.students) quickActions.push("student");
-  if (access.write.classes) quickActions.push("class");
-  if (access.write.consultations) quickActions.push("consultation");
+  // '빠른 작업'(학생 등록·수업 추가·상담 기록)은 뺐다 — 지시서 §10 "같은 동작을 두 곳에 두지 말 것": 각 화면의
+  // Primary가 이미 그 일이다(학생목록 '새 학생' 등). 원장 2026-09-03 "지시서 그대로".
   const showLiveSchedule = access.read.timetable || access.read.classes;
   const showFollowUps = access.read.consultations;
+  const trendVisible = {
+    attendance: access.read.attendance,
+    billing: access.read.billing,
+    enrollment: access.read.students,
+  };
   const liveGrid =
     showLiveSchedule && showFollowUps
       ? "lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.55fr)]"
@@ -343,22 +345,26 @@ export default async function TodayPage() {
         enrollmentChangesUnavailable={access.read.students && enrollmentChangesResult.unavailable}
       />
 
-      {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
-      {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} /> : null}
-
-      {/* ①.6 매니저 팀에게 물어보기 — 대화형 비서(질문 1건 = 명시 트리거 1회, Phase 2) */}
-      {canUseAssistant ? (
-        <AssistantPanel
-          initialConversationId={assistantConversationResult.data?.id ?? null}
-          initialTurns={assistantConversationResult.data?.turns ?? []}
-        />
-      ) : null}
-
       {/* ② 오늘 브리핑 — 조회·정리만, 실행은 원본 화면에서 */}
       <OperationsBriefing briefing={briefing} />
 
-      {/* 빠른 작업 */}
-      <QuickActions allowed={quickActions} />
+      {/* 1차 화면의 시선 앵커는 셋뿐이다(지시서 §4 "시선 앵커 3개 이하", 원장 2026-09-03 "지시서 그대로") —
+          ① 인사·지표 ② 오늘 브리핑 ③ 지금 진행 중. 나머지(매니저 팀 보고·비서·최근 추세·운영 맥락)는 접힌
+          2차 구역(`SecondarySection`)으로 내렸다. 접힌 줄이 오늘 보고의 **제목**을 나르므로 1차에서도 "보고가
+          있다·무슨 내용인지"는 읽힌다. */}
+      {canSeeDailyBriefing ? (
+        <SecondarySection
+          id="daily-briefing"
+          label="매니저 팀 보고"
+          hint={(() => {
+            // 조회 실패는 "보고 없음"과 다른 사실 — 접힌 줄 한 줄이 1차에서 보이는 전부라 여기서 갈라 적는다.
+            const s = dailyBriefingSummary(dailyBriefingResult.data, dailyBriefingResult.unavailable);
+            return s.tone === "danger" ? <span className="text-danger font-bold">{s.text}</span> : s.text;
+          })()}
+        >
+          <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} />
+        </SecondarySection>
+      ) : null}
 
       {showLiveSchedule || showFollowUps ? (
         <section aria-labelledby="live-operations-title" className="space-y-3">
@@ -397,31 +403,43 @@ export default async function TodayPage() {
         </section>
       ) : null}
 
-      {/* 학원 펄스 — 판단 큐 다음의 보조 맥락. */}
-      <SlimTrend
-        data={trend}
-        change={enrollmentChangeResult.data}
-        subjects={subjects}
-        visible={{
-          attendance: access.read.attendance,
-          billing: access.read.billing,
-          enrollment: access.read.students,
-        }}
-      />
+      {/* 2차 — 매니저 팀에게 물어보기(대화형 비서, 질문 1건 = 명시 트리거 1회, Phase 2). */}
+      {canUseAssistant ? (
+        <SecondarySection id="assistant" label="매니저 팀에게 물어보기">
+          <AssistantPanel
+            initialConversationId={assistantConversationResult.data?.id ?? null}
+            initialTurns={assistantConversationResult.data?.turns ?? []}
+          />
+        </SecondarySection>
+      ) : null}
 
-      {/* 운영 맥락 — 세 장(수납·등록·공지)을 **카드로 다시 싸지 않는다**(지시서 §4 "카드 안의 카드 금지", 원장 2026-09-03
-          "지시서 그대로" — 08-31의 *"카드 안에 단 구분"*은 이 규칙으로 대체). 짧은 쪽(공지)이 위로 붙어 아래가 휑하던 문제는
-          grid 기본(stretch)이 그대로 막는다 — 빈 카드도 같은 높이로 늘어난다(`items-start`를 두지 말 것). */}
-      <section aria-labelledby="operations-context-title" className="space-y-3">
-        <header className="px-1">
-          <p className="text-text-dim text-xs font-bold">
-            참고 지표
-          </p>
-          <h2 id="operations-context-title" className="text-foreground mt-0.5 text-lg font-bold tracking-tight">
-            운영 맥락
-          </h2>
-          {/* 설명 문장은 뺐다(지시서 §4). */}
-        </header>
+      {/* 2차 — 최근 7일 추세(학생 증감·출석·수납). 그릴 것이 없으면 줄 자체를 안 세운다(빈 구역 금지). */}
+      {hasTrendContent(trend, enrollmentChangeResult.data, trendVisible) ? (
+        <SecondarySection id="trend" label="최근 추세" hint={`최근 ${enrollmentChangeResult.data.days}일`}>
+          <SlimTrend data={trend} change={enrollmentChangeResult.data} subjects={subjects} visible={trendVisible} />
+        </SecondarySection>
+      ) : null}
+
+      {/* 2차 — 운영 맥락(누적 미수·등록상담·공지). 세 장을 **카드로 다시 싸지 않는다**(지시서 §4 "카드 안의 카드 금지").
+          짧은 쪽(공지)이 위로 붙어 아래가 휑하던 문제는 grid 기본(stretch)이 그대로 막는다(`items-start`를 두지 말 것).
+          ⚠️ 접힌 줄의 요약에 미수·공지 **건수를 적지 않는다** — 두 목록은 상위 N으로 잘린 미리보기라 길이가 곧 건수가
+          아니다([[#89]]). 등록상담만 쿼리가 세어 준 총건수다. */}
+      <SecondarySection
+        id="context"
+        label="운영 맥락"
+        hint={[
+          access.read.billing ? "누적 미수" : null,
+          // 조회 실패면 건수 대신 실패를 적는다(카드는 그대로 서 있으니 요약에서 지우면 카드와 어긋난다).
+          access.read.enrollment
+            ? enrollListResult.unavailable
+              ? "등록상담(불러오지 못함)"
+              : `등록상담 최근 30일 ${enrollList.total}건`
+            : null,
+          "공지",
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      >
         <div
           className="grid gap-4"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 19rem), 1fr))" }}
@@ -440,7 +458,7 @@ export default async function TodayPage() {
             manageUnavailable={manageAnnouncementsResult.unavailable}
           />
         </div>
-      </section>
+      </SecondarySection>
     </div>
   );
 }
