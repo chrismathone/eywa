@@ -68,6 +68,8 @@ async function recordGate(): Promise<Ctx | { error: string }> {
 function refresh() {
   revalidatePath("/shuttle");
   revalidatePath("/shuttle/today");
+  // 관제(운행 현황)도 같은 사실을 본다 — 빼먹으면 관리자 화면만 옛 값으로 남는다.
+  revalidatePath("/shuttle/live");
 }
 
 /** PostgREST 에러를 한글로 — raw 원문을 화면에 그대로 내보내지 않는다(CLAUDE.md 반복 지적). */
@@ -744,6 +746,210 @@ export async function clearBoarding(formData: FormData): Promise<ShuttleActionSt
   if (error) return { error: friendly(error, "기록을 지우지 못했습니다") };
 
   await logAction({ action: "shuttle_boarding_clear", targetType: "shuttle", metadata: { boardingId: id } });
+  refresh();
+  return { ok: true };
+}
+
+// ── 운행 단위 (0243a) — 그 회차가 출발했나 / 끝났나 ─────────────────────────────────────
+
+/**
+ * 출발을 찍는다 — **관제 화면의 재료**다.
+ *
+ * 🔑 이 액션이 없던 동안 관제에서 빈 회차는 두 가지 뜻이었다: ① 아직 출발 전이라 당연히 비었다
+ *    ② 출발했는데 아무도 안 찍고 있다. 전자는 정상이고 후자는 전화할 일인데 구분이 안 됐다.
+ *
+ * 🔴 게이트는 **기록 축**(`recordGate`)이다 — 차에 타는 셔틀 선생님(실측 역할 `viewer`)이 누를 버튼이라
+ *    편성 권한을 요구하면 정작 쓸 사람이 못 쓴다(0225a·record-gate.ts와 같은 결).
+ * 🔴 **오늘 것만** 찍는다 — 지난 날짜는 그날의 기록이고, 내일 차를 오늘 출발시키면 관제가 거짓이 된다.
+ *    화면도 같은 판정을 하지만 화면 조건은 게이트가 아니므로([[#77]]) 여기서 다시 막는다.
+ * ⚠️ 이미 출발한 회차를 다시 눌러도 **덮어쓰지 않는다** — 두 사람이 같이 눌렀을 때 나중 사람의 시각이
+ *    이겨서 "언제 떠났나"가 바뀌면 안 된다. 먼저 찍힌 것이 사실이다.
+ */
+export async function startTrip(formData: FormData): Promise<ShuttleActionState> {
+  const ctx = await recordGate();
+  if ("error" in ctx) return ctx;
+  const ranOn = String(formData.get("ranOn") ?? "");
+  const runId = String(formData.get("runId") ?? "");
+  if (!YMD.test(ranOn)) return { error: "날짜를 확인하세요" };
+  if (!runId) return { error: "회차를 찾지 못했습니다" };
+  if (ranOn !== kstToday()) return { error: "오늘 운행만 출발을 찍을 수 있습니다" };
+
+  const admin = createAdminClient();
+  // 스냅샷 재료 — 회차를 지워도 "그날 1호차 3회차가 돌았다"는 남아야 한다(boardings와 같은 규약).
+  const { data: run } = await admin
+    .from("shuttle_runs")
+    .select("run_no, vehicle:shuttle_vehicles!shuttle_runs_vehicle_id_fkey(name)")
+    .eq("id", runId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (!run) return { error: "회차를 찾지 못했습니다" };
+
+  const existing = await loadTrip(admin, ctx.tenantId, ranOn, runId);
+  // 이미 출발했으면 그대로 둔다(먼저 찍힌 시각이 사실). 종료된 것도 여기서 되살리지 않는다 — 그건 reopenTrip.
+  if (existing?.started_at) return { ok: true, notice: "이미 출발로 찍혀 있습니다" };
+
+  const vehicle = run.vehicle as { name?: string } | null;
+  const { error } = await admin.from("shuttle_trips").upsert(
+    {
+      tenant_id: ctx.tenantId,
+      ran_on: ranOn,
+      run_id: runId,
+      vehicle_label: vehicle?.name ?? null,
+      run_no: run.run_no,
+      started_at: new Date().toISOString(),
+      started_by: ctx.userId,
+    },
+    // 🔴 `ignoreDuplicates`(= ON CONFLICT DO NOTHING) — **먼저 찍힌 시각이 사실**이다.
+    //    기본 upsert(DO UPDATE)면 두 사람이 동시에 누를 때 나중 사람이 출발 시각을 덮어써
+    //    "언제 떠났나"가 바뀐다(위 early-return은 레이스를 못 막는다 — 둘 다 빈 상태를 본다).
+    { onConflict: "tenant_id,ran_on,run_id", ignoreDuplicates: true },
+  );
+  if (error) return { error: friendly(error, "출발을 저장하지 못했습니다") };
+
+  await logAction({ action: "shuttle_trip_start", targetType: "shuttle", metadata: { ranOn, runId } });
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * 종료를 찍는다. 🔴 **미기록이 남아 있어도 막지 않는다** — 차는 이미 들어왔는데 화면이 종료를 거부하면
+ * 사실과 화면이 어긋난다. 대신 관제가 그 회차를 '미기록 남음'으로 **표시**한다(막는 대신 보이게).
+ */
+export async function endTrip(formData: FormData): Promise<ShuttleActionState> {
+  const ctx = await recordGate();
+  if ("error" in ctx) return ctx;
+  const ranOn = String(formData.get("ranOn") ?? "");
+  const runId = String(formData.get("runId") ?? "");
+  if (!YMD.test(ranOn)) return { error: "날짜를 확인하세요" };
+  if (!runId) return { error: "회차를 찾지 못했습니다" };
+  if (ranOn !== kstToday()) return { error: "오늘 운행만 종료할 수 있습니다" };
+
+  const admin = createAdminClient();
+  const existing = await loadTrip(admin, ctx.tenantId, ranOn, runId);
+  if (!existing?.started_at) return { error: "아직 출발을 찍지 않았습니다" };
+  if (existing.ended_at) return { ok: true, notice: "이미 종료로 찍혀 있습니다" };
+
+  const { error } = await admin
+    .from("shuttle_trips")
+    .update({ ended_at: new Date().toISOString(), ended_by: ctx.userId })
+    .eq("id", existing.id)
+    .eq("tenant_id", ctx.tenantId);
+  if (error) return { error: friendly(error, "종료를 저장하지 못했습니다") };
+
+  await logAction({ action: "shuttle_trip_end", targetType: "shuttle", metadata: { ranOn, runId } });
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * 종료를 되돌린다 — **오늘 안에서만**.
+ * ⚠️ 되돌릴 문을 막으면 잘못 누른 한 번에 그날 남은 명단을 못 찍는다([[#103]] — 잠금은 되돌릴 문과 함께).
+ */
+export async function reopenTrip(formData: FormData): Promise<ShuttleActionState> {
+  const ctx = await recordGate();
+  if ("error" in ctx) return ctx;
+  const ranOn = String(formData.get("ranOn") ?? "");
+  const runId = String(formData.get("runId") ?? "");
+  if (!YMD.test(ranOn)) return { error: "날짜를 확인하세요" };
+  if (!runId) return { error: "회차를 찾지 못했습니다" };
+  if (ranOn !== kstToday()) return { error: "오늘 운행만 되돌릴 수 있습니다" };
+
+  const admin = createAdminClient();
+  const existing = await loadTrip(admin, ctx.tenantId, ranOn, runId);
+  if (!existing?.ended_at) return { error: "종료된 운행이 아닙니다" };
+
+  const { error } = await admin
+    .from("shuttle_trips")
+    .update({ ended_at: null, ended_by: null })
+    .eq("id", existing.id)
+    .eq("tenant_id", ctx.tenantId);
+  if (error) return { error: friendly(error, "종료를 되돌리지 못했습니다") };
+
+  await logAction({ action: "shuttle_trip_reopen", targetType: "shuttle", metadata: { ranOn, runId } });
+  refresh();
+  return { ok: true };
+}
+
+/** 그날 그 회차의 운행 행. ⚠️ admin은 RLS 우회라 tenant_id 필터 필수([[#104]]). */
+async function loadTrip(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  ranOn: string,
+  runId: string,
+): Promise<{ id: string; started_at: string | null; ended_at: string | null } | null> {
+  const { data } = await admin
+    .from("shuttle_trips")
+    .select("id, started_at, ended_at")
+    .eq("tenant_id", tenantId)
+    .eq("ran_on", ranOn)
+    .eq("run_id", runId)
+    .maybeSingle();
+  return data ?? null;
+}
+
+// ── 정류장 좌표 (0244a) ────────────────────────────────────────────────────────────────
+
+/**
+ * 정류장 위치를 찍는다 — 위경도·반경·주소.
+ *
+ * 🔴 **좌표는 둘 다이거나 둘 다 아니다**(0244a check와 같은 판정). 한쪽만 저장되면 지도에 못 찍으면서
+ *    "좌표 있음"으로 세어져 빈 마커가 된다. 빈 값으로 보내면 **좌표를 지운다**(잘못 찍은 것을 되돌리는 길).
+ * 🔴 게이트는 **편성 축**(`gate`) — 정류장 마스터는 데스크가 관리하는 편성 정보다(등하원 기록과 다른 축).
+ * ⚠️ 0244a 미적용이면 컬럼이 없어 update가 실패한다 — 한글 사유로 돌려준다(화면은 애초에 이 폼을
+ *    `coordsReady`가 false면 안 그린다, [[#95]]).
+ */
+export async function saveStopLocation(formData: FormData): Promise<ShuttleActionState> {
+  const ctx = await gate();
+  if ("error" in ctx) return ctx;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "정류장을 찾지 못했습니다" };
+
+  const rawLat = String(formData.get("lat") ?? "").trim();
+  const rawLng = String(formData.get("lng") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim() || null;
+  const rawRadius = String(formData.get("radiusM") ?? "").trim();
+
+  // 둘 다 비면 좌표를 지운다(되돌리기). 한쪽만 있으면 거절 — 반쪽 좌표는 지도에 못 찍는다.
+  const cleared = !rawLat && !rawLng;
+  let lat: number | null = null;
+  let lng: number | null = null;
+  if (!cleared) {
+    if (!rawLat || !rawLng) return { error: "위도와 경도를 함께 입력하세요" };
+    lat = Number(rawLat);
+    lng = Number(rawLng);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) return { error: "위도는 -90~90 사이여야 합니다" };
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) return { error: "경도는 -180~180 사이여야 합니다" };
+  }
+
+  let radiusM = 50;
+  if (rawRadius) {
+    radiusM = Number(rawRadius);
+    if (!Number.isFinite(radiusM) || radiusM < 10 || radiusM > 500) {
+      return { error: "도착 반경은 10~500m 사이여야 합니다" };
+    }
+    radiusM = Math.round(radiusM);
+  }
+  if (address && address.length > 200) return { error: "주소는 200자까지입니다" };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("shuttle_stops")
+    .update({ lat, lng, radius_m: radiusM, address })
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId);
+  if (error) {
+    // 컬럼이 아직 없는 배포 — 무엇을 해야 하는지 사람 말로 돌려준다(raw 원문 노출 금지).
+    if (error.code === "42703" || error.code === "PGRST204") {
+      return { error: "정류장 좌표 기능이 아직 준비되지 않았습니다 (마이그레이션 0244a 필요)" };
+    }
+    return { error: friendly(error, "정류장 위치를 저장하지 못했습니다") };
+  }
+
+  await logAction({
+    action: "shuttle_stop_location",
+    targetType: "shuttle",
+    metadata: { stopId: id, cleared, radiusM },
+  });
   refresh();
   return { ok: true };
 }

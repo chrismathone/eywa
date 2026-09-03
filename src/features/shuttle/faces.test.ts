@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { SHUTTLE_BOARD_PATH, SHUTTLE_TODAY_PATH, shuttleFaces } from "./faces";
+import {
+  SHUTTLE_BOARD_PATH,
+  SHUTTLE_LIVE_PATH,
+  SHUTTLE_TODAY_PATH,
+  shuttleFaces,
+} from "./faces";
 
 describe("셔틀 면 전환", () => {
-  it("두 면이 사이드바 하부탭에서 파생된다", () => {
+  it("세 면이 사이드바 하부탭에서 파생된다", () => {
     const faces = shuttleFaces("term");
-    expect(faces.map((f) => f.key)).toEqual([SHUTTLE_BOARD_PATH, SHUTTLE_TODAY_PATH]);
-    expect(faces.map((f) => f.label)).toEqual(["노선 편성", "오늘 등하원"]);
+    expect(faces.map((f) => f.key)).toEqual([
+      SHUTTLE_BOARD_PATH,
+      SHUTTLE_TODAY_PATH,
+      SHUTTLE_LIVE_PATH,
+    ]);
+    expect(faces.map((f) => f.label)).toEqual(["노선 편성", "오늘 등하원", "운행 현황"]);
   });
 
   it("면을 옮겨도 시즌이 유지된다", () => {
@@ -13,6 +22,7 @@ describe("셔틀 면 전환", () => {
     expect(shuttleFaces("vacation").map((f) => f.href)).toEqual([
       "/shuttle?season=vacation",
       "/shuttle/today?season=vacation",
+      "/shuttle/live?season=vacation",
     ]);
   });
 
@@ -21,5 +31,6 @@ describe("셔틀 면 전환", () => {
     const keys = shuttleFaces("term").map((f) => f.key);
     expect(keys).toContain(SHUTTLE_BOARD_PATH);
     expect(keys).toContain(SHUTTLE_TODAY_PATH);
+    expect(keys).toContain(SHUTTLE_LIVE_PATH);
   });
 });

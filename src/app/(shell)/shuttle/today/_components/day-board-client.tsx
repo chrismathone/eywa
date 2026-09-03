@@ -16,6 +16,7 @@ import {
   SEASON_LABEL,
   type Season,
   type ShuttleRun,
+  type ShuttleTrip,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
 import {
@@ -38,6 +39,7 @@ import {
   sumProgress,
   type DirectionFilter,
 } from "@/features/shuttle/today-board";
+import { useShuttleLive } from "@/features/shuttle/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { RideExceptionDialog } from "./ride-exception-dialog";
@@ -85,6 +87,9 @@ export function DayBoardClient({
   exceptionsReady,
   students,
   today,
+  trips,
+  tripsReady,
+  tenantId,
 }: {
   date: string;
   season: Season;
@@ -104,6 +109,15 @@ export function DayBoardClient({
   students: AssignableStudent[];
   /** KST 오늘 — 지난 날짜는 예외를 **읽기만** 한다(그날의 기록이다). */
   today: string;
+  /**
+   * 그날 회차별 운행 기록(0243a). Map은 서버→클라 경계를 못 넘어 **엔트리 배열**로 받는다.
+   * 🔴 `tripsReady`가 false면 상태를 **아예 안 그린다** — 표가 없어 전부 null인 것을 그리면
+   *    실제로 돌고 있는 차가 "출발 전"으로 보인다([[#95]] 규약).
+   */
+  trips: [string, ShuttleTrip][];
+  tripsReady: boolean;
+  /** 실시간 채널 키. 빈 문자열이면 채널을 안 연다(비로그인·조회 실패). */
+  tenantId: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +137,19 @@ export function DayBoardClient({
   }
 
   const absentSet = useMemo(() => new Set(absentStudentIds), [absentStudentIds]);
+  const tripByRun = useMemo(() => new Map(trips), [trips]);
+
+  /**
+   * 실시간 반영 — 내가 찍으면 알리고(publish), 남이 찍으면 이 화면도 따라 갱신된다.
+   * 🔑 `enabled`를 오늘로 좁히는 이유: 지난 날짜를 열어 둔 화면은 바뀔 일이 없는데 WebSocket만 연다.
+   */
+  const live = useShuttleLive({ tenantId, date, enabled: Boolean(tenantId) && date === today });
+
+  /** 액션이 성공했을 때 — 내 화면을 갱신하고 같은 날짜를 보는 다른 화면을 깨운다. */
+  const done = (kind: "boarding" | "trip" | "exception") => () => {
+    router.refresh();
+    live.publish(kind);
+  };
 
   /** 회차별 그날 줄 — 예정 × 기록. 기록은 회차 축으로 붙는다. */
   const byRun = useMemo(() => {
@@ -288,7 +315,7 @@ export function DayBoardClient({
           exceptions={exceptions}
           onClose={() => setExceptionOpen(false)}
           onError={setError}
-          onDone={() => router.refresh()}
+          onDone={done("exception")}
         />
       )}
 
@@ -312,7 +339,11 @@ export function DayBoardClient({
                   canWrite={canWrite}
                   canEditException={canEditException}
                   onError={setError}
-                  onDone={() => router.refresh()}
+                  onDone={done("boarding")}
+                  onTripDone={done("trip")}
+                  trip={tripByRun.get(run.id) ?? null}
+                  tripsReady={tripsReady}
+                  today={today}
                 />
               );
             })}

@@ -106,6 +106,9 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   shuttle: [
     { label: "노선 편성", href: "/shuttle" },
     { label: "오늘 등하원", href: "/shuttle/today" },
+    // 관제(2026-09-02) — '오늘 등하원'이 **찍는 화면**이라면 이쪽은 **보는 화면**이다. 관리자는
+    // 회차를 펼쳐 한 줄씩 다루는 게 아니라 차 전체를 한눈에 보고 이상한 것만 짚는다.
+    { label: "운행 현황", href: "/shuttle/live" },
   ],
   // 재고관리 — 면 4개(자산·대여·실사·소모품)는 **여기 두지 않는다**(원장 2026-09-02: *"재고관리 내부탭은 왼쪽 탭에서
   //    안보여도 돼. 의미 없음. 그냥 '재고관리' 1개"*). 면은 화면 안 탭바(`features/inventory/faces.ts`)로만 오간다.

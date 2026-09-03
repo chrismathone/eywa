@@ -3,6 +3,7 @@ import {
   getBoardingsOn,
   getRideExceptionsOn,
   getShuttleBoard,
+  getTripsOn,
 } from "@/features/shuttle/server/queries";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
 import { getAbsentStudentIdsOn } from "@/features/shuttle/server/attendance-link";
@@ -30,7 +31,7 @@ export default async function ShuttleTodayPage({
 }) {
   // 열람 = 메뉴 권한 또는 '셔틀 담당' 토글(access.ts). 🔴 로그인 착지가 이 화면이라 토글 우회가
   // 없으면 착지 → 거부 → 착지로 무한히 돈다. 기록 자격은 아래 canRecordBoarding이 따로 본다.
-  await requireShuttleView();
+  const user = await requireShuttleView();
   const sp = await searchParams;
   const date = sp.d && YMD.test(sp.d) ? sp.d : kstToday();
   const season: Season = isSeason(sp.season) ? sp.season : "term";
@@ -43,14 +44,16 @@ export default async function ShuttleTodayPage({
   const canWrite = await canRecordBoarding();
 
   // 나머지는 서로 독립 — 함께 받는다(B4). absentIds는 **신호 전용**(출결을 바꾸지 않는다).
-  const [board, { ready, logs }, absentIds, prefs, exceptionsRes, students] = await Promise.all([
-    getShuttleBoard(season),
-    getBoardingsOn(date),
-    getAbsentStudentIdsOn(date),
-    loadShuttleTodayPrefs(), // 등하원 보기 = 계정 귀속(다른 기기에서도 같은 상태)
-    getRideExceptionsOn(date), // 일회성 개입(0229a) — 표가 없으면 ready:false로 조용히 접힌다([[#95]])
-    canWrite ? getAssignableStudents() : Promise.resolve([]),
-  ]);
+  const [board, { ready, logs }, absentIds, prefs, exceptionsRes, students, tripsRes] =
+    await Promise.all([
+      getShuttleBoard(season),
+      getBoardingsOn(date),
+      getAbsentStudentIdsOn(date),
+      loadShuttleTodayPrefs(), // 등하원 보기 = 계정 귀속(다른 기기에서도 같은 상태)
+      getRideExceptionsOn(date), // 일회성 개입(0229a) — 표가 없으면 ready:false로 조용히 접힌다([[#95]])
+      canWrite ? getAssignableStudents() : Promise.resolve([]),
+      getTripsOn(date), // 운행 단위(0243a) — 표가 없으면 ready:false로 상태를 아예 안 그린다
+    ]);
 
   return (
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
@@ -75,6 +78,12 @@ export default async function ShuttleTodayPage({
           exceptionsReady={exceptionsRes.ready}
           students={students}
           today={kstToday()}
+          // 운행 단위(0243a). 🔴 ready가 false면 상태를 **아예 안 그린다** — 실제로 돌고 있는 차를
+          //    "출발 전"이라고 말하지 않기 위해서다(전부 null이라 그냥 그리면 그렇게 보인다).
+          trips={[...tripsRes.trips.entries()]}
+          tripsReady={tripsRes.ready}
+          // 실시간 반영 채널(테넌트 × 날짜) — 남이 찍은 것이 이 화면에도 바로 들어온다.
+          tenantId={user.tenantId}
         />
       )}
     </div>

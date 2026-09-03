@@ -81,6 +81,7 @@ export function ShuttleBoardClient({
   students,
   selectedRunId,
   canWrite,
+  coordsReady,
 }: {
   season: Season;
   vehicles: ShuttleVehicle[];
@@ -89,6 +90,8 @@ export function ShuttleBoardClient({
   students: AssignableStudent[];
   selectedRunId: string | null;
   canWrite: boolean;
+  /** 0244a(정류장 좌표) 적용 여부 — 정류장 관리 다이얼로그가 위치 입력을 그릴지 판단한다([[#95]]). */
+  coordsReady: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -330,6 +333,7 @@ export function ShuttleBoardClient({
           runs={runs}
           vehicles={vehicles}
           seasonLabel={SEASON_LABEL[season]}
+          coordsReady={coordsReady}
           onClose={() => setStopDialogOpen(false)}
           onError={setError}
         />

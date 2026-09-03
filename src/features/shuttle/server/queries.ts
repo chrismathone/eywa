@@ -18,6 +18,7 @@ import {
   type ShuttleRun,
   type ShuttleRunStop,
   type ShuttleStop,
+  type ShuttleTrip,
   type ShuttleVehicle,
 } from "../types";
 import { dayCodeOf, missedSignals, type RideException, type ShuttleSignal } from "../roster";
@@ -41,12 +42,31 @@ function isMissingTable(error: { code?: string; message?: string } | null): bool
   );
 }
 
+/**
+ * **컬럼이** 아직 없을 때(42703 = undefined_column / PGRST204 = 스키마 캐시에 그 컬럼이 없음).
+ * 🔑 표 부재와 코드가 다르다 — 마이그레이션이 표를 만드는 게 아니라 **컬럼을 더하는** 경우
+ *    (0244a 좌표)엔 `isMissingTable`로 안 잡혀 그대로 화면이 죽는다([[#95]]).
+ */
+function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    /column .* does not exist/i.test(error.message ?? "")
+  );
+}
+
 export type ShuttleBoard = {
   ready: boolean;
   season: Season;
   vehicles: ShuttleVehicle[];
   runs: ShuttleRun[];
   stops: ShuttleStop[];
+  /**
+   * 0244a(좌표 컬럼) 적용 여부. false면 화면이 **좌표 입력 자체를 안 그린다** — 없는 기능을 버튼으로
+   * 약속하면 눌렀을 때 한글 에러만 나온다([[#95]], 0229a `exceptionsReady`와 같은 규약).
+   */
+  coordsReady: boolean;
 };
 
 const EMPTY_BOARD = (season: Season): ShuttleBoard => ({
@@ -55,6 +75,7 @@ const EMPTY_BOARD = (season: Season): ShuttleBoard => ({
   vehicles: [],
   runs: [],
   stops: [],
+  coordsReady: false,
 });
 
 type StudentRow = { id: string; name: string; school: string | null; grade: string | null; status: string };
@@ -189,7 +210,11 @@ async function loadShuttleBoard(season: Season): Promise<ShuttleBoard> {
       .in("run_stop_id", chunk),
   );
 
-  const students = await loadStudents([...new Set(riderRows.map((r) => r.student_id))]);
+  // 좌표는 **따로** 받는다 — 위 select에 끼워 넣으면 0244a 미적용 배포에서 보드가 통째로 빈다([[#95]]).
+  const [students, coords] = await Promise.all([
+    loadStudents([...new Set(riderRows.map((r) => r.student_id))]),
+    loadStopCoords(),
+  ]);
   const stopById = new Map(stopRows.map((s) => [s.id, s]));
 
   const ridersByRunStop = new Map<string, ShuttleRider[]>();
@@ -252,13 +277,21 @@ async function loadShuttleBoard(season: Season): Promise<ShuttleBoard> {
     season,
     vehicles,
     runs,
-    stops: stopRows.map((s) => ({
-      id: s.id,
-      name: s.name,
-      memo: s.memo,
-      sortOrder: s.sort_order,
-      usedByRuns: usage.get(s.id) ?? 0,
-    })),
+    coordsReady: coords.ready,
+    stops: stopRows.map((s) => {
+      const c = coords.byStop.get(s.id);
+      return {
+        id: s.id,
+        name: s.name,
+        memo: s.memo,
+        sortOrder: s.sort_order,
+        usedByRuns: usage.get(s.id) ?? 0,
+        lat: c?.lat ?? null,
+        lng: c?.lng ?? null,
+        radiusM: c?.radiusM ?? 50,
+        address: c?.address ?? null,
+      };
+    }),
   };
 }
 
@@ -392,4 +425,125 @@ export async function getShuttleMissedSignals(ymd: string): Promise<Map<string, 
 /** 그날 요일에 해당하는 회차만 추린 목록(일별 화면·인쇄가 함께 쓴다). */
 export function dayCodeForDate(ymd: string): DayCode {
   return dayCodeOf(ymd);
+}
+
+// ── 운행 단위(0243a) ───────────────────────────────────────────────────────────────────
+
+/**
+ * 그날의 **운행 기록**(출발했나/끝났나) — 회차 id로 찾을 수 있게 Map으로 돌려준다.
+ *
+ * 🔴 `ready`가 중요한 축이다 — 0243a 적용 전에는 표가 없어 **모든 회차가 '출발 전'**으로 보이는데,
+ *    그건 사실이 아니라 "모른다"이다. 화면은 `ready:false`면 상태를 **아예 그리지 않는다**([[#95]]) —
+ *    실제로 돌고 있는 차를 "출발 전"이라고 말하지 않기 위해서다.
+ *
+ * ⚠️ 사람 이름은 **임베드가 아니라 별도 조회**로 붙인다. `started_by`·`ended_by`가 둘 다 users를
+ *    가리켜 임베드는 FK 힌트가 필수인데([[#94]]), 하루 회차는 실측 30개·사람은 두세 명이라
+ *    한 번 더 도는 편이 힌트가 어긋나 화면이 죽는 것보다 낫다.
+ */
+export async function getTripsOn(
+  ymd: string,
+): Promise<{ ready: boolean; trips: Map<string, ShuttleTrip> }> {
+  const empty = { ready: false, trips: new Map<string, ShuttleTrip>() };
+  const user = await getCurrentUser();
+  if (!user) return empty;
+
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("shuttle_trips")
+      .select("id, run_id, started_at, started_by, ended_at, ended_by, memo")
+      .eq("ran_on", ymd)
+      .limit(500); // 하루 회차는 실측 30개 규모 — 절단 방지 명시 상한(B2)
+
+    if (isMissingTable(error)) return empty;
+    if (error) {
+      reportError(error, { scope: "shuttle.trips", ymd });
+      return empty;
+    }
+
+    const rows = data ?? [];
+    const names = await loadUserNames([
+      ...new Set(rows.flatMap((r) => [r.started_by, r.ended_by]).filter((v): v is string => !!v)),
+    ]);
+
+    const trips = new Map<string, ShuttleTrip>();
+    for (const r of rows) {
+      // 회차가 지워진 옛 운행은 이 화면의 줄이 아니다(회차 id로 찾는 Map이라 자리가 없다).
+      if (!r.run_id) continue;
+      trips.set(r.run_id, {
+        id: r.id,
+        runId: r.run_id,
+        startedAt: r.started_at,
+        endedAt: r.ended_at,
+        // 모르면 null — 이름을 지어내지 않는다.
+        startedByName: r.started_by ? (names.get(r.started_by) ?? null) : null,
+        endedByName: r.ended_by ? (names.get(r.ended_by) ?? null) : null,
+        memo: r.memo,
+      });
+    }
+    return { ready: true, trips };
+  } catch (e) {
+    reportError(e, { scope: "shuttle.trips", ymd });
+    return empty;
+  }
+}
+
+/** 표시용 직원 이름 — 셔틀은 몇 명뿐이지만 규약대로 청크로 나눈다(B3). */
+async function loadUserNames(ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const supabase = await createClient();
+  const rows = await fetchInChunks<{ id: string; display_name: string }>(ids, (chunk) =>
+    supabase.from("users").select("id, display_name").in("id", chunk),
+  );
+  return new Map(rows.map((r) => [r.id, r.display_name]));
+}
+
+// ── 정류장 좌표(0244a) ─────────────────────────────────────────────────────────────────
+
+export type StopCoords = { lat: number | null; lng: number | null; radiusM: number; address: string | null };
+
+/**
+ * 정류장 좌표 — 🔴 **기존 정류장 select에 컬럼을 끼워 넣지 않고 따로 받는다**([[#95]]).
+ *
+ * eywa는 SQL을 원장이 손으로 실행하므로 배포와 적용 사이에 **항상 간격**이 있다. `getShuttleBoard`의
+ * select에 `lat`을 넣었다가 컬럼이 아직 없으면 PostgREST 400 → 그 함수는 규약대로 빈 보드를 돌려주고
+ * → **셔틀 편성 화면이 통째로 빈다**. 좌표는 부가 정보라 그 대가를 치를 이유가 없다: 따로 받고,
+ * 실패하면 좌표만 조용히 없는 것으로 둔다.
+ *
+ * ⚠️ 컬럼 부재는 표 부재와 코드가 다르다(42703 = undefined_column) — `isMissingTable`로는 안 잡힌다.
+ */
+export async function loadStopCoords(): Promise<{ ready: boolean; byStop: Map<string, StopCoords> }> {
+  const empty = { ready: false, byStop: new Map<string, StopCoords>() };
+  const user = await getCurrentUser();
+  if (!user) return empty;
+
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("shuttle_stops")
+      .select("id, lat, lng, radius_m, address")
+      .eq("archived", false)
+      .limit(500);
+
+    // 표가 없거나(0225a 미적용) 컬럼이 없으면(0244a 미적용) 좌표 없이 간다.
+    if (isMissingTable(error) || isMissingColumn(error)) return empty;
+    if (error) {
+      reportError(error, { scope: "shuttle.stopCoords" });
+      return empty;
+    }
+
+    const byStop = new Map<string, StopCoords>();
+    for (const r of data ?? []) {
+      byStop.set(r.id, {
+        lat: typeof r.lat === "number" ? r.lat : null,
+        lng: typeof r.lng === "number" ? r.lng : null,
+        radiusM: typeof r.radius_m === "number" ? r.radius_m : 50,
+        address: r.address ?? null,
+      });
+    }
+    return { ready: true, byStop };
+  } catch (e) {
+    reportError(e, { scope: "shuttle.stopCoords" });
+    return empty;
+  }
 }

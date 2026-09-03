@@ -48,6 +48,8 @@ export default async function ShuttlePage({
           students={students}
           selectedRunId={sp.run ?? null}
           canWrite={canWrite}
+          // 0244a 적용 여부 — 좌표는 기존 select와 **따로** 받으므로 컬럼이 없어도 보드는 그대로 산다.
+          coordsReady={board.coordsReady}
         />
       )}
     </div>

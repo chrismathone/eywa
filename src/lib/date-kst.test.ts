@@ -10,6 +10,7 @@ import {
   inclusiveDateWindowStart,
   formatKoreanDate,
   kstDateOf,
+  kstTimeOf,
 } from "./date-kst";
 
 describe("date-kst — KST(Asia/Seoul) 기준 오늘/이번 달", () => {
@@ -112,5 +113,31 @@ describe("kstDateOf — 타임스탬프를 KST 날짜로(UTC slice 금지)", () 
     expect(kstDateOf("garbage")).toBeNull();
     expect(kstDateOf(new Date(NaN))).toBeNull();
     expect(kstDateOf(12345)).toBeNull();
+  });
+});
+
+describe("kstTimeOf — 타임스탬프를 KST 시각으로(UTC slice 금지)", () => {
+  it("🔴 UTC 시각과 9시간 어긋나지 않는다", () => {
+    // 셔틀 "13:46 출발"은 2026-09-02T04:46Z다. slice(11,16)이면 04:46(9시간 이른 시각)으로 보인다.
+    expect(kstTimeOf("2026-09-02T04:46:00.000Z")).toBe("13:46");
+    expect("2026-09-02T04:46:00.000Z".slice(11, 16)).toBe("04:46"); // 옛 방식이 틀렸음을 못박음
+  });
+
+  it("자정을 넘는 구간도 24시간제로 답한다", () => {
+    // 2026-09-02T15:30Z = 2026-09-03 00:30 KST — 12시간제면 "12:30 AM"이 된다.
+    expect(kstTimeOf("2026-09-02T15:30:00.000Z")).toBe("00:30");
+    expect(kstTimeOf("2026-09-02T14:00:00.000Z")).toBe("23:00");
+  });
+
+  it("Date 객체도 받는다", () => {
+    expect(kstTimeOf(new Date("2026-09-02T00:00:00.000Z"))).toBe("09:00");
+  });
+
+  it("빈값·형식오류는 null(없는 시각을 지어내지 않는다)", () => {
+    expect(kstTimeOf(null)).toBeNull();
+    expect(kstTimeOf("")).toBeNull();
+    expect(kstTimeOf("   ")).toBeNull();
+    expect(kstTimeOf("garbage")).toBeNull();
+    expect(kstTimeOf(new Date(NaN))).toBeNull();
   });
 });

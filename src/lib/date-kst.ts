@@ -44,6 +44,28 @@ export function kstMonth(d: Date = new Date()): string {
   return kstToday(d).slice(0, 7);
 }
 
+/**
+ * 타임스탬프(ISO 문자열·Date) → **KST 시각**("HH:MM"). 파싱 불가·빈값은 null(없는 시각을 지어내지 않는다).
+ * 🔴 `iso.slice(11, 16)`을 쓰지 말 것 — 그건 **UTC 시각**이라 화면에 9시간 이른 시각이 찍힌다
+ *    (셔틀 "13:46 출발"이 "04:46 출발"로 보인다). 날짜 쪽 `kstDateOf`와 같은 이유·같은 규약이다.
+ */
+export function kstTimeOf(value: unknown): string | null {
+  const d =
+    value instanceof Date
+      ? value
+      : typeof value === "string" && value.trim()
+        ? new Date(value)
+        : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+  }).format(d);
+}
+
 /** KST 기준 현재 시각의 자정 기준 분(0–1439) — 서버 UTC에서 now.getHours()가 9시간 어긋나는 것 방지. */
 export function kstMinutesOfDay(d: Date = new Date()): number {
   const parts = new Intl.DateTimeFormat("en-CA", {

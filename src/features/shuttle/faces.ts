@@ -5,6 +5,8 @@ import type { Season } from "./types";
 /** 셔틀의 두 면 — 경로가 곧 면 키다(FaceTabs active). 착지·게이트도 이 상수를 쓴다. */
 export const SHUTTLE_BOARD_PATH = "/shuttle";
 export const SHUTTLE_TODAY_PATH = "/shuttle/today";
+/** 관제(2026-09-02) — '오늘 등하원'이 찍는 화면이면 이쪽은 보는 화면이다. */
+export const SHUTTLE_LIVE_PATH = "/shuttle/live";
 
 /**
  * 셔틀 면 전환 탭 — 노선 편성 ↔ 오늘 등하원.
