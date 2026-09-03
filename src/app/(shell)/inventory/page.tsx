@@ -13,12 +13,14 @@ import {
   type FaceData,
   type TableStatus,
 } from "@/features/inventory/server/queries";
+import { getInventoryCategories } from "@/features/inventory/server/category-queries";
 import { loadInventoryPrefs } from "@/features/inventory/server/prefs";
 import { actionNeededAssets, computeAssetStats } from "@/features/inventory/stats";
 import type { AssetOption, InventoryAudit, InventoryLoan, InventorySupply } from "@/features/inventory/types";
 import { ActionNeeded } from "./_components/action-needed";
 import { AssetsFace } from "./_components/assets-face";
 import { AuditsFace } from "./_components/audits-face";
+import { InventoryCategoriesProvider } from "./_components/categories-context";
 import { LoansFace } from "./_components/loans-face";
 import { NotReadyBanner } from "./_components/not-ready-banner";
 import { StatsRow } from "./_components/stats-row";
@@ -69,13 +71,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const tab = resolveInventoryTab((await searchParams).tab);
 
   // 서로 독립 — 함께 받는다(B4).
-  const [canWrite, counts, assets, face, prefs] = await Promise.all([
+  const [canWrite, counts, assets, face, prefs, categories] = await Promise.all([
     canWriteTenant(user.systemRole, "inventory"),
     getInventoryCounts(),
     getAssets(),
     loadFace(tab),
     // 보기 설정(폐기 숨김) — 계정 귀속(users.ui_prefs.inventory).
     loadInventoryPrefs(),
+    // 자산 분류(0247a) — 라벨·접두·순서의 단일 소스. 표가 없으면 내장 7종으로 폴백한다([[#95]]).
+    getInventoryCategories(),
   ]);
 
   // 표 없음(missing-table)이 그냥 실패보다 먼저 — 원인을 말하는 문구가 뜬다.
@@ -85,7 +89,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       : assets.status === "failed" || face.status === "failed"
         ? "failed"
         : "ok";
-  const editable = canWrite && status === "ok";
+  // 🔴 분류 조회 **실패**도 편집을 잠근다 — 그 상태의 드롭다운은 내장 7종 폴백이라 학원이 추가한 분류를 못 고르고,
+  //    수정 저장 한 번이 분류를 조용히 바꾼다. (표 없음 = 0247a 이전이라 폴백이 곧 사실이므로 안 잠근다.)
+  const editable = canWrite && status === "ok" && categories.status !== "failed";
   const stats = computeAssetStats(assets.rows);
   const action = actionNeededAssets(assets.rows);
   const today = kstToday();
@@ -102,15 +108,18 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         embedLabel="전자기기 자산관리대장 — 자산 · 대여 · 실사 · 소모품"
         stats={<StatsRow stats={stats} />}
       />
-      <NotReadyBanner status={status} />
-      {action.length > 0 ? <ActionNeeded assets={action} /> : null}
+      <NotReadyBanner status={status} categoryStatus={categories.status} />
+      {action.length > 0 ? <ActionNeeded assets={action} categories={categories.rows} /> : null}
       <FaceTabs faces={inventoryFaces(counts)} active={tab} ariaLabel="재고관리 면 전환" />
-      {face.kind === "assets" ? <AssetsFace assets={assets.rows} canWrite={editable} today={today} hideDisposed={prefs.hideDisposed} /> : null}
-      {face.kind === "loans" ? <LoansFace loans={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
-      {face.kind === "audits" ? <AuditsFace audits={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
-      {face.kind === "supplies" ? (
-        <SuppliesFace supplies={face.rows} canWrite={editable} today={today} userName={user.displayName} />
-      ) : null}
+      {/* 분류는 클라 컴포넌트 여럿(표·툴바·다이얼로그 4개)이 읽으므로 prop 배선 대신 프로바이더 하나로 준다. */}
+      <InventoryCategoriesProvider categories={categories.rows}>
+        {face.kind === "assets" ? <AssetsFace assets={assets.rows} canWrite={editable} today={today} hideDisposed={prefs.hideDisposed} /> : null}
+        {face.kind === "loans" ? <LoansFace loans={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
+        {face.kind === "audits" ? <AuditsFace audits={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
+        {face.kind === "supplies" ? (
+          <SuppliesFace supplies={face.rows} canWrite={editable} today={today} userName={user.displayName} />
+        ) : null}
+      </InventoryCategoriesProvider>
     </div>
   );
 }

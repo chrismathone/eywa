@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { assetCategoryLabel } from "@/features/inventory/category";
 import { startLoan } from "@/features/inventory/server/loan-actions";
 import { assetStatusLabel } from "@/features/inventory/status";
 import type { AssetOption } from "@/features/inventory/types";
+import { useCategoryMaps } from "./categories-context";
 import { DialogShell, FIELD, Field, FormError, SELECT, TEXTAREA, useSubmit } from "./form-bits";
 
 /**
@@ -15,6 +15,7 @@ import { DialogShell, FIELD, Field, FormError, SELECT, TEXTAREA, useSubmit } fro
  */
 export function LoanDialog({ assets, presetAssetId, today, onClose }: { assets: AssetOption[]; presetAssetId?: string; today: string; onClose: () => void }) {
   const { busy, error, submit } = useSubmit();
+  const cats = useCategoryMaps();
   const [always, setAlways] = useState(false);
   const candidates = useMemo(() => assets.filter((a) => a.status !== "disposed" && (a.status !== "on_loan" || a.id === presetAssetId)), [assets, presetAssetId]);
 
@@ -31,7 +32,7 @@ export function LoanDialog({ assets, presetAssetId, today, onClose }: { assets: 
             {!presetAssetId ? <option value="">자산을 고르세요</option> : null}
             {candidates.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.assetCode} · {a.model ?? assetCategoryLabel(a.category)} · {assetStatusLabel(a.status)}
+                {a.assetCode} · {a.model ?? cats.labelOf(a.category)} · {assetStatusLabel(a.status)}
               </option>
             ))}
           </select>

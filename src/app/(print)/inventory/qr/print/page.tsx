@@ -2,8 +2,9 @@ import { headers } from "next/headers";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
-import { assetCategoryLabel } from "@/features/inventory/category";
+import { buildCategoryMaps } from "@/features/inventory/category";
 import { numberAssets, parseNoRanges, qrImageSrc } from "@/features/inventory/qr";
+import { getInventoryCategories } from "@/features/inventory/server/category-queries";
 import { getAssets } from "@/features/inventory/server/queries";
 import { RangeForm } from "./range-form";
 
@@ -19,7 +20,9 @@ export default async function InventoryQrPrintPage({ searchParams }: { searchPar
   await requireAccess("inventory");
   const { all, range } = await searchParams;
   const embedded = (await headers()).get("x-embed") === "1";
-  const { rows } = await getAssets();
+  // 서로 독립 — 함께 받는다(B4).
+  const [{ rows }, categories] = await Promise.all([getAssets(), getInventoryCategories()]);
+  const cats = buildCategoryMaps(categories.rows);
   const numbered = numberAssets(rows);
   const parsed = parseNoRanges(range ?? "", numbered.length);
   const list = numbered.filter((a) => (all === "1" || a.status !== "disposed") && (!parsed.nos || parsed.nos.has(a.no)));
@@ -45,7 +48,7 @@ export default async function InventoryQrPrintPage({ searchParams }: { searchPar
               <img src={qrImageSrc(a.assetCode)} alt={`${a.assetCode} QR`} className="aspect-square w-[30mm]" />
               <span className="font-mono text-[12px] leading-none font-bold">{a.assetCode}</span>
               <span className="w-full truncate text-center text-[9.5px] leading-tight text-black/80">
-                {assetCategoryLabel(a.category)} · {a.model ?? "모델 미기재"}
+                {cats.labelOf(a.category)} · {a.model ?? "모델 미기재"}
               </span>
               <span className="text-[8px] leading-none text-black/50">
                 No.{a.no} · QR {today}

@@ -7,9 +7,11 @@
  *    엑셀로 넣지 않는다(화면 동작으로 기록 — 자산 상태·최종실사일이 함께 움직여야 해서).
  * 🔑 분류·상태는 **한글 라벨**로 적는다(키도 받아 준다). 빈 칸은 null(미기재 규약 — `미기재`·`—`를 적어도 null).
  * 🔑 매칭 키 = 자산ID / 품목ID. **추가**(append) = 이미 있는 키는 건너뜀 · **덮어쓰기**(overwrite) = 있는 키는 갱신.
+ * 🔑 **모르는 분류는 오류가 아니다**(원장 2026-09-03) — 새 분류로 만들 후보로 접어 두고(`categoryKey: null`)
+ *    서버 액션이 `planNewCategories`로 계획을 세운 뒤 사람 확인을 받는다. 상태는 코드 고정 enum이라 그대로 오류다.
  */
 import { isValidAssetCode, normalizeAssetCode } from "./asset-code";
-import { ASSET_CATEGORY_LABEL, isAssetCategory, type AssetCategory } from "./category";
+import type { CategoryMaps } from "./category";
 import { ASSET_STATUS_LABEL, isAssetStatus, type AssetStatus } from "./status";
 import { nullIfUnknown } from "./unknown-value";
 
@@ -78,15 +80,16 @@ export function normalizeDate(raw: string | null | undefined): string | null | u
   return Number.isNaN(Date.parse(iso)) ? undefined : iso;
 }
 
-const CATEGORY_BY_LABEL = new Map(Object.entries(ASSET_CATEGORY_LABEL).map(([k, v]) => [v, k as AssetCategory]));
 const STATUS_BY_LABEL = new Map(Object.entries(ASSET_STATUS_LABEL).map(([k, v]) => [v, k as AssetStatus]));
 
-/** 분류 칸 → 키. 빈 값 null · 라벨/키 → 키 · 모르는 값 undefined. */
-export function categoryKeyOf(raw: string | null | undefined): AssetCategory | null | undefined {
+/**
+ * 분류 칸 → 등록된 분류 키. 빈 값 null · 라벨/키(공백 무시) → 키 · **모르는 값 undefined**(= 새 분류 후보).
+ * 목록은 학원별 분류(0247a)라 맵을 받는다 — 라벨 표를 여기 다시 적지 말 것.
+ */
+export function categoryKeyOf(raw: string | null | undefined, maps: CategoryMaps): string | null | undefined {
   const s = nullIfUnknown(raw);
   if (s === null) return null;
-  if (isAssetCategory(s)) return s;
-  return CATEGORY_BY_LABEL.get(s.replace(/\s+/g, "")) ?? CATEGORY_BY_LABEL.get(s);
+  return maps.keyOfInput(s);
 }
 
 export function statusKeyOf(raw: string | null | undefined): AssetStatus | null | undefined {
@@ -99,7 +102,10 @@ export function statusKeyOf(raw: string | null | undefined): AssetStatus | null 
 export type AssetSheetRow = {
   rowNum: number;
   assetCode: string;
-  category: AssetCategory;
+  /** 이미 등록된 분류면 그 키, **새 분류 후보면 null**(그때 키는 `planNewCategories`가 도출한다). */
+  categoryKey: string | null;
+  /** 사람이 읽는 분류 이름 — 등록된 분류면 그 라벨, 새 후보면 파일에 적힌 글자 그대로(trim). */
+  categoryLabel: string;
   maker: string | null;
   model: string | null;
   serialNo: string | null;
@@ -120,15 +126,25 @@ export function isBlankCells(cells: Record<string, string | undefined>): boolean
   return Object.values(cells).every((v) => !String(v ?? "").trim());
 }
 
-/** 자산 시트 한 행 → 저장 가능한 값(라벨→키, 빈 칸→null, 날짜 정규화, 폐기일↔상태 짝 검사). */
-export function parseAssetSheetRow(cells: Partial<Record<AssetSheetKey, string>>, rowNum: number): Parsed<AssetSheetRow> {
+/**
+ * 자산 시트 한 행 → 저장 가능한 값(라벨→키, 빈 칸→null, 날짜 정규화, 폐기일↔상태 짝 검사).
+ * 🔑 **모르는 분류는 오류가 아니다** — `categoryKey: null`로 접어 두고 라벨만 들고 나간다(새 분류 후보).
+ *    빈 분류는 여전히 오류다(무엇으로 만들지 알 수 없다).
+ */
+export function parseAssetSheetRow(
+  cells: Partial<Record<AssetSheetKey, string>>,
+  rowNum: number,
+  maps: CategoryMaps,
+): Parsed<AssetSheetRow> {
   const at = (msg: string) => ({ ok: false as const, error: `${rowNum}행: ${msg}` });
   const assetCode = normalizeAssetCode(cells.assetCode ?? "");
   if (!assetCode) return at("자산ID가 비어 있습니다");
   if (!isValidAssetCode(assetCode)) return at(`자산ID "${assetCode}"는 영문 대문자·숫자·하이픈 2~32자여야 합니다`);
-  const category = categoryKeyOf(cells.category);
-  if (category === null) return at("분류가 비어 있습니다");
-  if (category === undefined) return at(`분류 "${cells.category}"를 모릅니다 (${Object.values(ASSET_CATEGORY_LABEL).join("·")})`);
+  const categoryKey = categoryKeyOf(cells.category, maps);
+  if (categoryKey === null) return at("분류가 비어 있습니다");
+  const categoryRaw = String(cells.category ?? "").trim();
+  if (categoryKey === undefined && categoryRaw.length > 40) return at(`분류 "${categoryRaw.slice(0, 20)}…"는 40자까지입니다`);
+  const categoryLabel = categoryKey ? maps.labelOf(categoryKey) : categoryRaw;
   const statusRaw = statusKeyOf(cells.status);
   if (statusRaw === undefined) return at(`상태 "${cells.status}"를 모릅니다 (${Object.values(ASSET_STATUS_LABEL).join("·")})`);
   const status: AssetStatus = statusRaw ?? "in_use";
@@ -150,7 +166,7 @@ export function parseAssetSheetRow(cells: Partial<Record<AssetSheetKey, string>>
   return {
     ok: true,
     row: {
-      rowNum, assetCode, category, status, statusGiven: statusRaw !== null,
+      rowNum, assetCode, categoryKey: categoryKey ?? null, categoryLabel, status, statusGiven: statusRaw !== null,
       maker: fields.maker as string | null, model: fields.model as string | null, serialNo: fields.serialNo as string | null,
       location: fields.location as string | null, holderName: fields.holderName as string | null, note: fields.note as string | null,
       acquiredOn: dates.acquiredOn, lastAuditedOn: dates.lastAuditedOn, disposedOn: dates.disposedOn,

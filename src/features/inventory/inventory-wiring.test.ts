@@ -18,7 +18,7 @@ import { NAV_GROUPS, SUBTABS_BY_MENU } from "@/lib/navigation";
 import { routeWindowSize } from "@/components/workspace/window-geometry";
 import { toAssetRow } from "../../../scripts/_oneoff/inventory-import-rules.mjs";
 import design from "../../../scripts/_oneoff/inventory-2026-07.json";
-import { ASSET_CATEGORY_LABEL } from "./category";
+import { BUILTIN_CATEGORIES } from "./category";
 import { ASSET_STATUS_LABEL } from "./status";
 import { actionNeededAssets, computeAssetStats } from "./stats";
 
@@ -80,7 +80,47 @@ describe("④ 시안 숫자 회귀 고정 — 가져오기 규칙 + 스탯 함�
     const statusKey = rules.STATUS_KEY as Record<string, string>;
     const categoryKey = rules.CATEGORY_KEY as Record<string, string>;
     for (const [key, label] of Object.entries(ASSET_STATUS_LABEL)) expect(statusKey[label]).toBe(key);
-    for (const [key, label] of Object.entries(ASSET_CATEGORY_LABEL)) expect(categoryKey[label]).toBe(key);
+    // 분류는 0247a 이후 학원별 데이터지만, 가져오기 스크립트는 **내장 7종**(시드와 같은 값)만 다룬다.
+    for (const c of BUILTIN_CATEGORIES) expect(categoryKey[c.label]).toBe(c.key);
+  });
+});
+
+describe("⑧ 자산 분류(0247a) — 코드 고정 enum을 학원별 데이터로", () => {
+  it("마이그레이션이 내장 7종을 그대로 시드하고 CHECK를 FK로 바꾼다", () => {
+    const sql = read("supabase", "migrations", "0247a_inventory_categories.sql");
+    for (const c of BUILTIN_CATEGORIES) {
+      expect(sql, `시드에 ${c.label} 없음`).toContain(`'${c.key}'`);
+      expect(sql, `시드에 접두 ${c.codePrefix} 없음`).toContain(`'${c.codePrefix}'`);
+    }
+    expect(sql).toMatch(/drop constraint if exists inventory_assets_category\b/);
+    expect(sql).toMatch(/foreign key \(tenant_id, category\)[\s\S]*references public\.inventory_categories \(tenant_id, key\)/);
+    expect(sql).toContain("on delete restrict");
+    // RLS는 0242a 4개 표와 같은 모양(읽기 = 테넌트 전원, 쓰기 정책 없음).
+    expect(sql).toContain("alter table public.inventory_categories enable row level security");
+    expect(sql).toMatch(/for select using \(tenant_id = public\.auth_tenant_id\(\)\)/);
+    // 🔴 auth_menu_access를 RLS에 쓰면 fail-closed 락아웃([[#92]]) — 주석의 "쓰지 말 것"은 뺀다.
+    const statements = sql.replace(/^\s*--.*$/gm, "");
+    expect(statements).not.toContain("auth_menu_access");
+  });
+  it("🔴 코드에 분류 하드코딩 맵을 다시 만들지 않는다(라벨·접두 소비처는 CategoryMaps)", () => {
+    const dir = join(process.cwd(), "src", "features", "inventory");
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".ts") && n !== "category.ts" && !n.endsWith(".test.ts"))) {
+      const src = readFileSync(join(dir, f), "utf8");
+      expect(src, `${f}: 분류 라벨/접두 상수 신설 금지`).not.toMatch(/ASSET_CATEGORY_LABEL|ASSET_CODE_PREFIX|ASSET_CATEGORIES\b/);
+    }
+  });
+  it("엑셀 반영은 새 분류 확인을 **서버가 다시 계산해** 대조한다([[#77]])", () => {
+    const src = read("src", "features", "inventory", "server", "excel-actions.ts");
+    expect(src).toContain("planNewCategories(");
+    expect(src).toContain("confirmMatchesPlan(");
+    // FK 순서 — 분류 insert가 자산 insert보다 앞이어야 한다.
+    expect(src.indexOf('from("inventory_categories")')).toBeLessThan(src.indexOf('from("inventory_assets").insert'));
+  });
+  it("감사로그 — 분류 추가 액션·대상이 한글로 등록돼 있다", () => {
+    expect(read("src", "features", "audit", "server", "log.ts")).toMatch(/^\s{2}inventory_category_create:/m);
+    const describeSrc = read("src", "features", "audit", "describe.ts");
+    expect(describeSrc).toContain('case "inventory_category_create"');
+    expect(describeSrc).toMatch(/\binventory_category: "[가-힣 ]+"/);
   });
 });
 

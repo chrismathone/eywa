@@ -72,6 +72,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   inventory_loan: "자산 대여",
   inventory_audit: "자산 실사",
   inventory_supply: "소모품",
+  inventory_category: "자산 분류",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -704,11 +705,18 @@ export function auditDetail(
     // 🔴 case가 없으면 폴백이 `status: on_loan` · `category: laptop`을 **영문 그대로** 내보낸다.
     case "inventory_asset_create": {
       const code = str(m.assetCode);
+      // 🔑 분류는 학원별 데이터(0247a)라 여기서 DB를 못 읽는다 — 호출부가 라벨을 **스냅샷**으로 남긴다.
+      //    0247a 이전 행엔 그 필드가 없어 내장 7종 라벨로 폴백한다(그때는 7종뿐이었으니 정확하다).
       return join(
         code ? `「${code}」` : null,
-        assetCategoryLabel(str(m.category)) || null,
+        str(m.categoryLabel) || assetCategoryLabel(str(m.category)) || null,
         assetStatusLabel(str(m.status)) || null,
       );
+    }
+    case "inventory_category_create": {
+      const labels = arr(m.labels).map(str).filter((v): v is string => !!v);
+      const via = str(m.source) === "excel" ? "엑셀에서" : null;
+      return join(labels.length ? labels.join("·") : null, labels.length ? `${labels.length}개` : null, via);
     }
     case "inventory_asset_update": {
       const code = str(m.assetCode);
@@ -761,6 +769,9 @@ export function auditDetail(
         num(m.suppliesUpdated) ? `소모품 갱신 ${num(m.suppliesUpdated)}` : null,
         num(m.suppliesSkipped) ? `소모품 건너뜀 ${num(m.suppliesSkipped)}` : null,
       ];
+      // 이 파일이 새로 만든 분류(0247a) — 별도 로그도 남지만 여기 한 줄이 "그 파일이 늘렸다"를 잇는다.
+      const cats = arr(m.categoriesCreated).map(str).filter((v): v is string => !!v);
+      if (cats.length > 0) parts.push(`분류 추가 ${cats.join("·")}`);
       return join(...parts);
     }
     case "inventory_supply_update": {

@@ -1,6 +1,6 @@
 import { Pill } from "@/components/atoms/pill";
 import { TONE_ACCENT_BAR } from "@/lib/design/semantic-color";
-import { assetCategoryLabel } from "@/features/inventory/category";
+import { buildCategoryMaps, type InventoryCategory } from "@/features/inventory/category";
 import { assetStatusLabel } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
 import { dashIfEmpty } from "@/features/inventory/unknown-value";
@@ -8,8 +8,10 @@ import { dashIfEmpty } from "@/features/inventory/unknown-value";
 /**
  * "지금 조치가 필요한 자산 N건" — `needsAction`으로 거른 목록(page.tsx가 스탯과 **같은 함수**로 만든다).
  * 🔴 N = 이 배열의 길이(상한 없음 — [[#89]]). 카드 = `자산ID / 모델(없으면 분류) / 상태 · 현위치`(시안 그대로).
+ * ⚠️ 서버 컴포넌트라 클라 훅(useCategoryMaps)을 못 쓴다 — 목록을 받아 여기서 맵을 만든다(작은 배열).
  */
-export function ActionNeeded({ assets }: { assets: InventoryAsset[] }) {
+export function ActionNeeded({ assets, categories }: { assets: InventoryAsset[]; categories: InventoryCategory[] }) {
+  const cats = buildCategoryMaps(categories);
   return (
     <section className={`bg-card shadow-card rounded-2xl border-l-[3px] p-4 ${TONE_ACCENT_BAR.critical}`}>
       <div className="flex items-baseline gap-2">
@@ -22,7 +24,7 @@ export function ActionNeeded({ assets }: { assets: InventoryAsset[] }) {
             <span className="border-line bg-bg-soft text-foreground shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[11px]">
               {a.assetCode}
             </span>
-            <span className="text-foreground min-w-0 truncate font-medium">{a.model ?? assetCategoryLabel(a.category)}</span>
+            <span className="text-foreground min-w-0 truncate font-medium">{a.model ?? cats.labelOf(a.category)}</span>
             <span className="text-text-dim ml-auto shrink-0 text-[11.5px] whitespace-nowrap">
               {assetStatusLabel(a.status)} · {dashIfEmpty(a.location)}
             </span>
