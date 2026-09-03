@@ -18,6 +18,7 @@ export function SearchForm({
   inputWidth = "w-32",
   className = "ml-auto flex items-center gap-2",
   resetParams = [],
+  autoFocus = false,
 }: {
   paramName?: string;
   placeholder: string;
@@ -27,6 +28,8 @@ export function SearchForm({
   className?: string;
   /** 검색 시 함께 제거할 파라미터(page는 항상 제거). */
   resetParams?: string[];
+  /** 토글로 펼쳐질 때(SearchToggle) 커서를 바로 넣는다 — 버튼이 사라진 자리에서 포커스를 잃지 않게. */
+  autoFocus?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
@@ -57,6 +60,7 @@ export function SearchForm({
           name={paramName}
           defaultValue={defaultValue ?? ""}
           placeholder={placeholder}
+          autoFocus={autoFocus}
           className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent leading-normal focus:outline-none`}
         />
       </div>

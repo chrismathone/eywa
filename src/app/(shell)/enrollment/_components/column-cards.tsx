@@ -242,21 +242,26 @@ function ConsultationCard({
           // 🔴 카드마다 실선 테두리(원장 2026-09-01 *"각 카드별 테두리"*) — 연한 면(bg-bg-soft/60)만으론
           //    카드끼리 경계가 녹아 한 덩어리로 읽혔다. 칸 테두리(칸 색)보다 한 단계 중립적인 선이라
           //    "칸 안의 카드"라는 위계가 유지된다(팔레트 v4: 면은 화이트, 구분은 테두리).
-          className="border-line bg-bg-soft/60 hover:bg-bg-soft hover:border-line-strong block rounded-xl border px-3.5 py-2.5 transition"
+          // 여백은 좌우 상하 모두 한 단계 좁게(원장 2026-09-03 *"여백 조금만 더 줄여 · 좌우 상하 모두"*): px-3.5/py-2.5 → px-2.5/py-1.5.
+          className="border-line bg-bg-soft/60 hover:bg-bg-soft hover:border-line-strong block rounded-xl border px-2.5 py-1.5 transition"
         >
-          {/* 🔴 **카드 높이를 통일한다**(원장 2026-09-01 *"카드 크기 통일시켜줘"*): 이름 줄을 **한 줄 고정
-              높이**로 못 박는다. 그전엔 배지(QR·반 배정·상담 N건·수정중)와 긴 학교명이 줄을 접어서
-              같은 칸 안에서도 카드가 들쭉날쭉했다. 접히지 않게 이름만 잘리고(`truncate`), 잘린 전문은
-              마우스 오버(title 첫 줄)에 그대로 있다.
+          {/* 🔴 **카드 = [이름 | 비고/날짜] 한 줄 2단**(원장 2026-09-03 캡처 *"하나의 라벨 안에서 두 줄 처리되는 거
+              한 줄로 · 글자도 라벨을 꽉 채우게 · 이름과 학년을 한 행으로 꽉 채우고 우측에 따로 공간을 두고 위쪽에는
+              비고, 아래쪽에 날짜"*): 왼쪽은 이름(+학교학년)이 행 높이를 채우고, 오른쪽은 위 표식 / 아래 시각 두 층.
+              그전엔 시각이 둘째 줄에 따로 앉아 카드가 두 줄이었다.
+              🔴 **카드 높이 통일**(원장 2026-09-01 *"카드 크기 통일시켜줘"*)은 그대로다 — 행을 **고정 높이(h-10)**로
+              못 박고 이름은 접히지 않게 잘린다(`truncate`, 전문은 마우스 오버 title 첫 줄). 오른쪽 층은 표식이
+              없어도 자리를 잡아 카드마다 키가 같다.
               ⚠️ `flex-wrap`을 다시 넣지 말 것 — 한 장만 두 줄이 되면 그 카드만 키가 커진다. */}
-          <div className="flex h-7 items-center justify-between gap-2">
+          <div className="flex h-10 items-center justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-center">
               {/* 이름 + (학교학년) 한 줄 — 옛 두 줄("백시후" / "초3 수창초")을 합친 것. */}
-              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-xl leading-none font-bold">
+              {/* 이름이 행을 채운다(2xl 28px) — 학교학년은 한 단계 아래(lg 20px), 같은 밑선. */}
+              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-2xl leading-none font-bold">
                 <span className="min-w-0 truncate">
                   {c.prospectName}
                   {gradeLabel ? (
-                    <span className="text-text-dim ml-1 text-base font-semibold">({gradeLabel})</span>
+                    <span className="text-text-dim ml-1 text-lg font-semibold">({gradeLabel})</span>
                   ) : null}
                 </span>
                 {c.personConsultCount > 1 ? (
@@ -336,13 +341,13 @@ function ConsultationCard({
                 </span>
               </p>
             </div>
-            <CardMarkBadge mark={mark} hasAiAnalysis={c.hasAiAnalysis || c.outcome === "ai_done"} />
-          </div>
-          {/* 감춘 줄들의 자리 — 시각만 남긴다(상담사·요약은 위 title). */}
-          <div className="text-text-faint mt-1 flex items-center justify-end text-sm">
-            <span className="num">
-              <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
-            </span>
+            {/* 오른쪽 2단 — 위 비고(표식) / 아래 시각. 40px 안에 표식(≤24) + 시각(16)이 들어간다(상담사·요약은 위 title). */}
+            <div className="flex h-full shrink-0 flex-col items-end justify-between">
+              <CardMarkBadge mark={mark} hasAiAnalysis={c.hasAiAnalysis || c.outcome === "ai_done"} />
+              <span className="num text-text-faint text-sm leading-none whitespace-nowrap">
+                <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
+              </span>
+            </div>
           </div>
         </WindowLink>
       </div>
@@ -368,20 +373,20 @@ function ConsultationCard({
  *    (`eywa-icon-mapping.test.ts`) 이모지를 넣으면 다음 사람이 다시 걷어낸다. 지시의 핵심인
  *    **"녹음기 + AI 두 개를 달지 말 것"**은 그대로다 — 녹음이 있으면 이 표식 하나뿐이다.
  *
- * ⚠️ 어느 모양이든 **28px(이름 줄 높이) 안에** 들어가야 한다 — 넘치면 그 카드만 키가 커져 "카드 크기
- *    통일"이 깨진다(그래서 알약엔 `leading-none`, 마이크는 `size-7`).
+ * ⚠️ 어느 모양이든 **24px(오른쪽 층의 위 칸) 안에** 들어가야 한다 — 넘치면 그 카드만 키가 커져 "카드 크기
+ *    통일"이 깨진다(그래서 알약은 sm+`leading-none`, 마이크는 `size-6`). 아래 칸은 시각 16px, 합쳐서 행 40px.
  */
 function CardMarkBadge({ mark, hasAiAnalysis }: { mark: CardMark; hasAiAnalysis: boolean }) {
   if (mark === "assigned") {
     return (
-      <Pill color="primary" size="md" className="shrink-0 leading-none">
+      <Pill color="primary" size="sm" className="shrink-0 leading-none">
         {ASSIGNED_LABEL}
       </Pill>
     );
   }
   if (mark === "qr") {
     return (
-      <Pill color="primary" size="md" className="shrink-0 leading-none">
+      <Pill color="primary" size="sm" className="shrink-0 leading-none">
         {QR_INTAKE_LABEL}
       </Pill>
     );
@@ -391,9 +396,9 @@ function CardMarkBadge({ mark, hasAiAnalysis }: { mark: CardMark; hasAiAnalysis:
       <span
         title={`녹음 상담 · ${hasAiAnalysis ? "AI 분석 완료" : "AI 분석 전"}`}
         aria-label={`녹음 상담 · ${hasAiAnalysis ? "AI 분석 완료" : "AI 분석 전"}`}
-        className="bg-blue-soft text-blue rounded-pill inline-flex size-7 shrink-0 items-center justify-center"
+        className="bg-blue-soft text-blue rounded-pill inline-flex size-6 shrink-0 items-center justify-center"
       >
-        <EyIcon name="mic" size={15} />
+        <EyIcon name="mic" size={14} />
       </span>
     );
   }

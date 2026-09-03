@@ -172,8 +172,9 @@ export function IntakeQrButton({ tokens }: { tokens: IntakeTokenView[] }) {
   return (
     <>
       {/* 우상단 액션은 공용 Button **기본 크기**로 통일(원장 2026-09-01 *"우상단 버튼크기 통일"*) —
-          옆 '신규 등록'이 기본 크기라 여기만 sm이면 두 버튼 키가 다르다. */}
-      <Button variant="outline" onClick={() => setOpen(true)}>
+          옆 '신규 등록'이 기본 크기라 여기만 sm이면 두 버튼 키가 다르다.
+          지시서 §10(원장 2026-09-03 "지시서 그대로"): 면 버튼은 창당 Primary 하나('신규 등록상담') — 이건 보더 없는 텍스트. */}
+      <Button variant="ghost" onClick={() => setOpen(true)}>
         <QrCode className="size-4" />
         공개 접수 QR
       </Button>

@@ -52,8 +52,9 @@ export function MonthPicker({ displayMonth, monthFilterActive, base, minYear, to
         if (next) setYear(selectedYear);
       }}
     >
+      {/* 아이콘만으로 뜻을 전하지 않는다(지시서 §3) — 글자 '연·월'이 서고 치수는 control-scale 한 벌. */}
       <DropdownMenuTrigger
-        className={`border-line hover:bg-bg-soft inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border transition ${
+        className={`border-line hover:bg-bg-soft inline-flex h-(--control-h) shrink-0 cursor-pointer items-center gap-1 rounded-lg border px-2 text-(length:--control-label) leading-none font-medium whitespace-nowrap transition ${
           // 달 필터가 실제로 걸려 있을 때만 진하게 — 기간 프리셋(3개월 등)으로 보는 중엔 옆 라벨이
           // "그냥 이번 달"이라는 뜻이라 아이콘까지 강조하면 고른 달처럼 읽힌다.
           monthFilterActive ? "text-foreground" : "text-text-dim hover:text-foreground"
@@ -61,7 +62,8 @@ export function MonthPicker({ displayMonth, monthFilterActive, base, minYear, to
         aria-label="연·월 선택"
         title="연·월 직접 선택"
       >
-        <EyIcon name="calendar" size={13} strokeWidth={2.5} />
+        <EyIcon name="calendar" size={16} strokeWidth={2.5} />
+        연·월
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 p-2">
         {/* 연도 이동 — 데이터가 있는 범위 밖으로는 못 나간다(빈 화면으로 걸어 들어가지 않게). */}

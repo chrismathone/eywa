@@ -120,7 +120,6 @@ export const Archive = createEywaCompatIcon("archive", "Archive");
 export const ArrowRightLeft = createEywaCompatIcon("swap", "ArrowRightLeft");
 export const BadgePercent = createEywaCompatIcon("percentBadge", "BadgePercent");
 export const Banknote = createEywaCompatIcon("banknote", "Banknote");
-export const BarChart3 = createEywaCompatIcon("barChart", "BarChart3");
 export const Bell = createEywaCompatIcon("bell", "Bell");
 export const BellRing = createEywaCompatIcon("bellRing", "BellRing");
 export const BookMarked = createEywaCompatIcon("bookMarked", "BookMarked");

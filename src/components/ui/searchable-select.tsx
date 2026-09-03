@@ -30,6 +30,7 @@ export function SearchableSelect({
   compact = false,
   defaultOpen,
   onOpenChange,
+  valuePrefix,
 }: {
   options: ComboOption[];
   value?: string;
@@ -60,6 +61,12 @@ export function SearchableSelect({
    * 물들이면 요청받지 않은 화면까지 바뀐다. **길고 자주 갈아타는 목록**(반·학생 전환)에서만 켤 것.
    */
   highlightSelected?: boolean;
+  /**
+   * 트리거 라벨 앞에 붙는 축 이름("기간" → `기간: 최근 7일`). 목록 안 항목은 그대로다.
+   * 툴바에 드롭다운이 여럿 설 때 고른 값만 남으면 어느 축인지 안 읽힌다('완료'가 후속인지 상태인지) —
+   * 학생상담 리뷰 확정 결함(2026-09-03). FilterSelect `axisLabel`이 넘긴다.
+   */
+  valuePrefix?: string;
   /**
    * 촘촘한 표 안(높이 24px 안팎)에 놓일 때 — 화살표와 좌우 간격을 줄인다. 기본 화살표(16px)는 24px 박스에서
    * 글자 자리를 먹어 값이 잘린다. ⚠️ 레이아웃 클래스를 **분기해서 한 벌만** 내보낼 것(`gap-2`와 `gap-1`을
@@ -139,7 +146,7 @@ export function SearchableSelect({
         <span
           className={`truncate ${selected ? "" : "text-text-faint"} ${highlightOn ? "font-bold" : ""}`}
         >
-          {selected ? selected.label : placeholder}
+          {selected ? (valuePrefix ? `${valuePrefix}: ${selected.label}` : selected.label) : placeholder}
         </span>
         {/* 꼬리표는 라벨 뒤·쉐브론 앞, 줄어들지 않는다 — 라벨만 남은 폭에서 접힌다. */}
         {trailing ? <span className="ml-auto shrink-0">{trailing}</span> : null}

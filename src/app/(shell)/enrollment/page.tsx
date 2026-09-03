@@ -193,7 +193,7 @@ export default async function EnrollmentPage({
           <>
             <Suspense
               fallback={
-                <Button variant="outline" disabled>
+                <Button variant="ghost" disabled>
                   <QrCode className="size-4" />
                   공개 접수 QR
                 </Button>

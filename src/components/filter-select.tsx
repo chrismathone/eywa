@@ -29,6 +29,8 @@ export function FilterSelect({
   triggerClassName,
   cap,
   marker = false,
+  clearParams,
+  axisLabel,
 }: {
   paramName: string;
   value: string | null | undefined;
@@ -60,6 +62,18 @@ export function FilterSelect({
   marker?: boolean;
   /** @deprecated 호환용 — 이제 항상 검색형(SearchableSelect)으로 통일. */
   searchable?: boolean;
+  /**
+   * 값을 고를 때 **함께 지우는** 파라미터 — 서로 배타인 축(등록상담의 기간 프리셋 ↔ 특정 달)에 쓴다.
+   * 안 지우면 두 축이 URL에 같이 남아 어느 쪽이 이기는지 서버 우선순위에 달린다.
+   */
+  clearParams?: string[];
+  /**
+   * 축 이름(기간·상담사·상태…). 주면 트리거가 **`축: 값`**(`기간: 전체` / `기간: 최근 7일`)으로 읽히고
+   * 목록 안 해제 항목은 `allLabel`(기본 "전체") 그대로 선다.
+   * 🔴 축 이름을 `allLabel`에 넣지 말 것 — 목록에서 "기간"이 제목인지 해제 항목인지 안 읽히고, 값을 고르면
+   *    트리거에 '완료'만 남아 어느 축인지 사라진다(학생상담 리뷰 확정 결함, 2026-09-03).
+   */
+  axisLabel?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
@@ -69,6 +83,7 @@ export function FilterSelect({
     const params = new URLSearchParams(currentParams?.toString() ?? "");
     if (v === allValue || v === "") params.delete(paramName);
     else params.set(paramName, v);
+    for (const k of clearParams ?? []) params.delete(k);
     params.delete("page"); // 필터 변경은 결과집합이 바뀌므로 1페이지로 리셋(stale page 방지).
     const s = params.toString();
     router.push(`${pathname}${s ? `?${s}` : ""}`);
@@ -82,7 +97,8 @@ export function FilterSelect({
       className={className ?? (markerOn ? MARKER_WIDTH : "w-44")}
       value={value ?? allValue}
       onValueChange={navigate}
-      placeholder={allLabel}
+      placeholder={axisLabel ?? allLabel}
+      valuePrefix={axisLabel}
       ariaLabel={ariaLabel ?? paramName}
       cap={cap}
       // undefined면 SearchableSelect가 기본 박스를 그린다 — 반쪽만 덮어쓰지 않는다(톤은 한 벌).

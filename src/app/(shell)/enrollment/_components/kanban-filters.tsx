@@ -1,18 +1,11 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
-import { BarChart3, LayoutGrid, List } from "@/components/icons/eywa-icon-compat";
 import { FilterSelect } from "@/components/filter-select";
 import { PeriodNav } from "@/components/period-nav";
-import { SearchForm } from "@/components/search-form";
+import { SearchToggle } from "@/components/search-toggle";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { BOARD_STAGE_OPTIONS, type BoardStageKey } from "@/features/enrollment/board-stages";
 import { MonthPicker } from "./month-picker";
-import {
-  buildEnrollmentQuery,
-  enrollmentHref,
-  formatMonthLabel,
-  shiftMonth,
-  type EnrollmentView,
-} from "./enrollment-query";
+import { enrollmentHref, formatMonthLabel, shiftMonth, type EnrollmentView } from "./enrollment-query";
 import { RANGE_LABEL, RANGE_PRESETS, type RangePreset } from "@/features/enrollment/range";
 
 type Props = {
@@ -41,21 +34,17 @@ type Props = {
   yearChips?: ReactNode;
 };
 
-const buildQuery = buildEnrollmentQuery;
-
 /**
- * 툴바 드롭다운 트리거 — 높이만 공용 Button(h-8)에 맞추고 톤은 SearchableSelect 기본과 같게 다시 적는다.
- * ⚠️ `triggerClassName`은 톤까지 통째로 대체하므로 **반쪽만 적으면 색이 갈린다**(그 컴포넌트 주석).
+ * 🔴 디자인 지시서 §10 그대로(원장 2026-09-03 *"남은 결정사항은 지시서 그대로 해 봐"*): 툴바에 **칩 줄·아이콘 열을
+ *    두지 않는다**. 기간 프리셋(칩 3개)·보기 전환(아이콘 칩 3개)은 각각 **라벨 하나(드롭다운)**로 접었고, 검색은 눌러야
+ *    나온다(SearchToggle). 남는 컨트롤 = 월 이동(PeriodNav) · 연·월 · 기간 · 상담사 · 상태 · 보기 · 검색 — 전부 같은
+ *    control-scale 치수(`TOOLBAR_SELECT`)라 한 줄에 밑선이 맞는다. 09-01의 "라운드 덜 둥근 쪽" 규약은 그 안에 들어 있다.
  */
-const TOOLBAR_SELECT = "border-border bg-card text-foreground flex h-8 items-center rounded-md border px-3 text-sm";
-
-/**
- * 🔴 툴바 라운드는 **덜 둥근 쪽으로 통일**한다(원장 2026-09-01: *"버튼 라운드 통일"* →
- * *"라운드 덜진쪽으로 통일"*): 묶음 상자 `rounded-lg`, 그 안의 칩·링크 `rounded-md`.
- * 종전엔 알약(`rounded-full`) 묶음과 각진 기간 네비·버튼이 한 줄에 섞여 있었다.
- * ⚠️ 디자인 캐논의 "칩 = full"은 **본문 배지**에 대한 규칙이다 — 컨트롤이 늘어선 툴바는 버튼·입력과
- *    같은 계열로 본다(캐논: 버튼/인풋 = lg).
- */
+const RANGE_OPTIONS = RANGE_PRESETS.map((r) => ({ value: r, label: RANGE_LABEL[r] }));
+const VIEW_OPTIONS: { value: Exclude<EnrollmentView, "kanban">; label: string }[] = [
+  { value: "table", label: "목록" },
+  { value: "stats", label: "통계" },
+];
 
 export function KanbanFilters({
   selectedMonth,
@@ -132,106 +121,60 @@ export function KanbanFilters({
         />
       </div>
 
-      <span className="bg-line hidden h-4 w-px sm:block" aria-hidden />
+      {/* 기간 프리셋 — 🔴 '전체'는 없다(원장 2026-08-04). 이관으로 3년치가 쌓여 전건을 열면 칸반이 카드 2,197장이
+          된다. 구간 길이는 최대 1년. 특정 달을 보는 중이면 값이 비고("기간"), 여기서 하나를 고르면 그 달은 풀린다
+          (clearParams — 옛 칩 링크가 month:null을 실어 보내던 것과 같은 뜻). */}
+      <FilterSelect
+        paramName="range"
+        value={selectedMonth ? "" : selectedRange}
+        options={RANGE_OPTIONS}
+        axisLabel="기간"
+        ariaLabel="기간 프리셋"
+        className="w-auto"
+        triggerClassName={TOOLBAR_SELECT}
+        clearParams={["month"]}
+      />
 
-      {/* 기간 프리셋 — 🔴 '전체'는 없다(원장 2026-08-04). 이관으로 3년치가 쌓여 전건을 열면
-          칸반이 카드 2,197장이 된다. 구간 길이는 최대 1년. 특정 달을 고르면 이 칩은 해제된다. */}
-      <div className="flex items-center gap-1.5">
-        <span className="micro shrink-0">기간</span>
-        {/* 높이 h-8 = 공용 Button 기본 크기(툴바 한 줄 정렬). */}
-        <div className="border-line inline-flex h-8 items-center gap-0.5 rounded-lg border p-0.5">
-          {RANGE_PRESETS.map((r) => {
-            const active = !selectedMonth && selectedRange === r;
-            return (
-              <Link
-                key={r}
-                href={`/enrollment${buildQuery({ ...base, month: null, range: r })}`}
-                className={`rounded-md px-2.5 py-1 text-xs transition ${
-                  active
-                    ? "bg-foreground text-background font-medium"
-                    : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
-                {RANGE_LABEL[r]}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
+      {/* 상담사 — 라벨 하나(드롭다운). 고른 값이 곧 라벨이다. */}
+      <FilterSelect
+        paramName="consultant"
+        value={selectedConsultant}
+        options={consultants.map((c) => ({ value: c.id, label: c.name }))}
+        axisLabel="상담사"
+        ariaLabel="상담사 필터"
+        className="w-auto"
+        triggerClassName={TOOLBAR_SELECT}
+      />
 
-      <span className="bg-line hidden h-4 w-px sm:block" aria-hidden />
-
-      {/* 상담사 dropdown */}
-      <div className="flex items-center gap-2">
-        <span className="micro shrink-0">상담사</span>
-        <FilterSelect
-          paramName="consultant"
-          value={selectedConsultant}
-          options={consultants.map((c) => ({ value: c.id, label: c.name }))}
-          ariaLabel="상담사 필터"
-          triggerClassName={TOOLBAR_SELECT}
-        />
-      </div>
-
-      {/* 진행 상태 dropdown — 🔴 **칸반과 같은 4단계**(원장 2026-09-01 *"상태 드랍다운도 4단계로
-          통일해야지"*). 선택지는 board-stages 단일 소스라 칸 이름과 절대 갈리지 않는다.
-          ⚠️ 파라미터 이름은 `outcome` 그대로고 값만 칸 키다(옛 링크는 그 칸으로 넓혀 받는다). */}
-      <div className="flex items-center gap-2">
-        <span className="micro shrink-0">상태</span>
-        <FilterSelect
-          paramName="outcome"
-          value={selectedStage}
-          options={BOARD_STAGE_OPTIONS}
-          ariaLabel="진행 단계 필터"
-          className="w-32"
-          triggerClassName={TOOLBAR_SELECT}
-        />
-      </div>
+      {/* 진행 상태 — 🔴 **칸반과 같은 4단계**(원장 2026-09-01 *"상태 드랍다운도 4단계로 통일해야지"*). 선택지는
+          board-stages 단일 소스라 칸 이름과 절대 갈리지 않는다. ⚠️ 파라미터 이름은 `outcome` 그대로고 값만 칸 키다. */}
+      <FilterSelect
+        paramName="outcome"
+        value={selectedStage}
+        options={BOARD_STAGE_OPTIONS}
+        axisLabel="상태"
+        ariaLabel="진행 단계 필터"
+        className="w-auto"
+        triggerClassName={TOOLBAR_SELECT}
+      />
         </>
       ) : null}
 
       {yearChips}
 
-      {/* 뷰 토글 — 칸반 · 목록 · 통계 (통계에선 이것과 대시보드 링크만 남는다) */}
-      <div className="border-line inline-flex h-8 items-center gap-0.5 rounded-lg border p-0.5">
-        <Link
-          href={`/enrollment${buildQuery({ ...base, month: selectedMonth, view: "kanban" })}`}
-          aria-label="칸반 보기"
-          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition ${
-            view === "kanban"
-              ? "bg-foreground text-background font-medium"
-              : "text-text-dim hover:text-foreground"
-          }`}
-        >
-          <LayoutGrid className="size-3.5" />
-          칸반
-        </Link>
-        <Link
-          href={`/enrollment${buildQuery({ ...base, month: selectedMonth, view: "table" })}`}
-          aria-label="목록 보기"
-          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition ${
-            view === "table"
-              ? "bg-foreground text-background font-medium"
-              : "text-text-dim hover:text-foreground"
-          }`}
-        >
-          <List className="size-3.5" />
-          목록
-        </Link>
-        {/* 통계는 집계 화면이라 월·기간·상담사 필터를 안 물려받는다 — 연도만 자기 안에서 고른다. */}
-        <Link
-          href="/enrollment?view=stats"
-          aria-label="통계 보기"
-          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition ${
-            view === "stats"
-              ? "bg-foreground text-background font-medium"
-              : "text-text-dim hover:text-foreground"
-          }`}
-        >
-          <BarChart3 className="size-3.5" />
-          통계
-        </Link>
-      </div>
+      {/* 보기 전환(칸반 · 목록 · 통계) — 지시서 §9 "보기 전환은 2차": 아이콘 칩 3개 대신 라벨 하나. 기본(칸반)은
+          파라미터가 없다(allValue). ⚠️ 통계는 집계 화면이라 월·기간·상담사 필터를 안 물려받는다 — 남은 파라미터는 무시된다. */}
+      <FilterSelect
+        paramName="view"
+        value={view}
+        options={VIEW_OPTIONS}
+        allValue="kanban"
+        allLabel="칸반"
+        axisLabel="보기"
+        ariaLabel="보기 전환"
+        className="w-auto"
+        triggerClassName={TOOLBAR_SELECT}
+      />
 
       {/* 오른쪽 묶음 — 동기화 배지가 자기 줄을 통째로 쓰던 걸 여기로 당겨 한 줄 줄였다(원장 2026-08-05).
           🔴 '대시보드 보기' 링크는 **뺐다**(원장 2026-09-01 *"대시보드 보기는 일단 제거해. 통계뷰가
@@ -241,9 +184,9 @@ export function KanbanFilters({
         {/* 동기화 시각 표시만 남는다 — '지금 동기화' 버튼은 없앴다(주간 자동, 손으로 돌릴 일은 연동 면). */}
         {syncBadge}
         {stats}
-        {/* 🔴 검색은 **맨 오른쪽**(원장 2026-09-01 *"검색창 최우측으로"*). 이름·전화·학교 검색은
-            클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체된다(다른 param 자동 보존). */}
-        {listFilters ? <SearchForm placeholder="이름·전화·학교" defaultValue={searchQuery} /> : null}
+        {/* 🔴 검색은 **맨 오른쪽**(원장 2026-09-01 *"검색창 최우측으로"*)이되 **눌러야 나온다**(§10). 이름·전화·학교
+            검색은 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체된다(다른 param 자동 보존). */}
+        {listFilters ? <SearchToggle placeholder="이름·전화·학교" defaultValue={searchQuery ?? undefined} /> : null}
       </div>
     </div>
   );
