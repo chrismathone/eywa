@@ -24,6 +24,8 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
           cells,
           lines: mpLinesOfDate(data, date),
           isOff: mpDayIsOff(date, data.holidays, mpOffOverrideOf(cells, date)),
+          // 아직 안 온 수업일은 판정에서 뺀다 — 안 빼면 달 초에 남은 수업일이 전부 '미작성'이 된다.
+          today: data.today,
         }),
       ),
     );

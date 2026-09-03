@@ -51,10 +51,13 @@ export type { TrendPoint };
 
 export async function getEnrolledStudentCount(): Promise<number> {
   const supabase = await createClient();
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from("students")
     .select("*", { count: "exact", head: true })
     .eq("status", "enrolled");
+  // 조회 실패를 **재원생 0명**이라는 사실 주장으로 바꾸지 않는다 — 히어로 KPI라 숫자 하나가 곧
+  // "학원이 비었다"로 읽힌다. 호출부(dashboardQuery)가 실패 허용을 담당한다(이 파일의 기존 규약).
+  if (error) throw new Error(`재원생 수 조회 실패: ${error.message}`);
   return count ?? 0;
 }
 
@@ -147,6 +150,9 @@ export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentCha
     supabase.from("students").select("id").eq("status", "enrolled").gte("enrolled_at", since).limit(2000),
     supabase.from("students").select("id").eq("status", "withdrawn").gte("withdrawn_at", since).limit(2000),
   ]);
+  // 조회 실패를 **'최근 7일 변동 없음'**이라는 거짓 문장으로 바꾸지 않는다(위 월간 함수와 같은 규약).
+  if (newCntRes.error) throw new Error(`신규 등록 수 조회 실패: ${newCntRes.error.message}`);
+  if (wdCntRes.error) throw new Error(`퇴원 수 조회 실패: ${wdCntRes.error.message}`);
   const newCount = newCntRes.count ?? 0;
   const withdrawnCount = wdCntRes.count ?? 0;
 
@@ -583,11 +589,41 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
 
 export type TrendDataScope = { attendance?: boolean; billing?: boolean };
 
-export async function getTrendDataLast7Days(scope: TrendDataScope = {}): Promise<TrendPoint[]> {
+/**
+ * 최근 7일 추세(스파크라인) — **60초 캐시**(B6). 이웃 두 위젯(미수 상위·결석 위험)이 같은 이유로
+ * 이미 캐시돼 있다.
+ *
+ * 왜 캐시인가: 이 한 함수가 **출결 7일 전건 + 겹치는 청구월 invoices 전건**(`line_items` jsonb 포함)을
+ * 끌어온다 — 실측 규모로 대략 3,000~4,000행이고 이 페이지에서 바이트가 가장 큰 조회다. 게다가
+ * eywa는 **창(iframe)마다 셸+페이지가 다시 도는 구조**라 창 N개면 N배고, 운영실은 5분마다 스스로
+ * `router.refresh()`까지 한다(하루 90여 회). 7일 추세선에 초 단위 신선도는 필요 없다.
+ *
+ * 🔴 **호출 전에 권한을 확인할 것** — 캐시 안에서 admin 클라이언트를 쓰므로 RLS를 타지 않는다
+ *    (캐시엔 쿠키가 없다, B6). 그래서 `tenant_id`를 **명시로** 건다. 대시보드 페이지는 이미
+ *    `access.read.attendance || access.read.billing`로 갈라 부르고, 어느 축을 실을지도 scope로 넘긴다.
+ * 🔴 캐시 키에 **scope 두 축이 들어간다** — 안 넣으면 수납 권한이 없는 사람이 남의 캐시(청구 포함)를
+ *    받는다.
+ */
+export const getTrendDataLast7Days = (
+  tenantId: string,
+  scope: TrendDataScope = {},
+): Promise<TrendPoint[]> => {
   const includeAttendance = scope.attendance ?? true;
   const includeBilling = scope.billing ?? true;
-  if (!includeAttendance && !includeBilling) return [];
-  const supabase = await createClient();
+  if (!includeAttendance && !includeBilling) return Promise.resolve([]);
+  return unstable_cache(
+    async () => loadTrendPoints(tenantId, includeAttendance, includeBilling),
+    ["dashboard-trend-7d", tenantId, String(includeAttendance), String(includeBilling)],
+    { tags: [dashboardWidgetsTag(tenantId)], revalidate: 60 },
+  )();
+};
+
+async function loadTrendPoints(
+  tenantId: string,
+  includeAttendance: boolean,
+  includeBilling: boolean,
+): Promise<TrendPoint[]> {
+  const supabase = createAdminClient();
   // Window ends yesterday — today is still in progress and shouldn't drag the
   // line to 0% just because attendance hasn't been recorded yet. KST 날짜 문자열을
   // UTC 자정 Date로 바꿔 서버 로컬 시간대와 무관하게 같은 7일 창을 만든다.
@@ -606,6 +642,8 @@ export async function getTrendDataLast7Days(scope: TrendDataScope = {}): Promise
           supabase
             .from("attendance_records")
             .select("id, student_id, class_id, session_date, status, recorded_at")
+            // ⚠️ admin은 RLS를 우회하므로 **tenant 필터가 필수**(캐시 안엔 쿠키가 없다).
+            .eq("tenant_id", tenantId)
             .gte("session_date", startIso)
             .lte("session_date", endIso)
             .order("recorded_at", { ascending: true })
@@ -619,6 +657,7 @@ export async function getTrendDataLast7Days(scope: TrendDataScope = {}): Promise
           supabase
             .from("invoices")
             .select("id, period, amount_total, amount_paid, amount_discount, paid_at, line_items")
+            .eq("tenant_id", tenantId)
             .in("period", invoicePeriods)
             .neq("status", "void")
             .order("id", { ascending: true })

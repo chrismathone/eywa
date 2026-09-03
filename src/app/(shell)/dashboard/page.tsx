@@ -1,7 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
-import { canAccess, canWrite } from "@/lib/permissions";
+import { canWrite } from "@/lib/permissions";
 import {
   getAbsenceRiskCached,
   getActiveEnrollmentConsultations,
@@ -27,7 +27,8 @@ import {
 } from "@/features/assistant/server/queries";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildOperationsBriefing } from "@/features/dashboard/operations-briefing";
-import { resolveDashboardAccess } from "@/features/dashboard/dashboard-access";
+import { resolveDashboardAccess, todayActionGate } from "@/features/dashboard/dashboard-access";
+import { buildBriefingLinks } from "@/features/dashboard/briefing-links";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
@@ -87,7 +88,7 @@ export default async function TodayPage() {
   // 노출만 넓으면 readonly 관리자에게 '항상 권한 오류 나는 죽은 패널'이 보인다(적대 리뷰 확정).
   const canUseAssistant = canSeeDailyBriefing && canWrite(user.systemRole, "dashboard", permissionMatrix);
   const [
-    enrolled,
+    enrolledResult,
     attendanceState,
     trend,
     todaySchedule,
@@ -101,11 +102,14 @@ export default async function TodayPage() {
     settings,
     enrollmentChangesResult,
     actionSignals,
-    enrollmentChange,
+    enrollmentChangeResult,
     dailyBriefingResult,
     assistantConversationResult,
   ] = await Promise.all([
-    access.read.students ? getEnrolledStudentCount() : Promise.resolve(0),
+    // 실패 허용 래퍼 — 쿼리는 throw하고(위장 금지) 카드는 fallback으로 그리되 실패가 로그에 남는다.
+    access.read.students
+      ? dashboardQuery("enrolled student count", getEnrolledStudentCount(), 0)
+      : Promise.resolve({ data: 0, unavailable: false }),
     access.read.attendance
       ? getDashboardAttendanceState()
       : Promise.resolve({
@@ -117,7 +121,11 @@ export default async function TodayPage() {
           snapshotProcessingIssue: false,
         }),
     access.read.attendance || access.read.billing
-      ? getTrendDataLast7Days({ attendance: access.read.attendance, billing: access.read.billing })
+      ? // ⚠️ 캐시본(60초)은 admin 클라이언트라 RLS를 안 탄다 — **이 줄의 권한 분기가 곧 게이트다**.
+        getTrendDataLast7Days(user.tenantId, {
+          attendance: access.read.attendance,
+          billing: access.read.billing,
+        })
       : Promise.resolve([]),
     access.read.timetable || access.read.classes || access.read.attendance
       ? getTodaySchedule()
@@ -158,7 +166,9 @@ export default async function TodayPage() {
       staffApprovals: access.manageStaff,
       owner: access.read.owner,
     }),
-    access.read.students ? getEnrollmentChangeLast7d() : Promise.resolve(EMPTY_ENROLLMENT_CHANGE),
+    access.read.students
+      ? dashboardQuery("enrollment change 7d", getEnrollmentChangeLast7d(), EMPTY_ENROLLMENT_CHANGE)
+      : Promise.resolve({ data: EMPTY_ENROLLMENT_CHANGE, unavailable: false }),
     // 저장분 조회만(AI 호출 없음). 테이블 미적용 DB에서도 대시보드가 죽지 않게 실패 허용 래퍼.
     canSeeDailyBriefing
       ? dashboardQuery<DailyBriefingRow | null>("daily briefing", getDailyBriefing(user.tenantId, kstToday()), null)
@@ -197,12 +207,15 @@ export default async function TodayPage() {
   // 새 쿼리나 AI 호출 없이 순수 계산만 하며, 서로 단위가 다른 count는 합산하지 않는다.
   // 과목 라벨은 학원설정 단일 소스(하드코딩 금지) — 아래 콕핏에 넘기는 것과 같은 맵을 신호에도 준다.
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  const todayActions = buildTodayActions(actionSignals, { subjectLabel: subjectMaps.labelOf }).filter((item) => {
-    if (!canAccess(user.systemRole, item.menuKey, permissionMatrix)) return false;
-    if (item.requiredAccess === "write") return canWrite(user.systemRole, item.menuKey, permissionMatrix);
-    if (item.requiredAccess === "manage-staff") return access.manageStaff;
-    return item.requiredAccess === "read";
-  });
+  // 조치 화면 열람 판정은 브리핑 바로 가기 칩과 **같은 술어**를 쓴다(갈리면 죽은 링크가 생긴다).
+  const canOpenAction = todayActionGate(user.systemRole, permissionMatrix, access);
+  const todayActions = buildTodayActions(actionSignals, { subjectLabel: subjectMaps.labelOf }).filter((item) =>
+    canOpenAction(item.menuKey, item.requiredAccess),
+  );
+  // 일일 브리핑 '바로 가기' — 결정론 payload의 신호만 링크로(문장 파싱 없음, briefing-links 주석).
+  const briefingLinks = canSeeDailyBriefing
+    ? buildBriefingLinks(dailyBriefingResult.data?.payload ?? null, canOpenAction)
+    : null;
   const briefing = buildOperationsBriefing({
     actions: todayActions,
     followUps: access.read.consultations ? followUps : [],
@@ -310,7 +323,7 @@ export default async function TodayPage() {
         metrics={{
           enrollment: access.read.students
             ? {
-                count: enrolled,
+                count: enrolledResult.data,
                 delta: enrollmentDelta(
                   enrollmentChanges.newCount,
                   enrollmentChanges.withdrawnCount,
@@ -331,7 +344,7 @@ export default async function TodayPage() {
       />
 
       {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
-      {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} /> : null}
+      {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} /> : null}
 
       {/* ①.6 매니저 팀에게 물어보기 — 대화형 비서(질문 1건 = 명시 트리거 1회, Phase 2) */}
       {canUseAssistant ? (
@@ -387,7 +400,7 @@ export default async function TodayPage() {
       {/* 학원 펄스 — 판단 큐 다음의 보조 맥락. */}
       <SlimTrend
         data={trend}
-        change={enrollmentChange}
+        change={enrollmentChangeResult.data}
         subjects={subjects}
         visible={{
           attendance: access.read.attendance,

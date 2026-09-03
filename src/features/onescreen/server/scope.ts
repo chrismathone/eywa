@@ -2,6 +2,8 @@ import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { COLLISION_STATUSES, isNameCollision } from "../classnote-collision";
+import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
+import { kstToday } from "@/lib/date-kst";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -20,16 +22,34 @@ export async function teacherOwnsStudent(
   studentId: string,
   date?: string,
 ): Promise<boolean> {
+  const on = date ?? kstToday();
   const { all: myClassIds } = await getTeachingClassIds(supabase, teacherId, date);
   if (myClassIds.length === 0) return false;
+  /**
+   * 🔴 **기준일 명단 판정이지 `end_date IS NULL`이 아니다.** 종료일이 잡힌 수강(반이동 예정·이달 말
+   *    종료)은 그 날짜엔 여전히 명단에 있고 **로스터가 화면에 그린다** — 그런데 이 게이트만 NULL을
+   *    요구해서, 화면엔 보이는 학생인데 첨부·링크 취소·재발급·회수가 전부 거절됐다([[#77]]의 뒤집힌 꼴:
+   *    화면은 열어 두고 서버만 막는다). 로스터와 **같은 날짜 창**으로 맞춘다.
+   * ⚠️ `.or(end_date.gte)`는 프리필터일 뿐이다([[#125]]) — 반이동 종료(`is_transferred`)는 그 하루가
+   *    이미 새 반이라 `isEnrollmentOnRosterOn`이 최종 판정한다.
+   */
   const { data: enr } = await supabase
     .from("enrollments")
-    .select("id")
+    .select("id, start_date, end_date, is_transferred")
     .eq("student_id", studentId)
-    .is("end_date", null)
-    .in("class_id", myClassIds)
-    .limit(1);
-  return !!enr && enr.length > 0;
+    .or(`start_date.is.null,start_date.lte.${on}`)
+    .or(`end_date.is.null,end_date.gte.${on}`)
+    .in("class_id", myClassIds);
+  return (enr ?? []).some((e) =>
+    isEnrollmentOnRosterOn(
+      {
+        startDate: (e.start_date as string | null) ?? on,
+        endDate: (e.end_date as string | null) ?? null,
+        isTransferred: (e.is_transferred as boolean | null) ?? false,
+      },
+      on,
+    ),
+  );
 }
 
 /**

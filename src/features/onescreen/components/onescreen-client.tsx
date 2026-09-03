@@ -40,6 +40,7 @@ import {
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
 import type { AttendanceMark, CellState, OneScreenStudent, Subject } from "../types";
+import dynamic from "next/dynamic";
 import { OneScreenTopBar } from "./top-bar";
 import { StudentList, type SendMark } from "./student-list";
 import type { TodayClass } from "../server/roster";
@@ -52,10 +53,35 @@ import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
 import { ReportPreview, type ReportPreviewContext } from "./report-preview";
 import type { TrendReportRow } from "../report-trend";
 import type { ReportSettings } from "@/features/owner/settings-types";
-import { OneScreenGrid } from "./onescreen-grid";
-import { StatusBoard } from "./status-board";
-import { SendCalendarBoard } from "./send-calendar";
-import { NoticeComposer } from "./notice-composer";
+/**
+ * 카드 아님 뷰 4종은 **지연 로드**(B5) — 기본 뷰는 카드이고 이 넷은 강사가 탭을 눌러야 그린다.
+ * 정적 import면 네 파일(격자 430줄 · 발송현황 280 · 발송달력 296 · 공지작성 536 = 1,540여 줄)이
+ * 전원이 매일 여는 첫 로드에 통째로 실린다. 창(iframe)마다 JS를 처음부터 다시 실행하는 구조라
+ * (docs/perf-open-window-backlog.md 실측: 지배 항목은 서버가 아니라 뷰어 PC의 클라 실행) 첫 화면이
+ * 안 그리는 코드를 첫 로드에서 빼는 것이 가장 곧은 레버다.
+ *
+ * ⚠️ `ssr: false` — 넷 다 클라 상호작용 전용이라 서버에서 미리 그릴 이유가 없다(부모가 이미
+ *    클라 컴포넌트라 이 옵션이 허용된다). 전환 순간의 빈 화면은 `loading` 스켈레톤이 덮는다.
+ */
+const ViewSkeleton = () => (
+  <div className="bg-card shadow-card h-64 animate-pulse rounded-2xl" />
+);
+const OneScreenGrid = dynamic(() => import("./onescreen-grid").then((m) => m.OneScreenGrid), {
+  ssr: false,
+  loading: ViewSkeleton,
+});
+const StatusBoard = dynamic(() => import("./status-board").then((m) => m.StatusBoard), {
+  ssr: false,
+  loading: ViewSkeleton,
+});
+const SendCalendarBoard = dynamic(() => import("./send-calendar").then((m) => m.SendCalendarBoard), {
+  ssr: false,
+  loading: ViewSkeleton,
+});
+const NoticeComposer = dynamic(() => import("./notice-composer").then((m) => m.NoticeComposer), {
+  ssr: false,
+  loading: ViewSkeleton,
+});
 import {
   buildGridRows,
   rowKey,

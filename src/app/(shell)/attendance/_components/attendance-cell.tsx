@@ -11,6 +11,7 @@ import {
   slotBreakdown,
   type SlotMark,
 } from "@/features/attendance/cell-display";
+import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { useCellState } from "./grid-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
@@ -38,7 +39,7 @@ export function AttendanceCell({
   muted,
   outside,
   derived,
-  locked,
+  lockedReason,
   daySlots,
   otherSlots,
   sharedDay,
@@ -60,8 +61,12 @@ export function AttendanceCell({
   outside?: boolean;
   /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시. */
   derived?: boolean;
-  /** 수정 기간(7일)이 지나 강사가 못 고치는 칸 — 이유를 담은 문장. */
-  locked?: string | null;
+  /**
+   * 이 칸을 왜 못 고치는가 — `"past"`(수정 기간 7일 경과) · `"notMine"`(이 표의 몫이 아닌 빗금 칸).
+   * 🔴 **문장이 아니라 사유 코드**다. 문장(157B)을 서버가 칸마다 만들어 내려보내면 잠긴 칸 수천 개가
+   *    그대로 RSC 페이로드 곱이 된다(강사 전체 보기 실측 1MB대) — 표시는 클라에서 편다.
+   */
+  lockedReason?: "past" | "notMine" | null;
   /**
    * 그날 교시가 **둘 이상**일 때만 오는 교시별 기록(0196a) — 숫자(합)·줄무늬·툴팁의 근거.
    * 대부분의 칸은 undefined라 종전과 완전히 같이 그려진다.
@@ -90,6 +95,13 @@ export function AttendanceCell({
   const row = rowKey(classId, studentId);
   const key = cellKey(row, sessionDate);
   const { state, ctx } = useCellState(key);
+  // 잠금 사유 문장은 여기서 편다 — 판정·문장 생산은 여전히 grid-context 한 곳이다.
+  const locked =
+    lockedReason === "past"
+      ? (ctx?.lockNoteOf(sessionDate) ?? null)
+      : lockedReason === "notMine"
+        ? NOT_MINE_MESSAGE
+        : null;
   // 팝오버가 고친 메모(null = 아직 안 고침 → 서버 값 사용). effect로 state를 되쓰지 않는다(#25).
   const [noteEdit, setNoteEdit] = useState<string | null>(null);
   const [popover, setPopover] = useState<PopoverAnchor | null>(null);

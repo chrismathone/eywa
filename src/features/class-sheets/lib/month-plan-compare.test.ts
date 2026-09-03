@@ -198,3 +198,46 @@ describe("mpSummarize — 휴강은 분모에서 빠진다", () => {
     expect(s.planned).toBe(1);
   });
 });
+
+describe("mpCompareDay — 아직 안 온 수업일은 판정하지 않는다(upcoming)", () => {
+  const cells = mpCellMapOf([cell("in_class", "SB 6-8")]);
+
+  it("🔴 계획만 있고 기록이 없어도, 그 날이 **오늘보다 뒤면** 미작성이 아니다", () => {
+    const v = mpCompareDay({
+      date: "2026-09-20",
+      isOff: false,
+      cells: mpCellMapOf([{ planDate: "2026-09-20", colKind: "in_class", body: "SB 6-8" }]),
+      lines: [],
+      today: "2026-09-03",
+    });
+    expect(v.status).toBe("upcoming");
+    expect(mpIsWarning(v.status)).toBe(false);
+  });
+
+  it("🔴 오늘은 '지난 날'이다 — 경계는 오늘보다 뒤만(앱 전역 elapsedDays 규약)", () => {
+    const v = mpCompareDay({ date: "2026-09-01", isOff: false, cells, lines: [], today: "2026-09-01" });
+    expect(v.status).toBe("unwritten");
+  });
+
+  it("🔴 사실이 달력을 이긴다 — 미래여도 기록이 있으면 그대로 대조한다", () => {
+    const v = mpCompareDay({
+      date: "2026-09-20",
+      isOff: false,
+      cells: mpCellMapOf([{ planDate: "2026-09-20", colKind: "in_class", body: "SB 6-8" }]),
+      lines: [line({ textbook: "SB", pageRange: "6-8" })],
+      today: "2026-09-03",
+    });
+    expect(v.status).toBe("ok");
+  });
+
+  it("today를 안 넘기면 종전대로 판정한다(호출부 점진 적용 안전)", () => {
+    expect(mpCompareDay({ date: "2026-09-01", isOff: false, cells, lines: [] }).status).toBe("unwritten");
+  });
+
+  it("upcoming은 미작성에서 빠지되 작성률 분자·분모에는 남는다(계획은 실제로 썼다)", () => {
+    const s = mpSummarize([{ status: "upcoming", planBooks: [], actualBooks: [] }]);
+    expect(s.unwritten).toBe(0);
+    expect(s.planned).toBe(1);
+    expect(s.scheduled).toBe(1);
+  });
+});

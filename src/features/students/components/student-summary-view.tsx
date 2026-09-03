@@ -97,16 +97,20 @@ type MetricTone = "primary" | "amber" | "danger";
 function SummaryBody({ summary }: { summary: StudentSummary }) {
   const subjects = useSubjectMaps();
   const a = summary.attendance;
+  // 🔴 수납 읽기 권한이 없으면 서버가 아예 안 실어 보낸다(null) — 칸을 **그리지 않는다**.
+  //    "완납"으로 대신 그리면 권한 없는 사람에게 거짓 사실을 말하는 셈이다([[#77]]).
   const b = summary.billing;
-  const billingValue = b.unpaidCount === 0 ? "완납" : `${b.unpaidCount}건`;
-  const billingSub = b.overdueCount > 0 ? `연체 ${b.overdueCount}건` : (b.latestPeriod ?? undefined);
-  const billingTone: MetricTone = b.overdueCount > 0 ? "danger" : b.unpaidCount > 0 ? "amber" : "primary";
+  const billingValue = b ? (b.unpaidCount === 0 ? "완납" : `${b.unpaidCount}건`) : null;
+  const billingSub = b ? (b.overdueCount > 0 ? `연체 ${b.overdueCount}건` : (b.latestPeriod ?? undefined)) : undefined;
+  const billingTone: MetricTone = b && b.overdueCount > 0 ? "danger" : b && b.unpaidCount > 0 ? "amber" : "primary";
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className={`grid gap-2.5 ${billingValue === null ? "grid-cols-1" : "grid-cols-2"}`}>
         <Metric label="출석률 (30일)" value={`${Math.round(a.rate)}%`} sub={`${a.present}/${a.total}회`} tone="primary" />
-        <Metric label="미납" value={billingValue} sub={billingSub} tone={billingTone} />
+        {billingValue === null ? null : (
+          <Metric label="미납" value={billingValue} sub={billingSub} tone={billingTone} />
+        )}
       </div>
 
       <div className="border-line flex items-center justify-between rounded-md border px-3 py-2 text-[11px]">

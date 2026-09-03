@@ -78,12 +78,16 @@ export const studentSummaryTool = betaZodTool({
       status: studentStatusLabel(summary.status),
       enrollments: summary.enrollments.map((e) => ({ ...e, subject: label(e.subject) ?? e.subject })),
       // latestStatus raw enum(unpaid/void…)이 모델 답변으로 유출되지 않게 한글 라벨링(상류 차단).
-      billing: {
-        ...summary.billing,
-        latestStatus: summary.billing.latestStatus
-          ? (INVOICE_STATUS_LABEL[summary.billing.latestStatus] ?? summary.billing.latestStatus)
-          : null,
-      },
+      // 🔴 수납 권한이 없으면 summary.billing이 **null**이다([[#77]]) — 그때는 키 자체를 안 싣는다.
+      //    빈 객체나 0을 실으면 모델이 "미납 없음"으로 읽어 권한 밖 사실을 지어낸다.
+      billing: summary.billing
+        ? {
+            ...summary.billing,
+            latestStatus: summary.billing.latestStatus
+              ? (INVOICE_STATUS_LABEL[summary.billing.latestStatus] ?? summary.billing.latestStatus)
+              : null,
+          }
+        : null,
     });
   },
 });
