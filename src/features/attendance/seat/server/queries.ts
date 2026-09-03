@@ -24,9 +24,14 @@ export type SeatStudent = {
    * 🔴 **비로그인 PIN 경로는 항상 null이다** — 아래 select 분기 주석 참조(병원·수술·가족 일정이 그대로 적힌다).
    */
   note: string | null;
-  /** JJ 전용(0206a). 랩실·공개 PIN은 항상 null. */
+  /**
+   * JJ 전용 칸 — 영어 시트 JJ 폼과 **같은 행**(`class_sheet_student_marks`). 랩실은 항상 null.
+   * 🔴 `attitude`는 marks의 `status`(태도 5단 눈금)다 — 위 `status`(출결)와 **다른 축**이다.
+   */
+  attitude: string | null;
   listeningLevel: string | null;
   memorizedWords: string | null;
+  progressNote: string | null;
 };
 
 export type SeatClassRoster = {
@@ -66,8 +71,10 @@ function toSeatStudent(
     recordedBy: recorder?.display_name ?? null,
     fromSeat: !!rec?.seat_label,
     note: rec?.note ?? null,
+    attitude: null,
     listeningLevel: null,
     memorizedWords: null,
+    progressNote: null,
   };
 }
 

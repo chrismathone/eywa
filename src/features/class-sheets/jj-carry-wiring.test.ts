@@ -94,10 +94,14 @@ describe("JJ 이어받기 배선", () => {
     const board = code(read("features/class-sheets/components/today-board.tsx"));
     expect(board).toContain("onCarried={(slotStart, patches)");
     expect(board).toContain("saveMark(");
-    // 자리 출석부(JJ): 블록 → 보드 오버레이. 오버레이는 두 칸만 담는 그릇이라 태도·특이사항에 닿지 않는다.
+    // 자리 출석부(JJ): 블록 → 보드 오버레이.
+    // 🔴 **`CARRY_FIELDS`(듣기·단어)로 돈다** — 2026-09-03에 오버레이 그릇이 태도·특이사항까지 담게
+    //    넓어졌다(원장 지시로 JJ 표를 영어 시트와 같은 칸으로 맞춤). 예전처럼 `JJ_MARK_FIELDS`로 돌면
+    //    이어받기가 안 채우는 두 칸이 `undefined`로 덮여 **화면에서 사라진다**(DB엔 남아 더 헷갈린다).
     const seatSaves = code(read("app/(shell)/attendance/seat/[seat]/_components/seat-board-saves.ts"));
     expect(seatSaves).toContain("applyCarried");
-    expect(seatSaves).toContain("for (const field of JJ_MARK_FIELDS) cur[field] = p[field];");
+    expect(seatSaves).toContain("for (const field of CARRY_FIELDS) cur[field] = p[field];");
+    expect(seatSaves).not.toContain("for (const field of JJ_MARK_FIELDS)");
   });
 
   it("머지가 태도·특이사항·시험 점수를 건드리지 않는다(있던 값 그대로)", () => {

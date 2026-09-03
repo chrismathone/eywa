@@ -91,8 +91,15 @@ export default async function PublicSeatPage({
       : Promise.resolve({}),
   ]);
 
+  // 🔴 본문 폭을 캡하지 않는다 — 셸 `<main>`(px-3 lg:px-6, max-w 없음)과 **같은 폭**이다.
+  //    원장 2026-09-03: *"월별 출석부와 같은 화면 크기로. 접근 방법만 다르지 기능이 다르지 않기
+  //    때문에"*(seat/jj 로 접속했을 때의 화면 너비). 그전엔 `max-w-5xl`(1024px)이라 한 교시에 반이
+  //    3개면 진도 붙은 열(440px×3=1,320px)이 통째로 잘려 가로로 끌어야 출결을 찍었다.
+  // ⚠️ loading.tsx도 **같은 클래스**여야 한다(다르면 스켈레톤에서 본문으로 폭이 튄다).
+  // ⚠️ 하단 여백은 셸 `<main>`과 같은 `pb-8 lg:pb-10` — 끝까지 내렸을 때 마지막 카드가 창 바닥에
+  //    딱 붙지 않게(원장 2026-09-03, 전 화면 공통). 크롬리스 라우트는 셸을 안 거치므로 직접 준다.
   return (
-    <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-3 px-3 py-4 sm:px-5">
+    <div className="flex min-h-screen flex-col gap-3 px-3 pt-4 pb-8 lg:px-6 lg:pb-10">
       <header className="shrink-0">
         <p className="text-text-dim text-xs font-medium">{labels.academyLine}</p>
         <h1 className="text-foreground text-xl font-bold tracking-tight">

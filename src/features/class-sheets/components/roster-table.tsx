@@ -32,7 +32,13 @@ import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import { attendanceOrMakeup } from "../lib/makeup-roster";
-import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
+import {
+  ROSTER_FIXED_LABEL,
+  rosterColSpan,
+  rosterTextCols,
+  type RosterForm,
+  type SheetMark,
+} from "../lib/roster-form";
 import { TODAY_BASE_COLS, TODAY_NAME_W } from "../lib/today-columns";
 // 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
 // (원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 여기 인라인이던 것을 추출, 동작 불변).
@@ -206,7 +212,7 @@ export const RosterTable = memo(function RosterTable({
             >
               유닛
             </th>
-            <th className="py-0.5 text-center font-bold">태도</th>
+            <th className="py-0.5 text-center font-bold">{ROSTER_FIXED_LABEL.attitude}</th>
             {/* 자유 입력 칸 — 그전엔 특이사항에 섞여 있었다("… PL 7, 15문"). 형식이 제각각이라 자유 입력이다.
                 라벨은 roster-form이 정한다(기본 '시험 점수' / JJ '듣기 레벨'·'누적 암기 단어수'). */}
             {textCols.map((col) => (
@@ -220,7 +226,7 @@ export const RosterTable = memo(function RosterTable({
             {/* ⚠️ `whitespace-nowrap` — JJ 폼은 이 열이 30px까지 좁아져(2026-08-28 열 다이어트) 라벨이
                 두 줄로 접힌다. 접히면 그 카드만 학생 줄이 아래로 밀려 나란한 카드의 `grid-rows-subgrid`
                 줄맞춤이 깨진다(roster-form ⚠️와 같은 이유). 넘치면 접지 말고 옆으로 흘려보낸다. */}
-            <th className="rounded-r-md py-0.5 text-center font-bold whitespace-nowrap">특이사항</th>
+            <th className="rounded-r-md py-0.5 text-center font-bold whitespace-nowrap">{ROSTER_FIXED_LABEL.progressNote}</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">

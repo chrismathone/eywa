@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fillSeatSlot, setSeatCell, type SeatStatus } from "@/features/attendance/seat/server/actions";
 import { setSeatJjField } from "@/features/attendance/seat/server/mark-actions";
-import { seatOverlayKey, JJ_MARK_FIELDS, type JjMarkField } from "@/features/attendance/seat/jj-fields";
-import type { CarryPatch } from "@/features/class-sheets/lib/carry-marks";
+import { seatOverlayKey, type JjMarkField } from "@/features/attendance/seat/jj-fields";
+import { CARRY_FIELDS, type CarryPatch } from "@/features/class-sheets/lib/carry-marks";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatKey } from "@/features/attendance/seat/seat";
 
@@ -170,7 +170,9 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
         for (const p of patches) {
           const key = keyOf(classId, p.studentId);
           const cur = { ...next[key] };
-          for (const field of JJ_MARK_FIELDS) cur[field] = p[field];
+          // 🔴 `JJ_MARK_FIELDS`(네 칸)가 아니라 **`CARRY_FIELDS`(듣기·단어)** — 이어받기가 채우는 건
+          //    그 둘뿐이라, 네 칸을 돌면 태도·특이사항이 `undefined`로 덮여 화면에서 사라진다.
+          for (const field of CARRY_FIELDS) cur[field] = p[field];
           next[key] = cur;
         }
         return next;

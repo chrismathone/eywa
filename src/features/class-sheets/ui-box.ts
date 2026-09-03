@@ -35,11 +35,17 @@ export const SHEET_BOX_FRAME = "border-line-strong rounded-sm border h-5";
 /** 뼈대 + 시트 공통 글자. */
 export const SHEET_BOX = `${SHEET_BOX_FRAME} ${SHEET_TEXT} font-semibold`;
 
-/** 한 줄 입력칸·드롭다운 트리거 — 이름 한 줄과 같은 높이(20px). */
-export const SHEET_INPUT = `${SHEET_BOX} text-foreground focus:border-primary w-full bg-transparent px-1 outline-none disabled:opacity-60`;
+/**
+ * 한 줄 입력칸·드롭다운 트리거 — 이름 한 줄과 같은 높이(20px).
+ * 🔴 **바탕은 흰색(`bg-card`)** — 원장 2026-09-03: *"텍스트 입력가능한 곳은 흰색 배경으로."*
+ *    그전엔 `bg-transparent`라 뒤 카드·행 틴트가 그대로 비쳐, 한 줄 안에서 "칠 수 있는 칸"과
+ *    "그냥 글자"가 모양으로 안 갈렸다(읽기 전용 `SHEET_BOX_READONLY`가 회색인 것과 짝이다).
+ *    ⚠️ 되돌리지 말 것. 행 상태 틴트는 칸 **밖**(td)에 그대로 남는다.
+ */
+export const SHEET_INPUT = `${SHEET_BOX} text-foreground focus:border-primary bg-card w-full px-1 outline-none disabled:opacity-60`;
 
-/** 여러 줄 입력(메모) — 높이만 다르다(h-5를 덮으므로 FRAME을 안 쓴다). */
-export const SHEET_TEXTAREA = `border-line-strong text-foreground focus:border-primary ${SHEET_TEXT} w-full resize-y rounded-sm border bg-transparent px-1 py-1 font-semibold outline-none`;
+/** 여러 줄 입력(메모) — 높이만 다르다(h-5를 덮으므로 FRAME을 안 쓴다). 바탕은 위와 같은 흰색. */
+export const SHEET_TEXTAREA = `border-line-strong text-foreground focus:border-primary ${SHEET_TEXT} bg-card w-full resize-y rounded-sm border px-1 py-1 font-semibold outline-none`;
 
 /**
  * 읽기 전용 칸 — 같은 박스에 회색 바탕이라 "여기는 못 고친다"가 모양으로 보인다.
@@ -47,5 +53,5 @@ export const SHEET_TEXTAREA = `border-line-strong text-foreground focus:border-p
  */
 export const SHEET_BOX_READONLY = `${SHEET_BOX} bg-bg-soft text-text-dim inline-flex w-full items-center truncate px-1`;
 
-/** 유닛 칸 — 굵기는 컴포넌트가 정한다(기본 1은 흐리게, 고치면 굵게). */
-export const SHEET_BOX_UNITS = `${SHEET_BOX_FRAME} focus:border-primary ${SHEET_TEXT} w-full bg-transparent px-0.5`;
+/** 유닛 칸 — 굵기는 컴포넌트가 정한다(기본 1은 흐리게, 고치면 굵게). 바탕은 위와 같은 흰색. */
+export const SHEET_BOX_UNITS = `${SHEET_BOX_FRAME} focus:border-primary ${SHEET_TEXT} bg-card w-full px-0.5`;

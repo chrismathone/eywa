@@ -87,7 +87,10 @@ export function MonthGoalStrip({
             const actual = actualBooksOf(lines, area.key);
             return (
               <div key={area.key} className="flex flex-col gap-1 bg-white px-2.5 py-1.5">
-                <div className="grid grid-cols-[74px_minmax(0,1fr)_92px] items-center gap-1.5">
+                {/* 영역 칩 | 교재명 | 목표 — 교재명:목표 = **4:6**(원장 2026-09-03 *"교재명을 줄이고 목표를
+                    넓혀. 4:6 정도로"*). 그전엔 목표가 92px 고정이라 "3과 중간까지"도 안 들어갔다.
+                    ⚠️ `minmax(0,…)`를 빼지 말 것 — 안 빼면 긴 교재명이 칸을 밀어 비율이 깨진다. */}
+                <div className="grid grid-cols-[74px_minmax(0,4fr)_minmax(0,6fr)] items-center gap-1.5">
                   <span
                     className={`${SHEET_BOX_FRAME} inline-flex h-5 w-full items-center justify-center truncate px-1 text-[12px] font-bold ${
                       SUBJECT_SOFT[skillAreaColorOf(skillAreas, area.key)]

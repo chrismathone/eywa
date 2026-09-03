@@ -28,6 +28,13 @@ export type SheetMark = {
   memorizedWords: string | null;
 };
 
+/**
+ * 자유 입력 열 앞뒤에 **늘 서는 두 칸**의 라벨 — 화면마다 다시 적지 말 것.
+ * (영어 시트 로스터 표와 JJ실 자리 출석부가 같은 글자를 써야 한 화면에서 배운 이름이 다른 화면에서 안 바뀐다.)
+ * ⚠️ `attitude`의 저장 컬럼 이름은 `status`지만 뜻은 **태도**다 — 출결과 헷갈리지 말 것.
+ */
+export const ROSTER_FIXED_LABEL = { attitude: "태도", progressNote: "특이사항" } as const;
+
 /** 자유 입력 칸(태도와 특이사항 사이) — 폼이 어느 것을 그릴지 정한다. */
 export type MarkTextField = "score" | "listeningLevel" | "memorizedWords";
 

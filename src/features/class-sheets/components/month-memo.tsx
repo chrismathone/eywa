@@ -1,0 +1,130 @@
+"use client";
+
+/**
+ * 월간 **특이사항 메모** — 달력 보기에서 월간계획 바로 아래 한 칸(0246a).
+ *
+ * 원장 2026-09-03: *"인재원 영어의 강사시트 달력뷰에서 특이사항 메모할 수 있는 메모란을 추가해야겠어.
+ * 월별 계획 아래쪽에 추가하면 될듯."*
+ *
+ * 🔴 **달력 보기에만 선다.** 진도표는 날짜 열이 축이고 계획(MP)은 인쇄 서식이라, 같은 칸을 세 보기에
+ *    다 두면 어디에 적은 게 남는지 헷갈린다(원장이 지목한 자리도 달력이다).
+ * 🔑 grain = **반 × 달 하나**. 담임/부담임으로 안 가른다 — 특이사항은 그 반의 사실이지 역할별 기록이
+ *    아니다(위 목표 스트립의 역할 토글은 목표에만 걸린다).
+ * ⚠️ 저장은 **디바운스 600ms + 언마운트 flush** — 목표 스트립(`use-month-goals`)과 같은 규약이라
+ *    마지막 글자를 잃지 않는다. 값은 `defaultValue`(비컨트롤드)라 왕복마다 커서가 튀지 않는다.
+ * ⚠️ 0246a 미적용이면 **편집을 잠그고 사실을 그대로 적는다** — 적을 수 있는 것처럼 두면 다 쓴 뒤에
+ *    저장 실패를 만난다([[#95]]·[[#103]] 거짓 어포던스).
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { saveMonthMemo } from "../server/month-memo-actions";
+import type { MonthMemoStatus } from "../server/month-queries";
+
+const SAVE_DELAY_MS = 600;
+const MAX_BODY = 2000;
+
+export function MonthMemo({
+  classId,
+  month,
+  monthLabel,
+  initialBody,
+  status,
+  canEdit,
+}: {
+  classId: string;
+  /** "YYYY-MM" */
+  month: string;
+  monthLabel: string;
+  initialBody: string;
+  status: MonthMemoStatus;
+  canEdit: boolean;
+}) {
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 아직 안 보낸 값 — 언마운트 flush가 **마지막으로 친 글자**를 보낸다. */
+  const pending = useRef<string | null>(null);
+  const ready = status === "ok" && canEdit;
+
+  const send = useCallback(
+    (body: string) => {
+      pending.current = null;
+      return saveMonthMemo({ classId, month, body })
+        .then((res) => {
+          if (res.ok) {
+            setSavedAt(Date.now());
+            setError(null);
+            return;
+          }
+          setError(res.error);
+        })
+        .catch(() => {
+          // 액션은 {ok:false}로 실패를 알리지만 **네트워크가 끊기면 reject**된다 — 안 잡으면
+          // 처리 안 된 rejection만 남고 사람은 저장된 줄 안다.
+          setError("저장에 실패했습니다(네트워크)");
+        });
+    },
+    [classId, month],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+      // 언마운트(달 이동·보기 전환·창 닫기) 직전 마지막 값 flush — 실패는 알릴 자리가 없으니 조용히 보낸다.
+      if (pending.current !== null) void send(pending.current);
+    };
+  }, [send]);
+
+  const onChange = (body: string) => {
+    pending.current = body;
+    setSavedAt(null);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      void send(body);
+    }, SAVE_DELAY_MS);
+  };
+
+  return (
+    <div className="border-line overflow-hidden rounded-xl border">
+      <div className="bg-bg-soft flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-[12.5px] font-bold">
+        <span>특이사항</span>
+        <span className="text-text-faint num">{monthLabel}</span>
+        <span
+          className={`ml-auto text-[11.5px] font-semibold ${
+            error ? "text-danger" : savedAt ? "text-green" : "text-text-faint"
+          }`}
+        >
+          {error ?? (savedAt ? "저장됨" : "이 달 전체에 남는 메모입니다")}
+        </span>
+      </div>
+      {/* 🔴 표가 아직 없으면 **적게 두지 않는다** — 다 쓰고 나서 저장 실패를 만나는 게 더 나쁘다. */}
+      {status !== "ok" ? (
+        <p className="text-text-dim px-2.5 py-2 text-[12px]">
+          {status === "missing-table"
+            ? "메모 칸은 아직 준비 중입니다(관리자에게 문의하세요). 달력·진도표는 그대로 쓸 수 있습니다."
+            : "메모를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요."}
+        </p>
+      ) : (
+        <textarea
+          className="text-foreground focus:border-primary min-h-[72px] w-full resize-y border-0 bg-white px-2.5 py-2 text-[13px] font-semibold outline-none disabled:opacity-60"
+          defaultValue={initialBody}
+          disabled={!ready}
+          maxLength={MAX_BODY}
+          placeholder={canEdit ? "이 달 전체에 남길 특이사항을 적습니다 (예: 9/16 시험 주간, 3주차 원어민 대체)" : ""}
+          aria-label={`${monthLabel} 특이사항 메모`}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => {
+            // 칸을 떠나면 디바운스를 기다리지 않는다 — 사람이 "다 썼다"고 말한 순간이다.
+            if (!ready || pending.current === null) return;
+            if (timer.current) {
+              clearTimeout(timer.current);
+              timer.current = null;
+            }
+            void send(e.target.value);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+

@@ -8,13 +8,43 @@
  *    **같은 행**이라 한쪽에서 고치면 다른 쪽에도 보인다.
  * 🔴 자리 시수(`seat_label`)와는 무관 — 이 칸을 적는다고 담임 정산에서 빠지지 않는다.
  */
-import { rosterTextCols, type MarkTextField, type RosterTextCol } from "@/features/class-sheets/lib/roster-form";
+import {
+  ROSTER_FIXED_LABEL,
+  rosterTextCols,
+  type MarkTextField,
+  type RosterTextCol,
+} from "@/features/class-sheets/lib/roster-form";
 import { hhmm, type SeatKey } from "./seat";
 
-export const JJ_MARK_FIELDS = ["listeningLevel", "memorizedWords"] as const;
+/**
+ * 저장 가능한 JJ 칸 — **영어 시트 JJ 폼과 같은 구성**(원장 2026-09-03: *"seat/jj로 접속하는 출석부에서
+ * 영어 강사 시트의 JJ처럼 입력란을 동일하게 맞춰야할듯"*). 순서도 시트와 같다(태도 → 듣기 → 단어 → 특이사항).
+ *
+ * 🔴 `attitude`는 marks의 `status` 컬럼이다 — **출결이 아니다.** 출결은 `attendance_records`고 이 표는
+ *    태도(5단 눈금)를 담는다. 이름이 비슷하다고 두 축을 섞지 말 것.
+ * ⚠️ 여기 이름은 화면·저장이 함께 쓰는 키다. 늘릴 땐 `JJ_MARK_COLUMN`·`JJ_MARK_MAXLEN`도 같이(타입이 강제한다).
+ */
+export const JJ_MARK_FIELDS = ["attitude", "listeningLevel", "memorizedWords", "progressNote"] as const;
 export type JjMarkField = (typeof JJ_MARK_FIELDS)[number];
 
-export const JJ_MARK_MAXLEN = 30;
+/** 칸 → `class_sheet_student_marks` 컬럼. 영어 시트(`upsertStudentMark`)와 **같은 행·같은 컬럼**이다. */
+export const JJ_MARK_COLUMN: Record<JjMarkField, string> = {
+  attitude: "status",
+  listeningLevel: "listening_level",
+  memorizedWords: "memorized_words",
+  progressNote: "progress_note",
+};
+
+/**
+ * 칸별 길이 상한 — 영어 시트(`upsertStudentMark`)와 **같은 값**이어야 한다.
+ * 갈리면 같은 기록이 한 화면에선 저장되고 다른 화면에선 거절된다.
+ */
+export const JJ_MARK_MAXLEN: Record<JjMarkField, number> = {
+  attitude: 50,
+  listeningLevel: 30,
+  memorizedWords: 30,
+  progressNote: 500,
+};
 
 /** 로그인 JJ실 출석부에만 전용 칸을 그린다. 랩실·공개 PIN은 출결만. */
 export function seatHasJjFields(seat: SeatKey): boolean {
@@ -26,13 +56,27 @@ export function parseJjMarkField(raw: string | null | undefined): JjMarkField | 
   return (JJ_MARK_FIELDS as readonly string[]).includes(v) ? (v as JjMarkField) : null;
 }
 
-/** 화면에 그릴 열 — ECS JJ 폼과 같은 배열. */
+/**
+ * 화면에 그릴 **자유 입력 열**(듣기·단어) — ECS JJ 폼과 같은 배열.
+ * ⚠️ 태도·특이사항은 여기 없다 — 시트에서도 자유 입력 열 앞뒤에 고정으로 서는 칸이다(`ROSTER_FIXED_LABEL`).
+ */
 export function jjSeatTextCols(): readonly RosterTextCol[] {
   return rosterTextCols("selfStudy");
 }
 
-export function isJjMarkField(field: MarkTextField): field is JjMarkField {
+/**
+ * 자유 입력 열(`rosterTextCols`)이 JJ 화면에서 그릴 칸인가 — 시험 점수는 JJ 폼에 없다.
+ * ⚠️ 반환 타입은 **`MarkTextField`와의 교집합**이어야 한다(태도·특이사항은 자유 입력 열이 아니다).
+ */
+export function isJjMarkField(field: MarkTextField): field is Extract<JjMarkField, MarkTextField> {
   return (JJ_MARK_FIELDS as readonly string[]).includes(field);
+}
+
+/** 에러 문구·aria에 쓰는 이름 — 화면 라벨과 같은 말(raw 컬럼명 노출 금지). */
+export function jjMarkLabel(field: JjMarkField): string {
+  if (field === "attitude") return ROSTER_FIXED_LABEL.attitude;
+  if (field === "progressNote") return ROSTER_FIXED_LABEL.progressNote;
+  return jjSeatTextCols().find((c) => c.field === field)?.label ?? "입력";
 }
 
 /** 낙관적 오버레이 키 — 교시가 빠지면 16:20에 적은 값이 17:20에 묻는다. */
@@ -47,8 +91,12 @@ export function seatOverlayKey(classId: string, studentId: string, slotStart: st
  *    슬리버로 무너진다. 여기서 줄이려면 `plan-table` 콜그룹부터 함께 줄여야 한다.
  */
 export const JJ_PLAN_COL_MIN_PX = 440;
-/** 출결만 그리는 열의 최소 폭 — 이름·출결·듣기·단어 넉 칸. */
-export const JJ_SEAT_COL_MIN_PX = 240;
+/**
+ * 진도 없이 명단만 그리는 열의 최소 폭 — 이름·출결·태도·듣기·단어·특이사항 여섯 칸.
+ * ⚠️ 2026-09-03에 240 → 340으로 올렸다(태도·특이사항 두 칸이 늘어서). 되돌리면 여섯 칸이 40px씩으로
+ *    눌려 아무것도 못 읽는다. 폰에서는 `min(100%, …)`가 화면 폭으로 다시 접는다(아래 각주).
+ */
+export const JJ_SEAT_COL_MIN_PX = 340;
 
 /**
  * 반 N개 = 열 N개. auto-fill은 창이 넓으면 빈 칸을 만들고, 좁으면 반을 다음 줄로 내린다.

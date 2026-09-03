@@ -16,6 +16,7 @@ import type { ClassSheetMonthData } from "../server/month-queries";
 import { MonthCalendar } from "./month-calendar";
 import { MonthDayEditor } from "./month-day-editor";
 import { MonthGoalStrip } from "./month-goal-strip";
+import { MonthMemo } from "./month-memo";
 import { MonthPlanBar } from "./month-plan-bar";
 import { MonthPlanView, type MonthPlanChromeProps } from "./month-plan-view";
 import { MonthRail } from "./month-rail";
@@ -313,6 +314,16 @@ export function MonthClient({
             canEdit={data.canEdit}
             savedAt={savedAt}
             onField={setField}
+          />
+          {/* 특이사항 메모(0246a) — 원장 2026-09-03 *"메모를 월간계획과 달력 바로 사이에"*.
+              🔴 달력 보기에만 선다(진도표·계획은 축이 다르다) — `month-memo.tsx` 머리 각주 참조. */}
+          <MonthMemo
+            classId={data.classId}
+            month={data.month}
+            monthLabel={data.monthLabel}
+            initialBody={data.memo.body}
+            status={data.memo.status}
+            canEdit={data.canEdit}
           />
           <MonthCalendar data={data} goals={warnGoals} display={cur} onOpenDay={openDayEditor} />
         </>

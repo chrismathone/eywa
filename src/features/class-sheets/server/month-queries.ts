@@ -89,6 +89,12 @@ export type ClassSheetMonthData = {
    * 🔴 0239a 미적용이어도 화면은 산다(`missing-table` → 한글 배너, 달력·진도표는 이 값을 아예 안 읽는다).
    */
   mp: { cells: MpCell[]; status: MpDataStatus };
+  /**
+   * 이 달 **특이사항 메모**(0246a) — 달력 보기의 월간계획 아래 한 칸. 반 × 달 하나뿐이다.
+   * 🔴 0246a 미적용이어도 화면은 산다(`missing-table` → 한글 배너 + 편집만 잠금, [[#95]]).
+   * ⚠️ 담임/부담임으로 안 가른다 — 특이사항은 그 반의 사실이지 역할별 기록이 아니다.
+   */
+  memo: { body: string; status: MonthMemoStatus };
 };
 
 /**
@@ -97,6 +103,9 @@ export type ClassSheetMonthData = {
  * `off` = 이 반은 MP 대상이 아니다(EiE 아님) — 조회를 아예 안 했다는 뜻.
  */
 export type MpDataStatus = "ok" | "off" | "missing-table" | "failed";
+
+/** 월 메모 조회의 결말 — MP와 같은 규약(표가 없는 것과 그냥 실패한 것은 다른 사실이다). */
+export type MonthMemoStatus = "ok" | "missing-table" | "failed";
 
 export type MonthResult = { ok: true; data: ClassSheetMonthData } | { ok: false; error: string };
 
@@ -114,7 +123,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
   const isEie = access.englishTrack === "eie";
 
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes] = await Promise.all([
+  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes] = await Promise.all([
     admin
       .from("class_schedules")
       .select("day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label")
@@ -165,6 +174,14 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
           .eq("tenant_id", access.tenantId)
           .maybeSingle()
       : Promise.resolve(null),
+    // 0246a 월 특이사항 메모 — 반 × 달 한 행. ⚠️ admin은 RLS 우회라 `tenant_id` 필터 필수([[#104]]).
+    admin
+      .from("class_sheet_month_memos")
+      .select("body")
+      .eq("tenant_id", access.tenantId)
+      .eq("class_id", classId)
+      .eq("month", from)
+      .maybeSingle(),
   ]);
 
   if (scheduleRes.error) return { ok: false, error: "시간표를 불러오지 못했습니다" };
@@ -186,6 +203,21 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
           /does not exist|could not find the table/i.test(mpErr.message ?? "")
         ? "missing-table"
         : "failed";
+  /**
+   * 월 메모 — MP와 **같은 이유로** throw하지 않는다([[#95]]). 0246a는 원장이 손으로 적용하므로
+   * 배포와 적용 사이에 간격이 있고, 그 사이 이 조회가 죽으면 달력·진도표·계획까지 함께 못 쓰게 된다.
+   */
+  const memoErr = memoRes?.error ?? null;
+  const memoCode = memoErr ? String(memoErr.code ?? "") : "";
+  const memoStatus: MonthMemoStatus = !memoErr
+    ? "ok"
+    : memoCode === "42P01" ||
+        memoCode === "PGRST205" ||
+        /does not exist|could not find the table/i.test(memoErr.message ?? "")
+      ? "missing-table"
+      : "failed";
+  const memoBody = typeof memoRes?.data?.body === "string" ? memoRes.data.body : "";
+
   const mpCells: MpCell[] = (mpRes?.data ?? []).map((r) => ({
     planDate: String(r.plan_date).slice(0, 10),
     colKind: String(r.col_kind) as MpColKind,
@@ -306,6 +338,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       },
       isEie,
       mp: { cells: mpCells, status: mpStatus },
+      memo: { body: memoBody, status: memoStatus },
     },
   };
 }
