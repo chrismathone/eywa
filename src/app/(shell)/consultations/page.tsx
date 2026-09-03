@@ -20,6 +20,10 @@ import {
 import { Pagination } from "@/components/pagination";
 import { NewConsultationTrigger } from "./_components/new-consultation-trigger";
 import { SearchToggle } from "@/components/search-toggle";
+import { AutoPageSize } from "@/components/auto-page-size";
+import { clampPageSize, pageSizeCookieName } from "@/components/page-size";
+import { cookies } from "next/headers";
+import type { CSSProperties } from "react";
 import { CATEGORY_META, URGENCY_META } from "./_components/consultation-meta";
 import { relativeTimeKo } from "@/lib/relative-time";
 
@@ -55,13 +59,28 @@ const URGENCY_OPTIONS: { value: Exclude<UrgencyKey, "all">; label: string }[] = 
 ];
 
 /**
- * 한 쪽 = 20건 — 이 메뉴의 최소 창(760×640)에서 수치 띠·머리 두 줄을 빼면 행(44px)이 약 10개 보인다.
- * 최소 창(1단)은 2화면, 넓혀서 2단이 되면 한 화면(원장 *"최소 크기보다 커지면 2단으로 만들어서 한 번에 많이 보이도록"*).
- * 옛 50건은 5화면이었다(*"너무 스크롤 길어지지 않게"*).
+ * 한 쪽의 행 수는 **창이 정한다**(원장 2026-09-03 *"창 크기에 따라서 스마트하게 유동성 있게"*): [AutoPageSize](@/components/auto-page-size)가
+ * 목록 아래 남는 높이 × 단 수를 재어 `?size=N`으로 다시 청하고 그 값을 기기 쿠키에 남긴다. 서버는 URL → 쿠키 → 이 기본값 순으로
+ * 읽고 같은 범위([page-size.ts](@/components/page-size))로 clamp한다(왕복 방지).
+ * 기본값 7 = 창을 처음 여는 크기(= 최소 창 760×640, 본문 601px)에서 실측한 행 수 — 쿠키가 없는 첫 방문에도 다시 청하지 않게.
  */
-const PAGE_SIZE = 20;
-/** 2단일 때 한 단에 서는 행 수 — 위에서 아래로 읽고 다음 단으로 넘어간다(column-major). */
-const ROWS_PER_COLUMN = PAGE_SIZE / 2;
+const DEFAULT_PAGE_SIZE = 7;
+const PAGE_SIZE_KEY = "consultations";
+/** 행 높이(h-11 44px) + 헤어라인 1px — AutoPageSize가 이 값으로 행 수를 센다. 행 높이를 바꾸면 여기도. */
+const ROW_PX = 45;
+/**
+ * 오른쪽 폭 고정 열(카테고리 | 후속 | 녹음·AI | 시각)의 폭(rem) — 16px 라벨 실측: 카테고리 알약 ≤56 · 후속 알약 ≤64 ·
+ * "녹음 AI" 85.4 · "2026. 12. 31." 98.2. 🔴 바깥 행 그리드의 4번째 트랙은 **이 합 + 안쪽 간격**으로 여기서 함께 도출한다 —
+ * 둘을 따로 적었다가 안쪽이 12px 넘쳤다(적대적 리뷰 2026-09-03). 바꿀 땐 여기 하나만.
+ */
+const RIGHT_COLS_REM = [3.5, 4, 5.5, 6.5] as const;
+const RIGHT_GAP_REM = 0.25; // = gap-1
+const RIGHT_W_REM = RIGHT_COLS_REM.reduce<number>((a, b) => a + b, 0) + RIGHT_GAP_REM * (RIGHT_COLS_REM.length - 1);
+/** 행 그리드: 이름(9~13rem) | 과목·상담사(6~11rem) | 요약(남는 폭, 행 56rem 이상에서만 보임) | 오른쪽 고정 열. */
+const ROW_GRID_VARS = {
+  "--row-cols": `minmax(9rem,13rem) minmax(6rem,11rem) minmax(0,1fr) ${RIGHT_W_REM}rem`,
+  "--right-cols": RIGHT_COLS_REM.map((r) => `${r}rem`).join(" "),
+} as CSSProperties;
 
 /**
  * 마우스 오버 전문 — 행에는 이름·학년·배지·시각만 남기고(원장 *"기본은 그냥 칸반"*) 요약·상담사·후속은 여기로
@@ -97,6 +116,7 @@ export default async function ConsultationsPage({
     urg?: UrgencyKey;
     q?: string;
     page?: string;
+    size?: string;
   }>;
 }) {
   await requireAccess("consultations");
@@ -106,12 +126,15 @@ export default async function ConsultationsPage({
   const urg: UrgencyKey = (sp.urg as UrgencyKey) ?? "all";
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
+  // 쪽 크기: URL(이번 창의 측정값) → 기기 쿠키(지난번 측정값) → 기본값. 서버·클라 clamp가 같은 상수라 왕복하지 않는다.
+  const jar = await cookies();
+  const size = clampPageSize(sp.size ?? jar.get(pageSizeCookieName(PAGE_SIZE_KEY))?.value, DEFAULT_PAGE_SIZE);
 
   const [{ rows: items, total }, counts] = await Promise.all([
-    getStudentConsultationsPage({ q, range, cat, urg }, page, PAGE_SIZE),
+    getStudentConsultationsPage({ q, range, cat, urg }, page, size),
     getStudentConsultationCounts(),
   ]);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / size));
   const { total: totalAll, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
 
   // 현재 필터 보존 + page만 변경(필터 드롭다운은 FilterSelect 규약대로 page를 리셋한다).
@@ -121,6 +144,7 @@ export default async function ConsultationsPage({
     if (cat !== "all") params.set("cat", cat);
     if (urg !== "all") params.set("urg", urg);
     if (q) params.set("q", q);
+    if (size !== DEFAULT_PAGE_SIZE) params.set("size", String(size));
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
     return s ? `/consultations?${s}` : "/consultations";
@@ -217,67 +241,77 @@ export default async function ConsultationsPage({
         </div>
       ) : (
         <>
-          {/* 행 = 이름 + 값(배지·시각) 한 줄, 행 사이는 헤어라인(지시서 §11 — 각 행을 카드로 싸지 않는다).
-              행 전체가 상담 상세로 가는 링크다(§10 "리스트 행 자체 클릭 · 행 오른쪽 아이콘 버튼 금지" — 삭제는 상세에).
-              🔴 창이 최소 크기(760)보다 넓어지면(lg≥1024) **2단** — 한 행의 가운데가 비어 공간을 낭비하던 것을 채운다
-                 (원장 2026-09-03 캡처). 위→아래로 읽고 다음 단으로(column-major: 페이지 순서가 세로로 이어진다).
-                 창=iframe이라 lg가 창 폭에 그대로 반응한다. */}
-          <ul
-            className="grid grid-cols-1 gap-x-8 lg:grid-flow-col lg:grid-cols-2 lg:[grid-template-rows:repeat(var(--rows),auto)]"
-            style={{ ["--rows" as string]: Math.min(ROWS_PER_COLUMN, Math.ceil(items.length / 2)) }}
-          >
-            {items.map((c) => {
-              const urgency = URGENCY_META[followUpUrgency(c.followUpDate, c.followUpDone)];
-              const catMeta = c.category ? CATEGORY_META[c.category] : null;
-              const isUrgent = urgency && (urgency.color === "danger" || urgency.color === "amber");
-              return (
-                <li key={c.id} title={hoverTextOf(c)} className="border-line border-b">
-                  {/* aria-label을 달지 않는다 — 달면 보조기기엔 이름만 남고 배지·시각이 사라진다(리뷰 확정 결함). 링크 본문이 곧 이름이다. */}
-                  <WindowLink
-                    href={`/consultations/${c.id}`}
-                    title={c.studentName}
-                    className={`hover:bg-bg-soft flex h-11 items-center justify-between gap-3 px-2 transition ${
-                      isUrgent ? "bg-danger-soft" : ""
-                    }`}
-                  >
-                    {/* 글자 크기는 등록상담 카드와 같다(이름 2xl 28 · 학년 lg 20) — "동일하게"는 구조만이 아니라 크기도. */}
-                    <p className="text-foreground flex min-w-0 items-center gap-1.5 text-2xl leading-none font-bold">
-                      <span className="min-w-0 truncate">
+          {/* 행 = 표처럼 열이 선다(원장 2026-09-03 *"좌우도 공간이 제법 많이 남으므로 … 과목과 상담자 등 뭘 더 보여주는 방안"*):
+              이름(학년) | 과목 · 상담사 | 요약 한 줄(행이 넓을 때만) | 카테고리 | 후속 | 녹음·AI | 시각.
+              행 사이는 헤어라인(§11 — 카드로 싸지 않는다), 행 전체가 상세 링크(§10 — 행 안 아이콘 버튼 금지, 삭제는 상세에).
+              🔴 **단 수는 폭이 정한다**(CSS 다단, 한 단 최소 44rem): 최소 창 760 = 1단, ~1,500 = 2단, ~2,200 = 3단. 위→아래→다음 단.
+              🔴 **행 수는 높이가 정한다**(AutoPageSize → ?size=N). 창=iframe이라 둘 다 창 크기에 그대로 반응한다. */}
+          <AutoPageSize size={size} rowPx={ROW_PX} storageKey={PAGE_SIZE_KEY}>
+            {/* 열 폭은 CSS 변수 두 개(위 ROW_GRID_VARS)로 한 번만 내려보내고 행·오른쪽 블록이 `grid-cols-(--var)`로 읽는다. */}
+            <ul className="columns-[44rem] gap-x-8 [&>li]:break-inside-avoid" style={ROW_GRID_VARS}>
+              {items.map((c) => {
+                const urgency = URGENCY_META[followUpUrgency(c.followUpDate, c.followUpDone)];
+                const catMeta = c.category ? CATEGORY_META[c.category] : null;
+                const isUrgent = urgency && (urgency.color === "danger" || urgency.color === "amber");
+                const who = [c.subject, c.counselorName].filter(Boolean).join(" · ");
+                return (
+                  // @container/row — 요약 열은 이 행이 56rem(896px) 이상일 때만 선다(이름·과목 최대폭 + 오른쪽 열 + 간격 = 46.5rem이라
+                  // 그보다 좁으면 요약 칸이 몇 글자짜리 토막이 된다). 단이 좁으면 이름·과목·배지만.
+                  <li key={c.id} title={hoverTextOf(c)} className="@container/row border-line border-b">
+                    {/* aria-label을 달지 않는다 — 달면 보조기기엔 이름만 남고 배지·시각이 사라진다(리뷰 확정 결함). 링크 본문이 곧 이름이다. */}
+                    <WindowLink
+                      href={`/consultations/${c.id}`}
+                      title={c.studentName}
+                      className={`hover:bg-bg-soft grid h-11 grid-cols-(--row-cols) items-center gap-3 px-2 transition ${
+                        isUrgent ? "bg-danger-soft" : ""
+                      }`}
+                    >
+                      {/* 이름 24px(등록상담 카드 28보다 한 단계 아래 — 원장 *"라벨 크기를 좀 적당하게"*), 학년 18px.
+                          1차 핵심값이라 이 칸엔 이름·학년만 — 배지가 같이 서면 배지가 이름을 밀어 "김서연 (…"이 된다(리뷰 확정). */}
+                      <p className="text-foreground min-w-0 truncate text-xl leading-none font-bold">
                         {c.studentName}
                         {c.studentGrade ? (
-                          <span className="text-text-dim ml-1 text-lg font-semibold">({c.studentGrade})</span>
+                          <span className="text-text-dim ml-1 text-base font-semibold">({c.studentGrade})</span>
                         ) : null}
-                      </span>
-                      {c.syncAddedAt ? <MakeeduOriginTag /> : null}
-                      <EditingBadge scope={`student-consultation:${c.id}`} />
-                    </p>
-                    {/* 오른쪽은 **열**이다(원장 *"우측에 열정렬"*) — 카테고리 | 후속 | 녹음·AI | 시각, 칸 폭 고정이라 행마다
-                        배지 수가 달라도 같은 자리에 선다. 빈 칸은 비워 둔다(자리를 당기지 않는다). */}
-                    <div className="grid shrink-0 grid-cols-[3.5rem_4rem_4.75rem_5rem] items-center justify-items-center gap-1">
-                      <span>{catMeta ? <Pill color={catMeta.color}>{catMeta.label}</Pill> : null}</span>
-                      <span>{urgency ? <Pill color={urgency.color}>{urgency.label}</Pill> : null}</span>
-                      {/* 아이콘만으로 뜻을 전하지 않는다(§2) — 옆에 읽히는 글자를 둔다. */}
-                      <span className="flex items-center gap-1.5">
-                        {c.hasAudio ? (
-                          <span className="text-primary inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
-                            <Mic className="size-4" />
-                            녹음
-                          </span>
-                        ) : null}
-                        {c.hasAi ? (
-                          <span className="text-gold inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
-                            <Sparkles className="size-4" />
-                            AI
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="num text-text-dim justify-self-end text-sm whitespace-nowrap">{relativeTimeKo(c.consultedAt)}</span>
-                    </div>
-                  </WindowLink>
-                </li>
-              );
-            })}
-          </ul>
+                      </p>
+                      {/* 과목 · 상담사 — 학생 상담이라 누가 무엇을 상담했는지가 이름 다음 정보다. 동기화·수정중 배지는 여기(2차 정보 칸)에. */}
+                      <p className="text-text-dim flex min-w-0 items-center gap-1.5 text-sm font-medium">
+                        <span className="min-w-0 truncate">{who}</span>
+                        {c.syncAddedAt ? <MakeeduOriginTag /> : null}
+                        <EditingBadge scope={`student-consultation:${c.id}`} />
+                      </p>
+                      {/* 요약 한 줄 — 2차 정보라 말줄임 허용(§1). 전문은 마우스 오버·상세. */}
+                      <p className="text-text-faint hidden min-w-0 truncate text-sm @4xl/row:block">{c.summary}</p>
+                      {/* 오른쪽은 **열**이다(원장 *"우측에 열정렬"*) — 카테고리 | 후속 | 녹음·AI | 시각, 칸 폭 고정이라 행마다
+                          배지 수가 달라도 같은 자리에 선다. 빈 칸은 비워 둔다(자리를 당기지 않는다).
+                          🔴 `col-start-4` — 요약 열이 숨는 폭(display:none = 그리드 아이템 없음)에서 이 블록이 3번째 트랙으로
+                          자동 배치돼 오른쪽 끝에서 떠다니던 것(리뷰 확정). 자리는 늘 4번째 트랙. */}
+                      <div className="col-start-4 grid grid-cols-(--right-cols) items-center justify-items-center gap-1">
+                        <span>{catMeta ? <Pill color={catMeta.color}>{catMeta.label}</Pill> : null}</span>
+                        <span>{urgency ? <Pill color={urgency.color}>{urgency.label}</Pill> : null}</span>
+                        {/* 아이콘만으로 뜻을 전하지 않는다(§2) — 옆에 읽히는 글자를 둔다. */}
+                        <span className="flex items-center gap-1.5">
+                          {c.hasAudio ? (
+                            <span className="text-primary inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
+                              <Mic className="size-4" />
+                              녹음
+                            </span>
+                          ) : null}
+                          {c.hasAi ? (
+                            <span className="text-gold inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
+                              <Sparkles className="size-4" />
+                              AI
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="num text-text-dim justify-self-end text-sm whitespace-nowrap">{relativeTimeKo(c.consultedAt)}</span>
+                      </div>
+                    </WindowLink>
+                  </li>
+                );
+              })}
+            </ul>
+          </AutoPageSize>
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
