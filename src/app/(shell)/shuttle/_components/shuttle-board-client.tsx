@@ -244,7 +244,7 @@ export function ShuttleBoardClient({
           📱 폰엔 사이드바(하부탭)가 없어 '오늘 등하원'으로 갈 길이 이 탭뿐이다(faces.ts).
           🔴 FaceTabs는 공용 컴포넌트라 손대지 않는다 — 감싸는 자리만 바꾼다. */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
-        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+        <span className="min-w-0 basis-full sm:basis-auto">
           <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_BOARD_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         {SEASONS.map((s) => (

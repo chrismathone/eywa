@@ -201,7 +201,7 @@ export function DayBoardClient({
           ⚠️ 앞·뒤 이동은 ←/→ **글자**가 아니라 아이콘이다 — 글리프는 폰트·플랫폼마다 크기가 널뛰어
              같은 줄의 버튼과 밑선이 어긋나고, 한글 자모로 오인되기도 한다([[#12]]). */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
-        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+        <span className="min-w-0 basis-full sm:basis-auto">
           <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
         </span>
         <Button
