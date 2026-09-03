@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import type { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { reportError } from "@/lib/observability/report-error";
 import { BUILTIN_CATEGORIES, type InventoryCategory } from "../category";
@@ -57,6 +57,15 @@ export async function getInventoryCategories(): Promise<CategoryData> {
     return withFallback(status, []);
   }
   return withFallback("ok", toCategories((data ?? []) as Row[]));
+}
+
+/**
+ * **비로그인 공개 화면용** — 세션이 없어 테넌트를 스스로 못 구하므로 호출부가 알아낸 tenantId를 받는다
+ * (`getAssetDetail`이 자산ID로 해석한 값 — `getTenantSettingsByTenantId`와 같은 결).
+ * 🔴 tenantId는 **신뢰할 수 있는 출처**(그 자산 행)에서만 넘길 것 — 사용자 입력을 그대로 넣지 말 것.
+ */
+export async function getInventoryCategoriesByTenantId(tenantId: string): Promise<CategoryData> {
+  return loadCategoriesForWrite(createAdminClient(), tenantId);
 }
 
 /**

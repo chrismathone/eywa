@@ -10,7 +10,7 @@ import { ListToolbar } from "./list-toolbar";
 import { LoanDialog } from "./loan-dialog";
 import { ReturnDialog } from "./return-dialog";
 import { SortableTable, type Column } from "./sortable-table";
-import { LoanStatusPill } from "./status-pill";
+import { LoanStatusPill } from "@/features/inventory/components/status-pill";
 import { useSort } from "./use-sort";
 
 type Dialog = { kind: "start" } | { kind: "return"; loan: InventoryLoan } | null;

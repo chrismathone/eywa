@@ -1,33 +1,43 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { buildCategoryMaps } from "@/features/inventory/category";
 import { auditResultLabel } from "@/features/inventory/audit-result";
 import { loanStatusLabel } from "@/features/inventory/loan-status";
-import { qrImageSrc } from "@/features/inventory/qr";
 import { getAssetDetail } from "@/features/inventory/server/asset-queries";
-import { getInventoryCategories } from "@/features/inventory/server/category-queries";
+import { getInventoryCategoriesByTenantId } from "@/features/inventory/server/category-queries";
 import { dashIfEmpty, unknownIfEmpty } from "@/features/inventory/unknown-value";
-import { AssetStatusPill, AuditResultPill, LoanStatusPill } from "../../_components/status-pill";
+import { AssetStatusPill, AuditResultPill, LoanStatusPill } from "@/features/inventory/components/status-pill";
 
+/** 기기 대장이라 검색엔진 색인은 막는다(자산ID가 추측 가능한 공개 주소 — (share)/r 선례와 같은 처리). */
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }) {
-  return { title: `${decodeURIComponent((await params).code)} — 재고관리 — eywa` };
+  return {
+    title: `${decodeURIComponent((await params).code)} — 재고관리 — eywa`,
+    robots: { index: false, follow: false },
+  };
 }
 
 /**
  * 자산 한 대의 **현재 상태** — QR을 찍으면 여기로 온다(원장 2026-09-02: *"QR코드를 찍으면 현재 상태가 그대로 볼 수
- * 있도록 … 길게 행으로 보이라기보다 모바일 뷰 기준 깔끔하게"*). 표의 11칸을 세로 목록으로, 그 아래 최근 대여·실사.
- * 게이트는 목록과 같은 `inventory` 메뉴 권한(QR 주소를 아는 것만으로는 안 열린다).
+ * 있도록 … 길게 행으로 보이라기보다 모바일 뷰 기준 깔끔하게"*).
+ *
+ * 🔴 **비로그인 공개 + 셸 없음**(원장 2026-09-03: *"그냥 안의 내용만 보이면 됨. seat/jj처럼 비로그인자도 볼 수 있게.
+ *    목록으로 갈 필요도 없음. 최근 실사 까지 만 있으면 될듯"*) — 로고·메뉴·알림벨·계정 아이콘이 없는 `(asset)` 그룹이고,
+ *    목록 링크와 맨 아래 QR 블록은 걷어냈다(QR을 찍고 들어온 사람에게 QR을 다시 보여줄 이유가 없다).
+ * 🔴 **사람 이름(사용자·대여자·실사자)을 그대로 싣는다** — 원장 2026-09-03 *"괜찮아 QR은 우리내부에 사용중이니까
+ *    이름도 넣어"*. 좌석 PIN 화면의 '직원 이름 조회 금지' 규약을 여기 가져오지 말 것(축이 다르다 — 그쪽은 학부모·외부인이
+ *    PIN으로 여는 화면, 이쪽은 학원 안 기기에 붙은 라벨이다).
+ * 🔴 **읽기 전용** — 상태 변경·대여·실사 버튼을 여기에 달지 말 것(공개 화면이다).
+ * 🔴 **주소 불변**(`/inventory/asset/[code]`) — 이미 인쇄해 붙인 라벨이 이 주소를 가리킨다(`qr.ts` 규약).
+ *    라우트 그룹 `(asset)`은 URL에 안 나타난다.
+ * ⚠️ 공개 범위는 이 경로 하나뿐이다 — `/inventory` 목록·엑셀·편집 액션은 그대로 로그인+권한(proxy의 정확/슬래시 매칭).
  */
 export default async function AssetDetailPage({ params }: { params: Promise<{ code: string }> }) {
-  await requireAccess("inventory");
   const code = decodeURIComponent((await params).code);
-  // 서로 독립 — 함께 받는다(B4).
-  const [detail, categories] = await Promise.all([getAssetDetail(code), getInventoryCategories()]);
+  const detail = await getAssetDetail(code);
   if (!detail) notFound();
-  const { asset, loans, audits } = detail;
-  const cats = buildCategoryMaps(categories.rows);
+  const { asset, loans, audits, tenantId } = detail;
+  // 분류 라벨은 학원별 데이터(0247a)라 그 자산의 학원으로 읽는다 — 세션이 없어 `getInventoryCategories()`를 못 쓴다.
+  const cats = buildCategoryMaps((await getInventoryCategoriesByTenantId(tenantId)).rows);
 
   const rows: Array<[string, React.ReactNode]> = [
     ["상태", <AssetStatusPill key="s" status={asset.status} />],
@@ -44,7 +54,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-3 p-3 md:p-5">
+    <div className="mx-auto flex w-full max-w-lg flex-col gap-3 p-3 pb-8 md:p-5 lg:pb-10">
       <PageHeader
         eyebrow="재고관리"
         title={asset.assetCode}
@@ -100,15 +110,8 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
         )}
       </section>
 
-      <section className="bg-card shadow-card flex items-center gap-4 rounded-2xl p-4">
-        {/* eslint-disable-next-line @next/next/no-img-element -- 라우트가 그 자리에서 그리는 SVG */}
-        <img src={qrImageSrc(asset.assetCode)} alt={`${asset.assetCode} QR`} width={96} height={96} className="shrink-0" />
-        <p className="text-text-dim text-[12px]">이 QR을 찍으면 이 화면(그때의 현재 상태)이 열립니다. 라벨은 재고관리 목록의 [인쇄]에서 한꺼번에 뽑습니다.</p>
-      </section>
-
-      <Link href="/inventory" className="text-primary text-[12.5px] font-bold hover:underline">
-        ← 재고관리 목록
-      </Link>
+      {/* 원장 2026-09-03: *"최근 실사 아래에 문의는 2층 데스크로 부탁드립니다. 라는 멘트만"* — 다른 안내를 덧붙이지 말 것. */}
+      <p className="text-text-dim text-center text-[12.5px]">문의는 2층 데스크로 부탁드립니다.</p>
     </div>
   );
 }

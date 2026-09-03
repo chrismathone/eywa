@@ -3,7 +3,7 @@ import { assetStatusLabel } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
 import { DashCell, UnknownCell } from "./cell-bits";
 import type { Column } from "./sortable-table";
-import { AssetStatusPill } from "./status-pill";
+import { AssetStatusPill } from "@/features/inventory/components/status-pill";
 
 /**
  * 자산 마스터 열 — 시안 그대로 `자산ID · 분류 · 제조사 · 모델명 · 입고일 · 상태 · 현위치 · 사용자 · 최종실사 · 폐기일 · 비고`
