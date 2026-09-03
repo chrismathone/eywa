@@ -168,6 +168,18 @@ describe("⑨ QR 자산 화면 = 비로그인 공개 · 셸 없음 · 읽기 전
     expect(page).toContain("문의는 2층 데스크로 부탁드립니다.");
   });
 
+  it("🔴 머리글은 제목 한 줄뿐 — 자산ID·분류·모델·상태는 카드 안에서만(중복 금지)", () => {
+    const page = read(...PAGE);
+    // 원장 2026-09-03 *"그냥 자산 관리 정보 라고 적당히 거대한 폰트로 적어놓던지"* + *"그 아래에 카드 시작"*.
+    expect(page).toContain("자산 관리 정보");
+    // PageHeader는 eyebrow·description·actions로 걷어낸 그 중복을 도로 만든다.
+    // (주석에서 "PageHeader를 쓰지 않는다"고 설명하므로 **import·태그**로만 판정한다.)
+    expect(page).not.toMatch(/^import .*PageHeader.*$/m);
+    expect(page).not.toMatch(/<PageHeader/);
+    // 카드 첫 행이 자산번호 — 이게 빠지면 화면 어디에도 자산ID가 안 남는다(머리글에서 뺐으므로).
+    expect(page).toMatch(/\["자산번호",/);
+  });
+
   it("세션 없이도 읽는다 — admin + 자산ID가 유일할 때만(테넌트 모호하면 못 찾은 것으로)", () => {
     const q = read("src", "features", "inventory", "server", "asset-queries.ts");
     expect(q).toContain("createAdminClient");
