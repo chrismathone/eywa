@@ -6,7 +6,7 @@
  */
 import type { DailyBriefingPayload } from "./briefing-digest";
 import { digestFactLines, narrativeNumberWhitelist, narrativeWordWhitelist } from "./briefing-digest";
-import { subjectBreakdownText } from "./today-actions";
+import { actionCountLabel, subjectBreakdownText } from "./today-actions";
 
 /** 보고 영역(매니저) — LLM 출력 area는 반드시 이 중 하나(검증). */
 export const TEAM_AREAS = ["수업", "학생", "상담", "수납", "운영"] as const;
@@ -111,33 +111,37 @@ export function validateTeamReport(
   return { ok: true, value: { headline, managers } };
 }
 
+/**
+ * 신호(menuKey) → 매니저 영역. 폴백 보고의 묶음 축이자 브리핑 카드 '바로 가기' 칩의 배치 축이다
+ * (briefing-links.ts) — 둘이 갈리면 같은 신호가 화면에서 두 영역에 나타난다.
+ */
+export const AREA_BY_MENU: Readonly<Record<string, TeamArea>> = {
+  attendance: "수업",
+  lesson_reports: "수업",
+  timetable: "수업",
+  classes: "수업",
+  students: "학생",
+  consultations: "상담",
+  enrollment: "상담",
+  meetings: "상담",
+  billing: "수납",
+  staff: "운영",
+  owner: "운영",
+};
+
 /** LLM 실패·검증 탈락 시 결정론 팀 보고 — 신호를 영역별로 묶어 같은 카드 구조로 렌더. */
 export function buildFallbackTeamReport(payload: DailyBriefingPayload): TeamReport {
   const byArea = new Map<TeamArea, string[]>();
   const put = (area: TeamArea, line: string) => {
     byArea.set(area, [...(byArea.get(area) ?? []), line]);
   };
-  const AREA_BY_MENU: Record<string, TeamArea> = {
-    attendance: "수업",
-    lesson_reports: "수업",
-    timetable: "수업",
-    classes: "수업",
-    students: "학생",
-    consultations: "상담",
-    enrollment: "상담",
-    meetings: "상담",
-    billing: "수납",
-    staff: "운영",
-    owner: "운영",
-  };
   for (const item of payload.attention) {
     const area = AREA_BY_MENU[item.menuKey] ?? "운영";
     // 단위는 신호가 들고 온 것(명/개 반/건), 범위·내역(note)은 괄호로 함께 — 예전엔 둘 다 버려서
     // "지출 결재 대기 13건"(실은 최근 7일분)·"makeedu 동기화 이상"(어느 도메인인지 없음)이 됐다.
-    const count = item.count != null ? ` ${item.count}${item.unit ?? "건"}` : "";
     // 과목 분해가 있으면 그게 가장 행동에 가까운 정보다("영어 147 · 수학 39" = 영어부터 손대라).
     const parts = [subjectBreakdownText(item.bySubject), item.note].filter(Boolean).join(", ");
-    put(area, `${item.label}${count}${parts ? `(${parts})` : ""}`);
+    put(area, `${actionCountLabel(item)}${parts ? `(${parts})` : ""}`);
   }
   if (payload.spotlights.length > 0) {
     put("학생", `살펴볼 학생 ${payload.spotlights.length}명: ${payload.spotlights.map((s) => s.name).join("·")}`);
@@ -161,7 +165,7 @@ export function buildFallbackTeamReport(payload: DailyBriefingPayload): TeamRepo
     managers.length === 0
       ? "어제 마감 기준 조치할 운영 신호가 없습니다."
       : first
-        ? `${first.label}${first.count != null ? ` ${first.count}${first.unit ?? "건"}` : ""}부터 확인해 주세요.`
+        ? `${actionCountLabel(first)}부터 확인해 주세요.`
         : "오늘 확인할 운영 신호가 있습니다.";
   return { headline, managers };
 }

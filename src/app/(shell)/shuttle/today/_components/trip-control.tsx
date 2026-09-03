@@ -18,11 +18,19 @@ import {
 import type { ShuttleTrip } from "@/features/shuttle/types";
 
 /**
- * 회차 하나의 **출발 / 종료**(0243a) — 회차 머리 아래 한 줄.
+ * 회차 하나의 **출발 / 종료**(0243a) — 회차 머리 줄 **오른쪽 끝에 인라인**으로 붙는다.
  *
  * 🔑 이게 있어야 관제 화면에서 빈 회차의 뜻이 갈린다 — 종전엔 아무 기록도 없는 회차가 ① 아직 출발
  *    전이라 당연히 빈 것 ② 출발했는데 아무도 안 찍는 것, 두 가지를 다 뜻했다. 전자는 정상이고
  *    후자는 전화할 일이다(trip-state.ts 머리 주석).
+ *
+ * 📐 **2026-09-03 밀도 개선**: 종전엔 이 컴포넌트가 회차마다 **줄 하나를 통째로** 먹었다
+ *    (회차 16개 × 40px ≈ 640px). 머리 줄 안으로 넣고 두 가지를 덜어냈다:
+ *    · 🔴 **'출발 전' 배지를 버튼과 함께 띄우지 않는다** — 버튼에 "출발"이라고 적혀 있으면 상태는
+ *      말 안 해도 안다. 같은 말을 두 번 하느라 폭을 쓰던 자리다. **누를 수 없는 사람에게만**
+ *      배지를 남긴다(열람 전용에겐 상태가 유일한 정보다).
+ *    · 시각·누가 눌렀는지는 **운행 중·종료일 때만** — 출발 전에는 있지도 않다. 이름은 툴팁으로
+ *      내렸다(줄에 늘 붙어 있으면 회차 이름을 밀어낸다).
  *
  * 🔴 **표가 없으면(0243a 미적용) 아무것도 그리지 않는다** — 실제로 돌고 있는 차를 "출발 전"이라고
  *    말하지 않기 위해서다. 없는 기능을 버튼으로 약속하지도 않는다([[#95]], 0229a와 같은 규약).
@@ -68,59 +76,66 @@ export function TripControl({
     });
   }
 
+  // 🔴 시각은 KST로 찍는다 — `iso.slice(11,16)`은 UTC라 "13:46 출발"이 "04:46"으로 보인다.
   const startedAt = kstTimeOf(trip?.startedAt);
   const endedAt = kstTimeOf(trip?.endedAt);
+  const showStart = canWrite && canStartTrip(state, date, today);
+  const showEnd = canWrite && canEndTrip(state, date, today);
+  const showReopen = canWrite && canReopenTrip(state, date, today);
+  /**
+   * 상태 배지를 띄울까 — **누를 버튼이 '출발'뿐일 때는 안 띄운다**(버튼이 이미 그 말을 한다).
+   * 운행 중·종료는 배지가 시각을 데리고 다니므로 정보가 하나 더 있다.
+   */
+  const showBadge = state !== "ready" || !showStart;
 
   return (
-    <div className="border-line-faint flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-3 py-2">
-      {/* 의미색 캐논: 진행중=info(blue) · 완료=positive(green) · 아직 아무 일 없음=inert(neutral).
-          🔴 '출발 전'과 '종료'를 같은 회색으로 두지 말 것 — 정반대 상태가 한눈에 구분돼야 한다. */}
-      <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>
-
-      {/* 🔴 시각은 KST로 찍는다 — `iso.slice(11,16)`은 UTC라 "13:46 출발"이 "04:46"으로 보인다. */}
-      {startedAt && (
-        <span className="text-text-dim text-[11.5px]">
-          <span className="num">{startedAt}</span> 출발
-          {trip?.startedByName && ` · ${trip.startedByName}`}
-        </span>
-      )}
-      {endedAt && (
-        <span className="text-text-dim text-[11.5px]">
-          · <span className="num">{endedAt}</span> 종료
-          {trip?.endedByName && ` · ${trip.endedByName}`}
-        </span>
-      )}
-
-      {canWrite && (
-        <span className="ml-auto flex items-center gap-1.5">
-          {canStartTrip(state, date, today) && (
-            <Button className={SHUTTLE_ACTION} disabled={busy} onClick={() => run(startTrip)}>
-              출발
-            </Button>
-          )}
-          {canEndTrip(state, date, today) && (
-            <Button
-              variant="outline"
-              className={SHUTTLE_ACTION}
-              disabled={busy}
-              onClick={() => run(endTrip)}
-            >
-              종료
-            </Button>
-          )}
-          {/* 잘못 누른 한 번에 그날 남은 명단을 못 찍으면 안 된다([[#103]] — 잠금은 되돌릴 문과 함께). */}
-          {canReopenTrip(state, date, today) && (
-            <Button
-              variant="outline"
-              className={SHUTTLE_ACTION}
-              disabled={busy}
-              onClick={() => run(reopenTrip)}
-            >
-              종료 취소
-            </Button>
+    <span className="flex shrink-0 items-center gap-1.5">
+      {showBadge && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
+      {state !== "ready" && startedAt && (
+        <span
+          className="text-text-faint hidden text-[11.5px] sm:inline"
+          title={[
+            `${startedAt} 출발${trip?.startedByName ? ` · ${trip.startedByName}` : ""}`,
+            endedAt ? `${endedAt} 종료${trip?.endedByName ? ` · ${trip.endedByName}` : ""}` : null,
+          ]
+            .filter(Boolean)
+            .join(" / ")}
+        >
+          <span className="num">{startedAt}</span>
+          {endedAt && (
+            <>
+              ~<span className="num">{endedAt}</span>
+            </>
           )}
         </span>
       )}
-    </div>
+      {showStart && (
+        <Button className={SHUTTLE_ACTION} disabled={busy} onClick={() => run(startTrip)}>
+          출발
+        </Button>
+      )}
+      {showEnd && (
+        <Button
+          variant="outline"
+          className={SHUTTLE_ACTION}
+          disabled={busy}
+          onClick={() => run(endTrip)}
+        >
+          종료
+        </Button>
+      )}
+      {/* 잘못 누른 한 번에 그날 남은 명단을 못 찍으면 안 된다([[#103]] — 잠금은 되돌릴 문과 함께). */}
+      {showReopen && (
+        <Button
+          variant="outline"
+          className={SHUTTLE_ACTION}
+          disabled={busy}
+          onClick={() => run(reopenTrip)}
+          title="실수로 종료를 눌렀을 때 되돌립니다"
+        >
+          종료 취소
+        </Button>
+      )}
+    </span>
   );
 }

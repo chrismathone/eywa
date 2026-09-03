@@ -7,6 +7,8 @@ import {
   progressState,
   sumProgress,
   type RunRows,
+  groupRowsByStop,
+  stopGroupRemaining,
 } from "./today-board";
 import type { RideRow } from "./roster";
 import type { Direction, ShuttleRun, ShuttleVehicle } from "./types";
@@ -260,5 +262,66 @@ describe("progressState — 전원이 오늘 안 타면 '완료'가 아니다", 
   });
   it("줄이 아예 없어도 none(빈 묶음)", () => {
     expect(progressState(countProgress([]))).toBe("none");
+  });
+});
+
+describe("groupRowsByStop — 정류장으로 묶어 이름 반복을 없앤다", () => {
+  /** 노선 칸·정류장 이름을 지정할 수 있는 줄(위 `row`는 칸이 null 고정이라 따로 만든다). */
+  const at = (key: string, runStopId: string | null, stopName: string, atTime: string | null = "13:46"): RideRow => ({
+    ...row(key, null),
+    runStopId,
+    stopName,
+    atTime,
+  });
+
+  it("연속된 같은 칸을 한 묶음으로", () => {
+    const groups = groupRowsByStop([
+      at("a", "s1", "센트럴자이"),
+      at("b", "s1", "센트럴자이"),
+      at("c", "s2", "힐스테이트"),
+    ]);
+    expect(groups.map((g) => g.stopName)).toEqual(["센트럴자이", "힐스테이트"]);
+    expect(groups[0]!.rows).toHaveLength(2);
+    expect(groups[1]!.rows).toHaveLength(1);
+  });
+
+  it("🔴 노선 순서를 보존한다 — 이름으로 전역 묶기를 하지 않는다", () => {
+    // 한 회차에 같은 정류장이 두 번 나오는 편성은 유니크 인덱스가 막지만, 떨어져 있는 줄을
+    // 이름으로 끌어모으면 "다음 정류장"을 못 읽는다. 연속된 것만 묶는 게 규약이다.
+    const groups = groupRowsByStop([
+      at("a", "s1", "센트럴자이"),
+      at("b", "s2", "힐스테이트"),
+      at("c", "s1", "센트럴자이"),
+    ]);
+    expect(groups.map((g) => g.stopName)).toEqual(["센트럴자이", "힐스테이트", "센트럴자이"]);
+  });
+
+  it("칸이 없는 추가 탑승은 이름으로 묶인다 — 바로 앞 같은 정류장에 합쳐진다", () => {
+    // 예정에 없던 기록은 runStopId가 null이다(roster.mergePlanAndLog). 같은 자리에서 탄 사람이므로
+    // 앞 묶음에 붙는 게 맞다.
+    const groups = groupRowsByStop([at("a", null, "센트럴자이"), at("b", null, "센트럴자이")]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.rows).toHaveLength(2);
+  });
+
+  it("빈 목록은 빈 묶음", () => {
+    expect(groupRowsByStop([])).toEqual([]);
+  });
+
+  it("묶음의 시각·이름은 첫 줄에서 온다", () => {
+    const groups = groupRowsByStop([at("a", "s1", "센트럴자이", "14:00")]);
+    expect(groups[0]!.atTime).toBe("14:00");
+    expect(groups[0]!.key).toBe("s1");
+  });
+});
+
+describe("stopGroupRemaining — 묶음 머리의 '남음'", () => {
+  it("아직 안 찍은 사람만 센다", () => {
+    expect(stopGroupRemaining({ rows: [row("a", "boarded"), row("b", null), row("c", null)] })).toBe(2);
+  });
+
+  it("오늘 안 타는 줄은 세지 않는다", () => {
+    // countProgress와 같은 규약 — 회색 줄은 화면에 남지만 '할 일'이 아니다.
+    expect(stopGroupRemaining({ rows: [row("a", null, "in", "skipped"), row("b", null)] })).toBe(1);
   });
 });

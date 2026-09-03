@@ -192,14 +192,18 @@ export function DayBoardClient({
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      {/* 면 전환 — 📱 폰엔 사이드바(하부탭)가 없다. 이 화면엔 PageHeader가 없어(세로 아끼기)
-          여기가 "지금 어느 면인지"를 알려 주는 자리이기도 하다(faces.ts). */}
-      <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
-
-      {/* 날짜·시즌 — 좁은 화면에선 가로 레일 한 줄(감기지 않는다). 크기는 전부 control-size 축.
+      {/* 📐 **면 전환 + 날짜 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*).
+          종전엔 탭 / 날짜·시즌 / 요약이 각각 한 줄이라 **상단만 330px**였다 — 창 높이의 절반이
+          머리라 첫 학생이 겨우 보였다. 탭 바는 `min-w-0`으로 줄어들고(안에서 가로 스크롤),
+          남는 폭을 날짜·시즌이 쓴다. 좁아지면 `toolbar-rail`이 눕혀 한 줄을 유지한다.
+          🔴 FaceTabs는 **공용 컴포넌트라 손대지 않는다** — 수납·학생상세 등이 같이 쓴다.
+             여기선 감싸는 자리만 바꾼다.
           ⚠️ 앞·뒤 이동은 ←/→ **글자**가 아니라 아이콘이다 — 글리프는 폰트·플랫폼마다 크기가 널뛰어
-             같은 줄의 버튼과 밑선이 어긋나고, 한글 자모로 오인되기도 한다([[#12]]·run-panel 주석). */}
+             같은 줄의 버튼과 밑선이 어긋나고, 한글 자모로 오인되기도 한다([[#12]]). */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
+        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
+        </span>
         <Button
           variant="outline"
           aria-label="어제"
@@ -254,15 +258,31 @@ export function DayBoardClient({
             </button>
           ))}
         </span>
+        {/* 📐 **0인 숫자를 색 알약으로 강조하지 않는다**(2026-09-03). 아침엔 탑승·미탑승이 둘 다 0이라
+            초록·빨강 알약 두 개가 아무 뜻 없이 눈을 끌었고, 정작 할 일인 '미기록'이 그 사이에 묻혔다.
+            🔴 '미기록 N'은 **옆 칩의 '전체 N'과 같은 값**이라 아예 뺐다(같은 숫자를 두 번 세지 않는다) —
+               할 일의 크기는 칩이 이미 말한다. 여기 남는 건 **일어난 일**(탑승·미탑승)뿐이고,
+               0이면 흐린 글자, 하나라도 있으면 그때 색 알약이 된다.
+            🔴 필터를 걸면 이 숫자는 **보고 있는 것**의 합이다 — 무엇의 합인지 밝히지 않으면 옆 칩의
+               전체 기준 숫자와 어긋나 보인다. */}
         <span className="text-text-dim whitespace-nowrap">
-          {/* 🔴 필터를 걸면 이 숫자는 **보고 있는 것**의 합이다 — 무엇의 합인지 밝히지 않으면 옆 칩의
-              전체 기준 숫자와 어긋나 보인다. */}
           {dirFilter !== "all" && `${DIRECTION_LABEL[dirFilter]} `}예정{" "}
           <span className="num text-foreground font-bold">{totals.planned}</span>명
         </span>
-        <Pill color={TONE_COLOR.positive}>탑승 {totals.boarded}</Pill>
-        <Pill color={TONE_COLOR.critical}>미탑승 {totals.missed}</Pill>
-        <Pill color={TONE_COLOR.inert}>미기록 {totals.unmarked}</Pill>
+        {totals.boarded > 0 ? (
+          <Pill color={TONE_COLOR.positive}>탑승 {totals.boarded}</Pill>
+        ) : (
+          <span className="text-text-faint whitespace-nowrap">
+            탑승 <span className="num">0</span>
+          </span>
+        )}
+        {totals.missed > 0 ? (
+          <Pill color={TONE_COLOR.critical}>미탑승 {totals.missed}</Pill>
+        ) : (
+          <span className="text-text-faint whitespace-nowrap">
+            미탑승 <span className="num">0</span>
+          </span>
+        )}
         {/* 🔑 일회성 변경은 **한 자리에** 모은다 — 줄마다 '오늘 안 탐'을 붙이면 바로 옆 '미탑승'과
             섞여 찍힌다(다른 축이다). 게다가 전화를 받은 데스크는 이름으로 찾지, 회차를 스크롤하지 않는다.
             🔴 `exceptionsReady`(0229a 적용) 전에는 **버튼을 아예 안 그린다** — 없는 기능을 약속하면

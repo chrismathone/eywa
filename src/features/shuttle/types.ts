@@ -150,6 +150,18 @@ export function runTitle(run: Pick<ShuttleRun, "runNo" | "direction" | "label">)
   return run.label?.trim() || `${run.runNo}회차 ${DIRECTION_LABEL[run.direction]}`;
 }
 
+/**
+ * 방향을 뺀 짧은 이름 — **바로 옆에 `[등원]` 배지가 있는 자리**용(2026-09-03 밀도 개선).
+ *
+ * 🔑 `runTitle`을 고치지 않고 따로 둔 이유: 인쇄 노선표·다이얼로그처럼 **배지가 없는 표면**은
+ *    방향이 이름에 있어야 뜻이 통한다. 화면에서 "13:46 [등원] 1회차 **등원**"처럼 같은 말이
+ *    두 번 나오던 자리만 이걸 쓴다.
+ * ⚠️ 별칭(label)이 있으면 그대로 쓴다 — 사람이 붙인 이름을 우리가 자르지 않는다.
+ */
+export function runShortTitle(run: Pick<ShuttleRun, "runNo" | "direction" | "label">): string {
+  return run.label?.trim() || `${run.runNo}회차`;
+}
+
 /** 회차의 운행 시간대 "13:46~14:11". 시각이 하나도 없으면 빈 문자열. */
 export function runTimeRange(stops: readonly Pick<ShuttleRunStop, "atTime">[]): string {
   const times = stops.map((s) => s.atTime).filter((t): t is string => !!t);

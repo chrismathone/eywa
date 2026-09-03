@@ -153,12 +153,13 @@ export function RideRowItem({
             <Pill color={TONE_COLOR.critical}>오늘 결석</Pill>
           </span>
         )}
-        <span className="text-text-faint min-w-0 truncate text-[11.5px]">
-          {row.atTime && <span className="num">{row.atTime}</span>}
-          {row.atTime && row.stopName && " · "}
-          {row.stopName}
-          {row.runStopId === null && " · 예정에 없던 탑승"}
-        </span>
+        {/* 📐 정류장·시각은 **묶음 머리가 말한다**(2026-09-03 밀도 개선, today-board.groupRowsByStop)
+            — 줄마다 반복하면 정작 봐야 할 이름보다 글자 덩어리가 커져 위계가 뒤집힌다.
+            🔴 다만 **예정에 없던 탑승**은 남긴다 — 묶음 머리가 설명하지 못하는 예외라
+               이유가 그 줄에 붙어 있어야 한다. */}
+        {row.runStopId === null && (
+          <span className="text-text-faint min-w-0 text-[11.5px]">예정에 없던 탑승</span>
+        )}
       </div>
 
       {/* 🔴 오늘 안 타는 줄엔 탑승/미탑승을 **띄우지 않는다** — '미탑승'(예정이었는데 안 탔다)과

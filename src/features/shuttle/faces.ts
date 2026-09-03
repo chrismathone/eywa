@@ -2,11 +2,13 @@ import type { Face } from "@/components/face-tabs";
 import { SUBTABS_BY_MENU } from "@/lib/navigation";
 import type { Season } from "./types";
 
-/** 셔틀의 두 면 — 경로가 곧 면 키다(FaceTabs active). 착지·게이트도 이 상수를 쓴다. */
+/** 셔틀의 면들 — 경로가 곧 면 키다(FaceTabs active). 착지·게이트도 이 상수를 쓴다. */
 export const SHUTTLE_BOARD_PATH = "/shuttle";
 export const SHUTTLE_TODAY_PATH = "/shuttle/today";
 /** 관제(2026-09-02) — '오늘 등하원'이 찍는 화면이면 이쪽은 보는 화면이다. */
 export const SHUTTLE_LIVE_PATH = "/shuttle/live";
+/** 실시간 위치(2026-09-03) — 차량이 지도에 뜰 **자리**. 위치 송신·지도 키가 아직 둘 다 없다. */
+export const SHUTTLE_TRACK_PATH = "/shuttle/track";
 
 /**
  * 셔틀 면 전환 탭 — 노선 편성 ↔ 오늘 등하원.

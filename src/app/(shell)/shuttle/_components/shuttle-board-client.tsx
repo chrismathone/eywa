@@ -238,10 +238,15 @@ export function ShuttleBoardClient({
         }
       />
 
-      {/* 면 전환 — 📱 폰엔 사이드바(하부탭)가 없어 '오늘 등하원'으로 갈 길이 여기뿐이다(faces.ts). */}
-      <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_BOARD_PATH} ariaLabel="셔틀 면 전환" />
-
+      {/* 📐 **면 전환 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*).
+          종전엔 제목줄 / 탭 / 시즌칩으로 상단만 세 줄이었고, 탭 바는 가로 880px 중 200px만 쓰고
+          나머지가 빈 띠였다. 탭을 `min-w-0`로 줄이고 남는 폭을 시즌 칩이 쓴다.
+          📱 폰엔 사이드바(하부탭)가 없어 '오늘 등하원'으로 갈 길이 이 탭뿐이다(faces.ts).
+          🔴 FaceTabs는 공용 컴포넌트라 손대지 않는다 — 감싸는 자리만 바꾼다. */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
+        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_BOARD_PATH} ariaLabel="셔틀 면 전환" />
+        </span>
         {SEASONS.map((s) => (
           <button
             key={s}
