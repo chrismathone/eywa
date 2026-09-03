@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 // (슬롯 advisory xact 락·재번호 원자성). 출석은 체크(ecs_mark_present_if_absent) + 취소(ecs_clear_present,
 // 0169a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
+// ui_prefs 부분 병합은 **단일 구현**(화면마다 복붙하면 형제 키를 날린다 — CLAUDE.md).
+import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
@@ -18,7 +20,6 @@ import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollm
 import { logAction } from "@/features/audit/server/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
-import { parseSheetLang, type SheetLang } from "../i18n";
 import { ECS_TEACHER_ALL, normalizeEcsTeacher } from "../landing-teacher";
 import {
   DEFAULT_ECS_ENGLISH_TRACK,
@@ -777,41 +778,7 @@ export async function clearPresentAttendance(input: {
  * 🔴 병합 로직을 설정마다 복붙하지 말 것 — 두 벌이 되면 한쪽만 고쳐 형제 키를 날리는 사고가 난다.
  */
 async function patchMyEcsPrefs(patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
-
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const ns =
-    raw.ecs && typeof raw.ecs === "object" && !Array.isArray(raw.ecs)
-      ? { ...(raw.ecs as Record<string, unknown>) }
-      : {};
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined) delete ns[key];
-    else ns[key] = value;
-  }
-
-  const merged = { ...raw };
-  if (Object.keys(ns).length === 0) delete merged.ecs;
-  else merged.ecs = ns;
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  return patchMyUiPrefs("ecs", patch);
 }
 
 /**
@@ -823,21 +790,6 @@ export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean
     return { ok: false, error: "잘못된 글씨 크기입니다" };
   }
   return patchMyEcsPrefs({ fontSize: size === DEFAULT_ECS_FONT_SIZE ? undefined : size });
-}
-
-/**
- * 화면 언어(한국어/English)를 본인 계정에 저장 — `users.ui_prefs.ecs.lang`(2026-09-03, 마이그레이션 0건).
- *
- * 🔴 **기본값과 같아도 지운다(생략)하지 않는다** — 다른 설정들은 "기본값이면 키를 지운다"가 규약이지만
- *    여기 기본값은 **표시 이름에서 도출**된다(원어민=영어). 이름은 바뀔 수 있어서(원어민 이름을 나중에
- *    한글로 등록하는 등) 키를 지우면 **본인이 고른 언어가 조용히 뒤집힌다**. 고른 사실 자체가 정보다.
- * ⚠️ 서버가 진실이다 — 랜딩·헤더 문구는 서버 컴포넌트가 그리므로 호출부가 저장 후 `router.refresh()`.
- * ⚠️ 이 액션은 반 게이트를 안 본다(내 계정의 표시 취향 — `patchMyEcsPrefs` 주석 그대로).
- */
-export async function setMyEcsLang(lang: string): Promise<{ ok: boolean; error?: string }> {
-  const parsed: SheetLang | null = parseSheetLang(lang);
-  if (!parsed) return { ok: false, error: "잘못된 값입니다" };
-  return patchMyEcsPrefs({ lang: parsed });
 }
 
 /**

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SHEET_LANG,
@@ -40,11 +42,14 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
   });
 
   it("🔴 사전에 없는 문구를 화면에 남겨 두지 않는다 — 쓰이지 않는 키(orphan) 금지", () => {
-    // 학원설정 규약과 같은 결: "소비처 없는 값은 만들지도 않는다". 지금 사전은 상단 바·네비·랜딩
-    // 프레임만 담고, 시트 본문(로스터·계획 표)은 v1 범위 밖이라 **키 자체를 두지 않는다**.
+    // 학원설정 규약과 같은 결: "소비처 없는 값은 만들지도 않는다". 지금 사전은 강사 미니셸 크롬
+    // ('내 메뉴')과 ECS 상단 바·네비·랜딩 프레임을 담고, 시트 본문(로스터·계획 표)·원스크린은
+    // 아직 범위 밖이라 **키 자체를 두지 않는다**.
     // 접두사가 늘면 그 구역을 실제로 배선했는지 사람이 한 번 더 보게 하는 가드다.
     const prefixes = new Set(Object.keys(SHEET_DICT).map((k) => k.split(".")[0]));
-    expect([...prefixes].sort()).toEqual(["chrome", "face", "filter", "landing", "lang", "nav", "toolbar", "today"].sort());
+    expect([...prefixes].sort()).toEqual(
+      ["chrome", "face", "filter", "landing", "lang", "menu", "nav", "today", "toolbar"].sort(),
+    );
   });
 });
 
@@ -125,5 +130,32 @@ describe("날짜 표기", () => {
   it("한국어는 서버가 준 라벨을 그대로 쓴다 — 같은 주가 화면마다 다르게 적히지 않게", () => {
     expect(sheetWeekLabel("2026-09-07", "9월 2주차 (7일~13일)", "ko")).toBe("9월 2주차 (7일~13일)");
     expect(sheetWeekLabel("2026-09-07", "9월 2주차 (7일~13일)", "en")).toBe("Sep 7 – 13, 2026");
+  });
+});
+
+describe("'내 메뉴' — 라벨이 사전과 어긋나지 않는다", () => {
+  const menu = readFileSync(
+    join(process.cwd(), "src", "components", "teacher-menu.tsx"),
+    "utf8",
+  );
+
+  it("🔴 메뉴 파일에 한국어 라벨을 다시 적지 않는다(사전이 단일 소스)", () => {
+    // `labelKey: "menu.item.*"`만 있어야 한다 — `label: "출석부"`가 되살아나면 영어 전환에서
+    // 그 줄만 한글로 남고, 아무도 에러를 못 본다.
+    expect(menu).not.toMatch(/label: "/);
+    expect(menu).toContain("labelKey:");
+  });
+
+  it("메뉴가 쓰는 키가 사전에 전부 있다", () => {
+    const used = [...menu.matchAll(/labelKey: "([^"]+)"/g)].map((m) => m[1]);
+    expect(used.length).toBeGreaterThan(10);
+    for (const k of used) expect(Object.keys(SHEET_DICT)).toContain(k);
+  });
+
+  it("🔴 스위치는 '내 메뉴' 한 곳뿐 — 다른 화면 툴바에 다시 달지 않는다(원장 2026-09-03 지정 자리)", () => {
+    expect(menu).toContain("<TeacherLangSwitch />");
+    // 🔴 메뉴 **항목**으로 감싸지 않는다 — 항목 안에 버튼 둘을 넣으면 클릭·키보드를 서로 뺏고
+    //    스크린리더에 중첩 인터랙티브로 읽힌다. 팝업의 평범한 자식이어야 한다.
+    expect(menu).not.toMatch(/<DropdownMenuItem[^>]*>\s*<TeacherLangSwitch/);
   });
 });

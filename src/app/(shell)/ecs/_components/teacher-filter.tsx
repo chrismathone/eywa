@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { setMyEcsTeacher } from "@/features/class-sheets/server/actions";
-import { useSheetT } from "@/features/class-sheets/lang-context";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 import { ECS_TEACHER_ALL, type LandingTeacherOption } from "@/features/class-sheets/landing-teacher";
 
 export function EcsTeacherFilter({

@@ -12,13 +12,13 @@ import {
  * 강사 시트 화면 언어를 **클라 트리 전체에** 흘려보내는 통로 — 학원설정
  * [`OperationsProvider`](@/features/owner/operations-context)와 같은 결이다.
  *
- * 🔑 **왜 prop이 아니라 context인가**: 상단 바 조각(`SheetClassPicker`·`SheetFaceSwitch`)은 주간 시트와
- *    월간 뷰가 함께 쓰는데, 그 사이에 낀 컴포넌트가 여럿이라 prop으로 내리면 중간 파일을 전부 고쳐야
- *    한다. 지금 그 중간 파일 몇 개는 **다른 세션이 동시에 고치는 중**이라 손대면 병합이 깨진다.
- *    context면 provider 한 곳(ECS 레이아웃)만 두고 읽는 쪽이 알아서 집는다.
+ * 🔑 **왜 prop이 아니라 context인가**: 강사가 여는 화면이 수십 개고 공용 조각(`SheetClassPicker`·
+ *    `SheetFaceSwitch`·'내 메뉴')이 여러 트리에 걸쳐 있어, prop으로 내리면 중간 파일을 전부 고쳐야
+ *    한다. context면 provider 한 곳(**강사 미니셸 레이아웃**)만 두고 읽는 쪽이 알아서 집는다.
  *
- * 🔴 **기본값은 한국어**다(provider 없이 읽혔을 때) — `SheetClassPicker`는 MCS(수학 시트)도 쓰는데
- *    MCS는 `/ecs` 밖이라 provider가 없다. 여기가 `en`이면 수학 시트 상단만 영어가 된다.
+ * 🔴 **provider는 강사 미니셸에만 건다** — 관리자 풀셸은 한국어 고정이다(원장 2026-09-03
+ *    *"관리자뷰는 수정할 필요 없고"*). 그래서 기본값도 한국어여야 한다: 같은 공용 조각이 관리자
+ *    화면에서도 렌더되는데, 기본값이 `en`이면 그쪽이 영어가 된다.
  */
 const SheetLangContext = createContext<SheetLang>(DEFAULT_SHEET_LANG);
 

@@ -20,9 +20,8 @@ import { setMyEcsMonthView } from "../server/actions";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
 import type { ClassSheetWeekData } from "../server/queries";
 import { ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
-import { sheetDowLabel, sheetWeekLabel } from "../i18n";
-import { useSheetLang, useSheetT } from "../lang-context";
-import { SheetLangSwitch } from "./lang-switch";
+import { sheetDowLabel, sheetWeekLabel } from "@/features/teacher-view/i18n";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { attHref } from "@/app/(shell)/attendance/_components/att-href";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 import { EcsMakeupAdder } from "./ecs-makeup-adder";
@@ -234,9 +233,6 @@ export function SheetToolbar({
             ))}
           </span>
         </span>
-        {/* 화면 언어(내 계정) — 글씨 크기 바로 옆. 원어민 강사의 홈이 이 화면이라 여기가 그 사람의 스위치다
-            (강사에겐 사이드바가 없어 설정 화면으로 갈 길이 없다). */}
-        <SheetLangSwitch tone="sheet" />
         <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
         {conflicts > 0 ? (
           <span className="text-danger text-[12px] font-bold whitespace-nowrap">

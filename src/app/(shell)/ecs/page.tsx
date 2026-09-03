@@ -25,9 +25,8 @@ import {
   type EcsTodayMode,
 } from "./_components/today-nav";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
-import { sheetDateLabelEn, sheetT, sheetWeekLabel, type SheetLang } from "@/features/class-sheets/i18n";
-import { getEcsLang } from "@/features/class-sheets/server/lang";
-import { SheetLangSwitch } from "@/features/class-sheets/components/lang-switch";
+import { sheetDateLabelEn, sheetT, sheetWeekLabel, type SheetLang } from "@/features/teacher-view/i18n";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 
 /** 오늘 면 시트 모드의 반 1개분 — 시트 조회가 실패해도 나머지 반은 그려야 하므로 결과를 통째로 나른다. */
 type TodaySheet = {
@@ -78,7 +77,7 @@ export default async function EcsLandingPage({
   // 화면 언어(2026-09-03) — ECS 레이아웃이 이미 읽어 둔 값을 **요청 캐시에서 그대로** 받는다(왕복 0).
   const [scoped, lang] = await Promise.all([
     effectiveTeacherScope().then((s) => s !== null),
-    getEcsLang(),
+    getTeacherViewLang(),
   ]);
   // 305 면은 사무실도 연다(오늘 면의 24반 폭탄과 달리 타임 단위). view=room 은 스코프와 무관.
   if (view === "room") {
@@ -174,10 +173,6 @@ export default async function EcsLandingPage({
           options={res.teacherOptions}
           totalCount={res.trackCounts[res.trackFilter]}
         />
-        {/* 화면 언어 — 반을 열기 **전에도** 바꿀 수 있어야 한다(원어민이 목록에서 막히면 시트까지 못 간다). */}
-        <span className="ml-auto">
-          <SheetLangSwitch />
-        </span>
       </div>
 
       {res.cards.length === 0 ? (
@@ -274,8 +269,6 @@ function EcsTodayFace({
         <EcsDayNav date={res.date} today={res.today} mode={mode} lang={lang} />
         {/* 출결 모드 — 영어 전담 강사에게는 ECS가 홈이라 여기가 그 사람의 입구다(폰엔 사이드바가 없다). */}
         <EcsQuickAttendanceLink lang={lang} />
-        {/* 화면 언어 — 원어민 강사의 기본 착지가 이 면이라 여기가 가장 먼저 눈에 띄는 자리다. */}
-        <SheetLangSwitch />
       </div>
 
       {/* 휴일 한 줄(원장 2026-09-01 *"ecs/mcs 휴일참조"* + *"대신 입력은 가능하도록"*).

@@ -7,7 +7,7 @@ import {
 } from "@/components/toolbar-controls";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
 import { PeriodNav } from "@/components/period-nav";
-import { sheetDateLabelEn, sheetT, type SheetLang } from "@/features/class-sheets/i18n";
+import { sheetDateLabelEn, sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { EcsDatePicker } from "./today-date-picker";
 
 /**

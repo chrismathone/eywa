@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SHEET_DICT } from "@/features/teacher-view/i18n";
 
 /**
  * 구조 가드 — 월간 뷰에서 **그 날짜를 그 자리에서 고치는** 배선이 조용히 갈라지지 않게 잠근다
@@ -253,6 +254,10 @@ describe("ECS 상단 바 · 좁은 폭에서 접기", () => {
     // 🔴 반 이름은 여전히 호출부가 붙인다(번역 대상이 아니다) → `${classLabel}` 보간이 남아야 한다.
     expect(chrome).toContain('aria-label={t("chrome.list.aria")}');
     expect(chrome).toContain("ariaLabel={`${classLabel} ${t(\"chrome.classInfo.suffix\")}`}");
+    // 🔴 사전 쪽도 함께 잠근다 — 배선만 보면 그 키가 빈 문자열이어도 통과해서, 접힌 알약이
+    //    **이름 없는 아이콘**이 되는 것을 이 가드가 놓친다(원문 확인처를 옮긴 것이지 없앤 게 아니다).
+    expect(SHEET_DICT["chrome.list.aria"].ko).toBe("반 목록");
+    expect(SHEET_DICT["chrome.classInfo.suffix"].ko).toBe("반 정보 보기");
   });
 
   it("⚠️ 아이콘 자리 높이가 글자 줄상자와 같다 — 접힌 알약만 낮아지지 않게", () => {

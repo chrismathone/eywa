@@ -1,10 +1,16 @@
 /**
- * 강사 시트 **화면 언어**(한국어 / English) — 사전 한 벌 + 순수 해석 함수.
+ * **강사뷰 화면 언어**(한국어 / English) — 사전 한 벌 + 순수 해석 함수.
  *
- * 원장 2026-09-03: *"강사뷰 화면을 영어/한글 전환할 수 있도록 원어민 전용뷰 세팅 (영어강사 기준)"*.
- * 원어민 강사(실측 injaewon 활성 12명 중 `KRISTINE DRIVER`·`Florence Park` 2명)는 영어 전담이라
- * 강사 홈이 ECS로 착지하는데([`teacher-home-rule.ts`](@/lib/auth/teacher-home-rule)), 그 화면의
- * 안내·상태·버튼이 전부 한글이라 **자기 반 시트를 읽지 못한 채** 써 왔다.
+ * 원장 2026-09-03: *"강사뷰 화면을 영어/한글 전환할 수 있도록 원어민 전용뷰 세팅 (영어강사 기준)"*
+ * → 범위 정정: *"강사로 로그인했을때 화면이야 '영어 강사 시트' 하나만 적용하는것이 아님"* ·
+ * *"관리자뷰는 수정할 필요 없고 강사로 로그인했을때 내 메뉴에서 한영전환이 있으면 됨"*.
+ * 🔴 그래서 이 사전은 **강사 미니셸 안에서만** 쓰인다 — 관리자(풀셸)는 한 글자도 안 바뀐다.
+ * 실측(2026-09-03, injaewon 활성 32계정): 로마자 이름은 **정확히 2명**(`KRISTINE DRIVER`·`Florence Park`)
+ * 이고 둘 다 `system_role=teacher`·`job_title=원어민`이다. 둘 다 **담임 반 0개**(교시 담당만, 전부 english)
+ * 라 강사 홈이 ECS로 착지하고([`teacher-home-rule.ts`](@/lib/auth/teacher-home-rule)), 둘 다
+ * **`ui_prefs = {}`** — 즉 아무것도 안 고른 상태라 **이름에서 도출되는 기본값이 곧 그들이 보는 화면**이다.
+ * `lesson_reports` 작성은 둘 다 0건이고 출결 입력은 KRISTINE 30건·Florence 0건 — 그래서 우선순위는
+ * **미니셸 크롬 → ECS → 출결**이고 원스크린(수업 마감)은 뒤로 미뤘다.
  *
  * ## 🔴 번역하는 것과 안 하는 것
  * - **번역한다**: 열 머리·버튼·상태 배지·툴팁·빈 화면 안내 — 즉 **우리가 쓴 UI 문구**.
@@ -28,10 +34,13 @@ export const SHEET_LANGS = ["ko", "en"] as const;
 export type SheetLang = (typeof SHEET_LANGS)[number];
 
 /**
- * 사전에 없거나 창밖(MCS·다른 메뉴)에서 읽힐 때의 값 = **한국어**.
+ * provider가 없는 곳에서 읽힐 때의 값 = **한국어**.
  *
- * 🔴 이 기본값을 `en`으로 돌리지 말 것 — `SheetClassPicker`는 MCS(수학 시트)도 쓰는 공용 조각이라
- *    ECS 밖에서는 provider 없이 이 값으로 떨어진다. 여기가 `en`이면 수학 시트 상단이 영어가 된다.
+ * 🔴 이 기본값을 `en`으로 돌리지 말 것 — provider는 **강사 미니셸에만** 걸려서, 관리자 풀셸과
+ *    창(iframe)에서 같은 공용 조각(`SheetClassPicker` 등)이 이 값으로 떨어진다. 여기가 `en`이면
+ *    **관리자뷰가 영어가 된다**(원장 2026-09-03 *"관리자뷰는 수정할 필요 없고"*를 정면으로 어긴다).
+ * ⚠️ MCS(수학 시트)는 이제 provider **안**이다 — 강사가 여는 화면 전체가 범위이므로 원어민에겐
+ *    수학 시트도 영어로 열린다(ECS 한 화면이던 1차 범위에서 넓어진 것).
  */
 export const DEFAULT_SHEET_LANG: SheetLang = "ko";
 
@@ -79,12 +88,42 @@ export function resolveSheetLang(
  *    **배선과 같은 푸시에서** 키를 더한다.
  */
 export const SHEET_DICT = {
-  // ── 언어 스위치 자체 ───────────────────────────────────────────────
+  // ── 언어 스위치 자체('내 메뉴' 드롭다운 안) ───────────────────────
+  "lang.label": { ko: "언어", en: "Language" },
   "lang.title": {
-    ko: "이 화면(영어 강사 시트)의 언어 — 내 계정에 저장되어 다른 PC에서도 같은 언어로 열립니다. 학생 이름·반 이름·교재·진도 등 입력된 내용은 번역하지 않습니다.",
-    en: "Language for the English teacher sheet. Saved to your account, so it opens the same way on any PC. Student names, class names, books and lesson notes are never translated.",
+    ko: "강사 화면의 언어 — 내 계정에 저장되어 다른 PC에서도 같은 언어로 열립니다. 학생 이름·반 이름·교재·진도 등 입력된 내용은 번역하지 않습니다.",
+    en: "Language for your teacher screens. Saved to your account, so it opens the same way on any PC. Student names, class names, books and lesson notes are never translated.",
   },
   "lang.aria": { ko: "화면 언어 선택", en: "Choose display language" },
+  "lang.saveFailed": {
+    ko: "화면 언어를 저장하지 못했습니다",
+    en: "Could not save your display language",
+  },
+
+  // ── 강사 미니셸 크롬('내 메뉴' 드롭다운 · 헤더) ────────────────────
+  // 🔴 원어민이 **항상** 보는 프레임이라 우선순위 1이다. 라벨은 [teacher-menu](@/components/teacher-menu)의
+  //    `LINKS`와 **같은 뜻**이어야 한다 — 키는 그 줄의 `menu`(MenuKey)를 그대로 쓴다(갈리면 새 메뉴가
+  //    조용히 한글로 남는다).
+  "menu.trigger": { ko: "내 메뉴", en: "My menu" },
+  "menu.heading": { ko: "강사 메뉴", en: "Teacher menu" },
+  "menu.me": { ko: "내 정보", en: "My profile" },
+  "menu.toAdmin": { ko: "관리자뷰로 전환", en: "Switch to admin view" },
+  "menu.item.attendanceQuick": { ko: "출결 모드", en: "Quick attendance" },
+  "menu.item.teacher_onescreen": { ko: "수업 마감 (원스크린)", en: "Lesson wrap-up (One Screen)" },
+  "menu.item.ecs": { ko: "영어 강사 시트", en: "English Teacher Sheet" },
+  "menu.item.mcs": { ko: "수학 강사 시트", en: "Math Teacher Sheet" },
+  "menu.item.students": { ko: "내 학생", en: "My students" },
+  "menu.item.attendance": { ko: "출석부", en: "Attendance book" },
+  "menu.item.classes": { ko: "내 수업", en: "My classes" },
+  "menu.item.timetable": { ko: "시간표", en: "Timetable" },
+  "menu.item.exams": { ko: "성적관리", en: "Grades" },
+  "menu.item.consultations": { ko: "학생상담", en: "Student counseling" },
+  "menu.item.textbook_requests": { ko: "교재 요청", en: "Textbook requests" },
+  "menu.item.expense_requests": { ko: "지출결의서", en: "Expense request" },
+  "menu.item.calendar": { ko: "캘린더", en: "Calendar" },
+  "menu.item.approvals": { ko: "전자결재", en: "Approvals" },
+  "menu.item.class_review": { ko: "수업 평가", en: "Class review" },
+  "menu.item.documents": { ko: "데이터베이스", en: "Documents" },
 
   // ── 면 전환(주간 | 달력 | 진도표 | 계획) ──────────────────────────
   "face.week": { ko: "주간", en: "Weekly" },
@@ -299,6 +338,22 @@ export function sheetT(lang: SheetLang, key: SheetDictKey): string {
   if (!entry) return key;
   const v = lang === "en" ? entry.en : entry.ko;
   return v || entry.ko;
+}
+
+/**
+ * 메뉴 키(`MenuKey`) → 그 메뉴 이름. 미니셸 **헤더의 현재 메뉴명**과 '내 메뉴' 항목이 같은 표를 읽는다.
+ *
+ * 🔴 앱 전역 네비 표([`navigation.ts`](@/lib/navigation))의 `label`을 **고치지 않는다** — 그 표는 관리자
+ *    사이드바·검색 팰릿·창 제목이 함께 쓰고, 관리자뷰는 한국어 고정이다(원장 2026-09-03). 여기서는
+ *    **강사 미니셸이 그릴 때만** 이름을 갈아 끼운다.
+ * ⚠️ 사전에 없는 메뉴(강사에게 안 열리는 메뉴)는 `null` — 호출부가 원래 한국어 라벨로 폴백한다
+ *    (지어내지 않는다·빈 칸도 만들지 않는다).
+ */
+export function sheetMenuLabel(menuKey: string, lang: SheetLang): string | null {
+  const key = `menu.item.${menuKey}`;
+  // ⚠️ 먼저 **실제로 있는 키인지** 보고 그 다음에 좁힌다(캐스팅해 놓고 확인하면 없는 키가 타입만 통과한다).
+  if (!Object.hasOwn(SHEET_DICT, key)) return null;
+  return sheetT(lang, key as SheetDictKey);
 }
 
 /** 호출부에서 `t("...")`로 쓰기 위한 바인딩(서버·클라 공용). */

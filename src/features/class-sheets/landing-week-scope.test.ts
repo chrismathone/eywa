@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SHEET_DICT } from "./i18n";
+import { SHEET_DICT } from "@/features/teacher-view/i18n";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");

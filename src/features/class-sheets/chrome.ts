@@ -10,7 +10,7 @@
  * ⚠️ 이 파일에 `"use client"`를 붙이지 말 것 — 서버 컴포넌트가 import하면 런타임에 값이 사라진다([[#81]]).
  */
 import { TOOLBAR_CHIP, TOOLBAR_SEG_BOX, TOOLBAR_SEG_ITEM } from "@/components/toolbar-controls";
-import { sheetT, type SheetLang } from "./i18n";
+import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import type { EcsMonthView } from "./view-prefs";
 
 /**

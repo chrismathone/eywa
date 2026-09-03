@@ -13,7 +13,7 @@ import {
   sheetSegItem,
   type SheetFace,
 } from "../chrome";
-import { useSheetT, useSheetLang } from "../lang-context";
+import { useSheetT, useSheetLang } from "@/features/teacher-view/lang-context";
 
 /**
  * ECS 상단 바의 **공용 조각** — 표기는 [`chrome.ts`](../chrome.ts), 여기는 그리는 쪽.
