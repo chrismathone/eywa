@@ -44,7 +44,7 @@ import { LiveVehicleCard } from "./live-vehicle-card";
  * 운행 현황(관제) — 차 전체를 한눈에 보고 **이상한 것만** 짚는다. 읽기 전용이다.
  *
  * 원장(2026-09-02): 동승 선생님이 폰에서 찍은 것을 **관리자가 본다**. 그래서 두 가지가 이 화면의 전부다:
- *   ① 지금 어느 차가 돌고 있나(운행 상태 0242a) ② 지금 손봐야 할 회차가 있나(경보).
+ *   ① 지금 어느 차가 돌고 있나(운행 상태 0243a) ② 지금 손봐야 할 회차가 있나(경보).
  *
  * 🔴 **찍는 버튼이 없다** — 탑승 체크·출발/종료는 전부 `/shuttle/today`에 있다. 관제에서 같은 일을
  *    또 할 수 있게 만들면 두 화면이 서로 다른 조작 축을 갖게 되고, 게이트도 두 벌이 된다.
@@ -73,11 +73,11 @@ export function LiveBoardClient({
   logs: BoardingLog[];
   exceptions: RideException[];
   /**
-   * 그날 회차별 운행 기록(0242a). Map은 서버→클라 경계를 못 넘어 **엔트리 배열**로 받는다
+   * 그날 회차별 운행 기록(0243a). Map은 서버→클라 경계를 못 넘어 **엔트리 배열**로 받는다
    * (오늘 등하원 화면과 같은 모양 — 두 화면이 같은 재료를 다르게 받으면 한쪽만 고쳐진다).
    */
   trips: [string, ShuttleTrip][];
-  /** 0242a 적용 여부. false면 상태·경보를 **아예 안 그린다**([[#95]]). */
+  /** 0243a 적용 여부. false면 상태·경보를 **아예 안 그린다**([[#95]]). */
   tripsReady: boolean;
   /** KST 오늘(서버가 내려준다) — 지난 날짜면 실시간 채널을 안 연다. */
   today: string;
@@ -189,10 +189,10 @@ export function LiveBoardClient({
         )}
       </div>
 
-      {/* 🔴 0242a 미적용 — 상태를 그리는 대신 **왜 안 보이는지**를 말한다(빈 화면은 고장으로 읽힌다). */}
+      {/* 🔴 0243a 미적용 — 상태를 그리는 대신 **왜 안 보이는지**를 말한다(빈 화면은 고장으로 읽힌다). */}
       {!tripsReady && (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-[12.5px]">
-          운행 상태(출발·종료)는 마이그레이션 <span className="num">0242a</span>를 적용하면 보입니다 —
+          운행 상태(출발·종료)는 마이그레이션 <span className="num">0243a</span>를 적용하면 보입니다 —
           지금은 탑승 기록만 표시합니다.
         </div>
       )}

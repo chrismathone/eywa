@@ -52,7 +52,7 @@ export default async function ShuttleTodayPage({
       loadShuttleTodayPrefs(), // 등하원 보기 = 계정 귀속(다른 기기에서도 같은 상태)
       getRideExceptionsOn(date), // 일회성 개입(0229a) — 표가 없으면 ready:false로 조용히 접힌다([[#95]])
       canWrite ? getAssignableStudents() : Promise.resolve([]),
-      getTripsOn(date), // 운행 단위(0242a) — 표가 없으면 ready:false로 상태를 아예 안 그린다
+      getTripsOn(date), // 운행 단위(0243a) — 표가 없으면 ready:false로 상태를 아예 안 그린다
     ]);
 
   return (
@@ -78,7 +78,7 @@ export default async function ShuttleTodayPage({
           exceptionsReady={exceptionsRes.ready}
           students={students}
           today={kstToday()}
-          // 운행 단위(0242a). 🔴 ready가 false면 상태를 **아예 안 그린다** — 실제로 돌고 있는 차를
+          // 운행 단위(0243a). 🔴 ready가 false면 상태를 **아예 안 그린다** — 실제로 돌고 있는 차를
           //    "출발 전"이라고 말하지 않기 위해서다(전부 null이라 그냥 그리면 그렇게 보인다).
           trips={[...tripsRes.trips.entries()]}
           tripsReady={tripsRes.ready}

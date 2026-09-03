@@ -36,13 +36,17 @@ describe("보이지 않는 '보강' 반", () => {
     expect(fn.slice(readAt, insertAt)).toMatch(/exists[\s\S]{0,120}return \{ ok: true/);
     expect(server).toContain('status: "makeup"');
     /**
-     * ③ 그리고 **어느 반이든** 그 (학생,날짜)에 이미 makeup 칸이 있으면 안 만든다(2026-09-02) — 강사가 자기
-     *    반에 손으로 찍어 둔 보강에 한 칸 더 서면 시수가 두 배다. 반으로 좁히지 않은 조회가 insert **앞**에 있다.
+     * ③ 그리고 **그 강사가 그날 그 학생을 이미 찍었으면** 안 만든다(2026-09-02 갱신) — 같은 수업을
+     *    두 번 세지 않기 위해서다. 🔴 축은 **상태가 아니라 강사**다: 손으로 찍을 땐 `present`가 더
+     *    흔하고(김승언), 반대로 "어느 반이든 makeup이면 skip"은 **다른 강사의 진짜 두 번째 수업**을
+     *    잘못 막는다(이채아 = 김윤하 정규 + 김은정 보강). 규칙과 실측 근거는 그 함수 주석.
+     *    조회는 반으로 좁히지 않고(그 강사의 어느 반이든), insert **앞**에 있다.
      */
     const between = fn.slice(readAt, insertAt);
-    const elsewhereAt = between.indexOf('.eq("status", "makeup")');
-    expect(elsewhereAt).toBeGreaterThan(-1);
-    expect(between.slice(between.lastIndexOf('.from("attendance_records")', elsewhereAt), elsewhereAt)).not.toContain(
+    expect(between).toContain("teacher_id");
+    expect(between).not.toContain('.eq("status"'); // 상태로 가르면 손으로 찍은 present를 놓친다
+    const scanAt = between.indexOf("teacher_id");
+    expect(between.slice(between.lastIndexOf('.from("attendance_records")', scanAt), scanAt)).not.toContain(
       '.eq("class_id"',
     );
   });

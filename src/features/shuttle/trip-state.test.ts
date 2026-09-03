@@ -31,7 +31,7 @@ const progress = (over: Partial<Progress> = {}): Progress => ({
 
 describe("운행 상태 — 시각에서 도출한다", () => {
   it("기록이 없으면 '출발 전'", () => {
-    // 0242a 적용 전에도 모든 회차가 이 값이다. 화면은 ready로 그릴지를 따로 판단한다.
+    // 0243a 적용 전에도 모든 회차가 이 값이다. 화면은 ready로 그릴지를 따로 판단한다.
     expect(tripState(null)).toBe("ready");
     expect(tripState(undefined)).toBe("ready");
     expect(tripState(trip())).toBe("ready");

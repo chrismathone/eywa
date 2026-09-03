@@ -45,7 +45,7 @@ function isMissingTable(error: { code?: string; message?: string } | null): bool
 /**
  * **컬럼이** 아직 없을 때(42703 = undefined_column / PGRST204 = 스키마 캐시에 그 컬럼이 없음).
  * 🔑 표 부재와 코드가 다르다 — 마이그레이션이 표를 만드는 게 아니라 **컬럼을 더하는** 경우
- *    (0243a 좌표)엔 `isMissingTable`로 안 잡혀 그대로 화면이 죽는다([[#95]]).
+ *    (0244a 좌표)엔 `isMissingTable`로 안 잡혀 그대로 화면이 죽는다([[#95]]).
  */
 function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -63,7 +63,7 @@ export type ShuttleBoard = {
   runs: ShuttleRun[];
   stops: ShuttleStop[];
   /**
-   * 0243a(좌표 컬럼) 적용 여부. false면 화면이 **좌표 입력 자체를 안 그린다** — 없는 기능을 버튼으로
+   * 0244a(좌표 컬럼) 적용 여부. false면 화면이 **좌표 입력 자체를 안 그린다** — 없는 기능을 버튼으로
    * 약속하면 눌렀을 때 한글 에러만 나온다([[#95]], 0229a `exceptionsReady`와 같은 규약).
    */
   coordsReady: boolean;
@@ -210,7 +210,7 @@ async function loadShuttleBoard(season: Season): Promise<ShuttleBoard> {
       .in("run_stop_id", chunk),
   );
 
-  // 좌표는 **따로** 받는다 — 위 select에 끼워 넣으면 0243a 미적용 배포에서 보드가 통째로 빈다([[#95]]).
+  // 좌표는 **따로** 받는다 — 위 select에 끼워 넣으면 0244a 미적용 배포에서 보드가 통째로 빈다([[#95]]).
   const [students, coords] = await Promise.all([
     loadStudents([...new Set(riderRows.map((r) => r.student_id))]),
     loadStopCoords(),
@@ -427,12 +427,12 @@ export function dayCodeForDate(ymd: string): DayCode {
   return dayCodeOf(ymd);
 }
 
-// ── 운행 단위(0242a) ───────────────────────────────────────────────────────────────────
+// ── 운행 단위(0243a) ───────────────────────────────────────────────────────────────────
 
 /**
  * 그날의 **운행 기록**(출발했나/끝났나) — 회차 id로 찾을 수 있게 Map으로 돌려준다.
  *
- * 🔴 `ready`가 중요한 축이다 — 0242a 적용 전에는 표가 없어 **모든 회차가 '출발 전'**으로 보이는데,
+ * 🔴 `ready`가 중요한 축이다 — 0243a 적용 전에는 표가 없어 **모든 회차가 '출발 전'**으로 보이는데,
  *    그건 사실이 아니라 "모른다"이다. 화면은 `ready:false`면 상태를 **아예 그리지 않는다**([[#95]]) —
  *    실제로 돌고 있는 차를 "출발 전"이라고 말하지 않기 위해서다.
  *
@@ -498,7 +498,7 @@ async function loadUserNames(ids: string[]): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.id, r.display_name]));
 }
 
-// ── 정류장 좌표(0243a) ─────────────────────────────────────────────────────────────────
+// ── 정류장 좌표(0244a) ─────────────────────────────────────────────────────────────────
 
 export type StopCoords = { lat: number | null; lng: number | null; radiusM: number; address: string | null };
 
@@ -525,7 +525,7 @@ export async function loadStopCoords(): Promise<{ ready: boolean; byStop: Map<st
       .eq("archived", false)
       .limit(500);
 
-    // 표가 없거나(0225a 미적용) 컬럼이 없으면(0243a 미적용) 좌표 없이 간다.
+    // 표가 없거나(0225a 미적용) 컬럼이 없으면(0244a 미적용) 좌표 없이 간다.
     if (isMissingTable(error) || isMissingColumn(error)) return empty;
     if (error) {
       reportError(error, { scope: "shuttle.stopCoords" });

@@ -750,7 +750,7 @@ export async function clearBoarding(formData: FormData): Promise<ShuttleActionSt
   return { ok: true };
 }
 
-// ── 운행 단위 (0242a) — 그 회차가 출발했나 / 끝났나 ─────────────────────────────────────
+// ── 운행 단위 (0243a) — 그 회차가 출발했나 / 끝났나 ─────────────────────────────────────
 
 /**
  * 출발을 찍는다 — **관제 화면의 재료**다.
@@ -887,15 +887,15 @@ async function loadTrip(
   return data ?? null;
 }
 
-// ── 정류장 좌표 (0243a) ────────────────────────────────────────────────────────────────
+// ── 정류장 좌표 (0244a) ────────────────────────────────────────────────────────────────
 
 /**
  * 정류장 위치를 찍는다 — 위경도·반경·주소.
  *
- * 🔴 **좌표는 둘 다이거나 둘 다 아니다**(0243a check와 같은 판정). 한쪽만 저장되면 지도에 못 찍으면서
+ * 🔴 **좌표는 둘 다이거나 둘 다 아니다**(0244a check와 같은 판정). 한쪽만 저장되면 지도에 못 찍으면서
  *    "좌표 있음"으로 세어져 빈 마커가 된다. 빈 값으로 보내면 **좌표를 지운다**(잘못 찍은 것을 되돌리는 길).
  * 🔴 게이트는 **편성 축**(`gate`) — 정류장 마스터는 데스크가 관리하는 편성 정보다(등하원 기록과 다른 축).
- * ⚠️ 0243a 미적용이면 컬럼이 없어 update가 실패한다 — 한글 사유로 돌려준다(화면은 애초에 이 폼을
+ * ⚠️ 0244a 미적용이면 컬럼이 없어 update가 실패한다 — 한글 사유로 돌려준다(화면은 애초에 이 폼을
  *    `coordsReady`가 false면 안 그린다, [[#95]]).
  */
 export async function saveStopLocation(formData: FormData): Promise<ShuttleActionState> {
@@ -940,7 +940,7 @@ export async function saveStopLocation(formData: FormData): Promise<ShuttleActio
   if (error) {
     // 컬럼이 아직 없는 배포 — 무엇을 해야 하는지 사람 말로 돌려준다(raw 원문 노출 금지).
     if (error.code === "42703" || error.code === "PGRST204") {
-      return { error: "정류장 좌표 기능이 아직 준비되지 않았습니다 (마이그레이션 0243a 필요)" };
+      return { error: "정류장 좌표 기능이 아직 준비되지 않았습니다 (마이그레이션 0244a 필요)" };
     }
     return { error: friendly(error, "정류장 위치를 저장하지 못했습니다") };
   }

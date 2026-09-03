@@ -21,7 +21,7 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
  *
  * 🔴 **쓰기 게이트가 없다** — 출발/종료·탑승 체크는 전부 오늘 등하원 화면에 있다. 관제는 보기만 한다.
  *    (열람 게이트 `requireShuttleView`는 메뉴 권한 ∪ '셔틀 담당' 토글 — 오늘 화면과 같은 문이다.)
- * 🔴 **운행 상태 표(0242a)가 없으면 상태를 그리지 않는다** — 표가 없을 땐 모든 회차가 '출발 전'으로
+ * 🔴 **운행 상태 표(0243a)가 없으면 상태를 그리지 않는다** — 표가 없을 땐 모든 회차가 '출발 전'으로
  *    보이는데 그건 사실이 아니라 "모른다"이다. 실제로 돌고 있는 차를 "출발 전"이라 말하지 않는다([[#95]]).
  */
 export default async function ShuttleLivePage({
@@ -40,7 +40,7 @@ export default async function ShuttleLivePage({
     getShuttleBoard(season),
     getBoardingsOn(date),
     getRideExceptionsOn(date), // 표가 없으면 ready:false로 조용히 접힌다([[#95]])
-    getTripsOn(date), // 0242a. ready:false면 화면이 상태를 아예 안 그린다
+    getTripsOn(date), // 0243a. ready:false면 화면이 상태를 아예 안 그린다
   ]);
 
   return (

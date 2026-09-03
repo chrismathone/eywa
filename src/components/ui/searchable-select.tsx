@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
 export type ComboOption = { value: string; label: string; hint?: string };
@@ -28,6 +28,8 @@ export function SearchableSelect({
   ariaLabel,
   highlightSelected = false,
   compact = false,
+  defaultOpen,
+  onOpenChange,
 }: {
   options: ComboOption[];
   value?: string;
@@ -64,13 +66,28 @@ export function SearchableSelect({
    * 같이 적으면 이기는 쪽을 Tailwind가 CSS를 찍은 순서가 정한다 — 아래 톤 분기와 같은 이유).
    */
   compact?: boolean;
+  /**
+   * 마운트되자마자 목록을 편 채로 시작 — 더블클릭으로 나타나는 인라인 편집 칸(등록상담 목록뷰)처럼
+   * "칸을 열었다 = 고르는 중"인 자리. 평소 폼·필터에선 쓰지 말 것(첫 페인트에 팝오버가 서면 놀란다).
+   */
+  defaultOpen?: boolean;
+  /** 목록이 열리고 닫힐 때(바깥 클릭·Esc·선택 포함) — 인라인 편집 칸이 "고르지 않고 닫았다"를 알아채는 데 쓴다. */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
   const current = isControlled ? value : internal;
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(defaultOpen ?? false);
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  // 열림 상태는 이 한 곳으로만 바꾼다 — 네 갈래(토글·바깥 클릭·선택·Esc)가 전부 호출부에 알려져야 한다.
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setOpenState(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
 
   const selected = options.find((o) => o.value === current) ?? null;
   const filtered = useMemo(() => {
@@ -90,7 +107,7 @@ export function SearchableSelect({
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  }, [open, setOpen]);
 
   function choose(v: string) {
     if (!isControlled) setInternal(v);
@@ -115,7 +132,7 @@ export function SearchableSelect({
       <button
         type="button"
         aria-label={ariaLabel}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >
         {/* 굵기는 박스 스타일과 안 겹쳐서 triggerClassName을 넘긴 호출부에서도 안전하게 붙는다. */}

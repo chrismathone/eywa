@@ -174,7 +174,10 @@ export default async function EnrollmentPage({
   return (
     // 세로 간격 4(=16px) — 🔴 5(20px)였는데 원장이 *"창을 가장 크게 해도 하단에 스크롤"*을 지적했다.
     // 여백은 세 곳(이 간격 · 칸 머리 py · 카드 py)에서 함께 줄여야 한 칸이 창 안에 들어온다.
-    <div className="space-y-4">
+    // 목록(시트)뷰만 **창 높이를 채우는 flex 기둥** — 표가 남는 높이를 전부 가져가 안에서 스크롤하고 페이저는 창 바닥에
+    // 붙는다(원장 2026-09-02 *"이 어색한 여백은 뭐야"* — 표 높이를 dvh 계산으로 박았더니 넓은 창에서 툴바가 한 줄로
+    // 접힌 만큼이 표 아래 빈 띠로 남았다). 칸반·통계는 종전대로 문서 흐름(자기 높이·페이지 스크롤).
+    <div className={view === "table" ? "flex h-full min-h-0 flex-col space-y-4" : "space-y-4"}>
       {/* Editorial 문법 ① — eyebrow→헤드라인 + 인라인 스탯 행(시간표 패턴: BigStat 카드 대신 밀도 우선).
           '등록 전환율'(outcome=enrolled 라벨 기반)은 실제 학생 미생성 건까지 세어 과대였음 →
           진짜 완료 지표인 '배정 완료(수업≥1)' 건수 유지(정직). */}
@@ -306,7 +309,17 @@ export default async function EnrollmentPage({
         </div>
       ) : view === "table" && tablePage ? (
         <>
-          <EnrollmentTable rows={tablePage.rows} nowMs={nowMs} />
+          {/* 시트형 표(원장 2026-09-02) — 필터·연월 피커는 칸반과 **같은 툴바**(위 KanbanFilters)이고 여기서
+              바뀌는 건 본문뿐. '번호'는 페이지를 넘어 이어진다(1페이지 1~50 · 2페이지 51~).
+              canWrite = 더블클릭 인라인 수정 노출(칸반 드래그와 같은 판정) — 게이트는 서버 액션이 다시 본다(#77).
+              consultants = '상담사' 칸 선택지(툴바 상담사 필터와 같은 목록). */}
+          <EnrollmentTable
+            rows={tablePage.rows}
+            nowMs={nowMs}
+            startIndex={(page - 1) * PAGE_SIZE}
+            canWrite={canWriteEnrollment}
+            consultants={consultants}
+          />
           <Pagination
             page={page}
             totalPages={Math.max(1, Math.ceil(tablePage.total / PAGE_SIZE))}

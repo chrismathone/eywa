@@ -689,6 +689,16 @@ describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", (
     { action: "student_consultation_delete", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-11", category: "emotional", audience: "both", hasFollowUp: false }, banned: ["emotional", "both", "consultedAt", "category", "audience", "hasFollowUp"] },
     { action: "student_consultation_follow_up", meta: { consultationId: DOC, studentId: SID, done: true }, banned: ["done", "true", "consultationId", "studentId"] },
     { action: "student_care_analysis", meta: { studentId: SID, model: "claude-sonnet-5", focus: 3 }, banned: ["claude-sonnet-5", "model", "focus", "studentId"] },
+    // 재고 관리(0242a) — 호출부가 실제로 넘기는 모양 그대로. 영문 enum(on_loan·laptop·missing)이 새면 안 된다.
+    { action: "inventory_asset_create", meta: { assetId: DOC, assetCode: "NB-019", category: "laptop", status: "in_use" }, banned: ["laptop", "in_use", "category", "status"] },
+    { action: "inventory_asset_update", meta: { assetId: DOC, assetCode: "NB-019", changed: ["모델명", "현위치"] }, banned: ["changed", "assetId"] },
+    { action: "inventory_asset_status", meta: { assetId: DOC, assetCode: "NB-014", from: "in_use", to: "disposed", disposedOn: "2026-08-28" }, banned: ["in_use", "disposed", "from", "to:"] },
+    { action: "inventory_loan_out", meta: { loanId: DOC, assetId: DOC2, assetCode: "NB-005", borrowerName: "김태건", dept: "강사", lentOn: "2026-06-14", dueOn: "2026-08-31", dueNote: null }, banned: ["borrowerName", "lentOn", "dueOn", "loanId"] },
+    { action: "inventory_loan_out", meta: { loanId: DOC, assetId: DOC2, assetCode: "MN-005", borrowerName: "셔틀담당", dept: "운영", lentOn: "2026-07-16", dueOn: null, dueNote: "상시" }, banned: ["dueNote", "null"] },
+    { action: "inventory_loan_return", meta: { loanId: DOC, assetId: DOC2, assetCode: "NB-005", borrowerName: "김태건", returnedOn: "2026-09-02", restoredStatus: "check" }, banned: ["check", "restoredStatus", "returnedOn"] },
+    { action: "inventory_audit", meta: { auditId: DOC, assetId: DOC2, assetCode: "NB-006", auditedOn: "2026-07-23", result: "missing", location: null, action: "사용자 연락" }, banned: ["missing", "result", "auditedOn", "auditId"] },
+    { action: "inventory_supply_update", meta: { supplyId: DOC, itemCode: "SP-01", name: "키보드", qtyFrom: 20, qtyTo: 18, checkedOn: "2026-09-02" }, banned: ["qtyFrom", "qtyTo", "checkedOn", "supplyId"] },
+    { action: "inventory_excel_import", meta: { mode: "overwrite", assetsInserted: 3, assetsUpdated: 96, assetsSkipped: 0, suppliesInserted: 0, suppliesUpdated: 11, suppliesSkipped: 0 }, banned: ["overwrite", "assetsInserted", "suppliesUpdated", "mode"] },
   ];
 
   for (const s of SAMPLES) {

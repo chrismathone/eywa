@@ -68,18 +68,18 @@ export type ShuttleStop = {
   /** 지금 몇 개 노선이 이 정류장을 쓰는지 — 0이면 안전하게 지울 수 있다는 신호. */
   usedByRuns?: number;
   /**
-   * 좌표(0243a) — 🔴 **둘 다 있거나 둘 다 없다**(DB check가 강제). 아직 안 찍은 정류장이 정상이라
+   * 좌표(0244a) — 🔴 **둘 다 있거나 둘 다 없다**(DB check가 강제). 아직 안 찍은 정류장이 정상이라
    * null이 흔하다. 있는지 판정은 손으로 하지 말고 `hasCoords()`를 쓸 것.
    */
   lat?: number | null;
   lng?: number | null;
-  /** 도착 판정 반경(m) — GPS가 붙었을 때 쓰고, 지금은 지도에 원으로만 보인다. 기본 50(0243a). */
+  /** 도착 판정 반경(m) — GPS가 붙었을 때 쓰고, 지금은 지도에 원으로만 보인다. 기본 50(0244a). */
   radiusM?: number;
   /** 사람이 읽는 주소 — 좌표는 못 읽으므로 **화면에 보여줄 것은 이 값**이다. */
   address?: string | null;
 };
 
-/** 좌표가 실제로 찍혔나 — 한쪽만 있는 값을 "있음"으로 세지 않는다(0243a check와 같은 판정). */
+/** 좌표가 실제로 찍혔나 — 한쪽만 있는 값을 "있음"으로 세지 않는다(0244a check와 같은 판정). */
 export function hasCoords(
   stop: Pick<ShuttleStop, "lat" | "lng">,
 ): stop is Pick<ShuttleStop, "lat" | "lng"> & { lat: number; lng: number } {
@@ -87,9 +87,9 @@ export function hasCoords(
 }
 
 /**
- * 그날 그 회차의 **운행 단위**(0242a) — 출발했나 / 끝났나.
+ * 그날 그 회차의 **운행 단위**(0243a) — 출발했나 / 끝났나.
  *
- * 🔴 진행률(탑승 N/M)은 여기 없다 — 그 사실의 주인은 `shuttle_boardings`다(0242a 머리 주석).
+ * 🔴 진행률(탑승 N/M)은 여기 없다 — 그 사실의 주인은 `shuttle_boardings`다(0243a 머리 주석).
  *    두 곳에 두면 찍을 때마다 맞춰야 하고, 한쪽이 틀어지면 관제 숫자가 조용히 거짓이 된다.
  */
 export type ShuttleTrip = {

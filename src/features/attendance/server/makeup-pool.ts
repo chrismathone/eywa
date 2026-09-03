@@ -185,25 +185,36 @@ export async function ensureMakeupAttendanceForReport(input: {
 }): Promise<{ ok: boolean; classId?: string }> {
   const admin = createAdminClient();
 
-  // ② **어느 반이든** 그 (학생, 날짜)에 이미 `makeup` 칸이 있으면 만들지 않는다 — 강사가 반 보강으로
-  //    자기 반에 손으로 찍어 둔 경우가 실제로 있다(실측 2026-09-01 정채민: 이수진이 자기 반에 `makeup`).
-  //    여기 한 칸 더 만들면 같은 수업이 **시수 두 배**가 된다. 소급 스크립트(backfill-makeup-attendance.mjs)의
-  //    규칙 ②와 같은 판정. ⚠️ 옛 정정본(append-only)의 makeup까지 잡혀 건너뛸 수 있다 — 안 만드는 쪽이
-  //    두 번 세는 쪽보다 낫다(칸은 사람이 월별 표에서 채울 수 있다).
+  // ② **그 강사가 그 학생을 그날 이미 찍었으면** 만들지 않는다 — 같은 수업을 두 번 세지 않기 위해서다.
+  //
+  // 🔴 판정 축은 "어느 반이든"이 아니라 **강사**다(원장 제보 2026-09-02: *"수업보고서는 1개인데, 실제
+  //    출석부는 시수합이 같은 학생에 대해 2가 되는 버그"*). 실측 2026-09-01~02 세 건이 축을 정해 줬다:
+  //     · 김승언 — 김은정이 보고서를 쓰고 **자기 반(CR1C)에 `present`로** 손수 찍어 뒀다. 같은 수업이다 → 만들면 2.
+  //     · 정채민 — 이수진이 **자기 반에 `makeup`으로** 찍어 뒀다. 같은 수업이다 → 만들면 2.
+  //     · 이채아 — 김은정 보강 보고서 + **김윤하**가 자기 반(JJ3J, 그날이 정규 수요일)에 `present`.
+  //       **서로 다른 두 수업**이다 → 여기서 막으면 김은정이 실제로 한 보강의 시수가 사라진다.
+  //    그래서 상태(`makeup`)로 가르면 첫째를 놓치고, "어느 반이든"으로 가르면 셋째를 잘못 막는다.
+  // 🔴 `status`로 좁히지 않는다 — 손으로 찍을 땐 `present`가 더 흔하다(김승언).
+  //    결석·조퇴 등도 "그날 그 강사가 이미 판단했다"는 뜻이라 그 위에 덧쓰지 않는다.
   // 🔑 반을 만들기 **전**에 본다 — 안 그러면 보강을 전부 자기 반에 찍는 강사에게 빈 보강 반이 생긴다(lazy 원칙).
-  const { data: elsewhere, error: elseErr } = await admin
+  // ⚠️ 축은 **담임**(`classes.teacher_id`)이다. 수학은 교시 담당이 전 슬롯 미지정이라 이게 곧 귀속이고,
+  //    소급 스크립트(`backfill-makeup-attendance.mjs`)도 같은 판정을 쓴다.
+  const { data: mine, error: mineErr } = await admin
     .from("attendance_records")
-    .select("id")
+    .select("id, classes!attendance_records_class_id_classes_id_fk(teacher_id)")
     .eq("tenant_id", input.tenantId)
     .eq("student_id", input.studentId)
-    .eq("session_date", input.date)
-    .eq("status", "makeup")
-    .limit(1);
-  if (elseErr) {
-    console.error("[makeup-pool] 타 반 보강 칸 조회 실패", elseErr.message);
+    .eq("session_date", input.date);
+  if (mineErr) {
+    console.error("[makeup-pool] 그날 출결 조회 실패", mineErr.message);
     return { ok: false };
   }
-  if ((elsewhere ?? []).length > 0) return { ok: true }; // 이미 어딘가에 보강 칸이 있다 — 그대로 둔다.
+  const alreadyByThisTeacher = (mine ?? []).some((r) => {
+    const c = (r as { classes?: { teacher_id?: string | null } | { teacher_id?: string | null }[] }).classes;
+    const row = Array.isArray(c) ? c[0] : c;
+    return row?.teacher_id === input.teacherId;
+  });
+  if (alreadyByThisTeacher) return { ok: true }; // 그 강사가 이미 찍었다 — 그대로 둔다.
 
   const classId = await ensureMakeupPoolClass({
     tenantId: input.tenantId,

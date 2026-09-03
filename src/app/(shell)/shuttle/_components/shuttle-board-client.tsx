@@ -90,7 +90,7 @@ export function ShuttleBoardClient({
   students: AssignableStudent[];
   selectedRunId: string | null;
   canWrite: boolean;
-  /** 0243a(정류장 좌표) 적용 여부 — 정류장 관리 다이얼로그가 위치 입력을 그릴지 판단한다([[#95]]). */
+  /** 0244a(정류장 좌표) 적용 여부 — 정류장 관리 다이얼로그가 위치 입력을 그릴지 판단한다([[#95]]). */
   coordsReady: boolean;
 }) {
   const router = useRouter();

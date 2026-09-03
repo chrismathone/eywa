@@ -55,7 +55,7 @@ export function StopMasterDialog({
   vehicles: ShuttleVehicle[];
   seasonLabel: string;
   /**
-   * 0243a(좌표 컬럼) 적용 여부. 🔴 false면 위치 입력을 **아예 그리지 않는다** — 없는 기능을 버튼으로
+   * 0244a(좌표 컬럼) 적용 여부. 🔴 false면 위치 입력을 **아예 그리지 않는다** — 없는 기능을 버튼으로
    * 약속하면 눌렀을 때 한글 에러만 나온다([[#95]], 0229a `exceptionsReady`와 같은 규약).
    */
   coordsReady: boolean;
@@ -240,7 +240,7 @@ export function StopMasterDialog({
                   <Button variant="ghost" className={SHUTTLE_ACTION} onClick={() => setEditing(s.id)}>
                     수정
                   </Button>
-                  {/* 🔴 0243a 미적용이면 이 버튼 자체가 없다 — 없는 기능을 약속하면 눌렀을 때
+                  {/* 🔴 0244a 미적용이면 이 버튼 자체가 없다 — 없는 기능을 약속하면 눌렀을 때
                       한글 에러만 나온다([[#95]]). */}
                   {coordsReady && (
                     <Button

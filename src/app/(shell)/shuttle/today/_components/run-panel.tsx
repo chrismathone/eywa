@@ -49,9 +49,9 @@ export function RunPanel({
   canEditException: boolean;
   onError: (msg: string | null) => void;
   onDone: () => void;
-  /** 그 회차의 운행 기록(0242a) — 아직 출발 안 했거나 표가 없으면 null. */
+  /** 그 회차의 운행 기록(0243a) — 아직 출발 안 했거나 표가 없으면 null. */
   trip: ShuttleTrip | null;
-  /** 0242a 적용 여부. false면 출발/종료 줄이 통째로 안 그려진다. */
+  /** 0243a 적용 여부. false면 출발/종료 줄이 통째로 안 그려진다. */
   tripsReady: boolean;
   /** KST 오늘 — 출발·종료는 오늘 것만 찍는다. */
   today: string;
@@ -102,7 +102,7 @@ export function RunPanel({
       </button>
 
       {/* 출발/종료 — 회차 머리(접기 버튼) 안에 넣을 수 없다(버튼 안에 버튼). 바로 아래 한 줄로 둔다.
-          🔴 0242a 미적용이면 이 줄 자체가 없다 — 없는 기능을 약속하지 않는다([[#95]]). */}
+          🔴 0243a 미적용이면 이 줄 자체가 없다 — 없는 기능을 약속하지 않는다([[#95]]). */}
       <TripControl
         trip={trip}
         ready={tripsReady}

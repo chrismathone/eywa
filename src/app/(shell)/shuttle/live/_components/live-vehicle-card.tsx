@@ -30,7 +30,7 @@ export function LiveVehicleCard({
   onToggleRun,
 }: {
   vehicle: LiveVehicle;
-  /** 0242a 적용 여부. false면 **상태·경보를 아예 안 그린다**(모르는 것을 '출발 전'이라 하지 않는다). */
+  /** 0243a 적용 여부. false면 **상태·경보를 아예 안 그린다**(모르는 것을 '출발 전'이라 하지 않는다). */
   tripsReady: boolean;
   openRuns: Record<string, boolean>;
   onToggleRun: (runId: string, next: boolean) => void;
@@ -113,7 +113,7 @@ function LiveRunPanel({
           {DIRECTION_LABEL[run.direction]}
         </Pill>
         <span className="text-text-dim text-[12.5px] font-bold">{runTitle(run)}</span>
-        {/* 🔴 0242a가 없으면 상태를 말하지 않는다 — '출발 전'은 사실이 아니라 "모른다"이다. */}
+        {/* 🔴 0243a가 없으면 상태를 말하지 않는다 — '출발 전'은 사실이 아니라 "모른다"이다. */}
         {tripsReady && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
         {tripsReady && alert !== "none" && (
           <Pill color={TONE_COLOR[RUN_ALERT_TONE[alert]]}>{RUN_ALERT_LABEL[alert]}</Pill>

@@ -192,6 +192,16 @@ export const AUDIT_ACTIONS = {
 
   // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
   mcs_goal_update: "수학 시트 학생 월간 목표 저장",
+
+  // 재고관리(0242a) — 자산 등록/수정/상태 · 대여 시작/반납 · 실사 기록 · 소모품 수량. 상세는 describe.ts.
+  inventory_asset_create: "자산 등록",
+  inventory_asset_update: "자산 수정",
+  inventory_asset_status: "자산 상태 변경",
+  inventory_loan_out: "자산 대여 시작",
+  inventory_loan_return: "자산 반납",
+  inventory_audit: "자산 실사 기록",
+  inventory_supply_update: "소모품 수량 수정",
+  inventory_excel_import: "재고관리 엑셀 반영",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 
