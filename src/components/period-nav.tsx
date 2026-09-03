@@ -109,7 +109,7 @@ export function PeriodNav({
     startTransition(() => router.push(href));
   };
 
-  // 🔴 높이·라벨은 **control-scale 한 벌**(높이 = 라벨 ÷ 0.9, 원장 2026-09-03) — 공용 `<Button>`·툴바 칩과
+  // 🔴 높이·라벨은 **control-scale 한 벌**(높이 = 라벨 + 4px, 원장 2026-09-03) — 공용 `<Button>`·툴바 칩과
   //    같은 값이라 한 줄에 나란히 서도 밑선이 맞는다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
   //    (09-01 "h-8 고정"은 이 규칙으로 대체.)
   const arrow =

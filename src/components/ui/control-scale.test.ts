@@ -78,15 +78,38 @@ describe("타입 스케일 v5 — 임의 px 글자 크기를 화면에 적지 �
 });
 
 describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트롤이 한 벌을 읽는다", () => {
-  it("높이 = 라벨 ÷ 0.9 (위아래 여백 5%씩)", () => {
+  it("높이 = 라벨 + 4px (위아래 2px — 원장 '상하 여백 1.5배') · 기본 라벨 18px 확정", () => {
     const css = readFileSync(join(SRC, "app/globals.css"), "utf8");
     for (const suffix of ["-sm", "", "-lg"]) {
       const label = Number(new RegExp(`--control-label${suffix}: (\\d+)px;`).exec(css)?.[1]);
       const h = Number(new RegExp(`--control-h${suffix}: (\\d+)px;`).exec(css)?.[1]);
       expect(label).toBeGreaterThan(0);
-      // 라벨이 높이의 90% 이상 — 여백 합 10% 이하(반올림 1px 허용).
-      expect(label / h).toBeGreaterThanOrEqual(0.88);
-      expect(h - label).toBeLessThanOrEqual(2);
+      // 글자가 높이의 80% 이상, 여백 합 4px — 패딩으로 높이를 부풀리는 옛 버릇(h-8·12px)으로 되돌아가지 않게.
+      expect(label / h).toBeGreaterThanOrEqual(0.8);
+      expect(h - label).toBe(4);
+    }
+    expect(css).toMatch(/--control-label: 18px;/);
+  });
+
+  it("검색 입력은 상자 높이를 다 쓴다 — leading-none 18px 줄에 18px 한글은 잘린다(원장 캡처 2026-09-03)", () => {
+    for (const r of [
+      "components/search-form.tsx",
+      "app/(shell)/classes/_components/class-filter-bar.tsx",
+      "app/(shell)/documents/_components/document-toolbar.tsx",
+      "app/(shell)/exams/page.tsx",
+      "app/(shell)/inventory/_components/list-toolbar.tsx",
+      "app/(shell)/students/_components/student-filter-bar.tsx",
+    ]) {
+      const src = readFileSync(join(SRC, r), "utf8");
+      // TOOLBAR_SEARCH_BOX 안의 <input>마다 h-full leading-normal.
+      const inputs = [...src.matchAll(/<input[\s\S]*?className=(?:"([^"]*)"|\{`([^`]*)`\})/g)].map((m) => m[1] ?? m[2] ?? "");
+      const inBox = inputs.filter((c) => c.includes("bg-transparent"));
+      expect(inBox.length, r).toBeGreaterThan(0);
+      for (const c of inBox) {
+        expect(c, r).toContain("h-full");
+        expect(c, r).toContain("leading-normal");
+        expect(c, r).not.toMatch(/\btext-xs\b/);
+      }
     }
   });
 

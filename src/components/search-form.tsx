@@ -57,7 +57,7 @@ export function SearchForm({
           name={paramName}
           defaultValue={defaultValue ?? ""}
           placeholder={placeholder}
-          className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent focus:outline-none`}
+          className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent leading-normal focus:outline-none`}
         />
       </div>
       <Button type="submit" variant="outline" disabled={pending}>

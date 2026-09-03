@@ -9,7 +9,7 @@
  * 1. **툴바를 감싸는 카드 껍데기를 두지 않는다.** 컨트롤이 저마다 테두리를 갖고 있어 줄은 그대로
  *    읽히고, 아래 목록·칸이 각자 테두리를 가지면 선이 이중으로 겹쳐 보인다.
  *    ⚠️ 그 바가 `sticky`면 배경까지 빼면 안 된다 — 스크롤 내용이 비친다(`bg-background`를 남길 것).
- * 2. **높이·라벨은 [`control-scale.ts`](@/components/ui/control-scale) 한 벌**(`h-(--control-h)` 20px ·
+ * 2. **높이·라벨은 [`control-scale.ts`](@/components/ui/control-scale) 한 벌**(`h-(--control-h)` 22px ·
  *    라벨 18px `leading-none`) — 공용 [`Button`](@/components/ui/button) 기본 크기와 같다. 한 줄에
  *    버튼·드롭다운·기간 네비·검색이 나란히 서므로 하나라도 다르면 줄이 울퉁불퉁하다.
  *    ⚠️ 2026-09-03: 종전 "h-8 고정"은 원장의 90% 규칙(라벨이 높이의 90%)으로 **대체**됐다 — 높이가

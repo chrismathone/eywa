@@ -239,7 +239,7 @@ export function StudentFilterBar({
                 name="q"
                 defaultValue={current.q}
                 placeholder="이름·학교·연락처"
-                className="text-foreground placeholder:text-text-faint w-36 bg-transparent text-xs focus:outline-none"
+                className="text-foreground placeholder:text-text-faint w-36 h-full bg-transparent leading-normal focus:outline-none"
               />
             </div>
           </form>

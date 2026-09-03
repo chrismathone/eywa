@@ -40,7 +40,7 @@ export function ListToolbar({
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder={placeholder}
           aria-label={placeholder}
-          className="text-foreground placeholder:text-text-faint w-44 min-w-0 bg-transparent text-xs outline-none"
+          className="text-foreground placeholder:text-text-faint w-44 min-w-0 h-full bg-transparent leading-normal outline-none"
         />
       </label>
       {filters}
