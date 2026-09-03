@@ -55,10 +55,13 @@ const URGENCY_OPTIONS: { value: Exclude<UrgencyKey, "all">; label: string }[] = 
 ];
 
 /**
- * 한 쪽 = 15건 — 이 메뉴의 최소 창(760×640)에서 수치 띠·머리 두 줄을 빼면 행(44px)이 약 10개 보인다.
- * 15건이면 1.5화면(옛 50건은 5화면). 원장 *"너무 스크롤 길어지지 않게"*.
+ * 한 쪽 = 20건 — 이 메뉴의 최소 창(760×640)에서 수치 띠·머리 두 줄을 빼면 행(44px)이 약 10개 보인다.
+ * 최소 창(1단)은 2화면, 넓혀서 2단이 되면 한 화면(원장 *"최소 크기보다 커지면 2단으로 만들어서 한 번에 많이 보이도록"*).
+ * 옛 50건은 5화면이었다(*"너무 스크롤 길어지지 않게"*).
  */
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 20;
+/** 2단일 때 한 단에 서는 행 수 — 위에서 아래로 읽고 다음 단으로 넘어간다(column-major). */
+const ROWS_PER_COLUMN = PAGE_SIZE / 2;
 
 /**
  * 마우스 오버 전문 — 행에는 이름·학년·배지·시각만 남기고(원장 *"기본은 그냥 칸반"*) 요약·상담사·후속은 여기로
@@ -215,14 +218,20 @@ export default async function ConsultationsPage({
       ) : (
         <>
           {/* 행 = 이름 + 값(배지·시각) 한 줄, 행 사이는 헤어라인(지시서 §11 — 각 행을 카드로 싸지 않는다).
-              행 전체가 상담 상세로 가는 링크다(§10 "리스트 행 자체 클릭 · 행 오른쪽 아이콘 버튼 금지" — 삭제는 상세에). */}
-          <ul className="divide-line divide-y">
+              행 전체가 상담 상세로 가는 링크다(§10 "리스트 행 자체 클릭 · 행 오른쪽 아이콘 버튼 금지" — 삭제는 상세에).
+              🔴 창이 최소 크기(760)보다 넓어지면(lg≥1024) **2단** — 한 행의 가운데가 비어 공간을 낭비하던 것을 채운다
+                 (원장 2026-09-03 캡처). 위→아래로 읽고 다음 단으로(column-major: 페이지 순서가 세로로 이어진다).
+                 창=iframe이라 lg가 창 폭에 그대로 반응한다. */}
+          <ul
+            className="grid grid-cols-1 gap-x-8 lg:grid-flow-col lg:grid-cols-2 lg:[grid-template-rows:repeat(var(--rows),auto)]"
+            style={{ ["--rows" as string]: Math.min(ROWS_PER_COLUMN, Math.ceil(items.length / 2)) }}
+          >
             {items.map((c) => {
               const urgency = URGENCY_META[followUpUrgency(c.followUpDate, c.followUpDone)];
               const catMeta = c.category ? CATEGORY_META[c.category] : null;
               const isUrgent = urgency && (urgency.color === "danger" || urgency.color === "amber");
               return (
-                <li key={c.id} title={hoverTextOf(c)}>
+                <li key={c.id} title={hoverTextOf(c)} className="border-line border-b">
                   {/* aria-label을 달지 않는다 — 달면 보조기기엔 이름만 남고 배지·시각이 사라진다(리뷰 확정 결함). 링크 본문이 곧 이름이다. */}
                   <WindowLink
                     href={`/consultations/${c.id}`}
@@ -242,23 +251,27 @@ export default async function ConsultationsPage({
                       {c.syncAddedAt ? <MakeeduOriginTag /> : null}
                       <EditingBadge scope={`student-consultation:${c.id}`} />
                     </p>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {catMeta ? <Pill color={catMeta.color}>{catMeta.label}</Pill> : null}
-                      {urgency ? <Pill color={urgency.color}>{urgency.label}</Pill> : null}
+                    {/* 오른쪽은 **열**이다(원장 *"우측에 열정렬"*) — 카테고리 | 후속 | 녹음·AI | 시각, 칸 폭 고정이라 행마다
+                        배지 수가 달라도 같은 자리에 선다. 빈 칸은 비워 둔다(자리를 당기지 않는다). */}
+                    <div className="grid shrink-0 grid-cols-[3.5rem_4rem_4.75rem_5rem] items-center justify-items-center gap-1">
+                      <span>{catMeta ? <Pill color={catMeta.color}>{catMeta.label}</Pill> : null}</span>
+                      <span>{urgency ? <Pill color={urgency.color}>{urgency.label}</Pill> : null}</span>
                       {/* 아이콘만으로 뜻을 전하지 않는다(§2) — 옆에 읽히는 글자를 둔다. */}
-                      {c.hasAudio ? (
-                        <span className="text-primary inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
-                          <Mic className="size-4" />
-                          녹음
-                        </span>
-                      ) : null}
-                      {c.hasAi ? (
-                        <span className="text-gold inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
-                          <Sparkles className="size-4" />
-                          AI
-                        </span>
-                      ) : null}
-                      <span className="num text-text-dim text-sm whitespace-nowrap">{relativeTimeKo(c.consultedAt)}</span>
+                      <span className="flex items-center gap-1.5">
+                        {c.hasAudio ? (
+                          <span className="text-primary inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
+                            <Mic className="size-4" />
+                            녹음
+                          </span>
+                        ) : null}
+                        {c.hasAi ? (
+                          <span className="text-gold inline-flex items-center gap-0.5 text-sm font-bold whitespace-nowrap">
+                            <Sparkles className="size-4" />
+                            AI
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="num text-text-dim justify-self-end text-sm whitespace-nowrap">{relativeTimeKo(c.consultedAt)}</span>
                     </div>
                   </WindowLink>
                 </li>

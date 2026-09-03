@@ -118,9 +118,12 @@ describe("팔레트 대비 — 화이트 캔버스(v4)", () => {
     expect(alphaOf(token("line"))).toBeLessThan(alphaOf(token("line-strong")));
   });
 
-  it("v5: 카드에 링도 그림자도 없다 — 원장 2026-09-03 '링·그림자 전부 제거'(구조는 제목·간격·구분선이 그린다)", () => {
-    expect(token("shadow-card")).toBe("none");
-    expect(token("shadow-card-hover")).toBe("none");
+  it("v5: 카드는 헤어라인 링 하나 — 블러·부양 그림자 없음(원장 2026-09-03 '그림자 제거' → '적당한 테두리는 있어야')", () => {
+    // 첫(유일) 레이어가 1px 링이고, 쉼표로 이어지는 둘째 레이어(블러)가 없다.
+    expect(token("shadow-card")).toMatch(/^0 0 0 1px rgba\(29, 29, 31, 0\.1[0-9]?\)$/);
+    expect(token("shadow-card-hover")).toMatch(/^0 0 0 1px rgba\(29, 29, 31, 0\.2[0-9]?\)$/);
+    // 둘째 레이어가 없다 = 닫는 괄호 뒤에 쉼표로 이어지는 값이 없다(rgba 안의 쉼표는 레이어 구분이 아니다).
+    expect(token("shadow-card")).not.toMatch(/\)\s*,/);
   });
 });
 

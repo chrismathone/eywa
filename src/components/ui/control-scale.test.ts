@@ -72,8 +72,8 @@ describe("타입 스케일 v5 — 임의 px 글자 크기를 화면에 적지 �
     expect(px("xl")).toBeLessThanOrEqual(24);
     // 보조 텍스트도 7:1에 가깝게 — #58585e(7.1:1). 옅은 회색으로 되돌리지 말 것.
     expect(css).toMatch(/--text-faint: #58585e;/);
-    // 카드 링·그림자 없음(원장 2026-09-03) — 되돌리면 313곳이 한 번에 돌아간다.
-    expect(css).toMatch(/--shadow-card: none;/);
+    // 카드 = 헤어라인 링 하나, 블러 없음(원장 2026-09-03 "적당한 테두리는 있어야") — 313곳이 이 토큰을 읽는다.
+    expect(css).toMatch(/--shadow-card: 0 0 0 1px rgba\(29, 29, 31, 0\.14\);/);
   });
 });
 
