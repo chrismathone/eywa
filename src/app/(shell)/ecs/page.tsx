@@ -198,7 +198,7 @@ export default async function EcsLandingPage({
         </p>
       ) : (
         // 카드 벽 → **한 장의 시트**(2026-08-11 원장 "이름에 걸맞게 컴팩트하게"). 상세는 landing-list.tsx.
-        <EcsLandingList cards={res.cards} weekMonday={res.weekMonday} />
+        <EcsLandingList cards={res.cards} weekMonday={res.weekMonday} lang={lang} />
       )}
     </div>
   );

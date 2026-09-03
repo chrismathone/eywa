@@ -34,6 +34,14 @@ export type SheetMark = {
  * ⚠️ `attitude`의 저장 컬럼 이름은 `status`지만 뜻은 **태도**다 — 출결과 헷갈리지 말 것.
  */
 export const ROSTER_FIXED_LABEL = { attitude: "태도", progressNote: "특이사항" } as const;
+/*
+ * ⚠️ **지금 이 상수를 읽는 곳은 자리(JJ) 출석부뿐이다** — ECS 로스터 표는 2026-09-03부터 사전
+ *    (`roster.col.attitude`·`roster.col.note`)을 읽는다(강사뷰 영어 화면). 한국어에서는 **글자가 같고**
+ *    (가드 `name-wiring`이 그것을 잠근다) 영어 화면에서만 ECS 쪽이 영문으로 갈린다.
+ * 🔴 그렇다고 자리 출석부를 사전으로 옮기지 말 것 — 그 화면은 **비로그인 PIN으로도 열리는 한국어 표면**
+ *    이고, 사전 provider가 없어 옮겨도 한국어로 떨어지며, 무엇보다 원장 지시 범위(강사로 로그인한 화면)가
+ *    아니다.
+ */
 
 /** 자유 입력 칸(태도와 특이사항 사이) — 폼이 어느 것을 그릴지 정한다. */
 export type MarkTextField = "score" | "listeningLevel" | "memorizedWords";
@@ -42,11 +50,22 @@ export type RosterForm = "default" | "selfStudy";
 
 export type RosterTextCol = {
   field: MarkTextField;
-  /** 표 머리 라벨(화면 문자열 — 여기가 단일 소스). */
+  /** 표 머리 라벨(한국어 — 여기가 단일 소스). 영어 화면은 `labelKey`를 사전에 넣어 쓴다. */
   label: string;
+  /**
+   * 강사뷰 영어 화면용 사전 키(`sheetT`) — 라벨·툴팁이 **짝으로** 간다.
+   * 🔴 영어 라벨을 여기 문자열로 박지 말 것: 폭(width)이 한글 머리 기준이라 사전 쪽에서 짧은 낱말을
+   *    고르고 뜻은 툴팁이 받는다(i18n.ts `roster.col.*` 주석). 한 곳에 모아야 둘이 안 갈린다.
+   */
+  labelKey: "roster.col.score" | "roster.col.listening" | "roster.col.words";
   /** 열 폭(px) — 주간 시트 colgroup과 오늘 면 레일이 **같은 값**을 쓴다. */
   width: number;
   title: string;
+  /**
+   * 툴팁의 사전 키 — 🔴 **라벨 키에 `.title`을 붙여 만들지 말 것**(`as SheetDictKey` 캐스팅이 필요해지고,
+   * 사전에 그 짝이 없으면 **키 문자열이 툴팁에 그대로** 뜬다). 짝을 여기 적어 타입이 검사하게 한다.
+   */
+  titleKey: "roster.col.score.title" | "roster.col.listening.title" | "roster.col.words.title";
   /** 키보드 세로 이동(grid-nav) 열 식별자 — 열마다 달라야 Enter/↑↓가 옆 칸으로 새지 않는다. */
   nav: string;
 };
@@ -65,6 +84,8 @@ export const ROSTER_TEXT_COLS: Record<RosterForm, readonly RosterTextCol[]> = {
     {
       field: "score",
       label: "시험 점수",
+      labelKey: "roster.col.score",
+      titleKey: "roster.col.score.title",
       width: 52,
       title: "이 교시의 시험 점수 — 자유 입력(18/20 · 95 · A 등)",
       nav: "ecs-score",
@@ -74,6 +95,8 @@ export const ROSTER_TEXT_COLS: Record<RosterForm, readonly RosterTextCol[]> = {
     {
       field: "listeningLevel",
       label: "듣기 레벨",
+      labelKey: "roster.col.listening",
+      titleKey: "roster.col.listening.title",
       width: 48,
       title: "JJ(집중자율수업실) 듣기 레벨 — 자유 입력",
       nav: "ecs-listening",
@@ -81,6 +104,8 @@ export const ROSTER_TEXT_COLS: Record<RosterForm, readonly RosterTextCol[]> = {
     {
       field: "memorizedWords",
       label: "누적 암기 단어수",
+      labelKey: "roster.col.words",
+      titleKey: "roster.col.words.title",
       width: 78,
       title: "지금까지 외운 누적 단어 수 — 자유 입력",
       nav: "ecs-words",

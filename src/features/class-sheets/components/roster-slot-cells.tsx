@@ -38,6 +38,7 @@ import { AttitudeCheck } from "./attitude-check";
 import { NoteCell } from "./note-cell";
 // 강사뷰 화면 언어(2026-09-03) — 영어 모드에서 학생 영어 이름이 주 이름이 된다(표시 전용).
 import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { studentNameParts } from "@/features/teacher-view/student-name";
 import type { SheetHandlers } from "./sheet-client";
 
@@ -294,19 +295,25 @@ export function withdrawnSlotRecord({
   form,
   mark,
   att,
+  lang,
 }: {
   slotStart: string;
   form: RosterForm;
   mark: SheetMark | null;
   att: { status: string; note: string | null } | null;
+  /** 화면 언어 — 출결 라벨·자유 입력 칸 이름이 표 머리와 **같은 낱말**이어야 한다. */
+  lang: SheetLang;
 }): WithdrawnSlotRecord {
   return {
     slotStart,
-    attendance: attendanceLabelOf(att?.status ?? null),
+    attendance: attendanceLabelOf(att?.status ?? null, lang),
     attendanceNote: att?.note ?? null,
     attitude: mark?.status ?? null,
     progressNote: mark?.progressNote ?? null,
-    extras: rosterTextCols(form).map((c) => ({ label: c.label, value: mark?.[c.field] ?? null })),
+    extras: rosterTextCols(form).map((c) => ({
+      label: sheetT(lang, c.labelKey),
+      value: mark?.[c.field] ?? null,
+    })),
   };
 }
 
@@ -338,14 +345,18 @@ export function WithdrawnSummaryRow({
   /** 이 학생에게 남아 있는 교시별 기록(빈 것은 문장에서 알아서 빠진다). */
   records: readonly WithdrawnSlotRecord[];
 }) {
+  const lang = useSheetLang();
   const summary = withdrawnSummaryText({
     // 압축 표기 "침산중2" — 공백 join 금지(전역 규칙).
     schoolGrade: schoolGradeLabel(meta?.school, meta?.grade),
     endedOn: entry.endedOn,
-    reason: reasonDisplay(entry.endedReason),
+    reason: reasonDisplay(entry.endedReason, lang),
   });
-  const kept = withdrawnRecordText(records);
-  const fullReason = reasonDisplay(entry.endedReason);
+  const kept = withdrawnRecordText(records, {
+    reason: sheetT(lang, "withdrawn.reason"),
+    attitude: sheetT(lang, "withdrawn.attitude"),
+  });
+  const fullReason = reasonDisplay(entry.endedReason, lang);
   return (
     <td colSpan={colSpan} className="py-px pr-1">
       <div className="flex min-w-0 items-center gap-1.5">

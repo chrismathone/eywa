@@ -14,6 +14,9 @@ import {
   type SheetFace,
 } from "../chrome";
 import { useSheetT, useSheetLang } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
+import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
 
 /**
  * ECS 상단 바의 **공용 조각** — 표기는 [`chrome.ts`](../chrome.ts), 여기는 그리는 쪽.
@@ -100,6 +103,11 @@ export function SheetClassPicker({
 }) {
   // 화면 언어(2026-09-03) — provider 밖(MCS)에서는 한국어로 떨어진다([`lang-context`](../lang-context.tsx)).
   const t = useSheetT();
+  const lang = useSheetLang();
+  // 🔴 반 이름도 언어를 따른다(원장 2026-09-03) — 표기 교체는 `classNameFor` 한 곳이다.
+  const showClass = (n: string) => classNameFor(n, lang);
+  // 담임 이름도 같은 규약(*"선생님 이름도 영어선생님의 경우 영어 이름으로"*) — 표에 없으면 한국어 그대로.
+  const shownTeacher = teacherNameFor(teacherName, useTeacherNames(), lang);
   return (
     <>
       <button
@@ -114,7 +122,7 @@ export function SheetClassPicker({
       </button>
       <span className={`${MARKER_WIDTH} shrink-0`}>
         <SearchableSelect
-          options={classOptions.map((c) => ({ value: c.id, label: c.name }))}
+          options={classOptions.map((c) => ({ value: c.id, label: showClass(c.name) }))}
           value={classId}
           onValueChange={(v) => {
             if (v && v !== classId) void onNavigate(hrefForClass(v));
@@ -127,12 +135,12 @@ export function SheetClassPicker({
           // 담임 이름 — 표기 안 오른쪽 끝, 쉐브론 바로 왼쪽. 트리거 **안**의 꼬리표라 긴 반 이름은 남은 폭에서
           // 말줄임되고(위에 얹으면 끝이 덮여 사라졌다), 툴팁·클릭도 트리거의 것 그대로다.
           trailing={
-            teacherName ? (
+            shownTeacher ? (
               <span
                 className="text-text-dim text-[15px] font-extrabold whitespace-nowrap"
-                title={`${t("chrome.homeroom")} ${teacherName}`}
+                title={`${t("chrome.homeroom")} ${shownTeacher}`}
               >
-                {teacherName}
+                {shownTeacher}
               </span>
             ) : undefined
           }
@@ -144,11 +152,11 @@ export function SheetClassPicker({
           WindowLink라 창 안에선 드릴인, 최상위에선 새 창. */}
       <WindowLink
         href={`/classes/${classId}`}
-        title={classLabel}
+        title={showClass(classLabel)}
         className={`${sheetPill(false)} inline-flex items-center`}
-        ariaLabel={`${classLabel} ${t("chrome.classInfo.suffix")}`}
+        ariaLabel={`${showClass(classLabel)} ${t("chrome.classInfo.suffix")}`}
       >
-        <PillGlyph icon="info" hint={`${classLabel} ${t("chrome.classInfo.suffix")}`}>
+        <PillGlyph icon="info" hint={`${showClass(classLabel)} ${t("chrome.classInfo.suffix")}`}>
           {t("chrome.classInfo")}
         </PillGlyph>
       </WindowLink>

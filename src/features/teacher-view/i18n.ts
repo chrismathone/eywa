@@ -14,9 +14,17 @@
  *
  * ## 🔴 번역하는 것과 안 하는 것
  * - **번역한다**: 열 머리·버튼·상태 배지·툴팁·빈 화면 안내 — 즉 **우리가 쓴 UI 문구**.
- * - **절대 번역하지 않는다**: 학생 이름 · 반 이름 · 교재명 · 진도 · 특이사항 · 담임 이름 · 학교명 ·
- *   프로그램 이름(`EiE`·`인재원 영어`) — **사람이 입력한 사실**이다. 옮기면 그 자리에서 사실이 바뀌고,
- *   한국인 강사와 원어민이 같은 반을 다른 이름으로 부르게 된다.
+ * - **절대 번역하지 않는다**: 교재명 · 진도 · 특이사항 · 학교명 · 프로그램 이름(`EiE`·`인재원 영어`) —
+ *   **사람이 입력한 사실**이다. 옮기면 그 자리에서 사실이 바뀐다.
+ * - **⚠️ 2026-09-03에 원장이 셋을 이 금지 목록에서 빼냈다**(각각 다른 이유로 안전하다):
+ *   · **학생 이름** → 저장된 `students.english_name`으로 **고른다**([`student-name.ts`](./student-name.ts)).
+ *   · **강사 이름** → 저장된 `users.english_name`으로 **고른다**([`teacher-name.ts`](./teacher-name.ts)).
+ *     둘은 번역이 아니라 **이미 있는 값 중 하나를 고르는 것**이라 사실이 바뀌지 않는다.
+ *   · **반 이름** → 낱말 표로 **표기만** 옮긴다([`class-name.ts`](./class-name.ts)). 이름이 문장이 아니라
+ *     `밴드_학년 레벨 반구분` 고정 문법이고 **구조를 하나도 안 바꾸므로**, 한국인 강사와 원어민이
+ *     같은 반을 이야기하고 있다는 걸 눈으로 대조할 수 있다(모르는 낱말은 한글로 남긴다).
+ *   🔴 셋 다 **표시 전용**이고 학부모·사무실 표면(ClassNote·보고서·엑셀·인쇄)은 한국어 고정이다 —
+ *      각 모듈의 구조 가드가 그 경로들의 import를 막는다.
  * - 🔴 **AI 번역 호출 금지**(원장 지시) — 사전은 코드에 박힌 정적 표다. 런타임 번역은 비용·지연·환각을
  *   한꺼번에 들여오고, 같은 버튼이 열 때마다 다른 글자가 될 수 있다.
  *
@@ -105,8 +113,10 @@ export const SHEET_DICT = {
   // ── 언어 스위치 자체('내 메뉴' 드롭다운 안) ───────────────────────
   "lang.label": { ko: "언어", en: "Language" },
   "lang.title": {
-    ko: "강사 화면의 언어 — 내 계정에 저장되어 다른 PC에서도 같은 언어로 열립니다. 학생 이름·반 이름·교재·진도 등 입력된 내용은 번역하지 않습니다.",
-    en: "Language for your teacher screens. Saved to your account, so it opens the same way on any PC. Student names, class names, books and lesson notes are never translated.",
+    // ⚠️ 이 문구는 **약속**이다 — 실제 동작이 바뀌면 함께 고칠 것(2026-09-03: 학생·강사 이름과 반 이름이
+    //    영어 화면에서 바뀌게 되어 "번역하지 않습니다" 목록에서 빼냈다).
+    ko: "강사 화면의 언어 — 내 계정에 저장되어 다른 PC에서도 같은 언어로 열립니다. English로 보면 영어 이름이 등록된 학생·강사는 그 이름으로, 반 이름은 영문 표기로 보입니다. 교재·진도·특이사항처럼 직접 입력한 내용은 번역하지 않습니다.",
+    en: "Language for your teacher screens. Saved to your account, so it opens the same way on any PC. In English, students and teachers who have an English name are shown by it, and class names use their English form. Books, lesson progress and notes you type are never translated.",
   },
   "lang.aria": { ko: "화면 언어 선택", en: "Choose display language" },
   "lang.saveFailed": {
@@ -143,7 +153,10 @@ export const SHEET_DICT = {
   // ── 면 전환(주간 | 달력 | 진도표 | 계획) ──────────────────────────
   "face.week": { ko: "주간", en: "Weekly" },
   "face.cal": { ko: "달력", en: "Calendar" },
-  "face.rail": { ko: "진도표", en: "Progress" },
+  // 🔴 계획 표의 '진도' 열(`plan.col.progress` = Progress)과 **다른 것**이다 — 이쪽은 날짜별 진도를
+  //    모아 보는 **보기(표)**이고 저쪽은 그 날 무엇을 나갔는지 적는 **칸**이다. 영어로 둘 다 `Progress`면
+  //    탭과 열이 같은 말이 되어 무엇을 누르는지 알 수 없다(가드 `lang-wiring`이 이 뭉침을 잡는다).
+  "face.rail": { ko: "진도표", en: "Progress table" },
   "face.mp": { ko: "계획(MP)", en: "Plan (MP)" },
   "face.week.title": {
     ko: "그 주의 출결·태도·수업계획을 함께 쓰는 화면",
@@ -439,6 +452,80 @@ export const SHEET_DICT = {
     ko: "보기 설정을 저장하지 못했습니다",
     en: "Could not save your view setting",
   },
+
+  // ── 수업계획 표(주간 시트·오늘 면이 같은 표를 쓴다) ────────────────
+  // 🔴 열 폭은 **한글 머리가 한 줄에 들어가는 최소치**로 맞춰져 있다(today-columns ⚠️). 영어 머리가
+  //    그보다 넓으면 머리가 두 줄이 되고, 나란한 카드 중 그 카드만 학생 줄이 밀려 `grid-rows-subgrid`
+  //    줄맞춤이 깨진다. 그래서 여기 라벨은 **짧은 낱말**로 고른다(뜻은 title 툴팁이 받는다).
+  "plan.col.kind": { ko: "구분", en: "Type" },
+  "plan.col.book": { ko: "교재 / 내신교과서", en: "Book / Exam text" },
+  "plan.col.pageTime": { ko: "페이지/시간", en: "Page/Time" },
+  "plan.col.pageTime.title": {
+    ko: "쪽수 또는 이 수업에 할당된 시간 — 둘 중 아무거나(예: 104p · 25분)",
+    en: "Pages or the time given to this lesson — either one (e.g. 104p · 25 min)",
+  },
+  "plan.col.progress": { ko: "진도", en: "Progress" },
+  "plan.col.homework": { ko: "과제", en: "Homework" },
+  "plan.empty": { ko: "계획이 없습니다", en: "No lesson plan yet" },
+  // 시기 칩 — 원본 시트가 계획 묶음을 가르는 큰 구분(평시 = 보통 주, 내신 = 학교 시험 대비 주).
+  "plan.term.regular": { ko: "평시", en: "Regular" },
+  "plan.term.exam": { ko: "내신", en: "Exam prep" },
+  "plan.addRow": { ko: "+ 줄 추가", en: "+ Add row" },
+  "plan.copy": { ko: "내용 복사 (지난 수업)", en: "Copy from previous lesson" },
+  "plan.copy.title": {
+    ko: "지난 수업에서 {term} 계획을 가져옵니다 — 강사 수업은 같은 요일·같은 교시, JJ 교시는 같은 교시의 지난 수업이 원본입니다(요일마다 교재가 달라서). 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)",
+    en: "Copies the {term} plan from the previous lesson — for a teacher's class the source is the same weekday and same period; for a JJ period it is the same period's previous lesson (books differ by weekday). Cells you already filled are left alone; only empty ones are filled. JJ periods also carry over each student's listening level and memorized words (attendance and attitude are never copied)",
+  },
+
+  // ── 로스터(학생) 표 머리 ──────────────────────────────────────────
+  // ⚠️ 폭(px)은 `roster-form.ts`·`today-columns.ts`가 정한다 — 라벨만 여기서 고른다.
+  "roster.col.attendance": { ko: "출결", en: "Attend." },
+  "roster.col.unit": { ko: "유닛", en: "Unit" },
+  "roster.col.unit.title": {
+    ko: "수업 1회 = 1유닛(기본). 시간·교시 길이와 상관없이 1이고, 다르면 여기서 고칠 수 있습니다. 급여 시수에 반영됩니다.",
+    en: "One lesson = 1 unit by default, regardless of how long the period is. Change it here if it differs. This feeds teaching hours for payroll.",
+  },
+  "roster.col.attitude": { ko: "태도", en: "Attitude" },
+  "roster.col.note": { ko: "특이사항", en: "Notes" },
+  "roster.col.score": { ko: "시험 점수", en: "Score" },
+  "roster.col.score.title": {
+    ko: "이 교시의 시험 점수 — 자유 입력(18/20 · 95 · A 등)",
+    en: "Test score for this period — free text (18/20 · 95 · A …)",
+  },
+  // 🔴 `Listening`(9자)은 48px 열에서 두 줄이 된다 — 짧은 `Level`을 쓰고 뜻은 툴팁이 말한다.
+  "roster.col.listening": { ko: "듣기 레벨", en: "Level" },
+  "roster.col.listening.title": {
+    ko: "JJ(집중자율수업실) 듣기 레벨 — 자유 입력",
+    en: "Listening level (JJ self-study room) — free text",
+  },
+  "roster.col.words": { ko: "누적 암기 단어수", en: "Words" },
+  "roster.col.words.title": {
+    ko: "지금까지 외운 누적 단어 수 — 자유 입력",
+    en: "Cumulative memorized words — free text",
+  },
+  "roster.group.active": { ko: "학생", en: "Students" },
+  "roster.group.makeup": { ko: "보강", en: "Makeup" },
+  "roster.group.withdrawn": { ko: "퇴원", en: "Withdrawn" },
+  "roster.group.record": { ko: "기록", en: "Records" },
+  // 접기 버튼의 접근성 이름·설명(마우스 오버로도 보인다).
+  "roster.group.listAria": { ko: "{name} 목록", en: "{name} list" },
+  "roster.group.makeup.hint": {
+    ko: "이 반 수강생은 아니지만 그날 보강으로 온 학생 — 출석부·원스크린과 같은 명단입니다",
+    en: "Not enrolled in this class, but came that day for a makeup lesson — the same list as the attendance book and One Screen",
+  },
+  "roster.group.withdrawn.hint": {
+    ko: "수강이 끝난 학생 — 종료일부터 한 달간 표시되고 그 뒤 주부터는 명단에서 빠집니다(읽기 전용)",
+    en: "Students whose enrolment ended — shown for one month from the end date, then dropped from the list (read-only)",
+  },
+  "roster.group.record.hint": {
+    ko: "현재 수강 대상이 아니지만 이 교시에 기록이 있어 표시(읽기 전용)",
+    en: "Not currently enrolled, but shown because this period has a record (read-only)",
+  },
+  "common.expand": { ko: "펼치기", en: "Expand" },
+  "common.collapse": { ko: "접기", en: "Collapse" },
+  // 퇴원 한 줄 요약 안에서만 쓰는 조각(값이 있을 때만 붙는다).
+  "withdrawn.reason": { ko: "사유", en: "Reason" },
+  "withdrawn.attitude": { ko: "태도", en: "Attitude" },
 
 } as const satisfies Record<string, { ko: string; en: string }>;
 

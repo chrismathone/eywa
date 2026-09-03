@@ -19,6 +19,8 @@ import { OperationsProvider } from "@/features/owner/operations-context";
 import { SheetLangProvider } from "@/features/teacher-view/lang-context";
 import { DEFAULT_SHEET_LANG, sheetMenuLabel } from "@/features/teacher-view/i18n";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
+import { TeacherNamesProvider } from "@/features/teacher-view/teacher-names-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, canUseOtherTeacherView, isFullShellRole, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
@@ -60,6 +62,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     //    (그 함수가 `getShellView()!=="teacher"`에서 조회 없이 즉시 반환) 풀셸 동작은 한 글자도 안 바뀐다.
     return (
       <EmbedProvider embed>
+        <TeacherNamesProvider names={await getTeacherEnglishNames()}>
         <SheetLangProvider lang={await getTeacherViewLang()}>
         <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
@@ -76,6 +79,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </main>
         </OperationsProvider></EditPresenceProvider>
         </SheetLangProvider>
+        </TeacherNamesProvider>
       </EmbedProvider>
     );
   }
@@ -151,6 +155,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // ⚠️ `getTeacherViewLang`은 스스로도 `getShellView()!=="teacher"`면 한국어를 내므로(서버 컴포넌트가
   //    직접 부르는 경로까지 같은 답), 여기 조건과 이중으로 맞물린다.
   const teacherLang = view === "teacher" ? await getTeacherViewLang() : DEFAULT_SHEET_LANG;
+  // 표시 이름 → 영어 이름 표(원장 2026-09-03) — 영어 화면이 아니면 보내지 않고 해당 함수도 조회 0회다.
+  const teacherNames = view === "teacher" ? await getTeacherEnglishNames() : {};
 
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
@@ -173,6 +179,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <WorkspaceEnabledProvider enabled={false}>
       {/* 🔴 provider가 **헤더까지** 감싼다 — 스위치와 '내 메뉴' 라벨이 헤더에 있어서, <main>만 감싸면
           메뉴는 한글인데 본문만 영어가 된다(둘이 같은 값을 봐야 한다). 학생 미니셸에는 안 걸린다. */}
+      <TeacherNamesProvider names={teacherNames}>
       <SheetLangProvider lang={teacherLang}>
       <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
         {/* z-[60]: 공지 팝업 레이어(z-55)가 좁은 미니셸에선 헤더 버튼('내 메뉴'·사용자 메뉴)까지 덮어
@@ -232,6 +239,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <NoticePopupLayer popups={popups} />
       </div>
       </SheetLangProvider>
+      </TeacherNamesProvider>
       </WorkspaceEnabledProvider>
     );
   }

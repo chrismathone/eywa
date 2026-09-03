@@ -35,6 +35,8 @@ import type { StudentMark } from "./today-mark-popover";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { TodayPlanEditor } from "./today-plan-editor";
 import type { TodayClassCard } from "../server/today";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
 
 /** 낙관 갱신용 로컬 출결 상태 — `${classId}|${studentId}` → 상태·메모. */
 type AttState = Record<string, { status: string | null; note: string | null }>;
@@ -126,6 +128,10 @@ function ClassCard({
   const { att, setAtt, marks, setMarks, attInflight } = state;
   const [open, setOpen] = useState(true);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const t = useSheetT();
+  // 🔴 반 이름 표기는 언어를 따른다(원장 2026-09-03) — 이 카드에 나오는 세 자리(제목·aria·title)가
+  //    같은 값을 봐야 마우스 오버와 화면 글자가 갈리지 않는다.
+  const shownClassName = classNameFor(card.className, useSheetLang());
   // 학생 기록의 교시 축 = **화면에 그려진 교시 그대로**(안 그린 자리·만료 슬롯엔 저장할 자리가 없다).
   const slotLabels = card.slots.map((s) => ({
     slotStart: s.slotStart,
@@ -278,7 +284,10 @@ function ClassCard({
           {card.startsAt}
           {card.endsAt ? <span className="text-text-dim font-medium">~{card.endsAt}</span> : null}
         </span>
-        <span className="text-foreground min-w-0 truncate text-[15px] font-bold">{card.className}</span>
+        {/* 🔴 반 이름 표기는 언어를 따른다(원장 2026-09-03) — 판정은 `classNameFor` 한 곳. */}
+        <span className="text-foreground min-w-0 truncate text-[15px] font-bold" title={shownClassName}>
+          {shownClassName}
+        </span>
         {/* 임시 위임(0173a) — 주간 랜딩·원스크린 반 칩과 같은 앰버 규약(남의 반임을 목록에서부터 가른다). */}
         {card.delegated ? (
           <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold">
@@ -320,8 +329,8 @@ function ClassCard({
             onClick={() => setOpen((v) => !v)}
             className="text-text-dim hover:text-foreground inline-flex cursor-pointer items-center p-1 transition"
             aria-expanded={open}
-            aria-label={`${card.className} ${open ? "접기" : "펼치기"}`}
-            title={`${card.className} ${open ? "접기" : "펼치기"}`}
+            aria-label={`${shownClassName} ${t(open ? "common.collapse" : "common.expand")}`}
+            title={`${shownClassName} ${t(open ? "common.collapse" : "common.expand")}`}
           >
             <EyIcon
               name="chevronRight"

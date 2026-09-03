@@ -23,7 +23,8 @@ import type { GridDay } from "../lib/grid";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import { attendanceOrMakeup } from "../lib/makeup-roster";
-import { GroupToggle, GROUP_HINT } from "./roster-table";
+import { GroupToggle, useGroupHint } from "./roster-table";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import {
   RosterNameCell,
   RosterSlotCells,
@@ -61,6 +62,9 @@ export const TodayRosterTable = memo(function TodayRosterTable({
   const date = day.date;
   const slots = day.slots;
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
+  const groupHint = useGroupHint();
+  const t = useSheetT();
+  const lang = useSheetLang();
   // 교시별 폼 — 판정은 슬롯 라벨 하나(rosterFormOf). colgroup·머리·칸이 **같은 값**을 봐야 열이 안 어긋난다.
   const formOf = (slot: (typeof slots)[number]) => rosterFormOf(slot.teacherLabel);
 
@@ -150,27 +154,26 @@ export const TodayRosterTable = memo(function TodayRosterTable({
             </th>
             {slots.map((slot) => (
               <Fragment key={slot.slotStart}>
-                <th className="border-line-strong border-l py-0.5 text-center font-bold">출결</th>
-                <th
-                  className="py-0.5 text-center font-bold"
-                  title="수업 1회 = 1유닛(기본). 다르면 여기서 고칠 수 있습니다. 급여 시수에 반영됩니다."
-                >
-                  유닛
+                <th className="border-line-strong border-l py-0.5 text-center font-bold">
+                  {t("roster.col.attendance")}
                 </th>
-                <th className="py-0.5 text-center font-bold">태도</th>
+                <th className="py-0.5 text-center font-bold" title={t("roster.col.unit.title")}>
+                  {t("roster.col.unit")}
+                </th>
+                <th className="py-0.5 text-center font-bold">{t("roster.col.attitude")}</th>
                 {rosterTextCols(formOf(slot)).map((col) => (
                   <th
                     key={col.field}
                     className="py-0.5 text-center leading-tight font-bold"
-                    title={col.title}
+                    title={t(col.titleKey)}
                   >
-                    {col.label}
+                    {t(col.labelKey)}
                   </th>
                 ))}
                 {/* 머리는 가운데 — 주간 시트와 **같은 규약**(둘이 갈리면 같은 표로 안 읽힌다). */}
                 {/* ⚠️ 주간 표와 같은 이유로 `whitespace-nowrap`(roster-table 주석 참조) — 좁아진 열에서
                     라벨이 두 줄로 접히면 그 교시만 머리 높이가 달라져 위층 카드 레일과 어긋난다. */}
-                <th className="py-0.5 text-center font-bold whitespace-nowrap">특이사항</th>
+                <th className="py-0.5 text-center font-bold whitespace-nowrap">{t("roster.col.note")}</th>
               </Fragment>
             ))}
           </tr>
@@ -180,7 +183,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
             if (row.kind === "label") {
               return (
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
-                  <td colSpan={colSpanAll} className="text-foreground px-1 py-0.5 text-[11px] font-bold" title={GROUP_HINT[row.key]}>
+                  <td colSpan={colSpanAll} className="text-foreground px-1 py-0.5 text-[11px] font-bold" title={groupHint(row.key)}>
                     <GroupToggle
                       group={row.key}
                       collapsed={collapsedGroups.includes(row.key)}
@@ -207,6 +210,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                         form: formOf(slot),
                         mark: marks[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null,
                         att: attendance[`${row.entry.studentId}|${date}|${slot.slotStart}`] ?? null,
+                        lang,
                       }),
                     )}
                   />

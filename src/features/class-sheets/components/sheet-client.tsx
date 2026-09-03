@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 // 강사뷰 화면 언어(2026-09-03) — 반 이름은 번역 대상이 아니고 안내·링크 글자만 사전을 탄다.
-import { useSheetT } from "@/features/teacher-view/lang-context";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEditPresence } from "@/features/presence/edit-presence";
@@ -128,7 +129,9 @@ export type SheetHandlers = PlanHandlers & {
  * 🔑 정상 카드와 **빈 카드가 같은 조각**을 쓴다(원장 2026-09-03 제보: 빈 카드가 반 이름 없이 회색
  *    문장만 떠서 **똑같은 상자 두 개**로 보였다 — 그런 반이 둘이면 어느 반인지 알 수 없었다).
  *    두 벌로 적으면 한쪽만 바뀌므로 조각 하나로 둔다.
- * 🔴 **반 이름은 번역하지 않는다**(사람이 지은 이름) — 링크 글자만 사전을 탄다.
+ * 🔴 **반 이름은 영어 화면에서 영문 표기로 바뀐다**(원장 2026-09-03 — 낱말 표 하나로 옮기는
+ *    [`classNameFor`](@/features/teacher-view/class-name) 단일 소스. 옛 규약 "반 이름은 번역하지
+ *    않는다"는 그 지시로 뒤집혔다). 구조는 그대로라 한국어 이름과 눈으로 1:1 대조된다.
  * ⚠️ 이름이 길면 잘라 낸다(`min-w-0` + 말줄임) — 안 그러면 카드가 늘어나 아래 표와 어긋난다.
  *    전체 이름은 title 툴팁에 남는다.
  */
@@ -145,6 +148,8 @@ function TodayCardHead({
   children?: React.ReactNode;
 }) {
   const t = useSheetT();
+  // 🔴 반 이름 표기도 언어를 따른다(원장 2026-09-03) — 판정은 `classNameFor` 한 곳.
+  const shown = classNameFor(className, useSheetLang());
   return (
     // 🔴 **`flex-wrap` 필수**(원장 제보 2026-09-03 "수정중 배지 글자가 겹침"). 실측(크롬, 오늘 면):
     //    이 줄은 옆 일괄 버튼들에 밀려 **131.8px**까지 좁아지는데, 안에 든 것은 이름 + 링크(123px) +
@@ -161,9 +166,9 @@ function TodayCardHead({
           "수업명을 더 선명하게"). 이름 굵게, 링크는 한 단계 낮춰 이름이 먼저 읽히게. */}
       <h2
         className="text-foreground min-w-0 truncate text-[17px] leading-tight font-extrabold tracking-tight"
-        title={className}
+        title={shown}
       >
-        {className}
+        {shown}
       </h2>
       {href ? (
         <Link
