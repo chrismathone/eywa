@@ -1,5 +1,43 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-03 (5) — 운영실 정리: **대화형 비서 제거 · 실시간 운영 제거 · '학원 펄스'→'학원생 증감'**
+
+원장이 운영실 화면을 보며 지목한 3건. 마이그레이션 0개(제거·리네임), DB 쓰기 0.
+
+### ① 대화형 비서 제거 — 원장 *"대화형 비서 제거. 필요없음."*
+'매니저 팀에게 물어보기' 블록(질문 입력창·답변 말풍선·'대화 초기화')을 **카드만 감추지 않고 수집까지 함께** 걷어냈다
+(운영실 '지출 결재 대기' 제거 때의 규칙 그대로 — 필드만 남기면 아무도 안 보는 일을 서버가 계속 한다).
+- 삭제: `src/app/(shell)/dashboard/_components/assistant-panel.tsx` + **`src/features/assistant/**` 전부(26파일)** —
+  툴 루프(`runAssistantLoop`)·툴 모듈 8종·`tool-gate`·`grounding`·`rich-answer`·`turns`·`solar-tokens`·`links`·`labels`·`answer-body`와 그 Vitest.
+- 운영실 배선 제거: `getLatestAssistantConversation()` 조회(Promise.all 한 자리)·`canUseAssistant` 게이트·`AssistantPanel` 렌더.
+- 🔴 **표 `assistant_conversations`(0117a)는 지우지 않았다** — 과거 대화가 실데이터이고, drizzle 정의를 빼면
+  다음 `generate`가 DROP을 만든다. `schema.ts`·마이그레이션 README에 "폐지된 기능의 잔존 표"라고 못박고 정의는 남겼다(실제 drop은 원장 결정).
+- 딸린 정리: `maxDuration = 60` 근거를 비서 툴 루프 → **일일 브리핑 '다시 생성'의 `after()`** 로 고쳐 적었다(값은 그대로 필요).
+  `generate.ts`의 `recordUsage` 주석에서 "대화형 비서 runAssistantLoop" 예시를 뺐다(외부 소비처가 0이 됐다).
+- cron·알림·API 라우트 물림은 **처음부터 없었다**(확인: `src/app/api/**`·cron 5종에 assistant 참조 0, `ai_usage_logs`의 `assistant_chat` 키를 읽는 코드 0).
+
+### ② 실시간 운영 제거 — 원장 *"실시간 운영 제거 필요없음."*
+'실시간 운영 / 지금 진행 중' 섹션(오늘의 일정·하루 밀도 막대·'다음 N시' 칩)을 걷어냈다.
+- 삭제: `now-cockpit.tsx` + `now-cockpit.test.ts` + 그 전용 헬퍼였던 `features/dashboard/subject-meta.ts`(`shortTime`, 다른 소비처 0).
+- 🔴 **'상담 후속조치'(`FollowUpCard`)는 남겼다** — 같은 격자에 얹혀 있었을 뿐 다른 신호다(오늘 브리핑의 후속조치 신호와 같은 소스).
+  섹션 머리를 걷었으니 이제 카드 한 장으로 선다(그 카드는 `DashCard`라 제 제목 '상담 후속조치'를 이미 들고 있다).
+  ⚠️ 전체 폭 한 장이라 목록이 짧으면 이름과 배지 사이가 벌어진다 — 자리를 옮길지는 원장 확인이 필요한 별건.
+- ⚠️ `getTodaySchedule()` 조회는 **남는다** — 소비처가 상단 지표의 출결 '처리 중 N/M' 판정(`startedClassIds`) 하나로 줄었다.
+  대신 조회 조건을 `timetable || classes || attendance` → **`attendance` 하나**로 좁혔다(출결을 못 보는 사람은 `todayProcessing`이
+  어차피 빈 배열이라 결과가 **글자 그대로 같고**, 그 조회는 죽은 쿼리였다).
+- 함께 사라진 지역 변수: `unrecordedCount`·`showLiveSchedule`·`liveGrid`.
+
+### ③ '학원 펄스' → '학원생 증감' — **라벨 문자열 하나만**
+[`slim-trend.tsx`](../src/app/(shell)/dashboard/_components/slim-trend.tsx)의 `<h2>` 텍스트만 교체. props·집계·`visible` 분기·눈썹 라벨('최근 추세')
+전부 불변이라 기존 행이 그대로 렌더된다(리네임 후 렌더 동일 확인이 완료 조건 — CLAUDE.md 작업 선호).
+⚠️ 이 카드는 학생 증감 외에 **출석률·수납률 sparkline도 함께** 담는다. 새 이름이 주 패널만 가리키므로
+카드를 쪼개거나 sparkline을 옮기는 것은 **제안만** 하고 손대지 않았다.
+
+- 결정 로그 갱신(CLAUDE.md): '학원 매니저 팀' ②를 **제거 완료 + 재도입 금지**로, '챗봇'은 **영구 제외로 환원**.
+  운영실 3건을 한 항목으로 새로 적어 다음 세션이 "챗봇 만들까요?"를 다시 제안하지 못하게 했다.
+- 검증: typecheck 0(마케팅 `_img` 3건은 기존 노이즈) · lint **0 err**(warn 11, 전부 기존) · test **7,811 통과**
+  (전체 실행에서 `actions-registry` 1건이 파일스캔 5초 타임아웃으로 헛실패 → 단독 재실행 7/7 통과, 알려진 flake) · build ✓.
+
 ## 2026-09-03 (4) — JJ 자리 출석부 = 영어 시트와 같은 칸 · 달력뷰 월 특이사항 메모 · **지난 수업 복사가 남의 요일을 당겨오던 것**
 
 원장 지시 3건(같은 날 오후). 마이그레이션 2개(**0245a·0246a, 원장이 손으로 적용**)이고 둘 다 미적용 상태에서도 화면은 산다([[#95]]).

@@ -21,10 +21,6 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { kstToday } from "@/lib/date-kst";
 import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
 import { getDailyBriefing, type DailyBriefingRow } from "@/features/dashboard/server/briefing";
-import {
-  getLatestAssistantConversation,
-  type AssistantConversation,
-} from "@/features/assistant/server/queries";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildOperationsBriefing } from "@/features/dashboard/operations-briefing";
 import { resolveDashboardAccess, todayActionGate } from "@/features/dashboard/dashboard-access";
@@ -35,8 +31,6 @@ import { CommandBand } from "./_components/command-band";
 import { QuickActions } from "./_components/quick-actions";
 import { OperationsBriefing } from "./_components/operations-briefing";
 import { DailyBriefingCard } from "./_components/daily-briefing-card";
-import { AssistantPanel } from "./_components/assistant-panel";
-import { NowCockpit } from "./_components/now-cockpit";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
@@ -71,7 +65,8 @@ async function dashboardQuery<T>(label: string, query: Promise<T>, fallback: T):
 }
 
 export const metadata = { title: "운영실 — eywa" };
-// AI 비서(askAssistant) 툴 루프가 이 라우트로 POST된다 — 다중 툴 왕복(수 초~수십 초) 여유.
+// 일일 브리핑 '다시 생성'(regenerateDailyBriefing) 서버 액션이 이 라우트로 POST되고 after()로
+// 백그라운드 AI 호출을 이어간다 — 응답 종료 뒤 작업이 잘리지 않게 여유를 둔다.
 export const maxDuration = 60;
 
 export default async function TodayPage() {
@@ -84,9 +79,6 @@ export default async function TodayPage() {
   // 일일 브리핑은 master/admin/manager 전용 — payload가 master 관점 전신호(미수·결재 포함)라
   // scoped 역할(counselor/accountant)에는 카드 자체를 렌더하지 않는다(#77, 0114a 주석 참조).
   const canSeeDailyBriefing = canManageStaff(user.systemRole);
-  // 비서 패널 노출 = 액션 게이트(askAssistant: canManageStaff + dashboard write)와 동일 조건(#77) —
-  // 노출만 넓으면 readonly 관리자에게 '항상 권한 오류 나는 죽은 패널'이 보인다(적대 리뷰 확정).
-  const canUseAssistant = canSeeDailyBriefing && canWrite(user.systemRole, "dashboard", permissionMatrix);
   const [
     enrolledResult,
     attendanceState,
@@ -104,7 +96,6 @@ export default async function TodayPage() {
     actionSignals,
     enrollmentChangeResult,
     dailyBriefingResult,
-    assistantConversationResult,
   ] = await Promise.all([
     // 실패 허용 래퍼 — 쿼리는 throw하고(위장 금지) 카드는 fallback으로 그리되 실패가 로그에 남는다.
     access.read.students
@@ -127,9 +118,9 @@ export default async function TodayPage() {
           billing: access.read.billing,
         })
       : Promise.resolve([]),
-    access.read.timetable || access.read.classes || access.read.attendance
-      ? getTodaySchedule()
-      : Promise.resolve([]),
+    // 오늘 시간표는 이제 출결 '처리 중 N/M' 판정(startedClassIds)에만 쓰인다 —
+    // 출결 열람 권한이 없으면 그 계산 자체가 빈 값이라 조회하지 않는다(죽은 쿼리 금지).
+    access.read.attendance ? getTodaySchedule() : Promise.resolve([]),
     access.read.billing ? getPaymentRateThisMonth() : Promise.resolve(null),
     // 쿼리 실패를 빈 데이터('상담 없음'/'±0'/'공지 없음')로 위장하지 않게 실패 허용 래퍼로 감싼다 —
     // 쿼리 자체는 error를 throw(위장 금지)하고, 카드는 fallback으로 렌더하되 실패가 로그에 남는다.
@@ -172,13 +163,6 @@ export default async function TodayPage() {
     // 저장분 조회만(AI 호출 없음). 테이블 미적용 DB에서도 대시보드가 죽지 않게 실패 허용 래퍼.
     canSeeDailyBriefing
       ? dashboardQuery<DailyBriefingRow | null>("daily briefing", getDailyBriefing(user.tenantId, kstToday()), null)
-      : Promise.resolve({ data: null, unavailable: false }),
-    canSeeDailyBriefing
-      ? dashboardQuery<AssistantConversation | null>(
-          "assistant conversation",
-          getLatestAssistantConversation(),
-          null,
-        )
       : Promise.resolve({ data: null, unavailable: false }),
   ]);
   const attendance = attendanceState.snapshot;
@@ -229,7 +213,7 @@ export default async function TodayPage() {
         }
       : null,
   });
-  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
+  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 학원생 증감 카드에 prop 주입(하드코딩 금지).
   const subjects = subjectMaps;
 
   // 오늘 시작한 수업만 예정학생 대비 기록학생으로 판정한다. 한 명만 입력된 반을 완료로 보지 않는다.
@@ -245,7 +229,6 @@ export default async function TodayPage() {
     0,
   );
   const attendanceInProgress = startedExpected > 0 && startedRecorded < startedExpected;
-  const unrecordedCount = startedProcessing.filter((row) => row.unprocessed > 0).length;
   const snapshotExpected = attendanceState.snapshotProcessing.reduce(
     (sum, row) => sum + row.expected,
     0,
@@ -308,12 +291,7 @@ export default async function TodayPage() {
   if (access.write.students) quickActions.push("student");
   if (access.write.classes) quickActions.push("class");
   if (access.write.consultations) quickActions.push("consultation");
-  const showLiveSchedule = access.read.timetable || access.read.classes;
   const showFollowUps = access.read.consultations;
-  const liveGrid =
-    showLiveSchedule && showFollowUps
-      ? "lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.55fr)]"
-      : "grid-cols-1";
 
   return (
     <div className="space-y-5 pb-4">
@@ -346,58 +324,23 @@ export default async function TodayPage() {
       {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
       {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} /> : null}
 
-      {/* ①.6 매니저 팀에게 물어보기 — 대화형 비서(질문 1건 = 명시 트리거 1회, Phase 2) */}
-      {canUseAssistant ? (
-        <AssistantPanel
-          initialConversationId={assistantConversationResult.data?.id ?? null}
-          initialTurns={assistantConversationResult.data?.turns ?? []}
-        />
-      ) : null}
-
       {/* ② 오늘 브리핑 — 조회·정리만, 실행은 원본 화면에서 */}
       <OperationsBriefing briefing={briefing} />
 
       {/* 빠른 작업 */}
       <QuickActions allowed={quickActions} />
 
-      {showLiveSchedule || showFollowUps ? (
-        <section aria-labelledby="live-operations-title" className="space-y-3">
-          <header className="flex flex-wrap items-end justify-between gap-2 px-1">
-            <div>
-              <p className="text-primary text-[12px] font-bold">
-                실시간 운영
-              </p>
-              <h2 id="live-operations-title" className="text-foreground mt-0.5 text-[17px] font-bold tracking-tight">
-                지금 진행 중
-              </h2>
-            </div>
-            <p className="text-text-dim text-[12px]">수업 흐름과 사람 후속조치를 한곳에서 봅니다.</p>
-          </header>
-          <div className={`grid items-start gap-4 ${liveGrid}`}>
-            {showLiveSchedule ? (
-              <NowCockpit
-                slots={todaySchedule}
-                subjects={subjects}
-                unrecordedCount={unrecordedCount}
-                attendanceProcessingUnavailable={
-                  access.read.attendance && attendanceState.todayProcessingIssue
-                }
-                canOpenClasses={access.read.classes}
-                canOpenTimetable={access.read.timetable}
-              />
-            ) : null}
-            {showFollowUps ? (
-              <FollowUpCard
-                items={followUps}
-                canOpenStudents={access.read.students}
-                unavailable={followUpsResult.unavailable}
-              />
-            ) : null}
-          </div>
-        </section>
+      {/* 상담 후속조치 — 원장 지시(2026-09-03)로 '실시간 운영/지금 진행 중' 묶음은 걷어냈지만,
+          이 카드는 그 안에 얹혀 있었을 뿐 다른 신호라 그대로 남긴다(오늘 브리핑의 후속조치 신호와 같은 소스). */}
+      {showFollowUps ? (
+        <FollowUpCard
+          items={followUps}
+          canOpenStudents={access.read.students}
+          unavailable={followUpsResult.unavailable}
+        />
       ) : null}
 
-      {/* 학원 펄스 — 판단 큐 다음의 보조 맥락. */}
+      {/* 학원생 증감 — 판단 큐 다음의 보조 맥락. */}
       <SlimTrend
         data={trend}
         change={enrollmentChangeResult.data}
@@ -409,7 +352,7 @@ export default async function TodayPage() {
         }}
       />
 
-      {/* 카드 안의 카드 — 학원 펄스와 같은 결(원장 2026-08-31: *"카드 안에 단 구분 시키던지해서 깔끔해지게"*).
+      {/* 카드 안의 카드 — 학원생 증감 카드와 같은 결(원장 2026-08-31: *"카드 안에 단 구분 시키던지해서 깔끔해지게"*).
           세 장이 따로 떠 있으면 내용이 짧은 쪽(공지)이 위로 붙어 아래가 휑했다. 하나로 감싸고
           안쪽은 패널로 낮춰(그림자 없는 rounded-xl) 높이를 맞춘다 — 빈 패널도 같은 높이로 늘어난다. */}
       <section

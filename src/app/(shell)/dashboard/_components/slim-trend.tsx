@@ -32,7 +32,7 @@ export function SlimTrend({
       <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <p className="text-primary text-[11px] font-bold">최근 추세</p>
-          <h2 className="text-foreground mt-0.5 text-[15px] font-bold">학원 펄스</h2>
+          <h2 className="text-foreground mt-0.5 text-[15px] font-bold">학원생 증감</h2>
         </div>
         <span className="text-text-dim text-[11px]">최근 {change.days}일 · {range}</span>
       </header>

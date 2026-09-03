@@ -123,7 +123,7 @@ type ProviderCall = { text: string; usage: ProviderUsage; truncated: boolean };
  * reportWarning만(AI 호출 흐름을 절대 안 깬다). admin client는 동적 import — generate.ts는 vitest가
  * 직접 import하는 파일이라 `server-only` 모듈(admin.ts)을 정적 import하면 테스트가 깨진다.
  * await 호출(fire-and-forget 금지 — 서버리스 응답 종료 후 floating promise는 드랍될 수 있음).
- * export: generateJSON 밖의 AI 루프(대화형 비서 runAssistantLoop 등)도 같은 계측을 쓴다.
+ * export: generateJSON 밖의 AI 루프도 같은 계측을 쓸 수 있게 열어 둔다(현재 소비처는 이 파일뿐).
  */
 export async function recordUsage(entry: {
   meta?: GenerateJSONOptions["meta"];
