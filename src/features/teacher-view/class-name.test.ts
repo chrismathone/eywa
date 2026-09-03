@@ -86,19 +86,16 @@ describe("🔴 학부모·사무실 표면은 이 표기를 쓰지 않는다", (
     join(ROOT, "features", "report-admin"), // ClassNote 발송·공지
     join(ROOT, "features", "onescreen"), // 수업보고서
     join(ROOT, "features", "exports"), // 엑셀 내보내기
-    join(ROOT, "features", "messaging"), // 알림톡·문자
+    join(ROOT, "lib", "messaging"), // 알림톡·문자 (🔴 `features/messaging`이 아니다 — 없는 경로였다)
     join(ROOT, "app", "(print)"), // 인쇄물
   ];
 
+  // 🔴 **없는 디렉터리를 조용히 건너뛰지 않는다** — 경로가 바뀌면 가드가 "훑을 게 없었다"는 이유로
+  //    초록이 되어 보호가 사라진다(실제로 같은 실수를 이 파일들에서 한 번 냈다). 파일이 한 개도
+  //    안 잡히면 아래 `expect(files.length)`가 실패해 사람이 경로를 고치게 만든다.
   const walk = (dir: string): string[] => {
     let out: string[] = [];
-    let entries: string[];
-    try {
-      entries = readdirSync(dir);
-    } catch {
-      return out; // 없는 디렉터리는 건너뛴다(구조가 바뀌어도 가드가 죽지 않게)
-    }
-    for (const e of entries) {
+    for (const e of readdirSync(dir)) {
       const p = join(dir, e);
       if (statSync(p).isDirectory()) out = out.concat(walk(p));
       else if (/\.(ts|tsx)$/.test(p)) out.push(p);
@@ -107,7 +104,9 @@ describe("🔴 학부모·사무실 표면은 이 표기를 쓰지 않는다", (
   };
 
   it.each(FORBIDDEN_DIRS)("%s 는 teacher-view/class-name 을 import하지 않는다", (dir) => {
-    const offenders = walk(dir).filter((f) => /teacher-view\/class-name/.test(readFileSync(f, "utf8")));
+    const files = walk(dir);
+    expect(files.length).toBeGreaterThan(0);
+    const offenders = files.filter((f) => /teacher-view\/class-name/.test(readFileSync(f, "utf8")));
     expect(offenders).toEqual([]);
   });
 });

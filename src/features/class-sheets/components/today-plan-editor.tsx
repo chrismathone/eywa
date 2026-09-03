@@ -27,6 +27,7 @@ import { buildSaveKey } from "../lib/save-keys";
 import { ecsPresenceScope } from "../lib/presence-scope";
 import type { PlanPatchField } from "../lib/plan-codec";
 import { TodayCopySlot } from "./today-copy-slot";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { useSheetDoc } from "./use-sheet-doc";
 import {
   useCellState,
@@ -60,29 +61,32 @@ function CasInput({
   placeholder?: string;
 }) {
   const saveKey = buildSaveKey(lineId, field);
+  const t = useSheetT();
   const cell = useCellState(store, saveKey);
   const value = cell ? (cell.value ?? "") : (fallback ?? "");
   if (cell?.conflict) {
     return (
       <div className="border-danger bg-danger/5 space-y-1 rounded-lg border px-1.5 py-1">
         <p className="text-danger text-[11px] leading-tight">
-          다른 강사가 수정: <b>{cell.conflict.serverValue ?? "(비움)"}</b>
+          {t("cell.conflict.server")} <b>{cell.conflict.serverValue ?? t("cell.conflict.empty")}</b>
         </p>
-        <p className="text-text-dim truncate text-[11px]">내 입력: {value || "(비움)"}</p>
+        <p className="text-text-dim truncate text-[11px]">
+          {t("cell.conflict.mine")} {value || t("cell.conflict.empty")}
+        </p>
         <div className="flex gap-1">
           <button
             type="button"
             className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-[11px]"
             onClick={() => store.resolveConflict(saveKey, "server")}
           >
-            서버값 사용
+            {t("cell.conflict.useServer")}
           </button>
           <button
             type="button"
             className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-[11px] font-medium"
             onClick={() => store.resolveConflict(saveKey, "mine")}
           >
-            내 값으로 덮기
+            {t("cell.conflict.useMine")}
           </button>
         </div>
       </div>
@@ -165,10 +169,13 @@ export function TodayPlanEditor({
   /** 오늘 이미 체크된 교시 시각 — 서버 스냅샷(주간 시트와 같은 표). */
   initialShouting?: readonly string[];
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   // Shouting 체크는 **이 컴포넌트가 소유**한다(반+날짜+교시가 앵커라 보드까지 올릴 이유가 없다).
   // 낙관 반영 후 실패하면 되돌리고 이유를 띄운다 — 주간 시트와 같은 처방.
+  // ⚠️ 인자 이름은 `hm`(HH:MM) — 위 번역 함수 `t`를 가리지 않게(그림자 이름은 읽는 사람을 헷갈리게 한다).
   const [shouting, setShouting] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries((initialShouting ?? []).map((t) => [t, true])),
+    Object.fromEntries((initialShouting ?? []).map((hm) => [hm, true])),
   );
   const toggleShouting = (slotStart: string, next: boolean) => {
     setShouting((prev) => ({ ...prev, [slotStart]: next }));
@@ -211,16 +218,20 @@ export function TodayPlanEditor({
 
   return (
     <div className="min-w-0">
-      <p className="editorial-eyebrow mb-1.5">수업계획</p>
+      <p className="editorial-eyebrow mb-1.5">{t("plan.editor.title")}</p>
 
       {others.length > 0 ? (
         // 락이 아니라 **알림**이다 — 팀티칭에서 두 사람이 같은 반을 보는 건 정상이고, 진짜 덮어쓰기는
         // 위 CAS가 막는다. 그래서 danger가 아니라 앰버 톤(원스크린 동시열림 경고와 같은 서식).
         <div className="border-amber/40 bg-amber/5 text-amber mb-2 flex flex-wrap items-center gap-x-1.5 rounded-md border px-2.5 py-1.5 text-[12.5px]">
           <span className="font-bold">
-            {others.map((e) => e.userName).filter(Boolean).join(", ") || "다른 사용자"} 님이 이 반을 수정 중입니다
+            {tf("plan.editor.presence", {
+              names:
+                others.map((e) => e.userName).filter(Boolean).join(", ") ||
+                t("plan.editor.presenceOther"),
+            })}
           </span>
-          <span>— 같은 칸을 함께 고치면 저장할 때 알려 드립니다.</span>
+          <span>{t("plan.editor.presenceHint")}</span>
         </div>
       ) : null}
 
@@ -247,7 +258,7 @@ export function TodayPlanEditor({
             {isEie ? (
               <label
                 className={`ml-auto flex shrink-0 items-center gap-1 ${canEdit ? "cursor-pointer" : "cursor-default opacity-60"}`}
-                title="이 교시에 Shouting을 했으면 체크하세요"
+                title={t("plan.shouting.title")}
               >
                 <input
                   type="checkbox"
@@ -277,7 +288,7 @@ export function TodayPlanEditor({
               />
               ) : null}
               {canEdit ? (
-                <span className="text-text-faint text-[12px]">또는 ‘주간 시트’에서 줄 추가</span>
+                <span className="text-text-faint text-[12px]">{t("plan.editor.addElsewhere")}</span>
               ) : null}
             </div>
           ) : (
@@ -285,16 +296,16 @@ export function TodayPlanEditor({
               <div key={l.id} className="mb-1 flex flex-wrap items-start gap-1.5 last:mb-0">
                 <AreaChip store={store} lineId={l.id} fallback={l.skillArea} skillAreas={skillAreas} />
                 <span className="min-w-[7rem] flex-1">
-                  <CasInput store={store} lineId={l.id} field="textbook" fallback={l.textbook} canEdit={canEdit} ariaLabel={`${className} 교재`} placeholder="교재" />
+                  <CasInput store={store} lineId={l.id} field="textbook" fallback={l.textbook} canEdit={canEdit} ariaLabel={tf("plan.editor.cellAria", { class: className, field: t("plan.col.book") })} placeholder={t("plan.col.book")} />
                 </span>
                 <span className="min-w-[5rem] flex-1">
-                  <CasInput store={store} lineId={l.id} field="page_range" fallback={l.pageRange} canEdit={canEdit} ariaLabel={`${className} 페이지/시간`} placeholder="페이지/시간" />
+                  <CasInput store={store} lineId={l.id} field="page_range" fallback={l.pageRange} canEdit={canEdit} ariaLabel={tf("plan.editor.cellAria", { class: className, field: t("plan.col.pageTime") })} placeholder={t("plan.col.pageTime")} />
                 </span>
                 <span className="min-w-[7rem] flex-1">
-                  <CasInput store={store} lineId={l.id} field="progress" fallback={l.progress} canEdit={canEdit} ariaLabel={`${className} 진도`} placeholder="진도" />
+                  <CasInput store={store} lineId={l.id} field="progress" fallback={l.progress} canEdit={canEdit} ariaLabel={tf("plan.editor.cellAria", { class: className, field: t("plan.col.progress") })} placeholder={t("plan.col.progress")} />
                 </span>
                 <span className="min-w-[7rem] flex-1">
-                  <CasInput store={store} lineId={l.id} field="homework" fallback={l.homework} canEdit={canEdit} ariaLabel={`${className} 과제`} placeholder="과제" />
+                  <CasInput store={store} lineId={l.id} field="homework" fallback={l.homework} canEdit={canEdit} ariaLabel={tf("plan.editor.cellAria", { class: className, field: t("plan.col.homework") })} placeholder={t("plan.col.homework")} />
                 </span>
               </div>
             ))

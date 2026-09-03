@@ -19,7 +19,7 @@ import { monthOfWeek } from "../face-nav";
 import { setMyEcsMonthView } from "../server/actions";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
 import type { ClassSheetWeekData } from "../server/queries";
-import { ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
+import { ECS_FONT_SIZES, FONT_SIZE_KEY, type EcsFontSize } from "../font-size";
 import { sheetDowLabel, sheetWeekLabel } from "@/features/teacher-view/i18n";
 import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { attHref } from "@/app/(shell)/attendance/_components/att-href";
@@ -29,7 +29,6 @@ import { EcsMakeupAdder } from "./ecs-makeup-adder";
 // 요일 글자·글씨 크기 라벨은 [i18n.ts](../i18n.ts) 한 곳 — 화면 언어(한/영)를 따라간다(2026-09-03).
 // 알약 표기는 [chrome.ts](../chrome.ts) 한 곳 — 월간 뷰의 표시 토글도 같은 것을 쓴다.
 const pill = sheetPill;
-const FONT_KEY = { sm: "toolbar.font.sm", md: "toolbar.font.md", lg: "toolbar.font.lg" } as const;
 
 export function SheetToolbar({
   data,
@@ -228,7 +227,7 @@ export function SheetToolbar({
                 aria-pressed={fontSize === s}
                 className={sheetSegItem(fontSize === s)}
               >
-                {t(FONT_KEY[s])}
+                {t(FONT_SIZE_KEY[s])}
               </button>
             ))}
           </span>

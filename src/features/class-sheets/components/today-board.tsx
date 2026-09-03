@@ -35,7 +35,7 @@ import type { StudentMark } from "./today-mark-popover";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { TodayPlanEditor } from "./today-plan-editor";
 import type { TodayClassCard } from "../server/today";
-import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { classNameFor } from "@/features/teacher-view/class-name";
 
 /** 낙관 갱신용 로컬 출결 상태 — `${classId}|${studentId}` → 상태·메모. */
@@ -129,6 +129,7 @@ function ClassCard({
   const [open, setOpen] = useState(true);
   const [bulkBusy, setBulkBusy] = useState(false);
   const t = useSheetT();
+  const tf = useSheetTf();
   // 🔴 반 이름 표기는 언어를 따른다(원장 2026-09-03) — 이 카드에 나오는 세 자리(제목·aria·title)가
   //    같은 값을 봐야 마우스 오버와 화면 글자가 갈리지 않는다.
   const shownClassName = classNameFor(card.className, useSheetLang());
@@ -170,7 +171,7 @@ function ClassCard({
       })
       .catch(() => {
         setAtt((p) => ({ ...p, [key]: before ?? { status: null, note: null } }));
-        toast.error("출결 저장에 실패했습니다 — 네트워크 연결을 확인해 주세요");
+        toast.error(t("today.saveFailed.attendance"));
       })
       .finally(() => attInflight.release(key));
   }
@@ -224,7 +225,7 @@ function ClassCard({
       //    — 반드시 전량 롤백 + 에러 표시(적대 리뷰 2026-08-11).
       .catch(() => {
         restore(targets);
-        toast.error("일괄 출석 저장에 실패했습니다 — 네트워크 연결을 확인해 주세요");
+        toast.error(t("today.saveFailed.bulk"));
       })
       .finally(() => {
         for (const id of targets) attInflight.release(`${card.classId}|${id}`);
@@ -272,7 +273,7 @@ function ClassCard({
     })()
       .catch(() => {
         rollback();
-        toast.error("출석 취소에 실패했습니다 — 네트워크 연결을 확인해 주세요");
+        toast.error(t("today.saveFailed.clear"));
       })
       .finally(() => attInflight.release(key));
   }
@@ -291,26 +292,34 @@ function ClassCard({
         {/* 임시 위임(0173a) — 주간 랜딩·원스크린 반 칩과 같은 앰버 규약(남의 반임을 목록에서부터 가른다). */}
         {card.delegated ? (
           <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold">
-            위임
+            {t("today.chip.delegated")}
           </span>
         ) : null}
         {live ? (
           <span className="bg-primary-soft text-primary shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-            진행 중
+            {t("today.chip.live")}
           </span>
         ) : null}
-        <span className="text-text-dim shrink-0 text-[12px]">{card.students.length}명</span>
+        <span className="text-text-dim shrink-0 text-[12px]">
+          {tf("today.students", { n: card.students.length })}
+        </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {/* 상태 배지 = WeekNav '과거/미래 조회'와 **같은 규약**(rounded-full · 10px · bold).
               ⚠️ 색은 **못 한 일에만** 쓴다 — 다 한 줄까지 물들면 눈이 갈 곳을 잃는다. */}
-          <Badge done={isHoliday || planMissing === 0} title="오늘 교시 중 수업계획이 채워진 교시">
-            계획 {card.fill.filled}/{card.fill.total}
+          <Badge done={isHoliday || planMissing === 0} title={t("today.badge.plan.title")}>
+            {tf("today.badge.plan", { done: card.fill.filled, total: card.fill.total })}
           </Badge>
-          <Badge done={isHoliday || marked >= card.students.length} title="출결을 기록한 학생 수">
-            출결 {marked}/{card.students.length}
+          <Badge
+            done={isHoliday || marked >= card.students.length}
+            title={t("today.badge.attendance.title")}
+          >
+            {tf("today.badge.attendance", { done: marked, total: card.students.length })}
           </Badge>
-          <Badge done={isHoliday || written >= card.students.length} title="수업보고서를 작성한 학생 수">
-            보고서 {written}/{card.students.length}
+          <Badge
+            done={isHoliday || written >= card.students.length}
+            title={t("today.badge.report.title")}
+          >
+            {tf("today.badge.report", { done: written, total: card.students.length })}
           </Badge>
           {/* 영어 알림장의 실제 채널은 ClassNote 반 보드다(eywa 발송 아님) — 워커 적재값(0140a)으로
               "이 날짜에 올라갔나"를 잇는다. 최대 30분 지연이라 '방금 올렸는데 미게시'일 수 있다(툴팁 고지).
@@ -318,9 +327,13 @@ function ClassCard({
           {card.classnoteToday !== "untracked" ? (
             <Badge
               done={isHoliday || card.classnoteToday === "posted"}
-              title="ClassNote 반 보드에 이 날짜 알림장이 올라왔는지 — 연동 PC가 최대 30분 지연으로 반영합니다"
+              title={t("today.badge.notice.title")}
             >
-              알림장 {card.classnoteToday === "posted" ? "게시됨" : "미게시"}
+              {t(
+                card.classnoteToday === "posted"
+                  ? "today.badge.notice.posted"
+                  : "today.badge.notice.missing",
+              )}
             </Badge>
           ) : null}
           {/* 접기 = ECS 로스터 GroupToggle과 같은 어포던스(회전 셰브런, 테두리 없는 인라인 버튼). */}
@@ -346,10 +359,12 @@ function ClassCard({
         // 계획은 읽는 칸, 학생은 손대는 칸이라 폭을 같게 줄 이유가 없다 — 학생 쪽을 조금 넓게.
         <div className="grid gap-4 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <div className="min-w-0">
-            {/* 계획은 **여기서 바로 고친다** — 주간 시트와 같은 저널·CAS·presence를 그대로 쓴다. */}
+            {/* 계획은 **여기서 바로 고친다** — 주간 시트와 같은 저널·CAS·presence를 그대로 쓴다.
+                `className`은 aria 라벨에만 쓰이는 **표시용 이름**이라 화면 제목과 같은 값을 넘긴다
+                (원본을 넘기면 영어 화면에서 음성만 한국어 반 이름을 부른다). */}
             <TodayPlanEditor
               classId={card.classId}
-              className={card.className}
+              className={shownClassName}
               weekMonday={weekMonday}
               date={date}
               slots={card.slots}
@@ -393,14 +408,14 @@ function ClassCard({
               href={`/ecs/${card.classId}?week=${weekMonday}`}
               className="text-primary mt-1 inline-block text-[13px] font-bold underline-offset-2 hover:underline"
             >
-              주간 시트 열기 →
+              {t("today.link.weekSheet")}
             </Link>
           </div>
 
           {/* 목록 폭을 여기서 묶는다(넓은 창에서 행이 끝없이 늘어나 밑줄만 길게 남는 것 방지). */}
           <div className="min-w-0 max-w-[26rem]">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="editorial-eyebrow">학생 · 출결 · 보고서</p>
+              <p className="editorial-eyebrow">{t("today.legend")}</p>
               <EcsMakeupAdder
                 classId={card.classId}
                 date={date}
@@ -416,21 +431,21 @@ function ClassCard({
                   type="button"
                   disabled={bulkBusy}
                   onClick={bulkPresent}
-                  title="아직 출결이 없는 학생만 출석으로 기록합니다 — 이미 기록된 값(지각·결석 포함)은 건드리지 않습니다"
+                  title={t("today.bulkPresent.title")}
                   className="border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
                 >
                   {bulkBusy
-                    ? "기록 중…"
+                    ? t("toolbar.saving")
                     : pending.length === card.students.length
-                      ? `전원 출석 (${pending.length}명)`
-                      : `나머지 ${pending.length}명 출석`}
+                      ? tf("today.bulkPresent.all", { n: pending.length })
+                      : tf("today.bulkPresent.rest", { n: pending.length })}
                 </button>
               ) : null}
             </div>
             {card.students.length === 0 ? (
               <p className="text-text-faint text-[13px]">
-                이 날 수강하는 학생이 없습니다
-                {card.canMarkAttendance ? " — 보강으로 온 학생은 위에서 추가할 수 있습니다" : ""}
+                {t("today.noStudents")}
+                {card.canMarkAttendance ? t("today.noStudents.makeup") : ""}
               </p>
             ) : (
               card.students.map((s) => (
@@ -460,7 +475,7 @@ function ClassCard({
               href={`/onescreen?date=${date}&class=${card.classId}`}
               className="text-primary mt-2 inline-block text-[13px] font-bold underline-offset-2 hover:underline"
             >
-              수업보고서 쓰기 →
+              {t("today.link.report")}
             </Link>
           </div>
         </div>
@@ -497,6 +512,9 @@ export function TodayBoard({
    */
   isHoliday?: boolean;
 }) {
+  // 이름을 `boardT`로 둔다 — 아래 카드 컴포넌트의 `t`와 **다른 스코프**라 같은 이름이면 어느 것을
+  // 부르는지 읽는 사람이 헷갈린다(이 보드는 토스트 하나만 쓴다).
+  const boardT = useSheetT();
   const [att, setAtt] = useState<AttState>(() => initialAtt(cards));
   const [marks, setMarks] = useState<MarkState>(() => initialMarks(cards));
   // 저장 중인 출결 칸 — 카드마다 흩어 두면 방송 구독(보드 1개)이 못 읽는다. 여기서 만들어 내려보낸다.
@@ -536,9 +554,11 @@ export function TodayBoard({
   const changeFontSize = useCallback((size: EcsFontSize) => {
     setFontSize(size);
     void setMyEcsFontSize(size).then((r) => {
-      if (!r.ok) toast.error("글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다");
+      if (!r.ok) toast.error(boardT("today.saveFailed.fontSize"));
     });
-  }, []);
+    // 🔴 `boardT`를 의존성에 넣는다 — 언어가 바뀌면 함수도 새로 만들어야 옛 언어로 굳지 않는다
+    //    (지금은 언어가 요청 단위라 사실상 안 바뀌지만, 빈 배열은 그 사실에 기대는 것이다).
+  }, [boardT]);
   const fontZoom = ECS_FONT_SIZE_ZOOM[fontSize];
 
   // 지금 시각(KST) — '진행 중' 표시용. SSR/첫 하이드레이션에선 null(시간 의존 렌더의 불일치 방지),

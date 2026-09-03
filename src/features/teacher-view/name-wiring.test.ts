@@ -1,10 +1,16 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SHEET_DICT } from "./i18n";
+import { SHEET_DICT, sheetT, sheetTf } from "./i18n";
 import { ROSTER_FIXED_LABEL, ROSTER_TEXT_COLS } from "@/features/class-sheets/lib/roster-form";
-import { ATTENDANCE_LABEL, ATTENDANCE_LABEL_EN } from "@/features/class-sheets/lib/attendance-label";
+import {
+  ATTENDANCE_LABEL,
+  ATTENDANCE_LABEL_EN,
+  attendanceLabelOf,
+} from "@/features/class-sheets/lib/attendance-label";
 import { REASON_LABEL, REASON_LABEL_EN } from "@/features/withdrawals/types";
+import { ATTITUDE } from "@/features/onescreen/attitude";
+import { attitudeLabelFor } from "./attitude-label";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -100,6 +106,98 @@ describe("🔴 시트 본문 문구가 사전을 탄다 — 화면 파일에 한
     expect(Object.keys(REASON_LABEL_EN).sort()).toEqual(Object.keys(REASON_LABEL).sort());
     for (const v of Object.values(REASON_LABEL_EN)) expect(v).not.toMatch(/[가-힣]/);
   });
+
+  it("🔴🔴 태도 사전의 ko는 **저장값과 글자까지 같다** — 저장은 한국어로 남아야 한다", () => {
+    // 태도는 라벨 = **DB 저장값**이고 학부모 문장(`attitudeClause`)이 그 한국어를 읽는다.
+    // ko가 어긋나면 영어로 고른 값이 저장될 때 옛 기록과 갈리고 학부모 문장이 폴백으로 떨어진다.
+    const koLabels = ATTITUDE.map((v) => attitudeLabelFor(v, "ko"));
+    expect(koLabels).toEqual([...ATTITUDE]);
+    // 영어 쪽은 다섯 눈금이 **서로 다른 낱말**이어야 한다(뭉치면 정도를 못 고른다).
+    const enLabels = ATTITUDE.map((v) => attitudeLabelFor(v, "en") ?? "");
+    expect(new Set(enLabels).size).toBe(ATTITUDE.length);
+    for (const v of enLabels) expect(v).not.toMatch(/[가-힣]/);
+    // 🔴 선택지 밖(옛 값·자유입력)은 원문 그대로 — 옮길 표가 없으니 원문이 정답이다.
+    expect(attitudeLabelFor("최고 책없음", "en")).toBe("최고 책없음");
+  });
+
+  it("🔴 태도 표시 규칙이 학부모 표면으로 새지 않는다", () => {
+    // `onescreen`이 이 모듈을 import하면 영어 라벨이 학부모 문장·보고서에 실릴 수 있다.
+    const dir = join(process.cwd(), "src", "features", "onescreen");
+    const offenders: string[] = [];
+    let scanned = 0;
+    const walk = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(p)) {
+          scanned += 1;
+          if (/teacher-view\/attitude-label/.test(readFileSync(p, "utf8"))) offenders.push(p);
+        }
+      }
+    };
+    walk(dir);
+    // 🔴 **훑은 파일이 0개면 이 가드는 아무것도 안 본 것이다** — try/catch로 감싸 두면 경로가 바뀌거나
+    //    함수가 없을 때 조용히 초록으로 통과한다(실제로 그랬다: `readdirSync` import 누락).
+    expect(scanned).toBeGreaterThan(10);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("🔴 오늘 면(카드·요약·학생 줄)도 사전을 탄다", () => {
+  it("카드: 배지·칩·일괄 출석·빈 명단이 사전 경유", () => {
+    const src = read("features", "class-sheets", "components", "today-board.tsx");
+    for (const key of [
+      "today.badge.plan",
+      "today.badge.attendance",
+      "today.badge.report",
+      "today.badge.notice.posted",
+      "today.chip.delegated",
+      "today.chip.live",
+      "today.bulkPresent.all",
+      "today.noStudents",
+      "today.saveFailed.attendance",
+    ]) {
+      expect(src).toContain(key);
+    }
+    const code = codeOnly(src);
+    expect(code).not.toContain(">위임<");
+    expect(code).not.toContain(">진행 중<");
+    expect(code).not.toMatch(/계획 \{card\.fill/);
+  });
+
+  it("요약 스트립: 다섯 칸 라벨이 사전 경유", () => {
+    const src = read("features", "class-sheets", "components", "today-summary.tsx");
+    for (const key of [
+      "today.stat.classes",
+      "today.stat.plan",
+      "today.stat.attendance",
+      "today.stat.report",
+      "today.stat.notice",
+      // 글씨 크기 라벨·칩은 **주간 시트 툴바와 같은 키**를 쓴다(두 벌이면 같은 칩이
+      // 화면마다 다른 영문으로 뜬다 — 실제로 "Text"/"Text size"로 갈렸었다).
+      "toolbar.font",
+      "FONT_SIZE_KEY",
+    ]) {
+      expect(src).toContain(key);
+    }
+    expect(codeOnly(src)).not.toMatch(/label="[가-힣]/);
+  });
+
+  it("학생 줄: 이름은 `studentNameParts` · 보고서 상태는 사전", () => {
+    const src = read("features", "class-sheets", "components", "today-student-row.tsx");
+    expect(src).toContain("studentNameParts");
+    expect(src).toContain("today.report.sent");
+    // 🔴 표시 이름과 접근성 이름이 **같은 값**을 봐야 한다(하나만 한국어면 음성으로 못 부른다).
+    expect(codeOnly(src)).not.toContain("studentName={student.name}");
+  });
+
+  it("🔴 오늘 면 학생에 영어 이름이 실려 온다(서버) — 없으면 화면이 영원히 한국어다", () => {
+    const src = read("features", "class-sheets", "server", "today.ts");
+    expect(src).toContain("englishName: string | null");
+    expect(src).toContain("english_name");
+    // 같은 값을 넣는 두 조립 지점(정규 수강 · 보강 방문자)에 **둘 다** 실려야 한다.
+    expect((src.match(/englishName: meta\?\.english_name \?\? null/g) ?? []).length).toBe(2);
+  });
 });
 
 describe("🔴 이름 표기는 단일 소스를 지난다 — 화면마다 삼항을 적지 않는다", () => {
@@ -145,5 +243,68 @@ describe("🔴 이름 표기는 단일 소스를 지난다 — 화면마다 삼�
     expect(src).toContain("fetchAllPaged");
     // RLS 우회(admin)라 테넌트 필터 필수.
     expect(src).toContain('.eq("tenant_id", user.tenantId)');
+  });
+});
+
+/**
+ * 🔴 **ko 화면은 한 글자도 안 바뀐다** — 사전으로 옮긴 문구는 원문과 글자까지 같아야 한다.
+ * 눈으로는 못 잡으므로(문자열이 화면 파일에서 사라졌다) 옮긴 자리의 한국어 결과를 여기서 고정한다.
+ */
+describe("🔴 사전으로 옮긴 오늘 면 문구의 ko 결과가 옛 문자열과 같다", () => {
+  it("출결 알약 — 라벨·잠긴 칸·사유 창", () => {
+    expect(attendanceLabelOf("present", "ko")).toBe("출석");
+    expect(attendanceLabelOf("present", "en")).toBe("Present");
+    expect(sheetT("ko", "bulk.noPerm")).toBe("출결 입력 권한이 없거나 수정 기간이 지났습니다");
+    expect(sheetT("ko", "att.pill.none")).toBe("출결 —");
+    expect(sheetTf("ko", "att.pill.setWithNote", { label: "지각" })).toBe(
+      "지각로 기록 — 사유 메모를 적을 수 있습니다",
+    );
+    expect(sheetTf("ko", "att.note.label", { name: "이지호", label: "결석" })).toBe("이지호 · 결석 사유");
+  });
+
+  it("셀 충돌 — 주간·오늘 두 화면이 **같은 키**를 쓴다", () => {
+    expect(sheetT("ko", "cell.conflict.server")).toBe("다른 강사가 수정:");
+    expect(sheetT("ko", "cell.conflict.empty")).toBe("(비움)");
+    expect(sheetT("ko", "cell.conflict.useServer")).toBe("서버값 사용");
+    for (const f of ["plan-row.tsx", "today-plan-editor.tsx"]) {
+      const src = read("features", "class-sheets", "components", f);
+      expect(src).toContain("cell.conflict.useServer");
+      expect(codeOnly(src)).not.toContain("서버값 사용");
+    }
+  });
+
+  it("'평시 내용 복사' — 라벨·툴팁·토스트", () => {
+    expect(sheetT("ko", "today.copy")).toBe("평시 내용 복사 (지난 수업)");
+    expect(sheetTf("ko", "today.copy.done", { source: "", n: 3 })).toBe("3줄 채웠습니다");
+    expect(sheetTf("ko", "today.copy.done.source", { label: "8/28" })).toBe("8/28 수업에서 ");
+    const src = read("features", "class-sheets", "components", "today-copy-slot.tsx");
+    expect(codeOnly(src)).not.toMatch(/[가-힣]/);
+  });
+
+  it("계획 편집기 — '수정 중' 문장은 **통째로** 사전에 있다(어미만 남기지 않는다)", () => {
+    expect(sheetTf("ko", "plan.editor.presence", { names: "김태건" })).toBe(
+      "김태건 님이 이 반을 수정 중입니다",
+    );
+    const src = read("features", "class-sheets", "components", "today-plan-editor.tsx");
+    expect(codeOnly(src)).not.toContain("님이 이 반을 수정 중입니다");
+  });
+
+  it("🔴 글씨 크기 칩은 주간 시트와 **한 벌**(FONT_SIZE_KEY)", () => {
+    for (const f of ["sheet-toolbar.tsx", "today-summary.tsx"]) {
+      expect(read("features", "class-sheets", "components", f)).toContain("FONT_SIZE_KEY");
+    }
+    // 라벨 상수(한국어)는 원스크린·시간표가 계속 쓰므로 **지우지 않는다** — 시트만 사전을 본다.
+    expect(read("features", "class-sheets", "components", "today-summary.tsx")).not.toContain(
+      "ECS_FONT_SIZE_LABEL",
+    );
+  });
+
+  it("🔴 드롭다운은 표시만 바꾼다 — 저장값(ATTITUDE 한국어)은 그대로", () => {
+    const src = read("features", "onescreen", "components", "field-select.tsx");
+    // 표시 매퍼가 있어도 선택 결과는 옵션의 **원래 값**이어야 한다.
+    expect(src).toContain("labelOf?.(v) ?? v");
+    expect(src).toContain("onSelect(v || null)");
+    const popover = read("features", "class-sheets", "components", "today-mark-popover.tsx");
+    expect(popover).toContain("labelOf={(v) => attitudeLabelFor(v, lang) ?? v}");
   });
 });

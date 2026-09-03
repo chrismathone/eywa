@@ -68,19 +68,16 @@ describe("🔴 학부모·사무실 표면은 이 규칙을 쓰지 않는다", (
     join(ROOT, "features", "report-admin"),
     join(ROOT, "features", "onescreen"),
     join(ROOT, "features", "exports"),
-    join(ROOT, "features", "messaging"),
+    join(ROOT, "lib", "messaging"), // 🔴 `features/messaging`이 아니다(없는 경로 → 가드가 조용히 통과했다)
     join(ROOT, "app", "(print)"),
   ];
 
+  // 🔴 **없는 디렉터리를 조용히 건너뛰지 않는다** — 경로가 틀리면 가드가 "훑을 게 없었다"는 이유로
+  //    초록이 된다(실제로 `features/messaging`이라는 없는 경로가 들어 있어 그 디렉터리는 한 번도
+  //    검사되지 않았다, 2026-09-04 발견). 파일이 0개면 아래 `expect(files.length)`가 실패한다.
   const walk = (dir: string): string[] => {
     let out: string[] = [];
-    let entries: string[];
-    try {
-      entries = readdirSync(dir);
-    } catch {
-      return out;
-    }
-    for (const e of entries) {
+    for (const e of readdirSync(dir)) {
       const p = join(dir, e);
       if (statSync(p).isDirectory()) out = out.concat(walk(p));
       else if (/\.(ts|tsx)$/.test(p)) out.push(p);

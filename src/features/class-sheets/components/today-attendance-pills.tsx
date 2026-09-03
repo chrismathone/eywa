@@ -22,7 +22,10 @@ import { Popover } from "@base-ui/react/popover";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
 import type { BasicAttendance } from "../lib/mark-cycle";
 // 한글 라벨은 ECS 단일 소스 — 체크 순환·퇴원 요약과 **같은 낱말**을 쓴다(각자 맵을 복사하면 갈린다).
-import { ATTENDANCE_LABEL as LABEL } from "../lib/attendance-label";
+import { attendanceLabelOf } from "../lib/attendance-label";
+// 🔴 상태 라벨은 **언어를 따라가는 단일 소스**(`attendanceLabelOf`)를 거친다 — 한글 맵을 직접 읽으면
+//    영어 화면에서 알약만 한국어로 남는다(원장 2026-09-03 *"출석 결석 같은 출결 상태도"*).
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { ATT_SOLID } from "@/features/attendance/status-color";
 
 const BASIC: readonly BasicAttendance[] = ["present", "late", "absent"];
@@ -53,6 +56,10 @@ export function TodayAttendancePills({
   /** 보강 명단에서 빼기 — 수강생이 아닌 행만. */
   onRemoveMakeup?: () => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const shown = attendanceLabelOf(status, lang);
   // 권한·기간이 없으면 누를 수 있는 것처럼 그리지 않는다(드롭다운·원스크린과 같은 처방).
   if (!canMark) {
     return (
@@ -60,11 +67,11 @@ export function TodayAttendancePills({
         className={READONLY_CLS}
         title={
           note
-            ? `${status ? (LABEL[status] ?? status) : "출결 없음"} · ${note} — 출결 입력 권한이 없거나 수정 기간이 지났습니다`
-            : "출결 입력 권한이 없거나 수정 기간이 지났습니다"
+            ? `${shown ?? t("att.pill.noRecord")} · ${note} — ${t("bulk.noPerm")}`
+            : t("bulk.noPerm")
         }
       >
-        {status ? (LABEL[status] ?? status) : "출결 —"}
+        {shown ?? t("att.pill.none")}
       </span>
     );
   }
@@ -74,25 +81,29 @@ export function TodayAttendancePills({
         <button
           type="button"
           className={`${READONLY_CLS} hover:bg-purple/15 text-purple cursor-pointer`}
-          title="클릭하면 보강 명단에서 뺍니다(출석 기록이 삭제됩니다)"
-          aria-label={`${studentName} 보강 취소`}
+          title={t("att.makeup.removeTitle")}
+          aria-label={tf("att.makeup.removeAria", { name: studentName })}
           onClick={() => {
             if (!window.confirm(`${studentName} 보강을 명단에서 뺄까요? 출석 기록이 삭제됩니다.`)) return;
             onRemoveMakeup();
           }}
         >
-          {LABEL[status] ?? status}
+          {shown ?? status}
         </button>
       );
     }
     return (
-      <span className={READONLY_CLS} title="조퇴·공결·보강은 출석부에서 변경하세요(여기서 바꾸면 그 상태가 사라집니다)">
-        {LABEL[status] ?? status}
+      <span className={READONLY_CLS} title={t("att.readonlyOther")}>
+        {shown ?? status}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-0.5" role="group" aria-label={`${studentName} 출결`}>
+    <span
+      className="inline-flex items-center gap-0.5"
+      role="group"
+      aria-label={tf("att.groupAria", { name: studentName })}
+    >
       {BASIC.map((s) => (
         <Pill
           key={s}
@@ -124,6 +135,10 @@ function Pill({
   onSet: (status: BasicAttendance, note?: string | null) => void;
   onClear: () => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const label = attendanceLabelOf(status, lang) ?? status;
   const [open, setOpen] = useState(false);
   const asks = NEEDS_NOTE.has(status);
 
@@ -140,17 +155,17 @@ function Pill({
       title={
         asks
           ? active
-            ? `${LABEL[status]} — 사유 메모 수정(기록 지우기는 출석부에서)`
-            : `${LABEL[status]}로 기록 — 사유 메모를 적을 수 있습니다`
+            ? tf("att.pill.editNote", { label })
+            : tf("att.pill.setWithNote", { label })
           : active
-            ? "출석 취소 — 기록 없음으로 되돌립니다(사유·시수가 붙은 기록은 지워지지 않습니다)"
-            : "출석으로 기록"
+            ? t("att.pill.clear")
+            : t("att.pill.setPresent")
       }
       className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap transition ${
         active ? ON_CLS[status] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
       }`}
     >
-      {LABEL[status]}
+      {label}
       {/* 메모가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다. */}
       {active && note ? (
         <span aria-hidden className="ml-0.5 align-middle text-[8px]">
@@ -172,7 +187,7 @@ function Pill({
             <NoteForm
               key={note}
               initial={note}
-              label={`${studentName} · ${LABEL[status]} 사유`}
+              label={tf("att.note.label", { name: studentName, label })}
               onCancel={() => setOpen(false)}
               onSave={(text) => {
                 onSet(status, text.trim() || null);

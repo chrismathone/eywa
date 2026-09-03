@@ -94,6 +94,12 @@ export type TodaySlot = {
 export type TodayStudent = {
   studentId: string;
   name: string;
+  /**
+   * 영어 이름(`students.english_name`) — **영어 화면에서 주 이름**이 된다(원장 2026-09-03).
+   * 🔴 표시 전용이고 판정은 [`studentNameParts`](@/features/teacher-view/student-name) 한 곳이다.
+   *    학부모에게 나가는 것에는 절대 쓰지 않는다(그 모듈의 구조 가드가 막는다).
+   */
+  englishName: string | null;
   school: string | null;
   grade: string | null;
   /** 출결 effective 상태(없으면 null=미기록). 교시별 행이 여러 개면 가장 최근 기록의 상태. */
@@ -460,9 +466,14 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const studentRows = await fetchInChunks<{
     id: string;
     name: string;
+    english_name: string | null;
     school: string | null;
     grade: string | null;
-  }>(studentIds, (chunk) => supabase.from("students").select("id, name, school, grade").in("id", chunk));
+    // ⚠️ `english_name`은 **이미 있는 컬럼**이다(주간 시트 로스터가 그대로 읽는다) — 새 컬럼이 아니라
+    //    [[#95]](마이그레이션보다 앱 먼저 배포) 위험이 없다.
+  }>(studentIds, (chunk) =>
+    supabase.from("students").select("id, name, english_name, school, grade").in("id", chunk),
+  );
 
   // 보고서 상태 — 그 날짜·그 학생들.
   // ⚠️ **`class_id`로만 매칭하면 보강 보고서를 놓친다** — 원스크린은 보강을 `class_id=null` + `subject`로
@@ -535,9 +546,12 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     const extra = await fetchInChunks<{
       id: string;
       name: string;
+      english_name: string | null;
       school: string | null;
       grade: string | null;
-    }>(missingMakeup, (chunk) => supabase.from("students").select("id, name, school, grade").in("id", chunk));
+    }>(missingMakeup, (chunk) =>
+      supabase.from("students").select("id, name, english_name, school, grade").in("id", chunk),
+    );
     for (const s of extra) studentMeta.set(s.id, s);
   }
   // 교시 라벨 표 — 주간 시트(queries.ts)와 **같은 폴백 체인**(과목 전용 → english 내장 → 전역).
@@ -699,6 +713,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
           return {
             studentId: e.student_id,
             name: meta?.name ?? "(이름 없음)",
+            englishName: meta?.english_name ?? null,
             school: meta?.school ?? null,
             grade: meta?.grade ?? null,
             attendance: att?.status ?? null,
@@ -729,6 +744,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         return {
           studentId: id,
           name: meta?.name ?? "(이름 없음)",
+          englishName: meta?.english_name ?? null,
           school: meta?.school ?? null,
           grade: meta?.grade ?? null,
           attendance: att?.status ?? null,

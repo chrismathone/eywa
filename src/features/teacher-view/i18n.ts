@@ -105,9 +105,10 @@ export function resolveSheetLang(
  *
  * ⚠️ 새 문구를 넣을 땐 **ko·en 둘 다** 적는다(en을 비우면 폴백이 한글을 내지만, 그건 미번역 표시지
  *    설계가 아니다). 가드 `i18n.test.ts`가 빈 값·한글 혼입·구역 목록을 잡는다.
- * 🔴 **쓰지 않을 키를 미리 넣지 말 것**(학원설정의 write-only-orphan과 같은 함정) — v1은 상단 바·
- *    네비·랜딩 프레임까지다. 시트 본문(로스터 열 머리·계획 표·월간 표)은 아직 한국어이고, 넓힐 땐
- *    **배선과 같은 푸시에서** 키를 더한다.
+ * 🔴 **쓰지 않을 키를 미리 넣지 말 것**(학원설정의 write-only-orphan과 같은 함정) — 넓힐 땐 **배선과
+ *    같은 푸시에서** 키를 더한다.
+ * 지금 범위 = 상단 바·네비·랜딩 프레임 + **시트 본문**(계획 표·로스터·출결·퇴원·오늘 면 카드·요약).
+ * 아직 한국어로 남은 것 = 월간 뷰 3종 · 자리(JJ·LAB) 출석부 · MCS 칸 문구 · 알림 벨 · 원스크린.
  */
 export const SHEET_DICT = {
   // ── 언어 스위치 자체('내 메뉴' 드롭다운 안) ───────────────────────
@@ -200,7 +201,8 @@ export const SHEET_DICT = {
   "toolbar.thisWeek": { ko: "눌러서 이번 주로", en: "Click for this week" },
   "toolbar.dow": { ko: "요일", en: "Day" },
   "toolbar.all": { ko: "전체", en: "All" },
-  "toolbar.attendance": { ko: "출석부", en: "Attendance" },
+  // 🔴 `today.stat.attendance`(출결 = 찍은 학생 수)와 **다른 것**이다 — 이쪽은 출석부로 가는 링크다.
+  "toolbar.attendance": { ko: "출석부", en: "Attendance book" },
   "toolbar.attendance.title": {
     ko: "반 출석부 열기",
     en: "Open the attendance book for this class",
@@ -479,6 +481,12 @@ export const SHEET_DICT = {
 
   // ── 로스터(학생) 표 머리 ──────────────────────────────────────────
   // ⚠️ 폭(px)은 `roster-form.ts`·`today-columns.ts`가 정한다 — 라벨만 여기서 고른다.
+  "roster.notEnrolled": { ko: "이 교시 수강 대상이 아닙니다", en: "Not enrolled in this period" },
+  "roster.unitsOnAbsent": {
+    ko: "결석은 유닛(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다",
+    en: "Absences use no units — switch to present or late to enter one",
+  },
+  "roster.cellAria": { ko: "{name} {field}", en: "{name} {field}" },
   "roster.col.attendance": { ko: "출결", en: "Attend." },
   "roster.col.unit": { ko: "유닛", en: "Unit" },
   "roster.col.unit.title": {
@@ -526,6 +534,239 @@ export const SHEET_DICT = {
   // 퇴원 한 줄 요약 안에서만 쓰는 조각(값이 있을 때만 붙는다).
   "withdrawn.reason": { ko: "사유", en: "Reason" },
   "withdrawn.attitude": { ko: "태도", en: "Attitude" },
+
+  // ── 오늘 면 반 카드(머리 칩·상태 배지·일괄 출석·빈 명단) ──────────
+  // ⚠️ 배지는 10px라 **문구가 곧 설명 전부**다 — 뜻은 title이 받는다(둘이 같은 말을 해야 한다).
+  "today.students": { ko: "{n}명", en: "{n} students" },
+  "today.chip.delegated": { ko: "위임", en: "Delegated" },
+  "today.chip.live": { ko: "진행 중", en: "In progress" },
+  "today.badge.plan": { ko: "계획 {done}/{total}", en: "Plan {done}/{total}" },
+  "today.badge.plan.title": {
+    ko: "오늘 교시 중 수업계획이 채워진 교시",
+    en: "How many of today's periods have a lesson plan filled in",
+  },
+  "today.badge.attendance": { ko: "출결 {done}/{total}", en: "Attendance {done}/{total}" },
+  "today.badge.attendance.title": {
+    ko: "출결을 기록한 학생 수",
+    en: "How many students have their attendance marked",
+  },
+  "today.badge.report": { ko: "보고서 {done}/{total}", en: "Reports {done}/{total}" },
+  "today.badge.report.title": {
+    ko: "수업보고서를 작성한 학생 수",
+    en: "How many students have a lesson report written",
+  },
+  // ⚠️ ClassNote는 제품 이름이라 옮기지 않는다.
+  "today.badge.notice.posted": { ko: "알림장 게시됨", en: "Notice posted" },
+  "today.badge.notice.missing": { ko: "알림장 미게시", en: "Notice not posted" },
+  "today.badge.notice.title": {
+    ko: "ClassNote 반 보드에 이 날짜 알림장이 올라왔는지 — 연동 PC가 최대 30분 지연으로 반영합니다",
+    en: "Whether this date's notice is up on the ClassNote class board — the sync PC updates this with up to 30 min delay",
+  },
+  "today.legend": { ko: "학생 · 출결 · 보고서", en: "Student · Attendance · Report" },
+  // 🔴 `strip.fillAll`(한 교시 전원)과 **다른 것**이다 — 이쪽은 이 반 카드의 남은 학생이다.
+  "today.bulkPresent.all": { ko: "전원 출석 ({n}명)", en: "Mark all present ({n})" },
+  "today.bulkPresent.rest": { ko: "나머지 {n}명 출석", en: "Mark remaining {n} present" },
+  "today.bulkPresent.title": {
+    ko: "아직 출결이 없는 학생만 출석으로 기록합니다 — 이미 기록된 값(지각·결석 포함)은 건드리지 않습니다",
+    en: "Marks present only where attendance is still empty — values already recorded (including late and absent) are never touched",
+  },
+  "today.noStudents": { ko: "이 날 수강하는 학생이 없습니다", en: "No students are enrolled on this day" },
+  "today.noStudents.makeup": {
+    ko: " — 보강으로 온 학생은 위에서 추가할 수 있습니다",
+    en: " — you can add a student who came for a makeup lesson above",
+  },
+  "today.saveFailed.attendance": {
+    ko: "출결 저장에 실패했습니다 — 네트워크 연결을 확인해 주세요",
+    en: "Could not save attendance — please check your network connection",
+  },
+  "today.saveFailed.bulk": {
+    ko: "일괄 출석 저장에 실패했습니다 — 네트워크 연결을 확인해 주세요",
+    en: "Could not save bulk attendance — please check your network connection",
+  },
+  "today.saveFailed.clear": {
+    ko: "출석 취소에 실패했습니다 — 네트워크 연결을 확인해 주세요",
+    en: "Could not clear attendance — please check your network connection",
+  },
+  "today.saveFailed.fontSize": {
+    ko: "글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다",
+    en: "Could not save the text size to your account — it still applies on this screen",
+  },
+
+  // ── 태도 5단 눈금 ────────────────────────────────────────────────
+  // 🔴 **저장값은 한국어 그대로**다(`ATTITUDE` = DB에 들어가는 문자열이고 학부모 카드가 그걸 읽는다).
+  //    여기 있는 것은 **화면에 적는 글자**뿐이다 — 영어로 골라도 저장은 `매우 좋음`이다.
+  // 오늘 카드 출결 알약(`today-attendance-pills.tsx`) — 잠긴 칸 문구는 일괄 바와 **같은 키**를 쓴다.
+  // 오늘 면 '평시 내용 복사' — 주간 시트 버튼(`plan.copy*`)과 **문구가 다르다**(시기가 평시로 고정이라
+  // 라벨에 그걸 밝힌다). 그래서 키를 따로 둔다: `{term}`을 끼우면 영어 문장에 한국어 낱말이 남는다.
+  "today.link.weekSheet": { ko: "주간 시트 열기 →", en: "Open weekly sheet →" },
+  "today.link.report": { ko: "수업보고서 쓰기 →", en: "Write lesson report →" },
+  "today.copy": { ko: "평시 내용 복사 (지난 수업)", en: "Copy regular plan (previous lesson)" },
+  "today.copy.busy": { ko: "복사 중…", en: "Copying…" },
+  "today.copy.title": {
+    ko: "지난 수업일에서 평시 계획을 가져옵니다 — 강사 수업은 같은 요일·같은 교시, JJ 교시는 같은 교시가 원본입니다(요일마다 교재가 달라서). 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)",
+    en: "Brings the regular plan from the previous lesson day — for a teacher's class the source is the same weekday and same period; for a JJ period it is the same period (books differ by weekday). Cells you already filled are left alone; only empty ones are filled. JJ periods also carry over each student's listening level and memorized words (attendance and attitude are never copied)",
+  },
+  "today.copy.unsaved": {
+    ko: "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 지난 수업 내용을 복사할까요? (입력을 잃을 수 있습니다)",
+    en: "Some entries are not saved yet (or are in conflict). Copy the previous lesson anyway? You may lose those entries.",
+  },
+  "today.copy.carryPending": {
+    ko: "듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)",
+    en: "Listening level and memorized-word cells are not ready yet — please ask the office",
+  },
+  // ⚠️ `{summary}`·`{source}`는 **서버가 만든 한국어 조각**이다(강사 이름·차시 요약) — 영어 화면에서도
+  //    그 부분만 한국어로 남는다. 지어내 옮기지 않는다(사실을 바꾸는 것보다 섞이는 편이 낫다).
+  "today.copy.carriedOnly": {
+    ko: "{summary} 채웠습니다 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요",
+    en: "Filled {summary} — these come from past records, so fix anyone who changed",
+  },
+  "today.copy.none.filled": {
+    ko: "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)",
+    en: "Nothing to fill — there are no empty cells (filled cells are never overwritten)",
+  },
+  "today.copy.none.notEmpty": {
+    ko: "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)",
+    en: "This period already has a plan, so nothing was copied (no overwriting)",
+  },
+  "today.copy.none.sameDow": {
+    ko: "복사할 지난 같은 요일 수업이 없습니다(최근 8주 안에 같은 요일·같은 교시의 평시 계획이 없습니다)",
+    en: "No previous lesson on the same weekday to copy (no regular plan for this weekday and period in the last 8 weeks)",
+  },
+  "today.copy.none.any": {
+    ko: "복사할 지난 수업이 없습니다(최근 8주 안에 같은 교시의 평시 계획이 없습니다)",
+    en: "No previous lesson to copy (no regular plan for this period in the last 8 weeks)",
+  },
+  "today.copy.done": { ko: "{source}{n}줄 채웠습니다", en: "{source}filled {n} lines" },
+  "today.copy.done.source": { ko: "{label} 수업에서 ", en: "From the {label} lesson, " },
+  "today.copy.done.carry": { ko: " · {summary} 채움", en: " · {summary} carried over" },
+  "today.copy.done.truncated": {
+    ko: " — {n}줄은 20줄 상한이라 못 넣었습니다",
+    en: " — {n} lines did not fit (20-line cap)",
+  },
+  "today.copy.failed": {
+    ko: "내용 복사에 실패했습니다 — 네트워크 연결을 확인해 주세요",
+    en: "Copy failed — check your network connection",
+  },
+  // 드롭다운(FieldSelect) 공통 문구 — 저장값은 그대로 두고 **표시만** 언어를 따른다.
+  "select.legacy": { ko: "이전 표기", en: "Old label" },
+  "select.search": { ko: "찾기", en: "Search" },
+  "select.choose": { ko: "선택", en: "Choose" },
+  // 오늘 카드 학생 기록 팝오버(태도·특이사항 + JJ 칸).
+  "mark.attitudeAria": { ko: "{name} {slot} 태도", en: "{name} {slot} attitude" },
+  "mark.noteAria": { ko: "{name} {slot} 특이사항", en: "{name} {slot} notes" },
+  "mark.colAria": { ko: "{name} {slot} {field}", en: "{name} {slot} {field}" },
+  "mark.notePlaceholder": {
+    ko: "특이사항 (예: PL 7, 20개 / PV 4)",
+    en: "Notes (e.g. PL 7, 20 words / PV 4)",
+  },
+  "mark.trigger.filled": {
+    ko: "{name} 태도·특이사항 {n}건 — 열어서 고치기",
+    en: "{name} — attitude and notes, {n} filled; open to edit",
+  },
+  "mark.trigger.empty": { ko: "{name} 태도·특이사항 입력", en: "Enter attitude and notes for {name}" },
+  "mark.aria": { ko: "{name} 태도·특이사항", en: "{name} attitude and notes" },
+  "att.pill.noRecord": { ko: "출결 없음", en: "No record" },
+  "att.pill.none": { ko: "출결 —", en: "Attendance —" },
+  "att.groupAria": { ko: "{name} 출결", en: "{name} attendance" },
+  "att.readonlyOther": {
+    ko: "조퇴·공결·보강은 출석부에서 변경하세요(여기서 바꾸면 그 상태가 사라집니다)",
+    en: "Change early leave, excused and makeup in the attendance book (changing it here would erase that status)",
+  },
+  "att.makeup.removeTitle": {
+    ko: "클릭하면 보강 명단에서 뺍니다(출석 기록이 삭제됩니다)",
+    en: "Click to remove from the makeup list (the attendance record is deleted)",
+  },
+  "att.makeup.removeAria": { ko: "{name} 보강 취소", en: "Cancel makeup for {name}" },
+  "att.pill.editNote": {
+    ko: "{label} — 사유 메모 수정(기록 지우기는 출석부에서)",
+    en: "{label} — edit the reason note (clear the record in the attendance book)",
+  },
+  // ⚠️ 한국어 원문의 조사(`{label}로`)를 그대로 둔다 — ko 화면은 한 글자도 안 바뀐다는 규약이 먼저다.
+  "att.pill.setWithNote": {
+    ko: "{label}로 기록 — 사유 메모를 적을 수 있습니다",
+    en: "Mark as {label} — you can add a reason note",
+  },
+  "att.pill.clear": {
+    ko: "출석 취소 — 기록 없음으로 되돌립니다(사유·시수가 붙은 기록은 지워지지 않습니다)",
+    en: "Undo present — back to no record (records that carry a reason or session count are kept)",
+  },
+  "att.pill.setPresent": { ko: "출석으로 기록", en: "Mark present" },
+  "att.note.label": { ko: "{name} · {label} 사유", en: "{name} · {label} reason" },
+  "roster.attitude.veryGood": { ko: "매우 좋음", en: "Very good" },
+  "roster.attitude.good": { ko: "좋음", en: "Good" },
+  "roster.attitude.ok": { ko: "보통", en: "Okay" },
+  "roster.attitude.bad": { ko: "안좋음", en: "Poor" },
+  "roster.attitude.veryBad": { ko: "매우 안좋음", en: "Very poor" },
+  "roster.attitude.aria": { ko: "{name} 태도 — {value}", en: "{name} attitude — {value}" },
+
+  // ── 오늘 면 계획 편집기(카드 안 계획 층) ─────────────────────────
+  // ⚠️ placeholder는 계획 표 머리와 **같은 낱말**을 써야 한다(같은 값을 넣는 칸이다) — 그래서 `plan.col.*`을
+  //    그대로 재사용하고 여기에 따로 적지 않는다. 여기 있는 것은 그 표에 없는 문구뿐이다.
+  // 셀 충돌(CAS) 인라인 선택 — 주간 시트 계획 행(`plan-row.tsx`)과 오늘 면 계획
+  // (`today-plan-editor.tsx`)이 **같은 UI를 두 벌** 들고 있어서, 문구는 여기 한 벌만 둔다.
+  "cell.conflict.server": { ko: "다른 강사가 수정:", en: "Edited by another teacher:" },
+  "cell.conflict.mine": { ko: "내 입력:", en: "My entry:" },
+  "cell.conflict.empty": { ko: "(비움)", en: "(empty)" },
+  "cell.conflict.useServer": { ko: "서버값 사용", en: "Use theirs" },
+  "cell.conflict.useMine": { ko: "내 값으로 덮기", en: "Keep mine" },
+  "plan.editor.title": { ko: "수업계획", en: "Lesson plan" },
+  // 🔴 문장 전체를 사전에 둔다 — 이름만 끼우고 뒤를 JSX에 남기면 영어 화면에 한국어 어미가 붙는다.
+  "plan.editor.presence": {
+    ko: "{names} 님이 이 반을 수정 중입니다",
+    en: "{names} is editing this class",
+  },
+  "plan.editor.presenceOther": { ko: "다른 사용자", en: "Another user" },
+  "plan.editor.presenceHint": {
+    ko: "— 같은 칸을 함께 고치면 저장할 때 알려 드립니다.",
+    en: "— if you both edit the same cell, we'll tell you when it saves.",
+  },
+  "plan.editor.addElsewhere": {
+    ko: "또는 ‘주간 시트’에서 줄 추가",
+    en: "or add a row in the weekly sheet",
+  },
+  "plan.shouting.title": {
+    ko: "이 교시에 Shouting을 했으면 체크하세요",
+    en: "Tick this if you did Shouting in this period",
+  },
+  /** 입력칸 접근성 이름 — `{class} {field}`(반 이름 + 칸 이름). */
+  "plan.editor.cellAria": { ko: "{class} {field}", en: "{class} {field}" },
+
+  // ── 오늘 면 요약 스트립(빅 스탯 5칸) ─────────────────────────────
+  // ⚠️ 칸이 좁아 **한 낱말**로 — 뜻이 겹치는 카드 배지(`today.badge.*`)와 같은 낱말을 쓴다.
+  // 🔴 `chrome.list`(반 목록 버튼 = Classes)와 **다른 것**이다 — 이쪽은 "오늘 수업이 몇 개"라는 수다.
+  "today.stat.classes": { ko: "수업", en: "Lessons" },
+  "today.stat.classesValue": { ko: "{n}개", en: "{n}" },
+  "today.stat.plan": { ko: "계획", en: "Plan" },
+  "today.stat.attendance": { ko: "출결", en: "Attendance" },
+  "today.stat.report": { ko: "보고서", en: "Reports" },
+  "today.stat.notice": { ko: "알림장", en: "Notices" },
+  "today.stat.noticeValue": { ko: "{done}/{total}반", en: "{done}/{total} classes" },
+  // 학생 줄의 보고서 상태 — 발송/작성/미작성.
+  "today.report.sent": { ko: "발송", en: "Sent" },
+  "today.report.written": { ko: "작성", en: "Written" },
+  "today.report.none": { ko: "미작성", en: "Not written" },
+  "today.makeup.removed": { ko: "보강 명단에서 뺐습니다", en: "Removed from the makeup list" },
+  "today.report.sent.title": {
+    ko: "학부모에게 발송됨 — {name} 보고서 열기",
+    en: "Sent to the parent — open {name}'s report",
+  },
+  "today.report.written.title": {
+    ko: "작성됨 · 아직 발송 전 — {name} 보고서 열기",
+    en: "Written · not sent yet — open {name}'s report",
+  },
+  "today.report.none.title": {
+    ko: "아직 작성 전 — {name} 보고서 쓰기",
+    en: "Not written yet — write {name}'s report",
+  },
+  "roster.attitude.none": { ko: "선택 안 함", en: "Not set" },
+  "roster.attitude.cycle": {
+    ko: "클릭할 때마다 {scale} → 선택 안 함",
+    en: "Each click cycles {scale} → Not set",
+  },
+  "roster.attitude.legacy": {
+    ko: "이전 표기 \"{value}\" — 누르면 새 눈금({first})으로 바뀝니다",
+    en: "Old wording “{value}” — clicking switches it to the new scale ({first})",
+  },
 
 } as const satisfies Record<string, { ko: string; en: string }>;
 

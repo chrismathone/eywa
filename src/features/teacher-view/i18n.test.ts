@@ -50,8 +50,12 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
     const prefixes = new Set(Object.keys(SHEET_DICT).map((k) => k.split(".")[0]));
     expect([...prefixes].sort()).toEqual(
       [
+        // 출결 알약(오늘 카드) — 라벨은 `attendanceLabelOf`, 문구만 여기.
+        "att",
         "banner",
         "bulk",
+        // 셀 충돌(CAS) — 주간 계획 행·오늘 계획이 **같은 UI 두 벌**이라 문구는 한 벌만 둔다.
+        "cell",
         "chrome",
         // 접기/펼치기처럼 **여러 구역이 함께 쓰는** 낱말(구역 접두를 붙이면 같은 말이 여러 벌 생긴다).
         "common",
@@ -59,12 +63,16 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
         "filter",
         "landing",
         "lang",
+        // 오늘 카드 학생 기록 팝오버(태도·특이사항 + JJ 칸).
+        "mark",
         "menu",
         "nav",
         "plan",
         "popup",
         "presence",
         "roster",
+        // 드롭다운(FieldSelect) 공통 — 저장값은 그대로 두고 표시만 언어를 따른다.
+        "select",
         "strip",
         "today",
         "toolbar",

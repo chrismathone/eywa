@@ -38,7 +38,7 @@ import { AttitudeCheck } from "./attitude-check";
 import { NoteCell } from "./note-cell";
 // 강사뷰 화면 언어(2026-09-03) — 영어 모드에서 학생 영어 이름이 주 이름이 된다(표시 전용).
 import { useSheetLang } from "@/features/teacher-view/lang-context";
-import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { studentNameParts } from "@/features/teacher-view/student-name";
 import type { SheetHandlers } from "./sheet-client";
 
@@ -148,10 +148,12 @@ export function RosterSlotCells({
    */
   withDivider?: boolean;
 }) {
+  // 화면 언어 — 이 칸들의 툴팁·접근성 이름도 사전을 거친다(하드코딩된 한국어를 남기지 않는다).
+  const lang = useSheetLang();
   const dividerCls = withDivider ? "border-line-strong border-l" : "";
   const textCols = rosterTextCols(form);
   if (entry === null) {
-    const offTitle = "이 교시 수강 대상이 아닙니다";
+    const offTitle = sheetT(lang, "roster.notEnrolled");
     const dash = <span className="text-text-faint text-[13px] font-semibold">—</span>;
     return (
       <>
@@ -210,7 +212,7 @@ export function RosterSlotCells({
         {att?.status === "absent" ? (
           <span
             className="text-text-faint text-[13px] font-semibold"
-            title="결석은 유닛(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
+            title={sheetT(lang, "roster.unitsOnAbsent")}
           >
             —
           </span>
@@ -249,8 +251,11 @@ export function RosterSlotCells({
             className={`${SHEET_INPUT} text-center`}
             defaultValue={mark?.[col.field] ?? ""}
             disabled={!rowEditable}
-            aria-label={`${meta?.name ?? ""} ${col.label}`}
-            title={col.title}
+            aria-label={sheetTf(lang, "roster.cellAria", {
+              name: meta?.name ?? "",
+              field: sheetT(lang, col.labelKey),
+            })}
+            title={sheetT(lang, col.titleKey)}
             // placeholder 없음 — 텍스트 입력은 **그냥 비워 둔다**(원장 2026-08-13). 빈 상자 자체가
             // "여기 적어라"이고, `—`를 넣으면 값이 적힌 것처럼 보인다([click-hint.ts](../click-hint.ts)).
             data-nav-col={`${col.nav}${navColSuffix}`}

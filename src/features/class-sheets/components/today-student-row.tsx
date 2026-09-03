@@ -14,6 +14,8 @@ import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { TodayAttendancePills } from "./today-attendance-pills";
 import { TodayMarkPopover, type MarkMap, type MarkSlot, type StudentMark } from "./today-mark-popover";
 import type { TodayClassCard, TodayStudent } from "../server/today";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { studentNameParts } from "@/features/teacher-view/student-name";
 
 export function StudentRow({
   card,
@@ -41,6 +43,11 @@ export function StudentRow({
   onClear: () => void;
 }) {
   const router = useRouter();
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
+  // 🔴 영어 화면에서는 영어 이름이 주 이름 — 판정은 `studentNameParts` 한 곳이다(주간 시트와 같은 규칙).
+  const names = studentNameParts(student.name, student.englishName, lang);
   return (
     // ⚠️ 이름 칸을 `1fr`로 두고 행을 화면 폭에 맡기면 넓은 창에서 이름은 왼쪽 끝, 컨트롤은 오른쪽 끝으로
     // **벌어져** 한 줄을 눈으로 잇기 어렵다(2026-08-07 실화면). 폭은 목록 컨테이너(`max-w`)가 잡고,
@@ -50,7 +57,14 @@ export function StudentRow({
     <div className="border-line grid grid-cols-[minmax(0,1fr)_7.25rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
       <span className="min-w-0 truncate text-[13px]">
         {/* 구조화 행 목록(Editorial 문법 ⑤) — 이름 bold 13.5px + 설명 dim 12.5px. */}
-        <span className="text-foreground text-[13.5px] font-bold">{student.name}</span>
+        {/* 🔴 이름 두 줄이 아니라 **주 이름 + 보조**를 한 줄에 잇는다(이 행은 높이가 촘촘하다).
+            🔴 보조 이름은 **영어 화면에서만** 붙인다 — 한국어 화면은 원래 이름 하나만 있었고
+               (주간 시트와 달리 이 행은 한 줄짜리 촘촘한 목록이다) 원장 지시는 영어 화면을 고치는
+               것이라 한국어 화면이 덩달아 바뀌면 안 된다("ko는 글자까지 그대로"). */}
+        <span className="text-foreground text-[13.5px] font-bold">{names.primary}</span>
+        {lang === "en" && names.secondary ? (
+          <span className="text-text-dim ml-1 text-[12px]">{names.secondary}</span>
+        ) : null}
         {student.grade ? <span className="text-text-dim ml-1 text-[12.5px]">{student.grade}</span> : null}
       </span>
       <span>
@@ -58,7 +72,7 @@ export function StudentRow({
         <TodayAttendancePills
           status={att.status}
           note={att.note}
-          studentName={student.name}
+          studentName={names.primary}
           canMark={card.canMarkAttendance}
           onSet={onSet}
           onClear={onClear}
@@ -74,7 +88,7 @@ export function StudentRow({
                       toast.error(r.error);
                       return;
                     }
-                    toast.success("보강 명단에서 뺐습니다");
+                    toast.success(t("today.makeup.removed"));
                     router.refresh();
                   });
                 }
@@ -87,7 +101,7 @@ export function StudentRow({
         classId={card.classId}
         date={date}
         studentId={student.studentId}
-        studentName={student.name}
+        studentName={names.primary}
         slots={slotLabels}
         marks={marks}
         canEdit={canEdit}
@@ -105,15 +119,22 @@ export function StudentRow({
               ? TONE_SOFT.caution
               : TONE_SOFT.inert
         }`}
-        title={
+        title={tf(
           student.reportSent
-            ? `학부모에게 발송됨 — ${student.name} 보고서 열기`
+            ? "today.report.sent.title"
             : student.reportWritten
-              ? `작성됨 · 아직 발송 전 — ${student.name} 보고서 열기`
-              : `아직 작성 전 — ${student.name} 보고서 쓰기`
-        }
+              ? "today.report.written.title"
+              : "today.report.none.title",
+          { name: names.primary },
+        )}
       >
-        {student.reportSent ? "발송" : student.reportWritten ? "작성" : "미작성"}
+        {t(
+          student.reportSent
+            ? "today.report.sent"
+            : student.reportWritten
+              ? "today.report.written"
+              : "today.report.none",
+        )}
       </Link>
     </div>
   );
