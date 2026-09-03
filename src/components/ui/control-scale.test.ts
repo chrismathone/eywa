@@ -51,7 +51,8 @@ const PAPER_ALLOW: RegExp[] = [
 const ARBITRARY_PX = /(?<!print:)(?<![\w-])text-\[\d+(?:\.\d+)?px\]/g;
 
 describe("타입 스케일 v5 — 임의 px 글자 크기를 화면에 적지 않는다", () => {
-  it("text-[Npx]는 종이 서식 밖에서 0건", () => {
+  // ⚠️ 전수 스캔(2,300파일)이라 전체 vitest와 겹쳐 돌면 기본 5초를 넘긴다(헛실패, [[reference_vitest-guard-test-timeout-flakes]]).
+  it("text-[Npx]는 종이 서식 밖에서 0건", { timeout: 60_000 }, () => {
     const bad: string[] = [];
     for (const f of FILES) {
       const r = rel(f);

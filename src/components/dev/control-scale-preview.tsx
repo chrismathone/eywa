@@ -85,7 +85,7 @@ export function ControlScalePreview() {
           type="button"
           onClick={() => pick(s)}
           aria-pressed={scale === s}
-          className={`num rounded-md px-1.5 py-0.5 transition ${scale === s ? "bg-background text-foreground" : "hover:bg-white/20"}`}
+          className={`num rounded-md px-1.5 py-0.5 transition ${scale === s ? "bg-background text-foreground" : "hover:bg-background/20"}`}
         >
           {LABEL[s]}
         </button>

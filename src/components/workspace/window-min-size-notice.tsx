@@ -61,7 +61,7 @@ export function WindowMinSizeNotice() {
       <button
         type="button"
         onClick={maximize}
-        className="text-amber shrink-0 rounded-md border border-current px-2 py-0.5 font-bold hover:bg-white/40"
+        className="text-amber shrink-0 rounded-md border border-current px-2 py-0.5 font-bold hover:bg-background/40"
       >
         창 최대화
       </button>
