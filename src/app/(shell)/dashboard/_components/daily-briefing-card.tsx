@@ -2,6 +2,12 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { DailyBriefingRow } from "@/features/dashboard/server/briefing";
 import { buildFallbackTeamReport, type TeamReport } from "@/features/dashboard/briefing-team-report";
+import {
+  emptyBriefingLinks,
+  leftoverBriefingLinks,
+  type BriefingLink,
+  type BriefingLinks,
+} from "@/features/dashboard/briefing-links";
 import { subjectBreakdownText } from "@/features/dashboard/today-actions";
 import { DailyBriefingRegen } from "./daily-briefing-regen";
 
@@ -21,6 +27,28 @@ function kstTimeLabel(iso: string): string {
   });
 }
 
+/**
+ * 바로 가기 칩 — 보고 문단 아래에 붙는 **목적지**. 라벨은 신호가 들고 온 것 그대로(briefing-links)라
+ * 문단이 무엇을 말하든 칩이 여는 화면과 어긋나지 않는다. 창(iframe) 셸이므로 WindowLink 경유([[#86]]).
+ */
+function BriefingLinkChip({ link }: { link: BriefingLink }) {
+  return (
+    <WindowLink
+      href={link.href}
+      title={link.label}
+      ariaLabel={`${link.label} 열기`}
+      className="border-line bg-card text-text-dim hover:border-primary/30 hover:bg-primary-soft/30 hover:text-primary focus-visible:ring-primary/35 group inline-flex items-center gap-1 rounded-pill border px-2.5 py-1 text-[11.5px] font-bold transition focus-visible:ring-2 focus-visible:outline-none"
+    >
+      {link.label}
+      <EyIcon
+        name="arrowRight"
+        size={12}
+        className="text-text-faint group-hover:text-primary shrink-0 transition-colors"
+      />
+    </WindowLink>
+  );
+}
+
 const AREA_TONE: Record<string, string> = {
   수업: "bg-blue-soft text-foreground ring-blue/20",
   학생: "bg-amber-soft text-foreground ring-amber/25",
@@ -29,7 +57,14 @@ const AREA_TONE: Record<string, string> = {
   운영: "bg-bg-soft text-text-dim ring-line",
 };
 
-export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | null }) {
+export function DailyBriefingCard({
+  briefing,
+  links,
+}: {
+  briefing: DailyBriefingRow | null;
+  /** 영역별 바로 가기 — 권한 필터는 페이지가 이미 통과시킨 것만 넘어온다(#77). */
+  links?: BriefingLinks | null;
+}) {
   const analyzing = briefing?.processing_status === "analyzing";
   const failed = briefing?.processing_status === "failed";
   const completed = briefing?.processing_status === "completed";
@@ -40,6 +75,12 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
     : null;
   const legacyNarrative = completed && !briefing?.team_report && briefing?.narrative ? briefing.narrative : null;
   const degraded = completed && !briefing?.team_report && Boolean(briefing?.processing_error);
+  // 바로 가기는 **완료된 보고**에만 붙인다(분석 중·실패엔 근거가 없다).
+  const areaLinks = completed ? (links ?? emptyBriefingLinks()) : emptyBriefingLinks();
+  // 문단이 없는 영역(LLM이 생략했거나 구 행 narrative만 있는 경우)의 칩은 마지막 줄에 모은다 —
+  // 안 그러면 그 신호로 가는 길이 카드에서 통째로 사라진다.
+  const shownAreas = legacyNarrative ? [] : (report?.managers ?? []).map((manager) => manager.area);
+  const leftover = leftoverBriefingLinks(areaLinks, shownAreas);
 
   return (
     <section
@@ -79,16 +120,28 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
               <p className="text-foreground mt-2 text-[13.5px] leading-relaxed">{legacyNarrative}</p>
             ) : completed && report ? (
               <ul className="mt-3.5 space-y-2.5">
-                {report.managers.map((manager) => (
-                  <li key={manager.area} className="flex items-start gap-3">
-                    <span
-                      className={`${AREA_TONE[manager.area] ?? AREA_TONE["운영"]} mt-px inline-flex w-12 shrink-0 justify-center rounded-full py-1 text-[11px] font-bold ring-1 ring-inset`}
-                    >
-                      {manager.area}
-                    </span>
-                    <p className="text-foreground min-w-0 text-[13.5px] leading-relaxed">{manager.report}</p>
-                  </li>
-                ))}
+                {report.managers.map((manager) => {
+                  const chips = areaLinks[manager.area] ?? [];
+                  return (
+                    <li key={manager.area} className="flex items-start gap-3">
+                      <span
+                        className={`${AREA_TONE[manager.area] ?? AREA_TONE["운영"]} mt-px inline-flex w-12 shrink-0 justify-center rounded-full py-1 text-[11px] font-bold ring-1 ring-inset`}
+                      >
+                        {manager.area}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-foreground text-[13.5px] leading-relaxed">{manager.report}</p>
+                        {chips.length > 0 ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {chips.map((link) => (
+                              <BriefingLinkChip key={link.key} link={link} />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="text-text-dim mt-2 text-[13.5px] leading-relaxed">
@@ -100,6 +153,15 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
               <p className="text-text-dim mt-2 text-[12px]" title={briefing?.processing_error ?? undefined}>
                 AI 보고 생성에 실패해 요약으로 대신 표시했습니다.
               </p>
+            ) : null}
+
+            {leftover.length > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-text-faint text-[12px] font-bold">바로 가기</span>
+                {leftover.map((link) => (
+                  <BriefingLinkChip key={link.key} link={link} />
+                ))}
+              </div>
             ) : null}
 
             {completed && payload && payload.spotlights.length > 0 ? (

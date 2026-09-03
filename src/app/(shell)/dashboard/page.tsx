@@ -1,7 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
-import { canAccess, canWrite } from "@/lib/permissions";
+import { canWrite } from "@/lib/permissions";
 import {
   getAbsenceRiskCached,
   getActiveEnrollmentConsultations,
@@ -27,7 +27,8 @@ import {
 } from "@/features/assistant/server/queries";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildOperationsBriefing } from "@/features/dashboard/operations-briefing";
-import { resolveDashboardAccess } from "@/features/dashboard/dashboard-access";
+import { resolveDashboardAccess, todayActionGate } from "@/features/dashboard/dashboard-access";
+import { buildBriefingLinks } from "@/features/dashboard/briefing-links";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
@@ -197,12 +198,15 @@ export default async function TodayPage() {
   // 새 쿼리나 AI 호출 없이 순수 계산만 하며, 서로 단위가 다른 count는 합산하지 않는다.
   // 과목 라벨은 학원설정 단일 소스(하드코딩 금지) — 아래 콕핏에 넘기는 것과 같은 맵을 신호에도 준다.
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  const todayActions = buildTodayActions(actionSignals, { subjectLabel: subjectMaps.labelOf }).filter((item) => {
-    if (!canAccess(user.systemRole, item.menuKey, permissionMatrix)) return false;
-    if (item.requiredAccess === "write") return canWrite(user.systemRole, item.menuKey, permissionMatrix);
-    if (item.requiredAccess === "manage-staff") return access.manageStaff;
-    return item.requiredAccess === "read";
-  });
+  // 조치 화면 열람 판정은 브리핑 바로 가기 칩과 **같은 술어**를 쓴다(갈리면 죽은 링크가 생긴다).
+  const canOpenAction = todayActionGate(user.systemRole, permissionMatrix, access);
+  const todayActions = buildTodayActions(actionSignals, { subjectLabel: subjectMaps.labelOf }).filter((item) =>
+    canOpenAction(item.menuKey, item.requiredAccess),
+  );
+  // 일일 브리핑 '바로 가기' — 결정론 payload의 신호만 링크로(문장 파싱 없음, briefing-links 주석).
+  const briefingLinks = canSeeDailyBriefing
+    ? buildBriefingLinks(dailyBriefingResult.data?.payload ?? null, canOpenAction)
+    : null;
   const briefing = buildOperationsBriefing({
     actions: todayActions,
     followUps: access.read.consultations ? followUps : [],
@@ -331,7 +335,7 @@ export default async function TodayPage() {
       />
 
       {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
-      {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} /> : null}
+      {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} /> : null}
 
       {/* ①.6 매니저 팀에게 물어보기 — 대화형 비서(질문 1건 = 명시 트리거 1회, Phase 2) */}
       {canUseAssistant ? (
