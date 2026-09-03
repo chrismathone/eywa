@@ -144,7 +144,7 @@ pnpm db:seed
 
 | `0116a_onescreen_student_order` | **`onescreen_student_order`(tenant·teacher·class PK, student_ids uuid[]) + tenant RLS** — 원스크린 학생 표시 순서(강사×반 개인 설정, edutrix '순서변경' 패리티). roster가 반 그룹 내부만 재배열(`student-order.ts` 순수함수). teacher own-스코프는 앱 레이어(`order-actions.ts`: teacher_id=`effectiveTeacherId` 서버 파생 + 담당 반 소유·수강생 소속 검증 — 0112a 철학). (병렬 세션이 0114a=일일 브리핑·0115a=출석 시수 선점 → 0116a로 개명.) |
 
-| `0117a_assistant_conversations` | **운영실 AI 비서 대화 저장**(Phase 2 — 대화형 비서 도입 승인 2026-07-16) — 대화 1건=1행, `messages` jsonb는 표시용 텍스트 턴만(툴 원시 블록·조회 스냅샷 미저장 → 권한 변화에 안전). RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(RLS·권한 자동 상속), service_role 불사용. |
+| `0117a_assistant_conversations` | ⚠️ **기능 폐지(2026-09-03, 원장 "대화형 비서 제거. 필요없음.") — 표는 남기고 코드만 제거**(과거 대화 보존, drop은 원장 결정 사항). 이하 원래 설명: **운영실 AI 비서 대화 저장**(Phase 2 — 대화형 비서 도입 승인 2026-07-16) — 대화 1건=1행, `messages` jsonb는 표시용 텍스트 턴만(툴 원시 블록·조회 스냅샷 미저장 → 권한 변화에 안전). RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(RLS·권한 자동 상속), service_role 불사용. |
 
 | `0117a_invoice_teacher_splits` | **강사별 시수 분배 저장(수납, 골든마스터 게이트 뒤)** — 병렬 세션 splits 마이그레이션(0116a→0117a 리네임). 상세는 해당 세션 changelog. |
 

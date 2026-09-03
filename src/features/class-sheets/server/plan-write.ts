@@ -62,6 +62,11 @@ export type PlanCopyResult =
       /** 20줄 상한에 걸려 못 넣은 원본 줄 수(0209a 이전 함수는 안 돌려줘 0) */
       truncated: number;
       reason: string | null;
+      /**
+       * 이번 복사가 **같은 요일만** 원본으로 봤나(0245a). 실수업=true · 자리(LAB·JJ)=false.
+       * 🔴 0245a 미적용이면 `null` — 그때 안내 문구는 옛 규칙(요일 무관) 그대로여야 한다.
+       */
+      sameDow: boolean | null;
       lines: PlanLineDTO[];
       /** JJ 폼 이어받기(듣기 레벨·누적 암기 단어수) — 호출부가 화면 상태에 머지한다. */
       carried: CarryPatch[];
@@ -75,6 +80,13 @@ export type PlanCopyResult =
   | PlanWriteError;
 
 const toLineDTO = planLineFromRow;
+
+const KO_DOW = ["일", "월", "화", "수", "목", "금", "토"] as const;
+/** "YYYY-MM-DD" → "목". ⚠️ `getUTCDay`여야 한다 — 로컬 파싱이면 서버 타임존에 따라 하루 밀린다. */
+function koDowOf(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? "?" : (KO_DOW[d.getUTCDay()] ?? "?");
+}
 
 // ── 필드 CAS 배치 저장 ────────────────────────────────────────────────────────
 
@@ -326,6 +338,7 @@ export async function copyPlanSlotFromPrevious(
     reason?: string;
     sourceDate?: string;
     sourceSlot?: string;
+    sameDow?: boolean;
     lines?: Record<string, unknown>[];
   };
   // JJ 폼 이어받기 — 같은 버튼이 학생별 듣기 레벨·누적 암기 단어수까지 채운다(직원 요청 2026-08-19).
@@ -345,8 +358,10 @@ export async function copyPlanSlotFromPrevious(
     copied: r.copied ?? 0,
     // 같은 교시에서만 가져오므로 시각은 대상과 늘 같다 — 라벨엔 **날짜만**(붙이면 "08-11 19:20 교시"가
     // 되어 마치 다른 시각에서 온 것처럼 읽힌다). ⚠️ 0209a 적용 전 함수는 다른 시각을 돌려줄 수 있다.
-    sourceLabel: r.sourceDate ? r.sourceDate.slice(5) : null,
+    // 🔑 요일을 함께 적는다(0245a) — 원본을 같은 요일로 좁힌 뒤로는 요일이 곧 "어느 수업에서 왔나"다.
+    sourceLabel: r.sourceDate ? `${r.sourceDate.slice(5)}(${koDowOf(r.sourceDate)})` : null,
     truncated: r.truncated ?? 0,
+    sameDow: typeof r.sameDow === "boolean" ? r.sameDow : null,
     reason: r.reason ?? null,
     lines: (r.lines ?? []).map(toLineDTO),
     carried: carry.patches,

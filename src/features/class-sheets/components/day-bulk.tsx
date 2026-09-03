@@ -300,7 +300,7 @@ export function DayBulk({
                 ))}
               </div>
               <input
-                className="border-line-strong text-foreground focus:border-primary w-full rounded-lg border bg-transparent px-1.5 py-1 text-[12px] outline-none"
+                className="border-line-strong text-foreground focus:border-primary bg-card w-full rounded-lg border px-1.5 py-1 text-[12px] outline-none"
                 placeholder={`${TERM_LABEL[effectiveTerm]} ${planFieldLabel} 값`}
                 value={planValue}
                 aria-label={`${TERM_LABEL[effectiveTerm]} ${planFieldLabel} 일괄 입력`}

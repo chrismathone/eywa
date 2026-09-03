@@ -3,19 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePlanText } from "@/features/class-sheets/lib/plan-codec";
-import { JJ_MARK_MAXLEN, jjSeatTextCols, parseJjMarkField, seatHasJjFields } from "../jj-fields";
+import {
+  JJ_MARK_COLUMN,
+  JJ_MARK_MAXLEN,
+  jjMarkLabel,
+  parseJjMarkField,
+  seatHasJjFields,
+  type JjMarkField,
+} from "../jj-fields";
 import { hhmm, type SeatKey } from "../seat";
 import { gateSeatWrite, rosterKeys } from "./gate";
 
-const COL: Record<"listeningLevel" | "memorizedWords", "listening_level" | "memorized_words"> = {
-  listeningLevel: "listening_level",
-  memorizedWords: "memorized_words",
-};
 const ON_CONFLICT = "tenant_id,class_id,student_id,mark_date,slot_start";
-
-function fieldLabel(field: "listeningLevel" | "memorizedWords"): string {
-  return jjSeatTextCols().find((c) => c.field === field)?.label ?? "입력";
-}
 
 function isMissingColumn(err: { code?: string; message?: string } | null, column: string): boolean {
   if (!err) return false;
@@ -44,7 +43,7 @@ export async function setSeatJjField(input: {
   value: string | null;
 }): Promise<{ ok: true } | { error: string }> {
   if (!seatHasJjFields(input.seat)) {
-    return { error: "이 자리에는 듣기·단어 칸이 없습니다" };
+    return { error: "이 자리에는 기록 칸이 없습니다" };
   }
   const field = parseJjMarkField(input.field);
   if (!field) return { error: "잘못된 칸입니다" };
@@ -61,12 +60,13 @@ export async function setSeatJjField(input: {
   }
 
   const value = normalizePlanText(input.value);
-  if ((value?.length ?? 0) > JJ_MARK_MAXLEN) {
-    return { error: `${fieldLabel(field)}은(는) ${JJ_MARK_MAXLEN}자 이내로 입력하세요` };
+  const maxLen = JJ_MARK_MAXLEN[field];
+  if ((value?.length ?? 0) > maxLen) {
+    return { error: `${jjMarkLabel(field)}은(는) ${maxLen}자 이내로 입력하세요` };
   }
 
   const admin = createAdminClient();
-  const col = COL[field];
+  const col = JJ_MARK_COLUMN[field];
   const { data: existing, error: readErr } = await admin
     .from("class_sheet_student_marks")
     .select("id, status, progress_note, score, listening_level, memorized_words")
@@ -96,17 +96,22 @@ export async function setSeatJjField(input: {
   );
   if (error) {
     if (isMissingColumn(error, col)) {
-      return { error: `'${fieldLabel(field)}' 칸은 아직 준비 중입니다` };
+      return { error: `'${jjMarkLabel(field)}' 칸은 아직 준비 중입니다` };
     }
     return { error: "저장에 실패했습니다" };
   }
 
+  // 이 저장 뒤의 행 모습 — **전부 비었을 때만** 행을 지운다(다른 칸이 남아 있으면 그대로 둔다).
+  // ⚠️ `score`는 이 화면에 없는 칸이지만 **판정에는 넣는다**: 영어 시트에서 적어 둔 시험 점수가
+  //    남아 있는데 여기서 듣기 칸을 비웠다고 행을 지우면 그 점수가 함께 사라진다.
+  const colOf = (f: JjMarkField): string | null =>
+    field === f ? value : ((existing as Record<string, string | null> | null)?.[JJ_MARK_COLUMN[f]] ?? null);
   const next = {
-    status: existing?.status ?? null,
-    progress_note: existing?.progress_note ?? null,
+    status: colOf("attitude"),
+    progress_note: colOf("progressNote"),
     score: existing?.score ?? null,
-    listening_level: field === "listeningLevel" ? value : (existing?.listening_level ?? null),
-    memorized_words: field === "memorizedWords" ? value : (existing?.memorized_words ?? null),
+    listening_level: colOf("listeningLevel"),
+    memorized_words: colOf("memorizedWords"),
   };
   if (Object.values(next).every((v) => v == null) && existing?.id) {
     await admin

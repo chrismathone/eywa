@@ -71,12 +71,13 @@ export function PlanTable({
                   교재를 미리 적어 두는 자리라 사실상 한 번도 안 보였다(원장 2026-08-14 "평시에도 추가").
                   이제 서버가 덮어쓰기 대신 **빈 칸만** 채우므로(0209a) 이미 쓴 구획에서 눌러도 잃을 게 없다.
                   ⚠️ 라벨에 '(지난 수업)'을 박는다 — "오늘 직전 차시인지 전날인지" 헷갈린다는 지적이 이
-                     버튼의 유일한 실제 불만이었다. 원본은 언제나 **같은 교시의 지난 수업일**이다. */}
+                     버튼의 유일한 실제 불만이었다. 원본은 **같은 교시의 지난 수업일**이고, 강사 수업은
+                     0245a부터 **같은 요일**까지 좁힌다(요일마다 커리큘럼이 달라 남의 수업이 딸려 왔다). */}
               {canEdit ? (
                 <button
                   type="button"
                   className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
-                  title={`같은 교시의 지난 수업일에서 ${term.label} 계획을 가져옵니다 — 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)`}
+                  title={`지난 수업에서 ${term.label} 계획을 가져옵니다 — 강사 수업은 같은 요일·같은 교시, JJ 교시는 같은 교시의 지난 수업이 원본입니다(요일마다 교재가 달라서). 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)`}
                   onClick={() => handlers.copySlot(date, slotStart, term.key)}
                 >
                   내용 복사 (지난 수업)

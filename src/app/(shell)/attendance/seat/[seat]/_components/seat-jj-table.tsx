@@ -14,6 +14,8 @@ import {
   jjSeatTextCols,
   type JjMarkField,
 } from "@/features/attendance/seat/jj-fields";
+import { ROSTER_FIXED_LABEL } from "@/features/class-sheets/lib/roster-form";
+import { AttitudeCheck } from "@/features/class-sheets/components/attitude-check";
 import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
@@ -152,22 +154,31 @@ function SeatJjClass({
         />
       ) : null}
       <table className="w-full table-fixed border-collapse text-[13px] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-[var(--line-faint)]">
+        {/* 여섯 칸 — 영어 시트 JJ 폼과 **같은 순서**(이름 · 출결 · 태도 · 자유 입력 · 특이사항).
+            ⚠️ 폭은 %다(시트는 px). 이 표는 반 수만큼 열이 갈리는 격자 안에 들어가 폭이 고정이 아니다.
+            특이사항은 width 없는 마지막 <col>이라 **잔여를 받는다**(시트와 같은 규약). */}
         <colgroup>
-          <col style={{ width: "28%" }} />
-          <col style={{ width: "20%" }} />
+          <col style={{ width: "22%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "14%" }} />
           {cols.map((c) => (
-            <col key={c.field} />
+            <col key={c.field} style={{ width: c.field === "memorizedWords" ? "14%" : "12%" }} />
           ))}
+          <col />
         </colgroup>
         <thead>
           <tr className="bg-bg-soft text-foreground text-[11px]">
             <th className="px-2 py-1.5 text-center font-bold">이름</th>
             <th className="px-1 py-1.5 text-center font-bold">출결</th>
+            <th className="px-1 py-1.5 text-center font-bold" title="이 교시의 수업 태도 — 누를 때마다 5단 눈금을 돕니다">
+              {ROSTER_FIXED_LABEL.attitude}
+            </th>
             {cols.map((c) => (
               <th key={c.field} className="px-1 py-1.5 text-center leading-tight font-bold" title={c.title}>
                 {c.label}
               </th>
             ))}
+            <th className="px-1 py-1.5 text-center font-bold whitespace-nowrap">{ROSTER_FIXED_LABEL.progressNote}</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -213,6 +224,15 @@ function SeatJjClass({
                     ) : null}
                   </div>
                 </td>
+                {/* 태도 — 영어 시트와 **같은 부품**(5단 눈금 순환). 옛 자유입력 값도 그대로 보여준다. */}
+                <td className="px-1 py-1.5">
+                  <AttitudeCheck
+                    value={s.attitude ?? null}
+                    studentName={s.name}
+                    canEdit={!readOnly}
+                    onSet={(next) => onSaveField(r.classId, s.id, "attitude", next ?? "")}
+                  />
+                </td>
                 {cols.map((c) => {
                   const field = c.field;
                   if (!isJjMarkField(field)) return null;
@@ -222,7 +242,7 @@ function SeatJjClass({
                         className={INPUT}
                         value={s[field] ?? ""}
                         disabled={readOnly}
-                        maxLength={JJ_MARK_MAXLEN}
+                        maxLength={JJ_MARK_MAXLEN[field]}
                         aria-label={`${s.name} ${c.label}`}
                         title={c.title}
                         onChange={(e) => onSaveField(r.classId, s.id, field, e.target.value)}
@@ -230,6 +250,17 @@ function SeatJjClass({
                     </td>
                   );
                 })}
+                <td className="px-1 py-1.5">
+                  <input
+                    className={INPUT}
+                    value={s.progressNote ?? ""}
+                    disabled={readOnly}
+                    maxLength={JJ_MARK_MAXLEN.progressNote}
+                    aria-label={`${s.name} ${ROSTER_FIXED_LABEL.progressNote}`}
+                    title="이 교시의 특이사항 — 영어 시트 JJ 칸과 같은 기록입니다"
+                    onChange={(e) => onSaveField(r.classId, s.id, "progressNote", e.target.value)}
+                  />
+                </td>
               </tr>
             );
           })}

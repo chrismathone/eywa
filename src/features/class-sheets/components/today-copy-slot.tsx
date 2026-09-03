@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 오늘 보드의 **내용 복사** — 같은 교시의 지난 수업일에서 계획을 가져와 **빈 칸만** 채운다(0209a).
+ * 오늘 보드의 **내용 복사** — 지난 수업일에서 계획을 가져와 **빈 칸만** 채운다(0209a).
+ * 원본은 같은 교시이고, 강사 수업이면 **같은 요일**까지 좁힌다(0245a — 요일마다 커리큘럼이 다르다).
  * 저장은 주간 시트와 **같은 RPC**(`ecs_copy_slot`)라 여기서 새 쓰기 경로를 만들지 않는다.
  *
  * ⚠️ 시기는 **평시(regular) 고정** — 오늘 보드는 시기 구획이 없는 채우기 화면이라 여기서 내신을 고르게
@@ -43,7 +44,7 @@ export function TodayCopySlot({
     <button
       type="button"
       disabled={busy}
-      title="같은 교시의 지난 수업일에서 평시 계획을 가져옵니다 — 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)"
+      title="지난 수업일에서 평시 계획을 가져옵니다 — 강사 수업은 같은 요일·같은 교시, JJ 교시는 같은 교시가 원본입니다(요일마다 교재가 달라서). 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)"
       className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
       onClick={() => {
         setBusy(true);
@@ -76,7 +77,9 @@ export function TodayCopySlot({
                     ? "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)"
                     : r.reason === "target_not_empty"
                       ? "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)"
-                      : "복사할 지난 수업이 없습니다(최근 8주 안에 같은 교시의 평시 계획이 없습니다)",
+                      : r.sameDow === true
+                        ? "복사할 지난 같은 요일 수업이 없습니다(최근 8주 안에 같은 요일·같은 교시의 평시 계획이 없습니다)"
+                        : "복사할 지난 수업이 없습니다(최근 8주 안에 같은 교시의 평시 계획이 없습니다)",
                 );
               }
               // 갱신된 행의 CAS 시드를 다시 심는다(위 🔴) — refresh는 화면 값만 바꾸고 시드는 안 고친다.

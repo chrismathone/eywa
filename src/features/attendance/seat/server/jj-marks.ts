@@ -6,8 +6,10 @@ import { hhmm } from "../seat";
 import type { SeatClassRoster } from "./queries";
 
 export type SeatJjMark = {
+  attitude: string | null;
   listeningLevel: string | null;
   memorizedWords: string | null;
+  progressNote: string | null;
 };
 
 function markKey(classId: string, studentId: string, slot: string): string {
@@ -35,6 +37,8 @@ export async function attachJjMarks(
     class_id: string;
     student_id: string;
     slot_start: string;
+    status?: string | null;
+    progress_note?: string | null;
     listening_level?: string | null;
     memorized_words?: string | null;
   }[];
@@ -42,7 +46,8 @@ export async function attachJjMarks(
     rows = await fetchInChunks(classIds, (chunk) =>
       admin
         .from("class_sheet_student_marks")
-        .select("class_id, student_id, slot_start, listening_level, memorized_words")
+        // ⚠️ `status`는 **태도**다(출결이 아니다 — 출결은 attendance_records).
+        .select("class_id, student_id, slot_start, status, progress_note, listening_level, memorized_words")
         .eq("tenant_id", tenantId)
         .eq("mark_date", date)
         .in("class_id", chunk),
@@ -56,8 +61,10 @@ export async function attachJjMarks(
   for (const r of rows) {
     if (hhmm(r.slot_start) !== slot) continue;
     byKey.set(markKey(r.class_id, r.student_id, slot), {
+      attitude: r.status ?? null,
       listeningLevel: r.listening_level ?? null,
       memorizedWords: r.memorized_words ?? null,
+      progressNote: r.progress_note ?? null,
     });
   }
   return rosters.map((roster) => ({
@@ -66,8 +73,10 @@ export async function attachJjMarks(
       const mark = byKey.get(markKey(roster.classId, s.id, slot));
       return {
         ...s,
+        attitude: mark?.attitude ?? null,
         listeningLevel: mark?.listeningLevel ?? null,
         memorizedWords: mark?.memorizedWords ?? null,
+        progressNote: mark?.progressNote ?? null,
       };
     }),
   }));

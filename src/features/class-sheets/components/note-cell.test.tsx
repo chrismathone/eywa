@@ -41,8 +41,9 @@ describe("NoteCell — 특이사항 스티커 메모", () => {
     // 특이사항은 맨 오른쪽 열이라 오른쪽으로 펼치면 옆 요일 카드를 침범한다.
     expect(box.style.right).toBe("0px");
     expect(box.style.left).toBe("auto");
-    // 🔴 바탕은 인라인이어야 한다 — SHEET_INPUT이 bg-transparent라 클래스로 덮으면 CSS 순서 싸움이 되고,
-    //    지면 펼친 메모 뒤로 아랫줄이 그대로 비친다.
+    // 🔴 바탕은 **인라인**이어야 한다 — 같은 축(background)을 클래스로 두 번 적으면 이기는 쪽을
+    //    CSS 순서가 정하고([[#116]]), 지는 날엔 펼친 메모 뒤로 아랫줄이 그대로 비친다.
+    //    (2026-09-03부터 SHEET_INPUT 자체가 bg-card라 접힌 상태도 흰색이지만, 펼침은 여전히 인라인.)
     expect(box.style.backgroundColor).toBe("var(--card)");
   });
 

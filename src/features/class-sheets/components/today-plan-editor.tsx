@@ -39,7 +39,7 @@ import type { CarryPatch } from "../lib/carry-marks";
 
 // 입력칸 테두리 = line-strong(18%) — 헤어라인 9%는 흰 카드 위에서 칸 경계가 안 보인다(주간 시트와 동일).
 const cellCls =
-  "border-line-strong text-foreground w-full rounded-lg border bg-transparent px-1.5 py-1 text-[13px] outline-none focus:border-primary disabled:opacity-60";
+  "border-line-strong text-foreground bg-card w-full rounded-lg border px-1.5 py-1 text-[13px] outline-none focus:border-primary disabled:opacity-60";
 
 /** CAS 입력 한 칸 — 충돌이 서면 그 칸만 멈추고 "서버값/내 값"을 묻는다(주간 시트 `CasInput`과 동일 계약). */
 function CasInput({

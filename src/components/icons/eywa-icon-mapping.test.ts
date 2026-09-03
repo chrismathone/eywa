@@ -183,8 +183,10 @@ describe("Eywa icon compatibility mapping", () => {
 
       expect(mapped).toEqual(imported);
       // 절대 개수 트립와이어(위 toEqual과 별개로 대량 유실을 잡는다). 별칭을 의도적으로 늘리거나
-      // 줄였을 때만 갱신할 것 — 143→142는 2026-07-29 `Lock` 제거분(소비처가 1beee908 '재인증 제거'에서 사라짐).
-      expect(mapped.size).toBe(142);
+      // 줄였을 때만 갱신할 것 — 143→142는 2026-07-29 `Lock` 제거분(소비처가 1beee908 '재인증 제거'에서 사라짐),
+      // 142→140은 2026-09-03 운영실 '빠른 작업' 제거분(`BookPlus`·`MessageSquarePlus`의 유일한 소비처였다.
+      // 밑그림 글리프 `bookPlus`·`messagePlus`는 카탈로그에 남아 있다 — 후자는 이름으로 계속 쓰인다).
+      expect(mapped.size).toBe(140);
     },
     // src/ 전건을 ts.createSourceFile로 파싱한다 — 단독 실행 14초라 15초는 여유가 없었고
     // 전 스위트 병렬(파일 증가 + CPU 경합)에서 실제로 터졌다. 파일 수는 계속 는다.

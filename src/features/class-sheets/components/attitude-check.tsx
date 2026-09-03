@@ -39,7 +39,10 @@ export function AttitudeCheck({
           ? "클릭할 때마다 매우 좋음 → 좋음 → 보통 → 안좋음 → 매우 안좋음 → 선택 안 함"
           : `이전 표기 "${value}" — 누르면 새 눈금(매우 좋음)으로 바뀝니다`
       }
-      className={`${SHEET_BOX} hover:bg-bg-soft inline-flex w-full cursor-pointer items-center justify-center px-0.5 transition ${
+      // 🔴 바탕 흰색 — 원장 2026-09-03 *"텍스트 입력가능한 곳은 흰색 배경으로"*. 태도는 글자를 치는
+      //    칸은 아니지만 **고칠 수 있는 칸**이라, 옆의 흰 입력칸들 사이에서 혼자 비치면 한 줄 안에서
+      //    "고칠 수 있는 것"이 두 모양으로 갈린다(읽기 전용은 아래 `SHEET_BOX_READONLY` 회색).
+      className={`${SHEET_BOX} bg-card hover:bg-bg-soft inline-flex w-full cursor-pointer items-center justify-center px-0.5 transition ${
         value === null ? "text-text-faint" : known ? "text-foreground" : "text-text-dim"
       }`}
     >

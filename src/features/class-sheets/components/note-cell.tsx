@@ -63,9 +63,10 @@ export function NoteCell({
               ? "shadow-card scrollbar-thin z-30 overflow-auto py-1 leading-[1.35] whitespace-pre-wrap"
               : "overflow-hidden py-px leading-[13px] whitespace-nowrap"
           }`}
-          // 펼침 치수·정박·바탕은 **인라인**으로(위 ⚠️). 특히 바탕: `SHEET_INPUT`이 `bg-transparent`라
-          // `bg-card` 클래스를 얹으면 이기는 쪽이 문자열 순서가 아니라 CSS 순서로 정해진다 — 지면
-          // 펼친 메모 뒤로 아랫줄이 그대로 비친다. 인라인은 항상 이긴다.
+          // 펼침 치수·정박·바탕은 **인라인**으로(위 ⚠️). 바탕을 인라인으로 두는 이유: 같은 축의
+          // 클래스를 두 번 적으면 이기는 쪽이 문자열 순서가 아니라 CSS 순서로 정해져([[#116]]),
+          // 지는 날엔 펼친 메모 뒤로 아랫줄이 그대로 비친다. 인라인은 항상 이긴다.
+          // (2026-09-03부터 `SHEET_INPUT` 자체가 `bg-card`라 접힌 상태도 흰색이다.)
           style={
             open
               ? {
