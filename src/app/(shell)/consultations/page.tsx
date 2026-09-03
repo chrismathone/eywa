@@ -62,9 +62,9 @@ const URGENCY_OPTIONS: { value: Exclude<UrgencyKey, "all">; label: string }[] = 
  * 한 쪽의 행 수는 **창이 정한다**(원장 2026-09-03 *"창 크기에 따라서 스마트하게 유동성 있게"*): [AutoPageSize](@/components/auto-page-size)가
  * 목록 아래 남는 높이 × 단 수를 재어 `?size=N`으로 다시 청하고 그 값을 기기 쿠키에 남긴다. 서버는 URL → 쿠키 → 이 기본값 순으로
  * 읽고 같은 범위([page-size.ts](@/components/page-size))로 clamp한다(왕복 방지).
- * 기본값 7 = 창을 처음 여는 크기(= 최소 창 760×640, 본문 601px)에서 실측한 행 수 — 쿠키가 없는 첫 방문에도 다시 청하지 않게.
+ * 기본값 6 = 창을 처음 여는 크기(= 최소 창 760×640, 본문 601px)에서 실측한 행 수(제목 행 36px 포함, 2026-09-04 재실측 — 7이면 4px 넘쳤다) — 쿠키가 없는 첫 방문에도 다시 청하지 않게.
  */
-const DEFAULT_PAGE_SIZE = 7;
+const DEFAULT_PAGE_SIZE = 6;
 const PAGE_SIZE_KEY = "consultations";
 /** 행 높이(h-11 44px) + 헤어라인 1px — AutoPageSize가 이 값으로 행 수를 센다. 행 높이를 바꾸면 여기도. */
 const ROW_PX = 45;
@@ -83,6 +83,11 @@ const RIGHT_W_REM = RIGHT_COLS_REM.reduce<number>((a, b) => a + b, 0) + RIGHT_GA
  * `floor((폭 + 간격) ÷ (44rem + 간격))`이라 단 수·단 폭이 정확히 겹친다). 6벌 = 6단(약 4,400px)까지.
  */
 const LIST_HEADER_COPIES = 6;
+/**
+ * 제목 행·테두리 격자의 열 — 목록의 단과 같은 수. `--cols`는 AutoPageSize가 "채울 수 있는 단 수"로 적어 준다(원장 2026-09-04 *"큰 창에서
+ * 하나의 단에 학생 수가 너무 적다"* → 단을 위에서 아래로 채우고 남는 단은 세우지 않는다). 적히기 전(첫 페인트)엔 폭이 정하는 auto-fill.
+ */
+const COL_GRID = "repeat(var(--cols, auto-fill), minmax(min(44rem, 100%), 1fr))";
 const ROW_GRID_VARS = {
   "--row-cols": `minmax(9rem,13rem) minmax(6rem,11rem) minmax(0,1fr) ${RIGHT_W_REM}rem`,
   "--right-cols": RIGHT_COLS_REM.map((r) => `${r}rem`).join(" "),
@@ -252,26 +257,29 @@ export default async function ConsultationsPage({
               행 사이는 헤어라인(§11 — 카드로 싸지 않는다), 행 전체가 상세 링크(§10 — 행 안 아이콘 버튼 금지, 삭제는 상세에).
               🔴 **단 수는 폭이 정한다**(CSS 다단, 한 단 최소 44rem): 최소 창 760 = 1단, ~1,500 = 2단, ~2,200 = 3단. 위→아래→다음 단.
               🔴 **행 수는 높이가 정한다**(AutoPageSize → ?size=N). 창=iframe이라 둘 다 창 크기에 그대로 반응한다. */}
-          <div className="relative">
+          {/* AutoPageSize가 루트다 — 제목·테두리 격자와 목록이 같은 `--cols`(채울 수 있는 단 수)를 읽어야 해서 한 상자 안에 둔다.
+              목록은 `data-autopage-list`로 찾는다(첫 자식이 아니어도 된다). */}
+          <AutoPageSize size={size} rowPx={ROW_PX} storageKey={PAGE_SIZE_KEY} className="relative">
           {/* 단마다 테두리(원장 2026-09-03 *"단 구분선 말고 단마다 테두리"*) — 다단의 단은 요소가 아니라 테두리를 두를 수 없다. 제목 행과
-              같은 auto-fill 격자로 **단 크기의 빈 상자**를 뒤에 깔고(제목 + 목록 높이) 그 위에 제목·목록을 얹는다 — 식이 같아 상자와 단이
+              같은 격자로 **단 크기의 빈 상자**를 뒤에 깔고(제목 + 목록 높이) 그 위에 제목·목록을 얹는다 — 식이 같아 상자와 단이
               정확히 겹친다. 남는 벌은 auto-rows-[100%]로 둘째 줄에 밀려 잘린다. 링(shadow-card)은 상자 밖에 그려져 overflow에 잘리므로
               여기만 border([[#114]]). 행 선은 border-t·제목 행은 선 없음 — 마지막 행 밑에 선이 겹치지 않게. */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 grid auto-rows-[100%] grid-cols-[repeat(auto-fill,minmax(min(44rem,100%),1fr))] gap-x-8 overflow-hidden"
+            className="pointer-events-none absolute inset-0 grid auto-rows-[100%] gap-x-8 overflow-hidden"
+            style={{ gridTemplateColumns: COL_GRID }}
           >
             {Array.from({ length: LIST_HEADER_COPIES }, (_, i) => (
-              <div key={i} className="border-line rounded-xl border" />
+              <div key={i} className="border-line rounded-lg border" />
             ))}
           </div>
           {/* 제목 행(원장 2026-09-03 *"학생 상담 제목행은 추가해주고"*) — 아래 행과 같은 열 격자(--row-cols/--right-cols)라 글자가
-              열 위에 정확히 선다. 단마다 한 벌씩: 위 LIST_HEADER_COPIES 주석. 🔴 AutoPageSize **밖**에 둔다 — 안에 두면 첫 자식이
-              목록이 아니라 단 수를 못 읽고, 밖에 두면 제목 높이만큼 목록 위가 내려가 행 수가 저절로 준다. 첫 벌만 접근성 트리에. */}
+              열 위에 정확히 선다. 단마다 한 벌씩: 위 LIST_HEADER_COPIES 주석. 목록 위에 두면 제목 높이만큼 목록 위가 내려가 행 수가
+              저절로 준다(AutoPageSize는 목록 위치를 실제 DOM에서 잰다). 첫 벌만 접근성 트리에. */}
           <div
             // auto-rows-[100%] — 둘째 줄(남는 벌)이 상자 높이(36px)에서 시작해야 잘려 나간다. 행 높이가 내용(24px)이면 둘째 줄 위 12px이 비친다(실측).
-            className="relative grid h-9 auto-rows-[100%] grid-cols-[repeat(auto-fill,minmax(min(44rem,100%),1fr))] gap-x-8 overflow-hidden"
-            style={ROW_GRID_VARS}
+            className="relative grid h-9 auto-rows-[100%] gap-x-8 overflow-hidden"
+            style={{ ...ROW_GRID_VARS, gridTemplateColumns: COL_GRID }}
             data-list-header=""
           >
             {Array.from({ length: LIST_HEADER_COPIES }, (_, i) => (
@@ -290,9 +298,14 @@ export default async function ConsultationsPage({
               </div>
             ))}
           </div>
-          <AutoPageSize size={size} rowPx={ROW_PX} storageKey={PAGE_SIZE_KEY}>
             {/* 열 폭은 CSS 변수 두 개(위 ROW_GRID_VARS)로 한 번만 내려보내고 행·오른쪽 블록이 `grid-cols-(--var)`로 읽는다. */}
-            <ul className="columns-[44rem] gap-x-8 [&>li]:break-inside-avoid" style={ROW_GRID_VARS}>
+            {/* 단 채우기: column-count는 AutoPageSize의 `--cols`(적히기 전 auto = 폭이 정함), column-fill:auto는 높이(`--list-h`)를 고정해야
+                듣는다 — 2단 이상일 때만 적히고 1단이면 auto(항목만큼). 폭 44rem 규칙은 그대로라 count와 폭 중 작은 쪽이 단 수다. */}
+            <ul
+              data-autopage-list=""
+              className="columns-[44rem] gap-x-8 [&>li]:break-inside-avoid"
+              style={{ ...ROW_GRID_VARS, columnCount: "var(--cols, auto)", columnFill: "auto", height: "var(--list-h, auto)" }}
+            >
               {items.map((c) => {
                 const urgency = URGENCY_META[followUpUrgency(c.followUpDate, c.followUpDone)];
                 const catMeta = c.category ? CATEGORY_META[c.category] : null;
@@ -306,7 +319,7 @@ export default async function ConsultationsPage({
                     <WindowLink
                       href={`/consultations/${c.id}`}
                       title={c.studentName}
-                      className={`hover:bg-bg-soft grid h-11 grid-cols-(--row-cols) items-center gap-3 px-2 transition ${
+                      className={`hover:bg-bg-soft grid h-11 grid-cols-(--row-cols) items-center gap-3 rounded-lg px-2 transition ${
                         isUrgent ? "bg-danger-soft" : ""
                       }`}
                     >
@@ -356,7 +369,6 @@ export default async function ConsultationsPage({
               })}
             </ul>
           </AutoPageSize>
-          </div>
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}

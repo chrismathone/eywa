@@ -37,12 +37,18 @@ export async function saveStudentListPrefs(next: Partial<StudentListPrefs>): Pro
   return { ok: true };
 }
 
-/** 저장된 보기 설정 — 비로그인·미저장·조회 실패면 기본값(목록은 그대로 뜬다, fail-soft). */
-export async function loadStudentListPrefs(): Promise<StudentListPrefs> {
+/**
+ * 저장된 보기 설정 — 비로그인·미저장이면 기본값(목록은 그대로 뜬다, fail-soft).
+ * 🔴 **조회 실패는 기본값이 아니라 null** — 기본값을 돌려주면 화면이 그것을 "저장값"으로 알고 RememberPrefs가 전체 객체를 보내,
+ *    필드 단위 머지로도 못 지키고 다른 축(학년·담임·미수강)을 기본값으로 덮어쓴다(리뷰 2026-09-04). null이면 화면은 기본값으로 그리되
+ *    그 렌더는 저장하지 않는다.
+ */
+export async function loadStudentListPrefs(): Promise<StudentListPrefs | null> {
   const user = await getCurrentUser();
   if (!user) return parseStudentListPrefs(undefined);
   const admin = createAdminClient();
-  const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle();
+  const { data, error } = await admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle();
+  if (error) return null;
   const raw = data?.ui_prefs as Record<string, unknown> | null | undefined;
   return parseStudentListPrefs(raw?.students);
 }

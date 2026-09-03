@@ -209,10 +209,12 @@ export function NotificationBell() {
       const hashAt = n.link.indexOf("#");
       const hash = hashAt >= 0 ? n.link.slice(hashAt) : "";
       if (hash && window.location.pathname === "/dashboard") {
-        const same = window.location.hash === hash;
-        window.location.assign(hash); // 같은 문서의 프래그먼트 이동(재로드 없음) — hashchange가 난다.
-        // 같은 해시를 다시 누르면 브라우저가 이벤트를 안 낸다(접었다가 다시 알림을 누른 경우) — 직접 알린다.
-        if (same) window.dispatchEvent(new HashChangeEvent("hashchange"));
+        // 🔴 `location.assign("#…")`로 프래그먼트 이동을 하면 **state=null인 히스토리 항목**이 생겨 Next 라우터가 그 popstate를
+        //    무시한다(뒤로 가기를 두 번 눌러야 하고, 다음 라우터 갱신이 주소의 해시를 지운다 — 적대적 리뷰 2026-09-04). 라우터의
+        //    state를 그대로 둔 채 주소만 바꾸고(`replaceState(history.state, …)` — Next의 패치가 __NA를 통과시킨다) 펼침은 직접 알린다
+        //    (`replaceState`는 hashchange를 안 낸다; 같은 해시를 다시 눌러도 마찬가지라 늘 디스패치).
+        if (window.location.hash !== hash) window.history.replaceState(window.history.state, "", hash);
+        window.dispatchEvent(new HashChangeEvent("hashchange"));
         return;
       }
       router.push(n.link);

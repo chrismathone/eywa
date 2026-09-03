@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { HEADER_FILTER_TRIGGER } from "@/components/header-filter";
@@ -22,11 +23,16 @@ import { DAY_FILTERS } from "@/features/classes/list-filters";
  * 계정에 저장된 보기 설정"으로 읽어서, 지우면 저장된 요일이 되살아나 전체를 고를 길이 없다. `all`은 요일 키가 아니라 파서가
  * 빈 배열로 접는다(`parseClassDays`).
  * 항목을 눌러도 메뉴는 닫히지 않는다(`closeOnClick={false}`) — 두 요일을 고르는 데 두 번 열 이유가 없다.
+ * 🔴 그래서 **낙관적 선택**이 필요하다: 서버 왕복(수백 ms) 안에 둘째 항목을 누르는데, 서버가 준 `value`로 다음 집합을 만들면 첫 클릭이
+ *    사라진다(적대적 리뷰 2026-09-04: 월 → 수 연타가 `days=wed`로 끝났다). 전환이 도는 동안은 마지막으로 보낸 집합이 화면이고, 끝나면 서버 값.
  */
 export function HeaderDayFilter({ value }: { value: string[] }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
   const currentParams = useSearchParams();
+  const [pending, startTransition] = useTransition();
+  const [local, setLocal] = useState<string[]>(value);
+  const effective = pending ? local : value;
 
   const navigate = (days: string[]) => {
     const params = new URLSearchParams(currentParams?.toString() ?? "");
@@ -35,11 +41,13 @@ export function HeaderDayFilter({ value }: { value: string[] }) {
     params.set("days", ordered.length ? ordered.join(",") : "all");
     params.delete("page"); // 필터 변경은 결과집합이 바뀌므로 1페이지로.
     const s = params.toString();
-    router.push(`${pathname}${s ? `?${s}` : ""}`);
+    setLocal(ordered);
+    startTransition(() => router.push(`${pathname}${s ? `?${s}` : ""}`));
   };
-  const toggle = (key: string) => navigate(value.includes(key) ? value.filter((d) => d !== key) : [...value, key]);
+  const toggle = (key: string) =>
+    navigate(effective.includes(key) ? effective.filter((d) => d !== key) : [...effective, key]);
 
-  const summary = DAY_FILTERS.filter((d) => value.includes(d.key))
+  const summary = DAY_FILTERS.filter((d) => effective.includes(d.key))
     .map((d) => d.label)
     .join("·");
 
@@ -66,7 +74,7 @@ export function HeaderDayFilter({ value }: { value: string[] }) {
         {DAY_FILTERS.map((d) => (
           <DropdownMenuCheckboxItem
             key={d.key}
-            checked={value.includes(d.key)}
+            checked={effective.includes(d.key)}
             closeOnClick={false}
             onCheckedChange={() => toggle(d.key)}
           >

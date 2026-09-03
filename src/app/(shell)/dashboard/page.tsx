@@ -362,7 +362,7 @@ export default async function TodayPage() {
             return s.tone === "danger" ? <span className="text-danger font-bold">{s.text}</span> : s.text;
           })()}
         >
-          <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} />
+          <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} unavailable={dailyBriefingResult.unavailable} />
         </SecondarySection>
       ) : null}
 

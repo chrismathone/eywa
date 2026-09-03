@@ -5,6 +5,7 @@ import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -27,7 +28,12 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
 import { loadClassListPrefs, saveClassListPrefs } from "@/features/classes/server/list-prefs";
-import { parseClassDays, type ClassListPrefs } from "@/features/classes/list-prefs";
+import {
+  DEFAULT_CLASS_LIST_PREFS,
+  parseClassDays,
+  parseClassListPrefs,
+  type ClassListPrefs,
+} from "@/features/classes/list-prefs";
 import {
   CLASS_STATUS_DEFAULT,
   classStatusMeta,
@@ -74,11 +80,13 @@ export default async function ClassesPage({
   // 강사 스코프(내 수업)면 `getClassesPage`가 teacher_id를 **강제**해 전 행이 내 반이다 → 강사 필터·담임 열은
   // 고를 수도 볼 것도 없다(원장 2026-08-20: "강사가 당연히 나일텐데 다른 강사 선택도 보임").
   // 보기 설정은 계정 귀속(users.ui_prefs.classes, 원장 2026-08-04) — URL(명시값) → 저장값 → 기본값.
-  const [canManageClasses, scopedTeacherId, prefs] = await Promise.all([
+  const [canManageClasses, scopedTeacherId, prefsLoaded] = await Promise.all([
     canManageTenant(user.systemRole, "classes"),
     effectiveTeacherId(),
     loadClassListPrefs(),
   ]);
+  // 조회 실패(null)면 기본값으로 그리되 **이번 렌더는 저장하지 않는다** — 기본값을 저장값으로 알고 전체를 보내면 다른 축이 지워진다(리뷰 2026-09-04).
+  const prefs = prefsLoaded ?? DEFAULT_CLASS_LIST_PREFS;
   // 상태 — **미지정이면 '운영'**(원장 2026-08-27 "디폴트로 폐지나 종강된 수업은 안보이고"). 🔴 상태·검색어는 저장하지 않는다.
   const status = parseClassStatus(sp.status);
   const q = sp.q ?? "";
@@ -103,11 +111,28 @@ export default async function ClassesPage({
   // 남아 결과를 0개로 만들지 않게(학생목록과 같은 규약). URL로 고른 값은 그대로 믿는다(그 경우 목록 조회가 설정을 기다리지 않는다).
   let subject = subjectRaw;
   let teacherId = teacherRaw;
+  /** 담임이 그 과목을 안 가르쳐 **풀었다** — 옛 필터바처럼 URL·저장값에서도 담임을 전체로 본다(안 그러면 유령 담임이 남아 과목을 되돌리면 다시 붙는다). */
+  let teacherReset = false;
   const fromPrefs = (key: "subject" | "teacher") => sp[key] === undefined;
-  if ((fromPrefs("subject") && subjectRaw !== "all") || (fromPrefs("teacher") && teacherRaw !== "all" && !scopedTeacherId)) {
+  // 🔴 담임이 그 과목을 안 가르치면 담임 필터를 **푼다** — 옛 필터바는 과목을 고르는 순간 클라에서 되돌렸는데(onSubject), 열 머리는
+  //    축마다 따로 이동하므로 서버가 같은 판정을 한다(적대적 리뷰 2026-09-04: 안 풀면 결과 0개인데 빈 상태는 상태 탓이라 말하고, 그 조합이
+  //    계정에 저장돼 맨몸 방문마다 0개였다). 판정엔 담임 목록(과목 포함)이 필요해 둘 다 걸린 경우만 선택지를 먼저 기다린다.
+  const needTeacherCheck = !scopedTeacherId && teacherRaw !== "all" && subjectRaw !== "all";
+  if (
+    (fromPrefs("subject") && subjectRaw !== "all") ||
+    (fromPrefs("teacher") && teacherRaw !== "all" && !scopedTeacherId) ||
+    needTeacherCheck
+  ) {
     const [teachersEarly, settingsEarly] = await optionsPromise;
     if (fromPrefs("subject") && !settingsEarly.operations.subjects.some((s) => s.key === subjectRaw)) subject = "all";
     if (fromPrefs("teacher") && !scopedTeacherId && !teachersEarly.some((t) => t.id === teacherRaw)) teacherId = "all";
+    if (needTeacherCheck && subject !== "all" && teacherId !== "all") {
+      const picked = teachersEarly.find((t) => t.id === teacherId);
+      if (picked && !teacherTeaches(picked.subjects, subject)) {
+        teacherId = "all";
+        teacherReset = true;
+      }
+    }
   }
 
   const [{ rows: classes, total }, stats, [teachers, settings]] = await Promise.all([
@@ -132,13 +157,15 @@ export default async function ClassesPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // 저장할 보기 설정 — 🔴 **사용자가 고른 값(URL) 또는 이미 저장된 값**만(선택지 밖 보정은 이 화면 한정, 계정에 안 쓴다).
-  const current: ClassListPrefs = {
+  // 🔑 저장값과 **같은 파서**를 지난다(`?subject=` 같은 빈 값을 원문 그대로 두면 저장값과 영영 달라 렌더마다 저장한다).
+  const current: ClassListPrefs = parseClassListPrefs({
     subject: sp.subject ?? prefs.subject,
-    teacher: sp.teacher ?? prefs.teacher,
+    teacher: teacherReset ? "all" : (sp.teacher ?? prefs.teacher),
     days,
-    sort,
-    view,
-  };
+    // URL 값이 선택지 밖(옛 링크의 모르는 정렬·보기)이면 기본값으로 **보여 주기만** 하고 저장값은 건드리지 않는다(리뷰 2026-09-04).
+    sort: sp.sort === undefined || parseClassSort(sp.sort) === sp.sort ? sort : prefs.sort,
+    view: sp.view === undefined || parseClassView(sp.view) === sp.view ? view : prefs.view,
+  });
 
   /**
    * 목록 링크(쪽 넘김·보기 전환·빈 상태의 '전체 상태로 보기')가 들고 갈 파라미터 — 기본값과 다르거나 **URL이 명시한** 축은
@@ -151,7 +178,8 @@ export default async function ClassesPage({
     if (st !== CLASS_STATUS_DEFAULT) params.set("status", st);
     if (sp.subject !== undefined) params.set("subject", sp.subject);
     else if (subject !== "all") params.set("subject", subject);
-    if (sp.teacher !== undefined) params.set("teacher", sp.teacher);
+    if (teacherReset) params.set("teacher", "all"); // 푼 담임은 링크에서도 전체(옛 필터바의 URL 되돌림과 같은 뜻)
+    else if (sp.teacher !== undefined) params.set("teacher", sp.teacher);
     else if (teacherId !== "all") params.set("teacher", teacherId);
     if (sp.days !== undefined) params.set("days", sp.days);
     else if (days.length) params.set("days", days.join(","));
@@ -200,7 +228,7 @@ export default async function ClassesPage({
   return (
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격도 좁힌다(원장 지시 2026-08-06 "너무 남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
-      <RememberPrefs current={current} saved={prefs} save={saveClassListPrefs} />
+      {prefsLoaded ? <RememberPrefs current={current} saved={prefsLoaded} save={saveClassListPrefs} /> : null}
       {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 반') + 텍스트 Secondary('강의실 자동배정') 둘. 설명 줄은 뺐다(바로 아래
           스탯 네 칸이 같은 숫자를 말한다). 동기화 배지는 읽기 전용 표식이라 그대로. */}
       <PageHeader
@@ -290,12 +318,10 @@ function emptyState(
       title={q ? "검색 결과 없음" : "결과 없음"}
       action={
         status === "all" ? undefined : (
-          <Link
-            href={listParams({ status: "all" })}
-            className="border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium"
-          >
+          // 공용 <Button>(control-scale) — 세로 패딩으로 높이를 만들지 않는다(v5 ②, 리뷰 2026-09-04).
+          <Button variant="outline" render={<Link href={listParams({ status: "all" })} />}>
             전체 상태로 보기
-          </Link>
+          </Button>
         )
       }
     />
@@ -371,9 +397,9 @@ function TableView({
 }) {
   const colCount = showTeacher ? 8 : 7;
   return (
-    // 이 메뉴의 최소 창(1100)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다(열 머리 팝업이 잘리지 않게
-    // `overflow`를 걸지 않는다 — HeaderFilter 주석). 폰(768px 미만)만 가로 스크롤.
-    <div className="bg-card shadow-card rounded-2xl max-md:overflow-x-auto">
+    // 이 메뉴의 최소 창(1100)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다. 🔴 폰에서도 `overflow-x-auto` 상자로 싸지
+    // 않는다(overflow-y까지 auto가 되어 열 머리 팝업이 잘린다 — 학생목록 주석). 폰은 표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다.
+    <div className="bg-card shadow-card rounded-2xl">
       <table className="w-full table-fixed text-sm max-md:min-w-[56rem]">
         {/* 열 폭 — 최소 창(1050 본문)에서 `상태: 종강 ⌄`(≈112px)가 들어가는 13% · 반 이름 22%(정렬 머리 + 18px 이름). */}
         <colgroup>

@@ -32,6 +32,6 @@ describe("windowIdForHref", () => {
     );
     expect(bell).toContain('linkPath === "/dashboard"');
     expect(bell).toContain("showDesktop()");
-    expect(bell).toContain("window.location.assign(hash)");
+    expect(bell).toContain("window.history.replaceState(window.history.state");
   });
 });

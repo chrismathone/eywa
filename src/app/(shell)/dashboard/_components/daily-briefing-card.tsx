@@ -86,10 +86,16 @@ const AREA_TONE: Record<string, string> = {
 export function DailyBriefingCard({
   briefing,
   links,
+  unavailable = false,
 }: {
   briefing: DailyBriefingRow | null;
   /** 영역별 바로 가기 — 권한 필터는 페이지가 이미 통과시킨 것만 넘어온다(#77). */
   links?: BriefingLinks | null;
+  /**
+   * 보고 **조회 자체가 실패**했다(표 없음·RLS·일시 오류). 접힌 줄(dailyBriefingSummary)은 이미 "불러오지 못했습니다"라고 말하는데
+   * 본문이 "아직 없습니다 · 지금 만들 수도"라고 하면 한 구역이 자기모순이다(적대적 리뷰 2026-09-04). 실패는 실패라고 적는다.
+   */
+  unavailable?: boolean;
 }) {
   const analyzing = briefing?.processing_status === "analyzing";
   const failed = briefing?.processing_status === "failed";
@@ -148,6 +154,10 @@ export function DailyBriefingCard({
               );
             })}
           </ul>
+        ) : unavailable ? (
+          <p className="text-danger mt-2 text-sm leading-relaxed">
+            보고를 불러오지 못했습니다. 잠시 뒤 새로고침해 보세요 — 그래도 같으면 관리자에게 알려 주세요.
+          </p>
         ) : (
           <p className="text-text-dim mt-2 text-sm leading-relaxed">
             오늘 보고가 아직 없습니다. 매일 아침 자동으로 생성되며, 지금 바로 만들 수도 있습니다.

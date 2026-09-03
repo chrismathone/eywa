@@ -30,6 +30,7 @@ import { loadStudentListPrefs, saveStudentListPrefs } from "@/features/students/
 import {
   DEFAULT_STUDENT_LIST_PREFS,
   parseSearchField,
+  parseStudentListPrefs,
   parseStudentSort,
   type StudentListPrefs,
 } from "@/features/students/list-prefs";
@@ -91,7 +92,9 @@ export default async function StudentsPage({
   const status = sp.status ?? "enrolled";
   // 보기 설정은 계정 귀속(users.ui_prefs.students, 원장 2026-08-04) — URL(명시값) → 저장값 → 기본값.
   // 표시 축(원장 2026-08-20) — 강사 스코프면 **담당 과목**으로 축을 좁힌다(관리자·담당 반 0개는 null=종전 동일).
-  const [scope, prefs] = await Promise.all([effectiveTeacherScope(), loadStudentListPrefs()]);
+  const [scope, prefsLoaded] = await Promise.all([effectiveTeacherScope(), loadStudentListPrefs()]);
+  // 조회 실패(null)면 기본값으로 그리되 **이번 렌더는 저장하지 않는다** — 기본값을 저장값으로 알고 전체를 보내면 다른 축이 지워진다(리뷰 2026-09-04).
+  const prefs = prefsLoaded ?? DEFAULT_STUDENT_LIST_PREFS;
   const axis = subjectAxisOf(scope);
   // 🔴 과목 필터를 감춘 화면(담당 과목 1개)에선 걸려 있던 값을 "전체"로 되돌린다 — 저장된 필터·직접 URL이 남아 있으면
   // 되돌릴 컨트롤이 없는데 행이 조용히 빠진다(축 밖 과목이면 0명 · 축 안 과목이어도 **휴원 학생이 사라진다**).
@@ -159,14 +162,16 @@ export default async function StudentsPage({
   // 저장할 보기 설정 — 저장값과 다르면 클라가 한 번 저장한다(공용 RememberPrefs — 수업목록과 한 벌). 🔴 **사용자가 고른 값(URL) 또는 이미 저장된 값**만 —
   // 위 보정(축 밖 과목 → 전체 · 선택지 밖 담임/학년 → 전체)은 이 화면 한정이라 계정에 쓰지 않는다(리뷰 확정 2026-09-03: 겸직 관리자가
   // 강사뷰·다른 강사 뷰를 열면 보정값이 관리자 본인의 저장 설정을 덮어썼다).
-  const current: StudentListPrefs = {
+  // 🔑 저장값과 **같은 파서**를 지난다 — `?subject=`(빈 값)처럼 파서가 접는 값을 원문 그대로 두면 저장값과 영영 달라 렌더마다 저장한다.
+  //    URL 값이 선택지 밖(옛 링크의 모르는 정렬·검색 범위)이면 보여 주기만 하고 저장값은 유지(리뷰 2026-09-04).
+  const current: StudentListPrefs = parseStudentListPrefs({
     subject: sp.subject ?? prefs.subject,
     grade: sp.grade ?? prefs.grade,
     teacher: sp.teacher ?? prefs.teacher,
-    field,
-    sort,
+    field: sp.field === undefined || parseSearchField(sp.field) === sp.field ? field : prefs.field,
+    sort: sp.sort === undefined || parseStudentSort(sp.sort) === sp.sort ? sort : prefs.sort,
     noenr: excludeNoEnrollment,
-  };
+  });
 
   /**
    * 목록 링크(쪽 넘김·미수강 토글)가 들고 갈 파라미터 — 기본값과 다르거나 **URL이 명시한** 축은 그대로 적는다.
@@ -206,7 +211,7 @@ export default async function StudentsPage({
   return (
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
-      <RememberPrefs current={current} saved={prefs} save={saveStudentListPrefs} />
+      {prefsLoaded ? <RememberPrefs current={current} saved={prefsLoaded} save={saveStudentListPrefs} /> : null}
       {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 학생') 하나 + 텍스트 Secondary('엑셀' 메뉴) 하나. 내보내기·가져오기는
           그 메뉴(2차)로 내렸다. 동기화 배지는 읽기 전용 표식이라 그대로. */}
       <PageHeader
@@ -281,10 +286,11 @@ export default async function StudentsPage({
           (실브라우저 검증 2026-09-03: 휴원+학년 '7세'로 0명이 되자 학년을 풀 길이 없었고 저장값이라 다음 방문에도 0명이었다).
           빈 상태는 표 본문 안에 선다. */}
       <>
-          {/* 표 — 이 메뉴의 최소 창(960)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다(열 머리 팝업이
-              잘리지 않게 `overflow`를 걸지 않는다 — HeaderFilter 주석). 폰(768px 미만)만 가로 스크롤.
+          {/* 표 — 이 메뉴의 최소 창(960)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다. 🔴 폰에서도 `overflow-x-auto`
+              상자로 싸지 않는다 — overflow-x가 auto면 overflow-y도 auto가 되어 열 머리 팝업(absolute)이 짧은 표 안에서 잘린다(리뷰 2026-09-04;
+              폰에선 이 팝업이 유일한 필터다). 폰은 표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다.
               행 = 이름(학교·학년) + 상태 + 과목 + 담당 강사 + 연락처 한 줄, 행 사이 헤어라인(§11). */}
-          <div className="bg-card shadow-card rounded-2xl max-md:overflow-x-auto">
+          <div className="bg-card shadow-card rounded-2xl">
             <table className="w-full table-fixed text-sm max-md:min-w-[46rem]">
               {/* 열 폭 — 최소 창(958)에서 상태 머리 `상태: 예비·상담 ⌄`(128px)가 들어가는 16%(153−24). 이름 열 287px = 이름·학교학년·표식. */}
               <colgroup>

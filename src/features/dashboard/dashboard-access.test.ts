@@ -15,7 +15,7 @@ describe("resolveDashboardAccess", () => {
     expect(access.write.consultations).toBe(false);
   });
 
-  it("상담사는 학생·상담 쓰기만 빠른 작업 후보가 되고 재무·출석은 보지 않는다", () => {
+  it("상담사는 학생·상담 쓰기만 오늘 조치 신호 후보가 되고 재무·출석은 보지 않는다", () => {
     const access = resolveDashboardAccess("counselor", MENU_ACCESS);
 
     expect(access.write.students).toBe(true);

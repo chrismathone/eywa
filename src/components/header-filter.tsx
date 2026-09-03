@@ -8,8 +8,9 @@ import { CONTROL_H_SM, CONTROL_LABEL_SM } from "./ui/control-scale";
  * 트리거는 열 제목처럼 읽힌다 — 값이 없으면 축 이름만(`상태`), 고르면 `상태: 휴원`. 치수는 control-scale의 작은
  * 컨트롤(라벨 16 = 표 본문과 같은 크기, 높이 20)이라 머리 행이 본문보다 커지지 않는다.
  *
- * 🔴 이 트리거가 서는 표는 `overflow-x-auto`로 싸지 말 것 — 팝업이 잘린다(팝업은 트리거 아래 absolute).
- *    표는 메뉴의 최소 창 폭에 맞춰 `table-fixed`로 세우고, 폰(768px 미만)에서만 가로 스크롤을 연다.
+ * 🔴 이 트리거가 서는 표는 `overflow-x-auto`로 싸지 말 것 — 팝업이 잘린다(팝업은 트리거 아래 absolute). **폰에서도**: overflow-x가
+ *    auto면 overflow-y도 auto가 되어 짧은 표 안에서 팝업이 잘린다(리뷰 2026-09-04). 표는 메뉴의 최소 창 폭에 맞춰 `table-fixed`로 세우고,
+ *    폰은 표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다.
  * 🔴 서버/클라 양쪽이 쓴다 — `"use client"`도 `server-only`도 붙이지 말 것(안쪽 FilterSelect가 클라다).
  */
 export const HEADER_FILTER_TRIGGER = `${CONTROL_H_SM} ${CONTROL_LABEL_SM} text-foreground hover:bg-bg-soft rounded-md px-1 font-bold whitespace-nowrap`;
@@ -44,13 +45,17 @@ export function HeaderFilter({
    */
   showAll?: boolean;
 }) {
+  // 걸린 값이 선택지 밖이면(학원설정에서 지운 학년·퇴사한 담임·옛 링크) 그 값을 **보이는 항목**으로 세운다 — 안 그러면 트리거가 옅은
+  // 축 이름(placeholder)이 되어 "안 걸림"으로 읽히는데 목록은 0건이다(적대적 리뷰 2026-09-04). 라벨이 값을 감추지 않으니 되돌릴 수 있다.
+  const known = value == null || value === "" || value === allValue || options.some((o) => o.value === value);
+  const shown = known ? options : [...options, { value: value as string, label: "(선택지에 없는 값)" }];
   return (
     <FilterSelect
       paramName={paramName}
       value={value}
       // 안 걸린 축은 축 이름만(`수강 과목`) — 값은 진짜 골라져 있어 굵기가 다른 머리와 같고 목록에 ✓가 선다(빈 값으로 흉내 내면 옅어진다).
       prefixOnlyFor={showAll ? undefined : allValue}
-      options={options}
+      options={shown}
       axisLabel={axisLabel}
       allLabel={allLabel}
       allValue={allValue}

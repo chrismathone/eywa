@@ -26,19 +26,26 @@ export function RememberPrefs<T extends object>({
   save: (next: T) => Promise<{ ok: boolean }>;
 }) {
   const sent = useRef<string | null>(null);
+  // 저장은 **한 줄로 세운다** — 서버 액션이 ui_prefs 전체를 읽고-쓰기라, 연달아 두 번 고치면(요일 월 → 수 연타) 먼저 보낸 저장이
+  // 나중에 써져 계정엔 옛 집합이 남는다(적대적 리뷰 2026-09-04). 같은 창 안에서는 앞 저장이 끝난 뒤 다음을 보낸다.
+  // ⚠️ 창이 다르면(학생목록 창과 수업목록 창이 동시에) 여전히 겹칠 수 있다(앱 전역 ui_prefs 쓰기 14곳이 같은 읽고-쓰기) — 형제 키를 잃으면
+  //    그 화면에서 필터를 한 번 더 바꿀 때 다시 써진다(맨몸으로 다시 열기만 해선 current===saved라 안 써진다).
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
   const key = JSON.stringify(current);
   const same = key === JSON.stringify(saved);
   useEffect(() => {
     if (same || sent.current === key) return;
     sent.current = key;
-    void save(JSON.parse(key) as T)
-      .then((result) => {
-        if (!result.ok) sent.current = null;
-      })
-      .catch(() => {
-        // 저장 실패 — 다음 렌더에서 다시 시도할 수 있게 표식을 지운다.
-        sent.current = null;
-      });
+    chain.current = chain.current.then(() =>
+      save(JSON.parse(key) as T)
+        .then((result) => {
+          if (!result.ok) sent.current = null;
+        })
+        .catch(() => {
+          // 저장 실패 — 다음 렌더에서 다시 시도할 수 있게 표식을 지운다.
+          sent.current = null;
+        }),
+    );
   }, [key, same, save]);
   return null;
 }
