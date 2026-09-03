@@ -16,6 +16,15 @@
 - 결정(원장, 같은 날): **탭 접힘 금지 · 가로로 늘어지는 1열 붕괴 금지 · 창 최소 크기 강제+경고**(2단계에서 구현) · 관리자뷰 먼저.
 - ⚠️ 강사뷰(원스크린·ECS·MCS·자리 출석부·미니셸)는 토큰 승격이 **같이 먹지만 레이아웃은 아직 손대지 않았다** — 좁은 열(ECS 432px 등)이 넘칠 수 있고 강사뷰 단계에서 잡는다.
 
+### 2단계 — 창 최소 크기 강제 + 탭 접힘 금지(등록상담 칸반)
+원장 캡처 제보: 창을 줄이면 칸반이 탭 하나로 접혀 카드가 가로로 늘어졌다(*"최악의 가독성"*) → *"4열 유지 · 최소 크기 위반 경고 · 줄어들지 않도록 · 앞으로도 탭접힘 금지"*.
+- [`windowMinSize`](src/components/workspace/window-geometry.ts) = 그 메뉴의 `ROUTE_WINDOW_SIZE`(없으면 480×560) — `resizeRect(…, min)`이 **바닥에서 멈추고**(캔버스가 더 작으면 캔버스가 상한),
+  포인터 리사이즈·`store.resizeBy` 둘 다 같은 바닥. 바닥에 닿으면 FloatingWindow `[data-min-hint]`에 "최소 크기 W×H"(DOM만, 리렌더 0).
+- [`WindowMinSizeNotice`](src/components/workspace/window-min-size-notice.tsx)(임베드 `<main>` 맨 위): iframe이 최소보다 작으면 앰버 안내 + [창 최대화](postMessage `eywa-window-maximize` → 캔버스가 `toggleMax`). 최상위 프레임(폰)엔 안 뜬다.
+- 등록상담 칸반: 탭바·`active`·`visible` 제거, `grid-cols-4` 고정 + `min-w-[1040px]`(좁으면 가로 넘침). `ROUTE_WINDOW_SIZE.enrollment = 1120×720` 신규(상세도 prefix 상속).
+- 가드 [`window-min-size.test.ts`](src/components/workspace/window-min-size.test.ts): 바닥에서 멈춤 · 캔버스 상한 · 배선 3곳 · 칸반에 반응형 `grid-cols-`/탭바 없음.
+- ⚠️ 스냅·타일은 막지 않았다(반쪽 스냅이 최소보다 작으면 안내가 대신 선다) — 막으면 스냅 자체가 무용해진다.
+
 ## 2026-09-03 (4) — JJ 자리 출석부 = 영어 시트와 같은 칸 · 달력뷰 월 특이사항 메모 · **지난 수업 복사가 남의 요일을 당겨오던 것**
 
 원장 지시 3건(같은 날 오후). 마이그레이션 2개(**0245a·0246a, 원장이 손으로 적용**)이고 둘 다 미적용 상태에서도 화면은 산다([[#95]]).

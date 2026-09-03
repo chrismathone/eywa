@@ -10,6 +10,7 @@ import {
   rectAtPoint,
   resizeRect,
   routeWindowSize,
+  windowMinSize,
   snapTarget,
   templateSlots,
   type Bounds,
@@ -622,7 +623,13 @@ export const useWindowStore = create<State & Actions>()(
           return {
             windows: {
               ...s.windows,
-              [id]: { ...w, rect: resizeRect(base, handle, dx, dy, s.bounds), maximized: false, snapped: false },
+              // 라우트 창은 그 메뉴의 최소 크기에서 멈춘다(원장 2026-09-03) — 포인터 리사이즈와 같은 바닥.
+              [id]: {
+                ...w,
+                rect: resizeRect(base, handle, dx, dy, s.bounds, w.kind === "route" ? windowMinSize(w.params.id) : undefined),
+                maximized: false,
+                snapped: false,
+              },
             },
           };
         }),

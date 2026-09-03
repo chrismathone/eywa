@@ -292,6 +292,15 @@ export function FloatingWindow({
           </div>
         ) : null}
 
+        {/* 리사이즈가 그 창의 최소 크기에 닿았을 때만 보이는 힌트 — use-pointer-resize가 DOM으로 켠다(리렌더 0).
+            원장 2026-09-03 "최소 크기보다 줄이려고 할 때 경고를 띄우고 줄어들지 않도록". */}
+        <div
+          data-min-hint
+          hidden
+          aria-live="polite"
+          className="bg-foreground text-background pointer-events-none absolute right-2 bottom-2 z-20 rounded-md px-2 py-1 text-xs font-bold whitespace-nowrap"
+        />
+
         {/* 8방향 리사이즈 핸들 (스포트라이트 상단 창은 잠금) */}
         {spot
           ? null

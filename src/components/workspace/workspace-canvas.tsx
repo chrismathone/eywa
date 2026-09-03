@@ -167,6 +167,11 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         st.setWindowDirty(sourceWinId, data.dirty === true);
         return;
       }
+      if (data.type === "eywa-window-maximize") {
+        // 창 안 '최소 크기 위반' 안내의 [창 최대화](WindowMinSizeNotice). 이미 최대화면 토글이 되돌리므로 건너뛴다.
+        if (!st.windows[sourceWinId]?.maximized) st.toggleMax(sourceWinId);
+        return;
+      }
       if (data.type === "eywa-open-window" && data.id && data.href) {
         // autoClose=true(useOpenFormWindow "새 X" 폼)면 제출 성공 후 창 자동 닫힘. shift+클릭(WindowLink)은
         // autoClose 없음 → false(그냥 새 창). spawnedBy=소스 창 id → autoClose로 닫힐 때 그 리스트 창도 reload

@@ -65,6 +65,9 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   mcs: { w: 1240, h: 760 },
   lesson_reports: { w: 980, h: 720 }, // 수업보고서 발송 관리 — 발송 큐 + 강사별 작성률 + 목록(다열 표·필터)
   consultations: { w: 760, h: 640 }, // 상담 목록(카드)·상세(내용+AI 7섹션) — 읽기 콘텐츠라 기본 480은 좁음. 상세 id도 prefix 상속
+  // 등록상담 칸반 — **4열 고정**(원장 2026-09-03 "창이 줄어들어도 4열 유지 · 탭 접힘 금지"). 칸 4개 × 250 + 틈이 들어가는 폭.
+  // 기본 480이면 칸이 120px이라 이름도 못 적는다. 상세(enrollment/<id>)도 prefix로 이 크기를 상속한다.
+  enrollment: { w: 1120, h: 720 },
 
   // 직원 목록 — 직원명부 시트와 같은 15열(소속·이름·직급·계약구분·메일·입사일·전화·현재계약·조건·갱신일…).
   // 기본 480은 두 열도 안 들어간다. 넓게 열고 부족한 폭은 가로 스크롤로.
@@ -135,6 +138,24 @@ export function routeWindowSize(id: string): { w: number; h: number } | undefine
   }
   return undefined;
 }
+
+/**
+ * 창 **최소 크기** = 그 메뉴의 기본 크기(`ROUTE_WINDOW_SIZE`, 없으면 `DEFAULT_WINDOW`).
+ * 원장 2026-09-03: *"창이 줄어들어도 기존 4열 스타일을 유지하는 게 오히려 가독성이 뛰어남 · 창 크기를 최소 크기보다
+ * 줄이려고 할 때 경고를 띄우고 줄어들지 않도록"* — 화면은 이 크기에서 설계됐고(탭 접힘 금지) 그 아래로는 리사이즈가
+ * 멈춘다(`resizeRect`의 `min`). 스냅·타일·작은 모니터로 그래도 작아지면 창 안 `WindowMinSizeNotice`가 선다.
+ * ⚠️ 캔버스가 그보다 작으면 캔버스가 상한이다 — 소비처가 `min(…, bounds)`로 접는다(창이 화면 밖으로 나가는 것보다 낫다).
+ */
+export function windowMinSize(id: string): { w: number; h: number } {
+  return routeWindowSize(id) ?? DEFAULT_WINDOW;
+}
+
+/**
+ * 창 크롬이 먹는 크기 — 창 rect(타이틀바 포함)와 본문 iframe(창 안 `window.inner*`)의 차.
+ * FloatingWindow: 타이틀바 `h-9`(36) + 그 아래 선 1 + 바깥 테두리 상하 2 → 세로 39 / 좌우 테두리 2.
+ * ⚠️ 타이틀바 높이를 바꾸면 여기도 함께 — 안 맞으면 정확히 최소 크기로 연 창에 "최소 크기 위반" 안내가 뜬다.
+ */
+export const WINDOW_CHROME = { w: 2, h: 39 } as const;
 
 /**
  * 커서(스테이지 로컬 sx,sy) 위치에서 새 창이 뜨도록 배치 — 타이틀바가 커서 바로 아래(약간 좌상)에
@@ -373,13 +394,28 @@ export function pointInRect(px: number, py: number, r: Rect): boolean {
   return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 }
 
-/** 8방향 핸들 리사이즈 — 델타 적용 + 최소크기(이동변 보정) + 캔버스 clamp. */
+/**
+ * 리사이즈 바닥 — 그 창의 최소 크기(`windowMinSize`)를 캔버스 안으로 접은 값. 전역 MIN_W/MIN_H가 절대 하한.
+ * 힌트("최소 크기 1120×720")를 띄우는 쪽(use-pointer-resize)도 같은 함수로 바닥을 알아본다.
+ */
+export function resizeFloor(min: { w: number; h: number } | undefined, bounds: Bounds): { w: number; h: number } {
+  return {
+    w: Math.max(MIN_W, Math.min(min?.w ?? MIN_W, bounds.width)),
+    h: Math.max(MIN_H, Math.min(min?.h ?? MIN_H, bounds.height)),
+  };
+}
+
+/**
+ * 8방향 핸들 리사이즈 — 델타 적용 + 최소크기(이동변 보정) + 캔버스 clamp.
+ * `min` = 그 창의 최소 크기(라우트 창은 `windowMinSize`). 없으면 전역 MIN_W/MIN_H.
+ */
 export function resizeRect(
   rect: Rect,
   handle: ResizeHandle,
   dx: number,
   dy: number,
   bounds: Bounds,
+  min?: { w: number; h: number },
 ): Rect {
   let left = rect.x;
   let top = rect.y;
@@ -391,13 +427,14 @@ export function resizeRect(
   if (handle.includes("w")) left = rect.x + dx;
   if (handle.includes("n")) top = rect.y + dy;
 
-  if (right - left < MIN_W) {
-    if (handle.includes("w")) left = right - MIN_W;
-    else right = left + MIN_W;
+  const floor = resizeFloor(min, bounds);
+  if (right - left < floor.w) {
+    if (handle.includes("w")) left = right - floor.w;
+    else right = left + floor.w;
   }
-  if (bottom - top < MIN_H) {
-    if (handle.includes("n")) top = bottom - MIN_H;
-    else bottom = top + MIN_H;
+  if (bottom - top < floor.h) {
+    if (handle.includes("n")) top = bottom - floor.h;
+    else bottom = top + floor.h;
   }
 
   return clampRect({ x: left, y: top, w: right - left, h: bottom - top }, bounds);
