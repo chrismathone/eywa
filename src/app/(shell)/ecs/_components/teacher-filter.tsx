@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { setMyEcsTeacher } from "@/features/class-sheets/server/actions";
+import { useSheetT } from "@/features/class-sheets/lang-context";
 import { ECS_TEACHER_ALL, type LandingTeacherOption } from "@/features/class-sheets/landing-teacher";
 
 export function EcsTeacherFilter({
@@ -28,6 +29,7 @@ export function EcsTeacherFilter({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const t = useSheetT();
 
   const pick = useCallback(
     async (next: string) => {
@@ -36,7 +38,7 @@ export function EcsTeacherFilter({
       try {
         const r = await setMyEcsTeacher(next);
         if (!r.ok) {
-          toast.error(r.error ?? "보기 설정을 저장하지 못했습니다");
+          toast.error(r.error ?? t("filter.saveFailed"));
           return;
         }
         router.refresh();
@@ -44,24 +46,25 @@ export function EcsTeacherFilter({
         setPending(false);
       }
     },
-    [pending, router, value],
+    [pending, router, t, value],
   );
 
   // 담임이 한 명뿐이면 고를 것이 없다 — 눌러도 같은 목록인 컨트롤은 자리만 차지한다(강사 본인 화면).
   if (options.length < 2) return null;
 
   return (
-    <span className="flex items-center gap-1.5" title="담임별로 반 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)">
-      <span className="micro">담임</span>
+    <span className="flex items-center gap-1.5" title={t("filter.homeroom.title")}>
+      <span className="micro">{t("filter.homeroom")}</span>
       <SearchableSelect
         compact
         className="w-36"
-        ariaLabel="담임으로 반 목록 좁히기"
+        ariaLabel={t("filter.homeroom.aria")}
         value={value}
         onValueChange={pick}
-        searchPlaceholder="담임 검색..."
+        searchPlaceholder={t("filter.homeroom.search")}
         options={[
-          { value: ECS_TEACHER_ALL, label: "전체", hint: `${totalCount}` },
+          // 🔴 담임 **이름**은 번역 대상이 아니다(사람 이름) — '전체'만 바뀐다.
+          { value: ECS_TEACHER_ALL, label: t("filter.all"), hint: `${totalCount}` },
           ...options.map((o) => ({ value: o.value, label: o.label, hint: `${o.count}` })),
         ]}
         // 같은 툴바의 다른 컨트롤(보기·주·프로그램)과 같은 높이·라운드 — 여기만 알약이면 그 줄이

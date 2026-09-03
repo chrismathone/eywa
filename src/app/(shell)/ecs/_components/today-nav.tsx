@@ -7,6 +7,7 @@ import {
 } from "@/components/toolbar-controls";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
 import { PeriodNav } from "@/components/period-nav";
+import { sheetDateLabelEn, sheetT, type SheetLang } from "@/features/class-sheets/i18n";
 import { EcsDatePicker } from "./today-date-picker";
 
 /**
@@ -35,21 +36,30 @@ const modeQ = (mode?: EcsTodayMode) => (mode === "cards" ? "&mode=cards" : "");
  * 싶다. 표 모드에서 전부 해결 가능하지 않나?"* → 기본이 **시트**(그 날짜 열만 필터한 주간 시트를 반마다
  * 쌓아 전부 편집), 카드는 요약·일괄 출석용 보조 보기로 남긴다.
  */
-export function EcsTodayModeTabs({ mode, date }: { mode: EcsTodayMode; date: string }) {
+export function EcsTodayModeTabs({
+  mode,
+  date,
+  lang = "ko",
+}: {
+  mode: EcsTodayMode;
+  date: string;
+  /** 화면 언어(2026-09-03) — 서버 컴포넌트라 context를 못 읽어 호출부가 넘긴다. */
+  lang?: SheetLang;
+}) {
   const base = `/ecs?view=today&date=${date}`;
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="micro mr-0.5">모드</span>
+      <span className="micro mr-0.5">{sheetT(lang, "nav.mode")}</span>
       <div className={TOOLBAR_SEG_BOX}>
         <Link href={base} className={chip(mode === "sheet")} aria-current={mode === "sheet" ? "page" : undefined}>
-          시트
+          {sheetT(lang, "nav.mode.sheet")}
         </Link>
         <Link
           href={`${base}&mode=cards`}
           className={chip(mode === "cards")}
           aria-current={mode === "cards" ? "page" : undefined}
         >
-          요약 카드
+          {sheetT(lang, "nav.mode.cards")}
         </Link>
       </div>
     </div>
@@ -64,40 +74,48 @@ export function EcsTodayModeTabs({ mode, date }: { mode: EcsTodayMode; date: str
  * ⚠️ 면 전환 칩(보기/모드/날짜)과 달리 **다른 라우트**라 알약 대신 테두리 버튼으로 구분한다 —
  *    같은 모양이면 "ECS의 네 번째 면"으로 읽힌다.
  */
-export function EcsQuickAttendanceLink() {
+export function EcsQuickAttendanceLink({ lang = "ko" }: { lang?: SheetLang }) {
   return (
     <Link
       href="/attendance/quick"
-      title="오늘 내 수업의 출결만 터치로 빠르게 입력합니다"
+      title={sheetT(lang, "nav.quickAttendance.title")}
       className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground inline-flex h-8 shrink-0 items-center rounded-lg border px-2.5 text-xs font-bold whitespace-nowrap"
     >
-      출결 모드
+      {sheetT(lang, "nav.quickAttendance")}
     </Link>
   );
 }
 
 export type EcsFace = "today" | "week" | "room";
 
-export function EcsFaceTabs({ face, showToday = true }: { face: EcsFace; showToday?: boolean }) {
+export function EcsFaceTabs({
+  face,
+  showToday = true,
+  lang = "ko",
+}: {
+  face: EcsFace;
+  showToday?: boolean;
+  lang?: SheetLang;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="micro mr-0.5">보기</span>
+      <span className="micro mr-0.5">{sheetT(lang, "nav.face")}</span>
       <div className={TOOLBAR_SEG_BOX}>
         {showToday ? (
           <Link href="/ecs?view=today" className={chip(face === "today")} aria-current={face === "today" ? "page" : undefined}>
-            오늘
+            {sheetT(lang, "nav.face.today")}
           </Link>
         ) : null}
         <Link href="/ecs?view=week" className={chip(face === "week")} aria-current={face === "week" ? "page" : undefined}>
-          주간 시트
+          {sheetT(lang, "nav.face.week")}
         </Link>
         <Link
           href="/ecs?view=room"
           className={chip(face === "room")}
           aria-current={face === "room" ? "page" : undefined}
-          title="305호 집중자율수업실 — 그 시각 여러 반을 한 표로"
+          title={sheetT(lang, "nav.face.room.title")}
         >
-          305 · JJ실
+          {sheetT(lang, "nav.face.room")}
         </Link>
       </div>
     </div>
@@ -118,25 +136,29 @@ export function EcsDayNav({
   today,
   mode,
   view = "today",
+  lang = "ko",
 }: {
   date: string;
   today: string;
   mode?: EcsTodayMode;
   view?: "today" | "room";
+  lang?: SheetLang;
 }) {
   const q = view === "room" ? "" : modeQ(mode);
   const base = `/ecs?view=${view}`;
   return (
     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
       <PeriodNav
-        label={formatKoreanDate(date)}
+        // 🔴 한국어는 앱 전역 `formatKoreanDate`가 정본 — 영어만 여기서 만든다(같은 날짜가 화면마다
+        //    다르게 적히지 않게).
+        label={lang === "en" ? sheetDateLabelEn(date) : formatKoreanDate(date)}
         prevHref={`${base}&date=${addDays(date, -1)}${q}`}
         nextHref={`${base}&date=${addDays(date, 1)}${q}`}
         currentHref={`${base}${q}`}
         relation={date === today ? "current" : date < today ? "past" : "future"}
-        prevAriaLabel="이전 날"
-        nextAriaLabel="다음 날"
-        currentTitle="눌러서 오늘로"
+        prevAriaLabel={sheetT(lang, "nav.prevDay")}
+        nextAriaLabel={sheetT(lang, "nav.nextDay")}
+        currentTitle={sheetT(lang, "nav.today")}
         // "2026년 12월 26일 (수)"(최장)까지 안 넘치는 고정 폭 — 넉넉히 잡는다(좁아서 넘치는 쪽이 더 나쁘다).
         labelWidth={180}
       />

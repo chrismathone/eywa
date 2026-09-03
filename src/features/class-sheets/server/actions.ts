@@ -18,6 +18,7 @@ import { isEnrollmentActiveOn, enrollmentAttendsOnDay } from "@/features/enrollm
 import { logAction } from "@/features/audit/server/log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { DEFAULT_ECS_FONT_SIZE, ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
+import { parseSheetLang, type SheetLang } from "../i18n";
 import { ECS_TEACHER_ALL, normalizeEcsTeacher } from "../landing-teacher";
 import {
   DEFAULT_ECS_ENGLISH_TRACK,
@@ -822,6 +823,21 @@ export async function setMyEcsFontSize(size: EcsFontSize): Promise<{ ok: boolean
     return { ok: false, error: "잘못된 글씨 크기입니다" };
   }
   return patchMyEcsPrefs({ fontSize: size === DEFAULT_ECS_FONT_SIZE ? undefined : size });
+}
+
+/**
+ * 화면 언어(한국어/English)를 본인 계정에 저장 — `users.ui_prefs.ecs.lang`(2026-09-03, 마이그레이션 0건).
+ *
+ * 🔴 **기본값과 같아도 지운다(생략)하지 않는다** — 다른 설정들은 "기본값이면 키를 지운다"가 규약이지만
+ *    여기 기본값은 **표시 이름에서 도출**된다(원어민=영어). 이름은 바뀔 수 있어서(원어민 이름을 나중에
+ *    한글로 등록하는 등) 키를 지우면 **본인이 고른 언어가 조용히 뒤집힌다**. 고른 사실 자체가 정보다.
+ * ⚠️ 서버가 진실이다 — 랜딩·헤더 문구는 서버 컴포넌트가 그리므로 호출부가 저장 후 `router.refresh()`.
+ * ⚠️ 이 액션은 반 게이트를 안 본다(내 계정의 표시 취향 — `patchMyEcsPrefs` 주석 그대로).
+ */
+export async function setMyEcsLang(lang: string): Promise<{ ok: boolean; error?: string }> {
+  const parsed: SheetLang | null = parseSheetLang(lang);
+  if (!parsed) return { ok: false, error: "잘못된 값입니다" };
+  return patchMyEcsPrefs({ lang: parsed });
 }
 
 /**

@@ -6,13 +6,14 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
 import {
   SHEET_FACES,
-  SHEET_FACE_LABEL,
-  SHEET_FACE_TITLE,
   SHEET_SEG_BOX,
+  sheetFaceLabel,
+  sheetFaceTitle,
   sheetPill,
   sheetSegItem,
   type SheetFace,
 } from "../chrome";
+import { useSheetT, useSheetLang } from "../lang-context";
 
 /**
  * ECS 상단 바의 **공용 조각** — 표기는 [`chrome.ts`](../chrome.ts), 여기는 그리는 쪽.
@@ -97,16 +98,18 @@ export function SheetClassPicker({
    */
   listHref?: string;
 }) {
+  // 화면 언어(2026-09-03) — provider 밖(MCS)에서는 한국어로 떨어진다([`lang-context`](../lang-context.tsx)).
+  const t = useSheetT();
   return (
     <>
       <button
         type="button"
         className={`${sheetPill(false)} inline-flex items-center`}
         onClick={() => void onNavigate(listHref)}
-        aria-label="반 목록"
+        aria-label={t("chrome.list.aria")}
       >
-        <PillGlyph icon="list" hint="반 목록">
-          목록
+        <PillGlyph icon="list" hint={t("chrome.list.aria")}>
+          {t("chrome.list")}
         </PillGlyph>
       </button>
       <span className={`${MARKER_WIDTH} shrink-0`}>
@@ -116,8 +119,8 @@ export function SheetClassPicker({
           onValueChange={(v) => {
             if (v && v !== classId) void onNavigate(hrefForClass(v));
           }}
-          placeholder="반 선택"
-          ariaLabel="반 전환"
+          placeholder={t("chrome.classPlaceholder")}
+          ariaLabel={t("chrome.classAria")}
           // ⚠️ `compact`를 안 쓴다 — 그건 쉐브론을 10px로 줄이는데(gap도 1) 21px 글자 옆에선
           //    흔적만 남는다.
           triggerClassName={MARKER_TRIGGER}
@@ -125,7 +128,10 @@ export function SheetClassPicker({
           // 말줄임되고(위에 얹으면 끝이 덮여 사라졌다), 툴팁·클릭도 트리거의 것 그대로다.
           trailing={
             teacherName ? (
-              <span className="text-text-dim text-[15px] font-extrabold whitespace-nowrap" title={`담임 ${teacherName}`}>
+              <span
+                className="text-text-dim text-[15px] font-extrabold whitespace-nowrap"
+                title={`${t("chrome.homeroom")} ${teacherName}`}
+              >
                 {teacherName}
               </span>
             ) : undefined
@@ -140,10 +146,10 @@ export function SheetClassPicker({
         href={`/classes/${classId}`}
         title={classLabel}
         className={`${sheetPill(false)} inline-flex items-center`}
-        ariaLabel={`${classLabel} 반 정보 보기`}
+        ariaLabel={`${classLabel} ${t("chrome.classInfo.suffix")}`}
       >
-        <PillGlyph icon="info" hint={`${classLabel} 반 정보 보기`}>
-          반 정보 보기
+        <PillGlyph icon="info" hint={`${classLabel} ${t("chrome.classInfo.suffix")}`}>
+          {t("chrome.classInfo")}
         </PillGlyph>
       </WindowLink>
     </>
@@ -169,6 +175,7 @@ export function SheetFaceSwitch({
   faces?: readonly SheetFace[];
   onSelect: (face: SheetFace) => void;
 }) {
+  const lang = useSheetLang();
   return (
     <span className={`${SHEET_SEG_BOX} shrink-0`}>
       {faces.map((face) => {
@@ -178,13 +185,13 @@ export function SheetFaceSwitch({
             key={face}
             type="button"
             aria-pressed={active}
-            title={SHEET_FACE_TITLE[face]}
+            title={sheetFaceTitle(face, lang)}
             onClick={() => {
               if (!active) onSelect(face);
             }}
             className={`${sheetSegItem(active)}`}
           >
-            {SHEET_FACE_LABEL[face]}
+            {sheetFaceLabel(face, lang)}
           </button>
         );
       })}

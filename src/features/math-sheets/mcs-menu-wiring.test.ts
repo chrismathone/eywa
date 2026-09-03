@@ -46,6 +46,8 @@ describe("영어 시트 빈 목록 — 막다른 안내 금지", () => {
 
   it("🔴 담당 영어 반이 0개일 때 수학 시트로 가는 길을 적는다", () => {
     expect(src).toMatch(/href="\/mcs"/);
-    expect(src).toContain("수학 강사 시트");
+    // 2026-09-03 화면 언어(한/영) 전환 후 링크 글자는 사전(`class-sheets/i18n.ts`)에서 온다 →
+    // 문자열이 아니라 **그 키를 실제로 그리는지**를 본다. 한국어 원문은 사전 쪽 가드가 지킨다.
+    expect(src).toContain('sheetT(lang, "landing.empty.noScoped.link")');
   });
 });

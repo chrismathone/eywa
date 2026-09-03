@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SHEET_DICT } from "./i18n";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
@@ -57,7 +58,11 @@ describe("주 배정 0인 반은 목록에서 뺀다", () => {
     );
     // 화면이 그 사유를 실제로 말해야 한다 — 타입만 늘리고 안내가 없으면 옛 문구로 떨어진다.
     expect(page).toContain('res.emptyReason === "no-week-classes"');
-    expect(page).toContain("위 주 이동으로 다른 주를 확인하세요");
+    // 2026-09-03 화면 언어(한/영) 전환 후 안내 문구는 사전(`i18n.ts`)에서 온다 → 화면은 **그 키를
+    // 그리는지**로, 한국어 원문("위 주 이동으로…")은 사전 자체로 확인한다(같은 사실을 두 곳에서
+    // 각자 적으면 한쪽만 고쳐진다).
+    expect(page).toContain('sheetT(lang, "landing.empty.noWeekClasses")');
+    expect(SHEET_DICT["landing.empty.noWeekClasses"].ko).toContain("위 주 이동으로 다른 주를 확인하세요");
   });
 
   it("부담임 갈래도 그 주로 좁힌다 — 관계가 끝난 반은 미래 주차에서 사라진다", () => {

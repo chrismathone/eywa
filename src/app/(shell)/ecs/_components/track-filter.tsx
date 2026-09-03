@@ -15,6 +15,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { setMyEcsEnglishTrack } from "@/features/class-sheets/server/actions";
+import { useSheetT } from "@/features/class-sheets/lang-context";
 import {
   ENGLISH_TRACK_FILTERS,
   ENGLISH_TRACK_FILTER_LABEL,
@@ -30,6 +31,7 @@ export function EcsTrackFilter({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const t = useSheetT();
 
   const pick = useCallback(
     async (next: EnglishTrackFilter) => {
@@ -38,7 +40,7 @@ export function EcsTrackFilter({
       try {
         const r = await setMyEcsEnglishTrack(next);
         if (!r.ok) {
-          toast.error(r.error ?? "보기 설정을 저장하지 못했습니다");
+          toast.error(r.error ?? t("filter.saveFailed"));
           return;
         }
         router.refresh();
@@ -46,15 +48,15 @@ export function EcsTrackFilter({
         setPending(false);
       }
     },
-    [pending, router, value],
+    [pending, router, t, value],
   );
 
   return (
     <span
       className={TOOLBAR_SEG_BOX}
-      title="영어 프로그램별로 반 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
+      title={t("filter.program.title")}
     >
-      <span className="text-text-dim px-1.5 text-[11px] font-bold">프로그램</span>
+      <span className="text-text-dim px-1.5 text-[11px] font-bold">{t("filter.program")}</span>
       {ENGLISH_TRACK_FILTERS.map((f) => (
         <button
           key={f}
@@ -66,7 +68,9 @@ export function EcsTrackFilter({
             value === f ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
           }`}
         >
-          {ENGLISH_TRACK_FILTER_LABEL[f]}
+          {/* 🔴 프로그램 **이름**(EiE·인재원 영어)은 번역하지 않는다 — 학원이 부르는 고유명이라
+              옮기면 같은 반을 사람마다 다르게 부르게 된다. 바뀌는 건 '전체'뿐. */}
+          {f === "all" ? t("filter.all") : ENGLISH_TRACK_FILTER_LABEL[f]}
           <span className={`num ml-1 ${value === f ? "opacity-80" : "opacity-60"}`}>{counts[f]}</span>
         </button>
       ))}

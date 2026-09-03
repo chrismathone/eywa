@@ -219,6 +219,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/billing/_components/session-term-table.tsx",
   "src/features/class-sheets/components/sheet-toolbar.tsx",
   "src/features/class-sheets/components/sheet-chrome.tsx",
+  // 강사 시트 화면 언어 스위치(2026-09-03, 새 컨트롤) — 만들 때부터 규약으로.
+  "src/features/class-sheets/components/lang-switch.tsx",
   "src/features/class-sheets/components/seat-day-face.tsx",
   "src/features/math-sheets/components/month-client.tsx",
   "src/app/(shell)/retention/board/page.tsx",

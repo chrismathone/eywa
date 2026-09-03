@@ -1,0 +1,129 @@
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_SHEET_LANG,
+  SHEET_DICT,
+  SHEET_LANGS,
+  SHEET_LANG_LABEL,
+  defaultSheetLangFor,
+  parseSheetLang,
+  resolveSheetLang,
+  sheetDateLabelEn,
+  sheetDowLabel,
+  sheetT,
+  sheetWeekLabel,
+  sheetWeekLabelEn,
+} from "./i18n";
+
+describe("사전 — 값이 비거나 키가 새지 않는다", () => {
+  it("모든 키가 ko·en 둘 다 비어 있지 않다", () => {
+    const empty = Object.entries(SHEET_DICT).filter(([, v]) => !v.ko.trim() && !v.en.trim());
+    expect(empty.map(([k]) => k)).toEqual([]);
+  });
+
+  it("한국어 문구는 한 곳도 비지 않는다 — 폴백의 바닥이라 비면 빈 화면이 된다", () => {
+    const missing = Object.entries(SHEET_DICT).filter(([, v]) => v.ko.trim() === "");
+    expect(missing.map(([k]) => k)).toEqual([]);
+  });
+
+  it("영어 문구에 한글이 섞여 있지 않다(붙여넣기 사고 방지)", () => {
+    const bad = Object.entries(SHEET_DICT).filter(([, v]) => /[가-힣]/.test(v.en));
+    expect(bad.map(([k]) => k)).toEqual([]);
+  });
+
+  it("키를 화면에 내지 않는다 — 모든 키가 실제 문구를 돌려준다", () => {
+    for (const key of Object.keys(SHEET_DICT) as (keyof typeof SHEET_DICT)[]) {
+      for (const lang of SHEET_LANGS) {
+        const out = sheetT(lang, key);
+        expect(out).not.toBe(key);
+      }
+    }
+  });
+
+  it("🔴 사전에 없는 문구를 화면에 남겨 두지 않는다 — 쓰이지 않는 키(orphan) 금지", () => {
+    // 학원설정 규약과 같은 결: "소비처 없는 값은 만들지도 않는다". 지금 사전은 상단 바·네비·랜딩
+    // 프레임만 담고, 시트 본문(로스터·계획 표)은 v1 범위 밖이라 **키 자체를 두지 않는다**.
+    // 접두사가 늘면 그 구역을 실제로 배선했는지 사람이 한 번 더 보게 하는 가드다.
+    const prefixes = new Set(Object.keys(SHEET_DICT).map((k) => k.split(".")[0]));
+    expect([...prefixes].sort()).toEqual(["chrome", "face", "filter", "landing", "lang", "nav", "toolbar", "today"].sort());
+  });
+});
+
+describe("언어 판정 — 이름이 기본값을 정하고, 고른 값이 언제나 이긴다", () => {
+  it("한글 이름 = 한국어 / 로마자 이름 = 영어", () => {
+    expect(defaultSheetLangFor("이수진")).toBe("ko");
+    expect(defaultSheetLangFor("KRISTINE DRIVER")).toBe("en");
+    expect(defaultSheetLangFor("Florence Park")).toBe("en");
+  });
+
+  it("이름이 없으면 영어로 떨어진다 — 한글이 '있으면' 한국인이라는 단일 소스 규약 그대로", () => {
+    expect(defaultSheetLangFor(null)).toBe("en");
+    expect(defaultSheetLangFor("")).toBe("en");
+  });
+
+  it("고른 값이 있으면 이름과 무관하게 그것 — 휴리스틱이 틀렸을 때 본인이 되돌릴 수 있어야 한다", () => {
+    expect(resolveSheetLang("en", "이수진")).toBe("en");
+    expect(resolveSheetLang("ko", "KRISTINE DRIVER")).toBe("ko");
+  });
+
+  it("저장값이 깨졌으면 이름에서 도출 — 화면이 비지 않는다", () => {
+    expect(resolveSheetLang(undefined, "이수진")).toBe("ko");
+    expect(resolveSheetLang("klingon", "이수진")).toBe("ko");
+    expect(resolveSheetLang(42, "Florence Park")).toBe("en");
+  });
+
+  it("parseSheetLang은 모르는 값에 null — 기본값은 호출부가 정한다", () => {
+    expect(parseSheetLang("ko")).toBe("ko");
+    expect(parseSheetLang("en")).toBe("en");
+    expect(parseSheetLang("jp")).toBeNull();
+    expect(parseSheetLang(null)).toBeNull();
+  });
+
+  it("기본 언어는 한국어 — MCS 등 provider 밖 공용 조각이 이 값으로 떨어진다", () => {
+    expect(DEFAULT_SHEET_LANG).toBe("ko");
+  });
+
+  it("언어 이름은 번역하지 않는다(자기 언어를 자기 글자로 찾을 수 있어야 한다)", () => {
+    expect(SHEET_LANG_LABEL.ko).toBe("한국어");
+    expect(SHEET_LANG_LABEL.en).toBe("English");
+  });
+});
+
+describe("날짜 표기", () => {
+  it("요일 알약은 영어에서 세 글자 — 한 글자면 화/수·토/일이 구분되지 않는다", () => {
+    expect(sheetDowLabel("wed", "ko")).toBe("수");
+    expect(sheetDowLabel("wed", "en")).toBe("Wed");
+    expect(sheetDowLabel("sun", "en")).toBe("Sun");
+    expect(sheetDowLabel("sat", "en")).not.toBe(sheetDowLabel("sun", "en"));
+  });
+
+  it("모르는 요일 키는 그대로 — 지어내지 않는다", () => {
+    expect(sheetDowLabel("xyz", "en")).toBe("xyz");
+  });
+
+  it("영어 날짜는 KST에서 하루 밀리지 않는다(UTC 파싱 함정)", () => {
+    // 2026-09-03은 목요일.
+    expect(sheetDateLabelEn("2026-09-03")).toBe("Thu, Sep 3, 2026");
+    // 2026-01-01은 목요일 — 연·월 경계에서도 안 밀린다.
+    expect(sheetDateLabelEn("2026-01-01")).toBe("Thu, Jan 1, 2026");
+  });
+
+  it("깨진 날짜는 원문 그대로 — 빈 칸을 만들지 않는다", () => {
+    expect(sheetDateLabelEn("")).toBe("");
+    expect(sheetDateLabelEn("nope")).toBe("nope");
+  });
+
+  it("영어 주 라벨은 같은 달이면 월을 한 번만 적는다", () => {
+    // 2026-09-07(월) ~ 2026-09-13(일)
+    expect(sheetWeekLabelEn("2026-09-07")).toBe("Sep 7 – 13, 2026");
+  });
+
+  it("달을 넘기는 주는 양쪽 월을 적는다", () => {
+    // 2026-08-31(월) ~ 2026-09-06(일)
+    expect(sheetWeekLabelEn("2026-08-31")).toBe("Aug 31 – Sep 6, 2026");
+  });
+
+  it("한국어는 서버가 준 라벨을 그대로 쓴다 — 같은 주가 화면마다 다르게 적히지 않게", () => {
+    expect(sheetWeekLabel("2026-09-07", "9월 2주차 (7일~13일)", "ko")).toBe("9월 2주차 (7일~13일)");
+    expect(sheetWeekLabel("2026-09-07", "9월 2주차 (7일~13일)", "en")).toBe("Sep 7 – 13, 2026");
+  });
+});

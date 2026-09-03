@@ -19,14 +19,18 @@ import { monthOfWeek } from "../face-nav";
 import { setMyEcsMonthView } from "../server/actions";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
 import type { ClassSheetWeekData } from "../server/queries";
-import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
+import { ECS_FONT_SIZES, type EcsFontSize } from "../font-size";
+import { sheetDowLabel, sheetWeekLabel } from "../i18n";
+import { useSheetLang, useSheetT } from "../lang-context";
+import { SheetLangSwitch } from "./lang-switch";
 import { attHref } from "@/app/(shell)/attendance/_components/att-href";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 import { EcsMakeupAdder } from "./ecs-makeup-adder";
 
-const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
+// 요일 글자·글씨 크기 라벨은 [i18n.ts](../i18n.ts) 한 곳 — 화면 언어(한/영)를 따라간다(2026-09-03).
 // 알약 표기는 [chrome.ts](../chrome.ts) 한 곳 — 월간 뷰의 표시 토글도 같은 것을 쓴다.
 const pill = sheetPill;
+const FONT_KEY = { sm: "toolbar.font.sm", md: "toolbar.font.md", lg: "toolbar.font.lg" } as const;
 
 export function SheetToolbar({
   data,
@@ -65,6 +69,9 @@ export function SheetToolbar({
   selfStudyPending: boolean;
 }) {
   const { pending, conflicts } = useSaveIndicator(store);
+  // 화면 언어(내 계정) — 문구만 바뀌고 저장되는 데이터·작성률은 한 글자도 안 바뀐다.
+  const t = useSheetT();
+  const lang = useSheetLang();
   const hrefFor = (classId: string, monday: string) => `/ecs/${classId}?week=${monday}`;
   // 출석부 바로가기 — 지금 보고 있는 날(요일 필터) 기준으로 그 반의 그 달 출석부를 연다.
   // 🔴 링크는 출석부의 **단일 빌더**(attHref)로 만든다 — 여기서 파라미터를 따로 조립하면 규약이 갈라져
@@ -90,9 +97,14 @@ export function SheetToolbar({
       {data.delegated ? (
         <span
           className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-2 py-0.5 text-[11px] font-bold whitespace-nowrap"
-          title={`${data.classTeacherName ? `${data.classTeacherName} 선생님 반` : "다른 선생님 반"} — 이 기간에만 대신 맡은 위임 반입니다`}
+          title={`${
+            data.classTeacherName
+              ? `${data.classTeacherName}${t("toolbar.delegated.own")}`
+              : t("toolbar.delegated.other")
+          } — ${t("toolbar.delegated.title")}`}
         >
-          위임{data.classTeacherName ? ` · ${data.classTeacherName} 선생님 반` : ""}
+          {t("toolbar.delegated")}
+          {data.classTeacherName ? ` · ${data.classTeacherName}${t("toolbar.delegated.own")}` : ""}
         </span>
       ) : null}
       <SheetBarDivider />
@@ -101,14 +113,14 @@ export function SheetToolbar({
           클릭**, "지금 이번 주인가"는 **과거/미래 조회 배지**. 배지를 지우면 지난 주를 보면서 이번 주로
           착각한다(그 알약이 색으로 말하던 사실이다). */}
       <PeriodNav
-        label={data.weekLabel}
+        label={sheetWeekLabel(data.weekMonday, data.weekLabel, lang)}
         prevHref={hrefFor(data.classId, addWeeks(data.weekMonday, -1))}
         nextHref={hrefFor(data.classId, addWeeks(data.weekMonday, 1))}
         currentHref={hrefFor(data.classId, thisMonday(data.today))}
         relation={rel}
-        prevAriaLabel="이전 주"
-        nextAriaLabel="다음 주"
-        currentTitle="눌러서 이번 주로"
+        prevAriaLabel={t("toolbar.prevWeek")}
+        nextAriaLabel={t("toolbar.nextWeek")}
+        currentTitle={t("toolbar.thisWeek")}
         labelWidth={WEEK_LABEL_W}
         onNavigate={onNavigate}
       />
@@ -134,10 +146,10 @@ export function SheetToolbar({
       />
       <SheetBarDivider />
 
-      <span className="text-foreground text-[11px] font-bold">요일</span>
+      <span className="text-foreground text-[11px] font-bold">{t("toolbar.dow")}</span>
       <div className="flex items-center gap-1">
         <button type="button" className={pill(dayFilter === null)} onClick={() => onDayFilter(null)}>
-          전체
+          {t("toolbar.all")}
         </button>
         {data.grid.days.map((d) => (
           <button
@@ -149,7 +161,9 @@ export function SheetToolbar({
             title={d.holiday ? `${d.date.slice(5)} ${d.holiday}` : undefined}
             onClick={() => onDayFilter(dayFilter === d.date ? null : d.date)}
           >
-            <span className={d.holiday && dayFilter !== d.date ? "text-danger" : undefined}>{DOW_KO[d.dow]}</span>
+            <span className={d.holiday && dayFilter !== d.date ? "text-danger" : undefined}>
+              {sheetDowLabel(d.dow, lang)}
+            </span>
             {d.date === data.today ? <span className="ml-0.5 align-middle text-[8px]">●</span> : null}
           </button>
         ))}
@@ -176,9 +190,9 @@ export function SheetToolbar({
           type="button"
           className={`${pill(false)} inline-flex items-center gap-1`}
           onClick={() => onNavigate(attendanceHref)}
-          title={`${data.className} 반 ${attendanceDate.slice(0, 7)} 출석부 열기`}
+          title={`${data.className} · ${attendanceDate.slice(0, 7)} — ${t("toolbar.attendance.title")}`}
         >
-          <ClipboardCheck className="size-3" /> 출석부
+          <ClipboardCheck className="size-3" /> {t("toolbar.attendance")}
         </button>
         {/* JJ 표시(내 계정) — 원장 2026-08-03: 코드가 정하지 말고 여기서 고른다.
             ⚠️ 2026-08-06부터 **LAB은 여기서 빠졌다**(항상 제외 — 전용 출석부로 이관 예정). 라벨이 'LAB·JJ'
@@ -186,11 +200,8 @@ export function SheetToolbar({
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
                때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-foreground shrink-0 text-[11px] font-bold">JJ</span>
-          <span
-            className={SHEET_SEG_BOX}
-            title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
-          >
+          <span className="text-foreground shrink-0 text-[11px] font-bold">{t("toolbar.jj")}</span>
+          <span className={SHEET_SEG_BOX} title={t("toolbar.jj.title")}>
             {[true, false].map((v) => (
               <button
                 key={String(v)}
@@ -200,7 +211,7 @@ export function SheetToolbar({
                 aria-pressed={showSelfStudy === v}
                 className={`${sheetSegItem(showSelfStudy === v)} disabled:cursor-wait disabled:opacity-60`}
               >
-                {v ? "표시" : "숨김"}
+                {v ? t("toolbar.show") : t("toolbar.hide")}
               </button>
             ))}
           </span>
@@ -208,11 +219,8 @@ export function SheetToolbar({
         {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31).
             지금 크기가 '작음'이라 기본은 화면 무변경. 저장은 계정이라 다른 PC에서도 같은 크기. */}
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-foreground shrink-0 text-[11px] font-bold">글씨</span>
-          <span
-            className={SHEET_SEG_BOX}
-            title="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
-          >
+          <span className="text-foreground shrink-0 text-[11px] font-bold">{t("toolbar.font")}</span>
+          <span className={SHEET_SEG_BOX} title={t("toolbar.font.title")}>
             {ECS_FONT_SIZES.map((s) => (
               <button
                 key={s}
@@ -221,21 +229,27 @@ export function SheetToolbar({
                 aria-pressed={fontSize === s}
                 className={sheetSegItem(fontSize === s)}
               >
-                {ECS_FONT_SIZE_LABEL[s]}
+                {t(FONT_KEY[s])}
               </button>
             ))}
           </span>
         </span>
+        {/* 화면 언어(내 계정) — 글씨 크기 바로 옆. 원어민 강사의 홈이 이 화면이라 여기가 그 사람의 스위치다
+            (강사에겐 사이드바가 없어 설정 화면으로 갈 길이 없다). */}
+        <SheetLangSwitch tone="sheet" />
         <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
         {conflicts > 0 ? (
-          <span className="text-danger text-[12px] font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>
+          <span className="text-danger text-[12px] font-bold whitespace-nowrap">
+            {t("toolbar.conflict")} {conflicts}
+            {t("toolbar.conflict.hint")}
+          </span>
         ) : pending > 0 ? (
-          <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장 중…</span>
+          <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">{t("toolbar.saving")}</span>
         ) : (
-          <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장됨</span>
+          <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">{t("toolbar.saved")}</span>
         )}
         <button type="button" className={pill(panelOpen)} onClick={onTogglePanel}>
-          계획 패널
+          {t("toolbar.planPanel")}
         </button>
       </span>
     </div>

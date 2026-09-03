@@ -10,6 +10,7 @@
  * ⚠️ 이 파일에 `"use client"`를 붙이지 말 것 — 서버 컴포넌트가 import하면 런타임에 값이 사라진다([[#81]]).
  */
 import { TOOLBAR_CHIP, TOOLBAR_SEG_BOX, TOOLBAR_SEG_ITEM } from "@/components/toolbar-controls";
+import { sheetT, type SheetLang } from "./i18n";
 import type { EcsMonthView } from "./view-prefs";
 
 /**
@@ -97,3 +98,19 @@ export const SHEET_FACE_TITLE: Record<SheetFace, string> = {
   rail: "한 달을 진도표로 — 영역별로 무엇을 언제 나갔는지 가로로 훑습니다",
   mp: "학부모에게 나가는 월간 계획서 — 미리 쓴 계획과 실제 진도를 나란히 대조하고 인쇄합니다",
 };
+
+/**
+ * 화면 언어에 맞춘 면 라벨·설명(2026-09-03 원어민 전용뷰).
+ *
+ * ⚠️ 위 두 `Record`는 **남겨 둔다** — `SheetFace` 타입에 면을 더하면 라벨을 빠뜨릴 수 없게 잡아 주는
+ *    컴파일 가드이자 사전이 비었을 때의 바닥이다. 여기 두 함수는 그 위에 언어만 얹는다.
+ * 🔴 사전 키(`face.week`…)는 `SheetFace` 값과 **같은 이름**을 쓴다 — 갈리면 새 면이 조용히 한글로 남는다
+ *    (`SHEET_DICT`에 키가 없으면 타입에서 걸린다).
+ */
+export function sheetFaceLabel(face: SheetFace, lang: SheetLang): string {
+  return sheetT(lang, `face.${face}`);
+}
+
+export function sheetFaceTitle(face: SheetFace, lang: SheetLang): string {
+  return sheetT(lang, `face.${face}.title`);
+}

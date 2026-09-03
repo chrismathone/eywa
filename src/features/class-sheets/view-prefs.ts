@@ -16,6 +16,7 @@
  *    (헤더의 `계획 N/M교시`·랜딩 카드가 서버 계산이라 클라에서만 감추면 숫자가 갈린다).
  */
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
+import { parseSheetLang, type SheetLang } from "./i18n";
 import { normalizeEcsTeacher } from "./landing-teacher";
 import type { RosterGroupKey } from "./lib/roster-order";
 
@@ -92,6 +93,20 @@ export function readEcsCollapsedRosterGroups(uiPrefs: unknown): RosterGroupKey[]
 export function normalizeCollapsedRosterGroups(raw: unknown): RosterGroupKey[] {
   if (!Array.isArray(raw)) return [];
   return ROSTER_GROUP_KEYS.filter((k) => raw.includes(k));
+}
+
+/**
+ * `ui_prefs.ecs.lang` → 이 사람이 **고른** 화면 언어(한국어/English, 2026-09-03).
+ *
+ * 🔴 다른 설정들과 달리 **기본값을 여기서 못 정한다** — 미설정 기본은 표시 이름에서 도출하는데
+ *    (`defaultSheetLangFor`: 이름에 한글이 있으면 한국어) 이 함수는 이름을 모른다. 그래서 여기선
+ *    "고른 값이 있나"만 답하고(없으면 null), 합치는 것은 [`resolveSheetLang`](./i18n.ts)이 한다.
+ * ⚠️ 계정 귀속(원장 2026-08-04 *"모든 뷰 세팅은 계정에 귀속"*) — 원어민 강사가 학원 어느 PC에서 열어도
+ *    영어로 열린다. localStorage면 포트가 바뀌는 순간 한글로 돌아간다([[#90]]).
+ * ⚠️ 이 값은 **표시뿐**이다 — 작성률 분모·권한·저장되는 데이터를 한 글자도 바꾸지 않는다.
+ */
+export function readEcsLangPref(uiPrefs: unknown): SheetLang | null {
+  return parseSheetLang(ecsScope(uiPrefs)?.lang);
 }
 
 /**

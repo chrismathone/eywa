@@ -25,6 +25,9 @@ import {
   type EcsTodayMode,
 } from "./_components/today-nav";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
+import { sheetDateLabelEn, sheetT, sheetWeekLabel, type SheetLang } from "@/features/class-sheets/i18n";
+import { getEcsLang } from "@/features/class-sheets/server/lang";
+import { SheetLangSwitch } from "@/features/class-sheets/components/lang-switch";
 
 /** 오늘 면 시트 모드의 반 1개분 — 시트 조회가 실패해도 나머지 반은 그려야 하므로 결과를 통째로 나른다. */
 type TodaySheet = {
@@ -41,13 +44,13 @@ export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
  * (실측 2026-09-01: 수학만 10명 · 영어만 8명). ⚠️ 담당 과목을 여기서 조회하지 않으므로
  * **단정하지 않고 조건문**으로 적는다.
  */
-const ecsMathHint = (
+const ecsMathHint = (lang: SheetLang) => (
   <>
-    담당하고 계신 영어 반이 없습니다. 수학 반을 맡고 계시면{" "}
+    {sheetT(lang, "landing.empty.noScoped.before")}{" "}
     <Link href="/mcs" className="text-primary font-bold underline underline-offset-2">
-      수학 강사 시트
+      {sheetT(lang, "landing.empty.noScoped.link")}
     </Link>
-    를 열어 주세요. 반 배정 문의는 사무실로.
+    {sheetT(lang, "landing.empty.noScoped.after")}
   </>
 );
 
@@ -72,7 +75,11 @@ export default async function EcsLandingPage({
   // 영어 반 **전부**(실측 24반)를 편집기·저널·presence 채널과 함께 펼친다 — 쓸 일도 없는 화면에
   // IndexedDB 문서 24개와 realtime 채널 24개를 여는 셈이다(2026-08-07 적대적 리뷰).
   // 학원 전체의 하루를 보는 건 시간표의 일이다. `?view=today`를 손으로 넣어도 주간으로 떨어뜨린다.
-  const scoped = (await effectiveTeacherScope()) !== null;
+  // 화면 언어(2026-09-03) — ECS 레이아웃이 이미 읽어 둔 값을 **요청 캐시에서 그대로** 받는다(왕복 0).
+  const [scoped, lang] = await Promise.all([
+    effectiveTeacherScope().then((s) => s !== null),
+    getEcsLang(),
+  ]);
   // 305 면은 사무실도 연다(오늘 면의 24반 폭탄과 달리 타임 단위). view=room 은 스코프와 무관.
   if (view === "room") {
     const roomRes = await getEcsSeatDay("JJ", date ?? null);
@@ -119,6 +126,7 @@ export default async function EcsLandingPage({
         mode={mode}
         sheets={sheets}
         myTeacherId={myTeacherId}
+        lang={lang}
       />
     );
   }
@@ -127,19 +135,27 @@ export default async function EcsLandingPage({
   if (!res.ok) {
     return (
       <div className="space-y-4">
-        <PageHeader eyebrow="수업 운영" title="영어 강사 시트" description="영어 반별 주간 수업계획서/출석부" />
+        <PageHeader
+          eyebrow={sheetT(lang, "landing.eyebrow")}
+          title={sheetT(lang, "landing.title")}
+          description={sheetT(lang, "landing.desc")}
+        />
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">{res.error}</p>
       </div>
     );
   }
 
+  // 주 라벨 — 영어는 같은 재료(월요일)로 다시 만든다. 서버가 준 `weekLabel`(한국어)은 그대로 둔다
+  // (인쇄·다른 화면도 그 문자열을 쓴다 — 여기서 서버를 바꾸면 그쪽까지 따라 바뀐다).
+  const weekText = sheetWeekLabel(res.weekMonday, res.weekLabel, lang);
+
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="수업 운영"
-        title="영어 강사 시트"
-        description={`영어 반별 주간 수업계획서/출석부 · ${res.weekLabel}`}
-        embedLabel={`영어 강사 시트 · ${res.weekLabel}`}
+        eyebrow={sheetT(lang, "landing.eyebrow")}
+        title={sheetT(lang, "landing.title")}
+        description={`${sheetT(lang, "landing.desc")} · ${weekText}`}
+        embedLabel={`${sheetT(lang, "landing.title")} · ${weekText}`}
       />
 
       {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 반 카드가 자기 테두리를
@@ -147,7 +163,7 @@ export default async function EcsLandingPage({
       <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         {/* '오늘'은 강사 스코프만 — 사무실이 눌러도 주간으로 떨어지는 탭은 거짓 어포던스.
             305는 사무실 본업(그 시각 여러 반)이라 스코프 없어도 단다. */}
-        <EcsFaceTabs face="week" showToday={scoped} />
+        <EcsFaceTabs face="week" showToday={scoped} lang={lang} />
         <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?view=week&week=${monday}`} />
         {/* 프로그램 필터(EiE / 인재원 영어) — 계정 귀속. 시트 가져오기 왼쪽에 붙여 주 네비와 한 줄. */}
         <EcsTrackFilter value={res.trackFilter} counts={res.trackCounts} />
@@ -158,6 +174,10 @@ export default async function EcsLandingPage({
           options={res.teacherOptions}
           totalCount={res.trackCounts[res.trackFilter]}
         />
+        {/* 화면 언어 — 반을 열기 **전에도** 바꿀 수 있어야 한다(원어민이 목록에서 막히면 시트까지 못 간다). */}
+        <span className="ml-auto">
+          <SheetLangSwitch />
+        </span>
       </div>
 
       {res.cards.length === 0 ? (
@@ -166,15 +186,20 @@ export default async function EcsLandingPage({
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
           {res.emptyReason === "filtered"
             ? // 되돌릴 수 있는 원인 — 무엇을 누르면 되는지까지 말한다(막다른 안내 금지).
-              `지금 보기가 '${ENGLISH_TRACK_FILTER_LABEL[res.trackFilter]}'로 좁혀져 있어 표시할 반이 없습니다. 위 '프로그램'에서 전체를 누르면 ${res.trackCounts.all}개 반이 모두 보입니다.`
+              // 🔴 프로그램 **이름**(EiE·인재원 영어)은 번역하지 않는다 — 필터 칩과 같은 규약(고유명).
+              `${sheetT(lang, "landing.empty.filtered.prefix")} '${
+                res.trackFilter === "all"
+                  ? sheetT(lang, "filter.all")
+                  : ENGLISH_TRACK_FILTER_LABEL[res.trackFilter]
+              }'${sheetT(lang, "landing.empty.filtered.suffix")}${res.trackCounts.all}${sheetT(lang, "landing.empty.filtered.tail")}`
             : res.emptyReason === "no-week-classes"
               ? // 반은 있는데 그 주만 비었다 — 주를 옮기면 보인다는 것까지 말한다(막다른 안내 금지).
-                "이 주에 수업이 배정된 영어 반이 없습니다. 위 주 이동으로 다른 주를 확인하세요."
+                sheetT(lang, "landing.empty.noWeekClasses")
               : res.emptyReason === "no-scoped-classes"
-                ? ecsMathHint
+                ? ecsMathHint(lang)
                 : res.emptyReason === "not-configured"
-                  ? "영어 과목의 수업계획(영어 강사 시트) 영역이 아직 설정되지 않았습니다. 학원 설정 → 과목 운영에서 영역을 지정하세요."
-                  : "이 주에 운영 중인 영어 반이 없습니다."}
+                  ? sheetT(lang, "landing.empty.notConfigured")
+                  : sheetT(lang, "landing.empty.none")}
         </p>
       ) : (
         // 카드 벽 → **한 장의 시트**(2026-08-11 원장 "이름에 걸맞게 컴팩트하게"). 상세는 landing-list.tsx.
@@ -204,11 +229,14 @@ function EcsTodayFace({
   mode,
   sheets,
   myTeacherId,
+  lang,
 }: {
   res: EcsTodayResult;
   scoped: boolean;
   mode: EcsTodayMode;
   sheets: TodaySheet[] | null;
+  /** 화면 언어(2026-09-03) — 서버 컴포넌트라 context를 못 읽어 부모가 넘긴다. */
+  lang: SheetLang;
   /**
    * 시트 모드의 **내 교시만 보기** 기준 강사 id(`effectiveTeacherId`). 요약 카드 모드는 안 쓴다 —
    * 카드는 하루 요약·작성률이라 반 전체가 목적이다(원장 지시 범위 = "오늘 시트").
@@ -218,7 +246,11 @@ function EcsTodayFace({
   if (!res.ok) {
     return (
       <div className="space-y-4">
-        <PageHeader eyebrow="수업 운영" title="영어 강사 시트" description="오늘 수업" />
+        <PageHeader
+          eyebrow={sheetT(lang, "landing.eyebrow")}
+          title={sheetT(lang, "landing.title")}
+          description={sheetT(lang, "today.desc.today")}
+        />
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">{res.error}</p>
       </div>
     );
@@ -229,19 +261,21 @@ function EcsTodayFace({
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="수업 운영"
-        title="영어 강사 시트"
-        description={`${isToday ? "오늘" : "이 날"} 수업 ${res.cards.length}개 · 계획·출결·보고서를 한 화면에서`}
-        embedLabel={`영어 강사 시트 · ${isToday ? "오늘" : res.date.slice(5)}`}
+        eyebrow={sheetT(lang, "landing.eyebrow")}
+        title={sheetT(lang, "landing.title")}
+        description={`${sheetT(lang, isToday ? "today.desc.today" : "today.desc.day")} ${res.cards.length}${sheetT(lang, "today.desc.tail")}`}
+        embedLabel={`${sheetT(lang, "landing.title")} · ${isToday ? sheetT(lang, "today.embed.today") : res.date.slice(5)}`}
       />
 
       {/* 좁은 화면(모바일·좁은 창)은 칩 툴바를 가로 레일로 — 시간표 툴바와 같은 .toolbar-rail 규약. */}
       <div className="toolbar-rail flex flex-wrap items-center gap-3 px-1 py-1">
-        <EcsFaceTabs face="today" showToday />
-        <EcsTodayModeTabs mode={mode} date={res.date} />
-        <EcsDayNav date={res.date} today={res.today} mode={mode} />
+        <EcsFaceTabs face="today" showToday lang={lang} />
+        <EcsTodayModeTabs mode={mode} date={res.date} lang={lang} />
+        <EcsDayNav date={res.date} today={res.today} mode={mode} lang={lang} />
         {/* 출결 모드 — 영어 전담 강사에게는 ECS가 홈이라 여기가 그 사람의 입구다(폰엔 사이드바가 없다). */}
-        <EcsQuickAttendanceLink />
+        <EcsQuickAttendanceLink lang={lang} />
+        {/* 화면 언어 — 원어민 강사의 기본 착지가 이 면이라 여기가 가장 먼저 눈에 띄는 자리다. */}
+        <SheetLangSwitch />
       </div>
 
       {/* 휴일 한 줄(원장 2026-09-01 *"ecs/mcs 휴일참조"* + *"대신 입력은 가능하도록"*).
@@ -252,15 +286,19 @@ function EcsTodayFace({
              경고를 더 세우지 않는다. */}
       {res.holidayName ? (
         <p className="border-danger/30 bg-danger-soft/40 text-foreground rounded-2xl border px-4 py-2.5 text-[13px]">
-          {/* ⚠️ 날짜를 "09/24은"처럼 적지 않는다 — 조사가 어긋난다. '일'로 끝나면 '은'이 맞다. */}
+          {/* ⚠️ 날짜를 "09/24은"처럼 적지 않는다 — 조사가 어긋난다. '일'로 끝나면 '은'이 맞다.
+              ⚠️ 영어는 조사가 없어 날짜 표기 뒤에 `is`가 붙는다 — 그래서 주어를 통째로 만들어 넣는다
+                 (한국어 문장을 조각내 붙이면 조사가 깨진다). 🔴 휴일 **이름**은 데이터라 번역 안 한다. */}
           <b className="text-danger">
             {isToday
-              ? "오늘은"
-              : `${Number(res.date.slice(5, 7))}월 ${Number(res.date.slice(8, 10))}일은`}{" "}
+              ? sheetT(lang, "today.holiday.today")
+              : lang === "en"
+                ? `${sheetDateLabelEn(res.date)} is`
+                : `${Number(res.date.slice(5, 7))}월 ${Number(res.date.slice(8, 10))}일은`}{" "}
             {res.holidayName}
           </b>{" "}
-          — 학원 휴일입니다. 수업이 있었다면 계획·출결·보고서를 <b>평소처럼 그대로</b> 쓰실 수 있고, 쓰지 않은
-          휴일은 작성률에 잡히지 않습니다.
+          {sheetT(lang, "today.holiday.tail")} <b>{sheetT(lang, "today.holiday.asUsual")}</b>
+          {sheetT(lang, "today.holiday.tail2")}
         </p>
       ) : null}
 
@@ -271,8 +309,9 @@ function EcsTodayFace({
           ⚠️ 반이 0개면 그 빈 화면 문구가 이미 주간 시트를 가리킨다(같은 말을 두 번 하지 않는다). */}
       {mode === "sheet" && res.cards.length > 0 ? (
         <p className="text-text-dim px-1 text-[15px] leading-relaxed font-medium">
-          전체 반에 대한 내용을 보려면 <span className="text-foreground font-bold">‘주간 시트’</span>에서 볼 수
-          있습니다.
+          {sheetT(lang, "today.weekHint.before")}{" "}
+          <span className="text-foreground font-bold">{sheetT(lang, "today.weekHint.link")}</span>
+          {sheetT(lang, "today.weekHint.after")}
         </p>
       ) : null}
 
@@ -290,9 +329,9 @@ function EcsTodayFace({
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
           {!res.hasAnyClass
             ? scoped
-              ? "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요."
-              : "운영 중인 영어 반이 없습니다."
-            : `${isToday ? "오늘은" : "이 날은"} 수업이 없습니다. 다른 날짜를 보시거나 '주간 시트'에서 이번 주 전체를 확인하세요.`}
+              ? sheetT(lang, "today.empty.noClassScoped")
+              : sheetT(lang, "today.empty.noClass")
+            : `${sheetT(lang, isToday ? "today.empty.noLesson.today" : "today.empty.noLesson.day")}${sheetT(lang, "today.empty.noLesson.tail")}`}
         </p>
       ) : mode === "sheet" ? (
         // 시트 모드 — 반마다 SheetClient를 그 날짜 열만 필터해 쌓는다. 조회 실패한 반은 그 반만 사유를
