@@ -7,6 +7,7 @@ import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { SHEET_BOX_FRAME, SHEET_INPUT } from "../ui-box";
 import { actualBooksOf, offGoalBooksOf, type MonthGoalMap, type PlanLineLike } from "../lib/goal-match";
 import type { GoalField, GoalRole } from "./use-month-goals";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 /**
  * 월간 목표 스트립 — 시트 원본의 '담임/부담임 월간계획'(6영역 × 교재·목표 진도)을 가로로 편 것.
@@ -41,6 +42,8 @@ export function MonthGoalStrip({
   savedAt: number | null;
   onField: (role: GoalRole, skillArea: string, field: GoalField, value: string) => void;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [folded, setFolded] = useState(false);
   const map = goals[role];
   const roleChip = (key: GoalRole, label: string) => (
@@ -62,21 +65,25 @@ export function MonthGoalStrip({
   return (
     <div className="border-line overflow-hidden rounded-xl border">
       <div className="bg-bg-soft flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-[12.5px] font-bold">
-        <span>{role === "homeroom" ? "담임" : "부담임"} 월간계획</span>
+        <span>
+          {tf("month.goal.title", {
+            role: t(role === "homeroom" ? "chrome.homeroom" : "month.goal.assistant"),
+          })}
+        </span>
         <span className="text-text-faint num">{monthLabel}</span>
         <span className="flex gap-1">
-          {roleChip("homeroom", "담임")}
-          {roleChip("assistant", "부담임")}
+          {roleChip("homeroom", t("chrome.homeroom"))}
+          {roleChip("assistant", t("month.goal.assistant"))}
         </span>
         <span className={`ml-auto text-[11.5px] font-semibold ${savedAt ? "text-green" : "text-text-faint"}`}>
-          {savedAt ? "저장됨" : "주간 시트와 같은 칸입니다"}
+          {t(savedAt ? "toolbar.saved" : "month.goal.sameAsWeekFull")}
         </span>
         <button
           type="button"
           onClick={() => setFolded((v) => !v)}
           className="border-line-strong text-text-dim hover:border-primary hover:text-primary cursor-pointer rounded-full border px-2 py-0.5 text-[11.5px] font-bold"
         >
-          {folded ? "펼치기" : "접기"}
+          {t(folded ? "common.expand" : "common.collapse")}
         </button>
       </div>
       {folded ? null : (
@@ -103,35 +110,40 @@ export function MonthGoalStrip({
                     className={SHEET_INPUT}
                     defaultValue={cell.textbook ?? ""}
                     readOnly={!canEdit}
-                    placeholder="교재명"
-                    aria-label={`${area.label} 월간 목표 교재명`}
+                    placeholder={t("month.goal.book")}
+                    aria-label={tf("month.goal.bookAria", { area: area.label })}
                     onChange={(e) => onField(role, area.key, "textbook", e.target.value)}
                   />
                   <input
                     className={SHEET_INPUT}
                     defaultValue={cell.targetProgress ?? ""}
                     readOnly={!canEdit}
-                    placeholder="목표"
-                    aria-label={`${area.label} 목표 진도`}
+                    placeholder={t("month.goal.target")}
+                    aria-label={tf("month.goal.targetAria", { area: area.label })}
                     onChange={(e) => onField(role, area.key, "targetProgress", e.target.value)}
                   />
                 </div>
                 <p className="text-text-faint pl-[80px] text-[11.5px]">
                   {actual.length === 0 ? (
-                    "이 달 진행 없음"
+                    t("month.goal.none")
                   ) : off.length > 0 ? (
                     <>
-                      실제 <span className="text-amber font-bold">{off[0]}</span>
-                      {off.length > 1 ? <span className="num"> 외 {off.length - 1}</span> : null}
+                      {t("month.goal.actual")} <span className="text-amber font-bold">{off[0]}</span>
+                      {off.length > 1 ? (
+                        <span className="num">{tf("month.goal.more", { n: off.length - 1 })}</span>
+                      ) : null}
                     </>
                   ) : cell.textbook ? (
                     <>
-                      실제 <span className="text-green font-bold">목표대로</span>
+                      {t("month.goal.actual")}{" "}
+                      <span className="text-green font-bold">{t("month.goal.onTarget")}</span>
                     </>
                   ) : (
                     <>
-                      실제 {actual[0]}
-                      {actual.length > 1 ? <span className="num"> 외 {actual.length - 1}</span> : null}
+                      {t("month.goal.actual")} {actual[0]}
+                      {actual.length > 1 ? (
+                        <span className="num">{tf("month.goal.more", { n: actual.length - 1 })}</span>
+                      ) : null}
                     </>
                   )}
                 </p>

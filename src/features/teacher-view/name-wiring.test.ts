@@ -1,7 +1,13 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SHEET_DICT, sheetT, sheetTf } from "./i18n";
+import {
+  SHEET_DICT,
+  sheetDowLabelByIndex,
+  sheetMonthLabel,
+  sheetT,
+  sheetTf,
+} from "./i18n";
 import { ROSTER_FIXED_LABEL, ROSTER_TEXT_COLS } from "@/features/class-sheets/lib/roster-form";
 import {
   ATTENDANCE_LABEL,
@@ -306,5 +312,57 @@ describe("🔴 사전으로 옮긴 오늘 면 문구의 ko 결과가 옛 문자�
     expect(src).toContain("onSelect(v || null)");
     const popover = read("features", "class-sheets", "components", "today-mark-popover.tsx");
     expect(popover).toContain("labelOf={(v) => attitudeLabelFor(v, lang) ?? v}");
+  });
+});
+
+/**
+ * 🔴 **월간 뷰(달력·진도표·계획 MP)에 한국어 리터럴이 남지 않는다.**
+ *
+ * 문구를 하나씩 잠그는 대신 **파일에 한글이 있는지**를 본다 — 이 화면들은 문구가 수십 개라
+ * 목록으로 잠그면 새 문구가 늘 때 가드가 조용히 뒤처진다(주석은 규칙을 설명하는 자리라 검사에서 뺀다).
+ * ⚠️ 인쇄물(`month-plan-paper`)은 **학부모 서식**이라 이 목록에 넣지 말 것 — 거기는 한국어가 정답이다.
+ */
+describe("🔴 월간 뷰는 사전만 본다 — 화면 파일에 한글 리터럴 0", () => {
+  const FILES = [
+    "month-client.tsx",
+    "month-calendar.tsx",
+    "month-day-editor.tsx",
+    "month-rail.tsx",
+    "month-goal-strip.tsx",
+    "month-memo.tsx",
+    "month-plan-bar.tsx",
+    "month-plan-view.tsx",
+  ];
+
+  it.each(FILES)("%s", (f) => {
+    const code = codeOnly(read("features", "class-sheets", "components", f));
+    const hits = code.split("\n").filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "month.noClasses")).toBe("이 달에는 수업이 없습니다.");
+    expect(sheetTf("ko", "month.weekTitle", { m: 9, w: 2, date: "2026-09-07" })).toBe(
+      "9월 2째 주 (2026-09-07 시작)",
+    );
+    expect(sheetTf("ko", "month.unwrittenN", { n: 3 })).toBe("미작성 3");
+    expect(sheetTf("ko", "month.days", { n: 4 })).toBe("4일");
+    expect(sheetTf("ko", "month.seat", { seat: "JJ" })).toBe("자리 · JJ");
+    // 🔴 휴강(사람이 표시) ≠ 수업 없음(배정이 없는 날) — 영어에서도 갈라져 있어야 한다.
+    expect(sheetT("en", "mp.off")).not.toBe(sheetT("en", "mp.noClassDay"));
+  });
+
+  it("🔴 요일·월 라벨 표는 한 벌이다 — 화면 파일이 제 표를 만들지 않는다", () => {
+    // 0=일 … 6=토(JS `getDay()`)와 같은 축이어야 달력·진도표가 같은 요일을 가리킨다.
+    expect(sheetDowLabelByIndex(0, "ko")).toBe("일");
+    expect(sheetDowLabelByIndex(4, "ko")).toBe("목");
+    expect(sheetDowLabelByIndex(4, "en")).toBe("Thu");
+    // 한국어는 **호출부가 만든 값 그대로**(앱 전역 monthLabel이 정본).
+    expect(sheetMonthLabel("2026-09", "2026년 9월", "ko")).toBe("2026년 9월");
+    expect(sheetMonthLabel("2026-09", "2026년 9월", "en")).toBe("September 2026");
+    for (const f of ["month-calendar.tsx", "month-rail.tsx", "month-day-editor.tsx"]) {
+      const src = read("features", "class-sheets", "components", f);
+      expect(src).not.toContain("DOW_KO");
+    }
   });
 });

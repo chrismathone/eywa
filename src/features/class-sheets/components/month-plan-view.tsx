@@ -8,6 +8,9 @@ import {
   type MonthPlanTexts,
 } from "@/features/owner/month-plan-texts";
 import { cellDateOf } from "../lib/month";
+// 🔴 화면 크롬만 언어를 따른다 — 서식 본문(머리말·Prep·하단 문구)은 학원설정이 단일 소스이고
+//    인쇄물은 아예 다른 컴포넌트(month-plan-paper)라 학부모에게는 한국어 그대로 나간다.
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import {
   MP_COLUMN_HINT,
   MP_COLUMN_LABEL,
@@ -160,6 +163,7 @@ function FooterBlock({
   disabled: boolean;
   onChange: (next: string) => void;
 }) {
+  const t = useSheetT();
   const [editing, setEditing] = useState(false);
   /**
    * 🔴 보기(div)와 입력(textarea)이 **같은 상자**여야 한다 — 글꼴·크기·굵기·줄간격·정렬·패딩까지.
@@ -185,7 +189,7 @@ function FooterBlock({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => setEditing(false)}
-        aria-label="월간 계획서 하단 문구"
+        aria-label={t("mp.footerAria")}
         style={text}
       />
     );
@@ -194,15 +198,15 @@ function FooterBlock({
     <div
       role={disabled ? undefined : "textbox"}
       tabIndex={disabled ? -1 : 0}
-      aria-label="월간 계획서 하단 문구"
+      aria-label={t("mp.footerAria")}
       aria-readonly={disabled || undefined}
-      title={disabled ? undefined : "눌러서 이 반의 하단 문구를 고칩니다"}
+      title={disabled ? undefined : t("mp.footerTitle")}
       onClick={() => !disabled && setEditing(true)}
       onFocus={() => !disabled && setEditing(true)}
       className={`${box} ${disabled ? "" : "cursor-text"}`}
       style={text}
     >
-      {value || (disabled ? "" : "눌러서 하단 문구를 적으세요")}
+      {value || (disabled ? "" : t("mp.footerEmpty"))}
     </div>
   );
 }
@@ -254,6 +258,8 @@ export function MonthPlanView({
   onEbookColumn: (dates: string[], show: boolean) => void;
   onDayOff: (date: string, off: boolean) => void;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const cellList: MpCell[] = useMemo(
     () =>
       Object.entries(cells).map(([key, body]) => {
@@ -288,7 +294,7 @@ export function MonthPlanView({
       if (
         written > 0 &&
         !window.confirm(
-          `${MP_DOW_LABEL_EN[dow]}의 e-book 열을 내리면 적어 둔 ${written}칸이 함께 지워집니다. 계속할까요?`,
+          tf("mp.ebook.dropConfirm", { dow: MP_DOW_LABEL_EN[dow], n: written }),
         )
       ) {
         return;
@@ -304,7 +310,7 @@ export function MonthPlanView({
   if (data.dows.length === 0) {
     return (
       <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
-        이 달에는 이 반의 배정된 수업이 없습니다 — 계획을 적을 날짜가 없습니다.
+        {t("mp.noSchedule")}
       </p>
     );
   }
@@ -446,12 +452,12 @@ export function MonthPlanView({
                         onClick={() => toggleEbook(dow, hasEbook)}
                         title={
                           hasEbook
-                            ? "이 요일의 e-book 열을 내립니다(적어 둔 내용도 함께 지워집니다)"
-                            : "이 요일에 e-book 열을 세웁니다"
+                            ? t("mp.ebook.drop.title")
+                            : t("mp.ebook.add.title")
                         }
                         className="text-text-dim hover:bg-bg-soft cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold"
                       >
-                        {hasEbook ? "e-book 열 내리기" : "+ e-book 열"}
+                        {t(hasEbook ? "mp.ebook.drop" : "mp.ebook.add")}
                       </button>
                     ) : null}
                   </span>
@@ -495,7 +501,9 @@ export function MonthPlanView({
                     {/* 날짜는 **가운데**(시트 그대로). 휴강 버튼만 오른쪽에 띄워서 날짜를 밀지 않게 한다. */}
                     <span className="flex flex-wrap items-center justify-center gap-1.5 pr-10">
                       <span className="num">{date ? monthDay(date) : "—"}</span>
-                      {date && !teaches ? <span className="text-[10px]">수업 없음</span> : null}
+                      {date && !teaches ? (
+                        <span className="text-[10px]">{t("mp.noClassDay")}</span>
+                      ) : null}
                       {/* ⚠️ 휴강 날은 아래 라벨 줄이 이미 `휴강 · 추석`을 적는다 — 여기 또 붙이면 같은
                           말이 두 번이다. 휴일인데 **수업하는 날**(반별 예외 `open`)에는 이 알약이
                           유일한 표시라 그때는 남긴다. */}
@@ -521,12 +529,12 @@ export function MonthPlanView({
                           onClick={() => onDayOff(date, !off)}
                           title={
                             off
-                              ? "이 날 수업을 되살립니다(계획을 다시 적을 수 있습니다)"
-                              : "이 날을 휴강으로 표시합니다(인쇄물에 회색 '휴강'으로 나옵니다)"
+                              ? t("mp.off.undo.title")
+                              : t("mp.off.title")
                           }
                           className="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold hover:bg-white"
                         >
-                          {off ? "수업함으로" : "휴강"}
+                          {t(off ? "mp.off.undo" : "mp.off")}
                         </button>
                       ) : null}
                     </span>
@@ -653,7 +661,7 @@ export function MonthPlanView({
                       }}
                     >
                       {summary.length === 0 ? (
-                        <span className="text-black/40">{date && teaches ? "기록 없음" : ""}</span>
+                        <span className="text-black/40">{date && teaches ? t("mp.noRecord") : ""}</span>
                       ) : (
                         <span className="text-black/70">{summary.join(" / ")}</span>
                       )}

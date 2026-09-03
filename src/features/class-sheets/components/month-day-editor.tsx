@@ -27,8 +27,11 @@ import { slotKey } from "../lib/month-assemble";
 import type { MonthSlot } from "../lib/month-assemble";
 import { SlotPlanBlock } from "./slot-plan-block";
 import { ECS_PLAN_API } from "./plan-api";
+import { sheetDowLabelByIndex, type SheetLang } from "@/features/teacher-view/i18n";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
+import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
 
-const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
 /** 닫을 때 저장이 끝나기를 기다리는 상한 — 넘으면 그냥 닫는다(못 나간 입력은 저널에 남는다). */
 const FLUSH_WAIT_MS = 5000;
@@ -44,10 +47,14 @@ const FLUSH_WAIT_MS = 5000;
  */
 const OUTSIDE_CLOSE_GRACE_MS = 400;
 
-/** "2026-09-03" → "9/3 (목)" — 창 제목은 짧게, 연도는 월간 툴바가 이미 말하고 있다. */
-function dayLabel(date: string): string {
+/**
+ * "2026-09-03" → "9/3 (목)" / "9/3 (Thu)" — 창 제목은 짧게, 연도는 월간 툴바가 이미 말하고 있다.
+ * 🔴 요일 글자는 [`sheetDowLabelByIndex`](@/features/teacher-view/i18n) 한 벌을 쓴다 — 여기서 표를
+ *    새로 만들면 같은 요일이 화면마다 다른 글자가 된다.
+ */
+function dayLabel(date: string, lang: SheetLang): string {
   const [y, m, d] = date.split("-").map(Number);
-  const dow = DOW_KO[new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay()] ?? "";
+  const dow = sheetDowLabelByIndex(new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay(), lang);
   return `${m}/${d} (${dow})`;
 }
 
@@ -70,6 +77,8 @@ export function MonthDayEditor({
   /** 저장 큐를 다 비운 뒤 호출 — 호출부가 월간을 다시 읽어 배지·경고를 갱신한다. */
   onSaved: () => void;
 }) {
+  const t = useSheetT();
+  const lang = useSheetLang();
   const [state, setState] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; plan: EcsDayPlan }>({
     kind: "loading",
   });
@@ -154,7 +163,7 @@ export function MonthDayEditor({
         <DialogHeader className="gap-1 px-2">
           <div className="flex flex-wrap items-center gap-2">
             <DialogTitle className="text-[15px] font-bold">
-              <span className="num">{dayLabel(date)}</span> 수업계획
+              <span className="num">{dayLabel(date, lang)}</span> {t("plan.editor.title")}
             </DialogTitle>
             <span className="text-text-dim text-[12.5px] font-semibold">{className}</span>
             <span className="ml-auto flex items-center gap-2">
@@ -163,9 +172,9 @@ export function MonthDayEditor({
                 onClick={goWeek}
                 disabled={closing}
                 className="border-line-strong text-text-dim hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2.5 py-1 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
-                title="출결·태도·학생 칸까지 있는 주간 시트로 갑니다 — 여기 적은 내용을 저장한 뒤 이동합니다"
+                title={t("month.editor.toWeek.title")}
               >
-                주간 시트로
+                {t("month.editor.toWeek")}
               </button>
               <button
                 type="button"
@@ -173,24 +182,30 @@ export function MonthDayEditor({
                 disabled={closing}
                 className="border-line-strong text-foreground hover:border-primary hover:text-primary inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
               >
-                {closing ? "저장 중…" : <><EyIcon name="close" size={12} /> 닫기</>}
+                {closing ? (
+                  t("toolbar.saving")
+                ) : (
+                  <>
+                    <EyIcon name="close" size={12} /> {t("popup.close")}
+                  </>
+                )}
               </button>
             </span>
           </div>
           {/* 창을 닫아야 반영되는 게 아니라는 걸 밝힌다 — 시트와 같은 자동저장이다. */}
           <p className="text-text-faint text-[11.5px]">
-            주간 시트와 같은 칸입니다 — 치는 대로 저장되고, 닫으면 이 달의 미작성·목표 밖 표시가 다시 계산됩니다.
+            {t("month.editor.hint")}
           </p>
         </DialogHeader>
 
         {state.kind === "loading" ? (
-          <p className="text-text-dim px-2 py-6 text-[13px]">수업계획을 불러오는 중…</p>
+          <p className="text-text-dim px-2 py-6 text-[13px]">{t("month.editor.loading")}</p>
         ) : state.kind === "error" ? (
           <p className="border-danger/40 bg-danger-soft text-danger mx-2 rounded-lg border px-3 py-2 text-[12.5px] font-semibold">
             {state.message}
           </p>
         ) : slots.length === 0 ? (
-          <p className="text-text-dim px-2 py-6 text-[13px]">이 날은 배정된 교시가 없습니다.</p>
+          <p className="text-text-dim px-2 py-6 text-[13px]">{t("month.editor.noSlots")}</p>
         ) : (
           <div className="min-w-0">
             {slots.map((slot) => (
@@ -226,6 +241,10 @@ function DaySlot({
   plan: EcsDayPlan;
   registerFlush: (slotStart: string, flush: (() => Promise<unknown>) | null) => void;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
+  const teacherNames = useTeacherNames();
   const onFlush = useCallback(
     (flush: (() => Promise<unknown>) | null) => registerFlush(slot.slotStart, flush),
     [registerFlush, slot.slotStart],
@@ -238,13 +257,15 @@ function DaySlot({
           {slot.slotEnd ? `~${slot.slotEnd}` : ""}
         </span>
         {periodLabel ? <span className="text-text-dim text-[11.5px] font-semibold">{periodLabel}</span> : null}
-        <span className="text-text-dim text-[12px]">{slot.teacherLabel ?? "담당 미지정"}</span>
+        <span className="text-text-dim text-[12px]">
+          {teacherNameFor(slot.teacherLabel, teacherNames, lang) ?? t("month.noTeacher")}
+        </span>
         {slot.seat ? (
           <span
             className="border-line-strong text-text-dim rounded-full border px-1.5 text-[10.5px] leading-4 font-bold"
-            title="자리 교시 — 반 진도가 아니라 학생 개별 진도입니다"
+            title={t("month.seat.title")}
           >
-            자리 · {slot.seat}
+            {tf("month.seat", { seat: slot.seat })}
           </span>
         ) : null}
       </div>

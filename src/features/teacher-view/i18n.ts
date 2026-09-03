@@ -345,7 +345,7 @@ export const SHEET_DICT = {
   // ⚠️ 이 배지는 관리자 풀셸(수업목록·상담·등록상담)에서도 쓰인다 — provider 밖이라 한국어로 떨어진다.
   "presence.editing": { ko: "수정중", en: "Editing" },
   "presence.someone": { ko: "누군가", en: "someone" },
-  "presence.more": { ko: " 외 {n}명", en: " +{n}" },
+  "presence.more": { ko: " 외 {n}명", en: " +{n} more" },
   // ⚠️ 영어는 **`is/are`를 쓰지 않는다** — 이름이 하나일 수도 여럿일 수도 있어 어느 쪽을 골라도
   //    절반은 틀린 문장이 된다(한국어 `님이`는 수와 무관해 문제가 없다). 대시로 끊어 수를 안 드러낸다.
   "presence.title": {
@@ -665,7 +665,191 @@ export const SHEET_DICT = {
   },
   "mark.trigger.empty": { ko: "{name} 태도·특이사항 입력", en: "Enter attitude and notes for {name}" },
   "mark.aria": { ko: "{name} 태도·특이사항", en: "{name} attitude and notes" },
-  "att.pill.noRecord": { ko: "출결 없음", en: "No record" },
+  // ── 월간 뷰(달력·진도표·계획 MP) ──────────────────
+  // 재사용: 계획=bulk.plan · 과제=plan.col.homework · 특이사항=roster.col.note · 닫기=popup.close
+  // 담임=chrome.homeroom · 저장됨=toolbar.saved · 달력=face.cal · 접기/펼치기=common.*
+  "month.prev": { ko: "이전 달", en: "Previous month" },
+  "month.next": { ko: "다음 달", en: "Next month" },
+  "month.current": { ko: "눌러서 이번 달로", en: "Click for this month" },
+  "month.printDocTitle": { ko: "{class} {month} 계획서", en: "{class} {month} plan" },
+  "month.fill.unit": { ko: "교시", en: "periods" },
+  "month.fill.title": {
+    ko: "이 달에 배정된 전 교시 기준입니다 — 아래 표시 토글(자리 교시)을 꺼도 이 숫자는 그대로입니다. 학원 휴일은 쓸 의무가 없어 분모에서 빠지고, 휴일에 쓴 계획은 그대로 인정됩니다. 주간 시트의 작성률은 그 주 표시 설정을 따르므로 두 숫자가 다를 수 있습니다.",
+    en: "Counted against every period assigned this month — turning the seat-period toggle off does not change it. Academy holidays are outside the denominator, and a plan written on a holiday still counts. The weekly sheet follows that week's display settings, so the two numbers can differ.",
+  },
+  "month.offGoal": { ko: "목표 밖 교재", en: "Off-goal book" },
+  "month.days": { ko: "{n}일", en: "{n} days" },
+  "month.toggle.actual": { ko: "실제 함께 보기", en: "Show actual too" },
+  "month.toggle.actual.title": {
+    ko: "그 날 주간 시트에 실제로 적힌 진도를 계획 아래에 함께 보여줍니다. 신호(미작성·교재 다름) 숫자는 이 토글과 무관합니다",
+    en: "Shows what was actually written in that day's weekly sheet under each plan. The signal counts (not written, different book) do not follow this toggle",
+  },
+  "month.print": { ko: "인쇄", en: "Print" },
+  "month.print.title": {
+    ko: "지금 화면의 계획을 A4 한 장으로 인쇄합니다(대조·경고는 실리지 않습니다)",
+    en: "Prints the plan on screen as one A4 page (comparisons and warnings are not included)",
+  },
+  "month.toggle.homework.title": {
+    ko: "계획 줄의 과제까지 보여줍니다",
+    en: "Also shows the homework on each plan line",
+  },
+  "month.toggle.seat": { ko: "자리 교시(JJ)", en: "Seat periods (JJ)" },
+  "month.toggle.seat.title": {
+    ko: "랩실·JJ실 자리 교시 — 반 진도가 아니라 학생 개별 진도입니다. 표시만 바뀌고 작성률은 그대로입니다",
+    en: "Lab and JJ seat periods — these are each student's own progress, not the class's. Only the display changes; the writing rate stays the same",
+  },
+  "month.error.goal": {
+    ko: "목표를 저장하지 못했습니다 — {error} · 새로고침하면 마지막으로 저장된 값이 보입니다",
+    en: "Could not save the goal — {error} · refresh to see the last saved value",
+  },
+  "month.error.plan": {
+    ko: "계획을 저장하지 못했습니다 — {error} · 새로고침하면 마지막으로 저장된 값이 보입니다",
+    en: "Could not save the plan — {error} · refresh to see the last saved value",
+  },
+  "month.mp.notReady": {
+    ko: "월간 계획서 저장소가 아직 준비되지 않았습니다(DB 갱신 필요) — 관리자에게 알려주세요. 그때까지 적은 내용은 저장되지 않습니다.",
+    en: "The monthly plan storage is not ready yet (the database needs an update) — please tell the office. Until then nothing you type here is saved.",
+  },
+  "month.mp.loadFailed": {
+    ko: "월간 계획서를 불러오지 못했습니다 — 새로고침해 보시고, 계속되면 관리자에게 알려주세요.",
+    en: "Could not load the monthly plan — try refreshing, and tell the office if it keeps happening.",
+  },
+  "month.noClasses": { ko: "이 달에는 수업이 없습니다.", en: "There are no classes this month." },
+  "month.dowFull": { ko: "{dow}요일", en: "{dow}" },
+  "month.weekTitle": { ko: "{m}월 {w}째 주 ({date} 시작)", en: "Week {w} of month {m} (starts {date})" },
+  "month.weekUnit": { ko: "주", en: "wk" },
+  "month.cell.holiday.edit": {
+    ko: "{holiday} — 휴일입니다. 수업했다면 이 날 계획을 그대로 고칠 수 있습니다",
+    en: "{holiday} — a holiday. If you did teach, you can still edit this day's plan",
+  },
+  "month.cell.holiday.view": {
+    ko: "{holiday} — 휴일입니다. 수업했다면 이 날 계획을 그대로 볼 수 있습니다",
+    en: "{holiday} — a holiday. If you did teach, you can still see this day's plan",
+  },
+  "month.cell.edit": { ko: "누르면 이 날 계획을 여기서 고칩니다", en: "Click to edit this day's plan here" },
+  "month.cell.view": { ko: "누르면 이 날 계획을 여기서 봅니다", en: "Click to see this day's plan here" },
+  "month.unwritten": { ko: "미작성", en: "Not written" },
+  "month.unwrittenN": { ko: "미작성 {n}", en: "Not written {n}" },
+  "month.allWritten.title": {
+    ko: "이 날은 배정된 교시에 계획이 다 있습니다",
+    en: "Every assigned period on this day has a plan",
+  },
+  "month.offGoalN": { ko: "목표 밖 {n}", en: "Off-goal {n}" },
+  "month.noPlan": { ko: "계획 없음", en: "No plan" },
+  "month.noTeacher": { ko: "담당 미지정", en: "No teacher set" },
+  "month.homeworkLine": { ko: "과제 {v}", en: "Homework {v}" },
+  "month.goalLine": { ko: "월간 목표: {book}", en: "Monthly goal: {book}" },
+  "month.bookOnly": { ko: "교재만 · 진도 미기입", en: "Book only · no progress written" },
+  "month.editor.toWeek": { ko: "주간 시트로", en: "To weekly sheet" },
+  "month.editor.toWeek.title": {
+    ko: "출결·태도·학생 칸까지 있는 주간 시트로 갑니다 — 여기 적은 내용을 저장한 뒤 이동합니다",
+    en: "Goes to the weekly sheet, which also has attendance, attitude and student cells — what you typed here is saved first",
+  },
+  "month.editor.hint": {
+    ko: "주간 시트와 같은 칸입니다 — 치는 대로 저장되고, 닫으면 이 달의 미작성·목표 밖 표시가 다시 계산됩니다.",
+    en: "These are the same cells as the weekly sheet — they save as you type, and closing recalculates this month's not-written and off-goal marks.",
+  },
+  "month.editor.loading": { ko: "수업계획을 불러오는 중…", en: "Loading the lesson plan…" },
+  "month.editor.noSlots": { ko: "이 날은 배정된 교시가 없습니다.", en: "No periods are assigned on this day." },
+  "month.seat.title": {
+    ko: "자리 교시 — 반 진도가 아니라 학생 개별 진도입니다",
+    en: "Seat period — this is each student's own progress, not the class's",
+  },
+  "month.seat": { ko: "자리 · {seat}", en: "Seat · {seat}" },
+  "month.rail.empty.a": {
+    ko: "이 달에는 작성된 계획이 없습니다. 수업은 있는데 비어 있다면",
+    en: "No plans were written this month. If there are classes but nothing here, the",
+  },
+  "month.rail.empty.b": { ko: "에서 어느 교시가 미작성인지 볼 수 있습니다.", en: "view shows which periods are missing." },
+  "month.rail.goalHead": { ko: "영역 · 월간 목표", en: "Area · monthly goal" },
+  "month.rail.footer": { ko: "그날 계획 / 배정 교시", en: "That day's plans / assigned periods" },
+  "month.goal.sameAsWeek": { ko: "주간 시트와 같은 칸", en: "Same cell as the weekly sheet" },
+  "month.goal.sameAsWeekFull": { ko: "주간 시트와 같은 칸입니다", en: "These are the same cells as the weekly sheet" },
+  "month.goal.book": { ko: "교재명", en: "Book" },
+  "month.goal.target": { ko: "목표", en: "Goal" },
+  "month.goal.bookAria": { ko: "{area} 월간 목표 교재명", en: "{area} monthly goal book" },
+  "month.goal.targetAria": { ko: "{area} 목표 진도", en: "{area} goal progress" },
+  "month.goal.assistant": { ko: "부담임", en: "Assistant" },
+  "month.goal.title": { ko: "{role} 월간계획", en: "{role} monthly plan" },
+  "month.goal.none": { ko: "이 달 진행 없음", en: "Nothing covered this month" },
+  "month.goal.actual": { ko: "실제", en: "Actual" },
+  "month.goal.onTarget": { ko: "목표대로", en: "On target" },
+  // 교재 이름 뒤에 붙는 여벌 수 — 사람 수(` 외 {n}명`)와 **다른 낱말**이어야 한다(가드).
+  "month.goal.more": { ko: " 외 {n}", en: " (+{n})" },
+  "month.memo.saveFailed": { ko: "저장에 실패했습니다(네트워크)", en: "Save failed (network)" },
+  "month.memo.hint": { ko: "이 달 전체에 남는 메모입니다", en: "A note that stays for the whole month" },
+  "month.memo.notReady": {
+    ko: "메모 칸은 아직 준비 중입니다(관리자에게 문의하세요). 달력·진도표는 그대로 쓸 수 있습니다.",
+    en: "The note field is not ready yet — please ask the office. The calendar and progress table still work.",
+  },
+  "month.memo.loadFailed": {
+    ko: "메모를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요.",
+    en: "Could not load the note. Please refresh in a moment.",
+  },
+  "month.memo.placeholder": {
+    ko: "이 달 전체에 남길 특이사항을 적습니다 (예: 9/16 시험 주간, 3주차 원어민 대체)",
+    en: "Notes for the whole month (e.g. exam week on 9/16, native teacher covering week 3)",
+  },
+  "month.memo.aria": { ko: "{month} 특이사항 메모", en: "{month} monthly notes" },
+  "mp.title": {
+    ko: "휴강으로 표시한 날은 분모에서 빠집니다. 달력·진도표의 '계획 N/M교시'는 축이 교시라 이 숫자와 다릅니다.",
+    en: "Days marked as no-class are outside the denominator. The calendar and progress table count periods, not days, so their numbers differ.",
+  },
+  // 🔴 인쇄물 본문은 **학부모 서식**이라 한국어 고정이다(별도 컴포넌트 `month-plan-paper`).
+  //    아래는 화면 편집기의 크롬(접근성 이름·안내)뿐 — 서식 문구는 학원설정이 단일 소스다.
+  "mp.footerAria": { ko: "월간 계획서 하단 문구", en: "Monthly plan footer text" },
+  "mp.footerTitle": {
+    ko: "눌러서 이 반의 하단 문구를 고칩니다",
+    en: "Click to edit this class's footer text",
+  },
+  "mp.noSchedule": {
+    ko: "이 달에는 이 반의 배정된 수업이 없습니다 — 계획을 적을 날짜가 없습니다.",
+    en: "This class has no assigned lessons this month — there are no days to plan.",
+  },
+  "mp.footerEmpty": { ko: "눌러서 하단 문구를 적으세요", en: "Click to write the footer text" },
+  "mp.ebook.dropConfirm": {
+    ko: "{dow}의 e-book 열을 내리면 적어 둔 {n}칸이 함께 지워집니다. 계속할까요?",
+    en: "Dropping the e-book column for {dow} also deletes the {n} cells written there. Continue?",
+  },
+  "mp.ebook.drop": { ko: "e-book 열 내리기", en: "Drop e-book column" },
+  "mp.ebook.add": { ko: "+ e-book 열", en: "+ e-book column" },
+  "mp.ebook.drop.title": {
+    ko: "이 요일의 e-book 열을 내립니다(적어 둔 내용도 함께 지워집니다)",
+    en: "Drops this weekday's e-book column (anything written there is deleted too)",
+  },
+  "mp.ebook.add.title": {
+    ko: "이 요일에 e-book 열을 세웁니다",
+    en: "Adds an e-book column for this weekday",
+  },
+  "mp.off": { ko: "휴강", en: "Mark as no class" },
+  "mp.off.undo": { ko: "수업함으로", en: "Mark as taught" },
+  "mp.off.title": {
+    ko: "이 날을 휴강으로 표시합니다(인쇄물에 회색 '휴강'으로 나옵니다)",
+    en: "Marks this day as no class (it prints greyed out)",
+  },
+  "mp.off.undo.title": {
+    ko: "이 날 수업을 되살립니다(계획을 다시 적을 수 있습니다)",
+    en: "Brings this day's lesson back (you can write a plan again)",
+  },
+  "mp.noRecord": { ko: "기록 없음", en: "No record" },
+  "mp.noClassDay": { ko: "수업 없음", en: "No class" },
+  "mp.dayUnit": { ko: "일", en: "days" },
+  "mp.unwritten": { ko: "미작성", en: "Not written" },
+  "mp.unwritten.title": {
+    ko: "계획은 적었는데 그 날 주간 시트에 기록이 없는 날입니다",
+    en: "Days with a plan but nothing written in that day's weekly sheet",
+  },
+  "mp.offBook": { ko: "교재 다름", en: "Different book" },
+  "mp.offBook.title": {
+    ko: "계획에 적은 교재가 그 날 기록 어디에도 없는 날입니다(쪽수는 대조하지 않습니다)",
+    en: "Days where the planned book appears nowhere in that day's records (page numbers are not compared)",
+  },
+  "mp.noPlan": { ko: "계획 없음", en: "No plan" },
+  "mp.noPlan.title": {
+    ko: "기록은 있는데 계획 칸이 비어 있는 날입니다 — 경고가 아닙니다",
+    en: "Days with records but an empty plan cell — this is not a warning",
+  },
+  "att.pill.noRecord": { ko: "출결 없음", en: "No attendance" },
   "att.pill.none": { ko: "출결 —", en: "Attendance —" },
   "att.groupAria": { ko: "{name} 출결", en: "{name} attendance" },
   "att.readonlyOther": {
@@ -839,6 +1023,40 @@ const DOW_LABEL: Record<SheetLang, Record<string, string>> = {
 export function sheetDowLabel(dow: string, lang: SheetLang): string {
   return DOW_LABEL[lang][dow] ?? DOW_LABEL.ko[dow] ?? dow;
 }
+
+/** 자바스크립트 요일 번호(0=일 … 6=토) → 같은 표. 달력·진도표가 `Date.getDay()`를 그대로 쓴다. */
+const DOW_BY_INDEX = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+export function sheetDowLabelByIndex(day: number, lang: SheetLang): string {
+  return sheetDowLabel(DOW_BY_INDEX[((day % 7) + 7) % 7], lang);
+}
+
+/**
+ * 월 라벨 — 한국어는 **호출부가 만든 값을 그대로** 쓴다(앱 전역 `monthLabel`이 정본이고, 여기서
+ * 한글판을 다시 만들면 같은 달이 화면마다 다르게 적힌다 — 주간 라벨과 같은 규약).
+ * 영어는 `September 2026`.
+ */
+export function sheetMonthLabel(month: string, koLabel: string, lang: SheetLang): string {
+  if (lang !== "en") return koLabel;
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m || m < 1 || m > 12) return koLabel;
+  return `${EN_MONTHS_FULL[m - 1]} ${y}`;
+}
+
+const EN_MONTHS_FULL = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
 const EN_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const EN_DOWS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

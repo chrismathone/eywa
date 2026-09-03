@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { saveMonthMemo } from "../server/month-memo-actions";
 import type { MonthMemoStatus } from "../server/month-queries";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 const SAVE_DELAY_MS = 600;
 const MAX_BODY = 2000;
@@ -38,6 +39,8 @@ export function MonthMemo({
   status: MonthMemoStatus;
   canEdit: boolean;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,10 +63,11 @@ export function MonthMemo({
         .catch(() => {
           // 액션은 {ok:false}로 실패를 알리지만 **네트워크가 끊기면 reject**된다 — 안 잡으면
           // 처리 안 된 rejection만 남고 사람은 저장된 줄 안다.
-          setError("저장에 실패했습니다(네트워크)");
+          setError(t("month.memo.saveFailed"));
         });
     },
-    [classId, month],
+    // 🔴 `t`도 의존성이다 — 언어가 바뀌면 이 함수도 새로 만들어야 실패 문구가 옛 언어로 굳지 않는다.
+    [classId, month, t],
   );
 
   useEffect(() => {
@@ -87,22 +91,22 @@ export function MonthMemo({
   return (
     <div className="border-line overflow-hidden rounded-xl border">
       <div className="bg-bg-soft flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-[12.5px] font-bold">
-        <span>특이사항</span>
+        <span>{t("roster.col.note")}</span>
         <span className="text-text-faint num">{monthLabel}</span>
         <span
           className={`ml-auto text-[11.5px] font-semibold ${
             error ? "text-danger" : savedAt ? "text-green" : "text-text-faint"
           }`}
         >
-          {error ?? (savedAt ? "저장됨" : "이 달 전체에 남는 메모입니다")}
+          {error ?? t(savedAt ? "toolbar.saved" : "month.memo.hint")}
         </span>
       </div>
       {/* 🔴 표가 아직 없으면 **적게 두지 않는다** — 다 쓰고 나서 저장 실패를 만나는 게 더 나쁘다. */}
       {status !== "ok" ? (
         <p className="text-text-dim px-2.5 py-2 text-[12px]">
           {status === "missing-table"
-            ? "메모 칸은 아직 준비 중입니다(관리자에게 문의하세요). 달력·진도표는 그대로 쓸 수 있습니다."
-            : "메모를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요."}
+            ? t("month.memo.notReady")
+            : t("month.memo.loadFailed")}
         </p>
       ) : (
         <textarea
@@ -110,8 +114,8 @@ export function MonthMemo({
           defaultValue={initialBody}
           disabled={!ready}
           maxLength={MAX_BODY}
-          placeholder={canEdit ? "이 달 전체에 남길 특이사항을 적습니다 (예: 9/16 시험 주간, 3주차 원어민 대체)" : ""}
-          aria-label={`${monthLabel} 특이사항 메모`}
+          placeholder={canEdit ? t("month.memo.placeholder") : ""}
+          aria-label={tf("month.memo.aria", { month: monthLabel })}
           onChange={(e) => onChange(e.target.value)}
           onBlur={(e) => {
             // 칸을 떠나면 디바운스를 기다리지 않는다 — 사람이 "다 썼다"고 말한 순간이다.

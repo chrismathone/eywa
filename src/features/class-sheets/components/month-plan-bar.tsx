@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { mpDayIsOff, mpOffOverrideOf } from "../lib/month-plan";
 import { mpCompareDay, mpLinesOfDate, mpSummarize } from "../lib/month-plan-compare";
 import type { ClassSheetMonthData } from "../server/month-queries";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 /**
  * 계획(MP) 보기의 **숫자 한 줄** — 작성률 + 신호 둘.
@@ -31,44 +32,46 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
     );
   }, [data, cells]);
 
+  const t = useSheetT();
+  const tf = useSheetTf();
   const pct = summary.scheduled === 0 ? 0 : Math.round((summary.planned / summary.scheduled) * 100);
 
   return (
     <>
       <span
         className="text-text-dim text-[12.5px]"
-        title="휴강으로 표시한 날은 분모에서 빠집니다. 달력·진도표의 '계획 N/M교시'는 축이 교시라 이 숫자와 다릅니다."
+        title={t("mp.title")}
       >
-        계획{" "}
+        {t("bulk.plan")}{" "}
         <b className="text-foreground num">
           {summary.planned}/{summary.scheduled}
         </b>
-        일 <span className="num">({pct}%)</span>
+        {t("mp.dayUnit")} <span className="num">({pct}%)</span>
       </span>
       {summary.unwritten > 0 ? (
         <span
           className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold"
-          title="계획은 적었는데 그 날 주간 시트에 기록이 없는 날입니다"
+          title={t("mp.unwritten.title")}
         >
           <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
-          미작성 <span className="num">{summary.unwritten}일</span>
+          {t("mp.unwritten")} <span className="num">{tf("month.days", { n: summary.unwritten })}</span>
         </span>
       ) : null}
       {summary.offBook > 0 ? (
         <span
           className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold"
-          title="계획에 적은 교재가 그 날 기록 어디에도 없는 날입니다(쪽수는 대조하지 않습니다)"
+          title={t("mp.offBook.title")}
         >
           <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
-          교재 다름 <span className="num">{summary.offBook}일</span>
+          {t("mp.offBook")} <span className="num">{tf("month.days", { n: summary.offBook })}</span>
         </span>
       ) : null}
       {summary.noPlan > 0 ? (
         <span
           className="text-text-faint text-[12.5px]"
-          title="기록은 있는데 계획 칸이 비어 있는 날입니다 — 경고가 아닙니다"
+          title={t("mp.noPlan.title")}
         >
-          계획 없음 <span className="num">{summary.noPlan}일</span>
+          {t("mp.noPlan")} <span className="num">{tf("month.days", { n: summary.noPlan })}</span>
         </span>
       ) : null}
     </>
