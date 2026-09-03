@@ -371,7 +371,7 @@ export default async function TodayPage() {
                 지금 진행 중
               </h2>
             </div>
-            <p className="text-text-dim text-xs">수업 흐름과 사람 후속조치를 한곳에서 봅니다.</p>
+            {/* 설명 문장은 뺐다(지시서 §4). */}
           </header>
           <div className={`grid items-start gap-4 ${liveGrid}`}>
             {showLiveSchedule ? (
@@ -409,28 +409,21 @@ export default async function TodayPage() {
         }}
       />
 
-      {/* 카드 안의 카드 — 학원 펄스와 같은 결(원장 2026-08-31: *"카드 안에 단 구분 시키던지해서 깔끔해지게"*).
-          세 장이 따로 떠 있으면 내용이 짧은 쪽(공지)이 위로 붙어 아래가 휑했다. 하나로 감싸고
-          안쪽은 패널로 낮춰(그림자 없는 rounded-xl) 높이를 맞춘다 — 빈 패널도 같은 높이로 늘어난다. */}
-      <section
-        aria-labelledby="operations-context-title"
-        className="bg-card border-line shadow-card rounded-2xl border px-5 py-4"
-      >
-        <header className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-text-dim text-xs font-bold">
-              참고 지표
-            </p>
-            <h2 id="operations-context-title" className="text-foreground mt-0.5 text-lg font-bold tracking-tight">
-              운영 맥락
-            </h2>
-          </div>
-          <p className="text-text-dim text-xs">결정 뒤에 참고할 수납·등록·팀 공지입니다.</p>
+      {/* 운영 맥락 — 세 장(수납·등록·공지)을 **카드로 다시 싸지 않는다**(지시서 §4 "카드 안의 카드 금지", 원장 2026-09-03
+          "지시서 그대로" — 08-31의 *"카드 안에 단 구분"*은 이 규칙으로 대체). 짧은 쪽(공지)이 위로 붙어 아래가 휑하던 문제는
+          grid 기본(stretch)이 그대로 막는다 — 빈 카드도 같은 높이로 늘어난다(`items-start`를 두지 말 것). */}
+      <section aria-labelledby="operations-context-title" className="space-y-3">
+        <header className="px-1">
+          <p className="text-text-dim text-xs font-bold">
+            참고 지표
+          </p>
+          <h2 id="operations-context-title" className="text-foreground mt-0.5 text-lg font-bold tracking-tight">
+            운영 맥락
+          </h2>
+          {/* 설명 문장은 뺐다(지시서 §4). */}
         </header>
-        {/* 안쪽 패널: 그림자를 빼고 모서리를 한 단 낮춘다(바깥 카드가 이미 떠 있으므로 두 번 띄우지 않는다).
-            높이는 grid 기본(stretch)에 맡긴다 — `items-start`를 두면 짧은 패널이 위로 붙는다. */}
         <div
-          className="grid gap-4 [&>section]:rounded-xl [&>section]:shadow-none"
+          className="grid gap-4"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 19rem), 1fr))" }}
         >
           {access.read.billing ? (

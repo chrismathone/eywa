@@ -4,6 +4,7 @@
  */
 import { UserPlus, BookPlus, MessageSquarePlus } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 
 const ACTIONS = [
   { key: "student", href: "/students/new", title: "학생 등록", label: "학생 등록", icon: UserPlus },
@@ -26,9 +27,10 @@ export function QuickActions({ allowed }: { allowed: readonly QuickActionKey[] }
           key={a.href}
           href={a.href}
           title={a.title}
-          className="border-line bg-card text-foreground hover:bg-bg-soft focus-visible:ring-primary/35 inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition focus-visible:ring-2 focus-visible:outline-none"
+          // 보더 없는 텍스트 동작(지시서 §10) — 치수는 control-scale 한 벌, 아이콘은 글자 크기(1em).
+          className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft focus-visible:ring-primary/35 inline-flex items-center gap-1 rounded-md px-1.5 font-medium whitespace-nowrap transition focus-visible:ring-2 focus-visible:outline-none`}
         >
-          <a.icon className="size-3.5" />
+          <a.icon className="size-[1em]" />
           {a.label}
         </WindowLink>
       ))}

@@ -273,7 +273,8 @@ function NextSlot({
 }
 
 function NextClassChip({ slot, subjects, canOpen }: { slot: TodaySlot; subjects: SubjectMaps; canOpen: boolean }) {
-  const className = `${SUBJECT_ICON_BG[subjects.colorOf(slot.subject)]} inline-flex items-baseline gap-1 rounded-md px-2 py-1 text-xs font-bold transition-shadow`;
+  // 반 이름은 1차 식별자 — 보조(14px)가 아니라 목록 라벨(16px).
+  const className = `${SUBJECT_ICON_BG[subjects.colorOf(slot.subject)]} inline-flex items-baseline gap-1 rounded-md px-2 py-1 text-sm font-bold transition-shadow`;
   const title = `${slot.className}${slot.teacherName ? ` · ${slot.teacherName}` : ""}${slot.classroomName ? ` · ${slot.classroomName}` : ""} · ${slot.studentCount}명`;
   const content = (
     <>
@@ -332,7 +333,8 @@ function OngoingBySubject({
 function OngoingRow({ slot, canOpen }: { slot: TodaySlot; canOpen: boolean }) {
   const content = (
     <>
-      <span className="num text-primary w-[86px] shrink-0 text-xs font-bold">
+      {/* 시각은 이 줄의 핵심값 — 16px, 폭은 "16:20~17:20"이 16px에서 들어가는 값. */}
+      <span className="num text-primary w-[104px] shrink-0 text-sm font-bold">
         {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
       </span>
       {/* 13/11px 한 줄 = baseline 정렬. truncate는 flex 자식에 두면 baseline이 박스 하단으로 합성 → 내부 block span으로. */}
