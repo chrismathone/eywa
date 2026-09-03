@@ -13,7 +13,8 @@
  * 이 함수는 **화면에 그리는 글자만** 정한다. 검색·정렬·매칭·저장 값·감사로그는 한 글자도 안 바뀐다.
  * 🔴 **학부모에게 나가는 것에는 절대 쓰지 말 것** — 수업보고서·ClassNote 발송·인쇄물·엑셀 내보내기는
  *    **한글 이름 고정**이다(학부모는 영어 이름을 모른다). 그 경로들은 이 모듈을 import하지 않으며,
- *    가드 [`student-name-scope.test.ts`](./student-name-scope.test.ts)가 그것을 구조로 잠근다.
+ *    가드 [`student-name.test.ts`](./student-name.test.ts)의 "학부모 표면·내보내기는 이 규칙을 쓰지 않는다"가
+ *    그것을 **구조로** 잠근다(report-admin·onescreen·exports·messaging·(print) 전 파일 import 검사).
  * 🔴 화면마다 `lang === "en" ? …` 삼항을 적지 말 것 — 한쪽만 고쳐진다. 이 함수 하나를 부른다.
  *
  * ⚠️ 좁은 칸은 영어 이름이 더 길 수 있다 — 기존 축소 규약(`fitSeatName` 등)을 그대로 타야 한다
