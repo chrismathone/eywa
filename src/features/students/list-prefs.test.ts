@@ -54,11 +54,12 @@ describe("학생목록 배선", () => {
     expect(page).not.toContain("StudentFilterBar");
   });
 
-  it("보기 설정은 DB(loadStudentListPrefs + RememberListPrefs) — localStorage 없음", () => {
+  it("보기 설정은 DB(loadStudentListPrefs + 공용 RememberPrefs) — localStorage 없음", () => {
     expect(page).toContain("loadStudentListPrefs");
-    expect(page).toContain("<RememberListPrefs");
+    expect(page).toContain("<RememberPrefs");
+    expect(page).toContain("save={saveStudentListPrefs}");
     expect(page).not.toContain("localStorage");
-    expect(read("src/app/(shell)/students/_components/remember-list-prefs.tsx")).not.toContain("localStorage");
+    expect(read("src/components/remember-prefs.tsx")).not.toContain("localStorage");
   });
 
   it("공용 헬퍼는 지시어 없는 모듈, 저장은 use server 모듈(#81)", () => {

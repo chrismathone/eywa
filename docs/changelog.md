@@ -52,6 +52,16 @@
   적대적 리뷰(43 에이전트, 반증 2표) 확정 9건 수리: `"use client"` 모듈 함수를 서버 페이지가 호출(#81 — 요청마다 throw, 페이지 전멸) · 폭 기반 다단의 `column-count`는 `auto`라 단 수 항상 1(2단 창 아래 절반이 빔 → 규격 식) · 안쪽 열 합 18rem > 바깥 트랙 17.25rem(12px 넘침 → 상수 하나에서 도출) · 요약이 숨는 폭에서 오른쪽 블록이 3번째 트랙으로 자동 배치(`col-start-4`) · "녹음 AI"·절대 날짜가 16px에서 열을 넘침(5.5·6.5rem) · 동기화·수정중 배지가 이름을 말줄임(배지를 과목 칸으로) · 기본 20 ≠ 최소 창 실측 7이라 열 때마다 2회 렌더(기본 7 + 쿠키) · 목록 아래 예약 높이 상수(96) → 실제 문서에서 측정(🔴 `scrollHeight`로 재면 내용이 짧을 때 빈 공간까지 '아래'로 잡혀 5행으로 떨어지고 창을 키워도 안 는다 — 페이지 루트 바닥 기준으로) · 문서 3곳 미갱신.
   실브라우저(Playwright, dev 3010, 읽기 전용) 실측: 최소 창 758×601 = **7행·재청 0**(기본값 그대로) · 1500×900 = **28행 2단** · 2235×1000 = **48행 3단** · 다시 최소 창 = 7행 — 넘침(main·행·오른쪽 블록·시각) 0, 런타임 에러 0, 행 45px.
 
+### 8단계 — 수업목록(/classes) = 열 머리 필터 + `users.ui_prefs.classes` + 공용 RememberPrefs (2026-09-04)
+학생목록(7단계)과 같은 수술. 옛 필터바 [`class-filter-bar.tsx`]는 필터를 **localStorage**(`eywa-classes-filters`)에 저장해 계정 귀속 위반이었고(다른 PC·포트에서 리셋, [[#90]]), 드롭다운 6 + 상시 검색 + 표/카드 세그먼트로 §10 밖이었다.
+- **열 머리가 필터**: `과목` | `반 이름` + `정렬: 수업명순` | `담임`(현재 과목 담당만, 고른 담임이 목록 밖이면 앞에 보강) | `요일` | 강의실 | 학생 | `상태: 운영`(showAll — 기본값이 종강·폐지를 숨긴다) | 메모. **요일은 다중 선택**이라 `HeaderFilter`(단일)로 못 담아 체크 항목 메뉴 [`HeaderDayFilter`](src/app/(shell)/classes/_components/header-day-filter.tsx)로 따로 섰다(트리거 치수는 같은 `HEADER_FILTER_TRIGGER`, 항목을 눌러도 안 닫힘, URL `days=mon,wed`, 전체는 `days=all`).
+- 결과 줄 = 숫자 + `보기: 표|카드`(FilterSelect explicitAll — 세그먼트 칩 대신 라벨 하나, §9 "보기 전환은 2차") + 검색 토글. 머리 상시 버튼 = Primary '새 반' + 텍스트 '강의실 자동배정'(outline+아이콘 → ghost 글자). 헤더 설명 줄(`운영 N개 반 · 등록 학생 M명`)은 뺐다 — 바로 아래 스탯 네 칸이 같은 숫자다. '운영 중' 스탯 톤 primary → green.
+- **보기 설정 = 계정 귀속** `users.ui_prefs.classes`(과목·담임·요일·정렬·보기 — [`list-prefs.ts`](src/features/classes/list-prefs.ts) 파서 + [`server/list-prefs.ts`](src/features/classes/server/list-prefs.ts) 형제 키 보존 머지). 🔴 상태·검색어는 저장하지 않는다(원장 2026-08-27 *"기본 세팅은 운영"*). 저장값 검증(흡수된 과목·퇴사한 담임은 전체로)·URL 원값 링크·통계는 끝에(B4) 전부 학생목록과 같은 규약.
+- **공용 [`RememberPrefs`](src/components/remember-prefs.tsx)**(제네릭, `save`에 그 화면의 서버 액션) — 학생목록의 `RememberListPrefs`를 이것으로 대체(삭제). 같음 판정은 JSON 비교(둘 다 같은 파서 통과 = 키 순서 같음).
+- 어휘 모듈 이사: `app/(shell)/classes/_components/filter-shared.ts` → [`features/classes/list-filters.ts`](src/features/classes/list-filters.ts)(+ `parseClassSort`·`parseClassView`·**`classStatusMeta`** — '운영' 배지가 v4 의미색 전수 처리에서 빠져 primary였다 → 초록·종강 앰버·폐지 중립, 라벨은 필터 표와 같은 말). `buildClassHref`는 폐기(기본값 생략이 계정 귀속과 충돌 — 페이지의 `listParams`가 URL 원값을 잇는다).
+- 표: `table-fixed` 8열(colgroup 8/22/10/10/20/6/13/11, 스코프에선 담임 열 제거 7열)이 최소 창 1100×700에서 가로 스크롤 0 · 반 이름 18px 굵게(1차 식별자, 잘리면 title) · 담임·강의실·메모 16px · 요일 원 24px(글자 14 — 종전 20px 원은 12px) · 열 제목 가운데. 카드 보기엔 같은 열 머리 한 벌을 격자 위 한 줄에. 🔴 결과 0개여도 표 머리 유지(빈 상태는 tbody 안, '전체 상태로 보기' 링크만·설명 문장 없음).
+- 가드 [`list-prefs.test.ts`](src/features/classes/list-prefs.test.ts)(파서·요일 정규화·상태 배지·열 머리 배선·localStorage **호출** 없음·지시어 위치·창 최소 크기·상시 버튼 둘·표 머리 유지) + `list-filters.test.ts`(이사). `control-scale.test.ts` 검색 입력 목록에서 옛 필터바 제거.
+
 ### 7단계 — 운영실 2차(시선 앵커 3) · 학생목록 = 열 머리 필터 + 계정 귀속 보기 설정
 원장 *"순서대로 진행 시작해"*(2026-09-03) — 운영실 2차는 추천안(지표·오늘 브리핑·지금 진행 중을 1차에 남김)으로 진행, 이어서 학생목록.
 - **운영실 2차**(지시서 §4 "시선 앵커 ≤3 · 나머지는 접거나 2차"): 1차 = ① 인사·지표 ② 오늘 브리핑 ③ 지금 진행 중. **매니저 팀 보고(AI)·매니저 팀에게 물어보기·최근 추세·운영 맥락은

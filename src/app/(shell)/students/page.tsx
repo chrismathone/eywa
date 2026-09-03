@@ -26,7 +26,7 @@ import {
   showSubjectFilter,
   coerceSubjectFilter,
 } from "@/features/students/scope-axis";
-import { loadStudentListPrefs } from "@/features/students/server/list-prefs";
+import { loadStudentListPrefs, saveStudentListPrefs } from "@/features/students/server/list-prefs";
 import {
   DEFAULT_STUDENT_LIST_PREFS,
   parseSearchField,
@@ -41,7 +41,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentsMoreMenu } from "./_components/students-more-menu";
-import { RememberListPrefs } from "./_components/remember-list-prefs";
+import { RememberPrefs } from "@/components/remember-prefs";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 
 export const metadata = { title: "학생목록 — eywa" };
@@ -156,7 +156,7 @@ export default async function StudentsPage({
   // ⚠️ 이미 값이 걸려 있으면 남겨 둔다 — 감추면 "전체"로 되돌릴 길이 없다.
   const hideTeacherFilter = axis !== null && teacherOptions.length <= 1 && teacherId === "all";
 
-  // 저장할 보기 설정 — 저장값과 다르면 클라가 한 번 저장한다(RememberListPrefs). 🔴 **사용자가 고른 값(URL) 또는 이미 저장된 값**만 —
+  // 저장할 보기 설정 — 저장값과 다르면 클라가 한 번 저장한다(공용 RememberPrefs — 수업목록과 한 벌). 🔴 **사용자가 고른 값(URL) 또는 이미 저장된 값**만 —
   // 위 보정(축 밖 과목 → 전체 · 선택지 밖 담임/학년 → 전체)은 이 화면 한정이라 계정에 쓰지 않는다(리뷰 확정 2026-09-03: 겸직 관리자가
   // 강사뷰·다른 강사 뷰를 열면 보정값이 관리자 본인의 저장 설정을 덮어썼다).
   const current: StudentListPrefs = {
@@ -206,7 +206,7 @@ export default async function StudentsPage({
   return (
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
-      <RememberListPrefs current={current} saved={prefs} />
+      <RememberPrefs current={current} saved={prefs} save={saveStudentListPrefs} />
       {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 학생') 하나 + 텍스트 Secondary('엑셀' 메뉴) 하나. 내보내기·가져오기는
           그 메뉴(2차)로 내렸다. 동기화 배지는 읽기 전용 표식이라 그대로. */}
       <PageHeader

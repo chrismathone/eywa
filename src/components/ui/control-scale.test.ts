@@ -94,7 +94,7 @@ describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트�
   it("검색 입력은 상자 높이를 다 쓴다 — leading-none 18px 줄에 18px 한글은 잘린다(원장 캡처 2026-09-03)", () => {
     for (const r of [
       "components/search-form.tsx",
-      "app/(shell)/classes/_components/class-filter-bar.tsx",
+      // 수업목록 필터바는 2026-09-03 열 머리 필터로 바뀌며 사라졌다(검색은 공용 SearchToggle → search-form.tsx).
       "app/(shell)/documents/_components/document-toolbar.tsx",
       "app/(shell)/exams/page.tsx",
       "app/(shell)/inventory/_components/list-toolbar.tsx",

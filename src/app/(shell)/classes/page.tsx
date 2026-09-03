@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BookOpen, Users, UserCheck, SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -6,7 +7,13 @@ import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { FilterSelect } from "@/components/filter-select";
+import { HeaderFilter } from "@/components/header-filter";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
+import { Pagination } from "@/components/pagination";
+import { RememberPrefs } from "@/components/remember-prefs";
+import { SearchToggle } from "@/components/search-toggle";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -16,36 +23,35 @@ import {
   getClassTeacherFilterOptions,
   type ClassListRow,
   type ClassDaySlot,
-  type ClassSort,
 } from "@/features/classes/server/queries";
-import { Pagination } from "@/components/pagination";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
-import Link from "next/link";
+import { loadClassListPrefs, saveClassListPrefs } from "@/features/classes/server/list-prefs";
+import { parseClassDays, type ClassListPrefs } from "@/features/classes/list-prefs";
+import {
+  CLASS_STATUS_DEFAULT,
+  classStatusMeta,
+  DAY_FILTERS,
+  parseClassSort,
+  parseClassStatus,
+  parseClassView,
+  SORT_OPTIONS,
+  STATUS_FILTERS,
+  teacherTeaches,
+  type ViewMode,
+} from "@/features/classes/list-filters";
 import { NewClassTrigger } from "./_components/new-class-trigger";
 import { ClassroomAssignButton } from "./_components/classroom-assign-dialog";
-import { ClassFilterBar } from "./_components/class-filter-bar";
-import {
-  buildClassHref,
-  DAY_KEYS,
-  parseClassStatus,
-  type ClassFilterState,
-  type ViewMode,
-} from "./_components/filter-shared";
+import { HeaderDayFilter } from "./_components/header-day-filter";
 
 export const metadata = { title: "수업목록 — eywa" };
 
 const PAGE_SIZE = 50;
 
-const DAY_LABEL: Record<string, string> = {
-  mon: "월",
-  tue: "화",
-  wed: "수",
-  thu: "목",
-  fri: "금",
-  sat: "토",
-  sun: "일",
-};
+const DAY_LABEL: Record<string, string> = Object.fromEntries(DAY_FILTERS.map((d) => [d.key, d.label]));
+
+// 보기(표/카드) — 지시서 §9 "보기 전환은 2차": 세그먼트 칩 대신 라벨 하나(`보기: 표`). 값은 계정 보기 설정에 남는다.
+const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [{ value: "cards", label: "카드" }];
 
 export default async function ClassesPage({
   searchParams,
@@ -55,69 +61,151 @@ export default async function ClassesPage({
     teacher?: string;
     days?: string;
     q?: string;
-    view?: ViewMode;
+    view?: string;
     sort?: string;
     status?: string;
     page?: string;
   }>;
 }) {
   const user = await requireAccess("classes");
+  const sp = await searchParams;
   // 반 생성·강의실 자동배정은 **학원 전체를 바꾸는 작업**이라 관리자만(원장 지시 2026-08-06 "강사에게
   // 강의실 자동배정·새 반은 필요없음"). 서버 액션도 같은 게이트(requireClassManage) — 여기 숨김은 표시일 뿐.
-  const canManageClasses = await canManageTenant(user.systemRole, "classes");
-  const sp = await searchParams;
-  const subject = sp.subject ?? "all";
-  const teacherId = sp.teacher ?? "all";
-  // 다중 요일(콤마구분) — 알 수 없는 키는 버려 안전화.
-  const days = (sp.days ?? "")
-    .split(",")
-    .map((d) => d.trim())
-    .filter((d) => DAY_KEYS.has(d));
-  const q = sp.q ?? "";
-  const view: ViewMode = sp.view === "cards" ? "cards" : "table";
-  const sort: ClassSort =
-    sp.sort === "students" || sp.sort === "teacher" ? sp.sort : "name";
-  // 상태 — **미지정이면 '운영'**(원장 2026-08-27 "디폴트로 폐지나 종강된 수업은 안보이고").
-  // 판정은 filter-shared 단일 소스라 필터바가 만드는 URL과 여기 해석이 갈리지 않는다.
-  const status = parseClassStatus(sp.status);
-  const page = Math.max(1, Number(sp.page) || 1);
-
   // 강사 스코프(내 수업)면 `getClassesPage`가 teacher_id를 **강제**해 전 행이 내 반이다 → 강사 필터·담임 열은
   // 고를 수도 볼 것도 없다(원장 2026-08-20: "강사가 당연히 나일텐데 다른 강사 선택도 보임").
-  // ⚠️ 위임(delegation)은 진입 자격만 열 뿐 classIds를 넓히지 않으므로 남의 이름이 섞일 여지도 없다.
-  const scopedTeacherId = await effectiveTeacherId();
-  const [{ rows: classes, total }, teachers, stats, settings] = await Promise.all([
+  // 보기 설정은 계정 귀속(users.ui_prefs.classes, 원장 2026-08-04) — URL(명시값) → 저장값 → 기본값.
+  const [canManageClasses, scopedTeacherId, prefs] = await Promise.all([
+    canManageTenant(user.systemRole, "classes"),
+    effectiveTeacherId(),
+    loadClassListPrefs(),
+  ]);
+  // 상태 — **미지정이면 '운영'**(원장 2026-08-27 "디폴트로 폐지나 종강된 수업은 안보이고"). 🔴 상태·검색어는 저장하지 않는다.
+  const status = parseClassStatus(sp.status);
+  const q = sp.q ?? "";
+  const page = Math.max(1, Number(sp.page) || 1);
+  const subjectRaw = sp.subject ?? prefs.subject;
+  const teacherRaw = sp.teacher ?? prefs.teacher;
+  // 요일(다중, 콤마구분) — `days=all`은 파서가 빈 배열로 접는다(전체를 URL에 **명시**하는 값, HeaderDayFilter 주석).
+  const days = sp.days !== undefined ? parseClassDays(sp.days) : prefs.days;
+  const sort = parseClassSort(sp.sort ?? prefs.sort);
+  const view = parseClassView(sp.view ?? prefs.view);
+
+  const settingsPromise = getTenantSettings();
+  // 스코프에선 조회 자체를 건너뛴다(고를 수 없는 목록이라 왕복 낭비). 필터 전용 — 배정용과 다르다(admin·퇴직 담임도 포함).
+  const teachersPromise: Promise<{ id: string; name: string; subjects: string[] }[]> = scopedTeacherId
+    ? Promise.resolve([])
+    : getClassTeacherFilterOptions();
+  // 통계는 지금 띄워 두고 맨 끝에 받는다 — 아래 저장값 검증이 기다리는 건 선택지 둘뿐(B4). 그 사이 거절은 표식만(값은 끝에서).
+  const statsPromise = getClassesStats();
+  void statsPromise.catch(() => undefined);
+  const optionsPromise = Promise.all([teachersPromise, settingsPromise]);
+  // 저장값(URL이 아니라 계정 설정에서 온 값)은 **지금 선택지에 있을 때만** 쓴다 — 흡수된 과목·퇴사한 담임이 보이지 않는 필터로
+  // 남아 결과를 0개로 만들지 않게(학생목록과 같은 규약). URL로 고른 값은 그대로 믿는다(그 경우 목록 조회가 설정을 기다리지 않는다).
+  let subject = subjectRaw;
+  let teacherId = teacherRaw;
+  const fromPrefs = (key: "subject" | "teacher") => sp[key] === undefined;
+  if ((fromPrefs("subject") && subjectRaw !== "all") || (fromPrefs("teacher") && teacherRaw !== "all" && !scopedTeacherId)) {
+    const [teachersEarly, settingsEarly] = await optionsPromise;
+    if (fromPrefs("subject") && !settingsEarly.operations.subjects.some((s) => s.key === subjectRaw)) subject = "all";
+    if (fromPrefs("teacher") && !scopedTeacherId && !teachersEarly.some((t) => t.id === teacherRaw)) teacherId = "all";
+  }
+
+  const [{ rows: classes, total }, stats, [teachers, settings]] = await Promise.all([
     getClassesPage({ subject, teacherId, days, q, sort, status }, page, PAGE_SIZE),
-    // 스코프에선 조회 자체를 건너뛴다(고를 수 없는 목록이라 왕복 낭비).
-    scopedTeacherId ? [] : getClassTeacherFilterOptions(), // 필터 전용 — 배정용과 다르다(admin·퇴직 담임도 포함)
-    getClassesStats(),
-    getTenantSettings(),
+    statsPromise,
+    optionsPromise,
   ]);
 
   // 과목 라벨·색·필터 옵션은 학원설정(operations.subjects) 단일 소스 — 미등록 과목은 드롭다운에 안 뜸.
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const subjectOptions = subjects.filters.filter((f) => f.value !== "all");
+  // 담임 선택지 — 현재 과목 담당만(전체면 전부). 선택 담임이 목록 밖이면(직접 URL) 앞에 보강해 라벨을 유지한다.
+  const visibleTeachers = subject === "all" ? teachers : teachers.filter((t) => teacherTeaches(t.subjects, subject));
+  const selectedTeacher = teacherId === "all" ? null : teachers.find((t) => t.id === teacherId);
+  const teacherOptions = visibleTeachers.map((t) => ({ value: t.id, label: t.name }));
+  if (selectedTeacher && !visibleTeachers.some((t) => t.id === selectedTeacher.id)) {
+    teacherOptions.unshift({ value: selectedTeacher.id, label: selectedTeacher.name });
+  }
+  const showTeacher = !scopedTeacherId;
   const totalSeats = stats.totalSeats;
   const active = stats.active;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const current: ClassFilterState = { subject, teacher: teacherId, days, q, view, sort, status };
 
-  const pageHref = (p: number) => {
-    const base = new URLSearchParams(buildClassHref(current, {}).split("?")[1] ?? "");
-    if (p > 1) base.set("page", String(p));
-    const s = base.toString();
+  // 저장할 보기 설정 — 🔴 **사용자가 고른 값(URL) 또는 이미 저장된 값**만(선택지 밖 보정은 이 화면 한정, 계정에 안 쓴다).
+  const current: ClassListPrefs = {
+    subject: sp.subject ?? prefs.subject,
+    teacher: sp.teacher ?? prefs.teacher,
+    days,
+    sort,
+    view,
+  };
+
+  /**
+   * 목록 링크(쪽 넘김·보기 전환·빈 상태의 '전체 상태로 보기')가 들고 갈 파라미터 — 기본값과 다르거나 **URL이 명시한** 축은
+   * 그대로 적는다. ⚠️ URL이 적은 값은 **적힌 그대로** 잇는다(보정값이 아니라) — 보정값을 링크에 실으면 다음 렌더가 그것을
+   * 사용자 선택으로 읽어 계정에 저장한다(학생목록 재리뷰 2026-09-03).
+   */
+  const listParams = (patch: { page?: number; status?: string } = {}) => {
+    const params = new URLSearchParams();
+    const st = patch.status ?? status;
+    if (st !== CLASS_STATUS_DEFAULT) params.set("status", st);
+    if (sp.subject !== undefined) params.set("subject", sp.subject);
+    else if (subject !== "all") params.set("subject", subject);
+    if (sp.teacher !== undefined) params.set("teacher", sp.teacher);
+    else if (teacherId !== "all") params.set("teacher", teacherId);
+    if (sp.days !== undefined) params.set("days", sp.days);
+    else if (days.length) params.set("days", days.join(","));
+    if (sp.sort !== undefined || sort !== "name") params.set("sort", sort);
+    if (sp.view !== undefined || view !== "table") params.set("view", view);
+    if (q) params.set("q", q);
+    if ((patch.page ?? 1) > 1) params.set("page", String(patch.page));
+    const s = params.toString();
     return s ? `/classes?${s}` : "/classes";
+  };
+  const pageHref = (p: number) => listParams({ page: p });
+
+  // 열 머리 필터 한 벌 — 표 보기는 `<th>` 안에, 카드 보기는 격자 위 머리 줄에 **같은 것**이 선다(필터 코드를 두 벌 두지 않는다).
+  const head = {
+    subject: (
+      <HeaderFilter paramName="subject" value={subject} options={subjectOptions} axisLabel="과목" allValue="all" explicitAll />
+    ),
+    sort: (
+      <HeaderFilter
+        paramName="sort"
+        value={sort}
+        options={SORT_OPTIONS.filter((o) => o.value !== "name" && (showTeacher || o.value !== "teacher" || sort === "teacher"))}
+        axisLabel="정렬"
+        allValue="name"
+        allLabel="수업명순"
+        explicitAll
+        showAll
+      />
+    ),
+    teacher: <HeaderFilter paramName="teacher" value={teacherId} options={teacherOptions} axisLabel="담임" allValue="all" explicitAll cap={200} />,
+    days: <HeaderDayFilter value={days} />,
+    // 기본값(운영)이 종강·폐지를 **숨기므로** 값을 항상 적는다(showAll). 저장하지 않는 축이라 explicitAll은 아니다(기본은 파라미터 없음).
+    status: (
+      <HeaderFilter
+        paramName="status"
+        value={status}
+        options={STATUS_FILTERS.filter((o) => o.value !== CLASS_STATUS_DEFAULT)}
+        axisLabel="상태"
+        allValue={CLASS_STATUS_DEFAULT}
+        allLabel="운영"
+        showAll
+      />
+    ),
   };
 
   return (
-    // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격도 좁힌다 — 제목을 접어도 5단 여백(20px×N)이
-    // 그대로면 절약분이 여백으로 되돌아간다(원장 지시 2026-08-06 "너무 남는 공간 많음").
+    // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격도 좁힌다(원장 지시 2026-08-06 "너무 남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
-      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(강의실 배정·신규 반).
-          ⚠️ 동기화 배지도 **이 행 안**에 둔다 — 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측이 텅 빈 채로). */}
+      <RememberPrefs current={current} saved={prefs} save={saveClassListPrefs} />
+      {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 반') + 텍스트 Secondary('강의실 자동배정') 둘. 설명 줄은 뺐다(바로 아래
+          스탯 네 칸이 같은 숫자를 말한다). 동기화 배지는 읽기 전용 표식이라 그대로. */}
       <PageHeader
         eyebrow="수업 운영"
         title="수업목록"
-        description={`운영 ${active}개 반 · 등록 학생 ${totalSeats}명`}
         actions={
           <>
             <MakeeduSyncBadge domain="classes" />
@@ -130,10 +218,10 @@ export default async function ClassesPage({
           </>
         }
       />
-      {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 보존 대상 EyIcon `check` 유지. */}
+      {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 정상 = 초록(의미색 캐논). */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <BigStat label="전체 반" value={stats.total} unit="개" tone="primary" icon={<BookOpen size={16} strokeWidth={1.8} />} />
-        <BigStat label="운영 중" value={active} unit="개" tone="primary" icon={<EyIcon name="check" size={16} />} />
+        <BigStat label="운영 중" value={active} unit="개" tone="green" icon={<EyIcon name="check" size={16} />} />
         <BigStat label="등록 학생" value={totalSeats} unit="명" tone="blue" icon={<Users size={16} strokeWidth={1.8} />} />
         <BigStat
           label="반당 평균"
@@ -144,57 +232,73 @@ export default async function ClassesPage({
         />
       </section>
 
-      {/* 과목·요일·강사·정렬 드롭다운 + 검색/뷰 — 선택값 localStorage 영속(클라이언트) */}
-      <ClassFilterBar
-        current={current}
-        teachers={teachers}
-        subjectFilters={subjects.filters}
-        hideTeacherFilter={scopedTeacherId !== null}
-      />
+      {/* 결과 줄 — 숫자 + 보기(라벨 하나) + 검색(눌러야 나온다). 필터·정렬은 여기 없다 — 아래 **열 머리**가 필터다
+          (§10 "필터·정렬은 목록 헤더 라벨을 눌러 호출"). 옛 필터바(드롭다운 6 + 상시 검색 + 세그먼트, localStorage 저장)는 삭제. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1">
+        <p className="text-text-dim text-sm whitespace-nowrap">
+          결과 <span className="text-foreground font-bold">{total}</span>개
+          {totalPages > 1 ? (
+            <span className="num ml-1.5">
+              · {page}/{totalPages}
+            </span>
+          ) : null}
+          {q ? <span className="ml-1.5">· &ldquo;{q}&rdquo; 검색</span> : null}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect
+            paramName="view"
+            value={view}
+            options={VIEW_OPTIONS}
+            allValue="table"
+            allLabel="표"
+            axisLabel="보기"
+            ariaLabel="보기 전환"
+            explicitAll
+            className="w-auto"
+            triggerClassName={TOOLBAR_SELECT}
+          />
+          <SearchToggle placeholder="수업명·강사·강의실" defaultValue={q} />
+        </div>
+      </div>
 
-      {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만.
-          컴팩트에선 위 필터 바에 바짝 붙여(-mt) 한 줄을 새로 만들지 않는다. */}
-      <p className="text-text-dim px-1 text-sm compact-chrome:-mt-1.5">
-        결과 <span className="text-foreground font-bold">{total}</span>개
-        {totalPages > 1 ? (
-          <span className="ml-2">
-            {page}/{totalPages} 페이지
-          </span>
-        ) : null}
-        {q ? <span className="ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
-      </p>
-
-      {total === 0 ? (
-        <EmptyState
-          image="classes"
-          icon={() => <SearchX size={32} strokeWidth={1.8} />}
-          title="결과 없음"
-          // 기본 필터가 숨긴 것일 수 있다 — "왜 그 반이 없지?"의 답을 여기서 준다(폐지 42 · 종강 5 실재).
-          description={
-            status === "all" ? undefined : "폐지·종강된 반은 기본으로 숨깁니다. 상태를 바꾸면 함께 보입니다."
-          }
-          action={
-            status === "all" ? undefined : (
-              <Link
-                href={buildClassHref(current, { status: "all" })}
-                className="border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium"
-              >
-                전체 상태로 보기
-              </Link>
-            )
-          }
-        />
+      {/* 🔴 표는 결과가 0개여도 그린다 — 열 머리가 곧 필터라, 표를 치우면 걸린 필터를 되돌릴 컨트롤이 함께 사라진다
+          (학생목록 실브라우저 결함 2026-09-03). 빈 상태는 표 본문 안에 선다. */}
+      {view === "table" ? (
+        <TableView classes={classes} subjects={subjects} showTeacher={showTeacher} head={head} empty={emptyState(total, status, q, listParams)} />
       ) : (
-        <>
-          {view === "table" ? (
-            <TableView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} />
-          ) : (
-            <CardsView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} />
-          )}
-          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
-        </>
+        <CardsView classes={classes} subjects={subjects} showTeacher={showTeacher} head={head} empty={emptyState(total, status, q, listParams)} />
       )}
+      {total > 0 ? <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} /> : null}
     </div>
+  );
+}
+
+type HeadCells = { subject: React.ReactNode; sort: React.ReactNode; teacher: React.ReactNode; days: React.ReactNode; status: React.ReactNode };
+
+/** 빈 상태 — 설명 문장 없이 제목만(§4). 기본 필터(운영)가 숨긴 것일 수 있어 '전체 상태로 보기' 링크 하나(폐지 42 · 종강 5 실재). */
+function emptyState(
+  total: number,
+  status: string,
+  q: string,
+  listParams: (patch: { status?: string }) => string,
+): React.ReactNode {
+  if (total > 0) return null;
+  return (
+    <EmptyState
+      image="classes"
+      icon={() => <SearchX size={32} strokeWidth={1.8} />}
+      title={q ? "검색 결과 없음" : "결과 없음"}
+      action={
+        status === "all" ? undefined : (
+          <Link
+            href={listParams({ status: "all" })}
+            className="border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium"
+          >
+            전체 상태로 보기
+          </Link>
+        )
+      }
+    />
   );
 }
 
@@ -215,7 +319,7 @@ function DayChips({
    */
   stale?: boolean;
 }) {
-  if (days.length === 0) return <span className="text-text-faint text-xs">—</span>;
+  if (days.length === 0) return <span className="text-text-faint text-sm">—</span>;
   const starts = days.map((d) => d.start).filter((s): s is string => !!s);
   const uniform = starts.length === days.length && new Set(starts).size === 1;
   return (
@@ -223,11 +327,12 @@ function DayChips({
       className="flex flex-wrap items-center gap-x-2 gap-y-1"
       {...(stale ? { title: "지금은 운영하지 않는 배치입니다 (운영 기간이 끝났거나 아직 시작 전)" } : {})}
     >
+      {/* 요일 원 = 글자 14(xs 바닥)에 24px — 종전 20px 원은 글자가 12px이었다(v5: 12px 이하 금지). */}
       <div className={`flex gap-0.5 text-xs font-bold ${stale ? "opacity-45" : ""}`}>
         {days.map((d) => (
           <span
             key={d.day}
-            className={`inline-flex size-5 items-center justify-center rounded-full ${
+            className={`inline-flex size-6 items-center justify-center rounded-full ${
               stale ? "bg-text-faint" : barClass
             } text-white`}
           >
@@ -235,11 +340,11 @@ function DayChips({
           </span>
         ))}
       </div>
-      {stale ? <span className="text-text-faint text-xs">운영 기간 밖</span> : null}
+      {stale ? <span className="text-text-faint text-sm">운영 기간 밖</span> : null}
       {uniform ? (
-        <span className="text-text-dim num text-xs">{starts[0]}</span>
+        <span className="text-text-dim num text-sm">{starts[0]}</span>
       ) : starts.length > 0 ? (
-        <span className="text-text-faint num text-xs">
+        <span className="text-text-faint num text-sm">
           {days
             .filter((d) => d.start)
             .map((d) => `${DAY_LABEL[d.day] ?? d.day}${d.start}`)
@@ -254,77 +359,102 @@ function TableView({
   classes,
   subjects,
   showTeacher,
+  head,
+  empty,
 }: {
   classes: ClassListRow[];
   subjects: SubjectMaps;
   /** 강사 스코프에선 전 행이 같은 담임(=본인)이라 열을 통째로 감춘다 — 같은 이름 50줄은 정보가 아니다. */
   showTeacher: boolean;
+  head: HeadCells;
+  empty: React.ReactNode;
 }) {
+  const colCount = showTeacher ? 8 : 7;
   return (
-    <div className="bg-card shadow-card overflow-auto rounded-2xl">
-      <table className="w-full text-sm [&_td]:whitespace-nowrap">
-        <thead className="border-line border-b [&_th]:whitespace-nowrap">
-          <tr>
-            <th className="micro px-4 py-3 text-left">과목</th>
-            <th className="micro px-4 py-3 text-left">반 이름</th>
-            {showTeacher ? <th className="micro px-4 py-3 text-left">담임</th> : null}
-            <th className="micro px-4 py-3 text-left">강의실</th>
-            <th className="micro px-4 py-3 text-left">요일</th>
-            <th className="micro px-4 py-3 text-right">학생</th>
-            <th className="micro px-4 py-3 text-left">상태</th>
-            <th className="micro px-4 py-3 text-left">메모</th>
+    // 이 메뉴의 최소 창(1100)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다(열 머리 팝업이 잘리지 않게
+    // `overflow`를 걸지 않는다 — HeaderFilter 주석). 폰(768px 미만)만 가로 스크롤.
+    <div className="bg-card shadow-card rounded-2xl max-md:overflow-x-auto">
+      <table className="w-full table-fixed text-sm max-md:min-w-[56rem]">
+        {/* 열 폭 — 최소 창(1050 본문)에서 `상태: 종강 ⌄`(≈112px)가 들어가는 13% · 반 이름 22%(정렬 머리 + 18px 이름). */}
+        <colgroup>
+          <col className="w-[8%]" />
+          <col className={showTeacher ? "w-[22%]" : "w-[30%]"} />
+          {showTeacher ? <col className="w-[10%]" /> : null}
+          <col className="w-[10%]" />
+          <col className={showTeacher ? "w-[20%]" : "w-[22%]"} />
+          <col className="w-[6%]" />
+          <col className="w-[13%]" />
+          <col className="w-[11%]" />
+        </colgroup>
+        <thead className="border-line border-b">
+          {/* 열 제목은 가운데(데이터 표 규약 2026-08-05) — 본문 값은 좌측 그대로. */}
+          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap">
+            <th scope="col">{head.subject}</th>
+            <th scope="col">
+              <span className="flex flex-wrap items-center justify-center gap-1">
+                <span className="px-1">반 이름</span>
+                {head.sort}
+              </span>
+            </th>
+            {showTeacher ? <th scope="col">{head.teacher}</th> : null}
+            <th scope="col">
+              <span className="px-1">강의실</span>
+            </th>
+            <th scope="col">{head.days}</th>
+            <th scope="col">
+              <span className="px-1">학생</span>
+            </th>
+            <th scope="col">{head.status}</th>
+            <th scope="col">
+              <span className="px-1">메모</span>
+            </th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
+          {empty ? (
+            <tr>
+              <td colSpan={colCount} className="px-3 py-4">
+                {empty}
+              </td>
+            </tr>
+          ) : null}
           {classes.map((c) => {
             const meta = { label: subjects.labelOf(c.subject), color: subjects.colorOf(c.subject) };
+            const st = classStatusMeta(c);
             return (
-              <tr key={c.id} className="hover:bg-bg-soft/50">
-                <td className="px-4 py-2.5">
+              <tr key={c.id} className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5">
+                <td>
                   <Pill color={meta.color}>{meta.label}</Pill>
                 </td>
-                <td className="px-4 py-2.5">
-                  <WindowLink
-                    href={`/classes/${c.id}`}
-                    title={c.className}
-                    className="text-foreground text-sm font-bold hover:underline"
-                  >
-                    {c.className}
-                  </WindowLink>
-                  <EditingBadge scope={`class:${c.id}`} className="ml-1.5" />
+                <td>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {/* 반 이름은 1차 식별자(18px 굵게) — 좁으면 잘리되 전문은 마우스 오버(title). */}
+                    <WindowLink
+                      href={`/classes/${c.id}`}
+                      title={c.className}
+                      className="text-foreground min-w-0 truncate text-base font-bold hover:underline"
+                    >
+                      {c.className}
+                    </WindowLink>
+                    <EditingBadge scope={`class:${c.id}`} />
+                  </span>
                 </td>
                 {showTeacher ? (
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      {c.teacherName ? (
-                        <span className="text-text-dim text-xs">{c.teacherName}</span>
-                      ) : (
-                        <span className="text-text-faint text-xs">미정</span>
-                      )}
-                    </div>
+                  <td className="text-text-dim">
+                    <span className="block truncate">{c.teacherName ?? <span className="text-text-faint">미정</span>}</span>
                   </td>
                 ) : null}
-                <td className="text-text-dim px-4 py-2.5 text-xs">
-                  {c.classroomName ?? "—"}
+                <td className="text-text-dim">
+                  <span className="block truncate">{c.classroomName ?? "—"}</span>
                 </td>
-                <td className="px-4 py-2.5">
+                <td>
                   <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
                 </td>
-                <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
-                  {c.studentCount}명
+                <td className="text-foreground num text-right font-bold whitespace-nowrap">{c.studentCount}명</td>
+                <td className="text-center">
+                  <Pill color={st.color}>{st.label}</Pill>
                 </td>
-                <td className="px-4 py-2.5">
-                  {!c.isActive ? (
-                    <Pill color="neutral">폐지</Pill>
-                  ) : c.closedAt ? (
-                    <Pill color="amber">종강</Pill>
-                  ) : (
-                    <Pill color="primary" soft={false}>
-                      운영
-                    </Pill>
-                  )}
-                </td>
-                <td className="text-text-dim px-4 py-2.5 text-xs">
+                <td className="text-text-dim">
                   {c.notes ? (
                     <span className="line-clamp-1" title={c.notes}>
                       {c.notes}
@@ -346,62 +476,68 @@ function CardsView({
   classes,
   subjects,
   showTeacher,
+  head,
+  empty,
 }: {
   classes: ClassListRow[];
   subjects: SubjectMaps;
   /** 테이블 '담임' 열과 같은 이유 — 스코프에선 전 카드가 본인 이름이라 강의실만 남긴다. */
   showTeacher: boolean;
+  head: HeadCells;
+  empty: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {classes.map((c) => {
-        const meta = { label: subjects.labelOf(c.subject), color: subjects.colorOf(c.subject) };
-        return (
-          <WindowLink
-            key={c.id}
-            href={`/classes/${c.id}`}
-            title={c.className}
-            className="bg-card shadow-card hover:shadow-card-hover flex flex-col gap-3 rounded-2xl p-5 transition"
-          >
-            <header className="flex items-center gap-2">
-              <Pill color={meta.color}>{meta.label}</Pill>
-              {!c.isActive ? (
-                <Pill color="neutral">폐지</Pill>
-              ) : c.closedAt ? (
-                <Pill color="amber">종강</Pill>
-              ) : (
-                <Pill color="primary" soft={false}>
-                  운영
-                </Pill>
-              )}
-            </header>
-            {/* 구조화 카드(문법 ⑤) — 반 이름 bold + 담임·강의실 dim 서브 + 우측 재원수 */}
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-lg font-bold leading-tight">
-                  {c.className}
-                  <EditingBadge scope={`class:${c.id}`} />
-                </h3>
-                <p className="text-text-dim mt-1 truncate text-xs">
-                  {showTeacher
-                    ? `${c.teacherName ?? "담임 미정"}${c.classroomName ? ` · ${c.classroomName}` : ""}`
-                    : (c.classroomName ?? "강의실 미정")}
+    <div className="space-y-3">
+      {/* 카드 보기엔 표 머리가 없다 — 같은 열 머리 필터를 격자 위 한 줄에 세운다(필터가 보기마다 다른 자리에 있으면 안 된다). */}
+      <div className="text-text-dim flex flex-wrap items-center gap-x-4 gap-y-1 px-2 text-sm font-bold">
+        {head.subject}
+        {head.sort}
+        {showTeacher ? head.teacher : null}
+        {head.days}
+        {head.status}
+      </div>
+      {empty}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {classes.map((c) => {
+          const meta = { label: subjects.labelOf(c.subject), color: subjects.colorOf(c.subject) };
+          const st = classStatusMeta(c);
+          return (
+            <WindowLink
+              key={c.id}
+              href={`/classes/${c.id}`}
+              title={c.className}
+              className="bg-card shadow-card hover:shadow-card-hover flex flex-col gap-3 rounded-2xl p-5 transition"
+            >
+              <header className="flex items-center gap-2">
+                <Pill color={meta.color}>{meta.label}</Pill>
+                <Pill color={st.color}>{st.label}</Pill>
+              </header>
+              {/* 구조화 카드(문법 ⑤) — 반 이름 bold + 담임·강의실 dim 서브 + 우측 재원수 */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-lg leading-tight font-bold">
+                    {c.className}
+                    <EditingBadge scope={`class:${c.id}`} />
+                  </h3>
+                  <p className="text-text-dim mt-1 truncate text-sm">
+                    {showTeacher
+                      ? `${c.teacherName ?? "담임 미정"}${c.classroomName ? ` · ${c.classroomName}` : ""}`
+                      : (c.classroomName ?? "강의실 미정")}
+                  </p>
+                </div>
+                <p className="shrink-0 text-right">
+                  <span className="num text-foreground text-xl leading-none font-bold">{c.studentCount}</span>
+                  <span className="text-text-dim ml-0.5 text-sm">명</span>
+                  <span className="text-text-faint block text-sm">재원</span>
                 </p>
               </div>
-              <p className="shrink-0 text-right">
-                <span className="num text-foreground text-xl font-bold leading-none">
-                  {c.studentCount}
-                </span>
-                <span className="text-text-dim ml-0.5 text-xs">명</span>
-                <span className="text-text-faint block text-xs">재원</span>
-              </p>
-            </div>
-            <div className="mt-auto pt-1">
-              <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
-            </div>
-          </WindowLink>
-        );
-      })}
+              <div className="mt-auto pt-1">
+                <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
+              </div>
+            </WindowLink>
+          );
+        })}
+      </div>
     </div>
   );
 }
