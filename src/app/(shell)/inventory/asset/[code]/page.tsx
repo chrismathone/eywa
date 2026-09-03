@@ -2,11 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
-import { assetCategoryLabel } from "@/features/inventory/category";
+import { buildCategoryMaps } from "@/features/inventory/category";
 import { auditResultLabel } from "@/features/inventory/audit-result";
 import { loanStatusLabel } from "@/features/inventory/loan-status";
 import { qrImageSrc } from "@/features/inventory/qr";
 import { getAssetDetail } from "@/features/inventory/server/asset-queries";
+import { getInventoryCategories } from "@/features/inventory/server/category-queries";
 import { dashIfEmpty, unknownIfEmpty } from "@/features/inventory/unknown-value";
 import { AssetStatusPill, AuditResultPill, LoanStatusPill } from "../../_components/status-pill";
 
@@ -22,13 +23,15 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
 export default async function AssetDetailPage({ params }: { params: Promise<{ code: string }> }) {
   await requireAccess("inventory");
   const code = decodeURIComponent((await params).code);
-  const detail = await getAssetDetail(code);
+  // 서로 독립 — 함께 받는다(B4).
+  const [detail, categories] = await Promise.all([getAssetDetail(code), getInventoryCategories()]);
   if (!detail) notFound();
   const { asset, loans, audits } = detail;
+  const cats = buildCategoryMaps(categories.rows);
 
   const rows: Array<[string, React.ReactNode]> = [
     ["상태", <AssetStatusPill key="s" status={asset.status} />],
-    ["분류", assetCategoryLabel(asset.category)],
+    ["분류", cats.labelOf(asset.category)],
     ["제조사", <Faint key="mk" v={asset.maker} f={unknownIfEmpty} />],
     ["모델명", <Faint key="md" v={asset.model} f={unknownIfEmpty} />],
     ["시리얼번호", <Faint key="sn" v={asset.serialNo} f={unknownIfEmpty} />],
@@ -45,8 +48,8 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
       <PageHeader
         eyebrow="재고관리"
         title={asset.assetCode}
-        description={`${assetCategoryLabel(asset.category)} · ${asset.model ?? "모델 미기재"}`}
-        embedLabel={`${asset.assetCode} · ${assetCategoryLabel(asset.category)} · ${asset.model ?? "모델 미기재"}`}
+        description={`${cats.labelOf(asset.category)} · ${asset.model ?? "모델 미기재"}`}
+        embedLabel={`${asset.assetCode} · ${cats.labelOf(asset.category)} · ${asset.model ?? "모델 미기재"}`}
         actions={<AssetStatusPill status={asset.status} />}
       />
 

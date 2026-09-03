@@ -204,6 +204,8 @@ export const AUDIT_ACTIONS = {
   inventory_audit: "자산 실사 기록",
   inventory_supply_update: "소모품 수량 수정",
   inventory_excel_import: "재고관리 엑셀 반영",
+  // 분류(0247a) — 엑셀에 없는 분류를 적으면 확인 뒤 자동으로 만들어진다(삭제·이름변경 경로는 아직 없다).
+  inventory_category_create: "자산 분류 추가",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

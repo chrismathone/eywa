@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AUDIT_RESULTS, AUDIT_RESULT_LABEL } from "@/features/inventory/audit-result";
-import { assetCategoryLabel } from "@/features/inventory/category";
 import { setAssetStatus } from "@/features/inventory/server/asset-actions";
 import { recordAudit } from "@/features/inventory/server/audit-actions";
 import { assetStatusLabel } from "@/features/inventory/status";
 import type { AssetOption } from "@/features/inventory/types";
+import { useCategoryMaps } from "./categories-context";
 import { DialogShell, FIELD, Field, FormError, SELECT, TEXTAREA, useSubmit } from "./form-bits";
 
 /**
@@ -17,6 +17,7 @@ import { DialogShell, FIELD, Field, FormError, SELECT, TEXTAREA, useSubmit } fro
  */
 export function AuditDialog({ assets, presetAssetId, today, onClose }: { assets: AssetOption[]; presetAssetId?: string; today: string; onClose: () => void }) {
   const { busy, error, submit } = useSubmit();
+  const cats = useCategoryMaps();
   const [assetId, setAssetId] = useState(presetAssetId ?? "");
   const [suggest, setSuggest] = useState(false);
   const candidates = useMemo(() => assets.filter((a) => a.status !== "disposed"), [assets]);
@@ -61,7 +62,7 @@ export function AuditDialog({ assets, presetAssetId, today, onClose }: { assets:
             <option value="">자산을 고르세요</option>
             {candidates.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.assetCode} · {a.model ?? assetCategoryLabel(a.category)} · {assetStatusLabel(a.status)}
+                {a.assetCode} · {a.model ?? cats.labelOf(a.category)} · {assetStatusLabel(a.status)}
               </option>
             ))}
           </select>

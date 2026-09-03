@@ -5,10 +5,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { logAction } from "@/features/audit/server/log";
 import { isValidAssetCode, nextAssetCode, normalizeAssetCode } from "../asset-code";
-import { ASSET_CODE_PREFIX, isAssetCategory } from "../category";
+import { buildCategoryMaps } from "../category";
 import { dateField, idField, textField } from "../form";
 import { isAssetStatus } from "../status";
 import { friendlyInventoryError, requireInventoryWrite } from "./access";
+import { loadCategoriesForWrite } from "./category-queries";
 
 /**
  * 자산 마스터 쓰기 — 등록 · 수정 · 상태 변경.
@@ -55,12 +56,26 @@ function readAssetFields(fd: FormData): { ok: true; values: AssetFields } | { ok
   };
 }
 
+/**
+ * 등록된 분류인가 — **게이트는 화면이 아니라 서버**([[#77]]). 화면 드롭다운은 진입로일 뿐이다.
+ * ⚠️ 0247a 미적용이면 `loadCategoriesForWrite`가 내장 7종으로 폴백하므로 지금 동작이 그대로 유지된다.
+ */
+async function resolveCategory(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  raw: unknown,
+): Promise<{ key: string; label: string; prefix: string } | { error: string }> {
+  const category = String(raw ?? "").trim();
+  if (!category) return { error: "분류를 선택하세요" };
+  const maps = buildCategoryMaps((await loadCategoriesForWrite(admin, tenantId)).rows);
+  if (!maps.has(category)) return { error: "등록되지 않은 분류입니다 — 목록에서 다시 고르세요" };
+  return { key: category, label: maps.labelOf(category), prefix: maps.prefixOf(category) };
+}
+
 export async function createAsset(fd: FormData): Promise<InventoryActionState> {
   const ctx = await requireInventoryWrite();
   if ("error" in ctx) return ctx;
 
-  const category = String(fd.get("category") ?? "");
-  if (!isAssetCategory(category)) return { error: "분류를 선택하세요" };
   const status = String(fd.get("status") ?? "in_use");
   if (!isAssetStatus(status)) return { error: "상태 값이 올바르지 않습니다" };
   if (status === "on_loan") return { error: "대여중은 '대여 시작'으로 만드세요(대여자·기간이 함께 기록됩니다)" };
@@ -72,15 +87,16 @@ export async function createAsset(fd: FormData): Promise<InventoryActionState> {
   const fields = read.values;
 
   const admin = createAdminClient();
+  const cat = await resolveCategory(admin, ctx.tenantId, fd.get("category"));
+  if ("error" in cat) return cat;
   let assetCode = normalizeAssetCode(String(fd.get("assetCode") ?? ""));
   if (!assetCode) {
     // 비워 두면 자동 채번 — 그 접두의 코드만 받아 최대 번호 + 1(전건 페이징, B2).
-    const prefix = ASSET_CODE_PREFIX[category];
     const codes = await fetchAllPaged<{ asset_code: string }>((from, to) =>
-      admin.from("inventory_assets").select("asset_code").eq("tenant_id", ctx.tenantId).like("asset_code", `${prefix}-%`).range(from, to),
+      admin.from("inventory_assets").select("asset_code").eq("tenant_id", ctx.tenantId).like("asset_code", `${cat.prefix}-%`).range(from, to),
     ).catch(() => null);
     if (!codes) return { error: "자산ID를 자동으로 매기지 못했습니다 — 직접 입력해 주세요" };
-    assetCode = nextAssetCode(category, codes.map((c) => c.asset_code));
+    assetCode = nextAssetCode(cat.prefix, codes.map((c) => c.asset_code));
   }
   if (!isValidAssetCode(assetCode)) return { error: "자산ID는 영문 대문자·숫자·하이픈 2~32자입니다(예: NB-019)" };
 
@@ -89,7 +105,7 @@ export async function createAsset(fd: FormData): Promise<InventoryActionState> {
     .insert({
       tenant_id: ctx.tenantId,
       asset_code: assetCode,
-      category,
+      category: cat.key,
       status,
       maker: fields.maker,
       model: fields.model,
@@ -107,7 +123,9 @@ export async function createAsset(fd: FormData): Promise<InventoryActionState> {
     action: "inventory_asset_create",
     targetType: "inventory_asset",
     targetLabel: assetCode,
-    metadata: { assetId: data.id, assetCode, category, status },
+    // 🔑 분류 라벨을 **스냅샷**으로 함께 남긴다 — 분류가 학원별 데이터라 감사로그(순수·동기)가 나중에
+    //    라벨을 되짚을 수 없다(0247a 이전 행은 describe.ts가 내장 7종으로 폴백한다).
+    metadata: { assetId: data.id, assetCode, category: cat.key, categoryLabel: cat.label, status },
   });
   refresh();
   return { ok: true };
@@ -118,8 +136,6 @@ export async function updateAsset(fd: FormData): Promise<InventoryActionState> {
   if ("error" in ctx) return ctx;
   const id = idField(fd);
   if (!id) return { error: "자산을 찾지 못했습니다" };
-  const category = String(fd.get("category") ?? "");
-  if (!isAssetCategory(category)) return { error: "분류를 선택하세요" };
   const assetCode = normalizeAssetCode(String(fd.get("assetCode") ?? ""));
   if (!isValidAssetCode(assetCode)) return { error: "자산ID는 영문 대문자·숫자·하이픈 2~32자입니다(예: NB-019)" };
   const read = readAssetFields(fd);
@@ -127,6 +143,9 @@ export async function updateAsset(fd: FormData): Promise<InventoryActionState> {
   const fields = read.values;
 
   const admin = createAdminClient();
+  const cat = await resolveCategory(admin, ctx.tenantId, fd.get("category"));
+  if ("error" in cat) return cat;
+  const category = cat.key;
   const { data: cur, error: curErr } = await admin
     .from("inventory_assets")
     .select("asset_code, category, maker, model, serial_no, acquired_on, location, note")
