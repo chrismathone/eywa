@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/page-header";
 import { buildCategoryMaps } from "@/features/inventory/category";
 import { auditResultLabel } from "@/features/inventory/audit-result";
 import { loanStatusLabel } from "@/features/inventory/loan-status";
@@ -40,6 +39,8 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
   const cats = buildCategoryMaps((await getInventoryCategoriesByTenantId(tenantId)).rows);
 
   const rows: Array<[string, React.ReactNode]> = [
+    // 🔴 자산번호가 첫 행 — 머리글의 제목이던 값이라 여기 없으면 화면 어디에도 자산ID가 안 남는다.
+    ["자산번호", <span key="ac" className="font-mono font-bold">{asset.assetCode}</span>],
     ["상태", <AssetStatusPill key="s" status={asset.status} />],
     ["분류", cats.labelOf(asset.category)],
     ["제조사", <Faint key="mk" v={asset.maker} f={unknownIfEmpty} />],
@@ -55,13 +56,16 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-3 p-3 pb-8 md:p-5 lg:pb-10">
-      <PageHeader
-        eyebrow="재고관리"
-        title={asset.assetCode}
-        description={`${cats.labelOf(asset.category)} · ${asset.model ?? "모델 미기재"}`}
-        embedLabel={`${asset.assetCode} · ${cats.labelOf(asset.category)} · ${asset.model ?? "모델 미기재"}`}
-        actions={<AssetStatusPill status={asset.status} />}
-      />
+      {/*
+        원장 2026-09-03: *"헤더에 [HDS-006 · 헤드셋 · 타이디홈 고성능 · 사용중] 필요없고 다 1번 카드 안으로 넣어
+        자산번호 HDS-006 그리고 나머진 중복이니까 필요없네"* + *"그냥 자산 관리 정보 라고 적당히 거대한 폰트로
+        적어놓던지"* + *"그 아래에 카드 시작"*.
+        🔴 여기에 자산ID·분류·모델·상태를 다시 적지 말 것 — 전부 아래 카드의 행이라 **중복**이다(그게 걷어낸 이유다).
+        ⚠️ PageHeader를 쓰지 않는다(eyebrow·description·actions가 그 중복을 도로 만든다). 이 화면은 셸이 없어
+           embedLabel도 소비처가 없다.
+      */}
+      {/* 카드와 왼쪽을 딱 맞춘다 — 4px쯤 들여쓰면 '거의 맞은' 어긋남으로 보인다(카드 링은 박스 밖이라 무시 가능, [[#114]]). */}
+      <h1 className="text-foreground text-[26px] font-extrabold tracking-tight md:text-[30px]">자산 관리 정보</h1>
 
       <section className="bg-card shadow-card rounded-2xl p-4">
         <dl className="grid grid-cols-[92px_minmax(0,1fr)] gap-x-3 gap-y-2 text-[14px]">
