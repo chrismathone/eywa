@@ -28,7 +28,6 @@ import { buildBriefingLinks } from "@/features/dashboard/briefing-links";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
-import { QuickActions } from "./_components/quick-actions";
 import { OperationsBriefing } from "./_components/operations-briefing";
 import { DailyBriefingCard } from "./_components/daily-briefing-card";
 import { OutstandingCard } from "./_components/outstanding-card";
@@ -36,7 +35,6 @@ import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
 import { SlimTrend } from "./_components/slim-trend";
-import type { QuickActionKey } from "./_components/quick-actions";
 
 const EMPTY_ENROLLMENT_CHANGES = {
   newCount: 0,
@@ -287,10 +285,6 @@ export default async function TodayPage() {
   }
   const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
   const unpaidCount = payment?.unpaidCount ?? 0;
-  const quickActions: QuickActionKey[] = [];
-  if (access.write.students) quickActions.push("student");
-  if (access.write.classes) quickActions.push("class");
-  if (access.write.consultations) quickActions.push("consultation");
   const showFollowUps = access.read.consultations;
 
   return (
@@ -326,9 +320,6 @@ export default async function TodayPage() {
 
       {/* ② 오늘 브리핑 — 조회·정리만, 실행은 원본 화면에서 */}
       <OperationsBriefing briefing={briefing} />
-
-      {/* 빠른 작업 */}
-      <QuickActions allowed={quickActions} />
 
       {/* 상담 후속조치 — 원장 지시(2026-09-03)로 '실시간 운영/지금 진행 중' 묶음은 걷어냈지만,
           이 카드는 그 안에 얹혀 있었을 뿐 다른 신호라 그대로 남긴다(오늘 브리핑의 후속조치 신호와 같은 소스). */}
