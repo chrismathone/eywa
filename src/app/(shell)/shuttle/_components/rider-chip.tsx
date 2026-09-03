@@ -128,7 +128,7 @@ export function RiderChip({
             aria-label={`${rider.studentName} 배정 해제`}
             // 폰에서는 칩 높이(44px)를 그대로 받아 손가락이 닿는 칸이 된다 — 폭까지 44로 키우면
             // 9rem 칸에서 이름이 사라지므로 세로만 채우고 좌우는 여백으로 넓힌다.
-            className="hover:text-danger h-11 shrink-0 cursor-pointer px-2 text-[15px] opacity-60 sm:h-auto sm:px-0 sm:text-inherit"
+            className="hover:text-danger h-11 shrink-0 cursor-pointer px-2 text-base opacity-60 sm:h-auto sm:px-0 sm:text-inherit"
           >
             ×
           </button>
@@ -146,7 +146,7 @@ export function RiderChip({
                 disabled={busy}
                 aria-pressed={on}
                 onClick={() => toggleDay(d)}
-                className={`size-11 cursor-pointer rounded text-[13px] font-bold transition-colors sm:size-6 sm:text-[11.5px] ${
+                className={`size-11 cursor-pointer rounded text-sm font-bold transition-colors sm:size-6 sm:text-xs ${
                   on ? "bg-primary text-primary-foreground" : "text-text-faint hover:bg-muted"
                 }`}
               >

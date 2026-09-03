@@ -109,13 +109,13 @@ export function ClassInfoCard({
 }) {
   const subjects = useSubjectMaps();
   return (
-    <div className="space-y-2 text-[11px]">
+    <div className="space-y-2 text-xs">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-foreground text-[13px] font-bold">{className}</span>
+        <span className="text-foreground text-sm font-bold">{className}</span>
         <Pill color={subjects.colorOf(subject)}>{subjects.labelOf(subject)}</Pill>
       </div>
       {pendingHandover ? (
-        <div className="bg-blue-soft text-blue rounded px-1.5 py-1 text-[10px] font-bold">
+        <div className="bg-blue-soft text-blue rounded px-1.5 py-1 text-xs font-bold">
           강사 인수인계 예정
           {pendingHandover.teacherName ? ` → ${pendingHandover.teacherName}` : ""}
           {pendingHandover.date ? ` (${pendingHandover.date})` : ""}
@@ -127,7 +127,7 @@ export function ClassInfoCard({
         {schedule ? <Row label="시간" value={schedule} mono /> : null}
         {textbook ? <Row label="교재" value={textbook} /> : null}
       </div>
-      <div className="border-line flex flex-wrap items-center gap-x-2.5 border-t pt-1.5 num text-[10px]">
+      <div className="border-line flex flex-wrap items-center gap-x-2.5 border-t pt-1.5 num text-xs">
         <span className="text-primary">재원 {counts.active}</span>
         {counts.hold > 0 ? <span className="text-amber">대기 {counts.hold}</span> : null}
         {counts.withdrawn > 0 ? <span className="text-text-faint">퇴원 {counts.withdrawn}</span> : null}
@@ -182,11 +182,11 @@ export function StudentInfoCard({
   const hasDetail =
     isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName;
   return (
-    <div className="space-y-2 break-keep text-[11px]">
+    <div className="space-y-2 break-keep text-xs">
       {/* 헤더 한 줄: 이름(좌) + 학년·학교(우상단). 별도 줄을 없애 세로 공간 절약. */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="text-foreground text-[13px] font-bold">{name}</span>
+          <span className="text-foreground text-sm font-bold">{name}</span>
           {englishName ? <span className="text-text-dim">({englishName})</span> : null}
           {status === "withdrawn" ? (
             <Pill color="neutral">퇴원</Pill>
@@ -198,7 +198,7 @@ export function StudentInfoCard({
           // 학교+학년을 ijw식 압축("달산초"+"초6"→"달산초6") — 셀 학생행과 동일 라벨.
           const sg = formatSchoolGrade(school, grade, { numberLast: true });
           return sg && sg !== "-" ? (
-            <span className="text-text-dim shrink-0 text-right text-[10px] leading-tight">{sg}</span>
+            <span className="text-text-dim shrink-0 text-right text-xs leading-tight">{sg}</span>
           ) : null;
         })()}
       </div>
@@ -211,14 +211,14 @@ export function StudentInfoCard({
             <div className="flex flex-wrap items-center gap-1.5">
               <Pill color="primary">전입</Pill>
               {enrollmentDate ? (
-                <span className="text-text-dim num text-[10px]">{enrollmentDate}</span>
+                <span className="text-text-dim num text-xs">{enrollmentDate}</span>
               ) : null}
             </div>
           ) : isNew ? (
             <div className="flex flex-wrap items-center gap-1.5">
               <Pill color="danger">신입</Pill>
               {enrollmentDate ? (
-                <span className="text-text-dim num text-[10px]">{enrollmentDate}</span>
+                <span className="text-text-dim num text-xs">{enrollmentDate}</span>
               ) : null}
             </div>
           ) : null}
@@ -255,7 +255,7 @@ export function StudentInfoCard({
             </p>
           ) : null}
           {report.examInfo || report.homeworkScore ? (
-            <div className="text-text-dim flex flex-wrap gap-x-2.5 num text-[10px]">
+            <div className="text-text-dim flex flex-wrap gap-x-2.5 num text-xs">
               {report.examInfo ? <span>시험 {report.examInfo}</span> : null}
               {report.homeworkScore ? <span>숙제 {report.homeworkScore}</span> : null}
             </div>

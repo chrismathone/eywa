@@ -109,11 +109,11 @@ export function PeriodNav({
     startTransition(() => router.push(href));
   };
 
-  // 🔴 높이는 **h-8(32px) 고정** — 공용 `<Button>` 기본 크기와 같은 값이다(원장 2026-09-01
-  //    *"전체적으로 버튼높이 등을 통일"*). 툴바 한 줄에 버튼·드롭다운·기간 네비가 나란히 서므로
-  //    하나라도 다르면 줄이 울퉁불퉁해 보인다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
+  // 🔴 높이·라벨은 **control-scale 한 벌**(높이 = 라벨 ÷ 0.9, 원장 2026-09-03) — 공용 `<Button>`·툴바 칩과
+  //    같은 값이라 한 줄에 나란히 서도 밑선이 맞는다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
+  //    (09-01 "h-8 고정"은 이 규칙으로 대체.)
   const arrow =
-    "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex h-full cursor-pointer items-center justify-center px-2.5 transition disabled:cursor-default disabled:opacity-50";
+    "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex h-full cursor-pointer items-center justify-center px-2 transition disabled:cursor-default disabled:opacity-50";
 
   // 칠해진 화살표 — hover 톤까지 덮어써야 마우스를 얹었을 때 색이 도로 풀리지 않는다.
   const lit = "bg-primary text-primary-foreground hover:bg-primary-deep hover:text-primary-foreground";
@@ -121,7 +121,7 @@ export function PeriodNav({
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <div
-        className={`border-line-strong inline-flex h-8 items-center overflow-hidden rounded-lg border ${
+        className={`border-line-strong inline-flex h-(--control-h) items-center overflow-hidden rounded-lg border ${
           pending || handing || externalPending ? "opacity-70" : ""
         }`}
       >
@@ -131,16 +131,18 @@ export function PeriodNav({
           aria-label={prevAriaLabel ?? "이전"}
           onClick={() => go(prevHref)}
         >
-          <ChevronLeft className="size-3.5" />
+          <ChevronLeft className="size-[1em] text-(length:--control-label)" />
         </button>
         <button
           type="button"
           // 이미 이번 기간이면 눌러도 갈 곳이 없다 — 비활성으로 그 사실을 모양에 담는다.
           disabled={isCurrent}
-          className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-[13px] font-bold whitespace-nowrap transition ${
+          className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-(length:--control-label) leading-none font-bold whitespace-nowrap transition ${
             isCurrent ? "text-foreground cursor-default" : "text-foreground hover:bg-bg-soft cursor-pointer"
           }`}
-          style={{ width: labelWidth }}
+          // 호출부의 labelWidth는 옛 13px 라벨에 맞춘 값 — v5 라벨(18px)은 약 1.4배라 그만큼 늘리고, 고정폭이 아니라
+          // **하한**으로 둔다(넘치면 잘리는 게 아니라 칸이 늘어난다 — 잘린 날짜가 가장 나쁘다).
+          style={{ minWidth: Math.ceil(labelWidth * 1.4) }}
           title={isCurrent ? undefined : (currentTitle ?? "눌러서 이번 기간으로")}
           onClick={() => go(currentHref)}
         >
@@ -152,11 +154,11 @@ export function PeriodNav({
           aria-label={nextAriaLabel ?? "다음"}
           onClick={() => go(nextHref)}
         >
-          <ChevronRight className="size-3.5" />
+          <ChevronRight className="size-[1em] text-(length:--control-label)" />
         </button>
       </div>
       {badge ? (
-        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${badge.tone}`}>
+        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${badge.tone}`}>
           {badge.label}
         </span>
       ) : null}

@@ -56,7 +56,7 @@ export function DayHeadCells({ data }: { data: MathSheetMonthData }) {
           <th
             key={day.date}
             title={holiday ? `${day.date} · ${holiday} — 학원 휴일` : undefined}
-            className={`border-line-faint num border p-2 text-center text-[12.5px] font-extrabold whitespace-nowrap ${
+            className={`border-line-faint num border p-2 text-center text-xs font-extrabold whitespace-nowrap ${
               warn ? "bg-amber-soft text-amber" : holiday ? "bg-att-weekend text-danger" : "bg-bg-soft text-text-dim"
             }`}
           >
@@ -102,7 +102,7 @@ export function DayCells({ stu, data }: { stu: MathStudentRow; data: MathSheetMo
                     행 높이는 고정열의 목표 칸이 정하므로 본문이 커져도 표가 길어지지 않는다. */}
                 {rec.textbook ? (
                   <div
-                    className={`mb-1 flex items-center gap-1.5 text-[13.5px] leading-tight font-bold ${
+                    className={`mb-1 flex items-center gap-1.5 text-sm leading-tight font-bold ${
                       rec.offGoal ? "text-amber" : "text-primary"
                     }`}
                   >
@@ -110,16 +110,16 @@ export function DayCells({ stu, data }: { stu: MathStudentRow; data: MathSheetMo
                     {rec.offGoal ? (
                       <span
                         title="이 달 목표에 적은 교재와 다릅니다"
-                        className="bg-amber shrink-0 rounded px-1.5 text-[11px] leading-[18px] font-extrabold text-white"
+                        className="bg-amber shrink-0 rounded px-1.5 text-xs leading-[18px] font-extrabold text-white"
                       >
                         목표 밖
                       </span>
                     ) : null}
                   </div>
                 ) : null}
-                <div className="text-foreground text-[15px] leading-snug whitespace-pre-line">{rec.progress ?? "—"}</div>
+                <div className="text-foreground text-base leading-snug whitespace-pre-line">{rec.progress ?? "—"}</div>
                 {tests.length > 0 ? (
-                  <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[13.5px] leading-tight">
+                  <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm leading-tight">
                     {tests.map((t) => (
                       <span key={t.kind} title={`${TEST_KIND_TITLE[t.kind]} ${t.raw}`} className="num">
                         <span className="text-text-dim font-semibold">{TEST_KIND_LABEL[t.kind]} </span>
@@ -129,14 +129,14 @@ export function DayCells({ stu, data }: { stu: MathStudentRow; data: MathSheetMo
                   </div>
                 ) : null}
                 {stalled ? (
-                  <div className="text-amber mt-1.5 flex items-center gap-1 text-[12.5px] font-bold">
+                  <div className="text-amber mt-1.5 flex items-center gap-1 text-xs font-bold">
                     <EyIcon name="alert" size={12} />
                     같은 진도 반복
                   </div>
                 ) : null}
               </>
             ) : (
-              <div className="text-text-faint text-[12.5px] font-bold">{cellNote(state, data.holidays[day.date])}</div>
+              <div className="text-text-faint text-xs font-bold">{cellNote(state, data.holidays[day.date])}</div>
             )}
           </td>
         );

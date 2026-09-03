@@ -121,7 +121,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
         <header className="flex items-center justify-between">
-          <h2 className="text-foreground inline-flex items-center gap-1.5 text-[15px] font-bold">
+          <h2 className="text-foreground inline-flex items-center gap-1.5 text-base font-bold">
             <CalendarOff className="text-primary size-4" />
             학원 지정 휴원일
           </h2>
@@ -133,7 +133,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
             학원설정에서 편집
           </Link>
         </header>
-        <p className="text-text-faint text-[11px]">
+        <p className="text-text-faint text-xs">
           계산기에서 차시를 셀 때 <b>항상 제외</b>됩니다. 학원 휴무·시험기간 등 학원 단위 휴원일은
           학원설정 › 운영에서 관리합니다.
         </p>
@@ -156,14 +156,14 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
       <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
         {/* 연도 이동 */}
         <header className="flex items-center justify-between">
-          <h2 className="text-foreground text-[15px] font-bold">대한민국 공휴일</h2>
+          <h2 className="text-foreground text-base font-bold">대한민국 공휴일</h2>
           <div className="flex items-center gap-1.5">
             {year > HOLIDAY_MIN_YEAR ? (
               <Link href={hrefFor(year - 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="이전 연도"><EyIcon name="chevronLeft" size={14} /></Link>
             ) : (
               <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-full border opacity-40"><EyIcon name="chevronLeft" size={14} /></span>
             )}
-            <span className="text-foreground num min-w-[64px] text-center text-[13px] font-bold">{year}년</span>
+            <span className="text-foreground num min-w-[64px] text-center text-sm font-bold">{year}년</span>
             {year < HOLIDAY_MAX_YEAR ? (
               <Link href={hrefFor(year + 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="다음 연도"><EyIcon name="chevronRight" size={14} /></Link>
             ) : (
@@ -189,7 +189,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
           ))}
         </div>
 
-        <p className="text-text-faint text-[11px]">
+        <p className="text-text-faint text-xs">
           계산기의 <b>“대한민국 공휴일 제외”</b> 체크 시 차시에서 빠집니다. 음력(설·추석)·대체공휴일·
           부처님오신날 포함(ijw 공휴일 데이터 이식, 2024–2030). {month >= 1 ? `${month}월` : "연간"} {national.length}일.
         </p>

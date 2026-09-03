@@ -84,12 +84,12 @@ function MonthListView({
   const byDate = groupTasksByDate(tasks);
   const dates = Object.keys(byDate).sort();
   if (dates.length === 0)
-    return <p className="text-text-faint px-1 py-6 text-center text-[13px]">이 달에 등록된 업무가 없습니다.</p>;
+    return <p className="text-text-faint px-1 py-6 text-center text-sm">이 달에 등록된 업무가 없습니다.</p>;
   return (
     <div className="border-line bg-card divide-line divide-y rounded-2xl border">
       {dates.map((d) => (
         <div key={d} className="flex gap-3 px-3 py-2">
-          <div className={`num w-16 shrink-0 text-[12px] ${d === today ? "text-primary font-bold" : "text-text-dim"}`}>
+          <div className={`num w-16 shrink-0 text-xs ${d === today ? "text-primary font-bold" : "text-text-dim"}`}>
             {d.slice(5).replace("-", "/")}
           </div>
           <div className="flex-1 space-y-0.5">
@@ -98,14 +98,14 @@ function MonthListView({
                 key={t.id}
                 type="button"
                 onClick={() => onOpen(t)}
-                className="hover:bg-primary/10 hover:text-primary flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[12px] transition"
+                className="hover:bg-primary/10 hover:text-primary flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-xs transition"
               >
                 <span className={t.done ? "text-text-faint line-through" : "text-foreground"}>{t.title}</span>
                 {t.dept ? <span className="text-text-faint">· {t.dept}</span> : null}
                 {t.start && t.due && t.start !== t.due ? (
-                  <span className="text-text-faint num text-[10px]">({t.start.slice(5)}~{t.due.slice(5)})</span>
+                  <span className="text-text-faint num text-xs">({t.start.slice(5)}~{t.due.slice(5)})</span>
                 ) : null}
-                {t.done ? <span className="text-green text-[10px]">완료</span> : null}
+                {t.done ? <span className="text-green text-xs">완료</span> : null}
               </button>
             ))}
           </div>
@@ -222,14 +222,14 @@ export function MonthlyScheduleView({
       return <Panel title="Notion 계정이 연결되지 않았습니다" desc="담당자가 이 직원의 Notion 계정을 연결하면 월간 업무가 표시됩니다." />;
     return (
       <div className="bg-card border-line shadow-card rounded-2xl border px-5 py-6">
-        <h3 className="text-foreground text-[14px] font-bold">Notion 계정 연결</h3>
-        <p className="text-text-faint mt-1 mb-3 text-[12px]">
+        <h3 className="text-foreground text-sm font-bold">Notion 계정 연결</h3>
+        <p className="text-text-faint mt-1 mb-3 text-xs">
           이메일이 같으면 자동 연결됩니다. 이메일이 달라 자동 연결되지 않았으니, Notion 담당자를 직접 골라 연결하세요.
           <br />
           이미 다른 직원에 연결된 계정은 목록에서 제외됩니다(중복 연결 방지).
         </p>
         {mapPrep.options.length === 0 ? (
-          <p className="text-text-faint text-[12px]">
+          <p className="text-text-faint text-xs">
             연결 가능한 Notion 담당자가 없습니다{mapPrep.taken.length > 0 ? " (후보 전원이 이미 다른 직원에 연결됨)" : " — 연동 설정을 확인해주세요"}.
           </p>
         ) : (
@@ -248,7 +248,7 @@ export function MonthlyScheduleView({
           </div>
         )}
         {mapPrep.taken.length > 0 ? (
-          <p className="text-text-faint mt-3 text-[11px]">
+          <p className="text-text-faint mt-3 text-xs">
             이미 연결됨: {mapPrep.taken.map((t) => `${t.notionName}→${t.staffName}`).join(", ")}
           </p>
         ) : null}
@@ -260,7 +260,7 @@ export function MonthlyScheduleView({
   if (!result.ok)
     return (
       <div className="border-danger/40 bg-danger/5 rounded-2xl border px-5 py-6 text-center">
-        <p className="text-danger text-[13px] font-medium">{result.error}</p>
+        <p className="text-danger text-sm font-medium">{result.error}</p>
         <Button size="sm" variant="outline" className="mt-3" disabled={pending} onClick={() => goMonth(month)}>
           다시 시도
         </Button>
@@ -279,14 +279,14 @@ export function MonthlyScheduleView({
           <Button variant="ghost" aria-label="이전 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, -1))}>
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="text-foreground min-w-[92px] text-center text-[14px] font-bold">{monthLabel(month)}</span>
+          <span className="text-foreground min-w-[92px] text-center text-sm font-bold">{monthLabel(month)}</span>
           <Button variant="ghost" aria-label="다음 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, 1))}>
             <ChevronRight className="size-4" />
           </Button>
           <Button variant="outline" className="ml-1" disabled={pending} onClick={() => goMonth(today.slice(0, 7))}>
             오늘
           </Button>
-          {pending ? <span className="text-text-faint ml-1 text-[11px]">불러오는 중…</span> : null}
+          {pending ? <span className="text-text-faint ml-1 text-xs">불러오는 중…</span> : null}
         </div>
         <div className="flex items-center gap-2">
           {canManage ? (
@@ -315,11 +315,11 @@ export function MonthlyScheduleView({
         </div>
       </div>
       {canManage ? (
-        <p className="text-text-faint px-1 text-[11px]">달력에서 업무 막대를 다른 날짜로 끌어 마감일을 옮길 수 있습니다(확인 후 Notion 반영).</p>
+        <p className="text-text-faint px-1 text-xs">달력에서 업무 막대를 다른 날짜로 끌어 마감일을 옮길 수 있습니다(확인 후 Notion 반영).</p>
       ) : null}
 
       {tasks.length === 0 && view === "grid" ? (
-        <p className="text-text-faint px-1 pb-1 text-[12px]">이 달에 등록된 업무가 없습니다.</p>
+        <p className="text-text-faint px-1 pb-1 text-xs">이 달에 등록된 업무가 없습니다.</p>
       ) : null}
       {view === "grid" ? (
         <MonthGridView

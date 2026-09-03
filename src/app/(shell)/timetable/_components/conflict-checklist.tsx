@@ -44,7 +44,7 @@ export function ConflictChecklist({
   return (
     <section className="space-y-2">
       {must.length > 0 ? (
-        <div className="border-danger/40 bg-danger-soft rounded-sm border p-2 text-[11px]">
+        <div className="border-danger/40 bg-danger-soft rounded-sm border p-2 text-xs">
           <p className="text-danger mb-1.5 flex items-center gap-1 font-bold">
             <AlertTriangle className="size-3" aria-hidden="true" />
             적용 전 확인 필요 <span className="num">{done}/{must.length}</span>
@@ -79,7 +79,7 @@ export function ConflictChecklist({
       ) : null}
 
       {merged.length > 0 ? (
-        <div className="bg-amber-soft text-amber rounded-sm p-2 text-[11px]">
+        <div className="bg-amber-soft text-amber rounded-sm p-2 text-xs">
           <p className="mb-1 flex items-center gap-1 font-bold">
             <Check className="size-3" aria-hidden="true" /> 합반으로 보임 <span className="num">{merged.length}</span>건 —
             확인만 하세요(적용 가능)
@@ -93,7 +93,7 @@ export function ConflictChecklist({
       ) : null}
 
       {old.length > 0 ? (
-        <div className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">
+        <div className="bg-bg-soft text-text-dim rounded-sm p-2 text-xs">
           <p className="mb-1 font-bold">
             원래 있던 충돌 <span className="num">{old.length}</span>건 — 이번 변경과 무관합니다
           </p>

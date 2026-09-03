@@ -51,10 +51,10 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
       />
 
       <section className="bg-card shadow-card rounded-2xl p-4">
-        <dl className="grid grid-cols-[92px_minmax(0,1fr)] gap-x-3 gap-y-2 text-[14px]">
+        <dl className="grid grid-cols-[92px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
-              <dt className="text-text-dim text-[12.5px] font-bold">{k}</dt>
+              <dt className="text-text-dim text-xs font-bold">{k}</dt>
               <dd className="min-w-0 break-words">{v}</dd>
             </div>
           ))}
@@ -62,11 +62,11 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
       </section>
 
       <section className="bg-card shadow-card rounded-2xl p-4">
-        <h3 className="text-foreground text-[13.5px] font-bold">최근 대여</h3>
+        <h3 className="text-foreground text-sm font-bold">최근 대여</h3>
         {loans.length === 0 ? (
-          <p className="text-text-faint mt-1 text-[12.5px]">대여 이력이 없습니다</p>
+          <p className="text-text-faint mt-1 text-xs">대여 이력이 없습니다</p>
         ) : (
-          <ul className="mt-2 flex flex-col gap-1.5 text-[12.5px]">
+          <ul className="mt-2 flex flex-col gap-1.5 text-xs">
             {loans.map((l) => (
               <li key={l.id} className="flex flex-wrap items-baseline gap-x-2">
                 <LoanStatusPill status={l.status} />
@@ -80,11 +80,11 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
       </section>
 
       <section className="bg-card shadow-card rounded-2xl p-4">
-        <h3 className="text-foreground text-[13.5px] font-bold">최근 실사</h3>
+        <h3 className="text-foreground text-sm font-bold">최근 실사</h3>
         {audits.length === 0 ? (
-          <p className="text-text-faint mt-1 text-[12.5px]">실사 이력이 없습니다</p>
+          <p className="text-text-faint mt-1 text-xs">실사 이력이 없습니다</p>
         ) : (
-          <ul className="mt-2 flex flex-col gap-1.5 text-[12.5px]">
+          <ul className="mt-2 flex flex-col gap-1.5 text-xs">
             {audits.map((d) => (
               <li key={d.id} className="flex flex-wrap items-baseline gap-x-2">
                 <AuditResultPill result={d.result} />
@@ -100,10 +100,10 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
       <section className="bg-card shadow-card flex items-center gap-4 rounded-2xl p-4">
         {/* eslint-disable-next-line @next/next/no-img-element -- 라우트가 그 자리에서 그리는 SVG */}
         <img src={qrImageSrc(asset.assetCode)} alt={`${asset.assetCode} QR`} width={96} height={96} className="shrink-0" />
-        <p className="text-text-dim text-[12px]">이 QR을 찍으면 이 화면(그때의 현재 상태)이 열립니다. 라벨은 재고관리 목록의 [인쇄]에서 한꺼번에 뽑습니다.</p>
+        <p className="text-text-dim text-xs">이 QR을 찍으면 이 화면(그때의 현재 상태)이 열립니다. 라벨은 재고관리 목록의 [인쇄]에서 한꺼번에 뽑습니다.</p>
       </section>
 
-      <Link href="/inventory" className="text-primary text-[12.5px] font-bold hover:underline">
+      <Link href="/inventory" className="text-primary text-xs font-bold hover:underline">
         ← 재고관리 목록
       </Link>
     </div>

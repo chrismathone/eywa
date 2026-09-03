@@ -76,12 +76,12 @@ export function ReportNameCard({
         </div>
       </form>
       {mappingBlocked ? (
-        <p className="mt-2 text-[11px] leading-snug text-amber-700">
+        <p className="mt-2 text-xs leading-snug text-amber-700">
           저장된 이름이 있지만 같은 이름의 직원이 있어 지금은 <b>실명으로 발송</b>되고 있습니다 —
           관리자에게 문의하세요.
         </p>
       ) : null}
-      <p className="text-text-faint mt-1 text-[11px]">
+      <p className="text-text-faint mt-1 text-xs">
         다음 발송부터 새 이름으로 나가고, <b>이미 보낸 보고서도</b> 학부모가 공유 링크를 다시 열면 새
         이름으로 보입니다(게시된 이미지 속 이름은 그대로).
       </p>

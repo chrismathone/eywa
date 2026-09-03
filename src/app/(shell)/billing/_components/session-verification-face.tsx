@@ -182,7 +182,7 @@ export async function SessionVerificationFace({
           <section className="border-line rounded-2xl border">
             <header className="border-line flex flex-wrap items-baseline justify-between gap-2 border-b px-3 py-2">
               <h3 className="text-foreground text-sm font-bold">강사별 분배 (참고)</h3>
-              <p className="text-text-dim text-[11px]">
+              <p className="text-text-dim text-xs">
                 반 담당 강사 기준 집계 — 표시 전용이며 어디에도 저장되지 않습니다. 단가 없는 행은 금액에서
                 제외하고 개수로 표시합니다.
               </p>
@@ -207,7 +207,7 @@ export async function SessionVerificationFace({
                         {t.teacherName}
                         {t.missingPriceRows > 0 ? (
                           <span
-                            className="text-text-dim ml-1 text-[10px]"
+                            className="text-text-dim ml-1 text-xs"
                             title="단가가 없어 금액 집계에서 제외된 행"
                           >
                             (단가없음 {t.missingPriceRows})
@@ -290,7 +290,7 @@ export async function SessionVerificationFace({
                         ) : (
                           <span className="text-text-dim" title="회차 확정 전 — 계획 회차는 참고">
                             {r.plannedSessions ?? "—"}
-                            <span className="ml-0.5 text-[10px]">(계획)</span>
+                            <span className="ml-0.5 text-xs">(계획)</span>
                           </span>
                         )}
                       </td>

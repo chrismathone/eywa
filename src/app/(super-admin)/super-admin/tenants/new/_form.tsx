@@ -40,14 +40,14 @@ export function NewTenantForm() {
       <Field name="plan" label="플랜" defaultValue="free" hint="free · pro · enterprise 등 자유 입력" />
 
       {state?.error ? (
-        <p className="bg-danger-soft text-danger rounded-md px-3 py-2 text-[12px]">{state.error}</p>
+        <p className="bg-danger-soft text-danger rounded-md px-3 py-2 text-xs">{state.error}</p>
       ) : null}
 
       <div className="flex justify-end gap-2 pt-2">
         <button
           type="submit"
           disabled={pending}
-          className="bg-primary text-primary-foreground shadow-primary-glow inline-flex items-center gap-1.5 rounded-md px-4 py-2.5 text-[13px] font-bold disabled:opacity-60"
+          className="bg-primary text-primary-foreground shadow-primary-glow inline-flex items-center gap-1.5 rounded-md px-4 py-2.5 text-sm font-bold disabled:opacity-60"
         >
           {pending ? "생성 중…" : "학원 + 원장 발급"}
         </button>
@@ -75,13 +75,13 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-foreground text-[12px] font-bold">{label}</span>
+      <span className="text-foreground text-xs font-bold">{label}</span>
       {type === "password" ? (
         <PasswordInput
           name={name}
           placeholder={placeholder}
           defaultValue={defaultValue}
-          className={`border-line text-foreground mt-1 block h-auto w-full rounded-md border bg-transparent px-3 py-2 text-[13px] ${
+          className={`border-line text-foreground mt-1 block h-auto w-full rounded-md border bg-transparent px-3 py-2 text-sm ${
             error ? "border-danger" : ""
           }`}
         />
@@ -91,15 +91,15 @@ function Field({
           name={name}
           placeholder={placeholder}
           defaultValue={defaultValue}
-          className={`border-line text-foreground mt-1 block w-full rounded-md border bg-transparent px-3 py-2 text-[13px] ${
+          className={`border-line text-foreground mt-1 block w-full rounded-md border bg-transparent px-3 py-2 text-sm ${
             error ? "border-danger" : ""
           }`}
         />
       )}
       {error ? (
-        <p className="text-danger mt-1 text-[11px]">{error}</p>
+        <p className="text-danger mt-1 text-xs">{error}</p>
       ) : hint ? (
-        <p className="text-text-dim mt-1 text-[11px]">{hint}</p>
+        <p className="text-text-dim mt-1 text-xs">{hint}</p>
       ) : null}
     </label>
   );

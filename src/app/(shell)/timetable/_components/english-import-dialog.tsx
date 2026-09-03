@@ -242,15 +242,15 @@ export function EnglishImportDialog({
             aria-label="시트에서 가져오기"
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-bold">시트에서 가져오기</h2>
+              <h2 className="text-foreground text-base font-bold">시트에서 가져오기</h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
                 <X className="size-4" />
               </button>
             </header>
-            <p className="text-text-dim mt-1 text-[11px]">
+            <p className="text-text-dim mt-1 text-xs">
               연결된 구글 시트를 편집한 뒤 불러오면 <b>수업 배치</b>(강사별 탭)와 <b>학생 반이동</b>(수강편집 탭) 변경을 한 번에 봅니다.
             </p>
-            <p className="text-text-faint mt-1 flex items-start gap-1 text-[11px]">
+            <p className="text-text-faint mt-1 flex items-start gap-1 text-xs">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
               <span>편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b>(전체 덮어쓰기라 편집분이 사라집니다).</span>
             </p>
@@ -274,17 +274,17 @@ export function EnglishImportDialog({
               </button>
             </div>
 
-            {error ? <p className="text-chart-4 mt-3 text-[12px]">{error}</p> : null}
+            {error ? <p className="text-chart-4 mt-3 text-xs">{error}</p> : null}
 
             {previewed ? (
-              <div className="mt-4 flex-1 space-y-4 overflow-auto pr-1 text-[12px]">
+              <div className="mt-4 flex-1 space-y-4 overflow-auto pr-1 text-xs">
                 {/* ── 수업 배치(구조) ── */}
                 <section>
-                  <h3 className="text-foreground mb-1.5 text-[12px] font-bold">수업 배치 <span className="text-text-faint font-normal">(강사별 탭)</span></h3>
+                  <h3 className="text-foreground mb-1.5 text-xs font-bold">수업 배치 <span className="text-text-faint font-normal">(강사별 탭)</span></h3>
                   {structErr ? (
-                    <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">{structErr}</p>
+                    <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-xs">{structErr}</p>
                   ) : structChanges === 0 ? (
-                    <p className="text-text-faint text-[11px]">변경 없음 — 시트와 배치가 일치합니다.</p>
+                    <p className="text-text-faint text-xs">변경 없음 — 시트와 배치가 일치합니다.</p>
                   ) : (
                     <>
                       <div className="mb-1.5 flex flex-wrap gap-3 num">
@@ -309,11 +309,11 @@ export function EnglishImportDialog({
 
                 {/* ── 학생 반이동 ── */}
                 <section>
-                  <h3 className="text-foreground mb-1.5 text-[12px] font-bold">학생 반이동 <span className="text-text-faint font-normal">(수강편집 탭)</span></h3>
+                  <h3 className="text-foreground mb-1.5 text-xs font-bold">학생 반이동 <span className="text-text-faint font-normal">(수강편집 탭)</span></h3>
                   {enrollErr ? (
-                    <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">{enrollErr}</p>
+                    <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-xs">{enrollErr}</p>
                   ) : enrollChanges === 0 ? (
-                    <p className="text-text-faint text-[11px]">변경 없음 — 시트와 수강이 일치합니다.</p>
+                    <p className="text-text-faint text-xs">변경 없음 — 시트와 수강이 일치합니다.</p>
                   ) : (
                     <>
                       <div className="mb-1.5 flex flex-wrap gap-3 num">
@@ -349,7 +349,7 @@ export function EnglishImportDialog({
 
                 {/* 경고(구조) */}
                 {struct && struct.warnings.length > 0 ? (
-                  <div className="bg-amber-soft text-amber rounded-sm p-2 text-[11px]">
+                  <div className="bg-amber-soft text-amber rounded-sm p-2 text-xs">
                     <p className="mb-1 flex items-center gap-1 font-bold"><AlertTriangle className="size-3" /> 확인 필요 {struct.warnings.length}건</p>
                     <div className="max-h-20 space-y-0.5 overflow-auto">{struct.warnings.map((w, i) => <p key={i}>· {w}</p>)}</div>
                   </div>
@@ -357,36 +357,36 @@ export function EnglishImportDialog({
 
                 {/* 적용 / 결과 / 롤백 */}
                 {applied ? (
-                  <div className="bg-blue-soft text-blue space-y-2 rounded-sm p-2 text-[12px]">
+                  <div className="bg-blue-soft text-blue space-y-2 rounded-sm p-2 text-xs">
                     <p className="flex items-center gap-1 font-bold">
                       <Check className="size-3" /> {scheduled ? `${effectiveDateLabel(effective)}부터 적용 예약됨` : "적용 완료"}
                     </p>
-                    {structRes ? <p className="text-text-dim text-[11px]">· 배치: 마감 {structRes.closed} · 삽입 {structRes.inserted} · 반 {structRes.classUpdated}</p> : null}
-                    {enrollRes ? <p className="text-text-dim text-[11px]">· 반이동: 이동 {enrollRes.moved} · 삭제 {enrollRes.removed} · 추가 {enrollRes.added}{enrollRes.failed ? ` · 실패 ${enrollRes.failed}` : ""}</p> : null}
+                    {structRes ? <p className="text-text-dim text-xs">· 배치: 마감 {structRes.closed} · 삽입 {structRes.inserted} · 반 {structRes.classUpdated}</p> : null}
+                    {enrollRes ? <p className="text-text-dim text-xs">· 반이동: 이동 {enrollRes.moved} · 삭제 {enrollRes.removed} · 추가 {enrollRes.added}{enrollRes.failed ? ` · 실패 ${enrollRes.failed}` : ""}</p> : null}
                     {scheduled ? (
-                      <p className="text-text-dim text-[11px]">
+                      <p className="text-text-dim text-xs">
                         지금 화면(이번 주)은 그대로입니다 — 바뀐 배치는 그 주로 넘겨야 보입니다.
                       </p>
                     ) : null}
                     <div className="flex flex-wrap items-center gap-2">
                       {scheduled ? (
-                        <button type="button" onClick={goToEffectiveWeek} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition">
+                        <button type="button" onClick={goToEffectiveWeek} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs transition">
                           <ArrowRight className="size-3" /> 그 주 시간표 보기
                         </button>
                       ) : null}
                       {snapshotId ? (
-                        <button type="button" onClick={rollback} disabled={rolling} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-40">
+                        <button type="button" onClick={rollback} disabled={rolling} className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs transition disabled:opacity-40">
                           {rolling ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />} 배치 변경 되돌리기
                         </button>
                       ) : null}
                     </div>
                   </div>
                 ) : reverted ? (
-                  <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[12px]">{reverted}</p>
+                  <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-xs">{reverted}</p>
                 ) : totalChanges === 0 ? (
-                  <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">변경 사항이 없습니다 — 시트와 시간표가 일치합니다.</p>
+                  <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-xs">변경 사항이 없습니다 — 시트와 시간표가 일치합니다.</p>
                 ) : confirming ? (
-                  <div className="border-amber/40 bg-amber-soft space-y-2 rounded-sm border p-2 text-[12px]">
+                  <div className="border-amber/40 bg-amber-soft space-y-2 rounded-sm border p-2 text-xs">
                     <p className="text-amber flex items-center gap-1 font-bold">
                       <AlertTriangle className="size-3" /> 배치 {structChanges}건 · 반이동 {enrollChanges}건을{" "}
                       {scheduled ? `${effectiveDateLabel(effective)}부터` : "지금"} 적용합니다. 계속할까요?
@@ -404,14 +404,14 @@ export function EnglishImportDialog({
                       type="button"
                       onClick={() => setConfirming(true)}
                       disabled={!ackDone}
-                      className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
+                      className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition disabled:opacity-40"
                     >
                       <Check className="size-3" /> {totalChanges}건 적용 (배치 {structChanges} · 반이동 {enrollChanges})
                       {scheduled ? ` · ${effectiveDateLabel(effective)}부터` : ""}
                     </button>
                     {/* ⚠️ 비활성 사유는 title이 아니라 **보이는 문구**로 — disabled button의 툴팁은 안 뜬다(툴바 Reason과 같은 규약). */}
                     {!ackDone ? (
-                      <p className="text-text-faint mt-1 text-[11px]">
+                      <p className="text-text-faint mt-1 text-xs">
                         위 <b>확인 필요</b> {mustAck.length}건을 모두 체크해야 적용할 수 있습니다.
                       </p>
                     ) : null}

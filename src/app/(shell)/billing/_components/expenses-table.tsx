@@ -130,7 +130,7 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
                       <button
                         type="button"
                         onClick={() => setReceiptsFor(r)}
-                        className="text-text-faint hover:text-foreground focus-visible:ring-primary/50 inline-flex max-w-[88px] items-center gap-1 rounded-sm px-1 py-0.5 text-[11px] focus:outline-none focus-visible:ring-1"
+                        className="text-text-faint hover:text-foreground focus-visible:ring-primary/50 inline-flex max-w-[88px] items-center gap-1 rounded-sm px-1 py-0.5 text-xs focus:outline-none focus-visible:ring-1"
                         title={`증빙자료${r.receiptType ? ` · ${r.receiptType}` : ""}`}
                         aria-label={`${r.title} 증빙자료 ${r.receiptUrls.length > 0 ? `${r.receiptUrls.length}건` : "없음"}`}
                       >

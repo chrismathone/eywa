@@ -60,7 +60,7 @@ export function DiffFilter({
             key={s}
             href={hrefFor(s)}
             aria-current={active ? "true" : undefined}
-            className={`rounded-pill inline-flex items-center gap-1.5 border px-3 py-1 text-[12px] font-semibold transition-colors ${
+            className={`rounded-pill inline-flex items-center gap-1.5 border px-3 py-1 text-xs font-semibold transition-colors ${
               active
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-line text-text-dim hover:bg-bg-soft"
@@ -68,7 +68,7 @@ export function DiffFilter({
           >
             {SCOPE_LABEL[s]}
             <span
-              className={`rounded-pill px-1.5 py-px text-[11px] font-bold ${
+              className={`rounded-pill px-1.5 py-px text-xs font-bold ${
                 active ? "bg-primary-foreground/20 text-primary-foreground" : badge
               }`}
             >

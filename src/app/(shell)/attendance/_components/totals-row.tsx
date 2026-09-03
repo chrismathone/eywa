@@ -66,30 +66,30 @@ export function MatrixTotalsSummary({
 
   return (
     <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-      <span className="text-foreground text-[12px] font-bold">{searching ? "검색 합계" : "합계"}</span>
+      <span className="text-foreground text-xs font-bold">{searching ? "검색 합계" : "합계"}</span>
       {searching ? (
         <>
           {/* 무엇으로 좁혔는지 — 검색칸이 화면 위쪽에 있어 스크롤하면 안 보인다. */}
-          <span className="text-text-dim text-[12px]">{`‘${search?.query.trim() ?? ""}’`}</span>
+          <span className="text-text-dim text-xs">{`‘${search?.query.trim() ?? ""}’`}</span>
           {/* ⚠️ **보이는 글씨**여야 한다 — 툴팁은 폰에서 없는 것과 같다. */}
-          <span className="bg-amber-soft text-amber shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap">
+          <span className="bg-amber-soft text-amber shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap">
             검색 중 — 전체 아님
           </span>
         </>
       ) : null}
       {/* ⚠️ 클래스는 종전 그대로(`num` 신설 금지) — 검색을 지우면 **표기까지** 원래대로여야 한다. */}
-      <span className="text-text-dim text-[11px]">
+      <span className="text-text-dim text-xs">
         {shownClasses}
         {searching ? <OfTotal>{classCount}</OfTotal> : null}
         개 반
       </span>
-      <span className="text-foreground num text-[12px] font-bold">
+      <span className="text-foreground num text-xs font-bold">
         시수 <LiveUnits countByRow={countByRow} fallback={fallback} />
       </span>
       {money && totals ? (
         <>
           {/* ⚠️ 합계는 **고유 학생 1회**만 더한다 — 한 학생이 여러 반에 나와도 청구서는 한 장이다. */}
-          <span className="text-text-dim num text-[11px]">
+          <span className="text-text-dim num text-xs">
             청구 {formatMoney(totals.billed)}
             {searching ? <OfTotal>{formatMoney(money.totals.billed)}</OfTotal> : null} · 납입{" "}
             {formatMoney(totals.paid)}
@@ -101,7 +101,7 @@ export function MatrixTotalsSummary({
           </span>
           {moneyNote ? (
             <span
-              className="text-amber text-[11px]"
+              className="text-amber text-xs"
               title="교시(시간표 슬롯) 담당으로 들어온 반입니다. 급여 배분은 아직 담임 축이라 이 반의 청구·정산액은 담임 선생님 쪽에 잡혀 있습니다."
             >
               {moneyNote}
@@ -109,7 +109,7 @@ export function MatrixTotalsSummary({
           ) : null}
           {totals.sharedStudents > 0 ? (
             <span
-              className="text-amber text-[11px]"
+              className="text-amber text-xs"
               title="다른 과목·강사와 청구서를 함께 쓰는 학생입니다. 이 금액은 강사 몫이 아니라 학생 총액이라 그대로 급여 기준으로 쓰면 안 됩니다."
             >
               공유 {totals.sharedStudents}
@@ -119,16 +119,16 @@ export function MatrixTotalsSummary({
           {/* 강사 몫(정산액) — 1순위는 티어 단가(0199a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
               티어 미배선이면 종전 안내(회차 확정/배분율)로 폴백. 없으면 0을 지어내지 않는다. */}
           {tier?.status === "ready" ? (
-            <span className="text-foreground num text-[12px] font-bold">
+            <span className="text-foreground num text-xs font-bold">
               정산액 {formatMoney(scopedTier ? scopedTier.total : tier.total)}
               {searching ? <OfTotal>{formatMoney(tier.total)}</OfTotal> : null}
-              <span className="text-text-faint ml-1 text-[11px] font-normal">
+              <span className="text-text-faint ml-1 text-xs font-normal">
                 (시수 {formatSessionUnits(scopedTier ? scopedTier.unitsTotal : tier.unitsTotal)}
                 {searching ? ` / ${formatSessionUnits(tier.unitsTotal)}` : ""} · 단가×시수×0.911×비율)
               </span>
               {missingTierStudents.length > 0 ? (
                 <span
-                  className="text-amber ml-1 text-[11px] font-normal"
+                  className="text-amber ml-1 text-xs font-normal"
                   title={`단가(수업 티어)가 지정되지 않아 정산액에서 빠진 학생입니다: ${missingTierStudents.join(", ")}`}
                 >
                   단가 미지정 {missingTierStudents.length}명 · {formatSessionUnits(excludedUnits)}시수 제외
@@ -136,7 +136,7 @@ export function MatrixTotalsSummary({
               ) : null}
               {missingPriceTiers.length > 0 ? (
                 <span
-                  className="text-amber ml-1 text-[11px] font-normal"
+                  className="text-amber ml-1 text-xs font-normal"
                   title={`단가표(salary_tiers)에 없는 티어입니다: ${missingPriceTiers.join(", ")}`}
                 >
                   단가표 미등록 티어 {missingPriceTiers.length}건
@@ -145,7 +145,7 @@ export function MatrixTotalsSummary({
             </span>
           ) : tier?.status === "hold" ? (
             <span
-              className="text-amber text-[11px]"
+              className="text-amber text-xs"
               title={
                 tier.missingTierStudents.length > 0
                   ? `단가 미지정: ${tier.missingTierStudents.join(", ")}`
@@ -155,7 +155,7 @@ export function MatrixTotalsSummary({
               정산액 보류 — 단가·비율이 지정된 학생이 없습니다
             </span>
           ) : (
-            <span className="text-text-faint text-[11px]">
+            <span className="text-text-faint text-xs">
               {money.splitRows === 0
                 ? "정산액 — 회차 확정이 없어 반별 배분을 낼 수 없습니다(수납관리 > 회차)"
                 : money.commissionRate === null

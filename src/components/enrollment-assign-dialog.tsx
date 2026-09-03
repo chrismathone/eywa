@@ -258,7 +258,7 @@ export function EnrollmentAssignDialog({
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-muted-foreground block text-[11px] font-medium">
+              <label className="text-muted-foreground block text-xs font-medium">
                 시작일
               </label>
               <input
@@ -271,7 +271,7 @@ export function EnrollmentAssignDialog({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-muted-foreground block text-[11px] font-medium">
+              <label className="text-muted-foreground block text-xs font-medium">
                 종료일 (선택)
               </label>
               <input
@@ -313,7 +313,7 @@ export function EnrollmentAssignDialog({
                 })}
               </div>
               <input type="hidden" name="attendanceDays" value={attendingDays.join(",")} />
-              <p className="text-muted-foreground text-[11px]">
+              <p className="text-muted-foreground text-xs">
                 {attendingDays.length === 0
                   ? "요일을 선택하지 않으면 전 요일 등원으로 저장됩니다."
                   : attendingDays.length >= orderedClassDays.length

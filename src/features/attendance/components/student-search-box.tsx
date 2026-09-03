@@ -50,7 +50,7 @@ export function StudentSearchBox({
         aria-label="학생 검색"
         // ⚠️ 브라우저 기본 ✕(webkit)를 감춘다 — 아래 우리 ✕와 나란히 두 개가 뜬다.
         // ⚠️ 거친 포인터(폰)에선 16px — iOS는 16px 미만 입력에 포커스하면 페이지를 자동 확대한다.
-        className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent text-[12px] outline-none [&::-webkit-search-cancel-button]:appearance-none pointer-coarse:text-[16px]`}
+        className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent text-xs outline-none [&::-webkit-search-cancel-button]:appearance-none pointer-coarse:text-base`}
       />
       {active ? (
         <button

@@ -58,7 +58,7 @@ export function RichGridView({
     //    (원장 2026-08-13 *"스크롤이 우측에 너무 안 보여서 끝까지 내려갔는지 헷갈림"*). 위(헤더 아래)와
     //    같은 정도의 숨 쉴 틈을 아래에도 둔다 — 여백 자체가 "여기가 끝"이라는 신호다.
     <div className="pb-8">
-      <div className="text-text-faint mb-2 text-right text-[12px]">
+      <div className="text-text-faint mb-2 text-right text-xs">
         {/* 검색 중이면 "보이는 수/전체" — 카드 한 장만 남은 화면이 "42개 수업"이라 말하면 거짓말이 된다. */}
         읽기 전용 · <VisibleClassCount total={total} />개 수업 · 편집은 기본뷰
       </div>

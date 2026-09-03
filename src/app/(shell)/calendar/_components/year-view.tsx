@@ -33,25 +33,25 @@ export function YearView({ year, events }: { year: number; events: CalendarEvent
         const monthKey = `${year}-${String(m).padStart(2, "0")}`;
         return (
           <section key={m} className="border-line bg-card shadow-card rounded-2xl border p-3">
-            <h3 className="text-foreground mb-2 flex items-baseline justify-between text-[14px] font-bold">
+            <h3 className="text-foreground mb-2 flex items-baseline justify-between text-sm font-bold">
               {m}월
               {list.length > 0 ? (
-                <span className="num text-text-faint text-[11px] font-normal">{list.length}건</span>
+                <span className="num text-text-faint text-xs font-normal">{list.length}건</span>
               ) : null}
             </h3>
             {list.length === 0 ? (
-              <p className="text-text-faint py-2 text-center text-[12px]">일정 없음</p>
+              <p className="text-text-faint py-2 text-center text-xs">일정 없음</p>
             ) : (
               <ul className="space-y-1">
                 {list.map((e) => {
                   const chip = chipProps(eventDisplayColor(e));
                   return (
                     <li key={e.id} className="flex items-start gap-1.5">
-                      <span className="num text-text-dim w-[56px] shrink-0 pt-0.5 text-right text-[11px] whitespace-nowrap">
+                      <span className="num text-text-dim w-[56px] shrink-0 pt-0.5 text-right text-xs whitespace-nowrap">
                         {dayLabel(e, monthKey)}
                       </span>
                       <span
-                        className={`min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-[12px] leading-tight font-medium ${chip.className}`}
+                        className={`min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-xs leading-tight font-medium ${chip.className}`}
                         style={chip.style}
                         title={e.title}
                       >

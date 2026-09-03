@@ -141,7 +141,7 @@ export function RoomMapView({
               className={`${TOOLBAR_SEG_ITEM} shrink-0 ${day === d ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
             >
               {DAY_LABEL[d] ?? d}
-              {dayDates[d] ? <span className="num ml-1 text-[10px] opacity-70">{dayDates[d]}</span> : null}
+              {dayDates[d] ? <span className="num ml-1 text-xs opacity-70">{dayDates[d]}</span> : null}
             </button>
           ))}
         </div>
@@ -179,7 +179,7 @@ export function RoomMapView({
           </>
         ) : null}
         <div className="rail-spacer ml-auto" aria-hidden />
-        <div className="text-text-dim flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        <div className="text-text-dim flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span>
             강의실 <span className="num text-foreground font-semibold">{summary.roomsTotal}</span>
           </span>

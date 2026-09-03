@@ -141,22 +141,22 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
           {new Date(c.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
         </span>
         {c.category ? (
-          <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
+          <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 rounded-full border px-1.5 py-0.5 text-xs font-medium">
             {CATEGORY_LABEL[c.category] ?? c.category}
           </span>
         ) : null}
         {c.audience ? (
-          <span className="text-muted-foreground text-[10px]">
+          <span className="text-muted-foreground text-xs">
             {AUDIENCE_LABEL[c.audience] ?? c.audience}
           </span>
         ) : null}
         {c.counselorName ? (
-          <span className="text-muted-foreground text-[10px]">· {c.counselorName}</span>
+          <span className="text-muted-foreground text-xs">· {c.counselorName}</span>
         ) : null}
         <div className="ml-auto flex items-center gap-3">
           <Link
             href={`/consultations/${c.id}/edit`}
-            className="text-chart-1 text-[11px] hover:underline"
+            className="text-chart-1 text-xs hover:underline"
           >
             수정
           </Link>
@@ -194,7 +194,7 @@ function EnrollmentConsultItem({
   return (
     <li className="bg-primary/5 border-primary/20 space-y-2 rounded-2xl border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-2">
-        <span className="bg-primary/10 text-primary border-primary/20 rounded-full border px-1.5 py-0.5 text-[10px] font-bold">
+        <span className="bg-primary/10 text-primary border-primary/20 rounded-full border px-1.5 py-0.5 text-xs font-bold">
           입학 상담
         </span>
         {e.date ? (
@@ -202,15 +202,15 @@ function EnrollmentConsultItem({
             {new Date(e.date).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
           </span>
         ) : null}
-        {subjectLabel ? <span className="text-muted-foreground text-[10px]">· {subjectLabel}</span> : null}
+        {subjectLabel ? <span className="text-muted-foreground text-xs">· {subjectLabel}</span> : null}
         {e.outcome && ENROLL_OUTCOME_LABEL[e.outcome] ? (
-          <span className="text-chart-2 text-[10px]">· {ENROLL_OUTCOME_LABEL[e.outcome]}</span>
+          <span className="text-chart-2 text-xs">· {ENROLL_OUTCOME_LABEL[e.outcome]}</span>
         ) : null}
         {canOpenDetail ? (
           <WindowLink
             href={`/enrollment/${e.id}`}
             title="입학 상담 상세"
-            className="text-chart-1 ml-auto text-[11px] hover:underline"
+            className="text-chart-1 ml-auto text-xs hover:underline"
           >
             상세 보기
           </WindowLink>
@@ -235,7 +235,7 @@ function EnrollmentConsultItem({
 function EnrollField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-muted-foreground mb-0.5 text-[11px] font-medium">{label}</p>
+      <p className="text-muted-foreground mb-0.5 text-xs font-medium">{label}</p>
       <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap">{value}</p>
     </div>
   );

@@ -51,8 +51,8 @@ export function DayListDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-foreground text-[15px] font-bold">{dayTitle(date)}</h2>
-          <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-[11px] font-semibold">
+          <h2 className="text-foreground text-base font-bold">{dayTitle(date)}</h2>
+          <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-xs font-semibold">
             {dayEvents.length}건
           </span>
         </div>
@@ -69,7 +69,7 @@ export function DayListDialog({
                   key={e.id}
                   type="button"
                   onClick={() => onSelect(e)}
-                  className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] leading-tight font-medium transition hover:opacity-80 ${chip.className}`}
+                  className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-sm leading-tight font-medium transition hover:opacity-80 ${chip.className}`}
                   style={chip.style}
                   title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
                 >

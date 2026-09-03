@@ -129,7 +129,7 @@ export default async function ApprovalsPage({
 
       {boxes.loadError ? (
         <p
-          className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-4 py-2.5 text-[13px]"
+          className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-4 py-2.5 text-sm"
           title={boxes.loadError.raw}
         >
           {boxes.loadError.summary}
@@ -186,7 +186,7 @@ export default async function ApprovalsPage({
           <FaceTabs faces={faces} active={face} ariaLabel="결재함 전환" />
 
           {activeTab.note ? (
-            <p className="text-text-faint px-1 text-[11px]">{activeTab.note}</p>
+            <p className="text-text-faint px-1 text-xs">{activeTab.note}</p>
           ) : null}
 
           <DocList docs={docsByTab[face]} emptyText={activeTab.empty} />

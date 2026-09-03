@@ -22,8 +22,8 @@ export function AuditsFace({ audits, assets, canWrite, today }: { audits: Invent
     [audits, query],
   );
   const columns = useMemo((): Column<InventoryAudit>[] => [
-    { key: "auditCode", label: "실사ID", width: 110, render: (d) => <span className="font-mono text-[11.5px]">{d.auditCode}</span>, className: "whitespace-nowrap" },
-    { key: "assetCode", label: "자산ID", width: 88, render: (d) => <span className="font-mono text-[11.5px] font-bold">{d.assetCode}</span>, className: "whitespace-nowrap" },
+    { key: "auditCode", label: "실사ID", width: 110, render: (d) => <span className="font-mono text-xs">{d.auditCode}</span>, className: "whitespace-nowrap" },
+    { key: "assetCode", label: "자산ID", width: 88, render: (d) => <span className="font-mono text-xs font-bold">{d.assetCode}</span>, className: "whitespace-nowrap" },
     { key: "auditedOn", label: "실사일", width: 100, render: (d) => <span className="num">{d.auditedOn}</span>, className: "whitespace-nowrap" },
     { key: "result", label: "결과", width: 84, render: (d) => <AuditResultPill result={d.result} />, sortValue: (d) => auditResultLabel(d.result), className: "whitespace-nowrap" },
     { key: "location", label: "확인위치", width: 128, render: (d) => <DashCell v={d.location} />, className: "whitespace-nowrap" },

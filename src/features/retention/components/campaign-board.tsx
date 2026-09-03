@@ -49,7 +49,7 @@ export function CampaignBoard({ board }: { board: Board }) {
         ].map((k) => (
           <div key={k.label} className="bg-card border-line shadow-card rounded-2xl border p-4">
             <p className="micro truncate">{k.label}</p>
-            <p className={`tabular mt-2 text-[24px] leading-none font-bold ${k.c}`}>{k.v}</p>
+            <p className={`tabular mt-2 text-2xl leading-none font-bold ${k.c}`}>{k.v}</p>
           </div>
         ))}
       </div>
@@ -59,7 +59,7 @@ export function CampaignBoard({ board }: { board: Board }) {
         <div className="bg-card border-line shadow-card rounded-2xl border p-3">
           <div className="mb-2.5 flex items-center gap-2">
             <span className="micro">재등록 위험 후보</span>
-            <span className="text-text-faint text-[11px]">{candidates.length}명 — 캠페인에 추가하세요</span>
+            <span className="text-text-faint text-xs">{candidates.length}명 — 캠페인에 추가하세요</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {(showAllCandidates ? candidates : candidates.slice(0, CANDIDATE_CAP)).map((c) => (
@@ -68,18 +68,18 @@ export function CampaignBoard({ board }: { board: Board }) {
                 className="border-line flex items-center gap-2.5 rounded-lg border px-3 py-2"
               >
                 <div className="min-w-0">
-                  <div className="text-foreground text-[12px] leading-tight font-bold">{c.name}</div>
-                  <div className="text-text-faint text-[10px]">
+                  <div className="text-foreground text-xs leading-tight font-bold">{c.name}</div>
+                  <div className="text-text-faint text-xs">
                     {[c.grade, c.school].filter(Boolean).join(" · ")}
                   </div>
                 </div>
                 <Pill color={c.renewalTone === "risk" ? "danger" : "amber"}>재등록 {c.renewalLabel}</Pill>
-                <span className="text-text-dim num text-[10px]">{c.feeLabel}</span>
+                <span className="text-text-dim num text-xs">{c.feeLabel}</span>
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => run(() => campaignAdd(c.studentId), `${c.name} — 캠페인 추가`)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-50"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
                 >
                   추가
                 </button>
@@ -89,7 +89,7 @@ export function CampaignBoard({ board }: { board: Board }) {
               <button
                 type="button"
                 onClick={() => setShowAllCandidates(true)}
-                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border border-dashed px-3 py-2 text-[11px] transition"
+                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border border-dashed px-3 py-2 text-xs transition"
               >
                 <EyIcon name="chevronDown" size={12} aria-hidden="true" />
                 {candidates.length - CANDIDATE_CAP}명 더 보기
@@ -111,11 +111,11 @@ export function CampaignBoard({ board }: { board: Board }) {
             <div key={col.key} className="min-w-[185px] flex-1">
               <div className="mb-2 flex items-center gap-1.5">
                 <Pill color={col.color}>{col.label}</Pill>
-                <span className="text-text-faint num text-[11px]">{list.length}</span>
+                <span className="text-text-faint num text-xs">{list.length}</span>
               </div>
               <div className="space-y-2">
                 {list.length === 0 ? (
-                  <div className="border-line text-text-faint rounded-lg border border-dashed px-3 py-6 text-center text-[11px]">
+                  <div className="border-line text-text-faint rounded-lg border border-dashed px-3 py-6 text-center text-xs">
                     비어 있음
                   </div>
                 ) : (
@@ -124,12 +124,12 @@ export function CampaignBoard({ board }: { board: Board }) {
                     <div key={card.targetId} className="bg-bg-soft/40 border-line rounded-lg border p-2.5">
                       <div className="flex items-start gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="text-foreground truncate text-[12px] font-bold">{card.name}</div>
-                          <div className="text-text-faint truncate text-[10px]">
+                          <div className="text-foreground truncate text-xs font-bold">{card.name}</div>
+                          <div className="text-text-faint truncate text-xs">
                             {[card.grade, card.school, card.teacherName].filter(Boolean).join(" · ")}
                           </div>
                         </div>
-                        <span className="text-text-dim num shrink-0 text-[10px]">{card.feeLabel}</span>
+                        <span className="text-text-dim num shrink-0 text-xs">{card.feeLabel}</span>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {card.status === "pending" ? (
@@ -174,7 +174,7 @@ export function CampaignBoard({ board }: { board: Board }) {
                       type="button"
                       data-no-drag-scroll
                       onClick={() => setExpandedCols((s) => new Set(s).add(col.key))}
-                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft flex w-full items-center justify-center gap-1 rounded-lg border border-dashed py-2 text-[11px] transition"
+                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft flex w-full items-center justify-center gap-1 rounded-lg border border-dashed py-2 text-xs transition"
                     >
                       <EyIcon name="chevronDown" size={12} aria-hidden="true" />
                       {rest}개 더 보기
@@ -209,7 +209,7 @@ function Btn({
       disabled={disabled}
       onClick={onClick}
       data-no-drag-scroll
-      className={`rounded-lg px-2 py-0.5 text-[11px] transition disabled:opacity-50 ${
+      className={`rounded-lg px-2 py-0.5 text-xs transition disabled:opacity-50 ${
         primary
           ? "bg-primary text-primary-foreground hover:bg-primary/90"
           : "border-line text-text-dim hover:bg-bg-soft border"

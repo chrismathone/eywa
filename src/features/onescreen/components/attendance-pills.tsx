@@ -77,7 +77,7 @@ export function AttendancePills({
   if (readOnly) {
     return (
       <span
-        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-[10px] font-bold"
+        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-xs font-bold"
         title="출결 입력 권한이 없습니다 — 학원설정(역할·권한)에서 원장님이 열어줄 수 있습니다"
       >
         {value ? (LABEL[value] ?? value) : "출결 —"}
@@ -87,7 +87,7 @@ export function AttendancePills({
   if (value && !BASIC.includes(value as BasicAttendance)) {
     return (
       <span
-        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-[10px] font-bold"
+        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-xs font-bold"
         title="조퇴·공결·보강 상태는 출석부에서 변경하세요 (원스크린 pill은 출석/지각/결석만)"
       >
         {LABEL[value] ?? value}
@@ -166,14 +166,14 @@ function StatusPill({
             ? `${LABEL[status]} (기록 지우기는 출석부에서)`
             : `${LABEL[status]}로 기록`
       }
-      className={`rounded-pill px-1.5 py-px text-[10px] font-bold transition disabled:opacity-50 ${
+      className={`rounded-pill px-1.5 py-px text-xs font-bold transition disabled:opacity-50 ${
         active ? ON_CLS[status] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
       }`}
     >
       {LABEL[status]}
       {/* 메모가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다. */}
       {active && note ? (
-        <span aria-hidden className="ml-0.5 align-middle text-[8px]">
+        <span aria-hidden className="ml-0.5 align-middle text-xs">
           ●
         </span>
       ) : null}
@@ -231,7 +231,7 @@ export function NoteForm({
   }, []);
   return (
     <div className="space-y-1.5">
-      <p className="text-text-faint text-[10px] font-bold">{label}</p>
+      <p className="text-text-faint text-xs font-bold">{label}</p>
       <textarea
         ref={ref}
         value={text}
@@ -245,20 +245,20 @@ export function NoteForm({
         }}
         rows={2}
         placeholder="예: 학원버스 지연 / 병결(부모 연락)"
-        className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-[11px] outline-none"
+        className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-xs outline-none"
       />
       <div className="flex items-center justify-end gap-1">
         <button
           type="button"
           onClick={onCancel}
-          className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-[11px]"
+          className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-xs"
         >
           취소
         </button>
         <button
           type="button"
           onClick={() => onSave(text)}
-          className="bg-primary text-primary-foreground cursor-pointer rounded-md px-2 py-0.5 text-[11px] font-bold"
+          className="bg-primary text-primary-foreground cursor-pointer rounded-md px-2 py-0.5 text-xs font-bold"
         >
           저장
         </button>
@@ -311,7 +311,7 @@ export function SessionUnitsField({
   if (status === "absent") {
     return big ? (
       <span
-        className="text-text-faint block text-center text-[13px]"
+        className="text-text-faint block text-center text-sm"
         title="결석은 수업타임(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
       >
         —
@@ -344,7 +344,7 @@ export function SessionUnitsField({
       className={`bg-transparent text-center outline-none transition-colors disabled:opacity-50 ${
         box ??
         `border-line focus:border-primary rounded-md border ${
-          big ? "h-8 w-[54px] text-[15px]" : "h-7 w-[46px] text-[13px]"
+          big ? "h-8 w-[54px] text-base" : "h-7 w-[46px] text-sm"
         }`
       } ${saved === 1 ? "text-text-dim" : "text-foreground font-bold"}`}
     />
@@ -359,7 +359,7 @@ export function SessionUnitsField({
         " ※ 학부모 보고서에는 나가지 않습니다. 급여 시수에는 반영됩니다."
       }
     >
-      {label ? <span className="text-text-faint text-[11px] font-bold whitespace-nowrap">{label}</span> : null}
+      {label ? <span className="text-text-faint text-xs font-bold whitespace-nowrap">{label}</span> : null}
       {field}
     </span>
   );

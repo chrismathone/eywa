@@ -18,7 +18,7 @@ import { sendBulkAdminReports } from "@/features/report-admin/server/compose-act
 import { REPORT_OPTOUT_LABEL } from "@/features/classes/report-optout";
 
 const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
-const LABEL = "text-text-dim text-[11px] font-medium";
+const LABEL = "text-text-dim text-xs font-medium";
 
 export function BulkComposeFace({
   classes: allClasses,
@@ -186,15 +186,15 @@ export function BulkComposeFace({
         onDiscard={localDraft.discard}
       />
       <div>
-        <h2 className="text-foreground text-[15px] font-bold">반 단위 대량 발송</h2>
-        <p className="text-text-faint text-[12px]">
+        <h2 className="text-foreground text-base font-bold">반 단위 대량 발송</h2>
+        <p className="text-text-faint text-xs">
           선택한 반의 재원생 각자에게 <b>같은 내용</b>의 리포트 카드를 발송합니다 · 점수·태도는 학생별이라 대량에선 제외(진도·본문 위주) ·
           오늘 이미 보고서가 있는 학생은 자동 제외
         </p>
       </div>
 
       {!sendEnabled ? (
-        <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-[12px]">
+        <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-xs">
           현재 <b>실제 발송이 꺼져</b> 있어 발송되지 않습니다(dry-run). 학부모에게 전송하려면 원장 설정의 <b>ClassNote 실제 발송</b>을 켜야 합니다.
         </p>
       ) : null}
@@ -203,14 +203,14 @@ export function BulkComposeFace({
         {/* 반 선택 */}
         <div className="border-line max-h-[420px] overflow-y-auto rounded-md border p-2">
           {classes.length === 0 ? (
-            <p className="text-text-faint p-2 text-[12px]">발송 허용 과목의 활성 반이 없습니다.</p>
+            <p className="text-text-faint p-2 text-xs">발송 허용 과목의 활성 반이 없습니다.</p>
           ) : (
             classes.map((c) => (
-              <label key={c.id} className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]">
+              <label key={c.id} className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm">
                 <input type="checkbox" checked={checked.has(c.id)} onChange={() => toggle(c.id)} />
                 <span className="text-foreground min-w-0 flex-1 truncate">{c.name}</span>
-                {c.subject ? <span className="text-text-faint text-[11px]">{subjects.labelOf(c.subject)}</span> : null}
-                <span className="text-text-faint text-[11px]">{c.studentCount}명</span>
+                {c.subject ? <span className="text-text-faint text-xs">{subjects.labelOf(c.subject)}</span> : null}
+                <span className="text-text-faint text-xs">{c.studentCount}명</span>
               </label>
             ))
           )}
@@ -229,7 +229,7 @@ export function BulkComposeFace({
                 className={INPUT}
               />
               {reportDate !== kstToday() ? (
-                <p className="text-amber mt-0.5 text-[11px]">과거 날짜로 발송 — 카드·ClassNote 게시일이 이 날짜</p>
+                <p className="text-amber mt-0.5 text-xs">과거 날짜로 발송 — 카드·ClassNote 게시일이 이 날짜</p>
               ) : null}
             </div>
             <div>
@@ -248,7 +248,7 @@ export function BulkComposeFace({
               <div className={LABEL}>오늘 과제</div>
               <div className="flex items-center gap-2">
                 <input value={homeworkToday} onChange={(e) => setHomeworkToday(e.target.value)} placeholder="예: 워크북 p.20~22" className={INPUT} />
-                <label className="text-text-dim inline-flex shrink-0 items-center gap-1 text-[12px]">
+                <label className="text-text-dim inline-flex shrink-0 items-center gap-1 text-xs">
                   <input type="checkbox" checked={makeup} onChange={(e) => setMakeup(e.target.checked)} /> 보강
                 </label>
               </div>
@@ -272,7 +272,7 @@ export function BulkComposeFace({
           {/* 액션 */}
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
-              <span className="text-foreground text-[12px]">
+              <span className="text-foreground text-xs">
                 선택한 <b>{checked.size}개 반</b>의 재원생 <b>{selectedCount}명</b>에게 같은 리포트 카드를 발송할까요?
                 {!sendEnabled ? " (실제 발송 OFF — 전송 안 됨)" : ""}
               </span>
@@ -297,7 +297,7 @@ export function BulkComposeFace({
               >
                 테스트 발송(학원이)
               </Button>
-              <span className="text-text-faint text-[12px]">발송 전 내용을 한 번 더 확인하세요 — 게시 후 회수는 발송 이력에서 요청</span>
+              <span className="text-text-faint text-xs">발송 전 내용을 한 번 더 확인하세요 — 게시 후 회수는 발송 이력에서 요청</span>
             </div>
           )}
         </div>

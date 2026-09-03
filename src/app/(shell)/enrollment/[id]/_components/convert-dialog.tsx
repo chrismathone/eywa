@@ -202,19 +202,19 @@ export function ConvertToStudentDialog({
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-baseline gap-1.5">
                                   <span className="text-foreground font-medium">{c.className}</span>
-                                  <span className="text-muted-foreground text-[11px]">
+                                  <span className="text-muted-foreground text-xs">
                                     {subjects.labelOf(c.subject)}
                                   </span>
                                   {isRecommended ? (
                                     // 추천 = 학생 학년이 반 이름에 들어가는 반(actions.ts gradePrefix 부분일치).
                                     // AI 추론이 아니라 학년 매칭이므로 "학년 추천"으로 정직하게 표기.
-                                    <span className="bg-chart-4/10 text-chart-4 border-chart-4/20 rounded-md border px-1 py-0 text-[9px] font-medium">
+                                    <span className="bg-chart-4/10 text-chart-4 border-chart-4/20 rounded-md border px-1 py-0 text-xs font-medium">
                                       학년 추천
                                     </span>
                                   ) : null}
                                 </div>
                                 {c.teacherName ? (
-                                  <p className="text-muted-foreground text-[11px]">
+                                  <p className="text-muted-foreground text-xs">
                                     {c.teacherName} 강사
                                   </p>
                                 ) : null}
@@ -226,7 +226,7 @@ export function ConvertToStudentDialog({
                     </ul>
                   )}
                 </div>
-                <p className="text-muted-foreground text-[11px]">
+                <p className="text-muted-foreground text-xs">
                   선택한 반으로 학생이 생성되고 수업이 배정됩니다. 반은 나중에 학생 상세에서 추가·변경할 수 있습니다.
                 </p>
               </div>
@@ -260,7 +260,7 @@ export function ConvertToStudentDialog({
                 </div>
               ) : null}
               {selected.size === 0 ? (
-                <p className="text-muted-foreground text-[11px]">배정할 반을 1개 이상 선택해야 합니다.</p>
+                <p className="text-muted-foreground text-xs">배정할 반을 1개 이상 선택해야 합니다.</p>
               ) : null}
 
               <footer className="flex items-center justify-end gap-2 pt-2">
@@ -294,7 +294,7 @@ function Field({
 }) {
   return (
     <div className={`space-y-1 ${className ?? ""}`}>
-      <label className="text-muted-foreground block text-[11px] font-medium">{label}</label>
+      <label className="text-muted-foreground block text-xs font-medium">{label}</label>
       <input
         name={name}
         defaultValue={defaultValue}

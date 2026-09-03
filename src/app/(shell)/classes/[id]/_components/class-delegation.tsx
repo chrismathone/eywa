@@ -236,7 +236,7 @@ export function DelegationBanner({
   if (rows.length === 0) return null;
   return (
     <div className="border-amber/30 bg-amber-soft/50 space-y-2 rounded-lg border px-4 py-3">
-      <p className="text-amber inline-flex items-center gap-1.5 text-[13px] font-bold">
+      <p className="text-amber inline-flex items-center gap-1.5 text-sm font-bold">
         <CalendarClock className="size-4" />
         임시 위임 {rows.length}건 — 담임은 그대로입니다
       </p>
@@ -259,7 +259,7 @@ export function DelegationBanner({
                 </span>
                 {/* 상태는 한글로 — 화면에 영문 키를 내보내지 않는다. */}
                 <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                  className={`rounded px-1.5 py-0.5 text-xs font-bold ${
                     active ? "bg-amber text-white" : "border-border text-text-dim border"
                   }`}
                 >

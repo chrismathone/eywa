@@ -47,7 +47,7 @@ export function UserActions({
           name="role"
           defaultValue={currentRole}
           onChange={(e) => e.currentTarget.form?.requestSubmit()}
-          className="border-line bg-background text-foreground rounded-sm border px-1.5 py-0.5 text-[11px]"
+          className="border-line bg-background text-foreground rounded-sm border px-1.5 py-0.5 text-xs"
           aria-label="역할 변경"
         >
           {ROLE_OPTIONS.map((r) => (
@@ -67,7 +67,7 @@ export function UserActions({
         <button
           type="submit"
           disabled={activePending}
-          className={`rounded-sm border px-2 py-0.5 text-[11px] font-medium transition disabled:opacity-50 ${
+          className={`rounded-sm border px-2 py-0.5 text-xs font-medium transition disabled:opacity-50 ${
             isActive
               ? "border-line text-text-dim hover:text-danger"
               : "border-primary text-primary"
@@ -86,14 +86,14 @@ export function UserActions({
           <button
             type="submit"
             disabled={pwPending}
-            className="bg-danger rounded-sm px-2 py-0.5 text-[11px] font-bold text-white disabled:opacity-50"
+            className="bg-danger rounded-sm px-2 py-0.5 text-xs font-bold text-white disabled:opacity-50"
           >
             {pwPending ? "…" : "확인"}
           </button>
           <button
             type="button"
             onClick={() => setConfirmReset(false)}
-            className="text-text-dim text-[11px]"
+            className="text-text-dim text-xs"
           >
             취소
           </button>
@@ -102,7 +102,7 @@ export function UserActions({
         <button
           type="button"
           onClick={() => setConfirmReset(true)}
-          className="border-line text-text-dim hover:text-foreground rounded-sm border px-2 py-0.5 text-[11px]"
+          className="border-line text-text-dim hover:text-foreground rounded-sm border px-2 py-0.5 text-xs"
         >
           비번 재설정
         </button>
@@ -110,12 +110,12 @@ export function UserActions({
 
       {/* 결과 표시 */}
       {pwState?.tempPassword ? (
-        <span className="text-primary font-mono text-[11px]">
+        <span className="text-primary font-mono text-xs">
           임시 비번: <strong>{pwState.tempPassword}</strong>
         </span>
       ) : null}
       {(roleState?.error || pwState?.error || activeState?.error) ? (
-        <span className="text-danger text-[10px]">
+        <span className="text-danger text-xs">
           {roleState?.error || pwState?.error || activeState?.error}
         </span>
       ) : null}

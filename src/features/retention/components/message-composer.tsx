@@ -50,7 +50,7 @@ export function MessageComposer({ studentId, input }: { studentId: string; input
         ))}
       </div>
 
-      <pre className="bg-bg-soft text-foreground max-h-64 overflow-auto rounded-md p-3 text-[12px] leading-relaxed whitespace-pre-wrap">
+      <pre className="bg-bg-soft text-foreground max-h-64 overflow-auto rounded-md p-3 text-xs leading-relaxed whitespace-pre-wrap">
         {draft}
       </pre>
 

@@ -15,22 +15,22 @@ export async function ShuttleMissedBanner({ date }: { date: string }) {
   return (
     <aside className="border-amber/30 bg-amber-soft rounded-2xl border px-3 py-2">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="text-amber text-[12.5px] font-bold">
+        <span className="text-amber text-xs font-bold">
           셔틀 미탑승 <span className="num">{rows.length}</span>명
         </span>
-        <span className="text-text-dim text-[11.5px]">
+        <span className="text-text-dim text-xs">
           — 출결은 자동으로 바뀌지 않습니다. 등원 여부를 확인하세요.
         </span>
         <Link
           href={`/shuttle/today?d=${date}`}
-          className="text-primary ml-auto text-[11.5px] font-bold hover:underline"
+          className="text-primary ml-auto text-xs font-bold hover:underline"
         >
           셔틀 등하원 보기
         </Link>
       </div>
       <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
         {rows.map((r) => (
-          <li key={r.studentId} className="text-foreground text-[12.5px]">
+          <li key={r.studentId} className="text-foreground text-xs">
             <span className="font-bold">{r.studentName}</span>
             <span className="text-text-dim"> · {r.where}</span>
             {r.reason && <span className="text-text-dim"> · {r.reason}</span>}

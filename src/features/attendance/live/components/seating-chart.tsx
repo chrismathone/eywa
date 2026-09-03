@@ -185,7 +185,7 @@ export function SeatingChart({
           {LEGEND.map((k) => (
             <li
               key={k}
-              className={`rounded-lg px-2 py-0.5 text-[12px] font-bold ${SEAT_MARK_TONE[k]}`}
+              className={`rounded-lg px-2 py-0.5 text-xs font-bold ${SEAT_MARK_TONE[k]}`}
             >
               {SEAT_MARK_LABEL[k]}
             </li>

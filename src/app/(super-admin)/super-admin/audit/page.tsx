@@ -65,13 +65,13 @@ export default async function AuditPage({
         <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-2.5">
           <span className="text-text-dim text-xs">액션</span>
           <FilterSelect paramName="action" value={action ?? null} options={ACTION_FILTERS} ariaLabel="액션 필터" />
-          <span className="text-text-faint ml-auto font-mono text-[11px]">
+          <span className="text-text-faint ml-auto font-mono text-xs">
             {total}건{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
           </span>
         </div>
 
         <section className="bg-card border-line shadow-card overflow-hidden rounded-md border">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-xs">
             <thead>
               <tr className="bg-bg-soft text-text-dim border-line border-b">
                 <th className="px-4 py-2 text-left font-bold">시각</th>
@@ -93,17 +93,17 @@ export default async function AuditPage({
                   const meta = ACTION_META[log.action] ?? { label: log.action, color: "neutral" as PillColor };
                   return (
                     <tr key={log.id} className="hover:bg-bg-soft">
-                      <td className="text-text-dim px-4 py-2.5 font-mono text-[11px] whitespace-nowrap">
+                      <td className="text-text-dim px-4 py-2.5 font-mono text-xs whitespace-nowrap">
                         {fmtTime(log.createdAt)}
                       </td>
-                      <td className="text-text-dim px-4 py-2.5 font-mono text-[11px]">{log.actorEmail}</td>
+                      <td className="text-text-dim px-4 py-2.5 font-mono text-xs">{log.actorEmail}</td>
                       <td className="px-4 py-2.5">
                         <Pill color={meta.color} soft>
                           {meta.label}
                         </Pill>
                       </td>
                       <td className="text-foreground px-4 py-2.5">{log.targetLabel ?? "—"}</td>
-                      <td className="text-text-dim px-4 py-2.5 font-mono text-[10px]">
+                      <td className="text-text-dim px-4 py-2.5 font-mono text-xs">
                         {log.metadata ? JSON.stringify(log.metadata) : "—"}
                       </td>
                     </tr>

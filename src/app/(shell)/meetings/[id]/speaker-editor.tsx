@@ -132,7 +132,7 @@ export function SpeakerEditor({
       <input type="hidden" name="id" value={meetingId} />
       <input type="hidden" name="mapping" value={JSON.stringify(mapping)} />
       <div className="flex items-center justify-between">
-        <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-bold">
+        <h3 className="text-foreground flex items-center gap-1.5 text-sm font-bold">
           <Users className="size-3.5" />화자 지정
         </h3>
         <button
@@ -144,7 +144,7 @@ export function SpeakerEditor({
           <X className="size-4" />
         </button>
       </div>
-      <p className="text-text-faint text-[11px]">
+      <p className="text-text-faint text-xs">
         각 화자를 직원으로 지정하면 회의 업무 연계의 기반이 됩니다. 직원이 아니면 “직접 입력”으로 이름을 적으세요.
       </p>
       <DraftBanner
@@ -162,7 +162,7 @@ export function SpeakerEditor({
           const usingStaff = !!r.staffId && r.staffId !== FREE;
           return (
             <div key={sp} className="flex flex-wrap items-center gap-2">
-              <span className="text-primary w-12 shrink-0 text-[13px] font-bold">화자 {sp}</span>
+              <span className="text-primary w-12 shrink-0 text-sm font-bold">화자 {sp}</span>
               <div className="min-w-[180px] flex-1">
                 <SearchableSelect
                   options={options}

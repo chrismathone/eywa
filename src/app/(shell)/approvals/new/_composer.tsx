@@ -75,7 +75,7 @@ const inputClass =
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-line flex flex-col gap-2 border-b py-4 last:border-b-0 sm:flex-row sm:gap-4">
-      <p className="text-foreground w-[84px] shrink-0 pt-1 text-[13px] font-bold">{label}</p>
+      <p className="text-foreground w-[84px] shrink-0 pt-1 text-sm font-bold">{label}</p>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
@@ -233,7 +233,7 @@ export function DraftComposer({
                     </Select>
                   </td>
                   <th className="w-[76px]">작성자</th>
-                  <td className="text-[13px]">
+                  <td className="text-sm">
                     <span className="text-foreground font-medium">{drafterName}</span>
                     {drafterJobTitle ? (
                       <span className="text-text-faint ml-1 text-xs">{drafterJobTitle}</span>
@@ -249,7 +249,7 @@ export function DraftComposer({
               </tbody>
             </table>
           </div>
-          <p className="text-text-dim mt-1.5 text-[11px]">{APPROVAL_FORM_DESC[form]}</p>
+          <p className="text-text-dim mt-1.5 text-xs">{APPROVAL_FORM_DESC[form]}</p>
         </Row>
 
         <Row label="결재선">
@@ -339,7 +339,7 @@ export function DraftComposer({
                       />
                     </label>
                   )}
-                  <p className="text-text-faint pb-2 text-[11px]">
+                  <p className="text-text-faint pb-2 text-xs">
                     연차 사용 기간 <span className="num">~{periodEnd}</span> · 일요일은 차감하지
                     않습니다
                   </p>
@@ -387,7 +387,7 @@ export function DraftComposer({
                           key={c}
                           type="button"
                           onClick={() => setCategory(c)}
-                          className={`rounded-full border px-2.5 py-0.5 text-[12px] transition ${
+                          className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
                             category === c
                               ? "border-primary bg-primary text-primary-foreground font-medium"
                               : "border-line bg-card text-text-dim hover:border-primary/50 hover:text-foreground"
@@ -413,7 +413,7 @@ export function DraftComposer({
                         aria-label="금액(원)"
                         required
                       />
-                      <span className="text-text-dim text-[13px]">원</span>
+                      <span className="text-text-dim text-sm">원</span>
                     </span>
                   </label>
                   <label className="block">
@@ -453,7 +453,7 @@ export function DraftComposer({
 
       {/* 하단 — 요약 + 상신(문서 판 바깥, 하이웍스의 하단 액션 바 대응) */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 px-1">
-        <p className="text-[13px]">
+        <p className="text-sm">
           {form === "leave" && leaveReady && !detailProblem ? (
             <>
               <span className="text-text-dim">차감 </span>
@@ -577,7 +577,7 @@ function LineTable({
             >
               결재
             </th>
-            <th className="border-line bg-bg-soft/60 text-text-dim min-w-[104px] border px-2 py-1 text-[11px] font-semibold">
+            <th className="border-line bg-bg-soft/60 text-text-dim min-w-[104px] border px-2 py-1 text-xs font-semibold">
               {drafterJobTitle ?? "기안"}
             </th>
             {approvers.length === 0 ? (
@@ -588,7 +588,7 @@ function LineTable({
               approvers.map((id) => (
                 <th
                   key={id}
-                  className="border-line bg-bg-soft/60 text-text-dim min-w-[112px] border px-2 py-1 text-[11px] font-semibold"
+                  className="border-line bg-bg-soft/60 text-text-dim min-w-[112px] border px-2 py-1 text-xs font-semibold"
                 >
                   {byId.get(id)?.jobTitle ?? "직원"}
                 </th>
@@ -617,15 +617,15 @@ function LineTable({
           {/* 3줄 — 이름(표시 전용 — 편집은 [지정] 모달에서) */}
           <tr>
             <td className="border-line border px-2 py-1.5">
-              <p className="text-foreground text-[12px] font-medium whitespace-nowrap">{drafterName}</p>
-              <p className="text-text-faint text-[10px]">기안</p>
+              <p className="text-foreground text-xs font-medium whitespace-nowrap">{drafterName}</p>
+              <p className="text-text-faint text-xs">기안</p>
             </td>
             {approvers.map((id, i) => (
               <td key={id} className="border-line border px-2 py-1.5">
-                <p className="text-foreground text-[12px] font-medium whitespace-nowrap">
+                <p className="text-foreground text-xs font-medium whitespace-nowrap">
                   {byId.get(id)?.name ?? "(알 수 없음)"}
                 </p>
-                <p className="text-text-faint text-[10px]">
+                <p className="text-text-faint text-xs">
                   {i + 1}차 {roles[i]}
                 </p>
               </td>
@@ -639,7 +639,7 @@ function LineTable({
             <td colSpan={bodyCols} className="border-line border px-3 py-1.5 text-left">
               <span className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 align-middle">
                 {refs.map((id) => (
-                  <span key={id} className="text-foreground text-[12px]">
+                  <span key={id} className="text-foreground text-xs">
                     {byId.get(id)?.name ?? "(알 수 없음)"}
                   </span>
                 ))}
@@ -653,7 +653,7 @@ function LineTable({
                   <EyIcon name={refs.length > 0 ? "edit" : "plus"} size={12} />
                 </button>
                 {refs.length === 0 ? (
-                  <span className="text-text-faint text-[11px]">결재 없이 열람만 — 없어도 됩니다</span>
+                  <span className="text-text-faint text-xs">결재 없이 열람만 — 없어도 됩니다</span>
                 ) : null}
               </span>
             </td>
@@ -741,7 +741,7 @@ function StaffPickerDialog({
       >
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-foreground text-sm font-bold">{twoPane ? "결재선 지정" : "참조자 지정"}</h2>
-          <p className="text-text-faint text-[11px]">
+          <p className="text-text-faint text-xs">
             {selected.length}/{max}명 · 클릭해서 넣고 빼세요
           </p>
         </div>
@@ -782,12 +782,12 @@ function StaffPickerDialog({
                         className="hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <span className="min-w-0">
-                          <span className="text-foreground text-[13px] font-medium">{c.name}</span>
+                          <span className="text-foreground text-sm font-medium">{c.name}</span>
                           {c.jobTitle ? (
                             <span className="text-text-faint ml-1.5 text-xs">{c.jobTitle}</span>
                           ) : null}
                           {lockedAsApprover ? (
-                            <span className="text-text-faint ml-1.5 text-[10px]">결재선에 있음</span>
+                            <span className="text-text-faint ml-1.5 text-xs">결재선에 있음</span>
                           ) : null}
                         </span>
                         {isSelected ? (
@@ -817,15 +817,15 @@ function StaffPickerDialog({
                     const person = byId.get(id);
                     return (
                       <li key={id} className="divide-line flex items-center gap-2 px-2.5 py-2">
-                        <span className="text-text-dim w-[52px] shrink-0 text-[11px]">
+                        <span className="text-text-dim w-[52px] shrink-0 text-xs">
                           {i + 1}차 {roles[i]}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="text-foreground block truncate text-[13px] font-medium">
+                          <span className="text-foreground block truncate text-sm font-medium">
                             {person?.name ?? "(알 수 없음)"}
                           </span>
                           {person?.jobTitle ? (
-                            <span className="text-text-faint block truncate text-[10px]">
+                            <span className="text-text-faint block truncate text-xs">
                               {person.jobTitle}
                             </span>
                           ) : null}
@@ -924,7 +924,7 @@ function TemplateControls({
     <div className="border-line mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-2.5">
       <span className="micro">자주 쓰는 결재선</span>
       {templates.length === 0 ? (
-        <span className="text-text-faint text-[11px]">저장된 결재선이 없습니다</span>
+        <span className="text-text-faint text-xs">저장된 결재선이 없습니다</span>
       ) : (
         templates.map((t) => (
           <span
@@ -961,7 +961,7 @@ function TemplateControls({
           onChange={(e) => setName(e.target.value)}
           maxLength={40}
           placeholder="이름 붙여 저장"
-          className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-[130px] rounded-lg border px-2.5 py-1 text-[12px] outline-none transition"
+          className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-[130px] rounded-lg border px-2.5 py-1 text-xs outline-none transition"
           aria-label="저장할 결재선 이름"
         />
         <Button

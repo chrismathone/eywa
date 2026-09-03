@@ -25,8 +25,8 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
     [loans, query],
   );
   const columns = useMemo((): Column<InventoryLoan>[] => [
-    { key: "loanCode", label: "이력ID", width: 84, render: (l) => <span className="font-mono text-[11.5px]">{l.loanCode}</span>, className: "whitespace-nowrap" },
-    { key: "assetCode", label: "자산ID", width: 88, render: (l) => <span className="font-mono text-[11.5px] font-bold">{l.assetCode}</span>, className: "whitespace-nowrap" },
+    { key: "loanCode", label: "이력ID", width: 84, render: (l) => <span className="font-mono text-xs">{l.loanCode}</span>, className: "whitespace-nowrap" },
+    { key: "assetCode", label: "자산ID", width: 88, render: (l) => <span className="font-mono text-xs font-bold">{l.assetCode}</span>, className: "whitespace-nowrap" },
     { key: "borrowerName", label: "대여자", width: 96, render: (l) => l.borrowerName, className: "whitespace-nowrap" },
     { key: "dept", label: "소속", width: 100, render: (l) => <DashCell v={l.dept} />, className: "whitespace-nowrap" },
     { key: "lentOn", label: "대여일", width: 100, render: (l) => <UnknownCell v={l.lentOn} num />, className: "whitespace-nowrap" },
@@ -61,7 +61,7 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
             canWrite
               ? (l) =>
                   l.status === "out" ? (
-                    <button type="button" className="text-primary px-1 text-[11.5px] font-medium hover:underline" onClick={() => setDialog({ kind: "return", loan: l })}>
+                    <button type="button" className="text-primary px-1 text-xs font-medium hover:underline" onClick={() => setDialog({ kind: "return", loan: l })}>
                       반납
                     </button>
                   ) : null

@@ -56,7 +56,7 @@ export function CatalogPicker({
 }
 
 const chip = (on: boolean) =>
-  `shrink-0 rounded-full border px-2 py-0.5 text-[11px] transition ${
+  `shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
     on ? "border-primary bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft"
   }`;
 
@@ -89,7 +89,7 @@ export function CourseEditor({
           까딱하다가 1회당 27만원으로 계산되기 때문"*). 예전엔 맨 아래 '월 N회 고정' 칩 하나가 전부여서,
           이게 월 금액인지 회당 단가인지 **화면 어디에도 안 적혀 있었다**. 금액을 읽기 전에 먼저 보이게 둔다. */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-text-faint text-[11px]">수강료 구분</span>
+        <span className="text-text-faint text-xs">수강료 구분</span>
         <div className="flex gap-1" role="group" aria-label={`${course.name || "과목"} 수강료 구분`}>
           {(["monthly", "per_session"] as const).map((k) => (
             <button
@@ -103,7 +103,7 @@ export function CourseEditor({
             </button>
           ))}
         </div>
-        <span className="text-text-faint text-[11px]">
+        <span className="text-text-faint text-xs">
           {course.fixedMonthly ? "· 금액을 그대로 청구(월 정액)" : "· 회당 단가 × 시수"}
         </span>
       </div>
@@ -111,14 +111,14 @@ export function CourseEditor({
           해 준다**. 침묵하면 회당 단가가 월 금액으로(또는 그 반대로) 조용히 굳는다.
           ⚠️ **옛 견적(출처 기록 없음)에는 안 뜬다** — 모르는 것을 "없다"고 말하면 안 된다(needsFeeKindCheck). */}
       {needsFeeKindCheck(course) ? (
-        <p className="border-amber/40 bg-amber-soft text-amber rounded-md border px-2 py-1 text-[11px] leading-snug">
+        <p className="border-amber/40 bg-amber-soft text-amber rounded-md border px-2 py-1 text-xs leading-snug">
           이 항목은 단가표에 <b>단가 종류</b>가 정해져 있지 않아 <b>월 고정</b>으로 넣었습니다 — 회당
           수업이면 위에서 바꿔 주세요. (단가표에서 종류를 채워 두면 다음부터 자동으로 잡힙니다.)
         </p>
       ) : null}
       <div className={`grid gap-2 ${course.fixedMonthly ? "grid-cols-[1.4fr_0.8fr_1fr]" : "grid-cols-[1.2fr_0.9fr_0.7fr_1fr]"}`}>
         <label className="space-y-0.5">
-          <span className="text-text-faint text-[11px]">요일</span>
+          <span className="text-text-faint text-xs">요일</span>
           <input
             className={input}
             value={course.days}
@@ -137,7 +137,7 @@ export function CourseEditor({
             때마다 0×시수로 다시 덮였다). 구분을 고를 수 있게 만든 이상, 그 구분에 필요한 값도 고칠 수 있어야 한다. */}
         {!course.fixedMonthly ? (
           <label className="space-y-0.5">
-            <span className="text-text-faint text-[11px]">회당 단가</span>
+            <span className="text-text-faint text-xs">회당 단가</span>
             <input
               type="number"
               min="0"
@@ -150,7 +150,7 @@ export function CourseEditor({
           </label>
         ) : null}
         <label className="space-y-0.5">
-          <span className="text-text-faint text-[11px]">{course.fixedMonthly ? "월 N회" : "시수"}</span>
+          <span className="text-text-faint text-xs">{course.fixedMonthly ? "월 N회" : "시수"}</span>
           <input
             type="number"
             min="0"
@@ -161,7 +161,7 @@ export function CourseEditor({
           />
         </label>
         <label className="space-y-0.5">
-          <span className="text-text-faint text-[11px]">{course.fixedMonthly ? "월 금액" : "총 금액"}</span>
+          <span className="text-text-faint text-xs">{course.fixedMonthly ? "월 금액" : "총 금액"}</span>
           <input
             type="number"
             min="0"
@@ -200,11 +200,11 @@ export function ExtraEditor({
   return (
     <div className="border-line bg-card flex items-end gap-2 rounded-md border p-2.5">
       <label className="flex-1 space-y-0.5">
-        <span className="text-text-faint text-[11px]">항목명 (교재·기타)</span>
+        <span className="text-text-faint text-xs">항목명 (교재·기타)</span>
         <input className={input} value={extra.name} onChange={(e) => onPatch({ name: e.target.value })} placeholder="예: 교재비, 입학금, 모의고사비" />
       </label>
       <label className="w-28 shrink-0 space-y-0.5">
-        <span className="text-text-faint text-[11px]">금액</span>
+        <span className="text-text-faint text-xs">금액</span>
         <input
           type="number"
           min="0"
@@ -234,11 +234,11 @@ export function DiscountEditor({
   return (
     <div className="border-line bg-card flex items-end gap-2 rounded-md border p-2.5">
       <label className="flex-1 space-y-0.5">
-        <span className="text-text-faint text-[11px]">할인명</span>
+        <span className="text-text-faint text-xs">할인명</span>
         <input className={input} value={discount.name} onChange={(e) => onPatch({ name: e.target.value })} placeholder="예: 형제 할인, 조기등록" />
       </label>
       <label className="w-28 shrink-0 space-y-0.5">
-        <span className="text-text-faint text-[11px]">할인액</span>
+        <span className="text-text-faint text-xs">할인액</span>
         <div className="relative">
           <span className="text-text-faint pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-sm">−</span>
           <input

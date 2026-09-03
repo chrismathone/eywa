@@ -248,7 +248,7 @@ export function QuickBoard({
 
   return (
     <div className="space-y-2">
-      <p className="text-text-dim px-1 text-[13px]">
+      <p className="text-text-dim px-1 text-sm">
         미출결 <span className="text-danger num font-bold">{sum.unmarked}</span>명 · 입력{" "}
         <span className="num font-bold">
           {sum.recorded}/{sum.expected}
@@ -258,7 +258,7 @@ export function QuickBoard({
       {/* 거절 띠 — 토스트는 몇 초 뒤 사라지고 시트는 이미 닫혀 있을 수 있다. 다음 입력을 시작하면
           (`setError(null)`) 스스로 사라진다. 시트가 열려 있으면 시트 안에 같은 문장이 있어 생략. */}
       {error && !open ? (
-        <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-[13px] font-medium">{error}</p>
+        <p className="bg-danger-soft text-danger rounded-xl px-3 py-2 text-sm font-medium">{error}</p>
       ) : null}
       {view.map((klass) => (
         <QuickClassCard

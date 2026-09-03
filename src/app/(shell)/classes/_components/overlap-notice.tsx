@@ -93,7 +93,7 @@ function OverlapRow({ item }: { item: OverlapItem }) {
       className="bg-card/70 border-line flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2.5 py-1.5 text-xs"
     >
       <span
-        className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
           isRoom ? "bg-amber-soft text-amber" : "bg-purple-soft text-purple"
         }`}
       >

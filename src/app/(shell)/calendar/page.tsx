@@ -111,7 +111,7 @@ export default async function CalendarPage({
             <Link
               key={vd.key}
               href={viewHref(vd.key)}
-              className={`rounded-md px-3 py-1 text-[12.5px] transition ${
+              className={`rounded-md px-3 py-1 text-xs transition ${
                 view === vd.key
                   ? "bg-card text-foreground font-semibold shadow-sm"
                   : "text-text-dim hover:text-foreground"
@@ -127,13 +127,13 @@ export default async function CalendarPage({
               <EyIcon name="chevronLeft" size={16} />
             </Link>
             {/* 분석 뷰는 한 해가 아니라 3개년 창이라 라벨도 범위로 — 가운데 해만 굵게(◀▶가 미는 축). */}
-            <span className="num text-foreground min-w-[64px] text-center text-[16px] font-bold tracking-tight">
+            <span className="num text-foreground min-w-[64px] text-center text-base font-bold tracking-tight">
               {view === "stats" ? (
                 <>
                   {statsYears.map((y, i) => (
                     <span key={y}>
                       {i > 0 ? <span className="text-text-faint mx-1 font-normal">·</span> : null}
-                      <span className={y === year ? "" : "text-text-dim text-[13px] font-medium"}>
+                      <span className={y === year ? "" : "text-text-dim text-sm font-medium"}>
                         {y}
                       </span>
                     </span>
@@ -149,7 +149,7 @@ export default async function CalendarPage({
             {year !== thisYear ? (
               <Link
                 href={yearHref(thisYear)}
-                className="border-line text-text-dim hover:text-foreground hover:border-primary/50 inline-flex h-8 items-center rounded-lg border px-2.5 text-[12px] transition"
+                className="border-line text-text-dim hover:text-foreground hover:border-primary/50 inline-flex h-8 items-center rounded-lg border px-2.5 text-xs transition"
               >
                 올해
               </Link>
@@ -207,7 +207,7 @@ export default async function CalendarPage({
               </Link>
             </>
           ) : null}
-          <span className="text-text-faint ml-auto text-[11px]">휴가는 월 보기에서만 표시됩니다</span>
+          <span className="text-text-faint ml-auto text-xs">휴가는 월 보기에서만 표시됩니다</span>
         </div>
       ) : null}
 

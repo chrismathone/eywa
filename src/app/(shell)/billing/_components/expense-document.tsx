@@ -49,7 +49,7 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
   return (
     <>
       <ExpensePrintBar />
-      <div className="print-portrait mx-auto max-w-[760px] print:max-w-none">
+      <div className="paper-scale print-portrait mx-auto max-w-[760px] print:max-w-none">
         <article className="bg-card border-line shadow-card text-foreground rounded-2xl border p-8 sm:p-10 print:rounded-none print:border-0 print:p-0 print:shadow-none">
         {/* 상단: 제목 + 결재란 */}
         <header className="mb-6 flex flex-wrap items-start justify-between gap-4">

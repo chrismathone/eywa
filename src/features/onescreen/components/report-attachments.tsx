@@ -145,11 +145,11 @@ export function ReportAttachments({
   return (
     <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className="text-text-faint text-[11px] font-bold">
+        <p className="text-text-faint text-xs font-bold">
           사진/파일 첨부 <span className="text-text-dim">{atts.length}/{MAX}</span>
         </p>
         <label
-          className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-[11px] font-bold ${
+          className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-xs font-bold ${
             disabled || busy || full ? "pointer-events-none opacity-50" : ""
           }`}
         >
@@ -171,7 +171,7 @@ export function ReportAttachments({
       {/* 거짓 약속 차단(2026-07-21) — showAttachments가 꺼져 있으면 첨부는 저장되지만 /r·인쇄·ClassNote 어디에도
           안 실린다. 워커도 파일첨부 API 경로를 안 타고 스샷만 보내 '발송 성공인데 파일 없음'이 된다. */}
       {hiddenFromParents ? (
-        <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-[11px] leading-snug">
+        <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-xs leading-snug">
           학원설정 → 보고서 → 표시 항목의 <b>사진/파일 첨부</b>가 꺼져 있어, 지금 첨부해도 학부모 보고서·ClassNote에는
           표시되지 않습니다.
         </p>
@@ -187,7 +187,7 @@ export function ReportAttachments({
                 // 비이미지(문서·오디오) = 파일 칩(아이콘 + 파일명)
                 <div className="bg-card text-text-dim flex h-16 w-full flex-col items-center justify-center gap-0.5 rounded px-1 text-center">
                   <EyIcon name="file" size={16} className="text-text-faint" />
-                  <span className="w-full truncate text-[10px]">{a.name}</span>
+                  <span className="w-full truncate text-xs">{a.name}</span>
                 </div>
               )}
               <button
@@ -202,7 +202,7 @@ export function ReportAttachments({
           ))}
         </div>
       ) : (
-        <p className="text-text-faint text-[11px]">사진/파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.</p>
+        <p className="text-text-faint text-xs">사진/파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.</p>
       )}
     </div>
   );

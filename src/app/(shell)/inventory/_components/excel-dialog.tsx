@@ -62,11 +62,11 @@ export function ExcelDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <DialogShell title="엑셀로 넣기" description="서식을 내려받아 고치거나 새 행을 적은 뒤 올리면 미리보기가 뜨고, [반영]을 누르면 그대로 들어갑니다." onClose={onClose} wide>
-      <div className="flex flex-col gap-4 text-[12.5px]">
+      <div className="flex flex-col gap-4 text-xs">
         <section className="border-line flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3">
           <div>
             <p className="font-bold">1. 서식 내려받기</p>
-            <p className="text-text-dim text-[11.5px]">현재 자산·소모품이 들어 있는 파일(시트: 자산 · 소모품 · 안내). 분류·상태는 드롭다운.</p>
+            <p className="text-text-dim text-xs">현재 자산·소모품이 들어 있는 파일(시트: 자산 · 소모품 · 안내). 분류·상태는 드롭다운.</p>
           </div>
           <a href={EXCEL_URL} download className="text-primary inline-flex items-center gap-1 font-bold hover:underline">
             <EyIcon name="arrowDown" size={14} /> 재고관리.xlsx
@@ -81,16 +81,16 @@ export function ExcelDialog({ onClose }: { onClose: () => void }) {
               <label key={m} className="flex items-center gap-1.5">
                 <input type="radio" name="mode" value={m} checked={mode === m} onChange={() => changeMode(m)} disabled={busy} />
                 <span className="font-medium">{EXCEL_MODE_LABEL[m]}</span>
-                <span className="text-text-faint text-[11.5px]">
+                <span className="text-text-faint text-xs">
                   {m === "append" ? "— 이미 있는 자산ID·품목ID는 건너뛰고 새 행만" : "— 있는 것은 파일 값으로 바꾸고 새 행은 넣기"}
                 </span>
               </label>
             ))}
           </div>
-          <p className="text-text-faint text-[11px]">매칭 키 = 자산ID / 품목ID. 오류가 하나라도 있으면 아무것도 바꾸지 않습니다. 대여·실사 이력은 이 파일로 넣지 않습니다.</p>
+          <p className="text-text-faint text-xs">매칭 키 = 자산ID / 품목ID. 오류가 하나라도 있으면 아무것도 바꾸지 않습니다. 대여·실사 이력은 이 파일로 넣지 않습니다.</p>
         </section>
 
-        {busy && !result ? <p className="text-text-dim text-[12px]">파일을 읽는 중…</p> : null}
+        {busy && !result ? <p className="text-text-dim text-xs">파일을 읽는 중…</p> : null}
         {result?.error ? <FormError error={result.error} /> : null}
         {result && !result.error ? <ResultPanel result={result} /> : null}
 
@@ -123,17 +123,17 @@ function PreviewList({ title, rows }: { title: string; rows: ExcelPreviewRow[] }
   const shown = rows.slice(0, 200);
   return (
     <div className="mt-2">
-      <p className="text-text-dim text-[11.5px] font-bold">{title}</p>
+      <p className="text-text-dim text-xs font-bold">{title}</p>
       <ul className="border-line mt-1 max-h-56 overflow-y-auto rounded-lg border">
         {shown.map((r) => (
-          <li key={`${title}-${r.rowNum}`} className="border-line-faint flex items-center gap-2 border-b px-2 py-1 text-[12px] last:border-b-0">
+          <li key={`${title}-${r.rowNum}`} className="border-line-faint flex items-center gap-2 border-b px-2 py-1 text-xs last:border-b-0">
             <span className="text-text-faint num w-8 shrink-0 text-right">{r.rowNum}</span>
             <Pill color={toneColor(ACTION_TONE[r.action])}>{ACTION_LABEL[r.action]}</Pill>
             <span className="font-mono font-bold">{r.key}</span>
             <span className="text-text-dim min-w-0 truncate">{r.summary}</span>
           </li>
         ))}
-        {rows.length > shown.length ? <li className="text-text-faint px-2 py-1 text-[11.5px]">… 외 {rows.length - shown.length}행</li> : null}
+        {rows.length > shown.length ? <li className="text-text-faint px-2 py-1 text-xs">… 외 {rows.length - shown.length}행</li> : null}
       </ul>
     </div>
   );
@@ -143,7 +143,7 @@ function ResultPanel({ result }: { result: NonNullable<ExcelImportResult> }) {
   const errors = result.errors ?? [];
   const tone = errors.length > 0 ? "border-danger bg-danger-soft/40" : result.applied ? "border-green bg-green-soft/40" : "border-blue bg-blue-soft/40";
   return (
-    <section className={`rounded-lg border-l-[3px] px-3 py-2 text-[12px] ${tone}`}>
+    <section className={`rounded-lg border-l-[3px] px-3 py-2 text-xs ${tone}`}>
       <p className="font-bold">
         {errors.length > 0 ? `오류 ${errors.length}건 — 반영할 수 없습니다(고친 뒤 다시 올려 주세요)` : result.applied ? "반영했습니다" : "미리보기 — 아직 아무것도 바꾸지 않았습니다"}
         {result.mode ? ` · ${EXCEL_MODE_LABEL[result.mode]}` : ""}

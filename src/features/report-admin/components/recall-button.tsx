@@ -58,7 +58,7 @@ export function RecallButton({
   // 회수 요청된 건은 버튼 대신 진행 표시 — 다시 누를 것이 없다는 뜻을 화면에서 읽히게.
   if (inFlight)
     return (
-      <span className="text-amber text-[11px] font-bold" title="연동 PC가 ClassNote 게시글을 순차 삭제합니다">
+      <span className="text-amber text-xs font-bold" title="연동 PC가 ClassNote 게시글을 순차 삭제합니다">
         회수 처리 중
       </span>
     );

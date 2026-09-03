@@ -2880,7 +2880,7 @@ export function OneScreenClient({
       {/* 그 요일에 담당 수업이 없을 때 — 예전엔 담당 반 전체가 '오늘 목록'처럼 떴다(2026-07-22 이수진 수요일:
           반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}
       {noClassesToday && !showingAll ? (
-        <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
           <span className="text-foreground font-bold">이 날짜에는 담당 수업이 없습니다</span>
           <span>— 다른 날짜를 고르거나, 필요하면 담당 반 전체를 볼 수 있습니다.</span>
           <a
@@ -2892,7 +2892,7 @@ export function OneScreenClient({
         </div>
       ) : null}
       {showingAll ? (
-        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
           <span className="font-bold">담당 반 전체 보기 — 이 날짜에 수업이 있는 학생이 아닙니다</span>
           <span>안 오는 날 입력·발송이 되지 않도록 주의하세요.</span>
           <a
@@ -2909,7 +2909,7 @@ export function OneScreenClient({
           → "왜 안 나가지?" 하며 계속 누르거나, 반대로 눌러서 학부모 게시판에 글이 하나 더 붙는다.
           ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없으므로, 이 날짜에 이미 나간 게 몇 건인지 먼저 말한다. */}
       {sentRowCount > 0 ? (
-        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
           <span className="font-bold">
             이 날짜는 이미 학부모에게 발송된 보고서가 {sentRowCount}건 있습니다
           </span>
@@ -2927,7 +2927,7 @@ export function OneScreenClient({
 
       {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
       {sameDateEditors.length > 0 ? (
-        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
           <span className="font-bold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
           <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
         </div>
@@ -2938,7 +2938,7 @@ export function OneScreenClient({
           ② 필터 결과가 0명이면 왜 비었는지 말하고 되돌아갈 문을 준다(빈 화면 막다른 길 금지). */}
       {writeFilter !== "all" && view !== "history" ? (
         staleCount > 0 ? (
-          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
             <span>
               <b className="text-foreground">
                 {writeFilter === "unwritten" ? "작성을 마친" : "문구가 비워진"} {staleCount}명
@@ -2954,7 +2954,7 @@ export function OneScreenClient({
             </button>
           </div>
         ) : visible.length === 0 ? (
-          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
             <span className="text-foreground font-bold">
               {writeFilter === "unwritten"
                 ? "미작성 학생이 없습니다 — 이 목록은 모두 작성했습니다"
@@ -3117,7 +3117,7 @@ export function OneScreenClient({
                   type="button"
                   onClick={() => openNoticeForStudent(selected.id)}
                   title="이 학생 학부모에게 공지(진도·평가 없이 안내글만) 발송"
-                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-[11px] font-bold"
+                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-xs font-bold"
                 >
                   학부모 공지
                 </button>

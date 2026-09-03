@@ -24,7 +24,7 @@ export function PrepBriefCollapse({ children }: { children: React.ReactNode }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="border-primary/20 bg-card/60 hover:bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[12px] font-semibold transition"
+        className="border-primary/20 bg-card/60 hover:bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition"
       >
         {open ? "브리프 접기" : "브리프 펼치기"}
         <ChevronDown

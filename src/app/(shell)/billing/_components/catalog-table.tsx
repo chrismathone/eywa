@@ -216,16 +216,16 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-bg-soft/50">
                   <td className="px-4 py-2.5">
-                    <span className="text-foreground text-[13px] font-bold">{r.title}</span>
+                    <span className="text-foreground text-sm font-bold">{r.title}</span>
                     {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
-                    {r.bookDetail ? <span className="text-text-faint ml-1.5 text-[11px]">{r.bookDetail}</span> : null}
+                    {r.bookDetail ? <span className="text-text-faint ml-1.5 text-xs">{r.bookDetail}</span> : null}
                   </td>
-                  <td className="text-text-dim px-4 py-2.5 text-[12px]">{r.gradeLevel ?? "—"}</td>
-                  <td className="text-text-dim px-4 py-2.5 text-[12px]">
+                  <td className="text-text-dim px-4 py-2.5 text-xs">{r.gradeLevel ?? "—"}</td>
+                  <td className="text-text-dim px-4 py-2.5 text-xs">
                     {r.subject ? subjects.labelOf(r.subject) : "—"}
                   </td>
-                  <td className="text-text-dim px-4 py-2.5 text-[12px]">{r.publisher ?? "—"}</td>
-                  <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+                  <td className="text-text-dim px-4 py-2.5 text-xs">{r.publisher ?? "—"}</td>
+                  <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
                     {KRW.format(r.price)}
                   </td>
                   <td className="px-4 py-2.5">

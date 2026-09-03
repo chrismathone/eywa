@@ -98,7 +98,7 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
         </div>
       )}
 
-      <p className="text-text-faint text-center text-[11px]">진도 데이터는 Edutrix 수업보고서에서 이식됩니다.</p>
+      <p className="text-text-faint text-center text-xs">진도 데이터는 Edutrix 수업보고서에서 이식됩니다.</p>
     </div>
   );
 }

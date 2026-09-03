@@ -53,7 +53,7 @@ export function DailyBriefingRegen({ analyzing }: { analyzing: boolean }) {
       >
         {pending ? "생성 중…" : analyzing ? "다시 시도" : "다시 생성"}
       </Button>
-      {error ? <p className="text-danger max-w-56 text-right text-[11px] leading-snug">{error}</p> : null}
+      {error ? <p className="text-danger max-w-56 text-right text-xs leading-snug">{error}</p> : null}
     </div>
   );
 }

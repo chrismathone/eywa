@@ -283,7 +283,7 @@ export function PublicIntakeForm({
         <div className="bg-foreground/70 absolute inset-0" aria-hidden />
         <div className="relative">
           <p className="text-gold text-sm font-bold">{academyName}</p>
-          <h1 className="text-background mt-1 text-[26px] font-bold">
+          <h1 className="text-background mt-1 text-3xl font-bold">
             {step === 1 ? "입학상담카드" : "사전 체크리스트"}
           </h1>
           <p className="text-background/70 mt-1.5 text-sm">
@@ -497,7 +497,7 @@ export function PublicIntakeForm({
             <div className="space-y-2">
               {shuttle.routes.map((r, ri) => (
                 <div key={ri} className="bg-danger/5 rounded-xl p-3">
-                  <p className="text-danger text-[13px] font-bold">{r.label}</p>
+                  <p className="text-danger text-sm font-bold">{r.label}</p>
                   <div className="text-text-dim mt-0.5 text-xs leading-relaxed">
                     {r.stops.map((stop, i) => (
                       <p key={i}>
@@ -519,7 +519,7 @@ export function PublicIntakeForm({
             개인정보 활용 동의서 <span className="text-danger">*</span>
           </h4>
           {showPrivacy ? (
-            <div className="bg-bg-soft rounded-xl p-4 text-[13px] leading-relaxed">
+            <div className="bg-bg-soft rounded-xl p-4 text-sm leading-relaxed">
               <p className="text-text-dim whitespace-pre-line">{privacyTerms}</p>
             </div>
           ) : null}
@@ -532,7 +532,7 @@ export function PublicIntakeForm({
         {showService ? (
           <div className="space-y-3 pt-2">
             <h4 className="text-foreground text-sm font-bold">환불·학칙 안내 동의서</h4>
-            <div className="bg-bg-soft rounded-xl p-4 text-[13px] leading-relaxed">
+            <div className="bg-bg-soft rounded-xl p-4 text-sm leading-relaxed">
               <p className="text-text-dim whitespace-pre-line">{serviceTerms}</p>
             </div>
             <label className="flex cursor-pointer items-center gap-2.5">

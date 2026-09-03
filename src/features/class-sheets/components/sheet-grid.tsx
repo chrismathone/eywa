@@ -94,17 +94,17 @@ export const SheetGrid = memo(function SheetGrid({
             >
               {/* 요일 = 원본 시트의 검정 반전 머리글(월/화/수). 오늘은 브랜드 네이비로 대체. */}
               <span
-                className={`inline-flex size-7 items-center justify-center rounded-lg text-[15px] font-bold text-white ${
+                className={`inline-flex size-7 items-center justify-center rounded-lg text-base font-bold text-white ${
                   isToday ? "bg-primary" : "bg-foreground"
                 }`}
               >
                 {DOW_KO[day.dow]}
               </span>
-              <span className={`num text-[13px] font-semibold ${holiday ? "text-danger" : "text-foreground"}`}>
+              <span className={`num text-sm font-semibold ${holiday ? "text-danger" : "text-foreground"}`}>
                 {day.date.slice(5).replace("-", "/")}
               </span>
               {isToday ? (
-                <span className="border-primary text-primary rounded-full border px-1.5 py-0.5 text-[11px] font-bold">
+                <span className="border-primary text-primary rounded-full border px-1.5 py-0.5 text-xs font-bold">
                   오늘
                 </span>
               ) : null}
@@ -112,7 +112,7 @@ export const SheetGrid = memo(function SheetGrid({
                   ⚠️ 폭이 모자라면 이름만 줄인다(`min-w-0`) — 뒤의 일괄 버튼이 밀리면 그 날 입력이 막힌다. */}
               {holiday ? (
                 <span
-                  className="text-danger min-w-0 shrink truncate text-[11px] font-bold"
+                  className="text-danger min-w-0 shrink truncate text-xs font-bold"
                   title={`${holiday} — 휴일이지만 수업했다면 그대로 쓰실 수 있습니다`}
                 >
                   {holiday}

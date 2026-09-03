@@ -20,7 +20,7 @@ export function PillGroup({
   size?: "sm" | "md"; // sm=표뷰(밀도), md=카드뷰(기존 크기)
   disabled?: boolean;
 }) {
-  const sizeCls = size === "sm" ? "px-1.5 py-0.5 text-[11px]" : "px-2.5 py-1 text-[12px]";
+  const sizeCls = size === "sm" ? "px-1.5 py-0.5 text-xs" : "px-2.5 py-1 text-xs";
   return (
     <div className={`flex flex-wrap ${size === "sm" ? "gap-1" : "gap-1.5"}`} role="group" aria-label={ariaLabel}>
       {options.map((o) => {

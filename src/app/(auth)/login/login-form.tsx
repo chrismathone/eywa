@@ -79,7 +79,7 @@ export function LoginForm({ next }: { next?: string }) {
           <Label htmlFor="password" className="eyebrow">
             비밀번호
           </Label>
-          <span className="text-muted-foreground text-[11px]">관리자에게 문의</span>
+          <span className="text-muted-foreground text-xs">관리자에게 문의</span>
         </div>
         <PasswordInput
           id="password"

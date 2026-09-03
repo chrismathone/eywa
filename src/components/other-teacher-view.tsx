@@ -42,9 +42,9 @@ function TargetItems({ targets, loading }: { targets: TeacherViewTarget[] | null
       if (dest) window.location.assign(dest);
     });
   if (loading || targets === null)
-    return <div className="text-text-faint px-2 py-1.5 text-[13px]">불러오는 중…</div>;
+    return <div className="text-text-faint px-2 py-1.5 text-sm">불러오는 중…</div>;
   if (targets.length === 0)
-    return <div className="text-text-faint px-2 py-1.5 text-[13px]">전환할 강사가 없습니다</div>;
+    return <div className="text-text-faint px-2 py-1.5 text-sm">전환할 강사가 없습니다</div>;
   return (
     <>
       {targets.map((t) => (
@@ -92,7 +92,7 @@ export function OtherTeacherViewPicker({ expanded, motion }: { expanded: boolean
         }`}
       />
       <span
-        className={`text-text-dim group-hover:text-foreground relative z-10 overflow-hidden text-[13px] font-medium whitespace-nowrap ${
+        className={`text-text-dim group-hover:text-foreground relative z-10 overflow-hidden text-sm font-medium whitespace-nowrap ${
           expanded ? "max-w-[160px] opacity-100" : "max-w-0 opacity-0"
         } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
       >
@@ -129,7 +129,7 @@ export function ViewAsChip({ name }: { name: string }) {
         render={
           <button
             type="button"
-            className={`${TONE_SOFT.special} flex h-7 cursor-pointer items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold`}
+            className={`${TONE_SOFT.special} flex h-7 cursor-pointer items-center gap-1 rounded-full px-2.5 text-xs font-semibold`}
           />
         }
       >

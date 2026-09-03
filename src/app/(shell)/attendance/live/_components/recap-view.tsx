@@ -76,7 +76,7 @@ export function RecapView({
   return (
     <div className="space-y-5">
       {isToday ? (
-        <p className="bg-amber-soft text-amber rounded-2xl px-3 py-2 text-[13px] font-medium">
+        <p className="bg-amber-soft text-amber rounded-2xl px-3 py-2 text-sm font-medium">
           오늘은 아직 진행 중입니다 — 아래 숫자는 지금까지 입력된 것까지입니다.
         </p>
       ) : null}
@@ -146,7 +146,7 @@ export function RecapView({
 
       {/* 빈 날은 블록 대신 한 줄 — "안 봤다"와 "볼 게 없었다"를 구분해 준다. */}
       {skipped.length > 0 ? (
-        <p className="text-text-faint text-[12px]">
+        <p className="text-text-faint text-xs">
           {skipped
             .map((d) => `${formatKoreanDate(d.date)} ${d.holiday ? `휴원일(${d.holiday})` : "수업 없음"}`)
             .join(" · ")}
@@ -170,16 +170,16 @@ export function RecapView({
           <h2 className="flex items-baseline gap-2">
             <span className="text-sm font-bold">입력이 덜 된 강사·자리</span>
             <span className="num text-text-dim text-sm">{behind.length}</span>
-            {recap.days.length > 1 ? <span className="text-text-faint text-[11px]">기간 합계</span> : null}
+            {recap.days.length > 1 ? <span className="text-text-faint text-xs">기간 합계</span> : null}
             {behind.some((x) => x.unmarkedClasses > 0 || x.partialCells > 0) ? (
-              <span className="text-text-faint text-[11px]">
+              <span className="text-text-faint text-xs">
                 이름을 누르면 미입력 출석부·빈 칸 명단이 열립니다.
               </span>
             ) : null}
             {/* 🔴 강사 줄은 **과목 축이 없다**(한 사람이 여러 과목을 찍는다) — 조용히 안 좁히면
                 "필터를 걸었는데 왜 다 보이지"가 되므로 그 사실을 적는다. */}
             {subject.active ? (
-              <span className="text-text-faint text-[11px]">과목 필터와 무관하게 전체를 셉니다.</span>
+              <span className="text-text-faint text-xs">과목 필터와 무관하게 전체를 셉니다.</span>
             ) : null}
           </h2>
           {/* 펼침 버튼이 행을 가득 채우므로 hover 배경이 모서리를 넘지 않게 목록이 자른다
@@ -279,13 +279,13 @@ function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: Rang
           {groups.length > 0 ? (
             <div className="space-y-2">
               {partialGroups.length > 0 ? (
-                <p className="text-text-dim text-[11px] font-bold">출석부 미입력</p>
+                <p className="text-text-dim text-xs font-bold">출석부 미입력</p>
               ) : null}
               {groups.map((g) => (
                 <div key={g.date} className="space-y-1">
                   {/* 기간 합계 줄이라 날짜를 밝힌다 — "언제 안 찍었나"가 사라지면 물어볼 수가 없다. */}
                   {multiDay ? (
-                    <p className="text-text-faint text-[11px] font-medium">{formatKoreanDate(g.date)}</p>
+                    <p className="text-text-faint text-xs font-medium">{formatKoreanDate(g.date)}</p>
                   ) : null}
                   <ul className="border-line divide-line divide-y rounded-xl border">
                     {g.classes.map((c) => (
@@ -301,12 +301,12 @@ function BehindTeacherRow({ line, recap }: { line: RecapTeacherLine; recap: Rang
           {partialGroups.length > 0 ? (
             <div className="space-y-2">
               {groups.length > 0 ? (
-                <p className="text-text-dim text-[11px] font-bold">빈 칸이 남은 출석부</p>
+                <p className="text-text-dim text-xs font-bold">빈 칸이 남은 출석부</p>
               ) : null}
               {partialGroups.map((g) => (
                 <div key={g.date} className="space-y-1">
                   {multiDay ? (
-                    <p className="text-text-faint text-[11px] font-medium">{formatKoreanDate(g.date)}</p>
+                    <p className="text-text-faint text-xs font-medium">{formatKoreanDate(g.date)}</p>
                   ) : null}
                   <ul className="border-line divide-line divide-y rounded-xl border">
                     {g.classes.map((c) => (

@@ -39,7 +39,7 @@ export function BoardTable({
 
   return (
     <div className="bg-card overflow-x-auto rounded-2xl shadow-card">
-      <table className="w-full min-w-[900px] border-collapse text-[13px]">
+      <table className="w-full min-w-[900px] border-collapse text-sm">
         <thead>
           <tr className="border-line bg-bg-soft/60 border-b text-left">
             <th className="text-text-dim px-4 py-2.5 text-xs font-medium">생성일</th>

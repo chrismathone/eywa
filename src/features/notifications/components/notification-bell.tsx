@@ -241,7 +241,7 @@ export function NotificationBell() {
               className="bg-danger absolute inline-flex h-full w-full animate-ping rounded-full opacity-50"
               aria-hidden
             />
-            <span className="bg-danger text-white ring-card relative inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums shadow-sm ring-2 [animation:badge-pop_0.35s_ease-out]">
+            <span className="bg-danger text-white ring-card relative inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-xs font-bold tabular-nums shadow-sm ring-2 [animation:badge-pop_0.35s_ease-out]">
               {badge}
             </span>
           </span>
@@ -255,7 +255,7 @@ export function NotificationBell() {
               <button
                 type="button"
                 onClick={markAllRead}
-                className="text-text-dim hover:text-foreground text-[11px] transition"
+                className="text-text-dim hover:text-foreground text-xs transition"
               >
                 모두 읽음
               </button>
@@ -264,7 +264,7 @@ export function NotificationBell() {
             <button
               type="button"
               onClick={() => setView((v) => (v === "active" ? "archived" : "active"))}
-              className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-[11px] transition"
+              className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs transition"
             >
               <Archive className="size-3" />
               {view === "archived" ? "받은 알림" : "보관함"}
@@ -278,14 +278,14 @@ export function NotificationBell() {
           <button
             type="button"
             onClick={() => void enableDesktopNotify()}
-            className="border-line hover:bg-bg-soft flex w-full items-center gap-1.5 border-b px-3 py-2 text-left text-[11px] transition"
+            className="border-line hover:bg-bg-soft flex w-full items-center gap-1.5 border-b px-3 py-2 text-left text-xs transition"
           >
             <EyIcon name="bell" size={13} className="text-primary shrink-0" />
             <span className="text-foreground font-bold">컴퓨터 알림 켜기</span>
             <span className="text-text-faint truncate">— 창 밖에서도 받기</span>
           </button>
         ) : view === "active" && perm === "denied" ? (
-          <p className="text-text-faint border-line border-b px-3 py-2 text-[11px] leading-snug break-keep">
+          <p className="text-text-faint border-line border-b px-3 py-2 text-xs leading-snug break-keep">
             컴퓨터 알림이 차단돼 있습니다 — 주소창의 자물쇠 &gt; 알림에서 &lsquo;허용&rsquo;으로 바꿔주세요.
           </p>
         ) : null}
@@ -321,9 +321,9 @@ export function NotificationBell() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
-                    <span className="text-foreground truncate text-[12px] font-bold">{n.title}</span>
+                    <span className="text-foreground truncate text-xs font-bold">{n.title}</span>
                     {!n.read ? <span className="bg-primary size-1.5 shrink-0 rounded-full" /> : null}
-                    <span className="text-text-faint ml-auto shrink-0 text-[10px]">
+                    <span className="text-text-faint ml-auto shrink-0 text-xs">
                       {relTime(n.createdAt)}
                     </span>
                     {/* 항목 액션 — 받은함: 보관·삭제 / 보관함: 복원·삭제. 클릭이 행 열기로 번지지 않게 정지. */}
@@ -370,7 +370,7 @@ export function NotificationBell() {
                     </span>
                   </span>
                   {n.body ? (
-                    <span className="text-text-dim mt-0.5 block text-[11px] leading-snug">{n.body}</span>
+                    <span className="text-text-dim mt-0.5 block text-xs leading-snug">{n.body}</span>
                   ) : null}
                 </span>
               </div>

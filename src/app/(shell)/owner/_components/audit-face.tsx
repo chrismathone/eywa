@@ -155,7 +155,7 @@ export async function AuditFace({
             </a>
           ) : null}
         </form>
-        <span className="text-text-faint num ml-auto text-[12px]">
+        <span className="text-text-faint num ml-auto text-xs">
           {total}건{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
         </span>
       </div>
@@ -192,7 +192,7 @@ export async function AuditFace({
       ) : (
         <>
           <DragScrollArea className="bg-card shadow-card rounded-2xl">
-            <table className="w-full text-[12px] [&_td]:whitespace-nowrap">
+            <table className="w-full text-xs [&_td]:whitespace-nowrap">
               <thead>
                 <tr className="bg-bg-soft text-text-dim border-line border-b [&_th]:whitespace-nowrap">
                   <th className="px-4 py-2 text-left font-bold">시각</th>
@@ -213,7 +213,7 @@ export async function AuditFace({
                   const actorName = auditActorName(log.actorName);
                   return (
                   <tr key={log.id} className="hover:bg-bg-soft/50">
-                    <td className="text-text-dim num px-4 py-2.5 text-[11px]">{fmtTime(log.createdAt)}</td>
+                    <td className="text-text-dim num px-4 py-2.5 text-xs">{fmtTime(log.createdAt)}</td>
                     {/* 실행자 — 운영 스크립트가 남긴 `system:*` 식별자는 한글로(원문은 툴팁) */}
                     <td
                       className="text-text-dim px-4 py-2.5"
@@ -235,7 +235,7 @@ export async function AuditFace({
                     >
                       <span className="inline-flex items-center gap-1.5">
                         {log.targetType ? (
-                          <span className="border-line text-text-faint rounded-full border px-1.5 py-px text-[10px]">
+                          <span className="border-line text-text-faint rounded-full border px-1.5 py-px text-xs">
                             {AUDIT_TYPE_LABEL[log.targetType] ?? log.targetType}
                           </span>
                         ) : null}
@@ -244,7 +244,7 @@ export async function AuditFace({
                     </td>
                     {/* 상세 = 한글 요약, 원문 JSON은 title 툴팁으로만(raw 노출 금지 규칙) */}
                     <td
-                      className="text-text-dim px-4 py-2.5 text-[11px]"
+                      className="text-text-dim px-4 py-2.5 text-xs"
                       title={log.metadata ? JSON.stringify(log.metadata) : undefined}
                     >
                       <span className="inline-block max-w-[420px] truncate align-bottom">

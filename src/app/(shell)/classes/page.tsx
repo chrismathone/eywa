@@ -154,7 +154,7 @@ export default async function ClassesPage({
 
       {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만.
           컴팩트에선 위 필터 바에 바짝 붙여(-mt) 한 줄을 새로 만들지 않는다. */}
-      <p className="text-text-dim px-1 text-[13px] compact-chrome:-mt-1.5">
+      <p className="text-text-dim px-1 text-sm compact-chrome:-mt-1.5">
         결과 <span className="text-foreground font-bold">{total}</span>개
         {totalPages > 1 ? (
           <span className="ml-2">
@@ -177,7 +177,7 @@ export default async function ClassesPage({
             status === "all" ? undefined : (
               <Link
                 href={buildClassHref(current, { status: "all" })}
-                className="border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-[13px] font-medium"
+                className="border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium"
               >
                 전체 상태로 보기
               </Link>
@@ -223,7 +223,7 @@ function DayChips({
       className="flex flex-wrap items-center gap-x-2 gap-y-1"
       {...(stale ? { title: "지금은 운영하지 않는 배치입니다 (운영 기간이 끝났거나 아직 시작 전)" } : {})}
     >
-      <div className={`flex gap-0.5 text-[11px] font-bold ${stale ? "opacity-45" : ""}`}>
+      <div className={`flex gap-0.5 text-xs font-bold ${stale ? "opacity-45" : ""}`}>
         {days.map((d) => (
           <span
             key={d.day}
@@ -235,11 +235,11 @@ function DayChips({
           </span>
         ))}
       </div>
-      {stale ? <span className="text-text-faint text-[11px]">운영 기간 밖</span> : null}
+      {stale ? <span className="text-text-faint text-xs">운영 기간 밖</span> : null}
       {uniform ? (
-        <span className="text-text-dim num text-[12px]">{starts[0]}</span>
+        <span className="text-text-dim num text-xs">{starts[0]}</span>
       ) : starts.length > 0 ? (
-        <span className="text-text-faint num text-[11px]">
+        <span className="text-text-faint num text-xs">
           {days
             .filter((d) => d.start)
             .map((d) => `${DAY_LABEL[d.day] ?? d.day}${d.start}`)
@@ -287,7 +287,7 @@ function TableView({
                   <WindowLink
                     href={`/classes/${c.id}`}
                     title={c.className}
-                    className="text-foreground text-[13px] font-bold hover:underline"
+                    className="text-foreground text-sm font-bold hover:underline"
                   >
                     {c.className}
                   </WindowLink>
@@ -297,20 +297,20 @@ function TableView({
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       {c.teacherName ? (
-                        <span className="text-text-dim text-[12px]">{c.teacherName}</span>
+                        <span className="text-text-dim text-xs">{c.teacherName}</span>
                       ) : (
                         <span className="text-text-faint text-xs">미정</span>
                       )}
                     </div>
                   </td>
                 ) : null}
-                <td className="text-text-dim px-4 py-2.5 text-[12px]">
+                <td className="text-text-dim px-4 py-2.5 text-xs">
                   {c.classroomName ?? "—"}
                 </td>
                 <td className="px-4 py-2.5">
                   <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
                 </td>
-                <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+                <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
                   {c.studentCount}명
                 </td>
                 <td className="px-4 py-2.5">
@@ -378,22 +378,22 @@ function CardsView({
             {/* 구조화 카드(문법 ⑤) — 반 이름 bold + 담임·강의실 dim 서브 + 우측 재원수 */}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-[17px] font-bold leading-tight">
+                <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-lg font-bold leading-tight">
                   {c.className}
                   <EditingBadge scope={`class:${c.id}`} />
                 </h3>
-                <p className="text-text-dim mt-1 truncate text-[12.5px]">
+                <p className="text-text-dim mt-1 truncate text-xs">
                   {showTeacher
                     ? `${c.teacherName ?? "담임 미정"}${c.classroomName ? ` · ${c.classroomName}` : ""}`
                     : (c.classroomName ?? "강의실 미정")}
                 </p>
               </div>
               <p className="shrink-0 text-right">
-                <span className="num text-foreground text-[20px] font-bold leading-none">
+                <span className="num text-foreground text-xl font-bold leading-none">
                   {c.studentCount}
                 </span>
-                <span className="text-text-dim ml-0.5 text-[12px]">명</span>
-                <span className="text-text-faint block text-[11px]">재원</span>
+                <span className="text-text-dim ml-0.5 text-xs">명</span>
+                <span className="text-text-faint block text-xs">재원</span>
               </p>
             </div>
             <div className="mt-auto pt-1">

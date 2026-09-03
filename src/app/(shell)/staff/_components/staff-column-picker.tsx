@@ -23,7 +23,7 @@ export function StaffColumnPicker() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="border-line bg-card text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] transition"
+        className="border-line bg-card text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition"
         aria-expanded={open}
       >
         열 {shownCount}/{STAFF_COLUMNS.length}
@@ -45,7 +45,7 @@ export function StaffColumnPicker() {
               <button
                 type="button"
                 onClick={() => setColumns([], [])}
-                className="text-text-faint hover:text-primary text-[11px] underline-offset-2 hover:underline"
+                className="text-text-faint hover:text-primary text-xs underline-offset-2 hover:underline"
               >
                 기본값
               </button>
@@ -73,7 +73,7 @@ export function StaffColumnPicker() {
                       >
                         {visible ? <Check className="size-2.5" /> : null}
                       </span>
-                      <span className={`truncate text-[12px] ${visible ? "text-foreground" : "text-text-faint"}`}>
+                      <span className={`truncate text-xs ${visible ? "text-foreground" : "text-text-faint"}`}>
                         {LABEL_OF[k]}
                       </span>
                     </button>
@@ -103,7 +103,7 @@ export function StaffColumnPicker() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-[11px]"
+                className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs"
               >
                 <X className="size-3" /> 닫기
               </button>

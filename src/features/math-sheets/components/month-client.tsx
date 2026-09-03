@@ -157,17 +157,17 @@ export function MonthClient({
         </span>
         {/* 🔴 아직 한 번도 안 지난 달은 '미작성'이 아니다 — 안 온 수업을 안 적었다고 재촉하지 않는다. */}
         {data.elapsedDays === 0 ? (
-          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-xs font-bold">
             아직 수업 전
           </span>
         ) : null}
         {data.elapsedDays > 0 && data.fill.unwritten > 0 ? (
-          <span className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-xs font-bold">
             미작성 {data.fill.unwritten}칸
           </span>
         ) : null}
         {data.elapsedDays > 0 && data.fill.untracked > 0 ? (
-          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-xs font-bold">
             입력 없음 {data.fill.untracked}칸
           </span>
         ) : null}
@@ -176,14 +176,14 @@ export function MonthClient({
             ⚠️ 휴일에 **쓴** 칸은 여기 없다(그건 `기록`에 들어가 100%로 인정된다 — [[holiday.ts]]). */}
         {data.fill.holiday > 0 ? (
           <span
-            className="bg-att-weekend text-text-dim rounded-full px-2 py-0.5 text-[11px] font-bold"
+            className="bg-att-weekend text-text-dim rounded-full px-2 py-0.5 text-xs font-bold"
             title="학원 휴일이라 기록 의무가 없는 칸입니다 — 작성률 분모에 들어가지 않습니다(그날 쓴 기록은 그대로 인정됩니다)"
           >
             휴일 {data.fill.holiday}칸
           </span>
         ) : null}
         {data.elapsedDays > 0 ? (
-          <span className="bg-muted text-text-faint num rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-muted text-text-faint num rounded-full px-2 py-0.5 text-xs font-bold">
             기록 {data.fill.written} / {data.fill.written + data.fill.unwritten}
           </span>
         ) : null}
@@ -193,7 +193,7 @@ export function MonthClient({
               data.railSummary[s] > 0 ? (
                 <span
                   key={s}
-                  className={`num rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE_SOFT[RAIL_TONE[s]]}`}
+                  className={`num rounded-full px-2 py-0.5 text-xs font-bold ${TONE_SOFT[RAIL_TONE[s]]}`}
                   title="이 달 목표(시작 → 목표 차시)에 견준 현재 위치 — 학생마다 대표 트랙 하나"
                 >
                   {RAIL_STATUS_LABEL[s]} {data.railSummary[s]}
@@ -201,7 +201,7 @@ export function MonthClient({
               ) : null,
             )
           : null}
-        {savedAt ? <span className="text-green text-[11px] font-bold">저장됨</span> : null}
+        {savedAt ? <span className="text-green text-xs font-bold">저장됨</span> : null}
       </div>
 
       {data.goalsStatus === "missing-table" ? (

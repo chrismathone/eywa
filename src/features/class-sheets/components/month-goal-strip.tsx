@@ -49,7 +49,7 @@ export function MonthGoalStrip({
       type="button"
       aria-pressed={role === key}
       onClick={() => onRole(key)}
-      className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11.5px] font-bold transition ${
+      className={`cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold transition ${
         role === key
           ? "border-foreground bg-foreground text-background"
           : "border-line-strong text-text-dim hover:bg-bg-soft"
@@ -61,20 +61,20 @@ export function MonthGoalStrip({
 
   return (
     <div className="border-line overflow-hidden rounded-xl border">
-      <div className="bg-bg-soft flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-[12.5px] font-bold">
+      <div className="bg-bg-soft flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-xs font-bold">
         <span>{role === "homeroom" ? "담임" : "부담임"} 월간계획</span>
         <span className="text-text-faint num">{monthLabel}</span>
         <span className="flex gap-1">
           {roleChip("homeroom", "담임")}
           {roleChip("assistant", "부담임")}
         </span>
-        <span className={`ml-auto text-[11.5px] font-semibold ${savedAt ? "text-green" : "text-text-faint"}`}>
+        <span className={`ml-auto text-xs font-semibold ${savedAt ? "text-green" : "text-text-faint"}`}>
           {savedAt ? "저장됨" : "주간 시트와 같은 칸입니다"}
         </span>
         <button
           type="button"
           onClick={() => setFolded((v) => !v)}
-          className="border-line-strong text-text-dim hover:border-primary hover:text-primary cursor-pointer rounded-full border px-2 py-0.5 text-[11.5px] font-bold"
+          className="border-line-strong text-text-dim hover:border-primary hover:text-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
         >
           {folded ? "펼치기" : "접기"}
         </button>
@@ -92,7 +92,7 @@ export function MonthGoalStrip({
                     ⚠️ `minmax(0,…)`를 빼지 말 것 — 안 빼면 긴 교재명이 칸을 밀어 비율이 깨진다. */}
                 <div className="grid grid-cols-[74px_minmax(0,4fr)_minmax(0,6fr)] items-center gap-1.5">
                   <span
-                    className={`${SHEET_BOX_FRAME} inline-flex h-5 w-full items-center justify-center truncate px-1 text-[12px] font-bold ${
+                    className={`${SHEET_BOX_FRAME} inline-flex h-5 w-full items-center justify-center truncate px-1 text-xs font-bold ${
                       SUBJECT_SOFT[skillAreaColorOf(skillAreas, area.key)]
                     }`}
                     title={area.label}
@@ -116,7 +116,7 @@ export function MonthGoalStrip({
                     onChange={(e) => onField(role, area.key, "targetProgress", e.target.value)}
                   />
                 </div>
-                <p className="text-text-faint pl-[80px] text-[11.5px]">
+                <p className="text-text-faint pl-[80px] text-xs">
                   {actual.length === 0 ? (
                     "이 달 진행 없음"
                   ) : off.length > 0 ? (

@@ -73,7 +73,7 @@ export function StudentSummaryView({
         <button
           type="button"
           onClick={onOpenDetail}
-          className="bg-primary text-primary-foreground hover:bg-primary/85 mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-bold transition"
+          className="bg-primary text-primary-foreground hover:bg-primary/85 mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-bold transition"
         >
           상세 전체보기
           <EyIcon name="arrowRight" size={13} />
@@ -82,7 +82,7 @@ export function StudentSummaryView({
         <WindowLink
           href={`/students/${info.id}`}
           title={name}
-          className="bg-primary text-primary-foreground hover:bg-primary/85 mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-[13px] font-bold transition"
+          className="bg-primary text-primary-foreground hover:bg-primary/85 mt-6 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-bold transition"
         >
           상세 전체보기
           <EyIcon name="arrowRight" size={13} />
@@ -113,7 +113,7 @@ function SummaryBody({ summary }: { summary: StudentSummary }) {
         )}
       </div>
 
-      <div className="border-line flex items-center justify-between rounded-md border px-3 py-2 text-[11px]">
+      <div className="border-line flex items-center justify-between rounded-md border px-3 py-2 text-xs">
         <span className="text-text-dim">
           결석 <span className="text-foreground font-bold">{a.absent}</span> · 지각{" "}
           <span className="text-foreground font-bold">{a.late}</span>
@@ -151,9 +151,9 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
   };
   return (
     <div className="bg-bg-soft rounded-md px-3 py-2.5">
-      <p className="text-text-dim text-[11px]">{label}</p>
-      <p className={`mt-0.5 text-[20px] leading-none font-bold ${TONE[tone]}`}>{value}</p>
-      {sub ? <p className="text-text-faint mt-1 text-[10px]">{sub}</p> : null}
+      <p className="text-text-dim text-xs">{label}</p>
+      <p className={`mt-0.5 text-xl leading-none font-bold ${TONE[tone]}`}>{value}</p>
+      {sub ? <p className="text-text-faint mt-1 text-xs">{sub}</p> : null}
     </div>
   );
 }

@@ -87,17 +87,17 @@ export function PrepBriefSection({
             상담 준비 브리프
             {record.source === "fallback" ? (
               // 폴백을 AI 결과처럼 보이게 두면 상담사가 "AI가 검토했다"고 오해한다 — 정직하게 구분.
-              <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
+              <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-xs font-medium">
                 접수 정보 기반 기본 브리프
               </span>
             ) : modelLabel ? (
-              <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
+              <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-xs font-medium">
                 {modelLabel}
               </span>
             ) : null}
           </h2>
           <p className="text-foreground text-lg font-semibold break-keep">{b.headline}</p>
-          <p className="text-text-dim text-[11px]">
+          <p className="text-text-dim text-xs">
             <span className="num">{generated}</span> 기준 학원 데이터로 작성 · 상담 전 확인용
           </p>
         </div>
@@ -125,14 +125,14 @@ export function PrepBriefSection({
 
       <PrepBriefCollapse>
         <Block icon={MessageSquare} title="오프닝 멘트">
-          <p className="text-foreground text-[13px] leading-relaxed break-keep whitespace-pre-line">{b.opening}</p>
+          <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">{b.opening}</p>
         </Block>
 
         {b.questions.length > 0 ? (
           <Block icon={HelpCircle} title="반드시 확인할 질문">
             <ul className="space-y-1">
               {b.questions.map((q) => (
-                <li key={q} className="text-foreground text-[13px] leading-relaxed break-keep">
+                <li key={q} className="text-foreground text-sm leading-relaxed break-keep">
                   · {q}
                 </li>
               ))}
@@ -145,9 +145,9 @@ export function PrepBriefSection({
             <div className="space-y-2.5">
               {b.playbook.map((p) => (
                 <div key={p.concern} className="border-border bg-card rounded-lg border p-3">
-                  <p className="text-foreground text-[13px] font-semibold break-keep">{p.concern}</p>
-                  <p className="text-text-dim mt-0.5 text-[11px] break-keep">근거: {p.evidence}</p>
-                  <p className="text-foreground mt-1.5 text-[13px] leading-relaxed break-keep">{p.response}</p>
+                  <p className="text-foreground text-sm font-semibold break-keep">{p.concern}</p>
+                  <p className="text-text-dim mt-0.5 text-xs break-keep">근거: {p.evidence}</p>
+                  <p className="text-foreground mt-1.5 text-sm leading-relaxed break-keep">{p.response}</p>
                 </div>
               ))}
             </div>
@@ -159,20 +159,20 @@ export function PrepBriefSection({
         {b.proposal || f.classes.length > 0 ? (
           <Block icon={ClipboardCheck} title="반 제안">
             {b.proposal ? (
-              <p className="text-foreground text-[13px] leading-relaxed break-keep whitespace-pre-line">
+              <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">
                 {b.proposal}
               </p>
             ) : null}
             {f.classes.length > 0 ? (
               <ul className="mt-2 space-y-1">
                 {f.classes.map((c) => (
-                  <li key={c.id} className="text-text-dim text-[12px] break-keep">
+                  <li key={c.id} className="text-text-dim text-xs break-keep">
                     · {classLine(c)}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-text-dim text-[12px]">조건에 맞는 개설 반이 없습니다 — 시간표를 먼저 확인하세요.</p>
+              <p className="text-text-dim text-xs">조건에 맞는 개설 반이 없습니다 — 시간표를 먼저 확인하세요.</p>
             )}
           </Block>
         ) : null}
@@ -182,8 +182,8 @@ export function PrepBriefSection({
             <div className="space-y-2">
               {b.objections.map((o) => (
                 <div key={o.objection}>
-                  <p className="text-foreground text-[13px] font-semibold break-keep">“{o.objection}”</p>
-                  <p className="text-foreground text-[13px] leading-relaxed break-keep">→ {o.answer}</p>
+                  <p className="text-foreground text-sm font-semibold break-keep">“{o.objection}”</p>
+                  <p className="text-foreground text-sm leading-relaxed break-keep">→ {o.answer}</p>
                 </div>
               ))}
             </div>
@@ -191,7 +191,7 @@ export function PrepBriefSection({
         ) : null}
 
         <Block icon={MessageSquare} title="클로징">
-          <p className="text-foreground text-[13px] leading-relaxed break-keep whitespace-pre-line">{b.closing}</p>
+          <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">{b.closing}</p>
         </Block>
 
         {b.cautions.length > 0 ? (
@@ -202,7 +202,7 @@ export function PrepBriefSection({
             </p>
             <ul className="mt-1.5 space-y-1">
               {b.cautions.map((c) => (
-                <li key={c} className="text-foreground text-[13px] leading-relaxed break-keep">
+                <li key={c} className="text-foreground text-sm leading-relaxed break-keep">
                   · {c}
                 </li>
               ))}
@@ -236,7 +236,7 @@ function Block({
 }) {
   return (
     <div className="space-y-1.5">
-      <h3 className="text-text-dim inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wide">
+      <h3 className="text-text-dim inline-flex items-center gap-1.5 text-xs font-bold tracking-wide">
         <Icon className="size-3.5" />
         {title}
       </h3>
@@ -248,8 +248,8 @@ function Block({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-text-dim text-[11px]">{label}</dt>
-      <dd className="text-foreground num text-[13px] font-semibold break-keep">{value}</dd>
+      <dt className="text-text-dim text-xs">{label}</dt>
+      <dd className="text-foreground num text-sm font-semibold break-keep">{value}</dd>
     </div>
   );
 }

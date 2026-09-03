@@ -26,9 +26,9 @@ export function VehicleHeader({
     // ⚠️ 토큰 이름은 `--background`다 — `bg-bg`는 **정의가 없어 아무 색도 안 칠해지고**, 화이트 캔버스라
     //    "정상처럼" 보인 채 sticky 뒤로 본문이 비친다(죽은 색 클래스, 팔레트 v4 주의).
     <div className="bg-background/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
-      <h2 className="text-foreground text-[15px] font-bold">{group.vehicleName}</h2>
+      <h2 className="text-foreground text-base font-bold">{group.vehicleName}</h2>
       {group.driverName && (
-        <span className="text-text-dim text-[11.5px]">
+        <span className="text-text-dim text-xs">
           기사 {group.driverName}
           {group.driverPhone && (
             <a href={`tel:${group.driverPhone}`} className="text-primary ml-1 font-bold underline">
@@ -37,7 +37,7 @@ export function VehicleHeader({
           )}
         </span>
       )}
-      <span className="ml-auto text-[11.5px] font-bold">
+      <span className="ml-auto text-xs font-bold">
         {/* 🔴 전원이 '오늘 안 탐'이면 "완료"가 아니라 "오늘 탑승 없음"이다 — 회차 머리와 같은 판정
             (`progressState`)을 쓴다. 두 머리가 다른 말을 하면 어느 쪽이 맞는지 알 수 없다. */}
         {state === "remaining" ? (

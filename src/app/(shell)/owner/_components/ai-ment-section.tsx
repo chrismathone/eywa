@@ -27,7 +27,7 @@ export function AiMentSection({ initial }: { initial: PromptRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-card border-line text-text-dim rounded-md border p-4 text-[13px] leading-relaxed">
+      <div className="bg-card border-line text-text-dim rounded-md border p-4 text-sm leading-relaxed">
         학부모 멘트·학습 추세의 <b className="text-foreground">프롬프트를 학원에 맞게 편집</b>할 수 있습니다. 저장하면
         이 학원의 모든 자동작성에 <b className="text-foreground">즉시 적용</b>됩니다(재배포 불필요). 프롬프트에{" "}
         <code className="text-primary">{"{{facts}}"}</code>·<code className="text-primary">{"{{historySummary}}"}</code>{" "}
@@ -108,10 +108,10 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-foreground text-[14px] font-bold">
+        <h2 className="text-foreground text-sm font-bold">
           {row.label}
           <span
-            className={`ml-2 rounded-pill px-2 py-0.5 text-[11px] font-bold ${
+            className={`ml-2 rounded-pill px-2 py-0.5 text-xs font-bold ${
               custom ? "bg-primary/10 text-primary" : "text-text-faint border-line border"
             }`}
           >
@@ -120,12 +120,12 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
           {/* ⚠️ 모드에 따라 실제로 안 쓰이는 프롬프트가 있다 — 화면이 밝히지 않으면 원장이 정성껏 고쳐도
               아무 일도 안 일어난다(저장은 되는데 아무도 안 읽는 상태를 직접 만들게 됨). */}
           {row.inUse ? null : (
-            <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-[11px] font-bold">
+            <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-xs font-bold">
               현재 미사용
             </span>
           )}
         </h2>
-        <button type="button" onClick={toggleHistory} className="text-text-dim hover:text-foreground text-[12px] underline">
+        <button type="button" onClick={toggleHistory} className="text-text-dim hover:text-foreground text-xs underline">
           {loadingHistory ? "불러오는 중…" : history ? "이력 닫기" : "버전 이력"}
         </button>
       </div>
@@ -134,12 +134,12 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={12}
-        className={`border-line focus:border-primary scrollbar-thin w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-[12px] leading-relaxed outline-none ${
+        className={`border-line focus:border-primary scrollbar-thin w-full resize-y rounded-md border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none ${
           missingPlaceholder ? "border-danger" : ""
         }`}
       />
       {row.inUse ? null : (
-        <p className="bg-amber/10 text-amber mt-1.5 rounded-md px-3 py-2 text-[12px] leading-relaxed break-keep">
+        <p className="bg-amber/10 text-amber mt-1.5 rounded-md px-3 py-2 text-xs leading-relaxed break-keep">
           지금 이 학원의 공지 모드에서는 <b>이 프롬프트가 쓰이지 않습니다</b> — 고쳐서 저장해도 자동작성 결과는
           바뀌지 않습니다.{" "}
           {row.type === "comment"
@@ -148,7 +148,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
           모드는 <b>보고서 설정 → AI 멘트 공지 모드</b>(또는 선생님 화면 상단 토글)에서 바꿉니다.
         </p>
       )}
-      <p className={`mt-1 text-[11px] ${missingPlaceholder ? "text-danger" : "text-text-faint"}`}>
+      <p className={`mt-1 text-xs ${missingPlaceholder ? "text-danger" : "text-text-faint"}`}>
         필수 자리표시자 <code className="font-mono">{placeholder}</code> — 이 자리에 실제 입력이 채워집니다.
         {missingPlaceholder ? " (현재 빠져 있어 저장할 수 없습니다)" : ""}
       </p>
@@ -169,12 +169,12 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
 
       {/* 실데이터 미리보기 — 저장 없이 편집 중 프롬프트로 생성해 결과만 확인. */}
       <div className="border-line mt-3 rounded-md border p-3">
-        <p className="text-text-faint mb-1.5 text-[12px] font-bold">실데이터로 테스트</p>
+        <p className="text-text-faint mb-1.5 text-xs font-bold">실데이터로 테스트</p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={testReport}
             onChange={(e) => setTestReport(e.target.value)}
-            className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none"
+            className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-sm border px-2 text-xs outline-none"
           >
             <option value="">보고서 선택…</option>
             {reports.map((r) => (
@@ -188,7 +188,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
           </Button>
         </div>
         {output != null ? (
-          <p className="text-foreground bg-bg-soft mt-2 rounded-md px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap">
+          <p className="text-foreground bg-bg-soft mt-2 rounded-md px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
             {output}
           </p>
         ) : null}
@@ -196,24 +196,24 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
 
       {history ? (
         <div className="border-line mt-3 rounded-md border p-3">
-          <p className="text-text-faint mb-1.5 text-[12px] font-bold">버전 이력 (최근 {history.length})</p>
+          <p className="text-text-faint mb-1.5 text-xs font-bold">버전 이력 (최근 {history.length})</p>
           {history.length === 0 ? (
-            <p className="text-text-faint text-[12px]">저장된 버전이 없습니다(기본값 사용 중).</p>
+            <p className="text-text-faint text-xs">저장된 버전이 없습니다(기본값 사용 중).</p>
           ) : (
             <ul className="divide-line divide-y">
               {history.map((v) => (
                 <li key={v.id} className="flex items-start justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <p className="text-text-dim text-[11px]">
+                    <p className="text-text-dim text-xs">
                       {new Date(v.createdAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
                       {v.isActive ? <span className="text-primary ml-1 font-bold">· 현재 사용 중</span> : null}
                     </p>
-                    <p className="text-text-faint mt-0.5 truncate text-[11px]">{v.text.slice(0, 80)}…</p>
+                    <p className="text-text-faint mt-0.5 truncate text-xs">{v.text.slice(0, 80)}…</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setText(v.text)}
-                    className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-2 py-1 text-[11px] font-bold"
+                    className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-2 py-1 text-xs font-bold"
                   >
                     이 버전 불러오기
                   </button>

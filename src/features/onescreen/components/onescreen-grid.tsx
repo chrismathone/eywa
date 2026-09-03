@@ -16,9 +16,9 @@ import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActio
 import { PrevRow } from "./prev-row";
 
 // 열 제목은 **가운데 정렬**(원장 2026-08-05) — 본문 값은 좌측 정렬 그대로다(읽는 흐름 유지).
-const TH = "text-text-faint px-2 py-2 text-center text-[11px] font-bold whitespace-nowrap";
+const TH = "text-text-faint px-2 py-2 text-center text-xs font-bold whitespace-nowrap";
 const ORDER_BTN =
-  "border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex size-5 items-center justify-center rounded-sm border text-[11px] font-bold disabled:opacity-40";
+  "border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex size-5 items-center justify-center rounded-sm border text-xs font-bold disabled:opacity-40";
 
 /**
  * 선생님 원스크린 — 표(스프레드시트) 대량작성 뷰.
@@ -215,7 +215,7 @@ export function OneScreenGrid({
       >
         {orderMode ? (
           <>
-            <span className="text-text-dim text-[11px]">↑↓로 학생 순서를 바꾼 뒤 저장하세요</span>
+            <span className="text-text-dim text-xs">↑↓로 학생 순서를 바꾼 뒤 저장하세요</span>
             <Button variant="outline" size="sm" onClick={() => setOrderMode(false)} disabled={savingOrder}>
               취소
             </Button>
@@ -295,7 +295,7 @@ export function OneScreenGrid({
             표 한 곳에서 거는 이유: 행 종류가 여럿이고(본문·참고행·묶음 첫 행) 앞으로 늘 수 있어, 한 군데를
             빠뜨리면 그 행만 세로선이 끊긴다. 너비와 **색을 같이** 지정한다 — 색을 빼면 Tailwind v4 기본
             border-color(currentColor)가 먹어 진한 선이 된다. */}
-        <table className="w-full min-w-[1304px] table-fixed border-collapse text-[12px] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
+        <table className="w-full min-w-[1304px] table-fixed border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
           {/* ⚠️ 주석을 `<col />`과 **같은 줄**에 두지 말 것 — 사이의 공백이 JSX 텍스트 노드로 남아
               "whitespace text nodes cannot be a child of <colgroup>" 하이드레이션 에러가 난다(표뷰 전체가
               클라 재렌더로 떨어져 클릭이 먹통처럼 보임, #75류). 줄바꿈이 낀 공백만 컴파일러가 제거한다. */}

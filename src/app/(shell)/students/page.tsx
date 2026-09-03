@@ -200,7 +200,7 @@ export default async function StudentsPage({
       />
 
       {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만 */}
-      <p className="text-text-dim px-1 text-[13px]">
+      <p className="text-text-dim px-1 text-sm">
         결과 <span className="text-foreground font-bold">{total}</span>명
         {totalPages > 1 ? <span className="ml-2">{page}/{totalPages} 페이지</span> : null}
         {q ? <span className="ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
@@ -242,7 +242,7 @@ export default async function StudentsPage({
                           href={`/students/${s.id}`}
                           title={s.name}
                           ariaLabel={`${s.name} 학생 정보`}
-                          className="text-foreground text-[13.5px] font-bold hover:underline"
+                          className="text-foreground text-sm font-bold hover:underline"
                         >
                           {s.name}
                         </WindowLink>
@@ -250,7 +250,7 @@ export default async function StudentsPage({
                         {s.dupSuspect ? <DupSuspectTag /> : null}
                         <EditingBadge scope={`student:${s.id}`} />
                       </span>
-                      <span className="text-text-dim mt-0.5 block text-[12px]">{sg || "—"}</span>
+                      <span className="text-text-dim mt-0.5 block text-xs">{sg || "—"}</span>
                     </td>
                     <td className="px-5 py-3.5">
                       <Pill color={meta.color}>{meta.label}</Pill>

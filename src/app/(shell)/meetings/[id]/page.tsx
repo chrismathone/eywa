@@ -111,7 +111,7 @@ export default async function MeetingDetailPage({
             <p className="eyebrow">{formatHeldAt(meeting.heldAt)}</p>
             {badge ? (
               <span
-                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${badge.class}`}
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${badge.class}`}
               >
                 {badge.spin ? <Loader2 className="size-3 animate-spin" /> : null}
                 {badge.label}
@@ -228,7 +228,7 @@ export default async function MeetingDetailPage({
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 {meeting.aiGeneratedAt ? (
-                  <span className="text-muted-foreground num text-[11px] whitespace-nowrap">
+                  <span className="text-muted-foreground num text-xs whitespace-nowrap">
                     {formatCreatedAt(meeting.aiGeneratedAt)}
                   </span>
                 ) : null}
@@ -260,7 +260,7 @@ export default async function MeetingDetailPage({
               </h2>
             </div>
             {meeting.aiGeneratedAt ? (
-              <span className="text-muted-foreground num text-[11px] whitespace-nowrap">
+              <span className="text-muted-foreground num text-xs whitespace-nowrap">
                 {formatCreatedAt(meeting.aiGeneratedAt)}
               </span>
             ) : null}

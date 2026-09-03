@@ -88,7 +88,7 @@ export function EditableAttendanceCell({
             key={d}
             type="button"
             onClick={() => toggle(d)}
-            className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-bold transition ${
+            className={`inline-flex size-5 items-center justify-center rounded-sm text-xs font-bold transition ${
               sel.has(d) ? "bg-primary text-primary-foreground" : "bg-bg-soft text-text-faint hover:bg-bg-soft/70"
             }`}
           >
@@ -113,7 +113,7 @@ export function EditableAttendanceCell({
       >
         <X className="size-3.5" />
       </button>
-      {err ? <span className="text-danger ml-0.5 text-[10px]">{err}</span> : null}
+      {err ? <span className="text-danger ml-0.5 text-xs">{err}</span> : null}
     </span>
   );
 }

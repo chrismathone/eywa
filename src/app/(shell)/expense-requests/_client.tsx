@@ -66,8 +66,8 @@ export function ExpenseRequestsClient({
         <div className="flex items-center gap-2">
           <Receipt className="text-primary size-5" />
           <div>
-            <h1 className="text-foreground text-[19px] font-bold">지출결의서</h1>
-            <p className="text-text-dim text-[13px]">
+            <h1 className="text-foreground text-xl font-bold">지출결의서</h1>
+            <p className="text-text-dim text-sm">
               지출 내역을 작성해 제출하면 사무실에서 원장·대표 결재 후 처리합니다. 본인이 작성한 결의서만 표시됩니다.
             </p>
           </div>
@@ -124,7 +124,7 @@ export function ExpenseRequestsClient({
                       <button
                         type="button"
                         onClick={() => setReceiptsFor(r)}
-                        className="text-text-faint hover:text-foreground focus-visible:ring-primary/50 inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-[11px] focus:outline-none focus-visible:ring-1"
+                        className="text-text-faint hover:text-foreground focus-visible:ring-primary/50 inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-xs focus:outline-none focus-visible:ring-1"
                         title={`증빙자료${r.receiptType ? ` · ${r.receiptType}` : ""}`}
                         aria-label={`${r.title} 증빙자료 ${r.receiptUrls.length > 0 ? `${r.receiptUrls.length}건` : "없음"}`}
                       >
@@ -141,7 +141,7 @@ export function ExpenseRequestsClient({
                     <td className="px-2 py-2">
                       <div className="flex items-center justify-end gap-0.5">
                         {locked ? (
-                          <span className="text-text-faint px-1 text-[11px]" title="사무실 결재가 시작되어 수정할 수 없습니다">
+                          <span className="text-text-faint px-1 text-xs" title="사무실 결재가 시작되어 수정할 수 없습니다">
                             잠김
                           </span>
                         ) : (
@@ -198,7 +198,7 @@ export function ExpenseRequestsClient({
         onCancel={() => setConfirmDelete(null)}
       />
 
-      <p className="text-text-faint px-1 text-[11px]">작성자: {requesterName} · 제출한 결의서는 사무실 지출 목록에 함께 표시됩니다.</p>
+      <p className="text-text-faint px-1 text-xs">작성자: {requesterName} · 제출한 결의서는 사무실 지출 목록에 함께 표시됩니다.</p>
     </div>
   );
 }

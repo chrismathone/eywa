@@ -72,14 +72,14 @@ export function CommandBand({
       {/* 인사말 — 큰 타이포 위계(날짜 → 인사 → 안내). 날짜는 운영실(데스크톱 작업면) 콘텐츠다 —
           창 위로 삐져나와 보였던 건 창 최대화가 상단을 안 덮은 탓이라 최대화 쪽을 고쳤다(복구, 2026-07-20). */}
       <div className="px-1">
-        <p className="text-text-dim text-[13px] font-medium">{dateLabel}</p>
+        <p className="text-text-dim text-sm font-medium">{dateLabel}</p>
         <h2
           id="assistant-home-title"
-          className="text-foreground mt-1 text-[26px] font-bold tracking-tight"
+          className="text-foreground mt-1 text-3xl font-bold tracking-tight"
         >
           안녕하세요, {name} {honorific}님
         </h2>
-        <p className="text-text-dim mt-1 text-[14px]">
+        <p className="text-text-dim mt-1 text-sm">
           오늘 필요한 판단과 실행 순서를 정리해 두었어요.
         </p>
       </div>
@@ -95,7 +95,7 @@ export function CommandBand({
             unit="명"
             sub={
               enrollmentChangesUnavailable ? (
-                <span className="text-text-faint text-[12px]">이번 달 증감을 불러오지 못했습니다</span>
+                <span className="text-text-faint text-xs">이번 달 증감을 불러오지 못했습니다</span>
               ) : (
                 <EnrollmentChangeModal
                   deltaText={deltaText}

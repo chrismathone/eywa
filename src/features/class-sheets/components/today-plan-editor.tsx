@@ -39,7 +39,7 @@ import type { CarryPatch } from "../lib/carry-marks";
 
 // 입력칸 테두리 = line-strong(18%) — 헤어라인 9%는 흰 카드 위에서 칸 경계가 안 보인다(주간 시트와 동일).
 const cellCls =
-  "border-line-strong text-foreground bg-card w-full rounded-lg border px-1.5 py-1 text-[13px] outline-none focus:border-primary disabled:opacity-60";
+  "border-line-strong text-foreground bg-card w-full rounded-lg border px-1.5 py-1 text-sm outline-none focus:border-primary disabled:opacity-60";
 
 /** CAS 입력 한 칸 — 충돌이 서면 그 칸만 멈추고 "서버값/내 값"을 묻는다(주간 시트 `CasInput`과 동일 계약). */
 function CasInput({
@@ -65,21 +65,21 @@ function CasInput({
   if (cell?.conflict) {
     return (
       <div className="border-danger bg-danger/5 space-y-1 rounded-lg border px-1.5 py-1">
-        <p className="text-danger text-[11px] leading-tight">
+        <p className="text-danger text-xs leading-tight">
           다른 강사가 수정: <b>{cell.conflict.serverValue ?? "(비움)"}</b>
         </p>
-        <p className="text-text-dim truncate text-[11px]">내 입력: {value || "(비움)"}</p>
+        <p className="text-text-dim truncate text-xs">내 입력: {value || "(비움)"}</p>
         <div className="flex gap-1">
           <button
             type="button"
-            className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-[11px]"
+            className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-xs"
             onClick={() => store.resolveConflict(saveKey, "server")}
           >
             서버값 사용
           </button>
           <button
             type="button"
-            className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-[11px] font-medium"
+            className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-xs font-medium"
             onClick={() => store.resolveConflict(saveKey, "mine")}
           >
             내 값으로 덮기
@@ -118,7 +118,7 @@ function AreaChip({
   const tone = skillAreaColorOf(skillAreas, key);
   return (
     <span
-      className={`inline-grid shrink-0 rounded-full border px-2 py-0.5 text-center text-[12px] font-bold ${SUBJECT_BORDER[tone]} ${SUBJECT_SOFT[tone]}`}
+      className={`inline-grid shrink-0 rounded-full border px-2 py-0.5 text-center text-xs font-bold ${SUBJECT_BORDER[tone]} ${SUBJECT_SOFT[tone]}`}
     >
       {/* 폭 맞춤판 — 설정된 모든 영역 라벨을 같은 격자 칸에 **투명하게 겹쳐** 두면 칩 폭이 가장 긴
           라벨로 확정된다. 모든 칩이 같은 판을 깔므로 줄마다 칩 폭이 같아지고, 뒤따르는 교재·페이지·
@@ -216,7 +216,7 @@ export function TodayPlanEditor({
       {others.length > 0 ? (
         // 락이 아니라 **알림**이다 — 팀티칭에서 두 사람이 같은 반을 보는 건 정상이고, 진짜 덮어쓰기는
         // 위 CAS가 막는다. 그래서 danger가 아니라 앰버 톤(원스크린 동시열림 경고와 같은 서식).
-        <div className="border-amber/40 bg-amber/5 text-amber mb-2 flex flex-wrap items-center gap-x-1.5 rounded-md border px-2.5 py-1.5 text-[12.5px]">
+        <div className="border-amber/40 bg-amber/5 text-amber mb-2 flex flex-wrap items-center gap-x-1.5 rounded-md border px-2.5 py-1.5 text-xs">
           <span className="font-bold">
             {others.map((e) => e.userName).filter(Boolean).join(", ") || "다른 사용자"} 님이 이 반을 수정 중입니다
           </span>
@@ -226,7 +226,7 @@ export function TodayPlanEditor({
 
       {slots.map((slot) => (
         <div key={slot.slotStart} className="border-line mb-2 border-b pb-2 last:mb-0 last:border-b-0 last:pb-0">
-          <p className="text-text-dim mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-bold">
+          <p className="text-text-dim mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold">
             <span>
               {slot.periodLabel ?? slot.slotStart}
               {slot.roomLabel ? <span className="font-medium"> · {slot.roomLabel}</span> : null}
@@ -266,7 +266,7 @@ export function TodayPlanEditor({
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {/* ⚠️ 읽기 전용 사용자에겐 지시문을 붙이지 않는다 — 권한상 할 수 없는 행동("주간 시트에서
                   추가하세요")을 시키는 거짓 안내가 된다(적대 리뷰 2026-08-11). */}
-              <p className="text-text-faint text-[13px]">계획 줄이 아직 없습니다{canEdit ? " —" : ""}</p>
+              <p className="text-text-faint text-sm">계획 줄이 아직 없습니다{canEdit ? " —" : ""}</p>
               {canEdit ? (
                 <TodayCopySlot
                 classId={classId}
@@ -277,7 +277,7 @@ export function TodayPlanEditor({
               />
               ) : null}
               {canEdit ? (
-                <span className="text-text-faint text-[12px]">또는 ‘주간 시트’에서 줄 추가</span>
+                <span className="text-text-faint text-xs">또는 ‘주간 시트’에서 줄 추가</span>
               ) : null}
             </div>
           ) : (

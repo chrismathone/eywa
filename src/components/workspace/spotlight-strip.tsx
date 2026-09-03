@@ -91,7 +91,7 @@ function FanCard({
       />
       {/* 배경 카드 표식 */}
       {item.isBackground ? (
-        <span className="text-text-faint absolute top-2 right-3 flex items-center gap-1 font-mono text-[9px] tracking-wider uppercase">
+        <span className="text-text-faint absolute top-2 right-3 flex items-center gap-1 font-mono text-xs tracking-wider uppercase">
           <Layers size={10} /> 배경
         </span>
       ) : null}
@@ -104,8 +104,8 @@ function FanCard({
           )}
         </span>
         <span className="mt-auto block min-w-0">
-          <span className="text-foreground block truncate text-[12.5px] font-bold">{item.title}</span>
-          <span className="text-text-faint block truncate text-[10px]">
+          <span className="text-foreground block truncate text-xs font-bold">{item.title}</span>
+          <span className="text-text-faint block truncate text-xs">
             {item.isBackground ? "배경 — 위로" : (item.subtitle ?? "창")}
           </span>
         </span>
@@ -144,7 +144,7 @@ function PageStack({
     >
       <span className="border-line bg-card absolute inset-0 translate-x-2.5 translate-y-1.5 rounded-l-md rounded-r-xl border opacity-45" aria-hidden />
       <span className="border-line bg-card absolute inset-0 translate-x-1 translate-y-0.5 rounded-l-md rounded-r-xl border opacity-70" aria-hidden />
-      <span className="border-line bg-bg-soft text-text-dim shadow-card relative flex h-full w-full items-center justify-center rounded-l-md rounded-r-xl border text-[16px] font-bold">
+      <span className="border-line bg-bg-soft text-text-dim shadow-card relative flex h-full w-full items-center justify-center rounded-l-md rounded-r-xl border text-base font-bold">
         +{hiddenCount}
       </span>
     </button>

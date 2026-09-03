@@ -31,11 +31,11 @@ function AddForm() {
   return (
     <form ref={formRef} action={action} className="flex flex-wrap items-end gap-2">
       <label className="flex flex-col gap-1">
-        <span className="text-text-dim text-[11px]">강의실 이름</span>
+        <span className="text-text-dim text-xs">강의실 이름</span>
         <input name="name" required placeholder="예: 본원 304" className={`${INPUT} w-40`} />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-text-dim text-[11px]">정원 (선택)</span>
+        <span className="text-text-dim text-xs">정원 (선택)</span>
         <input name="capacity" type="number" min={0} max={9999} placeholder="8" className={`${INPUT} w-24`} />
       </label>
       <button
@@ -99,26 +99,26 @@ function RoomRow({ room }: { room: ClassroomRow }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
       <div className="flex min-w-0 items-center gap-2">
-        <span className={`truncate text-[13px] font-bold ${archived ? "text-text-faint" : "text-foreground"}`}>
+        <span className={`truncate text-sm font-bold ${archived ? "text-text-faint" : "text-foreground"}`}>
           {room.name}
         </span>
         {archived ? (
-          <span className="bg-bg-soft text-text-faint rounded-full px-2 py-0.5 text-[11px]">숨김</span>
+          <span className="bg-bg-soft text-text-faint rounded-full px-2 py-0.5 text-xs">숨김</span>
         ) : null}
-        {room.capacity != null ? <span className="text-text-faint text-[11px]">정원 {room.capacity}</span> : null}
+        {room.capacity != null ? <span className="text-text-faint text-xs">정원 {room.capacity}</span> : null}
         {/* 🔴 "이 방에서 실제로 수업하는 반"과 "기본값만 이 방인 반"은 **다른 사실**이라 따로 보여준다.
             예전엔 기본값만 세서, 시간표가 다른 방으로 옮겨간 반까지 "2개 반 사용"으로 표시됐다(원장 제보). */}
         {room.classCount > 0 ? (
-          <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-[11px]">
+          <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-xs">
             수업 중 {room.classCount}개 반
           </span>
         ) : null}
         {room.slotCount > 0 ? (
-          <span className="bg-bg-soft text-text-faint rounded-full px-2 py-0.5 text-[11px]">주 {room.slotCount}칸</span>
+          <span className="bg-bg-soft text-text-faint rounded-full px-2 py-0.5 text-xs">주 {room.slotCount}칸</span>
         ) : null}
         {room.staleDefaultCount > 0 ? (
           <span
-            className="border-line text-text-faint rounded-full border px-2 py-0.5 text-[11px]"
+            className="border-line text-text-faint rounded-full border px-2 py-0.5 text-xs"
             title="반 정보에는 이 강의실이 기본값으로 적혀 있지만, 실제 시간표는 다른 강의실에서 돌거나 배치가 없습니다"
           >
             기본값만 {room.staleDefaultCount}개 반
@@ -145,7 +145,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
                 ? "다시 선택지에 노출합니다"
                 : "목록·선택지에서만 빼고, 이미 배정된 반·시간표는 그대로 둡니다"
             }
-            className="text-text-dim hover:text-foreground text-[11px] font-bold transition"
+            className="text-text-dim hover:text-foreground text-xs font-bold transition"
           >
             <SubmitInner>{archived ? "복원" : "숨기기"}</SubmitInner>
           </button>
@@ -156,10 +156,10 @@ function RoomRow({ room }: { room: ClassroomRow }) {
         {inUse ? null : confirm ? (
           <form action={delAction} className="flex items-center gap-1">
             <input type="hidden" name="id" value={room.id} />
-            <button type="submit" className="text-danger text-[11px] font-bold">
+            <button type="submit" className="text-danger text-xs font-bold">
               삭제
             </button>
-            <button type="button" onClick={() => setConfirm(false)} className="text-text-faint text-[11px]">
+            <button type="button" onClick={() => setConfirm(false)} className="text-text-faint text-xs">
               취소
             </button>
           </form>
@@ -201,7 +201,7 @@ export function ClassroomManager({ rooms }: { rooms: ClassroomRow[] }) {
       {/* 숨긴 강의실 — 접어 둔다. 배정이 남아 있으면 시간표엔 계속 보이므로 여기서 복원할 수 있어야 한다. */}
       {archived.length > 0 ? (
         <details className="mt-3">
-          <summary className="text-text-faint cursor-pointer text-[12px]">
+          <summary className="text-text-faint cursor-pointer text-xs">
             숨긴 강의실 {archived.length}개
           </summary>
           <ul className="divide-line mt-1 divide-y">

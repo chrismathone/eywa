@@ -29,11 +29,11 @@ export function RowTotalCells({ row, fallback }: { row: string; fallback: Counte
   const rate = ratePercent(c);
   return (
     <>
-      <td className="border-line text-foreground num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b border-l bg-card px-1.5 py-2 text-right text-[12px] whitespace-nowrap">
+      <td className="border-line text-foreground num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b border-l bg-card px-1.5 py-2 text-right text-xs whitespace-nowrap">
         {c.units > 0 ? formatSessionUnits(c.units) : "—"}
       </td>
       <td
-        className={`border-line num sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-[12px] font-bold whitespace-nowrap ${rateColorOf(rate)}`}
+        className={`border-line num sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-xs font-bold whitespace-nowrap ${rateColorOf(rate)}`}
       >
         {rate === null ? "—" : `${rate}%`}
       </td>
@@ -156,12 +156,12 @@ function CompactMetric({
 }) {
   return (
     <span className="flex items-baseline gap-1 whitespace-nowrap">
-      <span className="text-text-dim text-[12px] font-medium">{label}</span>
-      <span className={`num text-[17px] leading-none font-bold tracking-tight ${valueClass}`}>{value}</span>
+      <span className="text-text-dim text-xs font-medium">{label}</span>
+      <span className={`num text-lg leading-none font-bold tracking-tight ${valueClass}`}>{value}</span>
       {ofTotal !== null && ofTotal !== undefined ? (
-        <span className="text-text-faint num text-[12px] font-medium">{`/ ${ofTotal}`}</span>
+        <span className="text-text-faint num text-xs font-medium">{`/ ${ofTotal}`}</span>
       ) : null}
-      {unit ? <span className="text-text-faint text-[11px] font-medium">{unit}</span> : null}
+      {unit ? <span className="text-text-faint text-xs font-medium">{unit}</span> : null}
     </span>
   );
 }

@@ -79,13 +79,13 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
               <X className="size-4" />
             </button>
           </div>
-          <p className="text-text-dim mb-4 text-[12px] leading-relaxed">
+          <p className="text-text-dim mb-4 text-xs leading-relaxed">
             이 QR을 찍으면 <b>직원 명부 작성 화면</b>이 열립니다. 제출하면 {view?.roleLabel ?? "강사"} 계정이
             바로 만들어집니다(초기 비밀번호 eywa123). 역할·부서는 등록 뒤 직원 상세에서 바꿀 수 있습니다.
           </p>
 
           {!view ? (
-            <p className="text-text-dim flex items-center justify-center gap-2 py-10 text-[13px]">
+            <p className="text-text-dim flex items-center justify-center gap-2 py-10 text-sm">
               {pending ? (
                 <>
                   <Loader2 className="size-4 animate-spin" /> QR을 만드는 중…
@@ -103,8 +103,8 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
               />
               {view.open ? (
                 <>
-                  <span className="text-text-faint break-all text-center text-[10px]">{view.url}</span>
-                  <span className="text-text-dim text-[11px]">
+                  <span className="text-text-faint break-all text-center text-xs">{view.url}</span>
+                  <span className="text-text-dim text-xs">
                     등록 <span className="num text-foreground font-bold">{view.submissionCount}</span>명
                     {view.expiresAt ? (
                       <> · <span className="num">{view.expiresAt.slice(0, 10)}</span>까지</>
@@ -112,7 +112,7 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
                   </span>
                 </>
               ) : (
-                <span className="text-text-dim text-[12px]">
+                <span className="text-text-dim text-xs">
                   닫혀 있습니다 — 지금은 이 QR로 등록할 수 없습니다
                 </span>
               )}
@@ -126,7 +126,7 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
                         void navigator.clipboard.writeText(view.url);
                         toast.success("링크를 복사했습니다");
                       }}
-                      className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px]"
+                      className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs"
                     >
                       <Copy className="size-3" /> 링크 복사
                     </button>
@@ -137,7 +137,7 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
                         if (window.confirm("새 링크를 발급하면 지금 QR·링크는 더 이상 열리지 않습니다. 계속할까요?"))
                           mutate("rotate");
                       }}
-                      className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] disabled:opacity-50"
+                      className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs disabled:opacity-50"
                     >
                       <RefreshCw className="size-3" /> 새 링크
                     </button>
@@ -145,7 +145,7 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
                       type="button"
                       disabled={pending}
                       onClick={() => mutate("close")}
-                      className="border-line text-text-dim hover:text-danger inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] disabled:opacity-50"
+                      className="border-line text-text-dim hover:text-danger inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs disabled:opacity-50"
                     >
                       <Power className="size-3" /> 닫기
                     </button>
@@ -159,7 +159,7 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
               </div>
 
               {others.length > 0 ? (
-                <p className="text-text-faint mt-2 text-center text-[11px]">
+                <p className="text-text-faint mt-2 text-center text-xs">
                   예전에 만든 링크 <span className="num">{others.length}</span>개가 아직 열려 있습니다
                   <button
                     type="button"

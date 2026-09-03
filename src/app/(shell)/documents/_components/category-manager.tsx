@@ -137,7 +137,7 @@ function CategoryDialog({
               ) : (
                 <div className="flex items-center gap-1.5">
                   <span className="text-foreground min-w-0 flex-1 truncate text-sm">{c.label}</span>
-                  {c.isSystem ? <span className="text-text-faint shrink-0 text-[10px]">기본</span> : null}
+                  {c.isSystem ? <span className="text-text-faint shrink-0 text-xs">기본</span> : null}
                   <span className="text-text-faint num shrink-0 text-xs">{counts[c.key] ?? 0}</span>
                   <IconBtn
                     label={`${c.label} 위로`}

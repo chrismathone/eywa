@@ -173,8 +173,8 @@ export function MakeupConfirmDialog({
                 onClick={() => setMode(o.v)}
                 className={
                   mode === o.v
-                    ? "border-primary bg-primary-soft text-primary flex-1 rounded-lg border px-3 py-2 text-[13px] font-bold"
-                    : "border-line text-text-dim hover:bg-bg-soft flex-1 rounded-lg border px-3 py-2 text-[13px] font-bold"
+                    ? "border-primary bg-primary-soft text-primary flex-1 rounded-lg border px-3 py-2 text-sm font-bold"
+                    : "border-line text-text-dim hover:bg-bg-soft flex-1 rounded-lg border px-3 py-2 text-sm font-bold"
                 }
               >
                 {o.label}
@@ -187,7 +187,7 @@ export function MakeupConfirmDialog({
             ⚠️ 합침·분리 둘 다 묻는다: 어느 쪽이든 그 반의 급여 귀속이 달라진다. */}
         {candidates.length > 1 ? (
           <div className="mt-3" role="radiogroup" aria-label="보강 수업 선택">
-            <p className="text-text-faint mb-1.5 text-[12px]">어느 수업의 보강인가요?</p>
+            <p className="text-text-faint mb-1.5 text-xs">어느 수업의 보강인가요?</p>
             <div className="flex flex-wrap gap-1.5">
               {candidates.map((c) => (
                 <button
@@ -198,8 +198,8 @@ export function MakeupConfirmDialog({
                   onClick={() => setPick(c.name)}
                   className={
                     pick === c.name
-                      ? "border-primary bg-primary-soft text-primary rounded-lg border px-2.5 py-1.5 text-[12px] font-bold"
-                      : "border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1.5 text-[12px] font-bold"
+                      ? "border-primary bg-primary-soft text-primary rounded-lg border px-2.5 py-1.5 text-xs font-bold"
+                      : "border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1.5 text-xs font-bold"
                   }
                 >
                   {c.name}
@@ -213,7 +213,7 @@ export function MakeupConfirmDialog({
             안 물으면 저장이 "그날 전체"가 되고 주간 시트가 그 칸을 **첫 교시**에 붙인다. */}
         {slotOptions && slotOptions.length > 0 ? (
           <div className="mt-3" role="radiogroup" aria-label="보강 교시 선택">
-            <p className="text-text-faint mb-1.5 text-[12px]">어느 교시에 왔나요?</p>
+            <p className="text-text-faint mb-1.5 text-xs">어느 교시에 왔나요?</p>
             <div className="flex flex-wrap gap-1.5">
               {slotOptions.map((o) => (
                 <button
@@ -224,8 +224,8 @@ export function MakeupConfirmDialog({
                   onClick={() => setSlotPick(o.start)}
                   className={
                     slotPick === o.start
-                      ? "border-primary bg-primary-soft text-primary rounded-lg border px-2.5 py-1.5 text-[12px] font-bold"
-                      : "border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1.5 text-[12px] font-bold"
+                      ? "border-primary bg-primary-soft text-primary rounded-lg border px-2.5 py-1.5 text-xs font-bold"
+                      : "border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1.5 text-xs font-bold"
                   }
                 >
                   {o.label}
@@ -238,7 +238,7 @@ export function MakeupConfirmDialog({
         {/* 교시를 물을 수 있는 화면인데 고를 교시가 하나도 없을 때 — 조용히 "그날 전체"로 넘어가지 않게 밝힌다.
             (그 반 그날이 전부 자리 교시인 경우가 여기다.) */}
         {slotOptions && slotOptions.length === 0 ? (
-          <p className="text-text-faint mt-3 text-[11px] leading-snug">
+          <p className="text-text-faint mt-3 text-xs leading-snug">
             고를 교시가 없어 <b>그날 전체</b>로 기록됩니다.
           </p>
         ) : null}
@@ -246,7 +246,7 @@ export function MakeupConfirmDialog({
         {/* ① 며칠자 결석분인가 — **목록에서 고른다**(반 이동 전 옛 반 결석 포함). */}
         {asksAbsence ? (
           <div className="mt-3">
-            <label htmlFor="makeup-absence-pick" className="text-text-faint mb-1.5 block text-[12px]">
+            <label htmlFor="makeup-absence-pick" className="text-text-faint mb-1.5 block text-xs">
               며칠자 결석분 보강인가요?
             </label>
             <select
@@ -256,7 +256,7 @@ export function MakeupConfirmDialog({
                 setAbsencePick(e.target.value);
                 setCustomNote(null);
               }}
-              className="border-line bg-bg-soft focus:border-primary h-9 w-full rounded-lg border px-2 text-[13px] outline-none"
+              className="border-line bg-bg-soft focus:border-primary h-9 w-full rounded-lg border px-2 text-sm outline-none"
             >
               <option value={PICK_NONE}>결석분 아님 (추가 보강)</option>
               {absenceOptions.map((o) => (
@@ -271,7 +271,7 @@ export function MakeupConfirmDialog({
                 ⚠️ 문구는 **말한 만큼만** 참이어야 한다: ① 뺀 건수엔 이미 보강한 결석도 섞이므로 "메울 수 있는
                 N건"이라고 하지 않는다 ② 미분류 과목 결석은 일부러 통과시키므로 "이 과목 결석만 보인다"고도
                 하지 않는다(남은 목록이 한 과목이라고 단언할 수 없다). */}
-            <p className="text-text-faint mt-1.5 text-[11px] leading-snug">
+            <p className="text-text-faint mt-1.5 text-xs leading-snug">
               {absenceLoading
                 ? "결석 기록을 불러오는 중…"
                 : absenceOptions.length === 0
@@ -300,9 +300,9 @@ export function MakeupConfirmDialog({
                     setCustomNote(null);
                     setCustomDate(v);
                   }}
-                  className="border-line bg-bg-soft focus:border-primary h-8 rounded-lg border px-2 text-[13px] outline-none"
+                  className="border-line bg-bg-soft focus:border-primary h-8 rounded-lg border px-2 text-sm outline-none"
                 />
-                {customNote ? <p className="text-amber mt-1.5 text-[11px] leading-snug">{customNote}</p> : null}
+                {customNote ? <p className="text-amber mt-1.5 text-xs leading-snug">{customNote}</p> : null}
               </div>
             ) : null}
           </div>
@@ -310,7 +310,7 @@ export function MakeupConfirmDialog({
 
         {/* ② 시수 — 🔴 1로 박지 않는다(0.5 = 1시간). */}
         <div className="mt-3">
-          <label htmlFor="makeup-add-units" className="text-text-faint mb-1.5 block text-[12px]">
+          <label htmlFor="makeup-add-units" className="text-text-faint mb-1.5 block text-xs">
             이번 보강 시수
           </label>
           <div className="flex items-center gap-2">
@@ -321,15 +321,15 @@ export function MakeupConfirmDialog({
               placeholder={String(baseUnits)}
               onChange={(e) => setAddUnitsRaw(e.target.value)}
               aria-invalid={addUnits === null}
-              className="border-line bg-bg-soft focus:border-primary h-8 w-20 rounded-lg border px-2 text-[13px] outline-none"
+              className="border-line bg-bg-soft focus:border-primary h-8 w-20 rounded-lg border px-2 text-sm outline-none"
             />
-            <span className="text-text-faint text-[11px]">0.5 = 1시간 (수학 기준)</span>
+            <span className="text-text-faint text-xs">0.5 = 1시간 (수학 기준)</span>
           </div>
         </div>
 
         {/* 고른 대로 무슨 일이 벌어지는지 — 막힌 상태면 색을 바꾼다(흐린 회색 한 줄은 안 읽힌다). */}
         <p
-          className={`mt-3 text-[12px] leading-relaxed ${blocked ? "text-amber font-medium" : "text-text-faint"}`}
+          className={`mt-3 text-xs leading-relaxed ${blocked ? "text-amber font-medium" : "text-text-faint"}`}
         >
           {canMerge && !chosen
             ? "어느 수업의 보강인지 골라 주세요."
@@ -344,7 +344,7 @@ export function MakeupConfirmDialog({
                   : `${canMerge ? "보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. " : "출석부에 보강으로 기록합니다. "}출석부는 ${shortDate(absentDate)}${selectedOption ? ` ${selectedOption.className}` : ""} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸 보강 수업타임은 ${addUnits}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
         </p>
         {mode === "merge" && chosen && (sentSubjects ?? []).includes(chosen.name) ? (
-          <p className="text-amber mt-1.5 text-[12px] leading-relaxed">
+          <p className="text-amber mt-1.5 text-xs leading-relaxed">
             {`${chosen.name} 보고서는 이미 발송되어 보강 내용은 실리지 않습니다(수업타임만 올라갑니다). 보강 내용을 보내려면 ‘분리’를 고르세요.`}
           </p>
         ) : null}

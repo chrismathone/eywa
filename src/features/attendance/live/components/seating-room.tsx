@@ -44,7 +44,7 @@ export function SeatingRoom({
             {klass.teacherName ? ` · ${klass.teacherName}` : ""}
           </p>
         )}
-        {note && <p className="num mt-0.5 text-[11px]">{note}</p>}
+        {note && <p className="num mt-0.5 text-xs">{note}</p>}
       </header>
       <div className="bg-bg-soft px-2 py-2">
         <div className="grid grid-cols-3 gap-1">

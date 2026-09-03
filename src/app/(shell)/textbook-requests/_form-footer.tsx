@@ -52,17 +52,17 @@ export function TextbookFormFooter({
           {pending ? "저장 중…" : "이미지 저장 및 기록"}
         </Button>
         {!canSubmit ? (
-          <span className="text-text-faint text-[11px]">학생과 교재명을 입력하면 저장할 수 있어요</span>
+          <span className="text-text-faint text-xs">학생과 교재명을 입력하면 저장할 수 있어요</span>
         ) : null}
       </div>
 
       {notice ? (
-        <p className={`${notice.kind === "error" ? "text-danger" : "text-primary"} text-[12px]`}>{notice.text}</p>
+        <p className={`${notice.kind === "error" ? "text-danger" : "text-primary"} text-xs`}>{notice.text}</p>
       ) : null}
-      {result?.error ? <p className="text-danger text-[12px]">{result.error}</p> : null}
+      {result?.error ? <p className="text-danger text-xs">{result.error}</p> : null}
       {result?.ok ? (
         <div className="space-y-2">
-          <p className="text-primary text-[12px]">
+          <p className="text-primary text-xs">
             {(created?.length ?? 0) > 1
               ? `${created!.length}명에게 교재 요청이 기록되었습니다 — 요청서 ${created!.length}장이 각각 저장됩니다.`
               : "기록되었습니다 — 요청서 이미지가 자동 저장됩니다. (아래 내역의 ‘요청서’로 다시 받을 수 있어요)"}

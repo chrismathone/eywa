@@ -127,26 +127,26 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
                 key={`${e.date}-${e.source}-${i}`}
                 className="border-line flex gap-3 border-t pt-2 first:border-t-0 first:pt-0"
               >
-                <span className="num text-text-dim w-[92px] shrink-0 text-[12px] whitespace-nowrap">
+                <span className="num text-text-dim w-[92px] shrink-0 text-xs whitespace-nowrap">
                   {e.date}
                   {e.endDate ? (
-                    <span className="text-text-faint block text-[11px]">~{e.endDate}</span>
+                    <span className="text-text-faint block text-xs">~{e.endDate}</span>
                   ) : e.source === "schedule" ? (
-                    <span className="text-text-faint block text-[11px]">~ 현재</span>
+                    <span className="text-text-faint block text-xs">~ 현재</span>
                   ) : null}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span
-                      className={`rounded-pill border px-1.5 py-px text-[10px] font-bold ${SOURCE_TONE[e.source]}`}
+                      className={`rounded-pill border px-1.5 py-px text-xs font-bold ${SOURCE_TONE[e.source]}`}
                     >
                       {SOURCE_LABEL[e.source]}
                     </span>
-                    <span className="text-foreground text-[13px] font-semibold break-keep">{e.title}</span>
-                    {e.actor ? <span className="text-text-faint text-[11px]">· {e.actor}</span> : null}
+                    <span className="text-foreground text-sm font-semibold break-keep">{e.title}</span>
+                    {e.actor ? <span className="text-text-faint text-xs">· {e.actor}</span> : null}
                   </span>
                   {e.detail ? (
-                    <span className="text-text-dim mt-0.5 block text-[12px] break-keep">{e.detail}</span>
+                    <span className="text-text-dim mt-0.5 block text-xs break-keep">{e.detail}</span>
                   ) : null}
                 </span>
               </li>

@@ -194,30 +194,30 @@ function PayrollTable({
                   <WindowLink
                     href={`/staff/${r.userId}/payroll`}
                     title={`${r.name} 급여`}
-                    className="text-foreground text-[13px] font-bold hover:underline"
+                    className="text-foreground text-sm font-bold hover:underline"
                   >
                     {r.name}
                   </WindowLink>
                 </td>
-                <td className="text-text-dim px-4 py-2.5 text-[12px]">
+                <td className="text-text-dim px-4 py-2.5 text-xs">
                   {ROLE_LABEL[r.systemRole as SystemRole] ?? r.systemRole}
                 </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-[12px]">
+                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">
                   {r.baseAmount.toLocaleString("ko-KR")}
                 </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-[12px]">
+                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">
                   {r.hourlyAmount.toLocaleString("ko-KR")}
                   {r.hoursWorked > 0 ? (
                     <span className="text-text-faint ml-1">({r.hoursWorked}h)</span>
                   ) : null}
                 </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-[12px]">
+                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">
                   {r.bonus ? r.bonus.toLocaleString("ko-KR") : "—"}
                 </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-[12px]">
+                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">
                   {r.deduction ? `-${r.deduction.toLocaleString("ko-KR")}` : "—"}
                 </td>
-                <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+                <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
                   {r.total.toLocaleString("ko-KR")}
                 </td>
                 <td className="px-4 py-2.5">
@@ -231,14 +231,14 @@ function PayrollTable({
         </tbody>
         <tfoot className="border-line border-t-2">
           <tr className="bg-bg-soft/50">
-            <td className="text-foreground px-4 py-2.5 text-[12px] font-bold" colSpan={2}>
+            <td className="text-foreground px-4 py-2.5 text-xs font-bold" colSpan={2}>
               합계 ({rows.length}명)
             </td>
-            <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+            <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
               {totalBase.toLocaleString("ko-KR")}
             </td>
             <td colSpan={3} />
-            <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+            <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
               {totalNet.toLocaleString("ko-KR")}
             </td>
             <td />
@@ -274,7 +274,7 @@ function Stat({
           <Icon size={13} strokeWidth={1.8} />
         </span>
       </header>
-      <p className="text-foreground mt-2 num text-[18px] font-bold leading-none">{value}</p>
+      <p className="text-foreground mt-2 num text-lg font-bold leading-none">{value}</p>
     </div>
   );
 }

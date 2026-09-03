@@ -37,7 +37,7 @@ export function MonthlyRow({
         {/* 반별 출석부와 같은 표식·같은 규약 — 회색 띠(소속 아님)만으로는 신입인지 퇴원인지 모른다.
             라벨은 우측 정렬(ml-auto), 자리가 부족하면 이름이 줄임표로 양보한다. */}
         <span className="flex items-center gap-1">
-          <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
+          <span className="min-w-0 truncate text-xs leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
           {student.badges.map((b) => (
@@ -51,7 +51,7 @@ export function MonthlyRow({
           ))}
         </span>
       </td>
-      <td className="border-line text-text-dim truncate border-b border-r px-1.5 py-1 text-[11px]">
+      <td className="border-line text-text-dim truncate border-b border-r px-1.5 py-1 text-xs">
         {schoolGradeLabel(student.school, student.grade)}
       </td>
       {days.map((d) => {
@@ -70,13 +70,13 @@ export function MonthlyRow({
           />
         );
       })}
-      <td className="border-line text-foreground num sticky right-[104px] z-10 w-[44px] min-w-[44px] border-b border-l bg-card px-1 py-2 text-right text-[12px]">
+      <td className="border-line text-foreground num sticky right-[104px] z-10 w-[44px] min-w-[44px] border-b border-l bg-card px-1 py-2 text-right text-xs">
         {student.confirmedUnits > 0 ? formatSessionUnits(student.confirmedUnits) : "—"}
       </td>
-      <td className="border-line text-amber num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b bg-card px-1 py-2 text-right text-[12px]">
+      <td className="border-line text-amber num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b bg-card px-1 py-2 text-right text-xs">
         {student.reviewUnits > 0 ? formatSessionUnits(student.reviewUnits) : "—"}
       </td>
-      <td className={`border-line num sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-[12px] font-bold ${rateColor(rate)}`}>
+      <td className={`border-line num sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-xs font-bold ${rateColor(rate)}`}>
         {rate === null ? "—" : `${rate}%`}
       </td>
     </tr>
@@ -115,7 +115,7 @@ function MonthCell({
   const clickable = Boolean(cell?.expected || recorded.length);
   const inner = (
     <span
-      className={`flex h-7 items-center justify-center text-[11px] ${disp.className} ${review ? "ring-1 ring-inset ring-amber" : ""}`}
+      className={`flex h-7 items-center justify-center text-xs ${disp.className} ${review ? "ring-1 ring-inset ring-amber" : ""}`}
       style={disp.style}
     >
       {disp.text}

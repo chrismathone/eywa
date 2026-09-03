@@ -259,14 +259,14 @@ export default async function StaffPage({
         <section className="bg-card shadow-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3">
           <span className="micro">과목별</span>
           {subjectStats.map((s) => (
-            <span key={s.key} className="inline-flex items-center gap-1.5 text-[13px]">
+            <span key={s.key} className="inline-flex items-center gap-1.5 text-sm">
               <Pill color={s.color}>{s.label}</Pill>
               <span className="num text-foreground font-bold">{s.count}</span>
-              <span className="text-text-dim text-[11px]">명</span>
+              <span className="text-text-dim text-xs">명</span>
             </span>
           ))}
           {empUnset > 0 ? (
-            <span className="text-text-faint ml-auto text-[11.5px]">근무형태 미입력 {empUnset}명</span>
+            <span className="text-text-faint ml-auto text-xs">근무형태 미입력 {empUnset}명</span>
           ) : null}
         </section>
       ) : null}
@@ -391,7 +391,7 @@ export default async function StaffPage({
                 {n}
               </Link>
             ))}
-            <span className="text-text-faint ml-0.5 text-[11px]">명씩</span>
+            <span className="text-text-faint ml-0.5 text-xs">명씩</span>
           </div>
           {/* 표 글자 크기 −/+ · 볼 열 고르기(원장 지시 2026-07-31) — 둘 다 개인 설정으로 영속. */}
           <div className="flex items-center gap-1.5">

@@ -61,7 +61,7 @@ export default async function TenantDetailPage({
         action={
           <Link
             href="/super-admin/tenants"
-            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-bold"
+            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-bold"
           >
             <EyIcon name="arrowLeft" size={14} />
             목록
@@ -74,8 +74,8 @@ export default async function TenantDetailPage({
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div>
-                <h2 className="text-foreground text-[18px] font-bold">{detail.name}</h2>
-                <p className="text-text-dim font-mono text-[11px]">
+                <h2 className="text-foreground text-lg font-bold">{detail.name}</h2>
+                <p className="text-text-dim font-mono text-xs">
                   {detail.slug} · 가입 {formatDate(detail.createdAt)}
                 </p>
               </div>
@@ -97,10 +97,10 @@ export default async function TenantDetailPage({
         <section className="bg-card border-line shadow-card rounded-2xl border p-5">
           <header className="mb-3">
             <p className="micro">사용자</p>
-            <h3 className="text-foreground mt-0.5 text-[15px] font-bold">역할별 분포</h3>
+            <h3 className="text-foreground mt-0.5 text-base font-bold">역할별 분포</h3>
           </header>
           {Object.keys(roleCount).length === 0 ? (
-            <p className="text-text-dim text-[12px]">사용자 없음</p>
+            <p className="text-text-dim text-xs">사용자 없음</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {Object.entries(roleCount).map(([role, count]) => (
@@ -116,9 +116,9 @@ export default async function TenantDetailPage({
         <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
           <header className="border-line border-b px-5 py-3">
             <p className="micro">계정</p>
-            <h3 className="text-foreground mt-0.5 text-[15px] font-bold">사용자 목록 ({detail.users.length})</h3>
+            <h3 className="text-foreground mt-0.5 text-base font-bold">사용자 목록 ({detail.users.length})</h3>
           </header>
-          <table className="w-full text-[12px]">
+          <table className="w-full text-xs">
             <thead>
               <tr className="bg-bg-soft text-text-dim border-line border-b">
                 <th className="px-4 py-2 text-left font-bold">이름</th>
@@ -132,7 +132,7 @@ export default async function TenantDetailPage({
               {pageUsers.map((u) => (
                 <tr key={u.id}>
                   <td className="text-foreground px-4 py-2.5 font-bold whitespace-nowrap">{u.displayName}</td>
-                  <td className="text-text-dim px-4 py-2.5 font-mono text-[11px]">{u.email}</td>
+                  <td className="text-text-dim px-4 py-2.5 font-mono text-xs">{u.email}</td>
                   <td className="px-4 py-2.5">
                     <Pill color={roleMeta(u.systemRole).color} soft>
                       {roleMeta(u.systemRole).label}
@@ -163,7 +163,7 @@ export default async function TenantDetailPage({
         <section className="bg-card border-line shadow-card rounded-2xl border p-5">
           <header className="mb-3">
             <p className="micro">학원 정보 수정</p>
-            <h3 className="text-foreground mt-0.5 text-[15px] font-bold">기본 정보</h3>
+            <h3 className="text-foreground mt-0.5 text-base font-bold">기본 정보</h3>
           </header>
           <UpdateTenantForm id={detail.id} name={detail.name} plan={detail.plan} />
         </section>
@@ -174,14 +174,14 @@ export default async function TenantDetailPage({
         {/* 지점장 보기 (read-only 미러) */}
         <section className="bg-card border-line shadow-card flex items-center justify-between rounded-2xl border p-5">
           <div>
-            <p className="text-foreground text-[13px] font-bold">지점장 보기</p>
-            <p className="text-text-dim mt-1 text-[11px]">
+            <p className="text-foreground text-sm font-bold">지점장 보기</p>
+            <p className="text-text-dim mt-1 text-xs">
               해당 학원의 현황(학생·반·회의)을 읽기 전용으로 들여다봅니다. 진입 기록은 감사 로그에 남습니다.
             </p>
           </div>
           <Link
             href={`/super-admin/tenants/${detail.id}/view`}
-            className="bg-gold text-ink inline-flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-[12px] font-bold"
+            className="bg-gold text-ink inline-flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-xs font-bold"
           >
             <EyIcon name="search" size={13} /> 들여다보기
           </Link>
@@ -194,10 +194,10 @@ export default async function TenantDetailPage({
 function Kpi({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
     <div className="bg-card border-line shadow-card rounded-md border p-4">
-      <p className="text-text-dim font-mono text-[11px] tracking-wider uppercase">{label}</p>
+      <p className="text-text-dim font-mono text-xs tracking-wider uppercase">{label}</p>
       <p className="text-foreground mt-1.5 flex items-baseline gap-1">
-        <span className="text-[26px] font-bold tabular-nums">{value}</span>
-        <span className="text-text-dim text-[11px]">{unit}</span>
+        <span className="text-3xl font-bold tabular-nums">{value}</span>
+        <span className="text-text-dim text-xs">{unit}</span>
       </p>
     </div>
   );

@@ -99,13 +99,13 @@ export function MergeDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-[15px]">등록상담 병합</DialogTitle>
+          <DialogTitle className="text-base">등록상담 병합</DialogTitle>
         </DialogHeader>
 
         {error ? <p className="text-chart-4 text-sm">{error}</p> : null}
 
         {plan && !error ? (
-          <div className="space-y-4 text-[13px]">
+          <div className="space-y-4 text-sm">
             {/* 남길 상담 — 자동 추천을 쓰되 사람이 바꿀 수 있다. */}
             <section>
               <h3 className="text-text-dim mb-1.5 text-xs font-semibold">남길 상담</h3>

@@ -14,7 +14,7 @@ function SaveBtn({ dirty }: { dirty: boolean }) {
     <button
       type="submit"
       disabled={pending || !dirty}
-      className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-bold transition disabled:opacity-50"
+      className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:opacity-50"
     >
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
       메모 저장
@@ -71,9 +71,9 @@ export function MeetingNotepad({
           <FileText className="text-text-dim size-4 shrink-0" />
           <h2 className="text-foreground text-sm font-bold">메모장</h2>
         </div>
-        {justSaved ? <span className="text-primary text-[11px] font-medium">저장됨</span> : null}
+        {justSaved ? <span className="text-primary text-xs font-medium">저장됨</span> : null}
       </header>
-      <p className="text-text-dim text-[12px]">
+      <p className="text-text-dim text-xs">
         회의 중 메모를 적어두면 {hasAudio ? "녹음 전사와 함께 " : ""}‘AI로 정리’ 때 함께 분석됩니다. 저장한 뒤 상단 ‘AI로
         정리’를 누르세요.
       </p>

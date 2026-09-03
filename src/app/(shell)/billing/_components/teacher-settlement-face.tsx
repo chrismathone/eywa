@@ -200,8 +200,8 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
         </summary>
         <p className="text-text-dim px-4 pb-2 text-xs leading-relaxed">
           비율 우선순위는 <b>반별 → 과정별 → 강사 기본</b>입니다. 과정은 반 이름으로 자동 판정하며
-          (<code className="text-[11px]">초등M…</code>·<code className="text-[11px]">수능</code>·
-          <code className="text-[11px]">특강</code>), 이름에 근거가 없는 반(<code className="text-[11px]">JP1</code> 등)은
+          (<code className="text-xs">초등M…</code>·<code className="text-xs">수능</code>·
+          <code className="text-xs">특강</code>), 이름에 근거가 없는 반(<code className="text-xs">JP1</code> 등)은
           <b> 추정하지 않고 미분류</b>로 두니 직접 지정해 주세요.
         </p>
         <div className="max-h-[28rem] overflow-y-auto">

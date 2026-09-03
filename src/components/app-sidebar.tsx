@@ -249,7 +249,7 @@ export function AppSidebar({
               </span>
             )}
             <span
-              className={`text-foreground overflow-hidden text-[15px] font-bold tracking-tight whitespace-nowrap ${
+              className={`text-foreground overflow-hidden text-base font-bold tracking-tight whitespace-nowrap ${
                 expanded ? "max-w-[120px] opacity-100" : "max-w-0 opacity-0"
               } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
             >
@@ -292,7 +292,7 @@ export function AppSidebar({
                 }`}
               >
                 <span
-                  className={`text-text-faint absolute left-[17px] text-[11px] font-bold whitespace-nowrap ${
+                  className={`text-text-faint absolute left-[17px] text-xs font-bold whitespace-nowrap ${
                     expanded ? "opacity-100" : "opacity-0"
                   } ${motion ? "transition-opacity duration-200" : ""}`}
                 >
@@ -398,19 +398,19 @@ export function AppSidebar({
 
           {/* 단축키 안내 — 메뉴(관리자 도구 포함) 목록 아래. 펼침 데스크톱에서만(접힘 레일엔 공간 없음). */}
           {isDesktop && expanded ? (
-            <p className="text-text-faint mt-1.5 space-y-0.5 px-4 pt-2 text-[10px] leading-snug">
+            <p className="text-text-faint mt-1.5 space-y-0.5 px-4 pt-2 text-xs leading-snug">
               <span className="block">
-                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
+                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-xs">
                   Shift
                 </kbd>
                 +
-                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
+                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-xs">
                   F
                 </kbd>{" "}
                 검색(메뉴·학생·수업 점프)
               </span>
               <span className="block">
-                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
+                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-xs">
                   Shift
                 </kbd>
                 +클릭 = 같은 화면을 새 창으로 하나 더
@@ -457,8 +457,8 @@ export function AppSidebar({
               expanded ? "max-w-[150px] opacity-100" : "hidden max-w-0 opacity-0"
             } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
           >
-            <div className="text-foreground truncate text-[12px] font-bold leading-tight">{name}</div>
-            <div className="text-text-dim truncate text-[11px] leading-tight">{title}</div>
+            <div className="text-foreground truncate text-xs font-bold leading-tight">{name}</div>
+            <div className="text-text-dim truncate text-xs leading-tight">{title}</div>
           </div>
           {isDesktop ? (
             <div className={expanded ? "ml-auto shrink-0" : "shrink-0"}>
@@ -497,7 +497,7 @@ export function AppSidebar({
               style={{ top: flyout.top, left: flyout.left }}
               className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-lg border p-1"
             >
-              <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-[11px] font-bold">
+              <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-xs font-bold">
                 {flyout.label}
               </p>
               <ul className="space-y-px">
@@ -576,7 +576,7 @@ function SubTab({
         if (e.shiftKey) store.openNewInstance("route", { id: windowKey, title: label, href });
         else store.open("route", { id: windowKey, title: label, href });
       }}
-      className={`block truncate rounded text-[11px] transition ${
+      className={`block truncate rounded text-xs transition ${
         inFlyout ? "px-2.5 py-1" : "py-0.5 pr-2 pl-9"
       } focus-visible:ring-primary/50 focus-visible:ring-inset focus-visible:ring-2 focus-visible:outline-none ${
         // 활성 하부탭 = **왼쪽 세로 막대 + 채움 + 굵게**(원장 3회 지적 2026-07-31 — 옅은 칠만으론
@@ -719,7 +719,7 @@ function RailItem({
         className={`relative z-10 shrink-0 ${fg} ${motion ? "transition-colors duration-200" : ""}`}
       />
       <span
-        className={`relative z-10 overflow-hidden text-[13px] font-medium whitespace-nowrap ${fg} ${
+        className={`relative z-10 overflow-hidden text-sm font-medium whitespace-nowrap ${fg} ${
           expanded ? "max-w-[160px] opacity-100" : "max-w-0 opacity-0"
         } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
       >
@@ -785,7 +785,7 @@ function ExternalRailItem({
         }`}
       />
       <span
-        className={`text-text-dim group-hover:text-foreground relative z-10 inline-flex items-center gap-1 overflow-hidden text-[13px] font-medium whitespace-nowrap ${
+        className={`text-text-dim group-hover:text-foreground relative z-10 inline-flex items-center gap-1 overflow-hidden text-sm font-medium whitespace-nowrap ${
           expanded ? "max-w-[160px] opacity-100" : "max-w-0 opacity-0"
         } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
       >

@@ -124,7 +124,7 @@ export function ContractFiles({
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={busy}
-              className="border-line text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] transition disabled:opacity-50"
+              className="border-line text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition disabled:opacity-50"
               title="계약서 PDF를 파일로만 보관합니다 — 계약 기간·조건에 반영하려면 계약 기입의 '계약서 PDF 불러오기'를 쓰세요"
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
@@ -154,7 +154,7 @@ export function ContractFiles({
                 <span className="truncate">{f.fileName}</span>
               </button>
               <span className="flex shrink-0 items-center gap-2">
-                <span className="text-text-faint num text-[11px]">
+                <span className="text-text-faint num text-xs">
                   {f.createdAt.slice(0, 10)}
                   {fmtSize(f.fileSize) ? ` · ${fmtSize(f.fileSize)}` : ""}
                 </span>

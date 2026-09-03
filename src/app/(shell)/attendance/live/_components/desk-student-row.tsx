@@ -77,7 +77,7 @@ export function DeskStudentRow({
         <span className="text-sm font-bold">{row.studentName}</span>
         {row.schoolGrade && <span className="text-text-faint text-xs">{row.schoolGrade}</span>}
         <span
-          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+          className={`rounded-full px-2 py-0.5 text-xs font-bold ${
             absent ? "bg-att-absent text-att-absent-ink" : "bg-att-late text-att-late-ink"
           }`}
           title={SIGNAL_HINT[row.signal]}
@@ -86,7 +86,7 @@ export function DeskStudentRow({
         </span>
         {reason !== "unknown" && (
           <span
-            className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-[11px] font-bold"
+            className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-xs font-bold"
             title={`강사 메모에서 사유를 읽었습니다 — 아래 메모가 근거입니다. 목록에서 빠지지는 않고 같은 신호 안에서 뒤로 갑니다.`}
           >
             {ABSENCE_REASON_LABEL[reason]}
@@ -94,7 +94,7 @@ export function DeskStudentRow({
         )}
         {row.teacherRequested && (
           <span
-            className="bg-amber/15 text-amber rounded-full px-2 py-0.5 text-[11px] font-bold"
+            className="bg-amber/15 text-amber rounded-full px-2 py-0.5 text-xs font-bold"
             title="강사가 이 교시 미입력 학생의 등원 확인을 데스크에 요청했습니다"
           >
             강사 확인 요청

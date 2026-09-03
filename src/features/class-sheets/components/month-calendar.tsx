@@ -68,7 +68,7 @@ export function MonthCalendar({
       <div className="grid gap-1.5" style={{ gridTemplateColumns: cols }}>
         <div />
         {dows.map((dow) => (
-          <div key={dow} className="bg-bg-soft flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] font-bold">
+          <div key={dow} className="bg-bg-soft flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-bold">
             {DOW_KO[dow]}요일
           </div>
         ))}
@@ -77,7 +77,7 @@ export function MonthCalendar({
       {weeksWithClass.map((week) => (
         <div key={week.monday} className="grid items-stretch gap-1.5" style={{ gridTemplateColumns: cols }}>
           <div
-            className="border-line-faint text-text-faint flex items-center justify-center border-r text-[11.5px] font-bold"
+            className="border-line-faint text-text-faint flex items-center justify-center border-r text-xs font-bold"
             // 수업이 없는 주는 행이 없어서 번호가 건너뛸 수 있다 — 이 숫자는 '그 달의 몇째 주'다.
             title={`${Number(data.month.slice(5))}월 ${week.index}째 주 (${week.monday} 시작)`}
           >
@@ -168,21 +168,21 @@ function DayCell({
       }`}
     >
       <div className="flex items-center gap-1.5">
-        <span className={`num text-[13px] font-bold ${holiday ? "text-danger" : ""}`}>
+        <span className={`num text-sm font-bold ${holiday ? "text-danger" : ""}`}>
           {date.slice(5).replace("-", "/")}
         </span>
         {/* 공휴일명 — 이름이 곧 사유다. 좁은 칸이라 넘치면 줄인다(전문은 칸 title). */}
         {holiday ? (
-          <span className="text-danger min-w-0 shrink truncate text-[10.5px] font-bold">{holiday}</span>
+          <span className="text-danger min-w-0 shrink truncate text-xs font-bold">{holiday}</span>
         ) : null}
         <span className="ml-auto flex shrink-0 gap-1">
           {isToday ? (
-            <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-[10.5px] leading-4 font-bold">
+            <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-xs leading-4 font-bold">
               오늘
             </span>
           ) : null}
           {unwritten > 0 ? (
-            <span className="border-amber/40 bg-amber-soft text-amber num rounded-full border px-1.5 text-[10.5px] leading-4 font-bold">
+            <span className="border-amber/40 bg-amber-soft text-amber num rounded-full border px-1.5 text-xs leading-4 font-bold">
               미작성 {unwritten}
             </span>
           ) : missing === 0 && offGoal === 0 && !isToday ? (
@@ -194,7 +194,7 @@ function DayCell({
             </span>
           ) : null}
           {offGoal > 0 ? (
-            <span className="bg-amber num rounded-full px-1.5 text-[10.5px] leading-4 font-bold text-white">
+            <span className="bg-amber num rounded-full px-1.5 text-xs leading-4 font-bold text-white">
               목표 밖 {offGoal}
             </span>
           ) : null}
@@ -207,7 +207,7 @@ function DayCell({
         return (
           <div key={slot.slotStart} className="border-line-faint grid grid-cols-[46px_minmax(0,1fr)] gap-1.5 border-t border-dashed pt-1 first:border-0 first:pt-0">
             <span
-              className="text-text-faint num pt-0.5 text-[11px] font-bold"
+              className="text-text-faint num pt-0.5 text-xs font-bold"
               // 교시 이름은 학원설정이 단일 소스 — 칸이 좁아 본문엔 못 적고 툴팁으로 준다.
               title={data.periodLabelBySlot[slotKey(date, slot.slotStart)] ?? undefined}
             >
@@ -218,7 +218,7 @@ function DayCell({
               {lines.length === 0 ? (
                 // 🔴 휴일엔 '미작성'이라 부르지 않는다 — 안 쓴 게 아니라 쓸 의무가 없던 것이다(앰버=재촉).
                 <span
-                  className={`self-start rounded border border-dashed px-1.5 text-[10.5px] leading-4 font-bold ${
+                  className={`self-start rounded border border-dashed px-1.5 text-xs leading-4 font-bold ${
                     holiday ? "border-line-strong text-text-faint" : "border-amber/45 text-amber"
                   }`}
                 >
@@ -235,21 +235,21 @@ function DayCell({
                       }`}
                     >
                       <span
-                        className={`${SHEET_BOX_FRAME} inline-flex h-5 w-full items-center justify-center truncate px-1 text-[12px] font-bold ${
+                        className={`${SHEET_BOX_FRAME} inline-flex h-5 w-full items-center justify-center truncate px-1 text-xs font-bold ${
                           SUBJECT_SOFT[skillAreaColorOf(skillAreas, line.skillArea)]
                         }`}
                       >
                         {skillAreas.find((a) => a.key === line.skillArea)?.label ?? line.skillArea}
                       </span>
-                      <div className="min-w-0 text-[12px]">
+                      <div className="min-w-0 text-xs">
                         <span className={`font-bold ${off ? "text-amber" : ""}`}>{line.textbook}</span>
                         {line.pageRange ? <span className="text-text-faint num"> {line.pageRange}</span> : null}
                         {line.progress ? <div className="text-text-dim">{line.progress}</div> : null}
                         {display.homework && line.homework ? (
-                          <div className="text-text-faint text-[11.5px]">과제 {line.homework}</div>
+                          <div className="text-text-faint text-xs">과제 {line.homework}</div>
                         ) : null}
                         {off ? (
-                          <div className="text-amber text-[11px] font-bold">
+                          <div className="text-amber text-xs font-bold">
                             월간 목표: {goals[line.skillArea]?.textbook}
                           </div>
                         ) : null}
@@ -259,7 +259,7 @@ function DayCell({
                 })
               )}
               {lines.length > 0 && !lines.some((l) => l.progress) ? (
-                <span className="border-line-strong text-text-faint self-start rounded border border-dashed px-1.5 text-[10.5px] leading-4 font-bold">
+                <span className="border-line-strong text-text-faint self-start rounded border border-dashed px-1.5 text-xs leading-4 font-bold">
                   교재만 · 진도 미기입
                 </span>
               ) : null}

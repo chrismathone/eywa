@@ -167,13 +167,13 @@ export function PayrollClient({
               onChange={setDeduction}
             />
             <div className="space-y-1">
-              <label className="text-muted-foreground block text-[11px] font-medium">합계</label>
+              <label className="text-muted-foreground block text-xs font-medium">합계</label>
               <p className="text-foreground num text-base font-bold">{KRW.format(total)}원</p>
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-muted-foreground block text-[11px] font-medium">메모</label>
+            <label className="text-muted-foreground block text-xs font-medium">메모</label>
             <textarea
               name="notes"
               rows={2}
@@ -246,7 +246,7 @@ function StatBox({
 }) {
   return (
     <div className="bg-bg-soft/30 border-border rounded-md border px-3 py-2">
-      <p className="text-muted-foreground text-[11px]">{label}</p>
+      <p className="text-muted-foreground text-xs">{label}</p>
       <p className={`num text-foreground mt-0.5 font-bold ${highlight ?? ""}`}>{value}</p>
     </div>
   );
@@ -267,7 +267,7 @@ function NumField({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-muted-foreground block text-[11px] font-medium">{label}</label>
+      <label className="text-muted-foreground block text-xs font-medium">{label}</label>
       <input
         name={name}
         type="number"

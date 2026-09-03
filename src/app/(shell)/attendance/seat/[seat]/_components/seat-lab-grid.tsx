@@ -29,16 +29,16 @@ export function SeatLabGrid({
         const left = r.students.filter((s) => statusOf(r.classId, s) === null).length;
         return (
           <section key={r.classId} className="border-line overflow-hidden rounded-2xl border">
-            <header className="bg-bg-soft border-line flex items-center gap-2 border-b px-3 py-1.5 text-[13px]">
+            <header className="bg-bg-soft border-line flex items-center gap-2 border-b px-3 py-1.5 text-sm">
               <span className="font-bold">{r.className}</span>
-              <span className="text-text-faint text-[11px] tabular-nums">{r.students.length}명</span>
-              <span className="text-text-faint text-[11px] tabular-nums">~{r.end}</span>
+              <span className="text-text-faint text-xs tabular-nums">{r.students.length}명</span>
+              <span className="text-text-faint text-xs tabular-nums">~{r.end}</span>
               {!readOnly && left > 0 ? (
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => onFillClass(r.classId)}
-                  className="border-line bg-card text-primary ml-auto rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold disabled:opacity-50"
+                  className="border-line bg-card text-primary ml-auto rounded-full border px-2.5 py-0.5 text-xs font-semibold disabled:opacity-50"
                 >
                   이 반 출석
                 </button>
@@ -74,12 +74,12 @@ export function SeatLabGrid({
                       >
                         {s.name}
                       </span>
-                      <span className="text-[11.5px] opacity-80">
+                      <span className="text-xs opacity-80">
                         {schoolGradeLabel(s.school, s.grade) || " "}
                       </span>
                     </button>
                     {cur ? (
-                      <span className="pointer-events-none absolute top-1.5 right-2 text-[10px] font-extrabold">
+                      <span className="pointer-events-none absolute top-1.5 right-2 text-xs font-extrabold">
                         {SEAT_LABEL[cur]}
                       </span>
                     ) : null}
@@ -89,7 +89,7 @@ export function SeatLabGrid({
                         disabled={pending}
                         onClick={() => onSave(r.classId, s.id, "absent", cur)}
                         aria-label={`${s.name} 결석`}
-                        className="border-line bg-card text-text-faint hover:text-att-absent-ink absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full border text-[10px] font-bold"
+                        className="border-line bg-card text-text-faint hover:text-att-absent-ink absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full border text-xs font-bold"
                       >
                         결
                       </button>

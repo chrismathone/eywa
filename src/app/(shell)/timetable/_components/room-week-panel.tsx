@@ -183,7 +183,7 @@ export function RoomWeekPanel({
   return (
     <section className="bg-card border-line shadow-card flex min-h-0 flex-1 flex-col rounded-2xl border px-4 py-3">
       <header className="flex shrink-0 flex-wrap items-center gap-2 pb-2">
-        <span className="text-foreground text-[12px] font-bold">교실 활성도 · {hourDayLabel}요일</span>
+        <span className="text-foreground text-xs font-bold">교실 활성도 · {hourDayLabel}요일</span>
         <span className="micro compact-chrome:hidden">
           인원률(인원 ÷ 정원) — 옅을수록 자리가 남습니다 · 요일은 위 칩에서 · 평일은 14시부터
         </span>
@@ -204,7 +204,7 @@ export function RoomWeekPanel({
                 }}
                 aria-pressed={vertical === o.vertical}
                 title={o.title}
-                className={`rounded-full px-2 py-0 text-[11px] leading-5 transition ${
+                className={`rounded-full px-2 py-0 text-xs leading-5 transition ${
                   vertical === o.vertical
                     ? "bg-primary text-primary-foreground font-medium"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -230,7 +230,7 @@ export function RoomWeekPanel({
               title={`정원 초과 ${seatOver.length}건 · 시간 겹침 ${conflicts.length}건 — 목록을 ${
                 issuesOpen ? "접습니다" : "폅니다"
               } (내 계정에 저장)`}
-              className={`shrink-0 rounded-full border px-2 py-0 text-[11px] leading-5 transition ${
+              className={`shrink-0 rounded-full border px-2 py-0 text-xs leading-5 transition ${
                 issuesOpen
                   ? "border-danger bg-danger font-medium text-white"
                   : "border-danger/40 text-danger hover:bg-danger-soft"
@@ -248,7 +248,7 @@ export function RoomWeekPanel({
             }}
             aria-pressed={lines}
             title="건물·층이 바뀌는 자리에 구분선을 긋습니다 (내 계정에 저장)"
-            className={`shrink-0 rounded-full border px-2 py-0 text-[11px] leading-5 transition ${
+            className={`shrink-0 rounded-full border px-2 py-0 text-xs leading-5 transition ${
               lines
                 ? "border-primary bg-primary text-primary-foreground font-medium"
                 : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -282,7 +282,7 @@ export function RoomWeekPanel({
         )}
       </DragScrollArea>
 
-      <div className="mt-3 flex shrink-0 flex-col gap-2 text-[11px]">
+      <div className="mt-3 flex shrink-0 flex-col gap-2 text-xs">
         {idle.length > 0 ? (
           <p className="text-text-dim">
             <span className="text-foreground font-semibold">주중 저활용</span>

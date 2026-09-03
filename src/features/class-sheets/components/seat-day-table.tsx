@@ -66,7 +66,7 @@ export function SeatDayTable({
     // 폭은 seat-day-columns 단일 소스. `min-width`는 좁은 창에서 특이사항이 0으로 짜부라지지 않게 하는
     // 바닥이고, 넘치는 만큼은 바깥 DragScrollArea(overflow-x:auto)가 받는다(페이지 body가 아니다).
     <table
-      className="w-full border-collapse text-[13px] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint"
+      className="w-full border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint"
       style={{ tableLayout: "fixed", minWidth: seatTableMinWidth(form) }}
     >
       <colgroup>
@@ -77,7 +77,7 @@ export function SeatDayTable({
         <col />
       </colgroup>
       <thead>
-        <tr className="bg-bg-soft text-foreground text-left text-[11px]">
+        <tr className="bg-bg-soft text-foreground text-left text-xs">
           {/* 첫 칸만 좌측 — 열 제목이 아니라 **접기 버튼**이다(가운데로 밀면 셰브런이 이름 위에서 떠 보인다). */}
           <th className="rounded-l-md py-0.5 pl-1 font-bold">
             <GroupToggle
@@ -106,7 +106,7 @@ export function SeatDayTable({
           if (row.kind === "label") {
             return (
               <tr key={`label:${row.key}`} className="bg-bg-soft">
-                <td colSpan={rosterColSpan(form)} className="text-foreground px-1 py-0.5 text-[11px] font-bold" title={GROUP_HINT[row.key]}>
+                <td colSpan={rosterColSpan(form)} className="text-foreground px-1 py-0.5 text-xs font-bold" title={GROUP_HINT[row.key]}>
                   <GroupToggle
                     group={row.key}
                     collapsed={collapsedGroups.includes(row.key)}
@@ -169,7 +169,7 @@ function SeatNameCell({ student: s, historical }: { student: SeatDayStudent; his
       <WindowLink
         href={`/students/${s.studentId}`}
         title={s.name}
-        className={`shrink-0 text-[13px] font-bold whitespace-nowrap underline-offset-2 hover:underline ${
+        className={`shrink-0 text-sm font-bold whitespace-nowrap underline-offset-2 hover:underline ${
           historical ? "text-text-dim" : "text-foreground"
         } ${s.endedOn ? "line-through" : ""}`}
         ariaLabel={`${s.name} 학생 정보`}
@@ -179,7 +179,7 @@ function SeatNameCell({ student: s, historical }: { student: SeatDayStudent; his
         </span>
       </WindowLink>
       <span
-        className="bg-bg-soft text-text-dim min-w-0 truncate rounded-full px-1.5 py-px text-[10px] font-bold"
+        className="bg-bg-soft text-text-dim min-w-0 truncate rounded-full px-1.5 py-px text-xs font-bold"
         style={{ maxWidth: SEAT_BADGE_W }}
         title={s.className}
       >

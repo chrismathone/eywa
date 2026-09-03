@@ -116,7 +116,7 @@ export function AttendanceCheck({
 
   /** 사유가 적혀 있다는 표식 — 열어보지 않아도 보인다(원스크린 알약과 같은 신호). */
   const dot = note ? (
-    <span aria-hidden className="text-text-faint text-[8px]">
+    <span aria-hidden className="text-text-faint text-xs">
       ●
     </span>
   ) : null;

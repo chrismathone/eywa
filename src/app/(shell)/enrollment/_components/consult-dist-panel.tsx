@@ -156,11 +156,11 @@ export function ConsultDistPanel({
                   {/* 라벨은 짧은 표기 하나로 통일(병행표기 금지) — 공시 정식명은 툴팁으로만 남긴다. */}
                   <span className="text-foreground font-medium break-keep" title={s.officialName ?? undefined}>
                     {s.label}
-                    {s.kind ? <span className="text-text-faint ml-1.5 text-[11px]">{s.kind}</span> : null}
+                    {s.kind ? <span className="text-text-faint ml-1.5 text-xs">{s.kind}</span> : null}
                   </span>
                   <span className="text-text-dim num shrink-0 text-xs">
                     {s.n}건 · 등록 {s.enrolled}
-                    {conv !== null ? <b className="text-foreground ml-1.5 text-[13px]">{conv}%</b> : null}
+                    {conv !== null ? <b className="text-foreground ml-1.5 text-sm">{conv}%</b> : null}
                     {s.rate !== null ? (
                       <span className="text-text-faint ml-1.5">(전교생 {s.total?.toLocaleString("ko-KR")}명 중 {s.rate}%)</span>
                     ) : null}
@@ -180,7 +180,7 @@ export function ConsultDistPanel({
           })}
         </ul>
       )}
-      <p className="text-text-faint mt-2 text-[11px]">
+      <p className="text-text-faint mt-2 text-xs">
         굵은 %는 그 학교에서 온 상담의 등록 전환율입니다 · 막대는{" "}
         {prefs.sortBy === "pct" ? "전교생 대비 비율" : "상담 건수"} 기준
       </p>

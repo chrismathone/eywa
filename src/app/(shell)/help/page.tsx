@@ -270,14 +270,14 @@ export default async function HelpPage() {
         </span>
         <div className="min-w-0 flex-1">
           <p className="editorial-eyebrow">디자인 시스템</p>
-          <h2 className="text-foreground mt-0.5 text-[15px] font-bold">Eywa 아이콘 시스템</h2>
-          <p className="text-text-dim mt-1 text-[11px] leading-relaxed">
+          <h2 className="text-foreground mt-0.5 text-base font-bold">Eywa 아이콘 시스템</h2>
+          <p className="text-text-dim mt-1 text-xs leading-relaxed">
             제품에서 사용하는 아이콘과 크기, 선, 의미 배정 규칙을 한눈에 확인하세요.
           </p>
         </div>
         <Link
           href="/help/icons"
-          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[12px] font-bold transition-shadow"
+          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-shadow"
         >
           아이콘 보기 <EyIcon name="arrowRight" size={12} />
         </Link>
@@ -286,16 +286,16 @@ export default async function HelpPage() {
       {/* 1:1 문의 */}
       <div className="lg:max-w-md">
         <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[var(--primary-deep)] p-5 text-white shadow-primary-glow">
-          <p className="text-[12px] font-bold text-[var(--gold-bright)]">1:1 문의</p>
-          <h3 className="mt-1.5 text-[17px] font-bold leading-tight">
+          <p className="text-xs font-bold text-[var(--gold-bright)]">1:1 문의</p>
+          <h3 className="mt-1.5 text-lg font-bold leading-tight">
             도움이 필요하시면 언제든
           </h3>
-          <p className="mt-2 text-[12px] text-white/85">
+          <p className="mt-2 text-xs text-white/85">
             평일 10:00–18:00 · 1670-0000
           </p>
           <a
             href="tel:1670-0000"
-            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-[12px] font-bold text-primary"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-primary"
           >
             <EyIcon name="arrowRight" size={12} />
             상담 예약하기

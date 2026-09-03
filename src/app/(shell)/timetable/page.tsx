@@ -806,7 +806,7 @@ export default async function TimetablePage({
         {/* 학년 필터가 걸린 채로 이 과목·이 주에 보이는 학생이 0명이면, 화면이 그냥 비어 있어 고장으로
             보인다. 배지만으론 부족해 한 줄로 명시한다(필터 때문임을 알아야 되돌릴 수 있다). */}
         {viewPrefs.grades && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
-          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-xs">
             학년 필터에 걸려 표시할 수업이 없습니다 — 뷰 설정에서 학년을 넓혀 보세요.
           </span>
         ) : null}
@@ -816,7 +816,7 @@ export default async function TimetablePage({
             ⚠️ 학년 필터 안내와 조건이 겹칠 수 있어 프로그램 쪽을 먼저 잡는다(학년은 계정 설정이라 안 보이지만
             프로그램은 바로 위 칩에서 눈에 보이는 원인이다). */}
         {englishTrack !== "all" && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
-          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-xs">
             프로그램 필터(
             {ENGLISH_TRACK_FILTER_LABEL[englishTrack]})에 걸려 표시할 수업이 없습니다 — &lsquo;전체&rsquo;로
             바꿔 보세요.

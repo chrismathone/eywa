@@ -35,7 +35,7 @@ export function NoticePreview({
 
   return (
     <div className="space-y-1">
-      <span className="text-text-dim block text-[12px] font-medium">
+      <span className="text-text-dim block text-xs font-medium">
         미리보기{target ? ` · ${target.name} 기준` : ""}
         {target && target.orders.length > 1
           ? ` (요청 ${target.orders.length}건이 한 글로 이어집니다 — 첫 건만 표시)`
@@ -43,15 +43,15 @@ export function NoticePreview({
       </span>
       {text ? (
         <div className="border-line bg-bg-soft/60 space-y-2 rounded-2xl border p-3">
-          <p className="text-foreground text-[13px] whitespace-pre-wrap">{text}</p>
+          <p className="text-foreground text-sm whitespace-pre-wrap">{text}</p>
           {imageCount > 0 ? (
-            <p className="text-text-faint border-line border-t pt-2 text-[11px]">
+            <p className="text-text-faint border-line border-t pt-2 text-xs">
               + 이미지 <span className="num">{imageCount}</span>장이 이 글에 함께 올라갑니다
             </p>
           ) : null}
         </div>
       ) : (
-        <p className="text-text-faint border-line rounded-2xl border border-dashed p-3 text-[12px]">
+        <p className="text-text-faint border-line rounded-2xl border border-dashed p-3 text-xs">
           보낼 수 있는 학생이 없습니다.
         </p>
       )}

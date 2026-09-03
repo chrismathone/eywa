@@ -72,7 +72,7 @@ export function GridToolbar({
   const noticeStudents = new Set(selectedKeys.map((k) => k.split("::")[0])).size; // 공지=학생 단위(행 아님, #23)
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
-      <span className="text-text-dim text-[12px]">
+      <span className="text-text-dim text-xs">
         표시 <span className="text-foreground font-bold">{total}</span> · 발송가능{" "}
         <span className="text-foreground font-bold">{sendReady}</span>
         {sendable > sendReady ? (
@@ -89,10 +89,10 @@ export function GridToolbar({
         ) : null}
       </span>
       {navHint ? (
-        <span className="text-text-faint hidden text-[11px] lg:inline">· 점수·교재 칸은 Enter·↑↓로 위·아래 이동</span>
+        <span className="text-text-faint hidden text-xs lg:inline">· 점수·교재 칸은 Enter·↑↓로 위·아래 이동</span>
       ) : null}
       {prev.has ? (
-        <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-[12px]">
+        <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-xs">
           <input
             type="checkbox"
             checked={prev.show}

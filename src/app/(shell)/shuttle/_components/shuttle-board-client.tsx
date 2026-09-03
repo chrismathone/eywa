@@ -259,14 +259,14 @@ export function ShuttleBoardClient({
           </button>
         ))}
         {!canWrite && (
-          <span className="text-text-faint text-[12.5px] whitespace-nowrap">
+          <span className="text-text-faint text-xs whitespace-nowrap">
             열람 전용 — 편성은 사무실에서 수정합니다
           </span>
         )}
       </div>
 
       {error && (
-        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-[12.5px]">
+        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
           {error}
         </div>
       )}
@@ -324,7 +324,7 @@ export function ShuttleBoardClient({
 
       <DragOverlay dropAnimation={null}>
         {dragLabel ? (
-          <span className="border-primary/40 bg-card text-foreground rounded-pill border px-2.5 py-1 text-[12.5px] font-bold shadow-lg">
+          <span className="border-primary/40 bg-card text-foreground rounded-pill border px-2.5 py-1 text-xs font-bold shadow-lg">
             {dragLabel}
           </span>
         ) : null}
@@ -345,7 +345,7 @@ export function ShuttleBoardClient({
       )}
 
       {activeRun && (
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           {runTitle(activeRun)} — 정류장 {activeRun.stops.filter((s) => s.kind === "stop").length}곳 ·
           배정 {activeRun.stops.reduce((n, s) => n + s.riders.length, 0)}명
         </p>

@@ -82,7 +82,7 @@ export function SplitsSnapshotPanel({
 
       <form action={formAction} className="flex items-center gap-2">
         <input type="hidden" name="period" value={period} />
-        <span className="text-text-faint text-[10px]">그 달 전체 저장 · 청구서는 변경되지 않음</span>
+        <span className="text-text-faint text-xs">그 달 전체 저장 · 청구서는 변경되지 않음</span>
         <SaveButton
           disabled={!canSave}
           label={live.rowCount === 0 && saved !== null ? "스냅샷 비우기(확정 0)" : "분배 스냅샷 저장"}

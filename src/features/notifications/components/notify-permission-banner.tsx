@@ -24,7 +24,7 @@ export function NotifyPermissionBanner() {
   return (
     <div className="border-primary/30 bg-primary-soft/50 flex shrink-0 items-center gap-2.5 border-b px-5 py-2 lg:px-7">
       <EyIcon name="bell" size={14} className="text-primary shrink-0" />
-      <p className="text-foreground min-w-0 flex-1 text-[12px] leading-snug break-keep">
+      <p className="text-foreground min-w-0 flex-1 text-xs leading-snug break-keep">
         <b>컴퓨터 알림을 켜주세요.</b> 학부모가 클래스노트에 새 글을 올리면 eywa 화면을 보고 있지 않아도 바로
         알려드립니다. (브라우저가 물어보면 &lsquo;허용&rsquo;)
       </p>
@@ -34,7 +34,7 @@ export function NotifyPermissionBanner() {
       <button
         type="button"
         onClick={dismissNotifyBanner}
-        className="text-text-dim hover:text-foreground shrink-0 text-[12px] transition"
+        className="text-text-dim hover:text-foreground shrink-0 text-xs transition"
       >
         나중에
       </button>

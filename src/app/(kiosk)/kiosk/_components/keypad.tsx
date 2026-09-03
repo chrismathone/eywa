@@ -113,7 +113,7 @@ export function KioskKeypad({ academyName }: { academyName: string }) {
       <div className="mb-6 text-center">
         <div className="text-text-faint micro">{academyName}</div>
         <h1 className="text-foreground mt-1 text-2xl font-bold">출석 체크</h1>
-        <p className="text-text-dim mt-1 text-[13px]">출석번호를 입력하고 확인을 눌러주세요</p>
+        <p className="text-text-dim mt-1 text-sm">출석번호를 입력하고 확인을 눌러주세요</p>
       </div>
 
       {view.kind === "result" ? (
@@ -196,15 +196,15 @@ function ResultCard({ res, onDismiss }: { res: CheckinResponse; onDismiss: () =>
         <div className="text-text-dim mt-1 text-sm">{res.time}</div>
         <div className="border-border mt-4 border-t pt-3">
           <div className="text-gold micro">알림톡 발송됨 (시뮬레이션)</div>
-          <p className="text-text-dim mt-1 text-[12px] leading-relaxed">{res.message}</p>
+          <p className="text-text-dim mt-1 text-xs leading-relaxed">{res.message}</p>
           {res.recipientMasked ? (
-            <p className="text-text-faint mt-1 inline-flex items-center gap-1 text-[11px]">
+            <p className="text-text-faint mt-1 inline-flex items-center gap-1 text-xs">
               <EyIcon name="send" size={12} />
               {res.recipientMasked}
             </p>
           ) : null}
           {isIn && res.reflectedClassName ? (
-            <p className="text-primary mt-2 flex items-center justify-center gap-1 text-[11px]">
+            <p className="text-primary mt-2 flex items-center justify-center gap-1 text-xs">
               <EyIcon name="check" size={12} />
               {res.reflectedClassName} 출석부 기록
             </p>

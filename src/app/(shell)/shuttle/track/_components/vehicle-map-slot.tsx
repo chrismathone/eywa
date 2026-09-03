@@ -32,12 +32,12 @@ export function VehicleMapSlot({
 }) {
   return (
     <div className="border-line bg-muted/30 flex h-56 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 text-center">
-      <p className="text-text-dim text-[13.5px] font-bold">
+      <p className="text-text-dim text-sm font-bold">
         {MAP_KEY_READY ? "차량 위치가 아직 들어오지 않습니다" : "지도가 들어올 자리입니다"}
       </p>
 
       {/* 🔴 키가 있어도 지도를 띄우지 않는다 — 띄울 좌표가 없다. 두 경우의 **남은 일이 다르다**. */}
-      <p className="text-text-faint max-w-md text-[11.5px] leading-relaxed">
+      <p className="text-text-faint max-w-md text-xs leading-relaxed">
         {MAP_KEY_READY ? (
           <>
             기사·동승 선생님 폰이 운행 중에 위치를 보내기 시작하면 이 자리에 차량이 표시됩니다. 아직
@@ -53,7 +53,7 @@ export function VehicleMapSlot({
 
       {/* 지금 실제로 말할 수 있는 사실 하나 — 이 차 노선의 정류장 중 몇 곳이 지도에 찍힐 수 있나. */}
       {stopsTotal > 0 && (
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           이 차 노선 정류장 <span className="num font-bold">{stopsTotal}</span>곳 중{" "}
           <span className="num font-bold">{stopsWithCoords}</span>곳에 좌표가 지정돼 있습니다
           {stopsWithCoords === 0 && " — '노선 편성 → 정류장 관리'에서 찍을 수 있습니다"}

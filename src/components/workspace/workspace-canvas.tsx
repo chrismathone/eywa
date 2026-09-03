@@ -226,10 +226,10 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
               <div className="text-center">
                 {minimizedWins.length > 0 ? (
                   <>
-                    <p className="text-foreground text-[15px] font-bold">
+                    <p className="text-foreground text-base font-bold">
                       최소화한 창 {minimizedWins.length}개
                     </p>
-                    <p className="text-text-dim mt-1 text-[13px]">
+                    <p className="text-text-dim mt-1 text-sm">
                       눌러서 다시 열 수 있어요. 왼쪽 아래 독에도 있습니다.
                     </p>
                     <div className="pointer-events-auto mt-3 flex flex-wrap items-center justify-center gap-1.5">
@@ -238,7 +238,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
                           key={w.id}
                           type="button"
                           onClick={() => restore(w.id)}
-                          className="border-line bg-card text-foreground hover:border-primary/50 hover:bg-bg-soft rounded-full border px-3 py-1 text-[12px] transition"
+                          className="border-line bg-card text-foreground hover:border-primary/50 hover:bg-bg-soft rounded-full border px-3 py-1 text-xs transition"
                         >
                           {instanceLabel(w.id, w.params.title)}
                         </button>
@@ -247,8 +247,8 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
                   </>
                 ) : (
                   <>
-                    <p className="text-foreground text-[15px] font-bold">열린 창이 없어요</p>
-                    <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
+                    <p className="text-foreground text-base font-bold">열린 창이 없어요</p>
+                    <p className="text-text-dim mt-1 text-sm">왼쪽 메뉴를 눌러 창을 여세요.</p>
                   </>
                 )}
               </div>

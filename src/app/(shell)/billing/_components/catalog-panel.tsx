@@ -128,7 +128,7 @@ function Kpi({
           <Icon size={14} strokeWidth={1.8} />
         </span>
       </header>
-      <p className="tabular text-foreground num mt-2 text-[22px] leading-none">{value}</p>
+      <p className="tabular text-foreground num mt-2 text-2xl leading-none">{value}</p>
     </article>
   );
 }

@@ -86,11 +86,11 @@ export function MonthMemo({
 
   return (
     <div className="border-line overflow-hidden rounded-xl border">
-      <div className="bg-bg-soft flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-[12.5px] font-bold">
+      <div className="bg-bg-soft flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-xs font-bold">
         <span>특이사항</span>
         <span className="text-text-faint num">{monthLabel}</span>
         <span
-          className={`ml-auto text-[11.5px] font-semibold ${
+          className={`ml-auto text-xs font-semibold ${
             error ? "text-danger" : savedAt ? "text-green" : "text-text-faint"
           }`}
         >
@@ -99,14 +99,14 @@ export function MonthMemo({
       </div>
       {/* 🔴 표가 아직 없으면 **적게 두지 않는다** — 다 쓰고 나서 저장 실패를 만나는 게 더 나쁘다. */}
       {status !== "ok" ? (
-        <p className="text-text-dim px-2.5 py-2 text-[12px]">
+        <p className="text-text-dim px-2.5 py-2 text-xs">
           {status === "missing-table"
             ? "메모 칸은 아직 준비 중입니다(관리자에게 문의하세요). 달력·진도표는 그대로 쓸 수 있습니다."
             : "메모를 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요."}
         </p>
       ) : (
         <textarea
-          className="text-foreground focus:border-primary min-h-[72px] w-full resize-y border-0 bg-white px-2.5 py-2 text-[13px] font-semibold outline-none disabled:opacity-60"
+          className="text-foreground focus:border-primary min-h-[72px] w-full resize-y border-0 bg-white px-2.5 py-2 text-sm font-semibold outline-none disabled:opacity-60"
           defaultValue={initialBody}
           disabled={!ready}
           maxLength={MAX_BODY}

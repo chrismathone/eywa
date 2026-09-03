@@ -47,7 +47,7 @@ export const SHUTTLE_CHIP =
   // ⚠️ `cursor-pointer`가 붙어 있는 이유: Tailwind v4가 preflight의 `button{cursor:pointer}`를
   //    **삭제**해(v3→v4 breaking change) 수제 버튼은 명시하지 않으면 화살표 커서로 남는다
   //    (공용 Button이 같은 이유로 명시한다 — button.tsx 머리 주석, 원장 지적 2026-07-29).
-  "rounded-pill inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 px-3.5 text-[13px] font-bold whitespace-nowrap transition-colors disabled:cursor-default disabled:opacity-50 sm:h-8 sm:px-3 sm:text-[12.5px]";
+  "rounded-pill inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 px-3.5 text-sm font-bold whitespace-nowrap transition-colors disabled:cursor-default disabled:opacity-50 sm:h-8 sm:px-3 sm:text-xs";
 
 /** 켜진 칩. 🔑 `bg-primary`는 "지금 여기"(brand=자리 표시)이지 상태 색이 아니다(의미색 캐논). */
 export const SHUTTLE_CHIP_ON = "bg-primary text-primary-foreground";
@@ -63,7 +63,7 @@ export const SHUTTLE_CHIP_ADD = "border-line text-text-dim hover:bg-muted border
  * (같은 입력이 화면마다 다른 포커스 색을 갖던 자리를 없앤다).
  */
 export const SHUTTLE_INPUT =
-  "border-line focus:border-primary h-11 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-[12.5px]";
+  "border-line focus:border-primary h-11 rounded-lg border px-2.5 text-base outline-none sm:h-8 sm:text-xs";
 
 /**
  * 줄 전체가 눌리는 것(회차 링크·검색 결과 줄·접기 머리) — 내용에 따라 세로가 늘되 **44px 아래로
@@ -72,14 +72,14 @@ export const SHUTTLE_INPUT =
 export const SHUTTLE_ROW = "min-h-11 sm:min-h-8";
 
 /** 줄 안의 글자 — 컨트롤과 같은 한 벌. */
-export const SHUTTLE_ROW_TEXT = "text-[13px] sm:text-[12.5px]";
+export const SHUTTLE_ROW_TEXT = "text-sm sm:text-xs";
 
 /**
  * 🔑 **의도된 예외 하나** — 격자 안 밀도 요소(배정 칩)의 데스크톱 글자.
  * 한 정류장에 배정이 수십 개라 12.5px로 키우면 편성 화면이 세로로 두 배가 된다(라운드 캐논도
  * "표·그리드 내부 밀도 요소"를 불변 영역으로 둔다). 폰은 예외 없이 44px·13px다.
  */
-export const SHUTTLE_DENSE_TEXT = "text-[13px] sm:text-[11.5px]";
+export const SHUTTLE_DENSE_TEXT = "text-sm sm:text-xs";
 
 /**
  * ## 글자 계단 — 컨트롤 밖의 텍스트도 한 벌로
@@ -92,7 +92,7 @@ export const SHUTTLE_DENSE_TEXT = "text-[13px] sm:text-[11.5px]";
  *   16px   회차 출발 시각(기사가 먼저 보는 값)   14.5px 오늘 날짜
  *   14px   줄의 학생 이름(폰)           13px   컨트롤 글자(폰)
  *
- * 🔑 이 목록을 **상수로 만들지 않은 이유**: 값을 상수로 빼도 화면 파일이 raw `text-[12px]`를 새로
+ * 🔑 이 목록을 **상수로 만들지 않은 이유**: 값을 상수로 빼도 화면 파일이 raw `text-xs`를 새로
  *    적는 것을 막지 못한다(실제 회귀는 그렇게 난다). 대신 [`control-size.test.ts`](./control-size.test.ts)가
  *    셔틀 화면 전 파일을 훑어 목록 밖 크기·44px 미만 탭 타겟을 **실패시킨다** — 죽은 색 클래스 가드와 같은 결.
  *    새 크기가 정말 필요하면 그 테스트의 목록에 **이유와 함께** 추가할 것.

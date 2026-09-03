@@ -188,7 +188,7 @@ function TabLink({
       {label}
       {count && (
         <span
-          className={`num ml-1.5 rounded-full px-1.5 py-0.5 text-[11px] ${
+          className={`num ml-1.5 rounded-full px-1.5 py-0.5 text-xs ${
             alert ? "bg-danger text-white" : "bg-bg-soft text-text-dim"
           }`}
         >

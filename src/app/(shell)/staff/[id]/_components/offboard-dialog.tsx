@@ -207,11 +207,11 @@ export function OffboardDialog({
                     <span className="text-foreground min-w-0 flex-1 truncate font-medium">
                       {c.className}
                     </span>
-                    <span className="text-text-faint shrink-0 text-[11px]">
+                    <span className="text-text-faint shrink-0 text-xs">
                       {subjects.labelOf(c.subject)}
                     </span>
                     {c.pendingTeacherName ? (
-                      <span className="text-primary shrink-0 text-[11px]">
+                      <span className="text-primary shrink-0 text-xs">
                         예약됨 → {c.pendingTeacherName}
                       </span>
                     ) : null}
@@ -250,7 +250,7 @@ export function OffboardDialog({
                     <span className="text-foreground min-w-0 flex-1 truncate font-medium">
                       {c.className}
                     </span>
-                    <span className="text-text-faint shrink-0 text-[11px]">
+                    <span className="text-text-faint shrink-0 text-xs">
                       {subjects.labelOf(c.subject)} · 교시 {c.slotCount}개
                     </span>
                   </label>

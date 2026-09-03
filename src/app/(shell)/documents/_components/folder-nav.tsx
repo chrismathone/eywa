@@ -52,7 +52,7 @@ export function FolderNav({
       {linkedFolders.length > 0 ? (
         <>
           {/* 연동 폴더 구분 — 행 자체는 수납관리(textbook_orders·tuition_quotes) 소유, 여긴 읽기 전용 링크 */}
-          <p className="text-text-faint border-line mt-2 w-full border-t pt-2 pl-2.5 text-[11px] lg:mt-2">
+          <p className="text-text-faint border-line mt-2 w-full border-t pt-2 pl-2.5 text-xs lg:mt-2">
             수납관리 연동
           </p>
           {linkedFolders.map((f) => (

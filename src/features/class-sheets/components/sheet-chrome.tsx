@@ -125,7 +125,7 @@ export function SheetClassPicker({
           // 말줄임되고(위에 얹으면 끝이 덮여 사라졌다), 툴팁·클릭도 트리거의 것 그대로다.
           trailing={
             teacherName ? (
-              <span className="text-text-dim text-[15px] font-extrabold whitespace-nowrap" title={`담임 ${teacherName}`}>
+              <span className="text-text-dim text-base font-extrabold whitespace-nowrap" title={`담임 ${teacherName}`}>
                 {teacherName}
               </span>
             ) : undefined

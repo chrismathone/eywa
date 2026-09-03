@@ -86,7 +86,7 @@ function ClassBatch({ period, group, catalog }: { period: string; group: ClassGr
         title="비우면 학생별 계획 회차를 그대로 적용"
         className="border-input bg-background num w-14 rounded-md border px-2 py-1 text-center text-xs"
       />
-      <span className="text-text-faint text-[11px]">회 ×</span>
+      <span className="text-text-faint text-xs">회 ×</span>
       <input
         name="unitPrice"
         type="text"
@@ -110,7 +110,7 @@ function ClassBatch({ period, group, catalog }: { period: string; group: ClassGr
       >
         {pending ? <Loader2 className="size-3 animate-spin" /> : null}이 반 일괄 확정
       </button>
-      {err ? <span className="text-danger text-[11px]">{err}</span> : null}
+      {err ? <span className="text-danger text-xs">{err}</span> : null}
     </form>
   );
 }
@@ -218,7 +218,7 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
             확정
           </button>
         )}
-        {err ? <p className="text-danger mt-1 text-[11px]">{err}</p> : null}
+        {err ? <p className="text-danger mt-1 text-xs">{err}</p> : null}
       </td>
     </tr>
   );

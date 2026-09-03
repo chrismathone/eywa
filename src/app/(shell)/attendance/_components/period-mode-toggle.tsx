@@ -52,7 +52,7 @@ export function PeriodModeToggle({
             onClick={() => pick(m)}
             disabled={!!disabledReason || pending}
             aria-pressed={mode === m}
-            className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors ${
+            className={`rounded-md px-2 py-1 text-xs font-bold transition-colors ${
               mode === m ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
             } ${disabledReason ? "cursor-not-allowed" : ""}`}
           >
@@ -60,7 +60,7 @@ export function PeriodModeToggle({
           </button>
         ))}
       </div>
-      <span className="text-text-faint max-w-[220px] truncate text-[11px]">{disabledReason ?? windowLabel}</span>
+      <span className="text-text-faint max-w-[220px] truncate text-xs">{disabledReason ?? windowLabel}</span>
     </div>
   );
 }

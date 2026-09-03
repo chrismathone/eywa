@@ -83,14 +83,14 @@ export function SubjectSheetCard({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-text-dim block text-[12px] font-medium">Google Sheets ID</label>
+        <label className="text-text-dim block text-xs font-medium">Google Sheets ID</label>
         <div className="flex items-center gap-2">
           <input
             value={sheetId}
             onChange={(e) => setSheetId(e.target.value)}
             placeholder="시트 URL의 /d/ 뒤 문자열"
             spellCheck={false}
-            className="border-line bg-bg-soft focus:border-primary min-w-0 flex-1 rounded-md border px-2.5 py-1.5 font-mono text-[12px] outline-none"
+            className="border-line bg-bg-soft focus:border-primary min-w-0 flex-1 rounded-md border px-2.5 py-1.5 font-mono text-xs outline-none"
           />
           <button
             type="button"
@@ -104,7 +104,7 @@ export function SubjectSheetCard({
         </div>
       </div>
 
-      <div className="text-text-faint flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+      <div className="text-text-faint flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         {openUrl ? (
           <a
             href={openUrl}
@@ -126,16 +126,16 @@ export function SubjectSheetCard({
 
       {/* 자동 반영 안내 — 연동 ON + 수동 반영 이력이 있으면 새벽 4시 cron이 자동 push(사람 편집 감지 시 건너뜀).
           ⚠️ 재개 조건: '가져오기'(읽기)만으론 시트 최종수정자가 사람이라 계속 건너뜀 → '시트 반영'(쓰기)까지 해야 재개. */}
-      <p className="text-text-faint text-[11px]">
+      <p className="text-text-faint text-xs">
         연동이 켜져 있으면 매일 새벽 4시에 자동 반영됩니다. 시트에 직접 편집한 내용이 있으면 그날 자동 반영은
         건너뛰어 편집을 보호합니다. 편집분을 앱에 반영한 뒤(‘시트에서 가져오기’) ‘시트 반영’까지 하면 다음
         새벽부터 자동 반영이 재개됩니다.
       </p>
 
       {err ? (
-        <p className="text-danger text-[12px]">{err}</p>
+        <p className="text-danger text-xs">{err}</p>
       ) : status.lastError ? (
-        <p className="text-chart-4 text-[11px]">마지막 오류: {status.lastError}</p>
+        <p className="text-chart-4 text-xs">마지막 오류: {status.lastError}</p>
       ) : null}
     </section>
   );

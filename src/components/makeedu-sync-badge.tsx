@@ -43,7 +43,7 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
   return (
     <div className="flex items-center justify-end gap-2">
       <span
-        className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] ${issue || failed ? tone : "text-[color:var(--text-faint)]"}`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap text-xs ${issue || failed ? tone : "text-[color:var(--text-faint)]"}`}
         title={`makeedu 동기화: ${kstFull(state.syncedAt)}${state.rowCount != null ? ` · 신규 ${state.rowCount}건` : ""}${
           state.issue ? `\n확인 필요: ${state.issue}` : ""
         }`}

@@ -55,7 +55,7 @@ export function StatsCellDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-foreground flex items-center gap-1.5 text-[15px] font-bold">
+          <h2 className="text-foreground flex items-center gap-1.5 text-base font-bold">
             {dot ? (
               <span
                 className={`size-2.5 shrink-0 rounded-full ${dot.className}`}
@@ -66,14 +66,14 @@ export function StatsCellDialog({
             {picked.group.label}
             <span className="text-text-dim num font-normal">· {where}</span>
           </h2>
-          <span className="text-text-dim text-[12px]">
+          <span className="text-text-dim text-xs">
             일정 <span className="num text-foreground font-semibold">{events.length}</span>건
           </span>
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
           {events.length === 0 ? (
-            <p className="text-text-faint py-4 text-center text-[12px]">표시할 일정이 없습니다</p>
+            <p className="text-text-faint py-4 text-center text-xs">표시할 일정이 없습니다</p>
           ) : (
             <ul className="divide-line/60 divide-y">
               {events.map((e) => (

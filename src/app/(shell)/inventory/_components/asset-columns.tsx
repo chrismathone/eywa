@@ -23,7 +23,7 @@ export function assetColumns(
 ): Column<InventoryAsset>[] {
   return [
     { key: "no", label: "No", width: 56, render: (a) => <span className="num text-text-dim">{opts.noOf?.(a) ?? ""}</span>, sortValue: (a) => opts.noOf?.(a) ?? null, className: "whitespace-nowrap" },
-    { key: "assetCode", label: "자산ID", width: 88, render: (a) => <span className="font-mono text-[11.5px] font-bold">{a.assetCode}</span>, className: "whitespace-nowrap" },
+    { key: "assetCode", label: "자산ID", width: 88, render: (a) => <span className="font-mono text-xs font-bold">{a.assetCode}</span>, className: "whitespace-nowrap" },
     { key: "category", label: "분류", width: 78, render: (a) => assetCategoryLabel(a.category), sortValue: (a) => assetCategoryLabel(a.category), className: "whitespace-nowrap" },
     { key: "maker", label: "제조사", width: 96, render: (a) => <UnknownCell v={a.maker} />, className: "whitespace-nowrap" },
     { key: "model", label: "모델명", minWidth: 150, render: (a) => <UnknownCell v={a.model} />, className: "whitespace-nowrap" },
@@ -46,7 +46,7 @@ export function assetColumns(
       // QR은 자산ID에서 파생하므로 새 자산도 자동으로 있다 — 정렬 값은 없음(전부 같다).
       render: (a) =>
         opts.onQrClick ? (
-          <button type="button" className="text-primary block w-full text-center text-[11.5px] font-medium hover:underline" onClick={() => opts.onQrClick?.(a)}>
+          <button type="button" className="text-primary block w-full text-center text-xs font-medium hover:underline" onClick={() => opts.onQrClick?.(a)}>
             보기
           </button>
         ) : null,

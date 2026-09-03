@@ -107,7 +107,7 @@ export function ExpenseLineItems({
               className={`${inputCls} w-full`}
             />
             <div className="flex items-center gap-1.5">
-              <label className="text-text-faint flex shrink-0 items-center gap-1 text-[11px]">
+              <label className="text-text-faint flex shrink-0 items-center gap-1 text-xs">
                 수량
                 <input
                   type="number"
@@ -120,7 +120,7 @@ export function ExpenseLineItems({
                   aria-label="수량"
                 />
               </label>
-              <label className="text-text-faint flex min-w-0 flex-1 items-center gap-1 text-[11px]">
+              <label className="text-text-faint flex min-w-0 flex-1 items-center gap-1 text-xs">
                 금액
                 <input
                   type="number"
@@ -136,7 +136,7 @@ export function ExpenseLineItems({
               <button
                 type="button"
                 onClick={() => setRow(i, { vat: !r.vat })}
-                className={`shrink-0 rounded-full border px-2 py-1.5 text-[11px] transition ${
+                className={`shrink-0 rounded-full border px-2 py-1.5 text-xs transition ${
                   r.vat ? "border-primary bg-primary-soft text-primary" : "border-line text-text-faint"
                 }`}
                 title="부가세 10% 포함"
@@ -144,7 +144,7 @@ export function ExpenseLineItems({
                 VAT
               </button>
             </div>
-            <p className="text-text-dim text-right text-[11px]">
+            <p className="text-text-dim text-right text-xs">
               총액 <span className="num text-foreground font-bold">{formatMoney(lineTotal(r, currency), currency)}</span>
               {r.vat ? <span className="text-text-faint"> (VAT포함)</span> : null}
             </p>

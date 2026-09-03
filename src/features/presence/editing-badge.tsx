@@ -21,7 +21,7 @@ export function EditingBadge({ scope, className }: { scope: string; className?: 
   const label = others.length === 1 ? `수정중 · ${first}` : `수정중 · ${first} 외 ${others.length - 1}명`;
   return (
     <span
-      className={`bg-amber inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-[2px] align-middle text-[11px] font-bold text-white ${className ?? ""}`}
+      className={`bg-amber inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-[2px] align-middle text-xs font-bold text-white ${className ?? ""}`}
       title={`${others.map((o) => o.userName || "누군가").join(", ")}님이 지금 이 항목을 수정 중입니다`}
     >
       <Pencil className="size-2.5" strokeWidth={2.5} aria-hidden />

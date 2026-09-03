@@ -804,7 +804,7 @@ export function SheetClient({
       ) : null}
 
       {doc.recoverable ? (
-        <div className="border-line bg-bg-soft flex flex-wrap items-center gap-2 rounded-2xl border border-dashed px-4 py-2.5 text-[13px]">
+        <div className="border-line bg-bg-soft flex flex-wrap items-center gap-2 rounded-2xl border border-dashed px-4 py-2.5 text-sm">
           <span className="text-foreground">
             이전에 저장되지 못한 입력 {doc.recoverable.mutations.length}건이 이
             기기에 남아 있습니다.
@@ -854,12 +854,12 @@ export function SheetClient({
             {(saveIndicator.conflicts > 0 || saveIndicator.pending > 0) ? (
               <div className="flex flex-wrap items-center gap-2 px-1">
                 {saveIndicator.conflicts > 0 ? (
-                  <span className="text-danger text-[12px] font-bold whitespace-nowrap">
+                  <span className="text-danger text-xs font-bold whitespace-nowrap">
                     저장 충돌 {saveIndicator.conflicts}건 — 충돌한 셀에서 서버값/내 값을 고르세요(이 화면에 안
                     보이면 주간 시트에서)
                   </span>
                 ) : (
-                  <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장 중…</span>
+                  <span className="text-text-dim text-xs font-semibold whitespace-nowrap">저장 중…</span>
                 )}
               </div>
             ) : null}
@@ -875,14 +875,14 @@ export function SheetClient({
                        아래 표와 어긋난다. 전체 이름은 title 툴팁에 남는다. */
                     <div className="flex min-w-0 items-baseline gap-x-2">
                       <h2
-                        className="text-foreground min-w-0 truncate text-[17px] leading-tight font-extrabold tracking-tight"
+                        className="text-foreground min-w-0 truncate text-lg leading-tight font-extrabold tracking-tight"
                         title={data.className}
                       >
                         {data.className}
                       </h2>
                       <Link
                         href={`/ecs/${classId}?week=${weekMonday}`}
-                        className="text-primary shrink-0 text-[12.5px] font-medium underline-offset-2 hover:underline"
+                        className="text-primary shrink-0 text-xs font-medium underline-offset-2 hover:underline"
                       >
                         주간 시트 열기 →
                       </Link>
@@ -951,7 +951,7 @@ export function SheetClient({
           숫자를 깔면 그 날 화면과 숫자가 안 맞는 거짓 표시가 된다(적대 리뷰 2026-08-11). 오늘 면에는
           반마다 '주간 시트 열기' 링크가 있어 그쪽에서 그대로 보인다. */}
       {variant === "full" && data.grid.attendanceOnly.length > 0 ? (
-        <div className="bg-card shadow-card rounded-2xl px-4 py-3 text-[13px]">
+        <div className="bg-card shadow-card rounded-2xl px-4 py-3 text-sm">
           <p className="text-text-dim">
             수업 시간표가 없는 날짜의 출석 기록:{" "}
             {data.grid.attendanceOnly
@@ -970,7 +970,7 @@ export function SheetClient({
           ⚠️ 오늘 변형엔 그 토글(SheetToolbar)이 없다 — 없는 컨트롤을 가리키면 거짓 안내이므로 문구를
              '주간 시트의 토글'로 바꾼다(건수는 주 전체 기준임을 함께 밝힌다). */}
       {data.grid.hiddenSpecial.map((h) => (
-        <p key={h.seat} className="text-text-dim px-1 text-[12px]">
+        <p key={h.seat} className="text-text-dim px-1 text-xs">
           {h.seat} 교시 {h.slots}개는 이 시트에 표시하지 않습니다(이번 주 기준) — 그 시간에
           남아 있는 기록 {h.records}건은 지워지지 않았습니다
           {h.seat === "JJ"

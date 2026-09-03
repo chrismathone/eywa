@@ -88,7 +88,7 @@ export function MonthGrid({
       {/* 요일 머리 */}
       <div className="border-line-strong bg-bg-soft/50 grid grid-cols-7 border-b">
         {WEEKDAYS.map((w) => (
-          <p key={w.label} className={`py-2 text-center text-[12px] font-bold ${w.cls}`}>
+          <p key={w.label} className={`py-2 text-center text-xs font-bold ${w.cls}`}>
             {w.label}
           </p>
         ))}
@@ -116,7 +116,7 @@ export function MonthGrid({
                   {/* 공휴일명 — 일정 칩 위(좌측), 정식 명칭은 title 툴팁. 앞뒤 달은 흐림 규칙을 따른다. */}
                   {holiday ? (
                     <span
-                      className={`min-w-0 truncate text-[11px] leading-none font-semibold ${
+                      className={`min-w-0 truncate text-xs leading-none font-semibold ${
                         cell.inMonth ? "text-danger" : "text-text-faint"
                       }`}
                       title={holiday}
@@ -127,7 +127,7 @@ export function MonthGrid({
                     <span />
                   )}
                   <span
-                    className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[13px] ${
+                    className={`flex size-6 shrink-0 items-center justify-center rounded-full text-sm ${
                       isToday
                         ? "bg-primary text-primary-foreground font-bold"
                         : !cell.inMonth
@@ -154,7 +154,7 @@ export function MonthGrid({
                           ev.stopPropagation(); // 칩 클릭이 칸(일정 등록) 클릭으로 번지지 않게
                           onEventClick(e);
                         }}
-                        className={`block w-full truncate rounded px-1 py-0.5 text-left text-[12px] leading-tight font-medium transition hover:opacity-80 ${chip.className} ${
+                        className={`block w-full truncate rounded px-1 py-0.5 text-left text-xs leading-tight font-medium transition hover:opacity-80 ${chip.className} ${
                           cell.inMonth ? "" : "opacity-50"
                         }`}
                         style={chip.style}
@@ -173,7 +173,7 @@ export function MonthGrid({
                         ev.stopPropagation();
                         onMoreClick(cell.date);
                       }}
-                      className="text-text-dim hover:text-primary cursor-pointer px-1 text-left text-[11px] hover:underline"
+                      className="text-text-dim hover:text-primary cursor-pointer px-1 text-left text-xs hover:underline"
                     >
                       +{more}개 더
                     </button>

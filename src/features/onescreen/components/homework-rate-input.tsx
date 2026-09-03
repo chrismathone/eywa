@@ -37,7 +37,7 @@ export function HomeworkRateInput({
   const shown = n == null ? "" : String(n);
   const radius = size === "sm" ? "rounded-sm" : "rounded-lg";
   const chip = (on: boolean) =>
-    `h-8 shrink-0 rounded-full border px-2 text-[11px] transition-colors ${
+    `h-8 shrink-0 rounded-full border px-2 text-xs transition-colors ${
       on ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-faint"
     }`;
 
@@ -63,9 +63,9 @@ export function HomeworkRateInput({
           if (raw === "") return onChange("");
           onChange(`${Math.max(0, Math.min(100, parseInt(raw, 10) || 0))}%`);
         }}
-        className={`border-line focus:border-primary tabular bg-card h-8 w-12 border px-1 text-center text-[13px] font-bold outline-none disabled:opacity-40 ${radius}`}
+        className={`border-line focus:border-primary tabular bg-card h-8 w-12 border px-1 text-center text-sm font-bold outline-none disabled:opacity-40 ${radius}`}
       />
-      <span className="text-text-faint text-[11px]">%</span>
+      <span className="text-text-faint text-xs">%</span>
       {/* 알약 2개는 **한 덩어리로** 접힌다 — 낱개로 두면 칸 폭이 1~2px 달라질 때마다 '미제출'만 남고
           '없음'이 내려가는 등 행마다 모양이 달라진다. 묶어 두면 "숫자 / 알약" 두 줄로 항상 같다. */}
       <span className="flex items-center gap-1">

@@ -53,8 +53,8 @@ const LABEL = Object.fromEntries(COLS.map((c) => [c.key, c.label])) as Record<Co
  * `border-separate`.
  */
 const TH =
-  "bg-bg-soft text-foreground border-b-line sticky top-0 z-10 border-b px-2 py-2 text-center text-[12px] font-bold whitespace-nowrap";
-const TD = "border-b-line border-b px-2 py-1.5 align-top text-[12.5px] leading-[1.4] break-keep";
+  "bg-bg-soft text-foreground border-b-line sticky top-0 z-10 border-b px-2 py-2 text-center text-xs font-bold whitespace-nowrap";
+const TD = "border-b-line border-b px-2 py-1.5 align-top text-xs leading-[1.4] break-keep";
 /** 접수 아래 '경과'를 붙이는 창 — relativeTimeKo가 상대 표기를 돌려주는 구간(7일 미만)과 같은 값. */
 const RECENT_MS = 7 * 86_400_000;
 
@@ -95,14 +95,14 @@ export function EnrollmentTable({
     <div className="consult-sheet flex min-h-0 flex-1 flex-col gap-2">
       {/* 시트 1~2행의 상태 색 범례 — 칸반 4칸과 같은 라벨·색(board-stages)이라 표의 상태 칸과 절대 안 갈린다. */}
       <div className="flex flex-wrap items-center gap-1.5 px-1" aria-label="상태 범례">
-        <span className="text-text-dim text-[11.5px] font-bold">상태</span>
+        <span className="text-text-dim text-xs font-bold">상태</span>
         {SHEET_LEGEND.map((l) => (
           <Pill key={l.label} color={l.color} soft={false}>
             {l.label}
           </Pill>
         ))}
         {canWrite ? (
-          <span className="text-text-faint ml-auto text-[11px]">칸을 더블클릭하면 바로 고칠 수 있습니다 · Enter 저장 · Esc 취소</span>
+          <span className="text-text-faint ml-auto text-xs">칸을 더블클릭하면 바로 고칠 수 있습니다 · Enter 저장 · Esc 취소</span>
         ) : null}
       </div>
       {/* 높이는 flex가 준다(창 크기·툴바 줄 수와 무관하게 페이저가 창 바닥에 붙는다 — 원장 2026-09-02 *"이 어색한
@@ -221,7 +221,7 @@ export function EnrollmentTable({
                   </td>
                   <td className={TD} data-label={LABEL.log} data-empty={emptyAttr(c.parentRequest?.trim())}>
                     <EditableTextCell id={c.id} field="parentRequest" value={c.parentRequest} canEdit={canWrite} multiline>
-                      <div className="text-[12px] leading-[1.45] whitespace-pre-line">{c.parentRequest?.trim()}</div>
+                      <div className="text-xs leading-[1.45] whitespace-pre-line">{c.parentRequest?.trim()}</div>
                     </EditableTextCell>
                   </td>
                   <td className={`${TD} num`} data-label={LABEL.date}>
@@ -229,7 +229,7 @@ export function EnrollmentTable({
                     {/* 경과는 **7일 이내만** — relativeTimeKo는 7일이 지나면 절대 날짜를 돌려줘 접수일과 같은 날짜를
                         두 번 적는다. 판정은 서버가 준 nowMs 기준이라 첫 렌더가 서버·클라 같다(하이드레이션 안전). */}
                     {recent ? (
-                      <div className="text-text-faint text-[11px]">
+                      <div className="text-text-faint text-xs">
                         <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
                       </div>
                     ) : null}

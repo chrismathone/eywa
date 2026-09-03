@@ -181,24 +181,24 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
                     <Pill color={meta.color} soft>
                       {meta.label}
                     </Pill>
-                    <span className="text-foreground text-[13px] font-bold">
+                    <span className="text-foreground text-sm font-bold">
                       {subjects.labelOf(t.subject)}
                     </span>
-                    {t.level ? <span className="text-primary text-[12px] font-bold">{t.level}</span> : null}
-                    <span className="text-muted-foreground num text-[11px]">{t.testedOn}</span>
+                    {t.level ? <span className="text-primary text-xs font-bold">{t.level}</span> : null}
+                    <span className="text-muted-foreground num text-xs">{t.testedOn}</span>
                   </div>
                   <DeleteBtn id={t.id} studentId={studentId} />
                 </div>
                 {subs.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {subs.map(([k, v]) => (
-                      <span key={k} className="bg-bg-soft text-text-dim num rounded-full px-1.5 py-0.5 text-[11px]">
+                      <span key={k} className="bg-bg-soft text-text-dim num rounded-full px-1.5 py-0.5 text-xs">
                         {k} <span className="text-foreground font-bold">{v}</span>
                       </span>
                     ))}
                   </div>
                 ) : null}
-                {t.notes ? <p className="text-muted-foreground mt-1.5 text-[12px]">{t.notes}</p> : null}
+                {t.notes ? <p className="text-muted-foreground mt-1.5 text-xs">{t.notes}</p> : null}
               </li>
             );
           })}

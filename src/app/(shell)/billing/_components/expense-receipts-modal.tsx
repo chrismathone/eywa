@@ -268,13 +268,13 @@ export function ExpenseReceiptsModal({
                           ) : (
                             <FileText className="size-6" />
                           )}
-                          <span className="text-[10px] font-medium uppercase">
+                          <span className="text-xs font-medium uppercase">
                             {isImg ? "불러오는 중" : "파일"}
                           </span>
                         </button>
                       )}
                       <div className="flex items-center gap-1 px-1.5 py-1">
-                        <span className="text-text-dim min-w-0 flex-1 truncate text-[10px]" title={r.name}>
+                        <span className="text-text-dim min-w-0 flex-1 truncate text-xs" title={r.name}>
                           {r.name}
                         </span>
                         <button
@@ -307,7 +307,7 @@ export function ExpenseReceiptsModal({
             <span className="text-foreground text-sm font-medium">
               {uploading ? "업로드 중…" : "파일 추가 또는 Ctrl+V 붙여넣기"}
             </span>
-            <span className="text-text-faint text-[11px]">이미지 · PDF · 최대 10MB</span>
+            <span className="text-text-faint text-xs">이미지 · PDF · 최대 10MB</span>
             <input
               type="file"
               accept={ACCEPT}

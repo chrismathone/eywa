@@ -253,7 +253,7 @@ export function CommandPalette({
                   return (
                     <Fragment key={key}>
                       {showHeader ? (
-                        <li className="text-text-faint px-3 pt-2 pb-1 font-mono text-[10px] tracking-wider uppercase">
+                        <li className="text-text-faint px-3 pt-2 pb-1 font-mono text-xs tracking-wider uppercase">
                           {SECTION_LABEL[section]}
                         </li>
                       ) : null}
@@ -263,7 +263,7 @@ export function CommandPalette({
                           type="button"
                           onClick={() => go(item)}
                           onMouseMove={() => setActive(i)}
-                          className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] transition ${
+                          className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition ${
                             isActive ? "bg-primary text-primary-foreground" : "text-foreground"
                           }`}
                         >
@@ -284,7 +284,7 @@ export function CommandPalette({
                             </span>
                             {item.kind === "data" && item.hit.subtitle ? (
                               <span
-                                className={`block truncate text-[11px] ${
+                                className={`block truncate text-xs ${
                                   isActive ? "text-white/70" : "text-text-faint"
                                 }`}
                               >
@@ -294,7 +294,7 @@ export function CommandPalette({
                           </span>
                           {item.kind === "menu" ? (
                             <span
-                              className={`shrink-0 font-mono text-[10px] tracking-wider uppercase ${
+                              className={`shrink-0 font-mono text-xs tracking-wider uppercase ${
                                 isActive ? "text-white/70" : "text-text-faint"
                               }`}
                             >

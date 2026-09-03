@@ -196,7 +196,7 @@ function ViewBody({
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-foreground flex min-w-0 items-center gap-2 text-[16px] font-bold break-keep">
+        <h2 className="text-foreground flex min-w-0 items-center gap-2 text-base font-bold break-keep">
           <span
             className={`size-3 shrink-0 rounded-full ${dotProps(eventDisplayColor(event)).className}`}
             style={dotProps(eventDisplayColor(event)).style}
@@ -204,18 +204,18 @@ function ViewBody({
           />
           {event.title}
         </h2>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${dday.cls}`}>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${dday.cls}`}>
           {dday.label}
         </span>
       </div>
 
       {event.source === "leave" ? (
-        <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-[12px]">
+        <p className="bg-amber-soft text-amber rounded-lg px-3 py-2 text-xs">
           전자결재로 승인된 휴가입니다 — 캘린더에서 수정할 수 없고, 변경은 결재 문서에서 합니다.
         </p>
       ) : null}
 
-      <dl className="space-y-1.5 text-[13px]">
+      <dl className="space-y-1.5 text-sm">
         <div className="flex gap-2">
           <dt className="text-text-dim w-[52px] shrink-0">기간</dt>
           <dd className="num text-foreground">
@@ -391,7 +391,7 @@ function EditBody({
       <h2 className="text-foreground text-sm font-bold">{editing ? "일정 수정" : "일정 등록"}</h2>
 
       {editing?.seriesId ? (
-        <p className="bg-bg-soft text-text-dim rounded-lg px-3 py-2 text-[12px]">
+        <p className="bg-bg-soft text-text-dim rounded-lg px-3 py-2 text-xs">
           반복 일정의 한 회차입니다 — 수정은 이 회차에만 적용됩니다.
         </p>
       ) : null}
@@ -505,12 +505,12 @@ function EditBody({
               ) : null}
             </div>
           ) : null}
-          <p className="text-text-faint text-[11px]">
+          <p className="text-text-faint text-xs">
             시작 시간을 고르면 종료는 자동으로 따라옵니다(기본 1시간). 종일 일정은 시작 시간을
             &lsquo;종일&rsquo;로.
           </p>
           {repeat !== "none" && !editing ? (
-            <p className="text-text-faint text-[11px]">
+            <p className="text-text-faint text-xs">
               같은 일정이 반복 종료일까지 반복 등록됩니다(최대 60회). 29~31일 시작은 그 날이 없는
               달을 건너뜁니다.
             </p>

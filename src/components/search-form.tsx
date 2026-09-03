@@ -4,6 +4,7 @@ import { useRef, useTransition, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
+import { TOOLBAR_SEARCH_BOX } from "@/components/toolbar-controls";
 
 /**
  * 공통 검색 폼 — 기존 GET <form>(문서 전체 새로고침 = 화면 깜빡 + 스크롤/포커스 유실)을
@@ -47,16 +48,16 @@ export function SearchForm({
 
   return (
     <form onSubmit={onSubmit} className={className}>
-      {/* 높이 h-8 = 공용 Button 기본 크기(툴바 한 줄 정렬, 원장 2026-09-01). */}
-      <div className="border-border bg-bg-soft text-text-dim flex h-8 items-center gap-2 rounded-lg border px-2.5">
-        <EyIcon name="search" size={13} />
+      {/* 치수 = TOOLBAR_SEARCH_BOX(control-scale) — 툴바 한 줄에서 버튼·칩과 같은 높이·라벨. */}
+      <div className={TOOLBAR_SEARCH_BOX}>
+        <EyIcon name="search" size={16} />
         <input
           ref={inputRef}
           type="search"
           name={paramName}
           defaultValue={defaultValue ?? ""}
           placeholder={placeholder}
-          className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent text-xs focus:outline-none`}
+          className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent focus:outline-none`}
         />
       </div>
       <Button type="submit" variant="outline" disabled={pending}>

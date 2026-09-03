@@ -43,7 +43,7 @@ export function SearchableSelect({
   /**
    * 트리거 버튼의 **박스 스타일**만 교체(테두리·높이·padding·글자크기·라운드). 레이아웃(flex·w-full·
    * 화살표 정렬)은 항상 유지된다. ⚠️ 촘촘한 표 안에서는 기본값(py-2·px-3·text-sm)이 옆 입력칸(h-8·px-2·
-   * text-[12px])보다 눈에 띄게 커서 줄이 들쭉날쭉해진다(원장 2026-07-23 지적) → 그 자리에선 이웃과 같은
+   * text-xs)보다 눈에 띄게 커서 줄이 들쭉날쭉해진다(원장 2026-07-23 지적) → 그 자리에선 이웃과 같은
    * 클래스를 넘길 것. 미지정이면 기존 기본값 그대로(다른 화면 영향 없음).
    */
   triggerClassName?: string;
@@ -209,7 +209,7 @@ export function SearchableSelect({
               })
             )}
             {overflow > 0 ? (
-              <li className="text-text-faint px-3 py-1.5 text-[11px]">
+              <li className="text-text-faint px-3 py-1.5 text-xs">
                 +{overflow}개 더 — 검색으로 좁히세요
               </li>
             ) : null}

@@ -36,8 +36,8 @@ export function AttendanceCalendar({ history }: { history: Session[] }) {
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-foreground text-[15px] font-bold">출결 달력</h2>
-        <div className="flex items-center gap-2.5 text-[11px]">
+        <h2 className="text-foreground text-base font-bold">출결 달력</h2>
+        <div className="flex items-center gap-2.5 text-xs">
           <Legend cls="bg-green-soft" label="출석" />
           <Legend cls="bg-amber-soft" label="지각" />
           <Legend cls="bg-danger-soft" label="결석" />
@@ -50,12 +50,12 @@ export function AttendanceCalendar({ history }: { history: Session[] }) {
       <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-5">
         {months.map((m) => (
           <div key={m} className="w-full max-w-[340px]">
-            <p className="text-text-dim mb-1.5 text-[12px] font-bold">{m}월</p>
+            <p className="text-text-dim mb-1.5 text-xs font-bold">{m}월</p>
             <div className="grid grid-cols-7 gap-1 text-center">
               {DOW.map((w, i) => (
                 <div
                   key={`d${i}`}
-                  className={`text-[10px] font-bold ${i === 0 ? "text-danger" : "text-text-faint"}`}
+                  className={`text-xs font-bold ${i === 0 ? "text-danger" : "text-text-faint"}`}
                 >
                   {w}
                 </div>
@@ -66,7 +66,7 @@ export function AttendanceCalendar({ history }: { history: Session[] }) {
                 return (
                   <div
                     key={i}
-                    className={`tabular flex aspect-square items-center justify-center rounded-md text-[11px] ${att ? CELL_CLASS[att] : "text-text-faint"}`}
+                    className={`tabular flex aspect-square items-center justify-center rounded-md text-xs ${att ? CELL_CLASS[att] : "text-text-faint"}`}
                   >
                     {d}
                   </div>

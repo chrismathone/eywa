@@ -45,8 +45,8 @@ export function ScoreTrendChart({ history, subjects }: { history: Session[]; sub
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-foreground text-[15px] font-bold">테스트 점수 추이</h2>
-        <div className="flex items-center gap-2.5 text-[11px]">
+        <h2 className="text-foreground text-base font-bold">테스트 점수 추이</h2>
+        <div className="flex items-center gap-2.5 text-xs">
           <span className="flex items-center gap-1">
             <span className="size-2 rounded-full" style={{ background: primaryHex }} />
             확인
@@ -110,7 +110,7 @@ function FilterBtn({ label, on, onClick }: { label: string; on: boolean; onClick
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
+      className={`rounded-pill px-2.5 py-1 text-xs font-bold transition ${
         on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
       }`}
     >

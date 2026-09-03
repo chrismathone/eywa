@@ -84,7 +84,7 @@ function inline(text: string) {
 function AnswerTable({ head, rows }: { head: string[]; rows: string[][] }) {
   return (
     <div className="border-line bg-card max-h-80 overflow-auto rounded-xl border">
-      <table className="w-full border-collapse text-[12.5px] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
+      <table className="w-full border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
         <thead>
           <tr className="border-line bg-card border-b">
             {head.map((cell, i) => (
@@ -126,14 +126,14 @@ function LinkButtons({ links, omitted }: { links: AssistantLink[]; omitted: numb
           key={`${link.kind}:${link.id}`}
           href={assistantLinkHref(link)}
           title={link.label}
-          className="border-line bg-card text-foreground hover:border-primary/40 hover:text-primary rounded-pill inline-flex items-center gap-1 border px-2.5 py-1 text-[12px] font-medium transition"
+          className="border-line bg-card text-foreground hover:border-primary/40 hover:text-primary rounded-pill inline-flex items-center gap-1 border px-2.5 py-1 text-xs font-medium transition"
         >
           <span className="text-text-faint">{LINK_KIND_LABEL[link.kind]}</span>
           <span>{link.label}</span>
         </WindowLink>
       ))}
       {omitted > 0 ? (
-        <span className="text-text-faint text-[12px]">외 {omitted}건은 목록에서 확인하세요</span>
+        <span className="text-text-faint text-xs">외 {omitted}건은 목록에서 확인하세요</span>
       ) : null}
     </div>
   );

@@ -89,7 +89,7 @@ export default async function ClassReviewBoardPage() {
         <BoardTable groups={groups} areaHeads={areaHeads} />
       )}
 
-      <p className="text-text-dim text-[11px]">
+      <p className="text-text-dim text-xs">
         영역 소계는 제출된 채점들의 문항 평균 기준 ·{" "}
         {areaHeads.map((h) => `${h.short} ${h.title}${h.max ? `(${h.max}점)` : ""}`).join(" · ")} — 다른 문항
         세트로 만든 평가지의 영역 구성은 각 건 상세에서 확인하세요.

@@ -166,8 +166,8 @@ export function NoticeFace({
           </div>
         ) : null}
         <div className="mb-3">
-          <h2 className="text-foreground text-[15px] font-bold">반 공지 발송</h2>
-          <p className="text-text-faint text-[12px]">
+          <h2 className="text-foreground text-base font-bold">반 공지 발송</h2>
+          <p className="text-text-faint text-xs">
             선택한 반의 재원생 각자의 ClassNote 알림장으로 같은 내용이 발송됩니다 · 학부모 미가입 학생은 수신 불가
           </p>
         </div>
@@ -178,28 +178,28 @@ export function NoticeFace({
             <div className="border-line flex max-h-[360px] flex-col overflow-y-auto rounded-md border p-2 lg:absolute lg:inset-0 lg:max-h-none">
               {canSend && classes.length > 0 ? (
                 <div className="border-line mb-1 flex items-center justify-between gap-2 border-b px-2 pb-1.5">
-                  <span className="text-text-faint text-[11px]">
+                  <span className="text-text-faint text-xs">
                     반 {classes.length}
                     {selectedCount ? ` · 대상 ${selectedCount}명` : ""}
                   </span>
                   <button
                     type="button"
                     onClick={toggleAll}
-                    className="text-primary shrink-0 text-[11px] font-medium hover:underline"
+                    className="text-primary shrink-0 text-xs font-medium hover:underline"
                   >
                     {allChecked ? "전체 해제" : "전체 선택"}
                   </button>
                 </div>
               ) : null}
               {classes.length === 0 ? (
-                <p className="text-text-faint p-2 text-[12px]">발송 허용 과목의 활성 반이 없습니다.</p>
+                <p className="text-text-faint p-2 text-xs">발송 허용 과목의 활성 반이 없습니다.</p>
               ) : (
                 classes.map((c) => (
-                  <label key={c.id} className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]">
+                  <label key={c.id} className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm">
                     <input type="checkbox" checked={checked.has(c.id)} onChange={() => toggle(c.id)} disabled={!canSend} />
                     <span className="text-foreground min-w-0 flex-1 truncate">{c.name}</span>
-                    {c.subject ? <span className="text-text-faint text-[11px]">{subjects.labelOf(c.subject)}</span> : null}
-                    <span className="text-text-faint text-[11px]">{c.studentCount}명</span>
+                    {c.subject ? <span className="text-text-faint text-xs">{subjects.labelOf(c.subject)}</span> : null}
+                    <span className="text-text-faint text-xs">{c.studentCount}명</span>
                   </label>
                 ))
               )}
@@ -209,13 +209,13 @@ export function NoticeFace({
           {/* 공통 본문 + 개별 내용 + 발송 */}
           <div className="flex flex-col gap-2">
             <div>
-              <p className="text-text-dim mb-1 text-[11px] font-medium">공통 내용 (선택 반 재원생 모두에게)</p>
+              <p className="text-text-dim mb-1 text-xs font-medium">공통 내용 (선택 반 재원생 모두에게)</p>
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 disabled={!canSend}
                 placeholder="공지 내용 (예: 다음 주 월요일은 학원 휴원입니다.)"
-                className="border-line bg-card focus:border-primary min-h-[180px] w-full flex-1 resize-y rounded-lg border p-3 text-[14px] outline-none"
+                className="border-line bg-card focus:border-primary min-h-[180px] w-full flex-1 resize-y rounded-lg border p-3 text-sm outline-none"
               />
             </div>
 
@@ -225,7 +225,7 @@ export function NoticeFace({
                 <button
                   type="button"
                   onClick={() => setShowIndividual((v) => !v)}
-                  className="text-text-dim hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-[12px] font-medium"
+                  className="text-text-dim hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-xs font-medium"
                 >
                   <span>학생별 개별 내용 추가 (선택){indivCount ? ` · ${indivCount}명 입력함` : ""}</span>
                   <span className="text-text-faint inline-flex items-center gap-0.5">
@@ -235,14 +235,14 @@ export function NoticeFace({
                 </button>
                 {showIndividual ? (
                   <div className="border-line max-h-[300px] space-y-2 overflow-y-auto border-t p-2">
-                    <p className="text-text-faint px-1 text-[11px]">
+                    <p className="text-text-faint px-1 text-xs">
                       입력한 학생은 <b>공통 내용 뒤에</b> 이 내용이 덧붙어 발송됩니다. 비우면 공통 내용만 나갑니다.
                     </p>
                     {selectedStudents.map((s) => (
                       <div key={s.id} className="flex items-start gap-2">
                         <span className="w-24 shrink-0 pt-1.5" title={`${s.name} · ${s.className}`}>
-                          <span className="text-foreground block truncate text-[12px]">{s.name}</span>
-                          <span className="text-text-faint block truncate text-[10px]">
+                          <span className="text-foreground block truncate text-xs">{s.name}</span>
+                          <span className="text-text-faint block truncate text-xs">
                             {schoolGradeLabel(null, s.grade)} · {s.className}
                           </span>
                         </span>
@@ -251,7 +251,7 @@ export function NoticeFace({
                           onChange={(e) => setIndividual((prev) => ({ ...prev, [s.id]: e.target.value }))}
                           rows={2}
                           placeholder="이 학생에게만 덧붙일 내용(선택)"
-                          className="border-line bg-card focus:border-primary w-full resize-y rounded-md border px-2 py-1.5 text-[12px] outline-none"
+                          className="border-line bg-card focus:border-primary w-full resize-y rounded-md border px-2 py-1.5 text-xs outline-none"
                         />
                       </div>
                     ))}
@@ -286,10 +286,10 @@ export function NoticeFace({
                 >
                   테스트 발송(학원이)
                 </Button>
-                <span className="text-text-faint text-[12px]">발송 전 내용을 한 번 더 확인하세요 — 게시 후 회수는 발송 이력에서 요청</span>
+                <span className="text-text-faint text-xs">발송 전 내용을 한 번 더 확인하세요 — 게시 후 회수는 발송 이력에서 요청</span>
               </div>
             ) : (
-              <p className="text-text-faint text-[12px]">공지 발송 권한이 없습니다(열람 전용).</p>
+              <p className="text-text-faint text-xs">공지 발송 권한이 없습니다(열람 전용).</p>
             )}
           </div>
         </div>
@@ -297,12 +297,12 @@ export function NoticeFace({
 
       {/* 발송 이력 */}
       <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
-        <h2 className="text-foreground mb-3 text-[15px] font-bold">공지 발송 이력</h2>
+        <h2 className="text-foreground mb-3 text-base font-bold">공지 발송 이력</h2>
         {rows.length === 0 ? (
-          <p className="text-text-faint text-[13px]">아직 발송한 공지가 없습니다.</p>
+          <p className="text-text-faint text-sm">아직 발송한 공지가 없습니다.</p>
         ) : (
           <div className="border-line overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[560px] text-left text-[12px]">
+            <table className="w-full min-w-[560px] text-left text-xs">
               <thead>
                 <tr className="border-line text-text-faint border-b">
                   <th className="px-3 py-2 font-bold">발송 시각</th>
@@ -327,7 +327,7 @@ export function NoticeFace({
                         {r.targetCount}명
                         {/* 게시된 글은 **학생 이름**으로 링크 — 번호로는 누구 글인지 알 수 없다. 많으면 앞 6명만. */}
                         {r.reportLinks.length ? (
-                          <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px]">
+                          <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
                             {r.reportLinks.slice(0, 6).map((l, i) =>
                               l.url ? (
                                 <a
@@ -353,10 +353,10 @@ export function NoticeFace({
                         ) : null}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`text-[11px] font-bold ${st.cls}`}>{st.label}</span>
+                        <span className={`text-xs font-bold ${st.cls}`}>{st.label}</span>
                         {failNotes.length ? (
                           <span
-                            className="text-text-faint ml-1.5 text-[11px]"
+                            className="text-text-faint ml-1.5 text-xs"
                             // 사유는 워커/상류 원문이라 그대로 두면 "해당 학생 없음"처럼 조치를 알 수 없다 —
                             // 알림(0144a)·발송 콘솔과 **같은 해석**을 쓴다.
                             title={failNotes
@@ -370,7 +370,7 @@ export function NoticeFace({
                           //    실패 집계를 `ok` 있는 것만으로 좁힌 뒤엔 이걸 안 보여주면 조용히 사라진다.
                           // ⚠️ 여기 그대로 나가므로 워커가 쓰는 `error`는 **한글 요약**을 유지할 것
                           //    (현재 "회수 실패 N건"·"수정 실패 N건" — raw 기술 원문 UI 노출 금지 규약).
-                          <span className="text-text-faint ml-1.5 text-[11px]" title={r.error}>
+                          <span className="text-text-faint ml-1.5 text-xs" title={r.error}>
                             {r.error}
                           </span>
                         ) : null}

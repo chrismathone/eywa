@@ -199,8 +199,8 @@ export function FloatingWindow({
 
           {/* 정중앙: 창 이름 — 좌우 그룹 너비와 무관하게 바 한가운데 고정(absolute). 드래그 통과(pointer-events-none). */}
           <span className="pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[46%] -translate-x-1/2 items-center justify-center gap-1.5">
-            <span className="text-foreground truncate text-[12px] font-bold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
-            {win.params.subtitle ? <span className="text-text-faint shrink-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
+            <span className="text-foreground truncate text-xs font-bold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
+            {win.params.subtitle ? <span className="text-text-faint shrink-0 truncate text-xs">{win.params.subtitle}</span> : null}
           </span>
 
           {/* 우측 그룹: 최소화 · 최대화 · 닫기 (Windows식 창 컨트롤) */}

@@ -50,6 +50,39 @@
         105rem = 1680px. 실측으로 세 번 만에 잡았다. */
 @theme {
   --breakpoint-3xl: 105rem;
+
+  /*
+   * 타입 스케일 v5 — "가장 작은 창에서 글자를 최대로"(원장 2026-09-03 대규모 디자인 수정).
+   * Tailwind 기본(xs 12 · sm 14 · base 16 · lg 18 · xl 20 · 2xl 24 · 3xl 30 · 4xl 36)을 **한 단계씩 올렸다**.
+   *  · xs 14 = 보조(단위·시각·메타)의 **바닥** — 1차 화면에 13px 이하는 없다.
+   *  · sm 16 = 본문·목록 1차 라벨 / base 18 = 강조 본문·섹션 제목 / lg 20 · xl 24 = 창·화면 제목
+   *  · 2xl 28 ~ 4xl 40 = 1차 핵심 수치(BigStat).
+   * 🔴 화면 파일에 `text-[Npx]`(임의 px)를 적지 말 것 — 이 토큰만 쓴다(가드 `control-scale.test.ts`).
+   *    2026-09-03 코드모드로 2,910곳을 접었다. 종이 서식(인쇄·A4 미리보기)만 `.paper-scale`로 옛 스케일.
+   * ⚠️ 줄간격: 한글 본문 1.45~1.5, 제목·수치 1.1~1.25(지시서 §2).
+   */
+  --text-xs: 14px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 16px;
+  --text-sm--line-height: 1.5;
+  --text-base: 18px;
+  --text-base--line-height: 1.5;
+  --text-lg: 20px;
+  --text-lg--line-height: 1.35;
+  --text-xl: 24px;
+  --text-xl--line-height: 1.25;
+  --text-2xl: 28px;
+  --text-2xl--line-height: 1.2;
+  --text-3xl: 32px;
+  --text-3xl--line-height: 1.15;
+  --text-4xl: 40px;
+  --text-4xl--line-height: 1.1;
+  --text-5xl: 48px;
+  --text-5xl--line-height: 1.05;
+  --text-6xl: 56px;
+  --text-6xl--line-height: 1;
+  --text-7xl: 64px;
+  --text-7xl--line-height: 1;
 }
 
 @theme inline {
@@ -147,9 +180,10 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-2xl: 18px;
-  --radius-3xl: 22px;
+  /* v5(2026-09-03): 모서리는 8~12px까지만 — 알약형·큰 라운드 남발 금지(지시서 §11). xl 이상은 전부 12px. */
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
   --radius-pill: 999px;
 
   /* shadow — 소프트 엘리베이션, 뉴트럴 베이스 (2026-07-19 네이비 리스킨)
@@ -178,12 +212,27 @@
   --bg-soft: #e9edf4;
   --surface-hi: #ffffff;
 
-  /* text — 3단 시스템, v4 대비 승압(화이트 표면 전제): 기본 #1d1d1f(16.8:1) · 중간 #3f3f45(10.5:1) ·
-     마지노선 #66666c(5.6:1 — 구 #767676 4.54:1에서 강화, muted 칠 위에서도 4.5:1 유지). */
+  /* text — 3단 시스템, v5 대비 재승압(원장 2026-09-03 "배경 위 연한 회색 텍스트 삭제"): 기본 #1d1d1f(16.8:1) ·
+     중간 #3f3f45(10.5:1) · 마지노선 #58585e(**7.1:1**, 1차 화면 보조 텍스트도 AAA에 가깝게 — 구 #66666c 5.6:1). */
   --foreground: #1d1d1f;
   --ink: #1d1d1f;
   --text-dim: #3f3f45;
-  --text-faint: #66666c;
+  --text-faint: #58585e;
+
+  /*
+   * 컨트롤(버튼·칩·탭·입력·기간 네비) 치수 — **단일 소스**(원장 2026-09-03: *"모든 버튼 라벨 안의 텍스트는
+   * 위아래 여백이 5%씩 합 10% · 텍스트를 최대한 버튼과 라벨 안에 최대 크기로"*).
+   * 높이를 먼저 정하고 글자를 끼워 맞추지 않는다 — **라벨 글자에서 높이를 도출**한다(높이 = 라벨 ÷ 0.9).
+   * 소비처는 [`control-scale.ts`](../components/ui/control-scale.ts)의 클래스 상수뿐 — 화면 파일에 h-8·text-xs를
+   * 손으로 적지 말 것. 세 벌: sm(표 안·보조) / 기본 / lg(창당 하나뿐인 Primary).
+   * ⚠️ 09-01 "툴바 컨트롤 = h-8 고정" 캐논은 이 규칙으로 **대체**됐다(높이가 라벨을 따른다).
+   */
+  --control-label-sm: 16px;
+  --control-h-sm: 18px;
+  --control-label: 18px;
+  --control-h: 20px;
+  --control-label-lg: 22px;
+  --control-h-lg: 24px;
 
   /* lines — v4 헤어라인 승압: 화이트 캔버스에선 테두리가 유일한 표면 구분자라 한 단계 진하게
      (9%→14%). 상대 위계(faint < line < strong)는 유지. */
@@ -332,6 +381,12 @@
   }
 }
 
+/*
+ * 종이 스케일 — v5 승격에서 **제외되는 지면**. 인쇄(A4)는 크기가 고정이라 글자를 올리면 장수가 는다.
+ * ① `@media print` 전역: 무엇을 찍든 Tailwind 기본 스케일로 돌아간다.
+ * ② `.paper-scale`: 화면에 뜨는 A4 미리보기(견적서·지출결의서·이력서·환불요청서·(print) 라우트) 루트에 붙인다.
+ * 🔴 화면 컴포넌트에 이 클래스를 "글자가 커서" 붙이지 말 것 — 종이만.
+ */
 @media print {
   @page {
     size: A4;
@@ -342,6 +397,50 @@
     color: black !important;
     font-feature-settings: "ss01", "cv11", "tnum";
   }
+  :root {
+    --text-xs: 0.75rem;
+    --text-xs--line-height: calc(1 / 0.75);
+    --text-sm: 0.875rem;
+    --text-sm--line-height: calc(1.25 / 0.875);
+    --text-base: 1rem;
+    --text-base--line-height: 1.5;
+    --text-lg: 1.125rem;
+    --text-lg--line-height: calc(1.75 / 1.125);
+    --text-xl: 1.25rem;
+    --text-xl--line-height: 1.4;
+    --text-2xl: 1.5rem;
+    --text-2xl--line-height: calc(2 / 1.5);
+    --text-3xl: 1.875rem;
+    --text-3xl--line-height: 1.2;
+    --text-4xl: 2.25rem;
+    --text-4xl--line-height: calc(2.5 / 2.25);
+  }
+}
+.paper-scale {
+  --text-xs: 0.75rem;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm: 0.875rem;
+  --text-sm--line-height: calc(1.25 / 0.875);
+  --text-base: 1rem;
+  --text-base--line-height: 1.5;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: calc(1.75 / 1.125);
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: calc(2 / 1.5);
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 1.2;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: calc(2.5 / 2.25);
+}
+.paper-scale .micro,
+.paper-scale .eyebrow {
+  font-size: 11px;
+}
+.paper-scale .caption,
+.paper-scale .editorial-eyebrow {
+  font-size: 12px;
 }
 
 @layer components {
@@ -358,7 +457,7 @@
     line-height: 0.95;
   }
   .eyebrow {
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -403,33 +502,33 @@
     line-height: 1.2;
   }
   .h3 {
-    font-size: 19px;
+    font-size: 20px;
     font-weight: 800;
     letter-spacing: -0.4px;
     line-height: 1.25;
   }
   .lead {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 500;
     line-height: 1.65;
   }
   .body-default {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 500;
     line-height: 1.65;
   }
   .body-sm {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 500;
     line-height: 1.6;
   }
   .body-xs {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     line-height: 1.55;
   }
   .caption {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 500;
     line-height: 1.5;
     color: var(--text-dim);
@@ -437,7 +536,7 @@
   /* editorial-eyebrow — Editorial 문법 ①의 상단 소라벨(한글 전제, PageHeader가 캡슐화).
      ⚠️ 기존 .eyebrow(uppercase 영문 전제, 64파일 소비)는 호환용으로 불변 — 전역 재정의 금지. */
   .editorial-eyebrow {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--primary);
   }
@@ -445,7 +544,7 @@
   /* micro — 라벨·메타. (2026-07-19 de-mono: 구 JetBrains Mono 11px 700 uppercase 자간 1.5px가
      "코딩 틱함"의 진원지라 Pretendard 톤으로 전환. mono는 .tabular/시간·숫자 데이터에만.) */
   .micro {
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 500;
     letter-spacing: 0.02em;
     color: var(--text-faint);

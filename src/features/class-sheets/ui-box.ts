@@ -27,7 +27,7 @@
  */
 
 /** 시트 행의 글자 — 이 크기 **하나만** 쓴다(이름·드롭다운·유닛·특이사항·영어이름·퇴원일 전부). */
-export const SHEET_TEXT = "text-[13px]";
+export const SHEET_TEXT = "text-sm";
 
 /** 테두리·라운드·높이만 — 글자 굵기를 스스로 정하는 칸(유닛)이 쓴다. */
 export const SHEET_BOX_FRAME = "border-line-strong rounded-sm border h-5";

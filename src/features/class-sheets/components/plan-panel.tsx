@@ -61,14 +61,14 @@ export function PlanPanel({
                 size={11}
                 className="text-text-faint transition-transform group-open:rotate-90"
               />
-              <span className="text-foreground text-[14px] font-bold">{sec.title}</span>
-              <span className="text-foreground num ml-auto text-[11px] font-bold">
+              <span className="text-foreground text-sm font-bold">{sec.title}</span>
+              <span className="text-foreground num ml-auto text-xs font-bold">
                 {sec.scope === "month" ? monthStart.slice(0, 7) : "이번 주"}
               </span>
             </summary>
             <div className="space-y-1 px-1 pt-1 pb-2">
               {/* 열 머리글 — 시트의 '교재명 / 목표 진도' 머리줄. faint 10px는 안 읽혀 11px 굵게로. */}
-              <div className="text-foreground bg-bg-soft grid grid-cols-[74px_1fr_1fr] gap-1 rounded-md px-1 py-0.5 text-[11px] font-bold">
+              <div className="text-foreground bg-bg-soft grid grid-cols-[74px_1fr_1fr] gap-1 rounded-md px-1 py-0.5 text-xs font-bold">
                 <span />
                 <span>교재명</span>
                 <span>목표 진도</span>
@@ -81,7 +81,7 @@ export function PlanPanel({
                         색은 학원설정 단일 소스(skillAreaColorOf) — 여기서 이름별 색을 박지 말 것. */}
                     <span
                       // 계획 표의 '구분' 칸과 **같은 박스**(잉크 테두리·h-6) — 영역 구분은 바탕색이 진다.
-                      className={`${SHEET_BOX_FRAME} inline-flex h-6 w-full items-center justify-center truncate px-1 text-[12px] font-bold ${
+                      className={`${SHEET_BOX_FRAME} inline-flex h-6 w-full items-center justify-center truncate px-1 text-xs font-bold ${
                         SUBJECT_SOFT[skillAreaColorOf(skillAreas, area.key)]
                       }`}
                       title={area.label}
@@ -113,7 +113,7 @@ export function PlanPanel({
       </div>
 
       <div className="border-line-strong mt-1.5 border-t pt-1.5">
-        <span className="text-foreground text-[11px] font-bold">메모</span>
+        <span className="text-foreground text-xs font-bold">메모</span>
         <textarea
           className={`${SHEET_TEXTAREA} mt-1 min-h-[56px]`}
           defaultValue={memo}

@@ -110,17 +110,17 @@ export function StudentImportDialog() {
             aria-label="학생 엑셀 가져오기"
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-bold">학생 엑셀 가져오기</h2>
+              <h2 className="text-foreground text-base font-bold">학생 엑셀 가져오기</h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
                 <X className="size-4" />
               </button>
             </header>
-            <p className="text-text-dim mt-1 text-[11px]">
+            <p className="text-text-dim mt-1 text-xs">
               <b>엑셀 내보내기</b>로 받은 파일(또는 같은 형식: 이름·학년·학교·상태·학부모 연락처)을 올리면
               <b> 새 학생만</b> 추가됩니다. 이미 있는 학생은 건너뜁니다.
             </p>
 
-            <label className="text-foreground mt-3 block text-[12px] font-medium">
+            <label className="text-foreground mt-3 block text-xs font-medium">
               엑셀 파일 <span className="text-danger">*</span>
             </label>
             <div className="mt-1.5 flex items-center gap-2">
@@ -147,21 +147,21 @@ export function StudentImportDialog() {
               </button>
             </div>
             {!file ? (
-              <p className="text-text-faint mt-1.5 text-[11px]">엑셀 파일을 선택하면 미리보기가 활성화됩니다.</p>
+              <p className="text-text-faint mt-1.5 text-xs">엑셀 파일을 선택하면 미리보기가 활성화됩니다.</p>
             ) : null}
 
-            {error ? <p className="text-danger mt-3 text-[12px]">{error}</p> : null}
+            {error ? <p className="text-danger mt-3 text-xs">{error}</p> : null}
 
             {summary ? (
               <div className="mt-4 flex min-h-0 flex-1 flex-col">
-                <div className="num flex gap-3 text-[12px]">
+                <div className="num flex gap-3 text-xs">
                   <span className="text-primary">신규 {summary.new}</span>
                   <span className="text-text-faint">중복 {summary.duplicate}</span>
                   <span className="text-danger">오류 {summary.error}</span>
                   <span className="text-text-dim">전체 {summary.total}</span>
                 </div>
                 <div className="border-line mt-2 min-h-0 flex-1 overflow-y-auto rounded-md border">
-                  <table className="w-full text-[12px]">
+                  <table className="w-full text-xs">
                     <thead className="bg-bg-soft text-text-dim sticky top-0">
                       <tr className="[&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-medium">
                         <th>행</th>
@@ -194,7 +194,7 @@ export function StudentImportDialog() {
                   type="button"
                   onClick={runImport}
                   disabled={newRows.length === 0 || importing}
-                  className="bg-primary text-primary-foreground hover:bg-primary/85 mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
+                  className="bg-primary text-primary-foreground hover:bg-primary/85 mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition disabled:opacity-40"
                 >
                   {importing ? <Loader2 className="size-3 animate-spin" /> : null}
                   {newRows.length}명 가져오기
@@ -204,17 +204,17 @@ export function StudentImportDialog() {
 
             {result ? (
               result.error ? (
-                <p className="text-danger mt-3 text-[12px]">{result.error}</p>
+                <p className="text-danger mt-3 text-xs">{result.error}</p>
               ) : (
                 <>
-                  <p className="text-primary mt-3 text-[12px]">
+                  <p className="text-primary mt-3 text-xs">
                     등록 완료 — 신규 {result.inserted}
                     {result.skipped ? <span className="text-text-faint"> · 건너뜀 {result.skipped}</span> : null}
                     {result.failed ? <span className="text-amber"> · 실패 {result.failed}</span> : null}
                   </p>
                   {/* 동명이인이라 이름이 바뀐 건 반드시 보여준다 — 조용히 바꾸면 나중에 못 찾는다. */}
                   {result.renamed?.length ? (
-                    <div className="border-line bg-bg-soft mt-2 rounded-lg border px-3 py-2 text-[12px]">
+                    <div className="border-line bg-bg-soft mt-2 rounded-lg border px-3 py-2 text-xs">
                       <p className="text-foreground font-bold">
                         동명이인이 있어 {result.renamed.length}명은 이름 뒤에 구분자를 붙여 등록했습니다
                       </p>

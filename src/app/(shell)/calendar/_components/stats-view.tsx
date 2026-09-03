@@ -70,7 +70,7 @@ export function StatsView({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-text-dim text-[13px]">
+      <p className="text-text-dim text-sm">
         <span className="num text-foreground font-bold">
           {years[0]}~{years[years.length - 1]}
         </span>

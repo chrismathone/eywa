@@ -51,8 +51,8 @@ export function StudentPool({
       }`}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-foreground text-[13.5px] font-bold">학생</h3>
-        <span className="text-text-faint text-[11.5px]">
+        <h3 className="text-foreground text-sm font-bold">학생</h3>
+        <span className="text-text-faint text-xs">
           {searching ? (
             <>
               <span className="num">{matches.length}</span>명 찾음
@@ -73,7 +73,7 @@ export function StudentPool({
       />
 
       {isOver && (
-        <p className="text-danger text-center text-[11.5px] font-bold">여기 놓으면 배정 해제</p>
+        <p className="text-danger text-center text-xs font-bold">여기 놓으면 배정 해제</p>
       )}
 
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
@@ -82,7 +82,7 @@ export function StudentPool({
         ))}
         {!searching && (
           // 목록이 비어 보이는 이유를 적어 둔다 — 빈 칸만 있으면 "학생이 안 나온다"로 읽힌다.
-          <li className="text-text-faint px-1 py-2 text-[12.5px] leading-relaxed">
+          <li className="text-text-faint px-1 py-2 text-xs leading-relaxed">
             이름이나 학교를 입력하면 여기에 나옵니다.
             {canWrite && (
               <>
@@ -93,12 +93,12 @@ export function StudentPool({
           </li>
         )}
         {searching && matches.length === 0 && (
-          <li className="text-text-faint px-1 py-2 text-[12.5px]">찾는 학생이 없습니다</li>
+          <li className="text-text-faint px-1 py-2 text-xs">찾는 학생이 없습니다</li>
         )}
         {matches.length > shown.length && (
           // ⚠️ 위의 건수(matches.length)는 **참값**을 유지한다 — 잘린 배열 길이를 건수로 쓰면
           //    학생이 늘어도 숫자가 상한에 붙어 안 변한다([[#89]]).
-          <li className="text-text-faint px-1 py-2 text-[11.5px]">
+          <li className="text-text-faint px-1 py-2 text-xs">
             <span className="num">{matches.length}</span>명 중{" "}
             <span className="num">{shown.length}</span>명만 표시 — 이름을 더 입력해 좁히세요
           </li>
@@ -142,8 +142,8 @@ function PoolItem({
       <span className="text-foreground min-w-0 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
         {student.name}
       </span>
-      <span className="text-text-faint ml-auto shrink-0 text-[11.5px]">{student.schoolGrade}</span>
-      <span className="text-text-faint w-[2.9rem] shrink-0 text-right text-[11.5px]">
+      <span className="text-text-faint ml-auto shrink-0 text-xs">{student.schoolGrade}</span>
+      <span className="text-text-faint w-[2.9rem] shrink-0 text-right text-xs">
         {assigned ? "배정됨" : ""}
       </span>
     </li>

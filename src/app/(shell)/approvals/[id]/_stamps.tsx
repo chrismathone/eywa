@@ -104,7 +104,7 @@ function SignArea({ col, actionable }: { col: Col; actionable: boolean }) {
     // 기안자 화면에서 버튼처럼 보이면 "눌러도 안 되는 결재 버튼"이 된다(원장 2026-08-18 제보).
     if (!actionable) {
       return (
-        <span className="border-primary/50 text-primary/70 inline-flex items-center rounded-md border border-dashed px-2 py-1 text-[11px] font-semibold">
+        <span className="border-primary/50 text-primary/70 inline-flex items-center rounded-md border border-dashed px-2 py-1 text-xs font-semibold">
           결재 차례
         </span>
       );
@@ -114,7 +114,7 @@ function SignArea({ col, actionable }: { col: Col; actionable: boolean }) {
   if (col.sign === "deferred") {
     // 부재로 건너뛰어진 칸 — 사후 '후결 확인'을 기다린다(하이웍스 후열 '확인' 대응).
     return (
-      <span className="border-amber/70 text-amber inline-flex items-center rounded-md border border-dashed px-2 py-1 text-[11px] font-semibold">
+      <span className="border-amber/70 text-amber inline-flex items-center rounded-md border border-dashed px-2 py-1 text-xs font-semibold">
         후결 대기
       </span>
     );
@@ -132,7 +132,7 @@ function SignArea({ col, actionable }: { col: Col; actionable: boolean }) {
           aria-hidden
           className="absolute inset-0 [background:linear-gradient(to_top_right,transparent_calc(50%-0.5px),var(--line-strong)_calc(50%-0.5px),var(--line-strong)_calc(50%+0.5px),transparent_calc(50%+0.5px))]"
         />
-        <span className="bg-card text-text-faint relative px-1 text-[11px] font-medium">
+        <span className="bg-card text-text-faint relative px-1 text-xs font-medium">
           전결 생략
         </span>
       </span>
@@ -141,11 +141,11 @@ function SignArea({ col, actionable }: { col: Col; actionable: boolean }) {
   return (
     <span className="inline-flex flex-col items-center gap-1">
       <span
-        className={`flex size-14 items-center justify-center rounded-full border-2 text-[15px] font-bold ${STAMP_CLS[col.sign]}`}
+        className={`flex size-14 items-center justify-center rounded-full border-2 text-base font-bold ${STAMP_CLS[col.sign]}`}
       >
         {STAMP_TEXT[col.sign]}
       </span>
-      <span className="num text-text-faint text-[10px] leading-none">{col.date ?? ""}</span>
+      <span className="num text-text-faint text-xs leading-none">{col.date ?? ""}</span>
     </span>
   );
 }
@@ -197,7 +197,7 @@ export function ApprovalStamps({
             {cols.map((c) => (
               <th
                 key={c.key}
-                className={`border-line text-text-dim border px-2 py-1 text-[10px] font-semibold ${
+                className={`border-line text-text-dim border px-2 py-1 text-xs font-semibold ${
                   c.active ? "bg-primary-soft/30" : "bg-bg-soft/60"
                 }`}
               >
@@ -218,11 +218,11 @@ export function ApprovalStamps({
                   <SignArea col={c} actionable={actionable} />
                 </span>
                 {c.actedByName ? (
-                  <p className="text-text-faint text-[10px] leading-tight whitespace-nowrap">
+                  <p className="text-text-faint text-xs leading-tight whitespace-nowrap">
                     대결 · {c.actedByName}
                   </p>
                 ) : null}
-                <p className="text-foreground mt-0.5 text-[12px] font-medium whitespace-nowrap">
+                <p className="text-foreground mt-0.5 text-xs font-medium whitespace-nowrap">
                   {c.name}
                 </p>
               </td>
@@ -235,7 +235,7 @@ export function ApprovalStamps({
               </th>
               <td
                 colSpan={cols.length}
-                className="border-line border px-3 py-1.5 text-left text-[12px]"
+                className="border-line border px-3 py-1.5 text-left text-xs"
               >
                 <span className="text-foreground inline-flex flex-wrap items-center gap-x-3 gap-y-1">
                   {doc.refs.map((r) => (

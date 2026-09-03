@@ -42,7 +42,7 @@ function fmtDetectedAt(iso: string): string {
 function AnomalyLine({ a, muted }: { a: ProgressAnomaly; muted?: boolean }) {
   const move = a.from && a.to ? `${a.from.grade} ${a.from.lesson} → ${a.to.grade} ${a.to.lesson}` : null;
   return (
-    <span className={`break-keep text-[12px] leading-snug ${muted ? "text-text-faint" : "text-text-dim"}`}>
+    <span className={`break-keep text-xs leading-snug ${muted ? "text-text-faint" : "text-text-dim"}`}>
       <span className={muted ? "" : "text-danger font-bold"}>{anomalyLabel(a.type)}</span>
       <span className="text-text-faint mx-1.5">·</span>
       <span className="num">{fmtDetectedAt(a.at)}</span>
@@ -76,8 +76,8 @@ function AnomalyCard({ anomalies, canResolve }: { anomalies: readonly ProgressAn
   return (
     <div className="border-danger/25 bg-danger-soft/40 rounded-2xl border p-4">
       <div className="flex items-center gap-2">
-        <span className="bg-danger rounded-pill px-2 py-0.5 text-[10px] font-bold text-white">진도 확인 필요</span>
-        <p className="text-foreground text-[13px] font-bold">최근 이상 감지 {anomalies.length}건</p>
+        <span className="bg-danger rounded-pill px-2 py-0.5 text-xs font-bold text-white">진도 확인 필요</span>
+        <p className="text-foreground text-sm font-bold">최근 이상 감지 {anomalies.length}건</p>
       </div>
       <ul className="mt-2 space-y-1.5">
         {anomalies.map((a) => (
@@ -87,7 +87,7 @@ function AnomalyCard({ anomalies, canResolve }: { anomalies: readonly ProgressAn
           </li>
         ))}
       </ul>
-      <p className="text-text-faint mt-2 text-[11px] leading-snug break-keep">
+      <p className="text-text-faint mt-2 text-xs leading-snug break-keep">
         진도 점프는 <b>같은 선생님이 쓴 직전 진도와 비교</b>합니다 — 담당이 다른 진도(부담임 등)와는
         비교하지 않으므로 경고하지 않습니다. 아래 수업 진도 표에서 해당 날짜의 진도 입력이 맞는지 확인해
         주세요. 선행을 시작했거나 교재를 건너뛴 경우라면 정상입니다 — <b>이상 없음</b>을 누르면 이 학생의
@@ -104,7 +104,7 @@ function AnomalyCard({ anomalies, canResolve }: { anomalies: readonly ProgressAn
 function ResolvedAnomalies({ anomalies, canResolve }: { anomalies: readonly ProgressAnomaly[]; canResolve: boolean }) {
   return (
     <details className="border-line bg-bg-soft/40 rounded-2xl border px-4 py-2.5">
-      <summary className="text-text-dim cursor-pointer text-[12px]">
+      <summary className="text-text-dim cursor-pointer text-xs">
         이상 없음으로 확인한 기록 <b className="text-foreground">{anomalies.length}</b>건
         <span className="text-text-faint ml-1.5">(사람이 확인한 것 + 같은 선생님 진도 기준 자동 확인)</span>
       </summary>
@@ -129,33 +129,33 @@ function TrackCard({ t }: { t: TrackAnalytics }) {
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
-            className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${
+            className={`rounded-pill px-2 py-0.5 text-xs font-bold ${
               t.track === "ahead" ? "bg-amber-soft text-amber" : "bg-primary-soft text-primary"
             }`}
           >
             {TRACK_LABEL[t.track]}
           </span>
-          {t.gradeScope ? <span className="text-text-faint text-[11px]">{t.gradeScope}</span> : null}
+          {t.gradeScope ? <span className="text-text-faint text-xs">{t.gradeScope}</span> : null}
         </div>
-        <span className="text-text-faint text-[11px]">{t.chapterCount}개 기록</span>
+        <span className="text-text-faint text-xs">{t.chapterCount}개 기록</span>
       </div>
 
       <div className="@2xl:grid @2xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] @2xl:items-start @2xl:gap-x-5">
         {/* 현재 위치 */}
         {t.current ? (
           <div className="mb-3 @2xl:mb-0">
-            <p className="text-text-faint text-[11px]">현재 위치</p>
-            <p className="text-foreground text-[15px] font-bold break-keep">
+            <p className="text-text-faint text-xs">현재 위치</p>
+            <p className="text-foreground text-base font-bold break-keep">
               {t.current.grade} · {t.current.lesson}
             </p>
-            <p className="text-text-faint text-[11px] break-keep">{t.current.unit}</p>
+            <p className="text-text-faint text-xs break-keep">{t.current.unit}</p>
             <div className="bg-bg-soft relative mt-1.5 h-1.5 w-full overflow-hidden rounded-pill">
               <div
                 className="bg-primary absolute inset-y-0 left-0 rounded-pill"
                 style={{ width: `${t.progressPct}%` }}
               />
             </div>
-            <p className="text-text-faint mt-0.5 text-[10px]">전체 커리큘럼의 {t.progressPct}%</p>
+            <p className="text-text-faint mt-0.5 text-xs">전체 커리큘럼의 {t.progressPct}%</p>
           </div>
         ) : null}
 
@@ -163,16 +163,16 @@ function TrackCard({ t }: { t: TrackAnalytics }) {
           {/* 지표 3셀 */}
           <div className="border-line grid grid-cols-3 divide-x rounded-md border text-center">
             <div className="px-2 py-2">
-              <p className="text-text-faint text-[10px]">수업당 속도</p>
-              <p className="text-foreground text-[13px] font-bold">{fmtSpeed(t.speedPerLessonDay)}</p>
+              <p className="text-text-faint text-xs">수업당 속도</p>
+              <p className="text-foreground text-sm font-bold">{fmtSpeed(t.speedPerLessonDay)}</p>
             </div>
             <div className="px-2 py-2">
-              <p className="text-text-faint text-[10px]">또래 대비</p>
-              <p className="text-primary text-[13px] font-bold">{top != null ? `상위 ${top}%` : "표본 부족"}</p>
+              <p className="text-text-faint text-xs">또래 대비</p>
+              <p className="text-primary text-sm font-bold">{top != null ? `상위 ${top}%` : "표본 부족"}</p>
             </div>
             <div className="px-2 py-2">
-              <p className="text-text-faint text-[10px]">90일 예측</p>
-              <p className="text-foreground text-[13px] font-bold">
+              <p className="text-text-faint text-xs">90일 예측</p>
+              <p className="text-foreground text-sm font-bold">
                 {t.predictions.find((p) => p.days === 90)?.grade || "—"}
               </p>
             </div>
@@ -180,7 +180,7 @@ function TrackCard({ t }: { t: TrackAnalytics }) {
 
           {/* 예측 상세 */}
           {t.predictions.length ? (
-            <div className="text-text-dim mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+            <div className="text-text-dim mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
               {t.predictions.map((p) => (
                 <span key={p.days}>
                   {p.days}일 후 <b className="text-foreground">{p.grade}</b> {p.lesson}
@@ -210,7 +210,7 @@ export async function ProgressContainerPanel({ studentId }: { studentId: string 
     <div className="space-y-3">
       <header className="flex items-baseline justify-between">
         <h2 className="text-foreground text-base font-bold">진도 분석</h2>
-        <p className="text-text-faint text-[11px]">원스크린 진도 기록 기반 자동 산출</p>
+        <p className="text-text-faint text-xs">원스크린 진도 기록 기반 자동 산출</p>
       </header>
       {/* 이상 감지는 트랙 카드보다 위 — 진도 이상 알림을 타고 온 사람이 스크롤 없이 바로 본다. */}
       {open.length ? <AnomalyCard anomalies={open} canResolve={canResolve} /> : null}

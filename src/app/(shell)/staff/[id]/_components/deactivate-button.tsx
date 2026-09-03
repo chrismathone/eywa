@@ -77,13 +77,13 @@ export function DeactivateButton({
       {/* 퇴사일 — 계약 이력에 '퇴사 (날짜)' 줄로 남는다. 복구 때는 받지 않는다. */}
       {isInactive ? null : (
         <label className="mr-2 inline-flex items-center gap-1.5">
-          <span className="text-text-dim text-[11px]">퇴사일</span>
+          <span className="text-text-dim text-xs">퇴사일</span>
           <input
             type="date"
             name="resignDate"
             value={resignDate}
             onChange={(e) => setResignDate(e.target.value)}
-            className="border-line bg-card num rounded-lg border px-2 py-1 text-[12px] outline-none"
+            className="border-line bg-card num rounded-lg border px-2 py-1 text-xs outline-none"
           />
         </label>
       )}

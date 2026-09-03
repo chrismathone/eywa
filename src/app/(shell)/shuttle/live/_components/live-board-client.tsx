@@ -145,7 +145,7 @@ export function LiveBoardClient({
         >
           <EyIcon name="chevronLeft" size={16} />
         </Button>
-        <span className="text-foreground px-1 text-[14.5px] font-bold whitespace-nowrap">
+        <span className="text-foreground px-1 text-sm font-bold whitespace-nowrap">
           {formatKoreanDate(date)}
         </span>
         <Button
@@ -169,7 +169,7 @@ export function LiveBoardClient({
       </div>
 
       {/* 요약 — 숫자는 전부 `summarizeLive`에서 온다(여기서 세지 않는다). */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2 text-[12.5px]">
+      <div className="toolbar-rail flex flex-wrap items-center gap-2 text-xs">
         {/* 📐 **0인 숫자는 색 알약으로 강조하지 않는다**(2026-09-03) — 아침엔 여섯 알약 중 넷이 0이라
             아무 뜻 없이 눈을 끌었다. 관제에서 실제로 봐야 할 건 **지금 도는 것**(운행 중)과
             **남은 일**(미기록)이라, 그 둘만 색을 갖고 나머지는 0일 때 흐린 글자로 물러난다. */}
@@ -207,7 +207,7 @@ export function LiveBoardClient({
         )}
         {/* 시각을 적는다 — "방금"은 10분 뒤에 거짓이 된다(신호가 온 적 없으면 아예 안 그린다). */}
         {lastSignalAt !== null && (
-          <span className="text-green ml-auto text-[11.5px] font-bold whitespace-nowrap">
+          <span className="text-green ml-auto text-xs font-bold whitespace-nowrap">
             <span className="num">{kstTimeOf(new Date(lastSignalAt))}</span> 갱신됨
           </span>
         )}
@@ -215,7 +215,7 @@ export function LiveBoardClient({
 
       {/* 🔴 0243a 미적용 — 상태를 그리는 대신 **왜 안 보이는지**를 말한다(빈 화면은 고장으로 읽힌다). */}
       {!tripsReady && (
-        <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-[12.5px]">
+        <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-xs">
           운행 상태(출발·종료)는 마이그레이션 <span className="num">0243a</span>를 적용하면 보입니다 —
           지금은 탑승 기록만 표시합니다.
         </div>
@@ -224,10 +224,10 @@ export function LiveBoardClient({
       {/* 지금 볼 것 — 🔴 아래 차 목록에서 이 회차를 **빼지 않는다**(두 자리에서 동시에 사라지면 안 된다). */}
       {alerts.length > 0 && (
         <section className="border-danger/30 bg-danger-soft flex flex-col gap-1.5 rounded-2xl border p-3">
-          <h2 className="text-danger text-[13.5px] font-bold">지금 확인할 회차 {alerts.length}</h2>
+          <h2 className="text-danger text-sm font-bold">지금 확인할 회차 {alerts.length}</h2>
           <ul className="flex flex-col gap-1">
             {alerts.map(({ vehicle, run }) => (
-              <li key={run.run.id} className="flex flex-wrap items-center gap-2 text-[12.5px]">
+              <li key={run.run.id} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-foreground font-bold">{vehicle.vehicleName}</span>
                 <span className="text-text-dim">{runTitle(run.run)}</span>
                 {run.alert !== "none" && (
@@ -235,13 +235,13 @@ export function LiveBoardClient({
                     {RUN_ALERT_LABEL[run.alert]}
                   </Pill>
                 )}
-                <span className="text-text-faint num text-[11.5px]">
+                <span className="text-text-faint num text-xs">
                   {progressLabel(run.progress)}
                 </span>
                 {vehicle.driverPhone && (
                   <a
                     href={`tel:${vehicle.driverPhone}`}
-                    className="text-primary text-[11.5px] font-bold underline"
+                    className="text-primary text-xs font-bold underline"
                   >
                     기사 전화
                   </a>

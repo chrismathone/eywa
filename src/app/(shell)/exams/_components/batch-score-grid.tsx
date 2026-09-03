@@ -100,9 +100,9 @@ export function BatchScoreGrid({
               const p = pct(r.score, maxScore);
               return (
                 <tr key={r.studentId} className="hover:bg-bg-soft/50">
-                  <td className="text-foreground px-4 py-2 text-[13px] font-medium">{r.name}</td>
-                  <td className="text-text-dim px-4 py-2 text-[12px]">{r.grade ?? "—"}</td>
-                  <td className="text-text-dim px-4 py-2 text-[12px]">{r.school ?? "—"}</td>
+                  <td className="text-foreground px-4 py-2 text-sm font-medium">{r.name}</td>
+                  <td className="text-text-dim px-4 py-2 text-xs">{r.grade ?? "—"}</td>
+                  <td className="text-text-dim px-4 py-2 text-xs">{r.school ?? "—"}</td>
                   <td className="px-4 py-1.5 text-right">
                     <input
                       type="number"
@@ -117,10 +117,10 @@ export function BatchScoreGrid({
                       className="border-line bg-background text-foreground num w-20 rounded-md border px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
                     />
                   </td>
-                  <td className="text-text-dim num px-4 py-2 text-right text-[12px]">
+                  <td className="text-text-dim num px-4 py-2 text-right text-xs">
                     {p == null ? "—" : `${p}%`}
                   </td>
-                  <td className="text-text-dim num px-4 py-2 text-right text-[12px]">
+                  <td className="text-text-dim num px-4 py-2 text-right text-xs">
                     {r.rank == null ? "—" : `${r.rank}위`}
                   </td>
                 </tr>

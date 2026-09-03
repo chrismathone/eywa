@@ -22,7 +22,7 @@ import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
 
 const INPUT =
-  "border-line focus:border-primary h-8 w-full rounded-lg border bg-card px-2 text-[13px] font-semibold outline-none disabled:opacity-60";
+  "border-line focus:border-primary h-8 w-full rounded-lg border bg-card px-2 text-sm font-semibold outline-none disabled:opacity-60";
 
 /**
  * 진도(수업계획) 구획을 그리는 데 필요한 것 한 묶음 — **없으면 구획 자체가 안 생긴다**.
@@ -115,18 +115,18 @@ function SeatJjClass({
   );
   return (
     <section className="border-line min-w-0 overflow-hidden rounded-2xl border">
-      <header className="bg-bg-soft border-line flex flex-wrap items-center gap-2 border-b px-3 py-1.5 text-[13px]">
+      <header className="bg-bg-soft border-line flex flex-wrap items-center gap-2 border-b px-3 py-1.5 text-sm">
         <span className="min-w-0 truncate font-bold" title={r.className}>
           {r.className}
         </span>
-        <span className="text-text-faint text-[11px] tabular-nums">{r.students.length}명</span>
-        <span className="text-text-faint text-[11px] tabular-nums">~{r.end}</span>
+        <span className="text-text-faint text-xs tabular-nums">{r.students.length}명</span>
+        <span className="text-text-faint text-xs tabular-nums">~{r.end}</span>
         {!readOnly && left > 0 ? (
           <button
             type="button"
             disabled={pending}
             onClick={() => onFillClass(r.classId)}
-            className="border-line bg-card text-primary ml-auto rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold disabled:opacity-50"
+            className="border-line bg-card text-primary ml-auto rounded-full border px-2.5 py-0.5 text-xs font-semibold disabled:opacity-50"
           >
             이 반 출석
           </button>
@@ -153,7 +153,7 @@ function SeatJjClass({
           flushHost={plan.flushFields}
         />
       ) : null}
-      <table className="w-full table-fixed border-collapse text-[13px] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-[var(--line-faint)]">
+      <table className="w-full table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-[var(--line-faint)]">
         {/* 여섯 칸 — 영어 시트 JJ 폼과 **같은 순서**(이름 · 출결 · 태도 · 자유 입력 · 특이사항).
             ⚠️ 폭은 %다(시트는 px). 이 표는 반 수만큼 열이 갈리는 격자 안에 들어가 폭이 고정이 아니다.
             특이사항은 width 없는 마지막 <col>이라 **잔여를 받는다**(시트와 같은 규약). */}
@@ -167,7 +167,7 @@ function SeatJjClass({
           <col />
         </colgroup>
         <thead>
-          <tr className="bg-bg-soft text-foreground text-[11px]">
+          <tr className="bg-bg-soft text-foreground text-xs">
             <th className="px-2 py-1.5 text-center font-bold">이름</th>
             <th className="px-1 py-1.5 text-center font-bold">출결</th>
             <th className="px-1 py-1.5 text-center font-bold" title="이 교시의 수업 태도 — 누를 때마다 5단 눈금을 돕니다">
@@ -193,7 +193,7 @@ function SeatJjClass({
                   <p className="truncate font-bold" title={noteTitle ? `${s.name} · ${noteTitle}` : s.name}>
                     {s.name}
                   </p>
-                  <p className="text-text-dim truncate text-[11.5px]">
+                  <p className="text-text-dim truncate text-xs">
                     {schoolGradeLabel(s.school, s.grade) || " "}
                   </p>
                 </td>
@@ -205,7 +205,7 @@ function SeatJjClass({
                       type="button"
                       disabled={readOnly || pending}
                       onClick={() => onSave(r.classId, s.id, cur === "present" ? null : "present", cur)}
-                      className={`min-w-[40px] rounded-lg border px-1.5 py-1 text-[12px] font-bold disabled:cursor-default ${
+                      className={`min-w-[40px] rounded-lg border px-1.5 py-1 text-xs font-bold disabled:cursor-default ${
                         cur ? SEAT_TONE[cur] : "border-line bg-card border-dashed text-text-dim"
                       }`}
                     >
@@ -217,7 +217,7 @@ function SeatJjClass({
                         disabled={pending}
                         onClick={() => onSave(r.classId, s.id, "absent", cur)}
                         aria-label={`${s.name} 결석`}
-                        className="border-line bg-card text-text-faint hover:text-att-absent-ink grid size-6 place-items-center rounded-full border text-[10px] font-bold"
+                        className="border-line bg-card text-text-faint hover:text-att-absent-ink grid size-6 place-items-center rounded-full border text-xs font-bold"
                       >
                         결
                       </button>

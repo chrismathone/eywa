@@ -78,7 +78,7 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
           })}
         </tbody>
       </table>
-      <p className="text-text-dim border-line border-t px-3 py-2 text-right text-[12px]">
+      <p className="text-text-dim border-line border-t px-3 py-2 text-right text-xs">
         총 <span className="num font-semibold">{events.length}</span>건
       </p>
     </DragScrollArea>

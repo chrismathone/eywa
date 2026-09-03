@@ -193,7 +193,7 @@ export function useSearchActive(): boolean {
 export function ClassSearchCount({ rowKeys }: { rowKeys: readonly string[] }) {
   const { active, count } = useClassMatched(rowKeys);
   if (!active) return null;
-  return <span className="text-amber num text-[11px] font-bold">검색 {count}명</span>;
+  return <span className="text-amber num text-xs font-bold">검색 {count}명</span>;
 }
 
 /**
@@ -211,7 +211,7 @@ export function SearchEmptyRow({ colSpan, where }: { colSpan: number; where: str
       <tr>
         <td colSpan={colSpan} className="border-line border-b px-4 py-6">
           <div className="sticky left-0 flex w-fit items-center gap-2">
-            <span className="text-foreground text-[13px] font-bold">
+            <span className="text-foreground text-sm font-bold">
               {emptySearchMessage(ctx.query, where)}
             </span>
             <button

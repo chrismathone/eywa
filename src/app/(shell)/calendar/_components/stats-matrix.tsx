@@ -203,7 +203,7 @@ export function StatsMatrix({
             )}
           </tbody>
         </table>
-        <p className="text-text-faint border-line border-t px-3 py-1.5 text-[11px]">
+        <p className="text-text-faint border-line border-t px-3 py-1.5 text-xs">
           숫자를 누르면 그 칸의 일정이 열립니다 · 여러 날 일정은 시작일 기준 1건 ·{" "}
           <span className="num">{years[0]}</span>년 이전에 시작해 이어지는 일정은 집계·목록에 없습니다
         </p>

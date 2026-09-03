@@ -78,7 +78,7 @@ export function StopColumn({
     //    안쪽 여백을 조금 주면 링이 잘릴 자리가 생긴다. 컨테이너 안 요소는 다 같이 밀리므로 줄맞춤은 그대로.
     <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-1 py-0.5">
       <div className="flex items-center justify-between gap-2 px-1">
-        <h2 className="text-foreground text-[15px] font-bold">{runTitle(run)}</h2>
+        <h2 className="text-foreground text-base font-bold">{runTitle(run)}</h2>
         {canWrite && (
           <Button variant="outline" className={SHUTTLE_ACTION} onClick={() => setAdding((v) => !v)}>
             + 정류장
@@ -88,7 +88,7 @@ export function StopColumn({
       {canWrite && (
         // 요일 편집이 칩 안에 접혀 있어 처음 보면 못 찾는다(원장 2026-08-19 *"요일 어디서?"*) —
         // 어디를 눌러야 하는지 한 줄로 적어 둔다.
-        <p className="text-text-faint px-1 text-[11.5px]">
+        <p className="text-text-faint px-1 text-xs">
           학생을 끌어다 놓으면 <b className="font-bold">평일</b>로 들어갑니다 — 칩의 요일 글자를
           누르면 요일을 바꿉니다.
         </p>
@@ -97,7 +97,7 @@ export function StopColumn({
       {adding && canWrite && (
         <div className="bg-card flex max-h-56 flex-col gap-1 overflow-y-auto rounded-2xl p-2 shadow-[var(--shadow-card)]">
           {addable.length === 0 ? (
-            <p className="text-text-faint px-1 py-2 text-[12.5px]">
+            <p className="text-text-faint px-1 py-2 text-xs">
               추가할 정류장이 없습니다 — 헤더의 &lsquo;정류장 관리&rsquo;에서 먼저 만드세요.
             </p>
           ) : (
@@ -221,9 +221,9 @@ function StopCard({
             <EyIcon name="grip" className="size-4" />
           </button>
         )}
-        <span className={`min-w-0 flex-1 truncate text-[13.5px] ${isCampus ? "text-text-dim font-medium" : "text-foreground font-bold"}`}>
+        <span className={`min-w-0 flex-1 truncate text-sm ${isCampus ? "text-text-dim font-medium" : "text-foreground font-bold"}`}>
           {isCampus ? RUN_STOP_KIND_LABEL[stop.kind] : stop.stopName}
-          {stop.stopMemo && <span className="text-text-faint text-[11.5px]"> · {stop.stopMemo}</span>}
+          {stop.stopMemo && <span className="text-text-faint text-xs"> · {stop.stopMemo}</span>}
         </span>
         {/* 배정이 0명이면 '+ 학생'을 **머리줄의 빈 자리**에 둔다 — 아래에 따로 줄을 만들면 카드마다
             빈 줄이 하나씩 생겨 세로가 낭비된다(원장 2026-08-19 *"공간낭비 없도록"*). */}
@@ -293,7 +293,7 @@ function StopCard({
         </div>
       )}
       {!isCampus && stop.riders.length === 0 && !canWrite && (
-        <p className="text-text-faint mt-1.5 text-[11.5px]">배정된 학생이 없습니다</p>
+        <p className="text-text-faint mt-1.5 text-xs">배정된 학생이 없습니다</p>
       )}
 
       {picking && canWrite && !isCampus && (
@@ -318,16 +318,16 @@ function StopCard({
                 className={cn("hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-2 text-left", SHUTTLE_ROW, SHUTTLE_ROW_TEXT)}
               >
                 <span className="text-foreground font-medium">{s.name}</span>
-                {s.schoolGrade && <span className="text-text-faint text-[11.5px]">{s.schoolGrade}</span>}
+                {s.schoolGrade && <span className="text-text-faint text-xs">{s.schoolGrade}</span>}
               </button>
             ))}
             {candidates.length === 0 && (
-              <span className="text-text-faint px-1 py-2 text-[12.5px]">
+              <span className="text-text-faint px-1 py-2 text-xs">
                 {q.trim() ? "찾는 학생이 없습니다" : "이름이나 학교를 입력하세요"}
               </span>
             )}
             {candidates.length === 40 && (
-              <span className="text-text-faint px-1 py-1 text-[11.5px]">
+              <span className="text-text-faint px-1 py-1 text-xs">
                 40명까지만 표시됩니다 — 이름을 더 입력해 좁히세요
               </span>
             )}

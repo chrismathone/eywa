@@ -207,15 +207,15 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
       <article className="border-line bg-card shadow-card space-y-5 rounded-2xl border p-6">
         {/* ① 가운데 큰 표제(양식명) + 문서 제목 — 품의·지출·수입결의서는 제목이 곧 안건명이다. */}
         <header className="space-y-1.5">
-          <h1 className="text-foreground text-center text-[22px] font-bold tracking-tight">
+          <h1 className="text-foreground text-center text-2xl font-bold tracking-tight">
             {APPROVAL_FORM_LABEL[doc.form] ?? "결재 문서"}
           </h1>
-          <p className="text-foreground text-center text-[15px] font-medium break-keep">{doc.title}</p>
+          <p className="text-foreground text-center text-base font-medium break-keep">{doc.title}</p>
         </header>
 
         {/* ② 정보 격자표 — 문서 종류·번호·기안자·일시·상태(하이웍스 상단 그리드). */}
         <table className="border-line w-full border-collapse border text-sm">
-          <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-[13px]">
+          <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
             <tr>
               <th className="w-[96px]">문서 종류</th>
               <td>공통 · {APPROVAL_FORM_LABEL[doc.form] ?? doc.form}</td>
@@ -253,7 +253,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
         {leave ? (
           <table className="border-line w-full border-collapse border text-sm">
-            <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-[13px]">
+            <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
               <tr>
                 <th className="w-[110px]">휴가 종류</th>
                 <td>{LEAVE_KIND_LABEL[leave.kind]}</td>
@@ -301,7 +301,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
         ) : doc.expense ? (
           <>
             <table className="border-line w-full border-collapse border text-sm">
-              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-[13px]">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
                 <tr>
                   <th className="w-[110px]">분류</th>
                   <td>{doc.expense.category}</td>
@@ -331,7 +331,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
         ) : doc.income ? (
           <>
             <table className="border-line w-full border-collapse border text-sm">
-              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-[13px]">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
                 <tr>
                   <th className="w-[110px]">분류</th>
                   <td>{doc.income.category}</td>
@@ -389,13 +389,13 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
                   aria-hidden
                   className={`absolute top-[4px] left-0 size-[10px] rounded-full ${DOT_TONE[e.tone]}`}
                 />
-                <p className="text-[13px] leading-tight">
+                <p className="text-sm leading-tight">
                   <b className={e.tone === "primary" ? "text-primary" : "text-foreground"}>{e.label}</b>
                   {e.person ? <span className="text-text-dim ml-1.5">{e.person}</span> : null}
                   {e.result ? (
                     <span className={`ml-1.5 font-medium ${TEXT_TONE[e.tone]}`}>{e.result}</span>
                   ) : null}
-                  {e.time ? <span className="num text-text-faint ml-2 text-[11px]">{e.time}</span> : null}
+                  {e.time ? <span className="num text-text-faint ml-2 text-xs">{e.time}</span> : null}
                 </p>
                 {e.note ? <p className="text-text-dim mt-0.5 text-xs break-keep">{e.note}</p> : null}
               </li>
@@ -428,18 +428,18 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
                     {commentsBox.comments.map((c) => (
                       <li key={c.id} className="border-line rounded-lg border px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[12px] leading-tight">
+                          <p className="text-xs leading-tight">
                             <b className="text-foreground">{c.authorName}</b>
                             {c.authorJobTitle ? (
                               <span className="text-text-faint ml-1">{c.authorJobTitle}</span>
                             ) : null}
-                            <span className="num text-text-faint ml-2 text-[11px]">
+                            <span className="num text-text-faint ml-2 text-xs">
                               {fmtTime(c.createdAt)}
                             </span>
                           </p>
                           {c.authorId === user.id ? <CommentDeleteForm commentId={c.id} /> : null}
                         </div>
-                        <p className="text-foreground mt-1 text-[13px] break-keep whitespace-pre-wrap">
+                        <p className="text-foreground mt-1 text-sm break-keep whitespace-pre-wrap">
                           {c.body}
                         </p>
                       </li>

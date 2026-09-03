@@ -27,21 +27,21 @@ export default async function SuperAdminDashboardPage() {
           <header className="mb-3 flex items-center justify-between">
             <div>
               <p className="micro">최근 가입</p>
-              <h2 className="text-foreground mt-0.5 text-[15px] font-bold">최근 학원 5건</h2>
+              <h2 className="text-foreground mt-0.5 text-base font-bold">최근 학원 5건</h2>
             </div>
           </header>
           {recent.length === 0 ? (
-            <p className="text-text-dim py-6 text-center text-[13px]">아직 학원이 없습니다.</p>
+            <p className="text-text-dim py-6 text-center text-sm">아직 학원이 없습니다.</p>
           ) : (
             <ul className="divide-line divide-y">
               {recent.map((t) => (
                 <li key={t.id} className="flex items-center justify-between py-3">
                   <div className="min-w-0">
-                    <p className="text-foreground text-[13px] font-bold">{t.name}</p>
-                    <p className="text-text-dim mt-0.5 font-mono text-[11px]">{t.slug}</p>
+                    <p className="text-foreground text-sm font-bold">{t.name}</p>
+                    <p className="text-text-dim mt-0.5 font-mono text-xs">{t.slug}</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-text-dim text-[12px]">
+                    <span className="text-text-dim text-xs">
                       사용자 {fmt(t.userCount)} · 학생 {fmt(t.studentCount)}
                     </span>
                     <Pill color={t.plan === "free" ? "neutral" : "gold"} soft>
@@ -61,10 +61,10 @@ export default async function SuperAdminDashboardPage() {
 function KpiCard({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
     <div className="bg-card border-line shadow-card rounded-2xl border p-5">
-      <p className="text-text-dim font-mono text-[11px] tracking-wider uppercase">{label}</p>
+      <p className="text-text-dim font-mono text-xs tracking-wider uppercase">{label}</p>
       <p className="text-foreground mt-2 flex items-baseline gap-1">
-        <span className="text-[32px] font-bold tabular-nums">{value}</span>
-        <span className="text-text-dim text-[12px]">{unit}</span>
+        <span className="text-4xl font-bold tabular-nums">{value}</span>
+        <span className="text-text-dim text-xs">{unit}</span>
       </p>
     </div>
   );

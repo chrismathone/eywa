@@ -48,11 +48,11 @@ export function TranscriptSection({
         aria-expanded={open}
         className="bg-bg-soft hover:bg-bg-soft/60 flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
       >
-        <h2 className="text-foreground flex items-center gap-2 text-[13px] font-bold">
+        <h2 className="text-foreground flex items-center gap-2 text-sm font-bold">
           <EyIcon name="mic" size={15} />
           전사 내용
           {hasSpeakers ? (
-            <span className="text-text-faint text-[11px] font-normal whitespace-nowrap">
+            <span className="text-text-faint text-xs font-normal whitespace-nowrap">
               · {count}개 발화
             </span>
           ) : null}
@@ -69,7 +69,7 @@ export function TranscriptSection({
               {rows.map((u, i) => {
                 const role = speakerRoles?.[u.speaker];
                 return (
-                  <p key={i} className="text-[13px] leading-relaxed whitespace-pre-line">
+                  <p key={i} className="text-sm leading-relaxed whitespace-pre-line">
                     <span className="text-primary font-bold whitespace-nowrap">
                       [{role ?? `화자 ${u.speaker}`}]
                     </span>{" "}
@@ -91,7 +91,7 @@ export function TranscriptSection({
               ) : null}
             </>
           ) : (
-            <p className="text-foreground text-[13px] leading-relaxed whitespace-pre-line">
+            <p className="text-foreground text-sm leading-relaxed whitespace-pre-line">
               {plainText ? breakIntoSentences(plainText) : ""}
             </p>
           )}

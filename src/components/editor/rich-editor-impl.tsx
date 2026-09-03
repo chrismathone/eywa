@@ -56,7 +56,7 @@ function ToolButton({
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={`inline-flex size-7 shrink-0 items-center justify-center rounded-md text-[13px] transition disabled:opacity-30 ${
+      className={`inline-flex size-7 shrink-0 items-center justify-center rounded-md text-sm transition disabled:opacity-30 ${
         active ? "bg-primary-soft text-primary font-bold" : "text-text-dim hover:bg-bg-soft"
       }`}
     >

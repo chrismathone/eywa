@@ -68,15 +68,15 @@ export function AttendanceHub({
       >
         <span className="min-w-0">
           <span className="flex items-center gap-1.5">
-            <span className="text-foreground truncate text-[13.5px] font-bold">{t.name}</span>
-            {t.retired ? <span className="text-text-faint shrink-0 text-[11px]">(퇴직)</span> : null}
+            <span className="text-foreground truncate text-sm font-bold">{t.name}</span>
+            {t.retired ? <span className="text-text-faint shrink-0 text-xs">(퇴직)</span> : null}
             {t.subjects.map((s) => (
               <Pill key={s} color={colorOf(s)}>
                 {labelOf(s)}
               </Pill>
             ))}
           </span>
-          <span className="text-text-dim block text-[11.5px]">
+          <span className="text-text-dim block text-xs">
             <span className="num">{t.classCount}</span>개 반
             {t.today ? (
               <>
@@ -90,7 +90,7 @@ export function AttendanceHub({
             ) : null}
           </span>
         </span>
-        <span className="bg-primary-soft text-primary rounded-pill ml-auto shrink-0 px-2.5 py-1 text-[11px] font-bold">
+        <span className="bg-primary-soft text-primary rounded-pill ml-auto shrink-0 px-2.5 py-1 text-xs font-bold">
           출석부 열기
         </span>
       </Link>
@@ -101,24 +101,24 @@ export function AttendanceHub({
     <section className="min-h-0 flex-1 overflow-auto">
       <div className="bg-card shadow-card rounded-2xl p-5">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <p className="text-foreground text-[14px] font-bold">출석부 요약</p>
+          <p className="text-foreground text-sm font-bold">출석부 요약</p>
           {/* 오늘 입력 현황 한 줄 — "요약 화면"의 핵심 숫자. 오늘 수업이 없으면(일요일 등) 조용히 생략. */}
           {todayTotal.classes > 0 ? (
-            <p className="text-text-dim text-[12.5px]">
+            <p className="text-text-dim text-xs">
               {todayLabel} — 수업 <span className="num font-bold">{todayTotal.classes}</span>개 반 · 출결 입력{" "}
               <span className="num font-bold">{todayTotal.recorded}</span>/<span className="num">{todayTotal.expected}</span>명 · 완료{" "}
               <span className="num font-bold">{todayTotal.done}</span>개 반
             </p>
           ) : (
-            <p className="text-text-faint text-[12.5px]">{todayLabel} — 오늘 예정된 수업이 없습니다</p>
+            <p className="text-text-faint text-xs">{todayLabel} — 오늘 예정된 수업이 없습니다</p>
           )}
         </div>
-        <p className="text-text-faint mt-0.5 text-[12px]">
+        <p className="text-text-faint mt-0.5 text-xs">
           강사를 고르면 그 강사의 모든 반이 한 표로 열립니다 · 개별 반은 위 &lsquo;반&rsquo; 목록에서 검색
         </p>
 
         {teachers.length === 0 ? (
-          <p className="text-text-dim mt-4 text-[12.5px]">담임이 배정된 운영 중인 반이 없습니다.</p>
+          <p className="text-text-dim mt-4 text-xs">담임이 배정된 운영 중인 반이 없습니다.</p>
         ) : (
           <>
             <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{active.map(row)}</ul>
@@ -133,22 +133,22 @@ export function AttendanceHub({
                         className={`border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${s.open ? "" : "opacity-60"}`}
                       >
                         <Link href={s.href} className="hover:bg-bg-soft min-w-0 flex-1 rounded-lg">
-                          <span className="text-foreground block truncate text-[13.5px] font-bold">
+                          <span className="text-foreground block truncate text-sm font-bold">
                             {s.name} <span className="text-text-faint font-medium">{s.room}</span>
                           </span>
-                          <span className="text-text-dim block text-[11.5px]">
+                          <span className="text-text-dim block text-xs">
                             {s.open ? "여러 반이 함께 들어오는 자리" : "아직 열지 않음"}
                           </span>
                         </Link>
                         <Link
                           href={s.monthHref}
-                          className="bg-bg-soft text-text-dim hover:text-foreground rounded-pill shrink-0 px-2.5 py-1 text-[11px] font-bold"
+                          className="bg-bg-soft text-text-dim hover:text-foreground rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold"
                         >
                           월간
                         </Link>
                         <Link
                           href={s.href}
-                          className={`rounded-pill shrink-0 px-2.5 py-1 text-[11px] font-bold ${
+                          className={`rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold ${
                             s.open ? "bg-primary-soft text-primary" : "bg-bg-soft text-text-faint"
                           }`}
                         >

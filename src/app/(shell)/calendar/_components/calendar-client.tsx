@@ -58,7 +58,7 @@ export function CalendarClient({
           >
             <EyIcon name="chevronLeft" size={16} />
           </Link>
-          <h2 className="text-foreground min-w-[110px] text-center text-[17px] font-bold tracking-tight">
+          <h2 className="text-foreground min-w-[110px] text-center text-lg font-bold tracking-tight">
             {monthLabel}
           </h2>
           <Link

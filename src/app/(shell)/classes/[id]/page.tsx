@@ -262,7 +262,7 @@ export default async function ClassDetailPage({
           되돌리면 어긋난다). 수동 인수인계와는 별개 축이라 함께 설 수 있다. */}
       {scheduledClass.length > 0 ? (
         <div className="border-blue/30 bg-blue-soft/50 rounded-xl border px-4 py-3">
-          <p className="text-blue inline-flex items-center gap-1.5 text-[13px] font-bold">
+          <p className="text-blue inline-flex items-center gap-1.5 text-sm font-bold">
             <CalendarClock className="size-4" aria-hidden="true" />
             시간표 예약
           </p>
@@ -358,7 +358,7 @@ export default async function ClassDetailPage({
                         {s.name}
                         {/* 아직 안 온 학생 — 표시가 없으면 오늘 다니는 학생과 구분이 안 된다. */}
                         {s.phase === "upcoming" ? (
-                          <span className="text-blue bg-blue-soft num rounded-md px-1.5 py-0.5 text-[11px] font-semibold">
+                          <span className="text-blue bg-blue-soft num rounded-md px-1.5 py-0.5 text-xs font-semibold">
                             {monthDay(s.enrolledAt)}부터
                           </span>
                         ) : null}

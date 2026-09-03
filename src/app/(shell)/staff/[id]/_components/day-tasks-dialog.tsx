@@ -25,10 +25,10 @@ export function DayTasksDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-[15px]">{dateLabel(date)} · 업무 {items.length}건</DialogTitle>
+          <DialogTitle className="text-base">{dateLabel(date)} · 업무 {items.length}건</DialogTitle>
         </DialogHeader>
         {items.length === 0 ? (
-          <p className="text-text-faint py-4 text-center text-[12px]">이 날짜에 업무가 없습니다.</p>
+          <p className="text-text-faint py-4 text-center text-xs">이 날짜에 업무가 없습니다.</p>
         ) : (
           <div className="border-line divide-line max-h-[55vh] divide-y overflow-y-auto rounded-md border">
             {items.map((t) => (
@@ -36,12 +36,12 @@ export function DayTasksDialog({
                 key={t.id}
                 type="button"
                 onClick={() => onPick(t)}
-                className="hover:bg-bg-soft flex w-full items-center gap-2 px-3 py-2 text-left text-[12px]"
+                className="hover:bg-bg-soft flex w-full items-center gap-2 px-3 py-2 text-left text-xs"
               >
                 <span className={t.done ? "text-text-faint line-through" : "text-foreground"}>{t.title}</span>
                 {t.dept ? <span className="text-text-faint">· {t.dept}</span> : null}
                 {t.start && t.due && t.start !== t.due ? (
-                  <span className="text-text-faint num ml-auto text-[10px]">
+                  <span className="text-text-faint num ml-auto text-xs">
                     {t.start.slice(5)}~{t.due.slice(5)}
                   </span>
                 ) : null}

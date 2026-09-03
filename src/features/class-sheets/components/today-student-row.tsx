@@ -48,10 +48,10 @@ export function StudentRow({
     // 출결 칸 폭 = 알약 3개(출석·지각·결석)가 정확히 앉는 고정폭 — auto로 두면 읽기전용 행(배지 하나)과
     // 알약 행의 칸 폭이 달라져 열이 들쭉날쭉해진다.
     <div className="border-line grid grid-cols-[minmax(0,1fr)_7.25rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
-      <span className="min-w-0 truncate text-[13px]">
+      <span className="min-w-0 truncate text-sm">
         {/* 구조화 행 목록(Editorial 문법 ⑤) — 이름 bold 13.5px + 설명 dim 12.5px. */}
-        <span className="text-foreground text-[13.5px] font-bold">{student.name}</span>
-        {student.grade ? <span className="text-text-dim ml-1 text-[12.5px]">{student.grade}</span> : null}
+        <span className="text-foreground text-sm font-bold">{student.name}</span>
+        {student.grade ? <span className="text-text-dim ml-1 text-xs">{student.grade}</span> : null}
       </span>
       <span>
         {/* 드롭다운 배제(원장 2026-08-11) — 1클릭 알약. 저장 경로(onSet/onClear)는 그대로다. */}
@@ -98,7 +98,7 @@ export function StudentRow({
           배지는 **그 학생 보고서로 가는 링크**다(2026-08-07) — 상태를 보고 바로 손대는 게 자연스럽다. */}
       <Link
         href={`/onescreen?date=${date}&class=${card.classId}&student=${student.studentId}`}
-        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap transition hover:opacity-80 ${
+        className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap transition hover:opacity-80 ${
           student.reportSent
             ? TONE_SOFT.positive
             : student.reportWritten

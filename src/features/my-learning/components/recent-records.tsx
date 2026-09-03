@@ -14,9 +14,9 @@ export function RecentRecords({ history }: { history: Session[] }) {
   const recs = [...history].reverse();
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border p-5">
-      <h2 className="text-foreground text-[15px] font-bold">
+      <h2 className="text-foreground text-base font-bold">
         최근 수업 기록{" "}
-        <span className="text-text-faint text-[12px] font-normal">· 날짜를 누르면 그날 리포트로</span>
+        <span className="text-text-faint text-xs font-normal">· 날짜를 누르면 그날 리포트로</span>
       </h2>
       <ul className="divide-line mt-2 divide-y">
         {recs.map((h) => {
@@ -27,11 +27,11 @@ export function RecentRecords({ history }: { history: Session[] }) {
                 href={`/my-learning/report?date=${encodeURIComponent(h.date)}`}
                 className="hover:bg-bg-soft -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition"
               >
-                <span className="tabular text-foreground w-9 text-[13px] font-bold">{h.date}</span>
-                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ${ATT_CLASS[h.attendance]}`}>
+                <span className="tabular text-foreground w-9 text-sm font-bold">{h.date}</span>
+                <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${ATT_CLASS[h.attendance]}`}>
                   {h.attendance}
                 </span>
-                <span className="ml-auto flex items-center gap-2.5 text-[12px]">
+                <span className="ml-auto flex items-center gap-2.5 text-xs">
                   <span className={`tabular ${absent ? "text-text-faint" : "text-text-dim"}`}>
                     일일 {absent ? "—" : h.daily}
                   </span>

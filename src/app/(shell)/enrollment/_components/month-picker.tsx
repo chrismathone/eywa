@@ -97,7 +97,7 @@ export function MonthPicker({ displayMonth, monthFilterActive, base, minYear, to
               return (
                 <span
                   key={m}
-                  className="text-text-faint num rounded-lg py-1.5 text-center text-[13px] opacity-40"
+                  className="text-text-faint num rounded-lg py-1.5 text-center text-sm opacity-40"
                 >
                   {m}월
                 </span>
@@ -107,7 +107,7 @@ export function MonthPicker({ displayMonth, monthFilterActive, base, minYear, to
                 key={m}
                 href={enrollmentHref({ ...base, month: key })}
                 onClick={() => setOpen(false)}
-                className={`num rounded-lg py-1.5 text-center text-[13px] transition ${
+                className={`num rounded-lg py-1.5 text-center text-sm transition ${
                   isSelected
                     ? "bg-foreground text-background font-bold"
                     : "text-foreground hover:bg-bg-soft"

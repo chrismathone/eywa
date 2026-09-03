@@ -79,10 +79,10 @@ function MeetingItem({ m }: { m: MeetingRow }) {
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-foreground text-[15px] font-bold">{m.title}</h3>
+                <h3 className="text-foreground text-base font-bold">{m.title}</h3>
                 <EditingBadge scope={`meeting:${m.id}`} />
                 {m.hasAudio ? (
-                  <span className="text-text-faint inline-flex items-center gap-1 text-[12px]">
+                  <span className="text-text-faint inline-flex items-center gap-1 text-xs">
                     <EyIcon name="dot" size={10} />
                     음성
                   </span>
@@ -95,7 +95,7 @@ function MeetingItem({ m }: { m: MeetingRow }) {
                   <Pill color={badge.color}>{badge.label}</Pill>
                 ) : null}
               </div>
-              <p className="text-text-dim num mt-0.5 text-[12px]">{formatHeldAt(m.heldAt)}</p>
+              <p className="text-text-dim num mt-0.5 text-xs">{formatHeldAt(m.heldAt)}</p>
             </div>
           </div>
           {m.authorName ? (
@@ -105,7 +105,7 @@ function MeetingItem({ m }: { m: MeetingRow }) {
 
         <p
           title={m.summaryFull ?? undefined}
-          className={`text-text-dim mt-3 line-clamp-2 text-[13px] leading-relaxed ${
+          className={`text-text-dim mt-3 line-clamp-2 text-sm leading-relaxed ${
             m.summaryFull ? "cursor-help" : ""
           }`}
         >
@@ -113,7 +113,7 @@ function MeetingItem({ m }: { m: MeetingRow }) {
         </p>
 
         {m.attendees.length > 0 ? (
-          <div className="text-text-faint mt-3 flex items-center gap-2 text-[12px]">
+          <div className="text-text-faint mt-3 flex items-center gap-2 text-xs">
             <span className="num font-bold">{m.attendees.length}명</span>
             <span className="opacity-60">·</span>
             <span className="truncate">{m.attendees.join(", ")}</span>

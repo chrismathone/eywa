@@ -198,7 +198,7 @@ export function EnrollmentKanban({
       {notice ? (
         <div
           className={cn(
-            "mb-3 flex items-start justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-[13.5px]",
+            "mb-3 flex items-start justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-sm",
             notice.tone === "warn"
               ? "border-amber/30 bg-amber-soft text-amber"
               : "border-blue/30 bg-blue-soft text-blue",
@@ -224,14 +224,14 @@ export function EnrollmentKanban({
             type="button"
             onClick={() => setActive(i)}
             aria-pressed={i === active}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-bold transition ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold transition ${
               i === active
                 ? "bg-foreground text-background"
                 : "bg-bg-soft text-text-dim hover:text-foreground"
             }`}
           >
             {col.stage.label}
-            <span className="num text-[13px] opacity-70">{col.cards.length}</span>
+            <span className="num text-sm opacity-70">{col.cards.length}</span>
           </button>
         ))}
       </div>
@@ -257,7 +257,7 @@ export function EnrollmentKanban({
 
       <DragOverlay dropAnimation={null}>
         {dragging ? (
-          <div className="bg-card shadow-card text-foreground rounded-xl px-3.5 py-2.5 text-[17px] font-bold">
+          <div className="bg-card shadow-card text-foreground rounded-xl px-3.5 py-2.5 text-lg font-bold">
             {dragging.prospectName}
           </div>
         ) : null}
@@ -320,15 +320,15 @@ function StageColumn({
       >
         <div className="flex items-center gap-2">
           <span className="text-text-dim flex items-center justify-center">{columnIcon(stageKey)}</span>
-          <h3 className="text-foreground text-[16px] font-bold">{label}</h3>
+          <h3 className="text-foreground text-base font-bold">{label}</h3>
         </div>
         <span className="flex items-baseline gap-0.5">
-          <span className="num text-foreground text-[19px] leading-none font-bold">{cards.length}</span>
-          <span className="text-text-faint text-[13px]">건</span>
+          <span className="num text-foreground text-xl leading-none font-bold">{cards.length}</span>
+          <span className="text-text-faint text-sm">건</span>
         </span>
       </header>
       {cards.length === 0 ? (
-        <div className="text-text-faint flex flex-1 items-center justify-center px-4 text-[13.5px]">
+        <div className="text-text-faint flex flex-1 items-center justify-center px-4 text-sm">
           없음
         </div>
       ) : (

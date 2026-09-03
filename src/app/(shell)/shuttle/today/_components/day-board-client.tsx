@@ -212,7 +212,7 @@ export function DayBoardClient({
         >
           <EyIcon name="chevronLeft" size={16} />
         </Button>
-        <span className="text-foreground px-1 text-[14.5px] font-bold whitespace-nowrap">
+        <span className="text-foreground px-1 text-sm font-bold whitespace-nowrap">
           {formatKoreanDate(date)}
         </span>
         <Button
@@ -238,7 +238,7 @@ export function DayBoardClient({
       {/* 등하원 + 요약을 **한 레일**로 — 폰에서 상단 크롬이 세 줄이 되면 첫 호차까지 스크롤이 필요하다
           ("모바일 상단 크롬 = 한 줄" 규약 · 제보의 "아주 필요한 기능만"). 칩의 남은 수는 **필터와 무관한
           전체 기준**이라 누르기 전에 어느 쪽에 일이 있는지 보인다. */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2 text-[12.5px]">
+      <div className="toolbar-rail flex flex-wrap items-center gap-2 text-xs">
         <span className="flex items-center gap-1.5" role="radiogroup" aria-label="등하원 보기">
           {DIR_FILTERS.map((f) => (
             <button
@@ -251,7 +251,7 @@ export function DayBoardClient({
             >
               {f.label}
               {remainByDir[f.value] > 0 && (
-                <span className={`num text-[11.5px] ${dirFilter === f.value ? "" : "text-amber"}`}>
+                <span className={`num text-xs ${dirFilter === f.value ? "" : "text-amber"}`}>
                   {remainByDir[f.value]}
                 </span>
               )}
@@ -305,7 +305,7 @@ export function DayBoardClient({
       </div>
 
       {error && (
-        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-[12.5px]">
+        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
           {error}
         </div>
       )}

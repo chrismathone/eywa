@@ -73,7 +73,7 @@ function PeriodTable({
   const rowHeight = tableHeight / Math.max(1, rows.length);
   // 수학계열(평일·비영어)만 2교시 묶음 라벨(1교시=1·2교시 …). 영어·주말·폴백은 개별 교시 라벨.
   const isMathFamily = !weekend && subject !== "english";
-  const labelCls = `bg-bg-soft/70 text-foreground ${GRID} border-b border-r px-2 py-1 align-top text-[11px] font-bold whitespace-nowrap`;
+  const labelCls = `bg-bg-soft/70 text-foreground ${GRID} border-b border-r px-2 py-1 align-top text-xs font-bold whitespace-nowrap`;
   return (
     <table className={`border-collapse border ${GRID} text-sm`} style={{ tableLayout: "fixed" }}>
       <colgroup>
@@ -84,11 +84,11 @@ function PeriodTable({
       </colgroup>
       <thead>
         <tr>
-          <th className={`bg-bg-soft text-text-faint ${GRID} border-b border-r px-2 py-1.5 text-[11px] font-medium`}>
+          <th className={`bg-bg-soft text-text-faint ${GRID} border-b border-r px-2 py-1.5 text-xs font-medium`}>
             {weekend ? "주말" : "교시"}
           </th>
           {days.map((d) => (
-            <th key={d} className={`bg-bg-soft text-foreground ${GRID} border-b border-r px-2 py-1.5 text-center text-[12px] font-bold`}>
+            <th key={d} className={`bg-bg-soft text-foreground ${GRID} border-b border-r px-2 py-1.5 text-center text-xs font-bold`}>
               {DAY_KO[d]}
             </th>
           ))}
@@ -115,7 +115,7 @@ function PeriodTable({
                 // 앵커가 된 퇴화 케이스는 개별 라벨(다음 홀수와 오병합 금지).
                 <td rowSpan={oddPaired ? 2 : 1} className={labelCls} style={{ height: rowHeight * (oddPaired ? 2 : 1) }}>
                   {Math.ceil(mathN / 2)}교시
-                  <div className="text-text-faint num mt-0.5 text-[9px] font-normal">
+                  <div className="text-text-faint num mt-0.5 text-xs font-normal">
                     {oddPaired ? `${row.time.split("~")[0]}~${nextRow!.time.split("~")[1]}` : row.time}
                   </div>
                 </td>
@@ -125,7 +125,7 @@ function PeriodTable({
                   {row.label ? (
                     <>
                       {row.label}
-                      <div className="text-text-faint num mt-0.5 text-[9px] font-normal">{row.time}</div>
+                      <div className="text-text-faint num mt-0.5 text-xs font-normal">{row.time}</div>
                     </>
                   ) : (
                     <span className="num">{row.time}</span>
@@ -151,14 +151,14 @@ function PeriodTable({
                         className={`flex flex-col rounded-md px-1.5 py-1 ${cellColor}`}
                         style={{ height: spanH - 8 }} // p-1(상하 8px) 보정 → 셀 전체 채움
                       >
-                        <span className="text-foreground text-[12px] leading-tight font-bold break-keep">
+                        <span className="text-foreground text-xs leading-tight font-bold break-keep">
                           {c.className}
                         </span>
                         {c.teacherName ? (
-                          <span className="text-text-dim mt-0.5 text-[10px]">{c.teacherName}</span>
+                          <span className="text-text-dim mt-0.5 text-xs">{c.teacherName}</span>
                         ) : null}
                         {c.room ? (
-                          <span className="text-text-faint mt-auto pt-0.5 text-[10px]">{c.room}</span>
+                          <span className="text-text-faint mt-auto pt-0.5 text-xs">{c.room}</span>
                         ) : null}
                       </div>
                     ) : null}

@@ -58,7 +58,7 @@ function DeleteCommentButton() {
     <button
       type="submit"
       disabled={pending}
-      className="text-text-faint hover:text-danger shrink-0 text-[11px] transition"
+      className="text-text-faint hover:text-danger shrink-0 text-xs transition"
     >
       삭제
     </button>

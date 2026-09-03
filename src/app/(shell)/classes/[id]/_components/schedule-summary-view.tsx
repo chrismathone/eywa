@@ -97,7 +97,7 @@ function RowItem({
             <span
               key={d}
               aria-hidden
-              className={`inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium ${
+              className={`inline-flex size-5 items-center justify-center rounded-full text-xs font-medium ${
                 on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground/40"
               }`}
             >
@@ -115,7 +115,7 @@ function PastNote({ count, inline }: { count: number; inline?: boolean }) {
   const text = `지난 배치 ${count}개는 숨김`;
   return (
     <span
-      className={`text-muted-foreground text-[11px] ${inline ? "ml-1" : "block"}`}
+      className={`text-muted-foreground text-xs ${inline ? "ml-1" : "block"}`}
       title="운영 종료일이 지난 시간표 행입니다. 기록으로 남아 있고 화면·편집에서는 빠집니다."
     >
       {inline ? `· ${text}` : text}

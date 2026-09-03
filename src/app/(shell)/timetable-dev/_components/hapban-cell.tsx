@@ -104,10 +104,10 @@ function SegmentHeader({
         >
           <div className="flex items-baseline gap-1">
             <IndexBadge badge={String(index)} />
-            <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip text-[13px] font-bold">
+            <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip text-sm font-bold">
               {slot.className}
             </span>
-            <span className="num shrink-0 text-[11px] opacity-70">{active.length}</span>
+            <span className="num shrink-0 text-xs opacity-70">{active.length}</span>
           </div>
         </WindowLink>
       </HoverCard>
@@ -206,7 +206,7 @@ export function HapbanCell({
         // 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). setBodyRef=드롭존은 이 전체 영역.
         <div
           ref={setBodyRef}
-          className={`flex min-h-0 flex-1 flex-col text-[13px] ${
+          className={`flex min-h-0 flex-1 flex-col text-sm ${
             anyHandover ? "bg-blue-soft" : "bg-card"
           } ${isOver ? "ring-primary ring-2 ring-inset" : ""}`}
         >
@@ -237,7 +237,7 @@ export function HapbanCell({
                       const dayStudents = partialActive.filter((s) => s.displayAttendanceDays.includes(day));
                       const col = (
                         <>
-                          <div className="text-text-faint bg-bg-soft/60 px-1 py-px text-center text-[9px] font-bold">
+                          <div className="text-text-faint bg-bg-soft/60 px-1 py-px text-center text-xs font-bold">
                             {DAY_LABEL[day] ?? day}
                           </div>
                           {dayStudents.length > 0 ? (
@@ -274,7 +274,7 @@ export function HapbanCell({
                               );
                             })
                           ) : editing ? (
-                            <div className="text-text-faint/70 flex min-h-[22px] items-center justify-center text-[9px]">
+                            <div className="text-text-faint/70 flex min-h-[22px] items-center justify-center text-xs">
                               여기로
                             </div>
                           ) : (
@@ -306,7 +306,7 @@ export function HapbanCell({
               {/* 전입 예정 — 대상 반 인덱스 배지(어느 반으로 오는지). 재원 스크롤 안. */}
               {incomingAll.length > 0 ? (
                 <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
-                  <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide">
+                  <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide">
                     <span>전입 예정</span>
                     <span className="num">{incomingAll.length}</span>
                   </div>
@@ -320,7 +320,7 @@ export function HapbanCell({
                           {st.name}
                         </span>
                         {dayTag ? (
-                          <span className="text-primary shrink-0 text-[10px] font-bold">[{dayTag}]</span>
+                          <span className="text-primary shrink-0 text-xs font-bold">[{dayTag}]</span>
                         ) : null}
                       </div>
                     );

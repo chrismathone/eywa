@@ -119,19 +119,19 @@ export function StopMasterDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-card flex max-h-[85vh] w-full max-w-2xl flex-col gap-3 rounded-2xl p-4 shadow-xl">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-foreground text-[15px] font-bold">정류장 관리</h2>
+          <h2 className="text-foreground text-base font-bold">정류장 관리</h2>
           <Button variant="ghost" className={SHUTTLE_ACTION} onClick={onClose}>
             닫기
           </Button>
         </div>
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           이름은 여기서만 고칩니다 — 고치면 이 정류장을 쓰는 모든 노선이 함께 바뀝니다. 같은 아파트
           앞이라도 승차 지점이 반대편이면 각각 만들고 메모로 구분하세요.
         </p>
         {/* 🔑 미지정이 몇 곳인지 먼저 말한다 — 좌표는 한 번에 다 못 찍으므로 "얼마나 남았나"가
             이 화면을 다시 여는 이유가 된다. 다 찍었으면 굳이 말하지 않는다(빈 잔소리 금지). */}
         {coordsReady && missingCoords > 0 && (
-          <p className="text-text-dim text-[11.5px]">
+          <p className="text-text-dim text-xs">
             위치 미지정 <span className="num font-bold">{missingCoords}</span>곳 — 좌표를 찍어 두면
             같은 아파트 앞 반대편 정류장이 말이 아니라 지도로 구분됩니다.
           </p>
@@ -202,7 +202,7 @@ export function StopMasterDialog({
             ) : (
               <li key={s.id} className="rounded-xl">
                 <div className="hover:bg-muted flex min-h-11 flex-wrap items-center gap-2 rounded-xl px-2 py-1.5">
-                  <span className="text-foreground min-w-0 flex-1 overflow-hidden text-[12.5px] font-medium text-ellipsis whitespace-nowrap">
+                  <span className="text-foreground min-w-0 flex-1 overflow-hidden text-xs font-medium text-ellipsis whitespace-nowrap">
                     {s.name}
                     {s.memo && <span className="text-text-faint font-normal"> · {s.memo}</span>}
                   </span>
@@ -283,13 +283,13 @@ export function StopMasterDialog({
 
                 {openStop === s.id && (
                   <ul className="border-line bg-muted/40 mx-2 mb-1.5 flex flex-col gap-0.5 rounded-lg border p-1.5">
-                    <li className="text-text-faint px-1 pb-0.5 text-[11.5px]">
+                    <li className="text-text-faint px-1 pb-0.5 text-xs">
                       {seasonLabel} 기준
                     </li>
                     {uses.map((u) => (
                       <li
                         key={u.key}
-                        className="text-text-dim flex items-baseline gap-1.5 px-1 text-[11.5px]"
+                        className="text-text-dim flex items-baseline gap-1.5 px-1 text-xs"
                       >
                         <span className="text-foreground min-w-0 flex-1 overflow-hidden font-medium text-ellipsis whitespace-nowrap">
                           {u.vehicle} · {u.run}
@@ -301,7 +301,7 @@ export function StopMasterDialog({
                       </li>
                     ))}
                     {uses.length === 0 && (
-                      <li className="text-text-faint px-1 text-[11.5px]">
+                      <li className="text-text-faint px-1 text-xs">
                         이 시즌에는 쓰는 노선이 없습니다
                       </li>
                     )}
@@ -311,7 +311,7 @@ export function StopMasterDialog({
             );
           })}
           {stops.length === 0 && (
-            <li className="text-text-faint px-1 py-3 text-center text-[12.5px]">
+            <li className="text-text-faint px-1 py-3 text-center text-xs">
               정류장이 없습니다 — 위에서 추가하세요
             </li>
           )}

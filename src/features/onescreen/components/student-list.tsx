@@ -63,14 +63,14 @@ function StudentRow({
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-foreground truncate text-[13px] font-bold">{st.name}</span>
+          <span className="text-foreground truncate text-sm font-bold">{st.name}</span>
           {/* 발송 표시 — 라벨 색(보 셀)만으로는 '나갔는지'가 눈에 안 띈다는 원장 지적(2026-07-27).
               ⚠️ 표시는 **실제로 나간 행**에만 붙는다: 전부 나갔으면 채운 체크, 일부면 흐린 체크 + 남은 수.
                  아무것도 안 나갔으면 아무 표시도 없다(없음 = 미발송, 거짓 안심 금지). */}
           {sendMark && sendMark.total > 0 && sendMark.sent > 0 ? (
             <span
               title={`${sendMark.label} ${sendMark.sent}/${sendMark.total}`}
-              className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-px text-[10px] font-bold whitespace-nowrap ${
+              className={`flex shrink-0 items-center gap-0.5 rounded-full px-1 py-px text-xs font-bold whitespace-nowrap ${
                 sendMark.sent >= sendMark.total
                   ? "bg-primary-soft text-primary"
                   : "border-line text-text-faint border"
@@ -92,7 +92,7 @@ function StudentRow({
                축약보다 못하다 — 아래 칩 주석과 같은 원칙). 둘째 줄은 학년+점뿐이라 자리가 남는다.
             ⚠️ `whitespace-nowrap`을 빼지 말 것 — 이 배지가 쪼개진 게 이 수정의 발단이다.
             ⚠️ 학년은 `min-w-0 truncate` — 긴 학교명이 와도 배지를 밀어내 다시 찌그러뜨리지 않게. */}
-        <div className="text-text-faint mt-0.5 flex items-center gap-1.5 text-[11px]">
+        <div className="text-text-faint mt-0.5 flex items-center gap-1.5 text-xs">
           <span className="min-w-0 truncate">{st.grade}</span>
           <span className="flex shrink-0 items-center gap-0.5">
             {st.subjects.map((su, i) => (
@@ -105,7 +105,7 @@ function StudentRow({
           </span>
           {st.attendance !== "출석" ? (
             <span
-              className={`shrink-0 rounded-full px-1 py-px text-[10px] font-bold whitespace-nowrap ${
+              className={`shrink-0 rounded-full px-1 py-px text-xs font-bold whitespace-nowrap ${
                 st.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
               }`}
             >
@@ -121,7 +121,7 @@ function StudentRow({
             title={c.title}
             // 낱말이 들어가므로 정사각(size-5)이 아니라 **글자 폭을 따라가는 알약**으로. shrink-0 =
             // 이름이 길어도 이 칸이 찌그러져 글자가 깨지지 않게(찌그러지면 축약보다 못하다).
-            className={`shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${CELL_CLASS[cellState(c.key)]}`}
+            className={`shrink-0 rounded-sm px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${CELL_CLASS[cellState(c.key)]}`}
           >
             {c.label}
           </span>
@@ -202,12 +202,12 @@ export function StudentList({
             <button
               type="button"
               onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(orderedKeys))}
-              className="text-text-faint hover:text-text-dim text-[10px] font-medium whitespace-nowrap"
+              className="text-text-faint hover:text-text-dim text-xs font-medium whitespace-nowrap"
             >
               {allCollapsed ? "모두 펼치기" : "모두 접기"}
             </button>
           ) : null}
-          <p className="text-text-dim font-mono text-[11px]">{students.length}명</p>
+          <p className="text-text-dim font-mono text-xs">{students.length}명</p>
         </div>
       </header>
       <div className="scrollbar-thin flex max-h-[60vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 lg:max-h-none [scrollbar-gutter:stable]">
@@ -231,9 +231,9 @@ export function StudentList({
                       className={`text-text-faint size-3 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
                       strokeWidth={2.5}
                     />
-                    <span className="text-text-dim truncate text-[11px] font-bold">{key}</span>
+                    <span className="text-text-dim truncate text-xs font-bold">{key}</span>
                   </span>
-                  <span className="text-text-faint shrink-0 font-mono text-[10px]">{rows.length}명</span>
+                  <span className="text-text-faint shrink-0 font-mono text-xs">{rows.length}명</span>
                 </button>
                 {!isCollapsed
                   ? rows.map((st) => (

@@ -62,7 +62,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
       <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         <div className="flex items-center gap-1.5">
           <Link href={hrefFor({ period: prevPeriod })} className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border" aria-label="이전 달"><EyIcon name="chevronLeft" size={14} /></Link>
-          <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">{formatPeriod(period)}</span>
+          <span className="text-foreground min-w-[90px] text-center text-sm font-bold">{formatPeriod(period)}</span>
           <Link href={hrefFor({ period: nextPeriod })} className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border" aria-label="다음 달"><EyIcon name="chevronRight" size={14} /></Link>
         </div>
         <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
@@ -72,7 +72,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
           ))}
         </div>
         {months.length > 0 ? (
-          <span className="text-text-faint ml-auto num text-[10px]">지출 기록 {months.length}개월</span>
+          <span className="text-text-faint ml-auto num text-xs">지출 기록 {months.length}개월</span>
         ) : null}
       </div>
 
@@ -102,7 +102,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
             <div className="mb-3 flex items-baseline justify-between gap-2">
               <h2 className="text-foreground text-sm font-bold">분류별 지출</h2>
               {multiCurrency ? (
-                <span className="text-text-faint text-[11px]">
+                <span className="text-text-faint text-xs">
                   통화 {currencyMeta(primaryCurrency).symbol} 기준 · 다른 통화는 상단 합계 참조
                 </span>
               ) : null}
@@ -160,9 +160,9 @@ function Kpi({
           <Icon size={14} strokeWidth={1.8} />
         </span>
       </header>
-      <p className="tabular text-foreground num mt-3 text-[18px] leading-tight">{value}</p>
+      <p className="tabular text-foreground num mt-3 text-lg leading-tight">{value}</p>
       {hint ? (
-        <p className="text-text-dim border-line mt-3 border-t pt-3 text-[11px]">{hint}</p>
+        <p className="text-text-dim border-line mt-3 border-t pt-3 text-xs">{hint}</p>
       ) : (
         <div className="mt-3 h-[24px]" />
       )}

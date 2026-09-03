@@ -164,15 +164,15 @@ export function BulkApplyPopover({
     >
       <Popover.Trigger
         disabled={disabled}
-        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-lg px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title="선택(없으면 표시 전체) 행을 한 번에 채우기 — 직접 입력하거나 맨 위 행을 복사"
       >
         일괄 입력
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-lg border p-3 text-[12px] outline-none">
-            <p className="text-text-dim text-[11px]">
+          <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-lg border p-3 text-xs outline-none">
+            <p className="text-text-dim text-xs">
               대상 <span className="text-foreground font-bold">{targetCount}</span>행
               {selectedCount ? " (선택 행)" : " (표시 전체)"}
             </p>
@@ -190,7 +190,7 @@ export function BulkApplyPopover({
                   onClick={() => switchMode(m.key)}
                   aria-pressed={mode === m.key}
                   disabled={m.key === "copy" && !canCopy}
-                  className={`flex-1 px-2 py-1 text-[11.5px] not-first:border-l border-line disabled:opacity-40 ${
+                  className={`flex-1 px-2 py-1 text-xs not-first:border-l border-line disabled:opacity-40 ${
                     mode === m.key ? "bg-primary text-primary-foreground font-bold" : "text-text-dim hover:bg-bg-soft"
                   }`}
                 >
@@ -200,7 +200,7 @@ export function BulkApplyPopover({
             </div>
             {mode === "copy" ? (
               <div className="border-line bg-bg-soft rounded-md border px-2.5 py-2">
-                <p className="text-text-dim text-[11px]">
+                <p className="text-text-dim text-xs">
                   {canCopy ? (
                     <>
                       <span className="text-foreground font-bold">{copySource!.label}</span> 행을 아래{" "}
@@ -210,12 +210,12 @@ export function BulkApplyPopover({
                     "복사할 아래 행이 없습니다"
                   )}
                 </p>
-                <p className="text-foreground mt-1.5 text-[11px] font-bold">복사되는 것</p>
-                <p className="text-text-dim text-[11px]">진도 · 교재명 · 오늘 과제</p>
-                <p className="text-text-faint mt-1 text-[11px]">
+                <p className="text-foreground mt-1.5 text-xs font-bold">복사되는 것</p>
+                <p className="text-text-dim text-xs">진도 · 교재명 · 오늘 과제</p>
+                <p className="text-text-faint mt-1 text-xs">
                   점수 · 태도 · 과제 수행 · 학부모 문구는 <b>복사되지 않습니다</b>(학생마다 다른 기록)
                 </p>
-                <p className="text-text-faint mt-1 text-[11px]">
+                <p className="text-text-faint mt-1 text-xs">
                   다른 과목 행 · 발송 완료 행은 건너뜁니다
                 </p>
               </div>
@@ -230,7 +230,7 @@ export function BulkApplyPopover({
                       value={activeSubject.key}
                       onChange={(e) => setSubjectKey(e.target.value)}
                       aria-label="진도를 넣을 과목"
-                      className="border-line bg-card h-6 max-w-[130px] rounded-md border px-1 text-[11px] outline-none"
+                      className="border-line bg-card h-6 max-w-[130px] rounded-md border px-1 text-xs outline-none"
                     >
                       {subjects.map((s) => (
                         <option key={s.key} value={s.key}>
@@ -239,7 +239,7 @@ export function BulkApplyPopover({
                       ))}
                     </select>
                   ) : (
-                    <span className="text-text-faint text-[11px]">
+                    <span className="text-text-faint text-xs">
                       {activeSubject.name} {activeSubject.count}행
                     </span>
                   )}
@@ -260,10 +260,10 @@ export function BulkApplyPopover({
                     onChange={(e) => setProgress(e.target.value)}
                     placeholder="오늘 진도 (예: Unit 8 · p.90)"
                     aria-label="일괄 진도"
-                    className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
+                    className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                   />
                 )}
-                <p className="text-text-faint mt-1 text-[11px]">
+                <p className="text-text-faint mt-1 text-xs">
                   {activeSubject.name} 행에만 들어갑니다 — 다른 과목 행은 그대로
                 </p>
               </div>
@@ -277,7 +277,7 @@ export function BulkApplyPopover({
                     type="button"
                     onClick={() => setAtt(null)}
                     aria-pressed={att === null}
-                    className={`rounded-pill px-2 py-0.5 text-[11px] font-bold transition ${
+                    className={`rounded-pill px-2 py-0.5 text-xs font-bold transition ${
                       att === null
                         ? "bg-primary text-primary-foreground"
                         : "border-line text-text-dim hover:bg-bg-soft border"
@@ -291,7 +291,7 @@ export function BulkApplyPopover({
                       type="button"
                       onClick={() => setAtt(att === s ? null : s)}
                       aria-pressed={att === s}
-                      className={`rounded-pill px-2 py-0.5 text-[11px] font-bold transition ${
+                      className={`rounded-pill px-2 py-0.5 text-xs font-bold transition ${
                         att === s
                           ? "bg-primary text-primary-foreground"
                           : "border-line text-text-dim hover:bg-bg-soft border"
@@ -313,16 +313,16 @@ export function BulkApplyPopover({
                       placeholder="수업타임"
                       aria-label="일괄 출결 수업타임"
                       title="이번에 새로 기록되는 칸의 수업타임(시수) — 빈칸=기본 1. 이미 기록된 칸의 시수는 바꾸지 않습니다"
-                      className="border-line bg-card focus:border-primary h-7 w-20 rounded-lg border px-2 text-[12px] outline-none"
+                      className="border-line bg-card focus:border-primary h-7 w-20 rounded-lg border px-2 text-xs outline-none"
                     />
-                    <span className="text-text-faint text-[11px]">
+                    <span className="text-text-faint text-xs">
                       예: 3시간 반 = 1.5 · 빈칸 = 기본(1) · 기존 기록의 시수는 유지
                     </span>
                   </div>
                 ) : null}
                 {/* 고른 즉시 실제 대상·덮어쓸 건수를 보여준다 — 눌러 보고 나서 알게 되면 늦다. */}
                 {attPlan ? (
-                  <p className={`mt-1 text-[11px] ${attPlan.cells.length ? "text-text-dim" : "text-amber"}`}>
+                  <p className={`mt-1 text-xs ${attPlan.cells.length ? "text-text-dim" : "text-amber"}`}>
                     {attPlan.cells.length ? (
                       <>
                         <span className="text-foreground font-bold">{attPlan.cells.length}건</span> 기록
@@ -336,7 +336,7 @@ export function BulkApplyPopover({
                     ) : null}
                   </p>
                 ) : (
-                  <p className="text-text-faint mt-1 text-[11px]">
+                  <p className="text-text-faint mt-1 text-xs">
                     저장 즉시 출석부에 기록됩니다 — 조퇴·공결·보강 행은 건드리지 않습니다
                   </p>
                 )}
@@ -368,7 +368,7 @@ export function BulkApplyPopover({
                   onChange={(e) => setTextbook(e.target.value)}
                   placeholder="교재명 (비우면 적용 안 함)"
                   aria-label="일괄 교재명"
-                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
+                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                 />
                 <input
                   type="text"
@@ -376,13 +376,13 @@ export function BulkApplyPopover({
                   onChange={(e) => setHomeworkToday(e.target.value)}
                   placeholder="오늘 과제 (비우면 적용 안 함)"
                   aria-label="일괄 오늘 과제"
-                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
+                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                 />
-                <p className="text-text-faint text-[11px]">채운 필드만 적용됩니다</p>
+                <p className="text-text-faint text-xs">채운 필드만 적용됩니다</p>
               </>
             ) : null}
             <div className="flex items-center justify-between">
-              <label className="text-text-dim flex cursor-pointer items-center gap-1 text-[11px]">
+              <label className="text-text-dim flex cursor-pointer items-center gap-1 text-xs">
                 <input
                   type="checkbox"
                   checked={onlyEmpty}

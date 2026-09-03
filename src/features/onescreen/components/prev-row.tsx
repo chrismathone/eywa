@@ -4,7 +4,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { displayLessons } from "../curriculum";
 import type { Subject } from "../types";
 
-const PREV_TD_BASE = "px-2 py-1 align-top text-[11px] text-text-faint";
+const PREV_TD_BASE = "px-2 py-1 align-top text-xs text-text-faint";
 const PREV_TD = `border-line/60 ${PREV_TD_BASE}`;
 // 학생 묶음 구분선 — 참고행이 묶음의 첫 행이라 여기 위쪽에 굵고 진한 회색 선을 둔다(grid-row TD_GROUP과 동일 톤).
 // ⚠️ 폭 유틸(border-t / border-t-2)을 한 className에 섞지 말 것 — 어느 쪽이 이길지 CSS 순서에 달린다.
@@ -75,7 +75,7 @@ export function PrevRow({
             type="button"
             onClick={onImport}
             title="이전 회차 값을 이 행의 빈 칸에 채움 — 진도·태도·과제·오늘 과제 (특이사항 제외)"
-            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-[10px] font-bold"
+            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-xs font-bold"
           >
             가져오기
           </button>

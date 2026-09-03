@@ -40,7 +40,7 @@ export function BulkPresentButton({ count, alreadyMarked, busy, onApply }: BulkP
             ? "이 목록은 이미 전원 출결이 기록됐습니다"
             : "출결을 기록할 수 있는 학생이 없습니다"
       }
-      className={`rounded-pill border px-1.5 py-px text-[10px] font-bold whitespace-nowrap transition ${
+      className={`rounded-pill border px-1.5 py-px text-xs font-bold whitespace-nowrap transition ${
         disabled
           ? "border-line text-text-faint cursor-default"
           : "border-primary text-primary hover:bg-primary-soft cursor-pointer"

@@ -185,7 +185,7 @@ export function SeatingCell({
                못 들어간다. 잘라서 감추는 것보다 접어서 다 보이는 게 낫다. */}
         {check && (
           <span
-            className={`num mt-0.5 flex w-full flex-wrap items-baseline justify-center gap-x-1 text-center text-[10px] leading-tight font-bold ${SEAT_MARK_INK[mark]}`}
+            className={`num mt-0.5 flex w-full flex-wrap items-baseline justify-center gap-x-1 text-center text-xs leading-tight font-bold ${SEAT_MARK_INK[mark]}`}
           >
             {check.date && <span>{check.date}</span>}
             <span>{check.time}</span>
@@ -200,7 +200,7 @@ export function SeatingCell({
               key={m.status}
               type="button"
               onClick={() => save(m.status)}
-              className={`rounded-md px-2 py-1 text-[11px] font-bold whitespace-nowrap ${SEAT_MARK_TONE[m.status]}`}
+              className={`rounded-md px-2 py-1 text-xs font-bold whitespace-nowrap ${SEAT_MARK_TONE[m.status]}`}
             >
               {m.label}
             </button>
@@ -208,7 +208,7 @@ export function SeatingCell({
         </div>
       )}
       {error && (
-        <p className="text-danger absolute top-full left-0 z-20 mt-1 w-40 text-[10px]">{error}</p>
+        <p className="text-danger absolute top-full left-0 z-20 mt-1 w-40 text-xs">{error}</p>
       )}
     </div>
   );

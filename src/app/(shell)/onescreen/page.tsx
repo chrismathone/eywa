@@ -66,7 +66,7 @@ export default async function OneScreenPage({
       {/* '다른 강사 뷰' 열람 배너 — 이 화면의 입력·발송은 서버가 전부 거절한다(perm-matrix 캡 +
           readonlyTeacherViewError). 배너가 없으면 타이핑해 놓고 저장이 안 되는 이유를 알 수 없다. */}
       {viewAs ? (
-        <div className="bg-purple-soft text-purple mb-3 rounded-lg px-3 py-2 text-[13px] font-medium">
+        <div className="bg-purple-soft text-purple mb-3 rounded-lg px-3 py-2 text-sm font-medium">
           {viewAs.displayName || "이름 없음"} 강사의 화면을 열람 중입니다 — 이 화면에서는 저장·발송이 되지 않습니다.
         </div>
       ) : null}

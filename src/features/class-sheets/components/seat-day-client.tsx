@@ -60,15 +60,15 @@ export function SeatDayClient({ data }: { data: SeatDayData }) {
         return (
           <section key={p.slotStart} className="bg-card shadow-card rounded-2xl px-3 py-3">
             <header className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-1">
-              <h2 className="text-foreground text-[17px] font-extrabold tracking-tight">
+              <h2 className="text-foreground text-lg font-extrabold tracking-tight">
                 {p.periodLabel ? `${p.periodLabel} · ${range}` : range}
               </h2>
-              <p className="text-text-dim text-[12px]">
+              <p className="text-text-dim text-xs">
                 {p.classNames.map(shortClassLabel).join(" · ")} · {students.length}명
               </p>
               {mixedForms ? (
                 <span
-                  className="border-line text-text-dim rounded-full border px-2 py-px text-[11px] font-bold"
+                  className="border-line text-text-dim rounded-full border px-2 py-px text-xs font-bold"
                   title="이 타임만 입력 칸 구성이 다릅니다 — 태도 다음 열부터 다른 타임과 위치가 달라집니다"
                 >
                   {rosterTextCols(p.form)

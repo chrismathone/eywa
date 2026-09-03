@@ -34,17 +34,17 @@ export function FormCaptureStatus({
   const { head, total, done, error } = capture;
   return (
     <div className="space-y-1">
-      <span className="text-text-dim block text-[12px] font-medium">교재 요청서 이미지</span>
+      <span className="text-text-dim block text-xs font-medium">교재 요청서 이미지</span>
       {error ? (
-        <p className="border-danger/30 bg-danger-soft text-danger rounded-2xl border px-3 py-2 text-[12px]">
+        <p className="border-danger/30 bg-danger-soft text-danger rounded-2xl border px-3 py-2 text-xs">
           요청서 이미지를 준비하지 못했습니다 — {error}. 창을 닫고 다시 시도해 주세요.
         </p>
       ) : total === 0 ? (
-        <p className="text-text-faint border-line rounded-2xl border border-dashed px-3 py-2 text-[12px]">
+        <p className="text-text-faint border-line rounded-2xl border border-dashed px-3 py-2 text-xs">
           첨부할 요청서가 없습니다.
         </p>
       ) : (
-        <p className="border-line bg-bg-soft/60 text-text-dim rounded-2xl border px-3 py-2 text-[12px]">
+        <p className="border-line bg-bg-soft/60 text-text-dim rounded-2xl border px-3 py-2 text-xs">
           {done < total ? (
             <>
               요청서 <span className="num">{done}</span>/<span className="num">{total}</span>장 준비 중…
@@ -145,11 +145,11 @@ export function CoverPicker({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-text-dim text-[12px] font-medium">
+        <span className="text-text-dim text-xs font-medium">
           교재 표지 (선택) <span className="text-text-faint">{covers.length}/{COVER_MAX}</span>
         </span>
         <label
-          className={`border-line hover:bg-bg-soft inline-flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold ${
+          className={`border-line hover:bg-bg-soft inline-flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold ${
             disabled || busy || full ? "pointer-events-none opacity-50" : ""
           }`}
         >
@@ -193,7 +193,7 @@ export function CoverPicker({
           ))}
         </div>
       ) : (
-        <p className="text-text-faint text-[11px]">표지 사진을 넣으면 모든 학생 글에 함께 올라갑니다.</p>
+        <p className="text-text-faint text-xs">표지 사진을 넣으면 모든 학생 글에 함께 올라갑니다.</p>
       )}
     </div>
   );

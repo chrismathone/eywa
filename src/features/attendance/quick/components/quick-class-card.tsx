@@ -50,15 +50,15 @@ export function QuickClassCard({
             {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
           </span>
           <span className="min-w-0">
-            <span className="text-foreground block truncate text-[15px] font-bold">
+            <span className="text-foreground block truncate text-base font-bold">
               {klass.className}
               {klass.band === "now" ? (
-                <span className="bg-green-soft text-green ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+                <span className="bg-green-soft text-green ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-bold">
                   지금
                 </span>
               ) : null}
             </span>
-            <span className="text-text-dim block truncate text-[12px]">
+            <span className="text-text-dim block truncate text-xs">
               <span className="num">
                 {klass.firstStart}
                 {klass.firstEnd ? `~${klass.firstEnd}` : ""}
@@ -77,7 +77,7 @@ export function QuickClassCard({
             onClick={onBulk}
             disabled={bulkCount === 0 || bulkBusy}
             title="아직 입력하지 않은 칸만 전원 출석으로 기록합니다 — 이미 찍은 칸은 건드리지 않습니다"
-            className="bg-primary text-primary-foreground min-h-11 shrink-0 rounded-xl px-3 text-[13px] font-bold whitespace-nowrap disabled:opacity-40"
+            className="bg-primary text-primary-foreground min-h-11 shrink-0 rounded-xl px-3 text-sm font-bold whitespace-nowrap disabled:opacity-40"
           >
             일괄 출결 <span className="num">{bulkCount}</span>
           </button>
@@ -108,7 +108,7 @@ export function QuickClassCard({
               >
                 <span className={`w-full truncate ${fit.className}`}>{s.studentName}</span>
                 {s.note ? (
-                  <span className="w-full truncate text-[10px] font-medium opacity-80">{s.note}</span>
+                  <span className="w-full truncate text-xs font-medium opacity-80">{s.note}</span>
                 ) : null}
               </button>
             );

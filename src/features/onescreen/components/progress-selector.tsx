@@ -152,12 +152,12 @@ export function ProgressSelector({
   if (locked) {
     return (
       <div
-        className="border-line bg-bg-soft text-text-dim flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px]"
+        className="border-line bg-bg-soft text-text-dim flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-xs"
         aria-label={ariaLabel ?? "진도"}
         aria-readonly="true"
       >
         {activeMode && !skip ? (
-          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
+          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-xs font-bold">
             {activeMode}
           </span>
         ) : null}
@@ -175,7 +175,7 @@ export function ProgressSelector({
           `scrollWidth 417 > clientWidth 394`). 옆 자유입력 <input>은 처음부터 `w-full min-w-0 flex-1`이라
           멀쩡했다 — 같은 규약으로 맞춘다. 표 뷰(블록 컨텍스트)에선 flex-1이 무시돼 기존 동작 그대로. */}
       <Popover.Trigger
-        className={`bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
+        className={`bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-xs outline-none transition-colors ${
           skip ? "border-amber text-amber font-bold" : selected.length ? "border-line text-foreground" : "border-line text-text-faint"
         }`}
         aria-label={ariaLabel ?? "진도 선택"}
@@ -183,7 +183,7 @@ export function ProgressSelector({
         {/* 성격(복습·문제풀이)은 **닫힌 상태에서도** 보여야 한다 — 안 보이면 강사가 켠 줄 모르고,
             그게 곧 학부모 문장의 뜻을 바꾼다(진도 나감 ↔ 복습). */}
         {activeMode && !skip ? (
-          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
+          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-xs font-bold">
             {activeMode}
           </span>
         ) : null}
@@ -191,7 +191,7 @@ export function ProgressSelector({
           {skip ?? (selected.length ? displayLessons(value) : "진도 선택…")}
         </span>
         {selected.length > 1 ? (
-          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
+          <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-xs font-bold">
             {selected.length}
           </span>
         ) : null}
@@ -199,11 +199,11 @@ export function ProgressSelector({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border text-[12px] outline-none">
+          <Popover.Popup className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border text-xs outline-none">
             {/* ── 진도 없이 제출(edutrix '상태 선택'의 특수 상태) — 진도가 중단된 날. 맨 위에 두는 이유:
                    이걸 고르면 아래가 전부 잠기므로 **분기 지점**이고, 아래에 묻히면 강사가 못 찾는다. ── */}
             <div className="border-line border-b px-3 py-2">
-              <p className="text-text-faint mb-1.5 text-[11px]">
+              <p className="text-text-faint mb-1.5 text-xs">
                 진도 없이 제출 <span className="text-text-faint/70">· 시험 등 진도가 중단된 날</span>
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -215,7 +215,7 @@ export function ProgressSelector({
                       type="button"
                       onClick={() => pickSkip(s)}
                       aria-pressed={on}
-                      className={`rounded-pill border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                      className={`rounded-pill border px-2.5 py-1 text-xs font-bold transition-colors ${
                         on
                           ? "border-amber bg-amber-soft text-amber"
                           : "border-line text-text-dim hover:border-amber/60 hover:text-amber"
@@ -233,7 +233,7 @@ export function ProgressSelector({
                    ⚠️ 진도가 중단된 날(skip)엔 안 그린다 — 나간 차시가 없으니 그 차시의 복습도 성립하지 않는다. ── */}
             {onMode && !skip ? (
               <div className="border-line border-b px-3 py-2">
-                <p className="text-text-faint mb-1.5 text-[11px]">
+                <p className="text-text-faint mb-1.5 text-xs">
                   오늘 수업 성격 <span className="text-text-faint/70">· 안 고르면 새 진도로 나갑니다</span>
                 </p>
                 {/* 알약 자체는 공용 컴포넌트 — 자유 입력 과목(영어)이 입력칸 아래에 쓰는 것과 **같은 물건**이라
@@ -243,7 +243,7 @@ export function ProgressSelector({
             ) : null}
 
             {skip ? (
-              <p className="text-text-dim bg-amber-soft/50 border-line border-b px-3 py-2 text-[11px]">
+              <p className="text-text-dim bg-amber-soft/50 border-line border-b px-3 py-2 text-xs">
                 오늘은 <b className="text-amber">{skip}</b>라 진도 선택이 잠겨 있어요. 차시를 고르려면 위에서
                 <b> {skip}</b>를 한 번 더 눌러 해제하세요.
               </p>
@@ -259,7 +259,7 @@ export function ProgressSelector({
                   value={studyGrade}
                   onChange={(e) => onStudyGrade(e.target.value)}
                   disabled={!!skip}
-                  className="border-line bg-card focus:border-primary h-7 shrink-0 rounded-sm border px-1.5 text-[12px] outline-none"
+                  className="border-line bg-card focus:border-primary h-7 shrink-0 rounded-sm border px-1.5 text-xs outline-none"
                   aria-label="진도 학년 선택"
                 >
                   {CURRICULUM_GRADES.map((g) => (
@@ -269,7 +269,7 @@ export function ProgressSelector({
                   ))}
                 </select>
                 {ahead ? (
-                  <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-bold">
+                  <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1.5 py-0.5 text-xs font-bold">
                     실제 {studentGrade}
                   </span>
                 ) : null}
@@ -279,7 +279,7 @@ export function ProgressSelector({
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="단원·차시 검색"
                   disabled={!!skip}
-                  className="border-line bg-bg-soft focus:border-primary h-7 w-full min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none"
+                  className="border-line bg-bg-soft focus:border-primary h-7 w-full min-w-0 flex-1 rounded-sm border px-2 text-xs outline-none"
                   aria-label="단원·차시 검색"
                 />
               </div>
@@ -291,14 +291,14 @@ export function ProgressSelector({
               {prev?.trim() || selected.length ? (
                 <div className="border-line bg-bg-soft/40 flex items-center gap-2 border-b px-3 py-1.5">
                   {prev?.trim() ? (
-                    <p className="text-text-faint min-w-0 flex-1 truncate text-[11px]" title={displayLessons(prev)}>
+                    <p className="text-text-faint min-w-0 flex-1 truncate text-xs" title={displayLessons(prev)}>
                       이전 진도: <span className="text-text-dim">{displayLessons(prev)}</span>
                     </p>
                   ) : (
                     <span className="flex-1" />
                   )}
                   {selected.length ? (
-                    <span className="text-text-dim shrink-0 text-[11px]">
+                    <span className="text-text-dim shrink-0 text-xs">
                       선택 <b className="text-primary">{selected.length}</b>차시
                     </span>
                   ) : null}
@@ -307,7 +307,7 @@ export function ProgressSelector({
                       type="button"
                       onClick={() => onChange("")}
                       disabled={!!skip}
-                      className="text-text-faint hover:text-danger shrink-0 text-[11px]"
+                      className="text-text-faint hover:text-danger shrink-0 text-xs"
                     >
                       모두 해제
                     </button>
@@ -320,7 +320,7 @@ export function ProgressSelector({
                   (안 그러면 학년을 바꿔 본 강사가 "고른 게 사라졌다"고 읽고, 그대로 저장돼 학부모에게 나간다). */}
               {otherGrade.length ? (
                 <div className="border-line bg-primary-soft/30 flex items-center gap-2 border-b px-3 py-1.5">
-                  <p className="text-text-dim min-w-0 flex-1 truncate text-[11px]" title={otherGrade.join(", ")}>
+                  <p className="text-text-dim min-w-0 flex-1 truncate text-xs" title={otherGrade.join(", ")}>
                     다른 학년 <b className="text-primary">{otherGrade.length}</b>차시도 함께 선택됨:{" "}
                     <span className="text-text-faint">{otherGrade.join(", ")}</span>
                   </p>
@@ -328,7 +328,7 @@ export function ProgressSelector({
                     type="button"
                     onClick={() => onChange(joinLessons(selected.filter((l) => gradeLessons.has(l))))}
                     disabled={!!skip}
-                    className="text-text-faint hover:text-danger shrink-0 text-[11px]"
+                    className="text-text-faint hover:text-danger shrink-0 text-xs"
                   >
                     다른 학년만 해제
                   </button>
@@ -354,10 +354,10 @@ export function ProgressSelector({
                         {/* 검색 중엔 전부 펼쳐지므로 접기 버튼이 **아무 일도 안 하는 컨트롤**이 된다 →
                             버튼을 disabled로 두면 "고장난 것처럼" 보이므로 아예 비대화형 헤더로 렌더한다. */}
                         {q ? (
-                          <div className="text-text-faint bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-[10.5px] font-bold">
+                          <div className="text-text-faint bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-xs font-bold">
                             <span className="min-w-0 flex-1 truncate">{u.unit}</span>
                             {unitSelected ? (
-                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
+                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-xs">
                                 선택 {unitSelected}
                               </span>
                             ) : null}
@@ -368,14 +368,14 @@ export function ProgressSelector({
                             onClick={() => toggleUnit(u.unit)}
                             disabled={!!skip}
                             aria-expanded={expanded}
-                            className="text-text-faint hover:bg-bg-soft bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10.5px] font-bold"
+                            className="text-text-faint hover:bg-bg-soft bg-bg-soft/60 sticky top-0 z-10 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs font-bold"
                           >
                             <ChevronDown
                               className={`size-3 shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`}
                             />
                             <span className="min-w-0 flex-1 truncate">{u.unit}</span>
                             {unitSelected ? (
-                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
+                              <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-xs">
                                 선택 {unitSelected}
                               </span>
                             ) : (

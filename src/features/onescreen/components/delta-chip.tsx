@@ -8,7 +8,7 @@ export function DeltaChip({ score, prev }: { score: number | null; prev: number 
   const cls = d > 0 ? "text-primary" : d < 0 ? "text-danger" : "text-text-faint";
   const icon: EywaIconName | null = d > 0 ? "arrowUp" : d < 0 ? "arrowDown" : null;
   return (
-    <span className={`tabular inline-flex items-center gap-0.5 text-[11px] font-bold ${cls}`}>
+    <span className={`tabular inline-flex items-center gap-0.5 text-xs font-bold ${cls}`}>
       {icon ? <EyIcon name={icon} size={10} strokeWidth={1.8} /> : null}
       {d === 0 ? "동일" : Math.abs(d)}
     </span>

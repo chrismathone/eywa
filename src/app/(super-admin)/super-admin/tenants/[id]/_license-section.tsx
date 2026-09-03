@@ -26,13 +26,13 @@ export function LicenseSection({
     <section className="bg-card border-line shadow-card space-y-5 rounded-2xl border p-5">
       <header>
         <p className="micro">라이선스</p>
-        <h3 className="text-foreground mt-0.5 text-[15px] font-bold">기능·좌석 관리</h3>
+        <h3 className="text-foreground mt-0.5 text-base font-bold">기능·좌석 관리</h3>
       </header>
 
       {/* 좌석형 */}
       <div className="space-y-2">
-        <p className="text-text-dim text-[11px] font-bold tracking-wide uppercase">좌석 제한</p>
-        <table className="w-full text-[12px]">
+        <p className="text-text-dim text-xs font-bold tracking-wide uppercase">좌석 제한</p>
+        <table className="w-full text-xs">
           <thead>
             <tr className="text-text-dim border-line border-b">
               <th className="py-1.5 text-left font-bold">기능</th>
@@ -57,7 +57,7 @@ export function LicenseSection({
 
       {/* 토글형 */}
       <div className="space-y-2">
-        <p className="text-text-dim text-[11px] font-bold tracking-wide uppercase">기능 On / Off</p>
+        <p className="text-text-dim text-xs font-bold tracking-wide uppercase">기능 On / Off</p>
         <ul className="divide-line divide-y">
           {TOGGLE_FEATURES.map((f) => (
             <ToggleRow
@@ -111,12 +111,12 @@ function SeatRow({
           <button
             type="submit"
             disabled={pending}
-            className="bg-primary text-primary-foreground rounded-sm px-2.5 py-1 text-[11px] font-bold disabled:opacity-60"
+            className="bg-primary text-primary-foreground rounded-sm px-2.5 py-1 text-xs font-bold disabled:opacity-60"
           >
             {pending ? "…" : "저장"}
           </button>
         </form>
-        {state?.error ? <p className="text-danger mt-1 text-[10px]">{state.error}</p> : null}
+        {state?.error ? <p className="text-danger mt-1 text-xs">{state.error}</p> : null}
       </td>
     </tr>
   );
@@ -139,7 +139,7 @@ function ToggleRow({
   const isOn = license?.isActive ?? false;
   return (
     <li className="flex items-center justify-between py-2.5">
-      <span className="text-foreground text-[13px]">{label}</span>
+      <span className="text-foreground text-sm">{label}</span>
       <form action={action}>
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="tenantName" value={tenantName} />

@@ -134,7 +134,7 @@ export function StatsView({
                     <span className="text-text-dim num shrink-0 text-xs">
                       {b.total}건 · 등록 {b.enrolled}
                       {b.rate !== null ? (
-                        <b className="text-foreground ml-1.5 text-[13px]">{b.rate}%</b>
+                        <b className="text-foreground ml-1.5 text-sm">{b.rate}%</b>
                       ) : null}
                     </span>
                   </div>
@@ -142,7 +142,7 @@ export function StatsView({
                       (실측 소개 74% vs 인터넷 51%) 합계만 나란히 놓으면 경로 비교가 왜곡된다.
                       건당 평균의 분모도 등록 건수가 아니라 '금액이 적힌 등록 건수'다. */}
                   {b.paidSum > 0 ? (
-                    <div className="text-text-dim num mt-0.5 text-[11px]">
+                    <div className="text-text-dim num mt-0.5 text-xs">
                       매출 <b className="text-foreground">{won(b.paidSum)}</b>
                       {b.avgPaid !== null && b.paidCount ? (
                         <>
@@ -164,10 +164,10 @@ export function StatsView({
                   {/* 무엇이 이 버킷으로 묶였는지 — 규칙이 못 잡는 표기가 늘면 여기서 보인다. */}
                   {b.samples.length > 0 ? (
                     <details className="mt-1">
-                      <summary className="text-text-faint cursor-pointer text-[11px]">
+                      <summary className="text-text-faint cursor-pointer text-xs">
                         원문 {b.samples.length}종 보기
                       </summary>
-                      <p className="text-text-dim mt-1 text-[11px] leading-relaxed break-keep">
+                      <p className="text-text-dim mt-1 text-xs leading-relaxed break-keep">
                         {b.samples.slice(0, 20).map((s) => `${s.path}(${s.total})`).join(" · ")}
                         {b.samples.length > 20 ? " …" : ""}
                       </p>

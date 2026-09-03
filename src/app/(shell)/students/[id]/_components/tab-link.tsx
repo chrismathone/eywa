@@ -10,7 +10,7 @@ export function TabLink({ href, children }: { href: string; children: React.Reac
   return (
     <Link
       href={embed ? withEmbed(href) : href}
-      className="text-text-dim hover:text-primary inline-flex items-center gap-0.5 text-[11px]"
+      className="text-text-dim hover:text-primary inline-flex items-center gap-0.5 text-xs"
     >
       {children}
       <ArrowRight className="size-3" />

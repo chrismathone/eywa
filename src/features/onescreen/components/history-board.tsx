@@ -108,9 +108,9 @@ export function HistoryBoard({ date }: { date?: string }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="학생 이름 검색"
-          className="border-line bg-card focus:border-primary w-44 rounded-lg border px-2.5 py-1.5 text-[12.5px] outline-none"
+          className="border-line bg-card focus:border-primary w-44 rounded-lg border px-2.5 py-1.5 text-xs outline-none"
         />
-        <span className="text-text-faint ml-auto text-[12px]">
+        <span className="text-text-faint ml-auto text-xs">
           {date ? "이 날짜" : "불러온"} 보고서 {rows.length}건{q ? ` · 검색 결과 ${filtered.length}건` : ""}
         </span>
       </div>
@@ -123,8 +123,8 @@ export function HistoryBoard({ date }: { date?: string }) {
         [...byDate.entries()].map(([date, list]) => (
           <section key={date} className="bg-card border-line shadow-card rounded-2xl border">
             <header className="border-line flex items-baseline gap-2 border-b px-3 py-2">
-              <h3 className="text-foreground text-[13px] font-bold">{dateLabel(date)}</h3>
-              <span className="text-text-faint text-[11px]">
+              <h3 className="text-foreground text-sm font-bold">{dateLabel(date)}</h3>
+              <span className="text-text-faint text-xs">
                 {list.length}건 · 발송 {list.filter((r) => r.classnoteStatus === "success").length}
               </span>
             </header>
@@ -137,22 +137,22 @@ export function HistoryBoard({ date }: { date?: string }) {
                   // 통째로 사라져** 행마다 열이 어긋났다(점수·상태·열람이 뒤섞여 보임). 오른쪽 열들은 값이
                   // 없어도 고정폭 슬롯을 **항상** 렌더해 세로 정렬을 보장한다(wrap 금지 — 진도만 truncate).
                   <li key={r.id} className="flex items-baseline gap-x-2.5 px-3 py-2">
-                    <span className="text-foreground w-24 shrink-0 truncate text-[13px] font-bold">
+                    <span className="text-foreground w-24 shrink-0 truncate text-sm font-bold">
                       {r.studentName}
                     </span>
-                    <span className="text-text-faint w-20 shrink-0 truncate text-[11px]">{r.studentLabel}</span>
+                    <span className="text-text-faint w-20 shrink-0 truncate text-xs">{r.studentLabel}</span>
                     <span className="w-12 shrink-0 text-center">
                       {r.subject ? (
-                        <span className="border-line text-text-dim rounded-full border px-1.5 py-0.5 text-[11px]">
+                        <span className="border-line text-text-dim rounded-full border px-1.5 py-0.5 text-xs">
                           {subjects.labelOf(r.subject)}
                         </span>
                       ) : null}
                     </span>
-                    <span className="text-text-dim min-w-0 flex-1 truncate text-[12px]" title={r.progress ?? ""}>
+                    <span className="text-text-dim min-w-0 flex-1 truncate text-xs" title={r.progress ?? ""}>
                       {r.progress || "—"}
                     </span>
                     <span
-                      className="text-text-faint hidden w-12 shrink-0 truncate text-right text-[11px] sm:inline-block"
+                      className="text-text-faint hidden w-12 shrink-0 truncate text-right text-xs sm:inline-block"
                       title={r.examInfo ?? ""}
                     >
                       {r.examInfo ?? ""}
@@ -160,7 +160,7 @@ export function HistoryBoard({ date }: { date?: string }) {
                     <span className="w-32 shrink-0 text-right">
                       {badge ? (
                         <span
-                          className={`inline-block max-w-full truncate rounded-md px-1.5 py-0.5 align-bottom text-[10.5px] font-bold ${badge.cls}`}
+                          className={`inline-block max-w-full truncate rounded-md px-1.5 py-0.5 align-bottom text-xs font-bold ${badge.cls}`}
                           title={badge.label}
                         >
                           {badge.label}
@@ -169,15 +169,15 @@ export function HistoryBoard({ date }: { date?: string }) {
                         // 미발송 + 발송 게이트 통과(0128a sendable) = 지금 그 날짜로 가서 발송하면 실제로 나감.
                         // 달력 요약의 '보낼 수 있음'과 같은 판정·같은 amber(2026-07-28 원장 제보: 실패는 보이는데
                         // 보낼 수 있는 건이 목록에서 구분되지 않았다).
-                        <span className="bg-amber-soft text-amber rounded-pill inline-block px-1.5 py-0.5 text-[10.5px] font-bold">
+                        <span className="bg-amber-soft text-amber rounded-pill inline-block px-1.5 py-0.5 text-xs font-bold">
                           보낼 수 있음
                         </span>
                       ) : (
                         // 미발송이지만 게이트 밖(이관분·취소·과목 밖·기한 초과) — 사실만 표기(재촉 아님, #77).
-                        <span className="text-text-faint text-[10.5px]">미발송</span>
+                        <span className="text-text-faint text-xs">미발송</span>
                       )}
                     </span>
-                    <span className="text-text-faint w-12 shrink-0 text-right text-[11px]">
+                    <span className="text-text-faint w-12 shrink-0 text-right text-xs">
                       {r.viewCount > 0 ? `열람 ${r.viewCount}` : ""}
                     </span>
                     <span className="w-[74px] shrink-0 text-right">
@@ -186,7 +186,7 @@ export function HistoryBoard({ date }: { date?: string }) {
                           href={`/r/${r.shareToken}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-primary inline-flex items-center gap-0.5 text-[11px] hover:underline"
+                          className="text-primary inline-flex items-center gap-0.5 text-xs hover:underline"
                         >
                           보고서 보기 <EyIcon name="arrowRight" size={11} />
                         </a>
@@ -202,7 +202,7 @@ export function HistoryBoard({ date }: { date?: string }) {
 
       {/* 하루만 보는 모드에선 "이전 더 보기"가 의미 없다(커서가 날짜 단위). 대신 잘렸다는 사실만 알린다. */}
       {hasMore && date ? (
-        <p className="text-text-faint text-center text-[11px]">
+        <p className="text-text-faint text-center text-xs">
           이 날짜 보고서가 많아 최근 {rows.length}건만 표시했습니다
         </p>
       ) : null}
@@ -211,7 +211,7 @@ export function HistoryBoard({ date }: { date?: string }) {
           type="button"
           onClick={() => void loadMore()}
           disabled={loadingMore}
-          className="border-line text-text-dim hover:bg-bg-soft mx-auto rounded-lg border px-4 py-1.5 text-[12px] font-bold disabled:opacity-50"
+          className="border-line text-text-dim hover:bg-bg-soft mx-auto rounded-lg border px-4 py-1.5 text-xs font-bold disabled:opacity-50"
         >
           {loadingMore ? "불러오는 중…" : "이전 보고서 더 보기"}
         </button>

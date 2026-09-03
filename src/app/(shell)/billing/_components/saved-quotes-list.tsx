@@ -67,7 +67,7 @@ export function SavedQuotesList({
                 {schoolGradeLabel(r.school, r.grade)}
               </span>
             </div>
-            <p className="text-text-faint mt-0.5 text-[11px]">
+            <p className="text-text-faint mt-0.5 text-xs">
               수강 {r.courseCount}개 · 교재/기타 {r.extraCount}개 · {fmtDate(r.createdAt)}
             </p>
           </Link>

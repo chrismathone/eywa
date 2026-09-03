@@ -104,25 +104,25 @@ export const PeriodBlock = memo(function PeriodBlock({
              시각·강의실이 dim 보통굵기라 한 발짝만 떨어져도 안 읽혔다 — 여기서 위계를 다시 낮추지 말 것. */}
       <header className="border-line-strong flex flex-wrap items-center gap-x-2 gap-y-1 border-b pb-1.5">
         {periodLabel ? (
-          <span className="bg-bg-soft text-foreground rounded-md px-1.5 py-0.5 text-[13px] font-bold">
+          <span className="bg-bg-soft text-foreground rounded-md px-1.5 py-0.5 text-sm font-bold">
             {periodLabel}
           </span>
         ) : null}
-        <span className="text-foreground num text-[13px] font-bold whitespace-nowrap">
+        <span className="text-foreground num text-sm font-bold whitespace-nowrap">
           {slot.slotStart}
           {slot.slotEnd ? ` ~ ${slot.slotEnd}` : ""}
         </span>
         {teacher ? (
-          <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-[12px] font-bold whitespace-nowrap">
+          <span className="border-line-strong text-foreground rounded-full border px-2 py-0.5 text-xs font-bold whitespace-nowrap">
             {teacher}
           </span>
         ) : null}
         {slot.roomLabel ? (
-          <span className="text-foreground text-[12px] font-bold whitespace-nowrap">{slot.roomLabel}</span>
+          <span className="text-foreground text-xs font-bold whitespace-nowrap">{slot.roomLabel}</span>
         ) : null}
         {!slot.scheduled ? (
           <span
-            className="border-amber/50 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-[11px] font-bold whitespace-nowrap"
+            className="border-amber/50 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-xs font-bold whitespace-nowrap"
             title="시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시"
           >
             시간 변경됨
@@ -132,7 +132,7 @@ export const PeriodBlock = memo(function PeriodBlock({
             (원장 2026-08-27 "우상단에 우측정렬해서 구분선 위쪽에"). 라벨까지 눌리게 label로 감싼다. */}
         {onShouting ? (
           <label
-            className={`ml-auto flex shrink-0 items-center gap-1 text-[12px] font-bold whitespace-nowrap ${
+            className={`ml-auto flex shrink-0 items-center gap-1 text-xs font-bold whitespace-nowrap ${
               canEdit && slot.scheduled ? "cursor-pointer" : "cursor-default opacity-60"
             }`}
             title="이 교시에 Shouting을 했으면 체크하세요"

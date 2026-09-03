@@ -72,7 +72,7 @@ export function CancelAssignmentButton({
       />
       {state?.error ? (
         <span
-          className="text-danger ml-1 inline-block max-w-[10rem] truncate align-middle text-[10px]"
+          className="text-danger ml-1 inline-block max-w-[10rem] truncate align-middle text-xs"
           title={state.error}
         >
           {state.error}

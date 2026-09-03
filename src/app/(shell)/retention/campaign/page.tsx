@@ -15,7 +15,7 @@ export default async function RetentionCampaignPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <RetentionTabs />
-        <span className="text-text-faint text-[11px]">
+        <span className="text-text-faint text-xs">
           재등록 위험 학생을 대상→연락→재등록 퍼널로 관리합니다.
         </span>
       </div>

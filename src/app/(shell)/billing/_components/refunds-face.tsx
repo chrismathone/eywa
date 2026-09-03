@@ -103,7 +103,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
               >
                 <EyIcon name="chevronLeft" size={14} />
               </Link>
-              <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">
+              <span className="text-foreground min-w-[90px] text-center text-sm font-bold">
                 {formatPeriod(period)}
               </span>
               <Link
@@ -114,7 +114,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
                 <EyIcon name="chevronRight" size={14} />
               </Link>
             </div>
-            <span className="text-text-faint ml-auto num text-[10px]">
+            <span className="text-text-faint ml-auto num text-xs">
               환불 기록 {monthsWithData.length}개월
             </span>
           </div>

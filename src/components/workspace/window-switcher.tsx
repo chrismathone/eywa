@@ -169,7 +169,7 @@ export function WindowSwitcher() {
                         e.preventDefault();
                         requestCloseFromDock(w.id, label);
                       }}
-                      className={`flex shrink-0 items-center rounded-full border text-[12px] transition ${
+                      className={`flex shrink-0 items-center rounded-full border text-xs transition ${
                         active ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
                       } ${w.minimized ? "border-dashed border-line-strong/60 opacity-75" : "border-transparent"}`}
                     >
@@ -231,7 +231,7 @@ export function WindowSwitcher() {
           type="button"
           onClick={() => setCollapsed(false)}
           title={`창 ${list.length}개 — 독 펼치기${minimizedCount > 0 ? ` (최소화 ${minimizedCount}개)` : ""}`}
-          className={`border-line bg-card/95 shadow-card mb-2 flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] backdrop-blur transition ${
+          className={`border-line bg-card/95 shadow-card mb-2 flex items-center gap-1 rounded-full border px-2 py-1 text-xs backdrop-blur transition ${
             minimizedCount > 0 ? "text-primary border-primary/40" : "text-text-dim hover:text-foreground"
           }`}
         >

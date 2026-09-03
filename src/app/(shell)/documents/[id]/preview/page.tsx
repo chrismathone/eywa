@@ -80,7 +80,7 @@ export default async function DocumentPreviewPage({ params }: { params: Promise<
       )}
 
       {mode === "office" ? (
-        <p className="text-text-faint text-[11px]">Microsoft Office 온라인 뷰어로 표시 중 — 원본은 다운로드 버튼으로 받으세요.</p>
+        <p className="text-text-faint text-xs">Microsoft Office 온라인 뷰어로 표시 중 — 원본은 다운로드 버튼으로 받으세요.</p>
       ) : null}
     </div>
   );

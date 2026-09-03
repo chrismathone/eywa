@@ -78,7 +78,7 @@ export const BADGE_TONE: Record<"new" | "left" | "transferIn" | "transferOut", s
 };
 
 /** 표식 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나(크기 제각각 금지, 원장 2026-08-10). */
-export const BADGE_BASE = "shrink-0 rounded-sm px-1 text-[9px] leading-[14px] font-bold";
+export const BADGE_BASE = "shrink-0 rounded-sm px-1 text-xs leading-[14px] font-bold";
 
 export const STATUS_TEXT: Record<AttendanceMark, string> = {
   present: "출석",

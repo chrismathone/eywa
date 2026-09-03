@@ -15,7 +15,7 @@ import {
  * 비해 떨어져"* 를 다시 못 나게 잡는다.
  *
  * 🔑 **상수만으로는 못 막는다**: 크기를 [`control-size.ts`](./control-size.ts)로 모아도, 다음 사람이
- *    화면 파일에 `h-9`나 `text-[12px]`를 새로 적으면 조용히 다시 갈린다(실제 회귀는 그렇게 난다).
+ *    화면 파일에 `h-9`나 `text-xs`를 새로 적으면 조용히 다시 갈린다(실제 회귀는 그렇게 난다).
  *    그래서 죽은 색 클래스 가드([`dead-color-class.test.ts`](@/lib/design/dead-color-class.test.ts))처럼
  *    **파일을 훑어 값 자체를 막는다**.
  *
@@ -118,8 +118,8 @@ describe("크기 상수 자체의 계약", () => {
   });
 
   it("데스크톱은 한 벌 — 칩·입력·줄이 같은 크기로 되돌아간다", () => {
-    expect(SHUTTLE_CHIP).toContain("sm:text-[12.5px]");
-    expect(SHUTTLE_INPUT).toContain("sm:text-[12.5px]");
+    expect(SHUTTLE_CHIP).toContain("sm:text-xs");
+    expect(SHUTTLE_INPUT).toContain("sm:text-xs");
     for (const c of [SHUTTLE_ACTION, SHUTTLE_CHIP, SHUTTLE_INPUT]) expect(c).toContain("sm:h-8");
   });
 

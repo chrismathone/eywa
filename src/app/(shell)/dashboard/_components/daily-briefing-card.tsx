@@ -37,7 +37,7 @@ function BriefingLinkChip({ link }: { link: BriefingLink }) {
       href={link.href}
       title={link.label}
       ariaLabel={`${link.label} 열기`}
-      className="border-line bg-card text-text-dim hover:border-primary/30 hover:bg-primary-soft/30 hover:text-primary focus-visible:ring-primary/35 group inline-flex items-center gap-1 rounded-pill border px-2.5 py-1 text-[11.5px] font-bold transition focus-visible:ring-2 focus-visible:outline-none"
+      className="border-line bg-card text-text-dim hover:border-primary/30 hover:bg-primary-soft/30 hover:text-primary focus-visible:ring-primary/35 group inline-flex items-center gap-1 rounded-pill border px-2.5 py-1 text-xs font-bold transition focus-visible:ring-2 focus-visible:outline-none"
     >
       {link.label}
       <EyIcon
@@ -97,27 +97,27 @@ export function DailyBriefingCard({
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-primary text-[12px] font-bold">
+              <p className="text-primary text-xs font-bold">
                 오늘 브리핑
               </p>
               {briefing?.generated_at ? (
-                <span className="text-text-faint text-[12px]">{kstTimeLabel(briefing.generated_at)} 보고</span>
+                <span className="text-text-faint text-xs">{kstTimeLabel(briefing.generated_at)} 보고</span>
               ) : null}
             </div>
-            <h2 id="daily-briefing-title" className="text-foreground mt-1.5 text-[17px] font-bold leading-snug tracking-tight">
+            <h2 id="daily-briefing-title" className="text-foreground mt-1.5 text-lg font-bold leading-snug tracking-tight">
               {completed && report ? report.headline : "매니저 팀 아침 보고"}
             </h2>
 
             {analyzing ? (
-              <p className="text-text-dim mt-2 text-[13.5px] leading-relaxed">
+              <p className="text-text-dim mt-2 text-sm leading-relaxed">
                 매니저 팀이 보고를 준비하는 중입니다… 완료되면 화면이 자동으로 갱신됩니다.
               </p>
             ) : failed ? (
-              <p className="text-danger mt-2 text-[13.5px] leading-relaxed" title={briefing?.processing_error ?? undefined}>
+              <p className="text-danger mt-2 text-sm leading-relaxed" title={briefing?.processing_error ?? undefined}>
                 보고 생성에 실패했습니다. 다시 생성해 주세요.
               </p>
             ) : legacyNarrative ? (
-              <p className="text-foreground mt-2 text-[13.5px] leading-relaxed">{legacyNarrative}</p>
+              <p className="text-foreground mt-2 text-sm leading-relaxed">{legacyNarrative}</p>
             ) : completed && report ? (
               <ul className="mt-3.5 space-y-2.5">
                 {report.managers.map((manager) => {
@@ -125,12 +125,12 @@ export function DailyBriefingCard({
                   return (
                     <li key={manager.area} className="flex items-start gap-3">
                       <span
-                        className={`${AREA_TONE[manager.area] ?? AREA_TONE["운영"]} mt-px inline-flex w-12 shrink-0 justify-center rounded-full py-1 text-[11px] font-bold ring-1 ring-inset`}
+                        className={`${AREA_TONE[manager.area] ?? AREA_TONE["운영"]} mt-px inline-flex w-12 shrink-0 justify-center rounded-full py-1 text-xs font-bold ring-1 ring-inset`}
                       >
                         {manager.area}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-foreground text-[13.5px] leading-relaxed">{manager.report}</p>
+                        <p className="text-foreground text-sm leading-relaxed">{manager.report}</p>
                         {chips.length > 0 ? (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
                             {chips.map((link) => (
@@ -144,20 +144,20 @@ export function DailyBriefingCard({
                 })}
               </ul>
             ) : (
-              <p className="text-text-dim mt-2 text-[13.5px] leading-relaxed">
+              <p className="text-text-dim mt-2 text-sm leading-relaxed">
                 오늘 보고가 아직 없습니다. 매일 아침 자동으로 생성되며, 지금 바로 만들 수도 있습니다.
               </p>
             )}
 
             {degraded ? (
-              <p className="text-text-dim mt-2 text-[12px]" title={briefing?.processing_error ?? undefined}>
+              <p className="text-text-dim mt-2 text-xs" title={briefing?.processing_error ?? undefined}>
                 AI 보고 생성에 실패해 요약으로 대신 표시했습니다.
               </p>
             ) : null}
 
             {leftover.length > 0 ? (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <span className="text-text-faint text-[12px] font-bold">바로 가기</span>
+                <span className="text-text-faint text-xs font-bold">바로 가기</span>
                 {leftover.map((link) => (
                   <BriefingLinkChip key={link.key} link={link} />
                 ))}
@@ -166,7 +166,7 @@ export function DailyBriefingCard({
 
             {completed && payload && payload.spotlights.length > 0 ? (
               <div className="border-line/70 mt-4 border-t pt-3.5">
-                <p className="text-foreground text-[13px] font-bold">
+                <p className="text-foreground text-sm font-bold">
                   살펴볼 학생{" "}
                   <span className="text-text-faint font-medium">{payload.spotlights.length}</span>
                 </p>
@@ -184,20 +184,20 @@ export function DailyBriefingCard({
                     const subjects = subjectBreakdownText(s.bySubject ?? []);
                     const body = (
                       <>
-                        <span className="text-foreground shrink-0 text-[13.5px] font-bold">{s.name}</span>
+                        <span className="text-foreground shrink-0 text-sm font-bold">{s.name}</span>
                         {subjects ? (
-                          <span className="bg-bg-soft text-text-dim ring-line shrink-0 rounded-pill px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset">
+                          <span className="bg-bg-soft text-text-dim ring-line shrink-0 rounded-pill px-2 py-0.5 text-xs font-bold ring-1 ring-inset">
                             {subjects}
                           </span>
                         ) : null}
-                        <span className="text-text-dim min-w-0 flex-1 truncate text-[12.5px]">
+                        <span className="text-text-dim min-w-0 flex-1 truncate text-xs">
                           {s.reasons.slice(0, 2).join(" · ")}
                           {/* 사유 원문은 **화면에만** 나온다 — payload의 reasons엔 숫자만 담겨 AI로 나간다.
                               원장 2026-08-29 *"사유까지 정리해서"*. 사전 통보 건수는 위 reasons가 이미 말한다. */}
                           {s.reasonText ? <span className="text-text-faint"> · {s.reasonText}</span> : null}
                         </span>
                         {s.action ? (
-                          <span className="bg-primary-soft text-primary hidden shrink-0 items-center rounded-pill px-2.5 py-1 text-[11px] font-bold sm:inline-flex">
+                          <span className="bg-primary-soft text-primary hidden shrink-0 items-center rounded-pill px-2.5 py-1 text-xs font-bold sm:inline-flex">
                             {s.action}
                           </span>
                         ) : null}
@@ -230,7 +230,7 @@ export function DailyBriefingCard({
             ) : null}
 
             {completed && payload && payload.sourceIssueLabels.length > 0 ? (
-              <p className="text-text-faint mt-2 text-[12px]">
+              <p className="text-text-faint mt-2 text-xs">
                 확인 불가(조회 실패): {payload.sourceIssueLabels.join("·")}
               </p>
             ) : null}

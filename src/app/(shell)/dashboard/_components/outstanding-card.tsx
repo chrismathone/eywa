@@ -47,14 +47,14 @@ export function OutstandingCard({
                   title={p.studentName}
                   className="group min-w-0 flex-1"
                 >
-                  <span className="text-foreground group-hover:text-primary block truncate text-[13px] font-medium">
+                  <span className="text-foreground group-hover:text-primary block truncate text-sm font-medium">
                     {p.studentName}
                   </span>
                 </WindowLink>
               ) : (
                 <span
                   title={p.studentName}
-                  className="text-foreground block min-w-0 flex-1 truncate text-[13px] font-medium"
+                  className="text-foreground block min-w-0 flex-1 truncate text-sm font-medium"
                 >
                   {p.studentName}
                 </span>
@@ -73,15 +73,15 @@ export function OutstandingCard({
                   {labels.map((m) => (
                     <span
                       key={m}
-                      className="border-line text-text-dim num rounded-md border px-1.5 py-px text-[11px] font-medium"
+                      className="border-line text-text-dim num rounded-md border px-1.5 py-px text-xs font-medium"
                     >
                       {m}
                     </span>
                   ))}
-                  {more > 0 ? <span className="text-text-faint num text-[11px]">외 {more}</span> : null}
+                  {more > 0 ? <span className="text-text-faint num text-xs">외 {more}</span> : null}
                 </span>
               ) : null}
-              <span className="text-danger num min-w-[52px] shrink-0 text-right text-[12px] font-bold">
+              <span className="text-danger num min-w-[52px] shrink-0 text-right text-xs font-bold">
                 {man(p.amount)}
               </span>
               <Pill color={p.status === "partial" ? "amber" : "danger"}>

@@ -85,7 +85,7 @@ async function BrandPanel() {
         )}
         <div className="leading-tight">
           <p className="text-sm font-bold tracking-tight">{wordmark}</p>
-          <p className="text-[11px] text-white/70">{academyLine}</p>
+          <p className="text-xs text-white/70">{academyLine}</p>
         </div>
       </div>
 
@@ -102,7 +102,7 @@ async function BrandPanel() {
         </p>
       </div>
 
-      <p className="relative text-[12px] font-medium text-white/75">
+      <p className="relative text-xs font-medium text-white/75">
         {academyName ? `${academyName} · ` : ""}학원 운영의 하루가 여기서 시작됩니다
       </p>
     </aside>

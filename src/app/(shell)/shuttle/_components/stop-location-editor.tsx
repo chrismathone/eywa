@@ -79,7 +79,7 @@ export function StopLocationEditor({
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-text-dim flex items-center gap-1 text-[11.5px]">
+        <label className="text-text-dim flex items-center gap-1 text-xs">
           위도
           <input
             value={lat}
@@ -90,7 +90,7 @@ export function StopLocationEditor({
             className={cn(SHUTTLE_INPUT, "num w-32")}
           />
         </label>
-        <label className="text-text-dim flex items-center gap-1 text-[11.5px]">
+        <label className="text-text-dim flex items-center gap-1 text-xs">
           경도
           <input
             value={lng}
@@ -101,7 +101,7 @@ export function StopLocationEditor({
             className={cn(SHUTTLE_INPUT, "num w-32")}
           />
         </label>
-        <label className="text-text-dim flex items-center gap-1 text-[11.5px]">
+        <label className="text-text-dim flex items-center gap-1 text-xs">
           반경
           <input
             value={radius}
@@ -124,10 +124,10 @@ export function StopLocationEditor({
       />
 
       {halfFilled && (
-        <p className="text-danger text-[11.5px]">위도와 경도를 함께 입력하세요.</p>
+        <p className="text-danger text-xs">위도와 경도를 함께 입력하세요.</p>
       )}
       {!MAP_AVAILABLE && (
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           좌표는 카카오맵·네이버지도에서 위치를 길게 눌러 확인할 수 있습니다.
         </p>
       )}

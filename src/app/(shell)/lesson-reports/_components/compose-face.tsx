@@ -30,7 +30,7 @@ import {
 
 
 const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
-const LABEL = "text-text-dim text-[11px] font-medium";
+const LABEL = "text-text-dim text-xs font-medium";
 
 export type ComposeStudent = { id: string; name: string; school: string | null; grade: string | null };
 
@@ -338,14 +338,14 @@ export function ComposeFace({
         onDiscard={localDraft.discard}
       />
       <div>
-        <h2 className="text-foreground text-[15px] font-bold">직접 작성·발송</h2>
-        <p className="text-text-faint text-[12px]">
+        <h2 className="text-foreground text-base font-bold">직접 작성·발송</h2>
+        <p className="text-text-faint text-xs">
           학생을 선택해 수업보고서를 작성하고 ClassNote로 발송합니다(강사 원스크린과 동일 형식). 담당 반이 아니어도 발송할 수 있어요.
         </p>
       </div>
 
       {!sendEnabled ? (
-        <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-[12px]">
+        <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-xs">
           현재 <b>실제 발송이 꺼져</b> 있어 저장만 됩니다(dry-run). 학부모에게 전송하려면 원장 설정의 <b>ClassNote 실제 발송</b>을 켜야 합니다.
         </p>
       ) : null}
@@ -373,17 +373,17 @@ export function ComposeFace({
             className={INPUT}
           />
           {reportDate !== kstToday() ? (
-            <p className="text-amber mt-0.5 text-[11px]">과거 날짜로 발송 — 카드·ClassNote 게시일이 이 날짜가 됩니다</p>
+            <p className="text-amber mt-0.5 text-xs">과거 날짜로 발송 — 카드·ClassNote 게시일이 이 날짜가 됩니다</p>
           ) : null}
         </div>
       </div>
 
-      {ctxPending ? <p className="text-text-faint text-[12px]">학생 정보를 불러오는 중…</p> : null}
+      {ctxPending ? <p className="text-text-faint text-xs">학생 정보를 불러오는 중…</p> : null}
 
       {ctx ? (
         <div className="space-y-4">
           {ctx.nameCollision ? (
-            <p className="border-amber/40 bg-amber/10 text-amber flex items-start gap-1.5 rounded-md border px-3 py-2 text-[12px]">
+            <p className="border-amber/40 bg-amber/10 text-amber flex items-start gap-1.5 rounded-md border px-3 py-2 text-xs">
               <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
               <span>같은 이름의 학생이 또 있어 <b>자동 발송이 차단</b>됩니다(오발송 방지). 학생 구분 이름(classnote_name)을 지정한 뒤 발송하세요.</span>
             </p>
@@ -393,13 +393,13 @@ export function ComposeFace({
           <div>
             <div className={LABEL}>과목</div>
             {noSendableSubject ? (
-              <p className="border-amber/40 bg-amber/10 text-amber rounded-md border px-3 py-2 text-[12px]">
+              <p className="border-amber/40 bg-amber/10 text-amber rounded-md border px-3 py-2 text-xs">
                 발송 가능한 과목이 없습니다 — 원장 설정 &gt; 수업보고서 &gt; <b>발송 과목</b>(수학·영어)을 먼저 지정해야 발송할 수 있어요.
               </p>
             ) : (
               <>
                 {!hasEnrolledSendable ? (
-                  <p className="text-text-dim mb-1.5 text-[12px]">
+                  <p className="text-text-dim mb-1.5 text-xs">
                     이 학생은 발송 과목(수학·영어)에 <b>수강 중이 아니에요</b> — 아래에서 골라 직접 발송할 수 있어요.
                   </p>
                 ) : null}
@@ -409,7 +409,7 @@ export function ComposeFace({
                       key={s.key}
                       type="button"
                       onClick={() => pickSubject(s)}
-                      className={`rounded-full border px-3 py-1 text-[12px] ${
+                      className={`rounded-full border px-3 py-1 text-xs ${
                         subject === s.key ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"
                       }`}
                       title={s.sendable ? undefined : "발송 대상 과목이 아닙니다(저장만 됩니다)"}
@@ -422,7 +422,7 @@ export function ComposeFace({
               </>
             )}
             {curSubject?.board ? (
-              <p className="text-text-faint mt-1 text-[11px]">
+              <p className="text-text-faint mt-1 text-xs">
                 발송 보드: <b className="text-text-dim">{curSubject.board}</b>
               </p>
             ) : null}
@@ -476,7 +476,7 @@ export function ComposeFace({
               <div className={LABEL}>수업 태도</div>
               <div className="flex flex-wrap gap-1.5">
                 {ATTITUDE.map((a) => (
-                  <button key={a} type="button" onClick={() => setAttitude(attitude === a ? "" : a)} className={`rounded-full border px-2.5 py-1 text-[12px] ${attitude === a ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>
+                  <button key={a} type="button" onClick={() => setAttitude(attitude === a ? "" : a)} className={`rounded-full border px-2.5 py-1 text-xs ${attitude === a ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>
                     {a}
                   </button>
                 ))}
@@ -486,7 +486,7 @@ export function ComposeFace({
               <div className={LABEL}>과제 수행률</div>
               <div className="flex flex-wrap items-center gap-2">
                 <HomeworkRateInput value={homework} onChange={setHomework} label="과제 수행률" size="lg" />
-                <label className="text-text-dim ml-1 inline-flex items-center gap-1 text-[12px]">
+                <label className="text-text-dim ml-1 inline-flex items-center gap-1 text-xs">
                   <input type="checkbox" checked={makeup} onChange={(e) => setMakeup(e.target.checked)} /> 보강
                 </label>
               </div>
@@ -534,7 +534,7 @@ export function ComposeFace({
           {/* 액션 */}
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
-              <span className="text-foreground text-[12px]">
+              <span className="text-foreground text-xs">
                 <b>{ctx.student.name}</b>
                 {curSubject?.board ? <> · 보드 <b>{curSubject.board}</b></> : null} 에게 발송할까요?
                 {!sendEnabled ? " (실제 발송 OFF — 저장만 됨)" : ""}
@@ -557,7 +557,7 @@ export function ComposeFace({
                 </Button>
               </div>
               {!subject ? (
-                <p className="text-amber text-[11px]">
+                <p className="text-amber text-xs">
                   {noSendableSubject
                     ? "발송 가능한 과목이 없어 발송할 수 없습니다 — 원장 설정에서 발송 과목을 지정하세요."
                     : "발송할 과목을 먼저 선택하세요."}

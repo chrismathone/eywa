@@ -42,14 +42,14 @@ export function PinButtons({
 
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-      <span className="text-text-faint text-[11px]">연결 가능:</span>
+      <span className="text-text-faint text-xs">연결 가능:</span>
       {candidates.map((c) => (
         <button
           key={c.childId}
           type="button"
           disabled={pending}
           onClick={() => link(c)}
-          className="border-line hover:bg-bg-soft rounded-full border px-2 py-0.5 text-[11px] font-bold disabled:opacity-50"
+          className="border-line hover:bg-bg-soft rounded-full border px-2 py-0.5 text-xs font-bold disabled:opacity-50"
           title={`생년 ${c.birthYear} — 학년과 맞아 후보로 올랐습니다`}
         >
           {c.childName}
@@ -57,7 +57,7 @@ export function PinButtons({
           {c.nameHint ? <span className="text-primary"> · 이름 유사</span> : null}
         </button>
       ))}
-      {error ? <span className="text-danger text-[11px] break-keep">{error}</span> : null}
+      {error ? <span className="text-danger text-xs break-keep">{error}</span> : null}
     </div>
   );
 }
@@ -78,11 +78,11 @@ export function UnpinButton({ studentId, boardId, childName }: { studentId: stri
             if (!res.ok) setError(res.error);
           });
         }}
-        className="text-text-faint hover:text-danger ml-1 text-[11px] underline disabled:opacity-50"
+        className="text-text-faint hover:text-danger ml-1 text-xs underline disabled:opacity-50"
       >
         연결 해제
       </button>
-      {error ? <span className="text-danger ml-1 text-[11px]">{error}</span> : null}
+      {error ? <span className="text-danger ml-1 text-xs">{error}</span> : null}
     </>
   );
 }

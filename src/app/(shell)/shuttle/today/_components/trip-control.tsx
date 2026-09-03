@@ -93,7 +93,7 @@ export function TripControl({
       {showBadge && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
       {state !== "ready" && startedAt && (
         <span
-          className="text-text-faint hidden text-[11.5px] sm:inline"
+          className="text-text-faint hidden text-xs sm:inline"
           title={[
             `${startedAt} 출발${trip?.startedByName ? ` · ${trip.startedByName}` : ""}`,
             endedAt ? `${endedAt} 종료${trip?.endedByName ? ` · ${trip.endedByName}` : ""}` : null,

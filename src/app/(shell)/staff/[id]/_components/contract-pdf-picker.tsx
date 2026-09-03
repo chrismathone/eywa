@@ -92,7 +92,7 @@ export function ContractPdfPicker({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="border-line text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] transition disabled:opacity-50"
+        className="border-line text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition disabled:opacity-50"
         title="계약서 PDF에서 기간·조건을 읽어 아래 칸을 채웁니다 (저장은 확인 후)"
       >
         {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}

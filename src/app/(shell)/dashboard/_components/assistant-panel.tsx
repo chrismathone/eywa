@@ -109,10 +109,10 @@ export function AssistantPanel({
             <EyIcon name="message" size={18} />
           </span>
           <div className="min-w-0">
-            <p className="text-primary text-[12px] font-bold">
+            <p className="text-primary text-xs font-bold">
               대화형 비서
             </p>
-            <h2 id="assistant-panel-title" className="text-foreground mt-0.5 text-[16px] font-bold tracking-tight">
+            <h2 id="assistant-panel-title" className="text-foreground mt-0.5 text-base font-bold tracking-tight">
               매니저 팀에게 물어보기
             </h2>
           </div>
@@ -144,8 +144,8 @@ export function AssistantPanel({
                 <div
                   className={
                     turn.role === "user"
-                      ? "bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap"
-                      : `bg-bg-soft text-foreground ${wide ? "w-full" : "max-w-[85%]"} min-w-0 rounded-2xl rounded-bl-md px-4 py-2.5 text-[13.5px] leading-relaxed`
+                      ? "bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
+                      : `bg-bg-soft text-foreground ${wide ? "w-full" : "max-w-[85%]"} min-w-0 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed`
                   }
                 >
                   {blocks ? (
@@ -165,7 +165,7 @@ export function AssistantPanel({
           })}
           {pending ? (
             <div className="flex justify-start">
-              <div className="bg-bg-soft text-text-dim max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-[13.5px]">
+              <div className="bg-bg-soft text-text-dim max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm">
                 조회하고 있습니다…
               </div>
             </div>
@@ -173,14 +173,14 @@ export function AssistantPanel({
         </div>
       ) : (
         <div className="px-5 py-4 sm:px-6">
-          <p className="text-text-dim text-[13.5px]">학원 데이터를 조회해 바로 답해드려요.</p>
+          <p className="text-text-dim text-sm">학원 데이터를 조회해 바로 답해드려요.</p>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {EXAMPLE_QUESTIONS.map((q) => (
               <button
                 key={q}
                 type="button"
                 onClick={() => setInput(q)}
-                className="border-line bg-card text-text-dim hover:border-primary/35 hover:text-foreground rounded-pill border px-3 py-1.5 text-[12.5px] transition"
+                className="border-line bg-card text-text-dim hover:border-primary/35 hover:text-foreground rounded-pill border px-3 py-1.5 text-xs transition"
               >
                 {q}
               </button>
@@ -203,13 +203,13 @@ export function AssistantPanel({
             rows={1}
             maxLength={500}
             placeholder="무엇이든 물어보세요"
-            className="border-line bg-card text-foreground placeholder:text-text-faint focus-visible:ring-primary/40 min-h-11 flex-1 resize-none rounded-xl border px-3.5 py-2.5 text-[14px] leading-relaxed focus-visible:ring-2 focus-visible:outline-none"
+            className="border-line bg-card text-foreground placeholder:text-text-faint focus-visible:ring-primary/40 min-h-11 flex-1 resize-none rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed focus-visible:ring-2 focus-visible:outline-none"
           />
           <Button type="button" disabled={pending || input.trim().length === 0} onClick={submit}>
             {pending ? "조회 중…" : "질문"}
           </Button>
         </div>
-        {error ? <p className="text-danger mt-1.5 text-[12px]">{error}</p> : null}
+        {error ? <p className="text-danger mt-1.5 text-xs">{error}</p> : null}
       </div>
 
       <ConfirmDialog

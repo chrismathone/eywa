@@ -64,7 +64,7 @@ function MiniCalendar({
     const owner = paintedMonthOf(c.iso, painted);
     const dragging = inDrag(c.iso);
     const isHoliday = holidays.has(c.iso);
-    const base = "h-5 rounded-sm text-[10px] font-medium transition-colors";
+    const base = "h-5 rounded-sm text-xs font-medium transition-colors";
 
     let tone: string;
     if (dragging) tone = "bg-primary/30 text-foreground";
@@ -95,14 +95,14 @@ function MiniCalendar({
   return (
     <div className="border-line bg-card rounded-lg border p-2">
       <div className="mb-1 flex items-center justify-between">
-        <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold text-white ${MONTH_BG[month]}`}>
+        <span className={`rounded px-1.5 py-0.5 text-xs font-bold text-white ${MONTH_BG[month]}`}>
           {month}월
         </span>
         {mine ? (
           <button
             type="button"
             onClick={() => onClear(month)}
-            className="text-text-faint hover:text-danger text-[11px] leading-none"
+            className="text-text-faint hover:text-danger text-xs leading-none"
             aria-label={`${month}월 세션 지우기`}
           >
             ×
@@ -113,7 +113,7 @@ function MiniCalendar({
         {DAY_NAMES.map((d, i) => (
           <div
             key={d}
-            className={`text-center text-[10px] font-medium ${i === 0 ? "text-danger" : i === 6 ? "text-blue-500" : "text-text-faint"}`}
+            className={`text-center text-xs font-medium ${i === 0 ? "text-danger" : i === 6 ? "text-blue-500" : "text-text-faint"}`}
           >
             {d}
           </div>
@@ -172,7 +172,7 @@ export function SessionCalendar({
       //    취소로 두면 "칠했는데 사라졌다"가 된다. 확정은 버튼을 뗄 때만(onMouseUp).
       onMouseLeave={finish}
     >
-      <p className="text-text-dim text-[12px]">
+      <p className="text-text-dim text-xs">
         달력에서 <b>드래그</b>해 세션 기간을 칠하세요. 칠한 구간은 <b>시작일이 속한 달</b>의 세션이 됩니다 —
         2월 세션이 3월 초까지 이어져도 그대로 두시면 됩니다. 키보드로 넣으시려면 아래 <b>글자로 입력·복사</b>를 쓰세요.
         {drag ? (

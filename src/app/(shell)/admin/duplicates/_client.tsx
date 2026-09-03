@@ -78,7 +78,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
 
       <form action={action} className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
         <div className="space-y-1">
-          <label className="text-muted-foreground block text-[11px] font-medium">
+          <label className="text-muted-foreground block text-xs font-medium">
             보존할 학생 (통합 후 유지)
           </label>
           <select
@@ -95,7 +95,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-muted-foreground block text-[11px] font-medium">
+          <label className="text-muted-foreground block text-xs font-medium">
             중복 학생 (통합 후 퇴원)
           </label>
           <select

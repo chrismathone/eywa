@@ -44,9 +44,9 @@ export function LiveVehicleCard({
       {/* 차 머리 — 스크롤 중에도 붙어 있다(오늘 화면 VehicleHeader와 같은 결).
           ⚠️ 토큰 이름은 `--background`다(`bg-bg`는 정의가 없어 아무 색도 안 칠해진다 — 죽은 색 클래스). */}
       <div className="bg-background/95 border-line sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b py-1.5 backdrop-blur">
-        <h2 className="text-foreground text-[15px] font-bold">{vehicle.vehicleName}</h2>
+        <h2 className="text-foreground text-base font-bold">{vehicle.vehicleName}</h2>
         {vehicle.driverName && (
-          <span className="text-text-dim text-[11.5px]">
+          <span className="text-text-dim text-xs">
             기사 {vehicle.driverName}
             {vehicle.driverPhone && (
               <a href={`tel:${vehicle.driverPhone}`} className="text-primary ml-1 font-bold underline">
@@ -62,7 +62,7 @@ export function LiveVehicleCard({
           {tripsReady && vehicle.alerts > 0 && (
             <Pill color={TONE_COLOR.critical}>확인 {vehicle.alerts}</Pill>
           )}
-          <span className="text-text-faint text-[11.5px] font-bold">
+          <span className="text-text-faint text-xs font-bold">
             <span className="num">{progressLabel(vehicle.progress)}</span>
           </span>
         </span>
@@ -112,19 +112,19 @@ function LiveRunPanel({
         )}
       >
         {/* 🔴 출발 시각이 맨 앞 — 관리자도 "다음에 뭐가 뜨나"를 시각으로 읽는다(오늘 화면과 같은 규약). */}
-        {start && <span className="text-foreground num shrink-0 text-[16px] font-bold">{start}</span>}
+        {start && <span className="text-foreground num shrink-0 text-base font-bold">{start}</span>}
         <Pill color={TONE_COLOR[run.direction === "in" ? "info" : "special"]}>
           {DIRECTION_LABEL[run.direction]}
         </Pill>
         {/* 방향은 바로 앞 배지가 이미 말한다 — 제목은 "3회차"까지만(2026-09-03 밀도 개선). */}
-        <span className="text-text-dim text-[12.5px] font-bold">{runShortTitle(run)}</span>
+        <span className="text-text-dim text-xs font-bold">{runShortTitle(run)}</span>
         {/* 🔴 0243a가 없으면 상태를 말하지 않는다 — '출발 전'은 사실이 아니라 "모른다"이다. */}
         {tripsReady && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
         {tripsReady && alert !== "none" && (
           <Pill color={TONE_COLOR[RUN_ALERT_TONE[alert]]}>{RUN_ALERT_LABEL[alert]}</Pill>
         )}
         <span className="ml-auto flex items-center gap-1.5">
-          <span className="text-text-faint num text-[11.5px] font-bold">
+          <span className="text-text-faint num text-xs font-bold">
             {progressLabel(progress)}
           </span>
           <EyIcon name={open ? "chevronUp" : "chevronDown"} size={14} className="text-text-faint" />
@@ -133,7 +133,7 @@ function LiveRunPanel({
 
       {/* 누가 언제 눌렀는지 — 관제에서 "누구한테 전화하지"의 답이 된다. 모르면 그 줄을 안 그린다. */}
       {tripsReady && (startedAt || endedAt) && (
-        <div className="text-text-faint flex flex-wrap gap-x-2 px-3 pb-2 text-[11.5px]">
+        <div className="text-text-faint flex flex-wrap gap-x-2 px-3 pb-2 text-xs">
           {startedAt && (
             <span>
               <span className="num">{startedAt}</span> 출발
@@ -163,7 +163,7 @@ function LiveRunPanel({
               )}
             >
               <span className="text-foreground font-bold">{row.studentName || "—"}</span>
-              <span className="text-text-faint text-[11.5px]">{row.stopName}</span>
+              <span className="text-text-faint text-xs">{row.stopName}</span>
               <span className="ml-auto shrink-0">
                 {/* 🔴 안 찍은 줄은 '미기록'이지 미탑승이 아니다 — 색도 뜻도 다르다. */}
                 {row.status === null ? (

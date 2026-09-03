@@ -191,7 +191,7 @@ export default async function ConsultationsPage({
 
       {/* ⚠️ 동기화 배지를 이 행에 태운다 — 맨 위에 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측 텅 빔). */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-text-dim px-1 text-[13px]">
+        <p className="text-text-dim px-1 text-sm">
           결과 <span className="text-foreground font-bold">{total}</span>건
           {totalPages > 1 ? (
             <span className="ml-2">
@@ -256,7 +256,7 @@ export default async function ConsultationsPage({
                         <WindowLink
                           href={`/students/${c.studentId}`}
                           title={c.studentName}
-                          className="text-foreground relative z-10 text-[15px] font-bold hover:underline"
+                          className="text-foreground relative z-10 text-base font-bold hover:underline"
                         >
                           {c.studentName}
                         </WindowLink>
@@ -273,13 +273,13 @@ export default async function ConsultationsPage({
                           </span>
                         ) : null}
                         {c.hasAi ? (
-                          <span className="text-gold relative z-10 inline-flex items-center gap-0.5 text-[10px] font-bold" title="AI 분석됨">
+                          <span className="text-gold relative z-10 inline-flex items-center gap-0.5 text-xs font-bold" title="AI 분석됨">
                             <Sparkles className="size-3" />
                             AI
                           </span>
                         ) : null}
                       </div>
-                      <p className="text-text-dim mt-0.5 text-[11px]">
+                      <p className="text-text-dim mt-0.5 text-xs">
                         {c.subject ? <span>{c.subject} · </span> : null}
                         {c.counselorName ? <span>{c.counselorName} 상담</span> : null}
                       </p>
@@ -291,12 +291,12 @@ export default async function ConsultationsPage({
                   </div>
                 </header>
 
-                <p className="text-foreground mt-3 line-clamp-2 text-[13px] leading-relaxed">{c.summary}</p>
+                <p className="text-foreground mt-3 line-clamp-2 text-sm leading-relaxed">{c.summary}</p>
 
                 {c.followUpAction || c.followUpDate ? (
                   <div className="border-line mt-3 flex items-center justify-between gap-2 border-t pt-3">
                     {/* 구 font-mono uppercase 'Follow-up' 영문 라벨 → 한글 승격(코딩틱 제거) */}
-                    <p className="text-text-dim text-[12px]">
+                    <p className="text-text-dim text-xs">
                       <span className="text-gold mr-2 font-bold">후속 조치</span>
                       {c.followUpAction ?? "—"}
                       {c.followUpDate ? (

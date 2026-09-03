@@ -53,7 +53,7 @@ function shiftMonth(month: string, delta: number): string {
 function RangeSwitch({ range }: { range: WritingRatesView["range"] }) {
   const isMonth = range.kind === "month";
   const base = "/lesson-reports?tab=writing";
-  const chip = "rounded-full border px-3 py-1 text-[12px] transition";
+  const chip = "rounded-full border px-3 py-1 text-xs transition";
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {isMonth ? (
@@ -61,7 +61,7 @@ function RangeSwitch({ range }: { range: WritingRatesView["range"] }) {
           <Link href={`${base}&rmonth=${shiftMonth(range.month, -1)}`} className={`${chip} border-line text-text-dim hover:bg-bg-soft`} aria-label="이전 달">
             ‹
           </Link>
-          <span className="text-foreground px-1 text-[12px] font-bold">{formatMonth(range.month)}</span>
+          <span className="text-foreground px-1 text-xs font-bold">{formatMonth(range.month)}</span>
           <Link href={`${base}&rmonth=${shiftMonth(range.month, 1)}`} className={`${chip} border-line text-text-dim hover:bg-bg-soft`} aria-label="다음 달">
             ›
           </Link>
@@ -105,8 +105,8 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
         {/* 카드 헤더 위계(문법 ①) — 작은 소라벨 → 볼드 타이틀 → dim 서브 */}
         <div>
           <p className="editorial-eyebrow">작성 현황</p>
-          <h2 className="text-foreground mt-0.5 text-[16px] font-bold">강사별 작성률</h2>
-          <p className="text-text-faint mt-0.5 text-[12px]">
+          <h2 className="text-foreground mt-0.5 text-base font-bold">강사별 작성률</h2>
+          <p className="text-text-faint mt-0.5 text-xs">
             {isMonth ? (
               <>
                 {formatMonth(view.range.month)} 날짜별·월간 작성률 — 작성/대상(결석 제외) · 오늘은{" "}
@@ -134,7 +134,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                   type="button"
                   onClick={() => setSel(o.value)}
                   aria-pressed={on}
-                  className={`rounded-full border px-3 py-1 text-[12px] transition ${
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
                     on
                       ? "border-primary bg-primary/10 text-primary font-bold"
                       : "border-line text-text-dim hover:bg-bg-soft"
@@ -153,12 +153,12 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
       {isMonth ? (
         <WritingRateMonth view={view} />
       ) : filtered.length === 0 ? (
-        <p className="text-text-faint text-[13px]">
+        <p className="text-text-faint text-sm">
           {rates.length === 0 ? "최근 작성 기록이 없습니다." : "이 과목 강사의 작성 기록이 없습니다."}
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-[12px]">
+          <table className="w-full min-w-[760px] text-left text-xs">
             <thead>
               <tr className="border-line text-text-faint group border-b">
                 <SortableTh sortKey="teacher" state={sort} onSort={setSort}>
@@ -185,21 +185,21 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                     {/* 영어는 ClassNote 반 알림장이 소스라 셈법이 다르다 — 배지로 밝혀 둔다. */}
                     {r.source === "classnote" ? (
                       <span
-                        className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-[10px]"
+                        className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-xs"
                         title="영어는 강사가 ClassNote에 직접 쓰므로 반 알림장 기준으로 셉니다(반 단위 · 주간만)"
                       >
                         ClassNote
                       </span>
                     ) : null}
                     {r.todayMissing.length > 0 ? (
-                      <p className="text-danger mt-0.5 text-[11px]">미작성: {nameList(r.todayMissing)}</p>
+                      <p className="text-danger mt-0.5 text-xs">미작성: {nameList(r.todayMissing)}</p>
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-center">
                     {r.source === "classnote" ? (
                       // ⚠️ "수업 없음"으로 렌더하면 거짓말이다 — 수업은 있고 일간 집계가 없을 뿐.
                       <span
-                        className="text-text-faint text-[11px]"
+                        className="text-text-faint text-xs"
                         title="반 단위 알림장이라 '오늘 학생 몇 명분' 단위가 없습니다. 주간 합계만 집계합니다."
                       >
                         주간만 집계
@@ -207,23 +207,23 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                     ) : r.todayRate == null ? (
                       // ⚠️ 대상 0 = "수업 없음"이 아니다 — 저녁 수업만 있는 강사는 낮엔 '아직 시작 전'이다.
                       r.todayPending ? (
-                        <span className="text-text-dim text-[11px]" title={pendingTitle(r.todayPending)}>
+                        <span className="text-text-dim text-xs" title={pendingTitle(r.todayPending)}>
                           {r.todayPending.firstStart} 수업 예정
                         </span>
                       ) : (
-                        <span className="text-text-faint text-[11px]">수업 없음</span>
+                        <span className="text-text-faint text-xs">수업 없음</span>
                       )
                     ) : (
                       <span
-                        className={`num text-[14px] font-bold ${rateTone(r.todayRate)}`}
+                        className={`num text-sm font-bold ${rateTone(r.todayRate)}`}
                         title={r.todayPending ? pendingTitle(r.todayPending) : undefined}
                       >
                         {r.todayRate}%
-                        <span className="text-text-faint num ml-1 text-[11px] font-normal">
+                        <span className="text-text-faint num ml-1 text-xs font-normal">
                           {r.todayWritten}/{r.todayTarget}
                         </span>
                         {r.todayPending ? (
-                          <span className="text-text-faint ml-1 text-[11px] font-normal">
+                          <span className="text-text-faint ml-1 text-xs font-normal">
                             +{r.todayPending.classes}
                           </span>
                         ) : null}
@@ -236,20 +236,20 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                         d.holiday ? (
                           // 휴일은 "·"(수업 없음)와 구분해 표기 — 왜 분모에서 빠졌는지 화면에서 읽히게.
                           <span
-                            className="text-text-faint text-[11px]"
+                            className="text-text-faint text-xs"
                             title={`휴일${d.holidayName ? `(${d.holidayName})` : ""} · 작성률에서 제외`}
                           >
                             휴일
                           </span>
                         ) : d.pending ? (
-                          <span className="text-text-dim text-[11px]" title="오늘 수업이 아직 시작 전입니다">
+                          <span className="text-text-dim text-xs" title="오늘 수업이 아직 시작 전입니다">
                             수업 전
                           </span>
                         ) : (
-                          <span className="text-text-faint text-[11px]">·</span>
+                          <span className="text-text-faint text-xs">·</span>
                         )
                       ) : (
-                        <span className={`num text-[11px] font-bold ${rateTone(d.rate)}`} title={`${d.written}/${d.target} 작성`}>
+                        <span className={`num text-xs font-bold ${rateTone(d.rate)}`} title={`${d.written}/${d.target} 작성`}>
                           {d.rate}%
                           <span className="text-text-faint num block font-normal">{d.written}/{d.target}</span>
                         </span>
@@ -258,14 +258,14 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                   ))}
                   <td className="px-3 py-2 text-center align-middle">
                     {r.weekTarget > 0 ? (
-                      <span className={`num text-[14px] font-bold ${rateTone(r.weekRate)}`}>
+                      <span className={`num text-sm font-bold ${rateTone(r.weekRate)}`}>
                         {r.weekRate}%
-                        <span className="text-text-faint num block text-[11px] font-normal">
+                        <span className="text-text-faint num block text-xs font-normal">
                           {r.weekWritten}/{r.weekTarget}
                         </span>
                       </span>
                     ) : (
-                      <span className="text-text-faint text-[11px]">·</span>
+                      <span className="text-text-faint text-xs">·</span>
                     )}
                   </td>
                 </tr>

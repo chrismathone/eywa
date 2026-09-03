@@ -128,14 +128,14 @@ export function ColumnCards({
             disabled={safePage === 0}
             className={cn(
               PAGER_STEP_BASE,
-              "text-[13.5px]",
+              "text-sm",
               safePage === 0 ? PAGER_STEP_DISABLED : PAGER_STEP_ENABLED,
             )}
           >
             <EyIcon name="chevronLeft" size={14} />
             이전
           </button>
-          <span className={cn(PAGER_LABEL, "text-[13.5px]")}>
+          <span className={cn(PAGER_LABEL, "text-sm")}>
             {safePage + 1} / {totalPages} · {cards.length}건
           </span>
           <button
@@ -144,7 +144,7 @@ export function ColumnCards({
             disabled={safePage >= totalPages - 1}
             className={cn(
               PAGER_STEP_BASE,
-              "text-[13.5px]",
+              "text-sm",
               safePage >= totalPages - 1 ? PAGER_STEP_DISABLED : PAGER_STEP_ENABLED,
             )}
           >
@@ -252,11 +252,11 @@ function ConsultationCard({
           <div className="flex h-7 items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-center">
               {/* 이름 + (학교학년) 한 줄 — 옛 두 줄("백시후" / "초3 수창초")을 합친 것. */}
-              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-[19px] leading-none font-bold">
+              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-xl leading-none font-bold">
                 <span className="min-w-0 truncate">
                   {c.prospectName}
                   {gradeLabel ? (
-                    <span className="text-text-dim ml-1 text-[15px] font-semibold">({gradeLabel})</span>
+                    <span className="text-text-dim ml-1 text-base font-semibold">({gradeLabel})</span>
                   ) : null}
                 </span>
                 {c.personConsultCount > 1 ? (
@@ -273,7 +273,7 @@ function ConsultationCard({
                             e.preventDefault();
                             e.stopPropagation();
                           }}
-                          className="bg-amber-soft text-amber shrink-0 cursor-pointer rounded-full px-2 py-0.5 text-[13px] leading-none font-bold hover:brightness-95"
+                          className="bg-amber-soft text-amber shrink-0 cursor-pointer rounded-full px-2 py-0.5 text-sm leading-none font-bold hover:brightness-95"
                         />
                       }
                     >
@@ -281,7 +281,7 @@ function ConsultationCard({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-64 p-1.5">
                       <div className="flex items-center justify-between gap-2 px-1 pb-1">
-                        <p className="text-text-faint text-[11px] font-medium">
+                        <p className="text-text-faint text-xs font-medium">
                           이 학생의 등록상담 {c.personConsultCount}건
                         </p>
                         {/* 🔴 쓰기 권한이 있을 때만 — 병합은 되돌릴 수 없다(서버도 같은 게이트를 다시 본다). */}
@@ -293,7 +293,7 @@ function ConsultationCard({
                               e.stopPropagation();
                               setMergeOpen(true);
                             }}
-                            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-bold transition"
+                            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold transition"
                             title="이 학생의 등록상담을 한 건으로 합칩니다"
                           >
                             병합
@@ -312,11 +312,11 @@ function ConsultationCard({
                               s.id === c.id ? "bg-bg-soft/60" : ""
                             }`}
                           >
-                            <span className="num text-text-dim text-[11px]">
+                            <span className="num text-text-dim text-xs">
                               {new Date(s.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
                             </span>
                             <span className="flex items-center gap-1.5">
-                              {sl ? <span className="text-foreground text-[11px]">{sl}</span> : null}
+                              {sl ? <span className="text-foreground text-xs">{sl}</span> : null}
                               <Pill color={op.color}>{op.label}</Pill>
                             </span>
                           </WindowLink>
@@ -339,7 +339,7 @@ function ConsultationCard({
             <CardMarkBadge mark={mark} hasAiAnalysis={c.hasAiAnalysis || c.outcome === "ai_done"} />
           </div>
           {/* 감춘 줄들의 자리 — 시각만 남긴다(상담사·요약은 위 title). */}
-          <div className="text-text-faint mt-1 flex items-center justify-end text-[13px]">
+          <div className="text-text-faint mt-1 flex items-center justify-end text-sm">
             <span className="num">
               <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
             </span>

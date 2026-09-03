@@ -16,9 +16,9 @@ function Row({ label, value }: { label: string; value: string }) {
   if (!value) return null;
   return (
     <div className="flex gap-1.5">
-      <span className="text-text-faint shrink-0 text-[11px] font-bold">{label}</span>
+      <span className="text-text-faint shrink-0 text-xs font-bold">{label}</span>
       {/* 여러 교시면 줄이 여럿이다 — 시트에 보이는 줄 구조를 그대로 유지한다(`pre-line`). */}
-      <span className="text-text-dim min-w-0 flex-1 text-[12px] leading-relaxed whitespace-pre-line">
+      <span className="text-text-dim min-w-0 flex-1 text-xs leading-relaxed whitespace-pre-line">
         {value}
       </span>
     </div>
@@ -53,7 +53,7 @@ export function SheetSourceCard({
           <button
             type="button"
             onClick={onApply}
-            className="text-primary shrink-0 cursor-pointer text-[12px] font-bold underline-offset-2 hover:underline"
+            className="text-primary shrink-0 cursor-pointer text-xs font-bold underline-offset-2 hover:underline"
             title="시트에 적힌 진도·교재·오늘 과제를 아래 입력칸에 다시 채웁니다(학생별 기록은 그대로 둡니다)"
           >
             가져오기

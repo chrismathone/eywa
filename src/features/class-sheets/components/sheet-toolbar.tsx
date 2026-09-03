@@ -89,7 +89,7 @@ export function SheetToolbar({
           창(embed)에선 상단 PageHeader가 통째로 숨겨지므로 배지 자리는 여기가 유일하다. */}
       {data.delegated ? (
         <span
-          className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-2 py-0.5 text-[11px] font-bold whitespace-nowrap"
+          className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-2 py-0.5 text-xs font-bold whitespace-nowrap"
           title={`${data.classTeacherName ? `${data.classTeacherName} 선생님 반` : "다른 선생님 반"} — 이 기간에만 대신 맡은 위임 반입니다`}
         >
           위임{data.classTeacherName ? ` · ${data.classTeacherName} 선생님 반` : ""}
@@ -134,7 +134,7 @@ export function SheetToolbar({
       />
       <SheetBarDivider />
 
-      <span className="text-foreground text-[11px] font-bold">요일</span>
+      <span className="text-foreground text-xs font-bold">요일</span>
       <div className="flex items-center gap-1">
         <button type="button" className={pill(dayFilter === null)} onClick={() => onDayFilter(null)}>
           전체
@@ -150,7 +150,7 @@ export function SheetToolbar({
             onClick={() => onDayFilter(dayFilter === d.date ? null : d.date)}
           >
             <span className={d.holiday && dayFilter !== d.date ? "text-danger" : undefined}>{DOW_KO[d.dow]}</span>
-            {d.date === data.today ? <span className="ml-0.5 align-middle text-[8px]">●</span> : null}
+            {d.date === data.today ? <span className="ml-0.5 align-middle text-xs">●</span> : null}
           </button>
         ))}
       </div>
@@ -186,7 +186,7 @@ export function SheetToolbar({
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
                때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-foreground shrink-0 text-[11px] font-bold">JJ</span>
+          <span className="text-foreground shrink-0 text-xs font-bold">JJ</span>
           <span
             className={SHEET_SEG_BOX}
             title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
@@ -208,7 +208,7 @@ export function SheetToolbar({
         {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31).
             지금 크기가 '작음'이라 기본은 화면 무변경. 저장은 계정이라 다른 PC에서도 같은 크기. */}
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-foreground shrink-0 text-[11px] font-bold">글씨</span>
+          <span className="text-foreground shrink-0 text-xs font-bold">글씨</span>
           <span
             className={SHEET_SEG_BOX}
             title="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
@@ -228,11 +228,11 @@ export function SheetToolbar({
         </span>
         <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
         {conflicts > 0 ? (
-          <span className="text-danger text-[12px] font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>
+          <span className="text-danger text-xs font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>
         ) : pending > 0 ? (
-          <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장 중…</span>
+          <span className="text-text-dim text-xs font-semibold whitespace-nowrap">저장 중…</span>
         ) : (
-          <span className="text-text-dim text-[12px] font-semibold whitespace-nowrap">저장됨</span>
+          <span className="text-text-dim text-xs font-semibold whitespace-nowrap">저장됨</span>
         )}
         <button type="button" className={pill(panelOpen)} onClick={onTogglePanel}>
           계획 패널

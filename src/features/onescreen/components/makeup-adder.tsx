@@ -43,12 +43,12 @@ export function MakeupAdder({ onAdd }: { onAdd: (studentId: string) => void }) {
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-[12px] font-bold">
+      <Popover.Trigger className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-xs font-bold">
         + 보강 학생 추가
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card w-[280px] rounded-lg border p-2 text-[12px] outline-none">
+          <Popover.Popup className="bg-card border-line shadow-card w-[280px] rounded-lg border p-2 text-xs outline-none">
             <input
               autoFocus
               value={q}
@@ -77,7 +77,7 @@ export function MakeupAdder({ onAdd }: { onAdd: (studentId: string) => void }) {
                     className="hover:bg-bg-soft flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left"
                   >
                     <span className="text-foreground font-bold">{s.name}</span>
-                    <span className="text-text-faint text-[11px]">{s.label}</span>
+                    <span className="text-text-faint text-xs">{s.label}</span>
                   </button>
                 ))
               )}

@@ -45,7 +45,7 @@ export function ListToolbar({
       </label>
       {filters}
       {extra}
-      {summary ? <span className="text-text-faint num shrink-0 text-[11.5px]">{summary}</span> : null}
+      {summary ? <span className="text-text-faint num shrink-0 text-xs">{summary}</span> : null}
       {actions ? <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div> : null}
     </Toolbar>
   );

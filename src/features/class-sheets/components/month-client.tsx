@@ -209,7 +209,7 @@ export function MonthClient({
         ) : (
           <>
             <span
-              className="text-text-dim text-[12.5px]"
+              className="text-text-dim text-xs"
               title="이 달에 배정된 전 교시 기준입니다 — 아래 표시 토글(자리 교시)을 꺼도 이 숫자는 그대로입니다. 학원 휴일은 쓸 의무가 없어 분모에서 빠지고, 휴일에 쓴 계획은 그대로 인정됩니다. 주간 시트의 작성률은 그 주 표시 설정을 따르므로 두 숫자가 다를 수 있습니다."
             >
               계획{" "}
@@ -219,7 +219,7 @@ export function MonthClient({
               교시 <span className="num">({data.fill.pct}%)</span>
             </span>
             {offDays > 0 ? (
-              <span className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold">
+              <span className="text-amber inline-flex items-center gap-1.5 text-xs font-bold">
                 <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
                 목표 밖 교재 <span className="num">{offDays}일</span>
               </span>
@@ -261,7 +261,7 @@ export function MonthClient({
       </div>
 
       {error ? (
-        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold">
           목표를 저장하지 못했습니다 — {error} · 새로고침하면 마지막으로 저장된 값이 보입니다
           <button type="button" onClick={dismissError} className="ml-auto cursor-pointer underline">
             닫기
@@ -270,7 +270,7 @@ export function MonthClient({
       ) : null}
 
       {view === "mp" && plan.error ? (
-        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold">
           계획을 저장하지 못했습니다 — {plan.error} · 새로고침하면 마지막으로 저장된 값이 보입니다
           <button type="button" onClick={plan.dismissError} className="ml-auto cursor-pointer underline">
             닫기
@@ -280,13 +280,13 @@ export function MonthClient({
       {/* 🔴 0239a는 원장이 손으로 적용한다 — 적용 전에도 이 화면은 살아야 하고([[#95]]), **원인을
           단정하지 않는다**(표가 없는 것과 조회가 실패한 것은 다른 사실이다). */}
       {view === "mp" && data.mp.status === "missing-table" ? (
-        <p className="border-amber/40 bg-amber-soft text-amber rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-amber/40 bg-amber-soft text-amber rounded-lg border px-3 py-1.5 text-xs font-semibold">
           월간 계획서 저장소가 아직 준비되지 않았습니다(DB 갱신 필요) — 관리자에게 알려주세요. 그때까지 적은
           내용은 저장되지 않습니다.
         </p>
       ) : null}
       {view === "mp" && data.mp.status === "failed" ? (
-        <p className="border-danger/40 bg-danger-soft text-danger rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-danger/40 bg-danger-soft text-danger rounded-lg border px-3 py-1.5 text-xs font-semibold">
           월간 계획서를 불러오지 못했습니다 — 새로고침해 보시고, 계속되면 관리자에게 알려주세요.
         </p>
       ) : null}

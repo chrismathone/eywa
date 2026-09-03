@@ -38,7 +38,7 @@ export function MakeeduSyncRunsList({
               ? "[자동 실행]"
               : (TRIGGER_LABEL[run.triggerSource] ?? run.triggerSource);
           return (
-            <li key={run.id} className="py-2 text-[13px]">
+            <li key={run.id} className="py-2 text-sm">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-foreground tabular whitespace-nowrap">
                   {new Date(run.startedAt).toLocaleString("ko-KR", {

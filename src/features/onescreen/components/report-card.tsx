@@ -245,7 +245,7 @@ export function ReportCard({
               {student.subjects.length > 1 ? "today 보고서 · 과목별" : "today 보고서"}
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
+              <p className="text-foreground text-base font-bold">{student.name} · 학부모 보고</p>
               {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
               {/* 순수 보강 행이면 정규 학생 카드에서도 뺄 수 있어야 한다(적대 리뷰 M2) — 학생 단위
                   isMakeup만 보면 "정규 수업도 듣는 학생의 보강"에 문이 없다. 반이 붙은 '정규+보강'은 제외. */}
@@ -257,7 +257,7 @@ export function ReportCard({
                   onClick={() => onRemoveMakeup(subject.name)}
                   title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
                   aria-label={`${student.name} 보강 빼기`}
-                  className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
+                  className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-xs font-bold transition hover:text-white"
                 >
                   보강
                   <EyIcon name="close" size={9} />
@@ -265,7 +265,7 @@ export function ReportCard({
               ) : student.isMakeup || (subject.makeup && !subject.classId) ? (
                 // 뺄 수 없는 행 — 왜인지 툴팁으로 남긴다(버튼만 없애면 "왜 안 되지"가 남는다).
                 <span
-                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-xs font-bold"
                   title={makeupRemoveBlockReason(rep.classnoteStatus) ?? undefined}
                 >
                   보강
@@ -275,7 +275,7 @@ export function ReportCard({
                   수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
               {unreadBadge ? (
                 <span
-                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-xs font-bold"
                   title={`최근 보고서 ${unreadBadge.count}건을 학부모가 아직 확인하지 않았습니다 — 다른 경로(직접 안내 등) 확인이 필요할 수 있어요`}
                 >
                   학부모 미확인 {unreadBadge.count}회
@@ -283,7 +283,7 @@ export function ReportCard({
               ) : null}
               {showProgressBadge ? (
                 <span
-                  className="bg-danger-soft text-danger rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  className="bg-danger-soft text-danger rounded-pill px-1.5 py-px text-xs font-bold"
                   title="진도 기록에 점프·겹침이 감지됐습니다 — 학생 상세 > 진도 탭에서 확인하세요"
                 >
                   진도 확인 필요
@@ -292,7 +292,7 @@ export function ReportCard({
               {/* '수업보고서 미발송' 반 — 아래 입력이 왜 전부 잠겼는지 카드 머리에서 먼저 밝힌다(2026-08-19). */}
               {optoutRow ? (
                 <span
-                  className="border-line text-text-dim rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                  className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
                   title={REPORT_OPTOUT_NOTICE}
                 >
                   {REPORT_OPTOUT_SHORT}
@@ -333,7 +333,7 @@ export function ReportCard({
             </>
           ) : (
             <span
-              className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${
+              className={`rounded-pill px-2 py-0.5 text-xs font-bold ${
                 student.attendance === "지각"
                   ? "bg-amber-soft text-amber"
                   : student.attendance === "결석"
@@ -362,7 +362,7 @@ export function ReportCard({
                 type="button"
                 onClick={() => setSelIdx(i)}
                 aria-pressed={on}
-                className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
+                className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-xs font-bold transition ${
                   on
                     ? "bg-primary text-primary-foreground"
                     : "border-line text-text-dim hover:bg-bg-soft border"
@@ -387,7 +387,7 @@ export function ReportCard({
       {/* 결석 잠금 사유 — **잠긴 칸 바로 위**에 적는다(2026-07-30 "왜 비활성화됐는지 알 방법이 없다").
           출결 알약은 이 위에 살아 있으므로, 되돌리는 법까지 한 줄로 안내한다. */}
       {isAbsent && !alreadySent ? (
-        <p className="border-danger/30 bg-danger-soft/40 text-text-dim mx-3 mt-2 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+        <p className="border-danger/30 bg-danger-soft/40 text-text-dim mx-3 mt-2 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
           <b className="text-danger">결석</b>이라 이 수업의 입력이 잠겨 있습니다 — 진도·테스트·태도·과제와 학부모
           문구는 일어나지 않은 일이라 적지 않습니다. 사유·수업타임은 위 <b>출결</b>에서 적을 수 있고, 잘못
           눌렀다면 출결을 바꾸면 바로 열립니다.
@@ -419,7 +419,7 @@ export function ReportCard({
               onChange={(e) => onTextbook(subjectName, e.target.value)}
               placeholder="교재명 (예: 개념원리 중2-1)"
               aria-label={`${subjectName} 교재명`}
-              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-[12px] outline-none transition-colors"
+              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
             />
             <button
               type="button"
@@ -430,7 +430,7 @@ export function ReportCard({
                   ? "그날 정규 수업에 더해 보강까지 한 경우 — 학부모 보고서 제목이 '(정규+보강)'이 되고 한 건만 나갑니다"
                   : "보강(수업외) 수업 — 학부모 보고서 제목이 '(보강)'이 됩니다"
               }
-              className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
+              className={`shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold transition ${
                 subject.makeup ? "bg-amber-soft text-amber" : "border-line text-text-dim hover:bg-bg-soft border"
               }`}
             >
@@ -475,7 +475,7 @@ export function ReportCard({
             }}
             placeholder="오늘 과제 (예: 개념편 p10~16, 유형편 p6~11)"
             aria-label={`${subjectName} 오늘 과제`}
-            className="border-line bg-card focus:border-primary scrollbar-thin mt-1.5 w-full min-w-0 resize-none rounded-lg border px-2 py-1.5 text-[12px] leading-relaxed outline-none transition-colors"
+            className="border-line bg-card focus:border-primary scrollbar-thin mt-1.5 w-full min-w-0 resize-none rounded-lg border px-2 py-1.5 text-xs leading-relaxed outline-none transition-colors"
           />
         </div>
 
@@ -486,7 +486,7 @@ export function ReportCard({
             value={cardEval.note}
             onChange={(e) => onNote(e.target.value)}
             placeholder="예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다"
-            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
           />
         </div>
         </div>
@@ -507,7 +507,7 @@ export function ReportCard({
               <p className="micro text-text-faint">{subjectName} 보고서</p>
               {/* 상단 멘트 모드 토글의 하단 반영 — 모드가 바뀌면 이 배지와 아래 입력 구성이 함께 바뀐다. */}
               <span
-                className="border-line text-text-dim rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
                 title={
                   para
                     ? "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다."
@@ -520,7 +520,7 @@ export function ReportCard({
                   막힌 사람은 그걸 못 본다(원장 2026-07-30 "왜 비활성화됐는지 알 방법이 없다"와 같은 함정). */}
               {isAbsent && !alreadySent ? (
                 <span
-                  className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                  className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-1.5 py-px text-xs font-bold"
                   title="결석 행은 학부모에게 발송되지 않습니다. 진도·태도 등 기록은 왼쪽에서 계속 입력할 수 있습니다."
                 >
                   결석 — 발송 제외
@@ -551,21 +551,21 @@ export function ReportCard({
             // 모드 B — 저장·발송 계약은 그대로 단일 문자열, 화면만 2칸(joinComment이 빈 줄로 합침).
             <div className="flex flex-1 flex-col gap-1.5">
               <label className="flex flex-1 flex-col gap-1">
-                <span className="text-text-faint text-[11px] font-bold">1문단 · 수업 내용</span>
+                <span className="text-text-faint text-xs font-bold">1문단 · 수업 내용</span>
                 <textarea
                   value={paras.p1}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(e.target.value, paras.p2))}
                   placeholder={`교재·진도·오늘 과제를 담은 첫 문단. '자동 작성'이 ${subjectName} 진도로 채워 줍니다.`}
-                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1">
-                <span className="text-text-faint text-[11px] font-bold">2문단 · 태도 · 특이사항</span>
+                <span className="text-text-faint text-xs font-bold">2문단 · 태도 · 특이사항</span>
                 <textarea
                   value={paras.p2}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(paras.p1, e.target.value))}
                   placeholder="수업 태도·특이사항을 담은 둘째 문단. 태도·특이사항이 비어 있으면 자동 작성에서도 생략됩니다."
-                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
             </div>
@@ -574,7 +574,7 @@ export function ReportCard({
               value={rep.draft}
               onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
               placeholder={`'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`}
-              className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+              className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
             />
           )}
         </div>
@@ -586,7 +586,7 @@ export function ReportCard({
             value={rep.trendDraft ?? ""}
             onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
             placeholder="'자동 작성'을 누르면 최근 시험·과제 점수 흐름을 요약해 줍니다. 기록이 적으면 비어 있을 수 있습니다."
-            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
           />
         </div>
         </fieldset>
@@ -609,7 +609,7 @@ export function ReportCard({
               **비활성인데 사유 알약이 없는 상태가 생길 수 없다**. */}
           {sendGate.label ? (
             <span
-              className={`rounded-pill border px-2 py-0.5 text-[11px] font-bold ${
+              className={`rounded-pill border px-2 py-0.5 text-xs font-bold ${
                 sendGate.reasons[0] === "absent"
                   ? "border-danger/40 bg-danger-soft text-danger"
                   : sendGate.reasons[0] === "sent"
@@ -626,7 +626,7 @@ export function ReportCard({
           {mentWarnings.map((w) => (
             <span
               key={w}
-              className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-[11px] font-bold"
+              className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold"
               title={MENT_WARNING_HINT[w]}
             >
               {MENT_WARNING_LABEL[w]}
@@ -634,13 +634,13 @@ export function ReportCard({
           ))}
           {/* 발송 완료는 위 사유 알약이 이미 말했다 — 같은 말을 두 번 붙이지 않는다(표뷰와 동일). */}
           {!alreadySent && cnBadge ? (
-            <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span>
+            <span className={`text-xs font-bold ${cnBadge.cls}`}>{cnBadge.label}</span>
           ) : null}
           {/* 학부모 읽음(0122a) — 양성 배지만(없음 = 미읽음이 아니라 동기화 안 됨일 수 있음, types.ts 규약).
               원장 목록의 "읽음"과 같은 뜻·같은 툴팁 표기 — 강사도 확인 가능하게(원장 지시 2026-07-27). */}
           {subject.classnoteReadAt ? (
             <span
-              className="text-primary text-[11px] font-bold"
+              className="text-primary text-xs font-bold"
               title={`학부모 읽음 · ${readAtLabel(subject.classnoteReadAt)}`}
             >
               읽음
@@ -652,7 +652,7 @@ export function ReportCard({
             다시 보내면 기존 글은 그대로 둔 채 새 글만 하나 더 붙는다(되돌릴 수단 없음). 그래서 버튼을 잠근다.
             정말 다시 보내야 하면 아래 '링크 재발급'(상태 리셋) 또는 관리자 발송 콘솔의 '재발송'을 쓴다. */}
         {alreadySent ? (
-          <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+          <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
               이미 학부모 게시판에 올라간 보고서라 <b>입력이 잠겨 있습니다</b>. 게시글은 이미지로 올라가 있어,
@@ -666,7 +666,7 @@ export function ReportCard({
         {/* 회수 완료 — '발송'이 곧 재발송이다(별도 버튼을 두지 않는다, 원장 2026-08-06:
             *"회수하고 클래스노트 발송 버튼 누르면 그게 재발송 아닌가"*). 발송 시 새 토큰이 발급된다. */}
         {liveStatus === "recalled" ? (
-          <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+          <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="check" size={13} className="text-primary mt-0.5 shrink-0" />
             <span>
               학부모 게시글을 <b>회수했습니다</b>. 내용을 고친 뒤 <b>ClassNote 발송</b>을 누르면 수정본이 다시
@@ -721,11 +721,11 @@ export function ReportCard({
         >
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px] font-bold">
+              <p className="text-text-faint text-xs font-bold">
                 사진/파일 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
               </p>
               <label
-                className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-[11px] font-bold ${
+                className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-xs font-bold ${
                   uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
                 }`}
               >
@@ -747,7 +747,7 @@ export function ReportCard({
             {/* 거짓 약속 차단(2026-07-21) — 학원설정에서 첨부가 꺼져 있으면 저장은 되지만 /r·인쇄·ClassNote
                 어디에도 안 실린다(워커도 파일첨부 경로를 안 탐). 강사가 헛수고하지 않도록 입력 시점에 고지. */}
             {attachmentsHidden ? (
-              <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-[11px] leading-snug">
+              <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-xs leading-snug">
                 학원설정에서 <b>사진/파일 첨부</b>가 꺼져 있어, 첨부해도 학부모 보고서·ClassNote에는 표시되지 않습니다.
                 원장님께 문의하세요.
               </p>
@@ -767,7 +767,7 @@ export function ReportCard({
                       // 비이미지(문서·오디오) = 파일 칩
                       <div className="bg-card text-text-dim flex h-16 w-full flex-col items-center justify-center gap-0.5 rounded px-1 text-center">
                         <EyIcon name="file" size={16} className="text-text-faint" />
-                        <span className="w-full truncate text-[10px]">{a.name}</span>
+                        <span className="w-full truncate text-xs">{a.name}</span>
                       </div>
                     )}
                     <button
@@ -782,7 +782,7 @@ export function ReportCard({
                 ))}
               </div>
             ) : (
-              <p className="text-text-faint text-[11px]">
+              <p className="text-text-faint text-xs">
                 사진/파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.
               </p>
             )}
@@ -794,8 +794,8 @@ export function ReportCard({
         {rep.sent && sharePath ? (
           <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px] font-bold">학부모 공유 링크</p>
-              <div className="flex items-center gap-2 text-[10px]">
+              <p className="text-text-faint text-xs font-bold">학부모 공유 링크</p>
+              <div className="flex items-center gap-2 text-xs">
                 {typeof rep.viewCount === "number" && rep.viewCount > 0 ? (
                   <span className="text-text-dim">{rep.viewCount}회 열람</span>
                 ) : null}
@@ -804,7 +804,7 @@ export function ReportCard({
             </div>
             {rep.revoked ? (
               <div className="flex items-center justify-between gap-2">
-                <p className="text-text-dim text-[11px]">이 링크는 열람이 차단됐습니다.</p>
+                <p className="text-text-dim text-xs">이 링크는 열람이 차단됐습니다.</p>
                 <div className="flex items-center gap-1.5">
                   {/* ⚠️ 링크를 막아도 **ClassNote 게시글(스크린샷)은 남아 있다** — 지우려면 회수해야 한다. */}
                   {/* 열람 전용에선 회수 숨김 — 아래 게시판 블록의 RecallButton과 같은 이유. */}
@@ -824,7 +824,7 @@ export function ReportCard({
             ) : (
               <>
                 <div className="flex items-center gap-2">
-                  <code className="text-text-dim min-w-0 flex-1 truncate text-[11px]">{shareUrl}</code>
+                  <code className="text-text-dim min-w-0 flex-1 truncate text-xs">{shareUrl}</code>
                   <Button
                     variant="outline"
                     size="sm"

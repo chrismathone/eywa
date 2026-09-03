@@ -93,19 +93,19 @@ export function ReportSection({
           onChange={(v) => set({ classnoteSendEnabled: v })}
         />
         {!r.classnoteSendEnabled ? (
-          <p className="text-danger mt-1.5 text-[12px]">
+          <p className="text-danger mt-1.5 text-xs">
             안전을 위해 기본 꺼짐입니다. 실제 발송을 시작하려면 위 스위치를 켜세요(이관된 과거 보고서 오발송 방지).
           </p>
         ) : null}
 
         {/* 발송 허용 과목 — 체크한 과목만 학부모에게 발송(현 운영=수학만). 빈 목록이면 아무것도 발송 안 함. */}
         <div className="border-line mt-3 border-t pt-3">
-          <p className="text-foreground text-[13px] font-bold">발송 과목</p>
-          <p className="text-text-dim mt-0.5 text-[12px]">
+          <p className="text-foreground text-sm font-bold">발송 과목</p>
+          <p className="text-text-dim mt-0.5 text-xs">
             체크한 과목만 학부모에게 발송됩니다. 아무것도 고르지 않으면 발송되지 않습니다.
           </p>
           {sendableOptions.length === 0 ? (
-            <p className="text-text-faint mt-2 text-[12px]">
+            <p className="text-text-faint mt-2 text-xs">
               발송 가능한 과목이 없습니다 — ClassNote 학생모드 보드가 있는 과목(수학·영어)만 발송할 수 있습니다.
             </p>
           ) : (
@@ -118,7 +118,7 @@ export function ReportSection({
                     type="button"
                     onClick={() => toggleSubject(o.value)}
                     aria-pressed={on}
-                    className={`rounded-full border px-3 py-1 text-[13px] transition ${
+                    className={`rounded-full border px-3 py-1 text-sm transition ${
                       on
                         ? "border-primary bg-primary/10 text-primary font-bold"
                         : "border-line text-text-dim hover:bg-bg-soft"
@@ -131,7 +131,7 @@ export function ReportSection({
             </div>
           )}
           {r.classnoteSendEnabled && r.classnoteSubjects.length === 0 ? (
-            <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+            <p className="text-danger mt-2 flex items-start gap-1.5 text-xs">
               <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
               <span>발송이 켜져 있지만 선택된 과목이 없어 실제로는 아무것도 발송되지 않습니다. 발송할 과목을 선택하세요.</span>
             </p>
@@ -141,32 +141,32 @@ export function ReportSection({
         {/* 발송 허용 시간대 — 밤 수업 보고서가 밤에 학부모 폰을 울리지 않게. 창 밖 발송분은 큐에 대기했다가
             창 진입 시 워커가 자동 발송(강사는 평소처럼 발송 버튼만). 둘 다 채워야 활성, 비우면 무제한. */}
         <div className="border-line mt-3 border-t pt-3">
-          <p className="text-foreground text-[13px] font-bold">발송 허용 시간대</p>
+          <p className="text-foreground text-sm font-bold">발송 허용 시간대</p>
           {/* ⚠️ "수업 보고서" 한정 명시 — 반 공지(classnote_notices)는 이 창을 안 탄다(발신자 명시 발송 = 즉시
               게시가 의도). 무한정 "발송"이라 쓰면 같은 박스의 킬스위치·발송 과목이 공지에도 적용되는 것과 섞여
               공지까지 미뤄진다고 오독됨(리뷰 확정 — 과약속 금지). */}
-          <p className="text-text-dim mt-0.5 text-[12px]">
+          <p className="text-text-dim mt-0.5 text-xs">
             <b>수업 보고서</b>는 이 시간대에만 학부모에게 발송됩니다. 시간대 밖에 발송한 보고서는 대기했다가 자동
             발송됩니다. 비우면 제한 없이 즉시 발송합니다. (반 공지는 이 설정과 무관하게 즉시 게시됩니다.)
           </p>
           <div className="mt-2 flex items-center gap-2">
             <input
               type="time"
-              className="border-line focus:border-primary rounded-md border bg-white px-2 py-1.5 text-[13px] outline-none"
+              className="border-line focus:border-primary rounded-md border bg-white px-2 py-1.5 text-sm outline-none"
               value={r.classnoteSendWindowStart}
               onChange={(e) => set({ classnoteSendWindowStart: e.target.value })}
             />
-            <span className="text-text-faint text-[12px]">~</span>
+            <span className="text-text-faint text-xs">~</span>
             <input
               type="time"
-              className="border-line focus:border-primary rounded-md border bg-white px-2 py-1.5 text-[13px] outline-none"
+              className="border-line focus:border-primary rounded-md border bg-white px-2 py-1.5 text-sm outline-none"
               value={r.classnoteSendWindowEnd}
               onChange={(e) => set({ classnoteSendWindowEnd: e.target.value })}
             />
             {r.classnoteSendWindowStart || r.classnoteSendWindowEnd ? (
               <button
                 type="button"
-                className="text-text-dim hover:text-foreground text-[12px] underline underline-offset-2"
+                className="text-text-dim hover:text-foreground text-xs underline underline-offset-2"
                 onClick={() => set({ classnoteSendWindowStart: "", classnoteSendWindowEnd: "" })}
               >
                 제한 없음으로
@@ -174,7 +174,7 @@ export function ReportSection({
             ) : null}
           </div>
           {(r.classnoteSendWindowStart === "") !== (r.classnoteSendWindowEnd === "") ? (
-            <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+            <p className="text-danger mt-2 flex items-start gap-1.5 text-xs">
               <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
               <span>시작·종료를 둘 다 채워야 시간대 제한이 켜집니다. 하나만 채우면 제한 없이 동작합니다.</span>
             </p>
@@ -184,7 +184,7 @@ export function ReportSection({
           {r.classnoteSendWindowStart &&
           r.classnoteSendWindowEnd &&
           r.classnoteSendWindowStart === r.classnoteSendWindowEnd ? (
-            <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+            <p className="text-danger mt-2 flex items-start gap-1.5 text-xs">
               <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
               <span>시작과 종료가 같으면 제한 없이 동작합니다(즉시 발송). 시간대를 쓰려면 서로 다른 시각을 지정하세요.</span>
             </p>
@@ -192,7 +192,7 @@ export function ReportSection({
           {r.classnoteSendWindowStart &&
           r.classnoteSendWindowEnd &&
           r.classnoteSendWindowStart > r.classnoteSendWindowEnd ? (
-            <p className="text-text-dim mt-2 text-[12px]">
+            <p className="text-text-dim mt-2 text-xs">
               종료가 시작보다 이르면 자정을 넘는 창으로 동작합니다(예 21:00~08:00 = 밤~다음날 아침에만 발송).
             </p>
           ) : null}
@@ -274,10 +274,10 @@ export function ReportSection({
                       on ? "border-primary bg-primary/5" : "border-line hover:bg-bg-soft"
                     }`}
                   >
-                    <p className="text-foreground text-[13px] font-bold">
+                    <p className="text-foreground text-sm font-bold">
                       {title} <span className="text-text-faint font-normal">({mode})</span>
                     </p>
-                    <p className="text-text-dim mt-0.5 text-[12px]">{desc}</p>
+                    <p className="text-text-dim mt-0.5 text-xs">{desc}</p>
                   </button>
                 );
               })}
@@ -327,12 +327,12 @@ export function ReportSection({
           description="체크한 강사는 수업보고서의 '강사별 작성률' 표에서 빠집니다(보고서 작성 대상이 아닌 보조·데스크 강사 등). 퇴사(비활성) 처리된 강사는 자동으로 제외되니 여기에 추가할 필요가 없습니다."
         >
           {exemptGroupKeys.length === 0 ? (
-            <p className="text-text-faint text-[12px]">반을 담당 중인 강사가 없습니다.</p>
+            <p className="text-text-faint text-xs">반을 담당 중인 강사가 없습니다.</p>
           ) : (
             <div className="space-y-3">
               {exemptGroupKeys.map((key) => (
                 <div key={key}>
-                  <p className="text-text-dim text-[12px]">{subjects.labelOf(key)}</p>
+                  <p className="text-text-dim text-xs">{subjects.labelOf(key)}</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {(teachers[key] ?? []).map((name) => {
                       const on = r.writingExemptTeachers.includes(name);
@@ -342,7 +342,7 @@ export function ReportSection({
                           type="button"
                           onClick={() => toggleExempt(name)}
                           aria-pressed={on}
-                          className={`rounded-full border px-3 py-1 text-[13px] transition ${
+                          className={`rounded-full border px-3 py-1 text-sm transition ${
                             on
                               ? "border-danger bg-danger/10 text-danger font-bold line-through"
                               : "border-line text-text-dim hover:bg-bg-soft"
@@ -359,7 +359,7 @@ export function ReportSection({
           )}
           {orphanExempt.length > 0 ? (
             <div className="mt-3">
-              <p className="text-text-dim text-[12px]">현재 담당 반 없음(설정만 남음) — 클릭해 해제</p>
+              <p className="text-text-dim text-xs">현재 담당 반 없음(설정만 남음) — 클릭해 해제</p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {orphanExempt.map((name) => (
                   <button
@@ -367,7 +367,7 @@ export function ReportSection({
                     type="button"
                     onClick={() => toggleExempt(name)}
                     aria-pressed
-                    className="border-danger bg-danger/10 text-danger rounded-full border px-3 py-1 text-[13px] font-bold line-through"
+                    className="border-danger bg-danger/10 text-danger rounded-full border px-3 py-1 text-sm font-bold line-through"
                   >
                     {name}
                   </button>
@@ -376,7 +376,7 @@ export function ReportSection({
             </div>
           ) : null}
           {visibleExemptCount > 0 ? (
-            <p className="text-text-faint mt-3 text-[12px]">작성률 집계 제외 중: {visibleExemptCount}명</p>
+            <p className="text-text-faint mt-3 text-xs">작성률 집계 제외 중: {visibleExemptCount}명</p>
           ) : null}
         </SettingsCard>
 
@@ -393,7 +393,7 @@ export function ReportSection({
             addLabel="보드 추가"
             placeholder="(수학)안은지"
           />
-          <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+          <p className="text-danger mt-2 flex items-start gap-1.5 text-xs">
             <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
             <span>
               확인 없이 등록하면 실제로 다른 집에 보고서가 발송됩니다. 반드시 클래스노트 운영관리에서 연락처를

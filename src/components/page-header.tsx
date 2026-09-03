@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 
 /**
  * PageHeader — Editorial 문법 ①(eyebrow→헤드라인→서브)의 단일 소스.
- * 창(iframe) 스케일: eyebrow 12px / 타이틀 21px / 서브 13px — 블로그의 36px급을 운영 도구로 축소 이식.
+ * 스케일 v5(2026-09-03): eyebrow 14px / 타이틀 24px(text-xl) / 서브 16px(text-sm) — 창 제목은 20~24px(지시서 §2).
+ * 임베드 컴팩트 행의 라벨도 16px — 창 안에서 "지금 보는 것"이라 13px 회색이면 읽히지 않는다.
  * 기존 소비처 {title, description, actions}와 하위호환 — eyebrow/stats는 opt-in 슬롯.
  * stats에는 BigStat 그리드(문법 ②)를 끼운다. 구분선(border-b) 대신 여백 리듬(문법 ⑥).
  *
@@ -53,17 +54,17 @@ export function PageHeader({
         <div className="min-w-0 compact-chrome:flex compact-chrome:min-w-0 compact-chrome:flex-wrap compact-chrome:items-baseline compact-chrome:gap-x-2">
           {eyebrow ? <p className="editorial-eyebrow compact-chrome:hidden">{eyebrow}</p> : null}
           <h2
-            className={`text-foreground text-[21px] font-bold tracking-tight ${eyebrow ? "mt-1" : ""} ${
+            className={`text-foreground text-xl font-bold tracking-tight ${eyebrow ? "mt-1" : ""} ${
               hasCompactLabel
                 ? "compact-chrome:hidden"
-                : "compact-chrome:text-text-dim compact-chrome:mt-0 compact-chrome:text-[13px] compact-chrome:font-normal compact-chrome:tracking-normal"
+                : "compact-chrome:text-text-dim compact-chrome:mt-0 compact-chrome:text-sm compact-chrome:font-medium compact-chrome:tracking-normal"
             }`}
           >
             {title}
           </h2>
           {description ? (
             <div
-              className={`text-text-dim mt-1 text-[13px] ${
+              className={`text-text-dim mt-1 text-sm ${
                 embedLabel ? "compact-chrome:hidden" : "compact-chrome:mt-0"
               }`}
             >
@@ -71,7 +72,7 @@ export function PageHeader({
             </div>
           ) : null}
           {embedLabel ? (
-            <div className="text-text-dim hidden text-[13px] compact-chrome:block">{embedLabel}</div>
+            <div className="text-text-dim hidden text-sm compact-chrome:block">{embedLabel}</div>
           ) : null}
         </div>
         {actions ? (

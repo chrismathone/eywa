@@ -68,7 +68,7 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
       {stats.unset > 0 ? (
         <Link
           href={build({ cpmode: PMODE_UNSET, cactive: "active", cpage: "1" })}
-          className="border-amber/40 bg-amber-soft text-amber flex flex-wrap items-center gap-x-1.5 rounded-2xl border px-4 py-2.5 text-[12.5px] transition hover:brightness-95"
+          className="border-amber/40 bg-amber-soft text-amber flex flex-wrap items-center gap-x-1.5 rounded-2xl border px-4 py-2.5 text-xs transition hover:brightness-95"
         >
           <span className="font-bold">
             단가 종류를 안 고른 항목이 <span className="num">{stats.unset}</span>개 있습니다
@@ -160,7 +160,7 @@ function Kpi({
           <Icon size={14} strokeWidth={1.8} />
         </span>
       </header>
-      <p className="tabular text-foreground num mt-2 text-[22px] leading-none">{value}</p>
+      <p className="tabular text-foreground num mt-2 text-2xl leading-none">{value}</p>
     </article>
   );
 }

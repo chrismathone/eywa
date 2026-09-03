@@ -149,7 +149,7 @@ export default async function StudentDetailPage({
         <div className="flex flex-col items-end gap-2">
           {/* 상태 배지 = 목록·요약과 같은 단일 소스(studentStatusMeta) — 화면마다 색이 달라지지 않게.
               ⚠️ 크기는 Pill 기본을 그대로 쓴다. 처음엔 `className="px-2.5 py-1 text-xs"`를 얹었는데
-              Pill이 tailwind-merge를 안 거쳐서 기본값(text-[11px] py-[3px])과 **충돌한 채 둘 다 남고**
+              Pill이 tailwind-merge를 안 거쳐서 기본값(text-xs py-[3px])과 **충돌한 채 둘 다 남고**
               실제로는 기본값이 이겼다(계산값 11px/3px 실측) — 아무 효과 없는 거짓 클래스였다. */}
           <Pill color={statusMeta?.color ?? "neutral"}>{statusMeta?.label ?? student.status}</Pill>
           {/* ⚠️ 감기게 둔다 — 이 줄엔 상태 변경·수정·AI·삭제가 함께 서고, 라벨에 목적어를 붙이면

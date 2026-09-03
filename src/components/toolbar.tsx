@@ -11,6 +11,7 @@ import {
   TOOLBAR_SEG_ON,
   TOOLBAR_SEG_ON_PRIMARY,
 } from "./toolbar-controls";
+import { CONTROL_H, CONTROL_ICON, CONTROL_LABEL } from "./ui/control-scale";
 
 /**
  * 툴바 **부품** — [`toolbar-controls.ts`](./toolbar-controls.ts)의 치수를 감싼 컴포넌트 한 벌.
@@ -26,7 +27,7 @@ import {
  *    뿐이다. 배치(ml-auto·shrink-0·w-*)와 색만 얹는다. 가드가 이 파일을 쓰는 자리의
  *    `rounded-full`·`py-`를 잡는다(`toolbar-canon.test.ts`).
  *
- * 규약 본문(카드 껍데기 금지 · h-8 · 라운드)은 `toolbar-controls.ts` 머리주석이 정본이다.
+ * 규약 본문(카드 껍데기 금지 · 높이·라벨은 control-scale · 라운드)은 `toolbar-controls.ts` 머리주석이 정본이다.
  */
 
 /**
@@ -195,7 +196,7 @@ export function ToolbarChip({
 }
 
 /**
- * 툴바 **액션 버튼**(엑셀 내려받기·인쇄·새로 만들기…). 공용 `<Button>`과 같은 높이(h-8)다.
+ * 툴바 **액션 버튼**(엑셀 내려받기·인쇄·새로 만들기…). 공용 `<Button>`과 같은 치수(control-scale)다.
  * 🔴 세로 패딩으로 높이를 만들지 말 것 — 글자 크기가 바뀌면 같이 흔들려 줄이 울퉁불퉁해진다.
  */
 export function ToolbarButton({
@@ -210,9 +211,9 @@ export function ToolbarButton({
   className?: string;
   children: ReactNode;
 } & Omit<ComponentProps<"button">, "className" | "children">) {
-  const cls = `inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs transition disabled:opacity-50 ${
+  const cls = `inline-flex ${CONTROL_H} ${CONTROL_LABEL} ${CONTROL_ICON} shrink-0 items-center gap-1.5 rounded-lg px-2 font-medium whitespace-nowrap transition disabled:opacity-50 ${
     variant === "primary"
-      ? "bg-primary text-primary-foreground hover:bg-primary/85 font-medium"
+      ? "bg-primary text-primary-foreground hover:bg-primary/85"
       : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft border"
   } ${className}`;
   if (href !== undefined) {

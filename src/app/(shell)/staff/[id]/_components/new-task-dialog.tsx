@@ -50,17 +50,17 @@ export function NewTaskDialog({
     onClose();
   }
 
-  const inputCls = "border-line bg-card focus:border-primary w-full rounded-md border px-2 py-1.5 text-[13px] outline-none";
+  const inputCls = "border-line bg-card focus:border-primary w-full rounded-md border px-2 py-1.5 text-sm outline-none";
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-[15px]">새 업무 · {staffName}</DialogTitle>
+          <DialogTitle className="text-base">새 업무 · {staffName}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <label className="text-text-dim mb-1 block text-[12px]">업무명</label>
+            <label className="text-text-dim mb-1 block text-xs">업무명</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -71,15 +71,15 @@ export function NewTaskDialog({
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="text-text-dim mb-1 block text-[12px]">시작일 (선택)</label>
+              <label className="text-text-dim mb-1 block text-xs">시작일 (선택)</label>
               <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls} />
             </div>
             <div className="flex-1">
-              <label className="text-text-dim mb-1 block text-[12px]">마감일</label>
+              <label className="text-text-dim mb-1 block text-xs">마감일</label>
               <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={inputCls} />
             </div>
           </div>
-          <p className="text-text-faint text-[11px]">담당자는 {staffName}(으)로 자동 지정되어 Notion에 등록됩니다.</p>
+          <p className="text-text-faint text-xs">담당자는 {staffName}(으)로 자동 지정되어 Notion에 등록됩니다.</p>
         </div>
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={onClose}>

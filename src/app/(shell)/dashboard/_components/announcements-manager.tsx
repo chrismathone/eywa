@@ -221,9 +221,9 @@ function Manager({ items, unavailable = false }: { items: ManageAnnouncementRow[
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       {a.pinned ? <Pin className="text-gold size-3 shrink-0" /> : null}
-                      <span className="text-foreground truncate text-[13px] font-medium">{a.title}</span>
+                      <span className="text-foreground truncate text-sm font-medium">{a.title}</span>
                     </div>
-                    <p className="text-text-faint text-[11px]">
+                    <p className="text-text-faint text-xs">
                       {AUDIENCE_LABEL[a.audience as NoticeAudience] ?? a.audience}
                     </p>
                   </div>
@@ -264,7 +264,7 @@ export function AnnouncementsManager({
         render={
           <button
             type="button"
-            className="text-text-dim hover:text-foreground inline-flex shrink-0 items-center gap-1 rounded-sm text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            className="text-text-dim hover:text-foreground inline-flex shrink-0 items-center gap-1 rounded-sm text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           />
         }
       >

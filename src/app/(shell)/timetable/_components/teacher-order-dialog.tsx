@@ -90,7 +90,7 @@ export function TeacherOrderDialog({
             <header className="border-line/70 flex items-center justify-between border-b px-5 py-3">
               <div>
                 <h2 className="text-foreground text-sm font-bold">강사 순서 · {subjectLabel}</h2>
-                <p className="text-text-faint mt-0.5 text-[11px]">
+                <p className="text-text-faint mt-0.5 text-xs">
                   강사뷰에서 왼쪽부터 이 순서로 놓입니다. 여기 없는 강사도 사라지지 않고 뒤에 붙습니다.
                 </p>
               </div>
@@ -114,11 +114,11 @@ export function TeacherOrderDialog({
                       key={name}
                       className="border-line bg-bg-soft/40 flex items-center gap-2 rounded-lg border px-2.5 py-1.5"
                     >
-                      <span className="text-text-faint num w-5 text-right text-[11px]">{i + 1}</span>
+                      <span className="text-text-faint num w-5 text-right text-xs">{i + 1}</span>
                       <span className="text-foreground flex-1 truncate text-xs font-medium">{name}</span>
                       {/* 자리(JJ·LAB)는 사람이 아니라 방 — 목록에서 한눈에 구분되게 표시한다. */}
                       {isSpecialSlotLabel(name) ? (
-                        <span className="border-line text-text-faint rounded-full border px-1.5 py-px text-[10px]">
+                        <span className="border-line text-text-faint rounded-full border px-1.5 py-px text-xs">
                           자리
                         </span>
                       ) : null}

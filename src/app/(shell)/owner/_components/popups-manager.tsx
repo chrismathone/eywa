@@ -53,7 +53,7 @@ function ToggleForm({ id, isActive }: { id: string; isActive: boolean }) {
       <input type="hidden" name="isActive" value={isActive ? "false" : "true"} />
       <button
         type="submit"
-        className={`rounded-full px-2 py-0.5 text-[11px] font-bold transition ${
+        className={`rounded-full px-2 py-0.5 text-xs font-bold transition ${
           isActive
             ? "bg-primary-soft text-primary hover:bg-primary-soft/70"
             : "bg-bg-soft text-text-faint hover:bg-line-strong/20"
@@ -83,10 +83,10 @@ function DeleteForm({ id }: { id: string }) {
   return (
     <form action={action} className="flex items-center gap-1">
       <input type="hidden" name="id" value={id} />
-      <button type="submit" className="text-danger text-[11px] font-bold">
+      <button type="submit" className="text-danger text-xs font-bold">
         삭제
       </button>
-      <button type="button" onClick={() => setConfirm(false)} className="text-text-faint text-[11px]">
+      <button type="button" onClick={() => setConfirm(false)} className="text-text-faint text-xs">
         취소
       </button>
     </form>
@@ -137,9 +137,9 @@ function PopupImageField({ value, onChange }: { value: string; onChange: (v: str
             // eslint-disable-next-line @next/next/no-img-element -- objectURL/외부 미리보기
             <img src={previewSrc} alt="" className="h-full w-full object-contain" />
           ) : value ? (
-            <span className="text-text-faint text-[10px]">업로드됨</span>
+            <span className="text-text-faint text-xs">업로드됨</span>
           ) : (
-            <span className="text-text-faint text-[10px]">없음</span>
+            <span className="text-text-faint text-xs">없음</span>
           )}
         </div>
         <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs transition">
@@ -288,8 +288,8 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
                     <img src={p.imageSrc} alt="" className="border-line h-10 w-14 shrink-0 rounded border object-cover" />
                   ) : null}
                   <div className="min-w-0">
-                    <p className="text-foreground truncate text-[13px] font-bold">{p.title}</p>
-                    <p className="text-text-faint mt-0.5 text-[11px]">
+                    <p className="text-foreground truncate text-sm font-bold">{p.title}</p>
+                    <p className="text-text-faint mt-0.5 text-xs">
                       {AUDIENCE_LABEL[p.audience as PopupAudience] ?? p.audience} · {POSITION_LABEL[p.position as PopupPosition] ?? p.position} · 우선 {p.priority}
                     </p>
                   </div>

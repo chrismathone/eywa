@@ -17,15 +17,15 @@ const PERF_BG = { primary: "bg-primary", amber: "bg-amber", danger: "bg-danger" 
 function TestBlock({ kicker, sub, test }: { kicker: string; sub: string; test: TestScore }) {
   const header = (
     <div className="flex items-center justify-between">
-      <span className="text-foreground text-[13px] font-bold">{kicker}</span>
-      <span className="text-text-faint text-[11px]">{sub}</span>
+      <span className="text-foreground text-sm font-bold">{kicker}</span>
+      <span className="text-text-faint text-xs">{sub}</span>
     </div>
   );
   if (test.score == null) {
     return (
       <div className="border-line rounded-md border px-3 py-2.5">
         {header}
-        <p className="text-text-faint mt-1.5 text-[12px]">아직 점수가 입력되지 않았어요.</p>
+        <p className="text-text-faint mt-1.5 text-xs">아직 점수가 입력되지 않았어요.</p>
       </div>
     );
   }
@@ -35,10 +35,10 @@ function TestBlock({ kicker, sub, test }: { kicker: string; sub: string; test: T
     <div className="border-line rounded-md border px-3 py-2.5">
       {header}
       <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className={`tabular text-[22px] font-bold ${PERF_TEXT[tone]}`}>{test.score}</span>
-        <span className="text-text-faint tabular text-[13px]">/ {test.max}</span>
+        <span className={`tabular text-2xl font-bold ${PERF_TEXT[tone]}`}>{test.score}</span>
+        <span className="text-text-faint tabular text-sm">/ {test.max}</span>
         <DeltaChip score={test.score} prev={test.prevScore} />
-        <span className="text-text-dim tabular ml-auto text-[12px] font-bold">{p}%</span>
+        <span className="text-text-dim tabular ml-auto text-xs font-bold">{p}%</span>
       </div>
       <div className="bg-bg-soft mt-2 h-2 overflow-hidden rounded-pill">
         <div className={`h-full rounded-pill ${PERF_BG[tone]}`} style={{ width: `${p}%` }} />
@@ -60,21 +60,21 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
     <div className="space-y-4">
       {/* 헤더 (ink 다크) */}
       <header className="bg-ink text-background relative overflow-hidden rounded-2xl px-5 py-5">
-        <span className="absolute top-4 right-4 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold">
+        <span className="absolute top-4 right-4 rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold">
           {view.attendance}
         </span>
-        <p className="font-mono text-[11px] opacity-70">
+        <p className="font-mono text-xs opacity-70">
           {headDate} · {isLatest ? "오늘" : "지난"} 데일리 리포트
         </p>
-        <h1 className="mt-1 text-[21px] font-bold">오늘의 학습 리포트</h1>
-        <p className="mt-1 text-[13px] opacity-80">
+        <h1 className="mt-1 text-2xl font-bold">오늘의 학습 리포트</h1>
+        <p className="mt-1 text-sm opacity-80">
           {base.name} · {base.grade} {base.tag}
         </p>
       </header>
 
       {/* 오늘 배운 내용 */}
       <section className="bg-card border-line shadow-card rounded-2xl border p-5">
-        <h2 className="text-foreground text-[15px] font-bold">오늘 배운 내용</h2>
+        <h2 className="text-foreground text-base font-bold">오늘 배운 내용</h2>
         <div className="mt-3 space-y-2.5">
           {view.subjects.map((su, i) => {
             const { tone } = subjectTone(su.name);
@@ -82,8 +82,8 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
               <div key={i} className="flex items-start gap-3">
                 <span className={`mt-0.5 h-9 w-1 rounded-pill ${toneSolidClass(tone)}`} aria-hidden />
                 <div>
-                  <p className={`text-[14px] font-bold ${toneTextClass(tone)}`}>{su.name}</p>
-                  <p className="mt-0.5 flex items-center gap-1.5 text-[12.5px]">
+                  <p className={`text-sm font-bold ${toneTextClass(tone)}`}>{su.name}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs">
                     <span className="text-text-faint">{su.prev}</span>
                     <EyIcon name="arrowRight" size={13} className={toneTextClass(tone)} />
                     <span className="text-foreground font-bold">{su.today}</span>
@@ -97,9 +97,9 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
 
       {/* 오늘의 테스트 */}
       <section className="bg-card border-line shadow-card rounded-2xl border p-5">
-        <h2 className="text-foreground text-[15px] font-bold">오늘의 테스트</h2>
+        <h2 className="text-foreground text-base font-bold">오늘의 테스트</h2>
         {isAbsent ? (
-          <p className="text-text-faint mt-2 text-[13px]">결석한 날이라 테스트를 진행하지 않았어요.</p>
+          <p className="text-text-faint mt-2 text-sm">결석한 날이라 테스트를 진행하지 않았어요.</p>
         ) : (
           <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <TestBlock kicker="일일테스트" sub="이전 진도 복습" test={view.tests.daily} />
@@ -110,15 +110,15 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
 
       {/* 선생님 한마디 */}
       <section className="bg-card border-line shadow-card rounded-2xl border p-5">
-        <h2 className="text-foreground text-[15px] font-bold">선생님 한마디</h2>
+        <h2 className="text-foreground text-base font-bold">선생님 한마디</h2>
         {isAbsent ? (
-          <p className="text-text-faint mt-2 text-[13px]">
+          <p className="text-text-faint mt-2 text-sm">
             이 날은 결석했어요. 다음 수업에서 만나요!
           </p>
         ) : note ? (
-          <p className="text-foreground mt-2 text-[14px] leading-relaxed whitespace-pre-wrap">{note}</p>
+          <p className="text-foreground mt-2 text-sm leading-relaxed whitespace-pre-wrap">{note}</p>
         ) : (
-          <p className="text-text-faint mt-2 text-[13px]">
+          <p className="text-text-faint mt-2 text-sm">
             아직 선생님이 작성 중이에요. 잠시만 기다려 주세요.
           </p>
         )}

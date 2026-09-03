@@ -258,7 +258,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           <span className="text-amber shrink-0">
             <EyIcon name="alert" size={16} />
           </span>
-          <p className="text-foreground min-w-0 flex-1 text-[12px] leading-relaxed">
+          <p className="text-foreground min-w-0 flex-1 text-xs leading-relaxed">
             <b>
               {formatPeriod(period)} 숫자는 <span className="num">{kstDateTime(lastTouched)}</span> 이후
               갱신되지 않았습니다.
@@ -277,7 +277,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           <span className="text-amber shrink-0">
             <EyIcon name="alert" size={16} />
           </span>
-          <p className="text-foreground min-w-0 flex-1 text-[12px] leading-relaxed">
+          <p className="text-foreground min-w-0 flex-1 text-xs leading-relaxed">
             <b>
               마지막 동기화에 없던 청구 <span className="num">{missingRows.length}</span>건
             </b>{" "}
@@ -378,7 +378,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-3 flex items-baseline justify-between">
               <h2 className="text-foreground text-sm font-bold">수납 진행률</h2>
-              <span className="text-text-dim num text-[12px]">
+              <span className="text-text-dim num text-xs">
                 완납 {paidPct.toFixed(1)}% · 부분 {partialPct.toFixed(1)}% · 미수 {unpaidPct.toFixed(1)}%
               </span>
             </header>
@@ -398,18 +398,18 @@ export async function BillingContent({ sp }: { sp: Sp }) {
                 <CircleDollarSign size={18} strokeWidth={1.8} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-foreground text-[13px] font-bold">기한 경과 미수금</p>
+                <p className="text-foreground text-sm font-bold">기한 경과 미수금</p>
                 <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="num text-danger text-[24px] font-bold leading-none">
+                  <span className="num text-danger text-2xl font-bold leading-none">
                     {overdue.length}
                   </span>
-                  <span className="text-text-dim text-[12px]">건</span>
-                  <span className="num text-foreground text-[17px] font-bold">{won(overdueAmount)}</span>
+                  <span className="text-text-dim text-xs">건</span>
+                  <span className="num text-foreground text-lg font-bold">{won(overdueAmount)}</span>
                 </p>
               </div>
               <Link
                 href={buildHref({ period, q, sort, desc, overdue: !overdueOnly })}
-                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition ${
+                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
                   overdueOnly
                     ? "border-danger bg-danger text-white hover:bg-danger/90"
                     : "border-danger/40 text-danger hover:bg-danger/10"
@@ -422,7 +422,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
           {/* 필터가 걸려 있으면 표 위에 상태를 명시(어떤 집합을 보고 있는지 화면이 스스로 말한다). */}
           {overdueOnly || missingOnly ? (
-            <p className="text-text-dim flex flex-wrap items-center gap-2 text-[12px]">
+            <p className="text-text-dim flex flex-wrap items-center gap-2 text-xs">
               {overdueOnly ? (
                 <span className="bg-danger-soft text-danger rounded-full px-2.5 py-0.5 font-medium">
                   기한 경과만 {total}건

@@ -147,7 +147,7 @@ export function CellPopover({
       >
         {noteOnly ? (
           <div className="flex flex-col gap-1 p-0.5">
-            <p className="text-amber text-[10px] leading-tight">{locked}</p>
+            <p className="text-amber text-xs leading-tight">{locked}</p>
             {nothingToEdit ? (
               // 붙일 행이 없다 — 없는 출결을 지어내지 않는다(#메모는 기록에 딸린 것).
               // ⚠️ 다만 **빗금 칸은 기록이 있다**(남의 교시). 그 경우엔 사유가 다르므로 문장도 다르다.
@@ -155,7 +155,7 @@ export function CellPopover({
                 {/* ⚠️ 잠금 사유가 이미 같은 말을 했으면 **반복하지 않는다**(빗금 칸의 기본 경로).
                     7일 잠금과 겹칠 때만 두 문장이 서로 다른 정보를 담는다. */}
                 {hasOtherRecords && locked === NOT_MINE_MESSAGE ? null : (
-                  <p className="text-text-dim text-[11px] leading-tight">
+                  <p className="text-text-dim text-xs leading-tight">
                     {/* ⚠️ 사유 문장은 NOT_MINE_MESSAGE 단일 소스 — 여기 사본을 두면 사유가 늘 때
                         (2026-08-19 '담임 이전 기록') 한쪽만 고쳐져 같은 칸이 화면마다 다른 말을 한다. */}
                     {hasOtherRecords
@@ -166,12 +166,12 @@ export function CellPopover({
                 {/* 남의 교시에 달린 메모(결석 사유 등)는 **읽기로는 보여 준다** — 여기서 감추면
                     "병결"·"가족여행" 같은 사유가 화면에서 사라진다(실측 78칸). */}
                 {hasOtherRecords && note ? (
-                  <p className="text-foreground text-[11px] leading-tight break-keep">메모 · {note}</p>
+                  <p className="text-foreground text-xs leading-tight break-keep">메모 · {note}</p>
                 ) : null}
               </div>
             ) : (
               <>
-                <p className="text-text-dim text-[10px] leading-tight">메모는 기간과 무관하게 고칠 수 있습니다</p>
+                <p className="text-text-dim text-xs leading-tight">메모는 기간과 무관하게 고칠 수 있습니다</p>
                 <input
                   autoFocus
                   type="text"
@@ -192,7 +192,7 @@ export function CellPopover({
                     err ? "border-danger" : "border-line"
                   }`}
                 />
-                {err ? <p className="text-danger text-[10px] leading-tight">{err}</p> : null}
+                {err ? <p className="text-danger text-xs leading-tight">{err}</p> : null}
                 <button
                   type="button"
                   onClick={applyNoteOnly}
@@ -239,7 +239,7 @@ export function CellPopover({
                   err ? "border-danger" : "border-line"
                 }`}
               />
-              {err ? <p className="text-danger text-[10px] leading-tight">{err}</p> : null}
+              {err ? <p className="text-danger text-xs leading-tight">{err}</p> : null}
               <input
                 type="text"
                 value={noteDraft}
@@ -270,7 +270,7 @@ export function CellPopover({
             {/* 🔴 사정거리도 격자와 **같은 말**로 알린다 — 저장은 교시를 못 가려 그날 모든 교시에 가고,
                 지우기는 그날 행을 통째로 없앤다(그래서 저장은 열고 지우기만 닫는다). */}
             {status && sharedDelete ? (
-              <p className="text-text-dim border-t px-2 py-1 text-[10px] leading-tight break-keep">
+              <p className="text-text-dim border-t px-2 py-1 text-xs leading-tight break-keep">
                 고치면 같은 날 다른 교시 기록 {otherCount}건(다른 선생님·자리 JJ·랩실)도 함께 바뀝니다. 지우기는
                 여기서 못 합니다 — 반별 보기에서 지우세요
               </p>

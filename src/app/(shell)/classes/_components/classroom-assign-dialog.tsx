@@ -262,7 +262,7 @@ function SummaryCell({
   return (
     <div className="border-border bg-muted/30 rounded-md border px-3 py-2">
       <p className={`num text-xl font-bold ${color}`}>{value}</p>
-      <p className="text-text-dim text-[11px]">{label}</p>
+      <p className="text-text-dim text-xs">{label}</p>
     </div>
   );
 }

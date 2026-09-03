@@ -117,7 +117,7 @@ export function PlanMonthActions({
           계획 복제는 새 달에 옛 배치를 그대로 복사할 뿐이라 "달마다 같은 시간표"가 되던 원인이었다. */}
       {msg ? (
         <span
-          className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-[11px] break-keep"
+          className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-xs break-keep"
           title={msg.detail}
         >
           {msg.text}

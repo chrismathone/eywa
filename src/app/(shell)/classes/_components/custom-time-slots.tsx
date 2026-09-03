@@ -105,7 +105,7 @@ export function CustomTimeSlots({
           시각 추가
         </button>
       </div>
-      <p className="text-muted-foreground text-[11px] break-keep">
+      <p className="text-muted-foreground text-xs break-keep">
         방학 오전 특강처럼 교시표에 없는 시간대는 여기에 직접 입력합니다. 기존에 교시표 밖 시각으로
         저장된 수업도 여기에 나타납니다 — 지우면 저장 시 함께 삭제됩니다.
       </p>

@@ -99,7 +99,7 @@ function MetricBlock({
   if (!hasTrend(points, metric)) return null;
   return (
     <div>
-      <h3 className="mb-1.5 flex items-center gap-1.5 text-[13px] font-bold" style={{ color }}>
+      <h3 className="mb-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color }}>
         <span className="inline-block size-2 rounded-full" style={{ backgroundColor: color }} aria-hidden />
         {title}
       </h3>

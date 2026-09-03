@@ -44,7 +44,7 @@ export function LoanDialog({ assets, presetAssetId, today, onClose }: { assets: 
           <Field label="반납예정" as="div">
             <div className="flex items-center gap-2">
               <input type="date" name="dueOn" min={today} disabled={always} aria-label="반납예정일" className={FIELD} />
-              <label className="text-text-dim flex shrink-0 items-center gap-1 text-[11.5px]">
+              <label className="text-text-dim flex shrink-0 items-center gap-1 text-xs">
                 <input type="checkbox" checked={always} onChange={(e) => setAlways(e.target.checked)} /> 상시
               </label>
             </div>

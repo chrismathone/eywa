@@ -49,20 +49,20 @@ export function FollowUpCard({
                       <WindowLink
                         href={`/students/${f.studentId}`}
                         title={f.studentName}
-                        className="text-foreground truncate text-[13px] font-medium hover:underline"
+                        className="text-foreground truncate text-sm font-medium hover:underline"
                       >
                         {f.studentName}
                       </WindowLink>
                     ) : (
-                      <span className="text-foreground truncate text-[13px] font-medium">{f.studentName}</span>
+                      <span className="text-foreground truncate text-sm font-medium">{f.studentName}</span>
                     )}
                   </div>
-                  <p className="text-text-faint truncate text-[11px]">{f.followUpAction ?? "후속 연락"}</p>
+                  <p className="text-text-faint truncate text-xs">{f.followUpAction ?? "후속 연락"}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <Pill color={u.color}>{u.label}</Pill>
                   {f.followUpDate ? (
-                    <span className="text-text-faint num text-[10px]">{f.followUpDate.slice(5)}</span>
+                    <span className="text-text-faint num text-xs">{f.followUpDate.slice(5)}</span>
                   ) : null}
                 </div>
               </li>

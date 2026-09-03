@@ -33,7 +33,7 @@ export function StaffTableScaleControl() {
       >
         <Minus className="size-3.5" />
       </button>
-      <span className="num text-text-dim w-10 text-center text-[11px] tabular-nums">{scale}%</span>
+      <span className="num text-text-dim w-10 text-center text-xs tabular-nums">{scale}%</span>
       <button
         type="button"
         className={btn}

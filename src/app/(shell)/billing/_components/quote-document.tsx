@@ -50,7 +50,7 @@ export function QuoteDocument({
   const hasAccount = showAccount && !!(account?.bank || account?.holder || account?.number);
 
   return (
-    <div className="quote-doc print-portrait bg-card text-foreground mx-auto w-full max-w-[760px] space-y-5 p-6 print:max-w-none print:space-y-2 print:p-0">
+    <div className="quote-doc paper-scale print-portrait bg-card text-foreground mx-auto w-full max-w-[760px] space-y-5 p-6 print:max-w-none print:space-y-2 print:p-0">
       {/* 헤더 — 로고/학원명은 토글(로고 워드마크에 학원명이 있으면 하나만 켜서 중복 방지). */}
       <header className="flex flex-col items-center gap-2">
         {showLogo || showName ? (

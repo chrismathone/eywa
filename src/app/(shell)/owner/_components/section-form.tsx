@@ -103,13 +103,13 @@ export function SectionForm({
           전체 콘텐츠의 맨 아래(창 하단)에 sticky로 붙도록. 저장 버튼은 form 속성으로 위 폼과 연결. */}
       {footer}
       <FormActionBar>
-        {state?.ok ? <span className="text-primary mr-1 text-[12px] font-bold">저장됨 · 테넌트 전체 적용</span> : null}
-        {state?.error ? <span className="text-danger mr-1 text-[12px]">{state.error}</span> : null}
+        {state?.ok ? <span className="text-primary mr-1 text-xs font-bold">저장됨 · 테넌트 전체 적용</span> : null}
+        {state?.error ? <span className="text-danger mr-1 text-xs">{state.error}</span> : null}
         <button
           type="submit"
           form={formId}
           disabled={pending}
-          className="bg-primary text-primary-foreground inline-flex items-center rounded-lg px-4 py-2 text-[12px] font-bold disabled:opacity-60"
+          className="bg-primary text-primary-foreground inline-flex items-center rounded-lg px-4 py-2 text-xs font-bold disabled:opacity-60"
         >
           {pending ? "저장 중…" : "저장"}
         </button>
@@ -133,7 +133,7 @@ export function SettingsCard({
   return (
     <section className={`bg-card shadow-card rounded-2xl p-5 ${span2 ? "xl:col-span-2" : ""}`}>
       <h3 className="text-foreground text-sm font-bold">{title}</h3>
-      {description ? <p className="text-text-dim mt-1 text-[12px]">{description}</p> : null}
+      {description ? <p className="text-text-dim mt-1 text-xs">{description}</p> : null}
       <div className="mt-4">{children}</div>
     </section>
   );

@@ -61,14 +61,14 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
     <section className="bg-card shadow-card rounded-2xl px-3 py-2.5">
       {/* 머리 = 이 주 전체 작성 상황 한 줄. 카드마다 흩어져 있던 숫자를 한 번만 말한다. */}
       <div className="border-line mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b px-1 pb-2">
-        <h2 className="text-foreground text-[13px] font-bold">
+        <h2 className="text-foreground text-sm font-bold">
           반 <span className="num">{s.classes}</span>개
         </h2>
-        <p className="text-text-dim text-[12px]">
+        <p className="text-text-dim text-xs">
           담임 <span className="num text-foreground font-bold">{teacherCount}</span>명
         </p>
         <p
-          className="text-text-dim text-[12px]"
+          className="text-text-dim text-xs"
           // 분모가 왜 그 수인지 화면에 적어 둔다 — 안 적으면 추석 주에 "교시가 줄었다"만 보인다.
           title="분모는 이 주 배정 교시입니다. 학원 휴일은 쓸 의무가 없어 분모에서 빠지고, 휴일에 쓴 계획은 그대로 인정됩니다."
         >
@@ -81,7 +81,7 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
         {/* Shouting(0230a) — **행의 새 칸이 무엇인지 이름을 붙이는 자리**이기도 하다(행엔 열 머리가 없다). */}
         {showShouting ? (
           <p
-            className="text-text-dim text-[12px]"
+            className="text-text-dim text-xs"
             title="EiE 반의 이번 주 Shouting 체크 — 분모는 작성률과 같은 '이 주 배정 교시'입니다"
           >
             Shouting{" "}
@@ -92,12 +92,12 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
           </p>
         ) : null}
         {s.untouched > 0 ? (
-          <p className="text-text-dim text-[12px]">
+          <p className="text-text-dim text-xs">
             미작성 <span className="num text-foreground font-bold">{s.untouched}</span>반
           </p>
         ) : null}
         {s.done > 0 ? (
-          <p className="text-text-dim text-[12px]">
+          <p className="text-text-dim text-xs">
             완료 <span className="num text-foreground font-bold">{s.done}</span>반
           </p>
         ) : null}
@@ -106,7 +106,7 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
                사유를 툴팁에 적는다 — 머리 줄에 상태를 하나 더 세우면 다섯 숫자가 여섯이 된다. */}
         {s.idle > 0 ? (
           <p
-            className="text-text-dim text-[12px]"
+            className="text-text-dim text-xs"
             title="이 주에 쓸 교시가 없는 반 — 배정이 없거나, 수업일이 모두 학원 휴일인 반입니다(행의 `휴` 표시)."
           >
             이 주 수업 없음 <span className="num text-foreground font-bold">{s.idle}</span>반
@@ -132,13 +132,13 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
                       **간판**이라 목록에서 가장 큰 글씨(16px·800)에 브랜드색을 입힌다. 🔴 채우기는
                       `-soft`(연한 틴트)까지다 — 꽉 찬 네이비는 위 활성 필터 칩과 같은 모양이라
                       "눌러서 고르는 것"으로 읽힌다(이건 라벨이지 버튼이 아니다). */}
-                  <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-[16px] font-extrabold">
+                  <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-lg font-extrabold">
                     {p.label}
                   </h3>
-                  <span className="text-text-dim text-[11px]">
+                  <span className="text-text-dim text-xs">
                     <span className="num">{ps.classes}</span>반
                   </span>
-                  <span className="text-text-dim ml-auto text-[11px]">
+                  <span className="text-text-dim ml-auto text-xs">
                     작성{" "}
                     <span className="num text-foreground font-bold">
                       {ps.filled}/{ps.scheduled}
@@ -198,15 +198,15 @@ function TeacherGroupFlow({
                 강조 처리"*) — 15px·800으로 올린다. 프로그램 알약(16px)보다 한 단계 작아야 포함 관계가
                 크기로도 읽힌다. 🔴 다시 13px로 줄이지 말 것. '담임 미지정'만 색을 죽인다(사람이 아니라 상태). */}
             <Heading
-              className={`truncate text-[15px] font-extrabold ${g.unassigned ? "text-text-dim" : "text-foreground"}`}
+              className={`truncate text-base font-extrabold ${g.unassigned ? "text-text-dim" : "text-foreground"}`}
             >
               {g.label}
             </Heading>
-            <span className="text-text-dim shrink-0 text-[11px]">
+            <span className="text-text-dim shrink-0 text-xs">
               <span className="num">{g.summary.classes}</span>반
             </span>
             {/* 그 담임 몫의 작성 상황 — "누가 안 썼나"가 이 화면의 질문이라 묶음 머리에 숫자를 붙인다. */}
-            <span className="num text-text-dim ml-auto shrink-0 text-[11px]">
+            <span className="num text-text-dim ml-auto shrink-0 text-xs">
               {g.summary.filled}/{g.summary.scheduled}
             </span>
           </div>
@@ -259,7 +259,7 @@ function TeacherGroupFlow({
                     // 되면 압축이 아니라 고장이다(1열일 땐 어차피 세로가 남는다). 넓은 화면은 마우스라 7px.
                     className="hover:bg-bg-soft flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-2.5 transition sm:py-[7px]"
                   >
-                    <span className="text-foreground min-w-0 flex-1 truncate text-[13px] font-semibold">
+                    <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
                       {card.className}
                     </span>
                     {/* 예약된 반 이름 변경 **예고**만 표시한다(원장 2026-08-29 *"미래조회시에 지금 반으로
@@ -273,7 +273,7 @@ function TeacherGroupFlow({
                         ⚠️ 칸이 좁아 이름 옆엔 짧게만 두고 전문은 title로(문구는 여기서만 만든다). */}
                     {card.classNameUpcoming ? (
                       <span
-                        className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-[10px] font-bold"
+                        className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-xs font-bold"
                         title={renameNote ?? undefined}
                       >
                         {monthDay(card.classNameUpcoming.date)}→{card.classNameUpcoming.name}
@@ -282,13 +282,13 @@ function TeacherGroupFlow({
                     {/* 임시 위임(0173a) — 원스크린 반 칩과 같은 앰버 규약. 남의 반 시트를 내 반인 줄 알고
                         고치는 일이 없게, 목록에서부터 갈라 보인다(원장 지시 2026-08-03). */}
                     {card.delegated ? (
-                      <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-[10px] font-bold">
+                      <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-xs font-bold">
                         위임
                       </span>
                     ) : null}
                     {card.orphanSlots > 0 ? (
                       <span
-                        className="text-amber shrink-0 text-[10px] font-bold"
+                        className="text-amber shrink-0 text-xs font-bold"
                         title={`시간표가 바뀌어 지금 시간표에 없는 기록 ${card.orphanSlots}건`}
                       >
                         시간변경 <span className="num">{card.orphanSlots}</span>
@@ -305,7 +305,7 @@ function TeacherGroupFlow({
                           <span
                             // 색은 **의미 캐논**(팔레트 v4)에서 고른다 — 전 교시 체크 = positive(green).
                             // 남은 것은 '주의'가 아니라 진행 중이라 색을 안 쓴다(amber는 뜻이 다르다).
-                            className={`num rounded-pill border px-1 py-px text-[10.5px] font-bold ${
+                            className={`num rounded-pill border px-1 py-px text-xs font-bold ${
                               shoutCount === card.totalSlots
                                 ? `border-green ${TONE_SOFT.positive}`
                                 : shoutCount > 0
@@ -320,11 +320,11 @@ function TeacherGroupFlow({
                       </span>
                     ) : null}
                     {idle ? (
-                      <span className="text-text-dim w-11 shrink-0 text-right text-[12px]" title={idleTitle}>
+                      <span className="text-text-dim w-11 shrink-0 text-right text-xs" title={idleTitle}>
                         {holidayOnly ? "휴" : "—"}
                       </span>
                     ) : (
-                      <span className="num text-foreground w-11 shrink-0 text-right text-[12px] font-bold">
+                      <span className="num text-foreground w-11 shrink-0 text-right text-xs font-bold">
                         {card.filledSlots}/{card.totalSlots}
                       </span>
                     )}
@@ -341,7 +341,7 @@ function TeacherGroupFlow({
                       href={`/ecs/${card.classId}/month?month=${monthOfWeek(weekMonday)}&week=${weekMonday}&view=mp`}
                       title={`${card.className} 월간 계획서(MP) 열기`}
                       aria-label={`${card.className} 월간 계획서 열기`}
-                      className="border-line-strong text-text-dim hover:bg-bg-soft hover:text-foreground ml-1 shrink-0 rounded-full border px-1.5 py-px text-[10px] font-bold transition"
+                      className="border-line-strong text-text-dim hover:bg-bg-soft hover:text-foreground ml-1 shrink-0 rounded-full border px-1.5 py-px text-xs font-bold transition"
                     >
                       MP
                     </Link>

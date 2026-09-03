@@ -358,8 +358,8 @@ export default async function WithdrawalsPage({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-foreground text-[15px] font-bold">월별 퇴원 추이</h2>
-              <span className="text-text-faint text-[11px]">
+              <h2 className="text-foreground text-base font-bold">월별 퇴원 추이</h2>
+              <span className="text-text-faint text-xs">
                 {/* 무엇을 센 건지 말해 준다 — 필터가 걸렸는데 "전체"라고 적으면 화면이 거짓말을 한다. */}
                 최근 12개월 · {trendRows.length}명
                 {range !== "all" ? " (기간 필터는 이 축이라 제외)" : ""}
@@ -370,8 +370,8 @@ export default async function WithdrawalsPage({
           </section>
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-3">
-              <h2 className="text-foreground text-[15px] font-bold">과목별 분포</h2>
-              <span className="text-text-faint text-[11px]">
+              <h2 className="text-foreground text-base font-bold">과목별 분포</h2>
+              <span className="text-text-faint text-xs">
                 {subjectRows.length}명
                 {subject !== "all" ? " (과목 필터는 이 축이라 제외)" : ""}
               </span>
@@ -380,8 +380,8 @@ export default async function WithdrawalsPage({
               {subjects.map((s) => (
                 <div key={s.label}>
                   <div className="mb-1 flex items-baseline justify-between">
-                    <span className="text-foreground text-[12px] font-bold">{s.label}</span>
-                    <span className="text-text-dim num text-[11px]">
+                    <span className="text-foreground text-xs font-bold">{s.label}</span>
+                    <span className="text-text-dim num text-xs">
                       <span className="text-foreground font-bold">{s.count}</span>명
                     </span>
                   </div>
@@ -409,9 +409,9 @@ export default async function WithdrawalsPage({
             <header className="border-line flex items-baseline justify-between border-b px-5 py-4">
               <div>
                 <p className="micro">최근 퇴원</p>
-                <h2 className="text-foreground mt-1 text-[15px] font-bold">학생 명단</h2>
+                <h2 className="text-foreground mt-1 text-base font-bold">학생 명단</h2>
               </div>
-              <p className="text-text-faint num text-[11px]">
+              <p className="text-text-faint num text-xs">
                 {total}명{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
               </p>
             </header>
@@ -422,13 +422,13 @@ export default async function WithdrawalsPage({
                   <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
                     <WindowLink href={`/withdrawals/${r.id}`} title={r.name} className="flex items-center gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-foreground text-[13px] font-bold hover:underline">
+                        <p className="text-foreground text-sm font-bold hover:underline">
                           {r.name}{" "}
-                          <span className="text-text-dim text-[11px] font-normal">
+                          <span className="text-text-dim text-xs font-normal">
                             {r.grade ?? "—"} · {r.school ?? "—"}
                           </span>
                         </p>
-                        <p className="text-text-dim mt-0.5 text-[11px]">
+                        <p className="text-text-dim mt-0.5 text-xs">
                           {r.lastClassName ?? "수강 반 없음"}
                         </p>
                       </div>
@@ -438,14 +438,14 @@ export default async function WithdrawalsPage({
                         {r.systemBulk ? (
                           <>
                             <Pill color="neutral">시스템 정리</Pill>
-                            <p className="text-text-faint mt-0.5 text-[10px]">퇴원일 미상</p>
+                            <p className="text-text-faint mt-0.5 text-xs">퇴원일 미상</p>
                           </>
                         ) : (
                           <>
-                            <p className="text-foreground num text-[11px] font-bold">
+                            <p className="text-foreground num text-xs font-bold">
                               {r.withdrawnAt ?? "—"}
                             </p>
-                            {ago ? <p className="text-text-faint num text-[10px]">{ago}</p> : null}
+                            {ago ? <p className="text-text-faint num text-xs">{ago}</p> : null}
                           </>
                         )}
                       </div>
@@ -465,7 +465,7 @@ export default async function WithdrawalsPage({
           <section className="bg-card shadow-card overflow-hidden rounded-2xl">
             <header className="border-line border-b px-5 py-4">
               <p className="micro text-amber">사유 분석</p>
-              <h2 className="text-foreground mt-1 text-[15px] font-bold">상위 퇴원 사유</h2>
+              <h2 className="text-foreground mt-1 text-base font-bold">상위 퇴원 사유</h2>
             </header>
             <div className="space-y-3 p-5">
               {topReasons.map(([reason, count]) => {
@@ -473,8 +473,8 @@ export default async function WithdrawalsPage({
                 return (
                   <div key={reason}>
                     <div className="mb-1 flex items-baseline justify-between">
-                      <span className="text-foreground text-[12px] font-bold">{reason}</span>
-                      <span className="text-text-dim num text-[11px]">
+                      <span className="text-foreground text-xs font-bold">{reason}</span>
+                      <span className="text-text-dim num text-xs">
                         <span className="text-foreground font-bold">{count}</span>명 ·{" "}
                         {((count / rows.length) * 100).toFixed(0)}%
                       </span>
@@ -497,8 +497,8 @@ export default async function WithdrawalsPage({
                 </span>
                 <div>
                   {/* 구 font-mono uppercase 코딩틱 라벨 → 한글 12px semibold 승격 */}
-                  <p className="text-amber text-[12px] font-bold">자동 요약</p>
-                  <p className="text-foreground mt-0.5 text-[12px] leading-relaxed">
+                  <p className="text-amber text-xs font-bold">자동 요약</p>
+                  <p className="text-foreground mt-0.5 text-xs leading-relaxed">
                     {topReasons[0]
                       ? `현재 가장 빈번한 퇴원 사유는 "${topReasons[0][0]}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
                       : "퇴원 사유가 등록되면 인사이트가 표시됩니다."}
@@ -537,26 +537,26 @@ function SubjectEndedView({
       <header className="border-line flex items-baseline justify-between border-b px-5 py-4">
         <div>
           <p className="micro text-amber">과목 이탈 신호</p>
-          <h2 className="text-foreground mt-1 text-[15px] font-bold">수강종료 학생</h2>
+          <h2 className="text-foreground mt-1 text-base font-bold">수강종료 학생</h2>
         </div>
-        <p className="text-text-faint num text-[11px]">{rows.length}명</p>
+        <p className="text-text-faint num text-xs">{rows.length}명</p>
       </header>
       <ul className="divide-line divide-y">
         {rows.map((r) => (
           <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
             <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-foreground text-[13px] font-bold hover:underline">
+                <p className="text-foreground text-sm font-bold hover:underline">
                   {r.name}{" "}
-                  <span className="text-text-dim text-[11px] font-normal">
+                  <span className="text-text-dim text-xs font-normal">
                     {r.grade ?? "—"} · {r.school ?? "—"}
                   </span>
                   {r.status === "on_hold" ? (
-                    <span className="text-text-faint ml-1 text-[11px]">(휴원)</span>
+                    <span className="text-text-faint ml-1 text-xs">(휴원)</span>
                   ) : null}
                 </p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <span className="text-text-faint mr-0.5 text-[10px]">종료</span>
+                  <span className="text-text-faint mr-0.5 text-xs">종료</span>
                   {r.endedSubjects.map((s) => (
                     <Pill key={s} color="amber">
                       {labelOf(s)}
@@ -564,7 +564,7 @@ function SubjectEndedView({
                   ))}
                   {r.activeSubjects.length > 0 ? (
                     <>
-                      <span className="text-text-faint ml-1.5 mr-0.5 text-[10px]">수강중</span>
+                      <span className="text-text-faint ml-1.5 mr-0.5 text-xs">수강중</span>
                       {r.activeSubjects.map((s) => (
                         <Pill key={s} color="primary" soft>
                           {labelOf(s)}
@@ -576,7 +576,7 @@ function SubjectEndedView({
               </div>
               <div className="shrink-0 text-right">
                 {r.lastEndedAt ? (
-                  <p className="text-text-faint num text-[10px]">{r.lastEndedAt} 종료</p>
+                  <p className="text-text-faint num text-xs">{r.lastEndedAt} 종료</p>
                 ) : null}
               </div>
             </WindowLink>

@@ -43,12 +43,12 @@ export default async function IconSystemPage() {
             <div>
               <Link
                 href="/help"
-                className="text-text-faint hover:text-primary inline-flex items-center gap-1.5 text-[10px] font-bold transition-colors"
+                className="text-text-faint hover:text-primary inline-flex items-center gap-1.5 text-xs font-bold transition-colors"
               >
                 <EyIcon name="arrowRight" size={11} className="rotate-180" />
                 도움말로 돌아가기
               </Link>
-              <p className="text-primary mt-10 text-[11px] font-bold">
+              <p className="text-primary mt-10 text-xs font-bold">
                 Eywa icon system · v2
               </p>
               <h1 className="text-foreground mt-3 max-w-2xl text-[clamp(2rem,5vw,4.4rem)] leading-[1.05] font-bold tracking-[-0.045em]">
@@ -56,7 +56,7 @@ export default async function IconSystemPage() {
                 <br />
                 기능은 바로 읽힙니다.
               </h1>
-              <p className="text-text-dim mt-5 max-w-xl text-[14px] leading-[1.75] sm:text-[15px]">
+              <p className="text-text-dim mt-5 max-w-xl text-sm leading-[1.75] sm:text-base">
                 학원 운영의 익숙한 사물과 보편 조작을 한 문법으로 그립니다. 누구나 같은 기능을 같은 모양으로
                 알아볼 수 있게 만든 Eywa의 자체 아이콘입니다.
               </p>
@@ -64,17 +64,17 @@ export default async function IconSystemPage() {
 
             <dl className="border-line grid grid-cols-3 border-t pt-5">
               <div>
-                <dt className="text-text-faint text-[9px]">글리프</dt>
+                <dt className="text-text-faint text-xs">글리프</dt>
                 <dd className="text-foreground mt-1 text-xl font-bold tabular-nums">
                   {EYWA_ICON_CATALOG.length}
                 </dd>
               </div>
               <div className="border-line border-l pl-4 sm:pl-6">
-                <dt className="text-text-faint text-[9px]">그리드</dt>
+                <dt className="text-text-faint text-xs">그리드</dt>
                 <dd className="text-foreground mt-1 text-xl font-bold tabular-nums">24</dd>
               </div>
               <div className="border-line border-l pl-4 sm:pl-6">
-                <dt className="text-text-faint text-[9px]">획 두께</dt>
+                <dt className="text-text-faint text-xs">획 두께</dt>
                 <dd className="text-foreground mt-1 text-xl font-bold tabular-nums">1.6</dd>
               </div>
             </dl>
@@ -88,10 +88,10 @@ export default async function IconSystemPage() {
               backgroundSize: "24px 24px",
             }}
           >
-            <span className="text-text-faint absolute top-4 left-4 num text-[9px]">
+            <span className="text-text-faint absolute top-4 left-4 num text-xs">
               24 × 24 마스터 그리드
             </span>
-            <span className="text-text-faint absolute right-4 bottom-4 font-mono text-[9px]">
+            <span className="text-text-faint absolute right-4 bottom-4 font-mono text-xs">
               currentColor / round
             </span>
             <div className="absolute inset-0 flex items-center justify-center">
@@ -114,7 +114,7 @@ export default async function IconSystemPage() {
               하나의 뼈대, 다섯 가지 크기
             </h2>
           </div>
-          <p className="text-text-faint max-w-md text-right text-[11px] leading-relaxed">
+          <p className="text-text-faint max-w-md text-right text-xs leading-relaxed">
             16px 이하는 선을 1.8로 보정하고, 그보다 큰 크기는 1.6을 유지합니다.
           </p>
         </header>
@@ -131,8 +131,8 @@ export default async function IconSystemPage() {
                 <EyIcon name="calendar" size={size} strokeWidth={size <= 16 ? 1.8 : 1.6} />
               </span>
               <span className="text-center">
-                <span className="text-foreground block font-mono text-[11px] font-bold">{token}</span>
-                <span className="text-text-faint mt-0.5 block num text-[9px]">{size}px</span>
+                <span className="text-foreground block font-mono text-xs font-bold">{token}</span>
+                <span className="text-text-faint mt-0.5 block num text-xs">{size}px</span>
               </span>
             </div>
           ))}
@@ -158,14 +158,14 @@ export default async function IconSystemPage() {
                 className="[contain-intrinsic-size:auto_720px] [content-visibility:auto]"
               >
                 <div className="border-line mb-3 flex items-end gap-3 border-b pb-2.5">
-                  <span className="text-primary num text-[11px] font-bold">{meta.index}</span>
+                  <span className="text-primary num text-xs font-bold">{meta.index}</span>
                   <div>
-                    <h3 id={`family-${family}`} className="text-foreground text-[14px] font-bold">
+                    <h3 id={`family-${family}`} className="text-foreground text-sm font-bold">
                       {meta.label}
                     </h3>
-                    <p className="text-text-faint mt-0.5 text-[10px]">{meta.description}</p>
+                    <p className="text-text-faint mt-0.5 text-xs">{meta.description}</p>
                   </div>
-                  <span className="text-text-faint ml-auto text-[10px] tabular-nums">{icons.length}</span>
+                  <span className="text-text-faint ml-auto text-xs tabular-nums">{icons.length}</span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -178,9 +178,9 @@ export default async function IconSystemPage() {
                         <EyIcon name={icon.name} size={24} />
                       </span>
                       <span className="min-w-0">
-                        <span className="text-foreground block text-[13px] font-bold">{icon.label}</span>
-                        <code className="text-primary mt-0.5 block font-mono text-[10px]">{icon.name}</code>
-                        <span className="text-text-faint mt-1.5 block text-[10px] leading-relaxed">{icon.meaning}</span>
+                        <span className="text-foreground block text-sm font-bold">{icon.label}</span>
+                        <code className="text-primary mt-0.5 block font-mono text-xs">{icon.name}</code>
+                        <span className="text-text-faint mt-1.5 block text-xs leading-relaxed">{icon.meaning}</span>
                       </span>
                     </article>
                   ))}
@@ -193,9 +193,9 @@ export default async function IconSystemPage() {
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="bg-ink text-white rounded-2xl p-6 sm:p-8">
-          <p className="text-[10px] font-bold text-[var(--gold-bright)]">사용 규칙</p>
+          <p className="text-xs font-bold text-[var(--gold-bright)]">사용 규칙</p>
           <h2 className="mt-2 text-xl font-bold">하나의 의미에는 하나의 모양</h2>
-          <ul className="mt-6 space-y-4 text-[12px] leading-relaxed text-white/75">
+          <ul className="mt-6 space-y-4 text-xs leading-relaxed text-white/75">
             <li className="flex gap-3">
               <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[var(--gold-bright)]" />
               메뉴 아이콘은 반드시 MENU_ICON을 통해 배정합니다.
@@ -214,14 +214,14 @@ export default async function IconSystemPage() {
         <div className="border-line bg-card shadow-card rounded-2xl border p-6 sm:p-8">
           <p className="micro">Code</p>
           <h2 className="text-foreground mt-1 text-xl font-bold">한 컴포넌트로 사용합니다</h2>
-          <pre className="bg-bg-soft text-foreground mt-6 overflow-x-auto rounded-lg p-4 font-mono text-[11px] leading-6">
+          <pre className="bg-bg-soft text-foreground mt-6 overflow-x-auto rounded-lg p-4 font-mono text-xs leading-6">
             <code>{`<EyIcon name="calendar" size={20} />
 
 <button aria-label="알림 열기">
   <EyIcon name="bell" size={16} strokeWidth={1.8} />
 </button>`}</code>
           </pre>
-          <p className="text-text-faint mt-4 text-[11px] leading-relaxed">
+          <p className="text-text-faint mt-4 text-xs leading-relaxed">
             전체 제작 규칙과 신규 아이콘 검수 절차는 <code className="font-mono">docs/icon-system.md</code>에서 관리합니다.
           </p>
         </div>

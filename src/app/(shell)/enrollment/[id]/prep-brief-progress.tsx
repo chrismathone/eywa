@@ -65,11 +65,11 @@ export function PrepBriefProgress({ consultationId }: { consultationId: string }
   if (stalled) {
     return (
       <div className="space-y-1">
-        <p className="text-foreground inline-flex items-center gap-2 text-[13px]">
+        <p className="text-foreground inline-flex items-center gap-2 text-sm">
           <AlertCircle className="text-chart-4 size-4" />
           생성이 예상보다 오래 걸립니다
         </p>
-        <p className="text-text-dim text-[11px]">
+        <p className="text-text-dim text-xs">
           잠시 후 새로고침하거나 ‘다시 작성’을 눌러 주세요. 이전 브리프가 있으면 그대로 남아 있습니다.
         </p>
       </div>
@@ -78,7 +78,7 @@ export function PrepBriefProgress({ consultationId }: { consultationId: string }
 
   return (
     <div className="space-y-2">
-      <div className="text-foreground inline-flex items-center gap-2 text-[13px]">
+      <div className="text-foreground inline-flex items-center gap-2 text-sm">
         <Loader2 className="text-primary size-4 animate-spin" />
         <span>{stage}…</span>
         <span className="num text-text-dim text-xs">{pct}%</span>
@@ -89,7 +89,7 @@ export function PrepBriefProgress({ consultationId }: { consultationId: string }
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="text-text-dim text-[11px]">
+      <p className="text-text-dim text-xs">
         보통 1분 내외 걸립니다. 페이지를 떠나도 백그라운드에서 계속 진행됩니다.
       </p>
     </div>

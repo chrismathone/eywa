@@ -161,9 +161,9 @@ function Kpi({
           <Icon size={14} strokeWidth={1.8} />
         </span>
       </header>
-      <p className="tabular text-foreground num mt-3 text-[18px] leading-tight">{value}</p>
+      <p className="tabular text-foreground num mt-3 text-lg leading-tight">{value}</p>
       {hint ? (
-        <p className="text-text-dim border-line mt-3 border-t pt-3 text-[11px]">{hint}</p>
+        <p className="text-text-dim border-line mt-3 border-t pt-3 text-xs">{hint}</p>
       ) : (
         <div className="mt-3 h-[24px]" />
       )}

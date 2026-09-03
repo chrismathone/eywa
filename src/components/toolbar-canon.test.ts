@@ -120,19 +120,24 @@ function isControl(region: string, cls: string, tag: string): boolean {
 }
 
 describe("툴바 규약 — 값(단일 소스)", () => {
-  it("높이는 h-8 한 값이다 (세로 패딩으로 만들지 않는다)", () => {
+  it("높이는 control-scale 한 값이다 — h-(--control-h), 세로 패딩으로 만들지 않는다", () => {
     // 🔴 이 셋이 툴바 한 줄에 나란히 선다 — 하나라도 다르면 줄이 울퉁불퉁해진다.
-    expect(CONTROLS).toMatch(/TOOLBAR_SELECT\s*=\s*\n?\s*"[^"]*\bh-8\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX\s*=\s*"[^"]*\bh-8\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*"[^"]*\bh-8\b/);
-    // 줄바꿈되는 묶음은 한 줄일 때 h-8과 같은 높이여야 다른 묶음과 나란히 선다.
-    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX_WRAP\s*=\s*\n?\s*"[^"]*\bmin-h-8\b/);
+    //    2026-09-03: "h-8 고정"은 원장의 90% 규칙(라벨이 높이의 90%)으로 대체 — 높이는 라벨에서 도출(globals.css --control-*).
+    expect(CONTROLS).toMatch(/TOOLBAR_SELECT\s*=\s*\n?\s*"[^"]*\bh-\(--control-h\)/);
+    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX\s*=\s*"[^"]*\bh-\(--control-h\)/);
+    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*\n?\s*"[^"]*\bh-\(--control-h\)/);
+    // 줄바꿈되는 묶음은 한 줄일 때 같은 높이여야 다른 묶음과 나란히 선다.
+    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX_WRAP\s*=\s*\n?\s*"[^"]*\bmin-h-\(--control-h\)/);
+    // 라벨은 control-scale 토큰(18px·leading-none) — 화면마다 text-xs/sm을 손으로 적던 것을 막는다.
+    for (const name of ["TOOLBAR_SELECT", "TOOLBAR_SEG_ITEM", "TOOLBAR_CHIP", "TOOLBAR_SEARCH_BOX"]) {
+      expect(CONTROLS).toMatch(new RegExp(name + "\\s*=\\s*\\n?\\s*\"[^\"]*text-\\(length:--control-label\\) leading-none"));
+    }
   });
 
   it("라운드는 덜 둥근 쪽 — 묶음 lg / 안쪽 칩 md, 알약은 안 쓴다", () => {
     expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX\s*=\s*"[^"]*\brounded-lg\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_SEG_ITEM\s*=\s*"[^"]*\brounded-md\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*"[^"]*\brounded-lg\b/);
+    expect(CONTROLS).toMatch(/TOOLBAR_SEG_ITEM\s*=\s*\n?\s*"[^"]*\brounded-md\b/);
+    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*\n?\s*"[^"]*\brounded-lg\b/);
     // 규약 상수 자체에 알약이 섞이면 소비처 전체가 한 번에 갈린다.
     // ⚠️ **문자열 값만** 본다 — 주석은 "알약을 쓰지 않는다"고 적으려고 그 단어를 쓴다.
     expect(exportedStrings(CONTROLS).filter((v) => /rounded-(full|pill)/.test(v))).toEqual([]);
@@ -140,7 +145,7 @@ describe("툴바 규약 — 값(단일 소스)", () => {
 
   it("강사 시트(ECS·MCS)는 같은 규약을 색만 바꿔 쓴다", () => {
     expect(SHEET_SEG_BOX).toContain("border-line-strong");
-    expect(SHEET_SEG_BOX).toContain("h-8");
+    expect(SHEET_SEG_BOX).toContain("h-(--control-h)");
     expect(SHEET_SEG_BOX).toContain("rounded-lg");
     expect(SHEET_SEG_BOX).not.toContain("border-line ");
     // 상단 바에 카드 껍데기가 없다.

@@ -216,14 +216,14 @@ export default async function EnrollmentPage({
             // 🔴 헤더에 있던 숫자 줄 — 검색창 바로 왼쪽으로 옮겼다(원장 2026-09-01).
             // 통계뷰는 자기 헤드라인 카드가 같은 숫자를 갖고 있고 목록을 안 불러와 전부 0이 된다(안 그린다).
             <div className="flex items-baseline gap-x-3 whitespace-nowrap">
-              <span className="text-[12.5px]">
-                <b className="num text-foreground text-[15px] font-bold">
+              <span className="text-xs">
+                <b className="num text-foreground text-base font-bold">
                   {headerCounts ? headerCounts.total : items.length}
                 </b>{" "}
                 <span className="text-text-dim">{filterActive ? "필터 결과" : "전체"}</span>
               </span>
-              <span className="text-[12.5px]">
-                <b className="num text-gold text-[15px] font-bold">
+              <span className="text-xs">
+                <b className="num text-gold text-base font-bold">
                   {headerCounts ? headerCounts.aiDone : aiDone}
                 </b>{" "}
                 <span className="text-text-dim">AI 분석 완료</span>
@@ -231,8 +231,8 @@ export default async function EnrollmentPage({
               {/* '배정 완료'는 연결 학생의 수강까지 봐야 나오는 파생값이라 count 한 방으로 못 센다.
                   목록(페이지) 뷰에서 페이지 50행으로 세면 거짓말이 되므로 아예 안 띄운다(#89). */}
               {headerCounts ? null : (
-                <span className="text-[12.5px]">
-                  <b className="num text-primary text-[15px] font-bold">{assigned.length}</b>{" "}
+                <span className="text-xs">
+                  <b className="num text-primary text-base font-bold">{assigned.length}</b>{" "}
                   <span className="text-text-dim">배정 완료</span>
                 </span>
               )}

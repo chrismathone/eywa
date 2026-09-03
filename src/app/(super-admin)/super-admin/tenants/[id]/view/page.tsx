@@ -28,7 +28,7 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
         action={
           <Link
             href={`/super-admin/tenants/${id}`}
-            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-bold"
+            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-bold"
           >
             <EyIcon name="arrowLeft" size={14} />
             나가기
@@ -37,7 +37,7 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
       />
       <div className="space-y-5 px-7 py-6">
         {/* read-only 배지 */}
-        <div className="bg-amber-soft text-amber flex items-center gap-2 rounded-md px-4 py-2.5 text-[12px] font-bold">
+        <div className="bg-amber-soft text-amber flex items-center gap-2 rounded-md px-4 py-2.5 text-xs font-bold">
           <span className="bg-amber inline-block size-2 rounded-full" />
           읽기 전용 · {snap.name} 현황을 들여다보는 중입니다 (조작 불가)
         </div>
@@ -55,10 +55,10 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
           <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
             <header className="border-line border-b px-5 py-3">
               <p className="micro">최근 등록</p>
-              <h3 className="text-foreground mt-0.5 text-[15px] font-bold">학생 {snap.recentStudents.length}명</h3>
+              <h3 className="text-foreground mt-0.5 text-base font-bold">학생 {snap.recentStudents.length}명</h3>
             </header>
             {snap.recentStudents.length === 0 ? (
-              <p className="text-text-dim px-5 py-8 text-center text-[13px]">학생이 없습니다.</p>
+              <p className="text-text-dim px-5 py-8 text-center text-sm">학생이 없습니다.</p>
             ) : (
               <ul className="divide-line divide-y">
                 {snap.recentStudents.map((s) => {
@@ -66,8 +66,8 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
                   const meta = studentStatusMeta(s.status) ?? { label: s.status, color: "neutral" as PillColor };
                   return (
                     <li key={s.id} className="flex items-center gap-3 px-5 py-2.5">
-                      <span className="text-foreground text-[13px] font-medium">{s.name}</span>
-                      <span className="text-text-dim text-[12px]">{s.grade ?? "—"}</span>
+                      <span className="text-foreground text-sm font-medium">{s.name}</span>
+                      <span className="text-text-dim text-xs">{s.grade ?? "—"}</span>
                       <span className="ml-auto">
                         <Pill color={meta.color} soft>
                           {meta.label}
@@ -84,16 +84,16 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
           <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
             <header className="border-line border-b px-5 py-3">
               <p className="micro">최근 회의</p>
-              <h3 className="text-foreground mt-0.5 text-[15px] font-bold">회의록</h3>
+              <h3 className="text-foreground mt-0.5 text-base font-bold">회의록</h3>
             </header>
             {snap.recentMeetings.length === 0 ? (
-              <p className="text-text-dim px-5 py-8 text-center text-[13px]">회의록이 없습니다.</p>
+              <p className="text-text-dim px-5 py-8 text-center text-sm">회의록이 없습니다.</p>
             ) : (
               <ul className="divide-line divide-y">
                 {snap.recentMeetings.map((m) => (
                   <li key={m.id} className="px-5 py-3">
-                    <p className="text-foreground text-[13px] font-medium">{m.title}</p>
-                    <p className="text-text-dim mt-0.5 font-mono text-[11px]">{formatDate(m.heldAt)}</p>
+                    <p className="text-foreground text-sm font-medium">{m.title}</p>
+                    <p className="text-text-dim mt-0.5 font-mono text-xs">{formatDate(m.heldAt)}</p>
                   </li>
                 ))}
               </ul>
@@ -108,10 +108,10 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
 function Kpi({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
     <div className="bg-card border-line shadow-card rounded-md border p-4">
-      <p className="text-text-dim font-mono text-[11px] tracking-wider uppercase">{label}</p>
+      <p className="text-text-dim font-mono text-xs tracking-wider uppercase">{label}</p>
       <p className="text-foreground mt-1.5 flex items-baseline gap-1">
-        <span className="text-[24px] font-bold tabular-nums">{value}</span>
-        <span className="text-text-dim text-[11px]">{unit}</span>
+        <span className="text-2xl font-bold tabular-nums">{value}</span>
+        <span className="text-text-dim text-xs">{unit}</span>
       </p>
     </div>
   );

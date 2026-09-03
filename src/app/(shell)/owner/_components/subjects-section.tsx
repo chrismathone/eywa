@@ -36,11 +36,11 @@ import { SubjectSessionEditor } from "./subject-session-editor";
 import type { PeriodDef } from "@/features/periods/resolve";
 
 const cellCls =
-  "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-[13px] outline-none focus:border-primary";
+  "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary";
 const ghostBtnCls =
-  "border-line text-text-dim hover:text-foreground hover:border-primary inline-flex items-center gap-1 rounded-md border border-dashed px-3 py-1.5 text-[12px]";
+  "border-line text-text-dim hover:text-foreground hover:border-primary inline-flex items-center gap-1 rounded-md border border-dashed px-3 py-1.5 text-xs";
 const badgeCls =
-  "text-text-dim border-line rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap";
+  "text-text-dim border-line rounded border px-1.5 py-0.5 text-xs whitespace-nowrap";
 
 export function SubjectsSection({
   initial,
@@ -108,7 +108,7 @@ export function SubjectsSection({
               >
                 <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 rounded px-1 py-2 select-none [&::-webkit-details-marker]:hidden">
                   <EyIcon name="chevronRight" size={12} className="text-text-faint transition-transform group-open:rotate-90" />
-                  <span className="text-foreground text-[13px] font-bold">{s.label.trim() || s.key}</span>
+                  <span className="text-foreground text-sm font-bold">{s.label.trim() || s.key}</span>
                   <span className="ml-auto flex flex-wrap items-center gap-1.5">
                     <span className={badgeCls}>
                       {s.weekdayPeriods?.length ? `전용 ${s.weekdayPeriods.length}교시` : "전역 교시"}
@@ -135,8 +135,8 @@ export function SubjectsSection({
                 <div className="space-y-5 px-1 pt-1 pb-4">
                   {/* 수업 보고서 — 원스크린 일일·확인테스트 만점(문항 수). 기본 5. */}
                   <div className="space-y-2">
-                    <h4 className="text-foreground text-[12px] font-bold">수업 보고서 · 테스트</h4>
-                    <label className="flex flex-wrap items-center gap-2 text-[12px]">
+                    <h4 className="text-foreground text-xs font-bold">수업 보고서 · 테스트</h4>
+                    <label className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="text-text-dim w-[90px] shrink-0">테스트 문항수</span>
                       <input
                         type="number"
@@ -152,14 +152,14 @@ export function SubjectsSection({
                         }
                         aria-label={`${s.label.trim() || s.key} 테스트 문항수`}
                       />
-                      <span className="text-text-faint text-[11px]">일일·확인테스트 만점(/N). 기본 5</span>
+                      <span className="text-text-faint text-xs">일일·확인테스트 만점(/N). 기본 5</span>
                     </label>
                   </div>
 
                   {/* 수업계획(ECS) '구분' 영역 — English Class Sheet 계획 행의 영역 선택지. 저장은 영문 ID(불변),
                       라벨만 편집. english는 미설정 시 기본 6영역(Vocab~Speaking) 자동 사용(resolveSkillAreas). */}
                   <div className="space-y-2">
-                    <h4 className="text-foreground text-[12px] font-bold">수업계획(영어 강사 시트) 영역</h4>
+                    <h4 className="text-foreground text-xs font-bold">수업계획(영어 강사 시트) 영역</h4>
                     {s.skillAreas?.length ? (
                       <>
                         <SkillAreaListEditor
@@ -179,14 +179,14 @@ export function SubjectsSection({
                             ? "기본 6영역(Vocab~Speaking)으로 되돌리기"
                             : "영역 전체 해제 (수업계획 대상 제외)"}
                         </button>
-                        <p className="text-text-faint text-[11px]">
+                        <p className="text-text-faint text-xs">
                           영역을 삭제해도 이미 저장된 수업계획 행은 사라지지 않고 &lsquo;미등록 영역&rsquo;으로
                           표시됩니다.
                         </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-text-dim text-[12px]">
+                        <p className="text-text-dim text-xs">
                           {s.key === "english"
                             ? "기본 6영역(Vocab · Listening · Reading · Grammar · Writing · Speaking)을 사용 중입니다."
                             : "이 과목은 수업계획(ECS) 대상이 아닙니다."}
@@ -219,7 +219,7 @@ export function SubjectsSection({
 
                   {/* 평일 교시(과목 전용) — 미설정이면 전역(운영 체계 탭) 폴백. 주말 교시는 전역 공통. */}
                   <div className="space-y-2">
-                    <h4 className="text-foreground text-[12px] font-bold">평일 교시 (과목 전용)</h4>
+                    <h4 className="text-foreground text-xs font-bold">평일 교시 (과목 전용)</h4>
                     {s.weekdayPeriods?.length ? (
                       <>
                         <PeriodListEditor
@@ -243,7 +243,7 @@ export function SubjectsSection({
                       </>
                     ) : (
                       <>
-                        <p className="text-text-dim text-[12px]">
+                        <p className="text-text-dim text-xs">
                           전역 평일 교시(운영 체계 탭)를 사용 중입니다.
                         </p>
                         <button
@@ -261,8 +261,8 @@ export function SubjectsSection({
 
                   {/* 강사별시간표(강사뷰) — 가로줄(큰 섹션 경계 진한 선) + 격자 단위(분). */}
                   <div className="space-y-3">
-                    <h4 className="text-foreground text-[12px] font-bold">강사별시간표(강사뷰)</h4>
-                    <label className="flex items-center gap-2 text-[12px]">
+                    <h4 className="text-foreground text-xs font-bold">강사별시간표(강사뷰)</h4>
+                    <label className="flex items-center gap-2 text-xs">
                       <span className="text-text-dim w-[90px] shrink-0">격자 단위(분)</span>
                       <select
                         className={`${cellCls} w-[100px]`}
@@ -283,32 +283,32 @@ export function SubjectsSection({
                     </label>
                     {/* 격자 한 칸(=격자 단위 분) 높이(px). 내부는 "분당 px"로 저장(스텝 무관 밀도) — 스텝을 바꾸면
                         칸 높이는 비례로 재계산된다. 비우면 기본값(placeholder) 사용. 숫자 입력하는 대로 강사뷰 세로 간격이 바뀐다. */}
-                    <label className="flex items-center gap-2 text-[12px]">
+                    <label className="flex items-center gap-2 text-xs">
                       <span className="text-text-dim w-[90px] shrink-0">한 칸 높이(px)</span>
                       <RowHeightInput
                         pxPerMin={s.teacherViewPxPerMin}
                         step={s.teacherViewStep ?? 10}
                         onChange={(v) => patchSubject(i, { teacherViewPxPerMin: v })}
                       />
-                      <span className="text-text-faint text-[11px]">
+                      <span className="text-text-faint text-xs">
                         {s.teacherViewStep ?? 10}분 한 칸의 세로 높이 (비우면 기본)
                       </span>
                     </label>
                     <div className="space-y-1.5">
-                      <span className="text-text-dim block text-[12px]">가로줄(큰 섹션 경계) 시각</span>
+                      <span className="text-text-dim block text-xs">가로줄(큰 섹션 경계) 시각</span>
                       <TimeListEditor
                         value={s.teacherViewLines ?? []}
                         onChange={(v) => patchSubject(i, { teacherViewLines: v })}
                       />
                     </div>
-                    <p className="text-text-faint text-[11px]">
+                    <p className="text-text-faint text-xs">
                       강사뷰는 영어 또는 가로줄이 설정된 과목에서 노출됩니다. 가로줄 시각은 격자 단위에
                       맞춰 표시됩니다(예: 30분 격자에서 16:10은 16:00 선으로).
                     </p>
 
                     {/* 가로줄 제외 강사 — 이 강사 컬럼엔 큰 섹션 가로줄 미표시(예: LAB의 JJ·이주희). */}
                     <div className="space-y-1.5 pt-1">
-                      <span className="text-text-dim block text-[12px]">가로줄 제외 강사</span>
+                      <span className="text-text-dim block text-xs">가로줄 제외 강사</span>
                       <ExcludeTeacherChips
                         options={teacherLabels[s.key] ?? []}
                         value={s.teacherViewLineExcluded ?? []}
@@ -320,14 +320,14 @@ export function SubjectsSection({
 
                     {/* 쉬는 시간 — 앞뒤로 수업이 붙은 강사 컬럼에만 "쉬는 시간" 셀로 표시. */}
                     <div className="space-y-1.5 pt-1">
-                      <span className="text-text-dim block text-[12px]">쉬는 시간</span>
+                      <span className="text-text-dim block text-xs">쉬는 시간</span>
                       <BreakListEditor
                         value={s.teacherViewBreaks ?? []}
                         onChange={(v) =>
                           patchSubject(i, { teacherViewBreaks: v.length ? v : undefined })
                         }
                       />
-                      <p className="text-text-faint text-[11px]">
+                      <p className="text-text-faint text-xs">
                         설정한 시간대 앞에 끝나고 뒤에 시작하는 수업이 모두 있는 강사에게만 &lsquo;쉬는 시간&rsquo;
                         칸으로 표시됩니다(수업 사이). 앞뒤가 비어 있으면 표시되지 않습니다.
                       </p>
@@ -336,7 +336,7 @@ export function SubjectsSection({
 
                   {/* 세션 기간 — 이 과목이 실제로 운영되는 구간(달력월이 아니다). 원장 지시로 과목 운영 안에 둔다. */}
                   <div className="space-y-2">
-                    <h4 className="text-foreground text-[12px] font-bold">
+                    <h4 className="text-foreground text-xs font-bold">
                       세션 기간 <span className="text-text-faint font-normal">· {sessionYear}년</span>
                     </h4>
                     {openSubjects.has(s.key) ? (
@@ -351,7 +351,7 @@ export function SubjectsSection({
                         holidays={holidays}
                       />
                     ) : (
-                      <p className="text-text-faint text-[12px]">달력을 불러오는 중…</p>
+                      <p className="text-text-faint text-xs">달력을 불러오는 중…</p>
                     )}
                   </div>
                 </div>
@@ -455,20 +455,20 @@ function AbsorbDialog({
       <h3 className="text-foreground text-sm font-bold">‘{from.label}’ 과목 삭제</h3>
 
       {loadError ? (
-        <p className="text-danger mt-3 text-[12px]">{loadError}</p>
+        <p className="text-danger mt-3 text-xs">{loadError}</p>
       ) : !usage ? (
-        <p className="text-text-dim mt-3 text-[12px]">사용 데이터 확인 중…</p>
+        <p className="text-text-dim mt-3 text-xs">사용 데이터 확인 중…</p>
       ) : usage.total === 0 ? (
-        <p className="text-text-dim mt-3 text-[13px]">
+        <p className="text-text-dim mt-3 text-sm">
           이 과목을 쓰는 데이터가 없습니다. 삭제하면 즉시 적용됩니다.
         </p>
       ) : (
         <div className="mt-3 space-y-3">
-          <p className="text-text-dim text-[13px]">
+          <p className="text-text-dim text-sm">
             이 과목을 쓰는 데이터 <b className="text-foreground">{usage.total}건</b>이 있습니다. 삭제하려면
             아래에서 선택한 과목으로 <b className="text-foreground">모두 흡수</b>됩니다(즉시 적용).
           </p>
-          <ul className="text-text-dim flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
+          <ul className="text-text-dim flex flex-wrap gap-x-3 gap-y-1 text-xs">
             {usage.items.map((it) => (
               <li key={it.label} className="whitespace-nowrap">
                 {it.label} <b className="text-foreground">{it.count}</b>
@@ -476,7 +476,7 @@ function AbsorbDialog({
             ))}
           </ul>
           <div className="space-y-1">
-            <span className="text-text-dim block text-[12px]">흡수할 과목</span>
+            <span className="text-text-dim block text-xs">흡수할 과목</span>
             <SearchableSelect
               options={targets}
               value={target}
@@ -488,7 +488,7 @@ function AbsorbDialog({
         </div>
       )}
 
-      {error ? <p className="text-danger mt-3 text-[12px]">{error}</p> : null}
+      {error ? <p className="text-danger mt-3 text-xs">{error}</p> : null}
 
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
@@ -563,15 +563,15 @@ function MonthPlanTextsEditor({
   ];
   return (
     <div className="space-y-2">
-      <h4 className="text-foreground text-[12px] font-bold">월간 계획서(MP) 인쇄 문구</h4>
-      <p className="text-text-faint text-[11px]">
+      <h4 className="text-foreground text-xs font-bold">월간 계획서(MP) 인쇄 문구</h4>
+      <p className="text-text-faint text-xs">
         영어 강사 시트 · 계획(MP) 보기와 그 인쇄물이 함께 쓰는 문서 문구입니다(화면과 인쇄가 같은 값을
         읽습니다). 반마다 같은 문구라 여기서 한 번만 적습니다.
       </p>
       <div className="grid gap-2 lg:grid-cols-2">
         {fields.map((f) => (
           <label key={f.key} className="flex flex-col gap-1">
-            <span className="text-text-dim text-[11px] font-semibold">{f.label}</span>
+            <span className="text-text-dim text-xs font-semibold">{f.label}</span>
             <textarea
               className={`${cellCls} resize-y`}
               rows={f.rows}
@@ -579,7 +579,7 @@ function MonthPlanTextsEditor({
               onChange={(e) => patch(f.key, e.target.value)}
               aria-label={`월간 계획서 ${f.label}`}
             />
-            <span className="text-text-faint text-[11px]">{f.hint}</span>
+            <span className="text-text-faint text-xs">{f.hint}</span>
           </label>
         ))}
       </div>
@@ -664,7 +664,7 @@ function SkillAreaListEditor({
               </select>
             </span>
             <span className={badgeCls}>{a.key || "ID 자동"}</span>
-            {dup ? <span className="text-danger text-[11px]">이름 중복</span> : null}
+            {dup ? <span className="text-danger text-xs">이름 중복</span> : null}
             <button
               type="button"
               aria-label="영역 삭제"
@@ -789,7 +789,7 @@ function BreakListEditor({
             value={b.start}
             onChange={(e) => patch(i, { start: e.target.value })}
           />
-          <span className="text-text-faint text-[12px]">~</span>
+          <span className="text-text-faint text-xs">~</span>
           <input
             type="time"
             aria-label="쉬는 시간 종료"
@@ -834,7 +834,7 @@ function ExcludeTeacherChips({
   const names = Array.from(new Set([...options, ...value]));
   if (names.length === 0) {
     return (
-      <p className="text-text-faint text-[11px]">
+      <p className="text-text-faint text-xs">
         이 과목에 배정된 강사가 아직 없습니다. 시간표에 강사가 배정되면 여기서 선택할 수 있습니다.
       </p>
     );
@@ -852,7 +852,7 @@ function ExcludeTeacherChips({
             type="button"
             onClick={() => toggle(name)}
             aria-pressed={on}
-            className={`rounded-full border px-2.5 py-1 text-[12px] transition ${
+            className={`rounded-full border px-2.5 py-1 text-xs transition ${
               on
                 ? "border-primary bg-primary/10 text-primary font-bold"
                 : "border-line text-text-dim hover:border-primary/60"

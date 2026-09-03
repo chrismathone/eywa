@@ -79,7 +79,7 @@ export function DocList({
                 <td className="num text-text-dim px-3 py-2 text-xs whitespace-nowrap">
                   {d.submittedAt.slice(0, 10)}
                 </td>
-                <td className="text-text-dim px-3 py-2 text-[11px] whitespace-nowrap">
+                <td className="text-text-dim px-3 py-2 text-xs whitespace-nowrap">
                   {progressLabel(d)}
                 </td>
                 <td className="px-3 py-2 text-center">

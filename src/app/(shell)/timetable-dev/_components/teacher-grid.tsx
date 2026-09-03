@@ -246,10 +246,10 @@ export function TeacherGridView({
               >
                 {/* 한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
                     원어민은 이름이 곧 영어라 그대로. 닉네임은 한 단계 작게 — 이름이 먼저 읽혀야 한다. */}
-                <span className={`block overflow-hidden text-[16px] leading-tight font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
+                <span className={`block overflow-hidden text-base leading-tight font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
                   {t.name}
                   {teacherNicknames?.[t.name] ? (
-                    <span className="text-[13px] font-bold opacity-85">({teacherNicknames[t.name]})</span>
+                    <span className="text-sm font-bold opacity-85">({teacherNicknames[t.name]})</span>
                   ) : null}
                 </span>
               </th>
@@ -262,14 +262,14 @@ export function TeacherGridView({
                 <th
                   key={`${t.name}-${col.day}`}
                   colSpan={col.laneCount}
-                  className={`bg-bg-soft text-foreground sticky z-20 border-b px-1 py-0.5 text-center text-[10px] leading-tight font-bold ${GRID} ${
+                  className={`bg-bg-soft text-foreground sticky z-20 border-b px-1 py-0.5 text-center text-xs leading-tight font-bold ${GRID} ${
                     ci === t.cols.length - 1 ? TEACHER_EDGE : "border-r"
                   }`}
                   style={{ top: HEAD_TEACHER_H, height: HEAD_DAY_H }}
                 >
                   {DAY_LABEL[col.day] ?? col.day}
                   {dayDates[col.day] ? (
-                    <span className="text-ink/80 block text-[9px] font-bold">{dayDates[col.day]}</span>
+                    <span className="text-ink/80 block text-xs font-bold">{dayDates[col.day]}</span>
                   ) : null}
                 </th>
               )),
@@ -283,7 +283,7 @@ export function TeacherGridView({
                   전부 **본문 셀과 동일한 실제 border**(같은 렌더 경로 = 굵기·위치가 본문 가로줄과 정확히 일치). */}
               <td
                 className={`bg-bg-soft sticky left-0 z-10 border-r border-l px-1 py-0 text-right align-middle num leading-none ${GRID} ${bottomEdge(ri + 1).cls} ${
-                  row.isHour ? "text-foreground text-[9px] font-bold" : "text-ink/80 text-[9px] font-bold"
+                  row.isHour ? "text-foreground text-xs font-bold" : "text-ink/80 text-xs font-bold"
                 }`}
                 style={{ height: rowH }}
               >
@@ -311,7 +311,7 @@ export function TeacherGridView({
                           className="flex items-center justify-center"
                           style={{ height: brk.span * rowH - bottom.px }}
                         >
-                          <span className="text-text-faint text-[10px] whitespace-nowrap">
+                          <span className="text-text-faint text-xs whitespace-nowrap">
                             쉬는 시간
                           </span>
                         </div>
@@ -372,7 +372,7 @@ export function TeacherGridView({
                                     // ⚠️ cursor-default 필수 — 바깥 DragScrollArea가 컨테이너에
                                     // cursor-grab(펼친 손)을 깔아서, 안 덮으면 **끌어서 옮길 수 있는 것처럼**
                                     // 보인다(원장 지적 2026-07-22). 이 블록은 읽기 전용 라벨이다.
-                                    className="border-line text-text-dim bg-bg-soft/60 flex h-full min-w-0 flex-1 cursor-default items-center justify-center rounded-lg border border-dashed px-1 text-center text-[11px] leading-tight break-keep"
+                                    className="border-line text-text-dim bg-bg-soft/60 flex h-full min-w-0 flex-1 cursor-default items-center justify-center rounded-lg border border-dashed px-1 text-center text-xs leading-tight break-keep"
                                   >
                                     {s.className}
                                   </div>

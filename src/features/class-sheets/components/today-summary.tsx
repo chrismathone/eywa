@@ -26,7 +26,7 @@ function Stat({ label, value, done }: { label: string; value: string; done: bool
   return (
     <span className="flex items-baseline gap-1 whitespace-nowrap">
       <span className="micro">{label}</span>
-      <span className={`num text-[14px] font-bold ${done ? "text-text-dim" : "text-amber"}`}>{value}</span>
+      <span className={`num text-sm font-bold ${done ? "text-text-dim" : "text-amber"}`}>{value}</span>
     </span>
   );
 }
@@ -69,7 +69,7 @@ export function TodaySummary({
             type="button"
             aria-pressed={fontSize === s}
             onClick={() => onFontSize(s)}
-            className={`cursor-pointer rounded-full px-2 py-0.5 text-[12px] font-bold transition ${
+            className={`cursor-pointer rounded-full px-2 py-0.5 text-xs font-bold transition ${
               fontSize === s ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-bg-soft"
             }`}
           >

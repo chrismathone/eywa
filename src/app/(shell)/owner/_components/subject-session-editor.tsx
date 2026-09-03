@@ -147,20 +147,20 @@ export function SubjectSessionEditor({
     <div className="space-y-3">
       {/* 연도 전환 — searchParam이라 과목 운영 면 전체가 그 해로 바뀐다(과목마다 따로 놀지 않게). */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-text-dim text-[11px]">연도</span>
+        <span className="text-text-dim text-xs">연도</span>
         {[year - 1, year, year + 1].map((y) => (
           <Link
             key={y}
             href={`/owner?tab=subjects&year=${y}`}
             scroll={false}
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+            className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
               y === year ? "bg-primary text-primary-foreground" : "bg-card text-text-dim border-line border"
             }`}
           >
             {y}년
           </Link>
         ))}
-        {dirty ? <span className="text-amber text-[11px]">— 연도를 바꾸면 저장 전 변경은 사라집니다</span> : null}
+        {dirty ? <span className="text-amber text-xs">— 연도를 바꾸면 저장 전 변경은 사라집니다</span> : null}
       </div>
 
       <SessionCalendar year={year} painted={rows} holidays={holidays} onPaint={paint} onClear={clear} />
@@ -168,15 +168,15 @@ export function SubjectSessionEditor({
       {/* 설정된 세션 요약 — 구 출석부와 달리 **월/일을 모두** 보여준다(끝 월을 알 수 없던 문제). */}
       <div className="border-line rounded-lg border p-2.5">
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-text-dim text-[11px] font-bold">설정된 세션 ({sorted.length}개월)</span>
+          <span className="text-text-dim text-xs font-bold">설정된 세션 ({sorted.length}개월)</span>
           {sorted.length > 0 ? (
-            <button type="button" onClick={() => setPainted([])} className="text-text-faint hover:text-danger text-[11px]">
+            <button type="button" onClick={() => setPainted([])} className="text-text-faint hover:text-danger text-xs">
               전체 지우기
             </button>
           ) : null}
         </div>
         {sorted.length === 0 ? (
-          <p className="text-text-faint text-[12px]">
+          <p className="text-text-faint text-xs">
             아직 없습니다 — 비워 두면 이 과목은 <b>달력월</b>로 동작합니다.
           </p>
         ) : (
@@ -187,7 +187,7 @@ export function SubjectSessionEditor({
                 <span
                   key={r.labelMonth}
                   title={v.warning ?? v.note ?? "월~금 각 4회"}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
                     v.ok ? "border-line bg-card text-text-dim" : "border-amber/40 bg-amber-soft text-amber"
                   }`}
                 >
@@ -219,9 +219,9 @@ export function SubjectSessionEditor({
         </button>
         <div className="ml-auto flex items-center gap-2">
           {msg ? (
-            <span className={`text-[12px] ${msg.ok ? "text-green" : "text-danger"}`}>{msg.text}</span>
+            <span className={`text-xs ${msg.ok ? "text-green" : "text-danger"}`}>{msg.text}</span>
           ) : dirty ? (
-            <span className="text-amber text-[12px]">저장하지 않은 변경이 있습니다</span>
+            <span className="text-amber text-xs">저장하지 않은 변경이 있습니다</span>
           ) : null}
           <button
             type="button"
@@ -237,7 +237,7 @@ export function SubjectSessionEditor({
 
       {pasteOpen ? (
         <div className="border-line bg-card space-y-2 rounded-lg border p-2.5">
-          <p className="text-text-dim text-[12px]">
+          <p className="text-text-dim text-xs">
             한 줄에 한 달씩 — <b>3월 3/6~4/2</b>. 전해에 시작하는 1월 세션은 <b>1월 {year - 1}-12-28~1/24</b>처럼 연도까지.
           </p>
           <textarea

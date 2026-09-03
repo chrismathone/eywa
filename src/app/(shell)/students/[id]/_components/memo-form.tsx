@@ -72,7 +72,7 @@ export function MemoForm({ studentId }: { studentId: string }) {
             </option>
           ))}
         </select>
-        <span className="text-muted-foreground text-[11px]">분류</span>
+        <span className="text-muted-foreground text-xs">분류</span>
       </div>
       <textarea
         name="content"

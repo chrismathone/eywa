@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 
 const inputCls =
-  "border-line text-foreground block w-full rounded-md border bg-transparent px-3 py-2 text-[13px] outline-none focus:border-primary";
+  "border-line text-foreground block w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:border-primary";
 
 export function Field({
   label,
@@ -16,8 +16,8 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-foreground text-[12px] font-bold">{label}</span>
-      {hint ? <span className="text-text-dim ml-2 text-[11px]">{hint}</span> : null}
+      <span className="text-foreground text-xs font-bold">{label}</span>
+      {hint ? <span className="text-text-dim ml-2 text-xs">{hint}</span> : null}
       <div className="mt-1">{children}</div>
     </label>
   );
@@ -87,7 +87,7 @@ export function ColorField({
           onChange={(e) => onChange(e.target.value)}
         />
       </div>
-      {note ? <p className="text-text-dim mt-1.5 text-[11px] leading-snug">{note}</p> : null}
+      {note ? <p className="text-text-dim mt-1.5 text-xs leading-snug">{note}</p> : null}
     </Field>
   );
 }
@@ -164,8 +164,8 @@ export function ToggleField({
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
       <span className="min-w-0">
-        <span className="text-foreground text-[12px] font-bold">{label}</span>
-        {hint ? <span className="text-text-dim ml-2 text-[11px]">{hint}</span> : null}
+        <span className="text-foreground text-xs font-bold">{label}</span>
+        {hint ? <span className="text-text-dim ml-2 text-xs">{hint}</span> : null}
       </span>
       <input
         type="checkbox"

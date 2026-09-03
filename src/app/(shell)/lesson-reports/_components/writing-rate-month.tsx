@@ -96,7 +96,7 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
               {days.map((d, i) => (
                 <th
                   key={dates[i]}
-                  className={`border-line min-w-[30px] border-b border-r px-1 py-2 text-center text-[11px] font-bold ${
+                  className={`border-line min-w-[30px] border-b border-r px-1 py-2 text-center text-xs font-bold ${
                     d.dow === 0 || holidayDates.has(dates[i]!)
                       ? "text-danger"
                       : d.dow === 6
@@ -116,13 +116,13 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
           <tbody>
             {sorted.map((r) => (
               <tr key={r.teacher} className="hover:bg-bg-soft/40">
-                <td className="border-line text-foreground bg-card sticky left-0 z-10 border-b border-r px-3 py-2 text-[12px] font-bold whitespace-nowrap">
+                <td className="border-line text-foreground bg-card sticky left-0 z-10 border-b border-r px-3 py-2 text-xs font-bold whitespace-nowrap">
                   {r.teacher}
                   {/* 영어는 ClassNote 반 알림장 기준 — 일자 칸은 전부 '·'이고 월간 합계만 유효하다.
                       배지가 없으면 "매일 안 썼는데 합계는 있다"로 읽혀 오해를 산다. */}
                   {r.source === "classnote" ? (
                     <span
-                      className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-[10px] font-normal"
+                      className="border-line text-text-dim ml-1.5 rounded-full border px-1.5 py-0.5 text-xs font-normal"
                       title="영어는 ClassNote 반 알림장 기준(반 단위) — 일자별은 집계하지 않고 합계만 셉니다"
                     >
                       ClassNote
@@ -133,7 +133,7 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
                   <td
                     key={c.date}
                     // 휴일은 "수업 없음(·)"과 눈으로도 구분되게 옅은 음영 — 분모에서 빠진 날임을 표에서 바로 읽게.
-                    className={`border-line min-w-[30px] border-b border-r px-1 py-2 text-center text-[11px] font-bold ${
+                    className={`border-line min-w-[30px] border-b border-r px-1 py-2 text-center text-xs font-bold ${
                       c.holiday ? "bg-bg-soft text-text-faint" : cellTone(c.rate)
                     }`}
                     title={
@@ -152,10 +152,10 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
                   </td>
                 ))}
                 <td className="border-line bg-card sticky right-0 z-10 border-b border-l px-3 py-2 text-right whitespace-nowrap">
-                  <div className={`num text-[12px] font-bold ${totalTone(r.weekRate)}`}>
+                  <div className={`num text-xs font-bold ${totalTone(r.weekRate)}`}>
                     {r.weekRate == null ? "·" : `${r.weekRate}%`}
                   </div>
-                  <div className="text-text-faint num text-[10px]">
+                  <div className="text-text-faint num text-xs">
                     {r.weekWritten}/{r.weekTarget}
                   </div>
                 </td>
@@ -172,7 +172,7 @@ export function WritingRateMonth({ view }: { view: WritingRatesView }) {
         </table>
       </DragScrollArea>
 
-      <p className="text-text-faint text-[11px] break-keep">
+      <p className="text-text-faint text-xs break-keep">
         숫자 = 그날 작성률(%). 칸에 마우스를 올리면 작성/대상이 보입니다. <b>·</b> = 수업 없음(또는 아직 수업 전).
         오늘은 <b>시작된 수업까지만</b> 대상에 넣고, 이후 날짜는 판정하지 않습니다.
       </p>

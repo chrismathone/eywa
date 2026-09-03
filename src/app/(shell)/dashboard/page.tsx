@@ -364,14 +364,14 @@ export default async function TodayPage() {
         <section aria-labelledby="live-operations-title" className="space-y-3">
           <header className="flex flex-wrap items-end justify-between gap-2 px-1">
             <div>
-              <p className="text-primary text-[12px] font-bold">
+              <p className="text-primary text-xs font-bold">
                 실시간 운영
               </p>
-              <h2 id="live-operations-title" className="text-foreground mt-0.5 text-[17px] font-bold tracking-tight">
+              <h2 id="live-operations-title" className="text-foreground mt-0.5 text-lg font-bold tracking-tight">
                 지금 진행 중
               </h2>
             </div>
-            <p className="text-text-dim text-[12px]">수업 흐름과 사람 후속조치를 한곳에서 봅니다.</p>
+            <p className="text-text-dim text-xs">수업 흐름과 사람 후속조치를 한곳에서 봅니다.</p>
           </header>
           <div className={`grid items-start gap-4 ${liveGrid}`}>
             {showLiveSchedule ? (
@@ -418,14 +418,14 @@ export default async function TodayPage() {
       >
         <header className="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <p className="text-text-dim text-[12px] font-bold">
+            <p className="text-text-dim text-xs font-bold">
               참고 지표
             </p>
-            <h2 id="operations-context-title" className="text-foreground mt-0.5 text-[17px] font-bold tracking-tight">
+            <h2 id="operations-context-title" className="text-foreground mt-0.5 text-lg font-bold tracking-tight">
               운영 맥락
             </h2>
           </div>
-          <p className="text-text-dim text-[12px]">결정 뒤에 참고할 수납·등록·팀 공지입니다.</p>
+          <p className="text-text-dim text-xs">결정 뒤에 참고할 수납·등록·팀 공지입니다.</p>
         </header>
         {/* 안쪽 패널: 그림자를 빼고 모서리를 한 단 낮춘다(바깥 카드가 이미 떠 있으므로 두 번 띄우지 않는다).
             높이는 grid 기본(stretch)에 맡긴다 — `items-start`를 두면 짧은 패널이 위로 붙는다. */}

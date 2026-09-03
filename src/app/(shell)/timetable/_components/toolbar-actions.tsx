@@ -28,7 +28,7 @@ const KIND_EXPORT_TITLE =
  * 메뉴로 접어 놓으면 "왜 못 누르지"를 확인할 다른 경로가 없다(원장 제보 이력: "마우스 올려도 안 보임").
  */
 function Reason({ text }: { text: string }) {
-  return <p className="text-text-faint px-2 pb-1 text-[10px] leading-snug break-keep">{text}</p>;
+  return <p className="text-text-faint px-2 pb-1 text-xs leading-snug break-keep">{text}</p>;
 }
 
 export function TimetableToolbarActions({
@@ -255,7 +255,7 @@ export function TimetableToolbarActions({
                   ) : null}
                   {syncMsg ? (
                     <p
-                      className={`px-2 pb-1 text-[10px] leading-snug break-keep ${
+                      className={`px-2 pb-1 text-xs leading-snug break-keep ${
                         syncMsg === "시트에 반영됨" ? "text-primary" : "text-chart-4"
                       }`}
                     >

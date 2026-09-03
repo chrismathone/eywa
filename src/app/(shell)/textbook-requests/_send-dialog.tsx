@@ -136,14 +136,14 @@ export function TextbookSendDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="text-[15px]">학부모에게 발송 · 교재 신청 안내</DialogTitle>
+          <DialogTitle className="text-base">학부모에게 발송 · 교재 신청 안내</DialogTitle>
         </DialogHeader>
 
         {prep === null ? (
-          <p className="text-text-dim py-6 text-center text-[13px]">발송 정보를 불러오는 중…</p>
+          <p className="text-text-dim py-6 text-center text-sm">발송 정보를 불러오는 중…</p>
         ) : !prep.ok ? (
           <div className="flex items-center justify-between gap-3">
-            <p className="text-danger text-[13px]">{prep.error ?? "발송 정보를 불러오지 못했습니다"}</p>
+            <p className="text-danger text-sm">{prep.error ?? "발송 정보를 불러오지 못했습니다"}</p>
             <Button variant="outline" onClick={onClose}>
               닫기
             </Button>
@@ -166,7 +166,7 @@ export function TextbookSendDialog({
             <CoverPicker covers={covers} onChange={setCovers} disabled={busy || attachOff || !!workerError} />
 
             <div className="space-y-1.5">
-              <span className="text-text-dim block text-[12px] font-medium">
+              <span className="text-text-dim block text-xs font-medium">
                 받는 학생 <span className="num">{sendable.length}</span>명
               </span>
               <SendTargetList
@@ -188,7 +188,7 @@ export function TextbookSendDialog({
             {skipped ? <SendSkipList skipped={skipped} /> : null}
 
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="text-text-faint text-[11px]">실제 학부모에게 가지 않습니다</span>
+              <span className="text-text-faint text-xs">실제 학부모에게 가지 않습니다</span>
               <Button variant="secondary" disabled={!canSend} onClick={() => send(true)}>
                 학원이 테스트 발송
               </Button>

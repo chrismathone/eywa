@@ -128,7 +128,7 @@ export function TrackClient({
         >
           <EyIcon name="chevronLeft" size={16} />
         </Button>
-        <span className="text-foreground px-1 text-[14.5px] font-bold whitespace-nowrap">
+        <span className="text-foreground px-1 text-sm font-bold whitespace-nowrap">
           {formatKoreanDate(date)}
         </span>
         <Button
@@ -154,14 +154,14 @@ export function TrackClient({
         )}
         {/* 시각을 적는다 — "방금"은 10분 뒤에 거짓이 된다(신호가 온 적 없으면 아예 안 그린다). */}
         {lastSignalAt !== null && (
-          <span className="text-green ml-auto text-[11.5px] font-bold whitespace-nowrap">
+          <span className="text-green ml-auto text-xs font-bold whitespace-nowrap">
             <span className="num">{kstTimeOf(new Date(lastSignalAt))}</span> 갱신됨
           </span>
         )}
       </div>
 
       {/* 🔑 **왜 아직 비어 있는지를 한 번만** 말한다 — 카드마다 반복하면 잔소리가 된다. */}
-      <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2.5 text-[12.5px] leading-relaxed">
+      <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2.5 text-xs leading-relaxed">
         실시간 위치는 아직 <span className="text-foreground font-bold">자리만 잡혀</span> 있습니다.
         차량이 지도에 뜨려면 두 가지가 더 필요합니다 —{" "}
         <span className="text-foreground font-bold">① 운행 중 기사·동승 선생님 폰이 위치를 보내는 기능</span>{" "}
@@ -174,7 +174,7 @@ export function TrackClient({
 
       {/* 🔴 0243a 미적용 — 상태를 그리는 대신 **왜 안 보이는지**를 말한다(운행 현황과 같은 규약). */}
       {!tripsReady && (
-        <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-[12.5px]">
+        <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-xs">
           운행 상태(출발·종료)는 마이그레이션 <span className="num">0243a</span>를 적용하면 보입니다.
         </div>
       )}

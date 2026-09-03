@@ -144,7 +144,7 @@ export function OneScreenTopBar({
                   }
                 }}
               >
-                <p className="text-foreground text-[13px] font-bold">{today}</p>
+                <p className="text-foreground text-sm font-bold">{today}</p>
                 <input
                   ref={dateRef}
                   type="date"
@@ -203,7 +203,7 @@ export function OneScreenTopBar({
             <>
               <span className="bg-line h-4 w-px shrink-0" aria-hidden />
               <span
-                className="text-amber text-[11px] font-bold"
+                className="text-amber text-xs font-bold"
                 title="결근한 선생님 대신 이 기간에만 맡은 반입니다"
               >
                 위임
@@ -256,7 +256,7 @@ export function OneScreenTopBar({
 
         {/* 우측: 마감 통계 + 카드/표 토글 */}
         <div className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <div className="text-text-dim flex items-center gap-x-2.5 text-[12px]">
+          <div className="text-text-dim flex items-center gap-x-2.5 text-xs">
             <span>
               학생 <b className="text-foreground tabular">{stats.students}</b>
             </span>
@@ -445,7 +445,7 @@ function ClassChip({
       }
       className={`${base} ${tone}`}
     >
-      <span className={`font-mono text-[10px] font-bold ${timeTone}`}>{c.startTime ?? "—"}</span>
+      <span className={`font-mono text-xs font-bold ${timeTone}`}>{c.startTime ?? "—"}</span>
       <span className={on ? "" : c.delegated ? "" : "text-foreground"}>{c.name}</span>
       {/* '수업보고서 미발송' 반 — 눌러서 보고서 칸이 잠긴 걸 보기 **전에** 알린다(2026-08-19). */}
       {c.reportOptout ? (

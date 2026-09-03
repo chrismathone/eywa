@@ -27,15 +27,15 @@ export function AbsenceRiskCard({ items }: { items: AbsenceRisk[] }) {
                 title={s.studentName}
                 className="group flex items-baseline justify-between py-1.5"
               >
-                <span className="text-foreground group-hover:text-primary text-[13px] font-medium">
+                <span className="text-foreground group-hover:text-primary text-sm font-medium">
                   {s.studentName}
                 </span>
-                <span className="text-danger num text-[11px]">14일 {s.absences}회</span>
+                <span className="text-danger num text-xs">14일 {s.absences}회</span>
               </WindowLink>
             </li>
           ))}
           {items.length > CAP ? (
-            <li className="text-text-faint pt-2 text-[11px]">외 {items.length - CAP}명</li>
+            <li className="text-text-faint pt-2 text-xs">외 {items.length - CAP}명</li>
           ) : null}
         </ul>
       )}

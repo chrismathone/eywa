@@ -221,17 +221,17 @@ export function PlanSheetImportDialog({
             aria-label="시트에서 계획 가져오기"
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-bold">시트에서 계획 가져오기</h2>
+              <h2 className="text-foreground text-base font-bold">시트에서 계획 가져오기</h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
                 <X className="size-4" />
               </button>
             </header>
-            <p className="text-text-dim mt-1 text-[11px] break-keep">
+            <p className="text-text-dim mt-1 text-xs break-keep">
               구글 시트에서 <b>그 탭 주소를 통째로 복사</b>해 붙여넣으면 그 탭의 배치를 <b>고른 달의 계획</b>으로 가져옵니다.
               실제 시간표(출결·급여가 보는 표)는 <b>바뀌지 않습니다</b>.
             </p>
             {email ? (
-              <p className="text-text-faint mt-1 flex items-start gap-1 text-[11px] break-keep">
+              <p className="text-text-faint mt-1 flex items-start gap-1 text-xs break-keep">
                 <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
                 <span>
                   처음 쓰는 시트라면 <b className="text-text-dim break-all">{email}</b> 계정에 <b>보기 권한</b>으로 공유한 뒤 다시 시도하세요.
@@ -243,7 +243,7 @@ export function PlanSheetImportDialog({
               {/* 🔴 출처를 눈에 보이게 — 이게 없으면 "무엇이 들어오는지 모른 채" 적용하게 된다.
                   주소가 비어 있으면 **기존 연동 시트**를 읽는다는 사실을 그 자리에서 말한다. */}
               <p
-                className={`rounded-lg border px-2 py-1.5 text-[11px] break-keep ${
+                className={`rounded-lg border px-2 py-1.5 text-xs break-keep ${
                   url.trim()
                     ? "border-primary/30 bg-primary-soft text-foreground"
                     : "border-amber/30 bg-amber-soft text-foreground"
@@ -262,7 +262,7 @@ export function PlanSheetImportDialog({
               </p>
               <div className="flex items-end gap-2">
                 <label className="flex-1">
-                  <span className="text-text-faint text-[11px]">시트 주소</span>
+                  <span className="text-text-faint text-xs">시트 주소</span>
                   <input
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
@@ -278,7 +278,7 @@ export function PlanSheetImportDialog({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="text-text-faint text-[11px]">가져올 탭</span>
+                  <span className="text-text-faint text-xs">가져올 탭</span>
                   <SearchableSelect
                     options={tabOptions}
                     value={tabName}
@@ -292,7 +292,7 @@ export function PlanSheetImportDialog({
                   />
                 </label>
                 <label className="block">
-                  <span className="text-text-faint text-[11px]">계획을 담을 달</span>
+                  <span className="text-text-faint text-xs">계획을 담을 달</span>
                   <SearchableSelect
                     options={monthOptions}
                     value={target}
@@ -305,7 +305,7 @@ export function PlanSheetImportDialog({
                   />
                 </label>
               </div>
-              <label className="text-text-dim flex items-start gap-1.5 text-[11px] break-keep">
+              <label className="text-text-dim flex items-start gap-1.5 text-xs break-keep">
                 <input type="checkbox" checked={replace} onChange={(e) => { setReplace(e.target.checked); }} className="mt-0.5" />
                 <span>
                   이 달 계획을 <b>통째로 교체</b>합니다(시트에 없는 칸은 지움). 꺼두면 시트에 있는 칸만 더하거나 고치고 나머지는 그대로 둡니다.
@@ -337,25 +337,25 @@ export function PlanSheetImportDialog({
                   ② 적용
                 </button>
                 {applyBlockedReason ? (
-                  <span className="text-text-faint text-[11px] break-keep">{applyBlockedReason}</span>
+                  <span className="text-text-faint text-xs break-keep">{applyBlockedReason}</span>
                 ) : null}
               </div>
             </div>
 
             {msg ? (
-              <p className="text-danger mt-3 text-[12px] break-keep" title={msg.detail}>
+              <p className="text-danger mt-3 text-xs break-keep" title={msg.detail}>
                 {msg.text}
               </p>
             ) : null}
             {applied ? (
-              <p className="bg-green-soft text-green mt-3 flex items-start gap-1 rounded-lg p-2 text-[12px] break-keep">
+              <p className="bg-green-soft text-green mt-3 flex items-start gap-1 rounded-lg p-2 text-xs break-keep">
                 <Check size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
                 {applied}
               </p>
             ) : null}
 
             {plan ? (
-              <div className="mt-4 flex-1 space-y-3 overflow-auto pr-1 text-[12px]">
+              <div className="mt-4 flex-1 space-y-3 overflow-auto pr-1 text-xs">
                 <div className="num flex flex-wrap gap-3">
                   <span className="text-blue">추가 {plan.counts.add}</span>
                   <span className="text-primary">변경 {plan.counts.update}</span>
@@ -389,20 +389,20 @@ export function PlanSheetImportDialog({
                       ))}
                   </div>
                 ) : (
-                  <p className="bg-bg-soft text-text-dim rounded-lg p-2 text-[11px]">
+                  <p className="bg-bg-soft text-text-dim rounded-lg p-2 text-xs">
                     더하거나 고칠 칸이 없습니다 — 시트와 계획이 이미 같습니다.
                   </p>
                 )}
 
                 {plan.counts.orphan > 0 ? (
-                  <p className="text-text-faint text-[11px] break-keep">
+                  <p className="text-text-faint text-xs break-keep">
                     시트에 없는 계획 칸 {plan.counts.orphan}개
                     {replace ? " — 통째 교체라 지워집니다." : " — 그대로 둡니다(통째 교체를 켜면 지워집니다)."}
                   </p>
                 ) : null}
 
                 {plan.skipped.length > 0 ? (
-                  <div className="bg-danger-soft text-danger rounded-lg p-2 text-[11px]">
+                  <div className="bg-danger-soft text-danger rounded-lg p-2 text-xs">
                     <p className="mb-1 font-bold">계획에 담지 못한 칸 {plan.counts.skipped}개</p>
                     <div className="max-h-20 space-y-0.5 overflow-auto">
                       {plan.skipped.slice(0, 20).map((s, i) => (
@@ -415,7 +415,7 @@ export function PlanSheetImportDialog({
                 ) : null}
 
                 {plan.warnings.length > 0 ? (
-                  <div className="bg-amber-soft text-amber rounded-lg p-2 text-[11px]">
+                  <div className="bg-amber-soft text-amber rounded-lg p-2 text-xs">
                     <p className="mb-1 flex items-center gap-1 font-bold">
                       <AlertTriangle className="size-3" /> 확인 필요 {plan.warnings.length}건
                     </p>

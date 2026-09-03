@@ -113,7 +113,7 @@ export function PermissionsSection({
       <>
       <section className="border-border bg-card rounded-2xl border p-5">
         <h3 className="text-foreground text-sm font-bold">강사 &lsquo;내 메뉴&rsquo; 표시</h3>
-        <p className="text-text-dim mt-1 text-[12px] leading-relaxed">
+        <p className="text-text-dim mt-1 text-xs leading-relaxed">
           강사 화면 우상단 <b>내 메뉴</b> 드롭다운에 보여줄 탭을 고릅니다. 끄면 그 탭이 숨겨지고 강사가 해당
           페이지에 접근할 수 없습니다(모든 강사 공통). <b>수업 마감(원스크린)</b>은 강사 홈이라 항상 표시됩니다.
           세부 권한(담당/읽기 등)은 아래 표에서 조정합니다.
@@ -125,7 +125,7 @@ export function PermissionsSection({
             return (
               <label
                 key={menu}
-                className={`border-border flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] ${
+                className={`border-border flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
                   locked ? "opacity-60" : "hover:bg-bg-soft cursor-pointer"
                 }`}
               >
@@ -147,13 +147,13 @@ export function PermissionsSection({
       </section>
       <section className="border-border bg-card rounded-2xl border p-5">
         <h3 className="text-foreground text-sm font-bold">역할별 메뉴 권한</h3>
-        <p className="text-text-dim mt-1 text-[12px] leading-relaxed">
+        <p className="text-text-dim mt-1 text-xs leading-relaxed">
           셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
           (현재 {overrides.length}개 변경). 선생님 원스크린·내 학습은 역할 전용이라 고정이고, 학생 역할과
           원장의 설정·관리자 도구·운영실 접근은 잠글 수 없습니다. 강사 운영실은 담당 범위 집계가 없어 비활성화됩니다.
         </p>
         <DragScrollArea className="border-border mt-4 rounded-md border">
-          <table className="w-full border-collapse text-[12px]">
+          <table className="w-full border-collapse text-xs">
             <thead>
               <tr className="bg-bg-soft">
                 <th className="bg-bg-soft sticky left-0 z-10 px-3 py-2 text-left font-bold whitespace-nowrap">
@@ -182,7 +182,7 @@ export function PermissionsSection({
                           disabled={locked}
                           onClick={() => cycle(menu, role)}
                           title={locked ? "고정" : "클릭하여 변경"}
-                          className={`w-full min-w-[3rem] rounded px-1.5 py-1 text-[11px] font-medium transition ${ACCESS_CLS[a]} ${
+                          className={`w-full min-w-[3rem] rounded px-1.5 py-1 text-xs font-medium transition ${ACCESS_CLS[a]} ${
                             locked ? "cursor-default opacity-40" : "hover:ring-primary/40 hover:ring-1"
                           }`}
                         >
@@ -201,18 +201,18 @@ export function PermissionsSection({
           // 설현·이승엽 admin에게만 개별 허용, 2026-08-01). 표의 역할 값과 다르게 동작하는 이유를 원장이
           // 여기서 확인한다. 편집은 시스템 반영(스크립트) 경로만 — 이 폼은 저장 시 그대로 보존한다.
           <div className="border-border bg-bg-soft mt-4 rounded-md border px-4 py-3">
-            <p className="text-foreground text-[12px] font-bold">개인 예외 {userOverrides.length}건</p>
-            <p className="text-text-dim mt-0.5 text-[11px] leading-relaxed">
+            <p className="text-foreground text-xs font-bold">개인 예외 {userOverrides.length}건</p>
+            <p className="text-text-dim mt-0.5 text-xs leading-relaxed">
               아래 사용자는 역할과 무관하게 해당 메뉴가 개별 적용됩니다(위 표보다 우선).
             </p>
             <ul className="mt-1.5 space-y-0.5">
               {userOverrides.map((o) => (
-                <li key={`${o.userId}-${o.menu}`} className="text-[12px]">
+                <li key={`${o.userId}-${o.menu}`} className="text-xs">
                   <span className="text-foreground font-medium">
                     {userOverrideNames[o.userId] || `${o.userId.slice(0, 8)}…`}
                   </span>
                   <span className="text-text-dim"> — {MENU_LABEL[o.menu]}: </span>
-                  <span className={`rounded px-1 py-0.5 text-[11px] font-medium ${ACCESS_CLS[o.access]}`}>
+                  <span className={`rounded px-1 py-0.5 text-xs font-medium ${ACCESS_CLS[o.access]}`}>
                     {ACCESS_LABEL[o.access]}
                   </span>
                 </li>

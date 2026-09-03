@@ -255,11 +255,11 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                   <td className="px-3 py-2.5">
                     {/* 구분이 섞인 청구서는 한 칩으로 뭉치지 않는다 - '수업'이라 적어 놓고 교재가 섞이면 거짓말. */}
                     {sum.kind ? (
-                      <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${KIND_STYLE[kindLabel(sum.kind)] ?? "text-text-dim bg-bg-soft"}`}>
+                      <span className={`inline-block rounded-sm px-1.5 py-0.5 text-xs font-medium ${KIND_STYLE[kindLabel(sum.kind)] ?? "text-text-dim bg-bg-soft"}`}>
                         {kindLabel(sum.kind) || "수업"}
                       </span>
                     ) : (
-                      <span className="text-text-dim bg-bg-soft inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium">
+                      <span className="text-text-dim bg-bg-soft inline-block rounded-sm px-1.5 py-0.5 text-xs font-medium">
                         여러 구분
                       </span>
                     )}
@@ -367,7 +367,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                     {li.dueDay ?? dayOfMonth(r.billedAt) ?? "—"}
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${KIND_STYLE[kindLabel(li.kind)] ?? "text-text-dim bg-bg-soft"}`}>
+                    <span className={`inline-block rounded-sm px-1.5 py-0.5 text-xs font-medium ${KIND_STYLE[kindLabel(li.kind)] ?? "text-text-dim bg-bg-soft"}`}>
                       {kindLabel(li.kind) || "수업"}
                     </span>
                   </td>

@@ -113,21 +113,21 @@ export function TeacherCompEditor({
       )}
       {type === "commission" || type === "hybrid" ? (
         <div className="border-line flex w-full flex-wrap items-center gap-1.5 rounded-md border border-dashed px-2 py-1.5">
-          <span className="text-text-faint text-[11px]">과정별</span>
+          <span className="text-text-faint text-xs">과정별</span>
           {SALARY_GROUPS.map((g) => (
-            <label key={g} className="text-text-dim inline-flex items-center gap-0.5 text-[11px]">
+            <label key={g} className="text-text-dim inline-flex items-center gap-0.5 text-xs">
               {g}
               <input
                 name={`rate_${g}`}
                 defaultValue={groupRates?.[g] ?? ""}
                 inputMode="decimal"
                 placeholder="—"
-                className="border-line bg-card text-foreground w-11 rounded-md border px-1 py-0.5 text-[11px]"
+                className="border-line bg-card text-foreground w-11 rounded-md border px-1 py-0.5 text-xs"
               />
               %
             </label>
           ))}
-          <span className="text-text-faint text-[10px]">비우면 위 기본 배분율 적용</span>
+          <span className="text-text-faint text-xs">비우면 위 기본 배분율 적용</span>
         </div>
       ) : null}
       {type === "fixed" || type === "hybrid" ? (
@@ -152,7 +152,7 @@ export function TeacherCompEditor({
       >
         취소
       </button>
-      {state?.error ? <span className="text-danger w-full text-[11px]">{state.error}</span> : null}
+      {state?.error ? <span className="text-danger w-full text-xs">{state.error}</span> : null}
     </form>
   );
 }

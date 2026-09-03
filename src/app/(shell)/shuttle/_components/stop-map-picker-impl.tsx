@@ -198,15 +198,15 @@ export function StopMapPickerImpl({ appKey, lat, lng, radiusM, onPick }: StopMap
         aria-label="정류장 위치 지도"
       />
       {status === "loading" && (
-        <p className="text-text-faint text-[11.5px]">지도를 불러오는 중입니다…</p>
+        <p className="text-text-faint text-xs">지도를 불러오는 중입니다…</p>
       )}
       {status === "failed" && (
-        <p className="text-danger text-[11.5px]">
+        <p className="text-danger text-xs">
           지도를 불러오지 못했습니다 — 아래에서 위도·경도를 직접 입력하세요.
         </p>
       )}
       {status === "ready" && (
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           지도를 누르면 그 자리가 정류장 위치가 됩니다. 원은 도착 반경입니다.
         </p>
       )}

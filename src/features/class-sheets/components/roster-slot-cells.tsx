@@ -61,7 +61,7 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
         <WindowLink
           href={`/students/${entry.studentId}`}
           title={meta?.name}
-          className={`min-w-0 truncate text-[13px] font-bold underline-offset-2 hover:underline ${
+          className={`min-w-0 truncate text-sm font-bold underline-offset-2 hover:underline ${
             entry.historical ? "text-text-dim" : "text-foreground"
           } ${entry.endedOn ? "line-through" : ""}`}
           ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
@@ -72,14 +72,14 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
           </span>
         </WindowLink>
         {entry.endedOn ? (
-          <span className="text-text-dim num shrink-0 text-[13px]" title={`${entry.endedOn} 수강 종료`}>
+          <span className="text-text-dim num shrink-0 text-sm" title={`${entry.endedOn} 수강 종료`}>
             {entry.endedOn.slice(5)}
           </span>
         ) : null}
       </div>
       {/* 둘째 줄: 영어이름 — 행 글자 13px 통일 규약의 유일한 예외(보조 표기라 11px dim, ui-box.ts 각주). */}
       {meta?.englishName ? (
-        <div className="text-text-dim truncate text-[11px] leading-tight font-semibold" title={meta.englishName}>
+        <div className="text-text-dim truncate text-xs leading-tight font-semibold" title={meta.englishName}>
           {meta.englishName}
         </div>
       ) : null}
@@ -143,7 +143,7 @@ export function RosterSlotCells({
   const textCols = rosterTextCols(form);
   if (entry === null) {
     const offTitle = "이 교시 수강 대상이 아닙니다";
-    const dash = <span className="text-text-faint text-[13px] font-semibold">—</span>;
+    const dash = <span className="text-text-faint text-sm font-semibold">—</span>;
     return (
       <>
         <td className={`py-px text-center ${dividerCls}`} title={offTitle}>
@@ -200,7 +200,7 @@ export function RosterSlotCells({
         {/* 유닛 = session_units. 결석은 시수를 안 쓰고, 기록이 없으면 값 자체가 없다('—', 원장 "없는 경우 -"). */}
         {att?.status === "absent" ? (
           <span
-            className="text-text-faint text-[13px] font-semibold"
+            className="text-text-faint text-sm font-semibold"
             title="결석은 유닛(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
           >
             —
@@ -217,7 +217,7 @@ export function RosterSlotCells({
             }
           />
         ) : (
-          <span className="text-text-faint text-[13px] font-semibold">—</span>
+          <span className="text-text-faint text-sm font-semibold">—</span>
         )}
       </td>
       <td className="py-px pr-1">
@@ -344,7 +344,7 @@ export function WithdrawnSummaryRow({
         <WindowLink
           href={`/students/${entry.studentId}`}
           title={meta?.name}
-          className="text-text-dim shrink-0 text-[13px] font-bold line-through underline-offset-2 hover:underline"
+          className="text-text-dim shrink-0 text-sm font-bold line-through underline-offset-2 hover:underline"
           ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
         >
           <span
@@ -355,10 +355,10 @@ export function WithdrawnSummaryRow({
             {meta?.name ?? "?"}
           </span>
         </WindowLink>
-        {summary ? <span className="text-text-dim shrink-0 text-[13px]">{summary}</span> : null}
+        {summary ? <span className="text-text-dim shrink-0 text-sm">{summary}</span> : null}
         {/* 남은 기록 — 길면 잘리고 전체는 툴팁에(한 줄 요약이 두 줄로 부풀지 않게). */}
         {kept ? (
-          <span className="text-text-dim min-w-0 truncate text-[13px]" title={kept}>
+          <span className="text-text-dim min-w-0 truncate text-sm" title={kept}>
             · {kept}
           </span>
         ) : null}

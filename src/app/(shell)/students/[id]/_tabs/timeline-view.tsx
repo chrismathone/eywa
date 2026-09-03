@@ -121,14 +121,14 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="num text-muted-foreground text-xs">{e.date}</span>
                 <span
-                  className={`bg-bg-soft/40 border-border inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                  className={`bg-bg-soft/40 border-border inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-medium ${
                     meta.color.split(" ")[1]
                   }`}
                 >
                   {meta.label}
                 </span>
                 {e.registrant ? (
-                  <span className="text-text-faint text-[11px]">· {e.registrant}</span>
+                  <span className="text-text-faint text-xs">· {e.registrant}</span>
                 ) : null}
               </div>
               {/* 제목(굵게) — 본문과 위계 분리 */}

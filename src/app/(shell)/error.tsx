@@ -46,7 +46,7 @@ export default function ShellError({
           </Button>
         </div>
         {error.digest ? (
-          <p className="text-text-faint num mt-4 text-[11px]">오류 번호 {error.digest}</p>
+          <p className="text-text-faint num mt-4 text-xs">오류 번호 {error.digest}</p>
         ) : null}
       </div>
     </div>

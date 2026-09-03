@@ -41,7 +41,7 @@ export function ClassNarrativePopover({
     >
       <Popover.Trigger
         disabled={disabled || !activeClass}
-        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title={
           activeClass
             ? "이 반의 오늘 수업 맥락을 한 번 적어두면, 자동작성이 학생별 점수·태도와 결합해 서로 다른 멘트를 만듭니다"
@@ -52,8 +52,8 @@ export function ClassNarrativePopover({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[320px] flex-col gap-2 rounded-lg border p-3 text-[12px] outline-none">
-            <p className="text-text-dim text-[11px]">
+          <Popover.Popup className="bg-card border-line shadow-card flex w-[320px] flex-col gap-2 rounded-lg border p-3 text-xs outline-none">
+            <p className="text-text-dim text-xs">
               <span className="text-foreground font-bold">{activeClass}</span> 반 공통 수업 맥락 — 이후 자동작성부터
               학생별 사실과 결합됩니다(이미 쓴 멘트는 안 건드림)
             </p>
@@ -63,10 +63,10 @@ export function ClassNarrativePopover({
               rows={4}
               placeholder="예: 오늘은 2단원 심화 문제 위주로 진행. 대체로 이해도가 좋았고 응용 문제에서 시간이 걸렸음"
               aria-label="반 공통 수업 서술"
-              className="border-line bg-card focus:border-primary w-full resize-none rounded-lg border px-2 py-1.5 text-[12px] outline-none"
+              className="border-line bg-card focus:border-primary w-full resize-none rounded-lg border px-2 py-1.5 text-xs outline-none"
             />
             <div className="flex items-center justify-between">
-              <span className="text-text-faint text-[11px]">
+              <span className="text-text-faint text-xs">
                 {draft.length}/{CLASS_NARRATIVE_MAX}
               </span>
               <div className="flex gap-1.5">

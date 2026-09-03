@@ -36,7 +36,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
   return (
     <>
       <span
-        className="text-text-dim text-[12.5px]"
+        className="text-text-dim text-xs"
         title="휴강으로 표시한 날은 분모에서 빠집니다. 달력·진도표의 '계획 N/M교시'는 축이 교시라 이 숫자와 다릅니다."
       >
         계획{" "}
@@ -47,7 +47,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
       </span>
       {summary.unwritten > 0 ? (
         <span
-          className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold"
+          className="text-amber inline-flex items-center gap-1.5 text-xs font-bold"
           title="계획은 적었는데 그 날 주간 시트에 기록이 없는 날입니다"
         >
           <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
@@ -56,7 +56,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
       ) : null}
       {summary.offBook > 0 ? (
         <span
-          className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold"
+          className="text-amber inline-flex items-center gap-1.5 text-xs font-bold"
           title="계획에 적은 교재가 그 날 기록 어디에도 없는 날입니다(쪽수는 대조하지 않습니다)"
         >
           <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
@@ -65,7 +65,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
       ) : null}
       {summary.noPlan > 0 ? (
         <span
-          className="text-text-faint text-[12.5px]"
+          className="text-text-faint text-xs"
           title="기록은 있는데 계획 칸이 비어 있는 날입니다 — 경고가 아닙니다"
         >
           계획 없음 <span className="num">{summary.noPlan}일</span>

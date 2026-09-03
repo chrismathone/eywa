@@ -94,7 +94,7 @@ export function ReportPreview({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
         <p className="micro text-text-faint">학부모 화면 미리보기</p>
-        <p className="text-text-faint text-[11px]">왼쪽에서 고치면 바로 반영됩니다</p>
+        <p className="text-text-faint text-xs">왼쪽에서 고치면 바로 반영됩니다</p>
       </div>
       {/* 학부모가 보는 것과 같은 카드. 배경을 한 겹 깔아 '입력 영역이 아니라 결과물'임을 눈으로 가른다.
           🔴 폭을 **실제 발송 이미지와 같게** 둔다(원장 2026-08-05 "실제 학부모가 보는 이미지 크기로"):
@@ -130,7 +130,7 @@ export function ReportPreview({
         />
       </div>
       {imagesPending ? (
-        <p className="text-text-faint text-[11px] leading-snug">
+        <p className="text-text-faint text-xs leading-snug">
           첨부 {pendingAttachments}건은 업로드가 끝나면 미리보기에 나타납니다.
         </p>
       ) : null}

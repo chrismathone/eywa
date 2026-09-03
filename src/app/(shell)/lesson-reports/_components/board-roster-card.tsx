@@ -23,14 +23,14 @@ function StatusPill({ status }: { status: ClassCheck["status"] }) {
       : status === "issues"
         ? "bg-amber/20 text-amber"
         : "bg-danger/20 text-danger";
-  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>{STATUS_LABEL[status]}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${tone}`}>{STATUS_LABEL[status]}</span>;
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
     <div className="bg-bg-soft rounded-2xl px-4 py-3">
       <p className="micro text-text-faint">{label}</p>
-      <p className={`num text-[22px] font-bold ${tone ?? "text-foreground"}`}>{value}</p>
+      <p className={`num text-2xl font-bold ${tone ?? "text-foreground"}`}>{value}</p>
     </div>
   );
 }
@@ -40,8 +40,8 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
   if (!view.syncedAt)
     return (
       <div className="bg-card shadow-card rounded-2xl p-6">
-        <p className="text-foreground text-[15px] font-bold">아직 점검 자료가 없습니다</p>
-        <p className="text-text-dim mt-1 text-[13px] break-keep">
+        <p className="text-foreground text-base font-bold">아직 점검 자료가 없습니다</p>
+        <p className="text-text-dim mt-1 text-sm break-keep">
           ClassNote 반 구성은 연동 PC의 워커가 하루 한 번(새벽 5시 이후) 가져옵니다. 워커가 최소 한 번 돈 뒤에 결과가
           표시됩니다. 계속 비어 있으면 연동 PC가 꺼져 있는지 확인해 주세요.
         </p>
@@ -59,7 +59,7 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
         <Stat label="오발송 위험" value={s.conflict} tone={s.conflict ? "text-danger" : undefined} />
       </div>
 
-      <p className="text-text-faint text-[11px] break-keep">
+      <p className="text-text-faint text-xs break-keep">
         ClassNote 기준 시각 {new Date(view.syncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} · 하루 1회 갱신.
         <b>보드에 없음</b>은 발송이 실패한다는 뜻이고(다른 학생에게 가지는 않습니다), <b>오발송 위험</b>은 같은 이름의
         원아가 둘인데 생년이 달라 남의 아이에게도 갈 수 있다는 뜻입니다.
@@ -69,25 +69,25 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
         {checks.map((c) => (
           <div key={c.classId} className="bg-card shadow-card rounded-2xl p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-foreground text-[14px] font-bold">{c.className}</span>
-              {c.teacher ? <span className="text-text-dim text-[12px]">{c.teacher}</span> : null}
+              <span className="text-foreground text-sm font-bold">{c.className}</span>
+              {c.teacher ? <span className="text-text-dim text-xs">{c.teacher}</span> : null}
               <StatusPill status={c.status} />
               {c.board ? (
-                <span className="text-text-faint text-[11px] break-all">→ {c.board.name}</span>
+                <span className="text-text-faint text-xs break-all">→ {c.board.name}</span>
               ) : null}
             </div>
 
             {c.status === "no_board" ? (
-              <p className="text-danger mt-2 text-[12px] break-keep">
+              <p className="text-danger mt-2 text-xs break-keep">
                 ClassNote에 이 반의 보드가 없습니다 — 재원생 {c.problems}명 전원 발송 불가. 보드를 만들거나 반 이름을
                 맞춰 주세요.
               </p>
             ) : c.status === "dup_board" ? (
-              <p className="text-danger mt-2 text-[12px] break-keep">
+              <p className="text-danger mt-2 text-xs break-keep">
                 같은 이름의 보드가 둘 이상이라 대상을 특정할 수 없습니다. ClassNote에서 하나로 정리해 주세요.
               </p>
             ) : c.status === "empty_board" ? (
-              <p className="text-danger mt-2 text-[12px] break-keep">
+              <p className="text-danger mt-2 text-xs break-keep">
                 보드에 연결된 원아가 한 명도 없습니다 — 재원생 {c.students.length}명 전원 발송 불가. 학부모 초대·반 배정이
                 필요합니다.
               </p>
@@ -99,7 +99,7 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
                 {c.students
                   .filter((v) => v.pinned)
                   .map((v) => (
-                    <li key={`pin-${v.studentId}`} className="text-[12px] break-keep">
+                    <li key={`pin-${v.studentId}`} className="text-xs break-keep">
                       <span className="text-foreground font-bold">{v.student}</span>
                       <span className="text-text-faint"> — 원아 «{v.pinned!.childName}»에 연결됨</span>
                       {v.pinned!.renamed ? (
@@ -118,7 +118,7 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
                 {c.students
                   .filter((v) => v.kind !== "ok")
                   .map((v) => (
-                    <li key={v.studentId} className="text-[12px] break-keep">
+                    <li key={v.studentId} className="text-xs break-keep">
                       {v.kind === "missing" ? (
                         <>
                           <span className="text-danger font-bold">{v.student}</span>
@@ -162,7 +162,7 @@ export function BoardRosterCard({ view }: { view: BoardRosterView }) {
             ) : null}
 
             {c.extras.length ? (
-              <p className="text-text-dim mt-2 text-[12px] break-keep">
+              <p className="text-text-dim mt-2 text-xs break-keep">
                 보드에만 있는 원아: <span className="text-foreground">{c.extras.join(", ")}</span> — 이 반 재원생이
                 아닙니다. 강사가 반 보드에 직접 쓴 글은 이들에게도 갑니다.
               </p>

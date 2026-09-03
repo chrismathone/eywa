@@ -68,18 +68,18 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
       >
         <div className="space-y-3">
           {b.accounts.length === 0 ? (
-            <p className="text-text-dim border-line rounded-md border border-dashed px-3 py-6 text-center text-[12px]">
+            <p className="text-text-dim border-line rounded-md border border-dashed px-3 py-6 text-center text-xs">
               등록된 입금 계좌가 없습니다. 아래 &apos;계좌 추가&apos;로 등록하세요.
             </p>
           ) : (
             b.accounts.map((a, i) => (
               <div key={i} className="border-line bg-bg-soft/40 space-y-3 rounded-md border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-foreground text-[12px] font-bold">계좌 {i + 1}</span>
+                  <span className="text-foreground text-xs font-bold">계좌 {i + 1}</span>
                   <button
                     type="button"
                     onClick={() => removeAccount(i)}
-                    className="text-text-dim hover:text-danger inline-flex items-center gap-1 text-[12px] transition"
+                    className="text-text-dim hover:text-danger inline-flex items-center gap-1 text-xs transition"
                   >
                     <Trash2 className="size-3.5" />
                     삭제
@@ -114,13 +114,13 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
                 </div>
                 {/* 사용할 곳(배선) — 이 계좌를 기본으로 쓸 화면. 한 화면은 한 계좌에만(배타). */}
                 <div className="border-line/70 border-t pt-2.5">
-                  <span className="text-foreground text-[12px] font-bold">사용할 곳</span>
-                  <span className="text-text-dim ml-2 text-[11px]">이 계좌를 기본으로 쓸 화면</span>
+                  <span className="text-foreground text-xs font-bold">사용할 곳</span>
+                  <span className="text-text-dim ml-2 text-xs">이 계좌를 기본으로 쓸 화면</span>
                   <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
                     {ACCOUNT_TARGETS.map((t) => (
                       <label
                         key={t.key}
-                        className="text-foreground inline-flex cursor-pointer items-center gap-1.5 text-[12px]"
+                        className="text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs"
                       >
                         <input
                           type="checkbox"
@@ -139,7 +139,7 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
           <button
             type="button"
             onClick={addAccount}
-            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-2 text-[12px] transition"
+            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-2 text-xs transition"
           >
             <Plus className="size-3.5" />
             계좌 추가

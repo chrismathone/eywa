@@ -14,7 +14,7 @@ export function FollowUpToggle({ id, done }: { id: string; done: boolean }) {
       <button
         type="submit"
         title={done ? "완료 해제" : "완료로 표시"}
-        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium transition ${
           done
             ? "text-chart-2 hover:bg-chart-2/10"
             : "text-text-faint hover:text-foreground hover:bg-bg-soft"
@@ -23,7 +23,7 @@ export function FollowUpToggle({ id, done }: { id: string; done: boolean }) {
         {done ? <Check className="size-3" /> : <Circle className="size-3" />}
         {done ? "완료" : "완료 표시"}
       </button>
-      {state?.error ? <span className="text-danger ml-1 text-[10px]">{state.error}</span> : null}
+      {state?.error ? <span className="text-danger ml-1 text-xs">{state.error}</span> : null}
     </form>
   );
 }

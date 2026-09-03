@@ -449,7 +449,7 @@ export function MonthPlanView({
                             ? "이 요일의 e-book 열을 내립니다(적어 둔 내용도 함께 지워집니다)"
                             : "이 요일에 e-book 열을 세웁니다"
                         }
-                        className="text-text-dim hover:bg-bg-soft cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold"
+                        className="text-text-dim hover:bg-bg-soft cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-xs font-bold"
                       >
                         {hasEbook ? "e-book 열 내리기" : "+ e-book 열"}
                       </button>
@@ -495,13 +495,13 @@ export function MonthPlanView({
                     {/* 날짜는 **가운데**(시트 그대로). 휴강 버튼만 오른쪽에 띄워서 날짜를 밀지 않게 한다. */}
                     <span className="flex flex-wrap items-center justify-center gap-1.5 pr-10">
                       <span className="num">{date ? monthDay(date) : "—"}</span>
-                      {date && !teaches ? <span className="text-[10px]">수업 없음</span> : null}
+                      {date && !teaches ? <span className="text-xs">수업 없음</span> : null}
                       {/* ⚠️ 휴강 날은 아래 라벨 줄이 이미 `휴강 · 추석`을 적는다 — 여기 또 붙이면 같은
                           말이 두 번이다. 휴일인데 **수업하는 날**(반별 예외 `open`)에는 이 알약이
                           유일한 표시라 그때는 남긴다. */}
                       {holidayName && kind !== "off" ? (
                         <span
-                          className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT.inert}`}
+                          className={`rounded-pill px-1.5 py-px text-xs font-bold ${TONE_SOFT.inert}`}
                         >
                           {holidayName}
                         </span>
@@ -509,7 +509,7 @@ export function MonthPlanView({
                       {v && tone && v.status !== "ok" && v.status !== "empty" ? (
                         <span
                           title={MP_STATUS_HINT[v.status]}
-                          className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT[tone]}`}
+                          className={`rounded-pill px-1.5 py-px text-xs font-bold ${TONE_SOFT[tone]}`}
                         >
                           {MP_STATUS_LABEL[v.status]}
                         </span>
@@ -524,7 +524,7 @@ export function MonthPlanView({
                               ? "이 날 수업을 되살립니다(계획을 다시 적을 수 있습니다)"
                               : "이 날을 휴강으로 표시합니다(인쇄물에 회색 '휴강'으로 나옵니다)"
                           }
-                          className="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold hover:bg-white"
+                          className="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-xs font-bold hover:bg-white"
                         >
                           {off ? "수업함으로" : "휴강"}
                         </button>

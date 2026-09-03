@@ -54,7 +54,7 @@ export function EcsTrackFilter({
       className={TOOLBAR_SEG_BOX}
       title="영어 프로그램별로 반 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
     >
-      <span className="text-text-dim px-1.5 text-[11px] font-bold">프로그램</span>
+      <span className="text-text-dim px-1.5 text-xs font-bold">프로그램</span>
       {ENGLISH_TRACK_FILTERS.map((f) => (
         <button
           key={f}
@@ -62,7 +62,7 @@ export function EcsTrackFilter({
           disabled={pending}
           onClick={() => pick(f)}
           aria-pressed={value === f}
-          className={`cursor-pointer rounded-md px-2 py-1 text-[11px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${
+          className={`cursor-pointer rounded-md px-2 py-1 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 ${
             value === f ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
           }`}
         >

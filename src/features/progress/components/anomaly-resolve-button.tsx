@@ -31,7 +31,7 @@ export function AnomalyResolveButton({ eventId, resolved }: { eventId: string; r
         type="button"
         onClick={toggle}
         disabled={pending}
-        className={`shrink-0 rounded-pill border px-2 py-0.5 text-[11px] font-bold transition disabled:opacity-50 ${
+        className={`shrink-0 rounded-pill border px-2 py-0.5 text-xs font-bold transition disabled:opacity-50 ${
           resolved
             ? "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
             : "border-danger/40 text-danger hover:bg-danger hover:text-white"
@@ -40,7 +40,7 @@ export function AnomalyResolveButton({ eventId, resolved }: { eventId: string; r
         {pending ? "처리 중…" : resolved ? "되돌리기" : "이상 없음"}
       </button>
       {error ? (
-        <span className="text-danger text-[11px]" title={error}>
+        <span className="text-danger text-xs" title={error}>
           확인 처리 실패
         </span>
       ) : null}

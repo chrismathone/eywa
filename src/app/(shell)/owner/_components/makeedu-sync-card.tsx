@@ -149,7 +149,7 @@ export function MakeeduSyncCard({
         ) : null}
       </div>
 
-      <p className="text-muted-foreground border-t pt-3 text-[11px]">
+      <p className="text-muted-foreground border-t pt-3 text-xs">
         반영 시각은 각 화면(학생·수업·상담·수납)의 ‘↻ 동기화’ 배지에 표시됩니다.
         {status.lastSyncedAt
           ? ` · 마지막 동기화 ${new Date(status.lastSyncedAt).toLocaleString("ko-KR", {

@@ -56,14 +56,14 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border p-4">
       <div className="mb-3">
-        <h2 className="text-foreground text-[15px] font-bold">보고서 회수</h2>
-        <p className="text-text-faint mt-0.5 text-[12px]">
+        <h2 className="text-foreground text-base font-bold">보고서 회수</h2>
+        <p className="text-text-faint mt-0.5 text-xs">
           학부모 게시판에 올라간 보고서를 거둬들입니다. 학생 이름으로 찾는 게 가장 빠릅니다.
         </p>
       </div>
 
       {/* 경고 — 무슨 일이 일어나는지 화면에 상시 노출(버튼 안 다이얼로그에만 두면 스크롤 위에서 안 보인다). */}
-      <p className="border-amber/40 bg-amber-soft text-amber mb-3 flex items-start gap-1.5 rounded-md border px-3 py-2 text-[12px] leading-relaxed">
+      <p className="border-amber/40 bg-amber-soft text-amber mb-3 flex items-start gap-1.5 rounded-md border px-3 py-2 text-xs leading-relaxed">
         <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
         <span>
           회수하면 <b>학부모 공유 링크가 즉시 차단</b>되고, 연동 PC가 <b>ClassNote 게시글을 삭제</b>합니다.
@@ -81,13 +81,13 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
           }}
           placeholder="학생 이름"
           aria-label="학생 이름"
-          className="border-line rounded-lg border px-2.5 py-1.5 text-[13px]"
+          className="border-line rounded-lg border px-2.5 py-1.5 text-sm"
         />
         <select
           value={filters.teacher ?? ""}
           onChange={(e) => run({ ...filters, teacher: e.target.value || undefined, student: student.trim() || undefined, page: 0 })}
           aria-label="강사"
-          className="border-line rounded-lg border px-2 py-1.5 text-[13px]"
+          className="border-line rounded-lg border px-2 py-1.5 text-sm"
         >
           <option value="">강사 전체</option>
           {options.teachers.map((t) => (
@@ -102,16 +102,16 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
           max={todayYmd}
           onChange={(e) => run({ ...filters, from: e.target.value || undefined, student: student.trim() || undefined, page: 0 })}
           aria-label="시작일"
-          className="border-line rounded-lg border px-2 py-1.5 text-[13px]"
+          className="border-line rounded-lg border px-2 py-1.5 text-sm"
         />
-        <span className="text-text-faint text-[12px]">~</span>
+        <span className="text-text-faint text-xs">~</span>
         <input
           type="date"
           value={filters.to ?? ""}
           max={todayYmd}
           onChange={(e) => run({ ...filters, to: e.target.value || undefined, student: student.trim() || undefined, page: 0 })}
           aria-label="종료일"
-          className="border-line rounded-lg border px-2 py-1.5 text-[13px]"
+          className="border-line rounded-lg border px-2 py-1.5 text-sm"
         />
         <Button size="sm" disabled={pending} onClick={search}>
           {pending ? "찾는 중…" : "찾기"}
@@ -121,7 +121,7 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
           value={filters.status ?? "success"}
           onChange={(e) => run({ ...filters, status: e.target.value, student: student.trim() || undefined, page: 0 })}
           aria-label="상태"
-          className="border-line rounded-lg border px-2 py-1.5 text-[13px]"
+          className="border-line rounded-lg border px-2 py-1.5 text-sm"
         >
           <option value="success">발송 완료(회수 가능)</option>
           <option value="recall_requested">회수 처리 중</option>
@@ -131,16 +131,16 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
       </div>
 
       {result === null ? (
-        <p className="text-text-faint py-8 text-center text-[13px]">
+        <p className="text-text-faint py-8 text-center text-sm">
           학생 이름을 입력하고 <b>찾기</b>를 누르세요.
         </p>
       ) : rows.length === 0 ? (
-        <p className="text-text-faint py-8 text-center text-[13px]">조건에 맞는 보고서가 없습니다.</p>
+        <p className="text-text-faint py-8 text-center text-sm">조건에 맞는 보고서가 없습니다.</p>
       ) : (
         <>
-          <p className="text-text-dim mb-1.5 text-[12px]">총 {result.total}건</p>
+          <p className="text-text-dim mb-1.5 text-xs">총 {result.total}건</p>
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-sm">
               <thead className="text-text-faint border-line border-b text-left">
                 <tr>
                   <th className="px-3 py-2 font-bold">수업일</th>
@@ -164,9 +164,9 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
                       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.className ?? "—"}</td>
                       <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
                       <td className="px-3 py-2">
-                        {badge ? <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span> : null}
+                        {badge ? <span className={`text-xs font-bold ${badge.cls}`}>{badge.label}</span> : null}
                         {/* 읽음은 **양성 표시만**(없음 = 미읽음이 아니라 동기화 안 됨일 수 있다) */}
-                        {r.readAt ? <span className="text-primary ml-1.5 text-[11px] font-bold">읽음</span> : null}
+                        {r.readAt ? <span className="text-primary ml-1.5 text-xs font-bold">읽음</span> : null}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <RecallButton
@@ -185,7 +185,7 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
             </table>
           </div>
           {maxPage > 0 ? (
-            <div className="mt-3 flex items-center justify-center gap-2 text-[12px]">
+            <div className="mt-3 flex items-center justify-center gap-2 text-xs">
               <Button size="sm" variant="ghost" disabled={result.page <= 0 || pending} onClick={() => run({ ...filters, page: result.page - 1 })}>
                 이전
               </Button>
