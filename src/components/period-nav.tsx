@@ -42,7 +42,7 @@ export function PeriodNav({
   prevAriaLabel,
   nextAriaLabel,
   currentTitle,
-  labelWidth = 112,
+  labelWidth: labelWidthBase = 112,
   pending: externalPending = false,
   onNavigate,
 }: {
@@ -118,6 +118,10 @@ export function PeriodNav({
   // 칠해진 화살표 — hover 톤까지 덮어써야 마우스를 얹었을 때 색이 도로 풀리지 않는다.
   const lit = "bg-primary text-primary-foreground hover:bg-primary-deep hover:text-primary-foreground";
 
+  // 🔴 폭은 **고정**(원장 2026-09-01 "이동해도 크기 변동 안 되고 고정되게" — min이면 글자 수가 바뀔 때 화살표가 움찔한다).
+  //    호출부의 labelWidth는 옛 13px 라벨에 맞춘 값이라 v5 라벨(18px)에 맞춰 1.4배로 도출한다(고정폭은 그대로).
+  const labelWidth = Math.ceil(labelWidthBase * 1.4);
+
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <div
@@ -140,9 +144,7 @@ export function PeriodNav({
           className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-(length:--control-label) leading-none font-bold whitespace-nowrap transition ${
             isCurrent ? "text-foreground cursor-default" : "text-foreground hover:bg-bg-soft cursor-pointer"
           }`}
-          // 호출부의 labelWidth는 옛 13px 라벨에 맞춘 값 — v5 라벨(18px)은 약 1.4배라 그만큼 늘리고, 고정폭이 아니라
-          // **하한**으로 둔다(넘치면 잘리는 게 아니라 칸이 늘어난다 — 잘린 날짜가 가장 나쁘다).
-          style={{ minWidth: Math.ceil(labelWidth * 1.4) }}
+          style={{ width: labelWidth }}
           title={isCurrent ? undefined : (currentTitle ?? "눌러서 이번 기간으로")}
           onClick={() => go(currentHref)}
         >
