@@ -82,6 +82,22 @@ describe("🔴 수가 든 문구는 조각으로 잇지 않는다 — 문장 전
     const bad = Object.entries(SHEET_DICT).filter(([, v]) => /\{[a-zA-Z]+\}\s*(명|칸|개|줄|건)/.test(v.en));
     expect(bad.map(([k]) => k)).toEqual([]);
   });
+
+  it("🔴 한국어가 갈라 놓은 두 동작이 영어에서 같은 말로 뭉치지 않는다", () => {
+    // 실례: `전원 출석`(그 교시 한 칸)과 `일괄 출석`(그 날 × 전 교시)이 둘 다 "Mark all present"였다 —
+    // 한국어로는 구분되는데 영어로는 눌러 보기 전엔 알 수 없었다.
+    const byEn = new Map<string, string[]>();
+    for (const [k, v] of Object.entries(SHEET_DICT)) {
+      // 라벨(짧은 것)만 본다 — 긴 안내문이 우연히 같을 일은 없고, 같은 뜻의 재사용은 정상이다.
+      if (v.en.length > 24) continue;
+      byEn.set(v.en, [...(byEn.get(v.en) ?? []), k]);
+    }
+    const clashes = [...byEn.entries()]
+      // 한국어가 **다른데** 영어가 같은 것만 결함이다(한국어도 같으면 같은 말을 재사용한 것뿐).
+      .filter(([, keys]) => keys.length > 1 && new Set(keys.map((k) => SHEET_DICT[k as keyof typeof SHEET_DICT].ko)).size > 1)
+      .map(([en, keys]) => `${en} ← ${keys.join(", ")}`);
+    expect(clashes).toEqual([]);
+  });
 });
 
 /**

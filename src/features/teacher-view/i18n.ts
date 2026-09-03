@@ -134,7 +134,8 @@ export const SHEET_DICT = {
   "menu.item.consultations": { ko: "학생상담", en: "Student counseling" },
   "menu.item.textbook_requests": { ko: "교재 요청", en: "Textbook requests" },
   "menu.item.expense_requests": { ko: "지출결의서", en: "Expense request" },
-  "menu.item.calendar": { ko: "캘린더", en: "Calendar" },
+  // 🔴 ECS 월간 보기의 `달력`(face.cal)과 **다른 것**이다 — 이쪽은 학원 공용 일정 탭이라 영어도 갈라 적는다.
+  "menu.item.calendar": { ko: "캘린더", en: "Academy calendar" },
   "menu.item.approvals": { ko: "전자결재", en: "Approvals" },
   "menu.item.class_review": { ko: "수업 평가", en: "Class review" },
   "menu.item.documents": { ko: "데이터베이스", en: "Documents" },
@@ -256,13 +257,15 @@ export const SHEET_DICT = {
   },
 
   // ── '오늘' 면 ─────────────────────────────────────────────────────
-  // ⚠️ `머리 + 개수 + 꼬리`로 이어진다 — 한국어는 수 뒤에 단위(`개`)가 오고 영어는 앞에 오지 않으므로,
-  //    단위는 **꼬리**가 들고 있어야 양쪽 어순이 맞는다(`오늘 수업 3개 · …` / `Today 3 classes — …`).
-  "today.desc.today": { ko: "오늘 수업", en: "Today" },
-  "today.desc.day": { ko: "이 날 수업", en: "This day" },
-  "today.desc.tail": {
-    ko: "개 · 계획·출결·보고서를 한 화면에서",
-    en: " classes — plans, attendance and reports on one screen",
+  // 🔴 **문장 전체**를 담는다(조각 `머리+수+꼬리`로 두면 en 어순이 무너지고, 조각 하나가 다른 키와
+  //    같은 영어가 되어 뜻이 뭉친다 — `Today`가 면 탭·창 라벨과 겹쳤다).
+  "today.desc.today": {
+    ko: "오늘 수업 {n}개 · 계획·출결·보고서를 한 화면에서",
+    en: "Today — {n} classes · plans, attendance and reports on one screen",
+  },
+  "today.desc.day": {
+    ko: "이 날 수업 {n}개 · 계획·출결·보고서를 한 화면에서",
+    en: "This day — {n} classes · plans, attendance and reports on one screen",
   },
   "today.embed.today": { ko: "오늘", en: "Today" },
   "today.weekHint.before": { ko: "전체 반에 대한 내용을 보려면", en: "To see every class, open" },
@@ -336,8 +339,11 @@ export const SHEET_DICT = {
   },
 
   // ── 하루 일괄 입력 툴바 ───────────────────────────────────────────
-  "bulk.attendance": { ko: "일괄 출석", en: "Mark all present" },
-  "bulk.attitude": { ko: "일괄 태도", en: "Set attitude" },
+  // 🔴 스트립의 `전원 출석`(strip.fillAll)과 **다른 동작**이라 영어도 달라야 한다 — 저쪽은 그 교시
+  //    한 칸이고 이쪽은 **그 날 × 전 교시**다(뒤에 `7×1` 같은 범위가 붙는다). 한국어가 `전원`/`일괄`로
+  //    갈라 놓은 것을 영어에서 둘 다 "Mark all present"로 뭉치면 눌러 보기 전엔 구분이 안 된다.
+  "bulk.attendance": { ko: "일괄 출석", en: "Bulk present" },
+  "bulk.attitude": { ko: "일괄 태도", en: "Bulk attitude" },
   "bulk.plan": { ko: "계획", en: "Plan" },
   "bulk.allDone": {
     ko: "이 날은 이미 전원 기록됐습니다",

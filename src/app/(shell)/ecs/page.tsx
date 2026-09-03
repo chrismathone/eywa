@@ -25,7 +25,7 @@ import {
   type EcsTodayMode,
 } from "./_components/today-nav";
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
-import { sheetDateLabelEn, sheetT, sheetWeekLabel, type SheetLang } from "@/features/teacher-view/i18n";
+import { sheetDateLabelEn, sheetT, sheetTf, sheetWeekLabel, type SheetLang } from "@/features/teacher-view/i18n";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 
 /** 오늘 면 시트 모드의 반 1개분 — 시트 조회가 실패해도 나머지 반은 그려야 하므로 결과를 통째로 나른다. */
@@ -244,7 +244,9 @@ function EcsTodayFace({
         <PageHeader
           eyebrow={sheetT(lang, "landing.eyebrow")}
           title={sheetT(lang, "landing.title")}
-          description={sheetT(lang, "today.desc.today")}
+          // ⚠️ 조회 실패 갈래라 **수업 수를 모른다** — 수가 든 문구(`today.desc.*`)를 쓰면 `{n}`이 그대로
+          //    화면에 찍힌다. 여기선 수 없는 일반 설명을 쓴다(주간 면 실패 갈래와 같은 문구).
+          description={sheetT(lang, "landing.desc")}
         />
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">{res.error}</p>
       </div>
@@ -258,7 +260,9 @@ function EcsTodayFace({
       <PageHeader
         eyebrow={sheetT(lang, "landing.eyebrow")}
         title={sheetT(lang, "landing.title")}
-        description={`${sheetT(lang, isToday ? "today.desc.today" : "today.desc.day")} ${res.cards.length}${sheetT(lang, "today.desc.tail")}`}
+        // 🔴 문장 **전체**를 사전에서 받는다 — 조각(`머리+수+꼬리`)으로 두면 en 어순이 무너지고,
+        //    조각 하나가 다른 키와 같은 영어가 되어 뜻이 뭉친다(`Today`가 면 탭·창 라벨과 겹쳤다).
+        description={sheetTf(lang, isToday ? "today.desc.today" : "today.desc.day", { n: res.cards.length })}
         embedLabel={`${sheetT(lang, "landing.title")} · ${isToday ? sheetT(lang, "today.embed.today") : res.date.slice(5)}`}
       />
 
