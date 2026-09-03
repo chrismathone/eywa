@@ -120,7 +120,11 @@ export default async function TodayPage() {
           snapshotProcessingIssue: false,
         }),
     access.read.attendance || access.read.billing
-      ? getTrendDataLast7Days({ attendance: access.read.attendance, billing: access.read.billing })
+      ? // ⚠️ 캐시본(60초)은 admin 클라이언트라 RLS를 안 탄다 — **이 줄의 권한 분기가 곧 게이트다**.
+        getTrendDataLast7Days(user.tenantId, {
+          attendance: access.read.attendance,
+          billing: access.read.billing,
+        })
       : Promise.resolve([]),
     access.read.timetable || access.read.classes || access.read.attendance
       ? getTodaySchedule()

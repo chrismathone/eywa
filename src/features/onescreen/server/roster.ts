@@ -714,7 +714,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, classnote_read_at, revoked_at, attachments, notes, trend_note, progress, textbook, homework_today")
+          .select("id, student_id, subject, class_id, makeup, share_token, classnote_status, classnote_read_at, revoked_at, attachments, notes, trend_note, progress, textbook, homework_today, attitude, homework_score, exam_info")
           .eq("report_date", todayIso)
           .in("student_id", chunk)
           // 결정적 매칭 순서 — 같은 (학생,반) 폴백 후보가 여럿일 때 항상 같은 것을 집는다.
@@ -1114,11 +1114,31 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // 🔴 왜 필요한가(원장 제보 2026-08-13 "입력해놓은 내용이 일부 새로고침시에 삭제"): 이 값들은
     //    **세션에서만** 복원됐는데 보강 행은 세션에 저장되지 않았다 → 발송까지 끝낸 보강 보고서도
     //    새로고침하면 진도·교재·오늘 과제가 빈칸으로 돌아왔다(DB엔 멀쩡히 있는데도).
-    const savedToday = new Map<string, { progress: string | null; textbook: string | null; homework_today: string | null }>();
+    const savedToday = new Map<
+      string,
+      {
+        progress: string | null;
+        textbook: string | null;
+        homework_today: string | null;
+        // 🔴 태도·과제 수행률·테스트도 함께 실는다 — **보강 전용 카드는 세션에 저장되지 않아**
+        //    이 경로가 유일한 복원처다. 안 실으면 화면이 빈칸으로 뜨고, 그 상태로 다시 저장하면
+        //    DB에 멀쩡히 있던 값이 null로 덮인다(실측 보강 전용 245행 중 과제 211·태도 96·테스트 45).
+        attitude: string | null;
+        homework_score: string | null;
+        exam_info: string | null;
+      }
+    >();
     os.subjects.forEach((su, i) => {
       const t = todayMatched[i];
       if (!t) return;
-      savedToday.set(su.name, { progress: t.progress, textbook: t.textbook, homework_today: t.homework_today });
+      savedToday.set(su.name, {
+        progress: t.progress,
+        textbook: t.textbook,
+        homework_today: t.homework_today,
+        attitude: (t as { attitude?: string | null }).attitude ?? null,
+        homework_score: (t as { homework_score?: string | null }).homework_score ?? null,
+        exam_info: (t as { exam_info?: string | null }).exam_info ?? null,
+      });
       su.reportSent = true;
       su.shareToken = t.share_token ?? undefined;
       su.classnoteStatus = t.classnote_status ?? undefined;
@@ -1243,6 +1263,21 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         if (prog && !su.today) su.today = label && prog.startsWith(label) ? prog.slice(label.length).trim() || prog : prog;
         if (saved.textbook && !su.textbook) su.textbook = saved.textbook;
         if (saved.homework_today && !su.homeworkToday) su.homeworkToday = saved.homework_today;
+        // 🔴 아래 셋은 **행 단위 값**이라 세션이 없으면 되살릴 곳이 여기뿐이다(보강 전용 카드).
+        //    ⑤의 규약대로 **빈 칸만** 채운다 — 아래 세션 블록(작업중 편집)이 여전히 최종으로 이긴다.
+        if (saved.attitude && su.attitude == null) su.attitude = saved.attitude;
+        if (saved.homework_score && !su.homework) su.homework = saved.homework_score;
+        // 점수는 분자·분모를 **기존 두 헬퍼**로 읽는다(새 파서를 만들지 않는다 — 같은 판정 두 벌 금지).
+        const savedScore = parseExamScores(saved.exam_info);
+        const savedMax = parseExamMaxes(saved.exam_info);
+        if (savedScore.daily != null && su.dailyScore == null) {
+          su.dailyScore = savedScore.daily;
+          if (savedMax.daily != null) su.dailyMax = savedMax.daily;
+        }
+        if (savedScore.check != null && su.checkScore == null) {
+          su.checkScore = savedScore.check;
+          if (savedMax.check != null) su.checkMax = savedMax.check;
+        }
       }
       // 학생별 시트 기록은 **참고 표시 전용**(자동 삽입 금지 — 개인 기록은 문맥이 제각각이다).
       const mark = su.classId ? sheetMarkByKey.get(`${su.classId}|${os.id}`) : undefined;

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
@@ -27,7 +28,11 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { reportSubject } from "@/features/timetable/lib/report-subject";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import {
+  effectiveAttendanceRecords,
+  type EffectiveAttendanceRecord,
+} from "@/features/attendance/effective-records";
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { canViewStudentDetail } from "./read-scope";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
@@ -670,9 +675,18 @@ export type StudentEnrollment = {
   isTransferred: boolean;
 };
 
-export async function getStudentEnrollments(studentId: string): Promise<StudentEnrollment[]> {
+/**
+ * 한 학생의 수강 이력 — **요청 캐시**(React `cache`).
+ *
+ * 🔴 학생 상세 한 번 여는 데 이 함수를 **여러 곳이 각자 부른다**(페이지 본문 · 개요 탭 · 출결 탭 ·
+ *    QuickPanel 요약 · 환불 프리필). 캐시가 없으면 같은 학생의 같은 조회가 그 수만큼 왕복한다.
+ *    `cache`는 **요청 단위**라 다음 요청엔 새로 읽는다(신선도 손해 0).
+ */
+export const getStudentEnrollments = cache(async function getStudentEnrollments(
+  studentId: string,
+): Promise<StudentEnrollment[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("enrollments")
     // `is_transferred`는 **종료 규약에 필요하다** — 반이동은 종료일 당일에 이미 새 반 소속이고
     // 일반 종료는 그날까지 재원이라, 이 값 없이는 `isEnrollmentEndedOn`을 정확히 부를 수 없다.
@@ -683,6 +697,8 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
     .eq("student_id", studentId)
     .order("start_date", { ascending: false });
 
+  // 조회 실패를 "수강 0개"로 위장하지 않는다(B3) — 학생 상세·요약·환불 프리필이 다 이 값을 믿는다.
+  if (error) throw new Error(`수강 이력 조회 실패: ${error.message}`);
   if (!data) return [];
 
   return data.map((r) => {
@@ -704,7 +720,7 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
       isTransferred: (r.is_transferred as boolean | null) ?? false,
     };
   });
-}
+});
 
 // ───────── 수업 탭(ijw CoursesTab 이식) — 스케줄(요일+교시)·강사·인원 포함 ─────────
 const KO_DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
@@ -721,7 +737,6 @@ export type StudentClassRow = {
   startDate: string;
   endDate: string | null;
   onHold: boolean;
-  studentCount: number; // 반 현재 인원(활성 enrollment)
   schedule: ScheduleGroup[];
   // 등원요일로 필터링된 개별 슬롯(groupSchedule과 동일 필터) — 학생 주간 시간표 그리드 소스.
   slots: ClassSlot[];
@@ -846,18 +861,10 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     schedByClass.set(s.class_id, arr);
   }
 
-  // 반별 현재 인원(활성)
-  const countByClass = new Map<string, number>();
-  await Promise.all(
-    classIds.map(async (cid) => {
-      const { count } = await supabase
-        .from("enrollments")
-        .select("*", { count: "exact", head: true })
-        .eq("class_id", cid)
-        .is("end_date", null);
-      countByClass.set(cid, count ?? 0);
-    }),
-  );
+  // 🔴 반별 현재 인원(`studentCount`)은 **걷어냈다**(2026-09-03) — 반 개수만큼 카운트 쿼리를 돌고도
+  //    화면에 한 번도 안 그려지고 있었다. 이 함수는 학생 상세가 한 요청에서 여러 번 부르므로
+  //    그 왕복이 그대로 곱해졌다. 반 인원이 필요한 화면(수업 탭 배정 다이얼로그·반 이동)은
+  //    `getClassesList()`가 주는 값을 쓴다 — 거기가 이미 단일 소스다.
 
   // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준 — getTenantSettings는 React cache라 추가 쿼리 0.
   const periodsConfig = settingsToPeriodsConfig((await getTenantSettings()).operations);
@@ -916,7 +923,6 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       startDate: e.start_date,
       endDate: e.end_date,
       onHold: e.on_hold,
-      studentCount: countByClass.get(e.class_id) ?? 0,
       schedule: groupSchedule(rawSlots, subject, attKo, periodsConfig),
       slots,
       attendanceDays: attDays,
@@ -942,13 +948,24 @@ export async function getStudentAttendanceStats(
   const start = new Date();
   start.setDate(start.getDate() - days);
 
-  const { data } = await supabase
+  /**
+   * 🔴 `attendance_records`는 **정정을 새 행으로 남기는 append-only 표**다 — 그대로 세면 한 번
+   *    고친 출결이 **두 번** 잡힌다(분모도 늘고, 되돌린 옛 상태까지 함께 센다). 실제로 이 창의
+   *    "최근 30일 출석률"이 개요·QuickPanel에서 그렇게 부풀고 있었다.
+   *    접는 규약은 앱 공용 단일 소스 `effectiveAttendanceRecords`(학생·반·수업일·**교시**가 같은 행
+   *    중 recorded_at 최신 하나) — 그래서 select에 그 키 컬럼들을 함께 싣는다.
+   * ⚠️ `slot_start`를 빼면 같은 날 두 교시가 한 칸으로 접혀 한 교시가 조용히 사라진다.
+   */
+  const { data, error } = await supabase
     .from("attendance_records")
-    .select("status")
+    .select("id, student_id, class_id, session_date, slot_start, status, recorded_at")
     .eq("student_id", studentId)
     .gte("session_date", start.toISOString().slice(0, 10));
+  if (error) throw new Error(`출결 통계 조회 실패: ${error.message}`);
 
-  const rows = data ?? [];
+  const rows = effectiveAttendanceRecords(
+    (data ?? []) as (EffectiveAttendanceRecord & { status: string })[],
+  );
   const total = rows.length;
   const present = rows.filter((r) => r.status === "present").length;
   return {
@@ -1677,12 +1694,18 @@ export type StudentSummary = {
     late: number;
   };
   enrollments: { className: string; subject: string; teacherName: string | null; onHold: boolean }[];
+  /**
+   * 🔴 **수납 읽기 권한이 없으면 `null`**([[#77]]) — 이 요약은 `students` 게이트만 지나는 표면
+   * (QuickPanel API·창 오버레이·비서 툴)에서 쓰이는데, 미납·연체·청구월은 **수납(billing) 사실**이다.
+   * 게이트를 화면에서만 걸면 API를 직접 부르면 그대로 나온다 — 그래서 **값을 만들지 않는다.**
+   * ⚠️ 0으로 채우지 말 것: 0은 "완납"이라는 사실 주장이라 권한 없는 사람에게 거짓을 말하게 된다.
+   */
   billing: {
     unpaidCount: number;
     overdueCount: number;
     latestPeriod: string | null;
     latestStatus: string | null;
-  };
+  } | null;
 };
 
 /**
@@ -1691,11 +1714,18 @@ export type StudentSummary = {
  * route handler(/api/students/[id]/summary)에서 호출된다.
  */
 export async function getStudentSummary(studentId: string): Promise<StudentSummary | null> {
+  // 🔴 수납 블록은 **billing 읽기 권한이 있을 때만** 만든다([[#77]]) — 이 요약의 호출부는 전부
+  //    `students` 게이트만 지난다(QuickPanel API·창 오버레이·비서 툴). 조회 자체를 안 하므로
+  //    권한 없는 사람의 응답엔 미납 사실이 애초에 담기지 않는다(왕복도 하나 준다).
+  const user = await getCurrentUser();
+  const canReadBilling = user
+    ? (await accessLevelTenant(user.systemRole, "billing")) !== "none"
+    : false;
   const [detail, attendance, enrollments, invoices] = await Promise.all([
     getStudentById(studentId),
     getStudentAttendanceStats(studentId, 30),
     getStudentEnrollments(studentId),
-    getStudentInvoices(studentId),
+    canReadBilling ? getStudentInvoices(studentId) : Promise.resolve([]),
   ]);
   if (!detail) return null;
 
@@ -1737,11 +1767,14 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
     enrollments: enrollments
       .filter(onRoster)
       .map((e) => ({ className: e.className, subject: e.subject, teacherName: e.teacherName, onHold: e.onHold })),
-    billing: {
-      unpaidCount: unpaid.length,
-      overdueCount: overdue.length,
-      latestPeriod: latest?.period ?? null,
-      latestStatus: latest?.status ?? null,
-    },
+    // 수납 읽기 권한이 있을 때만 실는다(위 타입 주석 — 권한 없으면 null, 0이 아니다).
+    billing: canReadBilling
+      ? {
+          unpaidCount: unpaid.length,
+          overdueCount: overdue.length,
+          latestPeriod: latest?.period ?? null,
+          latestStatus: latest?.status ?? null,
+        }
+      : null,
   };
 }

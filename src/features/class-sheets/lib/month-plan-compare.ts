@@ -33,7 +33,21 @@ export type MpActualLine = {
   seat: boolean;
 };
 
-export type MpDayStatus = "off" | "empty" | "ok" | "unwritten" | "off-book" | "no-plan";
+/**
+ * 🔴 `upcoming` = **아직 그 날이 안 왔다.** MP는 애초에 *미리 쓰는 계획*이라 앞으로 올 수업일엔
+ *    실제 기록이 없는 게 정상이다 — 그걸 `unwritten`(주의)으로 세면 달 초에 그 달 남은 수업일이
+ *    전부 앰버가 되어 **진짜 미작성이 그 안에 묻힌다**. MCS가 같은 함정을 먼저 겪었고(원장 2026-09-01
+ *    *"수업전인데 '출결도 기록도 없음'이라는 오해스러운 멘트"*), 거기서 정한 규약을 그대로 쓴다:
+ *    **판정에서 빼는 것**이지 새 실패가 아니다(경고도 아니고 작성률 분자·분모도 아니다).
+ */
+export type MpDayStatus =
+  | "off"
+  | "empty"
+  | "ok"
+  | "unwritten"
+  | "off-book"
+  | "no-plan"
+  | "upcoming";
 
 export type MpDayVerdict = {
   status: MpDayStatus;
@@ -52,6 +66,8 @@ export type MpDayVerdict = {
  */
 export const MP_STATUS_TONE: Record<MpDayStatus, SemanticTone | null> = {
   off: "inert",
+  // 앞으로 올 날 — 아무 표식도 안 붙인다(할 일이 아니다).
+  upcoming: null,
   empty: null,
   ok: null,
   unwritten: "caution",
@@ -72,6 +88,7 @@ export const MP_STATUS_LABEL: Record<MpDayStatus, string> = {
   unwritten: "미작성",
   "off-book": "교재 다름",
   "no-plan": "계획 없음",
+  upcoming: "수업 전",
 };
 
 export const MP_STATUS_HINT: Record<MpDayStatus, string> = {
@@ -81,6 +98,7 @@ export const MP_STATUS_HINT: Record<MpDayStatus, string> = {
   unwritten: "계획은 있는데 그 날 주간 시트에 기록이 없습니다",
   "off-book": "계획에 적은 교재가 그 날 기록 어디에도 없습니다",
   "no-plan": "기록은 있는데 계획 칸이 비어 있습니다(경고 아님)",
+  upcoming: "아직 수업 전입니다 — 기록이 없는 게 정상입니다",
 };
 
 /**
@@ -173,8 +191,14 @@ export function mpCompareDay(input: {
   cells: MpCellMap;
   lines: readonly MpActualLine[];
   isOff: boolean;
+  /**
+   * 오늘(KST, `YYYY-MM-DD`). 이 날짜 **뒤**의 수업일은 판정하지 않는다(위 `upcoming` 주석).
+   * ⚠️ 경계는 **'오늘보다 뒤'만**이다 — 오늘은 지난 날로 본다(앱 전역 `elapsedDays` 규약과 같다).
+   * ⚠️ 안 넘기면 종전대로 전부 판정한다(호출부를 한 번에 고치지 않아도 안전).
+   */
+  today?: string;
 }): MpDayVerdict {
-  const { date, cells, lines, isOff } = input;
+  const { date, cells, lines, isOff, today } = input;
   const empty: MpDayVerdict = {
     status: "empty",
     planBooks: [],
@@ -185,7 +209,12 @@ export function mpCompareDay(input: {
   const hasPlan = MP_ALL_COLUMNS.some((k) => mpHasBody(cells, date, k));
   const hasAnyLine = lines.length > 0;
   if (!hasPlan) return hasAnyLine ? { ...empty, status: "no-plan" } : empty;
-  if (!hasAnyLine) return { ...empty, status: "unwritten", planBooks: [] };
+  // 🔴 아직 안 온 날은 "안 썼다"가 아니라 "아직"이다 — 사실이 달력을 이기므로 **기록이 있으면**
+  //    아래 대조로 그대로 내려간다(미리 적어 둔 날을 앞당겨 확인하는 경우).
+  if (!hasAnyLine) {
+    if (today && date > today) return { ...empty, status: "upcoming", planBooks: [] };
+    return { ...empty, status: "unwritten", planBooks: [] };
+  }
 
   // 대조 축은 **In-class** 하나다 — 그 칸이 "그 날 반이 나갈 책"을 이름 댄다(Homework의 WB·PB는
   // 집에서 하는 책이라 주간 시트의 그 날 기록에 안 나오는 게 정상이다).
