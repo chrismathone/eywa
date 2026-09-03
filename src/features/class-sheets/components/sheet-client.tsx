@@ -4,6 +4,8 @@
 // 페이지가 key={classId:week}로 재마운트하므로 서버 데이터로 state가 재초기화된다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+// 강사뷰 화면 언어(2026-09-03) — 반 이름은 번역 대상이 아니고 안내·링크 글자만 사전을 탄다.
+import { useSheetT } from "@/features/teacher-view/lang-context";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useEditPresence } from "@/features/presence/edit-presence";
@@ -120,6 +122,52 @@ export type SheetHandlers = PlanHandlers & {
   ) => void;
 };
 
+/**
+ * '오늘' 면 반 카드의 **머리 줄** — 반 이름 + '주간 시트 열기'.
+ *
+ * 🔑 정상 카드와 **빈 카드가 같은 조각**을 쓴다(원장 2026-09-03 제보: 빈 카드가 반 이름 없이 회색
+ *    문장만 떠서 **똑같은 상자 두 개**로 보였다 — 그런 반이 둘이면 어느 반인지 알 수 없었다).
+ *    두 벌로 적으면 한쪽만 바뀌므로 조각 하나로 둔다.
+ * 🔴 **반 이름은 번역하지 않는다**(사람이 지은 이름) — 링크 글자만 사전을 탄다.
+ * ⚠️ 이름이 길면 잘라 낸다(`min-w-0` + 말줄임) — 안 그러면 카드가 늘어나 아래 표와 어긋난다.
+ *    전체 이름은 title 툴팁에 남는다.
+ */
+function TodayCardHead({
+  className,
+  href,
+  children,
+}: {
+  className: string;
+  /** '주간 시트 열기' 링크 주소. **null이면 링크를 안 단다** — 주간 시트에 볼 게 없는 갈래(그 날
+   *  수업 자체가 없음)에서 링크를 걸면 **없는 것을 보러 가라고 보내는 셈**이다. */
+  href: string | null;
+  /** 오른쪽에 덧붙일 것(정상 카드의 '수정중' 배지). 빈 카드엔 없다(편집 중일 수가 없다). */
+  children?: React.ReactNode;
+}) {
+  const t = useSheetT();
+  return (
+    <div className="flex min-w-0 items-baseline gap-x-2">
+      {/* 반 이름 = 이 격자가 **어느 반인지** 말하는 유일한 자리라 또렷해야 한다(원장 2026-08-11
+          "수업명을 더 선명하게"). 이름 굵게, 링크는 한 단계 낮춰 이름이 먼저 읽히게. */}
+      <h2
+        className="text-foreground min-w-0 truncate text-[17px] leading-tight font-extrabold tracking-tight"
+        title={className}
+      >
+        {className}
+      </h2>
+      {href ? (
+        <Link
+          href={href}
+          className="text-primary shrink-0 text-[12.5px] font-medium underline-offset-2 hover:underline"
+        >
+          {t("today.card.openWeek")}
+        </Link>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
 export function SheetClient({
   data,
   classOptions,
@@ -160,6 +208,8 @@ export function SheetClient({
   myTeacherId?: string | null;
 }) {
   const router = useRouter();
+  // 빈 카드 안내 문구(오늘 면) — 반 이름은 번역 대상이 아니다.
+  const t = useSheetT();
   const { classId, weekMonday } = data;
   const canEdit = data.canWrite;
 
@@ -868,26 +918,10 @@ export function SheetClient({
                 <TodayClassSheet
                   day={todayDay}
                   header={
-                    /* 반 이름 = 이 격자가 **어느 반인지** 말하는 유일한 자리라 또렷해야 한다(원장
-                       2026-08-11 "수업명을 더 선명하게"). 카드 바깥 제목 줄이 사라졌으므로 그 위계를
-                       여기로 그대로 옮긴다 — 이름 굵게, 링크는 한 단계 낮춰 이름이 먼저 읽히게.
-                       ⚠️ 이름이 길면 잘라 낸다(`min-w-0` + 말줄임) — 안 그러면 카드가 늘어나
-                       아래 표와 어긋난다. 전체 이름은 title 툴팁에 남는다. */
-                    <div className="flex min-w-0 items-baseline gap-x-2">
-                      <h2
-                        className="text-foreground min-w-0 truncate text-[17px] leading-tight font-extrabold tracking-tight"
-                        title={data.className}
-                      >
-                        {data.className}
-                      </h2>
-                      <Link
-                        href={`/ecs/${classId}?week=${weekMonday}`}
-                        className="text-primary shrink-0 text-[12.5px] font-medium underline-offset-2 hover:underline"
-                      >
-                        주간 시트 열기 →
-                      </Link>
+                    // 카드 바깥 제목 줄이 사라졌으므로 그 위계를 여기로 옮긴다 — 조각은 빈 카드와 공용.
+                    <TodayCardHead className={data.className} href={`/ecs/${classId}?week=${weekMonday}`}>
                       <EditingBadge scope={ecsPresenceScope(classId, weekMonday)} />
-                    </div>
+                    </TodayCardHead>
                   }
                   data={data}
                   linesBySlot={linesBySlot}
@@ -904,13 +938,21 @@ export function SheetClient({
                     안내는 오늘 면 맨 위 한 줄이 대신한다(ecs/page.tsx). 여기 각주를 되살리지 말 것. */}
               </>
             ) : (
-              <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
-                {/* ⚠️ 원인을 뭉치지 않는다 — 반의 그 날 교시가 **전부 남의 것**이어서 빈 것과, 애초에
-                    수업이 없는 것은 사람이 할 일이 다르다. "수업이 없습니다"로 뭉치면 거짓말이 된다. */}
-                {hasHiddenOwn
-                  ? "이 날 이 반에 담당하시는 교시가 없습니다. 기록은 그대로 있고 주간 시트에서 보입니다."
-                  : "이 날은 수업이 없습니다."}
-              </p>
+              // 🔴 빈 카드에도 **반 이름을 단다**(원장 2026-09-03 제보) — 없으면 그런 반이 둘일 때
+              //    똑같은 회색 상자 두 개가 되어 어느 반인지 알 수 없다. 머리 줄은 정상 카드와 같은 조각.
+              <div className="bg-card shadow-card space-y-2 rounded-2xl px-4 py-5">
+                {/* 🔴 링크는 `hasHiddenOwn`일 때만 — 그 날 수업 자체가 없는 반은 주간 시트에 볼 것이
+                    없어서, 링크를 걸면 **없는 것을 보러 가라고 보내는 셈**이다. */}
+                <TodayCardHead
+                  className={data.className}
+                  href={hasHiddenOwn ? `/ecs/${classId}?week=${weekMonday}` : null}
+                />
+                <p className="text-text-dim text-sm">
+                  {/* ⚠️ 원인을 뭉치지 않는다 — 반의 그 날 교시가 **전부 남의 것**이어서 빈 것과, 애초에
+                      수업이 없는 것은 사람이 할 일이 다르다. "수업이 없습니다"로 뭉치면 거짓말이 된다. */}
+                  {hasHiddenOwn ? t("today.card.noOwnSlots") : t("today.card.noClass")}
+                </p>
+              </div>
             )}
           </div>
         ) : (

@@ -48,7 +48,7 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
     // 접두사가 늘면 그 구역을 실제로 배선했는지 사람이 한 번 더 보게 하는 가드다.
     const prefixes = new Set(Object.keys(SHEET_DICT).map((k) => k.split(".")[0]));
     expect([...prefixes].sort()).toEqual(
-      ["chrome", "face", "filter", "landing", "lang", "menu", "nav", "today", "toolbar"].sort(),
+      ["chrome", "face", "filter", "landing", "lang", "menu", "nav", "popup", "today", "toolbar"].sort(),
     );
   });
 });
@@ -66,14 +66,31 @@ describe("언어 판정 — 이름이 기본값을 정하고, 고른 값이 언�
   });
 
   it("고른 값이 있으면 이름과 무관하게 그것 — 휴리스틱이 틀렸을 때 본인이 되돌릴 수 있어야 한다", () => {
-    expect(resolveSheetLang("en", "이수진")).toBe("en");
-    expect(resolveSheetLang("ko", "KRISTINE DRIVER")).toBe("ko");
+    expect(resolveSheetLang("en", null, "이수진")).toBe("en");
+    expect(resolveSheetLang("ko", null, "KRISTINE DRIVER")).toBe("ko");
   });
 
-  it("저장값이 깨졌으면 이름에서 도출 — 화면이 비지 않는다", () => {
-    expect(resolveSheetLang(undefined, "이수진")).toBe("ko");
-    expect(resolveSheetLang("klingon", "이수진")).toBe("ko");
-    expect(resolveSheetLang(42, "Florence Park")).toBe("en");
+  it("저장값이 깨졌으면 다음 순서로 — 화면이 비지 않는다", () => {
+    expect(resolveSheetLang(undefined, null, "이수진")).toBe("ko");
+    expect(resolveSheetLang("klingon", null, "이수진")).toBe("ko");
+    expect(resolveSheetLang(42, null, "Florence Park")).toBe("en");
+  });
+
+  it("🔴 관리자 지정(0248a)이 이름 휴리스틱을 이긴다 — 샘 킴(=김태건)처럼 이름이 한글인 원어민", () => {
+    // 원장 2026-09-03 *"샘 킴 (sam)도 원어민에 등록"*.
+    expect(resolveSheetLang(null, "en", "김태건")).toBe("en");
+    // 반대 방향도 — 로마자 이름인데 한국어로 지정할 수도 있다.
+    expect(resolveSheetLang(null, "ko", "Florence Park")).toBe("ko");
+  });
+
+  it("🔴 본인 선택이 관리자 지정보다 **위**다 — 지정은 더 나은 기본값이지 잠금이 아니다", () => {
+    expect(resolveSheetLang("ko", "en", "김태건")).toBe("ko");
+    expect(resolveSheetLang("en", "ko", "이수진")).toBe("en");
+  });
+
+  it("관리자 지정이 없거나 깨졌으면 이름으로 — 지정 없음(null)과 '한국어로 지정'은 다른 사실이다", () => {
+    expect(resolveSheetLang(null, null, "김태건")).toBe("ko");
+    expect(resolveSheetLang(null, "klingon", "Florence Park")).toBe("en");
   });
 
   it("parseSheetLang은 모르는 값에 null — 기본값은 호출부가 정한다", () => {

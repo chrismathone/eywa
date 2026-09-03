@@ -8,6 +8,7 @@ import {
   createNoticePopup,
   updateNoticePopup,
   deleteNoticePopup,
+  regenerateNoticeTranslation,
   toggleNoticePopupActive,
   type NoticePopupActionState,
 } from "@/features/notices/server/actions";
@@ -42,6 +43,63 @@ function SubmitBtn({ label }: { label: string }) {
       {pending ? <Loader2 className="size-4 animate-spin" /> : null}
       {label}
     </Button>
+  );
+}
+
+/**
+ * **[영문]** — 이 공지의 영문 번역 상태 + 만들기 버튼(0249a). 원장 2026-09-03 *"공지사항도 영어로"*.
+ *
+ * 🔑 기존 공지는 저장 시점이 지나 캐시가 없다 → **사람이 누르는 명시 트리거**가 여기다
+ *    (페이지 로드에서 자동 생성하지 않는 이유 = 팝업은 창마다 도는 경로, B6).
+ * ⚠️ 상태가 넷이라 색·문구를 갈라 적는다 — `없음`/`옛 원문`(있지만 안 쓴다)/`영문 있음`/`건너뜀`.
+ *    🔴 `건너뜀`은 실패가 아니라 **일부러 안 보낸 것**(민감정보)이라 사유를 함께 보인다.
+ */
+function EnglishForm({
+  id,
+  status,
+  skipReason,
+}: {
+  id: string;
+  status: "none" | "stale" | "ready" | "skipped";
+  skipReason: string | null;
+}) {
+  const [state, action, pending] = useActionState(regenerateNoticeTranslation, undefined);
+  const label = pending
+    ? "만드는 중…"
+    : status === "ready"
+      ? "영문 있음"
+      : status === "stale"
+        ? "옛 원문"
+        : status === "skipped"
+          ? "건너뜀"
+          : "영문 만들기";
+  const tone =
+    status === "ready"
+      ? "bg-success-soft text-success"
+      : status === "stale"
+        ? "bg-amber-soft text-amber"
+        : status === "skipped"
+          ? "bg-bg-soft text-text-faint"
+          : "bg-bg-soft text-text-dim hover:bg-line-strong/20";
+  return (
+    <form action={action} className="flex items-center gap-1">
+      <input type="hidden" name="id" value={id} />
+      <button
+        type="submit"
+        disabled={pending}
+        // 이미 있어도 다시 누를 수 있다(원문을 고친 뒤 '옛 원문'을 최신으로 만드는 길).
+        title={
+          state?.error ??
+          skipReason ??
+          "원어민 강사에게 보일 영문을 만듭니다. 학생·반 이름 등 고유명사는 번역하지 않습니다."
+        }
+        className={`rounded-full px-2 py-0.5 text-[11px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${tone}`}
+      >
+        {label}
+      </button>
+      {/* 실패·건너뜀 사유는 **화면에 적는다** — 툴팁만 두면 모바일에서 없는 것과 같다. */}
+      {state?.error ? <span className="text-danger max-w-40 text-[10px] break-keep">{state.error}</span> : null}
+    </form>
   );
 }
 
@@ -295,6 +353,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2.5 pt-0.5">
+                  <EnglishForm id={p.id} status={p.enStatus} skipReason={p.enSkipReason} />
                   <ToggleForm id={p.id} isActive={p.isActive} />
                   <button type="button" onClick={() => startEdit(p)} aria-label="수정" className="text-text-dim hover:text-foreground inline-flex items-center transition">
                     <Pencil className="size-3.5" />

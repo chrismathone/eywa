@@ -360,6 +360,12 @@ export function auditDetail(
       // '강사뷰 접근'(다른 강사 뷰 열람) 토글 — 대상은 targetLabel(직원 이름)이 이미 보여준다.
       return m.enabled === true ? "허용으로 변경" : m.enabled === false ? "차단으로 변경" : null;
     }
+    case "staff_teacher_view_lang": {
+      // 강사 화면 기본 언어(0248a) — **화면 글자만** 바뀐다(권한·담임·시수 무관).
+      // 🔴 이 로그를 담임/원어민 판정 변경으로 읽지 말 것(축이 다르다 — 0248a 주석).
+      const label = (v: unknown) => (v === "ko" ? "한국어" : v === "en" ? "English" : "지정 없음");
+      return `강사 화면 기본 언어: ${label(m.from)} → ${label(m.to)}`;
+    }
     case "staff_password_reset": {
       const mode = str(m.mode);
       if (mode === "temp") return "임시 비밀번호 발급";

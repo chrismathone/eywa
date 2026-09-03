@@ -62,6 +62,9 @@ function readBaseForm(formData: FormData) {
     // '강사뷰 접근'(0224a) — 체크박스는 폼에 master(+super_admin)에게만 노출되고, 저장도 그 자격일 때만
     // 컬럼을 건드린다(아래 canGrantTeacherView 스프레드). 아니면 미체크=off로 남의 부여를 지우게 된다.
     teacherViewAccess: get("teacherViewAccess") === "on",
+    // 강사 화면 기본 언어(0248a) — "" = **지정 없음**(이름에서 도출). 모르는 값도 지정 없음으로.
+    // 🔴🔴 담임 판정과 무관하다(원어민 여부 플래그가 아니다) — `isKoreanTeacherName`은 이 값을 안 읽는다.
+    teacherViewLang: ((v) => (v === "ko" || v === "en" ? v : null))(get("teacherViewLang")),
   };
 }
 
@@ -169,6 +172,9 @@ export async function createStaff(
     seat_jj_duty: input.seatJjDuty,
     desk_attendance_optin: input.deskAttendanceOptin,
     ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
+    // 🔴 강사 화면 기본 언어(0248a)는 **생성 시 안 싣는다** — 신규 직원은 '지정 없음'(null)으로 태어나고
+    //    (이름에서 도출), 지정은 근무 설정에서 사람이 명시로 켠다. 여기서 실으면 0248a 미적용 창에서
+    //    계정 생성 전체가 실패한다([[#95]]).
   };
   let { error: dbErr } = await admin
     .from("users")
@@ -322,6 +328,20 @@ export async function updateStaff(
   if (canGrantTeacherView && input.teacherViewAccess && !isFullShellRole(target.system_role as SystemRole)) {
     return { error: "강사·학생 역할에는 '강사뷰 접근'을 줄 수 없습니다 (관리자 계열 전용)" };
   }
+  // 강사 화면 기본 언어(0248a) 변경 감지 — 폼에 칸이 **있을 때만** 읽는다(없으면 저장 대상이 아니다).
+  // 🔴 컬럼 미적용이면 error → `undefined`로 두고 저장·로그를 통째로 건너뛴다(#95: 화면은 그대로 산다).
+  let prevLang: "ko" | "en" | null | undefined;
+  if (formData.has("teacherViewLang")) {
+    const { data: langRow, error: langErr } = await supabase
+      .from("users")
+      .select("teacher_view_lang")
+      .eq("id", id)
+      .maybeSingle();
+    if (!langErr) {
+      const v = langRow?.teacher_view_lang;
+      prevLang = v === "ko" || v === "en" ? v : null;
+    }
+  }
   let prevTeacherView: boolean | null = null; // 변경 감지용 — 0224a 미적용이면 에러 → null(저장·로그 스킵)
   if (canGrantTeacherView) {
     const { data: prevRow, error: prevErr } = await supabase
@@ -337,6 +357,10 @@ export async function updateStaff(
     seat_jj_duty: input.seatJjDuty,
     desk_attendance_optin: input.deskAttendanceOptin,
     ...(canGrantTeacherView ? { teacher_view_access: input.teacherViewAccess } : {}),
+    // 🔴 **폼에 칸이 있고 컬럼도 있을 때만** 싣는다 — `prevLang === undefined`는 "칸이 없거나 0248a
+    //    미적용"이고, 그때 실으면 update 전체가 실패하거나(미적용) 다른 경로 저장이 이 값을 null로
+    //    지운다(칸 없음). CLAUDE.md: *"폼에서 뺀 칸은 서버 저장에서도 뺀다."*
+    ...(prevLang !== undefined ? { teacher_view_lang: input.teacherViewLang } : {}),
   };
   let { error } = await supabase
     .from("users")
@@ -358,7 +382,7 @@ export async function updateStaff(
 
   if (error) {
     // 0209a/0212a/0224a/0227a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
-    if (/seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access/i.test(error.message)) {
+    if (/seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access|teacher_view_lang/i.test(error.message)) {
       const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
       if (retry) return { error: retry.message };
       if (input.seatLabDuty || input.seatJjDuty || input.shuttleDuty || input.deskAttendanceOptin) {
@@ -367,15 +391,30 @@ export async function updateStaff(
     } else {
       return { error: error.message };
     }
-  } else if (canGrantTeacherView && prevTeacherView !== null && prevTeacherView !== input.teacherViewAccess) {
-    // '강사뷰 접근' 부여·회수 — 다른 강사 화면을 여는 권한이라 누가 언제 바꿨는지 남긴다.
-    await logAction({
-      action: "staff_teacher_view_access",
-      // 이름은 폼에서 빠졌다(이력서가 단일 소스) — 폼 값을 쓰면 라벨이 빈 문자열이 된다. DB 값이 진실.
-      targetLabel: (target.display_name as string | null) ?? null,
-      targetType: "user",
-      metadata: { targetUserId: id, enabled: input.teacherViewAccess },
-    });
+  } else {
+    // 🔴 **두 로그는 서로 배타가 아니다** — `else if`로 묶으면 한 번의 저장에서 둘 다 바뀐 날
+    //    뒤엣것('강사뷰 접근' 부여·회수 = 남의 화면을 여는 **권한**)이 통째로 안 남는다.
+    //    감사로그는 "무엇이 바뀌었나"를 각각 세는 자리라 각자 판정한다.
+    if (canGrantTeacherView && prevTeacherView !== null && prevTeacherView !== input.teacherViewAccess) {
+      // '강사뷰 접근' 부여·회수 — 다른 강사 화면을 여는 권한이라 누가 언제 바꿨는지 남긴다.
+      await logAction({
+        action: "staff_teacher_view_access",
+        // 이름은 폼에서 빠졌다(이력서가 단일 소스) — 폼 값을 쓰면 라벨이 빈 문자열이 된다. DB 값이 진실.
+        targetLabel: (target.display_name as string | null) ?? null,
+        targetType: "user",
+        metadata: { targetUserId: id, enabled: input.teacherViewAccess },
+      });
+    }
+    if (prevLang !== undefined && prevLang !== input.teacherViewLang) {
+      // 강사 화면 기본 언어 변경 — 그 사람이 보는 화면의 글자를 남이 바꾼 것이라 흔적을 남긴다.
+      // 🔴 권한·담임은 한 글자도 안 바뀐다(이 로그를 담임·원어민 판정 변경으로 읽지 말 것 — 0248a).
+      await logAction({
+        action: "staff_teacher_view_lang",
+        targetLabel: (target.display_name as string | null) ?? null,
+        targetType: "user",
+        metadata: { targetUserId: id, from: prevLang, to: input.teacherViewLang },
+      });
+    }
   }
 
   revalidatePath("/staff");

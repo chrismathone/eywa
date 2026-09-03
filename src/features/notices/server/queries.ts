@@ -7,6 +7,9 @@ import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import type { SystemRole } from "@/lib/permissions";
 import { audienceMatchesRole } from "../audience";
 import { isDismissed, type DismissRecord } from "../dismiss";
+// 화면 언어(2026-09-03) — 영어로 보는 사람에게만 캐시된 번역을 덮어씌운다(0249a).
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { noticeSourceHash } from "../translate-rules";
 
 /** 공지 팝업 캐시 무효화 태그(tenantId별). CRUD 액션이 updateTag로 비운다. */
 export function noticePopupsTag(tenantId: string): string {
@@ -105,7 +108,7 @@ export async function getActivePopups(
   );
   const now = Date.now();
 
-  return forRole
+  const shown = forRole
     .filter((p) => !isDismissed(dismissed.get(p.id), p.updatedAt, now))
     .map((p) => ({
       id: p.id,
@@ -118,6 +121,56 @@ export async function getActivePopups(
       position: p.position,
       updatedAt: p.updatedAt,
     }));
+
+  return applyEnglishOverlay(shown);
+}
+
+/**
+ * 영어로 보는 사람에게만 **캐시된 번역을 덮어씌운다**(0249a).
+ *
+ * 🔴 **여기서 AI를 부르지 않는다** — 팝업은 셸 진입마다(= 창마다) 도는 경로라, 로드 시 번역하면
+ *    창 수만큼 곱해진다(B6 + CLAUDE.md *"페이지 로드만으로 절대 새 호출 안 함"*). 만드는 것은
+ *    저장 시점·[영문 만들기] 버튼뿐이고 여기는 **읽기만** 한다.
+ * 🔴 **없거나·해시가 어긋나거나·조회가 실패하면 한국어 원문 그대로** — 빈 팝업은 고장으로 읽히고,
+ *    옛 번역이 새 글인 척하는 것보다 한국어가 정직하다. 0249a 미적용도 이 갈래로 조용히 떨어진다([[#95]]).
+ * ⚠️ 한국어 사용자에겐 **조회조차 하지 않는다**(왕복 0 — 대부분의 사용자가 여기다).
+ */
+async function applyEnglishOverlay(popups: ActivePopup[]): Promise<ActivePopup[]> {
+  if (popups.length === 0) return popups;
+  // 화면 언어는 강사 미니셸에서만 en이 될 수 있다(관리자는 항상 ko) — 그 판정을 그대로 재사용한다.
+  const lang = await getTeacherViewLang();
+  if (lang !== "en") return popups;
+
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("notice_popup_translations")
+      .select("notice_id, title, body, link_label, source_hash")
+      .eq("lang", "en")
+      // 상한 20짜리 목록이라 `.in()`이 안전(B3의 대량 id 케이스 아님).
+      .in(
+        "notice_id",
+        popups.map((p) => p.id),
+      );
+    if (error) return popups; // 표 없음·조회 실패 → 한국어 원문(화면은 그대로 산다)
+    const byId = new Map((data ?? []).map((r) => [r.notice_id as string, r]));
+    return popups.map((p) => {
+      const t = byId.get(p.id);
+      if (!t) return p;
+      // 🔴 원문이 바뀌었으면(해시 불일치) 옛 번역을 쓰지 않는다 — 지금 글과 다른 말을 띄우는 것이
+      //    번역이 없는 것보다 나쁘다(다음 저장·버튼에서 다시 만들어진다).
+      if ((t.source_hash as string | null) !== noticeSourceHash(p)) return p;
+      return {
+        ...p,
+        title: (t.title as string | null) ?? p.title,
+        body: (t.body as string | null) ?? p.body,
+        // ⚠️ linkLabel은 null이면 카드가 '자세히 보기' 기본값을 쓴다 — 원문 null을 덮지 않는다.
+        linkLabel: (t.link_label as string | null) ?? p.linkLabel,
+      };
+    });
+  } catch {
+    return popups;
+  }
 }
 
 /** 관리(owner)용 — 전체 팝업(비활성 포함). 미리보기 썸네일용 imageSrc도 resolve. */
@@ -136,7 +189,40 @@ export type AdminPopup = {
   isActive: boolean;
   startsAt: string | null;
   endsAt: string | null;
+  /**
+   * 영문 번역 상태(0249a) — `none`(없음) · `stale`(원문이 바뀜) · `ready`(최신) · `skipped`(민감정보 등).
+   * ⚠️ 표가 없으면(미적용) 전부 `none` — 화면은 [영문 만들기] 버튼만 보이고 죽지 않는다([[#95]]).
+   */
+  enStatus: "none" | "stale" | "ready" | "skipped";
+  /** `skipped`일 때의 사유(사람 말). 그 외 null. */
+  enSkipReason: string | null;
 };
+
+/**
+ * 팝업별 영문 번역 상태 — **조회 실패·표 없음이면 빈 맵**(전부 '없음'으로 보인다, [[#95]]).
+ * 🔴 여기서 번역을 만들지 않는다(목록을 여는 것은 명시 트리거가 아니다).
+ */
+async function loadEnStatus(
+  ids: string[],
+): Promise<Map<string, { hash: string; skip: string | null }>> {
+  if (ids.length === 0) return new Map();
+  try {
+    const { data, error } = await createAdminClient()
+      .from("notice_popup_translations")
+      .select("notice_id, source_hash, skip_reason")
+      .eq("lang", "en")
+      .in("notice_id", ids);
+    if (error) return new Map();
+    return new Map(
+      (data ?? []).map((r) => [
+        r.notice_id as string,
+        { hash: (r.source_hash as string) ?? "", skip: (r.skip_reason as string | null) ?? null },
+      ]),
+    );
+  } catch {
+    return new Map();
+  }
+}
 
 export async function listPopups(): Promise<AdminPopup[]> {
   const user = await getCurrentUser();
@@ -150,6 +236,8 @@ export async function listPopups(): Promise<AdminPopup[]> {
     .order("is_active", { ascending: false })
     .order("priority", { ascending: false })
     .order("created_at", { ascending: false });
+
+  const enStatus = await loadEnStatus((data ?? []).map((r) => r.id as string));
 
   return Promise.all(
     (data ?? []).map(async (r) => ({
@@ -167,6 +255,25 @@ export async function listPopups(): Promise<AdminPopup[]> {
       isActive: (r.is_active as boolean) ?? true,
       startsAt: (r.starts_at as string | null) ?? null,
       endsAt: (r.ends_at as string | null) ?? null,
+      ...enStatusOf(enStatus.get(r.id as string), {
+        title: r.title as string,
+        body: (r.body as string | null) ?? null,
+        linkLabel: (r.link_label as string | null) ?? null,
+      }),
     })),
   );
+}
+
+/**
+ * 저장된 번역 행 + 지금 원문 → 화면에 적을 상태.
+ * 🔴 해시가 어긋나면 `stale`(있지만 안 쓴다) — "있음"으로 뭉치면 사람이 옛 번역이 나가는 줄 모른다.
+ */
+function enStatusOf(
+  row: { hash: string; skip: string | null } | undefined,
+  src: { title: string; body: string | null; linkLabel: string | null },
+): { enStatus: AdminPopup["enStatus"]; enSkipReason: string | null } {
+  if (!row) return { enStatus: "none", enSkipReason: null };
+  const fresh = row.hash === noticeSourceHash(src);
+  if (row.skip) return { enStatus: fresh ? "skipped" : "none", enSkipReason: fresh ? row.skip : null };
+  return { enStatus: fresh ? "ready" : "stale", enSkipReason: null };
 }

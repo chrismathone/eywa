@@ -70,12 +70,26 @@ export function defaultSheetLangFor(displayName: string | null | undefined): She
   return isKoreanTeacherName(displayName) ? "ko" : "en";
 }
 
-/** 저장된 선택 → 실제 언어. 고른 값이 있으면 그것, 없으면 이름에서 도출. */
+/**
+ * 실제 언어 — **순서가 곧 결정**이다:
+ *   ① 본인이 고른 값(`ui_prefs.teacherView.lang`)
+ *   ② 관리자가 지정한 기본값(`users.teacher_view_lang`, 0248a)
+ *   ③ 표시 이름에서 도출(`defaultSheetLangFor`)
+ *
+ * 🔴 **본인 선택이 맨 위다** — 관리자가 `en`으로 지정해도 본인이 한국어를 고르면 한국어다.
+ *    스위치를 전원에게 연 것과 같은 논리(표시 판정을 능력 판정으로 만들지 않는다): 관리자 지정은
+ *    "이 사람은 아마 이 언어일 것"이라는 **더 나은 기본값**이지, 본인을 가두는 잠금이 아니다.
+ * 🔴 ②는 **왜 필요한가**: ③의 이름 휴리스틱은 로마자 이름만 잡는다. 원장 2026-09-03 *"샘 킴 (sam)도
+ *    원어민에 등록"* — 샘 킴 = 김태건이라 이름이 한글이라 휴리스틱이 못 잡는다.
+ * 🔴🔴 ②는 **담임 판정과 아무 상관이 없다**(0248a 주석) — `isKoreanTeacherName`은 이 값을 읽지 않고,
+ *    앞으로도 읽게 만들지 말 것. 김태건은 담임 반이 4개다.
+ */
 export function resolveSheetLang(
   stored: unknown,
+  adminDefault: unknown,
   displayName: string | null | undefined,
 ): SheetLang {
-  return parseSheetLang(stored) ?? defaultSheetLangFor(displayName);
+  return parseSheetLang(stored) ?? parseSheetLang(adminDefault) ?? defaultSheetLangFor(displayName);
 }
 
 /**
@@ -266,6 +280,25 @@ export const SHEET_DICT = {
     ko: " 쓰실 수 있고, 쓰지 않은 휴일은 작성률에 잡히지 않습니다.",
     en: ", and holidays you leave blank are not counted against your completion rate.",
   },
+  // ── 팝업 공지 껍데기 ──────────────────────────────────────────────
+  // 🔴 **본문·제목은 여기 없다** — 사람이 쓴 글이라 0249a 번역 캐시가 맡는다(정적 사전이 아니다).
+  //    여기 있는 건 우리가 만든 **버튼·체크박스 글자**뿐이다.
+  "popup.hideWeek": { ko: "7일간 보지 않기", en: "Hide for 7 days" },
+  "popup.hideForever": { ko: "다시 보지 않기", en: "Don't show again" },
+  "popup.close": { ko: "닫기", en: "Close" },
+  "popup.more": { ko: "자세히 보기", en: "Learn more" },
+  "popup.zoomTitle": { ko: "클릭하면 원본 크기로 봅니다", en: "Click to view full size" },
+  "popup.zoomAria": { ko: "이미지 원본 크기로 보기", en: "View image at full size" },
+
+  // ── '오늘' 면의 반 카드 머리 줄 ────────────────────────────────────
+  // 🔴 반 이름은 **번역하지 않는다**(사람이 지은 이름) — 여기 있는 건 그 옆에 붙는 링크·안내뿐이다.
+  "today.card.openWeek": { ko: "주간 시트 열기 →", en: "Open weekly sheet →" },
+  "today.card.noOwnSlots": {
+    ko: "이 날 이 반에 담당하시는 교시가 없습니다. 기록은 그대로 있고 주간 시트에서 보입니다.",
+    en: "You have no periods in this class on this day. The records are still there — see them in the weekly sheet.",
+  },
+  "today.card.noClass": { ko: "이 날은 수업이 없습니다.", en: "No class on this day." },
+
   "today.empty.noClassScoped": {
     ko: "담당하고 계신 영어 반이 없습니다. 반 배정은 사무실에 문의하세요.",
     en: "You have no English classes assigned. Please ask the office about class assignments.",

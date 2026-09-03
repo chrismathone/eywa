@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { createPortal } from "react-dom";
+// 강사뷰 화면 언어(2026-09-03) — 껍데기 글자만. 제목·본문은 0249a 번역 캐시가 맡는다.
+import { useSheetT } from "@/features/teacher-view/lang-context";
 import { X } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { DismissMode } from "../dismiss";
@@ -20,6 +22,8 @@ const LINK_CLASS =
  * 이미지 클릭 = 원본 크기 라이트박스(카드 폭에 맞춰 축소된 썸네일을 화면 가득 크게 — body 포털 z-100, 레이어 z-55 위).
  */
 export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
+  // 껍데기 글자만 사전을 탄다 — 제목·본문·링크 라벨은 **서버가 이미 번역본으로 내려준다**(0249a).
+  const t = useSheetT();
   const [closed, setClosed] = useState(false);
   const [mode, setMode] = useState<DismissMode | null>(null);
   const [saving, setSaving] = useState(false);
@@ -109,7 +113,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
           <span className="truncate text-[13px] font-bold">{popup.title}</span>
           <button
             type="button"
-            aria-label="닫기"
+            aria-label={t("popup.close")}
             onClick={close}
             className="flex size-6 shrink-0 items-center justify-center rounded-xs text-white/80 transition hover:bg-white/20 hover:text-white"
           >
@@ -137,8 +141,8 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
                 type="button"
                 onClick={() => setZoomed(true)}
                 className="block w-full cursor-zoom-in"
-                title="클릭하면 원본 크기로 봅니다"
-                aria-label="이미지 원본 크기로 보기"
+                title={t("popup.zoomTitle")}
+                aria-label={t("popup.zoomAria")}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element -- signed/외부 URL 이미지 */}
                 <img src={popup.imageSrc} alt={popup.title} className="block w-full" />
@@ -160,11 +164,11 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
                   onNavigate={close}
                   className={LINK_CLASS}
                 >
-                  {popup.linkLabel || "자세히 보기"}
+                  {popup.linkLabel || t("popup.more")}
                 </WindowLink>
               ) : (
                 <a href={popup.linkUrl} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
-                  {popup.linkLabel || "자세히 보기"}
+                  {popup.linkLabel || t("popup.more")}
                 </a>
               )}
             </div>
@@ -180,7 +184,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
                 disabled={saving}
                 onChange={(e) => void choose(e.target.checked ? "week" : null)}
               />
-              7일간 보지 않기
+              {t("popup.hideWeek")}
             </label>
             <label className="flex cursor-pointer items-center gap-1">
               <input
@@ -189,7 +193,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
                 disabled={saving}
                 onChange={(e) => void choose(e.target.checked ? "forever" : null)}
               />
-              다시 보지 않기
+              {t("popup.hideForever")}
             </label>
           </div>
           <button
@@ -197,7 +201,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
             onClick={close}
             className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-lg border px-2.5 py-1 text-xs transition"
           >
-            닫기
+            {t("popup.close")}
           </button>
           {saveError ? (
             <p role="status" className="text-danger w-full text-[11px]">
@@ -220,7 +224,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
             >
               <button
                 type="button"
-                aria-label="닫기"
+                aria-label={t("popup.close")}
                 onClick={() => setZoomed(false)}
                 className="fixed top-4 right-4 z-[101] flex size-9 items-center justify-center rounded-full bg-black/40 text-white transition hover:bg-black/60"
               >
