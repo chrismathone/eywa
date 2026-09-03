@@ -51,10 +51,13 @@ export type { TrendPoint };
 
 export async function getEnrolledStudentCount(): Promise<number> {
   const supabase = await createClient();
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from("students")
     .select("*", { count: "exact", head: true })
     .eq("status", "enrolled");
+  // 조회 실패를 **재원생 0명**이라는 사실 주장으로 바꾸지 않는다 — 히어로 KPI라 숫자 하나가 곧
+  // "학원이 비었다"로 읽힌다. 호출부(dashboardQuery)가 실패 허용을 담당한다(이 파일의 기존 규약).
+  if (error) throw new Error(`재원생 수 조회 실패: ${error.message}`);
   return count ?? 0;
 }
 
@@ -147,6 +150,9 @@ export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentCha
     supabase.from("students").select("id").eq("status", "enrolled").gte("enrolled_at", since).limit(2000),
     supabase.from("students").select("id").eq("status", "withdrawn").gte("withdrawn_at", since).limit(2000),
   ]);
+  // 조회 실패를 **'최근 7일 변동 없음'**이라는 거짓 문장으로 바꾸지 않는다(위 월간 함수와 같은 규약).
+  if (newCntRes.error) throw new Error(`신규 등록 수 조회 실패: ${newCntRes.error.message}`);
+  if (wdCntRes.error) throw new Error(`퇴원 수 조회 실패: ${wdCntRes.error.message}`);
   const newCount = newCntRes.count ?? 0;
   const withdrawnCount = wdCntRes.count ?? 0;
 

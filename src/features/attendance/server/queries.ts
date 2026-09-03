@@ -761,7 +761,7 @@ export async function getMonthlyAttendanceMatrix(
   const endIso = days[days.length - 1]!.date;
 
   // 해당 반의 활성 학생 + 그 반의 수업요일 + 이 기간에 기록을 남긴 학생 — 서로 독립이라 병렬로(B4).
-  const [{ data: enrollments }, { data: schedules }, recordedRows] = await Promise.all([
+  const [enrollRes, scheduleRes, recordedRows] = await Promise.all([
     supabase
       .from("enrollments")
       .select(
@@ -799,6 +799,22 @@ export async function getMonthlyAttendanceMatrix(
         .range(from, to),
     ),
   ]);
+
+  /**
+   * 🔴 **조회 실패를 빈 목록으로 삼키지 않는다**(B3). 여기서 `?? []`로 넘기면 명단 조회가 실패했을 때
+   *    화면이 "이 반에 등록된 학생이 없습니다"라고 **사실 주장**을 한다 — 출석 장부에서 이건 가장
+   *    위험한 거짓말이다(그 달을 통째로 비어 보이게 만든다). 던지면 `(shell)/error.tsx`가 받아
+   *    "화면을 불러오지 못했습니다"로 정직하게 말하고 다시 시도할 길을 준다([[#109]]).
+   * ⚠️ 위 `fetchAllPaged`는 규약대로 이미 스스로 throw한다 — 여기 둘만 맨 select라 손으로 검사한다.
+   */
+  if (enrollRes.error) {
+    throw new Error(`출석부 명단을 불러오지 못했습니다: ${enrollRes.error.message}`);
+  }
+  if (scheduleRes.error) {
+    throw new Error(`출석부 교시를 불러오지 못했습니다: ${scheduleRes.error.message}`);
+  }
+  const enrollments = enrollRes.data;
+  const schedules = scheduleRes.data;
 
   const classDows = dowsFromKeys((schedules ?? []).map((s) => s.day_of_week as string));
 

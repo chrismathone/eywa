@@ -3,8 +3,7 @@ import type { StudentMoney } from "@/features/attendance/server/teacher-money";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
 import { BADGE_LABEL, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
-import { BADGE_BASE, BADGE_TONE, NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
-import { lockedMessage } from "@/features/attendance/lock-message";
+import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
@@ -149,12 +148,11 @@ export function MatrixRow({
               attendDay={attend}
               muted={!!holiday || (!attend && d.isWeekend)}
               outside={outside}
-              locked={
-                lockBefore && d.date < lockBefore
-                  ? lockedMessage(d.date, lockBefore)
-                  : notMine
-                    ? NOT_MINE_MESSAGE
-                    : null
+              /* 🔴 문장이 아니라 **사유 코드**만 넘긴다 — 잠긴 칸마다 157B 문장을 서버가 만들어
+                 내려보내면 그게 그대로 RSC 페이로드 곱이 된다(강사 전체 보기는 잠긴 칸이 수천 개).
+                 문장은 칸이 grid-context의 `lockNoteOf`로 편다(판정·문구는 그대로 한 곳). */
+              lockedReason={
+                lockBefore && d.date < lockBefore ? "past" : notMine ? "notMine" : null
               }
               derived={!!matrix.derived[student.id]?.[d.date]}
               daySlots={matrix.slots[student.id]?.[d.date]}

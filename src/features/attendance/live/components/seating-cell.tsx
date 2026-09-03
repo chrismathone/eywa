@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useSeatingCanEdit } from "./seating-edit-context";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { fitSeatName, SEAT_CELL_NAME_LADDER } from "@/features/attendance/seat/name-fit";
 import { attendanceCheckMark, isDeskIntakeNote, seatRecorderName } from "../check-time";
@@ -38,6 +39,7 @@ export function SeatingCell({
   student: SeatingStudent;
   found?: boolean;
 }) {
+  const boardEditable = useSeatingCanEdit();
   const router = useRouter();
   const [busy, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -99,7 +101,10 @@ export function SeatingCell({
         // 자리(LAB·JJ)는 표기하지 않는다 — 담당이 방이라 대신 찍은 한 사람 이름이 전 칸에 반복된다.
         seatLabel: klass.seatLabel,
       });
-  const canMark = klass.ownedByMe || canDeskMark(status, klass.phase);
+  // 🔴 보드가 편집 불가면(읽기 전용 역할 · 강사의 7일 편집창 밖 · 다른 강사 뷰) 어떤 칸도 못 찍는다.
+  //    상단 띠는 같은 값을 읽어 스스로를 감추는데 이 칸만 안 읽어서, 서버가 거절할 버튼을 내밀고
+  //    있었다([[#103]]). 진짜 차단은 여전히 서버 몫이다([[#77]]).
+  const canMark = boardEditable && (klass.ownedByMe || canDeskMark(status, klass.phase));
   /**
    * 칸은 3열 격자라 폭이 고정이다 — 접미사 붙은 이름(`김하늘A`)이 넘쳐 `김하...`로 잘렸다.
    * 칸을 넓히지 않고 **그 이름만** 한 단계씩 줄인다(하한 11px). 하한에서도 넘치면 말줄임이
