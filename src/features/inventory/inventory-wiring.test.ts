@@ -9,7 +9,7 @@
  * 6. faces.ts가 SUBTABS_BY_MENU.inventory에서 파생된다(faces.test.ts).
  * 7. CANON_SURFACES에 /inventory 화면이 등록돼 있다.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MENU_ICON } from "@/components/icons/eywa-icons";
@@ -121,6 +121,64 @@ describe("⑧ 자산 분류(0247a) — 코드 고정 enum을 학원별 데이터
     const describeSrc = read("src", "features", "audit", "describe.ts");
     expect(describeSrc).toContain('case "inventory_category_create"');
     expect(describeSrc).toMatch(/\binventory_category: "[가-힣 ]+"/);
+  });
+});
+
+describe("⑨ QR 자산 화면 = 비로그인 공개 · 셸 없음 · 읽기 전용(원장 2026-09-03)", () => {
+  const PAGE = ["src", "app", "(asset)", "inventory", "asset", "[code]", "page.tsx"];
+
+  it("🔴 주소는 그대로다 — 이미 인쇄한 라벨이 `/inventory/asset/<자산ID>`를 가리킨다", () => {
+    // 라우트 그룹 `(asset)`은 URL에 안 나타난다 → 파일 경로에서 그룹만 뺀 것이 곧 주소다.
+    expect(existsSync(join(process.cwd(), ...PAGE))).toBe(true);
+    // QR이 담는 주소 규약도 불변(여기가 바뀌면 붙여 둔 라벨이 전부 죽는다).
+    expect(read("src", "features", "inventory", "qr.ts")).toContain("`/inventory/asset/${encodeURIComponent(normalizeAssetCode(assetCode))}`");
+    // 옛 자리((shell))엔 남아 있으면 안 된다 — 같은 주소가 두 번 잡히면 빌드가 깨진다.
+    expect(existsSync(join(process.cwd(), "src", "app", "(shell)", "inventory", "asset"))).toBe(false);
+  });
+
+  it("크롬리스 그룹 = (seat)·(share)와 같은 모양의 layout + 하단 여백은 페이지가 직접", () => {
+    const layout = read("src", "app", "(asset)", "layout.tsx");
+    expect(layout).toContain("min-h-screen");
+    // 셸 레이아웃(사이드바·헤더·알림벨)을 끌어오지 않는다.
+    expect(layout).not.toMatch(/AppShell|Sidebar|NotificationBell/);
+    // 크롬리스는 셸 main의 pb를 못 받는다 → 페이지가 **둘 다** 직접 준다(디자인 규약 `pb-8 lg:pb-10`).
+    const page = read(...PAGE);
+    expect(page).toContain("pb-8");
+    expect(page).toContain("lg:pb-10");
+  });
+
+  it("🔴 인증 우회는 `/inventory/asset/` 한 갈래뿐 — 목록·인쇄는 안 열린다", () => {
+    const proxy = read("src", "lib", "supabase", "proxy.ts");
+    expect(proxy).toContain('pathname.startsWith("/inventory/asset/")');
+    // "/inventory"로 여는 순간 자산 대장 전체가 공개된다.
+    expect(proxy).not.toMatch(/startsWith\("\/inventory"\)/);
+    expect(proxy).not.toMatch(/pathname === "\/inventory"[^/]/);
+  });
+
+  it("🔴 공개 화면은 읽기 전용 — 로그인 게이트도 쓰기 버튼도 없다", () => {
+    const page = read(...PAGE);
+    // requireAccess가 남아 있으면 비로그인이 못 연다(이 변경의 요지가 사라진다).
+    expect(page).not.toContain("requireAccess");
+    // 상태 변경·대여·실사·엑셀 같은 쓰기 진입로가 딸려 들어오지 않게.
+    expect(page).not.toMatch(/StatusDialog|LoanDialog|AuditDialog|ExcelDialog|-actions"/);
+    // 목록 링크·QR 블록 제거(원장 *"목록으로 갈 필요도 없음"* · QR을 찍고 온 사람에게 QR 재노출 금지).
+    expect(page).not.toContain("재고관리 목록");
+    expect(page).not.toContain("qrImageSrc");
+    // 최근 실사 아래 한 줄(문구 그대로, 다른 안내 추가 금지).
+    expect(page).toContain("문의는 2층 데스크로 부탁드립니다.");
+  });
+
+  it("세션 없이도 읽는다 — admin + 자산ID가 유일할 때만(테넌트 모호하면 못 찾은 것으로)", () => {
+    const q = read("src", "features", "inventory", "server", "asset-queries.ts");
+    expect(q).toContain("createAdminClient");
+    // 세션에서 테넌트를 얻으면 비로그인에서 항상 null이라 화면이 통째로 404가 된다.
+    // (주석의 설명 문장은 걸리면 안 되므로 **import 문**으로만 판정한다.)
+    expect(q).not.toMatch(/^import .*(getCurrentUser|supabase\/server).*$/m);
+    // 유일성 확인 — limit(2) 후 정확히 1건일 때만.
+    expect(q).toContain(".limit(2)");
+    expect(q).toMatch(/rows\.length !== 1/);
+    // admin은 RLS 우회 → 대여·실사는 그 자산의 tenant로 좁힌다.
+    expect((q.match(/\.eq\("tenant_id", tenantId\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });
 

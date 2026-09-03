@@ -9,7 +9,7 @@ import { AuditDialog } from "./audit-dialog";
 import { DashCell } from "./cell-bits";
 import { ListToolbar } from "./list-toolbar";
 import { SortableTable, type Column } from "./sortable-table";
-import { AuditResultPill } from "./status-pill";
+import { AuditResultPill } from "@/features/inventory/components/status-pill";
 import { useSort } from "./use-sort";
 
 /** 실사이력 면 — `실사ID · 자산ID · 실사일 · 결과 · 확인위치 · 확인자 · 조치`. */
