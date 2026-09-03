@@ -118,9 +118,9 @@ describe("팔레트 대비 — 화이트 캔버스(v4)", () => {
     expect(alphaOf(token("line"))).toBeLessThan(alphaOf(token("line-strong")));
   });
 
-  it("카드 그림자 첫 레이어가 헤어라인 링이다 — 화이트 위 카드 경계", () => {
-    const shadow = token("shadow-card");
-    expect(shadow).toMatch(/^0 0 0 1px/);
+  it("v5: 카드에 링도 그림자도 없다 — 원장 2026-09-03 '링·그림자 전부 제거'(구조는 제목·간격·구분선이 그린다)", () => {
+    expect(token("shadow-card")).toBe("none");
+    expect(token("shadow-card-hover")).toBe("none");
   });
 });
 

@@ -31,6 +31,7 @@ import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
+import { ControlScalePreview } from "@/components/dev/control-scale-preview";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
@@ -67,6 +68,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             <PaletteHotkeyForward />
             {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
             <WindowMinSizeNotice />
+            {/* 🧪 개발 전용 — 창 문서에도 같은 --control-* 값을 적용(표시 없음). 결정 후 제거. */}
+            <ControlScalePreview />
             {children}
           </main>
         </OperationsProvider></EditPresenceProvider>
@@ -209,6 +212,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </OperationsProvider></EditPresenceProvider>
         </main>
         <NoticePopupLayer popups={popups} />
+        {/* 🧪 개발 전용 — 컨트롤 라벨 16/18/20 비교 스위치. 결정 후 제거. */}
+        <ControlScalePreview />
       </div>
       </WorkspaceEnabledProvider>
     );
@@ -278,6 +283,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
       <NoticePopupLayer popups={popups} />
+      {/* 🧪 개발 전용 — 컨트롤 라벨 16/18/20 비교 스위치(원장 "3개 시안 모두 보고 결정"). 결정 후 제거. */}
+      <ControlScalePreview />
     </div>
     </OperationsProvider>
   );
