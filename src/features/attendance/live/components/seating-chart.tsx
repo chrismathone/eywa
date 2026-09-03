@@ -15,6 +15,7 @@
  */
 import { useState } from "react";
 import { EmptyState } from "@/components/empty-state";
+import { SeatingEditProvider } from "./seating-edit-context";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { SearchScopeChip, StudentSearchBox } from "@/features/attendance/components/student-search-box";
 import {
@@ -133,6 +134,9 @@ export function SeatingChart({
   );
 
   return (
+    // 편집 가능 여부는 **보드 단위 사실 하나** — 칸(SeatingCell)이 컨텍스트로 읽는다.
+    // 안 내리면 읽기 전용 역할·7일 지난 날짜에서도 알약이 눌리는 것처럼 보인다([[#103]]).
+    <SeatingEditProvider canEdit={board.canEdit}>
     <div className="space-y-6">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <p className="text-sm font-bold">
@@ -226,6 +230,7 @@ export function SeatingChart({
         <FloorList classes={subjectClasses} date={board.date} />
       )}
     </div>
+    </SeatingEditProvider>
   );
 }
 

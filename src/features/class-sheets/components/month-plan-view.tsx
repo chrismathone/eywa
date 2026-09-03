@@ -299,7 +299,7 @@ export function MonthPlanView({
 
   const linesOfDate = (date: string) => mpLinesOfDate(data, date);
   const verdictOf = (date: string) =>
-    mpCompareDay({ date, cells, lines: linesOfDate(date), isOff: isOff(date) });
+    mpCompareDay({ date, cells, lines: linesOfDate(date), isOff: isOff(date), today: data.today });
 
   if (data.dows.length === 0) {
     return (

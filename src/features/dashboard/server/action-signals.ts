@@ -8,6 +8,8 @@ import {
 } from "@/features/attendance/effective-records";
 import { HUMAN_RESOLVED_STATUSES, STUCK_MINUTES } from "@/features/report-admin/classnote-queue";
 import { getTenantSettings, getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { buildHolidayMap } from "@/features/attendance/calendar";
+import { isHolidayOn } from "@/features/class-sheets/lib/holiday";
 import { isReportTrackedSubject } from "../report-subjects";
 import { getUnassignedEnrolledStudents } from "./queries";
 import {
@@ -454,6 +456,19 @@ export async function getTodayActionSignals(
         .then((st) => st.report.classnoteSubjects ?? null)
         .catch(() => null)
     : null;
+  /**
+   * 🔴 **학원 휴일엔 재촉하지 않는다.** 이 두 신호("오늘 미작성 보고서"·"어제 출결 미기록")는
+   *    시간표 슬롯만 보고 세므로 휴원일에도 그날 배정된 반을 전부 미작성으로 잡아 거짓 경보가 뜬다.
+   *    규약은 새로 짓지 않는다 — 강사 시트·작성률이 쓰는 그대로(원장 2026-07-22): **안 쓴 휴일 =
+   *    대상 0**(의무가 없다). 판정 자료는 학원설정 `operations.holidays` **하나뿐**이고
+   *    `features/calendar/holidays.ts`의 내장 법정공휴일 표는 쓰지 않는다(법정공휴일 ≠ 학원 휴원일 —
+   *    이 학원은 실제로 공휴일에 수업한다).
+   * ⚠️ fail-soft — 설정 조회가 실패하면 `null`이라 종전처럼 전부 평일로 본다(신호를 죽이지 않는다).
+   * ⚠️ `getTenantSettings`는 요청 캐시 + 테넌트 캐시라 위 `trackedSubjects`와 같은 조회를 공유한다(왕복 0).
+   */
+  const holidayMap = await (db ? getTenantSettingsByTenantId(db.tenantId) : getTenantSettings())
+    .then((st) => buildHolidayMap(st.operations.holidays))
+    .catch(() => null);
   const staffApprovalsEnabled = scope.staffApprovals ?? enabled("staff");
 
   const failedCount = async (
@@ -523,7 +538,10 @@ export async function getTodayActionSignals(
         requiredAccess: "read",
       },
       [] as TodayActionsRaw["unrecordedYesterday"],
-      () => unrecordedClassesSignal(supabase, yesterday, db),
+      () =>
+        isHolidayOn(holidayMap, yesterday)
+          ? Promise.resolve([] as TodayActionsRaw["unrecordedYesterday"])
+          : unrecordedClassesSignal(supabase, yesterday, db),
     ),
     collectSignal(
       enabled("meetings"),
@@ -671,7 +689,10 @@ export async function getTodayActionSignals(
         requiredAccess: "read",
       },
       { count: 0, names: [], bySubject: [] },
-      () => unwrittenReportsSignal(supabase, today, nowMinutes, db, trackedSubjects),
+      () =>
+        isHolidayOn(holidayMap, today)
+          ? Promise.resolve({ count: 0, names: [], bySubject: [] })
+          : unwrittenReportsSignal(supabase, today, nowMinutes, db, trackedSubjects),
     ),
     collectSignal(
       enabled("students"),

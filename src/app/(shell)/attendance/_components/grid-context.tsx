@@ -30,6 +30,12 @@ type Ctx = {
   /** 전부 접기/펼치기 — 표 머리의 이름 칸 토글. */
   setAllCollapsed: (collapse: boolean) => void;
   isLocked: (date: string) => boolean;
+  /**
+   * 잠긴 칸의 사유 문장 — **칸마다 서버가 만들어 내려보내지 않고 여기서 만든다.**
+   * 문장이 157B라 잠긴 칸 수천 개면 RSC 페이로드에만 그 곱이 실렸다(강사 전체 보기 실측 1MB대).
+   * 칸은 `lockedReason`(4~7자)만 받고 표시할 때 이 함수로 편다.
+   */
+  lockNoteOf: (date: string) => string | null;
   /** 팝오버가 저장한 값을 격자에도 즉시 반영(표기가 갈리지 않게). */
   setLocal: (key: string, v: GridValue) => void;
   /** 인라인 input에서 Enter/Tab/화살표 — 버퍼를 확정하고 이동한다. */
@@ -574,6 +580,7 @@ export function GridProvider({
       toggleCollapsed,
       setAllCollapsed,
       isLocked,
+      lockNoteOf,
       setLocal: (key: string, v: GridValue) => store.setLocal([[key, v]]),
       commitAndMove: (dx: number, dy: number) => {
         commit();
@@ -586,7 +593,7 @@ export function GridProvider({
       },
       startFill,
     }),
-    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, commit, startFill],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill],
   );
 
   return (

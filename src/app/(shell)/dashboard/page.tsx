@@ -88,7 +88,7 @@ export default async function TodayPage() {
   // 노출만 넓으면 readonly 관리자에게 '항상 권한 오류 나는 죽은 패널'이 보인다(적대 리뷰 확정).
   const canUseAssistant = canSeeDailyBriefing && canWrite(user.systemRole, "dashboard", permissionMatrix);
   const [
-    enrolled,
+    enrolledResult,
     attendanceState,
     trend,
     todaySchedule,
@@ -102,11 +102,14 @@ export default async function TodayPage() {
     settings,
     enrollmentChangesResult,
     actionSignals,
-    enrollmentChange,
+    enrollmentChangeResult,
     dailyBriefingResult,
     assistantConversationResult,
   ] = await Promise.all([
-    access.read.students ? getEnrolledStudentCount() : Promise.resolve(0),
+    // 실패 허용 래퍼 — 쿼리는 throw하고(위장 금지) 카드는 fallback으로 그리되 실패가 로그에 남는다.
+    access.read.students
+      ? dashboardQuery("enrolled student count", getEnrolledStudentCount(), 0)
+      : Promise.resolve({ data: 0, unavailable: false }),
     access.read.attendance
       ? getDashboardAttendanceState()
       : Promise.resolve({
@@ -118,7 +121,11 @@ export default async function TodayPage() {
           snapshotProcessingIssue: false,
         }),
     access.read.attendance || access.read.billing
-      ? getTrendDataLast7Days({ attendance: access.read.attendance, billing: access.read.billing })
+      ? // ⚠️ 캐시본(60초)은 admin 클라이언트라 RLS를 안 탄다 — **이 줄의 권한 분기가 곧 게이트다**.
+        getTrendDataLast7Days(user.tenantId, {
+          attendance: access.read.attendance,
+          billing: access.read.billing,
+        })
       : Promise.resolve([]),
     access.read.timetable || access.read.classes || access.read.attendance
       ? getTodaySchedule()
@@ -159,7 +166,9 @@ export default async function TodayPage() {
       staffApprovals: access.manageStaff,
       owner: access.read.owner,
     }),
-    access.read.students ? getEnrollmentChangeLast7d() : Promise.resolve(EMPTY_ENROLLMENT_CHANGE),
+    access.read.students
+      ? dashboardQuery("enrollment change 7d", getEnrollmentChangeLast7d(), EMPTY_ENROLLMENT_CHANGE)
+      : Promise.resolve({ data: EMPTY_ENROLLMENT_CHANGE, unavailable: false }),
     // 저장분 조회만(AI 호출 없음). 테이블 미적용 DB에서도 대시보드가 죽지 않게 실패 허용 래퍼.
     canSeeDailyBriefing
       ? dashboardQuery<DailyBriefingRow | null>("daily briefing", getDailyBriefing(user.tenantId, kstToday()), null)
@@ -314,7 +323,7 @@ export default async function TodayPage() {
         metrics={{
           enrollment: access.read.students
             ? {
-                count: enrolled,
+                count: enrolledResult.data,
                 delta: enrollmentDelta(
                   enrollmentChanges.newCount,
                   enrollmentChanges.withdrawnCount,
@@ -391,7 +400,7 @@ export default async function TodayPage() {
       {/* 학원 펄스 — 판단 큐 다음의 보조 맥락. */}
       <SlimTrend
         data={trend}
-        change={enrollmentChange}
+        change={enrollmentChangeResult.data}
         subjects={subjects}
         visible={{
           attendance: access.read.attendance,

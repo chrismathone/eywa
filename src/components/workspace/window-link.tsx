@@ -109,9 +109,18 @@ export function WindowLink({
   const linkHref = inFrame ? withEmbed(href) : href;
   // BL4 — 데스크톱 최상위(창 열기)면 embed document, 그 외(모바일·iframe 드릴인)는 실제 이동 URL 프리워밍.
   const prefetchEmbed = isDesktop && workspaceEnabled && !inFrame;
+
   return (
     <Link
       href={linkHref}
+      // 🔴 뷰포트 프리페치를 끈다(Next 16 App Router 기본값 `auto`는 링크가 화면에 들어오면 프리페치).
+      //    시간표·명단 격자는 상세 링크를 수백 개 그려서, 창을 여는 순간 그 수만큼 RSC 요청이 한꺼번에
+      //    나가고 각 요청이 셸 레이아웃(인증·설정·권한)을 처음부터 다시 돌린다 — 정작 사람은 하나를 누른다.
+      //    데스크톱 최상위에선 클릭이 **iframe 창**을 여는데 부모 라우터 캐시는 iframe과 공유되지 않아
+      //    그 프리페치는 애초에 **효과 0**이다(prefetch-embed.ts 실측 주석).
+      // ⚠️ 자주 여는 메뉴 루트의 예열은 그대로다 — 아래 onMouseEnter의 document 프리워밍(BL4)이 맡는다.
+      //    상세 링크는 예열을 잃지만, 대부분의 상세 라우트엔 loading.tsx가 있어 클릭 즉시 뼈대가 뜬다.
+      prefetch={false}
       className={className}
       aria-label={ariaLabel}
       onClick={onClick}
