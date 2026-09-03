@@ -4,6 +4,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import {
   DEFAULT_SHEET_LANG,
   sheetT,
+  sheetTf,
   type SheetDictKey,
   type SheetLang,
 } from "./i18n";
@@ -38,4 +39,18 @@ export function useSheetLang(): SheetLang {
 export function useSheetT(): (key: SheetDictKey) => string {
   const lang = useSheetLang();
   return useMemo(() => (key: SheetDictKey) => sheetT(lang, key), [lang]);
+}
+
+/**
+ * 수를 끼우는 문구용 — `tf("strip.slotMeta", { time, n })`.
+ *
+ * 🔴 **조각을 이어 붙이지 말 것**(`앞 + n + 뒤`) — 한국어는 수 뒤에 단위가 오고(`미입력 4명`) 영어는
+ *    앞에 온다(`4 not marked`). 문장 전체를 사전에 넣고 자리만 뚫는다([`sheetTf`](./i18n.ts)).
+ */
+export function useSheetTf(): (key: SheetDictKey, params: Record<string, string | number>) => string {
+  const lang = useSheetLang();
+  return useMemo(
+    () => (key: SheetDictKey, params: Record<string, string | number>) => sheetTf(lang, key, params),
+    [lang],
+  );
 }

@@ -3,6 +3,10 @@
 import { Pencil } from "@/components/icons/eywa-icon-compat";
 import { dedupeEditors } from "./presence-state";
 import { useEditingOthers } from "./edit-presence";
+// 강사뷰 화면 언어(2026-09-03) — 🔴 **사람 이름은 번역하지 않는다**(자리로만 받는다).
+// ⚠️ 이 배지는 관리자 풀셸(수업목록·상담·등록상담·회의록·직원·학생)에서도 쓰인다 —
+//    provider가 강사 미니셸에만 걸려 있어 그쪽은 기본값 한국어로 떨어진다(원장: 관리자뷰 불변).
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 /**
  * 목록 행/카드에 인라인으로 붙는 "수정중" 배지 — 그 레코드를 **다른 사람이 지금 편집 중**이면 표시.
@@ -15,14 +19,21 @@ import { useEditingOthers } from "./edit-presence";
  *    여기만 다른 색으로 바꾸면 같은 사실이 화면마다 다른 색이 된다(의미색 캐논: 색은 뜻마다 하나).
  */
 export function EditingBadge({ scope, className }: { scope: string; className?: string }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const others = dedupeEditors(useEditingOthers(scope));
   if (others.length === 0) return null;
-  const first = others[0]!.userName || "누군가";
-  const label = others.length === 1 ? `수정중 · ${first}` : `수정중 · ${first} 외 ${others.length - 1}명`;
+  const first = others[0]!.userName || t("presence.someone");
+  // 🔴 꼬리(`외 N명`)는 **문장 조각이 아니라 사전 항목**이다 — 한국어는 수 뒤에 단위가 오고 영어는 앞에 온다.
+  const label = `${t("presence.editing")} · ${first}${
+    others.length === 1 ? "" : tf("presence.more", { n: others.length - 1 })
+  }`;
   return (
     <span
       className={`bg-amber inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-[2px] align-middle text-[11px] font-bold text-white ${className ?? ""}`}
-      title={`${others.map((o) => o.userName || "누군가").join(", ")}님이 지금 이 항목을 수정 중입니다`}
+      title={tf("presence.title", {
+        names: others.map((o) => o.userName || t("presence.someone")).join(", "),
+      })}
     >
       <Pencil className="size-2.5" strokeWidth={2.5} aria-hidden />
       {label}

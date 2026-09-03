@@ -19,6 +19,9 @@ import { reportError } from "@/lib/observability/report-error";
 import { groupAdjacentSlots } from "../seating";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { getLiveBoard, loadRequestMarks } from "../server/queries";
+// 강사뷰 화면 언어(2026-09-03) — 서버 컴포넌트라 context를 못 읽어 직접 판정한다(요청 캐시라 왕복 공유).
+import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { StripSlot } from "./strip-slot";
 
 export async function TodayAttendanceStrip() {
@@ -27,13 +30,17 @@ export async function TodayAttendanceStrip() {
   // ⚠️ 실패는 삼키되 **소리 없이 삼키지 않는다**(#89) — 이 스트립은 실패하면 그냥 안 보이므로, 조회가
   //    매번 깨져도 화면은 평소와 똑같아 아무도 눈치채지 못한다(기능이 죽은 채로 몇 주가 간다).
   const today = kstToday();
-  const [board, deskRequested] = await Promise.all([
+  // 🔴 언어도 **같은 `Promise.all`에** 넣는다(B4) — 앞에 따로 await하면 보드 조회 앞에 왕복이 하나
+  //    더 줄지어 서고, 이 스트립은 강사가 매일 여는 hot path다. 서로 의존이 없다.
+  //    (관리자·한국어 사용자는 `getShellView()`에서 조회 없이 즉시 'ko'로 떨어진다.)
+  const [board, deskRequested, lang] = await Promise.all([
     getLiveBoard(today, true).catch((e: unknown) => {
       reportError(e, { scope: "attendance.todayStrip" });
       return null;
     }),
     // '데스크 요청함' 표식 — 실패해도 버튼이 다시 보일 뿐이다(서버 dedup이 중복 발송을 막는다).
     loadRequestMarks(today, "attendance_desk_confirm_request").catch(() => new Set<string>()),
+    getTeacherViewLang(),
   ]);
   if (!board?.canEdit) return null;
 
@@ -51,15 +58,16 @@ export async function TodayAttendanceStrip() {
   return (
     <section className="border-amber/40 bg-amber/5 space-y-2 rounded-2xl border p-3">
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h2 className="text-amber text-sm font-bold">오늘 출석 미입력</h2>
+        <h2 className="text-amber text-sm font-bold">{sheetT(lang, "strip.title")}</h2>
+        {/* 🔴 수가 든 문구는 **문장 전체**를 사전에서 받는다 — 조각으로 이으면 영어 어순이 무너진다. */}
         <span className="num text-text-dim text-xs">
-          {slots.length}개 교시 · {missing}명
+          {sheetTf(lang, "strip.count", { slots: slots.length, students: missing })}
         </span>
         <Link
           href="/attendance/live"
           className="text-primary ml-auto text-xs font-semibold hover:underline"
         >
-          오늘 출결 자세히
+          {sheetT(lang, "strip.detailLink")}
         </Link>
       </header>
       {/* 열 수는 고정이 아니라 **한 줄 카드가 들어가는 폭(34rem)** 기준 auto-fill — 카드가 이름·시각·

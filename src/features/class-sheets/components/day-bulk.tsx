@@ -48,6 +48,8 @@ import {
 // 태도 선택지는 수학 수업보고서와 **같은 단일 소스**(원장 2026-08-06 "수학 수업보고서처럼").
 import { ATTITUDE } from "@/features/onescreen/attitude";
 import { FieldSelect } from "@/features/onescreen/components/field-select";
+// 강사뷰 화면 언어(2026-09-03) — 버튼·툴팁만. 태도 **값**(ATTITUDE)은 DB에 저장되는 값이라 번역 금지.
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { BasicAttendance } from "../lib/mark-cycle";
 
 const TERM_LABEL: Record<"regular" | "exam", string> = { regular: "평시", exam: "내신" };
@@ -94,6 +96,9 @@ export function DayBulk({
   onBulkStatus: (targets: DayBulkTarget[], status: string | null) => void;
   onBulkPlanCells: (lineIds: string[], field: PlanBulkField, value: string) => void;
 }) {
+  // 화면 언어 — 관리자 풀셸에서 ECS를 열면 provider가 없어 한국어로 떨어진다(원장: 관리자뷰 불변).
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [attitudeOpen, setAttitudeOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
@@ -183,12 +188,12 @@ export function DayBulk({
           attendanceCount > 0
             ? `${scopeWords} 범위 — 이 중 기록 없는 ${attendanceCount}칸만 출석으로 기록합니다(이미 기록된 칸은 그대로 둡니다)`
             : canMarkDate
-              ? "이 날은 이미 전원 기록됐습니다"
+              ? t("bulk.allDone")
               : // canMarkAttendanceByDate = 권한 AND 기간 — 원인을 단정하면 오표시(개별 툴팁과 동일 문구)
-                "출결 입력 권한이 없거나 수정 기간이 지났습니다"
+                t("bulk.noPerm")
         }
       >
-        일괄 출석{scope ? ` ${scope}` : ""}
+        {t("bulk.attendance")}{scope ? ` ${scope}` : ""}
       </button>
 
       {/* 태도 — 셀과 같은 5단 눈금에서 골라야 해서 창이 남는다. */}
@@ -203,7 +208,7 @@ export function DayBulk({
           className={PILL}
           title={`이 날 태도를 한 번에 — ${scopeWords} 범위(실제로 채우는 칸 수는 아래 버튼에)`}
         >
-          일괄 태도{scope ? ` ${scope}` : ""}
+          {t("bulk.attitude")}{scope ? ` ${scope}` : ""}
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
@@ -220,8 +225,8 @@ export function DayBulk({
               <FieldSelect
                 options={ATTITUDE}
                 value={picked}
-                ariaLabel="일괄 태도"
-                placeholder="태도 선택"
+                ariaLabel={t("bulk.attitude")}
+                placeholder={t("bulk.attitudePlaceholder")}
                 onSelect={setPicked}
               />
               <label className="text-text-dim flex cursor-pointer items-center gap-1.5 text-[12px]">
@@ -240,7 +245,8 @@ export function DayBulk({
                 disabled={statusCount === 0 || value === null}
                 onClick={applyStatus}
               >
-                {value === null ? "태도를 선택하세요" : `"${value}" 적용 ${statusCount}칸`}
+                {/* 🔴 수가 든 문구는 **문장 전체**를 사전에서(어순이 반대라 조각으로 못 잇는다). */}
+                {value === null ? t("bulk.attitudeChoose") : tf("bulk.attitudeApply", { value, n: statusCount })}
               </Button>
               {/* 각주 — 위 입력칸과 **붙어 보이지 않게** 구분한다. 안 그러면 바로 위 태도 설명으로 읽힌다. */}
               <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-[11px]">
@@ -260,8 +266,8 @@ export function DayBulk({
           if (!o) setPlanValue("");
         }}
       >
-        <Popover.Trigger className={PILL} title="이 날 수업계획(평시/내신)을 한 번에 채우기">
-          계획
+        <Popover.Trigger className={PILL} title={t("bulk.planTitle")}>
+          {t("bulk.plan")}
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">

@@ -280,6 +280,84 @@ export const SHEET_DICT = {
     ko: " 쓰실 수 있고, 쓰지 않은 휴일은 작성률에 잡히지 않습니다.",
     en: ", and holidays you leave blank are not counted against your completion rate.",
   },
+  // ── 컴퓨터 알림 안내 배너 ─────────────────────────────────────────
+  // ⚠️ 이 배너는 **강사 미니셸에서만** 렌더된다((shell)/layout.tsx `view === "teacher"`) — 그래도
+  //    provider 밖(관리자)에서 읽히면 기본값 한국어라 어느 쪽이든 안전하다.
+  // 🔴 ko 원문 교정 = **마침표 뒤 공백 하나뿐**(원장 2026-09-03 제보 "켜주세요.학부모가"). 굵은 조각과
+  //    설명 조각을 JSX에서 붙여 놔 공백이 없었다. 뜻은 한 글자도 안 바꿨다.
+  "banner.notify.title": { ko: "컴퓨터 알림을 켜주세요.", en: "Turn on desktop notifications." },
+  "banner.notify.body": {
+    ko: "학부모가 클래스노트에 새 글을 올리면 eywa 화면을 보고 있지 않아도 바로 알려드립니다. (브라우저가 물어보면 ‘허용’)",
+    en: "When a parent posts on ClassNote, you'll be notified right away even if eywa isn't open. (If the browser asks, choose “Allow”.)",
+  },
+  "banner.notify.enable": { ko: "켜기", en: "Turn on" },
+  "banner.notify.later": { ko: "나중에", en: "Later" },
+
+  // ── '오늘 출석 미입력' 스트립 ─────────────────────────────────────
+  // 🔴 수가 들어가는 문구는 **문장 전체**를 담고 자리만 뚫는다(`sheetTf`) — 조각 이어붙이기 금지.
+  "strip.title": { ko: "오늘 출석 미입력", en: "Attendance not marked yet" },
+  "strip.count": {
+    ko: "{slots}개 교시 · {students}명",
+    en: "{slots} periods · {students} students",
+  },
+  "strip.detailLink": { ko: "오늘 출결 자세히", en: "See today's attendance" },
+  // 교시 칸 한 줄의 메타 — 시각은 데이터(번역 대상 아님)라 자리로만 받는다.
+  "strip.slotMeta": { ko: "{time} · 미입력 {n}명", en: "{time} · {n} not marked" },
+  // 명단 넘침 꼬리 — 🔴 앞 공백을 문자열이 들고 있다(한국어는 띄고 영어도 띈다).
+  "strip.moreNames": { ko: " 외 {n}명", en: " +{n} more" },
+  "strip.fillAll": { ko: "전원 출석", en: "Mark all present" },
+  "strip.detail": { ko: "자세히", en: "Details" },
+  "strip.askDesk": { ko: "데스크에 확인 요청", en: "Ask front desk" },
+  "strip.asked": { ko: "데스크에 요청함", en: "Request sent" },
+  "strip.askDesk.title": {
+    ko: "미입력 학생의 등원 확인을 데스크에 요청합니다",
+    en: "Ask the front desk to confirm whether these students arrived",
+  },
+  "strip.saveFailed": {
+    ko: "저장하지 못했습니다 — 다시 눌러 주세요",
+    en: "Couldn't save — please press again",
+  },
+  "strip.requestFailed": {
+    ko: "요청을 보내지 못했습니다 — 다시 눌러 주세요",
+    en: "Couldn't send the request — please press again",
+  },
+
+  // ── '수정중' 동시편집 배지 ────────────────────────────────────────
+  // 🔴 **이름은 번역하지 않는다**(사람 이름) — 자리로만 받는다.
+  // ⚠️ 이 배지는 관리자 풀셸(수업목록·상담·등록상담)에서도 쓰인다 — provider 밖이라 한국어로 떨어진다.
+  "presence.editing": { ko: "수정중", en: "Editing" },
+  "presence.someone": { ko: "누군가", en: "someone" },
+  "presence.more": { ko: " 외 {n}명", en: " +{n}" },
+  // ⚠️ 영어는 **`is/are`를 쓰지 않는다** — 이름이 하나일 수도 여럿일 수도 있어 어느 쪽을 골라도
+  //    절반은 틀린 문장이 된다(한국어 `님이`는 수와 무관해 문제가 없다). 대시로 끊어 수를 안 드러낸다.
+  "presence.title": {
+    ko: "{names}님이 지금 이 항목을 수정 중입니다",
+    en: "{names} — editing this item right now",
+  },
+
+  // ── 하루 일괄 입력 툴바 ───────────────────────────────────────────
+  "bulk.attendance": { ko: "일괄 출석", en: "Mark all present" },
+  "bulk.attitude": { ko: "일괄 태도", en: "Set attitude" },
+  "bulk.plan": { ko: "계획", en: "Plan" },
+  "bulk.allDone": {
+    ko: "이 날은 이미 전원 기록됐습니다",
+    en: "Everyone is already marked for this day",
+  },
+  "bulk.noPerm": {
+    ko: "출결 입력 권한이 없거나 수정 기간이 지났습니다",
+    en: "You can't edit attendance here — no permission, or the edit window has closed",
+  },
+  "bulk.attitudePlaceholder": { ko: "태도 선택", en: "Choose attitude" },
+  "bulk.attitudeChoose": { ko: "태도를 선택하세요", en: "Choose an attitude" },
+  "bulk.attitudeApply": { ko: "\"{value}\" 적용 {n}칸", en: "Apply “{value}” to {n} cells" },
+  "bulk.planTitle": {
+    ko: "이 날 수업계획(평시/내신)을 한 번에 채우기",
+    en: "Fill this day's lesson plan at once (regular / exam)",
+  },
+  // ⚠️ `평시`·`내신`(TERM_LABEL)은 **아직 안 옮겼다** — 그 라벨이 확인창·placeholder 등 긴 문장 6곳에
+  //    끼워져 있어(조사 `(으)로` 포함) 라벨만 옮기면 문장이 반쯤 영어가 된다. 그 묶음을 통째로 옮길 때
+  //    함께 넣을 것. 🔴 지금 키만 만들어 두지 않는다(orphan 금지 — 가드가 구역을 잠근다).
+
   // ── 팝업 공지 껍데기 ──────────────────────────────────────────────
   // 🔴 **본문·제목은 여기 없다** — 사람이 쓴 글이라 0249a 번역 캐시가 맡는다(정적 사전이 아니다).
   //    여기 있는 건 우리가 만든 **버튼·체크박스 글자**뿐이다.
@@ -392,6 +470,26 @@ export function sheetMenuLabel(menuKey: string, lang: SheetLang): string | null 
 /** 호출부에서 `t("...")`로 쓰기 위한 바인딩(서버·클라 공용). */
 export function sheetTranslator(lang: SheetLang): (key: SheetDictKey) => string {
   return (key) => sheetT(lang, key);
+}
+
+/**
+ * **수를 끼우는 문구** — `{이름}` 자리를 채운다.
+ *
+ * 🔴 **조각 세 개를 이어 붙이지 말 것**(`앞 + n + 뒤`) — 한국어는 수 뒤에 단위가 오고(`미입력 4명`)
+ *    영어는 앞에 온다(`4 unmarked`). 조각으로 두면 영어 어순이 무너진다(`Today's classes 3 —`를
+ *    그렇게 만들었다가 고쳤다). 문장 **전체**를 사전에 넣고 자리만 뚫는다.
+ * ⚠️ 값은 문자열로 그대로 박는다(이스케이프 없음) — 넣는 것은 우리가 만든 수·이름뿐이고 JSX가
+ *    렌더하므로 XSS 경로가 아니다.
+ * ⚠️ 없는 자리는 그대로 남는다(빈칸으로 지우지 않는다) — 개발 중에 눈에 띄어야 고친다.
+ */
+export function sheetTf(
+  lang: SheetLang,
+  key: SheetDictKey,
+  params: Record<string, string | number>,
+): string {
+  let out = sheetT(lang, key);
+  for (const [k, v] of Object.entries(params)) out = out.split(`{${k}}`).join(String(v));
+  return out;
 }
 
 // ── 날짜 표기 ────────────────────────────────────────────────────────

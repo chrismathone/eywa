@@ -12,6 +12,8 @@ import Link from "next/link";
 import { setAttendanceBulk } from "@/features/attendance/server/actions";
 import { requestDeskConfirm } from "@/features/attendance/live/server/actions";
 import { publishAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
+// 강사뷰 화면 언어(2026-09-03) — 반 이름·학생 이름·시각은 데이터라 번역 대상이 아니다.
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export function StripSlot({
   date,
@@ -36,6 +38,8 @@ export function StripSlot({
   /** 이 (반·저장축)에 이미 '데스크 확인 요청'을 보냈는가 — 표식은 서버(dedup 원장)가 진실. */
   deskRequested: boolean;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const router = useRouter();
   const [busy, startTransition] = useTransition();
   const [done, setDone] = useState(false);
@@ -77,7 +81,7 @@ export function StripSlot({
         })
         .catch(() => {
           setDone(false);
-          setError("저장하지 못했습니다 — 다시 눌러 주세요");
+          setError(t("strip.saveFailed"));
         });
     });
   }
@@ -101,7 +105,7 @@ export function StripSlot({
         })
         .catch(() => {
           setAsked(deskRequested);
-          setError("요청을 보내지 못했습니다 — 다시 눌러 주세요");
+          setError(t("strip.requestFailed"));
         });
     });
   }
@@ -117,9 +121,10 @@ export function StripSlot({
       <p className="min-w-0 truncate text-sm font-bold" title={className}>
         {className}
       </p>
+      {/* 🔴 수가 든 문구는 **문장 전체**를 사전에서 받는다(`미입력 4명` ↔ `4 not marked` — 어순이 반대). */}
       <p className="text-text-dim num shrink-0 text-xs">
         {periodLabel ? `${periodLabel} · ` : ""}
-        {slotStart} · 미입력 {pendingIds.length}명
+        {tf("strip.slotMeta", { time: slotStart, n: pendingIds.length })}
       </p>
       {/* 명단은 남는 공간만 쓴다(basis 0) — 좁으면 먼저 줄어들되 최소 폭은 지켜 버튼을 다음 줄로 민다. */}
       <p
@@ -127,7 +132,7 @@ export function StripSlot({
         title={pendingNames.join(", ")}
       >
         {pendingNames.slice(0, 4).join(", ")}
-        {pendingNames.length > 4 ? ` 외 ${pendingNames.length - 4}명` : ""}
+        {pendingNames.length > 4 ? tf("strip.moreNames", { n: pendingNames.length - 4 }) : ""}
       </p>
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <button
@@ -136,27 +141,27 @@ export function StripSlot({
           disabled={busy}
           className="bg-primary text-primary-foreground rounded-lg px-2.5 py-1 text-xs font-bold whitespace-nowrap disabled:opacity-60"
         >
-          전원 출석
+          {t("strip.fillAll")}
         </button>
         <Link
           href="/attendance/live"
           className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-center text-xs whitespace-nowrap"
         >
-          자세히
+          {t("strip.detail")}
         </Link>
         {asked ? (
           <span className="text-text-faint text-center text-xs font-bold whitespace-nowrap">
-            데스크에 요청함
+            {t("strip.asked")}
           </span>
         ) : (
           <button
             type="button"
             onClick={askDesk}
             disabled={busy}
-            title="미입력 학생의 등원 확인을 데스크에 요청합니다"
+            title={t("strip.askDesk.title")}
             className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-xs whitespace-nowrap disabled:opacity-60"
           >
-            데스크에 확인 요청
+            {t("strip.askDesk")}
           </button>
         )}
       </div>

@@ -48,7 +48,22 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
     // 접두사가 늘면 그 구역을 실제로 배선했는지 사람이 한 번 더 보게 하는 가드다.
     const prefixes = new Set(Object.keys(SHEET_DICT).map((k) => k.split(".")[0]));
     expect([...prefixes].sort()).toEqual(
-      ["chrome", "face", "filter", "landing", "lang", "menu", "nav", "popup", "today", "toolbar"].sort(),
+      [
+        "banner",
+        "bulk",
+        "chrome",
+        "face",
+        "filter",
+        "landing",
+        "lang",
+        "menu",
+        "nav",
+        "popup",
+        "presence",
+        "strip",
+        "today",
+        "toolbar",
+      ].sort(),
     );
   });
 });
