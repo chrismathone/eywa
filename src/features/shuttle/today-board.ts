@@ -176,3 +176,44 @@ export function firstTime(run: Pick<ShuttleRun, "stops">): string {
   }
   return best;
 }
+
+/**
+ * 그날 줄을 **정류장으로 묶는다** — 화면 밀도의 핵심.
+ *
+ * 원장(2026-09-03): *"한 페이지에 정보가 너무 많고 글자는 작고 기능은 많으니 처음 보는 사람들이
+ * 쓰기 힘들지"*. 실화면을 재 보니 같은 정류장 이름이 **줄마다 반복**되고 있었다 —
+ * `김효빈 14:00 · 대구오페라 스위첸아파트 봄날부동산 앞` 이 세 줄 연속. 이름(봐야 할 것)보다
+ * 정류장 글자 덩어리가 훨씬 커서 위계가 뒤집혀 있었다.
+ *
+ * 🔑 **줄은 이미 노선 순서**다(`plannedRidesOn`이 정류장 sort_order로 훑는다) — 그래서 **연속된
+ *    같은 정류장**만 묶으면 순서가 그대로 보존되고, 묶음이 곧 **기사가 도는 순서**가 된다.
+ *    (정류장 이름으로 전역 그룹핑을 하면 노선 순서가 무너져 "다음 정류장"을 못 읽는다.)
+ * ⚠️ 예정에 없던 기록(추가 탑승)은 `runStopId`가 null이라 이름으로 묶는다 — 같은 이름의 정류장이
+ *    바로 앞에 있으면 그 묶음에 합쳐진다(그게 맞다: 같은 자리에서 탄 사람이다).
+ */
+export type StopGroup = {
+  key: string;
+  stopName: string;
+  atTime: string | null;
+  rows: RideRow[];
+};
+
+export function groupRowsByStop(rows: readonly RideRow[]): StopGroup[] {
+  const out: StopGroup[] = [];
+  for (const row of rows) {
+    // 칸 id가 있으면 그것으로, 없으면(추가 탑승) 이름으로 — 연속된 것만 같은 묶음이다.
+    const id = row.runStopId ?? `name:${row.stopName}`;
+    const last = out[out.length - 1];
+    if (last && last.key === id) {
+      last.rows.push(row);
+      continue;
+    }
+    out.push({ key: id, stopName: row.stopName, atTime: row.atTime, rows: [row] });
+  }
+  return out;
+}
+
+/** 그 정류장 묶음에서 아직 안 찍은 사람 수 — 묶음 머리에 "N명 남음"을 띄운다. */
+export function stopGroupRemaining(group: Pick<StopGroup, "rows">): number {
+  return countProgress(group.rows).unmarked;
+}

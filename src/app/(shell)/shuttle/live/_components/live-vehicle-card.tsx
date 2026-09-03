@@ -13,7 +13,11 @@ import {
   TRIP_STATE_LABEL,
   TRIP_TONE,
 } from "@/features/shuttle/trip-state";
-import { BOARDING_STATUS_LABEL, DIRECTION_LABEL, runTitle } from "@/features/shuttle/types";
+import {
+  BOARDING_STATUS_LABEL,
+  DIRECTION_LABEL,
+  runShortTitle,
+} from "@/features/shuttle/types";
 import { firstTime } from "@/features/shuttle/today-board";
 
 /**
@@ -112,7 +116,8 @@ function LiveRunPanel({
         <Pill color={TONE_COLOR[run.direction === "in" ? "info" : "special"]}>
           {DIRECTION_LABEL[run.direction]}
         </Pill>
-        <span className="text-text-dim text-[12.5px] font-bold">{runTitle(run)}</span>
+        {/* 방향은 바로 앞 배지가 이미 말한다 — 제목은 "3회차"까지만(2026-09-03 밀도 개선). */}
+        <span className="text-text-dim text-[12.5px] font-bold">{runShortTitle(run)}</span>
         {/* 🔴 0243a가 없으면 상태를 말하지 않는다 — '출발 전'은 사실이 아니라 "모른다"이다. */}
         {tripsReady && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
         {tripsReady && alert !== "none" && (

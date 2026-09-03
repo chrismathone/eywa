@@ -130,10 +130,13 @@ export function LiveBoardClient({
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_LIVE_PATH} ariaLabel="셔틀 면 전환" />
-
-      {/* 날짜·시즌 — 오늘 화면과 같은 모양(좁으면 가로 레일 한 줄). */}
+      {/* 📐 **면 전환 + 날짜 + 시즌을 한 줄로**(2026-09-03 밀도 개선) — 오늘 등하원 화면과 같은 모양.
+          🔴 FaceTabs는 공용 컴포넌트라 손대지 않고 감싸는 자리만 바꾼다(min-w-0으로 줄어들고
+             안에서 가로 스크롤한다). */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
+        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_LIVE_PATH} ariaLabel="셔틀 면 전환" />
+        </span>
         <Button
           variant="outline"
           aria-label="어제"
@@ -167,20 +170,41 @@ export function LiveBoardClient({
 
       {/* 요약 — 숫자는 전부 `summarizeLive`에서 온다(여기서 세지 않는다). */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2 text-[12.5px]">
+        {/* 📐 **0인 숫자는 색 알약으로 강조하지 않는다**(2026-09-03) — 아침엔 여섯 알약 중 넷이 0이라
+            아무 뜻 없이 눈을 끌었다. 관제에서 실제로 봐야 할 건 **지금 도는 것**(운행 중)과
+            **남은 일**(미기록)이라, 그 둘만 색을 갖고 나머지는 0일 때 흐린 글자로 물러난다. */}
         {tripsReady && (
           <>
-            <Pill color={TONE_COLOR.info}>운행 중 {summary.running}</Pill>
-            <Pill color={TONE_COLOR.inert}>출발 전 {summary.ready}</Pill>
-            <Pill color={TONE_COLOR.positive}>종료 {summary.done}</Pill>
+            {summary.running > 0 ? (
+              <Pill color={TONE_COLOR.info}>운행 중 {summary.running}</Pill>
+            ) : (
+              <span className="text-text-faint whitespace-nowrap">
+                운행 중 <span className="num">0</span>
+              </span>
+            )}
+            <span className="text-text-dim whitespace-nowrap">
+              출발 전 <span className="num">{summary.ready}</span>
+            </span>
+            <span className="text-text-dim whitespace-nowrap">
+              종료 <span className="num">{summary.done}</span>
+            </span>
             <span aria-hidden className="bg-line h-4 w-px shrink-0" />
           </>
         )}
         <span className="text-text-dim whitespace-nowrap">
           예정 <span className="num text-foreground font-bold">{summary.progress.planned}</span>명
         </span>
-        <Pill color={TONE_COLOR.positive}>탑승 {summary.progress.boarded}</Pill>
-        <Pill color={TONE_COLOR.critical}>미탑승 {summary.progress.missed}</Pill>
-        <Pill color={TONE_COLOR.inert}>미기록 {summary.progress.unmarked}</Pill>
+        {summary.progress.boarded > 0 && (
+          <Pill color={TONE_COLOR.positive}>탑승 {summary.progress.boarded}</Pill>
+        )}
+        {summary.progress.missed > 0 && (
+          <Pill color={TONE_COLOR.critical}>미탑승 {summary.progress.missed}</Pill>
+        )}
+        {summary.progress.unmarked > 0 && (
+          <span className="text-amber whitespace-nowrap">
+            <span className="num font-bold">{summary.progress.unmarked}</span>명 미기록
+          </span>
+        )}
         {/* 시각을 적는다 — "방금"은 10분 뒤에 거짓이 된다(신호가 온 적 없으면 아예 안 그린다). */}
         {lastSignalAt !== null && (
           <span className="text-green ml-auto text-[11.5px] font-bold whitespace-nowrap">
