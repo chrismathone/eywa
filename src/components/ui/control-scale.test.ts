@@ -78,15 +78,15 @@ describe("타입 스케일 v5 — 임의 px 글자 크기를 화면에 적지 �
 });
 
 describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트롤이 한 벌을 읽는다", () => {
-  it("높이 = 라벨 + 4px (위아래 2px — 원장 '상하 여백 1.5배') · 기본 라벨 18px 확정", () => {
+  it("높이 = 라벨 + 8px (위아래 4px — 원장 09-03 '상하 여백 1.5배' → 09-04 '조금만 더') · 기본 라벨 18px 확정", () => {
     const css = readFileSync(join(SRC, "app/globals.css"), "utf8");
     for (const suffix of ["-sm", "", "-lg"]) {
       const label = Number(new RegExp(`--control-label${suffix}: (\\d+)px;`).exec(css)?.[1]);
       const h = Number(new RegExp(`--control-h${suffix}: (\\d+)px;`).exec(css)?.[1]);
       expect(label).toBeGreaterThan(0);
-      // 글자가 높이의 80% 이상, 여백 합 4px — 패딩으로 높이를 부풀리는 옛 버릇(h-8·12px)으로 되돌아가지 않게.
-      expect(label / h).toBeGreaterThanOrEqual(0.8);
-      expect(h - label).toBe(4);
+      // 글자가 높이의 2/3 이상, 여백 합 8px — 패딩으로 높이를 부풀리는 옛 버릇(h-8·12px 라벨)으로 되돌아가지 않게.
+      expect(label / h).toBeGreaterThanOrEqual(0.65);
+      expect(h - label).toBe(8);
     }
     expect(css).toMatch(/--control-label: 18px;/);
   });

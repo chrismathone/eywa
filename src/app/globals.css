@@ -234,11 +234,11 @@
    * ⚠️ 09-01 "툴바 컨트롤 = h-8 고정" 캐논은 이 규칙으로 **대체**됐다(높이가 라벨을 따른다).
    */
   --control-label-sm: 16px;
-  --control-h-sm: 20px;
+  --control-h-sm: 24px;
   --control-label: 18px;
-  --control-h: 22px;
+  --control-h: 26px; /* 라벨 + 8(위아래 4) — 2026-09-04 원장 "라벨들에 상하 여백을 조금만 더 주자. 너무 좁아보이네"(22 → 26) */
   --control-label-lg: 22px;
-  --control-h-lg: 26px;
+  --control-h-lg: 30px;
 
   /* lines — v4 헤어라인 승압: 화이트 캔버스에선 테두리가 유일한 표면 구분자라 한 단계 진하게
      (9%→14%). 상대 위계(faint < line < strong)는 유지. */

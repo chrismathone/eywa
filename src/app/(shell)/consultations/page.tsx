@@ -284,15 +284,18 @@ export default async function ConsultationsPage({
           >
             {Array.from({ length: LIST_HEADER_COPIES }, (_, i) => (
               <div key={i} aria-hidden={i > 0 ? "true" : undefined} className="@container/row">
+                {/* 머리 라벨은 **그 열 본문과 같은 정렬**(원장 2026-09-04 *"열정렬 시켜줘"*): 글 열(학생·과목·요약)은 본문이 좌측이라 좌측,
+                    칩 열(카테고리·후속·녹음·AI)은 본문 칩이 가운데라 가운데, 시각은 본문이 우측 끝이라 우측. 세로 구분선이 없는 행 격자라
+                    라벨을 열 가운데에 띄우면 본문과 어긋나 보인다 — 테두리 있는 `<table>`의 "열 제목 가운데" 규약과 다른 갈래. */}
                 <div className="text-text-dim grid h-full grid-cols-(--row-cols) items-center gap-3 px-2 text-sm font-bold">
-                  <span className="text-center">학생</span>
-                  <span className="text-center">과목 · 상담사</span>
-                  <span className="hidden text-center @4xl/row:block">요약</span>
+                  <span className="text-left">학생</span>
+                  <span className="text-left">과목 · 상담사</span>
+                  <span className="hidden text-left @4xl/row:block">요약</span>
                   <div className="col-start-4 grid grid-cols-(--right-cols) items-center justify-items-center gap-1 whitespace-nowrap">
                     <span>카테고리</span>
                     <span>후속</span>
                     <span>녹음·AI</span>
-                    <span>시각</span>
+                    <span className="justify-self-end">시각</span>
                   </div>
                 </div>
               </div>
