@@ -10,15 +10,11 @@ import {
   type SettlementStatus,
   type TeacherSettlement,
 } from "@/features/payroll/settlement";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Pill } from "@/components/atoms/pill";
 import { TeacherCompEditor } from "./teacher-comp-editor";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-
-function shiftPeriod(period: string, delta: number): string {
-  const [y, m] = period.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, (m ?? 1) - 1 + delta, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
+import { BillingMonthNav } from "./billing-month-nav";
+import { FaceNote } from "./face-note";
 
 const fmtWon = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -47,57 +43,37 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
 
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
   const [view, classRows] = await Promise.all([getTeacherSettlementView(p), getClassSalaryRows()]);
-  const [y, m] = p.split("-");
   const isComputable = (r: TeacherSettlement) => r.status === "computed";
+  const hrefFor = (per: string) => `/billing?tab=payroll&period=${per}`;
 
   return (
     <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/billing?tab=payroll&period=${shiftPeriod(p, -1)}`}
-            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
-            aria-label="이전 달"
-          >
-            <EyIcon name="chevronLeft" size={14} />
-          </Link>
-          <span className="text-foreground num text-sm font-bold">
-            {y}년 {Number(m)}월
-          </span>
-          <Link
-            href={`/billing?tab=payroll&period=${shiftPeriod(p, 1)}`}
-            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
-            aria-label="다음 달"
-          >
-            <EyIcon name="chevronRight" size={14} />
-          </Link>
-        </div>
+      {/* 툴바(지시서 §10) — 월 이동은 공용 BillingMonthNav(옛 h-8 text-xs 화살표 링크 대체) · 집계는 값으로 오른쪽에. */}
+      <div className="flex flex-wrap items-center gap-2.5 px-1">
+        <BillingMonthNav period={p} hrefFor={hrefFor} ariaLabel="정산 월 선택" />
         {view.rows.length > 0 ? (
-          <div className="text-text-dim flex flex-wrap items-center gap-2 text-xs">
+          <div className="text-text-dim ml-auto flex flex-wrap items-center gap-2 text-sm">
             <span>
               산정 <b className="num text-foreground">{view.totals.teacherCount}</b>명 · 산정 급여 합{" "}
               <b className="num text-foreground">{fmtWon(view.totals.settledTotal)}</b>
             </span>
-            {view.totals.pendingCount > 0 ? (
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">
-                보류 {view.totals.pendingCount}
-              </span>
-            ) : null}
+            {view.totals.pendingCount > 0 ? <Pill color="amber">보류 {view.totals.pendingCount}</Pill> : null}
           </div>
         ) : null}
-      </header>
+      </div>
 
-      <p className="text-text-dim text-xs leading-relaxed">
+      {/* 산식 설명은 접힌 2차(§4). 🔴 아래 "현재 배분율" 경고는 숫자의 뜻을 바꾸는 사실이라 접지 않는다. */}
+      <FaceNote>
         저장된 <b>분배 스냅샷</b>(시수 검증)을 담당 강사별로 묶어 급여 방식(비율제/급여제/혼합)을 적용합니다.
         산식은 <b>지급 기준액 × {NET_MULTIPLIER}(결제 수수료 {(PLATFORM_FEE_RATE * 100).toFixed(1)}% 차감) × 배분율</b>이며,
         <b>지급 기준액 = 실제 수업분과 청구액 중 작은 값</b>입니다(덜 수업했으면 한 만큼, 더 수업했어도 청구액이 상한).
         이 화면은 <b>참고용</b>으로, 급여로 자동 기록되지 않습니다.
-      </p>
+      </FaceNote>
       {/* ⚠️ 배분율은 users에 **현재 값 한 벌**만 있다. 구 급여 시트 실측(김윤하 18개월)에서 비율이 달마다
           바뀌었다(25.03~25.09 44/44/46/48/50 · 25.08 42/42/44/46/48 · 25.11~26.06 45/45/45/48/50 ·
           26.01·26.07 43/43/43/46/48). 지난 달을 열면 **그때 비율이 아니라 지금 비율**로 계산되므로 그 사실을 밝힌다.
           월별 동결은 Phase 2(payroll_records 확정 스냅샷) 몫. */}
-      <p className="text-amber-700 text-xs leading-relaxed">
+      <p className="text-amber px-1 text-sm leading-relaxed">
         배분율은 <b>현재 설정값</b>으로 계산합니다. 과거 달을 열어도 그 달에 적용했던 비율이 아니라 지금 비율이
         쓰이므로, 이미 지급이 끝난 달의 실제 금액과 다를 수 있습니다(월별 비율 동결은 급여 확정 기능에서 다룹니다).
       </p>
@@ -118,19 +94,19 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
         <DragScrollArea className="border-line rounded-2xl border">
           <table className="w-full min-w-[52rem] text-sm">
             <thead>
-              <tr className="border-line text-text-dim border-b text-xs">
-                <th className="px-3 py-2 text-left font-medium">강사</th>
-                <th className="px-3 py-2 text-right font-medium">담당 반</th>
-                <th className="px-3 py-2 text-right font-medium">청구 총액</th>
-                <th className="px-3 py-2 text-right font-medium" title="실제 수업분과 청구액 중 작은 값 — 비율이 곱해지는 기준">
+              <tr className="border-line text-text-dim border-b text-sm [&_th]:font-bold">
+                <th className="px-3 py-2 text-left">강사</th>
+                <th className="px-3 py-2 text-right">담당 반</th>
+                <th className="px-3 py-2 text-right">청구 총액</th>
+                <th className="px-3 py-2 text-right" title="실제 수업분과 청구액 중 작은 값 — 비율이 곱해지는 기준">
                   지급 기준
                 </th>
-                <th className="px-3 py-2 text-right font-medium" title={`지급 기준액 × ${NET_MULTIPLIER} — 수수료를 뗀 금액`}>
+                <th className="px-3 py-2 text-right" title={`지급 기준액 × ${NET_MULTIPLIER} — 수수료를 뗀 금액`}>
                   수수료 차감
                 </th>
-                <th className="px-3 py-2 text-right font-medium">실측(신호)</th>
-                <th className="px-3 py-2 text-left font-medium">급여 방식</th>
-                <th className="px-3 py-2 text-right font-medium">산정 급여</th>
+                <th className="px-3 py-2 text-right">실측(신호)</th>
+                <th className="px-3 py-2 text-left">급여 방식</th>
+                <th className="px-3 py-2 text-right">산정 급여</th>
               </tr>
             </thead>
             <tbody>
@@ -208,11 +184,11 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
         <div className="max-h-[28rem] overflow-y-auto">
           <table className="w-full min-w-[40rem] text-sm">
             <thead className="bg-bg-soft/60 sticky top-0">
-              <tr className="border-line text-text-dim border-b text-xs">
-                <th className="px-3 py-2 text-left font-medium">반</th>
-                <th className="px-3 py-2 text-left font-medium">담당</th>
-                <th className="px-3 py-2 text-left font-medium">적용 과정</th>
-                <th className="px-3 py-2 text-left font-medium">설정</th>
+              <tr className="border-line text-text-dim border-b text-sm [&_th]:font-bold">
+                <th className="px-3 py-2 text-left">반</th>
+                <th className="px-3 py-2 text-left">담당</th>
+                <th className="px-3 py-2 text-left">적용 과정</th>
+                <th className="px-3 py-2 text-left">설정</th>
               </tr>
             </thead>
             <tbody>

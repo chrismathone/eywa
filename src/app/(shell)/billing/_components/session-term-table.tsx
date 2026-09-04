@@ -1,5 +1,5 @@
 "use client";
-import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
+import { Button } from "@/components/ui/button";
 
 import { Fragment, useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -26,7 +26,8 @@ export function RefreshPlanButton({ period }: { period: string }) {
   const [pending, start] = useTransition();
   const router = useRouter();
   return (
-    <button
+    // 회차 확정 면의 Primary(창당 하나, 지시서 §10) — 옛 회색 칩 모양에서 공용 Button 기본형으로(치수는 control-scale).
+    <Button
       type="button"
       disabled={pending}
       onClick={() =>
@@ -36,12 +37,11 @@ export function RefreshPlanButton({ period }: { period: string }) {
           else router.refresh();
         })
       }
-      className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} disabled:opacity-50`}
       title="시간표·수강 기간·공휴일 기준으로 반별 계획 회차를 다시 계산합니다 (확정된 값은 유지)"
     >
-      {pending ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+      {pending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
       계획 갱신
-    </button>
+    </Button>
   );
 }
 
@@ -262,15 +262,15 @@ export function SessionTermGroups({
           <col className="w-[12%]" />
         </colgroup>
         <thead>
-          <tr className="bg-bg-soft text-text-faint">
-            <th className="eyebrow px-3 py-1.5 text-left font-normal">학년</th>
-            <th className="eyebrow px-3 py-1.5 text-left font-normal">이름</th>
-            <th className="eyebrow px-3 py-1.5 text-center font-normal">계획</th>
-            <th className="eyebrow px-3 py-1.5 text-center font-normal">확정</th>
-            <th className="eyebrow px-3 py-1.5 text-right font-normal">회당 단가</th>
-            <th className="eyebrow px-3 py-1.5 text-right font-normal">확정 금액</th>
-            <th className="eyebrow px-3 py-1.5 text-right font-normal">이 반 청구액</th>
-            <th className="eyebrow px-3 py-1.5 text-right font-normal">개별</th>
+          <tr className="bg-bg-soft text-text-dim text-sm">
+            <th className="px-3 py-2 text-left font-bold">학년</th>
+            <th className="px-3 py-2 text-left font-bold">이름</th>
+            <th className="px-3 py-2 text-center font-bold">계획</th>
+            <th className="px-3 py-2 text-center font-bold">확정</th>
+            <th className="px-3 py-2 text-right font-bold">회당 단가</th>
+            <th className="px-3 py-2 text-right font-bold">확정 금액</th>
+            <th className="px-3 py-2 text-right font-bold">이 반 청구액</th>
+            <th className="px-3 py-2 text-right font-bold">개별</th>
           </tr>
         </thead>
         <tbody>

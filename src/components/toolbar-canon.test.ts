@@ -221,7 +221,6 @@ const CANON_SURFACES = [
   "src/app/(shell)/enrollment/page.tsx",
   "src/app/(shell)/enrollment/dashboard/page.tsx",
   "src/app/(shell)/staff/[id]/_components/monthly-schedule-view.tsx",
-  "src/app/(shell)/billing/_components/session-term-table.tsx",
   "src/features/class-sheets/components/sheet-toolbar.tsx",
   "src/features/class-sheets/components/sheet-chrome.tsx",
   "src/features/class-sheets/components/seat-day-face.tsx",
@@ -236,6 +235,15 @@ const CANON_SURFACES = [
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",
   "src/app/(shell)/meetings/page.tsx",
   "src/app/(shell)/withdrawals/page.tsx",
+  // 수납(2026-09-04, 14단계) — 월 네비 부품·면 툴바가 부품을 읽는다(수납 면·환불·정산은 BillingMonthNav 경유라 직접 import 없음).
+  "src/app/(shell)/billing/_components/billing-month-nav.tsx",
+  "src/app/(shell)/billing/_components/calculator-panel.tsx",
+  "src/app/(shell)/billing/_components/catalog-panel.tsx",
+  "src/app/(shell)/billing/_components/expenses-panel.tsx",
+  "src/app/(shell)/billing/_components/session-terms-face.tsx",
+  "src/app/(shell)/billing/_components/session-verification-face.tsx",
+  "src/app/(shell)/billing/_components/textbooks-panel.tsx",
+  "src/app/(shell)/billing/_components/tuition-prices-panel.tsx",
 ];
 
 describe("툴바 규약 — 옮긴 표면은 되돌아가지 않는다", () => {

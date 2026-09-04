@@ -6,11 +6,11 @@
  *    여기서 새 색 맵을 만들면 같은 학생이 화면마다 다른 색으로 보인다(팔레트 v4 캐논).
  * 🔴 **접기 토글과 '일괄 출결'은 서로 다른 버튼**이다 — 머리 전체를 하나의 버튼으로 만들면 일괄 버튼이
  *    버튼 안의 버튼이 되어(HTML 위반) 폰에서 어느 쪽이 눌렸는지가 브라우저마다 달라진다.
- * ⚠️ 터치 타겟은 44px(`min-h-11`) 이상 — 원장 지시가 "모바일 위주"다. 이름이 칸을 넘으면 자르지 말고
- *    그 칩만 글씨를 줄인다(`fitSeatName`, 격자형 이름 칸 규약 2026-08-19).
+ * ⚠️ 터치 타겟은 44px(`min-h-11`) 이상 — 원장 지시가 "모바일 위주"다. 이름 글자는 **칩 폭에 비례**한다
+ *    (`fluidNameFontSize`, 격자형 이름 칸 규약 2026-09-04 — 하한·상한은 name-fit.ts에만 적는다).
  */
 import { ChevronDown, ChevronRight } from "@/components/icons/eywa-icon-compat";
-import { fitSeatName, QUICK_CHIP_NAME_LADDER } from "@/features/attendance/seat/name-fit";
+import { fluidNameFontSize, NAME_FILL_MAX_PX, NAME_FILL_MIN_PX } from "@/features/attendance/seat/name-fit";
 import { seatHoverTitle, SEAT_MARK_TONE } from "@/features/attendance/live/mark-state";
 import type { QuickClass } from "../board";
 
@@ -87,7 +87,8 @@ export function QuickClassCard({
       {collapsed ? null : (
         <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {klass.students.map((s) => {
-            const fit = fitSeatName(s.studentName, QUICK_CHIP_NAME_LADDER);
+            // 이름 글자는 칩 폭에 비례(폰 90px 칸 → ~24px 3글자·20px 접미사 이름) — 하한·상한은 name-fit.ts 한 곳.
+            const nameSize = fluidNameFontSize(s.studentName, { minPx: NAME_FILL_MIN_PX.quickTile, maxPx: NAME_FILL_MAX_PX });
             const label = seatHoverTitle({
               studentName: s.studentName,
               schoolGrade: s.schoolGrade,
@@ -102,11 +103,15 @@ export function QuickClassCard({
                 onClick={() => onPick(s.studentId)}
                 title={label}
                 aria-label={label}
-                className={`flex min-h-11 min-w-0 flex-col items-center justify-center rounded-xl px-1 py-1.5 leading-tight font-bold ${SEAT_MARK_TONE[s.mark]} ${
+                // 이름이 칸을 채운다(원장 2026-09-04 *"출결에도 학생 이름이 최대한 꽉 차게"*): 칩이 `@container`, 글자는 칩 폭 비례
+                // (name-fit.ts `fluidNameFontSize`). 세로 여백 4px(24px 글자 + 8 = 32 < 터치 타겟 44 — 높이는 min-h가 지킨다).
+                className={`@container flex min-h-11 min-w-0 flex-col items-center justify-center rounded-xl px-1 py-1 leading-tight font-bold ${SEAT_MARK_TONE[s.mark]} ${
                   canEdit ? "active:opacity-80" : "cursor-default"
                 }`}
               >
-                <span className={`w-full truncate ${fit.className}`}>{s.studentName}</span>
+                <span className="w-full truncate text-center leading-none" style={{ fontSize: nameSize }}>
+                  {s.studentName}
+                </span>
                 {s.note ? (
                   <span className="w-full truncate text-xs font-medium opacity-80">{s.note}</span>
                 ) : null}

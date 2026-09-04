@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { Plus, ReceiptText } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -8,8 +6,9 @@ import { Pagination } from "@/components/pagination";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getRefundRequests, type RefundListRow } from "@/features/billing/server/refund-queries";
-import { kstMonth } from "@/lib/date-kst";
+import { kstMonth, monthLabel } from "@/lib/date-kst";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { BillingMonthNav } from "./billing-month-nav";
 
 const PAGE_SIZE = 50;
 
@@ -20,19 +19,6 @@ const dateLabel = (iso: string) =>
 const classLinesOf = (cn: string) =>
   (cn ?? "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 
-// ── 월 스테퍼(지출 패널과 동일 패턴, "YYYY-MM") ──
-function formatPeriod(period: string): string {
-  const [y, m] = period.split("-");
-  return `${y}년 ${Number(m)}월`;
-}
-function shiftPeriod(period: string, delta: number): string {
-  const [y, m] = period.split("-").map(Number);
-  const d = new Date(y!, m! - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-function currentPeriod(): string {
-  return kstMonth();
-}
 // 환불의 '월' = 환불처리일자(YYYY-MM-DD) 우선, 미입력이면 작성일 기준(월 필터에서 숨김 방지).
 function monthOf(r: RefundListRow): string {
   return /^\d{4}-\d{2}-\d{2}/.test(r.requestDate) ? r.requestDate.slice(0, 7) : r.createdAt.slice(0, 7);
@@ -42,8 +28,8 @@ function monthOf(r: RefundListRow): string {
  * 환불 요청서 면(/billing?tab=refunds) — 웹에서 작성한 환불처리요청서 목록. 작성본은 데이터베이스
  * (수납·결제, 사무실 전용 열람)에 저장되고, 여기와 /documents 양쪽에서 같은 행이 보인다. (직원 이력서 패턴)
  *
- * 월별 필터(지출 패널과 동일 ◀ 년월 ▶ 스테퍼) — 환불처리일자 기준(미입력이면 작성월). 기본 표시월은
- * 가장 최근 데이터 월(첫 로드에 빈 달 방지). 데이터 없으면 이번 달.
+ * 월별 필터 — 환불처리일자 기준(미입력이면 작성월). 기본 표시월은 가장 최근 데이터 월(첫 로드에 빈 달 방지). 데이터 없으면 이번 달.
+ * 월 이동은 공용 BillingMonthNav(PeriodNav + `월:` 드롭다운 — 기록이 있는 달만, 디자인 v5 14단계).
  */
 export async function RefundsFace({ sp }: { sp: { page?: string; period?: string } }) {
   const user = await getCurrentUser();
@@ -51,7 +37,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
   const all = await getRefundRequests();
 
   const monthsWithData = [...new Set(all.map(monthOf))].sort().reverse();
-  const defaultPeriod = monthsWithData[0] ?? currentPeriod();
+  const defaultPeriod = monthsWithData[0] ?? kstMonth();
   const period = sp.period && /^\d{4}-\d{2}$/.test(sp.period) ? sp.period : defaultPeriod;
 
   const monthRows = all.filter((r) => monthOf(r) === period);
@@ -69,13 +55,12 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="micro">
-          <span className="text-foreground font-bold">{formatPeriod(period)}</span> 환불 요청서{" "}
-          <span className="text-foreground font-bold">{monthRows.length}</span>건
-          <span className="text-text-faint ml-2 normal-case">
-            · 전체 {all.length}건 · 환불처리일자 기준(미입력 시 작성월)
-          </span>
+      {/* 머리 — 숫자 + Primary 하나('새 환불 요청서'). 옛 `micro`(대문자 소라벨) 문장은 값 위주 한 줄로. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <p className="text-text-dim text-sm">
+          <span className="text-foreground font-bold">{monthLabel(period)}</span> 환불 요청서{" "}
+          <span className="num text-foreground font-bold">{monthRows.length}</span>건
+          <span className="text-text-faint ml-2">· 전체 {all.length}건 · 환불처리일자 기준(미입력 시 작성월)</span>
         </p>
         {canWrite ? (
           <Button render={<WindowLink href="/billing/refunds/new" title="환불 요청서 작성" />}>
@@ -93,50 +78,36 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
         />
       ) : (
         <>
-          {/* 월 navigator (지출 패널과 동일 스타일) */}
-          {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01). */}
-          <div className="flex flex-wrap items-center gap-3 px-1 py-1">
-            <div className="flex items-center gap-1.5">
-              <Link
-                href={monthHref(shiftPeriod(period, -1))}
-                className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
-                aria-label="이전 달"
-              >
-                <EyIcon name="chevronLeft" size={14} />
-              </Link>
-              <span className="text-foreground min-w-[90px] text-center text-sm font-bold">
-                {formatPeriod(period)}
-              </span>
-              <Link
-                href={monthHref(shiftPeriod(period, 1))}
-                className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
-                aria-label="다음 달"
-              >
-                <EyIcon name="chevronRight" size={14} />
-              </Link>
-            </div>
-            <span className="text-text-faint ml-auto num text-xs">
-              환불 기록 {monthsWithData.length}개월
-            </span>
+          {/* 툴바 — 월 이동(공용). 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
+          <div className="flex flex-wrap items-center gap-2.5 px-1">
+            <BillingMonthNav
+              period={period}
+              hrefFor={monthHref}
+              months={monthsWithData}
+              defaultPeriod={defaultPeriod}
+              ariaLabel="환불 월 선택"
+            />
+            <span className="text-text-faint num ml-auto text-sm whitespace-nowrap">환불 기록 {monthsWithData.length}개월</span>
           </div>
 
           {monthRows.length === 0 ? (
             <div className="bg-card border-line text-text-dim rounded-2xl border px-4 py-10 text-center text-sm">
-              {formatPeriod(period)}에 작성된 환불 요청서가 없습니다.
+              {monthLabel(period)}에 작성된 환불 요청서가 없습니다.
             </div>
           ) : (
             <>
               <DragScrollArea className="bg-card border-line rounded-2xl border">
                 <table className="w-full text-sm">
+                  {/* 표 머리 = 16px 굵게(수납 면 v5 규약 — 옛 text-xs font-medium). */}
                   <thead>
-                    <tr className="text-text-dim border-line border-b text-left text-xs">
-                      <th className="px-4 py-2 font-medium">학생</th>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">수강반</th>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">환불처리일자</th>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">환불완료일자</th>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">총 환불금액</th>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">작성일</th>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">담당자</th>
+                    <tr className="text-text-dim border-line border-b text-left text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
+                      <th className="px-4 py-2.5">학생</th>
+                      <th className="px-3 py-2.5">수강반</th>
+                      <th className="px-3 py-2.5">환불처리일자</th>
+                      <th className="px-3 py-2.5">환불완료일자</th>
+                      <th className="px-3 py-2.5">총 환불금액</th>
+                      <th className="px-3 py-2.5">작성일</th>
+                      <th className="px-3 py-2.5">담당자</th>
                     </tr>
                   </thead>
                   <tbody>

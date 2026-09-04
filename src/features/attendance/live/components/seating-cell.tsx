@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSeatingCanEdit } from "./seating-edit-context";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
-import { fitSeatName, SEAT_CELL_NAME_LADDER } from "@/features/attendance/seat/name-fit";
+import { fluidNameFontSize, NAME_FILL_MAX_PX, NAME_FILL_MIN_PX } from "@/features/attendance/seat/name-fit";
 import { attendanceCheckMark, isDeskIntakeNote, seatRecorderName } from "../check-time";
 import {
   canDeskMark,
@@ -106,11 +106,11 @@ export function SeatingCell({
   //    있었다([[#103]]). 진짜 차단은 여전히 서버 몫이다([[#77]]).
   const canMark = boardEditable && (klass.ownedByMe || canDeskMark(status, klass.phase));
   /**
-   * 칸은 3열 격자라 폭이 고정이다 — 접미사 붙은 이름(`김하늘A`)이 넘쳐 `김하...`로 잘렸다.
-   * 칸을 넓히지 않고 **그 이름만** 한 단계씩 줄인다(하한 11px). 하한에서도 넘치면 말줄임이
-   * 남지만, 전체 이름은 이 버튼의 마우스오버(`seatHoverTitle`)에 늘 들어 있다.
+   * 이름 글자는 **칸 폭에 비례**해 커진다(원장 2026-09-04 *"출결에도 학생 이름이 최대한 꽉 차게. 우리 스타일대로"*) —
+   * 가장 좁은 칸(43px)에선 옛 사다리와 같은 13px, 창을 넓혀 칸이 135px이면 24px 상한까지. 하한(11px)에서도 넘치면
+   * 종전처럼 말줄임 + 전체 이름은 이 버튼의 마우스오버(`seatHoverTitle`)에.
    */
-  const fit = fitSeatName(student.studentName, SEAT_CELL_NAME_LADDER);
+  const nameSize = fluidNameFontSize(student.studentName, { minPx: NAME_FILL_MIN_PX.seatCell, maxPx: NAME_FILL_MAX_PX });
 
   function save(next: "present" | "late" | "absent") {
     setError(null);
@@ -163,16 +163,16 @@ export function SeatingCell({
           canMark ? "hover:ring-primary/40 cursor-pointer hover:ring-2" : "cursor-default"
         } ${found ? "ring-primary ring-2" : ""} disabled:opacity-60`}
       >
-        {/* 이름 알약 — 색·크기는 종전 그대로다. 시각 줄은 **이 알약 아래**(원장 시안)라 이름이 쓸 폭이
-            줄지 않는다 → `fitSeatName` 사다리는 손대지 않는다(08-19 잘림 수정 회귀 금지). */}
+        {/* 이름 알약 — `@container`: 이름 글자가 이 알약의 폭(cqw)을 읽어 커진다(name-fit.ts `fluidNameFontSize`).
+            시각 줄은 **이 알약 아래**(원장 시안)라 이름이 쓸 폭이 줄지 않는다. */}
         <span
           /* 🔴 수업이 끝난 뒤에 찍은 칸은 **진한 회색 테두리**(원장 2026-08-24). 안쪽 링이라 칸 크기가
              안 변한다(테두리를 주면 1px씩 커져 3열 격자가 밀린다). 색은 상태 배경을 덮지 않는 회색. */
-          className={`flex min-h-9 w-full items-center justify-center rounded-lg px-1 py-1 ${SEAT_MARK_TONE[mark]} ${
+          className={`@container flex min-h-9 w-full items-center justify-center rounded-lg px-1 py-1 ${SEAT_MARK_TONE[mark]} ${
             check?.afterClass ? "ring-2 ring-inset ring-text-faint" : ""
           }`}
         >
-          <span className={`truncate leading-tight font-bold ${fit.className}`}>
+          <span className="max-w-full truncate leading-none font-bold" style={{ fontSize: nameSize }}>
             {student.studentName}
           </span>
         </span>

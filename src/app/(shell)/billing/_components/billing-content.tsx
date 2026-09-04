@@ -21,11 +21,9 @@ import {
 } from "@/features/billing/sync-window";
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { getMakeeduSyncState } from "@/features/integrations/server/makeedu-sync";
-import { FilterSelect } from "@/components/filter-select";
-import { PeriodNav } from "@/components/period-nav";
 import { SearchToggle } from "@/components/search-toggle";
-import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { BillingTable } from "./billing-table";
+import { BillingMonthNav } from "./billing-month-nav";
 import { CreateInvoiceTrigger } from "./create-invoice-dialog";
 import { Pagination } from "@/components/pagination";
 
@@ -36,11 +34,6 @@ function won(n: number) {
 function formatPeriod(period: string): string {
   const [y, m] = period.split("-");
   return `${y}년 ${Number(m)}월`;
-}
-function shiftPeriod(period: string, delta: number): string {
-  const [y, m] = period.split("-").map(Number);
-  const d = new Date(y!, m! - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function todayIso(): string {
   return kstToday();
@@ -129,9 +122,6 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const prevPeriod = shiftPeriod(period, -1);
-  const nextPeriod = shiftPeriod(period, 1);
-
   // 진행률 바도 실청구(청구−할인) 기준 — 완납 학생이 할인폭만큼 미수 밴드로 새지 않게.
   const netBase = summary.totalBilled - summary.totalDiscount || 1;
   const paidPct = Math.min((summary.totalCollected / netBase) * 100, 100);
@@ -219,38 +209,15 @@ export async function BillingContent({ sp }: { sp: Sp }) {
         }
       />
 
-      {/* 툴바 — 월 이동은 앱 전역 단일 소스 [PeriodNav](@/components/period-nav)(원장 2026-08-31 *"웹앱 내 비슷한 곳은 다
-          이걸로"*, 수납은 첫 5곳에 든다) + 월 **직접 선택**(라벨 하나 — 옛 '최근 6개월 알약 칩 줄'은 §10 칩 줄 금지로 걷었다;
-          화살표만으론 옛 달까지 여러 번 눌러야 한다) + 검색(눌러야 나온다). 신규 청구·엑셀은 머리로 올렸다(같은 동작 두 곳 금지).
-          🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
+      {/* 툴바 — 월 이동은 수납 면 공용 BillingMonthNav(앱 전역 PeriodNav + 월 직접 선택 라벨; 옛 '최근 6개월 알약 칩 줄'은
+          §10 칩 줄 금지로 걷었다 — 화살표만으론 옛 달까지 여러 번 눌러야 한다) + 검색(눌러야 나온다).
+          항목 = 청구가 있는 달(최근 순). 신규 청구·엑셀은 머리로 올렸다(같은 동작 두 곳 금지). 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
       <div className="flex flex-wrap items-center gap-2.5 px-1 py-1">
-        <PeriodNav
-          label={formatPeriod(period)}
-          prevHref={buildHref({ period: prevPeriod, q, sort, desc })}
-          nextHref={buildHref({ period: nextPeriod, q, sort, desc })}
-          currentHref={buildHref({ period: currentPeriod(), q, sort, desc })}
-          relation={period === currentPeriod() ? "current" : period < currentPeriod() ? "past" : "future"}
-          prevAriaLabel="이전 달"
-          nextAriaLabel="다음 달"
-          currentTitle="눌러서 이번 달로"
-          // "2026년 12월"까지 안 넘치는 고정 폭 — 등록상담·ECS 월간과 같은 값(같은 라벨 모양이라 같이 선다).
-          labelWidth={116}
-        />
-        <FilterSelect
-          paramName="period"
-          value={period}
-          // 청구가 있는 달만(최근 순). 이번 달은 allValue라 목록 머리에 한 번만 서고, 보고 있는 달이 목록에 없으면(청구 0건) 앞에 보강.
-          options={[
-            ...(periods.includes(period) || period === currentPeriod() ? [] : [{ value: period, label: formatPeriod(period) }]),
-            ...periods.filter((p) => p !== currentPeriod()).map((p) => ({ value: p, label: formatPeriod(p) })),
-          ]}
-          allValue={currentPeriod()}
-          allLabel={formatPeriod(currentPeriod())}
-          axisLabel="월"
+        <BillingMonthNav
+          period={period}
+          hrefFor={(per) => buildHref({ period: per, q, sort, desc })}
+          months={periods}
           ariaLabel="청구월 선택"
-          cap={200}
-          className="w-auto"
-          triggerClassName={TOOLBAR_SELECT}
         />
         <div className="ml-auto flex items-center gap-2">
           <SearchToggle placeholder="학생명·항목" defaultValue={q} />

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { CalendarOff, Settings2 } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { FaceTabs, type Face } from "@/components/face-tabs";
+import { FilterSelect } from "@/components/filter-select";
+import { PeriodNav } from "@/components/period-nav";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { getTuitionCatalogActive } from "@/features/billing/server/tuition-catalog-queries";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
@@ -119,17 +122,18 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
+      <section className="bg-card shadow-card space-y-3 rounded-2xl p-5">
         <header className="flex items-center justify-between">
           <h2 className="text-foreground inline-flex items-center gap-1.5 text-base font-bold">
             <CalendarOff className="text-primary size-4" />
             학원 지정 휴원일
           </h2>
+          {/* 텍스트 Secondary(control-scale 치수) — 옛 py-1 text-xs 테두리 버튼. */}
           <Link
             href="/owner?tab=operations"
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
+            className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-1 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
           >
-            <Settings2 className="size-3.5" />
+            <Settings2 className="size-[1em]" />
             학원설정에서 편집
           </Link>
         </header>
@@ -153,41 +157,36 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
         )}
       </section>
 
-      <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
-        {/* 연도 이동 */}
-        <header className="flex items-center justify-between">
+      <section className="bg-card shadow-card space-y-3 rounded-2xl p-5">
+        {/* 연도 이동 = 앱 전역 PeriodNav(옛 size-7 알약 화살표) · 월 = `월: 전체` 라벨(옛 알약 칩 13개 — §10 칩 줄 금지).
+            경계 연도(2024·2030)에선 그쪽 화살표를 잠근다(데이터가 그 밖엔 없다 — 옛 비활성 화살표 그대로). */}
+        <header className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-foreground text-base font-bold">대한민국 공휴일</h2>
-          <div className="flex items-center gap-1.5">
-            {year > HOLIDAY_MIN_YEAR ? (
-              <Link href={hrefFor(year - 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="이전 연도"><EyIcon name="chevronLeft" size={14} /></Link>
-            ) : (
-              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-full border opacity-40"><EyIcon name="chevronLeft" size={14} /></span>
-            )}
-            <span className="text-foreground num min-w-[64px] text-center text-sm font-bold">{year}년</span>
-            {year < HOLIDAY_MAX_YEAR ? (
-              <Link href={hrefFor(year + 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border" aria-label="다음 연도"><EyIcon name="chevronRight" size={14} /></Link>
-            ) : (
-              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-full border opacity-40"><EyIcon name="chevronRight" size={14} /></span>
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            <PeriodNav
+              label={`${year}년`}
+              prevHref={hrefFor(Math.max(HOLIDAY_MIN_YEAR, year - 1), month)}
+              nextHref={hrefFor(Math.min(HOLIDAY_MAX_YEAR, year + 1), month)}
+              currentHref={hrefFor(thisYear, month)}
+              relation={year === thisYear ? "current" : year < thisYear ? "past" : "future"}
+              prevAriaLabel="이전 연도"
+              nextAriaLabel="다음 연도"
+              currentTitle="눌러서 올해로"
+              prevDisabled={year <= HOLIDAY_MIN_YEAR}
+              nextDisabled={year >= HOLIDAY_MAX_YEAR}
+              labelWidth={72}
+            />
+            <FilterSelect
+              paramName="hm"
+              value={month >= 1 ? String(month) : ""}
+              options={MONTHS.filter((m) => m >= 1).map((m) => ({ value: String(m), label: `${m}월` }))}
+              axisLabel="월"
+              ariaLabel="공휴일 월 선택"
+              className="w-auto"
+              triggerClassName={TOOLBAR_SELECT}
+            />
           </div>
         </header>
-
-        {/* 월 선택 */}
-        <div className="scrollbar-thin flex flex-wrap items-center gap-1 overflow-x-auto">
-          {MONTHS.map((m) => (
-            <Link
-              key={m}
-              href={hrefFor(year, m)}
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
-                m === month
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {m === 0 ? "전체" : `${m}월`}
-            </Link>
-          ))}
-        </div>
 
         <p className="text-text-faint text-xs">
           계산기의 <b>“대한민국 공휴일 제외”</b> 체크 시 차시에서 빠집니다. 음력(설·추석)·대체공휴일·

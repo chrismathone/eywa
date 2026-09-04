@@ -1,6 +1,6 @@
 import { FileText } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
-import { SearchForm } from "@/components/search-form";
+import { SearchToggle } from "@/components/search-toggle";
 import { Pagination } from "@/components/pagination";
 import { getQuotesPage } from "@/features/billing/server/tuition-quote-queries";
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
@@ -30,17 +30,13 @@ export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
   return (
     <div className="space-y-4">
       {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
-      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
+      {/* 검색은 눌러야 나온다(§10). 페이지 파라미터는 `qpage`라 함께 지운다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1">
         <p className="text-foreground inline-flex items-center gap-1.5 text-sm font-bold">
           <FileText className="text-primary size-4" />
           저장된 청구서 <span className="num text-text-dim font-normal">{total}건</span>
         </p>
-        <SearchForm
-          placeholder="학생 이름·학교"
-          defaultValue={q}
-          inputWidth="w-36"
-          resetParams={["qpage"]}
-        />
+        <SearchToggle placeholder="학생 이름·학교" defaultValue={q} resetParams={["qpage"]} />
       </div>
 
       {total === 0 ? (

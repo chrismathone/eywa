@@ -102,16 +102,16 @@ export function TextbooksTable({
           교재신청 내역이 없습니다. 위 “교재 신청 등록”으로 추가하세요.
         </div>
       ) : (
-      <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
+      <DragScrollArea className="bg-card shadow-card rounded-2xl">
         <table className="w-full text-sm">
-          <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
+          <thead className="border-line bg-bg-soft/50 text-text-dim border-b text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
             <tr>
-              <th className="micro px-4 py-2 text-left">신청일</th>
-              <th className="micro px-4 py-2 text-left">교재</th>
-              <th className="micro px-4 py-2 text-left">학생</th>
-              <th className="micro px-4 py-2 text-left">강사</th>
-              <th className="micro px-4 py-2 text-left">진행 (등록·납부·주문)</th>
-              <th className="micro px-4 py-2 text-right">금액</th>
+              <th className="px-4 py-2 text-left">신청일</th>
+              <th className="px-4 py-2 text-left">교재</th>
+              <th className="px-4 py-2 text-left">학생</th>
+              <th className="px-4 py-2 text-left">강사</th>
+              <th className="px-4 py-2 text-left">진행 (등록·납부·주문)</th>
+              <th className="px-4 py-2 text-right">금액</th>
               <th className="px-2 py-2" />
             </tr>
           </thead>

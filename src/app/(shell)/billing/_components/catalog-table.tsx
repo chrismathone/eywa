@@ -6,6 +6,7 @@ import { AlertCircle, Loader2, Pencil, Plus, Save, Trash2, X } from "@/component
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { BookText } from "@/components/icons/eywa-icon-compat";
 import {
   createCatalogItem,
@@ -199,17 +200,17 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
           description="표준 교재·단가를 등록해두면 교재 신청 시 자동으로 채워집니다."
         />
       ) : (
-        <div className="bg-card border-line shadow-card overflow-auto rounded-2xl border">
+        <DragScrollArea className="bg-card shadow-card rounded-2xl">
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
-            <thead className="border-line border-b [&_th]:whitespace-nowrap">
+            <thead className="border-line text-text-dim border-b text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
               <tr>
-                <th className="micro px-4 py-3 text-left">교재명</th>
-                <th className="micro px-4 py-3 text-left">학년</th>
-                <th className="micro px-4 py-3 text-left">과목</th>
-                <th className="micro px-4 py-3 text-left">출판사</th>
-                <th className="micro px-4 py-3 text-right">단가</th>
-                <th className="micro px-4 py-3 text-left">상태</th>
-                <th className="micro px-4 py-3 text-right">관리</th>
+                <th className="px-4 py-3 text-left">교재명</th>
+                <th className="px-4 py-3 text-left">학년</th>
+                <th className="px-4 py-3 text-left">과목</th>
+                <th className="px-4 py-3 text-left">출판사</th>
+                <th className="px-4 py-3 text-right">단가</th>
+                <th className="px-4 py-3 text-left">상태</th>
+                <th className="px-4 py-3 text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
@@ -245,7 +246,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </DragScrollArea>
       )}
 
       {open === "new" ? <CatalogDialog onClose={() => setOpen(null)} /> : null}

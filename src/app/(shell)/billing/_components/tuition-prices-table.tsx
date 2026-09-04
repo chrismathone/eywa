@@ -6,6 +6,7 @@ import { AlertCircle, Coins, Loader2, Pencil, Plus, Save, Trash2, X } from "@/co
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import {
   createTuitionItem,
   updateTuitionItem,
@@ -268,16 +269,16 @@ export function TuitionPricesTable({
           description="과목 단가·할인 프리셋을 등록하면 계산기에서 골라 자동으로 채워집니다."
         />
       ) : (
-        <div className="bg-card border-line shadow-card overflow-auto rounded-2xl border">
+        <DragScrollArea className="bg-card shadow-card rounded-2xl">
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
-            <thead className="border-line border-b [&_th]:whitespace-nowrap">
+            <thead className="border-line text-text-dim border-b text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
               <tr>
-                <th className="micro px-4 py-3 text-left">분류</th>
-                <th className="micro px-4 py-3 text-left">단가 종류</th>
-                <th className="micro px-4 py-3 text-left">항목명</th>
-                <th className="micro px-4 py-3 text-right">단가 · 할인액</th>
-                <th className="micro px-4 py-3 text-left">상태</th>
-                <th className="micro px-4 py-3 text-right">관리</th>
+                <th className="px-4 py-3 text-left">분류</th>
+                <th className="px-4 py-3 text-left">단가 종류</th>
+                <th className="px-4 py-3 text-left">항목명</th>
+                <th className="px-4 py-3 text-right">단가 · 할인액</th>
+                <th className="px-4 py-3 text-left">상태</th>
+                <th className="px-4 py-3 text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
@@ -366,7 +367,7 @@ export function TuitionPricesTable({
               </tbody>
             ) : null}
           </table>
-        </div>
+        </DragScrollArea>
       )}
 
       {open === "new" ? <TuitionDialog onClose={() => setOpen(null)} /> : null}

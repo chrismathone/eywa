@@ -8,21 +8,17 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
 import { Pagination } from "@/components/pagination";
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { TOOLBAR_CHIP } from "@/components/toolbar-controls";
+import { FilterSelect } from "@/components/filter-select";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { BillingMonthNav } from "./billing-month-nav";
+import { FaceNote } from "./face-note";
 
 const PAGE_SIZE = 50;
 
 // 시수(배수 합) 표시 — 정수는 그대로("12"), 소수는 한 자리("12.5").
 const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const fmtWon = (n: number) => `${n.toLocaleString("ko-KR")}원`;
-
-function shiftPeriod(period: string, delta: number): string {
-  const [y, m] = period.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, (m ?? 1) - 1 + delta, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 // diff 색: 일치=녹 / 부족=주황 / 초과=적 / 미확정=회색 (라이트 전용 Daylight).
 const STATUS_META: Record<VerificationStatus, { label: string; cell: string; chip: string }> = {
@@ -96,66 +92,43 @@ export async function SessionVerificationFace({
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const curPage = Math.min(Math.max(1, Number(page) || 1), totalPages);
   const rows = sorted.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
-  const pageHref = (n: number) => {
-    const qs = new URLSearchParams({ tab: "verify", period: p });
+  // 과목 필터를 보존한 채 월·page만 바꾸는 href.
+  const hrefFor = (per: string, n = 1) => {
+    const qs = new URLSearchParams({ tab: "verify", period: per });
     if (activeSubject) qs.set("subject", activeSubject);
     if (n > 1) qs.set("page", String(n));
     return `/billing?${qs.toString()}`;
   };
-  const [y, m] = p.split("-");
+  const pageHref = (n: number) => hrefFor(p, n);
 
   return (
     <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/billing?tab=verify&period=${shiftPeriod(p, -1)}`}
-            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
-            aria-label="이전 달"
-          >
-            <EyIcon name="chevronLeft" size={14} />
-          </Link>
-          <span className="text-foreground num text-sm font-bold">
-            {y}년 {Number(m)}월
-          </span>
-          <Link
-            href={`/billing?tab=verify&period=${shiftPeriod(p, 1)}`}
-            className="border-line text-text-dim hover:text-foreground inline-flex h-8 items-center rounded-lg border px-2 text-xs"
-            aria-label="다음 달"
-          >
-            <EyIcon name="chevronRight" size={14} />
-          </Link>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      {/* 툴바(지시서 §10) — 월 이동은 공용 BillingMonthNav(옛 h-8 text-xs 화살표 링크 대체) · 과목 칩 줄 → `과목: 전체` 라벨 ·
+          판정 집계(초과·부족·일치·미확정)는 읽기 전용 배지라 그대로 오른쪽에. 🔴 툴바 카드 껍데기 없음. */}
+      <div className="flex flex-wrap items-center gap-2.5 px-1">
+        <BillingMonthNav period={p} hrefFor={(per) => hrefFor(per)} ariaLabel="검증 월 선택" />
+        {presentSubjects.length > 1 ? (
+          <FilterSelect
+            paramName="subject"
+            value={activeSubject ?? ""}
+            options={presentSubjects.map((sk) => ({ value: sk, label: subjects.labelOf(sk) }))}
+            axisLabel="과목"
+            ariaLabel="과목 필터"
+            className="w-auto"
+            triggerClassName={TOOLBAR_SELECT}
+          />
+        ) : null}
+        <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
           {(["over", "short", "matched", "unconfirmed"] as VerificationStatus[]).map((s) => (
             <span key={s} className={`rounded-full border px-2 py-0.5 ${STATUS_META[s].chip}`}>
               {STATUS_META[s].label} <span className="num font-bold">{c[s]}</span>
             </span>
           ))}
         </div>
-      </header>
+      </div>
 
-      {presentSubjects.length > 1 ? (
-        <nav className="flex flex-wrap items-center gap-1.5" aria-label="과목별 보기">
-          <Link
-            href={`/billing?tab=verify&period=${p}`}
-            className={`${TOOLBAR_CHIP} ${!activeSubject ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
-          >
-            전체
-          </Link>
-          {presentSubjects.map((sk) => (
-            <Link
-              key={sk}
-              href={`/billing?tab=verify&period=${p}&subject=${sk}`}
-              className={`${TOOLBAR_CHIP} ${activeSubject === sk ? "border-primary bg-primary text-primary-foreground font-bold" : "border-line text-text-dim hover:text-foreground"}`}
-            >
-              {subjects.labelOf(sk)}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
-
-      <p className="text-text-dim text-xs leading-relaxed">
+      {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
+      <FaceNote>
         <b>확정한 회차</b>(청구 기준)와 그 반의 <b>실제 소비 출석</b>(출석·지각·조퇴·보강)을 나란히 대조합니다.
         차이는 <span className="text-amber">부족</span>(청구보다 적게 나옴)·<span className="text-danger">초과</span>(더
         나옴) 신호일 뿐, 어느 값도 자동으로 맞추지 않습니다. 회차를 고치려면{" "}
@@ -163,7 +136,7 @@ export async function SessionVerificationFace({
           회차 확정
         </Link>
         에서 조정하세요. (청구월은 달력월 기준으로 근사합니다.)
-      </p>
+      </FaceNote>
 
       {noAttendanceYet ? (
         <div className="rounded-2xl border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
@@ -191,14 +164,14 @@ export async function SessionVerificationFace({
             <DragScrollArea>
               <table className="w-full min-w-[42rem] text-sm">
                 <thead>
-                  <tr className="border-line text-text-dim border-b text-xs">
-                    <th className="px-3 py-2 text-left font-medium">강사</th>
-                    <th className="px-3 py-2 text-right font-medium">반</th>
-                    <th className="px-3 py-2 text-right font-medium">확정 회차</th>
-                    <th className="px-3 py-2 text-right font-medium">확정 금액</th>
-                    <th className="px-3 py-2 text-right font-medium">실 시수</th>
-                    <th className="px-3 py-2 text-right font-medium">실측 금액</th>
-                    <th className="px-3 py-2 text-right font-medium">차액</th>
+                  <tr className="border-line text-text-dim border-b text-sm [&_th]:font-bold">
+                    <th className="px-3 py-2 text-left">강사</th>
+                    <th className="px-3 py-2 text-right">반</th>
+                    <th className="px-3 py-2 text-right">확정 회차</th>
+                    <th className="px-3 py-2 text-right">확정 금액</th>
+                    <th className="px-3 py-2 text-right">실 시수</th>
+                    <th className="px-3 py-2 text-right">실측 금액</th>
+                    <th className="px-3 py-2 text-right">차액</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -264,14 +237,14 @@ export async function SessionVerificationFace({
           <DragScrollArea className="border-line rounded-2xl border">
             <table className="w-full min-w-[46rem] text-sm">
               <thead>
-                <tr className="border-line text-text-dim border-b text-xs">
-                  <th className="px-3 py-2 text-left font-medium">학생</th>
-                  <th className="px-3 py-2 text-left font-medium">반</th>
-                  <th className="px-3 py-2 text-left font-medium">과목</th>
-                  <th className="px-3 py-2 text-right font-medium">확정 회차</th>
-                  <th className="px-3 py-2 text-right font-medium">실 출석</th>
-                  <th className="px-3 py-2 text-right font-medium">차이</th>
-                  <th className="px-3 py-2 text-left font-medium">판정</th>
+                <tr className="border-line text-text-dim border-b text-sm [&_th]:font-bold">
+                  <th className="px-3 py-2 text-left">학생</th>
+                  <th className="px-3 py-2 text-left">반</th>
+                  <th className="px-3 py-2 text-left">과목</th>
+                  <th className="px-3 py-2 text-right">확정 회차</th>
+                  <th className="px-3 py-2 text-right">실 출석</th>
+                  <th className="px-3 py-2 text-right">차이</th>
+                  <th className="px-3 py-2 text-left">판정</th>
                 </tr>
               </thead>
               <tbody>
