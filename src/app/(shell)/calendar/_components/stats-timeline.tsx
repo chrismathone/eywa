@@ -21,18 +21,18 @@ function YearBlock({ year, events }: { year: number; events: CalendarEvent[] }) 
   }
 
   return (
-    <section className="border-line bg-card shadow-card rounded-2xl border">
+    <section className="bg-card shadow-card rounded-2xl">
       <header className="border-line flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-2.5">
         <h3 className="text-foreground text-base font-bold">
           <span className="num">{year}</span>년
         </h3>
-        <span className="text-text-dim text-xs">
+        <span className="text-text-dim text-sm">
           일정 <span className="num text-foreground font-semibold">{events.length}</span>건
         </span>
       </header>
       {events.length === 0 ? (
         // ⚠️ "등록된 일정이 없다"고 쓰지 않는다 — 태그 필터가 걸린 목록이면 사실이 아니다.
-        <p className="text-text-faint px-4 py-3 text-xs">표시할 일정이 없습니다</p>
+        <p className="text-text-faint px-4 py-3 text-sm">표시할 일정이 없습니다</p>
       ) : (
         <div className="divide-line divide-y">
           {MONTHS.map((m) => {
@@ -42,7 +42,7 @@ function YearBlock({ year, events }: { year: number; events: CalendarEvent[] }) 
             return (
               <div key={m} className="flex gap-3 px-4 py-2">
                 <span
-                  className={`num w-[38px] shrink-0 pt-0.5 text-xs font-semibold ${
+                  className={`num w-12 shrink-0 pt-0.5 text-sm font-semibold ${
                     list.length > 0 ? "text-foreground" : "text-text-faint"
                   }`}
                 >
@@ -50,7 +50,7 @@ function YearBlock({ year, events }: { year: number; events: CalendarEvent[] }) 
                 </span>
                 <div className="min-w-0 flex-1">
                   {list.length === 0 ? (
-                    <span className="text-text-faint text-xs">없음</span>
+                    <span className="text-text-faint text-sm">없음</span>
                   ) : (
                     <ul className="divide-line/60 divide-y">
                       {list.map((e) => (

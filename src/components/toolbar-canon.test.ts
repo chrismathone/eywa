@@ -244,6 +244,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/billing/_components/session-verification-face.tsx",
   "src/app/(shell)/billing/_components/textbooks-panel.tsx",
   "src/app/(shell)/billing/_components/tuition-prices-panel.tsx",
+  // 캘린더(2026-09-04, 15단계) — 보기·태그 드롭다운 + PeriodNav.
+  "src/app/(shell)/calendar/page.tsx",
 ];
 
 describe("툴바 규약 — 옮긴 표면은 되돌아가지 않는다", () => {

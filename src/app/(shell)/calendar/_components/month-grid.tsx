@@ -11,6 +11,11 @@ import { eventDisplayColor, type CalendarEvent } from "@/features/calendar/types
  *
  * ⚠️ Tailwind 동적 클래스 조립 금지 — 색→클래스는 아래 Record 한 곳(purge에 잡히게 전부 정적 문자열).
  * ⚠️ 페이지 가로 스크롤 금지 — 그리드는 w-full, 칸은 min-w-0 + 칩 truncate.
+ * 글자(디자인 v5 15단계 2026-09-04): 요일 머리·칩·"+N개 더" = `text-sm`(16) · 날짜 = `text-base`(18, 28px 원) — 옛 14/16.
+ *    공휴일명만 보조라 `text-xs`(14, 바닥). 최소 창 1120에서 칸 ≈150px: 칩은 truncate + 툴팁이 전문을 든다.
+ * 🔴 칸 높이 예산 = `min-h-[128px]`에 **정확히** 맞춘다(세로 패딩 8 + 날짜 줄 30 + 칩 3줄·'+N개 더' 20px×4 + 간격 = 90 → 128,
+ *    실측 2026-09-04) — 칩 `py-0`·더보기 `leading-tight`·칸 `py-1`이 그 이유다. 넘치면 바쁜 주만 행이 커져 격자가
+ *    울퉁불퉁해진다(적대 리뷰 2026-09-04: 승격 직후 144px). 칩·더보기 글자를 키우면 이 예산을 다시 맞출 것.
  */
 
 const WEEKDAYS = [
@@ -88,7 +93,7 @@ export function MonthGrid({
       {/* 요일 머리 */}
       <div className="border-line-strong bg-bg-soft/50 grid grid-cols-7 border-b">
         {WEEKDAYS.map((w) => (
-          <p key={w.label} className={`py-2 text-center text-xs font-bold ${w.cls}`}>
+          <p key={w.label} className={`py-2 text-center text-sm font-bold ${w.cls}`}>
             {w.label}
           </p>
         ))}
@@ -108,7 +113,7 @@ export function MonthGrid({
               <div
                 key={cell.date}
                 onClick={onDayClick ? () => onDayClick(cell.date) : undefined}
-                className={`min-h-[128px] min-w-0 p-1.5 ${dow === 0 || dow === 6 ? "bg-bg-soft/30" : ""} ${
+                className={`min-h-[128px] min-w-0 px-1.5 py-1 ${dow === 0 || dow === 6 ? "bg-bg-soft/30" : ""} ${
                   onDayClick ? "hover:bg-primary-soft/20 cursor-pointer transition-colors" : ""
                 }`}
               >
@@ -127,7 +132,7 @@ export function MonthGrid({
                     <span />
                   )}
                   <span
-                    className={`flex size-6 shrink-0 items-center justify-center rounded-full text-sm ${
+                    className={`flex size-7 shrink-0 items-center justify-center rounded-full text-base ${
                       isToday
                         ? "bg-primary text-primary-foreground font-bold"
                         : !cell.inMonth
@@ -154,7 +159,7 @@ export function MonthGrid({
                           ev.stopPropagation(); // 칩 클릭이 칸(일정 등록) 클릭으로 번지지 않게
                           onEventClick(e);
                         }}
-                        className={`block w-full truncate rounded px-1 py-0.5 text-left text-xs leading-tight font-medium transition hover:opacity-80 ${chip.className} ${
+                        className={`block w-full truncate rounded px-1 py-0 text-left text-sm leading-tight font-medium transition hover:opacity-80 ${chip.className} ${
                           cell.inMonth ? "" : "opacity-50"
                         }`}
                         style={chip.style}
@@ -173,7 +178,7 @@ export function MonthGrid({
                         ev.stopPropagation();
                         onMoreClick(cell.date);
                       }}
-                      className="text-text-dim hover:text-primary cursor-pointer px-1 text-left text-xs hover:underline"
+                      className="text-text-dim hover:text-primary cursor-pointer px-1 text-left text-sm leading-tight hover:underline"
                     >
                       +{more}개 더
                     </button>

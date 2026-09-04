@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { PeriodNav } from "@/components/period-nav";
 import { Button } from "@/components/ui/button";
 import type { CalendarEvent, CalendarTag } from "@/features/calendar/types";
 import { MonthGrid } from "./month-grid";
@@ -11,10 +11,15 @@ import { DayListDialog } from "./day-list-dialog";
 import { TagManager } from "./tag-manager";
 
 /**
- * 캘린더 클라 껍데기 — 월 내비(링크) + 그리드 + 일정 다이얼로그 상태.
+ * 캘린더 클라 껍데기 — 월 툴바(보기 드롭다운 · 월 네비 · 버튼) + 그리드 + 일정 다이얼로그 상태.
  * 데이터는 서버(page)가 내려준 직렬화 배열이라 그리드 통째로 클라여도 무겁지 않다(월 수십 건 규모).
+ *
+ * 툴바(지시서 §10, 디자인 v5 15단계 2026-09-04): 월 이동은 앱 전역 `PeriodNav`(옛 size-8 화살표 링크 + `오늘` outline 버튼 —
+ * 라벨 클릭이 이번 달) · 상시 버튼 = Primary '일정 등록' + 텍스트 '태그 관리'(옛 outline 둘). 보기 드롭다운은 서버(page)가
+ * 만든 노드를 같은 줄 맨 앞에 세운다(연간·목록·분석 줄과 같은 자리).
  */
 export function CalendarClient({
+  viewSelect,
   month,
   monthLabel,
   prevMonth,
@@ -25,6 +30,8 @@ export function CalendarClient({
   tags,
   canWrite,
 }: {
+  /** `보기: 월` 드롭다운 — 서버가 만든 노드(항목 href에 연도·태그가 실린다). */
+  viewSelect: ReactNode;
   month: string;
   monthLabel: string;
   prevMonth: string;
@@ -48,35 +55,25 @@ export function CalendarClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* 상단 내비 — 월 이동은 URL(?m=)이라 새로고침·딥링크·창 타이틀이 공짜. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Link
-            href={`/calendar?m=${prevMonth}`}
-            className="border-line text-text-dim hover:text-foreground hover:border-primary/50 flex size-8 items-center justify-center rounded-lg border transition"
-            aria-label="이전 달"
-          >
-            <EyIcon name="chevronLeft" size={16} />
-          </Link>
-          <h2 className="text-foreground min-w-[110px] text-center text-lg font-bold tracking-tight">
-            {monthLabel}
-          </h2>
-          <Link
-            href={`/calendar?m=${nextMonth}`}
-            className="border-line text-text-dim hover:text-foreground hover:border-primary/50 flex size-8 items-center justify-center rounded-lg border transition"
-            aria-label="다음 달"
-          >
-            <EyIcon name="chevronRight" size={16} />
-          </Link>
-          {!isCurrentMonth ? (
-            <Button variant="outline" render={<Link href="/calendar" />}>
-              오늘
-            </Button>
-          ) : null}
-        </div>
+      {/* 툴바 한 줄 — 월 이동은 URL(?m=)이라 새로고침·딥링크·창 타이틀이 공짜(PeriodNav가 router.push). */}
+      <div className="flex flex-wrap items-center gap-2.5 px-1 py-1">
+        {viewSelect}
+        <PeriodNav
+          label={monthLabel}
+          prevHref={`/calendar?m=${prevMonth}`}
+          nextHref={`/calendar?m=${nextMonth}`}
+          currentHref="/calendar"
+          relation={isCurrentMonth ? "current" : month < today.slice(0, 7) ? "past" : "future"}
+          prevAriaLabel="이전 달"
+          nextAriaLabel="다음 달"
+          currentTitle="눌러서 이번 달로"
+          // "2026년 12월"까지 안 넘치는 고정 폭 — 수납·등록상담과 같은 값.
+          labelWidth={116}
+        />
         {canWrite ? (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setTagManagerOpen(true)}>
+          <div className="ml-auto flex items-center gap-2">
+            {/* 텍스트 Secondary — 상시 버튼은 창당 Primary 1 + 텍스트 1(§10). */}
+            <Button variant="ghost" className="text-primary" onClick={() => setTagManagerOpen(true)}>
               태그 관리
             </Button>
             <Button onClick={() => setDialog({ mode: "create", date: isCurrentMonth ? today : `${month}-01` })}>

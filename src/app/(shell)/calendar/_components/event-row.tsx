@@ -33,19 +33,19 @@ export function EventRow({ event }: { event: EventRowData }) {
   const chip = event.tag ? chipProps(event.tag.color) : null;
   return (
     <li className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 py-1">
-      <span className="num text-text-dim w-[74px] shrink-0 text-xs whitespace-nowrap">
+      <span className="num text-text-dim w-24 shrink-0 text-sm whitespace-nowrap">
         {shortDate(event.startDate)}
       </span>
       <span className="text-foreground min-w-0 flex-1 text-sm font-medium break-keep">
         {event.title}
       </span>
       {event.endDate !== event.startDate ? (
-        <span className="num text-text-faint shrink-0 text-xs whitespace-nowrap">
+        <span className="num text-text-faint shrink-0 text-sm whitespace-nowrap">
           ~{shortDate(event.endDate)}
         </span>
       ) : null}
       {time ? (
-        <span className="num text-text-faint shrink-0 text-xs whitespace-nowrap">{time}</span>
+        <span className="num text-text-faint shrink-0 text-sm whitespace-nowrap">{time}</span>
       ) : null}
       {event.tag && chip ? (
         <span
