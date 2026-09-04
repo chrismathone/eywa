@@ -535,6 +535,11 @@ export default async function TimetablePage({
       {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
       <Toolbar>
+        {/* 왼쪽 묶음(주 이동·필터·검색·설정·엑셀) / 오른쪽 묶음(집계·ECS·편집) — 창을 줄이면 **묶음 단위로** 줄이 바뀐다
+            (원장 2026-09-04 *"창 크기를 조절했을때도 헤더 정렬이 이루어질 수 있게"* — 종전엔 항목 하나(엑셀·시트)만 둘째 줄
+            왼쪽에 떨어지고 집계·편집이 그 오른쪽에 붙어 어디가 왼쪽 묶음의 끝인지 안 읽혔다).
+            ⚠️ 폰 레일(compact-chrome)에선 묶음 상자를 없앤다(display: contents) — 레일은 직계 항목을 한 줄로 흘린다. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-3 compact-chrome:contents">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
@@ -804,7 +809,9 @@ export default async function TimetablePage({
         </>
         )}
 
+        </div>
         <div className="rail-spacer ml-auto" aria-hidden />
+        <div className="flex flex-wrap items-center gap-3 compact-chrome:contents">
 
         {/* 학생 집계 — 최상위 프레임은 PageHeader 우측(문법 ②), 창(임베드)은 헤더 줄을 접으므로
             여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
@@ -837,6 +844,7 @@ export default async function TimetablePage({
             <TimetableEditControls />
           </>
         ) : null}
+        </div>
       </Toolbar>
 
       {/* 검색 결과 0건 — 빈 격자만 남기면 "시간표가 고장났다"로 읽힌다. 왜 비었는지(어느 주·어느 과목에

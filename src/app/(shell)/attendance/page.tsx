@@ -1,16 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Users } from "@/components/icons/eywa-icon-compat";
 import { PeriodNav } from "@/components/period-nav";
-import {
-  TOOLBAR_CHIP,
-  TOOLBAR_CHIP_OFF,
-  TOOLBAR_SEG_BOX,
-  TOOLBAR_SEG_ITEM,
-  TOOLBAR_SEG_OFF,
-  TOOLBAR_SEG_ON_PRIMARY,
-  TOOLBAR_SELECT,
-} from "@/components/toolbar-controls";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { HrefSelect } from "@/components/href-select";
 import {
   USABLE_SEAT_KEYS,
   SEAT_KEYS,
@@ -48,7 +40,7 @@ import { HideRetiredToggle } from "./_components/hide-retired-toggle";
 import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
-import { AttendanceSearchBox, AttendanceSearchProvider } from "./_components/search-context";
+import { AttendanceSearchProvider, AttendanceSearchToggle } from "./_components/search-context";
 import { HubStudentSearch } from "./_components/hub-student-search";
 import { readSearchSeed } from "./_components/att-search-seed";
 import { loadHubStudentSearch } from "@/features/attendance/server/hub-search-queries";
@@ -718,71 +710,66 @@ export default async function AttendancePage({
       <div className="flex h-full min-h-0 flex-col gap-3 pb-3">
       {/* Toolbar — 월/범위/보기(+관리자 필터) 좌측, 살아있는 합계 우측. 이 화면의 유일한 크롬 줄. */}
       {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 격자가 자기 테두리를 갖고
-          있어 선이 이중으로 겹쳐 보였다. `relative`는 남긴다(우측 '안내' 패널의 기준 상자). */}
-      <div className="relative flex shrink-0 flex-wrap items-center gap-3 px-1 py-1">
+          있어 선이 이중으로 겹쳐 보였다. `relative`는 남긴다(우측 '안내' 패널의 기준 상자).
+          지시서 §10(2026-09-04, 12단계): 축 이름은 `micro` 소라벨이 아니라 드롭다운 안의 `축: 값`(과목·강사·반·기간·보기·정렬),
+          보기(반별/강사 전체)는 링크형 드롭다운(HrefSelect — 주소를 attHref가 만든다), 검색은 토글. 구분선은 뺐다(다른 화면과 같은 gap). */}
+      <div className="relative flex shrink-0 flex-wrap items-center gap-2.5 px-1 py-1">
         {/* 과목 → 강사 → 반 계층 필터(넓→좁). 위를 고르면 아래 선택지가 좁혀지고, 반을 골라야 출석부가 뜬다.
-            반 선택 시 과목·강사는 그 반의 값으로 자동 표시(누구 선생님인지 바로 보이게). */}
+            반 선택 시 과목·강사는 그 반의 값으로 자동 표시(누구 선생님인지 바로 보이게). 전체(=미선택)면 축 이름만 선다. */}
         {showSubjectFilter ? (
-          <>
-            <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">과목</span>
-              <FilterSelect
-                paramName="subject"
-                value={subjectValue}
-                options={subjectOptions}
-                ariaLabel="과목 필터"
-                allLabel="전체 과목"
-                triggerClassName={TOOLBAR_SELECT}
-              />
-            </div>
-            <span className="bg-line h-4 w-px" aria-hidden />
-          </>
+          <FilterSelect
+            paramName="subject"
+            value={subjectValue}
+            options={subjectOptions}
+            axisLabel="과목"
+            ariaLabel="과목 필터"
+            allLabel="전체"
+            prefixOnlyFor=""
+            className="w-auto"
+            triggerClassName={TOOLBAR_SELECT}
+          />
         ) : null}
 
         {showTeacherFilter ? (
           <>
-            <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">강사</span>
-              <FilterSelect
-                paramName="teacher"
-                value={teacherValue}
-                options={teacherOptions}
-                ariaLabel="강사 필터"
-                allLabel="전체 강사"
-                triggerClassName={TOOLBAR_SELECT}
-              />
-              {/* 퇴직 담임 숨김 — 감춘 인원을 칩에 적어 "강사가 없어졌다"로 읽히지 않게 한다. */}
-              {retiredCount > 0 || !viewPrefs.hideRetired ? (
-                <HideRetiredToggle hidden={viewPrefs.hideRetired} count={retiredCount} />
-              ) : null}
-            </div>
-            <span className="bg-line h-4 w-px" aria-hidden />
+            <FilterSelect
+              paramName="teacher"
+              value={teacherValue}
+              options={teacherOptions}
+              axisLabel="강사"
+              ariaLabel="강사 필터"
+              allLabel="전체"
+              prefixOnlyFor=""
+              className="w-auto"
+              triggerClassName={TOOLBAR_SELECT}
+            />
+            {/* 퇴직 담임 숨김 — 감춘 인원을 칩에 적어 "강사가 없어졌다"로 읽히지 않게 한다. */}
+            {retiredCount > 0 || !viewPrefs.hideRetired ? (
+              <HideRetiredToggle hidden={viewPrefs.hideRetired} count={retiredCount} />
+            ) : null}
           </>
         ) : null}
 
-        {/* 반 dropdown — 강사에겐 **반 선택의 유일한 수단**('전체 반' = 자기 전체 시트, 반 = 그 반).
-            관리자에게 '전체 반'은 종전대로 반 미선택(=선택 허브, 반 108개를 한 번에 안 여는 렉 방지). */}
-        <div className="flex items-center gap-1.5">
-          <span className="micro mr-1">반</span>
-          {/* cap 상향 — 기본 50이면 이름순 앞을 로마자 영어반이 독점해 목록을 훑을 때 수학반이 7개만
-              보였다(gotcha #84). 반 목록은 수백 규모라 전량 렌더가 안전하고, 초과분은 hint 검색으로 도달. */}
-          <FilterSelect
-            paramName="class"
-            value={effectiveClassId}
-            options={classOptions}
-            ariaLabel="반 필터"
-            allLabel={isTeacherView ? "전체 반(내 반 전부)" : "전체 반"}
-            cap={300}
-            // 형광 표기가 꺼진 상태("전체 반")에서만 쓰인다 — 켜지면 MARKER_TRIGGER가 이긴다.
-            triggerClassName={TOOLBAR_SELECT}
-            // 반을 고르면 그 반의 시트가 아래를 채운다 = "지금 어느 반을 보고 있나"의 자리라 형광 표기
-            // (원장 2026-08-18 "수업에 들어가서 세부 내용을 보는 곳에 전부 적용"). 옆 과목·강사 필터는
-            // 목록을 좁힐 뿐이라 **켜지 않는다** — 노란 게 둘이 되면 첫째가 안 보인다.
-            // ⚠️ "전체 반"일 땐 저절로 평범한 모양으로 돌아간다(FilterSelect가 고른 값에만 켠다).
-            marker
-          />
-        </div>
-        <span className="bg-line h-4 w-px" aria-hidden />
+        {/* 반 dropdown — 강사에겐 **반 선택의 유일한 수단**('전체' = 자기 전체 시트, 반 = 그 반).
+            관리자에게 '전체'는 종전대로 반 미선택(=선택 허브, 반 108개를 한 번에 안 여는 렉 방지).
+            cap 상향 — 기본 50이면 이름순 앞을 로마자 영어반이 독점해 목록을 훑을 때 수학반이 7개만
+            보였다(gotcha #84). 반 목록은 수백 규모라 전량 렌더가 안전하고, 초과분은 hint 검색으로 도달.
+            반을 고르면 그 반의 시트가 아래를 채운다 = "지금 어느 반을 보고 있나"의 자리라 형광 표기
+            (원장 2026-08-18 "수업에 들어가서 세부 내용을 보는 곳에 전부 적용"). 옆 과목·강사 필터는
+            목록을 좁힐 뿐이라 **켜지 않는다** — 노란 게 둘이 되면 첫째가 안 보인다.
+            ⚠️ "전체"일 땐 저절로 평범한 모양으로 돌아간다(FilterSelect가 고른 값에만 켠다). */}
+        <FilterSelect
+          paramName="class"
+          value={effectiveClassId}
+          options={classOptions}
+          axisLabel="반"
+          ariaLabel="반 필터"
+          allLabel={isTeacherView ? "전체(내 반 전부)" : "전체"}
+          cap={300}
+          className="w-auto"
+          triggerClassName={TOOLBAR_SELECT}
+          marker
+        />
 
         {/* 월 이동 — 앱 전역 단일 소스 PeriodNav(원장 2026-09-01 "출결 날짜 이동도 바꿔줘").
             🔑 종전엔 라벨이 그냥 글자라 **이번 달로 돌아갈 길이 없었다**(◀를 누른 만큼 ▶를 눌러야 했다).
@@ -811,61 +798,46 @@ export default async function AttendancePage({
           }
         />
 
-        {/* 보기 토글 — **관리자 전용**. '강사 전체'는 그 강사의 모든 반을 반별로 묶어 한 표에(급여 계산용).
-            강사 본인에겐 반 드롭다운과 뜻이 겹쳐(그리고 '반별'이 사진 허브로 보내서) 감춘다. */}
+        {/* 보기 — **관리자 전용**. '강사 전체'는 그 강사의 모든 반을 반별로 묶어 한 표에(급여 계산용).
+            강사 본인에겐 반 드롭다운과 뜻이 겹쳐(그리고 '반별'이 사진 허브로 보내서) 감춘다. 주소는 attHref가 만든다. */}
         {showViewToggle ? (
-          <>
-            <span className="bg-line h-4 w-px" aria-hidden />
-            <div className="flex items-center gap-1.5">
-              <span className="micro shrink-0">보기</span>
-              {effectiveTeacher ? (
-                <div className={TOOLBAR_SEG_BOX}>
-                {([
-                  ["class", "반별"],
-                  ["teacher", "강사 전체"],
-                ] as const).map(([key, label]) => (
-                  <Link
-                    key={key}
-                    href={attHref({
-                      classId: key === "teacher" ? null : effectiveClassId,
-                      month,
-                      teacherId: effectiveTeacher,
-                      subjectId: effectiveSubject,
-                      mode: key,
-                    })}
-                    className={`${TOOLBAR_SEG_ITEM} shrink-0 ${mode === key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-                  >
-                    {label}
-                  </Link>
-                ))}
-                </div>
-              ) : (
-                <span className="text-text-faint text-xs">강사를 고르면 전체 보기</span>
-              )}
-            </div>
-          </>
+          effectiveTeacher ? (
+            <HrefSelect
+              axisLabel="보기"
+              ariaLabel="보기 방식"
+              value={mode}
+              options={[
+                {
+                  value: "class",
+                  label: "반별",
+                  href: attHref({ classId: effectiveClassId, month, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode: "class" }),
+                },
+                {
+                  value: "teacher",
+                  label: "강사 전체",
+                  href: attHref({ classId: null, month, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode: "teacher" }),
+                },
+              ]}
+            />
+          ) : (
+            <span className="text-text-faint text-xs">강사를 고르면 전체 보기</span>
+          )
         ) : null}
 
         {/* 정렬 — 계정 귀속 설정(URL 아님). 반별 외엔 반 구분 없이 한 덩어리로 그린다. */}
         {allGroups.length > 0 ? (
           <>
-            <span className="bg-line h-4 w-px" aria-hidden />
-            <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">정렬</span>
-              <AttendanceSortSelect value={sortKey} />
-              {/* 반 머리행이 있는 보기에서만 — 이름 칸의 작은 화살표와 같은 동작을 글자로 한 번 더 낸다
-                  (아이콘만 있으면 있는 줄 모른다). 접힌 수까지 적어 "몇 개가 숨었는지"를 감추지 않는다. */}
-              {showGroups ? <CollapseAllChip classIds={allGroups.map((g) => g.classId)} /> : null}
-            </div>
-            <span className="bg-line h-4 w-px" aria-hidden />
-            {/* 학생 검색(원장 2026-08-19) — **클라 필터**라 서버 왕복 0, 친 즉시 표가 좁아진다.
-                안 걸린 행은 감추는 게 아니라 안 그린다(격자 좌표도 함께 좁아져 방향키가 새지 않는다).
+            <AttendanceSortSelect value={sortKey} />
+            {/* 반 머리행이 있는 보기에서만 — 이름 칸의 작은 화살표와 같은 동작을 글자로 한 번 더 낸다
+                (아이콘만 있으면 있는 줄 모른다). 접힌 수까지 적어 "몇 개가 숨었는지"를 감추지 않는다. */}
+            {showGroups ? <CollapseAllChip classIds={allGroups.map((g) => g.classId)} /> : null}
+            {/* 학생 검색(원장 2026-08-19) — **클라 필터**라 서버 왕복 0, 친 즉시 표가 좁아진다. 토글(§10) — 검색어(허브 씨앗 포함)가
+                걸려 있으면 펼친 채. 안 걸린 행은 감추는 게 아니라 안 그린다(격자 좌표도 함께 좁아져 방향키가 새지 않는다).
                 검색어는 저장하지 않는다 — 다음 방문에 필터가 걸린 채 열리면 "출석부가 비었다"로 읽힌다. */}
-            <AttendanceSearchBox />
+            <AttendanceSearchToggle />
           </>
         ) : (
           <>
-            <span className="bg-line h-4 w-px" aria-hidden />
             {/* 진입 **전** 학생 검색(원장 2026-08-20) — 강사를 고르기 전에 "이 학생이 누구 반이지"를 푼다.
                 결과를 누르면 그 강사 출석부가 **검색어를 들고** 열린다. 시트 검색과 자리가 겹치지 않도록
                 같은 칸에 둔다(둘 중 하나만 뜬다 = URL 씨앗을 적는 주인도 하나). */}
@@ -875,10 +847,7 @@ export default async function AttendancePage({
 
         {/* 대상 표기 — PageHeader의 서브라인이 하던 몫(반 이름 / N개 반). 세로 줄 대신 툴바 한 칸으로. */}
         {selectedClassLabel ? (
-          <>
-            <span className="bg-line h-4 w-px" aria-hidden />
-            <span className="text-text-dim truncate text-xs font-medium">{selectedClassLabel}</span>
-          </>
+          <span className="text-text-dim truncate text-xs font-medium">{selectedClassLabel}</span>
         ) : null}
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}

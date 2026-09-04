@@ -24,8 +24,7 @@
  *    page가 이 공급자를 **아예 안 씌운다**(= 입력칸도 없다. "있는데 안 먹는 것"이 제일 나쁘다).
  */
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import {
   emptySearchMessage,
   isSearchActive,
@@ -33,7 +32,7 @@ import {
 } from "@/features/attendance/student-search";
 import {
   SearchScopeChip,
-  StudentSearchBox,
+  StudentSearchToggle,
 } from "@/features/attendance/components/student-search-box";
 import {
   matchedClassIds,
@@ -227,45 +226,13 @@ export function useSearchTone(student: TimetableSearchStudent, tone: string): st
  */
 export function TimetableSearchToggle() {
   const ctx = useTimetableSearch();
-  const [opened, setOpened] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   if (!ctx || ctx.suspended || ctx.totalClasses === 0) return null;
-  const open = opened || ctx.active;
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setOpened(true);
-          // 포커스는 **누른 그 순간에만** — autoFocus(마운트마다)면 편집·교실뷰에서 돌아올 때 커서를 훔친다.
-          requestAnimationFrame(() => inputRef.current?.focus());
-        }}
-        className={`${CONTROL_H} ${CONTROL_LABEL} text-text-dim hover:text-foreground inline-flex shrink-0 items-center px-1 font-medium whitespace-nowrap transition`}
-      >
-        검색
-      </button>
-    );
-  }
   return (
-    <>
-      <StudentSearchBox value={ctx.query} onChange={ctx.setQuery} inputRef={inputRef} />
-      {ctx.active ? (
-        <SearchScopeChip
-          shown={ctx.matchedClasses}
-          total={ctx.totalClasses}
-          unit="개 수업"
-          totalsNote="상단 인원 집계는 전체 기준"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpened(false)}
-          className={`${CONTROL_H} ${CONTROL_LABEL} text-text-faint hover:text-foreground inline-flex shrink-0 items-center px-1 whitespace-nowrap transition`}
-        >
-          닫기
-        </button>
-      )}
-    </>
+    <StudentSearchToggle
+      value={ctx.query}
+      onChange={ctx.setQuery}
+      chip={<SearchScopeChip shown={ctx.matchedClasses} total={ctx.totalClasses} unit="개 수업" totalsNote="상단 인원 집계는 전체 기준" />}
+    />
   );
 }
 

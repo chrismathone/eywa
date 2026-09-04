@@ -8,7 +8,7 @@ import {
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
 import { RichCardGroupBoard } from "./rich-card-group";
-import { SearchedCell, VisibleClassCount } from "./search-context";
+import { SearchedCell } from "./search-context";
 
 /**
  * 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 이식. 시작 교시별 섹션마다:
@@ -47,7 +47,6 @@ export function RichGridView({
   compactSections: Set<number>;
 }) {
   const groups = buildRichCardGroups(slots, config, compactSections, customGroups);
-  const total = groups.reduce((n, g) => n + g.cards.length, 0);
   const subjectSoftClass = SUBJECT_SOFT[subjectMaps.colorOf(slots[0]?.subject ?? "")];
 
   return (
@@ -57,11 +56,9 @@ export function RichGridView({
     // ⚠️ 아래 여백(pb-8) — 마지막 줄이 창 바닥에 딱 붙어 끝나 **끝까지 내려온 건지 알 수 없었다**
     //    (원장 2026-08-13 *"스크롤이 우측에 너무 안 보여서 끝까지 내려갔는지 헷갈림"*). 위(헤더 아래)와
     //    같은 정도의 숨 쉴 틈을 아래에도 둔다 — 여백 자체가 "여기가 끝"이라는 신호다.
+    // "읽기 전용 · N개 수업 · 편집은 기본뷰" 머리 문구는 뺐다(원장 2026-09-04 *"영어 통합뷰에서 멘트 삭제"*) — 수업 수는
+    // 툴바의 검색 칩이, 편집 가능 여부는 편집 버튼의 유무가 이미 말한다(설명 문장 금지, 지시서 §4).
     <div className="pb-8">
-      <div className="text-text-faint mb-2 text-right text-xs">
-        {/* 검색 중이면 "보이는 수/전체" — 카드 한 장만 남은 화면이 "42개 수업"이라 말하면 거짓말이 된다. */}
-        읽기 전용 · <VisibleClassCount total={total} />개 수업 · 편집은 기본뷰
-      </div>
       {/* 섹션 = 한 판(스프레드시트의 다음 시트처럼 이어 붙임). 카드 사이는 구분선만. */}
       <div className="bg-card shadow-card w-max max-w-full overflow-hidden rounded-2xl">
         {groups.map((g) => (

@@ -10,6 +10,7 @@
  */
 import { useState } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { AbsenceIntakeDialog } from "./absence-intake-dialog";
 
 export function AbsenceIntakeButton({ today }: { today: string }) {
@@ -20,7 +21,8 @@ export function AbsenceIntakeButton({ today }: { today: string }) {
       <button
         type="button"
         onClick={() => setOpen(Date.now())}
-        className="border-line text-text-dim hover:bg-bg-soft flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold transition"
+        // 치수는 control-scale(툴바 한 줄의 다른 버튼과 같은 높이·라벨) — 옛 h-8·12px은 옆 드롭다운보다 크고 글자는 작았다.
+        className={`${CONTROL_H} ${CONTROL_LABEL} border-line text-text-dim hover:bg-bg-soft flex items-center gap-1.5 rounded-lg border px-2.5 font-bold transition`}
         title="학부모 전화로 받은 결석을 한 번에 등록합니다"
       >
         <EyIcon name="calendarOff" size={14} />

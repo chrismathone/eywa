@@ -17,9 +17,9 @@ import { useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { SeatingEditProvider } from "./seating-edit-context";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
-import { SearchScopeChip, StudentSearchBox } from "@/features/attendance/components/student-search-box";
+import { SearchScopeChip, StudentSearchToggle } from "@/features/attendance/components/student-search-box";
 import {
-  SubjectFilterChips,
+  SubjectFilterSelect,
   SubjectScopeChip,
   useSubjectFilter,
 } from "@/features/attendance/components/subject-filter-chips";
@@ -163,17 +163,14 @@ export function SeatingChart({
         </p>
         {/* 학생 검색 — 이름을 치면 그 학생이 있는 반만 남는다. 위 합계(미출결·결석·입력)는 **하루 전체**
             기준 그대로라(집계 분모 불변 규칙) 걸린 필터를 칩으로 크게 밝힌다. */}
-        <StudentSearchBox value={query} onChange={setQuery} inputWidth="w-[104px]" />
+        <StudentSearchToggle
+          value={query}
+          onChange={setQuery}
+          inputWidth="w-[104px]"
+          chip={<SearchScopeChip shown={shownClasses.length} total={subjectClasses.length} unit="개 반" totalsNote="위 합계는 하루 전체 기준" />}
+        />
         {/* 과목 필터 — 좁히는 축은 검색과 같은 **반 카드**다(계정 저장). 위 합계는 하루 전체 기준 그대로. */}
-        <SubjectFilterChips value={subject.value} onPick={subject.pick} pending={subject.pending} />
-        {searching ? (
-          <SearchScopeChip
-            shown={shownClasses.length}
-            total={subjectClasses.length}
-            unit="개 반"
-            totalsNote="위 합계는 하루 전체 기준"
-          />
-        ) : null}
+        <SubjectFilterSelect value={subject.value} onPick={subject.pick} pending={subject.pending} />
         <SubjectScopeChip
           subject={subject.value}
           shown={subjectClasses.length}

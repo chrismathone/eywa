@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ToolbarButton, ToolbarChip, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { ToolbarButton, ToolbarChip } from "@/components/toolbar";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { assetFilterChips, filterAssets, type AssetFilterKey } from "@/features/inventory/filter";
 import { saveInventoryPrefs } from "@/features/inventory/server/prefs";
@@ -81,25 +83,33 @@ export function AssetsFace({
         query={query}
         onQueryChange={setQuery}
         placeholder="자산ID, 모델명, 위치, 사용자 검색"
+        // 필터는 `필터: 값` 드롭다운 하나(지시서 §10 칩 줄 금지 — 옛 세그먼트 11칩이 툴바를 두 줄로 밀었다, 원장 2026-09-04
+        // *"2행을 1행으로"*·*"더 작아져서 2행이 될 경우가 없도록"*). 축은 하나(상태·분류·폐기가 한 목록)라 드롭다운도 하나.
         filters={
-          <ToolbarSegment wrap title="필터 — 하나만 고릅니다">
-            {chips.map((c) => (
-              <ToolbarSegmentItem key={c.key} active={chip === c.key} onClick={() => setChip(c.key)}>
-                {c.label}
-              </ToolbarSegmentItem>
-            ))}
-          </ToolbarSegment>
+          <SearchableSelect
+            options={chips.map((c) => ({ value: c.key, label: c.label }))}
+            value={chip}
+            onValueChange={(v) => setChip(v as AssetFilterKey)}
+            ariaLabel="자산 필터"
+            valuePrefix="필터"
+            prefixOnlyFor="all"
+            triggerClassName={TOOLBAR_SELECT}
+            className="w-auto shrink-0"
+          />
         }
         extra={
           <ToolbarChip active={hideDisposed} onClick={toggleHideDisposed} title="폐기 자산을 표에서 감춥니다('폐기' 필터를 고르면 보입니다)">
             폐기 숨김
           </ToolbarChip>
         }
-        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정 · 상태 칸 더블클릭 = 상태 변경" : ""}`}
+        // 더블클릭 안내 문구는 뺐다(원장 2026-09-04 *"더블클릭 관련 텍스트를 없애면 2행을 1행으로 합칠 수 있을듯"*) — 표 자체의
+        // 더블클릭 동작(행=수정·상태 칸=상태 변경)은 그대로다(sortable-table 주석).
+        summary={`${rows.length}건`}
         actions={
           <>
             {canWrite ? <ToolbarButton onClick={() => setDialog({ kind: "excel" })}>엑셀</ToolbarButton> : null}
-            <PrintWindowButton id="print/inventory-qr" href="/inventory/qr/print" title="자산 QR 라벨 인쇄" variant="outline" className="h-8 rounded-lg px-2.5 text-xs">
+            {/* 치수는 공용 <Button> 기본(control-scale) 그대로 — 옛 `h-8 text-xs` 덮어쓰기가 옆 버튼과 크기를 갈랐다(원장 캡처). */}
+            <PrintWindowButton id="print/inventory-qr" href="/inventory/qr/print" title="자산 QR 라벨 인쇄" variant="outline">
               인쇄
             </PrintWindowButton>
             {canWrite ? <ToolbarButton variant="primary" onClick={() => setDialog({ kind: "create" })}>+ 자산 등록</ToolbarButton> : null}

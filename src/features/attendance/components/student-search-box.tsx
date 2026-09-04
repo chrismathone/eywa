@@ -8,9 +8,76 @@
  *    열리면 "출석부가 비었다"로 읽힌다.
  * ⚠️ 서버 왕복 0 — URL 파라미터도 아니다(라우팅하면 표가 통째로 다시 그려져 즉시성이 사라진다).
  */
+import { useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { CONTROL_H } from "@/components/ui/control-scale";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { isSearchActive } from "../student-search";
+
+/**
+ * **클라 상태 검색의 토글** — 평소엔 '검색' 글자 하나, 누르면 위 입력칸(+걸린 필터 표기)이 펼쳐진다.
+ *
+ * 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)". 공용 [`SearchToggle`](@/components/search-toggle)은 URL(`?q=`)
+ * 검색용이라, 서버 왕복 0의 클라 필터(시간표·월별 출석부·오늘 출결·좌석표)는 이 토글을 쓴다. 규약은 같다:
+ * · 검색어가 걸려 있으면 **언제나** 펼친 채(무엇으로 걸러졌는지 보여야 한다) — `chip`(N/M 표기)이 그 옆에 선다.
+ * · 빈 채로 열었으면 '닫기'로 되돌린다.
+ * · 포커스는 **누른 그 순간에만**(`inputRef`) — autoFocus는 remount마다 커서를 훔친다(위 주석).
+ * ⚠️ 부르는 쪽이 "검색할 게 없을 때"(편집 모드·행 0개)는 이 컴포넌트를 아예 안 그린다 — 여기서는 판단하지 않는다.
+ */
+export function StudentSearchToggle({
+  value,
+  onChange,
+  chip,
+  placeholder,
+  inputWidth,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  /** 검색이 걸려 있을 때 입력칸 옆에 설 표기(`SearchScopeChip`). */
+  chip?: ReactNode;
+  placeholder?: string;
+  inputWidth?: string;
+}) {
+  const [opened, setOpened] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const active = isSearchActive(value);
+  const open = opened || active;
+  // 씨앗(URL `?q=`)으로 펼쳐진 채 X·Esc로 지우면 **그대로 펼친 채** 둔다('닫기'가 선다) — 지우는 순간 상자가 사라지면
+  // 커서 아래에서 입력칸이 증발하고, 방금 지운 자리에 다시 치려던 손이 갈 곳을 잃는다.
+  const change = (v: string) => {
+    if (!opened && !isSearchActive(v)) setOpened(true);
+    onChange(v);
+  };
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setOpened(true);
+          requestAnimationFrame(() => inputRef.current?.focus());
+        }}
+        className={`${CONTROL_H} ${CONTROL_LABEL} text-text-dim hover:text-foreground inline-flex shrink-0 items-center px-1 font-medium whitespace-nowrap transition`}
+      >
+        검색
+      </button>
+    );
+  }
+  return (
+    <>
+      <StudentSearchBox value={value} onChange={change} placeholder={placeholder} inputWidth={inputWidth} inputRef={inputRef} />
+      {active ? (
+        chip
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpened(false)}
+          className={`${CONTROL_H} ${CONTROL_LABEL} text-text-faint hover:text-foreground inline-flex shrink-0 items-center px-1 whitespace-nowrap transition`}
+        >
+          닫기
+        </button>
+      )}
+    </>
+  );
+}
 
 export function StudentSearchBox({
   value,
@@ -58,9 +125,10 @@ export function StudentSearchBox({
         placeholder={placeholder}
         aria-label="학생 검색"
         // ⚠️ 브라우저 기본 ✕(webkit)를 감춘다 — 아래 우리 ✕와 나란히 두 개가 뜬다.
-        // 글자 = 컨트롤 라벨(18px, iOS 자동확대 하한 16px 위) · `h-full leading-normal` — `<input>`은 제 상자 안에서
+        // 글자 = sm 라벨(16px — iOS 자동확대 하한 그대로, 상자 라벨 18보다 한 단계 작게: 원장 2026-09-04 "내부 텍스트는 폰트 작게") ·
+        // `h-full leading-normal` — `<input>`은 제 상자 안에서
         // 글자를 자르므로 상자 높이를 다 써야 한글이 안 잘린다(control-scale.ts 규칙 3, 원장 캡처 2026-09-03).
-        className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent text-(length:--control-label) leading-normal outline-none [&::-webkit-search-cancel-button]:appearance-none`}
+        className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent text-(length:--control-label-sm) leading-normal outline-none [&::-webkit-search-cancel-button]:appearance-none`}
       />
       {active ? (
         <button

@@ -1,11 +1,7 @@
 "use client";
 
-import {
-  TOOLBAR_SEG_BOX_WRAP,
-  TOOLBAR_SEG_ITEM,
-  TOOLBAR_SEG_OFF,
-  TOOLBAR_SEG_ON_PRIMARY,
-} from "@/components/toolbar-controls";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 
 /**
  * 오늘 출결 **과목별 필터 칩** — 세 탭(좌석표·확인 필요·어제 출결)이 같이 쓰는 하나
@@ -29,6 +25,46 @@ import {
   resolveSubjectFilter,
   SUBJECT_FILTER_ALL,
 } from "@/features/attendance/live/view-prefs";
+
+/**
+ * 오늘 출결(데스크·복기)·좌석표의 **과목 필터** — 계정에 저장되는 클라 상태(URL 아님).
+ *
+ * 2026-09-04 디자인 v5 12단계(지시서 §10): 옛 `과목` 소라벨 + 세그먼트 칩 줄(과목 수만큼 늘어난다) → **`과목: 값` 드롭다운 하나**.
+ * 선택지는 학원설정 단일 소스(`useSubjectMaps().filters` = 전체 + 설정 과목) — 코드에 과목을 적지 않는다.
+ * ⚠️ 파일 이름은 옛 것(`subject-filter-chips.tsx`) 그대로 — 소비처 3곳의 import 경로를 지키려고. 컴포넌트 이름은 바꿨다.
+ */
+export function SubjectFilterSelect({
+  value,
+  onPick,
+  pending,
+}: {
+  value: string;
+  onPick: (next: string) => void;
+  pending?: boolean;
+}) {
+  const subjects = useSubjectMaps();
+  // 설정 과목이 없으면(빈 학원) 드롭다운 자체가 노이즈다 — '전체' 하나만 있는 선택은 아무 일도 못 한다.
+  if (subjects.filters.length <= 1) return null;
+  return (
+    <span
+      className={`shrink-0 ${pending ? "opacity-60" : ""}`}
+      title="과목별로 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
+    >
+      <SearchableSelect
+        options={subjects.filters}
+        value={value}
+        onValueChange={(v) => {
+          if (!pending && v !== value) onPick(v);
+        }}
+        ariaLabel="과목 필터"
+        valuePrefix="과목"
+        prefixOnlyFor={SUBJECT_FILTER_ALL}
+        triggerClassName={TOOLBAR_SELECT}
+        className="w-auto"
+      />
+    </span>
+  );
+}
 
 /**
  * 과목 필터 상태 한 벌 — 화면은 `value`로 좁히고 `pick`을 칩에 넘긴다.
@@ -62,46 +98,6 @@ export function useSubjectFilter(initial: string) {
   );
 
   return { value, pick, pending, active: isSubjectFilterActive(value) };
-}
-
-export function SubjectFilterChips({
-  value,
-  onPick,
-  pending,
-}: {
-  value: string;
-  onPick: (next: string) => void;
-  pending?: boolean;
-}) {
-  const subjects = useSubjectMaps();
-  // 설정 과목이 없으면(빈 학원) 칩 줄 자체가 노이즈다 — '전체' 하나만 있는 토글은 아무 일도 못 한다.
-  if (subjects.filters.length <= 1) return null;
-  return (
-    // 항목 수가 **학원설정을 따라 늘어나므로** 줄바꿈되는 묶음(TOOLBAR_SEG_BOX_WRAP)이다.
-    // 소라벨('과목')은 묶음 밖 — 칩이 아닌 것이 칩 자리에 있으면 묶음이 삐뚤어 보인다.
-    <span className="flex shrink-0 items-center gap-1.5">
-      <span className="micro shrink-0">과목</span>
-      <span
-        className={TOOLBAR_SEG_BOX_WRAP}
-        title="과목별로 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
-      >
-        {subjects.filters.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            disabled={pending}
-            onClick={() => onPick(f.value)}
-            aria-pressed={value === f.value}
-            className={`${TOOLBAR_SEG_ITEM} cursor-pointer disabled:cursor-wait disabled:opacity-60 ${
-              value === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </span>
-    </span>
-  );
 }
 
 /**

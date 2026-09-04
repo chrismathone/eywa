@@ -33,7 +33,6 @@ export function PayslipWindowButton({
           : `급여명세서 ${period}`
       }
       variant="outline"
-      className="h-8 rounded-lg px-2.5 text-xs"
     >
       급여명세서{subjectFiltered ? " (전 과목)" : ""}
     </PrintWindowButton>

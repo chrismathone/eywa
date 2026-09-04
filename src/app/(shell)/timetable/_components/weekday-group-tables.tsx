@@ -455,7 +455,12 @@ function GroupTable({
                           </div>
                         </>
                       ) : (
-                        <div className="text-text-faint mt-0.5 num text-xs">{timeText}</div>
+                        // 시각은 **두 줄**(`14:30` / `~ 16:20`) — 한 줄 `14:30~16:20`은 교시 열 폭을 넘쳐 옆 칸으로 새어 나갔다
+                        // (원장 캡처 2026-09-04 *"왼쪽에 시간 텍스트가 벗어나지 않도록"*). 접힌 행(위)은 한 줄 압축 그대로.
+                        <div className="text-text-faint mt-0.5 num text-xs leading-tight">
+                          <div>{timeText.split("~")[0]}</div>
+                          {timeText.includes("~") ? <div>~ {timeText.split("~")[1]}</div> : null}
+                        </div>
                       )}
                     </>
                   )}

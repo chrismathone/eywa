@@ -5,7 +5,7 @@ import { rowKey } from "@/features/attendance/grid/model";
 import * as actions from "@/features/attendance/server/actions";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
-import { AttendanceSearchBox, AttendanceSearchProvider } from "./search-context";
+import { AttendanceSearchProvider, AttendanceSearchToggle } from "./search-context";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/features/attendance/server/actions", () => ({
@@ -97,16 +97,22 @@ function sheet(showGroups: boolean, initialQuery?: string) {
   return (
     <AttendanceSearchProvider rows={SEARCH_ROWS} initialQuery={initialQuery}>
       <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
-        <AttendanceSearchBox />
+        <AttendanceSearchToggle />
         <MatrixTable groups={GROUPS} days={DAYS} holidays={{}} showGroups={showGroups} ordered={ORDERED} />
       </GridProvider>
     </AttendanceSearchProvider>
   );
 }
 
+/** 입력칸은 토글(§10 "검색은 필요할 때만") 뒤에 있다 — 씨앗이 없으면 '검색'을 눌러 펼친다. */
+function openSearch() {
+  if (!screen.queryByLabelText("학생 검색")) fireEvent.click(screen.getByRole("button", { name: "검색" }));
+  return screen.getByLabelText("학생 검색") as HTMLInputElement;
+}
+
 function renderSheet(showGroups = true, initialQuery?: string) {
   const view = render(sheet(showGroups, initialQuery));
-  return { ...view, input: screen.getByLabelText("학생 검색") as HTMLInputElement };
+  return { ...view, input: openSearch() };
 }
 
 const type = (input: HTMLInputElement, v: string) => fireEvent.change(input, { target: { value: v } });
@@ -277,10 +283,10 @@ describe("숫자가 거짓말하지 않는다", () => {
           { row: rowKey(CB, S3), studentId: S3, name: "최유나" },
         ]}
       >
-        <AttendanceSearchBox />
+        <AttendanceSearchToggle />
       </AttendanceSearchProvider>,
     );
-    const box = screen.getByLabelText("학생 검색") as HTMLInputElement;
+    const box = openSearch();
     type(box, "이도");
     expect(screen.getByText(/검색 중 · 1\/2명 표시/)).toBeTruthy();
   });

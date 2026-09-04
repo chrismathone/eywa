@@ -9,9 +9,9 @@ import { CheckCircle2 } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { OUTCOME_LABEL, orderQueueSubjects, type DeskQueue, type QueueStudent } from "@/features/attendance/live/queue";
-import { SearchScopeChip, StudentSearchBox } from "@/features/attendance/components/student-search-box";
+import { SearchScopeChip, StudentSearchToggle } from "@/features/attendance/components/student-search-box";
 import {
-  SubjectFilterChips,
+  SubjectFilterSelect,
   SubjectScopeChip,
   useSubjectFilter,
 } from "@/features/attendance/components/subject-filter-chips";
@@ -80,22 +80,20 @@ export function DeskView({
       {searchableRows > 0 || (allKeys.length > 0 && subjects.filters.length > 1) ? (
         <div className="toolbar-rail flex flex-wrap items-center gap-2">
           {/* 검색할 줄이 없으면 입력칸만 접는다 — 과목 칩은 남긴다(섹션 좁히기는 여전히 가능하다). */}
+          {/* 검색은 토글(§10) — 검색어가 걸려 있으면 펼친 채 + 결과 칩. */}
           {searchableRows > 0 ? (
-            <StudentSearchBox value={query} onChange={setQuery} inputWidth="w-[104px]" />
+            <StudentSearchToggle
+              value={query}
+              onChange={setQuery}
+              inputWidth="w-[104px]"
+              chip={<SearchScopeChip shown={shownRows} total={searchableRows} unit="건" totalsNote="탭의 확인 건수는 전체 기준" />}
+            />
           ) : null}
-          <SubjectFilterChips
+          <SubjectFilterSelect
             value={subjectFilter.value}
             onPick={subjectFilter.pick}
             pending={subjectFilter.pending}
           />
-          {searching && searchableRows > 0 ? (
-            <SearchScopeChip
-              shown={shownRows}
-              total={searchableRows}
-              unit="건"
-              totalsNote="탭의 확인 건수는 전체 기준"
-            />
-          ) : null}
           <SubjectScopeChip
             subject={subjectFilter.value}
             shown={keys.length}

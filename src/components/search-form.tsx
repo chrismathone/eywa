@@ -61,7 +61,9 @@ export function SearchForm({
           defaultValue={defaultValue ?? ""}
           placeholder={placeholder}
           autoFocus={autoFocus}
-          className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent leading-normal focus:outline-none`}
+          // 안 글자는 16px(sm 라벨) — 상자 라벨 18px보다 한 단계 작게, 자리표시자·검색어가 더 보이게(원장 2026-09-04 재고관리 캡처,
+          // "스타일 통일" — 앱의 검색 입력이 전부 같은 값).
+          className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none`}
         />
       </div>
       <Button type="submit" variant="outline" disabled={pending}>

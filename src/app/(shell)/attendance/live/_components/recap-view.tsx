@@ -21,7 +21,7 @@ import type { RangeRecap } from "@/features/attendance/recap/range";
 import type { RecapTeacherLine } from "@/features/attendance/recap/digest";
 import { partialByTeacher, unmarkedByTeacher } from "@/features/attendance/recap/teacher-unmarked";
 import {
-  SubjectFilterChips,
+  SubjectFilterSelect,
   SubjectScopeChip,
   useSubjectFilter,
 } from "@/features/attendance/components/subject-filter-chips";
@@ -132,7 +132,7 @@ export function RecapView({
 
       {/* 과목 필터 — 아래 **날짜별 사건 줄**만 좁힌다. 위 스탯·AI 정리는 범위 전체 기준 그대로다. */}
       <div className="toolbar-rail flex flex-wrap items-center gap-2">
-        <SubjectFilterChips value={subject.value} onPick={subject.pick} pending={subject.pending} />
+        <SubjectFilterSelect value={subject.value} onPick={subject.pick} pending={subject.pending} />
         <SubjectScopeChip
           subject={subject.value}
           shown={shownEventRows.length}
