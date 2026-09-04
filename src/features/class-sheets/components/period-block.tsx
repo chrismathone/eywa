@@ -15,6 +15,8 @@ import { rosterFormOf, type SheetMark } from "../lib/roster-form";
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
 import { useSheetLang } from "@/features/teacher-view/lang-context";
+// 강의실 이름도 표기만 영문으로(원장 2026-09-04) — 건물 이름만 로마자, 호수는 그대로.
+import { roomNameFor } from "@/features/teacher-view/room-name";
 
 export const PeriodBlock = memo(function PeriodBlock({
   date,
@@ -129,7 +131,9 @@ export const PeriodBlock = memo(function PeriodBlock({
           </span>
         ) : null}
         {slot.roomLabel ? (
-          <span className="text-foreground text-[12px] font-bold whitespace-nowrap">{slot.roomLabel}</span>
+          <span className="text-foreground text-[12px] font-bold whitespace-nowrap">
+            {roomNameFor(slot.roomLabel, lang)}
+          </span>
         ) : null}
         {!slot.scheduled ? (
           <span

@@ -27,7 +27,8 @@ import { buildSaveKey } from "../lib/save-keys";
 import { ecsPresenceScope } from "../lib/presence-scope";
 import type { PlanPatchField } from "../lib/plan-codec";
 import { TodayCopySlot } from "./today-copy-slot";
-import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { roomNameFor } from "@/features/teacher-view/room-name";
 import { useSheetDoc } from "./use-sheet-doc";
 import {
   useCellState,
@@ -171,6 +172,7 @@ export function TodayPlanEditor({
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
+  const lang = useSheetLang();
   // Shouting 체크는 **이 컴포넌트가 소유**한다(반+날짜+교시가 앵커라 보드까지 올릴 이유가 없다).
   // 낙관 반영 후 실패하면 되돌리고 이유를 띄운다 — 주간 시트와 같은 처방.
   // ⚠️ 인자 이름은 `hm`(HH:MM) — 위 번역 함수 `t`를 가리지 않게(그림자 이름은 읽는 사람을 헷갈리게 한다).
@@ -240,7 +242,9 @@ export function TodayPlanEditor({
           <p className="text-text-dim mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-bold">
             <span>
               {slot.periodLabel ?? slot.slotStart}
-              {slot.roomLabel ? <span className="font-medium"> · {slot.roomLabel}</span> : null}
+              {slot.roomLabel ? (
+                <span className="font-medium"> · {roomNameFor(slot.roomLabel, lang)}</span>
+              ) : null}
             </span>
             {/* 줄이 이미 있어도 '내용 복사'를 준다 — 0209a는 덮어쓰기 없이 **빈 칸만** 채우므로, 교재만
                 적혀 있고 진도·과제가 빈 흔한 상태에서 이 버튼이 가장 쓸모 있다(원장 2026-08-14).

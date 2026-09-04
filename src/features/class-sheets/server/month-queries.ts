@@ -1,6 +1,8 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+// 🔴 방 이름 규약은 좌석표·주간 시트와 **같은 두 함수**다(단일 소스).
+import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/seating-floors";
 import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 // 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
@@ -123,10 +125,14 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
   const isEie = access.englishTrack === "eie";
 
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes] = await Promise.all([
+  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes, roomsRes] =
+    await Promise.all([
     admin
       .from("class_schedules")
-      .select("day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label")
+      .select(
+        // ⚠️ FK를 함께 읽는다 — 라벨은 시트가 적은 대로라 같은 방이 두 표기다(주간 시트와 같은 규약).
+        "day_of_week, start_time, end_time, valid_from, valid_to, classroom_id, slot_teacher_label, slot_room_label",
+      )
       .eq("tenant_id", access.tenantId)
       .eq("class_id", classId)
       .lte("valid_from", to)
@@ -182,6 +188,8 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       .eq("class_id", classId)
       .eq("month", from)
       .maybeSingle(),
+    // 등록 강의실(id→이름) — 라벨을 eywa 기준 이름으로 맞추는 근거(주간 시트와 같은 규약).
+    admin.from("classrooms").select("id, name").eq("tenant_id", access.tenantId),
   ]);
 
   if (scheduleRes.error) return { ok: false, error: "시간표를 불러오지 못했습니다" };
@@ -224,6 +232,10 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
     body: typeof r.body === "string" ? r.body : "",
   }));
 
+  const roomRows = (roomsRes.data ?? []) as { id: string; name: string }[];
+  const roomNameById = new Map(roomRows.map((r) => [r.id, r.name]));
+  const roomNames = roomRows.map((r) => r.name);
+
   const scheduleRows: MonthScheduleRow[] = (scheduleRes.data ?? []).map((r) => ({
     dayOfWeek: String(r.day_of_week),
     startTime: String(r.start_time),
@@ -231,7 +243,15 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
     validFrom: r.valid_from ? String(r.valid_from) : null,
     validTo: r.valid_to ? String(r.valid_to) : null,
     slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
-    slotRoomLabel: (r.slot_room_label as string | null) ?? null,
+    // 🔴 주간 시트(`queries.ts`)와 **같은 두 함수**로 해석한다 — 갈리면 같은 반의 같은 교시가
+    //    주간과 월간에서 다른 방 이름으로 뜬다.
+    slotRoomLabel: canonicalRoomName(
+      resolveRoomName({
+        slotClassroomName: r.classroom_id ? (roomNameById.get(String(r.classroom_id)) ?? null) : null,
+        slotRoomLabel: (r.slot_room_label as string | null) ?? null,
+      }),
+      roomNames,
+    ),
   }));
 
   const dates = monthDates(month);

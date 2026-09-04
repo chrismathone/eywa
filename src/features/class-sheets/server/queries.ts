@@ -9,6 +9,9 @@ import { mondayOf, shiftDays, weekLabel, weekRelation } from "@/features/timetab
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
 import { resolveTeacherLabel } from "@/features/timetable/lib/teacher-label";
+// 🔴 방 이름 규약은 좌석표(출결)와 **같은 두 함수**다 — 여기서 규칙을 다시 적으면 같은 방을
+//    시트는 `305`, 좌석표는 `본원305`로 부른다(2026-08-25 실사고와 같은 결).
+import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/seating-floors";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -210,11 +213,17 @@ export async function getClassSheetWeek(
     settings,
     labelMap,
     myPrefsRes,
+    roomsRes,
     shoutingRes,
   ] = await Promise.all([
     admin
       .from("class_schedules")
-      .select("day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, slot_teacher_label, slot_room_label")
+      .select(
+        // ⚠️ `classroom_id`(FK)를 **함께** 읽는다 — 라벨(`slot_room_label`)은 시트가 적은 대로라
+        //    같은 방이 `305`·`본원305` 두 표기로 들어 있다(실측 2026-09-04: 유효 슬롯 209건이
+        //    접두 없는 표기). eywa 기준은 **등록된 강의실 이름**이라 FK가 먼저다.
+        "day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label",
+      )
       .eq("tenant_id", tenantId)
       .eq("class_id", classId)
       .lte("valid_from", weekSunday)
@@ -289,6 +298,9 @@ export async function getClassSheetWeek(
     // 교시 체크(Shouting, 0230a). ⚠️ **에러를 일부러 삼킨다**(아래 에러 게이트 목록에도 안 넣는다) —
     // 마이그레이션보다 앱이 먼저 배포되면 표가 없어 400이 나는데, 그때 시트 전체가 안 열리면 안 된다([[#95]]).
     // 표가 생긴 뒤엔 정상 조회된다. 체크가 잠깐 안 보이는 것과 반 시트가 통째로 죽는 것은 급이 다르다.
+    // 등록된 강의실(id→이름) — 라벨을 eywa 기준 이름으로 맞추는 근거. 보관된 방도 포함해서 읽는다
+    // (지난 주 시트가 그 방을 가리킬 수 있고, 이름을 못 찾으면 라벨이 그대로 나온다).
+    admin.from("classrooms").select("id, name").eq("tenant_id", tenantId),
     admin
       .from("class_sheet_slot_flags")
       .select("flag_date, slot_start, shouting")
@@ -419,6 +431,11 @@ export async function getClassSheetWeek(
     console.error("[class-sheets] 전출자 감지 실패 — 퇴원 줄 표시로 폴백", e);
   }
 
+  // 등록 강의실 표 — id→이름(FK 우선), 이름 목록(라벨 정정 근거).
+  const roomRows = (roomsRes.data ?? []) as { id: string; name: string }[];
+  const roomNameById = new Map(roomRows.map((r) => [r.id, r.name]));
+  const roomNames = roomRows.map((r) => r.name);
+
   // 스케줄 행은 **한 번만** 만들어 그리드와 유닛 계산이 같은 입력을 본다(두 벌이면 라벨 해석이 갈린다).
   const scheduleRows = (schedulesRes.data ?? []).map((s) => ({
     dayOfWeek: s.day_of_week as DowKey,
@@ -429,7 +446,15 @@ export async function getClassSheetWeek(
     teacherId: (s.teacher_id as string | null) ?? null,
     // 해석은 여기(슬롯이 만들어지는 지점) 한 곳에서 — 컴포넌트마다 하면 표기가 갈린다(시간표 규약 동일).
     slotTeacherLabel: resolveTeacherLabel((s.slot_teacher_label as string | null) ?? null, labelMap),
-    slotRoomLabel: (s.slot_room_label as string | null) ?? null,
+    // 🔴 방 이름도 **같은 자리에서 한 번만** 해석한다(강사 라벨과 같은 규약) — FK 이름이 먼저고,
+    //    FK가 없으면 라벨을 등록된 이름으로 맞춘다(`305` → `본원305`). 화면마다 하면 표기가 갈린다.
+    slotRoomLabel: canonicalRoomName(
+      resolveRoomName({
+        slotClassroomName: s.classroom_id ? (roomNameById.get(s.classroom_id as string) ?? null) : null,
+        slotRoomLabel: (s.slot_room_label as string | null) ?? null,
+      }),
+      roomNames,
+    ),
   }));
 
   const grid = buildWeekGrid({
