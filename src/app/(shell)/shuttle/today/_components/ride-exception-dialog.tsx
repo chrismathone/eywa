@@ -21,12 +21,10 @@ import {
   RIDE_EXCEPTION_LABEL,
   runTitle,
   type Direction,
-  type RideExceptionKind,
   type ShuttleRun,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
 import type { RideException } from "@/features/shuttle/roster";
-import type { RunRows } from "@/features/shuttle/today-board";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { clearRideException, setRideException } from "@/features/shuttle/server/actions";
 
@@ -37,9 +35,12 @@ import { clearRideException, setRideException } from "@/features/shuttle/server/
  * 🔴 **여기서 바꾸는 건 '예정'이지 '기록'이 아니다.** 등하원 기록(탑승/미탑승)에 미리 찍어 해결하면
  *    안 탔는데 탄 걸로(또는 그 반대로) 남고 그 거짓이 출결 신호로 새어나간다 → 예정은 별도 축(0229a).
  *
- * 🔑 **한 자리에 모은 이유**: 줄마다 '오늘 안 탐' 버튼을 붙이면 바로 옆 '미탑승'과 섞여 찍힌다 —
- *    둘은 다른 축이다(미탑승 = 예정이었는데 안 탔다 / 오늘 안 탐 = 애초에 오늘은 안 탈 예정).
- *    게다가 전화를 받은 데스크는 **이름으로 찾는다**(회차를 스크롤해 줄을 찾지 않는다).
+ * 🔴 **'오늘 안 탐'을 거는 문은 2026-09-04에 닫았다**(원장 *"오늘 안탐 빼도될듯"*). 화면에서
+ *    미탑승과 갈라 쓸 실익이 없다는 판단이다 — 출결 화면의 셔틀 신호를 같은 날 뺐으므로, 두
+ *    기능이 만들어 내는 **눈에 보이는 차이가 사라졌다**(미탑승 하나로 끝난다).
+ *    ⚠️ **해석·표시는 그대로 둔다**: 이미 걸린 `skip` 행이 있으면 명단에 회색으로 남고 아래
+ *       '오늘의 변경'에서 되돌릴 수 있다(지금은 0건이지만, 남은 것을 못 지우게 만들지 않는다).
+ *       되살리려면 이 파일의 라디오 두 칸만 되돌리면 된다 — roster/서버는 손대지 않았다.
  *
  * 📱 모바일 1순위 — 탭 타겟·입력 크기는 전부 [`control-size.ts`](@/features/shuttle/control-size).
  * ⚠️ 사유는 **선택**이다(원장 브리프: 필수로 만들면 급할 때 아무도 못 찍는다).
@@ -49,7 +50,6 @@ export function RideExceptionDialog({
   today,
   canEdit,
   allRuns,
-  runRows,
   vehicles,
   students,
   exceptions,
@@ -62,13 +62,11 @@ export function RideExceptionDialog({
   /** 0229a 적용 + 오늘 이후 날짜일 때만 편집 가능. 지난 날짜는 **읽기만**(그날의 기록이다). */
   canEdit: boolean;
   /**
-   * 이 시즌의 **회차 전부**. 🔴 정류장 선택지는 여기서 만든다 — 그날 명단(`runRows`)은 "타는 사람이
-   * 있는 회차"만 남긴 목록이라, 그걸로 만들면 **오늘 아무도 안 타는 회차에는 학생을 못 넣는다**
-   * (토요일 회차에 "오늘만 태워 주세요"가 정확히 그 경우다).
+   * 이 시즌의 **회차 전부**. 🔴 정류장 선택지는 여기서 만든다 — 그날 명단만으로 만들면
+   * **오늘 아무도 안 타는 회차에는 학생을 못 넣는다**(토요일 회차에 "오늘만 태워 주세요"가
+   * 정확히 그 경우다).
    */
   allRuns: ShuttleRun[];
-  /** 그날 명단 전부(등하원 필터를 걸기 **전**) — 필터 때문에 '오늘 안 탐' 후보가 사라지면 안 된다. */
-  runRows: RunRows[];
   vehicles: ShuttleVehicle[];
   students: AssignableStudent[];
   exceptions: RideException[];
@@ -77,7 +75,6 @@ export function RideExceptionDialog({
   onDone: () => void;
 }) {
   const [busy, startTransition] = useTransition();
-  const [pane, setPane] = useState<RideExceptionKind>("skip");
   const [q, setQ] = useState("");
   const [memo, setMemo] = useState("");
   const [addStudentId, setAddStudentId] = useState("");
@@ -105,36 +102,8 @@ export function RideExceptionDialog({
     return out;
   }, [allRuns, vehicleName]);
 
-  /**
-   * '오늘 안 탐' 후보 = **그날 평소대로 타기로 되어 있는 줄**.
-   * ⚠️ 이미 예외가 걸린 줄(`skipped`·`added`)은 뺀다 — 그건 아래 '오늘의 변경'에서 되돌린다.
-   */
-  const skipCandidates = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { key: string; studentId: string; studentName: string; ioKind: Direction; where: string }[] = [];
-    for (const { run, rows } of runRows) {
-      for (const r of rows) {
-        if (r.dayKind !== "regular") continue;
-        const key = `${r.studentId}|${r.ioKind}`;
-        if (seen.has(key)) continue; // 같은 방향을 여러 회차에 걸쳐 타도 후보는 한 줄이면 된다
-        seen.add(key);
-        out.push({
-          key,
-          studentId: r.studentId,
-          studentName: r.studentName,
-          ioKind: r.ioKind,
-          where: [vehicleName.get(run.vehicleId), runTitle(run), r.stopName].filter(Boolean).join(" · "),
-        });
-      }
-    }
-    return out.sort((a, b) => a.studentName.localeCompare(b.studentName, "ko"));
-  }, [runRows, vehicleName]);
 
   const key = q.replace(/\s+/g, "").toLowerCase();
-  const skipShown = useMemo(() => {
-    if (!key) return [];
-    return skipCandidates.filter((c) => c.studentName.replace(/\s+/g, "").toLowerCase().includes(key));
-  }, [skipCandidates, key]);
   const addShown = useMemo(() => {
     if (!key) return [];
     return students.filter((s) => s.searchKey.includes(key)).slice(0, 30);
@@ -161,18 +130,6 @@ export function RideExceptionDialog({
     });
   }
 
-  function applySkip(studentId: string, ioKind: Direction) {
-    const fd = new FormData();
-    fd.set("onDate", date);
-    fd.set("studentId", studentId);
-    fd.set("kind", "skip");
-    fd.set("ioKind", ioKind);
-    if (memo.trim()) fd.set("memo", memo.trim());
-    submit(() => setRideException(fd), () => {
-      setQ("");
-      setMemo("");
-    });
-  }
 
   function applyAdd() {
     const stop = stopOptions.find((o) => o.value === addRunStopId);
@@ -237,28 +194,11 @@ export function RideExceptionDialog({
 
         {canEdit && (
           <>
-            <div className="flex items-center gap-1.5" role="radiogroup" aria-label="변경 종류">
-              {(["skip", "add"] as const).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  role="radio"
-                  aria-checked={pane === k}
-                  onClick={() => {
-                    setPane(k);
-                    setQ("");
-                  }}
-                  className={cn(SHUTTLE_CHIP, pane === k ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
-                >
-                  {RIDE_EXCEPTION_LABEL[k]}
-                </button>
-              ))}
-            </div>
 
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={pane === "skip" ? "오늘 명단에서 학생 이름 검색" : "재원생 이름·학교 검색"}
+              placeholder="재원생 이름·학교 검색"
               className={SHUTTLE_INPUT}
             />
             <input
@@ -269,41 +209,8 @@ export function RideExceptionDialog({
               className={SHUTTLE_INPUT}
             />
 
-            {pane === "skip" ? (
-              <ul className="flex max-h-56 min-h-0 flex-col gap-0.5 overflow-y-auto">
-                {skipShown.map((c) => (
-                  <li key={c.key}>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => applySkip(c.studentId, c.ioKind)}
-                      className={cn(
-                        "hover:bg-muted flex w-full cursor-pointer items-center gap-1.5 rounded-lg px-2 text-left",
-                        SHUTTLE_ROW,
-                        SHUTTLE_ROW_TEXT,
-                      )}
-                    >
-                      <span className="text-foreground font-medium">{c.studentName}</span>
-                      <Pill color={TONE_COLOR[c.ioKind === "in" ? "info" : "special"]}>
-                        {DIRECTION_LABEL[c.ioKind]}
-                      </Pill>
-                      <span className="text-text-faint min-w-0 flex-1 truncate text-[11.5px]">
-                        {c.where}
-                      </span>
-                      <span className="text-text-dim shrink-0 text-[11.5px] font-bold">오늘 안 탐</span>
-                    </button>
-                  </li>
-                ))}
-                {skipShown.length === 0 && (
-                  <li className="text-text-faint px-1 py-2 text-[12.5px]">
-                    {key
-                      ? "오늘 타기로 되어 있는 학생 중에는 없습니다."
-                      : "이름을 입력하면 오늘 명단에서 찾습니다."}
-                  </li>
-                )}
-              </ul>
-            ) : (
-              <div className="flex flex-col gap-2">
+            {/* 🔴 '오늘 안 탐'을 없앤 뒤라 이 화면은 **'오늘만 탑승' 한 종류**뿐이다(머리 주석). */}
+            <div className="flex flex-col gap-2">
                 {!addStudent ? (
                   <ul className="flex max-h-40 min-h-0 flex-col gap-0.5 overflow-y-auto">
                     {addShown.map((s) => (
@@ -382,7 +289,6 @@ export function RideExceptionDialog({
                   </Button>
                 </div>
               </div>
-            )}
           </>
         )}
 

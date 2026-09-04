@@ -41,7 +41,6 @@ export function RunPanel({
   progress,
   open,
   onToggle,
-  absentSet,
   date,
   canWrite,
   canEditException,
@@ -57,7 +56,6 @@ export function RunPanel({
   progress: Progress;
   open: boolean;
   onToggle: () => void;
-  absentSet: Set<string>;
   date: string;
   canWrite: boolean;
   /** 일회성 변경(0229a)을 여기서 되돌릴 수 있나 — 적용 여부 × 오늘 이후 날짜. */
@@ -174,7 +172,6 @@ export function RunPanel({
                     <RideRowItem
                       key={row.key}
                       row={row}
-                      absentToday={absentSet.has(row.studentId)}
                       date={date}
                       canWrite={canWrite}
                       canEditException={canEditException}
