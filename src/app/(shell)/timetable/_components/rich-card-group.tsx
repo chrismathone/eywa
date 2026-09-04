@@ -57,8 +57,12 @@ const STU_H = 24;
  * (원장 캡처 *"왼쪽에 시간이 셀 밖으로 빠져나옴"*) → 104px(11자 × ~8.5px + 여백).
  */
 const LABEL_W = 104;
-/** 5요일 반(DP6)의 카드 폭 — 아래 `DAY_COL_W`의 기준값이다. */
-const CARD_W = 176;
+/**
+ * 5요일 반(DP6)의 카드 폭 — 아래 `DAY_COL_W`의 기준값이다.
+ * 2026-09-04(v5 글자 승격 뒤): 176(칸 35px)에선 16px 학생 줄 `박세아A/칠성초2`가 3요일 카드(105px)에서 학교·학년부터 잘렸다
+ * (원장 *"각종 뷰에서 텍스트 빠져나오지 않게"*) → 240(칸 48px, 3요일 144px·2요일 96px). 통합뷰는 폭이 데이터 크기라 가로 스크롤+잡고 끌기.
+ */
+const CARD_W = 240;
 /**
  * 요일 한 칸의 폭 — **주5일 기준 고정**(원장 2026-08-11 "열너비는 dp처럼 주5일 기준에 맞춰").
  *
@@ -247,7 +251,9 @@ export function ClassColumn({
   const gridCols = { gridTemplateColumns: `repeat(${Math.max(1, days.length)}, 1fr)` };
   // 카드 폭 = 요일 수 × 고정 칸 폭(DAY_COL_W). 배치 편집(namesOnly)은 격자를 안 그리므로 5칸 기준 폭 유지 —
   // 수업명만 남은 칩이 요일 수에 따라 들쭉날쭉하면 끌어 놓을 자리를 가늠하기 어렵다.
-  const cardW = namesOnly ? CARD_W : Math.max(1, days.length) * DAY_COL_W;
+  // 🔴 카드 **최소 폭 = 3칸**(144px) — padCardDays가 못 채우는 주말 전용 반(토·일 하루)은 1칸(48px)이라 학생 이름이 통째로
+  //    잘렸다(실측 2026-09-04 수학 통합뷰 20줄). 칸은 `1fr`이라 폭이 남으면 요일 칸이 그만큼 넓어질 뿐 정렬은 안 깨진다.
+  const cardW = namesOnly ? CARD_W : Math.max(3, days.length) * DAY_COL_W;
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
@@ -525,7 +531,8 @@ function RosterRow({ s }: { s: GridStudent }) {
   const inner = (
     <>
       {s.name}
-      {meta ? <span className="opacity-90">/{meta}</span> : null}
+      {/* 학교·학년 꼬리는 한 단계 작게(14px, v5 바닥) — 이름은 그대로 두고 꼬리만 줄여 좁은 2요일 카드에서도 덜 잘린다. */}
+      {meta ? <span className="text-xs opacity-90">/{meta}</span> : null}
     </>
   );
   // ⚠️ 클래스 문자열도 기본뷰 StudentRow와 동일하게 유지할 것(px-2 py-[3px] leading-tight + hover:bg-bg-soft).
