@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { REPORT_NAME_MAX } from "@/features/onescreen/report-author-name";
+// 강사 미니셸이면 화면 언어를 따른다 — 관리자 풀셸에는 provider가 없어 한국어 그대로다.
+import { useSheetT } from "@/features/teacher-view/lang-context";
 import { updateMyReportName, type MeAccountState } from "@/features/staff/server/me-actions";
 
 const inputClass =
@@ -27,6 +29,7 @@ export function ReportNameCard({
   /** 이름은 저장돼 있는데 발송 매핑이 안 걸리는 상태(동명 직원 등) — 카드가 사실을 밝힌다([[#89]]). */
   mappingBlocked: boolean;
 }) {
+  const t = useSheetT();
   const [state, action, pending] = useActionState<MeAccountState, FormData>(updateMyReportName, undefined);
   const [name, setName] = useState(initialName ?? "");
   const seen = useRef<MeAccountState>(undefined);
@@ -34,15 +37,16 @@ export function ReportNameCard({
     if (!state || state === seen.current) return;
     seen.current = state;
     if (state.error) toast.error(state.error);
-    else if (state.ok) toast.success(state.notice ?? "저장했습니다");
-  }, [state]);
+    else if (state.ok) toast.success(state.notice ?? t("me.saved"));
+  }, [state, t]);
 
   return (
     <section className="border-line bg-card rounded-2xl border p-5 shadow-card">
-      <h2 className="text-foreground text-sm font-bold">수업보고서 이름</h2>
+      <h2 className="text-foreground text-sm font-bold">{t("me.reportName")}</h2>
       <p className="text-text-dim mt-1 text-xs">
-        학부모에게 나가는 수업보고서(클래스노트 게시·공유 링크·인쇄)에 표시할 이름입니다. 비워 두면
-        실명(<b>{realName}</b>)으로 나갑니다.
+        {t("me.reportName.desc.a")}
+        <b>{realName}</b>
+        {t("me.reportName.desc.b")}
       </p>
 
       <form
@@ -55,7 +59,7 @@ export function ReportNameCard({
         className="mt-4"
       >
         <label htmlFor="me-report-name" className="micro mb-1 block">
-          발송에 표시할 이름
+          {t("me.reportName.label")}
         </label>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -65,25 +69,25 @@ export function ReportNameCard({
             onChange={(e) => setName(e.target.value)}
             maxLength={REPORT_NAME_MAX}
             // 예시에 실명("OO 선생님")을 섞지 않는다 — 원장 지시 2026-08-18 "하드 코딩된 이름 삭제".
-            placeholder="예: 영어 이름"
+            placeholder={t("me.reportName.ph")}
             autoComplete="off"
             className={`${inputClass} max-w-72 flex-1`}
           />
           <Button type="submit" size="sm" disabled={pending}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-            저장
+            {t("me.save")}
           </Button>
         </div>
       </form>
       {mappingBlocked ? (
         <p className="mt-2 text-[11px] leading-snug text-amber-700">
-          저장된 이름이 있지만 같은 이름의 직원이 있어 지금은 <b>실명으로 발송</b>되고 있습니다 —
-          관리자에게 문의하세요.
+          {t("me.reportName.blocked.a")} <b>{t("me.reportName.blocked.b")}</b>
+          {t("me.reportName.blocked.c")}
         </p>
       ) : null}
       <p className="text-text-faint mt-1 text-[11px]">
-        다음 발송부터 새 이름으로 나가고, <b>이미 보낸 보고서도</b> 학부모가 공유 링크를 다시 열면 새
-        이름으로 보입니다(게시된 이미지 속 이름은 그대로).
+        {t("me.reportName.note.a")} <b>{t("me.reportName.note.b")}</b>{" "}
+        {t("me.reportName.note.c")}
       </p>
     </section>
   );

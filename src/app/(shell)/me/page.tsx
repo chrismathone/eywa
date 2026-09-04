@@ -14,10 +14,17 @@ import {
   resolveReportAuthorName,
 } from "@/features/onescreen/server/report-author-name";
 import { ResumeSheet } from "../staff/resumes/_components/resume-sheet";
+// 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
+// 🔴 아래 `ResumeSheet`(이력서 종이 서식)는 **인쇄물**이라 한국어 고정 — 여기 문구만 옮긴다.
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { AccountCard } from "./_components/account-card";
 import { ReportNameCard } from "./_components/report-name-card";
 
-export const metadata = { title: "내 정보 — eywa" };
+// 탭 제목도 화면 언어를 따른다 — 강사가 창을 여럿 열어 두면 제목이 유일한 구분이다.
+export async function generateMetadata() {
+  return { title: `${sheetT(await getTeacherViewLang(), "me.eyebrow")} — eywa` };
+}
 
 /**
  * 내 정보 — **로그인한 본인**의 이력서와 계정. 직원목록(/staff)은 사무실 전용이라 강사·뷰어는 들어갈 수 없어,
@@ -64,6 +71,7 @@ export default async function MyPage() {
   // 미니셸(강사 등)에서 팝업으로 들어온 사람은 '내 메뉴'를 몰라 여기 갇힌다(원장 제보 2026-08-04)
   // — 역할별 홈으로 돌아가는 길을 페이지 안에 직접 둔다(강사=원스크린 or ECS, 그 외=/dashboard).
   const home = await landingPath(user.systemRole);
+  const lang = await getTeacherViewLang();
 
   return (
     <div className="print-portrait space-y-5 p-6">
@@ -72,15 +80,15 @@ export default async function MyPage() {
           href={home}
           className="text-text-dim hover:text-primary mb-2 inline-flex items-center gap-1 text-xs font-medium transition"
         >
-          <ArrowLeft className="size-3.5" /> 메인으로 돌아가기
+          <ArrowLeft className="size-3.5" /> {sheetT(lang, "me.back")}
         </Link>
         <PageHeader
-          eyebrow="내 정보"
+          eyebrow={sheetT(lang, "me.eyebrow")}
           title={user.displayName}
-          description="내 이력서와 로그인 정보를 직접 확인·수정합니다."
+          description={sheetT(lang, "me.desc")}
           // ⚠️ title이 **본인 이름**(메뉴명이 아니다)이라 컴팩트(창·모바일)에선 접힌다 →
           //    이름을 컴팩트 행에 직접 실어야 좁은 화면에서 "누구의 정보인지"가 남는다.
-          embedLabel={`${user.displayName} · 내 이력서와 로그인 정보`}
+          embedLabel={sheetTf(lang, "me.embed", { name: user.displayName })}
         />
       </div>
 
