@@ -19,6 +19,7 @@
  *    학습 추이 그래프는 지연 조회(`loadReportTrend`)로 채운다 — 지난 회차는 서버, 오늘 회차는 지금 입력값.
  */
 import { ParentReportCard } from "./parent-report-card";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { buildReportFields } from "../report-fields";
 import { buildTrendPoints, type TrendReportRow } from "../report-trend";
 import { isImageAttachment } from "../attachment-utils";
@@ -60,6 +61,10 @@ export function ReportPreview({
   /** 지난 회차 시험·과제 이력(지연 조회). 아직 안 왔으면 undefined = 그래프만 비고 나머지는 그대로 그린다. */
   trendRows?: TrendReportRow[];
 }) {
+  // 🔴 껍데기(머리·안내)만 언어를 탄다 — 아래 ParentReportCard는 **학부모가 보는 것 그대로**라
+  //    한국어 고정이다(미리보기가 발송물과 달라지면 미리보기의 존재 이유가 없어진다).
+  const t = useSheetT();
+  const tf = useSheetTf();
   const fields = buildReportFields({
     subject,
     homework: student.homework,
@@ -93,8 +98,8 @@ export function ReportPreview({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-        <p className="micro text-text-faint">학부모 화면 미리보기</p>
-        <p className="text-text-faint text-[11px]">왼쪽에서 고치면 바로 반영됩니다</p>
+        <p className="micro text-text-faint">{t("os.preview.title")}</p>
+        <p className="text-text-faint text-[11px]">{t("os.preview.live")}</p>
       </div>
       {/* 학부모가 보는 것과 같은 카드. 배경을 한 겹 깔아 '입력 영역이 아니라 결과물'임을 눈으로 가른다.
           🔴 폭을 **실제 발송 이미지와 같게** 둔다(원장 2026-08-05 "실제 학부모가 보는 이미지 크기로"):
@@ -131,7 +136,7 @@ export function ReportPreview({
       </div>
       {imagesPending ? (
         <p className="text-text-faint text-[11px] leading-snug">
-          첨부 {pendingAttachments}건은 업로드가 끝나면 미리보기에 나타납니다.
+          {tf("os.preview.pending", { n: pendingAttachments })}
         </p>
       ) : null}
     </div>

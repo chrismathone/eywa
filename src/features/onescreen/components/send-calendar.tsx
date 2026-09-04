@@ -16,8 +16,9 @@ import {
 } from "../send-calendar";
 import { getMySendCalendar } from "../server/calendar-actions";
 import { HistoryBoard } from "./history-board";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { sheetDowLabelByIndex, sheetMonthLabel } from "@/features/teacher-view/i18n";
 
-const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 /** 아직 못 불러온 달의 자리표시 — 매 렌더 새 Map을 만들면 자식이 불필요하게 다시 그려진다. */
 const EMPTY_DAYS: Map<string, SendDay> = new Map();
 
@@ -32,6 +33,8 @@ function Legend({ tone, label }: { tone: string; label: string }) {
 
 /** 하루 칸의 내용 — 자료가 없으면 날짜만(빈 날을 숫자 0으로 채우면 눈이 시끄럽다). */
 function DayCellBody({ day }: { day: SendDay | undefined }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   if (!day || day.total === 0) return null;
   const allSent = day.target > 0 && day.sent === day.target;
   return (
@@ -43,11 +46,11 @@ function DayCellBody({ day }: { day: SendDay | undefined }) {
         // 분자·분모는 "학부모에게 나갔나"라는 **사실**이고(출처 무관), 아래 배지는 "지금 내가 누를 게
         // 있나"라는 **행동**이다. 둘을 한 숫자로 합치면 못 누르는 건까지 재촉하게 된다.
         title={
-          `학부모 발송 ${day.sent} / 작성 ${day.target}건` +
+          tf("os.cal.dayTitle", { sent: day.sent, target: day.target }) +
           (day.actionable > 0
-            ? ` · 지금 보낼 수 있는 건 ${day.actionable}건`
+            ? tf("os.cal.dayActionable", { n: day.actionable })
             : day.sent < day.target
-              ? " · 남은 건은 지금 발송할 수 없습니다(옛 이관분·과목 설정·기한·결석 등)"
+              ? t("os.cal.dayBlocked")
               : "")
         }
       >
@@ -55,15 +58,15 @@ function DayCellBody({ day }: { day: SendDay | undefined }) {
       </span>
       {day.problem > 0 ? (
         <span className="bg-danger/10 text-danger rounded-pill px-1 text-[10px] font-bold">
-          실패 {day.problem}
+          {tf("os.cal.problem", { n: day.problem })}
         </span>
       ) : day.actionable > 0 ? (
         // ⚠️ '미발송'이 아니라 '보낼 수 있음' — 미발송 전부를 재촉하면 옛 이관분까지 재촉하는 거짓말이 된다.
         <span className="bg-amber-soft text-amber rounded-pill px-1 text-[10px] font-bold">
-          보낼 수 있음 {day.actionable}
+          {tf("os.cal.sendableN", { n: day.actionable })}
         </span>
       ) : day.pending > 0 ? (
-        <span className="text-text-faint text-[10px]">대기 {day.pending}</span>
+        <span className="text-text-faint text-[10px]">{tf("os.cal.pending", { n: day.pending })}</span>
       ) : null}
     </span>
   );
@@ -74,6 +77,7 @@ function DayCellBody({ day }: { day: SendDay | undefined }) {
  * 달력이 목록을 대체하지 못하는 유일한 축이 **날짜를 가로지르는 학생 검색**이라 목록을 남겨 둔다.
  */
 function ModeToggle({ mode, onMode }: { mode: "calendar" | "list"; onMode: (m: "calendar" | "list") => void }) {
+  const t = useSheetT();
   return (
     <div className="border-line flex items-center rounded-full border p-0.5">
       {(["calendar", "list"] as const).map((m) => (
@@ -86,7 +90,7 @@ function ModeToggle({ mode, onMode }: { mode: "calendar" | "list"; onMode: (m: "
             mode === m ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
           }`}
         >
-          {m === "calendar" ? "달력" : "전체 목록"}
+          {m === "calendar" ? t("face.cal") : t("os.cal.modeList")}
         </button>
       ))}
     </div>
@@ -94,6 +98,9 @@ function ModeToggle({ mode, onMode }: { mode: "calendar" | "list"; onMode: (m: "
 }
 
 export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [mode, setMode] = useState<"calendar" | "list">("calendar");
   const [month, setMonth] = useState(() => monthOf(todayYmd));
   // ⚠️ 로드 결과에 **어느 달의 것인지**를 함께 담는다 — effect 안 동기 setState 금지(#25) 회피이자,
@@ -129,19 +136,19 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
         // 단 사용자가 이 달에서 이미 날짜를 골랐다면 그 선택을 존중한다.
         setSelected((cur) => (pickedMonthRef.current === month && cur ? cur : defaultSelectedDay(next, todayYmd)));
       } else {
-        setLoaded({ month, days: new Map(), error: res.error ?? "달력을 불러오지 못했습니다" });
+        setLoaded({ month, days: new Map(), error: res.error ?? t("os.cal.loadFail") });
         setSelected(null);
       }
     }).catch(() => {
       // ⚠️ .catch가 없으면 reject 시 loaded.month가 영영 안 바뀌어 화면이 '불러오는 중…'에 갇힌다.
       if (cancelled) return;
-      setLoaded({ month, days: new Map(), error: "달력을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요" });
+      setLoaded({ month, days: new Map(), error: t("os.cal.loadFailRetry") });
       setSelected(null);
     });
     return () => {
       cancelled = true;
     };
-  }, [month, todayYmd]);
+  }, [month, todayYmd, t]);
 
   const weeks = monthGrid(month);
   // 달 요약 — 칸을 다 훑지 않아도 이 달이 어땠는지 한 줄로.
@@ -176,18 +183,18 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
             <button
               type="button"
               onClick={() => setMonth((m) => shiftMonth(m, -1))}
-              aria-label="이전 달"
+              aria-label={t("month.prev")}
               className="text-text-dim hover:bg-bg-soft rounded-full px-1 py-1"
             >
               <EyIcon name="chevronLeft" size={16} />
             </button>
             <h3 className="text-foreground min-w-[92px] text-center text-[13px] font-bold">
-              {monthLabel(month)}
+              {sheetMonthLabel(month, monthLabel(month), lang)}
             </h3>
             <button
               type="button"
               onClick={() => setMonth((m) => shiftMonth(m, 1))}
-              aria-label="다음 달"
+              aria-label={t("month.next")}
               className="text-text-dim hover:bg-bg-soft rounded-full px-1 py-1"
             >
               <EyIcon name="chevronRight" size={16} />
@@ -199,42 +206,44 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
               onClick={() => setMonth(monthOf(todayYmd))}
               className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2 py-1 text-[11px] font-bold"
             >
-              이번 달
+              {t("os.cal.thisMonth")}
             </button>
           ) : null}
           {loading ? (
-            <span className="text-text-faint text-[12px]">불러오는 중…</span>
+            <span className="text-text-faint text-[12px]">{t("os.hist.loadingMore")}</span>
           ) : error ? (
             <span className="text-danger text-[12px]">{error}</span>
           ) : (
             <span className="text-text-faint text-[12px]">
-              작성 {sum.total}건 · 학부모 발송 {sum.sent}/{sum.target}
+              {tf("os.cal.sum", { n: sum.total, sent: sum.sent, target: sum.target })}
               {sum.actionable > 0 ? (
-                <span className="text-amber font-bold"> · 보낼 수 있음 {sum.actionable}</span>
+                <span className="text-amber font-bold">
+                  {tf("os.cal.sumActionable", { n: sum.actionable })}
+                </span>
               ) : null}
               {sum.problem > 0 ? (
-                <span className="text-danger font-bold"> · 실패 {sum.problem}</span>
+                <span className="text-danger font-bold">{tf("os.cal.sumProblem", { n: sum.problem })}</span>
               ) : null}
             </span>
           )}
           <span className="ml-auto flex items-center gap-2">
-            <Legend tone="bg-primary" label="전부 발송" />
-            <Legend tone="bg-amber" label="보낼 수 있음" />
-            <Legend tone="bg-danger" label="실패 있음" />
+            <Legend tone="bg-primary" label={t("os.cal.legendAll")} />
+            <Legend tone="bg-amber" label={t("os.cal.sendable")} />
+            <Legend tone="bg-danger" label={t("os.cal.legendProblem")} />
             <ModeToggle mode={mode} onMode={setMode} />
           </span>
         </header>
 
         <div className="px-2 pt-1.5 pb-2">
           <div className="grid grid-cols-7">
-            {WEEKDAY.map((w, i) => (
+            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
               <div
-                key={w}
+                key={i}
                 className={`pb-1 text-center text-[11px] font-bold ${
                   i === 0 ? "text-danger" : "text-text-faint"
                 }`}
               >
-                {w}
+                {sheetDowLabelByIndex(i, lang)}
               </div>
             ))}
           </div>
@@ -288,7 +297,7 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
           }`}
         >
           {/* ⚠️ 조회 실패를 "작성 0건"으로 보고하면 안 된다 — 실패와 빈 달은 다른 사실이다. */}
-          {loading ? "불러오는 중…" : error ? error : "이 달에 작성한 보고서가 없습니다"}
+          {loading ? t("os.hist.loadingMore") : error ? error : t("os.cal.empty")}
         </div>
       )}
     </div>

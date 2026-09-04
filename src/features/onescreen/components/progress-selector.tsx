@@ -24,6 +24,7 @@ import {
 import { SKIP_PROGRESS_STATUSES, skipStatusOf } from "../progress-status";
 import { asProgressMode } from "../progress-mode";
 import { ProgressModePills } from "./progress-mode-pills";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export function ProgressSelector({
   value,
@@ -50,6 +51,8 @@ export function ProgressSelector({
   /** 발송 완료·결석 — 수정 금지(isRowInputEditable). 선택 UI를 열지 않는다. */
   locked?: boolean;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   /** 특수 상태를 고르기 직전의 차시 선택 — 해제하면 되살린다(실수로 눌렀다고 고른 차시가 날아가면 다시 고르게 된다). */
@@ -153,7 +156,7 @@ export function ProgressSelector({
     return (
       <div
         className="border-line bg-bg-soft text-text-dim flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px]"
-        aria-label={ariaLabel ?? "진도"}
+        aria-label={ariaLabel ?? t("os.ps.aria")}
         aria-readonly="true"
       >
         {activeMode && !skip ? (
@@ -178,7 +181,7 @@ export function ProgressSelector({
         className={`bg-card hover:border-primary/60 data-[popup-open]:border-primary flex h-8 w-full min-w-0 flex-1 items-center gap-1 rounded-lg border px-2 text-left text-[12px] outline-none transition-colors ${
           skip ? "border-amber text-amber font-bold" : selected.length ? "border-line text-foreground" : "border-line text-text-faint"
         }`}
-        aria-label={ariaLabel ?? "진도 선택"}
+        aria-label={ariaLabel ?? t("os.ps.pickAria")}
       >
         {/* 성격(복습·문제풀이)은 **닫힌 상태에서도** 보여야 한다 — 안 보이면 강사가 켠 줄 모르고,
             그게 곧 학부모 문장의 뜻을 바꾼다(진도 나감 ↔ 복습). */}
@@ -188,7 +191,7 @@ export function ProgressSelector({
           </span>
         ) : null}
         <span className="min-w-0 flex-1 truncate">
-          {skip ?? (selected.length ? displayLessons(value) : "진도 선택…")}
+          {skip ?? (selected.length ? displayLessons(value) : t("os.ps.pickPh"))}
         </span>
         {selected.length > 1 ? (
           <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px] font-bold">
@@ -204,7 +207,7 @@ export function ProgressSelector({
                    이걸 고르면 아래가 전부 잠기므로 **분기 지점**이고, 아래에 묻히면 강사가 못 찾는다. ── */}
             <div className="border-line border-b px-3 py-2">
               <p className="text-text-faint mb-1.5 text-[11px]">
-                진도 없이 제출 <span className="text-text-faint/70">· 시험 등 진도가 중단된 날</span>
+                {t("os.ps.skipTitle")} <span className="text-text-faint/70">{t("os.ps.skipHint")}</span>
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {SKIP_PROGRESS_STATUSES.map((s) => {
@@ -234,18 +237,26 @@ export function ProgressSelector({
             {onMode && !skip ? (
               <div className="border-line border-b px-3 py-2">
                 <p className="text-text-faint mb-1.5 text-[11px]">
-                  오늘 수업 성격 <span className="text-text-faint/70">· 안 고르면 새 진도로 나갑니다</span>
+                  {t("os.ps.modeTitle")}{" "}
+                  <span className="text-text-faint/70">{t("os.ps.modeHint")}</span>
                 </p>
                 {/* 알약 자체는 공용 컴포넌트 — 자유 입력 과목(영어)이 입력칸 아래에 쓰는 것과 **같은 물건**이라
                     라벨·해제 규약·툴팁이 두 자리에서 갈라지지 않는다. */}
-                <ProgressModePills mode={mode} onMode={onMode} ariaLabel={`${ariaLabel ?? "진도"} 오늘 수업 성격`} />
+                <ProgressModePills
+                  mode={mode}
+                  onMode={onMode}
+                  ariaLabel={tf("os.ps.modeAria", { label: ariaLabel ?? t("os.ps.aria") })}
+                />
               </div>
             ) : null}
 
             {skip ? (
               <p className="text-text-dim bg-amber-soft/50 border-line border-b px-3 py-2 text-[11px]">
-                오늘은 <b className="text-amber">{skip}</b>라 진도 선택이 잠겨 있어요. 차시를 고르려면 위에서
-                <b> {skip}</b>를 한 번 더 눌러 해제하세요.
+                {t("os.ps.lockedA")}
+                <b className="text-amber">{skip}</b>
+                {t("os.ps.lockedB")}
+                <b>{skip}</b>
+                {t("os.ps.lockedC")}
               </p>
             ) : null}
 
@@ -260,7 +271,7 @@ export function ProgressSelector({
                   onChange={(e) => onStudyGrade(e.target.value)}
                   disabled={!!skip}
                   className="border-line bg-card focus:border-primary h-7 shrink-0 rounded-sm border px-1.5 text-[12px] outline-none"
-                  aria-label="진도 학년 선택"
+                  aria-label={t("os.ps.gradeAria")}
                 >
                   {CURRICULUM_GRADES.map((g) => (
                     <option key={g} value={g}>
@@ -270,17 +281,17 @@ export function ProgressSelector({
                 </select>
                 {ahead ? (
                   <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-bold">
-                    실제 {studentGrade}
+                    {tf("os.ps.actualGrade", { grade: studentGrade })}
                   </span>
                 ) : null}
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="단원·차시 검색"
+                  placeholder={t("os.ps.search")}
                   disabled={!!skip}
                   className="border-line bg-bg-soft focus:border-primary h-7 w-full min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none"
-                  aria-label="단원·차시 검색"
+                  aria-label={t("os.ps.search")}
                 />
               </div>
 
@@ -292,14 +303,16 @@ export function ProgressSelector({
                 <div className="border-line bg-bg-soft/40 flex items-center gap-2 border-b px-3 py-1.5">
                   {prev?.trim() ? (
                     <p className="text-text-faint min-w-0 flex-1 truncate text-[11px]" title={displayLessons(prev)}>
-                      이전 진도: <span className="text-text-dim">{displayLessons(prev)}</span>
+                      {t("os.ps.prev")} <span className="text-text-dim">{displayLessons(prev)}</span>
                     </p>
                   ) : (
                     <span className="flex-1" />
                   )}
                   {selected.length ? (
                     <span className="text-text-dim shrink-0 text-[11px]">
-                      선택 <b className="text-primary">{selected.length}</b>차시
+                      {t("os.ps.selPre")}
+                      <b className="text-primary">{selected.length}</b>
+                      {t("os.ps.selPost")}
                     </span>
                   ) : null}
                   {selected.length ? (
@@ -309,7 +322,7 @@ export function ProgressSelector({
                       disabled={!!skip}
                       className="text-text-faint hover:text-danger shrink-0 text-[11px]"
                     >
-                      모두 해제
+                      {t("os.ps.clearAll")}
                     </button>
                   ) : null}
                 </div>
@@ -321,7 +334,9 @@ export function ProgressSelector({
               {otherGrade.length ? (
                 <div className="border-line bg-primary-soft/30 flex items-center gap-2 border-b px-3 py-1.5">
                   <p className="text-text-dim min-w-0 flex-1 truncate text-[11px]" title={otherGrade.join(", ")}>
-                    다른 학년 <b className="text-primary">{otherGrade.length}</b>차시도 함께 선택됨:{" "}
+                    {t("os.ps.otherPre")}
+                    <b className="text-primary">{otherGrade.length}</b>
+                    {t("os.ps.otherPost")}
                     <span className="text-text-faint">{otherGrade.join(", ")}</span>
                   </p>
                   <button
@@ -330,7 +345,7 @@ export function ProgressSelector({
                     disabled={!!skip}
                     className="text-text-faint hover:text-danger shrink-0 text-[11px]"
                   >
-                    다른 학년만 해제
+                    {t("os.ps.clearOther")}
                   </button>
                 </div>
               ) : null}
@@ -344,7 +359,7 @@ export function ProgressSelector({
                 aria-hidden={!!skip || undefined}
               >
                 {filteredUnits.length === 0 ? (
-                  <p className="text-text-faint px-2 py-4 text-center">검색 결과가 없습니다</p>
+                  <p className="text-text-faint px-2 py-4 text-center">{t("os.ps.noResult")}</p>
                 ) : (
                   filteredUnits.map((u) => {
                     const unitSelected = u.lessons.filter((l) => selectedSet.has(l)).length;
@@ -358,7 +373,7 @@ export function ProgressSelector({
                             <span className="min-w-0 flex-1 truncate">{u.unit}</span>
                             {unitSelected ? (
                               <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
-                                선택 {unitSelected}
+                                {tf("os.ps.unitSelected", { n: unitSelected })}
                               </span>
                             ) : null}
                           </div>
@@ -376,7 +391,7 @@ export function ProgressSelector({
                             <span className="min-w-0 flex-1 truncate">{u.unit}</span>
                             {unitSelected ? (
                               <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-1.5 py-px text-[10px]">
-                                선택 {unitSelected}
+                                {tf("os.ps.unitSelected", { n: unitSelected })}
                               </span>
                             ) : (
                               <span className="text-text-faint/60 shrink-0 font-normal">{u.lessons.length}</span>

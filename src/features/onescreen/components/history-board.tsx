@@ -2,7 +2,7 @@
 
 // 원스크린 "지난 보고서" 목록 — 강사 본인이 쓴 보고서 이력을 날짜별로 묶어 열람(읽기 전용).
 // 뷰 진입 시에만 서버 액션으로 로드(첫 페인트 비블로킹, B7 취지) + "더 보기" 커서 페이징.
-// 표시 규칙: 과목=labelOf(한글), 발송상태=classnoteBadge(한글), 학교·학년=schoolGradeLabel 압축.
+// 표시 규칙: 과목=labelOf(학원설정 라벨·한글 고정), 발송상태=classnoteBadge(화면 언어), 학교·학년=schoolGradeLabel 압축.
 //
 // 두 가지 모드를 같은 렌더로 쓴다(중복 구현 금지):
 //  · `date` 없음 = 최신부터 커서 페이징(전체 이력 훑기)
@@ -13,16 +13,20 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { getMyPastReports, type PastReportRow } from "../server/history-actions";
 import { isShareExpired } from "../share-expiry";
 import { classnoteBadge } from "./report-card";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { sheetDowLabelByIndex, type SheetLang } from "@/features/teacher-view/i18n";
 
-const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
-
-function dateLabel(ymd: string): string {
+/** 날짜 머리 — `8/29 (금)` / `8/29 (Fri)`. 요일 표는 강사뷰 사전 하나뿐(여기서 새로 만들지 않는다). */
+function dateLabel(ymd: string, lang: SheetLang): string {
   const [y, m, d] = ymd.split("-").map(Number);
-  const dow = WEEKDAY[new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1)).getUTCDay()] ?? "";
+  const dow = sheetDowLabelByIndex(new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1)).getUTCDay(), lang);
   return `${m}/${d} (${dow})`;
 }
 
 export function HistoryBoard({ date }: { date?: string }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const subjects = useSubjectMaps();
   const [rows, setRows] = useState<PastReportRow[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -49,7 +53,7 @@ export function HistoryBoard({ date }: { date?: string }) {
       } else {
         setRows([]);
         setHasMore(false);
-        setError(res.error ?? "불러오지 못했습니다");
+        setError(res.error ?? t("os.hist.loadFail"));
       }
       setLoadedKey(key);
     }).catch(() => {
@@ -57,13 +61,13 @@ export function HistoryBoard({ date }: { date?: string }) {
       if (cancelled) return;
       setRows([]);
       setHasMore(false);
-      setError("보고서를 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요");
+      setError(t("os.hist.loadFailRetry"));
       setLoadedKey(key);
     });
     return () => {
       cancelled = true;
     };
-  }, [date, key]);
+  }, [date, key, t]);
 
   const loadMore = async () => {
     const oldest = rows[rows.length - 1]?.reportDate;
@@ -73,14 +77,14 @@ export function HistoryBoard({ date }: { date?: string }) {
     if (res.ok) {
       setRows((prev) => [...prev, ...(res.rows ?? [])]);
       setHasMore(res.hasMore ?? false);
-    } else setError(res.error ?? "더 불러오지 못했습니다");
+    } else setError(res.error ?? t("os.hist.moreFail"));
     setLoadingMore(false);
   };
 
   if (loading)
     return (
       <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
-        지난 보고서를 불러오는 중…
+        {t("os.hist.loading")}
       </div>
     );
   if (error)
@@ -107,30 +111,36 @@ export function HistoryBoard({ date }: { date?: string }) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="학생 이름 검색"
+          placeholder={t("os.makeup.searchPh")}
           className="border-line bg-card focus:border-primary w-44 rounded-lg border px-2.5 py-1.5 text-[12.5px] outline-none"
         />
         <span className="text-text-faint ml-auto text-[12px]">
-          {date ? "이 날짜" : "불러온"} 보고서 {rows.length}건{q ? ` · 검색 결과 ${filtered.length}건` : ""}
+          {date
+            ? tf("os.hist.countOnDay", { n: rows.length })
+            : tf("os.hist.countLoaded", { n: rows.length })}
+          {q ? tf("os.hist.countSearch", { n: filtered.length }) : ""}
         </span>
       </div>
 
       {byDate.size === 0 ? (
         <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
-          {q ? "검색 결과가 없습니다" : date ? "이 날짜에 작성한 보고서가 없습니다" : "작성한 보고서가 없습니다"}
+          {q ? t("os.hist.noResult") : date ? t("os.hist.emptyDay") : t("os.hist.empty")}
         </div>
       ) : (
         [...byDate.entries()].map(([date, list]) => (
           <section key={date} className="bg-card border-line shadow-card rounded-2xl border">
             <header className="border-line flex items-baseline gap-2 border-b px-3 py-2">
-              <h3 className="text-foreground text-[13px] font-bold">{dateLabel(date)}</h3>
+              <h3 className="text-foreground text-[13px] font-bold">{dateLabel(date, lang)}</h3>
               <span className="text-text-faint text-[11px]">
-                {list.length}건 · 발송 {list.filter((r) => r.classnoteStatus === "success").length}
+                {tf("os.hist.groupCount", {
+                  n: list.length,
+                  sent: list.filter((r) => r.classnoteStatus === "success").length,
+                })}
               </span>
             </header>
             <ul className="divide-border divide-y">
               {list.map((r) => {
-                const badge = classnoteBadge(r.classnoteStatus ?? undefined);
+                const badge = classnoteBadge(r.classnoteStatus ?? undefined, lang);
                 const linkOk = r.shareToken && !r.revoked && !isShareExpired(r.reportDate);
                 return (
                   // ⚠️ 열 정렬(2026-07-28 원장 제보): 예전 flex-wrap + 조건부 렌더는 값이 없는 항목의 **자리가
@@ -170,15 +180,15 @@ export function HistoryBoard({ date }: { date?: string }) {
                         // 달력 요약의 '보낼 수 있음'과 같은 판정·같은 amber(2026-07-28 원장 제보: 실패는 보이는데
                         // 보낼 수 있는 건이 목록에서 구분되지 않았다).
                         <span className="bg-amber-soft text-amber rounded-pill inline-block px-1.5 py-0.5 text-[10.5px] font-bold">
-                          보낼 수 있음
+                          {t("os.cal.sendable")}
                         </span>
                       ) : (
                         // 미발송이지만 게이트 밖(이관분·취소·과목 밖·기한 초과) — 사실만 표기(재촉 아님, #77).
-                        <span className="text-text-faint text-[10.5px]">미발송</span>
+                        <span className="text-text-faint text-[10.5px]">{t("os.hist.unsent")}</span>
                       )}
                     </span>
                     <span className="text-text-faint w-12 shrink-0 text-right text-[11px]">
-                      {r.viewCount > 0 ? `열람 ${r.viewCount}` : ""}
+                      {r.viewCount > 0 ? tf("os.hist.views", { n: r.viewCount }) : ""}
                     </span>
                     <span className="w-[74px] shrink-0 text-right">
                       {linkOk ? (
@@ -188,7 +198,7 @@ export function HistoryBoard({ date }: { date?: string }) {
                           rel="noreferrer"
                           className="text-primary inline-flex items-center gap-0.5 text-[11px] hover:underline"
                         >
-                          보고서 보기 <EyIcon name="arrowRight" size={11} />
+                          {t("os.hist.open")} <EyIcon name="arrowRight" size={11} />
                         </a>
                       ) : null}
                     </span>
@@ -203,7 +213,7 @@ export function HistoryBoard({ date }: { date?: string }) {
       {/* 하루만 보는 모드에선 "이전 더 보기"가 의미 없다(커서가 날짜 단위). 대신 잘렸다는 사실만 알린다. */}
       {hasMore && date ? (
         <p className="text-text-faint text-center text-[11px]">
-          이 날짜 보고서가 많아 최근 {rows.length}건만 표시했습니다
+          {tf("os.hist.truncated", { n: rows.length })}
         </p>
       ) : null}
       {hasMore && !date ? (
@@ -213,7 +223,7 @@ export function HistoryBoard({ date }: { date?: string }) {
           disabled={loadingMore}
           className="border-line text-text-dim hover:bg-bg-soft mx-auto rounded-lg border px-4 py-1.5 text-[12px] font-bold disabled:opacity-50"
         >
-          {loadingMore ? "불러오는 중…" : "이전 보고서 더 보기"}
+          {loadingMore ? t("os.hist.loadingMore") : t("os.hist.more")}
         </button>
       ) : null}
     </div>

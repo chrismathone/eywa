@@ -1,5 +1,43 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-04 (12) — 강사뷰 en 전환 **12차**: 보고서 카드·미리보기·진도 선택기·값 일괄·달력·회수
+
+원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환시켜줘"*. 원스크린의 **남은 화면 전부** —
+보고서 카드(`report-card` 80줄)·학부모 미리보기 껍데기·진도 선택기·반 서술·ECS 시트 카드·
+발송 시간대 안내·값 일괄 입력·지난 보고서 목록·월간 발송 달력, 그리고 **회수 버튼**.
+
+- 🔴🔴 **번역하지 않은 것이 이 차수의 핵심이다.** [ParentReportCard](../src/features/onescreen/components/parent-report-card.tsx)는
+  `/r`(학부모 링크)·인쇄·ClassNote 게시 이미지가 쓰는 **학부모가 보는 것 그대로**라 한국어 고정이고,
+  그 캡처 영역 안에서 도는 [ReportTrendGraph](../src/features/onescreen/components/report-trend-graph.tsx)도 마찬가지다.
+  미리보기는 **껍데기(머리·안내)만** 사전을 타고 안쪽 카드는 손대지 않는다 — 미리보기가 발송물과
+  달라지면 미리보기의 존재 이유가 없다. 가드가 두 파일의 `teacher-view` import 자체를 막는다.
+- 🔴 **다른 모듈이 들고 있던 한국어 세 벌**도 함께 열었다 — 전부 **한글 표 바로 옆에** 영어를 두고
+  **인자를 안 주면 한국어**가 계약이다(같은 함수를 서버·사무실이 쓴다):
+  · `REPORT_OPTOUT_NOTICE/SHORT`([report-optout.ts](../src/features/classes/report-optout.ts))
+  · `makeupRemoveBlockReason`([makeup-remove-plan.ts](../src/features/onescreen/makeup-remove-plan.ts)) — 서버 액션도 이 문장을 쓴다
+  · `recallBlockReason`([report-recall.ts](../src/features/report-admin/report-recall.ts)) — 사무실 일괄 회수도 쓴다
+  · `describeAttendanceSkips`([bulk-attendance.ts](../src/features/onescreen/bulk-attendance.ts))는 사전을 그대로 지난다.
+- **회수 버튼**([recall-button.tsx](../src/features/report-admin/components/recall-button.tsx))은 **강사 카드와
+  사무실 목록이 같은 컴포넌트**다 — 배선해도 사무실은 한 글자도 안 바뀐다(`getTeacherViewLang`이
+  `getShellView()!=="teacher"`면 조회 없이 한국어를 돌려주고, 창(iframe)도 그 값을 받는다).
+- 🔴 **적대 리뷰에서 잡은 진짜 누락 셋**: ① 표 행(11차)과 카드의 `classnoteBadge(...)`에 `lang`이 안 갔다
+  → 영어 화면에 "ClassNote 발송 완료"가 한글로 남았다(에러가 안 나서 눈으로만 잡힌다). 가드가
+  **강사 화면 4곳의 모든 호출이 `, lang)`으로 끝나는지** 본다. ② 보강 빼기 툴팁(`makeupRemoveBlockReason`)
+  ③ 회수 막힘 사유(`recallBlockReason`)도 같은 모양이었다.
+- ⚠️ **copy 변경 1건**: 카드의 `자동 작성` → **`자동작성`**(표·툴바와 같은 표기). 사전은 같은 뜻에
+  다른 영어를 두지 못하게 잠그는데(collision 가드) 두 표기가 갈려 있으면 키를 못 합친다 — 뜻이 같은
+  한 낱말이라 표기를 통일했다. 같은 이유로 카드 placeholder 안의 `'자동 작성'` 인용도 함께 맞췄다.
+- ⚠️ 값 일괄의 `**3건** 기록`이 `**3**건 기록`이 됐다(굵게가 숫자만) — ko 글자는 그대로다.
+- 사전 충돌 둘을 가드가 잡았다 — `수업`/`진도`가 둘 다 **Lessons**, `올리는 중…`/`업로드 중…`이 둘 다
+  **Uploading…**. 각각 `Progress`·`Uploading the file…`로 갈랐다.
+- 가드: `name-wiring.test.ts`에 ① 9파일 한글 리터럴 0 ② 학부모 카드·추이 그래프의 사전 import 0
+  ③ `classnoteBadge` lang 전수 ④ 읽음 시각은 두 언어 모두 KST ⑤ 막힘 사유 3종의 ko 기본값 불변
+  ⑥ 발송 게이트 `reasons` 불변 ⑦ ko 회귀 14개.
+- 검증: typecheck 0 · lint 0 · **test 8115(614 파일)** · `pnpm build` ✓. 마이그레이션 0.
+
+⚠️ **아직 한국어인 것(다음 차수)**: 원스크린 화면 껍데기 `onescreen-client`(187줄) · 공지 작성
+`notice-composer`·`notice-attachment-picker` · 사무실 전용 `report-attachments`(강사 표면 아님).
+
 ## 2026-09-04 (11) — 강사뷰 en 전환 **11차**: 원스크린 표 본문·점수 칸·진도 카드·발송 게이트
 
 원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환시켜줘"*. 10차가 뼈대였다면 이번은 **강사가 실제로

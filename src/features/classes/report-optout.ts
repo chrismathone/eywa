@@ -33,6 +33,25 @@ export const REPORT_OPTOUT_NOTICE = "이 반은 수업보고서를 보내지 않
 export const REPORT_OPTOUT_SHORT = "미발송 반 — 출결만";
 
 /**
+ * 원어민 강사 화면(강사뷰 en)용 같은 두 문장 — 🔴 **한글 바로 옆에 둔다**.
+ * 사전(`teacher-view/i18n.ts`)으로 옮기면 이 파일에 문구를 하나 더할 때 en 쪽을 잊어버려
+ * 그 화면만 한글이 뜬다(같은 이유로 요일·출결 표도 한 파일에 나란히 둔다).
+ */
+export const REPORT_OPTOUT_NOTICE_EN =
+  "This class does not send lesson reports — only attendance is recorded";
+export const REPORT_OPTOUT_SHORT_EN = "No report — attendance only";
+
+/** 화면 언어에 맞는 문장. 인자를 안 주면 한국어(기존 호출부 무변경). */
+export function reportOptoutNotice(lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? REPORT_OPTOUT_NOTICE_EN : REPORT_OPTOUT_NOTICE;
+}
+
+/** 좁은 칸용 짧은 형태 — 위와 같은 규약. */
+export function reportOptoutShort(lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? REPORT_OPTOUT_SHORT_EN : REPORT_OPTOUT_SHORT;
+}
+
+/**
  * 이 반이 '수업보고서 미발송'인가.
  * DB에서 온 snake_case(`report_optout`)와 앱 camelCase(`reportOptout`) 둘 다 받는다 — 쿼리 매핑 전
  * raw row로 거르는 자리가 있어서(예: 임베드 select).

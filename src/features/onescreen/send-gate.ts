@@ -24,7 +24,7 @@ import {
   type SheetDictKey,
   type SheetLang,
 } from "@/features/teacher-view/i18n";
-import { REPORT_OPTOUT_NOTICE, REPORT_OPTOUT_SHORT } from "@/features/classes/report-optout";
+import { reportOptoutNotice, reportOptoutShort } from "@/features/classes/report-optout";
 
 /** 발송을 막는 사유. sent·absent는 **상태**(고칠 게 아니라 그런 행), attendance·progress·ment는 **필요한 입력**. */
 export type SendBlockReason =
@@ -127,8 +127,8 @@ export function evaluateSendGate(args: {
     return {
       canSend: false,
       reasons: ["report_optout"],
-      label: REPORT_OPTOUT_SHORT,
-      hint: REPORT_OPTOUT_NOTICE,
+      label: reportOptoutShort(lang),
+      hint: reportOptoutNotice(lang),
     };
   }
   if (args.isAbsent) {

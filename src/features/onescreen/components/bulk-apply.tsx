@@ -32,6 +32,8 @@ import {
 } from "../bulk-attendance";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 import { ProgressSelector } from "./progress-selector";
 
 /** 대상 행에 있는 과목 — 진도를 넣을 과목 선택지(행 수는 "몇 행에 들어가는지" 표시용). */
@@ -87,6 +89,9 @@ export function BulkApplyPopover({
   const [progress, setProgress] = useState("");
   const [subjectKey, setSubjectKey] = useState<string | null>(null);
   const [grade, setGrade] = useState(studyGrade);
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
   const [att, setAtt] = useState<BulkAttendanceStatus | null>(null);
   // 출결 수업타임(시수) — 새로 기록되는 칸에만 적용(기존 기록의 시수는 보존). 빈칸=기본(1).
   // 시수는 급여 재료라(감사 P0-2) 3시간 반(1.5) 같은 배수 반을 일괄로 찍을 때 강사가 직접 지정한다.
@@ -121,7 +126,7 @@ export function BulkApplyPopover({
   const apply = () => {
     if (mode === "copy") {
       // 복사는 기본이 '빈 칸만'이라 덮어쓰기를 켠 경우에만 확인한다(되돌리기 없음).
-      if (!onlyEmpty && !window.confirm("이미 입력된 진도·교재·오늘 과제도 맨 위 행 값으로 덮어씁니다. 계속할까요?"))
+      if (!onlyEmpty && !window.confirm(t("os.bulk.confirmCopy")))
         return;
       onCopyFirstRow(!onlyEmpty);
       setOpen(false);
@@ -133,16 +138,20 @@ export function BulkApplyPopover({
     //    "빈 칸만"이 꺼져 있으면(덮어쓰기 모드) 전체 대상일 때 한 번 확인한다(실수 방지, 되돌리기 없음).
     if (selectedCount === 0 && !onlyEmpty) {
       warns.push(
-        `· 선택한 행이 없어 표시된 ${targetCount}행 전체에 적용됩니다. 이미 입력한 값도 덮어씁니다.\n  (빈 칸만 채우려면 '빈 칸만 채우기'를 켜세요)`,
+        tf("os.bulk.warnAll", { n: targetCount }),
       );
     }
     // 출결은 적용 즉시 출석부에 남고 여기서 되돌릴 수 없다 — **기존 기록을 덮을 때만** 따로 밝힌다.
     if (att && attPlan && attPlan.overwrite > 0) {
       warns.push(
-        `· 출결 ${attPlan.cells.length}건을 '${BULK_ATTENDANCE_LABEL[att]}'으로 기록합니다 — 그중 ${attPlan.overwrite}건은 이미 있는 기록을 덮어씁니다.\n  출결은 저장 즉시 출석부에 반영되며 여기서는 되돌릴 수 없습니다.`,
+        tf("os.bulk.warnAtt", {
+          n: attPlan.cells.length,
+          label: attendanceLabelOf(att, lang) ?? BULK_ATTENDANCE_LABEL[att],
+          over: attPlan.overwrite,
+        }),
       );
     }
-    if (warns.length && !window.confirm(`${warns.join("\n\n")}\n\n계속할까요?`)) return;
+    if (warns.length && !window.confirm(`${warns.join("\n\n")}\n\n${t("os.bulk.confirmTail")}`)) return;
     onApply(
       { attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress },
       onlyEmpty,
@@ -165,23 +174,25 @@ export function BulkApplyPopover({
       <Popover.Trigger
         disabled={disabled}
         className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-lg px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
-        title="선택(없으면 표시 전체) 행을 한 번에 채우기 — 직접 입력하거나 맨 위 행을 복사"
+        title={t("os.bulk.title")}
       >
-        일괄 입력
+        {t("os.bulk.btn")}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-lg border p-3 text-[12px] outline-none">
             <p className="text-text-dim text-[11px]">
-              대상 <span className="text-foreground font-bold">{targetCount}</span>행
-              {selectedCount ? " (선택 행)" : " (표시 전체)"}
+              {t("os.bulk.targetPre")}
+              <span className="text-foreground font-bold">{targetCount}</span>
+              {t("os.bulk.targetPost")}
+              {selectedCount ? t("os.bulk.targetSel") : t("os.bulk.targetAll")}
             </p>
             {/* 값 출처 — 버튼 두 개(값 일괄 입력·맨 위 행 복사)를 합친 자리(2026-07-23 원장 "겹치는 것 같은데"). */}
             <div className="border-line bg-background inline-flex overflow-hidden rounded-lg border">
               {(
                 [
-                  { key: "input" as const, label: "직접 입력" },
-                  { key: "copy" as const, label: "맨 위 행 복사" },
+                  { key: "input" as const, label: t("os.bulk.modeInput") },
+                  { key: "copy" as const, label: t("os.bulk.modeCopy") },
                 ]
               ).map((m) => (
                 <button
@@ -203,20 +214,24 @@ export function BulkApplyPopover({
                 <p className="text-text-dim text-[11px]">
                   {canCopy ? (
                     <>
-                      <span className="text-foreground font-bold">{copySource!.label}</span> 행을 아래{" "}
-                      <span className="text-foreground font-bold">{copySource!.belowCount}</span>행에 복사합니다
+                      <span className="text-foreground font-bold">{copySource!.label}</span>
+                      {t("os.bulk.copyA")}
+                      <span className="text-foreground font-bold">{copySource!.belowCount}</span>
+                      {t("os.bulk.copyB")}
                     </>
                   ) : (
-                    "복사할 아래 행이 없습니다"
+                    t("os.bulk.copyNone")
                   )}
                 </p>
-                <p className="text-foreground mt-1.5 text-[11px] font-bold">복사되는 것</p>
-                <p className="text-text-dim text-[11px]">진도 · 교재명 · 오늘 과제</p>
+                <p className="text-foreground mt-1.5 text-[11px] font-bold">{t("os.bulk.copyWhat")}</p>
+                <p className="text-text-dim text-[11px]">{t("os.bulk.copyList")}</p>
                 <p className="text-text-faint mt-1 text-[11px]">
-                  점수 · 태도 · 과제 수행 · 학부모 문구는 <b>복사되지 않습니다</b>(학생마다 다른 기록)
+                  {t("os.bulk.copyNotA")}
+                  <b>{t("os.bulk.copyNotB")}</b>
+                  {t("os.bulk.copyNotC")}
                 </p>
                 <p className="text-text-faint mt-1 text-[11px]">
-                  다른 과목 행 · 발송 완료 행은 건너뜁니다
+                  {t("os.bulk.copySkip")}
                 </p>
               </div>
             ) : null}
@@ -224,23 +239,23 @@ export function BulkApplyPopover({
             {mode === "input" && activeSubject ? (
               <div className="border-line bg-bg-soft/60 rounded-md border p-2">
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <p className="micro text-text-faint">오늘 진도</p>
+                  <p className="micro text-text-faint">{t("os.pc.title")}</p>
                   {subjects.length > 1 ? (
                     <select
                       value={activeSubject.key}
                       onChange={(e) => setSubjectKey(e.target.value)}
-                      aria-label="진도를 넣을 과목"
+                      aria-label={t("os.bulk.subjectAria")}
                       className="border-line bg-card h-6 max-w-[130px] rounded-md border px-1 text-[11px] outline-none"
                     >
                       {subjects.map((s) => (
                         <option key={s.key} value={s.key}>
-                          {s.name} ({s.count}행)
+                          {tf("os.bulk.subjectOpt", { name: s.name, n: s.count })}
                         </option>
                       ))}
                     </select>
                   ) : (
                     <span className="text-text-faint text-[11px]">
-                      {activeSubject.name} {activeSubject.count}행
+                      {tf("os.bulk.subjectOne", { name: activeSubject.name, n: activeSubject.count })}
                     </span>
                   )}
                 </div>
@@ -251,27 +266,27 @@ export function BulkApplyPopover({
                     studyGrade={grade}
                     onStudyGrade={setGrade}
                     studentGrade={grade}
-                    ariaLabel="일괄 진도"
+                    ariaLabel={t("os.bulk.progressAria")}
                   />
                 ) : (
                   <input
                     type="text"
                     value={progress}
                     onChange={(e) => setProgress(e.target.value)}
-                    placeholder="오늘 진도 (예: Unit 8 · p.90)"
-                    aria-label="일괄 진도"
+                    placeholder={t("os.row.progressPh")}
+                    aria-label={t("os.bulk.progressAria")}
                     className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
                   />
                 )}
                 <p className="text-text-faint mt-1 text-[11px]">
-                  {activeSubject.name} 행에만 들어갑니다 — 다른 과목 행은 그대로
+                  {tf("os.bulk.subjectOnly", { name: activeSubject.name })}
                 </p>
               </div>
             ) : null}
             {/* 출결 — 화면 state가 아니라 **출석부에 즉시 기록**되는 유일한 칸이라 따로 묶고 경계를 밝힌다. */}
             {mode === "input" && attendance ? (
               <div className="border-line bg-bg-soft/60 rounded-md border p-2">
-                <p className="micro text-text-faint mb-1">출결</p>
+                <p className="micro text-text-faint mb-1">{t("os.card.attendance")}</p>
                 <div className="flex flex-wrap gap-1">
                   <button
                     type="button"
@@ -283,7 +298,7 @@ export function BulkApplyPopover({
                         : "border-line text-text-dim hover:bg-bg-soft border"
                     }`}
                   >
-                    적용 안 함
+                    {t("os.bulk.attNone")}
                   </button>
                   {BULK_ATTENDANCE_STATUSES.map((s) => (
                     <button
@@ -297,7 +312,7 @@ export function BulkApplyPopover({
                           : "border-line text-text-dim hover:bg-bg-soft border"
                       }`}
                     >
-                      {BULK_ATTENDANCE_LABEL[s]}
+                      {attendanceLabelOf(s, lang) ?? BULK_ATTENDANCE_LABEL[s]}
                     </button>
                   ))}
                 </div>
@@ -310,13 +325,13 @@ export function BulkApplyPopover({
                       inputMode="decimal"
                       value={attUnits}
                       onChange={(e) => setAttUnits(e.target.value)}
-                      placeholder="수업타임"
-                      aria-label="일괄 출결 수업타임"
-                      title="이번에 새로 기록되는 칸의 수업타임(시수) — 빈칸=기본 1. 이미 기록된 칸의 시수는 바꾸지 않습니다"
+                      placeholder={t("os.card.units")}
+                      aria-label={t("os.bulk.unitsAria")}
+                      title={t("os.bulk.unitsTitle")}
                       className="border-line bg-card focus:border-primary h-7 w-20 rounded-lg border px-2 text-[12px] outline-none"
                     />
                     <span className="text-text-faint text-[11px]">
-                      예: 3시간 반 = 1.5 · 빈칸 = 기본(1) · 기존 기록의 시수는 유지
+                      {t("os.bulk.unitsHint")}
                     </span>
                   </div>
                 ) : null}
@@ -325,19 +340,22 @@ export function BulkApplyPopover({
                   <p className={`mt-1 text-[11px] ${attPlan.cells.length ? "text-text-dim" : "text-amber"}`}>
                     {attPlan.cells.length ? (
                       <>
-                        <span className="text-foreground font-bold">{attPlan.cells.length}건</span> 기록
-                        {attPlan.overwrite ? ` · 기존 기록 ${attPlan.overwrite}건 덮어씀` : ""}
+                        <span className="text-foreground font-bold">{attPlan.cells.length}</span>
+                        {t("os.bulk.planRecord")}
+                        {attPlan.overwrite ? tf("os.bulk.planOver", { n: attPlan.overwrite }) : ""}
                       </>
                     ) : (
-                      "기록할 대상이 없습니다"
+                      t("os.bulk.planNone")
                     )}
-                    {describeAttendanceSkips(attPlan) ? (
-                      <span className="text-text-faint"> · 제외 {describeAttendanceSkips(attPlan)}</span>
+                    {describeAttendanceSkips(attPlan, lang) ? (
+                      <span className="text-text-faint">
+                        {tf("os.bulk.planSkip", { list: describeAttendanceSkips(attPlan, lang) })}
+                      </span>
                     ) : null}
                   </p>
                 ) : (
                   <p className="text-text-faint mt-1 text-[11px]">
-                    저장 즉시 출석부에 기록됩니다 — 조퇴·공결·보강 행은 건드리지 않습니다
+                    {t("os.bulk.attHint")}
                   </p>
                 )}
               </div>
@@ -345,20 +363,20 @@ export function BulkApplyPopover({
             {mode === "input" ? (
               <>
                 <div>
-                  <p className="micro text-text-faint mb-1">태도</p>
+                  <p className="micro text-text-faint mb-1">{t("os.col.attitude")}</p>
                   <FieldSelect
                     options={attitudes}
                     value={attitude}
                     onSelect={setAttitude}
-                    ariaLabel="일괄 태도"
+                    ariaLabel={t("os.bulk.attitudeAria")}
                   />
                 </div>
                 <div>
-                  <p className="micro text-text-faint mb-1">과제 수행률</p>
+                  <p className="micro text-text-faint mb-1">{t("os.col.homework")}</p>
                   <HomeworkRateInput
                     value={homework}
                     onChange={setHomework}
-                    label="일괄 과제 수행률"
+                    label={t("os.bulk.hwAria")}
                     size="lg"
                   />
                 </div>
@@ -366,19 +384,19 @@ export function BulkApplyPopover({
                   type="text"
                   value={textbook}
                   onChange={(e) => setTextbook(e.target.value)}
-                  placeholder="교재명 (비우면 적용 안 함)"
-                  aria-label="일괄 교재명"
+                  placeholder={t("os.bulk.bookPh")}
+                  aria-label={t("os.bulk.bookAria")}
                   className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
                 />
                 <input
                   type="text"
                   value={homeworkToday}
                   onChange={(e) => setHomeworkToday(e.target.value)}
-                  placeholder="오늘 과제 (비우면 적용 안 함)"
-                  aria-label="일괄 오늘 과제"
+                  placeholder={t("os.bulk.hwTodayPh")}
+                  aria-label={t("os.bulk.hwTodayAria")}
                   className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
                 />
-                <p className="text-text-faint text-[11px]">채운 필드만 적용됩니다</p>
+                <p className="text-text-faint text-[11px]">{t("os.bulk.onlyFilled")}</p>
               </>
             ) : null}
             <div className="flex items-center justify-between">
@@ -389,10 +407,10 @@ export function BulkApplyPopover({
                   onChange={() => setOnlyEmpty((v) => !v)}
                   className="accent-primary size-3.5"
                 />
-                빈 칸만 채우기
+                {t("os.bulk.onlyEmpty")}
               </label>
               <Button size="sm" onClick={apply} disabled={!hasAny}>
-                적용
+                {t("os.bulk.apply")}
               </Button>
             </div>
           </Popover.Popup>

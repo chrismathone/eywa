@@ -104,11 +104,28 @@ export function canRemoveMakeupRow(status: string | null | undefined): boolean {
 }
 
 /** 못 빼는 이유(한글) — 버튼 툴팁·확인창에 그대로 쓴다. 뺄 수 있으면 null. */
-export function makeupRemoveBlockReason(status: string | null | undefined): string | null {
+/**
+ * 원어민 강사 화면(en)용 같은 세 문장 — 🔴 **한글 바로 옆에 둔다**(사유가 늘 때 한쪽만 채워지는 것 방지).
+ * 🔴 서버 액션도 같은 함수를 쓰는데 거기엔 세션 언어가 없다 → **인자를 안 주면 한국어**가 계약이다.
+ */
+const BLOCK_REASON_EN = {
+  inFlight: "This makeup is being sent — try again once that finishes",
+  recalling: "This makeup is being recalled — you can remove it once the post is deleted",
+  sent: "This makeup has already gone to the parents — recall the report (delete the post) first",
+} as const;
+
+export function makeupRemoveBlockReason(
+  status: string | null | undefined,
+  lang: "ko" | "en" = "ko",
+): string | null {
   if (canRemoveMakeupRow(status)) return null;
   if (status === "queued" || status === "processing")
-    return "발송 처리 중인 보강입니다 — 끝난 뒤에 다시 시도하세요";
+    return lang === "en" ? BLOCK_REASON_EN.inFlight : "발송 처리 중인 보강입니다 — 끝난 뒤에 다시 시도하세요";
   if (isRecallInFlight(status ?? null))
-    return "회수 처리 중인 보강입니다 — 게시글 삭제가 끝난 뒤에 뺄 수 있습니다";
-  return "이미 학부모에게 발송된 보강이라 뺄 수 없습니다 — 먼저 보고서를 회수(게시글 삭제)하세요";
+    return lang === "en"
+      ? BLOCK_REASON_EN.recalling
+      : "회수 처리 중인 보강입니다 — 게시글 삭제가 끝난 뒤에 뺄 수 있습니다";
+  return lang === "en"
+    ? BLOCK_REASON_EN.sent
+    : "이미 학부모에게 발송된 보강이라 뺄 수 없습니다 — 먼저 보고서를 회수(게시글 삭제)하세요";
 }

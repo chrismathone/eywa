@@ -22,7 +22,7 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 import type { OneScreenView } from "../view";
 import type { WriteFilter } from "../write-filter";
 import type { TodayClass } from "../server/roster";
-import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
+import { reportOptoutNotice } from "@/features/classes/report-optout";
 
 /**
  * 원스크린 상단 바 — 날짜 + 반 필터 + 오늘 수업 + 마감 통계 + 카드/표 토글을 **한 줄(반응형)**로.
@@ -406,6 +406,7 @@ function ClassChip({
   on: boolean;
   onFilter: (tag: string) => void;
 }) {
+  const lang = useSheetLang();
   const t = useSheetT();
   const tf = useSheetTf();
 // 🔴 반 이름·강사 이름은 **여기서 영어로 바꾸지 않는다** — 원스크린은 학부모 보고서를 짓는
@@ -462,7 +463,7 @@ function ClassChip({
           : c.delegatedAwayTo
             ? tf("os.class.lentHint", { to: c.delegatedAwayTo })
             : c.reportOptout
-              ? REPORT_OPTOUT_NOTICE
+              ? reportOptoutNotice(lang)
               : undefined
       }
       className={`${base} ${tone}`}

@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Button } from "@/components/ui/button";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 export const CLASS_NARRATIVE_MAX = 300;
 
@@ -25,6 +26,7 @@ export function ClassNarrativePopover({
   onSave: (text: string) => void;
   disabled?: boolean;
 }) {
+  const t = useSheetT();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -44,25 +46,26 @@ export function ClassNarrativePopover({
         className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title={
           activeClass
-            ? "이 반의 오늘 수업 맥락을 한 번 적어두면, 자동작성이 학생별 점수·태도와 결합해 서로 다른 멘트를 만듭니다"
-            : "반을 하나로 특정하면 그 반의 공통 수업 서술을 적을 수 있습니다(전체 보기·같은 이름 두 반은 비활성)"
+            ? t("os.cn.title")
+            : t("os.cn.titleOff")
         }
       >
-        반 서술{has ? " ●" : ""}
+        {t("os.cn.btn")}
+        {has ? " ●" : ""}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card flex w-[320px] flex-col gap-2 rounded-lg border p-3 text-[12px] outline-none">
             <p className="text-text-dim text-[11px]">
-              <span className="text-foreground font-bold">{activeClass}</span> 반 공통 수업 맥락 — 이후 자동작성부터
-              학생별 사실과 결합됩니다(이미 쓴 멘트는 안 건드림)
+              <span className="text-foreground font-bold">{activeClass}</span>
+              {t("os.cn.head")}
             </p>
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value.slice(0, CLASS_NARRATIVE_MAX))}
               rows={4}
-              placeholder="예: 오늘은 2단원 심화 문제 위주로 진행. 대체로 이해도가 좋았고 응용 문제에서 시간이 걸렸음"
-              aria-label="반 공통 수업 서술"
+              placeholder={t("os.cn.ph")}
+              aria-label={t("os.cn.aria")}
               className="border-line bg-card focus:border-primary w-full resize-none rounded-lg border px-2 py-1.5 text-[12px] outline-none"
             />
             <div className="flex items-center justify-between">
@@ -79,7 +82,7 @@ export function ClassNarrativePopover({
                       setOpen(false);
                     }}
                   >
-                    지우기
+                    {t("os.cn.clear")}
                   </Button>
                 ) : null}
                 <Button
@@ -89,7 +92,7 @@ export function ClassNarrativePopover({
                     setOpen(false);
                   }}
                 >
-                  저장
+                  {t("os.att.save")}
                 </Button>
               </div>
             </div>

@@ -61,6 +61,19 @@ import { MENT_WARNING_HINT, MENT_WARNING_LABEL } from "@/features/onescreen/ment
 import { makeupBadgeLabel, makeupTitleSuffix } from "@/features/onescreen/makeup-label";
 import { NOT_SUBMITTED } from "@/features/onescreen/homework-rate";
 import { NONE_LABEL } from "@/features/onescreen/none-marker";
+import { makeupRemoveBlockReason } from "@/features/onescreen/makeup-remove-plan";
+import { recallBlockReason } from "@/features/report-admin/report-recall";
+import { readAtLabel } from "@/features/onescreen/components/report-card";
+import {
+  REPORT_OPTOUT_NOTICE,
+  REPORT_OPTOUT_SHORT,
+  reportOptoutNotice,
+  reportOptoutShort,
+} from "@/features/classes/report-optout";
+import {
+  describeAttendanceSkips,
+  planBulkAttendance,
+} from "@/features/onescreen/bulk-attendance";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -893,5 +906,142 @@ describe("🔴 원스크린 표 본문·점수 칸·진도 카드도 사전만 �
     expect(sheetTf("ko", "os.prev.date", { date: "8/29" })).toBe("이전 8/29");
     expect(sheetTf("ko", "os.attach.title", { n: 2 })).toBe("첨부 2개 — 보기·추가·삭제");
     expect(sheetT("ko", "os.pc.heading")).toBe("오늘 어디까지 나갔나요");
+  });
+});
+
+/**
+ * 원스크린 **12차** — 보고서 카드·미리보기 껍데기·진도 선택기·반 서술·시트 카드·발송 시간대·값 일괄·
+ * 지난 보고서·월간 달력.
+ *
+ * 🔴 여기서 **번역하지 않는 것**이 규약의 핵심이다:
+ *  · [ParentReportCard](../onescreen/components/parent-report-card.tsx) = `/r`·인쇄·ClassNote 이미지가
+ *    쓰는 **학부모가 보는 것 그대로**라 한국어 고정. 미리보기가 발송물과 달라지면 미리보기의 존재 이유가 없다.
+ *  · [ReportTrendGraph](../onescreen/components/report-trend-graph.tsx)도 그 캡처 영역 안에서 렌더된다.
+ */
+describe("🔴 원스크린 보고서 카드·잔여 화면도 사전만 본다 — 한글 리터럴 0", () => {
+  it.each([
+    "report-card.tsx",
+    "report-preview.tsx",
+    "progress-selector.tsx",
+    "class-narrative.tsx",
+    "sheet-source-card.tsx",
+    "send-window-notice.tsx",
+    "bulk-apply.tsx",
+    "history-board.tsx",
+    "send-calendar.tsx",
+  ])("%s", (f) => {
+    const code = codeOnly(read("features", "onescreen", "components", f));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 학부모가 보는 카드·추이 그래프는 언어를 타지 않는다 — 사전 import 자체가 없다", () => {
+    for (const f of ["parent-report-card.tsx", "report-trend-graph.tsx"]) {
+      const code = codeOnly(read("features", "onescreen", "components", f));
+      expect(code, f).not.toMatch(/teacher-view\/(lang-context|i18n)/);
+      expect(code, f).not.toMatch(/useSheet(Lang|T|Tf)/);
+    }
+    // 미리보기는 **껍데기만** 사전을 타고 안쪽 카드는 그대로 넘긴다.
+    const prev = read("features", "onescreen", "components", "report-preview.tsx");
+    expect(prev).toMatch(/<ParentReportCard/);
+  });
+
+  it("🔴 발송 상태 배지를 그리는 강사 화면은 전부 lang을 넘긴다", () => {
+    // 🔴 안 넘기면 영어 화면에 "ClassNote 발송 완료"가 한글로 남는다 — 에러가 안 나서 눈으로만 잡힌다.
+    for (const f of ["grid-row.tsx", "report-card.tsx", "history-board.tsx", "status-board.tsx"]) {
+      const code = codeOnly(read("features", "onescreen", "components", f));
+      const calls = code.match(/classnoteBadge\([^)]*\)/g) ?? [];
+      expect(calls.length, f).toBeGreaterThan(0);
+      for (const c of calls) expect(c, `${f} — ${c}`).toMatch(/,\s*lang\s*\)$/);
+    }
+  });
+
+  it("🔴 학부모 읽음 시각은 언제나 KST — 바뀌는 건 글자 형식뿐", () => {
+    const iso = "2026-07-18T04:01:00.000Z"; // KST 13:01
+    expect(readAtLabel(iso)).toBe("7월 18일 13:01");
+    const en = readAtLabel(iso, "en");
+    expect(en).not.toMatch(/[가-힣]/);
+    expect(en).toContain("13:01"); // 시각대가 안 흔들린다
+  });
+
+  it("🔴 '미발송 반' 문장은 한글 옆에 영어를 둔다 — ko 기본값 불변", () => {
+    expect(reportOptoutNotice()).toBe(REPORT_OPTOUT_NOTICE);
+    expect(reportOptoutShort()).toBe(REPORT_OPTOUT_SHORT);
+    expect(reportOptoutNotice("en")).not.toMatch(/[가-힣]/);
+    expect(reportOptoutShort("en")).not.toMatch(/[가-힣]/);
+    // 발송 게이트도 같은 문장을 쓴다(판정은 불변).
+    const args = {
+      alreadySent: false,
+      reportOptout: true,
+      isAbsent: false,
+      hasProgress: true,
+      hasDraft: true,
+      attendanceUnchecked: false,
+    };
+    expect(evaluateSendGate(args).label).toBe(REPORT_OPTOUT_SHORT);
+    const en = evaluateSendGate({ ...args, lang: "en" as const });
+    expect(en.reasons).toEqual(evaluateSendGate(args).reasons);
+    expect(en.label).not.toMatch(/[가-힣]/);
+  });
+
+  it("🔴 일괄 출결 '건너뛴 사유'도 한 표에서 온다 — ko 기본값 불변", () => {
+    // 픽스처는 bulk-attendance.test.ts가 이미 잠근 것과 같은 조합(사유 3종).
+    const rows = [
+      { studentId: "s1", classId: "c1", raw: "present" },
+      { studentId: "s2", classId: "c1", raw: "excused" },
+      { studentId: "s3", classId: null },
+    ];
+    const plan = planBulkAttendance(rows, "present", { onlyEmpty: false });
+    expect(describeAttendanceSkips(plan)).toBe("이미 같은 상태 1 · 조퇴·공결·보강 1 · 반 없음 1");
+    expect(describeAttendanceSkips(plan, "en")).not.toMatch(/[가-힣]/);
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "os.card.saved")).toBe("기록 저장");
+    expect(sheetT("ko", "os.card.queue")).toBe("ClassNote 발송");
+    expect(sheetT("ko", "os.card.save")).toBe("저장");
+    expect(sheetT("ko", "os.card.saveSent")).toBe("발송됨 — 수정 불가");
+    expect(sheetTf("ko", "os.card.title", { name: "김민수" })).toBe("김민수 · 학부모 보고");
+    expect(sheetTf("ko", "os.card.views", { n: 3 })).toBe("3회 열람");
+    expect(sheetT("ko", "os.ps.pickPh")).toBe("진도 선택…");
+    expect(sheetT("ko", "os.cn.btn")).toBe("반 서술");
+    expect(sheetT("ko", "os.ss.title")).toBe("ECS 시트 · 오늘 계획");
+    expect(sheetT("ko", "os.bulk.btn")).toBe("일괄 입력");
+    expect(sheetT("ko", "os.bulk.apply")).toBe("적용");
+    expect(sheetTf("ko", "os.hist.countOnDay", { n: 4 })).toBe("이 날짜 보고서 4건");
+    expect(sheetTf("ko", "os.cal.sum", { n: 9, sent: 7, target: 8 })).toBe("작성 9건 · 학부모 발송 7/8");
+    expect(sheetT("ko", "os.preview.title")).toBe("학부모 화면 미리보기");
+  });
+});
+
+/**
+ * 회수 버튼은 **강사 카드와 사무실 목록이 같은 컴포넌트**를 쓴다 — 사무실 풀셸엔 언어 Provider가 없어
+ * 한국어로 떨어지므로 배선해도 안전하다. 🔴 다만 **막힌 사유 함수는 서버·일괄 회수도 쓴다** →
+ * 인자를 안 주면 한국어라는 계약이 깨지면 사무실 화면에 영어가 샌다.
+ */
+describe("🔴 회수 버튼·막힌 사유도 사전만 본다 — ko 기본값 불변", () => {
+  it("recall-button.tsx 한글 리터럴 0", () => {
+    const code = codeOnly(read("features", "report-admin", "components", "recall-button.tsx"));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 인자를 안 주면 한국어 — 사무실·서버 경로가 그대로다", () => {
+    const row = { classnoteStatus: "recalled", shareToken: "t" };
+    expect(recallBlockReason(row)).toBe("이미 회수된 보고서입니다");
+    expect(recallBlockReason(row, "en")).not.toMatch(/[가-힣]/);
+    expect(makeupRemoveBlockReason("queued")).toBe("발송 처리 중인 보강입니다 — 끝난 뒤에 다시 시도하세요");
+    expect(makeupRemoveBlockReason("queued", "en")).not.toMatch(/[가-힣]/);
+    // 뺄 수 있는 행은 두 언어 모두 사유가 없다(판정은 언어를 안 탄다).
+    expect(makeupRemoveBlockReason(null)).toBeNull();
+    expect(makeupRemoveBlockReason(null, "en")).toBeNull();
+    expect(recallBlockReason({ classnoteStatus: "success", shareToken: "t" })).toBeNull();
+    expect(recallBlockReason({ classnoteStatus: "success", shareToken: "t" }, "en")).toBeNull();
   });
 });

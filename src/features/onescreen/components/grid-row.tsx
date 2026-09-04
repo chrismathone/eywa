@@ -18,7 +18,7 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
-import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
+import { reportOptoutNotice } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -218,11 +218,14 @@ export function GridBodyRow({
   groupStart?: boolean; // 학생 묶음의 첫 렌더 행 — 위쪽에 굵은 구분선(참고행이 켜져 있으면 그쪽이 받는다)
 }) {
   const { student, subject, subjectIndex, key } = row;
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   // 이 행에 적용되는 평가값(태도·점수·과제 수행률) — 행 값이 없으면 학생 값 폴백(row-fields.ts).
   const rowEval = resolveRowFields(student, subject);
   const td = groupStart ? TD_GROUP : TD; // 학생 구분선(묶음 첫 행만 굵게)
   const { tone } = subjectTone(subject.name);
-  const badge = classnoteBadge(rep?.classnoteStatus);
+  const badge = classnoteBadge(rep?.classnoteStatus, lang);
   // 로스터 신호(G2·G3) — 판정은 순수 함수(roster-signals.ts). 진도 배지는 수학 파이프라인 데이터라 math 행에만
   // (subjectKey 미지정=math 간주는 진도 입력 분기와 동일 규약, types.ts:26-29).
   const isMathRow = !subject.subjectKey || subject.subjectKey === "math";
@@ -232,9 +235,6 @@ export function GridBodyRow({
   const unreadBadge = isMathRow ? parentUnreadBadge(student.parentRead) : null;
   const att = student.attendance;
   const genRowBusy = gen.rowBusy;
-  const lang = useSheetLang();
-  const t = useSheetT();
-  const tf = useSheetTf();
   // 모드 B 편집용 분리값 — 라운드트립 불변식(split(join)===원본)은 comment-paragraphs가 보장.
   const draftParas = splitComment(rep?.draft ?? "");
   const bulkGen = gen.bulk;
@@ -286,7 +286,7 @@ export function GridBodyRow({
     "contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed";
   const optoutRow = isReportOptoutRow(subject);
   const mentPlaceholder = optoutRow
-    ? REPORT_OPTOUT_NOTICE
+    ? reportOptoutNotice(lang)
     : isAbsent
       ? t("os.row.absentMent")
       : alreadySent
@@ -294,7 +294,7 @@ export function GridBodyRow({
         : null;
   /** 특이사항 자리 — 막기만 하지 말고 **갈 곳**을 알려준다(결석 사유는 출결 알약 안에 적는 칸이 있다). */
   const rowPlaceholder = optoutRow
-    ? REPORT_OPTOUT_NOTICE
+    ? reportOptoutNotice(lang)
     : isAbsent
       ? t("os.row.absentNote")
       : alreadySent
@@ -368,7 +368,7 @@ export function GridBodyRow({
               // 발송분 등 뺄 수 없는 행 — 버튼을 없애기만 하면 "왜 안 되지"가 남는다(적대 리뷰).
               <span
                 className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
-                title={makeupRemoveBlockReason(liveStatus) ?? undefined}
+                title={makeupRemoveBlockReason(liveStatus, lang) ?? undefined}
               >
                 {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
               </span>
@@ -433,7 +433,7 @@ export function GridBodyRow({
                 title={
                   subject.classId
                     ? undefined
-                    : (makeupRemoveBlockReason(liveStatus) ?? undefined)
+                    : (makeupRemoveBlockReason(liveStatus, lang) ?? undefined)
                 }
               >
                 {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId }, lang)}
@@ -706,7 +706,7 @@ export function GridBodyRow({
                   : canAutoWrite
                   ? t("os.row.genTitle")
                   : optoutRow
-                    ? REPORT_OPTOUT_NOTICE
+                    ? reportOptoutNotice(lang)
                     : isAbsent
                       ? t("os.row.genAbsent")
                       : t("os.row.genNoProgress") // 미발송 반은 위 optoutRow 분기가 먼저 잡는다
@@ -799,7 +799,7 @@ export function GridBodyRow({
           {subject.classnoteReadAt ? (
             <span
               className="text-primary text-center text-[10px] font-bold"
-              title={tf("os.row.readTitle", { when: readAtLabel(subject.classnoteReadAt) })}
+              title={tf("os.row.readTitle", { when: readAtLabel(subject.classnoteReadAt, lang) })}
             >
               {t("os.row.read")}
             </span>
