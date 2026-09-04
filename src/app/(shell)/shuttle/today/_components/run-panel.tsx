@@ -41,7 +41,6 @@ export function RunPanel({
   progress,
   open,
   onToggle,
-  absentSet,
   date,
   canWrite,
   canEditException,
@@ -57,7 +56,6 @@ export function RunPanel({
   progress: Progress;
   open: boolean;
   onToggle: () => void;
-  absentSet: Set<string>;
   date: string;
   canWrite: boolean;
   /** 일회성 변경(0229a)을 여기서 되돌릴 수 있나 — 적용 여부 × 오늘 이후 날짜. */
@@ -162,12 +160,18 @@ export function RunPanel({
                     )}
                   </span>
                 </div>
-                <ul className="flex flex-col gap-1.5">
+                {/* 📐 **넓으면 두 사람씩**(2026-09-03) — 정류장 이름을 묶음 머리로 올리고 나니 줄이
+                    이름 하나뿐인데도 폭을 다 써서, PC에서 이름(왼쪽 끝)과 [탑승]/[미탑승](오른쪽 끝)
+                    사이가 700px 가까이 비었다. 눈이 그만큼 왕복한다.
+                    🔴 **폰은 그대로 한 줄**이다 — 두 열로 쪼개면 44px 버튼 두 개가 한 칸에 들어가지
+                       못해 달리는 차 안에서 오조작이 난다(셔틀 결정: 탭 타겟 44px).
+                    ⚠️ 기준을 `sm`(640px)으로 잡은 이유: 셔틀 창은 ROUTE_WINDOW_SIZE에 없어 기본
+                       480px로 열린다 — 그보다 넓어야 두 열이 의미가 있다. */}
+                <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {group.rows.map((row) => (
                     <RideRowItem
                       key={row.key}
                       row={row}
-                      absentToday={absentSet.has(row.studentId)}
                       date={date}
                       canWrite={canWrite}
                       canEditException={canEditException}

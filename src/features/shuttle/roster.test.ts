@@ -3,7 +3,6 @@ import {
   compactWeekdays,
   dayCodeOf,
   mergePlanAndLog,
-  missedSignals,
   plannedRidesOn,
   ridesOn,
   type RideException,
@@ -168,32 +167,6 @@ describe("mergePlanAndLog — 예정 × 기록", () => {
   });
 });
 
-describe("missedSignals — 출결 신호(신호만, 자동 쓰기 없음)", () => {
-  it("미탑승만 뽑고 사람이 읽는 문구를 만든다", () => {
-    const out = missedSignals([
-      { studentId: "s1", status: "boarded", memo: null, vehicleLabel: "1호차", runNo: 3, ioKind: "in" },
-      { studentId: "s2", status: "missed", memo: "병원", vehicleLabel: "1호차", runNo: 3, ioKind: "in" },
-    ]);
-    expect(out).toHaveLength(1);
-    expect(out[0]).toEqual({ studentId: "s2", where: "1호차 3회차 등원", reason: "병원" });
-  });
-
-  it("한 학생이 여러 번 미탑승이어도 한 줄", () => {
-    const out = missedSignals([
-      { studentId: "s2", status: "missed", memo: null, vehicleLabel: "1호차", runNo: 3, ioKind: "in" },
-      { studentId: "s2", status: "missed", memo: null, vehicleLabel: "1호차", runNo: 7, ioKind: "out" },
-    ]);
-    expect(out).toHaveLength(1);
-  });
-
-  it("차량 라벨이 없어도 raw 코드를 노출하지 않는다", () => {
-    const out = missedSignals([
-      { studentId: "s2", status: "missed", memo: "  ", vehicleLabel: null, runNo: null, ioKind: "out" },
-    ]);
-    expect(out[0]!.where).toBe("하원");
-    expect(out[0]!.reason).toBe(null);
-  });
-});
 
 // ── 일회성 탑승 개입(0229a) ────────────────────────────────────────────────────────────
 // 🔴 원장 2026-08-20: *"오늘 연락이 와서 갑자기 탄다던지, 안타던지 하는 일회성 셔틀 개입도 필요함."*
