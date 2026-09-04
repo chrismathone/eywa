@@ -1,6 +1,6 @@
 import type { AttendanceMatrix, AttendanceStatus } from "@/features/attendance/server/queries";
 import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
-import { DAY_TONE, HEAD_ROW_H, STATUS_TEXT, cellDisplay } from "@/features/attendance/cell-display";
+import { DAY_TONE, HEAD_ROW_H, cellDisplay, statusTextOf } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
@@ -9,6 +9,9 @@ import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context"
 import { LiveRecords, LiveUnits } from "./live-totals";
 import { MatrixRow } from "./matrix-row";
 import { MatrixTotalsSummary } from "./totals-row";
+// 🔴 이 파일은 **서버 컴포넌트**다(GridProvider의 children으로 렌더된다) — 훅을 쓸 수 없어
+//    화면 언어를 페이지가 정해 prop으로 내려보낸다. 라벨은 사전, 상태·뱃지 표기는 각각의 단일 소스.
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /**
  * sticky 헤더의 선 — `border-collapse` 표에선 테두리 소유권이 **표**에 있어 sticky 셀만 남고 선은 밀려 사라진다(#71).
@@ -137,6 +140,7 @@ export function MatrixTable({
   moneyNote,
   lockBefore,
   ordered,
+  lang = "ko",
 }: {
   groups: MatrixGroup[];
   days: AttendanceMatrix["days"];
@@ -155,8 +159,16 @@ export function MatrixTable({
   moneyNote?: string | null;
   /** 이 날짜 이전 칸은 강사가 수정 못 함(7일 창). null = 관리자 이상이라 제한 없음. */
   lockBefore?: string | null;
+  /**
+   * 화면 언어 — 페이지가 판정해 내려준다(이 컴포넌트는 **서버**라 훅을 못 쓴다).
+   * 안 주면 한국어 — 앱 전역 규약과 같다(테스트·기존 호출부는 한 글자도 안 바뀐다).
+   */
+  lang?: SheetLang;
 }) {
   // 헤더의 수업요일 하이라이트 = 표에 담긴 반들의 수업요일 합집합(강사 전체 보기는 반마다 다르다).
+  const t = (key: Parameters<typeof sheetT>[1]) => sheetT(lang, key);
+  const tf = (key: Parameters<typeof sheetTf>[1], vars: Record<string, string | number>) =>
+    sheetTf(lang, key, vars);
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
   const colSpan = days.length + 4 + (money ? 2 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 학생 — 이름 칸 배경으로 행 단위 표시(합계 뱃지만으론 못 찾는다).
@@ -216,12 +228,12 @@ export function MatrixTable({
             >
               {/* 반 접기가 있는 보기에서만 — 별도 줄 없이 이름 열 머리에 얹는다. */}
               {showGroups ? <CollapseAllButton classIds={groups.map((g) => g.classId)} /> : null}
-              <span className="micro">이름</span>
+              <span className="micro">{t("att.col.name")}</span>
             </th>
             <th
               className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-center whitespace-nowrap`}
             >
-              <span className="micro">학교·학년</span>
+              <span className="micro">{t("att.col.schoolGrade")}</span>
             </th>
             {days.map((d) => {
               // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
@@ -270,12 +282,12 @@ export function MatrixTable({
               <>
                 <th
                   className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-l px-2 py-2 text-right whitespace-nowrap`}
-                  title="그 학생의 이 달 청구서 총액(다른 과목 포함) — 반별 배분이 아닙니다"
+                  title={t("att.col.billedTitle")}
                 >
-                  <span className="micro">청구</span>
+                  <span className="micro">{t("att.col.billed")}</span>
                 </th>
                 <th className={`bg-bg-soft sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} px-2 py-2 text-center whitespace-nowrap`}>
-                  <span className="micro">납입</span>
+                  <span className="micro">{t("att.col.paid")}</span>
                 </th>
               </>
             ) : null}
@@ -283,12 +295,12 @@ export function MatrixTable({
             <th
               className={`bg-bg-soft sticky top-0 right-[64px] ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[40px] min-w-[40px] px-1.5 py-2 text-center whitespace-nowrap`}
             >
-              <span className="micro">시수</span>
+              <span className="micro">{t("att.col.units")}</span>
             </th>
             <th
               className={`bg-bg-soft sticky top-0 right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} w-[64px] min-w-[64px] px-2 py-2 text-center whitespace-nowrap`}
             >
-              <span className="micro">출석률</span>
+              <span className="micro">{t("att.col.rate")}</span>
             </th>
           </tr>
         </thead>
@@ -314,6 +326,7 @@ export function MatrixTable({
                     classLabel={g.className}
                     tierMissing={tierMissingIds.has(s.id)}
                     tierLabel={tierByStudent[s.id] ?? null}
+                    lang={lang}
                   />
                 </SearchedRow>
               );
@@ -335,6 +348,7 @@ export function MatrixTable({
                 classLabel={g.className}
                 tierMissing={tierMissingIds.has(s.id)}
                 tierLabel={tierByStudent[s.id] ?? null}
+                lang={lang}
               />
             </SearchedRow>
           ));
@@ -352,7 +366,7 @@ export function MatrixTable({
                   {g.roleLabel ? (
                     <span
                       className="border-line text-text-dim rounded-full border px-1.5 py-px text-[10px]"
-                      title="이 반의 담임은 다른 선생님이고, 교시(시간표 슬롯) 담당으로 배선돼 있어 이 목록에 있습니다."
+                      title={t("att.group.slotTitle")}
                     >
                       {g.roleLabel}
                     </span>
@@ -360,18 +374,20 @@ export function MatrixTable({
                   {g.sinceLabel ? (
                     <span
                       className="border-line text-text-dim rounded-full border px-1.5 py-px text-[10px]"
-                      title="담임을 맡기 전(인수인계·담임 변경 기록 기준) 출결은 이전 담임 몫이라 이 표의 합계에서 뺐습니다 — 기록 자체는 남아 있고, 반별 보기에서 보입니다."
+                      title={t("att.group.sinceTitle")}
                     >
                       {g.sinceLabel}
                     </span>
                   ) : null}
-                  <span className="text-text-dim text-[11px]">{g.matrix.students.length}명</span>
+                  <span className="text-text-dim text-[11px]">
+                    {tf("att.group.students", { n: g.matrix.students.length })}
+                  </span>
                   {/* 검색 중이면 이 반에서 몇 명이 걸렸는지 — 머리행 인원(전체)만 두면 숫자가 거짓말한다. */}
                   <ClassSearchCount rowKeys={groupRowKeys} />
                   {/* 검색 중이면 `시수 12 / 53`(검색분 / 전체) — 옆의 "검색 N명"과 같은 규약이다.
                       한 머리행에서 인원만 검색 기준이고 시수는 전체이면 그게 제일 나쁘다. */}
                   <span className="text-text-dim num text-[11px]">
-                    시수{" "}
+                    {t("att.group.units")}
                     <LiveUnits rows={groupRowKeys} countByRow={countByRow} fallback={groupCount(g.matrix)} />
                   </span>
                 </>
@@ -382,7 +398,7 @@ export function MatrixTable({
           );
         })}
         {/* 결과 0명 — 왜 비었는지 한 줄로(빈 표만 남기면 고장으로 읽힌다). */}
-        <SearchEmptyRow colSpan={colSpan} where="이 달 출석부" />
+        <SearchEmptyRow colSpan={colSpan} where={t("att.searchEmpty.where")} />
         <tfoot>
           {/* ⚠️ 합계는 **반이 여럿이면 항상** 그린다 — `showGroups`(반 머리행 여부)에 묶으면 가나다·학년·
               담임순으로 바꾸는 순간 시수 총합·정산 안내가 통째로 사라진다(적대 리뷰 2026-08-06). */}
@@ -405,15 +421,20 @@ export function MatrixTable({
             <td colSpan={colSpan} className="bg-bg-soft border-line border-t px-3 py-2">
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 {/* 조작법을 여기 한 줄로 — 시트처럼 쓰는 화면이라 "클릭해서 고르는 곳"으로 오해하면 느려진다. */}
+                {/* ⚠️ 조각 사이 공백은 **사전 값 안에** 담았다 — JSX 줄바꿈은 공백을 지우고,
+                    `{" "}`로 넣으면 한국어에 없어야 할 공백이 생긴다(언어마다 붙임이 다르다). */}
                 <span className="text-text-faint text-[11px]">
-                  총 <LiveRecords countByRow={countByRow} fallback={totalCount} />회 기록 · 칸을 고르고{" "}
-                  <b className="text-text-dim">숫자</b>를 치세요(0=결석, 1·1.5·2=출석
-                  시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 ·
-                  {/* ⚠️ 요소와 텍스트를 줄바꿈으로 나누면 사이 공백이 사라진다 — `{" "}`로 명시. */}
-                  지각·조퇴·보강·메모는 <b className="text-text-dim">우클릭</b>{" "}
-                  (7일 지난 칸도 메모는 고칠 수 있습니다)
+                  {t("att.help.a")}
+                  <LiveRecords countByRow={countByRow} fallback={totalCount} />
+                  {t("att.help.b")}
+                  <b className="text-text-dim">{t("att.help.number")}</b>
+                  {t("att.help.c")}
+                  {t("att.help.d")}
+                  <b className="text-text-dim">{t("att.help.rightClick")}</b>
+                  {" "}
+                  {t("att.help.e")}
                 </span>
-                <span className="micro ml-auto">범례</span>
+                <span className="micro ml-auto">{t("att.legend")}</span>
                 {/* 범례 칩은 셀과 **같은 함수**로 그린다 — 색·숫자가 실제 셀과 어긋날 수 없게. */}
                 {(["present", "late", "early_leave", "makeup", "absent"] as AttendanceStatus[]).map((s) => {
                   const chip = cellDisplay(s, null);
@@ -424,17 +445,17 @@ export function MatrixTable({
                       >
                         {chip.text}
                       </span>
-                      {STATUS_TEXT[s]}
+                      {statusTextOf(s, lang)}
                     </span>
                   );
                 })}
                 <span className="text-text-dim inline-flex items-center gap-1">
                   <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.classDay}`} />
-                  등원요일
+                  {t("att.legend.classDay")}
                 </span>
                 <span className="text-text-dim inline-flex items-center gap-1">
                   <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.weekend}`} />
-                  주말·휴일
+                  {t("att.legend.off")}
                 </span>
               </div>
             </td>

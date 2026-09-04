@@ -12,6 +12,10 @@
  */
 
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
+import { sheetTf } from "@/features/teacher-view/i18n";
+// 🔴 반이동 툴팁엔 **반 이름이 둘** 들어간다 — 상대 반도 같은 표기표를 통과시켜야 한 문장이
+//    두 언어로 갈리지 않는다(호출부가 준 `className`은 이미 변환된 값이다).
+import { classNameFor } from "@/features/teacher-view/class-name";
 import { addDays } from "@/lib/date-kst";
 
 export type EnrollSpan = {
@@ -187,10 +191,37 @@ export const BADGE_LABEL: Record<LifecycleBadge["kind"], string> = {
   transferOut: "반이동",
 };
 
+/**
+ * 같은 뱃지의 **영어 표기** — 강사뷰 영어 화면. 🔴 한글 맵 바로 옆에 둔다(상태가 늘 때
+ * 한쪽만 채워지면 raw 키가 새는 것은 출결 상태 표와 같다).
+ */
+export const BADGE_LABEL_EN: Record<LifecycleBadge["kind"], string> = {
+  new: "New",
+  left: "Left",
+  transferIn: "Moved",
+  transferOut: "Moved",
+};
+
+/** 화면에 적을 뱃지 두 글자. 인자를 안 주면 한국어. */
+export function badgeLabelOf(
+  kind: LifecycleBadge["kind"],
+  lang: "ko" | "en" = "ko",
+): string {
+  return lang === "en" ? BADGE_LABEL_EN[kind] : BADGE_LABEL[kind];
+}
+
 /** 툴팁 문장 — 언제·어디서/어디로인지까지 말한다(뱃지 두 글자만으론 사유를 모른다). */
-export function badgeTitle(b: LifecycleBadge, className: string): string {
-  if (b.kind === "new") return `${b.date} 첫 수업`;
-  if (b.kind === "left") return `${b.date} 퇴원`;
-  if (b.kind === "transferIn") return `반이동: ${b.otherClassName} → ${className} (${b.date}부터)`;
-  return `반이동: ${className} → ${b.otherClassName} (${b.date}까지)`;
+export function badgeTitle(
+  b: LifecycleBadge,
+  className: string,
+  // 화면 언어 — 안 주면 한국어(자리 출석부·MCS 등 기존 호출부는 한 글자도 안 바뀐다).
+  lang: "ko" | "en" = "ko",
+): string {
+  if (b.kind === "new") return sheetTf(lang, "att.badge.new", { date: b.date });
+  if (b.kind === "left") return sheetTf(lang, "att.badge.left", { date: b.date });
+  const other = classNameFor(b.otherClassName ?? "", lang);
+  if (b.kind === "transferIn") {
+    return sheetTf(lang, "att.badge.transferIn", { from: other, to: className, date: b.date });
+  }
+  return sheetTf(lang, "att.badge.transferOut", { from: className, to: other, date: b.date });
 }

@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { saveAttendanceSort } from "@/features/attendance/server/prefs-actions";
 import {
   ATTENDANCE_SORT_KEYS,
-  ATTENDANCE_SORT_LABEL,
+  attendanceSortLabelOf,
   parseAttendanceSortKey,
   type AttendanceSortKey,
 } from "@/features/attendance/sort-rows";
+// 🔴 정렬 이름은 사전이 아니라 `sort-rows.ts`(한글 맵 옆)가 단일 소스다.
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 출석부 행 정렬 선택.
@@ -21,11 +23,13 @@ import {
  */
 export function AttendanceSortSelect({ value }: { value: AttendanceSortKey }) {
   const router = useRouter();
+  const lang = useSheetLang();
+  const t = useSheetT();
   const [pending, startTransition] = useTransition();
 
   return (
     <select
-      aria-label="정렬 기준"
+      aria-label={t("att.sort.aria")}
       value={value}
       disabled={pending}
       onChange={(e) => {
@@ -40,7 +44,7 @@ export function AttendanceSortSelect({ value }: { value: AttendanceSortKey }) {
     >
       {ATTENDANCE_SORT_KEYS.map((k) => (
         <option key={k} value={k}>
-          {ATTENDANCE_SORT_LABEL[k]}
+          {attendanceSortLabelOf(k, lang)}
         </option>
       ))}
     </select>

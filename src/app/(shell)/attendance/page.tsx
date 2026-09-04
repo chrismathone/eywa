@@ -59,8 +59,22 @@ import { LiveStats } from "./_components/live-totals";
 import { attHref, resolveViewMode, type ViewMode } from "./_components/att-href";
 import { PayslipWindowButton } from "./_components/payslip-window-button";
 import { canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
+// 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
+// 🔴 이름 축은 각각의 단일 소스를 통과시킨다 — 반 `classNameFor` · 정렬 `attendanceSortLabelOf`.
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import {
+  sheetMonthLabel,
+  sheetT,
+  sheetTf,
+  type SheetLang,
+} from "@/features/teacher-view/i18n";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { periodWindowLabel } from "@/features/periods/window-label";
+import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 
-export const metadata = { title: "출석부 — eywa" };
+export async function generateMetadata() {
+  return { title: `${sheetT(await getTeacherViewLang(), "att.title")} — eywa` };
+}
 
 function currentMonthKey(): string {
   return kstMonth();
@@ -72,9 +86,9 @@ function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function formatMonth(month: string): string {
+function formatMonth(month: string, lang: SheetLang = "ko"): string {
   const [y, m] = month.split("-");
-  return `${y}년 ${Number(m)}월`;
+  return sheetMonthLabel(month, `${y}년 ${Number(m)}월`, lang);
 }
 
 /** "2026-08-10" → "8/10" — 반 머리행 칩처럼 좁은 자리용(연도는 그 표가 이미 말한다). */
@@ -228,6 +242,7 @@ export default async function AttendancePage({
 
   // ── 과목 → 강사 → 반 계층(넓→좁). 위를 고르면 아래 선택지가 좁혀지는 cascade. ──
   // 과목(가장 큰 필터) 선택지 = 반에 실제 존재하는 과목(설정 순서 + 미등록 키는 라벨 폴백으로 뒤에).
+  const lang = await getTeacherViewLang();
   const presentSubjects = new Set(allClasses.map((c) => c.subject).filter(Boolean));
   const subjectOptions = [
     ...subjectMaps.options.filter((o) => presentSubjects.has(o.value)),
@@ -250,7 +265,11 @@ export default async function AttendancePage({
         .map((t) => [t.id, { name: t.name, retired: !t.active }]),
     ),
   )
-    .map(([value, t]) => ({ value, label: t.retired ? `${t.name} (퇴직)` : t.name, retired: t.retired }))
+    .map(([value, t]) => ({
+      value,
+      label: t.retired ? sheetTf(lang, "att.teacher.retiredName", { name: t.name }) : t.name,
+      retired: t.retired,
+    }))
     .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"));
   /**
    * 퇴직 담임 숨김(원장 2026-08-14) — **강사 축에서만** 감춘다. 그 반은 반 드롭다운에 그대로 남는다
@@ -271,7 +290,7 @@ export default async function AttendancePage({
     ? SEAT_KEYS.map((k) => ({
         value: seatFilterValue(k),
         label: `${SEAT_NAME[k]} ${SEAT_ROOM[k]}`,
-        hint: "자리 · 여러 반 동시 입실",
+        hint: sheetT(lang, "att.seat.hint"),
       }))
     : [];
   const teacherOptions = [
@@ -282,7 +301,7 @@ export default async function AttendancePage({
     ...allTeacherOptions
       // ⚠️ 이미 고른 강사는 숨김이어도 남긴다 — 목록에서 사라지면 보던 출석부가 허브로 튕긴다.
       .filter((t) => t.retired && (!viewPrefs.hideRetired || t.value === teacherParam))
-      .map(({ value, label }) => ({ value, label, hint: "퇴직" })),
+      .map(({ value, label }) => ({ value, label, hint: sheetT(lang, "att.retired") })),
   ];
   // 강사는 자기 자신이 기본 선택 — 자기 이름을 드롭다운에서 다시 고르게 하지 않는다.
   // (강사 계정의 반 목록은 이미 본인 반으로 좁혀져 있어 선택지도 자기 하나뿐이다.)
@@ -301,9 +320,10 @@ export default async function AttendancePage({
   // 매칭했는데, 수학반 이름엔 '수학'이 없어("고등M 고1 BS4A") **"수학"으로 검색해도 0건**이었다.
   // 이 드롭다운은 '바로 열기' 패널이 안내하는 탈출구라 여기서 막히면 갈 곳이 없다. hint는 검색 대상이자
   // 부가표시(SearchableSelect가 label·hint 양쪽을 매칭).
+  // 🔴 반 이름은 표기만 옮긴다(`classNameFor` 단일 소스) — **값은 id**라 매칭·URL은 안 바뀐다.
   const classOptions = classesForFilters.map((c) => ({
     value: c.id,
-    label: c.className,
+    label: classNameFor(c.className, lang),
     hint: [subjectMaps.labelOf(c.subject), c.teacherName].filter(Boolean).join(" · "),
   }));
   const effectiveClassId =
@@ -416,7 +436,7 @@ export default async function AttendancePage({
   const slotOnlyCount = teacherClasses.length - homeroomClasses.length;
   const moneyNote =
     money && slotOnlyCount > 0
-      ? `금액·정산액은 담임 반 ${homeroomClasses.length}개 기준 — 교시 담당 ${slotOnlyCount}개 반은 빠져 있습니다`
+      ? sheetTf(lang, "att.moneyNote", { n: homeroomClasses.length, m: slotOnlyCount })
       : null;
   // 매트릭스(무거운 출석 데이터)는 반을 골랐을 때만 로드. 미선택이면 base(빈 매트릭스) 재사용.
   const matrix =
@@ -430,21 +450,23 @@ export default async function AttendancePage({
     mode === "teacher"
       ? teacherClasses.map((c, i) => ({
           classId: c.id,
-          className: c.className,
+          className: classNameFor(c.className, lang),
           subjectLabel: subjectMaps.labelOf(c.subject),
           matrix: teacherMatrices[i]!,
           // 담임이 아닌 반이 왜 여기 있는지 밝힌다 — 라벨이 없으면 "남의 반이 왜 뜨지"가 된다.
           // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
           //    거기까지 붙이면 거의 모든 반에 배지가 달려 정작 남의 반 표식이 안 보인다.
-          roleLabel: teacherRoles.get(c.id) === "slot" ? "교시 담당" : null,
+          roleLabel: teacherRoles.get(c.id) === "slot" ? sheetT(lang, "att.role.slot") : null,
           // 담임 시작일 — 그 이전 칸이 왜 값에서 빠졌는지 반 머리행에서 밝힌다(빗금만 있으면 "왜 비었지").
-          sinceLabel: sinceByClass.get(c.id) ? `${dayLabel(sinceByClass.get(c.id)!)}부터 담임` : null,
+          sinceLabel: sinceByClass.get(c.id)
+            ? sheetTf(lang, "att.since", { date: dayLabel(sinceByClass.get(c.id)!) })
+            : null,
         }))
       : effectiveClassId && selectedClass
         ? [
             {
               classId: effectiveClassId,
-              className: selectedClass.className,
+              className: classNameFor(selectedClass.className, lang),
               subjectLabel: subjectMaps.labelOf(selectedClass.subject),
               matrix,
             },
@@ -473,7 +495,9 @@ export default async function AttendancePage({
     makeupPoolMatrix && makeupPoolMatrix.students.length > 0
       ? {
           classId: makeupPoolClassId!,
-          className: MAKEUP_POOL_PREFIX,
+          // 🔴 이 묶음 이름은 반 이름이 아니라 **출결 상태 '보강'과 같은 낱말**이다 —
+          //    그래서 반 이름 표기표가 아니라 출결 라벨 단일 소스를 읽는다(두 화면이 같은 말을 쓴다).
+          className: attendanceLabelOf("makeup", lang) ?? MAKEUP_POOL_PREFIX,
           // 과목 라벨은 비운다 — 이 묶음은 한 과목이 아니다(그 강사가 한 보강 전부가 여기 모인다).
           subjectLabel: "",
           matrix: makeupPoolMatrix,
@@ -638,18 +662,22 @@ export default async function AttendancePage({
       : [
           lockBefore ? (
             <p key="lock" className={noticeClass}>
-              출결 수정은 <strong className="text-foreground">최근 {ATTENDANCE_EDIT_WINDOW_DAYS}일</strong>
-              (오늘 포함 {lockBefore} 이후)만 가능합니다. 그보다 지난 날짜는 잠기며, 수정이 필요하면 관리자에게
-              요청하세요.
+              {sheetT(lang, "att.notice.lock.a")}
+              <strong className="text-foreground">
+                {sheetTf(lang, "att.notice.lock.b", { n: ATTENDANCE_EDIT_WINDOW_DAYS })}
+              </strong>
+              {sheetTf(lang, "att.notice.lock.c", { date: lockBefore })}
             </p>
           ) : null,
           // 🔴 같은 반이 반별 보기와 강사 전체 보기에서 **다른 숫자**를 낸다 — 그 사실을 화면이 먼저
           //    말해야 한다(조용히 다르면 "출결이 사라졌다"로 읽힌다). 근거는 교시 귀속(resolveTaughtBy).
           mode === "teacher" ? (
             <p key="scope" className={noticeClass}>
-              칸 숫자는 <strong className="text-foreground">이 선생님이 맡은 교시</strong>만 셉니다. 같은 반이라도
-              다른 선생님 교시와 자리(JJ·랩)는 빗금으로만 표시되고 시수·출석률에는 들어가지 않습니다 — 반 전체
-              숫자는 <strong className="text-foreground">반별 보기</strong>에서 봅니다.
+              {sheetT(lang, "att.notice.scope.a")}
+              <strong className="text-foreground">{sheetT(lang, "att.notice.scope.b")}</strong>
+              {sheetT(lang, "att.notice.scope.c")}
+              <strong className="text-foreground">{sheetT(lang, "att.notice.scope.d")}</strong>
+              {sheetT(lang, "att.notice.scope.e")}
             </p>
           ) : null,
           // 기록이 하나도 없는 화면은 **왜 비어 있는지**를 말해야 한다 — 빈 표 + "—"만 두면 고장으로 읽힌다.
@@ -659,20 +687,32 @@ export default async function AttendancePage({
               {/* ⚠️ 강사 전체 보기는 반이 여럿이라 "이 반"이 거짓말이 된다(적대검증) — 모드에 맞춰 주어를 바꾼다. */}
               {/* ⚠️ 강사 전체 보기의 '없음'은 **선생님 몫 기준**이다 — 남의 교시·자리 기록은 빗금으로
                   화면에 보이는데 여기서 그냥 "기록이 없다"고 하면 두 문장이 서로를 부정한다. */}
-              {mode === "teacher" ? "담당 반에 아직 " : "이 반은 아직 "}
+              {sheetT(
+                lang,
+                mode === "teacher" ? "att.notice.empty.teacherPre" : "att.notice.empty.classPre",
+              )}
               <strong className="text-foreground">
-                {mode === "teacher" ? "선생님 몫으로 잡힌 출결 기록이 없습니다" : "출결 기록이 없습니다"}
+                {sheetT(
+                  lang,
+                  mode === "teacher"
+                    ? "att.notice.empty.teacherBold"
+                    : "att.notice.empty.classBold",
+                )}
               </strong>
-              . 수업보고서로 자동 표시되는 과목이 아니라서, 셀을 직접 클릭해 찍은 값만 쌓입니다.
+              {sheetT(lang, "att.notice.empty.c")}
             </p>
           ) : null,
           // 파생 반(수학)은 표가 "누가 찍은 값인지"를 스스로 밝혀야 한다 — 셀 툴팁만으론 안 보인다.
           allGroups.some((g) => g.matrix.derivedActive) ? (
             <p key="derived" className={noticeClass}>
-              수업보고서가 있는 등원일은 <strong className="text-foreground">출석</strong>, 보고서가 없는 등원일은{" "}
-              <strong className="text-foreground">결석</strong>으로 자동 표시됩니다. 오늘과 이후 날짜는 아직 판정하지
-              않습니다. <strong className="text-foreground">직접 찍은 값이 항상 우선</strong>이며, 셀을 클릭해 언제든
-              고칠 수 있습니다.
+              {/* 🔴 '출석'·'결석'은 앱 전역 출결 라벨 단일 소스를 그대로 부른다(이 문단에만 적으면 갈린다). */}
+              {sheetT(lang, "att.notice.derived.a")}
+              <strong className="text-foreground">{attendanceLabelOf("present", lang)}</strong>
+              {sheetT(lang, "att.notice.derived.b")}
+              <strong className="text-foreground">{attendanceLabelOf("absent", lang)}</strong>
+              {sheetT(lang, "att.notice.derived.c")}
+              <strong className="text-foreground">{sheetT(lang, "att.notice.derived.d")}</strong>
+              {sheetT(lang, "att.notice.derived.e")}
             </p>
           ) : null,
         ].filter(Boolean);
@@ -682,8 +722,11 @@ export default async function AttendancePage({
   const selectedClassLabel =
     mode === "teacher"
       ? myTeacherId && myTeacherId === effectiveTeacher
-        ? `${teacherClasses.length}개 반`
-        : `${teacherLabel ?? "강사"} 전체 · ${teacherClasses.length}개 반`
+        ? sheetTf(lang, "att.nClasses", { n: teacherClasses.length })
+        : sheetTf(lang, "att.teacherAll", {
+            name: teacherLabel ?? sheetT(lang, "att.teacherFallback"),
+            n: teacherClasses.length,
+          })
       : effectiveClassId
         ? classOptions.find((o) => o.value === effectiveClassId)?.label
         : undefined;
@@ -725,13 +768,13 @@ export default async function AttendancePage({
         {showSubjectFilter ? (
           <>
             <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">과목</span>
+              <span className="micro mr-1">{sheetT(lang, "att.filter.subject")}</span>
               <FilterSelect
                 paramName="subject"
                 value={subjectValue}
                 options={subjectOptions}
-                ariaLabel="과목 필터"
-                allLabel="전체 과목"
+                ariaLabel={sheetT(lang, "att.filter.subjectAria")}
+                allLabel={sheetT(lang, "att.filter.subjectAll")}
                 triggerClassName={TOOLBAR_SELECT}
               />
             </div>
@@ -742,13 +785,13 @@ export default async function AttendancePage({
         {showTeacherFilter ? (
           <>
             <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">강사</span>
+              <span className="micro mr-1">{sheetT(lang, "att.filter.teacher")}</span>
               <FilterSelect
                 paramName="teacher"
                 value={teacherValue}
                 options={teacherOptions}
-                ariaLabel="강사 필터"
-                allLabel="전체 강사"
+                ariaLabel={sheetT(lang, "att.filter.teacherAria")}
+                allLabel={sheetT(lang, "att.filter.teacherAll")}
                 triggerClassName={TOOLBAR_SELECT}
               />
               {/* 퇴직 담임 숨김 — 감춘 인원을 칩에 적어 "강사가 없어졌다"로 읽히지 않게 한다. */}
@@ -763,15 +806,18 @@ export default async function AttendancePage({
         {/* 반 dropdown — 강사에겐 **반 선택의 유일한 수단**('전체 반' = 자기 전체 시트, 반 = 그 반).
             관리자에게 '전체 반'은 종전대로 반 미선택(=선택 허브, 반 108개를 한 번에 안 여는 렉 방지). */}
         <div className="flex items-center gap-1.5">
-          <span className="micro mr-1">반</span>
+          <span className="micro mr-1">{sheetT(lang, "att.filter.class")}</span>
           {/* cap 상향 — 기본 50이면 이름순 앞을 로마자 영어반이 독점해 목록을 훑을 때 수학반이 7개만
               보였다(gotcha #84). 반 목록은 수백 규모라 전량 렌더가 안전하고, 초과분은 hint 검색으로 도달. */}
           <FilterSelect
             paramName="class"
             value={effectiveClassId}
             options={classOptions}
-            ariaLabel="반 필터"
-            allLabel={isTeacherView ? "전체 반(내 반 전부)" : "전체 반"}
+            ariaLabel={sheetT(lang, "att.filter.classAria")}
+            allLabel={sheetT(
+              lang,
+              isTeacherView ? "att.filter.classAllMine" : "att.filter.classAll",
+            )}
             cap={300}
             // 형광 표기가 꺼진 상태("전체 반")에서만 쓰인다 — 켜지면 MARKER_TRIGGER가 이긴다.
             triggerClassName={TOOLBAR_SELECT}
@@ -788,25 +834,25 @@ export default async function AttendancePage({
             🔑 종전엔 라벨이 그냥 글자라 **이번 달로 돌아갈 길이 없었다**(◀를 누른 만큼 ▶를 눌러야 했다).
                이제 라벨을 누르면 이번 달로 오고, 다른 달을 보는 중이면 과거/미래 조회 배지가 선다. */}
         <PeriodNav
-          label={formatMonth(month)}
+          label={formatMonth(month, lang)}
           prevHref={attHref({ classId: effectiveClassId, month: prevMonth, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
           nextHref={attHref({ classId: effectiveClassId, month: nextMonth, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
           currentHref={attHref({ classId: effectiveClassId, month: currentMonthKey(), teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
           relation={month === currentMonthKey() ? "current" : month < currentMonthKey() ? "past" : "future"}
-          prevAriaLabel="이전 달"
-          nextAriaLabel="다음 달"
-          currentTitle="눌러서 이번 달로"
+          prevAriaLabel={sheetT(lang, "att.nav.prev")}
+          nextAriaLabel={sheetT(lang, "att.nav.next")}
+          currentTitle={sheetT(lang, "att.nav.current")}
         />
 
         {/* 날짜축(세션/월) — 같은 줄에 붙인다. ⚠️ 새 줄을 얹지 말 것(그 높이는 학생 행에서 빼 온다). */}
         <PeriodModeToggle
           mode={viewPrefs.periodMode}
-          windowLabel={matrix.window.label}
+          windowLabel={periodWindowLabel(matrix.window, lang)}
           disabledReason={
             mode === "teacher"
-              ? "강사 전체 보기는 반마다 세션이 달라 달력월로 표시합니다"
+              ? sheetT(lang, "att.period.disabledTeacher")
               : !effectiveClassId
-                ? "반을 고르면 세션으로 볼 수 있습니다"
+                ? sheetT(lang, "att.period.disabledNoClass")
                 : undefined
           }
         />
@@ -817,13 +863,13 @@ export default async function AttendancePage({
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <div className="flex items-center gap-1.5">
-              <span className="micro shrink-0">보기</span>
+              <span className="micro shrink-0">{sheetT(lang, "att.view")}</span>
               {effectiveTeacher ? (
                 <div className={TOOLBAR_SEG_BOX}>
                 {([
-                  ["class", "반별"],
-                  ["teacher", "강사 전체"],
-                ] as const).map(([key, label]) => (
+                  ["class", "att.view.class"],
+                  ["teacher", "att.view.teacher"],
+                ] as const).map(([key, labelKey]) => (
                   <Link
                     key={key}
                     href={attHref({
@@ -835,12 +881,12 @@ export default async function AttendancePage({
                     })}
                     className={`${TOOLBAR_SEG_ITEM} shrink-0 ${mode === key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
                   >
-                    {label}
+                    {sheetT(lang, labelKey)}
                   </Link>
                 ))}
                 </div>
               ) : (
-                <span className="text-text-faint text-xs">강사를 고르면 전체 보기</span>
+                <span className="text-text-faint text-xs">{sheetT(lang, "att.view.pickTeacher")}</span>
               )}
             </div>
           </>
@@ -851,7 +897,7 @@ export default async function AttendancePage({
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">정렬</span>
+              <span className="micro mr-1">{sheetT(lang, "att.sort")}</span>
               <AttendanceSortSelect value={sortKey} />
               {/* 반 머리행이 있는 보기에서만 — 이름 칸의 작은 화살표와 같은 동작을 글자로 한 번 더 낸다
                   (아이콘만 있으면 있는 줄 모른다). 접힌 수까지 적어 "몇 개가 숨었는지"를 감추지 않는다. */}
@@ -897,9 +943,9 @@ export default async function AttendancePage({
           {mode === "teacher" && allGroups.length > 0 ? (
             <span
               className="border-line text-text-dim rounded-full border px-2.5 py-0.5 text-xs"
-              title="칸 숫자는 이 선생님이 맡은 교시만 셉니다. 다른 선생님 교시와 자리(JJ·랩)는 빗금으로만 표시되고 시수·출석률에는 들어가지 않습니다 — 반 전체 숫자는 반별 보기에서 봅니다."
+              title={sheetT(lang, "att.scopeChip.title")}
             >
-              칸 = 이 선생님 교시
+              {sheetT(lang, "att.scopeChip")}
             </span>
           ) : null}
           {allGroups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
@@ -907,7 +953,7 @@ export default async function AttendancePage({
             // `<details>`라 클라 JS가 없다. 패널은 absolute라 열려도 격자를 밀어내지 않는다(높이 0 유지).
             <details className="[&_summary::-webkit-details-marker]:hidden">
               <summary className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} list-none cursor-pointer`}>
-                안내 {notices.length}
+                {sheetTf(lang, "att.notices", { n: notices.length })}
               </summary>
               <div className="border-line bg-card absolute top-full right-1 z-40 mt-1 w-[min(560px,calc(100vw-3rem))] space-y-2 rounded-2xl border p-3 shadow-lg">
                 {notices}
@@ -939,23 +985,30 @@ export default async function AttendancePage({
               : []
           }
           month={month}
+          lang={lang}
           subjectId={effectiveSubject}
           colorOf={subjectMaps.colorOf}
           labelOf={subjectMaps.labelOf}
-          todayLabel={new Intl.DateTimeFormat("ko-KR", {
-            timeZone: "Asia/Seoul",
-            month: "long",
-            day: "numeric",
-            weekday: "short",
-          }).format(new Date())}
+          todayLabel={
+            // 오늘 날짜 표기도 화면 언어를 따른다 — 시각대는 언제나 KST(앱 전역 규약).
+            new Intl.DateTimeFormat(lang === "en" ? "en-US" : "ko-KR", {
+              timeZone: "Asia/Seoul",
+              month: "long",
+              day: "numeric",
+              weekday: "short",
+            }).format(new Date())
+          }
         />
       ) : totalStudents === 0 ? (
         <div className="min-h-0 flex-1 overflow-auto">
           <EmptyState
             image="students"
             icon={() => <Users size={32} strokeWidth={1.8} />}
-            title={mode === "teacher" ? "이 강사의 반에 등록된 학생이 없습니다" : "이 반에 등록된 학생이 없습니다"}
-            description="학생목록에서 등록 후 다시 확인하세요."
+            title={sheetT(
+              lang,
+              mode === "teacher" ? "att.empty.teacher" : "att.empty.class",
+            )}
+            description={sheetT(lang, "att.empty.desc")}
           />
         </div>
       ) : (
@@ -972,6 +1025,7 @@ export default async function AttendancePage({
             showGroups={showGroups}
             money={money}
             moneyNote={moneyNote}
+            lang={lang}
             lockBefore={lockBefore}
             // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
             holidays={buildHolidayMap(operations.holidays)}

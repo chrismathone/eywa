@@ -4,15 +4,12 @@ import { useState, useTransition } from "react";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
 import { parseSessionUnits } from "@/features/attendance/session-units";
-import { NOT_MINE_MESSAGE, STATUS_TONE } from "@/features/attendance/cell-display";
+import { NOT_MINE_MESSAGE, STATUS_TONE, statusTextOf } from "@/features/attendance/cell-display";
+// 화면 언어 — 상태 이름은 `statusTextOf`(한글 맵 옆) 단일 소스, 나머지 문구는 사전.
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
-const OPTIONS: { value: AttendanceStatus; name: string }[] = [
-  { value: "present", name: "출석" },
-  { value: "absent", name: "결석" },
-  { value: "late", name: "지각" },
-  { value: "early_leave", name: "조퇴" },
-  { value: "makeup", name: "보강" },
-];
+/** 🔴 이름을 여기 적지 않는다 — 표·범례와 **같은 표**를 읽어야 같은 낱말이 된다. */
+const OPTIONS: AttendanceStatus[] = ["present", "absent", "late", "early_leave", "makeup"];
 
 export type PopoverAnchor = { x: number; top?: number; bottom?: number };
 
@@ -66,6 +63,9 @@ export function CellPopover({
   onClose: () => void;
   onSaved: (next: { status: AttendanceStatus | null; units: number | null; note: string }) => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [unitsDraft, setUnitsDraft] = useState(units !== null && units !== 1 ? String(units) : "");
   const [noteDraft, setNoteDraft] = useState(note);
   const [err, setErr] = useState<string | null>(null);
@@ -136,7 +136,7 @@ export function CellPopover({
       <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden />
       <div
         role="dialog"
-        aria-label="출결 상세 입력"
+        aria-label={t("att.pop.aria")}
         // ⚠️ role="dialog" 는 접근성 표시이자 **격자 키 가로채기 방지 신호**다(grid-context의 가드가 이걸 본다).
         className="bg-card border-line fixed z-50 flex w-44 flex-col gap-0.5 rounded-lg border p-1 shadow-lg"
         style={{
@@ -160,18 +160,22 @@ export function CellPopover({
                         (2026-08-19 '담임 이전 기록') 한쪽만 고쳐져 같은 칸이 화면마다 다른 말을 한다. */}
                     {hasOtherRecords
                       ? NOT_MINE_MESSAGE
-                      : "기록이 없는 날이라 메모만 남길 수는 없습니다 — 관리자에게 요청하세요"}
+                      : t("att.pop.noRecord")}
                   </p>
                 )}
                 {/* 남의 교시에 달린 메모(결석 사유 등)는 **읽기로는 보여 준다** — 여기서 감추면
                     "병결"·"가족여행" 같은 사유가 화면에서 사라진다(실측 78칸). */}
                 {hasOtherRecords && note ? (
-                  <p className="text-foreground text-[11px] leading-tight break-keep">메모 · {note}</p>
+                  <p className="text-foreground text-[11px] leading-tight break-keep">
+                    {tf("att.pop.note", { note })}
+                  </p>
                 ) : null}
               </div>
             ) : (
               <>
-                <p className="text-text-dim text-[10px] leading-tight">메모는 기간과 무관하게 고칠 수 있습니다</p>
+                <p className="text-text-dim text-[10px] leading-tight">
+                  {t("att.pop.noteAnytime")}
+                </p>
                 <input
                   autoFocus
                   type="text"
@@ -186,8 +190,8 @@ export function CellPopover({
                       applyNoteOnly();
                     }
                   }}
-                  placeholder="메모(사유)"
-                  aria-label="메모(사유)"
+                  placeholder={t("att.pop.notePh")}
+                  aria-label={t("att.pop.notePh")}
                   className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
                     err ? "border-danger" : "border-line"
                   }`}
@@ -199,7 +203,7 @@ export function CellPopover({
                   disabled={saving}
                   className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
                 >
-                  {saving ? "저장 중…" : "메모 저장"}
+                  {saving ? t("att.pop.saving") : t("att.pop.saveNote")}
                 </button>
               </>
             )}
@@ -209,16 +213,16 @@ export function CellPopover({
           <>
             {OPTIONS.map((o) => (
               <button
-                key={o.value}
+                key={o}
                 type="button"
-                onClick={() => apply(o.value, false)}
+                onClick={() => apply(o, false)}
                 className={`hover:bg-bg-soft flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs transition ${
-                  status === o.value ? "font-bold" : ""
+                  status === o ? "font-bold" : ""
                 }`}
               >
-                {o.name}
+                {statusTextOf(o, lang)}
                 <span
-                  className={`border-line size-4 shrink-0 rounded-sm border ${STATUS_TONE[o.value]}`}
+                  className={`border-line size-4 shrink-0 rounded-sm border ${STATUS_TONE[o]}`}
                   aria-hidden
                 />
               </button>
@@ -232,9 +236,9 @@ export function CellPopover({
                   setUnitsDraft(e.target.value);
                   setErr(null);
                 }}
-                placeholder="시수(기본 1)"
-                aria-label="시수"
-                title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
+                placeholder={t("att.pop.unitsPh")}
+                aria-label={t("att.pop.unitsAria")}
+                title={t("att.pop.unitsTitle")}
                 className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${
                   err ? "border-danger" : "border-line"
                 }`}
@@ -244,8 +248,8 @@ export function CellPopover({
                 type="text"
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
-                placeholder="메모(사유)"
-                aria-label="메모(사유)"
+                placeholder={t("att.pop.notePh")}
+                aria-label={t("att.pop.notePh")}
                 className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none"
               />
               <button
@@ -253,9 +257,9 @@ export function CellPopover({
                 onClick={() => apply(status, true)}
                 disabled={!status}
                 className="bg-foreground text-background rounded-md px-2 py-1 text-xs font-medium transition disabled:opacity-40"
-                title={status ? undefined : "상태를 먼저 선택하세요"}
+                title={status ? undefined : t("att.pop.pickFirst")}
               >
-                저장
+                {t("att.pop.save")}
               </button>
             </div>
             {status && !sharedDelete ? (
@@ -264,15 +268,15 @@ export function CellPopover({
                 onClick={() => apply(null, false)}
                 className="text-text-dim hover:bg-bg-soft rounded-md border-t px-2 py-1 text-left text-xs"
               >
-                지우기
+                {t("att.pop.clear")}
               </button>
             ) : null}
             {/* 🔴 사정거리도 격자와 **같은 말**로 알린다 — 저장은 교시를 못 가려 그날 모든 교시에 가고,
                 지우기는 그날 행을 통째로 없앤다(그래서 저장은 열고 지우기만 닫는다). */}
             {status && sharedDelete ? (
               <p className="text-text-dim border-t px-2 py-1 text-[10px] leading-tight break-keep">
-                고치면 같은 날 다른 교시 기록 {otherCount}건(다른 선생님·자리 JJ·랩실)도 함께 바뀝니다. 지우기는
-                여기서 못 합니다 — 반별 보기에서 지우세요
+                {tf("att.pop.sharedWarn.a", { n: otherCount })}
+                {t("att.pop.sharedWarn.b")}
               </p>
             ) : null}
           </>

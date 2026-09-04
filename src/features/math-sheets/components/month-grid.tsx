@@ -1,6 +1,9 @@
 "use client";
 
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+// 반이동 툴팁의 반 이름도 표기표를 통과시킨다(뱃지 안 두 이름이 같은 언어여야 한다).
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
 import { actualBooksOf, type MathRecordLike, type StudentGoalMap } from "../lib/student-goals";
 import type { MathSheetMonthData } from "../server/month-queries";
 import type { GoalField } from "./use-student-goals";
@@ -30,6 +33,7 @@ export function MonthGrid({
   onGoalChange: (studentId: string, field: GoalField, value: string) => void;
   canEdit: boolean;
 }) {
+  const lang = useSheetLang();
   if (data.days.length === 0) {
     return (
       <p className="text-text-faint rounded-2xl border border-dashed p-8 text-center text-sm">
@@ -70,7 +74,7 @@ export function MonthGrid({
                 actualBooks={actualBooksOf(flat, stu.studentId)}
                 canEdit={canEdit}
                 onGoalChange={onGoalChange}
-                classLabel={data.className}
+                classLabel={classNameFor(data.className, lang)}
               />
               <DayCells stu={stu} data={data} />
             </tr>

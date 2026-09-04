@@ -1,6 +1,7 @@
 "use client";
 
 import { PrintWindowButton } from "@/components/workspace/print-window";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 /**
  * 급여명세서 열기 — 출석부 '강사 전체 보기' 툴바(원장 전용).
@@ -23,19 +24,22 @@ export function PayslipWindowButton({
   /** 과목 칩이 걸려 화면 정산액이 좁혀져 있는가. */
   subjectFiltered?: boolean;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   return (
     <PrintWindowButton
       id={`print/payslip/${teacherId}/${period}`}
       href={`/payroll/${teacherId}/payslip?period=${period}`}
       title={
         subjectFiltered
-          ? "급여명세서는 전 과목 기준입니다 — 과목 칩으로 좁힌 위 정산액보다 큽니다."
-          : `급여명세서 ${period}`
+          ? t("att.payslip.title")
+          : tf("att.payslip.period", { period })
       }
       variant="outline"
       className="h-8 rounded-lg px-2.5 text-xs"
     >
-      급여명세서{subjectFiltered ? " (전 과목)" : ""}
+      {t("att.payslip")}
+      {subjectFiltered ? t("att.payslip.allSubjects") : ""}
     </PrintWindowButton>
   );
 }

@@ -16,6 +16,8 @@
  */
 import { formatDows, resolveAttendDows } from "./calendar";
 import { matchesStudentSearch, normalizeSearchText } from "./student-search";
+// 화면 문구는 사전 단일 소스 — 인자를 안 주면 한국어라 기존 호출부는 한 글자도 안 바뀐다.
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /** 한 번에 보여줄 결과 상한 — 넘으면 "앞 N건"이라고 **밝힌다**(잘라놓고 전부인 척 금지, [[#89]]). */
 export const HUB_SEARCH_LIMIT = 20;
@@ -198,18 +200,25 @@ export function groupHitsBySubject<T extends { subject: string }>(
 }
 
 /** 그룹이 미등록 과목일 때 쓰는 표시 이름 — raw 키가 화면에 새지 않게(#raw 코드 노출 금지). */
-export const HUB_SUBJECT_FALLBACK = "기타";
+export const HUB_SUBJECT_FALLBACK = sheetT("ko", "att.search.subjectFallback");
 
 /**
  * 그룹 머리글 문자열 — 라벨은 **학원설정이 단일 소스**라 `labelOf`를 인자로 받는다.
  * 🔴 `labelOf`가 키를 **그대로** 돌려주면(설정·레거시 어디에도 없는 키) 화면에 `subject_3`가 뜬다 →
  *    그럴 땐 `기타`. 과목 키는 전부 ascii라(`math`·`subject_1`) "라벨 == 키"는 곧 미등록이라는 뜻이다.
  */
-export function hubSubjectHeading(subject: string, labelOf: (key: string) => string): string {
+export function hubSubjectHeading(
+  subject: string,
+  labelOf: (key: string) => string,
+  // 🔴 과목 **라벨 자체**는 학원설정이 단일 소스라 언어를 안 탄다(사람이 적은 이름).
+  //    언어를 타는 건 미등록 키의 폴백 낱말('기타')뿐이다.
+  lang: SheetLang = "ko",
+): string {
+  const fallback = sheetT(lang, "att.search.subjectFallback");
   const key = (subject ?? "").trim();
-  if (!key) return HUB_SUBJECT_FALLBACK;
+  if (!key) return fallback;
   const label = (labelOf(key) ?? "").trim();
-  return !label || label === key ? HUB_SUBJECT_FALLBACK : label;
+  return !label || label === key ? fallback : label;
 }
 
 /**
@@ -274,11 +283,14 @@ export function buildHubHits(input: {
  * 0건일 때의 한 줄 — **왜 비었는지**를 사람 말로 밝힌다(빈 목록만 두면 "고장났다"로 읽힌다).
  * ⚠️ 권한 이야기를 하지 않는다 — `where`는 "담당 반"·"이번 달 출석부"처럼 **찾은 범위**만 말한다.
  */
-export function hubEmptyMessage(query: string, where: string): string {
-  return `‘${query.trim()}’ 이름의 학생을 ${where}에서 찾지 못했습니다.`;
+export function hubEmptyMessage(query: string, where: string, lang: SheetLang = "ko"): string {
+  return sheetTf(lang, "att.search.empty", { query: query.trim(), where });
 }
 
 /** 상한에 걸렸을 때의 한 줄 — 잘랐다는 사실과 좁히는 방법을 함께 말한다. */
-export function hubTruncatedNote(limit: number = HUB_SEARCH_LIMIT): string {
-  return `앞 ${limit}건만 표시합니다 — 이름을 더 입력하면 좁혀집니다.`;
+export function hubTruncatedNote(
+  limit: number = HUB_SEARCH_LIMIT,
+  lang: SheetLang = "ko",
+): string {
+  return sheetTf(lang, "att.search.truncated", { n: limit });
 }

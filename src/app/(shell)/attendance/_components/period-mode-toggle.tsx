@@ -5,6 +5,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveAttendancePeriodMode } from "@/features/attendance/server/prefs-actions";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 날짜축 전환 — 세션 기간(0189a) / 달력월.
@@ -28,6 +29,7 @@ export function PeriodModeToggle({
   disabledReason?: string;
 }) {
   const router = useRouter();
+  const t = useSheetT();
   const [pending, startTransition] = useTransition();
 
   const pick = (next: PeriodMode) => {
@@ -43,7 +45,7 @@ export function PeriodModeToggle({
       <div
         className={`${TOOLBAR_SEG_BOX} ${pending ? "opacity-60" : ""}`}
         role="group"
-        aria-label="날짜축 전환"
+        aria-label={t("att.period.aria")}
       >
         {(["session", "month"] as const).map((m) => (
           <button
@@ -56,7 +58,7 @@ export function PeriodModeToggle({
               mode === m ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
             } ${disabledReason ? "cursor-not-allowed" : ""}`}
           >
-            {m === "session" ? "세션" : "월"}
+            {t(m === "session" ? "att.period.session" : "att.period.month")}
           </button>
         ))}
       </div>

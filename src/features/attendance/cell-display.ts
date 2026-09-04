@@ -6,6 +6,8 @@
 // ⚠️ O·X·L 같은 글자 표기로 되돌리지 말 것(원장 지시로 폐기).
 
 import { COUNTABLE_STATUSES, formatSessionUnits } from "./session-units";
+// 화면 문구는 사전 단일 소스 — 인자를 안 주면 한국어라 기존 호출부는 그대로다.
+import { sheetT } from "@/features/teacher-view/i18n";
 import { ATT_VIVID } from "./status-color";
 
 export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup" | "early_leave";
@@ -88,6 +90,27 @@ export const STATUS_TEXT: Record<AttendanceMark, string> = {
   early_leave: "조퇴",
   makeup: "보강",
 };
+
+/**
+ * 같은 표기의 **영어판** — 강사뷰 영어 화면(원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환"*).
+ *
+ * 🔴 **한글 맵 바로 옆에 둔다** — 나누면 상태가 늘 때 한쪽만 채워지고 raw enum이 화면에 샌다.
+ * ⚠️ ECS `ATTENDANCE_LABEL`과 **일부러 다르다**: 여기서는 공결도 `Absent`로 접는다(시수 0을
+ *    말하는 표기라 한국어 쪽이 이미 그렇게 접고 있다). 두 표를 합치지 말 것.
+ */
+export const STATUS_TEXT_EN: Record<AttendanceMark, string> = {
+  present: "Present",
+  absent: "Absent",
+  excused: "Absent",
+  late: "Late",
+  early_leave: "Left early",
+  makeup: "Makeup",
+};
+
+/** 화면에 적을 상태 표기. 인자를 안 주면 한국어(기존 호출부는 한 글자도 안 바뀐다). */
+export function statusTextOf(mark: AttendanceMark, lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? STATUS_TEXT_EN[mark] : STATUS_TEXT[mark];
+}
 
 /** 결석은 시수를 소비하지 않으므로 0. 나머지는 시수(미입력·이상값=1). 급여로 흘러가는 그 숫자다. */
 export function consumedUnits(status: AttendanceMark, units: number | null | undefined): number {
@@ -181,11 +204,11 @@ function slotStripes(slots: readonly SlotMark[]): string {
 }
 
 /** 툴팁 한 줄 — "12:30 출석 1 · 14:10 결석 0". 교시가 없던 옛 기록은 시각 없이 상태만. */
-export function slotBreakdown(slots: readonly SlotMark[]): string {
+export function slotBreakdown(slots: readonly SlotMark[], lang: "ko" | "en" = "ko"): string {
   return slots
     .map((s) => {
       const time = s.slot ? `${s.slot.slice(0, 5)} ` : "";
-      return `${time}${STATUS_TEXT[s.status]} ${markNumber(s.status, s.units)}`;
+      return `${time}${statusTextOf(s.status, lang)} ${markNumber(s.status, s.units)}`;
     })
     .join(" · ");
 }
@@ -228,8 +251,8 @@ export const NOT_MINE_MESSAGE =
  *    기록이라 담당을 못 가르는 경우일 수도, **담임이 되기 전 기록**(2026-08-19)일 수도 있다.
  *    넷 다 참인 문장만 쓴다 — 그래서 "교시"라고도 못 박지 않는다(담임 이전 기록은 교시 문제가 아니다).
  */
-export function ghostBreakdown(others: readonly SlotMark[]): string {
-  return `이 선생님 몫으로 세지 않는 기록 · ${slotBreakdown(others)}`;
+export function ghostBreakdown(others: readonly SlotMark[], lang: "ko" | "en" = "ko"): string {
+  return `${sheetT(lang, "att.cell.ghostPrefix")}${slotBreakdown(others, lang)}`;
 }
 
 /**

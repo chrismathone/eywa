@@ -4,6 +4,7 @@ import { formatSessionUnits } from "@/features/attendance/session-units";
 import { EMPTY_COUNT, rateDecimal, ratePercent, sumCounts, type Counted } from "@/features/attendance/grid/totals";
 import { useRowCount, useRowsCount } from "./grid-context";
 import { useAttendanceSearch } from "./search-context";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 살아 있는 합계 — 칸을 치는 **그 순간** 시수·출석률·상단 스탯이 따라 움직인다.
@@ -183,6 +184,7 @@ export function LiveStats({
   totalStudents: number;
   fallback: Counted;
 }) {
+  const t = useSheetT();
   const search = useAttendanceSearch();
   // 🔴 검색 중이면 이 숫자들도 검색을 따라간다(2026-08-20) — 목록만 좁고 숫자는 전체이면, 바로 옆
   //    검색 칩이 "1/38명 표시"라고 말하는 그 화면에서 출석률·결석이 다른 38명 얘기를 하게 된다.
@@ -195,10 +197,10 @@ export function LiveStats({
   return (
     <div className="flex items-center gap-x-3">
       <CompactMetric
-        label="등록"
+        label={t("att.stat.enrolled")}
         value={searching ? (search?.matchedStudents ?? 0) : totalStudents}
         ofTotal={searching ? totalStudents : null}
-        unit="명"
+        unit={t("att.stat.people")}
       />
       <span className="bg-line h-4 w-px shrink-0" aria-hidden />
       {/* ⚠️ 기록 0건에 "0%"를 쓰지 않는다 — 출석률이 0인 게 아니라 아직 아무도 안 찍은 것이다.
@@ -206,26 +208,26 @@ export function LiveStats({
       {/* ⚠️ 단위(%)는 **한 번만** 붙는다 — 병기 값에도 %를 달면 "91.2 / 88% %"가 된다.
           검색분에 기록이 없어도 전체에 있으면 단위는 %다(그 자리가 "기록 없음"이면 옆 숫자가 미아가 된다). */}
       <CompactMetric
-        label="출석률"
+        label={t("att.stat.rate")}
         value={c.recorded > 0 ? rate : "—"}
         ofTotal={searching ? (all.recorded > 0 ? allRate : "—") : null}
-        unit={c.recorded > 0 || (searching && all.recorded > 0) ? "%" : "기록 없음"}
+        unit={c.recorded > 0 || (searching && all.recorded > 0) ? "%" : t("att.stat.noRecord")}
         valueClass={rateColorOf(c.recorded > 0 ? rate : null)}
       />
       <span className="bg-line h-4 w-px shrink-0" aria-hidden />
       <CompactMetric
-        label="결석"
+        label={t("att.stat.absent")}
         value={c.absent}
         ofTotal={searching ? all.absent : null}
-        unit="회"
+        unit={t("att.stat.times")}
         valueClass="text-danger"
       />
       <span className="bg-line h-4 w-px shrink-0" aria-hidden />
       <CompactMetric
-        label="지각"
+        label={t("att.stat.late")}
         value={c.late}
         ofTotal={searching ? all.late : null}
-        unit="회"
+        unit={t("att.stat.times")}
         valueClass="text-amber"
       />
     </div>

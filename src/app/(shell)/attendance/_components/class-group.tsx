@@ -5,6 +5,8 @@ import { ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { useOptionalCollapse } from "./collapse-source";
 import { useGridCollapse } from "./grid-context";
 import { useClassMatched, useSearchActive } from "./search-context";
+// 라벨은 사전 키로 다다 — 두 버튼(화살표·칩)이 같은 판정과 같은 낟말을 쓴다.
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 function useCollapse() {
   const optional = useOptionalCollapse();
@@ -80,7 +82,7 @@ export function ClassGroupBody({
 export function nextCollapseAction(classIds: readonly string[], collapsed: ReadonlySet<string>) {
   const collapsedCount = classIds.filter((id) => collapsed.has(id)).length;
   const expand = collapsedCount > 0;
-  return { collapsedCount, expand, label: expand ? "전체 펼치기" : "전체 접기" };
+  return { collapsedCount, expand, labelKey: expand ? "att.expandAll" : "att.collapseAll" } as const;
 }
 
 /**
@@ -91,11 +93,13 @@ export function nextCollapseAction(classIds: readonly string[], collapsed: Reado
  *    둘은 같은 판정(`nextCollapseAction`)을 쓴다 — 한쪽만 고치면 두 버튼이 다른 말을 한다.
  */
 export function CollapseAllButton({ classIds }: { classIds: string[] }) {
+  const t = useSheetT();
   const ctx = useCollapse();
   // 검색 중엔 접힘을 무시해 그리므로(위 ClassGroupBody 주석) 이 버튼은 눌러도 아무 일이 안 난다 — 감춘다.
   const searching = useSearchActive();
   if (!ctx || searching) return null;
-  const { expand, label } = nextCollapseAction(classIds, ctx.collapsed);
+  const { expand, labelKey } = nextCollapseAction(classIds, ctx.collapsed);
+  const label = t(labelKey);
   return (
     <button
       type="button"
@@ -116,18 +120,19 @@ export function CollapseAllButton({ classIds }: { classIds: string[] }) {
  * (교실뷰 '경고 N'과 같은 규칙). 반 머리행이 없는 보기에선 아예 안 그린다.
  */
 export function CollapseAllChip({ classIds }: { classIds: string[] }) {
+  const t = useSheetT();
   const ctx = useCollapse();
   // 같은 이유로 검색 중엔 물러난다(짝인 CollapseAllButton과 판정을 맞춘다).
   const searching = useSearchActive();
   if (!ctx || classIds.length === 0 || searching) return null;
-  const { collapsedCount, expand, label } = nextCollapseAction(classIds, ctx.collapsed);
+  const { collapsedCount, expand, labelKey } = nextCollapseAction(classIds, ctx.collapsed);
   return (
     <button
       type="button"
       onClick={() => ctx.setAllCollapsed(!expand)}
       className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}
     >
-      {label}
+      {t(labelKey)}
       {collapsedCount > 0 ? <span className="text-text-faint ml-1 num">{collapsedCount}</span> : null}
     </button>
   );

@@ -1,5 +1,50 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-04 (6) — 강사뷰 en 전환 **8차**: 월별 출석부(/attendance) 전체
+
+원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환시켜줘"*. '내 메뉴'의 **출석부** — 툴바·안내·허브·
+격자·칸 팝오버·합계까지 문구 190여 개를 사전 경유로 옮겼다.
+
+- **툴바**: 과목·강사·반 필터(라벨·aria·'전체 X') · 월 이동(`PeriodNav` aria·툴팁) · 날짜축(세션/월) ·
+  보기(반별/강사 전체) · 정렬 · 퇴직자 숨김 · 급여명세서 · 안내 토글 · 대상 표기(`7개 반` / `{name} 전체 · 7개 반`).
+- **안내 4종**(잠금·교시 귀속·기록 없음·자동 판정)은 굵은 글씨가 끼어 있어 **조각으로 나눠** 사전에 담되
+  조각마다 **앞뒤 공백까지** 값 안에 넣었다(JSX 줄바꿈은 공백을 지우고 `{" "}`는 한국어에 없어야 할 공백을 만든다).
+  🔴 그 안의 '출석'·'결석'은 앱 전역 [`attendanceLabelOf`](../src/features/class-sheets/lib/attendance-label.ts)를
+  그대로 부른다 — 문단에만 적으면 같은 낱말이 화면마다 갈린다.
+- **허브**(강사 미선택 요약): 오늘 현황 한 줄·자리 묶음·퇴직 묶음·학생 검색. 오늘 날짜 표기도 언어를 따른다
+  (`Intl` 로캘만 바꾸고 **시각대는 언제나 KST**).
+- **격자**: 열 머리(이름·학교·학년·청구·납입·시수·출석률) · 반 머리행(인원·시수·교시 담당·담임 이전) ·
+  조작법 한 줄 · 범례 · 학생 행 뱃지(신입·퇴원·반이동) · 칸 툴팁·낭독 · **우클릭 팝오버**(상태 5종·시수·메모) ·
+  합계 줄(청구·납입·정산액·단가 미지정·배분율 안내) · 상단 스탯 4개.
+- **표기 단일 소스 3개를 한글 맵 옆에 새로 뒀다**(나누면 상태가 늘 때 한쪽만 채워져 raw 키가 샌다):
+  `STATUS_TEXT_EN`+`statusTextOf`([cell-display](../src/features/attendance/cell-display.ts)) ·
+  `BADGE_LABEL_EN`+`badgeLabelOf`([enrollment-span](../src/features/attendance/enrollment-span.ts)) ·
+  `ATTENDANCE_SORT_LABEL_EN`+`attendanceSortLabelOf`([sort-rows](../src/features/attendance/sort-rows.ts)).
+  ⚠️ `STATUS_TEXT`는 ECS `ATTENDANCE_LABEL`과 **일부러 다르다**(여기선 공결도 '결석'으로 접는다 = 시수 0) —
+  영어판도 같은 접힘을 유지하고, 가드가 그 사실을 잠근다.
+- **순수 함수에 `lang` 인자(기본 ko)**: `badgeTitle` · `slotBreakdown`/`ghostBreakdown` ·
+  `emptySearchMessage` · `hubEmptyMessage`/`hubTruncatedNote`/`hubSubjectHeading`. 기존 호출부(자리 출석부·
+  시간표·좌석표·원스크린)는 인자를 안 줘서 **한 글자도 안 바뀐다**.
+- 🔴 **반 이름도 표기만 옮긴다**(`classNameFor`): 반 드롭다운 라벨·반 머리행·허브 검색 결과 줄.
+  **값은 id**라 매칭·URL·정렬은 그대로다. 보강 묶음 이름은 반 표기표가 아니라 **출결 라벨 'Makeup'**을 읽는다
+  (반 이름이 아니라 상태와 같은 낱말이라서).
+- 🔴 **반이동 툴팁엔 반 이름이 둘**이라 상대 반도 같은 표기표를 통과시킨다 — 안 그러면 한 문장이
+  `MidE_Elem Bridge C → 중등E_초등 브릿지 D`로 갈린다(적대적 리뷰가 잡았다). MCS 진도표도 같은 함수라 함께 고쳐졌다.
+- **기간 창 표기**([`periodWindowLabel`](../src/features/periods/window-label.ts) 신설): `2026년 3월 세션 (3/6~4/2)`
+  → `March 2026 session (Mar 6–Apr 2)`. 🔴 `PeriodWindow.label`(한국어)은 **한 글자도 안 건드린다** —
+  수납·급여·인쇄가 같은 값을 읽는다. 🔴 라벨월은 `start`가 아니라 **한국어 라벨에서** 읽는다(세션은 둘이 다를 수 있다).
+- 🔴 **서버 컴포넌트엔 훅을 못 쓴다** — `MatrixTable`·`MatrixRow`·`AttendanceHub`는 `GridProvider`의 children으로
+  렌더되는 **서버** 컴포넌트라 `lang`을 prop으로 내려보낸다(기본 ko라 테스트·기존 호출부 무변경).
+  처음에 훅으로 짰다가 이 사실을 놓칠 뻔했다.
+- 가드: `name-wiring.test.ts`에 "월별 출석부는 사전만 본다 — 한글 리터럴 0"(15파일 + 라우트) ·
+  세 표의 한·영 키 집합 일치 · 공결 접힘 · ko 회귀 + `window-label.test.ts`(4).
+- 검증: typecheck 0 · lint 0 · **test 8052(614 파일)**. 마이그레이션 0.
+
+⚠️ **이번 범위 밖**: ① **결석 통보 접수 다이얼로그**(`absence-intake-*`)는 `canManageTenant`(사무실 full)만
+여는 화면이라 강사에겐 버튼이 안 보인다 — 사무실에 열 때 함께 옮긴다. ② 서버 액션이 돌려주는 **거절 사유**는
+여전히 한국어다(옮길 표가 없고, 지어낸 번역이 학생 기록에 대한 거절 사유를 뒤집으면 안 된다).
+③ 과목 라벨은 **학원설정이 단일 소스**라 언어를 안 탄다(사람이 적은 이름 — 상위 규약 그대로).
+
 ## 2026-09-04 (5) — 강사뷰 en 전환 **7차**: 출결 모드(/attendance/quick)
 
 원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환시켜줘"*의 다음 배치. **'내 메뉴' 맨 윗줄**이자 강사가

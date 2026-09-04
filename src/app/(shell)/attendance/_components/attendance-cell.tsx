@@ -4,17 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
 import {
   CELL_SCROLL_MARGIN,
-  STATUS_TEXT,
   cellDisplay,
   ghostBreakdown,
   rollupDay,
   slotBreakdown,
   type SlotMark,
 } from "@/features/attendance/cell-display";
-import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
+import { NOT_MINE_MESSAGE, statusTextOf } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { useCellState } from "./grid-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
+// 화면 언어 — 상태 표기는 `statusTextOf`(한글 맵 옆)가 단일 소스, 나머지 문구는 사전.
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 /**
  * 출석부 시트의 한 칸.
@@ -106,6 +107,9 @@ export function AttendanceCell({
   const [noteEdit, setNoteEdit] = useState<string | null>(null);
   const [popover, setPopover] = useState<PopoverAnchor | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   // 격자에 키보드로 들어올 수 있는 **단 하나의 탭 정거장**(첫 칸). 그 뒤로는 방향키가 받는다 —
   // 칸마다 탭 정거장을 두면 31×N번을 눌러야 표를 지나칠 수 있다.
   const isFirst = ctx?.store.rows[0] === row && ctx?.store.cols[0] === sessionDate;
@@ -146,20 +150,22 @@ export function AttendanceCell({
   const fromReport = derived && status === initialStatus;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
   const title = [
-    locked || (status ? STATUS_TEXT[status] : null),
+    locked || (status ? statusTextOf(status, lang) : null),
     // 교시가 여럿인 날 — 칸엔 합계 하나뿐이라, 무엇을 접었는지 여기서 펼쳐 준다.
-    day ? `${day.count}교시 · ${slotBreakdown(day.slots)}` : null,
+    day
+      ? tf("att.cell.nPeriods", { n: day.count, breakdown: slotBreakdown(day.slots, lang) })
+      : null,
     // 이 표가 안 세는 교시(자리·남의 교시) — 숫자엔 없지만 기록은 있다는 사실을 여기서 밝힌다.
     // ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시가 같은 날)은 고치면 남의 교시까지 함께 바뀐다
     //    (저장은 그날 모든 교시에 간다, save-targets ①). 숫자가 1이라 사정거리가 안 보이므로 여기서 말한다.
     otherSlots?.length
-      ? `${ghostBreakdown(otherSlots)}${status ? " · 이 칸을 고치면 이 교시들도 함께 바뀝니다" : ""}`
+      ? `${ghostBreakdown(otherSlots, lang)}${status ? t("att.cell.alsoWrites") : ""}`
       : null,
     // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
-    outside ? (status ? "재원 기간 밖 기록(보강 등)" : "이 반 재원 기간이 아닙니다") : null,
+    outside ? t(status ? "att.cell.outsideRecord" : "att.cell.outside") : null,
     // 칩의 예외 — 교시가 안 찍힌 기록이라 이 반 담당 전원에게 같은 값이 잡힌다(위 sharedDay 주석).
-    sharedDay ? "교시가 안 찍힌 기록이라 이 반 전체 몫으로 셉니다(다른 선생님 화면에도 같은 값)" : null,
-    fromReport ? "수업보고서 자동 판정" : null,
+    sharedDay ? t("att.cell.sharedDay") : null,
+    fromReport ? t("att.cell.fromReport") : null,
     noteVal || ghostNote || null,
   ]
     .filter(Boolean)
@@ -188,8 +194,10 @@ export function AttendanceCell({
         data-cell-key={key}
         role="gridcell"
         tabIndex={state.active || isFirst ? 0 : -1}
-        aria-label={`${sessionDate} ${status ? STATUS_TEXT[status] : "미기록"}${day ? ` 외 ${day.count - 1}교시` : ""}${
-          otherSlots?.length ? ` · 세지 않는 기록 ${otherSlots.length}건` : ""
+        aria-label={`${sessionDate} ${
+          status ? statusTextOf(status, lang) : t("att.cell.unmarked")
+        }${day ? tf("att.cell.andNPeriods", { n: day.count - 1 }) : ""}${
+          otherSlots?.length ? tf("att.cell.ghostCount", { n: otherSlots.length }) : ""
         }`}
         title={title || undefined}
         // 색이 갈린 교시가 섞인 날만 — 인라인 배경이 클래스 배경을 이긴다(글자색은 클래스 그대로).
@@ -221,7 +229,7 @@ export function AttendanceCell({
             autoFocus
             type="text"
             inputMode="decimal"
-            aria-label="시수 입력"
+            aria-label={t("att.cell.unitsAria")}
             value={state.buffer ?? ""}
             onChange={(e) => {
               const v = e.target.value;
@@ -272,8 +280,8 @@ export function AttendanceCell({
         {state.active && !editing && !locked ? (
           <span
             role="button"
-            aria-label="드래그하여 옆 칸에 같은 값 채우기"
-            title="드래그하여 옆 칸에 같은 값 채우기"
+            aria-label={t("att.cell.fillHandle")}
+            title={t("att.cell.fillHandle")}
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();

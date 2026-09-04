@@ -23,6 +23,13 @@ import {
 } from "@/features/attendance/live/mark-state";
 import { ABSENCE_REASON_PRESETS, LATE_REASON_PRESETS } from "@/features/attendance/quick/reason-presets";
 import { absenceReasonLabelFor, lateReasonLabelFor } from "./reason-label";
+import {
+  ATTENDANCE_SORT_KEYS,
+  ATTENDANCE_SORT_LABEL,
+  ATTENDANCE_SORT_LABEL_EN,
+} from "@/features/attendance/sort-rows";
+import { STATUS_TEXT, STATUS_TEXT_EN } from "@/features/attendance/cell-display";
+import { BADGE_LABEL, BADGE_LABEL_EN } from "@/features/attendance/enrollment-span";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -447,5 +454,94 @@ describe("🔴 출결 모드는 사전만 본다 — 화면 파일에 한글 리
       `${sheetT("ko", "quick.sum.pre")}3${sheetT("ko", "quick.sum.mid")}8/9`,
     ).toBe("미출결 3명 · 입력 8/9");
     expect(sheetTf("ko", "quick.late.arrivalAt", { time: "17:05" })).toBe("17:05 등원");
+  });
+});
+
+/**
+ * 🔴 **월별 출석부(/attendance)에 한국어 리터럴이 남지 않는다.**
+ *
+ * 강사가 지난 날짜를 고치러 오는 화면이고 툴바·격자·팝오버·합계까지 문구가 100개가 넘어서,
+ * 목록으로 잠그면 새 문구가 늘 때 가드가 조용히 뒤처진다 — **파일에 한글이 있는지**를 본다.
+ *
+ * ⚠️ **결석 통보 접수 다이얼로그(`absence-intake-*`)는 이 목록에 없다** — `canManageTenant`(사무실
+ *    full)만 여는 화면이라 강사에겐 버튼 자체가 안 보인다. 사무실에 열 때 함께 옮긴다.
+ * ⚠️ 서버가 만드는 거절 사유(서버 액션 반환 문자열)도 아직 한국어다 — 옮길 표가 없고, 지어낸
+ *    번역이 학생 기록에 대한 거절 사유를 뒤집으면 안 된다.
+ */
+describe("🔴 월별 출석부는 사전만 본다 — 화면 파일에 한글 리터럴 0", () => {
+  const FILES = [
+    "attendance-hub.tsx",
+    "matrix-table.tsx",
+    "matrix-row.tsx",
+    "attendance-cell.tsx",
+    "cell-popover.tsx",
+    "totals-row.tsx",
+    "live-totals.tsx",
+    "hub-student-search.tsx",
+    "hide-retired-toggle.tsx",
+    "sort-select.tsx",
+    "period-mode-toggle.tsx",
+    "payslip-window-button.tsx",
+    "class-group.tsx",
+    "grid-context.tsx",
+    "search-context.tsx",
+  ];
+
+  it.each(FILES)("%s", (f) => {
+    const code = codeOnly(read("app", "(shell)", "attendance", "_components", f));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/.*$/, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("라우트(page.tsx)도 사전 경유 — 툴바·안내·빈 화면이 하드코딩이 아니다", () => {
+    const src = read("app", "(shell)", "attendance", "page.tsx");
+    for (const key of [
+      "att.title",
+      "att.filter.subject",
+      "att.filter.teacher",
+      "att.filter.class",
+      "att.nav.prev",
+      "att.notice.lock.a",
+      "att.notice.scope.b",
+      "att.notice.derived.d",
+      "att.empty.desc",
+    ]) {
+      expect(src).toContain(key);
+    }
+    // 🔴 남는 한글은 **한국어 정본 월 표기 한 줄뿐**이다(`formatMonth`의 ko 인자).
+    const code = codeOnly(src).replace(/\/\/[^\n\r]*/g, "");
+    const hits = code.split(/\r?\n/).filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([`  return sheetMonthLabel(month, \`\${y}년 \${Number(m)}월\`, lang);`]);
+  });
+
+  it("🔴 정렬·출결 표기·뱃지는 한·영 표가 같은 키 집합이다", () => {
+    expect(Object.keys(ATTENDANCE_SORT_LABEL_EN).sort()).toEqual(
+      Object.keys(ATTENDANCE_SORT_LABEL).sort(),
+    );
+    expect(ATTENDANCE_SORT_KEYS.every((k) => !!ATTENDANCE_SORT_LABEL_EN[k])).toBe(true);
+    expect(Object.keys(STATUS_TEXT_EN).sort()).toEqual(Object.keys(STATUS_TEXT).sort());
+    expect(Object.keys(BADGE_LABEL_EN).sort()).toEqual(Object.keys(BADGE_LABEL).sort());
+    for (const v of [...Object.values(STATUS_TEXT_EN), ...Object.values(BADGE_LABEL_EN)]) {
+      expect(v).not.toMatch(/[가-힣]/);
+    }
+  });
+
+  it("🔴🔴 공결은 여기서도 '결석'으로 접힌다 — ECS 표와 일부러 다르다", () => {
+    // 이 표는 시수 0을 말하는 표기라 한국어가 이미 그렇게 접고 있다(cell-display.ts 주석).
+    expect(STATUS_TEXT.excused).toBe(STATUS_TEXT.absent);
+    expect(STATUS_TEXT_EN.excused).toBe(STATUS_TEXT_EN.absent);
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "att.title")).toBe("출석부");
+    expect(sheetT("ko", "att.filter.classAll")).toBe("전체 반");
+    expect(sheetTf("ko", "att.nClasses", { n: 7 })).toBe("7개 반");
+    expect(sheetTf("ko", "att.notices", { n: 2 })).toBe("안내 2");
+    expect(
+      `${sheetT("ko", "att.notice.scope.a")}X${sheetT("ko", "att.notice.scope.e")}`,
+    ).toBe("칸 숫자는 X에서 봅니다.");
   });
 });

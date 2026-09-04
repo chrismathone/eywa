@@ -4,7 +4,9 @@ import Link from "next/link";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { TONE_TEXT } from "@/lib/design/semantic-color";
 import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
-import { BADGE_LABEL, badgeTitle } from "@/features/attendance/enrollment-span";
+import { badgeLabelOf, badgeTitle } from "@/features/attendance/enrollment-span";
+// 뱃지 두 글자·툴팁도 화면 언어를 따른다 — 출석부와 **같은 함수**(라벨 표는 한글 맵 옆).
+import { useSheetLang } from "@/features/teacher-view/lang-context";
 import { railDiffLabel, RAIL_STATUS_LABEL } from "../lib/goal-rail";
 import type { StudentGoalMap } from "../lib/student-goals";
 import type { MathStudentRow, StudentRail } from "../server/month-queries";
@@ -64,6 +66,7 @@ export function StudentHeadCell({
   /** 반 이름 — 반이동 툴팁("가반 → 나반")에만 쓴다. */
   classLabel: string;
 }) {
+  const lang = useSheetLang();
   const ended = stu.rosterPhase === "ended";
   const r = stu.rail;
   const showRail = r != null && r.rail.start != null && !ended;
@@ -91,8 +94,12 @@ export function StudentHeadCell({
         {stu.badges.length > 0 ? (
           <span className="ml-auto flex shrink-0 items-center gap-1">
             {stu.badges.map((b) => (
-              <span key={`${b.kind}-${b.date}`} title={badgeTitle(b, classLabel)} className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}>
-                {BADGE_LABEL[b.kind]}
+              <span
+                key={`${b.kind}-${b.date}`}
+                title={badgeTitle(b, classLabel, lang)}
+                className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
+              >
+                {badgeLabelOf(b.kind, lang)}
               </span>
             ))}
           </span>
