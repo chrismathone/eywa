@@ -79,6 +79,18 @@ export type ShuttleStop = {
   address?: string | null;
 };
 
+/**
+ * **지금 할 수 있는 만큼 채워졌나** — 정류장 관리가 "미지정"을 표시할 때 쓰는 판정(2026-09-04).
+ *
+ * 🔴 `hasCoords`가 아니라 이 함수를 쓴다. 좌표는 **지도 키가 있어야** 찍을 수 있는데, 키가 없는
+ *    동안 "위치 미지정"을 계속 띄우면 **할 수 없는 일을 매일 재촉하는 꼴**이 된다. 주소는 키 없이
+ *    (다음 우편번호 서비스로) 채울 수 있으므로, 주소가 있으면 지금으로선 다 한 것이다.
+ * ⚠️ GPS를 붙일 땐 판정이 달라진다 — 그때는 좌표가 진짜로 필요하므로 `hasCoords`로 다시 좁힌다.
+ */
+export function hasLocation(stop: Pick<ShuttleStop, "lat" | "lng" | "address">): boolean {
+  return hasCoords(stop) || Boolean(stop.address?.trim());
+}
+
 /** 좌표가 실제로 찍혔나 — 한쪽만 있는 값을 "있음"으로 세지 않는다(0244a check와 같은 판정). */
 export function hasCoords(
   stop: Pick<ShuttleStop, "lat" | "lng">,
