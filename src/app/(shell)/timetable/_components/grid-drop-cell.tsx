@@ -26,24 +26,6 @@ import {
 } from "@/features/timetable/lib/class-move";
 
 /**
- * 칸 좌표 속성 이름은 **일반 모듈**([`grid-attrs.ts`](../../../../features/timetable/lib/grid-attrs.ts))에 있다 —
- * 격자를 그리는 `weekday-group-tables.tsx`가 서버 컴포넌트라, 여기(클라 모듈)에 두면 그쪽에서 `undefined`가 된다([[#81]]).
- */
-export {
-  CELL_COL_ATTR,
-  CELL_DAY_ATTR,
-  CELL_DAYIDX_ATTR,
-  CELL_DAYS_ATTR,
-  CELL_GRID_ATTR,
-  CELL_HOT_ATTR,
-  CELL_OK_ATTR,
-  CELL_ROW_ATTR,
-  CELL_START_ATTR,
-  GRID_ID_ATTR,
-  GRID_ROWS_ATTR,
-} from "@/features/timetable/lib/grid-attrs";
-
-/**
  * 격자 칸(요일 × 교시) — 반 블록의 **드롭 대상 표면**.
  *
  * 원장 2026-09-04: *"반을 콕 찝으면 그걸 계산해서 드랍 가능한 위치만 하이라이트"*. 판정은 순수 함수
@@ -156,18 +138,22 @@ export function annotateDropCells(
   for (const c of cells) if (!rowStarts.has(c.grid)) rowStarts.set(c.grid, rowStartsOf(root, c.grid));
   for (const c of cells) {
     const el = c.el;
-    const start = el.getAttribute(CELL_START_ATTR) ?? "";
-    if (from.day === c.day && from.start.slice(0, 5) === start.slice(0, 5)) {
-      el.removeAttribute(CELL_OK_ATTR);
-      el.title = "지금 있는 자리입니다";
-      continue;
-    }
     const target: MoveTarget = {
       groupDays: c.groupDays,
       dayIndex: c.dayIndex,
       rowStarts: rowStarts.get(c.grid) ?? [],
       rowIndex: c.rowIndex,
     };
+    // 🔴 "지금 있는 자리"는 **칸의 시각**이 아니라 **놓았을 때 기준 줄이 갈 자리**로 가른다 — 반교시 확장
+    //    블록은 칸 앵커(윗 교시)와 실제 슬롯(아랫 교시)이 한 칸 어긋나 있어서, 칸 시각으로 비교하면
+    //    제자리도 "옮길 수 있다"가 된다(적대 리뷰 2026-09-04).
+    const placed = placeBlock(subject, target);
+    const anchorAt = placed?.find((w) => w.slotId === subject.slotId) ?? placed?.[0];
+    if (anchorAt && anchorAt.day === from.day && anchorAt.start.slice(0, 5) === from.start.slice(0, 5)) {
+      el.removeAttribute(CELL_OK_ATTR);
+      el.title = "지금 있는 자리입니다";
+      continue;
+    }
     const blockers = classMoveBlockers(subject, target, lookup);
     if (blockers.length === 0) {
       el.setAttribute(CELL_OK_ATTR, "1");

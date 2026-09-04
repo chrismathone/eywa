@@ -27,6 +27,12 @@ describe("시간표 격자 좌표 속성", () => {
     expect(grid).toContain("GRID_ROWS_ATTR");
   });
 
+  it("클라 모듈이 속성 이름을 **재-export하지 않는다**", () => {
+    // 재-export가 있으면 서버 파일이 `./grid-drop-cell`에서 집어도 컴파일은 통과하고 런타임에만 조용히 깨진다.
+    const cell = read("src/app/(shell)/timetable/_components/grid-drop-cell.tsx");
+    expect(cell).not.toMatch(/export\s*\{[^}]*CELL_[A-Z_]+/);
+  });
+
   it("속성 이름은 서로 다르고 data-*다", () => {
     const all = [CELL_DAY_ATTR, CELL_GRID_ATTR, GRID_ID_ATTR, GRID_ROWS_ATTR];
     expect(new Set(all).size).toBe(all.length);

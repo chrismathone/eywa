@@ -108,6 +108,16 @@ export async function moveClassSlots(input: {
     if (row.valid_to && String(row.valid_to).slice(0, 10) < effective) {
       return { ok: false, error: "이미 끝난 배치입니다 — 화면을 새로 고친 뒤 다시 시도해 주세요" };
     }
+    // 🔴 **적용일보다 늦게 시작하는 예약 행은 건드리지 않는다**(적대 리뷰 2026-09-04) — 옮기면 그 행이
+    //    지워지고 새 행이 적용일부터 열려 **예약이 앞당겨지고**, 예약 스냅샷
+    //    (`timetable_snapshots…apply.inserts[].id`, 0231a/0234a 취소·역추적)이 가리키던 id가 고아가 된다.
+    const from = row.valid_from ? String(row.valid_from).slice(0, 10) : null;
+    if (from && from > effective) {
+      return {
+        ok: false,
+        error: `${from}부터 시작하도록 예약된 배치입니다 — 그 날짜 이후로 적용일을 정하거나 예약을 먼저 취소해 주세요`,
+      };
+    }
     const toStart = m.toStart.length === 5 ? `${m.toStart}:00` : m.toStart;
     if (!/^\d{2}:\d{2}:\d{2}$/.test(toStart)) return { ok: false, error: "옮길 시각이 올바르지 않습니다" };
     const dur = toMinutes(String(row.end_time)) - toMinutes(String(row.start_time));
@@ -129,20 +139,27 @@ export async function moveClassSlots(input: {
   // 강사 근무 블록(감독·회의·연차)도 화면과 **같이** 태운다 — 안 태우면 서버가 화면보다 느슨해진다.
   const blocks = mine.subject ? await getTeacherScheduleBlocks(mine.subject, effective) : [];
   const lookup = buildClassMoveLookup(buildClassMoveIndex([...weekSlots, ...blocks], [classId]));
-  const blockers = moveBlockers(
-    {
-      slotId: mine.id,
-      classId,
-      teacher: slotTeacherOf(mine),
-      roomId: slotRoomIdOf(mine),
-      roomTok: slotRoomTokOf(mine),
-      roomName: slotRoomNameOf(mine),
-      seat: isSeatSlot(mine),
-      parts: moves.map((m) => ({ slotId: m.slotId, rowOffset: 0, dayOffset: 0, durMin: 0 })),
-    },
-    windows,
-    lookup,
-  );
+  // 🔴 축(강사·강의실·자리)은 **줄마다** 읽는다 — 한 블록에 그 반의 자리(LAB·JJ) 교시와 정규 교시가 섞일 수
+  //    있어서 기준 줄 한 벌로 판정하면 자리 줄이 전체 축을 끄거나(강사 이중배정 통과) 거짓 빨강이 된다.
+  //    ⚠️ 오프셋(row/day)은 여기선 안 쓴다 — 도착 자리는 이미 `windows`로 정해져 있다(화면이 계산한 값을
+  //    그대로 믿지 않고 위에서 배치를 다시 읽어 길이를 계산했다).
+  const byWeek = new Map(weekSlots.map((s2) => [s2.id, s2]));
+  const parts = moves.map((m) => {
+    const src = byWeek.get(m.slotId);
+    return {
+      slotId: m.slotId,
+      rowOffset: 0,
+      dayOffset: 0,
+      durMin: 0,
+      teacher: src ? slotTeacherOf(src) : null,
+      roomId: src ? slotRoomIdOf(src) : null,
+      roomTok: src ? slotRoomTokOf(src) : "",
+      roomName: src ? slotRoomNameOf(src) : "",
+      // 재료에서 못 찾은 줄은 **자리로 치지 않는다** — 자리로 치면 그 줄의 축이 조용히 꺼진다(느슨한 쪽).
+      seat: src ? isSeatSlot(src) : false,
+    };
+  });
+  const blockers = moveBlockers({ slotId: mine.id, classId, parts }, windows, lookup);
   if (blockers.length > 0) {
     return { ok: false, error: `그 자리로는 옮길 수 없습니다 — ${blockersText(blockers)}` };
   }
@@ -188,10 +205,38 @@ export async function moveClassSlots(input: {
   const className = klass?.class_name ?? null;
 
   const cutoff = shiftDay(effective, -1);
-  const createdIds: string[] = [];
-  // 새 행 — 라벨·강사·강의실·묶음은 그대로 승계한다(폼이 안 보내는 값을 잃지 않는 `preserveScheduleFields`와 같은 결).
+  /**
+   * 되돌리기 일지 — 트랜잭션이 없으니 **한 것을 그대로 되짚어** 원복한다(보상 트랜잭션).
+   * 🔴 옛 코드는 새 행만 지우고 **이미 마감·삭제한 옛 행은 그대로 뒀다** — 중간에 실패하면 그 반이 적용일부터
+   *    교시를 잃은 채 화면엔 "되돌렸습니다"가 떴다(삭제분은 복구 불가, 적대 리뷰 2026-09-04).
+   */
+  const journal: (
+    | { kind: "inserted"; id: string }
+    | { kind: "closed"; id: string; prevValidTo: string | null }
+    | { kind: "deleted"; row: SlotRow }
+  )[] = [];
+  const undo = async () => {
+    // 역순으로 되짚는다(넣은 것은 지우고, 마감은 원래 날짜로, 지운 행은 **원래 id 그대로** 다시 넣는다).
+    for (const j of [...journal].reverse()) {
+      if (j.kind === "inserted") {
+        await admin.from("class_schedules").delete().eq("id", j.id).eq("tenant_id", user.tenantId);
+      } else if (j.kind === "closed") {
+        await admin
+          .from("class_schedules")
+          .update({ valid_to: j.prevValidTo })
+          .eq("id", j.id)
+          .eq("tenant_id", user.tenantId);
+      } else {
+        // 🔴 id를 그대로 되살린다 — 예약 스냅샷·감사로그가 그 id를 가리킨다.
+        await admin.from("class_schedules").insert(j.row);
+      }
+    }
+  };
+
+  // 줄마다 **넣고 곧바로 마감**한다(짝으로) — 중간에 실패해도 되짚을 것이 명확하다.
   for (const w of windows) {
     const row = byId.get(w.slotId)!;
+    // 새 행 — 라벨·강사·강의실·묶음은 그대로 승계한다(폼이 안 보내는 값을 잃지 않는 `preserveScheduleFields`와 같은 결).
     const { data: created, error: insErr } = await admin
       .from("class_schedules")
       .insert({
@@ -213,15 +258,12 @@ export async function moveClassSlots(input: {
       .select("id")
       .single();
     if (insErr || !created) {
-      await rollback(admin, user.tenantId, createdIds);
-      return { ok: false, error: "새 배치를 넣지 못했습니다. 잠시 후 다시 시도해 주세요" };
+      await undo();
+      return { ok: false, error: "새 배치를 넣지 못해 되돌렸습니다. 잠시 후 다시 시도해 주세요" };
     }
-    createdIds.push(String(created.id));
-  }
+    journal.push({ kind: "inserted", id: String(created.id) });
 
-  // 옛 행 — 적용일 전에 시작했으면 **마감**, 적용일에 시작했으면(=아직 하루도 안 산 행) 지운다.
-  for (const w of windows) {
-    const row = byId.get(w.slotId)!;
+    // 옛 행 — 적용일 전에 시작했으면 **마감**, 적용일에 시작했으면(=아직 하루도 안 산 행) 지운다.
     const validFrom = row.valid_from ? String(row.valid_from).slice(0, 10) : null;
     const closing =
       validFrom && validFrom < effective
@@ -229,12 +271,16 @@ export async function moveClassSlots(input: {
         : admin.from("class_schedules").delete().eq("id", row.id).eq("tenant_id", user.tenantId);
     const { error: closeErr } = await closing;
     if (closeErr) {
-      // 새 행만 남으면 같은 칸이 두 번 그려진다 — 되돌린다(트랜잭션이 없어 best-effort, updateClass와 같은 방식).
-      // ⚠️ 이미 마감한 옛 행은 되살리지 않는다(마감은 유실이 아니라 날짜 좁힘이고, 되살리면 되레 두 벌이 된다).
-      await rollback(admin, user.tenantId, createdIds);
+      await undo();
       return { ok: false, error: "옛 배치를 마감하지 못해 되돌렸습니다. 잠시 후 다시 시도해 주세요" };
     }
+    journal.push(
+      validFrom && validFrom < effective
+        ? { kind: "closed", id: row.id, prevValidTo: row.valid_to }
+        : { kind: "deleted", row },
+    );
   }
+  const createdIds = journal.filter((j) => j.kind === "inserted").map((j) => (j as { id: string }).id);
 
   await logAction({
     action: "class_schedule_move",
@@ -258,15 +304,6 @@ export async function moveClassSlots(input: {
   return { ok: true, moved: windows.length };
 }
 
-/** 넣던 중 실패 — 방금 넣은 새 행들을 지운다(같은 칸이 두 번 그려지지 않게). */
-async function rollback(
-  admin: ReturnType<typeof createAdminClient>,
-  tenantId: string,
-  ids: string[],
-): Promise<void> {
-  if (ids.length === 0) return;
-  await admin.from("class_schedules").delete().in("id", ids).eq("tenant_id", tenantId);
-}
 
 /** `YYYY-MM-DD` → 요일 키(`mon`…) — 출결 기록이 **그 줄의 요일**인지 가르는 데 쓴다(UTC 결정적). */
 function weekdayOf(ymd: string): string {

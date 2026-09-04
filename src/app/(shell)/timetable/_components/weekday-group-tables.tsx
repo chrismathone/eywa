@@ -24,7 +24,15 @@ import {
   periodRowHeight,
   stackedHeights,
 } from "@/features/timetable/lib/empty-period-rows";
-import { toMinutes, type MovePart } from "@/features/timetable/lib/class-move";
+import {
+  isSeatSlot,
+  slotRoomIdOf,
+  slotRoomNameOf,
+  slotRoomTokOf,
+  slotTeacherOf,
+  toMinutes,
+  type MovePart,
+} from "@/features/timetable/lib/class-move";
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
@@ -147,21 +155,31 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
 }
 
 /**
- * 화면의 한 블록이 **함께 옮기는** 배치들 — 기준 줄(가장 위·왼쪽)에 대한 상대 위치로 접는다.
+ * 화면의 한 블록이 **함께 옮기는** 배치들 — **블록 앵커 칸**(그 `<td>`)에 대한 상대 위치로 접는다.
  *
  * 🔴 격자는 같은 반의 연속 교시(세로)·같은 그룹 요일(가로)을 한 칸으로 병합해 그린다 — 실측 2026-09-04:
  *    영어는 (반,요일) 121칸이 **전부** 교시 2개 이상이고 106칸이 두 요일에 걸쳐 있다. 기준 줄 하나만 옮기면
  *    화면은 블록이 통째로 간 것처럼 보이는데 나머지 줄이 제자리에 남는다.
- * ⚠️ 기준은 블록의 앵커 칸이 아니라 **실제로 슬롯이 있는 가장 위·왼쪽 칸**이다(반교시 확장 블록은 앵커가 빈 칸일 수 있다).
+ * 🔴 **기준은 앵커 칸이다**(실제 슬롯이 있는 첫 칸이 아니라) — 목적지 좌표가 칸 앵커(`rowIndex={ri}`)라
+ *    프레임이 같아야 한다. 반교시 확장 블록(`expandHalfPeriodBlocks`가 앵커를 윗 교시로 올린 것)은 두 프레임이
+ *    한 칸 어긋나서, **제자리에 놓아도** 교시가 한 칸 올라가고 무동작 가드가 안 걸렸다(적대 리뷰 2026-09-04).
+ * 🔴 강사·강의실·자리 여부를 **줄마다** 싣는다 — 한 블록에 자리(LAB·JJ) 교시와 정규 교시가 섞일 수 있다.
  */
-function blockMoveParts(placed: { slot: ScheduleSlotWithStudents; row: number; dayIdx: number }[]): MovePart[] {
-  const baseRow = Math.min(...placed.map((p) => p.row));
-  const baseDay = Math.min(...placed.map((p) => p.dayIdx));
+function blockMoveParts(
+  placed: { slot: ScheduleSlotWithStudents; row: number; dayIdx: number }[],
+  anchorRow: number,
+  anchorDayIdx: number,
+): MovePart[] {
   return placed.map((p) => ({
     slotId: p.slot.id,
-    rowOffset: p.row - baseRow,
-    dayOffset: p.dayIdx - baseDay,
+    rowOffset: p.row - anchorRow,
+    dayOffset: p.dayIdx - anchorDayIdx,
     durMin: Math.max(0, toMinutes(p.slot.endTime) - toMinutes(p.slot.startTime)),
+    teacher: slotTeacherOf(p.slot),
+    roomId: slotRoomIdOf(p.slot),
+    roomTok: slotRoomTokOf(p.slot),
+    roomName: slotRoomNameOf(p.slot),
+    seat: isSeatSlot(p.slot),
   }));
 }
 
@@ -540,9 +558,10 @@ function GroupTable({
                     }
                     // 이 블록이 담은 반이 하나일 때만 반 드래그(합반은 어느 반을 옮기는지 화면이 말할 수 없다).
                     const blockClassIds = new Set(acc.map((x) => x.classId));
+                    const anchorDayIdx = g.days.indexOf(t.days[ci]!);
                     const moveParts =
-                      blockClassIds.size === 1 && placed.length > 0 && placed.every((p) => p.dayIdx >= 0)
-                        ? blockMoveParts(placed)
+                      blockClassIds.size === 1 && placed.length > 0 && anchorDayIdx >= 0 && placed.every((p) => p.dayIdx >= 0)
+                        ? blockMoveParts(placed, ri, anchorDayIdx)
                         : undefined;
                     // 이 병합 블록이 덮는 요일 — 분리등원 요일 칸 분할용(월목 병합이면 [mon,thu]). 단독 셀이면 [그 요일].
                     const coveringDays = t.days.slice(ci, ci + block.colSpan);

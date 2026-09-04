@@ -37,13 +37,10 @@ import {
   type PendingTarget,
 } from "./edit-context";
 import { setTimetableDragging, type ClassDragInfo } from "./drag-flag";
-import {
-  annotateDropCells,
-  CELL_OK_ATTR,
-  clearDropCells,
-  markHotCells,
-  placementAt,
-} from "./grid-drop-cell";
+import { annotateDropCells, clearDropCells, markHotCells, placementAt } from "./grid-drop-cell";
+// 칸 좌표 속성 이름은 **일반 모듈**에서 — 클라 모듈 재-export를 두면 서버 파일이 실수로 그걸 집어
+// 런타임 undefined가 된다([[#81]], 실제로 한 번 그렇게 깨졌다).
+import { CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs";
 import { useClassMoveIndex } from "./class-move-context";
 import type { MoveSubject } from "@/features/timetable/lib/class-move";
 import { moveClassSlots } from "@/features/timetable/server/move-actions";

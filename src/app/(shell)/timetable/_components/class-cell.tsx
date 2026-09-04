@@ -11,14 +11,7 @@ import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuick } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
-import {
-  isSeatSlot,
-  slotRoomIdOf,
-  slotRoomNameOf,
-  slotRoomTokOf,
-  slotTeacherOf,
-  type MovePart,
-} from "@/features/timetable/lib/class-move";
+import type { MovePart } from "@/features/timetable/lib/class-move";
 import { useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
@@ -196,9 +189,6 @@ export function ClassCell({
   // 반 블록 드래그 — **반 이름 머리**를 잡으면 그 배치가 통째로 움직인다(원장 2026-09-04 *"반이름을 잡고 드래그하면
   // 반 드래그"*). 판정 재료(실효 강사·방·자리 여부·원래 길이)를 data에 실어 보내 격자 칸이 그것만으로 판정한다.
   // ⚠️ 리스너는 **머리 껍데기 div**에 붙인다 — 안쪽 링크의 더블클릭(반 정보 창)은 그대로 살아 있어야 한다.
-  // 판정 헬퍼는 **읽는 필드만** 받으므로 셀 슬롯을 그대로 넘긴다(옛 `as unknown as` 이중 캐스트는
-  // 필드가 어긋나도 타입체크가 못 잡아서 걷어냈다 — 적대 리뷰 2026-09-04).
-  const moveSubjectSlot = slot;
   const canDragBlock = canDrag && !!moveParts && moveParts.length > 0;
   const blockDrag = useDraggable({
     id: `block:${slot.id}`,
@@ -222,12 +212,8 @@ export function ClassCell({
       subject: {
         slotId: slot.id,
         classId: realClassId,
-        teacher: slotTeacherOf(moveSubjectSlot),
-        roomId: slotRoomIdOf(moveSubjectSlot),
-        roomTok: slotRoomTokOf(moveSubjectSlot),
-        roomName: slotRoomNameOf(moveSubjectSlot),
-        seat: isSeatSlot(moveSubjectSlot),
-        // 🔴 블록이 함께 옮기는 줄들 — 판정·저장이 같은 목록을 쓴다(기준 줄만 옮기면 나머지가 남는다).
+        // 🔴 블록이 함께 옮기는 줄들 — 판정·저장이 같은 목록을 쓰고, **강사·강의실·자리 여부도 줄마다** 들어 있다
+        //    (한 블록에 그 반의 자리(LAB·JJ) 교시와 정규 교시가 섞일 수 있다, 적대 리뷰 2026-09-04).
         parts: moveParts ?? [],
       },
     },

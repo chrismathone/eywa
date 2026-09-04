@@ -266,10 +266,14 @@ export default async function TimetablePage({
   // ⚠️ 기본뷰에서도 **편집 권한자에 한해** 읽는다 — 반 블록 이동 판정의 강사 축이 이걸 봐야
   //    "그 시간에 그 강사는 회의/연차"인 칸을 초록으로 칠하지 않는다(적대 리뷰 2026-09-04).
   //    화면엔 안 그린다(반이 아니라서 다른 뷰에 섞으면 수업 수가 부푼다) — 판정 재료로만 쓴다.
+  // ⚠️ 블록은 **과목별로 저장**된다(`teacher_schedule_blocks.subject`) — 영어로 등록된 연차·회의는
+  //    수학 시간표의 이동 판정에 안 잡힌다(같은 과목 안에서만 참인 축이다).
+  // 🔴 여기서 곧바로 await하지 않는다 — 기본뷰는 가장 많이 여는 화면이라 직렬 왕복이 첫 페인트를 민다(B4).
+  //    아래 다른 조회들과 겹쳐 돌리고 **쓰기 직전에** 기다린다.
   const needsBlocks = subject && (view === "teacher" || canEdit);
-  const scheduleBlocks = needsBlocks
-    ? await getTeacherScheduleBlocks(subject, referenceDate, teacherId)
-    : [];
+  const scheduleBlocksPromise = needsBlocks
+    ? getTeacherScheduleBlocks(subject, referenceDate, teacherId)
+    : Promise.resolve([]);
 
   // '시트 반영' 버튼 = sheet_sync 권한(기본 원장·관리자·실장, owner에서 조정) + 지원 과목(math·english) + 연동 ON.
   // 상태는 **현재 보는 과목** 기준. (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 —
@@ -285,6 +289,8 @@ export default async function TimetablePage({
   // 미래 날짜로 적용해 둔 가져오기(예약) — 툴바 배지의 재료. 예약이 없으면 0행이라 비용이 사실상 없고,
   // 권한자에게만 도는 쿼리다(배지의 × 가 권한자 전용이라 남에게 보여줄 이유가 없다).
   const scheduled = canSync && canManageImport ? await getScheduledImports() : [];
+  // 위에서 미리 띄워 둔 근무 블록(판정 재료·강사뷰 격자) — 여기서 한 번 기다린다.
+  const scheduleBlocks = await scheduleBlocksPromise;
   // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(그 과목 전용 시트).
   const sheetUrl = sheetsStatus?.spreadsheetId
     ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`

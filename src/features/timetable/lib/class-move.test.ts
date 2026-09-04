@@ -23,22 +23,23 @@ import {
 const ROWS = ["16:20:00", "17:00:00", "17:40:00", "18:20:00", "19:20:00"];
 const WEEK = ["mon", "thu"];
 
+/** 블록 한 줄 — 강사·강의실·자리 여부를 **줄마다** 싣는다(화면 `blockMoveParts`와 같은 모양). */
 const partOf = (s: MoveSlotLike, rowOffset = 0, dayOffset = 0): MovePart => ({
   slotId: s.id,
   rowOffset,
   dayOffset,
   durMin: toMinutes(s.endTime) - toMinutes(s.startTime),
+  teacher: slotTeacherOf(s),
+  roomId: slotRoomIdOf(s),
+  roomTok: slotRoomTokOf(s),
+  roomName: slotRoomNameOf(s),
+  seat: isSeatSlot(s),
 });
 
 /** 끌고 있는 블록의 판정 재료 — 화면이 드래그 data로 들고 다니는 값과 같은 모양. */
 const subjectOf = (s: MoveSlotLike, parts?: MovePart[]): MoveSubject => ({
   slotId: s.id,
   classId: s.classId,
-  teacher: slotTeacherOf(s),
-  roomId: slotRoomIdOf(s),
-  roomTok: slotRoomTokOf(s),
-  roomName: slotRoomNameOf(s),
-  seat: isSeatSlot(s),
   parts: parts ?? [partOf(s)],
 });
 
@@ -349,6 +350,57 @@ describe("강사·강의실 축 — 자리(LAB·JJ)는 빼고, 학생 축에선 
     const two = [base, lab];
     const b = check(base, "thu", "16:20:00", two);
     expect(b.some((x) => x.kind === "student")).toBe(true);
+  });
+
+  it("자리(LAB)와 정규 교시가 **한 블록**이어도 축은 줄마다 본다", () => {
+    // 기준 줄이 자리면 옛 코드는 블록 전체의 강사 축을 껐다 — 정규 줄이 강사 이중배정으로 통과했다.
+    const labRow = slot({
+      id: "mix-lab",
+      classId: "cx",
+      className: "혼합반",
+      dayOfWeek: "mon",
+      startTime: "16:20:00",
+      endTime: "17:00:00",
+      teacherName: "김은정",
+      slotTeacherLabel: "LAB",
+      slotRoomLabel: "LAB",
+    });
+    const normalRow = slot({
+      id: "mix-normal",
+      classId: "cx",
+      className: "혼합반",
+      dayOfWeek: "mon",
+      startTime: "17:00:00",
+      endTime: "17:40:00",
+      teacherName: "김은정",
+      classroomName: "본원201",
+    });
+    const busyTeacher = slot({
+      id: "other",
+      classId: "cy",
+      className: "다른반",
+      dayOfWeek: "thu",
+      startTime: "17:00:00",
+      endTime: "17:40:00",
+      teacherName: "김은정",
+      classroomName: "본원203",
+    });
+    const parts = [partOf(labRow, 0, 0), partOf(normalRow, 1, 0)];
+    // 목(thu) 첫 행에 놓으면 정규 줄이 17:00로 가서 그 강사의 다른 반과 겹친다 → 막혀야 한다.
+    const b = check(labRow, "thu", "16:20:00", [labRow, normalRow, busyTeacher], parts);
+    expect(b).toEqual([{ kind: "teacher", teacher: "김은정", className: "다른반" }]);
+    // 자리 줄만 겹치는 자리는 통과한다(자리는 같이 쓰는 것이 설계).
+    const busySeat = slot({
+      id: "other2",
+      classId: "cz",
+      className: "랩실반",
+      dayOfWeek: "thu",
+      startTime: "16:20:00",
+      endTime: "17:00:00",
+      slotTeacherLabel: "LAB",
+      slotRoomLabel: "LAB",
+    });
+    expect(check(labRow, "thu", "16:20:00", [labRow, normalRow, busySeat], parts)).toEqual([]);
   });
 
   it("실효 강사·강의실은 셀 override가 이긴다", () => {

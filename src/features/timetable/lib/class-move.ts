@@ -12,6 +12,7 @@
 //    실제로는 배치 여러 줄이다 — 실측 2026-09-04: 영어는 (반,요일) 121칸이 **전부** 교시 2개 이상이고 106칸이
 //    월목/화금 두 요일에 걸쳐 있다. 한 줄만 옮기면 화면은 블록이 통째로 간 것처럼 보이는데 나머지 줄은 제자리에
 //    남는다 → 판정·저장 모두 **블록 전체**(`parts`)를 단위로 한다.
+// 🔴 **강사·강의실·자리 여부는 줄마다 본다** — 한 블록이 그 반의 자리(LAB·JJ) 교시와 정규 교시를 함께 담을 수 있다.
 // 🔴 **블록은 모양을 유지한 채 움직인다** — 각 줄은 기준 줄에 대한 (교시 행 오프셋, 그룹 안 요일 오프셋)을
 //    그대로 지킨다. 시각 차(분)로 옮기지 않는 이유: 영어 교시표는 4~7교시가 서로 겹치고 9→10교시엔 10분 틈이
 //    있어(periods.ts) 분 단위로 밀면 교시에 안 맞는 시각이 나온다.
@@ -353,30 +354,36 @@ export function buildClassMoveIndex(
  */
 export type MovePart = {
   slotId: string;
-  /** 교시 행 오프셋(아래로 +1). 기준 줄은 0. */
+  /** 교시 행 오프셋(아래로 +1). 블록 앵커 칸이 0. */
   rowOffset: number;
-  /** 그룹 안 요일 열 오프셋(오른쪽으로 +1). 기준 줄은 0. */
+  /** 그룹 안 요일 열 오프셋(오른쪽으로 +1). 블록 앵커 칸이 0. */
   dayOffset: number;
   /** 원래 수업 길이(분) — 목적지 교시 길이를 따라가지 않는다. */
   durMin: number;
+  /**
+   * 🔴 강사·강의실·자리 여부는 **줄마다** 다르다 — 한 블록이 그 반의 **자리(LAB·JJ) 교시와 정규 교시를 함께**
+   *    담을 수 있기 때문이다(격자는 반 id로만 병합하고, 자리 슬롯도 `teacherName`이 담임이라 같은 강사 열에 선다).
+   *    기준 줄 한 벌로 판정하면 기준이 자리일 때 **블록 전체의 강사·강의실 축이 꺼져** 강사 이중배정이 통과하고,
+   *    기준이 정규면 자리 줄을 정규 방으로 검사해 **거짓 빨강**이 뜬다(적대 리뷰 2026-09-04).
+   */
+  teacher: string | null;
+  roomId: string | null;
+  roomTok: string;
+  /** 화면에 적을 강의실 이름(사람이 읽는 값). */
+  roomName: string;
+  /** 자리(LAB·JJ) 줄이면 그 줄만 강사·강의실 축에서 빠진다. */
+  seat: boolean;
 };
 
 /** 판정에 필요한, 끌고 있는 **블록**의 정보(화면이 드래그 data로 들고 있는 값). */
 export type MoveSubject = {
-  /** 블록의 기준 배치 id(가장 위·왼쪽 줄) — 큐·마커의 키. */
+  /** 블록의 기준 배치 id — 큐·마커의 키(화면 셀이 그리는 그 반의 대표 줄). */
   slotId: string;
   classId: string;
-  /** 실효 강사 라벨. */
-  teacher: string | null;
-  /** 실효 강의실 FK(없으면 null). */
-  roomId: string | null;
-  /** 실효 강의실 비교 토큰. */
-  roomTok: string;
-  /** 화면에 적을 강의실 이름. */
-  roomName: string;
-  /** 자리(LAB·JJ) 슬롯이면 강사·강의실 축을 안 본다. */
-  seat: boolean;
-  /** 이 블록이 **함께 옮기는** 배치들(기준 줄 포함, 최소 1개). */
+  /**
+   * 이 블록이 **함께 옮기는** 배치들(기준 줄 포함, 최소 1개).
+   * 강사·강의실·자리 여부는 **여기 줄마다** 들어 있다(위 `MovePart` 주석).
+   */
   parts: MovePart[];
 };
 
@@ -429,6 +436,7 @@ export function moveBlockers(
   lookup: ClassMoveLookup,
 ): MoveBlocker[] {
   const movingIds = new Set(subject.parts.map((p) => p.slotId));
+  const partOf = new Map(subject.parts.map((p) => [p.slotId, p]));
   const out: MoveBlocker[] = [];
 
   // ① 학생 — 목적지 요일에 **실제로 오는** 학생만 본다(분리등원).
@@ -460,6 +468,8 @@ export function moveBlockers(
   const seenTeacher = new Set<string>();
   const seenRoom = new Set<string>();
   for (const w of windows) {
+    // 🔴 축은 **그 줄의 것**을 쓴다 — 블록이 자리(LAB)와 정규 교시를 함께 담을 수 있다(MovePart 주석).
+    const me = partOf.get(w.slotId);
     for (const o of lookup.occByDay.get(w.day) ?? []) {
       if (movingIds.has(o.slotId)) continue;
       // 🔴 시간을 **먼저** 본다 — 겹치지도 않는 칸을 이유로 세우면 갈 수 있는 자리가 통째로 잠긴다
@@ -474,18 +484,18 @@ export function moveBlockers(
         }
         continue;
       }
-      if (o.seat || subject.seat) continue; // 자리는 강사·강의실 축을 안 본다(같이 쓰는 것이 설계)
-      if (subject.teacher && o.teacher === subject.teacher && !seenTeacher.has(o.classId)) {
+      if (!me || o.seat || me.seat) continue; // 자리는 강사·강의실 축을 안 본다(같이 쓰는 것이 설계)
+      if (me.teacher && o.teacher === me.teacher && !seenTeacher.has(o.classId)) {
         seenTeacher.add(o.classId);
-        out.push({ kind: "teacher", teacher: subject.teacher, className: o.className });
+        out.push({ kind: "teacher", teacher: me.teacher, className: o.className });
       }
       if (
-        (subject.roomId || subject.roomTok) &&
-        sameRoom(subject, { roomId: o.roomId, roomTok: o.roomTok }) &&
+        (me.roomId || me.roomTok) &&
+        sameRoom(me, { roomId: o.roomId, roomTok: o.roomTok }) &&
         !seenRoom.has(o.classId)
       ) {
         seenRoom.add(o.classId);
-        out.push({ kind: "room", room: subject.roomName || "같은 강의실", className: o.className });
+        out.push({ kind: "room", room: me.roomName || "같은 강의실", className: o.className });
       }
     }
   }
