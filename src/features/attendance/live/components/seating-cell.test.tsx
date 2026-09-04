@@ -138,6 +138,105 @@ describe("낙관 갱신 — 새 시각 옆에 옛 입력자 이름이 남지 않
   });
 });
 
+/**
+ * 출결 메뉴가 **뜨는 자리** — 반 카드가 `overflow-hidden`이라 칸 안에 그리면 잘린다(원장 제보 2026-09-04:
+ * 아랫줄 학생의 메뉴가 카드에 잘려 출결을 못 찍었다). 포털로 카드 밖에 띄우고 화면 안으로 클램프한다.
+ *
+ * 🔑 jsdom은 모든 rect가 0이라 **직접 물려 준다** — 이 스위트가 지키는 건 좌표 계산이지 실제 그림이 아니다.
+ */
+describe("메뉴는 카드 밖(포털)에 뜨고 화면 안에 들어온다", () => {
+  const VW = 1024;
+  const VH = 768;
+  /** 겹판(메뉴)과 앵커(칸 버튼)의 크기를 물려 준다 — 나머지 요소는 0으로 둔다. */
+  function stubRects(anchor: { top: number; bottom: number; left: number; right: number }) {
+    const rect = (r: { top: number; bottom: number; left: number; right: number }) =>
+      ({
+        ...r,
+        width: r.right - r.left,
+        height: r.bottom - r.top,
+        x: r.left,
+        y: r.top,
+        toJSON: () => r,
+      }) as DOMRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.className.includes("z-[9999]"))
+        return rect({ top: 0, bottom: 34, left: 0, right: 120 }); // 겹판 크기
+      if (this.tagName === "BUTTON" && (this.textContent ?? "").includes("김하늘")) return rect(anchor);
+      return rect({ top: 0, bottom: 0, left: 0, right: 0 });
+    });
+  }
+  const menuBox = () => document.querySelector<HTMLElement>(".z-\\[9999\\]");
+
+  beforeEach(() => {
+    setAttendanceCell.mockReturnValue(new Promise(() => {}));
+    Object.defineProperty(window, "innerWidth", { value: VW, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: VH, configurable: true });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("칸 컨테이너 안이 아니라 body에 붙는다(카드 overflow에 안 잘린다)", () => {
+    stubRects({ top: 100, bottom: 136, left: 40, right: 140 });
+    const { container } = render(cell(MARKED));
+    fireEvent.click(chip());
+    const menu = screen.getByRole("button", { name: "출석" });
+    expect(container.contains(menu)).toBe(false); // 카드(칸) 트리 밖
+    expect(document.body.contains(menu)).toBe(true);
+  });
+
+  it("칸 아래에 자리가 있으면 아래에 붙는다", () => {
+    stubRects({ top: 100, bottom: 136, left: 40, right: 140 });
+    render(cell(MARKED));
+    fireEvent.click(chip());
+    expect(menuBox()?.style.top).toBe("140px"); // 칸 바닥 + 4
+    expect(menuBox()?.style.left).toBe("40px");
+  });
+
+  it("🔴 아래 공간이 모자라면 **칸 위로 뒤집는다**(화면 밖으로 안 나간다)", () => {
+    stubRects({ top: 700, bottom: 740, left: 40, right: 140 });
+    render(cell(MARKED));
+    fireEvent.click(chip());
+    // 아래로 두면 740+4+34=778 > 768 → 위로: 700 - 4 - 34
+    expect(menuBox()?.style.top).toBe("662px");
+  });
+
+  it("🔴 오른쪽 끝 칸은 화면 안으로 당겨 붙인다", () => {
+    stubRects({ top: 100, bottom: 136, left: 980, right: 1020 });
+    render(cell(MARKED));
+    fireEvent.click(chip());
+    // 980+120=1100 > 1024-8 → 1024-8-120
+    expect(menuBox()?.style.left).toBe("896px");
+  });
+
+  it("🔴 칸이 스크롤돼 화면 밖으로 나가면 메뉴를 닫는다(엉뚱한 칸에 찍히지 않게)", () => {
+    stubRects({ top: 100, bottom: 136, left: 40, right: 140 });
+    render(cell(MARKED));
+    fireEvent.click(chip());
+    expect(screen.getByRole("button", { name: "출석" })).toBeTruthy();
+
+    stubRects({ top: -200, bottom: -164, left: 40, right: 140 }); // 위로 스크롤돼 사라졌다
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("button", { name: "출석" })).toBeNull();
+  });
+
+  it("Esc로 닫힌다", () => {
+    stubRects({ top: 100, bottom: 136, left: 40, right: 140 });
+    render(cell(MARKED));
+    fireEvent.click(chip());
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "출석" })).toBeNull();
+  });
+
+  it("바깥을 누르면 닫힌다 — 여러 칸의 메뉴가 겹쳐 뜨지 않는다", () => {
+    stubRects({ top: 100, bottom: 136, left: 40, right: 140 });
+    render(cell(MARKED));
+    fireEvent.click(chip());
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("button", { name: "출석" })).toBeNull();
+  });
+});
+
 describe("기록이 없던 칸", () => {
   it("찍기 전엔 시각 줄이 없고, 찍는 즉시 생긴다", () => {
     setAttendanceCell.mockReturnValue(new Promise(() => {}));
