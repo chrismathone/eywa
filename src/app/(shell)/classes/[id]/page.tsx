@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
@@ -36,6 +36,7 @@ import { getScheduledForClass } from "@/features/enrollments/server/scheduled-qu
 import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
 import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
 import { getClassDelegationList } from "@/features/classes/server/delegation";
+import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
 import { ClassHistorySection } from "./_components/history-section";
 import { getClassHistory } from "@/features/classes/server/history-queries";
@@ -82,8 +83,9 @@ export default async function ClassDetailPage({
 
   // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
-  // 분리등원 요일 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
-  const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
+  // 분리등원 요일 더블클릭 편집 — 서버 `updateEnrollmentsAttendanceBatch`는 **관리자(full)만** 통과시킨다.
+  // ⚠️ 종전 `canWriteTenant`는 scoped(강사)도 통과시켜, 강사에게 편집 칸이 열리고 저장만 거절됐다(#77 반대 꼴).
+  const canEditSchedule = await canManageTenant(user.systemRole, "classes");
 
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -123,8 +125,11 @@ export default async function ClassDetailPage({
   // full(원장·부원장·실장)은 학원 전체 반, scoped(강사)는 자기 담당 반만 — 결근을 아는 사람은 본인이라
   // 미리 맡기고 갈 수 있어야 한다. 두 판정이 갈라지면 "버튼은 보이는데 누르면 거절"이 된다.
   const classLevel = await accessLevelTenant(user.systemRole, "classes");
-  const canDelegate =
-    classLevel === "full" || (classLevel === "scoped" && klass.teacherId === user.id);
+  // 🔴 반을 **바꾸는** 것(반 수정·레벨 변경·인수인계·위임)은 전부 같은 판정 하나를 본다
+  //    — 서버 게이트(`requireClassWrite`/`requireDelegationWrite`)와 같은 순수 함수라 갈릴 수 없다.
+  //    강사(scoped)는 자기 담임 반만. 부담임·위임으로 화면을 여는 사람은 **읽기만** 한다.
+  const canEditClass = await canWriteLoadedClass(klass.teacherId);
+  const canDelegate = canEditClass;
   // 반 배정 = 학생 기록 변경 — 서버 createEnrollment 게이트(classes full ∥ students full)와 같은 모양(#77).
   // 강사(양쪽 scoped)는 열람 전용(원장 2026-08-18)이라 버튼 자체를 숨긴다.
   // 수강 종료 = 학생 기록 변경 — 서버 endSingleEnrollment의 게이트(canManageStudentRecords =
@@ -207,13 +212,15 @@ export default async function ClassDetailPage({
               }))}
             />
           ) : null}
-          <Button
-            variant="outline"
-            render={<WindowLink href={`/classes/${klass.id}/edit`} title={sheetT(lang, "cls.d.edit")} />}
-          >
-            <Pencil className="size-4" />
-            {sheetT(lang, "cls.d.edit")}
-          </Button>
+          {canEditClass ? (
+            <Button
+              variant="outline"
+              render={<WindowLink href={`/classes/${klass.id}/edit`} title={sheetT(lang, "cls.d.edit")} />}
+            >
+              <Pencil className="size-4" />
+              {sheetT(lang, "cls.d.edit")}
+            </Button>
+          ) : null}
           {klass.subject === "english" ? (
             // English Class Sheet — 영어 반만(진입 조건은 requireEcsClassAccess가 재검증: skillAreas 설정 기반)
             <Button
@@ -234,7 +241,9 @@ export default async function ClassDetailPage({
             <ClipboardCheck className="size-4" />
             {sheetT(lang, "cls.d.attendance")}
           </Button>
-          <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
+          {canEditClass ? (
+            <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
+          ) : null}
           {canDelegate ? (
             <DelegateAction
               classId={klass.id}
@@ -243,7 +252,7 @@ export default async function ClassDetailPage({
               teacherOptions={handoverPool}
             />
           ) : null}
-          {!klass.pendingTeacherId ? (
+          {canEditClass && !klass.pendingTeacherId ? (
             <HandoverAction
               classId={klass.id}
               currentTeacherName={klass.teacherName}
@@ -311,6 +320,7 @@ export default async function ClassDetailPage({
           pendingDate={klass.pendingTeacherDate}
           reason={klass.pendingTeacherReason}
           due={handoverDue}
+          canAct={canEditClass}
         />
       ) : null}
 

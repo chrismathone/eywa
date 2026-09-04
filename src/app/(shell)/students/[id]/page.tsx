@@ -99,8 +99,9 @@ export default async function StudentDetailPage({
   const canDeleteStudent = await canWriteTenant(user.systemRole, "admin");
   // 시작/종료일 더블클릭 수정 = owner(원장) 콘솔 권한 이상만(관리자 정정).
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
-  // 분리등원 요일(스케줄) 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
-  const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
+  // 분리등원 요일(스케줄) 더블클릭 편집 — 서버 `updateEnrollmentsAttendanceBatch`는 **관리자(full)만**.
+  // ⚠️ 종전 `canWriteTenant`는 scoped(강사)도 통과시켜, 강사에게 편집 칸이 열리고 저장만 거절됐다(#77 반대 꼴).
+  const canEditSchedule = await canManageTenant(user.systemRole, "classes");
   // 잘못 만든 **수업 이력 삭제** = 원장(owner 콘솔 full) + super_admin(원장 2026-08-20).
   // 🔴 super_admin은 새 게이트를 항상 통과한다(원장 2026-08-13). 서버 `deleteEnrollment`가 같은 판정을
   //    다시 하고 붙은 기록까지 검사한다 — 화면 조건은 게이트가 아니다(#77).

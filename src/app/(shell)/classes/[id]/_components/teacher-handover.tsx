@@ -177,6 +177,7 @@ export function HandoverBanner({
   pendingDate,
   reason,
   due,
+  canAct,
 }: {
   classId: string;
   currentTeacherName: string | null;
@@ -184,6 +185,12 @@ export function HandoverBanner({
   pendingDate: string | null;
   reason: string | null;
   due: boolean;
+  /**
+   * 적용·취소 버튼 노출 — 서버(`applyHandover`/`cancelHandover`)와 **같은 판정**(담임 또는 관리자).
+   * 🔴 예약 **사실 자체는 누구에게나 보인다**(부담임·위임 강사도 담임이 바뀌는 것은 알아야 한다).
+   *    감추는 것은 버튼뿐이다.
+   */
+  canAct: boolean;
 }) {
   const [, applyAction] = useActionState<HandoverState, FormData>(applyHandover, undefined);
   const [, cancelAction] = useActionState<HandoverState, FormData>(cancelHandover, undefined);
@@ -214,16 +221,18 @@ export function HandoverBanner({
         </p>
         {reason ? <p className="text-text-dim mt-0.5 text-xs">{reason}</p> : null}
       </div>
-      <div className="flex items-center gap-2">
-        <form action={applyAction}>
-          <input type="hidden" name="classId" value={classId} />
-          <MiniSubmit label={t("cls.ho.applyNow")} tone="primary" />
-        </form>
-        <form action={cancelAction}>
-          <input type="hidden" name="classId" value={classId} />
-          <MiniSubmit label={t("cls.ho.cancelBooking")} tone="ghost" />
-        </form>
-      </div>
+      {canAct ? (
+        <div className="flex items-center gap-2">
+          <form action={applyAction}>
+            <input type="hidden" name="classId" value={classId} />
+            <MiniSubmit label={t("cls.ho.applyNow")} tone="primary" />
+          </form>
+          <form action={cancelAction}>
+            <input type="hidden" name="classId" value={classId} />
+            <MiniSubmit label={t("cls.ho.cancelBooking")} tone="ghost" />
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

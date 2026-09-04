@@ -60,7 +60,7 @@ export async function ClassesTab({
   student: StudentDetail;
   canEnd: boolean;
   canEditDates: boolean;
-  /** 분리등원 요일(스케줄 셀) 더블클릭 편집 노출 — canWriteTenant("classes"). */
+  /** 분리등원 요일(스케줄 셀) 더블클릭 편집 노출 — canManageTenant("classes", 서버 액션과 같은 축). */
   canEditSchedule: boolean;
   /**
    * 잘못 만든 수업 이력 **삭제**(원장·super_admin) 노출 — 서버 `deleteEnrollment` 게이트와 같은 모양(#77).

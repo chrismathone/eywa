@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
 import {
   getClassDetail,
   getClassTeacherOptions,
@@ -55,6 +56,10 @@ export default async function EditClassPage({
   ]);
 
   if (!klass) notFound();
+  // 🔴 **남의 반 수정 폼은 열지 않는다** — 서버 액션(`updateClass`)과 같은 판정을 화면에서도 한 번
+  //    (#77: 폼을 열 수 있으면 "저장만 거절"이 되고, 그 사이 입력한 것이 통째로 사라진다).
+  //    `getClassDetail`이 이미 열람 스코프를 걸지만 그쪽은 **부담임·위임까지 넓다**(읽기 축).
+  if (!(await canWriteLoadedClass(klass.teacherId))) notFound();
   // 🔴 현재 담임이 배정 후보 밖(퇴직·역할 변경)이어도 **선택지에 남긴다**. 담임 select는 컨트롤드라
   // 값에 맞는 option이 없으면 빈 칸이 되고, 그대로 저장하면 `teacherId: get(...) || null`로 담임이
   // **조용히 NULL이 된다**(반을 고치러 들어갔다가 담임을 지우는 사고). 이름은 이미 klass에 있어 추가 조회 없음.

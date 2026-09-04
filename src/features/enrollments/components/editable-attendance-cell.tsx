@@ -12,7 +12,9 @@ const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 /**
  * 분리등원 요일(attendance_days) 더블클릭 인라인 수정 — EditableDateCell의 등원요일판.
- * 학생 상세 수업탭(스케줄 셀) + 수업 상세 로스터('화만' 배지) 공용. 노출은 호출부가 canWriteTenant("classes")로 게이트.
+ * 학생 상세 수업탭(스케줄 셀) + 수업 상세 로스터('화만' 배지) 공용. 노출은 호출부가
+ * canManageTenant("classes")로 게이트 — 저장하는 `updateEnrollmentsAttendanceBatch`가 관리자 전용이라
+ * 같은 축이어야 한다(canWriteTenant면 강사에게 칸만 열리고 저장은 거절된다).
  * children = 비편집 표시(스케줄/배지). 반 운영 요일(classDays)이 선택지, attendanceDays=[]는 전 요일 등원(분리 해제).
  * 저장은 updateEnrollmentsAttendanceBatch(단건). 전 요일 선택 = [] 저장(분리 해제), 부분 = 그 요일.
  */
