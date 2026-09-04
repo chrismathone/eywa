@@ -15,7 +15,8 @@ import {
 } from "@/features/onescreen/server/report-author-name";
 import { ResumeSheet } from "../staff/resumes/_components/resume-sheet";
 // 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
-// 🔴 아래 `ResumeSheet`(이력서 종이 서식)는 **인쇄물**이라 한국어 고정 — 여기 문구만 옮긴다.
+// 🔴 아래 `ResumeSheet`(이력서 종이 서식)는 **화면만** 언어를 타고 **인쇄물은 언제나 한국어**다
+//    (원장 2026-09-04 *"화면만 갈라서"*) — 가르는 장치는 그 파일의 `PaperText`.
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { AccountCard } from "./_components/account-card";

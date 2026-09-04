@@ -35,6 +35,14 @@ import {
   STUDENT_STATUS_LABEL_EN,
   studentStatusLabel,
 } from "@/features/students/status-labels";
+import {
+  EMPLOYMENT_TYPE_EN,
+  EMPLOYMENT_TYPES,
+  RESUME_CHECKS,
+  RESUME_COMPANIES,
+  RESUME_DEPARTMENTS,
+  WORKDAYS,
+} from "@/features/staff/resume";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -594,5 +602,79 @@ describe("🔴 학생목록은 사전만 본다 — 화면 파일에 한글 리�
       "재원 3명 · 담당 과목 기준",
     );
     expect(`${sheetT("ko", "stu.count.pre")}12${sheetT("ko", "stu.count.post")}`).toBe("결과 12명");
+  });
+});
+
+describe("🔴 이력서 종이 서식 — 화면만 언어를 타고 인쇄물은 언제나 한국어", () => {
+  const sheet = () => read("app", "(shell)", "staff", "resumes", "_components", "resume-sheet.tsx");
+
+  it.each(["resume-sheet.tsx", "resume-buttons.tsx"])("%s — 한글 리터럴 0", (f) => {
+    const code = codeOnly(read("app", "(shell)", "staff", "resumes", "_components", f));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 인쇄물은 한국어다 — 두 낱말을 함께 싣고 CSS로 가른다", () => {
+    const code = codeOnly(sheet());
+    // 영어 조각은 인쇄에서 빠지고 한국어 조각이 인쇄에서만 나타난다.
+    // 한쪽을 지우면 학원이 보관하는 인사 서류가 영어로 인쇄된다.
+    expect(code).toContain('<span className="print:hidden">{en}</span>');
+    expect(code).toContain('<span className="hidden print:inline">{ko}</span>');
+  });
+
+  it("🔴 인쇄되는 칸 이름은 전부 <P>를 지난다 — t()로 적으면 인쇄물이 영어가 된다", () => {
+    const code = codeOnly(sheet());
+    const heads = code.split(/\r?\n/).filter((l) => l.includes("<th className="));
+    expect(heads.length).toBeGreaterThanOrEqual(30);
+    // 🔴 예외는 **두 언어에서 글자가 같은 칸**뿐이고 명단으로만 늘린다 — "한글이 없으면 통과"로
+    //    두면 영어만 적은 칸이 조용히 통과해 그대로 인쇄된다.
+    const NEUTRAL = ["<th className={head}>E-mail</th>"];
+    const missing = heads.filter(
+      (l) => !l.includes("<P k=") && !NEUTRAL.some((n) => l.trim() === n),
+    );
+    expect(missing).toEqual([]);
+    expect(code.match(/<SectionHead><P k="res\.sec\./g)?.length).toBe(6);
+  });
+
+  it("🔴 저장값(근무요일·근무형태·서류)은 한 글자도 안 바뀐다 — 영어는 표시 전용", () => {
+    expect(WORKDAYS.map((d) => d.key)).toEqual(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
+    expect(WORKDAYS.map((d) => d.label)).toEqual(["월", "화", "수", "목", "금", "토", "일"]);
+    expect(EMPLOYMENT_TYPES).toEqual(["정규직", "아르바이트", "프리랜서"]);
+    expect(RESUME_CHECKS.map((c) => c.key)).toEqual([
+      "sexCrime",
+      "childAbuse",
+      "eduOffice",
+      "etcDocs",
+    ]);
+  });
+
+  it("🔴 한·영 표가 같은 키 집합이다 — 빠진 값은 한글로 새거나 raw로 샌다", () => {
+    for (const d of WORKDAYS) expect(d.en).not.toMatch(/[가-힣]/);
+    for (const c of RESUME_CHECKS) expect(c.en).not.toMatch(/[가-힣]/);
+    expect(Object.keys(EMPLOYMENT_TYPE_EN).sort()).toEqual([...EMPLOYMENT_TYPES].sort());
+    for (const v of Object.values(EMPLOYMENT_TYPE_EN)) expect(v).not.toMatch(/[가-힣]/);
+  });
+
+  it("🔴 회사 구분·근무부서·직급은 언어를 안 탄다 — 조직·직급 이름은 한국어가 정본", () => {
+    // 뷰 모드에서 이 셋은 저장값을 그대로 그린다(V(...)) — 영어 표를 만들면 편집 화면과 갈린다.
+    expect(RESUME_COMPANIES.some((v) => /[가-힣]/.test(v))).toBe(true);
+    expect(RESUME_DEPARTMENTS).toContain("영어과");
+    const code = codeOnly(sheet());
+    for (const v of ["V(c.company)", "V(c.division)", "V(c.jobTitle)"]) expect(code).toContain(v);
+    expect(code).not.toContain("RESUME_DEPARTMENT_EN");
+    expect(code).not.toContain("RESUME_COMPANY_EN");
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "res.title.resume")).toBe("이력서");
+    expect(sheetT("ko", "res.title.roster")).toBe("직원 명부");
+    expect(sheetT("ko", "res.sec.personal")).toBe("1. 인적사항");
+    expect(sheetT("ko", "res.f.rrn")).toBe("주민등록번호");
+    expect(sheetT("ko", "res.hint.view")).toBe("종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다.");
+    expect(sheetTf("ko", "res.opt.existing", { v: "국어과" })).toBe("국어과 (기존)");
+    expect(sheetTf("ko", "res.del.askNamed", { name: "박소선" })).toBe("박소선 이력서 삭제?");
   });
 });

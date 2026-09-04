@@ -79,6 +79,8 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
         "presence",
         // 출결 모드(/attendance/quick) — 강사가 복도에서 여는 화면.
         "quick",
+        // 이력서 종이 서식(/me) — 🔴 화면만 언어를 타고 **인쇄물은 언제나 한국어**다.
+        "res",
         "roster",
         // 드롭다운(FieldSelect) 공통 — 저장값은 그대로 두고 표시만 언어를 따른다.
         "select",
