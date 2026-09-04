@@ -58,14 +58,18 @@ export type BusyWindow = {
   end: string;
   /** 그 시간에 학생들이 가 있는 반 이름. */
   className: string;
-  /** 그 칸에 걸리는 학생 이름들(이 반 소속 기준). */
+  /** 그 칸에 걸리는 학생 이름들(이 반 소속 기준) — 화면은 3명까지 적고 나머지는 수로 말하므로 **최대 4명**만 싣는다. */
   names: string[];
+  /** 이름을 자른 뒤 남은 인원(0이면 생략) — payload를 키우지 않으면서 "외 N명"을 정확히 적기 위한 값. */
+  more?: number;
   /** 그 학생들이 **목적지 요일에 실제로 오는지** 판정하려면 요일별 등원이 필요하다 → 요일 제한이 있는 학생만 따로. */
   daysByName?: Record<string, string[]>;
 };
 
-/** 강사·강의실 판정용 슬롯(학생 없이). */
+/** 강사·강의실(그리고 같은 반의 다른 칸) 판정용 슬롯 — 학생 없이. */
 export type OccupancySlot = {
+  /** 배치(스케줄) id — 끌고 있는 **그 칸 자신**만 판정에서 빼기 위해 필요하다(같은 반의 다른 칸은 막아야 한다). */
+  slotId: string;
   classId: string;
   className: string;
   day: string;
@@ -85,11 +89,44 @@ export type ClassMoveIndex = {
   occupancy: OccupancySlot[];
 };
 
+/**
+ * 칸마다 부를 판정을 위해 **요일로 미리 나눠 둔** 색인 — 화면이 드래그 한 번에 한 벌 만든다.
+ * 🔴 칸이 수백 개라 칸마다 전 슬롯을 훑으면 그 곱이 곧 픽업 렉이다(실측: 300칸 × 500슬롯).
+ *    요일로 먼저 나누면 훑는 양이 1/6로 준다(가져오기 충돌 판정 `conflicts.ts`가 쓰는 것과 같은 수법).
+ */
+export type ClassMoveLookup = {
+  /** `${classId}|${day}` → 그 반 학생들이 그 요일에 다른 반에 잡혀 있는 칸들. */
+  busyByClassDay: Map<string, BusyWindow[]>;
+  /** 요일 → 그 요일 슬롯(강사·강의실·같은 반 판정용). */
+  occByDay: Map<string, OccupancySlot[]>;
+};
+
+/** 서버가 준 색인 → 요일별로 나눈 조회용 색인(클라에서 드래그당 한 번). */
+export function buildClassMoveLookup(index: ClassMoveIndex): ClassMoveLookup {
+  const busyByClassDay = new Map<string, BusyWindow[]>();
+  for (const [classId, wins] of Object.entries(index.busyByClass)) {
+    for (const w of wins) {
+      const k = `${classId}|${w.day}`;
+      const list = busyByClassDay.get(k);
+      if (list) list.push(w);
+      else busyByClassDay.set(k, [w]);
+    }
+  }
+  const occByDay = new Map<string, OccupancySlot[]>();
+  for (const o of index.occupancy) {
+    const list = occByDay.get(o.day);
+    if (list) list.push(o);
+    else occByDay.set(o.day, [o]);
+  }
+  return { busyByClassDay, occByDay };
+}
+
 /** 옮길 수 없는 이유 — 화면이 그대로 문장으로 만든다(빈 배열이면 갈 수 있다). */
 export type MoveBlocker =
-  | { kind: "student"; names: string[]; className: string }
+  | { kind: "student"; names: string[]; className: string; more?: number }
   | { kind: "teacher"; teacher: string; className: string }
-  | { kind: "room"; room: string; className: string };
+  | { kind: "room"; room: string; className: string }
+  | { kind: "self"; className: string };
 
 /** 그 슬롯의 실효 강사 라벨 — 셀 override가 반 담임을 이긴다(시간표 표시와 같은 우선순위). */
 export function slotTeacherOf(s: MoveSlotLike): string | null {
@@ -103,6 +140,9 @@ export function slotRoomKeyOf(s: MoveSlotLike): string | null {
   const label = s.slotRoomLabel ?? s.classroomName;
   return label ? `label:${label.trim()}` : null;
 }
+
+/** 한 칸에 이름을 몇 명까지 싣나 — 화면은 3명 + "외 N명"이라 4면 충분하다. */
+const NAME_CAP = 4;
 
 /** 화면에 적을 강의실 이름(키가 아니라 사람이 읽는 값). */
 export function slotRoomNameOf(s: MoveSlotLike): string {
@@ -187,7 +227,11 @@ export function buildClassMoveIndex(
         const name = nameOf.get(studentId) ?? "학생";
         const cur = merged.get(key);
         if (cur) {
-          if (!cur.names.includes(name)) cur.names.push(name);
+          if (!cur.names.includes(name)) {
+            // 이름은 4명까지만 — 화면이 3명 + "외 N명"으로 적는다(payload를 사람 수만큼 키우지 않는다).
+            if (cur.names.length < NAME_CAP) cur.names.push(name);
+            else cur.more = (cur.more ?? 0) + 1;
+          }
           if (days && days.length > 0) (cur.daysByName ??= {})[name] = days;
         } else {
           const win: BusyWindow = { day: w.day, start: w.start, end: w.end, className: w.className, names: [name] };
@@ -199,21 +243,46 @@ export function buildClassMoveIndex(
     if (merged.size > 0) busyByClass[classId] = [...merged.values()];
   }
 
-  const occupancy: OccupancySlot[] = slots.map((s) => ({
-    classId: s.classId,
-    className: s.className,
-    day: s.dayOfWeek,
-    start: s.startTime,
-    end: s.endTime,
-    teacher: slotTeacherOf(s),
-    roomKey: slotRoomKeyOf(s),
-    seat: isSeatSlot(s),
-  }));
+  // 강사·강의실 축은 **화면에 뜬 반이 실제로 쓰는 강사·방과 겹칠 수 있는 슬롯만** 싣는다 —
+  // 전 과목 939행을 통째로 내려보내면 그 자체가 페이지 payload가 된다(B5의 결). 판정 결과는 같다:
+  // 나머지 행은 강사도 방도 안 겹쳐서 어차피 막지 못한다.
+  const myTeachers = new Set<string>();
+  const myRooms = new Set<string>();
+  // 같은 반의 다른 칸도 판정 대상이다 — 한 반이 같은 시간에 두 곳에 있을 수는 없다.
+  for (const s of slots) {
+    if (!want.has(s.classId) || isSeatSlot(s)) continue;
+    const t = slotTeacherOf(s);
+    if (t) myTeachers.add(t);
+    const r = slotRoomKeyOf(s);
+    if (r) myRooms.add(r);
+  }
+  const occupancy: OccupancySlot[] = [];
+  for (const s of slots) {
+    if (isSeatSlot(s)) continue; // 자리는 강사·강의실 축에서 늘 빠진다(같이 앉는 것이 설계)
+    const teacher = slotTeacherOf(s);
+    const roomKey = slotRoomKeyOf(s);
+    const hitTeacher = teacher != null && myTeachers.has(teacher);
+    const hitRoom = roomKey != null && myRooms.has(roomKey);
+    if (!hitTeacher && !hitRoom && !want.has(s.classId)) continue;
+    occupancy.push({
+      slotId: s.id,
+      classId: s.classId,
+      className: s.className,
+      day: s.dayOfWeek,
+      start: s.startTime,
+      end: s.endTime,
+      teacher: hitTeacher ? teacher : null,
+      roomKey: hitRoom ? roomKey : null,
+      seat: false,
+    });
+  }
   return { busyByClass, occupancy };
 }
 
 /** 판정에 필요한, 끌고 있는 블록의 정보(화면이 드래그 data로 들고 있는 값). */
 export type MoveSubject = {
+  /** 끌고 있는 **그 배치**의 id — 자기 자신만 판정에서 뺀다(같은 반의 다른 칸은 막는다). */
+  slotId: string;
   classId: string;
   /** 실효 강사 라벨. */
   teacher: string | null;
@@ -235,27 +304,51 @@ export function classMoveBlockers(
   subject: MoveSubject,
   toDay: string,
   toStart: string,
-  index: ClassMoveIndex,
+  lookup: ClassMoveLookup,
 ): MoveBlocker[] {
   const toEnd = movedEndTime(subject, toStart);
   const out: MoveBlocker[] = [];
 
   // ① 학생 — 목적지 요일에 **실제로 오는** 학생만 본다(분리등원).
-  for (const w of index.busyByClass[subject.classId] ?? []) {
-    if (w.day !== toDay) continue;
+  // ⚠️ 같은 반이 그 시간에 여러 칸(교시)을 가지면 이유가 그 수만큼 반복된다 → **반 이름으로 합친다**.
+  const byClass = new Map<string, { names: string[]; more: number }>();
+  for (const w of lookup.busyByClassDay.get(`${subject.classId}|${toDay}`) ?? []) {
     if (!timeRangesOverlap(toStart, toEnd, w.start, w.end)) continue;
     const names = w.names.filter((n) => attendsOn(w.daysByName?.[n], toDay));
-    if (names.length > 0) out.push({ kind: "student", names, className: w.className });
+    // 잘린 인원(`more`)은 이름을 모르니 수로만 더한다 — 이름이 하나도 안 남았는데 잘린 인원이 있으면
+    // 그래도 막힌 것은 사실이라 그 사실을 알린다(요일 제한은 이름이 있는 쪽에만 걸린다).
+    const more = w.names.length === names.length ? (w.more ?? 0) : 0;
+    if (names.length === 0 && more === 0) continue;
+    const cur = byClass.get(w.className);
+    if (cur) {
+      for (const n of names) if (!cur.names.includes(n)) cur.names.push(n);
+      cur.more = Math.max(cur.more, more);
+    } else byClass.set(w.className, { names: [...names], more });
+  }
+  for (const [className, v] of byClass) {
+    out.push({ kind: "student", names: v.names, className, more: v.more });
   }
 
   // ②③ 강사·강의실 — 자리(LAB·JJ)는 뺀다(여럿이 동시에 쓰는 것이 설계).
-  if (!subject.seat) {
+  {
+    let seenSelf = false;
     const seenTeacher = new Set<string>();
     const seenRoom = new Set<string>();
-    for (const o of index.occupancy) {
-      if (o.classId === subject.classId || o.seat) continue;
-      if (o.day !== toDay) continue;
+    for (const o of lookup.occByDay.get(toDay) ?? []) {
+      if (o.slotId === subject.slotId || o.seat) continue;
+      // 🔴 시간을 **먼저** 본다 — 겹치지도 않는 칸을 이유로 세우면 갈 수 있는 자리가 통째로 잠긴다
+      //    (자기 반 칸도 마찬가지다: 다른 시각이면 아무 문제가 없다).
       if (!timeRangesOverlap(toStart, toEnd, o.start, o.end)) continue;
+      // 같은 반의 **다른 칸**이 그 시간에 있으면 못 간다 — 한 반이 두 곳에 동시에 있을 수 없다
+      // (월·목 병합 블록의 월 칸을 목 같은 시각으로 끌면 자기 목 칸과 겹친다).
+      if (o.classId === subject.classId) {
+        if (!seenSelf) {
+          seenSelf = true;
+          out.push({ kind: "self", className: o.className });
+        }
+        continue;
+      }
+      if (subject.seat) continue; // 자리(LAB·JJ)는 강사·강의실 축을 안 본다(같이 쓰는 것이 설계)
       if (subject.teacher && o.teacher === subject.teacher && !seenTeacher.has(o.classId)) {
         seenTeacher.add(o.classId);
         out.push({ kind: "teacher", teacher: subject.teacher, className: o.className });
@@ -273,9 +366,11 @@ export function classMoveBlockers(
 export function blockerText(b: MoveBlocker): string {
   if (b.kind === "student") {
     const head = b.names.slice(0, 3).join("·");
-    const rest = b.names.length > 3 ? ` 외 ${b.names.length - 3}명` : "";
-    return `${head}${rest} — 그 시간에 ${b.className}`;
+    const hidden = Math.max(0, b.names.length - 3) + (b.more ?? 0);
+    const rest = hidden > 0 ? ` 외 ${hidden}명` : "";
+    return `${head || "학생"}${rest} — 그 시간에 ${b.className}`;
   }
+  if (b.kind === "self") return `${b.className} — 그 시간에 이 반의 다른 수업이 있습니다`;
   if (b.kind === "teacher") return `${b.teacher} 강사 — 그 시간에 ${b.className}`;
   return `${b.room} — 그 시간에 ${b.className}`;
 }

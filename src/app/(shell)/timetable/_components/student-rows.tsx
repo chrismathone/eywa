@@ -6,6 +6,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { dayChangeLabel } from "@/features/timetable/lib/split-attendance";
 import { useTimetableEdit } from "./edit-context";
+import { isCoarsePointer, setArmedRow, useIsArmedRow } from "./drag-flag";
 import { HoverCard, StudentInfoCard } from "./hover-cards";
 import { useSearchTone } from "./search-context";
 
@@ -127,22 +128,17 @@ function StudentNameLink({
  * **더블클릭**으로 학생 정보 창, **우클릭**으로 등원 요일 편집(2요일+ 셀). 이동 예정이면 취소선 + 대상 마커.
  * ⚠️ 드래그 리스너는 바깥 div에, 여는 동작은 안쪽 링크에 둔다(포인터 이벤트가 위로 버블링해 둘 다 산다).
  */
-export function DraggableStudentRow({
-  student,
-  enrollmentId,
-  studentId,
-  classId,
-  className,
-  name,
-  meta,
-  tone,
-  dayKey,
-  attendanceDays,
-  slotId,
-  coveringDays,
-  badge,
-  blockingClassIds,
-}: {
+export function DraggableStudentRow(props: DraggableRowProps) {
+  // 🔴 **마우스가 올라간 줄만** dnd 장치를 단다(drag-flag.ts `useIsArmedRow` 주석) — 348줄이 전부 훅을 들면
+  //    집는 순간 그 전부가 다시 그려진다. 무장 줄과 평소 줄은 **같은 DOM**이라 마우스가 지나도 움찔하지 않는다.
+  // ⚠️ 터치·펜엔 hover가 없어 그 기기에선 늘 무장한다(느린 것보다 못 옮기는 게 나쁘다).
+  const rowKey = props.dayKey ? `${props.enrollmentId}:${props.dayKey}` : props.enrollmentId;
+  const armed = useIsArmedRow(rowKey);
+  if (armed || isCoarsePointer()) return <ArmedStudentRow {...props} />;
+  return <RestingStudentRow {...props} rowKey={rowKey} />;
+}
+
+type DraggableRowProps = {
   /** hover 카드 재료 — 읽기 행과 같은 카드를 띄운다(권한이 있다고 정보가 사라지면 안 된다). */
   student?: StudentQuick;
   enrollmentId: string;
@@ -164,23 +160,74 @@ export function DraggableStudentRow({
   badge?: string;
   /** 열린 수강(active+hold) 소속 반 전부 — resolveDropTarget의 소속 반 이동 차단용(drag data). */
   blockingClassIds?: string[];
+};
+
+/** 무장 전 — dnd 훅 없이 **같은 모습**으로 그리고, 마우스가 올라오면 무장시킨다. */
+function RestingStudentRow({ rowKey, ...props }: DraggableRowProps & { rowKey: string }) {
+  return <StudentRowView {...props} onArm={() => setArmedRow(rowKey)} />;
+}
+
+/** 무장 후 — dnd-kit draggable. 끌면 이동 큐에 쌓이고 반영은 '저장'이다. */
+function ArmedStudentRow(props: DraggableRowProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: props.dayKey ? `student:${props.enrollmentId}:${props.dayKey}` : `student:${props.enrollmentId}`,
+    // meta·tone·badge는 **드래그 고스트가 원본 줄 그대로** 보이게 하려고 싣는다(원장 2026-09-04
+    // *"드래그해도 '황혜린/칠성초6'이 … 파일이동처럼 조금 연하게"*). 판정엔 안 쓴다.
+    data: {
+      classId: props.classId,
+      name: props.name,
+      meta: props.meta,
+      tone: props.tone,
+      badge: props.badge,
+      fromClassName: props.className,
+      enrollmentId: props.enrollmentId,
+      attendanceDays: props.attendanceDays,
+      blockingClassIds: props.blockingClassIds,
+    },
+  });
+  return (
+    <StudentRowView {...props} dnd={{ attributes, listeners, setNodeRef, isDragging }} />
+  );
+}
+
+/**
+ * 줄의 **모습** — 무장 여부와 무관하게 같은 DOM을 그린다(달라지면 마우스가 지날 때마다 줄이 움찔한다).
+ * 끌 수 있는 상태면 `dnd`가 붙고, 아니면 `onArm`(마우스 진입)만 붙는다.
+ */
+function StudentRowView({
+  student,
+  enrollmentId,
+  studentId,
+  classId,
+  className,
+  name,
+  meta,
+  tone,
+  attendanceDays,
+  slotId,
+  coveringDays,
+  badge,
+  dnd,
+  onArm,
+}: DraggableRowProps & {
+  dnd?: {
+    attributes: ReturnType<typeof useDraggable>["attributes"];
+    listeners: ReturnType<typeof useDraggable>["listeners"];
+    setNodeRef: ReturnType<typeof useDraggable>["setNodeRef"];
+    isDragging: boolean;
+  };
+  onArm?: () => void;
 }) {
   const { pending, setHovered, openDayEdit } = useTimetableEdit();
   // 🔴 검색 표식은 드래그 줄에도 붙인다 — 검색은 이제 권한과 무관하게 켜져 있어서(옛 편집 모드가 끄던 것),
   //    안 붙이면 **관리자에게만** "누구를 찾았는지"가 사라진다(그 기능의 존재 이유가 그 표식이다).
   const searchTone = useSearchTone(student ?? { name, grade: null, school: null }, tone);
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: dayKey ? `student:${enrollmentId}:${dayKey}` : `student:${enrollmentId}`,
-    // meta·tone은 **드래그 고스트가 원본 줄 그대로** 보이게 하려고 싣는다(원장 2026-09-04
-    // *"드래그해도 '황혜린/칠성초6'이 … 파일이동처럼 조금 연하게"*). 판정엔 안 쓴다.
-    data: { classId, name, meta, tone, badge, fromClassName: className, enrollmentId, attendanceDays, blockingClassIds },
-  });
   const target = pending.get(enrollmentId);
   const moving = !!target && !target.sameClass; // 반 이동=취소선+dim / 같은 반 요일 편집=배지만
   const canEditDays = (coveringDays?.length ?? 0) >= 2 && !!slotId;
-  // 🔴 줄 **내용**은 메모이즈한다 — dnd-kit은 드래그 중 `over`가 바뀔 때마다 `useDraggable`을 쓰는 행을 **전부**
-  //    다시 그린다(이 화면은 350줄). 같은 엘리먼트를 돌려주면 React가 그 서브트리를 통째로 건너뛴다.
-  //    의존은 실제로 보이는 값만(이름·메타·배지·이동 표식) — 컨텍스트가 흔들려도 여기선 재조립이 안 일어난다.
+  const isDragging = dnd?.isDragging ?? false;
+  // 🔴 줄 **내용**은 메모이즈한다 — dnd-kit은 드래그 중 `over`가 바뀔 때마다 무장된 줄을 다시 그린다.
+  //    같은 엘리먼트를 돌려주면 React가 그 서브트리를 통째로 건너뛴다.
   const targetKey = target ? `${target.sameClass ? "day" : "move"}:${(target.toDays ?? []).join(",")}` : "";
   const body = useMemo(
     () => (
@@ -206,12 +253,17 @@ export function DraggableStudentRow({
     ),
     [studentId, name, meta, badge, moving, targetKey],
   );
-  const row = useMemo(
-    () => (
+  const row = (
     <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
+      ref={dnd?.setNodeRef}
+      {...(dnd?.attributes ?? {})}
+      {...(dnd?.listeners ?? {})}
+      onPointerOver={(e) => {
+        // 마우스가 올라오면 이 줄만 무장(터치·펜은 애초에 늘 무장이라 여기 안 온다).
+        // ⚠️ 가 아니라  — enter/leave는 버블링이 없어 React 합성이 까다롭고,
+        //    같은 값 재설정은 무동작이라 자식 사이를 오가며 여러 번 불려도 비용이 0이다.
+        if (onArm && e.pointerType === "mouse") onArm();
+      }}
       onMouseEnter={() => setHovered({ enrollmentId, studentId: studentId ?? "", name, className })}
       onMouseLeave={() => setHovered(null)}
       // 🔴 요일 편집은 **우클릭** — 더블클릭이 학생 창을 여는 자리라 클릭 계열이 남지 않았다([[#97]]와 같은 규약).
@@ -239,12 +291,6 @@ export function DraggableStudentRow({
     >
       {body}
     </div>
-    ),
-    // 🔴 dnd-kit은 `over`가 바뀔 때마다 **모든** draggable을 다시 그린다(이 화면 350줄) — 껍데기까지 메모이즈해야
-    //    픽업·이동에서 재조립이 0이 된다(실측: 픽업 구간 상위가 전부 React 커밋이었다).
-    //    `listeners`·`attributes`는 dnd-kit이 이미 메모이즈해 두 값이라 의존으로 안전하다.
-    [body, searchTone, isDragging, moving, canEditDays, listeners, attributes, setNodeRef,
-     enrollmentId, studentId, classId, className, name, slotId, attendanceDays, coveringDays, setHovered, openDayEdit],
   );
   if (!student) return row;
   // 끌고 있는 동안엔 카드를 안 띄운다 — 판정은 HoverCard가 **모듈 플래그**로 직접 읽는다(상태로 내리면

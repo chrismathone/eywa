@@ -22,6 +22,22 @@ export type DayEditTarget = {
   coveringDays: string[];
 };
 
+/**
+ * 대기 중인 **반 블록 이동** 한 건 — 반 이름 머리를 끌어 격자 칸에 놓았을 때 쌓인다.
+ * 🔴 학생 이동과 **같은 규약**: 화면에 표식만 남고, 반영은 '저장'을 눌러야 일어난다(서버 `moveClassSlot`).
+ */
+export type QueuedClassMove = {
+  /** 옮기는 배치(스케줄) id — 저장이 이 행을 마감하고 새 행을 넣는다. */
+  slotId: string;
+  classId: string;
+  className: string;
+  fromDay: string;
+  fromStart: string;
+  toDay: string;
+  /** 목적지 교시의 시작시각(`HH:MM:SS`) — 끝시각은 원래 길이로 서버가 계산한다(시수 보존). */
+  toStart: string;
+};
+
 /** 마우스 오버 중인 학생(편집 모드 Delete=오늘 수강 종료용). ref로 추적해 hover마다 리렌더 안 함. */
 export type HoveredStudent = { enrollmentId: string; studentId: string; name: string; className: string };
 
@@ -92,8 +108,12 @@ export interface TimetableEditState {
     toDays?: string[];
     fromDays?: string[];
   }) => void;
-  /** 압축된 이동 대기 건수. */
+  /** 압축된 이동 대기 건수(학생 + 반). */
   pendingCount: number;
+  /** slotId → 그 배치가 갈 곳(대기 중). 셀 머리가 `→ 화 3교시` 표식을 그린다. */
+  classMoves: Map<string, QueuedClassMove>;
+  /** 반 블록을 격자 칸에 놓았을 때(보드가 호출). 같은 배치를 다시 놓으면 마지막 것만 남는다. */
+  queueClassMove: (move: QueuedClassMove) => void;
   save: () => void;
   cancel: () => void;
   saving: boolean;
@@ -125,6 +145,8 @@ export interface TimetableEditState {
 const noop = () => {};
 export const TimetableEditContext = createContext<TimetableEditState>({
   canDrag: false,
+  classMoves: new Map(),
+  queueClassMove: noop,
   pending: new Map(),
   incoming: new Map(),
   queueMove: noop,

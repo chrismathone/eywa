@@ -77,6 +77,8 @@ import {
 } from "@/features/timetable/lib/pref-cookies";
 import { TimetableViewPrefsSync } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
+import { ClassMoveProvider } from "./_components/class-move-context";
+import { buildClassMoveIndex } from "@/features/timetable/lib/class-move";
 import { TimetableColorPrefSync } from "./_components/color-mode-toggle";
 import { TimetableFontPrefSync, TimetableZoomArea } from "./_components/font-size-toggle";
 import { TimetableViewSettings } from "./_components/view-settings";
@@ -547,7 +549,7 @@ export default async function TimetablePage({
             (원장 2026-09-04 *"창 크기를 조절했을때도 헤더 정렬이 이루어질 수 있게"* — 종전엔 항목 하나(엑셀·시트)만 둘째 줄
             왼쪽에 떨어지고 집계·편집이 그 오른쪽에 붙어 어디가 왼쪽 묶음의 끝인지 안 읽혔다).
             ⚠️ 폰 레일(compact-chrome)에선 묶음 상자를 없앤다(display: contents) — 레일은 직계 항목을 한 줄로 흘린다. */}
-        <div className="flex min-w-0 flex-wrap items-center gap-3 compact-chrome:contents">
+        <div className="toolbar-group flex min-w-0 flex-wrap items-center gap-3">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
@@ -845,7 +847,7 @@ export default async function TimetablePage({
 
         </div>
         <div className="rail-spacer ml-auto" aria-hidden />
-        <div className="flex flex-wrap items-center gap-3 compact-chrome:contents">
+        <div className="toolbar-group flex flex-wrap items-center gap-3">
 
         {/* 학생 집계 — 최상위 프레임은 PageHeader 우측(문법 ②), 창(임베드)은 헤더 줄을 접으므로
             여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
@@ -973,11 +975,21 @@ export default async function TimetablePage({
           </div>
         </TimetableZoomArea>
       ) : (
+        <ClassMoveProvider
+          index={
+            canEdit
+              ? buildClassMoveIndex(allSlots, [...new Set(slots.map((s) => s.classId ?? s.id))])
+              : null
+          }
+        >
         <TimetableDndArea>
           {/* ⚠️ zoom은 DndContext **안쪽**에 — 바깥에 두면 fixed인 DragOverlay가 커서와 어긋난다. */}
           <TimetableZoomArea>
             <div className="flex min-h-0 flex-1 flex-col">
               {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수·.tt-editing으로 즉시 펼침(평소 격자 지형 복원). */}
+              {/* 반 블록 이동 판정 재료 — **그 주 전 과목 슬롯**(allSlots)을 서버에서 한 번 접어 내려보낸다.
+                  🔴 새 조회가 0건이다(page가 이미 받아 둔 값) · 화면에 뜬 반 + 그 반이 쓰는 강사·방과 겹칠 수 있는
+                     슬롯만 실어 payload를 줄인다(class-move.ts 주석). 반 드래그가 없는 화면(권한 없음)엔 null. */}
               <EmptyPeriodScope collapsed={collapseEmptyPeriods} hideStudents={hideStudents}>
                 <WeekdayGroupTables
                   slots={slots}
@@ -991,6 +1003,7 @@ export default async function TimetablePage({
             </div>
           </TimetableZoomArea>
         </TimetableDndArea>
+        </ClassMoveProvider>
       )}
       </div>
       </TimetableSearchProvider>

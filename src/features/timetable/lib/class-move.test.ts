@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   blockersText,
   buildClassMoveIndex,
+  buildClassMoveLookup,
   classMoveBlockers,
   isSeatSlot,
   movedEndTime,
@@ -14,6 +15,7 @@ import {
 
 /** 끌고 있는 블록의 판정 재료 — 화면이 드래그 data로 들고 다니는 값과 같은 모양. */
 const subjectOf = (s: MoveSlotLike) => ({
+  slotId: s.id,
   classId: s.classId,
   teacher: slotTeacherOf(s),
   roomKey: slotRoomKeyOf(s),
@@ -25,7 +27,7 @@ const subjectOf = (s: MoveSlotLike) => ({
 
 /** 그 반만 색인에 담아 판정(화면은 뜬 반 전체를 한 번에 담는다). */
 const check = (slot: MoveSlotLike, day: string, start: string, slots: MoveSlotLike[]) =>
-  classMoveBlockers(subjectOf(slot), day, start, buildClassMoveIndex(slots, [slot.classId]));
+  classMoveBlockers(subjectOf(slot), day, start, buildClassMoveLookup(buildClassMoveIndex(slots, [slot.classId])));
 
 const stu = (id: string, name: string, extra: Partial<MoveStudentLike> = {}): MoveStudentLike => ({
   studentId: id,
@@ -93,10 +95,12 @@ describe("학생 축 — 모든 과목을 본다", () => {
     expect(check(math, "tue", "18:00:00", slots)).toEqual([]);
   });
 
-  it("같은 반의 다른 칸은 자기 자신이라 안 막는다", () => {
+  it("같은 반의 **다른 칸**이 그 시간에 있으면 막는다(한 반이 두 곳에 못 있는다)", () => {
     const other = slot({ id: "s3", classId: "c-math", className: "초등M 개별 B", dayOfWeek: "wed", students: math.students });
     const two = [math, other];
-    expect(check(math, "wed", "16:20:00", two)).toEqual([]);
+    expect(check(math, "wed", "16:20:00", two)).toEqual([{ kind: "self", className: "초등M 개별 B" }]);
+    // 겹치지 않는 시각이면 통과(자기 칸이라고 무조건 막지 않는다).
+    expect(check(math, "wed", "18:10:00", two)).toEqual([]);
   });
 
   it("대기·퇴원 학생은 안 센다(그 시간에 오지 않는다)", () => {

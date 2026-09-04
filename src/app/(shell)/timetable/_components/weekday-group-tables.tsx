@@ -26,6 +26,7 @@ import {
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
+import { GridDropCell } from "./grid-drop-cell";
 import { HapbanCell } from "./hapban-cell";
 import { SearchedCell } from "./search-context";
 
@@ -415,6 +416,9 @@ function GroupTable({
           const paired = mathN !== null && nextPid !== undefined && Number(nextPid) === mathN + 1;
           // '빈 교시 접기' 높이 — 접힌 행은 CSS 변수(편집 모드엔 EmptyPeriodScope가 풀 높이로 확장),
           // 점유 행은 고정 px. 그룹 라벨(rowSpan=2)은 두 행 높이 합(접힌 행이 섞이면 calc()로 변수 보존).
+          // 이 교시 행의 시작시각(`HH:MM:SS`) — 반을 여기로 옮기면 이 시각에 시작한다(길이는 원래 그대로).
+          // `row.time`은 표준 행 `16:20~18:10` · 비표준(x-) 행 `16:20` 둘 다 앞쪽이 시작시각이다.
+          const rowStart = `${row.time.split("~")[0]}:00`;
           const rowH = periodRowHeight(isCollapsed(row.key), rowHeight);
           const labelH = paired
             ? stackedHeights([rowH, periodRowHeight(isCollapsed(nextRow!.key), rowHeight)])
@@ -500,16 +504,23 @@ function GroupTable({
                           acc.length === 0 ? "bg-ink/[0.06]" : ""
                         } ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                       >
-                        {acc.length === 0 ? null : (
-                          <div className="flex flex-col" style={{ height: cellH }}>
-                            <SubSlotContent
-                              slots={acc}
-                              coveringDays={coveringDays}
-                              subSlot={t.subSlots.get(`${ri}:${ci}`) ?? "full"}
-                              hideStudents={hideStudents}
-                            />
-                          </div>
-                        )}
+                        {/* 반 블록 드롭 대상 — 빈 칸도 포함한다(옮길 곳은 대개 빈 칸이다). 반을 끌고 있지 않으면
+                            드롭존을 만들지 않아 학생 드래그가 느려지지 않는다(grid-drop-cell.tsx 주석). */}
+                        <GridDropCell day={d} start={rowStart}>
+                          {acc.length === 0 ? (
+                            // 빈 칸도 높이를 잡아 둬야 하이라이트가 칸 전체로 보인다(내용은 없다).
+                            <div style={{ height: cellH }} aria-hidden />
+                          ) : (
+                            <div className="flex flex-col" style={{ height: cellH }}>
+                              <SubSlotContent
+                                slots={acc}
+                                coveringDays={coveringDays}
+                                subSlot={t.subSlots.get(`${ri}:${ci}`) ?? "full"}
+                                hideStudents={hideStudents}
+                              />
+                            </div>
+                          )}
+                        </GridDropCell>
                       </td>
                     );
                   }),

@@ -16,6 +16,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Check, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
+import type { CSSProperties } from "react";
 import {
   moveEnrollmentsBatch,
   updateEnrollmentsAttendanceBatch,
@@ -30,11 +31,22 @@ import {
   type ClassPickCandidate,
   type ClassPickTarget,
   type DayEditTarget,
+  type QueuedClassMove,
   type HoveredStudent,
   type IncomingStudent,
   type PendingTarget,
 } from "./edit-context";
-import { setTimetableDragging } from "./drag-flag";
+import { setClassDrag, setTimetableDragging, type ClassDragInfo } from "./drag-flag";
+import {
+  annotateDropCells,
+  CELL_DAY_ATTR,
+  CELL_HOT_ATTR,
+  CELL_OK_ATTR,
+  CELL_START_ATTR,
+  clearDropCells,
+} from "./grid-drop-cell";
+import { useClassMoveIndex } from "./class-move-context";
+import { moveClassSlot } from "@/features/timetable/server/move-actions";
 import { IndexBadge, ROW_CLASS } from "./student-rows";
 
 type Queued = PendingMove & {
@@ -98,6 +110,8 @@ export function TimetableEditProvider({
   // 이동하면 이 값이 그대로 false라 Delete 핸들러·드롭·저장이 함께 잠긴다(#77: 게이트는 UI가 아니라 여기).
   const canDrag = canEdit;
   const [queue, setQueue] = useState<Queued[]>([]);
+  // 반 블록 이동 대기 — slotId당 한 건(같은 배치를 다시 놓으면 마지막 것만 남는다).
+  const [classQueue, setClassQueue] = useState<QueuedClassMove[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
@@ -301,8 +315,9 @@ export function TimetableEditProvider({
   }, [compressed.length]);
 
   async function save() {
-    if (compressed.length === 0) {
+    if (compressed.length === 0 && classQueue.length === 0) {
       setQueue([]);
+      setClassQueue([]);
       setScheduledDate(null);
       return;
     }
@@ -347,6 +362,27 @@ export function TimetableEditProvider({
           return;
         }
       }
+      // 반 블록 이동 — 학생 이동과 **같은 '저장'**이 반영한다. 배치마다 한 번씩(건수가 한 자릿수라 순차로 충분).
+      // 🔴 적용일은 학생 이동과 같은 앵커를 쓴다(지금 보는 주가 아니라 큐가 만들어진 의도, F2).
+      if (classQueue.length > 0) {
+        const failedMoves: string[] = [];
+        for (const m of classQueue) {
+          const res = await moveClassSlot({
+            slotId: m.slotId,
+            toDay: m.toDay,
+            toStart: m.toStart,
+            effectiveDate: scheduledDate ?? queueDate ?? undefined,
+          });
+          if (!res.ok) failedMoves.push(`${m.className}: ${res.error}`);
+        }
+        if (failedMoves.length > 0) {
+          setFailed((prev) => [...prev, ...failedMoves]);
+          // 실패한 반 이동은 큐에 남겨 사람이 이유를 보고 다시 시도하게 둔다(성공분만 비운다).
+          setClassQueue((prev) => prev.filter((m) => failedMoves.some((f) => f.startsWith(`${m.className}:`))));
+        } else {
+          setClassQueue([]);
+        }
+      }
       setQueue([]);
       setScheduledDate(null);
       router.refresh();
@@ -357,8 +393,13 @@ export function TimetableEditProvider({
     }
   }
 
+  const queueClassMove = useCallback((m: QueuedClassMove) => {
+    setClassQueue((prev) => [...prev.filter((x) => x.slotId !== m.slotId), m]);
+  }, []);
+
   function cancel() {
     setQueue([]);
+    setClassQueue([]);
     setScheduledDate(null);
     setError(null);
     setFailed([]);
@@ -371,7 +412,9 @@ export function TimetableEditProvider({
         pending,
         incoming,
         queueMove,
-        pendingCount: compressed.length,
+        pendingCount: compressed.length + classQueue.length,
+        classMoves: new Map(classQueue.map((m) => [m.slotId, m])),
+        queueClassMove,
         save,
         cancel,
         saving,
@@ -726,8 +769,8 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
     return (
       <span className="print:hidden text-text-faint text-xs">
         {rosterHidden
-          ? "학생 명단을 접어 둔 상태입니다 — 뷰 설정에서 펼치면 끌어 옮길 수 있습니다"
-          : "학생을 끌어 반을 옮기고, 더블클릭으로 상세를 엽니다"}
+          ? "학생 명단을 접어 둔 상태입니다 — 반 이름을 끌면 반 자체를 옮길 수 있습니다"
+          : "학생을 끌어 반을 옮기고, 반 이름을 끌면 반 자체를 옮깁니다 · 더블클릭으로 상세를 엽니다"}
       </span>
     );
   }
@@ -810,13 +853,84 @@ const preferDayZone: CollisionDetection = (args) => {
  *    전략도 기본값(WhileDragging = 시작 시 1회)을 쓴다.
  */
 export function TimetableDndArea({ children }: { children: ReactNode }) {
-  const { canDrag, queueMove, openClassPick } = useTimetableEdit();
+  const { canDrag, queueMove, queueClassMove, openClassPick } = useTimetableEdit();
+  // 반 이동 판정 재료(서버 색인 → 요일별). 없으면 반 드래그가 없는 화면이다.
+  const moveLookup = useClassMoveIndex();
   // 끌리는 줄의 **원본 모습**(이름·학교학년·톤·폭) — 고스트를 셀 안 줄과 똑같이 그리기 위한 재료.
   const [drag, setDrag] = useState<{ name: string; meta: string; tone: string; badge?: string; width: number } | null>(null);
+  // 반 블록 고스트 — **원본 머리 그대로**(색·강의실·인원·폭). 학생 줄 고스트와 같은 규약이다.
+  const [blockGhost, setBlockGhost] = useState<
+    | { className: string; room: string; count: number; headerClass: string; headerStyle: CSSProperties; width: number; height: number }
+    | null
+  >(null);
+  // 반 블록 드래그 — 포인터 아래 칸을 **직접** 찾는다(칸마다 드롭존을 만들면 집는 순간 전부 다시 재느라 멈칫한다).
+  // 마지막 좌표를 기억했다가 놓는 순간 그 자리의 칸을 읽고, 지나는 동안은 DOM 속성만 켜고 끈다(리렌더 0).
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const hotRef = useRef<HTMLElement | null>(null);
+  /**
+   * 좌표 아래의 **갈 수 있는 칸** — 🔴 `elementFromPoint`(단수)를 쓰면 안 된다: 커서를 따라다니는 드래그
+   * 고스트가 맨 위라 그것만 잡히고 칸은 영영 안 나온다(실측: 놓아도 아무 일이 없었다). 겹친 것을 전부 받아
+   * 그중 칸을 찾는다.
+   */
+  const okCellAt = useCallback((x: number, y: number): HTMLElement | null => {
+    for (const el of document.elementsFromPoint(x, y)) {
+      const cell = (el as HTMLElement).closest?.(`[${CELL_OK_ATTR}="1"]`) as HTMLElement | null;
+      if (cell) return cell;
+    }
+    return null;
+  }, []);
+  const cellAtPointer = useCallback((): { day: string; start: string } | null => {
+    const p = pointerRef.current;
+    if (!p) return null;
+    const cell = okCellAt(p.x, p.y);
+    const day = cell?.getAttribute(CELL_DAY_ATTR);
+    const start = cell?.getAttribute(CELL_START_ATTR);
+    return day && start ? { day, start } : null;
+  }, [okCellAt]);
+  const trackPointer = useCallback((e: PointerEvent) => {
+    pointerRef.current = { x: e.clientX, y: e.clientY };
+    const cell = okCellAt(e.clientX, e.clientY);
+    if (hotRef.current === cell) return;
+    hotRef.current?.removeAttribute(CELL_HOT_ATTR);
+    cell?.setAttribute(CELL_HOT_ATTR, "1");
+    hotRef.current = cell;
+  }, [okCellAt]);
+  const stopTracking = useCallback(() => {
+    window.removeEventListener("pointermove", trackPointer);
+    hotRef.current = null;
+    pointerRef.current = null;
+    clearDropCells(document);
+  }, [trackPointer]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   function onDragStart(e: DragStartEvent) {
-    const data = e.active.data.current as { name?: string; meta?: string; tone?: string; badge?: string } | undefined;
+    const data = e.active.data.current as
+      | { type?: string; name?: string; meta?: string; tone?: string; badge?: string; className?: string }
+      | undefined;
+    // 반 블록 — 격자 칸이 "여기로 갈 수 있나"를 판정할 재료를 올린다(칸만 구독해 다시 그린다).
+    if (data?.type === "class") {
+      const info = e.active.data.current as unknown as ClassDragInfo;
+      setClassDrag(info);
+      const g = (e.active.data.current as { ghost?: Omit<NonNullable<typeof blockGhost>, "width" | "height"> }).ghost;
+      const rect = e.active.rect.current.initial;
+      if (g) {
+        setBlockGhost({
+          ...g,
+          width: Math.round(rect?.width ?? 0),
+          height: Math.round(rect?.height ?? 0),
+        });
+      }
+      setTimetableDragging(true, "class");
+      // 갈 수 있는 칸을 **DOM에 직접** 칠한다(칸마다 React를 돌리면 그게 곧 픽업 렉 — grid-drop-cell.tsx 주석).
+      if (moveLookup) {
+        annotateDropCells(document, info.subject, { day: info.fromDay, start: info.fromStart }, moveLookup);
+      }
+      // 놓을 자리는 포인터 아래 칸으로 찾는다(드롭존을 새로 만들지 않는다).
+      const act = e.activatorEvent as PointerEvent | undefined;
+      pointerRef.current = act ? { x: act.clientX, y: act.clientY } : null;
+      window.addEventListener("pointermove", trackPointer);
+      return;
+    }
     // 폭은 집은 줄의 실측 폭 — 파일 드래그처럼 "그 줄이 그대로 떠 있는" 느낌이 되게(칩으로 줄이면 딴 물건이 된다).
     const width = Math.round(e.active.rect.current.initial?.width ?? 0);
     setDrag({ name: data?.name ?? "학생", meta: data?.meta ?? "", tone: data?.tone ?? "", badge: data?.badge, width });
@@ -824,13 +938,39 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
   }
 
   function onDragEnd(e: DragEndEvent) {
+    setBlockGhost(null);
+    // 🔴 **목적지를 먼저 읽는다** — `setClassDrag(null)`은 구독한 칸들을 곧바로 다시 그려
+    //    `data-cell-*` 표식을 지운다(useSyncExternalStore는 찢김을 막으려 동기로 반영될 수 있다).
+    //    지운 뒤에 `elementFromPoint`를 부르면 항상 빈손이라 드롭이 조용히 사라진다(실측).
+    const isBlockDrag = String(e.active.id).startsWith("block:");
+    const cellHit = isBlockDrag ? cellAtPointer() : null;
     setDrag(null);
     setTimetableDragging(false);
+    setClassDrag(null);
+    stopTracking();
     if (!canDrag) return;
     const { active, over } = e;
-    if (!over) return;
     const activeIdStr = String(active.id);
-    if (!activeIdStr.startsWith("student:")) return;
+    // ⚠️ 반 블록은 dnd-kit 드롭존이 아니라 **포인터 아래 칸**으로 목적지를 찾는다 → `over`가 없어도 처리한다.
+    if (!over && !activeIdStr.startsWith("block:")) return;
+    // ── 반 블록을 격자 칸에 놓았을 때 — 큐에만 쌓고 '저장'에서 반영한다(학생 이동과 같은 규약).
+    if (activeIdStr.startsWith("block:")) {
+      const src = active.data.current as unknown as ClassDragInfo | undefined;
+      const dst = cellHit;
+      if (!src || !dst) return;
+      if (src.fromDay === dst.day && src.fromStart.slice(0, 5) === dst.start.slice(0, 5)) return;
+      queueClassMove({
+        slotId: src.slotId,
+        classId: src.classId,
+        className: src.className,
+        fromDay: src.fromDay,
+        fromStart: src.fromStart,
+        toDay: dst.day,
+        toStart: dst.start,
+      });
+      return;
+    }
+    if (!over || !activeIdStr.startsWith("student:")) return;
     // 도착 정보는 드롭존 data에서 읽는다(id 파싱 금지) — classId=실제 반 id, slotId=셀 id, day=요일 존이면 요일.
     const overData = over.data.current as DropData | undefined;
     if (!overData?.classId) return;
@@ -904,14 +1044,38 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       onDragEnd={onDragEnd}
       onDragCancel={() => {
         setDrag(null);
+        setBlockGhost(null);
         setTimetableDragging(false);
+        setClassDrag(null);
+        stopTracking();
       }}
     >
       {children}
       {/* 고스트 = **원본 줄 그대로**, 파일 이동처럼 반투명(원장 2026-09-04). 이름만 남긴 칩으로 바꾸면
           "무엇을 끌고 있는지"는 알아도 "어느 줄을 집었는지"가 사라진다 — 같은 이름이 여러 반에 있다. */}
-      <DragOverlay dropAnimation={null}>
-        {drag ? (
+      {/* 🔴 오버레이는 히트테스트를 가로채면 안 된다 — 반 드롭은 포인터 아래 칸을 읽는다(위 `okCellAt`). */}
+      <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
+        {/* 반 블록 — 셀 머리를 그대로 복제한다(색·이름·강의실·인원·폭). 학생 줄과 같은 규약: 원본 그대로, 조금 연하게. */}
+        {blockGhost ? (
+          <div
+            className={`pointer-events-none cursor-grabbing overflow-hidden rounded-[3px] opacity-80 shadow-lg ${blockGhost.headerClass}`}
+            style={{
+              ...blockGhost.headerStyle,
+              width: blockGhost.width || undefined,
+              height: blockGhost.height || undefined,
+            }}
+          >
+            <div className="flex items-baseline justify-between gap-1.5 px-2 py-1">
+              <span className="min-w-0 overflow-hidden text-sm font-bold whitespace-nowrap text-clip">
+                {blockGhost.className}
+              </span>
+              <span className="num shrink-0 text-xs opacity-70">{blockGhost.count}</span>
+            </div>
+            <div className="flex items-center justify-end px-2 text-xs opacity-75">
+              <span className="overflow-hidden whitespace-nowrap text-clip">{blockGhost.room || " "}</span>
+            </div>
+          </div>
+        ) : drag ? (
           <div
             // 🔴 배경색도 원본 그대로(원장 2026-09-04 *"배경색상까지도 같이 고스트되면 같이"*) — 신입 빨강·전입 초록·
             //    퇴원 회색이 곧 그 줄의 뜻이다. tone에 배경이 없을 때만 카드색을 깔아 글자가 뜨는 것을 막는다.

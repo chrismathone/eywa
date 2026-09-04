@@ -66,6 +66,7 @@ export const AUDIT_ACTIONS = {
   class_handover_schedule: "담임 인수인계 예약",
   class_handover_cancel: "담임 인수인계 취소",
   class_update: "반 정보 수정",
+  class_schedule_move: "반 배치 이동(시간표)",
   class_handover_apply: "담임 인수인계 적용",
   class_handover_bulk: "담임 일괄 인계(퇴사)",
   class_delegate: "반 임시 위임(결근 대체)",

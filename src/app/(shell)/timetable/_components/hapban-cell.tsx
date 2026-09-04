@@ -166,7 +166,7 @@ export function HapbanCell({
    * 끄는 동안만 CSS로 켠다(`body.tt-dragging`). 🔴 상태로 마운트/언마운트하면 **픽업이 멈칫한다**(drag-flag.ts).
    */
   const dayColsAlways = partialActive.length > 0;
-  const dayHeadCls = dayColsAlways ? "" : "hidden [.tt-dragging_&]:block";
+  const dayHeadCls = dayColsAlways ? "" : "hidden [.tt-dragging-student_&]:block";
   // 재원·대기·퇴원 모두 스크롤로 전원 노출('외 N명' 숨김이 아니라 박스 스크롤).
   const activeCap = 40 * slots.length; // 합반은 반 수만큼 늘려도 스크롤로 흡수
   const SECTION_CAP = 40;
@@ -247,7 +247,7 @@ export function HapbanCell({
             </div>
             {/* 분리등원 요일 칸 — DayDropZone에 memberClassIds(멤버 드롭=자기 반 요일편집). */}
             {hasSplit ? (
-              <div className={`shrink-0 ${dayColsAlways ? "border-line/60 border-t border-dashed" : "[.tt-dragging_&]:border-line/60 [.tt-dragging_&]:border-t [.tt-dragging_&]:border-dashed"}`}>
+              <div className={`shrink-0 ${dayColsAlways ? "border-line/60 border-t border-dashed" : "[.tt-dragging-student_&]:border-line/60 [.tt-dragging-student_&]:border-t [.tt-dragging-student_&]:border-dashed"}`}>
                 <div className="flex">
                   {covers.map((day) => {
                       const dayStudents = partialActive.filter((s) => s.displayAttendanceDays.includes(day));
@@ -291,7 +291,7 @@ export function HapbanCell({
                               );
                             })
                           ) : (
-                            <div className="text-text-faint/70 hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging_&]:flex">
+                            <div className="text-text-faint/70 hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging-student_&]:flex">
                               여기로
                             </div>
                           )}
