@@ -29,6 +29,12 @@
 - 가드: [`kage-failure.test.mjs`](scripts/_classnote/kage-failure.test.mjs) 9개(네 갈래가 서로 다른 말 ·
   실제 대기 값 · 낚이는 어구 금지 · sanitize) + [`classnote-error.test.ts`](src/features/report-admin/classnote-error.test.ts)
   3개(**실제 사유 문자열을 그대로 넣어** 원문 통과 확인 — 리터럴 복사가 아니라 그 모듈을 직접 import한다).
+- **워커 cap `kageFailReasons` 추가**(`WORKER_CAPS`) — 연동 PC는 물리적으로 다른 컴퓨터라, 이 값이
+  "지금 도는 코드가 이 기능을 아는가"를 원격에서 확인할 **유일한 신호**다(그 파일 주석의 명시 규칙).
+  2026-08-06에 회수를 넣고 cap을 안 올린 탓에 옛 프로세스가 도는데도 하트비트로 알 수 없었던 전례가 있다.
+- 이관 안내문 [`워커수정-안내-2026-09-04-스샷사유.md`](scripts/_classnote/워커수정-안내-2026-09-04-스샷사유.md) —
+  네 갈래를 "재발송하면 되는 것 / 재발송해도 소용없는 것"으로 갈라 적었다(사유를 나눈 목적이 그것이다).
+  🔴 압축만 풀면 적용 안 됨(옛 프로세스가 메모리에 남는다) — 관리자 PowerShell 재시작 절차 포함.
 - 검증: typecheck 0 · lint 0 · **test 8193(618 파일)** · `pnpm build` ✓. 마이그레이션 0.
 
 ⚠️ **워커 코드라 연동 PC에 zip을 새로 이관해야 반영된다**(git pull 아님 — `연동PC-이관-안내.md`).
