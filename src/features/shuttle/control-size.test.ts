@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -30,8 +30,11 @@ const ROOT = resolve(process.cwd());
 /** 셔틀 화면(그리는 쪽)만 본다 — `(print)`는 종이 서식이라 자체 스케일이고 캐논 밖이다(라운드 캐논과 같은 예외). */
 const DIRS = [
   join(ROOT, "src/app/(shell)/shuttle"),
-  join(ROOT, "src/features/shuttle/components"),
-];
+  // ⚠️ 없는 경로를 적으면 `readdirSync`가 ENOENT로 죽어 **가드 전체가 실패**한다 — 실패가 곧
+  //    "규칙 위반"으로 읽혀 원인을 찾는 데 시간이 든다(2026-09-04 실제로 그렇게 깨졌다:
+  //    `features/shuttle/components`가 셔틀↔출결 분리로 통째로 사라졌는데 목록에 남아 있었다).
+  //    새 셔틀 화면 디렉터리를 만들면 여기 추가하고, 없앨 땐 여기서도 뺄 것.
+].filter((d) => existsSync(d));
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {

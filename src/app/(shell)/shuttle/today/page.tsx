@@ -6,7 +6,6 @@ import {
   getTripsOn,
 } from "@/features/shuttle/server/queries";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
-import { getAbsentStudentIdsOn } from "@/features/shuttle/server/attendance-link";
 import { canRecordBoarding } from "@/features/shuttle/server/record-gate";
 import { requireShuttleView } from "@/features/shuttle/server/access";
 import { loadShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
@@ -43,12 +42,11 @@ export default async function ShuttleTodayPage({
   //    셔틀 담당(viewer)만 토글 조회 1왕복이 든다.
   const canWrite = await canRecordBoarding();
 
-  // 나머지는 서로 독립 — 함께 받는다(B4). absentIds는 **신호 전용**(출결을 바꾸지 않는다).
-  const [board, { ready, logs }, absentIds, prefs, exceptionsRes, students, tripsRes] =
+  // 나머지는 서로 독립 — 함께 받는다(B4).
+  const [board, { ready, logs }, prefs, exceptionsRes, students, tripsRes] =
     await Promise.all([
       getShuttleBoard(season),
       getBoardingsOn(date),
-      getAbsentStudentIdsOn(date),
       loadShuttleTodayPrefs(), // 등하원 보기 = 계정 귀속(다른 기기에서도 같은 상태)
       getRideExceptionsOn(date), // 일회성 개입(0229a) — 표가 없으면 ready:false로 조용히 접힌다([[#95]])
       canWrite ? getAssignableStudents() : Promise.resolve([]),
@@ -69,7 +67,6 @@ export default async function ShuttleTodayPage({
           vehicles={board.vehicles}
           runs={board.runs}
           logs={logs}
-          absentStudentIds={[...absentIds]}
           canWrite={canWrite}
           initialDirection={prefs.direction}
           exceptions={exceptionsRes.exceptions}
