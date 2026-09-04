@@ -29,6 +29,7 @@ export function StudentSearchToggle({
   chip,
   placeholder,
   inputWidth,
+  ariaLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -36,6 +37,8 @@ export function StudentSearchToggle({
   chip?: ReactNode;
   placeholder?: string;
   inputWidth?: string;
+  /** 입력칸 접근성 이름 — 학생이 아닌 것을 찾는 화면(도움말)은 제 이름을 준다(기본 "학생 검색"). */
+  ariaLabel?: string;
 }) {
   const [opened, setOpened] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +66,14 @@ export function StudentSearchToggle({
   }
   return (
     <>
-      <StudentSearchBox value={value} onChange={change} placeholder={placeholder} inputWidth={inputWidth} inputRef={inputRef} />
+      <StudentSearchBox
+        value={value}
+        onChange={change}
+        placeholder={placeholder}
+        inputWidth={inputWidth}
+        inputRef={inputRef}
+        ariaLabel={ariaLabel}
+      />
       {active ? (
         chip
       ) : (
@@ -87,12 +97,15 @@ export function StudentSearchBox({
   inputWidth = "w-[92px]",
   className = "",
   inputRef,
+  ariaLabel = "학생 검색",
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   inputWidth?: string;
   className?: string;
+  /** 입력칸 접근성 이름 — 기본 "학생 검색"(출석부·시간표). 다른 것을 찾는 화면은 제 이름을 준다. */
+  ariaLabel?: string;
   /**
    * 입력칸 ref — 토글로 펼치는 화면(시간표 '검색')이 **누른 그 순간에만** 포커스를 넣으려고 쓴다.
    * ⚠️ `autoFocus`가 아니다: autoFocus는 마운트마다 포커스를 훔쳐서, 편집 모드·교실뷰로 물러났다 돌아올 때(remount)
@@ -123,7 +136,7 @@ export function StudentSearchBox({
           }
         }}
         placeholder={placeholder}
-        aria-label="학생 검색"
+        aria-label={ariaLabel}
         // ⚠️ 브라우저 기본 ✕(webkit)를 감춘다 — 아래 우리 ✕와 나란히 두 개가 뜬다.
         // 글자 = sm 라벨(16px — iOS 자동확대 하한 그대로, 상자 라벨 18보다 한 단계 작게: 원장 2026-09-04 "내부 텍스트는 폰트 작게") ·
         // `h-full leading-normal` — `<input>`은 제 상자 안에서

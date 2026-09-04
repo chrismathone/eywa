@@ -32,11 +32,9 @@ function SaveBtn({ dirty }: { dirty: boolean }) {
 export function MeetingNotepad({
   meetingId,
   content,
-  hasAudio,
 }: {
   meetingId: string;
   content: string;
-  hasAudio: boolean;
 }) {
   const [value, setValue] = useState(content);
   const [state, action] = useActionState<UpdateNotepadState, FormData>(
@@ -73,10 +71,8 @@ export function MeetingNotepad({
         </div>
         {justSaved ? <span className="text-primary text-xs font-medium">저장됨</span> : null}
       </header>
-      <p className="text-text-dim text-xs">
-        회의 중 메모를 적어두면 {hasAudio ? "녹음 전사와 함께 " : ""}‘AI로 정리’ 때 함께 분석됩니다. 저장한 뒤 상단 ‘AI로
-        정리’를 누르세요.
-      </p>
+      {/* 안내 문장("회의 중 메모를 적어두면 … 상단 'AI로 정리'를 누르세요")은 뺐다(디자인 v5 13단계 — 지시서 §4 설명 문장 금지).
+          제목 '메모장'과 머리의 Primary 'AI로 정리'가 이미 그 사실을 말한다. */}
       <DraftBanner
         savedAt={localDraft.draftSavedAt}
         onRestore={() => {

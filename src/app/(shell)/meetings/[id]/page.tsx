@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
-import { AlertCircle, CheckSquare, Loader2, Mic, Printer, Scissors, Sparkles, Users } from "@/components/icons/eywa-icon-compat";
-import { PrintWindowButton } from "@/components/workspace/print-window";
+import { AlertCircle, CheckSquare, Loader2, Mic, Scissors, Sparkles, Users } from "@/components/icons/eywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
+import { Pill, type PillColor } from "@/components/atoms/pill";
+import { toneColor } from "@/lib/design/semantic-color";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getMeetingById,
@@ -12,38 +13,24 @@ import {
 } from "@/features/meetings/server/queries";
 import { MeetingNotepad } from "./meeting-notepad";
 import { SpeakerEditor } from "./speaker-editor";
-import {
-  MeetingDeleteButton,
-  MeetingRegenerateButton,
-  MeetingRetryButton,
-} from "./meeting-actions";
+import { MeetingRegenerateButton, MeetingRetryButton } from "./meeting-actions";
+import { MeetingMoreMenu } from "./meeting-more-menu";
 import { MeetingStatusWatcher } from "./status-watcher";
 import { TranscriptSection } from "@/components/transcript-section";
 import { MeetingReportAccordion } from "./ai-report";
 import { MeetingTitleEditor } from "./meeting-title-editor";
-import { MeetingTxtButton } from "./meeting-txt-button";
 import { trimTrailingNoise } from "@/lib/ai/transcript-trim";
 
 export const metadata = { title: "회의록 상세 — eywa" };
 
-const STATUS_BADGE: Record<
-  MeetingProcessingStatus,
-  { label: string; class: string; spin?: boolean } | null
-> = {
+/** 목록(page.tsx)과 같은 의미색 캐논 — 대기=caution · 처리 중=info · 완료=positive · 실패=critical(옛 chart-3/4 로컬 클래스 폐기). */
+const STATUS_BADGE: Record<MeetingProcessingStatus, { label: string; color: PillColor; spin?: boolean } | null> = {
   idle: null,
-  uploaded: { label: "분석 대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
-  transcribing: {
-    label: "전사 중",
-    class: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-    spin: true,
-  },
-  analyzing: {
-    label: "AI 분석 중",
-    class: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-    spin: true,
-  },
-  completed: { label: "완료", class: "text-green bg-green-soft border-green/25" },
-  failed: { label: "실패", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
+  uploaded: { label: "분석 대기", color: toneColor("caution") },
+  transcribing: { label: "전사 중", color: toneColor("info"), spin: true },
+  analyzing: { label: "AI 분석 중", color: toneColor("info"), spin: true },
+  completed: { label: "완료", color: toneColor("positive") },
+  failed: { label: "실패", color: toneColor("critical") },
 };
 
 function formatHeldAt(iso: string): string {
@@ -110,12 +97,10 @@ export default async function MeetingDetailPage({
           <div className="flex items-center gap-2">
             <p className="eyebrow">{formatHeldAt(meeting.heldAt)}</p>
             {badge ? (
-              <span
-                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${badge.class}`}
-              >
+              <Pill color={badge.color} className="gap-1">
                 {badge.spin ? <Loader2 className="size-3 animate-spin" /> : null}
                 {badge.label}
-              </span>
+              </Pill>
             ) : null}
           </div>
           <MeetingTitleEditor meetingId={meeting.id} title={meeting.title} />
@@ -137,39 +122,35 @@ export default async function MeetingDetailPage({
             {meeting.authorName ? <span>· 작성 {meeting.authorName}</span> : null}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {hasAiReport ? (
-            <PrintWindowButton id={`print/meetings/${id}`} href={`/meetings/${id}/print`} title="회의록">
-              <Printer className="size-4" />
-              인쇄 미리보기
-            </PrintWindowButton>
-          ) : null}
-          {hasAiReport || meeting.content || meeting.transcription ? (
-            <MeetingTxtButton
-              title={meeting.title}
-              heldAt={meeting.heldAt}
-              attendees={meeting.attendees}
-              content={meeting.content}
-              transcription={meeting.transcription}
-              aiReport={meeting.aiReport}
-              aiSummary={meeting.aiSummary}
-              aiActionItems={meeting.aiActionItems}
-            />
-          ) : null}
-          {/* AI로 정리 — 저장된 전사 + 메모장으로 8섹션 (재)생성(오디오·웹훅 불필요, 즉시 완료). 메모만으로도 가능. */}
+        {/* 상시 버튼은 둘(지시서 §10): Primary 'AI로 정리'(저장된 전사 + 메모장으로 8섹션 (재)생성 — 오디오·웹훅 불필요) +
+            텍스트 '더보기'(인쇄 미리보기 · TXT로 저장 · 전사부터 다시(원본 오디오 재제출) · 삭제). 옛 머리엔 버튼 다섯이 나란히 섰다. */}
+        {/* shrink-0 + nowrap — 최소 창(760)에서 왼쪽 참석자 줄이 길면 이 묶음이 감겨 '더보기'가 Primary 아래로 떨어졌다(실측). */}
+        <div className="flex shrink-0 items-center gap-2">
           {canOrganize ? (
             <MeetingRegenerateButton meetingId={meeting.id} label={organizeLabel} />
           ) : null}
-          {/* 전사부터 다시 — 원본 오디오 재제출로 전사+분석 재생성. 옛 ijw 녹음은 Firebase에서 읽음. */}
-          {hasAudio && hasAiReport && !isProcessing ? (
-            <MeetingRetryButton
-              meetingId={meeting.id}
-              label="전사부터 다시"
-              variant="outline"
-              outerClassName=""
-            />
-          ) : null}
-          <MeetingDeleteButton meetingId={meeting.id} />
+          {/* key=상태 — 재전사·삭제 확인 줄(클라 state)이 상태가 바뀐 뒤에도 남아 있지 않게 리셋(effect setState 없이, #25). */}
+          <MeetingMoreMenu
+            key={meeting.processingStatus}
+            meetingId={meeting.id}
+            printHref={`/meetings/${id}/print`}
+            canPrint={hasAiReport}
+            txt={
+              hasAiReport || meeting.content || meeting.transcription
+                ? {
+                    title: meeting.title,
+                    heldAt: meeting.heldAt,
+                    attendees: meeting.attendees,
+                    content: meeting.content,
+                    transcription: meeting.transcription,
+                    aiReport: meeting.aiReport,
+                    aiSummary: meeting.aiSummary,
+                    aiActionItems: meeting.aiActionItems,
+                  }
+                : null
+            }
+            canRetry={hasAudio && hasAiReport && !isProcessing}
+          />
         </div>
       </header>
 
@@ -212,7 +193,7 @@ export default async function MeetingDetailPage({
       {/* 메모장 — 회의 중/후 직접 작성한 메모(편집 가능). 저장 후 'AI로 정리'로 전사와 함께 분석.
           처리 중(전사/분석)엔 숨겨 화면 잡음을 줄인다(완료·대기·실패 상태에서 편집). */}
       {!isProcessing ? (
-        <MeetingNotepad meetingId={meeting.id} content={meeting.content ?? ""} hasAudio={hasAudio} />
+        <MeetingNotepad meetingId={meeting.id} content={meeting.content ?? ""} />
       ) : null}
 
       {/* 8-section AI report */}

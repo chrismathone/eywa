@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { PageHeader } from "@/components/page-header";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { requireAccess } from "@/lib/auth/require-access";
 import type { MenuKey } from "@/lib/permissions";
 import { HelpBrowser } from "./_help-browser";
+import { HelpSearchProvider, HelpSearchToggle } from "./_help-search";
 
 export const metadata = { title: "도움말 — eywa" };
 
@@ -261,47 +264,55 @@ export default async function HelpPage() {
   await requireAccess("help");
 
   return (
-    <div className="space-y-6">
-      <HelpBrowser quickstart={QUICKSTART} menus={MENUS} faq={FAQ} />
+    // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
+    <HelpSearchProvider>
+      <div className="space-y-6 compact-chrome:space-y-4">
+        {/* 머리 — 값만(§12): 빠른 시작 단계 수 · 메뉴 수 · FAQ 수. 검색은 눌러야 나온다(§10). 옛 사진 히어로·"무엇을 도와드릴까요?"·
+            안내 문장은 걷었다(디자인 v5 13단계). */}
+        <PageHeader
+          eyebrow="안내"
+          title="도움말"
+          description={`빠른 시작 ${QUICKSTART.length}단계 · 메뉴 ${MENUS.length}개 · FAQ ${FAQ.length}개`}
+          actions={<HelpSearchToggle />}
+        />
 
-      <section className="border-line bg-card shadow-card flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center">
-        <span className="bg-primary-soft text-primary flex size-11 shrink-0 items-center justify-center rounded-lg">
-          <EyIcon name="help" size={22} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="editorial-eyebrow">디자인 시스템</p>
-          <h2 className="text-foreground mt-0.5 text-base font-bold">Eywa 아이콘 시스템</h2>
-          <p className="text-text-dim mt-1 text-xs leading-relaxed">
-            제품에서 사용하는 아이콘과 크기, 선, 의미 배정 규칙을 한눈에 확인하세요.
-          </p>
-        </div>
-        <Link
-          href="/help/icons"
-          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-shadow"
-        >
-          아이콘 보기 <EyIcon name="arrowRight" size={12} />
-        </Link>
-      </section>
+        <HelpBrowser quickstart={QUICKSTART} menus={MENUS} faq={FAQ} />
 
-      {/* 1:1 문의 */}
-      <div className="lg:max-w-md">
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[var(--primary-deep)] p-5 text-white shadow-primary-glow">
-          <p className="text-xs font-bold text-[var(--gold-bright)]">1:1 문의</p>
-          <h3 className="mt-1.5 text-lg font-bold leading-tight">
-            도움이 필요하시면 언제든
-          </h3>
-          <p className="mt-2 text-xs text-white/85">
-            평일 10:00–18:00 · 1670-0000
-          </p>
-          <a
-            href="tel:1670-0000"
-            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-primary"
+        {/* 카드 = 링 하나(v5 ④) — 별도 border를 겹치지 않는다. 링크는 텍스트 Secondary(control-scale 치수, 한 줄에 한 벌). */}
+        <section className="bg-card shadow-card flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-center">
+          <span className="bg-primary-soft text-primary flex size-11 shrink-0 items-center justify-center rounded-lg">
+            <EyIcon name="help" size={22} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="editorial-eyebrow">디자인 시스템</p>
+            <h2 className="text-foreground mt-0.5 text-base font-bold">Eywa 아이콘 시스템</h2>
+            <p className="text-text-dim mt-1 text-xs leading-relaxed">
+              제품에서 사용하는 아이콘과 크기, 선, 의미 배정 규칙을 한눈에 확인하세요.
+            </p>
+          </div>
+          <Link
+            href="/help/icons"
+            className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
           >
-            <EyIcon name="arrowRight" size={12} />
-            상담 예약하기
-          </a>
+            아이콘 보기 <EyIcon name="arrowRight" size={18} className="opacity-60" />
+          </Link>
         </section>
+
+        {/* 1:1 문의 — 옛 그라데이션 카드(흰 글자·글로우)를 같은 링 카드로(v5 ④·⑪ 장식 제거). 문구·번호는 그대로. */}
+        <div className="lg:max-w-md">
+          <section className="bg-card shadow-card rounded-2xl p-5">
+            <p className="editorial-eyebrow">1:1 문의</p>
+            <h3 className="text-foreground mt-1.5 text-lg leading-tight font-bold">도움이 필요하시면 언제든</h3>
+            <p className="text-text-dim num mt-2 text-sm">평일 10:00–18:00 · 1670-0000</p>
+            <a
+              href="tel:1670-0000"
+              className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft mt-3 inline-flex items-center gap-1 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
+            >
+              상담 예약하기 <EyIcon name="arrowRight" size={18} className="opacity-60" />
+            </a>
+          </section>
+        </div>
       </div>
-    </div>
+    </HelpSearchProvider>
   );
 }

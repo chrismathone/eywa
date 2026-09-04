@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2, RefreshCw, Sparkles, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
@@ -23,26 +23,19 @@ function DeleteSubmit() {
   );
 }
 
-/** 회의록 삭제 — 2단계 확인. 성공 시 서버가 /meetings로 redirect. */
-export function MeetingDeleteButton({ meetingId }: { meetingId: string }) {
-  const [armed, setArmed] = useState(false);
+/**
+ * 회의록 삭제 **확인 단계** — 성공 시 서버가 /meetings로 redirect. 여는 쪽은 '더보기' 메뉴(meeting-more-menu.tsx)의
+ * '삭제' 항목이고 여기가 2단계 확인이다(옛 `MeetingDeleteButton`의 armed 분기 — 항목 하나로 바로 지우지 않는다).
+ */
+export function MeetingDeleteConfirm({ meetingId, onCancel }: { meetingId: string; onCancel: () => void }) {
   const [state, action] = useActionState<DeleteMeetingState, FormData>(deleteMeeting, undefined);
-
-  if (!armed) {
-    return (
-      <Button variant="outline" onClick={() => setArmed(true)}>
-        <Trash2 className="size-4" />
-        삭제
-      </Button>
-    );
-  }
 
   return (
     <form action={action} className="flex items-center gap-2">
       <input type="hidden" name="id" value={meetingId} />
       <input type="hidden" name="redirectTo" value="/meetings" />
       <DeleteSubmit />
-      <Button type="button" variant="ghost" onClick={() => setArmed(false)}>
+      <Button type="button" variant="ghost" onClick={onCancel}>
         취소
       </Button>
       {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
@@ -60,10 +53,11 @@ function RetrySubmit({ label, variant }: { label: string; variant: "default" | "
   );
 }
 
+// 상세 머리의 **Primary**(창당 하나, 지시서 §10) — 이 화면의 본 동작이 AI 정리라 학원색으로 선다(나머지는 '더보기' 메뉴).
 function RegenerateSubmit({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant="outline" disabled={pending}>
+    <Button type="submit" disabled={pending}>
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
       {label}
     </Button>

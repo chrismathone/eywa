@@ -234,6 +234,8 @@ const CANON_SURFACES = [
   // 재고관리(2026-09-02, 새 화면) — 만들 때부터 부품으로.
   "src/app/(shell)/inventory/_components/assets-face.tsx",
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",
+  "src/app/(shell)/meetings/page.tsx",
+  "src/app/(shell)/withdrawals/page.tsx",
 ];
 
 describe("툴바 규약 — 옮긴 표면은 되돌아가지 않는다", () => {

@@ -73,9 +73,10 @@ export function HrefSelect({
                         isCurrent ? "text-foreground font-bold" : "text-text-dim hover:bg-bg-soft hover:text-foreground"
                       }`}
                       onClick={(e) => {
+                        // 목록은 어떤 클릭에도 닫힌다 — 수식키 클릭(새 탭)은 브라우저에 넘기되 팝업만 열린 채 남지 않게(리뷰 2026-09-04).
+                        setOpen(false);
                         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // 새 탭 등 보존
                         e.preventDefault();
-                        setOpen(false);
                         if (isCurrent) return;
                         if (beforeNavigate && !beforeNavigate()) return;
                         start(() => router.push(o.href, { scroll: false }));

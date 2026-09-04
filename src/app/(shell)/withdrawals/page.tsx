@@ -8,22 +8,17 @@ import {
   UserX,
 } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
-import { SearchForm } from "@/components/search-form";
+import { SearchToggle } from "@/components/search-toggle";
 import { PageHeader } from "@/components/page-header";
 import { BigStat } from "@/components/atoms/big-stat";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
-import {
-  TOOLBAR_SEG_BOX,
-  TOOLBAR_SEG_BOX_WRAP,
-  TOOLBAR_SEG_ITEM,
-  TOOLBAR_SEG_OFF,
-  TOOLBAR_SEG_ON_PRIMARY,
-  TOOLBAR_SELECT,
-} from "@/components/toolbar-controls";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { requireAccess } from "@/lib/auth/require-access";
 import { relativeDayKo } from "@/lib/relative-time";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   getWithdrawnStudents,
   getSubjectEndedStudents,
@@ -91,18 +86,42 @@ type RangeKey = "all" | "30d" | "90d" | "year";
 type ReasonKey = "all" | WithdrawalReason | "unspecified";
 type ConsultKey = "all" | "pending" | "done";
 
-const RANGE_FILTERS: { key: RangeKey; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "30d", label: "최근 30일" },
-  { key: "90d", label: "최근 90일" },
-  { key: "year", label: "올해" },
+/** 드롭다운 항목 — 해제 항목('전체')은 FilterSelect가 맨 위에 스스로 세운다(축 이름은 `axisLabel`, `allLabel`에 넣지 말 것). */
+const RANGE_OPTIONS: { value: Exclude<RangeKey, "all">; label: string }[] = [
+  { value: "30d", label: "최근 30일" },
+  { value: "90d", label: "최근 90일" },
+  { value: "year", label: "올해" },
 ];
 
-const CONSULT_FILTERS: { key: ConsultKey; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "pending", label: "상담 미완료" },
-  { key: "done", label: "상담 완료" },
+const CONSULT_OPTIONS: { value: Exclude<ConsultKey, "all">; label: string }[] = [
+  { value: "pending", label: "상담 미완료" },
+  { value: "done", label: "상담 완료" },
 ];
+
+/** 툴바 공통 — 축마다 라벨 하나(`기간: 최근 30일`), 폭은 글자만큼. */
+const SELECT_PROPS = { className: "w-auto", triggerClassName: TOOLBAR_SELECT } as const;
+
+/**
+ * 유형(퇴원 / 수강종료) — 두 목록을 오가는 보기 전환도 라벨 하나(지시서 §10 "보기 전환은 라벨"). 옛 세그먼트 칩 둘을 대체.
+ * 두 갈래(퇴원 목록·수강종료 목록) 모두에 서서 어느 쪽에서도 되돌아올 수 있다.
+ * 🔴 유형을 바꾸면 퇴원 목록의 필터·검색어를 **지운다**(`clearParams`) — 수강종료 갈래엔 필터도 '초기화'도 없어, 실은 채 넘어가면
+ *    URL에만 남은 필터가 되돌아올 때 되살아나는데 사용자는 그것을 볼 길이 없다(리뷰 2026-09-04).
+ */
+const WITHDRAWN_FILTER_PARAMS = ["range", "reason", "subject", "consult", "q"];
+function TypeSelect({ viewType }: { viewType: "withdrawn" | "subject-ended" }) {
+  return (
+    <FilterSelect
+      paramName="type"
+      value={viewType === "subject-ended" ? "subject-ended" : ""}
+      options={[{ value: "subject-ended", label: "수강종료" }]}
+      allLabel="퇴원"
+      axisLabel="유형"
+      ariaLabel="유형"
+      clearParams={WITHDRAWN_FILTER_PARAMS}
+      {...SELECT_PROPS}
+    />
+  );
+}
 
 type WdHrefParams = { range: RangeKey; reason: ReasonKey; q: string; subject: string; consult: ConsultKey };
 
@@ -210,13 +229,9 @@ export default async function WithdrawalsPage({
   const subjects = subjectBreakdown(subjectRows, subjectMaps.labelOf);
   const subjMax = subjects[0]?.count ?? 1;
 
-  const reasonChips: { key: ReasonKey; label: string }[] = [
-    { key: "all" as ReasonKey, label: "전체" },
-    ...(Object.entries(REASON_LABEL) as [WithdrawalReason, string][]).map(([k, label]) => ({
-      key: k as ReasonKey,
-      label,
-    })),
-    { key: "unspecified" as ReasonKey, label: "미기재" },
+  const reasonOptions: { value: Exclude<ReasonKey, "all">; label: string }[] = [
+    ...(Object.entries(REASON_LABEL) as [WithdrawalReason, string][]).map(([k, label]) => ({ value: k, label })),
+    { value: "unspecified", label: "미기재" },
   ];
 
   const current: WdHrefParams = { range, reason, q, subject, consult };
@@ -233,38 +248,26 @@ export default async function WithdrawalsPage({
   };
 
   return (
-    <div className="space-y-5">
+    // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
+    <div className="space-y-5 compact-chrome:space-y-3">
       {/* Editorial 문법 ① — eyebrow→헤드라인 위계 신설(상세 [studentId]의 헤더 패턴 역수출) */}
-      {/* description = 창 컴팩트 라벨 겸용 — 없으면 title 폴백이 창 타이틀바 '퇴원관리'와 순수 중복(적대 리뷰). */}
+      {/* description = 창 컴팩트 라벨 겸용 — 없으면 title 폴백이 창 타이틀바 '퇴원관리'와 순수 중복(적대 리뷰).
+          설명 문장("…관리합니다")이 아니라 값(§4·§12) — 필터와 무관한 전체 수. 창에선 이 줄이 유일한 화면 안 제목이라
+          수강종료 갈래에선 그 목록의 수를 적는다(리뷰: 수강종료 목록 위에 '퇴원 N명'이 서 있었다). */}
       <PageHeader
         eyebrow="학생 케어"
         title="퇴원관리"
-        description="퇴원·수강 종료 내역과 사후 상담을 관리합니다"
+        description={viewType === "subject-ended" ? `수강종료 ${subjectEnded.length}명` : `전체 퇴원 ${all.length}명`}
       />
-      {/* 유형 토글 — 퇴원(완전) / 수강종료(과목 이탈) */}
-      <div className="flex items-center gap-1.5">
-        <span className="micro shrink-0">유형</span>
-        <div className={TOOLBAR_SEG_BOX}>
-        <Link
-          href="/withdrawals"
-          className={`${TOOLBAR_SEG_ITEM} shrink-0 ${viewType === "withdrawn" ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-        >
-          퇴원 <span className="num">({all.length})</span>
-        </Link>
-        <Link
-          href="/withdrawals?type=subject-ended"
-          // 앰버는 의미색(주의)이라 그대로 둔다 — 모양·높이만 묶음 칩으로 맞춘다.
-          className={`${TOOLBAR_SEG_ITEM} shrink-0 ${
-            viewType === "subject-ended" ? "bg-amber text-white font-medium" : TOOLBAR_SEG_OFF
-          }`}
-        >
-          수강종료{viewType === "subject-ended" ? <span className="num"> ({subjectEnded.length})</span> : null}
-        </Link>
-        </div>
-      </div>
 
       {viewType === "subject-ended" ? (
-        <SubjectEndedView rows={subjectEnded} labelOf={subjectMaps.labelOf} />
+        <>
+          {/* 수강종료 갈래도 같은 툴바 자리 — 유형 라벨 하나로 퇴원 목록으로 되돌아간다. */}
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <TypeSelect viewType={viewType} />
+          </div>
+          <SubjectEndedView rows={subjectEnded} labelOf={subjectMaps.labelOf} />
+        </>
       ) : (
         <>
       {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
@@ -282,75 +285,55 @@ export default async function WithdrawalsPage({
         <BigStat label="필터 결과" value={rows.length} unit="명" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
       </section>
 
-      {/* Filter bar — 소프트 패널 + 알약 칩 */}
-      {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 표가 자기 테두리를 갖고
-          있어 선이 이중으로 겹쳐 보였다. 컨트롤 자체가 테두리를 가져 줄은 그대로 읽힌다. */}
-      <div className="space-y-2 px-1 py-1">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">기간</span>
-            <div className={TOOLBAR_SEG_BOX}>
-            {RANGE_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildWdHref({ ...current, range: f.key })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${range === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {f.label}
-              </Link>
-            ))}
-            </div>
-          </div>
-          <SearchForm placeholder="학생명" defaultValue={q} resetParams={["type"]} />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex items-center gap-1.5">
-            <span className="micro mr-1">사유</span>
-            <FilterSelect
-              paramName="reason"
-              value={reason === "all" ? null : reason}
-              options={reasonChips.filter((f) => f.key !== "all").map((f) => ({ value: f.key, label: f.label }))}
-              ariaLabel="사유 필터"
-              triggerClassName={TOOLBAR_SELECT}
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">과목</span>
-            <div className={TOOLBAR_SEG_BOX_WRAP}>
-            {subjectMaps.filters.map((f) => (
-              <Link
-                key={f.value}
-                href={buildWdHref({ ...current, subject: f.value })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {f.label}
-              </Link>
-            ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">상담</span>
-            <div className={TOOLBAR_SEG_BOX}>
-            {CONSULT_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildWdHref({ ...current, consult: f.key })}
-                // 앰버는 의미색(주의)이라 그대로 둔다 — 모양·높이만 묶음 칩으로 맞춘다.
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${
-                  consult === f.key ? "bg-amber text-white font-medium" : TOOLBAR_SEG_OFF
-                }`}
-              >
-                {f.label}
-              </Link>
-            ))}
-            </div>
-          </div>
-          {filterActive ? (
-            <Link href="/withdrawals" className="text-text-faint hover:text-foreground text-xs underline">
-              필터 초기화
-            </Link>
-          ) : null}
-        </div>
+      {/* 툴바 — 지시서 §10: 축마다 라벨 하나(`유형: 퇴원` · `기간: 최근 30일` · 사유 · 과목 · 상담), 검색은 눌러야 나온다.
+          옛 칩 묶음 넷(유형 2 · 기간 4 · 과목 N · 상담 3) + `micro` 소라벨 + 상시 검색창 두 줄을 한 줄로 걷었다.
+          최소 창(1040)에서 드롭다운 다섯 + 검색 + 초기화가 한 줄에 선다(검색을 펼쳐도 ~900px). 상담 칩의 앰버 톤은
+          드롭다운으로 오며 사라진다(의미색이 아니라 강조였다 — 값은 트리거 글자가 말한다). */}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <TypeSelect viewType={viewType} />
+        <FilterSelect
+          paramName="range"
+          value={range === "all" ? "" : range}
+          options={RANGE_OPTIONS}
+          axisLabel="기간"
+          ariaLabel="기간 필터"
+          {...SELECT_PROPS}
+        />
+        <FilterSelect
+          paramName="reason"
+          value={reason === "all" ? "" : reason}
+          options={reasonOptions}
+          axisLabel="사유"
+          ariaLabel="사유 필터"
+          {...SELECT_PROPS}
+        />
+        {/* 과목 선택지는 학원설정 단일 소스(subjectMaps.options) — 하드코딩 금지. */}
+        <FilterSelect
+          paramName="subject"
+          value={subject === "all" ? "" : subject}
+          options={subjectMaps.options}
+          axisLabel="과목"
+          ariaLabel="과목 필터"
+          {...SELECT_PROPS}
+        />
+        <FilterSelect
+          paramName="consult"
+          value={consult === "all" ? "" : consult}
+          options={CONSULT_OPTIONS}
+          axisLabel="상담"
+          ariaLabel="상담 필터"
+          {...SELECT_PROPS}
+        />
+        {/* 검색 토글은 퇴원 갈래에만 선다(수강종료 목록엔 검색이 없다) — 유형 전환이 검색어를 지우니(TypeSelect) 여기서 type을 되돌릴 일은 없다. */}
+        <SearchToggle placeholder="학생명" defaultValue={q} />
+        {filterActive ? (
+          <Link
+            href="/withdrawals"
+            className={`${CONTROL_H} ${CONTROL_LABEL} text-text-faint hover:text-foreground inline-flex items-center px-1 whitespace-nowrap transition`}
+          >
+            필터 초기화
+          </Link>
+        ) : null}
       </div>
 
       {/* 통계 — 카드마다 **자기 축만 빼고** 필터 반영(패싯). 위 술어 주석 참조. */}
@@ -415,40 +398,41 @@ export default async function WithdrawalsPage({
                 {total}명{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
               </p>
             </header>
+            {/* 행 = 이름(학교학년) | 마지막 반 | 퇴원일 | 경과 — 한 줄(§11), 행 전체가 링크. 옛 두 줄 행(이름 / 반)을 접었다.
+                학교·학년은 앱 규약 `schoolGradeLabel`("경명여중1") — 공백 join 금지. 오른쪽 둘은 폭 고정 열이라 행마다 같은 자리. */}
             <ul className="divide-line divide-y">
               {pageRows.map((r) => {
                 const ago = relativeDayKo(r.withdrawnAt);
+                const where = schoolGradeLabel(r.school, r.grade);
                 return (
-                  <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
-                    <WindowLink href={`/withdrawals/${r.id}`} title={r.name} className="flex items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-foreground text-sm font-bold hover:underline">
-                          {r.name}{" "}
-                          <span className="text-text-dim text-xs font-normal">
-                            {r.grade ?? "—"} · {r.school ?? "—"}
-                          </span>
-                        </p>
-                        <p className="text-text-dim mt-0.5 text-xs">
-                          {r.lastClassName ?? "수강 반 없음"}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        {/* 시스템 일괄 정리분 = 퇴원일이 실제 시점이 아니라 장부 날짜라 경과일을 표시하지 않는다
-                            (그대로 두면 "20일 전 퇴원"처럼 틀린 사실을 읽게 된다). */}
-                        {r.systemBulk ? (
-                          <>
+                  <li key={r.id} className="hover:bg-bg-soft/50 transition">
+                    <WindowLink
+                      href={`/withdrawals/${r.id}`}
+                      title={r.name}
+                      className="grid h-11 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_6.5rem_5rem] items-center gap-3 px-5"
+                    >
+                      <p className="text-foreground min-w-0 truncate text-base leading-none font-bold">
+                        {r.name}
+                        {where ? <span className="text-text-dim ml-1.5 text-sm font-semibold">{where}</span> : null}
+                      </p>
+                      <p className="text-text-dim min-w-0 truncate text-sm">{r.lastClassName ?? "수강 반 없음"}</p>
+                      {/* 시스템 일괄 정리분 = 퇴원일이 실제 시점이 아니라 장부 날짜라 경과일을 표시하지 않는다
+                          (그대로 두면 "20일 전 퇴원"처럼 틀린 사실을 읽게 된다). */}
+                      {r.systemBulk ? (
+                        <>
+                          <span className="justify-self-end">
                             <Pill color="neutral">시스템 정리</Pill>
-                            <p className="text-text-faint mt-0.5 text-xs">퇴원일 미상</p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-foreground num text-xs font-bold">
-                              {r.withdrawnAt ?? "—"}
-                            </p>
-                            {ago ? <p className="text-text-faint num text-xs">{ago}</p> : null}
-                          </>
-                        )}
-                      </div>
+                          </span>
+                          <span className="text-text-faint justify-self-end text-sm whitespace-nowrap">퇴원일 미상</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-foreground num justify-self-end text-sm font-bold whitespace-nowrap">
+                            {r.withdrawnAt ?? "—"}
+                          </span>
+                          <span className="text-text-faint num justify-self-end text-sm whitespace-nowrap">{ago}</span>
+                        </>
+                      )}
                     </WindowLink>
                   </li>
                 );
@@ -541,22 +525,24 @@ function SubjectEndedView({
         </div>
         <p className="text-text-faint num text-xs">{rows.length}명</p>
       </header>
+      {/* 행 = 이름(학교학년) | 종료·수강중 과목 알약 | 종료일 — 한 줄(§11). 알약이 많으면 그 행만 감긴다(min-h). */}
       <ul className="divide-line divide-y">
-        {rows.map((r) => (
-          <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
-            <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-foreground text-sm font-bold hover:underline">
-                  {r.name}{" "}
-                  <span className="text-text-dim text-xs font-normal">
-                    {r.grade ?? "—"} · {r.school ?? "—"}
-                  </span>
-                  {r.status === "on_hold" ? (
-                    <span className="text-text-faint ml-1 text-xs">(휴원)</span>
-                  ) : null}
+        {rows.map((r) => {
+          const where = schoolGradeLabel(r.school, r.grade);
+          return (
+            <li key={r.id} className="hover:bg-bg-soft/50 transition">
+              <WindowLink
+                href={`/students/${r.id}`}
+                title={r.name}
+                className="grid min-h-11 grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_7rem] items-center gap-3 px-5 py-1"
+              >
+                <p className="text-foreground min-w-0 truncate text-base leading-none font-bold">
+                  {r.name}
+                  {where ? <span className="text-text-dim ml-1.5 text-sm font-semibold">{where}</span> : null}
+                  {r.status === "on_hold" ? <span className="text-text-faint ml-1 text-sm font-normal">(휴원)</span> : null}
                 </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <span className="text-text-faint mr-0.5 text-xs">종료</span>
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
+                  <span className="text-text-faint mr-0.5 text-sm">종료</span>
                   {r.endedSubjects.map((s) => (
                     <Pill key={s} color="amber">
                       {labelOf(s)}
@@ -564,7 +550,7 @@ function SubjectEndedView({
                   ))}
                   {r.activeSubjects.length > 0 ? (
                     <>
-                      <span className="text-text-faint ml-1.5 mr-0.5 text-xs">수강중</span>
+                      <span className="text-text-faint ml-1.5 mr-0.5 text-sm">수강중</span>
                       {r.activeSubjects.map((s) => (
                         <Pill key={s} color="primary" soft>
                           {labelOf(s)}
@@ -573,15 +559,13 @@ function SubjectEndedView({
                     </>
                   ) : null}
                 </div>
-              </div>
-              <div className="shrink-0 text-right">
-                {r.lastEndedAt ? (
-                  <p className="text-text-faint num text-xs">{r.lastEndedAt} 종료</p>
-                ) : null}
-              </div>
-            </WindowLink>
-          </li>
-        ))}
+                <span className="text-text-faint num justify-self-end text-sm whitespace-nowrap">
+                  {r.lastEndedAt ? `${r.lastEndedAt} 종료` : null}
+                </span>
+              </WindowLink>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
