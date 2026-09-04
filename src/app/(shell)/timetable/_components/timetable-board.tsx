@@ -36,17 +36,17 @@ import {
   type IncomingStudent,
   type PendingTarget,
 } from "./edit-context";
-import { setClassDrag, setTimetableDragging, type ClassDragInfo } from "./drag-flag";
+import { setTimetableDragging, type ClassDragInfo } from "./drag-flag";
 import {
   annotateDropCells,
-  CELL_DAY_ATTR,
-  CELL_HOT_ATTR,
   CELL_OK_ATTR,
-  CELL_START_ATTR,
   clearDropCells,
+  markHotCells,
+  placementAt,
 } from "./grid-drop-cell";
 import { useClassMoveIndex } from "./class-move-context";
-import { moveClassSlot } from "@/features/timetable/server/move-actions";
+import type { MoveSubject } from "@/features/timetable/lib/class-move";
+import { moveClassSlots } from "@/features/timetable/server/move-actions";
 import { IndexBadge, ROW_CLASS } from "./student-rows";
 
 type Queued = PendingMove & {
@@ -299,20 +299,26 @@ export function TimetableEditProvider({
   // 미래로 예약되는 뒤바뀜이 생긴다(적대 감사 F2).
   // ⚠️ "배치가 살아있는가"는 raw 큐가 아니라 **compressed** 기준 — A→B→A처럼 전부 되돌린 net no-op
   // 큐를 raw 기준으로 잡으면, 주 이동 후 '대기 0건'인데 편집이 잠기는 유령 잠금이 생긴다(적대 리뷰 확정).
-  const queueDate = compressed.length > 0 ? (queue[0]?.effectiveOn ?? null) : null;
-  const weekMismatch = compressed.length > 0 && (queue[0]?.effectiveOn ?? null) !== queueIntent;
+  // 🔴 앵커는 **두 큐의 합집합**에서 잡는다 — 반 블록만 대기 중일 때 학생 큐만 보면 `queueDate`가 null이 되어
+  //    화면은 미래 주 날짜를 보여 주는데 저장은 오늘로 나간다(적대 리뷰 2026-09-04, F2와 같은 결함).
+  const liveAnchor =
+    compressed.length > 0 ? (queue[0]?.effectiveOn ?? null) : classQueue.length > 0 ? classQueue[0]!.effectiveOn : null;
+  const hasPending = compressed.length > 0 || classQueue.length > 0;
+  const queueDate = hasPending ? liveAnchor : null;
+  const weekMismatch = hasPending && liveAnchor !== queueIntent;
 
   // 미저장 이동이 있는 채로 새로고침·탭 닫기 하면 경고(가져오기 다이얼로그와 동일 패턴).
   // 앱 내 주/과목 이동은 weekMismatch 경고 + queueDate 앵커로 이미 안전하므로 여기선 문서 이탈만 막는다(F7).
   useEffect(() => {
-    if (compressed.length === 0) return;
+    // 반 블록만 대기 중이어도 경고한다 — 미저장은 미저장이다(학생 큐만 보던 것을 고침, 적대 리뷰 2026-09-04).
+    if (compressed.length === 0 && classQueue.length === 0) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [compressed.length]);
+  }, [compressed.length, classQueue.length]);
 
   async function save() {
     if (compressed.length === 0 && classQueue.length === 0) {
@@ -366,19 +372,24 @@ export function TimetableEditProvider({
       // 🔴 적용일은 학생 이동과 같은 앵커를 쓴다(지금 보는 주가 아니라 큐가 만들어진 의도, F2).
       if (classQueue.length > 0) {
         const failedMoves: string[] = [];
+        // 🔴 실패한 것만 큐에 남긴다 — 남길지 말지는 **배치 id**로 가른다(반 이름으로 가르면 같은 반의
+        //    다른 블록·동명 반이 함께 남거나 함께 사라진다, 적대 리뷰 2026-09-04).
+        const failedIds = new Set<string>();
         for (const m of classQueue) {
-          const res = await moveClassSlot({
-            slotId: m.slotId,
-            toDay: m.toDay,
-            toStart: m.toStart,
+          // 🔴 블록이 담은 배치를 **한 번에** 넘긴다 — 한 줄만 옮기면 나머지 줄이 제자리에 남는다.
+          const res = await moveClassSlots({
+            moves: m.moves,
             effectiveDate: scheduledDate ?? queueDate ?? undefined,
           });
-          if (!res.ok) failedMoves.push(`${m.className}: ${res.error}`);
+          if (!res.ok) {
+            failedMoves.push(`${m.className}: ${res.error}`);
+            failedIds.add(m.slotId);
+          }
         }
         if (failedMoves.length > 0) {
           setFailed((prev) => [...prev, ...failedMoves]);
           // 실패한 반 이동은 큐에 남겨 사람이 이유를 보고 다시 시도하게 둔다(성공분만 비운다).
-          setClassQueue((prev) => prev.filter((m) => failedMoves.some((f) => f.startsWith(`${m.className}:`))));
+          setClassQueue((prev) => prev.filter((m) => failedIds.has(m.slotId)));
         } else {
           setClassQueue([]);
         }
@@ -393,9 +404,18 @@ export function TimetableEditProvider({
     }
   }
 
-  const queueClassMove = useCallback((m: QueuedClassMove) => {
-    setClassQueue((prev) => [...prev.filter((x) => x.slotId !== m.slotId), m]);
-  }, []);
+  function queueClassMove(m: QueuedClassMove) {
+    // 학생 이동 큐잉과 **같은 두 문**을 지난다(#77: 게이트는 UI가 아니라 여기).
+    if (!canEdit) return; // 과거 주 등 편집 불가 주에서는 어떤 경로로도 큐잉되지 않는다.
+    if (weekMismatch) {
+      setError("다른 주에서 대기 중인 이동이 있습니다. 저장하거나 취소한 뒤 편집하세요.");
+      return;
+    }
+    setError(null);
+    setFailed([]);
+    // 🔴 적용 앵커는 **큐잉 시점의 의도**(이번 주=null·미래 주=그 주 월요일) — 저장이 "지금 보는 주"에 묶이지 않게(F2).
+    setClassQueue((prev) => [...prev.filter((x) => x.slotId !== m.slotId), { ...m, effectiveOn: queueIntent }]);
+  }
 
   function cancel() {
     setQueue([]);
@@ -840,6 +860,10 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
  * 그래야 "목 칸에 드롭 = 목만 등원"이 셀 전체 드롭(=전 요일)보다 우선한다. slotId는 UUID라 콜론이 없어 조각 수로 구분.
  */
 const preferDayZone: CollisionDetection = (args) => {
+  // 🔴 반 블록을 끌 때는 **학생 드롭존을 고르지 않는다** — 반은 격자 칸(포인터 아래 DOM)으로 놓는데,
+  //    dnd-kit이 셀 드롭존을 `over`로 잡으면 그 셀에 학생용 남색 링(`ring-primary`)이 켜져
+  //    **갈 수 없는 칸에도 "여기 놓을 수 있다"**는 거짓 표식이 선다(적대 리뷰 2026-09-04).
+  if (String(args.active.id).startsWith("block:")) return [];
   const hits = pointerWithin(args);
   const dayZone = hits.find((h) => String(h.id).split(":").length >= 3);
   if (dayZone) return [dayZone];
@@ -879,26 +903,26 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     }
     return null;
   }, []);
-  const cellAtPointer = useCallback((): { day: string; start: string } | null => {
+  /** 지금 끌고 있는 블록의 판정 재료 — 하이라이트가 "이 블록이 차지할 칸 전부"를 켜는 데 쓴다. */
+  const subjectRef = useRef<MoveSubject | null>(null);
+  const cellAtPointer = useCallback((): HTMLElement | null => {
     const p = pointerRef.current;
     if (!p) return null;
-    const cell = okCellAt(p.x, p.y);
-    const day = cell?.getAttribute(CELL_DAY_ATTR);
-    const start = cell?.getAttribute(CELL_START_ATTR);
-    return day && start ? { day, start } : null;
+    return okCellAt(p.x, p.y);
   }, [okCellAt]);
   const trackPointer = useCallback((e: PointerEvent) => {
     pointerRef.current = { x: e.clientX, y: e.clientY };
     const cell = okCellAt(e.clientX, e.clientY);
     if (hotRef.current === cell) return;
-    hotRef.current?.removeAttribute(CELL_HOT_ATTR);
-    cell?.setAttribute(CELL_HOT_ATTR, "1");
+    // 블록이 여러 칸이면 그 칸들을 함께 켠다(월목 병합 블록은 두 요일이 함께 옮겨진다).
+    markHotCells(document, cell, subjectRef.current);
     hotRef.current = cell;
   }, [okCellAt]);
   const stopTracking = useCallback(() => {
     window.removeEventListener("pointermove", trackPointer);
     hotRef.current = null;
     pointerRef.current = null;
+    subjectRef.current = null;
     clearDropCells(document);
   }, [trackPointer]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -910,7 +934,6 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // 반 블록 — 격자 칸이 "여기로 갈 수 있나"를 판정할 재료를 올린다(칸만 구독해 다시 그린다).
     if (data?.type === "class") {
       const info = e.active.data.current as unknown as ClassDragInfo;
-      setClassDrag(info);
       const g = (e.active.data.current as { ghost?: Omit<NonNullable<typeof blockGhost>, "width" | "height"> }).ghost;
       const rect = e.active.rect.current.initial;
       if (g) {
@@ -921,6 +944,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
         });
       }
       setTimetableDragging(true, "class");
+      subjectRef.current = info.subject;
       // 갈 수 있는 칸을 **DOM에 직접** 칠한다(칸마다 React를 돌리면 그게 곧 픽업 렉 — grid-drop-cell.tsx 주석).
       if (moveLookup) {
         annotateDropCells(document, info.subject, { day: info.fromDay, start: info.fromStart }, moveLookup);
@@ -939,14 +963,12 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
 
   function onDragEnd(e: DragEndEvent) {
     setBlockGhost(null);
-    // 🔴 **목적지를 먼저 읽는다** — `setClassDrag(null)`은 구독한 칸들을 곧바로 다시 그려
-    //    `data-cell-*` 표식을 지운다(useSyncExternalStore는 찢김을 막으려 동기로 반영될 수 있다).
-    //    지운 뒤에 `elementFromPoint`를 부르면 항상 빈손이라 드롭이 조용히 사라진다(실측).
+    // 🔴 **목적지를 먼저 읽는다** — `stopTracking()`이 `clearDropCells`로 `data-cell-ok` 표식을 지운다.
+    //    지운 뒤에 좌표로 칸을 찾으면 항상 빈손이라 드롭이 조용히 사라진다(실측).
     const isBlockDrag = String(e.active.id).startsWith("block:");
     const cellHit = isBlockDrag ? cellAtPointer() : null;
     setDrag(null);
     setTimetableDragging(false);
-    setClassDrag(null);
     stopTracking();
     if (!canDrag) return;
     const { active, over } = e;
@@ -956,17 +978,23 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // ── 반 블록을 격자 칸에 놓았을 때 — 큐에만 쌓고 '저장'에서 반영한다(학생 이동과 같은 규약).
     if (activeIdStr.startsWith("block:")) {
       const src = active.data.current as unknown as ClassDragInfo | undefined;
-      const dst = cellHit;
-      if (!src || !dst) return;
-      if (src.fromDay === dst.day && src.fromStart.slice(0, 5) === dst.start.slice(0, 5)) return;
+      if (!src || !cellHit) return;
+      // 블록 전체가 어디로 가는지 — 칸이 들고 있는 좌표로 계산한다(하이라이트와 **같은 함수**).
+      const placed = placementAt(cellHit, src.subject, document);
+      if (!placed || placed.length === 0) return;
+      const anchor = placed.find((w) => w.slotId === src.slotId) ?? placed[0]!;
+      if (src.fromDay === anchor.day && src.fromStart.slice(0, 5) === anchor.start.slice(0, 5)) return;
       queueClassMove({
         slotId: src.slotId,
         classId: src.classId,
         className: src.className,
         fromDay: src.fromDay,
         fromStart: src.fromStart,
-        toDay: dst.day,
-        toStart: dst.start,
+        moves: placed.map((w) => ({ slotId: w.slotId, toDay: w.day, toStart: w.start })),
+        toDay: anchor.day,
+        toStart: anchor.start,
+        toDays: [...new Set(placed.map((w) => w.day))],
+        effectiveOn: null, // provider가 큐잉 시점의 의도로 덮어쓴다(주 앵커)
       });
       return;
     }
@@ -1046,7 +1074,6 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
         setDrag(null);
         setBlockGhost(null);
         setTimetableDragging(false);
-        setClassDrag(null);
         stopTracking();
       }}
     >

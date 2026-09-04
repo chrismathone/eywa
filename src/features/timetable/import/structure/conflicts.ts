@@ -24,6 +24,7 @@
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import type { SchedulePlanItem, TargetSchedule } from "./types";
+import { roomToken } from "../../lib/room-token";
 
 /**
  * · `room` — 한 방에 **다른 강사**의 두 반(불가능)
@@ -68,11 +69,8 @@ const DAY_KO: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
 };
 
-/** 방 라벨을 비교 토큰으로("본원303"→"303", "SKY"→"SKY", 없으면 ""). diff.ts와 같은 규약. */
-function roomTok(r: string | null): string {
-  if (!r) return "";
-  return (r.match(/\b(\d{3}|SKY)\b/i)?.[1] ?? r.trim()).toUpperCase();
-}
+/** 방 라벨을 비교 토큰으로("본원303"→"303", "SKY"→"SKY", 없으면 "") — 앱 단일 소스(`lib/room-token.ts`). */
+const roomTok = roomToken;
 
 function toMin(t: string): number {
   const [h, m] = t.split(":").map(Number);

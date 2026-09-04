@@ -19,14 +19,18 @@ import {
   type SubSlot,
 } from "@/features/timetable/lib/grid";
 import {
+  EMPTY_PERIOD_H,
   periodRowFullHeight,
   periodRowHeight,
   stackedHeights,
 } from "@/features/timetable/lib/empty-period-rows";
+import { toMinutes, type MovePart } from "@/features/timetable/lib/class-move";
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
 import { GridDropCell } from "./grid-drop-cell";
+// 🔴 속성 이름은 **일반 모듈**에서 — 이 파일은 서버 컴포넌트라 "use client" 모듈의 상수는 런타임 undefined다([[#81]]).
+import { GRID_ID_ATTR, GRID_ROWS_ATTR } from "@/features/timetable/lib/grid-attrs";
 import { HapbanCell } from "./hapban-cell";
 import { SearchedCell } from "./search-context";
 
@@ -142,6 +146,25 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
   return out;
 }
 
+/**
+ * 화면의 한 블록이 **함께 옮기는** 배치들 — 기준 줄(가장 위·왼쪽)에 대한 상대 위치로 접는다.
+ *
+ * 🔴 격자는 같은 반의 연속 교시(세로)·같은 그룹 요일(가로)을 한 칸으로 병합해 그린다 — 실측 2026-09-04:
+ *    영어는 (반,요일) 121칸이 **전부** 교시 2개 이상이고 106칸이 두 요일에 걸쳐 있다. 기준 줄 하나만 옮기면
+ *    화면은 블록이 통째로 간 것처럼 보이는데 나머지 줄이 제자리에 남는다.
+ * ⚠️ 기준은 블록의 앵커 칸이 아니라 **실제로 슬롯이 있는 가장 위·왼쪽 칸**이다(반교시 확장 블록은 앵커가 빈 칸일 수 있다).
+ */
+function blockMoveParts(placed: { slot: ScheduleSlotWithStudents; row: number; dayIdx: number }[]): MovePart[] {
+  const baseRow = Math.min(...placed.map((p) => p.row));
+  const baseDay = Math.min(...placed.map((p) => p.dayIdx));
+  return placed.map((p) => ({
+    slotId: p.slot.id,
+    rowOffset: p.row - baseRow,
+    dayOffset: p.dayIdx - baseDay,
+    durMin: Math.max(0, toMinutes(p.slot.endTime) - toMinutes(p.slot.startTime)),
+  }));
+}
+
 /** 같은 반(classId) 슬롯들을 한 카드로 합침 — 시간 범위 min~max, 학생은 반 기준 동일. */
 function mergeSlotsByClass(slots: ScheduleSlotWithStudents[]): ScheduleSlotWithStudents[] {
   const byClass = new Map<string, ScheduleSlotWithStudents[]>();
@@ -173,6 +196,7 @@ function SubSlotContent({
   coveringDays,
   subSlot = "full",
   hideStudents = false,
+  parts,
 }: {
   slots: ScheduleSlotWithStudents[];
   coveringDays: DayOfWeek[];
@@ -180,6 +204,11 @@ function SubSlotContent({
   hideStudents?: boolean;
   /** 그룹 한쪽 교시만 쓰는 수업이면 수업명을 그 절반에만(expandHalfPeriodBlocks가 판정). */
   subSlot?: SubSlot;
+  /**
+   * 이 블록이 **함께 옮기는** 배치들(반 드래그) — 화면의 한 블록이 실제로는 배치 여러 줄이다
+   * (연속 교시 세로 병합·월목 가로 병합). 없으면(합반·읽기 전용) 반 드래그가 없다.
+   */
+  parts?: MovePart[];
 }) {
   const merged = mergeSlotsByClass(slots);
   const isHapban = merged.length >= 2;
@@ -201,7 +230,13 @@ function SubSlotContent({
       {isHapban ? (
         <HapbanCell slots={merged} subSlot={subSlot} coveringDays={coveringDays} roster={hideStudents ? "none" : "names"} />
       ) : (
-        <ClassCell slot={merged[0]!} roster={hideStudents ? "none" : "names"} subSlot={subSlot} coveringDays={coveringDays} />
+        <ClassCell
+          slot={merged[0]!}
+          roster={hideStudents ? "none" : "names"}
+          subSlot={subSlot}
+          coveringDays={coveringDays}
+          moveParts={parts}
+        />
       )}
     </div>
     </SearchedCell>
@@ -257,6 +292,8 @@ function GroupTable({
   // 대응) → 5·6·7교시 수업은 3칸 병합하고 8교시(4-2)는 별도. 교시 축은 라벨 컬럼이 그룹(3교시/4교시)을 2행
   // rowSpan으로 묶어 표시(아래 tbody) — 축은 8개로 안 늘어남. 수학계열만 그룹 라벨(영어는 개별 교시라 무관).
   const isMathFamily = !weekend && subject !== "english";
+  // 이 표의 식별자 — 교시 행 목록은 표마다 다르다(평일 14:30~ / 주말 09:00~). 반 블록 배치 계산이 쓴다.
+  const gridId = weekend ? "we" : "wd";
   const hm5 = (t: string) => t.slice(0, 5);
   const periodList = weekend ? subjectWeekendPeriods(config) : subjectWeekdayPeriods(subject, config);
   const matchPeriod = buildPeriodMatcher(periodList);
@@ -335,9 +372,16 @@ function GroupTable({
   // 평탄 요일 컬럼 목록 — colgroup으로 폭 고정(엑셀 줄맞춤). 수·토·일은 2배 폭.
   const dayCols = groups.flatMap((g) => g.teachers.flatMap((t) => t.days));
   const tableW = PERIOD_COL_W + dayCols.reduce((sum, d) => sum + dayColW(d, wideDays), 0);
+  // 반 블록을 놓을 자리를 계산하려면 **이 표의 교시 행 시작시각이 순서대로** 필요하다(블록이 두 교시를 쓰면
+  // 그 아래 행). 🔴 칸에서 되짚지 말 것 — 모든 열이 위쪽 rowSpan에 덮인 행은 칸이 하나도 없어 그 행이 빠진다.
+  const rowStarts = rows.map((r) => `${r.time.split("~")[0]}:00`).join(",");
 
   return (
-    <table className={`border-collapse border ${GRID} text-sm`} style={{ tableLayout: "fixed", width: tableW }}>
+    <table
+      className={`border-collapse border ${GRID} text-sm`}
+      style={{ tableLayout: "fixed", width: tableW }}
+      {...{ [GRID_ID_ATTR]: gridId, [GRID_ROWS_ATTR]: rowStarts }}
+    >
       <colgroup>
         <col style={{ width: PERIOD_COL_W }} />
         {dayCols.map((d, i) => (
@@ -481,10 +525,25 @@ function GroupTable({
                     const block = t.blocks.get(`${ri}:${ci}`);
                     if (!block) return null; // 위/왼쪽 병합에 피복됨 — 렌더 스킵
                     // 블록 전체(rowSpan×colSpan) 슬롯 모아 같은 반 합치기.
+                    // 🔴 **어느 줄이 어느 칸에서 왔는지**를 함께 기억한다 — 반 드래그는 블록 전체를 모양 그대로
+                    //    옮기므로(class-move.ts) 줄마다 (교시 행, 그룹 안 요일) 오프셋이 필요하다.
                     const acc: ScheduleSlotWithStudents[] = [];
+                    const placed: { slot: ScheduleSlotWithStudents; row: number; dayIdx: number }[] = [];
                     for (let rr = ri; rr < ri + block.rowSpan; rr++) {
-                      for (let cc = ci; cc < ci + block.colSpan; cc++) acc.push(...t.cellAt(rr, cc));
+                      for (let cc = ci; cc < ci + block.colSpan; cc++) {
+                        const dayIdx = g.days.indexOf(t.days[cc]!);
+                        for (const s of t.cellAt(rr, cc)) {
+                          acc.push(s);
+                          placed.push({ slot: s, row: rr, dayIdx });
+                        }
+                      }
                     }
+                    // 이 블록이 담은 반이 하나일 때만 반 드래그(합반은 어느 반을 옮기는지 화면이 말할 수 없다).
+                    const blockClassIds = new Set(acc.map((x) => x.classId));
+                    const moveParts =
+                      blockClassIds.size === 1 && placed.length > 0 && placed.every((p) => p.dayIdx >= 0)
+                        ? blockMoveParts(placed)
+                        : undefined;
                     // 이 병합 블록이 덮는 요일 — 분리등원 요일 칸 분할용(월목 병합이면 [mon,thu]). 단독 셀이면 [그 요일].
                     const coveringDays = t.days.slice(ci, ci + block.colSpan);
                     // 셀 높이 = 실제 연속 교시 수(block.rowSpan) × 교시 높이. 엑셀 셀병합처럼 수업이 쓰는
@@ -492,7 +551,7 @@ function GroupTable({
                     // 🔴 명단을 접으면 행이 38px이라 `rowSpan=1` 셀(영어·주말·수학 반쪽 그룹)은 22px가 되어
                     //    **반 이름 헤더(60)가 잘린다** — 최소 높이를 헤더 존으로 못박는다(합반은 배지 몫을 더한다).
                     //    그 행만 조금 높아질 뿐 격자 정렬은 유지된다(같은 행의 칸은 함께 늘어난다).
-                    const isHapbanCell = new Set(acc.map((x) => x.classId)).size >= 2;
+                    const isHapbanCell = blockClassIds.size >= 2;
                     const minCellH = hideStudents ? HEADER_H + (isHapbanCell ? HAPBAN_BADGE_H : 0) : 0;
                     const cellH = Math.max(minCellH, block.rowSpan * rowHeight - 16);
                     return (
@@ -506,10 +565,29 @@ function GroupTable({
                       >
                         {/* 반 블록 드롭 대상 — 빈 칸도 포함한다(옮길 곳은 대개 빈 칸이다). 반을 끌고 있지 않으면
                             드롭존을 만들지 않아 학생 드래그가 느려지지 않는다(grid-drop-cell.tsx 주석). */}
-                        <GridDropCell day={d} start={rowStart}>
+                        <GridDropCell
+                          day={d}
+                          start={rowStart}
+                          grid={gridId}
+                          rowIndex={ri}
+                          groupDays={g.days}
+                          col={`${g.title}:${t.name}`}
+                        >
                           {acc.length === 0 ? (
                             // 빈 칸도 높이를 잡아 둬야 하이라이트가 칸 전체로 보인다(내용은 없다).
-                            <div style={{ height: cellH }} aria-hidden />
+                            // 🔴 **접힌 빈 교시 행은 예외** — 고정 px를 주면 행이 통째로 펴져 '빈 교시 접기'가 죽는다
+                            //    (표 행 높이는 최솟값이라 내용이 이긴다). 접힌 행은 행과 **같은 변수**를 따라간다
+                            //    (드래그 중엔 EmptyPeriodScope가 그 변수를 풀 높이로 올려 함께 펼쳐진다).
+                            <div
+                              style={{
+                                // 🔴 빈 칸엔 **헤더 최소 높이(hideStudents)를 적용하지 않는다** — 지킬 반 이름이 없다.
+                                //    적용하면 명단을 접었을 때 빈 칸이 60px을 잡아 38px 행이 도로 늘어난다.
+                                height: isCollapsed(row.key)
+                                  ? `calc(${EMPTY_PERIOD_H} - 12px)`
+                                  : block.rowSpan * rowHeight - 16,
+                              }}
+                              aria-hidden
+                            />
                           ) : (
                             <div className="flex flex-col" style={{ height: cellH }}>
                               <SubSlotContent
@@ -517,6 +595,7 @@ function GroupTable({
                                 coveringDays={coveringDays}
                                 subSlot={t.subSlots.get(`${ri}:${ci}`) ?? "full"}
                                 hideStudents={hideStudents}
+                                parts={moveParts}
                               />
                             </div>
                           )}

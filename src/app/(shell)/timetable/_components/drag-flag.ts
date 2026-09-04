@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import type { MoveSubject } from "@/features/timetable/lib/class-move";
 
@@ -58,48 +58,22 @@ export function useTimetableDragging(enabled = true): boolean {
 }
 
 /**
- * 지금 끌고 있는 **반 블록**(반 이름 머리를 잡았을 때) — 격자 칸이 "여기로 갈 수 있나"를 판정하는 재료.
- *
- * 🔴 학생 드래그와 같은 이유로 **컨텍스트가 아니다**(픽업 렉) — 다만 칸 하이라이트는 다시 그려야 하므로
- *    칸 컴포넌트만 `useClassDrag()`로 구독한다. 반을 집는 것은 드문·의도적 동작이라 그때 한 번 도는 비용은 받는다.
+ * 지금 끌고 있는 **반 블록**의 판정 재료 — 보드가 `useRef`로 들고 다닌다(구독자 없음).
+ * 🔴 한때 이걸 모듈 저장소 + `useSyncExternalStore`로 뒀는데, 칸을 다시 그리게 하는 순간 그게 곧 픽업 렉이라
+ *    칸은 DOM 직칠(`annotateDropCells`)로 바뀌었고 구독자가 0이 됐다 — **저장소는 지웠다**(쓰기 전용 상태는
+ *    다음 사람이 "누군가 구독한다"고 오해한다). 타입만 남긴다.
  */
 export type ClassDragInfo = {
-  /** 끌고 있는 배치(스케줄) id — 저장은 이 행을 옮긴다. */
+  /** 끌고 있는 블록의 기준 배치(스케줄) id — 저장·표식의 키. */
   slotId: string;
   classId: string;
   className: string;
   /** 출발 요일·시각(같은 자리로 떨어뜨리면 아무 일도 안 하게). */
   fromDay: string;
   fromStart: string;
-  /** 판정 재료 — 실효 강사·강의실·자리 여부·원래 길이(class-move.ts `MoveSubject`). */
+  /** 판정 재료 — 실효 강사·강의실·자리 여부·함께 옮기는 줄들(class-move.ts `MoveSubject`). */
   subject: MoveSubject;
 };
-
-let classDrag: ClassDragInfo | null = null;
-const classSubscribers = new Set<() => void>();
-
-/** DnD 영역이 반 블록 드래그의 시작·끝에 부른다. */
-export function setClassDrag(next: ClassDragInfo | null): void {
-  if (classDrag === next) return;
-  classDrag = next;
-  for (const cb of classSubscribers) cb();
-}
-
-function subscribeClass(cb: () => void): () => void {
-  classSubscribers.add(cb);
-  return () => {
-    classSubscribers.delete(cb);
-  };
-}
-
-/** 지금 끌고 있는 반 블록(없으면 null) — 격자 칸이 구독한다. */
-export function useClassDrag(): ClassDragInfo | null {
-  return useSyncExternalStore(
-    subscribeClass,
-    () => classDrag,
-    () => null,
-  );
-}
 
 /**
  * **마우스가 올라간 줄만 드래그 장치를 단다**(원장 제보 2026-09-04 *"픽업할 때 렉"* 후속).
@@ -134,14 +108,44 @@ export function useIsArmedRow(key: string): boolean {
   return useSyncExternalStore(subscribeArmed, get, () => false);
 }
 
-/** 거친 포인터(터치·펜) 기기인가 — hover가 없어 무장 방식을 못 쓴다. 창마다 한 번만 잰다. */
-let coarsePointer: boolean | null = null;
-export function isCoarsePointer(): boolean {
-  if (coarsePointer === null) {
-    coarsePointer =
-      typeof window !== "undefined" && typeof window.matchMedia === "function"
-        ? window.matchMedia("(pointer: coarse)").matches
-        : false;
-  }
-  return coarsePointer;
+/**
+ * 이 기기에 **터치·펜이 달려 있나** — hover가 없어 무장 방식을 못 쓰므로 그런 기기에선 모든 줄을 무장한다.
+ *
+ * 🔴 `(pointer: coarse)`가 아니라 **`(any-pointer: coarse)`** (적대 리뷰 2026-09-04) — 앞엣것은 **주** 포인터만
+ *    본다. 터치스크린 + 트랙패드 노트북은 주 포인터가 fine이라 false가 되고, 손가락은 `pointerover`의
+ *    `pointerType`이 "touch"라 무장도 안 걸려 **그 기기에선 학생 줄을 아예 못 끌었다**.
+ * 🔴 **첫 렌더에는 false**를 돌려준다 — 서버는 이 값을 모르므로(항상 false로 그린다) 첫 클라 렌더가 다르면
+ *    하이드레이션이 깨진다(이 리포엔 그것으로 화면 클릭이 통째로 죽은 전례가 둘 있다: [[#75]]·[[#108]]).
+ *    마운트 뒤 한 번 재고, 그때 켜지는 기기만 다시 그린다.
+ */
+let touchCapable = false;
+let touchProbed = false;
+const touchSubscribers = new Set<() => void>();
+
+function probeTouchCapable(): void {
+  if (touchProbed) return;
+  touchProbed = true;
+  const next =
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(any-pointer: coarse)").matches
+      : false;
+  if (next === touchCapable) return;
+  touchCapable = next;
+  for (const cb of touchSubscribers) cb();
+}
+
+function subscribeTouch(cb: () => void): () => void {
+  touchSubscribers.add(cb);
+  return () => {
+    touchSubscribers.delete(cb);
+  };
+}
+
+export function useTouchCapable(): boolean {
+  useEffect(probeTouchCapable, []);
+  return useSyncExternalStore(
+    subscribeTouch,
+    () => touchCapable,
+    () => false,
+  );
 }

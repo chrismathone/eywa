@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, type ComponentProps, type ReactNode } from "react";
+import { useMemo, type ComponentProps, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { dayChangeLabel } from "@/features/timetable/lib/split-attendance";
 import { useTimetableEdit } from "./edit-context";
-import { isCoarsePointer, setArmedRow, useIsArmedRow } from "./drag-flag";
+import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { HoverCard, StudentInfoCard } from "./hover-cards";
 import { useSearchTone } from "./search-context";
 
@@ -134,8 +134,19 @@ export function DraggableStudentRow(props: DraggableRowProps) {
   // ⚠️ 터치·펜엔 hover가 없어 그 기기에선 늘 무장한다(느린 것보다 못 옮기는 게 나쁘다).
   const rowKey = props.dayKey ? `${props.enrollmentId}:${props.dayKey}` : props.enrollmentId;
   const armed = useIsArmedRow(rowKey);
-  if (armed || isCoarsePointer()) return <ArmedStudentRow {...props} />;
-  return <RestingStudentRow {...props} rowKey={rowKey} />;
+  // ⚠️ 터치·펜 기기는 hover가 없어 늘 무장한다 — 판정은 **마운트 뒤**에 켜진다(SSR과 같은 첫 렌더, [[#75]]).
+  const touch = useTouchCapable();
+  const inner =
+    armed || touch ? <ArmedStudentRow {...props} /> : <RestingStudentRow {...props} rowKey={rowKey} />;
+  // 🔴 hover 카드는 **스왑 바깥**에 둔다 — 무장 순간 줄이 다른 컴포넌트로 갈리면서 다시 마운트되는데,
+  //    카드가 그 안에 있으면 첫 진입의 `mouseenter`가 옛 노드와 함께 사라져 **카드가 안 뜬다**
+  //    (적대 리뷰 2026-09-04 제보 → 실브라우저에서 재현 확인). 카드는 여기서 한 번만 마운트된다.
+  if (!props.student) return inner;
+  return (
+    <HoverCard width={240} card={<StudentCard student={props.student} />}>
+      {inner}
+    </HoverCard>
+  );
 }
 
 type DraggableRowProps = {
@@ -209,7 +220,12 @@ function StudentRowView({
   badge,
   dnd,
   onArm,
+  onMouseEnter,
+  onMouseLeave,
 }: DraggableRowProps & {
+  /** hover 카드가 `cloneElement`로 주입한 핸들러 — 줄의 제 핸들러와 **함께** 부른다. */
+  onMouseEnter?: (e: ReactMouseEvent) => void;
+  onMouseLeave?: (e: ReactMouseEvent) => void;
   dnd?: {
     attributes: ReturnType<typeof useDraggable>["attributes"];
     listeners: ReturnType<typeof useDraggable>["listeners"];
@@ -258,14 +274,23 @@ function StudentRowView({
       ref={dnd?.setNodeRef}
       {...(dnd?.attributes ?? {})}
       {...(dnd?.listeners ?? {})}
-      onPointerOver={(e) => {
-        // 마우스가 올라오면 이 줄만 무장(터치·펜은 애초에 늘 무장이라 여기 안 온다).
+      onPointerOver={() => {
+        // 포인터가 올라오면 이 줄만 무장. 🔴 `pointerType`으로 거르지 않는다 — 터치 기기를 못 알아본
+        //    경우(하이브리드 노트북)에도 최소한 이 경로는 살아 있어야 한다(적대 리뷰 2026-09-04).
         // ⚠️ 가 아니라  — enter/leave는 버블링이 없어 React 합성이 까다롭고,
         //    같은 값 재설정은 무동작이라 자식 사이를 오가며 여러 번 불려도 비용이 0이다.
-        if (onArm && e.pointerType === "mouse") onArm();
+        onArm?.();
       }}
-      onMouseEnter={() => setHovered({ enrollmentId, studentId: studentId ?? "", name, className })}
-      onMouseLeave={() => setHovered(null)}
+      // ⚠️ hover 카드는 이 줄 **바깥**(DraggableStudentRow)에서 붙는다 — `cloneElement`가 주입한 핸들러가
+      //    여기까지 내려오므로 함께 부른다(하나만 부르면 카드나 Delete 대상 중 하나가 죽는다).
+      onMouseEnter={(e) => {
+        onMouseEnter?.(e);
+        setHovered({ enrollmentId, studentId: studentId ?? "", name, className });
+      }}
+      onMouseLeave={(e) => {
+        onMouseLeave?.(e);
+        setHovered(null);
+      }}
       // 🔴 요일 편집은 **우클릭** — 더블클릭이 학생 창을 여는 자리라 클릭 계열이 남지 않았다([[#97]]와 같은 규약).
       onContextMenu={
         canEditDays
@@ -292,14 +317,7 @@ function StudentRowView({
       {body}
     </div>
   );
-  if (!student) return row;
-  // 끌고 있는 동안엔 카드를 안 띄운다 — 판정은 HoverCard가 **모듈 플래그**로 직접 읽는다(상태로 내리면
-  // 픽업 순간 350줄이 다시 그려진다, drag-flag.ts 주석).
-  return (
-    <HoverCard width={240} card={<StudentCard student={student} />}>
-      {row}
-    </HoverCard>
-  );
+  return row;
 }
 
 /** hover 카드 본문 — 드래그 행·읽기 행이 같은 카드를 쓴다(필드 나열을 두 벌로 두지 않는다). */

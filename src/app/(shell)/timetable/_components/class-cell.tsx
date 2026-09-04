@@ -13,10 +13,11 @@ import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuic
 import { StudentSection, DayDropZone } from "./student-section";
 import {
   isSeatSlot,
-  slotRoomKeyOf,
+  slotRoomIdOf,
   slotRoomNameOf,
+  slotRoomTokOf,
   slotTeacherOf,
-  type MoveSlotLike,
+  type MovePart,
 } from "@/features/timetable/lib/class-move";
 import { useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
@@ -33,6 +34,15 @@ export type ClassDetailQuick = {
   subject: string;
   classroomName?: string | null;
   teacherName?: string | null;
+  /**
+   * 셀 override(시트 배치) — 반 블록 이동 판정이 읽는다(강사·강의실 축).
+   * 🔴 **타입에 적어 둔다**: 런타임 객체(`ScheduleSlotWithStudents`)엔 원래 있는데 이 타입이 빠뜨려서,
+   *    옛 코드가 `as unknown as` 캐스트로 넘기며 **강의실 FK를 통째로 못 읽고 있었다**(적대 리뷰 2026-09-04).
+   */
+  slotTeacherLabel?: string | null;
+  slotRoomLabel?: string | null;
+  slotRoomId?: string | null;
+  classRoomId?: string | null;
   startTime: string;
   endTime: string;
   dayOfWeek: string;
@@ -106,6 +116,7 @@ export function ClassCell({
   roster = "full",
   subSlot = "full",
   coveringDays,
+  moveParts,
 }: {
   slot: ClassDetailQuick;
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
@@ -117,6 +128,12 @@ export function ClassCell({
   subSlot?: "top" | "bottom" | "full";
   /** 이 셀(병합 블록)이 덮는 요일. 2일+이고 일부 요일만 오는 재원생이 있으면 요일 칸으로 분할(분리등원, ijw식). 기본뷰만 전달. */
   coveringDays?: string[];
+  /**
+   * 반 드래그로 **함께 옮길** 배치들(기준 줄 포함) — 화면의 한 블록이 배치 여러 줄이라 필요하다.
+   * 🔴 없으면 반 드래그를 **걸지 않는다**(합반 셀·통합뷰 등) — 어느 줄이 함께 가는지 모르는 채로 옮기면
+   *    기준 줄만 가고 나머지가 제자리에 남는다(적대 리뷰 2026-09-04).
+   */
+  moveParts?: MovePart[];
 }) {
   const { canDrag, incoming, classMoves } = useTimetableEdit();
   const subjects = useSubjectMaps();
@@ -179,10 +196,13 @@ export function ClassCell({
   // 반 블록 드래그 — **반 이름 머리**를 잡으면 그 배치가 통째로 움직인다(원장 2026-09-04 *"반이름을 잡고 드래그하면
   // 반 드래그"*). 판정 재료(실효 강사·방·자리 여부·원래 길이)를 data에 실어 보내 격자 칸이 그것만으로 판정한다.
   // ⚠️ 리스너는 **머리 껍데기 div**에 붙인다 — 안쪽 링크의 더블클릭(반 정보 창)은 그대로 살아 있어야 한다.
-  const moveSubjectSlot = slot as unknown as MoveSlotLike;
+  // 판정 헬퍼는 **읽는 필드만** 받으므로 셀 슬롯을 그대로 넘긴다(옛 `as unknown as` 이중 캐스트는
+  // 필드가 어긋나도 타입체크가 못 잡아서 걷어냈다 — 적대 리뷰 2026-09-04).
+  const moveSubjectSlot = slot;
+  const canDragBlock = canDrag && !!moveParts && moveParts.length > 0;
   const blockDrag = useDraggable({
     id: `block:${slot.id}`,
-    disabled: !canDrag,
+    disabled: !canDragBlock,
     data: {
       type: "class" as const,
       slotId: slot.id,
@@ -203,11 +223,12 @@ export function ClassCell({
         slotId: slot.id,
         classId: realClassId,
         teacher: slotTeacherOf(moveSubjectSlot),
-        roomKey: slotRoomKeyOf(moveSubjectSlot),
+        roomId: slotRoomIdOf(moveSubjectSlot),
+        roomTok: slotRoomTokOf(moveSubjectSlot),
         roomName: slotRoomNameOf(moveSubjectSlot),
         seat: isSeatSlot(moveSubjectSlot),
-        startTime: slot.startTime,
-        endTime: slot.endTime,
+        // 🔴 블록이 함께 옮기는 줄들 — 판정·저장이 같은 목록을 쓴다(기준 줄만 옮기면 나머지가 남는다).
+        parts: moveParts ?? [],
       },
     },
   });
@@ -229,10 +250,10 @@ export function ClassCell({
         {/* 반이름 헤더 바 — 반 색 우선(인라인), 없으면 과목색 클래스. WindowLink는 style 미지원이라 래퍼 div에 색.
             hover 시 수업 정보 카드, 클릭 시 반 정보 창 팝업(/classes/[classId]). */}
         <div
-          ref={canDrag ? blockDrag.setNodeRef : undefined}
-          {...(canDrag ? blockDrag.attributes : {})}
-          {...(canDrag ? blockDrag.listeners : {})}
-          className={`overflow-hidden transition hover:brightness-95 ${canDrag ? "cursor-grab touch-none active:cursor-grabbing" : ""} ${blockDrag.isDragging ? "opacity-40" : ""} ${headerClass}`}
+          ref={canDragBlock ? blockDrag.setNodeRef : undefined}
+          {...(canDragBlock ? blockDrag.attributes : {})}
+          {...(canDragBlock ? blockDrag.listeners : {})}
+          className={`overflow-hidden transition hover:brightness-95 ${canDragBlock ? "cursor-grab touch-none active:cursor-grabbing" : ""} ${blockDrag.isDragging ? "opacity-40" : ""} ${headerClass}`}
           style={{ ...headerStyle, height: subSlot === "full" ? HEADER_H : HEADER_ROW_H }}
         >
           <HoverCard
@@ -263,7 +284,10 @@ export function ClassCell({
                   {/* 반 블록을 옮겨 둔 상태 — 어디로 갈지 셀 머리에 남긴다(저장 전엔 화면이 유일한 근거다). */}
                   {classMove ? (
                     <span className="ml-1 text-xs font-bold opacity-90">
-                      → {DAY_LABEL[classMove.toDay] ?? classMove.toDay} {classMove.toStart.slice(0, 5)}
+                      → {(classMove.toDays.length > 0 ? classMove.toDays : [classMove.toDay])
+                        .map((d) => DAY_LABEL[d] ?? d)
+                        .join("·")}{" "}
+                      {classMove.toStart.slice(0, 5)}
                     </span>
                   ) : null}
                   {/* 🔴 미래 주는 **그 주에 불릴 이름**을 쓴다(원장 2026-08-29) — 오늘 이름으로 그리면
