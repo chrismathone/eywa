@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 export type BoardRow = {
   id: string;
@@ -38,7 +39,7 @@ export function BoardTable({
   const colCount = 6 + areaHeads.length;
 
   return (
-    <div className="bg-card overflow-x-auto rounded-2xl shadow-card">
+    <DragScrollArea className="bg-card rounded-2xl shadow-card">
       <table className="w-full min-w-[900px] border-collapse text-sm">
         <thead>
           <tr className="border-line bg-bg-soft/60 border-b text-left">
@@ -124,6 +125,6 @@ export function BoardTable({
           ])}
         </tbody>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }

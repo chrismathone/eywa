@@ -15,6 +15,7 @@ import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-a
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
 import { noticeFailures } from "@/features/report-admin/notice-failures";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 공지 상태 한글 라벨(raw 코드 UI 노출 금지) — 워커 처리 상태와 동기.
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -301,7 +302,7 @@ export function NoticeFace({
         {rows.length === 0 ? (
           <p className="text-text-faint text-sm">아직 발송한 공지가 없습니다.</p>
         ) : (
-          <div className="border-line overflow-x-auto rounded-md border">
+          <DragScrollArea className="border-line rounded-md border">
             <table className="w-full min-w-[560px] text-left text-xs">
               <thead>
                 <tr className="border-line text-text-faint border-b">
@@ -380,7 +381,7 @@ export function NoticeFace({
                 })}
               </tbody>
             </table>
-          </div>
+          </DragScrollArea>
         )}
       </section>
     </div>

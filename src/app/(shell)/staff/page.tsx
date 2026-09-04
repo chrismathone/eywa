@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchToggle } from "@/components/search-toggle";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
@@ -411,8 +412,12 @@ export default async function StaffPage({
               (필터가 열 머리에 없어 상자로 싸도 잘릴 팝업이 없다). */}
           {/* 표 형태(원장 지시 2026-07-31) — 셀마다 테두리를 그어 시트처럼 읽히게. 열 순서도 직원명부 시트와 같은
               소속 → 이름 → 직급 순. 글자 크기는 StaffTableScaleBox가 em 기준으로 한 번에 조절한다(기본 16px). */}
-          <StaffTableScaleBox className="bg-card shadow-card overflow-x-auto rounded-2xl">
-            <StaffTable rows={pageStaff} />
+          {/* 넘치면 잡고 끌어서 가로 이동(원장 2026-09-04 *"가로스크롤이 제일 아래에 있어서 힘드니까 드래그 스크롤 가능하게"*) —
+              행 클릭은 5px 안 움직임이면 그대로 산다(DragScrollArea가 실제로 끌었을 때만 뒤따르는 click 1회를 삼킨다). */}
+          <StaffTableScaleBox className="bg-card shadow-card rounded-2xl">
+            <DragScrollArea className="rounded-[inherit]">
+              <StaffTable rows={pageStaff} />
+            </DragScrollArea>
           </StaffTableScaleBox>
           {/* 눈에 띄는 번호형 페이저(원장 지시 2026-07-28 — 표준 컴팩트 페이저는 존재감이 약해 이 목록만 강조형) */}
           {totalPages > 1 ? (

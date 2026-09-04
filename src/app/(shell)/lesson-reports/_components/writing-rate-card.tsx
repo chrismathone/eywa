@@ -10,6 +10,7 @@ import { sortRows, type SortState } from "@/lib/table/sort";
 import { useMemo, useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { WritingRatesView } from "@/features/report-admin/server/queries";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -157,7 +158,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
           {rates.length === 0 ? "최근 작성 기록이 없습니다." : "이 과목 강사의 작성 기록이 없습니다."}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <DragScrollArea>
           <table className="w-full min-w-[760px] text-left text-xs">
             <thead>
               <tr className="border-line text-text-faint group border-b">
@@ -272,7 +273,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </DragScrollArea>
       )}
     </section>
   );

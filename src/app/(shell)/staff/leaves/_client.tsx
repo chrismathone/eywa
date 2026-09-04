@@ -10,6 +10,7 @@ import {
   type LeaveActionState,
 } from "@/features/payroll/server/actions";
 import type { StaffLeaveRow } from "@/features/payroll/server/queries";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 function dur(a: string, b: string): string {
   return a === b ? a : `${a} ~ ${b}`;
@@ -23,7 +24,7 @@ export function LeavesAdminClient({
   canManage: boolean;
 }) {
   return (
-    <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line text-text-dim border-b text-left text-xs [&_th]:whitespace-nowrap">
           <tr>
@@ -71,7 +72,7 @@ export function LeavesAdminClient({
           ))}
         </tbody>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }
 

@@ -22,6 +22,7 @@ import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 import type { ReportListFilters, ReportListRow } from "@/features/report-admin/report-filters";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 type Result = { rows: ReportListRow[]; total: number; page: number; pageSize: number };
 
@@ -139,7 +140,7 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
       ) : (
         <>
           <p className="text-text-dim mb-1.5 text-xs">총 {result.total}건</p>
-          <div className="overflow-x-auto">
+          <DragScrollArea>
             <table className="w-full text-sm">
               <thead className="text-text-faint border-line border-b text-left">
                 <tr>
@@ -183,7 +184,7 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
                 })}
               </tbody>
             </table>
-          </div>
+          </DragScrollArea>
           {maxPage > 0 ? (
             <div className="mt-3 flex items-center justify-center gap-2 text-xs">
               <Button size="sm" variant="ghost" disabled={result.page <= 0 || pending} onClick={() => run({ ...filters, page: result.page - 1 })}>

@@ -16,6 +16,7 @@ import { refreshClassnoteQueue, resetStuckClassnote, retryClassnote } from "@/fe
 import { attentionCount, queuePollIntervalMs, shouldAutoRefreshQueue } from "@/features/report-admin/classnote-queue";
 import { classnoteRetryDeadline } from "@/features/onescreen/classnote-guard";
 import type { ClassnoteQueueView } from "@/features/report-admin/server/queries";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 자동 갱신 상한 — **"변화가 없는 채로" 10분**이면 중지(창을 열어둔 채 밤새 폴링 금지).
 // ⚠️ 총 시간이 아니라 '무변화 시간'인 게 핵심 — 100건 일괄 발송처럼 오래 걸리는 정상 드레인 중에
@@ -469,7 +470,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       {items.length === 0 ? (
         <p className="text-text-faint mt-3 text-sm">주의가 필요한 발송이 없습니다 — 모두 정상입니다.</p>
       ) : (
-        <div className="border-line mt-3 overflow-x-auto rounded-md border">
+        <DragScrollArea className="border-line mt-3 rounded-md border">
           <table className="w-full min-w-[560px] text-left text-xs">
             <thead>
               <tr className="border-line text-text-faint border-b">
@@ -547,7 +548,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
               처리하면 이어서 나타납니다.
             </p>
           ) : null}
-        </div>
+        </DragScrollArea>
       )}
 
       {/* 진행 중 목록 — 대기·처리중(정상 흐름). 재발송 대상이 아니라 관찰용(발송이 실제로 도는지 확인). */}
@@ -576,7 +577,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
               </span>
             ) : null}
           </p>
-          <div className="border-line overflow-x-auto rounded-md border">
+          <DragScrollArea className="border-line rounded-md border">
             <table className="w-full min-w-[480px] text-left text-xs">
               <thead>
                 <tr className="border-line text-text-faint border-b">
@@ -610,7 +611,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                 })}
               </tbody>
             </table>
-          </div>
+          </DragScrollArea>
         </div>
       ) : null}
     </section>

@@ -24,6 +24,7 @@ import { SortableTh } from "@/components/table/sortable-th";
 import type { SortState } from "@/lib/table/sort";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 import { ReportViewSettings } from "./report-view-settings";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
@@ -268,7 +269,7 @@ export function ReportList({
         <span className="text-text-faint ml-auto text-xs">{pending ? "불러오는 중…" : `총 ${total}건`}</span>
       </div>
 
-      <div className="border-line overflow-x-auto rounded-md border">
+      <DragScrollArea className="border-line rounded-md border">
         {/* 반 열이 늘어 최소폭 상향(600→680) — 좁은 창에서 열이 서로 뭉개지지 않게. 넘치면 가로 스크롤.
             멘트 열(0214a)이 켜지면 한 뼘 더(680→720). */}
         <table className={`w-full ${showMent ? "min-w-[720px]" : "min-w-[680px]"} text-left text-xs`}>
@@ -384,7 +385,7 @@ export function ReportList({
             )}
           </tbody>
         </table>
-      </div>
+      </DragScrollArea>
 
       {maxPage > 0 ? (
         <div className="mt-3 flex items-center justify-center gap-2 text-xs">

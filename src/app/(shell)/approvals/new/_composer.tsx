@@ -27,6 +27,7 @@ import {
   type ApprovalForm,
 } from "@/features/approvals/types";
 import type { ApprovalLineTemplate, ApprovalPerson } from "@/features/approvals/server/queries";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import {
   Select,
   SelectContent,
@@ -566,7 +567,7 @@ function LineTable({
   const bodyCols = 1 + Math.max(1, approvers.length) + 1;
 
   return (
-    <div className="overflow-x-auto">
+    <DragScrollArea>
       <table className="border-line border-collapse border text-center text-sm">
         <tbody>
           {/* 1줄 — 직급 */}
@@ -678,7 +679,7 @@ function LineTable({
           onClose={() => setPicker(null)}
         />
       ) : null}
-    </div>
+    </DragScrollArea>
   );
 }
 

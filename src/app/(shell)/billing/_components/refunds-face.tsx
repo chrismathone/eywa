@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getRefundRequests, type RefundListRow } from "@/features/billing/server/refund-queries";
 import { kstMonth } from "@/lib/date-kst";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 const PAGE_SIZE = 50;
 
@@ -125,7 +126,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
             </div>
           ) : (
             <>
-              <div className="bg-card border-line overflow-x-auto rounded-2xl border">
+              <DragScrollArea className="bg-card border-line rounded-2xl border">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-text-dim border-line border-b text-left text-xs">
@@ -168,7 +169,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </DragScrollArea>
               <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} total={monthRows.length} />
             </>
           )}

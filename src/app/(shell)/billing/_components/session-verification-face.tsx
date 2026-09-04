@@ -10,6 +10,7 @@ import { Pagination } from "@/components/pagination";
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { TOOLBAR_CHIP } from "@/components/toolbar-controls";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 const PAGE_SIZE = 50;
 
@@ -187,7 +188,7 @@ export async function SessionVerificationFace({
                 제외하고 개수로 표시합니다.
               </p>
             </header>
-            <div className="overflow-x-auto">
+            <DragScrollArea>
               <table className="w-full min-w-[42rem] text-sm">
                 <thead>
                   <tr className="border-line text-text-dim border-b text-xs">
@@ -247,7 +248,7 @@ export async function SessionVerificationFace({
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </DragScrollArea>
           </section>
           ) : null}
 
@@ -260,7 +261,7 @@ export async function SessionVerificationFace({
             </section>
           ) : null}
 
-          <div className="border-line overflow-x-auto rounded-2xl border">
+          <DragScrollArea className="border-line rounded-2xl border">
             <table className="w-full min-w-[46rem] text-sm">
               <thead>
                 <tr className="border-line text-text-dim border-b text-xs">
@@ -306,7 +307,7 @@ export async function SessionVerificationFace({
                 })}
               </tbody>
             </table>
-          </div>
+          </DragScrollArea>
           <Pagination page={curPage} totalPages={totalPages} total={sorted.length} hrefForPage={pageHref} />
         </>
       )}

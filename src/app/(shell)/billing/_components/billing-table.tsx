@@ -14,6 +14,7 @@ import { overdueLinesOnly } from "@/features/billing/sync-window";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 구분(수납 분류) = makeedu 고정 taxonomy(과목 enum 아님) → 여기 라벨/색 하드코딩 허용.
 const KIND_STYLE: Record<string, string> = {
@@ -183,7 +184,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
           </button>
         ) : null}
       </div>
-      <div className="overflow-x-auto rounded-b-2xl">
+      <DragScrollArea className="rounded-b-2xl">
       <table className="w-full min-w-[1080px] text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line text-text-dim border-b text-left text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
           <tr>
@@ -435,7 +436,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
           </tr>
         </tfoot>
       </table>
-      </div>
+      </DragScrollArea>
     </div>
   );
 }

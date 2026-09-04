@@ -1,6 +1,7 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { TurnChip } from "./_decide-panel";
 import type { ApprovalDocRow, ApprovalStepCell } from "@/features/approvals/server/queries";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 /**
  * 결재란 — 종이 결재 양식 문법(원장 스크린샷 2026-08-14): 칸 = **위 직급 / 가운데 사인 칸 / 아래 이름**.
@@ -184,7 +185,7 @@ export function ApprovalStamps({
 
   return (
     // 결재자가 늘면 표가 옆으로 자란다 — 좁은 창에서는 표 안에서만 가로 스크롤.
-    <div className="overflow-x-auto">
+    <DragScrollArea>
       <table className="border-line border-collapse border text-center">
         <tbody>
           <tr>
@@ -252,6 +253,6 @@ export function ApprovalStamps({
           ) : null}
         </tbody>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }

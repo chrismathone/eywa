@@ -12,6 +12,7 @@ import {
   type SessionTermActionState,
 } from "@/features/billing/session-terms/server/actions";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -248,7 +249,7 @@ export function SessionTermGroups({
   period: string;
 }) {
   return (
-    <div className="border-border overflow-x-auto rounded-2xl border">
+    <DragScrollArea className="border-border rounded-2xl border">
       <table className="w-full min-w-[860px] table-fixed text-sm">
         <colgroup>
           <col className="w-[7%]" />
@@ -303,6 +304,6 @@ export function SessionTermGroups({
           })}
         </tbody>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from "@/features/payroll/settlement";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { TeacherCompEditor } from "./teacher-comp-editor";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 function shiftPeriod(period: string, delta: number): string {
   const [y, m] = period.split("-").map(Number);
@@ -114,7 +115,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           이 필요합니다.)
         </div>
       ) : (
-        <div className="border-line overflow-x-auto rounded-2xl border">
+        <DragScrollArea className="border-line rounded-2xl border">
           <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="border-line text-text-dim border-b text-xs">
@@ -186,7 +187,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
               </tr>
             </tfoot>
           </table>
-        </div>
+        </DragScrollArea>
       )}
 
       {/* 반별 과정·배분율 — 원장 전용 설정. splits가 없어도 미리 지정할 수 있게 활성 반 전체를 보여준다.

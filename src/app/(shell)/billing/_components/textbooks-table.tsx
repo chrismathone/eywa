@@ -10,6 +10,7 @@ import { ELAPSED_STRONG_DAYS, elapsedDays, shouldShowElapsed } from "@/features/
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import type { AccountSetting } from "@/features/owner/settings-types";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -101,7 +102,7 @@ export function TextbooksTable({
           교재신청 내역이 없습니다. 위 “교재 신청 등록”으로 추가하세요.
         </div>
       ) : (
-      <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
+      <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
         <table className="w-full text-sm">
           <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
             <tr>
@@ -232,7 +233,7 @@ export function TextbooksTable({
             })}
           </tbody>
         </table>
-      </div>
+      </DragScrollArea>
       )}
 
       {dialog ? (

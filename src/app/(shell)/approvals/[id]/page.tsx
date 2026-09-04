@@ -17,6 +17,7 @@ import {
 import { ApprovalStamps } from "./_stamps";
 import { CommentDeleteForm, CommentForm } from "./_comments";
 import { DecidePanel, DeferredConfirmPanel, WithdrawPanel } from "./_decide-panel";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 export const metadata = { title: "결재 문서 — eywa" };
 
@@ -272,14 +273,14 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
                 <td className="break-keep" colSpan={3}>
                   {reasonHtml ? (
                     // 표·목록이 들어오면 셀보다 넓어질 수 있어 셀 안에서만 가로 스크롤한다.
-                    <div className="overflow-x-auto">
+                    <DragScrollArea>
                       <div
                         className="rich-content"
                         // 🔴 저장 시점 위생처리를 **믿지 않고** 서버에서 한 번 더 통과시킨 값이다(위 reasonHtml).
                         //    옛 행·직접 INSERT·위생 규칙 변경분까지 렌더 직전에 다시 걸러야 XSS 경로가 닫힌다.
                         dangerouslySetInnerHTML={{ __html: reasonHtml }}
                       />
-                    </div>
+                    </DragScrollArea>
                   ) : (
                     "—"
                   )}
@@ -319,13 +320,13 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
               </tbody>
             </table>
             {expenseBodyHtml ? (
-              <div className="overflow-x-auto">
+              <DragScrollArea>
                 <div
                   className="rich-content"
                   // 🔴 렌더 직전 재위생처리를 통과한 값만(위 expenseBodyHtml — 사유 렌더와 같은 규약).
                   dangerouslySetInnerHTML={{ __html: expenseBodyHtml }}
                 />
-              </div>
+              </DragScrollArea>
             ) : null}
           </>
         ) : doc.income ? (
@@ -349,24 +350,24 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
               </tbody>
             </table>
             {incomeBodyHtml ? (
-              <div className="overflow-x-auto">
+              <DragScrollArea>
                 <div
                   className="rich-content"
                   // 🔴 렌더 직전 재위생처리를 통과한 값만(위 incomeBodyHtml — 사유 렌더와 같은 규약).
                   dangerouslySetInnerHTML={{ __html: incomeBodyHtml }}
                 />
-              </div>
+              </DragScrollArea>
             ) : null}
           </>
         ) : doc.basic ? (
           basicBodyHtml ? (
-            <div className="overflow-x-auto">
+            <DragScrollArea>
               <div
                 className="rich-content"
                 // 🔴 렌더 직전 재위생처리를 통과한 값만(위 basicBodyHtml).
                 dangerouslySetInnerHTML={{ __html: basicBodyHtml }}
               />
-            </div>
+            </DragScrollArea>
           ) : (
             <p className="text-text-faint text-sm">—</p>
           )

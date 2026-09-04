@@ -21,6 +21,7 @@ import {
   observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 export const metadata = { title: "수업 평가 상세 — eywa" };
 
@@ -184,7 +185,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
       </div>
 
       {/* 문항 × 평가자 매트릭스 */}
-      <div className="bg-card overflow-x-auto rounded-2xl shadow-card">
+      <DragScrollArea className="bg-card rounded-2xl shadow-card">
         <table className="w-full min-w-[860px] border-collapse text-sm">
           <thead>
             <tr className="border-line bg-bg-soft/60 border-b text-left">
@@ -298,7 +299,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
             </tr>
           </tfoot>
         </table>
-      </div>
+      </DragScrollArea>
 
       {/* 평가자 관리(지정 모드) — 미채점 평가자 교체. 서버 액션이 같은 조건·미채점 여부를 재검증한다(#77). */}
       {canManageObservers ? (
