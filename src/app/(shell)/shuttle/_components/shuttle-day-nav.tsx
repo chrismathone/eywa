@@ -2,7 +2,7 @@
 
 import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";
-import { addDays, formatKoreanDate } from "@/lib/date-kst";
+import { addDays, DAY_LABEL_W, formatKoreanDate } from "@/lib/date-kst";
 import { SEASON_LABEL, SEASONS, type Season } from "@/features/shuttle/types";
 
 /**
@@ -50,8 +50,8 @@ export function ShuttleDayNav({
         prevAriaLabel="어제"
         nextAriaLabel="내일"
         currentTitle="눌러서 오늘로"
-        // "2026년 12월 31일 (수)"(18px 굵게 실측 182px)가 안 넘치는 고정 폭 — 152 × 1.4 = 213, 내용 폭 195(리뷰 실측: 124는 오늘 날짜부터 넘쳤다).
-        labelWidth={152}
+        // 고정 폭은 날짜 라벨 공용 DAY_LABEL_W(× 1.4 = 213, 내용 폭 195 — 리뷰 실측: 124는 오늘 날짜부터 넘쳤다).
+        labelWidth={DAY_LABEL_W}
       />
       <ShuttleSeasonSelect season={season} hrefFor={(s) => hrefFor(date, s)} />
     </>

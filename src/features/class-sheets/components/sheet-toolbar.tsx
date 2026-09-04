@@ -1,6 +1,6 @@
 "use client";
 
-// ECS 툴바 — 주 네비(flush 후 이동)·반 전환·요일 알약·패널 토글·저장 인디케이터·동시편집 배지.
+// ECS 툴바 — 주 네비(flush 후 이동)·반 전환·요일 드롭다운·패널 토글·저장 인디케이터·동시편집 배지.
 // 주 네비 모양은 앱 전역 단일 소스 PeriodNav(원장 2026-09-01 "주차이동을 월간처럼 깔끔한 스타일로").
 // WeekNav(ParamLink)가 아니라 PeriodNav를 **직접** 쓰는 이유는 그대로다: 이동 전 store.flush()를
 // await해야 해서(§F) `onNavigate`로 가로챈다 — PeriodNav가 그 동안 "가는 중"을 그린다.
@@ -10,6 +10,7 @@
 //    디자인 통일"). 여기에 알약·셀렉트 표기를 다시 적지 말 것 — 그게 두 화면이 갈렸던 이유다.
 import { ClipboardCheck } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday, WEEK_LABEL_W } from "@/features/timetable/lib/week";
+import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";
 
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -134,26 +135,23 @@ export function SheetToolbar({
       />
       <SheetBarDivider />
 
-      <span className="text-foreground text-xs font-bold">요일</span>
-      <div className="flex items-center gap-1">
-        <button type="button" className={pill(dayFilter === null)} onClick={() => onDayFilter(null)}>
-          전체
-        </button>
-        {data.grid.days.map((d) => (
-          <button
-            key={d.date}
-            type="button"
-            className={pill(dayFilter === d.date)}
-            // 휴일이면 요일 글자만 빨갛게(달력 관행) — 칩을 지우거나 막지 않는다. 이름은 title로.
-            // ⚠️ 눌린 칩은 배경이 네이비라 빨강을 얹으면 안 읽힌다 → 안 눌렸을 때만.
-            title={d.holiday ? `${d.date.slice(5)} ${d.holiday}` : undefined}
-            onClick={() => onDayFilter(dayFilter === d.date ? null : d.date)}
-          >
-            <span className={d.holiday && dayFilter !== d.date ? "text-danger" : undefined}>{DOW_KO[d.dow]}</span>
-            {d.date === data.today ? <span className="ml-0.5 align-middle text-xs">●</span> : null}
-          </button>
-        ))}
-      </div>
+      {/* 요일 = `요일: 전체` 드롭다운(§10, 옛 알약 칩 줄). 휴일은 항목 hint에 이름으로, 오늘은 `오늘`로 — 색 대신 글자.
+          옛 칩은 눌린 요일을 다시 누르면 해제였는데 이제는 '전체'를 고른다(같은 값 재선택은 무시 — reselect 아님). */}
+      <HrefSelect
+        axisLabel="요일"
+        ariaLabel="요일 필터"
+        value={dayFilter ?? "all"}
+        onSelect={(v) => onDayFilter(v === "all" ? null : v)}
+        options={[
+          { value: "all", label: "전체" },
+          ...data.grid.days.map((d) => ({
+            value: d.date,
+            label: `${DOW_KO[d.dow]} ${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}`,
+            // 휴일과 오늘이 겹치면 둘 다(`추석 · 오늘`) — 휴일이 '오늘'을 덮으면 오늘 표식이 사라진다.
+            hint: [d.holiday, d.date === data.today ? "오늘" : null].filter(Boolean).join(" · ") || undefined,
+          })),
+        ]}
+      />
 
       <span className="ml-auto flex items-center gap-2">
         {dayFilter ? (
@@ -186,7 +184,7 @@ export function SheetToolbar({
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
                때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-foreground shrink-0 text-xs font-bold">JJ</span>
+          <span className="text-foreground shrink-0 text-sm font-bold">JJ</span>
           <span
             className={SHEET_SEG_BOX}
             title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
@@ -205,34 +203,21 @@ export function SheetToolbar({
             ))}
           </span>
         </span>
-        {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31).
-            지금 크기가 '작음'이라 기본은 화면 무변경. 저장은 계정이라 다른 PC에서도 같은 크기. */}
-        <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-foreground shrink-0 text-xs font-bold">글씨</span>
-          <span
-            className={SHEET_SEG_BOX}
-            title="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
-          >
-            {ECS_FONT_SIZES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onFontSize(s)}
-                aria-pressed={fontSize === s}
-                className={sheetSegItem(fontSize === s)}
-              >
-                {ECS_FONT_SIZE_LABEL[s]}
-              </button>
-            ))}
-          </span>
-        </span>
+        {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31). `축: 값` 드롭다운(§10). */}
+        <HrefSelect
+          axisLabel="글씨"
+          ariaLabel="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
+          value={fontSize}
+          onSelect={(v) => onFontSize(v as EcsFontSize)}
+          options={ECS_FONT_SIZES.map((s) => ({ value: s, label: ECS_FONT_SIZE_LABEL[s] }))}
+        />
         <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
         {conflicts > 0 ? (
-          <span className="text-danger text-xs font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>
+          <span className="text-danger text-sm font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>
         ) : pending > 0 ? (
-          <span className="text-text-dim text-xs font-semibold whitespace-nowrap">저장 중…</span>
+          <span className="text-text-dim text-sm font-semibold whitespace-nowrap">저장 중…</span>
         ) : (
-          <span className="text-text-dim text-xs font-semibold whitespace-nowrap">저장됨</span>
+          <span className="text-text-dim text-sm font-semibold whitespace-nowrap">저장됨</span>
         )}
         <button type="button" className={pill(panelOpen)} onClick={onTogglePanel}>
           계획 패널

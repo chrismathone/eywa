@@ -42,6 +42,7 @@ export function HrefSelect({
   options,
   beforeNavigate,
   onSelect,
+  reselect = false,
 }: {
   /** 축 이름 — 트리거에 `축: 값`으로 선다. */
   axisLabel: string;
@@ -51,8 +52,10 @@ export function HrefSelect({
   options: HrefSelectOption[];
   /** 이동 직전 확인(false = 취소). 클라 컴포넌트만 넘길 수 있다. */
   beforeNavigate?: () => boolean;
-  /** 값 모드 — 주면 항목이 주소로 가지 않고 이 콜백을 부른다(지금 값을 다시 고르면 닫기만). */
+  /** 값 모드 — 주면 항목이 주소로 가지 않고 이 콜백을 부른다(지금 값을 다시 고르면 닫기만 — `reselect`면 콜백). */
   onSelect?: (value: string) => void;
+  /** 값 모드에서 지금 값을 다시 골라도 `onSelect`를 부른다(원스크린 작성 필터: 같은 값 재선택 = 고정 목록 정리). */
+  reselect?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -91,7 +94,7 @@ export function HrefSelect({
                         className={itemClass(isCurrent)}
                         onClick={() => {
                           setOpen(false);
-                          if (isCurrent) return;
+                          if (isCurrent && !reselect) return;
                           onSelect?.(o.value);
                         }}
                       >

@@ -882,7 +882,7 @@ export function SheetClient({
                       </h2>
                       <Link
                         href={`/ecs/${classId}?week=${weekMonday}`}
-                        className="text-primary shrink-0 text-xs font-medium underline-offset-2 hover:underline"
+                        className="text-primary shrink-0 text-sm font-medium underline-offset-2 hover:underline"
                       >
                         주간 시트 열기 →
                       </Link>

@@ -167,8 +167,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               </span>
             )}
             <div className="min-w-0 leading-none">
-              <div className="text-foreground truncate text-lg font-bold tracking-tight">{brand}</div>
-              <div className="text-text-dim mt-[3px] truncate text-xs">
+              <div className="text-foreground truncate text-lg leading-tight font-bold tracking-tight">{brand}</div>
+              {/* 강사 미니셸의 유일한 제목 줄이라 16px(디자인 v5 18단계 — 옛 14). 머리는 `h-12`(48) 고정이라 두 줄의
+                  줄상자를 `leading-tight`로 잡는다(20×1.25 + 3 + 16×1.25 = 48 — 기본 줄높이면 54로 넘친다; 부모의
+                  `leading-none`은 자식 `text-*`가 제 줄높이를 다시 정해 상속되지 않는다). */}
+              <div className="text-text-dim mt-[3px] truncate text-sm leading-tight">
                 {/* ⚠️ 현재 메뉴명을 여기 넣는 이유: 본문 PageHeader가 좁은 화면에선 `compact-chrome`으로
                     제목을 접는다(= "제목은 크롬이 이미 보여준다"는 전제). 풀셸은 MobileTopNav가 그 역할을
                     하는데 이 미니셸엔 그런 줄이 없어, 안 넣으면 강사 화면에서 제목이 어디에도 안 남는다. */}
