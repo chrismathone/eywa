@@ -7,7 +7,9 @@ import {
   SHUTTLE_CHIP,
   SHUTTLE_ICON_BTN,
   SHUTTLE_INPUT,
+  SHUTTLE_PHONE_CONTROLS,
   SHUTTLE_ROW,
+  SHUTTLE_TOOLBAR,
 } from "./control-size";
 
 /**
@@ -21,7 +23,8 @@ import {
  *
  * 두 가지를 본다:
  *  ① **폰 탭 타겟 44px** — 접두사 없는(=폰에도 적용되는) `h-8`·`h-9`·`h-10`류 금지.
- *     `sm:h-8`처럼 데스크톱 한정은 통과한다(그게 캐논이다).
+ *     데스크톱 한정 옛 크기(`sm:h-8`·`sm:text-xs`)도 금지(디자인 v5 17단계 — 데스크톱은 control-scale 한 벌).
+ *     격자 밀도 예외(배정 칩 요일 토글)는 `size-guard-ok:` 표식으로 연다.
  *  ② **글자 계단** — control-size.ts 머리에 적힌 여덟 크기 밖은 금지.
  */
 
@@ -64,10 +67,10 @@ describe("셔틀 컨트롤 크기", () => {
    *    (FaceTabs 등)의 자리를 잡는 스켈레톤이 그렇다. 규칙을 느슨하게 푸는 대신 예외를 **눈에
    *    보이게** 남기는 쪽을 고른다(사유 없는 예외가 쌓이면 가드가 없는 것과 같아진다).
    */
-  const TOO_SMALL = /(?<![a-z0-9:-])(?:min-h|h|size)-(?:8|9|10)(?![.0-9a-z-])/g;
+  const TOO_SMALL = /(?<![a-z0-9:-])(?:min-h|h|size)-(?:8|9|10)(?![.0-9a-z-])|\bsm:(?:h|size|min-h)-(?:8|9|10)(?![.0-9a-z-])|\bsm:text-xs\b/g;
   const OPT_OUT = "size-guard-ok:";
 
-  it.each(FILES)("$path — 폰에서 44px 미만 컨트롤이 없다", ({ text }) => {
+  it.each(FILES)("$path — 폰에서 44px 미만 컨트롤·데스크톱 옛 크기(sm:h-8·sm:text-xs)가 없다", ({ text }) => {
     // 표식은 **그 줄 또는 바로 윗줄**에서 찾는다(eslint-disable-next-line과 같은 관용구) —
     // JSX에선 사유를 속성 사이에 끼워 넣을 수 없어 대개 바로 위 주석에 적힌다.
     const lines = text.split(/\r?\n/);
@@ -80,7 +83,8 @@ describe("셔틀 컨트롤 크기", () => {
   });
 
   /**
-   * ② 글자 계단 — 여덟 크기만. 새 크기가 필요하면 **이유와 함께** 여기 추가한다.
+   * ② 글자 계단 — 옛 여덟 크기. ⚠️ 2026-09-03 앱 전역 가드(`control-scale.test.ts`)가 화면 파일의 `text-[Npx]`를 통째로
+   *    막으므로 지금은 사실상 0건이 걸린다(역사·이중 방어로 남긴다).
    *
    * ⚠️ `sm:`이 붙은 것도 같이 본다 — 데스크톱만 몰래 다른 크기를 갖는 게 정확히 "한 벌"이 깨지는
    *    방식이었다(전엔 데스크톱 글자가 12.5·11.5·13·12·11px 다섯 벌이었다).
@@ -117,10 +121,19 @@ describe("크기 상수 자체의 계약", () => {
     expect(SHUTTLE_INPUT).toMatch(/(?<![a-z:-])text-base\b/);
   });
 
-  it("데스크톱은 한 벌 — 칩·입력·줄이 같은 크기로 되돌아간다", () => {
-    expect(SHUTTLE_CHIP).toContain("sm:text-xs");
-    expect(SHUTTLE_INPUT).toContain("sm:text-xs");
-    for (const c of [SHUTTLE_ACTION, SHUTTLE_CHIP, SHUTTLE_INPUT]) expect(c).toContain("sm:h-8");
+  it("데스크톱은 앱 공용 control-scale 한 벌 — 셔틀만 다른 세 번째 크기를 갖지 않는다(디자인 v5, 2026-09-04)", () => {
+    for (const c of [SHUTTLE_ACTION, SHUTTLE_CHIP, SHUTTLE_INPUT]) expect(c).toContain("sm:h-(--control-h)");
+    expect(SHUTTLE_CHIP).toContain("sm:text-(length:--control-label)");
+    // 검색 입력 안 글자 = 16px(원장 2026-09-04 "내부 텍스트는 폰트 작게" — 라벨 18보다 한 단계 아래, 14는 아니다).
+    expect(SHUTTLE_INPUT).toContain("sm:text-sm");
+    for (const c of [SHUTTLE_ACTION, SHUTTLE_CHIP, SHUTTLE_INPUT]) expect(c).not.toMatch(/sm:h-8|sm:text-xs/);
+  });
+
+  it("툴바 래퍼는 폰에서 공용 부품까지 44px·16px로 올린다(변수만 덮어쓴다)", () => {
+    expect(SHUTTLE_TOOLBAR).toContain("max-sm:[--control-h:2.75rem]");
+    expect(SHUTTLE_TOOLBAR).toContain("max-sm:[--control-label:1rem]");
+    expect(SHUTTLE_TOOLBAR).toContain("toolbar-rail");
+    expect(SHUTTLE_TOOLBAR).toContain(SHUTTLE_PHONE_CONTROLS);
   });
 
   it("수제 칩은 커서를 명시한다 — Tailwind v4가 preflight의 button{cursor:pointer}를 지웠다", () => {

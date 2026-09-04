@@ -146,6 +146,7 @@ export function RiderChip({
                 disabled={busy}
                 aria-pressed={on}
                 onClick={() => toggleDay(d)}
+                // size-guard-ok: 배정 칩 안 요일 토글 — 격자 밀도 예외(SHUTTLE_DENSE_TEXT와 같은 결), 폰은 44px.
                 className={`size-11 cursor-pointer rounded text-sm font-bold transition-colors sm:size-6 sm:text-xs ${
                   on ? "bg-primary text-primary-foreground" : "text-text-faint hover:bg-muted"
                 }`}

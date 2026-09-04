@@ -129,7 +129,8 @@ export function RideRowItem({
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
         <span
           className={cn(
-            "text-sm font-bold sm:text-xs",
+            // 줄의 학생 이름 — 폰·데스크톱 모두 16px(옛 데스크톱 14는 가독성 P0 아래, 디자인 v5 17단계).
+            "text-sm font-bold",
             skipped ? "text-text-dim line-through" : "text-foreground",
           )}
         >

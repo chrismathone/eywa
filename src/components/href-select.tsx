@@ -22,8 +22,18 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
  * ⚠️ 트리거의 접근성 이름은 **보이는 글자 그대로**(`과목: 수학`) — aria-label로 덮으면 보조기기엔 지금 값이 사라진다.
  *    `ariaLabel`은 펼친 목록(menu)의 이름이다.
  * ⚠️ 검색 입력은 없다 — 항목이 많아야 예닐곱 개인 축에 쓴다(수십 개면 `FilterSelect`/`SearchableSelect`).
+ * 🔑 **값 모드**(`onSelect`, 2026-09-04 셔틀 등하원): 주소가 아니라 클라 상태(계정 저장 필터)를 바꾸는 축도 같은 부품을 쓴다 —
+ *    `SearchableSelect`는 목록이 인라인 `absolute`라 `.toolbar-rail`(폰: overflow-y hidden) 안에서 **잘려서 안 열리고**
+ *    3항목에도 검색 입력이 자동 포커스돼 폰 키보드가 올라왔다(셔틀 리뷰 🔴). 항목은 `<button>`, `href` 없음.
  */
-export type HrefSelectOption = { value: string; label: string; href: string };
+export type HrefSelectOption = {
+  value: string;
+  label: string;
+  /** 이동할 주소. **값 모드**(`onSelect`)에선 생략 — 항목이 버튼이 된다. */
+  href?: string;
+  /** 항목 오른쪽 보조 글자(예: `48명 남음`). 트리거엔 안 실린다. */
+  hint?: string;
+};
 
 export function HrefSelect({
   axisLabel,
@@ -31,6 +41,7 @@ export function HrefSelect({
   value,
   options,
   beforeNavigate,
+  onSelect,
 }: {
   /** 축 이름 — 트리거에 `축: 값`으로 선다. */
   axisLabel: string;
@@ -40,11 +51,17 @@ export function HrefSelect({
   options: HrefSelectOption[];
   /** 이동 직전 확인(false = 취소). 클라 컴포넌트만 넘길 수 있다. */
   beforeNavigate?: () => boolean;
+  /** 값 모드 — 주면 항목이 주소로 가지 않고 이 콜백을 부른다(지금 값을 다시 고르면 닫기만). */
+  onSelect?: (value: string) => void;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value) ?? null;
+  // 🔴 링크 모드인데 href 없는 항목 — 타입이 `href?`로 풀려 컴파일이 못 잡으니 dev에서 알린다(그 항목은 닫기만 하는 무동작).
+  if (process.env.NODE_ENV !== "production" && !onSelect && options.some((o) => !o.href)) {
+    console.error(`[HrefSelect] '${axisLabel}' 링크 모드에 href 없는 항목:`, options.filter((o) => !o.href).map((o) => o.value));
+  }
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -65,26 +82,40 @@ export function HrefSelect({
                 const isCurrent = o.value === value;
                 return (
                   <li key={o.value} role="none">
-                    <a
-                      role="menuitem"
-                      href={o.href}
-                      aria-current={isCurrent ? "true" : undefined}
-                      className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-sm whitespace-nowrap ${
-                        isCurrent ? "text-foreground font-bold" : "text-text-dim hover:bg-bg-soft hover:text-foreground"
-                      }`}
-                      onClick={(e) => {
-                        // 목록은 어떤 클릭에도 닫힌다 — 수식키 클릭(새 탭)은 브라우저에 넘기되 팝업만 열린 채 남지 않게(리뷰 2026-09-04).
-                        setOpen(false);
-                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // 새 탭 등 보존
-                        e.preventDefault();
-                        if (isCurrent) return;
-                        if (beforeNavigate && !beforeNavigate()) return;
-                        start(() => router.push(o.href, { scroll: false }));
-                      }}
-                    >
-                      <span className="truncate">{o.label}</span>
-                      {isCurrent ? <EyIcon name="check" size={14} className="text-primary size-3.5 shrink-0" /> : null}
-                    </a>
+                    {onSelect || !o.href ? (
+                      // 값 모드 — 항목은 버튼(주소 없음). 수식키 클릭도 그냥 선택이다.
+                      <button
+                        type="button"
+                        role="menuitem"
+                        aria-current={isCurrent ? "true" : undefined}
+                        className={itemClass(isCurrent)}
+                        onClick={() => {
+                          setOpen(false);
+                          if (isCurrent) return;
+                          onSelect?.(o.value);
+                        }}
+                      >
+                        <ItemBody label={o.label} hint={o.hint} isCurrent={isCurrent} />
+                      </button>
+                    ) : (
+                      <a
+                        role="menuitem"
+                        href={o.href}
+                        aria-current={isCurrent ? "true" : undefined}
+                        className={itemClass(isCurrent)}
+                        onClick={(e) => {
+                          // 목록은 어떤 클릭에도 닫힌다 — 수식키 클릭(새 탭)은 브라우저에 넘기되 팝업만 열린 채 남지 않게(리뷰 2026-09-04).
+                          setOpen(false);
+                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // 새 탭 등 보존
+                          e.preventDefault();
+                          if (isCurrent) return;
+                          if (beforeNavigate && !beforeNavigate()) return;
+                          start(() => router.push(o.href!, { scroll: false }));
+                        }}
+                      >
+                        <ItemBody label={o.label} hint={o.hint} isCurrent={isCurrent} />
+                      </a>
+                    )}
                   </li>
                 );
               })}
@@ -93,5 +124,24 @@ export function HrefSelect({
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+/** 항목 한 줄 — 링크·버튼 두 모드가 같은 모양이어야 한다. */
+function itemClass(isCurrent: boolean): string {
+  return `flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-sm whitespace-nowrap ${
+    isCurrent ? "text-foreground font-bold" : "text-text-dim hover:bg-bg-soft hover:text-foreground"
+  }`;
+}
+
+function ItemBody({ label, hint, isCurrent }: { label: string; hint?: string; isCurrent: boolean }) {
+  return (
+    <>
+      <span className="truncate">{label}</span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        {hint ? <span className="text-text-faint text-xs">{hint}</span> : null}
+        {isCurrent ? <EyIcon name="check" size={14} className="text-primary size-3.5 shrink-0" /> : null}
+      </span>
+    </>
   );
 }

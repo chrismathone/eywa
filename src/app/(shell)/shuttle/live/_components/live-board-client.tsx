@@ -1,29 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
-import { addDays, formatKoreanDate, kstTimeOf } from "@/lib/date-kst";
-import { cn } from "@/lib/utils";
+import { kstTimeOf } from "@/lib/date-kst";
 import {
-  SEASONS,
-  SEASON_LABEL,
   runTitle,
   type Season,
   type ShuttleRun,
   type ShuttleTrip,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
-import {
-  SHUTTLE_ACTION,
-  SHUTTLE_CHIP,
-  SHUTTLE_CHIP_OFF,
-  SHUTTLE_CHIP_ON,
-} from "@/features/shuttle/control-size";
+import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_LIVE_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import { mergePlanAndLog, plannedRidesOn, type RideException } from "@/features/shuttle/roster";
 import { groupRunsByVehicle } from "@/features/shuttle/today-board";
@@ -38,6 +27,7 @@ import { RUN_ALERT_LABEL, RUN_ALERT_TONE } from "@/features/shuttle/trip-state";
 import { useShuttleLive } from "@/features/shuttle/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import { LiveVehicleCard } from "./live-vehicle-card";
+import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
 
 
 /**
@@ -133,43 +123,15 @@ export function LiveBoardClient({
       {/* 📐 **면 전환 + 날짜 + 시즌을 한 줄로**(2026-09-03 밀도 개선) — 오늘 등하원 화면과 같은 모양.
           🔴 FaceTabs는 공용 컴포넌트라 손대지 않고 감싸는 자리만 바꾼다(min-w-0으로 줄어들고
              안에서 가로 스크롤한다). */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2">
+      <div className={SHUTTLE_TOOLBAR}>
         <span className="min-w-0 flex-1 basis-full sm:basis-auto">
           <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_LIVE_PATH} ariaLabel="셔틀 면 전환" />
         </span>
-        <Button
-          variant="outline"
-          aria-label="어제"
-          className={SHUTTLE_ACTION}
-          render={<Link href={href(addDays(date, -1))} />}
-        >
-          <EyIcon name="chevronLeft" size={16} />
-        </Button>
-        <span className="text-foreground px-1 text-sm font-bold whitespace-nowrap">
-          {formatKoreanDate(date)}
-        </span>
-        <Button
-          variant="outline"
-          aria-label="내일"
-          className={SHUTTLE_ACTION}
-          render={<Link href={href(addDays(date, 1))} />}
-        >
-          <EyIcon name="chevronRight" size={16} />
-        </Button>
-        {SEASONS.map((s) => (
-          <Link
-            key={s}
-            href={href(date, s)}
-            aria-current={s === season ? "page" : undefined}
-            className={cn(SHUTTLE_CHIP, s === season ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
-          >
-            {SEASON_LABEL[s]}
-          </Link>
-        ))}
+        <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
       </div>
 
       {/* 요약 — 숫자는 전부 `summarizeLive`에서 온다(여기서 세지 않는다). */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2 text-xs">
+      <div className={`${SHUTTLE_TOOLBAR} text-sm`}>
         {/* 📐 **0인 숫자는 색 알약으로 강조하지 않는다**(2026-09-03) — 아침엔 여섯 알약 중 넷이 0이라
             아무 뜻 없이 눈을 끌었다. 관제에서 실제로 봐야 할 건 **지금 도는 것**(운행 중)과
             **남은 일**(미기록)이라, 그 둘만 색을 갖고 나머지는 0일 때 흐린 글자로 물러난다. */}
