@@ -5,7 +5,7 @@ import {
   STAFF_COLUMNS,
   visibleColumns,
   type StaffColumnKey,
-} from "./staff-columns";
+} from "./columns";
 
 const ALL = STAFF_COLUMNS.map((c) => c.key);
 

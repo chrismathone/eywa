@@ -7,7 +7,10 @@ import { useEffect, useRef } from "react";
  *
  * 서버가 URL(명시값) → 저장값 → 기본값 순으로 필터를 정하고 그 결과를 `current`로 내려 준다. 사용자가 열 머리에서 값을 고르면
  * URL이 바뀌어 다시 렌더되고, 그때 차이가 나면 여기서 저장한다 — 필터 컨트롤마다 저장 코드를 붙이지 않는다.
- * 학생목록(`ui_prefs.students`)·수업목록(`ui_prefs.classes`)이 같이 쓴다 — `save`는 그 화면의 서버 액션(`saveXxxPrefs`).
+ * 학생목록(`ui_prefs.students`)·수업목록(`ui_prefs.classes`)·직원관리(`ui_prefs.staff`, 필터 5축만)가 같이 쓴다 — `save`는 그 화면의
+ * 서버 액션(`saveXxxPrefs`) 또는 그 화면의 저장 큐(직원관리 `queueStaffPrefsSave` — 같은 키를 다른 컨트롤도 쓸 때).
+ * 🔴 `current`엔 **이 컴포넌트가 주인인 축만** 싣는다 — 다른 컨트롤이 따로 저장하는 키(열·글자 크기)를 함께 실으면 서버 렌더
+ *    시점의 사본이 방금 클릭한 값을 되돌려 쓴다(직원관리 적대적 리뷰 2026-09-04).
  *
  * 🔑 같음 판정은 **JSON 문자열 비교**다 — `current`·`saved` 둘 다 같은 파서(`parseXxxPrefs`)를 거친 완전한 객체라 키 순서가
  *    같다. 파서를 거치지 않은 객체를 넘기면 순서만 달라도 매 렌더 저장한다(호출부 규약).
@@ -22,7 +25,7 @@ export function RememberPrefs<T extends object>({
 }: {
   current: T;
   saved: T;
-  /** 그 화면의 `"use server"` 저장 액션 — 서버 컴포넌트가 참조를 그대로 넘긴다. */
+  /** 그 화면의 `"use server"` 저장 액션(서버 컴포넌트가 참조를 그대로 넘긴다) — 또는 그 화면의 저장 큐(직원관리 `queueStaffPrefsSave`, `StaffRememberPrefs`가 넘긴다). */
   save: (next: T) => Promise<{ ok: boolean }>;
 }) {
   const sent = useRef<string | null>(null);

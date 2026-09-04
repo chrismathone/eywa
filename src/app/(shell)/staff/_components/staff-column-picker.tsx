@@ -2,19 +2,22 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Check, X } from "@/components/icons/eywa-icon-compat";
-import { usePrefs } from "@/components/workspace/use-prefs";
-import { LABEL_OF, moveColumn, normalizeOrder, STAFF_COLUMNS } from "./staff-columns";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
+import { LABEL_OF, moveColumn, normalizeOrder, STAFF_COLUMNS, type StaffColumnKey } from "@/features/staff/columns";
+import { useStaffViewPrefs } from "./staff-view-prefs";
 
 /**
  * 열 고르기 — 무엇을 어떤 순서로 볼지(원장 지시 2026-07-31 "입맛대로 볼 수 있게").
- * 개인 설정으로 영속(usePrefs) — 원장과 회계가 보고 싶은 열이 같을 이유가 없다.
+ * 진실은 **계정**(`ui_prefs.staff.columnOrder/columnHidden`, 원장 2026-08-04 "뷰 세팅은 계정 귀속") — 원장과 회계가 보고 싶은
+ * 열이 같을 이유가 없고, 같은 사람은 어느 PC에서나 같아야 한다. 값·저장은 `StaffViewPrefsProvider`(즉시 반영 + 단일 큐 저장).
  */
 export function StaffColumnPicker() {
   const [open, setOpen] = useState(false);
-  const savedOrder = usePrefs((s) => s.staffColumnOrder);
-  const hidden = usePrefs((s) => s.staffColumnHidden);
-  const setColumns = usePrefs((s) => s.setStaffColumns);
-  const order = normalizeOrder(savedOrder);
+  const { view, setColumns: setView } = useStaffViewPrefs();
+  const hidden = view.columnHidden;
+  const setColumns = (nextOrder: readonly StaffColumnKey[] | string[], nextHidden: string[]) =>
+    setView([...nextOrder] as string[], nextHidden);
+  const order = normalizeOrder(view.columnOrder);
   const off = new Set(hidden);
   const shownCount = order.filter((k) => !off.has(k)).length;
 
@@ -23,11 +26,12 @@ export function StaffColumnPicker() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="border-line bg-card text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition"
+        // 치수는 control-scale(높이 = 라벨 + 4) — 세로 패딩으로 높이를 만들지 않는다(v5).
+        className={`${CONTROL_H} ${CONTROL_LABEL} border-line bg-card text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 transition`}
         aria-expanded={open}
       >
         열 {shownCount}/{STAFF_COLUMNS.length}
-        {open ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+        {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
       </button>
 
       {open ? (
@@ -73,7 +77,7 @@ export function StaffColumnPicker() {
                       >
                         {visible ? <Check className="size-2.5" /> : null}
                       </span>
-                      <span className={`truncate text-xs ${visible ? "text-foreground" : "text-text-faint"}`}>
+                      <span className={`truncate text-sm ${visible ? "text-foreground" : "text-text-faint"}`}>
                         {LABEL_OF[k]}
                       </span>
                     </button>

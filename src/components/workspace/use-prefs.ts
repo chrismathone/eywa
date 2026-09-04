@@ -45,25 +45,10 @@ type PrefsState = {
    */
   timetableFontSize: UiFontSize;
   setTimetableFontSize: (v: UiFontSize) => void;
-  /**
-   * 직원 목록 표 글자 크기(%) — 목록 위 −/+ 버튼(원장 지시 2026-07-31: 표 글씨가 작아 안 보임).
-   * 100 = 기본 13px. 사람마다 화면·시력이 달라 개인 설정으로 둔다(영속).
-   */
-  staffTableScale: number;
-  setStaffTableScale: (v: number) => void;
-  /**
-   * 직원 목록에서 **볼 열과 순서**(원장 지시 2026-07-31). 순서와 숨김을 따로 두는 이유는
-   * staff-columns.ts 주석 참조(새 열 ≠ 사용자가 끈 열). 빈 배열 = 기본(시트 순서·전부 보임).
-   */
-  staffColumnOrder: string[];
-  staffColumnHidden: string[];
-  setStaffColumns: (order: string[], hidden: string[]) => void;
+  // ⚠️ 직원 목록 표 열·글자 크기(`staffTableScale`·`staffColumn*`)는 2026-09-04 이 스토어에서 **뺐다** — 진실이 계정
+  //    (`ui_prefs.staff`)이 되면서 기기 사본이 필요 없고, persist가 모듈 로드 시점에 되살아나 SSR과 첫 클라 렌더가 갈렸다
+  //    (staff/_components/staff-view-prefs.tsx 주석). 옛 localStorage에 남은 그 키는 무시된다.
 };
-
-/** 표 글자 크기 허용 범위(%) — 너무 작으면 못 읽고, 너무 크면 열이 깨진다. */
-export const TABLE_SCALE_MIN = 90;
-export const TABLE_SCALE_MAX = 150;
-export const TABLE_SCALE_STEP = 10;
 
 export const usePrefs = create<PrefsState>()(
   persist(
@@ -84,12 +69,6 @@ export const usePrefs = create<PrefsState>()(
       setTimetableColor: (timetableColor) => set({ timetableColor }),
       timetableFontSize: DEFAULT_UI_FONT_SIZE, // 기본 '작음' = 배율 1(지금 화면 그대로).
       setTimetableFontSize: (timetableFontSize) => set({ timetableFontSize }),
-      staffColumnOrder: [],
-      staffColumnHidden: [],
-      setStaffColumns: (staffColumnOrder, staffColumnHidden) => set({ staffColumnOrder, staffColumnHidden }),
-      staffTableScale: 100,
-      setStaffTableScale: (v) =>
-        set({ staffTableScale: Math.min(TABLE_SCALE_MAX, Math.max(TABLE_SCALE_MIN, Math.round(v))) }),
     }),
     { name: "eywa-prefs" },
   ),

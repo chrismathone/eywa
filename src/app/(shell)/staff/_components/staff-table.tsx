@@ -7,24 +7,23 @@ import { Paperclip } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { usePrefs } from "@/components/workspace/use-prefs";
 import type { StaffRow } from "@/features/staff/server/queries";
 import { StaffRowLink } from "./staff-row-link";
-import { normalizeOrder, visibleColumns, type StaffColumnKey } from "./staff-columns";
-
+import { useStaffViewPrefs } from "./staff-view-prefs";
+import { normalizeOrder, visibleColumns, type StaffColumnKey } from "@/features/staff/columns";
 
 const CELL = "px-3 py-2.5";
 
 /**
  * 직원 목록 표 — **보이는 열과 순서를 사용자가 고른다**(원장 지시 2026-07-31).
- * 설정이 브라우저 저장(usePrefs)이라 표를 클라이언트에서 그린다. 행 데이터는 서버가 만든 그대로 받는다.
- * 과목 라벨·색은 `useSubjectMaps()`(학원설정 단일 소스) — 코드에 과목을 박지 않는다.
+ * 열 설정은 계정(`ui_prefs.staff`)이 진실이고 `StaffViewPrefsProvider`가 서버 시드로 첫 렌더부터 그 값으로 그린다(클릭은 즉시).
+ * 행 데이터는 서버가 만든 그대로 받는다. 과목 라벨·색은 `useSubjectMaps()`(학원설정 단일 소스) — 코드에 과목을 박지 않는다.
  */
 export function StaffTable({ rows }: { rows: StaffRow[] }) {
   const subjects = useSubjectMaps();
-  const order = normalizeOrder(usePrefs((s) => s.staffColumnOrder));
-  const hidden = usePrefs((s) => s.staffColumnHidden);
-  const cols = visibleColumns(order, hidden);
+  const { view } = useStaffViewPrefs();
+  const order = normalizeOrder(view.columnOrder);
+  const cols = visibleColumns(order, view.columnHidden);
 
   const render: Record<StaffColumnKey, (s: StaffRow) => ReactNode> = {
     department: (s) => <span className="font-medium">{s.department ?? "—"}</span>,
@@ -122,13 +121,16 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
 
   return (
     <table
-      className="[&_td]:border-line [&_th]:border-line w-full border-collapse [&_td]:border [&_th]:border"
+      // 열 제목은 한 줄(nowrap) — 16px에선 17열의 max-content 합이 표 폭을 넘겨 auto 레이아웃이 열을 좁히고 제목이 글자 단위로 꺾여 머리 행이 100px 넘게 자랐다(실측 2026-09-04).
+      className="[&_td]:border-line [&_th]:border-line w-full border-collapse [&_td]:border [&_th]:border [&_th]:whitespace-nowrap"
       style={{ minWidth: Math.max(560, cols.length * 116) }}
     >
       <thead>
-        <tr className="bg-bg-soft/70 text-foreground text-left text-[0.9em]">
+        {/* 열 제목은 전부 가운데(데이터 표 규약 2026-08-05 — 숫자 열도 제목은 가운데, 본문 값만 우측), 나머지 본문은 좌측 그대로.
+            크기는 본문과 같다(옛 0.9em은 v5에서 14.4px). */}
+        <tr className="bg-bg-soft/70 text-foreground text-center">
           {cols.map((k) => (
-            <th key={k} className={`${CELL} font-bold ${rightAligned.has(k) ? "text-right" : ""}`}>
+            <th key={k} className={`${CELL} font-bold`}>
               {LABEL[k]}
             </th>
           ))}

@@ -61,7 +61,8 @@ export function StaffQrPanel({ tokens }: { tokens: StaffQrView[] }) {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={toggle} aria-expanded={open}>
+      {/* 머리의 텍스트 Secondary(디자인 v5 §10: 상시 버튼 = Primary '직원 등록' + 텍스트 하나) — 테두리 없이 글자만. */}
+      <Button variant="ghost" className="text-primary" onClick={toggle} aria-expanded={open}>
         <QrCode className="size-3.5" />
         등록 QR
       </Button>
