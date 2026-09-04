@@ -33,6 +33,7 @@ import { isImageAttachment } from "../attachment-utils";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
@@ -163,6 +164,9 @@ export function ReportCard({
   /** '다른 강사 뷰'(열람 전용) — 카드 입력·발송·저장·공유링크 조작 전부 잠금(2026-08-19). */
   readonlyView?: boolean;
 }) {
+  // 🔴 훅은 아래 early return(`if (!subject) return null`)보다 **앞**에 — 조건부 호출 금지.
+  //    경고 라벨이 사전 키라 여기서 글자로 푼다(나머지 카드 문구 전환은 다음 차수).
+  const tWarn = useSheetT();
   const [ownIdx, setOwnIdx] = useState(0);
   const selIdx = subjectIndex ?? ownIdx;
   const setSelIdx = onSubjectIndex ?? setOwnIdx;
@@ -627,9 +631,9 @@ export function ReportCard({
             <span
               key={w}
               className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-[11px] font-bold"
-              title={MENT_WARNING_HINT[w]}
+              title={tWarn(MENT_WARNING_HINT[w])}
             >
-              {MENT_WARNING_LABEL[w]}
+              {tWarn(MENT_WARNING_LABEL[w])}
             </span>
           ))}
           {/* 발송 완료는 위 사유 알약이 이미 말했다 — 같은 말을 두 번 붙이지 않는다(표뷰와 동일). */}

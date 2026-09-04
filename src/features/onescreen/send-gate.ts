@@ -17,6 +17,13 @@
  *      최종 관문에서 차단한다. 예전엔 버튼이 멀쩡히 눌려서 빨간 토스트로만 알 수 있었다.
  */
 
+import {
+  DEFAULT_SHEET_LANG,
+  sheetT,
+  sheetTf,
+  type SheetDictKey,
+  type SheetLang,
+} from "@/features/teacher-view/i18n";
 import { REPORT_OPTOUT_NOTICE, REPORT_OPTOUT_SHORT } from "@/features/classes/report-optout";
 
 /** 발송을 막는 사유. sent·absent는 **상태**(고칠 게 아니라 그런 행), attendance·progress·ment는 **필요한 입력**. */
@@ -32,10 +39,10 @@ export type SendBlockReason =
   | "report_optout";
 
 /** 입력이 필요한 사유의 짧은 이름 — 라벨에서 "출결 · 진도 · 멘트 입력 필요"로 이어 붙인다. */
-const NEED_LABEL: Record<"attendance" | "progress" | "ment", string> = {
-  attendance: "출결",
-  progress: "진도",
-  ment: "멘트",
+const NEED_KEY: Record<"attendance" | "progress" | "ment", SheetDictKey> = {
+  attendance: "os.gate.need.attendance",
+  progress: "os.gate.need.progress",
+  ment: "os.gate.need.ment",
 };
 
 export type SendGate = {
@@ -82,21 +89,28 @@ export function evaluateSendGate(args: {
    * 옵셔널인 이유: 원스크린 열람 화면 전용 상태라 다른 소비처는 몰라도 된다(빼먹어도 기존 판정 그대로).
    */
   readonlyView?: boolean;
+  /**
+   * 화면 언어 — 없으면 한국어(기존 호출부는 한 글자도 안 바뀐다).
+   * 🔴 **판정에는 안 쓴다**: `canSend`·`reasons`는 언어와 무관하고 글자만 갈린다.
+   */
+  lang?: SheetLang;
 }): SendGate {
+  const lang = args.lang ?? DEFAULT_SHEET_LANG;
+  const t = (k: SheetDictKey) => sheetT(lang, k);
   if (args.readonlyView) {
     return {
       canSend: false,
       reasons: ["readonly"],
-      label: "열람 전용",
-      hint: "다른 강사 뷰(열람 전용)에서는 발송할 수 없습니다 — 관리자뷰 또는 본인 강사뷰에서 보내세요",
+      label: t("os.gate.readonly"),
+      hint: t("os.gate.readonlyHint"),
     };
   }
   if (args.recallPending) {
     return {
       canSend: false,
       reasons: ["recall_pending"],
-      label: "회수 처리 중",
-      hint: "학부모 게시글을 지우는 중입니다 — 끝나면 수정해서 다시 보낼 수 있습니다",
+      label: t("os.gate.recall"),
+      hint: t("os.gate.recallHint"),
     };
   }
   // 🔴 이미 발송된 건이 있으면 그 사실이 먼저다 — "미발송 반"이라고만 하면 이미 나간 글을 못 본다.
@@ -105,8 +119,8 @@ export function evaluateSendGate(args: {
     return {
       canSend: false,
       reasons: ["sent"],
-      label: "발송됨 — 재발송 불가",
-      hint: "이미 학부모에게 발송된 보고서입니다 — ClassNote는 게시글 수정이 안 됩니다",
+      label: t("os.gate.sent"),
+      hint: t("os.gate.sentHint"),
     };
   }
   if (args.reportOptout) {
@@ -121,8 +135,8 @@ export function evaluateSendGate(args: {
     return {
       canSend: false,
       reasons: ["absent"],
-      label: "결석 — 발송 제외",
-      hint: "결석 학생 — 발송 제외 (기록 저장은 가능)",
+      label: t("os.gate.absent"),
+      hint: t("os.gate.absentHint"),
     };
   }
   const needs: ("attendance" | "progress" | "ment")[] = [];
@@ -134,15 +148,13 @@ export function evaluateSendGate(args: {
   return {
     canSend: false,
     reasons: needs,
-    label: `${needs.map((n) => NEED_LABEL[n]).join(" · ")} 입력 필요`,
+    label: sheetTf(lang, "os.gate.needLabel", {
+      list: needs.map((n) => t(NEED_KEY[n])).join(" · "),
+    }),
     hint: [
-      needs.includes("attendance")
-        ? "출결이 아직 체크되지 않았습니다 — 출결 알약에서 출석/지각 등을 먼저 기록하세요(미체크 행은 발송되지 않습니다)"
-        : "",
-      needs.includes("progress") ? "오늘 진도를 입력해야 발송할 수 있습니다(보고서 본문의 뼈대)" : "",
-      needs.includes("ment")
-        ? "학부모 전달 멘트가 비어 있습니다 — '자동작성'을 누르거나 직접 입력하세요(빈 보고서는 발송되지 않습니다)"
-        : "",
+      needs.includes("attendance") ? t("os.gate.hint.attendance") : "",
+      needs.includes("progress") ? t("os.gate.hint.progress") : "",
+      needs.includes("ment") ? t("os.gate.hint.ment") : "",
     ]
       .filter(Boolean)
       .join(" / "),

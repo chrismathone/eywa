@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 테스트 문항수(/N) 입력 — **빈칸 편집을 허용**하는 숫자칸.
@@ -25,6 +26,7 @@ export function TestMaxInput({
   ariaLabel: string;
   className?: string;
 }) {
+  const t = useSheetT();
   const [text, setText] = useState(String(max));
   const [seenMax, setSeenMax] = useState(max);
   if (max !== seenMax) {
@@ -37,7 +39,7 @@ export function TestMaxInput({
       inputMode="numeric"
       value={text}
       aria-label={ariaLabel}
-      title="문항수(만점)"
+      title={t("os.score.maxTitle")}
       onChange={(e) => {
         const raw = e.target.value.replace(/[^0-9]/g, "");
         setText(raw); // 빈칸·중간 상태를 그대로 허용(스냅백 없음)

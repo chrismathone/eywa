@@ -1,5 +1,7 @@
 "use client";
 
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+
 /**
  * '일괄 출석'(빠른 출결) 버튼 — 지금 보이는 학생 중 **아직 출결 기록이 없는 칸만** 출석으로 찍는다.
  *
@@ -27,6 +29,8 @@ export type BulkPresentProps = {
 };
 
 export function BulkPresentButton({ count, alreadyMarked, busy, onApply }: BulkPresentProps) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const disabled = count === 0 || busy;
   return (
     <button
@@ -35,10 +39,10 @@ export function BulkPresentButton({ count, alreadyMarked, busy, onApply }: BulkP
       onClick={onApply}
       title={
         count > 0
-          ? `출결 기록이 없는 ${count}칸을 출석으로 기록합니다 — 이미 찍힌 출석·지각·결석은 그대로 둡니다`
+          ? tf("os.present.title", { n: count })
           : alreadyMarked > 0
-            ? "이 목록은 이미 전원 출결이 기록됐습니다"
-            : "출결을 기록할 수 있는 학생이 없습니다"
+            ? t("os.present.allDone")
+            : t("os.present.none")
       }
       className={`rounded-pill border px-1.5 py-px text-[10px] font-bold whitespace-nowrap transition ${
         disabled
@@ -46,7 +50,7 @@ export function BulkPresentButton({ count, alreadyMarked, busy, onApply }: BulkP
           : "border-primary text-primary hover:bg-primary-soft cursor-pointer"
       }`}
     >
-      {busy ? "기록 중…" : `일괄 출석${count > 0 ? ` ${count}` : ""}`}
+      {busy ? t("os.present.busy") : `${t("os.present.btn")}${count > 0 ? ` ${count}` : ""}`}
     </button>
   );
 }

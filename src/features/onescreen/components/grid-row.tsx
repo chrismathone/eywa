@@ -20,6 +20,8 @@ import {
 import { evaluateSendGate } from "../send-gate";
 import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
+import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { makeupBadgeLabel } from "../makeup-label";
 import { makeupRemoveBlockReason } from "../makeup-remove-plan";
@@ -128,6 +130,8 @@ function GridProgressCell({
   /** 발송 완료 또는 결석 — 수정 금지(읽기 전용). 판정은 `isRowInputEditable` 단일 소스. */
   locked?: boolean;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const su = student.subjects[subjectIndex];
   if (!su) return null;
   if (!isMathSubject(su.subjectKey)) {
@@ -143,8 +147,8 @@ function GridProgressCell({
           value={su.today}
           onChange={(e) => onProgress(student.id, subjectIndex, e.target.value)}
           readOnly={locked}
-          placeholder="오늘 진도 (예: Unit 8 · p.90)"
-          aria-label={`${student.name} ${su.name} 오늘 진도`}
+          placeholder={t("os.row.progressPh")}
+          aria-label={tf("os.row.progressAria", { name: student.name, subject: su.name })}
           title={su.today.includes("\n") ? su.today : undefined}
           className={`border-line focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-[12px] leading-[1.2] outline-none ${
             locked ? "bg-bg-soft text-text-dim" : "bg-card"
@@ -155,7 +159,7 @@ function GridProgressCell({
           onMode={(m) => onProgressMode(student.id, subjectIndex, m)}
           disabled={locked}
           compact
-          ariaLabel={`${student.name} ${su.name} 오늘 수업 성격`}
+          ariaLabel={tf("os.row.modeAria", { name: student.name, subject: su.name })}
         />
       </div>
     );
@@ -171,7 +175,7 @@ function GridProgressCell({
       studentGrade={student.grade}
       prev={su.prev}
       locked={locked}
-      ariaLabel={`${student.name} ${su.name} 오늘 진도`}
+      ariaLabel={tf("os.row.progressAria", { name: student.name, subject: su.name })}
     />
   );
 }
@@ -228,6 +232,9 @@ export function GridBodyRow({
   const unreadBadge = isMathRow ? parentUnreadBadge(student.parentRead) : null;
   const att = student.attendance;
   const genRowBusy = gen.rowBusy;
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   // 모드 B 편집용 분리값 — 라운드트립 불변식(split(join)===원본)은 comment-paragraphs가 보장.
   const draftParas = splitComment(rep?.draft ?? "");
   const bulkGen = gen.bulk;
@@ -240,6 +247,7 @@ export function GridBodyRow({
   // ⚠️ 멘트 미작성도 여기서 막는다: 빈 멘트 절대 가드(2026-07-28)가 어차피 sendRow에서 거절하므로,
   //    버튼만 살려 두면 눌러 보고서야 이유를 아는 거짓 어포던스다(원장 2026-07-30 제보의 핵심).
   const sendGate = evaluateSendGate({
+    lang,
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
     alreadySent,
     reportOptout: isReportOptoutRow(subject), // 미발송 반(0174a) — 카드뷰와 같은 단일 소스
@@ -280,17 +288,17 @@ export function GridBodyRow({
   const mentPlaceholder = optoutRow
     ? REPORT_OPTOUT_NOTICE
     : isAbsent
-      ? "결석 — 학부모 문구는 발송되지 않습니다"
+      ? t("os.row.absentMent")
       : alreadySent
-        ? "발송 완료 — 수정할 수 없습니다"
+        ? t("os.row.sentLocked")
         : null;
   /** 특이사항 자리 — 막기만 하지 말고 **갈 곳**을 알려준다(결석 사유는 출결 알약 안에 적는 칸이 있다). */
   const rowPlaceholder = optoutRow
     ? REPORT_OPTOUT_NOTICE
     : isAbsent
-      ? "결석 — 사유는 왼쪽 출결에서 적어 주세요"
+      ? t("os.row.absentNote")
       : alreadySent
-        ? "발송 완료 — 수정할 수 없습니다"
+        ? t("os.row.sentLocked")
         : null;
   const mentBase =
     "border-line focus:border-primary scrollbar-thin w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none";
@@ -328,7 +336,7 @@ export function GridBodyRow({
             type="checkbox"
             checked={checked}
             onChange={() => onToggle(key)}
-            aria-label={`${student.name} ${subject.name} 선택`}
+            aria-label={tf("os.row.pickAria", { name: student.name, subject: subject.name })}
             className="accent-primary size-3.5 align-middle"
           />
         )}
@@ -349,11 +357,11 @@ export function GridBodyRow({
               <button
                 type="button"
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
-                title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
-                aria-label={`${student.name} 보강 빼기`}
+                title={t("os.row.makeupRemove")}
+                aria-label={tf("os.row.makeupRemoveAria", { name: student.name })}
                 className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
               >
-                보강
+                {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
@@ -362,7 +370,7 @@ export function GridBodyRow({
                 className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
                 title={makeupRemoveBlockReason(liveStatus) ?? undefined}
               >
-                보강
+                {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
               </span>
             )
           ) : null}
@@ -371,9 +379,9 @@ export function GridBodyRow({
           {unreadBadge ? (
             <span
               className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
-              title={`최근 보고서 ${unreadBadge.count}건을 학부모가 아직 확인하지 않았습니다 — 다른 경로(직접 안내 등) 확인이 필요할 수 있어요`}
+              title={tf("os.row.unreadTitle", { n: unreadBadge.count })}
             >
-              학부모 미확인 {unreadBadge.count}회
+              {tf("os.row.unread", { n: unreadBadge.count })}
             </span>
           ) : null}
           {/* G2: 진도 확인 필요 — errored 컨테이너/최근 오류 이벤트(수학 파이프라인 전용 → math 행에만).
@@ -381,9 +389,9 @@ export function GridBodyRow({
           {showProgressBadge ? (
             <span
               className="bg-danger-soft text-danger shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
-              title="진도 기록에 점프·겹침이 감지됐습니다 — 점프는 같은 선생님이 쓴 직전 진도와 비교합니다(담당이 다른 진도는 경고하지 않습니다). 학생 상세 > 진도 탭에서 확인하세요"
+              title={t("os.row.jumpTitle")}
             >
-              진도 확인 필요
+              {t("os.row.jump")}
             </span>
           ) : null}
         </div>
@@ -412,11 +420,11 @@ export function GridBodyRow({
               <button
                 type="button"
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
-                title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
-                aria-label={`${student.name} ${subject.name} 보강 빼기`}
+                title={t("os.row.makeupRemove")}
+                aria-label={tf("os.row.makeupRemoveAria2", { name: student.name, subject: subject.name })}
                 className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
               >
-                {makeupBadgeLabel({ makeup: true, hasClass: false })}
+                {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
@@ -428,7 +436,7 @@ export function GridBodyRow({
                     : (makeupRemoveBlockReason(liveStatus) ?? undefined)
                 }
               >
-                {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId })}
+                {makeupBadgeLabel({ makeup: true, hasClass: !!subject.classId }, lang)}
               </span>
             )
           ) : null}
@@ -449,13 +457,13 @@ export function GridBodyRow({
               studentName={student.name}
               readOnly={gen.attReadOnly}
             />
-          ) : att !== "출석" ? (
+          ) : att !== MARK_PRESENT ? (
             <span
               className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${
-                att === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
+                att === MARK_LATE ? "bg-amber-soft text-amber" : "bg-danger text-white"
               }`}
             >
-              {att}
+              {attendanceMarkLabel(att, lang)}
             </span>
           ) : null}
         </div>
@@ -477,8 +485,8 @@ export function GridBodyRow({
             className="text-text-faint text-[13px]"
             title={
               gen.attReadOnly
-                ? "출결 입력 권한이 없어 수업타임을 고칠 수 없습니다"
-                : "이 행은 반이 없어 출석부에 기록할 자리가 없습니다 — 수업타임은 출석부에서 입력하세요"
+                ? t("os.units.noPerm")
+                : t("os.units.noClass")
             }
           >
             —
@@ -505,7 +513,7 @@ export function GridBodyRow({
               value={rowEval.tests.daily.score}
               max={rowEval.tests.daily.max}
               onChange={(v) => fields.onScore(student.id, subject.name, "daily", v)}
-              label={`${student.name} 일일테스트`}
+              label={tf("os.row.dailyLabel", { name: student.name })}
               allowMax={config.allowTestMax}
               onMax={(v) => fields.onMax(student.id, subject.name, "daily", v)}
               nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
@@ -520,7 +528,7 @@ export function GridBodyRow({
               value={rowEval.tests.check.score}
               max={rowEval.tests.check.max}
               onChange={(v) => fields.onScore(student.id, subject.name, "check", v)}
-              label={`${student.name} 확인테스트`}
+              label={tf("os.row.checkLabel", { name: student.name })}
               allowMax={config.allowTestMax}
               onMax={(v) => fields.onMax(student.id, subject.name, "check", v)}
               nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
@@ -536,7 +544,14 @@ export function GridBodyRow({
             options={config.attitudes}
             value={rowEval.attitude}
             onSelect={(a) => fields.onAttitude(student.id, subject.name, a)}
-            ariaLabel={`${student.name} 태도`}
+            ariaLabel={tf("os.row.attitudeAria", { name: student.name })}
+            // 🔴 **태도 값은 한국어 그대로 보인다** — 원스크린은 학부모 문장을 짓는 표면이라
+            //    표기 헬퍼(attitude-label) import 자체가 구조 가드로 막혀 있다. 아래 셋은
+            //    우리가 쓴 UI 문구라 언어를 탄다.
+            placeholder={t("select.choose")}
+            noneLabel={t("roster.attitude.none")}
+            legacyHint={t("select.legacy")}
+            searchPlaceholder={t("select.search")}
           />
         </fieldset>
       </td>
@@ -546,7 +561,7 @@ export function GridBodyRow({
           <HomeworkRateInput
             value={rowEval.homework}
             onChange={(h) => fields.onHomework(student.id, subject.name, h)}
-            label={`${student.name} 과제 수행률`}
+            label={tf("os.row.hwLabel", { name: student.name })}
             nav={{ col: "homework", row: nav.row }}
           />
         </fieldset>
@@ -558,8 +573,8 @@ export function GridBodyRow({
             value={subject.textbook ?? ""}
             onChange={(e) => fields.onTextbook(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
-            placeholder="교재명"
-            aria-label={`${student.name} ${subject.name} 교재명`}
+            placeholder={t("os.row.bookPh")}
+            aria-label={tf("os.row.bookAria", { name: student.name, subject: subject.name })}
             data-nav-col="textbook"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
@@ -584,13 +599,13 @@ export function GridBodyRow({
             // ⚠️ 이 칸은 고정 140px(colgroup) — 예시까지 넣은 긴 placeholder는 **좁아서 잘려서**
             // "오늘 과제 (예: 개념편 p"로 끊겼다(원장 제보 2026-08-04).
             // 칸 이름만 남기고 예시는 title(툴팁)로 — 카드 모드(폭 넉넉)는 예시를 그대로 쓴다.
-            placeholder="오늘 과제"
+            placeholder={t("os.row.hwTodayPh")}
             title={
               (subject.homeworkToday ?? "").includes("\n")
                 ? subject.homeworkToday!
-                : "오늘 내준 과제 — 예: 개념편 p10~16"
+                : t("os.row.hwTodayTitle")
             }
-            aria-label={`${student.name} ${subject.name} 오늘 과제`}
+            aria-label={tf("os.row.hwTodayAria", { name: student.name, subject: subject.name })}
             data-nav-col="homeworkToday"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
@@ -602,8 +617,8 @@ export function GridBodyRow({
             className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]"
             title={
               subject.classId
-                ? "그날 정규 수업에 더해 보강까지 한 경우 — 학부모 보고서 제목이 '(정규+보강)'이 되고 한 건만 나갑니다"
-                : "보강(수업외) 수업 — 학부모 보고서 제목이 '(보강)'이 됩니다"
+                ? t("os.row.makeupBoth")
+                : t("os.row.makeupOnly")
             }
           >
             <input
@@ -612,9 +627,9 @@ export function GridBodyRow({
               onChange={() => fields.onMakeup(student.id, subject.name)}
               disabled={rowLocked}
               className="accent-primary size-3.5 disabled:opacity-50"
-              aria-label={`${student.name} ${subject.name} 보강`}
+              aria-label={tf("os.row.makeupAria", { name: student.name, subject: subject.name })}
             />
-            보강
+            {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
           </label>
         </div>
       </td>
@@ -631,8 +646,8 @@ export function GridBodyRow({
             value={rowEval.note}
             onChange={(e) => fields.onNote(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
-            placeholder={rowPlaceholder ?? "특이사항(메모) · 예: 조퇴함 / 개념 어려워함"}
-            aria-label={`${student.name} 특이사항`}
+            placeholder={rowPlaceholder ?? t("os.row.notePh")}
+            aria-label={tf("os.row.noteAria", { name: student.name })}
             className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE} ${
               lockedTone || "bg-amber-soft/30"
             }`}
@@ -645,16 +660,16 @@ export function GridBodyRow({
                 value={draftParas.p1}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(e.target.value, draftParas.p2))}
                 readOnly={rowLocked}
-                placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "1문단 · 수업 내용(교재·진도·과제)")}
-                aria-label={`${student.name} ${subject.name} 학부모 문구 1문단 수업 내용`}
+                placeholder={mentPlaceholder ?? (genRowBusy ? t("os.gen.busy") : t("os.row.ment1Ph"))}
+                aria-label={tf("os.row.ment1Aria", { name: student.name, subject: subject.name })}
                 className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[52px]`}
               />
               <textarea
                 value={draftParas.p2}
                 onChange={(e) => fields.onDraft(student.id, subject.name, joinComment(draftParas.p1, e.target.value))}
                 readOnly={rowLocked}
-                placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "2문단 · 태도 · 특이사항")}
-                aria-label={`${student.name} ${subject.name} 학부모 문구 2문단 태도 특이사항`}
+                placeholder={mentPlaceholder ?? (genRowBusy ? t("os.gen.busy") : t("os.row.ment2Ph"))}
+                aria-label={tf("os.row.ment2Aria", { name: student.name, subject: subject.name })}
                 className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[52px]`}
               />
             </>
@@ -663,8 +678,8 @@ export function GridBodyRow({
               value={rep?.draft ?? ""}
               onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
               readOnly={rowLocked}
-              placeholder={mentPlaceholder ?? (genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송")}
-              aria-label={`${student.name} ${subject.name} 학부모 문구`}
+              placeholder={mentPlaceholder ?? (genRowBusy ? t("os.gen.busy") : t("os.row.mentPh"))}
+              aria-label={tf("os.row.mentAria", { name: student.name, subject: subject.name })}
               className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[72px]`}
             />
           )}
@@ -672,8 +687,8 @@ export function GridBodyRow({
             value={rep?.trendDraft ?? ""}
             onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
             readOnly={rowLocked}
-            placeholder={mentPlaceholder ?? "학습 추세(종합분석) · 기록 적으면 비어 있음"}
-            aria-label={`${student.name} ${subject.name} 학습 추세`}
+            placeholder={mentPlaceholder ?? t("os.row.trendPh")}
+            aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
             className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px]`}
           />
         </div>
@@ -687,14 +702,14 @@ export function GridBodyRow({
               disabled={genRowBusy || bulkGen || !canAutoWrite || alreadySent || gen.readonlyView}
               title={
                 alreadySent
-                  ? "이미 발송된 보고서 — 수정할 수 없습니다"
+                  ? t("os.row.genSentLocked")
                   : canAutoWrite
-                  ? "AI 학부모 멘트 자동작성 (발송 문구)"
+                  ? t("os.row.genTitle")
                   : optoutRow
                     ? REPORT_OPTOUT_NOTICE
                     : isAbsent
-                      ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                      : "오늘 진도를 먼저 입력하세요" // 미발송 반은 위 optoutRow 분기가 먼저 잡는다
+                      ? t("os.row.genAbsent")
+                      : t("os.row.genNoProgress") // 미발송 반은 위 optoutRow 분기가 먼저 잡는다
               }
               className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-bold disabled:opacity-50 ${
                 hasDraft ? "text-primary" : "text-text-dim"
@@ -704,10 +719,10 @@ export function GridBodyRow({
                 "…"
               ) : hasDraft ? (
                 <span className="inline-flex items-center justify-center gap-0.5">
-                  <EyIcon name="check" size={11} /> 멘트
+                  <EyIcon name="check" size={11} /> {t("os.row.mentDone")}
                 </span>
               ) : (
-                "자동작성"
+                t("os.row.gen")
               )}
             </button>
             <GridAttachButton
@@ -716,8 +731,8 @@ export function GridBodyRow({
               disabled={alreadySent || gen.readonlyView}
               disabledReason={
                 gen.readonlyView
-                  ? "다른 강사 뷰(열람 전용) — 첨부를 바꿀 수 없습니다"
-                  : "이미 발송된 보고서 — 첨부를 바꿀 수 없습니다"
+                  ? t("os.row.attachReadonly")
+                  : t("os.row.attachSent")
               }
               attachments={rep?.attachments ?? []}
               urls={config.attachmentUrls}
@@ -731,20 +746,20 @@ export function GridBodyRow({
             <button
               type="button"
               onClick={() => actions.onOpenCard(student.id)}
-              title="카드로 열어 본문·첨부·링크 편집"
+              title={t("os.row.cardTitle")}
               className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-1.5 py-1 text-[11px] font-bold"
             >
-              카드
+              {t("os.row.card")}
             </button>
           </div>
           <Button
             size="sm"
             variant="outline"
             disabled={!canSend || bulkGen}
-            title={bulkGen ? "전체 자동작성 중 — 완료 후 발송" : (sendGate.hint ?? undefined)}
+            title={bulkGen ? t("os.row.bulkGenBusy") : (sendGate.hint ?? undefined)}
             onClick={() => actions.onSendRow(student, subject.name)}
           >
-            {alreadySent ? "발송 완료" : "발송"}
+            {alreadySent ? t("os.row.sent") : t("os.row.send")}
           </Button>
           {/* 🔴 막힌 이유는 **눈에 보이게** — 버튼 title 툴팁뿐이면 강사는 이유를 모른다(2026-07-21:
               네이티브 툴팁이 실제로 안 뜨는 사례 확인 / 2026-07-30 원장: "왜 비활성화됐는지 알 방법이
@@ -771,9 +786,9 @@ export function GridBodyRow({
             <span
               key={w}
               className="text-amber text-center text-[10px] font-bold"
-              title={MENT_WARNING_HINT[w]}
+              title={t(MENT_WARNING_HINT[w])}
             >
-              {MENT_WARNING_LABEL[w]}
+              {t(MENT_WARNING_LABEL[w])}
             </span>
           ))}
           {/* 발송 상태 배지(큐·실패 등) — 발송 완료 라벨은 위 게이트가 이미 말했으므로 중복 표시하지 않는다. */}
@@ -784,9 +799,9 @@ export function GridBodyRow({
           {subject.classnoteReadAt ? (
             <span
               className="text-primary text-center text-[10px] font-bold"
-              title={`학부모 읽음 · ${readAtLabel(subject.classnoteReadAt)}`}
+              title={tf("os.row.readTitle", { when: readAtLabel(subject.classnoteReadAt) })}
             >
-              학부모 읽음
+              {t("os.row.read")}
             </span>
           ) : null}
         </div>

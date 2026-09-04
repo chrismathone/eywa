@@ -15,6 +15,7 @@
  * ⚠️ **막지 않는다.** 강사가 일부러 그렇게 쓸 수도 있고(예: 시험 얘기를 곁들인 정규 수업),
  *    발송을 잠그면 진짜 필요한 알림장이 안 나간다. 화면에 사실만 알리고 판단은 강사가 한다.
  */
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 import { isSkipStatus } from "./progress-status";
 
 export type MentWarning = "exam-progress" | "score-not-recorded";
@@ -45,16 +46,19 @@ const MENT_HAS_SCORE = /\d+\s*문제\s*중\s*\d+\s*개|\d+\s*점\s*만점|(?<!\d
 const PROGRESS_MENTIONS_EXAM =
   /월말평가|단원평가|중간고사|기말고사|모의고사|레벨테스트|진단평가|월간테스트|내신|시험|평가/;
 
-export const MENT_WARNING_LABEL: Record<MentWarning, string> = {
-  "exam-progress": "진도 칸 확인",
-  "score-not-recorded": "점수 칸 확인",
+/**
+ * 경고 라벨·상세 — **사전 키**로 둔다(글자는 [i18n.ts](@/features/teacher-view/i18n)에).
+ * 🔴 표를 한·영 두 벌로 나누지 않는다: 경고가 하나 늘 때 한쪽만 채워지면 그 경고가 화면에서
+ *    빈칸으로 뜬다(사본이 상태를 삼킨 계열).
+ */
+export const MENT_WARNING_LABEL: Record<MentWarning, SheetDictKey> = {
+  "exam-progress": "os.warn.examProgress",
+  "score-not-recorded": "os.warn.scoreNotRecorded",
 };
 
-export const MENT_WARNING_HINT: Record<MentWarning, string> = {
-  "exam-progress":
-    "멘트는 시험·평가를 봤다고 하는데 진도 칸에는 일반 차시가 적혀 있습니다 — 학부모 카드에는 둘 다 보입니다. 진도 칸을 '월말평가'처럼 바꾸면 카드와 멘트가 같은 말을 합니다.",
-  "score-not-recorded":
-    "멘트에는 점수가 있는데 테스트 칸이 비어 있습니다 — 이 점수는 성적 추이·이력에 남지 않습니다. 점수는 테스트 칸에 넣어 주세요.",
+export const MENT_WARNING_HINT: Record<MentWarning, SheetDictKey> = {
+  "exam-progress": "os.warn.examProgressHint",
+  "score-not-recorded": "os.warn.scoreNotRecordedHint",
 };
 
 /**

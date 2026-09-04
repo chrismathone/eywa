@@ -3,6 +3,7 @@
 import { handleGridNavKey } from "./grid-nav";
 import { NONE_LABEL } from "../none-marker";
 import { NOT_SUBMITTED, parseHomeworkRate } from "../homework-rate";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 과제 수행률 입력 — **숫자 한 칸 + `%`**(원장 2026-08-03: *"일일·확인처럼 두 칸으로. 숫자만 입력하면 자동 %처리."*).
@@ -29,6 +30,7 @@ export function HomeworkRateInput({
   /** sm=표(촘촘) · lg=카드·일괄(이웃 입력칸과 같은 라운드). */
   size?: "sm" | "lg";
 }) {
+  const t = useSheetT();
   const v = value.trim();
   const isNone = v === NONE_LABEL;
   const isNotSubmitted = v === NOT_SUBMITTED;
@@ -74,20 +76,20 @@ export function HomeworkRateInput({
           type="button"
           onClick={() => onChange(isNotSubmitted ? "" : NOT_SUBMITTED)}
           aria-pressed={isNotSubmitted}
-          title="과제를 내주었으나 제출하지 않음 (0%와 다른 문구로 나갑니다)"
+          title={t("os.hw.notSubmittedTitle")}
           className={chip(isNotSubmitted)}
         >
-          미제출
+          {t("os.hw.notSubmitted")}
         </button>
         {/* 과제가 **없던 날** — 미제출과 다르다(내준 과제 자체가 없음). 다시 누르면 해제. */}
         <button
           type="button"
           onClick={() => onChange(isNone ? "" : NONE_LABEL)}
           aria-pressed={isNone}
-          title="내준 과제가 애초에 없던 날 (미제출 아님 — 문장에서 언급하지 않습니다)"
+          title={t("os.hw.noneTitle")}
           className={chip(isNone)}
         >
-          없음
+          {t("os.hw.none")}
         </button>
       </span>
     </div>

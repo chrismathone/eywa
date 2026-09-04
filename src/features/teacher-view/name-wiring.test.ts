@@ -56,6 +56,11 @@ import {
   onescreenFontSizeLabel,
 } from "@/features/onescreen/font-size";
 import { bulkPickLabel } from "@/features/onescreen/bulk-label";
+import { evaluateSendGate } from "@/features/onescreen/send-gate";
+import { MENT_WARNING_HINT, MENT_WARNING_LABEL } from "@/features/onescreen/ment-consistency";
+import { makeupBadgeLabel, makeupTitleSuffix } from "@/features/onescreen/makeup-label";
+import { NOT_SUBMITTED } from "@/features/onescreen/homework-rate";
+import { NONE_LABEL } from "@/features/onescreen/none-marker";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -781,5 +786,112 @@ describe("🔴 원스크린 상단 바·격자·출결 알약·발송 현황은 
     expect(sheetT("ko", "os.col.ment")).toBe("학부모 문구");
     expect(sheetTf("ko", "os.status.unsent", { n: 3, total: 8 })).toBe("아직 안 보낸 3 / 전체 8");
     expect(sheetTf("ko", "os.list.count", { n: 5 })).toBe("5명");
+  });
+});
+
+describe("🔴 원스크린 표 본문·점수 칸·진도 카드도 사전만 본다 — 한글 리터럴 0", () => {
+  it.each([
+    "grid-row.tsx",
+    "test-card.tsx",
+    "progress-card.tsx",
+    "score-input.tsx",
+    "test-max-input.tsx",
+    "homework-rate-input.tsx",
+    "delta-chip.tsx",
+    "prev-row.tsx",
+    "makeup-adder.tsx",
+    "bulk-present-button.tsx",
+    "grid-attach.tsx",
+  ])("%s", (f) => {
+    const code = codeOnly(read("features", "onescreen", "components", f));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("발송 게이트도 사전만 본다 — 한글 리터럴 0", () => {
+    const code = codeOnly(read("features", "onescreen", "send-gate.ts"));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 발송 게이트의 판정은 언어를 안 탄다 — 글자만 갈린다", () => {
+    const args = {
+      alreadySent: false,
+      isAbsent: true,
+      hasProgress: true,
+      hasDraft: true,
+      attendanceUnchecked: false,
+    };
+    const ko = evaluateSendGate(args);
+    const en = evaluateSendGate({ ...args, lang: "en" as const });
+    expect(en.canSend).toBe(ko.canSend);
+    expect(en.reasons).toEqual(ko.reasons);
+    expect(ko.label).toBe("결석 — 발송 제외");
+    expect(en.label).not.toMatch(/[가-힣]/);
+    // 입력 필요 라벨은 사유를 이어 붙인다 — 두 언어 모두 사유 수만큼 담긴다.
+    const need = evaluateSendGate({
+      alreadySent: false,
+      isAbsent: false,
+      hasProgress: false,
+      hasDraft: false,
+      attendanceUnchecked: true,
+    });
+    expect(need.label).toBe("출결 · 진도 · 멘트 입력 필요");
+    const needEn = evaluateSendGate({
+      alreadySent: false,
+      isAbsent: false,
+      hasProgress: false,
+      hasDraft: false,
+      attendanceUnchecked: true,
+      lang: "en",
+    });
+    expect(needEn.label).not.toMatch(/[가-힣]/);
+    expect(needEn.reasons).toEqual(need.reasons);
+  });
+
+  it("🔴 멘트 경고는 사전 키를 담고, 두 소비처가 모두 글자로 푼다", () => {
+    for (const v of [...Object.values(MENT_WARNING_LABEL), ...Object.values(MENT_WARNING_HINT)]) {
+      expect(v).toMatch(/^os\.warn\./);
+      expect(SHEET_DICT[v]).toBeDefined();
+    }
+    // 🔴 키를 그대로 그리면 화면에 `os.warn.…`이 뜬다 — 두 화면 다 t()를 지나야 한다.
+    for (const f of ["grid-row.tsx", "report-card.tsx"]) {
+      const code = read("features", "onescreen", "components", f);
+      expect(code, f).toMatch(/\{t\w*\(MENT_WARNING_LABEL\[w\]\)\}/);
+      expect(code, f).toMatch(/title=\{t\w*\(MENT_WARNING_HINT\[w\]\)\}/);
+    }
+  });
+
+  it("🔴 보강 제목 접미사는 언어를 안 탄다 — 학부모 보고서 제목이다", () => {
+    expect(makeupTitleSuffix({ makeup: true, hasClass: true })).toBe(" (정규+보강)");
+    expect(makeupTitleSuffix({ makeup: true, hasClass: false })).toBe(" (보강)");
+    // 배지(화면 표기)만 갈린다.
+    expect(makeupBadgeLabel({ makeup: true, hasClass: false })).toBe("보강");
+    expect(makeupBadgeLabel({ makeup: true, hasClass: false }, "en")).toBe("Makeup");
+    expect(makeupBadgeLabel({ makeup: false })).toBeNull();
+  });
+
+  it("🔴 과제 '미제출'·'없음'은 저장값이라 안 바뀐다 — 버튼 글자만 언어를 탄다", () => {
+    expect(NOT_SUBMITTED).toBe("미제출");
+    expect(NONE_LABEL).toBe("없음");
+    expect(sheetT("ko", "os.hw.notSubmitted")).toBe(NOT_SUBMITTED);
+    expect(sheetT("ko", "os.hw.none")).toBe(NONE_LABEL);
+    expect(sheetT("en", "os.hw.notSubmitted")).not.toMatch(/[가-힣]/);
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "os.row.send")).toBe("발송");
+    expect(sheetT("ko", "os.row.sent")).toBe("발송 완료");
+    expect(sheetT("ko", "os.row.gen")).toBe("자동작성");
+    expect(sheetTf("ko", "os.row.unread", { n: 3 })).toBe("학부모 미확인 3회");
+    expect(sheetTf("ko", "os.prev.date", { date: "8/29" })).toBe("이전 8/29");
+    expect(sheetTf("ko", "os.attach.title", { n: 2 })).toBe("첨부 2개 — 보기·추가·삭제");
+    expect(sheetT("ko", "os.pc.heading")).toBe("오늘 어디까지 나갔나요");
   });
 });

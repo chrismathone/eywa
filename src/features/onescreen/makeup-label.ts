@@ -32,8 +32,14 @@ export function makeupTitleSuffix(r: MakeupShape): string {
   return r.hasClass ? MAKEUP_COMBINED_SUFFIX : MAKEUP_ONLY_SUFFIX;
 }
 
-/** 강사 화면 배지용 짧은 라벨(괄호·앞 공백 없음). 보강이 아니면 null. */
-export function makeupBadgeLabel(r: MakeupShape): string | null {
+/**
+ * 강사 화면 배지용 짧은 라벨(괄호·앞 공백 없음). 보강이 아니면 null.
+ *
+ * 🔴 **제목 접미사(`makeupTitleSuffix`)는 언어를 안 탄다** — 그건 학부모 보고서 제목이라
+ *    한국어 고정이다. 여기만 화면 표기다(인자를 안 주면 한국어).
+ */
+export function makeupBadgeLabel(r: MakeupShape, lang: "ko" | "en" = "ko"): string | null {
   if (!r.makeup) return null;
+  if (lang === "en") return r.hasClass ? "Regular + makeup" : "Makeup";
   return r.hasClass ? "정규+보강" : "보강";
 }

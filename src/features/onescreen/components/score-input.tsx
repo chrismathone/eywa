@@ -2,6 +2,7 @@
 
 import { handleGridNavKey } from "./grid-nav";
 import { TestMaxInput } from "./test-max-input";
+import { useSheetTf } from "@/features/teacher-view/lang-context";
 
 function clamp(n: number, max: number) {
   return Math.max(0, Math.min(max, n));
@@ -27,6 +28,7 @@ export function ScoreInput({
   onMax?: (v: number) => void;
   nav?: { col: string; row: number };
 }) {
+  const tf = useSheetTf();
   return (
     <div className="flex items-center justify-center gap-0.5">
       <input
@@ -48,7 +50,7 @@ export function ScoreInput({
         <TestMaxInput
           max={max}
           onCommit={onMax}
-          ariaLabel={`${label} 문항수`}
+          ariaLabel={tf("os.score.maxAria", { label })}
           className="border-line focus:border-primary tabular h-8 w-8 rounded-sm border bg-background px-0.5 text-center text-[11px] outline-none"
         />
       ) : (
