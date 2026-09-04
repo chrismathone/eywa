@@ -1,3 +1,5 @@
+import { DEFAULT_SHEET_LANG, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
+
 // 표 일괄 버튼 라벨 — 순수 함수(Vitest).
 //
 // ⚠️ 배경(2026-07-21 원장 제보 스크린샷): 37행을 선택했는데 버튼에 **"선택 0 저장"·"선택 0 발송"**이 떴다.
@@ -11,6 +13,12 @@
  * @param selected 사용자가 체크한 행 수
  * @param actionable 그중 실제로 이 동작이 적용될 행 수(발송가능·저장가능·멘트 없는 행 등)
  */
-export function bulkPickLabel(selected: number, actionable: number): string {
-  return selected === actionable ? `선택 ${selected}` : `선택 ${selected} 중 ${actionable}`;
+export function bulkPickLabel(
+  selected: number,
+  actionable: number,
+  lang: SheetLang = DEFAULT_SHEET_LANG,
+): string {
+  return selected === actionable
+    ? sheetTf(lang, "os.bulk.pick", { n: selected })
+    : sheetTf(lang, "os.bulk.pickOf", { n: selected, m: actionable });
 }

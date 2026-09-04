@@ -30,6 +30,18 @@ export const ONESCREEN_FONT_SIZE_LABEL: Record<OnescreenFontSize, string> = {
   lg: "큼",
 };
 
+/** 영어 화면 표기 — 🔴 한글 맵 **바로 옆**에 둔다(따로 두면 크기가 늘 때 한쪽만 채워진다). */
+export const ONESCREEN_FONT_SIZE_LABEL_EN: Record<OnescreenFontSize, string> = {
+  sm: "Small",
+  md: "Medium",
+  lg: "Large",
+};
+
+/** 화면에 적을 크기 이름 — 인자를 안 주면 한국어(기존 호출부 무변경). */
+export function onescreenFontSizeLabel(size: OnescreenFontSize, lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? ONESCREEN_FONT_SIZE_LABEL_EN[size] : ONESCREEN_FONT_SIZE_LABEL[size];
+}
+
 /** 확대 배율. sm=1이라 기본 사용자는 스타일이 아예 안 붙는다(기존 렌더 무변경). */
 export const ONESCREEN_FONT_SIZE_ZOOM: Record<OnescreenFontSize, number> = {
   sm: 1,

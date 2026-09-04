@@ -43,6 +43,19 @@ import {
   RESUME_DEPARTMENTS,
   WORKDAYS,
 } from "@/features/staff/resume";
+import { CLASS_GROUP_NONE, CLASS_GROUP_OTHER, CLASS_TAG_ALL } from "@/features/onescreen/class-tags";
+import {
+  attendanceMarkLabel,
+  MARK_ABSENT,
+  MARK_LATE,
+  MARK_PRESENT,
+} from "@/features/onescreen/attendance-mark";
+import { classnoteBadge } from "@/features/onescreen/classnote-badge";
+import {
+  ONESCREEN_FONT_SIZES,
+  onescreenFontSizeLabel,
+} from "@/features/onescreen/font-size";
+import { bulkPickLabel } from "@/features/onescreen/bulk-label";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -676,5 +689,97 @@ describe("🔴 이력서 종이 서식 — 화면만 언어를 타고 인쇄물�
     expect(sheetT("ko", "res.hint.view")).toBe("종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다.");
     expect(sheetTf("ko", "res.opt.existing", { v: "국어과" })).toBe("국어과 (기존)");
     expect(sheetTf("ko", "res.del.askNamed", { name: "박소선" })).toBe("박소선 이력서 삭제?");
+  });
+});
+
+describe("🔴 원스크린 상단 바·격자·출결 알약·발송 현황은 사전만 본다 — 한글 리터럴 0", () => {
+  it.each([
+    "top-bar.tsx",
+    "grid-toolbar.tsx",
+    "onescreen-grid.tsx",
+    "student-list.tsx",
+    "attendance-pills.tsx",
+    "status-board.tsx",
+  ])("%s", (f) => {
+    const code = codeOnly(read("features", "onescreen", "components", f));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 반 필터 '전체'는 라벨이 아니라 값이다 — 한 곳에서만 정의한다", () => {
+    expect(CLASS_TAG_ALL).toBe("전체");
+    // 서버가 목록을 만들고 클라가 판정하는 두 곳이 같은 상수를 읽는지(문자열을 다시 적으면 조용히 갈린다).
+    for (const f of [
+      read("features", "onescreen", "server", "roster.ts"),
+      read("features", "onescreen", "components", "onescreen-client.tsx"),
+      read("features", "onescreen", "components", "top-bar.tsx"),
+    ]) {
+      expect(f).toContain("CLASS_TAG_ALL");
+    }
+    expect(CLASS_GROUP_OTHER).toBe("기타");
+    expect(CLASS_GROUP_NONE).toBe("반 미배정");
+  });
+
+  it("🔴 출결 배지 값은 비교용이라 안 바뀐다 — 글자만 언어를 탄다", () => {
+    expect([MARK_PRESENT, MARK_LATE, MARK_ABSENT]).toEqual(["출석", "지각", "결석"]);
+    expect(attendanceMarkLabel(MARK_PRESENT)).toBe("출석");
+    expect(attendanceMarkLabel(MARK_LATE, "en")).toBe("Late");
+    expect(attendanceMarkLabel(MARK_ABSENT, "en")).toBe("Absent");
+  });
+
+  it("🔴 출결 알약이 라벨 사본을 다시 들지 않는다 — 앱 전역 단일 소스만 본다", () => {
+    const code = read("features", "onescreen", "components", "attendance-pills.tsx");
+    expect(code).toContain("attendanceLabelOf");
+    expect(code).not.toMatch(/const LABEL: Record<string, string>/);
+  });
+
+  it("🔴 ClassNote 배지는 상태마다 두 언어를 함께 적는다 — 한쪽만 적으면 그 상태가 화면에서 사라진다", () => {
+    const STATUSES = [
+      "queued",
+      "processing",
+      "success",
+      "failed",
+      "too_old",
+      "revoked",
+      "recall_requested",
+      "recalled",
+      "recall_failed",
+      "name_conflict",
+      "blocked_shared",
+      "subject_off",
+      "absent",
+      "report_optout",
+      "no_attendance",
+    ];
+    for (const st of STATUSES) {
+      const ko = classnoteBadge(st);
+      const en = classnoteBadge(st, "en");
+      expect(ko, st).not.toBeNull();
+      expect(en, st).not.toBeNull();
+      expect(en!.label, st).not.toMatch(/[가-힣]/);
+      expect(en!.short, st).not.toMatch(/[가-힣]/);
+      // 색은 언어를 안 탄다(의미색 캐논).
+      expect(en!.cls, st).toBe(ko!.cls);
+    }
+    // 인자를 안 주면 한국어 — 사무실 발송 콘솔은 한 글자도 안 바뀐다.
+    expect(classnoteBadge("success")?.label).toBe("ClassNote 발송 완료");
+    expect(classnoteBadge("nope")).toBeNull();
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(bulkPickLabel(37, 37)).toBe("선택 37");
+    expect(bulkPickLabel(37, 12)).toBe("선택 37 중 12");
+    expect(bulkPickLabel(37, 12, "en")).toBe("12 of 37 selected");
+    for (const size of ONESCREEN_FONT_SIZES) {
+      expect(onescreenFontSizeLabel(size)).toMatch(/[가-힣]/);
+      expect(onescreenFontSizeLabel(size, "en")).not.toMatch(/[가-힣]/);
+    }
+    expect(sheetT("ko", "os.quick")).toBe("출결 모드");
+    expect(sheetT("ko", "os.col.ment")).toBe("학부모 문구");
+    expect(sheetTf("ko", "os.status.unsent", { n: 3, total: 8 })).toBe("아직 안 보낸 3 / 전체 8");
+    expect(sheetTf("ko", "os.list.count", { n: 5 })).toBe("5명");
   });
 });

@@ -42,6 +42,7 @@ import { resizeImageForUpload } from "../resize-image";
 import type { AttendanceMark, CellState, OneScreenStudent, Subject } from "../types";
 import dynamic from "next/dynamic";
 import { OneScreenTopBar } from "./top-bar";
+import { CLASS_TAG_ALL } from "../class-tags";
 import { StudentList, type SendMark } from "./student-list";
 import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
@@ -301,7 +302,7 @@ export function OneScreenClient({
   // 진입 시 반·학생 지정(2026-08-07) — '오늘 ECS' 카드에서 넘어올 때 그 반(·그 학생)에서 시작한다.
   // ⚠️ 값 검증은 **서버**가 한다(그 날짜 로스터에 실제로 있는 반/학생만 내려온다) — 여기선 그대로 쓴다.
   const [selId, setSelId] = useState<string>(initialStudentId ?? initial[0]?.id ?? "");
-  const [classFilter, setClassFilter] = useState<string>(initialClassName ?? "전체");
+  const [classFilter, setClassFilter] = useState<string>(initialClassName ?? CLASS_TAG_ALL);
   // 작성 상태 필터(전체/작성/미작성) + 그 필터를 누른 시점의 대상 고정 — 입력 중 카드·행이 사라지지 않게.
   // (판정·합집합 규칙은 write-filter.ts. 날짜 이동은 클라 재마운트라 필터도 '전체'로 초기화된다.)
   const [writeFilter, setWriteFilter] = useState<WriteFilter>("all");
@@ -542,7 +543,7 @@ export function OneScreenClient({
 
   // 반 필터 — 특정 반이면 그 반 수강생 전부(tags로 다과목/다반 학생도 양쪽에서 잡음, 누락 방지) + 좌측 그룹 라벨을
   // 필터 반으로 리맵. 표 행은 activeClassFilter로 rowInClass 필터해 타 반 과목 행 혼입을 막는다.
-  const activeClassFilter = classFilter === "전체" ? null : classFilter;
+  const activeClassFilter = classFilter === CLASS_TAG_ALL ? null : classFilter;
   // ⚠️ 보강(수업외)은 반 무관이라 필터를 통과시킨다(studentInClass) — 안 그러면 특정 반을 고른 채 추가한
   //    보강 학생이 카드째 사라진다(2026-07-27 강사 제보). 라벨 리맵은 **그 반 실제 수강생에게만**:
   //    보강 카드까지 리맵하면 듣지도 않는 반 이름이 카드에 박힌다.
@@ -624,7 +625,7 @@ export function OneScreenClient({
   // ⚠️ 동명 반(과목만 다른 같은 이름, 스키마 허용) 가드: 필터는 이름 기반이라 두 반 학생이 섞여 보이는데
   //    첫 반 id로 저장하면 남의 반 학생이 섞인다(리뷰 확정) → 이름 매칭이 유일할 때만 순서 기능 노출.
   const matchingClasses =
-    classFilter !== "전체" ? todayClasses.filter((c) => c.name === classFilter) : [];
+    classFilter !== CLASS_TAG_ALL ? todayClasses.filter((c) => c.name === classFilter) : [];
   const orderClass = matchingClasses.length === 1 ? matchingClasses[0] : undefined;
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
   const selected = visible.find((s) => s.id === effectiveId) ?? null;
@@ -856,7 +857,7 @@ export function OneScreenClient({
     // 🔴 예전엔 앵커가 없어 보강 학생이 **모든 반 필터**에 나왔다(원장 제보 2026-08-03).
     // ⚠️ 이름은 **필터가 걸려 있으면 항상** 남긴다(id는 동명 반이면 특정 불가 → null). id가 없다고 이름까지
     //    비우면, 동명 반을 고른 채 보강을 추가했을 때 카드가 그 자리에서 사라진다 = 2026-07-27 그 버그 재발.
-    const anchorName = classFilter === "전체" ? null : classFilter;
+    const anchorName = classFilter === CLASS_TAG_ALL ? null : classFilter;
     const anchorId = matchingClasses.length === 1 ? matchingClasses[0]!.id : null;
     const withAnchor = (su: Subject): Subject => ({
       ...su,
@@ -3100,7 +3101,7 @@ export function OneScreenClient({
           onSelect={setSelId}
           reportCellById={reportCellById}
           sendMarkById={sendMarkById}
-          classOrder={classTags.filter((t) => t !== "전체")}
+          classOrder={classTags.filter((tag) => tag !== CLASS_TAG_ALL)}
           testConfig={testCfg}
           emptyLabel={emptyByWriteFilter}
         />

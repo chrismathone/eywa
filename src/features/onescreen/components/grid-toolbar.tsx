@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { AttachPicker } from "./grid-attach";
 import { bulkPickLabel } from "../bulk-label";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { BulkAttendanceStatus } from "../bulk-attendance";
 import type { BulkPatch } from "../grid";
 
@@ -70,26 +71,38 @@ export function GridToolbar({
   const genPreserved = (selectedKeys.length ? selectedKeys.length : sendable) - genTarget; // 멘트 있어 건너뛸 행 수
   const off = bulkGen || locked;
   const noticeStudents = new Set(selectedKeys.map((k) => k.split("::")[0])).size; // 공지=학생 단위(행 아님, #23)
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
       <span className="text-text-dim text-[12px]">
-        표시 <span className="text-foreground font-bold">{total}</span> · 발송가능{" "}
-        <span className="text-foreground font-bold">{sendReady}</span>
+        {t("os.bar.shown")} <span className="text-foreground font-bold">{total}</span> ·{" "}
+        {t("os.bar.sendable")} <span className="text-foreground font-bold">{sendReady}</span>
         {sendable > sendReady ? (
-          <span className="text-text-faint"> (멘트 미작성 {sendable - sendReady})</span>
+          <span className="text-text-faint">
+            {" "}
+            {tf("os.bar.noMent", { n: sendable - sendReady })}
+          </span>
         ) : null}
         {selectedKeys.length ? (
           <>
             {" "}
-            · 선택 <span className="text-primary font-bold">{selectedKeys.length}</span>
+            · {t("os.bar.selected")}{" "}
+            <span className="text-primary font-bold">{selectedKeys.length}</span>
             {selectedKeys.length > selectedSendReady ? (
-              <span className="text-text-faint"> (발송가능 {selectedSendReady})</span>
+              <span className="text-text-faint">
+                {" "}
+                {tf("os.bar.selectedSendable", { n: selectedSendReady })}
+              </span>
             ) : null}
           </>
         ) : null}
       </span>
       {navHint ? (
-        <span className="text-text-faint hidden text-[11px] lg:inline">· 점수·교재 칸은 Enter·↑↓로 위·아래 이동</span>
+        <span className="text-text-faint hidden text-[11px] lg:inline">
+          · {t("os.bar.keyHint")}
+        </span>
       ) : null}
       {prev.has ? (
         <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-[12px]">
@@ -99,7 +112,7 @@ export function GridToolbar({
             onChange={prev.onToggle}
             className="accent-primary size-3.5"
           />
-          이전 회차 참고
+          {t("os.prev.face")}
         </label>
       ) : null}
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -112,10 +125,12 @@ export function GridToolbar({
             size="sm"
             onClick={() => actions.onBulkImportPrev?.(selectedKeys.length ? selectedKeys : undefined)}
             disabled={off}
-            title="선택(없으면 표시 전체) 행의 빈 칸을 이전 회차 값으로 채웁니다 — 진도·태도·과제·오늘 과제만, 특이사항 제외. 멘트는 확인을 받은 뒤에만. 이미 입력한 칸은 건드리지 않습니다"
+            title={t("os.prev.title")}
           >
             {/* 행별 버튼과 같은 말로 통일 — '채우기'/'가져오기' 혼용 금지(원장 지시 07-21). */}
-            {selectedKeys.length ? `선택 ${selectedKeys.length} 이전값 가져오기` : "이전값 일괄 가져오기"}
+            {selectedKeys.length
+              ? tf("os.prev.pick", { n: selectedKeys.length })
+              : t("os.prev.allRows")}
           </Button>
         ) : null}
         {/* 일괄 첨부 — 파일을 고르는 즉시 선택 행에 첨부된다(확인 다이얼로그 없음: 첨부는 되돌리기가 쉬운 편이고
@@ -125,7 +140,7 @@ export function GridToolbar({
             disabled={off}
             onFiles={(files) => actions.onBulkAttach?.(selectedKeys, files)}
           >
-            {`선택 ${selectedKeys.length} 첨부`}
+            {tf("os.attach.pick", { n: selectedKeys.length })}
           </AttachPicker>
         ) : null}
         {actions.onClassNotice ? (
@@ -134,9 +149,11 @@ export function GridToolbar({
             size="sm"
             onClick={() => actions.onClassNotice?.(selectedKeys)}
             disabled={off}
-            title="선택(없으면 표시 전체) 학생 학부모에게 공지 발송 — 진도와 무관"
+            title={t("os.notice.title")}
           >
-            {noticeStudents ? `선택 ${noticeStudents}명 공지` : "반 전체 공지"}
+            {noticeStudents
+              ? tf("os.notice.pick", { n: noticeStudents })
+              : t("os.notice.whole")}
           </Button>
         ) : null}
         {/* 자동작성 = **멘트 없는 행만**. 이전값 가져오기로 멘트를 깔면 대상이 줄어드는 게 라벨에 바로 보이고,
@@ -149,18 +166,18 @@ export function GridToolbar({
           title={
             genTarget === 0
               ? genPreserved > 0
-                ? `자동작성할 행이 없습니다 — 멘트가 있는 ${genPreserved}건은 그대로 둡니다(다시 만들려면 행별 '자동작성')`
-                : "자동작성할 행이 없습니다 — 오늘 진도를 먼저 입력하세요"
+                ? tf("os.gen.nonePreserved", { n: genPreserved })
+                : t("os.gen.noneProgress")
               : genPreserved > 0
-                ? `멘트가 비어 있는 ${genTarget}건만 생성합니다 — 이미 멘트가 있는 ${genPreserved}건은 건드리지 않습니다`
-                : `${genTarget}건의 멘트를 생성합니다`
+                ? tf("os.gen.some", { n: genTarget, kept: genPreserved })
+                : tf("os.gen.count", { n: genTarget })
           }
         >
           {bulkGen
-            ? "자동작성 중…"
+            ? t("os.gen.busy")
             : selectedKeys.length
-              ? `${bulkPickLabel(selectedKeys.length, genTarget)} 자동작성`
-              : `전체 자동작성 ${genTarget}`}
+              ? tf("os.gen.pick", { pick: bulkPickLabel(selectedKeys.length, genTarget, lang) })
+              : tf("os.gen.all", { n: genTarget })}
         </Button>
         {/* ⚠️ disabled는 **선택이 있으면 선택분 기준**이다(2026-07-21 수정). 예전엔 전체 `saveable`만 봐서,
             고른 37행이 전부 저장 대상이 아닌데도 버튼이 살아 있어 눌러도 아무 일이 없었다. */}
@@ -171,11 +188,13 @@ export function GridToolbar({
           disabled={(selectedKeys.length ? selectedSaveable : saveable) === 0 || off}
           title={
             selectedKeys.length && selectedSaveable === 0
-              ? "고른 행 중 저장할 수 있는 행이 없습니다 — 오늘 진도가 비었거나 이미 발송된 행입니다"
+              ? t("os.save.none")
               : undefined
           }
         >
-          {selectedKeys.length ? `${bulkPickLabel(selectedKeys.length, selectedSaveable)} 저장` : "일괄 저장"}
+          {selectedKeys.length
+            ? tf("os.save.pick", { pick: bulkPickLabel(selectedKeys.length, selectedSaveable, lang) })
+            : t("os.save.all")}
         </Button>
         <Button
           size="sm"
@@ -183,11 +202,13 @@ export function GridToolbar({
           disabled={(selectedKeys.length ? selectedSendReady : sendReady) === 0 || off}
           title={
             (selectedKeys.length ? selectedSendReady : sendReady) === 0
-              ? "발송할 수 있는 행이 없습니다 — 진도·멘트 미작성, 결석, 이미 발송된 행입니다"
+              ? t("os.send.none")
               : undefined
           }
         >
-          {selectedKeys.length ? `${bulkPickLabel(selectedKeys.length, selectedSendReady)} 발송` : "ClassNote 일괄 발송"}
+          {selectedKeys.length
+            ? tf("os.send.pick", { pick: bulkPickLabel(selectedKeys.length, selectedSendReady, lang) })
+            : t("os.send.all")}
         </Button>
       </div>
     </div>

@@ -24,6 +24,7 @@ import { parseExamScores, parseExamMaxes } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
+import { CLASS_TAG_ALL } from "../class-tags";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
@@ -240,7 +241,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
   return {
     today,
     date,
-    classTags: ["전체"],
+    classTags: [CLASS_TAG_ALL],
     teacherName,
     students: [],
     todayClasses: [],
@@ -1411,7 +1412,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   );
 
   // 반별 필터 칩 = 전체 + 오늘 담당 반(시각순).
-  const classTags = ["전체", ...todayClasses.map((c) => c.name)];
+  const classTags = [CLASS_TAG_ALL, ...todayClasses.map((c) => c.name)];
 
   return {
     today,

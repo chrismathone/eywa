@@ -18,46 +18,70 @@
  */
 export type ClassnoteBadge = { label: string; short: string; cls: string };
 
-export function classnoteBadge(status?: string | null): ClassnoteBadge | null {
+/**
+ * 한 상태의 **네 글자를 한 자리에** 적는다 — 긴/짧은 라벨 × 한국어/영어.
+ *
+ * 🔴 영어 표를 따로 두지 않는 이유는 이 파일이 생긴 이유와 같다: 표가 둘이면 상태가 늘 때
+ *    한쪽만 채워지고, 빠진 키는 화면에서 **조용히 사라진다**(사본이 회수 3종을 삼켰던 그 사고).
+ *    인자가 넷이라 언어 하나만 적고 넘어갈 수가 없다.
+ */
+function badge(
+  lang: "ko" | "en",
+  ko: string,
+  koShort: string,
+  en: string,
+  enShort: string,
+  cls: string,
+): ClassnoteBadge {
+  return lang === "en"
+    ? { label: en, short: enShort, cls }
+    : { label: ko, short: koShort, cls };
+}
+
+/** @param lang 없으면 한국어 — 사무실 화면(발송 콘솔·보고서 목록)은 한 글자도 안 바뀐다. */
+export function classnoteBadge(
+  status?: string | null,
+  lang: "ko" | "en" = "ko",
+): ClassnoteBadge | null {
   switch (status) {
     case "queued":
-      return { label: "ClassNote 발송 대기", short: "대기", cls: "text-text-dim" };
+      return badge(lang, "ClassNote 발송 대기", "대기", "Waiting to send to ClassNote", "Waiting", "text-text-dim");
     case "processing":
-      return { label: "ClassNote 처리 중", short: "처리중", cls: "text-text-dim" };
+      return badge(lang, "ClassNote 처리 중", "처리중", "ClassNote is processing", "Processing", "text-text-dim");
     case "success":
-      return { label: "ClassNote 발송 완료", short: "발송됨", cls: "text-green" };
+      return badge(lang, "ClassNote 발송 완료", "발송됨", "Sent to ClassNote", "Sent", "text-green");
     case "failed":
-      return { label: "ClassNote 발송 실패", short: "실패", cls: "text-danger" };
+      return badge(lang, "ClassNote 발송 실패", "실패", "ClassNote send failed", "Failed", "text-danger");
     case "too_old":
-      return { label: "ClassNote 발송 제외(오래됨)", short: "제외", cls: "text-text-dim" };
+      return badge(lang, "ClassNote 발송 제외(오래됨)", "제외", "Left out of the send (too old)", "Left out", "text-text-dim");
     case "revoked":
-      return { label: "링크 취소됨 — 재발급 필요", short: "링크취소", cls: "text-danger" };
+      return badge(lang, "링크 취소됨 — 재발급 필요", "링크취소", "Link cancelled — needs reissuing", "Link off", "text-danger");
     // 회수 3종(2026-08-05) — **링크 취소와 다르다**: 회수는 ClassNote 학부모 게시글 자체를 지운다.
     // 실제 삭제는 연동 PC 워커가 하므로 요청 → 완료 사이에 대기 상태가 보인다(report-recall.ts).
     case "recall_requested":
-      return { label: "회수 처리 중 — 게시글 삭제 대기", short: "회수중", cls: "text-amber" };
+      return badge(lang, "회수 처리 중 — 게시글 삭제 대기", "회수중", "Recalling — waiting for the post to be deleted", "Recalling", "text-amber");
     case "recalled":
-      return { label: "회수됨 — 학부모 게시글 삭제", short: "회수됨", cls: "text-danger" };
+      return badge(lang, "회수됨 — 학부모 게시글 삭제", "회수됨", "Recalled — the parent post was deleted", "Recalled", "text-danger");
     case "recall_failed":
-      return { label: "회수 실패 — 다시 시도하세요", short: "회수실패", cls: "text-danger" };
+      return badge(lang, "회수 실패 — 다시 시도하세요", "회수실패", "Recall failed — try again", "Recall failed", "text-danger");
     case "name_conflict":
-      return { label: "동명이인 — 자동 발송 차단", short: "동명이인", cls: "text-danger" };
+      return badge(lang, "동명이인 — 자동 발송 차단", "동명이인", "Same name as another student — auto-send blocked", "Same name", "text-danger");
     case "blocked_shared":
       // 워커 프리플라이트 게이트가 오발송 위험(한 보드에 2가족+ 등)으로 보류 — 사유는 classnote_error에 한글로.
-      return { label: "공유 보드 — 자동 발송 차단", short: "공유 보드", cls: "text-danger" };
+      return badge(lang, "공유 보드 — 자동 발송 차단", "공유 보드", "Shared board — auto-send blocked", "Shared board", "text-danger");
     case "subject_off":
       // 원장 설정(classnoteSubjects) 밖 과목 — 저장만 되고 게시 안 됨. "발송 대기" 오인 방지(#2 확정).
-      return { label: "발송 대상 아님(과목 설정)", short: "과목 제외", cls: "text-text-dim" };
+      return badge(lang, "발송 대상 아님(과목 설정)", "과목 제외", "Not a send target (subject setting)", "Subject off", "text-text-dim");
     case "absent":
       // 서버 결석 게이트(#77) 반환 상태(세션 내 표시 전용 — DB엔 안 남음). 저장만 되고 발송 제외.
-      return { label: "결석 — 발송 제외", short: "결석", cls: "text-text-dim" };
+      return badge(lang, "결석 — 발송 제외", "결석", "Absent — left out of the send", "Absent", "text-text-dim");
     case "report_optout":
       // '수업보고서 미발송' 반(0174a) 게이트 반환 상태(세션 내 표시 전용 — DB엔 안 남는다).
       // 저장만 되고 발송 제외. 2026-08-19부터 이 반도 로스터에 있어서(출결 때문) 이 상태가 보인다.
-      return { label: "미발송 반 — 발송 제외", short: "미발송 반", cls: "text-text-dim" };
+      return badge(lang, "미발송 반 — 발송 제외", "미발송 반", "No-send class — left out", "No-send class", "text-text-dim");
     case "no_attendance":
       // 서버 출결 미체크 게이트(2026-08-17) 반환 상태(세션 내 표시 전용). 저장만 되고 발송 제외.
-      return { label: "출결 미체크 — 발송 제외", short: "출결없음", cls: "text-text-dim" };
+      return badge(lang, "출결 미체크 — 발송 제외", "출결없음", "Attendance not marked — left out", "No attendance", "text-text-dim");
     default:
       return null;
   }

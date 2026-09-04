@@ -74,6 +74,8 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
         "month",
         "mp",
         "nav",
+        // 원스크린(/onescreen) — 강사 홈. 상단 바·격자·출결 알약·발송 현황.
+        "os",
         "plan",
         "popup",
         "presence",

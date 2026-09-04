@@ -1,5 +1,49 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-04 (10) — 강사뷰 en 전환 **10차**: 원스크린 상단 바·격자·출결 알약·발송 현황
+
+원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환시켜줘"*. **강사 홈**(/onescreen)의 큰 뼈대 여섯 파일.
+
+- **상단 바**(`top-bar`): 날짜 이동·마감 라벨 · 반 칩(위임 반 앰버 툴팁 포함) · 작성 필터 3종과 그 안내 ·
+  마감 통계 5개 · 멘트 문단(A/B) · 글씨 크기 · 출결 모드 버튼 · 뷰 탭 5개.
+- **격자**(`onescreen-grid`·`grid-toolbar`): 열 제목 10개 · 전체 선택 · 순서 모드 · 일괄 바(표시/발송가능/선택
+  요약 · 이전값 가져오기 · 첨부 · 공지 · 자동작성 · 저장 · 발송)와 그 비활성 사유 툴팁.
+- **학생 목록**(`student-list`): 진행 칸 3종(진도·테스트·보고서) · 반 묶음 머리 · 인원 · 접기/펼치기.
+- **출결 알약**(`attendance-pills`): 권한 없음 배지 · 3종 밖 배지 · 사유 메모 팝오버 · 수업타임 툴팁.
+- **발송 현황**(`status-board`): 요약 칩 4개 · 열 제목 · 반 머리행(미작성 N·미발송 반·전원 작성) · 열람 횟수.
+
+**표기 단일 소스를 넷 더했다**(전부 *한글 맵 바로 옆*):
+- `ONESCREEN_FONT_SIZE_LABEL_EN` + `onescreenFontSizeLabel` ([font-size.ts](../src/features/onescreen/font-size.ts))
+- `MARK_PRESENT`/`MARK_LATE`/`MARK_ABSENT` + `attendanceMarkLabel`
+  ([attendance-mark.ts](../src/features/onescreen/attendance-mark.ts)) — 🔴 **값은 비교에 쓰는 것**이고
+  표기는 앱 전역 `attendanceLabelOf`를 그대로 지난다(표를 새로 만들지 않는다).
+- `bulkPickLabel(selected, actionable, lang)` ([bulk-label.ts](../src/features/onescreen/bulk-label.ts))
+- `classnoteBadge(status, lang)` ([classnote-badge.ts](../src/features/onescreen/classnote-badge.ts)) —
+  🔴 **영어 표를 따로 두지 않았다**: 이 파일이 생긴 이유가 "사본은 새 상태를 따라오지 않는다"(사본이 회수 3종을
+  통째로 삼켰다)라서, 상태 하나에 **네 글자(긴/짧은 × 한·영)를 한 자리에** 적는 `badge()` 헬퍼로 묶었다.
+  인자가 넷이라 언어 하나만 적고 넘어갈 수가 없다.
+
+- 🔴 **출결 알약의 라벨 사본을 지웠다** — `attendance-pills`가 6종 맵을 따로 들고 있었다(같은 뜻이 여러 벌로
+  갈리는 팔레트 v4 감사와 같은 계열). 이제 `attendanceLabelOf` 하나만 본다.
+- 🔴 **반 필터 '전체'는 라벨이 아니라 값이다** — 서버 로스터가 `["전체", …]`로 목록을 만들고 클라가 그 문자열로
+  판정한다. 화면 글자만 옮기고 값은 [`CLASS_TAG_ALL`](../src/features/onescreen/class-tags.ts) **한 곳**으로
+  모았다(roster·client·top-bar가 같은 상수를 읽는다). 묶음 키 `기타`·`반 미배정`도 같은 파일로.
+- 🔴🔴 **반 이름·강사 이름은 여기서 영어로 바꾸지 않는다** — 처음엔 `classNameFor`/`teacherNameFor`를 걸었는데
+  **구조 가드가 막았다**(`class-name.test.ts`·`teacher-name.test.ts`의 금지 디렉터리에 `features/onescreen`이
+  들어 있다). 원스크린은 **학부모 보고서를 짓는 표면**이라 그 규약이 맞다 — 되돌리고 주석으로 못박았다.
+  같은 이유로 학생 이름도 한국어 그대로다(로스터에 `english_name`을 싣지 않았다).
+- 영어 낱말 뭉침을 가드가 열 잡았다 — `이전 날짜`/`이전 날` · `작성중`/`진행 중` · `반 미배정`/`수업 없음` ·
+  `{n}명`/`{n}개` · `공지`/`알림장` · `발송완료`/`발송` · `모두 펼치기`/`전체 펼치기`(·접기) · `일일`/`하루`.
+  🔴 `발송`은 오늘 카드와 **글자가 같아** 키를 새로 만들지 않고 `today.report.sent`를 그대로 썼다.
+- 가드: `name-wiring.test.ts`에 "원스크린 …"(6파일 한글 리터럴 0 · '전체'가 세 파일에서 같은 상수 ·
+  출결 배지 값 회귀 · 알약이 사본을 안 듦 · ClassNote 배지 15상태 × 두 언어 · ko 회귀).
+- 검증: typecheck 0 · lint 0 · **test 8081(614 파일)** · `pnpm build` ✓. 마이그레이션 0.
+
+⚠️ **아직 한국어인 것(다음 차수)**: 표 본문 `grid-row` · 보고서 카드 `report-card`/`report-preview`/
+`parent-report-card` · 공지 작성 `notice-*` · 월간 발송 `history-board` · 화면 껍데기 `onescreen-client`.
+🔴 **`curriculum.ts`(교재·차시 850줄)와 `prompt-defaults.ts`(학부모 멘트 프롬프트)는 대상이 아니다** —
+전자는 사람이 적은 사실, 후자는 **한국어 학부모 문장을 만드는 지시문**이다.
+
 ## 2026-09-04 (9) — 이력서 종이 서식: **화면만** 영어 · **인쇄물은 언제나 한국어**
 
 원장 2026-09-04 *"화면만 갈라서"*(en 전환 6차에서 "인쇄물이 영어가 된다"고 물었던 것에 대한 답).

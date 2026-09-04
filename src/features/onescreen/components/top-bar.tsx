@@ -14,9 +14,11 @@ import {
 import { addDays } from "@/lib/date-kst";
 import {
   ONESCREEN_FONT_SIZES,
-  ONESCREEN_FONT_SIZE_LABEL,
+  onescreenFontSizeLabel,
   type OnescreenFontSize,
 } from "../font-size";
+import { CLASS_TAG_ALL } from "../class-tags";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { OneScreenView } from "../view";
 import type { WriteFilter } from "../write-filter";
 import type { TodayClass } from "../server/roster";
@@ -86,23 +88,27 @@ export function OneScreenTopBar({
   /** '다른 강사 뷰'(열람 전용) — 공지 탭(순수 작성 화면)을 숨긴다(2026-08-19). */
   readonlyView?: boolean;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   // 작성 상태 필터 — 순서는 원장 표현대로 전체 → 작성 → 미작성. 숫자는 **지금 조건에 맞는 학생 수**라
   // 고정(pinned)으로 화면에 남아 있는 학생과 다를 수 있다(그래서 아래 안내줄이 그 차이를 밝힌다).
   const writeOptions: { value: WriteFilter; label: string; count?: number }[] = [
-    { value: "all", label: "전체" },
-    { value: "written", label: "작성", count: writeCounts.written },
-    { value: "unwritten", label: "미작성", count: writeCounts.unwritten },
+    { value: "all", label: t("os.write.all") },
+    { value: "written", label: t("os.write.written"), count: writeCounts.written },
+    { value: "unwritten", label: t("os.write.unwritten"), count: writeCounts.unwritten },
   ];
   // 시각 칩으로 못 덮는 태그(todayClasses 없이 classTags만 오는 호출부 방어) — 보통은 빈 배열.
   const timedNames = new Set(todayClasses.map((c) => c.name));
-  const extraTags = classTags.filter((t) => t !== "전체" && !timedNames.has(t));
+  // ⚠️ 콜백 인자를 `t`로 두면 번역 함수를 가린다 — 이름을 갈라 둔다.
+  const extraTags = classTags.filter((tag) => tag !== CLASS_TAG_ALL && !timedNames.has(tag));
   // 내 반 / 위임받은 반(0173a) 분리 — 각 그룹 안의 시각순 정렬은 서버가 이미 해놨다(roster.ts).
   const ownClasses = todayClasses.filter((c) => !c.delegated);
   const delegatedClasses = todayClasses.filter((c) => c.delegated);
   const noticeOptions: { value: "A" | "B" | null; label: string }[] = [
-    { value: null, label: `학원 기본(${academyNoticeMode})` },
-    { value: "A", label: "단일 A" },
-    { value: "B", label: "2문단 B" },
+    { value: null, label: tf("os.ment.academy", { mode: academyNoticeMode }) },
+    { value: "A", label: t("os.ment.a") },
+    { value: "B", label: t("os.ment.b") },
   ];
   const dateRef = useRef<HTMLInputElement>(null);
   const isToday = date >= todayYmd; // 오늘(또는 이상) = 다음날 이동 막고 '오늘' 버튼 숨김
@@ -120,13 +126,13 @@ export function OneScreenTopBar({
             <button
               type="button"
               onClick={() => onDateChange(addDays(date, -1))}
-              aria-label="이전 날짜"
+              aria-label={t("os.date.prev")}
               className="text-text-dim hover:bg-bg-soft inline-flex h-8 w-7 items-center justify-center rounded-md"
             >
               <EyIcon name="chevronLeft" size={16} />
             </button>
             <div className="min-w-[128px] text-center">
-              <p className="micro text-text-faint">{isToday ? "수업 마감" : "지난 마감"}</p>
+              <p className="micro text-text-faint">{isToday ? t("os.close.today") : t("os.close.past")}</p>
               {/* 날짜 클릭 = 달력 열기.
                   🔴 예전엔 투명 `<input type="date">`를 겹쳐 두기만 했는데, 크로미움은 **달력 아이콘
                   (::-webkit-calendar-picker-indicator)을 눌러야** 달력이 열린다 — 투명 입력의 가운데를
@@ -152,7 +158,7 @@ export function OneScreenTopBar({
                   max={todayYmd}
                   onChange={(e) => e.target.value && onDateChange(e.target.value)}
                   className="absolute inset-0 cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                  aria-label="날짜 선택"
+                  aria-label={t("os.date.pick")}
                 />
               </label>
             </div>
@@ -160,7 +166,7 @@ export function OneScreenTopBar({
               type="button"
               onClick={() => onDateChange(addDays(date, 1))}
               disabled={isToday}
-              aria-label="다음 날짜"
+              aria-label={t("os.date.next")}
               className="text-text-dim hover:bg-bg-soft inline-flex h-8 w-7 items-center justify-center rounded-md disabled:opacity-30"
             >
               <EyIcon name="chevronRight" size={16} />
@@ -171,7 +177,7 @@ export function OneScreenTopBar({
                 onClick={() => onDateChange(todayYmd)}
                 className="border-line text-primary hover:bg-bg-soft ml-1 inline-flex h-8 items-center rounded-lg border px-2 text-xs font-medium"
               >
-                오늘
+                {t("os.today")}
               </button>
             ) : null}
           </div>
@@ -187,11 +193,13 @@ export function OneScreenTopBar({
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            onClick={() => onFilter("전체")}
-            aria-pressed={classFilter === "전체"}
-            className={`${TOOLBAR_CHIP} ${classFilter === "전체" ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
+            onClick={() => onFilter(CLASS_TAG_ALL)}
+            aria-pressed={classFilter === CLASS_TAG_ALL}
+            className={`${TOOLBAR_CHIP} ${
+              classFilter === CLASS_TAG_ALL ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF
+            }`}
           >
-            전체
+            {t("os.class.all")}
           </button>
           {ownClasses.map((c) => (
             <ClassChip key={c.id} c={c} on={c.name === classFilter} onFilter={onFilter} />
@@ -204,9 +212,9 @@ export function OneScreenTopBar({
               <span className="bg-line h-4 w-px shrink-0" aria-hidden />
               <span
                 className="text-amber text-[11px] font-bold"
-                title="결근한 선생님 대신 이 기간에만 맡은 반입니다"
+                title={t("os.class.delegatedTitle")}
               >
-                위임
+                {t("os.class.delegated")}
               </span>
             </>
           ) : null}
@@ -233,7 +241,7 @@ export function OneScreenTopBar({
             판정은 학부모 문구 기준(write-filter.ts). 같은 값을 다시 누르면 목록을 새로 계산한다. */}
         <div
           className={TOOLBAR_SEG_BOX}
-          title="학부모 문구 기준 — 모든 행에 문구가 있거나 이미 발송됐으면 '작성', 한 행이라도 비어 있으면 '미작성'입니다(결석 행은 발송 대상이 아니라 판정에서 제외). 필터를 켠 뒤 입력해도 카드·행이 사라지지 않으며, 같은 버튼을 다시 누르면 목록을 정리합니다."
+          title={t("os.write.title")}
         >
           {writeOptions.map((o) => {
             const on = writeFilter === o.value;
@@ -258,22 +266,22 @@ export function OneScreenTopBar({
         <div className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <div className="text-text-dim flex items-center gap-x-2.5 text-[12px]">
             <span>
-              학생 <b className="text-foreground tabular">{stats.students}</b>
+              {t("os.stat.students")} <b className="text-foreground tabular">{stats.students}</b>
             </span>
             <span>
-              진도 <b className="text-primary tabular">{stats.progressDone}</b>
+              {t("os.stat.progress")} <b className="text-primary tabular">{stats.progressDone}</b>
               <span className="text-text-faint">/{stats.students}</span>
             </span>
             <span>
-              테스트 <b className="text-blue tabular">{stats.testDone}</b>
+              {t("os.stat.test")} <b className="text-blue tabular">{stats.testDone}</b>
               <span className="text-text-faint">/{stats.students}</span>
             </span>
             <span>
-              발송 <b className="text-gold tabular">{stats.reportDone}</b>
+              {t("today.report.sent")} <b className="text-gold tabular">{stats.reportDone}</b>
               <span className="text-text-faint">/{stats.students}</span>
             </span>
             <span className="border-line rounded-full border px-1.5 py-0.5">
-              마감 <b className="text-foreground tabular">{doneCount}</b>
+              {t("os.stat.done")} <b className="text-foreground tabular">{doneCount}</b>
               <span className="text-text-faint">/{total}</span>
             </span>
           </div>
@@ -282,7 +290,7 @@ export function OneScreenTopBar({
               바꾸면 아래 보고서 입력이 1칸(A) ↔ 2칸(B, 수업 내용 / 태도·특이사항)으로 함께 바뀐다. */}
           <div
             className={TOOLBAR_SEG_BOX}
-            title="학부모 멘트 문단 구성(내 계정) — A는 한 문단, B는 '수업 내용'과 '태도·특이사항' 2문단. 아래 보고서 입력칸과 자동 작성 결과가 함께 바뀝니다."
+            title={t("os.ment.title")}
           >
             {noticeOptions.map((o) => {
               const on = noticeMode === o.value;
@@ -304,10 +312,10 @@ export function OneScreenTopBar({
               표뷰는 칸마다 px 글자가 박힌 조밀한 스프레드시트라 **표 전체를 같은 비율로** 확대한다
               (글자만 키우면 칸·체크박스와 어긋난다). 저장은 계정 = 다른 PC에서도 같은 크기. */}
           <div className="flex shrink-0 items-center gap-1.5">
-            <span className="micro shrink-0">글씨 크기</span>
+            <span className="micro shrink-0">{t("os.fontSize")}</span>
             <div
               className={TOOLBAR_SEG_BOX}
-              title="아래 목록·표의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
+              title={t("os.fontSize.title")}
             >
               {ONESCREEN_FONT_SIZES.map((s) => {
                 const on = fontSize === s;
@@ -319,7 +327,7 @@ export function OneScreenTopBar({
                     aria-pressed={on}
                     className={`${TOOLBAR_SEG_ITEM} ${on ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
                   >
-                    {ONESCREEN_FONT_SIZE_LABEL[s]}
+                    {onescreenFontSizeLabel(s, lang)}
                   </button>
                 );
               })}
@@ -343,10 +351,10 @@ export function OneScreenTopBar({
         {readonlyView ? null : (
           <Link
             href="/attendance/quick"
-            title="오늘 내 수업의 출결만 터치로 빠르게 입력합니다"
+            title={t("os.quick.title")}
             className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex h-8 shrink-0 items-center rounded-lg px-2.5 text-xs font-medium whitespace-nowrap transition"
           >
-            출결 모드
+            {t("os.quick")}
           </Link>
         )}
         {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 뷰 전환 */}
@@ -368,14 +376,14 @@ export function OneScreenTopBar({
               }`}
             >
               {v === "card"
-                ? "카드"
+                ? t("os.face.card")
                 : v === "grid"
-                  ? "표"
+                  ? t("os.face.table")
                   : v === "status"
-                    ? "발송 현황"
+                    ? t("os.face.sendStatus")
                     : v === "history"
-                      ? "월간 발송"
-                      : "공지"}
+                      ? t("os.face.monthly")
+                      : t("os.face.notice")}
             </button>
           ))}
         </div>
@@ -398,6 +406,11 @@ function ClassChip({
   on: boolean;
   onFilter: (tag: string) => void;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
+// 🔴 반 이름·강사 이름은 **여기서 영어로 바꾸지 않는다** — 원스크린은 학부모 보고서를 짓는
+//    표면이라 teacher-view의 표기 헬퍼 import 자체가 구조 가드로 막혀 있다(class-name·
+//    teacher-name 테스트). 우리가 쓴 UI 문구만 옮기고 사람·반 이름은 한국어 그대로다.
   const base = `${TOOLBAR_CHIP} gap-1 whitespace-nowrap`;
   // ⚠️ 위임 반은 앰버 — 톤만 갈리고 **모양(높이·라운드·테두리)은 툴바 칩 그대로**다.
   const tone = c.delegated
@@ -429,16 +442,25 @@ function ClassChip({
       // 스크린리더도 색을 못 보는 대신 이 라벨로 안다 — 시각 구분과 같은 사실을 말한다.
       aria-label={
         c.delegated
-          ? `${c.name} — ${c.ownerName ? `${c.ownerName} 선생님 반` : "다른 선생님 반"}, 위임받음`
+          ? tf("os.class.borrowed", {
+              name: c.name,
+              owner: c.ownerName
+                ? tf("os.class.ownerNamed", { name: c.ownerName })
+                : t("os.class.ownerUnknown"),
+            })
           : c.delegatedAwayTo
-            ? `${c.name} — ${c.delegatedAwayTo} 선생님에게 위임 중`
+            ? tf("os.class.lent", { name: c.name, to: c.delegatedAwayTo })
             : undefined
       }
       title={
         c.delegated
-          ? `${c.ownerName ? `${c.ownerName} 선생님 반` : "다른 선생님 반"} — 이 기간에만 대신 맡은 위임 반입니다`
+          ? tf("os.class.borrowedHint", {
+              owner: c.ownerName
+                ? tf("os.class.ownerNamed", { name: c.ownerName })
+                : t("os.class.ownerUnknown"),
+            })
           : c.delegatedAwayTo
-            ? `이 날짜에는 ${c.delegatedAwayTo} 선생님이 대신 맡습니다 — 직접 쓰실 수도 있지만 둘이 각자 쓰면 나중에 쓴 쪽이 남습니다`
+            ? tf("os.class.lentHint", { to: c.delegatedAwayTo })
             : c.reportOptout
               ? REPORT_OPTOUT_NOTICE
               : undefined
@@ -450,13 +472,13 @@ function ClassChip({
       {/* '수업보고서 미발송' 반 — 눌러서 보고서 칸이 잠긴 걸 보기 **전에** 알린다(2026-08-19). */}
       {c.reportOptout ? (
         <span className={on ? "text-primary-foreground/75" : "text-text-faint"} aria-hidden>
-          출결만
+          {t("os.class.attendOnly")}
         </span>
       ) : null}
       {/* 내 반이 남에게 넘어간 날 — 반을 숨기지 않고 표식만 단다(권한은 그대로, 원 담임도 쓸 수 있다). */}
       {c.delegatedAwayTo ? (
         <span className={on ? "text-primary-foreground/75" : "text-amber"} aria-hidden>
-          위임중
+          {t("os.class.lentChip")}
         </span>
       ) : null}
       <span className={countTone}>{c.studentCount}</span>
