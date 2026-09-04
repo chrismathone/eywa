@@ -191,14 +191,14 @@ export function ApprovalStamps({
           <tr>
             <th
               rowSpan={2}
-              className="border-line bg-bg-soft/60 text-text-dim w-9 border px-2.5 text-xs font-semibold"
+              className="border-line bg-bg-soft/60 text-text-dim w-9 border px-2.5 text-sm font-semibold"
             >
               결재
             </th>
             {cols.map((c) => (
               <th
                 key={c.key}
-                className={`border-line text-text-dim border px-2 py-1 text-xs font-semibold ${
+                className={`border-line text-text-dim border px-2 py-1 text-sm font-semibold ${
                   c.active ? "bg-primary-soft/30" : "bg-bg-soft/60"
                 }`}
               >
@@ -223,7 +223,7 @@ export function ApprovalStamps({
                     대결 · {c.actedByName}
                   </p>
                 ) : null}
-                <p className="text-foreground mt-0.5 text-xs font-medium whitespace-nowrap">
+                <p className="text-foreground mt-0.5 text-sm font-medium whitespace-nowrap">
                   {c.name}
                 </p>
               </td>
@@ -231,12 +231,12 @@ export function ApprovalStamps({
           </tr>
           {doc.refs.length > 0 ? (
             <tr>
-              <th className="border-line bg-bg-soft/60 text-text-dim border px-2.5 py-1.5 text-xs font-semibold">
+              <th className="border-line bg-bg-soft/60 text-text-dim border px-2.5 py-1.5 text-sm font-semibold">
                 참조
               </th>
               <td
                 colSpan={cols.length}
-                className="border-line border px-3 py-1.5 text-left text-xs"
+                className="border-line border px-3 py-1.5 text-left text-sm"
               >
                 <span className="text-foreground inline-flex flex-wrap items-center gap-x-3 gap-y-1">
                   {doc.refs.map((r) => (

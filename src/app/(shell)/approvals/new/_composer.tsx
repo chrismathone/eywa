@@ -76,7 +76,7 @@ const inputClass =
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-line flex flex-col gap-2 border-b py-4 last:border-b-0 sm:flex-row sm:gap-4">
-      <p className="text-foreground w-[84px] shrink-0 pt-1 text-sm font-bold">{label}</p>
+      <p className="text-foreground w-[84px] shrink-0 pt-1 text-base font-bold">{label}</p>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
@@ -201,11 +201,11 @@ export function DraftComposer({
       ) : null}
 
       {/* 문서 한 장 — 섹션이 카드로 갈라지지 않고 구분선으로만 이어진다. */}
-      <article className="border-line bg-card shadow-card rounded-2xl border px-5 py-1 sm:px-6">
+      <article className="bg-card shadow-card rounded-2xl px-5 py-1 sm:px-6">
         <Row label="기본 설정">
           <div className="overflow-hidden rounded-lg">
             <table className="w-full table-fixed border-collapse text-sm">
-              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:whitespace-nowrap">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-sm [&_th]:font-semibold [&_th]:whitespace-nowrap">
                 <tr>
                   <th className="w-[88px]">문서 종류</th>
                   <td>
@@ -250,7 +250,9 @@ export function DraftComposer({
               </tbody>
             </table>
           </div>
-          <p className="text-text-dim mt-1.5 text-xs">{APPROVAL_FORM_DESC[form]}</p>
+          {APPROVAL_FORM_DESC[form] ? (
+            <p className="text-text-dim mt-1.5 text-sm">{APPROVAL_FORM_DESC[form]}</p>
+          ) : null}
         </Row>
 
         <Row label="결재선">
@@ -574,11 +576,11 @@ function LineTable({
           <tr>
             <th
               rowSpan={3}
-              className="border-line bg-bg-soft/60 text-text-dim w-9 border px-2.5 text-xs font-semibold"
+              className="border-line bg-bg-soft/60 text-text-dim w-9 border px-2.5 text-sm font-semibold"
             >
               결재
             </th>
-            <th className="border-line bg-bg-soft/60 text-text-dim min-w-[104px] border px-2 py-1 text-xs font-semibold">
+            <th className="border-line bg-bg-soft/60 text-text-dim min-w-[104px] border px-2 py-1 text-sm font-semibold">
               {drafterJobTitle ?? "기안"}
             </th>
             {approvers.length === 0 ? (
@@ -589,7 +591,7 @@ function LineTable({
               approvers.map((id) => (
                 <th
                   key={id}
-                  className="border-line bg-bg-soft/60 text-text-dim min-w-[112px] border px-2 py-1 text-xs font-semibold"
+                  className="border-line bg-bg-soft/60 text-text-dim min-w-[112px] border px-2 py-1 text-sm font-semibold"
                 >
                   {byId.get(id)?.jobTitle ?? "직원"}
                 </th>
@@ -618,12 +620,12 @@ function LineTable({
           {/* 3줄 — 이름(표시 전용 — 편집은 [지정] 모달에서) */}
           <tr>
             <td className="border-line border px-2 py-1.5">
-              <p className="text-foreground text-xs font-medium whitespace-nowrap">{drafterName}</p>
+              <p className="text-foreground text-sm font-medium whitespace-nowrap">{drafterName}</p>
               <p className="text-text-faint text-xs">기안</p>
             </td>
             {approvers.map((id, i) => (
               <td key={id} className="border-line border px-2 py-1.5">
-                <p className="text-foreground text-xs font-medium whitespace-nowrap">
+                <p className="text-foreground text-sm font-medium whitespace-nowrap">
                   {byId.get(id)?.name ?? "(알 수 없음)"}
                 </p>
                 <p className="text-text-faint text-xs">
@@ -634,13 +636,13 @@ function LineTable({
           </tr>
           {/* 참조 행 */}
           <tr>
-            <th className="border-line bg-bg-soft/60 text-text-dim border px-2.5 py-1.5 text-xs font-semibold">
+            <th className="border-line bg-bg-soft/60 text-text-dim border px-2.5 py-1.5 text-sm font-semibold">
               참조
             </th>
             <td colSpan={bodyCols} className="border-line border px-3 py-1.5 text-left">
               <span className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 align-middle">
                 {refs.map((id) => (
-                  <span key={id} className="text-foreground text-xs">
+                  <span key={id} className="text-foreground text-sm">
                     {byId.get(id)?.name ?? "(알 수 없음)"}
                   </span>
                 ))}

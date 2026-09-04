@@ -199,13 +199,13 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
     <div className="mx-auto w-full max-w-[820px] space-y-4 p-4 md:p-6">
       <Link
         href="/approvals"
-        className="text-text-dim hover:text-primary inline-flex items-center gap-1 text-xs font-medium transition print:hidden"
+        className="text-text-dim hover:text-primary inline-flex items-center gap-1 text-sm font-medium transition print:hidden"
       >
-        <ArrowLeft className="size-3.5" /> 결재함으로
+        <ArrowLeft className="size-4" /> 결재함으로
       </Link>
 
       {/* 문서 — A4 종이 한 장 느낌(흰 판). 배치는 하이웍스 결재 문서 그대로. */}
-      <article className="border-line bg-card shadow-card space-y-5 rounded-2xl border p-6">
+      <article className="bg-card shadow-card space-y-5 rounded-2xl p-6">
         {/* ① 가운데 큰 표제(양식명) + 문서 제목 — 품의·지출·수입결의서는 제목이 곧 안건명이다. */}
         <header className="space-y-1.5">
           <h1 className="text-foreground text-center text-2xl font-bold tracking-tight">
@@ -216,7 +216,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
         {/* ② 정보 격자표 — 문서 종류·번호·기안자·일시·상태(하이웍스 상단 그리드). */}
         <table className="border-line w-full border-collapse border text-sm">
-          <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
+          <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-sm [&_th]:font-semibold [&_td]:text-sm">
             <tr>
               <th className="w-[96px]">문서 종류</th>
               <td>공통 · {APPROVAL_FORM_LABEL[doc.form] ?? doc.form}</td>
@@ -254,7 +254,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
         {leave ? (
           <table className="border-line w-full border-collapse border text-sm">
-            <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
+            <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-sm [&_th]:font-semibold [&_td]:text-sm">
               <tr>
                 <th className="w-[110px]">휴가 종류</th>
                 <td>{LEAVE_KIND_LABEL[leave.kind]}</td>
@@ -288,7 +288,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
               </tr>
               <tr>
                 <th>연차 근거</th>
-                <td className="text-text-dim text-xs" colSpan={3}>
+                <td className="text-text-dim text-sm" colSpan={3}>
                   사용 기간{" "}
                   <span className="num">
                     {leave.periodStart} ~ {leave.periodEnd}
@@ -302,7 +302,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
         ) : doc.expense ? (
           <>
             <table className="border-line w-full border-collapse border text-sm">
-              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-sm [&_th]:font-semibold [&_td]:text-sm">
                 <tr>
                   <th className="w-[110px]">분류</th>
                   <td>{doc.expense.category}</td>
@@ -332,7 +332,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
         ) : doc.income ? (
           <>
             <table className="border-line w-full border-collapse border text-sm">
-              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:text-sm">
+              <tbody className="[&_th]:bg-bg-soft/60 [&_th]:text-text-dim [&_td]:text-foreground [&_th]:border-line [&_td]:border-line [&_th]:border [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_th]:text-left [&_th]:text-sm [&_th]:font-semibold [&_td]:text-sm">
                 <tr>
                   <th className="w-[110px]">분류</th>
                   <td>{doc.income.category}</td>
@@ -379,7 +379,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
 
         {/* 결재 이력 — 기안부터 종결까지 시간순. 결재 의견은 각 줄에 실린다(따로 그리지 않는다). */}
         <section className="border-line space-y-2 border-t pt-4">
-          <p className="micro">결재 이력</p>
+          <h2 className="text-foreground text-base font-bold">결재 이력</h2>
           <ol>
             {timeline.map((e, i) => (
               <li key={e.key} className="relative pb-3 pl-5 last:pb-0">
@@ -398,7 +398,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
                   ) : null}
                   {e.time ? <span className="num text-text-faint ml-2 text-xs">{e.time}</span> : null}
                 </p>
-                {e.note ? <p className="text-text-dim mt-0.5 text-xs break-keep">{e.note}</p> : null}
+                {e.note ? <p className="text-text-dim mt-0.5 text-sm break-keep">{e.note}</p> : null}
               </li>
             ))}
           </ol>
@@ -408,7 +408,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
             결재 의견(도장에 붙는 처리 의견)과 별개. ready=false(0227a 미적용)면 섹션 자체를 숨긴다. */}
         {commentsBox.ready ? (
           <section className="border-line space-y-2.5 border-t pt-4">
-            <p className="micro">
+            <h2 className="text-foreground text-base font-bold">
               댓글
               {commentsBox.comments.length > 0 ? (
                 // 200 = 조회 상한 — 상한에 닿은 수를 그대로 찍으면 얼어붙은 거짓 건수가 된다([[#89]]).
@@ -416,10 +416,10 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
                   {commentsBox.comments.length >= 200 ? "200+" : commentsBox.comments.length}
                 </span>
               ) : null}
-            </p>
+            </h2>
             {commentsBox.loadError ? (
               // 실패를 빈 목록으로 위장하지 않는다 — 한글 요약 + 원문은 툴팁([[#109]] 규약).
-              <p className="text-danger text-xs" title={commentsBox.loadError.raw}>
+              <p className="text-danger text-sm" title={commentsBox.loadError.raw}>
                 {commentsBox.loadError.summary}
               </p>
             ) : (
@@ -429,7 +429,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
                     {commentsBox.comments.map((c) => (
                       <li key={c.id} className="border-line rounded-lg border px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs leading-tight">
+                          <p className="text-sm leading-tight">
                             <b className="text-foreground">{c.authorName}</b>
                             {c.authorJobTitle ? (
                               <span className="text-text-faint ml-1">{c.authorJobTitle}</span>
@@ -447,7 +447,7 @@ export default async function ApprovalDocPage({ params }: { params: Promise<{ id
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-text-faint text-xs">
+                  <p className="text-text-faint text-sm">
                     아직 댓글이 없습니다 — 전결 사유·보충 설명을 참여자와 공유해 보세요.
                   </p>
                 )}
