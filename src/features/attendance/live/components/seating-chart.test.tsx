@@ -196,8 +196,9 @@ describe("좌석표 과목 필터", () => {
   it("과목 드롭다운에서 고르면 그 과목 반 카드만 남는다", () => {
     renderMixed();
     expect(screen.getByText("영어반")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "과목 필터" }));
-    fireEvent.click(screen.getByRole("button", { name: "수학" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    // 항목은 Portal 드롭다운의 `menuitem`(폰 레일에서 잘리지 않게 HrefSelect 값 모드로 옮겼다, 2026-09-04).
+    fireEvent.click(screen.getByRole("menuitem", { name: "수학" }));
     expect(screen.getByText("수학반")).toBeTruthy();
     expect(screen.queryByText("영어반")).toBeNull();
   });
@@ -218,8 +219,8 @@ describe("좌석표 과목 필터", () => {
 
   it("고르면 계정에 저장한다(뷰 세팅은 계정 귀속)", () => {
     renderMixed();
-    fireEvent.click(screen.getByRole("button", { name: "과목 필터" }));
-    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "영어" }));
     expect(saveSubject).toHaveBeenCalledWith("english");
   });
 

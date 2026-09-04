@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { findNavItem, navPresentation } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
@@ -87,7 +86,6 @@ export function WindowLink({
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
   const workspaceEnabled = useWorkspaceEnabled();
-  const router = useRouter();
   /** 실제로 열기. 창으로 열었으면 true, 기본 네비게이션에 맡겨야 하면 false. */
   function activate(e: MouseEvent<HTMLAnchorElement>): boolean {
     // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지.
@@ -141,8 +139,11 @@ export function WindowLink({
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (activate(e)) return;
     // 창을 못 여는 경로(모바일·iframe 드릴인·워크스페이스 없음) — 단일 클릭을 삼켰으니 여기서 직접 이동한다.
+    // 🔴 `useRouter()`를 쓰지 않는다 — 이 부품은 라우터 없는 트리(테스트·격리 렌더)에서도 그려지는데
+    //    훅은 조건부로 못 부르고 없으면 **throw**한다(실측: 무관한 화면 테스트 3벌이 통째로 깨졌다).
+    //    앱 관례대로 `window.location.assign`([[#102]] 뷰 전환과 같은 경로).
     e.preventDefault();
-    router.push(linkHref);
+    window.location.assign(linkHref);
   }
   // 임베드 iframe 내부에선 onClick이 창을 안 열고 일반 네비게이션으로 떨어진다(isDesktop=false).
   // 그 드릴인이 embed=1을 잃으면 하위 페이지가 풀 셸로 떠 사이드바가 이중 노출되므로, iframe 안의

@@ -446,12 +446,21 @@ export async function getClassesPage(
   let dayClassIds: string[] | null = null;
   const days = (options.days ?? []).filter(Boolean);
   if (days.length > 0) {
-    const { data: scheds, error } = await supabase
-      .from("class_schedules")
-      .select("class_id")
-      .in("day_of_week", days);
-    if (error) throw new Error(`getClassesPage(days): ${error.message}`);
-    dayClassIds = [...new Set((scheds ?? []).map((s) => s.class_id))];
+    // 🔴 **무페이징 select 금지**(B2) — 이 결과는 whitelist라, 1000행에서 잘리면 **에러 없이 반이 사라진다**.
+    //    실측 2026-09-04: `class_schedules` 1,356행에 평일 요일당 200~285행이라 **요일을 4개 이상 고르면**
+    //    조합이 1,000을 넘어(월화수목 1,012) 일부 반이 목록에서 조용히 빠졌다(적대적 재리뷰).
+    //    옛 필터바는 한 번에 하나씩 고르는 모양이라 잘 안 밟혔고, 열 머리 다중 선택이 그 길을 열었다.
+    const scheds = await fetchAllPaged<{ class_id: string }>((from, to) =>
+      supabase
+        .from("class_schedules")
+        .select("class_id")
+        .in("day_of_week", days)
+        // 페이지 경계가 흔들리지 않게 결정적 정렬(같은 값이 두 페이지에 걸치지 않도록 id tie-break).
+        .order("class_id")
+        .order("id")
+        .range(from, to),
+    );
+    dayClassIds = [...new Set(scheds.map((s) => s.class_id))];
     if (dayClassIds.length === 0) return { rows: [], total: 0 };
   }
 

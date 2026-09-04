@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ToolbarButton, ToolbarChip } from "@/components/toolbar";
-import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { HrefSelect } from "@/components/href-select";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { assetFilterChips, filterAssets, type AssetFilterKey } from "@/features/inventory/filter";
 import { saveInventoryPrefs } from "@/features/inventory/server/prefs";
@@ -86,15 +85,14 @@ export function AssetsFace({
         // 필터는 `필터: 값` 드롭다운 하나(지시서 §10 칩 줄 금지 — 옛 세그먼트 11칩이 툴바를 두 줄로 밀었다, 원장 2026-09-04
         // *"2행을 1행으로"*·*"더 작아져서 2행이 될 경우가 없도록"*). 축은 하나(상태·분류·폐기가 한 목록)라 드롭다운도 하나.
         filters={
-          <SearchableSelect
-            options={chips.map((c) => ({ value: c.key, label: c.label }))}
-            value={chip}
-            onValueChange={(v) => setChip(v as AssetFilterKey)}
+          // 🔴 목록은 **Portal**이어야 한다(`HrefSelect` 값 모드) — 툴바가 폰에서 레일(`overflow-y: hidden`)이 되면
+          //    인라인 목록(`SearchableSelect`)이 잘려 안 열린다(셔틀 17단계 🔴와 같은 구조, 적대적 재리뷰 2026-09-04).
+          <HrefSelect
+            axisLabel="필터"
             ariaLabel="자산 필터"
-            valuePrefix="필터"
-            prefixOnlyFor="all"
-            triggerClassName={TOOLBAR_SELECT}
-            className="w-auto shrink-0"
+            value={chip}
+            options={chips.map((c) => ({ value: c.key, label: c.label }))}
+            onSelect={(v) => setChip(v as AssetFilterKey)}
           />
         }
         extra={

@@ -1,7 +1,6 @@
 "use client";
 
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { HrefSelect } from "@/components/href-select";
 
 /**
  * 오늘 출결 **과목별 필터 칩** — 세 탭(좌석표·확인 필요·어제 출결)이 같이 쓰는 하나
@@ -50,17 +49,17 @@ export function SubjectFilterSelect({
       className={`shrink-0 ${pending ? "opacity-60" : ""}`}
       title="과목별로 목록을 좁혀 봅니다(내 계정에 저장 — 다른 PC에서도 같은 상태로 열립니다)"
     >
-      <SearchableSelect
-        options={subjects.filters}
+      {/* 🔴 목록은 **Portal**이어야 한다(`HrefSelect` 값 모드) — 폰 툴바 레일(`.toolbar-rail`)은 `overflow-y: hidden`이라
+          인라인 목록(`SearchableSelect`)은 26px 레일에 잘려 **아예 안 열린다**(셔틀 17단계에서 🔴로 잡힌 함정과 같은 구조,
+          적대적 재리뷰 2026-09-04). 항목이 2~4개뿐이라 검색칸도 필요 없다. */}
+      <HrefSelect
+        axisLabel="과목"
+        ariaLabel="과목 필터"
         value={value}
-        onValueChange={(v) => {
+        options={subjects.filters.map((o) => ({ value: o.value, label: o.label }))}
+        onSelect={(v) => {
           if (!pending && v !== value) onPick(v);
         }}
-        ariaLabel="과목 필터"
-        valuePrefix="과목"
-        prefixOnlyFor={SUBJECT_FILTER_ALL}
-        triggerClassName={TOOLBAR_SELECT}
-        className="w-auto"
       />
     </span>
   );

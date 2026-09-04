@@ -158,8 +158,8 @@ describe("데스크 큐 과목 필터", () => {
     renderMixed();
     expect(screen.getByText("수학생")).toBeTruthy();
     expect(screen.getByText("영어생")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "과목 필터" }));
-    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "영어" }));
     expect(screen.queryByText("수학생")).toBeNull();
     expect(screen.getByText("영어생")).toBeTruthy();
   });
@@ -168,7 +168,7 @@ describe("데스크 큐 과목 필터", () => {
     renderMixed("math");
     expect(screen.getByText("수학생")).toBeTruthy();
     expect(screen.queryByText("영어생")).toBeNull();
-    expect(screen.getByRole("button", { name: "과목 필터" }).textContent).toContain("과목: 수학");
+    expect(screen.getByRole("button", { name: /^과목:/ }).textContent).toContain("과목: 수학");
   });
 
   it("🔴 설정에서 사라진 과목이 저장돼 있으면 전체로 되돌린다 — 빈 화면은 '출결이 사라졌다'로 읽힌다", () => {
@@ -179,8 +179,8 @@ describe("데스크 큐 과목 필터", () => {
 
   it("고르면 계정에 저장한다", () => {
     renderMixed();
-    fireEvent.click(screen.getByRole("button", { name: "과목 필터" }));
-    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "영어" }));
     expect(saveSubject).toHaveBeenCalledWith("english");
   });
 

@@ -1270,6 +1270,12 @@ html[data-stage="on"] main {
     .toolbar-rail > * {
       flex-shrink: 0;
     }
+    /* 툴바 **묶음 상자**(왼쪽/오른쪽) — 좁은 화면에서만 풀어 항목 단위로 감기게 한다.
+       🔴 조건을 `compact-chrome`(창=embed 포함)으로 적으면 **플로팅 창 안에서 상자가 없어진다** —
+          원장이 요청한 자리가 바로 그 창이다(적대적 재리뷰 2026-09-04). 레일과 같은 절에 둔다. */
+    .toolbar-group {
+      display: contents;
+    }
     /* 칩 묶음(과목·구분·뷰)도 내부에서 감기지 않게 */
     .toolbar-rail > div {
       flex-wrap: nowrap;

@@ -90,7 +90,12 @@ export function AutoPageSize({
       const items = list.children.length;
       const effCols = Math.min(cols, Math.max(1, Math.ceil(items / rows)));
       el.style.setProperty("--cols", String(effCols));
-      if (effCols > 1) el.style.setProperty("--list-h", `${rows * rowPx + 2}px`);
+      // 🔴 높이 고정은 **지금 실린 항목이 다 들어갈 때만** — `column-fill: auto` + 고정 높이인데 용량(행×단)이
+      //    항목보다 작으면 남는 행이 상자 **오른쪽 바깥 넘침 단**으로 새어 나간다(창을 줄이는 동안 가로 스크롤,
+      //    진동 가드에 걸린 갈래에선 다음 resize까지 남는다 — 적대적 재리뷰 2026-09-04). 모자라면 auto 높이로
+      //    떨어뜨려 전부 보이게 두고, 서버가 새 size를 주면 다음 측정에서 다시 고정한다.
+      const fitsInBox = Math.ceil(items / Math.max(1, rows)) <= cols;
+      if (effCols > 1 && fitsInBox) el.style.setProperty("--list-h", `${rows * rowPx + 2}px`);
       else el.style.removeProperty("--list-h");
       if (fit === size || (fit > size && fit - size < 2)) return;
       const last = lastRequest.current;

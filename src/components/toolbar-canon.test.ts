@@ -254,6 +254,10 @@ describe("툴바 규약 — 옮긴 표면은 되돌아가지 않는다", () => {
     const readsCanon =
       src.includes("@/components/toolbar-controls") ||
       src.includes("@/components/toolbar") ||
+      // 규약 치수를 **부품 안에서** 읽는 공용 컨트롤 — 화면이 이것만 써도 규약을 지킨 것이다
+      // (치수를 손으로 안 적는 게 이 가드의 목적이다).
+      src.includes("@/components/href-select") ||
+      src.includes("@/components/period-nav") ||
       /from "(\.\.\/)+chrome"/.test(src) ||
       src.includes("@/features/class-sheets/chrome");
     expect(readsCanon).toBe(true);
