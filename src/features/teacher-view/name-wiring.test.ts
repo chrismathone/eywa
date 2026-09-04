@@ -30,6 +30,11 @@ import {
 } from "@/features/attendance/sort-rows";
 import { STATUS_TEXT, STATUS_TEXT_EN } from "@/features/attendance/cell-display";
 import { BADGE_LABEL, BADGE_LABEL_EN } from "@/features/attendance/enrollment-span";
+import {
+  STUDENT_STATUS_LABEL,
+  STUDENT_STATUS_LABEL_EN,
+  studentStatusLabel,
+} from "@/features/students/status-labels";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -543,5 +548,51 @@ describe("🔴 월별 출석부는 사전만 본다 — 화면 파일에 한글 
     expect(
       `${sheetT("ko", "att.notice.scope.a")}X${sheetT("ko", "att.notice.scope.e")}`,
     ).toBe("칸 숫자는 X에서 봅니다.");
+  });
+});
+
+/**
+ * 🔴 **학생목록(/students) 머리·툴바에 한국어 리터럴이 남지 않는다.**
+ *
+ * ⚠️ 이 목록엔 **쓰기 화면이 없다**(학생 등록·수정 폼·엑셀 가져오기·상태 변경) — 강사는 학생 기록이
+ *    **열람 전용**이라 그 버튼 자체가 안 보인다(상위 결정 2026-08-18). 사무실에 열 때 함께 옮긴다.
+ */
+describe("🔴 학생목록은 사전만 본다 — 화면 파일에 한글 리터럴 0", () => {
+  it.each(["student-filter-bar.tsx"])("%s", (f) => {
+    const code = codeOnly(read("app", "(shell)", "students", "_components", f));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/.*$/, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("라우트(page.tsx)도 사전 경유 — 머리·열 제목·빈 화면이 하드코딩이 아니다", () => {
+    const src = read("app", "(shell)", "students", "page.tsx");
+    for (const key of ["stu.title", "stu.desc", "stu.col.student", "stu.empty.desc", "stu.excel"]) {
+      expect(src).toContain(key);
+    }
+    const code = codeOnly(src).replace(/\/\/[^\n\r]*/g, "");
+    expect(code.split(/\r?\n/).filter((l) => /[가-힣]/.test(l))).toEqual([]);
+  });
+
+  it("🔴 학생 상태는 한·영 표가 같은 키 집합이다 — 빠진 키는 raw enum이 샌다", () => {
+    expect(Object.keys(STUDENT_STATUS_LABEL_EN).sort()).toEqual(
+      Object.keys(STUDENT_STATUS_LABEL).sort(),
+    );
+    for (const v of Object.values(STUDENT_STATUS_LABEL_EN)) expect(v).not.toMatch(/[가-힣]/);
+    // 인자를 안 주면 한국어 — 기존 호출부(사무실 화면)는 한 글자도 안 바뀐다.
+    expect(studentStatusLabel("enrolled")).toBe("재원");
+    expect(studentStatusLabel("enrolled", "en")).toBe("Enrolled");
+    // 모르는 코드는 raw 반환(표시 전 매핑 추가가 정석) — 두 언어 모두.
+    expect(studentStatusLabel("weird", "en")).toBe("weird");
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "stu.title")).toBe("학생목록");
+    expect(sheetTf("ko", "stu.desc", { n: 3, basis: sheetT("ko", "stu.basis.mine") })).toBe(
+      "재원 3명 · 담당 과목 기준",
+    );
+    expect(`${sheetT("ko", "stu.count.pre")}12${sheetT("ko", "stu.count.post")}`).toBe("결과 12명");
   });
 });

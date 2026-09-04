@@ -27,13 +27,32 @@ export const STUDENT_STATUS_TONE: Record<string, SemanticTone> = {
   withdrawn: "inert",
 };
 
+/**
+ * 같은 상태의 **영어 라벨** — 강사뷰 영어 화면(원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환"*).
+ *
+ * 🔴 **한글 맵 바로 옆에 둔다** — 나누면 상태가 늘 때 한쪽만 채워지고 raw enum(`on_hold`)이 샌다.
+ * ⚠️ 표시 전용이다 — 저장값·필터 파라미터는 enum 그대로다.
+ */
+export const STUDENT_STATUS_LABEL_EN: Record<string, string> = {
+  prospect: "Prospect",
+  consulted: "Consulted",
+  enrolled: "Enrolled",
+  on_hold: "On hold",
+  withdrawn: "Withdrawn",
+};
+
 export const STUDENT_STATUS_COLOR: Record<string, PillColor> = Object.fromEntries(
   Object.entries(STUDENT_STATUS_TONE).map(([status, tone]) => [status, toneColor(tone)])
 );
 
 /** 상태 코드 → 한글 라벨. 미지의 코드는 raw 반환(디버그 가시성) — 표시 전 매핑 추가가 정석. */
-export function studentStatusLabel(status: string | null | undefined): string | null {
+export function studentStatusLabel(
+  status: string | null | undefined,
+  // 화면 언어 — 안 주면 한국어(기존 호출부는 한 글자도 안 바뀐다).
+  lang: "ko" | "en" = "ko",
+): string | null {
   if (!status) return null;
+  if (lang === "en") return STUDENT_STATUS_LABEL_EN[status] ?? STUDENT_STATUS_LABEL[status] ?? status;
   return STUDENT_STATUS_LABEL[status] ?? status;
 }
 
@@ -48,9 +67,10 @@ export function studentStatusLabel(status: string | null | undefined): string | 
  * ⚠️ 화면 파일에 `STATUS_META`를 다시 만들지 말 것. 상태가 늘면 여기 + `STUDENT_STATUS_TONE`에 더한다.
  */
 export function studentStatusMeta(
-  status: string | null | undefined
+  status: string | null | undefined,
+  lang: "ko" | "en" = "ko",
 ): { label: string; color: PillColor; tone: SemanticTone } | null {
   if (!status) return null;
   const tone = STUDENT_STATUS_TONE[status] ?? "inert";
-  return { label: STUDENT_STATUS_LABEL[status] ?? status, color: toneColor(tone), tone };
+  return { label: studentStatusLabel(status, lang)!, color: toneColor(tone), tone };
 }

@@ -29,6 +29,12 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { PageHeader } from "@/components/page-header";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { studentStatusMeta } from "@/features/students/status-labels";
+// 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
+// 강사 이름도 영어 이름이 있으면 그것으로 — 표는 셸 레이아웃이 이미 읽어 둔 요청 캐시라 왕복 0.
+import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
@@ -36,7 +42,9 @@ import { StudentImportDialog } from "./_components/student-import-dialog";
 import { StudentFilterBar } from "./_components/student-filter-bar";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 
-export const metadata = { title: "학생목록 — eywa" };
+export async function generateMetadata() {
+  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")} — eywa` };
+}
 
 export default async function StudentsPage({
   searchParams,
@@ -94,18 +102,26 @@ export default async function StudentsPage({
     teacherOptionsPromise,
     getTenantSettings(),
   ]);
+  const [lang, teacherNames] = await Promise.all([
+    getTeacherViewLang(),
+    getTeacherEnglishNames(),
+  ]);
+  const showTeacher = (n: string) => teacherNameFor(n, teacherNames, lang) ?? n;
   const { enrolled, bySubject } = counts;
   // 과목·학년 필터·라벨·색은 학원설정(operations) 단일 소스 — 미등록 값은 드롭다운에 안 뜸.
   const subjects = buildSubjectMaps(settings.operations.subjects);
   // 강사 스코프면 과목 선택지도 담당 과목만. 고를 게 1개뿐이면 필터 자체를 감춘다(잡음).
-  const subjectFilters = narrowSubjectFilters(axis, subjects.filters);
+  // 🔴 과목 **라벨**은 학원설정 단일 소스라 그대로 — 언어를 타는 건 우리가 붙인 '전체'뿐이다.
+  const subjectFilters = narrowSubjectFilters(axis, subjects.filters).map((f) =>
+    f.value === "all" ? { ...f, label: sheetT(lang, "stu.filter.all") } : f,
+  );
   const hideSubjectFilter = !showSubjectFilter(axis);
   const gradeFilters = [
-    { value: "all", label: "전체" },
+    { value: "all", label: sheetT(lang, "stu.filter.all") },
     ...settings.operations.gradeLevels.map((g) => ({ value: g, label: g })),
   ];
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const teacherOptions = teachers.map((t) => ({ value: t.id, label: t.displayName }));
+  const teacherOptions = teachers.map((t) => ({ value: t.id, label: showTeacher(t.displayName) }));
   // 담임 필터 — 스코프에서 고를 사람이 나 하나뿐이면 감춘다(전체/나 = 같은 결과).
   // ⚠️ 이미 값이 걸려 있으면(옛 localStorage 복원 등) 남겨 둔다 — 감추면 "전체"로 되돌릴 길이 없다.
   const hideTeacherFilter = axis !== null && teacherOptions.length <= 1 && teacherId === "all";
@@ -146,9 +162,12 @@ export default async function StudentsPage({
     <div className="space-y-5 compact-chrome:space-y-3">
       {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(엑셀·가져오기·신규) */}
       <PageHeader
-        eyebrow="학생 관리"
-        title="학생목록"
-        description={`재원 ${enrolled}명 · ${axis ? "담당 과목 기준" : "학원설정 과목 기준"}`}
+        eyebrow={sheetT(lang, "stu.eyebrow")}
+        title={sheetT(lang, "stu.title")}
+        description={sheetTf(lang, "stu.desc", {
+          n: enrolled,
+          basis: sheetT(lang, axis ? "stu.basis.mine" : "stu.basis.settings"),
+        })}
         actions={
           <>
             {/* ⚠️ 동기화 배지도 이 행 안에 — 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측 텅 빔). */}
@@ -167,7 +186,7 @@ export default async function StudentsPage({
               }
             >
               <EyIcon name="arrowDown" size={13} />
-              엑셀 내보내기
+              {sheetT(lang, "stu.excel")}
             </Button>
             {canManageStudent ? <StudentImportDialog /> : null}
             {canManageStudent ? <NewStudentTrigger /> : null}
@@ -201,17 +220,21 @@ export default async function StudentsPage({
 
       {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만 */}
       <p className="text-text-dim px-1 text-[13px]">
-        결과 <span className="text-foreground font-bold">{total}</span>명
-        {totalPages > 1 ? <span className="ml-2">{page}/{totalPages} 페이지</span> : null}
-        {q ? <span className="ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
+        {sheetT(lang, "stu.count.pre")}
+        <span className="text-foreground font-bold">{total}</span>
+        {sheetT(lang, "stu.count.post")}
+        {totalPages > 1 ? (
+          <span className="ml-2">{sheetTf(lang, "stu.count.pages", { page, total: totalPages })}</span>
+        ) : null}
+        {q ? <span className="ml-2">{sheetTf(lang, "stu.count.q", { q })}</span> : null}
       </p>
 
       {rows.length === 0 ? (
         <EmptyState
           image={q ? "search" : "students"}
           icon={() => <Users size={32} strokeWidth={1.8} />}
-          title="결과 없음"
-          description="검색어/필터를 조정해보세요."
+          title={sheetT(lang, "stu.empty.title")}
+          description={sheetT(lang, "stu.empty.desc")}
         />
       ) : (
         <>
@@ -219,16 +242,18 @@ export default async function StudentsPage({
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
             <thead className="border-line border-b [&_th]:whitespace-nowrap">
               <tr>
-                <th className="micro px-5 py-3 text-left">학생</th>
-                <th className="micro px-5 py-3 text-left">상태</th>
-                <th className="micro px-5 py-3 text-left">수강 과목</th>
-                <th className="micro px-5 py-3 text-left">담당 강사</th>
-                <th className="micro px-5 py-3 text-right">학부모 연락처</th>
+                <th className="micro px-5 py-3 text-left">{sheetT(lang, "stu.col.student")}</th>
+                <th className="micro px-5 py-3 text-left">{sheetT(lang, "stu.col.status")}</th>
+                <th className="micro px-5 py-3 text-left">{sheetT(lang, "stu.col.subjects")}</th>
+                <th className="micro px-5 py-3 text-left">{sheetT(lang, "stu.col.teacher")}</th>
+                <th className="micro px-5 py-3 text-right">
+                  {sheetT(lang, "stu.col.parentPhone")}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
               {rows.map((s) => {
-                const meta = studentStatusMeta(s.status) ?? {
+                const meta = studentStatusMeta(s.status, lang) ?? {
                   label: s.status,
                   color: "neutral" as PillColor,
                 };
@@ -241,7 +266,7 @@ export default async function StudentsPage({
                         <WindowLink
                           href={`/students/${s.id}`}
                           title={s.name}
-                          ariaLabel={`${s.name} 학생 정보`}
+                          ariaLabel={sheetTf(lang, "stu.rowAria", { name: s.name })}
                           className="text-foreground text-[13.5px] font-bold hover:underline"
                         >
                           {s.name}
@@ -269,7 +294,9 @@ export default async function StudentsPage({
                       )}
                     </td>
                     <td className="text-text-dim px-5 py-3.5 text-xs">
-                      {s.teacherNames.length > 0 ? s.teacherNames.join("·") : "—"}
+                      {s.teacherNames.length > 0
+                        ? s.teacherNames.map(showTeacher).join("·")
+                        : "—"}
                     </td>
                     <td className="text-text-dim num px-5 py-3.5 text-right text-xs">
                       {s.parentPhone ?? "—"}
