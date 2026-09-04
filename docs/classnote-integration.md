@@ -478,6 +478,16 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
   → too_old 가드(전 달 1일 이후만, [classnote-guard.ts](../src/features/onescreen/classnote-guard.ts))와
   기본 dry-run 스위치(`classnoteSendEnabled=false`)의 존재 이유. **이 가드들을 완화하지 말 것.**
 - **2026-07-10**: 연동 PC env 도메인 수기 오타(§6). → 주소는 복사-붙여넣기 + `발송PC-주소수정.bat`.
+- **2026-09-04 곽하윤 건 — 사유를 버려서 원인을 못 좁혔다**: 스샷 kage 업로드가 3회 재시도 전건 실패했는데
+  DB에 남은 말은 `스샷 kage 업로드 실패` 한 줄뿐이라 ① 캡처가 비었는지 ② 작성폼 첨부 칸이 안 열렸는지
+  ③ kage가 거부했는지(HTTP 몇) ④ 응답이 아예 없었는지를 **구분할 수 없었다**. 정황(같은 학생 과거 전건
+  성공·그날 42건 중 1건만 실패·바로 옆 김채원도 1회 재시도 후 성공)으로 일시 장애까지만 좁히고 끝.
+  → [`uploadToKageDetailed`](../scripts/_classnote/classnote-admin-core.mjs) + 순수
+  [`kage-failure.mjs`](../scripts/_classnote/kage-failure.mjs)로 **네 갈래를 갈라 담는다**.
+  🔴 사유 문장은 `humanizeClassnoteError`를 **사람 문장으로 통과**해야 한다 — 통과 못 하면 패턴표가
+  덮어써서(`/이미지/`→"보고서 이미지 생성 실패", `찾지 못`→보드 안내) **엉뚱한 조치를 안내한다**.
+  그래서 기술 원문은 `sanitizeKageDetail`로 신호(URL·스택·`Error:`·`net::`)를 걷고 40자로 자른다.
+  ⚠️ 워커 코드라 **연동 PC에 zip을 새로 이관해야 반영된다**(git pull 아님 — §2 이관 안내).
 
 ## 9. Edutrix 병행 운영·컷오버 평결 (2026-07-10 적대 검증 — 4방향 코드검증 + 실보드 대조)
 

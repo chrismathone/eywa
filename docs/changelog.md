@@ -1,5 +1,41 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-04 (18) — ClassNote 스샷 업로드 실패 **사유를 갈라 담는다**(네 갈래)
+
+원장 2026-09-04 *"스샷 경로도 실패 사유 구분되게 고쳐줘"* — 곽하윤 건(9/4) 원인 조사의 후속.
+
+**무엇이 문제였나**: 스샷 kage 업로드가 실패하면 워커가 `스샷 kage 업로드 실패` **한 줄**만 남겼다.
+그래서 3회 재시도가 전건 죽어도 DB만 보고는 ① 올릴 이미지가 비었는지 ② 작성폼 첨부 칸이 안 열렸는지
+③ kage가 거부했는지(HTTP 몇) ④ 응답이 아예 없었는지를 **구분할 수 없었다**. 바로 아래 파일첨부 경로는
+2026-07-21에 이미 단계별 사유를 담게 고쳤는데 **스샷 경로만 그 개선이 빠져 있었다** — 이제 짝이 맞는다.
+
+- [`uploadToKageDetailed`](scripts/_classnote/classnote-admin-core.mjs) 신설 — `{ ok, kage, reason, error }`.
+  🔴 **kage 응답을 버리지 않고 모은다**(`seen`): access_key가 없는 응답도 상태코드·본문 요약을 남겨야
+  "거부"와 "무응답"이 갈린다. 종전 시그니처 `uploadToKage`는 **얇은 껍데기로 남겼다** —
+  🔴 첨부 칸 예외는 **그대로 다시 던진다**(파일첨부·공지 경로는 자기 try/catch에서 원문을 사유에 담고
+  있어서, 여기서 null로 바꾸면 그쪽 사유가 "access_key 없음"으로 뭉개진다 = 고치려던 문제의 재발).
+- 문장은 순수 [`kage-failure.mjs`](scripts/_classnote/kage-failure.mjs)에 — 사유를 만드는 파일
+  (`classnote-admin-core`)이 **@playwright/test를 import**해서, 거기 두면 테스트가 playwright를 끈다
+  (`board-safety.mjs`·`identity-keys.mjs`와 같은 규칙).
+- 🔴 **문장이 곧 게이트다**: 이 사유는 `lesson_reports.classnote_error`에 저장돼 발송 콘솔의
+  [`humanizeClassnoteError`](src/features/report-admin/classnote-error.ts)를 지나는데, 그 함수는 한글 비율이
+  낮거나 기술 원문 신호(스택·`Error:`·`net::`·URL)가 있으면 **패턴표로 덮어쓴다**. 실제로 위험하다 —
+  "…이미지…"는 `/스크린샷|이미지/`에 걸려 "보고서 이미지 생성 실패"로, "찾지 못"은 보드 안내로 **오진**된다.
+  → 기술 원문은 `sanitizeKageDetail`로 신호를 걷고 **40자로 자르며**(길면 한글 비율이 떨어져 오진),
+  낚이는 어구는 아예 쓰지 않는다.
+- 대기 시간은 상수 이름이 아니라 **실제 값**을 적는다(`12초`) — 상수가 바뀌면 문장이 따라 바뀐다([[#121]]).
+- 빈 버퍼는 **즉시** 실패로 돌린다: 그대로 넣으면 kage가 access_key를 안 줘 "무응답"과 구분이 안 된 채
+  12초를 버린다(캡처 실패의 조용한 얼굴). 이건 업로드가 아니라 **캡처**가 실패한 것이라 조치가 다르다.
+- 가드: [`kage-failure.test.mjs`](scripts/_classnote/kage-failure.test.mjs) 9개(네 갈래가 서로 다른 말 ·
+  실제 대기 값 · 낚이는 어구 금지 · sanitize) + [`classnote-error.test.ts`](src/features/report-admin/classnote-error.test.ts)
+  3개(**실제 사유 문자열을 그대로 넣어** 원문 통과 확인 — 리터럴 복사가 아니라 그 모듈을 직접 import한다).
+- 검증: typecheck 0 · lint 0 · **test 8193(618 파일)** · `pnpm build` ✓. 마이그레이션 0.
+
+⚠️ **워커 코드라 연동 PC에 zip을 새로 이관해야 반영된다**(git pull 아님 — `연동PC-이관-안내.md`).
+이관 전까지 그 PC는 종전대로 한 줄 사유를 남긴다(동작은 동일, 정보만 적다).
+⚠️ 파일첨부·공지 경로는 **일부러 손대지 않았다** — 그쪽은 이미 단계별 사유가 있고, 종전 시그니처가
+글자 그대로 보존돼 동작이 불변이다. kage 단계까지 갈라 담고 싶으면 그때 `uploadToKageDetailed`로 옮긴다.
+
 ## 2026-09-04 (17) — 🔴 반 쓰기가 "내 담당 반"을 안 봤다 — 게이트 단일화(강사=담임 반만)
 
 원장 2026-09-04 *"내 담당반만 하도록 역할 배선 안되어있어? 이건 심각하군. 일단 그건 바로 고쳐야겠네."*

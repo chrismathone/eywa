@@ -11,6 +11,8 @@ import { chromium } from "@playwright/test";
 import { acceptBoardMembers, kstSchoolYear } from "./board-safety.mjs";
 // 이름 매칭 키도 같은 이유로 순수 모듈에 산다(offboard 판정이 이 파일을 import하면 playwright가 끌려온다).
 import { childKeys } from "./identity-keys.mjs";
+// 실패 사유 문장은 순수 모듈에(테스트가 playwright를 끌지 않게 — 위 두 import와 같은 이유).
+import { kageFailureReason } from "./kage-failure.mjs";
 
 export const CLASSNOTE_BASE = "https://www.classnote.com";
 
@@ -436,23 +438,70 @@ export async function scrapeStudentBoards(page) {
  * ⚠️ `page`는 반드시 `/service/report/add`에 있어야 함. inputTestId: 이미지=`media-attachment-add-input`(file_type=img) /
  * 문서=`doc-attachment-add-input`(etc). 반환 `{ access_key, info }`(문서 info={orgname,size,ext} / 이미지 info={img:{length,width,height},…}).
  */
-export async function uploadToKage(page, inputTestId, { name, mimeType, buffer }) {
+export const KAGE_WAIT_MS = 12000;
+const KAGE_POLL_MS = 100;
+
+/**
+ * 위 업로드의 **실패 사유까지 돌려주는 판**(2026-09-04). 반환 `{ ok, kage, reason, error }`.
+ *
+ * 왜 필요한가: 종전엔 access_key가 없으면 그냥 `null`이라, 호출부가 남길 수 있는 말이 "업로드 실패"
+ * 한 줄뿐이었다. 그래서 곽하윤 건(9/4)처럼 3회 재시도가 모두 죽어도 **DB만으론 원인을 못 좁혔다**.
+ * 이제 네 갈래(빈 데이터 · 첨부 칸 없음 · kage 거부(HTTP) · 무응답)를 갈라 `reason`에 담는다.
+ *
+ * 🔴 kage 응답을 **버리지 않고 모은다**(`seen`) — 실패했을 때 유일한 단서다. access_key가 없는 응답도
+ *    상태코드와 본문 요약을 남겨야 "거부"와 "무응답"이 구분된다.
+ * ⚠️ `error`에는 첨부 칸 조작 중 난 예외를 그대로 담는다 — 아래 종전 시그니처가 **그대로 다시 던지기**
+ *    위해서다(파일첨부·공지 경로의 동작을 바꾸지 않는다).
+ */
+export async function uploadToKageDetailed(page, inputTestId, { name, mimeType, buffer }, { subject = "첨부 파일" } = {}) {
+  // 올릴 바이트가 없으면 올릴 것도 없다 — 그대로 넣으면 kage가 access_key를 안 주고, 그 결과가
+  // "무응답"과 구분이 안 된 채 12초를 버린다(캡처 실패의 조용한 얼굴).
+  if (!buffer?.length) return { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "empty" }), error: null };
+
   let result = null;
+  /** kage POST 응답 기록(성공 여부·상태코드·본문 요약) — 실패 사유를 짚는 유일한 단서. */
+  const seen = [];
   const onResp = async (res) => {
-    if (/kids-kage\.kakao\.com/.test(res.url()) && res.request().method() === "POST") {
-      try { const j = await res.json(); if (j?.access_key) result = j; } catch { /* 무시 */ }
+    if (!/kids-kage\.kakao\.com/.test(res.url()) || res.request().method() !== "POST") return;
+    const status = res.status();
+    try {
+      const j = await res.json();
+      if (j?.access_key) { result = j; seen.push({ status, ok: true, detail: "" }); return; }
+      seen.push({ status, ok: false, detail: j?.message ?? j?.error ?? j?.msg ?? "access_key 없음" });
+    } catch {
+      seen.push({ status, ok: false, detail: "응답 본문을 읽지 못함" });
     }
   };
   page.on("response", onResp);
   try {
-    await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles({ name, mimeType, buffer });
+    try {
+      await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles({ name, mimeType, buffer });
+    } catch (e) {
+      return { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "no_input", detail: e?.message ?? "" }), error: e };
+    }
     // 업로드 완료 폴링 — 총 상한 12초는 유지하고 **간격만 300→100ms**(2026-07-28 속도).
     // 응답을 감지하고도 최대 300ms를 더 기다리던 낭비를 줄인다(건당 평균 ~150ms, 부하 증가 없음 — 로컬 폴링).
-    for (let i = 0; i < 120 && !result; i++) await page.waitForTimeout(100);
+    for (let i = 0; i < KAGE_WAIT_MS / KAGE_POLL_MS && !result; i++) await page.waitForTimeout(KAGE_POLL_MS);
   } finally {
     page.off("response", onResp);
   }
-  return result;
+  if (result) return { ok: true, kage: result, reason: null, error: null };
+  // 응답이 왔는데 거부된 것과, 응답 자체가 없는 것은 **다른 사고**다(전자는 파일 문제, 후자는 지연·미시작).
+  const bad = seen.filter((s) => !s.ok).pop();
+  return bad
+    ? { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "rejected", status: bad.status, detail: bad.detail }), error: null }
+    : { ok: false, kage: null, reason: kageFailureReason({ subject, kind: "timeout", waitedMs: KAGE_WAIT_MS }), error: null };
+}
+
+/**
+ * 종전 시그니처(성공=kage JSON / 실패=null / 첨부 칸 예외=throw) — 파일첨부·공지 경로가 그대로 쓴다.
+ * 🔴 예외를 **삼키지 않고 다시 던진다**: 그 경로들은 자기 try/catch에서 원문을 사유에 담고 있어서,
+ *    여기서 null로 바꾸면 그쪽 사유가 "access_key 없음"으로 뭉개진다(고치려던 문제의 재발).
+ */
+export async function uploadToKage(page, inputTestId, file) {
+  const r = await uploadToKageDetailed(page, inputTestId, file);
+  if (r.error) throw r.error;
+  return r.kage;
 }
 
 /**
