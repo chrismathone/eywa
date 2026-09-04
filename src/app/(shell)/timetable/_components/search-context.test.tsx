@@ -5,8 +5,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import {
   SEARCH_HIT_CLASS,
   SearchedCell,
-  TimetableSearchBox,
   TimetableSearchEmptyNote,
+  TimetableSearchToggle,
   TimetableSearchProvider,
   useSearchTone,
 } from "./search-context";
@@ -74,7 +74,7 @@ function Board({ enabled = true, editing = false }: { enabled?: boolean; editing
   return (
     <TimetableEditContext.Provider value={editState(editing)}>
       <TimetableSearchProvider index={index} scope="이번 주 수학 시간표" enabled={enabled}>
-        <TimetableSearchBox />
+        <TimetableSearchToggle />
         <TimetableSearchEmptyNote />
         {/* 합반 칸(c1+c2) · 단독 칸(c3) · 반이 아닌 칸(감독 블록) */}
         <SearchedCell classIds={["c1", "c2"]}>
@@ -99,8 +99,25 @@ function Board({ enabled = true, editing = false }: { enabled?: boolean; editing
   );
 }
 
-const type = (v: string) =>
+/** 입력칸은 토글(§10 "검색은 필요할 때만") 뒤에 있다 — 접혀 있으면 '검색'을 눌러 펼친 뒤 친다. */
+const type = (v: string) => {
+  if (!screen.queryByLabelText("학생 검색")) fireEvent.click(screen.getByRole("button", { name: "검색" }));
   fireEvent.change(screen.getByLabelText("학생 검색"), { target: { value: v } });
+};
+
+describe("검색 토글(§10) — 평소엔 '검색' 글자 하나, 검색어가 걸려 있으면 언제나 펼친 채", () => {
+  it("접힘 → 검색 → 입력칸 · 빈 채로는 닫기 · 검색어가 있으면 닫기 대신 결과 칩", () => {
+    render(<Board />);
+    expect(screen.queryByLabelText("학생 검색")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "검색" }));
+    expect(screen.getByLabelText("학생 검색")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    expect(screen.queryByLabelText("학생 검색")).toBeNull();
+    type("김하늘");
+    expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
+    expect(screen.getByText(/2\/3/)).toBeTruthy(); // 걸린 반 2/전체 3
+  });
+});
 
 describe("시간표 학생 검색 — 칸 남기기", () => {
   it("검색 전엔 모든 칸이 그대로다", () => {

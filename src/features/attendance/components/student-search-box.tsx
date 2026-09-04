@@ -9,6 +9,7 @@
  * ⚠️ 서버 왕복 0 — URL 파라미터도 아니다(라우팅하면 표가 통째로 다시 그려져 즉시성이 사라진다).
  */
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { CONTROL_H } from "@/components/ui/control-scale";
 import { isSearchActive } from "../student-search";
 
 export function StudentSearchBox({
@@ -18,25 +19,33 @@ export function StudentSearchBox({
   /** 입력칸 폭 — 툴바가 빡빡한 화면(월별 출석부)은 좁게, 여유 있는 화면은 넓게. */
   inputWidth = "w-[92px]",
   className = "",
+  inputRef,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   inputWidth?: string;
   className?: string;
+  /**
+   * 입력칸 ref — 토글로 펼치는 화면(시간표 '검색')이 **누른 그 순간에만** 포커스를 넣으려고 쓴다.
+   * ⚠️ `autoFocus`가 아니다: autoFocus는 마운트마다 포커스를 훔쳐서, 편집 모드·교실뷰로 물러났다 돌아올 때(remount)
+   *    방금 드롭다운을 고른 손에서 커서를 뺏는다(적대적 리뷰 2026-09-04).
+   */
+  inputRef?: React.Ref<HTMLInputElement>;
 }) {
   const active = isSearchActive(value);
   return (
     <div
-      // 높이 h-8 = 공용 `<Button>` 기본 크기(툴바 한 줄 정렬, 원장 2026-09-01 *"전체적으로 버튼높이 등을
-      // 통일"*). 🔴 `py-*`로 높이를 만들지 말 것 — 글자 크기가 바뀌면(폰 16px 자동확대 방지) 이 칸만 흔들린다.
-      className={`border-line focus-within:border-primary flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2 ${className}`}
+      // 높이 = control-scale(툴바 한 줄 정렬 — 원장 2026-09-01 *"전체적으로 버튼높이 등을 통일"* → 09-03 v5 프리셋).
+      // 🔴 `py-*`로 높이를 만들지 말 것 — 글자 크기가 바뀌면(폰 16px 자동확대 방지) 이 칸만 흔들린다.
+      className={`${CONTROL_H} border-line focus-within:border-primary flex shrink-0 items-center gap-1.5 rounded-lg border px-2 ${className}`}
     >
-      <EyIcon name="search" size={13} className="text-text-faint shrink-0" />
+      <EyIcon name="search" size={14} className="text-text-faint shrink-0" />
       <input
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        ref={inputRef}
         // Esc = 즉시 해제. 표를 보다가 손이 키보드에 있는 채로 되돌릴 수 있어야 한다.
         onKeyDown={(e) => {
           if (e.key === "Escape") {
@@ -49,8 +58,9 @@ export function StudentSearchBox({
         placeholder={placeholder}
         aria-label="학생 검색"
         // ⚠️ 브라우저 기본 ✕(webkit)를 감춘다 — 아래 우리 ✕와 나란히 두 개가 뜬다.
-        // ⚠️ 거친 포인터(폰)에선 16px — iOS는 16px 미만 입력에 포커스하면 페이지를 자동 확대한다.
-        className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent text-xs outline-none [&::-webkit-search-cancel-button]:appearance-none pointer-coarse:text-base`}
+        // 글자 = 컨트롤 라벨(18px, iOS 자동확대 하한 16px 위) · `h-full leading-normal` — `<input>`은 제 상자 안에서
+        // 글자를 자르므로 상자 높이를 다 써야 한글이 안 잘린다(control-scale.ts 규칙 3, 원장 캡처 2026-09-03).
+        className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent text-(length:--control-label) leading-normal outline-none [&::-webkit-search-cancel-button]:appearance-none`}
       />
       {active ? (
         <button

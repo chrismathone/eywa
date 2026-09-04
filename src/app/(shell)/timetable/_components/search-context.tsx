@@ -24,7 +24,8 @@
  *    page가 이 공급자를 **아예 안 씌운다**(= 입력칸도 없다. "있는데 안 먹는 것"이 제일 나쁘다).
  */
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import {
   emptySearchMessage,
   isSearchActive,
@@ -217,17 +218,37 @@ export function useSearchTone(student: TimetableSearchStudent, tone: string): st
 }
 
 /**
- * 툴바 입력칸 + 지금 걸린 필터 표기.
- * ⚠️ 앞의 구분선까지 이 컴포넌트가 그린다 — 밖에 두면 입력칸이 숨는 상황(편집 모드·반 0개)에서
- *    선만 덩그러니 남는다.
+ * 툴바 검색 **토글** — 평소엔 '검색' 글자 하나, 누르면 입력칸(+지금 걸린 필터 표기)이 펼쳐진다.
+ *
+ * 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)" — 공용 [`SearchToggle`](@/components/search-toggle)과 같은 모양이되
+ * 이 검색은 URL이 아니라 클라 상태라 그쪽 부품(SearchForm = router.push)을 못 쓴다. 규약은 같다: 검색어가 걸려 있으면 **언제나**
+ * 펼친 채(무엇으로 걸러졌는지 보여야 한다) · 빈 채로 열었으면 '닫기'로 되돌린다.
+ * ⚠️ 입력칸이 숨는 상황(편집 모드·반 0개)엔 통째로 사라진다 — 구분선을 따로 안 그리는 이유.
  */
-export function TimetableSearchBox() {
+export function TimetableSearchToggle() {
   const ctx = useTimetableSearch();
+  const [opened, setOpened] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   if (!ctx || ctx.suspended || ctx.totalClasses === 0) return null;
+  const open = opened || ctx.active;
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setOpened(true);
+          // 포커스는 **누른 그 순간에만** — autoFocus(마운트마다)면 편집·교실뷰에서 돌아올 때 커서를 훔친다.
+          requestAnimationFrame(() => inputRef.current?.focus());
+        }}
+        className={`${CONTROL_H} ${CONTROL_LABEL} text-text-dim hover:text-foreground inline-flex shrink-0 items-center px-1 font-medium whitespace-nowrap transition`}
+      >
+        검색
+      </button>
+    );
+  }
   return (
     <>
-      <span className="bg-line h-4 w-px" aria-hidden />
-      <StudentSearchBox value={ctx.query} onChange={ctx.setQuery} />
+      <StudentSearchBox value={ctx.query} onChange={ctx.setQuery} inputRef={inputRef} />
       {ctx.active ? (
         <SearchScopeChip
           shown={ctx.matchedClasses}
@@ -235,7 +256,15 @@ export function TimetableSearchBox() {
           unit="개 수업"
           totalsNote="상단 인원 집계는 전체 기준"
         />
-      ) : null}
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpened(false)}
+          className={`${CONTROL_H} ${CONTROL_LABEL} text-text-faint hover:text-foreground inline-flex shrink-0 items-center px-1 whitespace-nowrap transition`}
+        >
+          닫기
+        </button>
+      )}
     </>
   );
 }

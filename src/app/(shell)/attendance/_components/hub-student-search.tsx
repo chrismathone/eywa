@@ -115,7 +115,8 @@ export function HubStudentSearch({
         value={query}
         onChange={run}
         placeholder="학생 이름으로 찾기"
-        inputWidth="w-[116px]"
+        // 18px 라벨(control-scale) 기준 — "학생 이름으로 찾기" 9글자가 잘리지 않는 폭(옛 12px 시절 116px).
+        inputWidth="w-[168px]"
       />
       {open ? (
         // 🔑 넓은 화면 = **입력칸 바로 아래**(위 `sm:relative`가 기준, `right-0`으로 칸 오른쪽 끝에 맞춤)
