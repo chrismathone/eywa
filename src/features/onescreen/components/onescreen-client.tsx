@@ -29,6 +29,7 @@ import {
 } from "../server/actions";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
+import { makeupRowName } from "../makeup-label";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
 import {
@@ -50,7 +51,8 @@ import { SheetSourceCard } from "./sheet-source-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
-import { REPORT_OPTOUT_NOTICE } from "@/features/classes/report-optout";
+import { reportOptoutNotice } from "@/features/classes/report-optout";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { ReportPreview, type ReportPreviewContext } from "./report-preview";
 import type { TrendReportRow } from "../report-trend";
 import type { ReportSettings } from "@/features/owner/settings-types";
@@ -138,8 +140,8 @@ import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow 
 import { linkMakeupToAbsence, setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
 import { applyAppliedAttendance } from "../apply-applied-attendance";
-import { attendanceMarkOf } from "../attendance-mark";
-import { STATUS_TEXT } from "@/features/attendance/cell-display";
+import { attendanceMarkOf, MARK_PRESENT } from "../attendance-mark";
+import { STATUS_TEXT, statusTextOf } from "@/features/attendance/cell-display";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
@@ -292,6 +294,10 @@ export function OneScreenClient({
   logoSrc?: string | null;
 }) {
   const router = useRouter();
+  // 🔴 화면 문구만 갈린다 — 저장값(태도·과제 '미제출'·보강 행 이름 `과목 (보강)`)은 한국어 그대로다.
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
   // 글씨 크기 — 화면은 즉시(클릭 반응), 계정 저장은 백그라운드(실패해도 이번 세션 크기는 유지).
@@ -452,12 +458,12 @@ export function OneScreenClient({
   // 대기 중 자동저장을 즉시 커밋(날짜 이동 전 호출) — 디바운스 800ms 안에 이동하면 유실되던 편집 방어.
   useEffect(() => {
     flushSavesRef.current = () => {
-      for (const [sid, t] of saveTimers.current) {
-        clearTimeout(t);
+      for (const [sid, timer] of saveTimers.current) {
+        clearTimeout(timer);
         const s = studentsRef.current.find((x) => x.id === sid);
         if (!s || s.isMakeup) continue;
         void saveOnescreenSession(buildSessionInput(s, reportsRef.current[sid])).then((res) => {
-          if (!res.ok) toast.error(res.error ?? "자동 저장에 실패했습니다");
+          if (!res.ok) toast.error(res.error ?? t("os.c.autosaveFail"));
         });
       }
       saveTimers.current.clear();
@@ -535,7 +541,7 @@ export function OneScreenClient({
         const s = studentsRef.current.find((x) => x.id === studentId);
         if (!s || s.isMakeup) return; // 보강 학생은 반이 없어 세션(onescreen_daily_sessions) 저장 스킵
         void saveOnescreenSession(buildSessionInput(s, reportsRef.current[studentId])).then((res) => {
-          if (!res.ok) toast.error(res.error ?? "자동 저장에 실패했습니다");
+          if (!res.ok) toast.error(res.error ?? t("os.c.autosaveFail"));
         });
       }, 800),
     );
@@ -600,8 +606,8 @@ export function OneScreenClient({
     writeFilter === "all"
       ? undefined
       : writeFilter === "unwritten"
-        ? "미작성 학생이 없습니다"
-        : "작성한 학생이 없습니다";
+        ? t("os.c.emptyUnwritten")
+        : t("os.c.emptyWritten");
   // 고정(pinned) 덕에 조건과 어긋난 채 남아 있는 학생 수 — 안내줄이 그 사실을 밝히고 '목록 정리'를 준다.
   const staleCount =
     writeFilter === "all"
@@ -681,7 +687,7 @@ export function OneScreenClient({
   // ⚠️ 분모에서 결석 행은 뺀다 — 발송이 원천 차단된 행이라 남기면 "1/2"가 영영 안 채워진다(#77과 같은 이유).
   //    '수업보고서 미발송' 반(0174a) 행도 같은 이유로 뺀다(2026-08-19) — 그 반은 발송이 **영구히** 없어서
   //    남기면 그 학생 표시가 영원히 안 채워진다.
-  const sendMarkLabel = classnoteSendEnabled ? "학부모 발송" : "보고서 저장";
+  const sendMarkLabel = classnoteSendEnabled ? t("os.c.markSend") : t("os.c.markSave");
   const sendMarkById: Record<string, SendMark> = {};
   for (const s of students) {
     const rows = s.subjects.filter((su) => su.attendanceRaw !== "absent" && !isReportOptoutRow(su));
@@ -801,10 +807,14 @@ export function OneScreenClient({
     const res = await setMyNoticeMode(mode);
     if (!res.ok) {
       setNoticeMode(prev);
-      toast.error(res.error ?? "멘트 모드 저장에 실패했습니다");
+      toast.error(res.error ?? t("os.c.mentModeFail"));
     } else {
       toast.success(
-        mode === null ? "멘트 모드: 학원 기본" : `멘트 모드: ${mode === "A" ? "단일 문단" : "2문단 분리"}`,
+        mode === null
+          ? t("os.c.mentModeAcademy")
+          : tf("os.c.mentModeSet", {
+              mode: mode === "A" ? t("os.c.mentModeA") : t("os.c.mentModeB"),
+            }),
       );
     }
   }
@@ -817,7 +827,7 @@ export function OneScreenClient({
     if (size === fontSize) return;
     setFontSize(size);
     const res = await setMyOnescreenFontSize(size);
-    if (!res.ok) toast.error("글씨 크기를 계정에 저장하지 못했습니다 — 이 화면에서는 적용됩니다");
+    if (!res.ok) toast.error(t("os.c.fontSizeFail"));
   }
   /** 보강을 그 수업 출석부에 남긴다 — ECS·출석부 명단이 같은 학생을 보게. 이미 그 반 수강이면 건너뛴다. */
   function persistAnchorMakeup(
@@ -836,7 +846,7 @@ export function OneScreenClient({
       // 확인창에서 고른 시수를 그 칸에 그대로 적는다(1이면 서버가 접는다) — 급여가 이 값을 읽는다.
       ...(units && units !== 1 ? { units: String(units) } : {}),
     }).then((r) => {
-      if ("error" in r) toast.error(`출석부 보강 기록을 남기지 못했습니다 — ${r.error}`);
+      if ("error" in r) toast.error(tf("os.c.anchorFail", { error: r.error }));
     });
   }
   // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값).
@@ -849,7 +859,7 @@ export function OneScreenClient({
     if (readonlyBlocked()) return;
     const res = await buildMakeupStudent(studentId, date || undefined); // 조회 중인 날짜 전달(과거 백필 중복게시 방지)
     if (!res.ok || !res.student) {
-      toast.error(res.error ?? "학생을 추가하지 못했습니다");
+      toast.error(res.error ?? t("os.c.addStudentFail"));
       return;
     }
     // 보강을 **어느 수업 시간에** 하는지 = 지금 보고 있는 반 필터. 이게 반 필터 앵커가 된다(0171a) —
@@ -902,7 +912,7 @@ export function OneScreenClient({
       // 결국 두 번 나간다. 예전 "이미 보강 행이 추가되어 있습니다"와 같은 규약.
       setSelId(existing.id);
       toast.message(
-        `${existing.name} — ${plan.subjects.join("·")}는 이미 보강이 합쳐져 있습니다(정규+보강). 한 타임 더 했다면 수업타임을 올려 주세요.`,
+        tf("os.c.makeupAlready", { name: existing.name, subjects: plan.subjects.join("·") }),
       );
       return;
     }
@@ -985,10 +995,10 @@ export function OneScreenClient({
     }
     // 경고는 **무엇이 사라지는지 그대로** 적는다(원장 *"경고하고 확인하면 삭제"*).
     const lines = [
-      `${student.name} 보강을 뺄까요?`,
+      tf("os.c.removeMakeupTitle", { name: student.name }),
       "",
-      "출결 기록·저장된 보강 수업보고서·그 수업으로 올라간 진도 기록이 모두 삭제됩니다.",
-      "보강을 추가하기 전 상태로 돌아가며, 되돌릴 수 없습니다.",
+      t("os.c.removeMakeupLine1"),
+      t("os.c.removeMakeupLine2"),
     ];
     if (!window.confirm(lines.join("\n"))) return;
     const res = await removeMakeupEntry({
@@ -1036,15 +1046,15 @@ export function OneScreenClient({
         // ⚠️ 앵커(보고 있는 반)가 없으면 출결에 남길 칸이 없다 — 시수를 약속하지 않는다(지킬 수 없다).
         toast.success(
           anchorIdNew
-            ? `${mk.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
-            : `${mk.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+            ? tf("os.c.makeupAddedUnits", { name: mk.name, units: choice.addUnits })
+            : tf("os.c.makeupAddedNoAnchor", { name: mk.name }),
         );
       }
       return;
     }
     const existing = studentsRef.current.find((s) => s.id === ask.studentId);
     if (!existing) {
-      toast.error("학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요");
+      toast.error(t("os.c.cardNotFound"));
       return;
     }
     if (!choice.candidate) {
@@ -1061,8 +1071,8 @@ export function OneScreenClient({
       } else {
         toast.success(
           anchorIdNew
-            ? `${existing.name} (보강) 추가됨 — 수업타임 ${choice.addUnits}`
-            : `${existing.name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).`,
+            ? tf("os.c.makeupAddedUnits", { name: existing.name, units: choice.addUnits })
+            : tf("os.c.makeupAddedNoAnchor", { name: existing.name }),
         );
       }
       return;
@@ -1110,13 +1120,21 @@ export function OneScreenClient({
       absentDate: choice.absentDate!,
     });
     if ("error" in res) {
-      toast.error(`보강은 추가됐지만 결석분 연결에 실패했습니다 — ${res.error}`);
+      toast.error(tf("os.c.absenceLinkFail", { error: res.error }));
       return;
     }
     toast.success(
       res.absenceNoted
-        ? `${name} 보강 추가 — ${shortDate(choice.absentDate!)} 결석 칸에 메모, 수업타임 ${choice.addUnits}`
-        : `${name} 보강 추가 — 수업타임 ${choice.addUnits}. ${shortDate(choice.absentDate!)} 칸엔 결석 기록이 없어 메모는 남기지 않았습니다.`,
+        ? tf("os.c.makeupNoted", {
+            name,
+            date: shortDate(choice.absentDate!),
+            units: choice.addUnits,
+          })
+        : tf("os.c.makeupNoRecord", {
+            name,
+            units: choice.addUnits,
+            date: shortDate(choice.absentDate!),
+          }),
     );
   }
   /**
@@ -1141,7 +1159,7 @@ export function OneScreenClient({
       addUnits,
     });
     if ("error" in res) {
-      toast.error(`보강 시수를 기록하지 못했습니다 — ${res.error}`);
+      toast.error(tf("os.c.makeupUnitsFail", { error: res.error }));
       return;
     }
     // 화면의 그 행 시수도 서버 결과로 맞춘다(1이면 서버가 null로 접으므로 같은 규칙으로).
@@ -1150,18 +1168,33 @@ export function OneScreenClient({
       units: res.units === 1 ? null : res.units,
     });
     if (res.alreadyLinked) {
-      toast.message(`${shortDate(absentDate)} 결석분 보강은 이미 기록돼 있습니다 — 수업타임을 다시 올리지 않았습니다.`);
+      toast.message(tf("os.c.makeupAlreadyLinked", { date: shortDate(absentDate) }));
       return;
     }
     // ⚠️ 결석 기록이 없던 날이면 메모를 안 남긴다 — 조용히 넘기지 말고 그 사실을 밝힌다.
     toast.success(
       res.absenceNoted
-        ? `${existing.name} 보강 추가 — ${shortDate(absentDate)} 칸에 메모, ${target.name} 수업타임 ${res.units}`
+        ? tf("os.c.makeupNoted2", {
+            name: existing.name,
+            date: shortDate(absentDate),
+            target: target.name,
+            units: res.units,
+          })
         : // 선보강(아직 안 지난 날)이면 "기록이 없다"가 아니라 **아직 오지 않았다**가 사실이다 —
           //    같은 문장으로 뭉뚱그리면 강사가 "왜 기록이 없지?" 하고 출석부를 뒤진다.
           absentDate > activeDate
-          ? `${existing.name} 보강 추가 — ${target.name} 수업타임 ${res.units}. ${shortDate(absentDate)}은 아직 오지 않은 날이라 그 칸엔 메모를 남기지 않았습니다(그날 출결을 입력할 때 적어 주세요).`
-          : `${existing.name} 보강 추가 — ${target.name} 수업타임 ${res.units}. 단 ${shortDate(absentDate)}엔 출결 기록이 없어 메모는 남기지 않았습니다.`,
+          ? tf("os.c.makeupFuture", {
+              name: existing.name,
+              target: target.name,
+              units: res.units,
+              date: shortDate(absentDate),
+            })
+          : tf("os.c.makeupNoRecord2", {
+              name: existing.name,
+              target: target.name,
+              units: res.units,
+              date: shortDate(absentDate),
+            }),
       { duration: 8000 },
     );
   }
@@ -1182,7 +1215,7 @@ export function OneScreenClient({
     );
     setSelId(existing.id);
     toast.success(
-      `${existing.name} 보강 추가 — ${target.name} 보고서 2건(정규·보강 따로) · 수업타임 ${units}. 결석분 연결은 없습니다(추가 보강).`,
+      tf("os.c.makeupExtra", { name: existing.name, target: target.name, units }),
       { duration: 8000 },
     );
   }
@@ -1212,11 +1245,11 @@ export function OneScreenClient({
       // 발송본 잠금이라 보강 내용은 못 싣는다 — 다이얼로그에서 이미 알렸지만 결과도 그대로 밝힌다.
       toast.warning(
         // ⚠️ 숫자 뒤 조사 금지(받침이 값마다 다르다 — 2=이/3=삼) → 수치는 괄호로 뗀다.
-        `${existing.name} — ${merge.name} 보고서가 이미 발송되어 보강 내용은 보고서에 실리지 않습니다. 출석부 수업타임만 올렸습니다(수업타임 ${units}).`,
+        tf("os.c.mergeSent", { name: existing.name, target: merge.name, units }),
         { duration: 10000 },
       );
     } else {
-      toast.success(`${existing.name} 보강 합침 — ${merge.name} 보고서 1건(정규+보강) · 수업타임 ${units}`);
+      toast.success(tf("os.c.merged", { name: existing.name, target: merge.name, units }));
     }
   }
   /**
@@ -1247,9 +1280,9 @@ export function OneScreenClient({
       // 같은 과목 보강 행이 이미 있으면 중복 추가 안 함.
       .filter((su) => !existing.subjects.some((ex) => ex.makeup && !ex.classId && ex.subjectKey === su.subjectKey))
       .map((su) => {
-        let name = `${su.name} (보강)`;
+        let name = makeupRowName(su.name);
         let n = 2;
-        while (used.has(name)) name = `${su.name} (보강 ${n++})`;
+        while (used.has(name)) name = makeupRowName(su.name, n++);
         used.add(name);
         // ⚠️ classId=null·makeup=true 유지(반 무관 보강). subjectLabel은 깨끗한 라벨 — 진도 접두에 "(보강)" 누출 방지.
         // 반 필터 앵커(makeupClassId/Name)는 `mk`에 이미 실려 있다 — **'추가'를 누른 시점**의 반 필터라,
@@ -1258,7 +1291,7 @@ export function OneScreenClient({
       });
     if (makeupRows.length === 0) {
       setSelId(existing.id);
-      toast.message("이미 보강 행이 추가되어 있습니다");
+      toast.message(t("os.c.makeupRowExists"));
       return false;
     }
     patch(studentId, (s) => ({ ...s, subjects: [...s.subjects, ...makeupRows] }));
@@ -1266,14 +1299,14 @@ export function OneScreenClient({
     setReports((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? {}), ...slots } }));
     setSelId(studentId);
     // 결석분 연결이 뒤따르는 경로(다이얼로그 '분리')는 그쪽 토스트가 시수까지 밝히므로 여기선 조용히(silent).
-    if (!silent) toast.success(`${existing.name} 보강 추가됨`);
+    if (!silent) toast.success(tf("os.c.makeupAdded", { name: existing.name }));
     return true;
   }
   // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
   async function loadMakeupPrev(studentId: string) {
     const res = await loadMakeupHistory(studentId, date || undefined); // 조회 중인 날짜 기준 직전 회차(과거 백필 정합)
     if (!res.ok || !res.bySubject) {
-      toast.error(res.error ?? "이전 진도를 불러오지 못했습니다");
+      toast.error(res.error ?? t("os.c.prevFail"));
       return;
     }
     const bySubject = res.bySubject;
@@ -1298,7 +1331,7 @@ export function OneScreenClient({
     );
     setPrevLoaded((prev) => new Set(prev).add(studentId));
     toast.success(
-      Object.keys(bySubject).length ? "이전 진도를 불러왔습니다" : "이전 보고서가 없습니다",
+      Object.keys(bySubject).length ? t("os.c.prevLoaded") : t("os.c.prevNone"),
     );
   }
   function setScoreFor(studentId: string, subjectName: string, which: "daily" | "check", v: number | null) {
@@ -1390,7 +1423,7 @@ export function OneScreenClient({
       note: row?.attendanceNote ?? null,
       units: row?.attendanceUnits ?? null,
     };
-    const prevMark = stu?.attendance ?? "출석";
+    const prevMark = stu?.attendance ?? MARK_PRESENT;
     const changesExtra = extra !== undefined && ("note" in extra || "units" in extra);
     if (prev.raw === status && !changesExtra) return; // 상태 재클릭 no-op(삭제는 출석부에서)
     const myMark = markOf(status);
@@ -1435,12 +1468,17 @@ export function OneScreenClient({
           units: cu != null && Number.isFinite(cu) && cu !== 1 ? cu : null,
         });
         toast.message(
-          `이미 출결이 기록되어 있어 덮지 않았습니다 (현재: ${STATUS_TEXT[res.conflict.status as keyof typeof STATUS_TEXT] ?? "기록됨"}) — 바꾸려면 다시 눌러 주세요`,
+          tf("os.c.attConflict", {
+            // 🔴 서버가 돌려준 raw 상태라 표에 없는 값일 수 있다 — 옛 `?? "기록됨"` 폴백을 그대로 지킨다.
+            status: STATUS_TEXT[res.conflict.status as keyof typeof STATUS_TEXT]
+              ? statusTextOf(res.conflict.status as keyof typeof STATUS_TEXT, lang)
+              : t("os.c.attRecorded"),
+          }),
         );
       }
     } catch {
       rollbackAttendance(studentId, classId, prev, myMark, prevMark);
-      toast.error("출결 저장에 실패했습니다 — 네트워크를 확인해 주세요");
+      toast.error(t("os.c.attFail"));
     } finally {
       setAttPending((p) => {
         const n = new Set(p);
@@ -1493,18 +1531,16 @@ export function OneScreenClient({
       if (res.applied.length === 0) {
         // 조용한 0건 금지 — 왜 아무 일도 안 났는지 밝힌다.
         toast.message(
-          "기록된 칸이 없습니다 — 이미 다른 곳에서 출결이 찍혔거나 담당 반·수강 대상이 아닙니다",
+          t("os.c.presentNone"),
         );
         return;
       }
       toast.success(
-        `일괄 출석 — ${res.applied.length}칸 기록` +
-          (missed > 0
-            ? ` · ${missed}칸은 그대로 뒀습니다(이미 기록됐거나 담당 반·수강 대상이 아님 — 새로고침하면 최신 기록이 보입니다)`
-            : ""),
+        tf("os.c.presentDone", { n: res.applied.length }) +
+          (missed > 0 ? tf("os.c.presentMissed", { n: missed }) : ""),
       );
     } catch {
-      toast.error("일괄 출석 저장에 실패했습니다 — 네트워크를 확인해 주세요");
+      toast.error(t("os.c.presentFail"));
     } finally {
       setAttPending((p) => {
         const n = new Set(p);
@@ -1691,7 +1727,7 @@ export function OneScreenClient({
         date: date || undefined, // 보는 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
       });
       const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
-      if (!res.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
+      if (!res.ok) toast.message(t("os.c.aiFallback"));
       patchReport(student.id, subjectName, (r) => ({
         ...r,
         draft: text,
@@ -1703,7 +1739,7 @@ export function OneScreenClient({
     } catch {
       const fallback = buildSubjectReport(student, idx);
       patchReport(student.id, subjectName, (r) => ({ ...r, draft: fallback, autoDraft: fallback }));
-      toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
+      toast.message(t("os.c.aiFallback"));
     }
   }
   async function autoWriteSubject(subjectName: string) {
@@ -1765,8 +1801,8 @@ export function OneScreenClient({
     if (rows.length === 0) {
       toast.message(
         preserved
-          ? `자동작성할 새 행이 없습니다 — 멘트 있는 ${preserved}건은 보존(개별 '자동작성'으로 재생성)`
-          : "자동작성할 행이 없습니다 — 오늘 진도를 입력하세요",
+          ? tf("os.c.genNonePreserved", { n: preserved })
+          : t("os.c.genNone"),
       );
       return;
     }
@@ -1782,9 +1818,9 @@ export function OneScreenClient({
       setBulkGen(false);
     }
     toast.success(
-      `${rows.length}건 자동작성 완료` +
-        (preserved ? ` · 멘트 보존 ${preserved}건` : "") +
-        (skipped ? ` · 건너뜀 ${skipped}(진도 미입력·결석)` : ""),
+      tf("os.c.genDone", { n: rows.length }) +
+        (preserved ? tf("os.c.genPreserved", { n: preserved }) : "") +
+        (skipped ? tf("os.c.genSkipped", { n: skipped }) : ""),
     );
   }
   // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
@@ -1841,7 +1877,7 @@ export function OneScreenClient({
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
     }
     const done: string[] = [];
-    if (plan.length) done.push(`${plan.length}행 입력`);
+    if (plan.length) done.push(tf("os.c.doneRows", { n: plan.length }));
 
     if (attendance) {
       // 팝오버가 미리보기에 쓴 것과 **같은 순수 계획**(같은 행·같은 규칙) — 화면 숫자와 실제가 어긋나지 않게.
@@ -1855,9 +1891,9 @@ export function OneScreenClient({
         attendance,
         { onlyEmpty },
       );
-      const why = describeAttendanceSkips(attPlan);
+      const why = describeAttendanceSkips(attPlan, lang);
       if (attPlan.cells.length === 0) {
-        done.push(`출결 0건${why ? `(제외: ${why})` : ""}`);
+        done.push(t("os.c.doneAttNone") + (why ? tf("os.c.doneAttSkip", { why }) : ""));
       } else {
         const attKeys = attPlan.cells.map((c) => `${c.studentId}::${c.classId}`);
         setAttPending((p) => {
@@ -1893,13 +1929,13 @@ export function OneScreenClient({
                 c.created && echoUnits !== undefined ? { units: echoUnits } : undefined,
               );
             done.push(
-              `출결 ${res.applied.length}건 기록` +
-                (res.blocked ? ` (담당 반·수강생이 아니어서 ${res.blocked}건 제외)` : "") +
-                (why ? ` · 제외 ${why}` : ""),
+              tf("os.c.doneAtt", { n: res.applied.length }) +
+                (res.blocked ? tf("os.c.doneAttBlocked", { n: res.blocked }) : "") +
+                (why ? tf("os.c.doneAttWhy", { why }) : ""),
             );
           }
         } catch {
-          toast.error("출결 저장에 실패했습니다 — 네트워크를 확인해 주세요");
+          toast.error(t("os.c.attFail"));
         } finally {
           setAttPending((p) => {
             const n = new Set(p);
@@ -1910,10 +1946,10 @@ export function OneScreenClient({
       }
     }
     if (done.length === 0) {
-      toast.message("적용할 칸이 없습니다");
+      toast.message(t("os.c.applyNone"));
       return;
     }
-    toast.success(`일괄 적용 — ${done.join(" · ")}`);
+    toast.success(tf("os.c.applyDone", { list: done.join(" · ") }));
   }
   /**
    * 맨 위 행의 **수업 내용**(진도·교재·오늘 과제)을 아래 행 전부에 복사.
@@ -1927,7 +1963,7 @@ export function OneScreenClient({
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
     const [first, ...rest] = rows;
     if (!first || rest.length === 0) {
-      toast.message("복사할 아래 행이 없습니다");
+      toast.message(t("os.c.copyNoRow"));
       return;
     }
     const res = planCopyFirstRow(
@@ -1965,11 +2001,13 @@ export function OneScreenClient({
         // ⚠️ 이 카운터엔 결석 행(2026-08-07)과 '수업보고서 미발송' 반 행(2026-08-19)도 들어온다 —
         //    사유를 하나로 단정하면 거짓말이 된다. 판정 자체가 `isRowInputEditable`(입력 잠김)이라
         //    **잠김**이 셋 다 참인 유일한 이름이다.
-        res.skippedSent ? `입력 잠김 ${res.skippedSent}행` : "",
-        res.skippedSubject ? `다른 과목 ${res.skippedSubject}행` : "",
-        res.skippedFilled ? `이미 입력됨 ${res.skippedFilled}행` : "",
+        res.skippedSent ? tf("os.c.copyWhyLocked", { n: res.skippedSent }) : "",
+        res.skippedSubject ? tf("os.c.copyWhySubject", { n: res.skippedSubject }) : "",
+        res.skippedFilled ? tf("os.c.copyWhyFilled", { n: res.skippedFilled }) : "",
       ].filter(Boolean);
-      toast.message(why.length ? `복사할 칸이 없습니다 — ${why.join(" · ")}` : "맨 위 행에 먼저 진도를 입력하세요");
+      toast.message(
+        why.length ? tf("os.c.copyNoneWhy", { why: why.join(" · ") }) : t("os.c.copyNeedFirst"),
+      );
       return;
     }
     for (const p of res.plan) {
@@ -1979,15 +2017,18 @@ export function OneScreenClient({
     }
     const skipped = res.skippedSent + res.skippedSubject + res.skippedFilled;
     toast.success(
-      `${first.student.name} 행을 ${res.plan.length}행에 복사했습니다` +
+      tf("os.c.copyDone", { name: first.student.name, n: res.plan.length }) +
         (skipped
-          ? ` · 건너뜀 ${skipped}행(${[
-              res.skippedSent ? `입력 잠김 ${res.skippedSent}` : "",
-              res.skippedSubject ? `다른 과목 ${res.skippedSubject}` : "",
-              res.skippedFilled ? `이미 입력 ${res.skippedFilled}` : "",
-            ]
-              .filter(Boolean)
-              .join(", ")})`
+          ? tf("os.c.copySkipped", {
+              n: skipped,
+              why: [
+                res.skippedSent ? tf("os.c.copySkipLocked", { n: res.skippedSent }) : "",
+                res.skippedSubject ? tf("os.c.copySkipSubject", { n: res.skippedSubject }) : "",
+                res.skippedFilled ? tf("os.c.copySkipFilled", { n: res.skippedFilled }) : "",
+              ]
+                .filter(Boolean)
+                .join(", "),
+            })
           : ""),
     );
   }
@@ -2010,14 +2051,14 @@ export function OneScreenClient({
     });
     const count = Object.keys(fill).length;
     if (!count) {
-      toast.message("가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다");
+      toast.message(t("os.c.prevFillNone"));
       return;
     }
     if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
     if (fill.attitude !== undefined) applyToAllRows(student.id, (su) => ({ ...su, attitude: fill.attitude! }));
     if (fill.homework !== undefined) applyToAllRows(student.id, (su) => ({ ...su, homework: fill.homework! }));
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
-    toast.success(`이전 회차 값으로 빈 칸 ${count}개를 가져왔습니다`);
+    toast.success(tf("os.c.prevFillOne", { n: count }));
   }
   // 이전 회차 **일괄** 가져오기(G5 얕은판) — 표시(또는 선택) 전 행에 planPrevFill을 돌려 빈 칸만 채운다.
   // bulkApplyValues 대칭(대상 선정 규약 동일: keys 미선택=표시 전체, rowInClass 필터). 행별 importPrevFor와
@@ -2072,7 +2113,7 @@ export function OneScreenClient({
       })),
     );
     if (!plan.length && !commentPlan.length) {
-      toast.message("가져올 빈 칸이 없습니다 — 이미 입력됐거나 이전 회차 값이 없습니다");
+      toast.message(t("os.c.prevFillNone"));
       return;
     }
     let filledCells = 0;
@@ -2086,7 +2127,7 @@ export function OneScreenClient({
       filledCells += Object.keys(p.set).length;
     }
     if (plan.length) {
-      toast.success(`${plan.length}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 가져왔습니다 (특이사항 제외)`);
+      toast.success(tf("os.c.prevFillMany", { rows: plan.length, cells: filledCells }));
     }
     if (commentPlan.length) setPrevCommentPlan(commentPlan); // → 확인 다이얼로그
   }
@@ -2100,7 +2141,7 @@ export function OneScreenClient({
     //    오표기돼 말투 코퍼스가 오염된다(중복 유입 포함). 스냅샷을 남기면 그대로=auto, 고치면=auto_edited.
     for (const p of plan)
       patchReport(p.studentId, p.subjectName, (r) => ({ ...r, draft: p.comment, autoDraft: p.comment }));
-    toast.success(`${plan.length}행의 멘트를 직전 회차 문구로 가져왔습니다 — 발송 전에 오늘 내용과 맞는지 확인하세요`);
+    toast.success(tf("os.c.prevComments", { n: plan.length }));
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
@@ -2111,7 +2152,7 @@ export function OneScreenClient({
       return false;
     }
     setStudents((prev) => applyStudentOrder(prev, new Map([[classId, studentIds]])));
-    toast.success("학생 순서를 저장했습니다 — 다음 작성에도 유지됩니다");
+    toast.success(t("os.c.orderSaved"));
     return true;
   }
   // 표 행 → 카드로 열기(그 학생 선택 + 카드 뷰). 본문 편집·첨부·링크 관리·PDF는 카드에서.
@@ -2239,18 +2280,18 @@ export function OneScreenClient({
     if (readonlyBlocked()) return;
     if (!selected) return;
     if (bulkGen || bulkBusy) {
-      toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
+      toast.message(t("os.c.bulkBusy"));
       return;
     }
     // 진도 미입력 게이트(방어층) — 버튼 disabled 우회·프로그램 호출 대비. 표뷰와 동일 기준(#15 확정).
     const su = selected.subjects.find((s) => s.name === subjectName);
     if (su && !isRowActionable(su, "save")) {
-      toast.message("오늘 진도를 먼저 입력하세요");
+      toast.message(t("os.c.needProgress"));
       return;
     }
     const res = await saveRecord(selected, subjectName);
     if (!res.ok) {
-      toast.error(res.error ?? "보고서 저장에 실패했습니다");
+      toast.error(res.error ?? t("os.c.saveFail"));
       return;
     }
     // 채널은 pdf(인쇄 미리보기 창)·save(기록 저장)뿐. 카톡·문자 자동발송(알림톡)은 후속 —
@@ -2259,11 +2300,11 @@ export function OneScreenClient({
       openPrint({
         id: `print/lesson_reports/${res.id}`,
         href: `/lesson_reports/${res.id}/print`,
-        title: "수업 보고서",
+        title: t("os.c.printTitle"),
       });
-      toast.success(`${subjectName} 보고서 저장 — 미리보기를 열었습니다`);
+      toast.success(tf("os.c.savedPreview", { subject: subjectName }));
     } else {
-      toast.success(`${subjectName} 보고서를 기록에 저장했습니다`);
+      toast.success(tf("os.c.savedRecord", { subject: subjectName }));
     }
   }
 
@@ -2272,130 +2313,142 @@ export function OneScreenClient({
     if (readonlyBlocked()) return;
     if (!selected) return;
     if (bulkGen || bulkBusy) {
-      toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
+      toast.message(t("os.c.bulkBusy"));
       return;
     }
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 표 sendRow와 동일. 워커 최종 관문이 무조건 차단하므로
     // 여기서 큐잉해 봐야 "발송 대기" 표시 후 실패로 뒤집히는 혼란만 남는다. 이유를 즉시 말하고 막는다.
     if (!(reports[selected.id]?.[subjectName]?.draft ?? "").trim()) {
-      toast.error(`${subjectName} — 학부모 전달 멘트가 비어 있어 발송할 수 없습니다 (자동 작성 또는 직접 입력 후 발송)`);
+      toast.error(tf("os.c.emptyMentSubject", { subject: subjectName }));
       return;
     }
     const res = await queueOne(selected, subjectName);
     if (!res.ok) {
-      toast.error(res.error ?? "ClassNote 발송 큐 적재에 실패했습니다");
+      toast.error(res.error ?? t("os.c.queueFail"));
       return;
     }
     if (res.status === "recall_pending") {
-      toast.error(`${subjectName} — 회수 처리 중입니다. 게시글 삭제가 끝난 뒤에 보내세요`);
+      toast.error(tf("os.c.recallingSubject", { subject: subjectName }));
       return;
     }
     if (res.status === "revoked") {
-      toast.error(`${subjectName} — 취소된 링크입니다. 재발급 후 발송하세요`);
+      toast.error(tf("os.c.revokedSubject", { subject: subjectName }));
       return;
     }
     if (res.status === "name_conflict") {
       toast.error(
-        `${subjectName} — 동명이인이 있어 자동 발송을 막았습니다. 학생 관리에서 'ClassNote 이름'을 구분(예: "홍길동(중2)") 지정 후 다시 발송하세요`,
+        tf("os.c.nameConflictSubject", { subject: subjectName }),
       );
       return;
     }
     if (res.status === "dry_run") {
-      toast.message(`${subjectName} — 저장됨(dry-run). 원장 설정(보고서)에서 'ClassNote 실제 발송'을 켜야 실제 전송됩니다`);
+      toast.message(tf("os.c.dryRunSubject", { subject: subjectName }));
       return;
     }
     // 발송 대상 과목이 아님(원장 설정 classnoteSubjects 밖) — 저장만 되고 큐에 안 들어감. 성공으로 오인 방지.
     if (res.status === "subject_off") {
-      toast.message(`${subjectName} — 저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)`);
+      toast.message(tf("os.c.subjectOff", { subject: subjectName }));
       return;
     }
     // '수업보고서 미발송' 반 게이트(서버판, 2026-08-19) — 여기서 안 잡으면 아래 폴스루가 "대기 중"
     // 성공 토스트를 띄운다(서버가 방금 거절한 발송을 성공으로 오인).
     if (res.status === "report_optout") {
-      toast.message(`${subjectName} — ${REPORT_OPTOUT_NOTICE}(기록 저장은 유지)`);
+      toast.message(tf("os.c.optoutSubject", { subject: subjectName, notice: reportOptoutNotice(lang) }));
       return;
     }
     // 결석 게이트(#77 서버판) — 버튼 disabled를 우회한 경로(반 모호 행·stale 화면)도 서버가 막는다.
     if (res.status === "absent") {
-      toast.message(`${subjectName} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
+      toast.message(tf("os.c.absentSubject", { subject: subjectName }));
       return;
     }
     // 출결 미체크 게이트(서버판, 2026-08-17) — 여기서 안 잡으면 아래 폴스루가 "대기 중" 성공 토스트를
     // 띄운다(서버가 방금 거절한 발송을 성공으로 오인 — 적대 리뷰 확정). 표 sendRow와 동일 안내.
     if (res.status === "no_attendance") {
-      toast.message(`${subjectName} — 출결이 아직 체크되지 않아 발송하지 않았습니다(출결 기록 후 다시 발송 · 저장은 유지)`);
+      toast.message(tf("os.c.uncheckedSubject", { subject: subjectName }));
       return;
     }
     // 이미 게시된 건(중복 게시 차단) — 저장도 안 했으므로 "내용을 고쳤다면 저장부터"를 함께 안내한다.
     if (res.status === "already_sent") {
       toast.message(
-        `${subjectName} — 이미 학부모에게 발송된 보고서라 다시 보내지 않았습니다. 내용을 고쳤다면 '저장'을 누르세요`,
+        tf("os.c.alreadySentSubject", { subject: subjectName }),
       );
       return;
     }
     const msg =
       res.status === "queued"
         ? res.sendWindowHint
-          ? `발송 예약됨 — 허용 시간대(${res.sendWindowHint})에 자동 발송됩니다`
-          : "발송 대기 — 워커가 자동으로 게시합니다"
+          ? tf("os.c.queuedWindow", { hint: res.sendWindowHint })
+          : t("os.c.queuedWaiting")
         : res.status === "success"
-          ? "이미 발송 완료된 보고서입니다"
+          ? t("os.c.statusSuccess")
           : res.status === "processing"
-            ? "이미 처리 중입니다"
+            ? t("os.c.statusProcessing")
             : res.status === "too_old"
-              ? "오래된 보고서라 발송에서 제외됩니다"
-              : "대기 중";
-    toast.success(`${subjectName} ClassNote — ${msg}`);
+              ? t("os.c.statusTooOld")
+              : t("os.c.statusWaiting");
+    toast.success(tf("os.c.queueResult", { subject: subjectName, msg }));
   }
 
   // ── 표(그리드) 행별/일괄 — 카드와 같은 코어(queueOne/saveRecord) 재사용. 오늘 진도 있는 행만. ──
   async function sendRow(student: OneScreenStudent, subjectName: string) {
     if (readonlyBlocked()) return;
     if (bulkGen || bulkBusy) {
-      toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
+      toast.message(t("os.c.bulkBusy"));
       return;
     }
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 워커 최종 관문이 무조건 차단하므로(빈 보고서가
     // 학부모에게 노출된 이날 사고) 여기서 보내봐야 실패 예약일 뿐이다. 이유를 즉시 말하고 막는다.
     if (!(reports[student.id]?.[subjectName]?.draft ?? "").trim()) {
-      toast.error(`${student.name} — 학부모 전달 멘트가 비어 있어 발송할 수 없습니다 (자동작성 또는 직접 입력 후 발송)`);
+      toast.error(tf("os.c.emptyMentRow", { name: student.name }));
       return;
     }
     const res = await queueOne(student, subjectName);
     if (!res.ok) {
-      toast.error(res.error ?? "발송에 실패했습니다");
+      toast.error(res.error ?? t("os.c.sendFail"));
       return;
     }
     if (res.status === "name_conflict") {
-      toast.error(`${student.name} — 동명이인이 있어 발송을 막았습니다(학생 관리에서 ClassNote 이름 지정)`);
+      toast.error(tf("os.c.nameConflictRow", { name: student.name }));
     } else if (res.status === "recall_pending") {
-      toast.error(`${student.name} — 회수 처리 중입니다(삭제 후 발송)`);
+      toast.error(tf("os.c.recallingRow", { name: student.name }));
     } else if (res.status === "revoked") {
-      toast.error(`${student.name} — 취소된 링크입니다(재발급 필요)`);
+      toast.error(tf("os.c.revokedRow", { name: student.name }));
     } else if (res.status === "too_old") {
-      toast.message(`${student.name} — 오래된 보고서라 발송에서 제외됩니다`);
+      toast.message(tf("os.c.tooOldRow", { name: student.name }));
     } else if (res.status === "dry_run") {
-      toast.message(`${student.name} — 저장됨(dry-run · 승인 전 실제 발송 안 함)`);
+      toast.message(tf("os.c.dryRunRow", { name: student.name }));
     } else if (res.status === "subject_off") {
       // 발송 대상 과목이 아님 — 저장만 됨. "발송 대기" 성공 오안내 방지(#2 확정).
-      toast.message(`${student.name} ${subjectName} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다`);
+      toast.message(tf("os.c.subjectOffRow", { name: student.name, subject: subjectName }));
     } else if (res.status === "report_optout") {
       // 미발송 반 게이트(서버판, 2026-08-19) — 화면 게이트를 지난 경로(stale 화면)도 서버가 막는다.
-      toast.message(`${student.name} ${subjectName} — ${REPORT_OPTOUT_NOTICE}(기록 저장은 유지)`);
+      toast.message(
+        tf("os.c.optoutRow", {
+          name: student.name,
+          subject: subjectName,
+          notice: reportOptoutNotice(lang),
+        }),
+      );
     } else if (res.status === "absent") {
       // 결석 게이트(#77 서버판) — 반 모호(attendanceRaw 미채움) 행 등 클라 게이트 사각을 서버가 막은 경우.
-      toast.message(`${student.name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
+      toast.message(tf("os.c.absentRow", { name: student.name }));
     } else if (res.status === "no_attendance") {
       // 출결 미체크 게이트(서버판, 2026-08-17) — stale 화면 등 클라 게이트 사각을 서버가 막은 경우.
-      toast.message(`${student.name} — 출결이 아직 체크되지 않아 발송하지 않았습니다(출결 기록 후 다시 발송 · 저장은 유지)`);
+      toast.message(tf("os.c.uncheckedRow", { name: student.name }));
     } else if (res.status === "already_sent") {
       // 중복 게시 차단(서버판) — 화면 게이트를 지난 경로(stale 화면·다른 창에서 먼저 발송)도 서버가 막는다.
-      toast.message(`${student.name} ${subjectName} — 이미 학부모에게 발송된 보고서라 다시 보내지 않았습니다`);
+      toast.message(tf("os.c.alreadySentRow", { name: student.name, subject: subjectName }));
     } else if (res.status === "queued" && res.sendWindowHint) {
       // 발송 허용 시간창 밖 — 큐엔 정상 적재, 워커가 창 진입 시 자동 발송("왜 안 나가지?" 재발송 혼란 방지).
-      toast.success(`${student.name} ${subjectName} — 발송 예약됨(${res.sendWindowHint}에 자동 발송)`);
+      toast.success(
+        tf("os.c.queuedWindowRow", {
+          name: student.name,
+          subject: subjectName,
+          hint: res.sendWindowHint,
+        }),
+      );
     } else {
-      toast.success(`${student.name} ${subjectName} — 발송 대기`);
+      toast.success(tf("os.c.queuedRow", { name: student.name, subject: subjectName }));
     }
   }
   // 일괄 루프 중 학생·과목의 **최신** 스냅샷(ref) — 루프 중 편집을 반영하고 stale closure로 되돌리지 않게(#10).
@@ -2413,8 +2466,8 @@ export function OneScreenClient({
       // 발송 완료건은 수정 금지라 저장 대상에서도 빠진다 — "왜 아무것도 저장이 안 되지"의 답을 준다.
       toast.message(
         sentRowCount
-          ? `저장할 행이 없습니다 — 이미 발송된 ${sentRowCount}건은 수정할 수 없습니다(진도 미입력 행도 제외)`
-          : "저장할 행이 없습니다 — 오늘 진도를 입력하세요",
+          ? tf("os.c.saveNoneSent", { n: sentRowCount })
+          : t("os.c.saveNone"),
       );
       return;
     }
@@ -2432,7 +2485,9 @@ export function OneScreenClient({
       setBulkBusy(null);
     }
     toast.success(
-      `${ok}건 저장 완료${fail ? ` · ${fail}건 실패` : ""}${skipped ? ` · 건너뜀 ${skipped}(진도 미입력)` : ""}`,
+      tf("os.c.saveDone", { n: ok }) +
+        (fail ? tf("os.c.saveFailN", { n: fail }) : "") +
+        (skipped ? tf("os.c.saveSkipped", { n: skipped }) : ""),
     );
   }
   async function sendAllVisible(keys?: string[]) {
@@ -2456,8 +2511,8 @@ export function OneScreenClient({
     if (rows.length === 0) {
       toast.message(
         alreadySentRows
-          ? `발송할 새 행이 없습니다 — ${alreadySentRows}건은 이미 학부모에게 발송됐습니다`
-          : "발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석·출결 미체크 행은 발송 제외)",
+          ? tf("os.c.sendNoneSent", { n: alreadySentRows })
+          : t("os.c.sendNone"),
       );
       return;
     }
@@ -2478,9 +2533,14 @@ export function OneScreenClient({
     );
     const noProgressNames = [...new Set(noProgressRows.map((r) => r.student.name))];
     const progressLine = noProgressRows.length
-      ? `\n진도 미입력 ${noProgressRows.length}건은 발송에서 제외됩니다 — ${noProgressNames.slice(0, 5).join(", ")}${
-          noProgressNames.length > 5 ? ` 외 ${noProgressNames.length - 5}명` : ""
-        } (진도 입력 후 다시 발송하세요)`
+      ? tf("os.c.lineProgress", {
+          n: noProgressRows.length,
+          names: noProgressNames.slice(0, 5).join(", "),
+          more:
+            noProgressNames.length > 5
+              ? tf("os.c.lineMore", { n: noProgressNames.length - 5 })
+              : "",
+        })
       : "";
     // 출결 미체크 제외(2026-08-17 원장 지시) — 진도·멘트와 같은 규약: 소리 없는 제외 금지, 누구인지 명시.
     // "미체크만 아니면 발송됐을 행" = autowrite 판정(진도 있음·미발송·결석 아님)과 정확히 같은 집합이라
@@ -2495,14 +2555,19 @@ export function OneScreenClient({
     );
     const uncheckedNames = [...new Set(uncheckedRows.map((r) => r.student.name))];
     const uncheckedLine = uncheckedRows.length
-      ? `\n출결 미체크 ${uncheckedRows.length}건은 발송에서 제외됩니다 — ${uncheckedNames.slice(0, 5).join(", ")}${
-          uncheckedNames.length > 5 ? ` 외 ${uncheckedNames.length - 5}명` : ""
-        } (출결 체크 후 다시 발송하세요)`
+      ? tf("os.c.lineUnchecked", {
+          n: uncheckedRows.length,
+          names: uncheckedNames.slice(0, 5).join(", "),
+          more:
+            uncheckedNames.length > 5
+              ? tf("os.c.lineMore", { n: uncheckedNames.length - 5 })
+              : "",
+        })
       : "";
     const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
     const gapLine =
       gaps.missingAttitude || gaps.missingTest
-        ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
+        ? tf("os.c.lineGap", { attitude: gaps.missingAttitude, test: gaps.missingTest })
         : "";
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 멘트 없는 행은 **발송 대상에서 제외**한다(워커
     // 최종 관문도 무조건 차단 — 이날 빈 보고서 22건이 학부모에게 노출된 사고). confirm에 누구인지 명시.
@@ -2510,21 +2575,29 @@ export function OneScreenClient({
     rows = rows.filter((r) => (reports[r.student.id]?.[r.subject.name]?.draft ?? "").trim());
     const emptyMentNames = [...new Set(emptyMentRows.map((r) => r.student.name))];
     const emptyMentLine = emptyMentRows.length
-      ? `\n멘트 미작성 ${emptyMentRows.length}건은 발송에서 제외됩니다 — ${emptyMentNames.slice(0, 5).join(", ")}${
-          emptyMentNames.length > 5 ? ` 외 ${emptyMentNames.length - 5}명` : ""
-        } (멘트 작성 후 다시 발송하세요)`
+      ? tf("os.c.lineMent", {
+          n: emptyMentRows.length,
+          names: emptyMentNames.slice(0, 5).join(", "),
+          more:
+            emptyMentNames.length > 5
+              ? tf("os.c.lineMore", { n: emptyMentNames.length - 5 })
+              : "",
+        })
       : "";
     if (rows.length === 0) {
-      toast.message(`발송할 행이 없습니다 — 멘트 미작성 ${emptyMentRows.length}건 전부 제외됐습니다 (자동작성 또는 직접 입력 후 발송)`);
+      toast.message(tf("os.c.sendNoneMent", { n: emptyMentRows.length }));
       return;
     }
-    const absentLine = absentRows ? `\n결석 행 ${absentRows}건은 발송에서 제외됩니다` : "";
+    const absentLine = absentRows ? tf("os.c.lineAbsent", { n: absentRows }) : "";
     const sentLine = alreadySentRows
-      ? `\n이미 발송된 ${alreadySentRows}건은 제외됩니다 — ClassNote는 게시글 수정이 안 돼 다시 보내면 글만 하나 더 붙습니다`
+      ? tf("os.c.lineSent", { n: alreadySentRows })
       : "";
     if (
       !window.confirm(
-        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${emptyMentLine}${progressLine}${uncheckedLine}${gapLine}${absentLine}${sentLine}`,
+        tf("os.c.sendConfirm", {
+          n: rows.length,
+          lines: `${emptyMentLine}${progressLine}${uncheckedLine}${gapLine}${absentLine}${sentLine}`,
+        }),
       )
     )
       return;
@@ -2561,17 +2634,21 @@ export function OneScreenClient({
       setBulkBusy(null);
     }
     toast.success(
-      (dry ? `저장 ${dry}건(dry-run·발송 안 함) · ` : "") +
-        (windowHint ? `발송 예약 ${queued}건(${windowHint}에 자동 발송)` : `발송 대기 ${queued}건`) +
-        (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
-        (absentSkip ? ` · 결석 제외 ${absentSkip}건` : "") +
-        (uncheckedSkip ? ` · 출결 미체크 제외 ${uncheckedSkip}건` : "") +
-        (optoutSkip ? ` · 미발송 반 제외 ${optoutSkip}건` : "") +
-        (alreadySentRows || sentSkip ? ` · 발송완료 제외 ${alreadySentRows + sentSkip}건` : "") +
-        (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
-        (skipped ? ` · 제외 ${skipped}건` : "") +
-        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·출결 미체크·결석·발송완료)` : "") +
-        (fail ? ` · 실패 ${fail}건` : ""),
+      (dry ? tf("os.c.bulkDry", { n: dry }) : "") +
+        (windowHint
+          ? tf("os.c.bulkQueuedWindow", { n: queued, hint: windowHint })
+          : tf("os.c.bulkQueued", { n: queued })) +
+        (subjectOff ? tf("os.c.bulkSubjectOff", { n: subjectOff }) : "") +
+        (absentSkip ? tf("os.c.bulkAbsent", { n: absentSkip }) : "") +
+        (uncheckedSkip ? tf("os.c.bulkUnchecked", { n: uncheckedSkip }) : "") +
+        (optoutSkip ? tf("os.c.bulkOptout", { n: optoutSkip }) : "") +
+        (alreadySentRows || sentSkip
+          ? tf("os.c.bulkSent", { n: alreadySentRows + sentSkip })
+          : "") +
+        (blocked ? tf("os.c.bulkBlocked", { n: blocked }) : "") +
+        (skipped ? tf("os.c.bulkSkipped", { n: skipped }) : "") +
+        (preSkipped ? tf("os.c.bulkPreSkipped", { n: preSkipped }) : "") +
+        (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
     );
   }
 
@@ -2584,11 +2661,11 @@ export function OneScreenClient({
     const student = selected;
     const res = await revokeShareLink(token);
     if (!res.ok) {
-      toast.error(res.error ?? "링크 취소에 실패했습니다");
+      toast.error(res.error ?? t("os.c.revokeFail"));
       return;
     }
     patchReport(student.id, subjectName, (r) => ({ ...r, revoked: true }));
-    toast.success(`${subjectName} 공유 링크를 취소했습니다 — 학부모 열람이 차단됩니다`);
+    toast.success(tf("os.c.revoked", { subject: subjectName }));
   }
 
   // 공유링크 재발급(reissue) — 새 토큰. 옛 링크(카톡/문자/ClassNote 게시)는 즉시 무효화되므로 확인 후 실행.
@@ -2597,11 +2674,11 @@ export function OneScreenClient({
     if (!selected) return;
     const token = reports[selected.id]?.[subjectName]?.shareToken;
     if (!token) return;
-    if (!window.confirm("이미 전달·게시된 옛 링크는 즉시 열리지 않게 됩니다. 새 링크를 발급할까요?")) return;
+    if (!window.confirm(t("os.c.reissueConfirm"))) return;
     const student = selected;
     const res = await reissueShareLink(token);
     if (!res.ok || !res.shareToken) {
-      toast.error(res.error ?? "링크 재발급에 실패했습니다");
+      toast.error(res.error ?? t("os.c.reissueFail"));
       return;
     }
     // 새 토큰 반영 + 취소·ClassNote 상태 초기화(재발급=미발송으로 되돌림).
@@ -2611,7 +2688,7 @@ export function OneScreenClient({
       revoked: false,
       classnoteStatus: null, // 명시적 해제(undefined=미확인과 구분 — effectiveClassnoteStatus)
     }));
-    toast.success(`${subjectName} 공유 링크를 재발급했습니다 — 새 링크를 다시 전달하세요`);
+    toast.success(tf("os.c.reissued", { subject: subjectName }));
   }
 
   // ── 학생 사진 첨부(P2b) — 저장된 보고서에만(서버 강제). subject는 DB 저장키(subjectKey)로 넘긴다. ──
@@ -2675,7 +2752,7 @@ export function OneScreenClient({
     // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
     const su0 = student.subjects.find((s) => s.name === subjectName);
     if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
-      if (!opts?.silent) toast.message("오늘 진도를 입력한 뒤 첨부하세요");
+      if (!opts?.silent) toast.message(t("os.c.attachNeedProgress"));
       return 0;
     }
     const studentId = student.id;
@@ -2688,12 +2765,12 @@ export function OneScreenClient({
       if (!reports[studentId]?.[subjectName]?.sent) {
         const built = buildSaveInputFor(student, subjectName);
         if (!built) {
-          toast.error("저장할 보고서 정보를 찾을 수 없습니다");
+          toast.error(t("os.c.attachNoInfo"));
           return 0;
         }
         const saved = await saveLessonReport(built.input);
         if (!saved.ok || !saved.id) {
-          toast.error(saved.error ?? "보고서 저장에 실패했습니다");
+          toast.error(saved.error ?? t("os.c.saveFail"));
           return 0;
         }
         // 초안은 화면 값 그대로 둔다(위 saveRecord와 같은 이유 — 저장이 멘트를 쓰지 않는다).
@@ -2717,13 +2794,13 @@ export function OneScreenClient({
           ext,
         });
         if (issued.error || !issued.ticket) {
-          toast.error(issued.error ?? "업로드 준비에 실패했습니다");
+          toast.error(issued.error ?? t("os.c.attachIssueFail"));
           break;
         }
         try {
           await uploadToTicket(issued.ticket, file);
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : "업로드에 실패했습니다");
+          toast.error(e instanceof Error ? e.message : t("os.c.attachUploadFail"));
           break;
         }
         const reg = await registerReportAttachment({
@@ -2736,7 +2813,7 @@ export function OneScreenClient({
           size: file.size,
         });
         if (!reg.ok) {
-          toast.error(reg.error ?? "첨부 등록에 실패했습니다");
+          toast.error(reg.error ?? t("os.c.attachRegisterFail"));
           break;
         }
         added++;
@@ -2748,7 +2825,7 @@ export function OneScreenClient({
         }));
       }
       if (added) {
-        if (!opts?.silent) toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
+        if (!opts?.silent) toast.success(tf("os.c.attachDone", { n: added }));
         void ensureAttachmentUrls(student, subjectName); // 표 팝오버 썸네일(카드는 아래 서명 이펙트가 갱신)
       }
     } finally {
@@ -2771,7 +2848,7 @@ export function OneScreenClient({
       path,
     });
     if (!res.ok) {
-      toast.error(res.error ?? "첨부 삭제에 실패했습니다");
+      toast.error(res.error ?? t("os.c.attachDeleteFail"));
       return;
     }
     patchReport(studentId, subjectName, (r) => ({
@@ -2784,7 +2861,7 @@ export function OneScreenClient({
       delete n[path];
       return n;
     });
-    toast.success("첨부를 삭제했습니다");
+    toast.success(t("os.c.attachDeleted"));
   }
   const removeAttachment = (subjectName: string, path: string) =>
     selected ? removeAttachmentFor(selected, subjectName, path) : Promise.resolve();
@@ -2833,11 +2910,13 @@ export function OneScreenClient({
       setBulkBusy(null);
     }
     // 요약 1개 — 건너뛴 행(진도 미입력·상한 초과)이 있으면 숫자로 드러난다.
-    if (rows === 0) toast.message("첨부된 행이 없습니다 — 진도를 입력한 행에만 첨부됩니다");
+    if (rows === 0) toast.message(t("os.c.attachNoRow"));
     else {
       const skipped = targets.length - rows;
       toast.success(
-        `${rows}개 행에 ${added}개 첨부${skipped ? ` · ${skipped}행 건너뜀(진도 미입력·상한)` : ""} — ClassNote는 다시 발송하세요`,
+        tf("os.c.attachBulk", { rows, n: added }) +
+          (skipped ? tf("os.c.attachBulkSkip", { n: skipped }) : "") +
+          t("os.c.attachBulkTail"),
       );
     }
   }
@@ -2882,25 +2961,25 @@ export function OneScreenClient({
           반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}
       {noClassesToday && !showingAll ? (
         <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
-          <span className="text-foreground font-bold">이 날짜에는 담당 수업이 없습니다</span>
-          <span>— 다른 날짜를 고르거나, 필요하면 담당 반 전체를 볼 수 있습니다.</span>
+          <span className="text-foreground font-bold">{t("os.c.noClassTitle")}</span>
+          <span>{t("os.c.noClassBody")}</span>
           <a
             href={`/onescreen?date=${date}&all=1${view === "card" ? "" : `&view=${view}`}`}
             className="text-primary font-bold underline underline-offset-2"
           >
-            담당 반 전체 보기
+            {t("os.c.showAll")}
           </a>
         </div>
       ) : null}
       {showingAll ? (
         <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
-          <span className="font-bold">담당 반 전체 보기 — 이 날짜에 수업이 있는 학생이 아닙니다</span>
-          <span>안 오는 날 입력·발송이 되지 않도록 주의하세요.</span>
+          <span className="font-bold">{t("os.c.showingAllTitle")}</span>
+          <span>{t("os.c.showingAllBody")}</span>
           <a
             href={`/onescreen?date=${date}${view === "card" ? "" : `&view=${view}`}`}
             className="font-bold underline underline-offset-2"
           >
-            오늘 수업만 보기
+            {t("os.c.showTodayOnly")}
           </a>
         </div>
       ) : null}
@@ -2912,16 +2991,20 @@ export function OneScreenClient({
       {sentRowCount > 0 ? (
         <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
           <span className="font-bold">
-            이 날짜는 이미 학부모에게 발송된 보고서가 {sentRowCount}건 있습니다
+            {tf("os.c.sentBannerTitle", { n: sentRowCount })}
           </span>
           {/* ⚠️ 탈출구를 **실제로 화면에 있는 것**으로 적는다. 2026-08-06부터 게시된 보고서에는
               '공유 링크 재발급'이 아예 안 뜬다(게시글은 이미지라 링크를 만져도 학부모 화면이 그대로여서
               반쪽 수습을 고를 수 없게 감췄다) — 그런데 이 안내만 옛 경로를 가리키고 있었다.
               문구는 카드 안 배너(report-card.tsx)와 **같은 말**로 맞춘다(두 곳이 다르면 어느 쪽이 맞는지 모른다). */}
           <span className="text-text-dim">
-            — 발송 완료된 건은 <b>그대로는 수정할 수 없습니다</b>. ClassNote는 게시글 수정이 없어 학부모가
-            받은 것과 기록이 갈라지기 때문입니다. 고쳐야 하면 카드에서 <b>회수</b>로 학부모 게시글을 지우세요
-            — 삭제가 끝나면 입력이 열리고 <b>ClassNote 발송</b>으로 수정본을 다시 보낼 수 있습니다.
+            {t("os.c.sentBannerA")}
+            <b>{t("os.c.sentBannerB")}</b>
+            {t("os.c.sentBannerC")}
+            <b>{t("os.card.sentLockRecall")}</b>
+            {t("os.c.sentBannerD")}
+            <b>{t("os.card.queue")}</b>
+            {t("os.c.sentBannerE")}
           </span>
         </div>
       ) : null}
@@ -2929,8 +3012,8 @@ export function OneScreenClient({
       {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
       {sameDateEditors.length > 0 ? (
         <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
-          <span className="font-bold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
-          <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
+          <span className="font-bold">{t("os.c.presenceTitle")}</span>
+          <span>{t("os.c.presenceBody")}</span>
         </div>
       ) : null}
 
@@ -2942,31 +3025,35 @@ export function OneScreenClient({
           <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
             <span>
               <b className="text-foreground">
-                {writeFilter === "unwritten" ? "작성을 마친" : "문구가 비워진"} {staleCount}명
-              </b>
-              이 목록에 남아 있습니다 — 입력 중 카드·행이 사라지지 않도록 유지합니다.
+                {tf("os.c.staleCount", {
+                  label:
+                    writeFilter === "unwritten" ? t("os.c.staleWritten") : t("os.c.staleEmptied"),
+                  n: staleCount,
+                })}
+              </b>{" "}
+              {t("os.c.staleBody")}
             </span>
             <button
               type="button"
               onClick={() => changeWriteFilter(writeFilter)}
               className="text-primary font-bold underline underline-offset-2"
             >
-              목록 정리
+              {t("os.c.staleClear")}
             </button>
           </div>
         ) : visible.length === 0 ? (
           <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
             <span className="text-foreground font-bold">
               {writeFilter === "unwritten"
-                ? "미작성 학생이 없습니다 — 이 목록은 모두 작성했습니다"
-                : "작성한 학생이 아직 없습니다"}
+                ? t("os.c.emptyUnwrittenAll")
+                : t("os.c.emptyWrittenNone")}
             </span>
             <button
               type="button"
               onClick={() => changeWriteFilter("all")}
               className="text-primary font-bold underline underline-offset-2"
             >
-              전체 보기
+              {t("os.c.showAllFilter")}
             </button>
           </div>
         ) : null
@@ -3049,8 +3136,8 @@ export function OneScreenClient({
               setClassNarrative(activeDate, orderClass.id, text);
               toast.success(
                 text.trim()
-                  ? `${orderClass.name} 반 서술 저장 — 이후 자동작성부터 학생별 멘트에 반영됩니다`
-                  : `${orderClass.name} 반 서술을 지웠습니다`,
+                  ? tf("os.c.narrativeSaved", { name: orderClass.name })
+                  : tf("os.c.narrativeCleared", { name: orderClass.name }),
               );
             },
           }}
@@ -3113,14 +3200,14 @@ export function OneScreenClient({
             <div className="scrollbar-thin flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
-                <h2 className="text-foreground text-sm font-bold">보고서</h2>
+                <h2 className="text-foreground text-sm font-bold">{t("os.c.reportHeading")}</h2>
                 <button
                   type="button"
                   onClick={() => openNoticeForStudent(selected.id)}
-                  title="이 학생 학부모에게 공지(진도·평가 없이 안내글만) 발송"
+                  title={t("os.c.parentNoticeTitle")}
                   className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-[11px] font-bold"
                 >
-                  학부모 공지
+                  {t("os.c.parentNotice")}
                 </button>
               </header>
               <ReportCard
@@ -3225,7 +3312,7 @@ export function OneScreenClient({
           </>
         ) : (
           <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm lg:col-span-2">
-            학생을 선택하세요
+            {t("os.c.pickStudent")}
           </div>
         )}
       </div>
@@ -3236,10 +3323,10 @@ export function OneScreenClient({
           닫힘(취소)은 계획을 버리기만 한다(다른 칸 되돌리지 않음 — 그 칸들은 오늘 값 입력이라 문제 없음). */}
       <ConfirmDialog
         open={!!prevCommentPlan}
-        title="멘트도 일괄 가져오시겠습니까?"
-        message={`학부모 문구가 비어 있는 ${prevCommentPlan?.length ?? 0}개 행에 직전 회차에 보낸 멘트를 그대로 채웁니다. 오늘 진도·점수와 다를 수 있으니 발송 전에 확인·수정하세요.`}
-        confirmLabel="멘트도 가져오기"
-        cancelLabel="아니요"
+        title={t("os.c.prevCommentTitle")}
+        message={tf("os.c.prevCommentBody", { n: prevCommentPlan?.length ?? 0 })}
+        confirmLabel={t("os.c.prevCommentOk")}
+        cancelLabel={t("os.c.prevCommentCancel")}
         onConfirm={applyPrevComments}
         onCancel={() => setPrevCommentPlan(null)}
       />

@@ -26,6 +26,14 @@ export type MakeupShape = {
 export const MAKEUP_ONLY_SUFFIX = " (보강)";
 export const MAKEUP_COMBINED_SUFFIX = " (정규+보강)";
 
+/**
+ * 보강 전용 행의 **이름** — 🔴 화면 글자가 아니라 `reports[학생][이 이름]` **맵 키**이자
+ * 저장 단위(unit_key)라 언어를 타지 않는다. 같은 과목 보강을 또 넣으면 번호가 붙는다.
+ */
+export function makeupRowName(subjectName: string, n?: number): string {
+  return n && n > 1 ? `${subjectName} (보강 ${n})` : `${subjectName}${MAKEUP_ONLY_SUFFIX}`;
+}
+
 /** 제목 뒤에 붙일 접미사. 보강이 아니면 빈 문자열. */
 export function makeupTitleSuffix(r: MakeupShape): string {
   if (!r.makeup) return "";

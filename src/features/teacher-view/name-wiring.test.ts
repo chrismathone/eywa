@@ -63,6 +63,7 @@ import { NOT_SUBMITTED } from "@/features/onescreen/homework-rate";
 import { NONE_LABEL } from "@/features/onescreen/none-marker";
 import { makeupRemoveBlockReason } from "@/features/onescreen/makeup-remove-plan";
 import { recallBlockReason } from "@/features/report-admin/report-recall";
+import { makeupRowName, MAKEUP_ONLY_SUFFIX } from "@/features/onescreen/makeup-label";
 import { readAtLabel } from "@/features/onescreen/components/report-card";
 import {
   REPORT_OPTOUT_NOTICE,
@@ -1043,5 +1044,95 @@ describe("🔴 회수 버튼·막힌 사유도 사전만 본다 — ko 기본값
     expect(makeupRemoveBlockReason(null, "en")).toBeNull();
     expect(recallBlockReason({ classnoteStatus: "success", shareToken: "t" })).toBeNull();
     expect(recallBlockReason({ classnoteStatus: "success", shareToken: "t" }, "en")).toBeNull();
+  });
+});
+
+/**
+ * 원스크린 **13차** — 화면 껍데기(`onescreen-client`)와 학부모 공지 작성.
+ *
+ * 🔴 이 파일은 토스트가 대부분이라 **저장값과 화면 글자가 한 줄에 섞여 있다** — 아래 가드가
+ *    저장값(보강 행 이름·출결 배지값)이 언어를 안 타는지까지 함께 본다.
+ */
+describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 — 한글 리터럴 0", () => {
+  it.each(["onescreen-client.tsx", "notice-composer.tsx", "notice-attachment-picker.tsx"])(
+    "%s",
+    (f) => {
+      const code = codeOnly(read("features", "onescreen", "components", f));
+      const hits = code
+        .split(/\r?\n/)
+        .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+        .filter((l) => /[가-힣]/.test(l));
+      expect(hits).toEqual([]);
+    },
+  );
+
+  it("🔴 보강 행 이름은 **맵 키**라 언어를 안 탄다", () => {
+    // `reports[학생][이 이름]`의 키이자 저장 단위 — 영어로 바꾸면 그 행의 기록이 통째로 길을 잃는다.
+    expect(makeupRowName("수학")).toBe(`수학${MAKEUP_ONLY_SUFFIX}`);
+    expect(makeupRowName("수학")).toBe("수학 (보강)");
+    expect(makeupRowName("수학", 2)).toBe("수학 (보강 2)");
+    expect(makeupRowName("수학", 1)).toBe("수학 (보강)"); // 1은 번호를 안 붙인다(옛 동작)
+    // 화면 어디에도 이 문자열을 손으로 짓지 않는다.
+    const client = codeOnly(read("features", "onescreen", "components", "onescreen-client.tsx"));
+    expect(client).toContain("makeupRowName(su.name)");
+  });
+
+  it("🔴 공지 상태 라벨은 사전 키를 담고 화면이 글자로 푼다", () => {
+    const src = read("features", "onescreen", "components", "notice-composer.tsx");
+    for (const key of [
+      "os.n.st.queued",
+      "os.n.st.processing",
+      "os.n.st.success",
+      "os.n.st.partial",
+      "os.n.st.failed",
+      "os.n.st.revokeRequested",
+      "os.n.st.revoking",
+      "os.n.st.editRequested",
+      "os.n.st.editing",
+      "os.n.st.revoked",
+      "os.n.st.revokePartial",
+    ]) {
+      expect(SHEET_DICT[key as keyof typeof SHEET_DICT], key).toBeDefined();
+      expect(src, key).toContain(`"${key}"`);
+    }
+    // 🔴 키를 그대로 그리면 화면에 `os.n.st.…`가 뜬다 — 반드시 t()를 지난다.
+    expect(src).toContain("{st.key ? t(st.key) : st.raw}");
+    // 모르는 상태는 raw로 떨어진다(옛 default 분기 그대로).
+    expect(src).toContain("{ key: null, raw: s,");
+  });
+
+  it("🔴 첨부 라벨은 호출부가 덮을 수 있고, 기본값은 사전이 든다", () => {
+    // 사무실 공지 화면은 자기 라벨을 넘긴다 — prop 기본값을 사전으로 바꿔도 그 화면은 그대로다.
+    const src = read("features", "onescreen", "components", "notice-attachment-picker.tsx");
+    expect(src).toContain('label ?? t("os.na.label")');
+    expect(sheetT("ko", "os.na.label")).toBe("이미지 첨부 (선택 학생 모두에게)");
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "os.c.autosaveFail")).toBe("자동 저장에 실패했습니다");
+    expect(sheetT("ko", "os.c.markSend")).toBe("학부모 발송");
+    expect(sheetT("ko", "os.c.markSave")).toBe("보고서 저장");
+    expect(sheetT("ko", "os.c.bulkBusy")).toBe("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
+    expect(sheetT("ko", "os.c.needProgress")).toBe("오늘 진도를 먼저 입력하세요");
+    expect(sheetT("ko", "os.c.pickStudent")).toBe("학생을 선택하세요");
+    expect(sheetT("ko", "os.c.reportHeading")).toBe("보고서");
+    expect(sheetTf("ko", "os.c.makeupAdded", { name: "김민수" })).toBe("김민수 보강 추가됨");
+    expect(sheetTf("ko", "os.c.saveDone", { n: 4 })).toBe("4건 저장 완료");
+    expect(sheetTf("ko", "os.c.sentBannerTitle", { n: 2 })).toBe(
+      "이 날짜는 이미 학부모에게 발송된 보고서가 2건 있습니다",
+    );
+    expect(sheetT("ko", "os.n.heading")).toBe("학부모 공지");
+    expect(sheetT("ko", "os.n.test")).toBe("테스트 발송(학원이)");
+    expect(sheetT("ko", "os.n.st.success")).toBe("게시 완료");
+    expect(sheetTf("ko", "os.n.queued", { n: 7 })).toBe("7명 발송 대기(연동 PC가 순차 게시)");
+    expect(sheetTf("ko", "os.na.hint", { n: 5 })).toBe("사진(JPG·PNG·WebP) · 한 글에 최대 5장");
+  });
+
+  it("🔴 줄 앞 개행이 살아 있다 — 일괄 발송 확인창은 줄바꿈으로 읽는다", () => {
+    // 사전으로 옮기면서 `\n`이 사라지면 확인창이 한 줄로 뭉쳐 아무도 안 읽는다.
+    for (const k of ["os.c.lineProgress", "os.c.lineUnchecked", "os.c.lineGap", "os.c.lineMent", "os.c.lineAbsent", "os.c.lineSent"] as const) {
+      expect(SHEET_DICT[k].ko.startsWith("\n"), k).toBe(true);
+      expect(SHEET_DICT[k].en.startsWith("\n"), k).toBe(true);
+    }
   });
 });
