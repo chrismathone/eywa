@@ -177,7 +177,7 @@ export const SHEET_DICT = {
   },
 
   // ── 상단 바 왼쪽 덩어리(목록 · 반 선택 · 반 정보) ─────────────────
-  "chrome.list": { ko: "목록", en: "Classes" },
+  "chrome.list": { ko: "목록", en: "List" },
   "chrome.list.aria": { ko: "반 목록", en: "Class list" },
   "chrome.classPlaceholder": { ko: "반 선택", en: "Pick a class" },
   "chrome.classAria": { ko: "반 전환", en: "Switch class" },
@@ -2893,6 +2893,97 @@ export const SHEET_DICT = {
   "os.na.count": { ko: " · {n}장", en: " · {n}" },
   "os.na.add": { ko: "이미지 추가", en: "Add an image" },
   "os.na.hint": { ko: "사진(JPG·PNG·WebP) · 한 글에 최대 {n}장", en: "Photos (JPG, PNG, WebP) · at most {n} per post" },
+
+  // ── 페이저(공용) ────────────────────────────────────────────────
+  // 🔴 `components/pagination.tsx`는 **클라 컴포넌트도 import**한다(PAGER_STEP_*·PageStep) —
+  //    거기에 server-only 조회를 넣으면 빌드가 깨진다([[#61]]). 그래서 언어는 **prop**으로 받고
+  //    기본값이 한국어다(사무실 화면은 한 글자도 안 바뀐다).
+  "common.prev": { ko: "이전", en: "Previous" },
+  "common.next": { ko: "다음", en: "Next" },
+  "common.pageAria": { ko: "페이지 이동", en: "Pagination" },
+  "common.pageCount": { ko: " · {n}건", en: " · {n} rows" },
+
+  // ── makeedu 동기화 배지(목록 화면 상단, 공용) ────────────────────
+  // ⚠️ `{issue}`는 워커가 쓴 **한국어 사실 문장**이라 번역하지 않는다(특이사항과 같은 축).
+  "sync.failed": { ko: "동기화 실패", en: "Sync failed" },
+  "sync.ago": { ko: "동기화 {when}", en: "Synced {when}" },
+  "sync.issue": { ko: "· 확인 필요", en: "· needs a look" },
+  "sync.title": { ko: "makeedu 동기화: {when}", en: "makeedu sync: {when}" },
+  "sync.titleRows": { ko: " · 신규 {n}건", en: " · {n} new" },
+  "sync.titleIssue": { ko: "\n확인 필요: {issue}", en: "\nNeeds a look: {issue}" },
+  "sync.justNow": { ko: "방금 전", en: "just now" },
+  "sync.minAgo": { ko: "{n}분 전", en: "{n} min ago" },
+  "sync.hourAgo": { ko: "{n}시간 전", en: "{n} h ago" },
+  "sync.dayAgo": { ko: "{n}일 전", en: "{n} d ago" },
+
+  // ── 수업목록(/classes) — 목록 화면 ───────────────────────────────
+  "cls.title": { ko: "수업목록", en: "Classes" },
+  "cls.eyebrow": { ko: "수업 운영", en: "Class operations" },
+  "cls.desc": {
+    ko: "운영 {active}개 반 · 등록 학생 {seats}명",
+    en: "{active} classes running · {seats} students enrolled",
+  },
+  "cls.stat.total": { ko: "전체 반", en: "In total" },
+  "cls.stat.active": { ko: "운영 중", en: "Running now" },
+  "cls.stat.seats": { ko: "등록 학생", en: "Students enrolled" },
+  "cls.stat.avg": { ko: "반당 평균", en: "Average per class" },
+  // 🔴 영어엔 단위가 없다 — `All classes 94`가 곧 문장이라 `개`에 해당하는 낱말을 지어내면
+  //    `94 classes classes`가 된다. BigStat은 빈 문자열이면 그 자리를 아예 안 그린다.
+  "cls.unit.class": { ko: "개", en: "classes" },
+  "cls.unit.people": { ko: "명", en: "" },
+  "cls.count.pre": { ko: "결과 ", en: "Found " },
+  "cls.count.post": { ko: "개", en: " results" },
+  "cls.count.pages": { ko: "{page}/{total} 페이지", en: "page {page} of {total}" },
+  "cls.count.q": { ko: "“{q}” 검색", en: "search “{q}”" },
+  "cls.empty.title": { ko: "결과 없음", en: "No results" },
+  "cls.empty.desc": {
+    ko: "폐지·종강된 반은 기본으로 숨깁니다. 상태를 바꾸면 함께 보입니다.",
+    en: "Retired and finished classes are hidden by default. Change the status to see them too.",
+  },
+  "cls.empty.showAll": { ko: "전체 상태로 보기", en: "Show every status" },
+  "cls.col.subject": { ko: "과목", en: "Subject" },
+  "cls.col.name": { ko: "반 이름", en: "Class name" },
+  "cls.col.teacher": { ko: "담임", en: "Homeroom" },
+  "cls.col.room": { ko: "강의실", en: "Room" },
+  "cls.col.days": { ko: "요일", en: "Days" },
+  "cls.col.students": { ko: "학생", en: "Students" },
+  "cls.col.status": { ko: "상태", en: "Status" },
+  "cls.col.notes": { ko: "메모", en: "Memo" },
+  "cls.status.operating": { ko: "운영", en: "Running" },
+  "cls.status.ended": { ko: "종강", en: "Finished" },
+  "cls.status.retired": { ko: "폐지", en: "Retired" },
+  "cls.teacherNone": { ko: "미정", en: "Not assigned" },
+  "cls.card.teacherNone": { ko: "담임 미정", en: "No homeroom teacher" },
+  "cls.card.roomNone": { ko: "강의실 미정", en: "No room" },
+  "cls.card.enrolled": { ko: "재원", en: "Enrolled" },
+  "cls.staleTitle": {
+    ko: "지금은 운영하지 않는 배치입니다 (운영 기간이 끝났거나 아직 시작 전)",
+    en: "This slot is not running right now (its run has ended, or has not started yet)",
+  },
+  "cls.stale": { ko: "운영 기간 밖", en: "Outside the run" },
+  // ⚠️ 요일+시각 — 한국어는 붙여 쓰고(`월14:30`) 영어는 띄운다(`Mon 14:30`).
+  "cls.dayAt": { ko: "{dow}{time}", en: "{dow} {time}" },
+  "cls.filter.status": { ko: "상태", en: "Status" },
+  "cls.filter.statusAria": { ko: "상태 필터", en: "Status filter" },
+  "cls.filter.subject": { ko: "과목", en: "Subject" },
+  "cls.filter.subjectAria": { ko: "과목 필터", en: "Subject filter" },
+  "cls.filter.day": { ko: "요일", en: "Days" },
+  "cls.filter.dayAria": { ko: "요일 필터", en: "Day filter" },
+  "cls.filter.teacher": { ko: "강사", en: "Teacher" },
+  "cls.filter.teacherAria": { ko: "강사 필터", en: "Teacher filter" },
+  "cls.filter.sort": { ko: "정렬", en: "Sort" },
+  "cls.filter.sortAria": { ko: "정렬 기준", en: "Sort by" },
+  "cls.filter.searchPh": { ko: "수업명, 강사, 강의실 검색", en: "Search class, teacher, room" },
+  // ⚠️ 한국어 쪽 예시(`본원602`)는 실제 강의실 이름이라 영어 문장엔 넣지 않는다(영문 값에 한글 금지).
+  "cls.filter.searchTitle": {
+    ko: "수업명 · 강사명 · 강의실명으로 찾습니다(예: 본원602)",
+    en: "Searches by class name, teacher name and room name",
+  },
+  "cls.sort.name": { ko: "수업명순", en: "By class name" },
+  "cls.sort.students": { ko: "학생수순", en: "By student count" },
+  "cls.sort.teacher": { ko: "강사명순", en: "By teacher name" },
+  "cls.view.table": { ko: "테이블", en: "Table view" },
+  "cls.view.cards": { ko: "카드", en: "Card view" },
 
 } as const satisfies Record<string, { ko: string; en: string }>;
 

@@ -307,7 +307,7 @@ export default async function StudentsPage({
             </tbody>
           </table>
         </div>
-        <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+        <Pagination lang={lang} page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
     </div>

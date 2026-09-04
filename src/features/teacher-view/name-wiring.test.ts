@@ -1136,3 +1136,112 @@ describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 
     }
   });
 });
+
+/**
+ * 수업목록 **14차** — 목록 화면 + 목록 화면들이 함께 쓰는 조각 둘(페이저·makeedu 동기화 배지).
+ *
+ * 🔑 이 두 조각은 **화면 5곳이 같은 모양으로** 쓴다 — 화면마다 배선하면 한 곳만 빠뜨려도
+ *    그 화면만 한글로 남고 아무도 에러를 못 본다. 그래서 언어를 조각 쪽에서 해결한다:
+ *    · 배지 = async 서버 컴포넌트라 **자기가 읽는다**(`getTeacherViewLang`).
+ *    · 페이저 = **클라 컴포넌트도 import**하므로 server-only 조회를 넣을 수 없어 **prop**(기본 한국어).
+ */
+describe("🔴 수업목록(목록)·공용 조각 — 한글 리터럴 0", () => {
+  it.each([
+    ["app", "(shell)", "classes", "page.tsx"],
+    ["app", "(shell)", "classes", "_components", "class-filter-bar.tsx"],
+    ["app", "(shell)", "classes", "_components", "filter-shared.ts"],
+    ["components", "pagination.tsx"],
+    ["components", "makeedu-sync-badge.tsx"],
+  ])("%s/%s", (...seg) => {
+    const code = codeOnly(read(...seg));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 페이저에 server-only 조회를 넣지 않는다 — 클라 컴포넌트도 이 모듈을 import한다([[#61]])", () => {
+    const src = read("components", "pagination.tsx");
+    expect(src).not.toContain("getTeacherViewLang");
+    expect(src).not.toContain('import "server-only"');
+    // 언어는 prop이고 **기본값이 한국어**라, 안 넘기는 사무실 화면은 한 글자도 안 바뀐다.
+    expect(src).toContain("lang = DEFAULT_SHEET_LANG");
+  });
+
+  it("🔴 동기화 배지의 `issue`는 워커가 쓴 한국어 사실 문장이라 번역하지 않는다", () => {
+    const src = read("components", "makeedu-sync-badge.tsx");
+    // 사전엔 자리(`{issue}`)만 있고 문장은 없다 — 원문을 그대로 실어 보낸다.
+    expect(src).toContain('sheetTf(lang, "sync.titleIssue", { issue: state.issue })');
+    expect(SHEET_DICT["sync.titleIssue"].en).toContain("{issue}");
+    // 배지는 자기가 언어를 읽는다(화면 5곳에 prop을 배선하지 않는다).
+    expect(src).toContain("getTeacherViewLang()");
+  });
+
+  it("🔴 툴팁 줄바꿈이 살아 있다 — '확인 필요'는 다음 줄에 붙는다", () => {
+    for (const lang of ["ko", "en"] as const) {
+      expect(SHEET_DICT["sync.titleIssue"][lang].startsWith("\n"), lang).toBe(true);
+    }
+  });
+
+  it("🔴 영어 요일은 세 글자라 요일 알약이 20px 고정이면 넘친다", () => {
+    // `size-5`(20×20 고정)로 되돌리면 `Mon`이 잘린다 — 높이만 고정하고 가로는 늘어나야 한다.
+    const src = read("app", "(shell)", "classes", "page.tsx");
+    expect(src).toContain("h-5 min-w-5");
+    expect(src).not.toContain("inline-flex size-5 items-center justify-center rounded-full");
+  });
+
+  it("🔴 필터 선택지 라벨은 사전 키다 — 값(enum)은 URL 파라미터라 불변", () => {
+    const src = read("app", "(shell)", "classes", "_components", "filter-shared.ts");
+    for (const k of [
+      "cls.status.operating",
+      "cls.status.ended",
+      "cls.status.retired",
+      "filter.all",
+      "cls.sort.name",
+      "cls.sort.students",
+      "cls.sort.teacher",
+    ]) {
+      expect(SHEET_DICT[k as keyof typeof SHEET_DICT], k).toBeDefined();
+      expect(src, k).toContain(`"${k}"`);
+    }
+    // 값은 그대로 — 하나라도 바뀌면 저장된 링크·복원값이 통째로 깨진다.
+    for (const v of ["operating", "ended", "retired", "all", "name", "students", "teacher"]) {
+      expect(src, v).toContain(`"${v}"`);
+    }
+    // 요일 글자는 여기 두지 않는다(앱 전역 `sheetDowLabel` 단일 소스).
+    expect(src).not.toContain("label:");
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "cls.title")).toBe("수업목록");
+    expect(sheetT("ko", "cls.eyebrow")).toBe("수업 운영");
+    expect(sheetTf("ko", "cls.desc", { active: 78, seats: 1240 })).toBe(
+      "운영 78개 반 · 등록 학생 1240명",
+    );
+    expect(sheetT("ko", "cls.stat.total")).toBe("전체 반");
+    expect(sheetT("ko", "cls.stat.active")).toBe("운영 중");
+    expect(sheetT("ko", "cls.unit.class")).toBe("개");
+    expect(sheetT("ko", "cls.unit.people")).toBe("명");
+    expect(sheetT("ko", "cls.count.pre")).toBe("결과 ");
+    expect(sheetT("ko", "cls.count.post")).toBe("개");
+    expect(sheetTf("ko", "cls.count.pages", { page: 2, total: 5 })).toBe("2/5 페이지");
+    expect(sheetT("ko", "cls.empty.desc")).toBe(
+      "폐지·종강된 반은 기본으로 숨깁니다. 상태를 바꾸면 함께 보입니다.",
+    );
+    expect(sheetT("ko", "cls.status.operating")).toBe("운영");
+    expect(sheetT("ko", "cls.status.ended")).toBe("종강");
+    expect(sheetT("ko", "cls.status.retired")).toBe("폐지");
+    expect(sheetT("ko", "cls.stale")).toBe("운영 기간 밖");
+    expect(sheetTf("ko", "cls.dayAt", { dow: "월", time: "14:30" })).toBe("월14:30");
+    expect(sheetTf("en", "cls.dayAt", { dow: "Mon", time: "14:30" })).toBe("Mon 14:30");
+    expect(sheetT("ko", "cls.filter.searchPh")).toBe("수업명, 강사, 강의실 검색");
+    expect(sheetT("ko", "common.prev")).toBe("이전");
+    expect(sheetT("ko", "common.next")).toBe("다음");
+    expect(sheetTf("ko", "common.pageCount", { n: 401 })).toBe(" · 401건");
+    expect(sheetT("ko", "sync.failed")).toBe("동기화 실패");
+    expect(sheetTf("ko", "sync.ago", { when: "5분 전" })).toBe("동기화 5분 전");
+    expect(sheetTf("ko", "sync.minAgo", { n: 5 })).toBe("5분 전");
+    expect(sheetT("ko", "sync.issue")).toBe("· 확인 필요");
+  });
+});

@@ -32,20 +32,14 @@ import {
   type ClassFilterState,
   type ViewMode,
 } from "./_components/filter-shared";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { sheetDowLabel, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
-export const metadata = { title: "수업목록 — eywa" };
+export async function generateMetadata() {
+  return { title: `${sheetT(await getTeacherViewLang(), "cls.title")} — eywa` };
+}
 
 const PAGE_SIZE = 50;
-
-const DAY_LABEL: Record<string, string> = {
-  mon: "월",
-  tue: "화",
-  wed: "수",
-  thu: "목",
-  fri: "금",
-  sat: "토",
-  sun: "일",
-};
 
 export default async function ClassesPage({
   searchParams,
@@ -86,6 +80,7 @@ export default async function ClassesPage({
   // 고를 수도 볼 것도 없다(원장 2026-08-20: "강사가 당연히 나일텐데 다른 강사 선택도 보임").
   // ⚠️ 위임(delegation)은 진입 자격만 열 뿐 classIds를 넓히지 않으므로 남의 이름이 섞일 여지도 없다.
   const scopedTeacherId = await effectiveTeacherId();
+  const lang = await getTeacherViewLang();
   const [{ rows: classes, total }, teachers, stats, settings] = await Promise.all([
     getClassesPage({ subject, teacherId, days, q, sort, status }, page, PAGE_SIZE),
     // 스코프에선 조회 자체를 건너뛴다(고를 수 없는 목록이라 왕복 낭비).
@@ -115,9 +110,9 @@ export default async function ClassesPage({
       {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(강의실 배정·신규 반).
           ⚠️ 동기화 배지도 **이 행 안**에 둔다 — 따로 두면 배지 하나가 한 줄을 통째로 먹는다(우측이 텅 빈 채로). */}
       <PageHeader
-        eyebrow="수업 운영"
-        title="수업목록"
-        description={`운영 ${active}개 반 · 등록 학생 ${totalSeats}명`}
+        eyebrow={sheetT(lang, "cls.eyebrow")}
+        title={sheetT(lang, "cls.title")}
+        description={sheetTf(lang, "cls.desc", { active, seats: totalSeats })}
         actions={
           <>
             <MakeeduSyncBadge domain="classes" />
@@ -132,13 +127,13 @@ export default async function ClassesPage({
       />
       {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 보존 대상 EyIcon `check` 유지. */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <BigStat label="전체 반" value={stats.total} unit="개" tone="primary" icon={<BookOpen size={16} strokeWidth={1.8} />} />
-        <BigStat label="운영 중" value={active} unit="개" tone="primary" icon={<EyIcon name="check" size={16} />} />
-        <BigStat label="등록 학생" value={totalSeats} unit="명" tone="blue" icon={<Users size={16} strokeWidth={1.8} />} />
+        <BigStat label={sheetT(lang, "cls.stat.total")} value={stats.total} unit={sheetT(lang, "cls.unit.class")} tone="primary" icon={<BookOpen size={16} strokeWidth={1.8} />} />
+        <BigStat label={sheetT(lang, "cls.stat.active")} value={active} unit={sheetT(lang, "cls.unit.class")} tone="primary" icon={<EyIcon name="check" size={16} />} />
+        <BigStat label={sheetT(lang, "cls.stat.seats")} value={totalSeats} unit={sheetT(lang, "cls.unit.people")} tone="blue" icon={<Users size={16} strokeWidth={1.8} />} />
         <BigStat
-          label="반당 평균"
+          label={sheetT(lang, "cls.stat.avg")}
           value={stats.total > 0 ? Math.round(totalSeats / stats.total) : 0}
-          unit="명"
+          unit={sheetT(lang, "cls.unit.people")}
           tone="gold"
           icon={<UserCheck size={16} strokeWidth={1.8} />}
         />
@@ -155,31 +150,29 @@ export default async function ClassesPage({
       {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만.
           컴팩트에선 위 필터 바에 바짝 붙여(-mt) 한 줄을 새로 만들지 않는다. */}
       <p className="text-text-dim px-1 text-[13px] compact-chrome:-mt-1.5">
-        결과 <span className="text-foreground font-bold">{total}</span>개
+        {sheetT(lang, "cls.count.pre")}
+        <span className="text-foreground font-bold">{total}</span>
+        {sheetT(lang, "cls.count.post")}
         {totalPages > 1 ? (
-          <span className="ml-2">
-            {page}/{totalPages} 페이지
-          </span>
+          <span className="ml-2">{sheetTf(lang, "cls.count.pages", { page, total: totalPages })}</span>
         ) : null}
-        {q ? <span className="ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
+        {q ? <span className="ml-2">{sheetTf(lang, "cls.count.q", { q })}</span> : null}
       </p>
 
       {total === 0 ? (
         <EmptyState
           image="classes"
           icon={() => <SearchX size={32} strokeWidth={1.8} />}
-          title="결과 없음"
+          title={sheetT(lang, "cls.empty.title")}
           // 기본 필터가 숨긴 것일 수 있다 — "왜 그 반이 없지?"의 답을 여기서 준다(폐지 42 · 종강 5 실재).
-          description={
-            status === "all" ? undefined : "폐지·종강된 반은 기본으로 숨깁니다. 상태를 바꾸면 함께 보입니다."
-          }
+          description={status === "all" ? undefined : sheetT(lang, "cls.empty.desc")}
           action={
             status === "all" ? undefined : (
               <Link
                 href={buildClassHref(current, { status: "all" })}
                 className="border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-[13px] font-medium"
               >
-                전체 상태로 보기
+                {sheetT(lang, "cls.empty.showAll")}
               </Link>
             )
           }
@@ -187,11 +180,11 @@ export default async function ClassesPage({
       ) : (
         <>
           {view === "table" ? (
-            <TableView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} />
+            <TableView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} lang={lang} />
           ) : (
-            <CardsView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} />
+            <CardsView classes={classes} subjects={subjects} showTeacher={!scopedTeacherId} lang={lang} />
           )}
-          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} lang={lang} />
         </>
       )}
     </div>
@@ -206,9 +199,11 @@ function DayChips({
   days,
   barClass,
   stale = false,
+  lang,
 }: {
   days: ClassDaySlot[];
   barClass: string;
+  lang: SheetLang;
   /**
    * 지금 유효하지 않은 배치(운영 기간이 끝났거나 시작 전) — 흐리게 + 이유를 툴팁으로.
    * 🔴 진하게 그리면 "종료일을 넣었는데도 월~금 운영 중"으로 보인다([[#88]], 실측 7반).
@@ -221,28 +216,30 @@ function DayChips({
   return (
     <div
       className="flex flex-wrap items-center gap-x-2 gap-y-1"
-      {...(stale ? { title: "지금은 운영하지 않는 배치입니다 (운영 기간이 끝났거나 아직 시작 전)" } : {})}
+      {...(stale ? { title: sheetT(lang, "cls.staleTitle") } : {})}
     >
       <div className={`flex gap-0.5 text-[11px] font-bold ${stale ? "opacity-45" : ""}`}>
         {days.map((d) => (
           <span
             key={d.day}
-            className={`inline-flex size-5 items-center justify-center rounded-full ${
+            /* ⚠️ 영어 요일은 세 글자(`Mon`)라 `size-5`(20px)에 안 들어간다 — 높이만 고정하고
+               가로는 `min-w-5 px-1`로 늘린다(한 글자인 한국어는 20px 그대로 = 원형 유지). */
+            className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 ${
               stale ? "bg-text-faint" : barClass
             } text-white`}
           >
-            {DAY_LABEL[d.day] ?? d.day}
+            {sheetDowLabel(d.day, lang)}
           </span>
         ))}
       </div>
-      {stale ? <span className="text-text-faint text-[11px]">운영 기간 밖</span> : null}
+      {stale ? <span className="text-text-faint text-[11px]">{sheetT(lang, "cls.stale")}</span> : null}
       {uniform ? (
         <span className="text-text-dim num text-[12px]">{starts[0]}</span>
       ) : starts.length > 0 ? (
         <span className="text-text-faint num text-[11px]">
           {days
             .filter((d) => d.start)
-            .map((d) => `${DAY_LABEL[d.day] ?? d.day}${d.start}`)
+            .map((d) => sheetTf(lang, "cls.dayAt", { dow: sheetDowLabel(d.day, lang), time: d.start ?? "" }))
             .join(" ")}
         </span>
       ) : null}
@@ -254,25 +251,27 @@ function TableView({
   classes,
   subjects,
   showTeacher,
+  lang,
 }: {
   classes: ClassListRow[];
   subjects: SubjectMaps;
   /** 강사 스코프에선 전 행이 같은 담임(=본인)이라 열을 통째로 감춘다 — 같은 이름 50줄은 정보가 아니다. */
   showTeacher: boolean;
+  lang: SheetLang;
 }) {
   return (
     <div className="bg-card shadow-card overflow-auto rounded-2xl">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
-            <th className="micro px-4 py-3 text-left">과목</th>
-            <th className="micro px-4 py-3 text-left">반 이름</th>
-            {showTeacher ? <th className="micro px-4 py-3 text-left">담임</th> : null}
-            <th className="micro px-4 py-3 text-left">강의실</th>
-            <th className="micro px-4 py-3 text-left">요일</th>
-            <th className="micro px-4 py-3 text-right">학생</th>
-            <th className="micro px-4 py-3 text-left">상태</th>
-            <th className="micro px-4 py-3 text-left">메모</th>
+            <th className="micro px-4 py-3 text-left">{sheetT(lang, "cls.col.subject")}</th>
+            <th className="micro px-4 py-3 text-left">{sheetT(lang, "cls.col.name")}</th>
+            {showTeacher ? <th className="micro px-4 py-3 text-left">{sheetT(lang, "cls.col.teacher")}</th> : null}
+            <th className="micro px-4 py-3 text-left">{sheetT(lang, "cls.col.room")}</th>
+            <th className="micro px-4 py-3 text-left">{sheetT(lang, "cls.col.days")}</th>
+            <th className="micro px-4 py-3 text-right">{sheetT(lang, "cls.col.students")}</th>
+            <th className="micro px-4 py-3 text-left">{sheetT(lang, "cls.col.status")}</th>
+            <th className="micro px-4 py-3 text-left">{sheetT(lang, "cls.col.notes")}</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -299,7 +298,7 @@ function TableView({
                       {c.teacherName ? (
                         <span className="text-text-dim text-[12px]">{c.teacherName}</span>
                       ) : (
-                        <span className="text-text-faint text-xs">미정</span>
+                        <span className="text-text-faint text-xs">{sheetT(lang, "cls.teacherNone")}</span>
                       )}
                     </div>
                   </td>
@@ -308,19 +307,20 @@ function TableView({
                   {c.classroomName ?? "—"}
                 </td>
                 <td className="px-4 py-2.5">
-                  <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
+                  <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} lang={lang} />
                 </td>
                 <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
-                  {c.studentCount}명
+                  {c.studentCount}
+                  {sheetT(lang, "cls.unit.people")}
                 </td>
                 <td className="px-4 py-2.5">
                   {!c.isActive ? (
-                    <Pill color="neutral">폐지</Pill>
+                    <Pill color="neutral">{sheetT(lang, "cls.status.retired")}</Pill>
                   ) : c.closedAt ? (
-                    <Pill color="amber">종강</Pill>
+                    <Pill color="amber">{sheetT(lang, "cls.status.ended")}</Pill>
                   ) : (
                     <Pill color="primary" soft={false}>
-                      운영
+                      {sheetT(lang, "cls.status.operating")}
                     </Pill>
                   )}
                 </td>
@@ -346,11 +346,13 @@ function CardsView({
   classes,
   subjects,
   showTeacher,
+  lang,
 }: {
   classes: ClassListRow[];
   subjects: SubjectMaps;
   /** 테이블 '담임' 열과 같은 이유 — 스코프에선 전 카드가 본인 이름이라 강의실만 남긴다. */
   showTeacher: boolean;
+  lang: SheetLang;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -366,12 +368,12 @@ function CardsView({
             <header className="flex items-center gap-2">
               <Pill color={meta.color}>{meta.label}</Pill>
               {!c.isActive ? (
-                <Pill color="neutral">폐지</Pill>
+                <Pill color="neutral">{sheetT(lang, "cls.status.retired")}</Pill>
               ) : c.closedAt ? (
-                <Pill color="amber">종강</Pill>
+                <Pill color="amber">{sheetT(lang, "cls.status.ended")}</Pill>
               ) : (
                 <Pill color="primary" soft={false}>
-                  운영
+                  {sheetT(lang, "cls.status.operating")}
                 </Pill>
               )}
             </header>
@@ -384,20 +386,20 @@ function CardsView({
                 </h3>
                 <p className="text-text-dim mt-1 truncate text-[12.5px]">
                   {showTeacher
-                    ? `${c.teacherName ?? "담임 미정"}${c.classroomName ? ` · ${c.classroomName}` : ""}`
-                    : (c.classroomName ?? "강의실 미정")}
+                    ? `${c.teacherName ?? sheetT(lang, "cls.card.teacherNone")}${c.classroomName ? ` · ${c.classroomName}` : ""}`
+                    : (c.classroomName ?? sheetT(lang, "cls.card.roomNone"))}
                 </p>
               </div>
               <p className="shrink-0 text-right">
                 <span className="num text-foreground text-[20px] font-bold leading-none">
                   {c.studentCount}
                 </span>
-                <span className="text-text-dim ml-0.5 text-[12px]">명</span>
-                <span className="text-text-faint block text-[11px]">재원</span>
+                <span className="text-text-dim ml-0.5 text-[12px]">{sheetT(lang, "cls.unit.people")}</span>
+                <span className="text-text-faint block text-[11px]">{sheetT(lang, "cls.card.enrolled")}</span>
               </p>
             </div>
             <div className="mt-auto pt-1">
-              <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} />
+              <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} lang={lang} />
             </div>
           </WindowLink>
         );

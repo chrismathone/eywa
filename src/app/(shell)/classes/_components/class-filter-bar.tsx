@@ -24,6 +24,9 @@ import {
   type ClassFilterState,
 } from "./filter-shared";
 import type { ClassSort, ClassStatusFilter } from "@/features/classes/server/queries";
+// 강사뷰 화면 언어 — provider는 강사 미니셸·창에만 있어 관리자 풀셸은 한국어로 떨어진다.
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { sheetDowLabel } from "@/features/teacher-view/i18n";
 
 type Teacher = { id: string; name: string; subjects: string[] };
 
@@ -103,6 +106,8 @@ const viewCls = (active: boolean) =>
 
 /** 요일 다중선택 드롭다운 — 트리거는 요약 라벨, 팝오버에서 토글. */
 function DayMultiSelect({ days, onGo }: { days: string[]; onGo: (patch: Partial<ClassFilterState>) => void }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -116,16 +121,16 @@ function DayMultiSelect({ days, onGo }: { days: string[]; onGo: (patch: Partial<
 
   const summary =
     days.length === 0
-      ? "전체"
-      : DAY_FILTERS.filter((d) => days.includes(d.key))
-          .map((d) => d.label)
+      ? t("filter.all")
+      : DAY_FILTERS.filter((d) => days.includes(d))
+          .map((d) => sheetDowLabel(d, lang))
           .join("·");
   const toggle = (key: string) =>
     onGo({ days: days.includes(key) ? days.filter((d) => d !== key) : [...days, key] });
 
   return (
     <div ref={ref} className="relative w-28">
-      <button type="button" aria-label="요일 필터" onClick={() => setOpen((o) => !o)} className={triggerCls}>
+      <button type="button" aria-label={t("cls.filter.dayAria")} onClick={() => setOpen((o) => !o)} className={triggerCls}>
         <span className="truncate">{summary}</span>
         <ChevronDown className="size-4 shrink-0 opacity-50" />
       </button>
@@ -133,11 +138,11 @@ function DayMultiSelect({ days, onGo }: { days: string[]; onGo: (patch: Partial<
         <div className="border-border bg-card absolute z-50 mt-1 w-44 rounded-md border p-2 shadow-lg">
           <div className="flex flex-wrap gap-1.5">
             <button type="button" onClick={() => onGo({ days: [] })} className={chipCls(days.length === 0)}>
-              전체
+              {t("filter.all")}
             </button>
-            {DAY_FILTERS.map((f) => (
-              <button key={f.key} type="button" onClick={() => toggle(f.key)} className={chipCls(days.includes(f.key))}>
-                {f.label}
+            {DAY_FILTERS.map((d) => (
+              <button key={d} type="button" onClick={() => toggle(d)} className={chipCls(days.includes(d))}>
+                {sheetDowLabel(d, lang)}
               </button>
             ))}
           </div>
@@ -168,6 +173,7 @@ export function ClassFilterBar({
   hideTeacherFilter?: boolean;
 }) {
   const router = useRouter();
+  const t = useSheetT();
   const didInit = useRef(false);
 
   // 최초 마운트만: URL에 필터가 없으면 저장값 복원, 있으면 그 값을 저장(직접 링크도 다음에 이어지게).
@@ -216,33 +222,33 @@ export function ClassFilterBar({
         {/* 상태 — 기본 '운영'(폐지·종강 숨김). 맨 앞에 두는 이유: 목록이 기본적으로 좁혀져 있다는 사실을
             가장 먼저 보여야 "왜 그 반이 없지?"가 안 생긴다. */}
         <div className="flex items-center gap-1.5">
-          <span className="micro mr-1">상태</span>
+          <span className="micro mr-1">{t("cls.filter.status")}</span>
           <SearchableSelect
             className="w-24"
             value={current.status}
             onValueChange={(v) => go({ status: v as ClassStatusFilter })}
-            options={STATUS_FILTERS}
-            ariaLabel="상태 필터"
+            options={STATUS_FILTERS.map((o) => ({ value: o.value, label: t(o.key) }))}
+            ariaLabel={t("cls.filter.statusAria")}
             triggerClassName={TOOLBAR_SELECT}
           />
         </div>
 
         {/* 과목 */}
         <div className="flex items-center gap-1.5">
-          <span className="micro mr-1">과목</span>
+          <span className="micro mr-1">{t("cls.filter.subject")}</span>
           <SearchableSelect
             className="w-32"
             value={current.subject}
             onValueChange={onSubject}
             options={subjectFilters}
-            ariaLabel="과목 필터"
+            ariaLabel={t("cls.filter.subjectAria")}
             triggerClassName={TOOLBAR_SELECT}
           />
         </div>
 
         {/* 요일 (다중) */}
         <div className="flex items-center gap-1.5">
-          <span className="micro mr-1">요일</span>
+          <span className="micro mr-1">{t("cls.filter.day")}</span>
           <DayMultiSelect days={current.days} onGo={go} />
         </div>
 
@@ -250,32 +256,31 @@ export function ClassFilterBar({
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
           {hideTeacherFilter ? null : (
             <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">강사</span>
+              <span className="micro mr-1">{t("cls.filter.teacher")}</span>
               <SearchableSelect
                 className="w-36"
                 value={current.teacher}
                 onValueChange={(v) => go({ teacher: v })}
-                options={[{ value: "all", label: "전체" }, ...teacherOpts]}
-                ariaLabel="강사 필터"
+                options={[{ value: "all", label: t("filter.all") }, ...teacherOpts]}
+                ariaLabel={t("cls.filter.teacherAria")}
                 triggerClassName={TOOLBAR_SELECT}
               />
             </div>
           )}
 
           <div className="flex items-center gap-1.5">
-            <span className="micro mr-1">정렬</span>
+            <span className="micro mr-1">{t("cls.filter.sort")}</span>
             <SearchableSelect
               className="w-28"
               value={current.sort}
               onValueChange={(v) => go({ sort: v as ClassSort })}
               // '강사명순'도 같은 축이라 스코프에선 뺀다(전 행이 같은 담임 = 수업명순과 동일한 결과).
               // ⚠️ 이미 그 값이 걸려 있으면 남긴다 — 지우면 드롭다운이 빈 값으로 굳는다.
-              options={
-                hideTeacherFilter && current.sort !== "teacher"
-                  ? SORT_OPTIONS.filter((o) => o.value !== "teacher")
-                  : SORT_OPTIONS
-              }
-              ariaLabel="정렬 기준"
+              options={(hideTeacherFilter && current.sort !== "teacher"
+                ? SORT_OPTIONS.filter((o) => o.value !== "teacher")
+                : SORT_OPTIONS
+              ).map((o) => ({ value: o.value, label: t(o.key) }))}
+              ariaLabel={t("cls.filter.sortAria")}
               triggerClassName={TOOLBAR_SELECT}
             />
           </div>
@@ -294,8 +299,8 @@ export function ClassFilterBar({
                 type="search"
                 name="q"
                 defaultValue={current.q}
-                placeholder="수업명, 강사, 강의실 검색"
-                title="수업명 · 강사명 · 강의실명으로 찾습니다(예: 본원602)"
+                placeholder={t("cls.filter.searchPh")}
+                title={t("cls.filter.searchTitle")}
                 className="text-foreground placeholder:text-text-faint w-44 bg-transparent text-xs focus:outline-none"
               />
             </div>
@@ -303,10 +308,10 @@ export function ClassFilterBar({
 
           <div className={TOOLBAR_SEG_BOX}>
             <button type="button" onClick={() => go({ view: "table" })} className={viewCls(current.view === "table")}>
-              테이블
+              {t("cls.view.table")}
             </button>
             <button type="button" onClick={() => go({ view: "cards" })} className={viewCls(current.view === "cards")}>
-              카드
+              {t("cls.view.cards")}
             </button>
           </div>
         </div>
