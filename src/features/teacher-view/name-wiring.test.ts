@@ -17,6 +17,12 @@ import {
 import { REASON_LABEL, REASON_LABEL_EN } from "@/features/withdrawals/types";
 import { ATTITUDE } from "@/features/onescreen/attitude";
 import { attitudeLabelFor } from "./attitude-label";
+import {
+  SEAT_MARK_LABEL,
+  SEAT_MARK_LABEL_EN,
+} from "@/features/attendance/live/mark-state";
+import { ABSENCE_REASON_PRESETS, LATE_REASON_PRESETS } from "@/features/attendance/quick/reason-presets";
+import { absenceReasonLabelFor, lateReasonLabelFor } from "./reason-label";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
 
@@ -364,5 +370,82 @@ describe("🔴 월간 뷰는 사전만 본다 — 화면 파일에 한글 리터
       const src = read("features", "class-sheets", "components", f);
       expect(src).not.toContain("DOW_KO");
     }
+  });
+});
+
+/**
+ * 🔴 **출결 모드(/attendance/quick)에 한국어 리터럴이 남지 않는다.**
+ *
+ * 원장 2026-09-04: *"강사가 접근 가능한 모든 메뉴를 전환시켜줘"*. 이 화면은 강사가 수업 직후 복도에서
+ * 여는 주 진입로('내 메뉴' 맨 위)라 한 줄이라도 한국어가 남으면 바로 눈에 띈다.
+ *
+ * 🔴🔴 **저장값은 여전히 한국어다** — 사유 프리셋 문자열이 곧 `attendance_records.note`이고
+ *    `classifyAbsenceReason`이 그 한국어를 읽는다(영어로 저장하면 사유를 골랐는데도 '연락 안 됨
+ *    긴급'이 뜬다). 그래서 아래 두 검사는 **표시 라벨만** 바뀌었는지를 함께 잠근다.
+ */
+describe("🔴 출결 모드는 사전만 본다 — 화면 파일에 한글 리터럴 0", () => {
+  const FILES = [
+    "quick-board.tsx",
+    "quick-class-card.tsx",
+    "quick-mark-sheet.tsx",
+    "quick-reason-panels.tsx",
+  ];
+
+  it.each(FILES)("%s", (f) => {
+    const code = codeOnly(
+      read("features", "attendance", "quick", "components", f),
+    );
+    const hits = code
+      // ⚠️ `\n`으로만 자르면 CRLF 파일에서 줄 끝에 `\r`이 남고, JS의 `.`는 `\r`을 안 먹어
+      //    아래 줄-끝 주석 제거가 **조용히 아무 일도 안 한다**(실제로 걸렸다).
+      .split(/\r?\n/)
+      // 줄 끝 주석(`// …`)은 규약을 적는 자리라 검사에서 뺀다(파일 머리 주석과 같은 이유).
+      .map((l) => l.replace(/\/\/.*$/, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("라우트(page.tsx)도 사전 경유 — 머리·휴원일 안내가 하드코딩이 아니다", () => {
+    const src = read("app", "(shell)", "attendance", "quick", "page.tsx");
+    for (const key of [
+      "quick.title",
+      "quick.eyebrow",
+      "quick.header.desc",
+      "quick.embed",
+      "quick.holiday.title",
+      "quick.holiday.desc",
+    ]) {
+      expect(src).toContain(key);
+    }
+    const code = codeOnly(src).replace(/\/\/[^\n\r]*/g, "");
+    expect(code.split(/\r?\n/).filter((l) => /[가-힣]/.test(l))).toEqual([]);
+  });
+
+  it("🔴 표시 상태 5색은 한·영 표가 같은 키 집합이다 — 빠진 키는 raw enum이 샌다", () => {
+    expect(Object.keys(SEAT_MARK_LABEL_EN).sort()).toEqual(Object.keys(SEAT_MARK_LABEL).sort());
+    for (const v of Object.values(SEAT_MARK_LABEL_EN)) expect(v).not.toMatch(/[가-힣]/);
+  });
+
+  it("🔴🔴 사유 프리셋의 **저장값**은 한국어 그대로 — 표시만 영어다", () => {
+    // ko를 부르면 저장값과 글자까지 같아야 한다(칩을 눌러 저장되는 값이 그것이다).
+    for (const v of ABSENCE_REASON_PRESETS) expect(absenceReasonLabelFor(v, "ko")).toBe(v);
+    for (const v of LATE_REASON_PRESETS) expect(lateReasonLabelFor(v, "ko")).toBe(v);
+    // en은 전건이 영어여야 한다(하나라도 한글이면 그 칩만 한국어로 남는다).
+    for (const v of ABSENCE_REASON_PRESETS) {
+      expect(absenceReasonLabelFor(v, "en")).not.toMatch(/[가-힣]/);
+    }
+    for (const v of LATE_REASON_PRESETS) {
+      expect(lateReasonLabelFor(v, "en")).not.toMatch(/[가-힣]/);
+    }
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "quick.title")).toBe("출결 모드");
+    expect(sheetT("ko", "quick.saveFailed")).toBe("저장하지 못했습니다 — 다시 눌러 주세요");
+    expect(sheetTf("ko", "quick.blocked", { n: 3 })).toBe("3명은 이미 입력되어 있어 건너뛰었습니다");
+    expect(
+      `${sheetT("ko", "quick.sum.pre")}3${sheetT("ko", "quick.sum.mid")}8/9`,
+    ).toBe("미출결 3명 · 입력 8/9");
+    expect(sheetTf("ko", "quick.late.arrivalAt", { time: "17:05" })).toBe("17:05 등원");
   });
 });

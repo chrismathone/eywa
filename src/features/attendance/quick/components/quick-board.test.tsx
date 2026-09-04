@@ -46,6 +46,7 @@ beforeEach(() => {
 const student = (name: string, over: Partial<LiveStudent> = {}): LiveStudent => ({
   studentId: name,
   studentName: name,
+  englishName: null,
   schoolGrade: "경명여중2",
   parentPhone: null,
   studentPhone: null,

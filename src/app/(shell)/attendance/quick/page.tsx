@@ -6,9 +6,14 @@ import { formatKoreanDate, kstToday } from "@/lib/date-kst";
 import { getLiveBoard } from "@/features/attendance/live/server/queries";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
 import { quickClasses } from "@/features/attendance/quick/board";
+// 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { sheetDateLabel, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { QuickBoard } from "@/features/attendance/quick/components/quick-board";
 
-export const metadata = { title: "출결 모드 — eywa" };
+export async function generateMetadata() {
+  return { title: `${sheetT(await getTeacherViewLang(), "quick.title")} — eywa` };
+}
 
 /**
  * 출결 모드 — **강사 본인 반만, 터치 몇 번으로** 오늘 출결을 끝내는 화면(원장 2026-08-20).
@@ -24,17 +29,22 @@ export const metadata = { title: "출결 모드 — eywa" };
 export default async function AttendanceQuickPage() {
   await requireAccess("attendance");
   const today = kstToday();
-  // 휴원일 판정과 보드 적재는 서로 독립이라 병렬(B4).
-  const [board, holiday] = await Promise.all([getLiveBoard(today, true), holidayNameOf(today)]);
+  // 휴원일 판정과 보드 적재는 서로 독립이라 병렬(B4). 화면 언어는 쿠키 한 번이라 같이 묶는다.
+  const [board, holiday, lang] = await Promise.all([
+    getLiveBoard(today, true),
+    holidayNameOf(today),
+    getTeacherViewLang(),
+  ]);
 
   if (holiday) {
     return (
       <div className="space-y-4">
-        <Header date={today} />
+        <Header date={today} lang={lang} />
+        {/* 🔴 휴일 **이름**은 학원설정에 적힌 그대로 — 옮길 표가 없다(지어내지 않는다). */}
         <EmptyState
           icon={CalendarDays}
-          title={`${holiday} — 휴원일`}
-          description="이 날은 수업이 없어 출결을 입력하지 않습니다. 학원설정의 휴일 목록을 따릅니다."
+          title={sheetTf(lang, "quick.holiday.title", { name: holiday })}
+          description={sheetT(lang, "quick.holiday.desc")}
         />
       </div>
     );
@@ -47,19 +57,21 @@ export default async function AttendanceQuickPage() {
 
   return (
     <div className="space-y-4">
-      <Header date={today} />
+      <Header date={today} lang={lang} />
       <QuickBoard date={today} classes={classes} canEdit={board.canEdit} />
     </div>
   );
 }
 
-function Header({ date }: { date: string }) {
+function Header({ date, lang }: { date: string; lang: SheetLang }) {
+  // 날짜 표기도 화면 언어를 따른다 — 한국어는 앱 전역 `formatKoreanDate`가 정본이다.
+  const label = sheetDateLabel(date, formatKoreanDate(date), lang);
   return (
     <PageHeader
-      eyebrow="출결"
-      title="출결 모드"
-      description={`${formatKoreanDate(date)} · 내 수업`}
-      embedLabel={`출결 모드 · ${formatKoreanDate(date)}`}
+      eyebrow={sheetT(lang, "quick.eyebrow")}
+      title={sheetT(lang, "quick.title")}
+      description={sheetTf(lang, "quick.header.desc", { date: label })}
+      embedLabel={sheetTf(lang, "quick.embed", { date: label })}
     />
   );
 }

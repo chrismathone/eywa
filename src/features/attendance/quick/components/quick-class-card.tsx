@@ -12,6 +12,11 @@
 import { ChevronDown, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { fitSeatName, QUICK_CHIP_NAME_LADDER } from "@/features/attendance/seat/name-fit";
 import { seatHoverTitle, SEAT_MARK_TONE } from "@/features/attendance/live/mark-state";
+// 화면 언어(강사 미니셸) — 반 이름·강의실·학생 이름은 각각의 **단일 소스**를 통과시킨다.
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { roomNameFor } from "@/features/teacher-view/room-name";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
 import type { QuickClass } from "../board";
 
 export function QuickClassCard({
@@ -35,8 +40,11 @@ export function QuickClassCard({
   onBulk: () => void;
   onPick: (studentId: string) => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
   const recorded = klass.students.filter((s) => s.status != null).length;
   const total = klass.students.length;
+  const roomName = roomNameFor(klass.roomName, lang);
   return (
     <section className="bg-card shadow-card rounded-2xl px-3 py-2.5">
       <div className="flex items-center gap-2">
@@ -51,10 +59,10 @@ export function QuickClassCard({
           </span>
           <span className="min-w-0">
             <span className="text-foreground block truncate text-[15px] font-bold">
-              {klass.className}
+              {classNameFor(klass.className, lang)}
               {klass.band === "now" ? (
                 <span className="bg-green-soft text-green ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
-                  지금
+                  {t("quick.card.now")}
                 </span>
               ) : null}
             </span>
@@ -63,8 +71,8 @@ export function QuickClassCard({
                 {klass.firstStart}
                 {klass.firstEnd ? `~${klass.firstEnd}` : ""}
               </span>
-              {klass.roomName ? ` · ${klass.roomName}` : ""}
-              {` · 입력 `}
+              {roomName ? ` · ${roomName}` : ""}
+              {` · ${t("quick.card.recorded")} `}
               <span className="num">
                 {recorded}/{total}
               </span>
@@ -76,10 +84,10 @@ export function QuickClassCard({
             type="button"
             onClick={onBulk}
             disabled={bulkCount === 0 || bulkBusy}
-            title="아직 입력하지 않은 칸만 전원 출석으로 기록합니다 — 이미 찍은 칸은 건드리지 않습니다"
+            title={t("quick.bulk.title")}
             className="bg-primary text-primary-foreground min-h-11 shrink-0 rounded-xl px-3 text-[13px] font-bold whitespace-nowrap disabled:opacity-40"
           >
-            일괄 출결 <span className="num">{bulkCount}</span>
+            {t("quick.bulk")} <span className="num">{bulkCount}</span>
           </button>
         ) : null}
       </div>
@@ -87,12 +95,15 @@ export function QuickClassCard({
       {collapsed ? null : (
         <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {klass.students.map((s) => {
-            const fit = fitSeatName(s.studentName, QUICK_CHIP_NAME_LADDER);
+            // 영어 모드에서 영어 이름을 가진 학생은 **그 이름이 주 이름**이다(표시 전용 단일 소스).
+            const shownName = studentDisplayName(s.studentName, s.englishName, lang);
+            const fit = fitSeatName(shownName, QUICK_CHIP_NAME_LADDER);
             const label = seatHoverTitle({
-              studentName: s.studentName,
+              studentName: shownName,
               schoolGrade: s.schoolGrade,
               mark: s.mark,
               note: s.note,
+              lang,
             });
             return (
               <button
@@ -106,7 +117,7 @@ export function QuickClassCard({
                   canEdit ? "active:opacity-80" : "cursor-default"
                 }`}
               >
-                <span className={`w-full truncate ${fit.className}`}>{s.studentName}</span>
+                <span className={`w-full truncate ${fit.className}`}>{shownName}</span>
                 {s.note ? (
                   <span className="w-full truncate text-[10px] font-medium opacity-80">{s.note}</span>
                 ) : null}

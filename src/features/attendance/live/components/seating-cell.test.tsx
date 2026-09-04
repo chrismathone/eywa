@@ -50,6 +50,7 @@ const KLASS: SeatingClass = {
 const MARKED: SeatingStudent = {
   studentId: "s1",
   studentName: "김하늘",
+  englishName: null,
   schoolGrade: "경명여중1",
   parentPhone: null,
   studentPhone: null,

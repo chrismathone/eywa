@@ -15,6 +15,14 @@
  */
 import { useState } from "react";
 import { ATT_SOLID } from "@/features/attendance/status-color";
+// 🔴🔴 사유 칩은 **화면 글자만** 영어다 — 누르면 저장되는 값은 프리셋(한국어) 그대로다.
+//     `classifyAbsenceReason`이 그 한국어를 읽어 긴급 여부를 정하므로, 영어로 저장하면 사유를
+//     골랐는데도 화면이 “연락 안 됨 긴급”이라고 말한다(reason-label.ts 주석).
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import {
+  absenceReasonLabelFor,
+  lateReasonLabelFor,
+} from "@/features/teacher-view/reason-label";
 import { ABSENCE_REASON_PRESETS, LATE_REASON_PRESETS } from "../reason-presets";
 
 /** 사유 칩 한 개 — 고른 것은 채움(캐논상 '현재 위치' = brand). 라벨·색을 화면마다 새로 만들지 않는다. */
@@ -31,6 +39,7 @@ function FreeText({
   onSubmit,
   placeholder,
   autoFocus,
+  saveLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -39,6 +48,8 @@ function FreeText({
   /** 사용자가 '직접 입력'을 눌러 연 경우만 true — 저장된 사유를 되살려 여는 것만으로 폰 키보드가
    *  튀어오르면 시트 절반이 가려진다. */
   autoFocus: boolean;
+  /** 저장 버튼 라벨 — 패널이 화면 언어로 넘긴다(이 조각은 사전을 직접 읽지 않는다). */
+  saveLabel: string;
 }) {
   return (
     <div className="flex gap-2">
@@ -62,7 +73,7 @@ function FreeText({
         disabled={!value.trim()}
         className="bg-primary text-primary-foreground min-h-11 shrink-0 rounded-xl px-4 text-[15px] font-bold disabled:opacity-40"
       >
-        저장
+        {saveLabel}
       </button>
     </div>
   );
@@ -75,7 +86,6 @@ function FreeText({
 export function LatePanel({
   time,
   reason,
-  note,
   onShift,
   onTime,
   onReason,
@@ -83,13 +93,14 @@ export function LatePanel({
 }: {
   time: string;
   reason: string | null;
-  /** 저장될 메모 미리보기(`17:05 등원 · 버스 놓침`) — 무엇이 남는지 보고 넘기는 단계다. */
-  note: string;
   onShift: (deltaMin: number) => void;
   onTime: (hhmm: string) => void;
   onReason: (reason: string | null) => void;
   onSubmit: () => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const preset = reason != null && (LATE_REASON_PRESETS as readonly string[]).includes(reason);
   const [free, setFree] = useState(reason && !preset ? reason : "");
   const [freeOpen, setFreeOpen] = useState<false | "restored" | "user">(
@@ -97,28 +108,49 @@ export function LatePanel({
   );
   return (
     <div className="space-y-3">
+      {/* 🔴 미리보기는 저장될 글자를 그대로 베끼지 않고 **읽는 사람의 언어로** 적는다 — 확인할
+          것은 '몇 시로 남는가'이고, 저장 문자열(한국어)은 데스크·학부모 연락이 읽는 값이라 안 바뀐다. */}
       <p className="text-text-dim text-center text-[13px]">
-        메모로 남을 내용 — <span className="text-foreground font-bold">{note}</span>
+        {t("quick.late.preview")}{" "}
+        <span className="text-foreground font-bold">
+          {tf("quick.late.arrivalAt", { time })}
+          {reason ? ` · ${lateReasonLabelFor(reason, lang)}` : ""}
+        </span>
       </p>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => onShift(-5)} className={chip(false)} aria-label="등원 시각 5분 앞으로">
-          −5분
+        <button
+          type="button"
+          onClick={() => onShift(-5)}
+          className={chip(false)}
+          aria-label={t("quick.late.minusAria")}
+        >
+          {t("quick.late.minus")}
         </button>
         <input
           type="time"
           value={time}
           onChange={(e) => e.target.value && onTime(e.target.value)}
-          aria-label="등원 시각"
+          aria-label={t("quick.late.timeAria")}
           className="border-line num min-h-11 min-w-0 flex-1 rounded-xl border px-3 text-center text-[20px] font-bold"
         />
-        <button type="button" onClick={() => onShift(5)} className={chip(false)} aria-label="등원 시각 5분 뒤로">
-          +5분
+        <button
+          type="button"
+          onClick={() => onShift(5)}
+          className={chip(false)}
+          aria-label={t("quick.late.plusAria")}
+        >
+          {t("quick.late.plus")}
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {LATE_REASON_PRESETS.map((r) => (
-          <button key={r} type="button" onClick={() => onReason(reason === r ? null : r)} className={chip(reason === r)}>
-            {r}
+          <button
+            key={r}
+            type="button"
+            onClick={() => onReason(reason === r ? null : r)}
+            className={chip(reason === r)}
+          >
+            {lateReasonLabelFor(r, lang)}
           </button>
         ))}
       </div>
@@ -127,12 +159,17 @@ export function LatePanel({
           value={free}
           onChange={setFree}
           onSubmit={() => onReason(free.trim() || null)}
-          placeholder="사유 직접 입력"
+          placeholder={t("quick.reason.freePh")}
           autoFocus={freeOpen === "user"}
+          saveLabel={t("quick.reason.save")}
         />
       ) : (
-        <button type="button" onClick={() => setFreeOpen("user")} className={`${chip(false)} w-full`}>
-          직접 입력
+        <button
+          type="button"
+          onClick={() => setFreeOpen("user")}
+          className={`${chip(false)} w-full`}
+        >
+          {t("quick.reason.freeOpen")}
         </button>
       )}
       <button
@@ -140,7 +177,7 @@ export function LatePanel({
         onClick={onSubmit}
         className={`min-h-14 w-full rounded-2xl text-[17px] font-bold ${ATT_SOLID.late}`}
       >
-        지각 저장
+        {t("quick.late.submit")}
       </button>
     </div>
   );
@@ -157,6 +194,8 @@ export function AbsentPanel({
   reason: string | null;
   onPick: (reason: string) => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
   const preset = reason != null && (ABSENCE_REASON_PRESETS as readonly string[]).includes(reason);
   const [free, setFree] = useState(reason && !preset ? reason : "");
   const [freeOpen, setFreeOpen] = useState<false | "restored" | "user">(
@@ -167,7 +206,7 @@ export function AbsentPanel({
       <div className="grid grid-cols-3 gap-2">
         {ABSENCE_REASON_PRESETS.map((r) => (
           <button key={r} type="button" onClick={() => onPick(r)} className={chip(reason === r)}>
-            {r}
+            {absenceReasonLabelFor(r, lang)}
           </button>
         ))}
       </div>
@@ -176,12 +215,17 @@ export function AbsentPanel({
           value={free}
           onChange={setFree}
           onSubmit={() => free.trim() && onPick(free.trim())}
-          placeholder="사유 직접 입력"
+          placeholder={t("quick.reason.freePh")}
           autoFocus={freeOpen === "user"}
+          saveLabel={t("quick.reason.save")}
         />
       ) : (
-        <button type="button" onClick={() => setFreeOpen("user")} className={`${chip(false)} w-full`}>
-          직접 입력
+        <button
+          type="button"
+          onClick={() => setFreeOpen("user")}
+          className={`${chip(false)} w-full`}
+        >
+          {t("quick.reason.freeOpen")}
         </button>
       )}
     </div>

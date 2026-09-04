@@ -25,6 +25,7 @@ afterEach(cleanup);
 const student = (name: string) => ({
   studentId: name,
   studentName: name,
+  englishName: null,
   schoolGrade: "경명여중2",
   parentPhone: null,
   studentPhone: null,

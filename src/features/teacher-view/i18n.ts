@@ -323,7 +323,7 @@ export const SHEET_DICT = {
   "strip.slotMeta": { ko: "{time} · 미입력 {n}명", en: "{time} · {n} not marked" },
   // 명단 넘침 꼬리 — 🔴 앞 공백을 문자열이 들고 있다(한국어는 띄고 영어도 띈다).
   "strip.moreNames": { ko: " 외 {n}명", en: " +{n} more" },
-  "strip.fillAll": { ko: "전원 출석", en: "Mark all present" },
+  "strip.fillAll": { ko: "전원 출석", en: "All present" },
   "strip.detail": { ko: "자세히", en: "Details" },
   "strip.askDesk": { ko: "데스크에 확인 요청", en: "Ask front desk" },
   "strip.asked": { ko: "데스크에 요청함", en: "Request sent" },
@@ -1006,6 +1006,53 @@ export const SHEET_DICT = {
     en: "Old wording “{value}” — clicking switches it to the new scale ({first})",
   },
 
+  // ── 출결 모드(/attendance/quick) — 강사가 복도에서 여는 화면 ─────
+  "quick.title": { ko: "출결 모드", en: "Attendance mode" },
+  "quick.eyebrow": { ko: "출결", en: "Attendance" },
+  "quick.header.desc": { ko: "{date} · 내 수업", en: "{date} · my classes" },
+  "quick.embed": { ko: "출결 모드 · {date}", en: "Attendance mode · {date}" },
+  "quick.holiday.title": { ko: "{name} — 휴원일", en: "{name} — academy closed" },
+  "quick.holiday.desc": {
+    ko: "이 날은 수업이 없어 출결을 입력하지 않습니다. 학원설정의 휴일 목록을 따릅니다.",
+    en: "There are no classes on this day, so attendance is not recorded. This follows the academy's holiday list.",
+  },
+  "quick.empty.title": { ko: "오늘은 담당 수업이 없습니다", en: "You have no classes today" },
+  "quick.empty.desc": {
+    ko: "시간표에 오늘 열린 내 수업이 없습니다. 지난 날짜는 월별 출석부에서 고칠 수 있습니다.",
+    en: "None of your classes run today. Past dates can be corrected in the monthly attendance sheet.",
+  },
+  "quick.saveFailed": { ko: "저장하지 못했습니다 — 다시 눌러 주세요", en: "Could not save — please tap again" },
+  "quick.blocked": { ko: "{n}명은 이미 입력되어 있어 건너뛰었습니다", en: "Skipped {n} already recorded" },
+  // 🔴 숫자를 색·굵기로 감싸야 해서 한 문장으로 못 넣는다 — **조각에 공백까지** 담는다
+  //    (`미출결 3명 · 입력 8/9` / `Not marked 3 · Recorded 8/9`).
+  "quick.sum.pre": { ko: "미출결 ", en: "Not marked " },
+  "quick.sum.mid": { ko: "명 · 입력 ", en: " · Recorded " },
+  "quick.readonly": { ko: "읽기 전용", en: "Read only" },
+  "quick.card.now": { ko: "지금", en: "Now" },
+  "quick.card.recorded": { ko: "입력", en: "recorded" },
+  "quick.bulk.title": {
+    ko: "아직 입력하지 않은 칸만 전원 출석으로 기록합니다 — 이미 찍은 칸은 건드리지 않습니다",
+    en: "Marks everyone present, but only in cells that are still empty — cells already recorded are left alone.",
+  },
+  "quick.bulk": { ko: "일괄 출결", en: "Mark all present" },
+  "quick.sheet.aria": { ko: "{name} 출결 입력", en: "Record attendance for {name}" },
+  "quick.sheet.backdrop": { ko: "배경을 눌러 닫기", en: "Tap the background to close" },
+  "quick.close": { ko: "닫기", en: "Close" },
+  "quick.absent.saved": { ko: "결석으로 기록했습니다", en: "Recorded as absent" },
+  "quick.absent.addReason": { ko: "사유 추가(선택)", en: "add a reason (optional)" },
+  "quick.late.preview": { ko: "메모로 남을 내용 —", en: "This will be saved as the memo —" },
+  // 🔴 어순이 갈린다 — 한국어는 `17:05 등원`, 영어는 `Arrived 17:05`. 조각으로 이으면 한쪽이 어색해진다.
+  "quick.late.arrivalAt": { ko: "{time} 등원", en: "Arrived {time}" },
+  "quick.late.minusAria": { ko: "등원 시각 5분 앞으로", en: "Arrival time 5 minutes earlier" },
+  "quick.late.plusAria": { ko: "등원 시각 5분 뒤로", en: "Arrival time 5 minutes later" },
+  "quick.late.minus": { ko: "−5분", en: "−5 min" },
+  "quick.late.plus": { ko: "+5분", en: "+5 min" },
+  "quick.late.timeAria": { ko: "등원 시각", en: "Arrival time" },
+  "quick.late.submit": { ko: "지각 저장", en: "Save as late" },
+  "quick.reason.freePh": { ko: "사유 직접 입력", en: "Type a reason" },
+  "quick.reason.freeOpen": { ko: "직접 입력", en: "Type it in" },
+  "quick.reason.save": { ko: "저장", en: "Save" },
+
 } as const satisfies Record<string, { ko: string; en: string }>;
 
 export type SheetDictKey = keyof typeof SHEET_DICT;
@@ -1129,6 +1176,15 @@ export function sheetDateLabelEn(ymd: string): string {
   // getUTCDay(): 0=일 … 6=토 → 월요일 기준 인덱스로.
   const dow = EN_DOWS[(dt.getUTCDay() + 6) % 7];
   return `${dow}, ${EN_MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+/**
+ * 화면에 쓸 날짜 라벨 — 한국어는 호출부가 준 것(`formatKoreanDate`) 그대로, 영어는 다시 만든다.
+ * 🔴 여기서 한글판을 만들지 않는다 — 같은 날짜가 화면마다 다르게 적히지 않게 정본은 앱 전역
+ *    [`formatKoreanDate`](@/lib/date-kst) 하나다(주·월 라벨과 같은 규약).
+ */
+export function sheetDateLabel(ymd: string, koLabel: string, lang: SheetLang): string {
+  return lang === "en" ? sheetDateLabelEn(ymd) : koLabel;
 }
 
 /**

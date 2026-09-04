@@ -240,6 +240,7 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
     fetchInChunks<{
       id: string;
       name: string;
+      english_name: string | null;
       school: string | null;
       grade: string | null;
       parent_phone: string | null;
@@ -247,7 +248,7 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
     }>(studentIds, (chunk) =>
       supabase
         .from("students")
-        .select("id, name, school, grade, parent_phone, student_phone")
+        .select("id, name, english_name, school, grade, parent_phone, student_phone")
         .in("id", chunk),
     ),
     // 🔴 **테넌트 강의실 전건**(id 스코프 아님, 실측 23행). 이름 표를 다 들고 있어야 시트가 넣은
@@ -291,6 +292,7 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
       rows.push({
         studentId: sid,
         studentName: meta.name,
+        englishName: meta.english_name ?? null,
         schoolGrade: schoolGradeLabel(meta.school, meta.grade) || null,
         parentPhone: meta.parent_phone,
         studentPhone: meta.student_phone,
