@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Loader2 } from "@/components/icons/eywa-icon-co
 import { Button } from "@/components/ui/button";
 import { isLevelClassName, type LevelChange } from "@/features/timetable/lib/level";
 import { changeClassLevel } from "@/features/timetable/server/actions";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 영어 레벨반 원클릭 레벨 변경 — 반 상세 헤더 액션.
@@ -23,6 +24,7 @@ export function ClassLevelAction({
   subject: string;
 }) {
   const router = useRouter();
+  const t = useSheetT();
   const [leveling, startLevel] = useTransition();
   const [levelError, setLevelError] = useState<string | null>(null);
 
@@ -41,7 +43,7 @@ export function ClassLevelAction({
     <div className="flex flex-col items-start gap-1">
       <div className="border-border flex items-center gap-1 rounded-lg border p-1">
         <span className="text-muted-foreground inline-flex items-center gap-1 pr-0.5 pl-1 text-xs">
-          레벨
+          {t("cls.lv.label")}
           {leveling ? <Loader2 className="text-primary size-3 animate-spin" /> : null}
         </span>
         <Button
@@ -49,36 +51,40 @@ export function ClassLevelAction({
           size="xs"
           disabled={leveling}
           onClick={() => doLevel("number-up")}
-          title="숫자 올리기 (예: DP3 → DP4)"
+          title={t("cls.lv.numberUp")}
         >
-          <ChevronUp />숫자
+          <ChevronUp />
+          {t("cls.lv.number")}
         </Button>
         <Button
           variant="outline"
           size="xs"
           disabled={leveling}
           onClick={() => doLevel("number-down")}
-          title="숫자 내리기 (예: DP4 → DP3)"
+          title={t("cls.lv.numberDown")}
         >
-          <ChevronDown />숫자
+          <ChevronDown />
+          {t("cls.lv.number")}
         </Button>
         <Button
           variant="outline"
           size="xs"
           disabled={leveling}
           onClick={() => doLevel("class-up")}
-          title="레벨 올리기 (예: DP3 → PL1)"
+          title={t("cls.lv.classUp")}
         >
-          <ChevronUp />레벨
+          <ChevronUp />
+          {t("cls.lv.level")}
         </Button>
         <Button
           variant="outline"
           size="xs"
           disabled={leveling}
           onClick={() => doLevel("class-down")}
-          title="레벨 내리기 (예: PL1 → DP3)"
+          title={t("cls.lv.classDown")}
         >
-          <ChevronDown />레벨
+          <ChevronDown />
+          {t("cls.lv.level")}
         </Button>
       </div>
       {levelError ? <p className="text-chart-4 text-xs">{levelError}</p> : null}

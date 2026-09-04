@@ -2985,6 +2985,183 @@ export const SHEET_DICT = {
   "cls.view.table": { ko: "테이블", en: "Table view" },
   "cls.view.cards": { ko: "카드", en: "Card view" },
 
+  // ── 예정된 변경 배너(반 상세·학생 상세 공용) ─────────────────────
+  "sched.title": { ko: "예정된 변경", en: "Scheduled changes" },
+  "sched.count": { ko: "{n}건", en: "· {n}" },
+  // 시간표 가져오기가 미뤄 둔 **반 자체** 변경(담임·강의실·반 이름) 한 줄 — 반 상세 배너.
+  "sched.move": { ko: "{when}부터 {from} → {to} 이동", en: "Moves from {from} to {to} on {when}" },
+  "sched.join": { ko: "{when}부터 {name} 합류", en: "Joins {name} on {when}" },
+  // 전출은 "그만둠"이 아니라 "다른 반으로 옮겨감"이다 — 같은 말로 쓰면 반 상세가 거짓말을 한다.
+  "sched.transferOut": { ko: "{when}에 {name}에서 다른 반으로 이동", en: "Leaves {name} for another class on {when}" },
+  "sched.leave": { ko: "{when}에 {name} 수강 종료", en: "Enrolment in {name} ends on {when}" },
+  "sched.classChange": { ko: "{md}부터 {what} {from} → {to}", en: "From {md}, {what}: {from} → {to}" },
+
+  // ── 수업 상세(/classes/[id]) ─────────────────────────────────────
+  "cls.d.title": { ko: "수업 상세", en: "Class detail" },
+  "cls.d.back": { ko: "수업목록으로", en: "Back to the class list" },
+  "cls.d.eyebrow": { ko: "수업 · 반", en: "This class" },
+  "cls.d.endedAt": { ko: "종강 {date}", en: "Finished {date}" },
+  // 🔴 수는 `num`(고정폭 숫자) 안에 남겨야 해서 앞·뒤 조각으로 나눈다 — 조각이 아니라 **한 문장의 양끝**이다.
+  "cls.d.enrolledPre": { ko: "· 재원생 ", en: "· " },
+  "cls.d.enrolledPost": { ko: "명", en: " enrolled" },
+  // 인수인계 후보 목록의 힌트 — 과목 라벨은 학원설정에서 오고 이 둘만 문구다.
+  "cls.d.sameSubject": { ko: "이 반 과목", en: "Same subject" },
+  "cls.d.noSubject": { ko: "과목 미지정", en: "No subject set" },
+  "cls.d.edit": { ko: "반 수정", en: "Edit this class" },
+  "cls.d.sheetWin": { ko: "영어 강사 시트", en: "English class sheet" },
+  "cls.d.attendance": { ko: "오늘 출석 입력", en: "Take today's attendance" },
+  "cls.d.attendanceWin": { ko: "출석 입력", en: "Attendance entry" },
+  "cls.d.schedTitle": { ko: "시간표 예약", en: "Timetable change scheduled" },
+  "cls.d.schedHint": {
+    ko: "그날 자동으로 바뀝니다. 되돌리려면 시간표 화면의 적용 예정 배지에서 취소하세요.",
+    en: "It changes by itself on that day. To undo it, cancel from the scheduled badge on the timetable screen.",
+  },
+  "cls.d.info": { ko: "반 정보", en: "About this class" },
+  "cls.d.timetable": { ko: "시간표", en: "Timetable" },
+  "cls.d.att30": { ko: "최근 30일 출결", en: "Attendance, last 30 days" },
+  "cls.d.rate": { ko: "출석률", en: "Attendance rate" },
+  "cls.d.records": { ko: "총 건수", en: "In all" },
+  // ⚠️ 단위 `건`은 영어에서 라벨(`Records`)이 이미 말한다 — 낱말을 지어내면 `12 records records`가 된다.
+  "cls.d.unitCount": { ko: "건", en: "entries" },
+  "cls.d.roster": { ko: "수강 중인 학생", en: "Students in this class" },
+  "cls.d.rosterCount": { ko: "{n}명", en: "{n} students" },
+  "cls.d.upcomingCount": { ko: "· 예정 {n}", en: "· {n} upcoming" },
+  "cls.d.rosterEmpty": { ko: "활성 재원생이 없습니다", en: "No active student in this class" },
+  "cls.d.fromDate": { ko: "{md}부터", en: "from {md}" },
+  "cls.d.allDays": { ko: "모두", en: "Every day" },
+  "cls.d.onlyDays": { ko: "{days}만", en: "{days} only" },
+  "cls.d.toNow": { ko: "~ 현재", en: "~ now" },
+  "cls.d.onHold": { ko: "휴원", en: "On hold" },
+
+  // ── 시간표 요약 카드 ─────────────────────────────────────────────
+  "cls.sch.none": { ko: "등록된 시간표가 없습니다", en: "No timetable has been entered" },
+  "cls.sch.notStarted": { ko: "아직 시작하지 않은 반입니다", en: "This class has not started yet" },
+  "cls.sch.sessions": { ko: " · 주 {n}회", en: " · {n}× a week" },
+  "cls.sch.weekly": { ko: " · 주 {v}", en: " · {v} a week" },
+  "cls.sch.startsFrom": { ko: "{md}부터", en: "From {md}" },
+  "cls.sch.startsSoon": { ko: "시작 예정", en: "Starting soon" },
+  "cls.sch.pastHidden": { ko: "지난 배치 {n}개는 숨김", en: "{n} past slots are hidden" },
+  "cls.sch.pastTitle": {
+    ko: "운영 종료일이 지난 시간표 행입니다. 기록으로 남아 있고 화면·편집에서는 빠집니다.",
+    en: "These slots ran out before today. They stay on record but are left out of this screen and of editing.",
+  },
+  "cls.sch.rowAria": { ko: "{days} 수업", en: "Class on {days}" },
+  // 주당 시수 — 붙은 교시를 합친 뒤의 길이라 `주 1시간 40분`처럼 읽힌다.
+  "cls.sch.min": { ko: "{m}분", en: "{m} min" },
+  "cls.sch.hour": { ko: "{h}시간", en: "{h} h" },
+  "cls.sch.hourMin": { ko: "{h}시간 {m}분", en: "{h} h {m} min" },
+
+  // ── 레벨 변경(영어 레벨반 전용) ──────────────────────────────────
+  "cls.lv.label": { ko: "레벨", en: "Level code" },
+  "cls.lv.number": { ko: "숫자", en: "Number" },
+  "cls.lv.level": { ko: "레벨", en: "Tier" },
+  "cls.lv.numberUp": { ko: "숫자 올리기 (예: DP3 → DP4)", en: "Move the number up (e.g. DP3 to DP4)" },
+  "cls.lv.numberDown": { ko: "숫자 내리기 (예: DP4 → DP3)", en: "Move the number down (e.g. DP4 to DP3)" },
+  "cls.lv.classUp": { ko: "레벨 올리기 (예: DP3 → PL1)", en: "Move the tier up (e.g. DP3 to PL1)" },
+  "cls.lv.classDown": { ko: "레벨 내리기 (예: PL1 → DP3)", en: "Move the tier down (e.g. PL1 to DP3)" },
+
+  // ── 강사 인수인계(담임이 영구히 바뀐다) ──────────────────────────
+  "cls.ho.open": { ko: "강사 인수인계", en: "Hand the class over" },
+  "cls.ho.dialogTitle": { ko: "강사 인수인계 예약", en: "Schedule a handover" },
+  // 🔴 이름과 버튼 이름이 문장 가운데서 **강조**된다 — 한 키로 합치면 그 서식이 사라진다.
+  //    가운데 강조 조각은 버튼과 **같은 키**(`cls.ho.applyNow`)를 쓴다(둘이 갈리면 안내가 거짓이 된다).
+  "cls.ho.introA": { ko: "현재 담임 ", en: "The homeroom teacher is now " },
+  "cls.ho.introB": {
+    ko: " → 새 담임으로 교체를 예약합니다. 적용일에 ",
+    en: ". This books a change to a new one. On that day, press ",
+  },
+  "cls.ho.introC": { ko: " 버튼으로 반영됩니다.", en: " to make it real." },
+  "cls.ho.newTeacher": { ko: "새 담임 *", en: "New homeroom teacher *" },
+  "cls.ho.pickTeacher": { ko: "강사 선택", en: "Pick a teacher" },
+  "cls.ho.searchName": { ko: "이름으로 검색...", en: "Search by name..." },
+  "cls.ho.newTeacherAria": { ko: "새 담임 강사", en: "New homeroom teacher" },
+  "cls.ho.poolHint": {
+    ko: "이 반 과목 담당 강사가 위에 표시됩니다. 신입·타 과목 강사도 이름으로 검색해 선택할 수 있어요.",
+    en: "Teachers of this class's subject come first. You can also search by name for a new teacher or one from another subject.",
+  },
+  "cls.ho.effectiveDate": { ko: "적용일 *", en: "Takes effect on *" },
+  "cls.ho.reason": { ko: "사유 메모", en: "Reason note" },
+  "cls.ho.optional": { ko: "선택", en: "Optional" },
+  "cls.ho.cancel": { ko: "취소", en: "Cancel" },
+  "cls.ho.book": { ko: "예약", en: "Book it" },
+  "cls.ho.close": { ko: "닫기", en: "Close" },
+  "cls.ho.bannerTitle": { ko: "강사 인수인계 예약됨", en: "Handover booked" },
+  "cls.ho.due": { ko: "적용일 도달", en: "Due today" },
+  "cls.ho.effectiveOn": { ko: "· 적용일 {date}", en: "· takes effect {date}" },
+  "cls.ho.applyNow": { ko: "지금 적용", en: "Apply now" },
+  "cls.ho.cancelBooking": { ko: "예약 취소", en: "Cancel the booking" },
+  "cls.ho.teacherNone": { ko: "미정", en: "Nobody yet" },
+
+  // ── 임시 위임(담임은 그대로, 이 기간만 대신) ─────────────────────
+  "cls.dg.open": { ko: "임시 위임", en: "Cover for a while" },
+  "cls.dg.dialogTitle": { ko: "임시 위임", en: "Cover for a while" },
+  "cls.dg.introA": { ko: " 반을 이 기간에만 다른 선생님이 대신 맡습니다. 담임(", en: " is covered by another teacher for this stretch only. The homeroom teacher (" },
+  "cls.dg.introB": { ko: ")은", en: ") stays" },
+  "cls.dg.introC": { ko: " 그대로", en: " the same" },
+  "cls.dg.introD": { ko: "이고, 기간이 지나면 저절로 원래대로 돌아옵니다.", en: ", and everything goes back on its own once the stretch is over." },
+  "cls.dg.delegate": { ko: "대신 맡을 선생님 *", en: "Teacher covering *" },
+  "cls.dg.pickTeacher": { ko: "선생님 선택", en: "Pick someone to cover" },
+  "cls.dg.delegateAria": { ko: "대신 맡을 선생님", en: "Teacher covering" },
+  "cls.dg.hintA": { ko: "선택한 선생님의 원스크린 반 목록에 이 반이 ", en: "This class shows up on that teacher's onescreen list as " },
+  "cls.dg.hintB": { ko: "위임", en: "covered" },
+  "cls.dg.hintC": {
+    ko: "으로 뜹니다. 표 모드·임시저장·발송이 자기 반과 똑같이 동작합니다.",
+    en: ". The grid, the drafts and sending all work exactly as they do for their own classes.",
+  },
+  "cls.dg.fromDate": { ko: "시작일 *", en: "First day *" },
+  "cls.dg.toDate": { ko: "종료일 *", en: "Last day *" },
+  "cls.dg.maxHintA": { ko: "하루만 맡기면 두 날짜를 같게 둡니다(기본). 최대 {n}일 — 더 길면 담임을 바꾸는", en: "For a single day, leave both dates the same (that is the default). Up to {n} days — anything longer is a" },
+  "cls.dg.maxHintB": { ko: " 강사 인수인계", en: " handover" },
+  "cls.dg.maxHintC": { ko: "가 맞습니다.", en: ", which changes the homeroom teacher." },
+  "cls.dg.submit": { ko: "위임", en: "Hand it over" },
+  "cls.dg.bannerTitle": { ko: "임시 위임 {n}건 — 담임은 그대로입니다", en: "{n} covering the class — the homeroom teacher is unchanged" },
+  "cls.dg.nameNone": { ko: "이름 없음", en: "No name" },
+  "cls.dg.active": { ko: "진행 중", en: "Under way" },
+  "cls.dg.upcoming": { ko: "예정", en: "Booked" },
+  "cls.dg.ended": { ko: "종료", en: "Over" },
+  "cls.dg.revoke": { ko: "해제", en: "Release" },
+  // 기간 라벨·검증 — 서버 액션도 같은 함수를 쓰므로 **인자를 안 주면 한국어**다.
+  "cls.dg.day": { ko: "{m}월 {d}일", en: "{m}/{d}" },
+  "cls.dg.range": { ko: "{from} ~ {to}", en: "{from} – {to}" },
+  "cls.dg.errDate": { ko: "기간을 날짜로 선택해주세요", en: "Please pick the dates" },
+  "cls.dg.errOrder": { ko: "종료일이 시작일보다 빠릅니다", en: "The last day comes before the first day" },
+  "cls.dg.errTooLong": {
+    ko: "위임은 최대 {n}일까지입니다 — 더 길게 맡기려면 '강사 인수인계'를 쓰세요",
+    en: "Covering runs at most {n} days — for anything longer, use the handover instead",
+  },
+
+  // ── 이력 ─────────────────────────────────────────────────────────
+  // ⚠️ 줄 내용(`title`·`detail`·`actor`)은 감사로그에서 온 **한국어 사실 문장**이라 번역하지 않는다.
+  "cls.hist.title": { ko: "이력", en: "History" },
+  "cls.hist.hint": {
+    ko: "수업 배치·담당·강의실·학생 배정이 바뀐 기록입니다. 시간표에서 그 주를 열면 당시 배치가 그대로 보입니다.",
+    en: "A record of changes to the slots, the teacher, the room and the roster. Open that week on the timetable to see the layout as it was.",
+  },
+  "cls.hist.fromAria": { ko: "이력 시작일", en: "History from" },
+  "cls.hist.toAria": { ko: "이력 종료일", en: "History to" },
+  "cls.hist.clear": { ko: "전체", en: "All dates" },
+  "cls.hist.empty": {
+    ko: "남아 있는 변경 기록이 없습니다. 2026-08-04 이전의 담당·강의실 변경은 기록 자체가 남지 않아 되살릴 수 없고, 이후의 변경부터 이 자리에 쌓입니다.",
+    en: "There is no change on record. Changes to the teacher or the room before 2026-08-04 were never written down and cannot be recovered; everything after that lands here.",
+  },
+  "cls.hist.emptyRange": {
+    ko: "그 기간에는 기록이 없습니다. 위 날짜를 지우면 전체가 보입니다.",
+    en: "Nothing in that stretch. Clear the dates above to see everything.",
+  },
+  "cls.hist.toNow": { ko: "~ 현재", en: "~ now" },
+  "cls.hist.pageAria": { ko: "이력 페이지 이동", en: "History pagination" },
+  "cls.hist.src.schedule": { ko: "배치", en: "Slot" },
+  "cls.hist.src.audit": { ko: "기록", en: "Log" },
+  "cls.hist.src.delegation": { ko: "위임", en: "Cover" },
+  "cls.hist.src.enrollment": { ko: "학생", en: "Roster" },
+  "cls.hist.src.report": { ko: "보고서", en: "Report" },
+
+  // ── 분리등원 요일 인라인 수정 ────────────────────────────────────
+  "cls.ad.editTitle": { ko: "더블클릭하여 등원 요일 수정", en: "Double-click to change the days this student comes" },
+  "cls.ad.needOne": { ko: "최소 한 요일", en: "Pick at least one day" },
+  "cls.ad.save": { ko: "저장", en: "Save" },
+  "cls.ad.cancel": { ko: "취소", en: "Cancel" },
+
 } as const satisfies Record<string, { ko: string; en: string }>;
 
 export type SheetDictKey = keyof typeof SHEET_DICT;

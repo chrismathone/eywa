@@ -21,19 +21,12 @@
  *    "강사"로 적으면 거짓이 된다. 교시별 강사/강의실은 시간표 화면의 몫.
  */
 
+import { DEFAULT_SHEET_LANG, sheetDowLabel, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
+
 export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export const DAY_ORDER: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-export const DAY_LABEL: Record<DayKey, string> = {
-  mon: "월",
-  tue: "화",
-  wed: "수",
-  thu: "목",
-  fri: "금",
-  sat: "토",
-  sun: "일",
-};
 
 /** 요약이 필요로 하는 최소 슬롯 모양 — `ClassScheduleSlot`이 구조적으로 만족한다. */
 export type SummarySlot = {
@@ -224,7 +217,7 @@ export function summarizeSchedule(slots: SummarySlot[], today: string): Schedule
  * 요일 묶음 라벨 — "월·목", 3일 이상 이어지면 "월~금"으로 접는다.
  * (실측 요일 조합은 월·목 28반 / 화·금 21반처럼 2일이 대부분이라 접기는 주 5일 반에서만 걸린다.)
  */
-export function formatDays(days: DayKey[]): string {
+export function formatDays(days: DayKey[], lang: SheetLang = DEFAULT_SHEET_LANG): string {
   const sorted = [...new Set(days)].sort((a, b) => dayIndex(a) - dayIndex(b));
   const parts: string[] = [];
   let i = 0;
@@ -233,23 +226,23 @@ export function formatDays(days: DayKey[]): string {
     while (j + 1 < sorted.length && dayIndex(sorted[j + 1]) === dayIndex(sorted[j]) + 1) j += 1;
     const runLength = j - i + 1;
     if (runLength >= 3) {
-      parts.push(`${DAY_LABEL[sorted[i]]}~${DAY_LABEL[sorted[j]]}`);
+      parts.push(`${sheetDowLabel(sorted[i], lang)}~${sheetDowLabel(sorted[j], lang)}`);
     } else {
-      for (let k = i; k <= j; k += 1) parts.push(DAY_LABEL[sorted[k]]);
+      for (let k = i; k <= j; k += 1) parts.push(sheetDowLabel(sorted[k], lang));
     }
     i = j + 1;
   }
   return parts.join("·");
 }
 
-/** "1시간 40분" / "40분" — 주당 시수 표시용. 0이면 빈 문자열. */
-export function formatMinutes(total: number): string {
+/** "1시간 40분" / "40분" — 주당 시수 표시용. 0이면 빈 문자열. 인자를 안 주면 한국어. */
+export function formatMinutes(total: number, lang: SheetLang = DEFAULT_SHEET_LANG): string {
   if (!Number.isFinite(total) || total <= 0) return "";
   const h = Math.floor(total / 60);
   const m = total % 60;
-  if (h === 0) return `${m}분`;
-  if (m === 0) return `${h}시간`;
-  return `${h}시간 ${m}분`;
+  if (h === 0) return sheetTf(lang, "cls.sch.min", { m });
+  if (m === 0) return sheetTf(lang, "cls.sch.hour", { h });
+  return sheetTf(lang, "cls.sch.hourMin", { h, m });
 }
 
 /** 대화형 비서·요약 텍스트용 한 줄 표기 — "월·목 14:20~15:00". */

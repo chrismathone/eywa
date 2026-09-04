@@ -64,6 +64,9 @@ import { NONE_LABEL } from "@/features/onescreen/none-marker";
 import { makeupRemoveBlockReason } from "@/features/onescreen/makeup-remove-plan";
 import { recallBlockReason } from "@/features/report-admin/report-recall";
 import { makeupRowName, MAKEUP_ONLY_SUFFIX } from "@/features/onescreen/makeup-label";
+import { formatDays, formatMinutes } from "@/features/classes/schedule-summary";
+import { delegationRangeLabel, validateDelegationRange } from "@/features/classes/delegation-window";
+import { scheduledChangeLabel } from "@/features/enrollments/scheduled-changes";
 import { readAtLabel } from "@/features/onescreen/components/report-card";
 import {
   REPORT_OPTOUT_NOTICE,
@@ -1243,5 +1246,154 @@ describe("🔴 수업목록(목록)·공용 조각 — 한글 리터럴 0", () =
     expect(sheetTf("ko", "sync.ago", { when: "5분 전" })).toBe("동기화 5분 전");
     expect(sheetTf("ko", "sync.minAgo", { n: 5 })).toBe("5분 전");
     expect(sheetT("ko", "sync.issue")).toBe("· 확인 필요");
+  });
+});
+
+/**
+ * 수업 상세 **15차** — 반 상세 화면과 그 위에 서는 조각들(시간표 요약·레벨 변경·인수인계·위임·이력).
+ *
+ * 🔑 이 차수의 위험은 **화면 글자와 기록이 한 줄에 섞여 있다**는 것이다. 아래 가드가 둘을 가른다:
+ *    · 번역하는 것 = 우리가 쓴 UI 문구(열 제목·버튼·배지·안내).
+ *    · 번역하지 않는 것 = 감사로그가 쓴 **한국어 사실 문장**(이력 줄의 제목·설명·행위자).
+ */
+describe("🔴 수업 상세 — 한글 리터럴 0", () => {
+  it.each([
+    ["app", "(shell)", "classes", "[id]", "page.tsx"],
+    ["app", "(shell)", "classes", "[id]", "_components", "schedule-summary-view.tsx"],
+    ["app", "(shell)", "classes", "[id]", "_components", "class-level-action.tsx"],
+    ["app", "(shell)", "classes", "[id]", "_components", "teacher-handover.tsx"],
+    ["app", "(shell)", "classes", "[id]", "_components", "class-delegation.tsx"],
+    ["app", "(shell)", "classes", "[id]", "_components", "history-section.tsx"],
+    ["components", "scheduled-change-banner.tsx"],
+    ["features", "enrollments", "components", "editable-attendance-cell.tsx"],
+    ["features", "enrollments", "scheduled-changes.ts"],
+    ["features", "classes", "delegation-window.ts"],
+    ["features", "timetable", "server", "scheduled-class-change.ts"],
+  ])("%s/%s", (...seg) => {
+    const code = codeOnly(read(...seg));
+    const hits = code
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\/\/[^\n\r]*/g, ""))
+      .filter((l) => /[가-힣]/.test(l));
+    expect(hits).toEqual([]);
+  });
+
+  it("🔴 인자를 안 주면 한국어 — 서버 액션·감사로그가 같은 함수를 쓴다", () => {
+    // 이 다섯은 **서버에서도** 불린다(위임 검증·감사로그 문구·예약 배너). 기본값이 흔들리면
+    // 사무실 화면과 기록이 함께 영어가 된다.
+    expect(formatDays(["mon", "tue", "wed"])).toBe("월~수");
+    expect(formatDays(["mon", "thu"])).toBe("월·목");
+    expect(formatMinutes(100)).toBe("1시간 40분");
+    expect(formatMinutes(40)).toBe("40분");
+    expect(formatMinutes(120)).toBe("2시간");
+    expect(validateDelegationRange("2026-09-10", "2026-09-01")).toBe("종료일이 시작일보다 빠릅니다");
+    expect(validateDelegationRange("nope", "2026-09-01")).toBe("기간을 날짜로 선택해주세요");
+    expect(delegationRangeLabel("2026-08-03", "2026-08-03")).toBe("8월 3일");
+    expect(delegationRangeLabel("2026-08-03", "2026-08-07")).toBe("8월 3일 ~ 8월 7일");
+    expect(
+      scheduledChangeLabel(
+        { enrollmentId: "e", kind: "join", className: "DP3", date: "2026-09-01" } as never,
+        "2026-08-29",
+      ),
+    ).toBe("9/1부터 DP3 합류");
+    // 0이거나 깨진 값은 예전처럼 빈 문자열(문구를 지어내지 않는다).
+    expect(formatMinutes(0)).toBe("");
+    expect(formatDays([])).toBe("");
+  });
+
+  it("영어도 같은 자리에 같은 사실이 온다", () => {
+    expect(formatDays(["mon", "tue", "wed"], "en")).toBe("Mon~Wed");
+    expect(formatMinutes(100, "en")).toBe("1 h 40 min");
+    expect(delegationRangeLabel("2026-08-03", "2026-08-07", "en")).toBe("8/3 – 8/7");
+    expect(validateDelegationRange("2026-09-10", "2026-09-01", "en")).toMatch(/before/i);
+  });
+
+  it("🔴 이력 줄의 내용은 감사로그가 쓴 한국어 사실 문장이라 번역하지 않는다", () => {
+    const src = read("app", "(shell)", "classes", "[id]", "_components", "history-section.tsx");
+    // 출처 알약만 사전을 탄다.
+    expect(src).toContain('schedule: "cls.hist.src.schedule"');
+    expect(src).toContain("{t(SOURCE_LABEL[e.source])}");
+    // 제목·설명·행위자는 원문 그대로.
+    expect(src).toContain("{e.title}");
+    expect(src).toContain("{e.detail}");
+    expect(src).toContain("{e.actor}");
+  });
+
+  it("🔴 출결 상태 이름은 `seatMarkLabelOf` 단일 소스 — 낱말을 새로 짓지 않는다", () => {
+    const src = read("app", "(shell)", "classes", "[id]", "page.tsx");
+    expect(src).toContain('seatMarkLabelOf("absent", lang)');
+    expect(src).toContain('seatMarkLabelOf("late", lang)');
+    // 사전에 같은 뜻의 키를 새로 만들지 않았는지(뜻 하나에 표 하나).
+    expect(SHEET_DICT).not.toHaveProperty("cls.d.absent");
+    expect(SHEET_DICT).not.toHaveProperty("cls.d.late");
+  });
+
+  it("🔴 요일 글자 사본을 되살리지 않는다 — 앱 전역 `sheetDowLabel` 단일 소스", () => {
+    const summary = read("features", "classes", "schedule-summary.ts");
+    expect(summary).not.toContain("DAY_LABEL");
+    expect(summary).toContain("sheetDowLabel");
+    const cell = read("features", "enrollments", "components", "editable-attendance-cell.tsx");
+    expect(cell).not.toContain("DAY_LABEL");
+    expect(cell).toContain("sheetDowLabel");
+  });
+
+  it("🔴 영어 요일이 들어가도록 요일 칩이 늘어난다", () => {
+    for (const seg of [
+      ["app", "(shell)", "classes", "[id]", "_components", "schedule-summary-view.tsx"],
+      ["features", "enrollments", "components", "editable-attendance-cell.tsx"],
+    ]) {
+      const src = read(...seg);
+      expect(src, seg.join("/")).toContain("h-5 min-w-5");
+      expect(src, seg.join("/")).not.toContain("inline-flex size-5 items-center");
+    }
+  });
+
+  it("🔴 예정 배너는 언어를 prop으로 받고 기본값이 한국어 — 아직 안 배선된 학생 상세는 그대로다", () => {
+    const src = read("components", "scheduled-change-banner.tsx");
+    expect(src).toContain("lang = DEFAULT_SHEET_LANG");
+    expect(src).not.toContain("getTeacherViewLang");
+    const cls = read("app", "(shell)", "classes", "[id]", "page.tsx");
+    expect(cls).toContain('subject="class" lang={lang}');
+  });
+
+  it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
+    expect(sheetT("ko", "cls.d.back")).toBe("수업목록으로");
+    expect(sheetT("ko", "cls.d.eyebrow")).toBe("수업 · 반");
+    expect(sheetTf("ko", "cls.d.endedAt", { date: "2026-08-31" })).toBe("종강 2026-08-31");
+    expect(sheetT("ko", "cls.d.enrolledPre")).toBe("· 재원생 ");
+    expect(sheetT("ko", "cls.d.enrolledPost")).toBe("명");
+    expect(sheetT("ko", "cls.d.edit")).toBe("반 수정");
+    expect(sheetT("ko", "cls.d.attendance")).toBe("오늘 출석 입력");
+    expect(sheetT("ko", "cls.d.schedHint")).toBe(
+      "그날 자동으로 바뀝니다. 되돌리려면 시간표 화면의 적용 예정 배지에서 취소하세요.",
+    );
+    expect(sheetT("ko", "cls.d.rate")).toBe("출석률");
+    expect(sheetT("ko", "cls.d.unitCount")).toBe("건");
+    expect(sheetTf("ko", "cls.d.rosterCount", { n: 12 })).toBe("12명");
+    expect(sheetTf("ko", "cls.d.upcomingCount", { n: 2 })).toBe("· 예정 2");
+    expect(sheetT("ko", "cls.d.rosterEmpty")).toBe("활성 재원생이 없습니다");
+    expect(sheetT("ko", "cls.d.toNow")).toBe("~ 현재");
+    expect(sheetT("ko", "cls.d.onHold")).toBe("휴원");
+    expect(sheetTf("ko", "cls.d.onlyDays", { days: "화·목" })).toBe("화·목만");
+    expect(sheetT("ko", "cls.sch.none")).toBe("등록된 시간표가 없습니다");
+    expect(sheetTf("ko", "cls.sch.sessions", { n: 5 })).toBe(" · 주 5회");
+    expect(sheetTf("ko", "cls.sch.pastHidden", { n: 3 })).toBe("지난 배치 3개는 숨김");
+    expect(sheetT("ko", "cls.ho.open")).toBe("강사 인수인계");
+    expect(sheetT("ko", "cls.ho.due")).toBe("적용일 도달");
+    expect(sheetT("ko", "cls.ho.applyNow")).toBe("지금 적용");
+    // 🔴 안내문 가운데의 강조 조각은 버튼과 **같은 키**를 쓴다 — 둘이 갈리면 안내가 거짓이 된다.
+    expect(read("app", "(shell)", "classes", "[id]", "_components", "teacher-handover.tsx")).toContain(
+      '<span className="text-foreground">{t("cls.ho.applyNow")}</span>',
+    );
+    expect(sheetT("ko", "cls.ho.introA")).toBe("현재 담임 ");
+    expect(sheetT("ko", "cls.dg.open")).toBe("임시 위임");
+    expect(sheetTf("ko", "cls.dg.bannerTitle", { n: 2 })).toBe("임시 위임 2건 — 담임은 그대로입니다");
+    expect(sheetT("ko", "cls.dg.active")).toBe("진행 중");
+    expect(sheetT("ko", "cls.hist.title")).toBe("이력");
+    expect(sheetT("ko", "cls.hist.src.report")).toBe("보고서");
+    expect(sheetT("ko", "sched.title")).toBe("예정된 변경");
+    expect(sheetTf("ko", "sched.classChange", { md: "9/1", what: "담임", from: "김", to: "이" })).toBe(
+      "9/1부터 담임 김 → 이",
+    );
   });
 });

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { monthDay } from "@/features/timetable/scheduled-import";
 import { shouldApplyName, type ClassUpdate } from "@/features/timetable/due-class-updates";
+import { DEFAULT_SHEET_LANG, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /** 반 자체에 예약된 변경 한 줄. `kind`로 문구가 갈린다(화면에서 문장을 새로 만들지 않는다). */
 export type ScheduledClassChange = {
@@ -120,9 +121,24 @@ export async function getScheduledClassChanges(
 }
 
 /** 배너에 그대로 찍히는 한 줄. ⚠️ 영문 kind가 새지 않게 문장은 여기서만 만든다. */
-export function scheduledClassChangeLabel(c: ScheduledClassChange): string {
-  const what = c.kind === "teacher" ? "담임" : c.kind === "classroom" ? "강의실" : "반 이름";
-  const from = c.fromLabel ?? "미정";
+export function scheduledClassChangeLabel(
+  c: ScheduledClassChange,
+  lang: SheetLang = DEFAULT_SHEET_LANG,
+): string {
+  const what = sheetT(
+    lang,
+    c.kind === "teacher"
+      ? "cls.col.teacher"
+      : c.kind === "classroom"
+        ? "cls.col.room"
+        : "cls.col.name",
+  );
+  const from = c.fromLabel ?? sheetT(lang, "cls.teacherNone");
   const to = c.toLabel ?? "—";
-  return `${monthDay(c.effectiveDate)}부터 ${what} ${from} → ${to}`;
+  return sheetTf(lang, "sched.classChange", {
+    md: monthDay(c.effectiveDate),
+    what,
+    from,
+    to,
+  });
 }

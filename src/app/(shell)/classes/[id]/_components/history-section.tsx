@@ -9,6 +9,8 @@ import {
 } from "@/components/pagination";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { ClassHistoryEntry, ClassHistorySource } from "@/features/classes/history";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
 /**
  * 반 상세 '이력' — 배치 구간·감사로그·임시 위임·보고서 작성 기록을 한 줄기로(원장 2026-08-04).
@@ -21,12 +23,14 @@ import type { ClassHistoryEntry, ClassHistorySource } from "@/features/classes/h
  *    직접 재사용이 안 된다(pagination.tsx 주석에 명시된 패턴).
  * ⚠️ 목록 영역은 **고정 높이** — 마지막 페이지가 짧아 목록이 줄면 페이저가 커서 밑에서 튄다(같은 주석).
  */
-const SOURCE_LABEL: Record<ClassHistorySource, string> = {
-  schedule: "배치",
-  audit: "기록",
-  delegation: "위임",
-  enrollment: "학생",
-  report: "보고서",
+// 🔴 출처 알약만 사전을 탄다 — 줄 내용(`title`·`detail`·`actor`)은 감사로그에서 온
+//    **한국어 사실 문장**이라 번역하지 않는다(makeedu 동기화 `issue`와 같은 축).
+const SOURCE_LABEL: Record<ClassHistorySource, SheetDictKey> = {
+  schedule: "cls.hist.src.schedule",
+  audit: "cls.hist.src.audit",
+  delegation: "cls.hist.src.delegation",
+  enrollment: "cls.hist.src.enrollment",
+  report: "cls.hist.src.report",
 };
 
 const SOURCE_TONE: Record<ClassHistorySource, string> = {
@@ -40,6 +44,8 @@ const SOURCE_TONE: Record<ClassHistorySource, string> = {
 const PAGE_SIZE = 10;
 
 export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
@@ -70,17 +76,14 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
   return (
     <section className="bg-card shadow-card rounded-2xl px-4 py-3">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-foreground text-sm font-bold">이력</h2>
-        <p className="text-text-dim min-w-0 flex-1 text-xs break-keep">
-          수업 배치·담당·강의실·학생 배정이 바뀐 기록입니다. 시간표에서 그 주를 열면 당시 배치가 그대로
-          보입니다.
-        </p>
+        <h2 className="text-foreground text-sm font-bold">{t("cls.hist.title")}</h2>
+        <p className="text-text-dim min-w-0 flex-1 text-xs break-keep">{t("cls.hist.hint")}</p>
         <span className="flex shrink-0 items-center gap-1">
           <input
             type="date"
             value={from}
             onChange={(e) => withReset(() => setFrom(e.target.value))}
-            aria-label="이력 시작일"
+            aria-label={t("cls.hist.fromAria")}
             className="border-line-strong text-foreground rounded-lg border bg-transparent px-2 py-1 text-xs"
           />
           <span className="text-text-faint text-xs">~</span>
@@ -88,7 +91,7 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
             type="date"
             value={to}
             onChange={(e) => withReset(() => setTo(e.target.value))}
-            aria-label="이력 종료일"
+            aria-label={t("cls.hist.toAria")}
             className="border-line-strong text-foreground rounded-lg border bg-transparent px-2 py-1 text-xs"
           />
           {from || to ? (
@@ -102,7 +105,7 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
               }
               className="text-text-dim hover:text-foreground hover:bg-bg-soft cursor-pointer rounded-lg px-2 py-1 text-xs"
             >
-              전체
+              {t("cls.hist.clear")}
             </button>
           ) : null}
         </span>
@@ -110,14 +113,9 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
 
       {entries.length === 0 ? (
         // 원인을 정확히 — "기록이 없다"와 "이 반은 안 바뀌었다"는 다르다.
-        <p className="text-text-dim mt-3 text-sm break-keep">
-          남아 있는 변경 기록이 없습니다. 2026-08-04 이전의 담당·강의실 변경은 기록 자체가 남지 않아
-          되살릴 수 없고, 이후의 변경부터 이 자리에 쌓입니다.
-        </p>
+        <p className="text-text-dim mt-3 text-sm break-keep">{t("cls.hist.empty")}</p>
       ) : filtered.length === 0 ? (
-        <p className="text-text-dim mt-3 text-sm break-keep">
-          그 기간에는 기록이 없습니다. 위 날짜를 지우면 전체가 보입니다.
-        </p>
+        <p className="text-text-dim mt-3 text-sm break-keep">{t("cls.hist.emptyRange")}</p>
       ) : (
         <>
           {/* 고정 높이 — 마지막 페이지가 짧아도 페이저가 위로 튀지 않게(표준 주석의 함정). */}
@@ -132,7 +130,7 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
                   {e.endDate ? (
                     <span className="text-text-faint block text-[11px]">~{e.endDate}</span>
                   ) : e.source === "schedule" ? (
-                    <span className="text-text-faint block text-[11px]">~ 현재</span>
+                    <span className="text-text-faint block text-[11px]">{t("cls.hist.toNow")}</span>
                   ) : null}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -140,7 +138,7 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
                     <span
                       className={`rounded-pill border px-1.5 py-px text-[10px] font-bold ${SOURCE_TONE[e.source]}`}
                     >
-                      {SOURCE_LABEL[e.source]}
+                      {t(SOURCE_LABEL[e.source])}
                     </span>
                     <span className="text-foreground text-[13px] font-semibold break-keep">{e.title}</span>
                     {e.actor ? <span className="text-text-faint text-[11px]">· {e.actor}</span> : null}
@@ -156,7 +154,7 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
           {totalPages > 1 ? (
             <nav
               className="mx-auto flex max-w-xs items-center justify-between gap-2 pt-2"
-              aria-label="이력 페이지 이동"
+              aria-label={t("cls.hist.pageAria")}
             >
               <button
                 type="button"
@@ -167,10 +165,11 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
                 }`}
               >
                 <EyIcon name="chevronLeft" size={12} />
-                이전
+                {t("common.prev")}
               </button>
               <span className={PAGER_LABEL}>
-                {safePage} / {totalPages} · {filtered.length}건
+                {safePage} / {totalPages}
+                {tf("common.pageCount", { n: filtered.length })}
               </span>
               <button
                 type="button"
@@ -180,7 +179,7 @@ export function ClassHistorySection({ entries }: { entries: ClassHistoryEntry[] 
                   safePage >= totalPages ? PAGER_STEP_DISABLED : `${PAGER_STEP_ENABLED} cursor-pointer`
                 }`}
               >
-                다음
+                {t("common.next")}
                 <EyIcon name="chevronRight" size={12} />
               </button>
             </nav>

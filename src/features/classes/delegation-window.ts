@@ -17,6 +17,7 @@ export type DelegationWindow = {
 };
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
+import { DEFAULT_SHEET_LANG, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /** 최대 위임 기간(일). 이보다 길면 임시 대체가 아니라 담임 교체 — 인수인계로 안내한다. */
 export const DELEGATION_MAX_DAYS = 90;
@@ -56,22 +57,34 @@ export function inclusiveDayCount(from: string, to: string): number | null {
 }
 
 /**
- * 위임 기간 유효성 — 통과면 null, 아니면 **한글 사유**(그대로 화면에 뜬다. raw 코드 노출 금지 규약).
+ * 위임 기간 유효성 — 통과면 null, 아니면 **읽을 수 있는 사유**(그대로 화면에 뜬다. raw 코드 노출 금지 규약).
  * 서버 액션이 저장 전에 부르고, 폼도 같은 함수로 미리 알린다(두 벌로 적으면 갈라진다).
+ * ⚠️ **인자를 안 주면 한국어** — 서버 액션은 넘기지 않으므로 감사로그·사무실 화면은 한 글자도 안 바뀐다.
  */
-export function validateDelegationRange(from: string, to: string): string | null {
-  if (!YMD.test(from) || !YMD.test(to)) return "기간을 날짜로 선택해주세요";
+export function validateDelegationRange(
+  from: string,
+  to: string,
+  lang: SheetLang = DEFAULT_SHEET_LANG,
+): string | null {
+  if (!YMD.test(from) || !YMD.test(to)) return sheetT(lang, "cls.dg.errDate");
   const days = inclusiveDayCount(from, to);
-  if (days == null) return "기간을 날짜로 선택해주세요";
-  if (days <= 0) return "종료일이 시작일보다 빠릅니다";
+  if (days == null) return sheetT(lang, "cls.dg.errDate");
+  if (days <= 0) return sheetT(lang, "cls.dg.errOrder");
   if (days > DELEGATION_MAX_DAYS)
-    return `위임은 최대 ${DELEGATION_MAX_DAYS}일까지입니다 — 더 길게 맡기려면 '강사 인수인계'를 쓰세요`;
+    return sheetTf(lang, "cls.dg.errTooLong", { n: DELEGATION_MAX_DAYS });
   return null;
 }
 
 /** 기간 라벨 — 하루면 "8월 3일", 여러 날이면 "8월 3일 ~ 8월 7일". 형식이 깨졌으면 원문 그대로. */
-export function delegationRangeLabel(from: string, to: string): string {
+export function delegationRangeLabel(
+  from: string,
+  to: string,
+  lang: SheetLang = DEFAULT_SHEET_LANG,
+): string {
   if (!YMD.test(from) || !YMD.test(to)) return `${from} ~ ${to}`;
-  const short = (ymd: string) => `${Number(ymd.slice(5, 7))}월 ${Number(ymd.slice(8, 10))}일`;
-  return from === to ? short(from) : `${short(from)} ~ ${short(to)}`;
+  const short = (ymd: string) =>
+    sheetTf(lang, "cls.dg.day", { m: Number(ymd.slice(5, 7)), d: Number(ymd.slice(8, 10)) });
+  return from === to
+    ? short(from)
+    : sheetTf(lang, "cls.dg.range", { from: short(from), to: short(to) });
 }
