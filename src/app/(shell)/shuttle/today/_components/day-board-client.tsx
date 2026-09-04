@@ -245,9 +245,12 @@ export function DayBoardClient({
             🔴 `exceptionsReady`(0229a 적용) 전에는 **버튼을 아예 안 그린다** — 없는 기능을 약속하면
                눌렀을 때 한글 에러만 나온다([[#95]]). */}
         {canWrite && exceptionsReady && (
-          // 이 면의 상시 버튼 하나 = Primary(§10). 폰 44px은 래퍼 변수가 올린다.
-          <Button className="ml-auto" onClick={() => setExceptionOpen(true)}>
-            일회성 변경
+          <Button
+            variant="outline"
+            className={cn(SHUTTLE_ACTION, "ml-auto")}
+            onClick={() => setExceptionOpen(true)}
+          >
+            오늘만 승하차
             {exceptions.length > 0 && (
               <span className="num text-text-dim">{exceptions.length}</span>
             )}

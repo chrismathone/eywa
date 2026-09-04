@@ -9,29 +9,50 @@ import { AddressFinder } from "./address-finder";
 import { MAP_AVAILABLE, StopMapPicker } from "./stop-map-picker";
 
 /**
- * 정류장 **위치**(위경도 · 도착 반경 · 주소) 입력 — 0244a.
+ * 정류장 **위치** 잡기 — 한 번에 한 곳만, 목록을 가리고 여기에 집중한다.
  *
- * 🔑 **두 길을 다 연다**: ① 지도에서 클릭 ② 위도·경도 직접 입력. 지금 배포엔 카카오 앱키가 없어
- *    ①이 안 뜨는데(래퍼가 한글로 안내한다), 그렇다고 위치를 못 넣게 두면 기능이 통째로 잠긴다.
- *    키가 들어오면 ①이 저절로 살아난다.
+ * 📐 **2026-09-04 재설계**(원장 *"정류장 관리 → 위치 쪽 실제 사용자가 사용하기에 매우 불편함"*).
+ *    종전 흐름은 23곳을 채우기엔 손이 너무 많이 갔다 —
+ *      [위치] → [주소 찾기] → 고르기 → [위치 저장] → [닫기] → 목록에서 다음 줄 찾기 …  (곳당 5동작)
+ *    게다가 목록 **안에서** 패널이 펼쳐져 줄이 밀리는 바람에, 저장하고 나면 어디까지 했는지 잃었다.
  *
- * 🔴 **좌표는 둘 다이거나 둘 다 아니다**(0244a check). 한쪽만 저장되면 지도에 못 찍으면서 "좌표 있음"
- *    으로 세어져 빈 마커가 된다 — 서버가 거절하지만 화면에서도 같은 판정을 미리 해 준다.
- * 🔴 **비우면 지운다**: 잘못 찍은 좌표를 되돌릴 길이 필요하다('위치 지우기'가 두 칸을 비우고 저장).
+ *    바뀐 흐름:
+ *      · **[위치]를 누르면 목록이 사라지고 이 화면만** 남는다(줄이 밀리지 않는다).
+ *      · **주소 검색창이 처음부터 열려 있다** — 한 동작이 줄고, 열자마자 타이핑하면 된다.
+ *      · **주소를 고르면 곧바로 저장하고 다음 미지정 정류장으로 넘어간다** — 23곳을 연달아 훑는다.
+ *      · 진행이 "5 / 23"으로 보인다(끝이 보여야 앉아서 끝낸다).
+ *    → 곳당 **2동작**(검색어 입력 → 고르기). 나머지는 화면이 알아서 한다.
  *
+ * 🔴 **자동 저장이 좌표를 건드리지 않는다** — 폼이 들고 있는 현재 값을 그대로 다시 보낸다.
+ *    빈 값으로 보내면 서버가 **좌표를 지운다**(0244a 규약). 주소만 고쳤는데 좌표가 날아가면 안 된다.
  * ⚠️ `<form action={...}>`을 쓰지 않는다 — React 19는 action 제출마다 폼을 **자동 리셋**해서, 저장 뒤에도
- *    열려 있는 이 패널의 컨트롤드 입력이 옛 값으로 굳는다([[#83]]). `onSubmit` + 직접 디스패치가 규약.
+ *    열려 있는 이 화면의 컨트롤드 입력이 옛 값으로 굳는다([[#83]]).
  */
 export function StopLocationEditor({
   stop,
   busy,
+  position,
+  total,
+  nextName,
   onSubmit,
+  onSkip,
   onClose,
 }: {
   stop: ShuttleStop;
   busy: boolean;
-  /** 부모(정류장 관리 다이얼로그)가 `saveStopLocation`으로 보낸다 — 에러 표시·목록 갱신도 그쪽 규약. */
-  onSubmit: (fd: FormData) => void;
+  /** 지금 몇 번째 미지정인가(1부터). 끝이 보이면 앉아서 끝낸다. */
+  position: number;
+  /** 아직 위치가 없는 정류장 수. */
+  total: number;
+  /** 저장 뒤 이어서 갈 곳 이름 — 없으면(마지막) 버튼 문구가 바뀐다. */
+  nextName: string | null;
+  /**
+   * 부모(정류장 관리)가 `saveStopLocation`으로 보낸다. `advance`가 true면 저장 뒤 다음 곳으로 넘어간다.
+   * 에러 표시·목록 갱신도 부모 규약.
+   */
+  onSubmit: (fd: FormData, advance: boolean) => void;
+  /** 이 곳은 건너뛰고 다음으로. */
+  onSkip: () => void;
   onClose: () => void;
 }) {
   const [lat, setLat] = useState(stop.lat != null ? String(stop.lat) : "");
@@ -46,27 +67,63 @@ export function StopLocationEditor({
   const mapLng = lng.trim() && Number.isFinite(lngNum) ? lngNum : null;
   const mapRadius = Number.isFinite(radiusNum) && radiusNum >= 10 ? radiusNum : 50;
 
-  /** 한쪽만 채운 상태 — 저장 버튼을 막고 이유를 적는다(서버도 같은 판정을 한다). */
+  /** 한쪽만 채운 상태 — 저장을 막고 이유를 적는다(서버도 같은 판정을 한다). */
   const halfFilled = Boolean(lat.trim()) !== Boolean(lng.trim());
 
-  function send(next?: { lat: string; lng: string; address: string }) {
+  /**
+   * 저장 — 화면 상태가 아직 반영되기 전에 보내야 하는 경우가 있어(주소를 고른 그 순간) 값을 명시로 받는다.
+   * 🔴 넘기지 않은 칸은 **지금 폼 값을 그대로** 싣는다 — 빈 값을 보내면 서버가 그 칸을 지운다.
+   */
+  function send(
+    next: Partial<{ lat: string; lng: string; address: string }> = {},
+    advance = false,
+  ) {
     const fd = new FormData();
     fd.set("id", stop.id);
-    fd.set("lat", next?.lat ?? lat.trim());
-    fd.set("lng", next?.lng ?? lng.trim());
-    fd.set("address", next?.address ?? address.trim());
+    fd.set("lat", (next.lat ?? lat).trim());
+    fd.set("lng", (next.lng ?? lng).trim());
+    fd.set("address", (next.address ?? address).trim());
     fd.set("radiusM", radius.trim() || "50");
-    onSubmit(fd);
+    onSubmit(fd, advance);
   }
 
   return (
-    <form
-      className="border-line bg-muted/40 mx-2 mb-1.5 flex flex-col gap-2 rounded-lg border p-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        send();
-      }}
-    >
+    <div className="flex min-h-0 flex-col gap-2">
+      {/* 어디까지 왔나 — 끝이 보여야 한 번에 끝낸다. */}
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="text-foreground text-base font-bold">{stop.name}</span>
+        {stop.memo && <span className="text-text-faint text-xs">{stop.memo}</span>}
+        <span className="text-text-dim ml-auto text-xs">
+          위치 미지정 <span className="num font-bold">{position}</span> /{" "}
+          <span className="num">{total}</span>
+        </span>
+      </div>
+
+      {/* 📍 주소 검색창이 **처음부터 열려 있다** — 열자마자 타이핑하면 된다.
+          🔑 이건 앱키가 필요 없다(다음 우편번호 서비스) — 지도가 막혀 있어도 여기까진 된다.
+          🔴 고르는 순간 **저장하고 다음으로 넘어간다** — 23곳을 훑는 게 이 화면의 목적이다. */}
+      <AddressFinder
+        defaultOpen
+        disabled={busy}
+        onPick={(picked) => {
+          setAddress(picked);
+          send({ address: picked }, true);
+        }}
+      />
+
+      <label className="text-text-dim flex flex-col gap-1 text-xs">
+        주소
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          maxLength={200}
+          placeholder="위에서 찾거나 직접 입력"
+          aria-label={`${stop.name} 주소`}
+          className={cn(SHUTTLE_INPUT, "w-full")}
+        />
+      </label>
+
+      {/* 지도는 키가 있을 때만 뜬다 — 없으면 래퍼가 한 줄로 사유를 말한다(빈 회색 상자 금지). */}
       <StopMapPicker
         lat={mapLat}
         lng={mapLng}
@@ -94,11 +151,11 @@ export function StopLocationEditor({
         />
       </div>
 
-      {/* 🔴 **좌표는 접어 둔다** — 손으로 위경도를 치는 건 사람이 할 일이 아니다. 지도가 뜨면 클릭으로,
+      {/* 🔴 **좌표는 접어 둔다** — 손으로 위경도를 치는 건 사람이 할 일이 아니다. 지도가 뜨면 클릭·핀 끌기로,
           그전엔 주소로 충분하다. 그래도 아는 값을 넣고 싶은 사람을 막지는 않는다(펼치면 나온다).
           ⚠️ 좌표가 이미 있으면 처음부터 펼쳐 둔다 — 들어 있는 값을 숨기면 왜 못 고치는지 알 수 없다. */}
       <details className="text-text-dim text-xs" open={hasCoords(stop)}>
-        <summary className="cursor-pointer select-none">좌표 직접 입력 (선택)</summary>
+        <summary className="cursor-pointer select-none">좌표·반경 직접 입력 (선택)</summary>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <label className="text-text-dim flex items-center gap-1 text-xs">
             위도
@@ -141,14 +198,29 @@ export function StopLocationEditor({
       )}
       {!MAP_AVAILABLE && (
         <p className="text-text-faint text-xs">
-          지도 키가 들어오면 여기에 지도가 떠서 클릭으로 좌표까지 찍힙니다. 그전에는 주소만 채워 두면
+          지도 키가 들어오면 여기에 지도가 떠서 클릭·핀 끌기로 좌표까지 찍힙니다. 그전에는 주소만 채워 두면
           됩니다.
         </p>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" className={SHUTTLE_ACTION} disabled={busy || halfFilled}>
-          위치 저장
+        <Button
+          type="button"
+          className={SHUTTLE_ACTION}
+          disabled={busy || halfFilled}
+          onClick={() => send({}, true)}
+        >
+          {nextName ? "저장하고 다음" : "저장하고 끝내기"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={SHUTTLE_ACTION}
+          disabled={busy}
+          onClick={onSkip}
+          title={nextName ? `이 곳은 건너뛰고 '${nextName}'로 갑니다` : "목록으로 돌아갑니다"}
+        >
+          건너뛰기
         </Button>
         {hasCoords(stop) && (
           <Button
@@ -156,21 +228,25 @@ export function StopLocationEditor({
             variant="ghost"
             className={SHUTTLE_ACTION}
             disabled={busy}
-            title="이 정류장의 좌표를 지웁니다(이름·메모는 그대로)"
+            title="이 정류장의 좌표를 지웁니다(주소·이름은 그대로)"
             onClick={() => {
               setLat("");
               setLng("");
-              // 화면 상태가 반영되기 전에 보내야 하므로 지운 값을 명시로 넘긴다.
-              send({ lat: "", lng: "", address: address.trim() });
+              send({ lat: "", lng: "" });
             }}
           >
-            위치 지우기
+            좌표 지우기
           </Button>
         )}
-        <Button type="button" variant="ghost" className={SHUTTLE_ACTION} onClick={onClose}>
-          닫기
+        <Button
+          type="button"
+          variant="ghost"
+          className={cn(SHUTTLE_ACTION, "ml-auto")}
+          onClick={onClose}
+        >
+          목록으로
         </Button>
       </div>
-    </form>
+    </div>
   );
 }

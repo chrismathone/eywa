@@ -634,7 +634,7 @@ export async function setRideException(formData: FormData): Promise<ShuttleActio
   if (!YMD.test(onDate)) return { error: "날짜를 확인하세요" };
   if (onDate < kstToday()) return { error: "지난 날짜는 바꿀 수 없습니다 — 오늘 이후만 조정합니다" };
   if (!studentId) return { error: "학생을 고르세요" };
-  if (!isRideExceptionKind(kind)) return { error: "오늘만 탑승/오늘 안 탐 중에서 고르세요" };
+  if (!isRideExceptionKind(kind)) return { error: "변경 종류를 고르세요" };
   if (!isDirection(ioKind)) return { error: "등원/하원 중에서 고르세요" };
   if (kind === "add" && !runStopId) {
     // 어디서 타는지 모르면 기사가 못 태운다 — 자리 없는 '추가'는 만들지 않는다.

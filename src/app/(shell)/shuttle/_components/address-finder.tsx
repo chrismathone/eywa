@@ -76,12 +76,18 @@ function loadPostcode(): Promise<PostcodeCtor> {
 export function AddressFinder({
   onPick,
   disabled,
+  defaultOpen = false,
 }: {
   /** 고른 주소(도로명 우선, 없으면 지번). 건물명은 있으면 함께. */
   onPick: (address: string) => void;
   disabled?: boolean;
+  /**
+   * 처음부터 펼쳐 둘까 — 위치 잡기 화면은 **이걸 쓰려고 연 화면**이라 한 번 더 누르게 하지 않는다
+   * (2026-09-04 원장 *"실제 사용자가 사용하기에 매우 불편함"*).
+   */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   // 🔴 최신 콜백을 효과가 잡게 — 열려 있는 동안 부모가 리렌더되어도 옛 onPick으로 채우지 않는다.

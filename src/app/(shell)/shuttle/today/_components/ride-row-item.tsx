@@ -12,7 +12,11 @@ import {
   SHUTTLE_INPUT,
   SHUTTLE_ROW_TEXT,
 } from "@/features/shuttle/control-size";
-import { BOARDING_STATUS_LABEL, type BoardingStatus } from "@/features/shuttle/types";
+import {
+  BOARDING_STATUS_LABEL,
+  RIDE_EXCEPTION_LABEL,
+  type BoardingStatus,
+} from "@/features/shuttle/types";
 import type { RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
 
@@ -135,7 +139,9 @@ export function RideRowItem({
         </span>
         {/* 🔑 일회성 변경 표식 — tone 캐논에서 고른다: 오늘만 탑승 = special(예외·대체) ·
             오늘 안 탐 = inert(지나간 것). 사유는 **선택**이라 없으면 배지만 뜬다. */}
-        {row.dayKind === "added" && <Pill color={TONE_COLOR.special}>오늘만 탑승</Pill>}
+        {row.dayKind === "added" && (
+          <Pill color={TONE_COLOR.special}>{RIDE_EXCEPTION_LABEL.add}</Pill>
+        )}
         {skipped && (
           <>
             <Pill color={TONE_COLOR.inert}>오늘 안 탐</Pill>
@@ -166,7 +172,7 @@ export function RideRowItem({
               variant="outline"
               disabled={busy}
               onClick={undoException}
-              title="일회성 변경을 되돌려 평소대로 탑승 명단에 넣습니다"
+              title="오늘만 승하차를 되돌려 평소대로 탑승 명단에 넣습니다"
               className={cn(SHUTTLE_ACTION, SHUTTLE_ROW_TEXT, "px-2.5")}
             >
               되돌리기

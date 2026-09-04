@@ -73,10 +73,39 @@ export function StopMasterDialog({
    * 좌표를 아직 안 찍은 정류장 수 — 실측 23곳 중 대부분이 미지정이라 **몇 곳 남았는지**가 보여야
    * 한 번에 훑어 채울 수 있다(하나씩 열어 확인하면 끝이 안 난다).
    */
-  const missingCoords = useMemo(
-    () => (coordsReady ? stops.filter((s) => !hasLocation(s)).length : 0),
+  /**
+   * 아직 위치가 없는 정류장 — **순서대로** 훑는다(2026-09-04 재설계).
+   * 🔑 이 목록이 "저장하고 다음"의 이동 순서이자 "5 / 23"의 분모다.
+   */
+  const unlocated = useMemo(
+    () => (coordsReady ? stops.filter((s) => !hasLocation(s)) : []),
     [stops, coordsReady],
   );
+  const missingCoords = unlocated.length;
+
+  /** 위치를 잡는 중인 정류장 — 목록 대신 이 한 곳만 크게 그린다. */
+  const locatingStop = useMemo(
+    () => (locating ? (stops.find((s) => s.id === locating) ?? null) : null),
+    [locating, stops],
+  );
+
+  /**
+   * 지금 곳 다음으로 갈 미지정 정류장. 🔴 **지금 곳이 이미 채워진 상태로 다시 들어온 경우**
+   * (수정하러 온 경우)엔 `unlocated`에 없으므로 맨 앞부터 이어간다 — 그래야 흐름이 안 끊긴다.
+   */
+  const nextUnlocated = useMemo(() => {
+    if (!locatingStop) return null;
+    const idx = unlocated.findIndex((s) => s.id === locatingStop.id);
+    if (idx < 0) return unlocated[0] ?? null;
+    return unlocated[idx + 1] ?? null;
+  }, [locatingStop, unlocated]);
+
+  /** "5 / 23"의 앞 숫자 — 목록에 없으면(수정하러 온 곳) 이미 다 한 것 다음 번호로 센다. */
+  const locatingPosition = useMemo(() => {
+    if (!locatingStop) return 0;
+    const idx = unlocated.findIndex((s) => s.id === locatingStop.id);
+    return idx >= 0 ? idx + 1 : missingCoords + 1;
+  }, [locatingStop, unlocated, missingCoords]);
 
   /** 정류장 → 그 정류장을 쓰는 노선 칸들(차량·회차·시각·인원). 보드가 이미 실어 온 값이라 왕복 0. */
   const usageByStop = useMemo(() => {
@@ -103,13 +132,23 @@ export function StopMasterDialog({
     return map;
   }, [runs, vehicles]);
 
-  function submit(fd: FormData, action: (f: FormData) => Promise<{ error?: string } | undefined>) {
+  function submit(
+    fd: FormData,
+    action: (f: FormData) => Promise<{ error?: string } | undefined>,
+    /**
+     * 저장 뒤 **다음 미지정 정류장으로 넘어갈까**(위치 잡기 전용). 23곳을 연달아 훑는 흐름의 핵심이다.
+     * ⚠️ 다음 곳은 **지금 목록 기준**으로 미리 정해 둔다 — 저장이 끝나면 이 곳이 목록에서 빠져
+     *    인덱스가 밀리므로, 그때 다시 계산하면 한 곳을 건너뛴다.
+     */
+    advanceTo?: string | null,
+  ) {
     onError(null);
     startTransition(async () => {
       const res = await action(fd);
       if (res?.error) onError(res.error);
       else {
         setEditing(null);
+        if (advanceTo !== undefined) setLocating(advanceTo);
         router.refresh();
       }
     });
@@ -128,13 +167,42 @@ export function StopMasterDialog({
           이름은 여기서만 고칩니다 — 고치면 이 정류장을 쓰는 모든 노선이 함께 바뀝니다. 같은 아파트
           앞이라도 승차 지점이 반대편이면 각각 만들고 메모로 구분하세요.
         </p>
-        {/* 🔑 미지정이 몇 곳인지 먼저 말한다 — 좌표는 한 번에 다 못 찍으므로 "얼마나 남았나"가
-            이 화면을 다시 여는 이유가 된다. 다 찍었으면 굳이 말하지 않는다(빈 잔소리 금지). */}
+
+        {/* 📐 **위치를 잡는 동안엔 목록을 감춘다**(2026-09-04, 원장 *"실제 사용자가 사용하기에 매우
+            불편함"*). 종전엔 줄 안에서 패널이 펼쳐져 목록이 밀렸고, 저장하고 나면 어디까지 했는지
+            잃었다. 한 곳만 크게 보여주고, 저장하면 **다음 미지정 정류장으로 이어간다**. */}
+        {locatingStop ? (
+          <StopLocationEditor
+            stop={locatingStop}
+            busy={busy}
+            position={locatingPosition}
+            total={Math.max(missingCoords, locatingPosition)}
+            nextName={nextUnlocated?.name ?? null}
+            onSubmit={(fd, advance) =>
+              submit(fd, saveStopLocation, advance ? (nextUnlocated?.id ?? null) : undefined)
+            }
+            onSkip={() => setLocating(nextUnlocated?.id ?? null)}
+            onClose={() => setLocating(null)}
+          />
+        ) : (
+          <>
+        {/* 🔑 미지정이 몇 곳인지 말하고, **거기서 바로 시작할 수 있게** 한다(2026-09-04).
+            줄마다 [위치]를 찾아 누르게 하면 23번 찾아야 한다 — 입구를 하나 두고 그 뒤는
+            '저장하고 다음'이 끌고 간다. 다 찍었으면 굳이 말하지 않는다(빈 잔소리 금지). */}
         {coordsReady && missingCoords > 0 && (
-          <p className="text-text-dim text-xs">
-            위치 미지정 <span className="num font-bold">{missingCoords}</span>곳 — 각 줄의 [위치] →
-            [주소 찾기]로 채우면 됩니다(지도 키 없이도 됩니다).
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-text-dim text-xs">
+              위치 미지정 <span className="num font-bold">{missingCoords}</span>곳 — 주소만 채우면
+              됩니다(지도 키 없이도 됩니다).
+            </span>
+            <Button
+              className={cn(SHUTTLE_ACTION, "ml-auto")}
+              disabled={busy}
+              onClick={() => setLocating(unlocated[0]?.id ?? null)}
+            >
+              위치 채우기 시작
+            </Button>
+          </div>
         )}
 
         <form
@@ -202,9 +270,12 @@ export function StopMasterDialog({
             ) : (
               <li key={s.id} className="rounded-xl">
                 <div className="hover:bg-muted flex min-h-11 flex-wrap items-center gap-2 rounded-xl px-2 py-1.5">
-                  <span className="text-foreground min-w-0 flex-1 overflow-hidden text-xs font-medium text-ellipsis whitespace-nowrap">
-                    {s.name}
-                    {s.memo && <span className="text-text-faint font-normal"> · {s.memo}</span>}
+                  {/* 📐 **주소를 줄에 보여준다**(2026-09-04) — 종전엔 채웠는지 확인하려면 [위치]를
+                      눌러 열어봐야 했다. 23곳을 훑는 화면에서 그건 23번 여는 일이다. */}
+                  <span className="min-w-0 flex-1 overflow-hidden text-xs text-ellipsis whitespace-nowrap">
+                    <span className="text-foreground font-medium">{s.name}</span>
+                    {s.memo && <span className="text-text-faint"> · {s.memo}</span>}
+                    {s.address && <span className="text-text-dim"> · {s.address}</span>}
                   </span>
                   {/* 좌표 유무 — 🔑 **미지정만 표식을 단다**. 다 찍은 정류장에까지 알약을 붙이면
                       목록이 알약 밭이 되어 정작 남은 곳이 안 보인다(주소는 아래 패널에서 본다).
@@ -272,15 +343,6 @@ export function StopMasterDialog({
                   </Button>
                 </div>
 
-                {coordsReady && locating === s.id && (
-                  <StopLocationEditor
-                    stop={s}
-                    busy={busy}
-                    onSubmit={(fd) => submit(fd, saveStopLocation)}
-                    onClose={() => setLocating(null)}
-                  />
-                )}
-
                 {openStop === s.id && (
                   <ul className="border-line bg-muted/40 mx-2 mb-1.5 flex flex-col gap-0.5 rounded-lg border p-1.5">
                     <li className="text-text-faint px-1 pb-0.5 text-xs">
@@ -316,6 +378,8 @@ export function StopMasterDialog({
             </li>
           )}
         </ul>
+          </>
+        )}
       </div>
     </div>
   );
