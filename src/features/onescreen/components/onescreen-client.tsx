@@ -443,6 +443,8 @@ export function OneScreenClient({
     [activeDate],
   );
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // 덜 쓴 창 저장을 서버가 건너뛴 학생 — 800ms 자동저장마다 토스트가 쌓이지 않게 1회만.
+  const skippedSaveToast = useRef<Set<string>>(new Set());
   useEffect(() => {
     const timers = saveTimers.current;
     return () => {
@@ -457,17 +459,40 @@ export function OneScreenClient({
         const s = studentsRef.current.find((x) => x.id === sid);
         if (!s || s.isMakeup) continue;
         void saveOnescreenSession(buildSessionInput(s, reportsRef.current[sid])).then((res) => {
-          if (!res.ok) toast.error(res.error ?? "자동 저장에 실패했습니다");
+          applySessionSaveResult(sid, res);
         });
       }
       saveTimers.current.clear();
     };
   });
+  function applySessionSaveResult(
+    studentId: string,
+    res: { ok: boolean; error?: string; skipped?: boolean; updatedAt?: string },
+  ) {
+    if (!res.ok) {
+      toast.error(res.error ?? "자동 저장에 실패했습니다");
+      return;
+    }
+    if (res.skipped) {
+      if (!skippedSaveToast.current.has(studentId)) {
+        skippedSaveToast.current.add(studentId);
+        toast.message("다른 창에 이미 더 많이 입력된 내용이 있어 이 창의 저장은 반영하지 않았습니다");
+      }
+      return;
+    }
+    if (!res.updatedAt) return;
+    skippedSaveToast.current.delete(studentId);
+    studentsRef.current = studentsRef.current.map((s) =>
+      s.id === studentId ? { ...s, sessionUpdatedAt: res.updatedAt } : s,
+    );
+    setStudents((prev) => prev.map((s) => (s.id === studentId ? { ...s, sessionUpdatedAt: res.updatedAt } : s)));
+  }
   function buildSessionInput(s: OneScreenStudent, r: Record<string, SubjectReport> | undefined) {
     return {
       studentId: s.id,
       sessionDate: date || undefined, // 대상 날짜(빈값=서버 오늘) — 과거 날짜 작업분도 그 날짜 세션에 저장
       classId: s.classId ?? null,
+      baseUpdatedAt: s.sessionUpdatedAt ?? null,
       studyGrade: s.studyGrade ?? null,
       subjectProgress: Object.fromEntries(
         s.subjects
@@ -535,7 +560,7 @@ export function OneScreenClient({
         const s = studentsRef.current.find((x) => x.id === studentId);
         if (!s || s.isMakeup) return; // 보강 학생은 반이 없어 세션(onescreen_daily_sessions) 저장 스킵
         void saveOnescreenSession(buildSessionInput(s, reportsRef.current[studentId])).then((res) => {
-          if (!res.ok) toast.error(res.error ?? "자동 저장에 실패했습니다");
+          applySessionSaveResult(studentId, res);
         });
       }, 800),
     );
@@ -2926,11 +2951,11 @@ export function OneScreenClient({
         </div>
       ) : null}
 
-      {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
+      {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 빈 창이 잘 쓴 창을 덮지는 않는다(session-write.ts). */}
       {sameDateEditors.length > 0 ? (
         <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
           <span className="font-bold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
-          <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
+          <span>— 입력은 한 창에서만 하세요. 비어 있는 창은 이미 적힌 내용을 덮지 않습니다.</span>
         </div>
       ) : null}
 
