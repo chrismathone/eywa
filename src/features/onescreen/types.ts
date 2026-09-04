@@ -191,6 +191,11 @@ export type OneScreenStudent = {
   // 보강·수업외 학생(수동 추가) — true면 세션 자동저장(onescreen_daily_sessions) 건너뛰고(반 없음),
   // 저장 시 outOfClass로 담당반 검사 우회(같은 학원 학생이면 허용). roster엔 없고 클라에서만 추가됨.
   isMakeup?: boolean;
+  /**
+   * 이 강사 세션 행의 `updated_at`(onescreen_daily_sessions). 자동저장이 같은 값을 돌려주면
+   * 이 창이 마지막 저장자라 칸을 비워도 되고, 다르면 덜 쓴 창의 저장은 서버가 무시한다.
+   */
+  sessionUpdatedAt?: string;
   attendance: AttendanceMark;
   subjects: Subject[];
   tests: Tests;

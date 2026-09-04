@@ -2743,7 +2743,11 @@ export const SHEET_DICT = {
   "os.c.sentBannerD": { ko: "로 학부모 게시글을 지우세요 — 삭제가 끝나면 입력이 열리고 ", en: " on the card to delete the parent post — once it is gone the inputs open and " },
   "os.c.sentBannerE": { ko: "으로 수정본을 다시 보낼 수 있습니다.", en: " sends the corrected version." },
   "os.c.presenceTitle": { ko: "다른 창/기기에서 같은 날짜를 열어 두었습니다", en: "This date is open in another window or on another device" },
-  "os.c.presenceBody": { ko: "— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.", en: "— if the same student is edited in both, the last save wins." },
+  // 🔴 문구가 곧 동작이다 — 2026-09-04에 빈 창이 잘 쓴 세션을 덮지 않게 바뀌면서 옛 문장
+  //    ("마지막 저장이 덮어씁니다")은 **거짓**이 됐다. 동작이 또 바뀌면 여기도 함께 고칠 것.
+  "os.c.presenceBody": { ko: "— 입력은 한 창에서만 하세요. 비어 있는 창은 이미 적힌 내용을 덮지 않습니다.", en: "— type in one window only. An empty window never overwrites what is already written." },
+  // 이름이 겹치지 않게 `saveSkipped`(발송 요약의 " · 건너뜀 N")와 구분한다 — 뜻이 전혀 다르다.
+  "os.c.saveIgnored": { ko: "다른 창에 이미 더 많이 입력된 내용이 있어 이 창의 저장은 반영하지 않았습니다", en: "Another window already has more written, so this window's save was not applied" },
   "os.c.staleWritten": { ko: "작성을 마친", en: "finished" },
   "os.c.staleEmptied": { ko: "문구가 비워진", en: "with the message cleared" },
   "os.c.staleCount": { ko: "{label} {n}명", en: "{n} {label}" },

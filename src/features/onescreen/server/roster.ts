@@ -160,6 +160,7 @@ type OnescreenSessionRow = {
   homework: string | null;
   special_note: string | null;
   progress_confirmed: boolean | null;
+  updated_at: string | null;
 };
 
 /** 학원·강사 설정에서 온 값 — 빈 로스터도 정상 로스터와 **같은 값**을 실어야 한다(아래 emptyRoster 주석). */
@@ -753,7 +754,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       supabase
         .from("onescreen_daily_sessions")
         .select(
-          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed",
+          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed, updated_at",
         )
         .eq("session_date", todayIso)
         .eq("updated_by", teacherId)
@@ -1287,6 +1288,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // Phase3: 오늘 세션(작업중) 복원 — 점수/진도/태도/과제/확정을 하드코딩 기본값 위에 덮어씀.
     const sess = sessionById.get(os.id);
     if (sess) {
+      if (sess.updated_at) os.sessionUpdatedAt = sess.updated_at;
       if (sess.study_grade) os.studyGrade = sess.study_grade;
       if (sess.daily_score != null) os.tests.daily.score = sess.daily_score;
       if (sess.daily_max != null) os.tests.daily.max = sess.daily_max;
