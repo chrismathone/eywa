@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useSeatingCanEdit } from "./seating-edit-context";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
@@ -20,6 +21,132 @@ const MARKS = [
   { status: "late" as const, label: "지각" },
   { status: "absent" as const, label: "결석" },
 ];
+
+/** 겹판이 앵커·화면 가장자리와 두는 간격(px) — 위치 계산 한 곳에서만 쓴다. */
+const POP_GAP = 4;
+const POP_EDGE = 8;
+
+/**
+ * 칸 아래에 뜨는 겹판(출결 메뉴·오류) — **포털로 `document.body`에 붙인다.**
+ *
+ * 🔴 반 카드([`seating-room.tsx`](./seating-room.tsx)의 `<article>`)에 `overflow-hidden`이 걸려 있어
+ *    (머리 색띠가 둥근 모서리 밖으로 새지 않게) 칸 안에서 `absolute`로 띄우면 **카드 경계에서 잘린다**.
+ *    아랫줄 학생일수록 메뉴가 통째로 안 보여 출결을 못 찍었다(원장 제보 2026-09-04). 카드의 overflow를
+ *    푸는 건 머리띠가 깨지므로 **겹판만 카드 밖으로 꺼낸다**(시간표 hover 카드와 같은 규약).
+ * 🔑 위치는 앵커(칸 버튼)의 화면 좌표 + `position: fixed`라 조상 overflow와 무관하다. 대신 **스크롤·
+ *    리사이즈 때마다 다시 잰다** — 안 재면 칸은 움직이는데 겹판만 제자리에 남아 엉뚱한 칸 위에 뜬다.
+ * 🔑 오른쪽 끝 칸은 왼쪽으로, 아래 공간이 모자라면 **칸 위로 뒤집는다**(3열 격자의 오른쪽 칸·화면 맨
+ *    아랫줄에서 창 밖으로 나가던 자리).
+ * ⚠️ 위치를 재기 전에는 **투명 + 클릭 통과**다 — 첫 프레임에 (0,0)으로 번쩍이지 않게 하되, 안 보이는
+ *    판이 화면 왼쪽 위에서 클릭을 가로채지 않게 한다.
+ */
+function CellPopover({
+  anchorRef,
+  onClose,
+  children,
+}: {
+  anchorRef: RefObject<HTMLButtonElement | null>;
+  /** 바깥을 누르거나 Esc — 여러 칸의 메뉴가 동시에 떠 있지 않게. 없으면 스스로 안 닫힌다(오류 문구). */
+  onClose?: () => void;
+  children: ReactNode;
+}) {
+  const popRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 위치를 재기 전 한 프레임은 안 보이게 둔다.
+   * 🔴 감추는 수단은 **`opacity`여야 한다** — `visibility: hidden`·`display: none`인 요소는 초점을 못
+   *    받아서, 그 프레임에 걸리는 자동 초점(아래 메뉴 첫 항목)이 조용히 무시된다. 투명도는 자리와
+   *    초점을 그대로 두고 그림만 감춘다.
+   */
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  const place = useCallback(() => {
+    const anchor = anchorRef.current?.getBoundingClientRect();
+    const pop = popRef.current?.getBoundingClientRect();
+    if (!anchor || !pop) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    /**
+     * 🔴 앵커가 스크롤돼 화면 밖으로 나갔으면 겹판을 **치운다** — 가장자리에 클램프된 채로 남으면
+     *    이미 안 보이는 학생의 메뉴가 **다른 반 카드 위에서** 눌린다(엉뚱한 학생 출결).
+     * ⚠️ 크기 0인 rect는 "화면 밖"이 아니라 **잴 수 없는 것**이다(테스트 환경·숨김) — 판단하지 않는다.
+     */
+    const measurable = anchor.width > 0 || anchor.height > 0;
+    if (
+      measurable &&
+      (anchor.bottom <= 0 || anchor.top >= vh || anchor.right <= 0 || anchor.left >= vw)
+    ) {
+      if (onClose) onClose();
+      else setPos(null); // 스스로 안 닫히는 겹판(오류)은 숨겼다가 되돌아오면 다시 뜬다
+      return;
+    }
+    let left = anchor.left;
+    if (left + pop.width > vw - POP_EDGE) left = vw - POP_EDGE - pop.width;
+    if (left < POP_EDGE) left = POP_EDGE;
+    let top = anchor.bottom + POP_GAP;
+    if (top + pop.height > vh - POP_EDGE) {
+      const above = anchor.top - POP_GAP - pop.height;
+      top = above >= POP_EDGE ? above : Math.max(POP_EDGE, vh - POP_EDGE - pop.height);
+    }
+    setPos((prev) => (prev && prev.left === left && prev.top === top ? prev : { left, top }));
+  }, [anchorRef, onClose]);
+
+  /**
+   * 🔑 위치는 **ref 콜백**에서 잰다 — 이 리포는 effect 안 setState를 금지한다([[#25]]).
+   *    ref 콜백은 커밋 단계라 페인트 전에 재고, 그 자리에서 상태를 맞출 수 있다.
+   */
+  const attach = useCallback(
+    (el: HTMLDivElement | null) => {
+      popRef.current = el;
+      if (el) place();
+    },
+    [place],
+  );
+
+  useEffect(() => {
+    // capture=true — 창 안 스크롤 컨테이너(`main.overflow-auto`)의 스크롤까지 잡는다.
+    const onScroll = () => place();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [place]);
+
+  useEffect(() => {
+    if (!onClose) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      // 앵커를 다시 누른 것은 버튼의 토글이 처리한다(여기서 닫으면 곧바로 다시 열려 깜빡인다).
+      if (anchorRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      onClose();
+      // 초점을 칸으로 되돌린다 — 겹판이 사라지면 초점이 body로 떨어져 키보드 흐름이 끊긴다.
+      anchorRef.current?.focus();
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [anchorRef, onClose]);
+
+  return createPortal(
+    <div
+      ref={attach}
+      className={`fixed z-[9999] ${pos ? "" : "pointer-events-none"}`}
+      style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, opacity: pos ? undefined : 0 }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
 
 /** 방금 누른 값 — 상태와 **찍은 시각**이 한 덩어리다(따로 두면 되돌릴 때 한쪽만 남는다). */
 type Optimistic = { status: string; at: string };
@@ -111,6 +238,9 @@ export function SeatingCell({
    * 남지만, 전체 이름은 이 버튼의 마우스오버(`seatHoverTitle`)에 늘 들어 있다.
    */
   const fit = fitSeatName(student.studentName, SEAT_CELL_NAME_LADDER);
+  /** 겹판(메뉴·오류)이 붙을 자리 — 포털이라 좌표를 이 버튼에서 잰다(`CellPopover` 주석). */
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
 
   function save(next: "present" | "late" | "absent") {
     setError(null);
@@ -146,8 +276,11 @@ export function SeatingCell({
   return (
     <div className="relative h-full min-w-0">
       <button
+        ref={btnRef}
         type="button"
         disabled={busy || !canMark}
+        aria-haspopup={canMark ? "menu" : undefined}
+        aria-expanded={canMark ? open : undefined}
         onClick={() => canMark && setOpen((v) => !v)}
         title={seatHoverTitle({
           studentName: student.studentName,
@@ -193,22 +326,35 @@ export function SeatingCell({
           </span>
         )}
       </button>
+      {/* 🔴 메뉴·오류는 카드 밖(포털)에 뜬다 — 카드 `overflow-hidden`에 잘리던 자리(`CellPopover` 주석).
+          테두리를 두른다: 카드 밖 화면 어디에도 뜰 수 있어 배경만으로는 경계가 안 읽힌다. */}
       {open && canMark && (
-        <div className="bg-card shadow-card absolute top-full left-0 z-30 mt-1 flex gap-0.5 rounded-lg p-1">
-          {MARKS.map((m) => (
-            <button
-              key={m.status}
-              type="button"
-              onClick={() => save(m.status)}
-              className={`rounded-md px-2 py-1 text-[11px] font-bold whitespace-nowrap ${SEAT_MARK_TONE[m.status]}`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <CellPopover anchorRef={btnRef} onClose={closeMenu}>
+          <div className="border-line bg-card shadow-modal flex gap-0.5 rounded-lg border p-1">
+            {MARKS.map((m, i) => (
+              <button
+                key={m.status}
+                type="button"
+                /* 겹판이 DOM 끝(포털)으로 나가 Tab 순서에서 칸 바로 뒤가 아니게 됐다 — 열릴 때 첫 항목에
+                   초점을 줘 키보드로도 그대로 고를 수 있게 한다(Esc로 닫힌다). */
+                autoFocus={i === 0}
+                onClick={() => save(m.status)}
+                className={`rounded-md px-2 py-1 text-[11px] font-bold whitespace-nowrap ${SEAT_MARK_TONE[m.status]}`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </CellPopover>
       )}
-      {error && (
-        <p className="text-danger absolute top-full left-0 z-20 mt-1 w-40 text-[10px]">{error}</p>
+      {/* 메뉴가 열려 있는 동안엔 안 그린다 — 둘 다 같은 자리(칸 아래)에 떠서 서로를 덮는다.
+          닫으면 다시 보이므로 실패 사실은 사라지지 않는다(다음 저장 시도에서 지워진다). */}
+      {error && !open && (
+        <CellPopover anchorRef={btnRef}>
+          <p className="border-danger bg-card text-danger shadow-modal w-40 rounded-lg border px-2 py-1 text-[10px] font-bold">
+            {error}
+          </p>
+        </CellPopover>
       )}
     </div>
   );
