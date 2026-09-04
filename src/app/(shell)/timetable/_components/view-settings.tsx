@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
 
-import { CalendarOff, Filter, ListFilter, RotateCcw } from "@/components/icons/eywa-icon-compat";
+import { CalendarOff, Filter, ListFilter, RotateCcw, Users } from "@/components/icons/eywa-icon-compat";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 import {
   bucketsOf,
@@ -45,6 +45,8 @@ export function TimetableViewSettings({
   collapseOn = false,
   hideEmptyDaysHref,
   hideEmptyDaysOn = false,
+  hideStudentsHref,
+  hideStudentsOn = false,
 }: {
   /** 학원설정(operations.gradeLevels) — 학년 목록의 단일 소스. 여기에 하드코딩 금지. */
   allGrades: string[];
@@ -58,6 +60,10 @@ export function TimetableViewSettings({
   /** 강사뷰 '미사용 요일' 토글 링크. 없으면 숨김. */
   hideEmptyDaysHref?: string;
   hideEmptyDaysOn?: boolean;
+  /** '학생 명단' 토글 링크(명단을 그리는 뷰에서만 — 기본뷰·통합뷰). 없으면 항목 자체를 숨긴다. */
+  hideStudentsHref?: string;
+  /** 지금 접혀 있는가(true = 명단 숨김). 칩은 "보이는 상태"를 강조로 나타낸다. */
+  hideStudentsOn?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -215,8 +221,19 @@ export function TimetableViewSettings({
                   <TimetableColorToggle />
                 </div>
               ) : null}
-              {collapseHref || hideEmptyDaysHref ? (
+              {collapseHref || hideEmptyDaysHref || hideStudentsHref ? (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  {/* 학생 명단 — 강조 = **보이는 상태**('미사용 요일'과 같은 규약: 켜짐 = 그게 보인다). */}
+                  {hideStudentsHref ? (
+                    <ParamLink
+                      href={hideStudentsHref}
+                      title="셀 안 학생 명단 표시/숨김 (숨기면 반 이름·강의실·인원만 남고 칸이 낮아진다)"
+                      className={toggleCls(!hideStudentsOn)}
+                    >
+                      <Users size={11} strokeWidth={1.8} />
+                      학생 명단
+                    </ParamLink>
+                  ) : null}
                   {collapseHref ? (
                     <ParamLink
                       href={collapseHref}

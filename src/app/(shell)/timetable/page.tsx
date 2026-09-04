@@ -72,6 +72,7 @@ import {
   COMPACT1H_NONE,
   EMPTY_DAYS_COOKIE,
   EMPTY_PERIODS_COOKIE,
+  STUDENTS_COOKIE,
   readCompact1hFor,
 } from "@/features/timetable/lib/pref-cookies";
 import { TimetableViewPrefsSync } from "./_components/prefs-sync";
@@ -108,10 +109,10 @@ type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string; gedit?: string; etrack?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string; students?: string; gedit?: string; etrack?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw, gedit: geditRaw, etrack: etrackRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw, students: studentsRaw, gedit: geditRaw, etrack: etrackRaw } = await searchParams;
   // 정규/특강/전체 — 기본 = 정규(특강 제외). 특강은 방학 단기강좌라 정규 주간표에 섞이면 시야가 흐려진다.
   const kind = parseTimetableKind(kindRaw);
   const cookieStore = await cookies();
@@ -206,6 +207,11 @@ export default async function TimetablePage({
   const collapseEmptyPeriods = emptyperiodsRaw
     ? emptyperiodsRaw === "collapse"
     : savedCollapseEmptyPeriods;
+  // '학생 명단 접기'(2026-09-04 원장) — 셀에 반 이름·강의실·인원만 남기고 명단을 감춘다. 기본 = 펼침.
+  // 우선순위는 위 둘과 같다(URL → 계정 → 쿠키 → 기본값). 명단을 감추면 셀·행 높이도 함께 줄어든다.
+  const savedHideStudents =
+    viewPrefs.hideStudents ?? cookieStore.get(STUDENTS_COOKIE)?.value === "hide";
+  const hideStudents = studentsRaw ? studentsRaw === "hide" : savedHideStudents;
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
@@ -496,11 +502,13 @@ export default async function TimetablePage({
       <TimetableViewPrefsSync
         hideEmptyDays={hideEmptyDays}
         collapseEmptyPeriods={collapseEmptyPeriods}
+        hideStudents={hideStudents}
         subject={subject}
         sections={compactList}
         englishTrack={carriedTrack}
         savedHideEmptyDays={viewPrefs.hideEmptyDays}
         savedCollapseEmptyPeriods={viewPrefs.collapseEmptyPeriods}
+        savedHideStudents={viewPrefs.hideStudents}
         savedSections={viewPrefs.compact1h?.[subject] ?? null}
         savedEnglishTrack={viewPrefs.englishTrack}
       />
@@ -544,7 +552,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
         {/* 미래 날짜로 적용해 둔 변경 — 이번 주 화면엔 흔적이 없어 여기 상시로 붙인다(원장 2026-08-28).
             라벨=시트 열기 · ×=예약 취소. 예약이 없으면 아무것도 안 그린다(평소 비용 0). */}
@@ -598,6 +606,7 @@ export default async function TimetablePage({
                   // 네비(주 이동·뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
                   hideEmptyDays,
                   collapseEmptyPeriods,
+                  hideStudents,
                   // 프로그램 필터는 **영어에만 있는 축**이라 다른 과목으로 갈 땐 안 싣는다(싣고 가면 그 과목
                   // 반이 전부 english_track=null이라 'eie'에서 화면이 통째로 빈다). 영어로 돌아올 땐 계정값 복원.
                   englishTrack: k === "english" ? englishTrack : undefined,
@@ -626,6 +635,7 @@ export default async function TimetablePage({
                   compact1h: compactList,
                   hideEmptyDays,
                   collapseEmptyPeriods,
+                  hideStudents,
                   englishTrack: carriedTrack,
                 }),
               }))}
@@ -653,6 +663,7 @@ export default async function TimetablePage({
                     compact1h: compactList,
                     hideEmptyDays,
                     collapseEmptyPeriods,
+                    hideStudents,
                     englishTrack: t,
                   }),
                 }))}
@@ -677,7 +688,7 @@ export default async function TimetablePage({
           ).map((v) => ({
             value: v.key,
             label: v.label,
-            href: buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView }),
+            href: buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView }),
           }))}
         />
 
@@ -701,7 +712,7 @@ export default async function TimetablePage({
                 *"통합뷰에서 편집모드를 누르고, 통합뷰의 그 자체를 드래그하고 싶은거야"*).
                 누르면 같은 서식 그대로 **수업명 행만** 남고 그 위에서 반을 끌어 줄을 바꾼다. */}
             <ParamLink
-              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
               title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
               className={`${TOOLBAR_CHIP} gap-1.5 ${groupEditing ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
             >
@@ -749,6 +760,7 @@ export default async function TimetablePage({
                   compact1h: compactList,
                   hideEmptyDays,
                   collapseEmptyPeriods: !collapseEmptyPeriods,
+                  hideStudents,
                   englishTrack: carriedTrack,
                 })
               : undefined
@@ -767,11 +779,33 @@ export default async function TimetablePage({
                   compact1h: compactList,
                   hideEmptyDays: !hideEmptyDays,
                   collapseEmptyPeriods,
+                  hideStudents,
                   englishTrack: carriedTrack,
                 })
               : undefined
           }
           hideEmptyDaysOn={hideEmptyDays}
+          hideStudentsHref={
+            // '학생 명단' 토글은 명단을 그리는 뷰에서만(기본뷰·통합뷰) — 강사뷰·교실뷰엔 명단 자체가 없어
+            // 항목이 서 있으면 눌러도 아무 일도 안 일어난다.
+            effView === "basic" || effView === "integrated"
+              ? buildHref({
+                  view: effView,
+                  defaultView: thisSubjectDefaultView,
+                  subject,
+                  defaultSubject,
+                  kind,
+                  week,
+                  thisWk,
+                  compact1h: compactList,
+                  hideEmptyDays,
+                  collapseEmptyPeriods,
+                  hideStudents: !hideStudents,
+                  englishTrack: carriedTrack,
+                })
+              : undefined
+          }
+          hideStudentsOn={hideStudents}
         />
 
         {/* 학년 필터가 걸린 채로 이 과목·이 주에 보이는 학생이 0명이면, 화면이 그냥 비어 있어 고장으로
@@ -841,7 +875,7 @@ export default async function TimetablePage({
         {effView === "basic" && slots.length > 0 && canEdit ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
-            <TimetableEditControls />
+            <TimetableEditControls rosterHidden={hideStudents} />
           </>
         ) : null}
         </div>
@@ -903,7 +937,7 @@ export default async function TimetablePage({
           initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
           initialPresets={groupPresets}
           initialCompactSections={compactList}
-          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
       ) : isIntegrated ? (
         <TimetableZoomArea>
@@ -915,6 +949,7 @@ export default async function TimetablePage({
             teacherNicknames={teacherNicknames}
             compactSections={compactSections}
             customGroups={customGroups}
+            hideStudents={hideStudents}
           />
         </TimetableZoomArea>
       ) : effView === "teacher" ? (
@@ -943,13 +978,14 @@ export default async function TimetablePage({
           <TimetableZoomArea>
             <div className="flex min-h-0 flex-1 flex-col">
               {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수·.tt-editing으로 즉시 펼침(평소 격자 지형 복원). */}
-              <EmptyPeriodScope>
+              <EmptyPeriodScope collapsed={collapseEmptyPeriods} hideStudents={hideStudents}>
                 <WeekdayGroupTables
                   slots={slots}
                   config={periodsConfig}
                   weekMonday={week}
                   weekdayGrouping={weekdayGrouping}
                   collapseEmptyPeriods={collapseEmptyPeriods}
+                  hideStudents={hideStudents}
                 />
               </EmptyPeriodScope>
             </div>
@@ -991,6 +1027,11 @@ function buildHref(opts: {
    */
   collapseEmptyPeriods?: boolean;
   /**
+   * '학생 명단 접기' 상태 — 위 둘과 동일 규약: 값이 오면 **양방향 명시 직렬화**(hide/show),
+   * 미지정(undefined)만 생략(=계정/쿠키 기본).
+   */
+  hideStudents?: boolean;
+  /**
    * 통합뷰 '배치 편집' 모드. **true일 때만** 직렬화한다 — 위 두 표시 설정과 달리 '기억할 취향'이 아니라
    * 지금 켠 작업 모드라, 다른 링크(주 이동·과목 전환)는 파라미터를 안 실어 자연스럽게 읽기 전용으로 돌아간다.
    */
@@ -1021,6 +1062,7 @@ function buildHref(opts: {
   if (opts.hideEmptyDays !== undefined) params.set("emptydays", opts.hideEmptyDays ? "hide" : "show");
   if (opts.collapseEmptyPeriods !== undefined)
     params.set("emptyperiods", opts.collapseEmptyPeriods ? "collapse" : "expand");
+  if (opts.hideStudents !== undefined) params.set("students", opts.hideStudents ? "hide" : "show");
   if (opts.gedit) params.set("gedit", "1");
   if (opts.englishTrack !== undefined) params.set("etrack", opts.englishTrack);
   const q = params.toString();

@@ -31,6 +31,7 @@ export function RichGridView({
   teacherNicknames,
   compactSections,
   customGroups,
+  hideStudents = false,
 }: {
   slots: GridSlot[];
   subjectMaps: SubjectMaps;
@@ -45,6 +46,8 @@ export function RichGridView({
    * 나눈다. **여기선 설정만 소비**하고 토글은 안 그린다(설정 지점 = 그룹 설정 화면).
    */
   compactSections: Set<number>;
+  /** '학생 명단 접기'(뷰 설정) — 카드에서 명단 섹션을 뺀다(기본뷰와 같은 축). */
+  hideStudents?: boolean;
 }) {
   const groups = buildRichCardGroups(slots, config, compactSections, customGroups);
   const subjectSoftClass = SUBJECT_SOFT[subjectMaps.colorOf(slots[0]?.subject ?? "")];
@@ -71,6 +74,7 @@ export function RichGridView({
                 subjectSoftClass={subjectSoftClass}
                 teacherColors={teacherColors}
                 teacherNicknames={teacherNicknames}
+                hideStudents={hideStudents}
               />
             </section>
           </SearchedCell>

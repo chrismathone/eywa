@@ -72,6 +72,12 @@ export const WD_MAX_H = 3 * STU_ROW_H + SEC_LABEL_H; // 퇴원 3칸 = 86px
 export const HEADER_ROW_H = 30;
 export const HEADER_H = HEADER_ROW_H * 2;
 
+/**
+ * 합반 칸 머리의 `합반 N반` 배지가 먹는 세로 몫(배지 + 셀 패딩·간격) — 명단을 접었을 때 셀 최소 높이 계산에 더한다.
+ * 안 더하면 헤더가 그만큼 잘린다(적대 리뷰 2026-09-04).
+ */
+export const HAPBAN_BADGE_H = 30;
+
 /** 반교시 표시용 빈 밴드 — 반대쪽 서브슬롯 자리(합반 셀과 공유해 두 셀 높이가 항상 같게). */
 export function SubSlotBand() {
   return (
@@ -105,7 +111,7 @@ export function ClassCell({
   /** 이 셀(병합 블록)이 덮는 요일. 2일+이고 일부 요일만 오는 재원생이 있으면 요일 칸으로 분할(분리등원, ijw식). 기본뷰만 전달. */
   coveringDays?: string[];
 }) {
-  const { editing, incoming } = useTimetableEdit();
+  const { canDrag, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
   const colorMode = useTimetableColorMode();
   // 과목 헤더 색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지. 강도는 개인 색모드(vivid/mid/pastel).
@@ -146,7 +152,17 @@ export function ClassCell({
   const incomingHere = incoming.get(slot.id) ?? [];
   const showRoster = roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0);
   // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
-  const hasSplit = partialActive.length > 0 || (editing && covers.length >= 2);
+  // 🔴 요일 칸(분리등원 존)은 **드래그 시작에 새로 만들지 않는다** — dnd-kit은 드롭존 집합이 바뀌면 전부
+  //    다시 잰다(`droppableRects` lazy memo). 픽업 순간 200개 존이 한꺼번에 생기면 그 재측정이 통째로
+  //    한 프레임에 몰려 **집는 순간 멈칫**한다(실측 701ms, 원장 제보 2026-09-04 *"픽업할 때 렉"*).
+  //    → 권한이 있으면 **늘 마운트**하고(집합 불변), 보이는 것만 CSS(`body.tt-dragging`)로 켠다.
+  const hasSplit = partialActive.length > 0 || (canDrag && covers.length >= 2);
+  /**
+   * 요일 칸의 머리·안내는 **늘 그려 둔다** — 분리등원 학생이 있으면 평소에도 보이고, 없으면 `hidden`으로 두었다가
+   * 끄는 동안만 CSS로 켠다(`body.tt-dragging`). 🔴 상태로 마운트/언마운트하면 **픽업이 멈칫한다**(drag-flag.ts).
+   */
+  const dayColsAlways = partialActive.length > 0;
+  const dayHeadCls = dayColsAlways ? "" : "hidden [.tt-dragging_&]:block";
 
   // ⚠️ 이동 목적지 반은 slot.id(스케줄 id)가 아니라 slot.classId(실제 반 id) — 드롭 data로 전달(과거 onDragEnd가
   // slot.id를 반 id로 넘겨 RPC FK 실패하던 버그 수정). id는 셀 유니크(slot.id) 유지, slotId는 마커 키.
@@ -186,7 +202,9 @@ export function ClassCell({
               />
             }
           >
+            {/* 🔴 반 정보는 **더블클릭**으로 연다(원장 2026-09-04) — 학생 행과 같은 규약. */}
             <WindowLink
+              openOn="doubleClick"
               href={`/classes/${slot.classId ?? slot.id}`}
               title={renameNote ?? (slot.classroomName ? `${slot.className} · ${slot.classroomName}` : slot.className)}
               ariaLabel={`${slot.className} 반 정보`}
@@ -224,7 +242,8 @@ export function ClassCell({
         </div>
 
         {/* 학생 명단 — 재원(이 영역만 스크롤+페이드) / 대기·퇴원(고정 박스, 각자 스크롤)을 분리.
-            신입=빨강·전입=초록·퇴원=취소선. 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). */}
+            신입=빨강·전입=초록·퇴원=취소선. 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자).
+*/}
         {showRoster ? (
           <div className={`flex min-h-0 flex-1 flex-col text-sm ${handover ? "bg-blue-soft" : "bg-card"}`}>
             {/* 재원 — 이 영역만 스크롤(스크롤바 숨김 + 위·아래 페이드). 10칸 기본, 넘으면 스크롤.
@@ -236,7 +255,7 @@ export function ClassCell({
                   students={commonActive}
                   classId={realClassId}
                   className={slot.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={activeCap}
                   draggable
                   tone={(s) => timetableStudentTone(colorMode, s)}
@@ -246,20 +265,21 @@ export function ClassCell({
               </div>
               {/* 분리등원 요일 칸 — 편집 모드의 다요일 셀엔 요일 드롭존을 항상(요일별 등원 지정), 아니면 분리 학생 있을 때만. */}
               {hasSplit ? (
-                <div className="border-line/60 shrink-0 border-t border-dashed">
+                <div className={`shrink-0 ${dayColsAlways ? "border-line/60 border-t border-dashed" : "[.tt-dragging_&]:border-line/60 [.tt-dragging_&]:border-t [.tt-dragging_&]:border-dashed"}`}>
                   <div className="flex">
                     {covers.map((day) => {
                         const dayStudents = partialActive.filter((s) => (s.attendanceDays ?? []).includes(day));
                         const col = (
                           <>
-                            <div className="text-text-faint bg-bg-soft/60 px-1 py-px text-center text-xs font-bold">
+                            <div className={`text-text-faint bg-bg-soft/60 px-1 py-px text-center text-xs font-bold ${dayHeadCls}`}>
                               {DAY_LABEL[day] ?? day}
                             </div>
                             {dayStudents.length > 0 ? (
                               dayStudents.map((s, i) =>
-                                editing && s.enrollmentId ? (
+                                canDrag && s.enrollmentId ? (
                                   <DraggableStudentRow
                                     key={s.enrollmentId}
+                                    student={s}
                                     enrollmentId={s.enrollmentId}
                                     studentId={s.studentId}
                                     dayKey={day}
@@ -282,16 +302,14 @@ export function ClassCell({
                                   />
                                 ),
                               )
-                            ) : editing ? (
-                              <div className="text-text-faint/70 flex min-h-[22px] items-center justify-center text-xs">
+                            ) : (
+                              <div className="text-text-faint/70 hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging_&]:flex">
                                 여기로
                               </div>
-                            ) : (
-                              <div className="min-h-[22px]" aria-hidden />
                             )}
                           </>
                         );
-                        return editing ? (
+                        return canDrag ? (
                           <DayDropZone
                             key={day}
                             slotId={slot.id}
@@ -349,7 +367,7 @@ export function ClassCell({
                   students={hold}
                   classId={slot.id}
                   className={slot.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
                   tone={() => "text-text-dim"}
@@ -368,7 +386,7 @@ export function ClassCell({
                   students={withdrawn}
                   classId={slot.id}
                   className={slot.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
                   tone={() => withdrawnTone(colorMode)}

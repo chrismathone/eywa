@@ -61,9 +61,17 @@ export type IncomingStudent = {
 };
 
 export interface TimetableEditState {
-  editing: boolean;
-  /** 편집 모드 토글(툴바 컨트롤이 호출). */
-  setEditing: (v: boolean) => void;
+  /**
+   * 드래그로 옮길 수 있는가 = **편집 권한 + 이번/미래 주**(과거 주는 조회 전용). 옛 '편집 모드' 토글을 대신한다
+   * (원장 2026-09-04 *"편집모드 없이 바로 드래그 되도록 하자. 대신 저장을 눌러야 반영"*) — 켜고 끄는 상태가
+   * 아니라 **권한의 다른 이름**이라, 화면에 토글이 없다. 반영은 여전히 '저장'을 눌러야 한다(큐 → RPC).
+   */
+  canDrag: boolean;
+  /**
+   * 🔴 "지금 끌고 있나"는 **여기 없다** — [`drag-flag.ts`](./drag-flag.ts)의 모듈 플래그 + `body.tt-dragging`
+   *    클래스가 나른다. 이 컨텍스트에 넣었더니 집는 **그 순간** 소비처(셀 59 + 줄 350)가 통째로 다시 그려져
+   *    **픽업이 멈칫**했다(원장 제보 2026-09-04, CPU 프로파일로 확인 — 상위가 전부 React 커밋이었다).
+   */
   /** enrollmentId → 이 학생이 어디로 이동 예정인지(없으면 이동 없음). 출발 셀이 취소선+→대상 표시에 사용. */
   pending: Map<string, PendingTarget>;
   /** toSlotId(=도착 셀 slot.id, 스케줄 id) → 그 셀로 전입 예정인 학생들. 도착 셀이 초록 미리보기 행으로 표시. */
@@ -116,8 +124,7 @@ export interface TimetableEditState {
 
 const noop = () => {};
 export const TimetableEditContext = createContext<TimetableEditState>({
-  editing: false,
-  setEditing: noop,
+  canDrag: false,
   pending: new Map(),
   incoming: new Map(),
   queueMove: noop,

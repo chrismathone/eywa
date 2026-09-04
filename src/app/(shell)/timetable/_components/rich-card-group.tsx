@@ -98,6 +98,10 @@ export type ColumnCommon = {
   activeH: number;
   holdH: number;
   wdH: number;
+  /** 명단 섹션 행 수 — '학생 명단 접기'면 전부 0(그룹 원본 `group.rosterRows`가 아니라 이 값을 볼 것). */
+  rosterRows: { active: number; hold: number; withdrawn: number };
+  /** 명단 접힘 — 카드 머리에 **인원**을 대신 적는다(접었다고 몇 명인지까지 사라지면 그건 은폐다). */
+  hideStudents?: boolean;
   /**
    * **수업명 행만** 그린다(그룹 설정 = 배치 편집 모드). 담임·강의실·교시 격자·명단을 통째로 접어
    * 반 하나가 40px 한 칸이 된다 — 42반이면 원래 2만 칸 넘는 격자를 매 드롭마다 다시 그려야 해서
@@ -129,6 +133,7 @@ export function RichCardGroupBoard({
   renderCard,
   trailing,
   namesOnly,
+  hideStudents = false,
 }: {
   group: RichCardGroup;
   subjectSoftClass: string;
@@ -141,12 +146,16 @@ export function RichCardGroupBoard({
   trailing?: ReactNode;
   /** 수업명 행만(배치 편집) — ColumnCommon.namesOnly 주석 참조. */
   namesOnly?: boolean;
+  /** '학생 명단 접기'(뷰 설정) — 명단 섹션을 통째로 안 그린다(카드가 그만큼 낮아진다). */
+  hideStudents?: boolean;
 }) {
   // 섹션 안에서는 모든 카드가 같은 높이(행이 맞물려 시트처럼 읽힌다) — 높이는 그 섹션의 최대 인원.
-  const activeH = sectionH(group.rosterRows.active);
-  const holdH = sectionH(group.rosterRows.hold);
-  const wdH = sectionH(group.rosterRows.withdrawn);
-  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, teacherNicknames, activeH, holdH, wdH, namesOnly };
+  // '학생 명단 접기'면 세 섹션을 0행으로 — 높이·라벨·행이 **같은 값 하나**를 보므로 카드와 라벨열이 어긋나지 않는다.
+  const rosterRows = hideStudents ? { active: 0, hold: 0, withdrawn: 0 } : group.rosterRows;
+  const activeH = sectionH(rosterRows.active);
+  const holdH = sectionH(rosterRows.hold);
+  const wdH = sectionH(rosterRows.withdrawn);
+  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, teacherNicknames, activeH, holdH, wdH, rosterRows, hideStudents, namesOnly };
   // 학생 검색 — 걸린 반만 남긴다. 섹션 높이(rosterRows)는 그룹 전체 기준 그대로라 남은 카드의 행이
   // 어긋나지 않는다.
   // 🔴 **배치 편집(renderCard)에선 절대 안 거른다** — 끌어 옮기는 화면에서 반이 사라지면 배치가
@@ -211,9 +220,12 @@ function LabelColumn({
           {p.label && p.time && p.time !== p.label ? <span className="text-xs">{p.time}</span> : null}
         </div>
       ))}
-      <div className={`text-primary ${GRID} flex items-center justify-center border-b text-xs font-bold`} style={{ height: activeH }}>
-        재원
-      </div>
+      {/* 명단을 접으면(activeH 0) 라벨도 없다 — 카드 쪽과 높이가 같아야 줄이 어긋나지 않는다. */}
+      {activeH > 0 ? (
+        <div className={`text-primary ${GRID} flex items-center justify-center border-b text-xs font-bold`} style={{ height: activeH }}>
+          재원
+        </div>
+      ) : null}
       {/* 대기·퇴원은 그 섹션에 한 명도 없으면 라벨까지 통째로 접는다 — 카드 쪽과 같은 높이라 정렬이 유지된다. */}
       {holdH > 0 ? <div className={`${cell} text-rose`} style={{ height: holdH }}>대기</div> : null}
       {wdH > 0 ? (
@@ -235,6 +247,8 @@ export function ClassColumn({
   activeH,
   holdH,
   wdH,
+  rosterRows,
+  hideStudents,
   namesOnly,
   edit,
 }: ColumnCommon & {
@@ -302,6 +316,7 @@ export function ClassColumn({
             }
           >
             <WindowLink
+              openOn="doubleClick"
               href={`/classes/${card.classId}`}
               title={card.className}
               ariaLabel={`${card.className} 반 정보`}
@@ -318,6 +333,8 @@ export function ClassColumn({
               {namesOnly ? null : (
                 <span className="line-clamp-1 w-full text-xs leading-tight font-normal opacity-70" title={card.classroomLabel}>
                   {card.classroomLabel}
+                  {/* 명단을 접으면 인원이 어디에도 안 남는다(기본뷰는 헤더에 있다) → 강의실 옆에 붙인다. */}
+                  {hideStudents ? <span className="num"> · {card.activeCount}</span> : null}
                 </span>
               )}
             </WindowLink>
@@ -364,14 +381,14 @@ export function ClassColumn({
         </div>
       ))}
       {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드. */}
-      <RosterSection h={activeH} rows={group.rosterRows.active} count={card.active.length} className={`bg-card ${GRID} border-b`}>
+      <RosterSection h={activeH} rows={rosterRows.active} count={card.active.length} className={`bg-card ${GRID} border-b`}>
         {card.activeCount === 0 ? (
           <div className="text-text-faint py-2 text-center text-xs">-</div>
         ) : (
           card.active.map((s, i) => <RosterRow key={s.studentId ?? `a-${i}`} s={s} />)
         )}
       </RosterSection>
-      <RosterSection h={holdH} rows={group.rosterRows.hold} count={card.hold.length} className={`bg-rose-soft/30 ${GRID} border-b`}>
+      <RosterSection h={holdH} rows={rosterRows.hold} count={card.hold.length} className={`bg-rose-soft/30 ${GRID} border-b`}>
         {card.hold.length === 0 ? (
           <div className="text-text-faint text-center text-xs">-</div>
         ) : (
@@ -379,7 +396,7 @@ export function ClassColumn({
         )}
       </RosterSection>
       {/* 퇴원 — 재원/대기와 동일 서식, 진회색 배경+흰 글자 톤으로 구분 */}
-      <RosterSection h={wdH} rows={group.rosterRows.withdrawn} count={card.withdrawn.length} className="bg-bg-soft">
+      <RosterSection h={wdH} rows={rosterRows.withdrawn} count={card.withdrawn.length} className="bg-bg-soft">
         {card.withdrawn.length === 0 ? (
           <div className="text-text-faint text-center text-xs">-</div>
         ) : (
@@ -539,7 +556,7 @@ function RosterRow({ s }: { s: GridStudent }) {
   //    글자 크기는 명단 컨테이너의 text-sm에서 상속 — 기본뷰 class-cell과 같은 값이다.
   const cls = `block overflow-hidden whitespace-nowrap text-clip px-2 py-[3px] leading-tight ${tone}`;
   const trigger = s.studentId ? (
-    <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>
+    <WindowLink openOn="doubleClick" href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>
       {inner}
     </WindowLink>
   ) : (

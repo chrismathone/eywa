@@ -33,6 +33,14 @@ export type TimetableViewPrefs = {
   hideEmptyDays: boolean | null;
   /** 기본뷰 '빈 교시 접기'. null = 미설정(기존 쿠키/기본값 폴백). */
   collapseEmptyPeriods: boolean | null;
+  /**
+   * **학생 명단 접기**(기본뷰·통합뷰) — true면 셀에 반 이름·강의실·인원만 남기고 명단을 감춘다.
+   * 원장 2026-09-04 *"시간표에서 '학생목록 접기' 기능 추가. 접으면 학생 목록이 안보이면 좋겠네"*
+   * (ijw 시간표의 `displayOptions.showStudents`와 같은 축 — 거기선 기기 로컬이었지만 여기선 계정 귀속).
+   * ⚠️ 명단이 사라지면 셀 높이도 함께 줄어든다(빈 칸을 남기면 접는 뜻이 없다) — `noRosterCellHeight` 참조.
+   * null = 미설정(쿠키/기본값 폴백 = 펼침).
+   */
+  hideStudents: boolean | null;
   /** 기본뷰 셀 색 강도. null = 미설정(기기 저장 localStorage/기본 vivid 폴백). */
   colorMode: TimetableColorPref | null;
   /**
@@ -86,6 +94,7 @@ export const EMPTY_VIEW_PREFS: TimetableViewPrefs = {
   grades: null,
   hideEmptyDays: null,
   collapseEmptyPeriods: null,
+  hideStudents: null,
   colorMode: null,
   compact1h: null,
   fontSize: null,
@@ -216,6 +225,7 @@ export function parseViewPrefs(raw: unknown): TimetableViewPrefs {
     hideEmptyDays: typeof o.hideEmptyDays === "boolean" ? o.hideEmptyDays : null,
     collapseEmptyPeriods:
       typeof o.collapseEmptyPeriods === "boolean" ? o.collapseEmptyPeriods : null,
+    hideStudents: typeof o.hideStudents === "boolean" ? o.hideStudents : null,
     colorMode:
       typeof o.colorMode === "string" && COLOR_MODES.includes(o.colorMode)
         ? (o.colorMode as TimetableColorPref)
@@ -246,6 +256,9 @@ export function serializeViewPrefs(prefs: TimetableViewPrefs): Record<string, un
   if (prefs.grades && prefs.grades.length > 0) out.grades = prefs.grades;
   if (prefs.hideEmptyDays !== null) out.hideEmptyDays = prefs.hideEmptyDays;
   if (prefs.collapseEmptyPeriods !== null) out.collapseEmptyPeriods = prefs.collapseEmptyPeriods;
+  // 🔴 **양방향 명시**(형제 두 키와 같은 규약) — 읽기가 `계정 ?? 쿠키`라, 끈 것을 키 삭제로 표현하면
+  //    다른 기기의 쿠키가 되살리고 동기화가 매번 다시 저장한다(적대 리뷰 2026-09-04).
+  if (prefs.hideStudents !== null) out.hideStudents = prefs.hideStudents;
   if (prefs.colorMode !== null) out.colorMode = prefs.colorMode;
   // ⚠️ 빈 배열 과목도 그대로 적는다(명시적 해제). 맵 자체가 비면 키를 안 적는다(= 미설정).
   if (prefs.compact1h && Object.keys(prefs.compact1h).length > 0) out.compact1h = prefs.compact1h;
@@ -279,6 +292,7 @@ export function mergeViewPrefs(
     grades: pick("grades"),
     hideEmptyDays: pick("hideEmptyDays"),
     collapseEmptyPeriods: pick("collapseEmptyPeriods"),
+    hideStudents: pick("hideStudents"),
     colorMode: pick("colorMode"),
     roomGroupLines: pick("roomGroupLines"),
     roomTimeVertical: pick("roomTimeVertical"),

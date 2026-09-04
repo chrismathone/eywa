@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import {
   SEARCH_HIT_CLASS,
   SearchedCell,
@@ -11,6 +11,7 @@ import {
   useSearchTone,
 } from "./search-context";
 import { TimetableEditContext, type TimetableEditState } from "./edit-context";
+import { setTimetableDragging } from "./drag-flag";
 import { buildTimetableSearchIndex } from "@/features/timetable/lib/student-search";
 
 /**
@@ -36,11 +37,10 @@ const index = buildTimetableSearchIndex([
   { classId: "c3", students: [김하늘, 장윤진] },
 ]);
 
-/** 편집 상태 주입 — 실제 보드 대신 컨텍스트만 세운다(편집 모드에서 검색이 물러나는지 확인용). */
-function editState(editing: boolean): TimetableEditState {
+/** 편집 상태 주입 — 실제 보드 대신 컨텍스트만 세운다(**끄는 동안** 검색이 물러나는지 확인용). */
+function editState(): TimetableEditState {
   return {
-    editing,
-    setEditing: () => {},
+    canDrag: true,
     pending: new Map(),
     incoming: new Map(),
     queueMove: () => {},
@@ -70,9 +70,9 @@ function Row({ student }: { student: { name: string; school: string; grade: stri
   return <span className={tone}>{student.name}</span>;
 }
 
-function Board({ enabled = true, editing = false }: { enabled?: boolean; editing?: boolean }) {
+function Board({ enabled = true }: { enabled?: boolean }) {
   return (
-    <TimetableEditContext.Provider value={editState(editing)}>
+    <TimetableEditContext.Provider value={editState()}>
       <TimetableSearchProvider index={index} scope="이번 주 수학 시간표" enabled={enabled}>
         <TimetableSearchToggle />
         <TimetableSearchEmptyNote />
@@ -318,15 +318,17 @@ describe("0건", () => {
 });
 
 describe("🔴 검색이 스스로 물러나는 자리", () => {
-  it("편집 모드 — 필터가 풀리고 입력칸도 사라진다(옮길 목적지 반이 가려지면 편집이 막힌다)", () => {
-    const { rerender } = render(<Board />);
+  it("끄는 동안 — 필터가 풀리고 입력칸도 사라진다(옮길 목적지 반이 가려지면 드롭할 곳이 없다)", () => {
+    render(<Board />);
     type("이도윤");
     expect(screen.queryByText("단독칸")).toBeNull();
-    rerender(<Board editing />);
+    // 🔴 "끄는 중"은 컨텍스트가 아니라 **모듈 플래그**다(픽업 렉 때문에 상태를 뺐다 — drag-flag.ts).
+    //    검색어가 걸려 있을 때만 구독하므로, 이 provider는 그때만 깨어난다.
+    act(() => setTimetableDragging(true));
     expect(screen.getByText("단독칸")).toBeTruthy(); // 전 칸 복귀
     expect(screen.queryByLabelText("학생 검색")).toBeNull();
-    // 편집을 끄면 치던 검색어가 그대로 살아난다.
-    rerender(<Board />);
+    // 손을 놓으면 치던 검색어가 그대로 살아난다.
+    act(() => setTimetableDragging(false));
     expect(screen.queryByText("단독칸")).toBeNull();
   });
 

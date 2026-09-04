@@ -15,7 +15,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Check, GripVertical, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
 import {
   moveEnrollmentsBatch,
   updateEnrollmentsAttendanceBatch,
@@ -34,7 +34,8 @@ import {
   type IncomingStudent,
   type PendingTarget,
 } from "./edit-context";
-import { IndexBadge } from "./student-rows";
+import { setTimetableDragging } from "./drag-flag";
+import { IndexBadge, ROW_CLASS } from "./student-rows";
 
 type Queued = PendingMove & {
   fromClassName: string;
@@ -68,9 +69,10 @@ type DropData = {
  * 시간표 편집 상태 provider — 편집 토글·이동 큐·저장/취소·적용일을 소유하고 context로 제공.
  * 편집 컨트롤(TimetableEditControls, 툴바에 인라인)과 드롭영역(TimetableDndArea, 그리드)이
  * 분리돼 같은 상태를 소비한다.
- * - 읽기 전용(기본): 학생 드래그 비활성, 셀 클릭 → drawer.
- * - 편집 모드: 학생을 다른 반의 요일 존/공통 존으로 드롭 → 델타 버퍼에 누적(DB 미반영). 요일 존=그 요일만
- *   등원(분리등원), 공통 존=전 요일. '저장' 시 compressMoves 후 moveEnrollmentsBatch(단일 RPC)로 커밋.
+ * - 권한 없음·과거 주: 학생 드래그 비활성(읽기 전용).
+ * - 권한 있음: **모드 없이 곧바로** 학생을 다른 반의 요일 존/공통 존으로 드롭 → 델타 버퍼에 누적(DB 미반영).
+ *   요일 존=그 요일만 등원(분리등원), 공통 존=전 요일. '저장' 시 compressMoves 후 moveEnrollmentsBatch(단일 RPC)로
+ *   커밋한다(원장 2026-09-04 *"편집모드 없이 바로 드래그 … 대신 저장을 눌러야 반영"*).
  */
 export function TimetableEditProvider({
   children,
@@ -92,11 +94,9 @@ export function TimetableEditProvider({
   canEdit?: boolean;
 }) {
   const router = useRouter();
-  const [editingRaw, setEditing] = useState(false);
-  // 과거 주로 이동하면 편집 의도가 남아 있어도 즉시 무효 — 아래 모든 소비처(Delete 핸들러·드롭·저장)가
-  // 이 파생값을 본다. state를 effect로 리셋하지 않는 이유는 렌더 중 setState 금지 규칙(#25)과,
-  // 되돌아왔을 때 대기 큐를 잃지 않기 위해서다.
-  const editing = canEdit && editingRaw;
+  // 드래그 가능 = 권한 + 이번/미래 주. 옛 '편집 모드' state는 없앴다(모드 없이 바로 드래그) — 과거 주로
+  // 이동하면 이 값이 그대로 false라 Delete 핸들러·드롭·저장이 함께 잠긴다(#77: 게이트는 UI가 아니라 여기).
+  const canDrag = canEdit;
   const [queue, setQueue] = useState<Queued[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,9 +123,11 @@ export function TimetableEditProvider({
   const [classPick, setClassPick] = useState<ClassPickTarget | null>(null);
   const openClassPick = useCallback((t: ClassPickTarget) => setClassPick(t), []);
 
-  // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 확인 팝업. 입력창 타이핑 중엔 무시. 편집 모드에서만.
+  // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 **확인 팝업**. 입력창 타이핑 중엔 무시.
+  // ⚠️ 옛 '편집 모드'가 이 단축키의 문이었는데 모드가 사라졌다 — 이제 편집 권한(canDrag)이 곧 문이고,
+  //    실제 종료는 팝업에서 한 번 더 확인해야 일어난다(키 하나로 조용히 지워지지 않는다).
   useEffect(() => {
-    if (!editing) return;
+    if (!canDrag) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Delete") return;
       const el = e.target as HTMLElement | null;
@@ -139,7 +141,7 @@ export function TimetableEditProvider({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editing]);
+  }, [canDrag]);
 
   async function confirmEndEnrollment() {
     if (!endTarget) return;
@@ -300,7 +302,6 @@ export function TimetableEditProvider({
 
   async function save() {
     if (compressed.length === 0) {
-      setEditing(false);
       setQueue([]);
       setScheduledDate(null);
       return;
@@ -348,7 +349,6 @@ export function TimetableEditProvider({
       }
       setQueue([]);
       setScheduledDate(null);
-      setEditing(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -360,7 +360,6 @@ export function TimetableEditProvider({
   function cancel() {
     setQueue([]);
     setScheduledDate(null);
-    setEditing(false);
     setError(null);
     setFailed([]);
   }
@@ -368,8 +367,7 @@ export function TimetableEditProvider({
   return (
     <TimetableEditContext.Provider
       value={{
-        editing,
-        setEditing,
+        canDrag,
         pending,
         incoming,
         queueMove,
@@ -701,11 +699,15 @@ function EndEnrollmentConfirm({
   );
 }
 
-/** 편집 토글/저장/취소/적용일 컨트롤 — 툴바에 인라인 배치(별도 행 차지 안 함). */
-export function TimetableEditControls() {
+/**
+ * 이동 대기 → 저장/취소 바 — 툴바에 인라인 배치(별도 행 차지 안 함).
+ *
+ * 🔴 옛 '편집' 토글은 없앴다(원장 2026-09-04 *"편집모드 없이 바로 드래그"*). 권한이 있으면 곧바로 끌 수 있고,
+ *    이 바는 **옮긴 게 생겼을 때만** 선다 — 아무것도 안 옮겼는데 저장 버튼이 서 있으면 무엇이 저장될지 모른다.
+ *    평소엔 어떻게 쓰는지 한 줄 힌트만(툴바 상시 버튼 수를 늘리지 않는다, §10).
+ */
+export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?: boolean }) {
   const {
-    editing,
-    setEditing,
     pendingCount,
     save,
     cancel,
@@ -720,24 +722,23 @@ export function TimetableEditControls() {
   } = useTimetableEdit();
   // 표시·저장 모두 "큐가 만들어진 주"를 앵커로 — 주를 옮겨도 적용일 표시가 실제 적용값과 어긋나지 않게(F2).
   const anchorDate = queueDate ?? dateFloor;
+  if (pendingCount === 0 && !error && failed.length === 0) {
+    return (
+      <span className="print:hidden text-text-faint text-xs">
+        {rosterHidden
+          ? "학생 명단을 접어 둔 상태입니다 — 뷰 설정에서 펼치면 끌어 옮길 수 있습니다"
+          : "학생을 끌어 반을 옮기고, 더블클릭으로 상세를 엽니다"}
+      </span>
+    );
+  }
   return (
     <div className="print:hidden flex flex-wrap items-center gap-2 text-xs">
-      {!editing ? (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF}`}
-        >
-          <Pencil className="size-3" />
-          편집
-        </button>
-      ) : (
+      {pendingCount > 0 ? (
         <>
           <span className="text-primary inline-flex items-center gap-1.5 font-medium">
             <Pencil className="size-3" />
-            편집 중
+            <span className="num">{pendingCount}건</span> 이동 대기
           </span>
-          <span className="text-text-faint num">{pendingCount}건 이동 대기</span>
           {/* 적용일(즉시=오늘/조회 주, 예정일=날짜 지정). 이동은 이 날짜에 반영(옛 반은 그날 전까지 유지). */}
           <label className="text-text-dim inline-flex items-center gap-1">
             적용일
@@ -748,14 +749,14 @@ export function TimetableEditControls() {
               value={scheduledDate ?? anchorDate}
               onChange={(e) => setScheduledDate(e.target.value || null)}
               disabled={saving}
-              className="border-line h-8 rounded-lg border px-1.5 text-xs disabled:opacity-50"
+              className="border-line h-(--control-h) rounded-lg border px-1.5 text-xs disabled:opacity-50"
             />
           </label>
           <button
             type="button"
             onClick={save}
             disabled={saving}
-            className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex h-(--control-h) shrink-0 items-center gap-1.5 rounded-lg px-2.5 font-medium transition disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
             저장
@@ -770,7 +771,7 @@ export function TimetableEditControls() {
             취소
           </button>
         </>
-      )}
+      ) : null}
       {/* 대기 이동이 다른 주에서 만들어졌음을 명시 — 저장은 그 앵커 기준으로 나가고, 새 편집은 막혀 있다(F2).
           앵커 null=즉시 의도(이번 주에서 큐잉) — 미래 주로 이동해 온 경우에도 배너는 떠야 한다. */}
       {weekMismatch ? (
@@ -778,6 +779,10 @@ export function TimetableEditControls() {
           다른 주에서 만든 이동 {pendingCount}건이 대기 중입니다 — <b>{queueDate ?? "오늘(즉시)"}</b> 기준으로
           적용됩니다. 저장하거나 취소한 뒤 이 주를 편집하세요.
         </span>
+      ) : null}
+      {/* 명단을 접어 두면 취소선·전입 예정 미리보기가 화면에 없다 — 무엇이 옮겨졌는지 못 보는 채로 저장하지 않게 알린다. */}
+      {rosterHidden && pendingCount > 0 ? (
+        <span className="text-amber">학생 명단을 접어 둬서 옮긴 줄이 안 보입니다 — 뷰 설정에서 펼치면 표시됩니다.</span>
       ) : null}
       {error ? <span className="text-chart-4">{error}</span> : null}
       {failed.length > 0 ? (
@@ -798,21 +803,30 @@ const preferDayZone: CollisionDetection = (args) => {
   return hits.length > 0 ? hits : rectIntersection(args);
 };
 
-/** DnD 드롭영역 — 시간표 그리드를 감싼다. 편집 모드에서만 이동을 큐에 누적.
- * DragOverlay로 잡은 학생 이름 칩이 커서를 따라다녀 "끌고 있다"는 느낌을 준다. */
+/** DnD 드롭영역 — 시간표 그리드를 감싼다. 편집 권한이 있으면 모드 없이 곧바로 이동을 큐에 누적.
+ * DragOverlay로 잡은 학생 이름 칩이 커서를 따라다녀 "끌고 있다"는 느낌을 준다.
+ * ⚠️ 드롭존은 **드래그 시작에 새로 만들지 않는다**(요일 칸도 권한이 있으면 늘 마운트) — dnd-kit은 드롭존
+ *    집합이 바뀌면 전부 다시 재서, 픽업 순간 그 비용이 한 프레임에 몰린다(실측 701ms). 그래서 재측정
+ *    전략도 기본값(WhileDragging = 시작 시 1회)을 쓴다.
+ */
 export function TimetableDndArea({ children }: { children: ReactNode }) {
-  const { editing, queueMove, openClassPick } = useTimetableEdit();
-  const [dragName, setDragName] = useState<string | null>(null);
+  const { canDrag, queueMove, openClassPick } = useTimetableEdit();
+  // 끌리는 줄의 **원본 모습**(이름·학교학년·톤·폭) — 고스트를 셀 안 줄과 똑같이 그리기 위한 재료.
+  const [drag, setDrag] = useState<{ name: string; meta: string; tone: string; badge?: string; width: number } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   function onDragStart(e: DragStartEvent) {
-    const data = e.active.data.current as { name?: string } | undefined;
-    setDragName(data?.name ?? "학생");
+    const data = e.active.data.current as { name?: string; meta?: string; tone?: string; badge?: string } | undefined;
+    // 폭은 집은 줄의 실측 폭 — 파일 드래그처럼 "그 줄이 그대로 떠 있는" 느낌이 되게(칩으로 줄이면 딴 물건이 된다).
+    const width = Math.round(e.active.rect.current.initial?.width ?? 0);
+    setDrag({ name: data?.name ?? "학생", meta: data?.meta ?? "", tone: data?.tone ?? "", badge: data?.badge, width });
+    setTimetableDragging(true);
   }
 
   function onDragEnd(e: DragEndEvent) {
-    setDragName(null);
-    if (!editing) return;
+    setDrag(null);
+    setTimetableDragging(false);
+    if (!canDrag) return;
     const { active, over } = e;
     if (!over) return;
     const activeIdStr = String(active.id);
@@ -888,14 +902,28 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       collisionDetection={preferDayZone}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragCancel={() => setDragName(null)}
+      onDragCancel={() => {
+        setDrag(null);
+        setTimetableDragging(false);
+      }}
     >
       {children}
+      {/* 고스트 = **원본 줄 그대로**, 파일 이동처럼 반투명(원장 2026-09-04). 이름만 남긴 칩으로 바꾸면
+          "무엇을 끌고 있는지"는 알아도 "어느 줄을 집었는지"가 사라진다 — 같은 이름이 여러 반에 있다. */}
       <DragOverlay dropAnimation={null}>
-        {dragName ? (
-          <div className="border-primary bg-card text-foreground pointer-events-none inline-flex cursor-grabbing items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-medium shadow-lg">
-            <GripVertical className="text-primary size-3.5" />
-            {dragName}
+        {drag ? (
+          <div
+            // 🔴 배경색도 원본 그대로(원장 2026-09-04 *"배경색상까지도 같이 고스트되면 같이"*) — 신입 빨강·전입 초록·
+            //    퇴원 회색이 곧 그 줄의 뜻이다. tone에 배경이 없을 때만 카드색을 깔아 글자가 뜨는 것을 막는다.
+            //    ⚠️ `bg-card`를 항상 깔면 안 된다 — 같은 축 유틸이 겹치면 승자를 CSS 순서가 정한다([[#116]]).
+            className={`${ROW_CLASS} ring-primary/50 pointer-events-none cursor-grabbing rounded-[3px] text-sm opacity-80 shadow-lg ring-1 ${/(^|\s)bg-/.test(drag.tone) ? "" : "bg-card"} ${drag.tone}`}
+            style={drag.width ? { width: drag.width } : undefined}
+          >
+            <span className="block overflow-hidden whitespace-nowrap text-clip">
+              <IndexBadge badge={drag.badge} />
+              {drag.name}
+              {drag.meta ? <span className="opacity-90">/{drag.meta}</span> : null}
+            </span>
           </div>
         ) : null}
       </DragOverlay>

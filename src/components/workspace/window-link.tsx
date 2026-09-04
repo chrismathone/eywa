@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { findNavItem, navPresentation } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
@@ -59,6 +60,7 @@ export function WindowLink({
   onMouseLeave,
   onMouseMove,
   onNavigate,
+  openOn = "click",
 }: {
   href: string;
   title?: string;
@@ -74,16 +76,25 @@ export function WindowLink({
    * 모디파이어 클릭(새 탭)에선 호출하지 않는다 — 화면은 그대로 있어야 한다.
    */
   onNavigate?: () => void;
+  /**
+   * 무엇으로 여는가 — 기본은 클릭. `doubleClick`은 **한 번 클릭으로는 아무 일도 안 일어나고** 더블클릭에만 연다
+   * (원장 2026-09-04, 시간표: 셀을 끌려다 클릭이 되어 창이 열리는 것을 막는다). 모디파이어 클릭(새 탭)은 두 모드 다
+   * 브라우저 기본을 지킨다. 🔴 더블클릭 모드에선 창을 못 여는 경로(모바일·iframe 안·워크스페이스 없음)에서
+   * **직접 이동**한다 — 단일 클릭을 삼켰으니 기본 네비게이션이 남아 있지 않다.
+   */
+  openOn?: "click" | "doubleClick";
 }) {
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
   const workspaceEnabled = useWorkspaceEnabled();
-  function onClick(e: MouseEvent<HTMLAnchorElement>) {
+  const router = useRouter();
+  /** 실제로 열기. 창으로 열었으면 true, 기본 네비게이션에 맡겨야 하면 false. */
+  function activate(e: MouseEvent<HTMLAnchorElement>): boolean {
     // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지.
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return true;
     onNavigate?.(); // 이동이 확정된 뒤에만 — 새 탭으로 빠지는 경우엔 부르지 않는다.
     const resolved = windowIdForHref(href);
-    if (!resolved) return; // 메뉴 라우트가 아니면 기본 이동
+    if (!resolved) return false; // 메뉴 라우트가 아니면 기본 이동
     // 창(iframe) 안에서 shift+클릭 = 드릴인 대신 **부모 워크스페이스에 새 플로팅 창**으로 연다.
     // iframe은 별도 문서라 window-store에 직접 접근 못 함 → 부모(workspace-canvas)에 postMessage하면
     // 그 리스너가 open("route")을 대신 호출한다(EmbedFocusSignal 브리지와 동일 방식).
@@ -93,12 +104,12 @@ export function WindowLink({
         { type: "eywa-open-window", id: resolved.id, title: title ?? resolved.navLabel, href },
         window.location.origin,
       );
-      return;
+      return true;
     }
     // 임베드 iframe 내부(일반 클릭=자연스러운 드릴인) 또는 모바일 = 기본 Link 이동으로 떨어짐.
-    if (!isDesktop) return;
+    if (!isDesktop) return false;
     // 워크스페이스 캔버스 없는 셸(강사·학생 미니멀 셸) = 창을 못 여니 기본 Link 이동(드릴인)으로.
-    if (!workspaceEnabled) return;
+    if (!workspaceEnabled) return false;
     e.preventDefault();
     // 마우스 클릭(detail>0)이면 커서 위치에서 팝업, 키보드 활성(detail=0, clientX/Y 0)이면 cascade.
     const anchor = e.detail > 0 ? { x: e.clientX, y: e.clientY } : undefined;
@@ -107,6 +118,31 @@ export function WindowLink({
     // 최상위 프레임: shift+클릭 = 같은 화면을 새 창으로 한 벌 더(듀얼), 일반 클릭 = 기존 창 포커스/열기.
     if (e.shiftKey) store.openNewInstance("route", params, anchor);
     else store.open("route", params, anchor);
+    return true;
+  }
+  const dblMode = openOn === "doubleClick";
+  function onClick(e: MouseEvent<HTMLAnchorElement>) {
+    if (!dblMode) {
+      activate(e);
+      return;
+    }
+    // 더블클릭 모드 — 모디파이어(새 탭)만 기본을 지키고, 맨 클릭은 아무 일도 하지 않는다.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // 🔴 **키보드 활성(Enter)은 한 번에 연다** — 키보드엔 더블클릭이 없다(`dblclick`은 포인터 전용).
+    //    detail===0이 곧 "마우스가 아니다"라는 신호다(마우스 클릭은 1 이상). 이걸 빼면 링크가 보조기기에서 죽는다.
+    if (e.detail === 0) {
+      activate(e);
+      return;
+    }
+    e.preventDefault();
+  }
+  function onDoubleClick(e: MouseEvent<HTMLAnchorElement>) {
+    if (!dblMode) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (activate(e)) return;
+    // 창을 못 여는 경로(모바일·iframe 드릴인·워크스페이스 없음) — 단일 클릭을 삼켰으니 여기서 직접 이동한다.
+    e.preventDefault();
+    router.push(linkHref);
   }
   // 임베드 iframe 내부에선 onClick이 창을 안 열고 일반 네비게이션으로 떨어진다(isDesktop=false).
   // 그 드릴인이 embed=1을 잃으면 하위 페이지가 풀 셸로 떠 사이드바가 이중 노출되므로, iframe 안의
@@ -129,6 +165,7 @@ export function WindowLink({
       className={className}
       aria-label={ariaLabel}
       onClick={onClick}
+      onDoubleClick={dblMode ? onDoubleClick : undefined}
       // 네이티브 anchor 드래그(URL 고스트) 차단 — 시간표 편집에서 학생 행을 끌 때 링크 URL이
       // 딸려오던 것 방지. nav 링크는 클릭 전용이라 HTML5 drag가 필요 없다.
       draggable={false}

@@ -96,7 +96,9 @@ function SegmentHeader({
           />
         }
       >
+        {/* 반 정보는 더블클릭(class-cell과 같은 규약). */}
         <WindowLink
+          openOn="doubleClick"
           href={`/classes/${realClassId}`}
           title={slot.className}
           ariaLabel={`${slot.className} 반 정보`}
@@ -120,18 +122,21 @@ export function HapbanCell({
   slots,
   subSlot = "full",
   coveringDays,
+  roster = "names",
 }: {
   /** mergeSlotsByClass 결과(반별 1개, startTime순) — 순서가 곧 세그먼트 인덱스(1부터). */
   slots: ClassDetailQuick[];
   subSlot?: "top" | "bottom" | "full";
   coveringDays?: string[];
+  /** ClassCell과 같은 계약 — `none`이면 명단 구획을 통째로 안 그린다('학생 명단 접기'). */
+  roster?: "full" | "names" | "none";
 }) {
-  const { editing, incoming } = useTimetableEdit();
+  const { canDrag, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
   const colorMode = useTimetableColorMode();
-  const roster = buildHapbanRoster(slots);
+  const hapbanRoster = buildHapbanRoster(slots);
   // 합반 구성 반 목록(드롭존 data 공용) — 멤버 재해석(resolveDropTarget)·반+요일 팝업 후보(shouldOpenClassPick) 양쪽에 사용.
-  const memberClasses: HapbanMemberClass[] = roster.segments.map((s) => ({
+  const memberClasses: HapbanMemberClass[] = hapbanRoster.segments.map((s) => ({
     classId: s.classId,
     className: s.className,
     slotId: s.slotId,
@@ -143,21 +148,32 @@ export function HapbanCell({
   const covers = coveringDays ?? [];
   const attendsAll = (s: { displayAttendanceDays: string[] }) =>
     s.displayAttendanceDays.length === 0 || covers.every((d) => s.displayAttendanceDays.includes(d));
-  const splitByDay = covers.length >= 2 && roster.active.some((s) => !attendsAll(s));
-  const commonActive = splitByDay ? roster.active.filter(attendsAll) : roster.active;
-  const partialActive = splitByDay ? roster.active.filter((s) => !attendsAll(s)) : [];
+  const splitByDay = covers.length >= 2 && hapbanRoster.active.some((s) => !attendsAll(s));
+  const commonActive = splitByDay ? hapbanRoster.active.filter(attendsAll) : hapbanRoster.active;
+  const partialActive = splitByDay ? hapbanRoster.active.filter((s) => !attendsAll(s)) : [];
 
   // 전입예정 — 전 슬롯의 incoming 병합. slotId 키라 fetch 시점에 대상 세그먼트 인덱스를 안다(배지).
   const incomingAll = slots.flatMap((s, i) => (incoming.get(s.id) ?? []).map((st) => ({ st, seg: i + 1 })));
 
   // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
-  const hasSplit = partialActive.length > 0 || (editing && covers.length >= 2);
+  // 🔴 요일 칸(분리등원 존)은 **드래그 시작에 새로 만들지 않는다** — dnd-kit은 드롭존 집합이 바뀌면 전부
+  //    다시 잰다(`droppableRects` lazy memo). 픽업 순간 200개 존이 한꺼번에 생기면 그 재측정이 통째로
+  //    한 프레임에 몰려 **집는 순간 멈칫**한다(실측 701ms, 원장 제보 2026-09-04 *"픽업할 때 렉"*).
+  //    → 권한이 있으면 **늘 마운트**하고(집합 불변), 보이는 것만 CSS(`body.tt-dragging`)로 켠다.
+  const hasSplit = partialActive.length > 0 || (canDrag && covers.length >= 2);
+  /**
+   * 요일 칸의 머리·안내는 **늘 그려 둔다** — 분리등원 학생이 있으면 평소에도 보이고, 없으면 `hidden`으로 두었다가
+   * 끄는 동안만 CSS로 켠다(`body.tt-dragging`). 🔴 상태로 마운트/언마운트하면 **픽업이 멈칫한다**(drag-flag.ts).
+   */
+  const dayColsAlways = partialActive.length > 0;
+  const dayHeadCls = dayColsAlways ? "" : "hidden [.tt-dragging_&]:block";
   // 재원·대기·퇴원 모두 스크롤로 전원 노출('외 N명' 숨김이 아니라 박스 스크롤).
   const activeCap = 40 * slots.length; // 합반은 반 수만큼 늘려도 스크롤로 흡수
   const SECTION_CAP = 40;
   const anyHandover = slots.some((s) => s.pendingHandover);
   const totalStudents = slots.reduce((n, s) => n + s.students.length, 0);
-  const showRoster = totalStudents > 0 || incomingAll.length > 0;
+  // 'none' = '학생 명단 접기'(뷰 설정) — 명단 구획을 통째로 안 그린다(ClassCell과 같은 계약).
+  const showRoster = roster !== "none" && (totalStudents > 0 || incomingAll.length > 0);
 
   // 본문(통합 명단) 드롭존 — id는 `hapban:`(콜론 2조각: `class:${rep.id}`는 세그먼트1과 중복, 3조각은
   // preferDayZone이 요일존으로 오인). onDragEnd는 data만 읽으므로 계약 무변경.
@@ -218,7 +234,7 @@ export function HapbanCell({
                 students={commonActive}
                 classId={repClassId}
                 className={rep.className}
-                editing={editing}
+                canDrag={canDrag}
                 cap={activeCap}
                 draggable
                 tone={(s) => timetableStudentTone(colorMode, s)}
@@ -226,18 +242,18 @@ export function HapbanCell({
                 coveringDays={covers}
                 label="재원"
                 labelTone="bg-bg-soft/60 text-text-dim"
-                count={roster.active.length}
+                count={hapbanRoster.active.length}
               />
             </div>
             {/* 분리등원 요일 칸 — DayDropZone에 memberClassIds(멤버 드롭=자기 반 요일편집). */}
             {hasSplit ? (
-              <div className="border-line/60 shrink-0 border-t border-dashed">
+              <div className={`shrink-0 ${dayColsAlways ? "border-line/60 border-t border-dashed" : "[.tt-dragging_&]:border-line/60 [.tt-dragging_&]:border-t [.tt-dragging_&]:border-dashed"}`}>
                 <div className="flex">
                   {covers.map((day) => {
                       const dayStudents = partialActive.filter((s) => s.displayAttendanceDays.includes(day));
                       const col = (
                         <>
-                          <div className="text-text-faint bg-bg-soft/60 px-1 py-px text-center text-xs font-bold">
+                          <div className={`text-text-faint bg-bg-soft/60 px-1 py-px text-center text-xs font-bold ${dayHeadCls}`}>
                             {DAY_LABEL[day] ?? day}
                           </div>
                           {dayStudents.length > 0 ? (
@@ -245,9 +261,10 @@ export function HapbanCell({
                               // 요일 칸 행은 **그 요일을 실소유한 enrollment**에 바인딩(dayOwners) — 채택 고정이면
                               // A=[월]+B=[수] 학생의 '수' 칸을 끌 때 A가 편집되는 오류. 폴백=채택(own).
                               const owner = s.dayOwners[day];
-                              return editing && (owner?.enrollmentId ?? s.enrollmentId) ? (
+                              return canDrag && (owner?.enrollmentId ?? s.enrollmentId) ? (
                                 <DraggableStudentRow
                                   key={owner?.enrollmentId ?? s.enrollmentId}
+                                  student={s}
                                   enrollmentId={(owner?.enrollmentId ?? s.enrollmentId)!}
                                   studentId={s.studentId}
                                   dayKey={day}
@@ -273,16 +290,14 @@ export function HapbanCell({
                                 />
                               );
                             })
-                          ) : editing ? (
-                            <div className="text-text-faint/70 flex min-h-[22px] items-center justify-center text-xs">
+                          ) : (
+                            <div className="text-text-faint/70 hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging_&]:flex">
                               여기로
                             </div>
-                          ) : (
-                            <div className="min-h-[22px]" aria-hidden />
                           )}
                         </>
                       );
-                      return editing ? (
+                      return canDrag ? (
                         <DayDropZone
                           key={day}
                           slotId={rep.id}
@@ -329,16 +344,16 @@ export function HapbanCell({
               ) : null}
             </div>
             {/* 대기 — 고정 박스(최대 2칸), 넘으면 이 박스만 스크롤(스크롤바 숨김). 있을 때만 렌더. */}
-            {roster.hold.length > 0 ? (
+            {hapbanRoster.hold.length > 0 ? (
               <div
                 className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
                 style={{ maxHeight: HOLD_MAX_H }}
               >
                 <StudentSection
-                  students={roster.hold}
+                  students={hapbanRoster.hold}
                   classId={repClassId}
                   className={rep.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
                   tone={() => "text-text-dim"}
@@ -348,16 +363,16 @@ export function HapbanCell({
               </div>
             ) : null}
             {/* 퇴원 — 고정 박스(최대 3칸), 넘으면 스크롤(스크롤바 숨김). 있을 때만 렌더. */}
-            {roster.withdrawn.length > 0 ? (
+            {hapbanRoster.withdrawn.length > 0 ? (
               <div
                 className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
                 style={{ maxHeight: WD_MAX_H }}
               >
                 <StudentSection
-                  students={roster.withdrawn}
+                  students={hapbanRoster.withdrawn}
                   classId={repClassId}
                   className={rep.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
                   tone={() => withdrawnTone(colorMode)}

@@ -29,7 +29,7 @@ export function StudentSection({
   students,
   classId,
   className,
-  editing,
+  canDrag,
   cap,
   draggable,
   tone,
@@ -42,7 +42,8 @@ export function StudentSection({
   students: SectionStudent[];
   classId: string;
   className: string;
-  editing: boolean;
+  /** 드래그 가능(편집 권한 + 이번/미래 주) — 옛 `editing`. */
+  canDrag: boolean;
   cap: number;
   draggable: boolean;
   tone: (s: { isNew?: boolean; isTransferredIn?: boolean }) => string;
@@ -69,9 +70,10 @@ export function StudentSection({
         </div>
       ) : null}
       {visible.map((s, i) =>
-        draggable && editing && s.enrollmentId ? (
+        draggable && canDrag && s.enrollmentId ? (
           <DraggableStudentRow
             key={s.enrollmentId}
+            student={s}
             enrollmentId={s.enrollmentId}
             studentId={s.studentId}
             classId={s.ownClassId ?? classId}

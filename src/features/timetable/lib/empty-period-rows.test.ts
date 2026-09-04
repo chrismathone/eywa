@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CELL_H,
   EMPTY_PERIOD_H,
   EMPTY_PERIOD_ROW_H,
+  NO_ROSTER_CELL_H,
+  NO_ROSTER_PERIOD_ROW_H,
   PERIOD_ROW_H,
+  periodRowFullHeight,
   periodRowHeight,
   stackedHeights,
 } from "./empty-period-rows";
@@ -29,5 +33,21 @@ describe("empty-period-rows ('빈 교시 접기' 행 높이)", () => {
     expect(stackedHeights([EMPTY_PERIOD_H, EMPTY_PERIOD_H])).toBe(
       `calc(${EMPTY_PERIOD_H} + ${EMPTY_PERIOD_H})`,
     );
+  });
+});
+
+describe("명단 접기 — 셀 높이가 헤더 존을 지킨다", () => {
+  it("접힌 셀 높이 = 헤더 존 + 셀 패딩(하드코딩 76이 아니라 산식)", () => {
+    // class-cell의 HEADER_H(30×2) + 셀 패딩 16. 헤더 존이 바뀌면 이 테스트가 먼저 깨진다.
+    expect(NO_ROSTER_CELL_H).toBe(60 + 16);
+    expect(NO_ROSTER_PERIOD_ROW_H).toBe(NO_ROSTER_CELL_H / 2);
+  });
+  it("펼친 셀 높이 = 헤더 60 + 학생 12행(23) + 패딩 16", () => {
+    expect(CELL_H).toBe(60 + 12 * 23 + 16);
+    expect(PERIOD_ROW_H).toBe(CELL_H / 2);
+  });
+  it("행 높이는 접힘 여부를 따라간다", () => {
+    expect(periodRowFullHeight(false)).toBe(PERIOD_ROW_H);
+    expect(periodRowFullHeight(true)).toBe(NO_ROSTER_PERIOD_ROW_H);
   });
 });

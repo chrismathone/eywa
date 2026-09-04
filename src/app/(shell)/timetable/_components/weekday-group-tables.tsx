@@ -19,13 +19,13 @@ import {
   type SubSlot,
 } from "@/features/timetable/lib/grid";
 import {
-  PERIOD_ROW_H,
+  periodRowFullHeight,
   periodRowHeight,
   stackedHeights,
 } from "@/features/timetable/lib/empty-period-rows";
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
-import { ClassCell } from "./class-cell";
+import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
 import { HapbanCell } from "./hapban-cell";
 import { SearchedCell } from "./search-context";
 
@@ -76,7 +76,6 @@ const dayColW = (d: DayOfWeek, wide: Set<DayOfWeek>) => (wide.has(d) ? DAY_COL_W
 //     그룹 높이로 늘려(수업명만 위/아래 절반) **학생 명단 영역이 어느 셀이나 같다**.
 //   · 영어·주말 = 교시 1칸이 셀 1개 → 행 = CELL_H(SINGLE_PERIOD_ROW_H).
 // 값은 empty-period-rows 단일 소스 — '빈 교시 접기'의 편집 모드 확장(EmptyPeriodScope)이 같은 값을 쓴다.
-const ROW_H = PERIOD_ROW_H;
 // 격자선 — 전 격자를 **하나의 동일한 테두리**(색·굵기 통일)로. 얇은 --line(연회색)은 셀 경계가 뭉개져 가독성↓ → 진한 ink 1px.
 // ⚠️ 구조선/안쪽선 굵기 구분 없이 균일 + 셀 카드 중복 테두리 제거(사용자 요청). 색값은 아래 sticky 교시열 box-shadow와 동일.
 const GRID = "border-ink/25"; // 전 셀·헤더 공통 1px 격자
@@ -172,9 +171,12 @@ function SubSlotContent({
   slots,
   coveringDays,
   subSlot = "full",
+  hideStudents = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   coveringDays: DayOfWeek[];
+  /** 학생 명단 접기 — 셀은 반 이름·강의실·인원만 남는다(뷰 설정). */
+  hideStudents?: boolean;
   /** 그룹 한쪽 교시만 쓰는 수업이면 수업명을 그 절반에만(expandHalfPeriodBlocks가 판정). */
   subSlot?: SubSlot;
 }) {
@@ -196,9 +198,9 @@ function SubSlotContent({
         </span>
       ) : null}
       {isHapban ? (
-        <HapbanCell slots={merged} subSlot={subSlot} coveringDays={coveringDays} />
+        <HapbanCell slots={merged} subSlot={subSlot} coveringDays={coveringDays} roster={hideStudents ? "none" : "names"} />
       ) : (
-        <ClassCell slot={merged[0]!} roster="names" subSlot={subSlot} coveringDays={coveringDays} />
+        <ClassCell slot={merged[0]!} roster={hideStudents ? "none" : "names"} subSlot={subSlot} coveringDays={coveringDays} />
       )}
     </div>
     </SearchedCell>
@@ -221,6 +223,7 @@ function GroupTable({
   dateOf,
   wideDays,
   collapseEmpty = false,
+  hideStudents = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   subject: TimetableSubject;
@@ -235,6 +238,8 @@ function GroupTable({
   wideDays: Set<DayOfWeek>;
   /** '빈 교시 접기' — 이 표의 어느 열에도 수업이 없는 교시 행을 얇은 밴드로 축소(행 자체는 유지). */
   collapseEmpty?: boolean;
+  /** '학생 명단 접기' — 셀에서 명단을 빼고(행 높이는 호출부가 `rowHeight`로 함께 줄인다). */
+  hideStudents?: boolean;
 }) {
   // 교시열 좌측 고정(가로 스크롤) — 평일 표만(주말은 자체 교시열이라 겹침 방지로 비고정).
   // 헤더 상단 고정(세로 스크롤) — 두 표 모두(아래 thead th에 sticky top-0/30/60). 스크롤해도 강사·요일 헤더가 붙어 있음.
@@ -480,7 +485,12 @@ function GroupTable({
                     const coveringDays = t.days.slice(ci, ci + block.colSpan);
                     // 셀 높이 = 실제 연속 교시 수(block.rowSpan) × 교시 높이. 엑셀 셀병합처럼 수업이 쓰는
                     // 교시만큼만 세로로 차지(4-1만 하면 1칸, 5·6·7교시면 3칸). 안 쓰는 교시는 별도 빈칸.
-                    const cellH = block.rowSpan * rowHeight - 16;
+                    // 🔴 명단을 접으면 행이 38px이라 `rowSpan=1` 셀(영어·주말·수학 반쪽 그룹)은 22px가 되어
+                    //    **반 이름 헤더(60)가 잘린다** — 최소 높이를 헤더 존으로 못박는다(합반은 배지 몫을 더한다).
+                    //    그 행만 조금 높아질 뿐 격자 정렬은 유지된다(같은 행의 칸은 함께 늘어난다).
+                    const isHapbanCell = new Set(acc.map((x) => x.classId)).size >= 2;
+                    const minCellH = hideStudents ? HEADER_H + (isHapbanCell ? HAPBAN_BADGE_H : 0) : 0;
+                    const cellH = Math.max(minCellH, block.rowSpan * rowHeight - 16);
                     return (
                       <td
                         key={`${g.title}-${t.name}-${d}-${row.key}`}
@@ -496,6 +506,7 @@ function GroupTable({
                               slots={acc}
                               coveringDays={coveringDays}
                               subSlot={t.subSlots.get(`${ri}:${ci}`) ?? "full"}
+                              hideStudents={hideStudents}
                             />
                           </div>
                         )}
@@ -522,6 +533,7 @@ export function WeekdayGroupTables({
   weekMonday,
   weekdayGrouping = "mon-thu",
   collapseEmptyPeriods = false,
+  hideStudents = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
@@ -529,15 +541,22 @@ export function WeekdayGroupTables({
   weekMonday?: string;
   /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
   weekdayGrouping?: WeekdayGrouping;
-  /** '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(평일·주말 표 각각 판정). 편집 모드는 자동 펼침. */
+  /** '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(평일·주말 표 각각 판정). 끄는 동안은 자동 펼침. */
   collapseEmptyPeriods?: boolean;
+  /**
+   * '학생 명단 접기'(뷰 설정, 계정 귀속) — 셀에 반 이름·강의실·인원만 남긴다.
+   * 🔴 명단만 감추는 게 아니라 **행 높이도 함께** 줄인다(안 줄이면 칸의 4/5가 빈 채로 남아 접는 뜻이 없다).
+   */
+  hideStudents?: boolean;
 }) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
   const dayDates = weekMonday ? dayDateLabels(weekMonday) : {};
   const dateOf = (d: DayOfWeek) => dayDates[d];
-  // 행 높이 = 교시 1칸(ROW_H), 과목 분기 없음. 수업은 실제 쓰는 연속 교시 수만큼 rowSpan 병합된다.
-  const weekdayRowH = ROW_H;
+  // 행 높이 = 교시 1칸, 과목 분기 없음. 수업은 실제 쓰는 연속 교시 수만큼 rowSpan 병합된다.
+  // 명단을 접으면 헤더 존만 남는 높이로 함께 줄어든다(단일 소스 = periodRowFullHeight).
+  const rowH = periodRowFullHeight(hideStudents);
+  const weekdayRowH = rowH;
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
@@ -565,6 +584,7 @@ export function WeekdayGroupTables({
               groups={weekdayGroups}
               weekend={false}
               rowHeight={weekdayRowH}
+              hideStudents={hideStudents}
               config={config}
               dateOf={dateOf}
               wideDays={weekdayWide}
@@ -579,7 +599,8 @@ export function WeekdayGroupTables({
               subject={subject}
               groups={weekendGroups}
               weekend
-              rowHeight={ROW_H}
+              rowHeight={rowH}
+              hideStudents={hideStudents}
               stickyPeriod={false}
               config={config}
               dateOf={dateOf}

@@ -40,7 +40,7 @@ import {
   type TimetableSearchClass,
   type TimetableSearchStudent,
 } from "@/features/timetable/lib/student-search";
-import { useTimetableEdit } from "./edit-context";
+import { useTimetableDragging } from "./drag-flag";
 
 /**
  * 검색에 걸린 학생 이름 표식 — **형광펜으로 그은 줄**(형광 노랑 채움 + 진한 글씨).
@@ -127,9 +127,11 @@ export function TimetableSearchProvider({
   const setQuery = useCallback((v: string) => {
     setState((s) => (s.query === v ? s : { query: v, flash: s.flash + 1 }));
   }, []);
-  // 편집(드래그로 반 이동)에선 필터를 푼다 — 위 주석의 "드롭할 곳이 없는 편집 모드" 방지.
-  const { editing } = useTimetableEdit();
-  const active = enabled && isSearchActive(query) && !editing;
+  // **끄는 동안**엔 필터를 푼다 — 위 주석의 "드롭할 곳이 없는" 상태 방지(옛 편집 모드가 하던 몫).
+  // ⚠️ 권한(canDrag)으로 풀면 관리자에겐 검색이 영영 안 걸린다 — 판정은 실제 드래그 중인지다.
+  // ⚠️ **검색어가 걸려 있을 때만 구독**한다 — 평소(검색 없음)엔 픽업에 이 provider가 안 깨어난다(드래그 렉).
+  const dragging = useTimetableDragging(enabled && isSearchActive(query));
+  const active = enabled && isSearchActive(query) && !dragging;
   const matched = useMemo(
     () => (active ? matchedClassIds(index, query) : NO_MATCH),
     [active, index, query],
@@ -143,10 +145,10 @@ export function TimetableSearchProvider({
       totalClasses: index.length,
       matchedClasses: matched.size,
       scope,
-      suspended: editing || !enabled,
+      suspended: dragging || !enabled,
       hitClass: `${SEARCH_HIT_CLASS} ${SEARCH_FLASH_CLASSES[flash % SEARCH_FLASH_CLASSES.length]}`,
     }),
-    [query, setQuery, active, matched, index.length, scope, editing, enabled, flash],
+    [query, setQuery, active, matched, index.length, scope, dragging, enabled, flash],
   );
   return <SearchCtx.Provider value={value}>{children}</SearchCtx.Provider>;
 }
