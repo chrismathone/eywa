@@ -198,9 +198,10 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   users: (
     <>
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3.5 20c0-4 2-6 5.5-6s5.5 2 5.5 6" />
-      <path d="M15 5.5a3 3 0 010 5.5M16 14c2.8.4 4.5 2.4 4.5 5" />
+      <circle cx="8" cy="7" r="3" />
+      <path d="M3 20v-3q0-4 5-4q2 0 3 2" />
+      <circle cx="17" cy="13" r="2" />
+      <path d="M13 21q0-3 4-3q4 0 4 3" />
     </>
   ),
   mic: (
@@ -224,16 +225,18 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   userPlus: (
     <>
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3.5 20c0-4 2-6 5.5-6 2.5 0 4.2 1 5 3" />
-      <path d="M18 12v7M14.5 15.5h7" />
+      <circle cx="8" cy="7" r="3" />
+      <path d="M3 20v-3q0-4 5-4q2 0 3 2" />
+      <line x1="13" y1="17" x2="21" y2="17" />
+      <line x1="17" y1="13" x2="17" y2="21" />
     </>
   ),
   calendar: (
     <>
       <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M7 3v4M17 3v4M3 10h18" />
-      <path d="M8 14h1M12 14h1M16 14h1M8 17h1M12 17h1" />
+      <path d="M7 3v4M17 3v4" />
+      <line x1="6" y1="10" x2="18" y2="10" />
+      <circle cx="12" cy="15" r="2" />
     </>
   ),
   upload: (
@@ -245,15 +248,16 @@ const EXTENDED_ICON_GLYPHS = {
   chevronLeft: <path d="M15 6l-6 6 6 6" />,
   userMinus: (
     <>
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3.5 20c0-4 2-6 5.5-6 2.5 0 4.2 1 5 3" />
-      <path d="M15 15.5h7" />
+      <circle cx="8" cy="7" r="3" />
+      <path d="M3 20v-3q0-4 5-4q2 0 3 2" />
+      <line x1="13" y1="17" x2="21" y2="17" />
     </>
   ),
   wallet: (
     <>
-      <path d="M4 6h15a2 2 0 012 2v11H4zM4 6l12-3v3" />
-      <path d="M16 11h5v5h-5a2.5 2.5 0 010-5z" />
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M4 7l12-4v4" />
+      <path d="M21 11h-5q-2 0-2 2v1q0 2 2 2h5" />
     </>
   ),
   download: (
@@ -264,15 +268,16 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   history: (
     <>
-      <path d="M4 8V3M4 8h5" />
-      <path d="M5 8a8.5 8.5 0 11-1 7" />
-      <path d="M12 7v5l3 2" />
+      <path d="M3.5 15C4.8 18.5 8 21 12 21c5 0 9-4 9-9c0-5-4-9-9-9C8.5 3 5.5 5 4 8" />
+      <polyline points="4,3 4,8 9,8" />
+      <polyline points="12,7 12,12 15,15" />
     </>
   ),
   undo: (
     <>
-      <path d="M9 8L4 12l5 4" />
-      <path d="M5 12h8a6 6 0 016 6" />
+      <polyline points="7,5 3,9 7,13" />
+      <path d="M3 9h9c5 0 9 4 9 9" />
+      <line x1="21" y1="18" x2="21" y2="21" />
     </>
   ),
   userCheck: (
@@ -284,14 +289,17 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   clipboardList: (
     <>
-      <rect x="5" y="4" width="14" height="17" rx="2" />
-      <path d="M9 4V2h6v2M9 9h6M9 13h6M9 17h4" />
+      <path d="M9 5H8q-2 0-2 2v12q0 2 2 2h8q2 0 2-2V7q0-2-2-2h-1" />
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <line x1="9" y1="11" x2="15" y2="11" />
+      <line x1="9" y1="16" x2="15" y2="16" />
     </>
   ),
   clock: (
     <>
       <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l4 2" />
+      <line x1="12" y1="7" x2="12" y2="12" />
+      <line x1="12" y1="12" x2="15" y2="15" />
     </>
   ),
   copy: (
@@ -302,8 +310,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   graduationCap: (
     <>
-      <path d="M2 9l10-5 10 5-10 5z" />
-      <path d="M6 11v5c3 3 9 3 12 0v-5M22 9v7" />
+      <polyline points="3,9 12,4 21,9 12,14 3,9" />
+      <path d="M6 11v6q6 4 12 0v-6" />
+      <line x1="21" y1="9" x2="21" y2="17" />
     </>
   ),
   user: (
@@ -320,8 +329,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   clipboardCheck: (
     <>
-      <rect x="5" y="4" width="14" height="17" rx="2" />
-      <path d="M9 4V2h6v2M8 13l3 3 5-6" />
+      <path d="M9 5H6q-2 0-2 2v12q0 2 2 2h12q2 0 2-2V7q0-2-2-2h-3" />
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <polyline points="8,13 11,16 16,11" />
     </>
   ),
   layoutGrid: (
@@ -346,8 +356,10 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   messages: (
     <>
-      <path d="M5 5h14v10H9l-4 4z" />
-      <path d="M8 2h13v10l-2 2M9 9h6" />
+      <path d="M3 21V9q0-2 2-2h10q2 0 2 2v6q0 2-2 2H7Z" />
+      <path d="M8 3h11q2 0 2 2" />
+      <line x1="21" y1="5" x2="21" y2="12" />
+      <line x1="7" y1="12" x2="13" y2="12" />
     </>
   ),
   pin: (
@@ -358,8 +370,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   spreadsheet: (
     <>
-      <path d="M5 2h10l4 4v16H5zM15 2v5h4" />
-      <path d="M8 11h8M8 15h8M8 19h8M11 9v12" />
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M6 9h12M6 14h12" />
+      <line x1="11" y1="7" x2="11" y2="17" />
     </>
   ),
   square: <rect x="4" y="4" width="16" height="16" rx="1.5" />,
@@ -394,8 +407,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   mapPin: (
     <>
-      <path d="M12 22s7-6 7-13a7 7 0 00-14 0c0 7 7 13 7 13z" />
+      <path d="M12 18C9 15 5 12 5 9q0-6 7-6q7 0 7 6c0 3-4 6-7 9Z" />
       <circle cx="12" cy="9" r="2.5" />
+      <line x1="9" y1="21" x2="15" y2="21" />
     </>
   ),
   minus: <path d="M5 12h14" />,
@@ -407,8 +421,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   receipt: (
     <>
-      <path d="M6 3h12v19l-3-2-3 2-3-2-3 2z" />
-      <path d="M9 8h6M9 12h6M9 16h4" />
+      <path d="M8 3h8q2 0 2 2v16l-3-3l-3 3l-3-3l-3 3V5q0-2 2-2Z" />
+      <line x1="9" y1="8" x2="15" y2="8" />
+      <line x1="9" y1="13" x2="15" y2="13" />
     </>
   ),
   searchOff: (
@@ -431,10 +446,10 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   userSettings: (
     <>
-      <circle cx="8" cy="8" r="3" />
-      <path d="M3 19c0-3.5 1.8-5.5 5-5.5 1.5 0 2.7.4 3.5 1.2" />
-      <circle cx="17" cy="16" r="2.5" />
-      <path d="M17 11.5v2M17 18.5v2M12.5 16h2M19.5 16h2" />
+      <circle cx="8" cy="7" r="3" />
+      <path d="M3 20v-3q0-4 5-4q2 0 3 2" />
+      <circle cx="17" cy="17" r="2" />
+      <path d="M17 13v2M17 19v2M13 17h2M19 17h2" />
     </>
   ),
   window: (
@@ -445,8 +460,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   archive: (
     <>
-      <path d="M4 8h16v13H4zM3 3h18v5H3z" />
-      <path d="M9 12h6" />
+      <rect x="3" y="4" width="18" height="5" rx="1" />
+      <path d="M5 9v10q0 2 2 2h10q2 0 2-2V9" />
+      <line x1="10" y1="13" x2="14" y2="13" />
     </>
   ),
   swap: (
@@ -470,8 +486,10 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   bus: (
     <>
-      <rect x="5" y="3" width="14" height="16" rx="3" />
-      <path d="M5 10h14M8 19v2M16 19v2M8 15h.1M16 15h.1" />
+      <rect x="4" y="3" width="16" height="16" rx="2" />
+      <line x1="4" y1="10" x2="20" y2="10" />
+      <path d="M7 19v2M17 19v2" />
+      <path d="M7 15h3M14 15h3" />
     </>
   ),
   cake: (
@@ -491,8 +509,9 @@ const EXTENDED_ICON_GLYPHS = {
   droplet: <path d="M12 2s7 8 7 13a7 7 0 01-14 0c0-5 7-13 7-13z" />,
   eraser: (
     <>
-      <path d="M4 15l9-10 7 7-8 9H7z" />
-      <path d="M9 10l7 7M12 21h9" />
+      <path d="M4 14l9-9q1-1 2 0l5 5q1 1 0 2l-8 8H10Z" />
+      <line x1="9" y1="9" x2="16" y2="16" />
+      <line x1="12" y1="20" x2="21" y2="20" />
     </>
   ),
   file: (
@@ -541,8 +560,8 @@ const EXTENDED_ICON_GLYPHS = {
   help: (
     <>
       <circle cx="12" cy="12" r="9" />
-      <path d="M9.5 9a2.8 2.8 0 115 1.7c-1.5 1.3-2.5 1.6-2.5 3.3" />
-      <circle cx="12" cy="17" r="0.8" fill="currentColor" stroke="none" />
+      <path d="M9 8q0-2 3-2q3 0 3 3q0 2-3 2v2" />
+      <circle cx="12" cy="17" r="1" />
     </>
   ),
   home: (
@@ -553,8 +572,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   key: (
     <>
-      <circle cx="8" cy="15" r="4" />
-      <path d="M11 12l9-9M16 7l3 3M14 9l2 2" />
+      <circle cx="7" cy="16" r="4" />
+      <line x1="10" y1="13" x2="20" y2="3" />
+      <path d="M15 8l3 3M18 5l3 3" />
     </>
   ),
   languages: (
@@ -582,14 +602,18 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   megaphone: (
     <>
-      <path d="M4 10v5h4l10 4V6L8 10z" />
-      <path d="M8 15l2 6h4l-2-5M21 9v7" />
+      <rect x="3" y="8" width="5" height="6" rx="1" />
+      <polyline points="8,8 18,4 18,18 8,14" />
+      <polyline points="5,14 7,21 11,21 9,14" />
+      <line x1="21" y1="8" x2="21" y2="14" />
     </>
   ),
   palette: (
     <>
-      <path d="M12 3a9 9 0 00-9 9c0 5 4 9 9 9h1.5a2 2 0 001.2-3.6l-.7-.5a1.5 1.5 0 01.9-2.7H18a3 3 0 003-3C21 6.5 17 3 12 3z" />
-      <circle cx="8" cy="9" r="1" /><circle cx="12" cy="7" r="1" /><circle cx="16" cy="9" r="1" />
+      <path d="M12 3c-5 0-9 4-9 9c0 5 4 9 9 9h2q2 0 2-2q0-1-2-3q-1-2 1-2h3q3 0 3-3c0-5-4-8-9-8Z" />
+      <circle cx="7" cy="10" r="1" />
+      <circle cx="11" cy="7" r="1" />
+      <circle cx="16" cy="8" r="1" />
     </>
   ),
   panelLeftClose: (
@@ -621,8 +645,9 @@ const EXTENDED_ICON_GLYPHS = {
   send: <path d="M3 4l18 8-18 8 4-8zM7 12h14" />,
   note: (
     <>
-      <path d="M5 3h14v14l-4 4H5z" />
-      <path d="M15 21v-4h4M8 8h8M8 12h6" />
+      <path d="M5 4h14q2 0 2 2v9l-6 6H5q-2 0-2-2V6q0-2 2-2Z" />
+      <polyline points="15,21 15,15 21,15" />
+      <line x1="7" y1="9" x2="16" y2="9" />
     </>
   ),
   target: (
@@ -673,8 +698,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   bookMarked: (
     <>
-      <path d="M5 3h14v18H7a2 2 0 01-2-2zM5 17h14" />
-      <path d="M13 3v8l2-1.5 2 1.5V3" />
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <line x1="5" y1="17" x2="19" y2="17" />
+      <polyline points="11,3 11,11 14,8 17,11 17,3" />
     </>
   ),
   bookPlus: (
@@ -727,8 +753,11 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   scrollText: (
     <>
-      <path d="M7 3h12v16a3 3 0 01-3 3H7a3 3 0 01-3-3h12" />
-      <path d="M7 3a3 3 0 013 3v13M12 8h4M12 12h4M12 16h3" />
+      <path d="M8 3h10q2 0 2 2v13q0 3-3 3H7q-3 0-3-3v-1h10q0 4 3 4" />
+      <rect x="3" y="3" width="6" height="4" rx="1" />
+      <line x1="9" y1="7" x2="9" y2="17" />
+      <line x1="12" y1="9" x2="16" y2="9" />
+      <line x1="12" y1="13" x2="16" y2="13" />
     </>
   ),
   userX: (
@@ -765,8 +794,10 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   listChecks: (
     <>
-      <path d="M10 6h10M10 12h10M10 18h10" />
-      <path d="M3 6l2 2 3-4M3 12l2 2 3-4M3 18l2 2 3-4" />
+      <polyline points="3,5 5,7 8,4" />
+      <polyline points="3,11 5,13 8,10" />
+      <polyline points="3,17 5,19 8,16" />
+      <path d="M11 6h10M11 12h10M11 18h10" />
     </>
   ),
   pinOff: (
@@ -804,8 +835,10 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   bellRing: (
     <>
-      <path d="M6 9a6 6 0 0112 0v4l2 3H4l2-3V9zM10 19a2 2 0 004 0" />
-      <path d="M4 8a8 8 0 012-4M20 8a8 8 0 00-2-4" />
+      <path d="M6 10q0-6 6-6q6 0 6 6v4l2 3H4l2-3Z" />
+      <path d="M10 20q2 2 4 0" />
+      <line x1="3" y1="6" x2="5" y2="4" />
+      <line x1="19" y1="4" x2="21" y2="6" />
     </>
   ),
   imageDownload: (
@@ -829,8 +862,9 @@ const EXTENDED_ICON_GLYPHS = {
   ),
   wrench: (
     <>
-      <path d="M14 6a5 5 0 006 6L11 21l-4-4 9-9a5 5 0 00-6-6l3 3-3 3-3-3" />
-      <circle cx="8.5" cy="19.5" r="0.8" fill="currentColor" stroke="none" />
+      <path d="M11 10l-7 7q-1.5 1.5 0 3q1.5 1.5 3 0l7-7" />
+      <path d="M17 3C12 2 9 6 11 10M14 13c4 2 8-1 7-6" />
+      <polyline points="17,3 14,6 14,10 18,10 21,7" />
     </>
   ),
   panelTop: (
@@ -890,45 +924,51 @@ export function EyIcon({
     case "screen":
       return (
         <svg {...common}>
-          <rect x="3" y="4" width="18" height="13" rx="2" />
-          <path d="M8 21h8M12 17v4" />
-          <path d="M12 14V9m0 2c-2 0-3-1-3-3 2 0 3 1 3 3zm0 1c0-2 1-3 3-3 0 2-1 3-3 3z" />
+          <rect x="3" y="5" width="18" height="11" rx="2" />
+          <line x1="12" y1="16" x2="12" y2="20" />
+          <line x1="8" y1="20" x2="16" y2="20" />
         </svg>
       );
     case "report":
       return (
         <svg {...common}>
-          <path d="M6 2h8l4 4v16H6z" />
-          <path d="M14 2v5h4M9 12h6M9 16h6" />
-          <path d="M9 8h1" />
+          <path d="M7 3h6l6 6v10q0 2-2 2H7q-2 0-2-2V5q0-2 2-2Z" />
+          <polyline points="13,3 13,9 19,9" />
+          <line x1="9" y1="17" x2="9" y2="13" />
+          <line x1="15" y1="17" x2="15" y2="12" />
         </svg>
       );
     case "exam":
       return (
         <svg {...common}>
           <rect x="4" y="3" width="16" height="18" rx="2" />
-          <path d="M8 9l2 2 4-4M8 15h8M8 18h5" />
+          <polyline points="8,8 10,10 14,6" />
+          <line x1="8" y1="14" x2="16" y2="14" />
+          <line x1="8" y1="18" x2="12" y2="18" />
         </svg>
       );
     case "shield":
       return (
         <svg {...common}>
-          <path d="M12 2l8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5z" />
-          <path d="M12 17v-6m0 2c-2.2 0-3.5-1.2-3.5-3.5 2.3 0 3.5 1.2 3.5 3.5zm0 1c0-2.2 1.2-3.5 3.5-3.5 0 2.3-1.2 3.5-3.5 3.5z" />
+          <path d="M12 3L4 6v6q0 5 8 9" />
+          <path d="M12 3l8 3v6q0 5-8 9" />
+          <polyline points="8,12 11,15 16,10" />
         </svg>
       );
     case "book":
       return (
         <svg {...common}>
-          <path d="M4 4c3-1 5 0 8 2v15c-3-2-5-2-8-1z" />
-          <path d="M20 4c-3-1-5 0-8 2v15c3-2 5-2 8-1z" />
+          <path d="M12 6Q8 3 3 4v14q5-1 9 2" />
+          <path d="M12 6q4-3 9-2v14q-5-1-9 2" />
+          <line x1="12" y1="6" x2="12" y2="20" />
         </svg>
       );
     case "folder":
       return (
         <svg {...common}>
-          <path d="M3 6h7l2 2h9v11H3z" />
-          <path d="M3 10h18" />
+          <rect x="3" y="8" width="18" height="12" rx="2" />
+          <path d="M3 8V6q0-2 2-2h4l4 4" />
+          <line x1="6" y1="12" x2="18" y2="12" />
         </svg>
       );
     case "building":
@@ -941,16 +981,18 @@ export function EyIcon({
     case "settings":
       return (
         <svg {...common}>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+          <path d="M5 3v4M5 11v10M12 3v10M12 17v4M19 3v4M19 11v10" />
+          <circle cx="5" cy="9" r="2" />
+          <circle cx="12" cy="15" r="2" />
+          <circle cx="19" cy="9" r="2" />
         </svg>
       );
     case "sync":
       return (
         <svg {...common}>
-          <path d="M20 7h-5V2" />
-          <path d="M19 7a8 8 0 00-14-1M4 17h5v5" />
-          <path d="M5 17a8 8 0 0014 1" />
+          <path d="M4 7C5.6 4.5 8.6 3 12 3q6 0 9 6M20 17c-1.6 2.5-4.6 4-8 4q-6 0-9-6" />
+          <polyline points="16,9 21,9 21,4" />
+          <polyline points="3,20 3,15 8,15" />
         </svg>
       );
     case "search":

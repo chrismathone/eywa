@@ -1,6 +1,14 @@
 # Eywa 아이콘 시스템
 
-> 상태: v2 · 2026-07-14
+> 상태: v3 · 2026-09-08 — **탭·내부 탭 38개 글리프 재작성**(원장 지시: *"전부다 아이콘 새로 생성하자 탭 및
+> 내부 탭 … 일관성있고 개성있지만 심플하고 컴팩트한 아이콘으로"*). 규격(§1)은 그대로이고 그림만 다시 그렸다.
+> 이번 세트의 개성: **직교 우선 · 한 겹(겹침 2겹까지) · 내부 디테일 2~3개 · 모서리 rx=2 통일 · 시각 상자 20×20**.
+> 가족으로 묶어 그린 것: `users/userPlus/userMinus/userSettings`(같은 사람 + 보조 기호만 다름),
+> `calendar/clock/history/undo/sync`(원형 계열), 종이류(`book/bookMarked/spreadsheet/report/scrollText/note/
+> clipboardList/clipboardCheck/listChecks/exam`)는 테두리와 내부 표식을 서로 다르게 해 실루엣이 안 겹치게 했다.
+> ⚠️ 생성은 codex CLI로 했고(원장 지정), 적용 전 **전후 비교 시트**와 `getBBox`로 38개 전부 2~22 상자 안인지 확인했다.
+>
+> 이전 상태: v2 · 2026-07-14
 > 코드 원본: `src/components/icons/eywa-icons.tsx`
 > 기존 화면 호환: `src/components/icons/eywa-icon-compat.tsx`
 > 시각 갤러리: `/help/icons`
