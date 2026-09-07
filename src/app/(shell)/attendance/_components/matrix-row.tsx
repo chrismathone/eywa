@@ -155,6 +155,8 @@ export function MatrixRow({
               initialUnits={units[d.date] ?? null}
               attendDay={attend}
               muted={!!holiday || (!attend && d.isWeekend)}
+              // 휴일은 주말과 **다른 색**으로(2026-09-07) — muted와 함께 넘겨 셀이 갈라 칠한다.
+              holiday={!!holiday}
               outside={outside}
               /* 🔴 문장이 아니라 **사유 코드**만 넘긴다 — 잠긴 칸마다 157B 문장을 서버가 만들어
                  내려보내면 그게 그대로 RSC 페이로드 곱이 된다(강사 전체 보기는 잠긴 칸이 수천 개).

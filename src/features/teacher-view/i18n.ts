@@ -1066,6 +1066,18 @@ export const SHEET_DICT = {
     ko: "금액·정산액은 담임 반 {n}개 기준 — 교시 담당 {m}개 반은 빠져 있습니다",
     en: "Amounts and pay cover the {n} classes you are homeroom for — the {m} classes you only teach a period in are left out",
   },
+  // 반 머리행 끝의 "누가 수업했나"(2026-09-07) — 이름은 데이터, 여기 있는 건 꼬리말과 근거 설명뿐이다.
+  "att.group.workerOthers": { ko: "{name} 외 {n}명", en: "{name} +{n}" },
+  "att.group.workerReport": {
+    ko: "이 달 수업보고서를 쓴 사람입니다.",
+    en: "Wrote this month's lesson reports for this class.",
+  },
+  "att.group.workerAttendance": {
+    ko: "이 달 출결을 기록한 사람입니다(수업보고서가 없는 반). 대신 찍어 준 경우가 있어 실제 수업자와 다를 수 있습니다.",
+    en: "Recorded this month's attendance (this class has no lesson reports). Someone may have marked it on another teacher's behalf.",
+  },
+  // 그 달 학원 휴일 — 날짜 칸이 좁아 이름을 못 적으니 표 위에 한 줄로 적는다(원장 2026-09-07).
+  "att.holidayLine": { ko: "학원 휴일", en: "Academy holidays" },
   "att.role.slot": { ko: "교시 담당", en: "Period teacher" },
   "att.since": { ko: "{date}부터 담임", en: "Homeroom since {date}" },
   "att.notice.lock.a": { ko: "출결 수정은 ", en: "Attendance can be edited only for the " },

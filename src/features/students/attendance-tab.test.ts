@@ -62,12 +62,14 @@ describe("formatSlotStart / seatDisplayName", () => {
 });
 
 describe("badge / title", () => {
-  it("교시가 있으면 상태+시각, 자리면 랩실을 덧붙인다", () => {
-    expect(attendanceBadgeText(rec())).toBe("출석 16:20");
-    expect(attendanceBadgeText(rec({ seatLabel: "LAB" }))).toBe("출석 16:20 랩실");
+  it("🔴 교시가 있어도 **반 이름을 먼저** 적는다(2026-09-07)", () => {
+    // 종전엔 `slot ?? className`이라 교시가 있는 반(영어·자리)만 이름이 통째로 사라졌다
+    // — 같은 달력에 `출석 초등M 개별 JJ1F`와 `출석 17:00`이 섞여 보이던 원인(원장 제보).
+    expect(attendanceBadgeText(rec())).toBe("출석 중등수학A 16:20");
+    expect(attendanceBadgeText(rec({ seatLabel: "LAB" }))).toBe("출석 중등수학A 16:20 랩실");
   });
 
-  it("교시 없는 옛 기록은 반 이름으로 구분", () => {
+  it("교시 없는 기록은 반 이름만", () => {
     expect(attendanceBadgeText(rec({ slotStart: null }))).toBe("출석 중등수학A");
   });
 

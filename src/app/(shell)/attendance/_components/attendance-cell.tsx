@@ -38,6 +38,7 @@ export function AttendanceCell({
   initialUnits,
   attendDay,
   muted,
+  holiday,
   outside,
   derived,
   lockedReason,
@@ -55,6 +56,8 @@ export function AttendanceCell({
   attendDay?: boolean;
   /** 주말·공휴일 등 수업이 없는 날(회색). */
   muted?: boolean;
+  /** 학원 휴일(휴강) — 주말 회색과 갈라 칠한다(2026-09-07). `muted`와 함께 온다. */
+  holiday?: boolean;
   /**
    * 그 날 이 반 소속이 아니었다(입원 전·퇴원 후) — 진한 회색.
    * ⚠️ **입력을 막지 않는다** — 퇴원 뒤 보강 출석이 실제로 있고, 막으면 이미 들어온 기록을 고칠 길이 사라진다.
@@ -146,7 +149,7 @@ export function AttendanceCell({
   // 🔴 빗금 칸엔 값이 없어도 **메모는 있다** — 실측 78칸이 결석 사유였다("병결"·"가족여행").
   //    noteVal은 값이 없으면 비우는 규약(지워진 칸의 유령 메모 방지)이라, 이 칸만 따로 살린다.
   const ghostNote = ghost ? noteEdit ?? note ?? "" : "";
-  const display = cellDisplay(status, units, { attendDay, muted, outside, day, ghost });
+  const display = cellDisplay(status, units, { attendDay, muted, holiday, outside, day, ghost });
   const fromReport = derived && status === initialStatus;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
   const title = [

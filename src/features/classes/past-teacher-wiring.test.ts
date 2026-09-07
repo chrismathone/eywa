@@ -57,7 +57,7 @@ describe("지난 수업의 강사 — 종료 시점으로 되살린다", () => {
 describe("판정 자체 — 실데이터 모양으로", () => {
   // 실측 모양: 09-01 인수인계(허주연) · 8월 작성자 허은진 · 7월 작성자 이유정.
   const index = buildTeacherAsOfIndex({
-    today: "2026-09-07",
+    since: "2026-07-01", // historyWindowStart("2026-09-07") = 2개월 창의 시작
     transitions: [{ classId: "c1", date: "2026-09-01", teacherName: "허주연" }],
     writers: [
       { classId: "c1", month: "2026-08", teacherName: "허은진", count: 25 },

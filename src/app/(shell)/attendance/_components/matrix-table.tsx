@@ -58,6 +58,15 @@ export type MatrixGroup = {
    */
   roleLabel?: string | null;
   /**
+   * 그 달 이 반을 **실제로 한 사람**(`유형숙` / `엄소윤 외 2명`) — 원장 2026-09-07 *"누가 수업했는지 …
+   * 라벨 끝에 적어줘"* + *"'수업보고서' 발송한 사람을 적어. 담임말고"*.
+   * 🔴 담임이 아니다(담임은 시간 축이 없어 지난 달에도 지금 사람이 나온다). 규칙은
+   *    [`class-worker.ts`](@/features/attendance/class-worker) 단일 소스. 근거가 없으면 null(안 적는다).
+   */
+  workerLabel?: string | null;
+  /** 그 이름의 근거 — 보고서(강한 근거) / 출결 기록자(대신 찍혔을 수 있다)를 툴팁이 밝힌다. */
+  workerSource?: "report" | "attendance" | null;
+  /**
    * "8/10부터 담임" — 그 날짜 **이전 칸이 왜 값에서 빠졌는지** 밝힌다(2026-08-19).
    * 담임은 반 단위 속성이라 시간 축이 없어 인계 전 기록까지 새 담임 표에 잡혔다. 이제 값에서 빼되
    * 빗금으로 남기는데, 표식이 없으면 "왜 8월 초가 비었지"가 된다. null이면 종전과 같은 표기.
@@ -251,13 +260,17 @@ export function MatrixTable({
               const isClassDay = classDows.has(d.dow) && !holiday;
               // 배경 = 오늘 > 수업요일(민트) > 주말·휴일(회색) > 수업 없는 평일(흰색). 본문 셀과 같은 DAY_TONE.
               // 글자색 = 일요일·공휴일이면 빨강(달력 관행).
+              // 🔴 휴일은 주말보다 **먼저** 본다(2026-09-07 "셀을 구분") — 뒤에 두면 토요일 휴일이
+              //    회색으로 덮여 왜 쉬는지가 사라진다. 본문 셀(cellDisplay)과 **같은 순서**여야 열이 안 어긋난다.
               const bg = d.isToday
                 ? "bg-primary"
                 : isClassDay
                   ? DAY_TONE.classDay
-                  : d.isWeekend || holiday
-                    ? DAY_TONE.weekend
-                    : "bg-card";
+                  : holiday
+                    ? DAY_TONE.holiday
+                    : d.isWeekend
+                      ? DAY_TONE.weekend
+                      : "bg-card";
               const fg = d.isToday
                 ? "text-primary-foreground"
                 : holiday || d.dow === 0
@@ -369,6 +382,19 @@ export function MatrixTable({
                       title={t("att.group.slotTitle")}
                     >
                       {g.roleLabel}
+                    </span>
+                  ) : null}
+                  {/* 🔴 **라벨 맨 끝**에 그 달 담당자(원장 지시) — 반 이름·과목·역할 배지 뒤. */}
+                  {g.workerLabel ? (
+                    <span
+                      className="text-text-dim text-[11px]"
+                      title={t(
+                        g.workerSource === "attendance"
+                          ? "att.group.workerAttendance"
+                          : "att.group.workerReport",
+                      )}
+                    >
+                      {g.workerLabel}
                     </span>
                   ) : null}
                   {g.sinceLabel ? (

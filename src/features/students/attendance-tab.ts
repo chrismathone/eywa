@@ -78,9 +78,23 @@ export function seatDisplayName(seatLabel: string | null | undefined): string | 
   return key ? SEAT_NAME[key] : null;
 }
 
+/**
+ * 출결 달력 칸의 배지 — `출석 초등M 개별 JJ1F 17:00`.
+ *
+ * 🔴 종전엔 `slot ?? className`이라 **교시가 있는 행은 반 이름이 통째로 사라졌다**(원장 제보 2026-09-07
+ *    *"수업명이 보이지 않고 출결되는거 왜 그런지 원인 파악"*). 같은 달력에 `출석 초등M 개별 JJ1F`와
+ *    `출석 17:00`이 섞여 보이던 게 이 한 줄 때문이다 — 교시(slot_start)를 쓰는 반(영어·자리)만 이름을
+ *    잃었다. 칸이 좁아 하나만 적으려던 것으로 보이는데, **사라져야 할 쪽은 이름이 아니다**:
+ *    "몇 시에 왔나"보다 "어느 수업이었나"가 먼저다(시각은 반이 이미 요일·교시로 정해 준다).
+ * ⚠️ 칸은 여전히 좁다 → 넘치면 `truncate`가 자르고, 전문은 `attendanceRecordTitle` 툴팁에 이미 있다.
+ */
 export function attendanceBadgeText(r: AttendanceRecordLike): string {
-  const slot = formatSlotStart(r.slotStart);
-  return [attendanceStatusLabel(r.status), slot ?? r.className, seatDisplayName(r.seatLabel)]
+  return [
+    attendanceStatusLabel(r.status),
+    r.className,
+    formatSlotStart(r.slotStart),
+    seatDisplayName(r.seatLabel),
+  ]
     .filter(Boolean)
     .join(" ");
 }

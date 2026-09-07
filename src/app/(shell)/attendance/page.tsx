@@ -28,7 +28,9 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
-import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
+import { getTeacherMoney } from "@/features/attendance/server/teacher-money";import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
+import { classWorkerLabel } from "@/features/attendance/class-worker";
+
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
@@ -446,6 +448,27 @@ export default async function AttendancePage({
         ? await getMonthlyAttendanceMatrix(month, effectiveClassId, viewPrefs.periodMode)
         : base;
 
+  /**
+   * 반 머리행 끝의 **"누가 수업했나"** — 담임이 아니라 그 달 실제 담당(원장 2026-09-07).
+   * 실측 근거: 수학은 그 달 보고서 작성자가 반마다 1명(9월 55/55·7월 58/58·8월 60중 1개만 2명)이라
+   * 사실상 확정이고, 영어는 보고서를 eywa에 안 써서 출결 기록자로 떨어진다(반마다 2~4명 → `외 N명`).
+   * ⚠️ 근거가 없는 반(그 달 보고서·출결이 둘 다 없음)은 **안 적는다** — 실측 9월 수학 활성 반 22개.
+   */
+  /** 그 달 학원 휴일(날짜 오름차순) — 표 위 한 줄과 셀 색이 **같은 자료**를 본다. */
+  const monthHolidays = Object.entries(buildHolidayMap(operations.holidays))
+    .filter(([date]) => date.slice(0, 7) === month)
+    .map(([date, name]) => ({ date, name }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const workerClassIds = (
+    mode === "teacher" ? teacherClasses.map((c) => c.id) : effectiveClassId ? [effectiveClassId] : []
+  ).filter(Boolean);
+  const workers = await getMonthlyClassWorkers(user.tenantId, month, workerClassIds);
+  const workerOf = (classId: string) => {
+    const w = workers.get(classId) ?? null;
+    return { workerLabel: classWorkerLabel(w, lang), workerSource: w?.source ?? null };
+  };
+
   const groups: MatrixGroup[] =
     mode === "teacher"
       ? teacherClasses.map((c, i) => ({
@@ -457,6 +480,7 @@ export default async function AttendancePage({
           // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
           //    거기까지 붙이면 거의 모든 반에 배지가 달려 정작 남의 반 표식이 안 보인다.
           roleLabel: teacherRoles.get(c.id) === "slot" ? sheetT(lang, "att.role.slot") : null,
+          ...workerOf(c.id),
           // 담임 시작일 — 그 이전 칸이 왜 값에서 빠졌는지 반 머리행에서 밝힌다(빗금만 있으면 "왜 비었지").
           sinceLabel: sinceByClass.get(c.id)
             ? sheetTf(lang, "att.since", { date: dayLabel(sinceByClass.get(c.id)!) })
@@ -469,6 +493,7 @@ export default async function AttendancePage({
               className: classNameFor(selectedClass.className, lang),
               subjectLabel: subjectMaps.labelOf(selectedClass.subject),
               matrix,
+              ...workerOf(effectiveClassId),
             },
           ]
         : [];
@@ -1016,7 +1041,18 @@ export default async function AttendancePage({
         // 줄지 않아 화면 밖으로 넘치고 결국 페이지 스크롤이 되살아난다(= 스크롤바 2개).
         // `isolate` — 표 헤더의 높은 z(50/60)를 격자 안에 가둔다. 안 그러면 그 z가 페이지 전역과 겨뤄
         // 툴바 드롭다운·셀 팝오버를 헤더가 덮는다(스택 컨텍스트만 만들 뿐 fixed 탈출은 막지 않는다).
-        <div className="isolate min-h-0 flex-1">
+        <div className="isolate flex min-h-0 flex-1 flex-col">
+          {/* 🔴 그 달 **학원 휴일을 이름까지** 적는다(원장 2026-09-07 *"공휴일도 달력에 표시해주고"*).
+              날짜 칸은 30px이라 이름이 안 들어가 종전엔 **툴팁뿐**이었다 — 열어 보지 않으면 왜 쉬는지
+              알 수 없었다. 표 위 한 줄이면 한 번만 적고도 그 달 전체가 설명된다.
+              ⚠️ 자료는 학원설정 `operations.holidays` 하나(법정공휴일 ≠ 학원 휴원일) — 셀 색과 같은 소스다.
+              ⚠️ 휴일이 없는 달엔 줄 자체가 없다(빈 줄로 자리를 먹지 않는다). */}
+          {monthHolidays.length > 0 ? (
+            <p className="text-text-dim shrink-0 px-1 pb-1.5 text-[11px]">
+              <span className="text-danger font-bold">{sheetT(lang, "att.holidayLine")}</span>{" "}
+              {monthHolidays.map((h) => `${Number(h.date.slice(5, 7))}/${Number(h.date.slice(8, 10))} ${h.name}`).join(" · ")}
+            </p>
+          ) : null}
           <MatrixTable
             groups={allGroups}
             days={visibleDays}

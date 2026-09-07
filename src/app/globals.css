@@ -131,6 +131,7 @@
   --color-att-classday: var(--att-classday);
   --color-att-weekend: var(--att-weekend);
   --color-att-outside: var(--att-outside);
+  --color-att-holiday: var(--att-holiday);
 
   /* sidebar */
   --color-sidebar: var(--sidebar);
@@ -300,7 +301,8 @@
   --att-makeup: #cfbdfb; /* 보강 = 보라 */
   --att-makeup-ink: #3d2596;
   --att-classday: #e2f8ef; /* 수업요일(기록 전) — 출석 민트의 옅은 버전. 헤더·본문 공용 */
-  --att-weekend: #dfdfe6; /* 주말·공휴일 — 회색(수업 없는 평일은 흰색). 민트와 명도가 비슷해도 색상이 갈린다 */
+  --att-weekend: #dfdfe6; /* 주말 — 회색(수업 없는 평일은 흰색). 민트와 명도가 비슷해도 색상이 갈린다 */
+  --att-holiday: #f6dede; /* 학원 휴일(휴강) — 주말 회색과 **갈라야 한다**(원장 2026-09-07 "셀을 구분"). 달력 관행대로 붉은 계열, 단 출결 danger(결석)보다 훨씬 옅게 */
   /* 재원 기간 밖(입원 전·퇴원 후) — 구 출석부 빗금 자리. 주말 회색보다 **진해야** "쉬는 날"과 안 헷갈린다 */
   --att-outside: #c2c2cc;
 

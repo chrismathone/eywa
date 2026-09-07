@@ -83,7 +83,13 @@ export async function ClassesTab({
   const hasEnded = (r: StudentClassRow) => (r.endDate ? r.endDate < today : false);
   const current = rows.filter((r) => !hasEnded(r) && r.startDate <= today);
   const scheduled = rows.filter((r) => !hasEnded(r) && r.startDate > today);
-  const past = rows.filter((r) => hasEnded(r));
+  /**
+   * 지난 수업은 **최근 종료가 위**(원장 2026-09-07 *"지난 수업을 최근 종료한 수업이 상단에 오도록"*).
+   * ⚠️ 종료일이 같으면 시작일이 늦은 쪽을 위로 — 같은 반을 두 번 다닌 줄(재등록)이 뒤집혀 보이지 않게.
+   */
+  const past = rows
+    .filter((r) => hasEnded(r))
+    .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? "") || b.startDate.localeCompare(a.startDate));
   /**
    * 🔴 **지난 수업의 '강사'는 그 수업이 끝날 때의 담임**이다(원장 2026-09-07 *"종료된 수업은 종료될
    *    타이밍의 강사가 말이 되는거 아닌가?"*). 종전엔 `classes.teacher_id`(**지금** 담임)를 그대로 찍어,

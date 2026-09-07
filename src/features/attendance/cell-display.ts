@@ -29,7 +29,7 @@ export const STATUS_TONE: Record<AttendanceMark, string> = ATT_VIVID;
 /**
  * 날짜 성격 배경 — 헤더·본문이 **같은 상수**를 써야 열이 위아래로 어긋나지 않는다.
  * · 수업하는 요일(기록 전) = 아주 옅은 민트(출석 민트의 옅은 버전 — "찍어야 할 칸"이지 출결 표시가 아니다)
- * · 수업 없는 평일 = 흰색  · 주말·공휴일 = 회색
+ * · 수업 없는 평일 = 흰색  · 주말 = 회색  · **학원 휴일(휴강) = 옅은 붉은색**
  * ⚠️ 여기(날짜)에 쨍한 색을 주면 출결 표시와 헷갈린다 — 쨍한 색은 STATUS_TONE(1의 배경)만.
  */
 export const DAY_TONE = {
@@ -41,6 +41,17 @@ export const DAY_TONE = {
    * ⚠️ 주말 회색보다 진해야 한다 — 같은 회색이면 "쉬는 날"과 "소속 아님"이 구분되지 않는다.
    */
   outside: "bg-att-outside",
+  /**
+   * 학원 휴일(휴강) — 원장 2026-09-07 *"공휴일(휴강)은 셀을 구분시켜줘"*.
+   *
+   * 🔴 종전엔 **주말과 같은 회색**이라 "쉬는 날"이라는 것만 알 뿐 *왜* 쉬는지가 안 보였다(달력에서
+   *    공휴일은 늘 붉게 적히는데 여기선 글자만 빨갛고 배경은 주말과 똑같았다).
+   * ⚠️ 출결 danger(결석)보다 **훨씬 옅어야** 한다 — 쨍하면 "결석이 깔린 열"로 읽힌다.
+   *    날짜 성격은 옅게, 쨍한 색은 STATUS_TONE만(이 블록 맨 위 경고와 같은 규칙).
+   * ⚠️ 판정 자료는 **학원설정 `operations.holidays`** 하나뿐이다(법정공휴일 ≠ 학원 휴원일 — 이 학원은
+   *    실제로 공휴일에 수업한 날이 있다). 캘린더 탭 내장 표를 여기 끌어오지 말 것.
+   */
+  holiday: "bg-att-holiday",
 } as const;
 
 /**
@@ -270,6 +281,12 @@ export function cellDisplay(
     day?: DayRollup | null;
     /** 이 표가 세지 않는 교시만 있는 칸(자리·남의 교시) — 값은 없고 빗금만(GHOST_HATCH 주석). */
     ghost?: boolean;
+    /**
+     * 학원 휴일(휴강)인 날 — 주말 회색과 **갈라서** 칠한다(2026-09-07).
+     * ⚠️ `muted`보다 **먼저** 본다: 휴일은 muted의 한 갈래로 넘어오는데, 뒤에 두면 회색이 이긴다.
+     * 🔴 값이 있으면 값이 먼저다(위 규칙 그대로) — 휴일에 실제로 수업했으면 그 기록이 보여야 한다.
+     */
+    holiday?: boolean;
   } = {},
 ): CellDisplay {
   // 하루에 교시가 둘 이상 찍힌 칸(0196a) — 숫자는 **합**, 색이 갈리면 교시 순서대로 줄무늬.
@@ -289,6 +306,7 @@ export function cellDisplay(
   // "빈칸이 아니라 남의 몫"임을 드러낸다(배경색은 그대로 두고 backgroundImage만 겹친다).
   const hatch = opts.ghost ? { style: { backgroundImage: GHOST_HATCH } } : {};
   if (opts.outside) return { text: "", className: `text-text-faint ${DAY_TONE.outside}`, ...hatch };
+  if (opts.holiday) return { text: "·", className: `text-text-faint ${DAY_TONE.holiday}`, ...hatch };
   if (opts.muted) return { text: "·", className: `text-text-faint ${DAY_TONE.weekend}`, ...hatch };
   if (opts.attendDay) return { text: "·", className: `text-text-faint ${DAY_TONE.classDay}`, ...hatch };
   return { text: "·", className: "text-text-faint", ...hatch };
