@@ -29,8 +29,12 @@ describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 �
     });
   });
 
-  it("🔴 운영실(presentation:desktop)은 창으로 열지 않는다 — main 자체가 작업면", () => {
-    expect(deepLinkWindow("/dashboard", "운영실 — eywa")).toBeNull();
+  // 🔴 2026-09-07 뒤집힘(원장: 운영실도 다른 창들처럼) — 배경은 메뉴 화면이고 운영실은 창이다.
+  it("운영실도 사이드바와 같은 창으로 연다", () => {
+    expect(deepLinkWindow("/dashboard", "운영실 — eywa")).toEqual({
+      id: "dashboard",
+      title: "운영실",
+    });
   });
 
   it("메뉴에 없는 라우트도 경로 그대로 창으로 연다(안 열면 그 주소는 빈 바탕)", () => {

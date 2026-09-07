@@ -14,15 +14,16 @@ import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
-import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
-import { HUB_GROUPS, SUPPORT_GROUPS, favoritesFor, hubGroupsFor, type HubGroup } from "@/lib/menu-hub";
+import { type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { HUB_GROUPS, SUPPORT_GROUPS, frequentFor, hubGroupsFor, type HubGroup } from "@/lib/menu-hub";
+import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import { useMenuHub } from "./workspace/menu-hub-store";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { TeacherViewToggle } from "@/components/view-mode-toggle";
 import { OtherTeacherViewPicker } from "@/components/other-teacher-view";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
-import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
+import { useSidebarWidth } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
 import { useShowDesktop } from "@/components/workspace/use-show-desktop";
 import { withEmbed } from "@/components/workspace/embed-context";
@@ -84,6 +85,7 @@ export function AppSidebar({
   permMatrix,
   canTeacherView = false,
   canOtherTeacherView = false,
+  frequentKeys,
 }: {
   systemRole: SystemRole;
   email: string;
@@ -97,6 +99,8 @@ export function AppSidebar({
   canTeacherView?: boolean;
   /** '다른 강사 뷰'(열람 전용) 자격(master·super_admin·강사뷰 접근 토글) → 하단에 강사 피커 노출. */
   canOtherTeacherView?: boolean;
+  /** 자주 방문한 메뉴(많이 → 최근 순, 권한 통과분). 비면 기본값으로 떨어진다. */
+  frequentKeys?: MenuKey[];
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
   const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
@@ -105,7 +109,8 @@ export function AppSidebar({
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
   const showDesktop = useShowDesktop();
-  const { expanded, width, dragging, handleProps } = useSidebarResize();
+  // 폭은 고정이다(원장 2026-09-07) — 접기/펴기만.
+  const { expanded, width } = useSidebarWidth();
   const animations = usePrefs((s) => s.animations);
   const toggleSidebar = usePrefs((s) => s.toggleSidebar); // 브랜드 줄 접기/펼치기 버튼(드래그·더블클릭과 동일 상태)
 
@@ -133,8 +138,7 @@ export function AppSidebar({
     };
   }, [expanded]);
 
-  // 모션: 설정 ON & 드래그 중이 아닐 때만 슬라이드(드래그는 1:1 추종이라 트랜지션 off).
-  const motion = animations && !dragging;
+  const motion = animations;
   const focusedId = useWindowStore((s) => s.focusedId);
   // 열린(비최소화) 창 id 집합을 primitive 문자열로 구독 → 드래그/리사이즈 시엔 리렌더 안 함.
   const openKey = useWindowStore((s) =>
@@ -155,7 +159,8 @@ export function AppSidebar({
     canTeacherView,
     isMaster: systemRole === "master",
   };
-  const favorites = favoritesFor(gate);
+  // 자주 방문한 메뉴 — 서버가 계정 기록에서 뽑아 순서대로 내려준다(없으면 기본값).
+  const frequent = frequentFor(gate, frequentKeys);
   const workGroups = hubGroupsFor(HUB_GROUPS, gate);
   const supportGroups = hubGroupsFor(SUPPORT_GROUPS, gate);
   const hubOpenId = useMenuHub((s) => s.groupId);
@@ -180,8 +185,8 @@ export function AppSidebar({
             펼침에선 우측 가장자리(Claude 패턴). 하단 배치는 계정 줄과 겹쳐 실패했던 이력(#57) — 상단 고정. */}
         <div className="border-line relative flex h-12 shrink-0 items-center overflow-hidden border-b pr-3 pl-3">
           <Link
-            href="/dashboard"
-            aria-label="EYWA 운영실"
+            href="/menu"
+            aria-label="메뉴로"
             onClick={(e) => {
               if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
               e.preventDefault();
@@ -232,10 +237,10 @@ export function AppSidebar({
             ref={navRef}
             className="scrollbar-hide flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-2.5"
           >
-          {/* 즐겨찾기 — 업무군을 거치지 않고 **한 번에** 여는 자리(고정 4개, menu-hub.ts). */}
-          {favorites.length > 0 ? (
-            <NavSection label="즐겨찾기" first expanded={expanded} motion={motion}>
-              {favorites.map((d) => {
+          {/* 자주 방문한 메뉴 — 연 횟수로 자동 정렬(사람이 고르는 즐겨찾기가 아니다). */}
+          {frequent.length > 0 ? (
+            <NavSection label="자주 방문한 메뉴" first expanded={expanded} motion={motion}>
+              {frequent.map((d) => {
                 const item = navItemByKey(d.menuKey);
                 return item ? (
                   <MenuRail
@@ -258,7 +263,7 @@ export function AppSidebar({
           ) : null}
 
           {/* 전체 업무 — 업무군을 누르면 본문에 그 업무의 메뉴 버튼이 뜬다(운영실·캘린더는 바로 열린다). */}
-          <NavSection label="전체 업무" first={favorites.length === 0} expanded={expanded} motion={motion}>
+          <NavSection label="전체 업무" first={frequent.length === 0} expanded={expanded} motion={motion}>
             {workGroups.map((g) => (
               <GroupRail
                 key={g.id}
@@ -371,23 +376,6 @@ export function AppSidebar({
           ) : null}
         </div>
 
-        {/* 너비 조절 핸들 — 오른쪽 경계선. 끌어서 조절/접기, 더블클릭=토글, ←/→ 키 지원. */}
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={`사이드바 너비 조절 (더블클릭하면 ${expanded ? "접기" : "펼치기"})`}
-          tabIndex={0}
-          {...handleProps}
-          className="group absolute top-0 right-0 z-20 flex h-full w-2 translate-x-1/2 cursor-col-resize touch-none items-center justify-center focus:outline-none"
-        >
-          <span
-            className={`h-9 w-[3px] rounded-full transition ${
-              dragging
-                ? "bg-primary"
-                : "bg-line opacity-0 group-hover:opacity-100 group-focus-visible:bg-primary group-focus-visible:opacity-100"
-            }`}
-          />
-        </div>
       </aside>
 
     </TooltipProvider>
@@ -513,7 +501,13 @@ function MenuRail({
 }) {
   const st = railState(item, { isDesktop, pathname, focusedId, hasFocus, openIds, hubOpen });
   return (
-    <div onClick={onOpen}>
+    <div
+      onClick={() => {
+        onOpen();
+        // '자주 방문한 메뉴'의 재료 — 기록은 뒤따를 뿐 여는 동작을 막지 않는다(실패해도 조용히).
+        void recordMenuVisit(item.menuKey);
+      }}
+    >
       <RailItem
         item={item}
         active={st.active}
@@ -611,13 +605,9 @@ function GroupRail({
           expanded ? "max-w-[220px] opacity-100" : "max-w-0 opacity-0"
         } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
       >
+        {/* 🔴 오른쪽 꺾쇠는 없다(원장 2026-09-07 *"화살표는 필요없어"*) — 12줄 전부에 붙으니 줄마다
+            같은 기호가 반복돼 이름을 읽는 데 방해가 됐다. */}
         <span className="truncate font-medium">{group.label}</span>
-        {/* 오른쪽 꺾쇠 = "누르면 메뉴가 나온다"는 표시(바로 여는 업무군엔 없다). */}
-        <EyIcon
-          name="arrowRight"
-          size={13}
-          className={`ml-auto shrink-0 ${active ? "" : "text-text-faint"}`}
-        />
       </span>
       {openOnly ? (
         <span aria-hidden className="bg-primary absolute top-1/2 right-2 size-1.5 -translate-y-1/2 rounded-full" />

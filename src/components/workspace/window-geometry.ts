@@ -38,6 +38,8 @@ export const DEFAULT_WINDOW = { w: 480, h: 560 };
  * 없는 메뉴는 DEFAULT_WINDOW. 캔버스보다 크면 cascadeNext에서 clamp됨.
  */
 export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
+  // 운영실 — 지표 줄·오늘 브리핑·접힌 2차 줄이 들어가는 폭(2026-09-07 창으로 전환).
+  dashboard: { w: 1180, h: 820 },
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
   // 시간표(개발중) — 같은 격자를 그리므로 같은 크기. 없으면 기본 480×560으로 열려 표가 통째로 접힌다.
   "timetable-dev": { w: 1040, h: 680 },

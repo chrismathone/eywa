@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { useWindowStore, instanceLabel } from "./window-store";
 import { usePrefs } from "./use-prefs";
-import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
+import { railWidth } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
 import Image from "next/image";
 import { FloatingWindow } from "./floating-window";
@@ -33,7 +33,9 @@ const HEADER = 0;
 export function WorkspaceCanvas({ owner }: { owner: string }) {
   const isDesktop = useIsDesktop();
   const pathname = usePathname();
-  const isDesktopSurface = pathname === "/dashboard";
+  // 셸 main 자체가 화면인 라우트 = **메뉴**뿐이다(원장 2026-09-07: 운영실도 창으로).
+  // 창을 다 닫으면 이 화면이 배경으로 남는다 — 빈 바탕 대신 "다음에 뭘 열지"가 보인다.
+  const isDesktopSurface = pathname === "/menu";
   const order = useWindowStore((s) => s.order);
   const windows = useWindowStore((s) => s.windows);
   const focusedId = useWindowStore((s) => s.focusedId);
@@ -64,8 +66,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   // 사이드바 실제 너비 = 펼침이면 저장 너비, 접힘이면 레일(52). 펼침/접힘·드래그 드롭으로 바뀌면
   // 스테이지가 따라가 창 최대치(최대화·스냅)가 사이드바 오른쪽에 정확히 맞는다.
   const sidebarExpanded = usePrefs((s) => s.sidebarExpanded);
-  const sidebarWidth = usePrefs((s) => s.sidebarWidth);
-  const rail = sidebarExpanded ? sidebarWidth : SIDEBAR_COLLAPSED_W;
+  const rail = railWidth(sidebarExpanded);
 
   // 스테이지 = 뷰포트 − 사이드바(rail) − 헤더. rail(사이드바 너비)이나 브라우저 크기가 바뀌면
   // 재계산 → setStage가 최대화·스냅 창을 새 영역에 재배치(reflow).

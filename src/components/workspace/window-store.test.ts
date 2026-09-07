@@ -19,59 +19,42 @@ function reset() {
   });
 }
 
-describe("window-store showDesktop() — 오늘은 main 데스크톱", () => {
+describe("window-store showDesktop() — 배경(메뉴 화면) 보이기", () => {
   beforeEach(reset);
 
-  it("일반 창은 안전하게 최소화하고 legacy dashboard 창·복제본·warm 캐시와 런타임 흔적은 제거한다", () => {
+  // 🔴 2026-09-07 뒤집힘(원장: *"운영실도 다른창들처럼 만들어주고"*) — 옛 규약은 "showDesktop이 dashboard
+  //    창·복제본·warm 캐시를 **제거**한다"였다. 이제 운영실은 보통 창이라 **지우면 안 된다**(원장이 방금
+  //    연 창이 배경으로 갈 때마다 사라진다). showDesktop이 하는 일은 **최소화**뿐이다.
+  it("열린 창은 지우지 않고 전부 최소화한다 — 운영실 창도 그대로 남는다", () => {
     const s = useWindowStore.getState();
     s.open("route", { id: "students", title: "학생목록", href: "/students" });
     const students = windowId("route", "students");
     s.setWindowDirty(students, true);
-
-    s.open("route", { id: "dashboard", title: "오늘", href: "/dashboard" });
+    s.open("route", { id: "dashboard", title: "운영실", href: "/dashboard" });
     const dashboard = windowId("route", "dashboard");
-    s.observeIframe(dashboard, { title: "오늘", url: "/dashboard?embed=1" });
-    s.reloadWindow(dashboard);
-    s.duplicate(dashboard);
-    const duplicate = `${dashboard}#1`;
-    s.close(dashboard); // primary는 warm cache, 복제본은 열린 상태
 
-    useWindowStore.setState({
-      spotlight: true,
-      spotlightRaised: [duplicate],
-      dirty: { ...useWindowStore.getState().dirty, [duplicate]: true },
-    });
     useWindowStore.getState().showDesktop();
 
     const st = useWindowStore.getState();
-    expect(Object.keys(st.windows)).toEqual([students]);
+    expect(new Set(Object.keys(st.windows))).toEqual(new Set([students, dashboard]));
     expect(st.windows[students].minimized).toBe(true);
-    expect(st.dirty[students]).toBe(true); // 다른 창의 미저장 상태는 보존
-    expect(st.order).toEqual([students]);
+    expect(st.windows[dashboard].minimized).toBe(true);
+    expect(st.dirty[students]).toBe(true); // 미저장 상태는 보존
     expect(st.focusedId).toBe(null);
-    expect(st.cached).not.toContain(dashboard);
-    expect(st.live[dashboard]).toBeUndefined();
-    expect(st.nav[dashboard]).toBeUndefined();
-    expect(st.reloadNonce[dashboard]).toBeUndefined();
-    expect(st.dirty[duplicate]).toBeUndefined();
     expect(st.spotlight).toBe(false);
-    expect(st.spotlightRaised).toEqual([]);
   });
 
-  it("같은 owner의 영속 레이아웃 채택 때 legacy dashboard iframe만 제거하고 일반 창은 유지한다", () => {
+  it("owner 채택(복원) 때도 운영실 창을 지우지 않는다", () => {
     const s = useWindowStore.getState();
     s.open("route", { id: "students", title: "학생목록", href: "/students" });
-    s.open("route", { id: "dashboard", title: "오늘", href: "/dashboard" });
-    s.duplicate(windowId("route", "dashboard"));
+    s.open("route", { id: "dashboard", title: "운영실", href: "/dashboard" });
     useWindowStore.setState({ owner: "tenant:user" });
 
     useWindowStore.getState().adoptOwner("tenant:user");
 
     const st = useWindowStore.getState();
     expect(st.windows[windowId("route", "students")]).toBeTruthy();
-    expect(st.windows[windowId("route", "students")].minimized).toBe(false);
-    expect(Object.keys(st.windows).some((id) => id.startsWith("route:dashboard"))).toBe(false);
-    expect(st.order.some((id) => id.startsWith("route:dashboard"))).toBe(false);
+    expect(st.windows[windowId("route", "dashboard")]).toBeTruthy();
   });
 });
 

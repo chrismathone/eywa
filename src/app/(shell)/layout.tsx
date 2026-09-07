@@ -32,6 +32,9 @@ import { findNavItem } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { MenuHubPanel } from "@/components/workspace/menu-hub-panel";
+import { getMyMenuVisits } from "@/features/nav/server/visits";
+import { topVisitedMenus } from "@/features/nav/menu-visits";
+import { MENU_KEYS } from "@/lib/permissions";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
@@ -256,6 +259,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // '다른 강사 뷰'(열람 전용) 진입 자격 — master는 쿼리 0, 그 외 요청 캐시된 PK 조회 1회(0224a 토글).
   const canOtherTeacherView = await canUseOtherTeacherView();
+  // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
+  // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
+  const frequentKeys = topVisitedMenus(
+    await getMyMenuVisits().catch(() => ({})),
+    MENU_KEYS.filter((k) => canAccess(user.systemRole, k, permMatrix)),
+    4,
+  );
 
   return (
     // ⚠️ OperationsProvider는 **셸 전체**를 감싼다 — 예전엔 <main> 안 {children}만 감쌌더니
@@ -282,6 +292,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           permMatrix={permMatrix}
           canTeacherView={canTeacherView}
           canOtherTeacherView={canOtherTeacherView}
+          frequentKeys={frequentKeys}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>

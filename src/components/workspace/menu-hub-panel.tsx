@@ -2,16 +2,13 @@
 
 import { useEffect } from "react";
 
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, type HubDest } from "@/lib/menu-hub";
-import { navPresentation, navItemByKey } from "@/lib/navigation";
+import { HubGrid, useOpenMenu } from "./menu-hub-grid";
+import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor } from "@/lib/menu-hub";
 import type { AccessMatrix, SystemRole } from "@/lib/permissions";
-import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
+import { railWidth } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
 import { useMenuHub } from "./menu-hub-store";
 import { usePrefs } from "./use-prefs";
-import { useShowDesktop } from "./use-show-desktop";
-import { useWindowStore } from "./window-store";
 
 /**
  * 업무군 메뉴 허브 — 왼쪽에서 업무군을 고르면 **본문에 그 업무의 메뉴 버튼**이 뜬다(원장 2026-09-07 확정).
@@ -34,10 +31,9 @@ export function MenuHubPanel({
   const groupId = useMenuHub((s) => s.groupId);
   const close = useMenuHub((s) => s.close);
   const isDesktop = useIsDesktop();
-  const showDesktop = useShowDesktop();
+  const go = useOpenMenu();
   const sidebarExpanded = usePrefs((s) => s.sidebarExpanded);
-  const sidebarWidth = usePrefs((s) => s.sidebarWidth);
-  const rail = sidebarExpanded ? sidebarWidth : SIDEBAR_COLLAPSED_W;
+  const rail = railWidth(sidebarExpanded);
 
   // Esc = 닫기(하던 작업으로 돌아간다). 창 안 입력은 다른 문서라 여기 키가 안 걸린다.
   useEffect(() => {
@@ -63,21 +59,6 @@ export function MenuHubPanel({
   // 설정처럼 목적지가 많은 허브는 묶음 제목으로 나눈다(순서는 정의 순서 그대로).
   const sections = [...new Set(main.map((d) => d.section).filter((s): s is string => !!s))];
 
-  const go = (dest: HubDest, shift: boolean) => {
-    const item = navItemByKey(dest.menuKey);
-    // 운영실처럼 셸 본문 자체가 작업면인 메뉴는 창을 만들지 않는다.
-    if (item && navPresentation(item) === "desktop") {
-      close();
-      showDesktop();
-      return;
-    }
-    const store = useWindowStore.getState();
-    const params = { id: dest.menuKey, title: dest.label, href: dest.href };
-    if (shift) store.openNewInstance("route", params);
-    else store.open("route", params);
-    close();
-  };
-
   return (
     <div
       className="animate-in fade-in-0 fixed z-[44] duration-150 print:hidden"
@@ -86,12 +67,14 @@ export function MenuHubPanel({
       aria-modal="false"
       aria-label={`${group.label} 메뉴`}
     >
-      <div className="bg-background h-full overflow-auto px-6 pt-6 pb-10 [scrollbar-gutter:stable]">
-        <div className="mx-auto w-full max-w-5xl">
+      {/* 세로도 가운데 — 짧은 업무군(학생 2칸)이 화면 위쪽에 매달려 있으면 허전하다(원장 2026-09-07).
+          길어지면(설정 11칸) `min-h-full`이 자리를 넘겨 자연스럽게 스크롤된다. */}
+      <div className="bg-background h-full overflow-auto px-6 py-8 [scrollbar-gutter:stable]">
+        <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-center">
           <header className="mb-5 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-text-faint text-xs font-bold">전체 업무 / {group.label}</p>
-              <h1 className="text-foreground mt-1 text-2xl font-bold tracking-tight">{group.label}</h1>
+              <h1 className="text-foreground mt-1 text-3xl font-bold tracking-tight">{group.label}</h1>
               {group.note ? <p className="text-text-dim mt-1 text-sm">{group.note}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -111,7 +94,7 @@ export function MenuHubPanel({
           {sections.length > 0 ? (
             sections.map((s) => (
               <section key={s} className="mb-5">
-                <h2 className="text-text-dim mb-2 text-sm font-bold">{s}</h2>
+                <h2 className="text-text-dim mb-2 text-base font-bold">{s}</h2>
                 <HubGrid dests={main.filter((d) => d.section === s)} onGo={go} />
               </section>
             ))
@@ -122,7 +105,7 @@ export function MenuHubPanel({
           {tools.length > 0 ? (
             <section className="mt-6">
               {/* 가끔 쓰는 도구 — 큰 버튼과 섞으면 매일 쓰는 것이 안 보인다. */}
-              <h2 className="text-text-dim mb-2 text-sm font-bold">도구</h2>
+              <h2 className="text-text-dim mb-2 text-base font-bold">도구</h2>
               <div className="flex flex-wrap gap-2">
                 {tools.map((d) => (
                   <button
@@ -143,31 +126,6 @@ export function MenuHubPanel({
           </p>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** 메뉴 버튼 격자 — 넓은 창 3열, 좁아지면 2열·1열(창 최소 크기 규약과 같은 결). */
-function HubGrid({ dests, onGo }: { dests: HubDest[]; onGo: (d: HubDest, shift: boolean) => void }) {
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {dests.map((d) => (
-        <button
-          key={d.href}
-          type="button"
-          onClick={(e) => onGo(d, e.shiftKey)}
-          className="bg-card shadow-card hover:bg-bg-soft flex items-center gap-3 rounded-xl px-4 py-4 text-left transition"
-        >
-          <span className="bg-primary-soft text-primary flex size-12 shrink-0 items-center justify-center rounded-lg">
-            <EyIcon name={d.icon} size={22} strokeWidth={1.7} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="text-foreground block truncate text-lg font-bold">{d.label}</span>
-            {d.desc ? <span className="text-text-dim block truncate text-xs">{d.desc}</span> : null}
-          </span>
-          <EyIcon name="arrowRight" size={16} className="text-text-faint shrink-0" />
-        </button>
-      ))}
     </div>
   );
 }

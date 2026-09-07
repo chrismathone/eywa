@@ -57,7 +57,11 @@ function fromMenu(menuKey: MenuKey, desc?: string, extra?: Partial<HubDest>): Hu
   return { menuKey, href: item.href, label: item.label, icon: item.icon, desc, ...extra };
 }
 
-/** 면(탭) 목적지 — 부모 메뉴의 권한·아이콘을 쓰고 라벨은 그 면 이름이다. */
+/**
+ * 면(탭) 목적지 — 권한은 부모 메뉴 것을 쓰고, 라벨은 그 면 이름이다.
+ * ⚠️ **아이콘은 면마다 준다**(`extra.icon`) — 부모 것을 그대로 물려받으면 설정 11칸이 전부 같은 톱니가 된다
+ *    (원장 캡처 2026-09-07). 안 주면 부모 아이콘으로 떨어진다.
+ */
 function face(parent: MenuKey, href: string, label: string, desc?: string, extra?: Partial<HubDest>): HubDest | null {
   const item = navItemByKey(parent);
   if (!item) return null;
@@ -96,7 +100,7 @@ export const HUB_GROUPS: HubGroup[] = [
     items: keep([
       fromMenu("timetable", "과목별 수업 배치·조회"),
       // 강사 시트는 영어·수학이 **독립 권한**이라 버튼도 둘이다(사이드바에선 한 줄 + 하부탭이었다).
-      face("ecs", "/ecs", "영어 강사 시트", "영어 반별 주간 수업·진도"),
+      face("ecs", "/ecs", "영어 강사 시트", "영어 반별 주간 수업·진도", { icon: "spreadsheet" }),
       { menuKey: "mcs", href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.ecs, desc: "수학 반별 월간 진도" },
       fromMenu("attendance", "월별 출석부·오늘 출결"),
       fromMenu("classes", "반 목록·반 정보 관리"),
@@ -104,8 +108,8 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("class_review", "수업 참관·평가 기록"),
       fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true }),
       // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로.
-      face("attendance", "/attendance/live", "오늘 출결", undefined, { tool: true }),
-      face("attendance", "/attendance/quick", "출결 모드", undefined, { tool: true, teacherOnly: true }),
+      face("attendance", "/attendance/live", "오늘 출결", undefined, { tool: true, icon: "clipboardList" }),
+      face("attendance", "/attendance/quick", "출결 모드", undefined, { tool: true, teacherOnly: true, icon: "listChecks" }),
     ]),
   },
   {
@@ -139,10 +143,10 @@ export const HUB_GROUPS: HubGroup[] = [
     kind: "hub",
     note: "청구·수납과 관련 도구입니다.",
     items: keep([
-      billingFace("/billing", "월별 청구·수납 현황"),
-      billingFace("/billing?tab=textbooks", "교재 신청·정산"),
-      billingFace("/billing?tab=expenses", "지출 결의·집행"),
-      billingFace("/billing?tab=refunds", "환불 요청서 처리"),
+      billingFace("/billing", "월별 청구·수납 현황", { icon: "wallet" }),
+      billingFace("/billing?tab=textbooks", "교재 신청·정산", { icon: "bookMarked" }),
+      billingFace("/billing?tab=expenses", "지출 결의·집행", { icon: "receipt" }),
+      billingFace("/billing?tab=refunds", "환불 요청서 처리", { icon: "undo" }),
       billingFace("/billing?tab=calculator", undefined, { tool: true }),
       billingFace("/billing?tab=sessions", undefined, { tool: true }),
       billingFace("/billing?tab=verify", undefined, { tool: true }),
@@ -158,10 +162,10 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("staff", "직원 명부·근무 설정"),
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
-      face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { tool: true }),
-      face("shuttle", "/shuttle/live", "운행 현황", undefined, { tool: true }),
+      face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { tool: true, icon: "bus" }),
+      face("shuttle", "/shuttle/live", "운행 현황", undefined, { tool: true, icon: "clock" }),
       // ⚠️ 실시간 위치는 아직 준비 화면이다(인수인계 §7) — 그래도 **입구는 남긴다**(사이드바 하부탭에 있던 자리).
-      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { tool: true }),
+      face("shuttle", "/shuttle/track", "실시간 위치", undefined, { tool: true, icon: "mapPin" }),
     ]),
   },
   {
@@ -189,17 +193,17 @@ export const SUPPORT_GROUPS: HubGroup[] = [
     // ⚠️ 인수인계의 '11 → 5 범주'는 **제안**이라 면을 합치지 않았다(면을 합치면 라우트·조회가 바뀐다).
     //    여기서는 같은 11면을 **범주 제목으로 묶어** 고르게만 한다 — 주소·권한·화면 모두 그대로다.
     items: keep([
-      face("owner", "/owner", "프로필·브랜드", undefined, { section: "학원 정보" }),
-      face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영" }),
-      face("owner", "/owner?tab=subjects", "과목 운영", undefined, { section: "수업·운영" }),
-      face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내" }),
-      face("owner", "/owner?tab=notifications", "알림·약관", undefined, { section: "청구·안내" }),
-      face("owner", "/owner?tab=consultations", "상담 양식", undefined, { section: "청구·안내" }),
-      face("owner", "/owner?tab=popups", "팝업 공지", undefined, { section: "청구·안내" }),
-      face("owner", "/owner?tab=permissions", "역할·권한", undefined, { section: "계정·권한" }),
-      face("owner", "/owner?tab=data", "데이터 정리", undefined, { section: "시스템" }),
-      face("owner", "/owner?tab=audit", "감사로그", undefined, { section: "시스템" }),
-      face("owner", "/owner?tab=sheets", "연동", undefined, { section: "시스템" }),
+      face("owner", "/owner", "프로필·브랜드", undefined, { section: "학원 정보", icon: "palette" }),
+      face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영", icon: "clock" }),
+      face("owner", "/owner?tab=subjects", "과목 운영", undefined, { section: "수업·운영", icon: "book" }),
+      face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내", icon: "wallet" }),
+      face("owner", "/owner?tab=notifications", "알림·약관", undefined, { section: "청구·안내", icon: "bellRing" }),
+      face("owner", "/owner?tab=consultations", "상담 양식", undefined, { section: "청구·안내", icon: "messages" }),
+      face("owner", "/owner?tab=popups", "팝업 공지", undefined, { section: "청구·안내", icon: "megaphone" }),
+      face("owner", "/owner?tab=permissions", "역할·권한", undefined, { section: "계정·권한", icon: "key" }),
+      face("owner", "/owner?tab=data", "데이터 정리", undefined, { section: "시스템", icon: "eraser" }),
+      face("owner", "/owner?tab=audit", "감사로그", undefined, { section: "시스템", icon: "history" }),
+      face("owner", "/owner?tab=sheets", "연동", undefined, { section: "시스템", icon: "sync" }),
     ]),
   },
   {
@@ -212,11 +216,15 @@ export const SUPPORT_GROUPS: HubGroup[] = [
 ];
 
 /**
- * 즐겨찾기 = 왼쪽에서 **한 번에 여는** 자리(업무군을 거치지 않는다).
- * ⚠️ 지금은 고정 4개다 — 사용 빈도를 잰 값이 아니고, 사람이 고르는 기능도 아직 없다(계정 저장이 필요하다,
- *    '모든 뷰 세팅은 계정 귀속' 규칙). 늘리려면 그 저장부터.
+ * 왼쪽 맨 위 **'자주 방문한 메뉴'** — 업무군을 거치지 않고 한 번에 여는 자리.
+ *
+ * 🔴 목록은 **사람이 고르지 않는다** — 연 횟수로 자동 정렬한다(원장 2026-09-07:
+ *    *"즐겨찾기 말고 사용자가 자주 방문한 탭이 알아서 리스트에 올라가도록"*). 집계·순위는
+ *    [`menu-visits.ts`](src/features/nav/menu-visits.ts), 저장은 계정(`users.ui_prefs.nav.visits`).
+ * ⚠️ 아래 배열은 **기록이 아직 없을 때의 첫 화면**일 뿐이다(신규 계정·첫 로그인). 한 번이라도 메뉴를 열면
+ *    그때부터 실제 기록이 이 자리를 대신한다.
  */
-export const FAVORITE_KEYS: MenuKey[] = ["timetable", "ecs", "attendance", "students"];
+export const DEFAULT_FREQUENT_KEYS: MenuKey[] = ["timetable", "ecs", "attendance", "students"];
 
 type Gate = {
   systemRole: SystemRole;
@@ -241,9 +249,13 @@ export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
     .filter((g) => g.items.length > 0);
 }
 
-/** 즐겨찾기 — 권한이 없으면 그 줄만 빠진다. */
-export function favoritesFor(gate: Gate): HubDest[] {
-  return keep(FAVORITE_KEYS.map((k) => fromMenu(k))).filter((d) => allowed(d, gate));
+/**
+ * '자주 방문한 메뉴' 줄 — 방문 기록 순서(`keys`)를 목적지로 바꾼다. 권한이 없으면 그 줄만 빠진다.
+ * ⚠️ 기록이 비면 첫 화면용 기본값으로 떨어진다(빈 자리를 남기지 않는다).
+ */
+export function frequentFor(gate: Gate, keys?: readonly MenuKey[]): HubDest[] {
+  const source = keys && keys.length > 0 ? keys : DEFAULT_FREQUENT_KEYS;
+  return keep(source.map((k) => fromMenu(k))).filter((d) => allowed(d, gate));
 }
 
 const routePath = (href: string): string => href.split(/[?#]/, 1)[0] ?? href;

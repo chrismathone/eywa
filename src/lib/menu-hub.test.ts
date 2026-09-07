@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  FAVORITE_KEYS,
+  DEFAULT_FREQUENT_KEYS,
   HUB_GROUPS,
   SUPPORT_GROUPS,
-  favoritesFor,
+  frequentFor,
   hubGroupOfPath,
   hubGroupsFor,
 } from "./menu-hub";
@@ -52,9 +52,9 @@ describe("버튼형 메뉴 — 입구를 줄이되 목적지는 하나도 잃지
     for (const d of allDests) expect(d.href.startsWith("/")).toBe(true);
   });
 
-  it("즐겨찾기는 업무군에도 있는 화면이다 — 중복 입구는 의도(한 번에 열기)", () => {
+  it("'자주 방문한 메뉴'의 첫 화면 기본값도 업무군에 있는 화면이다 — 중복 입구는 의도(한 번에 열기)", () => {
     const covered = new Set(allDests.map((d) => d.menuKey));
-    for (const k of FAVORITE_KEYS) expect(covered.has(k)).toBe(true);
+    for (const k of DEFAULT_FREQUENT_KEYS) expect(covered.has(k)).toBe(true);
   });
 });
 
@@ -109,10 +109,18 @@ describe("권한 — 업무군은 자식이 하나라도 열릴 때만 선다", 
     expect(office).not.toContain("/onescreen");
   });
 
-  it("즐겨찾기도 권한을 탄다", () => {
-    const favs = favoritesFor({ systemRole: "master", permMatrix: matrixWith({ ecs: "none" }) });
+  it("'자주 방문한 메뉴'도 권한을 탄다 — 기록에 남아 있어도 못 여는 메뉴는 안 세운다", () => {
+    const favs = frequentFor({ systemRole: "master", permMatrix: matrixWith({ ecs: "none" }) });
     expect(favs.some((d) => d.menuKey === "ecs")).toBe(false);
     expect(favs.some((d) => d.menuKey === "timetable")).toBe(true);
+  });
+
+  it("방문 기록 순서를 그대로 따른다(빈 기록이면 기본값)", () => {
+    const ordered = frequentFor({ systemRole: "master" }, ["students", "billing"]);
+    expect(ordered.map((d) => d.menuKey)).toEqual(["students", "billing"]);
+    expect(frequentFor({ systemRole: "master" }, []).map((d) => d.menuKey)).toEqual(
+      DEFAULT_FREQUENT_KEYS,
+    );
   });
 });
 

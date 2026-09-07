@@ -19,8 +19,14 @@ export function useEmbed() {
 
 /** href에 embed=1을 안전 병합(기존 쿼리 보존). 라우트 창 iframe `src`·임베드 내부 드릴인이 공유. */
 export function withEmbed(href: string): string {
-  const [path, query = ""] = href.split("?");
+  // 🔴 **해시를 먼저 떼어 낸다** — `/dashboard#daily-briefing`처럼 쿼리가 없는 해시 링크를 그냥 이으면
+  //    `…#daily-briefing?embed=1`이 되어 embed가 **프래그먼트 안으로 들어가고**, 창 안에서 풀 셸이 뜬다
+  //    (2026-09-03 적대적 리뷰가 잡았던 그 증상 — 그땐 운영실을 창에서 빼는 것으로 피했다).
+  const hashAt = href.indexOf("#");
+  const hash = hashAt >= 0 ? href.slice(hashAt) : "";
+  const base = hashAt >= 0 ? href.slice(0, hashAt) : href;
+  const [path, query = ""] = base.split("?");
   const params = new URLSearchParams(query);
   params.set("embed", "1");
-  return `${path}?${params.toString()}`;
+  return `${path}?${params.toString()}${hash}`;
 }

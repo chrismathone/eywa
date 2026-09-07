@@ -1,84 +1,27 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { usePrefs } from "./use-prefs";
 
 /**
- * 사이드바 오른쪽 경계선 드래그로 너비를 조절하는 훅.
- * - 끌면 너비가 커서를 따라옴(라이브, 영속 쓰기는 drop에서 1회).
- * - THRESHOLD 미만으로 줄이면 접힘(아이콘 레일 52px)으로 스냅, 이상이면 펼침(MIN~MAX로 클램프).
- * - 더블클릭=빠른 토글, ←/→ 키=너비 조절/접고펴기(접근성). pointer capture로 영역 밖 드래그도 추적.
- * 반환: 현재(라이브 포함) expanded/width + dragging + 핸들 div에 스프레드할 handleProps.
+ * 사이드바 너비 — **고정이다. 접기/펴기만 한다**(원장 2026-09-07: *"왼쪽 탭 크기를 고정으로 가고 접기 펴기만"*).
+ *
+ * 🔴 폭을 사람이 끌어 바꾸던 것을 걷어냈다(옛 `useSidebarResize`의 드래그·←/→ 조절). 버튼형 메뉴로 바뀌며
+ *    왼쪽은 업무군 12줄로 짧아졌고, 폭이 계정마다 다르면 본문 메뉴 격자의 열 수까지 사람마다 달라진다.
+ * ⚠️ **캔버스·메뉴 허브가 같은 값을 봐야 한다** — 창 스테이지(`left`)와 허브 패널이 이 폭을 기준으로 자리를
+ *    잡으므로, 화면마다 제 숫자를 적으면 창이 사이드바 밑으로 들어가거나 틈이 벌어진다.
+ * ⚠️ `usePrefs.sidebarWidth`(옛 저장값)는 **더 이상 읽지 않는다** — 지우지는 않았다(되돌릴 때 그 값이 필요하고,
+ *    다른 기기에 남아 있는 값을 마이그레이션할 이유도 없다).
  */
-export const SIDEBAR_COLLAPSED_W = 52; // 접힘 레일 너비(아이콘만)
-const THRESHOLD = 120; // 이 너비 미만으로 끌면 접힘으로 스냅
-const MIN_EXPANDED = 150; // 펼침 최소 너비
-const MAX_EXPANDED = 360; // 펼침 최대 너비
-const KEY_STEP = 24; // 화살표 키 1칸
+export const SIDEBAR_COLLAPSED_W = 52; // 접힘 레일(아이콘만)
+export const SIDEBAR_EXPANDED_W = 216; // 펼침 고정 폭(옛 기본값과 같다 — 지금 화면이 그 폭이다)
 
-type Resolved = { expanded: boolean; width: number };
-
-function resolve(raw: number): Resolved {
-  if (raw < THRESHOLD) return { expanded: false, width: SIDEBAR_COLLAPSED_W };
-  return { expanded: true, width: Math.min(MAX_EXPANDED, Math.max(MIN_EXPANDED, Math.round(raw))) };
+/** 지금 사이드바가 차지하는 폭 — 창 스테이지·메뉴 허브가 이 함수를 함께 쓴다. */
+export function railWidth(expanded: boolean): number {
+  return expanded ? SIDEBAR_EXPANDED_W : SIDEBAR_COLLAPSED_W;
 }
 
-export function useSidebarResize() {
+/** 사이드바 상태 — 펼침 여부와 그때의 폭(고정). 토글은 브랜드 줄 버튼이 `usePrefs.toggleSidebar`로 한다. */
+export function useSidebarWidth(): { expanded: boolean; width: number } {
   const expanded = usePrefs((s) => s.sidebarExpanded);
-  const storedWidth = usePrefs((s) => s.sidebarWidth);
-  const setSidebar = usePrefs((s) => s.setSidebar);
-  const toggleSidebar = usePrefs((s) => s.toggleSidebar);
-
-  const [live, setLive] = useState<Resolved | null>(null);
-  const leftRef = useRef(0); // 드래그 시작 시 사이드바 좌측 x (커서 → 너비 변환 기준)
-
-  const dragging = live !== null;
-  const curExpanded = live ? live.expanded : expanded;
-  const curWidth = live ? live.width : expanded ? storedWidth : SIDEBAR_COLLAPSED_W;
-
-  function commit(width: number) {
-    if (!expanded) return setSidebar(true, Math.max(MIN_EXPANDED, width));
-    setSidebar(true, Math.min(MAX_EXPANDED, Math.max(MIN_EXPANDED, width)));
-  }
-
-  const handleProps = {
-    onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-      if (e.button !== 0) return;
-      const aside = e.currentTarget.parentElement;
-      leftRef.current = aside ? aside.getBoundingClientRect().left : 0;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    },
-    onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-      if (!e.currentTarget.hasPointerCapture?.(e.pointerId)) return;
-      setLive(resolve(e.clientX - leftRef.current));
-    },
-    onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-      e.currentTarget.releasePointerCapture?.(e.pointerId);
-      if (live) setSidebar(live.expanded, live.expanded ? live.width : undefined);
-      setLive(null);
-    },
-    onDoubleClick() {
-      setLive(null);
-      toggleSidebar();
-    },
-    onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        if (!expanded) return;
-        const w = storedWidth - KEY_STEP;
-        if (w < THRESHOLD) setSidebar(false);
-        else commit(w);
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        if (!expanded) setSidebar(true, MIN_EXPANDED);
-        else commit(storedWidth + KEY_STEP);
-      } else if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        toggleSidebar();
-      }
-    },
-  };
-
-  return { expanded: curExpanded, width: curWidth, dragging, handleProps };
+  return { expanded, width: railWidth(expanded) };
 }

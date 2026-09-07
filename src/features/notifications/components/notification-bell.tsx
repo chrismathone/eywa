@@ -199,27 +199,9 @@ export function NotificationBell() {
     // 있는 게 정상 상태고, 그 밑에서 배경이 바뀌어봐야 **눈에 보이는 변화가 0**이다. WindowLink와 같은 경로·
     // 같은 가드를 쓴다(창 시스템 없는 강사 미니셸·모바일·임베드는 아래 router.push로 자연 폴백).
     const onWorkspace = isDesktop && workspaceEnabled && isTopFrame();
-    // 🔴 운영실(`/dashboard`)은 창이 아니라 셸 main 자체인 **데스크톱 작업면**이다(windowIdForHref도 null을 돌려준다) — 창을
-    //    열면 스토어가 레거시로 지우고, 해시가 붙은 링크(`/dashboard#daily-briefing`, 브리핑 알림)는 withEmbed가 embed를 잃어
-    //    창 안에 풀 셸이 떴다(적대적 리뷰 2026-09-03). 대신 열린 창을 내려(showDesktop) 배경 main을 그 주소로 보낸다.
-    //    이미 운영실이면 **해시만** 바꾼다 — router.push(pushState)는 `hashchange`를 안 내서 접힌 2차 줄(DetailsHashOpen)이 안 펴진다.
-    const linkPath = n.link.split("?")[0].split("#")[0];
-    if (linkPath === "/dashboard") {
-      if (onWorkspace) useWindowStore.getState().showDesktop();
-      const hashAt = n.link.indexOf("#");
-      const hash = hashAt >= 0 ? n.link.slice(hashAt) : "";
-      if (hash && window.location.pathname === "/dashboard") {
-        // 🔴 `location.assign("#…")`로 프래그먼트 이동을 하면 **state=null인 히스토리 항목**이 생겨 Next 라우터가 그 popstate를
-        //    무시한다(뒤로 가기를 두 번 눌러야 하고, 다음 라우터 갱신이 주소의 해시를 지운다 — 적대적 리뷰 2026-09-04). 라우터의
-        //    state를 그대로 둔 채 주소만 바꾸고(`replaceState(history.state, …)` — Next의 패치가 __NA를 통과시킨다) 펼침은 직접 알린다
-        //    (`replaceState`는 hashchange를 안 낸다; 같은 해시를 다시 눌러도 마찬가지라 늘 디스패치).
-        if (window.location.hash !== hash) window.history.replaceState(window.history.state, "", hash);
-        window.dispatchEvent(new HashChangeEvent("hashchange"));
-        return;
-      }
-      router.push(n.link);
-      return;
-    }
+    // ⚠️ 운영실도 이제 **다른 메뉴와 같은 창**이다(원장 2026-09-07) — 특례가 사라졌다.
+    //    해시(`/dashboard#daily-briefing`)는 창 주소에 그대로 실려 그 자리로 스크롤된다
+    //    (`withEmbed`가 해시를 분리해 붙인다 — 안 그러면 embed가 프래그먼트로 들어가 창 안에 풀 셸이 뜬다).
     const resolved = onWorkspace ? windowIdForHref(n.link) : null;
     if (resolved) {
       useWindowStore
