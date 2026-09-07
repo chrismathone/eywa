@@ -78,7 +78,8 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
       .eq("class_id", classId)
       .order("from_date", { ascending: false }),
     supabase.from("users").select("id, display_name"),
-    // 보고서 작성 기록(추정 근거) — 창 안(최근 2개월)만. 한 반 최대 33행(실측)이라 집계는 JS로 충분.
+    // 보고서 작성 기록(추정 근거) — 창 안(TEACHER_HISTORY_MONTHS, 2026-09-07부터 12개월)만.
+    // 반 하나로 좁힌 조회라(`class_id` 고정) 창을 넓혀도 가볍다 — 집계는 JS로 충분.
     supabase
       .from("lesson_reports")
       .select("report_date, teacher_name")

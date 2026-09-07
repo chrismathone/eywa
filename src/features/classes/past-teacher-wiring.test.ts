@@ -57,11 +57,13 @@ describe("지난 수업의 강사 — 종료 시점으로 되살린다", () => {
 describe("판정 자체 — 실데이터 모양으로", () => {
   // 실측 모양: 09-01 인수인계(허주연) · 8월 작성자 허은진 · 7월 작성자 이유정.
   const index = buildTeacherAsOfIndex({
-    since: "2026-07-01", // historyWindowStart("2026-09-07") = 2개월 창의 시작
+    since: "2025-10-01", // historyWindowStart("2026-09-07") = 12개월 창의 시작(2026-09-07 확대)
     transitions: [{ classId: "c1", date: "2026-09-01", teacherName: "허주연" }],
     writers: [
       { classId: "c1", month: "2026-08", teacherName: "허은진", count: 25 },
       { classId: "c1", month: "2026-07", teacherName: "이유정", count: 9 },
+      // 2026-09-07 창 확대(2→12개월)로 **되살아난** 구간 — 이관분 반 백필이 만든 근거다.
+      { classId: "c1", month: "2026-05", teacherName: "김윤하", count: 36 },
     ],
   });
 
@@ -74,7 +76,12 @@ describe("판정 자체 — 실데이터 모양으로", () => {
     expect(resolveTeacherAsOf(index, "c1", "2026-07-01")).toEqual({ name: "이유정", inferred: true });
   });
 
-  it("🔴 창 밖(5월)은 null — 화면이 `—`로 비운다", () => {
-    expect(resolveTeacherAsOf(index, "c1", "2026-05-08")).toBeNull();
+  it("🔴 창을 12개월로 넓혀 5월도 되살아난다(2026-09-07) — 종전엔 창 밖이라 `—`였다", () => {
+    expect(resolveTeacherAsOf(index, "c1", "2026-05-08")).toEqual({ name: "김윤하", inferred: true });
+  });
+
+  it("🔴 그래도 창 밖이면 null — 화면이 `—`로 비운다(없는 걸 지어내지 않는다)", () => {
+    // since=2025-10-01 이전. 창을 넓힌 것이지 없앤 게 아니다.
+    expect(resolveTeacherAsOf(index, "c1", "2025-06-01")).toBeNull();
   });
 });
