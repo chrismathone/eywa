@@ -15,6 +15,8 @@ export type HapbanStudentIn = {
   status?: "active" | "hold" | "withdrawn";
   endDate?: string | null;
   isNew?: boolean;
+  /** 등록 31~60일(신입 다음 단계). */
+  isRecent?: boolean;
   isTransferredIn?: boolean;
   attendanceDays?: string[];
 };

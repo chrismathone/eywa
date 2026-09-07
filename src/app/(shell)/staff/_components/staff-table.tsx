@@ -36,6 +36,17 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
           ariaLabel={`${s.displayName} 상세`}
           className="group inline-flex items-center gap-1.5"
         >
+          {/* 시간표 강사 색(근무 설정) — **정해 둔 사람만** 사각형이 선다(원장 2026-09-07).
+              색이 곧 시간표에서 그 사람을 찾는 단서라, 명부에서 누가 무슨 색인지 바로 보이게 한다.
+              ⚠️ 색은 사람이 고른 자유 hex라 토큰이 아니다 → 인라인 style(문자열 그대로 저장된 값). */}
+          {s.bgColor ? (
+            <span
+              aria-hidden
+              title={`시간표 색 ${s.bgColor}`}
+              className="border-line inline-block size-3.5 shrink-0 rounded-xs border"
+              style={{ background: s.bgColor }}
+            />
+          ) : null}
           <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
           <EditingBadge scope={`staff:${s.id}`} />
         </WindowLink>

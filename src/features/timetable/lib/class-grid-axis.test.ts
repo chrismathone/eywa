@@ -105,10 +105,13 @@ describe("rosterRows — 명단 섹션 행수", () => {
     expect(rowsOf([slotWithStudents("a", "mon", [])]).active).toBe(1);
   });
 
-  it("🔴 대기·퇴원은 그룹에 한 명도 없으면 0 — 섹션을 통째로 안 그린다(빈 여백 제거의 핵심)", () => {
+  // 🔴 2026-09-07 뒤집힘(원장 *"대기/퇴원을 항상 보여줄것"*): 예전엔 0명이면 섹션을 통째로 안 그렸는데,
+  //    그러면 **누가 퇴원하는 순간 카드가 아래로 밀리고**(줄마다 높이가 달라진다) 학생을 끌어다 놓을
+  //    자리도 화면에 없다(통합뷰 명단 드래그). 이제 세 섹션 모두 최소 한 줄("-")을 잡는다.
+  it("대기·퇴원은 한 명도 없어도 한 줄은 남긴다 — 자리가 늘 있어야 드롭 대상이 된다", () => {
     const rows = rowsOf([slotWithStudents("a", "mon", [stu("가", "active")])]);
-    expect(rows.hold).toBe(0);
-    expect(rows.withdrawn).toBe(0);
+    expect(rows.hold).toBe(1);
+    expect(rows.withdrawn).toBe(1);
   });
 
   it("한 명이라도 있으면 그 최대치만큼만 잡는다", () => {

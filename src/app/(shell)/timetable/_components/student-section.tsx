@@ -46,7 +46,7 @@ export function StudentSection({
   canDrag: boolean;
   cap: number;
   draggable: boolean;
-  tone: (s: { isNew?: boolean; isTransferredIn?: boolean }) => string;
+  tone: (s: { isNew?: boolean; isRecent?: boolean; isTransferredIn?: boolean }) => string;
   label?: string;
   labelTone?: string;
   /** 클릭 시 같은 반 요일 편집 팝오버용(재원 섹션에만 전달). */

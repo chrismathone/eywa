@@ -12,7 +12,7 @@ import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuick } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
 import type { MovePart } from "@/features/timetable/lib/class-move";
-import { useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
+import { HOLD_SECTION_CLASS, useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
  * 시간표 셀(ClassCell·IntegratedCell)에 넘기는 반+학생 명단 슬롯.
@@ -423,7 +423,8 @@ export function ClassCell({
             {/* 대기 — 고정 박스(최대 2칸), 넘으면 이 박스만 스크롤(스크롤바 숨김). 있을 때만 렌더(빈 슬롯 예약 X). */}
             {hold.length > 0 ? (
               <div
-                className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
+                // 대기 면 색은 모든 뷰 공통(timetable-color 단일 소스) — 원장 2026-09-07 색 견본.
+                className={`scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t ${HOLD_SECTION_CLASS}`}
                 style={{ maxHeight: HOLD_MAX_H }}
               >
                 <StudentSection
@@ -433,9 +434,9 @@ export function ClassCell({
                   canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
-                  tone={() => "text-text-dim"}
+                  tone={() => ""}
                   label="대기"
-                  labelTone="bg-amber-soft/40 text-amber"
+                  labelTone=""
                 />
               </div>
             ) : null}

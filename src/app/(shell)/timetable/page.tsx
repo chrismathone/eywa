@@ -58,6 +58,7 @@ import {
 } from "./_components/search-context";
 import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
+import { RosterMoveArea } from "./_components/roster-move";
 import { IntegratedEditBoard } from "./_components/integrated-edit-board";
 import {
   TimetableEditProvider,
@@ -167,6 +168,10 @@ export default async function TimetablePage({
   //    남의 반 명단까지 바뀐다 → 관리자(classes=full)만. `canWriteTenant`는 scoped 강사도 통과하므로
   //    쓰면 안 된다(perm-matrix `canManageTenant` 주석). 서버 액션도 같은 게이트로 잠갔다(#77).
   const canEdit = rel !== "past" && (await canManageTenant(user.systemRole, "classes"));
+  // 명단 이동(통합뷰에서 대기/퇴원으로 끌어 놓기) = **학생 기록 변경**이라 문이 다르다 — 서버 액션의
+  // 게이트(canManageStudentRecords = students full)와 같은 모양이어야 한다(#77: 끌 수는 있는데 저장에서
+  // 거절당하면 그게 더 나쁘다). 강사는 학생 기록 열람 전용(원장 2026-08-18).
+  const canEditRoster = rel !== "past" && (await canManageTenant(user.systemRole, "students"));
   // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
   const effectiveDate = isFutureWeek ? week : undefined;
 
@@ -951,6 +956,9 @@ export default async function TimetablePage({
           doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
       ) : isIntegrated ? (
+        // 통합뷰 명단 이동(대기/퇴원 드롭) — 🔴 zoom 래퍼 **바깥**에 DndContext를 둔다([[#98]]: 안쪽이면
+        // fixed인 DragOverlay가 zoom 좌표계로 들어가 고스트가 커서와 어긋난다. 기본뷰와 같은 배치).
+        <RosterMoveArea canEdit={canEditRoster} today={today}>
         <TimetableZoomArea>
           <RichGridView
             slots={slots}
@@ -963,6 +971,7 @@ export default async function TimetablePage({
             hideStudents={hideStudents}
           />
         </TimetableZoomArea>
+        </RosterMoveArea>
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.

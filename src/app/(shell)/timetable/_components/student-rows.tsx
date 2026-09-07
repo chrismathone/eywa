@@ -9,6 +9,7 @@ import { useTimetableEdit } from "./edit-context";
 import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { HoverCard, StudentInfoCard } from "./hover-cards";
 import { useSearchTone } from "./search-context";
+import { RECENT_ROW_CLASS } from "./timetable-color";
 
 /**
  * 시간표 셀 학생 행(단일 셀·합반 공용) — class-cell.tsx에서 추출(200줄 규칙).
@@ -31,6 +32,8 @@ export type StudentQuick = {
   status?: "active" | "hold" | "withdrawn";
   endDate?: string | null;
   isNew?: boolean;
+  /** 등록 31~60일(신입 다음 단계). */
+  isRecent?: boolean;
   isTransferredIn?: boolean;
   /** 수강 시작일(YYYY-MM-DD) — hover에서 신입 시작일·전입일 표시용. 런타임엔 StudentLine 전체가 도착. */
   enrollmentDate?: string | null;
@@ -56,9 +59,11 @@ export function metaLabel(school: string | null | undefined, grade: string | nul
  * ⚠️ 전입을 신입보다 **먼저** 검사 — 반이동은 새 enrollment라 start_date가 최근이라 isNew도 true가 되지만,
  * 다른 반에서 옮겨온 기존 학생이므로 "신입(빨강)"이 아니라 "전입(초록)"으로 표시한다(ijw getEnrollmentStyle 순서 동일).
  * 재원생은 가독성을 위해 text-foreground(진함) — 대기/퇴원과 톤 위계를 둔다. */
-export function studentRowTone(s: { isNew?: boolean; isTransferredIn?: boolean }): string {
+export function studentRowTone(s: { isNew?: boolean; isRecent?: boolean; isTransferredIn?: boolean }): string {
   if (s.isTransferredIn) return "bg-primary-soft text-primary";
   if (s.isNew) return "bg-danger-soft text-danger";
+  // 등록 31~60일 — 신입 다음 단계(원장 2026-09-07). 색은 timetable-color.ts 단일 소스.
+  if (s.isRecent) return RECENT_ROW_CLASS;
   return "text-foreground";
 }
 

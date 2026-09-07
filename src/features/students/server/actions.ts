@@ -651,6 +651,64 @@ export async function endStudentEnrollments(
   return { ok: true };
 }
 
+/**
+ * 단일 수강 **대기(휴원)** 전환 — 이 수강 한 건만 대기로 돌린다(퇴원·반 폐지 아님).
+ *
+ * 원장 2026-09-07(시간표 통합뷰): 학생을 대기 칸으로 끌어 놓으면 확인 팝업이 뜨고, 날짜를 고른다(기본 오늘).
+ *
+ * 🔴 **게이트는 수강 종료와 같다**(`canManageStudentRecords` = students full) — 강사는 학생 기록 열람 전용
+ *    (원장 2026-08-18). 화면이 드래그를 숨기고 여기서 한 번 더 막는다(#77 이중 방어).
+ * 🔴 **날짜는 기록이다** — `enrollments`엔 "언제부터 대기"를 담는 칸이 없다(퇴원은 `end_date`가 있다).
+ *    그래서 화면은 저장 즉시 대기로 바뀌고, 고른 날짜는 감사로그(`metadata.date`)에 남아 되짚을 수 있다.
+ *    미래 날짜 예약이 필요하면 컬럼(예: `hold_from`) 신설이 선행돼야 한다 — 원장 결정 사항.
+ * ⚠️ 이미 종료된 수강은 거절한다(끝난 기록을 되살리는 것처럼 보인다). 이미 대기면 **성공으로 통과**(멱등).
+ */
+export async function holdSingleEnrollment(
+  _prev: ChangeStatusState,
+  formData: FormData,
+): Promise<ChangeStatusState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+
+  const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const date = String(formData.get("date") ?? "").trim() || kstToday();
+  if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: row, error: readErr } = await supabase
+    .from("enrollments")
+    .select("id, class_id, student_id, end_date, on_hold")
+    .eq("id", enrollmentId)
+    .maybeSingle();
+  if (readErr) return { error: readErr.message };
+  if (!row) return { error: "수강 기록을 찾을 수 없습니다" };
+  if (row.end_date) return { error: "이미 종료된 수강입니다" };
+
+  if (!row.on_hold) {
+    const { error } = await supabase.from("enrollments").update({ on_hold: true }).eq("id", enrollmentId);
+    if (error) return { error: error.message };
+    await logAction({
+      action: "enrollment_hold",
+      targetType: "student",
+      metadata: {
+        studentId: studentId || row.student_id,
+        classId: row.class_id,
+        date,
+        source: "timetable_integrated_drag",
+      },
+    });
+  }
+
+  const sid = studentId || row.student_id;
+  if (sid) revalidatePath(`/students/${sid}`);
+  revalidatePath("/students");
+  if (row.class_id) revalidatePath(`/classes/${row.class_id}`);
+  revalidatePath("/timetable");
+  return undefined;
+}
+
 /** 단일 수강 종료 (전체 퇴원과 별개) */
 export async function endSingleEnrollment(
   _prev: ChangeStatusState,

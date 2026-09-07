@@ -19,8 +19,12 @@ export type GridStudent = {
   grade: string | null;
   school: string | null;
   studentId?: string;
+  /** 이 반 수강 id — 통합뷰에서 대기/퇴원으로 끌어 옮길 때의 저장 키(서버가 그 한 건만 바꾼다). */
+  enrollmentId?: string;
   status: "active" | "hold" | "withdrawn";
   isNew?: boolean;
+  /** 등록 31~60일(신입 다음 단계). */
+  isRecent?: boolean;
   isTransferredIn?: boolean;
   englishName?: string | null;
   // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재·최근 진도·수강 시작일.
@@ -776,10 +780,12 @@ export function groupRichCards(
         periodRows,
         days,
         rosterRows: {
-          // 재원은 빈 반도 "-" 한 줄은 보여준다(반이 있는데 명단 칸이 통째로 없으면 오독).
+          // 세 섹션 모두 빈 반도 "-" 한 줄은 보여준다(반이 있는데 명단 칸이 통째로 없으면 오독).
+          // 🔴 대기·퇴원도 **항상 자리를 잡는다**(원장 2026-09-07) — 예전엔 0명이면 줄이 통째로 사라져서
+          //    누가 퇴원하는 순간 카드가 아래로 밀리고, 옮겨 놓을 자리(드롭 대상)도 화면에 없었다.
           active: clampRows(Math.max(...cluster.map((c) => c.active.length)), 1),
-          hold: clampRows(Math.max(...cluster.map((c) => c.hold.length)), 0),
-          withdrawn: clampRows(Math.max(...cluster.map((c) => c.withdrawn.length)), 0),
+          hold: clampRows(Math.max(...cluster.map((c) => c.hold.length)), 1),
+          withdrawn: clampRows(Math.max(...cluster.map((c) => c.withdrawn.length)), 1),
         },
       });
     });

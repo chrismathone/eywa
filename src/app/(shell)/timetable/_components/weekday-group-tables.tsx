@@ -44,16 +44,19 @@ import { SearchedCell } from "./search-context";
 
 // 요일 라벨은 공용 단일 소스(split-attendance) — 파일마다 같은 맵을 다시 적지 않는다.
 
-// 요일 그룹 — 과목별 프리셋(weekdayPartition)으로 동적 구성. band=그룹타이틀 색, tint=요일헤더 색.
-type GroupDef = { title: string; days: DayOfWeek[]; band: string; tint: string; merge: boolean };
+// 요일 그룹 — 과목별 프리셋(weekdayPartition)으로 동적 구성. tint=요일헤더 색.
+// ⚠️ 그룹 이름(`title`)은 **화면에 안 적는다**(원장 2026-09-07 *"상단의 월목/화금 삭제"*) — 바로 아래
+//    요일 줄이 이미 `월 9/7`·`목 9/10`을 적고 있어 한 줄을 통째로 되풀이하는 밴드였다. 이름은 키·툴팁으로만
+//    남고, 그룹 경계는 색(tint)과 아래 GROUP_DIVIDER(진한 세로선)가 나른다.
+type GroupDef = { title: string; days: DayOfWeek[]; tint: string; merge: boolean };
 
-// 그룹 밴드/헤더 색 팔레트 — 그룹 수가 과목별로 가변이라 고정색 대신 인덱스 순환.
-const GROUP_PALETTE: { band: string; tint: string }[] = [
-  { band: "bg-blue-soft text-blue", tint: "bg-blue-soft/50" },
-  { band: "bg-purple-soft text-purple", tint: "bg-purple-soft/50" },
-  { band: "bg-primary-soft text-primary", tint: "bg-primary-soft/50" },
-  { band: "bg-rose-soft text-rose", tint: "bg-rose-soft/50" },
-  { band: "bg-amber-soft text-amber", tint: "bg-amber-soft/50" },
+// 요일 헤더 색 팔레트 — 그룹 수가 과목별로 가변이라 고정색 대신 인덱스 순환.
+const GROUP_PALETTE: { tint: string }[] = [
+  { tint: "bg-blue-soft/50" },
+  { tint: "bg-purple-soft/50" },
+  { tint: "bg-primary-soft/50" },
+  { tint: "bg-rose-soft/50" },
+  { tint: "bg-amber-soft/50" },
 ];
 
 // 과목 프리셋 → 평일 그룹 정의. 묶인 요일(길이≥2)=병합 표시, 단독(길이1)=풀너비. 색은 팔레트 순환.
@@ -63,7 +66,6 @@ function buildWeekdayGroupDefs(grouping: WeekdayGrouping): GroupDef[] {
     return {
       title: days.map((d) => DAY_LABEL[d] ?? d).join("/"),
       days,
-      band: pal.band,
       tint: pal.tint,
       merge: days.length >= 2,
     };
@@ -71,7 +73,7 @@ function buildWeekdayGroupDefs(grouping: WeekdayGrouping): GroupDef[] {
 }
 
 const WEEKEND_GROUP: GroupDef = {
-  title: "주말", days: ["sat", "sun"], band: "bg-amber-soft text-amber", tint: "bg-amber-soft/50", merge: false,
+  title: "주말", days: ["sat", "sun"], tint: "bg-amber-soft/50", merge: false,
 };
 const WEEKEND_KEYS = new Set<DayOfWeek>(["sat", "sun"]);
 
@@ -99,10 +101,18 @@ const GRID = "border-ink/25"; // 전 셀·헤더 공통 1px 격자
 const STICKY_EDGES =
   "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-ink/25 before:content-[''] " +
   "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-ink/25 after:content-['']";
-// 요일 그룹(월목 / 화금 / 수) 사이 굵은 구분선 — 그룹의 **첫 컬럼 왼쪽**에 2px 진한 선(첫 그룹 제외).
-// 헤더 3단(그룹밴드/강사/요일)+본문 셀에 모두 얹어 세로 전체를 관통. border-collapse에선 2px가 인접
-// 1px GRID보다 넓어 자동 우선하므로 이웃 셀은 손대지 않아도 이중선이 안 생긴다.
-const GROUP_DIVIDER = "border-l-2 border-l-ink/50";
+// 구조선 — 얇은 격자(GRID)가 칸을 나눈다면 이 선은 **구조**를 나눈다: 세로 = 요일 그룹 경계(월목|화금),
+// 가로 = 교시(셀) 경계. 원장 2026-09-07 *"월목과 화금 사이에 세로선을 좀더 진하게"* → *"가로선도 세로선과
+// 동일한 서식으로"*.
+// 🔴 두 상수는 **같은 굵기(2px)·같은 농도(ink/60)** 여야 한다 — 한쪽만 고치면 격자가 한 축으로 기울어 보인다.
+// ⚠️ 값을 변수로 조립하지 말 것: Tailwind는 소스에 **적힌 글자 그대로**를 스캔하므로 `border-l-${ink}` 같은
+//    템플릿은 클래스가 생성되지 않아 **에러 없이 색이 안 붙는다**(currentColor로 떨어진다).
+const GROUP_DIVIDER = "border-l-2 border-l-ink/60"; // 그룹 첫 컬럼 왼쪽(첫 그룹 제외) — 세로 전체 관통
+const ROW_DIVIDER = "border-b-2 border-b-ink/60"; // 교시(셀) 아래 — 병합 셀은 블록 끝에서만 그어진다
+// border-collapse에선 2px가 인접 1px GRID보다 넓어 자동 우선하므로 이웃 셀은 손대지 않아도 이중선이 안 생긴다.
+// 강사 이름 줄 높이(px) — 아래 요일 줄의 sticky top 오프셋과 **같은 값**이어야 한다(어긋나면 세로 스크롤에서
+// 두 줄이 겹치거나 틈이 벌어진다). 이름 20px(line-height 1.35 = 27) + 상하 여백 12 = 39 → 40.
+const TEACHER_HEAD_H = 40;
 
 // 요일 → 월요일로부터의 오프셋(일수). 요일 헤더 날짜 라벨 계산용.
 const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
@@ -124,7 +134,7 @@ function dayDateLabels(weekMonday: string): Partial<Record<DayOfWeek, string>> {
 
 
 type TeacherCol = { name: string; days: DayOfWeek[] };
-type GroupCols = GroupDef & { teachers: TeacherCol[]; dayCount: number };
+type GroupCols = GroupDef & { teachers: TeacherCol[] };
 
 /** 슬롯에서 그룹별 컬럼(강사→요일) 구성. 해당 그룹 요일에 수업 있는 강사만, 요일은 그룹 순서. */
 function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): GroupCols[] {
@@ -148,7 +158,7 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
       if (days.length > 0) cols.push({ name: t, days });
     }
     if (cols.length > 0) {
-      out.push({ ...def, teachers: cols, dayCount: cols.reduce((a, c) => a + c.days.length, 0) });
+      out.push({ ...def, teachers: cols });
     }
   }
   return out;
@@ -407,36 +417,26 @@ function GroupTable({
         ))}
       </colgroup>
       <thead>
-        {/* 그룹타이틀 밴드 */}
+        {/* 강사 행 — 표의 첫 줄(그룹 밴드는 2026-09-07 삭제). */}
         <tr>
           {/* 좌상단 코너 = 교시(세로축)와 요일·강사(가로축)의 교차점 → 어느 축 라벨도 아니므로 비워둔다. */}
           <th
-            rowSpan={3}
+            rowSpan={2}
             aria-hidden
-            className={`bg-bg-soft ${GRID} ${periodHeadSticky} ${periodDivider} w-[80px] border-b p-2`}
+            className={`bg-bg-soft ${GRID} ${periodHeadSticky} ${periodDivider} ${ROW_DIVIDER} w-[80px] p-2`}
           />
-          {groups.map((g, gi) => (
-            <th
-              key={g.title}
-              colSpan={g.dayCount}
-              className={`bg-card ${GRID} sticky top-0 z-10 border-b border-r ${gi > 0 ? GROUP_DIVIDER : ""}`}
-            >
-              {/* sticky 헤더는 불투명 base(bg-card) 위에 반투명 밴드색을 얹는다 — soft 토큰은 12% 알파라
-                  셀 자체를 그 색으로 두면 스크롤 시 본문(학생 이름)이 비쳐 보인다. */}
-              <div className={`${g.band} px-2 py-1.5 text-center text-xs font-bold`}>{g.title}</div>
-            </th>
-          ))}
-        </tr>
-        {/* 강사 행 */}
-        <tr>
           {groups.flatMap((g, gi) =>
             g.teachers.map((t, ti) => (
               <th
                 key={`${g.title}-${t.name}`}
                 colSpan={t.days.length}
-                className={`bg-bg-soft ${GRID} sticky top-[30px] z-10 border-b border-r px-2 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
+                // 이름이 표의 첫 줄이라 sticky top=0. 높이는 아래 요일 줄의 오프셋과 묶여 있어 **명시**한다.
+                style={{ height: TEACHER_HEAD_H }}
+                className={`bg-bg-soft ${GRID} sticky top-0 z-10 border-b border-r px-2 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
               >
-                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-xs font-bold">{t.name}</span>
+                {/* 이름 1.5배(원장 2026-09-07) — 격자에서 열을 찾는 기준이 강사 이름이라 가장 크게 읽혀야 한다.
+                    토큰 스케일에 21px이 없어 한 칸 위인 20px(text-lg). 넘치면 잘린다(생략표 없음 = 고밀도 규약). */}
+                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-lg font-bold">{t.name}</span>
               </th>
             )),
           )}
@@ -450,9 +450,11 @@ function GroupTable({
                 return (
                   <th
                     key={`${g.title}-${t.name}-${d}`}
-                    className={`bg-card ${GRID} sticky top-[60px] z-10 border-b border-r ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
+                    style={{ top: TEACHER_HEAD_H }}
+                    className={`bg-card ${GRID} ${ROW_DIVIDER} sticky z-10 border-r ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                   >
-                    {/* 불투명 base + 반투명 tint(위 그룹밴드와 동일 이유 — 비침 방지). */}
+                    {/* 그룹 색 띠 — 밴드를 없앤 뒤로 이 물들임이 월목|화금을 가르는 유일한 색 신호다(나머지는 진한 세로선).
+                        불투명 base 위에 반투명 tint를 얹는다 — sticky 셀을 soft 토큰(12% 알파)으로만 두면 스크롤 시 본문(학생 이름)이 비친다. */}
                     <div className={`${g.tint} text-text-dim px-1 py-1 text-center text-xs leading-tight font-bold`}>
                       {DAY_LABEL[d] ?? d}
                       {date ? (
@@ -492,7 +494,7 @@ function GroupTable({
           const labelCollapsed = paired
             ? isCollapsed(row.key) && isCollapsed(nextRow!.key)
             : isCollapsed(row.key);
-          const labelBase = `bg-bg-soft ${periodCellSticky} ${periodDivider} border-b ${GRID} font-bold whitespace-nowrap`;
+          const labelBase = `bg-bg-soft ${periodCellSticky} ${periodDivider} ${ROW_DIVIDER} font-bold whitespace-nowrap`;
           const labelCls = labelCollapsed
             ? `${labelBase} text-text-dim overflow-hidden px-2 py-0 align-middle text-xs [.tt-editing_&]:text-foreground [.tt-editing_&]:py-2 [.tt-editing_&]:align-top [.tt-editing_&]:text-xs`
             : `${labelBase} text-foreground px-2 py-2 align-top text-xs`;
@@ -583,7 +585,7 @@ function GroupTable({
                         key={`${g.title}-${t.name}-${d}-${row.key}`}
                         rowSpan={block.rowSpan > 1 ? block.rowSpan : undefined}
                         colSpan={block.colSpan > 1 ? block.colSpan : undefined}
-                        className={`border-b border-r ${GRID} p-1.5 align-top ${
+                        className={`${ROW_DIVIDER} border-r ${GRID} p-1.5 align-top ${
                           acc.length === 0 ? "bg-ink/[0.06]" : ""
                         } ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                       >

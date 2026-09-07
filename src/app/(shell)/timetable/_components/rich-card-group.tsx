@@ -17,7 +17,10 @@ import {
 } from "@/features/timetable/lib/class-grid";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { useClassFilter, useSearchTone } from "./search-context";
-import { timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { HOLD_SECTION_CLASS, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
+import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
+import { rosterDropId, useRosterMove, type RosterDragData } from "./roster-move";
 
 /**
  * 표 격자선 — 통합뷰는 **격자 자체가 정보**라 데이터 표(열=`--line-faint`)와 규약이 다르다.
@@ -192,6 +195,9 @@ function LabelColumn({
   namesOnly?: boolean;
 }) {
   const cell = `${GRID} text-text-dim flex items-center justify-center border-b text-xs font-bold`;
+  // 대기 라벨은 색 띠 위에 얹히므로 **글자색을 상속하지 않는다** — `cell`의 text-text-dim과 겹치면
+  // 승자를 CSS 순서가 정해(같은 축 유틸, [[#116]]) 카드 쪽(잉크)과 레일 쪽이 다른 색이 된다.
+  const cellNoColor = `${GRID} flex items-center justify-center border-b text-xs font-bold`;
   const rail = `bg-bg-soft ${GRID} sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]`;
   if (namesOnly)
     return (
@@ -226,8 +232,8 @@ function LabelColumn({
           재원
         </div>
       ) : null}
-      {/* 대기·퇴원은 그 섹션에 한 명도 없으면 라벨까지 통째로 접는다 — 카드 쪽과 같은 높이라 정렬이 유지된다. */}
-      {holdH > 0 ? <div className={`${cell} text-rose`} style={{ height: holdH }}>대기</div> : null}
+      {/* 대기·퇴원은 **항상** 선다(원장 2026-09-07) — 카드 쪽 높이와 같아 정렬이 유지된다. */}
+      {holdH > 0 ? <div className={`${cellNoColor} ${HOLD_SECTION_CLASS}`} style={{ height: holdH }}>대기</div> : null}
       {wdH > 0 ? (
         <div className={`${GRID} text-text-dim flex items-center justify-center text-xs font-bold`} style={{ height: wdH }}>
           퇴원
@@ -272,8 +278,6 @@ export function ClassColumn({
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
     : undefined;
-  // 담임색 — ijw 강사 저장색(users.bg_color, display_name·영문닉네임으로 해결). 없으면 plain.
-  const damimColor = card.teacherName ? teacherColors[card.teacherName] : undefined;
 
   return (
     <div
@@ -344,21 +348,15 @@ export function ClassColumn({
       {/* 배치 편집(수업명만) — 여기서 끝. 아래 담임·격자·명단을 안 그려야 42반을 끌 때 안 버벅인다. */}
       {namesOnly ? null : (
       <>
-      {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain.
+      {/* 담임 — **색 없이 이름만**(원장 2026-09-07: *"통합뷰에서 담임에게도 배경색상들이 있는데, 여기서는 제거해"*).
+          🔴 강사색은 아래 **교시 칸**이 계속 쓴다 — 담임 줄까지 칠하면 반 이름 줄(과목색)·담임 줄·칸이
+             세 겹으로 색을 겹쳐 카드마다 다른 색 덩어리가 되고, 정작 "이 시간에 누가 들어가나"를 말하는
+             칸의 색이 묻힌다. 이름 자체는 그대로다(정보 손실 없음).
           한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
-          닉네임은 9px로 한 단계 작게: 2요일 카드는 폭이 70px라 같은 크기로 적으면 이름부터 잘린다.
           ⚠️ 넘치면 카드 안에서 **잘린다**(overflow-hidden) — 옆 반 칸 위로 삐져나오지 않게. */}
       <div className={`${GRID} flex min-w-0 items-center justify-center overflow-hidden border-b`} style={{ height: TEACHER_H }}>
         {!card.teacherName ? (
           <span className="text-text-faint text-xs">-</span>
-        ) : damimColor ? (
-          <span
-            className="overflow-hidden rounded px-1.5 py-0.5 text-xs font-bold whitespace-nowrap text-clip"
-            style={{ background: damimColor.bg, color: damimColor.text }}
-          >
-            {card.teacherName}
-            <TeacherNick name={card.teacherName} map={teacherNicknames} />
-          </span>
         ) : (
           <span className="text-foreground overflow-hidden text-xs font-bold whitespace-nowrap text-clip">
             {card.teacherName}
@@ -383,30 +381,119 @@ export function ClassColumn({
       {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드. */}
       <RosterSection h={activeH} rows={rosterRows.active} count={card.active.length} className={`bg-card ${GRID} border-b`}>
         {card.activeCount === 0 ? (
-          <div className="text-text-faint py-2 text-center text-xs">-</div>
+          <EmptyDash />
         ) : (
-          card.active.map((s, i) => <RosterRow key={s.studentId ?? `a-${i}`} s={s} />)
+          card.active.map((s, i) => (
+            <RosterRow key={s.studentId ?? `a-${i}`} s={s} classId={card.classId} cardName={card.className} />
+          ))
         )}
       </RosterSection>
-      <RosterSection h={holdH} rows={rosterRows.hold} count={card.hold.length} className={`bg-rose-soft/30 ${GRID} border-b`}>
+      <RosterSection
+        h={holdH}
+        rows={rosterRows.hold}
+        count={card.hold.length}
+        className={`${HOLD_SECTION_CLASS} ${GRID} border-b`}
+        dropId={rosterDropId(card.classId, "hold")}
+      >
         {card.hold.length === 0 ? (
-          <div className="text-text-faint text-center text-xs">-</div>
+          <EmptyDash />
         ) : (
-          card.hold.map((s, i) => <RosterRow key={s.studentId ?? `h-${i}`} s={s} />)
+          card.hold.map((s, i) => (
+            <RosterRow key={s.studentId ?? `h-${i}`} s={s} classId={card.classId} cardName={card.className} />
+          ))
         )}
       </RosterSection>
       {/* 퇴원 — 재원/대기와 동일 서식, 진회색 배경+흰 글자 톤으로 구분 */}
-      <RosterSection h={wdH} rows={rosterRows.withdrawn} count={card.withdrawn.length} className="bg-bg-soft">
+      <RosterSection
+        h={wdH}
+        rows={rosterRows.withdrawn}
+        count={card.withdrawn.length}
+        className="bg-bg-soft"
+        dropId={rosterDropId(card.classId, "withdrawn")}
+      >
         {card.withdrawn.length === 0 ? (
-          <div className="text-text-faint text-center text-xs">-</div>
+          <EmptyDash />
         ) : (
-          card.withdrawn.map((s, i) => <RosterRow key={s.studentId ?? `w-${i}`} s={s} />)
+          card.withdrawn.map((s, i) => (
+            <RosterRow key={s.studentId ?? `w-${i}`} s={s} classId={card.classId} cardName={card.className} />
+          ))
         )}
       </RosterSection>
       </>
       )}
     </div>
   );
+}
+
+type MovableRowProps = {
+  armed: boolean;
+  rowKey: string;
+  drag: RosterDragData;
+  children: React.ReactNode;
+  /** HoverCard가 `cloneElement`로 주입 — 덮지 않고 그대로 내려보낸다(카드가 안 뜨면 정보가 사라진다). */
+  onMouseEnter?: (e: React.MouseEvent) => void;
+  onMouseLeave?: (e: React.MouseEvent) => void;
+};
+
+/** 끌 수 있는 줄 — 무장 여부만 다르고 **DOM은 같다**(다르면 마우스가 지날 때마다 줄이 움찔한다). */
+function MovableRosterRow(props: MovableRowProps) {
+  return props.armed ? <ArmedRosterRow {...props} /> : <RestingRosterRow {...props} />;
+}
+
+/** 무장 전 — dnd 훅 없이 그리고, 포인터가 올라오면 그 줄만 무장시킨다. */
+function RestingRosterRow({ rowKey, ...rest }: MovableRowProps) {
+  return <RosterRowShell {...rest} onArm={() => setArmedRow(rowKey)} />;
+}
+
+/** 무장 후 — dnd-kit draggable. 떨어뜨리면 확인 팝업이 뜬다(그것만으로 바뀌지 않는다). */
+function ArmedRosterRow({ drag, ...rest }: MovableRowProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `roster:${drag.enrollmentId}`,
+    data: drag,
+  });
+  return (
+    <RosterRowShell {...rest} drag={drag} dnd={{ attributes, listeners, setNodeRef, isDragging }} />
+  );
+}
+
+function RosterRowShell({
+  children,
+  onArm,
+  onMouseEnter,
+  onMouseLeave,
+  dnd,
+}: Omit<MovableRowProps, "armed" | "rowKey"> & {
+  onArm?: () => void;
+  dnd?: {
+    attributes: ReturnType<typeof useDraggable>["attributes"];
+    listeners: ReturnType<typeof useDraggable>["listeners"];
+    setNodeRef: ReturnType<typeof useDraggable>["setNodeRef"];
+    isDragging: boolean;
+  };
+}) {
+  return (
+    <div
+      ref={dnd?.setNodeRef}
+      {...(dnd?.attributes ?? {})}
+      {...(dnd?.listeners ?? {})}
+      // ⚠️ `pointerover`(버블링) — enter/leave는 자식을 오갈 때 놓치기 쉽고, 같은 값 재설정은 무동작이다.
+      onPointerOver={() => onArm?.()}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      title="끌어서 대기·퇴원으로 · 더블클릭 = 학생 정보"
+      className={`cursor-grab touch-none select-none active:cursor-grabbing ${dnd?.isDragging ? "opacity-40" : ""}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * 빈 섹션 자리 표시 — 가로뿐 아니라 **세로도 가운데**(원장 2026-09-07: *"중앙 정렬만 되던걸 가운데 정렬까지"*).
+ * 섹션 높이가 고정이라 `h-full`이 그 칸을 그대로 채운다(부모 `p-1` 안쪽 기준).
+ */
+function EmptyDash() {
+  return <div className="text-text-faint flex h-full items-center justify-center text-xs">-</div>;
 }
 
 /**
@@ -421,19 +508,26 @@ function RosterSection({
   rows,
   count,
   className,
+  dropId,
   children,
 }: {
   h: number;
   rows: number;
   count: number;
   className: string;
+  /** 대기·퇴원 칸이면 드롭 대상 id — 없으면(재원) 그냥 목록이다. */
+  dropId?: string;
   children: React.ReactNode;
 }) {
+  // 🔴 훅은 이른 반환보다 **앞에** — 조건부로 부르면 훅 순서가 깨진다.
+  const { setNodeRef, isOver } = useDroppable({ id: dropId ?? "roster-drop:none", disabled: !dropId });
   if (rows <= 0) return null;
   const overflowing = count > rows;
   return (
     <div
-      className={`${className} scrollbar-hide overflow-y-auto p-1 text-sm`}
+      ref={dropId ? setNodeRef : undefined}
+      // 받을 수 있는 칸이라는 신호는 **끌고 있을 때만** 뜬다(평소엔 아무 표시도 없다).
+      className={`${className} scrollbar-hide overflow-y-auto p-1 text-sm ${isOver ? "ring-primary ring-2 ring-inset" : ""}`}
       style={{
         height: h,
         // 아래 12px에 걸쳐 서서히 사라지게 — 잘린 이름이 "여기서 끝"으로 안 읽히도록.
@@ -535,8 +629,25 @@ function cellFont(text: string): string {
  * 괄호로 덧붙여, 같은 학생이 뷰마다 다르게 보였다. 이름 우선·메타는 뒤에 붙어 잘리는 규약으로 통일.
  * ⚠️ 영문명은 행에서 뺐지만 hover 카드(StudentInfoCard)엔 그대로 있어 정보 손실은 없다.
  */
-function RosterRow({ s }: { s: GridStudent }) {
+function RosterRow({
+  s,
+  classId,
+  cardName,
+}: {
+  s: GridStudent;
+  /** 이 줄이 속한 반 — 드롭 판정(같은 반인지)과 확인 팝업 문구에 쓴다. */
+  classId?: string;
+  cardName?: string;
+}) {
   const withdrawn = s.status === "withdrawn";
+  // 명단 이동(대기/퇴원 드롭) — 권한이 있고 **아직 살아 있는 수강**만 집는다(퇴원 줄은 끝난 기록이다).
+  // ⚠️ 훅은 분기와 무관하게 항상 같은 순서로 부른다.
+  const { enabled } = useRosterMove();
+  const rowKey = `rc:${s.enrollmentId ?? s.studentId ?? ""}`;
+  const armed = useIsArmedRow(rowKey);
+  // 터치·펜엔 hover가 없어 무장이 안 걸린다 → 그 기기에선 모든 줄을 무장한다(기본뷰와 같은 규약).
+  const touch = useTouchCapable();
+  const movable = enabled && !withdrawn && !!s.enrollmentId && !!classId;
   const colorMode = useTimetableColorMode();
   // 재원/대기는 기본뷰와 **같은 tone 헬퍼**(색 강도 모드 반영). 예전엔 여기서 pastel 색을 손으로 박아
   // 뷰 설정 '색 강도'를 바꿔도 통합뷰만 안 따라왔다. 퇴원은 통합뷰에만 있는 섹션이라 전용 tone 유지.
@@ -555,12 +666,32 @@ function RosterRow({ s }: { s: GridStudent }) {
   // ⚠️ 클래스 문자열도 기본뷰 StudentRow와 동일하게 유지할 것(px-2 py-[3px] leading-tight + hover:bg-bg-soft).
   //    글자 크기는 명단 컨테이너의 text-sm에서 상속 — 기본뷰 class-cell과 같은 값이다.
   const cls = `block overflow-hidden whitespace-nowrap text-clip px-2 py-[3px] leading-tight ${tone}`;
-  const trigger = s.studentId ? (
+  const nameNode = s.studentId ? (
     <WindowLink openOn="doubleClick" href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>
       {inner}
     </WindowLink>
   ) : (
     <div className={cls}>{inner}</div>
+  );
+  const trigger = movable ? (
+    <MovableRosterRow
+      armed={armed || touch}
+      rowKey={rowKey}
+      drag={{
+        enrollmentId: s.enrollmentId!,
+        studentId: s.studentId,
+        classId: classId!,
+        className: cardName ?? "",
+        name: s.name,
+        meta,
+        tone,
+        from: s.status === "hold" ? "hold" : "active",
+      }}
+    >
+      {nameNode}
+    </MovableRosterRow>
+  ) : (
+    nameNode
   );
   return (
     <HoverCard

@@ -20,7 +20,7 @@ import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, IndexBadge, metaLabel, ROW_CLASS } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
-import { useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
+import { HOLD_SECTION_CLASS, useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
  * 합반 셀(ijw ClassCard 통합 명단 패턴) — 같은 강사·교시·요일의 2개 반+를 카드 1개로:
@@ -346,7 +346,8 @@ export function HapbanCell({
             {/* 대기 — 고정 박스(최대 2칸), 넘으면 이 박스만 스크롤(스크롤바 숨김). 있을 때만 렌더. */}
             {hapbanRoster.hold.length > 0 ? (
               <div
-                className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
+                // 대기 면 색은 모든 뷰 공통(timetable-color 단일 소스) — 원장 2026-09-07 색 견본.
+                className={`scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t ${HOLD_SECTION_CLASS}`}
                 style={{ maxHeight: HOLD_MAX_H }}
               >
                 <StudentSection
@@ -356,9 +357,9 @@ export function HapbanCell({
                   canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
-                  tone={() => "text-text-dim"}
+                  tone={() => ""}
                   label="대기"
-                  labelTone="bg-amber-soft/40 text-amber"
+                  labelTone=""
                 />
               </div>
             ) : null}
