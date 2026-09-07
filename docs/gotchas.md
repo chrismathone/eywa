@@ -364,6 +364,16 @@ recomputePrimaryTeacher, withdrawals 로스터.
 (`config.toml`·max-rows 오버라이드 없음). super-admin `getAllTenants`/`getSaaSStats`가 멀티테넌트 users·students·
 invoices를 전건 받아 JS Map으로 세다가 테넌트 증가 시 과소집계. **단순 카운트는 `count:"exact", head:true`,
 합계·그룹은 RPC group-by 또는 `fetchAllPaged`로.** "세기만 하려고 수백 행을 JS로 끌어오기"는 신호.
+- 🔴 **청크로 나눴다고 끝난 게 아니다 — 청크 *안에서* 또 잘린다** (2026-09-07 실사고, 원장 제보
+  *"이 반은 왜 스케줄이 안나와?"*). 수업목록이 `fetchInChunks`로 100반씩 `class_schedules`를 읽었는데,
+  이 표는 운영 이력을 함께 담아([[#88]]) 반 하나가 12행씩이라 **한 청크가 1,042행**을 요청했다 → 1,000행에서
+  침묵 절단 → 꼬리에 걸린 반은 슬롯이 **한 행도 안 와서** 요일 칸이 `—`. 반 상세엔 화·금이 멀쩡히 떠 있어
+  "화면마다 다른 사실"이 됐다. 고침 = **`fetchAllPagedInChunks`**(청크 × 페이징) + `.order("id")`.
+- 🔑 **누가 잘리는지는 사람마다 다르다** — RLS(`tenant_id = auth_tenant_id()`)가 붙으면 실행 계획이 바뀌어
+  버려지는 꼬리가 달라진다(같은 청크에서 service_role 5반 vs 로그인 세션 9반, 겹치는 건 2반뿐). 그래서
+  ⚠️ **service_role 프로브로 "정상"을 확인하면 안 된다**([[#91]]과 같은 결) — 재현은 세션 조건으로.
+- ⚠️ 청크 크기를 줄이는 건 답이 아니다 — 이력을 쌓는 표(`class_schedules`는 시간표 가져오기마다 행 분할)는
+  계속 자라서 언젠가 다시 넘는다. 절단은 **에러가 없어** 다음 사람이 데이터 문제로 오진한다.
 
 ### 55. 창(iframe) ⇄ 배경(메인 프레임)은 **별도 문서** — 저장이 자동 반영 안 됨
 플로팅 창은 크롬리스 same-origin iframe(별도 Next 인스턴스). 창에서 server action으로 저장하면 그 **iframe 안**은

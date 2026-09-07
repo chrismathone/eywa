@@ -42,6 +42,11 @@ HTTP 헤더 값은 ByteString(Latin-1, ≤255)이라 한글(예 '수'=49688)을 
   · 단순 카운트 = `.select("*", { count: "exact", head: true })` (행을 안 받음)
   · 합계·그룹 = **group-by RPC**(security invoker + `auth_tenant_id()` 이중격리, 0039a/0040a 패턴)
   · 전건이 꼭 필요 = **`fetchAllPaged`**(`.range` 페이지네이션, 1000 초과 전건)
+- 🔴 **청크로 나눴다고 끝난 게 아니다 — 청크 *안에서* 또 잘린다**(2026-09-07, 원장 제보 *"이 반은 왜 스케줄이 안나와?"*):
+  수업목록이 `fetchInChunks`로 100반씩 `class_schedules`를 읽었는데 이 표는 이력을 함께 담아([[#88]]) 한 청크가
+  **1,042행** → 1,000행 침묵 절단 → 꼬리에 걸린 반은 요일 칸이 `—`(반 상세엔 멀쩡히 떴다). **id 목록 × 행이 많은 표는
+  `fetchAllPagedInChunks`**(청크 × 페이징 + `.order("id")`). ⚠️ 청크 크기 축소는 임시방편(이력 표는 계속 자란다).
+  ⚠️ **RLS가 붙으면 잘리는 꼬리가 달라져 사람마다 다른 반이 사라진다** — service_role 프로브로 "정상"을 확인하지 말 것.
 - **점검**: `features/*/server/queries.ts`에서 `.select(...)` 뒤 `.reduce/.filter/.length/Map/Set`로 집계하는 곳에 `count`/`fetchAllPaged`/RPC가 있는지.
 
 ### B3. 대량 `.in()`은 **`fetchInChunks`** — HTTP 414 + error 삼킴 ([[#53]])

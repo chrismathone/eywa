@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { readEnglishTrack, type EnglishTrack } from "../english-track";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
@@ -320,23 +320,36 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
     }
   }
 
-  // 요일 + 시작시각 — 동일하게 청크 조회(반 많아지면 단일 .in()이 414, 스케줄 1000행 절단).
+  /**
+   * 요일 + 시작시각 — 청크 **안에서 페이징**한다(`fetchAllPagedInChunks`).
+   *
+   * 🔴 왜 페이징인가(2026-09-07 실측): `class_schedules`는 운영 이력을 함께 담아 반 하나가 12행씩
+   *    갖는다([[#88]]). 청크(100반)가 **1,042행**을 요청했는데 PostgREST는 1,000행에서 **에러 없이
+   *    잘랐고**([[#54]]), 꼬리에 걸린 반은 슬롯이 **한 행도 안 와서** 요일 칸이 `—`가 됐다
+   *    (원장 제보 *"이 반은 왜 스케줄이 안나와?"* — 중등E_중2 정규 B. 반 상세엔 화·금이 멀쩡히 떴다).
+   * ⚠️ **누가 잘리는지는 로그인 세션마다 다르다** — RLS(`tenant_id = auth_tenant_id()`)가 붙으면
+   *    실행 계획이 달라져 버려지는 꼬리가 바뀐다(service_role 5반 vs 세션 9반). 그래서 "내 화면엔
+   *    멀쩡한데"가 성립한다. 청크 크기를 줄이는 건 답이 아니다 — 이 표는 가져오기마다 자란다.
+   */
   let dayView = {
     live: new Map<string, Map<string, string | null>>(),
     any: new Map<string, Map<string, string | null>>(),
   };
   if (classIds.length > 0) {
-    const scheds = await fetchInChunks<{
+    const scheds = await fetchAllPagedInChunks<{
       class_id: string;
       day_of_week: string;
       start_time: string | null;
       valid_from: string | null;
       valid_to: string | null;
-    }>(classIds, (chunk) =>
+    }>(classIds, (chunk, from, to) =>
       supabase
         .from("class_schedules")
         .select("class_id, day_of_week, start_time, valid_from, valid_to")
-        .in("class_id", chunk),
+        .in("class_id", chunk)
+        // 🔴 페이지 경계가 흔들리지 않게 **유일 키로 정렬**한다 — 정렬이 없으면 페이지가 겹치거나 빈다.
+        .order("id", { ascending: true })
+        .range(from, to),
     );
     // 운영 기간이 지난 교시를 현재처럼 그리지 않는다([[#88]]) — 유효 행 우선, 없으면 흐리게.
     dayView = buildDayView(scheds, kstToday());
@@ -496,7 +509,8 @@ export async function getClassesPage(
   const matched = (classes ?? []).filter((c) => !poolIds.has(c.id as string));
   const classIds = matched.map((c) => c.id);
 
-  // 학생수·요일 — 매칭 수업 id를 청크로 조회(전건 .in() 414/1000행 절단 회피).
+  // 학생수·요일 — 매칭 수업 id를 청크로 조회(전건 .in() 414 회피). 요일은 청크 **안에서도 페이징**한다 —
+  // 이유는 위 getClassesList의 같은 조회 주석(1,042행 요청 → 1,000행 침묵 절단 → 요일 칸 `—`).
   const counts = new Map<string, number>();
   let dayView = {
     live: new Map<string, Map<string, string | null>>(),
@@ -514,17 +528,20 @@ export async function getClassesPage(
         .or(`end_date.is.null,end_date.gte.${kstToday()}`)
         .in("class_id", chunk),
       ),
-      fetchInChunks<{
+      fetchAllPagedInChunks<{
         class_id: string;
         day_of_week: string;
         start_time: string | null;
         valid_from: string | null;
         valid_to: string | null;
-      }>(classIds, (chunk) =>
+      }>(classIds, (chunk, from, to) =>
         supabase
           .from("class_schedules")
           .select("class_id, day_of_week, start_time, valid_from, valid_to")
-          .in("class_id", chunk),
+          .in("class_id", chunk)
+          // 🔴 페이지 경계가 흔들리지 않게 **유일 키로 정렬**(위 getClassesList와 같은 규약).
+          .order("id", { ascending: true })
+          .range(from, to),
       ),
     ]);
     const rosterToday = kstToday();
