@@ -78,6 +78,21 @@ describe("badge / title", () => {
       "출석 · 중등수학A · 16:20 · 랩실 · 병원",
     );
   });
+
+  it("🔴 보고서 작성자는 맨 뒤에 붙는다 — 없으면 한 글자도 안 늘어난다(2026-09-07)", () => {
+    // 원장 *"출결 뒤에 보고서 발송자"* · *"수학의 경우"* — 영어는 eywa에 보고서를 안 써서
+    // reporter가 늘 비고, 그때 배지가 종전과 **완전히 같아야** 한다(빈 자리·구분자 금지).
+    expect(attendanceBadgeText(rec({ reporter: "유형숙" }))).toBe("출석 중등수학A 16:20 유형숙");
+    expect(attendanceBadgeText(rec({ reporter: null }))).toBe("출석 중등수학A 16:20");
+    expect(attendanceBadgeText(rec())).toBe("출석 중등수학A 16:20");
+  });
+
+  it("툴팁은 이름만 두지 않고 '보고서'라고 밝힌다", () => {
+    // 툴팁에 이름만 있으면 담임인지 찍은 사람인지 알 수 없다(축이 셋이다).
+    expect(attendanceRecordTitle(rec({ reporter: "유형숙", note: "병원" }))).toBe(
+      "출석 · 중등수학A · 16:20 · 보고서 유형숙 · 병원",
+    );
+  });
 });
 
 describe("과목·반 필터 조합", () => {

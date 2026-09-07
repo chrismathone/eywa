@@ -17,6 +17,8 @@ export type AttendanceRecordLike = {
   note: string | null;
   slotStart: string | null;
   seatLabel: string | null;
+  /** 그날 그 반 수업보고서를 쓴 사람(담임 아님). 없으면 안 적는다 — 영어는 eywa에 보고서를 안 쓴다. */
+  reporter?: string | null;
 };
 
 /** 출결 6종. excused=병결(입력 경로는 이 모듈 밖). */
@@ -94,13 +96,22 @@ export function attendanceBadgeText(r: AttendanceRecordLike): string {
     r.className,
     formatSlotStart(r.slotStart),
     seatDisplayName(r.seatLabel),
+    r.reporter,
   ]
     .filter(Boolean)
     .join(" ");
 }
 
 export function attendanceRecordTitle(r: AttendanceRecordLike): string {
-  return [attendanceStatusLabel(r.status), r.className, formatSlotStart(r.slotStart), seatDisplayName(r.seatLabel), r.note]
+  return [
+    attendanceStatusLabel(r.status),
+    r.className,
+    formatSlotStart(r.slotStart),
+    seatDisplayName(r.seatLabel),
+    // 배지는 좁아 잘리니 툴팁엔 누가 썼는지 말까지 붙인다(이름만 있으면 무엇인지 모른다).
+    r.reporter ? `보고서 ${r.reporter}` : null,
+    r.note,
+  ]
     .filter(Boolean)
     .join(" · ");
 }

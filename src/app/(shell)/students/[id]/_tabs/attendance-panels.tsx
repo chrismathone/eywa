@@ -100,7 +100,7 @@ export function AttendanceList({ records }: { records: StudentAttendanceFull[] }
 }
 
 function listExtra(r: StudentAttendanceFull) {
-  const bits = [formatSlotStart(r.slotStart), seatDisplayName(r.seatLabel)].filter(
+  const bits = [formatSlotStart(r.slotStart), seatDisplayName(r.seatLabel), r.reporter].filter(
     (v): v is string => !!v,
   );
   if (bits.length === 0) return null;

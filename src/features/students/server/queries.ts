@@ -1474,12 +1474,22 @@ export type StudentAttendanceFull = {
   slotStart: string | null;
   /** 0208a 자리(LAB/JJ). 학생 출결로는 정상 기록 — 감추지 않는다. */
   seatLabel: string | null;
+  /**
+   * 그날 그 반의 **수업보고서를 쓴 사람**(원장 2026-09-07 *"출결 뒤에 보고서 발송자"* · *"수학의 경우"*).
+   * 🔴 담임이 아니다 — 월별 출석부 담당자 라벨과 **같은 축**(보고서 작성자)이다.
+   * 🔴 **반이 적힌 보고서만** 읽는다(`class_id`) — 영어는 eywa에 보고서를 안 써서 자연히 빈다.
+   *    edutrix 이관분은 반이 비어 있어(17,806건) 여기서도 빈다: 날짜만 보고 아무 행에나 붙이면
+   *    수학 강사 이름이 영어 칸에 앉는다. 그 구간은 반 백필로 채우는 것이 정공법이다.
+   */
+  reporter: string | null;
 };
 
 /** 학생 전 출결 기록(월 네비·달력/리스트 뷰·과목/반 필터를 클라에서 처리하도록 전건 반환). */
 export async function getStudentAttendanceFull(studentId: string): Promise<StudentAttendanceFull[]> {
   const supabase = await createClient();
-  const data = await fetchAllPaged<{
+  // 🔴 둘은 서로를 안 쓴다 — 순서대로 await하면 왕복이 합산된다(B4).
+  const [data, reports] = await Promise.all([
+    fetchAllPaged<{
     id: string;
     student_id: string;
     session_date: string;
@@ -1500,7 +1510,38 @@ export async function getStudentAttendanceFull(studentId: string): Promise<Stude
       .order("session_date", { ascending: false })
       .order("id", { ascending: true })
       .range(from, to),
-  );
+    ),
+    /**
+     * 그 학생의 수업보고서 작성자를 (날짜, 반)으로 붙인다 — 위 `reporter` 주석의 규약.
+     * ⚠️ 전건이 1000행을 넘을 수 있어(이관분 포함) `fetchAllPaged`(B2). 임베드가 없어 FK 힌트 불요(#94).
+     * 🔴 **정렬을 반드시 걸 것** — `.range()` 페이지네이션은 순서가 정해져야 페이지가 안 겹치고 안 빠진다
+     *    (덤으로 아래 "먼저 온 것을 남긴다"가 결정론이 된다 — 안 그러면 새로고침마다 이름이 바뀔 수 있다).
+     */
+    fetchAllPaged<{
+      report_date: string;
+      class_id: string | null;
+      teacher_name: string | null;
+    }>((from, to) =>
+      supabase
+        .from("lesson_reports")
+        .select("report_date, class_id, teacher_name")
+        .eq("student_id", studentId)
+        .not("class_id", "is", null)
+        .order("report_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ).catch(() => []),
+  ]);
+  const reporterMap = new Map<string, string>();
+  for (const rp of reports) {
+    const name = rp.teacher_name?.trim();
+    if (!name || !rp.class_id) continue;
+    const key = `${rp.report_date}|${rp.class_id}`;
+    // 같은 칸에 보고서가 둘이면 먼저 온 것을 남긴다(둘 다 적으면 배지가 넘친다).
+    if (!reporterMap.has(key)) reporterMap.set(key, name);
+  }
+  const reporterOf = (date: string, classId: string) => reporterMap.get(`${date}|${classId}`) ?? null;
+
   // append-only 정정 행을 전부 그리면 같은 교시가 두 번 나온다 — 최신만.
   return effectiveAttendanceRecords(data).map((r) => {
     const c = (Array.isArray(r.class) ? r.class[0] : r.class) as
@@ -1515,6 +1556,7 @@ export async function getStudentAttendanceFull(studentId: string): Promise<Stude
       subject: c?.subject ?? "",
       slotStart: r.slot_start,
       seatLabel: r.seat_label,
+      reporter: reporterOf(r.session_date, r.class_id),
     } satisfies StudentAttendanceFull;
   });
 }
