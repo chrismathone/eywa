@@ -1,30 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ExternalLink, PanelLeftClose, PanelLeftOpen } from "@/components/icons/eywa-icon-compat";
+import { PanelLeftClose, PanelLeftOpen } from "@/components/icons/eywa-icon-compat";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import {
-  NAV_GROUPS,
-  EXTERNAL_NAV,
-  navPresentation,
-  subTabsForMenu,
-  activeSubTabHref,
-  type NavItem,
-  type ExternalNavItem,
-  type SubTab as SubTabItem,
-} from "@/lib/navigation";
-import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
+import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
+import { HUB_GROUPS, SUPPORT_GROUPS, favoritesFor, hubGroupsFor, type HubGroup } from "@/lib/menu-hub";
+import { useMenuHub } from "./workspace/menu-hub-store";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { TeacherViewToggle } from "@/components/view-mode-toggle";
 import { OtherTeacherViewPicker } from "@/components/other-teacher-view";
@@ -111,7 +103,6 @@ export function AppSidebar({
   // 이름이 비면(이론상 거의 없음) 이메일 앞부분으로 폴백해 빈 줄을 방지.
   const name = displayName?.trim() || email.split("@")[0];
   const pathname = usePathname();
-  const currentTab = useSearchParams().get("tab"); // 활성 하부탭 표시용(배경 프레임 기준)
   const isDesktop = useIsDesktop();
   const showDesktop = useShowDesktop();
   const { expanded, width, dragging, handleProps } = useSidebarResize();
@@ -141,31 +132,6 @@ export function AppSidebar({
       ro.disconnect();
     };
   }, [expanded]);
-  // 하부탭 플라이아웃(WordPress식) — 비활성 메뉴 hover 시 우측에 면 목록을 fixed 포털로 띄운다.
-  // 인라인 노출은 hover마다 왼쪽 메뉴 전체를 리플로우해 산만 → **왼쪽 메뉴 고정** + 우측 팝업.
-  // 활성(클릭·네비된) 메뉴만 왼쪽 인라인 하부탭 유지. nav가 overflow-clip이라 인라인 left-full은
-  // 잘리므로 body 포털 + position:fixed(측정 좌표)로 클리핑 회피(HoverCard 패턴).
-  const [flyout, setFlyout] = useState<
-    { menuKey: MenuKey; label: string; subs: SubTabItem[]; top: number; left: number } | null
-  >(null);
-  const flyoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelFlyoutClose = () => {
-    if (flyoutTimer.current) {
-      clearTimeout(flyoutTimer.current);
-      flyoutTimer.current = null;
-    }
-  };
-  const openFlyout = (item: NavItem, subs: SubTabItem[], el: HTMLElement) => {
-    cancelFlyoutClose();
-    const r = el.getBoundingClientRect();
-    setFlyout({ menuKey: item.menuKey, label: item.label, subs, top: r.top, left: r.right + 4 });
-  };
-  // 아이템 → 플라이아웃 이동 사이의 짧은 유예(둘 다 벗어나면 닫힘). 붙어 있어 이동은 연속이나 안전판.
-  const scheduleFlyoutClose = () => {
-    cancelFlyoutClose();
-    flyoutTimer.current = setTimeout(() => setFlyout(null), 140);
-  };
-  useEffect(() => () => cancelFlyoutClose(), []);
 
   // 모션: 설정 ON & 드래그 중이 아닐 때만 슬라이드(드래그는 1:1 추종이라 트랜지션 off).
   const motion = animations && !dragging;
@@ -181,34 +147,20 @@ export function AppSidebar({
   const openIds = new Set(openKey ? openKey.split("|") : []);
   const hasFocus = isDesktop && !!focusedId && openIds.has(focusedId);
   // 포커스된 창이 **지금 보고 있는 주소** — 하부탭 활성 판정에 쓴다.
-  // 창으로 열면 배경 프레임 pathname은 대시보드 그대로라, 그것만 보면 '직원 목록'처럼
-  // 메뉴 루트와 같은 경로인 하부탭이 영원히 비활성이었다(원장 지적 2026-07-31:
-  // "직원 목록에 들어왔는데 직원관리만 켜져 있어 어디인지 혼동").
-  const focusedHref = useWindowStore((s) => (s.focusedId ? s.windows[s.focusedId]?.params.href : undefined));
-
-  // 접근 가능한 항목만 남기고 빈 그룹 제거 (그룹 구분선 위치 계산용)
-  // subOf 항목은 최상위에서 빼고 부모의 하부탭으로 내린다(subTabsForMenu). 팰릿·모바일내비엔 그대로 남는다.
-  const groups = NAV_GROUPS.map((g) => ({
-    label: g.label,
-    items: g.items.filter(
-      (item) => !item.hidden && !item.subOf && canAccess(systemRole, item.menuKey, permMatrix),
-    ),
-  })).filter((g) => g.items.length > 0);
-
-  // 하부탭 권한 필터 — 독립 메뉴 하부탭(menuKey 有)은 자기 키로 검사한다. 부모만 통과하면 노출되던
-  // 기존 구조에선 ecs=none인 역할(상담사·회계)에게 눌러도 튕기는 죽은 링크가 보인다(#77 거짓 약속).
-  // `teacherOnly` 면은 담당 반을 전제로 그리므로 겸직(canTeacherView)에게만 — 담당 반 0인 사무실
-  // 계정에겐 눌러도 빈 화면이라 같은 결의 죽은 링크다(권한 차단이 아니라 노이즈 제거, URL은 열려 있다).
-  // ⚠️ 단 **지금 그 면을 보고 있으면 남긴다** — 감추면 접두가 겹치는 형제(월별 출석부)가 대신 켜져
-  //    "어디인지 혼동"이 된다(원장 2026-07-31 지적과 같은 증상). 현재 위치는 항상 보여야 한다.
-  const subTabsFor = (menuKey: MenuKey): SubTabItem[] =>
-    subTabsForMenu(menuKey).filter(
-      (s) =>
-        (!s.menuKey || canAccess(systemRole, s.menuKey, permMatrix)) &&
-        (!s.teacherOnly ||
-          canTeacherView ||
-          isSubActive(s.href, [s], pathname, currentTab, focusedHref)),
-    );
+  // 버튼형 메뉴(원장 2026-09-07 확정) — 왼쪽은 **업무군**만 세우고, 그 업무의 메뉴는 본문 버튼이 든다.
+  // 🔴 목적지·권한 판정은 [`menu-hub.ts`](src/lib/menu-hub.ts) 한 곳 — 사이드바가 메뉴를 다시 적지 않는다.
+  const gate = {
+    systemRole,
+    permMatrix,
+    canTeacherView,
+    isMaster: systemRole === "master",
+  };
+  const favorites = favoritesFor(gate);
+  const workGroups = hubGroupsFor(HUB_GROUPS, gate);
+  const supportGroups = hubGroupsFor(SUPPORT_GROUPS, gate);
+  const hubOpenId = useMenuHub((s) => s.groupId);
+  const toggleHub = useMenuHub((s) => s.toggle);
+  const closeHub = useMenuHub((s) => s.close);
 
   return (
     <TooltipProvider delay={200}>
@@ -278,124 +230,76 @@ export function AppSidebar({
         <div className="relative min-h-0 flex-1">
           <nav
             ref={navRef}
-            onScroll={() => setFlyout(null)}
             className="scrollbar-hide flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-2.5"
           >
-          {groups.map((group, gi) => (
-            <div key={group.label} className="flex w-full flex-col gap-1">
-              {/* 그룹 구분 — 슬롯 높이가 펼침(22)↔접힘(헤더 0줄: gi>0은 구분선 13, 첫 그룹 6)으로
-                  트랜지션해 "패널이 열리듯" 자연스럽게. 헤더 텍스트↔구분선은 opacity 크로스페이드. */}
-              <div
-                style={{ height: expanded ? 22 : gi > 0 ? 13 : 6 }}
-                className={`relative flex shrink-0 items-center overflow-hidden ${
-                  motion ? `transition-[height] duration-200 ${EASE}` : ""
-                }`}
-              >
-                <span
-                  className={`text-text-faint absolute left-[17px] text-xs font-bold whitespace-nowrap ${
-                    expanded ? "opacity-100" : "opacity-0"
-                  } ${motion ? "transition-opacity duration-200" : ""}`}
-                >
-                  {group.label}
-                </span>
-                {gi > 0 ? (
-                  <span
-                    aria-hidden="true"
-                    className={`bg-line absolute top-1/2 left-1/2 h-px w-6 -translate-x-1/2 -translate-y-1/2 ${
-                      expanded ? "opacity-0" : "opacity-100"
-                    } ${motion ? "transition-opacity duration-200" : ""}`}
+          {/* 즐겨찾기 — 업무군을 거치지 않고 **한 번에** 여는 자리(고정 4개, menu-hub.ts). */}
+          {favorites.length > 0 ? (
+            <NavSection label="즐겨찾기" first expanded={expanded} motion={motion}>
+              {favorites.map((d) => {
+                const item = navItemByKey(d.menuKey);
+                return item ? (
+                  <MenuRail
+                    key={d.href}
+                    item={item}
+                    isDesktop={isDesktop}
+                    expanded={expanded}
+                    motion={motion}
+                    onShowDesktop={showDesktop}
+                    onOpen={closeHub}
+                    pathname={pathname}
+                    focusedId={focusedId}
+                    hasFocus={hasFocus}
+                    openIds={openIds}
+                    hubOpen={hubOpenId !== null}
                   />
-                ) : null}
-              </div>
-              {group.items.map((item) => {
-                const presentation = navPresentation(item);
-                const winId = windowId("route", item.menuKey);
-                const subsAll = subTabsFor(item.menuKey);
-                // ⚠️ 권한으로 걸러 **한 줄만 남은 경우**도 하부탭으로 그리지 않는다 — navigation.ts의
-                //    "면 하나 = 하부탭 아님"과 같은 규칙(독립 메뉴는 하나여도 남긴다: 유일한 진입로).
-                const subs =
-                  subsAll.length > 1 || subsAll.some((t) => t.menuKey) ? subsAll : undefined;
-                // subOf 자식(독립 메뉴 하부탭)의 창 상태는 부모 항목에 귀속시킨다 — 자식이 최상위에서
-                // 빠졌으므로 안 그러면 "ECS 창이 포커스인데 사이드바 어디에도 표시가 없다"가 된다.
-                // 부모가 켜지면 인라인 하부탭이 열리고, 거기서 자식 탭이 자기 창 포커스로 하이라이트된다.
-                const childWinIds = (subs ?? [])
-                  .filter((s) => s.menuKey)
-                  .map((s) => windowId("route", s.menuKey!));
-                const isOpen =
-                  isDesktop &&
-                  presentation === "window" &&
-                  (openIds.has(winId) || childWinIds.some((id) => openIds.has(id)));
-                const focusedHere =
-                  hasFocus && (focusedId === winId || childWinIds.includes(focusedId!));
-                const active = isDesktop
-                  ? presentation === "desktop"
-                    ? !hasFocus && isItemActive(item.href, pathname)
-                    : focusedHere
-                  : isItemActive(item.href, pathname);
-                const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
-                // 이미 최상단(포커스)인 창 — 이 메뉴를 다시 누르면 "첫 화면"으로 리셋(아래 handleNav).
-                const atTop =
-                  isDesktop && presentation === "window" && hasFocus && focusedId === winId;
-                // 비활성 메뉴 + 하부탭 有 → hover 시 우측 플라이아웃(왼쪽 메뉴는 고정, 리플로우 없음).
-                const flyoutable = isDesktop && expanded && !!subs && !active;
-                return (
-                  <div
-                    key={item.href}
-                    className="group/menu"
-                    onMouseEnter={
-                      flyoutable
-                        ? (e) => openFlyout(item, subs!, e.currentTarget)
-                        : undefined
-                    }
-                    onMouseLeave={flyoutable ? scheduleFlyoutClose : undefined}
-                  >
-                    <RailItem
-                      item={item}
-                      active={active}
-                      openOnly={openOnly}
-                      atTop={atTop}
-                      isDesktop={isDesktop}
-                      expanded={expanded}
-                      motion={motion}
-                      onShowDesktop={showDesktop}
-                    />
-                    {/* 하부탭(면) — 활성(클릭·네비된) 메뉴만 왼쪽에 인라인 노출. 비활성은 hover 우측 플라이아웃(위 참조). */}
-                    {isDesktop && expanded && subs && active ? (
-                      <ul className="mt-0.5 mb-1 space-y-px">
-                        {subs.map((sub) => (
-                          <li key={sub.href}>
-                            <SubTab
-                              windowKey={sub.menuKey ?? item.menuKey}
-                              label={sub.label}
-                              href={sub.href}
-                              active={
-                                sub.menuKey
-                                  ? hasFocus && focusedId === windowId("route", sub.menuKey)
-                                  : isSubActive(
-                                      sub.href,
-                                      subs,
-                                      pathname,
-                                      currentTab,
-                                      hasFocus && focusedId === windowId("route", item.menuKey)
-                                        ? focusedHref
-                                        : undefined,
-                                    )
-                              }
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                );
+                ) : null;
               })}
-              {/* 외부 링크 탭(EXTERNAL_NAV) — 섹션별 외부 앱을 새 탭으로. 창·권한·subtab 없음. 현재 항목 0. */}
-              {EXTERNAL_NAV.filter((x) => x.group === group.label).map((x) => (
-                <ExternalRailItem key={x.href} item={x} expanded={expanded} motion={motion} />
-              ))}
-            </div>
-          ))}
+            </NavSection>
+          ) : null}
 
+          {/* 전체 업무 — 업무군을 누르면 본문에 그 업무의 메뉴 버튼이 뜬다(운영실·캘린더는 바로 열린다). */}
+          <NavSection label="전체 업무" first={favorites.length === 0} expanded={expanded} motion={motion}>
+            {workGroups.map((g) => (
+              <GroupRail
+                key={g.id}
+                group={g}
+                isDesktop={isDesktop}
+                expanded={expanded}
+                motion={motion}
+                onShowDesktop={showDesktop}
+                onToggleHub={toggleHub}
+                onCloseHub={closeHub}
+                hubOpenId={hubOpenId}
+                pathname={pathname}
+                focusedId={focusedId}
+                hasFocus={hasFocus}
+                openIds={openIds}
+              />
+            ))}
+          </NavSection>
+
+          {/* 지원 — 설정(면이 많아 허브)·도움말. */}
+          {supportGroups.length > 0 ? (
+            <NavSection label="지원" expanded={expanded} motion={motion}>
+              {supportGroups.map((g) => (
+                <GroupRail
+                  key={g.id}
+                  group={g}
+                  isDesktop={isDesktop}
+                  expanded={expanded}
+                  motion={motion}
+                  onShowDesktop={showDesktop}
+                  onToggleHub={toggleHub}
+                  onCloseHub={closeHub}
+                  hubOpenId={hubOpenId}
+                  pathname={pathname}
+                  focusedId={focusedId}
+                  hasFocus={hasFocus}
+                  openIds={openIds}
+                />
+              ))}
+            </NavSection>
+          ) : null}
           {/* 단축키 안내 — 메뉴(관리자 도구 포함) 목록 아래. 펼침 데스크톱에서만(접힘 레일엔 공간 없음). */}
           {isDesktop && expanded ? (
             <p className="text-text-faint mt-1.5 space-y-0.5 px-4 pt-2 text-xs leading-snug">
@@ -486,109 +390,7 @@ export function AppSidebar({
         </div>
       </aside>
 
-      {/* 하부탭 플라이아웃 — 비활성 메뉴 hover 시 우측 팝업(body 포털 + fixed = nav overflow 클리핑 회피).
-          z-[46] = 사이드바(45) 위·커맨드 팰릿(50) 아래. 아이템↔팝업 이동 유예로 안 사라짐. */}
-      {isDesktop && expanded && flyout
-        ? createPortal(
-            <div
-              onMouseEnter={cancelFlyoutClose}
-              onMouseLeave={scheduleFlyoutClose}
-              onClick={() => setFlyout(null)}
-              style={{ top: flyout.top, left: flyout.left }}
-              className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-lg border p-1"
-            >
-              <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-xs font-bold">
-                {flyout.label}
-              </p>
-              <ul className="space-y-px">
-                {flyout.subs.map((sub) => (
-                  <li key={sub.href}>
-                    <SubTab
-                      windowKey={sub.menuKey ?? flyout.menuKey}
-                      label={sub.label}
-                      href={sub.href}
-                      active={
-                        sub.menuKey
-                          ? hasFocus && focusedId === windowId("route", sub.menuKey)
-                          : isSubActive(
-                              sub.href,
-                              flyout.subs,
-                              pathname,
-                              currentTab,
-                              hasFocus && focusedId === windowId("route", flyout.menuKey)
-                                ? focusedHref
-                                : undefined,
-                            )
-                      }
-                      inFlyout
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>,
-            document.body,
-          )
-        : null}
     </TooltipProvider>
-  );
-}
-
-/**
- * 하부탭 활성 판정 — 창으로 보고 있으면 **그 창의 주소**, 아니면 배경 프레임의 pathname + `?tab`.
- * 창 안에서 면을 옮기면 store의 href가 갱신되므로(RouteWindow가 iframe src를 바꾼다) 그걸 따라간다.
- */
-function isSubActive(
-  href: string,
-  tabs: readonly { href: string }[],
-  pathname: string,
-  currentTab: string | null,
-  focusedHref?: string,
-): boolean {
-  const current = focusedHref ?? (currentTab ? `${pathname}?tab=${currentTab}` : pathname);
-  return activeSubTabHref(tabs, current) === href;
-}
-
-/** 하부탭(면) 링크 — 클릭 시 `windowKey` 창에서 그 면으로 이동(open이 href 갱신 → iframe 네비).
- *  windowKey = 면이면 부모 menuKey, **독립 메뉴 하부탭이면 자기 menuKey**(자기 창·자기 크기로 열림 —
- *  부모 키로 열면 ECS가 시간표 창 크기 1040으로 열려 계획 패널+요일 2.5칸이 안 들어간다).
- *  inFlyout=우측 플라이아웃 팝업 안(아이콘 들여쓰기 pl-9 대신 균등 px-2.5). */
-function SubTab({
-  windowKey,
-  label,
-  href,
-  active,
-  inFlyout,
-}: {
-  windowKey: string;
-  label: string;
-  href: string;
-  active: boolean;
-  inFlyout?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      onClick={(e) => {
-        if (e.metaKey || e.ctrlKey || e.altKey) return;
-        e.preventDefault();
-        const store = useWindowStore.getState();
-        // shift+클릭 = 그 면을 새 창으로(듀얼), 일반 클릭 = 부모 메뉴 창에서 면 전환.
-        if (e.shiftKey) store.openNewInstance("route", { id: windowKey, title: label, href });
-        else store.open("route", { id: windowKey, title: label, href });
-      }}
-      className={`block truncate rounded text-xs transition ${
-        inFlyout ? "px-2.5 py-1" : "py-0.5 pr-2 pl-9"
-      } focus-visible:ring-primary/50 focus-visible:ring-inset focus-visible:ring-2 focus-visible:outline-none ${
-        // 활성 하부탭 = **왼쪽 세로 막대 + 채움 + 굵게**(원장 3회 지적 2026-07-31 — 옅은 칠만으론
-        // "이 메뉴 안에 있다"가 안 읽혔다). 막대는 inset 그림자라 자리를 안 밀어 글자가 흔들리지 않는다.
-        // 부모는 진한 네이비 pill, 자식은 옅은 네이비 + 막대 → 위계가 한눈에 보인다.
-        active
-          ? "bg-primary/15 text-primary font-bold shadow-[inset_3px_0_0_var(--primary)]"
-          : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-      }`}
-    >
-      {label}
-    </Link>
   );
 }
 
@@ -601,6 +403,229 @@ function SubTab({
  *  · 활성/hover 하이라이트(절대배치 bg)는 left/right를 8↔4로 트랜지션 → 사각형↔행 모핑
  *  · 라벨은 max-width+opacity 페이드(접힘 시 0폭, 레일이 클립). Tooltip은 접힘일 때만.
  */
+/**
+ * 섹션 머리 — 펼침이면 라벨, 접힘이면 얇은 구분선(옛 그룹 헤더와 같은 모핑).
+ * 첫 섹션은 구분선을 안 그린다(맨 위에 선이 뜨면 헤더와 붙어 보인다).
+ */
+function NavSection({
+  label,
+  first = false,
+  expanded,
+  motion,
+  children,
+}: {
+  label: string;
+  first?: boolean;
+  expanded: boolean;
+  motion: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <div
+        style={{ height: expanded ? 22 : first ? 6 : 13 }}
+        className={`relative flex shrink-0 items-center overflow-hidden ${
+          motion ? `transition-[height] duration-200 ${EASE}` : ""
+        }`}
+      >
+        <span
+          className={`text-text-faint absolute left-[17px] text-xs font-bold whitespace-nowrap ${
+            expanded ? "opacity-100" : "opacity-0"
+          } ${motion ? "transition-opacity duration-200" : ""}`}
+        >
+          {label}
+        </span>
+        {!first ? (
+          <span
+            aria-hidden="true"
+            className={`bg-line absolute top-1/2 left-1/2 h-px w-6 -translate-x-1/2 -translate-y-1/2 ${
+              expanded ? "opacity-0" : "opacity-100"
+            } ${motion ? "transition-opacity duration-200" : ""}`}
+          />
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** 창 상태(포커스·열림) 판정 — 옛 렌더 안에서 하던 계산을 한 곳으로. */
+function railState(
+  item: NavItem,
+  {
+    isDesktop,
+    pathname,
+    focusedId,
+    hasFocus,
+    openIds,
+    hubOpen = false,
+  }: {
+    isDesktop: boolean;
+    pathname: string;
+    focusedId: string | null;
+    hasFocus: boolean;
+    openIds: Set<string>;
+    /** 메뉴 허브가 떠 있나 — 그동안은 배경 라우트(운영실) 표시를 양보한다(활성 줄이 둘이면 지금 어디인지 모호). */
+    hubOpen?: boolean;
+  },
+) {
+  const presentation = navPresentation(item);
+  const winId = windowId("route", item.menuKey);
+  const isOpen = isDesktop && presentation === "window" && openIds.has(winId);
+  const active = isDesktop
+    ? presentation === "desktop"
+      ? !hasFocus && !hubOpen && isItemActive(item.href, pathname)
+      : hasFocus && focusedId === winId
+    : isItemActive(item.href, pathname);
+  return {
+    active,
+    openOnly: isOpen && !active,
+    atTop: isDesktop && presentation === "window" && hasFocus && focusedId === winId,
+  };
+}
+
+/** 메뉴 한 줄 — 즐겨찾기·바로 여는 업무군(운영실·캘린더·도움말)이 쓴다. 제스처는 RailItem 그대로. */
+function MenuRail({
+  item,
+  isDesktop,
+  expanded,
+  motion,
+  onShowDesktop,
+  onOpen,
+  pathname,
+  focusedId,
+  hasFocus,
+  openIds,
+  hubOpen = false,
+}: {
+  item: NavItem;
+  isDesktop: boolean;
+  expanded: boolean;
+  motion: boolean;
+  onShowDesktop: () => void;
+  /** 화면을 열면 떠 있던 메뉴 허브는 닫는다(작업 화면이 앞으로 온다). */
+  onOpen: () => void;
+  pathname: string;
+  focusedId: string | null;
+  hasFocus: boolean;
+  openIds: Set<string>;
+  hubOpen?: boolean;
+}) {
+  const st = railState(item, { isDesktop, pathname, focusedId, hasFocus, openIds, hubOpen });
+  return (
+    <div onClick={onOpen}>
+      <RailItem
+        item={item}
+        active={st.active}
+        openOnly={st.openOnly}
+        atTop={st.atTop}
+        isDesktop={isDesktop}
+        expanded={expanded}
+        motion={motion}
+        onShowDesktop={onShowDesktop}
+      />
+    </div>
+  );
+}
+
+/**
+ * 업무군 한 줄 — `direct`면 그 화면을 바로 열고, `hub`면 **본문 메뉴 버튼**을 띄운다(토글).
+ * 🔴 업무군은 권한 축이 아니다 — 자식이 하나라도 열려야 이 줄이 서고(hubGroupsFor), 접근 판정은 자식마다 한다.
+ */
+function GroupRail({
+  group,
+  isDesktop,
+  expanded,
+  motion,
+  onShowDesktop,
+  onToggleHub,
+  onCloseHub,
+  hubOpenId,
+  pathname,
+  focusedId,
+  hasFocus,
+  openIds,
+}: {
+  group: HubGroup;
+  isDesktop: boolean;
+  expanded: boolean;
+  motion: boolean;
+  onShowDesktop: () => void;
+  onToggleHub: (id: string) => void;
+  onCloseHub: () => void;
+  hubOpenId: string | null;
+  pathname: string;
+  focusedId: string | null;
+  hasFocus: boolean;
+  openIds: Set<string>;
+}) {
+  const direct = group.kind === "direct" ? navItemByKey(group.items[0]!.menuKey) : undefined;
+  if (direct) {
+    return (
+      <MenuRail
+        item={direct}
+        isDesktop={isDesktop}
+        expanded={expanded}
+        motion={motion}
+        onShowDesktop={onShowDesktop}
+        onOpen={onCloseHub}
+        pathname={pathname}
+        focusedId={focusedId}
+        hasFocus={hasFocus}
+        openIds={openIds}
+        hubOpen={hubOpenId !== null}
+      />
+    );
+  }
+  // 허브가 떠 있거나, 이 업무군의 화면이 지금 포커스면 활성.
+  const hubOpen = hubOpenId === group.id;
+  const focusedHere =
+    hasFocus && group.items.some((d) => windowId("route", d.menuKey) === focusedId);
+  const active = hubOpen || focusedHere;
+  // 이 업무군의 화면이 열려는 있으나 포커스는 아님 → 점.
+  const openOnly =
+    !active && isDesktop && group.items.some((d) => openIds.has(windowId("route", d.menuKey)));
+
+  return (
+    <button
+      type="button"
+      onClick={() => onToggleHub(group.id)}
+      aria-expanded={hubOpen}
+      aria-label={`${group.label} 메뉴`}
+      title={expanded ? undefined : group.label}
+      className={`group relative flex h-9 w-full shrink-0 items-center rounded-md text-sm ${
+        active ? "text-primary-foreground" : openOnly ? "text-foreground" : "text-text-dim hover:text-foreground"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`absolute inset-y-0 rounded-md ${expanded ? "right-1 left-1" : "right-2 left-2"} ${
+          active ? "bg-primary" : "group-hover:bg-bg-soft"
+        } ${motion ? `transition-[left,right] duration-200 ${EASE}` : ""}`}
+      />
+      <span className="absolute left-[26px] flex -translate-x-1/2 items-center justify-center">
+        <EyIcon name={group.icon} size={18} strokeWidth={1.8} />
+      </span>
+      <span
+        className={`relative ml-[42px] flex min-w-0 flex-1 items-center gap-1 overflow-hidden pr-2 whitespace-nowrap ${
+          expanded ? "max-w-[220px] opacity-100" : "max-w-0 opacity-0"
+        } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
+      >
+        <span className="truncate font-medium">{group.label}</span>
+        {/* 오른쪽 꺾쇠 = "누르면 메뉴가 나온다"는 표시(바로 여는 업무군엔 없다). */}
+        <EyIcon
+          name="arrowRight"
+          size={13}
+          className={`ml-auto shrink-0 ${active ? "" : "text-text-faint"}`}
+        />
+      </span>
+      {openOnly ? (
+        <span aria-hidden className="bg-primary absolute top-1/2 right-2 size-1.5 -translate-y-1/2 rounded-full" />
+      ) : null}
+    </button>
+  );
+}
+
 function RailItem({
   item,
   active,
@@ -747,59 +772,3 @@ function RailItem({
   );
 }
 
-/**
- * 외부 링크 레일 항목 — RailItem의 시각(아이콘+라벨+접힘/펼침 모핑·hover 하이라이트·접힘 Tooltip)을
- * 따르되, 내부 창/권한/드래그 로직 없이 **새 브라우저 탭**으로 여는 순수 앵커(cross-origin 별도 앱).
- * 펼침 시 라벨 옆 작은 ↗ 아이콘으로 "새 탭으로 열림"을 표시.
- */
-function ExternalRailItem({
-  item,
-  expanded,
-  motion,
-}: {
-  item: ExternalNavItem;
-  expanded: boolean;
-  motion: boolean;
-}) {
-  const Icon = item.icon;
-  const link = (
-    <a
-      href={item.href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`${item.label} (새 탭으로 열림)`}
-      className="group focus-visible:ring-primary/55 relative flex h-9 w-full items-center gap-2.5 pl-[17px] focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none"
-    >
-      <span
-        aria-hidden="true"
-        style={{ left: expanded ? 4 : 8, right: expanded ? 4 : 8 }}
-        className={`bg-sidebar-accent pointer-events-none absolute inset-y-0 z-0 rounded-[9px] opacity-0 group-hover:opacity-100 ${
-          motion ? `transition-[left,right,opacity] duration-200 ${EASE}` : ""
-        }`}
-      />
-      <Icon
-        size={18}
-        strokeWidth={1.8}
-        className={`text-text-dim group-hover:text-foreground relative z-10 shrink-0 ${
-          motion ? "transition-colors duration-200" : ""
-        }`}
-      />
-      <span
-        className={`text-text-dim group-hover:text-foreground relative z-10 inline-flex items-center gap-1 overflow-hidden text-sm font-medium whitespace-nowrap ${
-          expanded ? "max-w-[160px] opacity-100" : "max-w-0 opacity-0"
-        } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
-      >
-        <span className="truncate">{item.label}</span>
-        <ExternalLink size={11} strokeWidth={1.8} className="text-text-faint shrink-0" aria-hidden="true" />
-      </span>
-    </a>
-  );
-
-  if (expanded) return link;
-  return (
-    <Tooltip>
-      <TooltipTrigger render={link} />
-      <TooltipContent side="right">{item.label}</TooltipContent>
-    </Tooltip>
-  );
-}

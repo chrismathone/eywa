@@ -31,6 +31,7 @@ import { canAccess, menuKeyForPath } from "@/lib/permissions";
 import { findNavItem } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
+import { MenuHubPanel } from "@/components/workspace/menu-hub-panel";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
@@ -311,6 +312,17 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
       <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} />
+
+      {/* 업무군 메뉴 허브(버튼형, 원장 2026-09-07) — 사이드바에서 업무군을 고르면 본문에 메뉴 버튼이 뜬다.
+          ⚠️ 캔버스와 **형제**로 둔다(캔버스 안에 넣으면 창들과 같은 층에 갇혀 z·포인터가 얽힌다).
+          🔴 창은 그대로 열려 있다 — 허브는 그 위를 잠깐 덮는 층이고 Esc로 닫으면 하던 작업이 그대로다. */}
+      <HideInFrame>
+        <MenuHubPanel
+          systemRole={user.systemRole}
+          permMatrix={permMatrix}
+          canTeacherView={canTeacherView}
+        />
+      </HideInFrame>
 
       {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
       <NoticePopupLayer popups={popups} />

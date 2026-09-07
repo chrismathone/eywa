@@ -277,6 +277,18 @@ export function activeSubTabHref(
   return best;
 }
 
+/**
+ * 권한키로 메뉴 정의 찾기 — 숨김 항목도 돌려준다(창·타이틀 해석용 정의라 존재 자체는 유효하다).
+ * 🔴 목적지의 라벨·주소·아이콘은 **여기(NAV_GROUPS) 한 곳**이 진실이다 — 다른 표면(버튼형 메뉴 허브 등)이
+ *    같은 값을 다시 적으면 이름을 바꿀 때 한쪽만 바뀐다.
+ */
+export function navItemByKey(menuKey: MenuKey): NavItem | undefined {
+  for (const group of NAV_GROUPS) {
+    for (const item of group.items) if (item.menuKey === menuKey) return item;
+  }
+  return undefined;
+}
+
 export function findNavItem(pathname: string): NavItem | undefined {
   const path = routePath(pathname);
   for (const group of NAV_GROUPS) {

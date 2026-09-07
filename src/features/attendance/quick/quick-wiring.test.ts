@@ -144,8 +144,13 @@ describe("입구 — 하부탭 하나만으로는 폰에서 갈 길이 없다", 
     expect(faces.find((s) => s.href === "/attendance")?.teacherOnly).toBeUndefined();
   });
 
-  it("🔴 사이드바가 그 플래그를 실제로 읽는다 — 플래그만 두면 write-only orphan", () => {
-    const flat = read("src/components/app-sidebar.tsx").replace(/\s+/g, "");
-    expect(flat).toContain("!s.teacherOnly||canTeacherView||isSubActive(");
+  it("🔴 버튼형 메뉴가 그 플래그를 실제로 읽는다 — 플래그만 두면 write-only orphan", () => {
+    // ⚠️ 2026-09-07 버튼형 개편으로 **면(하부탭)은 사이드바가 아니라 본문 메뉴 허브가 든다** —
+    //    그래서 이 판정의 소비처도 `menu-hub.ts`로 옮겼다(플래그 자체는 그대로).
+    const hub = read("src/lib/menu-hub.ts").replace(/\s+/g, "");
+    expect(hub).toContain('face("attendance","/attendance/quick"');
+    expect(hub).toContain("teacherOnly:true");
+    // 허브의 접근 판정이 그 플래그를 실제로 본다(겸직이 아니면 뺀다).
+    expect(hub).toContain("if(dest.teacherOnly&&!gate.canTeacherView)returnfalse;");
   });
 });
