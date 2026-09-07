@@ -11,10 +11,13 @@ export default function Loading() {
           <div key={i} className="bg-muted h-24 animate-pulse rounded-2xl" />
         ))}
       </div>
-      <div className="bg-muted h-10 w-64 animate-pulse rounded-2xl" />
+      {/* 면 탭 — 실제 `FaceTabs`와 같은 높이·라운드(`--control-h` · rounded-lg). */}
+      <div className="bg-muted h-(--control-h) w-64 animate-pulse rounded-lg" />
+      {/* 툴바 — `필터: 전체` 하나 + 검색 토글(옛 칩 11개는 12단계에서 걷었다). 높이는 컨트롤과 같은 변수. */}
       <div className="flex gap-2">
-        <div className="bg-muted h-8 w-48 animate-pulse rounded-lg" />
-        <div className="bg-muted h-8 w-80 animate-pulse rounded-lg" />
+        <div className="bg-muted h-(--control-h) w-28 animate-pulse rounded-lg" />
+        <div className="bg-muted h-(--control-h) w-20 animate-pulse rounded-lg" />
+        <div className="bg-muted ml-auto h-(--control-h) w-24 animate-pulse rounded-lg" />
       </div>
       <div className="flex flex-col gap-1.5">
         {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (

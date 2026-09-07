@@ -13,12 +13,13 @@ export default function AttendanceLoading() {
       </div>
       {/* 툴바 */}
       <div className="flex flex-wrap items-center gap-3 px-1 py-1">
-        {/* 실제 툴바는 카드 껍데기가 없고 컨트롤이 h-8이다(툴바 규약 2026-09-01) — 껍데기를 그리면
-            로딩→본문에서 카드가 사라지며 화면이 튄다(스켈레톤=실표면 동일 캐논). */}
-        <div className="bg-bg-soft h-8 w-36 animate-pulse rounded-lg" />
-        <div className="bg-bg-soft h-8 w-36 animate-pulse rounded-lg" />
-        <div className="bg-bg-soft h-8 w-44 animate-pulse rounded-lg" />
-        <div className="bg-bg-soft h-8 w-28 animate-pulse rounded-lg" />
+        {/* 실제 툴바는 카드 껍데기가 없고 컨트롤 높이는 `--control-h`다(v5 control-scale, 2026-09-03 —
+            09-01의 "h-(--control-h) 고정"을 대체했다). 껍데기를 그리거나 옛 32px로 두면 로딩→본문에서 화면이 튄다
+            (스켈레톤=실표면 동일 캐논). 숫자를 손으로 적지 말고 **같은 변수**를 가리킬 것. */}
+        <div className="bg-bg-soft h-(--control-h) w-36 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-(--control-h) w-36 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-(--control-h) w-44 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-(--control-h) w-28 animate-pulse rounded-lg" />
       </div>
       {/* 스탯 4 */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
