@@ -286,6 +286,10 @@ export const SHEET_DICT = {
   "today.weekHint.before": { ko: "전체 반에 대한 내용을 보려면", en: "To see every class, open" },
   "today.weekHint.link": { ko: "‘주간 시트’", en: "“Weekly sheet”" },
   "today.weekHint.after": { ko: "에서 볼 수 있습니다.", en: "." },
+  // 오늘 면 반 순서 드래그(2026-09-05) — 손잡이 하나와 실패 안내뿐이다(성공은 화면이 이미 말한다).
+  "today.order.handleAria": { ko: "순서 이동", en: "reorder" },
+  "today.order.handleTitle": { ko: "끌어서 반 순서 변경 (내 계정에 저장)", en: "Drag to reorder classes (saved to your account)" },
+  "today.order.saveFail": { ko: "순서를 저장하지 못했습니다", en: "Could not save the order" },
   "today.holiday.today": { ko: "오늘은", en: "Today is" },
   "today.holiday.tail": {
     ko: "— 학원 휴일입니다. 수업이 있었다면 계획·출결·보고서를",

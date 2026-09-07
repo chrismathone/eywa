@@ -47,6 +47,8 @@ import {
   type PlanPatchesResult,
   type PlanWriteGrant,
 } from "./plan-write";
+import { mergeTodayOrder, normalizeTodayOrder } from "../today-order";
+import { readEcsTodayOrder } from "../view-prefs";
 
 type ActionError = { ok: false; error: string };
 
@@ -779,6 +781,25 @@ export async function clearPresentAttendance(input: {
  */
 async function patchMyEcsPrefs(patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
   return patchMyUiPrefs("ecs", patch);
+}
+
+/**
+ * 오늘 면 **반 순서**를 본인 계정에 저장 — `users.ui_prefs.ecs.todayOrder`(원장 2026-09-05 드래그&드롭).
+ *
+ * 인자는 **오늘 화면에 보이는 반의 새 순서**다. 저장 전에 오늘 안 보인 옛 저장분을 뒤에 붙여
+ * 다른 날의 순서를 지우지 않는다([`mergeTodayOrder`](../today-order.ts) — 규약·정규화 단일 소스).
+ * ⚠️ `revalidatePath` 없음: 순서는 클라 state가 즉시 반영하고 이 저장은 **다음 방문용 영속화**다
+ *    (글씨 크기와 같은 규약 — 새로고침을 강요하면 끌자마자 화면이 깜빡인다).
+ */
+export async function setMyEcsTodayOrder(visibleOrder: string[]): Promise<{ ok: boolean; error?: string }> {
+  const next = normalizeTodayOrder(visibleOrder);
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const admin = createAdminClient();
+  const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).maybeSingle();
+  const saved = readEcsTodayOrder(data?.ui_prefs);
+  const merged = mergeTodayOrder(saved, next);
+  return patchMyEcsPrefs({ todayOrder: merged.length > 0 ? merged : undefined });
 }
 
 /**

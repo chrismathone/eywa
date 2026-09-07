@@ -12,8 +12,14 @@ import { TodayAttendanceStrip } from "@/features/attendance/live/components/toda
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 // 오늘 면 반 순서 = **화면에 보이는 첫 교시**(SheetClient가 쓰는 것과 같은 순수 함수).
 import { firstVisibleTodaySlot } from "@/features/class-sheets/lib/today-own-slots";
+// 내가 손으로 정한 반 순서(2026-09-05) — 기본 순서(첫 교시) 위에 얹는다.
+import { applyTodayOrder } from "@/features/class-sheets/today-order";
+import { TodayOrderList } from "@/features/class-sheets/components/today-order-list";
 import { EcsLandingList } from "./_components/landing-list";
 import { EcsTeacherFilter } from "./_components/teacher-filter";
 import { EcsTrackFilter } from "./_components/track-filter";
@@ -117,10 +123,18 @@ export default async function EcsLandingPage({
               : "99:99"; // 조회 실패한 반은 맨 뒤(시각을 알 수 없다)
           return key(a).localeCompare(key(b)) || a.className.localeCompare(b.className, "ko");
         });
+      // 🔴 **개인 순서가 마지막에 이긴다** — 위 시각 정렬은 아직 아무 것도 안 정한 사람의 기본값이고,
+      //    손으로 정한 순서가 있으면 그게 그 사람의 답이다. 저장에 없는 반은 시각 순서 그대로 뒤에 남는다.
+      sheets = applyTodayOrder(sheets, todayRes.ok ? todayRes.todayOrder : []);
     }
     return (
       <EcsTodayFace
-        res={todayRes}
+        // 요약 카드도 **같은 순서**로 — 보기를 바꿨다고 반 차례가 달라지면 그게 더 헷갈린다.
+        res={
+          todayRes.ok
+            ? { ...todayRes, cards: applyTodayOrder(todayRes.cards, todayRes.todayOrder) }
+            : todayRes
+        }
         scoped={scoped}
         mode={mode}
         sheets={sheets}
@@ -147,6 +161,28 @@ export default async function EcsLandingPage({
   // 주 라벨 — 영어는 같은 재료(월요일)로 다시 만든다. 서버가 준 `weekLabel`(한국어)은 그대로 둔다
   // (인쇄·다른 화면도 그 문자열을 쓴다 — 여기서 서버를 바꾸면 그쪽까지 따라 바뀐다).
   const weekText = sheetWeekLabel(res.weekMonday, res.weekLabel, lang);
+
+  /**
+   * 목록을 **누구의 눈으로** 묶을지 — 강사 본인이면 담임/부담임, 사무실이면 종전 담임별.
+   *
+   * 🔴 `scoped`일 때만 id를 넘긴다. 겸직 관리자가 강사뷰를 켰을 때도 `effectiveTeacherId`가 그 사람을
+   *    가리키므로 같은 취급을 받는다(뷰 전환은 스코프를 바꾼다 — 권한은 그대로).
+   * ⚠️ 이름은 영어 화면이면 영어 이름으로([`teacherNameFor`]) — 표 조회는 **요청 캐시**라(셸이 이미
+   *    불렀다) 왕복이 늘지 않고, 한국어 화면이면 그 함수가 빈 표를 받아 원문을 그대로 돌려준다.
+   */
+  const viewer: { id: string | null; name: string | null } = scoped
+    ? await (async () => {
+        const [id, me, names] = await Promise.all([
+          effectiveTeacherId(),
+          getCurrentUser(),
+          getTeacherEnglishNames(),
+        ]);
+        // 겸직 강사뷰·'다른 강사 뷰'에서는 로그인 계정과 대상 강사가 다를 수 있다 — 그때는 이름을
+        // 적지 않는다(내 이름이 아닌 이름을 "내 이름" 자리에 적으면 그게 더 나쁜 거짓말이다).
+        const name = id && me && id === me.id ? teacherNameFor(me.displayName, names, lang) : null;
+        return { id, name };
+      })()
+    : { id: null, name: null };
 
   return (
     <div className="space-y-4">
@@ -198,7 +234,13 @@ export default async function EcsLandingPage({
         </p>
       ) : (
         // 카드 벽 → **한 장의 시트**(2026-08-11 원장 "이름에 걸맞게 컴팩트하게"). 상세는 landing-list.tsx.
-        <EcsLandingList cards={res.cards} weekMonday={res.weekMonday} lang={lang} />
+        <EcsLandingList
+          cards={res.cards}
+          weekMonday={res.weekMonday}
+          lang={lang}
+          viewerTeacherId={viewer.id}
+          viewerName={viewer.name}
+        />
       )}
     </div>
   );
@@ -333,35 +375,36 @@ function EcsTodayFace({
       ) : mode === "sheet" ? (
         // 시트 모드 — 반마다 SheetClient를 그 날짜 열만 필터해 쌓는다. 조회 실패한 반은 그 반만 사유를
         // 보이고 나머지는 그린다(한 반 때문에 하루 전체가 죽으면 안 된다).
-        <div className="space-y-6">
-          {(sheets ?? []).map((s) =>
-            s.res.ok ? (
-              <section key={s.classId} className="space-y-2">
-                {/* 🔴 수업명 줄은 **카드 안**으로 내려갔다(원장 2026-08-18: *"수업명을 빈 공간으로
-                    이동시켜줘"* + *"그러면 행 절약할 수 있을듯"*). 여기 바깥 제목 줄과 카드 안 일괄
-                    버튼 줄이 나란히 있어 반마다 두 줄을 먹었는데, 정작 일괄 줄 왼쪽은 늘 비어 있었다.
-                    이름·'주간 시트 열기'·'수정중' 배지는 이제 SheetClient가 `header`로 넘긴다
-                    (today-class-sheet.tsx) — 위계(굵게·링크는 한 단계 낮게)는 그대로 옮겼다. */}
-                <SheetClient
-                  // 반 상세와 같은 재마운트 키 + **날짜** — 날짜 이동은 searchParam 네비라 키에 없으면
-                  // 요일 필터 state가 옛 날짜에 남는다(카드 모드 key={date}와 같은 이유).
-                  key={`${s.classId}:${s.res.data.weekMonday}:${s.res.data.showSelfStudy ? "jj" : "nojj"}:${res.date}`}
-                  data={s.res.data}
-                  classOptions={classOptions}
-                  userId={res.userId}
-                  tenantId={res.tenantId}
-                  initialDay={res.date}
-                  variant="today"
-                  myTeacherId={myTeacherId}
-                />
-              </section>
+        // 🔴 순서 바꾸기는 **껍데기만** 클라다 — 카드는 여기서 서버가 그린 그대로 넘어간다
+        //    (클라가 다시 그리면 편집기·저널·presence가 재마운트돼 입력 중이던 값이 날아간다).
+        <TodayOrderList
+          key={res.date}
+          items={(sheets ?? []).map((s) => ({
+            id: s.classId,
+            label: s.className,
+            node: s.res.ok ? (
+              // 🔴 수업명 줄은 **카드 안**으로 내려갔다(원장 2026-08-18: "수업명을 빈 공간으로 이동시켜줘"
+              //    + "그러면 행 절약할 수 있을듯"). 이름·'주간 시트 열기'·'수정중' 배지는 SheetClient가
+              //    `header`로 넘긴다(today-class-sheet.tsx) — 위계는 그대로 옮겼다.
+              <SheetClient
+                // 반 상세와 같은 재마운트 키 + **날짜** — 날짜 이동은 searchParam 네비라 키에 없으면
+                // 요일 필터 state가 옛 날짜에 남는다(카드 모드 key={date}와 같은 이유).
+                key={`${s.classId}:${s.res.data.weekMonday}:${s.res.data.showSelfStudy ? "jj" : "nojj"}:${res.date}`}
+                data={s.res.data}
+                classOptions={classOptions}
+                userId={res.userId}
+                tenantId={res.tenantId}
+                initialDay={res.date}
+                variant="today"
+                myTeacherId={myTeacherId}
+              />
             ) : (
-              <p key={s.classId} className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-4 text-sm">
+              <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-4 text-sm">
                 {s.className}: {s.res.error}
               </p>
             ),
-          )}
-        </div>
+          }))}
+        />
       ) : (
         // 🔴 `key={date}` — 날짜 이동은 searchParam 네비라 React가 이 클라 컴포넌트를 **재사용**한다.
         // 출결 낙관 상태는 `useState` 초기값으로만 만들어져, 같은 반이 두 요일에 걸치면 **어제 찍은 값이

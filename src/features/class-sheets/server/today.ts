@@ -31,7 +31,7 @@ import { shoutingKey } from "../shouting";
 import { rosterFormOf, type RosterForm, type SheetMark } from "../lib/roster-form";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { dowKeyOf, normalizeSlotTime, YMD_RE } from "../lib/week";
-import { readEcsShowSelfStudy } from "../view-prefs";
+import { readEcsTodayOrder, readEcsShowSelfStudy } from "../view-prefs";
 import { DEFAULT_ECS_FONT_SIZE, readEcsFontSize, type EcsFontSize } from "../font-size";
 // 영어 알림장은 eywa가 아니라 ClassNote 반 보드에 직접 올라간다(2026-08-11 전수 검사: 35일 5,680건 중
 // 영어 lesson_reports 0건). "이 날짜에 알림장이 나갔나"의 진실은 워커가 적재하는 classnote_class_posts
@@ -195,6 +195,11 @@ export type EcsTodayResult =
       /** 내 글씨 크기(users.ui_prefs.ecs.fontSize) — 주간 시트와 같은 계정 귀속 값·같은 배율. */
       fontSize: EcsFontSize;
       /**
+       * 내가 손으로 정한 **반 순서**(users.ui_prefs.ecs.todayOrder, 2026-09-05 드래그&드롭).
+       * 비었으면 기본 순서(화면에 보이는 첫 교시) 그대로 — 규약은 [`today-order.ts`](../today-order.ts).
+       */
+      todayOrder: string[];
+      /**
        * 보고 있는 날짜가 학원 휴일이면 그 이름(아니면 null) — 화면이 그 사실을 한 줄로 알린다.
        * 🔴 **카드를 지우거나 입력을 막는 값이 아니다**(원장 2026-09-01 *"입력은 가능하도록"*).
        *    수업이 있으면 그대로 뜨고 출결·계획도 그대로 저장된다. 달라지는 건 안내 한 줄과
@@ -223,7 +228,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const skillAreas = resolveSkillAreas(english);
   if (skillAreas.length === 0) {
     // 카드 0개 조기 반환 — 보드가 안 그려지므로 글씨 크기는 기본값이면 충분(ui_prefs 조회 전이다).
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize: DEFAULT_ECS_FONT_SIZE, holidayName };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize: DEFAULT_ECS_FONT_SIZE, todayOrder: [], holidayName };
   }
 
   const supabase = await createClient();
@@ -256,8 +261,10 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const scoped = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
   const fontSize = readEcsFontSize(prefsRes.data?.ui_prefs);
+  // 내가 정한 반 순서 — 화면이 기본 순서 위에 얹는다(빈 배열이면 기본 그대로).
+  const todayOrder = readEcsTodayOrder(prefsRes.data?.ui_prefs);
   if (scoped.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, holidayName };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, todayOrder, holidayName };
   }
   const scopedIds = scoped.map((c) => c.id as string);
 
@@ -290,7 +297,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   }
   const todayIds = scopedIds.filter((id) => (slotsByClass.get(id)?.length ?? 0) > 0);
   if (todayIds.length === 0) {
-    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, holidayName };
+    return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, todayOrder, holidayName };
   }
 
   // 오늘 Shouting 체크(0230a) — EiE 카드의 교시 줄에 그린다.
@@ -805,5 +812,5 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     // 시간표 순서 = 그 날 일과 순서. 같은 시각이면 반 이름으로 안정 정렬.
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.className.localeCompare(b.className, "ko"));
 
-  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, holidayName };
+  return { ok: true, date, today, weekMonday: mondayOf(date), cards, hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, todayOrder, holidayName };
 }

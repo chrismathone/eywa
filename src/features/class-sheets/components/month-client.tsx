@@ -185,6 +185,9 @@ export function MonthClient({
           // 담임 이름을 반 표기 안 오른쪽에(원장 2026-09-02 *"ecs도 마찬가지"*) — 주간 시트·MCS와 같은 자리.
           teacherName={data.teacherName}
           onNavigate={navigate}
+          // 주간 시트와 같은 규약 — '목록'은 **주간 면**으로 돌아간다. 어느 주로 갈지는 '주간' 전환
+          // 버튼과 **같은 판정**(`weekForMonth`)을 재사용한다(두 벌로 적으면 서로 다른 주로 간다).
+          listHref={`/ecs?view=week&week=${weekMonday}`}
           hrefForClass={(id) => `/ecs/${id}/month?month=${data.month}&view=${view}`}
         />
         <SheetBarDivider />

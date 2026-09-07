@@ -5,10 +5,11 @@ import { monthDay } from "@/features/timetable/scheduled-import";
 //    RTL이 렌더할 수 없어 이 파일의 단위 테스트 17개가 통째로 죽는다(실측). 페이지가 이미 들고 있는 값을
 //    **prop으로 받는다**. 기본값은 `ko`(= 표기 불변)라 안 넘겨도 화면이 깨지지 않고, 페이지가 넘기는지는
 //    가드(`name-wiring`)가 잠근다.
-import type { SheetLang } from "@/features/teacher-view/i18n";
+import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { classNameFor } from "@/features/teacher-view/class-name";
 import type { SheetLandingCard } from "@/features/class-sheets/server/queries";
 import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
+import { groupLandingByMyRole, MY_ROLE_LABEL } from "@/features/class-sheets/landing-my-role";
 import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landing-summary";
 import { shoutingCountOf, summarizeShouting } from "@/features/class-sheets/landing-shouting";
 import { splitLandingByProgram } from "@/features/class-sheets/landing-programs";
@@ -56,11 +57,21 @@ export function EcsLandingList({
   cards,
   weekMonday,
   lang = "ko",
+  viewerTeacherId = null,
+  viewerName = null,
 }: {
   cards: readonly SheetLandingCard[];
   weekMonday: string;
   /** 화면 언어 — 반 이름 표기를 정한다(페이지가 `getTeacherViewLang()`으로 읽어 넘긴다). */
   lang?: SheetLang;
+  /**
+   * **보고 있는 사람이 강사 본인이면** 그 강사 id — 목록의 축이 담임(남의 이름)에서
+   * **담임/부담임(내 역할)**으로 바뀐다([`landing-my-role`](@/features/class-sheets/landing-my-role)).
+   * 사무실(스코프 없음)이면 null이라 종전 담임별 묶음 그대로다.
+   */
+  viewerTeacherId?: string | null;
+  /** 머리 줄에 적을 내 이름(영어 화면이면 영어 이름). 없으면 종전처럼 '담임 N명'. */
+  viewerName?: string | null;
 }) {
   const s = summarizeLanding(cards);
   const shout = summarizeShouting(cards);
@@ -80,9 +91,15 @@ export function EcsLandingList({
         <h2 className="text-foreground text-[13px] font-bold">
           반 <span className="num">{s.classes}</span>개
         </h2>
-        <p className="text-text-dim text-[12px]">
-          담임 <span className="num text-foreground font-bold">{teacherCount}</span>명
-        </p>
+        {/* 🔴 내 화면이면 **내 이름**이 먼저다(원장 2026-09-05) — 종전엔 남의 이름(그 반 담임)만 있었다.
+            사무실 화면은 "누가 안 썼나"를 묻는 자리라 종전 '담임 N명'을 그대로 둔다. */}
+        {viewerName ? (
+          <p className="text-foreground text-[13px] font-extrabold">{viewerName}</p>
+        ) : (
+          <p className="text-text-dim text-[12px]">
+            담임 <span className="num text-foreground font-bold">{teacherCount}</span>명
+          </p>
+        )}
         <p
           className="text-text-dim text-[12px]"
           // 분모가 왜 그 수인지 화면에 적어 둔다 — 안 적으면 추석 주에 "교시가 줄었다"만 보인다.
@@ -170,6 +187,7 @@ export function EcsLandingList({
                   columnsClass={PANEL_COLUMNS}
                   lang={lang}
                   headingLevel="h4"
+                  viewerTeacherId={viewerTeacherId}
                 />
               </section>
             );
@@ -191,6 +209,7 @@ function TeacherGroupFlow({
   columnsClass,
   lang,
   headingLevel = "h3",
+  viewerTeacherId = null,
 }: {
   cards: readonly SheetLandingCard[];
   weekMonday: string;
@@ -199,9 +218,25 @@ function TeacherGroupFlow({
   lang: SheetLang;
   /** 묶음 제목의 층 — 프로그램 단 안이면 h4(그 단의 h3 아래), 단일 목록이면 h3. */
   headingLevel?: "h3" | "h4";
+  /** 강사 본인 화면이면 그 id — 묶음 축이 담임에서 **내 역할**로 바뀐다. */
+  viewerTeacherId?: string | null;
 }) {
   const Heading = headingLevel;
-  const groups = groupLandingByTeacher(cards);
+  /**
+   * 축이 둘이고 **보는 사람이 정한다**:
+   *  · 사무실 = 담임별(그 화면의 질문이 "누가 안 썼나"라서).
+   *  · 강사 본인 = **담임 / 부담임**(내 화면인데 남의 이름으로 묶이면 내 반이 어디 있는지 안 보인다).
+   * 🔴 라벨은 사전 키를 그대로 — 영어 화면에서 `Homeroom`/`Assistant`로 따라온다.
+   */
+  const groups = viewerTeacherId
+    ? groupLandingByMyRole(cards, viewerTeacherId).map((g) => ({
+        key: g.key,
+        label: sheetT(lang, MY_ROLE_LABEL[g.key]),
+        unassigned: false,
+        cards: g.cards,
+        summary: g.summary,
+      }))
+    : groupLandingByTeacher(cards);
   /**
    * Shouting 구역을 잡을지는 **이 흐름 안에서만** 판정한다. 좌우로 가르면 인재원 단엔 EiE가 한 반도
    * 없으므로 52px을 비워 둘 이유가 없다(그 폭은 긴 반 이름에 돌아간다). 원장이 말한 열 정렬은

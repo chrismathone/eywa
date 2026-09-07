@@ -18,8 +18,10 @@
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 import { normalizeEcsTeacher } from "./landing-teacher";
 import type { RosterGroupKey } from "./lib/roster-order";
+import { normalizeTodayOrder } from "./today-order";
 
 /** 미설정 기본값 = 표시(원장 2026-08-03). 저장은 기본값이 아닐 때만 키를 남긴다. */
+
 export const DEFAULT_ECS_SHOW_SELF_STUDY = true;
 
 /**
@@ -86,6 +88,14 @@ export function readEcsCollapsedRosterGroups(uiPrefs: unknown): RosterGroupKey[]
   if (!Array.isArray(raw)) return DEFAULT_ECS_COLLAPSED_ROSTER_GROUPS;
   // 모르는 값은 버린다(통째로 무시하지 않는다) — 새 키가 생겨도 옛 선택이 살아남게.
   return ROSTER_GROUP_KEYS.filter((k) => raw.includes(k));
+}
+
+/**
+ * `ui_prefs.ecs.todayOrder` → 오늘 면 **내가 정한 반 순서**(2026-09-05, 드래그&드롭).
+ * 규약·정규화는 [`today-order.ts`](./today-order.ts) 단일 소스 — 여기선 읽기만 한다.
+ */
+export function readEcsTodayOrder(uiPrefs: unknown): string[] {
+  return normalizeTodayOrder(ecsScope(uiPrefs)?.todayOrder);
 }
 
 /** 저장 가능한 그룹 키만 남긴다(순서도 고정) — 액션·리더가 같은 정규화를 쓴다. */

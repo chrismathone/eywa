@@ -88,6 +88,10 @@ export function SheetToolbar({
         // 담임 이름을 반 표기 안 오른쪽에(원장 2026-09-02 *"ecs도 마찬가지"*) — MCS와 같은 조각·같은 자리.
         teacherName={data.classTeacherName}
         onNavigate={onNavigate}
+        // 🔴 **온 곳으로 돌려보낸다**(원장 2026-09-05 *"좌측 목록 눌렀을때 주간 시트 상태로 돌아가도록"*).
+        //    맨 `/ecs`로 보내면 강사는 기본 착지인 **'오늘'** 면으로 떨어져, 방금 훑던 주간 목록이 사라진다
+        //    (랜딩 기본값은 강사=오늘·사무실=주간이라 사람마다 다른 곳에 도착한다). 보던 주까지 함께 싣는다.
+        listHref={`/ecs?view=week&week=${data.weekMonday}`}
         hrefForClass={(id) => hrefFor(id, data.weekMonday)}
       />
       {/* 임시 위임(0173a) — 지금 **남의 반 시트**를 고치는 중이라는 사실이 열고 나서도 보여야 한다.
