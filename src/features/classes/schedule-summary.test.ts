@@ -7,6 +7,7 @@ import {
   slotMinutes,
   slotPhase,
   summarizeSchedule,
+  type ScheduleDayRow,
   type SummarySlot,
 } from "./schedule-summary";
 
@@ -19,6 +20,10 @@ const slot = (
   validFrom: string | null = "2026-03-01",
   validTo: string | null = null,
 ): SummarySlot => ({ dayOfWeek, startTime, endTime, validFrom, validTo });
+
+/** 요일축 줄을 사람이 읽는 한 줄로 — "화·금 18:20~20:10, 20:20~21:10". */
+const dayLine = (r: ScheduleDayRow) =>
+  `${formatDays(r.days)} ${r.ranges.map((x) => `${x.start}~${x.end}`).join(", ")}`;
 
 describe("slotPhase", () => {
   it("종료일이 지나면 past", () => {
@@ -163,15 +168,18 @@ describe("summarizeSchedule — 묶기 규칙", () => {
     expect(s.current.map(formatRow)).toEqual(["금 16:20~17:00", "화 16:20~17:20"]);
   });
 
-  it("같은 요일이 같은 시각에 두 번 있으면 요일 칩은 1개·회차는 2", () => {
+  it("같은 요일이 같은 시각에 두 번 있으면 요일 칩은 1개 — 회차는 1(사람은 두 번 못 앉는다)", () => {
     const s = summarizeSchedule(
       [slot("wed", "15:00", "15:40"), slot("wed", "15:00", "15:40")],
       TODAY,
     );
     expect(s.current).toHaveLength(1);
     expect(s.current[0].days).toEqual(["wed"]);
+    // ⚠️ 중복 자체는 안 지운다 — `count`(그리고 시수)에 그대로 남아 데이터 이상을 계속 드러낸다.
     expect(s.current[0].count).toBe(2);
-    expect(s.sessions).toBe(2);
+    expect(s.minutes).toBe(80);
+    // 🔴 '주 N회'는 앉는 횟수라 중복을 한 번으로 센다(2026-09-07 요일축 전환).
+    expect(s.sessions).toBe(1);
   });
 
   it("줄은 시작시각 순, 요일은 월→일 순", () => {
@@ -222,6 +230,22 @@ describe("summarizeSchedule — 붙은 교시 잇기(mergeAdjacent)", () => {
     );
     expect(s.current.map(formatRow)).toEqual(["일 14:20~16:20"]);
     expect(s.minutes).toBe(120);
+  });
+
+  it("🔴 '주 N회'는 조각이 아니라 앉는 횟수 — 월·목 15:00~17:00 + 수 = 6회가 아니라 3회", () => {
+    // 실측 중등E_초6 SKY. 시각축은 요일 집합이 갈려 3줄(1+3+2=6조각)이지만 사람은 주 3번 앉는다.
+    const s = summarizeSchedule(
+      [
+        slot("wed", "14:20", "15:00"),
+        ...["mon", "wed", "thu"].map((d) => slot(d, "15:00", "16:20")),
+        ...["mon", "thu"].map((d) => slot(d, "16:20", "17:00")),
+      ],
+      TODAY,
+    );
+    expect(s.current.reduce((n, r) => n + r.count, 0)).toBe(6); // 조각은 여전히 6
+    expect(s.sessions).toBe(3);
+    expect(s.byDay.map(dayLine)).toEqual(["월·목 15:00~17:00", "수 14:20~16:20"]);
+    expect(s.minutes).toBe(360);
   });
 
   it("🔴 요일 집합이 다르면 안 잇는다 — 월만 2교시인데 월~금을 이으면 화~금이 거짓", () => {
@@ -381,5 +405,84 @@ describe("mergeTimeRanges — 학생 수업탭 스케줄 셀의 연속 구간 �
         { start: "17:20", end: "18:10" },
       ]),
     ).toEqual([{ start: "16:20", end: "18:10" }]);
+  });
+});
+
+describe("groupByDay — 요일이 줄의 주인", () => {
+  it("시각 구성이 같은 요일은 한 줄로 묶고 그 날의 자리를 나열한다(원장 지목 반 실데이터)", () => {
+    // 중등E_중2 정규 B 실제 배치: 화·금 18:20/19:20/20:20. 앞 둘은 붙어 있고 20:20은 10분 떨어져 있다.
+    const s = summarizeSchedule(
+      ["tue", "fri"].flatMap((d) => [
+        slot(d, "18:20", "19:20"),
+        slot(d, "19:20", "20:10"),
+        slot(d, "20:20", "21:10"),
+      ]),
+      TODAY,
+    );
+    expect(s.byDay.map(dayLine)).toEqual(["화·금 18:20~20:10, 20:20~21:10"]);
+    // 🔴 축을 뒤집어도 줄이 늘지 않는다 — 시각축 2줄이 요일축 1줄이 된다(2026-09-07 실측 154→127줄).
+    expect(s.byDay.length).toBeLessThanOrEqual(s.current.length);
+  });
+
+  it("월~금 한 자리 반은 여전히 한 줄 — 요일을 한 줄씩 세우지 않는다", () => {
+    const s = summarizeSchedule(
+      ["mon", "tue", "wed", "thu", "fri"].flatMap((d) => [
+        slot(d, "14:20", "15:00"),
+        slot(d, "15:00", "15:40"),
+      ]),
+      TODAY,
+    );
+    expect(s.byDay.map(dayLine)).toEqual(["월~금 14:20~15:40"]);
+  });
+
+  it("🔑 요일축은 시각축과 답이 다를 수 있고 그게 맞다 — 월만 2교시", () => {
+    const s = summarizeSchedule(
+      [
+        ...["mon", "tue", "wed", "thu", "fri"].map((d) => slot(d, "14:20", "15:00")),
+        slot("mon", "15:00", "15:40"),
+      ],
+      TODAY,
+    );
+    // 시각축은 요일 집합이 달라 못 이어 2줄, 요일축은 월요일의 사실을 그대로 이어 말한다.
+    expect(s.current.map(formatRow)).toEqual(["월~금 14:20~15:00", "월 15:00~15:40"]);
+    expect(s.byDay.map(dayLine)).toEqual(["월 14:20~15:40", "화~금 14:20~15:00"]);
+  });
+
+  it("10분이라도 비면 따로 — 없는 수업 시간을 만들지 않는다", () => {
+    const s = summarizeSchedule([slot("wed", "19:20", "20:10"), slot("wed", "20:20", "21:10")], TODAY);
+    expect(s.byDay.map(dayLine)).toEqual(["수 19:20~20:10, 20:20~21:10"]);
+  });
+
+  it("만료 배치는 요일축에도 안 샌다", () => {
+    const s = summarizeSchedule(
+      [slot("tue", "16:20", "17:00", "2026-03-01", "2026-07-02"), slot("fri", "18:20", "19:20")],
+      TODAY,
+    );
+    expect(s.byDay.map(dayLine)).toEqual(["금 18:20~19:20"]);
+    expect(s.pastCount).toBe(1);
+  });
+
+  it("예정 배치는 upcomingByDay로 따로 온다", () => {
+    const s = summarizeSchedule(
+      [slot("mon", "11:00", "12:30", "2026-08-18"), slot("mon", "12:30", "14:00", "2026-08-18")],
+      TODAY,
+    );
+    expect(s.byDay).toEqual([]);
+    expect(s.upcomingByDay.map(dayLine)).toEqual(["월 11:00~14:00"]);
+  });
+
+  it("알 수 없는 요일 값은 버린다 — raw 코드가 화면에 새지 않게", () => {
+    const s = summarizeSchedule([slot("moon", "14:20", "15:00"), slot("mon", "14:20", "15:00")], TODAY);
+    expect(s.byDay.map(dayLine)).toEqual(["월 14:20~15:00"]);
+  });
+
+  it("줄 순서는 시각이 아니라 요일 순 — 늦은 시각의 월요일이 먼저 선다", () => {
+    const s = summarizeSchedule([slot("fri", "10:00", "11:00"), slot("mon", "20:00", "21:00")], TODAY);
+    expect(s.byDay.map((r) => r.days.join(","))).toEqual(["mon", "fri"]);
+  });
+
+  it("하루 총 분은 그 요일의 자리 합", () => {
+    const s = summarizeSchedule([slot("wed", "19:20", "20:10"), slot("wed", "20:20", "21:10")], TODAY);
+    expect(s.byDay[0].minutes).toBe(50 + 50);
   });
 });

@@ -3065,7 +3065,6 @@ export const SHEET_DICT = {
     ko: "운영 종료일이 지난 시간표 행입니다. 기록으로 남아 있고 화면·편집에서는 빠집니다.",
     en: "These slots ran out before today. They stay on record but are left out of this screen and of editing.",
   },
-  "cls.sch.rowAria": { ko: "{days} 수업", en: "Class on {days}" },
   // 주당 시수 — 붙은 교시를 합친 뒤의 길이라 `주 1시간 40분`처럼 읽힌다.
   "cls.sch.min": { ko: "{m}분", en: "{m} min" },
   "cls.sch.hour": { ko: "{h}시간", en: "{h} h" },

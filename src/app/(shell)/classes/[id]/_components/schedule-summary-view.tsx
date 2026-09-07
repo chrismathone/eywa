@@ -1,18 +1,21 @@
 import {
-  DAY_ORDER,
   formatDays,
   formatMinutes,
-  type DayKey,
-  type ScheduleRow,
+  type ScheduleDayRow,
   type ScheduleSummary,
 } from "@/features/classes/schedule-summary";
 import { sheetDowLabel, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /**
- * 반 상세 '시간표' 카드 본문 — 시각으로 묶은 줄 + 요일 스트립.
+ * 반 상세 '시간표' 카드 본문 — **요일이 줄의 주인**, 그 요일에 앉는 시간대가 오른쪽에 선다.
  *
- * 왜 이 모양인가(2026-07-30): 전엔 `class_schedules` 한 행 = 한 줄이라 월~금 2교시 반이 25줄이었고,
- * 그중 15줄은 이미 끝난 배치였다. 시각으로 묶으면 2줄이고, 요일은 읽는 게 아니라 **보는** 편이 빠르다.
+ * 왜 이 모양인가:
+ * · 2026-07-30 — `class_schedules` 한 행 = 한 줄이라 월~금 2교시 반이 25줄이었다(그중 15줄은 끝난 배치).
+ *   묶어서 2줄로 줄였다. **이 압축은 유지한다.**
+ * · 2026-09-07 — 원장 지시 *"요일을 기준으로 시간대를 표시해주면 좋을듯. 시간대를 기준으로 요일을
+ *   표시하지말고"* → 축을 뒤집었다. 사람이 반을 떠올리는 순서가 "화요일엔 몇 시부터"라서다.
+ *   ⚠️ **요일을 한 줄씩 세우지 않는다** — 시각 구성이 같은 요일은 묶는다(`groupByDay`). 안 그러면
+ *      월~금 반이 5줄이 되어 2026-07-30에 줄인 것을 그대로 되돌린다.
  * ⚠️ 뺀 행(만료·예정)은 반드시 아래에 밝힌다 — 조용히 숨기면 "내가 넣은 교시가 왜 없지"가 된다.
  */
 export function ScheduleSummaryView({
@@ -22,15 +25,10 @@ export function ScheduleSummaryView({
   schedule: ScheduleSummary;
   lang: SheetLang;
 }) {
-  const { current, upcoming, upcomingFrom, pastCount } = schedule;
+  const { byDay, upcomingByDay, upcomingFrom, pastCount } = schedule;
   const weekly = formatMinutes(schedule.minutes, lang);
-  // 주말을 쓰는 반만 토·일 칸을 편다(대부분 반은 평일뿐이라 빈 칸 두 개가 노이즈).
-  const usesWeekend = [...current, ...upcoming].some((r) =>
-    r.days.some((d) => d === "sat" || d === "sun"),
-  );
-  const axis = usesWeekend ? DAY_ORDER : DAY_ORDER.slice(0, 5);
 
-  if (current.length === 0 && upcoming.length === 0) {
+  if (byDay.length === 0 && upcomingByDay.length === 0) {
     return (
       <p className="text-muted-foreground py-2 text-sm">
         {sheetT(lang, "cls.sch.none")}
@@ -41,7 +39,7 @@ export function ScheduleSummaryView({
 
   return (
     <div className="space-y-3">
-      {current.length > 0 ? (
+      {byDay.length > 0 ? (
         <>
           <p className="text-muted-foreground text-xs">
             <span className="text-foreground font-medium">{formatDays(schedule.days, lang)}</span>
@@ -51,8 +49,8 @@ export function ScheduleSummaryView({
             {weekly ? <span className="num">{sheetTf(lang, "cls.sch.weekly", { v: weekly })}</span> : null}
           </p>
           <ul className="space-y-1.5">
-            {current.map((row) => (
-              <RowItem key={`${row.startTime}-${row.endTime}`} row={row} axis={axis} lang={lang} />
+            {byDay.map((row) => (
+              <DayRowItem key={row.days.join(",")} row={row} lang={lang} />
             ))}
           </ul>
         </>
@@ -60,7 +58,7 @@ export function ScheduleSummaryView({
         <p className="text-muted-foreground text-xs">{sheetT(lang, "cls.sch.notStarted")}</p>
       )}
 
-      {upcoming.length > 0 ? (
+      {upcomingByDay.length > 0 ? (
         <div className="space-y-1.5">
           <p className="text-chart-1 text-xs font-medium">
             {upcomingFrom
@@ -68,8 +66,8 @@ export function ScheduleSummaryView({
               : sheetT(lang, "cls.sch.startsSoon")}
           </p>
           <ul className="space-y-1.5">
-            {upcoming.map((row) => (
-              <RowItem key={`up-${row.startTime}-${row.endTime}`} row={row} axis={axis} lang={lang} upcoming />
+            {upcomingByDay.map((row) => (
+              <DayRowItem key={`up-${row.days.join(",")}`} row={row} lang={lang} upcoming />
             ))}
           </ul>
         </div>
@@ -80,45 +78,44 @@ export function ScheduleSummaryView({
   );
 }
 
-function RowItem({
+/**
+ * 한 줄 = 요일 묶음(왼쪽) + 그 요일에 앉는 시간대들(오른쪽).
+ * ⚠️ 요일 칩은 **이 줄의 요일만** 세운다 — 월~일 축을 통째로 깔면 다시 "시각이 주인, 요일은 표식"으로
+ *    읽히고, 줄마다 같은 축이 반복돼 시간대가 밀린다.
+ */
+function DayRowItem({
   row,
-  axis,
   lang,
   upcoming,
 }: {
-  row: ScheduleRow;
-  axis: DayKey[];
+  row: ScheduleDayRow;
   lang: SheetLang;
   upcoming?: boolean;
 }) {
   return (
     <li
-      className={`border-border flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-md border px-3 py-2 ${
+      className={`border-border flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border px-3 py-2 ${
         upcoming ? "bg-card border-dashed" : "bg-muted/30"
       }`}
     >
-      <span className="num text-foreground text-sm font-medium">
-        {row.startTime} – {row.endTime}
+      <span className="flex items-center gap-1" aria-label={formatDays(row.days, lang)}>
+        {row.days.map((d) => (
+          <span
+            key={d}
+            aria-hidden
+            /* ⚠️ 영어 요일은 세 글자라 20px 고정에 안 들어간다 — 목록 화면 알약과 같은 규약. */
+            className="bg-primary text-primary-foreground inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-medium"
+          >
+            {sheetDowLabel(d, lang)}
+          </span>
+        ))}
       </span>
-      <span
-        className="flex items-center gap-1"
-        aria-label={sheetTf(lang, "cls.sch.rowAria", { days: formatDays(row.days, lang) })}
-      >
-        {axis.map((d) => {
-          const on = row.days.includes(d);
-          return (
-            <span
-              key={d}
-              aria-hidden
-              /* ⚠️ 영어 요일은 세 글자라 20px 고정에 안 들어간다 — 목록 화면 알약과 같은 규약. */
-              className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-medium ${
-                on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground/40"
-              }`}
-            >
-              {sheetDowLabel(d, lang)}
-            </span>
-          );
-        })}
+      <span className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+        {row.ranges.map((r) => (
+          <span key={`${r.start}-${r.end}`} className="num text-foreground text-sm font-medium">
+            {r.start} – {r.end}
+          </span>
+        ))}
       </span>
     </li>
   );

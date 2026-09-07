@@ -48,6 +48,22 @@ export type ScheduleRow = {
   minutes: number;
 };
 
+/**
+ * 한 줄 = **같은 시각 구성을 쓰는 요일 묶음**(2026-09-07 원장 지시 *"요일을 기준으로 시간대를 표시해주면
+ * 좋을듯. 시간대를 기준으로 요일을 표시하지말고"*). `ScheduleRow`(시각이 주인, 요일이 칩)의 축을 뒤집은 것.
+ *
+ * ⚠️ 요일을 **한 줄씩** 세우지 않는다 — 월~금 반이 5줄이 되어 2026-07-30에 "25줄 → 1줄"로 줄인 것을
+ *    되돌리게 된다. 시각 구성이 글자까지 같은 요일은 한 줄로 묶는다(`화·금` → 자리 2개).
+ */
+export type ScheduleDayRow = {
+  /** 이 줄이 대표하는 요일들(요일 순). */
+  days: DayKey[];
+  /** 그 요일에 앉는 자리들 — 붙은 교시는 이어져 있다(`mergeTimeRanges`). 시작시각 순. */
+  ranges: { start: string; end: string }[];
+  /** 하루에 앉는 총 분. */
+  minutes: number;
+};
+
 export type ScheduleSummary = {
   /** 오늘 유효한 시각 묶음(시작시각 순). */
   current: ScheduleRow[];
@@ -59,10 +75,22 @@ export type ScheduleSummary = {
   pastCount: number;
   /** 오늘 기준 운영 요일. ⚠️ 배정 다이얼로그·분리등원 후보는 이 값을 써야 한다(만료 요일 금지). */
   days: DayKey[];
-  /** 주당 총 회차(= current 슬롯 수). */
+  /**
+   * 주당 **앉는 횟수** — 요일축 기준(그 요일에 앉는 자리 수의 합).
+   *
+   * 🔴 시각축(`current`)으로 세면 안 된다(2026-09-07 실측 112반 중 **12반**이 어긋났다): 요일 집합이
+   *    달라 못 이은 조각이 각각 한 회로 세어져, 월요일에 15:00~17:00 한 번 앉는 반이 `주 6회`가 됐다.
+   *    이 값의 뜻은 처음부터 "교시 수가 아니라 앉는 횟수"였으니 요일축이 그 정의를 지키는 쪽이다.
+   * ⚠️ 완전 중복 슬롯(이력 겹침)은 한 번으로 센다 — 사람은 같은 시각에 두 번 앉지 못한다(실데이터 0건).
+   *    중복 자체는 `current[].count`에 그대로 남아 있어 데이터 이상을 놓치지 않는다.
+   */
   sessions: number;
   /** 주당 총 분. */
   minutes: number;
+  /** 화면용 — current를 **요일 기준**으로 뒤집은 줄들. 숫자(sessions·minutes)는 여기서 만들지 않는다. */
+  byDay: ScheduleDayRow[];
+  /** 화면용 — upcoming의 요일 기준 줄들. */
+  upcomingByDay: ScheduleDayRow[];
 };
 
 const ymd = (v: string | null | undefined): string | null =>
@@ -183,6 +211,43 @@ function mergeAdjacent(rows: ScheduleRow[]): ScheduleRow[] {
   return out.sort(byStart);
 }
 
+/**
+ * 요일 기준 줄 — 요일마다 자리를 모아 붙은 교시를 잇고, **시각 구성이 같은 요일끼리 묶는다.**
+ *
+ * 🔑 시각 묶음(`groupByTime`)과 답이 다를 수 있고 그게 맞다: `월~금 14:20~15:00` + `월 15:00~15:40`은
+ *    시각 축에선 요일 집합이 달라 못 이어 2줄이지만(`mergeAdjacent` 규칙), 요일 축에선
+ *    **월 14:20~15:40 / 화~금 14:20~15:00**으로 각 요일의 사실을 그대로 말한다.
+ * ⚠️ `mergeTimeRanges`가 완전 중복 구간을 한 번만 남긴다 — 화면 줄이 목적이라 맞다(회차·시수는
+ *    여기서 만들지 않고 `current`(ScheduleRow)가 그대로 담당한다).
+ */
+export function groupByDay(slots: SummarySlot[]): ScheduleDayRow[] {
+  const byDay = new Map<DayKey, { start: string; end: string }[]>();
+  for (const s of slots) {
+    if (dayIndex(s.dayOfWeek) < 0) continue; // 알 수 없는 요일 값은 버린다(raw 코드 노출 금지)
+    const day = s.dayOfWeek as DayKey;
+    const list = byDay.get(day) ?? [];
+    list.push({ start: hm(s.startTime), end: hm(s.endTime) });
+    byDay.set(day, list);
+  }
+  const bySig = new Map<string, ScheduleDayRow>();
+  for (const day of DAY_ORDER) {
+    const raw = byDay.get(day);
+    if (!raw) continue;
+    const ranges = mergeTimeRanges(raw);
+    const sig = ranges.map((r) => `${r.start}~${r.end}`).join("|");
+    const row = bySig.get(sig);
+    if (row) row.days.push(day);
+    else
+      bySig.set(sig, {
+        days: [day],
+        ranges,
+        minutes: ranges.reduce((n, r) => n + slotMinutes(r.start, r.end), 0),
+      });
+  }
+  // 요일 축이므로 **가장 이른 요일 순** — 시각 순으로 정렬하면 다시 시각이 주인이 된다.
+  return [...bySig.values()].sort((a, b) => dayIndex(a.days[0]) - dayIndex(b.days[0]));
+}
+
 export function summarizeSchedule(slots: SummarySlot[], today: string): ScheduleSummary {
   const current: SummarySlot[] = [];
   const upcoming: SummarySlot[] = [];
@@ -201,6 +266,7 @@ export function summarizeSchedule(slots: SummarySlot[], today: string): Schedule
     }
   }
   const currentRows = groupByTime(current);
+  const dayRows = groupByDay(current);
   const days = DAY_ORDER.filter((d) => currentRows.some((r) => r.days.includes(d)));
   return {
     current: currentRows,
@@ -208,8 +274,13 @@ export function summarizeSchedule(slots: SummarySlot[], today: string): Schedule
     upcomingFrom,
     pastCount,
     days,
-    sessions: currentRows.reduce((n, r) => n + r.count, 0),
+    sessions: dayRows.reduce((n, r) => n + r.days.length * r.ranges.length, 0),
+    // ⚠️ 시수는 **시각축 그대로** 둔다 — 이어붙여도 총합이 안 변한다는 성질이 테스트로 잠겨 있고,
+    //    중복 슬롯도 정직하게 더한다(회차와 달리 "두 번 적힌 40분"은 데이터 이상으로 남는 편이 낫다).
+    //    실측 112반 전부 두 축의 분(分)이 같다 — 갈릴 일이 있다면 그건 중복 행이 있다는 신호다.
     minutes: currentRows.reduce((n, r) => n + r.minutes * r.count, 0),
+    byDay: dayRows,
+    upcomingByDay: groupByDay(upcoming),
   };
 }
 
