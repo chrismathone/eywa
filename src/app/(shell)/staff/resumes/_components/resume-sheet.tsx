@@ -27,12 +27,15 @@ import type { SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { useJobTitleResolver, useSubjectMaps } from "@/features/owner/operations-context";
+import { sheetT, type SheetDictKey } from "@/features/teacher-view/i18n";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { subjectsFromDepartment } from "@/features/staff/department-subjects";
 import { autoJobTitle } from "@/features/staff/department-job-titles";
 import {
   CAREER_ROWS,
   DYNAMIC_ROWS_MAX,
   EDU_ROWS,
+  EMPLOYMENT_TYPE_EN,
   EMPLOYMENT_TYPES,
   emptyCareer,
   emptyCert,
@@ -72,18 +75,55 @@ const inputBase =
 
 const V = (s: string) => s || " ";
 
+/**
+ * 종이 칸 글자 — **화면만** 뷰어 언어를 따르고 **인쇄물은 언제나 한국어**다
+ * (원장 2026-09-04 *"화면만 갈라서"* — 인쇄물은 학원이 보관하는 한국어 인사 서류다).
+ *
+ * 🔑 인쇄는 `window.print()`로 **같은 DOM**을 찍는다 → 언어를 가를 자리가 CSS뿐이라 두 낱말을
+ *    함께 싣고 미디어로 가른다. 한국어면 조각을 하나만 그려서 DOM이 두 배가 되지 않는다.
+ * 🔴 영어만 남기지 말 것 — 그러면 **인쇄된 인사 서류가 영어**가 된다.
+ */
+function PaperText({ ko, en }: { ko: string; en: string }) {
+  if (ko === en) return <>{ko}</>;
+  return (
+    <>
+      <span className="print:hidden">{en}</span>
+      <span className="hidden print:inline">{ko}</span>
+    </>
+  );
+}
+
+/** 사전 키로 적는 종이 칸 글자 — 위 규약 그대로. */
+function P({ k }: { k: SheetDictKey }) {
+  const lang = useSheetLang();
+  if (lang === "ko") return <>{sheetT("ko", k)}</>;
+  return <PaperText ko={sheetT("ko", k)} en={sheetT("en", k)} />;
+}
+
+/**
+ * **저장값**의 표기(근무요일·근무형태·서류 확인) — 값은 한 글자도 안 바뀌고 그리는 글자만 바뀐다.
+ * ⚠️ 회사 구분·근무부서·직급은 여기 안 태운다 — 조직·직급 이름이라 한국어 그대로가 정본이다
+ *    (학원설정 직급을 안 옮기는 것과 같은 축).
+ */
+function PV({ ko, en }: { ko: string; en: string }) {
+  const lang = useSheetLang();
+  if (lang === "ko") return <>{ko}</>;
+  return <PaperText ko={ko} en={en} />;
+}
+
 function SectionHead({ children }: { children: React.ReactNode }) {
   return <h2 className="text-foreground mt-5 mb-1.5 text-[13px] font-bold print:mt-3 print:text-[12px]">{children}</h2>;
 }
 
 /** 동적 섹션의 행 +/− 버튼 — 마지막 행에 입력하면 자동으로도 늘어나고, 버튼으로도 조절(원장 요청). */
 function RowButtons({ label, onAdd, onRemove }: { label: string; onAdd: () => void; onRemove: () => void }) {
+  const tf = useSheetTf();
   return (
     <div className="print:hidden mt-1 flex items-center justify-end gap-1">
       <button
         type="button"
         onClick={onAdd}
-        aria-label={`${label} 행 추가`}
+        aria-label={tf("res.rows.add", { label })}
         className="border-line text-text-dim hover:text-foreground hover:border-primary/40 inline-flex size-6 items-center justify-center rounded-md border transition"
       >
         <Plus size={12} aria-hidden="true" />
@@ -91,7 +131,7 @@ function RowButtons({ label, onAdd, onRemove }: { label: string; onAdd: () => vo
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`${label} 마지막 행 삭제`}
+        aria-label={tf("res.rows.removeLast", { label })}
         className="border-line text-text-dim hover:text-foreground hover:border-primary/40 inline-flex size-6 items-center justify-center rounded-md border transition"
       >
         <Minus size={12} aria-hidden="true" />
@@ -162,18 +202,19 @@ function DynInput({
  * 그 사이 재클릭하면 id 없는 폼이 한 번 더 제출돼 **같은 사람 이력서가 2건** 생긴다.
  */
 function SaveButton({ done = false }: { done?: boolean }) {
+  const t = useSheetT();
   const { pending } = useFormStatus();
   const busy = pending || done;
   return (
     <Button type="submit" disabled={busy}>
       {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-      저장
+      {t("res.save")}
     </Button>
   );
 }
 
 /** 학력 행 안내문 — 위에서부터 시간순(원장 지시 2026-07-29). 행이 더 있으면 일반 라벨로 폴백. */
-const EDU_PLACEHOLDERS = ["고등학교", "대학교", "대학원"];
+const EDU_PLACEHOLDER_KEYS = ["res.edu.ph.hs", "res.edu.ph.uni", "res.edu.ph.grad"] as const;
 
 /** photos 배열 → 고정 슬롯 배열(길이 RESUME_PHOTO_SLOTS, 빈 슬롯 null). */
 const slotify = <T,>(arr: readonly T[] | undefined): (T | null)[] =>
@@ -245,6 +286,9 @@ export function ResumeSheet({
   syncsToAccount?: boolean;
 }) {
   const isPublic = !!publicToken;
+  // 화면 언어 — provider는 **강사 미니셸**에만 걸려 있어 사무실 풀셸·QR 공개 폼은 한국어 그대로다.
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [editing, setEditing] = useState(startEditing);
   const [state, formAction] = useActionState<ResumeActionState, FormData>(
     submitAction ?? saveStaffResume,
@@ -445,12 +489,12 @@ export function ResumeSheet({
       fd.set("size", String(file.size));
       const res = await issueResumePhotoTicket(undefined, fd);
       const ticket = res?.ticket;
-      if (!ticket) throw new Error(res?.error ?? "업로드 티켓 발급 실패");
+      if (!ticket) throw new Error(res?.error ?? t("res.photo.ticketFail"));
       await uploadToTicket(ticket, file);
       setPhotos((prev) => prev.map((p, i) => (i === slot ? ticket.path : p)));
       setPreviews((prev) => prev.map((p, i) => (i === slot ? URL.createObjectURL(file) : p)));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "사진 업로드에 실패했습니다");
+      toast.error(e instanceof Error ? e.message : t("res.photo.uploadFail"));
     } finally {
       setUploadingSlot(null);
     }
@@ -522,31 +566,35 @@ export function ResumeSheet({
   // 기존 직원 연결 작성은 종전대로 "이력서".
   // ⚠️ 직원등록 = ① 사무실 '직원 등록'(계정 섹션이 있는 신규) ② **QR 공개 등록**(isPublic) 둘 다다 —
   //    공개 경로는 assignableRoles를 안 넘겨서(역할이 토큰에 박혀 있다) 조건에서 빠져 "이력서"가 떴다(실측).
-  const sheetTitle =
-    !id && !staffUserId && (isPublic || (assignableRoles?.length ?? 0) > 0) ? "직원 명부" : "이력서";
+  const sheetTitleKey: SheetDictKey =
+    !id && !staffUserId && (isPublic || (assignableRoles?.length ?? 0) > 0)
+      ? "res.title.roster"
+      : "res.title.resume";
   const sheet = (
     <div className="resume-sheet paper-scale border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
-      <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]">{sheetTitle}</h1>
+      <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]"><P k={sheetTitleKey} /></h1>
 
-      <SectionHead>1. 인적사항</SectionHead>
+      <SectionHead><P k="res.sec.personal" /></SectionHead>
       <table className={T}>
         <tbody>
           <tr>
-            <th className={`${head} w-28`}>성명</th>
+            <th className={`${head} w-28`}><P k="res.f.name" /></th>
             <td className={cell}>
-              {field("p_name", p.name, { ph: "성명" })}
+              {field("p_name", p.name, { ph: t("res.f.name") })}
               {/* 개명은 라벨 교체가 아니다 — 옛 이름을 키로 쓰던 과거 기록(교재요청 소유·옛 보고서 귀속)까지
                   서버가 함께 옮긴다. 저장하고 나서 알면 늦으므로 칸 옆에 적는다. */}
               {editing && syncsToAccount ? (
                 <p className="text-text-faint mt-1 text-[11px] leading-snug print:hidden">
-                  바꾸면 <b className="text-text-dim">앱 표시 이름</b>도 함께 바뀝니다
+                  {t("res.sync.name.a")}
+                  <b className="text-text-dim">{t("res.sync.name.b")}</b>
+                  {t("res.sync.name.c")}
                 </p>
               ) : null}
             </td>
-            <th className={`${head} w-28`}>영문</th>
-            <td className={cell}>{field("p_nameEn", p.nameEn, { ph: "영문 이름" })}</td>
+            <th className={`${head} w-28`}><P k="res.f.nameEn" /></th>
+            <td className={cell}>{field("p_nameEn", p.nameEn, { ph: t("res.ph.nameEn") })}</td>
             {/* 증명사진 2장 — 직원 얼굴 구별용. 한 칸에서 ‹ › 슬라이드로 넘긴다(원장 지시 2026-07-28). */}
-            <td className={`${cell} w-[104px] align-top print:w-[80px]`} rowSpan={4} data-label="증명사진">
+            <td className={`${cell} w-[104px] align-top print:w-[80px]`} rowSpan={4} data-label={t("res.f.photo")}>
               {(() => {
                 const slot = Math.min(photoSlide, RESUME_PHOTO_SLOTS - 1);
                 const url = editing ? previews[slot] : (photoUrls?.[slot] ?? null);
@@ -562,11 +610,11 @@ export function ResumeSheet({
                         // object-cover는 3:4 틀에 맞춰 원본을 잘라내므로 세로로 긴 원본(폰 카메라)에서 얼굴이 통째로
                         // 날아간다 → contain으로 원본 비율을 유지해 잘림 0(남는 자리는 배경). PC·모바일 결과 동일.
                         // eslint-disable-next-line @next/next/no-img-element -- signed URL/objectURL 미리보기(최적화 불필요)
-                        <img src={url} alt={`증명사진 ${slot + 1}`} className="size-full object-contain" />
+                        <img src={url} alt={tf("res.photo.alt", { n: slot + 1 })} className="size-full object-contain" />
                       ) : hasPath ? (
-                        <span className="text-text-faint px-1 text-center text-[10px]">사진 첨부됨</span>
+                        <span className="text-text-faint px-1 text-center text-[10px]">{t("res.photo.attached")}</span>
                       ) : (
-                        <span className="text-text-faint px-1 text-center text-[10px]">사진 {slot + 1}</span>
+                        <span className="text-text-faint px-1 text-center text-[10px]">{tf("res.photo.slot", { n: slot + 1 })}</span>
                       )}
                     </div>
                     {RESUME_PHOTO_SLOTS > 1 ? (
@@ -574,7 +622,7 @@ export function ResumeSheet({
                         <button
                           type="button"
                           onClick={() => step(-1)}
-                          aria-label="이전 사진"
+                          aria-label={t("res.photo.prev")}
                           className="text-text-dim hover:text-foreground px-0.5 text-[11px] leading-none"
                         >
                           ‹
@@ -584,7 +632,7 @@ export function ResumeSheet({
                             key={i}
                             type="button"
                             onClick={() => setPhotoSlide(i)}
-                            aria-label={`사진 ${i + 1} 보기`}
+                            aria-label={tf("res.photo.show", { n: i + 1 })}
                             aria-current={i === slot}
                             className={`size-1.5 rounded-full transition ${i === slot ? "bg-primary" : "bg-line"}`}
                           />
@@ -592,7 +640,7 @@ export function ResumeSheet({
                         <button
                           type="button"
                           onClick={() => step(1)}
-                          aria-label="다음 사진"
+                          aria-label={t("res.photo.next")}
                           className="text-text-dim hover:text-foreground px-0.5 text-[11px] leading-none"
                         >
                           ›
@@ -603,7 +651,11 @@ export function ResumeSheet({
                     {editing && !isPublic ? (
                       <div className="print:hidden mt-0.5 flex items-center justify-center gap-1.5">
                         <label className="text-primary relative cursor-pointer text-[10px] font-bold hover:underline">
-                          {uploadingSlot === slot ? "올리는 중…" : hasPath ? "변경" : "첨부"}
+                          {uploadingSlot === slot
+                            ? t("res.photo.uploading")
+                            : hasPath
+                              ? t("res.photo.change")
+                              : t("res.photo.attach")}
                           <input
                             type="file"
                             accept="image/jpeg,image/png,image/webp"
@@ -621,7 +673,7 @@ export function ResumeSheet({
                             onClick={() => clearPhoto(slot)}
                             className="text-text-dim text-[10px] hover:underline"
                           >
-                            삭제
+                            {t("res.delete")}
                           </button>
                         ) : null}
                       </div>
@@ -636,19 +688,19 @@ export function ResumeSheet({
             </td>
           </tr>
           <tr>
-            <th className={head}>주민등록번호</th>
+            <th className={head}><P k="res.f.rrn" /></th>
             <td className={`${cell} num`} colSpan={3}>
               {field("p_residentId", p.residentId, { ph: "000000-0000000" })}
             </td>
           </tr>
           <tr>
-            <th className={head}>주소</th>
+            <th className={head}><P k="res.f.address" /></th>
             <td className={cell} colSpan={3}>
-              {field("p_address", p.address, { ph: "주소" })}
+              {field("p_address", p.address, { ph: t("res.f.address") })}
             </td>
           </tr>
           <tr>
-            <th className={head}>전화번호</th>
+            <th className={head}><P k="res.f.phone" /></th>
             <td className={`${cell} num`}>{field("p_phone", p.phone, { ph: "010-0000-0000" })}</td>
             <th className={head}>E-mail</th>
             <td className={cell}>
@@ -657,7 +709,9 @@ export function ResumeSheet({
                   종이 서식엔 없는 화면 전용 안내라 인쇄에서 뺀다. */}
               {editing && syncsToAccount ? (
                 <p className="text-text-faint mt-1 text-[11px] leading-snug print:hidden">
-                  이 주소를 바꾸면 <b className="text-text-dim">로그인 아이디도 함께</b> 바뀝니다
+                  {t("res.sync.email.a")}
+                  <b className="text-text-dim">{t("res.sync.email.b")}</b>
+                  {t("res.sync.email.c")}
                 </p>
               ) : null}
             </td>
@@ -665,37 +719,39 @@ export function ResumeSheet({
         </tbody>
       </table>
 
-      <SectionHead>2. 학력사항</SectionHead>
+      <SectionHead><P k="res.sec.education" /></SectionHead>
       <table className={T}>
         <thead>
           <tr>
-            <th className={`${head} w-36`}>재학 기간</th>
-            <th className={head}>학교명</th>
-            <th className={head}>전공</th>
-            <th className={`${head} w-16`}>학점</th>
-            <th className={head}>소재지</th>
+            <th className={`${head} w-36`}><P k="res.f.eduPeriod" /></th>
+            <th className={head}><P k="res.f.school" /></th>
+            <th className={head}><P k="res.f.major" /></th>
+            <th className={`${head} w-16`}><P k="res.f.gpa" /></th>
+            <th className={head}><P k="res.f.location" /></th>
           </tr>
         </thead>
         <tbody>
           {(editing ? edus : data.education).map((r, i) => (
             <tr key={i}>
-              <td className={`${cell} num text-center`} data-label="재학 기간">
+              <td className={`${cell} num text-center`} data-label={t("res.f.eduPeriod")}>
                 {eduField(i, "period", r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
               </td>
               {/* 위에서부터 시간순 — 고등학교 → 대학교 → 대학원(원장 지시 2026-07-29, 종전 역순에서 뒤집음).
                   남는 행은 일반 라벨(대학원 위 학력을 강요하지 않는다). */}
-              <td className={cell} data-label="학교명">
-                {eduField(i, "school", r.school, { ph: EDU_PLACEHOLDERS[i] ?? "학교명" })}
+              <td className={cell} data-label={t("res.f.school")}>
+                {eduField(i, "school", r.school, {
+                  ph: EDU_PLACEHOLDER_KEYS[i] ? t(EDU_PLACEHOLDER_KEYS[i]) : t("res.f.school"),
+                })}
               </td>
-              <td className={cell} data-label="전공">
-                {eduField(i, "major", r.major, { ph: "전공" })}
+              <td className={cell} data-label={t("res.f.major")}>
+                {eduField(i, "major", r.major, { ph: t("res.f.major") })}
               </td>
               {/* 학점만 placeholder가 없어 빈 상자로 보이고 보조기술에도 이름이 없었다 — ph로 이름 부여. */}
-              <td className={`${cell} text-center`} data-label="학점">
-                {eduField(i, "gpa", r.gpa, { ph: "학점", align: "center" })}
+              <td className={`${cell} text-center`} data-label={t("res.f.gpa")}>
+                {eduField(i, "gpa", r.gpa, { ph: t("res.f.gpa"), align: "center" })}
               </td>
-              <td className={cell} data-label="소재지">
-                {eduField(i, "location", r.location, { ph: "소재지" })}
+              <td className={cell} data-label={t("res.f.location")}>
+                {eduField(i, "location", r.location, { ph: t("res.f.location") })}
               </td>
             </tr>
           ))}
@@ -703,40 +759,40 @@ export function ResumeSheet({
       </table>
       {editing ? (
         <RowButtons
-          label="학력"
+          label={t("res.rows.education")}
           onAdd={() => addRow(setEdus, emptyEducation)}
           onRemove={() => removeLastRow(setEdus, EDU_ROWS)}
         />
       ) : null}
 
-      <SectionHead>3. 경력사항</SectionHead>
+      <SectionHead><P k="res.sec.career" /></SectionHead>
       <table className={T}>
         <thead>
           <tr>
-            <th className={head}>직장명</th>
-            <th className={`${head} w-36`}>근무 기간</th>
-            <th className={head}>담당 업무</th>
-            <th className={`${head} w-24`}>월급여</th>
-            <th className={head}>퇴직 사유</th>
+            <th className={head}><P k="res.f.employer" /></th>
+            <th className={`${head} w-36`}><P k="res.f.workPeriod" /></th>
+            <th className={head}><P k="res.f.duties" /></th>
+            <th className={`${head} w-24`}><P k="res.f.salary" /></th>
+            <th className={head}><P k="res.f.leaveReason" /></th>
           </tr>
         </thead>
         <tbody>
           {(editing ? careers : data.career).map((r, i) => (
             <tr key={i}>
-              <td className={cell} data-label="직장명">
-                {carField(i, "company", r.company, { ph: "직장명" })}
+              <td className={cell} data-label={t("res.f.employer")}>
+                {carField(i, "company", r.company, { ph: t("res.f.employer") })}
               </td>
-              <td className={`${cell} num text-center`} data-label="근무 기간">
+              <td className={`${cell} num text-center`} data-label={t("res.f.workPeriod")}>
                 {carField(i, "period", r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
               </td>
-              <td className={cell} data-label="담당 업무">
-                {carField(i, "duties", r.duties, { ph: "담당 업무" })}
+              <td className={cell} data-label={t("res.f.duties")}>
+                {carField(i, "duties", r.duties, { ph: t("res.f.duties") })}
               </td>
-              <td className={`${cell} num text-right`} data-label="월급여">
-                {carField(i, "salary", r.salary, { ph: "월급여", align: "right" })}
+              <td className={`${cell} num text-right`} data-label={t("res.f.salary")}>
+                {carField(i, "salary", r.salary, { ph: t("res.f.salary"), align: "right" })}
               </td>
-              <td className={cell} data-label="퇴직 사유">
-                {carField(i, "leaveReason", r.leaveReason, { ph: "퇴직 사유" })}
+              <td className={cell} data-label={t("res.f.leaveReason")}>
+                {carField(i, "leaveReason", r.leaveReason, { ph: t("res.f.leaveReason") })}
               </td>
             </tr>
           ))}
@@ -744,73 +800,73 @@ export function ResumeSheet({
       </table>
       {editing ? (
         <RowButtons
-          label="경력"
+          label={t("res.rows.career")}
           onAdd={() => addRow(setCareers, emptyCareer)}
           onRemove={() => removeLastRow(setCareers, CAREER_ROWS)}
         />
       ) : null}
 
-      <SectionHead>4. 자격증 및 외국어 능력</SectionHead>
+      <SectionHead><P k="res.sec.cert" /></SectionHead>
       <table className={T}>
         <thead>
           <tr>
-            <th className={head}>자격증 취득사항</th>
-            <th className={`${head} w-32`}>취득년월일</th>
-            <th className={head}>발행처</th>
+            <th className={head}><P k="res.f.cert" /></th>
+            <th className={`${head} w-32`}><P k="res.f.certDate" /></th>
+            <th className={head}><P k="res.f.issuer" /></th>
           </tr>
         </thead>
         <tbody>
           {(editing ? certs : data.certificates).map((r, i) => (
             <tr key={i}>
-              <td className={cell} data-label="자격증 취득사항">
-                {certField(i, "name", r.name, { ph: "자격증명" })}
+              <td className={cell} data-label={t("res.f.cert")}>
+                {certField(i, "name", r.name, { ph: t("res.ph.certName") })}
               </td>
-              <td className={`${cell} num text-center`} data-label="취득년월일">
-                {certField(i, "date", r.date, { ph: "취득년월일", align: "center" })}
+              <td className={`${cell} num text-center`} data-label={t("res.f.certDate")}>
+                {certField(i, "date", r.date, { ph: t("res.f.certDate"), align: "center" })}
               </td>
-              <td className={cell} data-label="발행처">
-                {certField(i, "issuer", r.issuer, { ph: "발행처" })}
+              <td className={cell} data-label={t("res.f.issuer")}>
+                {certField(i, "issuer", r.issuer, { ph: t("res.f.issuer") })}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       {editing ? (
-        <RowButtons label="자격증" onAdd={() => addRow(setCerts, emptyCert)} onRemove={() => removeLastRow(setCerts)} />
+        <RowButtons label={t("res.rows.cert")} onAdd={() => addRow(setCerts, emptyCert)} onRemove={() => removeLastRow(setCerts)} />
       ) : null}
       <table className={`${T} mt-2`}>
         <thead>
           <tr>
-            <th className={head}>외국어 능력</th>
-            <th className={`${head} w-32`}>시험일</th>
-            <th className={head}>점수/등급</th>
+            <th className={head}><P k="res.f.lang" /></th>
+            <th className={`${head} w-32`}><P k="res.f.testDate" /></th>
+            <th className={head}><P k="res.f.score" /></th>
           </tr>
         </thead>
         <tbody>
           {(editing ? langs : data.languages).map((r, i) => (
             <tr key={i}>
-              <td className={cell} data-label="외국어 능력">
-                {langField(i, "name", r.name, { ph: "외국어 (시험명)" })}
+              <td className={cell} data-label={t("res.f.lang")}>
+                {langField(i, "name", r.name, { ph: t("res.ph.lang") })}
               </td>
-              <td className={`${cell} num text-center`} data-label="시험일">
-                {langField(i, "testDate", r.testDate, { ph: "시험일", align: "center" })}
+              <td className={`${cell} num text-center`} data-label={t("res.f.testDate")}>
+                {langField(i, "testDate", r.testDate, { ph: t("res.f.testDate"), align: "center" })}
               </td>
-              <td className={`${cell} text-center`} data-label="점수/등급">
-                {langField(i, "score", r.score, { ph: "점수/등급", align: "center" })}
+              <td className={`${cell} text-center`} data-label={t("res.f.score")}>
+                {langField(i, "score", r.score, { ph: t("res.f.score"), align: "center" })}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       {editing ? (
-        <RowButtons label="외국어" onAdd={() => addRow(setLangs, emptyLanguage)} onRemove={() => removeLastRow(setLangs)} />
+        <RowButtons label={t("res.rows.language")} onAdd={() => addRow(setLangs, emptyLanguage)} onRemove={() => removeLastRow(setLangs)} />
       ) : null}
 
-      <SectionHead>5. 계약사항</SectionHead>
+      <SectionHead><P k="res.sec.contract" /></SectionHead>
       <table className={T}>
         <tbody>
           <tr>
-            <th className={`${head} w-32`}>회사 구분</th>
+            <th className={`${head} w-32`}><P k="res.f.company" /></th>
             <td className={cell}>
               {editing ? (
                 // 드롭다운 규약: native select 금지 → SearchableSelect(name = hidden input 제출, 컨트롤드 = 초안 복원).
@@ -819,8 +875,8 @@ export function ResumeSheet({
                   value={company}
                   onValueChange={setCompany}
                   options={RESUME_COMPANIES.map((v) => ({ value: v, label: v }))}
-                  placeholder="선택"
-                  ariaLabel="회사 구분"
+                  placeholder={t("res.ph.select")}
+                  ariaLabel={t("res.f.company")}
                   className="w-full"
                 />
               ) : (
@@ -828,7 +884,7 @@ export function ResumeSheet({
               )}
             </td>
             {/* 소속부서·근무부서 두 칸을 근무부서 한 칸으로 통합(원장 지시 2026-07-28). */}
-            <th className={`${head} w-24`}>근무부서</th>
+            <th className={`${head} w-24`}><P k="res.f.division" /></th>
             <td className={cell}>
               {editing ? (
                 <SearchableSelect
@@ -848,10 +904,10 @@ export function ResumeSheet({
                     ...RESUME_DEPARTMENTS.map((v) => ({ value: v, label: v })),
                     ...((RESUME_DEPARTMENTS as readonly string[]).includes(division) || !division
                       ? []
-                      : [{ value: division, label: `${division} (기존)` }]),
+                      : [{ value: division, label: tf("res.opt.existing", { v: division }) }]),
                   ]}
-                  placeholder="선택"
-                  ariaLabel="근무부서"
+                  placeholder={t("res.ph.select")}
+                  ariaLabel={t("res.f.division")}
                   className="w-full"
                 />
               ) : (
@@ -863,16 +919,18 @@ export function ResumeSheet({
               {editing ? (
                 <p className="text-text-faint mt-1 min-h-[15px] text-[11px] leading-[15px]">
                   {!division
-                    ? "담당 과목은 부서에 따라 자동 지정됩니다"
+                    ? t("res.subj.auto")
                     : autoSubjects.length > 0
-                      ? `담당 과목 ${autoSubjects.map((k) => subjectMaps.labelOf(k)).join(" · ")} (부서 기준 자동)`
-                      : "담당 과목 없음 (교과 부서가 아님)"}
+                      ? tf("res.subj.list", {
+                          list: autoSubjects.map((k) => subjectMaps.labelOf(k)).join(" · "),
+                        })
+                      : t("res.subj.none")}
                 </p>
               ) : null}
             </td>
           </tr>
           <tr>
-            <th className={head}>직급</th>
+            <th className={head}><P k="res.f.jobTitle" /></th>
             <td className={cell}>
               {editing ? (
                 <SearchableSelect
@@ -884,21 +942,21 @@ export function ResumeSheet({
                     ...jobTitleOptions.map((v) => ({ value: v, label: v })),
                     ...(!jobTitle || jobTitleOptions.includes(jobTitle)
                       ? []
-                      : [{ value: jobTitle, label: `${jobTitle} (기존)` }]),
+                      : [{ value: jobTitle, label: tf("res.opt.existing", { v: jobTitle }) }]),
                   ]}
-                  placeholder={division ? "선택" : "근무부서를 먼저 고르세요"}
-                  ariaLabel="직급"
+                  placeholder={division ? t("res.ph.select") : t("res.ph.divisionFirst")}
+                  ariaLabel={t("res.f.jobTitle")}
                   className="w-full"
                 />
               ) : (
                 V(c.jobTitle)
               )}
             </td>
-            <th className={head}>처리담당자</th>
-            <td className={cell}>{field("c_manager", c.manager, { ph: "처리담당자" })}</td>
+            <th className={head}><P k="res.f.manager" /></th>
+            <td className={cell}>{field("c_manager", c.manager, { ph: t("res.f.manager") })}</td>
           </tr>
           <tr>
-            <th className={head}>근무요일</th>
+            <th className={head}><P k="res.f.workDays" /></th>
             <td className={cell} colSpan={3}>
               {editing
                 ? WORKDAYS.map((d) => (
@@ -917,88 +975,91 @@ export function ResumeSheet({
                       />
                       <span className="inline-flex items-center gap-1 whitespace-nowrap">
                         {workDays.includes(d.key) ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
-                        {d.label}
+                        <PV ko={d.label} en={d.en} />
                       </span>
                     </label>
                   ))
                 : WORKDAYS.map((d) => (
                     <span key={d.key} className="mr-3 inline-flex items-center gap-1 whitespace-nowrap">
                       {c.workDays.includes(d.key) ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
-                      {d.label}
+                      <PV ko={d.label} en={d.en} />
                     </span>
                   ))}
             </td>
           </tr>
           <tr>
-            <th className={head}>급여 계약</th>
+            <th className={head}><P k="res.f.pay" /></th>
             <td className={cell} colSpan={3}>
               {editing ? (
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="whitespace-nowrap">(월급)</span>
+                  <span className="whitespace-nowrap"><P k="res.pay.monthly" /></span>
                   <span className="min-w-[8rem] flex-1">
-                    <EditInput name="c_salaryMonthly" defaultValue={c.salaryMonthly} placeholder="예: 2,800,000원" />
+                    <EditInput name="c_salaryMonthly" defaultValue={c.salaryMonthly} placeholder={t("res.ph.salaryMonthly")} />
                   </span>
-                  <span className="whitespace-nowrap">(연봉)</span>
+                  <span className="whitespace-nowrap"><P k="res.pay.annual" /></span>
                   <span className="min-w-[8rem] flex-1">
                     {/* placeholder가 "연봉"이면 라벨을 값으로 오입력하기 쉽다(실사고: 시트에 "연봉 연봉") — 예시 금액으로. */}
-                    <EditInput name="c_salaryAnnual" defaultValue={c.salaryAnnual} placeholder="예: 40,000,000원" />
+                    <EditInput name="c_salaryAnnual" defaultValue={c.salaryAnnual} placeholder={t("res.ph.salaryAnnual")} />
                   </span>
                 </span>
               ) : (
                 <>
-                  (월급) {c.salaryMonthly || "      "} &nbsp;&nbsp; (연봉) {c.salaryAnnual || " "}
+                  <P k="res.pay.monthly" /> {c.salaryMonthly || "      "} &nbsp;&nbsp;{" "}
+                  <P k="res.pay.annual" /> {c.salaryAnnual || " "}
                 </>
               )}
             </td>
           </tr>
           <tr>
-            <th className={head}>근무형태</th>
+            <th className={head}><P k="res.f.empType" /></th>
             <td className={cell} colSpan={3}>
               <input type="hidden" name="c_employmentType" value={editing ? empType : ""} />
               {/* ■/□는 종이 서식을 재현한 **그림**이라 보조기술엔 상태가 안 전달된다 —
                   편집은 aria-pressed(토글 버튼), 뷰는 sr-only 텍스트로 선택 여부를 함께 알린다. */}
               {editing
-                ? EMPLOYMENT_TYPES.map((t) => (
+                ? EMPLOYMENT_TYPES.map((emp) => (
                     <button
-                      key={t}
+                      key={emp}
                       type="button"
-                      aria-pressed={t === empType}
-                      onClick={() => setEmpType((prev) => (prev === t ? "" : t))}
+                      aria-pressed={emp === empType}
+                      onClick={() => setEmpType((prev) => (prev === emp ? "" : emp))}
                       className="mr-3 inline-flex cursor-pointer items-center gap-1 whitespace-nowrap"
                     >
-                      {t === empType ? "■" : "□"} {t}
+                      {emp === empType ? "■" : "□"} <PV ko={emp} en={EMPLOYMENT_TYPE_EN[emp] ?? emp} />
                     </button>
                   ))
-                : EMPLOYMENT_TYPES.map((t) => (
+                : EMPLOYMENT_TYPES.map((emp) => (
                     // relative — 안의 sr-only(absolute)가 main 클리핑을 빠져나가지 않게(위 라벨과 같은 이유).
-                    <span key={t} className="relative mr-3 whitespace-nowrap">
-                      {t === c.employmentType ? "■" : "□"} {t}
-                      <span className="sr-only">{t === c.employmentType ? " 선택됨" : " 선택 안 함"}</span>
+                    <span key={emp} className="relative mr-3 whitespace-nowrap">
+                      {emp === c.employmentType ? "■" : "□"} <PV ko={emp} en={EMPLOYMENT_TYPE_EN[emp] ?? emp} />
+                      <span className="sr-only">
+                        {emp === c.employmentType ? t("res.sr.selected") : t("res.sr.notSelected")}
+                      </span>
                     </span>
                   ))}
             </td>
           </tr>
           <tr>
-            <th className={head}>계좌번호</th>
+            <th className={head}><P k="res.f.account" /></th>
             <td className={`${cell} num`} colSpan={3}>
               {editing ? (
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="min-w-[10rem] flex-[2]">
-                    <EditInput name="c_account" defaultValue={c.account} placeholder="계좌번호" />
+                    <EditInput name="c_account" defaultValue={c.account} placeholder={t("res.f.account")} />
                   </span>
                   <span className="min-w-[6rem] flex-1">
-                    <EditInput name="c_bank" defaultValue={c.bank} placeholder="은행명" />
+                    <EditInput name="c_bank" defaultValue={c.bank} placeholder={t("res.ph.bank")} />
                   </span>
                 </span>
               ) : (
                 <>
-                  {V(c.account)} {c.bank ? `(${c.bank})` : "(은행)"}
+                  {V(c.account)} {c.bank ? `(${c.bank})` : <P k="res.bankEmpty" />}
                 </>
               )}
             </td>
           </tr>
           <tr>
-            <th className={head}>입사일</th>
+            <th className={head}><P k="res.f.startDate" /></th>
             <td className={`${cell} num`} colSpan={3}>
               {field("c_startDate", c.startDate, { type: "date" })}
             </td>
@@ -1006,11 +1067,11 @@ export function ResumeSheet({
         </tbody>
       </table>
 
-      <SectionHead>6. 제출서류 확인</SectionHead>
+      <SectionHead><P k="res.sec.docs" /></SectionHead>
       <table className={T}>
         <tbody>
           <tr>
-            <th className={`${head} w-32`}>서류 확인</th>
+            <th className={`${head} w-32`}><P k="res.f.docs" /></th>
             <td className={cell}>
               {RESUME_CHECKS.map((item) =>
                 editing ? (
@@ -1026,14 +1087,16 @@ export function ResumeSheet({
                     />
                     <span className="inline-flex items-center gap-1 whitespace-nowrap">
                       {checks[item.key] ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
-                      {item.label}
+                      <PV ko={item.label} en={item.en} />
                     </span>
                   </label>
                 ) : (
                   <span key={item.key} className="relative mr-4 inline-flex items-center gap-1 whitespace-nowrap">
                     {data.checks[item.key] ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
-                    {item.label}
-                    <span className="sr-only">{data.checks[item.key] ? " 완료" : " 미완료"}</span>
+                    <PV ko={item.label} en={item.en} />
+                    <span className="sr-only">
+                      {data.checks[item.key] ? t("res.sr.done") : t("res.sr.notDone")}
+                    </span>
                   </span>
                 ),
               )}
@@ -1047,7 +1110,7 @@ export function ResumeSheet({
   const toolbar = (
     <div className="print:hidden flex flex-wrap items-center justify-between gap-2">
       <p className="text-text-dim text-xs">
-        {editing ? "칸을 클릭해 바로 입력하세요 — 저장해야 반영됩니다." : "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다."}
+        {editing ? t("res.hint.editing") : t("res.hint.view")}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {/* 편집 중 취소/저장은 하단 고정 FormActionBar로(다른 창 폼과 동일 위치). 뷰 모드 액션만 여기. */}
@@ -1056,7 +1119,7 @@ export function ResumeSheet({
             {canWrite ? (
               <Button type="button" onClick={startEdit}>
                 <Pencil className="size-4" />
-                수정
+                {t("res.edit")}
               </Button>
             ) : null}
             <PrintResumeButton />
@@ -1109,26 +1172,25 @@ export function ResumeSheet({
             />
             <span className="inline-flex items-center gap-1.5 text-[13px] font-bold">
               {acctRegister ? <CheckSquare size={15} aria-hidden="true" /> : <Square size={15} aria-hidden="true" />}
-              저장하면서 직원 계정도 함께 등록
+              {t("res.acct.register")}
             </span>
           </label>
           {acctRegister ? (
             <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span className="text-text-dim text-[12.5px]">시스템 역할</span>
+              <span className="text-text-dim text-[12.5px]">{t("res.acct.role")}</span>
               <SearchableSelect
                 name="acct_role"
                 value={acctRole}
                 onValueChange={setAcctRole}
                 options={assignableRoles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
-                placeholder="역할 선택"
-                ariaLabel="직원 계정 역할"
+                placeholder={t("res.acct.rolePh")}
+                ariaLabel={t("res.acct.roleAria")}
                 className="w-40"
               />
               <p className="text-text-dim w-full text-[12px]">
-                인적사항의 E-mail로 로그인 계정을 만들고, 초기 비밀번호는{" "}
-                <span className="num font-bold">{INITIAL_STAFF_PASSWORD}</span> — 본인이 로그인 후 변경합니다. 같은
-                이메일 직원이 이미 있으면 새로 만들지 않고 그 직원과 이력서를 연결합니다. 역할은 기본
-                &lsquo;강사&rsquo; — 다르면 위에서 바꿔 주세요.
+                {t("res.acct.note.a")}
+                <span className="num font-bold">{INITIAL_STAFF_PASSWORD}</span>
+                {t("res.acct.note.b")}
               </p>
             </div>
           ) : null}
@@ -1139,7 +1201,7 @@ export function ResumeSheet({
         {isPublic ? null : (
           <Button type="button" variant="outline" onClick={cancel}>
             <X className="size-4" />
-            취소
+            {t("res.cancel")}
           </Button>
         )}
         {/* 생성 성공 후 새 뷰로 이동할 때까지 잠금 유지 → 중복 INSERT 방지 */}

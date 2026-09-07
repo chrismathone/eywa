@@ -11,6 +11,10 @@ import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { rowSendStatus, summarizeSend, type SendStatus } from "../status";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
+import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
+import { CLASS_GROUP_NONE } from "../class-tags";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
 /**
  * 색은 의미색 캐논([`semantic-color.ts`](src/lib/design/semantic-color.ts)) — 발송완료=positive ·
@@ -18,12 +22,13 @@ import { classnoteBadge, type SubjectReport } from "./report-card";
  * ⚠️ 발송완료는 v4에서 primary(네이비) → positive(그린): "끝났다"는 앱 전역이 그린이라(완납·승인·출석)
  *    여기만 네이비면 같은 뜻이 화면마다 다른 색이 된다.
  */
-const STATUS_META: Record<SendStatus, { label: string; cls: string }> = {
-  sent: { label: "발송완료", cls: TONE_SOFT.positive },
-  draft: { label: "작성중", cls: TONE_SOFT.caution },
-  todo: { label: "미작성", cls: TONE_SOFT.critical },
+// 🔴 라벨은 **사전 키**다(색은 의미색 캐논 그대로) — 화면 파일에 낱말을 다시 박지 않는다.
+const STATUS_META: Record<SendStatus, { label: SheetDictKey; cls: string }> = {
+  sent: { label: "os.status.sent", cls: TONE_SOFT.positive },
+  draft: { label: "os.status.draft", cls: TONE_SOFT.caution },
+  todo: { label: "os.status.todo", cls: TONE_SOFT.critical },
   // '수업보고서 미발송' 반(0174a) — 보낼 일이 없는 행이라 **위험(빨강)이 아니라 종료(중립)**다(2026-08-19).
-  excluded: { label: "미발송 반", cls: TONE_SOFT.inert },
+  excluded: { label: "os.status.excluded", cls: TONE_SOFT.inert },
 };
 
 // 정렬 우선순위 — '보고서' 열은 가나다가 아니라 **급한 순**(미작성 먼저)이 유용하다.
@@ -37,7 +42,7 @@ const STATUS_ORDER: Record<SendStatus, number> = {
 type SortKey = "student" | "progress" | "report" | "classnote" | "views";
 
 /** 반 미배정 행을 담는 그룹 이름 — 항상 맨 끝으로 보낸다. */
-const NO_CLASS = "반 미배정";
+const NO_CLASS = CLASS_GROUP_NONE;
 
 function Chip({
   label,
@@ -60,22 +65,26 @@ export function StatusBoard({
   students,
   reports,
   onOpenCard,
-  emptyLabel = "오늘 담당 학생이 없습니다",
+  emptyLabel,
 }: {
   students: OneScreenStudent[];
   reports: Record<string, Record<string, SubjectReport>>;
   onOpenCard: (studentId: string) => void;
-  /** 빈 표 문구 — **작성 필터**로 비었을 때 "담당 학생이 없다"는 거짓말을 하지 않도록 호출부가 덮어쓴다. */
+  /** 빈 표 문구 — **작성 필터**로 비었을 때 "담당 학생이 없다"는 거짓말을 하지 않도록 호출부가 덮어쓴다.
+   *  안 넘기면 사전 기본값. */
   emptyLabel?: string;
 }) {
   const [sort, setSort] = useState<SortState<SortKey>>(null);
   const rows = buildGridRows(students);
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const sum = summarizeSend(rows, reports);
 
   if (rows.length === 0) {
     return (
       <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
-        {emptyLabel}
+        {emptyLabel ?? t("os.status.empty")}
       </div>
     );
   }
@@ -91,7 +100,7 @@ export function StatusBoard({
       case "report":
         return STATUS_ORDER[rowSendStatus(rep, r.subject)];
       case "classnote":
-        return classnoteBadge(rep?.classnoteStatus)?.label ?? null;
+        return classnoteBadge(rep?.classnoteStatus, lang)?.label ?? null;
       case "views":
         return rep?.viewCount ?? 0;
     }
@@ -118,26 +127,18 @@ export function StatusBoard({
     <div className="flex flex-col gap-3">
       {/* 요약 — 미작성이 핵심(빨강). 발송·열람은 진척. */}
       <div className="flex flex-wrap items-center gap-2">
-        <Chip label="미작성" value={sum.todo} tone="bg-danger/10 text-danger" />
+        <Chip label={t("os.status.todo")} value={sum.todo} tone="bg-danger/10 text-danger" />
+        <Chip label={t("os.status.draft")} value={sum.draft} tone="bg-amber-soft text-amber" />
+        <Chip label={t("os.status.sent")} value={sum.sent} tone="bg-primary/10 text-primary" />
         <Chip
-          label="작성중"
-          value={sum.draft}
-          tone="bg-amber-soft text-amber"
-        />
-        <Chip
-          label="발송완료"
-          value={sum.sent}
-          tone="bg-primary/10 text-primary"
-        />
-        <Chip
-          label="학부모 열람"
+          label={t("os.status.parentRead")}
           value={sum.viewed}
           tone="border-line text-text-dim border"
         />
         <span className="text-text-faint ml-auto text-xs">
-          아직 안 보낸 {sum.unsent} / 전체 {sum.total}
+          {tf("os.status.unsent", { n: sum.unsent, total: sum.total })}
           {/* 분모에서 뺀 행을 밝힌다 — 안 밝히면 "학생은 8명인데 전체가 5?"가 된다. */}
-          {sum.excluded > 0 ? ` · 미발송 반 ${sum.excluded} 제외` : ""}
+          {sum.excluded > 0 ? tf("os.status.excludedTail", { n: sum.excluded }) : ""}
         </span>
       </div>
 
@@ -146,13 +147,13 @@ export function StatusBoard({
           <thead>
             <tr className="border-line text-text-faint group border-b">
               <SortableTh sortKey="student" state={sort} onSort={setSort}>
-                학생 · 반
+                {t("os.col.student")}
               </SortableTh>
               <SortableTh sortKey="progress" state={sort} onSort={setSort}>
-                오늘 진도
+                {t("os.status.colProgress")}
               </SortableTh>
               <SortableTh sortKey="report" state={sort} onSort={setSort}>
-                보고서
+                {t("os.status.colReport")}
               </SortableTh>
               <SortableTh sortKey="classnote" state={sort} onSort={setSort}>
                 ClassNote
@@ -163,7 +164,7 @@ export function StatusBoard({
                 onSort={setSort}
                 align="right"
               >
-                열람
+                {t("os.status.colViews")}
               </SortableTh>
             </tr>
           </thead>
@@ -182,24 +183,27 @@ export function StatusBoard({
                 <tr className="bg-bg-soft border-line border-b">
                   <th colSpan={5} className="px-3 py-1.5 text-left">
                     <span className="text-foreground text-xs font-bold">
-                      {className}
+                      {/* 🔴 반 이름은 한국어 그대로(위 top-bar 주석과 같은 이유). */}
+                      {className === NO_CLASS ? t("os.status.noClass") : className}
                     </span>
                     <span className="text-text-faint ml-2 text-xs">
                       {/* ⚠️ 행 수가 아니라 **학생 수** — 한 학생이 두 과목이면 2행이라 행 수를 쓰면 인원이 부푼다. */}
-                      {new Set(groupRows.map((r) => r.student.id)).size}명
+                      {tf("os.list.count", {
+                        n: new Set(groupRows.map((r) => r.student.id)).size,
+                      })}
                     </span>
                     {todo > 0 ? (
                       <span className="text-danger ml-2 text-xs font-bold">
-                        미작성 {todo}
+                        {tf("os.status.todoN", { n: todo })}
                       </span>
                     ) : allExcluded ? (
                       // 🔴 "전원 작성"이라고 하면 거짓말이다 — 아무도 안 썼고, 쓸 일도 없는 반이다.
                       <span className="text-text-dim ml-2 text-xs font-bold">
-                        수업보고서 미발송 반 — 출결만 기록
+                        {t("os.status.noSendClass")}
                       </span>
                     ) : (
                       <span className="text-primary ml-2 text-xs font-bold">
-                        전원 작성
+                        {t("os.status.allWritten")}
                       </span>
                     )}
                   </th>
@@ -208,7 +212,7 @@ export function StatusBoard({
                   const rep = reports[r.student.id]?.[r.subject.name];
                   const status = rowSendStatus(rep, r.subject);
                   const meta = STATUS_META[status];
-                  const badge = classnoteBadge(rep?.classnoteStatus);
+                  const badge = classnoteBadge(rep?.classnoteStatus, lang);
                   const views = rep?.viewCount ?? 0;
                   return (
                     <tr
@@ -225,15 +229,15 @@ export function StatusBoard({
                         <span className="text-text-faint ml-1.5">
                           {r.subject.name}
                         </span>
-                        {r.student.attendance !== "출석" ? (
+                        {r.student.attendance !== MARK_PRESENT ? (
                           <span
                             className={`ml-1.5 rounded-pill px-1.5 py-px text-xs font-bold ${
-                              r.student.attendance === "지각"
+                              r.student.attendance === MARK_LATE
                                 ? "bg-amber-soft text-amber"
                                 : "bg-danger text-white"
                             }`}
                           >
-                            {r.student.attendance}
+                            {attendanceMarkLabel(r.student.attendance, lang)}
                           </span>
                         ) : null}
                       </td>
@@ -244,7 +248,7 @@ export function StatusBoard({
                         <span
                           className={`rounded-pill px-2 py-0.5 text-xs font-bold ${meta.cls}`}
                         >
-                          {meta.label}
+                          {t(meta.label)}
                         </span>
                       </td>
                       <td className="px-3 py-2">
@@ -261,7 +265,7 @@ export function StatusBoard({
                       <td className="px-3 py-2 text-right">
                         {views > 0 ? (
                           <span className="text-text-dim tabular text-xs">
-                            {views}회
+                            {tf("os.status.views", { n: views })}
                           </span>
                         ) : (
                           <span className="text-text-faint text-xs">—</span>

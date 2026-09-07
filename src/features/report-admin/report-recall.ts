@@ -52,17 +52,36 @@ export function isRecallable(row: RecallableRow): boolean {
  * 회수 불가 사유(한글) — 버튼 비활성 툴팁. `null` = 회수 가능.
  * ⚠️ raw 상태 코드(`success`·`queued`)를 그대로 내보내지 않는다(UI raw 코드 노출 금지 규칙).
  */
-export function recallBlockReason(row: RecallableRow): string | null {
+/**
+ * 원어민 강사 화면(en)용 같은 사유들 — 🔴 **한글 바로 옆에 둔다**(사유가 늘 때 한쪽만 채워지는 것 방지).
+ * 🔴 사무실 일괄 회수(`partitionRecallTargets`)도 같은 함수를 쓰는데 거기엔 화면 언어가 없다 →
+ *    **인자를 안 주면 한국어**가 계약이다.
+ */
+const BLOCK_REASON_EN = {
+  requested: "Already requested — the linked PC works through them in order",
+  recalled: "This report has already been recalled",
+  sending: "It is being sent — you can recall it once that finishes",
+  notSent: "This report has not gone to the parents yet",
+  noToken: "There is no share link to identify the post, so it cannot be recalled automatically — delete it in ClassNote",
+  neverPosted: "Nothing to recall — it never went up on the parent board",
+} as const;
+
+export function recallBlockReason(row: RecallableRow, lang: "ko" | "en" = "ko"): string | null {
   const s = row.classnoteStatus;
+  const en = lang === "en";
   if (isRecallable(row)) return null;
-  if (s === RECALL_REQUESTED || s === RECALLING) return "이미 회수 요청됨 — 연동 PC가 순차 처리합니다";
-  if (s === RECALLED) return "이미 회수된 보고서입니다";
-  if (s === "queued" || s === "processing") return "발송 처리 중입니다 — 끝난 뒤에 회수할 수 있습니다";
-  if (!s) return "아직 학부모에게 발송되지 않은 보고서입니다";
+  if (s === RECALL_REQUESTED || s === RECALLING)
+    return en ? BLOCK_REASON_EN.requested : "이미 회수 요청됨 — 연동 PC가 순차 처리합니다";
+  if (s === RECALLED) return en ? BLOCK_REASON_EN.recalled : "이미 회수된 보고서입니다";
+  if (s === "queued" || s === "processing")
+    return en ? BLOCK_REASON_EN.sending : "발송 처리 중입니다 — 끝난 뒤에 회수할 수 있습니다";
+  if (!s) return en ? BLOCK_REASON_EN.notSent : "아직 학부모에게 발송되지 않은 보고서입니다";
   if (s === "success" && !row.shareToken)
-    return "게시글을 특정할 공유 링크가 없어 자동 회수할 수 없습니다 — ClassNote에서 직접 삭제하세요";
+    return en
+      ? BLOCK_REASON_EN.noToken
+      : "게시글을 특정할 공유 링크가 없어 자동 회수할 수 없습니다 — ClassNote에서 직접 삭제하세요";
   // failed·too_old·name_conflict·blocked_shared·subject_off·absent·report_optout = 애초에 게시가 안 된 상태.
-  return "학부모 게시판에 올라가지 않아 회수할 것이 없습니다";
+  return en ? BLOCK_REASON_EN.neverPosted : "학부모 게시판에 올라가지 않아 회수할 것이 없습니다";
 }
 
 /**

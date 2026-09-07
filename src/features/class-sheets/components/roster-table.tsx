@@ -32,13 +32,9 @@ import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import { attendanceOrMakeup } from "../lib/makeup-roster";
-import {
-  ROSTER_FIXED_LABEL,
-  rosterColSpan,
-  rosterTextCols,
-  type RosterForm,
-  type SheetMark,
-} from "../lib/roster-form";
+import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 import { TODAY_BASE_COLS, TODAY_NAME_W } from "../lib/today-columns";
 // 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
 // (원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 여기 인라인이던 것을 추출, 동작 불변).
@@ -50,21 +46,27 @@ import {
 } from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 
-/** 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. 통합 표와 공용. */
-export const GROUP_HINT: Record<RosterGroupKey, string> = {
-  active: "",
-  makeup: "이 반 수강생은 아니지만 그날 보강으로 온 학생 — 출석부·원스크린과 같은 명단입니다",
-  withdrawn: "수강이 끝난 학생 — 종료일부터 한 달간 표시되고 그 뒤 주부터는 명단에서 빠집니다(읽기 전용)",
-  record: "현재 수강 대상이 아니지만 이 교시에 기록이 있어 표시(읽기 전용)",
+/**
+ * 섹션 라벨 행의 설명(툴팁) — 왜 이 학생이 아직 보이는지 화면이 스스로 답한다. 통합 표와 공용.
+ *
+ * 섹션 설명(마우스 오버) — **사전 키**로 든다. `active`는 설명이 없다(null).
+ * 🔴 문구를 여기 적지 말 것(세 화면이 같은 title을 쓴다 — 한 곳만 고치면 갈린다).
+ */
+export const GROUP_HINT_KEY: Record<RosterGroupKey, SheetDictKey | null> = {
+  active: null,
+  makeup: "roster.group.makeup.hint",
+  withdrawn: "roster.group.withdrawn.hint",
+  record: "roster.group.record.hint",
 };
 
-/** 접기 버튼의 접근성 이름 — `active`는 라벨 행이 없어 표 머리('학생')가 그 자리다. */
-const GROUP_TOGGLE_LABEL: Record<RosterGroupKey, string> = {
-  active: "학생 목록",
-  makeup: "보강 학생 목록",
-  withdrawn: "퇴원생 목록",
-  record: "기록 목록",
-};
+/** 섹션 설명 문자열 — 없으면 `undefined`(빈 `title=""`을 달지 않는다). */
+export function useGroupHint(): (group: RosterGroupKey) => string | undefined {
+  const t = useSheetT();
+  return (group) => {
+    const key = GROUP_HINT_KEY[group];
+    return key ? t(key) : undefined;
+  };
+}
 
 /** 섹션 접기/펼치기 셰브런 — 표 머리(active)와 라벨 행(withdrawn·record)이 같은 어포던스를 쓴다. */
 export function GroupToggle({
@@ -78,14 +80,18 @@ export function GroupToggle({
   count: number;
   onToggle: () => void;
 }) {
-  const name = GROUP_TOGGLE_LABEL[group];
+  const t = useSheetT();
+  const tf = useSheetTf();
+  // 라벨·설명은 사전이 정한다(강사뷰 영어 화면) — 화면 파일에 한글을 다시 박지 말 것.
+  const name = tf("roster.group.listAria", { name: t(GROUP_LABEL_KEY[group]) });
+  const action = t(collapsed ? "common.expand" : "common.collapse");
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      aria-label={`${name} ${collapsed ? "펼치기" : "접기"}`}
-      title={`${name} ${collapsed ? "펼치기" : "접기"}`}
+      aria-label={`${name} ${action}`}
+      title={`${name} ${action}`}
       className="hover:text-foreground inline-flex cursor-pointer items-center gap-1"
     >
       <EyIcon
@@ -93,18 +99,23 @@ export function GroupToggle({
         size={10}
         className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`}
       />
-      <span>{group === "active" ? "학생" : GROUP_LABEL_OF[group]}</span>
+      <span>{t(GROUP_LABEL_KEY[group])}</span>
       {/* 접었든 폈든 건수는 남긴다 — 접힌 섹션이 "없는 섹션"으로 보이면 안 된다. */}
       <span className="num opacity-70">{count}</span>
     </button>
   );
 }
 
-const GROUP_LABEL_OF: Record<RosterGroupKey, string> = {
-  active: "학생",
-  makeup: "보강",
-  withdrawn: "퇴원",
-  record: "기록",
+/**
+ * 섹션 이름 — **사전 키**로 든다(라벨 자체는 [i18n.ts](@/features/teacher-view/i18n) `roster.group.*`).
+ * 🔴 여기에 한글 문자열을 다시 적지 말 것: 같은 섹션이 표 머리·라벨 행·접근성 이름 세 자리에 나오는데
+ *    한 곳만 사전을 안 타면 그 자리만 한글로 남는다.
+ */
+const GROUP_LABEL_KEY: Record<RosterGroupKey, SheetDictKey> = {
+  active: "roster.group.active",
+  makeup: "roster.group.makeup",
+  withdrawn: "roster.group.withdrawn",
+  record: "roster.group.record",
 };
 
 export const RosterTable = memo(function RosterTable({
@@ -138,6 +149,9 @@ export const RosterTable = memo(function RosterTable({
 }) {
   const canMarkDate = data.canMarkAttendanceByDate[date] ?? false;
   const textCols = rosterTextCols(form);
+  const t = useSheetT();
+  const groupHint = useGroupHint();
+  const lang = useSheetLang();
   // 섹션(재원/퇴원/기록)으로 나눠 이름·종료일 순으로 정렬한 뒤 라벨 행과 함께 한 줄로 편다.
   // 표를 나누지 않고 한 <table> 안에서 라벨 행으로 가르는 이유: 열 폭(이름/출결/학교/태도/과제)이
   // 섹션마다 어긋나면 같은 명단으로 안 읽힌다. 키보드 이동(data-nav-row)은 렌더 순서로 다시 매긴다.
@@ -205,19 +219,20 @@ export const RosterTable = memo(function RosterTable({
             </th>
             {/* 가운데 세 열은 라벨을 **칸 가운데**로(원장 2026-08-06 "라벨 중앙정렬") — 값(드롭다운·숫자)이
                 칸을 꽉 채우거나 가운데 있어서 라벨만 왼쪽에 붙으면 열이 어긋나 보인다. */}
-            <th className="py-0.5 text-center font-bold">출결</th>
-            <th
-              className="py-0.5 text-center font-bold"
-              title="수업 1회 = 1유닛(기본). 시간·교시 길이와 상관없이 1이고, 다르면 여기서 고칠 수 있습니다. 급여 시수에 반영됩니다."
-            >
-              유닛
+            <th className="py-0.5 text-center font-bold">{t("roster.col.attendance")}</th>
+            <th className="py-0.5 text-center font-bold" title={t("roster.col.unit.title")}>
+              {t("roster.col.unit")}
             </th>
-            <th className="py-0.5 text-center font-bold">{ROSTER_FIXED_LABEL.attitude}</th>
+            <th className="py-0.5 text-center font-bold">{t("roster.col.attitude")}</th>
             {/* 자유 입력 칸 — 그전엔 특이사항에 섞여 있었다("… PL 7, 15문"). 형식이 제각각이라 자유 입력이다.
                 라벨은 roster-form이 정한다(기본 '시험 점수' / JJ '듣기 레벨'·'누적 암기 단어수'). */}
             {textCols.map((col) => (
-              <th key={col.field} className="py-0.5 text-center leading-tight font-bold" title={col.title}>
-                {col.label}
+              <th
+                key={col.field}
+                className="py-0.5 text-center leading-tight font-bold"
+                title={t(col.titleKey)}
+              >
+                {t(col.labelKey)}
               </th>
             ))}
             {/* 특이사항 머리도 **가운데**(원장 2026-08-19 "라벨 줄맞춤") — 이 열은 잔여 폭을 다 받아
@@ -226,7 +241,7 @@ export const RosterTable = memo(function RosterTable({
             {/* ⚠️ `whitespace-nowrap` — JJ 폼은 이 열이 30px까지 좁아져(2026-08-28 열 다이어트) 라벨이
                 두 줄로 접힌다. 접히면 그 카드만 학생 줄이 아래로 밀려 나란한 카드의 `grid-rows-subgrid`
                 줄맞춤이 깨진다(roster-form ⚠️와 같은 이유). 넘치면 접지 말고 옆으로 흘려보낸다. */}
-            <th className="rounded-r-md py-0.5 text-center font-bold whitespace-nowrap">{ROSTER_FIXED_LABEL.progressNote}</th>
+            <th className="rounded-r-md py-0.5 text-center font-bold whitespace-nowrap">{t("roster.col.note")}</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -237,7 +252,7 @@ export const RosterTable = memo(function RosterTable({
                   <td
                     colSpan={rosterColSpan(form)}
                     className="text-foreground px-1 py-0.5 text-xs font-bold"
-                    title={GROUP_HINT[row.key]}
+                    title={groupHint(row.key)}
                   >
                     <GroupToggle
                       group={row.key}
@@ -267,6 +282,7 @@ export const RosterTable = memo(function RosterTable({
                         form,
                         mark: marks[markKey] ?? null,
                         att: attendance[markKey] ?? null,
+                        lang,
                       }),
                     ]}
                   />

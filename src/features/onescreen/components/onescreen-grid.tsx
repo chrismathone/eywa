@@ -14,6 +14,7 @@ import { ClassNarrativePopover } from "./class-narrative";
 import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
 import { PrevRow } from "./prev-row";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 // 열 제목은 **가운데 정렬**(원장 2026-08-05) — 본문 값은 좌측 정렬 그대로다(읽는 흐름 유지).
 const TH = "text-text-faint px-2 py-2 text-center text-xs font-bold whitespace-nowrap";
@@ -181,10 +182,13 @@ export function OneScreenGrid({
     }
   };
 
+  const t = useSheetT();
+  const tf = useSheetTf();
+
   if (rows.length === 0) {
     return (
       <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm">
-        표시할 학생이 없습니다
+        {t("os.grid.empty")}
       </div>
     );
   }
@@ -215,12 +219,12 @@ export function OneScreenGrid({
       >
         {orderMode ? (
           <>
-            <span className="text-text-dim text-xs">↑↓로 학생 순서를 바꾼 뒤 저장하세요</span>
+            <span className="text-text-dim text-xs">{t("os.order.hint")}</span>
             <Button variant="outline" size="sm" onClick={() => setOrderMode(false)} disabled={savingOrder}>
-              취소
+              {t("os.order.cancel")}
             </Button>
             <Button size="sm" onClick={saveOrder} disabled={savingOrder}>
-              {savingOrder ? "저장 중…" : "순서 저장"}
+              {savingOrder ? t("os.order.saving") : t("os.order.save")}
             </Button>
           </>
         ) : (
@@ -278,11 +282,11 @@ export function OneScreenGrid({
               disabled={!order || bulkGen}
               title={
                 order
-                  ? "학생 표시 순서 변경 — 이 반에 저장(좌석·채점지 순서). 다음 작성에도 유지"
-                  : "반을 하나 선택하면 학생 순서를 바꿀 수 있습니다"
+                  ? t("os.order.title")
+                  : t("os.order.needClass")
               }
             >
-              순서
+              {t("os.order")}
             </Button>
           </>
         )}
@@ -332,7 +336,7 @@ export function OneScreenGrid({
                   type="checkbox"
                   checked={allChecked}
                   onChange={toggleAll}
-                  aria-label="표시 행 전체 선택"
+                  aria-label={t("os.grid.selectAll")}
                   className="accent-primary size-3.5 align-middle"
                 />
               </th>
@@ -341,20 +345,21 @@ export function OneScreenGrid({
                     (docs/design-conventions.md "고정 폭 표 칸의 가로 나열은 flex-wrap"). nowrap은 TH가 이미
                     걸고 있어 낱말이 쪼개지지는 않는다. */}
                 <span className="flex flex-wrap items-center justify-center gap-1">
-                  학생 · 반{bulkPresent ? <BulkPresentButton {...bulkPresent} /> : null}
+                  {t("os.col.student")}
+                  {bulkPresent ? <BulkPresentButton {...bulkPresent} /> : null}
                 </span>
               </th>
-              <th className={TH} title="수업타임(시수) — 기본 1. 출석부에 그대로 들어갑니다(학부모 보고서엔 미표시)">
-                타임
+              <th className={TH} title={t("os.col.units.title")}>
+                {t("os.col.units")}
               </th>
-              <th className={TH}>진도(오늘)</th>
-              {config.dailyEnabled ? <th className={TH}>일일</th> : null}
-              {config.checkEnabled ? <th className={TH}>확인</th> : null}
-              <th className={TH}>태도</th>
-              <th className={TH}>과제 수행률</th>
-              <th className={TH}>교재명 · 보강</th>
-              <th className={TH}>학부모 문구</th>
-              <th className={TH}>발송 · 편집</th>
+              <th className={TH}>{t("os.col.progress")}</th>
+              {config.dailyEnabled ? <th className={TH}>{t("os.col.daily")}</th> : null}
+              {config.checkEnabled ? <th className={TH}>{t("os.col.check")}</th> : null}
+              <th className={TH}>{t("os.col.attitude")}</th>
+              <th className={TH}>{t("os.col.homework")}</th>
+              <th className={TH}>{t("os.col.book")}</th>
+              <th className={TH}>{t("os.col.ment")}</th>
+              <th className={TH}>{t("os.col.send")}</th>
             </tr>
           </thead>
           <tbody>
@@ -368,7 +373,7 @@ export function OneScreenGrid({
                     <button
                       type="button"
                       onClick={() => setDraftOrder((p) => moveInOrder(p, row.student.id, -1))}
-                      aria-label={`${row.student.name} 위로`}
+                      aria-label={tf("os.row.up", { name: row.student.name })}
                       className={ORDER_BTN}
                     >
                       ↑
@@ -376,7 +381,7 @@ export function OneScreenGrid({
                     <button
                       type="button"
                       onClick={() => setDraftOrder((p) => moveInOrder(p, row.student.id, 1))}
-                      aria-label={`${row.student.name} 아래로`}
+                      aria-label={tf("os.row.down", { name: row.student.name })}
                       className={ORDER_BTN}
                     >
                       ↓

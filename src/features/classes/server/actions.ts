@@ -12,10 +12,14 @@ import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { parseSeatValue } from "@/features/timetable/lib/teacher-label";
 import { logAction } from "@/features/audit/server/log";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { delegationRangeLabel, validateDelegationRange } from "../delegation-window";
 import { getClassroomAssignmentData } from "./queries";
+// 🔴 반 쓰기 게이트는 **공용 함수 하나**를 지난다(강사=담임 반만) — class-scope.ts 헤더 주석 참조.
+import { requireClassWrite } from "./class-scope";
+import { CLASS_NOT_MINE_DELEGATE_ERROR, canWriteClassRecord } from "../class-write-scope";
 import { moveLiveSlotTeacher } from "./handover";
 import { detectOverlaps } from "./overlap-detect";
 import {
@@ -309,11 +313,13 @@ export async function updateClass(
   _prev: ClassFormState,
   formData: FormData,
 ): Promise<ClassFormState> {
-  const { user, error: gateError } = await requireClassWrite();
-  if (gateError || !user) return { error: gateError };
-
+  // 🔴 게이트보다 **반 id를 먼저** 읽는다 — 강사(scoped)는 자기 담임 반만 고칠 수 있어서
+  //    "누구인가"만으로는 판정이 끝나지 않는다(class-write-scope.ts).
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "반 ID가 누락되었습니다" };
+
+  const { user, error: gateError } = await requireClassWrite(id);
+  if (gateError || !user) return { error: gateError };
 
   const allowed = await allowedSubjectSet();
   const input = readForm(formData, allowed);
@@ -713,13 +719,8 @@ export async function reopenClassTerm(_prev: ClassTermState, formData: FormData)
 // ⚠️ ijw의 enrollment eager-split·배치 롤백·적용일 자동적용은 미이식(데모 과중). 적용은 수동(배너 버튼).
 export type HandoverState = { error?: string; ok?: boolean } | undefined;
 
-async function requireClassWrite() {
-  const user = await getCurrentUser();
-  if (!user) return { user: null, error: "로그인이 필요합니다" };
-  const lvl = await accessLevelTenant(user.systemRole, "classes");
-  if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "반 관리 권한이 없습니다" };
-  return { user, error: undefined as string | undefined };
-}
+// `requireClassWrite`는 [`./class-scope`](./class-scope.ts)로 이관했다 — 종전 로컬 판이 접근 수준만
+// 보고 **어느 반인지는 안 봐서**, 강사가 반 id만 바꿔 보내면 남의 반도 저장됐다(2026-09-04 원장 지시로 수정).
 
 /**
  * **학원 전체를 바꾸는 반 작업**(반 생성·강의실 자동배정) 게이트 — 관리자(full)만.
@@ -762,14 +763,14 @@ async function isAssignableTeacher(
 
 /** 강사 인수인계 예약 — 예정 강사·적용일·사유를 classes에 저장(아직 teacher_id 미변경). */
 export async function scheduleHandover(_prev: HandoverState, formData: FormData): Promise<HandoverState> {
-  const { user, error } = await requireClassWrite();
-  if (error || !user) return { error };
-
   const classId = String(formData.get("classId") ?? "").trim();
   const newTeacherId = String(formData.get("newTeacherId") ?? "").trim();
   const effectiveDate = String(formData.get("effectiveDate") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim() || null;
   if (!classId) return { error: "반 ID가 누락되었습니다" };
+
+  const { user, error } = await requireClassWrite(classId);
+  if (error || !user) return { error };
   if (!newTeacherId) return { error: "인계받을 강사를 선택해주세요" };
   if (!effectiveDate) return { error: "적용일을 입력해주세요" };
 
@@ -824,11 +825,11 @@ export async function scheduleHandover(_prev: HandoverState, formData: FormData)
 
 /** 인수인계 예약 취소 — 예정 필드 비움(teacher_id 불변). */
 export async function cancelHandover(_prev: HandoverState, formData: FormData): Promise<HandoverState> {
-  const { user, error } = await requireClassWrite();
-  if (error || !user) return { error };
-
   const classId = String(formData.get("classId") ?? "").trim();
   if (!classId) return { error: "반 ID가 누락되었습니다" };
+
+  const { user, error } = await requireClassWrite(classId);
+  if (error || !user) return { error };
 
   const supabase = await createClient();
   const { error: updErr } = await supabase
@@ -846,11 +847,11 @@ export async function cancelHandover(_prev: HandoverState, formData: FormData): 
 
 /** 인수인계 적용 — teacher_id ← pending_teacher_id로 교체하고 예정 필드 비움. */
 export async function applyHandover(_prev: HandoverState, formData: FormData): Promise<HandoverState> {
-  const { user, error } = await requireClassWrite();
-  if (error || !user) return { error };
-
   const classId = String(formData.get("classId") ?? "").trim();
   if (!classId) return { error: "반 ID가 누락되었습니다" };
+
+  const { user, error } = await requireClassWrite(classId);
+  if (error || !user) return { error };
 
   const supabase = await createClient();
   const { data: klass } = await supabase
@@ -1002,8 +1003,19 @@ async function requireDelegationWrite(
     .eq("id", classId)
     .maybeSingle();
   if (!klass) return { ok: false, error: "반을 찾을 수 없습니다" };
-  if (lvl === "scoped" && klass.teacher_id !== user.id)
-    return { ok: false, error: "담당 반만 위임할 수 있습니다 — 다른 반은 원장·실장에게 요청해주세요" };
+  // 판정은 반 수정과 **같은 순수 함수**를 쓴다 — 손으로 복사하면 반드시 갈라진다(같은 버튼 하나가
+  // 서버 둘에게 다른 답을 듣게 된다). 문구만 하는 일에 맞춰 다르다.
+  // super_admin은 새로 만든 '담임 확인'을 자동 통과한다(위 접근 수준 검사는 그대로 지난다).
+  if (
+    !canWriteClassRecord({
+      level: lvl,
+      classTeacherId: (klass.teacher_id as string | null) ?? null,
+      userId: user.id,
+    }) &&
+    !(await isCurrentUserSuperAdmin())
+  ) {
+    return { ok: false, error: CLASS_NOT_MINE_DELEGATE_ERROR };
+  }
   return {
     ok: true,
     user,

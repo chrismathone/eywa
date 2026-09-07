@@ -10,8 +10,10 @@ import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { useEffect, useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { searchTenantStudents } from "../server/actions";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 export function MakeupAdder({ onAdd }: { onAdd: (studentId: string) => void }) {
+  const t = useSheetT();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<{ id: string; name: string; label: string }[]>([]);
@@ -47,7 +49,7 @@ export function MakeupAdder({ onAdd }: { onAdd: (studentId: string) => void }) {
     <Popover.Root open={open} onOpenChange={setOpen}>
       {/* 트리거는 툴바 한 줄에 서므로 control-scale 치수(디자인 v5) — 안쪽 패널은 그대로. */}
       <Popover.Trigger className={`${CONTROL_H} ${CONTROL_LABEL} border-line text-text-dim hover:bg-bg-soft inline-flex items-center rounded-lg border px-2.5 font-bold whitespace-nowrap`}>
-        + 보강 학생 추가
+        {t("os.makeup.add")}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
@@ -56,16 +58,16 @@ export function MakeupAdder({ onAdd }: { onAdd: (studentId: string) => void }) {
               autoFocus
               value={q}
               onChange={(e) => runSearch(e.target.value)}
-              placeholder="학생 이름 검색"
-              aria-label="보강 학생 이름 검색"
+              placeholder={t("os.makeup.searchPh")}
+              aria-label={t("os.makeup.searchAria")}
               className="border-line bg-bg-soft focus:border-primary h-8 w-full rounded-lg border px-2 outline-none"
             />
             <div className="scrollbar-thin mt-1.5 max-h-64 overflow-y-auto">
               {loading ? (
-                <p className="text-text-faint px-2 py-3 text-center">검색 중…</p>
+                <p className="text-text-faint px-2 py-3 text-center">{t("os.makeup.searching")}</p>
               ) : results.length === 0 ? (
                 <p className="text-text-faint px-2 py-3 text-center">
-                  {q.trim() ? "결과 없음" : "이름을 입력하세요"}
+                  {q.trim() ? t("os.makeup.noResult") : t("os.makeup.typeName")}
                 </p>
               ) : (
                 results.map((s) => (

@@ -19,6 +19,8 @@
  * 신경 쓰지 않고 친다.
  * ⚠️ 여기서 더 지우지 말 것(가운뎃점·괄호 등) — 표시값과 검색값이 멀어질수록 "왜 안 찾히지"가 늘어난다.
  */
+import { sheetTf } from "@/features/teacher-view/i18n";
+
 export function normalizeSearchText(v: string): string {
   return v.replace(/\s+/g, "").toLowerCase();
 }
@@ -54,6 +56,11 @@ export function matchesStudentSearch(query: string, fields: StudentSearchFields)
  * 결과가 0명일 때 화면이 내놓을 한 줄 — **왜 비었는지**를 사람 말로 밝힌다(raw 코드 금지).
  * 빈 표에 "—"만 두면 "출석부가 고장났다"로 읽힌다.
  */
-export function emptySearchMessage(query: string, where: string): string {
-  return `‘${query.trim()}’과 맞는 학생이 ${where}에 없습니다 — 검색어를 지우면 전체가 다시 보입니다.`;
+export function emptySearchMessage(
+  query: string,
+  where: string,
+  // 화면 언어 — 안 주면 한국어(기존 호출부는 한 글자도 안 바뀐다).
+  lang: "ko" | "en" = "ko",
+): string {
+  return sheetTf(lang, "att.search.none", { query: query.trim(), where });
 }

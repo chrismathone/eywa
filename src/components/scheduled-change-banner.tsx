@@ -1,5 +1,6 @@
 import { CalendarClock } from "@/components/icons/eywa-icon-compat";
 import { scheduledChangeLabel, type ScheduledChange } from "@/features/enrollments/scheduled-changes";
+import { DEFAULT_SHEET_LANG, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /**
  * **예정된 변경** 배너 — 학생 상세·반 상세에서 탭 바로 위에 선다(원장 2026-08-28 지시·스케치).
@@ -19,19 +20,23 @@ export function ScheduledChangeBanner({
   /** 학생 화면이면 반 이름을, 반 화면이면 학생 이름을 앞세운다(같은 값이 반복되지 않게). */
   subject,
   actions,
+  lang = DEFAULT_SHEET_LANG,
 }: {
   changes: ScheduledChange[];
   today: string;
   subject: "class" | "student";
   /** 줄마다 오른쪽에 붙일 컨트롤(수정·취소). 권한 없으면 넘기지 않는다. */
   actions?: (change: ScheduledChange) => React.ReactNode;
+  /** 강사뷰 화면 언어. 안 주면 한국어라 아직 안 배선된 호출부는 한 글자도 안 바뀐다. */
+  lang?: SheetLang;
 }) {
   if (changes.length === 0) return null;
   return (
     <div className="border-blue/30 bg-blue-soft/50 rounded-xl border px-4 py-3">
       <p className="text-blue inline-flex items-center gap-1.5 text-sm font-bold">
         <CalendarClock className="size-4" aria-hidden="true" />
-        예정된 변경 {changes.length > 1 ? `${changes.length}건` : null}
+        {sheetT(lang, "sched.title")}{" "}
+        {changes.length > 1 ? sheetTf(lang, "sched.count", { n: changes.length }) : null}
       </p>
       <ul className="mt-2 space-y-1.5">
         {changes.map((c) => (
@@ -43,7 +48,7 @@ export function ScheduledChangeBanner({
               {subject === "class" ? (
                 <span className="font-semibold">{c.studentName}</span>
               ) : null}{" "}
-              {scheduledChangeLabel(c, today)}
+              {scheduledChangeLabel(c, today, lang)}
             </span>
             {actions ? <span className="flex shrink-0 items-center gap-1">{actions(c)}</span> : null}
           </li>

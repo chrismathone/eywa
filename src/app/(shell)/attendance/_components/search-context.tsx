@@ -24,6 +24,7 @@ import {
   type ReactNode,
 } from "react";
 import { syncSearchSeedInUrl } from "./att-search-seed";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import {
   emptySearchMessage,
   isSearchActive,
@@ -137,6 +138,7 @@ export function AttendanceSearchProvider({
 /** 툴바의 입력칸 + 지금 걸린 필터 표기. 표에 행이 하나도 없으면 아예 안 그린다(검색할 게 없다). */
 export function AttendanceSearchToggle() {
   const ctx = useAttendanceSearch();
+  const t = useSheetT();
   if (!ctx || ctx.totalStudents === 0) return null;
   // 토글(§10 "검색은 필요할 때만") — 검색어가 걸려 있으면(허브에서 들고 온 씨앗 포함) 언제나 펼친 채 + 결과 칩.
   // ⚠️ 2026-08-20부터 이 화면의 집계는 **검색을 따라간다**(합계 줄·반 머리행·상단 스탯 전부) —
@@ -145,7 +147,7 @@ export function AttendanceSearchToggle() {
     <StudentSearchToggle
       value={ctx.query}
       onChange={ctx.setQuery}
-      chip={<SearchScopeChip shown={ctx.matchedStudents} total={ctx.totalStudents} totalsNote="숫자도 검색 기준" />}
+      chip={<SearchScopeChip shown={ctx.matchedStudents} total={ctx.totalStudents} totalsNote={t("att.search.totalsNote")} />}
     />
   );
 }
@@ -187,9 +189,12 @@ export function useSearchActive(): boolean {
  *    인원만 검색 기준이고 시수는 전체이면 그게 제일 나쁘다.
  */
 export function ClassSearchCount({ rowKeys }: { rowKeys: readonly string[] }) {
+  const tf = useSheetTf();
   const { active, count } = useClassMatched(rowKeys);
   if (!active) return null;
-  return <span className="text-amber num text-xs font-bold">검색 {count}명</span>;
+  return (
+    <span className="text-amber num text-xs font-bold">{tf("att.search.count", { n: count })}</span>
+  );
 }
 
 /**
@@ -200,6 +205,8 @@ export function ClassSearchCount({ rowKeys }: { rowKeys: readonly string[] }) {
  *    클라 컴포넌트에 함수를 넘기는 꼴이라 직렬화가 안 돼 실행 시점에 터진다(테스트는 전부 클라라 못 잡는다).
  */
 export function SearchEmptyRow({ colSpan, where }: { colSpan: number; where: string }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
   const ctx = useAttendanceSearch();
   if (!ctx?.active || ctx.matched.size > 0) return null;
   return (
@@ -208,14 +215,14 @@ export function SearchEmptyRow({ colSpan, where }: { colSpan: number; where: str
         <td colSpan={colSpan} className="border-line border-b px-4 py-6">
           <div className="sticky left-0 flex w-fit items-center gap-2">
             <span className="text-foreground text-sm font-bold">
-              {emptySearchMessage(ctx.query, where)}
+              {emptySearchMessage(ctx.query, where, lang)}
             </span>
             <button
               type="button"
               onClick={() => ctx.setQuery("")}
               className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition"
             >
-              검색 지우기
+              {t("att.search.clear")}
             </button>
           </div>
         </td>

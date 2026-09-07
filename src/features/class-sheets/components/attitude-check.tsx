@@ -10,6 +10,9 @@
  * ⚠️ 출결과 달리 여기엔 '지울 수 없는 기록'이 없다 — 태도는 시수·급여에 안 닿아서 선택 안 함이 그냥 저장된다.
  */
 import { ATTITUDE } from "@/features/onescreen/attitude";
+import { useSheetLang, useSheetTf } from "@/features/teacher-view/lang-context";
+import { sheetT } from "@/features/teacher-view/i18n";
+import { attitudeLabelFor, attitudeScaleText } from "@/features/teacher-view/attitude-label";
 import { nextCycleValue } from "../lib/mark-cycle";
 import { EMPTY_CLICK_LABEL } from "../click-hint";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
@@ -25,19 +28,30 @@ export function AttitudeCheck({
   canEdit: boolean;
   onSet: (next: string | null) => void;
 }) {
+  // 🔴 표시 글자만 언어를 따른다(원장 2026-09-03) — **저장값은 한국어 `value` 그대로**다
+  //    (`onSet(nextCycleValue(value, ATTITUDE))`가 손대지 않는다). 학부모 문장이 그 한국어를 읽는다.
+  const lang = useSheetLang();
+  const tf = useSheetTf();
+  const shown = attitudeLabelFor(value, lang);
   // 읽기 전용 행도 **값은 보여준다**(옛 표기 포함) — 숨기면 기록이 증발한다.
-  if (!canEdit) return <span className={SHEET_BOX_READONLY}>{value ?? "—"}</span>;
+  if (!canEdit) return <span className={SHEET_BOX_READONLY}>{shown ?? "—"}</span>;
 
   const known = value !== null && (ATTITUDE as readonly string[]).includes(value);
   return (
     <button
       type="button"
       onClick={() => onSet(nextCycleValue(value, ATTITUDE))}
-      aria-label={`${studentName} 태도 — ${value ?? "선택 안 함"}`}
+      aria-label={tf("roster.attitude.aria", {
+        name: studentName,
+        value: shown ?? sheetT(lang, "roster.attitude.none"),
+      })}
       title={
         known || value === null
-          ? "클릭할 때마다 매우 좋음 → 좋음 → 보통 → 안좋음 → 매우 안좋음 → 선택 안 함"
-          : `이전 표기 "${value}" — 누르면 새 눈금(매우 좋음)으로 바뀝니다`
+          ? tf("roster.attitude.cycle", { scale: attitudeScaleText(lang) })
+          : tf("roster.attitude.legacy", {
+              value: value ?? "",
+              first: attitudeLabelFor(ATTITUDE[0], lang) ?? ATTITUDE[0],
+            })
       }
       // 🔴 바탕 흰색 — 원장 2026-09-03 *"텍스트 입력가능한 곳은 흰색 배경으로"*. 태도는 글자를 치는
       //    칸은 아니지만 **고칠 수 있는 칸**이라, 옆의 흰 입력칸들 사이에서 혼자 비치면 한 줄 안에서
@@ -48,7 +62,7 @@ export function AttitudeCheck({
     >
       {/* 빈 칸도 **누를 수 있다는 걸 모양으로** 말한다(원장 2026-08-13). 읽기 전용 칸은 위에서 이미
           값/`—`로 갈라져 있어 여기 라벨이 새지 않는다. */}
-      <span className="truncate">{value ?? EMPTY_CLICK_LABEL}</span>
+      <span className="truncate">{shown ?? EMPTY_CLICK_LABEL}</span>
     </button>
   );
 }

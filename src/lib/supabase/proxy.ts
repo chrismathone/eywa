@@ -104,6 +104,12 @@ export async function updateSession(request: NextRequest) {
   // 보호할 데이터가 없다(학원명만 getPublicBranding으로 읽는다).
   // ⚠️ "/academy"·"/academy/…"만 — 정확/슬래시 매칭으로 다른 경로가 딸려오지 않게 한다.
   const isAcademyPublic = pathname === "/academy" || pathname.startsWith("/academy/");
+  // /inventory/asset/* (기기에 붙은 QR 라벨이 가리키는 자산 상세) — 비로그인 통과. 원장 2026-09-03
+  // *"seat/jj처럼 비로그인자도 볼 수 있게"*. 읽기 전용 화면이고 쓰기 경로는 하나도 안 딸려 온다.
+  // 🔴 **이 한 갈래만 연다** — `/inventory`(목록)·`/inventory/qr/print`(라벨 시트)·엑셀·편집 액션은
+  //    그대로 로그인+권한이어야 하므로 `"/inventory/asset/"` **접두**로만 매칭한다("/inventory"로 열면
+  //    자산 대장 전체가 공개된다). `/api/*`는 위에서 이미 빠지지만 QR 이미지 라우트는 자체 게이트가 있다.
+  const isAssetPublic = pathname === "/inventory/asset" || pathname.startsWith("/inventory/asset/");
   if (
     PUBLIC_PATHS.has(pathname) ||
     isKioskPublic ||
@@ -111,7 +117,8 @@ export async function updateSession(request: NextRequest) {
     isReportPublic ||
     isStaffIntakePublic ||
     isSeatPublic ||
-    isAcademyPublic
+    isAcademyPublic ||
+    isAssetPublic
   ) {
     return response;
   }

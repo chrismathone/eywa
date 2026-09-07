@@ -13,6 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DAY_FILTERS } from "@/features/classes/list-filters";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { sheetDowLabel } from "@/features/teacher-view/i18n";
 
 /**
  * 수업목록 **요일 열 머리 필터** — 다중 선택(월·수 = 둘 중 하나라도 운영하는 반, ijw 의미 그대로). 단일 선택인
@@ -32,6 +34,9 @@ export function HeaderDayFilter({ value }: { value: string[] }) {
   const currentParams = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [local, setLocal] = useState<string[]>(value);
+  // 화면 언어 — 요일 글자는 사전이 아니라 `sheetDowLabel`이 단일 소스다(시트 툴바와 같은 함수).
+  const lang = useSheetLang();
+  const t = useSheetT();
   const effective = pending ? local : value;
 
   const navigate = (days: string[]) => {
@@ -48,7 +53,7 @@ export function HeaderDayFilter({ value }: { value: string[] }) {
     navigate(effective.includes(key) ? effective.filter((d) => d !== key) : [...effective, key]);
 
   const summary = DAY_FILTERS.filter((d) => effective.includes(d.key))
-    .map((d) => d.label)
+    .map((d) => sheetDowLabel(d.key, lang))
     .join("·");
 
   return (
@@ -58,18 +63,18 @@ export function HeaderDayFilter({ value }: { value: string[] }) {
           <button
             type="button"
             // 🔴 aria-label은 버튼 글자를 덮는다 — 고른 요일을 함께 실어야 낭독기가 지금 값을 읽는다(재리뷰 2026-09-04).
-            aria-label={summary ? `요일 필터: ${summary}` : "요일 필터"}
+            aria-label={summary ? `${t("cls.filter.dayAria")}: ${summary}` : t("cls.filter.dayAria")}
             className={`${HEADER_FILTER_TRIGGER} inline-flex items-center gap-1 align-middle`}
           />
         }
       >
         {/* 안 걸렸으면 축 이름만(`요일`), 걸리면 `요일: 월·수` — HeaderFilter의 prefixOnlyFor 규약과 같은 모양. */}
-        {summary ? `요일: ${summary}` : "요일"}
+        {summary ? `${t("cls.filter.day")}: ${summary}` : t("cls.filter.day")}
         <EyIcon name="chevronDown" size={14} className="opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="w-36">
         <DropdownMenuItem onClick={() => navigate([])} className="font-medium">
-          전체
+          {t("cls.filter.all")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {DAY_FILTERS.map((d) => (
@@ -79,7 +84,7 @@ export function HeaderDayFilter({ value }: { value: string[] }) {
             closeOnClick={false}
             onCheckedChange={() => toggle(d.key)}
           >
-            {d.label}
+            {sheetDowLabel(d.key, lang)}
           </DropdownMenuCheckboxItem>
         ))}
       </DropdownMenuContent>

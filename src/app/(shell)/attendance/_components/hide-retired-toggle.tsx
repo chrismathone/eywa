@@ -4,6 +4,7 @@ import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/to
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveAttendanceHideRetired } from "@/features/attendance/server/prefs-actions";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 퇴직 담임 숨김 칩 — 원장 지시 2026-08-14 *"퇴직자 출석부 숨기기 추가 헤더에"*.
@@ -14,6 +15,7 @@ import { saveAttendanceHideRetired } from "@/features/attendance/server/prefs-ac
  */
 export function HideRetiredToggle({ hidden, count }: { hidden: boolean; count: number }) {
   const router = useRouter();
+  const t = useSheetT();
   const [pending, startTransition] = useTransition();
 
   return (
@@ -22,9 +24,7 @@ export function HideRetiredToggle({ hidden, count }: { hidden: boolean; count: n
       disabled={pending}
       aria-pressed={hidden}
       title={
-        hidden
-          ? "퇴직한 담임을 강사 목록에서 숨기는 중입니다 — 그 반은 반 목록에 그대로 있습니다"
-          : "퇴직한 담임도 강사 목록에 표시합니다"
+        hidden ? t("att.hideRetired.on") : t("att.hideRetired.off")
       }
       onClick={() =>
         startTransition(async () => {
@@ -34,7 +34,8 @@ export function HideRetiredToggle({ hidden, count }: { hidden: boolean; count: n
       }
       className={`${TOOLBAR_CHIP} ${hidden ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF} ${pending ? "opacity-60" : ""}`}
     >
-      퇴직자 숨김{count > 0 ? ` ${count}` : ""}
+      {t("att.hideRetired")}
+      {count > 0 ? ` ${count}` : ""}
     </button>
   );
 }

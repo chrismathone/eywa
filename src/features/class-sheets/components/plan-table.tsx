@@ -9,11 +9,18 @@ import type { PlanLineDTO } from "../server/actions";
 import type { PlanHandlers } from "./use-plan-handlers";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PlanRow } from "./plan-row";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
 
 // 시기 칩 — 원본 시트에서 '평시/내신'은 계획 묶음을 가르는 큰 구분이라 알약도 또렷하게(솔리드/앰버).
-const TERMS: { key: "regular" | "exam"; label: string; tone: string }[] = [
-  { key: "regular", label: "평시", tone: "border-primary bg-primary text-primary-foreground" },
-  { key: "exam", label: "내신", tone: "border-amber/60 text-amber bg-amber-soft" },
+// ⚠️ 라벨은 사전이 정한다(강사뷰 영어 화면) — 여기에 한글을 다시 박지 말 것.
+const TERMS: {
+  key: "regular" | "exam";
+  labelKey: "plan.term.regular" | "plan.term.exam";
+  tone: string;
+}[] = [
+  { key: "regular", labelKey: "plan.term.regular", tone: "border-primary bg-primary text-primary-foreground" },
+  { key: "exam", labelKey: "plan.term.exam", tone: "border-amber/60 text-amber bg-amber-soft" },
 ];
 
 export function PlanTable({
@@ -41,9 +48,11 @@ export function PlanTable({
   showExamTerm: boolean;
 }) {
   const defaultArea = skillAreas[0]?.key ?? "vocab";
+  const lang = useSheetLang();
   return (
     <div className="space-y-1">
       {TERMS.map((term) => {
+        const termLabel = sheetT(lang, term.labelKey);
         const rows = lines.filter((l) => l.termMode === term.key);
         // 내신을 안 쓰는 반: **빈 구획만** 숨긴다. 줄이 남아 있으면(과거 입력·시트 임포트) 그대로 보여
         // 사람이 지우거나 옮길 수 있게 한다 — 조용히 감추면 "쓴 게 안 보임"이 된다(07-31 함정 재발 방지).
@@ -56,7 +65,7 @@ export function PlanTable({
                 안 감싸면 넘친 칩이 옆 카드 배경에 덮여 "라벨이 잘린" 것처럼 보인다(디자인 규칙). */}
             <div className="flex flex-wrap items-center gap-1.5 py-0.5">
               <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${term.tone}`}>
-                {term.label}
+                {termLabel}
               </span>
               {canEdit ? (
                 <button
@@ -64,7 +73,7 @@ export function PlanTable({
                   className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
                   onClick={() => handlers.addLine(date, slotStart, term.key, defaultArea)}
                 >
-                  + 줄 추가
+                  {sheetT(lang, "plan.addRow")}
                 </button>
               ) : null}
               {/* 내용 복사 — **항상** 뜬다(평시 포함). 옛 '직전 교시 복사'는 비어 있을 때만 떴는데, 평시는
@@ -77,10 +86,10 @@ export function PlanTable({
                 <button
                   type="button"
                   className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
-                  title={`지난 수업에서 ${term.label} 계획을 가져옵니다 — 강사 수업은 같은 요일·같은 교시, JJ 교시는 같은 교시의 지난 수업이 원본입니다(요일마다 교재가 달라서). 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)`}
+                  title={sheetTf(lang, "plan.copy.title", { term: termLabel })}
                   onClick={() => handlers.copySlot(date, slotStart, term.key)}
                 >
-                  내용 복사 (지난 수업)
+                  {sheetT(lang, "plan.copy")}
                 </button>
               ) : null}
             </div>
@@ -101,17 +110,17 @@ export function PlanTable({
                 <thead>
                   {/* 헤더 밴드 — 원본 시트의 노란 머리글(시기·구분·교재·시간·진도·과제)과 같은 역할. */}
                   <tr className="bg-bg-soft text-foreground text-left text-xs">
-                    <th className="rounded-l-md py-0.5 pl-1 font-bold">구분</th>
-                    <th className="py-0.5 font-bold">교재 / 내신교과서</th>
+                    <th className="rounded-l-md py-0.5 pl-1 font-bold">{sheetT(lang, "plan.col.kind")}</th>
+                    <th className="py-0.5 font-bold">{sheetT(lang, "plan.col.book")}</th>
                     {/* '페이지' → '시간'(원장 2026-08-11) → **'페이지/시간'**(원장 2026-08-13 "둘 중 아무거나
                         입력가능하도록"). ⚠️ **라벨만 바뀐다** — 저장은 내내 같은 `page_range` 한 칸이다.
                         실측(2026-08-11, 프로덕션 768행) 채워진 326건에 `25분`(56)·`15분`(53)과 `104`·`2강씩`이
                         섞여 있었다 = 강사들은 이미 둘 다 적고 있었다. 새 컬럼을 파면 그 기록이 화면에서 사라진다. */}
-                    <th className="py-0.5 font-bold" title="쪽수 또는 이 수업에 할당된 시간 — 둘 중 아무거나(예: 104p · 25분)">
-                      페이지/시간
+                    <th className="py-0.5 font-bold" title={sheetT(lang, "plan.col.pageTime.title")}>
+                      {sheetT(lang, "plan.col.pageTime")}
                     </th>
-                    <th className="py-0.5 font-bold">진도</th>
-                    <th className="py-0.5 font-bold">과제</th>
+                    <th className="py-0.5 font-bold">{sheetT(lang, "plan.col.progress")}</th>
+                    <th className="py-0.5 font-bold">{sheetT(lang, "plan.col.homework")}</th>
                     <th className="rounded-r-md" aria-hidden />
                   </tr>
                 </thead>
@@ -131,7 +140,7 @@ export function PlanTable({
                 </tbody>
               </table>
             ) : term.key === "regular" ? (
-              <p className="text-text-dim px-1 py-0.5 text-xs font-semibold">계획이 없습니다</p>
+              <p className="text-text-dim px-1 py-0.5 text-xs font-semibold">{sheetT(lang, "plan.empty")}</p>
             ) : null}
             {/* ⚠️ 내신이 비었을 땐 **아무것도 안 그린다**(원장 2026-08-10 "이런 trash 공간 제거") —
                 예전엔 빈 문자열을 담은 <p>가 남아 '내신' 칩 밑에 padding만큼 빈 띠가 깔렸다. */}

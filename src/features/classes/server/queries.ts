@@ -10,6 +10,7 @@ import { kstToday } from "@/lib/date-kst";
 import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 import { listMakeupPoolClassIds } from "@/features/attendance/server/makeup-pool";
+import { canViewClassDetail } from "./class-scope";
 
 /**
  * "만료되지 않은 스케줄" PostgREST `or` 절 — `valid_to`가 무기한(null)이거나 오늘 이후(**포함**).
@@ -692,6 +693,10 @@ export async function getClassTeacherFilterOptions(): Promise<
 }
 
 export async function getClassDetail(id: string): Promise<ClassDetail | null> {
+  // 🔴 상세 열람 스코프의 **유일한 초크포인트** — 반 상세 페이지와 반 수정 페이지가 여기로 모인다
+  //    (표면마다 다시 쓰면 한쪽만 조여진다, [[#77]]). 강사(scoped)는 담임 ∪ 교시 담당 ∪ 임시 위임뿐.
+  //    종전엔 스코프가 없어 강사가 주소만 알면 학원 전체 반의 명단·메모·출결을 열 수 있었다.
+  if (!(await canViewClassDetail(id))) return null;
   const supabase = await createClient();
   const today = kstToday();
   const { data: c } = await supabase

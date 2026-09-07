@@ -18,6 +18,8 @@ import "server-only";
  */
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { sheetMonthLabel, sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -45,6 +47,8 @@ type Row = {
     | null;
 };
 
+// 🔴 이 문구들은 **서버가 만든다** — 그래서 여기서 화면 언어를 읽는다(강사 미니셸이면 영어).
+//    쿠키 한 번이고 React 캐시라 왕복이 늘지 않는다.
 function emptyResult(where: string, error?: string): HubSearchResult {
   return { hits: [], truncated: false, limit: HUB_SEARCH_LIMIT, where, ...(error ? { error } : {}) };
 }
@@ -55,18 +59,23 @@ export async function loadHubStudentSearch(input: {
   month: string;
 }): Promise<HubSearchResult> {
   const month = /^\d{4}-\d{2}$/.test(input.month) ? input.month : kstMonth();
-  const monthLabel = `${Number(month.slice(5, 7))}월`;
+  const lang = await getTeacherViewLang();
+  // 한국어는 짧게(`8월`), 영어는 앱 전역 월 표기(`August 2026`) — 문장 안에 들어가는 조각이다.
+  const monthLabel = sheetMonthLabel(month, `${Number(month.slice(5, 7))}월`, lang);
 
+  const plainScope = sheetTf(lang, "att.search.scope.plain", { month: monthLabel });
   const user = await getCurrentUser();
-  if (!user) return emptyResult(`${monthLabel} 출석부`);
+  if (!user) return emptyResult(plainScope);
   // 화면(page)의 requireAccess("attendance")와 **같은 게이트** — 읽기라 canAccessTenant(readonly 통과).
-  if (!(await canAccessTenant(user.systemRole, "attendance"))) return emptyResult(`${monthLabel} 출석부`);
+  if (!(await canAccessTenant(user.systemRole, "attendance"))) return emptyResult(plainScope);
 
   const viewerTeacherId = await effectiveTeacherId();
   // 🔑 0건 문구가 말할 **찾은 범위** — '수강 중'으로 좁혔다는 사실을 문구가 밝힌다(보이지 않는 필터 금지).
-  const where = viewerTeacherId
-    ? `${monthLabel} 수강 중인 담당 반`
-    : `${monthLabel} 수강 중인 반`;
+  const where = sheetTf(
+    lang,
+    viewerTeacherId ? "att.search.scope.mine" : "att.search.scope.all",
+    { month: monthLabel },
+  );
 
   const pattern = hubSearchPattern(input.query);
   if (!pattern) return emptyResult(where);
@@ -78,7 +87,7 @@ export async function loadHubStudentSearch(input: {
   try {
     classes = await loadVisibleClassAxisRows(range.from, range.to);
   } catch {
-    return emptyResult(where, "반 목록을 불러오지 못했습니다 — 잠시 후 다시 시도해 주세요");
+    return emptyResult(where, sheetT(lang, "att.search.err.classes"));
   }
   const classIds = classes.map((c) => c.id);
   if (classIds.length === 0) return emptyResult(where);
@@ -109,7 +118,7 @@ export async function loadHubStudentSearch(input: {
         .limit(HUB_SEARCH_LIMIT + 1),
     );
   } catch {
-    return emptyResult(where, "학생을 찾는 중 오류가 났습니다 — 잠시 후 다시 시도해 주세요");
+    return emptyResult(where, sheetT(lang, "att.search.err.students"));
   }
 
   const enrollments: HubSearchEnrollment[] = [];

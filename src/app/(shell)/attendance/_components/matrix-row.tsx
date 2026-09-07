@@ -2,7 +2,9 @@ import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/featur
 import type { StudentMoney } from "@/features/attendance/server/teacher-money";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
-import { BADGE_LABEL, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
+// 🔴 서버 컴포넌트라 훅을 못 쓴다 — 언어는 `MatrixTable`이 prop으로 내려준다.
+import { badgeLabelOf, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
@@ -25,7 +27,10 @@ export function MatrixRow({
   classLabel,
   tierMissing,
   tierLabel,
+  lang = "ko",
 }: {
+  /** 화면 언어 — 표가 내려준다(서버 컴포넌트라 훅을 못 쓴다). 안 주면 한국어. */
+  lang?: SheetLang;
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
   classId: string;
@@ -70,10 +75,10 @@ export function MatrixRow({
               {student.badges.map((b) => (
                 <span
                   key={`${b.kind}-${b.date}`}
-                  title={badgeTitle(b, classLabel ?? "이 반")}
+                  title={badgeTitle(b, classLabel ?? sheetT(lang, "att.row.thisClass"), lang)}
                   className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
                 >
-                  {BADGE_LABEL[b.kind]}
+                  {badgeLabelOf(b.kind, lang)}
                 </span>
               ))}
             </span>
@@ -86,7 +91,7 @@ export function MatrixRow({
             {attendLabel ? (
               <span
                 className="text-text-faint min-w-0 truncate text-xs leading-tight font-medium"
-                title={`등원 ${attendLabel}`}
+                title={sheetTf(lang, "att.row.attendDows", { dows: attendLabel })}
               >
                 {attendLabel}
               </span>
@@ -95,9 +100,9 @@ export function MatrixRow({
               // 라벨은 짧게 「단가」 + 우측 정렬(ml-auto) — 셀 오른쪽 끝. 크기는 신입·퇴원과 동일(BADGE_BASE).
               <span
                 className={`${BADGE_BASE} ml-auto bg-amber-300 text-amber-950`}
-                title={`${student.name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다. 수강의 티어를 지정하면 계산에 들어갑니다`}
+                title={sheetTf(lang, "att.row.noTierTitle", { name: student.name })}
               >
-                단가
+                {sheetT(lang, "att.row.noTier")}
               </span>
             ) : null}
           </span>
@@ -114,7 +119,10 @@ export function MatrixRow({
         </span>
         {/* 단가 티어(라벨만, 금액 아님) — 열의 남는 폭을 채운다(원장 2026-08-10). 원장 전용 금액 열이 있을 때만. */}
         {tierLabel ? (
-          <span className="text-text-faint block truncate text-xs leading-tight" title={`단가 티어 ${tierLabel}`}>
+          <span
+            className="text-text-faint block truncate text-xs leading-tight"
+            title={sheetTf(lang, "att.row.tierTitle", { tier: tierLabel })}
+          >
             {tierLabel}
           </span>
         ) : null}

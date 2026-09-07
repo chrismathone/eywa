@@ -57,9 +57,19 @@ describe("수업목록 보기 설정(users.ui_prefs.classes)", () => {
   });
 
   it("상태 배지 = 운영 초록(positive) · 종강 앰버 · 폐지 중립 — 라벨은 필터 표와 같은 말", () => {
-    expect(classStatusMeta({ isActive: true, closedAt: null })).toEqual({ label: "운영", color: "green" });
-    expect(classStatusMeta({ isActive: true, closedAt: "2026-08-31" })).toEqual({ label: "종강", color: "amber" });
-    expect(classStatusMeta({ isActive: false, closedAt: null })).toEqual({ label: "폐지", color: "neutral" });
+    // 색(의미색 캐논)·한국어 라벨·사전 키를 **한 줄에서** 돌려준다 — 강사뷰가 영어일 때도 색은 같다.
+    expect(classStatusMeta({ isActive: true, closedAt: null })).toEqual({
+      key: "cls.status.operating",
+      color: "green",
+    });
+    expect(classStatusMeta({ isActive: true, closedAt: "2026-08-31" })).toEqual({
+      key: "cls.status.ended",
+      color: "amber",
+    });
+    expect(classStatusMeta({ isActive: false, closedAt: null })).toEqual({
+      key: "cls.status.retired",
+      color: "neutral",
+    });
   });
 });
 

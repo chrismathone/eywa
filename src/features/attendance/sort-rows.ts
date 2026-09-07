@@ -28,6 +28,26 @@ export const ATTENDANCE_SORT_LABEL: Record<AttendanceSortKey, string> = {
   role: "담임·부담임순",
 };
 
+/**
+ * 같은 정렬의 **영어 라벨** — 강사뷰 영어 화면(원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환"*).
+ *
+ * 🔴 **한글 맵 바로 옆에 둔다** — 두 파일로 나누면 정렬이 하나 늘 때 한쪽만 채워지고, 빠진 키는
+ *    raw 키(`role`)가 드롭다운에 그대로 샌다(출결 상태 표와 같은 규약).
+ * ⚠️ 가나다순은 **한글 이름 기준 정렬 그대로**다(영어 화면에서도 정렬 축은 안 바꾼다) — 그래서
+ *    `A to Z`가 아니라 `By name`이라고 적는다(정렬 방식을 오해시키지 않는다).
+ */
+export const ATTENDANCE_SORT_LABEL_EN: Record<AttendanceSortKey, string> = {
+  class: "By class",
+  name: "By name",
+  grade: "By grade",
+  role: "By homeroom role",
+};
+
+/** 화면에 적을 정렬 이름. 인자를 안 주면 한국어(기존 호출부는 한 글자도 안 바뀐다). */
+export function attendanceSortLabelOf(key: AttendanceSortKey, lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? ATTENDANCE_SORT_LABEL_EN[key] : ATTENDANCE_SORT_LABEL[key];
+}
+
 /** 반 그룹 머리행을 그리는 정렬인가 — 반별일 때만. 나머지는 한 덩어리(평면). */
 export function isGroupedSort(key: AttendanceSortKey): boolean {
   return key === "class";

@@ -8,6 +8,9 @@ import { PeriodNav } from "@/components/period-nav";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { offGoalCountByDate } from "../lib/goal-match";
 import { setMyEcsMonthDisplay, setMyEcsMonthView } from "../server/actions";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { sheetMonthLabel } from "@/features/teacher-view/i18n";
+import { classNameFor } from "@/features/teacher-view/class-name";
 import { SHEET_BAR, sheetFacesFor, sheetPill } from "../chrome";
 import { hasClassOnDate, weekForMonth } from "../face-nav";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
@@ -114,12 +117,19 @@ export function MonthClient({
   const flushEdits = () => Promise.all([flushAll(), plan.flushAll()]).then(() => undefined);
   const openDayEditor = (date: string) => void flushEdits().then(() => setOpenDay(date));
 
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
+  // 반 이름·월 라벨은 화면 언어를 따른다(상단 바·창 제목이 같은 값을 봐야 갈리지 않는다).
+  const shownClassName = classNameFor(data.className, lang);
+  const shownMonthLabel = sheetMonthLabel(data.month, data.monthLabel, lang);
   const openPrintWindow = usePrintWindow();
   // 창 id는 `print/<type>/<recordId>` 규약 — 반·달마다 다른 창이라 두 달을 나란히 열어 비교할 수 있다.
   const printOpts = {
     id: `print/ecs-mp/${data.classId}-${data.month}`,
     href: `/ecs/${data.classId}/month-plan/print?month=${data.month}`,
-    title: `${data.className} ${data.monthLabel} 계획서`,
+    // 창 **제목**(강사가 보는 크롬)이라 언어를 따른다 — 인쇄물 본문은 학부모 서식이라 한국어 그대로다.
+    title: tf("month.printDocTitle", { class: shownClassName, month: shownMonthLabel }),
   };
 
   const chooseView = (next: EcsMonthView) => {
@@ -170,7 +180,7 @@ export function MonthClient({
         {/* 목록 · 반 선택(노란 표기) · 반 정보 보기 — 주간 시트와 **같은 조각**(sheet-chrome.tsx). */}
         <SheetClassPicker
           classId={data.classId}
-          classLabel={data.className}
+          classLabel={shownClassName}
           classOptions={classOptions}
           // 담임 이름을 반 표기 안 오른쪽에(원장 2026-09-02 *"ecs도 마찬가지"*) — 주간 시트·MCS와 같은 자리.
           teacherName={data.teacherName}
@@ -179,14 +189,14 @@ export function MonthClient({
         />
         <SheetBarDivider />
         <PeriodNav
-          label={data.monthLabel}
+          label={shownMonthLabel}
           prevHref={hrefFor(shiftMonth(data.month, -1))}
           nextHref={hrefFor(shiftMonth(data.month, 1))}
           currentHref={hrefFor(thisMonth)}
           relation={data.month === thisMonth ? "current" : data.month < thisMonth ? "past" : "future"}
-          prevAriaLabel="이전 달"
-          nextAriaLabel="다음 달"
-          currentTitle="눌러서 이번 달로"
+          prevAriaLabel={t("month.prev")}
+          nextAriaLabel={t("month.next")}
+          currentTitle={t("month.current")}
           labelWidth={116}
           onNavigate={navigate}
         />
@@ -210,18 +220,18 @@ export function MonthClient({
           <>
             <span
               className="text-text-dim text-xs"
-              title="이 달에 배정된 전 교시 기준입니다 — 아래 표시 토글(자리 교시)을 꺼도 이 숫자는 그대로입니다. 학원 휴일은 쓸 의무가 없어 분모에서 빠지고, 휴일에 쓴 계획은 그대로 인정됩니다. 주간 시트의 작성률은 그 주 표시 설정을 따르므로 두 숫자가 다를 수 있습니다."
+              title={t("month.fill.title")}
             >
-              계획{" "}
+              {t("bulk.plan")}{" "}
               <b className="text-foreground num">
                 {data.fill.filled}/{data.fill.total}
               </b>
-              교시 <span className="num">({data.fill.pct}%)</span>
+              {t("month.fill.unit")} <span className="num">({data.fill.pct}%)</span>
             </span>
             {offDays > 0 ? (
               <span className="text-amber inline-flex items-center gap-1.5 text-xs font-bold">
                 <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
-                목표 밖 교재 <span className="num">{offDays}일</span>
+                {t("month.offGoal")} <span className="num">{tf("month.days", { n: offDays })}</span>
               </span>
             ) : null}
           </>
@@ -232,8 +242,8 @@ export function MonthClient({
             <>
               {toggleChip(
                 "actual",
-                "실제 함께 보기",
-                "그 날 주간 시트에 실제로 적힌 진도를 계획 아래에 함께 보여줍니다. 신호(미작성·교재 다름) 숫자는 이 토글과 무관합니다",
+                t("month.toggle.actual"),
+                t("month.toggle.actual.title"),
               )}
               {/* 🔴 인쇄는 **학부모 문서**라 대조·경고·작성률이 실리지 않는다(인쇄 라우트 주석).
                   🔴 여는 창은 **서버에서 다시 읽는다** → 방금 친 글자가 아직 큐에 있으면 옛 내용이
@@ -242,18 +252,18 @@ export function MonthClient({
                 type="button"
                 onClick={(e) => void flushEdits().then(() => openPrintWindow(printOpts, e))}
                 className={`${sheetPill(false)} inline-flex items-center gap-1`}
-                title="지금 화면의 계획을 A4 한 장으로 인쇄합니다(대조·경고는 실리지 않습니다)"
+                title={t("month.print.title")}
               >
-                인쇄
+                {t("month.print")}
               </button>
             </>
           ) : (
             <>
-              {toggleChip("homework", "과제", "계획 줄의 과제까지 보여줍니다")}
+              {toggleChip("homework", t("plan.col.homework"), t("month.toggle.homework.title"))}
               {toggleChip(
                 "seat",
-                "자리 교시(JJ)",
-                "랩실·JJ실 자리 교시 — 반 진도가 아니라 학생 개별 진도입니다. 표시만 바뀌고 작성률은 그대로입니다",
+                t("month.toggle.seat"),
+                t("month.toggle.seat.title"),
               )}
             </>
           )}
@@ -262,18 +272,18 @@ export function MonthClient({
 
       {error ? (
         <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold">
-          목표를 저장하지 못했습니다 — {error} · 새로고침하면 마지막으로 저장된 값이 보입니다
+          {tf("month.error.goal", { error })}
           <button type="button" onClick={dismissError} className="ml-auto cursor-pointer underline">
-            닫기
+            {t("popup.close")}
           </button>
         </p>
       ) : null}
 
       {view === "mp" && plan.error ? (
         <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold">
-          계획을 저장하지 못했습니다 — {plan.error} · 새로고침하면 마지막으로 저장된 값이 보입니다
+          {tf("month.error.plan", { error: plan.error })}
           <button type="button" onClick={plan.dismissError} className="ml-auto cursor-pointer underline">
-            닫기
+            {t("popup.close")}
           </button>
         </p>
       ) : null}
@@ -281,13 +291,12 @@ export function MonthClient({
           단정하지 않는다**(표가 없는 것과 조회가 실패한 것은 다른 사실이다). */}
       {view === "mp" && data.mp.status === "missing-table" ? (
         <p className="border-amber/40 bg-amber-soft text-amber rounded-lg border px-3 py-1.5 text-xs font-semibold">
-          월간 계획서 저장소가 아직 준비되지 않았습니다(DB 갱신 필요) — 관리자에게 알려주세요. 그때까지 적은
-          내용은 저장되지 않습니다.
+          {t("month.mp.notReady")}
         </p>
       ) : null}
       {view === "mp" && data.mp.status === "failed" ? (
         <p className="border-danger/40 bg-danger-soft text-danger rounded-lg border px-3 py-1.5 text-xs font-semibold">
-          월간 계획서를 불러오지 못했습니다 — 새로고침해 보시고, 계속되면 관리자에게 알려주세요.
+          {t("month.mp.loadFailed")}
         </p>
       ) : null}
 
@@ -320,7 +329,7 @@ export function MonthClient({
           <MonthMemo
             classId={data.classId}
             month={data.month}
-            monthLabel={data.monthLabel}
+            monthLabel={shownMonthLabel}
             initialBody={data.memo.body}
             status={data.memo.status}
             canEdit={data.canEdit}

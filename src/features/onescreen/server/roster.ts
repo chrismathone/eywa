@@ -24,6 +24,7 @@ import { parseExamScores, parseExamMaxes } from "../exam-info";
 import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
+import { CLASS_TAG_ALL } from "../class-tags";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
@@ -159,6 +160,7 @@ type OnescreenSessionRow = {
   homework: string | null;
   special_note: string | null;
   progress_confirmed: boolean | null;
+  updated_at: string | null;
 };
 
 /** 학원·강사 설정에서 온 값 — 빈 로스터도 정상 로스터와 **같은 값**을 실어야 한다(아래 emptyRoster 주석). */
@@ -240,7 +242,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
   return {
     today,
     date,
-    classTags: ["전체"],
+    classTags: [CLASS_TAG_ALL],
     teacherName,
     students: [],
     todayClasses: [],
@@ -374,7 +376,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    종료일 뒤에도 로스터에 영원히 남는다. 시간표(fetchSlots)와 같은 규약으로 맞춘다.
   // ⚠️ 보강 보고서 조회는 반과 무관하다 — 스케줄과 **병렬**로(B4: 독립 await는 Promise.all).
   //    그날 내가 쓴 보강(수업외) 보고서 = 아래 수강생 로스터엔 절대 안 잡히는 행들의 유일한 원천.
-  const [scheds, makeupReports] = await Promise.all([
+  const [scheds, makeupReports, makeupAttRows] = await Promise.all([
     fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
       supabase
         .from("class_schedules")
@@ -385,8 +387,22 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
     ),
     fetchMyMakeupReports(supabase, targetDate, teacherId, teacherName),
+    // 🔴 그날 **내 반에 찍힌 보강 출결** — 보고서가 아직 없어도 화면에 남아야 한다(원장 제보 2026-09-05
+    //    *"오늘자 주준호를 추가하려고 하니까 새로고침할 때마다 사라짐"*).
+    //    실측: 허주연 담당 반은 월~금만 도는데 토요일에 `중등M 개별 BS3Q`로 보강 2건(주준호·최하림)을
+    //    찍었다. 그 반은 '오늘의 반'이 아니라 아래 `activeIds`에서 빠지고, 보강 행을 되살리는 5-c가
+    //    activeIds만 보고 있어 **새로고침마다 통째로 사라졌다**(저장은 됐는데 보이지 않는 데이터).
+    //    ⚠️ 반 축이다(`class_id in 내 담당 반`) — `recorded_by`는 귀속이 아니다(teacher-axis.ts).
+    fetchInChunks<{ student_id: string; class_id: string }>(allIds, (chunk) =>
+      supabase
+        .from("attendance_records")
+        .select("student_id, class_id")
+        .eq("session_date", targetDate)
+        .eq("status", "makeup")
+        .in("class_id", chunk),
+    ),
   ]);
-  if (allClasses.length === 0 && makeupReports.length === 0)
+  if (allClasses.length === 0 && makeupReports.length === 0 && makeupAttRows.length === 0)
     return emptyRoster(today, targetDate, teacherName, config);
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
@@ -405,7 +421,9 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // 🔴 그날 보강 기록이 있으면 "수업 없음"이어도 화면을 비우지 않는다 — 보강만 있는 날엔 그게 유일한 기록이고,
   //    비우면 강사가 방금 발송한 보고서를 찾을 길이 사라진다(원장 2026-08-03). 단 **담당반 전체 폴백은
   //    여전히 금지**(2026-07-22 회귀 방지) — 반 목록은 비우고 보강 행만 싣는다.
-  if (noClassesToday && !showAll && makeupReports.length === 0) {
+  // ⚠️ 보강 **출결**도 보고서와 같이 센다 — 출결만 찍고 보고서는 아직 안 쓴 상태가 정상 순서다
+  //    (강사는 학생이 오면 먼저 출결을 찍는다). 보고서만 세면 그 사이 화면이 비어 방금 넣은 학생이 사라진다.
+  if (noClassesToday && !showAll && makeupReports.length === 0 && makeupAttRows.length === 0) {
     return emptyRoster(today, targetDate, teacherName, { ...config, noClassesToday: true });
   }
   const activeClasses = noClassesToday
@@ -459,6 +477,27 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const enrolled = enrollments.filter((e) => e.class_id === classId).map((e) => e.student_id);
     const recorded = classAttRows.filter((r) => r.class_id === classId).map((r) => r.student_id);
     for (const id of makeupStudentIds(recorded, enrolled)) attMakeup.push({ studentId: id, classId });
+  }
+  /**
+   * **오늘의 반이 아닌 반**에 찍힌 보강 — 위 루프는 `activeIds`만 돌아서 이 행들을 아예 안 본다.
+   *
+   * 🔴 **그 학생만 되살린다. 반을 `activeIds`에 넣지 않는다** — 넣으면 `enrollments`가 그 반 전체로
+   *    넓어져 토요일에 반 전원이 뜬다(2026-07-22 "담당반 전체 폴백 금지" 회귀). 아래 `classById`에만
+   *    넣어 5-c가 반 이름·과목을 찾을 수 있게 한다(맵은 조회 전용이라 명단을 넓히지 않는다).
+   * 🔴 `makeupStudentIds`를 여기 태우지 않는다 — 그 함수는 "수강생이면 정규 명단에 뜬다"를 전제로
+   *    수강생을 빼는데, 그 반이 오늘 안 도는 날엔 정규 명단 자체가 없다. 실제로 주준호·최하림은 둘 다
+   *    BS3Q 수강생이라 그 전제에 걸려 **양쪽 어디에도 못 서고 사라졌다.** 보강 기록이 곧 "왔다"는 증거다.
+   */
+  const activeIdSet = new Set(activeIds);
+  const rescueSeen = new Set<string>();
+  for (const r of makeupAttRows) {
+    if (activeIdSet.has(r.class_id)) continue;
+    const key = `${r.student_id}|${r.class_id}`;
+    if (rescueSeen.has(key)) continue;
+    rescueSeen.add(key);
+    attMakeup.push({ studentId: r.student_id, classId: r.class_id });
+    const cls = allClasses.find((c) => c.id === r.class_id);
+    if (cls && !classById.has(cls.id)) classById.set(cls.id, cls);
   }
 
   // 보강 학생은 수강생이 아니어도 화면에 있어야 한다 — 아래 학생정보·보고서 조회가 이 id 집합을 쓴다.
@@ -752,7 +791,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       supabase
         .from("onescreen_daily_sessions")
         .select(
-          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed",
+          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed, updated_at",
         )
         .eq("session_date", todayIso)
         .eq("updated_by", teacherId)
@@ -1286,6 +1325,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     // Phase3: 오늘 세션(작업중) 복원 — 점수/진도/태도/과제/확정을 하드코딩 기본값 위에 덮어씀.
     const sess = sessionById.get(os.id);
     if (sess) {
+      if (sess.updated_at) os.sessionUpdatedAt = sess.updated_at;
       if (sess.study_grade) os.studyGrade = sess.study_grade;
       if (sess.daily_score != null) os.tests.daily.score = sess.daily_score;
       if (sess.daily_max != null) os.tests.daily.max = sess.daily_max;
@@ -1411,7 +1451,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   );
 
   // 반별 필터 칩 = 전체 + 오늘 담당 반(시각순).
-  const classTags = ["전체", ...todayClasses.map((c) => c.name)];
+  const classTags = [CLASS_TAG_ALL, ...todayClasses.map((c) => c.name)];
 
   return {
     today,

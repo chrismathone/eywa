@@ -6,10 +6,12 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { saveAttendancePeriodMode } from "@/features/attendance/server/prefs-actions";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
-const MODE_OPTIONS: { value: PeriodMode; label: string }[] = [
-  { value: "session", label: "세션" },
-  { value: "month", label: "월" },
+// 라벨은 화면 언어를 따르므로 **키**만 든다(문구는 사전 한 곳 — 컴포넌트 안에서 t로 푼다).
+const MODE_OPTIONS: { value: PeriodMode; key: "att.period.session" | "att.period.month" }[] = [
+  { value: "session", key: "att.period.session" },
+  { value: "month", key: "att.period.month" },
 ];
 
 /**
@@ -36,8 +38,9 @@ export function PeriodModeToggle({
   disabledReason?: string;
 }) {
   const router = useRouter();
+  const t = useSheetT();
   const [pending, startTransition] = useTransition();
-  const label = MODE_OPTIONS.find((o) => o.value === mode)?.label ?? "월";
+  const label = t(MODE_OPTIONS.find((o) => o.value === mode)?.key ?? "att.period.month");
 
   return (
     <div className="flex shrink-0 items-center gap-1.5" title={disabledReason ?? windowLabel}>
@@ -52,12 +55,12 @@ export function PeriodModeToggle({
           onClick={(e) => e.preventDefault()}
           className={`${TOOLBAR_SELECT} cursor-not-allowed opacity-60`}
         >
-          기간: {label}
+          {t("att.period")}: {label}
         </button>
       ) : (
         <span className={pending ? "opacity-60" : ""}>
           <SearchableSelect
-            options={MODE_OPTIONS}
+            options={MODE_OPTIONS.map((o) => ({ value: o.value, label: t(o.key) }))}
             value={mode}
             onValueChange={(v) => {
               const next = v === "session" ? "session" : "month";
@@ -67,8 +70,8 @@ export function PeriodModeToggle({
                 router.refresh();
               });
             }}
-            ariaLabel="날짜축 전환"
-            valuePrefix="기간"
+            ariaLabel={t("att.period.aria")}
+            valuePrefix={t("att.period")}
             triggerClassName={TOOLBAR_SELECT}
             className="w-auto"
           />

@@ -11,6 +11,7 @@
  *    문맥이 제각각이고, 그대로 학부모 발송물에 실리면 안 되는 것이 섞일 수 있다. 여기선 **보여주기만** 한다.
  */
 import type { Subject } from "../types";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 function Row({ label, value }: { label: string; value: string }) {
   if (!value) return null;
@@ -33,6 +34,7 @@ export function SheetSourceCard({
   /** '가져오기' — 진도·교재·오늘 과제를 시트 값으로 되돌린다(학생별 기록은 대상 아님). */
   onApply: () => void;
 }) {
+  const t = useSheetT();
   const sheet = subject.sheetDraft;
   const note = subject.sheetStudentNote;
   if (!sheet && !note) return null;
@@ -48,28 +50,28 @@ export function SheetSourceCard({
   return (
     <div className="border-line rounded-lg border px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="micro text-text-faint">ECS 시트 · 오늘 계획</p>
+        <p className="micro text-text-faint">{t("os.ss.title")}</p>
         {differs ? (
           <button
             type="button"
             onClick={onApply}
             className="text-primary shrink-0 cursor-pointer text-xs font-bold underline-offset-2 hover:underline"
-            title="시트에 적힌 진도·교재·오늘 과제를 아래 입력칸에 다시 채웁니다(학생별 기록은 그대로 둡니다)"
+            title={t("os.ss.applyTitle")}
           >
-            가져오기
+            {t("os.prev.rowGet")}
           </button>
         ) : null}
       </div>
       {sheet ? (
         <div className="flex flex-col gap-0.5">
-          <Row label="진도" value={sheet.progress} />
-          <Row label="교재" value={sheet.textbook} />
-          <Row label="과제" value={sheet.homework} />
+          <Row label={t("os.ss.progress")} value={sheet.progress} />
+          <Row label={t("os.ss.book")} value={sheet.textbook} />
+          <Row label={t("os.ss.hw")} value={sheet.homework} />
         </div>
       ) : null}
       {note ? (
         <div className="border-line mt-1.5 border-t pt-1.5">
-          <Row label="이 학생" value={note} />
+          <Row label={t("os.ss.student")} value={note} />
         </div>
       ) : null}
     </div>

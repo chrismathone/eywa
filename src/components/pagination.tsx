@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { DEFAULT_SHEET_LANG, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /**
  * 목록 페이지 공용 페이지네이션 (서버 컴포넌트) — **앱 전역 페이저 표준 스타일**.
@@ -37,29 +38,36 @@ export function Pagination({
   totalPages,
   hrefForPage,
   total,
+  lang = DEFAULT_SHEET_LANG,
 }: {
   page: number;
   totalPages: number;
   hrefForPage: (page: number) => string;
   /** 있으면 페이지 표시 옆에 "· N건" 총 개수를 덧붙인다(없으면 page/total만). */
   total?: number;
+  /**
+   * 강사뷰 화면 언어. 🔴 **여기서 직접 읽지 않는다** — 이 모듈은 클라 컴포넌트도 import하므로
+   * (PAGER_STEP_*·PageStep) server-only 조회를 넣으면 빌드가 깨진다([[#61]]). 안 주면 한국어라
+   * 사무실 화면·기존 호출부는 한 글자도 안 바뀐다.
+   */
+  lang?: SheetLang;
 }) {
   if (totalPages <= 1) return null;
   return (
     <nav
       className="mx-auto flex max-w-xs items-center justify-between gap-2 pt-2"
-      aria-label="페이지 이동"
+      aria-label={sheetT(lang, "common.pageAria")}
     >
       <PageStep href={hrefForPage(page - 1)} disabled={page <= 1}>
         <EyIcon name="chevronLeft" size={12} />
-        이전
+        {sheetT(lang, "common.prev")}
       </PageStep>
       <span className={PAGER_LABEL}>
         {page} / {totalPages}
-        {total != null ? ` · ${total}건` : ""}
+        {total != null ? sheetTf(lang, "common.pageCount", { n: total }) : ""}
       </span>
       <PageStep href={hrefForPage(page + 1)} disabled={page >= totalPages}>
-        다음
+        {sheetT(lang, "common.next")}
         <EyIcon name="chevronRight" size={12} />
       </PageStep>
     </nav>

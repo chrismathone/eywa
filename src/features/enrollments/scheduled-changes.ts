@@ -15,6 +15,7 @@
 //    날짜 인접으로 추론한 관계를 쓰기 대상 선정에 쓰면 남의 행을 건드린다(적대 리뷰 합의 R3).
 
 import { enrollmentPhaseOn } from "./eligibility";
+import { DEFAULT_SHEET_LANG, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 export type ScheduledKind = "move" | "join" | "leave";
 
@@ -71,14 +72,23 @@ export function shortDate(date: string, today: string): string {
   return y === today.slice(0, 4) ? md : `${y.slice(2)}. ${md}`;
 }
 
-/** 배너에 그대로 찍히는 한 줄. ⚠️ 영문 키·enum이 새지 않게 여기서만 문장을 만든다. */
-export function scheduledChangeLabel(c: ScheduledChange, today: string): string {
+/**
+ * 배너에 그대로 찍히는 한 줄. ⚠️ 영문 키·enum이 새지 않게 여기서만 문장을 만든다.
+ * ⚠️ **인자를 안 주면 한국어** — 아직 안 배선된 호출부는 한 글자도 안 바뀐다.
+ */
+export function scheduledChangeLabel(
+  c: ScheduledChange,
+  today: string,
+  lang: SheetLang = DEFAULT_SHEET_LANG,
+): string {
   const when = shortDate(c.date, today);
-  if (c.kind === "move") return `${when}부터 ${c.fromClassName ?? "?"} → ${c.className} 이동`;
-  if (c.kind === "join") return `${when}부터 ${c.className} 합류`;
+  const name = c.className;
+  if (c.kind === "move")
+    return sheetTf(lang, "sched.move", { when, from: c.fromClassName ?? "?", to: name });
+  if (c.kind === "join") return sheetTf(lang, "sched.join", { when, name });
   // 전출은 "그만둠"이 아니라 "다른 반으로 옮겨감"이다 — 같은 말로 쓰면 반 상세가 거짓말을 한다.
-  if (c.viaTransfer) return `${when}에 ${c.className}에서 다른 반으로 이동`;
-  return `${when}에 ${c.className} 수강 종료`;
+  if (c.viaTransfer) return sheetTf(lang, "sched.transferOut", { when, name });
+  return sheetTf(lang, "sched.leave", { when, name });
 }
 
 /**

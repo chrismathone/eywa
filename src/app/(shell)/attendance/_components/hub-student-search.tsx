@@ -28,6 +28,8 @@ import {
 import { searchAttendanceHubStudents } from "@/features/attendance/server/hub-search-actions";
 import { attHref } from "./att-href";
 import { syncSearchSeedInUrl } from "./att-search-seed";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
 
 /** 입력이 멎고 이만큼 지나면 서버에 묻는다(결석 접수 다이얼로그와 같은 리듬). */
 const DEBOUNCE_MS = 250;
@@ -43,6 +45,11 @@ export function HubStudentSearch({
   /** 씨앗이 있을 때 **서버가 미리 돌린** 결과 — 첫 렌더에 결과가 이미 있어 마운트 조회가 필요 없다. */
   initialResult?: HubSearchResult | null;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
+  // 🔴 `run`이 useCallback이라 문구를 **밖에서 뽑아** 의존성에 넣는다(안에서 t()를 부르면 옛 언어로 굳는다).
+  const errorText = t("att.search.error");
   const [query, setQueryState] = useState(initialQuery);
   const [result, setResult] = useState<HubSearchResult | null>(initialResult);
   const [loading, setLoading] = useState(false);
@@ -81,13 +88,13 @@ export function HubStudentSearch({
               truncated: false,
               limit: HUB_SEARCH_LIMIT,
               where: "",
-              error: "학생을 찾지 못했습니다 — 잠시 후 다시 시도해 주세요",
+              error: errorText,
             });
             setLoading(false);
           });
       }, DEBOUNCE_MS);
     },
-    [month],
+    [month, errorText],
   );
 
   // 🔴 과목 라벨·순서는 **학원설정이 단일 소스**다([[운영 enum 하드코딩 절대 금지]]).
@@ -114,8 +121,8 @@ export function HubStudentSearch({
       <StudentSearchBox
         value={query}
         onChange={run}
-        placeholder="학생 이름으로 찾기"
-        // 18px 라벨(control-scale) 기준 — "학생 이름으로 찾기" 9글자가 잘리지 않는 폭(옛 12px 시절 116px).
+        placeholder={t("att.search.ph")}
+        // 18px 라벨(control-scale, v5) 기준 — 안내 문구가 잘리지 않는 폭(옛 12px 시절 116px).
         inputWidth="w-[168px]"
       />
       {open ? (
@@ -126,18 +133,20 @@ export function HubStudentSearch({
           {/* 🔴 결과가 없는 채로 다시 묻는 중이면 **"없습니다"라고 말하지 않는다** — 방금 친 말의 답이
               아직 안 왔을 뿐인데 못 찾았다고 하면 사람이 검색을 그만둔다. */}
           {loading && (!result || result.hits.length === 0) ? (
-            <p className="text-text-dim px-2 py-3 text-xs">찾는 중…</p>
+            <p className="text-text-dim px-2 py-3 text-xs">{t("att.search.loading")}</p>
           ) : result?.error ? (
             <p className="text-danger px-2 py-3 text-xs">{result.error}</p>
           ) : result && result.hits.length === 0 ? (
             <p className="text-text-dim px-2 py-3 text-xs break-keep">
-              {hubEmptyMessage(query, result.where || "출석부")}
+              {hubEmptyMessage(query, result.where || t("att.search.where"), lang)}
             </p>
           ) : result ? (
             <>
               {/* 검색어를 바꾸는 동안엔 **옛 결과**가 잠깐 남는다 — 그 사실을 한 줄로 밝힌다
                   (아무 표시가 없으면 지금 목록이 방금 친 말의 답인 줄로 읽힌다). */}
-              {loading ? <p className="text-text-faint px-2 pb-1 text-xs">찾는 중…</p> : null}
+              {loading ? (
+                <p className="text-text-faint px-2 pb-1 text-xs">{t("att.search.loading")}</p>
+              ) : null}
               {/* 🔑 **과목 그룹**(원장 2026-08-24 *"이런식으로 구분되게 · 과목 라벨을 붙이라는 소리임"*).
                   스크롤은 **바깥 한 곳**에만 둔다 — 그룹마다 스크롤을 주면 짧은 그룹이 각자 잘린다.
                   🔴 머리글 라벨은 학원설정이 단일 소스(`labelOf`) — 화면 파일에 과목 맵을 만들지 말 것. */}
@@ -151,7 +160,7 @@ export function HubStudentSearch({
                   ⚠️ 스크롤은 바깥 한 곳에만 — 그룹마다 주면 짧은 그룹이 각자 잘린다. */}
               <ul className="grid max-h-[min(46vh,360px)] grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-baseline gap-x-2 gap-y-0.5 overflow-y-auto px-1">
                 {groups.map((g, gi) => (
-                  <Fragment key={g.subject || "(미분류)"}>
+                  <Fragment key={g.subject || "(unclassified)"}>
                     {/* 그룹이 하나뿐이어도 머리글은 그린다 — 글자를 치는 동안 줄이 튀지 않고,
                         지금 보는 게 무슨 과목인지 말해 준다.
                         구분선은 **그룹 사이에만** — 마지막 그룹 아래에 선이 남으면 잘린 목록처럼 읽힌다. */}
@@ -160,7 +169,7 @@ export function HubStudentSearch({
                         gi > 0 ? "border-line mt-1.5 border-t pt-1.5" : ""
                       }`}
                     >
-                      {hubSubjectHeading(g.subject, subjects.labelOf)}
+                      {hubSubjectHeading(g.subject, subjects.labelOf, lang)}
                     </li>
                     {g.hits.map((h) => (
                       <li key={`${h.classId}:${h.studentId}`} className="col-span-full grid grid-cols-subgrid">
@@ -181,8 +190,11 @@ export function HubStudentSearch({
                           <span className="text-foreground text-sm font-bold">{h.studentName}</span>
                           {/* 🔴 값이 없어도 칸은 **비워서 그린다** — 안 그리면 그 줄만 열이 하나 밀린다. */}
                           <span className="text-text-faint text-xs">{h.schoolGrade}</span>
-                          <span className="text-text-dim min-w-0 truncate text-xs" title={h.className}>
-                            {h.className}
+                          <span
+                            className="text-text-dim min-w-0 truncate text-xs"
+                            title={classNameFor(h.className, lang)}
+                          >
+                            {classNameFor(h.className, lang)}
                           </span>
                           <span className="text-text-dim text-xs">{h.teacherName ?? ""}</span>
                           {/* 🔑 **등원 요일**(원장 2026-08-24) — 한 학생이 여러 반이면 줄이 이름·학교·담임
@@ -195,7 +207,9 @@ export function HubStudentSearch({
                           <span
                             // `pl-2` = 담임 이름과 붙어 한 덩어리로 읽히지 않게(열 간격만으론 좁다).
                             className="text-text-dim pl-2 text-right text-xs font-medium"
-                            title={h.attendLabel ? `등원 ${h.attendLabel}` : undefined}
+                            title={
+                              h.attendLabel ? tf("att.search.attendDows", { dows: h.attendLabel }) : undefined
+                            }
                           >
                             {h.attendLabel}
                           </span>
@@ -208,12 +222,12 @@ export function HubStudentSearch({
               {/* 🔴 잘랐으면 **밝힌다** — 상한을 숨기면 "그 학생은 없다"는 거짓말이 된다([[#89]]). */}
               {result.truncated ? (
                 <p className="text-amber border-line mt-1 border-t px-2 pt-1.5 text-xs">
-                  {hubTruncatedNote(result.limit)}
+                  {hubTruncatedNote(result.limit, lang)}
                 </p>
               ) : null}
             </>
           ) : (
-            <p className="text-text-dim px-2 py-3 text-xs">찾는 중…</p>
+            <p className="text-text-dim px-2 py-3 text-xs">{t("att.search.loading")}</p>
           )}
         </div>
       ) : null}

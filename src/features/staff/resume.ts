@@ -13,17 +13,29 @@ export const CAREER_ROWS = 3;
 // 동적 섹션 상한 — 폼 변조·초안 폭주 방지용 안전 캡(정상 사용에선 닿지 않는다). 학력·경력·자격증·외국어 공통.
 export const DYNAMIC_ROWS_MAX = 20;
 
+// 🔴 `key`가 저장값이고 `label`/`en`은 **표시 전용**이다 — 영어를 별도 파일로 빼지 않는 이유는
+//    요일이 하나 늘 때 한쪽만 채워지면 그 칸이 raw 키로 새기 때문(학원설정 enum 규약과 같은 결).
 export const WORKDAYS = [
-  { key: "mon", label: "월" },
-  { key: "tue", label: "화" },
-  { key: "wed", label: "수" },
-  { key: "thu", label: "목" },
-  { key: "fri", label: "금" },
-  { key: "sat", label: "토" },
-  { key: "sun", label: "일" },
+  { key: "mon", label: "월", en: "Mon" },
+  { key: "tue", label: "화", en: "Tue" },
+  { key: "wed", label: "수", en: "Wed" },
+  { key: "thu", label: "목", en: "Thu" },
+  { key: "fri", label: "금", en: "Fri" },
+  { key: "sat", label: "토", en: "Sat" },
+  { key: "sun", label: "일", en: "Sun" },
 ] as const;
 
 export const EMPLOYMENT_TYPES = ["정규직", "아르바이트", "프리랜서"] as const;
+
+/**
+ * 근무형태 표시용 영어 — 🔴 **값(한국어)은 저장값이자 계약서 추출(`contract-extract`)의 매칭 키**라
+ * 한 글자도 바뀌지 않는다. 여기 영어는 화면에 그리는 글자일 뿐이다.
+ */
+export const EMPLOYMENT_TYPE_EN: Record<string, string> = {
+  정규직: "Full-time",
+  아르바이트: "Part-time",
+  프리랜서: "Freelance",
+};
 
 // 회사 구분 — 신규 직원명부(구글시트) '회사명' 열과 같은 선택지(2026-07-16 원장 지정 목록).
 export const RESUME_COMPANIES = [
@@ -45,10 +57,10 @@ const DEPT_LEGACY: Record<string, string> = { 경영지원: "경영지원팀" };
 
 // 서류 확인 체크박스 4종(2026-07-28) — 했는지 여부만(boolean). 시트 기입은 'Y'/'' 텍스트.
 export const RESUME_CHECKS = [
-  { key: "sexCrime", label: "성범죄 조회" },
-  { key: "childAbuse", label: "아동학대 조회" },
-  { key: "eduOffice", label: "교육청 강사등록" },
-  { key: "etcDocs", label: "기타 서류" },
+  { key: "sexCrime", label: "성범죄 조회", en: "Sex-offence check" },
+  { key: "childAbuse", label: "아동학대 조회", en: "Child-abuse check" },
+  { key: "eduOffice", label: "교육청 강사등록", en: "Education office registration" },
+  { key: "etcDocs", label: "기타 서류", en: "Other documents" },
 ] as const;
 export type ResumeCheckKey = (typeof RESUME_CHECKS)[number]["key"];
 

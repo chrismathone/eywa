@@ -7,6 +7,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 // 출결 쓰기의 담당 반 축 — **출결 서버 액션과 같은 함수**(담임 ∪ 위임 ∪ 교시 담당). 화면 잠금이
 // 액션보다 좁으면 "서버는 허락하는데 화면이 막는" 거짓 잠금이 된다(write-gate-axis.test.ts).
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
+// 🔴 방 이름 규약은 좌석표·주간 시트와 **같은 두 함수**다(단일 소스) — 갈리면 같은 방을
+//    화면마다 다르게 부른다.
+import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/seating-floors";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { getClassNameAsOfIndex } from "@/features/classes/server/class-name-as-of-queries";
 import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
@@ -94,6 +97,12 @@ export type TodaySlot = {
 export type TodayStudent = {
   studentId: string;
   name: string;
+  /**
+   * 영어 이름(`students.english_name`) — **영어 화면에서 주 이름**이 된다(원장 2026-09-03).
+   * 🔴 표시 전용이고 판정은 [`studentNameParts`](@/features/teacher-view/student-name) 한 곳이다.
+   *    학부모에게 나가는 것에는 절대 쓰지 않는다(그 모듈의 구조 가드가 막는다).
+   */
+  englishName: string | null;
   school: string | null;
   grade: string | null;
   /** 출결 effective 상태(없으면 null=미기록). 교시별 행이 여러 개면 가장 최근 기록의 상태. */
@@ -259,10 +268,12 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     end_time: string | null;
     slot_teacher_label: string | null;
     classroom_id: string | null;
+    slot_room_label: string | null;
   }>(scopedIds, (chunk) =>
     supabase
       .from("class_schedules")
-      .select("class_id, start_time, end_time, slot_teacher_label, classroom_id")
+      // ⚠️ 라벨도 함께 읽는다 — FK가 빈 슬롯은 라벨이 유일한 단서다(주간 시트와 같은 규약).
+      .select("class_id, start_time, end_time, slot_teacher_label, classroom_id, slot_room_label")
       .in("class_id", chunk)
       .eq("day_of_week", dow)
       .lte("valid_from", date)
@@ -460,9 +471,14 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const studentRows = await fetchInChunks<{
     id: string;
     name: string;
+    english_name: string | null;
     school: string | null;
     grade: string | null;
-  }>(studentIds, (chunk) => supabase.from("students").select("id, name, school, grade").in("id", chunk));
+    // ⚠️ `english_name`은 **이미 있는 컬럼**이다(주간 시트 로스터가 그대로 읽는다) — 새 컬럼이 아니라
+    //    [[#95]](마이그레이션보다 앱 먼저 배포) 위험이 없다.
+  }>(studentIds, (chunk) =>
+    supabase.from("students").select("id, name, english_name, school, grade").in("id", chunk),
+  );
 
   // 보고서 상태 — 그 날짜·그 학생들.
   // ⚠️ **`class_id`로만 매칭하면 보강 보고서를 놓친다** — 원스크린은 보강을 `class_id=null` + `subject`로
@@ -535,9 +551,12 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     const extra = await fetchInChunks<{
       id: string;
       name: string;
+      english_name: string | null;
       school: string | null;
       grade: string | null;
-    }>(missingMakeup, (chunk) => supabase.from("students").select("id, name, school, grade").in("id", chunk));
+    }>(missingMakeup, (chunk) =>
+      supabase.from("students").select("id, name, english_name, school, grade").in("id", chunk),
+    );
     for (const s of extra) studentMeta.set(s.id, s);
   }
   // 교시 라벨 표 — 주간 시트(queries.ts)와 **같은 폴백 체인**(과목 전용 → english 내장 → 전역).
@@ -667,7 +686,14 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
           slotEnd: end,
           teacherLabel: s.slot_teacher_label ?? null,
           periodLabel: resolvePeriodLabel(start, end, periodTables, weekend),
-          roomLabel: s.classroom_id ? (roomName.get(s.classroom_id) ?? null) : null,
+          // 🔴 FK 이름이 먼저, 없으면 라벨을 등록된 이름으로 맞춘다 — 주간·월간 시트와 **같은 두 함수**.
+          roomLabel: canonicalRoomName(
+            resolveRoomName({
+              slotClassroomName: s.classroom_id ? (roomName.get(s.classroom_id) ?? null) : null,
+              slotRoomLabel: s.slot_room_label,
+            }),
+            [...roomName.values()],
+          ),
           lines,
           // 폼은 자리 라벨이 정한다 — 주간 시트와 같은 함수(반 이름·강의실로 추측 금지).
           form: rosterFormOf(s.slot_teacher_label),
@@ -699,6 +725,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
           return {
             studentId: e.student_id,
             name: meta?.name ?? "(이름 없음)",
+            englishName: meta?.english_name ?? null,
             school: meta?.school ?? null,
             grade: meta?.grade ?? null,
             attendance: att?.status ?? null,
@@ -729,6 +756,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         return {
           studentId: id,
           name: meta?.name ?? "(이름 없음)",
+          englishName: meta?.english_name ?? null,
           school: meta?.school ?? null,
           grade: meta?.grade ?? null,
           attendance: att?.status ?? null,

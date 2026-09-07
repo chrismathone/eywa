@@ -15,6 +15,12 @@ import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getActivePopups } from "@/features/notices/server/queries";
 import { NoticePopupLayer } from "@/features/notices/components/notice-popup-layer";
 import { OperationsProvider } from "@/features/owner/operations-context";
+// 강사뷰 화면 언어(2026-09-03) — **미니셸(강사)에만** 주입한다. 관리자 풀셸은 한국어 고정(원장 지시).
+import { SheetLangProvider } from "@/features/teacher-view/lang-context";
+import { DEFAULT_SHEET_LANG, sheetMenuLabel } from "@/features/teacher-view/i18n";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
+import { TeacherNamesProvider } from "@/features/teacher-view/teacher-names-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, canUseOtherTeacherView, isFullShellRole, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
@@ -52,8 +58,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 생략하고 본문만(크롬리스). 창 안엔 캔버스가 없으니 무한중첩 불가. RLS는 페이지가 자체 게이트.
   const embed = (await headers()).get("x-embed") === "1";
   if (embed) {
+    // 🔴 창(iframe)에도 **같은 언어**를 흘린다 — 안 흘리면 서버 컴포넌트(`getTeacherViewLang`)는 영어인데
+    //    클라 컴포넌트는 provider가 없어 한국어인 **반반 화면**이 된다. 관리자에겐 이 값이 항상 한국어라
+    //    (그 함수가 `getShellView()!=="teacher"`에서 조회 없이 즉시 반환) 풀셸 동작은 한 글자도 안 바뀐다.
     return (
       <EmbedProvider embed>
+        <TeacherNamesProvider names={await getTeacherEnglishNames()}>
+        <SheetLangProvider lang={await getTeacherViewLang()}>
         <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
@@ -70,6 +81,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             {children}
           </main>
         </OperationsProvider></EditPresenceProvider>
+        </SheetLangProvider>
+        </TeacherNamesProvider>
       </EmbedProvider>
     );
   }
@@ -140,12 +153,26 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 위 ecsForTeacher와 **같은 캐시**(effectiveTeacherScope·ecsAssistantClassIds)를 재사용하므로 추가 쿼리 0.
   const teacherHome = view === "teacher" ? await teacherViewHome() : null;
 
+  // 강사뷰 화면 언어(원장 2026-09-03) — 크롬('내 메뉴')과 본문이 **한 값**을 봐야 하므로 셸에서 한 번 읽어
+  // 아래 미니셸 전체를 감싼다. 🔴 관리자 풀셸·학생 미니셸에는 주입하지 않는다(원장: 관리자뷰 수정 불필요).
+  // ⚠️ `getTeacherViewLang`은 스스로도 `getShellView()!=="teacher"`면 한국어를 내므로(서버 컴포넌트가
+  //    직접 부르는 경로까지 같은 답), 여기 조건과 이중으로 맞물린다.
+  const teacherLang = view === "teacher" ? await getTeacherViewLang() : DEFAULT_SHEET_LANG;
+  // 표시 이름 → 영어 이름 표(원장 2026-09-03) — 영어 화면이 아니면 보내지 않고 해당 함수도 조회 0회다.
+  const teacherNames = view === "teacher" ? await getTeacherEnglishNames() : {};
+
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
   if (view === "teacher" || view === "student") {
     // 미니셸 헤더에 현재 메뉴명을 얹는다 — 이 셸엔 MobileTopNav가 없어 크롬에 제목이 없다.
     // 모르는 경로는 null(지어내지 않는다 — 학원명만 남는다).
-    const miniShellLabel = findNavItem((await headers()).get("x-pathname") ?? "")?.label ?? null;
+    // 화면 언어를 따라간다(2026-09-03) — 앱 전역 네비 표의 label은 **안 고친다**(관리자 사이드바·팰릿
+    // 공용이고 관리자뷰는 한국어 고정). 강사 미니셸이 그릴 때만 사전으로 갈아 끼우고, 사전에 없는
+    // 메뉴는 원래 한국어 라벨로 떨어진다.
+    const miniShellNav = findNavItem((await headers()).get("x-pathname") ?? "") ?? null;
+    const miniShellLabel = miniShellNav
+      ? (sheetMenuLabel(miniShellNav.menuKey, teacherLang) ?? miniShellNav.label)
+      : null;
     return (
       // print:h-auto/overflow-visible — 인쇄 시 h-screen+overflow-hidden 래퍼가 문서를 1페이지 높이로
       // 클리핑하는 것 방지(globals.css의 html/body/main 인쇄 리셋과 세트 — 래퍼 div는 셀렉터 밖이라 여기서).
@@ -153,6 +180,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       // 사용자 메뉴(WindowLink '내 정보')가 기본값 true를 보고 캔버스 없는 미니셸에서 유령 창만 열어
       // "눌러도 아무 일 없음"이 났다(원장 제보 2026-08-04, 육소희 실측).
       <WorkspaceEnabledProvider enabled={false}>
+      {/* 🔴 provider가 **헤더까지** 감싼다 — 스위치와 '내 메뉴' 라벨이 헤더에 있어서, <main>만 감싸면
+          메뉴는 한글인데 본문만 영어가 된다(둘이 같은 값을 봐야 한다). 학생 미니셸에는 안 걸린다. */}
+      <TeacherNamesProvider names={teacherNames}>
+      <SheetLangProvider lang={teacherLang}>
       <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
         {/* z-[60]: 공지 팝업 레이어(z-55)가 좁은 미니셸에선 헤더 버튼('내 메뉴'·사용자 메뉴)까지 덮어
             클릭이 팝업에 먹혔다(2026-08-04 실측) — 내비 크롬은 공지보다 항상 위. */}
@@ -213,6 +244,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         </main>
         <NoticePopupLayer popups={popups} />
       </div>
+      </SheetLangProvider>
+      </TeacherNamesProvider>
       </WorkspaceEnabledProvider>
     );
   }

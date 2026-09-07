@@ -99,6 +99,7 @@ export default async function EditStaffPage({
           deskAttendanceOptin: staff.deskAttendanceOptin,
           shuttleDuty: staff.shuttleDuty,
           teacherViewAccess: staff.teacherViewAccess,
+          teacherViewLang: staff.teacherViewLang,
         }}
       />
     </div>

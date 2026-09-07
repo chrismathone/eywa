@@ -1,6 +1,13 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+// 슬롯 담당 해석 — 주간 시트(`queries.ts`)·시간표 3뷰와 **같은 두 함수**를 쓴다(갈리면 같은 교시가
+// 화면마다 다른 담당으로 보인다).
+import { fetchInChunks } from "@/lib/supabase/batch";
+import { getTeacherLabelMap } from "@/features/timetable/server/queries";
+import { resolveTeacherLabel } from "@/features/timetable/lib/teacher-label";
+// 🔴 방 이름 규약은 좌석표·주간 시트와 **같은 두 함수**다(단일 소스).
+import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/seating-floors";
 import { kstMonth, kstToday, monthLabel, monthRange } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 // 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
@@ -123,10 +130,17 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
   const isEie = access.englishTrack === "eie";
 
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes] = await Promise.all([
+  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes, roomsRes, labelMap] =
+    await Promise.all([
     admin
       .from("class_schedules")
-      .select("day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label")
+      .select(
+        // ⚠️ FK를 함께 읽는다 — 라벨은 시트가 적은 대로라 같은 방이 두 표기다(주간 시트와 같은 규약).
+        // 🔴 `teacher_id`도 같은 이유로 읽는다(2026-09-04 원장 제보 "강사 시트랑 배선이 다르게 되어있나?"):
+        //    종전엔 라벨만 읽어서, 라벨이 빈 교시가 담당이 **배정돼 있는데도** `담당 미지정`으로 떴다
+        //    (실측 `중등E_중1 정규 B` 화 19:20 = 라벨 null · teacher_id 추민아 → 시간표엔 추민아, 월간엔 미지정).
+        "day_of_week, start_time, end_time, valid_from, valid_to, classroom_id, teacher_id, slot_teacher_label, slot_room_label",
+      )
       .eq("tenant_id", access.tenantId)
       .eq("class_id", classId)
       .lte("valid_from", to)
@@ -182,6 +196,10 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       .eq("class_id", classId)
       .eq("month", from)
       .maybeSingle(),
+    // 등록 강의실(id→이름) — 라벨을 eywa 기준 이름으로 맞추는 근거(주간 시트와 같은 규약).
+    admin.from("classrooms").select("id, name").eq("tenant_id", access.tenantId),
+    // 강사 라벨 해석기(닉네임 `Song` → 표시 이름 `송지혜`) — 주간 시트·시간표 3뷰와 **같은 함수**.
+    getTeacherLabelMap({ supabase: admin, tenantId: access.tenantId }),
   ]);
 
   if (scheduleRes.error) return { ok: false, error: "시간표를 불러오지 못했습니다" };
@@ -224,14 +242,60 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
     body: typeof r.body === "string" ? r.body : "",
   }));
 
+  const roomRows = (roomsRes.data ?? []) as { id: string; name: string }[];
+  const roomNameById = new Map(roomRows.map((r) => [r.id, r.name]));
+  const roomNames = roomRows.map((r) => r.name);
+
+  /**
+   * 슬롯 담당 표시 이름 — 주간 시트(`queries.ts`)가 하는 것과 **같은 조회**(id → display_name).
+   * 한 반 한 달의 담당은 많아야 서넛이라 청크 하나로 끝난다.
+   */
+  const slotTeacherIds = new Set<string>();
+  for (const r of scheduleRes.data ?? []) {
+    const id = (r.teacher_id as string | null) ?? null;
+    if (id) slotTeacherIds.add(id);
+  }
+  const slotTeacherNames: Record<string, string> = {};
+  if (slotTeacherIds.size > 0) {
+    const rows = await fetchInChunks<{ id: string; display_name: string | null }>(
+      [...slotTeacherIds],
+      (chunk) => admin.from("users").select("id, display_name").eq("tenant_id", access.tenantId).in("id", chunk),
+    );
+    for (const u of rows) if (u.display_name) slotTeacherNames[u.id] = u.display_name;
+  }
+  const classTeacherName = (teacherRes?.data?.display_name as string | null | undefined) ?? null;
+
+  /**
+   * 교시 담당 표시명 — **주간 시트(`period-block.tsx`)와 글자 그대로 같은 순서**: 라벨 → 슬롯 담당 → 담임.
+   *
+   * 🔴 **라벨이 먼저다. 뒤집지 말 것** — 라벨과 FK가 서로 다른 사람을 가리키는 슬롯이 실제로 있어서,
+   *    FK를 앞세우면 시간표·주간 시트와 어긋난 이름이 월간에만 뜬다(period-block.tsx 주석·changelog 2026-07-29).
+   * ⚠️ 자리(LAB·JJ)는 라벨이 곧 이름이라 `resolveTeacherLabel`이 그대로 돌려주고, FK가 null이라
+   *    폴백에도 안 걸린다 — 자리가 사람 이름으로 바뀌는 일은 구조적으로 없다.
+   */
+  const displayTeacherOf = (r: Record<string, unknown>): string | null => {
+    const label = resolveTeacherLabel((r.slot_teacher_label as string | null) ?? null, labelMap);
+    if (label) return label;
+    const id = (r.teacher_id as string | null) ?? null;
+    return (id ? (slotTeacherNames[id] ?? null) : null) ?? classTeacherName;
+  };
+
   const scheduleRows: MonthScheduleRow[] = (scheduleRes.data ?? []).map((r) => ({
     dayOfWeek: String(r.day_of_week),
     startTime: String(r.start_time),
     endTime: r.end_time ? String(r.end_time) : null,
     validFrom: r.valid_from ? String(r.valid_from) : null,
     validTo: r.valid_to ? String(r.valid_to) : null,
-    slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
-    slotRoomLabel: (r.slot_room_label as string | null) ?? null,
+    slotTeacherLabel: displayTeacherOf(r),
+    // 🔴 주간 시트(`queries.ts`)와 **같은 두 함수**로 해석한다 — 갈리면 같은 반의 같은 교시가
+    //    주간과 월간에서 다른 방 이름으로 뜬다.
+    slotRoomLabel: canonicalRoomName(
+      resolveRoomName({
+        slotClassroomName: r.classroom_id ? (roomNameById.get(String(r.classroom_id)) ?? null) : null,
+        slotRoomLabel: (r.slot_room_label as string | null) ?? null,
+      }),
+      roomNames,
+    ),
   }));
 
   const dates = monthDates(month);
@@ -313,7 +377,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       //    달 중간에 이름이 바뀌는 경우 헤더를 어느 이름으로 쓸지가 새 결정이다. 필요해지면 그때.
       className: access.className,
       teacherId: access.teacherId,
-      teacherName: (teacherRes?.data?.display_name as string | null | undefined) ?? null,
+      teacherName: classTeacherName,
       month,
       monthLabel: monthLabel(month),
       today,

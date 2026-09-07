@@ -4,15 +4,17 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import { updateEnrollmentsAttendanceBatch } from "@/features/enrollments/server/actions";
+// 요일 글자는 앱 전역 `sheetDowLabel` 단일 소스 — 여기에 표를 다시 만들지 않는다.
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { sheetDowLabel } from "@/features/teacher-view/i18n";
 
-const DAY_LABEL: Record<string, string> = {
-  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
-};
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 /**
  * 분리등원 요일(attendance_days) 더블클릭 인라인 수정 — EditableDateCell의 등원요일판.
- * 학생 상세 수업탭(스케줄 셀) + 수업 상세 로스터('화만' 배지) 공용. 노출은 호출부가 canWriteTenant("classes")로 게이트.
+ * 학생 상세 수업탭(스케줄 셀) + 수업 상세 로스터('화만' 배지) 공용. 노출은 호출부가
+ * canManageTenant("classes")로 게이트 — 저장하는 `updateEnrollmentsAttendanceBatch`가 관리자 전용이라
+ * 같은 축이어야 한다(canWriteTenant면 강사에게 칸만 열리고 저장은 거절된다).
  * children = 비편집 표시(스케줄/배지). 반 운영 요일(classDays)이 선택지, attendanceDays=[]는 전 요일 등원(분리 해제).
  * 저장은 updateEnrollmentsAttendanceBatch(단건). 전 요일 선택 = [] 저장(분리 해제), 부분 = 그 요일.
  */
@@ -28,6 +30,8 @@ export function EditableAttendanceCell({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const lang = useSheetLang();
+  const t = useSheetT();
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -46,7 +50,7 @@ export function EditableAttendanceCell({
           setErr(null);
           setEditing(true);
         }}
-        title="더블클릭하여 등원 요일 수정"
+        title={t("cls.ad.editTitle")}
         className="hover:bg-bg-soft -mx-1 cursor-pointer rounded px-1 py-0.5 text-left transition"
       >
         {children}
@@ -65,7 +69,7 @@ export function EditableAttendanceCell({
   function save() {
     const days = opts.filter((d) => sel.has(d));
     if (days.length === 0) {
-      setErr("최소 한 요일");
+      setErr(t("cls.ad.needOne"));
       return;
     }
     start(async () => {
@@ -88,11 +92,12 @@ export function EditableAttendanceCell({
             key={d}
             type="button"
             onClick={() => toggle(d)}
-            className={`inline-flex size-5 items-center justify-center rounded-sm text-xs font-bold transition ${
+            /* ⚠️ 영어 요일은 세 글자라 20px 고정에 안 들어간다 — 목록 화면 알약과 같은 규약. */
+            className={`inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 text-xs font-bold transition ${
               sel.has(d) ? "bg-primary text-primary-foreground" : "bg-bg-soft text-text-faint hover:bg-bg-soft/70"
             }`}
           >
-            {DAY_LABEL[d] ?? d}
+            {sheetDowLabel(d, lang)}
           </button>
         ))}
       </span>
@@ -100,7 +105,7 @@ export function EditableAttendanceCell({
         type="button"
         onClick={save}
         disabled={pending}
-        title="저장"
+        title={t("cls.ad.save")}
         className="text-primary hover:bg-primary/10 rounded p-1 transition disabled:opacity-60"
       >
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
@@ -108,7 +113,7 @@ export function EditableAttendanceCell({
       <button
         type="button"
         onClick={() => setEditing(false)}
-        title="취소"
+        title={t("cls.ad.cancel")}
         className="text-text-faint hover:bg-bg-soft rounded p-1 transition"
       >
         <X className="size-3.5" />

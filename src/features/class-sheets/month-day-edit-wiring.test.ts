@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SHEET_DICT } from "@/features/teacher-view/i18n";
 
 /**
  * 구조 가드 — 월간 뷰에서 **그 날짜를 그 자리에서 고치는** 배선이 조용히 갈라지지 않게 잠근다
@@ -248,8 +249,20 @@ describe("ECS 상단 바 · 좁은 폭에서 접기", () => {
   });
 
   it("🔴 접혔을 때 이름이 남는다(두 알약 다 aria-label)", () => {
-    expect(chrome).toContain('aria-label="반 목록"');
-    expect(chrome).toContain("ariaLabel={`${classLabel} 반 정보 보기`}");
+    // 2026-09-03 화면 언어(한/영) 전환이 붙으면서 라벨이 사전(`i18n.ts`)에서 온다 — 그래서
+    // **문자열이 아니라 배선**을 본다(접근성 이름이 사라지지 않았는지가 이 가드의 뜻이다).
+    // 🔴 반 이름은 여전히 호출부가 붙인다 — 다만 2026-09-03부터 **표기가 언어를 따른다**
+    //    (`showClass` = [`classNameFor`](@/features/teacher-view/class-name)). 이름이 접근성 이름에서
+    //    사라지지 않았는지가 이 가드의 뜻이라, 보간이 남아 있는지를 그 함수 경유로 확인한다.
+    expect(chrome).toContain('aria-label={t("chrome.list.aria")}');
+    expect(chrome).toContain("ariaLabel={`${showClass(classLabel)} ${t(\"chrome.classInfo.suffix\")}`}");
+    // 🔴 표기 함수가 사전이 아니라 **반 이름 규약**을 타는지도 함께 잠근다(화면에서 `lang === "en" ? …`를
+    //    직접 적으면 같은 반이 자리마다 다른 이름이 된다).
+    expect(chrome).toContain('classNameFor(n, lang)');
+    // 🔴 사전 쪽도 함께 잠근다 — 배선만 보면 그 키가 빈 문자열이어도 통과해서, 접힌 알약이
+    //    **이름 없는 아이콘**이 되는 것을 이 가드가 놓친다(원문 확인처를 옮긴 것이지 없앤 게 아니다).
+    expect(SHEET_DICT["chrome.list.aria"].ko).toBe("반 목록");
+    expect(SHEET_DICT["chrome.classInfo.suffix"].ko).toBe("반 정보 보기");
   });
 
   it("⚠️ 아이콘 자리 높이가 글자 줄상자와 같다 — 접힌 알약만 낮아지지 않게", () => {

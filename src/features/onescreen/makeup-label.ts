@@ -26,14 +26,28 @@ export type MakeupShape = {
 export const MAKEUP_ONLY_SUFFIX = " (보강)";
 export const MAKEUP_COMBINED_SUFFIX = " (정규+보강)";
 
+/**
+ * 보강 전용 행의 **이름** — 🔴 화면 글자가 아니라 `reports[학생][이 이름]` **맵 키**이자
+ * 저장 단위(unit_key)라 언어를 타지 않는다. 같은 과목 보강을 또 넣으면 번호가 붙는다.
+ */
+export function makeupRowName(subjectName: string, n?: number): string {
+  return n && n > 1 ? `${subjectName} (보강 ${n})` : `${subjectName}${MAKEUP_ONLY_SUFFIX}`;
+}
+
 /** 제목 뒤에 붙일 접미사. 보강이 아니면 빈 문자열. */
 export function makeupTitleSuffix(r: MakeupShape): string {
   if (!r.makeup) return "";
   return r.hasClass ? MAKEUP_COMBINED_SUFFIX : MAKEUP_ONLY_SUFFIX;
 }
 
-/** 강사 화면 배지용 짧은 라벨(괄호·앞 공백 없음). 보강이 아니면 null. */
-export function makeupBadgeLabel(r: MakeupShape): string | null {
+/**
+ * 강사 화면 배지용 짧은 라벨(괄호·앞 공백 없음). 보강이 아니면 null.
+ *
+ * 🔴 **제목 접미사(`makeupTitleSuffix`)는 언어를 안 탄다** — 그건 학부모 보고서 제목이라
+ *    한국어 고정이다. 여기만 화면 표기다(인자를 안 주면 한국어).
+ */
+export function makeupBadgeLabel(r: MakeupShape, lang: "ko" | "en" = "ko"): string | null {
   if (!r.makeup) return null;
+  if (lang === "en") return r.hasClass ? "Regular + makeup" : "Makeup";
   return r.hasClass ? "정규+보강" : "보강";
 }

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canWriteClassRecord } from "@/features/classes/class-write-scope";
 import {
   applyLevelChange,
   DEFAULT_ENGLISH_LEVELS,
@@ -37,8 +39,16 @@ export async function changeClassLevel(
   // scoped(강사)는 **담당 반만** — canWriteTenant는 "강사가 어떤 반이든 쓸 수 있다"만 보장하지 이 반이
   // 내 반인지는 보장하지 않는다. RLS도 tenant 격리뿐이라 여기서 막지 않으면 강사가 안 맡은 반 이름까지
   // 바꿀 수 있었다(2026-07-17 적대 감사 M4). full(관리자 계열·겸직 포함)은 기존대로 전 반.
-  // 패턴은 setAttendanceCell의 scoped 담당 반 강제와 동일.
-  if ((await accessLevelTenant(user.systemRole, "classes")) === "scoped" && klass.teacher_id !== user.id) {
+  // 🔴 판정은 반 수정·위임과 **같은 순수 함수**(2026-09-04) — 손으로 복사한 네 번째 사본이었다.
+  //    super_admin은 새 제한을 자동 통과(화면 버튼이 그렇게 나오므로 서버도 같아야 한다).
+  if (
+    !canWriteClassRecord({
+      level: await accessLevelTenant(user.systemRole, "classes"),
+      classTeacherId: (klass.teacher_id as string | null) ?? null,
+      userId: user.id,
+    }) &&
+    !(await isCurrentUserSuperAdmin())
+  ) {
     return { error: "담당 반만 변경할 수 있습니다" };
   }
 

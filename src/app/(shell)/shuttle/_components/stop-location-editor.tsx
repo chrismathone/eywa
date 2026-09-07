@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_ACTION, SHUTTLE_INPUT } from "@/features/shuttle/control-size";
 import { hasCoords, type ShuttleStop } from "@/features/shuttle/types";
+import { AddressFinder } from "./address-finder";
 import { MAP_AVAILABLE, StopMapPicker } from "./stop-map-picker";
 
 /**
@@ -78,57 +79,70 @@ export function StopLocationEditor({
         }}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="text-text-dim flex items-center gap-1 text-xs">
-          위도
-          <input
-            value={lat}
-            onChange={(e) => setLat(e.target.value)}
-            inputMode="decimal"
-            placeholder="35.8714"
-            aria-label={`${stop.name} 위도`}
-            className={cn(SHUTTLE_INPUT, "num w-32")}
-          />
-        </label>
-        <label className="text-text-dim flex items-center gap-1 text-xs">
-          경도
-          <input
-            value={lng}
-            onChange={(e) => setLng(e.target.value)}
-            inputMode="decimal"
-            placeholder="128.6014"
-            aria-label={`${stop.name} 경도`}
-            className={cn(SHUTTLE_INPUT, "num w-32")}
-          />
-        </label>
-        <label className="text-text-dim flex items-center gap-1 text-xs">
-          반경
-          <input
-            value={radius}
-            onChange={(e) => setRadius(e.target.value)}
-            inputMode="numeric"
-            aria-label={`${stop.name} 도착 반경(미터)`}
-            className={cn(SHUTTLE_INPUT, "num w-20")}
-          />
-          m
-        </label>
+      {/* 📍 **주소 찾기가 기본 수단이다**(원장 2026-09-04 *"위도경도 찍지말고 … 주소찾기 기능 쓰면
+          대자나"*). 🔑 이건 **앱키가 필요 없어** 지금 바로 된다 — 지도가 막혀 있는 것과 별개다.
+          ⚠️ 다만 우편번호 서비스는 **주소만** 준다(좌표 없음). 좌표는 지도 키가 들어온 뒤에 채운다. */}
+      <div className="flex flex-col gap-1.5">
+        <AddressFinder onPick={setAddress} disabled={busy} />
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          maxLength={200}
+          placeholder="주소 — 위 '주소 찾기'로 채우거나 직접 입력"
+          aria-label={`${stop.name} 주소`}
+          className={cn(SHUTTLE_INPUT, "w-full")}
+        />
       </div>
 
-      <input
-        value={address}
-        onChange={(e) => setAddress(e.target.value)}
-        maxLength={200}
-        placeholder="주소 (예: 대구 북구 …)"
-        aria-label={`${stop.name} 주소`}
-        className={cn(SHUTTLE_INPUT, "w-full")}
-      />
+      {/* 🔴 **좌표는 접어 둔다** — 손으로 위경도를 치는 건 사람이 할 일이 아니다. 지도가 뜨면 클릭으로,
+          그전엔 주소로 충분하다. 그래도 아는 값을 넣고 싶은 사람을 막지는 않는다(펼치면 나온다).
+          ⚠️ 좌표가 이미 있으면 처음부터 펼쳐 둔다 — 들어 있는 값을 숨기면 왜 못 고치는지 알 수 없다. */}
+      <details className="text-text-dim text-xs" open={hasCoords(stop)}>
+        <summary className="cursor-pointer select-none">좌표 직접 입력 (선택)</summary>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <label className="text-text-dim flex items-center gap-1 text-xs">
+            위도
+            <input
+              value={lat}
+              onChange={(e) => setLat(e.target.value)}
+              inputMode="decimal"
+              placeholder="35.8714"
+              aria-label={`${stop.name} 위도`}
+              className={cn(SHUTTLE_INPUT, "num w-32")}
+            />
+          </label>
+          <label className="text-text-dim flex items-center gap-1 text-xs">
+            경도
+            <input
+              value={lng}
+              onChange={(e) => setLng(e.target.value)}
+              inputMode="decimal"
+              placeholder="128.6014"
+              aria-label={`${stop.name} 경도`}
+              className={cn(SHUTTLE_INPUT, "num w-32")}
+            />
+          </label>
+          <label className="text-text-dim flex items-center gap-1 text-xs">
+            반경
+            <input
+              value={radius}
+              onChange={(e) => setRadius(e.target.value)}
+              inputMode="numeric"
+              aria-label={`${stop.name} 도착 반경(미터)`}
+              className={cn(SHUTTLE_INPUT, "num w-20")}
+            />
+            m
+          </label>
+        </div>
+      </details>
 
       {halfFilled && (
         <p className="text-danger text-xs">위도와 경도를 함께 입력하세요.</p>
       )}
       {!MAP_AVAILABLE && (
         <p className="text-text-faint text-xs">
-          좌표는 카카오맵·네이버지도에서 위치를 길게 눌러 확인할 수 있습니다.
+          지도 키가 들어오면 여기에 지도가 떠서 클릭으로 좌표까지 찍힙니다. 그전에는 주소만 채워 두면
+          됩니다.
         </p>
       )}
 

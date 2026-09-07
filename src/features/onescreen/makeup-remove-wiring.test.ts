@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SHEET_DICT } from "@/features/teacher-view/i18n";
 
 /**
  * 구조 가드 — 보강 빼기의 **치명 사고 3종**은 순수 로직이 아니라 배선에 있었다(적대 리뷰 2026-08-18).
@@ -86,7 +87,11 @@ describe("보강 빼기 화면 배선", () => {
   });
 
   it("경고에 진도 기록 삭제도 적는다(원장 '진도기록도 되돌려야지')", () => {
-    expect(client).toContain("진도 기록이 모두 삭제됩니다");
+    // 문구는 강사뷰 사전으로 옮겼다(en 전환 13차) — 화면이 그 키를 쓰는지와
+    // 사전이 여전히 그 사실을 적는지를 **둘 다** 본다(한쪽만 보면 조용히 빠진다).
+    expect(client).toContain('t("os.c.removeMakeupLine1")');
+    expect(SHEET_DICT["os.c.removeMakeupLine1"].ko).toContain("진도 기록이 모두 삭제됩니다");
+    expect(SHEET_DICT["os.c.removeMakeupLine1"].en).toMatch(/progress/i);
   });
 
   it("발송분은 버튼 자체가 안 열린다(표·카드 모두 canRemoveMakeup 통과 필요)", () => {

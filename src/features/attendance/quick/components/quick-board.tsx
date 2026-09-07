@@ -33,10 +33,11 @@ import {
   type QuickClass,
   type QuickMark,
 } from "../board";
+// 화면 언어(강사 미니셸) — 라벨은 사전, 반 이름은 `classNameFor` 단일 소스.
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
 import { QuickClassCard } from "./quick-class-card";
 import { QuickMarkSheet, type QuickSaveInput } from "./quick-mark-sheet";
-
-const SAVE_FAILED = "저장하지 못했습니다 — 다시 눌러 주세요";
 
 export function QuickBoard({
   date,
@@ -48,6 +49,12 @@ export function QuickBoard({
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
+  // 🔴 서버가 준 거절 사유(`res.error`)는 **한국어 그대로** 띄운다 — 옮길 표가 없고, 지어낸 번역이
+  //    학생 기록에 대한 거절 사유를 뒤집으면 안 된다. 이 화면이 만드는 문장만 언어를 따른다.
+  const saveFailed = t("quick.saveFailed");
   const [marks, setMarks] = useState<Record<string, QuickMark>>({});
   const [open, setOpen] = useState<{ classId: string; studentId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +150,7 @@ export function QuickBoard({
         })
         .catch(() => {
           revert(klass.classId, studentId);
-          fail(SAVE_FAILED);
+          fail(saveFailed);
         })
         .finally(() => bump(key, -1)),
     );
@@ -181,7 +188,7 @@ export function QuickBoard({
         })
         .catch(() => {
           put(klass.classId, studentId, { status: student.status, note: prevNote });
-          fail(SAVE_FAILED);
+          fail(saveFailed);
         })
         .finally(() => bump(key, -1)),
     );
@@ -225,13 +232,13 @@ export function QuickBoard({
         if (res.applied.length < plan.cells.length) {
           // 🔴 걸러진 칸을 되돌리면 화면이 **낡은 서버 값**(빈 칸)으로 돌아간다 — 정작 서버엔 남이 찍은
           //    기록이 있다. "건너뛰었습니다"라고만 말하고 빈 칸을 보여 주면 그 안내가 거짓처럼 읽힌다.
-          if (res.blocked > 0) toast.info(`${res.blocked}명은 이미 입력되어 있어 건너뛰었습니다`);
+          if (res.blocked > 0) toast.info(tf("quick.blocked", { n: res.blocked }));
           router.refresh();
         }
       })
       .catch(() => {
         for (const c of plan.cells) revert(klass.classId, c.studentId);
-        fail(SAVE_FAILED);
+        fail(saveFailed);
       })
       .finally(() => bump(key, -1));
   }
@@ -240,8 +247,8 @@ export function QuickBoard({
     return (
       <EmptyState
         icon={CalendarDays}
-        title="오늘은 담당 수업이 없습니다"
-        description="시간표에 오늘 열린 내 수업이 없습니다. 지난 날짜는 월별 출석부에서 고칠 수 있습니다."
+        title={t("quick.empty.title")}
+        description={t("quick.empty.desc")}
       />
     );
   }
@@ -249,11 +256,15 @@ export function QuickBoard({
   return (
     <div className="space-y-2">
       <p className="text-text-dim px-1 text-sm">
-        미출결 <span className="text-danger num font-bold">{sum.unmarked}</span>명 · 입력{" "}
+        {t("quick.sum.pre")}
+        <span className="text-danger num font-bold">{sum.unmarked}</span>
+        {t("quick.sum.mid")}
         <span className="num font-bold">
           {sum.recorded}/{sum.expected}
         </span>
-        {canEdit ? null : <span className="text-amber ml-2 font-bold">읽기 전용</span>}
+        {canEdit ? null : (
+          <span className="text-amber ml-2 font-bold">{t("quick.readonly")}</span>
+        )}
       </p>
       {/* 거절 띠 — 토스트는 몇 초 뒤 사라지고 시트는 이미 닫혀 있을 수 있다. 다음 입력을 시작하면
           (`setError(null)`) 스스로 사라진다. 시트가 열려 있으면 시트 안에 같은 문장이 있어 생략. */}
@@ -286,8 +297,9 @@ export function QuickBoard({
       {open && target && targetClass ? (
         <QuickMarkSheet
           studentName={target.studentName}
+          englishName={target.englishName}
           schoolGrade={target.schoolGrade}
-          className={targetClass.className}
+          className={classNameFor(targetClass.className, lang)}
           status={target.status}
           note={target.note}
           error={error}

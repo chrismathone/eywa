@@ -31,6 +31,7 @@ const slot = (over: Partial<LiveBoardSlot> & { key: string; slotStart: string })
 const kid = (name: string, status: string | null = null) => ({
   studentId: name,
   studentName: name,
+  englishName: null,
   schoolGrade: null,
   parentPhone: null,
   studentPhone: null,

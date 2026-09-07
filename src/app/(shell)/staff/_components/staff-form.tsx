@@ -51,6 +51,8 @@ export type StaffFormValue = {
   deskAttendanceOptin?: boolean;
   /** '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용) 허용. master(+super_admin) 편집 전용. */
   teacherViewAccess?: boolean;
+  /** 강사 화면 기본 언어(0248a) — null/undefined = 지정 없음(이름에서 도출). */
+  teacherViewLang?: "ko" | "en" | null;
 };
 
 function SubmitButton({ mode }: { mode: Mode }) {
@@ -515,6 +517,29 @@ export function StaffForm({
           </label>
         </div>
       ) : null}
+
+      {/* 강사 화면 기본 언어(0248a) — 원장 2026-09-03 *"샘 킴 (sam)도 원어민에 등록"*.
+          🔴 **"원어민 여부" 같은 이름의 체크박스로 만들지 말 것** — 그 이름이면 다음 사람이 담임 판정
+             (`isKoreanTeacherName`, "원어민은 담임을 맡지 않는다")에 끌어다 쓴다. 김태건은 담임 반이
+             4개라 그 순간 시간표 가져오기의 담임 자동채움에서 그 반들이 빠진다. 이 칸은 **화면 글자**뿐이다.
+          🔴 '지정 없음'을 기본값으로 남긴다 — "아직 안 정함"과 "한국어로 정함"은 다른 사실이고,
+             전자는 나중에 이름 휴리스틱이 좋아지면 따라온다. */}
+      <Field label="강사 화면 기본 언어" htmlFor="teacherViewLang">
+        <select
+          id="teacherViewLang"
+          name="teacherViewLang"
+          defaultValue={v.teacherViewLang ?? ""}
+          className={inputClass}
+        >
+          <option value="">지정 없음 (이름으로 자동)</option>
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+        </select>
+        <p className="text-muted-foreground mt-1 text-xs">
+          지정하지 않으면 이름으로 정해집니다(로마자 이름 = English). 본인이 강사 화면 <b>‘내 메뉴’</b>에서
+          고르면 그 값이 우선합니다. 화면에 보이는 글자만 바뀌고 권한·담임·시수는 그대로입니다.
+        </p>
+      </Field>
 
       <Field label="메모" htmlFor="memo">
         <textarea

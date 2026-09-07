@@ -26,6 +26,26 @@ export const SEAT_MARK_LABEL: Record<SeatMark, string> = {
 };
 
 /**
+ * 같은 5색의 **영어 라벨** — 강사뷰 영어 화면(원장 2026-09-04 *"강사가 접근 가능한 모든 메뉴를 전환"*).
+ *
+ * 🔴 **한글 맵 바로 옆에 둔다** — 두 파일로 나누면 상태가 하나 늘 때 한쪽만 채워지고, 빠진 키는
+ *    raw enum(`waiting`)이 화면에 그대로 샌다(ECS `attendance-label.ts`와 같은 규약).
+ * ⚠️ 이 표는 **표시 전용**이다 — 저장값은 `attendance_status` enum 그대로다.
+ */
+export const SEAT_MARK_LABEL_EN: Record<SeatMark, string> = {
+  present: "Present",
+  absent: "Absent",
+  late: "Late",
+  unmarked: "Not marked",
+  waiting: "Waiting",
+};
+
+/** 화면에 적을 표시 상태. 인자를 안 주면 한국어(기존 호출부는 한 글자도 안 바뀐다). */
+export function seatMarkLabelOf(mark: SeatMark, lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? SEAT_MARK_LABEL_EN[mark] : SEAT_MARK_LABEL[mark];
+}
+
+/**
  * 출석·결석·지각은 출석부 `STATUS_TONE`과 같은 배경(민트/빨강/주황).
  * 시작 전(대기)은 민트를 쓰지 않는다 — classday는 출석과 같은 계열이라 전원 출석으로 읽힌다.
  * ⚠️ 칸 버튼에 `bg-card`를 덧씌우지 말 것 — 동형 유틸은 CSS 순서라 출석 배경이 진다.
@@ -68,12 +88,27 @@ export function seatHoverTitle(input: {
   checkedAt?: string | null;
   /** 담임 아닌 입력자 이름(`seatRecorderName`) — 좁은 칸에서 잘렸어도 여기선 온전히 읽힌다. */
   recordedByName?: string | null;
+  /**
+   * 화면 언어 — 안 주면 한국어(자리 출석부·데스크 화면은 그대로다).
+   * ⚠️ 학생 이름은 **호출부가 정한 글자를 그대로** 받는다(영어 이름 전환은 `studentDisplayName`
+   *    단일 소스라 여기서 다시 고르지 않는다).
+   */
+  lang?: "ko" | "en";
 }): string {
+  const lang = input.lang ?? "ko";
   const bits = [input.studentName];
   if (input.schoolGrade) bits.push(input.schoolGrade);
-  bits.push(SEAT_MARK_LABEL[input.mark]);
+  bits.push(seatMarkLabelOf(input.mark, lang));
   if (input.checkedAt) {
-    bits.push(input.recordedByName ? `${input.checkedAt} ${input.recordedByName} 체크` : `${input.checkedAt} 체크`);
+    const checked =
+      lang === "en"
+        ? input.recordedByName
+          ? `${input.checkedAt} checked by ${input.recordedByName}`
+          : `${input.checkedAt} checked`
+        : input.recordedByName
+          ? `${input.checkedAt} ${input.recordedByName} 체크`
+          : `${input.checkedAt} 체크`;
+    bits.push(checked);
   }
   const head = bits.join(" · ");
   const note = input.note?.trim();

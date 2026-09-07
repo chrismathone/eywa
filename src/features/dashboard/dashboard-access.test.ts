@@ -3,24 +3,21 @@ import { MENU_ACCESS, resolveMatrix } from "@/lib/permissions";
 import { resolveDashboardAccess } from "./dashboard-access";
 
 describe("resolveDashboardAccess", () => {
-  it("회계는 수납을 보되 상담·반 생성·휴가 관리는 받지 않는다", () => {
+  it("회계는 수납을 보되 상담·휴가 승인은 받지 않는다", () => {
     const access = resolveDashboardAccess("accountant", MENU_ACCESS);
 
     expect(access.read.billing).toBe(true);
     expect(access.read.consultations).toBe(false);
-    expect(access.read.classes).toBe(false);
     expect(access.write.billing).toBe(true);
     expect(access.manageStaff).toBe(false);
-    expect(access.write.classes).toBe(false);
     expect(access.write.consultations).toBe(false);
   });
 
-  it("상담사는 학생·상담 쓰기만 오늘 조치 신호 후보가 되고 재무·출석은 보지 않는다", () => {
+  it("상담사는 학생·상담·등록 쓰기를 받고 재무·출석은 보지 않는다", () => {
     const access = resolveDashboardAccess("counselor", MENU_ACCESS);
 
     expect(access.write.students).toBe(true);
     expect(access.write.consultations).toBe(true);
-    expect(access.write.classes).toBe(false);
     expect(access.write.enrollment).toBe(true);
     expect(access.read.billing).toBe(false);
     expect(access.read.attendance).toBe(false);

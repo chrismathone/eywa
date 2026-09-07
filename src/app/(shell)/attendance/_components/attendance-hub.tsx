@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Pill } from "@/components/atoms/pill";
 import type { PillColor } from "@/components/atoms/pill";
 import { attHref } from "./att-href";
+// 화면 언어는 **페이지가 정해 넘긴다**(같은 요청에서 두 번 판정하지 않는다).
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /** 요약 허브의 강사 한 줄 — 서버(page.tsx)가 조립한다. */
 export type HubTeacher = {
@@ -36,6 +38,7 @@ export function AttendanceHub({
   colorOf,
   labelOf,
   todayLabel,
+  lang,
 }: {
   teachers: HubTeacher[];
   /** 강사 목록과 퇴직 사이에 놓이는 자리 묶음(원장 2026-08-14: 선생님 / LAB·JJ / 퇴직 순). */
@@ -45,8 +48,10 @@ export function AttendanceHub({
   /** 과목 색·라벨 = 학원설정 단일 소스(buildSubjectMaps). 로컬 과목 맵 신설 금지. */
   colorOf: (key: string) => PillColor;
   labelOf: (key: string) => string;
-  /** "8월 10일 (월)" — 서버에서 KST로 만든 표시 문자열. */
+  /** "8월 10일 (월)" — 서버에서 KST로 만든 표시 문자열(언어도 서버가 맞춰 준다). */
   todayLabel: string;
+  /** 강사 미니셸이면 영어. 관리자 풀셸은 언제나 한국어(페이지가 판정). */
+  lang: SheetLang;
 }) {
   const active = teachers.filter((t) => !t.retired);
   const retired = teachers.filter((t) => t.retired);
@@ -69,7 +74,9 @@ export function AttendanceHub({
         <span className="min-w-0">
           <span className="flex items-center gap-1.5">
             <span className="text-foreground truncate text-sm font-bold">{t.name}</span>
-            {t.retired ? <span className="text-text-faint shrink-0 text-xs">(퇴직)</span> : null}
+            {t.retired ? (
+              <span className="text-text-faint shrink-0 text-xs">{sheetT(lang, "att.hub.retired")}</span>
+            ) : null}
             {t.subjects.map((s) => (
               <Pill key={s} color={colorOf(s)}>
                 {labelOf(s)}
@@ -77,21 +84,22 @@ export function AttendanceHub({
             ))}
           </span>
           <span className="text-text-dim block text-xs">
-            <span className="num">{t.classCount}</span>개 반
+            <span className="num">{t.classCount}</span>
+            {sheetT(lang, "att.hub.classesSuffix")}
             {t.today ? (
               <>
-                {" · 오늘 "}
+                {sheetT(lang, "att.hub.todayPre")}
                 {/* 기록/예정 — 오늘 수업이 있는 반의 학생 기준. 다 채워지면 초록. */}
                 <span className={`num font-bold ${t.today.recorded >= t.today.expected ? "text-green" : "text-amber"}`}>
-                  {t.today.recorded}/{t.today.expected}명
+                  {t.today.recorded}/{t.today.expected}
                 </span>
-                {" 입력"}
+                {sheetT(lang, "att.hub.todayPost")}
               </>
             ) : null}
           </span>
         </span>
         <span className="bg-primary-soft text-primary rounded-pill ml-auto shrink-0 px-2.5 py-1 text-xs font-bold">
-          출석부 열기
+          {sheetT(lang, "att.hub.open")}
         </span>
       </Link>
     </li>
@@ -101,31 +109,36 @@ export function AttendanceHub({
     <section className="min-h-0 flex-1 overflow-auto">
       <div className="bg-card shadow-card rounded-2xl p-5">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <p className="text-foreground text-sm font-bold">출석부 요약</p>
+          <p className="text-foreground text-sm font-bold">{sheetT(lang, "att.hub.title")}</p>
           {/* 오늘 입력 현황 한 줄 — "요약 화면"의 핵심 숫자. 오늘 수업이 없으면(일요일 등) 조용히 생략. */}
           {todayTotal.classes > 0 ? (
             <p className="text-text-dim text-xs">
-              {todayLabel} — 수업 <span className="num font-bold">{todayTotal.classes}</span>개 반 · 출결 입력{" "}
-              <span className="num font-bold">{todayTotal.recorded}</span>/<span className="num">{todayTotal.expected}</span>명 · 완료{" "}
-              <span className="num font-bold">{todayTotal.done}</span>개 반
+              {sheetTf(lang, "att.hub.today.a", { date: todayLabel })}
+              <span className="num font-bold">{todayTotal.classes}</span>
+              {sheetT(lang, "att.hub.today.b")}
+              <span className="num font-bold">{todayTotal.recorded}</span>/
+              <span className="num">{todayTotal.expected}</span>
+              {sheetT(lang, "att.hub.today.c")}
+              <span className="num font-bold">{todayTotal.done}</span>
+              {sheetT(lang, "att.hub.today.d")}
             </p>
           ) : (
-            <p className="text-text-faint text-xs">{todayLabel} — 오늘 예정된 수업이 없습니다</p>
+            <p className="text-text-faint text-xs">
+              {sheetTf(lang, "att.hub.noClasses", { date: todayLabel })}
+            </p>
           )}
         </div>
-        <p className="text-text-faint mt-0.5 text-xs">
-          강사를 고르면 그 강사의 모든 반이 한 표로 열립니다 · 개별 반은 위 &lsquo;반&rsquo; 목록에서 검색
-        </p>
+        <p className="text-text-faint mt-0.5 text-xs">{sheetT(lang, "att.hub.hint")}</p>
 
         {teachers.length === 0 ? (
-          <p className="text-text-dim mt-4 text-xs">담임이 배정된 운영 중인 반이 없습니다.</p>
+          <p className="text-text-dim mt-4 text-xs">{sheetT(lang, "att.hub.noHomeroom")}</p>
         ) : (
           <>
             <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{active.map(row)}</ul>
             {seats.length > 0 ? (
               <>
                 {/* 자리 = 여러 반이 동시에 들어오는 방. 담임이 없어 강사 줄에 섞으면 사람으로 오해한다. */}
-                <p className="micro mt-4">랩실 · JJ실</p>
+                <p className="micro mt-4">{sheetT(lang, "att.hub.seats")}</p>
                 <ul className="mt-1.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {seats.map((s) => (
                     <li key={s.key}>
@@ -137,14 +150,14 @@ export function AttendanceHub({
                             {s.name} <span className="text-text-faint font-medium">{s.room}</span>
                           </span>
                           <span className="text-text-dim block text-xs">
-                            {s.open ? "여러 반이 함께 들어오는 자리" : "아직 열지 않음"}
+                            {sheetT(lang, s.open ? "att.hub.seatOpen" : "att.hub.seatClosed")}
                           </span>
                         </Link>
                         <Link
                           href={s.monthHref}
                           className="bg-bg-soft text-text-dim hover:text-foreground rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold"
                         >
-                          월간
+                          {sheetT(lang, "att.hub.monthly")}
                         </Link>
                         <Link
                           href={s.href}
@@ -152,7 +165,7 @@ export function AttendanceHub({
                             s.open ? "bg-primary-soft text-primary" : "bg-bg-soft text-text-faint"
                           }`}
                         >
-                          {s.open ? "하루" : "준비 중"}
+                          {sheetT(lang, s.open ? "att.hub.day" : "att.hub.prep")}
                         </Link>
                       </div>
                     </li>
@@ -163,7 +176,7 @@ export function AttendanceHub({
             {retired.length > 0 ? (
               <>
                 {/* 퇴직 강사도 지난달 급여·기록 조회가 실제 용무라 숨기지 않는다 — 뒤로 밀고 흐리게만. */}
-                <p className="micro mt-4">퇴직</p>
+                <p className="micro mt-4">{sheetT(lang, "att.retired")}</p>
                 <ul className="mt-1.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{retired.map(row)}</ul>
               </>
             ) : null}

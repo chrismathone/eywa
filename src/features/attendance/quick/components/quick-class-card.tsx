@@ -12,6 +12,11 @@
 import { ChevronDown, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { fluidNameFontSize, NAME_FILL_MAX_PX, NAME_FILL_MIN_PX } from "@/features/attendance/seat/name-fit";
 import { seatHoverTitle, SEAT_MARK_TONE } from "@/features/attendance/live/mark-state";
+// 화면 언어(강사 미니셸) — 반 이름·강의실·학생 이름은 각각의 **단일 소스**를 통과시킨다.
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { roomNameFor } from "@/features/teacher-view/room-name";
+import { studentDisplayName } from "@/features/teacher-view/student-name";
 import type { QuickClass } from "../board";
 
 export function QuickClassCard({
@@ -35,8 +40,11 @@ export function QuickClassCard({
   onBulk: () => void;
   onPick: (studentId: string) => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
   const recorded = klass.students.filter((s) => s.status != null).length;
   const total = klass.students.length;
+  const roomName = roomNameFor(klass.roomName, lang);
   return (
     <section className="bg-card shadow-card rounded-2xl px-3 py-2.5">
       <div className="flex items-center gap-2">
@@ -51,10 +59,10 @@ export function QuickClassCard({
           </span>
           <span className="min-w-0">
             <span className="text-foreground block truncate text-base font-bold">
-              {klass.className}
+              {classNameFor(klass.className, lang)}
               {klass.band === "now" ? (
                 <span className="bg-green-soft text-green ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-bold">
-                  지금
+                  {t("quick.card.now")}
                 </span>
               ) : null}
             </span>
@@ -63,8 +71,8 @@ export function QuickClassCard({
                 {klass.firstStart}
                 {klass.firstEnd ? `~${klass.firstEnd}` : ""}
               </span>
-              {klass.roomName ? ` · ${klass.roomName}` : ""}
-              {` · 입력 `}
+              {roomName ? ` · ${roomName}` : ""}
+              {` · ${t("quick.card.recorded")} `}
               <span className="num">
                 {recorded}/{total}
               </span>
@@ -76,10 +84,10 @@ export function QuickClassCard({
             type="button"
             onClick={onBulk}
             disabled={bulkCount === 0 || bulkBusy}
-            title="아직 입력하지 않은 칸만 전원 출석으로 기록합니다 — 이미 찍은 칸은 건드리지 않습니다"
+            title={t("quick.bulk.title")}
             className="bg-primary text-primary-foreground min-h-11 shrink-0 rounded-xl px-3 text-sm font-bold whitespace-nowrap disabled:opacity-40"
           >
-            일괄 출결 <span className="num">{bulkCount}</span>
+            {t("quick.bulk")} <span className="num">{bulkCount}</span>
           </button>
         ) : null}
       </div>
@@ -87,13 +95,17 @@ export function QuickClassCard({
       {collapsed ? null : (
         <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {klass.students.map((s) => {
-            // 이름 글자는 칩 폭에 비례(폰 90px 칸 → ~24px 3글자·20px 접미사 이름) — 하한·상한은 name-fit.ts 한 곳.
-            const nameSize = fluidNameFontSize(s.studentName, { minPx: NAME_FILL_MIN_PX.quickTile, maxPx: NAME_FILL_MAX_PX });
+            // 영어 모드에서 영어 이름을 가진 학생은 **그 이름이 주 이름**이다(표시 전용 단일 소스).
+            const shownName = studentDisplayName(s.studentName, s.englishName, lang);
+            // 🔴 이름 글자는 **칩 폭에 비례**한다(원장 2026-09-04) — 고정 px 사다리는 넓은 창에서 안 커진다.
+            //    하한·상한은 name-fit.ts 한 곳(폰 90px 칸 → ~24px 3글자·20px 접미사 이름).
+            const nameSize = fluidNameFontSize(shownName, { minPx: NAME_FILL_MIN_PX.quickTile, maxPx: NAME_FILL_MAX_PX });
             const label = seatHoverTitle({
-              studentName: s.studentName,
+              studentName: shownName,
               schoolGrade: s.schoolGrade,
               mark: s.mark,
               note: s.note,
+              lang,
             });
             return (
               <button
@@ -110,7 +122,7 @@ export function QuickClassCard({
                 }`}
               >
                 <span className="w-full truncate text-center leading-none" style={{ fontSize: nameSize }}>
-                  {s.studentName}
+                  {shownName}
                 </span>
                 {s.note ? (
                   <span className="w-full truncate text-xs font-medium opacity-80">{s.note}</span>

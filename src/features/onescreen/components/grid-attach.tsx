@@ -11,6 +11,7 @@ import { useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { isImageAttachment } from "../attachment-utils";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export type GridAttachment = { path: string; name: string };
 
@@ -44,6 +45,8 @@ export function GridAttachButton({
   onRemove: (path: string) => void;
   onOpen: () => void; // 열 때 썸네일 서명 요청(행마다 미리 서명하지 않는다)
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [open, setOpen] = useState(false);
   const count = attachments.length;
   const full = count >= MAX_ROW_ATTACHMENTS;
@@ -57,8 +60,16 @@ export function GridAttachButton({
     >
       <Popover.Trigger
         disabled={disabled}
-        title={disabled ? disabledReason : count ? `첨부 ${count}개 — 보기·추가·삭제` : "사진/파일 첨부"}
-        aria-label={`${label} 첨부${count ? ` ${count}개` : ""}`}
+        title={
+          disabled
+            ? disabledReason
+            : count
+              ? tf("os.attach.title", { n: count })
+              : t("os.attach.empty")
+        }
+        aria-label={
+          count ? tf("os.attach.ariaN", { label, n: count }) : tf("os.attach.aria", { label })
+        }
         className={`border-line hover:bg-bg-soft data-[popup-open]:bg-bg-soft inline-flex shrink-0 items-center gap-0.5 rounded-sm border px-1.5 py-1 text-xs font-bold disabled:pointer-events-none disabled:opacity-50 ${
           count ? "text-primary" : "text-text-dim"
         }`}
@@ -77,13 +88,18 @@ export function GridAttachButton({
           <Popover.Popup className="bg-card border-line shadow-card flex w-[260px] flex-col gap-2 rounded-lg border p-3 text-xs outline-none">
             <div className="flex items-center justify-between gap-2">
               <p className="text-text-faint text-xs font-bold">
-                사진/파일 첨부 <span className="text-text-dim num">{count}/{MAX_ROW_ATTACHMENTS}</span>
+                {t("os.attach.empty")}{" "}
+                <span className="text-text-dim num">
+                  {count}/{MAX_ROW_ATTACHMENTS}
+                </span>
               </p>
               <AttachPicker disabled={uploading || full} onFiles={onAdd} compact />
             </div>
             {hiddenFromParents ? (
               <p className="border-amber/40 bg-amber-soft text-amber rounded border px-2 py-1.5 text-xs leading-snug">
-                학원설정에서 <b>사진/파일 첨부</b>가 꺼져 있어, 첨부해도 학부모 보고서·ClassNote에는 표시되지 않습니다.
+                {t("os.attach.offA")}
+                <b>{t("os.attach.offB")}</b>
+                {t("os.attach.offC")}
               </p>
             ) : null}
             {count ? (
@@ -103,7 +119,7 @@ export function GridAttachButton({
                       type="button"
                       onClick={() => onRemove(a.path)}
                       className="bg-danger absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded text-white opacity-0 transition group-hover:opacity-100"
-                      aria-label={`${a.name} 삭제`}
+                      aria-label={tf("os.attach.deleteAria", { name: a.name })}
                     >
                       <EyIcon name="close" size={11} strokeWidth={1.8} />
                     </button>
@@ -112,8 +128,9 @@ export function GridAttachButton({
               </div>
             ) : (
               <p className="text-text-faint text-xs leading-snug">
-                파일을 <b>행 위에 끌어다 놓아도</b> 바로 첨부됩니다. 첨부하면 학부모 링크·ClassNote 게시글에 함께
-                실립니다.
+                {t("os.attach.dropA")}
+                <b>{t("os.attach.dropB")}</b>
+                {t("os.attach.dropC")}
               </p>
             )}
           </Popover.Popup>
@@ -135,6 +152,7 @@ export function AttachPicker({
   compact?: boolean;
   children?: React.ReactNode;
 }) {
+  const t = useSheetT();
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <label
@@ -142,7 +160,7 @@ export function AttachPicker({
         compact ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs"
       } ${disabled ? "pointer-events-none opacity-50" : ""}`}
     >
-      {children ?? "파일 선택"}
+      {children ?? t("os.attach.pickFile")}
       <input
         ref={inputRef}
         type="file"

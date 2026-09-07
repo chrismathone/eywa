@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { StudentImportDialog } from "./student-import-dialog";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 학생목록 머리의 **텍스트 Secondary 하나** — '엑셀'(내보내기·가져오기). 지시서 §9·§10: 내보내기·가져오기는 상시
@@ -18,6 +19,8 @@ import { StudentImportDialog } from "./student-import-dialog";
  */
 export function StudentsMoreMenu({ exportHref, canImport }: { exportHref: string; canImport: boolean }) {
   const [importOpen, setImportOpen] = useState(false);
+  // 화면 언어 — provider 밖(관리자 풀셸)에선 한국어로 떨어진다(i18n 기본값).
+  const t = useSheetT();
   return (
     <>
       <DropdownMenu>
@@ -29,13 +32,13 @@ export function StudentsMoreMenu({ exportHref, canImport }: { exportHref: string
             />
           }
         >
-          엑셀
+          {t("stu.excelAxis")}
           {/* 아이콘은 라벨(18px)과 같은 크기(±10%). */}
           <EyIcon name="chevronDown" size={18} className="opacity-60" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem render={<a href={exportHref} />}>엑셀 내보내기</DropdownMenuItem>
-          {canImport ? <DropdownMenuItem onClick={() => setImportOpen(true)}>엑셀 가져오기</DropdownMenuItem> : null}
+          <DropdownMenuItem render={<a href={exportHref} />}>{t("stu.excel")}</DropdownMenuItem>
+          {canImport ? <DropdownMenuItem onClick={() => setImportOpen(true)}>{t("stu.excelImport")}</DropdownMenuItem> : null}
         </DropdownMenuContent>
       </DropdownMenu>
       {canImport ? <StudentImportDialog open={importOpen} onOpenChange={setImportOpen} /> : null}

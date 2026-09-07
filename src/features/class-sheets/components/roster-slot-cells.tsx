@@ -36,6 +36,10 @@ import { SHEET_BOX_UNITS, SHEET_INPUT } from "../ui-box";
 import { AttendanceCheck } from "./attendance-check";
 import { AttitudeCheck } from "./attitude-check";
 import { NoteCell } from "./note-cell";
+// 강사뷰 화면 언어(2026-09-03) — 영어 모드에서 학생 영어 이름이 주 이름이 된다(표시 전용).
+import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
+import { studentNameParts } from "@/features/teacher-view/student-name";
 import type { SheetHandlers } from "./sheet-client";
 
 export type StudentMeta = {
@@ -54,6 +58,9 @@ export type StudentMeta = {
  * ⚠️ 아바타/이니셜 배지 금지(결정 로그) — 이름은 텍스트만.
  */
 export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: StudentMeta | undefined }) {
+  // 🔴 주/보조 이름 판정은 [`studentNameParts`](@/features/teacher-view/student-name) **한 곳**이다 —
+  //    화면마다 `lang === "en" ? …`를 적으면 한쪽만 고쳐진다. 여기선 그 결과를 그리기만 한다.
+  const names = studentNameParts(meta?.name, meta?.englishName, useSheetLang());
   return (
     <td className="py-px pr-1">
       {/* 첫 줄: 한글 이름(+퇴원일). flex+min-w-0라 긴 이름이 truncate로 잘리고 날짜는 안 밀린다. */}
@@ -68,7 +75,7 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
         >
           {/* 학교·학년은 이름 툴팁(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다). */}
           <span title={meta ? `${meta.name} · ${schoolGradeLabel(meta.school, meta.grade)} — 클릭하면 학생 정보` : undefined}>
-            {meta?.name ?? "?"}
+            {names.primary || "?"}
           </span>
         </WindowLink>
         {entry.endedOn ? (
@@ -77,10 +84,12 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
           </span>
         ) : null}
       </div>
-      {/* 둘째 줄: 영어이름 — 행 글자 13px 통일 규약의 유일한 예외(보조 표기라 11px dim, ui-box.ts 각주). */}
-      {meta?.englishName ? (
-        <div className="text-text-dim truncate text-xs leading-tight font-semibold" title={meta.englishName}>
-          {meta.englishName}
+      {/* 둘째 줄: 보조 이름 — 행 글자 13px 통일 규약의 유일한 예외(보조 표기라 11px dim, ui-box.ts 각주).
+          🔴 **영어 모드에서는 주/보조가 뒤집힌다**(원장 2026-09-03 *"영어이름 보유한 학생은 이름 → 영어이름"*):
+             en이면 위가 영어 이름·여기가 한글 이름, ko면 지금 그대로. 판정은 `studentNameParts` 한 곳. */}
+      {names.secondary ? (
+        <div className="text-text-dim truncate text-xs leading-tight font-semibold" title={names.secondary}>
+          {names.secondary}
         </div>
       ) : null}
     </td>
@@ -139,10 +148,12 @@ export function RosterSlotCells({
    */
   withDivider?: boolean;
 }) {
+  // 화면 언어 — 이 칸들의 툴팁·접근성 이름도 사전을 거친다(하드코딩된 한국어를 남기지 않는다).
+  const lang = useSheetLang();
   const dividerCls = withDivider ? "border-line-strong border-l" : "";
   const textCols = rosterTextCols(form);
   if (entry === null) {
-    const offTitle = "이 교시 수강 대상이 아닙니다";
+    const offTitle = sheetT(lang, "roster.notEnrolled");
     const dash = <span className="text-text-faint text-sm font-semibold">—</span>;
     return (
       <>
@@ -201,7 +212,7 @@ export function RosterSlotCells({
         {att?.status === "absent" ? (
           <span
             className="text-text-faint text-sm font-semibold"
-            title="결석은 유닛(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
+            title={sheetT(lang, "roster.unitsOnAbsent")}
           >
             —
           </span>
@@ -240,8 +251,11 @@ export function RosterSlotCells({
             className={`${SHEET_INPUT} text-center`}
             defaultValue={mark?.[col.field] ?? ""}
             disabled={!rowEditable}
-            aria-label={`${meta?.name ?? ""} ${col.label}`}
-            title={col.title}
+            aria-label={sheetTf(lang, "roster.cellAria", {
+              name: meta?.name ?? "",
+              field: sheetT(lang, col.labelKey),
+            })}
+            title={sheetT(lang, col.titleKey)}
             // placeholder 없음 — 텍스트 입력은 **그냥 비워 둔다**(원장 2026-08-13). 빈 상자 자체가
             // "여기 적어라"이고, `—`를 넣으면 값이 적힌 것처럼 보인다([click-hint.ts](../click-hint.ts)).
             data-nav-col={`${col.nav}${navColSuffix}`}
@@ -286,19 +300,25 @@ export function withdrawnSlotRecord({
   form,
   mark,
   att,
+  lang,
 }: {
   slotStart: string;
   form: RosterForm;
   mark: SheetMark | null;
   att: { status: string; note: string | null } | null;
+  /** 화면 언어 — 출결 라벨·자유 입력 칸 이름이 표 머리와 **같은 낱말**이어야 한다. */
+  lang: SheetLang;
 }): WithdrawnSlotRecord {
   return {
     slotStart,
-    attendance: attendanceLabelOf(att?.status ?? null),
+    attendance: attendanceLabelOf(att?.status ?? null, lang),
     attendanceNote: att?.note ?? null,
     attitude: mark?.status ?? null,
     progressNote: mark?.progressNote ?? null,
-    extras: rosterTextCols(form).map((c) => ({ label: c.label, value: mark?.[c.field] ?? null })),
+    extras: rosterTextCols(form).map((c) => ({
+      label: sheetT(lang, c.labelKey),
+      value: mark?.[c.field] ?? null,
+    })),
   };
 }
 
@@ -330,14 +350,18 @@ export function WithdrawnSummaryRow({
   /** 이 학생에게 남아 있는 교시별 기록(빈 것은 문장에서 알아서 빠진다). */
   records: readonly WithdrawnSlotRecord[];
 }) {
+  const lang = useSheetLang();
   const summary = withdrawnSummaryText({
     // 압축 표기 "침산중2" — 공백 join 금지(전역 규칙).
     schoolGrade: schoolGradeLabel(meta?.school, meta?.grade),
     endedOn: entry.endedOn,
-    reason: reasonDisplay(entry.endedReason),
+    reason: reasonDisplay(entry.endedReason, lang),
   });
-  const kept = withdrawnRecordText(records);
-  const fullReason = reasonDisplay(entry.endedReason);
+  const kept = withdrawnRecordText(records, {
+    reason: sheetT(lang, "withdrawn.reason"),
+    attitude: sheetT(lang, "withdrawn.attitude"),
+  });
+  const fullReason = reasonDisplay(entry.endedReason, lang);
   return (
     <td colSpan={colSpan} className="py-px pr-1">
       <div className="flex min-w-0 items-center gap-1.5">

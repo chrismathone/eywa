@@ -3,16 +3,18 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { nextAssetCode } from "@/features/inventory/asset-code";
-import { ASSET_CATEGORIES, ASSET_CATEGORY_LABEL, isAssetCategory, type AssetCategory } from "@/features/inventory/category";
 import { createAsset, updateAsset } from "@/features/inventory/server/asset-actions";
 import { ASSET_STATUSES, ASSET_STATUS_LABEL } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
+import { useCategoryMaps } from "./categories-context";
 import { DialogShell, FIELD, Field, FormError, SELECT, TEXTAREA, useSubmit } from "./form-bits";
 
 /**
  * 자산 등록·수정 — 자산ID는 분류 접두 + 3자리 **자동 제안**(직접 고칠 수 있다, 중복은 서버가 한글로 거절).
  * 등록 때만 상태를 고른다(대여중 제외 — 대여는 '대여 시작'으로). 수정에서 상태는 '상태' 버튼이 따로 맡는다
  * (폐기일 짝·열린 대여 검사가 그쪽에 있다).
+ * 🔑 분류 선택지는 학원별 분류(0247a) — 목록·라벨·접두를 여기 적지 않는다. 새 분류를 만드는 길은 **엑셀**뿐이라
+ *    여기 드롭다운엔 등록된 것만 뜬다(원장 2026-09-03 지시 범위 = 엑셀 자동 추가).
  */
 export function AssetDialog({
   mode,
@@ -28,15 +30,21 @@ export function AssetDialog({
   onClose: () => void;
 }) {
   const { busy, error, submit } = useSubmit();
-  const [category, setCategory] = useState<AssetCategory>(asset && isAssetCategory(asset.category) ? asset.category : "laptop");
-  const [code, setCode] = useState(asset?.assetCode ?? nextAssetCode("laptop", existingCodes));
+  const cats = useCategoryMaps();
+  // 등록 기본값 = 목록의 두 번째(노트북 자리) — 없으면 첫 번째. 분류가 0개면 빈 값(서버가 한글로 거절한다).
+  // 🔴 수정할 때 그 자산의 분류가 목록에 없어도(조회 실패 폴백) **그 값을 지키고** 선택지에 남긴다 —
+  //    조용히 '노트북'으로 바꿔 두면 저장 한 번에 분류가 바뀐다.
+  const unknownCurrent = mode === "edit" && !!asset && !cats.has(asset.category) ? asset.category : null;
+  const initialCategory = unknownCurrent ?? (asset && cats.has(asset.category) ? asset.category : (cats.list[1]?.key ?? cats.list[0]?.key ?? ""));
+  const [category, setCategory] = useState(initialCategory);
+  const [code, setCode] = useState(asset?.assetCode ?? nextAssetCode(cats.prefixOf(initialCategory), existingCodes));
   const [codeTouched, setCodeTouched] = useState(mode === "edit");
   const [status, setStatus] = useState(asset?.status ?? "in_use");
 
-  function onCategory(next: AssetCategory) {
+  function onCategory(next: string) {
     setCategory(next);
     // 사람이 아직 안 만진 자산ID만 따라 바뀐다(직접 적은 값을 덮지 않는다).
-    if (!codeTouched) setCode(nextAssetCode(next, existingCodes));
+    if (!codeTouched) setCode(nextAssetCode(cats.prefixOf(next), existingCodes));
   }
 
   async function onSubmit(fd: FormData) {
@@ -48,10 +56,21 @@ export function AssetDialog({
     <DialogShell title={mode === "create" ? "자산 등록" : `자산 수정 — ${asset?.assetCode ?? ""}`} onClose={onClose} wide>
       <form onSubmit={(e) => { e.preventDefault(); void onSubmit(new FormData(e.currentTarget)); }} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {asset ? <input type="hidden" name="id" value={asset.id} /> : null}
-        <Field label="분류">
-          <select name="category" value={category} onChange={(e) => onCategory(e.target.value as AssetCategory)} className={SELECT}>
-            {ASSET_CATEGORIES.map((c) => (
-              <option key={c} value={c}>{ASSET_CATEGORY_LABEL[c]}</option>
+        <Field
+          label="분류"
+          hint={
+            cats.list.length === 0
+              ? "등록된 분류가 없습니다 — 엑셀로 넣거나 관리자에게 문의하세요."
+              : unknownCurrent
+                ? "이 자산의 분류를 목록에서 못 찾았습니다 — 지금 값을 그대로 둡니다."
+                : undefined
+          }
+        >
+          <select name="category" value={category} onChange={(e) => onCategory(e.target.value)} required className={SELECT}>
+            {cats.list.length === 0 && !unknownCurrent ? <option value="">분류가 없습니다</option> : null}
+            {unknownCurrent ? <option value={unknownCurrent}>{cats.labelOf(unknownCurrent)}</option> : null}
+            {cats.options.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
         </Field>

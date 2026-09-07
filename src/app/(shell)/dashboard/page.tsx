@@ -21,10 +21,6 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { kstToday } from "@/lib/date-kst";
 import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
 import { getDailyBriefing, type DailyBriefingRow } from "@/features/dashboard/server/briefing";
-import {
-  getLatestAssistantConversation,
-  type AssistantConversation,
-} from "@/features/assistant/server/queries";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildOperationsBriefing } from "@/features/dashboard/operations-briefing";
 import { resolveDashboardAccess, todayActionGate } from "@/features/dashboard/dashboard-access";
@@ -35,8 +31,6 @@ import { CommandBand } from "./_components/command-band";
 import { OperationsBriefing } from "./_components/operations-briefing";
 import { DailyBriefingCard, dailyBriefingSummary } from "./_components/daily-briefing-card";
 import { SecondarySection } from "./_components/secondary-section";
-import { AssistantPanel } from "./_components/assistant-panel";
-import { NowCockpit } from "./_components/now-cockpit";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
@@ -70,7 +64,8 @@ async function dashboardQuery<T>(label: string, query: Promise<T>, fallback: T):
 }
 
 export const metadata = { title: "운영실 — eywa" };
-// AI 비서(askAssistant) 툴 루프가 이 라우트로 POST된다 — 다중 툴 왕복(수 초~수십 초) 여유.
+// 일일 브리핑 '다시 생성'(regenerateDailyBriefing) 서버 액션이 이 라우트로 POST되고 after()로
+// 백그라운드 AI 호출을 이어간다 — 응답 종료 뒤 작업이 잘리지 않게 여유를 둔다.
 export const maxDuration = 60;
 
 export default async function TodayPage() {
@@ -83,9 +78,6 @@ export default async function TodayPage() {
   // 일일 브리핑은 master/admin/manager 전용 — payload가 master 관점 전신호(미수·결재 포함)라
   // scoped 역할(counselor/accountant)에는 카드 자체를 렌더하지 않는다(#77, 0114a 주석 참조).
   const canSeeDailyBriefing = canManageStaff(user.systemRole);
-  // 비서 패널 노출 = 액션 게이트(askAssistant: canManageStaff + dashboard write)와 동일 조건(#77) —
-  // 노출만 넓으면 readonly 관리자에게 '항상 권한 오류 나는 죽은 패널'이 보인다(적대 리뷰 확정).
-  const canUseAssistant = canSeeDailyBriefing && canWrite(user.systemRole, "dashboard", permissionMatrix);
   const [
     enrolledResult,
     attendanceState,
@@ -103,7 +95,6 @@ export default async function TodayPage() {
     actionSignals,
     enrollmentChangeResult,
     dailyBriefingResult,
-    assistantConversationResult,
   ] = await Promise.all([
     // 실패 허용 래퍼 — 쿼리는 throw하고(위장 금지) 카드는 fallback으로 그리되 실패가 로그에 남는다.
     access.read.students
@@ -126,9 +117,9 @@ export default async function TodayPage() {
           billing: access.read.billing,
         })
       : Promise.resolve([]),
-    access.read.timetable || access.read.classes || access.read.attendance
-      ? getTodaySchedule()
-      : Promise.resolve([]),
+    // 오늘 시간표는 이제 출결 '처리 중 N/M' 판정(startedClassIds)에만 쓰인다 —
+    // 출결 열람 권한이 없으면 그 계산 자체가 빈 값이라 조회하지 않는다(죽은 쿼리 금지).
+    access.read.attendance ? getTodaySchedule() : Promise.resolve([]),
     access.read.billing ? getPaymentRateThisMonth() : Promise.resolve(null),
     // 쿼리 실패를 빈 데이터('상담 없음'/'±0'/'공지 없음')로 위장하지 않게 실패 허용 래퍼로 감싼다 —
     // 쿼리 자체는 error를 throw(위장 금지)하고, 카드는 fallback으로 렌더하되 실패가 로그에 남는다.
@@ -171,13 +162,6 @@ export default async function TodayPage() {
     // 저장분 조회만(AI 호출 없음). 테이블 미적용 DB에서도 대시보드가 죽지 않게 실패 허용 래퍼.
     canSeeDailyBriefing
       ? dashboardQuery<DailyBriefingRow | null>("daily briefing", getDailyBriefing(user.tenantId, kstToday()), null)
-      : Promise.resolve({ data: null, unavailable: false }),
-    canSeeDailyBriefing
-      ? dashboardQuery<AssistantConversation | null>(
-          "assistant conversation",
-          getLatestAssistantConversation(),
-          null,
-        )
       : Promise.resolve({ data: null, unavailable: false }),
   ]);
   const attendance = attendanceState.snapshot;
@@ -228,7 +212,7 @@ export default async function TodayPage() {
         }
       : null,
   });
-  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
+  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 학원생 증감 카드에 prop 주입(하드코딩 금지).
   const subjects = subjectMaps;
 
   // 오늘 시작한 수업만 예정학생 대비 기록학생으로 판정한다. 한 명만 입력된 반을 완료로 보지 않는다.
@@ -244,7 +228,6 @@ export default async function TodayPage() {
     0,
   );
   const attendanceInProgress = startedExpected > 0 && startedRecorded < startedExpected;
-  const unrecordedCount = startedProcessing.filter((row) => row.unprocessed > 0).length;
   const snapshotExpected = attendanceState.snapshotProcessing.reduce(
     (sum, row) => sum + row.expected,
     0,
@@ -303,19 +286,14 @@ export default async function TodayPage() {
   }
   const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
   const unpaidCount = payment?.unpaidCount ?? 0;
-  // '빠른 작업'(학생 등록·수업 추가·상담 기록)은 뺐다 — 지시서 §10 "같은 동작을 두 곳에 두지 말 것": 각 화면의
+  // '빠른 작업'·'실시간 운영'·'대화형 비서'는 뺐다 — 지시서 §10 "같은 동작을 두 곳에 두지 말 것": 각 화면의
   // Primary가 이미 그 일이다(학생목록 '새 학생' 등). 원장 2026-09-03 "지시서 그대로".
-  const showLiveSchedule = access.read.timetable || access.read.classes;
   const showFollowUps = access.read.consultations;
   const trendVisible = {
     attendance: access.read.attendance,
     billing: access.read.billing,
     enrollment: access.read.students,
   };
-  const liveGrid =
-    showLiveSchedule && showFollowUps
-      ? "lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.55fr)]"
-      : "grid-cols-1";
 
   return (
     <div className="space-y-5 pb-4">
@@ -349,9 +327,11 @@ export default async function TodayPage() {
       <OperationsBriefing briefing={briefing} />
 
       {/* 1차 화면의 시선 앵커는 셋뿐이다(지시서 §4 "시선 앵커 3개 이하", 원장 2026-09-03 "지시서 그대로") —
-          ① 인사·지표 ② 오늘 브리핑 ③ 지금 진행 중. 나머지(매니저 팀 보고·비서·최근 추세·운영 맥락)는 접힌
+            ① 인사·지표 ② 오늘 브리핑 ③ 후속조치. 나머지(매니저 팀 보고·학원생 증감·운영 맥락)는 접힌
           2차 구역(`SecondarySection`)으로 내렸다. 접힌 줄이 오늘 보고의 **제목**을 나르므로 1차에서도 "보고가
-          있다·무슨 내용인지"는 읽힌다. */}
+          있다·무슨 내용인지"는 읽힌다.
+          ⚠️ **대화형 비서·실시간 운영(오늘 일정)·빠른 작업은 화면에서 뺐다**(원장 2026-09-03 지목) — 되살리려면
+             부품부터 다시 만들어야 한다(파일도 함께 지워졌다). */}
       {canSeeDailyBriefing ? (
         <SecondarySection
           id="daily-briefing"
@@ -366,56 +346,19 @@ export default async function TodayPage() {
         </SecondarySection>
       ) : null}
 
-      {showLiveSchedule || showFollowUps ? (
-        <section aria-labelledby="live-operations-title" className="space-y-3">
-          <header className="flex flex-wrap items-end justify-between gap-2 px-1">
-            <div>
-              <p className="text-primary text-xs font-bold">
-                실시간 운영
-              </p>
-              <h2 id="live-operations-title" className="text-foreground mt-0.5 text-lg font-bold tracking-tight">
-                지금 진행 중
-              </h2>
-            </div>
-            {/* 설명 문장은 뺐다(지시서 §4). */}
-          </header>
-          <div className={`grid items-start gap-4 ${liveGrid}`}>
-            {showLiveSchedule ? (
-              <NowCockpit
-                slots={todaySchedule}
-                subjects={subjects}
-                unrecordedCount={unrecordedCount}
-                attendanceProcessingUnavailable={
-                  access.read.attendance && attendanceState.todayProcessingIssue
-                }
-                canOpenClasses={access.read.classes}
-                canOpenTimetable={access.read.timetable}
-              />
-            ) : null}
-            {showFollowUps ? (
-              <FollowUpCard
-                items={followUps}
-                canOpenStudents={access.read.students}
-                unavailable={followUpsResult.unavailable}
-              />
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
-      {/* 2차 — 매니저 팀에게 물어보기(대화형 비서, 질문 1건 = 명시 트리거 1회, Phase 2). */}
-      {canUseAssistant ? (
-        <SecondarySection id="assistant" label="매니저 팀에게 물어보기">
-          <AssistantPanel
-            initialConversationId={assistantConversationResult.data?.id ?? null}
-            initialTurns={assistantConversationResult.data?.turns ?? []}
-          />
-        </SecondarySection>
+      {/* 상담 후속조치 — 원장 지시(2026-09-03)로 '실시간 운영/지금 진행 중' 묶음은 걷어냈지만,
+          이 카드는 그 안에 얹혀 있었을 뿐 다른 신호라 그대로 남긴다(오늘 브리핑의 후속조치 신호와 같은 소스). */}
+      {showFollowUps ? (
+        <FollowUpCard
+          items={followUps}
+          canOpenStudents={access.read.students}
+          unavailable={followUpsResult.unavailable}
+        />
       ) : null}
 
       {/* 2차 — 최근 7일 추세(학생 증감·출석·수납). 그릴 것이 없으면 줄 자체를 안 세운다(빈 구역 금지). */}
       {hasTrendContent(trend, enrollmentChangeResult.data, trendVisible) ? (
-        <SecondarySection id="trend" label="최근 추세" hint={`최근 ${enrollmentChangeResult.data.days}일`}>
+        <SecondarySection id="trend" label="학원생 증감" hint={`최근 ${enrollmentChangeResult.data.days}일`}>
           <SlimTrend data={trend} change={enrollmentChangeResult.data} subjects={subjects} visible={trendVisible} />
         </SecondarySection>
       ) : null}

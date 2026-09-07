@@ -34,6 +34,7 @@ import { NoteForm } from "@/features/onescreen/components/attendance-pills";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { nextAttendance, type BasicAttendance } from "../lib/mark-cycle";
 import { attendanceLabelOf } from "../lib/attendance-label";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
 import { EMPTY_CLICK_LABEL } from "../click-hint";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
 import { ATT_SOFT } from "@/features/attendance/status-color";
@@ -91,7 +92,8 @@ export function AttendanceCheck({
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const anchorRef = useRef<HTMLSpanElement | null>(null);
-  const label = attendanceLabelOf(status);
+  const lang = useSheetLang();
+  const label = attendanceLabelOf(status, lang);
 
   /** 사유 창 — 세 갈래(순환 뒤 자동 · 우클릭 · 잠긴 칸)가 **같은 폼**을 쓴다(수학과 같은 낱말). */
   const notePopup = (onSave: (text: string) => void) => (

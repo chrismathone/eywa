@@ -86,7 +86,9 @@ const recentIssues = [];
 // ⚠️ **새 기능을 워커에 넣으면 여기 cap을 함께 올릴 것.** 연동 PC는 물리적으로 다른 컴퓨터라, 이 값이
 // "지금 도는 코드가 그 기능을 아는가"를 웹에서 확인할 유일한 수단이다. 2026-08-06에 회수를 넣고 cap을
 // 안 올린 탓에, 옛 프로세스가 그대로 돌고 있는데도(started_at 7일 전) 하트비트만 보고는 알 수 없었다.
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true };
+// kageFailReasons=스샷 업로드 실패를 네 갈래(빈 캡처·첨부 칸 없음·kage 거부·무응답)로 갈라 담는 버전인가
+// (2026-09-04). 이 키가 없으면 옛 워커라 실패 사유가 여전히 `스샷 kage 업로드 실패` 한 줄로만 남는다.
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).

@@ -11,6 +11,7 @@ import {
   parseSupplySheetRow,
   statusKeyOf,
 } from "./excel-sheet";
+import { BUILTIN_CATEGORY_MAPS as CATS } from "./category";
 
 describe("엑셀 서식 — 헤더·값 규약", () => {
   it("헤더는 라벨 또는 키를 받고, 공백은 무시한다", () => {
@@ -33,11 +34,11 @@ describe("엑셀 서식 — 헤더·값 규약", () => {
     expect(normalizeDate("2026-13-45")).toBeUndefined();
   });
   it("분류·상태 — 한글 라벨과 키 둘 다 키로, 모르면 undefined", () => {
-    expect(categoryKeyOf("노트북")).toBe("laptop");
-    expect(categoryKeyOf("laptop")).toBe("laptop");
-    expect(categoryKeyOf("TV")).toBe("tv");
-    expect(categoryKeyOf("")).toBeNull();
-    expect(categoryKeyOf("냉장고")).toBeUndefined();
+    expect(categoryKeyOf("노트북", CATS)).toBe("laptop");
+    expect(categoryKeyOf("laptop", CATS)).toBe("laptop");
+    expect(categoryKeyOf("TV", CATS)).toBe("tv");
+    expect(categoryKeyOf("", CATS)).toBeNull();
+    expect(categoryKeyOf("냉장고", CATS)).toBeUndefined();
     expect(statusKeyOf("사용중")).toBe("in_use");
     expect(statusKeyOf("확인 필요")).toBe("check");
     expect(statusKeyOf("")).toBeNull();
@@ -48,26 +49,34 @@ describe("엑셀 서식 — 헤더·값 규약", () => {
 describe("자산 행 파싱", () => {
   const base = { assetCode: "nb-019", category: "노트북", status: "사용중", maker: "LG", model: "", acquiredOn: "2026.9.2" };
   it("정상 행 — 코드 대문자화, 빈 칸 null, 상태 기본 사용중", () => {
-    const r = parseAssetSheetRow({ ...base, status: "" }, 2);
+    const r = parseAssetSheetRow({ ...base, status: "" }, 2, CATS);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.row.assetCode).toBe("NB-019");
-    expect(r.row.category).toBe("laptop");
+    expect(r.row.categoryKey).toBe("laptop");
+    expect(r.row.categoryLabel).toBe("노트북");
     expect(r.row.status).toBe("in_use");
     // 상태 칸을 비웠다는 사실을 남긴다 — 덮어쓰기가 있는 자산을 조용히 사용중으로 바꾸지 않게.
     expect(r.row.statusGiven).toBe(false);
-    expect(parseAssetSheetRow(base, 2)).toMatchObject({ ok: true, row: { statusGiven: true } });
+    expect(parseAssetSheetRow(base, 2, CATS)).toMatchObject({ ok: true, row: { statusGiven: true } });
     expect(r.row.model).toBeNull();
     expect(r.row.acquiredOn).toBe("2026-09-02");
   });
   it("필수·형식·짝 검사 — 오류 문구에 행 번호", () => {
-    expect(parseAssetSheetRow({ ...base, assetCode: "" }, 3)).toMatchObject({ ok: false, error: expect.stringContaining("3행") });
-    expect(parseAssetSheetRow({ ...base, category: "" }, 4)).toMatchObject({ ok: false, error: expect.stringContaining("분류") });
-    expect(parseAssetSheetRow({ ...base, status: "고장" }, 5)).toMatchObject({ ok: false, error: expect.stringContaining("상태") });
-    expect(parseAssetSheetRow({ ...base, disposedOn: "2026-08-28" }, 6)).toMatchObject({ ok: false, error: expect.stringContaining("폐기") });
-    expect(parseAssetSheetRow({ ...base, status: "폐기" }, 7)).toMatchObject({ ok: false, error: expect.stringContaining("폐기일") });
-    expect(parseAssetSheetRow({ ...base, status: "폐기", disposedOn: "2026-08-28" }, 8)).toMatchObject({ ok: true });
-    expect(parseAssetSheetRow({ ...base, acquiredOn: "언젠가" }, 9)).toMatchObject({ ok: false, error: expect.stringContaining("입고일") });
+    expect(parseAssetSheetRow({ ...base, assetCode: "" }, 3, CATS)).toMatchObject({ ok: false, error: expect.stringContaining("3행") });
+    expect(parseAssetSheetRow({ ...base, category: "" }, 4, CATS)).toMatchObject({ ok: false, error: expect.stringContaining("분류") });
+    expect(parseAssetSheetRow({ ...base, status: "고장" }, 5, CATS)).toMatchObject({ ok: false, error: expect.stringContaining("상태") });
+    expect(parseAssetSheetRow({ ...base, disposedOn: "2026-08-28" }, 6, CATS)).toMatchObject({ ok: false, error: expect.stringContaining("폐기") });
+    expect(parseAssetSheetRow({ ...base, status: "폐기" }, 7, CATS)).toMatchObject({ ok: false, error: expect.stringContaining("폐기일") });
+    expect(parseAssetSheetRow({ ...base, status: "폐기", disposedOn: "2026-08-28" }, 8, CATS)).toMatchObject({ ok: true });
+    expect(parseAssetSheetRow({ ...base, acquiredOn: "언젠가" }, 9, CATS)).toMatchObject({ ok: false, error: expect.stringContaining("입고일") });
+  });
+  it("🔑 모르는 분류는 오류가 아니라 새 분류 후보 — 키는 null, 라벨은 파일에 적힌 글자 그대로", () => {
+    const r = parseAssetSheetRow({ ...base, category: " 헤드셋 " }, 2, CATS);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.row.categoryKey).toBeNull();
+    expect(r.row.categoryLabel).toBe("헤드셋");
   });
   it("같은 자산ID가 두 번이면 오류", () => {
     const rows = [{ rowNum: 2, k: "NB-001" }, { rowNum: 3, k: "NB-002" }, { rowNum: 4, k: "NB-001" }];

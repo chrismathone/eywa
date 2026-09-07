@@ -21,6 +21,7 @@ import { lockedMessage } from "@/features/attendance/lock-message";
 import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 import { useAttendanceSearch } from "./search-context";
+import { useSheetTf } from "@/features/teacher-view/lang-context";
 
 type Ctx = {
   store: GridStore;
@@ -147,6 +148,7 @@ export function GridProvider({
    */
   // ⚠️ 같은 문구가 연달아 나와도 타이머가 **다시** 돌게 id를 단다(문자열만 담으면 React가 bail-out
   //    해서 effect가 안 돌고, 연속 입력 중 마지막 알림이 곧바로 사라진다).
+  const tf = useSheetTf();
   const [notice, setNotice] = useState<{ text: string; id: number } | null>(null);
   const noticeSeq = useRef(0);
   const showNotice = useCallback((text: string) => {
@@ -321,7 +323,7 @@ export function GridProvider({
       //    ⚠️ 문을 닫는 게 아니다 — 반별 보기에선 그 칸이 3으로 보이고 그대로 지울 수 있다(#103).
       if (val === null && shared > 0) {
         setError(
-          `이 칸엔 다른 교시 기록 ${shared}건(다른 선생님·자리 JJ·랩실)이 함께 있어 여기서 지우면 그것까지 지워집니다 — 반별 보기에서 지우세요`,
+          tf("att.grid.sharedBlock", { n: shared }),
         );
         return;
       }
@@ -332,9 +334,9 @@ export function GridProvider({
       // 값을 **쓰는** 경우엔 막지 않는다(내 교시가 있으니 고칠 권리가 있다) — 대신 사정거리를 말한다.
       // 칸 숫자가 내 교시만 보여주므로 이 문장이 없으면 "내 것만 바뀐다"고 믿는다.
       // ⚠️ 이 문장은 **성공 알림**이다 — 실패 채널(빨강)에 실으면 잘 저장된 순간마다 경고가 뜬다.
-      if (shared > 0) showNotice(`같은 날 다른 교시 기록 ${shared}건(다른 선생님·자리)도 함께 바뀝니다`);
+      if (shared > 0) showNotice(tf("att.grid.sharedNotice", { n: shared }));
     },
-    [store, lockNoteOf, isNotMine, alsoWrites, pushCell, showNotice],
+    [store, lockNoteOf, isNotMine, alsoWrites, pushCell, showNotice, tf],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
@@ -357,17 +359,21 @@ export function GridProvider({
       const notMineCount = unlocked.length - mine.length;
       const mixedCount = mine.length - targets.length;
       const skipNote = [
-        lockedCount > 0 ? `${lockedCount}칸은 수정 기간(7일)이 지나` : null,
-        notMineCount > 0 ? `${notMineCount}칸은 선생님 교시가 없어` : null,
-        mixedCount > 0 ? `${mixedCount}칸은 다른 교시 기록이 함께 있어(반별 보기에서 지우세요)` : null,
+        lockedCount > 0 ? tf("att.grid.skip.locked", { n: lockedCount }) : null,
+        notMineCount > 0 ? tf("att.grid.skip.notMine", { n: notMineCount }) : null,
+        mixedCount > 0 ? tf("att.grid.skip.mixed", { n: mixedCount }) : null,
       ].filter(Boolean);
       if (targets.length === 0) {
-        if (skipNote.length > 0) setError(`${skipNote.join(" · ")} 건너뛰었습니다`);
+        if (skipNote.length > 0) {
+          setError(tf("att.grid.skip.tail", { list: skipNote.join(" · ") }));
+        }
         return;
       }
       if (targets.length === 1) {
         writeOne(cellKey(targets[0]!.row, targets[0]!.date), val);
-        if (skipNote.length > 0) setError(`${skipNote.join(" · ")} 건너뛰었습니다`);
+        if (skipNote.length > 0) {
+          setError(tf("att.grid.skip.tail", { list: skipNote.join(" · ") }));
+        }
         return;
       }
       const prevs = targets.map(
@@ -396,19 +402,22 @@ export function GridProvider({
         // 🔴 `mixedCount`도 여기서 말한다 — skipNote는 targets가 0·1일 때만 뜨므로, 2칸 이상 남으면
         //    섞인 칸이 **조용히** 빠졌다(5칸 잡아 지우면 3칸만 지워지는데 화면은 무음).
         const failNotes = [
-          skipped > 0 ? `${skipped}칸은 수정 기간이 지났거나 담당 반·선생님 교시가 아니어서 건너뛰었습니다` : null,
-          mixedCount > 0 ? `${mixedCount}칸은 다른 교시 기록이 함께 있어 안 지웠습니다 — 반별 보기에서 지우세요` : null,
+          skipped > 0 ? tf("att.grid.clear.skipped", { n: skipped }) : null,
+          mixedCount > 0 ? tf("att.grid.clear.mixed", { n: mixedCount }) : null,
         ].filter(Boolean);
         if (failNotes.length > 0) setError(failNotes.join(" · "));
         // ⚠️ `shared`는 서버가 반려한 칸(res.blocked)까지 세므로, 반려가 섞였으면 단정하지 않는다.
         if (shared > 0) {
           showNotice(
-            `${shared}칸은 같은 날 다른 교시 기록(다른 선생님·자리)도 함께 바뀌${res.blocked > 0 ? "었을 수 있습니다" : "었습니다"}`,
+            tf(
+              res.blocked > 0 ? "att.grid.clear.sharedMaybe" : "att.grid.clear.shared",
+              { n: shared },
+            ),
           );
         }
       });
     },
-    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice],
+    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice, tf],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */

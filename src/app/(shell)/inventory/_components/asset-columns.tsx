@@ -1,9 +1,9 @@
-import { assetCategoryLabel } from "@/features/inventory/category";
+import type { CategoryMaps } from "@/features/inventory/category";
 import { assetStatusLabel } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
 import { DashCell, UnknownCell } from "./cell-bits";
 import type { Column } from "./sortable-table";
-import { AssetStatusPill } from "./status-pill";
+import { AssetStatusPill } from "@/features/inventory/components/status-pill";
 
 /**
  * 자산 마스터 열 — 시안 그대로 `자산ID · 분류 · 제조사 · 모델명 · 입고일 · 상태 · 현위치 · 사용자 · 최종실사 · 폐기일 · 비고`
@@ -14,6 +14,8 @@ import { AssetStatusPill } from "./status-pill";
  * `onStatusDoubleClick` — 상태 칸 더블클릭 = 상태 변경. `onQrClick` — QR 열 [보기].
  */
 export function assetColumns(
+  /** 분류 라벨 단일 소스(0247a) — 화면이 라벨 표를 다시 갖지 않는다. */
+  cats: CategoryMaps,
   opts: {
     /** 자산 마스터 순서의 고정 번호(1부터) — 정렬·필터해도 그 자산의 번호는 그대로(라벨 인쇄 범위가 이 번호를 가리킨다). */
     noOf?: (a: InventoryAsset) => number | null;
@@ -24,7 +26,7 @@ export function assetColumns(
   return [
     { key: "no", label: "No", width: 56, render: (a) => <span className="num text-text-dim">{opts.noOf?.(a) ?? ""}</span>, sortValue: (a) => opts.noOf?.(a) ?? null, className: "whitespace-nowrap" },
     { key: "assetCode", label: "자산ID", width: 88, render: (a) => <span className="font-mono text-xs font-bold">{a.assetCode}</span>, className: "whitespace-nowrap" },
-    { key: "category", label: "분류", width: 78, render: (a) => assetCategoryLabel(a.category), sortValue: (a) => assetCategoryLabel(a.category), className: "whitespace-nowrap" },
+    { key: "category", label: "분류", width: 78, render: (a) => cats.labelOf(a.category), sortValue: (a) => cats.labelOf(a.category), className: "whitespace-nowrap" },
     { key: "maker", label: "제조사", width: 96, render: (a) => <UnknownCell v={a.maker} />, className: "whitespace-nowrap" },
     { key: "model", label: "모델명", minWidth: 150, render: (a) => <UnknownCell v={a.model} />, className: "whitespace-nowrap" },
     { key: "acquiredOn", label: "입고일", width: 100, render: (a) => <UnknownCell v={a.acquiredOn} num />, className: "whitespace-nowrap" },

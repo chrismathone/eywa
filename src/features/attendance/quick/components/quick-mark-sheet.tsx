@@ -23,19 +23,21 @@ import { useEffect, useState } from "react";
 import { ATT_SOFT, ATT_SOFT_BORDER, ATT_SOLID } from "@/features/attendance/status-color";
 import { noteOnStatusChange, type QuickMarkStatus } from "../board";
 import { buildLateNote, lateArrivalTime, parseLateNote } from "../late-note";
+// 화면 언어 — 상태 3종 라벨은 좌석표·시트와 **같은 단일 소스**(`seatMarkLabelOf`).
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { seatMarkLabelOf } from "@/features/attendance/live/mark-state";
+import { studentNameParts } from "@/features/teacher-view/student-name";
 import { AbsentPanel, LatePanel } from "./quick-reason-panels";
 
 /** `note`를 안 넘기면 **기존 메모 유지**(서버 계약 그대로) — null은 "비운다"는 뜻이다. */
 export type QuickSaveInput = { status: QuickMarkStatus; note?: string | null };
 
-const MARKS: { status: QuickMarkStatus; label: string }[] = [
-  { status: "present", label: "출석" },
-  { status: "late", label: "지각" },
-  { status: "absent", label: "결석" },
-];
+/** 🔴 라벨은 여기 적지 않는다 — `seatMarkLabelOf`(좌석표·출결 모드 공용)를 그대로 부른다. */
+const MARKS: QuickMarkStatus[] = ["present", "late", "absent"];
 
 export function QuickMarkSheet({
   studentName,
+  englishName,
   schoolGrade,
   className,
   status,
@@ -46,7 +48,10 @@ export function QuickMarkSheet({
   onClose,
 }: {
   studentName: string;
+  /** 영어 이름(`students.english_name`) — 영어 모드에서 주 이름이 된다. 없으면 null. */
+  englishName: string | null;
   schoolGrade: string | null;
+  /** 🔴 호출부가 이미 `classNameFor`를 통과시킨 **표시용** 반 이름이다(여기서 다시 고르지 않는다). */
   className: string;
   /** 지금 화면이 믿는 상태(낙관 반영 포함) — 초기 패널·선택 표시의 근거. */
   status: string | null;
@@ -58,6 +63,10 @@ export function QuickMarkSheet({
   onSaveNote: (note: string) => void;
   onClose: () => void;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const name = studentNameParts(studentName, englishName, lang);
   const isLate = status === "late";
   const isAbsent = status === "absent" || status === "excused";
   const parsed = parseLateNote(note);
@@ -94,26 +103,33 @@ export function QuickMarkSheet({
     onClose();
   }
 
+  // 🔴 **저장될 메모는 한국어 그대로**다(`17:05 등원 · 버스 놓침`) — 데스크·학부모 연락·결석 사유
+  //    분류기가 그 한국어를 읽는다. 화면에 보이는 미리보기는 `LatePanel`이 같은 재료로 다시 적는다.
   const lateNote = buildLateNote(lateTime, 0, lateReason);
   return (
     <>
       {/* 라벨을 머리의 '닫기'와 다르게 둔다 — 같은 이름의 버튼이 둘이면 화면 낭독기에서 구분되지 않는다. */}
       <button
         type="button"
-        aria-label="배경을 눌러 닫기"
+        aria-label={t("quick.sheet.backdrop")}
         onClick={onClose}
         className="fixed inset-0 z-40 cursor-default bg-black/30"
       />
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`${studentName} 출결 입력`}
+        aria-label={tf("quick.sheet.aria", { name: name.primary })}
         className="bg-card fixed inset-x-0 bottom-0 z-50 max-h-[85vh] w-full overflow-y-auto rounded-t-2xl px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.18)] sm:inset-0 sm:m-auto sm:h-fit sm:max-w-md sm:rounded-2xl sm:pb-4"
       >
         <header className="mb-3 flex items-start gap-2">
           <div className="min-w-0">
             <p className="text-foreground truncate text-lg font-bold">
-              {studentName}
+              {name.primary}
+              {name.secondary ? (
+                <span className="text-text-faint ml-1.5 text-sm font-normal">
+                  {name.secondary}
+                </span>
+              ) : null}
               {schoolGrade ? (
                 <span className="text-text-faint ml-1.5 text-sm font-normal">{schoolGrade}</span>
               ) : null}
@@ -125,24 +141,24 @@ export function QuickMarkSheet({
             onClick={onClose}
             className="text-text-dim hover:bg-bg-soft ml-auto min-h-11 shrink-0 rounded-xl px-3 text-base font-bold"
           >
-            닫기
+            {t("quick.close")}
           </button>
         </header>
 
         <div className="mb-3 flex gap-2">
           {MARKS.map((m) => {
-            const on = m.status === "absent" ? isAbsent : status === m.status;
+            const on = m === "absent" ? isAbsent : status === m;
             return (
               <button
-                key={m.status}
+                key={m}
                 type="button"
-                onClick={() => choose(m.status)}
+                onClick={() => choose(m)}
                 aria-pressed={on}
                 className={`min-h-14 flex-1 rounded-2xl text-lg font-bold transition ${
-                  on ? ATT_SOLID[m.status] : `${ATT_SOFT[m.status]} border ${ATT_SOFT_BORDER[m.status]}`
+                  on ? ATT_SOLID[m] : `${ATT_SOFT[m]} border ${ATT_SOFT_BORDER[m]}`
                 }`}
               >
-                {m.label}
+                {seatMarkLabelOf(m, lang)}
               </button>
             );
           })}
@@ -152,7 +168,6 @@ export function QuickMarkSheet({
           <LatePanel
             time={lateTime}
             reason={lateReason}
-            note={lateNote}
             onShift={(delta) => setLateTime(lateArrivalTime(lateTime, delta))}
             onTime={(hhmm) => setLateTime(lateArrivalTime(hhmm, 0))}
             onReason={setLateReason}
@@ -167,7 +182,8 @@ export function QuickMarkSheet({
         mode === "absent" && isAbsent ? (
           <>
             <p className="text-text-dim mb-2 text-sm">
-              <span className="text-danger font-bold">결석으로 기록했습니다</span> · 사유 추가(선택)
+              <span className="text-danger font-bold">{t("quick.absent.saved")}</span> ·{" "}
+              {t("quick.absent.addReason")}
             </p>
             <AbsentPanel
               reason={note?.trim() || null}

@@ -31,6 +31,7 @@ import {
 } from "@/features/attendance/search-totals";
 import { LiveUnits, OfTotal } from "./live-totals";
 import { useAttendanceSearch } from "./search-context";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export function MatrixTotalsSummary({
   classCount,
@@ -49,6 +50,8 @@ export function MatrixTotalsSummary({
   money?: TeacherMoney | null;
   moneyNote?: string | null;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const search = useAttendanceSearch();
   const searching = search?.active ?? false;
   // 🔴 모수는 **학생 id 집합**이다 — 이름으로 좁히면 동명이인이 한 명으로 접혀 남의 돈이 섞인다.
@@ -66,14 +69,16 @@ export function MatrixTotalsSummary({
 
   return (
     <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-      <span className="text-foreground text-xs font-bold">{searching ? "검색 합계" : "합계"}</span>
+      <span className="text-foreground text-xs font-bold">
+        {t(searching ? "att.totals.search" : "att.totals.all")}
+      </span>
       {searching ? (
         <>
           {/* 무엇으로 좁혔는지 — 검색칸이 화면 위쪽에 있어 스크롤하면 안 보인다. */}
           <span className="text-text-dim text-xs">{`‘${search?.query.trim() ?? ""}’`}</span>
           {/* ⚠️ **보이는 글씨**여야 한다 — 툴팁은 폰에서 없는 것과 같다. */}
           <span className="bg-amber-soft text-amber shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap">
-            검색 중 — 전체 아님
+            {t("att.totals.searching")}
           </span>
         </>
       ) : null}
@@ -81,28 +86,31 @@ export function MatrixTotalsSummary({
       <span className="text-text-dim text-xs">
         {shownClasses}
         {searching ? <OfTotal>{classCount}</OfTotal> : null}
-        개 반
+        {t("att.totals.classes")}
       </span>
       <span className="text-foreground num text-xs font-bold">
-        시수 <LiveUnits countByRow={countByRow} fallback={fallback} />
+        {t("att.totals.units")}
+        <LiveUnits countByRow={countByRow} fallback={fallback} />
       </span>
       {money && totals ? (
         <>
           {/* ⚠️ 합계는 **고유 학생 1회**만 더한다 — 한 학생이 여러 반에 나와도 청구서는 한 장이다. */}
           <span className="text-text-dim num text-xs">
-            청구 {formatMoney(totals.billed)}
-            {searching ? <OfTotal>{formatMoney(money.totals.billed)}</OfTotal> : null} · 납입{" "}
+            {tf("att.totals.billed", { amount: formatMoney(totals.billed) })}
+            {searching ? <OfTotal>{formatMoney(money.totals.billed)}</OfTotal> : null}
+            {t("att.totals.paidPre")}
             {formatMoney(totals.paid)}
             {searching ? <OfTotal>{formatMoney(money.totals.paid)}</OfTotal> : null}
             <span className="text-text-faint ml-1">
               ({totals.students}
-              {searching ? ` / ${money.totals.students}` : ""}명 기준)
+              {searching ? ` / ${money.totals.students}` : ""}
+              {t("att.totals.basis")}
             </span>
           </span>
           {moneyNote ? (
             <span
               className="text-amber text-xs"
-              title="교시(시간표 슬롯) 담당으로 들어온 반입니다. 급여 배분은 아직 담임 축이라 이 반의 청구·정산액은 담임 선생님 쪽에 잡혀 있습니다."
+              title={t("att.totals.slotTitle")}
             >
               {moneyNote}
             </span>
@@ -110,36 +118,48 @@ export function MatrixTotalsSummary({
           {totals.sharedStudents > 0 ? (
             <span
               className="text-amber text-xs"
-              title="다른 과목·강사와 청구서를 함께 쓰는 학생입니다. 이 금액은 강사 몫이 아니라 학생 총액이라 그대로 급여 기준으로 쓰면 안 됩니다."
+              title={t("att.totals.sharedTitle")}
             >
-              공유 {totals.sharedStudents}
-              {searching ? ` / ${money.totals.sharedStudents}` : ""}명 포함
+              {tf("att.totals.shared", { n: totals.sharedStudents })}
+              {searching ? ` / ${money.totals.sharedStudents}` : ""}
+              {t("att.totals.sharedIncluded")}
             </span>
           ) : null}
           {/* 강사 몫(정산액) — 1순위는 티어 단가(0199a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
               티어 미배선이면 종전 안내(회차 확정/배분율)로 폴백. 없으면 0을 지어내지 않는다. */}
           {tier?.status === "ready" ? (
             <span className="text-foreground num text-xs font-bold">
-              정산액 {formatMoney(scopedTier ? scopedTier.total : tier.total)}
+              {tf("att.totals.pay", {
+                amount: formatMoney(scopedTier ? scopedTier.total : tier.total),
+              })}
               {searching ? <OfTotal>{formatMoney(tier.total)}</OfTotal> : null}
               <span className="text-text-faint ml-1 text-xs font-normal">
-                (시수 {formatSessionUnits(scopedTier ? scopedTier.unitsTotal : tier.unitsTotal)}
-                {searching ? ` / ${formatSessionUnits(tier.unitsTotal)}` : ""} · 단가×시수×0.911×비율)
+                {t("att.totals.unitsPre")}
+                {formatSessionUnits(scopedTier ? scopedTier.unitsTotal : tier.unitsTotal)}
+                {searching ? ` / ${formatSessionUnits(tier.unitsTotal)}` : ""}
+                {t("att.totals.formula")}
               </span>
               {missingTierStudents.length > 0 ? (
                 <span
                   className="text-amber ml-1 text-xs font-normal"
-                  title={`단가(수업 티어)가 지정되지 않아 정산액에서 빠진 학생입니다: ${missingTierStudents.join(", ")}`}
+                  title={tf("att.totals.missingTierTitle", {
+                    names: missingTierStudents.join(", "),
+                  })}
                 >
-                  단가 미지정 {missingTierStudents.length}명 · {formatSessionUnits(excludedUnits)}시수 제외
+                  {tf("att.totals.missingTier", {
+                    n: missingTierStudents.length,
+                    units: formatSessionUnits(excludedUnits),
+                  })}
                 </span>
               ) : null}
               {missingPriceTiers.length > 0 ? (
                 <span
                   className="text-amber ml-1 text-xs font-normal"
-                  title={`단가표(salary_tiers)에 없는 티어입니다: ${missingPriceTiers.join(", ")}`}
+                  title={tf("att.totals.missingPriceTitle", {
+                    tiers: missingPriceTiers.join(", "),
+                  })}
                 >
-                  단가표 미등록 티어 {missingPriceTiers.length}건
+                  {tf("att.totals.missingPrice", { n: missingPriceTiers.length })}
                 </span>
               ) : null}
             </span>
@@ -148,19 +168,21 @@ export function MatrixTotalsSummary({
               className="text-amber text-xs"
               title={
                 tier.missingTierStudents.length > 0
-                  ? `단가 미지정: ${tier.missingTierStudents.join(", ")}`
+                  ? tf("att.totals.missingTierPlain", {
+                      names: tier.missingTierStudents.join(", "),
+                    })
                   : undefined
               }
             >
-              정산액 보류 — 단가·비율이 지정된 학생이 없습니다
+              {t("att.totals.payHold")}
             </span>
           ) : (
             <span className="text-text-faint text-xs">
               {money.splitRows === 0
-                ? "정산액 — 회차 확정이 없어 반별 배분을 낼 수 없습니다(수납관리 > 회차)"
+                ? t("att.totals.noTerms")
                 : money.commissionRate === null
-                  ? "정산액 — 배분율 미설정(수납관리 > 강사 정산)"
-                  : `배분율 ${money.commissionRate}% · 정산액은 수납관리 > 강사 정산에서`}
+                  ? t("att.totals.noRate")
+                  : tf("att.totals.rateNote", { rate: money.commissionRate })}
             </span>
           )}
         </>

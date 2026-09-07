@@ -13,6 +13,12 @@ import type { LiveSignal, SlotPhase } from "./signals";
 export type LiveStudent = {
   studentId: string;
   studentName: string;
+  /**
+   * 영어 이름(`students.english_name`) — 강사뷰 영어 화면에서 **주 이름**이 된다
+   * ([`studentDisplayName`](@/features/teacher-view/student-name) 단일 소스). 없으면 null.
+   * 🔴 표시 전용 — 검색·정렬·저장·학부모 표면은 한글 이름 고정이다.
+   */
+  englishName: string | null;
   schoolGrade: string | null;
   parentPhone: string | null;
   studentPhone: string | null;

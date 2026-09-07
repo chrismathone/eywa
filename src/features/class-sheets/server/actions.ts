@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 // (슬롯 advisory xact 락·재번호 원자성). 출석은 체크(ecs_mark_present_if_absent) + 취소(ecs_clear_present,
 // 0169a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
+// ui_prefs 부분 병합은 **단일 구현**(화면마다 복붙하면 형제 키를 날린다 — CLAUDE.md).
+import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
@@ -776,41 +778,7 @@ export async function clearPresentAttendance(input: {
  * 🔴 병합 로직을 설정마다 복붙하지 말 것 — 두 벌이 되면 한쪽만 고쳐 형제 키를 날리는 사고가 난다.
  */
 async function patchMyEcsPrefs(patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const admin = createAdminClient();
-  const { data: row, error: readErr } = await admin
-    .from("users")
-    .select("ui_prefs")
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId)
-    .maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
-
-  const raw =
-    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
-      ? (row.ui_prefs as Record<string, unknown>)
-      : {};
-  const ns =
-    raw.ecs && typeof raw.ecs === "object" && !Array.isArray(raw.ecs)
-      ? { ...(raw.ecs as Record<string, unknown>) }
-      : {};
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined) delete ns[key];
-    else ns[key] = value;
-  }
-
-  const merged = { ...raw };
-  if (Object.keys(ns).length === 0) delete merged.ecs;
-  else merged.ecs = ns;
-
-  const { error } = await admin
-    .from("users")
-    .update({ ui_prefs: merged })
-    .eq("id", user.id)
-    .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  return patchMyUiPrefs("ecs", patch);
 }
 
 /**

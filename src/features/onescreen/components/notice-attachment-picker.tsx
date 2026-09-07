@@ -11,6 +11,7 @@
  */
 
 import { toast } from "sonner";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { issueNoticeAttachmentTicket, registerNoticeAttachment } from "../server/notice-attachment-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
@@ -22,7 +23,7 @@ export function NoticeAttachmentPicker({
   uploading,
   onUploadingChange,
   disabled,
-  label = "이미지 첨부 (선택 학생 모두에게)",
+  label,
 }: {
   attachments: NoticeAttachment[];
   onChange: (next: NoticeAttachment[]) => void;
@@ -31,6 +32,10 @@ export function NoticeAttachmentPicker({
   disabled?: boolean;
   label?: string;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
+  // 라벨은 호출부가 덮을 수 있고, 안 주면 사전 기본값(관리자 화면엔 provider가 없어 한국어).
+  const labelText = label ?? t("os.na.label");
   const full = attachments.length >= NOTICE_ATTACHMENT_MAX;
 
   /**
@@ -45,28 +50,29 @@ export function NoticeAttachmentPicker({
     if (!picked.length) return;
     const room = NOTICE_ATTACHMENT_MAX - attachments.length;
     if (room <= 0) {
-      toast.error(`이미지는 한 글에 최대 ${NOTICE_ATTACHMENT_MAX}장까지 첨부할 수 있습니다`);
+      toast.error(tf("os.na.max", { n: NOTICE_ATTACHMENT_MAX }));
       return;
     }
-    if (picked.length > room) toast.message(`${room}장만 첨부합니다 — 한 글에 최대 ${NOTICE_ATTACHMENT_MAX}장`);
+    if (picked.length > room)
+      toast.message(tf("os.na.trimmed", { room, n: NOTICE_ATTACHMENT_MAX }));
     onUploadingChange(true);
     const added: NoticeAttachment[] = [];
     try {
       for (const original of picked.slice(0, room)) {
         if (!original.type.startsWith("image/")) {
-          toast.error(`${original.name} — 이미지(JPG·PNG·WebP)만 첨부할 수 있습니다`);
+          toast.error(tf("os.na.typeOnly", { name: original.name }));
           continue;
         }
         const file = await resizeImageForUpload(original);
         const issued = await issueNoticeAttachmentTicket({ contentType: file.type, size: file.size });
         if (issued.error || !issued.ticket) {
-          toast.error(issued.error ?? "업로드 준비에 실패했습니다");
+          toast.error(issued.error ?? t("os.c.attachIssueFail"));
           break;
         }
         try {
           await uploadToTicket(issued.ticket, file);
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : "업로드에 실패했습니다");
+          toast.error(e instanceof Error ? e.message : t("os.c.attachUploadFail"));
           break;
         }
         const reg = await registerNoticeAttachment({
@@ -75,7 +81,7 @@ export function NoticeAttachmentPicker({
           size: file.size,
         });
         if (reg.error || !reg.attachment) {
-          toast.error(reg.error ?? "첨부 등록에 실패했습니다");
+          toast.error(reg.error ?? t("os.c.attachRegisterFail"));
           break;
         }
         added.push(reg.attachment);
@@ -85,7 +91,7 @@ export function NoticeAttachmentPicker({
     }
     if (added.length) {
       onChange([...attachments, ...added]);
-      toast.success(`이미지 ${added.length}장 첨부`);
+      toast.success(tf("os.na.done", { n: added.length }));
     }
   }
 
@@ -93,15 +99,15 @@ export function NoticeAttachmentPicker({
     <div className="border-line rounded-md border px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-text-dim text-xs font-medium">
-          {label}
-          {attachments.length ? ` · ${attachments.length}장` : ""}
+          {labelText}
+          {attachments.length ? tf("os.na.count", { n: attachments.length }) : ""}
         </p>
         <label
           className={`border-line text-text-dim rounded-md border px-2 py-1 text-xs ${
             uploading || full || disabled ? "text-text-faint cursor-not-allowed" : "hover:bg-bg-soft cursor-pointer"
           }`}
         >
-          {uploading ? "업로드 중…" : "이미지 추가"}
+          {uploading ? t("os.card.uploading") : t("os.na.add")}
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
@@ -130,13 +136,15 @@ export function NoticeAttachmentPicker({
                 onClick={() => onChange(attachments.filter((x) => x.path !== a.path))}
                 className="text-text-faint hover:text-danger shrink-0"
               >
-                삭제
+                {t("os.n.delete")}
               </button>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-text-faint mt-1 text-xs">사진(JPG·PNG·WebP) · 한 글에 최대 {NOTICE_ATTACHMENT_MAX}장</p>
+        <p className="text-text-faint mt-1 text-xs">
+          {tf("os.na.hint", { n: NOTICE_ATTACHMENT_MAX })}
+        </p>
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { displayLessons } from "../curriculum";
 import type { Subject } from "../types";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 const PREV_TD_BASE = "px-2 py-1 align-top text-xs text-text-faint";
 const PREV_TD = `border-line/60 ${PREV_TD_BASE}`;
@@ -30,6 +31,8 @@ export function PrevRow({
   onImport?: () => void; // 이전 회차 값 → 오늘 행 빈 칸 채움(1-3). 특이사항은 제외(발송 본문 오염 방지).
   groupStart?: boolean; // 학생 묶음의 첫 렌더 행 — 위쪽에 굵은 구분선
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const p = subject.prevReport;
   if (!p) return null;
   const prog = displayLessons(p.progress) || p.progress || "—";
@@ -43,7 +46,9 @@ export function PrevRow({
         <EyIcon name="chevronDown" size={13} className="text-text-faint/70" />
       </td>
       <td className={td}>
-        <span className="whitespace-nowrap">이전 {shortDate(p.date)}</span>
+        <span className="whitespace-nowrap">
+          {tf("os.prev.date", { date: shortDate(p.date) })}
+        </span>
       </td>
       {/* 수업타임 열(2026-08-05 신설) — 지난 회차엔 보여줄 값이 없지만 **칸은 반드시 차지해야 한다**.
           이 행은 위치로만 열을 맞추는 구조라, 빠뜨리면 아래 모든 칸이 한 칸씩 왼쪽으로 밀린다(조용한 오정렬). */}
@@ -63,7 +68,9 @@ export function PrevRow({
       <td className={td}>
         <span className="line-clamp-2">{p.textbook || "—"}</span>
         {p.homeworkToday ? (
-          <span className="text-text-faint/80 mt-0.5 block line-clamp-2">과제 {p.homeworkToday}</span>
+          <span className="text-text-faint/80 mt-0.5 block line-clamp-2">
+            {tf("os.prev.homework", { text: p.homeworkToday })}
+          </span>
         ) : null}
       </td>
       <td className={td}>
@@ -74,10 +81,10 @@ export function PrevRow({
           <button
             type="button"
             onClick={onImport}
-            title="이전 회차 값을 이 행의 빈 칸에 채움 — 진도·태도·과제·오늘 과제 (특이사항 제외)"
+            title={t("os.prev.rowTitle")}
             className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-xs font-bold"
           >
-            가져오기
+            {t("os.prev.rowGet")}
           </button>
         ) : null}
       </td>

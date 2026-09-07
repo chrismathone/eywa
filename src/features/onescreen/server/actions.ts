@@ -28,6 +28,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
+import { sameSessionRevision, sessionContentFromRow, sessionSaveDecision, type SessionContent } from "../session-write";
 import { isRecallInFlight } from "@/features/report-admin/report-recall";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
@@ -652,6 +653,11 @@ export type SaveOnescreenSessionInput = {
   homework?: string | null;
   note?: string | null; // 특이사항(강사 메모) — 0093a
   progressConfirmed?: boolean;
+  /**
+   * 이 창이 마지막으로 본 세션 `updated_at`. 같은 값이면 이 창이 마지막 저장자라 칸을 비워도 반영.
+   * 없거나 다르면 덜 쓴 창의 저장은 무시한다(session-write.ts).
+   */
+  baseUpdatedAt?: string | null;
 };
 
 /**
@@ -661,7 +667,7 @@ export type SaveOnescreenSessionInput = {
  */
 export async function saveOnescreenSession(
   input: SaveOnescreenSessionInput,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; skipped?: boolean; updatedAt?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 임시저장도 저장이다(대상 강사의 세션 행과 섞이면 안 된다).
@@ -687,31 +693,74 @@ export async function saveOnescreenSession(
     .limit(1);
   if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
 
+  // 같은 강사 창이 둘이면 나중 저장이 이겼다(0118a 유니크는 강사축일 뿐 창 축이 아니다).
+  // 덜 쓴 창의 자동저장이 멘트·오늘 과제를 지우지 않게, 반영 전에 내용 칸을 견준다(session-write.ts).
+  const { data: prior } = await supabase
+    .from("onescreen_daily_sessions")
+    .select("updated_at, subject_progress, attitude, homework, special_note, daily_score, check_score")
+    .eq("student_id", input.studentId)
+    .eq("session_date", sessionDate)
+    .eq("updated_by", user.id)
+    .maybeSingle();
+  const incoming: SessionContent = {
+    subjectProgress: input.subjectProgress ?? {},
+    attitude: input.attitude ?? null,
+    homework: input.homework ?? null,
+    note: input.note ?? null,
+    dailyScore: input.dailyScore ?? null,
+    checkScore: input.checkScore ?? null,
+  };
+  const existing = sessionContentFromRow(prior);
+  const sameRevision = sameSessionRevision(input.baseUpdatedAt, prior?.updated_at as string | undefined);
+  if (sessionSaveDecision(existing, incoming, sameRevision) === "ignore") {
+    return { ok: true, skipped: true, updatedAt: (prior?.updated_at as string | undefined) ?? undefined };
+  }
+
+  const payload = {
+    tenant_id: user.tenantId,
+    student_id: input.studentId,
+    session_date: sessionDate,
+    class_id: input.classId ?? null,
+    study_grade: input.studyGrade ?? null,
+    subject_progress: input.subjectProgress ?? {},
+    daily_score: input.dailyScore ?? null,
+    daily_max: input.dailyMax ?? null,
+    check_score: input.checkScore ?? null,
+    check_max: input.checkMax ?? null,
+    attitude: input.attitude ?? null,
+    homework: input.homework ?? null,
+    special_note: input.note ?? null,
+    progress_confirmed: input.progressConfirmed ?? false,
+    updated_by: user.id,
+    updated_at: new Date().toISOString(),
+  };
+
+  // 두 창이 동시에 '행 없음'을 보고 쓰면 나중 upsert가 이긴다 — 빈 창이 늦게 오면 잘 쓴 값이 사라진다.
+  // insert가 유니크 충돌이면 다시 읽어 같은 판정을 한 번 더 한다.
+  if (!prior) {
+    const ins = await supabase.from("onescreen_daily_sessions").insert(payload).select("updated_at").single();
+    if (!ins.error) return { ok: true, updatedAt: (ins.data?.updated_at as string | undefined) ?? undefined };
+    const { data: raced } = await supabase
+      .from("onescreen_daily_sessions")
+      .select("updated_at, subject_progress, attitude, homework, special_note, daily_score, check_score")
+      .eq("student_id", input.studentId)
+      .eq("session_date", sessionDate)
+      .eq("updated_by", user.id)
+      .maybeSingle();
+    if (sessionSaveDecision(sessionContentFromRow(raced), incoming, false) === "ignore") {
+      return { ok: true, skipped: true, updatedAt: (raced?.updated_at as string | undefined) ?? undefined };
+    }
+  }
+
   // ⚠️ 강사축(0118a): onConflict에 updated_by(=강사)를 포함 — 같은 학생을 다른 강사가 같은 날 가르쳐도
   //    각자 1행이라 subject_progress·점수·태도가 서로 안 덮인다(WIP 유실 방지). roster는 updated_by=본인만 복원.
-  const { error } = await supabase.from("onescreen_daily_sessions").upsert(
-    {
-      tenant_id: user.tenantId,
-      student_id: input.studentId,
-      session_date: sessionDate,
-      class_id: input.classId ?? null,
-      study_grade: input.studyGrade ?? null,
-      subject_progress: input.subjectProgress ?? {},
-      daily_score: input.dailyScore ?? null,
-      daily_max: input.dailyMax ?? null,
-      check_score: input.checkScore ?? null,
-      check_max: input.checkMax ?? null,
-      attitude: input.attitude ?? null,
-      homework: input.homework ?? null,
-      special_note: input.note ?? null,
-      progress_confirmed: input.progressConfirmed ?? false,
-      updated_by: user.id,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "tenant_id,updated_by,student_id,session_date" },
-  );
+  const { data, error } = await supabase
+    .from("onescreen_daily_sessions")
+    .upsert(payload, { onConflict: "tenant_id,updated_by,student_id,session_date" })
+    .select("updated_at")
+    .single();
   if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  return { ok: true, updatedAt: (data?.updated_at as string | undefined) ?? undefined };
 }
 
 /**

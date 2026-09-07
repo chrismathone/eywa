@@ -26,6 +26,7 @@ import {
   requestReportRecallByShareToken,
 } from "@/features/report-admin/server/recall-actions";
 import { isRecallInFlight, isRecallable, recallBlockReason } from "@/features/report-admin/report-recall";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export function RecallButton({
   reportId,
@@ -48,23 +49,27 @@ export function RecallButton({
   size?: "sm" | "default";
   onDone?: () => void;
 }) {
+  // 🔴 사무실(관리자 풀셸)엔 언어 Provider가 없어 항상 한국어다 — 이 배선은 강사 카드에서만 갈린다.
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [pending, start] = useTransition();
 
   const row = { classnoteStatus, shareToken };
-  const blocked = recallBlockReason(row);
+  const blocked = recallBlockReason(row, lang);
   const inFlight = isRecallInFlight(classnoteStatus);
 
   // 회수 요청된 건은 버튼 대신 진행 표시 — 다시 누를 것이 없다는 뜻을 화면에서 읽히게.
   if (inFlight)
     return (
-      <span className="text-amber text-xs font-bold" title="연동 PC가 ClassNote 게시글을 순차 삭제합니다">
-        회수 처리 중
+      <span className="text-amber text-xs font-bold" title={t("os.recall.inFlightTitle")}>
+        {t("os.recall.inFlight")}
       </span>
     );
   if (!isRecallable(row)) return null; // 회수할 게 없는 행엔 버튼 자체를 안 만든다(거짓 약속 방지)
 
-  const who = studentName ? `${studentName} 학생의 ` : "";
+  const who = studentName ? tf("os.recall.who", { name: studentName }) : "";
 
   function submit() {
     start(async () => {
@@ -73,10 +78,10 @@ export function RecallButton({
         : await requestReportRecallByShareToken(shareToken ?? "");
       setStep(0);
       if (!res.ok) {
-        toast.error(res.error ?? "회수하지 못했습니다");
+        toast.error(res.error ?? t("os.recall.failed"));
         return;
       }
-      toast.success("회수를 요청했습니다 — 연동 PC가 학부모 게시글을 삭제합니다");
+      toast.success(t("os.recall.done"));
       onDone?.();
     });
   }
@@ -87,26 +92,25 @@ export function RecallButton({
         variant="ghost"
         size={size}
         disabled={pending || !!blocked}
-        title={blocked ?? "학부모 게시판에서 이 보고서 글을 삭제합니다 — 지운 뒤 수정해서 다시 보낼 수 있습니다"}
+        title={blocked ?? t("os.recall.btnTitle")}
         onClick={() => setStep(1)}
         className="text-danger"
       >
-        {pending ? "요청 중…" : (label ?? "회수")}
+        {pending ? t("os.recall.btnBusy") : (label ?? t("os.recall.btn"))}
       </Button>
 
       {/* 1단계 — 무슨 일이 일어나는지. */}
       <ConfirmDialog
         open={step === 1}
         danger
-        title="보고서를 회수합니다"
+        title={t("os.recall.step1Title")}
         message={
-          `${who}학부모 게시판에 올라간 이 보고서 글을 삭제합니다. ` +
-          `공유 링크는 즉시 차단되고, 게시글은 연동 PC가 순차적으로 지웁니다. ` +
-          (readAt ? "주의: 이 보고서는 학부모가 이미 열람했습니다 — 지워도 본 내용은 되돌릴 수 없습니다. " : "") +
-          "삭제가 끝나면 입력이 열립니다 — 고쳐서 'ClassNote 발송'을 누르면 수정본이 다시 올라갑니다."
+          tf("os.recall.step1Body", { who }) +
+          (readAt ? t("os.recall.step1Read") : "") +
+          t("os.recall.step1Tail")
         }
-        confirmLabel="회수 진행"
-        cancelLabel="그만두기"
+        confirmLabel={t("os.recall.step1Ok")}
+        cancelLabel={t("os.recall.step1Cancel")}
         onConfirm={() => setStep(2)}
         onCancel={() => setStep(0)}
       />
@@ -115,10 +119,10 @@ export function RecallButton({
       <ConfirmDialog
         open={step === 2}
         danger
-        title="회수하겠습니까?"
-        message={`${who}보고서를 학부모 게시판에서 삭제합니다. 이 동작은 되돌릴 수 없습니다.`}
-        confirmLabel="회수하겠습니다"
-        cancelLabel="취소"
+        title={t("os.recall.step2Title")}
+        message={tf("os.recall.step2Body", { who })}
+        confirmLabel={t("os.recall.step2Ok")}
+        cancelLabel={t("os.recall.step2Cancel")}
         onConfirm={submit}
         onCancel={() => setStep(0)}
       />

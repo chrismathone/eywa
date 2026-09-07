@@ -16,7 +16,7 @@ import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "
 import { shortClassLabel } from "../lib/seat-day";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
 import type { RosterEntry } from "../lib/grid";
-import { GroupToggle, GROUP_HINT } from "./roster-table";
+import { GroupToggle, useGroupHint } from "./roster-table";
 import { RosterSlotCells } from "./roster-slot-cells";
 import type { SheetHandlers } from "./sheet-client";
 import type { SeatDayStudent } from "../server/seat-day-types";
@@ -39,6 +39,7 @@ export function SeatDayTable({
   onToggleGroup: (key: RosterGroupKey) => void;
 }) {
   const textCols = rosterTextCols(form);
+  const groupHint = useGroupHint();
   const { rows, counts } = useMemo(() => {
     const asRoster: (RosterEntry & { row: SeatDayStudent })[] = students.map((s) => ({
       studentId: s.studentId,
@@ -106,7 +107,7 @@ export function SeatDayTable({
           if (row.kind === "label") {
             return (
               <tr key={`label:${row.key}`} className="bg-bg-soft">
-                <td colSpan={rosterColSpan(form)} className="text-foreground px-1 py-0.5 text-xs font-bold" title={GROUP_HINT[row.key]}>
+                <td colSpan={rosterColSpan(form)} className="text-foreground px-1 py-0.5 text-xs font-bold" title={groupHint(row.key)}>
                   <GroupToggle
                     group={row.key}
                     collapsed={collapsedGroups.includes(row.key)}

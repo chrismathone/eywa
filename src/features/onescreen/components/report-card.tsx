@@ -18,7 +18,7 @@ import {
 } from "../grid";
 import { resolveRowFields } from "../row-fields";
 import { evaluateSendGate } from "../send-gate";
-import { REPORT_OPTOUT_NOTICE, REPORT_OPTOUT_SHORT } from "@/features/classes/report-optout";
+import { reportOptoutNotice, reportOptoutShort } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import {
@@ -33,6 +33,9 @@ import { isImageAttachment } from "../attachment-utils";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
+import { attendanceMarkLabel, MARK_ABSENT, MARK_LATE } from "../attendance-mark";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import type { SheetLang } from "@/features/teacher-view/i18n";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
@@ -64,9 +67,13 @@ const MAX_ATTACHMENTS = 6;
 export { classnoteBadge };
 export type { ClassnoteBadge };
 
-/** 학부모 읽음 툴팁용 KST 일시("7월 18일 13:01") — 원장 목록(report-list readAtLabel)과 같은 표기. 표뷰 공용 → export. */
-export function readAtLabel(iso: string): string {
-  return new Date(iso).toLocaleString("ko-KR", {
+/**
+ * 학부모 읽음 툴팁용 KST 일시("7월 18일 13:01") — 원장 목록(report-list readAtLabel)과 같은 표기. 표뷰 공용 → export.
+ * 🔴 시각대는 언제나 KST다 — 바뀌는 건 **글자 형식**뿐(en이면 `July 18, 13:01`). 원장 목록(사무실 화면)은
+ *    자기 사본을 쓰므로 여기 인자는 강사뷰에서만 넘어온다.
+ */
+export function readAtLabel(iso: string, lang: SheetLang = "ko"): string {
+  return new Date(iso).toLocaleString(lang === "en" ? "en-US" : "ko-KR", {
     timeZone: "Asia/Seoul",
     month: "long",
     day: "numeric",
@@ -163,6 +170,10 @@ export function ReportCard({
   /** '다른 강사 뷰'(열람 전용) — 카드 입력·발송·저장·공유링크 조작 전부 잠금(2026-08-19). */
   readonlyView?: boolean;
 }) {
+  // 🔴 훅은 아래 early return(`if (!subject) return null`)보다 **앞**에 — 조건부 호출 금지.
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [ownIdx, setOwnIdx] = useState(0);
   const selIdx = subjectIndex ?? ownIdx;
   const setSelIdx = onSubjectIndex ?? setOwnIdx;
@@ -185,7 +196,7 @@ export function ReportCard({
   const sharePath = rep.shareToken ? `/r/${rep.shareToken}` : "";
   const shareUrl = sharePath ? `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "")}${sharePath}` : "";
   const generating = generatingSubject === subjectName; // 이 과목 AI 멘트 생성 중
-  const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
+  const cnBadge = classnoteBadge(rep.classnoteStatus, lang); // ClassNote 발송 상태 배지
   // 재발송 차단(2026-07-22) — 화면 state가 로스터 스냅샷을 이긴다.
   // ⚠️ `??`가 아니라 effectiveClassnoteStatus: 재발급·첨부변경이 상태를 **명시적으로 지운**(null) 뒤에도
   //    `??`면 스냅샷의 옛 "success"가 되살아나 잠금이 안 풀린다(적대 검수 확정).
@@ -204,7 +215,8 @@ export function ReportCard({
   // 열람 전용(다른 강사 뷰)이면 무조건 잠금 — 3개 fieldset(입력 열·멘트 열·첨부)이 이 값 하나를 본다.
   const locked = readonlyView || !isRowInputEditable(subject, liveStatus);
   const sendGate = evaluateSendGate({
-    readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다(표뷰와 동일)
+    lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
+    readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
     alreadySent,
     reportOptout: optoutRow, // 미발송 반(0174a) — 표뷰와 같은 단일 소스
@@ -242,10 +254,12 @@ export function ReportCard({
         <div className="flex items-center justify-between">
           <div>
             <p className="micro text-text-faint">
-              {student.subjects.length > 1 ? "today 보고서 · 과목별" : "today 보고서"}
+              {student.subjects.length > 1 ? t("os.card.kickerSubjects") : t("os.card.kicker")}
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="text-foreground text-base font-bold">{student.name} · 학부모 보고</p>
+              <p className="text-foreground text-base font-bold">
+                {tf("os.card.title", { name: student.name })}
+              </p>
               {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
               {/* 순수 보강 행이면 정규 학생 카드에서도 뺄 수 있어야 한다(적대 리뷰 M2) — 학생 단위
                   isMakeup만 보면 "정규 수업도 듣는 학생의 보강"에 문이 없다. 반이 붙은 '정규+보강'은 제외. */}
@@ -255,20 +269,20 @@ export function ReportCard({
                 <button
                   type="button"
                   onClick={() => onRemoveMakeup(subject.name)}
-                  title="클릭하면 이 보강을 뺍니다(출결·보강 보고서·진도 기록이 삭제됩니다)"
-                  aria-label={`${student.name} 보강 빼기`}
+                  title={t("os.row.makeupRemove")}
+                  aria-label={tf("os.row.makeupRemoveAria", { name: student.name })}
                   className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-xs font-bold transition hover:text-white"
                 >
-                  보강
+                  {t("os.card.makeup")}
                   <EyIcon name="close" size={9} />
                 </button>
               ) : student.isMakeup || (subject.makeup && !subject.classId) ? (
                 // 뺄 수 없는 행 — 왜인지 툴팁으로 남긴다(버튼만 없애면 "왜 안 되지"가 남는다).
                 <span
                   className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-xs font-bold"
-                  title={makeupRemoveBlockReason(rep.classnoteStatus) ?? undefined}
+                  title={makeupRemoveBlockReason(rep.classnoteStatus, lang) ?? undefined}
                 >
-                  보강
+                  {t("os.card.makeup")}
                 </span>
               ) : null}
               {/* 로스터 신호(G2·G3) — 표뷰와 동일 판정(roster-signals.ts). 카드는 학생 단위라 진도 배지는
@@ -276,39 +290,39 @@ export function ReportCard({
               {unreadBadge ? (
                 <span
                   className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-xs font-bold"
-                  title={`최근 보고서 ${unreadBadge.count}건을 학부모가 아직 확인하지 않았습니다 — 다른 경로(직접 안내 등) 확인이 필요할 수 있어요`}
+                  title={tf("os.row.unreadTitle", { n: unreadBadge.count })}
                 >
-                  학부모 미확인 {unreadBadge.count}회
+                  {tf("os.row.unread", { n: unreadBadge.count })}
                 </span>
               ) : null}
               {showProgressBadge ? (
                 <span
                   className="bg-danger-soft text-danger rounded-pill px-1.5 py-px text-xs font-bold"
-                  title="진도 기록에 점프·겹침이 감지됐습니다 — 학생 상세 > 진도 탭에서 확인하세요"
+                  title={t("os.card.jumpTitle")}
                 >
-                  진도 확인 필요
+                  {t("os.row.jump")}
                 </span>
               ) : null}
               {/* '수업보고서 미발송' 반 — 아래 입력이 왜 전부 잠겼는지 카드 머리에서 먼저 밝힌다(2026-08-19). */}
               {optoutRow ? (
                 <span
                   className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
-                  title={REPORT_OPTOUT_NOTICE}
+                  title={reportOptoutNotice(lang)}
                 >
-                  {REPORT_OPTOUT_SHORT}
+                  {reportOptoutShort(lang)}
                 </span>
               ) : null}
             </div>
           </div>
           {/* 실발송이 아니라 lesson_reports 기록 저장(PDF만 실제 인쇄). "발송 완료" 거짓 약속 방지. */}
-          {rep.sent ? <Pill color="primary">기록 저장</Pill> : null}
+          {rep.sent ? <Pill color="primary">{t("os.card.saved")}</Pill> : null}
         </div>
         {/* 출결·수업타임 — **이름 바로 아래**(표뷰와 같은 자리). 원장 2026-08-05: *"표 모드에서는 출석/지각/
             결석이 바로 이름 아래에 보이는데 카드에서는 못찾겠"* — 예전엔 아래 교재명 블록 안에 묻혀 있었다.
             행(반) 단위(subject.classId)라 과목 알약 아래에 둔다(선택 과목이 바뀌면 이 값도 바뀐다).
             보강 행·반 모호(같은 과목 2반)는 기록할 자리가 없어 배지만(출석부에서 기록). */}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="micro text-text-faint">출결</span>
+          <span className="micro text-text-faint">{t("os.card.attendance")}</span>
           {attendance && !student.isMakeup && subject.classId ? (
             <>
               <AttendancePills
@@ -327,26 +341,26 @@ export function ReportCard({
                   pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
                   onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
                   studentName={student.name}
-                  label="수업타임"
+                  label={t("os.card.units")}
                 />
               )}
             </>
           ) : (
             <span
               className={`rounded-pill px-2 py-0.5 text-xs font-bold ${
-                student.attendance === "지각"
+                student.attendance === MARK_LATE
                   ? "bg-amber-soft text-amber"
-                  : student.attendance === "결석"
+                  : student.attendance === MARK_ABSENT
                     ? "bg-danger text-white"
                     : "bg-bg-soft text-text-dim"
               }`}
               title={
                 student.isMakeup || !subject.classId
-                  ? "이 행은 반이 없어 출석부에 기록할 자리가 없습니다 — 출결·수업타임은 출석부에서 입력하세요"
+                  ? t("os.card.noClassAttendance")
                   : undefined
               }
             >
-              {student.attendance}
+              {attendanceMarkLabel(student.attendance, lang)}
             </span>
           )}
         </div>
@@ -388,9 +402,10 @@ export function ReportCard({
           출결 알약은 이 위에 살아 있으므로, 되돌리는 법까지 한 줄로 안내한다. */}
       {isAbsent && !alreadySent ? (
         <p className="border-danger/30 bg-danger-soft/40 text-text-dim mx-3 mt-2 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
-          <b className="text-danger">결석</b>이라 이 수업의 입력이 잠겨 있습니다 — 진도·테스트·태도·과제와 학부모
-          문구는 일어나지 않은 일이라 적지 않습니다. 사유·수업타임은 위 <b>출결</b>에서 적을 수 있고, 잘못
-          눌렀다면 출결을 바꾸면 바로 열립니다.
+          <b className="text-danger">{t("os.card.absentLockWord")}</b>
+          {t("os.card.absentLockA")}
+          <b>{t("os.card.absentLockWord2")}</b>
+          {t("os.card.absentLockB")}
         </p>
       ) : null}
 
@@ -417,8 +432,8 @@ export function ReportCard({
               type="text"
               value={subject.textbook ?? ""}
               onChange={(e) => onTextbook(subjectName, e.target.value)}
-              placeholder="교재명 (예: 개념원리 중2-1)"
-              aria-label={`${subjectName} 교재명`}
+              placeholder={t("os.card.bookPh")}
+              aria-label={tf("os.card.bookAria", { subject: subjectName })}
               className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
             />
             <button
@@ -427,14 +442,14 @@ export function ReportCard({
               aria-pressed={!!subject.makeup}
               title={
                 subject.classId
-                  ? "그날 정규 수업에 더해 보강까지 한 경우 — 학부모 보고서 제목이 '(정규+보강)'이 되고 한 건만 나갑니다"
-                  : "보강(수업외) 수업 — 학부모 보고서 제목이 '(보강)'이 됩니다"
+                  ? t("os.row.makeupBoth")
+                  : t("os.row.makeupOnly")
               }
               className={`shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold transition ${
                 subject.makeup ? "bg-amber-soft text-amber" : "border-line text-text-dim hover:bg-bg-soft border"
               }`}
             >
-              보강
+              {t("os.card.makeup")}
             </button>
           </div>
           {/* 출결·수업타임은 **카드 헤더(이름 아래)**로 올렸다(2026-08-05) — 여기 두면 교재명 블록에 묻혀
@@ -442,22 +457,22 @@ export function ReportCard({
         </div>
 
         <div>
-          <p className="micro text-text-faint mb-1.5">수업 태도</p>
+          <p className="micro text-text-faint mb-1.5">{t("os.card.attitude")}</p>
           {/* 원장 2026-07-23: 알약 → 드롭다운(표 모드와 동일 규약). 해제는 "선택 안 함". */}
           <FieldSelect
             options={attitudes}
             value={cardEval.attitude}
             onSelect={(v) => onAttitude(v ?? "")}
-            ariaLabel={`${student.name} 수업 태도`}
+            ariaLabel={tf("os.card.attitudeAria", { name: student.name })}
           />
         </div>
 
         <div>
-          <p className="micro text-text-faint mb-1.5">과제 수행률</p>
+          <p className="micro text-text-faint mb-1.5">{t("os.col.homework")}</p>
           <HomeworkRateInput
             value={cardEval.homework}
             onChange={onHomework}
-            label={`${student.name} 과제 수행률`}
+            label={tf("os.row.hwLabel", { name: student.name })}
             size="lg"
           />
           {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.
@@ -473,19 +488,19 @@ export function ReportCard({
               const fixed = normalizeHomeworkPages(e.target.value);
               if (fixed !== e.target.value) onHomeworkToday(subjectName, fixed);
             }}
-            placeholder="오늘 과제 (예: 개념편 p10~16, 유형편 p6~11)"
-            aria-label={`${subjectName} 오늘 과제`}
+            placeholder={t("os.card.hwTodayPh")}
+            aria-label={tf("os.card.hwTodayAria", { subject: subjectName })}
             className="border-line bg-card focus:border-primary scrollbar-thin mt-1.5 w-full min-w-0 resize-none rounded-lg border px-2 py-1.5 text-xs leading-relaxed outline-none transition-colors"
           />
         </div>
 
         {/* 특이사항(강사 메모) — AI 멘트 입력(4c). 자유서술. 학부모엔 생성 문구만 나감. */}
         <div className="flex flex-col gap-1.5">
-          <p className="micro text-text-faint">특이사항 (메모)</p>
+          <p className="micro text-text-faint">{t("os.card.note")}</p>
           <textarea
             value={cardEval.note}
             onChange={(e) => onNote(e.target.value)}
-            placeholder="예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다"
+            placeholder={t("os.card.notePh")}
             className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
           />
         </div>
@@ -504,26 +519,26 @@ export function ReportCard({
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="micro text-text-faint">{subjectName} 보고서</p>
+              <p className="micro text-text-faint">{tf("os.card.reportOf", { subject: subjectName })}</p>
               {/* 상단 멘트 모드 토글의 하단 반영 — 모드가 바뀌면 이 배지와 아래 입력 구성이 함께 바뀐다. */}
               <span
                 className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
                 title={
                   para
-                    ? "2문단 B — 수업 내용과 태도·특이사항을 나눠 작성합니다. 상단 토글에서 바꿀 수 있습니다."
-                    : "단일 A — 모든 내용을 한 문단으로 작성합니다. 상단 토글에서 바꿀 수 있습니다."
+                    ? t("os.card.modeBTitle")
+                    : t("os.card.modeATitle")
                 }
               >
-                {para ? "2문단 B" : "단일 A"}
+                {para ? t("os.ment.b") : t("os.ment.a")}
               </span>
               {/* 🔴 잠근 이유를 **잠긴 칸 옆에** 적는다 — 발송 버튼 옆 사유 알약은 한참 아래라, 문구를 쓰려다
                   막힌 사람은 그걸 못 본다(원장 2026-07-30 "왜 비활성화됐는지 알 방법이 없다"와 같은 함정). */}
               {isAbsent && !alreadySent ? (
                 <span
                   className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-1.5 py-px text-xs font-bold"
-                  title="결석 행은 학부모에게 발송되지 않습니다. 진도·태도 등 기록은 왼쪽에서 계속 입력할 수 있습니다."
+                  title={t("os.card.absentBadgeTitle")}
                 >
-                  결석 — 발송 제외
+                  {t("os.gate.absent")}
                 </span>
               ) : null}
             </div>
@@ -533,38 +548,38 @@ export function ReportCard({
               disabled={generating || !isRowActionable(subject, "autowrite") || alreadySent}
               title={
                 alreadySent
-                  ? "이미 발송된 보고서 — 수정할 수 없습니다"
+                  ? t("os.row.genSentLocked")
                   : isRowActionable(subject, "autowrite")
                   ? undefined
                   : optoutRow
-                    ? REPORT_OPTOUT_NOTICE
+                    ? reportOptoutNotice(lang)
                     : subject.attendanceRaw === "absent"
-                      ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
-                      : "오늘 진도를 먼저 입력하세요"
+                      ? t("os.row.genAbsent")
+                      : t("os.row.genNoProgress")
               }
               onClick={() => onAutoWrite(subjectName)}
             >
-              <EyIcon name="sparkle" size={13} /> {generating ? "생성 중…" : "자동 작성"}
+              <EyIcon name="sparkle" size={13} /> {generating ? t("os.card.generating") : t("os.row.gen")}
             </Button>
           </div>
           {para ? (
             // 모드 B — 저장·발송 계약은 그대로 단일 문자열, 화면만 2칸(joinComment이 빈 줄로 합침).
             <div className="flex flex-1 flex-col gap-1.5">
               <label className="flex flex-1 flex-col gap-1">
-                <span className="text-text-faint text-xs font-bold">1문단 · 수업 내용</span>
+                <span className="text-text-faint text-xs font-bold">{t("os.card.para1")}</span>
                 <textarea
                   value={paras.p1}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(e.target.value, paras.p2))}
-                  placeholder={`교재·진도·오늘 과제를 담은 첫 문단. '자동 작성'이 ${subjectName} 진도로 채워 줍니다.`}
+                  placeholder={tf("os.card.para1Ph", { subject: subjectName })}
                   className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1">
-                <span className="text-text-faint text-xs font-bold">2문단 · 태도 · 특이사항</span>
+                <span className="text-text-faint text-xs font-bold">{t("os.card.para2")}</span>
                 <textarea
                   value={paras.p2}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(paras.p1, e.target.value))}
-                  placeholder="수업 태도·특이사항을 담은 둘째 문단. 태도·특이사항이 비어 있으면 자동 작성에서도 생략됩니다."
+                  placeholder={t("os.card.para2Ph")}
                   className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
@@ -573,7 +588,7 @@ export function ReportCard({
             <textarea
               value={rep.draft}
               onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
-              placeholder={`'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`}
+              placeholder={tf("os.card.mentPh", { subject: subjectName })}
               className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
             />
           )}
@@ -581,11 +596,11 @@ export function ReportCard({
 
         {/* 학습 추세(종합분석) — 4a. '자동 작성'이 최근 시험·과제 흐름을 요약해 채운다. 표본 부족 시 빈 채로 둠(수동 입력 가능). */}
         <div className="flex flex-col gap-1.5">
-          <p className="micro text-text-faint">학습 추세 (종합분석)</p>
+          <p className="micro text-text-faint">{t("os.card.trend")}</p>
           <textarea
             value={rep.trendDraft ?? ""}
             onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
-            placeholder="'자동 작성'을 누르면 최근 시험·과제 점수 흐름을 요약해 줍니다. 기록이 적으면 비어 있을 수 있습니다."
+            placeholder={t("os.card.trendPh")}
             className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
           />
         </div>
@@ -598,11 +613,11 @@ export function ReportCard({
             size="sm"
             disabled={!canQueue}
             title={
-              sendGate.hint ?? "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
+              sendGate.hint ?? t("os.card.queueTitle")
             }
             onClick={() => onQueueClassnote(subjectName)}
           >
-            ClassNote 발송
+            {t("os.card.queue")}
           </Button>
           {/* 🔴 막힌 이유를 **눈에 보이게** — 버튼 title 툴팁뿐이면 강사는 알 수 없다(2026-07-21 툴팁 미표시
               사례 / 2026-07-30 원장 "왜 비활성화됐는지 알 방법이 없다"). 판정은 위 sendGate 단일 소스라
@@ -627,9 +642,9 @@ export function ReportCard({
             <span
               key={w}
               className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold"
-              title={MENT_WARNING_HINT[w]}
+              title={t(MENT_WARNING_HINT[w])}
             >
-              {MENT_WARNING_LABEL[w]}
+              {t(MENT_WARNING_LABEL[w])}
             </span>
           ))}
           {/* 발송 완료는 위 사유 알약이 이미 말했다 — 같은 말을 두 번 붙이지 않는다(표뷰와 동일). */}
@@ -641,9 +656,9 @@ export function ReportCard({
           {subject.classnoteReadAt ? (
             <span
               className="text-primary text-xs font-bold"
-              title={`학부모 읽음 · ${readAtLabel(subject.classnoteReadAt)}`}
+              title={tf("os.row.readTitle", { when: readAtLabel(subject.classnoteReadAt, lang) })}
             >
-              읽음
+              {t("os.card.read")}
             </span>
           ) : null}
         </div>
@@ -655,10 +670,13 @@ export function ReportCard({
           <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
-              이미 학부모 게시판에 올라간 보고서라 <b>입력이 잠겨 있습니다</b>. 게시글은 이미지로 올라가 있어,
-              여기서 내용만 바꿔도 학부모가 보는 화면은 그대로이고 기록만 갈라집니다. 고치려면 아래{" "}
-              <b>회수</b>로 학부모 게시글을 지우세요 — 삭제가 끝나면 입력이 열리고,{" "}
-              <b>ClassNote 발송</b>으로 수정본을 다시 보낼 수 있습니다.
+              {t("os.card.sentLockA")}
+              <b>{t("os.card.sentLockWord")}</b>
+              {t("os.card.sentLockB")}
+              <b>{t("os.card.sentLockRecall")}</b>
+              {t("os.card.sentLockC")}
+              <b>{t("os.card.queue")}</b>
+              {t("os.card.sentLockD")}
             </span>
           </p>
         ) : null}
@@ -669,8 +687,11 @@ export function ReportCard({
           <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="check" size={13} className="text-primary mt-0.5 shrink-0" />
             <span>
-              학부모 게시글을 <b>회수했습니다</b>. 내용을 고친 뒤 <b>ClassNote 발송</b>을 누르면 수정본이 다시
-              올라갑니다(새 공유 링크가 발급됩니다).
+              {t("os.card.recalledA")}
+              <b>{t("os.card.recalledWord")}</b>
+              {t("os.card.recalledB")}
+              <b>{t("os.card.queue")}</b>
+              {t("os.card.recalledC")}
             </span>
           </p>
         ) : null}
@@ -685,16 +706,16 @@ export function ReportCard({
             disabled={readonlyView || !isRowActionable(subject, "save") || alreadySent}
             title={
               alreadySent
-                ? "이미 학부모에게 발송된 보고서 — 수정할 수 없습니다(고치려면 공유 링크 재발급)"
+                ? t("os.card.saveSentTitle")
                 : isRowActionable(subject, "save")
-                  ? "보고서를 기록에 저장합니다 — 아래 학부모 공유 링크를 복사해 카톡·문자로 보낼 수 있습니다"
+                  ? t("os.card.saveTitle")
                   : optoutRow
-                    ? REPORT_OPTOUT_NOTICE // 진도 칸이 잠겨 있어 "진도를 먼저 입력하세요"는 거짓 안내다
-                    : "오늘 진도를 먼저 입력하세요"
+                    ? reportOptoutNotice(lang) // 진도 칸이 잠겨 있어 "진도를 먼저 입력하세요"는 거짓 안내다
+                    : t("os.row.genNoProgress")
             }
             onClick={() => onSend(subjectName, "save")}
           >
-            {alreadySent ? "발송됨 — 수정 불가" : "저장"}
+            {alreadySent ? t("os.card.saveSent") : t("os.card.save")}
           </Button>
           <Button
             variant="ghost"
@@ -702,10 +723,10 @@ export function ReportCard({
             disabled={readonlyView || !isRowActionable(subject, "save")}
             title={
               isRowActionable(subject, "save")
-                ? "학부모 보고서 미리보기·인쇄"
+                ? t("os.card.pdfTitle")
                 : optoutRow
-                  ? REPORT_OPTOUT_NOTICE
-                  : "오늘 진도를 먼저 입력하세요"
+                  ? reportOptoutNotice(lang)
+                  : t("os.row.genNoProgress")
             }
             onClick={() => onSend(subjectName, "pdf")}
           >
@@ -722,14 +743,17 @@ export function ReportCard({
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-text-faint text-xs font-bold">
-                사진/파일 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
+                {t("os.attach.empty")}{" "}
+                <span className="text-text-dim">
+                  {atts.length}/{MAX_ATTACHMENTS}
+                </span>
               </p>
               <label
                 className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-xs font-bold ${
                   uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
                 }`}
               >
-                {uploadingAtt ? "업로드 중…" : "사진/파일 추가"}
+                {uploadingAtt ? t("os.card.uploading") : t("os.card.attachAdd")}
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf,.hwp,.hwpx,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.cell,.show,audio/mpeg,audio/mp4,.mp3,.m4a"
@@ -748,8 +772,9 @@ export function ReportCard({
                 어디에도 안 실린다(워커도 파일첨부 경로를 안 탐). 강사가 헛수고하지 않도록 입력 시점에 고지. */}
             {attachmentsHidden ? (
               <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-xs leading-snug">
-                학원설정에서 <b>사진/파일 첨부</b>가 꺼져 있어, 첨부해도 학부모 보고서·ClassNote에는 표시되지 않습니다.
-                원장님께 문의하세요.
+                {t("os.attach.offA")}
+                <b>{t("os.attach.offB")}</b>
+                {t("os.attach.offC")} {t("os.card.attachOffAsk")}
               </p>
             ) : null}
             {atts.length ? (
@@ -774,7 +799,7 @@ export function ReportCard({
                       type="button"
                       onClick={() => onRemoveAttachment(subjectName, a.path)}
                       className="bg-danger absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded text-white opacity-0 transition group-hover:opacity-100"
-                      aria-label={`${a.name} 삭제`}
+                      aria-label={tf("os.attach.deleteAria", { name: a.name })}
                     >
                       <EyIcon name="close" size={11} strokeWidth={1.8} />
                     </button>
@@ -783,7 +808,7 @@ export function ReportCard({
               </div>
             ) : (
               <p className="text-text-faint text-xs">
-                사진/파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.
+                {t("os.card.attachHint")}
               </p>
             )}
           </div>
@@ -794,17 +819,17 @@ export function ReportCard({
         {rep.sent && sharePath ? (
           <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="text-text-faint text-xs font-bold">학부모 공유 링크</p>
+              <p className="text-text-faint text-xs font-bold">{t("os.card.shareLink")}</p>
               <div className="flex items-center gap-2 text-xs">
                 {typeof rep.viewCount === "number" && rep.viewCount > 0 ? (
-                  <span className="text-text-dim">{rep.viewCount}회 열람</span>
+                  <span className="text-text-dim">{tf("os.card.views", { n: rep.viewCount })}</span>
                 ) : null}
-                {rep.revoked ? <span className="text-danger font-bold">취소됨</span> : null}
+                {rep.revoked ? <span className="text-danger font-bold">{t("os.card.revoked")}</span> : null}
               </div>
             </div>
             {rep.revoked ? (
               <div className="flex items-center justify-between gap-2">
-                <p className="text-text-dim text-xs">이 링크는 열람이 차단됐습니다.</p>
+                <p className="text-text-dim text-xs">{t("os.card.revokedHint")}</p>
                 <div className="flex items-center gap-1.5">
                   {/* ⚠️ 링크를 막아도 **ClassNote 게시글(스크린샷)은 남아 있다** — 지우려면 회수해야 한다. */}
                   {/* 열람 전용에선 회수 숨김 — 아래 게시판 블록의 RecallButton과 같은 이유. */}
@@ -817,7 +842,7 @@ export function ReportCard({
                     />
                   )}
                   <Button variant="outline" size="sm" disabled={readonlyView} onClick={() => onReissue(subjectName)}>
-                    재발급
+                    {t("os.card.reissue")}
                   </Button>
                 </div>
               </div>
@@ -831,10 +856,10 @@ export function ReportCard({
                     onClick={() => {
                       // 복사는 **지금 열려 있는 호스트** 기준으로 — env가 비었거나 도메인이 달라도 유효한 주소가 나간다.
                       void navigator.clipboard?.writeText(`${window.location.origin}${sharePath}`);
-                      toast.success("학부모 공유 링크를 복사했습니다");
+                      toast.success(t("os.card.copied"));
                     }}
                   >
-                    복사
+                    {t("os.card.copy")}
                   </Button>
                 </div>
                 {/* 🔴 게시된 보고서에는 **회수·재발송만** 노출한다(2026-08-06 원장).
@@ -860,10 +885,10 @@ export function ReportCard({
                   ) : (
                     <>
                       <Button variant="ghost" size="sm" disabled={readonlyView} onClick={() => onReissue(subjectName)}>
-                        재발급
+                        {t("os.card.reissue")}
                       </Button>
                       <Button variant="ghost" size="sm" disabled={readonlyView} onClick={() => onRevoke(subjectName)}>
-                        취소
+                        {t("os.card.revoke")}
                       </Button>
                     </>
                   )}

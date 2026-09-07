@@ -36,6 +36,7 @@ const student = (
 ) => ({
   studentId: name,
   studentName: name,
+  englishName: null,
   schoolGrade: null,
   parentPhone: null,
   studentPhone: null,

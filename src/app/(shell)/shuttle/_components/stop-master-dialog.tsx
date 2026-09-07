@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { SHUTTLE_ACTION, SHUTTLE_INPUT } from "@/features/shuttle/control-size";
 import {
   DIRECTION_LABEL,
-  hasCoords,
+  hasLocation,
   runTitle,
   type ShuttleRun,
   type ShuttleStop,
@@ -74,7 +74,7 @@ export function StopMasterDialog({
    * 한 번에 훑어 채울 수 있다(하나씩 열어 확인하면 끝이 안 난다).
    */
   const missingCoords = useMemo(
-    () => (coordsReady ? stops.filter((s) => !hasCoords(s)).length : 0),
+    () => (coordsReady ? stops.filter((s) => !hasLocation(s)).length : 0),
     [stops, coordsReady],
   );
 
@@ -132,8 +132,8 @@ export function StopMasterDialog({
             이 화면을 다시 여는 이유가 된다. 다 찍었으면 굳이 말하지 않는다(빈 잔소리 금지). */}
         {coordsReady && missingCoords > 0 && (
           <p className="text-text-dim text-xs">
-            위치 미지정 <span className="num font-bold">{missingCoords}</span>곳 — 좌표를 찍어 두면
-            같은 아파트 앞 반대편 정류장이 말이 아니라 지도로 구분됩니다.
+            위치 미지정 <span className="num font-bold">{missingCoords}</span>곳 — 각 줄의 [위치] →
+            [주소 찾기]로 채우면 됩니다(지도 키 없이도 됩니다).
           </p>
         )}
 
@@ -209,7 +209,7 @@ export function StopMasterDialog({
                   {/* 좌표 유무 — 🔑 **미지정만 표식을 단다**. 다 찍은 정류장에까지 알약을 붙이면
                       목록이 알약 밭이 되어 정작 남은 곳이 안 보인다(주소는 아래 패널에서 본다).
                       색은 의미색 캐논: 아직 안 한 일 = caution(amber). */}
-                  {coordsReady && !hasCoords(s) && (
+                  {coordsReady && !hasLocation(s) && (
                     <Pill color={TONE_COLOR.caution}>위치 미지정</Pill>
                   )}
                   {/* 🔴 여기가 "정렬이 떨어진다"의 대표 자리였다 — 한 줄에 수제 버튼(11px·py-1)과

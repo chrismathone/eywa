@@ -13,6 +13,8 @@
  *    같은 과목을 두 반에서 듣는 모호 행(classId=null)은 기록할 자리가 없다(pill도 같은 조건으로 숨는다).
  */
 
+import { DEFAULT_SHEET_LANG, sheetTf, type SheetDictKey, type SheetLang } from "@/features/teacher-view/i18n";
+
 /** 일괄로 찍을 수 있는 상태 — 인라인 pill과 **같은 3종**. 조퇴·공결·보강은 출석부 전용(위 주석). */
 export const BULK_ATTENDANCE_STATUSES = ["present", "late", "absent"] as const;
 export type BulkAttendanceStatus = (typeof BULK_ATTENDANCE_STATUSES)[number];
@@ -116,13 +118,18 @@ export function planBulkAttendance(
   return plan;
 }
 
-/** 건너뛴 사유 요약 — 토스트/확인 문구 공용(사유를 말하지 않으면 "눌렀는데 무반응"이 된다). */
-export function describeAttendanceSkips(plan: BulkAttPlan): string {
+/**
+ * 건너뛴 사유 요약 — 토스트/확인 문구 공용(사유를 말하지 않으면 "눌렀는데 무반응"이 된다).
+ * 인자를 안 주면 한국어(기존 호출부 무변경). 영어는 강사뷰 사전을 그대로 지난다 —
+ * 🔴 여기에 영어 표를 따로 만들지 말 것(사유가 늘 때 한쪽만 채워져 raw 키가 샌다).
+ */
+export function describeAttendanceSkips(plan: BulkAttPlan, lang: SheetLang = DEFAULT_SHEET_LANG): string {
+  const f = (k: SheetDictKey, n: number) => (n ? sheetTf(lang, k, { n }) : "");
   return [
-    plan.skippedSame ? `이미 같은 상태 ${plan.skippedSame}` : "",
-    plan.skippedFilled ? `이미 기록됨 ${plan.skippedFilled}` : "",
-    plan.skippedSpecial ? `조퇴·공결·보강 ${plan.skippedSpecial}` : "",
-    plan.skippedNoClass ? `반 없음 ${plan.skippedNoClass}` : "",
+    f("os.bulk.skipSame", plan.skippedSame),
+    f("os.bulk.skipFilled", plan.skippedFilled),
+    f("os.bulk.skipSpecial", plan.skippedSpecial),
+    f("os.bulk.skipNoClass", plan.skippedNoClass),
   ]
     .filter(Boolean)
     .join(" · ");

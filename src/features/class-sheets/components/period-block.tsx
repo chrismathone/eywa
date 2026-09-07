@@ -12,6 +12,11 @@ import { PlanTable } from "./plan-table";
 import { RosterTable } from "./roster-table";
 import type { RosterGroupKey } from "../lib/roster-order";
 import { rosterFormOf, type SheetMark } from "../lib/roster-form";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
+import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
+import { useSheetLang } from "@/features/teacher-view/lang-context";
+// 강의실 이름도 표기만 영문으로(원장 2026-09-04) — 건물 이름만 로마자, 호수는 그대로.
+import { roomNameFor } from "@/features/teacher-view/room-name";
 
 export const PeriodBlock = memo(function PeriodBlock({
   date,
@@ -72,10 +77,18 @@ export const PeriodBlock = memo(function PeriodBlock({
   // teacherLabel은 로더에서 이미 해석된 표시명(시간표와 동일 문자열). 라벨 우선은 **시간표 3뷰와 같은
   // 순서**라 두 화면이 같은 이름을 보여준다 — 뒤집지 말 것(실측: 라벨과 FK가 서로 다른 사람을 가리키는
   // 슬롯이 존재해, FK 우선으로 바꾸면 시간표와 어긋난 이름이 ECS에만 뜬다. 상세는 changelog 2026-07-29).
-  const teacher =
+  // 🔴 영어 화면에서는 그 강사의 **영어 이름**으로 바꿔 적는다(원장 2026-09-03) — 판정은
+  //    [`teacherNameFor`](@/features/teacher-view/teacher-name) 한 곳이고 표에 없으면 한국어 그대로다.
+  //    ⚠️ 라벨엔 자리(LAB·JJ)도 들어오는데 표에 없으니 저절로 안 바뀐다.
+  const teacherNames = useTeacherNames();
+  const lang = useSheetLang();
+  const teacher = teacherNameFor(
     slot.teacherLabel ??
-    (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??
-    data.classTeacherName;
+      (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??
+      data.classTeacherName,
+    teacherNames,
+    lang,
+  );
   return (
     // ⚠️ cursor-default 필수 — 바깥 DragScrollArea가 컨테이너에 cursor-grab(펼친 손)을 깔아서,
     // 안 덮으면 카드를 **끌어서 옮길 수 있는 것처럼** 보인다(teacher-grid 선례·원장 지적 2026-07-29).
@@ -118,7 +131,9 @@ export const PeriodBlock = memo(function PeriodBlock({
           </span>
         ) : null}
         {slot.roomLabel ? (
-          <span className="text-foreground text-xs font-bold whitespace-nowrap">{slot.roomLabel}</span>
+          <span className="text-foreground text-xs font-bold whitespace-nowrap">
+            {roomNameFor(slot.roomLabel, lang)}
+          </span>
         ) : null}
         {!slot.scheduled ? (
           <span

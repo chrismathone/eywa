@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BUILTIN_CATEGORIES } from "./category";
 import { assetFilterChips, filterAssets, isAssetFilterKey, matchesTextQuery } from "./filter";
 import { computeAssetStats } from "./stats";
 
@@ -12,14 +13,14 @@ type Row = {
 
 describe("자산 필터 칩", () => {
   it("순서는 시안 그대로, 기타는 자산이 있을 때만", () => {
-    const labels = assetFilterChips([mk("DT-001", "in_use", "desktop")]).map((c) => c.label);
+    const labels = assetFilterChips([mk("DT-001", "in_use", "desktop")], BUILTIN_CATEGORIES).map((c) => c.label);
     expect(labels).toEqual(["전체", "조치필요", "대여중", "사용중", "데스크탑", "노트북", "모니터", "태블릿", "프린터", "TV", "폐기"]);
-    expect(assetFilterChips([mk("ET-001", "in_use", "etc")]).map((c) => c.label)).toContain("기타");
+    expect(assetFilterChips([mk("ET-001", "in_use", "etc")], BUILTIN_CATEGORIES).map((c) => c.label)).toContain("기타");
   });
   it("키 판정", () => {
-    expect(isAssetFilterKey("cat:laptop")).toBe(true);
-    expect(isAssetFilterKey("cat:nope")).toBe(false);
-    expect(isAssetFilterKey("action")).toBe(true);
+    expect(isAssetFilterKey("cat:laptop", BUILTIN_CATEGORIES)).toBe(true);
+    expect(isAssetFilterKey("cat:nope", BUILTIN_CATEGORIES)).toBe(false);
+    expect(isAssetFilterKey("action", BUILTIN_CATEGORIES)).toBe(true);
   });
 });
 

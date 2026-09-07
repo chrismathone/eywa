@@ -11,15 +11,18 @@ import type { TodayActionAccess } from "./today-actions";
 /**
  * `오늘` 화면이 다루는 도메인별 유효 권한.
  *
- * 페이지·브리핑·하단 카드·오늘 조치 신호가 서로 다른 기준으로 판단하면 홈에서(옛 "빠른 작업"은 2026-09-03 운영실 2차에서 제거)
- * 민감 정보가 새거나, 눌러도 열리지 않는 링크가 생긴다. 한 번 계산한 작은
- * boolean 집합을 서버 컴포넌트 안에서만 공유해 같은 기준으로 조회와 렌더를 건넌다.
+ * 페이지·브리핑·하단 카드가 서로 다른 기준으로 판단하면 홈에서 민감 정보가 새거나,
+ * 눌러도 열리지 않는 링크가 생긴다. 한 번 계산한 작은 boolean 집합을 서버 컴포넌트
+ * 안에서만 공유해 같은 기준으로 조회와 렌더를 건넌다.
+ *
+ * ⚠️ **소비처 없는 갈래는 두지 않는다** — 이 집합의 유일한 소비처는 운영실 페이지 하나라,
+ * 화면에서 블록이 빠지면 그 블록만 보던 갈래도 함께 뺀다(2026-09-03: `read.classes`·
+ * `read.timetable`은 '실시간 운영', `write.classes`는 '빠른 작업'과 함께 제거).
  */
 export type DashboardAccess = {
   read: {
     attendance: boolean;
     billing: boolean;
-    classes: boolean;
     consultations: boolean;
     enrollment: boolean;
     lessonReports: boolean;
@@ -27,11 +30,9 @@ export type DashboardAccess = {
     owner: boolean;
     staff: boolean;
     students: boolean;
-    timetable: boolean;
   };
   write: {
     billing: boolean;
-    classes: boolean;
     consultations: boolean;
     enrollment: boolean;
     meetings: boolean;
@@ -46,7 +47,6 @@ export function resolveDashboardAccess(role: SystemRole, matrix: AccessMatrix): 
     read: {
       attendance: canAccess(role, "attendance", matrix),
       billing: canAccess(role, "billing", matrix),
-      classes: canAccess(role, "classes", matrix),
       consultations: canAccess(role, "consultations", matrix),
       enrollment: canAccess(role, "enrollment", matrix),
       lessonReports: canAccess(role, "lesson_reports", matrix),
@@ -54,11 +54,9 @@ export function resolveDashboardAccess(role: SystemRole, matrix: AccessMatrix): 
       owner: canAccess(role, "owner", matrix),
       staff: canAccess(role, "staff", matrix),
       students: canAccess(role, "students", matrix),
-      timetable: canAccess(role, "timetable", matrix),
     },
     write: {
       billing: canWrite(role, "billing", matrix),
-      classes: canWrite(role, "classes", matrix),
       consultations: canWrite(role, "consultations", matrix),
       enrollment: canWrite(role, "enrollment", matrix),
       meetings: canWrite(role, "meetings", matrix),

@@ -7,11 +7,8 @@
  * 색 규약은 카드 배지와 동일 — **못 한 일에만 앰버**, 다 한 줄은 무채색(눈이 갈 곳을 지킨다).
  * 글씨 크기 토글은 주간 시트 툴바와 같은 어휘(작음/보통/큼)·같은 계정 귀속(users.ui_prefs.ecs.fontSize).
  */
-import {
-  ECS_FONT_SIZES,
-  ECS_FONT_SIZE_LABEL,
-  type EcsFontSize,
-} from "../font-size";
+import { ECS_FONT_SIZES, FONT_SIZE_KEY, type EcsFontSize } from "../font-size";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export type TodayStats = {
   classes: number;
@@ -48,21 +45,23 @@ export function TodaySummary({
    */
   holiday?: boolean;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   // `done` = "재촉하지 않는다". 휴일이면 무엇을 얼마나 했든 재촉할 일이 없다.
   const done = (ok: boolean) => holiday || ok;
   return (
     <div className="bg-card shadow-card flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl px-4 py-2.5">
-      <Stat label="수업" value={`${stats.classes}개`} done />
-      <Stat label="계획" value={`${stats.plan.filled}/${stats.plan.total}`} done={done(stats.plan.filled >= stats.plan.total)} />
-      <Stat label="출결" value={`${stats.att.marked}/${stats.att.total}`} done={done(stats.att.marked >= stats.att.total)} />
-      <Stat label="보고서" value={`${stats.report.written}/${stats.report.total}`} done={done(stats.report.written >= stats.report.total)} />
+      <Stat label={t("today.stat.classes")} value={tf("today.stat.classesValue", { n: stats.classes })} done />
+      <Stat label={t("today.stat.plan")} value={`${stats.plan.filled}/${stats.plan.total}`} done={done(stats.plan.filled >= stats.plan.total)} />
+      <Stat label={t("today.stat.attendance")} value={`${stats.att.marked}/${stats.att.total}`} done={done(stats.att.marked >= stats.att.total)} />
+      <Stat label={t("today.stat.report")} value={`${stats.report.written}/${stats.report.total}`} done={done(stats.report.written >= stats.report.total)} />
       {/* 분모 = ClassNote 보드가 확인된 반만 — 0/0(연동 반 없음)이면 숫자 자체를 안 그린다. */}
       {stats.classnote.total > 0 ? (
-        <Stat label="알림장" value={`${stats.classnote.posted}/${stats.classnote.total}반`} done={done(stats.classnote.posted >= stats.classnote.total)} />
+        <Stat label={t("today.stat.notice")} value={tf("today.stat.noticeValue", { done: stats.classnote.posted, total: stats.classnote.total })} done={done(stats.classnote.posted >= stats.classnote.total)} />
       ) : null}
       {/* 글씨 크기 — 주간 시트 툴바와 같은 3칩(aria-pressed). 저장은 부모가 한다(낙관 적용 + 계정 저장). */}
       <span className="ml-auto flex items-center gap-0.5">
-        <span className="micro mr-0.5">글씨</span>
+        <span className="micro mr-0.5">{t("toolbar.font")}</span>
         {ECS_FONT_SIZES.map((s) => (
           <button
             key={s}
@@ -73,7 +72,7 @@ export function TodaySummary({
               fontSize === s ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-bg-soft"
             }`}
           >
-            {ECS_FONT_SIZE_LABEL[s]}
+            {t(FONT_SIZE_KEY[s])}
           </button>
         ))}
       </span>

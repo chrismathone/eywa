@@ -8,7 +8,7 @@ import { chromium } from "@playwright/test";
 import {
   CLASSNOTE_BASE, dismissHonorificDialog,
   loginClassnote, fetchCenterId, fetchBoards, fetchBoardChildren,
-  fetchChildren, uploadToKage, resolveBoardChildEnrollments, postClassnoteReport,
+  fetchChildren, uploadToKage, uploadToKageDetailed, resolveBoardChildEnrollments, postClassnoteReport,
   findChildReportId,
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
@@ -204,12 +204,23 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
     .catch(() => {});
 
   // 1) 스샷 → kage(img input) → attached_images
-  const imgKage = await uploadToKage(adminPage, "media-attachment-add-input", { name: `report_${studentName}.jpg`, mimeType: "image/jpeg", buffer: screenshot });
-  const attachedImages = imgKage?.access_key
-    ? [{ access_key: imgKage.access_key, original_file_name: `report_${studentName}.jpg`,
-        file_size: imgKage.info?.img?.length ?? screenshot.length, width: imgKage.info?.img?.width, height: imgKage.info?.img?.height }]
+  // ⚠️ 실패하면 **사유를 갈라서** 담는다(2026-09-04, 원장 "스샷 경로도 실패 사유 구분되게"). 종전엔
+  //    네 갈래(빈 캡처·첨부 칸 없음·kage 거부·무응답)가 전부 "스샷 kage 업로드 실패" 한 줄이라
+  //    DB만 보고는 원인을 못 좁혔다(곽하윤 9/4 — 3회 재시도 전건 실패, 이유 불명).
+  //    파일첨부(아래)는 2026-07-21에 이미 같은 이유로 단계별 사유를 담게 고쳤다 — 이제 짝이 맞는다.
+  const imgKage = await uploadToKageDetailed(
+    adminPage,
+    "media-attachment-add-input",
+    { name: `report_${studentName}.jpg`, mimeType: "image/jpeg", buffer: screenshot },
+    { subject: "보고서 이미지" },
+  );
+  const attachedImages = imgKage.kage?.access_key
+    ? [{ access_key: imgKage.kage.access_key, original_file_name: `report_${studentName}.jpg`,
+        file_size: imgKage.kage.info?.img?.length ?? screenshot.length, width: imgKage.kage.info?.img?.width, height: imgKage.kage.info?.img?.height }]
     : [];
-  if (!attachedImages.length) return { ok: false, error: "스샷 kage 업로드 실패" };
+  // 사유가 비는 경우는 없어야 하지만(ok=false면 항상 채운다) **error가 null로 저장되는 것만은 막는다** —
+  // 화면이 "실패인데 사유 없음"으로 보이면 이번에 고친 것이 무의미해진다.
+  if (!attachedImages.length) return { ok: false, error: imgKage.reason || "보고서 이미지 업로드 실패 — 원인을 알 수 없습니다. 워커 로그를 확인하세요" };
 
   // 2) eywa 내부 엔드포인트 → 파일 signed URL → fetch(바이트) → kage(doc input) → attached_files
   // ⚠️ 실패 원인을 **단계별로 구분해 error에 담는다**(2026-07-21). 이전엔 세 단계(목록조회·다운로드·kage)가

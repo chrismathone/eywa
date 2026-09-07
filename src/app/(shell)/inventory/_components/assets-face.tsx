@@ -10,6 +10,7 @@ import { needsAction } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
 import { assetColumns } from "./asset-columns";
 import { AssetDialog } from "./asset-dialog";
+import { useCategoryMaps } from "./categories-context";
 import { ExcelDialog } from "./excel-dialog";
 import { ListToolbar } from "./list-toolbar";
 import { QrDialog } from "./qr-dialog";
@@ -46,12 +47,13 @@ export function AssetsFace({
   /** 저장된 보기 설정(users.ui_prefs.inventory) — 토글은 바꾸는 순간 저장한다([[#90]]). */
   hideDisposed: boolean;
 }) {
+  const cats = useCategoryMaps();
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<AssetFilterKey>("all");
   const [hideDisposed, setHideDisposed] = useState(hideDisposedInitial);
   const [dialog, setDialog] = useState<Dialog>(null);
   const { sort, toggle } = useSort();
-  const chips = useMemo(() => assetFilterChips(assets), [assets]);
+  const chips = useMemo(() => assetFilterChips(assets, cats.list), [assets, cats]);
   // 폐기 숨김(원장 2026-09-02) — '폐기' 칩을 고른 동안은 토글과 무관하게 보인다(숨긴 채 폐기 필터가 빈 표면 "왜 없지").
   const rows = useMemo(() => {
     const base = filterAssets(assets, chip, query);
@@ -66,12 +68,12 @@ export function AssetsFace({
   const noById = useMemo(() => new Map(assets.map((a, i) => [a.id, i + 1])), [assets]);
   const columns = useMemo(
     () =>
-      assetColumns({
+      assetColumns(cats, {
         noOf: (asset) => noById.get(asset.id) ?? null,
         onStatusDoubleClick: canWrite ? (asset) => setDialog({ kind: "status", asset }) : undefined,
         onQrClick: (asset) => setDialog({ kind: "qr", asset }),
       }),
-    [canWrite, noById],
+    [canWrite, noById, cats],
   );
   const existingCodes = useMemo(() => assets.map((a) => a.assetCode), [assets]);
   const close = () => setDialog(null);

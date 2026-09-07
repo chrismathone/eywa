@@ -7,12 +7,16 @@ import { cellDateOf, DOW_ORDER } from "../lib/month";
 import { hasClassOnDate } from "../face-nav";
 import { slotKey, unwrittenCountOf } from "../lib/month-assemble";
 import { holidayNameOn } from "../lib/holiday";
+// 요일 글자·문구는 화면 언어를 따른다 — 요일 표는 주간 시트 알약과 **같은 한 벌**이다.
+import { sheetDowLabel } from "@/features/teacher-view/i18n";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { teacherNameFor } from "@/features/teacher-view/teacher-name";
+import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
 import { isOffGoalLine, type MonthGoalMap } from "../lib/goal-match";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SHEET_BOX_FRAME } from "../ui-box";
 import type { ClassSheetMonthData } from "../server/month-queries";
 
-const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
 
 /**
  * 월간 **달력** 보기 — 그 반이 실제로 도는 요일만 열로 세운다(주 행 × 수업 요일 열).
@@ -49,11 +53,14 @@ export function MonthCalendar({
   /** 칸 클릭 — 그 날 계획을 이 화면에서 연다. */
   onOpenDay: (date: string) => void;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
   const dows = data.dows.filter((d) => DOW_ORDER.includes(d));
   if (dows.length === 0) {
     return (
       <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
-        이 달에는 수업이 없습니다.
+        {t("month.noClasses")}
       </p>
     );
   }
@@ -69,7 +76,7 @@ export function MonthCalendar({
         <div />
         {dows.map((dow) => (
           <div key={dow} className="bg-bg-soft flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-bold">
-            {DOW_KO[dow]}요일
+            {tf("month.dowFull", { dow: sheetDowLabel(dow, lang) })}
           </div>
         ))}
       </div>
@@ -79,9 +86,14 @@ export function MonthCalendar({
           <div
             className="border-line-faint text-text-faint flex items-center justify-center border-r text-xs font-bold"
             // 수업이 없는 주는 행이 없어서 번호가 건너뛸 수 있다 — 이 숫자는 '그 달의 몇째 주'다.
-            title={`${Number(data.month.slice(5))}월 ${week.index}째 주 (${week.monday} 시작)`}
+            title={tf("month.weekTitle", {
+              m: Number(data.month.slice(5)),
+              w: week.index,
+              date: week.monday,
+            })}
           >
-            <span className="num">{week.index}</span>주
+            <span className="num">{week.index}</span>
+            {t("month.weekUnit")}
           </div>
           {dows.map((dow) => {
             const date = cellDateOf(week, dow, data.month);
@@ -121,6 +133,11 @@ function DayCell({
   skillAreas: SkillAreaSetting[];
   onOpenDay: (date: string) => void;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
+  // 강사 라벨 → 영어 이름(표에 없으면 한국어 그대로) — 판정은 `teacherNameFor` 한 곳이다.
+  const teacherNames = useTeacherNames();
   const allSlots = data.slotsByDate[date] ?? [];
   const shown = allSlots.filter((s) => display.seat || s.seat === null);
   /**
@@ -152,8 +169,8 @@ function DayCell({
       // 🔴 휴일이어도 **누르면 그 날 계획이 열린다**(원장 2026-09-01 *"입력은 가능하도록"*) — 톤만 회색이다.
       title={
         holiday
-          ? `${holiday} — 휴일입니다. 수업했다면 이 날 계획을 그대로 ${data.canEdit ? "고칠 수 있습니다" : "볼 수 있습니다"}`
-          : `누르면 이 날 계획을 여기서 ${data.canEdit ? "고칩니다" : "봅니다"}`
+          ? tf(data.canEdit ? "month.cell.holiday.edit" : "month.cell.holiday.view", { holiday })
+          : t(data.canEdit ? "month.cell.edit" : "month.cell.view")
       }
       onClick={() => onOpenDay(date)}
       className={`flex min-w-0 cursor-pointer flex-col items-stretch gap-1.5 rounded-[10px] border px-2 py-1.5 text-left transition ${
@@ -178,24 +195,24 @@ function DayCell({
         <span className="ml-auto flex shrink-0 gap-1">
           {isToday ? (
             <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-xs leading-4 font-bold">
-              오늘
+              {t("nav.face.today")}
             </span>
           ) : null}
           {unwritten > 0 ? (
             <span className="border-amber/40 bg-amber-soft text-amber num rounded-full border px-1.5 text-xs leading-4 font-bold">
-              미작성 {unwritten}
+              {tf("month.unwrittenN", { n: unwritten })}
             </span>
           ) : missing === 0 && offGoal === 0 && !isToday ? (
             <span
               className="border-green/30 bg-green-soft text-green inline-flex items-center rounded-full border px-1.5 leading-4"
-              title="이 날은 배정된 교시에 계획이 다 있습니다"
+              title={t("month.allWritten.title")}
             >
               <EyIcon name="check" size={11} />
             </span>
           ) : null}
           {offGoal > 0 ? (
             <span className="bg-amber num rounded-full px-1.5 text-xs leading-4 font-bold text-white">
-              목표 밖 {offGoal}
+              {tf("month.offGoalN", { n: offGoal })}
             </span>
           ) : null}
         </span>
@@ -222,7 +239,8 @@ function DayCell({
                     holiday ? "border-line-strong text-text-faint" : "border-amber/45 text-amber"
                   }`}
                 >
-                  {holiday ? "계획 없음" : "미작성"} · {slot.teacherLabel ?? "담당 미지정"}
+                  {t(holiday ? "month.noPlan" : "month.unwritten")} ·{" "}
+                  {teacherNameFor(slot.teacherLabel, teacherNames, lang) ?? t("month.noTeacher")}
                 </span>
               ) : (
                 lines.map((line) => {
@@ -246,11 +264,13 @@ function DayCell({
                         {line.pageRange ? <span className="text-text-faint num"> {line.pageRange}</span> : null}
                         {line.progress ? <div className="text-text-dim">{line.progress}</div> : null}
                         {display.homework && line.homework ? (
-                          <div className="text-text-faint text-xs">과제 {line.homework}</div>
+                          <div className="text-text-faint text-xs">
+                            {tf("month.homeworkLine", { v: line.homework })}
+                          </div>
                         ) : null}
                         {off ? (
                           <div className="text-amber text-xs font-bold">
-                            월간 목표: {goals[line.skillArea]?.textbook}
+                            {tf("month.goalLine", { book: goals[line.skillArea]?.textbook ?? "" })}
                           </div>
                         ) : null}
                       </div>
@@ -260,7 +280,7 @@ function DayCell({
               )}
               {lines.length > 0 && !lines.some((l) => l.progress) ? (
                 <span className="border-line-strong text-text-faint self-start rounded border border-dashed px-1.5 text-xs leading-4 font-bold">
-                  교재만 · 진도 미기입
+                  {t("month.bookOnly")}
                 </span>
               ) : null}
             </div>

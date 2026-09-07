@@ -186,6 +186,11 @@ export type StaffDetail = {
   shuttleDuty: boolean;
   /** '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용) 허용. 편집은 master(+super_admin)만. */
   teacherViewAccess: boolean;
+  /**
+   * 강사 화면 기본 언어(0248a) — null = 지정 없음(표시 이름에서 도출).
+   * 🔴🔴 **담임 판정과 무관**하다(원어민 여부 플래그가 아니다) — `isKoreanTeacherName`은 이 값을 안 읽는다.
+   */
+  teacherViewLang: "ko" | "en" | null;
   hourlyRate: number;
   monthlyBase: number;
   department: string | null; // 0147a — 이력서 프리필·상세 표시용
@@ -201,6 +206,23 @@ async function getShuttleDutyFlag(id: string): Promise<boolean> {
     .eq("id", id)
     .maybeSingle();
   return !error && data?.shuttle_duty === true;
+}
+
+/**
+ * 강사뷰 **화면 언어 기본값**(0248a) — 컬럼 미적용이면 에러 없이 null(#95: 본 select에 싣지 말 것).
+ * 🔴 null = **지정 없음**(이름에서 도출)이지 '한국어로 지정'이 아니다 — 두 사실을 합치지 말 것.
+ * 🔴🔴 이 값은 담임 판정과 무관하다(0248a 주석) — 원어민 여부 플래그가 아니다.
+ */
+async function getTeacherViewLangValue(id: string): Promise<"ko" | "en" | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("teacher_view_lang")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return null;
+  const v = data?.teacher_view_lang;
+  return v === "ko" || v === "en" ? v : null;
 }
 
 /** '강사뷰 접근'(0224a) — 컬럼 미적용이면 에러 없이 false(#95: getStaffById 본 select에 싣지 말 것). */
@@ -228,11 +250,12 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
 
   // 자리·셔틀 담당, 데스크 알림, 강사뷰 접근 컬럼은 0209a/0212a/0224a/0227a 이후.
   // 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95). 넷 다 독립이라 함께 받는다(B4).
-  const [duties, deskOptin, teacherViewAccess, shuttleDuty] = await Promise.all([
+  const [duties, deskOptin, teacherViewAccess, shuttleDuty, teacherViewLang] = await Promise.all([
     getSeatDuties(id),
     getDeskAttendanceOptin(id),
     getTeacherViewAccessFlag(id),
     getShuttleDutyFlag(id),
+    getTeacherViewLangValue(id),
   ]);
 
   return {
@@ -245,6 +268,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     deskAttendanceOptin: deskOptin,
     shuttleDuty,
     teacherViewAccess,
+    teacherViewLang,
     email: data.email,
     phone: data.phone ?? null,
     systemRole: data.system_role as SystemRole,

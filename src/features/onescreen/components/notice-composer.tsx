@@ -22,6 +22,8 @@ import {
 import { NoticeAttachmentPicker } from "./notice-attachment-picker";
 import type { NoticeAttachment } from "../notice-attachments";
 import type { OneScreenStudent } from "../types";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
 const BODY = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-sm w-full resize-y";
 
@@ -31,33 +33,37 @@ type Candidate = NoticeStudent;
 /** 대상 범위 — 기본은 오늘(카드/표에서 넘어온 선택을 그대로 살림), '전체'는 요일과 무관한 담당 학생 전원. */
 type Scope = "today" | "all";
 
-/** classnote_notices.status → 한글 라벨 + 색(원문 노출 금지). */
-function statusLabel(s: string): { label: string; cls: string } {
+/**
+ * classnote_notices.status → **사전 키** + 색(원문 노출 금지).
+ * 🔴 한·영 표를 두 벌로 나누지 않는다 — 상태가 늘 때 한쪽만 채워져 raw enum이 샌다.
+ *    키를 그대로 그리면 화면에 `os.n.st.…`가 뜨므로 소비처가 반드시 `t()`를 지난다.
+ */
+function statusLabel(s: string): { key: SheetDictKey | null; raw: string; cls: string } {
   switch (s) {
     case "queued":
-      return { label: "발송 대기", cls: "text-text-dim" };
+      return { key: "os.n.st.queued", raw: s, cls: "text-text-dim" };
     case "processing":
-      return { label: "게시 중", cls: "text-text-dim" };
+      return { key: "os.n.st.processing", raw: s, cls: "text-text-dim" };
     case "success":
-      return { label: "게시 완료", cls: "text-green" };
+      return { key: "os.n.st.success", raw: s, cls: "text-green" };
     case "partial":
-      return { label: "일부 게시", cls: "text-amber" };
+      return { key: "os.n.st.partial", raw: s, cls: "text-amber" };
     case "failed":
-      return { label: "게시 실패", cls: "text-danger" };
+      return { key: "os.n.st.failed", raw: s, cls: "text-danger" };
     case "revoke_requested":
-      return { label: "게시취소 요청됨(연동 PC 처리 대기)", cls: "text-text-dim" };
+      return { key: "os.n.st.revokeRequested", raw: s, cls: "text-text-dim" };
     case "revoking":
-      return { label: "게시취소 처리 중", cls: "text-text-dim" };
+      return { key: "os.n.st.revoking", raw: s, cls: "text-text-dim" };
     case "edit_requested":
-      return { label: "수정 요청됨(연동 PC 처리 대기)", cls: "text-text-dim" };
+      return { key: "os.n.st.editRequested", raw: s, cls: "text-text-dim" };
     case "editing":
-      return { label: "수정 처리 중", cls: "text-text-dim" };
+      return { key: "os.n.st.editing", raw: s, cls: "text-text-dim" };
     case "revoked":
-      return { label: "게시취소됨(회수)", cls: "text-danger" };
+      return { key: "os.n.st.revoked", raw: s, cls: "text-danger" };
     case "revoke_partial":
-      return { label: "일부 회수", cls: "text-amber" };
+      return { key: "os.n.st.revokePartial", raw: s, cls: "text-amber" };
     default:
-      return { label: s, cls: "text-text-faint" };
+      return { key: null, raw: s, cls: "text-text-faint" };
   }
 }
 
@@ -77,6 +83,8 @@ export function NoticeComposer({
   const [individual, setIndividual] = useState<Record<string, string>>({}); // studentId → 개별 내용(공통 뒤 덧붙임)
   const [showIndividual, setShowIndividual] = useState(false); // 개별 내용 섹션 펼침
   const [busy, setBusy] = useState(false);
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [confirmSend, setConfirmSend] = useState(false);
   const [rows, setRows] = useState<OnescreenNoticeRow[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -84,7 +92,7 @@ export function NoticeComposer({
   const [scope, setScope] = useState<Scope>("today");
   const [allStudents, setAllStudents] = useState<Candidate[] | null>(null); // 담당 전체(한 번 받아 캐시)
   // 관리자뷰는 담당 반 개념이 없어 실제로 학원 전체가 담긴다 — 라벨이 거짓말하지 않게 서버가 알려준 범위를 쓴다.
-  const [allLabel, setAllLabel] = useState("내 담당 전체");
+  const [allLabel, setAllLabel] = useState(t("os.n.scopeMine"));
   const [loadingAll, setLoadingAll] = useState(false);
   const [atts, setAtts] = useState<NoticeAttachment[]>([]); // 전원 공통 이미지
   const [uploading, setUploading] = useState(false);
@@ -136,11 +144,11 @@ export function NoticeComposer({
     const res = await listMyNoticeStudents();
     setLoadingAll(false);
     if (!res.ok) {
-      toast.error(res.error ?? "담당 학생을 불러오지 못했습니다");
+      toast.error(res.error ?? t("os.n.loadFail"));
       setScope("today");
       return;
     }
-    if (res.scope === "tenant") setAllLabel("학원 전체");
+    if (res.scope === "tenant") setAllLabel(t("os.n.scopeTenant"));
     setAllStudents(res.students ?? []);
   }
 
@@ -171,12 +179,12 @@ export function NoticeComposer({
 
   async function doSend(test: boolean) {
     if (!body.trim()) {
-      toast.error("공통 내용을 입력하세요");
+      toast.error(t("os.n.needBody"));
       return;
     }
     const targets = test ? [] : buildTargets();
     if (!test && targets.length === 0) {
-      toast.error("대상 학생을 선택하세요");
+      toast.error(t("os.n.needTargets"));
       return;
     }
     setBusy(true);
@@ -189,18 +197,18 @@ export function NoticeComposer({
     setBusy(false);
     setConfirmSend(false);
     if (!res.ok) {
-      toast.error(res.error ?? "발송에 실패했습니다");
+      toast.error(res.error ?? t("os.n.sendFail"));
       return;
     }
     if (res.dryRun) {
       toast.message(
-        `실제 발송이 꺼져 있어 전송하지 않았습니다 — 대상 ${res.queued ?? 0}명(원장 설정에서 'ClassNote 실제 발송'을 켜야 전송).`,
+        tf("os.n.dryRun", { n: res.queued ?? 0 }),
       );
       return;
     }
     const skip = res.skipped?.length ?? 0;
     (res.queued ? toast.success : toast.message)(
-      `${res.queued ?? 0}명 발송 대기(연동 PC가 순차 게시)${skip ? ` · 제외 ${skip}명(발송과목 아님/동명이인)` : ""}`,
+      tf("os.n.queued", { n: res.queued ?? 0 }) + (skip ? tf("os.n.queuedSkip", { n: skip }) : ""),
     );
     if (!test) {
       setBody("");
@@ -220,35 +228,35 @@ export function NoticeComposer({
     const posted = row.status !== "queued";
     const res = posted ? await editPostedNotice(row.id, editBody) : await editQueuedNotice(row.id, editBody);
     if (!res.ok) {
-      toast.error(res.error ?? "수정에 실패했습니다");
+      toast.error(res.error ?? t("os.n.editFail"));
       if (res.reason === "already_sent") void refreshHistory();
       return;
     }
-    toast.success(posted ? "게시 공지 수정을 요청했습니다 — 연동 PC가 게시글에 반영합니다" : "공지를 수정했습니다");
+    toast.success(posted ? t("os.n.editedPosted") : t("os.n.edited"));
     setEditingId(null);
     void refreshHistory();
   }
 
   async function del(id: string) {
-    if (!window.confirm("이 대기 공지를 삭제할까요? (게시 전이라 학부모에게 가지 않습니다)")) return;
+    if (!window.confirm(t("os.n.delConfirm"))) return;
     const res = await deleteQueuedNotice(id);
     if (!res.ok) {
-      toast.error(res.error ?? "삭제에 실패했습니다");
+      toast.error(res.error ?? t("os.n.delFail"));
       if (res.reason === "already_sent") void refreshHistory();
       return;
     }
-    toast.success("대기 공지를 삭제했습니다");
+    toast.success(t("os.n.deleted"));
     void refreshHistory();
   }
 
   async function revoke(id: string) {
-    if (!window.confirm("게시된 공지를 학부모 게시판에서 삭제(회수)할까요? 연동 PC가 순차 처리합니다.")) return;
+    if (!window.confirm(t("os.n.revokeConfirm"))) return;
     const res = await cancelOnescreenNotice(id);
     if (!res.ok) {
-      toast.error(res.error ?? "게시취소에 실패했습니다");
+      toast.error(res.error ?? t("os.n.revokeFail"));
       return;
     }
-    toast.success("게시취소를 요청했습니다 — 연동 PC가 처리하면 게시판에서 삭제됩니다");
+    toast.success(t("os.n.revoked"));
     void refreshHistory();
   }
 
@@ -262,13 +270,13 @@ export function NoticeComposer({
         <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-2xl border lg:absolute lg:inset-0 lg:max-h-none">
           <div className="border-line space-y-1.5 border-b px-3 py-2">
             <p className="text-foreground text-sm font-bold">
-              대상 학생 <span className="text-primary">{selectedCount}</span>
+              {t("os.n.targets")} <span className="text-primary">{selectedCount}</span>
             </p>
             {/* 범위 — 오늘 수업(로스터) vs 내 담당 전체. 요일과 무관한 공지(휴강 안내 등)는 '전체'로. */}
             <div className="border-line inline-flex rounded-full border p-0.5 text-xs">
               {(
                 [
-                  { key: "today", label: "오늘 수업" },
+                  { key: "today", label: t("os.n.scopeToday") },
                   { key: "all", label: allLabel },
                 ] as const
               ).map((o) => (
@@ -286,7 +294,10 @@ export function NoticeComposer({
             </div>
             <div className="flex items-center justify-between gap-2">
               <p className="text-text-faint text-xs">
-                {scope === "all" ? `${allLabel} 재원생` : "보이는 반의 재원생"} · 발송 과목(수학 등)만 실제 게시
+                {scope === "all"
+                  ? tf("os.n.poolAll", { label: allLabel })
+                  : t("os.n.poolToday")}
+                {t("os.n.poolTail")}
               </p>
               {candidates.length > 0 ? (
                 <button
@@ -294,17 +305,17 @@ export function NoticeComposer({
                   onClick={toggleAll}
                   className="text-primary shrink-0 text-xs font-medium hover:underline"
                 >
-                  {allChecked ? "전체 해제" : `전체 선택 ${candidates.length}`}
+                  {allChecked ? t("os.n.clearAll") : tf("os.n.selectAll", { n: candidates.length })}
                 </button>
               ) : null}
             </div>
           </div>
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-1.5">
             {loadingAll ? (
-              <p className="text-text-faint p-2 text-xs">담당 학생을 불러오는 중…</p>
+              <p className="text-text-faint p-2 text-xs">{t("os.n.loadingAll")}</p>
             ) : candidates.length === 0 ? (
               <p className="text-text-faint p-2 text-xs">
-                {scope === "all" ? "담당 반의 재원생이 없습니다." : "표시할 학생이 없습니다."}
+                {scope === "all" ? t("os.n.emptyAll") : t("os.n.emptyToday")}
               </p>
             ) : (
               candidates.map((s) => (
@@ -327,23 +338,27 @@ export function NoticeComposer({
       <div className="space-y-4">
         <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
           <div>
-            <h2 className="text-foreground text-base font-bold">학부모 공지</h2>
+            <h2 className="text-foreground text-base font-bold">{t("os.n.heading")}</h2>
             <p className="text-text-faint text-xs">
-              선택 학생 학부모의 ClassNote 보드에 공지를 게시합니다 · 수업 보고서와 별개 글로 누적됩니다
+              {t("os.n.headingHint")}
             </p>
           </div>
           {!sendEnabled ? (
             <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-xs">
-              현재 <b>실제 발송이 꺼져</b> 있어 전송되지 않습니다(dry-run). 학부모에게 보내려면 원장 설정의 <b>ClassNote 실제 발송</b>을 켜세요.
+              {t("os.n.offA")}
+              <b>{t("os.n.offB")}</b>
+              {t("os.n.offC")}
+              <b>{t("os.n.offD")}</b>
+              {t("os.n.offE")}
             </p>
           ) : null}
           <div>
-            <p className="text-text-dim mb-1 text-xs font-medium">공통 내용 (선택 학생 모두에게)</p>
+            <p className="text-text-dim mb-1 text-xs font-medium">{t("os.n.bodyLabel")}</p>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={5}
-              placeholder="예: 안녕하세요 어머님, 다음 주 월요일은 휴강입니다. 교재 p.29까지 풀어 오세요!"
+              placeholder={t("os.n.bodyPh")}
               className={BODY}
             />
           </div>
@@ -356,16 +371,21 @@ export function NoticeComposer({
                 onClick={() => setShowIndividual((v) => !v)}
                 className="text-text-dim hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-xs font-medium"
               >
-                <span>학생별 개별 내용 추가 (선택){indivCount ? ` · ${indivCount}명 입력함` : ""}</span>
+                <span>
+                  {t("os.n.indiv")}
+                  {indivCount ? tf("os.n.indivCount", { n: indivCount }) : ""}
+                </span>
                 <span className="text-text-faint inline-flex items-center gap-0.5">
-                  {showIndividual ? "접기" : "펼치기"}
+                  {showIndividual ? t("os.n.collapse") : t("os.n.expand")}
                   <EyIcon name={showIndividual ? "chevronUp" : "chevronDown"} size={12} />
                 </span>
               </button>
               {showIndividual ? (
                 <div className="border-line max-h-[280px] space-y-2 overflow-y-auto border-t p-2">
                   <p className="text-text-faint px-1 text-xs">
-                    입력한 학생은 <b>공통 내용 뒤에</b> 이 내용이 덧붙어 발송됩니다. 비우면 공통 내용만 나갑니다.
+                    {t("os.n.indivHintA")}
+                    <b>{t("os.n.indivHintB")}</b>
+                    {t("os.n.indivHintC")}
                   </p>
                   {candidates
                     .filter((s) => checked.has(s.id))
@@ -378,7 +398,7 @@ export function NoticeComposer({
                           value={individual[s.id] ?? ""}
                           onChange={(e) => setIndividual((prev) => ({ ...prev, [s.id]: e.target.value }))}
                           rows={2}
-                          placeholder="이 학생에게만 덧붙일 내용(선택)"
+                          placeholder={t("os.n.indivPh")}
                           className={`${BODY} text-xs`}
                         />
                       </div>
@@ -399,16 +419,18 @@ export function NoticeComposer({
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
               <span className="text-foreground text-xs">
-                {scope === "all" ? `${allLabel} ` : ""}<b>{selectedCount}명</b>
-                {indivCount ? ` (개별 내용 ${indivCount}명)` : ""}
-                {atts.length ? ` · 이미지 ${atts.length}장` : ""}의 학부모에게 공지를 발송할까요?
-                {!sendEnabled ? " (실제 발송 OFF — 전송 안 됨)" : ""}
+                {scope === "all" ? `${allLabel} ` : ""}
+                <b>{tf("os.n.confirmCount", { n: selectedCount })}</b>
+                {indivCount ? tf("os.n.confirmIndiv", { n: indivCount }) : ""}
+                {atts.length ? tf("os.n.confirmImages", { n: atts.length }) : ""}
+                {t("os.n.confirmTail")}
+                {!sendEnabled ? t("os.n.confirmOff") : ""}
               </span>
               <Button size="sm" onClick={() => doSend(false)} disabled={busy}>
-                {busy ? "발송 중…" : "발송 확인"}
+                {busy ? t("os.n.sending") : t("os.n.confirmSend")}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setConfirmSend(false)} disabled={busy}>
-                취소
+                {t("os.n.cancel")}
               </Button>
             </div>
           ) : (
@@ -418,16 +440,16 @@ export function NoticeComposer({
                 disabled={busy || !body.trim() || selectedCount === 0}
                 onClick={() => setConfirmSend(true)}
               >
-                ClassNote 공지 발송 {selectedCount > 0 ? `(${selectedCount}명)` : ""}
+                {t("os.n.send")} {selectedCount > 0 ? tf("os.n.sendCount", { n: selectedCount }) : ""}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 disabled={busy || !body.trim()}
                 onClick={() => doSend(true)}
-                title="실 학부모에게 가지 않는 테스트 학생(학원이)에게만 발송해 봅니다"
+                title={t("os.n.testTitle")}
               >
-                테스트 발송(학원이)
+                {t("os.n.test")}
               </Button>
             </div>
           )}
@@ -435,9 +457,9 @@ export function NoticeComposer({
 
         {/* 내가 보낸 공지 이력 — 대기건은 수정/삭제 */}
         <section className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
-          <p className="text-foreground mb-2 text-sm font-bold">내가 보낸 공지</p>
+          <p className="text-foreground mb-2 text-sm font-bold">{t("os.n.history")}</p>
           {rows.length === 0 ? (
-            <p className="text-text-faint text-xs">아직 보낸 공지가 없습니다.</p>
+            <p className="text-text-faint text-xs">{t("os.n.historyEmpty")}</p>
           ) : (
             <ul className="divide-line divide-y">
               {rows.map((r) => {
@@ -458,13 +480,14 @@ export function NoticeComposer({
                           <p className="text-foreground line-clamp-2 text-xs whitespace-pre-wrap">{r.body}</p>
                         )}
                         <p className="text-text-faint mt-0.5 text-xs">
-                          <span className={st.cls}>{st.label}</span> · 대상 {r.targetCount}명
+                          <span className={st.cls}>{st.key ? t(st.key) : st.raw}</span>
+                          {tf("os.n.rowTargets", { n: r.targetCount })}
                         </p>
                         {/* 게시된 리포트 — **학생 이름**으로 링크(원장 요청: #1 #2로는 누구 글인지 알 수 없음).
                             많으면 앞 8명만 이름으로, 나머지는 수만 표시. */}
                         {r.reportLinks.length ? (
                           <p className="text-text-faint mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
-                            <span>게시글 {r.reportLinks.length}개:</span>
+                            <span>{tf("os.n.links", { n: r.reportLinks.length })}</span>
                             {r.reportLinks.slice(0, 8).map((l, i) =>
                               l.url ? (
                                 <a
@@ -472,18 +495,20 @@ export function NoticeComposer({
                                   href={l.url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  title={l.revoked ? `${l.name} — 회수됨` : l.name}
+                                  title={l.revoked ? tf("os.n.linkRevoked", { name: l.name }) : l.name}
                                   className={`underline ${l.revoked ? "text-text-faint line-through" : "text-primary"}`}
                                 >
                                   {l.name}
                                 </a>
                               ) : (
-                                <span key={i} className="text-text-faint" title="주소를 못 찾아 링크 없음">
+                                <span key={i} className="text-text-faint" title={t("os.n.linkNone")}>
                                   {l.name}
                                 </span>
                               ),
                             )}
-                            {r.reportLinks.length > 8 ? <span>외 {r.reportLinks.length - 8}명</span> : null}
+                            {r.reportLinks.length > 8 ? (
+                              <span>{tf("os.n.linkMore", { n: r.reportLinks.length - 8 })}</span>
+                            ) : null}
                           </p>
                         ) : null}
                       </div>
@@ -497,28 +522,35 @@ export function NoticeComposer({
                               setEditingId(r.id);
                               setEditBody(r.body);
                             }}
-                            title={r.status === "queued" ? "발송 전 내용 수정" : "게시된 글의 내용을 바로 수정"}
+                            title={
+                              r.status === "queued" ? t("os.n.editQueuedTitle") : t("os.n.editPostedTitle")
+                            }
                           >
-                            수정
+                            {t("os.n.edit")}
                           </Button>
                         ) : null}
                         {r.status === "queued" && !editing ? (
                           <Button size="sm" variant="ghost" onClick={() => del(r.id)}>
-                            삭제
+                            {t("os.n.delete")}
                           </Button>
                         ) : null}
                         {r.canRevoke && !editing ? (
-                          <Button size="sm" variant="ghost" onClick={() => revoke(r.id)} title="학부모 게시판에서 이 공지 글을 삭제(회수)">
-                            게시취소
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => revoke(r.id)}
+                            title={t("os.n.revokeTitle")}
+                          >
+                            {t("os.n.revoke")}
                           </Button>
                         ) : null}
                         {editing ? (
                           <>
                             <Button size="sm" onClick={() => saveEdit(r)}>
-                              저장
+                              {t("os.n.save")}
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
-                              취소
+                              {t("os.n.cancel")}
                             </Button>
                           </>
                         ) : null}

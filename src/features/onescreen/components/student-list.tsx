@@ -7,6 +7,10 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
+import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
+import { CLASS_GROUP_OTHER } from "../class-tags";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
 /**
  * 이름 옆 발송 표시 재료(원장 요청 2026-07-27: "발송완료면 체크 같은 걸 이름 옆에").
@@ -27,10 +31,10 @@ const CELL_CLASS: Record<CellState, string> = {
  * 달아 봐야 같은 한 글자라 도움이 안 됐다. 자리가 있으니 낱말로 적는다.
  * ⚠️ `title`은 라벨을 되풀이하지 말고 **그 칸이 무엇을 기다리는지**를 적는다(라벨과 같은 말이면 무의미).
  */
-const CELLS: { key: "prog" | "test" | "rep"; label: string; title: string }[] = [
-  { key: "prog", label: "진도", title: "오늘 진도 입력 여부" },
-  { key: "test", label: "테스트", title: "테스트 점수 입력 여부" },
-  { key: "rep", label: "보고서", title: "학부모 보고서 작성·발송 여부" },
+const CELLS: { key: "prog" | "test" | "rep"; label: SheetDictKey; title: SheetDictKey }[] = [
+  { key: "prog", label: "os.chip.prog", title: "os.chip.prog.title" },
+  { key: "test", label: "os.chip.test", title: "os.chip.test.title" },
+  { key: "rep", label: "os.chip.rep", title: "os.chip.rep.title" },
 ];
 
 function StudentRow({
@@ -48,6 +52,8 @@ function StudentRow({
   onClick: () => void;
   testConfig?: TestConfig;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
   const s = studentStatus(st, testConfig);
   // 보(보고서) 셀은 과목별 발송 상태로 재정의 가능 (클라이언트가 reportCellById로 전달).
   const cellState = (key: "prog" | "test" | "rep"): CellState =>
@@ -103,13 +109,13 @@ function StudentRow({
               />
             ))}
           </span>
-          {st.attendance !== "출석" ? (
+          {st.attendance !== MARK_PRESENT ? (
             <span
               className={`shrink-0 rounded-full px-1 py-px text-xs font-bold whitespace-nowrap ${
-                st.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
+                st.attendance === MARK_LATE ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
               }`}
             >
-              {st.attendance}
+              {attendanceMarkLabel(st.attendance, lang)}
             </span>
           ) : null}
         </div>
@@ -118,12 +124,12 @@ function StudentRow({
         {CELLS.map((c) => (
           <span
             key={c.key}
-            title={c.title}
+            title={t(c.title)}
             // 낱말이 들어가므로 정사각(size-5)이 아니라 **글자 폭을 따라가는 알약**으로. shrink-0 =
             // 이름이 길어도 이 칸이 찌그러져 글자가 깨지지 않게(찌그러지면 축약보다 못하다).
             className={`shrink-0 rounded-sm px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${CELL_CLASS[cellState(c.key)]}`}
           >
-            {c.label}
+            {t(c.label)}
           </span>
         ))}
       </div>
@@ -140,7 +146,7 @@ export function StudentList({
   classOrder,
   testConfig,
   bulkPresent,
-  emptyLabel = "해당 반 학생이 없습니다",
+  emptyLabel,
 }: {
   students: OneScreenStudent[];
   selId: string;
@@ -148,7 +154,8 @@ export function StudentList({
   reportCellById?: Record<string, CellState>;
   /** 이름 옆 발송 표시 — 학생 id → {나간 행 수, 나갈 수 있는 행 수, 기준 라벨}. */
   sendMarkById?: Record<string, SendMark>;
-  /** 빈 목록 문구 — 반이 아니라 **작성 필터** 때문에 비었을 때 사실과 다른 말을 하지 않도록 호출부가 덮어쓴다. */
+  /** 빈 목록 문구 — 반이 아니라 **작성 필터** 때문에 비었을 때 사실과 다른 말을 하지 않도록 호출부가 덮어쓴다.
+   *  안 넘기면 사전 기본값. */
   emptyLabel?: string;
   /** 반 그룹 표시 순서(보통 시각순). 없으면 등장 순서. */
   classOrder?: readonly string[];
@@ -163,9 +170,11 @@ export function StudentList({
   bulkPresent?: BulkPresentProps;
 }) {
   // 반별 그룹 — className 없으면 "기타"로.
+  const t = useSheetT();
+  const tf = useSheetTf();
   const groups = new Map<string, OneScreenStudent[]>();
   for (const st of students) {
-    const key = st.className ?? "기타";
+    const key = st.className ?? CLASS_GROUP_OTHER;
     const arr = groups.get(key);
     if (arr) arr.push(st);
     else groups.set(key, [st]);
@@ -195,7 +204,7 @@ export function StudentList({
        60vh까지만 차지하고 나머지는 페이지가 스크롤한다. */
     <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border lg:h-full lg:min-h-0">
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
-        <p className="micro text-text-faint">학생 · 반별</p>
+        <p className="micro text-text-faint">{t("os.list.caption")}</p>
         <div className="flex items-center gap-2">
           {bulkPresent ? <BulkPresentButton {...bulkPresent} /> : null}
           {orderedKeys.length > 1 ? (
@@ -204,15 +213,19 @@ export function StudentList({
               onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(orderedKeys))}
               className="text-text-faint hover:text-text-dim text-xs font-medium whitespace-nowrap"
             >
-              {allCollapsed ? "모두 펼치기" : "모두 접기"}
+              {allCollapsed ? t("os.list.expandAll") : t("os.list.collapseAll")}
             </button>
           ) : null}
-          <p className="text-text-dim font-mono text-xs">{students.length}명</p>
+          <p className="text-text-dim font-mono text-xs">
+            {tf("os.list.count", { n: students.length })}
+          </p>
         </div>
       </header>
       <div className="scrollbar-thin flex max-h-[60vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 lg:max-h-none [scrollbar-gutter:stable]">
         {students.length === 0 ? (
-          <p className="text-text-faint px-2 py-6 text-center text-xs">{emptyLabel}</p>
+          <p className="text-text-faint px-2 py-6 text-center text-xs">
+            {emptyLabel ?? t("os.list.empty")}
+          </p>
         ) : (
           orderedKeys.map((key) => {
             const rows = groups.get(key)!;
@@ -231,9 +244,14 @@ export function StudentList({
                       className={`text-text-faint size-3 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
                       strokeWidth={2.5}
                     />
-                    <span className="text-text-dim truncate text-xs font-bold">{key}</span>
+                    <span className="text-text-dim truncate text-xs font-bold">
+                      {/* 🔴 반 이름은 한국어 그대로 — 원스크린은 학부모 보고서를 짓는 표면이다. */}
+                      {key === CLASS_GROUP_OTHER ? t("os.list.noClass") : key}
+                    </span>
                   </span>
-                  <span className="text-text-faint shrink-0 font-mono text-xs">{rows.length}명</span>
+                  <span className="text-text-faint shrink-0 font-mono text-xs">
+                    {tf("os.list.count", { n: rows.length })}
+                  </span>
                 </button>
                 {!isCollapsed
                   ? rows.map((st) => (

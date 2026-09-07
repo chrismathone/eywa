@@ -13,6 +13,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { canAccess, type AccessMatrix, type MenuKey } from "@/lib/permissions";
+// 강사뷰 화면 언어(2026-09-03) — 라벨은 사전에서, 스위치는 이 드롭다운 **하나**(원장 지정 자리).
+import { useSheetT } from "@/features/teacher-view/lang-context";
+import { TeacherLangSwitch } from "@/features/teacher-view/lang-switch";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
 /**
  * 강사 미니멀 셸용 '내 메뉴' 드롭다운(B 옵션 — onescreen 허브 + 필요한 깊은 페이지 진입).
@@ -22,38 +26,41 @@ import { canAccess, type AccessMatrix, type MenuKey } from "@/lib/permissions";
  * 끄면(teacher 접근=없음) 그 탭이 숨겨지고 페이지 접근도 차단된다(canWriteTenant/requireAccess 게이트와 일관).
  * teacher_onescreen(수업 마감)은 ROLE_LOCKED라 항상 표시.
  */
-const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[] = [
+// 🔴 라벨은 **사전 키**다(한국어 원문은 [i18n.ts](@/features/teacher-view/i18n) 한 곳) — 여기에 문자열을
+//    다시 적으면 한/영이 갈린다. 키는 `menu.item.<menuKey>`가 원칙이고, 같은 menuKey를 두 줄이 쓰는
+//    출결 모드만 `menu.item.attendanceQuick`으로 구분한다.
+const LINKS: { href: string; labelKey: SheetDictKey; icon: EywaIconName; menu: MenuKey }[] = [
   // 출결 모드(2026-08-20) — 내 반 오늘 출결만 터치 몇 번으로. 원장 지시: 원스크린 상단 바에만 두니
   //   *"완전 안보인다"* → 강사의 주 진입로인 이 드롭다운에도 올린다(홈 바로 아래).
   //   ⚠️ 권한 키는 출석부와 같은 `attendance` — 새 메뉴 키를 만들면 auth_menu_access DEFAULTS 누락으로 잠긴다.
-  { href: "/attendance/quick", label: "출결 모드", icon: MENU_ICON.attendance, menu: "attendance" },
-  { href: "/onescreen", label: "수업 마감 (원스크린)", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
+  { href: "/attendance/quick", labelKey: "menu.item.attendanceQuick", icon: MENU_ICON.attendance, menu: "attendance" },
+  { href: "/onescreen", labelKey: "menu.item.teacher_onescreen", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
   // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
-  { href: "/ecs", label: "영어 강사 시트", icon: MENU_ICON.ecs, menu: "ecs" },
+  { href: "/ecs", labelKey: "menu.item.ecs", icon: MENU_ICON.ecs, menu: "ecs" },
   // Math Class Sheet — 수학 반별 월간 진도표(scoped: 담당 반만. requireMcsClassAccess 게이트).
   // 🔴 이 줄이 없어서 **수학만 맡은 강사 9명에게는 MCS로 가는 길이 아예 없었다**(폰엔 사이드바가 없고
   //    이 드롭다운이 강사의 유일한 진입로다). 노출 조건은 영어와 대칭(`showMcs`).
-  { href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.mcs, menu: "mcs" },
-  { href: "/students", label: "내 학생", icon: MENU_ICON.students, menu: "students" },
-  { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menu: "attendance" },
-  { href: "/classes", label: "내 수업", icon: MENU_ICON.classes, menu: "classes" },
-  { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menu: "timetable" },
-  { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menu: "exams" },
-  { href: "/consultations", label: "학생상담", icon: MENU_ICON.consultations, menu: "consultations" },
+  { href: "/mcs", labelKey: "menu.item.mcs", icon: MENU_ICON.mcs, menu: "mcs" },
+  { href: "/students", labelKey: "menu.item.students", icon: MENU_ICON.students, menu: "students" },
+  { href: "/attendance", labelKey: "menu.item.attendance", icon: MENU_ICON.attendance, menu: "attendance" },
+  { href: "/classes", labelKey: "menu.item.classes", icon: MENU_ICON.classes, menu: "classes" },
+  { href: "/timetable", labelKey: "menu.item.timetable", icon: MENU_ICON.timetable, menu: "timetable" },
+  { href: "/exams", labelKey: "menu.item.exams", icon: MENU_ICON.exams, menu: "exams" },
+  { href: "/consultations", labelKey: "menu.item.consultations", icon: MENU_ICON.consultations, menu: "consultations" },
   // 교재 요청 — 강사 스코프(본인 담당 학생) 요청 + 진행상태. 사무실은 /billing 교재 면에서 처리.
-  { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menu: "textbook_requests" },
+  { href: "/textbook-requests", labelKey: "menu.item.textbook_requests", icon: MENU_ICON.textbook_requests, menu: "textbook_requests" },
   // 지출결의서 — 강사가 본인 지출을 작성·제출 + 결재 진행상태 조회. 사무실은 /billing 지출 면에서 결재.
-  { href: "/expense-requests", label: "지출결의서", icon: MENU_ICON.expense_requests, menu: "expense_requests" },
+  { href: "/expense-requests", labelKey: "menu.item.expense_requests", icon: MENU_ICON.expense_requests, menu: "expense_requests" },
   // 캘린더 — 학원 공용 일정(강사 readonly 기본). 테넌트 공용 정보라 스코핑 무관.
-  { href: "/calendar", label: "캘린더", icon: MENU_ICON.calendar, menu: "calendar" },
+  { href: "/calendar", labelKey: "menu.item.calendar", icon: MENU_ICON.calendar, menu: "calendar" },
   // 전자결재 — 기본 teacher=none이라 파일럿 개인 예외 계정(테스터)에만 보인다. 문서 스코프는
   // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
-  { href: "/approvals", label: "전자결재", icon: MENU_ICON.approvals, menu: "approvals" },
+  { href: "/approvals", labelKey: "menu.item.approvals", icon: MENU_ICON.approvals, menu: "approvals" },
   // 수업 평가 — 강사는 **자기 평가 전용**(본인 평가지의 본인 채점만 보이고 쓸 수 있다, 원장 2026-08-19).
   // 기본 teacher=none이라 학원설정에서 연 학원에서만 보인다.
-  { href: "/class-review", label: "수업 평가", icon: MENU_ICON.class_review, menu: "class_review" },
+  { href: "/class-review", labelKey: "menu.item.class_review", icon: MENU_ICON.class_review, menu: "class_review" },
   // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
-  { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menu: "documents" },
+  { href: "/documents", labelKey: "menu.item.documents", icon: MENU_ICON.documents, menu: "documents" },
 ];
 
 export function TeacherMenu({
@@ -87,6 +94,8 @@ export function TeacherMenu({
    */
   home?: string | null;
 }) {
+  // 화면 언어 — provider는 강사 미니셸에만 있다(관리자 풀셸은 한국어 고정, 원장 2026-09-03).
+  const t = useSheetT();
   // 학원 권한 매트릭스에서 강사 접근이 '없음'인 탭은 숨긴다(설정 반영). teacher_onescreen은 항상 통과(locked full).
   // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
   const visible = LINKS.filter(
@@ -102,21 +111,30 @@ export function TeacherMenu({
       <DropdownMenuTrigger
         render={<Button variant="outline" size="sm" className="gap-1.5" />}
       >
-        <EyIcon name="screen" size={16} strokeWidth={1.8} /> 내 메뉴
+        <EyIcon name="screen" size={16} strokeWidth={1.8} /> {t("menu.trigger")}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="text-text-faint">강사 메뉴</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-text-faint">{t("menu.heading")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {links.map(({ href, label, icon }) => (
+        {links.map(({ href, labelKey, icon }) => (
           <DropdownMenuItem key={href} render={<Link href={href} className="cursor-pointer" />}>
-            <EyIcon name={icon} size={16} strokeWidth={1.8} /> {label}
+            <EyIcon name={icon} size={16} strokeWidth={1.8} /> {t(labelKey)}
           </DropdownMenuItem>
         ))}
         {/* 내 정보 — 본인 이력서·로그인 정보. 권한 매트릭스와 무관(자기 것만이라 항상 표시). */}
         <DropdownMenuSeparator />
         <DropdownMenuItem render={<Link href="/me" className="cursor-pointer" />}>
-          <EyIcon name="user" size={16} strokeWidth={1.8} /> 내 정보
+          <EyIcon name="user" size={16} strokeWidth={1.8} /> {t("menu.me")}
         </DropdownMenuItem>
+        {/* 화면 언어(한국어 / English) — 원장 2026-09-03이 **이 자리**를 지정했다("내 메뉴에서 한영전환").
+            🔴 **`DropdownMenuItem`으로 감싸지 않는다** — 메뉴 항목은 "누르면 하나가 실행되고 닫히는 줄"이라
+               그 안에 버튼 둘을 넣으면 ① 메뉴 항목과 버튼이 클릭·키보드를 서로 뺏고 ② 스크린리더에 중첩
+               인터랙티브(menuitem 안의 button)로 읽힌다. 팝업의 **평범한 자식**으로 두면 항목 의미가 없어
+               그 두 문제가 함께 사라진다(닫힘 제어도 필요 없다 — 항목이 아니라 닫히지 않는다).
+            ⚠️ 그래서 `closeOnClick`도 안 쓴다. 저장은 이동이 아니라 `router.refresh()`라 메뉴가 열린 채
+               라벨이 그 자리에서 바뀐다(누른 결과가 눈앞에서 보인다). */}
+        <DropdownMenuSeparator />
+        <TeacherLangSwitch />
         {/* 겸직(관리자 계열)만 — 맨 하단 구분선 아래 '관리자뷰로 전환'(쿠키만 지우고 관리자 홈 복귀, 권한 불변).
             액션이 착지경로를 반환 → window.location으로 확정 네비게이션(드롭다운 안에선 서버액션 redirect의
             클라 네비게이션이 유실되기 때문). closeOnClick=false로 액션 완료 전 메뉴가 닫히는 것을 방지. */}
@@ -131,7 +149,7 @@ export function TeacherMenu({
                 window.location.assign(dest);
               }}
             >
-              <EyIcon name="building" size={16} strokeWidth={1.8} /> 관리자뷰로 전환
+              <EyIcon name="building" size={16} strokeWidth={1.8} /> {t("menu.toAdmin")}
             </DropdownMenuItem>
           </>
         ) : null}

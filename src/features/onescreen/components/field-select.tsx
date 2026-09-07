@@ -25,6 +25,10 @@ export function FieldSelect({
   className,
   radius = "lg",
   box,
+  labelOf,
+  noneLabel = "선택 안 함",
+  legacyHint = "이전 표기",
+  searchPlaceholder = "찾기",
 }: {
   options: readonly string[];
   /** 현재 값. 빈 문자열·null 모두 "미선택"으로 본다. */
@@ -45,19 +49,30 @@ export function FieldSelect({
    * 화살표도 함께 작아진다. 미지정이면 기존 기본값 그대로 — **다른 화면 영향 0**.
    */
   box?: string;
+  /**
+   * **저장값 → 화면 글자**(강사뷰 영어 화면). 저장·비교는 계속 원래 값으로 하고 **표시만** 바꾼다
+   * — 넘기지 않으면 값이 그대로 보인다(기존 호출부 전부 무변경).
+   * 🔴 여기서 값을 갈아치우지 말 것: `onSelect`는 언제나 **저장값**을 돌려줘야 한다.
+   */
+  labelOf?: (value: string) => string;
+  /** '선택 안 함'·'이전 표기'·'찾기' — 화면 언어를 따르는 자리만 넘긴다(기본은 한국어 그대로). */
+  noneLabel?: string;
+  legacyHint?: string;
+  searchPlaceholder?: string;
 }) {
   const opts = useMemo(() => {
+    const show = (v: string) => labelOf?.(v) ?? v;
     const base: ComboOption[] = [
-      { value: "", label: "선택 안 함" },
-      ...options.map((o) => ({ value: o, label: o })),
+      { value: "", label: noneLabel },
+      ...options.map((o) => ({ value: o, label: show(o) })),
     ];
     // ⚠️ **선택지에 없는 저장값도 보이게 유지한다.** SearchableSelect는 옵션에서 못 찾은 값을 placeholder로
     //    그리므로, 그냥 두면 옛 표기(과제 '완료' → 퍼센트 전환, 2026-08-03)나 학원설정에서 지운 태도값이
     //    **빈 칸처럼 보인다** — 강사 눈엔 값이 사라진 것이고, 실제 DB엔 그대로 남아 학부모에게 나간다.
     const v = (value ?? "").trim();
-    if (v && !options.includes(v)) base.push({ value: v, label: v, hint: "이전 표기" });
+    if (v && !options.includes(v)) base.push({ value: v, label: show(v), hint: legacyHint });
     return base;
-  }, [options, value]);
+  }, [options, value, labelOf, noneLabel, legacyHint]);
   return (
     <SearchableSelect
       options={opts}
@@ -66,7 +81,7 @@ export function FieldSelect({
       placeholder={placeholder}
       ariaLabel={ariaLabel}
       // 선택지가 5개 안팎이라 검색 입력은 실질 무용 — 안내 문구만 짧게(컴포넌트가 항상 그린다).
-      searchPlaceholder="찾기"
+      searchPlaceholder={searchPlaceholder}
       className={className}
       // 박스를 통째로 받은 자리(ECS)는 그 표면의 입력칸과 한 벌이라는 뜻 → 화살표도 촘촘하게.
       compact={box !== undefined}

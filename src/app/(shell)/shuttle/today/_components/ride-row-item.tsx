@@ -32,7 +32,6 @@ import { clearBoarding, clearRideException, recordBoarding } from "@/features/sh
  */
 export function RideRowItem({
   row,
-  absentToday,
   date,
   canWrite,
   canEditException,
@@ -40,8 +39,6 @@ export function RideRowItem({
   onDone,
 }: {
   row: RideRow;
-  /** 오늘 출결이 결석 — 🔴 표시만. 셔틀 기록을 자동으로 찍지 않는다(원장 2026-08-19 "신호만"). */
-  absentToday: boolean;
   date: string;
   canWrite: boolean;
   /**
@@ -146,13 +143,6 @@ export function RideRowItem({
               <span className="text-text-dim text-xs">{row.exceptionMemo}</span>
             )}
           </>
-        )}
-        {absentToday && (
-          // 배지는 수제로 그리지 않고 공용 `<Pill>` + tone 캐논(결석 = critical)에서 고른다 —
-          // 화면 파일마다 배지를 깎으면 같은 뜻이 화면마다 다른 크기·색으로 갈린다(팔레트 v4).
-          <span title="오늘 출결이 결석입니다 — 셔틀 기록은 자동으로 찍히지 않습니다">
-            <Pill color={TONE_COLOR.critical}>오늘 결석</Pill>
-          </span>
         )}
         {/* 📐 정류장·시각은 **묶음 머리가 말한다**(2026-09-03 밀도 개선, today-board.groupRowsByStop)
             — 줄마다 반복하면 정작 봐야 할 이름보다 글자 덩어리가 커져 위계가 뒤집힌다.

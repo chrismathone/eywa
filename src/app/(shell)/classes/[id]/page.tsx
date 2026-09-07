@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
@@ -19,7 +19,6 @@ import {
   getClassTeacherOptions,
 } from "@/features/classes/server/queries";
 import {
-  DAY_LABEL,
   DAY_ORDER,
   summarizeSchedule,
 } from "@/features/classes/schedule-summary";
@@ -37,11 +36,17 @@ import { getScheduledForClass } from "@/features/enrollments/server/scheduled-qu
 import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
 import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
 import { getClassDelegationList } from "@/features/classes/server/delegation";
+import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
 import { ClassHistorySection } from "./_components/history-section";
 import { getClassHistory } from "@/features/classes/server/history-queries";
+import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { sheetDowLabel, sheetT, sheetTf } from "@/features/teacher-view/i18n";
+import { seatMarkLabelOf } from "@/features/attendance/live/mark-state";
 
-export const metadata = { title: "수업 상세 — eywa" };
+export async function generateMetadata() {
+  return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")} — eywa` };
+}
 
 function todayIso(): string {
   return kstToday();
@@ -53,6 +58,7 @@ export default async function ClassDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireAccess("classes");
+  const lang = await getTeacherViewLang();
   const { id } = await params;
   const [klass, students, stats, allEnrolledStudents, settings, teacherOptions, delegations, history] =
     await Promise.all([
@@ -77,8 +83,9 @@ export default async function ClassDetailPage({
 
   // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
-  // 분리등원 요일 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
-  const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
+  // 분리등원 요일 더블클릭 편집 — 서버 `updateEnrollmentsAttendanceBatch`는 **관리자(full)만** 통과시킨다.
+  // ⚠️ 종전 `canWriteTenant`는 scoped(강사)도 통과시켜, 강사에게 편집 칸이 열리고 저장만 거절됐다(#77 반대 꼴).
+  const canEditSchedule = await canManageTenant(user.systemRole, "classes");
 
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -95,10 +102,10 @@ export default async function ClassDetailPage({
         name: t.name,
         isSubjectMatch,
         hint: isSubjectMatch
-          ? "이 반 과목"
+          ? sheetT(lang, "cls.d.sameSubject")
           : t.subjects.length
             ? t.subjects.map((s) => subjects.labelOf(s)).join("·")
-            : "과목 미지정",
+            : sheetT(lang, "cls.d.noSubject"),
       };
     })
     .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
@@ -118,8 +125,11 @@ export default async function ClassDetailPage({
   // full(원장·부원장·실장)은 학원 전체 반, scoped(강사)는 자기 담당 반만 — 결근을 아는 사람은 본인이라
   // 미리 맡기고 갈 수 있어야 한다. 두 판정이 갈라지면 "버튼은 보이는데 누르면 거절"이 된다.
   const classLevel = await accessLevelTenant(user.systemRole, "classes");
-  const canDelegate =
-    classLevel === "full" || (classLevel === "scoped" && klass.teacherId === user.id);
+  // 🔴 반을 **바꾸는** 것(반 수정·레벨 변경·인수인계·위임)은 전부 같은 판정 하나를 본다
+  //    — 서버 게이트(`requireClassWrite`/`requireDelegationWrite`)와 같은 순수 함수라 갈릴 수 없다.
+  //    강사(scoped)는 자기 담임 반만. 부담임·위임으로 화면을 여는 사람은 **읽기만** 한다.
+  const canEditClass = await canWriteLoadedClass(klass.teacherId);
+  const canDelegate = canEditClass;
   // 반 배정 = 학생 기록 변경 — 서버 createEnrollment 게이트(classes full ∥ students full)와 같은 모양(#77).
   // 강사(양쪽 scoped)는 열람 전용(원장 2026-08-18)이라 버튼 자체를 숨긴다.
   // 수강 종료 = 학생 기록 변경 — 서버 endSingleEnrollment의 게이트(canManageStudentRecords =
@@ -139,35 +149,37 @@ export default async function ClassDetailPage({
   const classDays = schedule.days;
   const attendanceBadge = (days: string[]) =>
     days.length > 0 && days.length < classDays.length
-      ? DAY_ORDER.filter((d) => days.includes(d))
-          .map((d) => DAY_LABEL[d])
-          .join("·") + "만"
+      ? sheetTf(lang, "cls.d.onlyDays", {
+          days: DAY_ORDER.filter((d) => days.includes(d))
+            .map((d) => sheetDowLabel(d, lang))
+            .join("·"),
+        })
       : null;
 
   return (
     <div className="space-y-6">
-      <BackLink href="/classes" label="수업목록으로" />
+      <BackLink href="/classes" label={sheetT(lang, "cls.d.back")} />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
-          <p className="eyebrow">수업 · 반</p>
+          <p className="eyebrow">{sheetT(lang, "cls.d.eyebrow")}</p>
           <div className="flex flex-wrap items-baseline gap-2">
             <h1 className="font-bold tracking-tight text-foreground text-3xl">{klass.className}</h1>
             <Pill color={subjects.colorOf(klass.subject)}>{subjects.labelOf(klass.subject)}</Pill>
             {!klass.isActive ? (
               <span className="text-muted-foreground bg-muted border-border inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
-                폐지
+                {sheetT(lang, "cls.status.retired")}
               </span>
             ) : klass.closedAt ? (
               <span className="text-amber border-amber/30 bg-amber/10 inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
-                종강 {klass.closedAt}
+                {sheetTf(lang, "cls.d.endedAt", { date: klass.closedAt })}
               </span>
             ) : null}
           </div>
           <p className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             <span className="inline-flex items-center gap-1.5">
               <User className="size-3.5" />
-              {klass.teacherName ?? "담임 미정"}
+              {klass.teacherName ?? sheetT(lang, "cls.card.teacherNone")}
             </span>
             {klass.classroomName ? (
               <span className="inline-flex items-center gap-1.5">
@@ -175,7 +187,11 @@ export default async function ClassDetailPage({
                 {klass.classroomName}
               </span>
             ) : null}
-            <span>· 재원생 <span className="num">{klass.studentCount}</span>명</span>
+            <span>
+              {sheetT(lang, "cls.d.enrolledPre")}
+              <span className="num">{klass.studentCount}</span>
+              {sheetT(lang, "cls.d.enrolledPost")}
+            </span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -196,24 +212,38 @@ export default async function ClassDetailPage({
               }))}
             />
           ) : null}
-          <Button variant="outline" render={<WindowLink href={`/classes/${klass.id}/edit`} title="반 수정" />}>
-            <Pencil className="size-4" />
-            반 수정
-          </Button>
+          {canEditClass ? (
+            <Button
+              variant="outline"
+              render={<WindowLink href={`/classes/${klass.id}/edit`} title={sheetT(lang, "cls.d.edit")} />}
+            >
+              <Pencil className="size-4" />
+              {sheetT(lang, "cls.d.edit")}
+            </Button>
+          ) : null}
           {klass.subject === "english" ? (
             // English Class Sheet — 영어 반만(진입 조건은 requireEcsClassAccess가 재검증: skillAreas 설정 기반)
             <Button
               variant="outline"
-              render={<WindowLink href={`/ecs/${klass.id}`} title="영어 강사 시트" />}
+              render={<WindowLink href={`/ecs/${klass.id}`} title={sheetT(lang, "cls.d.sheetWin")} />}
             >
               Class Sheet
             </Button>
           ) : null}
-          <Button render={<WindowLink href={`/attendance/${todayIso()}/${klass.id}`} title="출석 입력" />}>
+          <Button
+            render={
+              <WindowLink
+                href={`/attendance/${todayIso()}/${klass.id}`}
+                title={sheetT(lang, "cls.d.attendanceWin")}
+              />
+            }
+          >
             <ClipboardCheck className="size-4" />
-            오늘 출석 입력
+            {sheetT(lang, "cls.d.attendance")}
           </Button>
-          <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
+          {canEditClass ? (
+            <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
+          ) : null}
           {canDelegate ? (
             <DelegateAction
               classId={klass.id}
@@ -222,7 +252,7 @@ export default async function ClassDetailPage({
               teacherOptions={handoverPool}
             />
           ) : null}
-          {!klass.pendingTeacherId ? (
+          {canEditClass && !klass.pendingTeacherId ? (
             <HandoverAction
               classId={klass.id}
               currentTeacherName={klass.teacherName}
@@ -264,25 +294,23 @@ export default async function ClassDetailPage({
         <div className="border-blue/30 bg-blue-soft/50 rounded-xl border px-4 py-3">
           <p className="text-blue inline-flex items-center gap-1.5 text-sm font-bold">
             <CalendarClock className="size-4" aria-hidden="true" />
-            시간표 예약
+            {sheetT(lang, "cls.d.schedTitle")}
           </p>
           <ul className="mt-2 space-y-1">
             {scheduledClass.map((c) => (
               <li key={`${c.kind}:${c.effectiveDate}`} className="text-foreground text-sm">
-                {scheduledClassChangeLabel(c)}
+                {scheduledClassChangeLabel(c, lang)}
               </li>
             ))}
           </ul>
-          <p className="text-text-dim mt-1.5 text-xs">
-            그날 자동으로 바뀝니다. 되돌리려면 시간표 화면의 적용 예정 배지에서 취소하세요.
-          </p>
+          <p className="text-text-dim mt-1.5 text-xs">{sheetT(lang, "cls.d.schedHint")}</p>
         </div>
       ) : null}
 
       {/* 예약된 명단 변동(합류·이동·종료 예정) — 학생 상세와 같은 컴포넌트·같은 문구.
           🔴 여기선 수정·취소를 주지 않는다: 한 반에서 여러 학생을 한꺼번에 다루는 자리라
              오클릭 피해가 크고, 개별 정정은 그 학생 상세에서 하는 것이 원장 확정 규약이다. */}
-      <ScheduledChangeBanner changes={scheduledRoster} today={today} subject="class" />
+      <ScheduledChangeBanner changes={scheduledRoster} today={today} subject="class" lang={lang} />
 
       {klass.pendingTeacherId ? (
         <HandoverBanner
@@ -292,6 +320,7 @@ export default async function ClassDetailPage({
           pendingDate={klass.pendingTeacherDate}
           reason={klass.pendingTeacherReason}
           due={handoverDue}
+          canAct={canEditClass}
         />
       ) : null}
 
@@ -300,23 +329,38 @@ export default async function ClassDetailPage({
           {/* 좌 그룹 제목 — 우측 '수강 중인 학생'과 대칭(영역 구분 규약). */}
           <header className="flex items-center gap-2">
             <Info className="text-primary size-4" />
-            <h2 className="text-foreground text-sm font-bold">반 정보</h2>
+            <h2 className="text-foreground text-sm font-bold">{sheetT(lang, "cls.d.info")}</h2>
           </header>
-          <Card title="시간표" icon={<CalendarClock className="size-3.5" />}>
-            <ScheduleSummaryView schedule={schedule} />
+          <Card title={sheetT(lang, "cls.d.timetable")} icon={<CalendarClock className="size-3.5" />}>
+            <ScheduleSummaryView schedule={schedule} lang={lang} />
           </Card>
 
-          <Card title="최근 30일 출결">
+          <Card title={sheetT(lang, "cls.d.att30")}>
             <dl className="grid grid-cols-2 gap-3 text-sm">
-              <Stat label="출석률" value={`${stats.rate.toFixed(1)}%`} highlight="text-chart-2" />
-              <Stat label="총 건수" value={String(stats.total)} unit="건" />
-              <Stat label="결석" value={String(stats.absent)} unit="건" highlight="text-chart-4" />
-              <Stat label="지각" value={String(stats.late)} unit="건" highlight="text-chart-3" />
+              <Stat label={sheetT(lang, "cls.d.rate")} value={`${stats.rate.toFixed(1)}%`} highlight="text-chart-2" />
+              <Stat
+                label={sheetT(lang, "cls.d.records")}
+                value={String(stats.total)}
+                unit={sheetT(lang, "cls.d.unitCount")}
+              />
+              {/* 🔴 출결 상태 이름은 `seatMarkLabelOf` 단일 소스 — 여기서 낱말을 새로 짓지 않는다. */}
+              <Stat
+                label={seatMarkLabelOf("absent", lang)}
+                value={String(stats.absent)}
+                unit={sheetT(lang, "cls.d.unitCount")}
+                highlight="text-chart-4"
+              />
+              <Stat
+                label={seatMarkLabelOf("late", lang)}
+                value={String(stats.late)}
+                unit={sheetT(lang, "cls.d.unitCount")}
+                highlight="text-chart-3"
+              />
             </dl>
           </Card>
 
           {klass.notes ? (
-            <Card title="메모">
+            <Card title={sheetT(lang, "cls.col.notes")}>
               <p className="text-foreground text-sm whitespace-pre-wrap leading-relaxed">
                 {klass.notes}
               </p>
@@ -329,21 +373,25 @@ export default async function ClassDetailPage({
           <header className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Users className="text-primary size-4" />
-              <h2 className="text-foreground text-sm font-bold">수강 중인 학생</h2>
+              <h2 className="text-foreground text-sm font-bold">{sheetT(lang, "cls.d.roster")}</h2>
             </div>
             {/* 🔴 예정(아직 안 온 학생)을 오늘 수와 **합쳐 세지 않는다**(2026-08-29) — 미래 시작 수강이
                 이미 DB에 있어서(실측 28건) 합치면 9/1부터 올 학생이 오늘 재원생으로 보인다. */}
             <p className="text-muted-foreground num text-xs">
-              {students.filter((s) => s.phase !== "upcoming").length}명
+              {sheetTf(lang, "cls.d.rosterCount", {
+                n: students.filter((s) => s.phase !== "upcoming").length,
+              })}
               {upcoming.length > 0 ? (
-                <span className="text-blue ml-1.5 font-medium">· 예정 {upcoming.length}</span>
+                <span className="text-blue ml-1.5 font-medium">
+                  {sheetTf(lang, "cls.d.upcomingCount", { n: upcoming.length })}
+                </span>
               ) : null}
             </p>
           </header>
           <section className="bg-card border-border rounded-2xl border">
             {students.length === 0 ? (
               <div className="text-muted-foreground px-5 py-8 text-center text-sm">
-                활성 재원생이 없습니다
+                {sheetT(lang, "cls.d.rosterEmpty")}
               </div>
             ) : (
               <ul className="divide-border divide-y">
@@ -359,7 +407,7 @@ export default async function ClassDetailPage({
                         {/* 아직 안 온 학생 — 표시가 없으면 오늘 다니는 학생과 구분이 안 된다. */}
                         {s.phase === "upcoming" ? (
                           <span className="text-blue bg-blue-soft num rounded-md px-1.5 py-0.5 text-xs font-semibold">
-                            {monthDay(s.enrolledAt)}부터
+                            {sheetTf(lang, "cls.d.fromDate", { md: monthDay(s.enrolledAt) })}
                           </span>
                         ) : null}
                       </p>
@@ -376,7 +424,7 @@ export default async function ClassDetailPage({
                               {attendanceBadge(s.attendanceDays)}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground text-xs">모두</span>
+                            <span className="text-muted-foreground text-xs">{sheetT(lang, "cls.d.allDays")}</span>
                           )}
                         </EditableAttendanceCell>
                       ) : attendanceBadge(s.attendanceDays) ? (
@@ -399,13 +447,13 @@ export default async function ClassDetailPage({
                             <span className="num">{s.endDate}</span>
                           </>
                         ) : (
-                          "~ 현재"
+                          sheetT(lang, "cls.d.toNow")
                         )}
                       </span>
                       {/* 휴원 = caution(amber) — 학생목록·상세 배지와 같은 색(종전엔 chart-3 직접 참조). */}
                       {s.onHold ? (
                         <span className="text-amber bg-amber-soft border-amber/25 rounded-md border px-2 py-0.5 text-xs font-medium">
-                          휴원
+                          {sheetT(lang, "cls.d.onHold")}
                         </span>
                       ) : null}
                       {/* 반에서 바로 끝낸다(원장 2026-09-01) — 학생 상세까지 들어가지 않게.

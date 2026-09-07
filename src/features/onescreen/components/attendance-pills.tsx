@@ -22,6 +22,8 @@ import { useEffect, useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { effectiveUnits, formatSessionUnits } from "@/features/attendance/session-units";
 import { ATT_SOLID } from "@/features/attendance/status-color";
+import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export type BasicAttendance = "present" | "late" | "absent";
 /** 저장 부가값 — 넘기지 않은 필드는 서버가 기존 값을 유지한다(setAttendanceCell 규약). */
@@ -30,14 +32,8 @@ export type AttendanceExtra = { note?: string | null; units?: string };
 const BASIC: readonly BasicAttendance[] = ["present", "late", "absent"];
 /** 사유 메모를 물어보는 상태. */
 const NEEDS_NOTE: ReadonlySet<string> = new Set(["late", "absent"]);
-const LABEL: Record<string, string> = {
-  present: "출석",
-  late: "지각",
-  absent: "결석",
-  early_leave: "조퇴",
-  excused: "공결",
-  makeup: "보강",
-};
+// 🔴 라벨 사본을 두지 않는다 — 앱 전역 `attendanceLabelOf`(한·영 표가 나란한 단일 소스)를 그대로 쓴다.
+//    예전 로컬 맵은 상태가 늘 때 따라오지 못해 raw enum이 새는 계열이었다(팔레트 v4 감사와 같은 결).
 /**
  * 활성색 = [`status-color.ts`](src/features/attendance/status-color.ts) 단일 소스(`ATT_SOLID`).
  * ⚠️ v4 이전 출석=primary(네이비)는 출석부 격자의 민트와 어긋났다 — 같은 '출석'은 어디서나 초록 계열.
@@ -71,6 +67,9 @@ export function AttendancePills({
    */
   showUnits?: boolean;
 }) {
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   // ⚠️ 권한이 없으면 **버튼을 아예 내보내지 않는다**(2026-07-21 원장 제보) — 예전엔 pill이 그대로 눌려서
   // 서버가 "출석 관리 권한이 없습니다"로 거절했고, 강사는 왜 안 되는지 모른 채 계속 눌렀다.
   // 할 수 없는 일을 할 수 있는 것처럼 보여주지 않는다(#77의 반대 방향 사례).
@@ -78,9 +77,9 @@ export function AttendancePills({
     return (
       <span
         className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-xs font-bold"
-        title="출결 입력 권한이 없습니다 — 학원설정(역할·권한)에서 원장님이 열어줄 수 있습니다"
+        title={t("os.att.noPerm")}
       >
-        {value ? (LABEL[value] ?? value) : "출결 —"}
+        {value ? (attendanceLabelOf(value, lang) ?? value) : t("os.att.empty")}
       </span>
     );
   }
@@ -88,15 +87,15 @@ export function AttendancePills({
     return (
       <span
         className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-xs font-bold"
-        title="조퇴·공결·보강 상태는 출석부에서 변경하세요 (원스크린 pill은 출석/지각/결석만)"
+        title={t("os.att.otherStates")}
       >
-        {LABEL[value] ?? value}
+        {attendanceLabelOf(value, lang) ?? value}
       </span>
     );
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
-      <span className="inline-flex gap-0.5" role="group" aria-label={`${studentName} 출결`}>
+      <span className="inline-flex gap-0.5" role="group" aria-label={tf("os.att.group", { name: studentName })}>
         {BASIC.map((s) => (
           <StatusPill
             key={s}
@@ -147,6 +146,10 @@ function StatusPill({
   const [open, setOpen] = useState(false);
   const asks = NEEDS_NOTE.has(status);
 
+  const lang = useSheetLang();
+  const tf = useSheetTf();
+  // 라벨은 앱 전역 단일 소스 — 모르는 상태는 enum 대신 그대로(폴백 규약).
+  const label = attendanceLabelOf(status, lang) ?? status;
   const pill = (
     <button
       type="button"
@@ -160,17 +163,17 @@ function StatusPill({
       title={
         asks
           ? active
-            ? `${LABEL[status]} — 사유 메모 수정 (기록 지우기는 출석부에서)`
-            : `${LABEL[status]}로 기록 — 사유 메모를 적을 수 있습니다`
+            ? tf("os.att.editNote", { label })
+            : tf("os.att.markWithNote", { label })
           : active
-            ? `${LABEL[status]} (기록 지우기는 출석부에서)`
-            : `${LABEL[status]}로 기록`
+            ? tf("os.att.already", { label })
+            : tf("os.att.mark", { label })
       }
       className={`rounded-pill px-1.5 py-px text-xs font-bold transition disabled:opacity-50 ${
         active ? ON_CLS[status] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
       }`}
     >
-      {LABEL[status]}
+      {label}
       {/* 메모가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다. */}
       {active && note ? (
         <span aria-hidden className="ml-0.5 align-middle text-xs">
@@ -192,7 +195,7 @@ function StatusPill({
             <NoteForm
               key={note}
               initial={note}
-              label={`${studentName} · ${LABEL[status]} 사유`}
+              label={tf("os.att.noteLabel", { name: studentName, label })}
               onCancel={() => setOpen(false)}
               onSave={(text) => {
                 onSet(status, { note: text.trim() || null });
@@ -223,6 +226,7 @@ export function NoteForm({
   onSave: (text: string) => void;
   onCancel: () => void;
 }) {
+  const t = useSheetT();
   const [text, setText] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -244,7 +248,7 @@ export function NoteForm({
           if (e.key === "Escape") onCancel();
         }}
         rows={2}
-        placeholder="예: 학원버스 지연 / 병결(부모 연락)"
+        placeholder={t("os.att.notePh")}
         className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-xs outline-none"
       />
       <div className="flex items-center justify-end gap-1">
@@ -253,14 +257,14 @@ export function NoteForm({
           onClick={onCancel}
           className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-xs"
         >
-          취소
+          {t("os.att.cancel")}
         </button>
         <button
           type="button"
           onClick={() => onSave(text)}
           className="bg-primary text-primary-foreground cursor-pointer rounded-md px-2 py-0.5 text-xs font-bold"
         >
-          저장
+          {t("os.att.save")}
         </button>
       </div>
     </div>
@@ -302,6 +306,8 @@ export function SessionUnitsField({
    */
   box?: string;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const saved = effectiveUnits(units);
   const [draft, setDraft] = useState<string | null>(null); // null = 편집 중 아님(서버 값 표시)
   const savedText = formatSessionUnits(saved);
@@ -312,7 +318,7 @@ export function SessionUnitsField({
     return big ? (
       <span
         className="text-text-faint block text-center text-sm"
-        title="결석은 수업타임(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다"
+        title={t("os.units.absent")}
       >
         —
       </span>
@@ -325,7 +331,7 @@ export function SessionUnitsField({
       inputMode="decimal"
       value={draft ?? savedText}
       disabled={pending}
-      aria-label={`${studentName} 수업타임`}
+      aria-label={tf("os.units.aria", { name: studentName })}
       onChange={(e) => setDraft(e.target.value)}
       onFocus={(e) => e.currentTarget.select()}
       onBlur={(e) => {
@@ -354,9 +360,9 @@ export function SessionUnitsField({
     <span
       className={`inline-flex items-center gap-1 ${big ? "justify-center" : ""}`}
       title={
-        `${studentName} 수업타임 — 기본 1타임. 한 타임 더 했으면 2로 고치면 출석부에 그대로 들어갑니다.` +
-        (status ? "" : " (지금 출결이 비어 있어 '출석'으로 함께 기록됩니다)") +
-        " ※ 학부모 보고서에는 나가지 않습니다. 급여 시수에는 반영됩니다."
+        tf("os.units.title", { name: studentName }) +
+        (status ? "" : t("os.units.titleNoStatus")) +
+        t("os.units.titleTail")
       }
     >
       {label ? <span className="text-text-faint text-xs font-bold whitespace-nowrap">{label}</span> : null}

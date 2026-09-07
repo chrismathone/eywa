@@ -160,6 +160,8 @@ export const AUDIT_ACTIONS = {
   // 기능이라(원장 지시) 이 로그가 유일한 역검수 근거다.
   teacher_view_impersonate: "다른 강사 뷰 열람",
   staff_teacher_view_access: "강사뷰 접근 토글 변경",
+  // 🔴 **화면 글자만** 바뀐다 — 담임·원어민 판정과 무관한 축이다(0248a 주석).
+  staff_teacher_view_lang: "강사 화면 기본 언어 변경",
   // 회의록(2026-08-25 원장 제보 "감사로그에 녹음 관련 이력이 하나도 없다") — 빠뜨린 게 아니라
   // **처음부터 배선이 없던 영역**이었다(액션 9개 중 logAction 0). 🔴 특히 meeting_delete는 녹음·전사·
   // AI 분석이 통째로 사라지는데 누가 지웠는지 역추적할 방법이 0이었다(학생 퇴원 사고와 같은 모양).
@@ -203,6 +205,8 @@ export const AUDIT_ACTIONS = {
   inventory_audit: "자산 실사 기록",
   inventory_supply_update: "소모품 수량 수정",
   inventory_excel_import: "재고관리 엑셀 반영",
+  // 분류(0247a) — 엑셀에 없는 분류를 적으면 확인 뒤 자동으로 만들어진다(삭제·이름변경 경로는 아직 없다).
+  inventory_category_create: "자산 분류 추가",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

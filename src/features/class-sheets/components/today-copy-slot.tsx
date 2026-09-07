@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { copySlotFromPrevious } from "../server/actions";
 import type { CarryPatch } from "../lib/carry-marks";
 import type { SheetSaveStore } from "./use-sheet-saves";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export function TodayCopySlot({
   classId,
@@ -39,12 +40,14 @@ export function TodayCopySlot({
   onCarried?: (slotStart: string, patches: CarryPatch[]) => void;
 }) {
   const router = useRouter();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const [busy, setBusy] = useState(false);
   return (
     <button
       type="button"
       disabled={busy}
-      title="지난 수업일에서 평시 계획을 가져옵니다 — 강사 수업은 같은 요일·같은 교시, JJ 교시는 같은 교시가 원본입니다(요일마다 교재가 달라서). 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)"
+      title={t("today.copy.title")}
       className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold disabled:cursor-default disabled:opacity-60"
       onClick={() => {
         setBusy(true);
@@ -52,9 +55,7 @@ export function TodayCopySlot({
           .flush()
           .then((flushed) => {
             if (!flushed.ok) {
-              const go = window.confirm(
-                "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 지난 수업 내용을 복사할까요? (입력을 잃을 수 있습니다)",
-              );
+              const go = window.confirm(t("today.copy.unsaved"));
               if (!go) return;
             }
             return copySlotFromPrevious({ classId, planDate: date, slotStart, termMode: "regular" }).then((r) => {
@@ -63,23 +64,25 @@ export function TodayCopySlot({
               if (r.carried.length > 0) onCarried?.(slotStart, r.carried);
               if (r.carryError) toast.error(r.carryError);
               if (r.carryPending) {
-                toast.info("듣기 레벨·누적 암기 단어수 칸은 아직 준비 중입니다(관리자에게 문의하세요)");
+                toast.info(t("today.copy.carryPending"));
               }
               if (r.copied === 0 && r.carrySummary) {
-                toast.success(`${r.carrySummary} 채웠습니다 — 지난 기록 값이라 바뀐 학생은 고쳐 주세요`);
+                toast.success(tf("today.copy.carriedOnly", { summary: r.carrySummary }));
                 return;
               }
               if (r.copied === 0) {
                 // 서버가 "조용히 성공한 척"을 안 한다 — 사유를 그대로 잇는다(raw 코드는 한글로).
                 // ⚠️ target_not_empty는 0209a 적용 전(옛 함수)에만 온다.
                 return void toast.info(
-                  r.reason === "target_already_filled"
-                    ? "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)"
-                    : r.reason === "target_not_empty"
-                      ? "이미 계획이 있는 교시라 복사하지 않았습니다(덮어쓰기 없음)"
-                      : r.sameDow === true
-                        ? "복사할 지난 같은 요일 수업이 없습니다(최근 8주 안에 같은 요일·같은 교시의 평시 계획이 없습니다)"
-                        : "복사할 지난 수업이 없습니다(최근 8주 안에 같은 교시의 평시 계획이 없습니다)",
+                  t(
+                    r.reason === "target_already_filled"
+                      ? "today.copy.none.filled"
+                      : r.reason === "target_not_empty"
+                        ? "today.copy.none.notEmpty"
+                        : r.sameDow === true
+                          ? "today.copy.none.sameDow"
+                          : "today.copy.none.any",
+                  ),
                 );
               }
               // 갱신된 행의 CAS 시드를 다시 심는다(위 🔴) — refresh는 화면 값만 바꾸고 시드는 안 고친다.
@@ -91,21 +94,24 @@ export function TodayCopySlot({
                 store.seed(l.id, "skill_area", l.skillArea);
               }
               toast.success(
-                `${r.sourceLabel ? `${r.sourceLabel} 수업에서 ` : ""}${r.copied}줄 채웠습니다` +
-                  (r.carrySummary ? ` · ${r.carrySummary} 채움` : "") +
-                  (r.truncated > 0 ? ` — ${r.truncated}줄은 20줄 상한이라 못 넣었습니다` : ""),
+                tf("today.copy.done", {
+                  source: r.sourceLabel ? tf("today.copy.done.source", { label: r.sourceLabel }) : "",
+                  n: r.copied,
+                }) +
+                  (r.carrySummary ? tf("today.copy.done.carry", { summary: r.carrySummary }) : "") +
+                  (r.truncated > 0 ? tf("today.copy.done.truncated", { n: r.truncated }) : ""),
               );
               router.refresh();
             });
           })
           // 서버 액션 reject(네트워크 단절 등)면 아무 피드백 없이 버튼만 풀린다 — 에러를 말한다(적대 리뷰).
-          .catch(() => toast.error("내용 복사에 실패했습니다 — 네트워크 연결을 확인해 주세요"))
+          .catch(() => toast.error(t("today.copy.failed")))
           .finally(() => setBusy(false));
       }}
     >
       {/* '평시'를 라벨에 밝힌다 — 내신 기간에 이 버튼이 하는 일(평시 계획 복사)이 툴팁 없이도 보이게.
           출처('지난 수업')도 라벨에 — "오늘 직전 차시인지 전날인지" 헷갈린다는 지적이 이 문구의 출발점이다. */}
-      {busy ? "복사 중…" : "평시 내용 복사 (지난 수업)"}
+      {busy ? t("today.copy.busy") : t("today.copy")}
     </button>
   );
 }

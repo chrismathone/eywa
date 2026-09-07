@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { humanizeClassnoteError } from "./classnote-error";
+import { humanizeClassnoteError } from "./classnote-error";
+// 워커의 kage 실패 사유는 **순수 .mjs**에 산다(워커가 TS를 못 import — vitest.config가 그래서 그 폴더를 픽업).
+// 여기서 그 함수를 직접 불러 "문구가 이 화면을 사람 문장으로 통과하는가"를 실물로 잠근다(리터럴 복사 금지 — 갈린다).
+import { kageFailureReason } from "../../../scripts/_classnote/kage-failure.mjs";
 
 describe("humanizeClassnoteError", () => {
   it("빈 값 → null", () => {
@@ -74,5 +77,38 @@ describe("HTTP 409(중복 거부)", () => {
 
   it("⚠️ 더 구체적인 기존 사유가 있으면 그쪽이 이긴다(409 분기가 덮지 않게)", () => {
     expect(humanizeClassnoteError("해당 학생 없음")).toContain("초대");
+  });
+});
+
+describe("🔴 kage 업로드 실패 사유(워커) — 패턴표가 덮어쓰지 않는다", () => {
+  // 2026-09-04: 스샷 경로가 네 갈래를 "스샷 kage 업로드 실패" 한 줄로 뭉개던 것을 갈랐다.
+  // 그 문장이 여기서 **그대로** 나와야 원장이 원인을 읽는다 — 덮어써지면 고친 의미가 사라진다.
+  const cases = [
+    { kind: "empty" },
+    { kind: "no_input" },
+    { kind: "rejected", status: 413 },
+    { kind: "timeout", waitedMs: 12000 },
+  ];
+
+  it("네 갈래 전부 원문 그대로 통과", () => {
+    for (const c of cases) {
+      const reason = kageFailureReason({ subject: "보고서 이미지", ...c });
+      expect(humanizeClassnoteError(reason), c.kind).toBe(reason);
+    }
+  });
+
+  it("기술 원문이 꼬리에 붙어도 통과 — 붙이는 쪽이 신호를 걷어내기 때문", () => {
+    const nasty = "TypeError: setInputFiles failed at page.mjs:120:9 net::ERR_ABORTED https://kids-kage.kakao.com/u";
+    for (const c of cases) {
+      const reason = kageFailureReason({ subject: "보고서 이미지", ...c, detail: nasty });
+      expect(humanizeClassnoteError(reason), c.kind).toBe(reason);
+    }
+  });
+
+  it("'이미지'라는 낱말이 들어가도 '보고서 이미지 생성 실패'로 오진되지 않는다", () => {
+    // 패턴표에 /스크린샷|이미지/ 가 있다 — 사람 문장 판정이 먼저 걸리는 덕에 살아남는다.
+    const reason = kageFailureReason({ subject: "보고서 이미지", kind: "timeout", waitedMs: 12000 });
+    expect(reason).toContain("이미지");
+    expect(humanizeClassnoteError(reason)).not.toContain("생성 실패");
   });
 });

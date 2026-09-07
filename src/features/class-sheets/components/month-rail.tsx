@@ -8,9 +8,12 @@ import { isOffGoalLine, type MonthGoalMap } from "../lib/goal-match";
 import { SHEET_BOX_FRAME, SHEET_INPUT } from "../ui-box";
 import type { ClassSheetMonthData, MonthPlanLine } from "../server/month-queries";
 import type { GoalField, GoalRole } from "./use-month-goals";
+import { sheetDowLabelByIndex, type SheetLang } from "@/features/teacher-view/i18n";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
-const DOW_KO: Record<number, string> = { 0: "일", 1: "월", 2: "화", 3: "수", 4: "목", 5: "금", 6: "토" };
-const dowKo = (date: string) => DOW_KO[new Date(`${date}T00:00:00Z`).getUTCDay()] ?? "";
+// 요일 글자는 사전 한 벌(`sheetDowLabelByIndex`) — 화면마다 표를 새로 만들면 글자가 갈린다.
+const dowOf = (date: string, lang: SheetLang) =>
+  sheetDowLabelByIndex(new Date(`${date}T00:00:00Z`).getUTCDay(), lang);
 
 /**
  * 월간 **진도표** 보기 — 영역 × 수업일. 달력이 "그날 뭐 하지"라면 이 표는 "이 영역이 한 달 동안
@@ -51,6 +54,9 @@ export function MonthRail({
    */
   onOpenDay: (date: string) => void;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
+  const lang = useSheetLang();
   // 열 = 계획 줄이 하나라도 있는 날(수업은 있는데 아무것도 안 쓴 날까지 세우면 표가 빈 열로 길어진다).
   // ⚠️ **지금 보여 줄 줄**로 센다 — 자리 교시에만 계획이 있는 날은 자리를 접었을 때 셀이 전부 비므로,
   //    `data.lines` 전체로 세면 아무것도 없는 열이 하나 선다.
@@ -58,8 +64,8 @@ export function MonthRail({
   if (days.length === 0) {
     return (
       <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
-        이 달에는 작성된 계획이 없습니다. 수업은 있는데 비어 있다면 <b className="text-foreground">달력</b>에서
-        어느 교시가 미작성인지 볼 수 있습니다.
+        {t("month.rail.empty.a")} <b className="text-foreground">{t("face.cal")}</b>{" "}
+        {t("month.rail.empty.b")}
       </p>
     );
   }
@@ -87,9 +93,9 @@ export function MonthRail({
         <thead>
           <tr>
             <th className="border-line-faint bg-bg-soft sticky left-0 z-[4] min-w-[236px] border-r border-b px-2 py-1.5 text-left text-xs font-bold shadow-[1px_0_0_var(--line)]">
-              영역 · 월간 목표
+              {t("month.rail.goalHead")}
               <span className={`ml-2 font-semibold ${savedAt ? "text-green" : "text-text-faint"}`}>
-                {savedAt ? "저장됨" : "주간 시트와 같은 칸"}
+                {t(savedAt ? "toolbar.saved" : "month.goal.sameAsWeek")}
               </span>
             </th>
             {days.map((date) => {
@@ -113,8 +119,10 @@ export function MonthRail({
                     onClick={() => onOpenDay(date)}
                     title={
                       holiday
-                        ? `${holiday} — 휴일입니다. 누르면 이 날 계획을 여기서 ${canEdit ? "고칩니다" : "봅니다"}`
-                        : `누르면 이 날 계획을 여기서 ${canEdit ? "고칩니다" : "봅니다"}`
+                        ? `${tf(canEdit ? "month.cell.holiday.edit" : "month.cell.holiday.view", {
+                            holiday,
+                          })}`
+                        : t(canEdit ? "month.cell.edit" : "month.cell.view")
                     }
                     className="hover:text-primary w-full cursor-pointer px-2 py-1.5 font-bold"
                   >
@@ -127,7 +135,7 @@ export function MonthRail({
                     <span
                       className={`font-semibold ${holiday && !offDays.has(date) ? "text-danger" : "text-text-faint"}`}
                     >
-                      {holiday ?? dowKo(date)}
+                      {holiday ?? dowOf(date, lang)}
                     </span>
                   </button>
                 </th>
@@ -154,16 +162,16 @@ export function MonthRail({
                         className={SHEET_INPUT}
                         defaultValue={goal.textbook ?? ""}
                         readOnly={!canEdit}
-                        placeholder="교재명"
-                        aria-label={`${area.label} 월간 목표 교재명`}
+                        placeholder={t("month.goal.book")}
+                        aria-label={tf("month.goal.bookAria", { area: area.label })}
                         onChange={(e) => onField("homeroom", area.key, "textbook", e.target.value)}
                       />
                       <input
                         className={SHEET_INPUT}
                         defaultValue={goal.targetProgress ?? ""}
                         readOnly={!canEdit}
-                        placeholder="목표"
-                        aria-label={`${area.label} 목표 진도`}
+                        placeholder={t("month.goal.target")}
+                        aria-label={tf("month.goal.targetAria", { area: area.label })}
                         onChange={(e) => onField("homeroom", area.key, "targetProgress", e.target.value)}
                       />
                     </div>
@@ -202,7 +210,7 @@ export function MonthRail({
                             </span>
                             {display.homework && line.homework ? (
                               <span className="text-text-faint text-xs">
-                                <b>과제</b> {line.homework}
+                                <b>{t("plan.col.homework")}</b> {line.homework}
                               </span>
                             ) : null}
                           </div>
@@ -218,7 +226,7 @@ export function MonthRail({
         <tfoot>
           <tr>
             <th className="border-line-strong sticky left-0 z-[3] border-t border-r bg-white px-2 py-1.5 text-left text-xs font-normal shadow-[1px_0_0_var(--line)]">
-              그날 계획 / 배정 교시
+              {t("month.rail.footer")}
             </th>
             {days.map((date) => {
               const slots = data.slotsByDate[date] ?? [];

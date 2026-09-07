@@ -1994,7 +1994,10 @@ export const dailyBriefings = pgTable(
 );
 
 // === assistant_conversations (운영실 AI 비서 대화 — 0117a 손수 alpha) ===
-// 대화 1건 = 1행. messages jsonb는 표시용 텍스트 턴만([{role,content,at}] — turns.ts가 파싱 단일 소스).
+// 🔴 **폐지된 기능의 잔존 표**(원장 2026-09-03: *"대화형 비서 제거. 필요없음."*) — 읽는 코드도 쓰는 코드도
+// 이제 없다. 정의만 남긴 이유는 표가 프로덕션에 실재하기 때문이다(지우면 drizzle이 DROP을 만들어
+// 과거 대화가 소실된다). 표를 실제로 없앨지는 원장 결정 사항이라 여기서 손대지 말 것.
+// 대화 1건 = 1행. messages jsonb는 표시용 텍스트 턴만([{role,content,at}]).
 // RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(권한 자동 상속), service_role 불사용.
 export const assistantConversations = pgTable(
   "assistant_conversations",

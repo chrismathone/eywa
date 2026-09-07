@@ -8,6 +8,7 @@
 // 서버·클라 시계 차이로 인한 hydration 불일치가 원천적으로 없다(#25 setState-in-effect도 회피).
 import { useSyncExternalStore } from "react";
 import { classnoteSendWindowHint } from "../classnote-guard";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 const TICK_MS = 30_000;
 
@@ -17,6 +18,8 @@ function subscribe(onChange: () => void): () => void {
 }
 
 export function SendWindowNotice({ start, end }: { start: string; end: string }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const hint = useSyncExternalStore(
     subscribe,
     () => classnoteSendWindowHint(start, end),
@@ -26,8 +29,8 @@ export function SendWindowNotice({ start, end }: { start: string; end: string })
   return (
     <div className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-xs">
       {/* "수업 보고서" 한정 표기 — 반 공지는 시간창 미적용(G1 확정)이라 ClassNote 전체로 말하면 과약속. */}
-      <span className="text-foreground font-bold">수업 보고서 발송 시간대 {hint}</span>
-      <span> — 지금은 시간대 밖입니다. 발송하면 예약돼 시간대가 열릴 때 자동 발송됩니다.</span>
+      <span className="text-foreground font-bold">{tf("os.sw.title", { hint })}</span>
+      <span>{t("os.sw.body")}</span>
     </div>
   );
 }

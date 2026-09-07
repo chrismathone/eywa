@@ -71,7 +71,6 @@ export function DayBoardClient({
   vehicles,
   runs,
   logs,
-  absentStudentIds,
   canWrite,
   initialDirection,
   exceptions,
@@ -87,8 +86,6 @@ export function DayBoardClient({
   vehicles: ShuttleVehicle[];
   runs: ShuttleRun[];
   logs: BoardingLog[];
-  /** 그날 출결이 결석·사유결석인 학생 — 🔴 표시만(셔틀 배정·기록을 바꾸지 않는다). */
-  absentStudentIds: string[];
   canWrite: boolean;
   /** 계정에 저장된 등하원 보기(`users.ui_prefs.shuttleToday`) — 저녁마다 다시 누르지 않게. */
   initialDirection: DirectionFilter;
@@ -127,7 +124,6 @@ export function DayBoardClient({
     void saveShuttleTodayPrefs({ direction: next });
   }
 
-  const absentSet = useMemo(() => new Set(absentStudentIds), [absentStudentIds]);
   const tripByRun = useMemo(() => new Map(trips), [trips]);
 
   /**
@@ -285,9 +281,6 @@ export function DayBoardClient({
           // 🔴 정류장 선택지는 **회차 전부**에서 만든다 — 그날 명단(byRun)은 "타는 사람이 있는
           //    회차"만 남긴 목록이라, 오늘 아무도 안 타는 회차엔 학생을 넣을 수 없게 된다.
           allRuns={runs}
-          // 🔴 '오늘 안 탐' 후보는 등하원 필터를 **걸기 전** 명단이다 — '등원'만 보고 있다고 해서
-          //    하원 학생을 못 빼면 안 된다(필터는 보기일 뿐 할 수 있는 일을 줄이지 않는다).
-          runRows={byRun}
           vehicles={vehicles}
           students={students}
           exceptions={exceptions}
@@ -312,7 +305,6 @@ export function DayBoardClient({
                   progress={progress}
                   open={open}
                   onToggle={() => setManualOpen((m) => ({ ...m, [run.id]: !open }))}
-                  absentSet={absentSet}
                   date={date}
                   canWrite={canWrite}
                   canEditException={canEditException}

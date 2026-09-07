@@ -25,6 +25,8 @@ import {
   delegationRangeLabel,
   validateDelegationRange,
 } from "@/features/classes/delegation-window";
+// 강사뷰 화면 언어 — provider는 강사 미니셸·창에만 있어 관리자 풀셸은 한국어로 떨어진다.
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 const inputCls =
   "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
@@ -41,11 +43,12 @@ export type ActiveDelegation = {
 
 function SaveBtn({ blocked }: { blocked: boolean }) {
   const { pending } = useFormStatus();
+  const t = useSheetT();
   // 기간이 잘못됐으면 아예 못 누르게 — 서버도 같은 함수로 거절하지만, 왕복해서 같은 말을 듣게 할 이유가 없다.
   return (
     <Button type="submit" size="sm" disabled={pending || blocked}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-      위임
+      {t("cls.dg.submit")}
     </Button>
   );
 }
@@ -64,12 +67,15 @@ function DelegateDialog({
   onClose: () => void;
 }) {
   const [state, formAction] = useActionState<DelegationState, FormData>(createClassDelegation, undefined);
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const today = kstToday();
   // 기본은 **하루**(오늘) — 결근 대체의 압도적 다수가 하루다. 여러 날이면 종료일만 늘린다.
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
   // 서버와 **같은 순수함수**로 미리 알린다(두 벌로 적으면 화면과 서버가 다른 말을 한다).
-  const rangeError = validateDelegationRange(fromDate, toDate);
+  const rangeError = validateDelegationRange(fromDate, toDate, lang);
 
   useEffect(() => {
     if (state?.ok) onClose();
@@ -80,12 +86,12 @@ function DelegateDialog({
       {/* ⚠️ overflow-y-auto/max-h 금지 — SearchableSelect 팝업(absolute)이 잘린다(인수인계 다이얼로그와 동일). */}
       <div className="bg-background border-border w-full max-w-md rounded-lg border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
-          <h2 className="text-foreground text-lg font-bold">임시 위임</h2>
+          <h2 className="text-foreground text-lg font-bold">{t("cls.dg.dialogTitle")}</h2>
           <button
             type="button"
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground"
-            aria-label="닫기"
+            aria-label={t("cls.ho.close")}
           >
             <X className="size-4" />
           </button>
@@ -94,30 +100,33 @@ function DelegateDialog({
         <form action={formAction} className="space-y-3">
           <input type="hidden" name="classId" value={classId} />
           <p className="text-muted-foreground text-xs">
-            <span className="text-foreground font-medium">{className}</span> 반을 이 기간에만 다른 선생님이
-            대신 맡습니다. 담임(<span className="text-foreground">{currentTeacherName ?? "미정"}</span>)은
-            <span className="text-foreground font-medium"> 그대로</span>이고, 기간이 지나면 저절로 원래대로
-            돌아옵니다.
+            <span className="text-foreground font-medium">{className}</span>
+            {t("cls.dg.introA")}
+            <span className="text-foreground">{currentTeacherName ?? t("cls.ho.teacherNone")}</span>
+            {t("cls.dg.introB")}
+            <span className="text-foreground font-medium">{t("cls.dg.introC")}</span>
+            {t("cls.dg.introD")}
           </p>
 
           <div className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">대신 맡을 선생님 *</span>
+            <span className="text-foreground block text-sm font-medium">{t("cls.dg.delegate")}</span>
             <SearchableSelect
               name="delegateUserId"
               options={teacherOptions.map((t) => ({ value: t.id, label: t.name, hint: t.hint }))}
-              placeholder="선생님 선택"
-              searchPlaceholder="이름으로 검색..."
-              ariaLabel="대신 맡을 선생님"
+              placeholder={t("cls.dg.pickTeacher")}
+              searchPlaceholder={t("cls.ho.searchName")}
+              ariaLabel={t("cls.dg.delegateAria")}
             />
             <p className="text-text-faint text-xs">
-              선택한 선생님의 원스크린 반 목록에 이 반이 <span className="text-amber font-bold">위임</span>으로
-              뜹니다. 표 모드·임시저장·발송이 자기 반과 똑같이 동작합니다.
+              {t("cls.dg.hintA")}
+              <span className="text-amber font-bold">{t("cls.dg.hintB")}</span>
+              {t("cls.dg.hintC")}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <label className="block space-y-1.5">
-              <span className="text-foreground block text-sm font-medium">시작일 *</span>
+              <span className="text-foreground block text-sm font-medium">{t("cls.dg.fromDate")}</span>
               <input
                 name="fromDate"
                 type="date"
@@ -131,7 +140,7 @@ function DelegateDialog({
               />
             </label>
             <label className="block space-y-1.5">
-              <span className="text-foreground block text-sm font-medium">종료일 *</span>
+              <span className="text-foreground block text-sm font-medium">{t("cls.dg.toDate")}</span>
               <input
                 name="toDate"
                 type="date"
@@ -143,13 +152,14 @@ function DelegateDialog({
             </label>
           </div>
           <p className="text-text-faint text-xs">
-            하루만 맡기면 두 날짜를 같게 둡니다(기본). 최대 {DELEGATION_MAX_DAYS}일 — 더 길면 담임을 바꾸는
-            <span className="text-foreground"> 강사 인수인계</span>가 맞습니다.
+            {tf("cls.dg.maxHintA", { n: DELEGATION_MAX_DAYS })}
+            <span className="text-foreground">{t("cls.dg.maxHintB")}</span>
+            {t("cls.dg.maxHintC")}
           </p>
 
           <label className="block space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">사유 메모</span>
-            <textarea name="reason" rows={2} className={`${inputCls} resize-y`} placeholder="선택" />
+            <span className="text-foreground block text-sm font-medium">{t("cls.ho.reason")}</span>
+            <textarea name="reason" rows={2} className={`${inputCls} resize-y`} placeholder={t("cls.ho.optional")} />
           </label>
 
           {rangeError || state?.error ? (
@@ -161,7 +171,7 @@ function DelegateDialog({
 
           <div className="border-border flex items-center justify-end gap-2 border-t pt-3">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              취소
+              {t("cls.ho.cancel")}
             </Button>
             <SaveBtn blocked={rangeError != null} />
           </div>
@@ -184,11 +194,12 @@ export function DelegateAction({
   teacherOptions: TeacherOption[];
 }) {
   const [open, setOpen] = useState(false);
+  const t = useSheetT();
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
         <CalendarClock className="size-4" />
-        임시 위임
+        {t("cls.dg.open")}
       </Button>
       {open ? (
         <DelegateDialog
@@ -205,6 +216,7 @@ export function DelegateAction({
 
 function RevokeBtn() {
   const { pending } = useFormStatus();
+  const t = useSheetT();
   return (
     <button
       type="submit"
@@ -212,7 +224,7 @@ function RevokeBtn() {
       className="border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs disabled:opacity-50"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : null}
-      해제
+      {t("cls.dg.revoke")}
     </button>
   );
 }
@@ -233,12 +245,15 @@ export function DelegationBanner({
   // 🔴 상태를 버리면(`const [, action]`) 해제 실패가 **아무 표시 없이** 사라진다 — 권한이 없거나 경합으로
   //    거절돼도 화면은 그대로라 "눌렀는데 아무 일도 안 일어남"이 된다(gotcha #67 계열). 반드시 보여준다.
   const [state, revokeAction] = useActionState<DelegationState, FormData>(revokeClassDelegation, undefined);
+  const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   if (rows.length === 0) return null;
   return (
     <div className="border-amber/30 bg-amber-soft/50 space-y-2 rounded-lg border px-4 py-3">
       <p className="text-amber inline-flex items-center gap-1.5 text-sm font-bold">
         <CalendarClock className="size-4" />
-        임시 위임 {rows.length}건 — 담임은 그대로입니다
+        {tf("cls.dg.bannerTitle", { n: rows.length })}
       </p>
       {state?.error ? (
         <p className="text-danger inline-flex items-start gap-1.5 text-sm">
@@ -253,17 +268,17 @@ export function DelegationBanner({
           return (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-foreground flex flex-wrap items-center gap-1.5 text-sm">
-                <span className="font-bold">{r.delegateName ?? "이름 없음"}</span>
+                <span className="font-bold">{r.delegateName ?? t("cls.dg.nameNone")}</span>
                 <span className="text-text-dim num text-xs">
-                  {delegationRangeLabel(r.fromDate, r.toDate)}
+                  {delegationRangeLabel(r.fromDate, r.toDate, lang)}
                 </span>
-                {/* 상태는 한글로 — 화면에 영문 키를 내보내지 않는다. */}
+                {/* 상태는 사전에서 — 화면에 영문 키(raw enum)를 내보내지 않는다. */}
                 <span
                   className={`rounded px-1.5 py-0.5 text-xs font-bold ${
                     active ? "bg-amber text-white" : "border-border text-text-dim border"
                   }`}
                 >
-                  {active ? "진행 중" : upcoming ? "예정" : "종료"}
+                  {t(active ? "cls.dg.active" : upcoming ? "cls.dg.upcoming" : "cls.dg.ended")}
                 </span>
                 {r.reason ? <span className="text-text-dim text-xs">{r.reason}</span> : null}
               </span>

@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { monthDay } from "@/features/timetable/scheduled-import";
+// 반 이름 영문 표기(원장 2026-09-03).
+// 🔴 언어를 이 컴포넌트가 **직접 읽지 않는다**(`await getTeacherViewLang()`) — async 서버 컴포넌트가 되면
+//    RTL이 렌더할 수 없어 이 파일의 단위 테스트 17개가 통째로 죽는다(실측). 페이지가 이미 들고 있는 값을
+//    **prop으로 받는다**. 기본값은 `ko`(= 표기 불변)라 안 넘겨도 화면이 깨지지 않고, 페이지가 넘기는지는
+//    가드(`name-wiring`)가 잠근다.
+import type { SheetLang } from "@/features/teacher-view/i18n";
+import { classNameFor } from "@/features/teacher-view/class-name";
 import type { SheetLandingCard } from "@/features/class-sheets/server/queries";
 import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
 import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landing-summary";
@@ -45,7 +52,16 @@ const PANEL_COLUMNS = "columns-1 gap-x-5 xl:columns-2";
  * ⚠️ 행에서 담임 이름을 뺐다 — 묶음 머리가 그 말을 이미 하고 있다(같은 사실을 두 번 적으면 그게 소음이다).
  * ⚠️ 서버 컴포넌트로 둔다 — 상호작용이 링크뿐이라 클라 번들을 늘릴 이유가 없다(반응속도 1순위).
  */
-export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLandingCard[]; weekMonday: string }) {
+export function EcsLandingList({
+  cards,
+  weekMonday,
+  lang = "ko",
+}: {
+  cards: readonly SheetLandingCard[];
+  weekMonday: string;
+  /** 화면 언어 — 반 이름 표기를 정한다(페이지가 `getTeacherViewLang()`으로 읽어 넘긴다). */
+  lang?: SheetLang;
+}) {
   const s = summarizeLanding(cards);
   const shout = summarizeShouting(cards);
   /**
@@ -152,6 +168,7 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
                   cards={p.cards}
                   weekMonday={weekMonday}
                   columnsClass={PANEL_COLUMNS}
+                  lang={lang}
                   headingLevel="h4"
                 />
               </section>
@@ -159,7 +176,7 @@ export function EcsLandingList({ cards, weekMonday }: { cards: readonly SheetLan
           })}
         </div>
       ) : (
-        <TeacherGroupFlow cards={cards} weekMonday={weekMonday} columnsClass={FULL_COLUMNS} />
+        <TeacherGroupFlow cards={cards} weekMonday={weekMonday} columnsClass={FULL_COLUMNS} lang={lang} />
       )}
     </section>
   );
@@ -172,11 +189,14 @@ function TeacherGroupFlow({
   cards,
   weekMonday,
   columnsClass,
+  lang,
   headingLevel = "h3",
 }: {
   cards: readonly SheetLandingCard[];
   weekMonday: string;
   columnsClass: string;
+  /** 화면 언어 — 반 이름 표기를 정한다(부모가 서버에서 읽어 넘긴다). */
+  lang: SheetLang;
   /** 묶음 제목의 층 — 프로그램 단 안이면 h4(그 단의 h3 아래), 단일 목록이면 h3. */
   headingLevel?: "h3" | "h4";
 }) {
@@ -226,18 +246,21 @@ function TeacherGroupFlow({
                 : "이 주에 배정된 교시가 없습니다";
               // EiE만 숫자가 있다(그 외 null = 칸을 비운다). 분모를 넘지 않게 자르는 것도 여기 한 곳.
               const shoutCount = shoutingCountOf(card);
+              // 🔴 이 카드에서 반 이름이 나오는 자리 넷(제목·예고 문구·접근성 이름·MP 링크)이
+              //    **같은 값**을 봐야 한다 — 한 곳만 원문이면 같은 반이 두 이름으로 읽힌다.
+              const shownName = classNameFor(card.className, lang);
               // 예약된 개명 **예고** 문구 — 한 곳에서만 만든다. 아래 배지 title과 접근성 이름이 같은 말을
               // 해야 하는데 따로 적으면 한쪽만 고쳐진다(배지는 10px라 문구가 곧 설명 전부다).
               // 🔴 **이미 지나간 개명은 아무 말도 하지 않는다**(원장 2026-08-31: *"반이름 변경된 반에
               //    '개명'이라고 남는데 필요없어 그냥 날짜 지나면 반이름 변경되었으면 됨"*). 그 주 이름을
               //    그대로 부르는 것이 곧 답이라, 표식은 앞으로 올 변경(upcoming)에만 남긴다.
               const renameNote = card.classNameUpcoming
-                ? `${monthDay(card.classNameUpcoming.date)}부터 ${card.className} → ${card.classNameUpcoming.name}`
+                ? `${monthDay(card.classNameUpcoming.date)}부터 ${shownName} → ${classNameFor(card.classNameUpcoming.name, lang)}`
                 : null;
               // 🔴 압축의 대가 — "교시 작성"이라는 **단위**가 행에서 사라졌다. 눈으로는 열 머리가
               // 설명하지만 스크린리더는 행만 읽어 "0/5"가 무엇의 5인지 알 수 없다. 접근성 이름에 되돌린다.
               const srLabel = [
-                card.className,
+                shownName,
                 renameNote,
                 card.delegated ? "위임 받은 반" : null,
                 card.orphanSlots > 0
@@ -260,7 +283,7 @@ function TeacherGroupFlow({
                     className="hover:bg-bg-soft flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-2.5 transition sm:py-[7px]"
                   >
                     <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
-                      {card.className}
+                      {shownName}
                     </span>
                     {/* 예약된 반 이름 변경 **예고**만 표시한다(원장 2026-08-29 *"미래조회시에 지금 반으로
                         보면 착각할 수 있을거같은데"* → 2026-08-31 *"날짜 지나면 반이름 변경되었으면 됨"*).
@@ -276,7 +299,7 @@ function TeacherGroupFlow({
                         className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-xs font-bold"
                         title={renameNote ?? undefined}
                       >
-                        {monthDay(card.classNameUpcoming.date)}→{card.classNameUpcoming.name}
+                        {monthDay(card.classNameUpcoming.date)}→{classNameFor(card.classNameUpcoming.name, lang)}
                       </span>
                     ) : null}
                     {/* 임시 위임(0173a) — 원스크린 반 칩과 같은 앰버 규약. 남의 반 시트를 내 반인 줄 알고
@@ -339,8 +362,8 @@ function TeacherGroupFlow({
                   {card.englishTrack === "eie" ? (
                     <Link
                       href={`/ecs/${card.classId}/month?month=${monthOfWeek(weekMonday)}&week=${weekMonday}&view=mp`}
-                      title={`${card.className} 월간 계획서(MP) 열기`}
-                      aria-label={`${card.className} 월간 계획서 열기`}
+                      title={`${shownName} 월간 계획서(MP) 열기`}
+                      aria-label={`${shownName} 월간 계획서 열기`}
                       className="border-line-strong text-text-dim hover:bg-bg-soft hover:text-foreground ml-1 shrink-0 rounded-full border px-1.5 py-px text-xs font-bold transition"
                     >
                       MP

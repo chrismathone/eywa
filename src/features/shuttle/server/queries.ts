@@ -21,7 +21,7 @@ import {
   type ShuttleTrip,
   type ShuttleVehicle,
 } from "../types";
-import { dayCodeOf, missedSignals, type RideException, type ShuttleSignal } from "../roster";
+import { dayCodeOf, type RideException } from "../roster";
 
 /**
  * 셔틀 조회 — 읽기는 세션 클라이언트 + RLS(테넌트 전원, 0225a). 쓰기는 서버 액션(actions.ts).
@@ -406,21 +406,6 @@ export async function getRideExceptionsOn(
   }
 }
 
-/**
- * 🔴 출결 화면용 신호 — **읽기 전용, 자동 쓰기 없음**(원장 2026-08-19).
- * 그날 셔틀에서 미탑승으로 찍힌 학생만. 실패해도 출결 화면을 죽이지 않는다(부가 정보).
- */
-export async function getShuttleMissedSignals(ymd: string): Promise<Map<string, ShuttleSignal>> {
-  try {
-    const { ready, logs } = await getBoardingsOn(ymd);
-    if (!ready) return new Map();
-    return new Map(missedSignals(logs).map((s) => [s.studentId, s]));
-  } catch (e) {
-    // 조용히 접으면 "셔틀 신호가 안 뜬다"를 아무도 모른다([[#89]]) → 계측만 남기고 빈 값.
-    reportError(e, { scope: "shuttle.signals", ymd });
-    return new Map();
-  }
-}
 
 /** 그날 요일에 해당하는 회차만 추린 목록(일별 화면·인쇄가 함께 쓴다). */
 export function dayCodeForDate(ymd: string): DayCode {

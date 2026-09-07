@@ -7,10 +7,12 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { saveAttendanceSort } from "@/features/attendance/server/prefs-actions";
 import {
   ATTENDANCE_SORT_KEYS,
-  ATTENDANCE_SORT_LABEL,
+  attendanceSortLabelOf,
   parseAttendanceSortKey,
   type AttendanceSortKey,
 } from "@/features/attendance/sort-rows";
+// 🔴 정렬 이름은 사전이 아니라 `sort-rows.ts`(한글 맵 옆)가 단일 소스다.
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * 출석부 행 정렬 선택 — `정렬: 이름순` 드롭다운(지시서 §10, 2026-09-04 12단계: 옛 native `<select>` h-8·12px → 앱 공용 드롭다운 모양).
@@ -23,12 +25,15 @@ import {
  */
 export function AttendanceSortSelect({ value }: { value: AttendanceSortKey }) {
   const router = useRouter();
+  const lang = useSheetLang();
+  const t = useSheetT();
   const [pending, startTransition] = useTransition();
 
   return (
+    // v5 §10 드롭다운(`정렬: 이름순`) + 화면 언어 — 이름은 사전이 아니라 `sort-rows.ts`가 단일 소스라 `attendanceSortLabelOf(k, lang)`.
     <span className={`shrink-0 ${pending ? "opacity-60" : ""}`}>
       <SearchableSelect
-        options={ATTENDANCE_SORT_KEYS.map((k) => ({ value: k, label: ATTENDANCE_SORT_LABEL[k] }))}
+        options={ATTENDANCE_SORT_KEYS.map((k) => ({ value: k, label: attendanceSortLabelOf(k, lang) }))}
         value={value}
         onValueChange={(v) => {
           const next = parseAttendanceSortKey(v);
@@ -38,8 +43,8 @@ export function AttendanceSortSelect({ value }: { value: AttendanceSortKey }) {
             router.refresh();
           });
         }}
-        ariaLabel="정렬 기준"
-        valuePrefix="정렬"
+        ariaLabel={t("att.sort.aria")}
+        valuePrefix={t("att.sort")}
         triggerClassName={TOOLBAR_SELECT}
         className="w-auto"
       />

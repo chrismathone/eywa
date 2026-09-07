@@ -20,12 +20,14 @@ import { monthOfWeek } from "../face-nav";
 import { setMyEcsMonthView } from "../server/actions";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
 import type { ClassSheetWeekData } from "../server/queries";
-import { ECS_FONT_SIZES, ECS_FONT_SIZE_LABEL, type EcsFontSize } from "../font-size";
+import { ECS_FONT_SIZES, FONT_SIZE_KEY, type EcsFontSize } from "../font-size";
+import { sheetDowLabel, sheetWeekLabel } from "@/features/teacher-view/i18n";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { attHref } from "@/app/(shell)/attendance/_components/att-href";
 import { useSaveIndicator, type SheetSaveStore } from "./use-sheet-saves";
 import { EcsMakeupAdder } from "./ecs-makeup-adder";
 
-const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
+// 요일 글자·글씨 크기 라벨은 [i18n.ts](../i18n.ts) 한 곳 — 화면 언어(한/영)를 따라간다(2026-09-03).
 // 알약 표기는 [chrome.ts](../chrome.ts) 한 곳 — 월간 뷰의 표시 토글도 같은 것을 쓴다.
 const pill = sheetPill;
 
@@ -66,6 +68,9 @@ export function SheetToolbar({
   selfStudyPending: boolean;
 }) {
   const { pending, conflicts } = useSaveIndicator(store);
+  // 화면 언어(내 계정) — 문구만 바뀌고 저장되는 데이터·작성률은 한 글자도 안 바뀐다.
+  const t = useSheetT();
+  const lang = useSheetLang();
   const hrefFor = (classId: string, monday: string) => `/ecs/${classId}?week=${monday}`;
   // 출석부 바로가기 — 지금 보고 있는 날(요일 필터) 기준으로 그 반의 그 달 출석부를 연다.
   // 🔴 링크는 출석부의 **단일 빌더**(attHref)로 만든다 — 여기서 파라미터를 따로 조립하면 규약이 갈라져
@@ -91,9 +96,14 @@ export function SheetToolbar({
       {data.delegated ? (
         <span
           className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-2 py-0.5 text-xs font-bold whitespace-nowrap"
-          title={`${data.classTeacherName ? `${data.classTeacherName} 선생님 반` : "다른 선생님 반"} — 이 기간에만 대신 맡은 위임 반입니다`}
+          title={`${
+            data.classTeacherName
+              ? `${data.classTeacherName}${t("toolbar.delegated.own")}`
+              : t("toolbar.delegated.other")
+          } — ${t("toolbar.delegated.title")}`}
         >
-          위임{data.classTeacherName ? ` · ${data.classTeacherName} 선생님 반` : ""}
+          {t("toolbar.delegated")}
+          {data.classTeacherName ? ` · ${data.classTeacherName}${t("toolbar.delegated.own")}` : ""}
         </span>
       ) : null}
       <SheetBarDivider />
@@ -102,14 +112,14 @@ export function SheetToolbar({
           클릭**, "지금 이번 주인가"는 **과거/미래 조회 배지**. 배지를 지우면 지난 주를 보면서 이번 주로
           착각한다(그 알약이 색으로 말하던 사실이다). */}
       <PeriodNav
-        label={data.weekLabel}
+        label={sheetWeekLabel(data.weekMonday, data.weekLabel, lang)}
         prevHref={hrefFor(data.classId, addWeeks(data.weekMonday, -1))}
         nextHref={hrefFor(data.classId, addWeeks(data.weekMonday, 1))}
         currentHref={hrefFor(data.classId, thisMonday(data.today))}
         relation={rel}
-        prevAriaLabel="이전 주"
-        nextAriaLabel="다음 주"
-        currentTitle="눌러서 이번 주로"
+        prevAriaLabel={t("toolbar.prevWeek")}
+        nextAriaLabel={t("toolbar.nextWeek")}
+        currentTitle={t("toolbar.thisWeek")}
         labelWidth={WEEK_LABEL_W}
         onNavigate={onNavigate}
       />
@@ -135,23 +145,24 @@ export function SheetToolbar({
       />
       <SheetBarDivider />
 
-      {/* 요일 = `요일: 전체` 드롭다운(§10, 옛 알약 칩 줄). 휴일은 항목 hint에 이름으로, 오늘은 `오늘`로 — 색 대신 글자.
-          옛 칩은 눌린 요일을 다시 누르면 해제였는데 이제는 '전체'를 고른다(같은 값 재선택은 무시 — reselect 아님). */}
-      <HrefSelect
-        axisLabel="요일"
-        ariaLabel="요일 필터"
-        value={dayFilter ?? "all"}
-        onSelect={(v) => onDayFilter(v === "all" ? null : v)}
-        options={[
-          { value: "all", label: "전체" },
-          ...data.grid.days.map((d) => ({
-            value: d.date,
-            label: `${DOW_KO[d.dow]} ${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}`,
-            // 휴일과 오늘이 겹치면 둘 다(`추석 · 오늘`) — 휴일이 '오늘'을 덮으면 오늘 표식이 사라진다.
-            hint: [d.holiday, d.date === data.today ? "오늘" : null].filter(Boolean).join(" · ") || undefined,
-          })),
-        ]}
-      />
+        {/* 요일 = `요일: 전체` 드롭다운(§10, 옛 알약 칩 줄). 휴일은 항목 hint에 이름으로, 오늘은 '오늘'로 — 색 대신 글자.
+            옛 칩은 눌린 요일을 다시 누르면 해제였는데 이제는 '전체'를 고른다(같은 값 재선택은 무시 — reselect 아님).
+            🔴 요일 글자는 화면 언어를 따른다(`sheetDowLabel`) — 사전이 아니라 그 함수가 단일 소스다. */}
+        <HrefSelect
+          axisLabel={t("toolbar.dow")}
+          ariaLabel={t("toolbar.dow.aria")}
+          value={dayFilter ?? "all"}
+          onSelect={(v) => onDayFilter(v === "all" ? null : v)}
+          options={[
+            { value: "all", label: t("toolbar.all") },
+            ...data.grid.days.map((d) => ({
+              value: d.date,
+              label: `${sheetDowLabel(d.dow, lang)} ${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}`,
+              // 휴일과 오늘이 겹치면 둘 다(`추석 · 오늘`) — 휴일이 '오늘'을 덮으면 오늘 표식이 사라진다.
+              hint: [d.holiday, d.date === data.today ? t("toolbar.today") : null].filter(Boolean).join(" · ") || undefined,
+            })),
+          ]}
+        />
 
       <span className="ml-auto flex items-center gap-2">
         {dayFilter ? (
@@ -174,9 +185,9 @@ export function SheetToolbar({
           type="button"
           className={`${pill(false)} inline-flex items-center gap-1`}
           onClick={() => onNavigate(attendanceHref)}
-          title={`${data.className} 반 ${attendanceDate.slice(0, 7)} 출석부 열기`}
+          title={`${data.className} · ${attendanceDate.slice(0, 7)} — ${t("toolbar.attendance.title")}`}
         >
-          <ClipboardCheck className="size-3" /> 출석부
+          <ClipboardCheck className="size-3" /> {t("toolbar.attendance")}
         </button>
         {/* JJ 표시(내 계정) — 원장 2026-08-03: 코드가 정하지 말고 여기서 고른다.
             ⚠️ 2026-08-06부터 **LAB은 여기서 빠졌다**(항상 제외 — 전용 출석부로 이관 예정). 라벨이 'LAB·JJ'
@@ -184,11 +195,8 @@ export function SheetToolbar({
             ⚠️ 글씨 크기와 달리 **서버가 다시 그린다** — 이 값이 카드뿐 아니라 작성률 분모까지 정하기
                때문(보이는 교시 = 세는 교시). 그래서 왕복 중엔 잠근다. */}
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-foreground shrink-0 text-sm font-bold">JJ</span>
-          <span
-            className={SHEET_SEG_BOX}
-            title="JJ(집중자율수업실) 교시를 시트에 그릴지 — 숨기면 카드와 작성률에서 함께 빠집니다(쓴 기록은 지워지지 않습니다). LAB은 전용 출석부로 옮길 예정이라 항상 빠집니다."
-          >
+          <span className="text-foreground shrink-0 text-xs font-bold">{t("toolbar.jj")}</span>
+          <span className={SHEET_SEG_BOX} title={t("toolbar.jj.title")}>
             {[true, false].map((v) => (
               <button
                 key={String(v)}
@@ -198,29 +206,32 @@ export function SheetToolbar({
                 aria-pressed={showSelfStudy === v}
                 className={`${sheetSegItem(showSelfStudy === v)} disabled:cursor-wait disabled:opacity-60`}
               >
-                {v ? "표시" : "숨김"}
+                {v ? t("toolbar.show") : t("toolbar.hide")}
               </button>
             ))}
           </span>
         </span>
-        {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31). `축: 값` 드롭다운(§10). */}
-        <HrefSelect
-          axisLabel="글씨"
-          ariaLabel="계획 패널·주간 시트의 글씨 크기(내 계정) — 다른 PC에서도 같은 크기로 열립니다"
-          value={fontSize}
-          onSelect={(v) => onFontSize(v as EcsFontSize)}
-          options={ECS_FONT_SIZES.map((s) => ({ value: s, label: ECS_FONT_SIZE_LABEL[s] }))}
-        />
-        <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
-        {conflicts > 0 ? (
-          <span className="text-danger text-sm font-bold whitespace-nowrap">충돌 {conflicts}건 — 셀에서 선택</span>
-        ) : pending > 0 ? (
-          <span className="text-text-dim text-sm font-semibold whitespace-nowrap">저장 중…</span>
-        ) : (
-          <span className="text-text-dim text-sm font-semibold whitespace-nowrap">저장됨</span>
+          {/* 글씨 크기(내 계정) — 수업보고서 강사뷰와 같은 컨트롤·같은 어휘(원장 지시 2026-07-31). `축: 값` 드롭다운(§10). */}
+          <HrefSelect
+            axisLabel={t("toolbar.font")}
+            ariaLabel={t("toolbar.font.title")}
+            value={fontSize}
+            onSelect={(v) => onFontSize(v as EcsFontSize)}
+            options={ECS_FONT_SIZES.map((s) => ({ value: s, label: t(FONT_SIZE_KEY[s]) }))}
+          />
+          <EditingBadge scope={ecsPresenceScope(data.classId, data.weekMonday)} />
+          {conflicts > 0 ? (
+            <span className="text-danger text-sm font-bold whitespace-nowrap">
+              {t("toolbar.conflict")} {conflicts}
+              {t("toolbar.conflict.hint")}
+            </span>
+          ) : pending > 0 ? (
+            <span className="text-text-dim text-sm font-semibold whitespace-nowrap">{t("toolbar.saving")}</span>
+          ) : (
+            <span className="text-text-dim text-sm font-semibold whitespace-nowrap">{t("toolbar.saved")}</span>
         )}
         <button type="button" className={pill(panelOpen)} onClick={onTogglePanel}>
-          계획 패널
+          {t("toolbar.planPanel")}
         </button>
       </span>
     </div>

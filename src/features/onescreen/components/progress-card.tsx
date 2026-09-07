@@ -5,6 +5,7 @@ import { displayLessons, resolveStudyGrade } from "../curriculum";
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import type { OneScreenStudent } from "../types";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 /**
  * 진도 카드 — 과목별 오늘 진도를 **다중 차시**로 선택(edutrix 진도선택창, ProgressSelector).
@@ -31,6 +32,8 @@ export function ProgressCard({
   /** 보고서 카드 안에 들어간 상태 — 카드 속 카드로 겹쳐 보이지 않게 그림자·배경을 뺀 얇은 테두리로(2026-08-05 통합). */
   embedded?: boolean;
 }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
   const studyGrade = resolveStudyGrade(student.studyGrade ?? student.grade);
   const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
 
@@ -45,27 +48,27 @@ export function ProgressCard({
       >
         <div>
           {embedded ? (
-            <p className="text-foreground text-sm font-bold">오늘 진도</p>
+            <p className="text-foreground text-sm font-bold">{t("os.pc.title")}</p>
           ) : (
             <>
-              <p className="micro text-text-faint">진도 확인</p>
-              <p className="text-foreground text-base font-bold">오늘 어디까지 나갔나요</p>
+              <p className="micro text-text-faint">{t("os.pc.kicker")}</p>
+              <p className="text-foreground text-base font-bold">{t("os.pc.heading")}</p>
             </>
           )}
         </div>
         <div className="flex items-center gap-2">
           {onLoadPrev && (
             <Button variant="outline" size="sm" onClick={onLoadPrev}>
-              <EyIcon name="history" size={13} /> 이전 진도 불러오기
+              <EyIcon name="history" size={13} /> {t("os.pc.loadPrev")}
             </Button>
           )}
           <Button variant={student.progressConfirmed ? "outline" : "default"} size="sm" onClick={onConfirm}>
             {student.progressConfirmed ? (
               <>
-                <EyIcon name="check" size={13} /> 확정됨
+                <EyIcon name="check" size={13} /> {t("os.pc.confirmed")}
               </>
             ) : (
-              "오늘 진도 확정"
+              t("os.pc.confirm")
             )}
           </Button>
         </div>
@@ -81,10 +84,14 @@ export function ProgressCard({
               <div className="min-w-0 flex-1">
                 <p className={`text-sm font-bold ${toneTextClass(tone)}`}>{su.name}</p>
                 <div className="mt-1 space-y-1 text-xs">
-                  <p className="text-text-faint truncate">이전 · {displayLessons(su.prev) || su.prev || "기록 없음"}</p>
+                  <p className="text-text-faint truncate">
+                    {tf("os.pc.prev", {
+                      text: displayLessons(su.prev) || su.prev || t("os.pc.noRecord"),
+                    })}
+                  </p>
                   <div className="flex items-center gap-1.5">
                     <span className={`inline-flex shrink-0 items-center gap-0.5 font-bold ${toneTextClass(tone)}`}>
-                      오늘 <EyIcon name="arrowRight" size={11} />
+                      {t("os.pc.today")} <EyIcon name="arrowRight" size={11} />
                     </span>
                     {isMath ? (
                       <ProgressSelector
@@ -96,7 +103,7 @@ export function ProgressCard({
                         onStudyGrade={onStudyGrade}
                         studentGrade={student.grade}
                         prev={su.prev}
-                        ariaLabel={`${su.name} 오늘 진도`}
+                        ariaLabel={tf("os.pc.subjectProgressAria", { subject: su.name })}
                       />
                     ) : (
                       // 🔴 한 줄 `<input>`이면 **개행이 뭉개져** "Vocab 41 42Reading section 5-1"으로 읽힌다
@@ -106,8 +113,8 @@ export function ProgressCard({
                         rows={Math.min(4, (su.today.match(/\n/g)?.length ?? 0) + 1)}
                         value={su.today}
                         onChange={(e) => onProgress(i, e.target.value)}
-                        placeholder="오늘 진도 입력 (예: Unit 8 · p.90)"
-                        aria-label={`${su.name} 오늘 진도 입력`}
+                        placeholder={t("os.pc.inputPh")}
+                        aria-label={tf("os.pc.inputAria", { subject: su.name })}
                         className="border-line bg-card focus:border-primary scrollbar-thin w-full min-w-0 flex-1 resize-none rounded-lg border px-2 py-1.5 text-xs leading-relaxed outline-none transition-colors"
                       />
                     )}
@@ -119,7 +126,7 @@ export function ProgressCard({
                       <ProgressModePills
                         mode={su.progressMode}
                         onMode={(m) => onProgressMode(i, m)}
-                        ariaLabel={`${su.name} 오늘 수업 성격`}
+                        ariaLabel={tf("os.pc.modeAria", { subject: su.name })}
                       />
                     </div>
                   ) : null}

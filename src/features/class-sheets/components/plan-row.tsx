@@ -13,6 +13,9 @@ import type { PlanLineDTO } from "../server/actions";
 import { SHEET_BOX_FRAME, SHEET_INPUT } from "../ui-box";
 import type { PlanHandlers } from "./use-plan-handlers";
 import { useCellState, type SheetSaveStore } from "./use-sheet-saves";
+// 충돌 문구는 오늘 면 계획(`today-plan-editor.tsx`)과 **같은 사전 키**를 쓴다 — 같은 UI가 두 벌이라
+// 한쪽만 옮기면 같은 다이얼로그가 화면마다 다른 언어로 뜬다.
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 function CasInput({
   lineId,
@@ -31,6 +34,7 @@ function CasInput({
   canEdit: boolean;
   ariaLabel: string;
 }) {
+  const t = useSheetT();
   const saveKey = buildSaveKey(lineId, field);
   const cell = useCellState(store, saveKey);
   const value = cell ? (cell.value ?? "") : (fallback ?? "");
@@ -38,23 +42,25 @@ function CasInput({
     return (
       <div className="border-danger bg-danger/5 space-y-1 rounded-md border px-1.5 py-1">
         <p className="text-danger text-xs leading-tight">
-          다른 강사가 수정: <b>{cell.conflict.serverValue ?? "(비움)"}</b>
+          {t("cell.conflict.server")} <b>{cell.conflict.serverValue ?? t("cell.conflict.empty")}</b>
         </p>
-        <p className="text-text-dim truncate text-xs">내 입력: {value || "(비움)"}</p>
+        <p className="text-text-dim truncate text-xs">
+          {t("cell.conflict.mine")} {value || t("cell.conflict.empty")}
+        </p>
         <div className="flex gap-1">
           <button
             type="button"
             className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-xs font-semibold"
             onClick={() => handlers.resolveConflict(saveKey, "server")}
           >
-            서버값 사용
+            {t("cell.conflict.useServer")}
           </button>
           <button
             type="button"
             className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-xs font-medium"
             onClick={() => handlers.resolveConflict(saveKey, "mine")}
           >
-            내 값으로 덮기
+            {t("cell.conflict.useMine")}
           </button>
         </div>
       </div>
