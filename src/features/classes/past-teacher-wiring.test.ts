@@ -48,9 +48,14 @@ describe("지난 수업의 강사 — 종료 시점으로 되살린다", () => {
     expect(code).toContain("past.length > 0 ? await getTeacherAsOfIndex() : null");
   });
 
-  it("⚠️ 추정이면 화면이 밝힌다 — 작성자는 담임이 아니다([[#93]])", () => {
+  it("🔴 화면 글자는 **이름만** — `(추정)` 꼬리표 금지(원장 2026-09-07)", () => {
+    expect(src).not.toContain("(추정)");
+  });
+
+  it("⚠️ 그래도 근거 등급은 남는다 — 마우스 오버로 무엇으로 되살렸는지 말한다([[#93]])", () => {
+    // 화면에서 글자를 뗀 것이지 사실을 지운 게 아니다. 데이터까지 지우면 되돌릴 수 없다.
     expect(code).toContain("teacherInferred");
-    expect(src).toContain("(추정)");
+    expect(src).toContain("작성자로 되살린 이름");
   });
 });
 
