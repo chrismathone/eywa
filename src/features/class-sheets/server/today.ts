@@ -32,6 +32,7 @@ import { rosterFormOf, type RosterForm, type SheetMark } from "../lib/roster-for
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { dowKeyOf, normalizeSlotTime, YMD_RE } from "../lib/week";
 import { readEcsTodayOrder, readEcsShowSelfStudy } from "../view-prefs";
+import { viewAsTeacher } from "@/lib/auth/view-mode";
 import { DEFAULT_ECS_FONT_SIZE, readEcsFontSize, type EcsFontSize } from "../font-size";
 // 영어 알림장은 eywa가 아니라 ClassNote 반 보드에 직접 올라간다(2026-08-11 전수 검사: 35일 5,680건 중
 // 영어 lesson_reports 0건). "이 날짜에 알림장이 나갔나"의 진실은 워커가 적재하는 classnote_class_posts
@@ -261,8 +262,25 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const scoped = (allClasses ?? []).filter((c) => !scopeSet || scopeSet.has(c.id as string));
   const showSelfStudy = readEcsShowSelfStudy(prefsRes.data?.ui_prefs);
   const fontSize = readEcsFontSize(prefsRes.data?.ui_prefs);
-  // 내가 정한 반 순서 — 화면이 기본 순서 위에 얹는다(빈 배열이면 기본 그대로).
-  const todayOrder = readEcsTodayOrder(prefsRes.data?.ui_prefs);
+  /**
+   * 🔴 **'다른 강사 뷰'는 그 사람이 보는 화면 그대로**여야 한다(원장 2026-09-05 *"다른 사람 강사뷰는
+   *    그 사람 뷰와 동일하게 해줘"*) — 순서도 **그 강사가 저장한 값**을 읽는다. 보는 사람(관리자) 값을
+   *    쓰면 남의 화면을 내 취향으로 재배열해 놓고 "그 사람 화면"이라 부르게 된다.
+   * ⚠️ 그 뷰가 아닐 땐 **왕복이 안 는다**(내 행은 위에서 이미 읽었다). 쓰기는 그 화면에서 아예 막는다
+   *    (열람 전용 — 손잡이를 안 그린다).
+   */
+  const orderOwner = await viewAsTeacher();
+  const orderPrefs = orderOwner
+    ? (
+        await admin
+          .from("users")
+          .select("ui_prefs")
+          .eq("id", orderOwner.id)
+          .eq("tenant_id", user.tenantId)
+          .maybeSingle()
+      ).data?.ui_prefs
+    : prefsRes.data?.ui_prefs;
+  const todayOrder = readEcsTodayOrder(orderPrefs);
   if (scoped.length === 0) {
     return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: false, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, todayOrder, holidayName };
   }

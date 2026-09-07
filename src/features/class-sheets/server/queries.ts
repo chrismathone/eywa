@@ -9,6 +9,7 @@ import { mondayOf, shiftDays, weekLabel, weekRelation } from "@/features/timetab
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
 import { resolveTeacherLabel } from "@/features/timetable/lib/teacher-label";
+import { viewAsTeacher } from "@/lib/auth/view-mode";
 // 🔴 방 이름 규약은 좌석표(출결)와 **같은 두 함수**다 — 여기서 규칙을 다시 적으면 같은 방을
 //    시트는 `305`, 좌석표는 `본원305`로 부른다(2026-08-25 실사고와 같은 결).
 import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/seating-floors";
@@ -27,6 +28,7 @@ import {
   DEFAULT_ECS_ENGLISH_TRACK,
   readEcsCollapsedRosterGroups,
   readEcsEnglishTrack,
+  readEcsLandingOrder,
   readEcsShowSelfStudy,
   readEcsTeacher,
 } from "../view-prefs";
@@ -765,6 +767,8 @@ export async function getSheetLanding(
       emptyReason: SheetLandingEmptyReason;
       /** 프로그램 보기 필터(내 계정, 0176a) — 헤더 토글의 현재 값. */
       trackFilter: EnglishTrackFilter;
+      /** 내가 손으로 정한 목록 순서(내 계정, 2026-09-05) — 묶음 **안에서만** 적용된다. */
+      landingOrder: string[];
       /** 토글에 붙는 개수 — **필터 전** 내 스코프 기준(필터를 걸어도 숫자가 안 변해야 고를 수 있다). */
       trackCounts: Record<EnglishTrackFilter, number>;
       /**
@@ -797,6 +801,7 @@ export async function getSheetLanding(
       today,
       cards: [],
       emptyReason: "not-configured",
+      landingOrder: [],
       trackFilter: DEFAULT_ECS_ENGLISH_TRACK,
       trackCounts: { all: 0, eie: 0, injaewon: 0 },
       teacherFilter: ECS_TEACHER_ALL,
@@ -819,6 +824,26 @@ export async function getSheetLanding(
     admin.from("users").select("ui_prefs").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
   ]);
   if (classError) return { ok: false, error: `반 목록을 불러오지 못했습니다: ${classError.message}` };
+  /**
+   * 🔴 **'다른 강사 뷰'는 그 사람이 보는 화면 그대로**여야 한다(원장 2026-09-05 *"다른 사람 강사뷰는
+   *    그 사람 뷰와 동일하게 해줘"*) — 순서도 **그 강사가 저장한 값**을 읽는다. 보는 사람(관리자) 값을
+   *    쓰면 남의 화면을 내 취향으로 재배열해 놓고 "그 사람 화면"이라 부르게 된다.
+   * ⚠️ 그 뷰가 아닐 땐 **왕복이 안 는다**(내 행은 위에서 이미 읽었다). 쓰기는 그 화면에서 아예 막는다
+   *    (열람 전용 — 손잡이를 안 그린다).
+   */
+  const orderOwner = await viewAsTeacher();
+  const landingOrder = readEcsLandingOrder(
+    orderOwner
+      ? (
+          await createAdminClient()
+            .from("users")
+            .select("ui_prefs")
+            .eq("id", orderOwner.id)
+            .eq("tenant_id", user.tenantId)
+            .maybeSingle()
+        ).data?.ui_prefs
+      : prefsRes.data?.ui_prefs,
+  );
   const trackFilter = readEcsEnglishTrack(prefsRes.data?.ui_prefs);
   const storedTeacher = readEcsTeacher(prefsRes.data?.ui_prefs);
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3).
@@ -925,6 +950,7 @@ export async function getSheetLanding(
       today,
       cards: [],
       trackFilter,
+      landingOrder,
       trackCounts,
       teacherFilter,
       teacherOptions,
@@ -1111,5 +1137,6 @@ export async function getSheetLanding(
     trackCounts,
     teacherFilter,
     teacherOptions,
+    landingOrder,
   };
 }

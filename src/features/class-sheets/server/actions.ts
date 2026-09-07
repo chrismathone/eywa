@@ -48,7 +48,7 @@ import {
   type PlanWriteGrant,
 } from "./plan-write";
 import { mergeTodayOrder, normalizeTodayOrder } from "../today-order";
-import { readEcsTodayOrder } from "../view-prefs";
+import { readEcsLandingOrder, readEcsTodayOrder } from "../view-prefs";
 
 type ActionError = { ok: false; error: string };
 
@@ -800,6 +800,21 @@ export async function setMyEcsTodayOrder(visibleOrder: string[]): Promise<{ ok: 
   const saved = readEcsTodayOrder(data?.ui_prefs);
   const merged = mergeTodayOrder(saved, next);
   return patchMyEcsPrefs({ todayOrder: merged.length > 0 ? merged : undefined });
+}
+
+/**
+ * 주간 랜딩 목록의 **반 순서**를 본인 계정에 저장 — `users.ui_prefs.ecs.landingOrder`(2026-09-05).
+ * 인자는 **끌어서 바꾼 그 묶음의 새 순서**이고, 나머지(다른 묶음·다른 주에만 뜨는 반)는 서버가 뒤에 붙인다.
+ * 🔴 오늘 면(`todayOrder`)과 다른 키 — 이유는 [`view-prefs`](../view-prefs.ts) `readEcsLandingOrder` 주석.
+ */
+export async function setMyEcsLandingOrder(visibleOrder: string[]): Promise<{ ok: boolean; error?: string }> {
+  const next = normalizeTodayOrder(visibleOrder);
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const admin = createAdminClient();
+  const { data } = await admin.from("users").select("ui_prefs").eq("id", user.id).maybeSingle();
+  const merged = mergeTodayOrder(readEcsLandingOrder(data?.ui_prefs), next);
+  return patchMyEcsPrefs({ landingOrder: merged.length > 0 ? merged : undefined });
 }
 
 /**

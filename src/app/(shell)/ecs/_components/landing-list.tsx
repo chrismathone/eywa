@@ -10,6 +10,8 @@ import { classNameFor } from "@/features/teacher-view/class-name";
 import type { SheetLandingCard } from "@/features/class-sheets/server/queries";
 import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
 import { groupLandingByMyRole, MY_ROLE_LABEL } from "@/features/class-sheets/landing-my-role";
+import { applyTodayOrder } from "@/features/class-sheets/today-order";
+import { LandingOrderRows } from "@/features/class-sheets/components/landing-order-rows";
 import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landing-summary";
 import { shoutingCountOf, summarizeShouting } from "@/features/class-sheets/landing-shouting";
 import { splitLandingByProgram } from "@/features/class-sheets/landing-programs";
@@ -59,6 +61,8 @@ export function EcsLandingList({
   lang = "ko",
   viewerTeacherId = null,
   viewerName = null,
+  landingOrder = [],
+  canReorder = false,
 }: {
   cards: readonly SheetLandingCard[];
   weekMonday: string;
@@ -72,6 +76,13 @@ export function EcsLandingList({
   viewerTeacherId?: string | null;
   /** 머리 줄에 적을 내 이름(영어 화면이면 영어 이름). 없으면 종전처럼 '담임 N명'. */
   viewerName?: string | null;
+  /** 내가 손으로 정한 목록 순서(계정 귀속) — 묶음 **안에서만** 적용된다. */
+  landingOrder?: readonly string[];
+  /**
+   * 순서를 바꿀 수 있나 — **'다른 강사 뷰'(열람 전용)에서는 false**(원장 2026-09-05
+   * *"어차피 다른 강사 뷰는 읽음 전용이니까 드래그기능을 넣어주면 안되는 부분"*).
+   */
+  canReorder?: boolean;
 }) {
   const s = summarizeLanding(cards);
   const shout = summarizeShouting(cards);
@@ -88,13 +99,21 @@ export function EcsLandingList({
     <section className="bg-card shadow-card rounded-2xl px-3 py-2.5">
       {/* 머리 = 이 주 전체 작성 상황 한 줄. 카드마다 흩어져 있던 숫자를 한 번만 말한다. */}
       <div className="border-line mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b px-1 pb-2">
-        <h2 className="text-foreground text-[13px] font-bold">
-          반 <span className="num">{s.classes}</span>개
-        </h2>
-        {/* 🔴 내 화면이면 **내 이름**이 먼저다(원장 2026-09-05) — 종전엔 남의 이름(그 반 담임)만 있었다.
-            사무실 화면은 "누가 안 썼나"를 묻는 자리라 종전 '담임 N명'을 그대로 둔다. */}
+        {/* 🔴 내 화면이면 **내 이름이 맨 앞**이고 가장 크다(원장 2026-09-05 *"'추민아'를 아래 '담임'보다
+            글씨 크기 20% 키워줘. 반 9개는 이름 뒤로"*). 아래 묶음 머리('담임'·'부담임')가 15px이라
+            그 20% 위인 **18px**. 이 화면의 주어가 사람이라 제목(h2) 자리도 이름이 갖는다.
+            🔴 다시 줄이거나 '반 N개' 뒤로 보내지 말 것. 사무실 화면은 주어가 사람이 아니라 그대로 둔다. */}
         {viewerName ? (
-          <p className="text-foreground text-[13px] font-extrabold">{viewerName}</p>
+          <h2 className="text-foreground text-[18px] font-extrabold">{viewerName}</h2>
+        ) : (
+          <h2 className="text-foreground text-[13px] font-bold">
+            반 <span className="num">{s.classes}</span>개
+          </h2>
+        )}
+        {viewerName ? (
+          <p className="text-text-dim text-[12px]">
+            반 <span className="num text-foreground font-bold">{s.classes}</span>개
+          </p>
         ) : (
           <p className="text-text-dim text-[12px]">
             담임 <span className="num text-foreground font-bold">{teacherCount}</span>명
@@ -188,13 +207,25 @@ export function EcsLandingList({
                   lang={lang}
                   headingLevel="h4"
                   viewerTeacherId={viewerTeacherId}
+                  landingOrder={landingOrder}
+                  canReorder={canReorder}
                 />
               </section>
             );
           })}
         </div>
       ) : (
-        <TeacherGroupFlow cards={cards} weekMonday={weekMonday} columnsClass={FULL_COLUMNS} lang={lang} />
+        // ⚠️ 좌우로 안 가르는 흐름(한 프로그램만 있을 때)도 **같은 축**으로 묶어야 한다 —
+        //    한쪽만 배선하면 EiE가 0개인 강사에게만 옛 담임별 묶음이 남는다(2026-09-05 실제로 그랬다).
+        <TeacherGroupFlow
+          cards={cards}
+          weekMonday={weekMonday}
+          columnsClass={FULL_COLUMNS}
+          lang={lang}
+          viewerTeacherId={viewerTeacherId}
+          landingOrder={landingOrder}
+          canReorder={canReorder}
+        />
       )}
     </section>
   );
@@ -210,6 +241,8 @@ function TeacherGroupFlow({
   lang,
   headingLevel = "h3",
   viewerTeacherId = null,
+  landingOrder = [],
+  canReorder = false,
 }: {
   cards: readonly SheetLandingCard[];
   weekMonday: string;
@@ -220,6 +253,10 @@ function TeacherGroupFlow({
   headingLevel?: "h3" | "h4";
   /** 강사 본인 화면이면 그 id — 묶음 축이 담임에서 **내 역할**로 바뀐다. */
   viewerTeacherId?: string | null;
+  /** 내가 정한 목록 순서 — 묶음 **안에서만** 얹는다(묶음을 넘나드는 이동은 없다). */
+  landingOrder?: readonly string[];
+  /** 순서 바꾸기 허용('다른 강사 뷰'는 열람 전용이라 false). */
+  canReorder?: boolean;
 }) {
   const Heading = headingLevel;
   /**
@@ -265,8 +302,14 @@ function TeacherGroupFlow({
               {g.summary.filled}/{g.summary.scheduled}
             </span>
           </div>
-          <ul>
-            {g.cards.map((card) => {
+          {/* 🔴 순서는 **묶음 안에서만** 바뀐다 — 담임/부담임(과 EiE/인재원)은 취향이 아니라 사실이라
+              칸을 넘나들면 화면이 거짓말을 한다. `SortableContext`가 묶음마다 하나라 구조로 막힌다. */}
+          <LandingOrderRows
+            // 🔴 주·필터가 바뀌면 **다시 만든다** — 안 그러면 클라가 들고 있던 옛 순서가 새 목록을
+            //    덮어써, 서버가 준 저장 순서 대신 지난 주 배열이 남는다(오늘 면의 `key={res.date}`와 같은 이유).
+            key={`${g.key}:${weekMonday}`}
+            canReorder={canReorder}
+            items={applyTodayOrder(g.cards, landingOrder).map((card) => {
               const pct = landingCardPct(card);
               const idle = card.totalSlots === 0;
               /**
@@ -308,8 +351,10 @@ function TeacherGroupFlow({
               ]
                 .filter(Boolean)
                 .join(", ");
-              return (
-                <li key={card.classId} className="border-line-faint flex items-center border-b">
+              return {
+                id: card.classId,
+                node: (
+                  <>
                   <Link
                     href={`/ecs/${card.classId}?week=${weekMonday}`}
                     aria-label={srLabel}
@@ -404,10 +449,11 @@ function TeacherGroupFlow({
                       MP
                     </Link>
                   ) : null}
-                </li>
-              );
+                  </>
+                ),
+              };
             })}
-          </ul>
+          />
         </section>
       ))}
     </div>

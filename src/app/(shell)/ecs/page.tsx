@@ -11,7 +11,7 @@ import { TodayBoard } from "@/features/class-sheets/components/today-board";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { EcsSeatDayFace } from "@/features/class-sheets/components/seat-day-face";
-import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, effectiveTeacherScope, viewAsTeacher } from "@/lib/auth/view-mode";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
@@ -81,10 +81,14 @@ export default async function EcsLandingPage({
   // IndexedDB 문서 24개와 realtime 채널 24개를 여는 셈이다(2026-08-07 적대적 리뷰).
   // 학원 전체의 하루를 보는 건 시간표의 일이다. `?view=today`를 손으로 넣어도 주간으로 떨어뜨린다.
   // 화면 언어(2026-09-03) — ECS 레이아웃이 이미 읽어 둔 값을 **요청 캐시에서 그대로** 받는다(왕복 0).
-  const [scoped, lang] = await Promise.all([
+  const [scoped, lang, viewAs] = await Promise.all([
     effectiveTeacherScope().then((s) => s !== null),
     getTeacherViewLang(),
+    // '다른 강사 뷰'(열람 전용)면 순서 바꾸기를 **아예 안 만든다**(원장 2026-09-05
+    // *"어차피 다른 강사 뷰는 읽음 전용이니까 드래그기능을 넣어주면 안되는 부분"*).
+    viewAsTeacher(),
   ]);
+  const canReorder = viewAs === null;
   // 305 면은 사무실도 연다(오늘 면의 24반 폭탄과 달리 타임 단위). view=room 은 스코프와 무관.
   if (view === "room") {
     const roomRes = await getEcsSeatDay("JJ", date ?? null);
@@ -140,6 +144,7 @@ export default async function EcsLandingPage({
         sheets={sheets}
         myTeacherId={myTeacherId}
         lang={lang}
+        canReorder={canReorder}
       />
     );
   }
@@ -177,10 +182,13 @@ export default async function EcsLandingPage({
           getCurrentUser(),
           getTeacherEnglishNames(),
         ]);
-        // 겸직 강사뷰·'다른 강사 뷰'에서는 로그인 계정과 대상 강사가 다를 수 있다 — 그때는 이름을
-        // 적지 않는다(내 이름이 아닌 이름을 "내 이름" 자리에 적으면 그게 더 나쁜 거짓말이다).
-        const name = id && me && id === me.id ? teacherNameFor(me.displayName, names, lang) : null;
-        return { id, name };
+        const target = viewAs;
+        // 🔴 **'다른 강사 뷰'에서도 그 강사의 이름을 적는다**(원장 2026-09-05 *"관리자가 강사뷰를
+        //    접근할때도 내이름 + 담임/부담임으로 보여야하는거 아냐?"*). 그 뷰의 존재 이유가
+        //    **"그 사람이 보는 화면 그대로"**라 이름도 그 사람 것이어야 한다(원장 2026-08-19 규약).
+        //    상단 배지가 이미 '○○ 강사뷰 · 열람 전용'이라 내 이름으로 오해할 여지도 없다.
+        const display = target?.displayName ?? (id && me && id === me.id ? me.displayName : null);
+        return { id, name: display ? teacherNameFor(display, names, lang) : null };
       })()
     : { id: null, name: null };
 
@@ -240,6 +248,8 @@ export default async function EcsLandingPage({
           lang={lang}
           viewerTeacherId={viewer.id}
           viewerName={viewer.name}
+          landingOrder={res.landingOrder}
+          canReorder={canReorder}
         />
       )}
     </div>
@@ -267,6 +277,7 @@ function EcsTodayFace({
   sheets,
   myTeacherId,
   lang,
+  canReorder,
 }: {
   res: EcsTodayResult;
   scoped: boolean;
@@ -279,6 +290,8 @@ function EcsTodayFace({
    * 카드는 하루 요약·작성률이라 반 전체가 목적이다(원장 지시 범위 = "오늘 시트").
    */
   myTeacherId: string | null;
+  /** 반 순서를 끌어 바꿀 수 있나 — '다른 강사 뷰'(열람 전용)는 false. */
+  canReorder: boolean;
 }) {
   if (!res.ok) {
     return (
@@ -379,6 +392,7 @@ function EcsTodayFace({
         //    (클라가 다시 그리면 편집기·저널·presence가 재마운트돼 입력 중이던 값이 날아간다).
         <TodayOrderList
           key={res.date}
+          canReorder={canReorder}
           items={(sheets ?? []).map((s) => ({
             id: s.classId,
             label: s.className,

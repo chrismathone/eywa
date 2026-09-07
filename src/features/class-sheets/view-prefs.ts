@@ -98,6 +98,15 @@ export function readEcsTodayOrder(uiPrefs: unknown): string[] {
   return normalizeTodayOrder(ecsScope(uiPrefs)?.todayOrder);
 }
 
+/**
+ * `ui_prefs.ecs.landingOrder` → 주간 랜딩 목록에서 **내가 정한 반 순서**(2026-09-05).
+ * 🔴 오늘 면(`todayOrder`)과 **다른 키**다 — 두 화면은 같은 반을 다른 축으로 세운다(오늘=그날 수업
+ *    있는 반·시각순 / 랜딩=그 주 전체·묶음 안 이름순). 한 키를 공유하면 한쪽에서 끈 것이 다른 쪽을 뒤집는다.
+ */
+export function readEcsLandingOrder(uiPrefs: unknown): string[] {
+  return normalizeTodayOrder(ecsScope(uiPrefs)?.landingOrder);
+}
+
 /** 저장 가능한 그룹 키만 남긴다(순서도 고정) — 액션·리더가 같은 정규화를 쓴다. */
 export function normalizeCollapsedRosterGroups(raw: unknown): RosterGroupKey[] {
   if (!Array.isArray(raw)) return [];
