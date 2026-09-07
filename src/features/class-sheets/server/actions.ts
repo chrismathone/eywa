@@ -49,6 +49,7 @@ import {
 } from "./plan-write";
 import { mergeTodayOrder, normalizeTodayOrder } from "../today-order";
 import { readEcsLandingOrder, readEcsTodayOrder } from "../view-prefs";
+import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 
 type ActionError = { ok: false; error: string };
 
@@ -792,6 +793,10 @@ async function patchMyEcsPrefs(patch: Record<string, unknown>): Promise<{ ok: bo
  *    (글씨 크기와 같은 규약 — 새로고침을 강요하면 끌자마자 화면이 깜빡인다).
  */
 export async function setMyEcsTodayOrder(visibleOrder: string[]): Promise<{ ok: boolean; error?: string }> {
+  // 🔴 **화면에서만 잠그지 않는다**([[#77]]) — '다른 강사 뷰'는 손잡이를 안 그리지만, 액션은 여전히
+  //    부를 수 있다. 그 뷰는 열람 전용이라 여기서도 거절한다(원장 2026-09-05).
+  const readonlyErr = await readonlyTeacherViewError();
+  if (readonlyErr) return { ok: false, error: readonlyErr };
   const next = normalizeTodayOrder(visibleOrder);
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -808,6 +813,10 @@ export async function setMyEcsTodayOrder(visibleOrder: string[]): Promise<{ ok: 
  * 🔴 오늘 면(`todayOrder`)과 다른 키 — 이유는 [`view-prefs`](../view-prefs.ts) `readEcsLandingOrder` 주석.
  */
 export async function setMyEcsLandingOrder(visibleOrder: string[]): Promise<{ ok: boolean; error?: string }> {
+  // 🔴 **화면에서만 잠그지 않는다**([[#77]]) — '다른 강사 뷰'는 손잡이를 안 그리지만, 액션은 여전히
+  //    부를 수 있다. 그 뷰는 열람 전용이라 여기서도 거절한다(원장 2026-09-05).
+  const readonlyErr = await readonlyTeacherViewError();
+  if (readonlyErr) return { ok: false, error: readonlyErr };
   const next = normalizeTodayOrder(visibleOrder);
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };

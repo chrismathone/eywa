@@ -122,6 +122,15 @@ describe("④ '다른 강사 뷰'는 **그 사람 뷰와 동일** — 순서도 
     }
   });
 
+  it("🔴 서버도 거절한다 — 화면에서만 잠그면 액션은 그대로 부를 수 있다([[#77]])", () => {
+    const actions = codeOnly(read("features", "class-sheets", "server", "actions.ts"));
+    for (const fn of ["setMyEcsTodayOrder", "setMyEcsLandingOrder"]) {
+      const at = actions.indexOf(`export async function ${fn}(`);
+      expect(at, fn).toBeGreaterThan(-1);
+      expect(actions.slice(at, at + 400), fn).toContain("readonlyTeacherViewError()");
+    }
+  });
+
   it("두 면 모두 canReorder를 받는다", () => {
     expect(page).toContain("canReorder={canReorder}");
     expect(page.split("canReorder={canReorder}").length - 1).toBeGreaterThanOrEqual(2);
