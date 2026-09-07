@@ -14,6 +14,8 @@ import {
   type TimetableSubject,
 } from "./periods";
 
+import { planRowSpans, type RowSpanPlan } from "./row-span";
+
 export type GridStudent = {
   name: string;
   grade: string | null;
@@ -164,6 +166,12 @@ export type RichCardGroup = {
   compactable: boolean;
   cards: RichClassCard[];
   periodRows: GridPeriodRow[]; // 그룹 공통 교시축(카드 union, order순)
+  /**
+   * 교시축 접기 계획(화면 전용) — 40분·60분 두 체계가 한 줄에 섞였을 때 긴 행을 짧은 눈금에 얹는다.
+   * 🔴 `periodRows` 자체는 **안 건드린다** — 엑셀 내보내기가 같은 배열을 축으로 쓰는데, 행을 지우면
+   *    그 시각의 수업이 에러 없이 통째로 빠진다(칸을 `${order}:${day}`로 찾는다).
+   */
+  rowPlan?: RowSpanPlan;
   days: DayOfWeek[]; // 그룹 공통 요일축(카드 union)
   /**
    * 명단 섹션 표시 행수 — **그룹 내 최대 인원**(카드·라벨열 높이 동기화) + `ROSTER_ROW_CAP` 상한.
@@ -778,6 +786,8 @@ export function groupRichCards(
         customGroupId: cluster[0].groupCustomId,
         cards: cluster,
         periodRows,
+        // 접기 계획은 축이 확정된 **뒤** 계산한다(감출 행·앉힐 자리 둘 다 이 목록이 기준).
+        rowPlan: planRowSpans(periodRows),
         days,
         rosterRows: {
           // 세 섹션 모두 빈 반도 "-" 한 줄은 보여준다(반이 있는데 명단 칸이 통째로 없으면 오독).

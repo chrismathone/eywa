@@ -21,6 +21,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { HOLD_SECTION_CLASS, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { rosterDropId, useRosterMove, type RosterDragData } from "./roster-move";
+import { movedByTarget, visibleSpanRows } from "@/features/timetable/lib/row-span";
 
 /**
  * 표 격자선 — 통합뷰는 **격자 자체가 정보**라 데이터 표(열=`--line-faint`)와 규약이 다르다.
@@ -211,7 +212,7 @@ function LabelColumn({
       <div className={cell} style={{ height: NAME_ROOM_H }}>수업명</div>
       <div className={cell} style={{ height: TEACHER_H }}>담임</div>
       <div className={cell} style={{ height: DAYHEAD_H }}>교시</div>
-      {group.periodRows.map((p) => (
+      {visibleSpanRows(group.periodRows, group.rowPlan).map((p) => (
         <div
           key={p.order}
           className={`${GRID} text-text-faint flex flex-col items-center justify-center border-b num leading-none`}
@@ -269,6 +270,9 @@ export function ClassColumn({
   //    들쭉날쭉했다. 모자란 만큼 수요일부터 **빈 더미 열**을 채운다(padCardDays, 주말 전용은 예외).
   const days: DayOfWeek[] = padCardDays(card.days?.length ? card.days : group.days);
   const gridCols = { gridTemplateColumns: `repeat(${Math.max(1, days.length)}, 1fr)` };
+  // 교시축 접기(40분·60분 혼재) — 그릴 행과, 그 행 위에 얹힐 접힌 칸. 카드마다 한 번만 만든다.
+  const gridRows = visibleSpanRows(group.periodRows, group.rowPlan);
+  const moved = movedByTarget(group.rowPlan);
   // 카드 폭 = 요일 수 × 고정 칸 폭(DAY_COL_W). 배치 편집(namesOnly)은 격자를 안 그리므로 5칸 기준 폭 유지 —
   // 수업명만 남은 칩이 요일 수에 따라 들쭉날쭉하면 끌어 놓을 자리를 가늠하기 어렵다.
   // 🔴 카드 **최소 폭 = 3칸**(144px) — padCardDays가 못 채우는 주말 전용 반(토·일 하루)은 1칸(48px)이라 학생 이름이 통째로
@@ -371,10 +375,25 @@ export function ClassColumn({
         ))}
       </div>
       {/* 요일×교시 미니그리드 — 행은 섹션이 실제 쓰는 교시만(keepUsedRows). */}
-      {group.periodRows.map((p) => (
+      {gridRows.map((p) => (
         <div key={p.order} className={`${GRID} grid border-b`} style={{ ...gridCols, height: PERIOD_H }}>
-          {days.map((d) => (
-            <Cell key={d} card={card} order={p.order} day={d} teacherColors={teacherColors} />
+          {days.map((d, di) => (
+            // 칸 하나가 **한 칸보다 길 수 있다**(60분 수업 = 40분 눈금 1.5칸) → 요일마다 자리 상자를 두고
+            // 접힌 칸을 그 안에 절대배치한다. 넘치는 부분은 아래 행 위로 그려진다(그 자리는 어차피 빈 칸이다).
+            <div key={d} className="relative h-full">
+              <Cell card={card} order={p.order} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
+              {(moved.get(p.order) ?? []).map((m) =>
+                card.cells[`${m.from}:${d}`] ? (
+                  <div
+                    key={m.from}
+                    className="absolute inset-x-0 z-[1]"
+                    style={{ top: m.offset * PERIOD_H, height: m.span * PERIOD_H }}
+                  >
+                    <Cell card={card} order={m.from} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
+                  </div>
+                ) : null,
+              )}
+            </div>
           ))}
         </div>
       ))}
@@ -568,13 +587,20 @@ function Cell({
   order,
   day,
   teacherColors,
+  last = false,
 }: {
   card: RichClassCard;
   order: number;
   day: DayOfWeek;
   teacherColors: TeacherColorMap;
+  /**
+   * 이 요일이 카드의 마지막 열인가 — 오른쪽 격자선을 뺀다.
+   * ⚠️ 예전엔 `last:border-r-0`(CSS)로 됐는데, 칸이 **자리 상자 안**으로 들어가면서 더는 마지막 형제가
+   *    아니게 됐다(그대로 두면 마지막 열에만 없던 세로선이 생긴다).
+   */
+  last?: boolean;
 }) {
-  const base = `${GRID} flex items-center justify-center overflow-hidden border-r font-bold last:border-r-0`;
+  const base = `${GRID} h-full flex items-center justify-center overflow-hidden font-bold ${last ? "" : "border-r"}`;
   const c = card.cells[`${order}:${day}`];
   if (!c) return <div className={base} />;
   // 주말 셀은 행 라벨이 그 반의 시각이 아니다(class-grid `weekendSelfShift`) → 툴팁에 실제 시각을 붙인다.
