@@ -19,7 +19,20 @@ export type WeekGridRow = {
   subject: string;
   className: string;
   teacherName: string | null;
-  slots: { day: DayOfWeek; startTime: string; periodLabel: string; room?: string | null }[];
+  /**
+   * ⚠️ `teacherName`은 **그 교시의 담당**이다(반 담임이 아니다) — 원장 2026-09-07 *"영어 주간 시간표에서
+   * 스케줄마다 다 선생님이 다르고 JJ실도 있을텐데 표현 제대로"*. 영어는 한 반이 교시마다 담당이 갈리고
+   * 자리(LAB·JJ) 교시도 섞인다. 없으면 반 담임으로 떨어진다(로더가 정한다).
+   */
+  slots: {
+    day: DayOfWeek;
+    startTime: string;
+    periodLabel: string;
+    room?: string | null;
+    teacherName?: string | null;
+    /** 자리(LAB·JJ) 교시면 그 이름 — 사람이 아니라 방이라 화면이 다르게 그린다. */
+    seat?: string | null;
+  }[];
 };
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -38,6 +51,8 @@ export type PeriodCell = {
   subject: string;
   /** 그 슬롯의 강의실(slot_room_label ?? 반 기본 classroom). 없으면 null. */
   room: string | null;
+  /** 자리(LAB·JJ) 교시면 그 이름 — 담당 자리에 사람 이름 대신 방을 적는다. */
+  seat: string | null;
 };
 
 /** 교시 행 1개(개별 교시). 수학계열 '2교시 묶음' 라벨은 렌더 단계에서 rowSpan=2로 표시(축은 개별 교시). */
@@ -96,9 +111,11 @@ export function buildSubjectPeriodGrid(
       cellMap.set(`${rk}::${s.day}`, {
         classId: r.classId,
         className: r.className,
-        teacherName: r.teacherName,
+        // 🔴 **교시 담당이 먼저**다 — 반 담임은 그게 없을 때의 폴백이다(영어는 교시마다 갈린다).
+        teacherName: s.teacherName ?? r.teacherName,
         subject: r.subject,
         room: s.room ?? null,
+        seat: s.seat ?? null,
       });
     }
   }

@@ -154,7 +154,13 @@ function PeriodTable({
                         <span className="text-foreground text-[12px] leading-tight font-bold break-keep">
                           {c.className}
                         </span>
-                        {c.teacherName ? (
+                        {/* 🔴 자리(LAB·JJ) 교시는 **사람이 아니라 방**이다 — 이름 자리에 자리 이름을 적고
+                            테두리 알약으로 사람과 구분한다(원장 2026-09-07 "JJ실도 있을텐데 표현 제대로"). */}
+                        {c.seat ? (
+                          <span className="border-line text-text-dim mt-0.5 w-fit rounded-full border px-1 text-[10px]">
+                            {c.seat}
+                          </span>
+                        ) : c.teacherName ? (
                           <span className="text-text-dim mt-0.5 text-[10px]">{c.teacherName}</span>
                         ) : null}
                         {c.room ? (

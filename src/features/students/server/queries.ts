@@ -1,3 +1,5 @@
+import { getTeacherLabelMap } from "@/features/timetable/server/queries";
+import { resolveTeacherLabel, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -727,7 +729,20 @@ const KO_DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
 
 export type ScheduleGroup = { days: string[]; label: string }; // {days:["월","목"], label:"1~3교시"}
 // 개별 슬롯(요일 하나 × 시작시각 하나) — 주간 시간표 그리드 배치용(교시 체계가 과목마다 달라 시각 기준 병합).
-export type ClassSlot = { day: DayOfWeek; startTime: string; periodLabel: string; room: string | null };
+export type ClassSlot = {
+  day: DayOfWeek;
+  startTime: string;
+  periodLabel: string;
+  room: string | null;
+  /**
+   * **그 교시의 담당**(반 담임이 아니다) — 원장 2026-09-07 *"영어 주간 시간표에서 스케줄마다 다
+   * 선생님이 다르고 JJ실도 있을텐데 표현 제대로"*. 영어는 한 반이 교시마다 담당이 갈린다.
+   * 없으면 반 담임으로 떨어진다(시간표·ECS와 같은 폴백 사슬).
+   */
+  teacherName: string | null;
+  /** 자리(LAB·JJ) 교시면 그 이름 — 사람이 아니라 방이라 화면이 다르게 그린다. */
+  seat: string | null;
+};
 export type StudentClassRow = {
   enrollmentId: string;
   classId: string;
@@ -837,7 +852,11 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   // 요일당 9줄) — 아래 enrollment별 기준일(refDate)로 유효 슬롯만 남긴다.
   const { data: scheds } = await supabase
     .from("class_schedules")
-    .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_room_label")
+    // 🔴 교시 담당(FK)·라벨을 함께 읽는다 — 없으면 화면이 반 담임을 칸마다 반복해 "교시마다 다른
+    //    선생님"이 통째로 안 보인다(실측: 영어 한 반이 교시마다 갈리고 JJ 교시가 섞인다).
+    .select(
+      "class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_room_label, teacher_id, slot_teacher_label",
+    )
     .in("class_id", classIds);
   type SchedSlot = {
     day: DayOfWeek;
@@ -846,6 +865,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     validFrom: string | null;
     validTo: string | null;
     roomLabel: string | null;
+    teacherId: string | null;
+    teacherLabel: string | null;
   };
   const schedByClass = new Map<string, SchedSlot[]>();
   for (const s of scheds ?? []) {
@@ -857,6 +878,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       validFrom: s.valid_from ? String(s.valid_from).slice(0, 10) : null,
       validTo: s.valid_to ? String(s.valid_to).slice(0, 10) : null,
       roomLabel: (s.slot_room_label as string | null) ?? null,
+      teacherId: (s.teacher_id as string | null) ?? null,
+      teacherLabel: (s.slot_teacher_label as string | null) ?? null,
     });
     schedByClass.set(s.class_id, arr);
   }
@@ -865,6 +888,24 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   //    화면에 한 번도 안 그려지고 있었다. 이 함수는 학생 상세가 한 요청에서 여러 번 부르므로
   //    그 왕복이 그대로 곱해졌다. 반 인원이 필요한 화면(수업 탭 배정 다이얼로그·반 이동)은
   //    `getClassesList()`가 주는 값을 쓴다 — 거기가 이미 단일 소스다.
+
+  /**
+   * 교시 담당 이름 — **시간표·ECS와 같은 두 함수**로 해석한다(갈리면 같은 교시가 화면마다 다른 사람이 된다).
+   * ① 라벨(`Song` 같은 닉네임)을 `resolveTeacherLabel`로 표시명(`송지혜`)으로 ② 없으면 슬롯 FK의 계정 이름.
+   * 🔴 **라벨이 먼저**다 — 라벨과 FK가 서로 다른 사람을 가리키는 슬롯이 실제로 있다(changelog 2026-07-29).
+   * ⚠️ 자리(LAB·JJ)는 라벨이 곧 방 이름이라 `specialSlotLabel`이 걸러 사람 자리에 안 들어간다.
+   */
+  const slotTeacherIds = [
+    ...new Set((scheds ?? []).map((s) => (s.teacher_id as string | null) ?? null).filter((v): v is string => !!v)),
+  ];
+  const slotTeacherNames = new Map<string, string>();
+  if (slotTeacherIds.length > 0) {
+    const rows = await fetchInChunks<{ id: string; display_name: string | null }>(slotTeacherIds, (chunk) =>
+      supabase.from("users").select("id, display_name").in("id", chunk),
+    ).catch(() => []);
+    for (const u of rows) if (u.display_name) slotTeacherNames.set(u.id, u.display_name);
+  }
+  const labelMap = await getTeacherLabelMap();
 
   // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준 — getTenantSettings는 React cache라 추가 쿼리 0.
   const periodsConfig = settingsToPeriodsConfig((await getTenantSettings()).operations);
@@ -913,6 +954,12 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
         periodLabel: periodRowText(slotPeriodRow(subject, s.startTime, s.day, periodsConfig, s.endTime)),
         // 슬롯별 강의실 라벨 우선, 없으면 반 기본 강의실 상속(메인 시간표와 동일 규칙).
         room: s.roomLabel ?? defaultRoom,
+        // 자리(LAB·JJ)면 사람이 아니라 방 — 담당 이름은 비우고 `seat`에 담는다.
+        seat: specialSlotLabel(s.teacherLabel),
+        teacherName: specialSlotLabel(s.teacherLabel)
+          ? null
+          : (resolveTeacherLabel(s.teacherLabel, labelMap) ??
+            (s.teacherId ? (slotTeacherNames.get(s.teacherId) ?? null) : null)),
       }));
     return {
       enrollmentId: e.id,
