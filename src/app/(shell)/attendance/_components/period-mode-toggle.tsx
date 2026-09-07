@@ -42,9 +42,18 @@ export function PeriodModeToggle({
   return (
     <div className="flex shrink-0 items-center gap-1.5" title={disabledReason ?? windowLabel}>
       {disabledReason ? (
-        <span aria-disabled="true" className={`${TOOLBAR_SELECT} cursor-not-allowed opacity-60`}>
+        // 🔴 `aria-disabled`는 **위젯 역할이 있을 때만** 뜻이 있다 — 맨 `<span>`에 달면 낭독기가 그냥 글자로 읽고
+        //    "왜 안 눌리는지"가 사라진다(재리뷰 2026-09-04). 진짜 버튼으로 세우되 눌러도 아무 일도 안 하게 둔다
+        //    (`disabled`는 포커스를 못 받아 사유(title)를 읽을 길이 없어서 `aria-disabled`를 쓴다).
+        <button
+          type="button"
+          aria-disabled="true"
+          title={disabledReason}
+          onClick={(e) => e.preventDefault()}
+          className={`${TOOLBAR_SELECT} cursor-not-allowed opacity-60`}
+        >
           기간: {label}
-        </span>
+        </button>
       ) : (
         <span className={pending ? "opacity-60" : ""}>
           <SearchableSelect

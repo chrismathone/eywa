@@ -384,11 +384,20 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
  */
 export async function getClassesStats(): Promise<{ total: number; active: number; totalSeats: number }> {
   const supabase = await createClient();
-  // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반·그 반 수강만 카운트(목록과 일치).
-  const tId = await effectiveTeacherId();
+  /**
+   * 🔴 **보이지 않는 '보강' 반(0241a)은 여기서도 뺀다** — 목록은 이미 빼는데(getClassesPage) 카드만 세면
+   *    "전체 반 167"인데 상태 '전체'로 본 목록은 164개다(실측 2026-09-07: 강사당 1개씩 3개, 재리뷰 2026-09-04).
+   * ⚠️ 컬럼 이름을 이 쿼리에 끼워 넣지 않는다 — id 목록을 따로 받아 뺀다(0241a 미적용이면 400, [[#95]]).
+   *    조회 실패는 빈 배열이라 fail-open(옛 숫자 그대로, 화면은 산다).
+   */
+  // 강사 스코프(teacher·겸직 강사뷰면 본인 담당 반·그 반 수강만 — 목록과 일치)와 보강 반 id는
+  // 서로 안 기다린다(B4) — 둘 다 아래 쿼리를 만드는 재료다.
+  const [tId, poolIds] = await Promise.all([effectiveTeacherId(), listMakeupPoolClassIds()]);
   const classBase = () => {
-    const q = supabase.from("classes").select("*", { count: "exact", head: true });
-    return tId ? q.eq("teacher_id", tId) : q;
+    let q = supabase.from("classes").select("*", { count: "exact", head: true });
+    if (tId) q = q.eq("teacher_id", tId);
+    if (poolIds.length > 0) q = q.not("id", "in", `(${poolIds.join(",")})`);
+    return q;
   };
   // 🔴 `is("end_date", null)`만 보면 두 방향으로 틀린다(2026-08-29): 반이동을 예약하면 **아직 다니는**
   //    학생에게 미래 종료일이 붙어 빠지고, 예약된 합류(미래 시작)는 오늘 수에 섞인다.
@@ -569,11 +578,23 @@ export async function getClassesPage(
     } satisfies ClassListRow;
   });
 
-  sortClassRows(rows, sort);
+  /**
+   * 🔴 요일 필터는 **화면의 요일 칩과 같은 집합**으로 다시 좁힌다 — 위 whitelist는 `class_schedules`의
+   *    만료 행까지 매칭해서, 끝난 토요일 배치 하나 때문에 지금은 금요일만 도는 반이 `요일: 토`에 섰다
+   *    (실측 2026-09-07: **활성 반 2개** — `고등E_고1 특별 S`(칩 금)·`고등E_고2 심화`(칩 수·금)가 토에 걸렸다).
+   *    칩은 유효 배치가 있으면 그것만 그리므로(`buildDayView`), 판정을 그 값 하나로 모은다([[#88]]).
+   * ⚠️ 어긋남이 이만큼 작은 건 칩에 **폴백**이 있어서다 — 유효 배치가 하나도 없는 반(종강·미시작)은 지난 배치를
+   *    그대로 그리므로(`daysStale`) 그 반은 여전히 그 요일로 걸린다. 그건 거짓이 아니라 "흐리게 보여 주는 사실"이다.
+   * ⚠️ whitelist는 상위집합이라(칩 요일 ⊆ 전체 배치 요일) 이 필터로 **빠지는 반은 없다** — 좁히는 건
+   *    "그 요일에 지금 안 도는 반"뿐이다. whitelist 자체는 남긴다(`classes` 조회를 미리 좁혀 준다).
+   */
+  const dayRows = days.length > 0 ? rows.filter((r) => r.days.some((d) => days.includes(d.day))) : rows;
 
-  const total = rows.length;
+  sortClassRows(dayRows, sort);
+
+  const total = dayRows.length;
   const from = (page - 1) * pageSize;
-  return { rows: rows.slice(from, from + pageSize), total };
+  return { rows: dayRows.slice(from, from + pageSize), total };
 }
 
 /**

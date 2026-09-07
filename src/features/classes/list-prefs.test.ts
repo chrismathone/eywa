@@ -5,7 +5,6 @@ import {
   DEFAULT_CLASS_LIST_PREFS,
   parseClassDays,
   parseClassListPrefs,
-  sameClassListPrefs,
 } from "./list-prefs";
 import { classStatusMeta, parseClassSort, parseClassStatus, parseClassView } from "./list-filters";
 
@@ -48,12 +47,13 @@ describe("수업목록 보기 설정(users.ui_prefs.classes)", () => {
     expect(parseClassStatus(undefined)).toBe("operating");
   });
 
-  it("같음 판정은 다섯 키 전부(요일은 원소까지)", () => {
-    const a = parseClassListPrefs({ subject: "math", days: ["mon"] });
-    expect(sameClassListPrefs(a, { ...a })).toBe(true);
-    expect(sameClassListPrefs(a, { ...a, days: ["tue"] })).toBe(false);
-    expect(sameClassListPrefs(a, { ...a, days: ["mon", "tue"] })).toBe(false);
-    expect(sameClassListPrefs(a, { ...a, view: "cards" })).toBe(false);
+  it("같음 판정은 **JSON 문자열 비교**다(공용 RememberPrefs) — 파서가 키 순서까지 같은 객체를 만든다", () => {
+    // 🔑 저장 여부를 `JSON.stringify(current) === JSON.stringify(saved)`로 정하므로, URL에서 온 값과 DB에서 온 값이
+    //    **같은 파서**를 지나 같은 키 순서로 나와야 한다(아니면 값이 같아도 렌더마다 저장한다).
+    const fromUrl = parseClassListPrefs({ days: "mon", subject: "math", view: "table", sort: "name", teacher: "all" });
+    const fromDb = parseClassListPrefs({ subject: "math", teacher: "all", days: ["mon"], sort: "name", view: "table" });
+    expect(JSON.stringify(fromUrl)).toBe(JSON.stringify(fromDb));
+    expect(JSON.stringify(parseClassListPrefs({ ...fromDb, days: ["tue"] }))).not.toBe(JSON.stringify(fromDb));
   });
 
   it("상태 배지 = 운영 초록(positive) · 종강 앰버 · 폐지 중립 — 라벨은 필터 표와 같은 말", () => {

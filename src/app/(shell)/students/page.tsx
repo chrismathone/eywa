@@ -177,7 +177,8 @@ export default async function StudentsPage({
    * 목록 링크(쪽 넘김·미수강 토글)가 들고 갈 파라미터 — 기본값과 다르거나 **URL이 명시한** 축은 그대로 적는다.
    * 저장값에서 온 축도 값이 기본값과 다르면 적히므로, 링크를 따라가도 지금 보는 필터가 그대로다.
    * ⚠️ URL이 적은 과목은 **적힌 그대로** 잇는다(위 축 보정값이 아니라) — 보정값을 링크에 실으면 다음 렌더가 그것을 사용자 선택으로
-   * 읽어 계정에 저장한다(재리뷰 2026-09-03). 학년·담임은 URL 값이면 보정하지 않으니 그대로다.
+   * 읽어 계정에 저장한다(재리뷰 2026-09-03). **정렬·검색 범위**도 파서가 보정하는 축이라 같이 원값으로 잇는다
+   * (재리뷰 2026-09-04). 학년·담임은 URL 값이면 보정하지 않으니 그대로다.
    */
   const listParams = (patch: { page?: number; noenr?: boolean } = {}) => {
     const params = new URLSearchParams();
@@ -186,8 +187,10 @@ export default async function StudentsPage({
     else if (subject !== DEFAULT_STUDENT_LIST_PREFS.subject) params.set("subject", subject);
     if (grade !== DEFAULT_STUDENT_LIST_PREFS.grade || sp.grade !== undefined) params.set("grade", grade);
     if (teacherId !== DEFAULT_STUDENT_LIST_PREFS.teacher || sp.teacher !== undefined) params.set("teacher", teacherId);
-    if (field !== DEFAULT_STUDENT_LIST_PREFS.field || sp.field !== undefined) params.set("field", field);
-    if (sort !== DEFAULT_STUDENT_LIST_PREFS.sort || sp.sort !== undefined) params.set("sort", sort);
+    if (sp.field !== undefined) params.set("field", sp.field);
+    else if (field !== DEFAULT_STUDENT_LIST_PREFS.field) params.set("field", field);
+    if (sp.sort !== undefined) params.set("sort", sp.sort);
+    else if (sort !== DEFAULT_STUDENT_LIST_PREFS.sort) params.set("sort", sort);
     const noenr = patch.noenr ?? excludeNoEnrollment;
     if (noenr || sp.noenr !== undefined || patch.noenr !== undefined) params.set("noenr", noenr ? "1" : "0");
     if (q) params.set("q", q);

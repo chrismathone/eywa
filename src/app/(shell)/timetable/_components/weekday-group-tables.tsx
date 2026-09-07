@@ -512,7 +512,12 @@ function GroupTable({
               {isGroupSecond ? null : (
                 <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: labelH }}>
                   {timeOnly ? (
-                    <span className="num">{timeText}</span>
+                    // 이름이 없어도 시각은 **두 줄**(`14:30` / `~ 16:20`) — 한 줄 `14:30~16:20`은 교시 열 폭을 넘어
+                    // 옆 칸으로 샌다(원장 캡처 2026-09-04. 이름 있는 갈래는 아래에서 이미 두 줄이었다).
+                    <span className="num leading-tight">
+                      <span className="block">{timeText.split("~")[0]}</span>
+                      {timeText.includes("~") ? <span className="block">~ {timeText.split("~")[1]}</span> : null}
+                    </span>
                   ) : (
                     <>
                       {labelText}

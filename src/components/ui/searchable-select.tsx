@@ -139,12 +139,20 @@ export function SearchableSelect({
       highlightOn ? "border-amber/60 bg-amber-soft text-amber" : "border-border bg-card text-foreground"
     }`;
 
+  /**
+   * 🔴 `aria-label`은 **버튼 안의 글자를 덮는다** — 축 이름만 주면 화면 낭독기가 "과목 필터"까지만 읽고
+   *    지금 고른 값을 영영 안 읽는다(재리뷰 2026-09-04. `HrefSelect`는 처음부터 트리거에 안 달았다).
+   *    서술 라벨이 필요한 자리에선 **값을 붙여 한 이름으로** 만든다("과목 필터: 수학").
+   */
+  const a11yValue = selected ? selected.label : (placeholder ?? null);
+  const a11yName = ariaLabel ? (a11yValue ? `${ariaLabel}: ${a11yValue}` : ariaLabel) : undefined;
+
   return (
     <div ref={ref} className={`relative ${className ?? ""}`}>
       {name ? <input type="hidden" name={name} value={current} /> : null}
       <button
         type="button"
-        aria-label={ariaLabel}
+        aria-label={a11yName}
         onClick={() => setOpen(!open)}
         className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 /**
  * 보이지 않는 '보강' 반의 **조회·생성** — 규약과 "왜 이렇게 하나"는 순수부에 있다:
  * [`features/classes/makeup-pool.ts`](@/features/classes/makeup-pool). 여기 오기 전에 그걸 먼저 읽을 것.
@@ -262,11 +264,12 @@ export async function ensureMakeupAttendanceForReport(input: {
  *    `is_makeup_pool`을 수업목록 쿼리에 끼워 넣으면 PostgREST가 400을 내고 **화면이 통째로 죽는다**([[#95]]).
  *    여기서 실패하면 빈 배열이라 목록은 종전과 같이(그 반이 보이는 채로) 그냥 돈다 — fail-open.
  * ⚠️ 반 수가 강사 수만큼이라(수십) `.in()` 걱정은 없다.
+ * 🔑 요청 단위 `cache` — 수업목록 한 화면이 목록(getClassesPage)과 스탯(getClassesStats) 두 곳에서 부른다.
  */
-export async function listMakeupPoolClassIds(): Promise<string[]> {
+export const listMakeupPoolClassIds = cache(async (): Promise<string[]> => {
   // 세션 클라이언트 — 읽기는 RLS(테넌트 격리)가 알아서 좁힌다(admin을 쓸 이유가 없다).
   const supabase = await createClient();
   const { data, error } = await supabase.from("classes").select("id").eq("is_makeup_pool", true);
   if (error) return []; // 미적용·실패 = 아무것도 안 뺀다(목록이 죽는 것보다 낫다).
   return (data ?? []).map((r) => r.id as string);
-}
+});

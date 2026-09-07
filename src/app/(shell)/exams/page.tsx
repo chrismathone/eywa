@@ -141,7 +141,7 @@ export default async function ExamsPage({
               name="q"
               defaultValue={q}
               placeholder="시험명"
-              className="text-foreground placeholder:text-text-faint w-32 h-full bg-transparent leading-normal focus:outline-none"
+              className="text-foreground placeholder:text-text-faint h-full w-32 bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none"
             />
           </div>
           <label className="text-text-dim flex items-center gap-1 text-xs">

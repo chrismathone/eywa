@@ -74,12 +74,20 @@ export function BigStat({
   // compact-chrome(창·모바일·강사 미니셸) — 크롬이 이미 밖에 있는 화면에선 카드가 세로 110px을 먹을 이유가
   // 없다. 값·라벨·보조라인은 **그대로 두고 밀도만** 올린다(정보를 지우지 않는다). 아이콘 칩만 한 단계 축소.
   const Shell = onClick ? "button" : "div";
+  /**
+   * 버튼은 **phrasing content**만 담을 수 있어서, 누를 수 있는 카드의 안쪽 묶음은 `<span>`이어야 한다
+   * (재리뷰 2026-09-04 — `<div>`는 브라우저가 견딜 뿐 무효한 HTML이다).
+   * ⚠️ 반대로 **그냥 카드일 땐 `<div>` 그대로** 둔다 — 호출부가 `sub`에 컴포넌트를 넘기는 자리가 있어
+   *    (운영실 `command-band`) 늘 `<span>`으로 감싸면 이번엔 span 안에 블록이 들어가 같은 문제가 뒤집혀 난다.
+   *    그래서 누를 수 있는 카드의 `sub`엔 블록 요소를 넘기지 말 것(지금은 전부 문자열).
+   */
+  const Box = onClick ? "span" : "div";
   return (
     <Shell
       {...(onClick ? { type: "button" as const, onClick, "aria-label": ariaLabel } : {})}
       className={`bg-card block w-full rounded-2xl p-4 compact-chrome:p-3 xl:p-5 ${onClick ? RAISED : "shadow-card"}`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <Box className="flex items-center justify-between gap-2">
         <span className="text-text-dim text-sm font-medium compact-chrome:text-xs">{label}</span>
         {icon ? (
           <span
@@ -89,8 +97,8 @@ export function BigStat({
             {icon}
           </span>
         ) : null}
-      </div>
-      <div className={`${size === "lg" ? "mt-3" : "mt-2.5"} flex items-baseline gap-1 compact-chrome:mt-1`}>
+      </Box>
+      <Box className={`${size === "lg" ? "mt-3" : "mt-2.5"} flex items-baseline gap-1 compact-chrome:mt-1`}>
         <span
           className={`num font-bold leading-none tracking-tight compact-chrome:text-2xl ${
             size === "lg" ? "text-4xl" : "text-3xl"
@@ -99,12 +107,12 @@ export function BigStat({
           {value}
         </span>
         {unit ? <span className="text-text-dim text-sm font-medium compact-chrome:text-xs">{unit}</span> : null}
-      </div>
+      </Box>
       {/* 보조라인 자리는 값이 없을 때 **비워두되 높이를 잡아** 카드 4장의 밑선을 맞춘다 — 컴팩트에선 그
           예약 높이를 없애고(min-h-0) 실제 내용이 있을 때만 차지하게 한다. */}
-      <div className="text-text-faint mt-1.5 min-h-[17px] text-xs compact-chrome:mt-0.5 compact-chrome:min-h-0">
+      <Box className="text-text-faint mt-1.5 block min-h-[17px] text-xs compact-chrome:mt-0.5 compact-chrome:min-h-0">
         {sub ?? null}
-      </div>
+      </Box>
     </Shell>
   );
 }

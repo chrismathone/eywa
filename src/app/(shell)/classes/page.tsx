@@ -183,8 +183,10 @@ export default async function ClassesPage({
     else if (teacherId !== "all") params.set("teacher", teacherId);
     if (sp.days !== undefined) params.set("days", sp.days);
     else if (days.length) params.set("days", days.join(","));
-    if (sp.sort !== undefined || sort !== "name") params.set("sort", sort);
-    if (sp.view !== undefined || view !== "table") params.set("view", view);
+    if (sp.sort !== undefined) params.set("sort", sp.sort);
+    else if (sort !== "name") params.set("sort", sort);
+    if (sp.view !== undefined) params.set("view", sp.view);
+    else if (view !== "table") params.set("view", view);
     if (q) params.set("q", q);
     if ((patch.page ?? 1) > 1) params.set("page", String(patch.page));
     const s = params.toString();

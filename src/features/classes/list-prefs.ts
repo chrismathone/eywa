@@ -59,13 +59,3 @@ export function parseClassListPrefs(raw: unknown): ClassListPrefs {
   };
 }
 
-export function sameClassListPrefs(a: ClassListPrefs, b: ClassListPrefs): boolean {
-  return (
-    a.subject === b.subject &&
-    a.teacher === b.teacher &&
-    a.days.length === b.days.length &&
-    a.days.every((d, i) => d === b.days[i]) &&
-    a.sort === b.sort &&
-    a.view === b.view
-  );
-}

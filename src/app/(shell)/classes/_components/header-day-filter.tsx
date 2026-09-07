@@ -57,7 +57,8 @@ export function HeaderDayFilter({ value }: { value: string[] }) {
         render={
           <button
             type="button"
-            aria-label="요일 필터"
+            // 🔴 aria-label은 버튼 글자를 덮는다 — 고른 요일을 함께 실어야 낭독기가 지금 값을 읽는다(재리뷰 2026-09-04).
+            aria-label={summary ? `요일 필터: ${summary}` : "요일 필터"}
             className={`${HEADER_FILTER_TRIGGER} inline-flex items-center gap-1 align-middle`}
           />
         }
