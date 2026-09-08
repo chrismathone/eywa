@@ -17,6 +17,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import { TabLink } from "../_components/tab-link";
+import { memoCategoryLabel } from "@/features/students/memo-category";
 
 const won = (n: number) => n.toLocaleString();
 
@@ -195,7 +196,9 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
             pinnedMemos.slice(0, 3).map((m) => (
               <DigestRow
                 key={m.id}
-                left={m.pinned ? <EyIcon name="pin" size={13} aria-label="고정 메모" /> : m.category}
+                // 🔴 저장값(`general`)을 그대로 적지 않는다 — 분류 라벨은 단일 소스에서
+                //    (원장 제보 2026-09-08 *"실제 출력이 영문으로 출력됨"*).
+                left={m.pinned ? <EyIcon name="pin" size={13} aria-label="고정 메모" /> : memoCategoryLabel(m.category)}
                 right={m.content}
                 truncate
               />

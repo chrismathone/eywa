@@ -711,6 +711,8 @@ export async function createStudentMemo(
   const studentId = String(formData.get("studentId") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim() || "general";
   const content = String(formData.get("content") ?? "").trim();
+  // '검색 허용'(0250a) — 체크박스는 꺼져 있으면 아예 안 실려 오므로 **존재 여부**로 읽는다.
+  const searchable = formData.get("searchable") !== null;
 
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
   if (!content) return { error: "메모 내용을 입력해주세요" };
@@ -721,6 +723,7 @@ export async function createStudentMemo(
     student_id: studentId,
     category,
     content,
+    searchable,
     created_by: user.id,
   });
 
@@ -767,13 +770,14 @@ export async function updateStudentMemo(
   const studentId = String(formData.get("studentId") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim() || "general";
   const content = String(formData.get("content") ?? "").trim();
+  const searchable = formData.get("searchable") !== null;
   if (!id) return { error: "메모 ID가 누락되었습니다" };
   if (!content) return { error: "메모 내용을 입력해주세요" };
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("student_memos")
-    .update({ category, content, updated_at: new Date().toISOString() })
+    .update({ category, content, searchable, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return { error: error.message };
 

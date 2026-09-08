@@ -1485,7 +1485,7 @@ export const SHEET_DICT = {
   "stu.filter.sort.name": { ko: "이름순", en: "By name" },
   "stu.filter.sort.recent": { ko: "등록일순", en: "By date added" },
   "stu.filter.noEnrollment": { ko: "미수강 제외", en: "Hide unenrolled" },
-  "stu.filter.searchPh": { ko: "이름·학교·연락처", en: "Name, school or phone" },
+  "stu.filter.searchPh": { ko: "이름·학교·연락처·메모", en: "Name, school, phone or memo" },
 
   // ── 이력서 종이 서식(/me) — 🔴 화면만 언어를 타고 **인쇄물은 언제나 한국어**다 ────
   "res.title.roster": { ko: "직원 명부", en: "Staff register" },

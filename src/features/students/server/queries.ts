@@ -111,12 +111,66 @@ const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
   memo: ["notes"],
 };
 
-// 검색어를 선택된 필드(들)에 ilike OR로 적용. 쉼표·괄호는 PostgREST or() 구문 충돌이라 공백 치환.
-function applySearch<T extends { or: (f: string) => T }>(qb: T, q: string | undefined, field?: SearchField): T {
-  const term = (q ?? "").trim().replace(/[,()]/g, " ");
+/**
+ * 메모 내용으로 걸린 학생을 검색에 함께 태울 때, **URL에 실을 id 상한**.
+ * 🔴 상한이 필요한 이유: 이 id들은 `id.in.(…)`로 **쿼리스트링에 실린다** — 예전에 미수강 학생 458명을
+ *    그렇게 실었다가 URL 17,943자 → PostgREST가 `content-location`으로 되돌려준 헤더가 Node
+ *    `maxHeaderSize`(16384)를 넘겨 `fetch failed`, 그걸 삼켜 **"학생 0명"**이 됐다(위 embed 주석).
+ * ⚠️ 상한에 걸리면 조용히 자른다 — 이름·학교·연락처 매칭은 그대로라 검색이 죽지는 않는다.
+ */
+const MEMO_MATCH_CAP = 200;
+
+/**
+ * 검색어와 겹치는 **'검색 허용' 메모**가 달린 학생 id(0250a) — 원장 2026-09-08
+ * *"학생 검색시에 '메모 내용'도 검색되도록"* + *"토글 허용된 검색만 검색에 노출되도록"*.
+ *
+ * 🔴 **허용된 메모만** 본다(`searchable`) — 끈 메모는 검색 결과에 그 학생을 올리지 않는다.
+ * ⚠️ 0250a 미적용이면 컬럼이 없어 400이 난다 → **빈 배열**로 떨어뜨린다(검색은 종전대로 돈다,
+ *    [[#95]] expand/contract). 에러를 던지면 학생 목록이 통째로 죽는다.
+ */
+async function memoMatchStudentIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  term: string,
+): Promise<string[]> {
+  if (!term) return [];
+  const { data, error } = await supabase
+    .from("student_memos")
+    .select("student_id")
+    .eq("searchable", true)
+    .ilike("content", `%${term}%`)
+    .limit(MEMO_MATCH_CAP);
+  if (error || !data) return [];
+  return [...new Set(data.map((r) => r.student_id as string))];
+}
+
+/**
+ * 검색어 정리 — 쉼표·괄호는 PostgREST `or()` 구문과 충돌해 공백으로 바꾼다.
+ * 🔑 메모 매칭(`memoMatchStudentIds`)도 **같은 값**을 봐야 한다 — 한쪽만 치환하면 같은 검색어가
+ *    이름에선 걸리고 메모에선 안 걸린다(또는 그 반대).
+ */
+function searchTerm(q: string | undefined): string {
+  return (q ?? "").trim().replace(/[,()]/g, " ");
+}
+
+// 검색어를 선택된 필드(들)에 ilike OR로 적용.
+// 🔑 `memoIds`가 있으면 **그 학생들도 결과에 넣는다**(메모 내용 검색) — 기본 검색(all)에서만 쓴다.
+function applySearch<T extends { or: (f: string) => T }>(
+  qb: T,
+  q: string | undefined,
+  field?: SearchField,
+  memoIds: string[] = [],
+): T {
+  const term = searchTerm(q);
   if (!term) return qb;
   const cols = SEARCH_FIELD_COLS[field ?? "all"] ?? SEARCH_FIELD_COLS.all;
-  return qb.or(cols.map((c) => `${c}.ilike.%${term}%`).join(","));
+  const parts = cols.map((c) => `${c}.ilike.%${term}%`);
+  if (memoIds.length > 0) parts.push(`id.in.(${memoIds.join(",")})`);
+  return qb.or(parts.join(","));
+}
+
+/** 메모 내용까지 훑는 검색인가 — **기본(all)일 때만**. 필드를 콕 집었으면 그 필드만 본다. */
+function searchesMemos(q: string | undefined, field?: SearchField): boolean {
+  return !!searchTerm(q) && (field ?? "all") === "all";
 }
 
 /**
@@ -194,6 +248,10 @@ export async function getStudentsList(
   //    헤더 초과로 조용히 "0명"이 된다(임계 n≈398, 이 파일 enrollmentEmbed 주석의 🔴 2026-07-29 사고).
   //    학생 전건은 어차피 아래 fetchAllPaged가 받고 있어 추가 왕복이 없다.
   const scopeIds = teacherScope ? new Set(teacherScope.studentIds) : null;
+  // 메모 내용까지 훑는 검색(0250a) — 왕복은 검색어가 있을 때만, 상한 안에서.
+  const memoIds = searchesMemos(options?.q, options?.searchField)
+    ? await memoMatchStudentIds(supabase, searchTerm(options?.q))
+    : [];
   // 학생 전건을 .range()로 페이지네이션 — export·반 상세가 전 학생을 받으므로 1000행 절단 방지.
   const all = await fetchAllPaged((from, to) => {
     let qb = supabase
@@ -204,7 +262,7 @@ export async function getStudentsList(
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
     if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
     // 강사 필터는 아래 in-memory(과목별 담당 강사 기준) — primary_teacher_id 제거로 쿼리단 필터 없음.
-    qb = applySearch(qb, options?.q, options?.searchField);
+    qb = applySearch(qb, options?.q, options?.searchField, memoIds);
     const sorted =
       options?.sort === "name"
         ? qb.order("name", { ascending: true })
@@ -400,6 +458,10 @@ export async function getStudentsPage(
   const excludeNoEnrollment = !!options?.excludeNoEnrollment && !isWithdrawn;
   const embed = enrollmentEmbed(options);
   const needEnrollmentJoin = excludeNoEnrollment || embed.subjectFilter || embed.teacherFilter;
+  // 메모 내용까지 훑는 검색(0250a) — 위 전건 조회와 같은 규약.
+  const memoIds = searchesMemos(options?.q, options?.searchField)
+    ? await memoMatchStudentIds(supabase, searchTerm(options?.q))
+    : [];
 
   let qb = supabase
     .from("students")
@@ -410,7 +472,7 @@ export async function getStudentsPage(
     );
   if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
   if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
-  qb = applySearch(qb, options?.q, options?.searchField);
+  qb = applySearch(qb, options?.q, options?.searchField, memoIds);
   if (needEnrollmentJoin) {
     // 공통: 종료되지 않은 수강. (휴원은 '수강 중'으로 본다 — 과목 필터일 때만 아래에서 더 좁힌다.)
     // 🔴 상태=퇴원에선 활성 조건을 떼고 **이력 포함** 매치 — 퇴원생은 활성 수강이 없어 그대로 걸면
@@ -1308,6 +1370,8 @@ export type StudentMemoRow = {
   category: string;
   content: string;
   pinned: boolean;
+  /** 학생 검색에서 이 메모 내용도 매칭 대상으로 쓸지(0250a) — 작성·수정 폼의 '검색 허용' 토글. */
+  searchable: boolean;
   createdAt: string;
   createdBy: string | null;
   createdByName: string | null;
@@ -1318,7 +1382,7 @@ export async function getStudentMemos(studentId: string): Promise<StudentMemoRow
   const { data } = await supabase
     .from("student_memos")
     .select(
-      `id, category, content, pinned, created_at, created_by,
+      `id, category, content, pinned, searchable, created_at, created_by,
        author:created_by ( display_name )`,
     )
     .eq("student_id", studentId)
@@ -1334,6 +1398,8 @@ export async function getStudentMemos(studentId: string): Promise<StudentMemoRow
       category: r.category,
       content: r.content,
       pinned: r.pinned ?? false,
+      // 0250a 이전 행은 컬럼이 없어 undefined — 그때는 '허용'으로 본다(마이그레이션 기본값과 같다).
+      searchable: r.searchable ?? true,
       createdAt: r.created_at,
       createdBy: r.created_by,
       createdByName: a?.display_name ?? null,

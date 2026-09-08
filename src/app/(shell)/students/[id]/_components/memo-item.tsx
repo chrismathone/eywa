@@ -12,27 +12,10 @@ import {
   type UpdateMemoState,
 } from "@/features/students/server/actions";
 import type { StudentMemoRow } from "@/features/students/server/queries";
+// 분류 목록·라벨·색은 단일 소스(여기에 복사본을 두지 말 것 — 그 복사가 '최근 메모'만 영문으로
+// 남게 만든 원인이다).
+import { MEMO_CATEGORIES, memoCategoryColor, memoCategoryLabel } from "@/features/students/memo-category";
 import { DeleteMemoButton } from "./memo-delete-button";
-
-const CATEGORIES = [
-  { value: "general", label: "일반" },
-  { value: "homework", label: "숙제/과제" },
-  { value: "behavior", label: "행동" },
-  { value: "parent", label: "학부모" },
-  { value: "health", label: "건강" },
-  { value: "other", label: "기타" },
-];
-const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
-  CATEGORIES.map((c) => [c.value, c.label]),
-);
-const CATEGORY_COLOR: Record<string, string> = {
-  general: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-  homework: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-  behavior: "bg-chart-3/10 text-chart-3 border-chart-3/20",
-  parent: "bg-chart-5/10 text-chart-5 border-chart-5/20",
-  health: "bg-chart-4/10 text-chart-4 border-chart-4/20",
-  other: "bg-muted text-muted-foreground border-border",
-};
 
 function PinButton({ memo, studentId }: { memo: StudentMemoRow; studentId: string }) {
   const [, action] = useActionState(toggleStudentMemoPin, undefined);
@@ -90,10 +73,10 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
         <div className="flex items-baseline gap-2">
           <span
             className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
-              CATEGORY_COLOR[memo.category] ?? CATEGORY_COLOR.other
+              memoCategoryColor(memo.category)
             }`}
           >
-            {CATEGORY_LABEL[memo.category] ?? memo.category}
+            {memoCategoryLabel(memo.category)}
           </span>
           {memo.createdByName ? (
             <span className="text-muted-foreground text-[11px]">{memo.createdByName}</span>
@@ -140,12 +123,22 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
             defaultValue={memo.category}
             className="border-border bg-card text-foreground rounded-lg border px-2 py-1 text-xs"
           >
-            {CATEGORIES.map((c) => (
+            {MEMO_CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>
                 {c.label}
               </option>
             ))}
           </select>
+          {/* 검색 허용(0250a) — 작성 폼과 같은 이름·같은 뜻. 끄면 학생 검색에서 이 메모가 빠진다. */}
+          <label className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-[11px]">
+            <input
+              type="checkbox"
+              name="searchable"
+              defaultChecked={memo.searchable}
+              className="size-3.5 accent-[var(--primary)]"
+            />
+            검색 허용
+          </label>
           <textarea
             name="content"
             required

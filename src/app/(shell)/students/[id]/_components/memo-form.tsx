@@ -7,15 +7,8 @@ import { Button } from "@/components/ui/button";
 import { createStudentMemo, type CreateMemoState } from "@/features/students/server/actions";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
-
-const CATEGORIES = [
-  { value: "general", label: "일반" },
-  { value: "homework", label: "숙제/과제" },
-  { value: "behavior", label: "행동" },
-  { value: "parent", label: "학부모" },
-  { value: "health", label: "건강" },
-  { value: "other", label: "기타" },
-];
+// 분류는 단일 소스 — 화면 파일에 목록·라벨·색을 다시 적지 말 것.
+import { MEMO_CATEGORIES } from "@/features/students/memo-category";
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -66,13 +59,19 @@ export function MemoForm({ studentId }: { studentId: string }) {
           defaultValue="general"
           className="border-border bg-card text-foreground rounded-lg border px-2 py-1 text-xs"
         >
-          {CATEGORIES.map((c) => (
+          {MEMO_CATEGORIES.map((c) => (
             <option key={c.value} value={c.value}>
               {c.label}
             </option>
           ))}
         </select>
         <span className="text-muted-foreground text-[11px]">분류</span>
+        {/* 검색 허용(원장 2026-09-08) — 켜 두면 학생 검색이 이 메모 내용으로도 그 학생을 찾는다.
+            🔴 기본은 켜짐이다: 메모를 적는 대부분의 이유가 "나중에 찾기"라서(민감한 메모만 끈다). */}
+        <label className="text-muted-foreground ml-auto flex cursor-pointer items-center gap-1.5 text-[11px]">
+          <input type="checkbox" name="searchable" defaultChecked className="size-3.5 accent-[var(--primary)]" />
+          검색 허용
+        </label>
       </div>
       <textarea
         name="content"
