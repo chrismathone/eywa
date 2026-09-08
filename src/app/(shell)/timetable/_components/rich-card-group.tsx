@@ -250,8 +250,6 @@ export function ClassColumn({
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
     : undefined;
-  // 담임색 — ijw 강사 저장색(users.bg_color, display_name·영문닉네임으로 해결). 없으면 plain.
-  const damimColor = card.teacherName ? teacherColors[card.teacherName] : undefined;
 
   return (
     <div
@@ -319,21 +317,15 @@ export function ClassColumn({
       {/* 배치 편집(수업명만) — 여기서 끝. 아래 담임·격자·명단을 안 그려야 42반을 끌 때 안 버벅인다. */}
       {namesOnly ? null : (
       <>
-      {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain.
+      {/* 담임 — **이름만**(원장 2026-09-08 *"통합 시간표에서 담임 행에서 배경색 제거해줘"*).
+          🔴 강사 저장색(`teacherColors`) 칩을 여기 다시 넣지 말 것 — 반 헤더색·교시 칸 색과 겹쳐
+             한 카드에 색이 세 층이 됐다. 색은 칸(누가 그 교시에 들어가나)에만 남는다.
           한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
           닉네임은 9px로 한 단계 작게: 2요일 카드는 폭이 70px라 같은 크기로 적으면 이름부터 잘린다.
           ⚠️ 넘치면 카드 안에서 **잘린다**(overflow-hidden) — 옆 반 칸 위로 삐져나오지 않게. */}
       <div className={`${GRID} flex min-w-0 items-center justify-center overflow-hidden border-b`} style={{ height: TEACHER_H }}>
         {!card.teacherName ? (
           <span className="text-text-faint text-[11px]">-</span>
-        ) : damimColor ? (
-          <span
-            className="overflow-hidden rounded px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-clip"
-            style={{ background: damimColor.bg, color: damimColor.text }}
-          >
-            {card.teacherName}
-            <TeacherNick name={card.teacherName} map={teacherNicknames} />
-          </span>
         ) : (
           <span className="text-foreground overflow-hidden text-[11px] font-bold whitespace-nowrap text-clip">
             {card.teacherName}
