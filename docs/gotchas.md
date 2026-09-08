@@ -1944,3 +1944,25 @@ grep 일치), dev 서버를 재시작해도 같았다. 즉 빌드 파이프라�
 - ⚠️ 같은 카드 안의 **오류 문구도 함께 잘리고 있었다**(같은 `absolute`) — 겹판을 옮길 땐 그 형제도 같이
   본다. 단 둘이 같은 자리에 뜨므로 메뉴가 열린 동안엔 오류를 안 그린다.
 - 가드 = `seating-cell.test.tsx`(rect를 물려 위로 뒤집기·오른쪽 클램프·스크롤 이탈 닫힘·포털 여부를 고정).
+
+## #129 **끌던 줄이 언마운트되면 dnd-kit `active.data`가 빈 객체가 된다** — "출발 반을 알 수 없어" 거절은 판정이 아니라 데이터 증발이었다 (2026-09-09)
+
+**증상**: 수학 기본뷰에서 학생을 끌어 놓으면 우상단에 *"출발 반을 알 수 없어 옮기지 못했습니다"*(원장 제보). 반 블록은
+되고 학생만 그랬다.
+
+**원인**: 픽업 렉을 없애려고 **마우스가 올라간 줄만** `useDraggable`을 다는 무장(arming) 방식을 쓰는데(drag-flag.ts),
+무장은 `pointerover`로 갈아탄다. 끄는 동안 고스트는 `pointer-events:none`이라 포인터가 지나는 **다른 줄**의 `pointerover`가
+그대로 불리고 → 그 줄이 무장되면서 원래 줄은 평소 줄로 돌아가 훅이 **언마운트** → dnd-kit은 `draggableNodes`에서 노드를
+지우고 `active.data`를 `defaultData`(빈 객체)로 바꾼다(core.esm 주석 *"It's possible for the active node to unmount while
+dragging"*). 놓는 순간 `data.classId`가 없어 거절 갈래로 떨어졌다. 학생 줄이 빽빽한 수학 기본뷰에선 거의 매번이다.
+- 🔑 **판별**: `active.data.current`가 `{}`(undefined가 아니라 빈 객체)면 노드가 사라진 것이다. 터치 기기(모든 줄 무장)에선
+  재현이 안 된다 — 이 PC가 그랬다(`(any-pointer: coarse)` true). 재현·판정은 단위 테스트로.
+- **고침 둘**: ① **누르고 있는 동안·끌고 있는 동안은 무장을 안 바꾼다**(`holdArmedRow` — 줄의 `onPointerDownCapture`,
+  풀림은 window `pointerup`·`pointercancel`·`blur`). 🔴 `dragging` 플래그만으론 부족하다 — 활성화 문턱(5px) **앞**에도
+  같은 일이 나므로 "누름"에 건다. ② 보드가 **집는 순간의 data를 스냅샷**으로 들고 놓을 때 그것을 쓴다(안전망 — 줄이 어떤
+  이유로든 다시 그려져도 산다). 가드 = `drag-flag.test.ts`.
+- ⚠️ 같은 날 곁가지 둘: **막힌 칸에 놓았을 때 "칸을 찾지 못했다"**고 하던 것은 `okCellAt`(갈 수 있는 칸만 찾음)의 빈손을
+  "격자 밖"으로 읽은 것 — 아무 칸(`anyCellAt`)을 찾아 `annotateDropCells`가 `title`에 적어 둔 **이유**를 말한다(제자리는
+  취소라 조용히). 놓을 칸이 0개면 집는 순간 말한다(초록 칸이 안 켜지면 "표시가 안 된다"로 읽힌다). **드래그 직후의
+  더블클릭**(크롬은 더블클릭을 요소가 아니라 시간·좌표로 센다 — 짧게 끌다 놓고 다시 잡으면 창이 열린다)은 DnD 영역 루트의
+  `onDoubleClickCapture`에서 삼킨다(`swallowDoubleClickAfterDrag`, 유예 700ms).

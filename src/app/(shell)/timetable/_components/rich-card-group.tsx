@@ -19,7 +19,7 @@ import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { useClassFilter, useSearchTone } from "./search-context";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { holdTone, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
-import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
+import { holdArmedRow, setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { rosterDropId, useRosterMove, type RosterDragData } from "./roster-move";
 import { movedByTarget, visibleSpanRows } from "@/features/timetable/lib/row-span";
 
@@ -507,6 +507,8 @@ function RosterRowShell({
       {...(dnd?.attributes ?? {})}
       {...(dnd?.listeners ?? {})}
       // ⚠️ `pointerover`(버블링) — enter/leave는 자식을 오갈 때 놓치기 쉽고, 같은 값 재설정은 무동작이다.
+      // 🔴 누르는 순간 무장을 잠근다(학생 줄과 같은 규약 — drag-flag.ts `holdArmedRow` 주석).
+      onPointerDownCapture={() => holdArmedRow()}
       onPointerOver={() => onArm?.()}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}

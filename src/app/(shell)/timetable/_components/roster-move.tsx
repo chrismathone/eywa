@@ -1,7 +1,7 @@
 "use client";
 
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -17,7 +17,7 @@ import {
 
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { endSingleEnrollment, holdSingleEnrollment } from "@/features/students/server/actions";
-import { setTimetableDragging } from "./drag-flag";
+import { setTimetableDragging, swallowDoubleClickAfterDrag } from "./drag-flag";
 
 /**
  * 통합뷰 명단 이동 — 학생 줄을 **대기/퇴원 칸으로 끌어다 놓는다**(원장 2026-09-07).
@@ -97,6 +97,9 @@ export function RosterMoveArea({
   const router = useRouter();
   const [drag, setDrag] = useState<RosterDragData | null>(null);
   const [pending, setPending] = useState<(RosterDragData & { kind: RosterDropKind }) | null>(null);
+  // 집는 순간의 drag data 스냅샷 — 끌던 줄이 언마운트되면 dnd-kit `active.data`가 빈 객체가 된다(timetable-board와
+  // 같은 안전망, drag-flag.ts `holdArmedRow` 주석).
+  const dragRef = useRef<RosterDragData | null>(null);
   // 5px 넘게 끌어야 드래그 — 그래야 줄의 더블클릭(학생 정보)이 그대로 산다([[#97]]와 같은 규약).
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const value = useMemo(() => ({ enabled: canEdit, today }), [canEdit, today]);
@@ -104,7 +107,8 @@ export function RosterMoveArea({
   const onDragEnd = useCallback((e: DragEndEvent) => {
     setTimetableDragging(false);
     setDrag(null);
-    const data = e.active.data.current as RosterDragData | undefined;
+    const data = dragRef.current ?? (e.active.data.current as RosterDragData | undefined);
+    dragRef.current = null;
     const target = e.over ? parseDropId(String(e.over.id)) : null;
     if (!data || !target) return;
     // 남의 반 칸 = 반 이동이라 여기서 처리하지 않는다(조용히 무시 — 화면은 제자리로 돌아간다).
@@ -123,15 +127,21 @@ export function RosterMoveArea({
         collisionDetection={collisionDetection}
         onDragStart={(e) => {
           setTimetableDragging(true);
-          setDrag((e.active.data.current as RosterDragData | undefined) ?? null);
+          const d = (e.active.data.current as RosterDragData | undefined) ?? null;
+          dragRef.current = d;
+          setDrag(d);
         }}
         onDragCancel={() => {
+          dragRef.current = null;
           setTimetableDragging(false);
           setDrag(null);
         }}
         onDragEnd={onDragEnd}
       >
-        {children}
+        {/* 드래그 직후의 더블클릭은 창 열기가 아니다 — 캡처에서 삼킨다(drag-flag.ts, 기본뷰 DnD 영역과 같은 규약). */}
+        <div className="contents" onDoubleClickCapture={swallowDoubleClickAfterDrag}>
+          {children}
+        </div>
         {/* 고스트는 **원본 그대로**(이름/학교학년 + 같은 tone) — 파일 이동처럼 조금 연하게. */}
         <DragOverlay dropAnimation={null}>
           {drag ? (

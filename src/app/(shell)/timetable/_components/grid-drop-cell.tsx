@@ -84,6 +84,9 @@ export function GridDropCell({
   );
 }
 
+/** 제자리 칸의 `title` — 보드가 드롭 거절을 말할 때 이 문자열로 "제자리 = 취소"를 알아본다(중복 문자열 금지). */
+export const SAME_SPOT_TITLE = "지금 있는 자리입니다";
+
 /** 이 칸의 좌표(속성에서 읽은 것) — 판정·하이라이트가 함께 쓴다. */
 type CellCoord = {
   el: HTMLElement;
@@ -151,7 +154,7 @@ export function annotateDropCells(
     const anchorAt = placed?.find((w) => w.slotId === subject.slotId) ?? placed?.[0];
     if (anchorAt && anchorAt.day === from.day && anchorAt.start.slice(0, 5) === from.start.slice(0, 5)) {
       el.removeAttribute(CELL_OK_ATTR);
-      el.title = "지금 있는 자리입니다";
+      el.title = SAME_SPOT_TITLE;
       continue;
     }
     const blockers = classMoveBlockers(subject, target, lookup);

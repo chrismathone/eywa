@@ -6,7 +6,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { dayChangeLabel } from "@/features/timetable/lib/split-attendance";
 import { useTimetableEdit } from "./edit-context";
-import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
+import { holdArmedRow, setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { HoverCard, StudentInfoCard } from "./hover-cards";
 import { useSearchTone } from "./search-context";
 import { RECENT_ROW_CLASS } from "./timetable-color";
@@ -279,6 +279,9 @@ function StudentRowView({
       ref={dnd?.setNodeRef}
       {...(dnd?.attributes ?? {})}
       {...(dnd?.listeners ?? {})}
+      // 🔴 누르는 순간 무장을 잠근다 — 끌면서 지나는 다른 줄의 pointerover가 무장을 빼앗아 이 줄이 언마운트되면
+      //    dnd-kit `active.data`가 비어 "출발 반을 알 수 없어"로 거절됐다(drag-flag.ts `holdArmedRow` 주석).
+      onPointerDownCapture={() => holdArmedRow()}
       onPointerOver={() => {
         // 포인터가 올라오면 이 줄만 무장. 🔴 `pointerType`으로 거르지 않는다 — 터치 기기를 못 알아본
         //    경우(하이브리드 노트북)에도 최소한 이 경로는 살아 있어야 한다(적대 리뷰 2026-09-04).
