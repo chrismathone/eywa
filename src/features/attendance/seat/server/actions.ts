@@ -33,6 +33,21 @@ export async function setSeatCell(input: {
   classId: string;
   studentId: string;
   status: SeatStatus | null;
+  /**
+   * 결석·지각 **사유 메모**(원장 2026-09-08 *"jj실 출석부도 결석 누르면 사유 입력할 수 있게 …
+   * 다른 출결과 동일하게"*). 서버 계약은 출결 모드와 같다:
+   * · `undefined` = 기존 메모 **유지** · `null` = 비움 · 문자열 = 그 값으로.
+   * ⚠️ 상태만 바꿀 때 무엇을 비울지는 호출부가 `noteOnStatusChange`로 정한다(사유는 그 상태의 설명이라
+   *    결석→출석이면 `여행`이 남으면 안 된다). 여기서 임의로 지우지 않는다.
+   */
+  note?: string | null;
+  /**
+   * **사유만 저장**(이미 찍힌 칸에 사유를 덧붙이는 경로) — 참이면 `status`를 **쓰지 않는다**.
+   * 🔴 사유를 적는 동안 다른 창이 상태를 고칠 수 있다. 상태를 함께 실으면 그 수정을 되돌린다
+   *    (출결 모드가 `noteOnly`를 따로 둔 이유와 같다).
+   * ⚠️ 붙일 행이 없으면 **아무것도 만들지 않는다** — 사유만 있는 칸(상태 없는 출결 행)은 만들지 않는다.
+   */
+  noteOnly?: boolean;
 }): Promise<SeatResult> {
   const g = await gateSeatWrite(input.seat, input.date);
   if ("error" in g) return g;
@@ -54,6 +69,8 @@ export async function setSeatCell(input: {
     classId: input.classId,
     studentId: input.studentId,
     status: input.status,
+    note: input.note,
+    noteOnly: input.noteOnly === true,
   });
   if (typeof changed === "string") return { error: changed };
 
@@ -155,6 +172,15 @@ export async function fillSeatSlot(input: {
  * 📌 반 출결 완료 알림(notifyIfClassAttendanceComplete)은 부르지 않는다 — 자리 교시는 그 반 수업의
  *    일부일 뿐이라 "이 반 오늘 출결 끝"이 아니다.
  */
+/**
+ * 메모 패치 조각 — `undefined`면 **키 자체를 안 넣는다**(기존 메모 유지).
+ * 🔴 `{ note: undefined }`를 그대로 넘기면 PostgREST가 그 컬럼을 지우거나(insert) 실어 보내니,
+ *    스프레드로 **키를 없애야** "건드리지 않는다"가 성립한다.
+ */
+function notePatch(note: string | null | undefined): { note?: string | null } {
+  return note === undefined ? {} : { note: note === "" ? null : note };
+}
+
 async function writeOne(
   supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
   p: {
@@ -166,6 +192,10 @@ async function writeOne(
     classId: string;
     studentId: string;
     status: SeatStatus | null;
+    /** `undefined`면 기존 메모를 건드리지 않는다(출결 모드 서버 계약과 같다). */
+    note?: string | null;
+    /** 참이면 `status`를 무시하고 메모만 갱신한다(붙일 행이 없으면 아무것도 안 한다). */
+    noteOnly?: boolean;
   },
 ): Promise<number | string> {
   const base = supabase
@@ -177,7 +207,7 @@ async function writeOne(
     .eq("session_date", p.date)
     .eq("slot_start", p.slot);
 
-  if (p.status === null) {
+  if (p.status === null && !p.noteOnly) {
     const { data: deleted, error } = await supabase
       .from("attendance_records")
       .delete()
@@ -221,11 +251,12 @@ async function writeOne(
       const err = await seatUpdate(
         supabase,
         {
-          status: p.status,
+          ...(p.noteOnly ? {} : { status: p.status }),
           seat_label: SEAT_DB_LABEL[p.seat],
           recorded_by: p.userId,
           recorded_at: new Date().toISOString(),
           recorded_via: "seat",
+          ...notePatch(p.note),
         },
         [existing],
       );
@@ -254,8 +285,16 @@ async function writeOne(
     }
     if (updateIds.length > 0 || promoteIds.length > 0) {
       const nowIso = new Date().toISOString();
-      const basePatch = { status: p.status, recorded_by: p.userId, recorded_at: nowIso, recorded_via: "seat" };
-      if (promoteIds.length > 0) {
+      const basePatch = {
+        ...(p.noteOnly ? {} : { status: p.status }),
+        recorded_by: p.userId,
+        recorded_at: nowIso,
+        recorded_via: "seat",
+        ...notePatch(p.note),
+      };
+      // 🔴 승격(day-level 행을 이 교시로 옮기기)은 **상태 쓰기의 부수효과**다 — 사유만 적는데 교시를
+      //    옮기면 다른 교시 칸이 미체크로 뒤집힌다.
+      if (promoteIds.length > 0 && !p.noteOnly) {
         const err = await seatUpdate(supabase, { ...basePatch, slot_start: p.slot }, promoteIds);
         if (err) return err;
       }
@@ -267,6 +306,9 @@ async function writeOne(
     }
   }
 
+  // 사유만 적는 요청인데 붙일 행이 없다 = 그새 누가 지웠다. 상태 없는 행을 만들지 않고 조용히 끝낸다.
+  if (p.noteOnly) return 0;
+
   const row = {
     tenant_id: p.tenantId,
     class_id: p.classId,
@@ -277,6 +319,7 @@ async function writeOne(
     seat_label: isPayrollSeat(p.seat) ? SEAT_DB_LABEL[p.seat] : null,
     recorded_by: p.userId,
     recorded_via: "seat",
+    ...notePatch(p.note),
   };
   const first = await supabase.from("attendance_records").insert(row);
   const error =
@@ -290,6 +333,9 @@ async function writeOne(
           status: row.status,
           seat_label: row.seat_label,
           recorded_by: row.recorded_by,
+          // `note`는 옛 컬럼이라 이 폴백(= recorded_via가 없는 스키마)에서도 그대로 실어 보낸다 —
+          // 빼면 사유가 조용히 사라진다.
+          ...notePatch(p.note),
         })).error
       : first.error;
   return error ? error.message : 1;

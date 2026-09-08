@@ -6,19 +6,27 @@ import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
+import { PrevAbsenceHint, SeatMarkButtons, SeatReasonInput } from "./seat-mark-extras";
 
 /** 랩실 출석부 — 이름 카드에 출결만. JJ 전용 칸은 여기에 넣지 않는다. */
 export function SeatLabGrid({
   rosters,
   statusOf,
+  noteOf,
   onSave,
+  onSaveNote,
+  showReason,
   onFillClass,
   readOnly,
   pending,
 }: {
   rosters: SeatClassRoster[];
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
+  noteOf: (classId: string, student: SeatClassRoster["students"][number]) => string | null;
   onSave: (classId: string, studentId: string, next: SeatStatus | null, prev: SeatStatus | null) => void;
+  onSaveNote: (classId: string, studentId: string, note: string, status: SeatStatus | null) => void;
+  /** 사유 칸을 그릴 것인가 — 비로그인 PIN 화면은 false(그 경로는 사유를 조회하지 않는다). */
+  showReason: boolean;
   onFillClass: (classId: string) => void;
   readOnly: boolean;
   pending: boolean;
@@ -83,17 +91,31 @@ export function SeatLabGrid({
                         {SEAT_LABEL[cur]}
                       </span>
                     ) : null}
-                    {!readOnly && cur !== "absent" ? (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => onSave(r.classId, s.id, "absent", cur)}
-                        aria-label={`${s.name} 결석`}
-                        className="border-line bg-card text-text-faint hover:text-att-absent-ink absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full border text-[10px] font-bold"
-                      >
-                        결
-                      </button>
+                    {!readOnly ? (
+                      <span className="absolute top-1.5 right-1.5 flex items-center gap-1">
+                        <SeatMarkButtons
+                          cur={cur}
+                          studentName={s.name}
+                          pending={pending}
+                          compact
+                          onMark={(next) => onSave(r.classId, s.id, next, cur)}
+                        />
+                      </span>
                     ) : null}
+                    {/* 결석·지각이면 그 자리에서 사유를 적는다(원장 2026-09-08) — 아직 안 찍힌 칸엔
+                        **지난 결석**을 대신 적어 "왜 안 왔었는지"를 묻지 않고도 알 수 있게 한다. */}
+                    <div className="mt-1 px-0.5">
+                      {showReason ? (
+                      <SeatReasonInput
+                        value={noteOf(r.classId, s)}
+                        status={cur}
+                        studentName={s.name}
+                        disabled={readOnly || pending}
+                        onChange={(next) => onSaveNote(r.classId, s.id, next, cur)}
+                      />
+                      ) : null}
+                      <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
+                    </div>
                   </li>
                 );
               })}

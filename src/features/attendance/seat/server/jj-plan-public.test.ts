@@ -60,6 +60,7 @@ const seatDay: SeatDay = {
             recordedBy: null,
             fromSeat: false,
       note: null,
+    prevAbsence: null,
             attitude: null,
             listeningLevel: null,
             memorizedWords: null,

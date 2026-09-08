@@ -50,6 +50,7 @@ export function SeatBoard({
   rosters,
   readOnly,
   hrefFor,
+  publicPin,
   plans,
 }: {
   seat: SeatKey;
@@ -59,9 +60,15 @@ export function SeatBoard({
   rosters: SeatClassRoster[];
   readOnly: boolean;
   hrefFor: string;
+  /**
+   * 비로그인 PIN 화면인가 — 참이면 **사유 칸을 안 그린다**(그 경로는 사유를 조회하지 않는다).
+   * ⚠️ `plans.viaPin`으로 대신 판정하지 말 것 — 계획이 없는 자리·교시엔 `plans` 자체가 안 넘어와서
+   *    공개 화면인데도 거짓이 된다.
+   */
+  publicPin?: boolean;
   plans?: SeatPlans;
 }) {
-  const { pending, error, statusOf, mergeFields, save, fill, saveField, flushFields, applyCarried } =
+  const { pending, error, statusOf, noteOf, mergeFields, save, saveNote, fill, saveField, flushFields, applyCarried } =
     useSeatBoardSaves(seat, date, activeStart);
   const showJj = seatHasJjFields(seat);
   // 문 선택은 여기 한 줄 — 참조 고정(계획 블록이 `memo`라 매 렌더 새 객체면 표가 통째로 다시 그려진다).
@@ -170,7 +177,10 @@ export function SeatBoard({
             rosters={view}
             plan={planContext}
             statusOf={statusOf}
+            noteOf={noteOf}
             onSave={save}
+            onSaveNote={saveNote}
+            showReason={!publicPin}
             onSaveField={saveField}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
@@ -180,7 +190,10 @@ export function SeatBoard({
           <SeatLabGrid
             rosters={view}
             statusOf={statusOf}
+            noteOf={noteOf}
             onSave={save}
+            onSaveNote={saveNote}
+            showReason={!publicPin}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
             pending={pending}

@@ -20,6 +20,7 @@ import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
+import { PrevAbsenceHint, SeatMarkButtons, SeatReasonInput } from "./seat-mark-extras";
 
 const INPUT =
   "border-line focus:border-primary h-8 w-full rounded-lg border bg-card px-2 text-[13px] font-semibold outline-none disabled:opacity-60";
@@ -52,6 +53,10 @@ type JjTableProps = {
   rosters: SeatClassRoster[];
   plan?: SeatPlanContext;
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
+  noteOf: (classId: string, student: SeatClassRoster["students"][number]) => string | null;
+  onSaveNote: (classId: string, studentId: string, note: string, status: SeatStatus | null) => void;
+  /** 사유 칸을 그릴 것인가 — 비로그인 PIN 화면은 false(그 경로는 사유를 조회하지 않는다). */
+  showReason: boolean;
   onSave: (classId: string, studentId: string, next: SeatStatus | null, prev: SeatStatus | null) => void;
   onSaveField: (classId: string, studentId: string, field: JjMarkField, value: string) => void;
   onFillClass: (classId: string) => void;
@@ -82,6 +87,9 @@ export function SeatJjTable(props: JjTableProps) {
           roster={r}
           plan={props.plan}
           statusOf={props.statusOf}
+          noteOf={props.noteOf}
+          onSaveNote={props.onSaveNote}
+          showReason={props.showReason}
           onSave={props.onSave}
           onSaveField={props.onSaveField}
           onFillClass={props.onFillClass}
@@ -97,6 +105,9 @@ function SeatJjClass({
   roster: r,
   plan,
   statusOf,
+  noteOf,
+  onSaveNote,
+  showReason,
   onSave,
   onSaveField,
   onFillClass,
@@ -211,17 +222,28 @@ function SeatJjClass({
                     >
                       {cur ? SEAT_LABEL[cur] : "출석"}
                     </button>
-                    {!readOnly && cur !== "absent" ? (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => onSave(r.classId, s.id, "absent", cur)}
-                        aria-label={`${s.name} 결석`}
-                        className="border-line bg-card text-text-faint hover:text-att-absent-ink grid size-6 place-items-center rounded-full border text-[10px] font-bold"
-                      >
-                        결
-                      </button>
+                    {!readOnly ? (
+                      <SeatMarkButtons
+                        cur={cur}
+                        studentName={s.name}
+                        pending={pending}
+                        onMark={(next) => onSave(r.classId, s.id, next, cur)}
+                      />
                     ) : null}
+                  </div>
+                  {/* 결석·지각이면 그 자리에서 사유를 적고(원장 2026-09-08), 아직 안 찍힌 칸엔
+                      **지난 결석**을 적는다 — 랩실 카드와 **같은 부품**이라 두 화면이 안 갈린다. */}
+                  <div className="mt-1">
+                    {showReason ? (
+                    <SeatReasonInput
+                      value={noteOf(r.classId, s)}
+                      status={cur}
+                      studentName={s.name}
+                      disabled={readOnly || pending}
+                      onChange={(next) => onSaveNote(r.classId, s.id, next, cur)}
+                    />
+                    ) : null}
+                    <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
                   </div>
                 </td>
                 {/* 태도 — 영어 시트와 **같은 부품**(5단 눈금 순환). 옛 자유입력 값도 그대로 보여준다. */}

@@ -122,6 +122,9 @@ export default async function PublicSeatPage({
           activeStart={period.start}
           rosters={rosters}
           readOnly={false}
+          // 🔴 비로그인 PIN 화면 — 사유 칸을 **안 그린다**. 이 경로는 사유(note)를 조회조차 안 하므로
+          //    (병원·수술·가족 일정이 적힌다) 입력만 열어 두면 화면엔 영영 안 보이는 유령 기록이 된다.
+          publicPin
           hrefFor={`/seat/${seat}?start=`}
           // 진도 구획은 명단에 오른 반 중 계획이 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={

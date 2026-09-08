@@ -30,6 +30,7 @@ const roster: SeatClassRoster = {
       recordedBy: null,
       fromSeat: false,
       note: null,
+    prevAbsence: null,
       attitude: null,
       listeningLevel: "L3",
       memorizedWords: null,
@@ -44,6 +45,9 @@ describe("JJ실 출석부 표", () => {
       <SeatJjTable
         rosters={[roster]}
         statusOf={() => null}
+        noteOf={() => null}
+        onSaveNote={vi.fn()}
+        showReason
         onSave={vi.fn()}
         onSaveField={vi.fn()}
         onFillClass={vi.fn()}
@@ -63,6 +67,9 @@ describe("JJ실 출석부 표", () => {
       <SeatJjTable
         rosters={[roster]}
         statusOf={() => null}
+        noteOf={() => null}
+        onSaveNote={vi.fn()}
+        showReason
         onSave={vi.fn()}
         onSaveField={onSaveField}
         onFillClass={vi.fn()}
@@ -85,6 +92,9 @@ describe("JJ실 출석부 표", () => {
       <SeatJjTable
         rosters={[roster, other]}
         statusOf={() => null}
+        noteOf={() => null}
+        onSaveNote={vi.fn()}
+        showReason
         onSave={vi.fn()}
         onSaveField={vi.fn()}
         onFillClass={vi.fn()}
@@ -146,6 +156,9 @@ const other: SeatClassRoster = {
 describe("JJ실 출석부 진도(수업계획)", () => {
   const props = {
     statusOf: () => null,
+    noteOf: () => null,
+    onSaveNote: vi.fn(),
+    showReason: true,
     onSave: vi.fn(),
     onSaveField: vi.fn(),
     onFillClass: vi.fn(),
