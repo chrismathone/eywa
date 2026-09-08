@@ -207,7 +207,7 @@ export function ProgressSelector({
                    이걸 고르면 아래가 전부 잠기므로 **분기 지점**이고, 아래에 묻히면 강사가 못 찾는다. ── */}
             <div className="border-line border-b px-3 py-2">
               <p className="text-text-faint mb-1.5 text-xs">
-                {t("os.ps.skipTitle")} <span className="text-text-faint/70">{t("os.ps.skipHint")}</span>
+                {t("os.ps.skipTitle")} <span className="text-text-faint">{t("os.ps.skipHint")}</span>
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {SKIP_PROGRESS_STATUSES.map((s) => {
@@ -238,7 +238,7 @@ export function ProgressSelector({
               <div className="border-line border-b px-3 py-2">
                 <p className="text-text-faint mb-1.5 text-xs">
                   {t("os.ps.modeTitle")}{" "}
-                  <span className="text-text-faint/70">{t("os.ps.modeHint")}</span>
+                  <span className="text-text-faint">{t("os.ps.modeHint")}</span>
                 </p>
                 {/* 알약 자체는 공용 컴포넌트 — 자유 입력 과목(영어)이 입력칸 아래에 쓰는 것과 **같은 물건**이라
                     라벨·해제 규약·툴팁이 두 자리에서 갈라지지 않는다. */}
@@ -394,7 +394,7 @@ export function ProgressSelector({
                                 {tf("os.ps.unitSelected", { n: unitSelected })}
                               </span>
                             ) : (
-                              <span className="text-text-faint/60 shrink-0 font-normal">{u.lessons.length}</span>
+                              <span className="text-text-faint shrink-0 font-normal">{u.lessons.length}</span>
                             )}
                           </button>
                         )}

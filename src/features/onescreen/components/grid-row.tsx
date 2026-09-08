@@ -47,7 +47,10 @@ const TD_BASE = "px-2 py-1.5 align-top";
 // ⚠️ `border-t`(1px)와 `border-t-2`를 한 className에 같이 두지 말 것 — 둘 다 border-top-width라
 //    어느 쪽이 이기는지 생성 CSS 순서에 달린다. 아예 다른 상수로 갈라 충돌 자체를 없앤다.
 const TD = `border-line border-t ${TD_BASE}`;
-const TD_GROUP = `border-t-2 border-t-text-faint/50 ${TD_BASE}`;
+// 🔴 색은 **글자 토큰이 아니라 면 토큰**(`--neutral-fill`)에서 온다 — 2026-09-08에 글자색이 한 값
+//    (#121212)이 되면서 `border-t-text-faint/50`이던 이 선이 함께 진해졌다(#ABABAF → #898989).
+//    선은 글자가 아니라 구조라 그 통일 대상이 아니다(globals.css: "테두리는 그대로").
+const TD_GROUP = `border-t-2 border-t-neutral-fill/50 ${TD_BASE}`;
 // 문구·특이사항 textarea — 내용에 따라 자동 확장(공용 상수, 미지원 브라우저는 각 칸의 min-h가 폴백).
 // 표 모드는 좁은 칸이 여러 개라 손잡이를 남기는 변형을 쓴다(폼 입력칸은 손잡이 없는 TEXTAREA_AUTOSIZE).
 const AUTOSIZE = TEXTAREA_AUTOSIZE_RESIZABLE;

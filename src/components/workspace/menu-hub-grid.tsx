@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import type { HubDest } from "@/lib/menu-hub";
 import { navItemByKey, navPresentation } from "@/lib/navigation";
@@ -65,14 +66,17 @@ export function HubGrid({
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {dests.map((d) => (
+        // 🔴 세로 여백도 **채움 70%**를 따른다(원장 2026-09-08 "이런거는 왜 70% 채움이 안되어잇지?") —
+        // 높이를 정하는 것은 64px 아이콘 판이라 64 ÷ 0.7 ≈ 91 → 위아래 14px. py-5(20px)면 61.5%라 헐거웠다.
         <button
           key={d.href}
           type="button"
           onClick={(e) => onGo(d, e.shiftKey)}
-          className="bg-card shadow-card hover:bg-bg-soft flex items-center gap-4 rounded-xl px-5 py-5 text-left transition"
+          className="bg-card shadow-card hover:bg-bg-soft flex items-center gap-4 rounded-xl px-5 py-3.5 text-left transition"
         >
+          {/* 🔴 판 배경은 버튼 hover(`hover:bg-bg-soft`)와 **다른 값**이어야 한다 — 같으면 마우스를 올릴 때 판이 사라진다. */}
           <span className="bg-primary-soft text-primary flex size-16 shrink-0 items-center justify-center rounded-xl">
-            <EyIcon name={d.icon} size={30} strokeWidth={1.6} />
+            <MenuGlyph name={d.icon} size={38} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="text-foreground block truncate text-2xl font-bold">{d.label}</span>

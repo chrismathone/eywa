@@ -303,7 +303,7 @@ export function SeatingCell({
           /* 🔴 수업이 끝난 뒤에 찍은 칸은 **진한 회색 테두리**(원장 2026-08-24). 안쪽 링이라 칸 크기가
              안 변한다(테두리를 주면 1px씩 커져 3열 격자가 밀린다). 색은 상태 배경을 덮지 않는 회색. */
           className={`@container flex min-h-9 w-full items-center justify-center rounded-lg px-1 py-1 ${SEAT_MARK_TONE[mark]} ${
-            check?.afterClass ? "ring-2 ring-inset ring-text-faint" : ""
+            check?.afterClass ? "ring-2 ring-inset ring-neutral-fill" : ""
           }`}
         >
           <span className="max-w-full truncate leading-none font-bold" style={{ fontSize: nameSize }}>

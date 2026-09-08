@@ -375,7 +375,7 @@ function DayChips({
             /* ⚠️ 영어 요일은 세 글자(`Mon`)라 `size-5`(20px)에 안 들어간다 — 높이만 고정하고
                가로는 `min-w-5 px-1`로 늘린다(한 글자인 한국어는 20px 그대로 = 원형 유지). */
             className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 ${
-              stale ? "bg-text-faint" : barClass
+              stale ? "bg-neutral-fill" : barClass
             } text-white`}
           >
             {sheetDowLabel(d.day, lang)}

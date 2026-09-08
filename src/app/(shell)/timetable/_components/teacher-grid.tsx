@@ -269,7 +269,7 @@ export function TeacherGridView({
                 >
                   {DAY_LABEL[col.day] ?? col.day}
                   {dayDates[col.day] ? (
-                    <span className="text-ink/80 block text-xs font-bold">{dayDates[col.day]}</span>
+                    <span className="text-ink block text-xs font-bold">{dayDates[col.day]}</span>
                   ) : null}
                 </th>
               )),
@@ -283,7 +283,7 @@ export function TeacherGridView({
                   전부 **본문 셀과 동일한 실제 border**(같은 렌더 경로 = 굵기·위치가 본문 가로줄과 정확히 일치). */}
               <td
                 className={`bg-bg-soft sticky left-0 z-10 border-r border-l px-1 py-0 text-right align-middle num leading-none ${GRID} ${bottomEdge(ri + 1).cls} ${
-                  row.isHour ? "text-foreground text-xs font-bold" : "text-ink/80 text-xs font-bold"
+                  row.isHour ? "text-foreground text-xs font-bold" : "text-ink text-xs font-bold"
                 }`}
                 style={{ height: rowH }}
               >

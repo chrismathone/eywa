@@ -582,7 +582,7 @@ export function IntegratedEditBoard({
             }`}
             style={
               dragCard.bgColor
-                ? { background: dragCard.bgColor, color: dragCard.textColor ?? "#1d1d1f" }
+                ? { background: dragCard.bgColor, color: dragCard.textColor ?? "#121212" }
                 : undefined
             }
           >

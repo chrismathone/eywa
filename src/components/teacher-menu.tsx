@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { EyIcon, MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Button } from "@/components/ui/button";
 import { switchToAdminView } from "@/features/shell/view-actions";
 import {
@@ -33,7 +34,8 @@ const LINKS: { href: string; labelKey: SheetDictKey; icon: EywaIconName; menu: M
   // 출결 모드(2026-08-20) — 내 반 오늘 출결만 터치 몇 번으로. 원장 지시: 원스크린 상단 바에만 두니
   //   *"완전 안보인다"* → 강사의 주 진입로인 이 드롭다운에도 올린다(홈 바로 아래).
   //   ⚠️ 권한 키는 출석부와 같은 `attendance` — 새 메뉴 키를 만들면 auth_menu_access DEFAULTS 누락으로 잠긴다.
-  { href: "/attendance/quick", labelKey: "menu.item.attendanceQuick", icon: MENU_ICON.attendance, menu: "attendance" },
+  // 🔴 출석부와 **다른 그림**이어야 한다 — 같은 드롭다운에 나란히 선다(menu-hub의 출결 모드와 같은 listChecks).
+  { href: "/attendance/quick", labelKey: "menu.item.attendanceQuick", icon: "listChecks", menu: "attendance" },
   { href: "/onescreen", labelKey: "menu.item.teacher_onescreen", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
   // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
   { href: "/ecs", labelKey: "menu.item.ecs", icon: MENU_ICON.ecs, menu: "ecs" },
@@ -118,7 +120,7 @@ export function TeacherMenu({
         <DropdownMenuSeparator />
         {links.map(({ href, labelKey, icon }) => (
           <DropdownMenuItem key={href} render={<Link href={href} className="cursor-pointer" />}>
-            <EyIcon name={icon} size={16} strokeWidth={1.8} /> {t(labelKey)}
+            <MenuGlyph name={icon} size={16} /> {t(labelKey)}
           </DropdownMenuItem>
         ))}
         {/* 내 정보 — 본인 이력서·로그인 정보. 권한 매트릭스와 무관(자기 것만이라 항상 표시). */}

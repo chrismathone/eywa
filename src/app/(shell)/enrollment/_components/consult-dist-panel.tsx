@@ -171,7 +171,7 @@ export function ConsultDistPanel({
                     className="bar-grow h-full rounded-full"
                     style={{
                       width: `${(v / max) * 100}%`,
-                      background: KIND_COLOR[s.kind ?? ""] ?? "var(--color-text-faint)",
+                      background: KIND_COLOR[s.kind ?? ""] ?? "var(--color-neutral-fill)",
                     }}
                   />
                 </div>

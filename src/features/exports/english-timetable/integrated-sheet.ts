@@ -136,8 +136,8 @@ export function appendIntegratedSheet(
       if (days.length > 1) sheet.mergeCells(nameRow, st, nameRow, st + days.length - 1);
       const bg = c.bgColor ? hexToARGB(c.bgColor, subjectSoft) : subjectSoft;
       const color = c.bgColor
-        ? hexToARGB(c.textColor ?? (readableTextColor(c.bgColor) || "#1d1d1f"), "FF1D1D1F")
-        : "FF1D1D1F";
+        ? hexToARGB(c.textColor ?? (readableTextColor(c.bgColor) || "#121212"), "FF121212")
+        : "FF121212";
       setCell(nameRow, st, c.className, { bg, color, bold: true, size: 11, wrap: true });
     });
     sheet.getRow(nameRow).height = 24;
@@ -151,7 +151,7 @@ export function appendIntegratedSheet(
       const tc = c.teacherName ? teacherColors[c.teacherName] : undefined;
       setCell(teacherRow, st, c.teacherName ?? "-", {
         bg: tc ? hexToARGB(tc.bg, "FFE9E9EE") : undefined,
-        color: tc ? hexToARGB(tc.text, "FF1D1D1F") : undefined,
+        color: tc ? hexToARGB(tc.text, "FF121212") : undefined,
         bold: true,
         size: 10,
       });

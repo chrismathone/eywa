@@ -22,9 +22,9 @@ const TONE_HEX: Record<SubjectTone, string> = {
   rose: "var(--color-rose)",
   purple: "var(--color-purple)",
   gold: "var(--color-gold)",
-  neutral: "var(--color-text-faint)",
+  neutral: "var(--color-neutral-fill)",
 };
-const FAINT = "var(--color-text-faint)";
+const FAINT = "var(--color-neutral-fill)";
 
 /** 테스트 점수 추이 — 확인(주선) + 일일(보조). 과목 필터로 시리즈 전환. */
 export function ScoreTrendChart({ history, subjects }: { history: Session[]; subjects: string[] }) {

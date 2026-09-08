@@ -46,6 +46,6 @@ export const BILLING_SOLID: Record<BillingStatusKey, string> = {
   paid: "bg-green",
   partial: "bg-amber",
   unpaid: "bg-danger",
-  refunded: "bg-text-faint",
-  void: "bg-text-faint",
+  refunded: "bg-neutral-fill",
+  void: "bg-neutral-fill",
 };

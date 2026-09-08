@@ -238,8 +238,8 @@ export function appendTeacherGridSheet(
           const bg = hexToARGB(s.classBgColor, "FFF1F5F4");
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
           const txt = s.classTextColor
-            ? hexToARGB(s.classTextColor, "FF1D1D1F")
-            : hexToARGB(readableTextColor(s.classBgColor ?? "#f1f5f4") || "#1d1d1f", "FF1D1D1F");
+            ? hexToARGB(s.classTextColor, "FF121212")
+            : hexToARGB(readableTextColor(s.classBgColor ?? "#f1f5f4") || "#121212", "FF121212");
           cell.font = { bold: true, size: 9, color: { argb: txt } };
         }
       }

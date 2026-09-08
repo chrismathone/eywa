@@ -13,6 +13,7 @@ import { PanelLeftClose, PanelLeftOpen } from "@/components/icons/eywa-icon-comp
 import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
 import { type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { HUB_GROUPS, SUPPORT_GROUPS, frequentFor, hubGroupsFor, type HubGroup } from "@/lib/menu-hub";
@@ -598,7 +599,7 @@ function GroupRail({
         } ${motion ? `transition-[left,right] duration-200 ${EASE}` : ""}`}
       />
       <span className="absolute left-[26px] flex -translate-x-1/2 items-center justify-center">
-        <EyIcon name={group.icon} size={18} strokeWidth={1.8} />
+        <MenuGlyph name={group.icon} size={18} />
       </span>
       <span
         className={`relative ml-[42px] flex min-w-0 flex-1 items-center gap-1 overflow-hidden pr-2 whitespace-nowrap ${
@@ -727,10 +728,9 @@ function RailItem({
               : "bg-sidebar-accent opacity-0 group-hover:opacity-100"
         } ${motion ? `transition-[left,right,opacity,box-shadow] duration-200 ${EASE}` : ""}`}
       />
-      <EyIcon
+      <MenuGlyph
         name={item.icon}
         size={18}
-        strokeWidth={1.8}
         className={`relative z-10 shrink-0 ${fg} ${motion ? "transition-colors duration-200" : ""}`}
       />
       <span

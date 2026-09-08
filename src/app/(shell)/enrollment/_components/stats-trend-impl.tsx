@@ -86,8 +86,13 @@ export function StatsTrendImpl({
               return [label.includes("전환율") ? `${v}%` : `${v}건`, label];
             }}
           />
-          {/* 범례 = 축 아래 연도 색 라벨(원장 지시). 계열 이름에 연도를 박아 색만 보고도 짝이 지어진다. */}
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {/* 범례 = 축 아래 연도 색 라벨(원장 지시). 계열 이름에 연도를 박아 색만 보고도 짝이 지어진다.
+              🔴 recharts 기본 범례는 **글자까지 계열 색으로** 칠한다 — 옛 연도 계열이 회색이라 그 라벨만
+              회색 글자가 됐다(2026-09-08 "모든 회색계열은 18 18 18"). 색은 앞의 표식이 나르고 글자는 본문색으로. */}
+          <Legend
+            wrapperStyle={{ fontSize: 12 }}
+            formatter={(value) => <span style={{ color: "var(--color-foreground)" }}>{value}</span>}
+          />
           {showBars
             ? series.map((s) => (
                 <Bar

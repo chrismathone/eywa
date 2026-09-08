@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { NAV_GROUPS, findNavItem, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
@@ -123,7 +124,7 @@ export function MobileTopNav({
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
-                <EyIcon name={item.icon} size={14} strokeWidth={1.8} />
+                <MenuGlyph name={item.icon} size={14} />
                 <span className="truncate">{item.label}</span>
               </Link>
             </li>

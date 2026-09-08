@@ -70,23 +70,29 @@ describe("타입 스케일 v5 — 임의 px 글자 크기를 화면에 적지 �
     expect(px("sm")).toBeGreaterThanOrEqual(16);
     expect(px("xl")).toBeGreaterThanOrEqual(20);
     expect(px("xl")).toBeLessThanOrEqual(24);
-    // 보조 텍스트도 7:1에 가깝게 — #58585e(7.1:1). 옅은 회색으로 되돌리지 말 것.
-    expect(css).toMatch(/--text-faint: #58585e;/);
+    // 🔴 글자색은 **한 값 #121212**(원장 2026-09-08 "모든 회색계열은 18 18 18 로"). 회색 3단으로 되돌리지 말 것.
+    for (const t of ["foreground", "ink", "text-dim", "text-faint"]) {
+      expect(css, `--${t}`).toMatch(new RegExp(`--${t}: #121212;`));
+    }
     // 카드 = 헤어라인 링 하나, 블러 없음(원장 2026-09-03 "적당한 테두리는 있어야") — 313곳이 이 토큰을 읽는다.
     expect(css).toMatch(/--shadow-card: 0 0 0 1px rgba\(29, 29, 31, 0\.14\);/);
   });
 });
 
 describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트롤이 한 벌을 읽는다", () => {
-  it("높이 = 라벨 + 8px (위아래 4px — 원장 09-03 '상하 여백 1.5배' → 09-04 '조금만 더') · 기본 라벨 18px 확정", () => {
+  it("세로 채움 70% — 높이 = 라벨 ÷ --control-fill, 세 벌이 같은 비율(원장 2026-09-08) · 기본 라벨 18px 확정", () => {
     const css = readFileSync(join(SRC, "app/globals.css"), "utf8");
+    // 채움 비율은 한 곳에서만 정한다 — 크기마다 고정 여백(옛 "라벨 + 8px")을 다시 적으면 채움이 또 갈린다.
+    expect(css).toMatch(/--control-fill: 0\.7;/);
     for (const suffix of ["-sm", "", "-lg"]) {
-      const label = Number(new RegExp(`--control-label${suffix}: (\\d+)px;`).exec(css)?.[1]);
-      const h = Number(new RegExp(`--control-h${suffix}: (\\d+)px;`).exec(css)?.[1]);
-      expect(label).toBeGreaterThan(0);
-      // 글자가 높이의 2/3 이상, 여백 합 8px — 패딩으로 높이를 부풀리는 옛 버릇(h-8·12px 라벨)으로 되돌아가지 않게.
-      expect(label / h).toBeGreaterThanOrEqual(0.65);
-      expect(h - label).toBe(8);
+      expect(css, `--control-label${suffix}`).toMatch(
+        new RegExp(`--control-label${suffix}: \\d+px;`),
+      );
+      expect(css, `--control-h${suffix}`).toMatch(
+        new RegExp(
+          `--control-h${suffix}: calc\\(var\\(--control-label${suffix}\\) / var\\(--control-fill\\)\\);`,
+        ),
+      );
     }
     expect(css).toMatch(/--control-label: 18px;/);
   });

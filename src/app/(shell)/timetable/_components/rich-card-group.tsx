@@ -280,7 +280,7 @@ export function ClassColumn({
   const cardW = namesOnly ? CARD_W : Math.max(3, days.length) * DAY_COL_W;
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
-    ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
+    ? { background: card.bgColor, color: card.textColor ?? "#121212" }
     : undefined;
 
   return (

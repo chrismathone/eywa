@@ -1,5 +1,6 @@
 "use client";
 
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { useEffect } from "react";
 
 import { HubGrid, useOpenMenu } from "./menu-hub-grid";
@@ -84,7 +85,7 @@ export function MenuHubPanel({
                 onClick={close}
                 aria-label="메뉴 닫기"
                 title="닫기 (Esc)"
-                className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground h-(--control-h) rounded-lg border px-2.5 text-(length:--control-label) font-bold"
+                className={`border-line text-text-dim hover:bg-bg-soft hover:text-foreground inline-flex items-center rounded-lg border px-2.5 font-bold ${CONTROL_H} ${CONTROL_LABEL}`}
               >
                 닫기
               </button>
@@ -112,7 +113,7 @@ export function MenuHubPanel({
                     key={d.href}
                     type="button"
                     onClick={(e) => go(d, e.shiftKey)}
-                    className="border-line text-foreground hover:bg-bg-soft h-(--control-h) rounded-lg border px-3 text-(length:--control-label) font-bold"
+                    className={`border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 font-bold ${CONTROL_H} ${CONTROL_LABEL}`}
                   >
                     {d.label}
                   </button>

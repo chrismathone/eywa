@@ -1,5 +1,6 @@
 "use client";
 
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -218,7 +219,7 @@ function RosterMoveDialog({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="border-line bg-card text-foreground h-(--control-h) rounded-lg border px-2 text-(length:--control-label)"
+            className={`border-line bg-card text-foreground rounded-lg border px-2 ${CONTROL_H} ${CONTROL_LABEL}`}
           />
         </label>
         {futureHold ? (
@@ -232,7 +233,7 @@ function RosterMoveDialog({
             type="button"
             onClick={() => onClose(false)}
             disabled={busy}
-            className="border-line text-text-dim hover:bg-bg-soft h-(--control-h) rounded-lg border px-3 text-(length:--control-label) font-bold"
+            className={`border-line text-text-dim hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 font-bold ${CONTROL_H} ${CONTROL_LABEL}`}
           >
             취소
           </button>
@@ -241,7 +242,7 @@ function RosterMoveDialog({
             onClick={submit}
             disabled={busy || !date}
             autoFocus
-            className={`h-(--control-h) inline-flex items-center gap-1.5 rounded-lg px-3 text-(length:--control-label) font-bold text-white disabled:opacity-60 ${
+            className={`${CONTROL_H} ${CONTROL_LABEL} inline-flex items-center gap-1.5 rounded-lg px-3 font-bold text-white disabled:opacity-60 ${
               isWithdraw ? "bg-danger" : "bg-primary"
             }`}
           >

@@ -31,7 +31,7 @@ const CATEGORY_COLOR: Record<string, string> = {
   emotional: "var(--color-rose)",
   career: "var(--color-purple)",
   social: "var(--color-gold)",
-  other: "var(--color-text-faint)",
+  other: "var(--color-neutral-fill)",
 };
 
 export function StatsCharts({
@@ -44,7 +44,7 @@ export function StatsCharts({
   const pieData = byCategory.map((b) => ({
     name: CATEGORY_LABEL[b.category] ?? b.category,
     value: b.count,
-    fill: CATEGORY_COLOR[b.category] ?? "var(--color-text-faint)",
+    fill: CATEGORY_COLOR[b.category] ?? "var(--color-neutral-fill)",
   }));
 
   return (

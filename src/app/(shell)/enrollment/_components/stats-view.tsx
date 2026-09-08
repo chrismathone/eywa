@@ -205,7 +205,7 @@ export function StatsView({
                       className="bar-grow h-full rounded-full"
                       style={{
                         width: `${(g.n / maxGrade) * 100}%`,
-                        background: KIND_COLOR[g.label[0] ?? ""] ?? "var(--color-text-faint)",
+                        background: KIND_COLOR[g.label[0] ?? ""] ?? "var(--color-neutral-fill)",
                       }}
                     />
                   </div>
@@ -227,7 +227,7 @@ export function StatsView({
                       className="bar-grow h-full rounded-full"
                       style={{
                         width: `${(r.n / maxRegion) * 100}%`,
-                        background: r.label === "미상" ? "var(--color-text-faint)" : "var(--color-primary)",
+                        background: r.label === "미상" ? "var(--color-neutral-fill)" : "var(--color-primary)",
                       }}
                     />
                   </div>

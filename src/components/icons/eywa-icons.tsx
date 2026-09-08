@@ -91,6 +91,15 @@ export const EYWA_ICON_CATALOG = [
   { name: "spreadsheet", label: "표 문서", family: "interface", meaning: "행과 열 데이터" },
   { name: "sheetColumns", label: "열 시트", family: "interface", meaning: "세로 열로 나뉜 표" },
   { name: "sheetRows", label: "행 시트", family: "interface", meaning: "가로 행으로 나뉜 표" },
+  // 뜻이 다른데 그림이 같던 자리를 가른 것들(2026-09-08) — 짝은 아래 MENU_ICON 주석 참조.
+  { name: "seatGrid", label: "자리 배치", family: "interface", meaning: "자리 여섯 칸 중 하나가 다른 색" },
+  { name: "weekGrid", label: "주간 격자", family: "interface", meaning: "세로·가로 격자에 수업 블록 하나" },
+  { name: "star", label: "별", family: "interface", meaning: "평가·점수" },
+  { name: "tablet", label: "태블릿", family: "interface", meaning: "세로 화면 기기" },
+  { name: "formInput", label: "입력 양식", family: "interface", meaning: "칸 두 개짜리 폼" },
+  { name: "invoice", label: "청구서", family: "interface", meaning: "금액이 적힌 종이" },
+  { name: "steering", label: "운전대", family: "interface", meaning: "운행" },
+  { name: "busStop", label: "정류장", family: "interface", meaning: "기둥 위 표지판" },
   { name: "square", label: "사각형", family: "interface", meaning: "창과 선택 영역" },
   { name: "arrowLeft", label: "왼쪽 화살표", family: "interface", meaning: "이전 위치로 이동" },
   { name: "calculator", label: "계산기", family: "interface", meaning: "금액과 수치 계산" },
@@ -392,6 +401,62 @@ const EXTENDED_ICON_GLYPHS = {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <line x1="3" y1="9" x2="21" y2="9" />
       <line x1="3" y1="15" x2="21" y2="15" />
+    </>
+  ),
+  seatGrid: (
+    <>
+      <rect x="3" y="5" width="5" height="5" rx="1" />
+      <rect x="9.5" y="5" width="5" height="5" rx="1" />
+      <rect x="16" y="5" width="5" height="5" rx="1" />
+      <rect x="3" y="14" width="5" height="5" rx="1" />
+      <rect x="9.5" y="14" width="5" height="5" rx="1" />
+      <rect x="16" y="14" width="5" height="5" rx="1" />
+    </>
+  ),
+  weekGrid: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="9" x2="9" y2="21" />
+      <line x1="15" y1="9" x2="15" y2="21" />
+    </>
+  ),
+  star: <path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z" />,
+  tablet: (
+    <>
+      <rect x="6" y="3" width="12" height="18" rx="2" />
+      <line x1="12" y1="18" x2="12" y2="18" />
+    </>
+  ),
+  formInput: (
+    <>
+      <rect x="3" y="4" width="18" height="6" rx="1.5" />
+      <rect x="3" y="14" width="18" height="6" rx="1.5" />
+      <line x1="6.5" y1="7" x2="12" y2="7" />
+      <line x1="6.5" y1="17" x2="12" y2="17" />
+    </>
+  ),
+  invoice: (
+    <>
+      <path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z" />
+      <line x1="8.5" y1="8" x2="15.5" y2="8" />
+      <line x1="8.5" y1="12" x2="15.5" y2="12" />
+    </>
+  ),
+  steering: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="2.5" />
+      <line x1="12" y1="3.5" x2="12" y2="9.5" />
+      <line x1="4.4" y1="16" x2="9.8" y2="13.3" />
+      <line x1="19.6" y1="16" x2="14.2" y2="13.3" />
+    </>
+  ),
+  busStop: (
+    <>
+      <rect x="6" y="3" width="12" height="9" rx="1.5" />
+      <line x1="12" y1="12" x2="12" y2="21" />
+      <line x1="9" y1="21" x2="15" y2="21" />
     </>
   ),
   square: <rect x="4" y="4" width="16" height="16" rx="1.5" />,
@@ -1183,10 +1248,11 @@ export function EyIcon({
 // 식물·자연물 모티프를 쓰지 않고, 메뉴 기능을 자의적인 비유로 치환하지 않는다.
 export const MENU_ICON = {
   dashboard: "layoutGrid",
-  timetable: "calendar",
+  timetable: "weekGrid",
   attendance: "clipboardCheck",
-  // 자리(랩실·JJ실) 출석부 — 출석부와 같은 일이지만 축이 '방'이라 공간 기호를 쓴다(아이콘 공유 선례: class_review).
-  seat_attendance: "layoutGrid",
+  // 자리(랩실·JJ실) 출석부 — 출석부와 같은 일이지만 축이 '방'이라 공간 기호를 쓴다.
+  // 🔴 2026-09-08부터 **뜻이 다르면 그림도 다르다**(원장 "같은 아이콘을 안쓰면 좋겠는데") — 아이콘 공유 선례를 새로 만들지 말 것.
+  seat_attendance: "seatGrid",
   classes: "book",
   students: "users",
   exams: "exam",
@@ -1204,7 +1270,7 @@ export const MENU_ICON = {
   expense_requests: "receipt",
   meetings: "note",
   documents: "folder",
-  class_review: "clipboardCheck", // 수업 평가 체크리스트 — 점검 정체성(출석부와 공유, ecs 선례)
+  class_review: "star", // 수업 평가 — 옛 clipboardCheck는 출석부와 같은 그림이라 나란히 서면 구분이 안 됐다
   approvals: "scrollText", // 전자결재 — 결재 문서(두루마리) 정체성
   calendar: "calendar", // 캘린더 — 학원 공용 일정
   shuttle: "bus", // 셔틀(노랑버스) — 노선 편성·등하원 기록
@@ -1216,5 +1282,5 @@ export const MENU_ICON = {
   owner: "settings",
   teacher_onescreen: "screen",
   my_learning: "graduationCap",
-  kiosk_settings: "settings",
+  kiosk_settings: "tablet",
 } as const satisfies Record<MenuKey, EywaIconName>;

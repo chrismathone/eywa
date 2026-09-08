@@ -366,7 +366,7 @@ export function ClassCell({
                                 ),
                               )
                             ) : (
-                              <div className="text-text-faint/70 hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging-student_&]:flex">
+                              <div className="text-text-faint hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging-student_&]:flex">
                                 여기로
                               </div>
                             )}

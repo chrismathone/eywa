@@ -1,5 +1,6 @@
 "use client";
 
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, type HubDest } from "@/lib/menu-hub";
 import type { AccessMatrix, SystemRole } from "@/lib/permissions";
 import { HubGrid, useOpenMenu } from "./menu-hub-grid";
@@ -55,12 +56,14 @@ export function MenuBoard({
             <HubGrid dests={main} onGo={open} />
             {tools.length > 0 ? (
               <div className="mt-2.5 flex flex-wrap gap-2">
+                {/* 🔴 치수를 손으로 적지 말 것 — 허브 패널의 같은 칩과 **한 쌍**이라 한쪽만 고치면
+                    같은 메뉴가 첫 화면과 허브에서 다른 모양으로 보인다(줄상자까지 같아야 해서 CONTROL_LABEL). */}
                 {tools.map((d: HubDest) => (
                   <button
                     key={d.href}
                     type="button"
                     onClick={(e) => open(d, e.shiftKey)}
-                    className="border-line text-foreground hover:bg-bg-soft h-(--control-h) rounded-lg border px-3 text-(length:--control-label) font-bold"
+                    className={`border-line text-foreground hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 font-bold ${CONTROL_H} ${CONTROL_LABEL}`}
                   >
                     {d.label}
                   </button>
