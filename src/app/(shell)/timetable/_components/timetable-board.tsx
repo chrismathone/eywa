@@ -41,6 +41,7 @@ import { annotateDropCells, clearDropCells, markHotCells, placementAt } from "./
 // 칸 좌표 속성 이름은 **일반 모듈**에서 — 클라 모듈 재-export를 두면 서버 파일이 실수로 그걸 집어
 // 런타임 undefined가 된다([[#81]], 실제로 한 번 그렇게 깨졌다).
 import { CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs";
+import { toast } from "sonner";
 import { useClassMoveIndex } from "./class-move-context";
 import type { MoveSubject } from "@/features/timetable/lib/class-move";
 import { moveClassSlots } from "@/features/timetable/server/move-actions";
@@ -856,6 +857,27 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
  * 드롭 대상 우선순위 — 요일 존(class:slotId:day, 콜론 3조각)이 셀(class:slotId, 2조각)과 겹치면 요일 존을 택한다.
  * 그래야 "목 칸에 드롭 = 목만 등원"이 셀 전체 드롭(=전 요일)보다 우선한다. slotId는 UUID라 콜론이 없어 조각 수로 구분.
  */
+/**
+ * 드롭이 **거절될 때 이유를 말한다** — 원장 제보 2026-09-08 *"드래그는 되는데 드랍해도 아무런 반응이 없음"*.
+ *
+ * 🔴 학생 드롭 경로엔 조용한 `return`이 다섯 갈래 있었다(놓을 칸 못 찾음 · 출발 반 모름 · 이미 그 반에
+ *    수강 있음 · 같은 반·같은 요일 · 반 블록이 갈 수 없는 칸). 전부 아무 표시가 없어서 **거절인지 고장인지
+ *    구분할 수 없었다**. 규칙을 바꾸는 게 아니라 **말을 붙이는 것**이다(판정은 그대로).
+ * ⚠️ 아무 데도 아닌 곳에 놓은 것(=취소)은 말하지 않는다 — 그건 사용자가 의도한 무동작이라 토스트가 소음이다.
+ */
+function refuse(reason: string): void {
+  toast.info(reason);
+}
+
+/**
+ * 큐에 쌓였다는 사실을 **말한다** — 이동은 즉시가 아니라 '저장'에서 반영된다(원장 2026-09-04 규약).
+ * 🔴 성공에도 말이 없으면 거절과 구분이 안 된다(원장 2026-09-08 *"드랍해도 아무런 반응이 없음"*).
+ *    툴바의 '이동 대기 N건' 바가 이미 있지만, 격자를 보고 있는 눈에서 그 줄은 멀다.
+ */
+function queued(what: string): void {
+  toast.success(`${what} — '저장'을 눌러야 반영됩니다`);
+}
+
 const preferDayZone: CollisionDetection = (args) => {
   // 🔴 반 블록을 끌 때는 **학생 드롭존을 고르지 않는다** — 반은 격자 칸(포인터 아래 DOM)으로 놓는데,
   //    dnd-kit이 셀 드롭존을 `over`로 잡으면 그 셀에 학생용 남색 링(`ring-primary`)이 켜져
@@ -975,12 +997,14 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // ── 반 블록을 격자 칸에 놓았을 때 — 큐에만 쌓고 '저장'에서 반영한다(학생 이동과 같은 규약).
     if (activeIdStr.startsWith("block:")) {
       const src = active.data.current as unknown as ClassDragInfo | undefined;
-      if (!src || !cellHit) return;
+      if (!src) return;
+      if (!cellHit) return refuse("놓을 칸을 찾지 못했습니다 — 격자 칸 위에 놓아 주세요.");
       // 블록 전체가 어디로 가는지 — 칸이 들고 있는 좌표로 계산한다(하이라이트와 **같은 함수**).
       const placed = placementAt(cellHit, src.subject, document);
-      if (!placed || placed.length === 0) return;
+      if (!placed || placed.length === 0) return refuse("그 칸에는 이 반을 놓을 수 없습니다.");
       const anchor = placed.find((w) => w.slotId === src.slotId) ?? placed[0]!;
       if (src.fromDay === anchor.day && src.fromStart.slice(0, 5) === anchor.start.slice(0, 5)) return;
+      queued(`${src.className} 반을 옮깁니다`);
       queueClassMove({
         slotId: src.slotId,
         classId: src.classId,
@@ -998,7 +1022,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     if (!over || !activeIdStr.startsWith("student:")) return;
     // 도착 정보는 드롭존 data에서 읽는다(id 파싱 금지) — classId=실제 반 id, slotId=셀 id, day=요일 존이면 요일.
     const overData = over.data.current as DropData | undefined;
-    if (!overData?.classId) return;
+    if (!overData?.classId) return refuse("반 칸 위에 놓아 주세요.");
     const data = active.data.current as
       | {
           classId?: string;
@@ -1012,7 +1036,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // 분리등원 요일 칸에서 온 드래그는 id가 `student:{id}:{day}`로 유니크 → id 파싱 대신 data.enrollmentId 우선.
     const enrollmentId = data?.enrollmentId ?? activeIdStr.slice("student:".length);
     const fromClassId = data?.classId ?? ""; // 출발 반 id(실제 반 id)
-    if (!fromClassId) return;
+    if (!fromClassId) return refuse("출발 반을 알 수 없어 옮기지 못했습니다.");
     // 합반 드롭 = 반+요일 선택 팝업(외부 학생 어디든 / 멤버의 다른 세그먼트) — 조용히 대표 반으로 보내지
     // 않고 명시적으로 고르게 한다. 세그먼트 드롭=그 반, 요일존 드롭=그 요일이 미리 선택된 채 열림.
     if (shouldOpenClassPick(fromClassId, overData)) {
@@ -1041,12 +1065,15 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       { classId: fromClassId, blockingClassIds: data?.blockingClassIds },
       { ...overData, memberClassIds: overData.memberClasses?.map((c) => c.classId) },
     );
-    if (!target) return;
+    // 규칙 ②(hapban.ts) — 이미 그 반에 열린 수강이 있으면 옮기지 않는다(저장 시 GiST 충돌 방지).
+    if (!target) return refuse(`${data?.name ?? "이 학생"}은(는) 이미 그 반 수강이 있습니다.`);
     const toClassId = target.toClassId;
     const fromDays = data?.attendanceDays ?? []; // 출발 시점 등원 요일(no-op 판정)
     const toDays = zoneAttendanceDays(target.day); // 요일 존=[그 요일], 공통 존=[]
     // 같은 반이면 요일이 바뀔 때만(2일↔1일 편집), 교차 반이면 항상 이동.
-    if (fromClassId === toClassId && sameDaySet(fromDays, toDays)) return;
+    if (fromClassId === toClassId && sameDaySet(fromDays, toDays))
+      return refuse("같은 반·같은 요일이라 바뀐 것이 없습니다.");
+    queued(`${data?.name ?? "학생"} → ${overData?.className ?? "다른 반"}`);
     queueMove({
       enrollmentId,
       fromClassId,
