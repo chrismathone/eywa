@@ -248,14 +248,15 @@ export function MeetingReportAccordion({
                     >
                       <Pencil className="size-3" /> 수정
                     </button>
+                    {/* pr-16(64px) = 위 '수정' 칩 실측 폭(border 2 + px-1.5 12 + size-3 12 + gap-1 4 + text-xs 14px×2자 28 = 58px) 이상 — 2026-09-08 v5 글자 기준 실측. 두 곳 같은 값(빈 상태도 겹친다) */}
                     {body ? (
                       <RichText
                         text={body}
                         bulletize={section.list}
-                        className="text-foreground space-y-1.5 pr-12 text-sm leading-relaxed"
+                        className="text-foreground space-y-1.5 pr-16 text-sm leading-relaxed"
                       />
                     ) : (
-                      <p className="text-text-faint pr-12 text-sm italic">
+                      <p className="text-text-faint pr-16 text-sm italic">
                         (내용 없음 — 수정으로 채울 수 있습니다)
                       </p>
                     )}

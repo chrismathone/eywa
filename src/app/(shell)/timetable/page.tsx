@@ -1020,6 +1020,7 @@ export default async function TimetablePage({
                   weekdayGrouping={weekdayGrouping}
                   collapseEmptyPeriods={collapseEmptyPeriods}
                   hideStudents={hideStudents}
+                  teacherOrder={viewPrefs.teacherOrder?.[subject]}
                 />
               </EmptyPeriodScope>
             </div>

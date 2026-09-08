@@ -305,7 +305,9 @@ function PeriodRow({
         <GripVertical className="size-4" />
       </button>
       <input
-        className={`${cellCls} w-[110px]`}
+        // 2026-09-08 v5 글자 기준 실측: text-sm 16px에서 placeholder '이름 없음(시간만)'이 ≈115px라
+        // 110px 칸(안쪽 88px)에서 '이름 없음(시'로 끊겼다(input이라 말줄임도 없다) → 140px(필요 137px).
+        className={`${cellCls} w-[140px]`}
         value={row.label}
         // 비워도 저장된다(2026-08-13) — 그 교시는 화면에서 이름 없이 시간대만 나온다. placeholder에
         // "1교시"를 두면 비운 칸이 "1교시로 저장될 것"처럼 보여 그 규칙이 안 보인다.
@@ -315,14 +317,16 @@ function PeriodRow({
       />
       <input
         type="time"
-        className={`${cellCls} w-[120px]`}
+        // 2026-09-08 v5 글자 기준 실측: ko-KR time 입력은 text-sm 16px에서 콘텐츠 113 + px-2.5 20 + 테두리 2
+        // = 135px가 필요해 120px에서 '오후 03:4'로 끊겼다 → 140px(끝 칸도 같은 값).
+        className={`${cellCls} w-[140px]`}
         value={row.startTime}
         onChange={(e) => onPatch({ startTime: e.target.value })}
       />
       <span className="text-text-faint text-xs">~</span>
       <input
         type="time"
-        className={`${cellCls} w-[120px]`}
+        className={`${cellCls} w-[140px]`}
         value={row.endTime}
         onChange={(e) => onPatch({ endTime: e.target.value })}
       />

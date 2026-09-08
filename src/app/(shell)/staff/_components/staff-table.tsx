@@ -70,7 +70,9 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
         "—"
       ),
     contractTerms: (s) => (
-      <span className="block max-w-[220px] truncate" title={s.contractTerms ?? ""}>
+      // 상한은 em — 표 글자 −/+ 배수(StaffTableScaleBox font-size)를 그대로 따른다. 2026-09-08 v5 글자 기준 실측:
+      // 옛 220px는 13px 시절 값이라 16px에서 `주 5일 09:00~18:00 · 4대보험 가입 · 급여제 강사`(≈17em=272px)가 잘렸다. 14em ≈ 224px@100%.
+      <span className="block max-w-[14em] truncate" title={s.contractTerms ?? ""}>
         {s.contractTerms ?? "—"}
       </span>
     ),

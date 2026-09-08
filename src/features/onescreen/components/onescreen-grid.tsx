@@ -341,7 +341,7 @@ export function OneScreenGrid({
                 />
               </th>
               <th className={TH}>
-                {/* 고정 폭 열(128px)이라 버튼이 옆에 나란히 못 선다 — 넘치면 아랫줄로 접는다
+                {/* 고정 폭 열(144px — 2026-09-08 v5 글자 기준 실측으로 128→144)이라 버튼이 옆에 나란히 못 선다 — 넘치면 아랫줄로 접는다
                     (docs/design-conventions.md "고정 폭 표 칸의 가로 나열은 flex-wrap"). nowrap은 TH가 이미
                     걸고 있어 낱말이 쪼개지지는 않는다. */}
                 <span className="flex flex-wrap items-center justify-center gap-1">

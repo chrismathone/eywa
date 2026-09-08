@@ -54,7 +54,10 @@ export function StudentRow({
     // 행은 그 안을 채운다 — 그래야 밑줄도 컨트롤 있는 데까지만 그어진다.
     // 출결 칸 폭 = 알약 3개(출석·지각·결석)가 정확히 앉는 고정폭 — auto로 두면 읽기전용 행(배지 하나)과
     // 알약 행의 칸 폭이 달라져 열이 들쭉날쭉해진다.
-    <div className="border-line grid grid-cols-[minmax(0,1fr)_7.25rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
+    // 폭 9rem(144px) = 2026-09-08 v5 글자 기준 실측 — text-xs 14px 알약(2자 28 + px-1.5 12 + 비활성 border 2 = 42)
+    // ×3 + gap-0.5×2 = 130px에 사유 점(+16)까지 146px 수용. 옛 7.25rem(116px)은 12px 시절 값이라 미기록 행이
+    // 14px 넘쳐 옆 칸(TodayMarkPopover) 위로 올라왔다. 고정 트랙이라 넘치면 그대로 흘러나온다(이름 칸 1fr이 흡수).
+    <div className="border-line grid grid-cols-[minmax(0,1fr)_9rem_auto_auto] items-center gap-2 border-b py-1.5 last:border-b-0">
       <span className="min-w-0 truncate text-sm">
         {/* 구조화 행 목록(Editorial 문법 ⑤) — 이름 bold 13.5px + 설명 dim 12.5px. */}
         {/* 🔴 이름 두 줄이 아니라 **주 이름 + 보조**를 한 줄에 잇는다(이 행은 높이가 촘촘하다).

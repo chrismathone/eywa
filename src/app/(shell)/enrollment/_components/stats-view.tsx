@@ -209,7 +209,8 @@ export function StatsView({
                       }}
                     />
                   </div>
-                  <span className="text-foreground num w-16 shrink-0 text-right text-xs font-medium">
+                  {/* w-20(80px)+nowrap — 2026-09-08 v5 글자 기준 실측: text-xs 14px에서 `123건(45)`≈74.5px라 옛 w-16(64px)은 `건`/`(` 사이에서 접혀 그 행만 키가 커졌다 */}
+                  <span className="text-foreground num w-20 shrink-0 text-right text-xs font-medium whitespace-nowrap">
                     {g.n}건<span className="text-text-faint ml-1">({g.enrolled})</span>
                   </span>
                 </li>

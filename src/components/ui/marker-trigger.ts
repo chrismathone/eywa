@@ -28,7 +28,12 @@ export const MARKER_TRIGGER =
   "bg-marker border-amber/40 text-foreground focus:border-primary h-10 rounded-full border px-3.5 text-2xl leading-tight font-bold outline-none";
 
 /**
- * 그 트리거의 폭. 21px로 키우면 `w-44`(176px)에서 반 이름이 바로 잘린다 — 실측 최장급
+ * 그 트리거의 폭. 큰 글자에선 `w-44`(176px)에서 반 이름이 바로 잘린다 — 실측 최장급
  * "중등E_초등 브릿지 A"가 들어가는 폭. 더 긴 이름은 종전대로 말줄임(`truncate`)이다.
+ *
+ * 2026-09-08 v5 글자 기준 실측: `text-2xl`(28px)에서 "중등E_초등 브릿지 C" ≈ 261px + 담임 꼬리표
+ * (18px×3자) 54 + 쉐브론 16 + gap 16 + px-3.5 28 + border 2 = 377px → 옛 300px(21px 시절 예산)로는
+ * 라벨 뒤 A/B/C가 통째로 잘려 세 반이 같은 글자로 보였다. `max-w-full`은 375px 폰에서 `shrink-0`
+ * 380px가 툴바를 가로로 넘치게 하는 것을 막는다.
  */
-export const MARKER_WIDTH = "w-[300px]";
+export const MARKER_WIDTH = "w-[380px] max-w-full";

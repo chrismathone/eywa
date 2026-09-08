@@ -21,7 +21,9 @@ export function SuperAdminSidebar({
 }) {
   const activeHref = usePathname() ?? "/super-admin";
   return (
-    <aside className="bg-ink flex w-[232px] shrink-0 flex-col text-white">
+    // 폭 232→256px (2026-09-08 v5 글자 기준 실측): 푸터 이메일이 font-mono text-xs(14px)라 22자 계정이
+    // 169~185px인데 예산(232−px-4 32−칩 28−gap 10)이 162px이라 꼬리가 잘렸다 → 예산 186px.
+    <aside className="bg-ink flex w-[256px] shrink-0 flex-col text-white">
       {/* Brand */}
       <div className="border-b border-white/10 px-5 py-5">
         <Link href="/super-admin" className="inline-flex items-center gap-2">

@@ -1135,9 +1135,11 @@ export const SHEET_DICT = {
   "att.nav.prev": { ko: "이전 달", en: "Previous month" },
   "att.nav.next": { ko: "다음 달", en: "Next month" },
   "att.nav.current": { ko: "눌러서 이번 달로", en: "Click for this month" },
+  // 잠금 사유는 period-mode-toggle의 `max-w-[220px] truncate text-xs` 칸에 그대로 선다 — 2026-09-08 v5 글자(14px) 기준
+  // Pretendard 실측: 옛 ko 31자 = 315px·옛 en 87자 = 548px라 문장 중간이 끊겼다 → ko 183px·en 199px로 줄였다(title도 같은 문구).
   "att.period.disabledTeacher": {
-    ko: "강사 전체 보기는 반마다 세션이 달라 달력월로 표시합니다",
-    en: "The all-classes view spans classes with different sessions, so it shows calendar months",
+    ko: "반마다 세션이 달라 달력월로 표시",
+    en: "Sessions vary by class; monthly",
   },
   "att.period.disabledNoClass": { ko: "반을 고르면 세션으로 볼 수 있습니다", en: "Pick a class to switch to sessions" },
   "att.period.aria": { ko: "날짜축 전환", en: "Switch date axis" },

@@ -233,7 +233,9 @@ export function DraftComposer({
                       </SelectContent>
                     </Select>
                   </td>
-                  <th className="w-[76px]">작성자</th>
+                  {/* 1열과 같은 88px — table-fixed라 2행 '기안 일시'(16px semibold 4자+공백 ≈59px + px-3 24 + border 2 = 85px)가
+                      이 폭을 그대로 물려받는다. 76px이던 시절엔 9px가 표 선을 뚫고 나왔다(2026-09-08 v5 글자 기준 실측). */}
+                  <th className="w-[88px]">작성자</th>
                   <td className="text-sm">
                     <span className="text-foreground font-medium">{drafterName}</span>
                     {drafterJobTitle ? (

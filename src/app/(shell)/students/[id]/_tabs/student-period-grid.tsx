@@ -77,7 +77,10 @@ function PeriodTable({
   return (
     <table className={`border-collapse border ${GRID} text-sm`} style={{ tableLayout: "fixed" }}>
       <colgroup>
-        <col style={{ width: 72 }} />
+        {/* 라벨 열 112px — 2026-09-08 v5 글자 기준 실측: `HH:MM~HH:MM`(11자)이 14px에서 ≈90px라
+            112 − px-2 16 − border 1 = 95px가 필요하다(72px 시절엔 55px뿐이라 뒤 2글자가 옆 칸에 덮였다).
+            시간표 LABEL_W=104는 패딩 없는 레일 기준이라 여기선 px-2 만큼 더 잡는다. */}
+        <col style={{ width: 112 }} />
         {days.map((_, i) => (
           <col key={i} style={{ width: 104 }} />
         ))}

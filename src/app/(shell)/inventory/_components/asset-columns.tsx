@@ -31,7 +31,8 @@ export function assetColumns(
     { key: "no", label: "No", width: 56, render: (a) => <span className="num text-text-dim">{opts.noOf?.(a) ?? ""}</span>, sortValue: (a) => opts.noOf?.(a) ?? null, className: "whitespace-nowrap" },
     { key: "assetCode", label: "자산ID", width: 88, render: (a) => <span className="font-mono text-xs font-bold">{a.assetCode}</span>, className: "whitespace-nowrap" },
     { key: "category", label: "분류", width: 78, render: (a) => cats.labelOf(a.category), sortValue: (a) => cats.labelOf(a.category), className: "whitespace-nowrap" },
-    { key: "maker", label: "제조사", width: 96, render: (a) => <UnknownCell v={a.maker} />, className: "whitespace-nowrap" },
+    // 제조사 96→104 — 2026-09-08 v5 글자 기준 실측: 표 글자 text-xs(14px)에서 한글 6자(`익스프레스럭`)=84px > 안쪽 79px(96−px-2 16−border 1)라 말줄임이 붙었다. 104면 안쪽 87px.
+    { key: "maker", label: "제조사", width: 104, render: (a) => <UnknownCell v={a.maker} />, className: "whitespace-nowrap" },
     { key: "model", label: "모델명", minWidth: 150, render: (a) => <UnknownCell v={a.model} />, className: "whitespace-nowrap" },
     { key: "acquiredOn", label: "입고일", width: 100, render: (a) => <UnknownCell v={a.acquiredOn} num />, className: "whitespace-nowrap" },
     {

@@ -233,8 +233,11 @@ export function ScheduleGrid({
             <thead>
               <tr className="bg-muted/40">
                 {/* 교시 열은 시작~종료 시각(예 14:20~15:00)을 한 줄로 담아야 해 폭을 넉넉히 준다.
-                    table-fixed라 이 폭이 그대로 확정되고 나머지를 요일이 나눠 갖는다. */}
-                <th className="border-border text-muted-foreground w-[4.5rem] border-b border-r py-1.5 font-medium">
+                    table-fixed라 이 폭이 그대로 확정되고 나머지를 요일이 나눠 갖는다.
+                    6.5rem(104px) = 2026-09-08 v5 글자 기준 실측 — 11자(`HH:MM~HH:MM`) × ~8.5px + 여백.
+                    옛 4.5rem(72px)은 xs 14px에서 좌우 ~10px씩 잘렸다(overflow-hidden이라 진짜로 사라짐).
+                    시간표 rich-card-group.tsx `LABEL_W = 104`와 같은 문자열·같은 크기라 값을 맞춘다. */}
+                <th className="border-border text-muted-foreground w-[6.5rem] border-b border-r py-1.5 font-medium">
                   교시
                 </th>
                 {days.map((d) => (

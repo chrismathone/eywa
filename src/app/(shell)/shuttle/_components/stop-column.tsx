@@ -247,9 +247,11 @@ function StopCard({
           aria-label="도착 시각"
           // ⚠️ 폭은 짐작하지 말 것 — 한국어 로캘의 `type="time"`은 "오후 03:45" + 시계 아이콘이라
           //    실측 폭이 16px 글자에서 127px, 12px 글자에서 105px다(전엔 104/92라 "오후 03:4"로 잘렸다).
-          //    데스크톱 글자가 12→12.5px로 올라갔으니(control-size 한 벌) 폭도 105×12.5/12 ≈ 109px 위로
-          //    올려 둔다 — 110px 그대로 두면 딱 경계라 로캘·폰트가 조금만 달라도 다시 잘린다.
-          className={cn(SHUTTLE_INPUT, "num w-[132px] shrink-0 px-1.5 sm:w-[118px]")}
+          //    2026-09-08 v5 글자 기준 실측: SHUTTLE_INPUT이 데스크톱 `sm:text-sm`=16px·폰 `text-base`=18px라
+          //    데스크톱은 위 실측값 127px이 그대로 필요 폭(옛 118px은 12.5px 기준 109px에서 올린 값이라 9px 부족),
+          //    폰은 텍스트분 비례(오후 03:45 ≈89 + 아이콘·간격 ≈34 + px-1.5 12 + border 2) ≈137px라 132px이 5px 부족했다.
+          //    → 144px/132px(각 ≈7px·5px 여유). 경계에 딱 맞추면 로캘·폰트가 조금만 달라도 다시 잘린다.
+          className={cn(SHUTTLE_INPUT, "num w-[144px] shrink-0 px-1.5 sm:w-[132px]")}
         />
         {canWrite && !isCampus ? (
           <button

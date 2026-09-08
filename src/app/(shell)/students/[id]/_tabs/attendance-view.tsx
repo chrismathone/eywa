@@ -90,8 +90,9 @@ export function AttendanceView({
           />
         ) : null}
         {classOptions.length > 0 ? (
+          // 2026-09-08 v5 글자 기준 실측: 라벨 18px에서 `중등E_초등 브릿지 C` ≈168px — w-40(라벨 자리 114px)은 끝이 잘려 w-56(178px)으로.
           <SearchableSelect
-            className="w-40"
+            className="w-56"
             triggerClassName={TOOLBAR_SELECT}
             value={activeClassId}
             onValueChange={setClassId}
