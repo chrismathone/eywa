@@ -8,19 +8,35 @@
  *    (알림 규칙이 "강사가 미출결→출결로 바꾸면"을 전제하므로). 데스크만 이 선 밖의 빈 칸만 손댄다.
  * 판정은 읽는 시점 계산 — 상태를 DB에 적어 두면 10분마다 배치가 필요해진다.
  */
-import { DAY_TONE, STATUS_TONE } from "@/features/attendance/cell-display";
+import {
+  DAY_TONE,
+  STATUS_TEXT,
+  STATUS_TEXT_EN,
+  STATUS_TONE,
+  type AttendanceMark,
+} from "@/features/attendance/cell-display";
 import type { RecordedVia } from "./recorded-via";
 import { ATTENDANCE_GRACE_MIN, type SlotPhase } from "./signals";
 
 export { ATTENDANCE_GRACE_MIN };
 
-/** 좌석표·요약이 쓰는 5색. raw enum을 화면에 내보내지 않는다. */
-export type SeatMark = "present" | "absent" | "late" | "unmarked" | "waiting";
+/**
+ * 좌석표·요약이 쓰는 표시 상태 = **출석부의 6상태 + 기록이 없는 두 칸**(대기·미출결).
+ *
+ * 🔴 2026-09-08 원장 지시 *"전부 통일된 뷰가 있도록 버그 수정"* — 종전엔 5색이었고 `seatMarkOf`가
+ *    **보강을 출석에, 조퇴를 지각에 접었다**. 그래서 같은 기록을 월별 출석부·학생 달력·반별 출석부는
+ *    `보강`(보라)이라 부르는데 좌석표·출결 모드·오늘 출결만 **출석(초록)**이라 했다.
+ *    실측 2026-09-04 권형준(중등E_중1 정규 A)이 그 예이고, 최근 90일 보강 63건 중 20건이 칸으로
+ *    그려져 초록이었다. 출결은 매일 보는 화면이라 이건 색이 아니라 **사실이 갈린 것**이다.
+ * 🔑 라벨·색을 여기서 새로 적지 않는다 — `cell-display`(출석부 정본)의 표를 **그대로 편다**.
+ *    두 화면이 같은 표를 읽으면 구조적으로 다시 갈릴 수 없다.
+ * ⚠️ `excused`(공결)만은 정본도 결석과 **같은 라벨·같은 색**이라 그 접기를 그대로 둔다
+ *    (`seatMarkOf` 주석 참조) — 여기서 갈라 놓으면 요약의 '결석 N'이 조용히 줄어든다.
+ */
+export type SeatMark = AttendanceMark | "unmarked" | "waiting";
 
 export const SEAT_MARK_LABEL: Record<SeatMark, string> = {
-  present: "출석",
-  absent: "결석",
-  late: "지각",
+  ...STATUS_TEXT,
   unmarked: "미출결",
   waiting: "대기",
 };
@@ -33,9 +49,7 @@ export const SEAT_MARK_LABEL: Record<SeatMark, string> = {
  * ⚠️ 이 표는 **표시 전용**이다 — 저장값은 `attendance_status` enum 그대로다.
  */
 export const SEAT_MARK_LABEL_EN: Record<SeatMark, string> = {
-  present: "Present",
-  absent: "Absent",
-  late: "Late",
+  ...STATUS_TEXT_EN,
   unmarked: "Not marked",
   waiting: "Waiting",
 };
@@ -46,14 +60,12 @@ export function seatMarkLabelOf(mark: SeatMark, lang: "ko" | "en" = "ko"): strin
 }
 
 /**
- * 출석·결석·지각은 출석부 `STATUS_TONE`과 같은 배경(민트/빨강/주황).
+ * 기록이 있는 칸은 **출석부 `STATUS_TONE` 그대로**(민트·빨강·주황·파랑·보라) — 한 벌을 펴서 쓴다.
  * 시작 전(대기)은 민트를 쓰지 않는다 — classday는 출석과 같은 계열이라 전원 출석으로 읽힌다.
  * ⚠️ 칸 버튼에 `bg-card`를 덧씌우지 말 것 — 동형 유틸은 CSS 순서라 출석 배경이 진다.
  */
 export const SEAT_MARK_TONE: Record<SeatMark, string> = {
-  present: STATUS_TONE.present,
-  absent: STATUS_TONE.absent,
-  late: STATUS_TONE.late,
+  ...STATUS_TONE,
   unmarked: `${DAY_TONE.outside} text-att-absent-ink`,
   waiting: "border-line bg-card text-text-dim border",
 };
@@ -69,7 +81,10 @@ export const SEAT_MARK_TONE: Record<SeatMark, string> = {
 export const SEAT_MARK_INK: Record<SeatMark, string> = {
   present: "text-att-present-ink",
   absent: "text-att-absent-ink",
+  excused: "text-att-absent-ink",
   late: "text-att-late-ink",
+  early_leave: "text-att-leave-ink",
+  makeup: "text-att-makeup-ink",
   // 기록이 없는 칸엔 시각 줄 자체가 안 그려진다 — 맵을 닫아 두기 위한 값.
   unmarked: "text-text-dim",
   waiting: "text-text-dim",
@@ -116,11 +131,21 @@ export function seatHoverTitle(input: {
   return head;
 }
 
-/** 그 칸의 표시 상태 — 기록이 있으면 그 값, 없으면 국면으로 대기/미출결. */
+/**
+ * 그 칸의 표시 상태 — **기록이 있으면 그 값 그대로**, 없으면 국면으로 대기/미출결.
+ *
+ * 🔴 접지 말 것(원장 2026-09-08 *"전부 통일된 뷰"*). 종전엔 `makeup → present`·`early_leave → late`로
+ *    접어서, 같은 기록을 출석부는 `보강`·`조퇴`라 부르는데 이 화면만 `출석`·`지각`이라 했다.
+ * ⚠️ 유일한 접기 = **`excused`(공결) → `absent`**. 출석부 정본(`STATUS_TEXT`/`STATUS_VAR`)도 공결을
+ *    결석과 **같은 라벨·같은 색**으로 그리므로 화면은 어차피 같고, 여기서 갈라 놓으면 요약의
+ *    '결석 N'(`mark === "absent"`로 센다)이 조용히 줄어든다.
+ */
+/** 저장값 그대로 쓰는 표시 상태(공결은 아래에서 결석으로 접는다). */
+const RECORDED_MARKS: ReadonlySet<string> = new Set(["present", "absent", "late", "early_leave", "makeup"]);
+
 export function seatMarkOf(status: string | null, phase: SlotPhase): SeatMark {
-  if (status === "present" || status === "makeup") return "present";
-  if (status === "absent" || status === "excused") return "absent";
-  if (status === "late" || status === "early_leave") return "late";
+  if (status === "excused") return "absent";
+  if (status != null && RECORDED_MARKS.has(status)) return status as SeatMark;
   if (status != null) return "present"; // 알 수 없는 값은 '왔다' 쪽으로 — 빈 칸으로 오인하지 않는다
   if (phase === "before" || phase === "grace") return "waiting";
   return "unmarked";

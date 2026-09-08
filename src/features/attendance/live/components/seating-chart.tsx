@@ -37,10 +37,17 @@ import { groupSeatingFloors, type SeatingRoom as SeatingRoomGroup } from "../sea
 import type { LiveBoard } from "../types";
 import { SeatingRoom } from "./seating-room";
 
+/**
+ * 범례 — 칸에 실제로 나올 수 있는 색 전부.
+ * ⚠️ `excused`(공결)는 결석과 **같은 라벨·같은 색**이라 뺀다(같은 알약이 두 번 서면 다른 뜻으로 읽힌다).
+ * 🔴 2026-09-08 보강·조퇴 추가 — 그전엔 이 화면이 둘을 출석·지각에 접어 범례가 필요 없었다.
+ */
 const LEGEND: Array<keyof typeof SEAT_MARK_LABEL> = [
   "present",
-  "absent",
   "late",
+  "early_leave",
+  "makeup",
+  "absent",
   "unmarked",
   "waiting",
 ];

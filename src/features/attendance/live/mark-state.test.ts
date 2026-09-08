@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STATUS_TONE } from "@/features/attendance/cell-display";
+import { STATUS_TEXT, STATUS_TONE } from "@/features/attendance/cell-display";
 import { ATTENDANCE_GRACE_MIN } from "./signals";
 import {
   canDeskMark,
@@ -11,6 +11,7 @@ import {
   isArrivalStatus,
   isUnmarkedToArrival,
   seatMarkOf,
+  SEAT_MARK_LABEL,
   SEAT_MARK_TONE,
   shortSeatName,
 } from "./mark-state";
@@ -28,10 +29,28 @@ describe("seatMarkOf", () => {
     expect(seatMarkOf("late", "before")).toBe("late");
   });
 
-  it("보강은 출석, 공결은 결석, 조퇴는 지각 칸(5색 안에 흡수)", () => {
-    expect(seatMarkOf("makeup", "due")).toBe("present");
+  it("🔴 보강·조퇴는 접지 않는다 — 출석부와 같은 말을 해야 한다(원장 2026-09-08)", () => {
+    // 실측 2026-09-04 권형준(중등E_중1 정규 A): 보강인데 좌석표만 '출석 초록'이었다.
+    expect(seatMarkOf("makeup", "due")).toBe("makeup");
+    expect(seatMarkOf("early_leave", "due")).toBe("early_leave");
+  });
+
+  it("공결만 결석으로 접는다 — 출석부 정본도 같은 라벨·같은 색이고, 접지 않으면 '결석 N'이 줄어든다", () => {
     expect(seatMarkOf("excused", "due")).toBe("absent");
-    expect(seatMarkOf("early_leave", "due")).toBe("late");
+    expect(SEAT_MARK_LABEL.excused).toBe(SEAT_MARK_LABEL.absent);
+  });
+
+  it("라벨·색은 출석부 정본을 그대로 편다 — 두 표가 갈릴 수 없게", () => {
+    expect(SEAT_MARK_LABEL.makeup).toBe(STATUS_TEXT.makeup);
+    expect(SEAT_MARK_LABEL.early_leave).toBe(STATUS_TEXT.early_leave);
+    expect(SEAT_MARK_TONE.makeup).toBe(STATUS_TONE.makeup);
+    expect(SEAT_MARK_TONE.early_leave).toBe(STATUS_TONE.early_leave);
+    expect(SEAT_MARK_TONE.makeup).toContain("bg-att-makeup");
+    // 6상태 전부 — 하나라도 빠지면 그 상태가 좌석표에서 다른 뜻으로 읽힌다.
+    for (const m of ["present", "absent", "excused", "late", "early_leave", "makeup"] as const) {
+      expect(SEAT_MARK_LABEL[m]).toBe(STATUS_TEXT[m]);
+      expect(SEAT_MARK_TONE[m]).toBe(STATUS_TONE[m]);
+    }
   });
 
   it("시작 전·유예 안의 빈 칸은 대기 — 미출결이 아니다", () => {
