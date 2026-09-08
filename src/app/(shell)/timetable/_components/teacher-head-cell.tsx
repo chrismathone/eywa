@@ -91,7 +91,10 @@ export function TeacherHeadCell({
         startSave(async () => {
           const res = await saveTimetableViewPrefs({ teacherOrder: { [subject]: { [groupKey]: next } } });
           // 저장이 막히면 말한다 — 조용히 새로고침만 하면 "드래그가 안 된다"로 읽힌다(드롭 거절 토스트와 같은 규약).
-          if (!res.ok) return toast.error(res.error ?? "강사 순서를 저장하지 못했습니다");
+          if (!res.ok) {
+            toast.error(res.error ?? "강사 순서를 저장하지 못했습니다");
+            return;
+          }
           router.refresh();
         });
       }}
