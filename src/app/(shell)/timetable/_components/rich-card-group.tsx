@@ -18,7 +18,7 @@ import {
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { useClassFilter, useSearchTone } from "./search-context";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { HOLD_SECTION_CLASS, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
+import { holdTone, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { rosterDropId, useRosterMove, type RosterDragData } from "./roster-move";
 import { movedByTarget, visibleSpanRows } from "@/features/timetable/lib/row-span";
@@ -49,7 +49,13 @@ const DAYHEAD_H = 22;
 const PERIOD_H = 26;
 // 학생 1행 높이 — 기본뷰 StudentRow 실측(13px × leading-tight + py-[3px] = 23.1px)에 맞춘 값.
 // ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 행이 잘린다).
-const STU_H = 24;
+/**
+ * 학생 한 줄의 높이 — **실제 줄 높이와 같아야 한다**(명단 섹션 높이가 `줄 수 × 이 값`이라서).
+ * 🔴 2026-09-08: 24px이던 값이 타입 스케일 v5(명단 글자 `text-sm` 14→16px)를 안 따라와, 실제 줄(16 × 1.25
+ *    + `py-[3px]` 6 = 26px)보다 작아졌다 → 섹션이 학생을 **반 줄에서 잘랐다**(원장 캡처: 이름이 가로로 잘린 채 끝남).
+ * ⚠️ 줄의 글자 크기나 세로 여백을 바꾸면 **이 값도 같이** 바꿀 것(둘이 갈리면 또 잘린다).
+ */
+const STU_H = 26;
 /**
  * 교시축(좌측 라벨열) 폭 — **시간대 한 줄이 안 깨지는 최소치**.
  *
@@ -199,9 +205,6 @@ function LabelColumn({
   namesOnly?: boolean;
 }) {
   const cell = `${GRID} text-text-dim flex items-center justify-center border-b text-xs font-bold`;
-  // 대기 라벨은 색 띠 위에 얹히므로 **글자색을 상속하지 않는다** — `cell`의 text-text-dim과 겹치면
-  // 승자를 CSS 순서가 정해(같은 축 유틸, [[#116]]) 카드 쪽(잉크)과 레일 쪽이 다른 색이 된다.
-  const cellNoColor = `${GRID} flex items-center justify-center border-b text-xs font-bold`;
   const rail = `bg-bg-soft ${GRID} sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]`;
   if (namesOnly)
     return (
@@ -237,7 +240,7 @@ function LabelColumn({
         </div>
       ) : null}
       {/* 대기·퇴원은 **항상** 선다(원장 2026-09-07) — 카드 쪽 높이와 같아 정렬이 유지된다. */}
-      {holdH > 0 ? <div className={`${cellNoColor} ${HOLD_SECTION_CLASS}`} style={{ height: holdH }}>대기</div> : null}
+      {holdH > 0 ? <div className={cell} style={{ height: holdH }}>대기</div> : null}
       {wdH > 0 ? (
         <div className={`${GRID} text-text-dim flex items-center justify-center text-xs font-bold`} style={{ height: wdH }}>
           퇴원
@@ -413,7 +416,7 @@ export function ClassColumn({
         h={holdH}
         rows={rosterRows.hold}
         count={card.hold.length}
-        className={`${HOLD_SECTION_CLASS} ${GRID} border-b`}
+        className={`bg-bg-soft ${GRID} border-b`}
         dropId={rosterDropId(card.classId, "hold")}
       >
         {card.hold.length === 0 ? (
@@ -679,7 +682,12 @@ function RosterRow({
   const colorMode = useTimetableColorMode();
   // 재원/대기는 기본뷰와 **같은 tone 헬퍼**(색 강도 모드 반영). 예전엔 여기서 pastel 색을 손으로 박아
   // 뷰 설정 '색 강도'를 바꿔도 통합뷰만 안 따라왔다. 퇴원은 통합뷰에만 있는 섹션이라 전용 tone 유지.
-  const baseTone = withdrawn ? withdrawnTone(colorMode) : timetableStudentTone(colorMode, s);
+  // 퇴원·대기는 **사람에게 붙는 칩**이다(섹션 배경이 아니라) — 원장 2026-09-08 *"대기 셀 색상이 아니고 퇴원생처럼"*.
+  const baseTone = withdrawn
+    ? withdrawnTone(colorMode)
+    : s.status === "hold"
+      ? holdTone(colorMode)
+      : timetableStudentTone(colorMode, s);
   // 검색에 걸린 학생 표식 — 기본뷰 StudentRow와 같은 함수(같은 필드로 판정, 같은 클래스로 표시).
   const tone = useSearchTone(s, baseTone);
   const meta = schoolGradeLabel(s.school, s.grade);

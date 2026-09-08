@@ -233,6 +233,12 @@ export function padCardDays(days: readonly DayOfWeek[], min: number = MIN_CARD_D
 }
 /** 명단 섹션 최대 표시 행수(원장 2026-07-27 "최대 12명"). 넘치면 카드 안에서 스크롤(스크롤바 숨김+페이드). */
 export const ROSTER_ROW_CAP = 12;
+/**
+ * 재원 명단이 **기본으로 잡는 줄 수**(원장 2026-09-08: *"재원생이 10명은 기본으로 공간 배정. 통합뷰에서"*).
+ * 인원이 적은 반도 이만큼은 자리를 잡아서, 한 줄에 늘어선 카드들의 명단 바닥이 들쭉날쭉하지 않는다.
+ * 🔴 `ROSTER_ROW_CAP`(12)보다 크게 두지 말 것 — 상한보다 바닥이 높으면 clamp가 뒤집힌다.
+ */
+export const ROSTER_ACTIVE_MIN_ROWS = 10;
 
 /** 교시표를 시각순으로 세우고 order→인덱스 맵을 만든다(시프트는 '분'이 아니라 '몇 번째 교시'로 센다). */
 function periodIndexByOrder(rows: readonly { order: number; label: string; time: string }[]) {
@@ -793,7 +799,7 @@ export function groupRichCards(
           // 세 섹션 모두 빈 반도 "-" 한 줄은 보여준다(반이 있는데 명단 칸이 통째로 없으면 오독).
           // 🔴 대기·퇴원도 **항상 자리를 잡는다**(원장 2026-09-07) — 예전엔 0명이면 줄이 통째로 사라져서
           //    누가 퇴원하는 순간 카드가 아래로 밀리고, 옮겨 놓을 자리(드롭 대상)도 화면에 없었다.
-          active: clampRows(Math.max(...cluster.map((c) => c.active.length)), 1),
+          active: clampRows(Math.max(...cluster.map((c) => c.active.length)), ROSTER_ACTIVE_MIN_ROWS),
           hold: clampRows(Math.max(...cluster.map((c) => c.hold.length)), 1),
           withdrawn: clampRows(Math.max(...cluster.map((c) => c.withdrawn.length)), 1),
         },
