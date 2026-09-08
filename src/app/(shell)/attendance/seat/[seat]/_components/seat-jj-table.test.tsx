@@ -1,3 +1,4 @@
+import { JJ_SEAT_COL_MIN_PX } from "@/features/attendance/seat/jj-fields";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
@@ -103,7 +104,7 @@ describe("JJ실 출석부 표", () => {
       />,
     );
     expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
-      "repeat(2, minmax(min(100%, 340px), 1fr))",
+      `repeat(2, minmax(min(100%, ${JJ_SEAT_COL_MIN_PX}px), 1fr))`,
     );
     expect(screen.getAllByRole("table")).toHaveLength(2);
     expect(screen.getByText("중등E_초5 의치대")).toBeTruthy();
@@ -200,7 +201,7 @@ describe("JJ실 출석부 진도(수업계획)", () => {
     const { container } = render(<SeatJjTable rosters={[roster, other]} {...props} />);
     expect(screen.queryByText("수업계획")).toBeNull();
     expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
-      "repeat(2, minmax(min(100%, 340px), 1fr))",
+      `repeat(2, minmax(min(100%, ${JJ_SEAT_COL_MIN_PX}px), 1fr))`,
     );
   });
 });

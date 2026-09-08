@@ -238,7 +238,8 @@ export function TeacherGridView({
                 // ⚠️ 색이 없는 강사(색 미지정 + 영어 시트 강사 목록 밖)면 th 자체가 투명이라, sticky 헤더
                 // 아래로 흐르는 본문이 px-2 py-1 패딩 링 사이로 비쳐 보였다(#74와 같은 부류). 안쪽 span만
                 // bg를 갖고 있었기 때문 → th에도 불투명 배경 폴백.
-                className={`sticky top-0 z-20 border-b px-2 py-1 text-center ${t.color ? "" : "bg-bg-soft"} ${TEACHER_EDGE} ${GRID}`}
+                // 여백을 좁혀 이름 3자를 살린다(폭 변화 0) — v5 글자 상승 뒤 47px 가용에 18px×3=54px이 안 들어갔다.
+                className={`sticky top-0 z-20 border-b px-0.5 py-1 text-center ${t.color ? "" : "bg-bg-soft"} ${TEACHER_EDGE} ${GRID}`}
                 style={{
                   height: HEAD_TEACHER_H,
                   ...(t.color ? { backgroundColor: t.color.bg, color: t.color.text } : {}),

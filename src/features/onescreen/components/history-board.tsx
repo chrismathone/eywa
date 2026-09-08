@@ -162,7 +162,7 @@ export function HistoryBoard({ date }: { date?: string }) {
                       {r.progress || "—"}
                     </span>
                     <span
-                      className="text-text-faint hidden w-12 shrink-0 truncate text-right text-xs sm:inline-block"
+                      className="text-text-faint hidden w-20 shrink-0 truncate text-right text-xs sm:inline-block"
                       title={r.examInfo ?? ""}
                     >
                       {r.examInfo ?? ""}
@@ -190,7 +190,7 @@ export function HistoryBoard({ date }: { date?: string }) {
                     <span className="text-text-faint w-12 shrink-0 text-right text-xs">
                       {r.viewCount > 0 ? tf("os.hist.views", { n: r.viewCount }) : ""}
                     </span>
-                    <span className="w-[74px] shrink-0 text-right">
+                    <span className="w-20 shrink-0 text-right">
                       {linkOk ? (
                         <a
                           href={`/r/${r.shareToken}`}

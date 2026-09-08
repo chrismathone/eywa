@@ -10,7 +10,8 @@ const HEAD_UNDERLINE =
   "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-line after:content-['']";
 const EDGE_RIGHT = "before:absolute before:inset-y-0 before:right-0 before:w-px before:bg-line before:content-['']";
 const EDGE_LEFT = "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-line before:content-['']";
-const COL = { name: 104, school: 84, confirmed: 44, review: 40, rate: 64, day: 30 } as const;
+// ⚠️ 반별 출석부(matrix-table)와 **같은 값**으로 맞춘다 — 두 표가 같은 뱃지·같은 폭 규약을 쓴다.
+const COL = { name: 132, school: 96, confirmed: 44, review: 40, rate: 64, day: 30 } as const;
 
 export function MonthlyTable({
   seat,
