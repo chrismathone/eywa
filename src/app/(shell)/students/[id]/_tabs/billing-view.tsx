@@ -209,7 +209,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                               {r.lineItems.map((li, i) => (
                                 <div key={i} className="flex items-baseline justify-between gap-2">
                                   <span className="truncate">{li.description || "항목"}</span>
-                                  <span className="num text-text-faint shrink-0 text-[11px]">{won(li.amount)}</span>
+                                  <span className="num text-text-faint shrink-0 text-xs">{won(li.amount)}</span>
                                 </div>
                               ))}
                             </div>
@@ -220,7 +220,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                         <td className="num px-3 py-2 text-right">{won(r.amountTotal)}</td>
                         <td className="num text-green px-3 py-2 text-right">{r.amountPaid > 0 ? won(r.amountPaid) : "-"}</td>
                         <td className="px-3 py-2 text-center">
-                          <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+                          <span className={`inline-block rounded-full border px-1.5 py-0.5 text-xs font-medium ${badge.cls}`}>
                             {badge.label}
                           </span>
                         </td>
@@ -322,9 +322,9 @@ function Section({
 function StatCard({ label, value, sub, cls }: { label: string; value: string; sub?: string; cls: string }) {
   return (
     <div className={`rounded-2xl border px-3 py-2 ${cls}`}>
-      <p className="text-text-dim text-[11px]">{label}</p>
+      <p className="text-text-dim text-xs">{label}</p>
       <p className="num text-sm font-bold">{value}</p>
-      {sub ? <p className="text-[10px] opacity-80">{sub}</p> : null}
+      {sub ? <p className="text-xs opacity-80">{sub}</p> : null}
     </div>
   );
 }

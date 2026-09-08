@@ -76,7 +76,7 @@ export function AttendancePills({
   if (readOnly) {
     return (
       <span
-        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-[10px] font-bold"
+        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-xs font-bold"
         title={t("os.att.noPerm")}
       >
         {value ? (attendanceLabelOf(value, lang) ?? value) : t("os.att.empty")}
@@ -86,7 +86,7 @@ export function AttendancePills({
   if (value && !BASIC.includes(value as BasicAttendance)) {
     return (
       <span
-        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-[10px] font-bold"
+        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-xs font-bold"
         title={t("os.att.otherStates")}
       >
         {attendanceLabelOf(value, lang) ?? value}
@@ -169,14 +169,14 @@ function StatusPill({
             ? tf("os.att.already", { label })
             : tf("os.att.mark", { label })
       }
-      className={`rounded-pill px-1.5 py-px text-[10px] font-bold transition disabled:opacity-50 ${
+      className={`rounded-pill px-1.5 py-px text-xs font-bold transition disabled:opacity-50 ${
         active ? ON_CLS[status] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
       }`}
     >
       {label}
       {/* 메모가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다. */}
       {active && note ? (
-        <span aria-hidden className="ml-0.5 align-middle text-[8px]">
+        <span aria-hidden className="ml-0.5 align-middle text-xs">
           ●
         </span>
       ) : null}
@@ -235,7 +235,7 @@ export function NoteForm({
   }, []);
   return (
     <div className="space-y-1.5">
-      <p className="text-text-faint text-[10px] font-bold">{label}</p>
+      <p className="text-text-faint text-xs font-bold">{label}</p>
       <textarea
         ref={ref}
         value={text}
@@ -249,20 +249,20 @@ export function NoteForm({
         }}
         rows={2}
         placeholder={t("os.att.notePh")}
-        className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-[11px] outline-none"
+        className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-xs outline-none"
       />
       <div className="flex items-center justify-end gap-1">
         <button
           type="button"
           onClick={onCancel}
-          className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-[11px]"
+          className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-xs"
         >
           {t("os.att.cancel")}
         </button>
         <button
           type="button"
           onClick={() => onSave(text)}
-          className="bg-primary text-primary-foreground cursor-pointer rounded-md px-2 py-0.5 text-[11px] font-bold"
+          className="bg-primary text-primary-foreground cursor-pointer rounded-md px-2 py-0.5 text-xs font-bold"
         >
           {t("os.att.save")}
         </button>
@@ -317,7 +317,7 @@ export function SessionUnitsField({
   if (status === "absent") {
     return big ? (
       <span
-        className="text-text-faint block text-center text-[13px]"
+        className="text-text-faint block text-center text-sm"
         title={t("os.units.absent")}
       >
         —
@@ -350,7 +350,7 @@ export function SessionUnitsField({
       className={`bg-transparent text-center outline-none transition-colors disabled:opacity-50 ${
         box ??
         `border-line focus:border-primary rounded-md border ${
-          big ? "h-8 w-[54px] text-[15px]" : "h-7 w-[46px] text-[13px]"
+          big ? "h-8 w-[54px] text-base" : "h-7 w-[46px] text-sm"
         }`
       } ${saved === 1 ? "text-text-dim" : "text-foreground font-bold"}`}
     />
@@ -365,7 +365,7 @@ export function SessionUnitsField({
         t("os.units.titleTail")
       }
     >
-      {label ? <span className="text-text-faint text-[11px] font-bold whitespace-nowrap">{label}</span> : null}
+      {label ? <span className="text-text-faint text-xs font-bold whitespace-nowrap">{label}</span> : null}
       {field}
     </span>
   );

@@ -55,7 +55,7 @@ import type { BasicAttendance } from "../lib/mark-cycle";
 const TERM_LABEL: Record<"regular" | "exam", string> = { regular: "평시", exam: "내신" };
 
 const miniBtn = (on: boolean) =>
-  `cursor-pointer rounded-full border px-2 py-0.5 text-[12px] transition ${
+  `cursor-pointer rounded-full border px-2 py-0.5 text-xs transition ${
     on
       ? "border-primary bg-primary text-primary-foreground font-bold"
       : "border-line-strong text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -63,9 +63,9 @@ const miniBtn = (on: boolean) =>
 
 /** 머리의 알약 버튼 셋 — 셋이 같은 모양이라야 한 줄로 읽힌다. */
 const PILL =
-  "border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-40 disabled:hover:text-foreground disabled:hover:border-line-strong";
+  "border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold disabled:cursor-default disabled:opacity-40 disabled:hover:text-foreground disabled:hover:border-line-strong";
 const POPUP =
-  "bg-card border-line-strong shadow-card flex max-h-[70vh] w-[268px] flex-col gap-2 overflow-y-auto rounded-lg border p-3 text-[12px] outline-none";
+  "bg-card border-line-strong shadow-card flex max-h-[70vh] w-[268px] flex-col gap-2 overflow-y-auto rounded-lg border p-3 text-xs outline-none";
 
 export function DayBulk({
   date,
@@ -214,7 +214,7 @@ export function DayBulk({
           <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
             <Popover.Popup className={POPUP}>
               {/* 범위는 출석 라벨과 **같은 셈법**으로 적는다(한 줄에 두 셈법이 섞이면 더 헷갈린다). */}
-              <p className="text-text-dim text-[12px]">
+              <p className="text-text-dim text-xs">
                 학생 <b className="text-foreground num">{studentCount}</b>명 × 교시{" "}
                 <b className="text-foreground num">{slotCount}</b>개
               </p>
@@ -229,7 +229,7 @@ export function DayBulk({
                 placeholder={t("bulk.attitudePlaceholder")}
                 onSelect={setPicked}
               />
-              <label className="text-text-dim flex cursor-pointer items-center gap-1.5 text-[12px]">
+              <label className="text-text-dim flex cursor-pointer items-center gap-1.5 text-xs">
                 <input
                   type="checkbox"
                   className="cursor-pointer"
@@ -249,7 +249,7 @@ export function DayBulk({
                 {value === null ? t("bulk.attitudeChoose") : tf("bulk.attitudeApply", { value, n: statusCount })}
               </Button>
               {/* 각주 — 위 입력칸과 **붙어 보이지 않게** 구분한다. 안 그러면 바로 위 태도 설명으로 읽힌다. */}
-              <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-[11px]">
+              <p className="bg-bg-soft text-text-dim rounded-md px-2 py-1.5 text-xs">
                 ※ ‘특이사항’은 <b className="text-foreground">여기서 입력하지 않습니다</b> — 학생마다
                 다른 기록이라 일괄 대상이 아니며, 학생 행의 맨 오른쪽 칸에 직접 적습니다.
               </p>
@@ -274,7 +274,7 @@ export function DayBulk({
             <Popover.Popup className={POPUP}>
               {/* ⚠️ 여기만 곱셈으로 못 적는다 — 계획 줄 수는 **교시마다 다를 수 있어** `N×M`이 거짓이 될
                   수 있다. 대신 몇 개 교시를 합친 수인지 옆에 밝혀 숫자의 출처를 보이게 한다. */}
-              <p className="text-text-dim text-[12px]">
+              <p className="text-text-dim text-xs">
                 이 날 {TERM_LABEL[effectiveTerm]} 계획{" "}
                 <b className="text-foreground num">{termLineCount}</b>줄
                 <span className="text-text-faint"> (교시 {slotCount}개 합계)</span>
@@ -306,13 +306,13 @@ export function DayBulk({
                 ))}
               </div>
               <input
-                className="border-line-strong text-foreground focus:border-primary bg-card w-full rounded-lg border px-1.5 py-1 text-[12px] outline-none"
+                className="border-line-strong text-foreground focus:border-primary bg-card w-full rounded-lg border px-1.5 py-1 text-xs outline-none"
                 placeholder={`${TERM_LABEL[effectiveTerm]} ${planFieldLabel} 값`}
                 value={planValue}
                 aria-label={`${TERM_LABEL[effectiveTerm]} ${planFieldLabel} 일괄 입력`}
                 onChange={(e) => setPlanValue(e.target.value)}
               />
-              <label className="text-text-dim flex cursor-pointer items-center gap-1.5 text-[12px]">
+              <label className="text-text-dim flex cursor-pointer items-center gap-1.5 text-xs">
                 <input
                   type="checkbox"
                   className="cursor-pointer"
@@ -334,7 +334,7 @@ export function DayBulk({
               </Button>
               {termLineCount === 0 ? (
                 // 대상이 없는 이유를 밝힌다 — 일괄이 줄을 몰래 만들지 않는다는 계약(bulk.ts 주석)의 이면.
-                <p className="text-text-dim text-[11px]">
+                <p className="text-text-dim text-xs">
                   계획 표의 ‘+ 줄 추가’로 줄을 먼저 만드세요(일괄은 있는 줄만 채웁니다).
                 </p>
               ) : null}

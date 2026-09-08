@@ -50,7 +50,7 @@ function ProgressChecks({ row }: { row: TextbookOrderRow }) {
           <span
             key={c.key}
             title={on ? `${c.label} 완료` : `${c.label} 대기`}
-            className={`inline-flex w-[40px] shrink-0 items-center justify-center gap-0.5 rounded-full border py-0.5 text-[11px] font-medium ${
+            className={`inline-flex w-[40px] shrink-0 items-center justify-center gap-0.5 rounded-full border py-0.5 text-xs font-medium ${
               on ? c.on : "border-line text-text-faint"
             }`}
           >
@@ -137,7 +137,7 @@ function RequestRow({
 
   if (editing) {
     return (
-      <li className="bg-card space-y-2 px-3 py-2.5 text-[13px]">
+      <li className="bg-card space-y-2 px-3 py-2.5 text-sm">
         <div className="grid gap-2 sm:grid-cols-4">
           <Input value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="교재명" aria-label="교재명" />
           <Input value={bookDetail} onChange={(e) => setBookDetail(e.target.value)} placeholder="비고" aria-label="비고" />
@@ -156,21 +156,21 @@ function RequestRow({
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={save} disabled={pending}>{pending ? "저장 중…" : "저장"}</Button>
           <Button size="sm" variant="outline" onClick={() => setEditing(false)} disabled={pending}>취소</Button>
-          {err ? <span className="text-danger text-[12px]">{err}</span> : null}
+          {err ? <span className="text-danger text-xs">{err}</span> : null}
         </div>
       </li>
     );
   }
 
   return (
-    <li className={`bg-card flex items-center gap-3 px-3 py-2.5 text-[13px] ${done ? "opacity-60" : ""}`}>
+    <li className={`bg-card flex items-center gap-3 px-3 py-2.5 text-sm ${done ? "opacity-60" : ""}`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {/* ijw 패리티 — 완료(3체크) 행은 회색 + 교재명 취소선 */}
           <span className={`text-foreground truncate font-medium ${done ? "line-through" : ""}`}>{row.bookName}</span>
-          {row.bookDetail ? <span className="text-text-faint truncate text-[12px]">{row.bookDetail}</span> : null}
+          {row.bookDetail ? <span className="text-text-faint truncate text-xs">{row.bookDetail}</span> : null}
         </div>
-        <div className="text-text-dim mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+        <div className="text-text-dim mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
           {row.studentName ? <span>{row.studentName}</span> : null}
           {/* 요청 선생님 — 남의 요청인 줄 알 방법이 없어 수정·삭제·발송까지 열려 있던 게 2026-07-29 감사의 발견.
               권한은 서버가 막고, 화면은 **왜 버튼이 없는지**를 이 이름으로 설명한다. */}
@@ -181,13 +181,13 @@ function RequestRow({
           {row.price > 0 ? <span className="num text-text-faint">· {row.price.toLocaleString()}원</span> : null}
           {row.notes ? <span className="text-text-faint">· {row.notes}</span> : null}
         </div>
-        {err ? <div className="text-danger mt-0.5 text-[12px]">{err}</div> : null}
+        {err ? <div className="text-danger mt-0.5 text-xs">{err}</div> : null}
       </div>
       <ProgressChecks row={row} />
       <button
         type="button"
         onClick={() => onDownload(row)}
-        className="text-text-faint hover:text-primary inline-flex shrink-0 items-center gap-1 text-[12px]"
+        className="text-text-faint hover:text-primary inline-flex shrink-0 items-center gap-1 text-xs"
         title="교재요청서 바로 다운로드(PNG)"
       >
         <FileDown className="size-3.5" /> 요청서
@@ -197,7 +197,7 @@ function RequestRow({
         <button
           type="button"
           onClick={() => onSend(row)}
-          className="text-text-faint hover:text-primary inline-flex shrink-0 items-center gap-1 text-[12px]"
+          className="text-text-faint hover:text-primary inline-flex shrink-0 items-center gap-1 text-xs"
           title="이 요청을 학부모 알림장으로 발송"
         >
           <EyIcon name="send" size={14} /> 발송
@@ -205,7 +205,7 @@ function RequestRow({
       ) : null}
       {canManage ? (
         confirmDel ? (
-          <span className="flex shrink-0 items-center gap-1 text-[12px]">
+          <span className="flex shrink-0 items-center gap-1 text-xs">
             <button type="button" onClick={remove} disabled={pending} className="text-danger font-bold">삭제</button>
             <button type="button" onClick={() => setConfirmDel(false)} className="text-text-faint">취소</button>
           </span>
@@ -224,7 +224,7 @@ function RequestRow({
            🔴 버튼만 없애고 아무 말도 안 하면 "왜 안 되지"로 끝난다(원장 2026-08-03 "삭제가 안 되는 것 같은데").
            할 수 없는 이유와 다음 행동을 같이 적는다. */
         <span
-          className="text-text-faint shrink-0 text-[11px] whitespace-nowrap"
+          className="text-text-faint shrink-0 text-xs whitespace-nowrap"
           title="등록·주문·납부 중 하나라도 처리되면 요청서를 지울 수 없습니다 — 사무실 장부와 어긋나기 때문입니다"
         >
           사무실 처리됨 · 관리자에게 문의
@@ -301,12 +301,12 @@ export function RequestHistory({
     <section className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1">
-          <h2 className="text-text-dim mr-2 text-[12px] font-bold">요청 내역</h2>
+          <h2 className="text-text-dim mr-2 text-xs font-bold">요청 내역</h2>
           <div className={TOOLBAR_SEG_BOX}>
             {tabBtn("incomplete", "미완료", counts.incomplete)}
             {tabBtn("complete", "완료", counts.complete)}
           </div>
-          {capNote ? <span className="text-text-faint ml-1 text-[11px]">({capNote})</span> : null}
+          {capNote ? <span className="text-text-faint ml-1 text-xs">({capNote})</span> : null}
         </div>
         <div className="relative">
           <Search className="text-text-faint pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
@@ -324,7 +324,7 @@ export function RequestHistory({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-text-faint border-line rounded-2xl border border-dashed p-6 text-center text-[13px]">
+        <p className="text-text-faint border-line rounded-2xl border border-dashed p-6 text-center text-sm">
           {q.trim()
             ? "검색 결과가 없습니다."
             : tab === "incomplete"

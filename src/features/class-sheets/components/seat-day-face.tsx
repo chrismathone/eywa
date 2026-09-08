@@ -42,7 +42,7 @@ export function EcsSeatDayFace({ res, showToday }: { res: SeatDayResult; showTod
       ) : (
         <>
           <SeatDayClient key={data.date} data={data} />
-          <p className="text-text-dim px-1 text-[12px]">
+          <p className="text-text-dim px-1 text-xs">
             이 표는 영어 반 시트의 JJ 칸과 같은 기록입니다. 반 카드에서도 그대로 보입니다.
           </p>
         </>

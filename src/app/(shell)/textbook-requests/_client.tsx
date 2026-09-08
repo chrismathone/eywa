@@ -28,7 +28,7 @@ import { TextbookSendDialog } from "./_send-dialog";
 
 function SectionLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="border-line text-foreground flex items-center gap-1.5 border-b pb-1.5 text-[12px] font-bold">
+    <div className="border-line text-foreground flex items-center gap-1.5 border-b pb-1.5 text-xs font-bold">
       {icon}
       {children}
     </div>
@@ -228,7 +228,7 @@ export function TextbookRequestClient({
       />
 
       {students.length === 0 ? (
-        <p className="text-text-dim border-line rounded-2xl border p-4 text-[13px]">
+        <p className="text-text-dim border-line rounded-2xl border p-4 text-sm">
           담당 학생이 없어 교재를 요청할 수 없습니다.
         </p>
       ) : (
@@ -242,7 +242,7 @@ export function TextbookRequestClient({
             <div className="space-y-3">
               <SectionLabel icon={<User className="size-3.5" />}>기본 정보</SectionLabel>
               <div className="space-y-1.5">
-                <span className="text-text-dim block text-[12px] font-medium">
+                <span className="text-text-dim block text-xs font-medium">
                   학생 이름 <span className="text-danger">*</span>
                   {studentIds.length > 0 ? (
                     <span className="text-primary ml-1 font-bold">· {studentIds.length}명</span>
@@ -264,7 +264,7 @@ export function TextbookRequestClient({
                     {selectedStudents.map((s) => (
                       <span
                         key={s.id}
-                        className="border-line bg-bg-soft text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px]"
+                        className="border-line bg-bg-soft text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
                       >
                         {s.name}
                         <button
@@ -284,11 +284,11 @@ export function TextbookRequestClient({
                   <input key={id} type="hidden" name="studentId" value={id} />
                 ))}
                 {state?.fieldErrors?.studentId ? (
-                  <span className="text-danger text-[11px]">{state.fieldErrors.studentId}</span>
+                  <span className="text-danger text-xs">{state.fieldErrors.studentId}</span>
                 ) : null}
               </div>
               <label className="block space-y-1">
-                <span className="text-text-dim text-[12px] font-medium">담임 선생님</span>
+                <span className="text-text-dim text-xs font-medium">담임 선생님</span>
                 <Input
                   name="teacherName"
                   value={teacherName}
@@ -299,14 +299,14 @@ export function TextbookRequestClient({
                     그 선생님만 할 수 있다. 안 알리면 '기록했습니다, 발송창에서 보낼 수 있어요' 토스트 직후
                     발송이 거절되는 거짓 약속이 된다(2026-07-29 적대검증). 강사 화면에서만 안내. */}
                 {isTeacher && teacherName.trim() && teacherName.trim() !== requesterName ? (
-                  <span className="text-gold block text-[11px] break-keep">
+                  <span className="text-gold block text-xs break-keep">
                     다른 선생님 이름으로 저장하면 이 요청의 수정·삭제·학부모 발송은{" "}
                     <strong>{teacherName.trim()}</strong> 선생님만 할 수 있습니다.
                   </span>
                 ) : null}
               </label>
               <label className="block space-y-1">
-                <span className="text-text-dim text-[12px] font-medium">요청 일자</span>
+                <span className="text-text-dim text-xs font-medium">요청 일자</span>
                 <Input
                   name="requestDate"
                   type="date"
@@ -318,7 +318,7 @@ export function TextbookRequestClient({
 
             <div className="space-y-3">
               <div className="border-line flex items-center justify-between border-b pb-1.5">
-                <span className="text-foreground flex items-center gap-1.5 text-[12px] font-bold">
+                <span className="text-foreground flex items-center gap-1.5 text-xs font-bold">
                   <BookOpen className="size-3.5" />
                   교재 내용
                 </span>
@@ -326,7 +326,7 @@ export function TextbookRequestClient({
               </div>
               {catalogOptions.length > 0 ? (
                 <label className="block space-y-1">
-                  <span className="text-text-dim text-[12px] font-medium">교재 검색 (단가표에서 불러오기)</span>
+                  <span className="text-text-dim text-xs font-medium">교재 검색 (단가표에서 불러오기)</span>
                   {/* value=""(controlled) — 선택 후 placeholder로 복귀하는 '불러오기' 동작(아래 교재명을 손으로 고쳐도 표시 불일치 없음) */}
                   <SearchableSelect
                     value=""
@@ -336,13 +336,13 @@ export function TextbookRequestClient({
                     ariaLabel="교재 단가표 검색"
                     onValueChange={pickCatalog}
                   />
-                  <span className="text-text-faint text-[11px]">
+                  <span className="text-text-faint text-xs">
                     선택하면 교재명·상세·금액이 자동으로 채워집니다 (직접 수정 가능)
                   </span>
                 </label>
               ) : null}
               <label className="block space-y-1">
-                <span className="text-text-dim text-[12px] font-medium">
+                <span className="text-text-dim text-xs font-medium">
                   교재명 (과목/난이도) <span className="text-danger">*</span>
                 </span>
                 <Input
@@ -352,11 +352,11 @@ export function TextbookRequestClient({
                   placeholder="교재명을 입력하세요"
                 />
                 {state?.fieldErrors?.bookName ? (
-                  <span className="text-danger text-[11px]">{state.fieldErrors.bookName}</span>
+                  <span className="text-danger text-xs">{state.fieldErrors.bookName}</span>
                 ) : null}
               </label>
               <label className="block space-y-1">
-                <span className="text-text-dim text-[12px] font-medium">상세 내용 (단원)</span>
+                <span className="text-text-dim text-xs font-medium">상세 내용 (단원)</span>
                 <Input
                   name="bookDetail"
                   value={bookDetail}
@@ -365,7 +365,7 @@ export function TextbookRequestClient({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-text-dim text-[12px] font-medium">금액 (원)</span>
+                <span className="text-text-dim text-xs font-medium">금액 (원)</span>
                 <Input
                   name="price"
                   type="number"
@@ -378,7 +378,7 @@ export function TextbookRequestClient({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-text-dim text-[12px] font-medium">메모 (사무실 전달, 선택)</span>
+                <span className="text-text-dim text-xs font-medium">메모 (사무실 전달, 선택)</span>
                 {/* 손잡이로 잡아끄는 대신 작성량에 따라 자동 확장(rows=기본 줄 수 겸 미지원 브라우저 폴백). */}
                 <textarea
                   name="notes"
@@ -407,12 +407,12 @@ export function TextbookRequestClient({
 
           {/* 우: 실시간 미리보기 (ijw 우측 패널 — 타이핑 즉시 종이 서식에 반영) */}
           <section className="space-y-2">
-            <h2 className="text-text-dim flex items-center gap-1.5 text-[12px] font-bold">
+            <h2 className="text-text-dim flex items-center gap-1.5 text-xs font-bold">
               <Eye className="size-3.5" />
               미리보기
             </h2>
             {studentIds.length > 1 ? (
-              <p className="text-primary text-[11px] font-medium">
+              <p className="text-primary text-xs font-medium">
                 같은 교재를 {studentIds.length}명에게 발행합니다 — 미리보기는 {firstStudentName} 기준(요청서는 학생별 1장씩 저장)
               </p>
             ) : null}
@@ -432,7 +432,7 @@ export function TextbookRequestClient({
                 account={account}
               />
             </div>
-            <p className="text-text-faint text-[11px]">
+            <p className="text-text-faint text-xs">
               * 입력한 내용은 자동으로 미리보기에 반영됩니다. &lsquo;이미지 저장 및 기록&rsquo;을 누르면 이 요청서가
               PNG로 저장되고 아래 내역에 기록됩니다.
             </p>

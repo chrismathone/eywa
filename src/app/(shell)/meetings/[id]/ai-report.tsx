@@ -156,7 +156,7 @@ export function MeetingReportAccordion({
       {error && !editing ? <p className="text-danger text-xs">{error}</p> : null}
       <div className="flex items-center justify-between gap-2">
         {attribution ? (
-          <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
+          <span className="text-text-faint inline-flex items-center gap-1 text-xs">
             <Pencil className="size-3" />
             {attribution.by}님 수정 · {fmtEdited(attribution.at)}
           </span>
@@ -166,7 +166,7 @@ export function MeetingReportAccordion({
         <div className="flex items-center gap-1.5">
           {modelLabel ? (
             <span
-              className="border-line text-text-faint inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]"
+              className="border-line text-text-faint inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs"
               title="이 분석을 생성한 AI 모델"
             >
               <EyIcon name="sparkle" size={10} />
@@ -176,7 +176,7 @@ export function MeetingReportAccordion({
           <button
             type="button"
             onClick={toggleAll}
-            className="text-text-faint hover:text-primary text-[11px] transition"
+            className="text-text-faint hover:text-primary text-xs transition"
           >
             {allOpen ? "모두 접기" : "모두 펼치기"}
           </button>
@@ -195,7 +195,7 @@ export function MeetingReportAccordion({
               aria-expanded={isOpen}
               className="bg-bg-soft hover:bg-bg-soft/60 flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
             >
-              <h3 className="text-foreground flex items-center gap-2 text-[13px] font-bold">
+              <h3 className="text-foreground flex items-center gap-2 text-sm font-bold">
                 <EyIcon name={section.icon} size={15} />
                 {section.label}
               </h3>
@@ -212,9 +212,9 @@ export function MeetingReportAccordion({
                       onChange={(e) => setDraft(e.target.value)}
                       rows={Math.min(14, Math.max(4, draft.split("\n").length + 1))}
                       autoFocus
-                      className="border-line bg-background text-foreground focus:ring-primary/40 w-full resize-y rounded-md border px-3 py-2 text-[13px] leading-relaxed focus:ring-1 focus:outline-none"
+                      className="border-line bg-background text-foreground focus:ring-primary/40 w-full resize-y rounded-md border px-3 py-2 text-sm leading-relaxed focus:ring-1 focus:outline-none"
                     />
-                    <p className="text-text-faint text-[11px]">
+                    <p className="text-text-faint text-xs">
                       줄바꿈·“•”·번호로 항목을 나눌 수 있습니다(인쇄·화면에 그대로 반영).
                     </p>
                     {error ? <p className="text-danger text-xs">{error}</p> : null}
@@ -244,7 +244,7 @@ export function MeetingReportAccordion({
                       type="button"
                       onClick={() => startEdit(section.key)}
                       title="이 섹션 수정"
-                      className="border-line text-text-faint hover:text-primary hover:bg-bg-soft absolute top-0 right-0 inline-flex items-center gap-1 rounded-md border bg-card/80 px-1.5 py-0.5 text-[11px] opacity-0 transition group-hover:opacity-100"
+                      className="border-line text-text-faint hover:text-primary hover:bg-bg-soft absolute top-0 right-0 inline-flex items-center gap-1 rounded-md border bg-card/80 px-1.5 py-0.5 text-xs opacity-0 transition group-hover:opacity-100"
                     >
                       <Pencil className="size-3" /> 수정
                     </button>
@@ -252,10 +252,10 @@ export function MeetingReportAccordion({
                       <RichText
                         text={body}
                         bulletize={section.list}
-                        className="text-foreground space-y-1.5 pr-12 text-[13px] leading-relaxed"
+                        className="text-foreground space-y-1.5 pr-12 text-sm leading-relaxed"
                       />
                     ) : (
-                      <p className="text-text-faint pr-12 text-[13px] italic">
+                      <p className="text-text-faint pr-12 text-sm italic">
                         (내용 없음 — 수정으로 채울 수 있습니다)
                       </p>
                     )}

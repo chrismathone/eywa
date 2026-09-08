@@ -10,11 +10,13 @@ import {
 } from "./navigation";
 
 describe("navigation presentation", () => {
-  it("운영실은 데스크톱 작업면으로 표시한다", () => {
+  // 🔴 2026-09-07 뒤집힘(원장: *"운영실도 다른창들처럼 만들어주고"*) — 배경은 이제 메뉴 화면(`/menu`)이고
+  //    운영실은 다른 메뉴와 같은 **창**이다. 옛 규약(presentation:"desktop")을 되살리지 말 것.
+  it("운영실도 다른 메뉴와 같은 창이다", () => {
     const dashboard = findNavItem("/dashboard");
     expect(dashboard).toBeTruthy();
     expect(dashboard!.label).toBe("운영실");
-    expect(navPresentation(dashboard!)).toBe("desktop");
+    expect(navPresentation(dashboard!)).toBe("window");
   });
 
   it("등록상담은 별도 권한을 가진 탐색 메뉴로 노출한다", () => {

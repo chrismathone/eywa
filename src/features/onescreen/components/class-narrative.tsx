@@ -43,7 +43,7 @@ export function ClassNarrativePopover({
     >
       <Popover.Trigger
         disabled={disabled || !activeClass}
-        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title={
           activeClass
             ? t("os.cn.title")
@@ -55,8 +55,8 @@ export function ClassNarrativePopover({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[320px] flex-col gap-2 rounded-lg border p-3 text-[12px] outline-none">
-            <p className="text-text-dim text-[11px]">
+          <Popover.Popup className="bg-card border-line shadow-card flex w-[320px] flex-col gap-2 rounded-lg border p-3 text-xs outline-none">
+            <p className="text-text-dim text-xs">
               <span className="text-foreground font-bold">{activeClass}</span>
               {t("os.cn.head")}
             </p>
@@ -66,10 +66,10 @@ export function ClassNarrativePopover({
               rows={4}
               placeholder={t("os.cn.ph")}
               aria-label={t("os.cn.aria")}
-              className="border-line bg-card focus:border-primary w-full resize-none rounded-lg border px-2 py-1.5 text-[12px] outline-none"
+              className="border-line bg-card focus:border-primary w-full resize-none rounded-lg border px-2 py-1.5 text-xs outline-none"
             />
             <div className="flex items-center justify-between">
-              <span className="text-text-faint text-[11px]">
+              <span className="text-text-faint text-xs">
                 {draft.length}/{CLASS_NARRATIVE_MAX}
               </span>
               <div className="flex gap-1.5">

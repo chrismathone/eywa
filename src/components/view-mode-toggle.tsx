@@ -46,7 +46,7 @@ export function TeacherViewToggle({ expanded, motion }: { expanded: boolean; mot
         }`}
       />
       <span
-        className={`text-text-dim group-hover:text-foreground relative z-10 overflow-hidden text-[13px] font-medium whitespace-nowrap ${
+        className={`text-text-dim group-hover:text-foreground relative z-10 overflow-hidden text-sm font-medium whitespace-nowrap ${
           expanded ? "max-w-[160px] opacity-100" : "max-w-0 opacity-0"
         } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
       >

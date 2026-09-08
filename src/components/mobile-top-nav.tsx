@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { NAV_GROUPS, findNavItem, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
@@ -74,13 +75,13 @@ export function MobileTopNav({
                 <EyIcon name="building" size={12} strokeWidth={1.8} className="text-white" />
               </span>
             )}
-            <span className="text-foreground text-[13px] font-bold tracking-tight">{brand}</span>
+            <span className="text-foreground text-sm font-bold tracking-tight">{brand}</span>
           </Link>
           {currentLabel ? (
             <>
               <span className="bg-line h-3 w-px shrink-0" aria-hidden />
               {/* 이 줄이 이 화면의 제목이다 — 본문 PageHeader는 compact-chrome으로 접힌다(중복 금지). */}
-              <h1 className="text-foreground min-w-0 truncate text-[14px] font-bold tracking-tight">
+              <h1 className="text-foreground min-w-0 truncate text-sm font-bold tracking-tight">
                 {currentLabel}
               </h1>
             </>
@@ -117,13 +118,13 @@ export function MobileTopNav({
                 href={item.href}
                 onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
-                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-[12px] font-bold transition ${
+                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold transition ${
                   active
                     ? "bg-primary text-primary-foreground shadow-primary-glow"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
-                <EyIcon name={item.icon} size={14} strokeWidth={1.8} />
+                <MenuGlyph name={item.icon} size={14} />
                 <span className="truncate">{item.label}</span>
               </Link>
             </li>

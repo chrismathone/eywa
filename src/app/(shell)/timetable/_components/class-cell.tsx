@@ -1,7 +1,7 @@
 "use client";
 import { monthDay } from "@/features/timetable/scheduled-import";
 
-import { useDroppable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -11,7 +11,8 @@ import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuick } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
-import { useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
+import type { MovePart } from "@/features/timetable/lib/class-move";
+import { HOLD_SECTION_CLASS, useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
  * 시간표 셀(ClassCell·IntegratedCell)에 넘기는 반+학생 명단 슬롯.
@@ -26,6 +27,15 @@ export type ClassDetailQuick = {
   subject: string;
   classroomName?: string | null;
   teacherName?: string | null;
+  /**
+   * 셀 override(시트 배치) — 반 블록 이동 판정이 읽는다(강사·강의실 축).
+   * 🔴 **타입에 적어 둔다**: 런타임 객체(`ScheduleSlotWithStudents`)엔 원래 있는데 이 타입이 빠뜨려서,
+   *    옛 코드가 `as unknown as` 캐스트로 넘기며 **강의실 FK를 통째로 못 읽고 있었다**(적대 리뷰 2026-09-04).
+   */
+  slotTeacherLabel?: string | null;
+  slotRoomLabel?: string | null;
+  slotRoomId?: string | null;
+  classRoomId?: string | null;
   startTime: string;
   endTime: string;
   dayOfWeek: string;
@@ -72,6 +82,12 @@ export const WD_MAX_H = 3 * STU_ROW_H + SEC_LABEL_H; // 퇴원 3칸 = 86px
 export const HEADER_ROW_H = 30;
 export const HEADER_H = HEADER_ROW_H * 2;
 
+/**
+ * 합반 칸 머리의 `합반 N반` 배지가 먹는 세로 몫(배지 + 셀 패딩·간격) — 명단을 접었을 때 셀 최소 높이 계산에 더한다.
+ * 안 더하면 헤더가 그만큼 잘린다(적대 리뷰 2026-09-04).
+ */
+export const HAPBAN_BADGE_H = 30;
+
 /** 반교시 표시용 빈 밴드 — 반대쪽 서브슬롯 자리(합반 셀과 공유해 두 셀 높이가 항상 같게). */
 export function SubSlotBand() {
   return (
@@ -93,6 +109,7 @@ export function ClassCell({
   roster = "full",
   subSlot = "full",
   coveringDays,
+  moveParts,
 }: {
   slot: ClassDetailQuick;
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
@@ -104,8 +121,14 @@ export function ClassCell({
   subSlot?: "top" | "bottom" | "full";
   /** 이 셀(병합 블록)이 덮는 요일. 2일+이고 일부 요일만 오는 재원생이 있으면 요일 칸으로 분할(분리등원, ijw식). 기본뷰만 전달. */
   coveringDays?: string[];
+  /**
+   * 반 드래그로 **함께 옮길** 배치들(기준 줄 포함) — 화면의 한 블록이 배치 여러 줄이라 필요하다.
+   * 🔴 없으면 반 드래그를 **걸지 않는다**(합반 셀·통합뷰 등) — 어느 줄이 함께 가는지 모르는 채로 옮기면
+   *    기준 줄만 가고 나머지가 제자리에 남는다(적대 리뷰 2026-09-04).
+   */
+  moveParts?: MovePart[];
 }) {
-  const { editing, incoming } = useTimetableEdit();
+  const { canDrag, incoming, classMoves } = useTimetableEdit();
   const subjects = useSubjectMaps();
   const colorMode = useTimetableColorMode();
   // 과목 헤더 색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지. 강도는 개인 색모드(vivid/mid/pastel).
@@ -118,6 +141,8 @@ export function ClassCell({
   const headerClass = slot.classBgColor ? "" : headerFallback.className;
   // 강사 인수인계 예약된 반 — 명단 영역에 은은한 blue 틴트(합반 앰버·전입 초록·신입 빨강과 구분). 상세는 hover 카드.
   const handover = slot.pendingHandover ?? null;
+  // 이 배치가 옮겨질 예정인가(저장 대기) — 머리에 `→ 화 16:20` 표식.
+  const classMove = classMoves.get(slot.id);
 
   // 재원/대기/퇴원 분리 — ijw 셀처럼 섹션별 표시. status 없으면(구버전) 재원으로 간주.
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
@@ -146,11 +171,53 @@ export function ClassCell({
   const incomingHere = incoming.get(slot.id) ?? [];
   const showRoster = roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0);
   // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
-  const hasSplit = partialActive.length > 0 || (editing && covers.length >= 2);
+  // 🔴 요일 칸(분리등원 존)은 **드래그 시작에 새로 만들지 않는다** — dnd-kit은 드롭존 집합이 바뀌면 전부
+  //    다시 잰다(`droppableRects` lazy memo). 픽업 순간 200개 존이 한꺼번에 생기면 그 재측정이 통째로
+  //    한 프레임에 몰려 **집는 순간 멈칫**한다(실측 701ms, 원장 제보 2026-09-04 *"픽업할 때 렉"*).
+  //    → 권한이 있으면 **늘 마운트**하고(집합 불변), 보이는 것만 CSS(`body.tt-dragging`)로 켠다.
+  const hasSplit = partialActive.length > 0 || (canDrag && covers.length >= 2);
+  /**
+   * 요일 칸의 머리·안내는 **늘 그려 둔다** — 분리등원 학생이 있으면 평소에도 보이고, 없으면 `hidden`으로 두었다가
+   * 끄는 동안만 CSS로 켠다(`body.tt-dragging`). 🔴 상태로 마운트/언마운트하면 **픽업이 멈칫한다**(drag-flag.ts).
+   */
+  const dayColsAlways = partialActive.length > 0;
+  const dayHeadCls = dayColsAlways ? "" : "hidden [.tt-dragging-student_&]:block";
 
   // ⚠️ 이동 목적지 반은 slot.id(스케줄 id)가 아니라 slot.classId(실제 반 id) — 드롭 data로 전달(과거 onDragEnd가
   // slot.id를 반 id로 넘겨 RPC FK 실패하던 버그 수정). id는 셀 유니크(slot.id) 유지, slotId는 마커 키.
   const realClassId = slot.classId ?? slot.id;
+  // 반 블록 드래그 — **반 이름 머리**를 잡으면 그 배치가 통째로 움직인다(원장 2026-09-04 *"반이름을 잡고 드래그하면
+  // 반 드래그"*). 판정 재료(실효 강사·방·자리 여부·원래 길이)를 data에 실어 보내 격자 칸이 그것만으로 판정한다.
+  // ⚠️ 리스너는 **머리 껍데기 div**에 붙인다 — 안쪽 링크의 더블클릭(반 정보 창)은 그대로 살아 있어야 한다.
+  const canDragBlock = canDrag && !!moveParts && moveParts.length > 0;
+  const blockDrag = useDraggable({
+    id: `block:${slot.id}`,
+    disabled: !canDragBlock,
+    data: {
+      type: "class" as const,
+      slotId: slot.id,
+      classId: realClassId,
+      className: slot.className,
+      fromDay: slot.dayOfWeek,
+      fromStart: slot.startTime,
+      // 🔴 고스트는 **원본 머리 그대로**(원장 2026-09-04 *"반도 그대로 옮길 수 있도록 … 학생이동처럼"*) —
+      //    색·강의실·인원까지 실어 보내 DragOverlay가 같은 조각을 그린다(딴 모양 칩으로 바꾸지 말 것).
+      ghost: {
+        className: slot.className,
+        room: slot.classroomName ?? "",
+        count: active.length,
+        headerClass,
+        headerStyle,
+      },
+      subject: {
+        slotId: slot.id,
+        classId: realClassId,
+        // 🔴 블록이 함께 옮기는 줄들 — 판정·저장이 같은 목록을 쓰고, **강사·강의실·자리 여부도 줄마다** 들어 있다
+        //    (한 블록에 그 반의 자리(LAB·JJ) 교시와 정규 교시가 섞일 수 있다, 적대 리뷰 2026-09-04).
+        parts: moveParts ?? [],
+      },
+    },
+  });
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `class:${slot.id}`,
     data: { className: slot.className, classId: realClassId, slotId: slot.id },
@@ -169,7 +236,10 @@ export function ClassCell({
         {/* 반이름 헤더 바 — 반 색 우선(인라인), 없으면 과목색 클래스. WindowLink는 style 미지원이라 래퍼 div에 색.
             hover 시 수업 정보 카드, 클릭 시 반 정보 창 팝업(/classes/[classId]). */}
         <div
-          className={`overflow-hidden transition hover:brightness-95 ${headerClass}`}
+          ref={canDragBlock ? blockDrag.setNodeRef : undefined}
+          {...(canDragBlock ? blockDrag.attributes : {})}
+          {...(canDragBlock ? blockDrag.listeners : {})}
+          className={`overflow-hidden transition hover:brightness-95 ${canDragBlock ? "cursor-grab touch-none active:cursor-grabbing" : ""} ${blockDrag.isDragging ? "opacity-40" : ""} ${headerClass}`}
           style={{ ...headerStyle, height: subSlot === "full" ? HEADER_H : HEADER_ROW_H }}
         >
           <HoverCard
@@ -186,15 +256,26 @@ export function ClassCell({
               />
             }
           >
+            {/* 🔴 반 정보는 **더블클릭**으로 연다(원장 2026-09-04) — 학생 행과 같은 규약. */}
             <WindowLink
+              openOn="doubleClick"
               href={`/classes/${slot.classId ?? slot.id}`}
               title={renameNote ?? (slot.classroomName ? `${slot.className} · ${slot.classroomName}` : slot.className)}
               ariaLabel={`${slot.className} 반 정보`}
               className="block h-full w-full px-2 py-1 text-left"
             >
               <div className="flex items-baseline justify-between gap-1.5">
-                <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">
+                <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-sm font-bold">
                   {slot.className}
+                  {/* 반 블록을 옮겨 둔 상태 — 어디로 갈지 셀 머리에 남긴다(저장 전엔 화면이 유일한 근거다). */}
+                  {classMove ? (
+                    <span className="ml-1 text-xs font-bold opacity-90">
+                      → {(classMove.toDays.length > 0 ? classMove.toDays : [classMove.toDay])
+                        .map((d) => DAY_LABEL[d] ?? d)
+                        .join("·")}{" "}
+                      {classMove.toStart.slice(0, 5)}
+                    </span>
+                  ) : null}
                   {/* 🔴 미래 주는 **그 주에 불릴 이름**을 쓴다(원장 2026-08-29) — 오늘 이름으로 그리면
                       "그 반이 그대로구나"로 읽힌다. 🔴 다만 '개명' 표식은 붙이지 않는다(원장 2026-08-31:
                       *"그냥 날짜 지나면 반이름 변경되었으면 됨"*) — 바뀐 이름 자체가 답이다. 무엇이 무엇이
@@ -202,16 +283,16 @@ export function ClassCell({
                 </span>
                 {/* 반교시(1행)면 아래 줄이 없으니 강의실을 이름과 같은 줄에 붙인다(정보 손실 방지). */}
                 {subSlot !== "full" && slot.classroomName ? (
-                  <span className="shrink-0 whitespace-nowrap text-[11px] opacity-75">{slot.classroomName}</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs opacity-75">{slot.classroomName}</span>
                 ) : null}
-                <span className="num shrink-0 text-[12px] opacity-70">{active.length}</span>
+                <span className="num shrink-0 text-xs opacity-70">{active.length}</span>
               </div>
               {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시.
                   ⚠️ 강의실 줄은 **항상 렌더**(없으면 nbsp 자리표시) — 셀마다 헤더 높이(2줄)를 일정하게 유지해
                   인접 반의 학생 이름이 가로로 줄맞춤되게 한다(강의실 유무로 헤더가 1↔2줄 되며 명단이 17px 어긋나던 것 해소).
                   ⚠️ 2행(full)일 때만 — 반교시(1행)는 위 이름 줄에 강의실을 붙인다. */}
               {subSlot === "full" ? (
-              <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
+              <div className="flex items-center justify-end gap-1 text-xs opacity-75">
                 <span className="overflow-hidden whitespace-nowrap text-clip">
                   {slot.classroomName || " "}
                 </span>
@@ -224,9 +305,10 @@ export function ClassCell({
         </div>
 
         {/* 학생 명단 — 재원(이 영역만 스크롤+페이드) / 대기·퇴원(고정 박스, 각자 스크롤)을 분리.
-            신입=빨강·전입=초록·퇴원=취소선. 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). */}
+            신입=빨강·전입=초록·퇴원=취소선. 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자).
+*/}
         {showRoster ? (
-          <div className={`flex min-h-0 flex-1 flex-col text-[13px] ${handover ? "bg-blue-soft" : "bg-card"}`}>
+          <div className={`flex min-h-0 flex-1 flex-col text-sm ${handover ? "bg-blue-soft" : "bg-card"}`}>
             {/* 재원 — 이 영역만 스크롤(스크롤바 숨김 + 위·아래 페이드). 10칸 기본, 넘으면 스크롤.
                 재원 공통 + 분리등원 요일 칸 + 전입예정(편집)을 포함. flex-1이라 대기/퇴원이 있으면
                 그만큼 줄어 재원≈10칸, 없으면 재원이 더 넓게 채운다(짧으면 페이드 없음). */}
@@ -236,7 +318,7 @@ export function ClassCell({
                   students={commonActive}
                   classId={realClassId}
                   className={slot.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={activeCap}
                   draggable
                   tone={(s) => timetableStudentTone(colorMode, s)}
@@ -246,20 +328,21 @@ export function ClassCell({
               </div>
               {/* 분리등원 요일 칸 — 편집 모드의 다요일 셀엔 요일 드롭존을 항상(요일별 등원 지정), 아니면 분리 학생 있을 때만. */}
               {hasSplit ? (
-                <div className="border-line/60 shrink-0 border-t border-dashed">
+                <div className={`shrink-0 ${dayColsAlways ? "border-line/60 border-t border-dashed" : "[.tt-dragging-student_&]:border-line/60 [.tt-dragging-student_&]:border-t [.tt-dragging-student_&]:border-dashed"}`}>
                   <div className="flex">
                     {covers.map((day) => {
                         const dayStudents = partialActive.filter((s) => (s.attendanceDays ?? []).includes(day));
                         const col = (
                           <>
-                            <div className="text-text-faint bg-bg-soft/60 px-1 py-px text-center text-[9px] font-bold">
+                            <div className={`text-text-faint bg-bg-soft/60 px-1 py-px text-center text-xs font-bold ${dayHeadCls}`}>
                               {DAY_LABEL[day] ?? day}
                             </div>
                             {dayStudents.length > 0 ? (
                               dayStudents.map((s, i) =>
-                                editing && s.enrollmentId ? (
+                                canDrag && s.enrollmentId ? (
                                   <DraggableStudentRow
                                     key={s.enrollmentId}
+                                    student={s}
                                     enrollmentId={s.enrollmentId}
                                     studentId={s.studentId}
                                     dayKey={day}
@@ -282,16 +365,14 @@ export function ClassCell({
                                   />
                                 ),
                               )
-                            ) : editing ? (
-                              <div className="text-text-faint/70 flex min-h-[22px] items-center justify-center text-[9px]">
+                            ) : (
+                              <div className="text-text-faint hidden min-h-[22px] items-center justify-center text-xs [.tt-dragging-student_&]:flex">
                                 여기로
                               </div>
-                            ) : (
-                              <div className="min-h-[22px]" aria-hidden />
                             )}
                           </>
                         );
-                        return editing ? (
+                        return canDrag ? (
                           <DayDropZone
                             key={day}
                             slotId={slot.id}
@@ -316,7 +397,7 @@ export function ClassCell({
               {/* 전입 예정(편집 모드) — 다른 반에서 끌어온 학생을 도착 셀에 초록 미리보기로(재원 스크롤 안). */}
               {incomingHere.length > 0 ? (
                 <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
-                  <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide">
+                  <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide">
                     <span>전입 예정</span>
                     <span className="num">{incomingHere.length}</span>
                   </div>
@@ -331,7 +412,7 @@ export function ClassCell({
                           {s.name}
                         </span>
                         {dayTag ? (
-                          <span className="text-primary shrink-0 text-[10px] font-bold">[{dayTag}]</span>
+                          <span className="text-primary shrink-0 text-xs font-bold">[{dayTag}]</span>
                         ) : null}
                       </div>
                     );
@@ -342,19 +423,20 @@ export function ClassCell({
             {/* 대기 — 고정 박스(최대 2칸), 넘으면 이 박스만 스크롤(스크롤바 숨김). 있을 때만 렌더(빈 슬롯 예약 X). */}
             {hold.length > 0 ? (
               <div
-                className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
+                // 대기 면 색은 모든 뷰 공통(timetable-color 단일 소스) — 원장 2026-09-07 색 견본.
+                className={`scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t ${HOLD_SECTION_CLASS}`}
                 style={{ maxHeight: HOLD_MAX_H }}
               >
                 <StudentSection
                   students={hold}
                   classId={slot.id}
                   className={slot.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
-                  tone={() => "text-text-dim"}
+                  tone={() => ""}
                   label="대기"
-                  labelTone="bg-amber-soft/40 text-amber"
+                  labelTone=""
                 />
               </div>
             ) : null}
@@ -368,7 +450,7 @@ export function ClassCell({
                   students={withdrawn}
                   classId={slot.id}
                   className={slot.className}
-                  editing={editing}
+                  canDrag={canDrag}
                   cap={SECTION_CAP}
                   draggable={false}
                   tone={() => withdrawnTone(colorMode)}

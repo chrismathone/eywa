@@ -84,11 +84,11 @@ export function RoomHourTable({
   // 건물 → 층 → 호수 정렬 + 묶음 경계. 정렬은 구분선을 꺼도 유지한다(끌 때마다 행이 튀면 자리를 잃는다).
   const ordered = useMemo(() => groupRooms(rows), [rows]);
   if (axis.slots === 0) {
-    return <p className="text-text-dim px-2 py-3 text-[11px]">운영 시간이 없어 시간대별 표를 만들 수 없습니다.</p>;
+    return <p className="text-text-dim px-2 py-3 text-xs">운영 시간이 없어 시간대별 표를 만들 수 없습니다.</p>;
   }
   return (
     <table
-      className="w-full table-fixed border-separate border-spacing-0 text-[11px]"
+      className="w-full table-fixed border-separate border-spacing-0 text-xs"
       style={{ minWidth: NAME_W + CAP_W + axis.slots * SLOT_MIN_W }}
     >
       {/* table-fixed + colgroup: 앞 2열만 고정폭, 10분 칸은 남은 폭을 **균등** 분배한다. */}
@@ -111,7 +111,7 @@ export function RoomHourTable({
           {Array.from({ length: axis.slots }, (_, i) => (
             <th key={i} className={`${TH} relative`} style={tick(i)}>
               {i % SLOTS_PER_HOUR === 0 ? (
-                <span className="text-foreground absolute top-1 left-0.5 text-[11px] font-bold whitespace-nowrap">
+                <span className="text-foreground absolute top-1 left-0.5 text-xs font-bold whitespace-nowrap">
                   {Math.floor((axis.startMin + i * TIMELINE_STEP_MIN) / 60)}시
                 </span>
               ) : null}
@@ -208,7 +208,7 @@ function TimelineTd({
         ) : (
           <>
             <span className="num truncate font-semibold">{cell.students}명</span>
-            <span className={`num truncate text-[10px] ${over ? "font-bold text-danger" : "opacity-70"}`}>
+            <span className={`num truncate text-xs ${over ? "font-bold text-danger" : "opacity-70"}`}>
               {cell.seatPct == null ? "정원?" : `${cell.seatPct}%`}
             </span>
           </>
@@ -287,11 +287,11 @@ export function RoomTimeColumnTable({
   );
 
   if (axis.slots === 0) {
-    return <p className="text-text-dim px-2 py-3 text-[11px]">운영 시간이 없어 시간대별 표를 만들 수 없습니다.</p>;
+    return <p className="text-text-dim px-2 py-3 text-xs">운영 시간이 없어 시간대별 표를 만들 수 없습니다.</p>;
   }
   return (
     <table
-      className="w-full table-fixed border-separate border-spacing-0 text-[11px]"
+      className="w-full table-fixed border-separate border-spacing-0 text-xs"
       style={{ minWidth: TIME_W + ordered.length * ROOM_MIN_W }}
     >
       <colgroup>
@@ -344,7 +344,7 @@ export function RoomTimeColumnTable({
                 style={tickY(i)}
               >
                 {onHour ? (
-                  <span className="num text-[10px]">{Math.floor((axis.startMin + i * TIMELINE_STEP_MIN) / 60)}시</span>
+                  <span className="num text-xs">{Math.floor((axis.startMin + i * TIMELINE_STEP_MIN) / 60)}시</span>
                 ) : null}
               </td>
               {columns.map(({ room, at }) => {
@@ -410,7 +410,7 @@ function TimelineTdVertical({
                옆 칸이 `13명 130%`인 표에서 그 `5`는 사람 수인지 %인지 알 수 없었다(원장 지적 2026-08-06). */}
         <span className="num truncate font-semibold">{cell.students}명</span>
         {compact ? null : (
-          <span className={`num truncate text-[10px] ${over ? "font-bold text-danger" : "opacity-70"}`}>
+          <span className={`num truncate text-xs ${over ? "font-bold text-danger" : "opacity-70"}`}>
             {cell.seatPct == null ? "정원?" : `${cell.seatPct}%`}
           </span>
         )}

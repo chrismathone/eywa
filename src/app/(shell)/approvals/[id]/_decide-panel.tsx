@@ -34,7 +34,7 @@ export function TurnChip() {
     <button
       type="button"
       onClick={() => window.dispatchEvent(new Event(OPEN_DECIDE_EVENT))}
-      className="border-primary text-primary hover:bg-primary-soft/50 inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-bold transition"
+      className="border-primary text-primary hover:bg-primary-soft/50 inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-bold transition"
       title="결재 창을 엽니다"
     >
       결재
@@ -68,7 +68,7 @@ type Decision = "approved" | "rejected" | "final";
 
 /** 결재 창·댓글 입력 공용 textarea 클래스 — 폼 스타일 조정은 여기 한 곳(_comments.tsx도 쓴다). */
 export const APPROVAL_TEXTAREA_CLASS =
-  "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary resize-none rounded-lg border px-3 py-2 text-[13px] outline-none transition";
+  "border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary resize-none rounded-lg border px-3 py-2 text-sm outline-none transition";
 
 /** 결재 창 선택지 라벨·설명 — 하이웍스 결재 팝업의 라디오 대응. 한 곳에서만 정한다. */
 const DECISION_META: Record<Decision, { label: string; desc: string }> = {
@@ -156,7 +156,7 @@ export function DecidePanel({
   return (
     <>
       <div className="border-primary/30 bg-primary-soft/30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
-        <p className="text-text-dim text-[12px] break-keep">
+        <p className="text-text-dim text-xs break-keep">
           {mode === "proxy" ? (
             <>
               현재 차례 결재자가 부재중이면 원장이 <b className="text-foreground">대결</b>로 대신
@@ -184,7 +184,7 @@ export function DecidePanel({
             {deferChecked ? <input type="hidden" name="deferPrevious" value="1" /> : null}
 
             {mode === "proxy" ? (
-              <p className="border-amber/40 bg-amber-soft/40 text-text-dim rounded-lg border px-3 py-2 text-[12px] break-keep">
+              <p className="border-amber/40 bg-amber-soft/40 text-text-dim rounded-lg border px-3 py-2 text-xs break-keep">
                 <b className="text-foreground">대결</b> — 현재 차례 결재자를 대신해 처리합니다.
                 결재란에는 대결 처리자가 함께 기록됩니다.
               </p>
@@ -209,10 +209,10 @@ export function DecidePanel({
                     className="accent-primary mt-0.5 size-3.5"
                   />
                   <span className="min-w-0">
-                    <span className="text-foreground block text-[13px] font-semibold">
+                    <span className="text-foreground block text-sm font-semibold">
                       {DECISION_META[d].label}
                     </span>
-                    <span className="text-text-dim block text-[11px] break-keep">
+                    <span className="text-text-dim block text-xs break-keep">
                       {DECISION_META[d].desc}
                     </span>
                   </span>
@@ -221,7 +221,7 @@ export function DecidePanel({
             </div>
 
             {needsDefer ? (
-              <label className="border-amber/40 bg-amber-soft/30 flex items-start gap-2 rounded-lg border px-3 py-2 text-[12px]">
+              <label className="border-amber/40 bg-amber-soft/30 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs">
                 <input
                   type="checkbox"
                   checked={deferChecked}
@@ -284,7 +284,7 @@ export function DeferredConfirmPanel({ documentId }: { documentId: string }) {
       className="border-amber/40 bg-amber-soft/40 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4"
     >
       <input type="hidden" name="documentId" value={documentId} />
-      <p className="text-text-dim text-[12px] break-keep">
+      <p className="text-text-dim text-xs break-keep">
         부재중에 <b className="text-foreground">후결</b>로 넘어간 문서입니다 — 내용 확인 후 후결
         확인을 눌러 주세요.
       </p>
@@ -311,7 +311,7 @@ export function WithdrawPanel({ documentId }: { documentId: string }) {
   return (
     <form action={action} className="flex items-center justify-end gap-3">
       <input type="hidden" name="documentId" value={documentId} />
-      <p className="text-text-faint text-[11px]">아직 결재가 시작되지 않아 회수할 수 있습니다.</p>
+      <p className="text-text-faint text-xs">아직 결재가 시작되지 않아 회수할 수 있습니다.</p>
       <WithdrawButton />
     </form>
   );

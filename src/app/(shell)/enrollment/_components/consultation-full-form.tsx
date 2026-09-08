@@ -309,7 +309,7 @@ export function ConsultationFullForm({
           수정: 녹음은 여러 행으로 **누적**(0068a) — 여러 상담사가 각자 추가하고, 분석은 전체 합본으로 갱신. */}
       <div className="border-primary/25 bg-primary/5 space-y-2.5 rounded-2xl border p-3">
         {!isCreate && existingRecordings.length > 0 ? (
-          <p className="text-text-dim flex items-center gap-1.5 text-[11px]">
+          <p className="text-text-dim flex items-center gap-1.5 text-xs">
             <Mic className="size-3.5" />
             이미 등록된 녹음 <span className="num text-foreground font-bold">{existingRecordings.length}개</span>
             {" "}(마지막 {KST_REC_LABEL.format(new Date(existingRecordings[existingRecordings.length - 1].createdAt))})
@@ -499,7 +499,7 @@ export function ConsultationFullForm({
             </Grid>
             {/* 상담 내용 — 남는 세로공간 전부 채움(학생정보 카드 높이에 맞춰 늘어남) */}
             <label className="flex flex-1 flex-col space-y-1">
-              <span className="text-text-dim flex items-center gap-1 text-[11px] font-medium">
+              <span className="text-text-dim flex items-center gap-1 text-xs font-medium">
                 <MessageSquare className="size-3 shrink-0" />
                 상담 내용
               </span>
@@ -543,7 +543,7 @@ export function ConsultationFullForm({
                   >
                     무시
                   </button>
-                  <span className="text-text-faint ml-auto text-[10px]">저장해야 반영됩니다</span>
+                  <span className="text-text-faint ml-auto text-xs">저장해야 반영됩니다</span>
                 </div>
               </div>
             ) : null}
@@ -816,7 +816,7 @@ function GroupInputs({
           if (f.type === "textarea") {
             return (
               <label key={f.key} className="col-span-full block space-y-1">
-                <span className="text-text-dim text-[11px]">{f.label}</span>
+                <span className="text-text-dim text-xs">{f.label}</span>
                 <AutoGrowTextarea
                   value={val}
                   onChange={(e) => onChange(subjectKey, f.key, e.target.value)}
@@ -828,7 +828,7 @@ function GroupInputs({
           if (f.type === "score") {
             return (
               <label key={f.key} className="block space-y-1">
-                <span className="text-text-dim text-[11px]">{f.label}</span>
+                <span className="text-text-dim text-xs">{f.label}</span>
                 {/* 소수 허용(67.5·55.93). inputMode=decimal이라야 폰 키패드에 소수점이 뜬다. */}
                 <input
                   inputMode="decimal"
@@ -841,7 +841,7 @@ function GroupInputs({
           }
           return (
             <label key={f.key} className="block space-y-1">
-              <span className="text-text-dim text-[11px]">{f.label}</span>
+              <span className="text-text-dim text-xs">{f.label}</span>
               <input
                 type={f.type === "date" ? "date" : "text"}
                 value={val}
@@ -888,7 +888,7 @@ function L({
 }) {
   return (
     <label className="block space-y-1">
-      <span className="text-text-dim flex items-center gap-1 text-[11px] font-medium">
+      <span className="text-text-dim flex items-center gap-1 text-xs font-medium">
         {Icon ? <Icon className="size-3 shrink-0" /> : null}
         {label}
         {required ? <span className="text-danger">*</span> : null}
@@ -925,7 +925,7 @@ function Collapsible({
         {open ? <ChevronDown className="size-4 shrink-0" /> : <ChevronRight className="size-4 shrink-0" />}
         {Icon ? <Icon className="size-3.5 shrink-0" /> : null}
         <span className="text-foreground text-sm font-bold">{title}</span>
-        <span className="text-text-dim text-[11px]">{subtitle}</span>
+        <span className="text-text-dim text-xs">{subtitle}</span>
       </button>
       {open ? <div className="space-y-2 px-3 pb-3 pt-1">{children}</div> : null}
     </div>

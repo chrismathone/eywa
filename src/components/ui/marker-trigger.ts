@@ -21,11 +21,11 @@
  * 트리거 박스 한 벌. `SearchableSelect`의 `triggerClassName`은 기본 박스를 **통째로 대체**하므로
  * 배경·테두리·높이·글자를 여기서 다 정한다(반쪽만 주면 어느 쪽이 이길지 CSS 순서가 정한다).
  *
- * · `text-[21px]` = 이 화면들의 최대 글자(PageHeader 제목)와 **같은 값**. 더 크게가 아니다.
+ * · `text-2xl` = 이 화면들의 최대 글자(PageHeader 제목)와 **같은 값**. 더 크게가 아니다.
  * · 굵기는 **안쪽 라벨이 이긴다**(`highlightSelected`가 `font-bold`를 얹는다) → 렌더되는 값 그대로 적는다.
  */
 export const MARKER_TRIGGER =
-  "bg-marker border-amber/40 text-foreground focus:border-primary h-10 rounded-full border px-3.5 text-[21px] leading-tight font-bold outline-none";
+  "bg-marker border-amber/40 text-foreground focus:border-primary h-10 rounded-full border px-3.5 text-2xl leading-tight font-bold outline-none";
 
 /**
  * 그 트리거의 폭. 21px로 키우면 `w-44`(176px)에서 반 이름이 바로 잘린다 — 실측 최장급

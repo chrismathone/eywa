@@ -106,7 +106,7 @@ export default async function ClassReviewPage() {
           })}
         />
       )}
-      <p className="text-text-dim text-[11px]">
+      <p className="text-text-dim text-xs">
         {selfOnly
           ? `표시되는 점수는 본인 평가입니다 — 100점 기준 환산 · 등급 컷 ${cutsLabel}`
           : `환산점수 = 제출된 채점들의 문항 평균으로 계산한 100점 기준 점수 · 등급 컷 ${cutsLabel}`}

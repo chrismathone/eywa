@@ -25,14 +25,14 @@ import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-group
 import { STATE_RESERVED_COLORS } from "@/lib/design/semantic-color";
 
 const cellCls =
-  "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-[13px] outline-none focus:border-primary";
+  "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary";
 
 function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="border-line text-text-dim hover:text-foreground hover:border-primary inline-flex items-center gap-1 rounded-md border border-dashed px-3 py-1.5 text-[12px]"
+      className="border-line text-text-dim hover:text-foreground hover:border-primary inline-flex items-center gap-1 rounded-md border border-dashed px-3 py-1.5 text-xs"
     >
       <Plus className="size-3.5" /> {label}
     </button>
@@ -219,7 +219,7 @@ export function SubjectListEditor({
               </select>
               {/* QR 공개접수 '상담 희망 과목' 노출 — 끄면 학부모 접수 폼에서 숨는다(재원생 전용 반 등).
                   내부 화면·시간표엔 영향 없음. 체크=노출이 직관적이라 저장값(hiddenFromIntake)과 반전. */}
-              <label className="text-text-dim flex w-[92px] shrink-0 cursor-pointer items-center gap-1.5 text-[11px]">
+              <label className="text-text-dim flex w-[92px] shrink-0 cursor-pointer items-center gap-1.5 text-xs">
                 <input
                   type="checkbox"
                   className="accent-primary size-3.5"
@@ -230,7 +230,7 @@ export function SubjectListEditor({
               </label>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span
-                className="text-text-faint w-[70px] shrink-0 truncate text-[11px]"
+                className="text-text-faint w-[70px] shrink-0 truncate text-xs"
                 title={`내부 ID: ${s.key} (자동·변경 불가)`}
               >
                 {s.key}
@@ -240,11 +240,11 @@ export function SubjectListEditor({
               />
             </div>
             {dup ? (
-              <p className="text-danger pl-0.5 text-[11px]">이미 있는 과목명입니다 — 다른 이름을 쓰거나 한 행을 삭제하세요.</p>
+              <p className="text-danger pl-0.5 text-xs">이미 있는 과목명입니다 — 다른 이름을 쓰거나 한 행을 삭제하세요.</p>
             ) : null}
             {/* 저장은 막지 않는다(경고만) — 이미 그 색을 쓰던 학원의 설정이 잠기면 안 된다. */}
             {STATE_RESERVED_COLORS.has(s.color) ? (
-              <p className="text-amber pl-0.5 text-[11px]">
+              <p className="text-amber pl-0.5 text-xs">
                 초록·빨강·앰버는 앱 전체에서 <b>상태색</b>(정상·위험·주의)입니다 — 과목에 쓰면 학생목록
                 등에서 상태 배지와 같은 색이 되어 구분이 어려워집니다.
               </p>
@@ -319,7 +319,7 @@ function PeriodRow({
         value={row.startTime}
         onChange={(e) => onPatch({ startTime: e.target.value })}
       />
-      <span className="text-text-faint text-[12px]">~</span>
+      <span className="text-text-faint text-xs">~</span>
       <input
         type="time"
         className={`${cellCls} w-[120px]`}
@@ -385,7 +385,7 @@ export function PeriodListEditor({
           label="교시 추가"
         />
         {value.length > 1 ? (
-          <span className="text-text-faint text-[11px]">왼쪽 손잡이를 끌어 순서를 바꿉니다.</span>
+          <span className="text-text-faint text-xs">왼쪽 손잡이를 끌어 순서를 바꿉니다.</span>
         ) : null}
       </div>
     </div>
@@ -437,7 +437,7 @@ export function ShuttleEditor({
     onChange({ ...value, routes: value.routes.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
   return (
     <div className="space-y-3">
-      <label className="text-foreground flex items-center gap-2 text-[13px]">
+      <label className="text-foreground flex items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={value.enabled}
@@ -447,7 +447,7 @@ export function ShuttleEditor({
         공개 접수 폼에 셔틀버스 신청 표시
       </label>
       <label className="block">
-        <span className="text-text-dim text-[12px]">요금 문구</span>
+        <span className="text-text-dim text-xs">요금 문구</span>
         <input
           className={`${cellCls} ml-2 w-[160px]`}
           value={value.fee}
@@ -525,7 +525,7 @@ export function ConsultationTemplateEditor({
 
   return (
     <div className="space-y-3">
-      <label className="text-foreground flex items-center gap-2 text-[13px]">
+      <label className="text-foreground flex items-center gap-2 text-sm">
         <input
           type="radio"
           name="consultation-default"
@@ -537,7 +537,7 @@ export function ConsultationTemplateEditor({
       </label>
 
       {/* 치환 태그 안내 — 요약 뼈대에 넣으면 상담 등록 시 실제 값으로 자동 치환. */}
-      <p className="text-text-dim border-line bg-bg-soft/40 rounded-md border px-3 py-2 text-[11px] leading-relaxed break-keep">
+      <p className="text-text-dim border-line bg-bg-soft/40 rounded-md border px-3 py-2 text-xs leading-relaxed break-keep">
         요약 뼈대에 치환 태그를 넣으면 상담 등록 시 자동으로 채워집니다 —{" "}
         {["{{날짜}}", "{{담당}}", "{{학생}}", "{{학년}}"].map((tag) => (
           <code key={tag} className="border-line text-foreground mx-0.5 rounded border bg-transparent px-1 font-mono">
@@ -575,7 +575,7 @@ export function ConsultationTemplateEditor({
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-            <label className="text-text-dim inline-flex items-center gap-1.5 text-[12px]">
+            <label className="text-text-dim inline-flex items-center gap-1.5 text-xs">
               <input
                 type="radio"
                 name="consultation-default"
@@ -641,7 +641,7 @@ export function TermListEditor({
             value={t.start}
             onChange={(e) => set(i, { start: e.target.value })}
           />
-          <span className="text-text-faint text-[12px]">~</span>
+          <span className="text-text-faint text-xs">~</span>
           <input
             type="date"
             className={`${cellCls} w-[150px]`}

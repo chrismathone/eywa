@@ -14,7 +14,7 @@ export function KpiGrid({ stat }: { stat: LearningStats }) {
         <div key={it.k} className="bg-card border-line shadow-card rounded-2xl border p-4">
           <p className="micro text-text-faint">{it.k}</p>
           <p className="mt-2 flex items-baseline gap-0.5">
-            <span className="tabular text-foreground text-[23px] leading-none font-bold">{it.v}</span>
+            <span className="tabular text-foreground text-2xl leading-none font-bold">{it.v}</span>
             <span className="text-text-dim text-xs">{it.u}</span>
           </p>
         </div>

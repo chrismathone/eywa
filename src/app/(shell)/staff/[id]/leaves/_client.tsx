@@ -47,7 +47,7 @@ export function LeavesClient({
         <h3 className="text-foreground text-sm font-bold">신규 휴가</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="space-y-1">
-            <label className="text-muted-foreground block text-[11px] font-medium">유형</label>
+            <label className="text-muted-foreground block text-xs font-medium">유형</label>
             <select
               name="leaveType"
               required
@@ -61,7 +61,7 @@ export function LeavesClient({
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-muted-foreground block text-[11px] font-medium">시작</label>
+            <label className="text-muted-foreground block text-xs font-medium">시작</label>
             <input
               name="startsOn"
               type="date"
@@ -70,7 +70,7 @@ export function LeavesClient({
             />
           </div>
           <div className="space-y-1">
-            <label className="text-muted-foreground block text-[11px] font-medium">종료</label>
+            <label className="text-muted-foreground block text-xs font-medium">종료</label>
             <input
               name="endsOn"
               type="date"
@@ -83,7 +83,7 @@ export function LeavesClient({
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-muted-foreground block text-[11px] font-medium">사유 (선택)</label>
+          <label className="text-muted-foreground block text-xs font-medium">사유 (선택)</label>
           <input
             name="reason"
             type="text"
@@ -123,7 +123,7 @@ function LeaveRowItem({
 
   return (
     <li className="flex flex-wrap items-center gap-3 px-5 py-3">
-      <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
+      <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium">
         {leave.leaveType}
       </span>
       <span className="num text-foreground text-sm">
@@ -135,7 +135,7 @@ function LeaveRowItem({
       ) : null}
       <div className="ml-auto flex items-center gap-2">
         {leave.approvedAt ? (
-          <span className="text-chart-2 inline-flex items-center gap-1 text-[11px]">
+          <span className="text-chart-2 inline-flex items-center gap-1 text-xs">
             <Check className="size-3" />
             {leave.approvedByName ? `${leave.approvedByName} 승인` : "승인됨"}
           </span>
@@ -151,7 +151,7 @@ function LeaveRowItem({
             </button>
           </form>
         ) : (
-          <span className="text-text-dim text-[11px]">승인 대기</span>
+          <span className="text-text-dim text-xs">승인 대기</span>
         )}
         {canManage ? (
           <form action={deleteAction}>

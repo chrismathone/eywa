@@ -99,7 +99,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         // 창 컴팩트 행은 1행이 규칙 — 위 안내문(~110자)은 창 폭에서 2~3줄로 감겨 짧은 라벨로 대체(적대 리뷰).
         // ⚠️ 상단 바 브랜드는 `logoText`라 `profile.name`과 다를 수 있다 → 컴팩트 행에 학원명을 남긴다.
         embedLabel={`${settings.profile.name || "학원"} 설정 — 변경은 원장·위임 계정만`}
-        actions={<p className="text-text-faint text-[12px]">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
+        actions={<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
       />
 
       <FaceTabs faces={FACES} active={tab} ariaLabel="학원 설정·관리 면 전환" />

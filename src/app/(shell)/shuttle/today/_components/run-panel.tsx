@@ -92,24 +92,24 @@ export function RunPanel({
             "flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-left",
           )}
         >
-          {start && <span className="text-foreground num shrink-0 text-[16px] font-bold">{start}</span>}
+          {start && <span className="text-foreground num shrink-0 text-base font-bold">{start}</span>}
           <Pill color={TONE_COLOR[run.direction === "in" ? "info" : "special"]}>
             {DIRECTION_LABEL[run.direction]}
           </Pill>
           {/* 방향 글자는 위 배지가 이미 말한다 — 제목은 "3회차"까지만. */}
-          <span className="text-text-dim text-[12.5px] font-bold">{runShortTitle(run)}</span>
-          {tail && <span className="text-text-faint num text-[11.5px]">{tail}</span>}
+          <span className="text-text-dim text-xs font-bold">{runShortTitle(run)}</span>
+          {tail && <span className="text-text-faint num text-xs">{tail}</span>}
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
             {/* 🔴 전원이 '오늘 안 탐'인 회차를 "완료"로 쓰지 않는다(아무도 안 탔는데 다 한 것처럼 읽힌다)
                 — 판정은 순수 `progressState` 한 곳에서 온다. */}
             {state === "remaining" ? (
-              <span className="text-amber text-[11.5px] font-bold">
+              <span className="text-amber text-xs font-bold">
                 <span className="num">{progress.unmarked}</span>명 남음
               </span>
             ) : state === "done" ? (
-              <span className="text-green text-[11.5px] font-bold">완료</span>
+              <span className="text-green text-xs font-bold">완료</span>
             ) : (
-              <span className="text-text-faint text-[11.5px] font-bold">오늘 탑승 없음</span>
+              <span className="text-text-faint text-xs font-bold">오늘 탑승 없음</span>
             )}
             {/* ⚠️ 접기 표시를 ▲/▼ **문자**로 쓰지 말 것 — 아이콘 자리에 글리프를 세우는 건
                 가드 테스트(eywa-icon-mapping)가 막는다. 폰트·플랫폼마다 크기가 널뛴다. */}
@@ -141,14 +141,14 @@ export function RunPanel({
                     🔑 묶음 순서가 곧 기사가 도는 순서라 "다음 정류장"이 그대로 읽힌다. */}
                 <div className="border-line-faint flex items-baseline gap-1.5 border-b px-1 pb-1">
                   {group.atTime && (
-                    <span className="text-text-dim num shrink-0 text-[12.5px] font-bold">
+                    <span className="text-text-dim num shrink-0 text-xs font-bold">
                       {group.atTime}
                     </span>
                   )}
-                  <span className="text-foreground min-w-0 flex-1 truncate text-[12.5px] font-bold">
+                  <span className="text-foreground min-w-0 flex-1 truncate text-xs font-bold">
                     {group.stopName}
                   </span>
-                  <span className="text-text-faint shrink-0 text-[11.5px]">
+                  <span className="text-text-faint shrink-0 text-xs">
                     {remaining > 0 ? (
                       <span className="text-amber font-bold">
                         <span className="num">{remaining}</span>명 남음

@@ -48,11 +48,11 @@ export function ProgressCard({
       >
         <div>
           {embedded ? (
-            <p className="text-foreground text-[13px] font-bold">{t("os.pc.title")}</p>
+            <p className="text-foreground text-sm font-bold">{t("os.pc.title")}</p>
           ) : (
             <>
               <p className="micro text-text-faint">{t("os.pc.kicker")}</p>
-              <p className="text-foreground text-[15px] font-bold">{t("os.pc.heading")}</p>
+              <p className="text-foreground text-base font-bold">{t("os.pc.heading")}</p>
             </>
           )}
         </div>
@@ -82,8 +82,8 @@ export function ProgressCard({
             <div key={i} className="flex items-start gap-3">
               <span className={`mt-1 h-9 w-1 rounded-pill ${toneSolidClass(tone)}`} aria-hidden />
               <div className="min-w-0 flex-1">
-                <p className={`text-[13px] font-bold ${toneTextClass(tone)}`}>{su.name}</p>
-                <div className="mt-1 space-y-1 text-[12px]">
+                <p className={`text-sm font-bold ${toneTextClass(tone)}`}>{su.name}</p>
+                <div className="mt-1 space-y-1 text-xs">
                   <p className="text-text-faint truncate">
                     {tf("os.pc.prev", {
                       text: displayLessons(su.prev) || su.prev || t("os.pc.noRecord"),
@@ -115,7 +115,7 @@ export function ProgressCard({
                         onChange={(e) => onProgress(i, e.target.value)}
                         placeholder={t("os.pc.inputPh")}
                         aria-label={tf("os.pc.inputAria", { subject: su.name })}
-                        className="border-line bg-card focus:border-primary scrollbar-thin w-full min-w-0 flex-1 resize-none rounded-lg border px-2 py-1.5 text-[12px] leading-relaxed outline-none transition-colors"
+                        className="border-line bg-card focus:border-primary scrollbar-thin w-full min-w-0 flex-1 resize-none rounded-lg border px-2 py-1.5 text-xs leading-relaxed outline-none transition-colors"
                       />
                     )}
                   </div>

@@ -42,6 +42,12 @@ export type StaffRow = {
   contractFile: boolean;
   /** 직원 행 최근 수정 시각(users.updated_at) — 목록 '수정일' 열(원장 지시 2026-08-04). */
   updatedAt: string | null;
+  /**
+   * 시간표 강사 색(근무 설정 `bg_color`/`text_color`, 0054a) — 목록 이름 옆 색 사각형(원장 2026-09-07).
+   * 안 정한 사람은 null이라 사각형이 아예 안 선다("색 없음"을 회색 칸으로 흉내 내지 않는다).
+   */
+  bgColor: string | null;
+  textColor: string | null;
 };
 
 export async function getStaffList(): Promise<StaffRow[]> {
@@ -63,7 +69,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     supabase
       .from("users")
       .select(
-        "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, department, employment_type, updated_at",
+        "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, department, employment_type, bg_color, text_color, updated_at",
       )
       .neq("system_role", "student")
       .order("system_role", { ascending: true })
@@ -148,6 +154,8 @@ export async function getStaffList(): Promise<StaffRow[]> {
     contractSeq: currentContractOf.get(u.id)?.seq ?? null,
     contractFile: hasContractFile.has(u.id),
     updatedAt: ((u as { updated_at?: string | null }).updated_at ?? null),
+    bgColor: ((u as { bg_color?: string | null }).bg_color ?? null),
+    textColor: ((u as { text_color?: string | null }).text_color ?? null),
   }));
 }
 

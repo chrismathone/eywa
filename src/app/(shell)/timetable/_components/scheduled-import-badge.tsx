@@ -53,7 +53,7 @@ export function ScheduledImportBadge({
 
   return (
     <span className="inline-flex shrink-0 items-center gap-0.5">
-      <span className="border-blue/40 bg-blue-soft text-blue inline-flex items-center gap-1 rounded-pill border py-0.5 pr-1 pl-2 text-[11px] font-bold">
+      <span className="border-blue/40 bg-blue-soft text-blue inline-flex items-center gap-1 rounded-pill border py-0.5 pr-1 pl-2 text-xs font-bold">
         {sheetUrl ? (
           // 시트를 새 창으로 — 시간표 화면(창 안 iframe)을 떠나지 않게 한다.
           <a
@@ -82,7 +82,7 @@ export function ScheduledImportBadge({
         ) : null}
       </span>
       {/* ⚠️ 실패 사유는 보이는 문구로 — 배지 옆 작은 × 의 title은 눌러 본 뒤엔 안 읽힌다. */}
-      {error ? <span className="text-danger max-w-[22rem] text-[11px]">{error}</span> : null}
+      {error ? <span className="text-danger max-w-[22rem] text-xs">{error}</span> : null}
     </span>
   );
 }

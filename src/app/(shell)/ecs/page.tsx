@@ -337,7 +337,7 @@ function EcsTodayFace({
           ⚠️ 색은 danger 틴트(달력에서 공휴일이 빨간 것과 같은 관행)지만 실패가 아니므로 아이콘·굵기로
              경고를 더 세우지 않는다. */}
       {res.holidayName ? (
-        <p className="border-danger/30 bg-danger-soft/40 text-foreground rounded-2xl border px-4 py-2.5 text-[13px]">
+        <p className="border-danger/30 bg-danger-soft/40 text-foreground rounded-2xl border px-4 py-2.5 text-sm">
           {/* ⚠️ 날짜를 "09/24은"처럼 적지 않는다 — 조사가 어긋난다. '일'로 끝나면 '은'이 맞다.
               ⚠️ 영어는 조사가 없어 날짜 표기 뒤에 `is`가 붙는다 — 그래서 주어를 통째로 만들어 넣는다
                  (한국어 문장을 조각내 붙이면 조사가 깨진다). 🔴 휴일 **이름**은 데이터라 번역 안 한다. */}
@@ -360,7 +360,7 @@ function EcsTodayFace({
           ⚠️ 시트 모드에서만 — 요약 카드는 반 전체 교시를 그리므로 이 안내가 거짓이 된다.
           ⚠️ 반이 0개면 그 빈 화면 문구가 이미 주간 시트를 가리킨다(같은 말을 두 번 하지 않는다). */}
       {mode === "sheet" && res.cards.length > 0 ? (
-        <p className="text-text-dim px-1 text-[15px] leading-relaxed font-medium">
+        <p className="text-text-dim px-1 text-base leading-relaxed font-medium">
           {sheetT(lang, "today.weekHint.before")}{" "}
           <span className="text-foreground font-bold">{sheetT(lang, "today.weekHint.link")}</span>
           {sheetT(lang, "today.weekHint.after")}

@@ -77,6 +77,8 @@ function renderDesk() {
       <DeskView queue={QUEUE} date="2026-08-19" canEdit carryOver={null} />
     </OperationsProvider>,
   );
+  // 입력칸은 토글(§10) 뒤에 있다 — 접혀 있으면 '검색'을 눌러 펼친다.
+  if (!screen.queryByLabelText("학생 검색")) fireEvent.click(screen.getByRole("button", { name: "검색" }));
   return { ...view, input: screen.getByLabelText("학생 검색") as HTMLInputElement };
 }
 const type = (input: HTMLInputElement, v: string) => fireEvent.change(input, { target: { value: v } });
@@ -152,11 +154,12 @@ describe("데스크 큐 과목 필터", () => {
     );
   }
 
-  it("과목 칩을 누르면 그 과목 섹션만 남는다(선택지는 학원설정 단일 소스)", () => {
+  it("과목 드롭다운에서 고르면 그 과목 섹션만 남는다(선택지는 학원설정 단일 소스)", () => {
     renderMixed();
     expect(screen.getByText("수학생")).toBeTruthy();
     expect(screen.getByText("영어생")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "영어" }));
     expect(screen.queryByText("수학생")).toBeNull();
     expect(screen.getByText("영어생")).toBeTruthy();
   });
@@ -165,7 +168,7 @@ describe("데스크 큐 과목 필터", () => {
     renderMixed("math");
     expect(screen.getByText("수학생")).toBeTruthy();
     expect(screen.queryByText("영어생")).toBeNull();
-    expect(screen.getByRole("button", { name: "수학" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /^과목:/ }).textContent).toContain("과목: 수학");
   });
 
   it("🔴 설정에서 사라진 과목이 저장돼 있으면 전체로 되돌린다 — 빈 화면은 '출결이 사라졌다'로 읽힌다", () => {
@@ -176,7 +179,8 @@ describe("데스크 큐 과목 필터", () => {
 
   it("고르면 계정에 저장한다", () => {
     renderMixed();
-    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "영어" }));
     expect(saveSubject).toHaveBeenCalledWith("english");
   });
 

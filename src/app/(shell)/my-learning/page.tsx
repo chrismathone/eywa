@@ -31,10 +31,10 @@ export default async function MyLearningPage() {
         </div>
         <div className="mt-2.5 flex items-center gap-3">
           <div>
-            <h1 className="text-foreground text-[22px] leading-tight font-bold">
+            <h1 className="text-foreground text-2xl leading-tight font-bold">
               {student.name} 님, 환영해요
             </h1>
-            <p className="text-text-dim text-[13px]">
+            <p className="text-text-dim text-sm">
               {student.grade} {student.tag} · {subjectKeys.join(" · ")}
             </p>
           </div>

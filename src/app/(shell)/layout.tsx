@@ -31,11 +31,16 @@ import { canAccess, menuKeyForPath } from "@/lib/permissions";
 import { findNavItem } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
+import { MenuHubPanel } from "@/components/workspace/menu-hub-panel";
+import { getMyMenuVisits } from "@/features/nav/server/visits";
+import { topVisitedMenus } from "@/features/nav/menu-visits";
+import { MENU_KEYS } from "@/lib/permissions";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
+import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
@@ -75,6 +80,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             <EmbedFocusSignal />
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />
+            {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
+            <WindowMinSizeNotice />
             {children}
           </main>
         </OperationsProvider></EditPresenceProvider>
@@ -195,8 +202,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               </span>
             )}
             <div className="min-w-0 leading-none">
-              <div className="text-foreground truncate text-[17px] font-bold tracking-tight">{brand}</div>
-              <div className="text-text-dim mt-[3px] truncate text-[10px]">
+              <div className="text-foreground truncate text-lg leading-tight font-bold tracking-tight">{brand}</div>
+              {/* 강사 미니셸의 유일한 제목 줄이라 16px(디자인 v5 18단계 — 옛 14). 머리는 `h-12`(48) 고정이라 두 줄의
+                  줄상자를 `leading-tight`로 잡는다(20×1.25 + 3 + 16×1.25 = 48 — 기본 줄높이면 54로 넘친다; 부모의
+                  `leading-none`은 자식 `text-*`가 제 줄높이를 다시 정해 상속되지 않는다). */}
+              <div className="text-text-dim mt-[3px] truncate text-sm leading-tight">
                 {/* ⚠️ 현재 메뉴명을 여기 넣는 이유: 본문 PageHeader가 좁은 화면에선 `compact-chrome`으로
                     제목을 접는다(= "제목은 크롬이 이미 보여준다"는 전제). 풀셸은 MobileTopNav가 그 역할을
                     하는데 이 미니셸엔 그런 줄이 없어, 안 넣으면 강사 화면에서 제목이 어디에도 안 남는다. */}
@@ -249,6 +259,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // '다른 강사 뷰'(열람 전용) 진입 자격 — master는 쿼리 0, 그 외 요청 캐시된 PK 조회 1회(0224a 토글).
   const canOtherTeacherView = await canUseOtherTeacherView();
+  // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
+  // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
+  const frequentKeys = topVisitedMenus(
+    await getMyMenuVisits().catch(() => ({})),
+    MENU_KEYS.filter((k) => canAccess(user.systemRole, k, permMatrix)),
+    4,
+  );
 
   return (
     // ⚠️ OperationsProvider는 **셸 전체**를 감싼다 — 예전엔 <main> 안 {children}만 감쌌더니
@@ -275,6 +292,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           permMatrix={permMatrix}
           canTeacherView={canTeacherView}
           canOtherTeacherView={canOtherTeacherView}
+          frequentKeys={frequentKeys}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
@@ -305,6 +323,17 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
       <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} />
+
+      {/* 업무군 메뉴 허브(버튼형, 원장 2026-09-07) — 사이드바에서 업무군을 고르면 본문에 메뉴 버튼이 뜬다.
+          ⚠️ 캔버스와 **형제**로 둔다(캔버스 안에 넣으면 창들과 같은 층에 갇혀 z·포인터가 얽힌다).
+          🔴 창은 그대로 열려 있다 — 허브는 그 위를 잠깐 덮는 층이고 Esc로 닫으면 하던 작업이 그대로다. */}
+      <HideInFrame>
+        <MenuHubPanel
+          systemRole={user.systemRole}
+          permMatrix={permMatrix}
+          canTeacherView={canTeacherView}
+        />
+      </HideInFrame>
 
       {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
       <NoticePopupLayer popups={popups} />

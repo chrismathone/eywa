@@ -284,7 +284,7 @@ export function MatrixTable({
                 <th
                   key={d.date}
                   title={holiday ?? undefined}
-                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[30px] border-r px-0.5 py-1 text-center text-[10px] ${bg} ${fg}`}
+                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[30px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
                 >
                   <div className="font-bold">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
@@ -374,11 +374,11 @@ export function MatrixTable({
               rowKeys={groupRowKeys}
               summary={
                 <>
-                  <span className="text-foreground text-[12px] font-bold">{g.className}</span>
-                  <span className="text-text-faint text-[11px]">{g.subjectLabel}</span>
+                  <span className="text-foreground text-xs font-bold">{g.className}</span>
+                  <span className="text-text-faint text-xs">{g.subjectLabel}</span>
                   {g.roleLabel ? (
                     <span
-                      className="border-line text-text-dim rounded-full border px-1.5 py-px text-[10px]"
+                      className="border-line text-text-dim rounded-full border px-1.5 py-px text-xs"
                       title={t("att.group.slotTitle")}
                     >
                       {g.roleLabel}
@@ -387,7 +387,7 @@ export function MatrixTable({
                   {/* 🔴 **라벨 맨 끝**에 그 달 담당자(원장 지시) — 반 이름·과목·역할 배지 뒤. */}
                   {g.workerLabel ? (
                     <span
-                      className="text-text-dim text-[11px]"
+                      className="text-text-dim text-xs"
                       title={t(
                         g.workerSource === "attendance"
                           ? "att.group.workerAttendance"
@@ -399,20 +399,20 @@ export function MatrixTable({
                   ) : null}
                   {g.sinceLabel ? (
                     <span
-                      className="border-line text-text-dim rounded-full border px-1.5 py-px text-[10px]"
+                      className="border-line text-text-dim rounded-full border px-1.5 py-px text-xs"
                       title={t("att.group.sinceTitle")}
                     >
                       {g.sinceLabel}
                     </span>
                   ) : null}
-                  <span className="text-text-dim text-[11px]">
+                  <span className="text-text-dim text-xs">
                     {tf("att.group.students", { n: g.matrix.students.length })}
                   </span>
                   {/* 검색 중이면 이 반에서 몇 명이 걸렸는지 — 머리행 인원(전체)만 두면 숫자가 거짓말한다. */}
                   <ClassSearchCount rowKeys={groupRowKeys} />
                   {/* 검색 중이면 `시수 12 / 53`(검색분 / 전체) — 옆의 "검색 N명"과 같은 규약이다.
                       한 머리행에서 인원만 검색 기준이고 시수는 전체이면 그게 제일 나쁘다. */}
-                  <span className="text-text-dim num text-[11px]">
+                  <span className="text-text-dim num text-xs">
                     {t("att.group.units")}
                     <LiveUnits rows={groupRowKeys} countByRow={countByRow} fallback={groupCount(g.matrix)} />
                   </span>
@@ -445,11 +445,11 @@ export function MatrixTable({
           <tr>
             {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
             <td colSpan={colSpan} className="bg-bg-soft border-line border-t px-3 py-2">
-              <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
+              <div className="flex items-center gap-2 overflow-x-auto text-xs [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 {/* 조작법을 여기 한 줄로 — 시트처럼 쓰는 화면이라 "클릭해서 고르는 곳"으로 오해하면 느려진다. */}
                 {/* ⚠️ 조각 사이 공백은 **사전 값 안에** 담았다 — JSX 줄바꿈은 공백을 지우고,
                     `{" "}`로 넣으면 한국어에 없어야 할 공백이 생긴다(언어마다 붙임이 다르다). */}
-                <span className="text-text-faint text-[11px]">
+                <span className="text-text-faint text-xs">
                   {t("att.help.a")}
                   <LiveRecords countByRow={countByRow} fallback={totalCount} />
                   {t("att.help.b")}
@@ -467,7 +467,7 @@ export function MatrixTable({
                   return (
                     <span key={s} className="text-text-dim inline-flex items-center gap-1">
                       <span
-                        className={`inline-flex size-5 items-center justify-center rounded-sm text-[10px] font-bold ${chip.className}`}
+                        className={`inline-flex size-5 items-center justify-center rounded-sm text-xs font-bold ${chip.className}`}
                       >
                         {chip.text}
                       </span>

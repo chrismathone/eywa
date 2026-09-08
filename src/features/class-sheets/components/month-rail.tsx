@@ -89,10 +89,10 @@ export function MonthRail({
 
   return (
     <div className="border-line overflow-x-auto rounded-xl border">
-      <table className="w-max min-w-full border-separate border-spacing-0 text-[12px]">
+      <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr>
-            <th className="border-line-faint bg-bg-soft sticky left-0 z-[4] min-w-[236px] border-r border-b px-2 py-1.5 text-left text-[11.5px] font-bold shadow-[1px_0_0_var(--line)]">
+            <th className="border-line-faint bg-bg-soft sticky left-0 z-[4] min-w-[236px] border-r border-b px-2 py-1.5 text-left text-xs font-bold shadow-[1px_0_0_var(--line)]">
               {t("month.rail.goalHead")}
               <span className={`ml-2 font-semibold ${savedAt ? "text-green" : "text-text-faint"}`}>
                 {t(savedAt ? "toolbar.saved" : "month.goal.sameAsWeek")}
@@ -106,7 +106,7 @@ export function MonthRail({
               return (
                 <th
                   key={date}
-                  className={`border-line-faint sticky top-0 z-[2] border-r border-b p-0 text-center text-[11.5px] font-bold whitespace-nowrap ${
+                  className={`border-line-faint sticky top-0 z-[2] border-r border-b p-0 text-center text-xs font-bold whitespace-nowrap ${
                     offDays.has(date)
                       ? "text-amber bg-amber-soft shadow-[inset_0_-2px_0_var(--amber)]"
                       : holiday
@@ -151,7 +151,7 @@ export function MonthRail({
                 <th className="border-line-faint sticky left-0 z-[3] min-w-[236px] border-r border-b bg-white px-2 py-1.5 text-left align-top font-normal shadow-[1px_0_0_var(--line)]">
                   <div className="flex flex-col gap-1">
                     <span
-                      className={`${SHEET_BOX_FRAME} inline-flex h-5 w-[74px] items-center justify-center px-1 text-[12px] font-bold ${
+                      className={`${SHEET_BOX_FRAME} inline-flex h-5 w-[74px] items-center justify-center px-1 text-xs font-bold ${
                         SUBJECT_SOFT[skillAreaColorOf(data.skillAreas, area.key)]
                       }`}
                     >
@@ -196,20 +196,20 @@ export function MonthRail({
                             }`}
                           >
                             {line.pageRange ? (
-                              <span className="num text-[12px] font-bold">
-                                {seat ? <span className="text-text-faint border-line mr-1 rounded border px-1 text-[10px]">{"JJ"}</span> : null}
+                              <span className="num text-xs font-bold">
+                                {seat ? <span className="text-text-faint border-line mr-1 rounded border px-1 text-xs">{"JJ"}</span> : null}
                                 {line.pageRange}
                               </span>
                             ) : null}
-                            {line.progress ? <span className="text-text-dim text-[11.5px]">{line.progress}</span> : null}
+                            {line.progress ? <span className="text-text-dim text-xs">{line.progress}</span> : null}
                             <span
-                              className={`truncate text-[11px] ${off ? "text-amber font-bold" : "text-text-faint"}`}
+                              className={`truncate text-xs ${off ? "text-amber font-bold" : "text-text-faint"}`}
                               title={line.textbook ?? ""}
                             >
                               {line.textbook}
                             </span>
                             {display.homework && line.homework ? (
-                              <span className="text-text-faint text-[11px]">
+                              <span className="text-text-faint text-xs">
                                 <b>{t("plan.col.homework")}</b> {line.homework}
                               </span>
                             ) : null}
@@ -225,7 +225,7 @@ export function MonthRail({
         </tbody>
         <tfoot>
           <tr>
-            <th className="border-line-strong sticky left-0 z-[3] border-t border-r bg-white px-2 py-1.5 text-left text-[11.5px] font-normal shadow-[1px_0_0_var(--line)]">
+            <th className="border-line-strong sticky left-0 z-[3] border-t border-r bg-white px-2 py-1.5 text-left text-xs font-normal shadow-[1px_0_0_var(--line)]">
               {t("month.rail.footer")}
             </th>
             {days.map((date) => {
@@ -235,7 +235,7 @@ export function MonthRail({
               const short = filled < slots.length && !isHolidayOn(data.holidays, date);
               return (
                 <td key={date} className="border-line-strong border-t px-2 py-1.5 text-center">
-                  <span className={`num text-[11.5px] ${short ? "text-amber font-bold" : "text-text-faint"}`}>
+                  <span className={`num text-xs ${short ? "text-amber font-bold" : "text-text-faint"}`}>
                     {filled}/{slots.length}
                   </span>
                 </td>

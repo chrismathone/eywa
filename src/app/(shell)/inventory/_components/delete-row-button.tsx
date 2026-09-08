@@ -58,7 +58,7 @@ export function DeleteRowButton({
         삭제
       </Button>
       {/* 실패 사유는 확인창을 닫은 뒤에도 보여야 한다 — 폼 본문이 아니라 버튼 옆에 둔다. */}
-      {error ? <span className="text-danger self-center text-[12px]">{error}</span> : null}
+      {error ? <span className="text-danger self-center text-xs">{error}</span> : null}
       <ConfirmDialog
         open={asking}
         title={label}

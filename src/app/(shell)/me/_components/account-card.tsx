@@ -72,7 +72,7 @@ export function AccountCard({ email, isPlaceholder }: { email: string; isPlaceho
           </label>
           {/* 아이디만 고치고 도메인은 고정(지금 쓰는 도메인 그대로) — 전체 주소 타이핑 오타 방지. */}
           <EmailIdField id="me-email" defaultEmail={email} inputClassName={inputClass} />
-          <p className="text-text-faint mt-1 text-[11px]">
+          <p className="text-text-faint mt-1 text-xs">
             {t("me.email.hint.a")} <b>{t("me.email.hint.b")}</b> {t("me.email.hint.c")}
           </p>
           <div className="mt-auto pt-3">

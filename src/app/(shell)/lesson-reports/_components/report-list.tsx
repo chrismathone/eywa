@@ -24,6 +24,7 @@ import { SortableTh } from "@/components/table/sortable-th";
 import type { SortState } from "@/lib/table/sort";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 import { ReportViewSettings } from "./report-view-settings";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
@@ -54,14 +55,14 @@ function StatusCell({ status, source, readAt }: { status: string | null; source:
   // 학부모 읽음(0122a) — **양성 배지만**: 없음 = "미읽음"이 아니라 "동기화 안 됨"일 수 있어 표시하지 않는다
   // (매칭 키 없는 행의 거짓 미확인 방지 — report-filters.ts readAt 주석 참조).
   const read = readAt ? (
-    <span className="text-primary ml-1.5 text-[11px] font-bold" title={`학부모 읽음 · ${readAtLabel(readAt)}`}>
+    <span className="text-primary ml-1.5 text-xs font-bold" title={`학부모 읽음 · ${readAtLabel(readAt)}`}>
       읽음
     </span>
   ) : null;
   if (badge)
     return (
       <>
-        <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span>
+        <span className={`text-xs font-bold ${badge.cls}`}>{badge.label}</span>
         {read}
       </>
     );
@@ -69,11 +70,11 @@ function StatusCell({ status, source, readAt }: { status: string | null; source:
   if (source === "edutrix_import")
     return (
       <>
-        <span className="text-text-faint text-[11px]" title="edutrix에서 이관된 기록(eywa 발송 아님)">이관</span>
+        <span className="text-text-faint text-xs" title="edutrix에서 이관된 기록(eywa 발송 아님)">이관</span>
         {read}
       </>
     );
-  return <span className="text-amber text-[11px]">미발송</span>;
+  return <span className="text-amber text-xs">미발송</span>;
 }
 
 /** 멘트 작성 방식(0214a) 셀 — 직접(강조)/자동+수정/자동. 도입 전 행(null)은 "—"(라벨을 지어내지 않는다). */
@@ -83,7 +84,7 @@ function MentSourceCell({ value }: { value: string | null | undefined }) {
   const cls =
     ms === "manual" ? "text-primary font-bold" : ms === "auto_edited" ? "text-text-dim" : "text-text-faint";
   return (
-    <span className={`text-[11px] ${cls}`} title={MENT_SOURCE_LABEL[ms]}>
+    <span className={`text-xs ${cls}`} title={MENT_SOURCE_LABEL[ms]}>
       {MENT_SOURCE_SHORT[ms]}
     </span>
   );
@@ -210,7 +211,7 @@ export function ReportList({
           두 달 전 기록으로만 채워져 정렬이 무의미해진다(실측). 월로 끊어야 "이 달 안에서 강사순"이 된다. */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2
-          className="text-foreground text-[15px] font-bold"
+          className="text-foreground text-base font-bold"
           title="기간·강사·과목·상태·읽음·반으로 조회 — 오른쪽 '열람' 버튼으로 학부모 보고서를 엽니다"
         >
           보고서 목록
@@ -219,7 +220,7 @@ export function ReportList({
           <button type="button" onClick={() => setMonthRange(shiftMonth(activeMonth, -1))} aria-label="이전 달" className="text-text-dim hover:bg-bg-soft rounded-full px-1.5 py-0.5">
             <EyIcon name="chevronLeft" size={14} />
           </button>
-          <span className="text-foreground min-w-[76px] text-center text-[12px] font-bold">
+          <span className="text-foreground min-w-[76px] text-center text-xs font-bold">
             {isMonthRange ? monthLabel(activeMonth) : isAllTime ? "전체 기간" : "직접 지정"}
           </span>
           <button type="button" onClick={() => setMonthRange(shiftMonth(activeMonth, 1))} aria-label="다음 달" className="text-text-dim hover:bg-bg-soft rounded-full px-1.5 py-0.5">
@@ -239,7 +240,7 @@ export function ReportList({
           }}
           placeholder="학생 이름"
           aria-label="학생 이름 검색"
-          className="border-line focus:border-primary w-[104px] rounded-lg border px-2 py-1 text-[11px] outline-none"
+          className="border-line focus:border-primary w-[104px] rounded-lg border px-2 py-1 text-xs outline-none"
         />
         <input
           type="search"
@@ -250,7 +251,7 @@ export function ReportList({
           }}
           placeholder="담임 이름"
           aria-label="담임 이름 검색"
-          className="border-line focus:border-primary w-[104px] rounded-lg border px-2 py-1 text-[11px] outline-none"
+          className="border-line focus:border-primary w-[104px] rounded-lg border px-2 py-1 text-xs outline-none"
         />
         <ReportViewSettings options={options} filters={filters} todayYmd={todayYmd} onApply={run} />
         {/* 관리자 발송 — 미발송(native)만 대상. 이미 발송된 건은 선택 자체가 안 되고 서버도 거부(중복발송 차단).
@@ -265,13 +266,13 @@ export function ReportList({
             선택 발송 {checked.size > 0 ? `(${checked.size})` : ""}
           </Button>
         ) : null}
-        <span className="text-text-faint ml-auto text-[12px]">{pending ? "불러오는 중…" : `총 ${total}건`}</span>
+        <span className="text-text-faint ml-auto text-xs">{pending ? "불러오는 중…" : `총 ${total}건`}</span>
       </div>
 
-      <div className="border-line overflow-x-auto rounded-md border">
+      <DragScrollArea className="border-line rounded-md border">
         {/* 반 열이 늘어 최소폭 상향(600→680) — 좁은 창에서 열이 서로 뭉개지지 않게. 넘치면 가로 스크롤.
             멘트 열(0214a)이 켜지면 한 뼘 더(680→720). */}
-        <table className={`w-full ${showMent ? "min-w-[720px]" : "min-w-[680px]"} text-left text-[12px]`}>
+        <table className={`w-full ${showMent ? "min-w-[720px]" : "min-w-[680px]"} text-left text-xs`}>
           <thead>
             <tr className="border-line text-text-faint group border-b">
               {canSend ? (
@@ -326,7 +327,7 @@ export function ReportList({
                     {/* 실제 수업일이 따로 지정된 건(선발송·연속수업) — 그 날짜가 작성률 분모에서 면제된다. */}
                     {r.coversDate ? (
                       <span
-                        className="bg-bg-soft text-text-dim ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                        className="bg-bg-soft text-text-dim ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-bold"
                         title={coversTitle(r)}
                       >
                         수업 {r.coversDate.slice(5)}
@@ -384,10 +385,10 @@ export function ReportList({
             )}
           </tbody>
         </table>
-      </div>
+      </DragScrollArea>
 
       {maxPage > 0 ? (
-        <div className="mt-3 flex items-center justify-center gap-2 text-[12px]">
+        <div className="mt-3 flex items-center justify-center gap-2 text-xs">
           <Button size="sm" variant="ghost" disabled={page <= 0 || pending} onClick={() => run({ ...filters, page: page - 1 })}>
             이전
           </Button>
@@ -472,14 +473,14 @@ function CoversDateControl({
         type="date"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="border-line rounded-lg border px-1.5 py-1 text-[11px]"
+        className="border-line rounded-lg border px-1.5 py-1 text-xs"
         aria-label="실제 수업일"
       />
       {/* 사유 — 나중에 "왜 이 날이 빠졌나"를 알 수 있어야 감사가 의미 있다(원장이 정의한 두 경우). */}
       <select
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        className="border-line rounded-lg border px-1.5 py-1 text-[11px]"
+        className="border-line rounded-lg border px-1.5 py-1 text-xs"
         aria-label="지정 사유"
       >
         {COVERS_REASONS.map((o) => (

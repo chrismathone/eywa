@@ -31,7 +31,7 @@ export function DeleteGradeButton({
       >
         <Trash2 className="size-3.5" />
       </button>
-      {state?.error ? <span className="text-danger ml-1 text-[10px]">{state.error}</span> : null}
+      {state?.error ? <span className="text-danger ml-1 text-xs">{state.error}</span> : null}
     </form>
   );
 }

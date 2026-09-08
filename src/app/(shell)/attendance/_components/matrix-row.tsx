@@ -63,7 +63,7 @@ export function MatrixRow({
           읽힌다(원장 2026-08-10: "배경색 노란건 지워"). 설명은 라벨 툴팁이 담당. */}
       <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1">
         <span className="flex items-center gap-1">
-          <span className="min-w-0 truncate text-[12px] leading-tight font-bold" title={student.name}>
+          <span className="min-w-0 truncate text-xs leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
           {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 대부분의 행엔 아무것도 안 붙는다.
@@ -90,7 +90,7 @@ export function MatrixRow({
           <span className="flex items-center gap-1">
             {attendLabel ? (
               <span
-                className="text-text-faint min-w-0 truncate text-[10px] leading-tight font-medium"
+                className="text-text-faint min-w-0 truncate text-xs leading-tight font-medium"
                 title={sheetTf(lang, "att.row.attendDows", { dows: attendLabel })}
               >
                 {attendLabel}
@@ -110,7 +110,7 @@ export function MatrixRow({
       </td>
       {/* 학교·학년 = 표시 표준 압축("경명여중2", school-grade.ts) — 두 열로 나누던 것을 합쳐 날짜 칸에
           폭을 돌려준다(원장 2026-08-10). 원문(학교·학년 따로)은 title에 남긴다. */}
-      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-[11px]">
+      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-xs">
         <span
           className="block truncate"
           title={[student.school, student.grade].filter(Boolean).join(" · ") || undefined}
@@ -120,7 +120,7 @@ export function MatrixRow({
         {/* 단가 티어(라벨만, 금액 아님) — 열의 남는 폭을 채운다(원장 2026-08-10). 원장 전용 금액 열이 있을 때만. */}
         {tierLabel ? (
           <span
-            className="text-text-faint block truncate text-[10px] leading-tight"
+            className="text-text-faint block truncate text-xs leading-tight"
             title={sheetTf(lang, "att.row.tierTitle", { tier: tierLabel })}
           >
             {tierLabel}
@@ -176,10 +176,10 @@ export function MatrixRow({
         <>
           {/* 청구·납입은 **학생 단위 총액**(다른 과목 포함) — 반 몫이 아니다. 여러 강사에 걸친 학생은 '공유' 표식. */}
           {/* '공유' 행 라벨은 제거(원장 2026-08-10) — 공유 규모는 합계 줄의 "공유 N명 포함"이 계속 알린다. */}
-          <td className="border-line text-text-dim num border-b border-l px-2 py-1 text-right text-[11px] whitespace-nowrap">
+          <td className="border-line text-text-dim num border-b border-l px-2 py-1 text-right text-xs whitespace-nowrap">
             {formatMoney(money?.billed ?? null)}
           </td>
-          <td className="border-line text-foreground num border-b px-2 py-1 text-right text-[11px] whitespace-nowrap">
+          <td className="border-line text-foreground num border-b px-2 py-1 text-right text-xs whitespace-nowrap">
             {formatMoney(money?.paid ?? null)}
           </td>
         </>

@@ -29,12 +29,13 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
 import { OperationsBriefing } from "./_components/operations-briefing";
-import { DailyBriefingCard } from "./_components/daily-briefing-card";
+import { DailyBriefingCard, dailyBriefingSummary } from "./_components/daily-briefing-card";
+import { SecondarySection } from "./_components/secondary-section";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
-import { SlimTrend } from "./_components/slim-trend";
+import { SlimTrend, hasTrendContent } from "./_components/slim-trend";
 
 const EMPTY_ENROLLMENT_CHANGES = {
   newCount: 0,
@@ -285,7 +286,14 @@ export default async function TodayPage() {
   }
   const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
   const unpaidCount = payment?.unpaidCount ?? 0;
+  // '빠른 작업'·'실시간 운영'·'대화형 비서'는 뺐다 — 지시서 §10 "같은 동작을 두 곳에 두지 말 것": 각 화면의
+  // Primary가 이미 그 일이다(학생목록 '새 학생' 등). 원장 2026-09-03 "지시서 그대로".
   const showFollowUps = access.read.consultations;
+  const trendVisible = {
+    attendance: access.read.attendance,
+    billing: access.read.billing,
+    enrollment: access.read.students,
+  };
 
   return (
     <div className="space-y-5 pb-4">
@@ -315,11 +323,28 @@ export default async function TodayPage() {
         enrollmentChangesUnavailable={access.read.students && enrollmentChangesResult.unavailable}
       />
 
-      {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
-      {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} /> : null}
-
       {/* ② 오늘 브리핑 — 조회·정리만, 실행은 원본 화면에서 */}
       <OperationsBriefing briefing={briefing} />
+
+      {/* 1차 화면의 시선 앵커는 셋뿐이다(지시서 §4 "시선 앵커 3개 이하", 원장 2026-09-03 "지시서 그대로") —
+            ① 인사·지표 ② 오늘 브리핑 ③ 후속조치. 나머지(매니저 팀 보고·학원생 증감·운영 맥락)는 접힌
+          2차 구역(`SecondarySection`)으로 내렸다. 접힌 줄이 오늘 보고의 **제목**을 나르므로 1차에서도 "보고가
+          있다·무슨 내용인지"는 읽힌다.
+          ⚠️ **대화형 비서·실시간 운영(오늘 일정)·빠른 작업은 화면에서 뺐다**(원장 2026-09-03 지목) — 되살리려면
+             부품부터 다시 만들어야 한다(파일도 함께 지워졌다). */}
+      {canSeeDailyBriefing ? (
+        <SecondarySection
+          id="daily-briefing"
+          label="매니저 팀 보고"
+          hint={(() => {
+            // 조회 실패는 "보고 없음"과 다른 사실 — 접힌 줄 한 줄이 1차에서 보이는 전부라 여기서 갈라 적는다.
+            const s = dailyBriefingSummary(dailyBriefingResult.data, dailyBriefingResult.unavailable);
+            return s.tone === "danger" ? <span className="text-danger font-bold">{s.text}</span> : s.text;
+          })()}
+        >
+          <DailyBriefingCard briefing={dailyBriefingResult.data} links={briefingLinks} unavailable={dailyBriefingResult.unavailable} />
+        </SecondarySection>
+      ) : null}
 
       {/* 상담 후속조치 — 원장 지시(2026-09-03)로 '실시간 운영/지금 진행 중' 묶음은 걷어냈지만,
           이 카드는 그 안에 얹혀 있었을 뿐 다른 신호라 그대로 남긴다(오늘 브리핑의 후속조치 신호와 같은 소스). */}
@@ -331,40 +356,35 @@ export default async function TodayPage() {
         />
       ) : null}
 
-      {/* 학원생 증감 — 판단 큐 다음의 보조 맥락. */}
-      <SlimTrend
-        data={trend}
-        change={enrollmentChangeResult.data}
-        subjects={subjects}
-        visible={{
-          attendance: access.read.attendance,
-          billing: access.read.billing,
-          enrollment: access.read.students,
-        }}
-      />
+      {/* 2차 — 최근 7일 추세(학생 증감·출석·수납). 그릴 것이 없으면 줄 자체를 안 세운다(빈 구역 금지). */}
+      {hasTrendContent(trend, enrollmentChangeResult.data, trendVisible) ? (
+        <SecondarySection id="trend" label="학원생 증감" hint={`최근 ${enrollmentChangeResult.data.days}일`}>
+          <SlimTrend data={trend} change={enrollmentChangeResult.data} subjects={subjects} visible={trendVisible} />
+        </SecondarySection>
+      ) : null}
 
-      {/* 카드 안의 카드 — 학원생 증감 카드와 같은 결(원장 2026-08-31: *"카드 안에 단 구분 시키던지해서 깔끔해지게"*).
-          세 장이 따로 떠 있으면 내용이 짧은 쪽(공지)이 위로 붙어 아래가 휑했다. 하나로 감싸고
-          안쪽은 패널로 낮춰(그림자 없는 rounded-xl) 높이를 맞춘다 — 빈 패널도 같은 높이로 늘어난다. */}
-      <section
-        aria-labelledby="operations-context-title"
-        className="bg-card border-line shadow-card rounded-2xl border px-5 py-4"
+      {/* 2차 — 운영 맥락(누적 미수·등록상담·공지). 세 장을 **카드로 다시 싸지 않는다**(지시서 §4 "카드 안의 카드 금지").
+          짧은 쪽(공지)이 위로 붙어 아래가 휑하던 문제는 grid 기본(stretch)이 그대로 막는다(`items-start`를 두지 말 것).
+          ⚠️ 접힌 줄의 요약에 미수·공지 **건수를 적지 않는다** — 두 목록은 상위 N으로 잘린 미리보기라 길이가 곧 건수가
+          아니다([[#89]]). 등록상담만 쿼리가 세어 준 총건수다. */}
+      <SecondarySection
+        id="context"
+        label="운영 맥락"
+        hint={[
+          access.read.billing ? "누적 미수" : null,
+          // 조회 실패면 건수 대신 실패를 적는다(카드는 그대로 서 있으니 요약에서 지우면 카드와 어긋난다).
+          access.read.enrollment
+            ? enrollListResult.unavailable
+              ? "등록상담(불러오지 못함)"
+              : `등록상담 최근 30일 ${enrollList.total}건`
+            : null,
+          "공지",
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       >
-        <header className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-text-dim text-[12px] font-bold">
-              참고 지표
-            </p>
-            <h2 id="operations-context-title" className="text-foreground mt-0.5 text-[17px] font-bold tracking-tight">
-              운영 맥락
-            </h2>
-          </div>
-          <p className="text-text-dim text-[12px]">결정 뒤에 참고할 수납·등록·팀 공지입니다.</p>
-        </header>
-        {/* 안쪽 패널: 그림자를 빼고 모서리를 한 단 낮춘다(바깥 카드가 이미 떠 있으므로 두 번 띄우지 않는다).
-            높이는 grid 기본(stretch)에 맡긴다 — `items-start`를 두면 짧은 패널이 위로 붙는다. */}
         <div
-          className="grid gap-4 [&>section]:rounded-xl [&>section]:shadow-none"
+          className="grid gap-4"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 19rem), 1fr))" }}
         >
           {access.read.billing ? (
@@ -381,7 +401,7 @@ export default async function TodayPage() {
             manageUnavailable={manageAnnouncementsResult.unavailable}
           />
         </div>
-      </section>
+      </SecondarySection>
     </div>
   );
 }

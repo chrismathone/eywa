@@ -30,7 +30,7 @@ import {
   isSearchActive,
   matchesStudentSearch,
 } from "@/features/attendance/student-search";
-import { SearchScopeChip, StudentSearchBox } from "@/features/attendance/components/student-search-box";
+import { SearchScopeChip, StudentSearchToggle } from "@/features/attendance/components/student-search-box";
 
 /** 표의 한 행이 들고 있는 검색 재료 — **그 줄에 실제로 그려진 값만**(영문 이름 등은 이 표에 없다). */
 export type AttendanceSearchRow = {
@@ -136,23 +136,19 @@ export function AttendanceSearchProvider({
 }
 
 /** 툴바의 입력칸 + 지금 걸린 필터 표기. 표에 행이 하나도 없으면 아예 안 그린다(검색할 게 없다). */
-export function AttendanceSearchBox() {
+export function AttendanceSearchToggle() {
   const ctx = useAttendanceSearch();
   const t = useSheetT();
   if (!ctx || ctx.totalStudents === 0) return null;
+  // 토글(§10 "검색은 필요할 때만") — 검색어가 걸려 있으면(허브에서 들고 온 씨앗 포함) 언제나 펼친 채 + 결과 칩.
+  // ⚠️ 2026-08-20부터 이 화면의 집계는 **검색을 따라간다**(합계 줄·반 머리행·상단 스탯 전부) —
+  //    칩 문구를 "전체 기준"으로 되돌리지 말 것. 전체 값은 사라지지 않고 `검색분 / 전체`로 함께 선다.
   return (
-    <>
-      <StudentSearchBox value={ctx.query} onChange={ctx.setQuery} />
-      {ctx.active ? (
-        // ⚠️ 2026-08-20부터 이 화면의 집계는 **검색을 따라간다**(합계 줄·반 머리행·상단 스탯 전부) —
-        //    문구를 "전체 기준"으로 되돌리지 말 것. 전체 값은 사라지지 않고 `검색분 / 전체`로 함께 선다.
-        <SearchScopeChip
-          shown={ctx.matchedStudents}
-          total={ctx.totalStudents}
-          totalsNote={t("att.search.totalsNote")}
-        />
-      ) : null}
-    </>
+    <StudentSearchToggle
+      value={ctx.query}
+      onChange={ctx.setQuery}
+      chip={<SearchScopeChip shown={ctx.matchedStudents} total={ctx.totalStudents} totalsNote={t("att.search.totalsNote")} />}
+    />
   );
 }
 
@@ -197,7 +193,7 @@ export function ClassSearchCount({ rowKeys }: { rowKeys: readonly string[] }) {
   const { active, count } = useClassMatched(rowKeys);
   if (!active) return null;
   return (
-    <span className="text-amber num text-[11px] font-bold">{tf("att.search.count", { n: count })}</span>
+    <span className="text-amber num text-xs font-bold">{tf("att.search.count", { n: count })}</span>
   );
 }
 
@@ -218,7 +214,7 @@ export function SearchEmptyRow({ colSpan, where }: { colSpan: number; where: str
       <tr>
         <td colSpan={colSpan} className="border-line border-b px-4 py-6">
           <div className="sticky left-0 flex w-fit items-center gap-2">
-            <span className="text-foreground text-[13px] font-bold">
+            <span className="text-foreground text-sm font-bold">
               {emptySearchMessage(ctx.query, where, lang)}
             </span>
             <button

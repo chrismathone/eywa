@@ -55,8 +55,8 @@ function Chip({
 }) {
   return (
     <div className={`rounded-full px-3 py-1.5 ${tone}`}>
-      <span className="text-[18px] font-bold tabular">{value}</span>
-      <span className="ml-1 text-[12px] font-bold">{label}</span>
+      <span className="text-lg font-bold tabular">{value}</span>
+      <span className="ml-1 text-xs font-bold">{label}</span>
     </div>
   );
 }
@@ -135,7 +135,7 @@ export function StatusBoard({
           value={sum.viewed}
           tone="border-line text-text-dim border"
         />
-        <span className="text-text-faint ml-auto text-[12px]">
+        <span className="text-text-faint ml-auto text-xs">
           {tf("os.status.unsent", { n: sum.unsent, total: sum.total })}
           {/* 분모에서 뺀 행을 밝힌다 — 안 밝히면 "학생은 8명인데 전체가 5?"가 된다. */}
           {sum.excluded > 0 ? tf("os.status.excludedTail", { n: sum.excluded }) : ""}
@@ -143,7 +143,7 @@ export function StatusBoard({
       </div>
 
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
-        <table className="w-full min-w-[640px] text-left text-[12px]">
+        <table className="w-full min-w-[640px] text-left text-xs">
           <thead>
             <tr className="border-line text-text-faint group border-b">
               <SortableTh sortKey="student" state={sort} onSort={setSort}>
@@ -182,27 +182,27 @@ export function StatusBoard({
                 {/* 반 머리행 — 반 이름 + 인원 + 그 반의 미작성 수(급한 반이 바로 보이게). */}
                 <tr className="bg-bg-soft border-line border-b">
                   <th colSpan={5} className="px-3 py-1.5 text-left">
-                    <span className="text-foreground text-[12px] font-bold">
+                    <span className="text-foreground text-xs font-bold">
                       {/* 🔴 반 이름은 한국어 그대로(위 top-bar 주석과 같은 이유). */}
                       {className === NO_CLASS ? t("os.status.noClass") : className}
                     </span>
-                    <span className="text-text-faint ml-2 text-[11px]">
+                    <span className="text-text-faint ml-2 text-xs">
                       {/* ⚠️ 행 수가 아니라 **학생 수** — 한 학생이 두 과목이면 2행이라 행 수를 쓰면 인원이 부푼다. */}
                       {tf("os.list.count", {
                         n: new Set(groupRows.map((r) => r.student.id)).size,
                       })}
                     </span>
                     {todo > 0 ? (
-                      <span className="text-danger ml-2 text-[11px] font-bold">
+                      <span className="text-danger ml-2 text-xs font-bold">
                         {tf("os.status.todoN", { n: todo })}
                       </span>
                     ) : allExcluded ? (
                       // 🔴 "전원 작성"이라고 하면 거짓말이다 — 아무도 안 썼고, 쓸 일도 없는 반이다.
-                      <span className="text-text-dim ml-2 text-[11px] font-bold">
+                      <span className="text-text-dim ml-2 text-xs font-bold">
                         {t("os.status.noSendClass")}
                       </span>
                     ) : (
-                      <span className="text-primary ml-2 text-[11px] font-bold">
+                      <span className="text-primary ml-2 text-xs font-bold">
                         {t("os.status.allWritten")}
                       </span>
                     )}
@@ -231,7 +231,7 @@ export function StatusBoard({
                         </span>
                         {r.student.attendance !== MARK_PRESENT ? (
                           <span
-                            className={`ml-1.5 rounded-pill px-1.5 py-px text-[10px] font-bold ${
+                            className={`ml-1.5 rounded-pill px-1.5 py-px text-xs font-bold ${
                               r.student.attendance === MARK_LATE
                                 ? "bg-amber-soft text-amber"
                                 : "bg-danger text-white"
@@ -246,7 +246,7 @@ export function StatusBoard({
                       </td>
                       <td className="px-3 py-2">
                         <span
-                          className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${meta.cls}`}
+                          className={`rounded-pill px-2 py-0.5 text-xs font-bold ${meta.cls}`}
                         >
                           {t(meta.label)}
                         </span>
@@ -254,21 +254,21 @@ export function StatusBoard({
                       <td className="px-3 py-2">
                         {badge ? (
                           <span
-                            className={`text-[11px] font-bold ${badge.cls}`}
+                            className={`text-xs font-bold ${badge.cls}`}
                           >
                             {badge.label}
                           </span>
                         ) : (
-                          <span className="text-text-faint text-[11px]">—</span>
+                          <span className="text-text-faint text-xs">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-right">
                         {views > 0 ? (
-                          <span className="text-text-dim tabular text-[11px]">
+                          <span className="text-text-dim tabular text-xs">
                             {tf("os.status.views", { n: views })}
                           </span>
                         ) : (
-                          <span className="text-text-faint text-[11px]">—</span>
+                          <span className="text-text-faint text-xs">—</span>
                         )}
                       </td>
                     </tr>

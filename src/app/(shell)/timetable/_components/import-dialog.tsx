@@ -206,7 +206,7 @@ export function TimetableImportDialog({
             aria-label={sheet ? "구글 시트에서 가져오기" : "엑셀 가져오기"}
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-bold">
+              <h2 className="text-foreground text-base font-bold">
                 {sheet ? "구글 시트에서 가져오기" : "시간표 엑셀 가져오기"}
               </h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
@@ -216,10 +216,10 @@ export function TimetableImportDialog({
 
             {sheet ? (
               <>
-                <p className="text-text-dim mt-1 text-[11px]">
+                <p className="text-text-dim mt-1 text-xs">
                   연결된 구글 시트의 <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 뒤 불러오세요.
                 </p>
-                <p className="text-text-faint mt-1 flex items-start gap-1 text-[11px]">
+                <p className="text-text-faint mt-1 flex items-start gap-1 text-xs">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
                   <span>시트에서 편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b> — 전체 덮어쓰기라 편집분이 사라집니다.</span>
                 </p>
@@ -237,16 +237,16 @@ export function TimetableImportDialog({
               </>
             ) : (
               <>
-                <p className="text-text-dim mt-1 text-[11px]">
+                <p className="text-text-dim mt-1 text-xs">
                   내보낸 엑셀의 <b>수강편집</b> 시트에서 학생의 <b>반</b>만 바꿔 다시 올리세요.
                 </p>
-                <p className="text-text-faint mt-1 text-[11px]">
+                <p className="text-text-faint mt-1 text-xs">
                   구글시트로 편집했다면 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받아 올리면 됩니다.
                 </p>
                 {/* 구조 가져오기 지원 과목(영어)만 — 파일 경로는 '수강편집'만 읽어 배치 편집이 조용히 무시된다.
                     사용자가 강사별 격자를 고쳐 올리고 "반영됐겠지" 하는 오해를 막는 안내(2026-07-15). */}
                 {supportsStructureImport(subject) ? (
-                  <p className="text-text-faint mt-1 flex items-start gap-1 text-[11px]">
+                  <p className="text-text-faint mt-1 flex items-start gap-1 text-xs">
                     <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
                     <span>
                       이 경로는 <b>학생 반이동만</b> 반영합니다 — 강사별 시간표 탭에서 <b>수업 배치</b>를 바꿔도
@@ -255,7 +255,7 @@ export function TimetableImportDialog({
                   </p>
                 ) : null}
 
-                <label className="text-foreground mt-3 block text-[12px] font-medium">
+                <label className="text-foreground mt-3 block text-xs font-medium">
                   엑셀 파일 <span className="text-danger">*</span>
                 </label>
                 <div className="mt-1.5 flex items-center gap-2">
@@ -282,7 +282,7 @@ export function TimetableImportDialog({
                   </button>
                 </div>
                 {!file ? (
-                  <p className="text-text-faint mt-1.5 text-[11px]">엑셀 파일을 선택하면 미리보기가 활성화됩니다.</p>
+                  <p className="text-text-faint mt-1.5 text-xs">엑셀 파일을 선택하면 미리보기가 활성화됩니다.</p>
                 ) : null}
               </>
             )}
@@ -296,10 +296,10 @@ export function TimetableImportDialog({
               disabled={applying || !!result?.applied}
             />
 
-            {error ? <p className="text-chart-4 mt-3 text-[12px]">{error}</p> : null}
+            {error ? <p className="text-chart-4 mt-3 text-xs">{error}</p> : null}
 
             {diff ? (
-              <div className="mt-4 space-y-3 text-[12px]">
+              <div className="mt-4 space-y-3 text-xs">
                 {/* 요약 카운트 — 무엇이 얼마나 바뀌는지 */}
                 <div className="flex flex-wrap gap-3 num">
                   <span className="text-primary">이동 {diff.moves.length}</span>
@@ -364,7 +364,7 @@ export function TimetableImportDialog({
 
                 {/* 확인 필요 · 적용에서 제외되는 항목 */}
                 {diff.warnings.length > 0 ? (
-                  <div className="bg-amber-soft text-amber rounded-sm p-2 text-[11px]">
+                  <div className="bg-amber-soft text-amber rounded-sm p-2 text-xs">
                     <p className="mb-1 flex items-center gap-1 font-bold">
                       <AlertTriangle className="size-3" /> 확인 필요 · 적용에서 제외 {diff.warnings.length}건
                     </p>
@@ -377,14 +377,14 @@ export function TimetableImportDialog({
                 ) : null}
 
                 {total === 0 ? (
-                  <p className="text-text-faint text-[11px]">가져올 변경이 없습니다.</p>
+                  <p className="text-text-faint text-xs">가져올 변경이 없습니다.</p>
                 ) : null}
 
                 <button
                   type="button"
                   onClick={apply}
                   disabled={total === 0 || applying}
-                  className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
+                  className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition disabled:opacity-40"
                 >
                   {applying ? <Loader2 className="size-3 animate-spin" /> : null}
                   {total > 0 ? `${total}건 적용` : "변경 없음"}
@@ -394,9 +394,9 @@ export function TimetableImportDialog({
 
             {result ? (
               result.error ? (
-                <p className="text-chart-4 mt-3 text-[12px]">{sanitizeErrorText(result.error)}</p>
+                <p className="text-chart-4 mt-3 text-xs">{sanitizeErrorText(result.error)}</p>
               ) : (
-                <p className="text-primary mt-3 text-[12px]">
+                <p className="text-primary mt-3 text-xs">
                   적용 완료 — 이동 {result.applied?.moved} · 삭제 {result.applied?.removed} · 추가{" "}
                   {result.applied?.added}
                   {/* 휴원 학생은 거절·스킵이 아니라 **휴원 표식을 달고** 들어간다 — 조용히 넘어가면

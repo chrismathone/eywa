@@ -162,9 +162,10 @@ describe("buildRichCardGroups", () => {
     expect(g.cards.find((c) => c.classId === "b")!.days).toEqual(["tue"]);
     // 🔴 교시 행도 실제 쓰는 것만 — 둘 다 1교시(14:20)뿐이라 한 행.
     expect(g.periodRows.map((p) => p.label)).toEqual(["1교시"]);
-    // 명단 행수 = 그룹 내 max (2026-07-27). 대기 1명 → 1행, 퇴원 0명 → 0(섹션 자체를 안 그린다).
+    // 명단 행수 = 그룹 내 max (2026-07-27). 🔴 대기·퇴원은 **0명이어도 1줄**을 잡는다(원장 2026-09-07:
+    // *"대기/퇴원을 항상 보여줄것"*) — 사람이 빠질 때마다 카드가 밀리지 않고, 끌어다 놓을 자리가 늘 있다.
     expect(g.rosterRows.hold).toBe(1);
-    expect(g.rosterRows.withdrawn).toBe(0);
+    expect(g.rosterRows.withdrawn).toBe(1);
     expect(g.rosterRows.active).toBe(1);
   });
 

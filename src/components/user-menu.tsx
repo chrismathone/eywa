@@ -44,7 +44,7 @@ export function UserMenu({
             <span className="min-w-0 truncate text-sm font-normal">
               {displayName}
               {jobTitle ? <span className="text-text-dim"> · {jobTitle}</span> : null}
-              <span className="text-text-faint block truncate text-[11px]">{email}</span>
+              <span className="text-text-faint block truncate text-xs">{email}</span>
             </span>
           ) : (
             <span className="truncate text-sm font-normal">{email}</span>

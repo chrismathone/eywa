@@ -93,7 +93,7 @@ export async function SheetsFace({
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
         {/* 좌 — 최초 1회 설정 안내(서비스계정은 새 시트를 못 만들어 사람이 만든 시트에 공유가 필요) */}
-        <section className="border-border bg-card flex flex-col rounded-2xl border p-5 text-[13px] leading-relaxed">
+        <section className="border-border bg-card flex flex-col rounded-2xl border p-5 text-sm leading-relaxed">
           <p className="text-foreground font-bold">처음 한 번 설정 (과목마다)</p>
           <ol className="text-text-dim mt-2 list-decimal space-y-1.5 pl-5">
             <li>
@@ -102,7 +102,7 @@ export async function SheetsFace({
             <li>
               각 시트를 아래 계정에 <strong>‘편집자’로 공유</strong>합니다:
               {saEmail ? (
-                <code className="bg-bg-soft border-line mt-1 block w-fit rounded border px-1.5 py-0.5 text-[12px] break-all">
+                <code className="bg-bg-soft border-line mt-1 block w-fit rounded border px-1.5 py-0.5 text-xs break-all">
                   {saEmail}
                 </code>
               ) : (
@@ -114,7 +114,7 @@ export async function SheetsFace({
             </li>
             <li>토글을 켜고, 시간표 화면의 ‘시트 반영’ 버튼으로 동기화합니다.</li>
           </ol>
-          <p className="text-text-faint mt-auto flex items-start gap-1.5 pt-3 text-[12px] text-balance">
+          <p className="text-text-faint mt-auto flex items-start gap-1.5 pt-3 text-xs text-balance">
             <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
             <span>서비스계정은 저장공간이 없어 시트를 새로 만들 수 없습니다(미리 만든 시트 필요). 동기화는
             그 시트를 <strong>전체 덮어쓰기</strong>하므로 다른 내용과 섞지 말고 과목 전용 시트로 쓰세요.

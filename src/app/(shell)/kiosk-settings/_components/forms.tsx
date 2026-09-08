@@ -16,8 +16,8 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 function Notice({ state }: { state: KioskActionState }) {
   if (!state) return null;
   if (state.error)
-    return <p className="text-danger mt-2 text-[13px]">{state.error}</p>;
-  if (state.ok) return <p className="text-primary mt-2 text-[13px]">{state.ok}</p>;
+    return <p className="text-danger mt-2 text-sm">{state.error}</p>;
+  if (state.ok) return <p className="text-primary mt-2 text-sm">{state.ok}</p>;
   return null;
 }
 
@@ -83,17 +83,17 @@ export function RevokeDeviceButton({ deviceId }: { deviceId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="text-danger hover:bg-danger/5 rounded px-2 py-1 text-[12px] disabled:opacity-50"
+        className="text-danger hover:bg-danger/5 rounded px-2 py-1 text-xs disabled:opacity-50"
       >
         {pending ? "…" : "폐기"}
       </button>
-      {state?.error ? <span className="text-danger ml-1 text-[11px]">{state.error}</span> : null}
+      {state?.error ? <span className="text-danger ml-1 text-xs">{state.error}</span> : null}
     </form>
   );
 }
 
 const inputCls = "border-border bg-card h-9 w-full rounded-md border px-3 text-sm";
-const labelCls = "text-text-dim mb-1 block text-[12px] font-medium";
+const labelCls = "text-text-dim mb-1 block text-xs font-medium";
 
 /** 카카오 알림톡 연동 정보(pfId·등하원 템플릿·SMS대체) 저장 폼. */
 export function KakaoChannelForm({ status }: { status: KakaoChannelStatus }) {
@@ -133,7 +133,7 @@ export function KakaoChannelForm({ status }: { status: KakaoChannelStatus }) {
           />
         </div>
       </div>
-      <label className="text-foreground flex items-center gap-2 text-[13px]">
+      <label className="text-foreground flex items-center gap-2 text-sm">
         <input type="checkbox" name="smsFallback" defaultChecked={status.smsFallback} className="size-4" />
         알림톡 실패 시 SMS로 대체발송
       </label>

@@ -133,18 +133,18 @@ export function StatsMatrix({
 
   return (
     <>
-      <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
+      <DragScrollArea className="bg-card shadow-card rounded-2xl">
         <table className="w-full min-w-[820px] text-sm">
           <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
-            <tr>
-              <th className="micro px-3 py-2 text-center">태그</th>
-              <th className={`micro px-2 py-2 text-center ${DIVIDER}`}>연도</th>
+            <tr className="text-text-dim text-sm [&_th]:font-bold">
+              <th className="px-3 py-2 text-center">태그</th>
+              <th className={`px-2 py-2 text-center ${DIVIDER}`}>연도</th>
               {MONTHS.map((m) => (
-                <th key={m} className={`micro px-1.5 py-2 text-center ${DIVIDER}`}>
+                <th key={m} className={`px-1.5 py-2 text-center ${DIVIDER}`}>
                   {m}월
                 </th>
               ))}
-              <th className={`micro px-2 py-2 text-center ${DIVIDER}`}>합계</th>
+              <th className={`px-2 py-2 text-center ${DIVIDER}`}>합계</th>
             </tr>
           </thead>
           <tbody className="divide-line divide-y">
@@ -161,7 +161,7 @@ export function StatsMatrix({
                     {yi === 0 ? (
                       <td
                         rowSpan={years.length}
-                        className={`px-3 py-2 align-top text-xs whitespace-nowrap ${
+                        className={`px-3 py-2 align-top text-sm whitespace-nowrap ${
                           g.strong ? "font-bold" : ""
                         } ${g.key === NONE_KEY ? "text-text-dim" : ""}`}
                       >
@@ -177,11 +177,11 @@ export function StatsMatrix({
                         </span>
                       </td>
                     ) : null}
-                    <td className={`num text-text-dim px-2 py-2 text-center text-xs ${DIVIDER}`}>
+                    <td className={`num text-text-dim px-2 py-2 text-center text-sm ${DIVIDER}`}>
                       {y}
                     </td>
                     {arr.map((n, i) => (
-                      <td key={i} className={`num px-1.5 py-2 text-center text-xs ${DIVIDER}`}>
+                      <td key={i} className={`num px-1.5 py-2 text-center text-sm ${DIVIDER}`}>
                         <CountCell
                           n={n}
                           onOpen={() => setPicked({ group: g, year: y, month: i + 1 })}
@@ -189,7 +189,7 @@ export function StatsMatrix({
                         />
                       </td>
                     ))}
-                    <td className={`num px-2 py-2 text-center text-xs ${DIVIDER}`}>
+                    <td className={`num px-2 py-2 text-center text-sm ${DIVIDER}`}>
                       <CountCell
                         n={total}
                         strong
@@ -203,7 +203,7 @@ export function StatsMatrix({
             )}
           </tbody>
         </table>
-        <p className="text-text-faint border-line border-t px-3 py-1.5 text-[11px]">
+        <p className="text-text-faint border-line border-t px-3 py-1.5 text-xs">
           숫자를 누르면 그 칸의 일정이 열립니다 · 여러 날 일정은 시작일 기준 1건 ·{" "}
           <span className="num">{years[0]}</span>년 이전에 시작해 이어지는 일정은 집계·목록에 없습니다
         </p>

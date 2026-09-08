@@ -227,7 +227,7 @@ export function ConsultationReportEditor({
       />
       {/* 헤더: 수정/생성 시각 + 재분석·TXT·모두펼치기 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
+        <span className="text-text-faint inline-flex items-center gap-1 text-xs">
           {attribution ? (
             <>
               <Pencil className="size-3" />
@@ -243,7 +243,7 @@ export function ConsultationReportEditor({
             onClick={reanalyze}
             disabled={reanalyzing}
             title="녹음 전사를 다시 분석"
-            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-50"
+            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition disabled:opacity-50"
           >
             {reanalyzing ? (
               <Loader2 className="size-3 animate-spin" />
@@ -255,13 +255,13 @@ export function ConsultationReportEditor({
           <button
             type="button"
             onClick={downloadTxt}
-            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition"
+            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
           >
             <Download className="size-3" /> TXT
           </button>
           {modelLabel ? (
             <span
-              className="border-line text-text-faint inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]"
+              className="border-line text-text-faint inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs"
               title="이 분석을 생성한 AI 모델"
             >
               <EyIcon name="sparkle" size={10} />
@@ -272,7 +272,7 @@ export function ConsultationReportEditor({
             <button
               type="button"
               onClick={toggleAll}
-              className="text-text-faint hover:text-primary px-1 text-[11px] transition"
+              className="text-text-faint hover:text-primary px-1 text-xs transition"
             >
               {allOpen ? "모두 접기" : "모두 펼치기"}
             </button>
@@ -297,7 +297,7 @@ export function ConsultationReportEditor({
               onClick={() => toggle(key)}
               className="hover:bg-bg-soft/60 flex w-full items-center justify-between px-3.5 py-2.5 text-left transition"
             >
-              <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-bold">
+              <h3 className="text-foreground flex items-center gap-1.5 text-sm font-bold">
                 <EyIcon name={icon} size={15} />
                 {label}
               </h3>
@@ -317,7 +317,7 @@ export function ConsultationReportEditor({
                       }
                     }}
                     title="이 섹션 수정"
-                    className="text-text-faint hover:text-primary hover:bg-bg-soft inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] transition"
+                    className="text-text-faint hover:text-primary hover:bg-bg-soft inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs transition"
                   >
                     <Pencil className="size-3" /> 수정
                   </span>
@@ -340,7 +340,7 @@ export function ConsultationReportEditor({
                       autoFocus
                       className="border-line bg-background text-foreground focus:ring-primary/40 w-full resize-y rounded-md border px-3 py-2 text-sm leading-relaxed focus:ring-1 focus:outline-none"
                     />
-                    <p className="text-text-faint text-[11px]">
+                    <p className="text-text-faint text-xs">
                       줄바꿈·“- ”·번호로 항목을 나눌 수 있습니다(화면·인쇄에 그대로 반영).
                     </p>
                     <div className="flex items-center justify-end gap-1.5">
@@ -388,7 +388,7 @@ export function ConsultationReportEditor({
             onClick={() => toggle(FLOW_KEY)}
             className="hover:bg-bg-soft/60 flex w-full items-center justify-between px-3.5 py-2.5 text-left transition"
           >
-            <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-bold">
+            <h3 className="text-foreground flex items-center gap-1.5 text-sm font-bold">
               <EyIcon name="layers" size={15} />
               상담 흐름 수형도
             </h3>

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { useWindowStore, instanceLabel } from "./window-store";
 import { usePrefs } from "./use-prefs";
-import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
+import { railWidth } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
 import Image from "next/image";
 import { FloatingWindow } from "./floating-window";
@@ -33,7 +33,9 @@ const HEADER = 0;
 export function WorkspaceCanvas({ owner }: { owner: string }) {
   const isDesktop = useIsDesktop();
   const pathname = usePathname();
-  const isDesktopSurface = pathname === "/dashboard";
+  // 셸 main 자체가 화면인 라우트 = **메뉴**뿐이다(원장 2026-09-07: 운영실도 창으로).
+  // 창을 다 닫으면 이 화면이 배경으로 남는다 — 빈 바탕 대신 "다음에 뭘 열지"가 보인다.
+  const isDesktopSurface = pathname === "/menu";
   const order = useWindowStore((s) => s.order);
   const windows = useWindowStore((s) => s.windows);
   const focusedId = useWindowStore((s) => s.focusedId);
@@ -64,8 +66,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   // 사이드바 실제 너비 = 펼침이면 저장 너비, 접힘이면 레일(52). 펼침/접힘·드래그 드롭으로 바뀌면
   // 스테이지가 따라가 창 최대치(최대화·스냅)가 사이드바 오른쪽에 정확히 맞는다.
   const sidebarExpanded = usePrefs((s) => s.sidebarExpanded);
-  const sidebarWidth = usePrefs((s) => s.sidebarWidth);
-  const rail = sidebarExpanded ? sidebarWidth : SIDEBAR_COLLAPSED_W;
+  const rail = railWidth(sidebarExpanded);
 
   // 스테이지 = 뷰포트 − 사이드바(rail) − 헤더. rail(사이드바 너비)이나 브라우저 크기가 바뀌면
   // 재계산 → setStage가 최대화·스냅 창을 새 영역에 재배치(reflow).
@@ -167,6 +168,11 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         st.setWindowDirty(sourceWinId, data.dirty === true);
         return;
       }
+      if (data.type === "eywa-window-maximize") {
+        // 창 안 '최소 크기 위반' 안내의 [창 최대화](WindowMinSizeNotice). 이미 최대화면 토글이 되돌리므로 건너뛴다.
+        if (!st.windows[sourceWinId]?.maximized) st.toggleMax(sourceWinId);
+        return;
+      }
       if (data.type === "eywa-open-window" && data.id && data.href) {
         // autoClose=true(useOpenFormWindow "새 X" 폼)면 제출 성공 후 창 자동 닫힘. shift+클릭(WindowLink)은
         // autoClose 없음 → false(그냥 새 창). spawnedBy=소스 창 id → autoClose로 닫힐 때 그 리스트 창도 reload
@@ -226,10 +232,10 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
               <div className="text-center">
                 {minimizedWins.length > 0 ? (
                   <>
-                    <p className="text-foreground text-[15px] font-bold">
+                    <p className="text-foreground text-base font-bold">
                       최소화한 창 {minimizedWins.length}개
                     </p>
-                    <p className="text-text-dim mt-1 text-[13px]">
+                    <p className="text-text-dim mt-1 text-sm">
                       눌러서 다시 열 수 있어요. 왼쪽 아래 독에도 있습니다.
                     </p>
                     <div className="pointer-events-auto mt-3 flex flex-wrap items-center justify-center gap-1.5">
@@ -238,7 +244,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
                           key={w.id}
                           type="button"
                           onClick={() => restore(w.id)}
-                          className="border-line bg-card text-foreground hover:border-primary/50 hover:bg-bg-soft rounded-full border px-3 py-1 text-[12px] transition"
+                          className="border-line bg-card text-foreground hover:border-primary/50 hover:bg-bg-soft rounded-full border px-3 py-1 text-xs transition"
                         >
                           {instanceLabel(w.id, w.params.title)}
                         </button>
@@ -247,8 +253,8 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
                   </>
                 ) : (
                   <>
-                    <p className="text-foreground text-[15px] font-bold">열린 창이 없어요</p>
-                    <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
+                    <p className="text-foreground text-base font-bold">열린 창이 없어요</p>
+                    <p className="text-text-dim mt-1 text-sm">왼쪽 메뉴를 눌러 창을 여세요.</p>
                   </>
                 )}
               </div>

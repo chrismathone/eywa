@@ -39,7 +39,7 @@ function Spans({ spans }: { spans: RichSpan[] }) {
         if (s.bold) cls += " font-bold";
         if (s.italic) cls += " italic";
         if (s.strike) cls += " line-through";
-        if (s.code) cls += " bg-bg-soft rounded px-1 text-[11px] font-mono";
+        if (s.code) cls += " bg-bg-soft rounded px-1 text-xs font-mono";
         if (s.href)
           return (
             <a key={i} href={s.href} target="_blank" rel="noopener noreferrer" className={`text-primary underline${cls}`}>
@@ -73,12 +73,12 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
     }
   }
   return (
-    <div className="space-y-1 text-[12px] leading-relaxed">
+    <div className="space-y-1 text-xs leading-relaxed">
       {lines.map((l, i) => {
         switch (l.kind) {
           case "heading":
             return (
-              <p key={i} className={`text-foreground font-bold ${l.level === 1 ? "text-[14px]" : "text-[13px]"} ${i > 0 ? "mt-2" : ""}`}>
+              <p key={i} className={`text-foreground font-bold ${l.level === 1 ? "text-sm" : "text-sm"} ${i > 0 ? "mt-2" : ""}`}>
                 <Spans spans={l.spans} />
               </p>
             );
@@ -122,7 +122,7 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
             );
           case "code":
             return (
-              <pre key={i} className="bg-bg-soft text-text-dim overflow-x-auto rounded-sm px-2 py-1 text-[11px]">
+              <pre key={i} className="bg-bg-soft text-text-dim overflow-x-auto rounded-sm px-2 py-1 text-xs">
                 {spansPlainInline(l.spans)}
               </pre>
             );
@@ -130,14 +130,14 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
             return <hr key={i} className="border-line my-1.5" />;
           case "image":
             return (
-              <p key={i} className="text-text-faint flex items-center gap-1.5 text-[11px]">
+              <p key={i} className="text-text-faint flex items-center gap-1.5 text-xs">
                 <EyIcon name="image" size={13} />
                 이미지 (Notion에서 열어 확인)
               </p>
             );
           case "table":
             return (
-              <p key={i} className="text-text-faint flex items-center gap-1.5 text-[11px]">
+              <p key={i} className="text-text-faint flex items-center gap-1.5 text-xs">
                 <EyIcon name="spreadsheet" size={13} />
                 표 (Notion에서 열어 확인)
               </p>
@@ -228,10 +228,10 @@ export function TaskDetailDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="pr-6 text-[15px] leading-snug">{task.title}</DialogTitle>
+          <DialogTitle className="pr-6 text-base leading-snug">{task.title}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           {hasRange ? (
             <span className="text-text-dim num">기간 {task.start} ~ {task.due}</span>
           ) : task.due ? (
@@ -275,33 +275,33 @@ export function TaskDetailDialog({
         {/* 본문 */}
         <div className="border-line max-h-[38vh] overflow-y-auto border-t pt-3">
           {loading && content === null ? (
-            <p className="text-text-faint py-4 text-center text-[12px]">내용 불러오는 중…</p>
+            <p className="text-text-faint py-4 text-center text-xs">내용 불러오는 중…</p>
           ) : content && content.length > 0 ? (
             <ContentBody lines={content} />
           ) : (
-            <p className="text-text-faint py-2 text-center text-[12px]">본문 내용이 없습니다.</p>
+            <p className="text-text-faint py-2 text-center text-xs">본문 내용이 없습니다.</p>
           )}
         </div>
 
         {/* 댓글 */}
         <div className="border-line max-h-[28vh] space-y-2.5 overflow-y-auto border-t pt-3">
-          <p className="text-text-faint text-[11px] font-bold">댓글</p>
+          <p className="text-text-faint text-xs font-bold">댓글</p>
           {loading && comments === null ? (
-            <p className="text-text-faint py-2 text-center text-[12px]">댓글 불러오는 중…</p>
+            <p className="text-text-faint py-2 text-center text-xs">댓글 불러오는 중…</p>
           ) : error ? (
-            <p className="text-danger py-2 text-center text-[12px]">{error}</p>
+            <p className="text-danger py-2 text-center text-xs">{error}</p>
           ) : comments && comments.length > 0 ? (
             comments.map((c) => (
-              <div key={c.id} className="text-[12px]">
+              <div key={c.id} className="text-xs">
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-foreground font-bold">{c.author}</span>
-                  <span className="text-text-faint text-[11px]">{timeLabel(c.time)}</span>
+                  <span className="text-text-faint text-xs">{timeLabel(c.time)}</span>
                 </div>
                 <p className="text-text-dim whitespace-pre-wrap">{c.text}</p>
               </div>
             ))
           ) : (
-            <p className="text-text-faint py-2 text-center text-[12px]">아직 댓글이 없습니다.</p>
+            <p className="text-text-faint py-2 text-center text-xs">아직 댓글이 없습니다.</p>
           )}
         </div>
 
@@ -311,13 +311,13 @@ export function TaskDetailDialog({
             onChange={(e) => setText(e.target.value)}
             placeholder="댓글 남기기…"
             rows={2}
-            className="border-line bg-card focus:border-primary min-h-[38px] flex-1 resize-none rounded-md border px-2 py-1.5 text-[12px] outline-none"
+            className="border-line bg-card focus:border-primary min-h-[38px] flex-1 resize-none rounded-md border px-2 py-1.5 text-xs outline-none"
           />
           <Button size="sm" disabled={posting || !text.trim()} onClick={submit}>
             남기기
           </Button>
         </div>
-        <p className="text-text-faint text-[11px]">작성 시 이름이 함께 기록됩니다.</p>
+        <p className="text-text-faint text-xs">작성 시 이름이 함께 기록됩니다.</p>
       </DialogContent>
 
       <ConfirmDialog

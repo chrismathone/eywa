@@ -200,11 +200,11 @@ export function HandoverBanner({
   return (
     <div className="border-primary/30 bg-primary-soft/40 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
       <div className="min-w-0">
-        <p className="text-primary inline-flex items-center gap-1.5 text-[13px] font-bold">
+        <p className="text-primary inline-flex items-center gap-1.5 text-sm font-bold">
           <UserCog className="size-4" />
           {t("cls.ho.bannerTitle")}
           {due ? (
-            <span className="bg-primary text-primary-foreground ml-1 rounded px-1.5 py-0.5 text-[10px]">
+            <span className="bg-primary text-primary-foreground ml-1 rounded px-1.5 py-0.5 text-xs">
               {t("cls.ho.due")}
             </span>
           ) : null}

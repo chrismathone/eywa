@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { leavePeriodLabel } from "@/features/leave/accrual";
 import { formatLeaveDays } from "@/features/leave/request-days";
-import { getApprovalBoxes, getMyLeaveBalance } from "@/features/approvals/server/queries";
+import { getApprovalBoxes, getMyLeaveBalance, needsMyDeferredConfirm } from "@/features/approvals/server/queries";
 import { DocList } from "./_components/doc-list";
 
 export const metadata = { title: "전자결재 — eywa" };
@@ -23,49 +23,42 @@ export const metadata = { title: "전자결재 — eywa" };
  * 예외로 얹힌다(파일럿). 상세는 [`access.ts`](../../../features/approvals/access.ts).
  */
 
-/** 탭(하이웍스 문서함) 정의 — 어느 함이 어떤 문서를 담는지 설명 문구까지 여기 한 곳. */
+/** 탭(하이웍스 문서함) 정의 — 빈 상태 문구까지 여기 한 곳(함 설명 문단은 §4로 걷었다 — 라벨이 곧 뜻이다). */
 const BOX_TABS = [
   {
     key: "all",
     label: "전체",
     empty: "관련 문서가 없습니다 — 위 ‘기안하기’로 시작하세요.",
-    note: "내가 기안·결재·참조로 관련된 모든 문서입니다.",
   },
   {
     key: "waiting",
     label: "결재 대기",
     empty: "결재할 문서가 없습니다.",
-    note: "내 차례인 문서와, 부재중에 후결로 넘어가 확인이 필요한 문서입니다.",
   },
   {
     key: "upcoming",
     label: "결재 예정",
     empty: "차례를 기다리는 문서가 없습니다.",
-    note: "내가 결재선에 있지만 아직 내 차례가 오지 않은 문서입니다.",
   },
   {
     key: "progress",
     label: "진행",
     empty: "진행 중인 문서가 없습니다 — 위 ‘기안하기’로 시작하세요.",
-    note: "내가 기안했거나 결재한, 아직 진행 중인 문서입니다.",
   },
   {
     key: "done",
     label: "완료",
     empty: "완료된 문서가 없습니다.",
-    note: "승인으로 끝난, 내가 관여한 문서입니다.",
   },
   {
     key: "rejected",
     label: "반려·회수",
     empty: "반려되거나 회수된 문서가 없습니다.",
-    note: "반려 또는 기안자 회수로 끝난, 내가 관여한 문서입니다.",
   },
   {
     key: "refs",
     label: "참조",
     empty: "참조로 지정된 문서가 없습니다.",
-    note: "결재 없이 열람만 하도록 참조로 지정된 문서입니다.",
   },
 ] as const;
 
@@ -109,16 +102,26 @@ export default async function ApprovalsPage({
     refs: boxes.refDocs,
   };
   const activeTab = BOX_TABS.find((t) => t.key === face)!;
+  // 🔴 조회 실패(loadError)·표 미적용(ready=false)이면 값을 **안 적는다** — 빈 배열 길이 0을 "0건"이라 찍으면 거짓
+  //    숫자다(`getApprovalBoxes`는 실패해도 `ready=true`인 빈 함을 돌려준다, 적대 리뷰 2026-09-04). 머리는 제목만 남는다.
+  const boxSummary =
+    boxes.ready && !boxes.loadError
+      ? `결재 대기 ${boxes.waiting.length}건 · 진행 ${boxes.inProgress.length}건 · 완료 ${boxes.completed.length}건`
+      : undefined;
+  // '결재 대기'엔 내 차례 문서와 **부재중 후결로 넘어가 확인이 필요한 문서**가 섞인다 — 후자는 진행 열이 "남의 차례"·
+  // "승인"으로 읽혀 왜 여기 있는지 안 보인다(옛 설명 문단이 그걸 말했다). 문장 대신 그 행의 진행 열에 값으로 적는다.
+  const deferredConfirmIds = docsByTab[face].filter((d) => needsMyDeferredConfirm(d, user.id)).map((d) => d.id);
 
   const period = balance.period;
 
   return (
     <div className="mx-auto w-full max-w-[1000px] space-y-5 p-4 md:p-6">
+      {/* 설명 문장 대신 값(§4) — 결재함 건수. 상시 버튼 = Primary '기안하기' 하나(§10). */}
       <PageHeader
         eyebrow="운영"
         title="전자결재"
-        description="문서를 기안하면 결재선에 순서대로 올라갑니다. 양식: 휴가신청서·품의서·지출결의서·수입결의서."
-        embedLabel="전자결재 · 기안과 결재함"
+        description={boxSummary}
+        embedLabel={boxSummary ? `전자결재 · ${boxSummary}` : undefined}
         actions={
           <Button render={<Link href="/approvals/new" />}>
             <EyIcon name="plus" size={16} />
@@ -129,7 +132,7 @@ export default async function ApprovalsPage({
 
       {boxes.loadError ? (
         <p
-          className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-4 py-2.5 text-[13px]"
+          className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-4 py-2.5 text-sm"
           title={boxes.loadError.raw}
         >
           {boxes.loadError.summary}
@@ -178,18 +181,14 @@ export default async function ApprovalsPage({
               />
             </section>
           ) : (
-            <p className="border-line bg-bg-soft/50 text-text-dim rounded-xl border px-4 py-2.5 text-xs">
+            <p className="border-line bg-bg-soft/50 text-text-dim rounded-xl border px-4 py-2.5 text-sm">
               입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 등록을 요청하세요.
             </p>
           )}
 
           <FaceTabs faces={faces} active={face} ariaLabel="결재함 전환" />
 
-          {activeTab.note ? (
-            <p className="text-text-faint px-1 text-[11px]">{activeTab.note}</p>
-          ) : null}
-
-          <DocList docs={docsByTab[face]} emptyText={activeTab.empty} />
+          <DocList docs={docsByTab[face]} emptyText={activeTab.empty} deferredConfirmIds={deferredConfirmIds} />
         </>
       )}
     </div>

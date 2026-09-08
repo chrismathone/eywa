@@ -63,11 +63,11 @@ export function MonthNav({
           <ChevronRight size={13} strokeWidth={2.5} />
         </ParamLink>
       </div>
-      <span className="text-text-dim text-[11px] font-medium whitespace-nowrap">
+      <span className="text-text-dim text-xs font-medium whitespace-nowrap">
         {planMonthLabel(current)}
       </span>
       {!hasPlan ? (
-        <span className="bg-amber-soft text-amber shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap">
+        <span className="bg-amber-soft text-amber shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap">
           계획 없음
         </span>
       ) : null}

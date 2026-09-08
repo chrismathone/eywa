@@ -98,12 +98,12 @@ export function NoticeAttachmentPicker({
   return (
     <div className="border-line rounded-md border px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-text-dim text-[11px] font-medium">
+        <p className="text-text-dim text-xs font-medium">
           {labelText}
           {attachments.length ? tf("os.na.count", { n: attachments.length }) : ""}
         </p>
         <label
-          className={`border-line text-text-dim rounded-md border px-2 py-1 text-[11px] ${
+          className={`border-line text-text-dim rounded-md border px-2 py-1 text-xs ${
             uploading || full || disabled ? "text-text-faint cursor-not-allowed" : "hover:bg-bg-soft cursor-pointer"
           }`}
         >
@@ -127,7 +127,7 @@ export function NoticeAttachmentPicker({
       {attachments.length ? (
         <ul className="mt-1.5 space-y-1">
           {attachments.map((a) => (
-            <li key={a.path} className="flex items-center gap-2 text-[11px]">
+            <li key={a.path} className="flex items-center gap-2 text-xs">
               <span className="text-foreground min-w-0 flex-1 truncate" title={a.name}>
                 {a.name}
               </span>
@@ -142,7 +142,7 @@ export function NoticeAttachmentPicker({
           ))}
         </ul>
       ) : (
-        <p className="text-text-faint mt-1 text-[11px]">
+        <p className="text-text-faint mt-1 text-xs">
           {tf("os.na.hint", { n: NOTICE_ATTACHMENT_MAX })}
         </p>
       )}

@@ -124,17 +124,17 @@ export default async function McsLandingPage({
                 {/* 단의 **간판** — 담임 묶음 머리(15px)와 형태로 갈라야 크기 경쟁 없이 위계가 선다.
                     🔴 채우기는 `-soft`(연한 틴트)까지 — 꽉 찬 네이비는 활성 필터 칩과 같은 모양이라
                     "눌러서 고르는 것"으로 읽힌다(이건 라벨이지 버튼이 아니다). */}
-                <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-[16px] font-extrabold">
+                <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-base font-extrabold">
                   {panel.label}
                 </h3>
-                <span className="text-text-dim text-[11px]">
+                <span className="text-text-dim text-xs">
                   <span className="num">{panel.cards.length}</span>반
                 </span>
                 {/* ⚠️ 작성률은 **그 단 몫만** 센다 — 합치면 옆 단 숫자가 섞여 "정규는 썼는데 특강이
                     비었다"를 못 읽는다. 위 전체 줄과 같은 함수라 산식은 하나다. */}
                 <WrittenSummary
                   cards={panel.cards}
-                  className="text-text-dim num ml-auto text-[11px]"
+                  className="text-text-dim num ml-auto text-xs"
                 />
               </div>
               {/* 단 안에선 담임이 정규/특강 **아래** 층이다 — 제목 층을 실제 구조대로 내린다
@@ -179,7 +179,7 @@ function TeacherGroups({
     <div className="flex flex-col gap-5">
       {groups.map((group) => (
         <section key={group.teacherName} className="flex flex-col gap-2">
-          <Heading className="text-[15px] font-extrabold">
+          <Heading className="text-base font-extrabold">
             {group.teacherName}
           </Heading>
           <div className={columnsClass}>
@@ -189,14 +189,14 @@ function TeacherGroups({
                 href={`/mcs/${card.classId}/month?month=${month}`}
                 className="border-line hover:border-primary flex flex-col gap-1 rounded-xl border bg-white p-3 transition"
               >
-                <span className="truncate text-[13.5px] font-extrabold">
+                <span className="truncate text-sm font-extrabold">
                   {card.className}
                 </span>
                 {/* 🔴 "학생 N명" = **현재 재원**이다. 시트 줄 수(= N + 회색·예정)를 그대로 적으면
                         현재 재원 0명인 특강이 "학생 7명"이 된다(적대적 리뷰 2026-09-01). 남는 줄은
                         `+N`으로 따로 적어 둘을 더하면 시트 줄 수가 되게 한다. */}
                 <span
-                  className="text-text-faint num text-[11.5px]"
+                  className="text-text-faint num text-xs"
                   title={card.extraTitle ?? undefined}
                 >
                   수업 {card.dayCount}일 · 학생 {card.studentCount}명
@@ -211,7 +211,7 @@ function TeacherGroups({
                 <span className="mt-1 flex items-center gap-1.5">
                   {card.elapsedDays === 0 ? (
                     <span
-                      className="text-text-faint text-[11.5px]"
+                      className="text-text-faint text-xs"
                       title="이 달에 아직 수업이 지나지 않았습니다"
                     >
                       아직 수업 전
@@ -219,14 +219,14 @@ function TeacherGroups({
                   ) : card.shown === 0 ? (
                     // 달은 지났는데 온 학생이 없다 — '아직 수업 전'과 다른 사실이라 다르게 적는다.
                     <span
-                      className="text-text-faint text-[11.5px]"
+                      className="text-text-faint text-xs"
                       title="이 달 수업일에 출석 기록이 없습니다(전원 결석이거나 출결을 안 찍었습니다)"
                     >
                       출결 기록 없음
                     </span>
                   ) : (
                     <>
-                      <span className="num text-foreground w-12 shrink-0 text-[12px] font-bold">
+                      <span className="num text-foreground w-12 shrink-0 text-xs font-bold">
                         {card.written}/{card.shown}
                       </span>
                       <span className="bg-bg-soft h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
@@ -237,7 +237,7 @@ function TeacherGroups({
                           style={{ width: `${card.pct}%` }}
                         />
                       </span>
-                      <span className="num text-text-faint w-9 shrink-0 text-right text-[11.5px]">
+                      <span className="num text-text-faint w-9 shrink-0 text-right text-xs">
                         {card.pct}%
                       </span>
                     </>

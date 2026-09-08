@@ -1,9 +1,9 @@
-import Link from "next/link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { BookText, Clock, CircleDollarSign, Receipt } from "@/components/icons/eywa-icon-compat";
+import { BigStat } from "@/components/atoms/big-stat";
+import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
-import { SearchForm } from "@/components/search-form";
-import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
+import { SearchToggle } from "@/components/search-toggle";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import {
   getStudentOptions,
   getTextbookOrdersPage,
@@ -21,11 +21,11 @@ import { TextbooksTable } from "./textbooks-table";
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 
-// 하단 체크 버튼(등록·납부·주문)과 라벨·순서 일치. 각 칩 = "그 단계가 아직 안 된 것", 완료 = 3체크 전부.
+// 하단 체크 버튼(등록·납부·주문)과 라벨·순서 일치. 각 항목 = "그 단계가 아직 안 된 것", 완료 = 3체크 전부.
 const FILTERS: { key: string; label: string; title: string; count: (s: TextbookStats) => number }[] = [
-  { key: "reg", label: "등록", title: "아직 등록 안 된 건", count: (s) => s.needReg },
-  { key: "pay", label: "납부", title: "아직 납부 안 된 건", count: (s) => s.needPay },
-  { key: "order", label: "주문", title: "아직 주문 안 된 건", count: (s) => s.needOrder },
+  { key: "reg", label: "등록 안 됨", title: "아직 등록 안 된 건", count: (s) => s.needReg },
+  { key: "pay", label: "납부 안 됨", title: "아직 납부 안 된 건", count: (s) => s.needPay },
+  { key: "order", label: "주문 안 됨", title: "아직 주문 안 된 건", count: (s) => s.needOrder },
   { key: "done", label: "완료", title: "등록·납부·주문 모두 완료", count: (s) => s.done },
 ];
 
@@ -52,12 +52,6 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   const account = accountForTarget(settings.billing, "textbook");
   const todayKst = kstToday(); // 신청일 경과 라벨 계산 기준(서버 KST) — 클라에 주입.
 
-  const chipHref = (s: string) => {
-    const p = new URLSearchParams({ tab: "textbooks" });
-    if (s !== "all") p.set("status", s);
-    if (q) p.set("q", q);
-    return `/billing?${p.toString()}`;
-  };
   const pageHref = (n: number) => {
     const p = new URLSearchParams({ tab: "textbooks" });
     if (status !== "all") p.set("status", status);
@@ -68,42 +62,45 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
 
   return (
     <div className="space-y-4">
-      {/* 필터 바 */}
-      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
-      <div className="flex flex-wrap items-center gap-2 px-1 py-1">
-        <Link
-          href={chipHref("all")}
-          className={`${TOOLBAR_CHIP} ${status === "all" ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
-        >
-          전체 {stats.total}
-        </Link>
-        {FILTERS.map((s) => (
-          <Link
-            key={s.key}
-            href={chipHref(s.key)}
-            title={s.title}
-            className={`${TOOLBAR_CHIP} ${status === s.key ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
-          >
-            {s.label} {s.count(stats)}
-          </Link>
-        ))}
-        <SearchForm placeholder="교재명·학생" defaultValue={q} />
-      </div>
-
-      {/* KPI */}
+      {/* KPI — 공용 BigStat(옛 로컬 Kpi 카드는 링 위에 border를 겹쳐 선이 이중이었다, v5 ④). */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Kpi label="전체 신청" value={`${stats.total}건`} icon={BookText} color="blue" />
-        <Kpi label="처리 대기" value={`${stats.pending}건`} icon={Clock} color="amber" hint="등록·납부·주문 미완" />
-        <Kpi label="미납 합계" value={won(stats.unpaidAmount)} icon={CircleDollarSign} color="danger" />
-        <Kpi label="총 신청액" value={won(stats.totalAmount)} icon={Receipt} color="primary" />
+        <BigStat label="전체 신청" value={stats.total} unit="건" tone="blue" icon={<BookText size={16} strokeWidth={1.8} />} />
+        <BigStat
+          label="처리 대기"
+          value={stats.pending}
+          unit="건"
+          tone="amber"
+          sub="등록·납부·주문 미완"
+          icon={<Clock size={16} strokeWidth={1.8} />}
+        />
+        <BigStat label="미납 합계" value={won(stats.unpaidAmount)} tone="danger" icon={<CircleDollarSign size={16} strokeWidth={1.8} />} />
+        <BigStat label="총 신청액" value={won(stats.totalAmount)} tone="primary" icon={<Receipt size={16} strokeWidth={1.8} />} />
       </section>
 
-      <div className="flex items-center justify-between">
-        <p className="text-text-dim text-xs">
+      {/* 결과 줄 + 필터(지시서 §10): 옛 칩 5개(전체 N·등록 N·납부 N·주문 N·완료 N) + 상시 검색창 → `상태: 전체` 라벨 하나
+          (항목 옆에 건수) + 검색 토글. 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1">
+        <p className="text-text-dim text-sm whitespace-nowrap">
           교재신청 <span className="num text-foreground font-bold">{total}</span>건
-          {q ? <span className="ml-2">· &ldquo;{q}&rdquo; 검색</span> : null}
-          {totalPages > 1 ? <span className="ml-2">· {page}/{totalPages} 페이지</span> : null}
+          {q ? <span className="ml-1.5">· &ldquo;{q}&rdquo; 검색</span> : null}
+          {totalPages > 1 ? (
+            <span className="num ml-1.5">
+              · {page}/{totalPages}
+            </span>
+          ) : null}
         </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterSelect
+            paramName="status"
+            value={status === "all" ? "" : status}
+            options={FILTERS.map((f) => ({ value: f.key, label: f.label, hint: `${f.count(stats)}건` }))}
+            axisLabel="상태"
+            ariaLabel="진행 상태 필터"
+            className="w-auto"
+            triggerClassName={TOOLBAR_SELECT}
+          />
+          <SearchToggle placeholder="교재명·학생" defaultValue={q} />
+        </div>
       </div>
 
       {total === 0 ? (
@@ -131,42 +128,5 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
         </>
       )}
     </div>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  icon: Icon,
-  color,
-  hint,
-}: {
-  label: string;
-  value: string;
-  icon: LucideIcon;
-  color: "primary" | "blue" | "amber" | "danger";
-  hint?: string;
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    blue: "bg-blue-soft text-blue",
-    amber: "bg-amber-soft text-amber",
-    danger: "bg-danger-soft text-danger",
-  } as const;
-  return (
-    <article className="bg-card border-line shadow-card rounded-2xl border p-5">
-      <header className="flex items-center justify-between">
-        <p className="micro">{label}</p>
-        <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <Icon size={14} strokeWidth={1.8} />
-        </span>
-      </header>
-      <p className="tabular text-foreground num mt-3 text-[18px] leading-tight">{value}</p>
-      {hint ? (
-        <p className="text-text-dim border-line mt-3 border-t pt-3 text-[11px]">{hint}</p>
-      ) : (
-        <div className="mt-3 h-[24px]" />
-      )}
-    </article>
   );
 }

@@ -305,7 +305,8 @@ describe("RecapView — 사전 통보 결석과 과목 필터", () => {
 
   it("고르면 계정에 저장한다", () => {
     provider(<RecapView recap={mixed} isToday={false} ai={null} />);
-    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "영어" }));
     expect(saveSubject).toHaveBeenCalledWith("english");
   });
 });

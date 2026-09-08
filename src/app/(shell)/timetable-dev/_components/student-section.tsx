@@ -62,7 +62,7 @@ export function StudentSection({
     <>
       {label ? (
         <div
-          className={`flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
+          className={`flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
         >
           <span>{label}</span>
           <span className="num">{count ?? students.length}</span>
@@ -97,7 +97,7 @@ export function StudentSection({
         ),
       )}
       {hidden > 0 ? (
-        <div className="text-text-faint px-2 py-[3px] text-[12px]">외 {hidden}명</div>
+        <div className="text-text-faint px-2 py-[3px] text-xs">외 {hidden}명</div>
       ) : null}
     </>
   );

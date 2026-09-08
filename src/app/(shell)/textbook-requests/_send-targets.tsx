@@ -23,10 +23,10 @@ const SKIP_LABEL: Record<TextbookNoticeSkip["reason"], string> = {
 export function SendSkipList({ skipped }: { skipped: TextbookNoticeSkip[] }) {
   return (
     <div className="border-line rounded-2xl border p-3">
-      <p className="text-text-dim text-[12px] font-medium">
+      <p className="text-text-dim text-xs font-medium">
         제외된 학생 <span className="num">{skipped.length}</span>명
       </p>
-      <ul className="text-text-faint mt-1 space-y-0.5 text-[12px]">
+      <ul className="text-text-faint mt-1 space-y-0.5 text-xs">
         {skipped.map((s, i) => (
           <li key={`${s.name}-${s.reason}-${i}`}>
             {s.name} — {SKIP_LABEL[s.reason]}
@@ -84,17 +84,17 @@ export function SendTargetList({
   return (
     <ul className="divide-line border-line divide-y rounded-2xl border">
       {targets.map((t) => (
-        <li key={t.studentId} className="flex flex-wrap items-center gap-2 px-3 py-2 text-[13px]">
+        <li key={t.studentId} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
           <span className="text-foreground w-20 shrink-0 truncate font-medium">{t.name}</span>
-          <span className="text-text-faint min-w-0 flex-1 truncate text-[12px]">
+          <span className="text-text-faint min-w-0 flex-1 truncate text-xs">
             {t.orders.map((o) => o.bookName).join(", ")}
           </span>
           {t.subjects.length === 0 ? (
-            <span className="text-danger shrink-0 text-[11px]">
+            <span className="text-danger shrink-0 text-xs">
               발송 불가 — 수강 과목이 없어 학부모 보드를 찾을 수 없습니다
             </span>
           ) : t.subjects.length === 1 ? (
-            <span className="text-text-dim shrink-0 text-[12px]">{labelOf(t.subjects[0]!)} 알림장</span>
+            <span className="text-text-dim shrink-0 text-xs">{labelOf(t.subjects[0]!)} 알림장</span>
           ) : (
             <SearchableSelect
               className="w-36 shrink-0"
@@ -107,10 +107,10 @@ export function SendTargetList({
         </li>
       ))}
       {orphans.map((o) => (
-        <li key={o.id} className="flex items-center gap-2 px-3 py-2 text-[13px] opacity-60">
+        <li key={o.id} className="flex items-center gap-2 px-3 py-2 text-sm opacity-60">
           <span className="text-foreground w-20 shrink-0 truncate">{o.studentName ?? "이름 없음"}</span>
-          <span className="text-text-faint min-w-0 flex-1 truncate text-[12px]">{o.bookName}</span>
-          <span className="text-danger shrink-0 text-[11px]">발송 불가 — 학생 연결 없음</span>
+          <span className="text-text-faint min-w-0 flex-1 truncate text-xs">{o.bookName}</span>
+          <span className="text-danger shrink-0 text-xs">발송 불가 — 학생 연결 없음</span>
         </li>
       ))}
     </ul>

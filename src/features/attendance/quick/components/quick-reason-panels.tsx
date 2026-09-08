@@ -27,7 +27,7 @@ import { ABSENCE_REASON_PRESETS, LATE_REASON_PRESETS } from "../reason-presets";
 
 /** 사유 칩 한 개 — 고른 것은 채움(캐논상 '현재 위치' = brand). 라벨·색을 화면마다 새로 만들지 않는다. */
 function chip(on: boolean): string {
-  return `min-h-11 rounded-xl px-3 text-[15px] font-bold transition ${
+  return `min-h-11 rounded-xl px-3 text-base font-bold transition ${
     on ? "bg-primary text-primary-foreground" : "border-line text-foreground hover:bg-bg-soft border"
   }`;
 }
@@ -65,13 +65,13 @@ function FreeText({
         placeholder={placeholder}
         aria-label={placeholder}
         autoFocus={autoFocus}
-        className="border-line min-h-11 min-w-0 flex-1 rounded-xl border px-3 text-[16px]"
+        className="border-line min-h-11 min-w-0 flex-1 rounded-xl border px-3 text-base"
       />
       <button
         type="button"
         onClick={onSubmit}
         disabled={!value.trim()}
-        className="bg-primary text-primary-foreground min-h-11 shrink-0 rounded-xl px-4 text-[15px] font-bold disabled:opacity-40"
+        className="bg-primary text-primary-foreground min-h-11 shrink-0 rounded-xl px-4 text-base font-bold disabled:opacity-40"
       >
         {saveLabel}
       </button>
@@ -110,7 +110,7 @@ export function LatePanel({
     <div className="space-y-3">
       {/* 🔴 미리보기는 저장될 글자를 그대로 베끼지 않고 **읽는 사람의 언어로** 적는다 — 확인할
           것은 '몇 시로 남는가'이고, 저장 문자열(한국어)은 데스크·학부모 연락이 읽는 값이라 안 바뀐다. */}
-      <p className="text-text-dim text-center text-[13px]">
+      <p className="text-text-dim text-center text-sm">
         {t("quick.late.preview")}{" "}
         <span className="text-foreground font-bold">
           {tf("quick.late.arrivalAt", { time })}
@@ -131,7 +131,7 @@ export function LatePanel({
           value={time}
           onChange={(e) => e.target.value && onTime(e.target.value)}
           aria-label={t("quick.late.timeAria")}
-          className="border-line num min-h-11 min-w-0 flex-1 rounded-xl border px-3 text-center text-[20px] font-bold"
+          className="border-line num min-h-11 min-w-0 flex-1 rounded-xl border px-3 text-center text-xl font-bold"
         />
         <button
           type="button"
@@ -175,7 +175,7 @@ export function LatePanel({
       <button
         type="button"
         onClick={onSubmit}
-        className={`min-h-14 w-full rounded-2xl text-[17px] font-bold ${ATT_SOLID.late}`}
+        className={`min-h-14 w-full rounded-2xl text-lg font-bold ${ATT_SOLID.late}`}
       >
         {t("quick.late.submit")}
       </button>

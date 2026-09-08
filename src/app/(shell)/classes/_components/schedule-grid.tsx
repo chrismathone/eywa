@@ -227,7 +227,7 @@ export function ScheduleGrid({
     if (periodList.length === 0) return null;
     return (
       <div className="space-y-1">
-        <p className="text-muted-foreground text-[11px] font-medium">{caption}</p>
+        <p className="text-muted-foreground text-xs font-medium">{caption}</p>
         <div className="border-border overflow-hidden rounded-md border">
           <table className="w-full table-fixed border-collapse text-center text-xs">
             <thead>
@@ -252,11 +252,11 @@ export function ScheduleGrid({
                 <tr key={p.id}>
                   <th className="border-border bg-muted/20 text-muted-foreground border-b border-r px-0.5 py-1 font-normal leading-tight last:border-b-0">
                     {/* 교시 이름은 학원설정(과목 운영 → 평일 교시)이 단일 소스 — 코드가 "N교시"를 지어내지 않는다. */}
-                    <div className="text-foreground break-keep text-[10px] font-bold">
+                    <div className="text-foreground break-keep text-xs font-bold">
                       {periodCellName(p)}
                     </div>
                     {/* 시작만 보이면 몇 분짜리 수업인지 알 수 없다 — 종료 시각까지 한 줄로. */}
-                    <div className="num whitespace-nowrap text-[9px]">
+                    <div className="num whitespace-nowrap text-xs">
                       {p.startTime}~{p.endTime}
                     </div>
                   </th>
@@ -283,7 +283,7 @@ export function ScheduleGrid({
                           }`}
                           title={on && override ? `부담임 · ${eff}` : undefined}
                         >
-                          <span className="block truncate text-[10px] font-bold leading-none">
+                          <span className="block truncate text-xs font-bold leading-none">
                             {on ? (eff ?? "●") : "·"}
                           </span>
                         </button>
@@ -353,7 +353,7 @@ export function ScheduleGrid({
 
       {showAdvanced && rows.length > 0 ? (
         <div className="border-border space-y-2 rounded-md border p-3">
-          <p className="text-muted-foreground text-[11px]">
+          <p className="text-muted-foreground text-xs">
             교시별로 담임과 다른 강사(부담임)·다른 강의실을 지정할 수 있습니다. 비워두면 반의 담임·기본 강의실을 따릅니다.
           </p>
           {rows.map((r) => (
@@ -377,7 +377,7 @@ export function ScheduleGrid({
                 ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강의실`}
               />
               {slotClassroom[r.key] ? (
-                <span className="text-text-faint text-[10px]">{classroomNameOf(slotClassroom[r.key])}</span>
+                <span className="text-text-faint text-xs">{classroomNameOf(slotClassroom[r.key])}</span>
               ) : null}
             </div>
           ))}

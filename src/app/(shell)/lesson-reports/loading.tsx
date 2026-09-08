@@ -11,6 +11,9 @@ export default function LessonReportsLoading() {
         <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded compact-chrome:hidden" />
         <div className="bg-bg-soft mt-2 h-4 w-full max-w-xl animate-pulse rounded compact-chrome:mt-0" />
       </header>
+      {/* 면 탭 — 실화면은 헤더 바로 아래 `FaceTabs` 한 줄이다(높이는 컨트롤과 같은 변수). 빠뜨리면
+          데이터 도착 때 아래 카드가 그 줄만큼 통째로 내려간다. */}
+      <div className="bg-bg-soft h-(--control-h) w-72 max-w-full animate-pulse rounded-lg" />
       <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-2xl border" />
       <div className="bg-card border-line shadow-card h-52 animate-pulse rounded-2xl border" />
       <div className="bg-card border-line shadow-card h-72 animate-pulse rounded-2xl border" />

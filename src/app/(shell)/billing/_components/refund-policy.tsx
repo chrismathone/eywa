@@ -24,12 +24,12 @@ export function RefundPolicy() {
   // 하단 공백/잘림 유발. 표 행은 전역 tr/td/th page-break-inside:avoid가 보호 → 행 단위로 끊긴다. 제목만 고아 방지.
   return (
     <section className="mt-6 print:mt-2">
-      <h3 className="text-foreground mb-3 text-center text-[15px] font-bold break-after-avoid print:mb-1.5">학원 수칙 및 환불 규정</h3>
+      <h3 className="text-foreground mb-3 text-center text-base font-bold break-after-avoid print:mb-1.5">학원 수칙 및 환불 규정</h3>
 
       <div className="border-line bg-card rounded-md border p-4 print:rounded-none print:border-0 print:p-0">
         {/* 학원 수칙 */}
-        <h4 className="text-foreground mb-2 text-[13px] font-bold">학원 수칙</h4>
-        <ol className="text-text-dim mb-4 list-decimal space-y-1.5 pl-5 text-[12px] leading-relaxed">
+        <h4 className="text-foreground mb-2 text-sm font-bold">학원 수칙</h4>
+        <ol className="text-text-dim mb-4 list-decimal space-y-1.5 pl-5 text-xs leading-relaxed">
           {RULES.map((r) => (
             <li key={r.text}>
               {r.text}
@@ -40,8 +40,8 @@ export function RefundPolicy() {
         </ol>
 
         {/* 환불 규정 */}
-        <h4 className="text-foreground mb-2 text-[13px] font-bold">환불 규정</h4>
-        <table className="w-full border-collapse text-[11px] leading-snug">
+        <h4 className="text-foreground mb-2 text-sm font-bold">환불 규정</h4>
+        <table className="w-full border-collapse text-xs leading-snug">
           <thead>
             <tr>
               <th className={TH}>구분</th>
@@ -102,7 +102,7 @@ export function RefundPolicy() {
         </table>
 
         {/* 각주 */}
-        <ol className="text-text-dim mt-3 list-decimal space-y-1 pl-5 text-[11px] leading-relaxed">
+        <ol className="text-text-dim mt-3 list-decimal space-y-1 pl-5 text-xs leading-relaxed">
           <li>
             총 교습시간은 교습기간 중의 총 교습기간을 말하며, 반환금액의 산정은 반환사유가 발생한 날까지
             경과된 교습시간을 기준으로 한다.
@@ -113,7 +113,7 @@ export function RefundPolicy() {
           </li>
         </ol>
 
-        <p className="text-text-faint mt-3 text-right text-[10px]">
+        <p className="text-text-faint mt-3 text-right text-xs">
           * 본 영수증은 소득공제용(현금영수증)으로 사용하실 수 없습니다. 별도 요청 부탁드립니다.
         </p>
       </div>

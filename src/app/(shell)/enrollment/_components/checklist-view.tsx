@@ -59,7 +59,7 @@ export function ChecklistView({ checklist }: { checklist: IntakeChecklist }) {
         {visible.map(([k, v]) => (
           <div key={k} className="grid grid-cols-[7.5rem_1fr] gap-3 py-2">
             <dt className="text-text-dim text-xs">{k}</dt>
-            <dd className="text-foreground text-[13px] leading-relaxed break-keep">{v}</dd>
+            <dd className="text-foreground text-sm leading-relaxed break-keep">{v}</dd>
           </div>
         ))}
       </dl>

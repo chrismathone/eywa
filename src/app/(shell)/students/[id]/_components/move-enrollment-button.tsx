@@ -225,7 +225,7 @@ function MoveDialog({
               }))}
             />
             {currentSubject ? (
-              <p className="text-muted-foreground text-[11px]">
+              <p className="text-muted-foreground text-xs">
                 같은 과목({subjects.labelOf(currentSubject)}) 반만 표시됩니다
                 {showSpecial ? "" : " · 특강 제외"}.
                 {targets.length === 0 ? " 이동할 수 있는 반이 없습니다." : ""}
@@ -234,7 +234,7 @@ function MoveDialog({
           </div>
 
           <div className="space-y-1">
-            <label className="text-muted-foreground block text-[11px] font-medium">
+            <label className="text-muted-foreground block text-xs font-medium">
               적용일 (이 날부터 새 반, 그 전날까지 옛 반)
             </label>
             <input
@@ -244,7 +244,7 @@ function MoveDialog({
               onChange={(e) => setEff(e.target.value)}
               className="border-border bg-card text-foreground num w-full rounded-md border px-2 py-1.5 text-sm"
             />
-            <p className="text-muted-foreground text-[11px]">
+            <p className="text-muted-foreground text-xs">
               전출/전입으로 처리되어 옛 반엔 퇴원으로 뜨지 않고, 같은 날이어도 이름이 중복되지 않습니다.
             </p>
           </div>
@@ -277,7 +277,7 @@ function MoveDialog({
                   );
                 })}
               </div>
-              <p className="text-muted-foreground text-[11px]">
+              <p className="text-muted-foreground text-xs">
                 {attending.length === 0
                   ? "요일을 선택하지 않으면 전 요일 등원으로 저장됩니다."
                   : attending.length >= orderedDays.length

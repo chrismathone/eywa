@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { setMyClassReviewFilter } from "@/features/class-review/server/actions";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import {
   CLASS_REVIEW_FILTERS,
   CLASS_REVIEW_FILTER_LABEL,
@@ -104,7 +105,7 @@ export function ReviewTable({
           </p>
         </div>
       ) : (
-        <div className="bg-card overflow-x-auto rounded-2xl shadow-card">
+        <DragScrollArea className="bg-card rounded-2xl shadow-card">
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-line bg-bg-soft/60 border-b text-left">
@@ -162,7 +163,7 @@ export function ReviewTable({
               ))}
             </tbody>
           </table>
-        </div>
+        </DragScrollArea>
       )}
     </div>
   );

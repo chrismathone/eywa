@@ -86,7 +86,7 @@ export function ColorPicker({
       </span>
 
       {/* 고른 색이 무엇인지 글자로 — 점만으로는 이름을 알 수 없다. */}
-      <span className="text-text-dim text-[11px] whitespace-nowrap">
+      <span className="text-text-dim text-xs whitespace-nowrap">
         {customActive ? <span className="num">{colorLabel(value)}</span> : colorLabel(value)}
         {customActive ? <span className="text-text-faint"> · 직접 선택</span> : null}
       </span>

@@ -157,7 +157,7 @@ describe("⑤ 랜딩 목록 순서 — 묶음 안에서만", () => {
   });
 
   it("🔴 이름이 묶음 머리(15px)보다 크고 맨 앞이다 — 원장 2026-09-05 '20% 키워줘·반 9개는 이름 뒤로'", () => {
-    expect(list).toContain('<h2 className="text-foreground text-[18px] font-extrabold">{viewerName}</h2>');
+    expect(list).toContain('<h2 className="text-foreground text-lg font-extrabold">{viewerName}</h2>');
     const iName = list.indexOf("{viewerName}</h2>");
     const iCount = list.indexOf("{s.classes}</span>개", iName);
     expect(iName).toBeGreaterThan(-1);

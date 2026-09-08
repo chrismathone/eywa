@@ -1,0 +1,138 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+import { MENU_GLYPH_NAMES } from "./menu-glyph";
+
+const ROOT = join(__dirname, "..", "..", "..");
+const ICON_DIR = join(ROOT, "public", "icons");
+const SRC = join(ROOT, "src");
+
+/**
+ * 탭 아이콘은 **그림 파일**이다(원장 2026-09-08, B 스티커 화풍). 그림이 빠지면 화면에선 조용히
+ * 깨진 이미지·엉뚱한 선화가 되므로 여기서 파일 존재를 잠근다.
+ */
+describe("탭 아이콘 그림 파일", () => {
+  it("MENU_GLYPH_NAMES의 이름은 전부 public/icons에 파일이 있다", () => {
+    const missing = [...MENU_GLYPH_NAMES].filter((n) => !existsSync(join(ICON_DIR, `${n}.png`)));
+    expect(missing).toEqual([]);
+  });
+
+  it("public/icons의 파일은 전부 MENU_GLYPH_NAMES에 등록돼 있다 — 쓰이지 않는 그림을 남기지 않는다", () => {
+    const files = readdirSync(ICON_DIR)
+      .filter((f) => f.endsWith(".png"))
+      .map((f) => f.replace(/\.png$/, ""));
+    const orphan = files.filter((n) => !MENU_GLYPH_NAMES.has(n));
+    expect(orphan).toEqual([]);
+  });
+
+  it("메뉴가 쓰는 아이콘 이름은 전부 그림이 있다 — MENU_ICON + 허브 면 override", () => {
+    const icons = readFileSync(join(SRC, "components", "icons", "eywa-icons.tsx"), "utf8");
+    const menuBlock = icons.slice(
+      icons.indexOf("export const MENU_ICON"),
+      icons.indexOf("} as const satisfies Record<MenuKey"),
+    );
+    const used = new Set<string>([...menuBlock.matchAll(/:\s*"(\w+)"/g)].map((m) => m[1]!));
+    const hub = readFileSync(join(SRC, "lib", "menu-hub.ts"), "utf8");
+    for (const m of hub.matchAll(/icon:\s*"(\w+)"/g)) used.add(m[1]!);
+
+    const missing = [...used].filter((n) => !MENU_GLYPH_NAMES.has(n)).sort();
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * 🔴 **뜻이 다르면 그림도 다르다**(원장 2026-09-08 *"같은 아이콘을 안쓰면 좋겠는데"* — 메뉴 보드에서
+   * 출석부와 수업 평가가 같은 클립보드였다). 선화 시절엔 공유해도 티가 덜 났지만, 색이 박힌 그림은
+   * 나란히 선 타일에서 곧바로 같은 것으로 읽힌다.
+   */
+  it("서로 다른 메뉴가 같은 그림을 쓰지 않는다", () => {
+    const icons = readFileSync(join(SRC, "components", "icons", "eywa-icons.tsx"), "utf8");
+    const menuBlock = icons.slice(
+      icons.indexOf("export const MENU_ICON"),
+      icons.indexOf("} as const satisfies Record<MenuKey"),
+    );
+    const keyToIcon = new Map<string, string>();
+    for (const m of menuBlock.matchAll(/(\w+):\s*"(\w+)"/g)) keyToIcon.set(m[1]!, m[2]!);
+
+    // ⚠️ **같은 곳으로 가는 두 입구**는 예외다 — 그림을 가르면 다른 데로 간다는 거짓 신호가 된다.
+    //    (수납관리 ↔ 월별 청구·수납 / 교재 신청 ↔ billing 교재 탭 / 지출 ↔ billing 지출 탭 / 연동 ↔ 설정 연동 면)
+    const SAME_DESTINATION = new Set(["wallet", "bookMarked", "receipt", "sync"]);
+
+    /** 판정 단위는 **한 화면에 나란히 서는 목록**이다 — 다른 화면끼리는 같은 그림이어도 헷갈릴 일이 없다. */
+    function dupsIn(surface: string, entries: [string, string][]): string[] {
+      const byIcon = new Map<string, string[]>();
+      for (const [icon, who] of entries) byIcon.set(icon, [...(byIcon.get(icon) ?? []), who]);
+      return [...byIcon.entries()]
+        .filter(([icon, who]) => who.length > 1 && !SAME_DESTINATION.has(icon))
+        .map(([icon, who]) => `${surface} — ${icon}: ${who.join(" / ")}`)
+        .sort();
+    }
+
+    // ① 메뉴 보드·사이드바 = MENU_ICON + 허브 면 override가 한 화면에 함께 선다.
+    const board: [string, string][] = [...keyToIcon].map(([k, v]) => [v, k]);
+    const hub = readFileSync(join(SRC, "lib", "menu-hub.ts"), "utf8");
+    for (const line of hub.split("\n")) {
+      const icon = /icon:\s*"(\w+)"/.exec(line);
+      if (!icon) continue;
+      const label = [...line.matchAll(/"([^"]+)"/g)].map((m) => m[1]!).find((v) => /[가-힣]/.test(v));
+      board.push([icon[1]!, `hub:${label ?? line.trim().slice(0, 24)}`]);
+    }
+
+    // ② 강사 '내 메뉴' 드롭다운 — 한 목록 안에서 출결 모드와 출석부가 같은 클립보드였다.
+    //    🔴 강사(폰)에겐 사이드바가 없어 이 드롭다운이 유일한 메뉴라 여기서의 중복이 더 아프다.
+    //    이 목록은 MENU_ICON을 거치기도 하고 문자열을 직접 적기도 해서 ①만 봐서는 안 잡힌다.
+    const teacher = readFileSync(join(SRC, "components", "teacher-menu.tsx"), "utf8");
+    const from = teacher.indexOf("const LINKS");
+    const links = teacher.slice(from, teacher.indexOf("];", from));
+    const menu: [string, string][] = [];
+    for (const line of links.split("\n")) {
+      const icon = /icon:\s*(?:MENU_ICON\.(\w+)|"(\w+)")/.exec(line);
+      if (!icon) continue;
+      const href = /href:\s*"([^"]+)"/.exec(line);
+      menu.push([icon[2] ?? keyToIcon.get(icon[1]!) ?? icon[1]!, href?.[1] ?? line.trim().slice(0, 20)]);
+    }
+    expect(menu.length, "강사 메뉴 LINKS를 못 읽었다").toBeGreaterThan(5);
+
+    const dup = [...dupsIn("메뉴 보드", board), ...dupsIn("강사 내 메뉴", menu)];
+    expect(dup, `같은 그림을 쓰는 서로 다른 메뉴:\n${dup.join("\n")}`).toEqual([]);
+  });
+
+  /**
+   * 🔴 탭 표면은 MenuGlyph로 그린다 — **선화(EyIcon)로 되돌리지 말 것**(그 이유로 한 번 반려됐다).
+   *
+   * 🔑 “한 번이라도 나오면 통과”로는 부족하다 — `app-sidebar`엔 MenuGlyph가 둘(업무군 줄·메뉴 항목 줄)이라
+   *    메뉴 항목 전부를 EyIcon으로 되돌려도 업무군 한 줄이 남아 초록이 된다(실증으로 확인됨).
+   *    그래서 **몇 군데서 그리는지**를 세고, 아이콘 이름을 받는 자리에 EyIcon이 서 있는지도 본다.
+   */
+  const TAB_SURFACES: [string[], number][] = [
+    [["components", "app-sidebar.tsx"], 2], // 업무군 줄 + 메뉴 항목 줄
+    [["components", "workspace", "menu-hub-grid.tsx"], 1],
+    [["components", "teacher-menu.tsx"], 1],
+    // 폰 상단 메뉴 줄도 같은 MENU_ICON을 그린다 — 사이드바가 없는 화면의 탭이라 같은 규약.
+    [["components", "mobile-top-nav.tsx"], 1],
+  ];
+
+  it("🔴 탭 표면은 MenuGlyph를 쓴다 — 선화(EyIcon)로 되돌리지 말 것", () => {
+    for (const [rel, count] of TAB_SURFACES) {
+      const src = readFileSync(join(SRC, ...rel), "utf8");
+      // 🔴 import 한 줄이 아니라 **실제로 그리는 자리 수**를 센다 — 문자열 포함만 보면
+      //    본문을 EyIcon으로 되돌려도 남은 한 줄·import가 초록을 만든다.
+      const drawn = [...src.matchAll(/<MenuGlyph\b/g)].length;
+      expect(drawn, `${rel.join("/")} — MenuGlyph로 그리는 자리 수`).toBe(count);
+    }
+  });
+
+  it("탭 표면에서 아이콘 이름을 EyIcon에 넘기지 않는다", () => {
+    const bad: string[] = [];
+    for (const [rel] of TAB_SURFACES) {
+      const src = readFileSync(join(SRC, ...rel), "utf8");
+      // 화살표·꺾쇠 같은 **고정 이름** EyIcon은 그대로 둔다(`name="arrowRight"`) — 막는 것은
+      //    메뉴/업무군의 아이콘 이름을 받아 그리는 자리다(`name={item.icon}`·`name={icon}`).
+      for (const m of src.matchAll(/<EyIcon\b[\s\S]*?\/>/g)) {
+        if (/name=\{[^}]*\bicon\b/.test(m[0]))
+          bad.push(`${rel.join("/")}: ${m[0].replace(/\s+/g, " ").slice(0, 60)}`);
+      }
+    }
+    expect(bad, `탭 표면이 아이콘을 선화로 그린다:\n${bad.join("\n")}`).toEqual([]);
+  });
+});

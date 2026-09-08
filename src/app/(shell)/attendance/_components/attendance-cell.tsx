@@ -223,7 +223,7 @@ export function AttendanceCell({
         onDoubleClick={openPopover}
         onContextMenu={openPopover}
         // `scroll-mt` — 방향키 이동 시 활성 칸이 고정 헤더 뒤로 숨지 않게(cell-display.ts 주석 참조).
-        className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold select-none ${CELL_SCROLL_MARGIN} ${display.className} ${
+        className={`absolute inset-0 flex items-center justify-center text-xs font-bold select-none ${CELL_SCROLL_MARGIN} ${display.className} ${
           locked ? "cursor-not-allowed" : "cursor-cell"
         }`}
       >
@@ -255,7 +255,7 @@ export function AttendanceCell({
                 ctx?.store.setBuffer(null);
               }
             }}
-            className="text-primary absolute inset-0 h-full w-full border-0 bg-white/90 p-0 text-center text-[12px] font-bold outline-none"
+            className="text-primary absolute inset-0 h-full w-full border-0 bg-white/90 p-0 text-center text-xs font-bold outline-none"
           />
         ) : (
           display.text

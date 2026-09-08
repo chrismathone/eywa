@@ -10,6 +10,7 @@ import { ELAPSED_STRONG_DAYS, elapsedDays, shouldShowElapsed } from "@/features/
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import type { AccountSetting } from "@/features/owner/settings-types";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -101,16 +102,16 @@ export function TextbooksTable({
           교재신청 내역이 없습니다. 위 “교재 신청 등록”으로 추가하세요.
         </div>
       ) : (
-      <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
+      <DragScrollArea className="bg-card shadow-card rounded-2xl">
         <table className="w-full text-sm">
-          <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
+          <thead className="border-line bg-bg-soft/50 text-text-dim border-b text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
             <tr>
-              <th className="micro px-4 py-2 text-left">신청일</th>
-              <th className="micro px-4 py-2 text-left">교재</th>
-              <th className="micro px-4 py-2 text-left">학생</th>
-              <th className="micro px-4 py-2 text-left">강사</th>
-              <th className="micro px-4 py-2 text-left">진행 (등록·납부·주문)</th>
-              <th className="micro px-4 py-2 text-right">금액</th>
+              <th className="px-4 py-2 text-left">신청일</th>
+              <th className="px-4 py-2 text-left">교재</th>
+              <th className="px-4 py-2 text-left">학생</th>
+              <th className="px-4 py-2 text-left">강사</th>
+              <th className="px-4 py-2 text-left">진행 (등록·납부·주문)</th>
+              <th className="px-4 py-2 text-right">금액</th>
               <th className="px-2 py-2" />
             </tr>
           </thead>
@@ -129,7 +130,7 @@ export function TextbooksTable({
                       {elapsedLabel !== null ? (
                         <span
                           title={`신청 후 ${elapsedLabel}일 경과`}
-                          className={`num inline-block rounded-sm border px-1 py-px text-[10px] font-medium whitespace-nowrap ${
+                          className={`num inline-block rounded-sm border px-1 py-px text-xs font-medium whitespace-nowrap ${
                             elapsedLabel >= ELAPSED_STRONG_DAYS
                               ? "bg-amber text-white border-amber"
                               : "bg-amber-soft text-amber border-amber/30"
@@ -144,7 +145,7 @@ export function TextbooksTable({
                     {r.bookName}
                     {r.bookDetail ? <span className="text-text-faint"> · {r.bookDetail}</span> : null}
                     {r.notes ? (
-                      <div className="text-text-faint mt-0.5 text-[11px] whitespace-pre-wrap">메모: {r.notes}</div>
+                      <div className="text-text-faint mt-0.5 text-xs whitespace-pre-wrap">메모: {r.notes}</div>
                     ) : null}
                   </td>
                   <td className="text-foreground px-4 py-2 text-xs">{r.studentName ?? "—"}</td>
@@ -161,7 +162,7 @@ export function TextbooksTable({
                             disabled={isBusy}
                             onClick={() => toggleCheck(r, c.field, !checked)}
                             title={checked ? `${c.label} 완료 · ${fmtFull(date)}` : `${c.label} (미완료) — 클릭하여 체크`}
-                            className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] font-medium transition ${
+                            className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs font-medium transition ${
                               checked
                                 ? c.active
                                 : "border-line text-text-faint hover:text-foreground hover:bg-bg-soft"
@@ -176,7 +177,7 @@ export function TextbooksTable({
                     {/* '처리자·시각'은 사무실이 실제로 등록/납부/주문을 체크했을 때만 — 신규(미처리) 요청엔
                         status_by_name이 생성자(=요청 강사)라 신청일·강사 컬럼과 중복되고 "등록함"으로 오해됨. */}
                     {(r.registered || r.paid || r.ordered) && (r.statusAt || r.statusByName) ? (
-                      <p className="text-text-faint mt-1 text-[10px]" title={`마지막 처리 · ${fmtFull(r.statusAt)}`}>
+                      <p className="text-text-faint mt-1 text-xs" title={`마지막 처리 · ${fmtFull(r.statusAt)}`}>
                         처리 {r.statusAt ? fmtShort(r.statusAt) : ""}
                         {r.statusByName ? ` · ${r.statusByName}` : ""}
                       </p>
@@ -224,7 +225,7 @@ export function TextbooksTable({
                     </div>
                     {/* 삭제 실패 사유 — 권한(RLS)에 막히면 예전엔 아무 표시 없이 행이 남아 "고장난 버튼"으로 읽혔다. */}
                     {delError?.id === r.id ? (
-                      <p className="text-danger mt-1 text-[11px] whitespace-normal">{delError.message}</p>
+                      <p className="text-danger mt-1 text-xs whitespace-normal">{delError.message}</p>
                     ) : null}
                   </td>
                 </tr>
@@ -232,7 +233,7 @@ export function TextbooksTable({
             })}
           </tbody>
         </table>
-      </div>
+      </DragScrollArea>
       )}
 
       {dialog ? (

@@ -56,7 +56,7 @@ export async function ClassesTab({ staffId }: { staffId: string }) {
                 ) : (
                   <div className="flex flex-wrap gap-1">
                     {c.schedules.map((s, i) => (
-                      <span key={i} className="border-line bg-bg-soft num rounded-sm border px-1.5 py-0.5 text-[11px]">
+                      <span key={i} className="border-line bg-bg-soft num rounded-sm border px-1.5 py-0.5 text-xs">
                         {DAY_LABEL[s.day]} {s.startTime}–{s.endTime}
                       </span>
                     ))}

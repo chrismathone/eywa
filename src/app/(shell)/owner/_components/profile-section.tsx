@@ -167,9 +167,9 @@ function BrandingField({
             // eslint-disable-next-line @next/next/no-img-element -- 외부/objectURL 미리보기
             <img src={previewSrc} alt={label} className="h-full w-full object-contain" />
           ) : value ? (
-            <span className="text-text-faint text-[10px]">업로드됨</span>
+            <span className="text-text-faint text-xs">업로드됨</span>
           ) : (
-            <span className="text-text-faint text-[10px]">없음</span>
+            <span className="text-text-faint text-xs">없음</span>
           )}
         </div>
         <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition">

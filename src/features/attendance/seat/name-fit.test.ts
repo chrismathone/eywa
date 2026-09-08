@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   fitSeatName,
+  fluidNameFontSize,
+  LAB_CHIP_NAME_FILL,
+  NAME_FILL_MAX_PX,
+  NAME_FILL_MIN_PX,
   nameDisplayWidth,
   SEAT_CELL_NAME_LADDER,
   SEAT_CHIP_NAME_LADDER,
@@ -132,12 +136,21 @@ describe("배선 — 이름 칸은 이 함수를 거친다(복붙 금지)", () =
     "src/app/(shell)/attendance/seat/[seat]/_components/seat-lab-grid.tsx",
   ];
 
-  it("두 소비처가 크기를 직접 적지 않고 사다리에서 받아 쓴다", () => {
-    for (const path of CONSUMERS) {
+  it("소비처는 크기를 직접 적지 않고 칸 폭 비례 함수에서 받아 쓴다 — 칸엔 @container(2026-09-04 '이름 꽉 차게')", () => {
+    for (const path of [...CONSUMERS, "src/features/attendance/quick/components/quick-class-card.tsx"]) {
       const src = read(path);
-      expect(src).toMatch(/fitSeatName\(/);
-      expect(src).toMatch(/\$\{fit\.className\}/);
+      expect(src).toMatch(/fluidNameFontSize\(/);
+      expect(src).toMatch(/@container/);
+      expect(src).not.toMatch(/text-\[1[0-9]px\]/);
+      // 하한·채움 비율 숫자는 name-fit.ts에만 — 소비처가 `minPx: 13`·`fill: 0.75`를 직접 적으면 규약이 갈린다.
+      expect(src).not.toMatch(/minPx:\s*\d/);
+      expect(src).not.toMatch(/fill:\s*\d/);
     }
+  });
+
+  it("랩실 칩은 하한에서 넘치는 이름의 툴팁 판정(clipped)을 여전히 사다리에서 받는다", () => {
+    expect(read(CONSUMERS[1])).toMatch(/fitSeatName\(/);
+    expect(read(CONSUMERS[1])).toMatch(/fit\.clipped/);
   });
 
   it("랩실 칩은 배지·'결' 버튼 자리를 비워 둔다", () => {
@@ -166,5 +179,28 @@ describe("사다리 = 캐논 잠금", () => {
       "text-[12px]",
       "text-[11px]",
     ]);
+  });
+});
+
+describe("fluidNameFontSize — 칸 폭에 비례하는 이름 글자(원장 2026-09-04 '출결에도 이름 꽉 차게')", () => {
+  it("세 글자 이름은 칸 내용 폭의 33.3%(1 ÷ 3em)로, 하한·상한은 clamp에 실린다", () => {
+    expect(fluidNameFontSize("김하늘", { minPx: 11, maxPx: 24 })).toBe("clamp(11px, 33.3cqw, 24px)");
+  });
+  it("접미사 이름(3.7em)은 그만큼 작은 비율 — 같은 칸에서 세 글자 이름보다 작다", () => {
+    expect(fluidNameFontSize("김하늘A", { minPx: 11, maxPx: 24 })).toBe("clamp(11px, 27cqw, 24px)");
+  });
+  it("배지 자리를 남기는 칩은 fill을 낮춘다(랩실 0.75)", () => {
+    expect(LAB_CHIP_NAME_FILL).toBe(0.75);
+    expect(fluidNameFontSize("김하늘", { minPx: NAME_FILL_MIN_PX.labChip, maxPx: NAME_FILL_MAX_PX, fill: LAB_CHIP_NAME_FILL })).toBe("clamp(12px, 25cqw, 24px)");
+  });
+  it("가장 좁은 좌석표 칸(내용 폭 39px)에서 세 글자 이름은 옛 사다리와 같은 13px(회귀 아님)", () => {
+    // cqw는 내용 상자 기준(실측 2026-09-04: 47px 칸 = 내용 39px). 구현이 낸 비율로 계산한다(산수만 검사하지 않는다).
+    const css = fluidNameFontSize("김하늘", { minPx: NAME_FILL_MIN_PX.seatCell, maxPx: NAME_FILL_MAX_PX });
+    const cqw = Number(css.match(/([\d.]+)cqw/)![1]);
+    const px = Math.min(NAME_FILL_MAX_PX, Math.max(NAME_FILL_MIN_PX.seatCell, (cqw / 100) * 39));
+    expect(px).toBeCloseTo(13, 0);
+  });
+  it("상한은 24px(text-xl) 하나", () => {
+    expect(NAME_FILL_MAX_PX).toBe(24);
   });
 });

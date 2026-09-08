@@ -115,10 +115,10 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="text-foreground truncate text-sm font-bold">{t.name}</p>
-                    {!t.isActive ? <span className="text-text-faint text-[10px]">(비활성)</span> : null}
+                    {!t.isActive ? <span className="text-text-faint text-xs">(비활성)</span> : null}
                   </div>
-                  <p className="text-text-faint break-all font-mono text-[10px]">{t.url}</p>
-                  <p className="text-text-dim text-[11px]">
+                  <p className="text-text-faint break-all font-mono text-xs">{t.url}</p>
+                  <p className="text-text-dim text-xs">
                     조회 <span className="num">{t.usageCount}</span> · 제출{" "}
                     <span className="text-primary num font-bold">{t.submissionCount}</span>
                     {t.expiresAt ? ` · ~${t.expiresAt.slice(0, 10)}` : ""}
@@ -127,7 +127,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                     <button
                       type="button"
                       onClick={() => copy(t.url, t.id)}
-                      className="border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px]"
+                      className="border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs"
                     >
                       <Copy className="size-3" />
                       {copied === t.id ? "복사됨" : "링크 복사"}
@@ -138,7 +138,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                       <input type="hidden" name="active" value={String(!t.isActive)} />
                       <button
                         type="submit"
-                        className="border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px]"
+                        className="border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs"
                       >
                         <Power className="size-3" />
                         {t.isActive ? "비활성" : "활성"}
@@ -149,7 +149,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                       <input type="hidden" name="action" value="delete" />
                       <button
                         type="submit"
-                        className="text-danger/70 hover:text-danger inline-flex items-center gap-1 rounded border border-transparent px-2 py-0.5 text-[11px]"
+                        className="text-danger/70 hover:text-danger inline-flex items-center gap-1 rounded border border-transparent px-2 py-0.5 text-xs"
                       >
                         <Trash2 className="size-3" />
                         삭제
@@ -172,8 +172,9 @@ export function IntakeQrButton({ tokens }: { tokens: IntakeTokenView[] }) {
   return (
     <>
       {/* 우상단 액션은 공용 Button **기본 크기**로 통일(원장 2026-09-01 *"우상단 버튼크기 통일"*) —
-          옆 '신규 등록'이 기본 크기라 여기만 sm이면 두 버튼 키가 다르다. */}
-      <Button variant="outline" onClick={() => setOpen(true)}>
+          옆 '신규 등록'이 기본 크기라 여기만 sm이면 두 버튼 키가 다르다.
+          지시서 §10(원장 2026-09-03 "지시서 그대로"): 면 버튼은 창당 Primary 하나('신규 등록상담') — 이건 보더 없는 텍스트. */}
+      <Button variant="ghost" onClick={() => setOpen(true)}>
         <QrCode className="size-4" />
         공개 접수 QR
       </Button>

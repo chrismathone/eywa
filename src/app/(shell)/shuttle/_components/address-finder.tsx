@@ -138,7 +138,7 @@ export function AddressFinder({
         {open ? "주소 찾기 닫기" : "주소 찾기"}
       </Button>
 
-      {error && <p className="text-danger text-[11.5px]">{error}</p>}
+      {error && <p className="text-danger text-xs">{error}</p>}
 
       {/* 위젯이 들어올 자리 — 높이를 실제로 잡아 둔다(0이면 목록이 보이지 않는다). */}
       {open && <div ref={boxRef} className="border-line h-72 w-full overflow-hidden rounded-lg border" />}

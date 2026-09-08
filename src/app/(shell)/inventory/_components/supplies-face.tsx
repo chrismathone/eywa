@@ -19,7 +19,7 @@ export function SuppliesFace({ supplies, canWrite, today, userName }: { supplies
     [supplies, query],
   );
   const columns = useMemo((): Column<InventorySupply>[] => [
-    { key: "itemCode", label: "품목ID", width: 80, render: (s) => <span className="font-mono text-[11.5px]">{s.itemCode ?? ""}</span>, className: "whitespace-nowrap" },
+    { key: "itemCode", label: "품목ID", width: 80, render: (s) => <span className="font-mono text-xs">{s.itemCode ?? ""}</span>, className: "whitespace-nowrap" },
     { key: "name", label: "품목", width: 96, render: (s) => <span className="font-medium">{s.name}</span>, className: "whitespace-nowrap" },
     { key: "makerModel", label: "제조사/모델", minWidth: 160, render: (s) => <UnknownCell v={s.makerModel} />, className: "whitespace-nowrap" },
     { key: "qty", label: "수량", width: 72, render: (s) => <span className="num font-bold">{s.qty}</span>, className: "whitespace-nowrap" },

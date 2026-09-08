@@ -25,6 +25,7 @@ import { DocumentToolbar } from "./_components/document-toolbar";
 import { DocumentRow } from "./_components/document-row";
 import { LinkedDocumentRow } from "./_components/linked-row";
 import { FolderNav, type FolderItem } from "./_components/folder-nav";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 export const metadata = { title: "데이터베이스 — eywa" };
 
@@ -172,7 +173,7 @@ export default async function DocumentsPage({
           {total === 0 ? (
             <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />
           ) : (
-            <div className="overflow-x-auto">
+            <DragScrollArea>
               <table className="w-full text-sm">
                 <thead>
                   {/* 헤더 클릭 정렬 — 서버 정렬(URL `?sort=&dir=`)이라 페이지를 넘겨도 전체 기준으로 줄 선다.
@@ -249,7 +250,7 @@ export default async function DocumentsPage({
                       ))}
                 </tbody>
               </table>
-            </div>
+            </DragScrollArea>
           )}
         </section>
       </div>

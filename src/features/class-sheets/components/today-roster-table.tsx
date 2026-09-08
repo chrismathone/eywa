@@ -123,7 +123,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
     //    상자를 두르면 사이에 여백과 테두리가 겹쳐 격자가 끊긴다.
     <>
         <table
-          className="border-collapse text-[13px]"
+          className="border-collapse text-sm"
           style={{ tableLayout: "fixed", width: todayContentWidth(slots.length) }}
         >
         <colgroup>
@@ -143,7 +143,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
               본원302"를 말하고 있어, 표가 한 번 더 적으면 같은 사실이 두 줄을 먹는다(원장 2026-08-11
               "여백도 최소화"). 두 층은 한 카드·한 격자라 위층 머리가 곧 이 열의 머리다.
               ⚠️ 계획 층 없이 이 표만 따로 쓸 일이 생기면 교시 머리를 여기 되살릴 것. */}
-          <tr className="bg-bg-soft text-foreground text-left text-[11px]">
+          <tr className="bg-bg-soft text-foreground text-left text-xs">
             <th className="rounded-l-md py-0.5 pl-1 align-bottom font-bold">
               <GroupToggle
                 group="active"
@@ -183,7 +183,7 @@ export const TodayRosterTable = memo(function TodayRosterTable({
             if (row.kind === "label") {
               return (
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
-                  <td colSpan={colSpanAll} className="text-foreground px-1 py-0.5 text-[11px] font-bold" title={groupHint(row.key)}>
+                  <td colSpan={colSpanAll} className="text-foreground px-1 py-0.5 text-xs font-bold" title={groupHint(row.key)}>
                     <GroupToggle
                       group={row.key}
                       collapsed={collapsedGroups.includes(row.key)}

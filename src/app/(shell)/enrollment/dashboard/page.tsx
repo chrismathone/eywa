@@ -11,6 +11,7 @@ import {
 import { ConversionBars } from "./_components/conversion-bars";
 import { OutcomeDonut } from "./_components/outcome-donut";
 import { kstMonth } from "@/lib/date-kst";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 export const metadata = { title: "등록상담 대시보드 — eywa" };
 
@@ -123,7 +124,7 @@ export default async function EnrollmentDashboardPage({
         {consultants.length === 0 ? (
           <div className="text-muted-foreground px-5 py-8 text-center text-sm">데이터 없음</div>
         ) : (
-          <div className="overflow-x-auto">
+          <DragScrollArea>
           <table className="w-full text-sm">
             <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
               <tr>
@@ -148,7 +149,7 @@ export default async function EnrollmentDashboardPage({
               ))}
             </tbody>
           </table>
-          </div>
+          </DragScrollArea>
         )}
       </section>
     </div>

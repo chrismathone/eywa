@@ -55,7 +55,7 @@ export function TextbookPreview({
 }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-text-dim flex items-center gap-1.5 text-[12px] font-bold">
+      <h3 className="text-text-dim flex items-center gap-1.5 text-xs font-bold">
         <Eye className="size-3.5" />
         미리보기
       </h3>

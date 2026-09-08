@@ -5,11 +5,12 @@ import { displayLessons } from "../curriculum";
 import type { Subject } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
-const PREV_TD_BASE = "px-2 py-1 align-top text-[11px] text-text-faint";
+const PREV_TD_BASE = "px-2 py-1 align-top text-xs text-text-faint";
 const PREV_TD = `border-line/60 ${PREV_TD_BASE}`;
 // 학생 묶음 구분선 — 참고행이 묶음의 첫 행이라 여기 위쪽에 굵고 진한 회색 선을 둔다(grid-row TD_GROUP과 동일 톤).
 // ⚠️ 폭 유틸(border-t / border-t-2)을 한 className에 섞지 말 것 — 어느 쪽이 이길지 CSS 순서에 달린다.
-const PREV_TD_GROUP = `border-t-2 border-t-text-faint/50 ${PREV_TD_BASE}`;
+// 🔴 색은 면 토큰(`--neutral-fill`) — grid-row TD_GROUP과 같은 이유(글자색 통일에 딸려가지 않게).
+const PREV_TD_GROUP = `border-t-2 border-t-neutral-fill/50 ${PREV_TD_BASE}`;
 
 /** "2026-07-10" → "07/10". 이전 회차 참고행 날짜. */
 function shortDate(ymd: string): string {
@@ -43,7 +44,7 @@ export function PrevRow({
       {/* ⚠️ 화살표는 **아래**를 가리킨다 — 이 참고행은 바로 **아래** 학생의 지난 회차다. 위를 가리키면
           윗 학생에 딸린 줄로 읽혀 아주 헷갈린다(원장 지적 07-21). */}
       <td className={`${td} text-center`} aria-hidden>
-        <EyIcon name="chevronDown" size={13} className="text-text-faint/70" />
+        <EyIcon name="chevronDown" size={13} className="text-text-faint" />
       </td>
       <td className={td}>
         <span className="whitespace-nowrap">
@@ -53,7 +54,7 @@ export function PrevRow({
       {/* 수업타임 열(2026-08-05 신설) — 지난 회차엔 보여줄 값이 없지만 **칸은 반드시 차지해야 한다**.
           이 행은 위치로만 열을 맞추는 구조라, 빠뜨리면 아래 모든 칸이 한 칸씩 왼쪽으로 밀린다(조용한 오정렬). */}
       <td className={`${td} text-center`} aria-hidden>
-        <span className="text-text-faint/70">·</span>
+        <span className="text-text-faint">·</span>
       </td>
       <td className={td}>
         <span className="line-clamp-3 whitespace-pre-line">{prog}</span>
@@ -68,7 +69,7 @@ export function PrevRow({
       <td className={td}>
         <span className="line-clamp-2">{p.textbook || "—"}</span>
         {p.homeworkToday ? (
-          <span className="text-text-faint/80 mt-0.5 block line-clamp-2">
+          <span className="text-text-faint mt-0.5 block line-clamp-2">
             {tf("os.prev.homework", { text: p.homeworkToday })}
           </span>
         ) : null}
@@ -82,7 +83,7 @@ export function PrevRow({
             type="button"
             onClick={onImport}
             title={t("os.prev.rowTitle")}
-            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-[10px] font-bold"
+            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-xs font-bold"
           >
             {t("os.prev.rowGet")}
           </button>

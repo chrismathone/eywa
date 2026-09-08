@@ -214,7 +214,7 @@ export function AudioRecorderField({
           >
             <Upload className="text-muted-foreground size-5" />
             <span className="text-foreground text-sm font-medium">파일 업로드</span>
-            <span className="text-muted-foreground text-[11px]">MP3/M4A/WAV · 50MB</span>
+            <span className="text-muted-foreground text-xs">MP3/M4A/WAV · 50MB</span>
           </button>
           <button
             type="button"
@@ -224,7 +224,7 @@ export function AudioRecorderField({
           >
             <Mic className="text-muted-foreground size-5" />
             <span className="text-foreground text-sm font-medium">바로 녹음</span>
-            <span className="text-muted-foreground text-[11px]">입력하면서 녹음 가능</span>
+            <span className="text-muted-foreground text-xs">입력하면서 녹음 가능</span>
           </button>
         </div>
       )}

@@ -93,7 +93,7 @@ export function EditableAttendanceCell({
             type="button"
             onClick={() => toggle(d)}
             /* ⚠️ 영어 요일은 세 글자라 20px 고정에 안 들어간다 — 목록 화면 알약과 같은 규약. */
-            className={`inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 text-[11px] font-bold transition ${
+            className={`inline-flex h-5 min-w-5 items-center justify-center rounded-sm px-1 text-xs font-bold transition ${
               sel.has(d) ? "bg-primary text-primary-foreground" : "bg-bg-soft text-text-faint hover:bg-bg-soft/70"
             }`}
           >
@@ -118,7 +118,7 @@ export function EditableAttendanceCell({
       >
         <X className="size-3.5" />
       </button>
-      {err ? <span className="text-danger ml-0.5 text-[10px]">{err}</span> : null}
+      {err ? <span className="text-danger ml-0.5 text-xs">{err}</span> : null}
     </span>
   );
 }

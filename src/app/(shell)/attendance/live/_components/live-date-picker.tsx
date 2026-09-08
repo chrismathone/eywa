@@ -32,7 +32,7 @@ export function LiveDatePicker({
   return (
     <button
       type="button"
-      className="text-text-dim hover:text-foreground relative cursor-pointer text-left text-[13px]"
+      className="text-text-dim hover:text-foreground relative cursor-pointer text-left text-sm"
       title="날짜 선택"
       onClick={() => {
         try {

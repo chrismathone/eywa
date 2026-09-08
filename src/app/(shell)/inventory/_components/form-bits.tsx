@@ -12,10 +12,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
  * 데스크톱 12.5px. 높이는 공용 `<Input>`과 같은 h-8.
  */
 export const FIELD =
-  "border-line focus:border-primary h-8 w-full min-w-0 rounded-lg border bg-transparent px-2.5 text-base outline-none sm:text-[12.5px] disabled:opacity-60";
+  "border-line focus:border-primary h-8 w-full min-w-0 rounded-lg border bg-transparent px-2.5 text-base outline-none sm:text-xs disabled:opacity-60";
 export const SELECT = `${FIELD} pr-7`;
 export const TEXTAREA =
-  "border-line focus:border-primary min-h-16 w-full rounded-lg border bg-transparent px-2.5 py-1.5 text-base outline-none sm:text-[12.5px]";
+  "border-line focus:border-primary min-h-16 w-full rounded-lg border bg-transparent px-2.5 py-1.5 text-base outline-none sm:text-xs";
 
 export function Field({
   label,
@@ -34,9 +34,9 @@ export function Field({
   const Tag = as;
   return (
     <Tag className={`flex flex-col gap-1 ${className}`}>
-      <span className="text-text-dim text-[11.5px] font-bold">{label}</span>
+      <span className="text-text-dim text-xs font-bold">{label}</span>
       {children}
-      {hint ? <span className="text-text-faint text-[11px]">{hint}</span> : null}
+      {hint ? <span className="text-text-faint text-xs">{hint}</span> : null}
     </Tag>
   );
 }
@@ -44,7 +44,7 @@ export function Field({
 export function FormError({ error }: { error: string | null }) {
   if (!error) return null;
   return (
-    <p role="alert" className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-1.5 text-[12px]">
+    <p role="alert" className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-1.5 text-xs">
       {error}
     </p>
   );
@@ -68,8 +68,8 @@ export function DialogShell({
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
       <DialogContent className={`max-h-[88vh] overflow-y-auto ${wide ? "sm:max-w-lg" : "sm:max-w-md"}`}>
         <DialogHeader>
-          <DialogTitle className="text-[15px] font-bold">{title}</DialogTitle>
-          {description ? <DialogDescription className="text-[12px]">{description}</DialogDescription> : null}
+          <DialogTitle className="text-base font-bold">{title}</DialogTitle>
+          {description ? <DialogDescription className="text-xs">{description}</DialogDescription> : null}
         </DialogHeader>
         {children}
       </DialogContent>

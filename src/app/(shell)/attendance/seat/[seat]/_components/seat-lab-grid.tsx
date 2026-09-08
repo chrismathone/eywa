@@ -1,7 +1,14 @@
 "use client";
 
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { fitSeatName, SEAT_CHIP_NAME_LADDER } from "@/features/attendance/seat/name-fit";
+import {
+  fitSeatName,
+  fluidNameFontSize,
+  LAB_CHIP_NAME_FILL,
+  NAME_FILL_MAX_PX,
+  NAME_FILL_MIN_PX,
+  SEAT_CHIP_NAME_LADDER,
+} from "@/features/attendance/seat/name-fit";
 import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
@@ -37,16 +44,16 @@ export function SeatLabGrid({
         const left = r.students.filter((s) => statusOf(r.classId, s) === null).length;
         return (
           <section key={r.classId} className="border-line overflow-hidden rounded-2xl border">
-            <header className="bg-bg-soft border-line flex items-center gap-2 border-b px-3 py-1.5 text-[13px]">
+            <header className="bg-bg-soft border-line flex items-center gap-2 border-b px-3 py-1.5 text-sm">
               <span className="font-bold">{r.className}</span>
-              <span className="text-text-faint text-[11px] tabular-nums">{r.students.length}명</span>
-              <span className="text-text-faint text-[11px] tabular-nums">~{r.end}</span>
+              <span className="text-text-faint text-xs tabular-nums">{r.students.length}명</span>
+              <span className="text-text-faint text-xs tabular-nums">~{r.end}</span>
               {!readOnly && left > 0 ? (
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => onFillClass(r.classId)}
-                  className="border-line bg-card text-primary ml-auto rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold disabled:opacity-50"
+                  className="border-line bg-card text-primary ml-auto rounded-full border px-2.5 py-0.5 text-xs font-semibold disabled:opacity-50"
                 >
                   이 반 출석
                 </button>
@@ -66,15 +73,20 @@ export function SeatLabGrid({
                       type="button"
                       disabled={readOnly || pending}
                       onClick={() => onSave(r.classId, s.id, cur === "present" ? null : "present", cur)}
-                      className={`border-line flex min-h-[54px] w-full flex-col items-start rounded-xl border px-2.5 py-2 text-left transition disabled:cursor-default ${
+                      className={`@container border-line flex h-full min-h-[54px] w-full flex-col items-start rounded-xl border px-2.5 py-2 text-left transition disabled:cursor-default ${
                         cur ? SEAT_TONE[cur] : "bg-card border-dashed"
                       }`}
                     >
                       {/* `pr-5` = 오른쪽 위 상태 배지·'결' 버튼 자리를 비워 둔다(안 비우면 긴 이름이
-                          배지 밑으로 들어간다). `leading-5`로 줄 높이를 고정해 단계가 내려가도 칩 높이는
-                          그대로. 하한(12px)에서도 넘칠 때만 말줄임 + 전체 이름 툴팁. */}
+                          배지 밑으로 들어간다). 글자는 칩 폭에 비례(name-fit.ts `fluidNameFontSize`, 원장 2026-09-04
+                          "출결에도 이름 꽉 차게") — 배지 자리를 뺀 폭만 쓴다(`LAB_CHIP_NAME_FILL`). 하한에서도 넘칠 때만
+                          말줄임 + 전체 이름 툴팁. 버튼은 `h-full` — 격자 한 줄 안에서 이름이 상한(24px)에 닿은 칩과
+                          긴 이름이라 작아진 칩의 높이가 갈리지 않게(li가 줄 높이로 늘고 버튼이 그걸 채운다). */}
                       <span
-                        className={`w-full truncate pr-5 leading-5 font-bold ${fit.className}`}
+                        className="w-full truncate pr-5 leading-none font-bold"
+                        style={{
+                          fontSize: fluidNameFontSize(s.name, { minPx: NAME_FILL_MIN_PX.labChip, maxPx: NAME_FILL_MAX_PX, fill: LAB_CHIP_NAME_FILL }),
+                        }}
                         // 이름이 잘린 칩에서는 이름 툴팁이 <li>의 사유를 가린다 → 둘을 이어 붙인다.
                         title={
                           fit.clipped ? (noteTitle ? `${s.name} · ${noteTitle}` : s.name) : (noteTitle ?? undefined)
@@ -82,12 +94,12 @@ export function SeatLabGrid({
                       >
                         {s.name}
                       </span>
-                      <span className="text-[11.5px] opacity-80">
+                      <span className="text-xs opacity-80">
                         {schoolGradeLabel(s.school, s.grade) || " "}
                       </span>
                     </button>
                     {cur ? (
-                      <span className="pointer-events-none absolute top-1.5 right-2 text-[10px] font-extrabold">
+                      <span className="pointer-events-none absolute top-1.5 right-2 text-xs font-extrabold">
                         {SEAT_LABEL[cur]}
                       </span>
                     ) : null}

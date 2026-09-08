@@ -69,7 +69,7 @@ export function SortableTable<T>({
     <DragScrollArea className="stack-table">
       <table
         style={{ minWidth: minTableWidth }}
-        className="w-full table-fixed border-collapse text-[12.5px] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint"
+        className="w-full table-fixed border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint"
       >
         <colgroup>
           {columns.map((c) => (
@@ -86,7 +86,7 @@ export function SortableTable<T>({
                   key={c.key}
                   scope="col"
                   aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-                  className="text-text-dim overflow-hidden px-2 py-1.5 text-center text-[11.5px] font-bold whitespace-nowrap"
+                  className="text-text-dim overflow-hidden px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap"
                 >
                   <button
                     type="button"

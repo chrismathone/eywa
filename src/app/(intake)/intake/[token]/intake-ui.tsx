@@ -53,8 +53,8 @@ export function QuestionSection({
     <>
       <div className={`mx-3 mt-5 flex items-baseline gap-2.5 rounded-t-2xl px-4 py-3 ${t.bar}`}>
         <span className={`mt-[3px] h-3.5 w-1 shrink-0 self-start rounded-full ${t.accent}`} aria-hidden />
-        <span className="text-foreground flex-1 text-[15px] leading-snug font-bold break-keep">{title}</span>
-        {hint ? <span className="text-text-dim shrink-0 text-[11px]">{hint}</span> : null}
+        <span className="text-foreground flex-1 text-base leading-snug font-bold break-keep">{title}</span>
+        {hint ? <span className="text-text-dim shrink-0 text-xs">{hint}</span> : null}
       </div>
       <div className="bg-card mx-3 space-y-4 rounded-b-2xl px-5 py-5 shadow-sm">{children}</div>
     </>

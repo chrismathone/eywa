@@ -56,7 +56,7 @@ export function EcsTrackFilter({
       className={TOOLBAR_SEG_BOX}
       title={t("filter.program.title")}
     >
-      <span className="text-text-dim px-1.5 text-[11px] font-bold">{t("filter.program")}</span>
+      <span className="text-text-dim px-1.5 text-xs font-bold">{t("filter.program")}</span>
       {ENGLISH_TRACK_FILTERS.map((f) => (
         <button
           key={f}
@@ -64,7 +64,7 @@ export function EcsTrackFilter({
           disabled={pending}
           onClick={() => pick(f)}
           aria-pressed={value === f}
-          className={`cursor-pointer rounded-md px-2 py-1 text-[11px] font-bold transition disabled:cursor-wait disabled:opacity-60 ${
+          className={`cursor-pointer rounded-md px-2 py-1 text-xs font-bold transition disabled:cursor-wait disabled:opacity-60 ${
             value === f ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
           }`}
         >

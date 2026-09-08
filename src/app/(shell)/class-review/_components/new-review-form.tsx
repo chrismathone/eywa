@@ -77,13 +77,13 @@ export function NewReviewForm({
           </div>
         ) : null}
       </div>
-      <p className="text-text-faint text-[11px]">날짜는 따로 입력하지 않습니다 — 생성한 날이 평가일로 기록됩니다.</p>
+      <p className="text-text-faint text-xs">날짜는 따로 입력하지 않습니다 — 생성한 날이 평가일로 기록됩니다.</p>
 
       <div className="border-line border-t pt-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="micro">평가자 방식</p>
           <div className="flex items-center gap-1.5">
-            <span className="text-text-dim text-[11px]">평가자 인원</span>
+            <span className="text-text-dim text-xs">평가자 인원</span>
             {/* 방식과 무관하게 같은 값을 쓴다 — 지정이면 칸 수, 선착순이면 마감 인원. */}
             <div className="border-line flex overflow-hidden rounded-lg border" role="group" aria-label="평가자 인원">
               {OBSERVER_LIMIT_OPTIONS.map((n) => (
@@ -123,7 +123,7 @@ export function NewReviewForm({
               <span className={`block text-sm font-bold ${mode === o.v ? "text-primary" : "text-foreground"}`}>
                 {o.t}
               </span>
-              <span className="text-text-dim mt-0.5 block text-[11px]">{o.d}</span>
+              <span className="text-text-dim mt-0.5 block text-xs">{o.d}</span>
             </button>
           ))}
         </div>
@@ -151,7 +151,7 @@ export function NewReviewForm({
             </div>
           </div>
         ) : (
-          <p className="text-text-faint mt-3 text-[11px]">
+          <p className="text-text-faint mt-3 text-xs">
             이 화면에 접근 가능한 사람이라면 누구든 상세에서 바로 채점할 수 있고, 먼저 저장한{" "}
             <span className="num">{count}</span>명까지만 평가자로 집계됩니다. (평가 대상 본인은 인원 제한과 무관하게 &lsquo;본인 평가&rsquo;로 저장)
           </p>

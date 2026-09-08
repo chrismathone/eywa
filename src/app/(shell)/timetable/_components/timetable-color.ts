@@ -59,6 +59,18 @@ export function subjectHeaderStyle(
 }
 
 /**
+ * 원장이 색 견본으로 직접 준 두 색(2026-09-07) — 스프레드시트 표준색을 그대로 옮긴 것이라 토큰이 아니다.
+ * 🔴 **모든 뷰가 이 상수를 쓴다**(기본뷰·통합뷰·합반·강사뷰) — 뷰마다 색을 적으면 같은 학생이 화면마다 달라진다.
+ * ⚠️ 값을 조립하지 말 것: Tailwind는 소스에 **적힌 글자 그대로**를 스캔해서 `bg-[#a4c2f4]`가 문자열로 없으면
+ *    클래스가 생성되지 않고 **에러 없이 색이 안 붙는다**.
+ * 🔴 글씨는 흰색이 아니라 진한 잉크다 — 원장 지시는 *"대비맞춰서 … 왠만하면 흰색"*인데 이 두 배경에서 흰 글씨는
+ *    각각 1.8:1·1.1:1(WCAG 하한 4.5)로 **안 읽힌다**. 대비가 먼저라 잉크로 두고, 흰 글씨를 쓰려면 배경을 더
+ *    진한 파랑으로 바꾸는 별도 결정이 필요하다.
+ */
+export const HOLD_SECTION_CLASS = "bg-[#a4c2f4] text-ink"; // 대기 = light cornflower blue 1 (대비 9.5:1)
+export const RECENT_ROW_CLASS = "bg-[#f4cccc] text-[#7f1d1d]"; // 등록 31~60일 = light red 1 (대비 6.9:1)
+
+/**
  * 재원 학생 한 줄 tone(신입/전입/일반) — 모드별 강도. 퇴원·대기는 호출부에서 별도 처리(무영향).
  * ⚠️ 전입을 신입보다 먼저 검사(반이동은 isNew도 true라 순서 중요 — studentRowTone과 동일 규칙).
  * - vivid: 신입=빨강 채움+흰 글자, 전입=민트 채움+진초록(시트 export 색 그대로).
@@ -67,20 +79,23 @@ export function subjectHeaderStyle(
  */
 export function timetableStudentTone(
   mode: TimetableColorMode,
-  s: { isNew?: boolean; isTransferredIn?: boolean },
+  s: { isNew?: boolean; isRecent?: boolean; isTransferredIn?: boolean },
 ): string {
   if (mode === "vivid") {
     // vivid = 이름을 bold로 확실히 굵게(사용자 요청 "더 쨍하게"). 신입=빨강 채움, 전입=민트 채움.
     if (s.isTransferredIn) return "bg-[#bbf7d0] font-bold text-[#14512b]";
     if (s.isNew) return "bg-danger font-bold text-white";
+    if (s.isRecent) return `${RECENT_ROW_CLASS} font-bold`;
     return "font-bold text-foreground";
   }
   if (mode === "mid") {
     if (s.isTransferredIn) return "bg-primary/15 font-medium text-primary";
     if (s.isNew) return "bg-danger/15 font-medium text-danger";
+    if (s.isRecent) return RECENT_ROW_CLASS;
     return "text-foreground";
   }
   if (s.isTransferredIn) return "bg-primary-soft text-primary";
   if (s.isNew) return "bg-danger-soft text-danger";
+  if (s.isRecent) return RECENT_ROW_CLASS;
   return "text-foreground";
 }

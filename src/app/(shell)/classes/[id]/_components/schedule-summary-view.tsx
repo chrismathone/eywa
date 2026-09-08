@@ -104,7 +104,7 @@ function DayRowItem({
             key={d}
             aria-hidden
             /* ⚠️ 영어 요일은 세 글자라 20px 고정에 안 들어간다 — 목록 화면 알약과 같은 규약. */
-            className="bg-primary text-primary-foreground inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-medium"
+            className="bg-primary text-primary-foreground inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-medium"
           >
             {sheetDowLabel(d, lang)}
           </span>
@@ -126,7 +126,7 @@ function PastNote({ count, lang, inline }: { count: number; lang: SheetLang; inl
   const text = sheetTf(lang, "cls.sch.pastHidden", { n: count });
   return (
     <span
-      className={`text-muted-foreground text-[11px] ${inline ? "ml-1" : "block"}`}
+      className={`text-muted-foreground text-xs ${inline ? "ml-1" : "block"}`}
       title={sheetT(lang, "cls.sch.pastTitle")}
     >
       {inline ? `· ${text}` : text}

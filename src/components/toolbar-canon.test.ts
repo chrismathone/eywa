@@ -120,19 +120,24 @@ function isControl(region: string, cls: string, tag: string): boolean {
 }
 
 describe("툴바 규약 — 값(단일 소스)", () => {
-  it("높이는 h-8 한 값이다 (세로 패딩으로 만들지 않는다)", () => {
+  it("높이는 control-scale 한 값이다 — h-(--control-h), 세로 패딩으로 만들지 않는다", () => {
     // 🔴 이 셋이 툴바 한 줄에 나란히 선다 — 하나라도 다르면 줄이 울퉁불퉁해진다.
-    expect(CONTROLS).toMatch(/TOOLBAR_SELECT\s*=\s*\n?\s*"[^"]*\bh-8\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX\s*=\s*"[^"]*\bh-8\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*"[^"]*\bh-8\b/);
-    // 줄바꿈되는 묶음은 한 줄일 때 h-8과 같은 높이여야 다른 묶음과 나란히 선다.
-    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX_WRAP\s*=\s*\n?\s*"[^"]*\bmin-h-8\b/);
+    //    2026-09-03: "h-8 고정"은 원장의 90% 규칙(라벨이 높이의 90%)으로 대체 — 높이는 라벨에서 도출(globals.css --control-*).
+    expect(CONTROLS).toMatch(/TOOLBAR_SELECT\s*=\s*\n?\s*"[^"]*\bh-\(--control-h\)/);
+    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX\s*=\s*"[^"]*\bh-\(--control-h\)/);
+    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*\n?\s*"[^"]*\bh-\(--control-h\)/);
+    // 줄바꿈되는 묶음은 한 줄일 때 같은 높이여야 다른 묶음과 나란히 선다.
+    expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX_WRAP\s*=\s*\n?\s*"[^"]*\bmin-h-\(--control-h\)/);
+    // 라벨은 control-scale 토큰(18px·leading-none) — 화면마다 text-xs/sm을 손으로 적던 것을 막는다.
+    for (const name of ["TOOLBAR_SELECT", "TOOLBAR_SEG_ITEM", "TOOLBAR_CHIP", "TOOLBAR_SEARCH_BOX"]) {
+      expect(CONTROLS).toMatch(new RegExp(name + "\\s*=\\s*\\n?\\s*\"[^\"]*text-\\(length:--control-label\\) leading-none"));
+    }
   });
 
   it("라운드는 덜 둥근 쪽 — 묶음 lg / 안쪽 칩 md, 알약은 안 쓴다", () => {
     expect(CONTROLS).toMatch(/TOOLBAR_SEG_BOX\s*=\s*"[^"]*\brounded-lg\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_SEG_ITEM\s*=\s*"[^"]*\brounded-md\b/);
-    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*"[^"]*\brounded-lg\b/);
+    expect(CONTROLS).toMatch(/TOOLBAR_SEG_ITEM\s*=\s*\n?\s*"[^"]*\brounded-md\b/);
+    expect(CONTROLS).toMatch(/TOOLBAR_CHIP\s*=\s*\n?\s*"[^"]*\brounded-lg\b/);
     // 규약 상수 자체에 알약이 섞이면 소비처 전체가 한 번에 갈린다.
     // ⚠️ **문자열 값만** 본다 — 주석은 "알약을 쓰지 않는다"고 적으려고 그 단어를 쓴다.
     expect(exportedStrings(CONTROLS).filter((v) => /rounded-(full|pill)/.test(v))).toEqual([]);
@@ -140,7 +145,7 @@ describe("툴바 규약 — 값(단일 소스)", () => {
 
   it("강사 시트(ECS·MCS)는 같은 규약을 색만 바꿔 쓴다", () => {
     expect(SHEET_SEG_BOX).toContain("border-line-strong");
-    expect(SHEET_SEG_BOX).toContain("h-8");
+    expect(SHEET_SEG_BOX).toContain("h-(--control-h)");
     expect(SHEET_SEG_BOX).toContain("rounded-lg");
     expect(SHEET_SEG_BOX).not.toContain("border-line ");
     // 상단 바에 카드 껍데기가 없다.
@@ -216,7 +221,6 @@ const CANON_SURFACES = [
   "src/app/(shell)/enrollment/page.tsx",
   "src/app/(shell)/enrollment/dashboard/page.tsx",
   "src/app/(shell)/staff/[id]/_components/monthly-schedule-view.tsx",
-  "src/app/(shell)/billing/_components/session-term-table.tsx",
   "src/features/class-sheets/components/sheet-toolbar.tsx",
   "src/features/class-sheets/components/sheet-chrome.tsx",
   "src/features/class-sheets/components/seat-day-face.tsx",
@@ -229,6 +233,19 @@ const CANON_SURFACES = [
   // 재고관리(2026-09-02, 새 화면) — 만들 때부터 부품으로.
   "src/app/(shell)/inventory/_components/assets-face.tsx",
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",
+  "src/app/(shell)/meetings/page.tsx",
+  "src/app/(shell)/withdrawals/page.tsx",
+  // 수납(2026-09-04, 14단계) — 월 네비 부품·면 툴바가 부품을 읽는다(수납 면·환불·정산은 BillingMonthNav 경유라 직접 import 없음).
+  "src/app/(shell)/billing/_components/billing-month-nav.tsx",
+  "src/app/(shell)/billing/_components/calculator-panel.tsx",
+  "src/app/(shell)/billing/_components/catalog-panel.tsx",
+  "src/app/(shell)/billing/_components/expenses-panel.tsx",
+  "src/app/(shell)/billing/_components/session-terms-face.tsx",
+  "src/app/(shell)/billing/_components/session-verification-face.tsx",
+  "src/app/(shell)/billing/_components/textbooks-panel.tsx",
+  "src/app/(shell)/billing/_components/tuition-prices-panel.tsx",
+  // 캘린더(2026-09-04, 15단계) — 보기·태그 드롭다운 + PeriodNav.
+  "src/app/(shell)/calendar/page.tsx",
 ];
 
 describe("툴바 규약 — 옮긴 표면은 되돌아가지 않는다", () => {
@@ -237,6 +254,10 @@ describe("툴바 규약 — 옮긴 표면은 되돌아가지 않는다", () => {
     const readsCanon =
       src.includes("@/components/toolbar-controls") ||
       src.includes("@/components/toolbar") ||
+      // 규약 치수를 **부품 안에서** 읽는 공용 컨트롤 — 화면이 이것만 써도 규약을 지킨 것이다
+      // (치수를 손으로 안 적는 게 이 가드의 목적이다).
+      src.includes("@/components/href-select") ||
+      src.includes("@/components/period-nav") ||
       /from "(\.\.\/)+chrome"/.test(src) ||
       src.includes("@/features/class-sheets/chrome");
     expect(readsCanon).toBe(true);

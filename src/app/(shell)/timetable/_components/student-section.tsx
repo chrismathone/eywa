@@ -29,7 +29,7 @@ export function StudentSection({
   students,
   classId,
   className,
-  editing,
+  canDrag,
   cap,
   draggable,
   tone,
@@ -42,10 +42,11 @@ export function StudentSection({
   students: SectionStudent[];
   classId: string;
   className: string;
-  editing: boolean;
+  /** 드래그 가능(편집 권한 + 이번/미래 주) — 옛 `editing`. */
+  canDrag: boolean;
   cap: number;
   draggable: boolean;
-  tone: (s: { isNew?: boolean; isTransferredIn?: boolean }) => string;
+  tone: (s: { isNew?: boolean; isRecent?: boolean; isTransferredIn?: boolean }) => string;
   label?: string;
   labelTone?: string;
   /** 클릭 시 같은 반 요일 편집 팝오버용(재원 섹션에만 전달). */
@@ -62,16 +63,17 @@ export function StudentSection({
     <>
       {label ? (
         <div
-          className={`flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
+          className={`flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
         >
           <span>{label}</span>
           <span className="num">{count ?? students.length}</span>
         </div>
       ) : null}
       {visible.map((s, i) =>
-        draggable && editing && s.enrollmentId ? (
+        draggable && canDrag && s.enrollmentId ? (
           <DraggableStudentRow
             key={s.enrollmentId}
+            student={s}
             enrollmentId={s.enrollmentId}
             studentId={s.studentId}
             classId={s.ownClassId ?? classId}
@@ -97,7 +99,7 @@ export function StudentSection({
         ),
       )}
       {hidden > 0 ? (
-        <div className="text-text-faint px-2 py-[3px] text-[12px]">외 {hidden}명</div>
+        <div className="text-text-faint px-2 py-[3px] text-xs">외 {hidden}명</div>
       ) : null}
     </>
   );

@@ -39,7 +39,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
   return (
     <>
       <span
-        className="text-text-dim text-[12.5px]"
+        className="text-text-dim text-xs"
         title={t("mp.title")}
       >
         {t("bulk.plan")}{" "}
@@ -50,7 +50,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
       </span>
       {summary.unwritten > 0 ? (
         <span
-          className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold"
+          className="text-amber inline-flex items-center gap-1.5 text-xs font-bold"
           title={t("mp.unwritten.title")}
         >
           <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
@@ -59,7 +59,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
       ) : null}
       {summary.offBook > 0 ? (
         <span
-          className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold"
+          className="text-amber inline-flex items-center gap-1.5 text-xs font-bold"
           title={t("mp.offBook.title")}
         >
           <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
@@ -68,7 +68,7 @@ export function MonthPlanBar({ data, cells }: { data: ClassSheetMonthData; cells
       ) : null}
       {summary.noPlan > 0 ? (
         <span
-          className="text-text-faint text-[12.5px]"
+          className="text-text-faint text-xs"
           title={t("mp.noPlan.title")}
         >
           {t("mp.noPlan")} <span className="num">{tf("month.days", { n: summary.noPlan })}</span>

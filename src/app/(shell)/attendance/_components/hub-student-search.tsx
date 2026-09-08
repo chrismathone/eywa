@@ -122,7 +122,8 @@ export function HubStudentSearch({
         value={query}
         onChange={run}
         placeholder={t("att.search.ph")}
-        inputWidth="w-[116px]"
+        // 18px 라벨(control-scale, v5) 기준 — 안내 문구가 잘리지 않는 폭(옛 12px 시절 116px).
+        inputWidth="w-[168px]"
       />
       {open ? (
         // 🔑 넓은 화면 = **입력칸 바로 아래**(위 `sm:relative`가 기준, `right-0`으로 칸 오른쪽 끝에 맞춤)
@@ -132,11 +133,11 @@ export function HubStudentSearch({
           {/* 🔴 결과가 없는 채로 다시 묻는 중이면 **"없습니다"라고 말하지 않는다** — 방금 친 말의 답이
               아직 안 왔을 뿐인데 못 찾았다고 하면 사람이 검색을 그만둔다. */}
           {loading && (!result || result.hits.length === 0) ? (
-            <p className="text-text-dim px-2 py-3 text-[12.5px]">{t("att.search.loading")}</p>
+            <p className="text-text-dim px-2 py-3 text-xs">{t("att.search.loading")}</p>
           ) : result?.error ? (
-            <p className="text-danger px-2 py-3 text-[12.5px]">{result.error}</p>
+            <p className="text-danger px-2 py-3 text-xs">{result.error}</p>
           ) : result && result.hits.length === 0 ? (
-            <p className="text-text-dim px-2 py-3 text-[12.5px] break-keep">
+            <p className="text-text-dim px-2 py-3 text-xs break-keep">
               {hubEmptyMessage(query, result.where || t("att.search.where"), lang)}
             </p>
           ) : result ? (
@@ -144,7 +145,7 @@ export function HubStudentSearch({
               {/* 검색어를 바꾸는 동안엔 **옛 결과**가 잠깐 남는다 — 그 사실을 한 줄로 밝힌다
                   (아무 표시가 없으면 지금 목록이 방금 친 말의 답인 줄로 읽힌다). */}
               {loading ? (
-                <p className="text-text-faint px-2 pb-1 text-[11.5px]">{t("att.search.loading")}</p>
+                <p className="text-text-faint px-2 pb-1 text-xs">{t("att.search.loading")}</p>
               ) : null}
               {/* 🔑 **과목 그룹**(원장 2026-08-24 *"이런식으로 구분되게 · 과목 라벨을 붙이라는 소리임"*).
                   스크롤은 **바깥 한 곳**에만 둔다 — 그룹마다 스크롤을 주면 짧은 그룹이 각자 잘린다.
@@ -164,7 +165,7 @@ export function HubStudentSearch({
                         지금 보는 게 무슨 과목인지 말해 준다.
                         구분선은 **그룹 사이에만** — 마지막 그룹 아래에 선이 남으면 잘린 목록처럼 읽힌다. */}
                     <li
-                      className={`text-text-faint col-span-full px-2 pb-0.5 text-[11px] font-bold ${
+                      className={`text-text-faint col-span-full px-2 pb-0.5 text-xs font-bold ${
                         gi > 0 ? "border-line mt-1.5 border-t pt-1.5" : ""
                       }`}
                     >
@@ -186,16 +187,16 @@ export function HubStudentSearch({
                           })}
                           className="hover:bg-bg-soft col-span-full grid grid-cols-subgrid items-baseline gap-x-2 rounded-lg px-2 py-1.5"
                         >
-                          <span className="text-foreground text-[13px] font-bold">{h.studentName}</span>
+                          <span className="text-foreground text-sm font-bold">{h.studentName}</span>
                           {/* 🔴 값이 없어도 칸은 **비워서 그린다** — 안 그리면 그 줄만 열이 하나 밀린다. */}
-                          <span className="text-text-faint text-[11.5px]">{h.schoolGrade}</span>
+                          <span className="text-text-faint text-xs">{h.schoolGrade}</span>
                           <span
-                            className="text-text-dim min-w-0 truncate text-[12px]"
+                            className="text-text-dim min-w-0 truncate text-xs"
                             title={classNameFor(h.className, lang)}
                           >
                             {classNameFor(h.className, lang)}
                           </span>
-                          <span className="text-text-dim text-[12px]">{h.teacherName ?? ""}</span>
+                          <span className="text-text-dim text-xs">{h.teacherName ?? ""}</span>
                           {/* 🔑 **등원 요일**(원장 2026-08-24) — 한 학생이 여러 반이면 줄이 이름·학교·담임
                               까지 똑같아 보여 어느 줄이 어느 요일 반인지 구분이 안 됐다. 반 운영 요일이
                               아니라 **그 학생이 그 반에 오는 요일**이고(분리등원), 시트가 이름 아래
@@ -205,7 +206,7 @@ export function HubStudentSearch({
                                  고장으로 읽힌다(칸 자체는 열 맞춤 때문에 남긴다). */}
                           <span
                             // `pl-2` = 담임 이름과 붙어 한 덩어리로 읽히지 않게(열 간격만으론 좁다).
-                            className="text-text-dim pl-2 text-right text-[11.5px] font-medium"
+                            className="text-text-dim pl-2 text-right text-xs font-medium"
                             title={
                               h.attendLabel ? tf("att.search.attendDows", { dows: h.attendLabel }) : undefined
                             }
@@ -220,13 +221,13 @@ export function HubStudentSearch({
               </ul>
               {/* 🔴 잘랐으면 **밝힌다** — 상한을 숨기면 "그 학생은 없다"는 거짓말이 된다([[#89]]). */}
               {result.truncated ? (
-                <p className="text-amber border-line mt-1 border-t px-2 pt-1.5 text-[11.5px]">
+                <p className="text-amber border-line mt-1 border-t px-2 pt-1.5 text-xs">
                   {hubTruncatedNote(result.limit, lang)}
                 </p>
               ) : null}
             </>
           ) : (
-            <p className="text-text-dim px-2 py-3 text-[12.5px]">{t("att.search.loading")}</p>
+            <p className="text-text-dim px-2 py-3 text-xs">{t("att.search.loading")}</p>
           )}
         </div>
       ) : null}

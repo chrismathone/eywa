@@ -99,7 +99,7 @@ export default async function ConsultationStatsPage() {
                   <WindowLink
                     href={`/consultations/new?studentId=${s.id}`}
                     title="새 상담"
-                    className="text-chart-1 text-[11px] hover:underline"
+                    className="text-chart-1 text-xs hover:underline"
                   >
                     상담 기록 +
                   </WindowLink>

@@ -46,7 +46,7 @@ export function MonthCalendar({
           <div key={i} className="border-line min-h-[64px] border-r border-b p-1 last:border-r-0">
             {d ? (
               <>
-                <div className={`num text-[11px] ${i % 7 === 0 ? "text-danger" : i % 7 === 6 ? "text-blue" : "text-text-dim"}`}>
+                <div className={`num text-xs ${i % 7 === 0 ? "text-danger" : i % 7 === 6 ? "text-blue" : "text-text-dim"}`}>
                   {d}
                 </div>
                 <div className="mt-0.5 flex flex-col gap-0.5">
@@ -54,7 +54,7 @@ export function MonthCalendar({
                     <span
                       key={`${r.classId}-${r.slotStart ?? "all"}`}
                       title={attendanceRecordTitle(r)}
-                      className={`truncate rounded-sm border px-1 py-0.5 text-[10px] font-medium ${attendanceStatusColor(r.status)}`}
+                      className={`truncate rounded-sm border px-1 py-0.5 text-xs font-medium ${attendanceStatusColor(r.status)}`}
                     >
                       {attendanceBadgeText(r)}
                     </span>
@@ -84,7 +84,7 @@ export function AttendanceList({ records }: { records: StudentAttendanceFull[] }
               <span
                 key={`${r.classId}-${r.slotStart ?? "all"}`}
                 title={r.note ?? undefined}
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${attendanceStatusColor(r.status)}`}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${attendanceStatusColor(r.status)}`}
               >
                 <span>{attendanceStatusLabel(r.status)}</span>
                 <span className="opacity-60">·</span>

@@ -249,7 +249,7 @@ export function TimetableSearchEmptyNote() {
   if (!ctx?.active || ctx.matchedClasses > 0) return null;
   return (
     <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-2 rounded-2xl px-4 py-3">
-      <span className="text-foreground text-[13px] font-bold break-keep">
+      <span className="text-foreground text-sm font-bold break-keep">
         {emptySearchMessage(ctx.query, ctx.scope)}
       </span>
       <button

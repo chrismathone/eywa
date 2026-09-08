@@ -69,33 +69,33 @@ export function MatrixTotalsSummary({
 
   return (
     <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-      <span className="text-foreground text-[12px] font-bold">
+      <span className="text-foreground text-xs font-bold">
         {t(searching ? "att.totals.search" : "att.totals.all")}
       </span>
       {searching ? (
         <>
           {/* 무엇으로 좁혔는지 — 검색칸이 화면 위쪽에 있어 스크롤하면 안 보인다. */}
-          <span className="text-text-dim text-[12px]">{`‘${search?.query.trim() ?? ""}’`}</span>
+          <span className="text-text-dim text-xs">{`‘${search?.query.trim() ?? ""}’`}</span>
           {/* ⚠️ **보이는 글씨**여야 한다 — 툴팁은 폰에서 없는 것과 같다. */}
-          <span className="bg-amber-soft text-amber shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap">
+          <span className="bg-amber-soft text-amber shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap">
             {t("att.totals.searching")}
           </span>
         </>
       ) : null}
       {/* ⚠️ 클래스는 종전 그대로(`num` 신설 금지) — 검색을 지우면 **표기까지** 원래대로여야 한다. */}
-      <span className="text-text-dim text-[11px]">
+      <span className="text-text-dim text-xs">
         {shownClasses}
         {searching ? <OfTotal>{classCount}</OfTotal> : null}
         {t("att.totals.classes")}
       </span>
-      <span className="text-foreground num text-[12px] font-bold">
+      <span className="text-foreground num text-xs font-bold">
         {t("att.totals.units")}
         <LiveUnits countByRow={countByRow} fallback={fallback} />
       </span>
       {money && totals ? (
         <>
           {/* ⚠️ 합계는 **고유 학생 1회**만 더한다 — 한 학생이 여러 반에 나와도 청구서는 한 장이다. */}
-          <span className="text-text-dim num text-[11px]">
+          <span className="text-text-dim num text-xs">
             {tf("att.totals.billed", { amount: formatMoney(totals.billed) })}
             {searching ? <OfTotal>{formatMoney(money.totals.billed)}</OfTotal> : null}
             {t("att.totals.paidPre")}
@@ -109,7 +109,7 @@ export function MatrixTotalsSummary({
           </span>
           {moneyNote ? (
             <span
-              className="text-amber text-[11px]"
+              className="text-amber text-xs"
               title={t("att.totals.slotTitle")}
             >
               {moneyNote}
@@ -117,7 +117,7 @@ export function MatrixTotalsSummary({
           ) : null}
           {totals.sharedStudents > 0 ? (
             <span
-              className="text-amber text-[11px]"
+              className="text-amber text-xs"
               title={t("att.totals.sharedTitle")}
             >
               {tf("att.totals.shared", { n: totals.sharedStudents })}
@@ -128,12 +128,12 @@ export function MatrixTotalsSummary({
           {/* 강사 몫(정산액) — 1순위는 티어 단가(0199a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
               티어 미배선이면 종전 안내(회차 확정/배분율)로 폴백. 없으면 0을 지어내지 않는다. */}
           {tier?.status === "ready" ? (
-            <span className="text-foreground num text-[12px] font-bold">
+            <span className="text-foreground num text-xs font-bold">
               {tf("att.totals.pay", {
                 amount: formatMoney(scopedTier ? scopedTier.total : tier.total),
               })}
               {searching ? <OfTotal>{formatMoney(tier.total)}</OfTotal> : null}
-              <span className="text-text-faint ml-1 text-[11px] font-normal">
+              <span className="text-text-faint ml-1 text-xs font-normal">
                 {t("att.totals.unitsPre")}
                 {formatSessionUnits(scopedTier ? scopedTier.unitsTotal : tier.unitsTotal)}
                 {searching ? ` / ${formatSessionUnits(tier.unitsTotal)}` : ""}
@@ -141,7 +141,7 @@ export function MatrixTotalsSummary({
               </span>
               {missingTierStudents.length > 0 ? (
                 <span
-                  className="text-amber ml-1 text-[11px] font-normal"
+                  className="text-amber ml-1 text-xs font-normal"
                   title={tf("att.totals.missingTierTitle", {
                     names: missingTierStudents.join(", "),
                   })}
@@ -154,7 +154,7 @@ export function MatrixTotalsSummary({
               ) : null}
               {missingPriceTiers.length > 0 ? (
                 <span
-                  className="text-amber ml-1 text-[11px] font-normal"
+                  className="text-amber ml-1 text-xs font-normal"
                   title={tf("att.totals.missingPriceTitle", {
                     tiers: missingPriceTiers.join(", "),
                   })}
@@ -165,7 +165,7 @@ export function MatrixTotalsSummary({
             </span>
           ) : tier?.status === "hold" ? (
             <span
-              className="text-amber text-[11px]"
+              className="text-amber text-xs"
               title={
                 tier.missingTierStudents.length > 0
                   ? tf("att.totals.missingTierPlain", {
@@ -177,7 +177,7 @@ export function MatrixTotalsSummary({
               {t("att.totals.payHold")}
             </span>
           ) : (
-            <span className="text-text-faint text-[11px]">
+            <span className="text-text-faint text-xs">
               {money.splitRows === 0
                 ? t("att.totals.noTerms")
                 : money.commissionRate === null

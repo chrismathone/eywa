@@ -211,7 +211,12 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
   it("🔴 프로그램 라벨·담임 이름은 **크게 + 강조**(원장 2026-08-28) — 다시 줄이지 말 것", () => {
     render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
     // 크기는 **하한만** 잠근다(더 키우는 건 자유, 되돌리는 것만 막는다).
-    const px = (el: Element) => Number(/text-\[(\d+)px\]/.exec(el.className)?.[1] ?? 0);
+    // 2026-09-03 스케일 v5: 임의 px 대신 토큰(globals.css --text-*)이라 토큰 → px로 읽는다.
+    const TOKEN_PX: Record<string, number> = { xs: 14, sm: 16, base: 18, lg: 20, xl: 24, "2xl": 28, "3xl": 32 };
+    const px = (el: Element) => {
+      const t = /(?:^|\s)text-(xs|sm|base|lg|xl|2xl|3xl)(?:\s|$)/.exec(el.className)?.[1];
+      return t ? TOKEN_PX[t]! : Number(/text-\[(\d+)px\]/.exec(el.className)?.[1] ?? 0);
+    };
     const label = screen.getByRole("heading", { level: 3, name: "EiE" });
     expect(px(label)).toBeGreaterThanOrEqual(16);
     expect(label.className).toContain("font-extrabold");

@@ -110,7 +110,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
           onPointerCancel={endDrag}
           className="bg-primary flex shrink-0 cursor-grab items-center justify-between gap-2 px-3 py-2 text-white select-none active:cursor-grabbing"
         >
-          <span className="truncate text-[13px] font-bold">{popup.title}</span>
+          <span className="truncate text-sm font-bold">{popup.title}</span>
           <button
             type="button"
             aria-label={t("popup.close")}
@@ -176,7 +176,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
         </div>
 
         <footer className="border-line bg-bg-soft/50 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
-          <div className="text-text-dim flex items-center gap-3 text-[11px]">
+          <div className="text-text-dim flex items-center gap-3 text-xs">
             <label className="flex cursor-pointer items-center gap-1">
               <input
                 type="checkbox"
@@ -204,7 +204,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
             {t("popup.close")}
           </button>
           {saveError ? (
-            <p role="status" className="text-danger w-full text-[11px]">
+            <p role="status" className="text-danger w-full text-xs">
               {saveError}
             </p>
           ) : null}

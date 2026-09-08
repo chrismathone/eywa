@@ -133,10 +133,10 @@ describe("SessionUnitsField", () => {
     cleanup();
     const { container: lg } = render(<SessionUnitsField {...base} units={null} status="present" onSet={vi.fn()} size="lg" />);
     const lgCls = lg.querySelector("input")!.className;
-    expect(mdCls).toContain("text-[13px]");
-    expect(lgCls).toContain("text-[15px]");
+    expect(mdCls).toContain("text-sm");
+    expect(lgCls).toContain("text-base");
     // 예전 크기(10px·18px 높이)로 되돌아가지 않는다.
-    expect(`${mdCls} ${lgCls}`).not.toContain("text-[10px]");
+    expect(`${mdCls} ${lgCls}`).not.toContain("text-xs");
     expect(`${mdCls} ${lgCls}`).not.toContain("h-[18px]");
   });
 });

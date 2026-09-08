@@ -1,17 +1,12 @@
-import { useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { DatePickerButton } from "@/components/date-picker-button";
+import { HrefSelect } from "@/components/href-select";
+import { PeriodNav } from "@/components/period-nav";
 import { Toolbar } from "@/components/toolbar";
-import {
-  TOOLBAR_CHIP,
-  TOOLBAR_CHIP_OFF,
-  TOOLBAR_CHIP_ON,
-  TOOLBAR_SEG_BOX,
-  TOOLBAR_SEG_ITEM,
-  TOOLBAR_SEG_OFF,
-  TOOLBAR_SEG_ON_PRIMARY,
-} from "@/components/toolbar-controls";
-import { addDays } from "@/lib/date-kst";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
+import { Button } from "@/components/ui/button";
+import { addDays, DAY_LABEL_W } from "@/lib/date-kst";
 import {
   ONESCREEN_FONT_SIZES,
   onescreenFontSizeLabel,
@@ -32,12 +27,26 @@ import { reportOptoutNotice } from "@/features/classes/report-optout";
  *    폰(390px)에선 컨트롤이 7줄로 감겨 본문 전에 **301px**을 먹었고, 순서도 중요도와 반대였다(뷰 탭이 맨
  *    아래, 한 번 정하면 끝인 글씨 크기가 그 위). → 시간표 툴바와 같은 `.toolbar-rail` 규약으로 **감는 대신
  *    눕히고**(컨트롤은 하나도 안 숨긴다) 두 줄로 나눈다. 실측 **301px → 92px**.
- *    · 줄 ② = 출결 모드 · 뷰 탭 — `rail-row-first`로 맨 위(합쳐 ~310px라 폰에서 스크롤 없이 다 보인다)
+ *    · 줄 ② = 출결 모드 · 보기 드롭다운 — `rail-row-first`로 맨 위(합쳐 ~310px라 폰에서 스크롤 없이 다 보인다)
  *    · 줄 ① = 날짜 · 반/작성 필터 · 진행 통계 · 보강 추가 · 공지 모드 · 글씨 크기(뒤로 갈수록 드물게 만짐)
  * ⚠️ 데스크톱·창(≥1024 + 정밀 포인터)은 **종전 그대로** 감긴다 — 줄 래퍼가 `display: contents`로 사라져
  *    DOM 순서(=예전 순서)가 그대로 배치된다. 그래서 **JSX 순서를 바꾸면 데스크톱이 바뀐다**: 모바일에서만
  *    앞으로 당기고 싶으면 항목이 아니라 **줄에** `rail-row-first`를 준다(globals.css 주석 참조).
+ *
+ * 디자인 v5 18단계(강사뷰, 2026-09-04, 지시서 §10): 날짜 = 앱 전역 `PeriodNav`(라벨 클릭 = 오늘) + 달력 아이콘(날짜 선택) ·
+ * 작성 상태·멘트·글씨·보기 세그먼트 → `축: 값` 드롭다운(`HrefSelect` 값 모드) · '출결 모드' = Primary `<Button>` ·
+ * 통계 글자 16. 🔴 **반 칩은 남긴다** — 시각·인원·위임(앰버) 표식을 나르는 이 화면의 주 스위치라 드롭다운으로 접으면
+ * 위임 반이 남의 반이라는 사실이 트리거에서 사라진다(원장 2026-08-03 "디자인적으로도 구분").
  */
+// 면 이름은 **사전 키**만 든다 — 문구는 사전 한 곳이라 화면 언어를 따라간다(v5 드롭다운 라벨도 이 표를 쓴다).
+const VIEW_LABEL_KEY: Record<OneScreenView, "os.face.card" | "os.face.table" | "os.face.sendStatus" | "os.face.monthly" | "os.face.notice"> = {
+  card: "os.face.card",
+  grid: "os.face.table",
+  status: "os.face.sendStatus",
+  history: "os.face.monthly",
+  notice: "os.face.notice",
+};
+
 export function OneScreenTopBar({
   today,
   date,
@@ -110,77 +119,33 @@ export function OneScreenTopBar({
     { value: "A", label: t("os.ment.a") },
     { value: "B", label: t("os.ment.b") },
   ];
-  const dateRef = useRef<HTMLInputElement>(null);
   const isToday = date >= todayYmd; // 오늘(또는 이상) = 다음날 이동 막고 '오늘' 버튼 숨김
   return (
     <Toolbar rail={false} gap="gap-x-3 gap-y-2">
       {/* ── 줄 ①(데스크톱 순서 그대로) — 날짜 · 반/작성 필터 · 진행 통계 · 드물게 만지는 설정.
              모바일에선 아래 줄 ②가 위로 올라가므로 **화면에선 두 번째 줄**이다(rail-row-first). */}
       <div className="toolbar-rail toolbar-rail-row items-center gap-x-2">
-        {/* 날짜 — 이전/다음 이동 + 날짜 선택(과거 날짜 마감·재발송). report_date=카드 표시일=ClassNote 게시일. */}
+        {/* 날짜 — 이전/다음 이동 + 날짜 선택(과거 날짜 마감·재발송). report_date=카드 표시일=ClassNote 게시일.
+            PeriodNav는 href 대신 **날짜 문자열**을 받고 `onNavigate`가 가로채 `onDateChange`로 넘긴다(searchParam 네비는 호출부 몫).
+            오늘 이후로는 못 간다(`nextDisabled`) — 옛 규칙 그대로. */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="bg-primary-soft text-primary flex size-7 items-center justify-center rounded-sm">
-            <EyIcon name="check" size={14} />
-          </span>
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => onDateChange(addDays(date, -1))}
-              aria-label={t("os.date.prev")}
-              className="text-text-dim hover:bg-bg-soft inline-flex h-8 w-7 items-center justify-center rounded-md"
-            >
-              <EyIcon name="chevronLeft" size={16} />
-            </button>
-            <div className="min-w-[128px] text-center">
-              <p className="micro text-text-faint">{isToday ? t("os.close.today") : t("os.close.past")}</p>
-              {/* 날짜 클릭 = 달력 열기.
-                  🔴 예전엔 투명 `<input type="date">`를 겹쳐 두기만 했는데, 크로미움은 **달력 아이콘
-                  (::-webkit-calendar-picker-indicator)을 눌러야** 달력이 열린다 — 투명 입력의 가운데를
-                  누르면 포커스만 가고 아무 일도 안 일어났다(원장 제보 2026-07-23 "달력뷰가 안 되는 것 같네").
-                  → ① 클릭 때 `showPicker()`를 직접 호출하고, ② 달력 아이콘을 입력 전체로 늘려 어디를 눌러도
-                  열리게 이중으로 보장한다(showPicker 미지원 브라우저 폴백). */}
-              <label
-                className="relative block cursor-pointer"
-                onClick={() => {
-                  // showPicker는 사용자 제스처 밖이거나 미지원이면 throw — 실패해도 아래 CSS 폴백이 받는다.
-                  try {
-                    dateRef.current?.showPicker?.();
-                  } catch {
-                    /* 폴백: 달력 아이콘이 입력 전체를 덮고 있어 이 클릭이 그대로 picker를 연다 */
-                  }
-                }}
-              >
-                <p className="text-foreground text-[13px] font-bold">{today}</p>
-                <input
-                  ref={dateRef}
-                  type="date"
-                  value={date}
-                  max={todayYmd}
-                  onChange={(e) => e.target.value && onDateChange(e.target.value)}
-                  className="absolute inset-0 cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                  aria-label={t("os.date.pick")}
-                />
-              </label>
-            </div>
-            <button
-              type="button"
-              onClick={() => onDateChange(addDays(date, 1))}
-              disabled={isToday}
-              aria-label={t("os.date.next")}
-              className="text-text-dim hover:bg-bg-soft inline-flex h-8 w-7 items-center justify-center rounded-md disabled:opacity-30"
-            >
-              <EyIcon name="chevronRight" size={16} />
-            </button>
-            {!isToday ? (
-              <button
-                type="button"
-                onClick={() => onDateChange(todayYmd)}
-                className="border-line text-primary hover:bg-bg-soft ml-1 inline-flex h-8 items-center rounded-lg border px-2 text-xs font-medium"
-              >
-                {t("os.today")}
-              </button>
-            ) : null}
-          </div>
+          <PeriodNav
+            // 라벨은 호출부가 만든 문자열(`today` = "2026년 9월 4일 (금)") — PeriodNav 규약(포맷은 호출부 단일 소스).
+            label={today}
+            prevHref={addDays(date, -1)}
+            nextHref={addDays(date, 1)}
+            currentHref={todayYmd}
+            relation={date === todayYmd ? "current" : date < todayYmd ? "past" : "future"}
+            prevAriaLabel={t("os.date.prev")}
+            nextAriaLabel={t("os.date.next")}
+            currentTitle={t("nav.today")}
+            nextDisabled={isToday}
+            onNavigate={(ymd) => onDateChange(ymd)}
+            labelWidth={DAY_LABEL_W}
+          />
+          {/* 달력 열기 — 공용 DatePickerButton(옛 규약 그대로 `showPicker()` + 아이콘을 입력 전체로).
+              라벨은 PeriodNav가 들고, 이 버튼은 **달력만** 연다. ECS 오늘 면과 같은 부품·같은 크기. */}
+          <DatePickerButton value={date} max={todayYmd} onChange={onDateChange} title={t("os.date.pick")} />
         </div>
 
         <span className="bg-line hidden h-5 w-px shrink-0 sm:block" aria-hidden />
@@ -211,7 +176,7 @@ export function OneScreenTopBar({
             <>
               <span className="bg-line h-4 w-px shrink-0" aria-hidden />
               <span
-                className="text-amber text-[11px] font-bold"
+                className="text-amber text-xs font-bold"
                 title={t("os.class.delegatedTitle")}
               >
                 {t("os.class.delegated")}
@@ -238,33 +203,24 @@ export function OneScreenTopBar({
         </div>
 
         {/* 작성 상태 필터 — "아직 안 쓴 학생만" 추려 마저 쓰기 위한 것(반 필터 바로 옆 = 둘 다 '무엇을 보여줄지').
-            판정은 학부모 문구 기준(write-filter.ts). 같은 값을 다시 누르면 목록을 새로 계산한다. */}
-        <div
-          className={TOOLBAR_SEG_BOX}
-          title={t("os.write.title")}
-        >
-          {writeOptions.map((o) => {
-            const on = writeFilter === o.value;
-            return (
-              <button
-                key={o.value}
-                type="button"
-                onClick={() => onWriteFilter(o.value)}
-                aria-pressed={on}
-                className={`${TOOLBAR_SEG_ITEM} ${on ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {o.label}
-                {o.count != null ? (
-                  <span className={`tabular ml-1 ${on ? "" : "text-text-faint"}`}>{o.count}</span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
+            판정은 학부모 문구 기준(write-filter.ts). `축: 값` 드롭다운(§10, 옛 세그먼트). 같은 값을 다시 고르면
+            목록을 새로 계산한다(`reselect` — 필터를 켠 뒤 입력해도 카드·행이 사라지지 않게 고정된 목록을 정리). */}
+        <HrefSelect
+          axisLabel={t("os.write.axis")}
+          ariaLabel={t("os.write.title")}
+          value={writeFilter}
+          onSelect={(v) => onWriteFilter(v as WriteFilter)}
+          reselect
+          // 수는 라벨에 싣는다(`미작성 5`) — hint는 트리거에 안 실려 고른 뒤엔 "몇 명 남았나"가 사라진다(옛 세그먼트는 상시 표시).
+          options={writeOptions.map((o) => ({
+            value: o.value,
+            label: o.count != null ? `${o.label} ${o.count}` : o.label,
+          }))}
+        />
 
         {/* 우측: 마감 통계 + 카드/표 토글 */}
         <div className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <div className="text-text-dim flex items-center gap-x-2.5 text-[12px]">
+          <div className="text-text-dim flex items-center gap-x-2.5 text-sm">
             <span>
               {t("os.stat.students")} <b className="text-foreground tabular">{stats.students}</b>
             </span>
@@ -287,52 +243,29 @@ export function OneScreenTopBar({
           </div>
           {makeupAdder}
           {/* AI 멘트 모드(내 계정) — 학원 기본 / 단일 A / 2문단 B. 강사별 저장(users.report_notice_mode).
-              바꾸면 아래 보고서 입력이 1칸(A) ↔ 2칸(B, 수업 내용 / 태도·특이사항)으로 함께 바뀐다. */}
-          <div
-            className={TOOLBAR_SEG_BOX}
-            title={t("os.ment.title")}
-          >
-            {noticeOptions.map((o) => {
-              const on = noticeMode === o.value;
-              return (
-                <button
-                  key={String(o.value)}
-                  type="button"
-                  onClick={() => onNoticeMode(o.value)}
-                  aria-pressed={on}
-                  className={`${TOOLBAR_SEG_ITEM} ${on ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
+              바꾸면 아래 보고서 입력이 1칸(A) ↔ 2칸(B, 수업 내용 / 태도·특이사항)으로 함께 바뀐다. `축: 값` 드롭다운(§10). */}
+          <HrefSelect
+            axisLabel={t("os.ment.axis")}
+            ariaLabel={t("os.ment.title")}
+            value={String(noticeMode)}
+            onSelect={(v) => onNoticeMode(v === "null" ? null : (v as "A" | "B"))}
+            options={noticeOptions.map((o) => ({
+              value: String(o.value),
+              label: o.label,
+              hint: o.value === "A" ? t("os.ment.aHint") : o.value === "B" ? t("os.ment.bHint") : undefined,
+            }))}
+          />
           <span className="bg-line h-5 w-px" aria-hidden />
           {/* 글씨 크기(내 계정) — 원장 지시 2026-07-30. 지금 크기가 '작음'이라 기본은 화면 무변경.
               표뷰는 칸마다 px 글자가 박힌 조밀한 스프레드시트라 **표 전체를 같은 비율로** 확대한다
-              (글자만 키우면 칸·체크박스와 어긋난다). 저장은 계정 = 다른 PC에서도 같은 크기. */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="micro shrink-0">{t("os.fontSize")}</span>
-            <div
-              className={TOOLBAR_SEG_BOX}
-              title={t("os.fontSize.title")}
-            >
-              {ONESCREEN_FONT_SIZES.map((s) => {
-                const on = fontSize === s;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => onFontSize(s)}
-                    aria-pressed={on}
-                    className={`${TOOLBAR_SEG_ITEM} ${on ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-                  >
-                    {onescreenFontSizeLabel(s, lang)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+              (글자만 키우면 칸·체크박스와 어긋난다). 저장은 계정 = 다른 PC에서도 같은 크기. `축: 값` 드롭다운(§10). */}
+          <HrefSelect
+            axisLabel={t("os.fontSize")}
+            ariaLabel={t("os.fontSize.title")}
+            value={fontSize}
+            onSelect={(v) => onFontSize(v as OnescreenFontSize)}
+            options={ONESCREEN_FONT_SIZES.map((s) => ({ value: s, label: onescreenFontSizeLabel(s, lang) }))}
+          />
         </div>
       </div>
 
@@ -349,44 +282,24 @@ export function OneScreenTopBar({
             ⚠️ 열람 전용('다른 강사 뷰')에선 숨긴다 — 그 화면은 저장이 전부 거절되므로 데려가 봐야
                누를 수 없는 버튼만 보여 준다(공지 탭을 숨기는 것과 같은 결). */}
         {readonlyView ? null : (
-          <Link
-            href="/attendance/quick"
-            title={t("os.quick.title")}
-            className="bg-primary text-primary-foreground hover:bg-primary/85 inline-flex h-8 shrink-0 items-center rounded-lg px-2.5 text-xs font-medium whitespace-nowrap transition"
+          <Button
+            render={<Link href="/attendance/quick" title={t("os.quick.title")} />}
+            className="shrink-0"
           >
             {t("os.quick")}
-          </Link>
+          </Button>
         )}
-        {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 뷰 전환 */}
-        <div className={TOOLBAR_SEG_BOX}>
-          {/* 열람 전용은 공지 탭 제외 — 공지는 순수 작성 화면이라 열람에서 열 이유가 없다(진입 가드와 짝). */}
-          {(readonlyView
+        {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 = `보기: 카드` 드롭다운(§10, 옛 세그먼트 탭). */}
+        <HrefSelect
+          axisLabel={t("os.face.axis")}
+          ariaLabel={t("os.face.axis")}
+          value={view}
+          onSelect={(v) => onView(v as OneScreenView)}
+          options={(readonlyView
             ? (["card", "grid", "status", "history"] as const)
             : (["card", "grid", "status", "history", "notice"] as const)
-          ).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => onView(v)}
-              aria-pressed={view === v}
-              // 레일(가로 스크롤) 안이라 `whitespace-nowrap` — '발송 현황'·'월간 발송'이 두 줄로 접히면
-              // 그 줄만 키가 두 배가 된다(칩 폭이 아니라 **줄 높이**가 크롬을 먹는다).
-              className={`${TOOLBAR_SEG_ITEM} whitespace-nowrap ${
-                view === v ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF
-              }`}
-            >
-              {v === "card"
-                ? t("os.face.card")
-                : v === "grid"
-                  ? t("os.face.table")
-                  : v === "status"
-                    ? t("os.face.sendStatus")
-                    : v === "history"
-                      ? t("os.face.monthly")
-                      : t("os.face.notice")}
-            </button>
-          ))}
-        </div>
+          ).map((v) => ({ value: v, label: t(VIEW_LABEL_KEY[v]) }))}
+        />
       </div>
     </Toolbar>
   );
@@ -468,7 +381,7 @@ function ClassChip({
       }
       className={`${base} ${tone}`}
     >
-      <span className={`font-mono text-[10px] font-bold ${timeTone}`}>{c.startTime ?? "—"}</span>
+      <span className={`font-mono text-sm font-bold ${timeTone}`}>{c.startTime ?? "—"}</span>
       <span className={on ? "" : c.delegated ? "" : "text-foreground"}>{c.name}</span>
       {/* '수업보고서 미발송' 반 — 눌러서 보고서 칸이 잠긴 걸 보기 **전에** 알린다(2026-08-19). */}
       {c.reportOptout ? (

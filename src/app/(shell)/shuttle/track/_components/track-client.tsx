@@ -4,14 +4,9 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
-import { addDays, formatKoreanDate, kstTimeOf } from "@/lib/date-kst";
-import { cn } from "@/lib/utils";
+import { kstTimeOf } from "@/lib/date-kst";
 import {
-  SEASONS,
-  SEASON_LABEL,
   hasCoords,
   type Season,
   type ShuttleRun,
@@ -19,12 +14,7 @@ import {
   type ShuttleTrip,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
-import {
-  SHUTTLE_ACTION,
-  SHUTTLE_CHIP,
-  SHUTTLE_CHIP_OFF,
-  SHUTTLE_CHIP_ON,
-} from "@/features/shuttle/control-size";
+import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_TRACK_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import { mergePlanAndLog, plannedRidesOn, type RideException } from "@/features/shuttle/roster";
 import { groupRunsByVehicle } from "@/features/shuttle/today-board";
@@ -32,6 +22,7 @@ import { buildLiveBoard, summarizeLive } from "@/features/shuttle/live-board";
 import { useShuttleLive } from "@/features/shuttle/use-shuttle-live";
 import type { BoardingLog } from "@/features/shuttle/server/queries";
 import { TrackVehicleCard } from "./track-vehicle-card";
+import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
 
 /**
  * 실시간 위치 — **차 한 대 = 카드 하나**, 그 안에 지도가 들어올 자리.
@@ -116,52 +107,25 @@ export function TrackClient({
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TRACK_PATH} ariaLabel="셔틀 면 전환" />
-
-      {/* 날짜·시즌 — 다른 셔틀 면과 같은 모양(좁으면 가로 레일 한 줄). */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          aria-label="어제"
-          className={SHUTTLE_ACTION}
-          render={<Link href={href(addDays(date, -1))} />}
-        >
-          <EyIcon name="chevronLeft" size={16} />
-        </Button>
-        <span className="text-foreground px-1 text-[14.5px] font-bold whitespace-nowrap">
-          {formatKoreanDate(date)}
+      {/* 면 전환 + 날짜·시즌 한 줄 — 다른 셔틀 면과 같은 부품(ShuttleDayNav, 디자인 v5 17단계). */}
+      <div className={SHUTTLE_TOOLBAR}>
+        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
+          <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TRACK_PATH} ariaLabel="셔틀 면 전환" />
         </span>
-        <Button
-          variant="outline"
-          aria-label="내일"
-          className={SHUTTLE_ACTION}
-          render={<Link href={href(addDays(date, 1))} />}
-        >
-          <EyIcon name="chevronRight" size={16} />
-        </Button>
-        {SEASONS.map((s) => (
-          <Link
-            key={s}
-            href={href(date, s)}
-            aria-current={s === season ? "page" : undefined}
-            className={cn(SHUTTLE_CHIP, s === season ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
-          >
-            {SEASON_LABEL[s]}
-          </Link>
-        ))}
+        <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
         {tripsReady && summary.running > 0 && (
           <Pill color={TONE_COLOR.info}>운행 중 {summary.running}</Pill>
         )}
         {/* 시각을 적는다 — "방금"은 10분 뒤에 거짓이 된다(신호가 온 적 없으면 아예 안 그린다). */}
         {lastSignalAt !== null && (
-          <span className="text-green ml-auto text-[11.5px] font-bold whitespace-nowrap">
+          <span className="text-green ml-auto text-xs font-bold whitespace-nowrap">
             <span className="num">{kstTimeOf(new Date(lastSignalAt))}</span> 갱신됨
           </span>
         )}
       </div>
 
       {/* 🔑 **왜 아직 비어 있는지를 한 번만** 말한다 — 카드마다 반복하면 잔소리가 된다. */}
-      <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2.5 text-[12.5px] leading-relaxed">
+      <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2.5 text-xs leading-relaxed">
         실시간 위치는 아직 <span className="text-foreground font-bold">자리만 잡혀</span> 있습니다.
         차량이 지도에 뜨려면 두 가지가 더 필요합니다 —{" "}
         <span className="text-foreground font-bold">① 운행 중 기사·동승 선생님 폰이 위치를 보내는 기능</span>{" "}
@@ -174,7 +138,7 @@ export function TrackClient({
 
       {/* 🔴 0243a 미적용 — 상태를 그리는 대신 **왜 안 보이는지**를 말한다(운행 현황과 같은 규약). */}
       {!tripsReady && (
-        <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-[12.5px]">
+        <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-xs">
           운행 상태(출발·종료)는 마이그레이션 <span className="num">0243a</span>를 적용하면 보입니다.
         </div>
       )}

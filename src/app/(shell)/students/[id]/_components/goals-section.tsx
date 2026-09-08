@@ -171,8 +171,8 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
                     <Pill color={subjects.colorOf(g.subject)} soft>
                       {subjects.labelOf(g.subject)}
                     </Pill>
-                    <span className="text-foreground text-[13px] font-bold">{g.examName}</span>
-                    <span className="num text-muted-foreground text-[12px]">
+                    <span className="text-foreground text-sm font-bold">{g.examName}</span>
+                    <span className="num text-muted-foreground text-xs">
                       목표{" "}
                       <span className="text-foreground font-bold">
                         {g.targetScore}
@@ -185,12 +185,12 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
                         대기
                       </Pill>
                     ) : g.achieved ? (
-                      <span className="text-chart-2 inline-flex items-center gap-1 text-[12px] font-bold">
+                      <span className="text-chart-2 inline-flex items-center gap-1 text-xs font-bold">
                         <Check className="size-3.5" /> 달성 {g.actualScore}
                         {actualPct != null ? ` (${actualPct}%)` : ""}
                       </span>
                     ) : (
-                      <span className="text-chart-4 inline-flex items-center gap-1 text-[12px] font-bold">
+                      <span className="text-chart-4 inline-flex items-center gap-1 text-xs font-bold">
                         <X className="size-3.5" /> 미달 {g.actualScore}
                         {actualPct != null ? ` (${actualPct}%)` : ""}
                       </span>
@@ -199,7 +199,7 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
                   <DeleteGoalBtn id={g.id} studentId={studentId} />
                 </div>
                 {g.reason ? (
-                  <p className="text-muted-foreground mt-1.5 text-[12px]">{g.reason}</p>
+                  <p className="text-muted-foreground mt-1.5 text-xs">{g.reason}</p>
                 ) : null}
               </li>
             );

@@ -65,10 +65,10 @@ export function MemoForm({ studentId }: { studentId: string }) {
             </option>
           ))}
         </select>
-        <span className="text-muted-foreground text-[11px]">분류</span>
+        <span className="text-muted-foreground text-xs">분류</span>
         {/* 검색 허용(원장 2026-09-08) — 켜 두면 학생 검색이 이 메모 내용으로도 그 학생을 찾는다.
             🔴 기본은 켜짐이다: 메모를 적는 대부분의 이유가 "나중에 찾기"라서(민감한 메모만 끈다). */}
-        <label className="text-muted-foreground ml-auto flex cursor-pointer items-center gap-1.5 text-[11px]">
+        <label className="text-muted-foreground ml-auto flex cursor-pointer items-center gap-1.5 text-xs">
           <input type="checkbox" name="searchable" defaultChecked className="size-3.5 accent-[var(--primary)]" />
           검색 허용
         </label>

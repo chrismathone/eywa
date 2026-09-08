@@ -571,7 +571,7 @@ export function ResumeSheet({
       ? "res.title.roster"
       : "res.title.resume";
   const sheet = (
-    <div className="resume-sheet border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
+    <div className="resume-sheet paper-scale border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
       <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]"><P k={sheetTitleKey} /></h1>
 
       <SectionHead><P k="res.sec.personal" /></SectionHead>

@@ -120,7 +120,7 @@ export function RefundSheet({
     );
 
   const sheet = (
-    <div className="border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border p-6 shadow-card sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:p-3 print:shadow-none">
+    <div className="paper-scale border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-2xl border p-6 shadow-card sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:p-3 print:shadow-none">
       {/* 상단 — 제목 + 결재란(담당/부원장/원장) */}
       <table className={T}>
         <tbody>

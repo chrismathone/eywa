@@ -80,12 +80,12 @@ export function ReportNameCard({
         </div>
       </form>
       {mappingBlocked ? (
-        <p className="mt-2 text-[11px] leading-snug text-amber-700">
+        <p className="mt-2 text-xs leading-snug text-amber-700">
           {t("me.reportName.blocked.a")} <b>{t("me.reportName.blocked.b")}</b>
           {t("me.reportName.blocked.c")}
         </p>
       ) : null}
-      <p className="text-text-faint mt-1 text-[11px]">
+      <p className="text-text-faint mt-1 text-xs">
         {t("me.reportName.note.a")} <b>{t("me.reportName.note.b")}</b>{" "}
         {t("me.reportName.note.c")}
       </p>

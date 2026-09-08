@@ -67,7 +67,7 @@ export function ObserverManager({
   return (
     <div className="bg-card rounded-2xl p-5 shadow-card">
       <p className="micro mb-1">평가자 관리</p>
-      <p className="text-text-dim mb-3 text-[12px]">
+      <p className="text-text-dim mb-3 text-xs">
         아직 채점하지 않은 평가자는 다른 직원으로 바꿀 수 있습니다. 채점을 마친 평가자는 잠깁니다.
       </p>
       <ul className="divide-line divide-y">
@@ -76,15 +76,15 @@ export function ObserverManager({
             <span className="flex items-center gap-2">
               <span className="text-foreground text-sm font-medium">{o.name}</span>
               {o.submitted ? (
-                <span className="bg-green-soft text-green rounded-full px-2 py-0.5 text-[11px] font-semibold">
+                <span className="bg-green-soft text-green rounded-full px-2 py-0.5 text-xs font-semibold">
                   채점 완료
                 </span>
               ) : (
-                <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-[11px]">미채점</span>
+                <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-xs">미채점</span>
               )}
             </span>
             {o.submitted ? (
-              <span className="text-text-faint text-[11px]">변경 불가</span>
+              <span className="text-text-faint text-xs">변경 불가</span>
             ) : (
               <Button
                 type="button"
@@ -115,8 +115,8 @@ export function ObserverManager({
             aria-label="평가자 변경"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-foreground text-[15px] font-bold">평가자 변경</h2>
-            <p className="text-text-dim mt-1 text-[13px]">
+            <h2 className="text-foreground text-base font-bold">평가자 변경</h2>
+            <p className="text-text-dim mt-1 text-sm">
               <span className="font-medium">{editing.name}</span> 님을 대신할 직원을 고르세요.
             </p>
             <div className="mt-3">

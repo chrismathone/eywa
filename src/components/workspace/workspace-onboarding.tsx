@@ -62,7 +62,7 @@ export function WorkspaceOnboarding() {
           </button>
         </header>
 
-        <h2 className="text-foreground text-[19px] font-bold tracking-tight">
+        <h2 className="text-foreground text-xl font-bold tracking-tight">
           여러 화면을 한 번에
         </h2>
         <p className="text-text-dim mt-1.5 text-sm">
@@ -76,7 +76,7 @@ export function WorkspaceOnboarding() {
                 <Icon size={17} strokeWidth={1.8} />
               </span>
               <div className="min-w-0">
-                <p className="text-foreground text-[13px] font-bold">{title}</p>
+                <p className="text-foreground text-sm font-bold">{title}</p>
                 <p className="text-text-dim mt-0.5 text-xs">{desc}</p>
               </div>
             </li>

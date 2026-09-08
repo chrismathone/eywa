@@ -30,7 +30,7 @@ export function NotifyPermissionBanner() {
       {/* 🔴 굵은 조각과 설명 사이에 **공백을 명시**한다(`{" "}`) — 그전엔 JSX가 줄바꿈을 공백으로
           접어 주길 기대했는데 `<b>…</b>` 바로 뒤라 접히지 않아 "켜주세요.학부모가"로 붙어 있었다
           (원장 2026-09-03 제보). 뜻은 그대로고 공백 하나만 교정. */}
-      <p className="text-foreground min-w-0 flex-1 text-[12px] leading-snug break-keep">
+      <p className="text-foreground min-w-0 flex-1 text-xs leading-snug break-keep">
         <b>{t("banner.notify.title")}</b> {t("banner.notify.body")}
       </p>
       <Button size="sm" onClick={() => void enableDesktopNotify()} className="shrink-0">
@@ -39,7 +39,7 @@ export function NotifyPermissionBanner() {
       <button
         type="button"
         onClick={dismissNotifyBanner}
-        className="text-text-dim hover:text-foreground shrink-0 text-[12px] transition"
+        className="text-text-dim hover:text-foreground shrink-0 text-xs transition"
       >
         {t("banner.notify.later")}
       </button>

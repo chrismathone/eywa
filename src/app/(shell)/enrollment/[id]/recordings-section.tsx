@@ -54,7 +54,7 @@ export function RecordingsSection({
     <section className="space-y-2">
       <div className="flex items-center gap-2">
         <Mic className="text-text-dim size-3.5" />
-        <h2 className="text-foreground text-[13px] font-bold">
+        <h2 className="text-foreground text-sm font-bold">
           상담 녹음 <span className="num text-text-faint font-normal">{recordings.length}개</span>
         </h2>
       </div>
@@ -69,19 +69,19 @@ export function RecordingsSection({
         return (
           <div key={r.id} className="border-line bg-card overflow-hidden rounded-2xl border">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-              <span className="text-foreground text-[12px] font-bold whitespace-nowrap">
+              <span className="text-foreground text-xs font-bold whitespace-nowrap">
                 녹음 {i + 1}
               </span>
-              <span className="text-text-dim text-[11px]">{meta.join(" · ")}</span>
+              <span className="text-text-dim text-xs">{meta.join(" · ")}</span>
               <span
-                className={`ml-auto inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${badge.class}`}
+                className={`ml-auto inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${badge.class}`}
               >
                 {badge.spin ? <Loader2 className="size-3 animate-spin" /> : null}
                 {badge.label}
               </span>
             </div>
             {r.status === "failed" && r.error ? (
-              <p className="text-danger border-line border-t px-4 py-2 text-[12px]">{sanitizeErrorText(r.error)}</p>
+              <p className="text-danger border-line border-t px-4 py-2 text-xs">{sanitizeErrorText(r.error)}</p>
             ) : null}
             {r.transcription || (r.speakerLabels?.length ?? 0) > 0 ? (
               <div className="border-line border-t">

@@ -45,7 +45,7 @@ export function MonthPairPicker({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-text-dim shrink-0 text-[12px]">기준</span>
+      <span className="text-text-dim shrink-0 text-xs">기준</span>
       <SearchableSelect
         className="w-40"
         value={a}
@@ -64,7 +64,7 @@ export function MonthPairPicker({
       >
         맞바꾸기
       </Button>
-      <span className="text-text-dim shrink-0 text-[12px]">비교</span>
+      <span className="text-text-dim shrink-0 text-xs">비교</span>
       <SearchableSelect
         className="w-40"
         value={b}

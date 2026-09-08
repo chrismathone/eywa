@@ -40,7 +40,7 @@ export function SeatMarkButtons({
           onClick={() => onMark("absent")}
           aria-label={`${studentName} 결석`}
           title="결석"
-          className={`border-line bg-card text-text-faint hover:text-att-absent-ink grid ${size} place-items-center rounded-full border text-[10px] font-bold`}
+          className={`border-line bg-card text-text-faint hover:text-att-absent-ink grid ${size} place-items-center rounded-full border text-xs font-bold`}
         >
           결
         </button>
@@ -52,7 +52,7 @@ export function SeatMarkButtons({
           onClick={() => onMark("late")}
           aria-label={`${studentName} 지각`}
           title="지각"
-          className={`border-line bg-card text-text-faint hover:text-att-late-ink grid ${size} place-items-center rounded-full border text-[10px] font-bold`}
+          className={`border-line bg-card text-text-faint hover:text-att-late-ink grid ${size} place-items-center rounded-full border text-xs font-bold`}
         >
           지
         </button>
@@ -106,7 +106,7 @@ export function SeatReasonInput({
         outside.current = e.target.value;
         onChange(e.target.value);
       }}
-      className="border-line bg-card placeholder:text-text-faint w-full rounded-md border px-1.5 py-0.5 text-[11.5px] disabled:opacity-60"
+      className="border-line bg-card placeholder:text-text-faint w-full rounded-md border px-1.5 py-0.5 text-xs disabled:opacity-60"
     />
   );
 }
@@ -130,7 +130,7 @@ export function PrevAbsenceHint({
   const md = monthDay(prev.date);
   return (
     <p
-      className="text-att-absent-ink/80 truncate text-[10.5px]"
+      className="text-att-absent-ink/80 truncate text-xs"
       title={`지난 수업(${prev.date}) 결석${prev.note ? ` · ${prev.note}` : " — 사유 미기재"}`}
     >
       지난 결석 {md}

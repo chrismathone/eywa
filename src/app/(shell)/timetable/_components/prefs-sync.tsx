@@ -8,6 +8,7 @@ import {
   COMPACT1H_COOKIE,
   EMPTY_DAYS_COOKIE,
   EMPTY_PERIODS_COOKIE,
+  STUDENTS_COOKIE,
   writeCompact1hFor,
 } from "@/features/timetable/lib/pref-cookies";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
@@ -23,7 +24,7 @@ function setCookie(name: string, value: string) {
  * 시간표 표시 선호를 **계정에 기억**한다(0146a users.ui_prefs). 원장 지시 2026-07-23:
  * "뷰 설정은 각자 계정에 개별 귀속되어 다음에도 계속 같은 뷰로 볼 수 있게."
  *
- * 대상 3종 — 강사뷰 '미사용 요일' · 기본뷰 '빈 교시 접기' · 통합뷰 '1시간 단위'(과목별).
+ * 대상 4종 — 강사뷰 '미사용 요일' · 기본뷰 '빈 교시 접기' · **학생 명단 접기** · 통합뷰 '1시간 단위'(과목별).
  * 이 토글들은 URL 파라미터로만 살아 있었는데, eywa는 메뉴를 창(iframe)으로 열고 창은 항상 깨끗한
  * URL로 열리므로 **열 때마다 초기화**됐다(주 2일 강사가 매번 넓은 표를 다시 접어야 했음).
  *
@@ -43,16 +44,20 @@ function setCookie(name: string, value: string) {
 export function TimetableViewPrefsSync({
   hideEmptyDays,
   collapseEmptyPeriods,
+  hideStudents,
   subject,
   sections,
   englishTrack,
   savedHideEmptyDays,
   savedCollapseEmptyPeriods,
+  savedHideStudents,
   savedSections,
   savedEnglishTrack,
 }: {
   hideEmptyDays: boolean;
   collapseEmptyPeriods: boolean;
+  /** 학생 명단 접기(기본뷰·통합뷰). */
+  hideStudents: boolean;
   subject: string;
   sections: number[];
   /**
@@ -64,6 +69,7 @@ export function TimetableViewPrefsSync({
   /** 계정에 저장돼 있던 값(null = 미설정). 이것과 다를 때만 저장한다. */
   savedHideEmptyDays: boolean | null;
   savedCollapseEmptyPeriods: boolean | null;
+  savedHideStudents: boolean | null;
   /** 계정에 저장돼 있던 **이 과목의** 압축 섹션(null = 그 과목 미설정). */
   savedSections: number[] | null;
   savedEnglishTrack: EnglishTrackFilter | null;
@@ -78,6 +84,7 @@ export function TimetableViewPrefsSync({
     // 쿠키는 항상 최신으로(폴백 경로가 옛 값을 들고 있지 않게).
     setCookie(EMPTY_DAYS_COOKIE, hideEmptyDays ? "hide" : "show");
     setCookie(EMPTY_PERIODS_COOKIE, collapseEmptyPeriods ? "collapse" : "expand");
+    setCookie(STUDENTS_COOKIE, hideStudents ? "hide" : "show");
     if (subject) {
       const raw = document.cookie
         .split("; ")
@@ -95,6 +102,7 @@ export function TimetableViewPrefsSync({
     if (savedCollapseEmptyPeriods !== collapseEmptyPeriods) {
       patch.collapseEmptyPeriods = collapseEmptyPeriods;
     }
+    if (savedHideStudents !== hideStudents) patch.hideStudents = hideStudents;
     // 과목별 — 그 과목 키만 보낸다(액션이 과목 단위로 병합). 빈 배열도 보낸다(= 명시적 해제).
     if (subject && savedKey !== key) {
       patch.compact1h = { [subject]: key ? key.split(".").map(Number) : [] };
@@ -106,7 +114,7 @@ export function TimetableViewPrefsSync({
     }
     if (Object.keys(patch).length === 0) return;
 
-    const stamp = `${hideEmptyDays}|${collapseEmptyPeriods}|${subject}|${key}|${englishTrack ?? "-"}`;
+    const stamp = `${hideEmptyDays}|${collapseEmptyPeriods}|${hideStudents}|${subject}|${key}|${englishTrack ?? "-"}`;
     if (sentRef.current === stamp) return;
     sentRef.current = stamp;
     // 표시 취향이라 실패해도 화면을 막지 않는다(쿠키 폴백이 남아 이번 기기에선 유지된다).
@@ -114,11 +122,13 @@ export function TimetableViewPrefsSync({
   }, [
     hideEmptyDays,
     collapseEmptyPeriods,
+    hideStudents,
     subject,
     key,
     englishTrack,
     savedHideEmptyDays,
     savedCollapseEmptyPeriods,
+    savedHideStudents,
     savedKey,
     savedEnglishTrack,
   ]);

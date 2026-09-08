@@ -21,9 +21,9 @@ import {
 } from "@/features/billing/sync-window";
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { getMakeeduSyncState } from "@/features/integrations/server/makeedu-sync";
-import { SearchForm } from "@/components/search-form";
-import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
+import { SearchToggle } from "@/components/search-toggle";
 import { BillingTable } from "./billing-table";
+import { BillingMonthNav } from "./billing-month-nav";
 import { CreateInvoiceTrigger } from "./create-invoice-dialog";
 import { Pagination } from "@/components/pagination";
 
@@ -34,11 +34,6 @@ function won(n: number) {
 function formatPeriod(period: string): string {
   const [y, m] = period.split("-");
   return `${y}년 ${Number(m)}월`;
-}
-function shiftPeriod(period: string, delta: number): string {
-  const [y, m] = period.split("-").map(Number);
-  const d = new Date(y!, m! - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function todayIso(): string {
   return kstToday();
@@ -127,9 +122,6 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const prevPeriod = shiftPeriod(period, -1);
-  const nextPeriod = shiftPeriod(period, 1);
-
   // 진행률 바도 실청구(청구−할인) 기준 — 완납 학생이 할인폭만큼 미수 밴드로 새지 않게.
   const netBase = summary.totalBilled - summary.totalDiscount || 1;
   const paidPct = Math.min((summary.totalCollected / netBase) * 100, 100);
@@ -184,70 +176,51 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
   return (
     <div className="space-y-5">
-      {/* Editorial 문법 ① — eyebrow→월 헤드라인→서브(청구·수납률 승격). 월 네비게이션은 actions 슬롯. */}
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브(청구·수납률 승격). 상시 버튼 = Primary '청구서 생성' + 텍스트 '엑셀 내보내기'
+          (디자인 v5 §10 — 종전엔 툴바 오른쪽에 outline 둘이었다). */}
       <PageHeader
-        eyebrow="수납 현황"
-        title={formatPeriod(period)}
+        eyebrow="수납 관리"
+        title="수납 현황"
         description={periodSummary}
-        // 창 컴팩트 행에선 title(월)이 접히므로 월을 라벨에 명시 — 월 네비(actions)가 옆에 있어 필수.
-        // 검색 결과 건수·페이지 접미사도 동일하게(창이 기본 경로라 빠지면 검색 피드백이 사라짐, 적대 리뷰).
+        // 창 컴팩트 행에선 title이 접히므로 월을 라벨에 명시(월 네비는 아래 툴바). 검색 결과 건수·페이지 접미사도
+        // 동일하게(창이 기본 경로라 빠지면 검색 피드백이 사라짐, 적대 리뷰).
         embedLabel={`${formatPeriod(period)} · ${periodSummary}`}
         actions={
           <>
-            <Link
-              href={buildHref({ period: prevPeriod, q, sort, desc })}
-              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
-              aria-label="이전 달"
+            <Button
+              variant="ghost"
+              className="text-primary"
+              render={
+                <a
+                  // 화면과 같은 집합을 내보낸다 — 기한 경과 필터가 켜져 있으면 엑셀도 그 건들만.
+                  href={`/api/exports/billing?${new URLSearchParams({
+                    period,
+                    ...(q ? { q } : {}),
+                    ...(overdueOnly ? { overdue: "1" } : {}),
+                    ...(missingOnly ? { missing: "1" } : {}),
+                  }).toString()}`}
+                />
+              }
             >
-              <EyIcon name="chevronLeft" size={14} />
-            </Link>
-            <Link
-              href={buildHref({ period: nextPeriod, q, sort, desc })}
-              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-lg border"
-              aria-label="다음 달"
-            >
-              <EyIcon name="chevronRight" size={14} />
-            </Link>
+              엑셀 내보내기
+            </Button>
+            <CreateInvoiceTrigger students={students} defaultPeriod={period} />
           </>
         }
       />
 
-      {/* 툴바 — 최근 월 알약 칩 + 검색 + 액션(신규 청구·엑셀) */}
-      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표·카드가 자기 테두리를 가져 선이 겹쳤다. */}
-      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
-        <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
-          {periods.slice(0, 6).map((p) => (
-            <Link
-              key={p}
-              href={buildHref({ period: p, q, sort, desc })}
-              className={`${TOOLBAR_CHIP} ${p === period ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
-            >
-              {formatPeriod(p)}
-            </Link>
-          ))}
-        </div>
-
-        <SearchForm placeholder="학생명·항목" defaultValue={q} inputWidth="w-36" />
-
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <CreateInvoiceTrigger students={students} defaultPeriod={period} variant="outline" />
-          <Button
-            variant="outline"
-            render={
-              <a
-                // 화면과 같은 집합을 내보낸다 — 기한 경과 필터가 켜져 있으면 엑셀도 그 건들만.
-                href={`/api/exports/billing?${new URLSearchParams({
-                  period,
-                  ...(q ? { q } : {}),
-                  ...(overdueOnly ? { overdue: "1" } : {}),
-                  ...(missingOnly ? { missing: "1" } : {}),
-                }).toString()}`}
-              />
-            }
-          >
-            <EyIcon name="arrowDown" size={13} />
-            엑셀 내보내기
-          </Button>
+      {/* 툴바 — 월 이동은 수납 면 공용 BillingMonthNav(앱 전역 PeriodNav + 월 직접 선택 라벨; 옛 '최근 6개월 알약 칩 줄'은
+          §10 칩 줄 금지로 걷었다 — 화살표만으론 옛 달까지 여러 번 눌러야 한다) + 검색(눌러야 나온다).
+          항목 = 청구가 있는 달(최근 순). 신규 청구·엑셀은 머리로 올렸다(같은 동작 두 곳 금지). 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
+      <div className="flex flex-wrap items-center gap-2.5 px-1 py-1">
+        <BillingMonthNav
+          period={period}
+          hrefFor={(per) => buildHref({ period: per, q, sort, desc })}
+          months={periods}
+          ariaLabel="청구월 선택"
+        />
+        <div className="ml-auto flex items-center gap-2">
+          <SearchToggle placeholder="학생명·항목" defaultValue={q} />
         </div>
       </div>
 
@@ -258,7 +231,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           <span className="text-amber shrink-0">
             <EyIcon name="alert" size={16} />
           </span>
-          <p className="text-foreground min-w-0 flex-1 text-[12px] leading-relaxed">
+          <p className="text-foreground min-w-0 flex-1 text-xs leading-relaxed">
             <b>
               {formatPeriod(period)} 숫자는 <span className="num">{kstDateTime(lastTouched)}</span> 이후
               갱신되지 않았습니다.
@@ -277,7 +250,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           <span className="text-amber shrink-0">
             <EyIcon name="alert" size={16} />
           </span>
-          <p className="text-foreground min-w-0 flex-1 text-[12px] leading-relaxed">
+          <p className="text-foreground min-w-0 flex-1 text-xs leading-relaxed">
             <b>
               마지막 동기화에 없던 청구 <span className="num">{missingRows.length}</span>건
             </b>{" "}
@@ -310,15 +283,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
                   ? "검색 결과 없음"
                   : "이 달 청구 내역이 없습니다"
           }
-          description={
-            missingOnly
-              ? `이 달 청구 ${summary.totalCount}건이 모두 마지막 동기화에 있었습니다.`
-              : overdueOnly
-                ? `이 달 청구 ${summary.totalCount}건 중 납부기한이 지난 미완납이 없습니다.`
-                : q
-                  ? "검색어를 조정해보세요."
-                  : "월을 이동하거나 신규 청구서를 생성하세요."
-          }
+          // 설명 문장은 뺐다(§4) — 제목이 빈 이유를 말하고, 되돌릴 길은 아래 '전체 보기'·위 월 네비다.
           action={
             overdueOnly || missingOnly ? (
               <Button
@@ -333,7 +298,8 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       ) : (
         <>
           {/* KPI 5종 — Editorial 문법 ②(BigStat). 금액은 num tabular + "원" 단위 분리, 미수금만 danger 강조. */}
-          <section className="grid grid-cols-2 gap-3.5 md:grid-cols-3 2xl:grid-cols-5">
+          {/* 다섯 칸 한 줄은 xl(1280)부터 — 최소 창(본문 1148)에서 5칸이면 "132,110,875원"이 두 줄로 꺾인다(실측). 그 아래는 3+2. */}
+          <section className="grid grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-5">
             <BigStat
               label="총 청구액"
               value={KRW.format(summary.totalBilled)}
@@ -375,21 +341,21 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             />
           </section>
 
-          <section className="bg-card shadow-card rounded-2xl p-5">
-            <header className="mb-3 flex items-baseline justify-between">
-              <h2 className="text-foreground text-sm font-bold">수납 진행률</h2>
-              <span className="text-text-dim num text-[12px]">
+          {/* 수납 진행률 — 카드 껍데기 없이 스탯 줄 아래 한 줄(§4 카드 안의 카드 금지 · 시선 앵커 셋 = 머리·스탯·표).
+              의미색 캐논 — 완납=positive(green) · 부분=caution(amber) · 미수=critical(danger). */}
+          <div className="px-1">
+            <div className="mb-1.5 flex items-baseline justify-between gap-3">
+              <span className="text-foreground text-sm font-bold">수납 진행률</span>
+              <span className="text-text-dim num text-sm">
                 완납 {paidPct.toFixed(1)}% · 부분 {partialPct.toFixed(1)}% · 미수 {unpaidPct.toFixed(1)}%
               </span>
-            </header>
-            {/* 의미색 캐논 — 완납=positive(green) · 부분=caution(amber) · 미수=critical(danger).
-                ⚠️ 완납은 v4에서 primary(네이비) → green: "정상 종결"은 앱 전역이 그린이다(출석·승인·재원). */}
+            </div>
             <div className="bg-bg-soft flex h-2.5 overflow-hidden rounded-pill">
               <span className="bg-green block h-full" style={{ width: `${paidPct}%` }} />
               <span className="bg-amber block h-full" style={{ width: `${partialPct}%` }} />
               <span className="bg-danger block h-full" style={{ width: `${unpaidPct}%` }} />
             </div>
-          </section>
+          </div>
 
           {overdue.length > 0 ? (
             /* 기한 경과 배너 — 굵은 건수+금액 위계 + 우측 '목록 보기'(그 건들만 남기는 진짜 필터) */
@@ -398,18 +364,18 @@ export async function BillingContent({ sp }: { sp: Sp }) {
                 <CircleDollarSign size={18} strokeWidth={1.8} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-foreground text-[13px] font-bold">기한 경과 미수금</p>
+                <p className="text-foreground text-sm font-bold">기한 경과 미수금</p>
                 <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="num text-danger text-[24px] font-bold leading-none">
+                  <span className="num text-danger text-2xl font-bold leading-none">
                     {overdue.length}
                   </span>
-                  <span className="text-text-dim text-[12px]">건</span>
-                  <span className="num text-foreground text-[17px] font-bold">{won(overdueAmount)}</span>
+                  <span className="text-text-dim text-xs">건</span>
+                  <span className="num text-foreground text-lg font-bold">{won(overdueAmount)}</span>
                 </p>
               </div>
               <Link
                 href={buildHref({ period, q, sort, desc, overdue: !overdueOnly })}
-                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition ${
+                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
                   overdueOnly
                     ? "border-danger bg-danger text-white hover:bg-danger/90"
                     : "border-danger/40 text-danger hover:bg-danger/10"
@@ -422,7 +388,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
           {/* 필터가 걸려 있으면 표 위에 상태를 명시(어떤 집합을 보고 있는지 화면이 스스로 말한다). */}
           {overdueOnly || missingOnly ? (
-            <p className="text-text-dim flex flex-wrap items-center gap-2 text-[12px]">
+            <p className="text-text-dim flex flex-wrap items-center gap-2 text-xs">
               {overdueOnly ? (
                 <span className="bg-danger-soft text-danger rounded-full px-2.5 py-0.5 font-medium">
                   기한 경과만 {total}건

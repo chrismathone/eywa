@@ -17,8 +17,8 @@ import { ReportTrendGraph } from "./report-trend-graph";
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="border-line flex items-start justify-between gap-3 border-b py-3 last:border-b-0">
-      <span className="text-text-faint shrink-0 text-[15px]">{label}</span>
-      <span className="text-foreground text-right text-[15px] font-bold whitespace-pre-line">
+      <span className="text-text-faint shrink-0 text-base">{label}</span>
+      <span className="text-foreground text-right text-base font-bold whitespace-pre-line">
         {value.replace(/\r\n?/g, "\n")}
       </span>
     </div>
@@ -29,7 +29,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       {/* 섹션 제목: 13px→26px(2배)·faint→dim(더 진한 회색) — 2026-07-10 원장 요청. */}
-      <h2 className="text-text-dim mb-3 text-[26px] font-bold">{title}</h2>
+      <h2 className="text-text-dim mb-3 text-3xl font-bold">{title}</h2>
       {children}
     </section>
   );
@@ -117,7 +117,7 @@ export function ParentReportCard({
           // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 외부 로고(최적화 불필요)
           <img src={logoSrc} alt={academyName} className="h-14 w-auto object-contain" />
         ) : null}
-        {rpt.showAcademyName ? <p className="text-text-dim text-[15px]">{academyName}</p> : null}
+        {rpt.showAcademyName ? <p className="text-text-dim text-base">{academyName}</p> : null}
         {/* 제목에 보고일 합체("2026년 07월 10일 수업 보고서") — 별도 보고일 필드 제거(2026-07-10 원장 요청).
             보강이면 접미사를 덧붙여 같은 날 정규 보고서와 학부모가 구분(2026-07-24 원장).
             정규 수업까지 한 날의 보강은 "(정규+보강)"으로 합쳐 **한 번만** 나간다(2026-08-05 원장, makeup-label.ts). */}
@@ -175,7 +175,7 @@ export function ParentReportCard({
 
       {rpt.showParentNote ? (
         <Section title="학부모 전달 내용">
-          <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">
+          <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">
             {report.notes || "작성된 보고 내용이 없습니다."}
           </p>
         </Section>
@@ -184,7 +184,7 @@ export function ParentReportCard({
       {/* 학습 추세(종합분석) — 0091a. 내용 있을 때만 노출(빈 회차엔 섹션 자체를 숨김). */}
       {rpt.showTrendNote && report.trendNote ? (
         <Section title="학습 추세">
-          <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">{report.trendNote}</p>
+          <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">{report.trendNote}</p>
         </Section>
       ) : null}
 
@@ -218,8 +218,8 @@ export function ParentReportCard({
                     className="border-line bg-bg-soft hover:bg-line/30 flex items-center gap-2 rounded-md border px-3 py-2.5 no-underline"
                   >
                     <EyIcon name="fileDownload" size={20} className="text-primary shrink-0" />
-                    <span className="text-foreground min-w-0 flex-1 truncate text-[14px] font-medium">{a.name}</span>
-                    <span className="text-text-faint shrink-0 text-[11px]">받기</span>
+                    <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">{a.name}</span>
+                    <span className="text-text-faint shrink-0 text-xs">받기</span>
                   </a>
                 ))}
             </div>
@@ -228,7 +228,7 @@ export function ParentReportCard({
       ) : null}
 
       {rpt.showFooter ? (
-        <footer className="text-text-faint mt-2 pb-4 text-center text-[12px]">
+        <footer className="text-text-faint mt-2 pb-4 text-center text-xs">
           {rpt.footerNote || [academyName, reportDate].filter(Boolean).join(" · ")}
         </footer>
       ) : null}

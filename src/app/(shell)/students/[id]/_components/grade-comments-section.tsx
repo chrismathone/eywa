@@ -208,13 +208,13 @@ export function GradeCommentsSection({
                       {meta.label}
                     </Pill>
                     {c.subject ? (
-                      <span className="text-text-dim text-[12px] font-medium">
+                      <span className="text-text-dim text-xs font-medium">
                         {subjects.labelOf(c.subject)}
                       </span>
                     ) : null}
-                    <span className="text-muted-foreground num text-[11px]">{c.period}</span>
+                    <span className="text-muted-foreground num text-xs">{c.period}</span>
                     {c.sharedWithParent ? (
-                      <span className="text-blue inline-flex items-center gap-0.5 text-[11px] font-medium">
+                      <span className="text-blue inline-flex items-center gap-0.5 text-xs font-medium">
                         <Users className="size-3" /> 공유
                       </span>
                     ) : null}
@@ -231,9 +231,9 @@ export function GradeCommentsSection({
                     <DeleteCommentBtn id={c.id} studentId={studentId} />
                   </div>
                 </div>
-                <p className="text-foreground mt-1.5 text-[13px] whitespace-pre-wrap">{c.content}</p>
+                <p className="text-foreground mt-1.5 text-sm whitespace-pre-wrap">{c.content}</p>
                 {c.authorName ? (
-                  <p className="text-text-faint mt-1 text-[11px]">{c.authorName}</p>
+                  <p className="text-text-faint mt-1 text-xs">{c.authorName}</p>
                 ) : null}
               </li>
             );

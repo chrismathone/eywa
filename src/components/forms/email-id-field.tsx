@@ -69,7 +69,7 @@ export function EmailIdField({
       <button
         type="button"
         onClick={() => setEditDomain((v) => !v)}
-        className="text-text-faint hover:text-primary mt-1 text-[11px] underline-offset-2 hover:underline"
+        className="text-text-faint hover:text-primary mt-1 text-xs underline-offset-2 hover:underline"
       >
         {/* 닫아도 도메인 값은 그대로 — 버튼은 '입력칸을 여닫는' 것일 뿐 도메인을 바꾸지 않는다. */}
         {editDomain ? "도메인 입력칸 닫기" : "도메인 변경"}

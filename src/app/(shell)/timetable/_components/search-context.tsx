@@ -32,7 +32,7 @@ import {
 } from "@/features/attendance/student-search";
 import {
   SearchScopeChip,
-  StudentSearchBox,
+  StudentSearchToggle,
 } from "@/features/attendance/components/student-search-box";
 import {
   matchedClassIds,
@@ -40,7 +40,7 @@ import {
   type TimetableSearchClass,
   type TimetableSearchStudent,
 } from "@/features/timetable/lib/student-search";
-import { useTimetableEdit } from "./edit-context";
+import { useTimetableDragging } from "./drag-flag";
 
 /**
  * 검색에 걸린 학생 이름 표식 — **형광펜으로 그은 줄**(형광 노랑 채움 + 진한 글씨).
@@ -127,9 +127,11 @@ export function TimetableSearchProvider({
   const setQuery = useCallback((v: string) => {
     setState((s) => (s.query === v ? s : { query: v, flash: s.flash + 1 }));
   }, []);
-  // 편집(드래그로 반 이동)에선 필터를 푼다 — 위 주석의 "드롭할 곳이 없는 편집 모드" 방지.
-  const { editing } = useTimetableEdit();
-  const active = enabled && isSearchActive(query) && !editing;
+  // **끄는 동안**엔 필터를 푼다 — 위 주석의 "드롭할 곳이 없는" 상태 방지(옛 편집 모드가 하던 몫).
+  // ⚠️ 권한(canDrag)으로 풀면 관리자에겐 검색이 영영 안 걸린다 — 판정은 실제 드래그 중인지다.
+  // ⚠️ **검색어가 걸려 있을 때만 구독**한다 — 평소(검색 없음)엔 픽업에 이 provider가 안 깨어난다(드래그 렉).
+  const dragging = useTimetableDragging(enabled && isSearchActive(query));
+  const active = enabled && isSearchActive(query) && !dragging;
   const matched = useMemo(
     () => (active ? matchedClassIds(index, query) : NO_MATCH),
     [active, index, query],
@@ -143,10 +145,10 @@ export function TimetableSearchProvider({
       totalClasses: index.length,
       matchedClasses: matched.size,
       scope,
-      suspended: editing || !enabled,
+      suspended: dragging || !enabled,
       hitClass: `${SEARCH_HIT_CLASS} ${SEARCH_FLASH_CLASSES[flash % SEARCH_FLASH_CLASSES.length]}`,
     }),
-    [query, setQuery, active, matched, index.length, scope, editing, enabled, flash],
+    [query, setQuery, active, matched, index.length, scope, dragging, enabled, flash],
   );
   return <SearchCtx.Provider value={value}>{children}</SearchCtx.Provider>;
 }
@@ -217,26 +219,22 @@ export function useSearchTone(student: TimetableSearchStudent, tone: string): st
 }
 
 /**
- * 툴바 입력칸 + 지금 걸린 필터 표기.
- * ⚠️ 앞의 구분선까지 이 컴포넌트가 그린다 — 밖에 두면 입력칸이 숨는 상황(편집 모드·반 0개)에서
- *    선만 덩그러니 남는다.
+ * 툴바 검색 **토글** — 평소엔 '검색' 글자 하나, 누르면 입력칸(+지금 걸린 필터 표기)이 펼쳐진다.
+ *
+ * 지시서 §10 "검색은 필요할 때만 나타나게(단축키 또는 토글)" — 공용 [`SearchToggle`](@/components/search-toggle)과 같은 모양이되
+ * 이 검색은 URL이 아니라 클라 상태라 그쪽 부품(SearchForm = router.push)을 못 쓴다. 규약은 같다: 검색어가 걸려 있으면 **언제나**
+ * 펼친 채(무엇으로 걸러졌는지 보여야 한다) · 빈 채로 열었으면 '닫기'로 되돌린다.
+ * ⚠️ 입력칸이 숨는 상황(편집 모드·반 0개)엔 통째로 사라진다 — 구분선을 따로 안 그리는 이유.
  */
-export function TimetableSearchBox() {
+export function TimetableSearchToggle() {
   const ctx = useTimetableSearch();
   if (!ctx || ctx.suspended || ctx.totalClasses === 0) return null;
   return (
-    <>
-      <span className="bg-line h-4 w-px" aria-hidden />
-      <StudentSearchBox value={ctx.query} onChange={ctx.setQuery} />
-      {ctx.active ? (
-        <SearchScopeChip
-          shown={ctx.matchedClasses}
-          total={ctx.totalClasses}
-          unit="개 수업"
-          totalsNote="상단 인원 집계는 전체 기준"
-        />
-      ) : null}
-    </>
+    <StudentSearchToggle
+      value={ctx.query}
+      onChange={ctx.setQuery}
+      chip={<SearchScopeChip shown={ctx.matchedClasses} total={ctx.totalClasses} unit="개 수업" totalsNote="상단 인원 집계는 전체 기준" />}
+    />
   );
 }
 
@@ -249,7 +247,7 @@ export function TimetableSearchEmptyNote() {
   if (!ctx?.active || ctx.matchedClasses > 0) return null;
   return (
     <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-2 rounded-2xl px-4 py-3">
-      <span className="text-foreground text-[13px] font-bold break-keep">
+      <span className="text-foreground text-sm font-bold break-keep">
         {emptySearchMessage(ctx.query, ctx.scope)}
       </span>
       <button

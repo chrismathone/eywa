@@ -36,7 +36,6 @@ export function PayslipWindowButton({
           : tf("att.payslip.period", { period })
       }
       variant="outline"
-      className="h-8 rounded-lg px-2.5 text-xs"
     >
       {t("att.payslip")}
       {subjectFiltered ? t("att.payslip.allSubjects") : ""}

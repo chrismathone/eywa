@@ -168,9 +168,9 @@ export function RideExceptionDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
       <div className="bg-card flex max-h-[88vh] w-full max-w-xl flex-col gap-3 rounded-2xl p-3 shadow-xl sm:p-4">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-foreground text-[15px] font-bold">
+          <h2 className="text-foreground text-base font-bold">
             일회성 탑승 변경
-            <span className="text-text-faint ml-1.5 text-[11.5px] font-normal">
+            <span className="text-text-faint ml-1.5 text-xs font-normal">
               {formatKoreanDate(date)}
             </span>
           </h2>
@@ -179,13 +179,13 @@ export function RideExceptionDialog({
           </Button>
         </div>
 
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           평소 배정은 그대로 두고 <b className="font-bold">그날 하루만</b> 태우거나 뺍니다. 출결은 함께
           바뀌지 않습니다 — 결석 처리는 출석부에서 따로 합니다.
         </p>
 
         {!canEdit && (
-          <p className="border-line text-text-dim rounded-xl border border-dashed px-3 py-2 text-[12.5px]">
+          <p className="border-line text-text-dim rounded-xl border border-dashed px-3 py-2 text-xs">
             {past
               ? "지난 날짜라 읽기만 합니다 — 그날의 기록입니다."
               : "셔틀 일회성 변경 표가 아직 준비되지 않았습니다 — 마이그레이션 0229a를 적용하면 바로 쓸 수 있습니다."}
@@ -225,20 +225,20 @@ export function RideExceptionDialog({
                           )}
                         >
                           <span className="text-foreground font-medium">{s.name}</span>
-                          <span className="text-text-faint text-[11.5px]">{s.schoolGrade}</span>
+                          <span className="text-text-faint text-xs">{s.schoolGrade}</span>
                         </button>
                       </li>
                     ))}
                     {addShown.length === 0 && (
-                      <li className="text-text-faint px-1 py-2 text-[12.5px]">
+                      <li className="text-text-faint px-1 py-2 text-xs">
                         {key ? "찾는 학생이 없습니다." : "이름이나 학교를 입력하세요."}
                       </li>
                     )}
                   </ul>
                 ) : (
                   <div className="border-line flex flex-wrap items-center gap-2 rounded-xl border p-2">
-                    <span className="text-foreground text-[12.5px] font-bold">{addStudent.name}</span>
-                    <span className="text-text-faint text-[11.5px]">{addStudent.schoolGrade}</span>
+                    <span className="text-foreground text-xs font-bold">{addStudent.name}</span>
+                    <span className="text-text-faint text-xs">{addStudent.schoolGrade}</span>
                     <Button
                       variant="ghost"
                       className={cn(SHUTTLE_ACTION, SHUTTLE_ROW_TEXT, "ml-auto px-2")}
@@ -294,7 +294,7 @@ export function RideExceptionDialog({
 
         {/* 오늘 걸린 변경 — 🔴 되돌리는 문을 잠그지 않는다([[#103]]). 지난 날짜는 목록만 보인다. */}
         <div className="border-line flex min-h-0 flex-col gap-1 rounded-xl border p-1.5">
-          <span className="text-text-faint px-1 text-[11.5px]">
+          <span className="text-text-faint px-1 text-xs">
             이 날짜의 변경 <span className="num">{entries.length}</span>건
           </span>
           <ul className="flex max-h-40 min-h-0 flex-col gap-0.5 overflow-y-auto">
@@ -303,8 +303,8 @@ export function RideExceptionDialog({
                 <Pill color={TONE_COLOR[e.kind === "add" ? "special" : "inert"]}>
                   {RIDE_EXCEPTION_LABEL[e.kind]}
                 </Pill>
-                <span className="text-foreground shrink-0 text-[12.5px] font-medium">{e.studentName}</span>
-                <span className="text-text-faint min-w-0 flex-1 truncate text-[11.5px]">
+                <span className="text-foreground shrink-0 text-xs font-medium">{e.studentName}</span>
+                <span className="text-text-faint min-w-0 flex-1 truncate text-xs">
                   {[DIRECTION_LABEL[e.ioKind], e.where, e.memo].filter(Boolean).join(" · ")}
                 </span>
                 {canEdit && (
@@ -320,7 +320,7 @@ export function RideExceptionDialog({
               </li>
             ))}
             {entries.length === 0 && (
-              <li className="text-text-faint px-1 py-2 text-[12.5px]">아직 변경이 없습니다.</li>
+              <li className="text-text-faint px-1 py-2 text-xs">아직 변경이 없습니다.</li>
             )}
           </ul>
         </div>

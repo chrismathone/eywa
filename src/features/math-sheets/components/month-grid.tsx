@@ -54,11 +54,11 @@ export function MonthGrid({
 
   return (
     <DragScrollArea className="px-1 pb-6">
-      <table className="border-line-faint w-full min-w-[940px] border-collapse text-[13px]">
+      <table className="border-line-faint w-full min-w-[940px] border-collapse text-sm">
         <thead>
           <tr>
             <th
-              className={`bg-bg-soft border-line-faint text-text-dim sticky left-0 z-10 ${HEAD_CELL_W} border p-2 text-left text-[12.5px] font-extrabold`}
+              className={`bg-bg-soft border-line-faint text-text-dim sticky left-0 z-10 ${HEAD_CELL_W} border p-2 text-left text-xs font-extrabold`}
             >
               학생 · 이 달 목표
             </th>

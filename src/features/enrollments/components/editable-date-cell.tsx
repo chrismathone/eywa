@@ -89,9 +89,9 @@ export function EditableDateCell({
         <X className="size-3.5" />
       </button>
       {field === "end" ? (
-        <span className="text-text-faint ml-0.5 text-[10px] whitespace-nowrap">비우면 재원중</span>
+        <span className="text-text-faint ml-0.5 text-xs whitespace-nowrap">비우면 재원중</span>
       ) : null}
-      {state?.error ? <span className="text-danger ml-0.5 text-[10px]">{state.error}</span> : null}
+      {state?.error ? <span className="text-danger ml-0.5 text-xs">{state.error}</span> : null}
     </form>
   );
 }

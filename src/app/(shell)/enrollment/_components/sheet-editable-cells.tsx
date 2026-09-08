@@ -118,7 +118,7 @@ function CellFace({
 }
 
 const INPUT =
-  "border-border bg-card text-foreground focus:border-primary block w-full rounded-md border px-1.5 py-0.5 text-[12.5px] leading-[1.4] focus:outline-none disabled:opacity-60";
+  "border-border bg-card text-foreground focus:border-primary block w-full rounded-md border px-1.5 py-0.5 text-xs leading-[1.4] focus:outline-none disabled:opacity-60";
 
 /**
  * 한 줄 입력 / 여러 줄 입력 편집기. Enter = 저장(여러 줄은 Shift+Enter가 줄바꿈), Esc = 취소, blur = 바뀌었으면 저장.
@@ -182,7 +182,7 @@ function TextEditor({
           onFocus={onFocus}
           className={`${INPUT} resize-y ${className}`}
         />
-        <p className="text-text-faint mt-0.5 text-[10.5px]">Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소</p>
+        <p className="text-text-faint mt-0.5 text-xs">Enter 저장 · Shift+Enter 줄바꿈 · Esc 취소</p>
       </div>
     );
   }
@@ -253,7 +253,7 @@ export function EditableTextCell({
 
 /** 값이 없을 때 고를 수 있는 '없음' — 빈 문자열은 서버에서 null로 저장된다. */
 const NONE_OPTION: ComboOption = { value: "", label: "없음" };
-const SELECT_TRIGGER = "border-border bg-card text-foreground h-7 rounded-md border px-2 text-[12px]";
+const SELECT_TRIGGER = "border-border bg-card text-foreground h-7 rounded-md border px-2 text-xs";
 
 /**
  * 고르는 칸 — 상담사 · 과목. 더블클릭하면 목록이 **열린 채로** 나타나고(`defaultOpen`), 고르면 바로 저장,

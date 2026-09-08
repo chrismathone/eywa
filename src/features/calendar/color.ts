@@ -40,7 +40,7 @@ const DOT_CLASS: Record<EventColor, string> = {
   amber: "bg-amber",
   purple: "bg-purple",
   rose: "bg-rose",
-  neutral: "bg-text-faint",
+  neutral: "bg-neutral-fill",
 };
 
 /** 프리셋 칩(soft 배경 + 같은 색 글자) 클래스 — 종전 month-grid CHIP_CLASS의 정본. */

@@ -92,7 +92,6 @@ export function EnrollmentKanban({
   canWrite: boolean;
 }) {
   const router = useRouter();
-  const [active, setActive] = useState(0);
   const [dragging, setDragging] = useState<ConsultationListRow | null>(null);
   /**
    * 보드 위 한 줄 안내. `warn` = 못 옮긴 이유 / `info` = 옮기긴 했는데 알아야 할 것.
@@ -198,7 +197,7 @@ export function EnrollmentKanban({
       {notice ? (
         <div
           className={cn(
-            "mb-3 flex items-start justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-[13.5px]",
+            "mb-3 flex items-start justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-sm",
             notice.tone === "warn"
               ? "border-amber/30 bg-amber-soft text-amber"
               : "border-blue/30 bg-blue-soft text-blue",
@@ -216,48 +215,32 @@ export function EnrollmentKanban({
         </div>
       ) : null}
 
-      {/* 좁은 화면 전용 탭바 — xl(4열)부터 숨김 */}
-      <div className="mb-2.5 flex gap-1.5 overflow-x-auto xl:hidden">
-        {columns.map((col, i) => (
-          <button
-            key={col.stage.key}
-            type="button"
-            onClick={() => setActive(i)}
-            aria-pressed={i === active}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-bold transition ${
-              i === active
-                ? "bg-foreground text-background"
-                : "bg-bg-soft text-text-dim hover:text-foreground"
-            }`}
-          >
-            {col.stage.label}
-            <span className="num text-[13px] opacity-70">{col.cards.length}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* 컬럼 그리드 — xl에서 4열, 좁으면 활성 탭 1개만 노출 */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
-        {columns.map((col, i) => (
-          <StageColumn
-            key={col.stage.key}
-            stageKey={col.stage.key}
-            label={col.stage.label}
-            color={col.stage.color}
-            cards={col.cards}
-            nowMs={nowMs}
-            canWrite={canWrite}
-            visible={i === active}
-            dragging={!!dragging}
-            focusId={movedId}
-            onUserPaged={() => setMovedId(null)}
-          />
-        ))}
+      {/* 🔴 컬럼 4열 **항상**(원장 2026-09-03 *"창이 줄어들어도 기존 4열 스타일을 유지하는 게 오히려 가독성이 뛰어남 ·
+          앞으로도 탭접힘은 금지"*) — 좁은 창에서 탭 하나로 접어 카드가 가로로 늘어지던 것을 걷었다. 창은
+          ROUTE_WINDOW_SIZE.enrollment(1120×720) 아래로 못 줄이고, 그래도 작으면(스냅·작은 모니터) 여기는 가로로
+          넘치고 창 위에 WindowMinSizeNotice가 선다. 06-19 "큰창 그리드/작은창 탭" 규약은 폐기. */}
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[1040px] grid-cols-4 gap-3">
+          {columns.map((col) => (
+            <StageColumn
+              key={col.stage.key}
+              stageKey={col.stage.key}
+              label={col.stage.label}
+              color={col.stage.color}
+              cards={col.cards}
+              nowMs={nowMs}
+              canWrite={canWrite}
+              dragging={!!dragging}
+              focusId={movedId}
+              onUserPaged={() => setMovedId(null)}
+            />
+          ))}
+        </div>
       </div>
 
       <DragOverlay dropAnimation={null}>
         {dragging ? (
-          <div className="bg-card shadow-card text-foreground rounded-xl px-3.5 py-2.5 text-[17px] font-bold">
+          <div className="bg-card shadow-card text-foreground rounded-xl px-3.5 py-2.5 text-lg font-bold">
             {dragging.prospectName}
           </div>
         ) : null}
@@ -273,7 +256,6 @@ function StageColumn({
   cards,
   nowMs,
   canWrite,
-  visible,
   dragging,
   focusId,
   onUserPaged,
@@ -284,8 +266,6 @@ function StageColumn({
   cards: ConsultationListRow[];
   nowMs: number;
   canWrite: boolean;
-  /** 좁은 화면에서 이 칸이 활성 탭인지(넓은 화면은 항상 보인다). */
-  visible: boolean;
   /** 지금 무언가를 끌고 있는지 — 놓을 자리를 눈에 띄게 한다. */
   dragging: boolean;
   /** 방금 옮긴 카드 id(이 칸에 없으면 무시된다) — ColumnCards가 그 페이지를 편다. */
@@ -302,9 +282,8 @@ function StageColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "bg-card shadow-card min-h-[280px] flex-col rounded-3xl border transition-shadow xl:flex",
+        "bg-card shadow-card flex min-h-[280px] flex-col rounded-3xl border transition-shadow",
         COLUMN_BORDER[color],
-        visible ? "flex" : "hidden",
         // 끌고 있을 때만 놓을 자리를 표시 — 평소엔 위 칸 색 테두리 그대로.
         dragging && canWrite && "ring-line ring-2",
         isOver && "ring-primary ring-2",
@@ -320,15 +299,15 @@ function StageColumn({
       >
         <div className="flex items-center gap-2">
           <span className="text-text-dim flex items-center justify-center">{columnIcon(stageKey)}</span>
-          <h3 className="text-foreground text-[16px] font-bold">{label}</h3>
+          <h3 className="text-foreground text-base font-bold">{label}</h3>
         </div>
         <span className="flex items-baseline gap-0.5">
-          <span className="num text-foreground text-[19px] leading-none font-bold">{cards.length}</span>
-          <span className="text-text-faint text-[13px]">건</span>
+          <span className="num text-foreground text-xl leading-none font-bold">{cards.length}</span>
+          <span className="text-text-faint text-sm">건</span>
         </span>
       </header>
       {cards.length === 0 ? (
-        <div className="text-text-faint flex flex-1 items-center justify-center px-4 text-[13.5px]">
+        <div className="text-text-faint flex flex-1 items-center justify-center px-4 text-sm">
           없음
         </div>
       ) : (

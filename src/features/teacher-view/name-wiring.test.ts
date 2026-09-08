@@ -601,7 +601,9 @@ describe("🔴 월별 출석부는 사전만 본다 — 화면 파일에 한글 
  *    **열람 전용**이라 그 버튼 자체가 안 보인다(상위 결정 2026-08-18). 사무실에 열 때 함께 옮긴다.
  */
 describe("🔴 학생목록은 사전만 본다 — 화면 파일에 한글 리터럴 0", () => {
-  it.each(["student-filter-bar.tsx"])("%s", (f) => {
+  // ⚠️ 옛 `student-filter-bar.tsx`는 디자인 v5에서 사라졌다(필터가 표의 **열 머리**로 들어갔다) —
+  //    남은 조각(더보기 메뉴)과 라우트가 이 규칙의 대상이다.
+  it.each(["students-more-menu.tsx"])("%s", (f) => {
     const code = codeOnly(read("app", "(shell)", "students", "_components", f));
     const hits = code
       .split(/\r?\n/)
@@ -612,11 +614,17 @@ describe("🔴 학생목록은 사전만 본다 — 화면 파일에 한글 리�
 
   it("라우트(page.tsx)도 사전 경유 — 머리·열 제목·빈 화면이 하드코딩이 아니다", () => {
     const src = read("app", "(shell)", "students", "page.tsx");
-    for (const key of ["stu.title", "stu.desc", "stu.col.student", "stu.empty.desc", "stu.excel"]) {
+    // ⚠️ 빈 화면의 **설명 문장**은 v5 §4에서 지웠다(제목만 남긴다) — 없는 문구를 요구하지 않는다.
+    for (const key of ["stu.title", "stu.desc", "stu.col.student", "stu.empty.title"]) {
       expect(src).toContain(key);
     }
     const code = codeOnly(src).replace(/\/\/[^\n\r]*/g, "");
     expect(code.split(/\r?\n/).filter((l) => /[가-힣]/.test(l))).toEqual([]);
+  });
+
+  it("엑셀 내보내기·가져오기 문구는 더보기 메뉴가 사전에서 가져온다(v5에서 머리 버튼 → 메뉴로 옮겼다)", () => {
+    const src = read("app", "(shell)", "students", "_components", "students-more-menu.tsx");
+    for (const key of ["stu.excelAxis", "stu.excel", "stu.excelImport"]) expect(src).toContain(key);
   });
 
   it("🔴 학생 상태는 한·영 표가 같은 키 집합이다 — 빠진 키는 raw enum이 샌다", () => {
@@ -1151,8 +1159,9 @@ describe("🔴 원스크린 화면 껍데기·공지 작성도 사전만 본다 
 describe("🔴 수업목록(목록)·공용 조각 — 한글 리터럴 0", () => {
   it.each([
     ["app", "(shell)", "classes", "page.tsx"],
-    ["app", "(shell)", "classes", "_components", "class-filter-bar.tsx"],
-    ["app", "(shell)", "classes", "_components", "filter-shared.ts"],
+    // ⚠️ 옛 `class-filter-bar.tsx`·`filter-shared.ts`는 디자인 v5에서 사라졌다(필터 = 열 머리, 어휘는
+    //    `features/classes/list-filters.ts`로 이사). 지금 화면에서 한글을 들 수 있는 자리는 요일 머리 필터다.
+    ["app", "(shell)", "classes", "_components", "header-day-filter.tsx"],
     ["components", "pagination.tsx"],
     ["components", "makeedu-sync-badge.tsx"],
   ])("%s/%s", (...seg) => {
@@ -1195,12 +1204,15 @@ describe("🔴 수업목록(목록)·공용 조각 — 한글 리터럴 0", () =
   });
 
   it("🔴 필터 선택지 라벨은 사전 키다 — 값(enum)은 URL 파라미터라 불변", () => {
-    const src = read("app", "(shell)", "classes", "_components", "filter-shared.ts");
+    // ⚠️ 어휘는 v5에서 `features/classes/list-filters.ts`로 이사했다(옛 `_components/filter-shared.ts`).
+    //    정렬 라벨은 라우트가 사전에서 고르므로 그 파일도 함께 본다.
+    const src =
+      read("features", "classes", "list-filters.ts") + read("app", "(shell)", "classes", "page.tsx");
     for (const k of [
       "cls.status.operating",
       "cls.status.ended",
       "cls.status.retired",
-      "filter.all",
+      "cls.filter.all",
       "cls.sort.name",
       "cls.sort.students",
       "cls.sort.teacher",
@@ -1212,8 +1224,9 @@ describe("🔴 수업목록(목록)·공용 조각 — 한글 리터럴 0", () =
     for (const v of ["operating", "ended", "retired", "all", "name", "students", "teacher"]) {
       expect(src, v).toContain(`"${v}"`);
     }
-    // 요일 글자는 여기 두지 않는다(앱 전역 `sheetDowLabel` 단일 소스).
-    expect(src).not.toContain("label:");
+    // 🔴 **어휘 파일엔 문구를 두지 않는다**(값 + 사전 키만) — 라우트는 그 키를 `sheetT`로 풀어 쓰므로
+    //    `label:`이 나와도 정상이다. 그래서 이 검사는 어휘 파일 하나만 본다.
+    expect(read("features", "classes", "list-filters.ts")).not.toContain("label:");
   });
 
   it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
@@ -1380,11 +1393,16 @@ describe("🔴 수업 상세 — 한글 리터럴 0", () => {
     expect(sheetTf("ko", "cls.sch.pastHidden", { n: 3 })).toBe("지난 배치 3개는 숨김");
     expect(sheetT("ko", "cls.ho.open")).toBe("강사 인수인계");
     expect(sheetT("ko", "cls.ho.due")).toBe("적용일 도달");
-    expect(sheetT("ko", "cls.ho.applyNow")).toBe("지금 적용");
-    // 🔴 안내문 가운데의 강조 조각은 버튼과 **같은 키**를 쓴다 — 둘이 갈리면 안내가 거짓이 된다.
-    expect(read("app", "(shell)", "classes", "[id]", "_components", "teacher-handover.tsx")).toContain(
-      '<span className="text-foreground">{t("cls.ho.applyNow")}</span>',
-    );
+    expect(sheetT("ko", "cls.ho.applyNow")).toBe("지금 적용");
+
+    // 🔴 안내문 가운데의 강조 조각은 버튼과 **같은 키**를 쓴다 — 둘이 갈리면 안내가 거짓이 된다.
+
+    expect(read("app", "(shell)", "classes", "[id]", "_components", "teacher-handover.tsx")).toContain(
+
+      '<span className="text-foreground">{t("cls.ho.applyNow")}</span>',
+
+    );
+
     expect(sheetT("ko", "cls.ho.introA")).toBe("현재 담임 ");
     expect(sheetT("ko", "cls.dg.open")).toBe("임시 위임");
     expect(sheetTf("ko", "cls.dg.bannerTitle", { n: 2 })).toBe("임시 위임 2건 — 담임은 그대로입니다");

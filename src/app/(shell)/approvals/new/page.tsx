@@ -34,17 +34,13 @@ export default async function NewApprovalPage() {
     <div className="mx-auto w-full max-w-[900px] space-y-4 p-4 md:p-6">
       <Link
         href="/approvals"
-        className="text-text-dim hover:text-primary inline-flex items-center gap-1 text-xs font-medium transition"
+        className="text-text-dim hover:text-primary inline-flex items-center gap-1 text-sm font-medium transition"
       >
-        <ArrowLeft className="size-3.5" /> 결재함으로
+        <ArrowLeft className="size-4" /> 결재함으로
       </Link>
 
-      <PageHeader
-        eyebrow="전자결재"
-        title="결재 문서 작성"
-        description="문서 종류를 고르고 결재선을 지정해 상신합니다."
-        embedLabel="결재 문서 작성"
-      />
+      {/* 설명 문장 없음(§4) — 양식 선택·결재선·상세가 화면 자체다. */}
+      <PageHeader eyebrow="전자결재" title="결재 문서 작성" embedLabel="결재 문서 작성" />
 
       <DraftComposer
         drafterName={user.displayName}

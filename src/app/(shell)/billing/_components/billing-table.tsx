@@ -14,6 +14,7 @@ import { overdueLinesOnly } from "@/features/billing/sync-window";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 구분(수납 분류) = makeedu 고정 taxonomy(과목 enum 아님) → 여기 라벨/색 하드코딩 허용.
 const KIND_STYLE: Record<string, string> = {
@@ -99,7 +100,7 @@ function SortHeader({
       className={`text-text-dim hover:text-foreground inline-flex items-center gap-0.5 transition ${active ? "text-foreground font-bold" : ""} ${className ?? ""}`}
     >
       {label}
-      <EyIcon name={active && !current.desc ? "chevronUp" : "chevronDown"} size={11} />
+      <EyIcon name={active && !current.desc ? "chevronUp" : "chevronDown"} size={14} />
     </Link>
   );
 }
@@ -162,12 +163,13 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
       lineCount++;
     }
 
-  const numTh = "eyebrow num px-3 py-3 text-right font-normal";
+  const numTh = "num px-3 py-2.5 text-right";
   return (
-    <div className="bg-card border-border rounded-2xl border">
+    // 카드 = 헤어라인 링 하나(디자인 v5 ⑤) — 링 위에 border를 겹치지 않는다. 열 제목은 본문 크기(16)·굵게(v5, 옛 eyebrow 14 대문자).
+    <div className="bg-card shadow-card rounded-2xl">
       {/* 표 위 한 줄 - 지금 몇 건을 보고 있는지 + 전체 펼치기. 접을 것이 없으면(전부 1항목) 버튼도 없다. */}
-      <div className="border-border flex items-center justify-between gap-2 border-b px-3 py-2">
-        <span className="text-text-dim text-xs">
+      <div className="border-line flex items-center justify-between gap-2 border-b px-3 py-2">
+        <span className="text-text-dim text-sm">
           청구서 <span className="num">{groups.length}</span>건 · 항목{" "}
           <span className="num">{lineCount}</span>개
         </span>
@@ -175,26 +177,26 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
           <button
             type="button"
             onClick={toggleAll}
-            className="text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition"
+            className="text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium transition"
           >
-            <EyIcon name={allOpen ? "chevronUp" : "chevronDown"} size={12} />
+            <EyIcon name={allOpen ? "chevronUp" : "chevronDown"} size={14} />
             {allOpen ? "전체 접기" : "전체 펼치기"}
           </button>
         ) : null}
       </div>
-      <div className="overflow-x-auto rounded-b-2xl">
+      <DragScrollArea className="rounded-b-2xl">
       <table className="w-full min-w-[1080px] text-sm [&_td]:whitespace-nowrap">
-        <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
+        <thead className="border-line text-text-dim border-b text-left text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
           <tr>
             <th className="w-7 px-1 py-3" />
-            <th className="eyebrow px-3 py-3 font-normal">학년</th>
-            <th className="eyebrow px-3 py-3 font-normal">
+            <th className="px-3 py-2.5">학년</th>
+            <th className="px-3 py-2.5">
               <SortHeader col="name" label="이름" current={current} />
             </th>
-            <th className="eyebrow px-3 py-3 font-normal">청구월</th>
-            <th className="eyebrow px-3 py-3 text-center font-normal">청구일</th>
-            <th className="eyebrow px-3 py-3 font-normal">구분</th>
-            <th className="eyebrow px-3 py-3 font-normal">수납명</th>
+            <th className="px-3 py-2.5">청구월</th>
+            <th className="px-3 py-2.5 text-center">청구일</th>
+            <th className="px-3 py-2.5">구분</th>
+            <th className="px-3 py-2.5">수납명</th>
             <th className={numTh}>
               <SortHeader col="amount_total" label="청구액" current={current} className="justify-end" />
             </th>
@@ -202,9 +204,9 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
             <th className={numTh}>적립금</th>
             <th className={numTh}>실제낸금액</th>
             <th className={numTh}>미납금액</th>
-            <th className="eyebrow px-3 py-3 font-normal">결제수단</th>
-            <th className="eyebrow num px-3 py-3 text-center font-normal">수납일</th>
-            <th className="eyebrow px-3 py-3 font-normal">메모</th>
+            <th className="px-3 py-2.5">결제수단</th>
+            <th className="num px-3 py-2.5 text-center">수납일</th>
+            <th className="px-3 py-2.5">메모</th>
           </tr>
         </thead>
         <tbody>
@@ -216,7 +218,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                 <tr
                   key={`${r.id}-fold`}
                   onClick={() => toggleOne(r.id)}
-                  className="border-border hover:bg-accent/30 cursor-pointer border-t transition-colors"
+                  className="border-line hover:bg-accent/30 cursor-pointer border-t transition-colors"
                 >
                   <td className="px-1 py-2.5 text-center">
                     {/* 줄 전체가 눌리지만 버튼도 둔다 - 키보드·스크린리더가 쓰는 진짜 조작부는 이쪽이다. */}
@@ -230,10 +232,10 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                       aria-label={`${r.studentName} ${r.period} 세부 항목 ${sum.count}개 펼치기`}
                       className="text-text-faint hover:text-foreground inline-flex size-5 items-center justify-center rounded transition"
                     >
-                      <EyIcon name="chevronRight" size={12} />
+                      <EyIcon name="chevronRight" size={14} />
                     </button>
                   </td>
-                  <td className="text-muted-foreground px-3 py-2.5">{r.studentGrade ?? "—"}</td>
+                  <td className="text-text-dim px-3 py-2.5">{r.studentGrade ?? "—"}</td>
                   {/* 🔴 이름 칸은 줄 펼치기를 삼킨다 - 학생을 열려고 누른 클릭이 접힘까지 건드리면
                       창이 열리면서 표가 함께 튀어 "뭘 누른 건지" 알 수 없다. */}
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -248,18 +250,18 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                       {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
                     </span>
                   </td>
-                  <td className="text-muted-foreground num px-3 py-2.5 text-xs">{r.period}</td>
-                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">
+                  <td className="text-text-dim num px-3 py-2.5 text-xs">{r.period}</td>
+                  <td className="text-text-dim num px-3 py-2.5 text-center text-xs">
                     {sum.dueDay ?? dayOfMonth(r.billedAt) ?? "—"}
                   </td>
                   <td className="px-3 py-2.5">
                     {/* 구분이 섞인 청구서는 한 칩으로 뭉치지 않는다 - '수업'이라 적어 놓고 교재가 섞이면 거짓말. */}
                     {sum.kind ? (
-                      <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${KIND_STYLE[kindLabel(sum.kind)] ?? "text-text-dim bg-bg-soft"}`}>
+                      <span className={`inline-block rounded-sm px-1.5 py-0.5 text-xs font-medium ${KIND_STYLE[kindLabel(sum.kind)] ?? "text-text-dim bg-bg-soft"}`}>
                         {kindLabel(sum.kind) || "수업"}
                       </span>
                     ) : (
-                      <span className="text-text-dim bg-bg-soft inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium">
+                      <span className="text-text-dim bg-bg-soft inline-block rounded-sm px-1.5 py-0.5 text-xs font-medium">
                         여러 구분
                       </span>
                     )}
@@ -302,10 +304,10 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                       <span className="text-green">완납</span>
                     )}
                   </td>
-                  <td className="text-muted-foreground px-3 py-2.5 text-xs">
+                  <td className="text-text-dim px-3 py-2.5 text-xs">
                     {sum.method ? (PAYMENT_METHOD_LABEL[sum.method] ?? sum.method) : "—"}
                   </td>
-                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">
+                  <td className="text-text-dim num px-3 py-2.5 text-center text-xs">
                     {shortDate(sum.paidDate)}
                   </td>
                   <td className="text-text-dim px-3 py-2.5 text-xs">
@@ -327,7 +329,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
               return (
                 <tr
                   key={`${r.id}-${i}`}
-                  className={`hover:bg-accent/30 transition-colors ${first ? "border-border border-t" : ""}`}
+                  className={`hover:bg-accent/30 transition-colors ${first ? "border-line border-t" : ""}`}
                 >
                   <td className="px-1 py-2.5 text-center">
                     {first && lines.length > 1 ? (
@@ -338,11 +340,11 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                         aria-label={`${r.studentName} ${r.period} 세부 항목 접기`}
                         className="text-text-faint hover:text-foreground inline-flex size-5 items-center justify-center rounded transition"
                       >
-                        <EyIcon name="chevronDown" size={12} />
+                        <EyIcon name="chevronDown" size={14} />
                       </button>
                     ) : null}
                   </td>
-                  <td className="text-muted-foreground px-3 py-2.5">{first ? (r.studentGrade ?? "—") : ""}</td>
+                  <td className="text-text-dim px-3 py-2.5">{first ? (r.studentGrade ?? "—") : ""}</td>
                   <td className="px-3 py-2.5">
                     {first ? (
                       <span className="inline-flex items-center">
@@ -359,15 +361,15 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                       ""
                     )}
                   </td>
-                  <td className="text-muted-foreground num px-3 py-2.5 text-xs">{first ? r.period : ""}</td>
+                  <td className="text-text-dim num px-3 py-2.5 text-xs">{first ? r.period : ""}</td>
                   {/* 청구일 — makeedu 라인엔 dueDay가 있고, eywa 수동 청구서엔 없다(billed_at에만 저장).
                       폴백이 없던 시절엔 사용자가 다이얼로그에서 청구일을 입력해도 항상 '—'로 떠서
                       "저장은 됐는데 아무도 안 읽는" write-only-orphan이었다. */}
-                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">
+                  <td className="text-text-dim num px-3 py-2.5 text-center text-xs">
                     {li.dueDay ?? dayOfMonth(r.billedAt) ?? "—"}
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${KIND_STYLE[kindLabel(li.kind)] ?? "text-text-dim bg-bg-soft"}`}>
+                    <span className={`inline-block rounded-sm px-1.5 py-0.5 text-xs font-medium ${KIND_STYLE[kindLabel(li.kind)] ?? "text-text-dim bg-bg-soft"}`}>
                       {kindLabel(li.kind) || "수업"}
                     </span>
                   </td>
@@ -404,10 +406,10 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                       <span className="text-green">완납</span>
                     )}
                   </td>
-                  <td className="text-muted-foreground px-3 py-2.5 text-xs">
+                  <td className="text-text-dim px-3 py-2.5 text-xs">
                     {li.method ? (PAYMENT_METHOD_LABEL[li.method] ?? li.method) : "—"}
                   </td>
-                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">{shortDate(li.paidDate)}</td>
+                  <td className="text-text-dim num px-3 py-2.5 text-center text-xs">{shortDate(li.paidDate)}</td>
                   <td className="text-text-dim px-3 py-2.5 text-xs">
                     {first && r.notes ? (
                       <span className="line-clamp-1" title={r.notes}>{r.notes}</span>
@@ -421,8 +423,8 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
           })}
         </tbody>
         <tfoot>
-          <tr className="border-border bg-bg-soft border-t font-bold">
-            <td className="text-muted-foreground px-3 py-3 text-xs" colSpan={7}>
+          <tr className="border-line bg-bg-soft border-t font-bold">
+            <td className="text-text-dim px-3 py-3 text-xs" colSpan={7}>
               이 페이지 합계 · <span className="num">{lineCount}</span>개 항목 / {groups.length}건
             </td>
             <td className="text-foreground num px-3 py-3 text-right">{won(pageBilled)}</td>
@@ -434,7 +436,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
           </tr>
         </tfoot>
       </table>
-      </div>
+      </DragScrollArea>
     </div>
   );
 }

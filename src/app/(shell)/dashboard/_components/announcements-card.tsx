@@ -42,9 +42,9 @@ export function AnnouncementsCard({
             <li key={a.id} className="flex flex-col gap-0.5 py-2">
               <div className="flex items-center gap-1.5">
                 {a.pinned ? <Pill color="gold">고정</Pill> : null}
-                <span className="text-foreground truncate text-[13px] font-medium">{a.title}</span>
+                <span className="text-foreground truncate text-sm font-medium">{a.title}</span>
               </div>
-              <p className="text-text-faint flex items-center gap-1.5 text-[11px]">
+              <p className="text-text-faint flex items-center gap-1.5 text-xs">
                 <span>{relativeTimeKo(a.createdAt)}</span>
                 {a.authorName ? <span>· {a.authorName}</span> : null}
               </p>

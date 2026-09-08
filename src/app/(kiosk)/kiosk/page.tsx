@@ -11,7 +11,7 @@ export default async function KioskPage() {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="text-text-dim text-sm">이 기기는 키오스크로 등록되지 않았습니다.</div>
-        <p className="text-text-faint max-w-sm text-[13px] leading-relaxed">
+        <p className="text-text-faint max-w-sm text-sm leading-relaxed">
           학원 관리자 계정으로 로그인한 뒤 <span className="text-foreground font-medium">키오스크 설정</span>에서
           이 기기를 등록하면 출석 체크인이 활성화됩니다.
         </p>

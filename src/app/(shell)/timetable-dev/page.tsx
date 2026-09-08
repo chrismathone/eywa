@@ -826,7 +826,7 @@ export default async function TimetablePage({
         {/* 학년 필터가 걸린 채로 이 과목·이 주에 보이는 학생이 0명이면, 화면이 그냥 비어 있어 고장으로
             보인다. 배지만으론 부족해 한 줄로 명시한다(필터 때문임을 알아야 되돌릴 수 있다). */}
         {viewPrefs.grades && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
-          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-xs">
             학년 필터에 걸려 표시할 수업이 없습니다 — 뷰 설정에서 학년을 넓혀 보세요.
           </span>
         ) : null}
@@ -836,7 +836,7 @@ export default async function TimetablePage({
             ⚠️ 학년 필터 안내와 조건이 겹칠 수 있어 프로그램 쪽을 먼저 잡는다(학년은 계정 설정이라 안 보이지만
             프로그램은 바로 위 칩에서 눈에 보이는 원인이다). */}
         {englishTrack !== "all" && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
-          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-xs">
             프로그램 필터(
             {ENGLISH_TRACK_FILTER_LABEL[englishTrack]})에 걸려 표시할 수업이 없습니다 — &lsquo;전체&rsquo;로
             바꿔 보세요.
@@ -888,7 +888,7 @@ export default async function TimetablePage({
       {/* 계획엔 있는데 반을 못 찾은 칸 — **조용히 버리지 않는다**(어댑터가 개수를 세어 준다).
           폐지·종강된 반이거나, 강사 계정이라 담당 밖 반인 경우다. 숫자를 밝혀야 "칸이 왜 적지"를 묻는다. */}
       {plan.unresolvedSlots > 0 ? (
-        <div className="bg-amber-soft text-amber shrink-0 rounded-xl px-3 py-2 text-[11px] break-keep">
+        <div className="bg-amber-soft text-amber shrink-0 rounded-xl px-3 py-2 text-xs break-keep">
           현재 시간표에서 반을 찾지 못해 표시하지 못한 계획 칸이 {plan.unresolvedSlots}개 있습니다(반{" "}
           {plan.unresolvedClasses}개) — 폐지·종강된 반이거나 담당 밖 반입니다.
         </div>
@@ -896,7 +896,7 @@ export default async function TimetablePage({
 
       {planError ? (
         // 게이트 실패 — "계획이 없다"로 위장하지 않는다(#89). 사유는 access.ts가 한글로 준다.
-        <div className="border-danger/30 bg-danger-soft text-danger mx-auto max-w-xl rounded-xl border px-4 py-3 text-[13px] break-keep">
+        <div className="border-danger/30 bg-danger-soft text-danger mx-auto max-w-xl rounded-xl border px-4 py-3 text-sm break-keep">
           {planError}
         </div>
       ) : !hasPlan ? (

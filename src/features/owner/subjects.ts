@@ -97,7 +97,7 @@ export const SUBJECT_SOLID: Record<PillColor, string> = {
   rose: "bg-rose",
   amber: "bg-amber",
   danger: "bg-danger",
-  neutral: "bg-text-faint",
+  neutral: "bg-neutral-fill",
 };
 
 export const SUBJECT_BORDER: Record<PillColor, string> = {

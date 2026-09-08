@@ -52,7 +52,7 @@ export function MakeeduWorkerStatus({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-foreground text-sm font-bold">동기화 담당 PC</span>
         {workers.length === 0 ? (
-          <span className="text-amber text-[13px]">
+          <span className="text-amber text-sm">
             아직 지정된 PC가 없습니다 — 담당 PC에서 <code className="text-xs">setup-sync-pc.ps1</code> 실행
           </span>
         ) : null}
@@ -61,7 +61,7 @@ export function MakeeduWorkerStatus({
       {workers.length > 0 ? (
         <ul className="mt-2 space-y-1">
           {workers.map((w) => (
-            <li key={w.hostname} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
+            <li key={w.hostname} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
               <span
                 className={`inline-block size-2 shrink-0 rounded-full ${w.online ? "bg-primary" : "bg-line-strong"}`}
                 aria-hidden

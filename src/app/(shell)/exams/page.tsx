@@ -141,7 +141,7 @@ export default async function ExamsPage({
               name="q"
               defaultValue={q}
               placeholder="시험명"
-              className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
+              className="text-foreground placeholder:text-text-faint h-full w-32 bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none"
             />
           </div>
           <label className="text-text-dim flex items-center gap-1 text-xs">
@@ -210,33 +210,33 @@ function ExamTable({ rows, subjects }: { rows: ExamRow[]; subjects: SubjectMaps 
             const s = e.stats;
             return (
               <tr key={e.id} className="hover:bg-bg-soft/50">
-                <td className="text-text-dim num px-4 py-2.5 text-[12px]">{e.examDate}</td>
+                <td className="text-text-dim num px-4 py-2.5 text-xs">{e.examDate}</td>
                 <td className="px-4 py-2.5">
                   <Pill color={meta.color}>{meta.label}</Pill>
                 </td>
-                <td className="text-text-dim px-4 py-2.5 text-[12px]">
+                <td className="text-text-dim px-4 py-2.5 text-xs">
                   {TYPE_LABEL[e.examType] ?? e.examType}
                 </td>
                 <td className="px-4 py-2.5">
                   <WindowLink
                     href={`/exams/${e.id}`}
                     title={e.name}
-                    className="text-foreground text-[13px] font-bold hover:underline"
+                    className="text-foreground text-sm font-bold hover:underline"
                   >
                     {e.name}
                   </WindowLink>
                 </td>
-                <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+                <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
                   {s.count}명
                 </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-[12px]">
+                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">
                   {s.avg ?? "—"}
                   {s.avgPct != null ? (
                     <span className="text-text-faint ml-1">({s.avgPct}%)</span>
                   ) : null}
                 </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-[12px]">{s.max ?? "—"}</td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-[12px]">{s.min ?? "—"}</td>
+                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">{s.max ?? "—"}</td>
+                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">{s.min ?? "—"}</td>
               </tr>
             );
           })}

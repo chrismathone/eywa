@@ -66,18 +66,18 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
           {open ? (
             /* 펼침 헤더 — 명단 공간 확보를 위해 한 줄(반명+인원). */
             <div className="flex items-baseline justify-between gap-1">
-              <span className="overflow-hidden text-[12px] leading-tight font-bold whitespace-nowrap text-clip">
+              <span className="overflow-hidden text-xs leading-tight font-bold whitespace-nowrap text-clip">
                 {slot.className}
               </span>
-              <span className="num shrink-0 text-[10px] opacity-75">{active.length}</span>
+              <span className="num shrink-0 text-xs opacity-75">{active.length}</span>
             </div>
           ) : (
             /* 접힘 — 블록이 세로로 여유로우니 시트처럼 반명(줄바꿈 허용) 위 / 강의실 아랫줄.
                한 줄에 욱여넣어 반명이 잘리던 것 해소(2026-07-06 사용자 지적). */
             <div className="text-center">
-              <span className="block text-[12px] leading-tight font-bold break-keep">{slot.className}</span>
+              <span className="block text-xs leading-tight font-bold break-keep">{slot.className}</span>
               {slot.classroomName ? (
-                <span className="mt-0.5 block text-[10px] opacity-75">{slot.classroomName}</span>
+                <span className="mt-0.5 block text-xs opacity-75">{slot.classroomName}</span>
               ) : null}
             </div>
           )}
@@ -85,7 +85,7 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
       </HoverCard>
       {/* 학생 명단(토글) — 시트 통합 탭의 반별 명단처럼 이름 세로 나열. 블록 잔여 높이를 채우고 넘치면 스크롤. */}
       {open ? (
-        <div className="tt-cell-scroll bg-card divide-line/40 min-h-0 flex-1 divide-y overflow-y-auto text-[12px]">
+        <div className="tt-cell-scroll bg-card divide-line/40 min-h-0 flex-1 divide-y overflow-y-auto text-xs">
           {active.length === 0 ? (
             <div className="text-text-faint px-1.5 py-0.5">재원생 없음</div>
           ) : (

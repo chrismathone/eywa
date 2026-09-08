@@ -1,12 +1,13 @@
 "use client";
 // 툴바 모양은 ECS 시트와 **같은 상수**를 쓴다 — 두 시트를 오가는 사람이 다시 배우지 않게(앱 전역 툴바 규약).
-import { SHEET_BAR, SHEET_SEG_BOX, sheetPill, sheetSegItem } from "@/features/class-sheets/chrome";
+import { SHEET_BAR, sheetPill } from "@/features/class-sheets/chrome";
 // 목록 · 반 선택(노란 표기) · 반 정보 보기 — ECS 주간·월간과 **같은 조각**(원장 2026-09-02 *"영어 ECS처럼
 // 수학 MCS에 반정보가 있어야하는데 상단 헤더에 없음"*). 다른 점은 목록이 `/mcs`로 간다는 것뿐이다.
 import { SheetBarDivider, SheetClassPicker } from "@/features/class-sheets/components/sheet-chrome";
 
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";
 import { copyGoalsFromPreviousMonth, setMyMcsFontSize } from "../server/actions";
 import {
@@ -141,33 +142,27 @@ export function MonthClient({
           </button>
         ) : null}
         <span className="flex-1" />
-        {/* 글씨 크기 — 원스크린·ECS와 **같은 어휘·같은 배율**(원장이 화면을 오가며 쓴다). */}
-        <span className={SHEET_SEG_BOX}>
-          {MCS_FONT_SIZES.map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={f === fontSize}
-              onClick={() => chooseFont(f)}
-              className={sheetSegItem(f === fontSize)}
-            >
-              {MCS_FONT_SIZE_LABEL[f]}
-            </button>
-          ))}
-        </span>
+        {/* 글씨 크기 — 원스크린·ECS와 **같은 어휘·같은 배율**(원장이 화면을 오가며 쓴다). `축: 값` 드롭다운(§10). */}
+        <HrefSelect
+          axisLabel="글씨"
+          ariaLabel="진도표 글씨 크기(내 계정)"
+          value={fontSize}
+          onSelect={(v) => chooseFont(v as McsFontSize)}
+          options={MCS_FONT_SIZES.map((f) => ({ value: f, label: MCS_FONT_SIZE_LABEL[f] }))}
+        />
         {/* 🔴 아직 한 번도 안 지난 달은 '미작성'이 아니다 — 안 온 수업을 안 적었다고 재촉하지 않는다. */}
         {data.elapsedDays === 0 ? (
-          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-xs font-bold">
             아직 수업 전
           </span>
         ) : null}
         {data.elapsedDays > 0 && data.fill.unwritten > 0 ? (
-          <span className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-danger-soft text-danger rounded-full px-2 py-0.5 text-xs font-bold">
             미작성 {data.fill.unwritten}칸
           </span>
         ) : null}
         {data.elapsedDays > 0 && data.fill.untracked > 0 ? (
-          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-muted text-text-faint rounded-full px-2 py-0.5 text-xs font-bold">
             입력 없음 {data.fill.untracked}칸
           </span>
         ) : null}
@@ -176,14 +171,14 @@ export function MonthClient({
             ⚠️ 휴일에 **쓴** 칸은 여기 없다(그건 `기록`에 들어가 100%로 인정된다 — [[holiday.ts]]). */}
         {data.fill.holiday > 0 ? (
           <span
-            className="bg-att-weekend text-text-dim rounded-full px-2 py-0.5 text-[11px] font-bold"
+            className="bg-att-weekend text-text-dim rounded-full px-2 py-0.5 text-xs font-bold"
             title="학원 휴일이라 기록 의무가 없는 칸입니다 — 작성률 분모에 들어가지 않습니다(그날 쓴 기록은 그대로 인정됩니다)"
           >
             휴일 {data.fill.holiday}칸
           </span>
         ) : null}
         {data.elapsedDays > 0 ? (
-          <span className="bg-muted text-text-faint num rounded-full px-2 py-0.5 text-[11px] font-bold">
+          <span className="bg-muted text-text-faint num rounded-full px-2 py-0.5 text-xs font-bold">
             기록 {data.fill.written} / {data.fill.written + data.fill.unwritten}
           </span>
         ) : null}
@@ -193,7 +188,7 @@ export function MonthClient({
               data.railSummary[s] > 0 ? (
                 <span
                   key={s}
-                  className={`num rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE_SOFT[RAIL_TONE[s]]}`}
+                  className={`num rounded-full px-2 py-0.5 text-xs font-bold ${TONE_SOFT[RAIL_TONE[s]]}`}
                   title="이 달 목표(시작 → 목표 차시)에 견준 현재 위치 — 학생마다 대표 트랙 하나"
                 >
                   {RAIL_STATUS_LABEL[s]} {data.railSummary[s]}
@@ -201,16 +196,16 @@ export function MonthClient({
               ) : null,
             )
           : null}
-        {savedAt ? <span className="text-green text-[11px] font-bold">저장됨</span> : null}
+        {savedAt ? <span className="text-green text-xs font-bold">저장됨</span> : null}
       </div>
 
       {data.goalsStatus === "missing-table" ? (
-        <p className="border-amber bg-amber-soft/40 text-amber rounded-lg border-l-[3px] px-3 py-2 text-xs">
+        <p className="border-amber bg-amber-soft/40 text-amber rounded-lg border-l-[3px] px-3 py-2 text-sm">
           이 달 목표를 아직 저장할 수 없습니다 — 목표 표(0237a)가 적용되기 전입니다. 진도 · 미작성 · 정체는
           그대로 보입니다.
         </p>
       ) : data.goalsStatus === "failed" ? (
-        <p className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-2 text-xs">
+        <p className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-2 text-sm">
           이 달 목표를 불러오지 못했습니다. 목표와 어긋난 교재 경고가 이 화면에선 뜨지 않습니다 — 잠시 뒤
           새로고침해 주세요.
         </p>
@@ -220,7 +215,7 @@ export function MonthClient({
         <button
           type="button"
           onClick={() => setCopyMsg(null)}
-          className="border-line-strong bg-bg-soft text-text-dim cursor-pointer rounded-lg border-l-[3px] px-3 py-2 text-left text-xs"
+          className="border-line-strong bg-bg-soft text-text-dim cursor-pointer rounded-lg border-l-[3px] px-3 py-2 text-left text-sm"
         >
           {copyMsg} (눌러서 닫기)
         </button>
@@ -230,7 +225,7 @@ export function MonthClient({
         <button
           type="button"
           onClick={dismissError}
-          className="border-danger bg-danger-soft/50 text-danger cursor-pointer rounded-lg border-l-[3px] px-3 py-2 text-left text-xs"
+          className="border-danger bg-danger-soft/50 text-danger cursor-pointer rounded-lg border-l-[3px] px-3 py-2 text-left text-sm"
         >
           <EyIcon name="alert" size={12} className="mr-1 inline" />
           목표 저장 실패: {error} — 새로고침하면 마지막으로 저장된 값이 보입니다. (눌러서 닫기)

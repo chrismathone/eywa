@@ -25,7 +25,7 @@ import type { OneScreenStudent } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
-const BODY = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-[13px] w-full resize-y";
+const BODY = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-sm w-full resize-y";
 
 /** 대상 후보 — '오늘 수업'(로스터)과 '내 담당 전체'(서버 조회)를 한 모양으로 다룬다. */
 type Candidate = NoticeStudent;
@@ -269,11 +269,11 @@ export function NoticeComposer({
       <div className="lg:relative lg:min-h-[320px]">
         <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-2xl border lg:absolute lg:inset-0 lg:max-h-none">
           <div className="border-line space-y-1.5 border-b px-3 py-2">
-            <p className="text-foreground text-[13px] font-bold">
+            <p className="text-foreground text-sm font-bold">
               {t("os.n.targets")} <span className="text-primary">{selectedCount}</span>
             </p>
             {/* 범위 — 오늘 수업(로스터) vs 내 담당 전체. 요일과 무관한 공지(휴강 안내 등)는 '전체'로. */}
-            <div className="border-line inline-flex rounded-full border p-0.5 text-[11px]">
+            <div className="border-line inline-flex rounded-full border p-0.5 text-xs">
               {(
                 [
                   { key: "today", label: t("os.n.scopeToday") },
@@ -293,7 +293,7 @@ export function NoticeComposer({
               ))}
             </div>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px]">
+              <p className="text-text-faint text-xs">
                 {scope === "all"
                   ? tf("os.n.poolAll", { label: allLabel })
                   : t("os.n.poolToday")}
@@ -303,7 +303,7 @@ export function NoticeComposer({
                 <button
                   type="button"
                   onClick={toggleAll}
-                  className="text-primary shrink-0 text-[11px] font-medium hover:underline"
+                  className="text-primary shrink-0 text-xs font-medium hover:underline"
                 >
                   {allChecked ? t("os.n.clearAll") : tf("os.n.selectAll", { n: candidates.length })}
                 </button>
@@ -312,21 +312,21 @@ export function NoticeComposer({
           </div>
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-1.5">
             {loadingAll ? (
-              <p className="text-text-faint p-2 text-[12px]">{t("os.n.loadingAll")}</p>
+              <p className="text-text-faint p-2 text-xs">{t("os.n.loadingAll")}</p>
             ) : candidates.length === 0 ? (
-              <p className="text-text-faint p-2 text-[12px]">
+              <p className="text-text-faint p-2 text-xs">
                 {scope === "all" ? t("os.n.emptyAll") : t("os.n.emptyToday")}
               </p>
             ) : (
               candidates.map((s) => (
                 <label
                   key={s.id}
-                  className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]"
+                  className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm"
                 >
                   <input type="checkbox" checked={checked.has(s.id)} onChange={() => toggle(s.id)} />
                   <span className="text-foreground min-w-0 flex-1 truncate">{s.name}</span>
-                  <span className="text-text-faint text-[11px]">{schoolGradeLabel(null, s.grade)}</span>
-                  <span className="text-text-faint text-[11px]">{s.className}</span>
+                  <span className="text-text-faint text-xs">{schoolGradeLabel(null, s.grade)}</span>
+                  <span className="text-text-faint text-xs">{s.className}</span>
                 </label>
               ))
             )}
@@ -338,13 +338,13 @@ export function NoticeComposer({
       <div className="space-y-4">
         <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
           <div>
-            <h2 className="text-foreground text-[15px] font-bold">{t("os.n.heading")}</h2>
-            <p className="text-text-faint text-[12px]">
+            <h2 className="text-foreground text-base font-bold">{t("os.n.heading")}</h2>
+            <p className="text-text-faint text-xs">
               {t("os.n.headingHint")}
             </p>
           </div>
           {!sendEnabled ? (
-            <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-[12px]">
+            <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-xs">
               {t("os.n.offA")}
               <b>{t("os.n.offB")}</b>
               {t("os.n.offC")}
@@ -353,7 +353,7 @@ export function NoticeComposer({
             </p>
           ) : null}
           <div>
-            <p className="text-text-dim mb-1 text-[11px] font-medium">{t("os.n.bodyLabel")}</p>
+            <p className="text-text-dim mb-1 text-xs font-medium">{t("os.n.bodyLabel")}</p>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -369,7 +369,7 @@ export function NoticeComposer({
               <button
                 type="button"
                 onClick={() => setShowIndividual((v) => !v)}
-                className="text-text-dim hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-[12px] font-medium"
+                className="text-text-dim hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-xs font-medium"
               >
                 <span>
                   {t("os.n.indiv")}
@@ -382,7 +382,7 @@ export function NoticeComposer({
               </button>
               {showIndividual ? (
                 <div className="border-line max-h-[280px] space-y-2 overflow-y-auto border-t p-2">
-                  <p className="text-text-faint px-1 text-[11px]">
+                  <p className="text-text-faint px-1 text-xs">
                     {t("os.n.indivHintA")}
                     <b>{t("os.n.indivHintB")}</b>
                     {t("os.n.indivHintC")}
@@ -391,7 +391,7 @@ export function NoticeComposer({
                     .filter((s) => checked.has(s.id))
                     .map((s) => (
                       <div key={s.id} className="flex items-start gap-2">
-                        <span className="text-foreground w-16 shrink-0 truncate pt-1.5 text-[12px]" title={s.name}>
+                        <span className="text-foreground w-16 shrink-0 truncate pt-1.5 text-xs" title={s.name}>
                           {s.name}
                         </span>
                         <textarea
@@ -399,7 +399,7 @@ export function NoticeComposer({
                           onChange={(e) => setIndividual((prev) => ({ ...prev, [s.id]: e.target.value }))}
                           rows={2}
                           placeholder={t("os.n.indivPh")}
-                          className={`${BODY} text-[12px]`}
+                          className={`${BODY} text-xs`}
                         />
                       </div>
                     ))}
@@ -418,7 +418,7 @@ export function NoticeComposer({
 
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
-              <span className="text-foreground text-[12px]">
+              <span className="text-foreground text-xs">
                 {scope === "all" ? `${allLabel} ` : ""}
                 <b>{tf("os.n.confirmCount", { n: selectedCount })}</b>
                 {indivCount ? tf("os.n.confirmIndiv", { n: indivCount }) : ""}
@@ -457,9 +457,9 @@ export function NoticeComposer({
 
         {/* 내가 보낸 공지 이력 — 대기건은 수정/삭제 */}
         <section className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
-          <p className="text-foreground mb-2 text-[13px] font-bold">{t("os.n.history")}</p>
+          <p className="text-foreground mb-2 text-sm font-bold">{t("os.n.history")}</p>
           {rows.length === 0 ? (
-            <p className="text-text-faint text-[12px]">{t("os.n.historyEmpty")}</p>
+            <p className="text-text-faint text-xs">{t("os.n.historyEmpty")}</p>
           ) : (
             <ul className="divide-line divide-y">
               {rows.map((r) => {
@@ -477,16 +477,16 @@ export function NoticeComposer({
                             className={BODY}
                           />
                         ) : (
-                          <p className="text-foreground line-clamp-2 text-[12px] whitespace-pre-wrap">{r.body}</p>
+                          <p className="text-foreground line-clamp-2 text-xs whitespace-pre-wrap">{r.body}</p>
                         )}
-                        <p className="text-text-faint mt-0.5 text-[11px]">
+                        <p className="text-text-faint mt-0.5 text-xs">
                           <span className={st.cls}>{st.key ? t(st.key) : st.raw}</span>
                           {tf("os.n.rowTargets", { n: r.targetCount })}
                         </p>
                         {/* 게시된 리포트 — **학생 이름**으로 링크(원장 요청: #1 #2로는 누구 글인지 알 수 없음).
                             많으면 앞 8명만 이름으로, 나머지는 수만 표시. */}
                         {r.reportLinks.length ? (
-                          <p className="text-text-faint mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px]">
+                          <p className="text-text-faint mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
                             <span>{tf("os.n.links", { n: r.reportLinks.length })}</span>
                             {r.reportLinks.slice(0, 8).map((l, i) =>
                               l.url ? (

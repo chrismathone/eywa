@@ -14,7 +14,7 @@ export function QrDialog({ asset, onClose }: { asset: InventoryAsset; onClose: (
       <div className="flex flex-col items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element -- 라우트가 그 자리에서 그리는 SVG */}
         <img src={qrImageSrc(asset.assetCode)} alt={`${asset.assetCode} QR`} width={224} height={224} className="border-line rounded-lg border bg-white p-2" />
-        <p className="font-mono text-[15px] font-bold">{asset.assetCode}</p>
+        <p className="font-mono text-base font-bold">{asset.assetCode}</p>
         <div className="flex justify-end gap-2 self-stretch">
           <Button type="button" variant="outline" onClick={onClose}>닫기</Button>
         </div>

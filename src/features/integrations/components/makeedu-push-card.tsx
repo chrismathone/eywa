@@ -80,7 +80,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
       ) : (
       <div className="border-border overflow-x-auto overflow-y-hidden rounded-md border">
         {/* 가로만 넘치는 8열 표 — overflow-x-auto로 스크롤(overflow-y-hidden 병행: Chrome 세로 휠 삼킴 방지). */}
-        <table className="w-full text-[13px]">
+        <table className="w-full text-sm">
           <thead className="bg-bg-soft text-text-dim">
             <tr>
               <th className="w-10 px-3 py-2 text-left">
@@ -120,7 +120,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
                     {/* 등록됐는데 makeedu에 학생이 없는 건 — 왜 목록에 있는지 밝히지 않으면
                         "이미 다니는 학생이 왜 신규 문의에?"로 읽힌다(push-eligibility.ts). */}
                     {c.note ? (
-                      <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-[11px] font-bold" title={c.note}>
+                      <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-xs font-bold" title={c.note}>
                         makeedu 미등록
                       </span>
                     ) : null}
@@ -160,7 +160,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
         </table>
       </div>
       )}
-      <p className="text-text-faint flex items-start gap-1.5 text-[11px]">
+      <p className="text-text-faint flex items-start gap-1.5 text-xs">
         <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
         <span>makeedu는 정본입니다 — 전송은 <strong>새로 추가만</strong> 하고 기존 makeedu 데이터는 건드리지 않습니다.
         전송 실패 건은 원인을 확인 후 다시 선택해 보낼 수 있습니다.

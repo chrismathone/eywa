@@ -125,7 +125,7 @@ export function DocumentToolbar({
             name="q"
             defaultValue={initialQuery}
             placeholder="문서 검색..."
-            className="text-foreground placeholder:text-text-faint w-full bg-transparent text-xs focus:outline-none"
+            className="text-foreground placeholder:text-text-faint h-full w-full bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none"
             aria-label="문서 검색"
           />
         </span>

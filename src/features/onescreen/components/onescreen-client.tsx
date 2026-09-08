@@ -2986,7 +2986,7 @@ export function OneScreenClient({
       {/* 그 요일에 담당 수업이 없을 때 — 예전엔 담당 반 전체가 '오늘 목록'처럼 떴다(2026-07-22 이수진 수요일:
           반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}
       {noClassesToday && !showingAll ? (
-        <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
           <span className="text-foreground font-bold">{t("os.c.noClassTitle")}</span>
           <span>{t("os.c.noClassBody")}</span>
           <a
@@ -2998,7 +2998,7 @@ export function OneScreenClient({
         </div>
       ) : null}
       {showingAll ? (
-        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
           <span className="font-bold">{t("os.c.showingAllTitle")}</span>
           <span>{t("os.c.showingAllBody")}</span>
           <a
@@ -3015,7 +3015,7 @@ export function OneScreenClient({
           → "왜 안 나가지?" 하며 계속 누르거나, 반대로 눌러서 학부모 게시판에 글이 하나 더 붙는다.
           ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없으므로, 이 날짜에 이미 나간 게 몇 건인지 먼저 말한다. */}
       {sentRowCount > 0 ? (
-        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
           <span className="font-bold">
             {tf("os.c.sentBannerTitle", { n: sentRowCount })}
           </span>
@@ -3037,7 +3037,7 @@ export function OneScreenClient({
 
       {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 빈 창이 잘 쓴 창을 덮지는 않는다(session-write.ts). */}
       {sameDateEditors.length > 0 ? (
-        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
           <span className="font-bold">{t("os.c.presenceTitle")}</span>
           <span>{t("os.c.presenceBody")}</span>
         </div>
@@ -3048,7 +3048,7 @@ export function OneScreenClient({
           ② 필터 결과가 0명이면 왜 비었는지 말하고 되돌아갈 문을 준다(빈 화면 막다른 길 금지). */}
       {writeFilter !== "all" && view !== "history" ? (
         staleCount > 0 ? (
-          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
             <span>
               <b className="text-foreground">
                 {tf("os.c.staleCount", {
@@ -3068,7 +3068,7 @@ export function OneScreenClient({
             </button>
           </div>
         ) : visible.length === 0 ? (
-          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-[12.5px]">
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
             <span className="text-foreground font-bold">
               {writeFilter === "unwritten"
                 ? t("os.c.emptyUnwrittenAll")
@@ -3231,7 +3231,7 @@ export function OneScreenClient({
                   type="button"
                   onClick={() => openNoticeForStudent(selected.id)}
                   title={t("os.c.parentNoticeTitle")}
-                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-[11px] font-bold"
+                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-xs font-bold"
                 >
                   {t("os.c.parentNotice")}
                 </button>

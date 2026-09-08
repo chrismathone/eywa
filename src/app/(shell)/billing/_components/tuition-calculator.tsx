@@ -271,10 +271,10 @@ export function TuitionCalculator({
         <DraftBanner savedAt={draft.draftSavedAt} onRestore={restoreDraft} onDiscard={draft.discard} />
         {/* 학생 정보 */}
         <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-4">
-          <h2 className="text-foreground text-[15px] font-bold">상담 정보 (신입생)</h2>
+          <h2 className="text-foreground text-base font-bold">상담 정보 (신입생)</h2>
           <div className="grid grid-cols-2 items-end gap-2">
             <label className="space-y-1">
-              <span className="text-text-faint text-[11px]">
+              <span className="text-text-faint text-xs">
                 학생 이름 <span className="text-danger">*</span>
               </span>
               <input className={inputCls} placeholder="학생 이름" value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} />
@@ -286,18 +286,18 @@ export function TuitionCalculator({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
-              <span className="text-text-faint text-[11px]">시작일</span>
+              <span className="text-text-faint text-xs">시작일</span>
               <input type="date" className={inputCls} value={student.startDate} onChange={(e) => setPeriod("startDate", e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-text-faint text-[11px]">종료일</span>
+              <span className="text-text-faint text-xs">종료일</span>
               <input type="date" className={inputCls} value={student.endDate} onChange={(e) => setPeriod("endDate", e.target.value)} />
             </label>
           </div>
           <input className={inputCls} placeholder="상담자" value={student.consultant} onChange={(e) => setStudent({ ...student, consultant: e.target.value })} />
           {/* 안내문 헤더 표시 — 로고 이미지에 학원명이 들어가 있으면 하나만 켜서 중복 제거. */}
           <div className="border-line flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3">
-            <span className="text-text-faint text-[11px]">안내문 헤더</span>
+            <span className="text-text-faint text-xs">안내문 헤더</span>
             <label className="text-foreground inline-flex items-center gap-1.5 text-xs">
               <input type="checkbox" checked={showLogo} onChange={(e) => setShowLogo(e.target.checked)} className="size-4" />
               로고 이미지
@@ -330,8 +330,8 @@ export function TuitionCalculator({
             list.length ? (
               <div key={label} className="space-y-2">
                 <div className="border-line flex items-baseline gap-2 border-b pb-1">
-                  <span className="text-foreground text-[12px] font-bold">{label}</span>
-                  <span className="text-text-faint text-[11px]">{hint}</span>
+                  <span className="text-foreground text-xs font-bold">{label}</span>
+                  <span className="text-text-faint text-xs">{hint}</span>
                 </div>
                 {list.map((c) => (
                   <CourseEditor
@@ -370,7 +370,7 @@ export function TuitionCalculator({
 
         {/* 입금 계좌 안내 — 안내문(우측 최종 납부 금액 위)에 표시. 기본값=학원설정(수납) 계좌, 여기서 수정 가능. */}
         <section className="bg-card border-line shadow-card space-y-2.5 rounded-2xl border p-4">
-          <label className="text-foreground inline-flex items-center gap-1.5 text-[15px] font-bold">
+          <label className="text-foreground inline-flex items-center gap-1.5 text-base font-bold">
             <input
               type="checkbox"
               checked={showAccount}
@@ -379,7 +379,7 @@ export function TuitionCalculator({
             />
             입금 계좌 안내
           </label>
-          <p className="text-text-faint text-[11px]">
+          <p className="text-text-faint text-xs">
             체크하면 안내문 <b>최종 납부 금액 위</b>에 입금 계좌가 표시됩니다. 학원설정(수납)에서 &lsquo;수강료
             계산기&rsquo;에 배선한 계좌가 자동으로 채워지며, 여기서 수정하면 이 안내문에만 반영됩니다.
           </p>
@@ -413,10 +413,10 @@ export function TuitionCalculator({
         {/* 저장 */}
         <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-foreground text-[15px] font-bold">견적 저장</h2>
+            <h2 className="text-foreground text-base font-bold">견적 저장</h2>
             <span className="text-primary num text-lg font-bold">{won(totals.total)}</span>
           </div>
-          <p className="text-text-faint text-[11px]">신입생 상담 견적으로 저장됩니다(재원생 청구서와 별개). 저장 후 ‘저장된 청구서’ 탭에서 다시 열 수 있습니다.</p>
+          <p className="text-text-faint text-xs">신입생 상담 견적으로 저장됩니다(재원생 청구서와 별개). 저장 후 ‘저장된 청구서’ 탭에서 다시 열 수 있습니다.</p>
           <form onSubmit={(e) => submitAction(e, formAction)} className="flex items-center justify-end gap-2">
             <input type="hidden" name="studentName" value={student.name} />
             <input type="hidden" name="school" value={student.school} />
@@ -488,11 +488,11 @@ function Group({
 }) {
   return (
     <section className="bg-card border-line shadow-card space-y-2.5 rounded-2xl border p-4">
-      <h2 className="text-foreground text-[15px] font-bold">
+      <h2 className="text-foreground text-base font-bold">
         {title}
         {required ? <span className="text-danger"> *</span> : null}
       </h2>
-      {hint ? <p className="text-text-faint text-[11px]">{hint}</p> : null}
+      {hint ? <p className="text-text-faint text-xs">{hint}</p> : null}
       {children}
     </section>
   );

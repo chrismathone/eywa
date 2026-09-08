@@ -152,17 +152,17 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
         {/* ⚠️ "아래에서 고르세요"라고 단정하지 않는다 — 저널 복구로 되살아난 패치는 **다른 날짜·다른 교시**
             칸일 수 있고, 그 칸은 이 블록에 그려지지 않는다(오늘 면이 같은 이유로 쓰는 문구). */}
         {saveIndicator.conflicts > 0 ? (
-          <span className="text-danger text-[11.5px] font-bold">
+          <span className="text-danger text-xs font-bold">
             저장 충돌 {saveIndicator.conflicts}건 — 충돌한 칸에서 서버값/내 값을 고르세요(여기 안 보이면 영어
             시트에서)
           </span>
         ) : saveIndicator.pending > 0 ? (
-          <span className="text-text-dim text-[11.5px] font-semibold">저장 중…</span>
+          <span className="text-text-dim text-xs font-semibold">저장 중…</span>
         ) : null}
       </div>
 
       {doc.recoverable ? (
-        <div className="border-line bg-bg-soft mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-dashed px-2 py-1 text-[11.5px]">
+        <div className="border-line bg-bg-soft mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-dashed px-2 py-1 text-xs">
           <span className="text-foreground">
             저장되지 못한 입력 {doc.recoverable.mutations.length}건이 이 기기에 남아 있습니다.
           </span>

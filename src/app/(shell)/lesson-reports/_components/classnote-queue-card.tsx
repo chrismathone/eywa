@@ -16,6 +16,7 @@ import { refreshClassnoteQueue, resetStuckClassnote, retryClassnote } from "@/fe
 import { attentionCount, queuePollIntervalMs, shouldAutoRefreshQueue } from "@/features/report-admin/classnote-queue";
 import { classnoteRetryDeadline } from "@/features/onescreen/classnote-guard";
 import type { ClassnoteQueueView } from "@/features/report-admin/server/queries";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 자동 갱신 상한 — **"변화가 없는 채로" 10분**이면 중지(창을 열어둔 채 밤새 폴링 금지).
 // ⚠️ 총 시간이 아니라 '무변화 시간'인 게 핵심 — 100건 일괄 발송처럼 오래 걸리는 정상 드레인 중에
@@ -57,8 +58,8 @@ function hhmmKst(iso: string | null): string {
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className={`rounded-full px-3 py-1 ${tone}`}>
-      <span className="num text-[13px] font-bold">{value}</span>
-      <span className="ml-1 text-[11.5px] font-medium">{label}</span>
+      <span className="num text-sm font-bold">{value}</span>
+      <span className="ml-1 text-xs font-medium">{label}</span>
     </div>
   );
 }
@@ -75,8 +76,8 @@ function BigStatInline({
 }) {
   return (
     <div>
-      <p className="text-text-dim text-[12px] font-medium">{label}</p>
-      <p className={`num mt-1 text-[26px] font-bold leading-none ${valueClass ?? "text-foreground"}`}>
+      <p className="text-text-dim text-xs font-medium">{label}</p>
+      <p className={`num mt-1 text-3xl font-bold leading-none ${valueClass ?? "text-foreground"}`}>
         {value}
       </p>
     </div>
@@ -99,18 +100,18 @@ function WorkerIssues({ lines, now }: { lines: string[]; now: number }) {
   if (items.length === 0) return null;
   return (
     <Popover.Root>
-      <Popover.Trigger className="text-danger data-[popup-open]:underline text-[11px] font-bold underline-offset-2 hover:underline">
+      <Popover.Trigger className="text-danger data-[popup-open]:underline text-xs font-bold underline-offset-2 hover:underline">
         발송 PC 알림 {items.length}건 보기
       </Popover.Trigger>
       <Popover.Portal>
         {/* 오른쪽 정렬(align=end) — 트리거가 카드 우상단이라 팝업이 화면 밖으로 안 넘치게. 좁은 창에선 max-w로 접힘. */}
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card max-h-[60vh] w-[420px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border p-2 text-left outline-none">
-            <p className="text-text-faint mb-1.5 px-1 text-[11px] font-bold">발송 PC 최근 알림 {items.length}건</p>
+            <p className="text-text-faint mb-1.5 px-1 text-xs font-bold">발송 PC 최근 알림 {items.length}건</p>
             {/* 전부 오래된 알림이면 "지금 문제"로 오해하지 않게 먼저 말해 준다. 워커가 살아 있어도 이 목록은
                 새 문제가 생겨야 바뀐다(링버퍼) — 그 사실을 모르면 해결된 오류를 계속 쫓게 된다. */}
             {stale === items.length ? (
-              <p className="text-text-faint mb-1.5 px-1 text-[11px] leading-snug break-keep">
+              <p className="text-text-faint mb-1.5 px-1 text-xs leading-snug break-keep">
                 모두 <b>{WORKER_STALE_HOURS}시간 이상 지난 기록</b>입니다 — 이미 해결됐을 수 있습니다(새 문제가
                 생길 때까지 이 목록은 그대로 남습니다).
               </p>
@@ -119,7 +120,7 @@ function WorkerIssues({ lines, now }: { lines: string[]; now: number }) {
               {items.map((it, i) => (
                 <li
                   key={i}
-                  className={`border-line/60 text-text-dim rounded-md border px-2 py-1.5 text-[11px] leading-snug break-keep ${
+                  className={`border-line/60 text-text-dim rounded-md border px-2 py-1.5 text-xs leading-snug break-keep ${
                     isWorkerLogStale(it.at, now) ? "opacity-60" : ""
                   }`}
                 >
@@ -161,13 +162,13 @@ function ReasonCell({ summary, raw }: { summary: string; raw: string }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="text-primary mt-0.5 text-[11px] font-bold underline-offset-2 hover:underline"
+          className="text-primary mt-0.5 text-xs font-bold underline-offset-2 hover:underline"
         >
           {open ? "접기" : "자세히"}
         </button>
       ) : null}
       {open && hasMore ? (
-        <p className="text-text-dim border-line mt-1 break-keep border-t pt-1 text-[11px] whitespace-normal">
+        <p className="text-text-dim border-line mt-1 break-keep border-t pt-1 text-xs whitespace-normal">
           {raw}
         </p>
       ) : null}
@@ -352,23 +353,23 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   return (
     <section className="bg-card shadow-card rounded-2xl px-5 py-5">
       {!view.sendEnabled ? (
-        <div className="border-danger bg-danger/5 text-danger mb-3 rounded-md border px-3 py-2 text-[12px]">
+        <div className="border-danger bg-danger/5 text-danger mb-3 rounded-md border px-3 py-2 text-xs">
           <b>dry-run 모드</b> — 재발송을 눌러도 실제 전송되지 않습니다(저장/큐잉 안 함). 학원 설정 &gt; 보고서에서{" "}
           <b>‘ClassNote 실제 발송’</b>을 켜야 전송됩니다.
         </div>
       ) : null}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-foreground text-[15px] font-bold">ClassNote 발송 큐</h2>
+          <h2 className="text-foreground text-base font-bold">ClassNote 발송 큐</h2>
           {/* ⚠️ 창을 정직하게 적는다 — 집계는 최근 N일이지만 **아직 손 쓸 수 있는 실패·보류는 창과 무관하게**
               전부 싣는다(그러라고 만든 예외다). 예전 문구는 "최근 3일"만 말해, 창 밖으로 밀려난 실패가
               화면에서 사라진 것을 원장이 "미발송분이 사라졌다"로 겪게 했다(2026-08-11). */}
-          <p className="text-text-faint text-[12px]">
+          <p className="text-text-faint text-xs">
             최근 {days}일 집계 · 조치가 필요한 건은 기간과 무관하게 모두 표시
           </p>
         </div>
         {/* 발송 담당 PC(워커) 상태 — 큐가 실제로 처리될지 한눈에. */}
-        <div className="flex flex-col items-end gap-0.5 text-[11px]">
+        <div className="flex flex-col items-end gap-0.5 text-xs">
           {workers.length === 0 ? (
             <span className="text-text-faint">발송 PC 미등록 — 로컬 워커 실행 필요</span>
           ) : (
@@ -459,7 +460,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       {/* 기한을 넘겨 잃은 건 — 되살릴 수 없으므로 목록이 아니라 한 줄 경고로만(원장이 볼 곳은 위 주의 목록).
           같은 학생이 계속 쌓인다면 원인(ClassNote 보드 배정·구분 이름)이 아직 안 고쳐졌다는 뜻이다. */}
       {expiredUnsent > 0 ? (
-        <p className="bg-amber-soft text-amber mt-3 rounded-md px-3 py-2 text-[12px]">
+        <p className="bg-amber-soft text-amber mt-3 rounded-md px-3 py-2 text-xs">
           최근 30일 <b>{expiredUnsent}건</b>은 재발송 기한(7일)을 넘겨 학부모에게 나가지 못했습니다 — 같은 학생이
           반복된다면 ClassNote 보드 배정·구분 이름을 먼저 바로잡아 주세요.
         </p>
@@ -467,10 +468,10 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
 
       {/* 주의 목록 */}
       {items.length === 0 ? (
-        <p className="text-text-faint mt-3 text-[13px]">주의가 필요한 발송이 없습니다 — 모두 정상입니다.</p>
+        <p className="text-text-faint mt-3 text-sm">주의가 필요한 발송이 없습니다 — 모두 정상입니다.</p>
       ) : (
-        <div className="border-line mt-3 overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[560px] text-left text-[12px]">
+        <DragScrollArea className="border-line mt-3 rounded-md border">
+          <table className="w-full min-w-[560px] text-left text-xs">
             <thead>
               <tr className="border-line text-text-faint border-b">
                 <th className="w-8 px-2 py-2"></th>
@@ -510,14 +511,14 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                     <td className="text-text-dim px-3 py-2.5">
                       <span className="block">{it.reportDate}</span>
                       {/* 재발송 기한 — 이 줄이 없으면 "나중에 고치지"가 곧 영구 미발송이 된다(위 deadlineBadge 주석). */}
-                      {dl ? <span className={`mt-0.5 block text-[11px] ${dl.cls}`}>{dl.text}</span> : null}
+                      {dl ? <span className={`mt-0.5 block text-xs ${dl.cls}`}>{dl.text}</span> : null}
                     </td>
                     <td className="px-3 py-2.5">
                       {/* 미지의 상태 코드도 raw 노출 금지 — 원문은 툴팁으로만. */}
                       {badge ? (
-                        <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span>
+                        <span className={`text-xs font-bold ${badge.cls}`}>{badge.label}</span>
                       ) : (
-                        <span className="text-text-dim text-[11px]" title={it.status ?? ""}>
+                        <span className="text-text-dim text-xs" title={it.status ?? ""}>
                           기타
                         </span>
                       )}
@@ -542,12 +543,12 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
           {/* ⚠️ 목록은 상한 100 — 넘치면 **조용히 잘린다**(빅스탯 '주의' 숫자는 전건이라 둘이 어긋난다).
               말없이 자르면 표에 보이는 게 전부인 줄 알게 된다(#89) → 잘린 수를 그 자리에서 밝힌다. */}
           {attention > items.length ? (
-            <p className="text-text-faint border-line border-t px-3 py-2 text-[11px]">
+            <p className="text-text-faint border-line border-t px-3 py-2 text-xs">
               주의 {attention}건 중 {items.length}건만 표시했습니다 — 나머지 {attention - items.length}건은 위 항목을
               처리하면 이어서 나타납니다.
             </p>
           ) : null}
-        </div>
+        </DragScrollArea>
       )}
 
       {/* 진행 중 목록 — 대기·처리중(정상 흐름). 재발송 대상이 아니라 관찰용(발송이 실제로 도는지 확인). */}
@@ -555,7 +556,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
         <div className="mt-3">
           {/* 갱신 상태를 말로 적어준다 — 발송이 안 끝난 채 화면이 멈춰 보이면 "고장인가"로 읽히기 때문.
               화면을 못 보는 사용자에게도 상태 전환이 전달되도록 aria-live. */}
-          <p className="text-text-faint mb-1.5 text-[12px] font-bold" aria-live="polite">
+          <p className="text-text-faint mb-1.5 text-xs font-bold" aria-live="polite">
             진행 중 · 대기 {summary.queued} · 처리중 {summary.processing}
             {polling && failing ? (
               // 조회가 계속 실패하는데 '갱신 중'이라고 두면 멈춘 숫자를 최신으로 오해한다.
@@ -570,14 +571,14 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
             ) : stalled ? (
               <span className="text-amber ml-1.5 font-medium">
                 · 10분째 변화가 없어 자동 갱신을 멈췄습니다{" "}
-                <Button variant="link" size="sm" className="h-auto p-0 text-[12px]" onClick={resync}>
+                <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={resync}>
                   다시 확인
                 </Button>
               </span>
             ) : null}
           </p>
-          <div className="border-line overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[480px] text-left text-[12px]">
+          <DragScrollArea className="border-line rounded-md border">
+            <table className="w-full min-w-[480px] text-left text-xs">
               <thead>
                 <tr className="border-line text-text-faint border-b">
                   <th className="px-3 py-2 font-bold">학생 · 과목</th>
@@ -598,9 +599,9 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                       <td className="text-text-dim px-3 py-2">{it.reportDate}</td>
                       <td className="px-3 py-2">
                         {badge ? (
-                          <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span>
+                          <span className={`text-xs font-bold ${badge.cls}`}>{badge.label}</span>
                         ) : (
-                          <span className="text-text-dim text-[11px]" title={it.status ?? ""}>기타</span>
+                          <span className="text-text-dim text-xs" title={it.status ?? ""}>기타</span>
                         )}
                       </td>
                       {/* 처리중이면 클레임 시각, 대기면 아직 안 잡혀 "—". */}
@@ -610,7 +611,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                 })}
               </tbody>
             </table>
-          </div>
+          </DragScrollArea>
         </div>
       ) : null}
     </section>

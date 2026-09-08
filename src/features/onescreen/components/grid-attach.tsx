@@ -70,7 +70,7 @@ export function GridAttachButton({
         aria-label={
           count ? tf("os.attach.ariaN", { label, n: count }) : tf("os.attach.aria", { label })
         }
-        className={`border-line hover:bg-bg-soft data-[popup-open]:bg-bg-soft inline-flex shrink-0 items-center gap-0.5 rounded-sm border px-1.5 py-1 text-[11px] font-bold disabled:pointer-events-none disabled:opacity-50 ${
+        className={`border-line hover:bg-bg-soft data-[popup-open]:bg-bg-soft inline-flex shrink-0 items-center gap-0.5 rounded-sm border px-1.5 py-1 text-xs font-bold disabled:pointer-events-none disabled:opacity-50 ${
           count ? "text-primary" : "text-text-dim"
         }`}
       >
@@ -85,9 +85,9 @@ export function GridAttachButton({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[260px] flex-col gap-2 rounded-lg border p-3 text-[12px] outline-none">
+          <Popover.Popup className="bg-card border-line shadow-card flex w-[260px] flex-col gap-2 rounded-lg border p-3 text-xs outline-none">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px] font-bold">
+              <p className="text-text-faint text-xs font-bold">
                 {t("os.attach.empty")}{" "}
                 <span className="text-text-dim num">
                   {count}/{MAX_ROW_ATTACHMENTS}
@@ -96,7 +96,7 @@ export function GridAttachButton({
               <AttachPicker disabled={uploading || full} onFiles={onAdd} compact />
             </div>
             {hiddenFromParents ? (
-              <p className="border-amber/40 bg-amber-soft text-amber rounded border px-2 py-1.5 text-[11px] leading-snug">
+              <p className="border-amber/40 bg-amber-soft text-amber rounded border px-2 py-1.5 text-xs leading-snug">
                 {t("os.attach.offA")}
                 <b>{t("os.attach.offB")}</b>
                 {t("os.attach.offC")}
@@ -112,7 +112,7 @@ export function GridAttachButton({
                     ) : (
                       <div className="bg-bg-soft text-text-dim flex h-14 w-full flex-col items-center justify-center gap-0.5 rounded px-1 text-center">
                         <EyIcon name="file" size={14} className="text-text-faint" />
-                        <span className="w-full truncate text-[10px]">{a.name}</span>
+                        <span className="w-full truncate text-xs">{a.name}</span>
                       </div>
                     )}
                     <button
@@ -127,7 +127,7 @@ export function GridAttachButton({
                 ))}
               </div>
             ) : (
-              <p className="text-text-faint text-[11px] leading-snug">
+              <p className="text-text-faint text-xs leading-snug">
                 {t("os.attach.dropA")}
                 <b>{t("os.attach.dropB")}</b>
                 {t("os.attach.dropC")}
@@ -157,7 +157,7 @@ export function AttachPicker({
   return (
     <label
       className={`border-line hover:bg-bg-soft cursor-pointer rounded-lg border font-bold ${
-        compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-[12px]"
+        compact ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs"
       } ${disabled ? "pointer-events-none opacity-50" : ""}`}
     >
       {children ?? t("os.attach.pickFile")}

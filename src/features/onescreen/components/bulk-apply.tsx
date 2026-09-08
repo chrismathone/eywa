@@ -173,15 +173,15 @@ export function BulkApplyPopover({
     >
       <Popover.Trigger
         disabled={disabled}
-        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-lg px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title={t("os.bulk.title")}
       >
         {t("os.bulk.btn")}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-lg border p-3 text-[12px] outline-none">
-            <p className="text-text-dim text-[11px]">
+          <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-lg border p-3 text-xs outline-none">
+            <p className="text-text-dim text-xs">
               {t("os.bulk.targetPre")}
               <span className="text-foreground font-bold">{targetCount}</span>
               {t("os.bulk.targetPost")}
@@ -201,7 +201,7 @@ export function BulkApplyPopover({
                   onClick={() => switchMode(m.key)}
                   aria-pressed={mode === m.key}
                   disabled={m.key === "copy" && !canCopy}
-                  className={`flex-1 px-2 py-1 text-[11.5px] not-first:border-l border-line disabled:opacity-40 ${
+                  className={`flex-1 px-2 py-1 text-xs not-first:border-l border-line disabled:opacity-40 ${
                     mode === m.key ? "bg-primary text-primary-foreground font-bold" : "text-text-dim hover:bg-bg-soft"
                   }`}
                 >
@@ -211,7 +211,7 @@ export function BulkApplyPopover({
             </div>
             {mode === "copy" ? (
               <div className="border-line bg-bg-soft rounded-md border px-2.5 py-2">
-                <p className="text-text-dim text-[11px]">
+                <p className="text-text-dim text-xs">
                   {canCopy ? (
                     <>
                       <span className="text-foreground font-bold">{copySource!.label}</span>
@@ -223,14 +223,14 @@ export function BulkApplyPopover({
                     t("os.bulk.copyNone")
                   )}
                 </p>
-                <p className="text-foreground mt-1.5 text-[11px] font-bold">{t("os.bulk.copyWhat")}</p>
-                <p className="text-text-dim text-[11px]">{t("os.bulk.copyList")}</p>
-                <p className="text-text-faint mt-1 text-[11px]">
+                <p className="text-foreground mt-1.5 text-xs font-bold">{t("os.bulk.copyWhat")}</p>
+                <p className="text-text-dim text-xs">{t("os.bulk.copyList")}</p>
+                <p className="text-text-faint mt-1 text-xs">
                   {t("os.bulk.copyNotA")}
                   <b>{t("os.bulk.copyNotB")}</b>
                   {t("os.bulk.copyNotC")}
                 </p>
-                <p className="text-text-faint mt-1 text-[11px]">
+                <p className="text-text-faint mt-1 text-xs">
                   {t("os.bulk.copySkip")}
                 </p>
               </div>
@@ -245,7 +245,7 @@ export function BulkApplyPopover({
                       value={activeSubject.key}
                       onChange={(e) => setSubjectKey(e.target.value)}
                       aria-label={t("os.bulk.subjectAria")}
-                      className="border-line bg-card h-6 max-w-[130px] rounded-md border px-1 text-[11px] outline-none"
+                      className="border-line bg-card h-6 max-w-[130px] rounded-md border px-1 text-xs outline-none"
                     >
                       {subjects.map((s) => (
                         <option key={s.key} value={s.key}>
@@ -254,7 +254,7 @@ export function BulkApplyPopover({
                       ))}
                     </select>
                   ) : (
-                    <span className="text-text-faint text-[11px]">
+                    <span className="text-text-faint text-xs">
                       {tf("os.bulk.subjectOne", { name: activeSubject.name, n: activeSubject.count })}
                     </span>
                   )}
@@ -275,10 +275,10 @@ export function BulkApplyPopover({
                     onChange={(e) => setProgress(e.target.value)}
                     placeholder={t("os.row.progressPh")}
                     aria-label={t("os.bulk.progressAria")}
-                    className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
+                    className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                   />
                 )}
-                <p className="text-text-faint mt-1 text-[11px]">
+                <p className="text-text-faint mt-1 text-xs">
                   {tf("os.bulk.subjectOnly", { name: activeSubject.name })}
                 </p>
               </div>
@@ -292,7 +292,7 @@ export function BulkApplyPopover({
                     type="button"
                     onClick={() => setAtt(null)}
                     aria-pressed={att === null}
-                    className={`rounded-pill px-2 py-0.5 text-[11px] font-bold transition ${
+                    className={`rounded-pill px-2 py-0.5 text-xs font-bold transition ${
                       att === null
                         ? "bg-primary text-primary-foreground"
                         : "border-line text-text-dim hover:bg-bg-soft border"
@@ -306,7 +306,7 @@ export function BulkApplyPopover({
                       type="button"
                       onClick={() => setAtt(att === s ? null : s)}
                       aria-pressed={att === s}
-                      className={`rounded-pill px-2 py-0.5 text-[11px] font-bold transition ${
+                      className={`rounded-pill px-2 py-0.5 text-xs font-bold transition ${
                         att === s
                           ? "bg-primary text-primary-foreground"
                           : "border-line text-text-dim hover:bg-bg-soft border"
@@ -328,16 +328,16 @@ export function BulkApplyPopover({
                       placeholder={t("os.card.units")}
                       aria-label={t("os.bulk.unitsAria")}
                       title={t("os.bulk.unitsTitle")}
-                      className="border-line bg-card focus:border-primary h-7 w-20 rounded-lg border px-2 text-[12px] outline-none"
+                      className="border-line bg-card focus:border-primary h-7 w-20 rounded-lg border px-2 text-xs outline-none"
                     />
-                    <span className="text-text-faint text-[11px]">
+                    <span className="text-text-faint text-xs">
                       {t("os.bulk.unitsHint")}
                     </span>
                   </div>
                 ) : null}
                 {/* 고른 즉시 실제 대상·덮어쓸 건수를 보여준다 — 눌러 보고 나서 알게 되면 늦다. */}
                 {attPlan ? (
-                  <p className={`mt-1 text-[11px] ${attPlan.cells.length ? "text-text-dim" : "text-amber"}`}>
+                  <p className={`mt-1 text-xs ${attPlan.cells.length ? "text-text-dim" : "text-amber"}`}>
                     {attPlan.cells.length ? (
                       <>
                         <span className="text-foreground font-bold">{attPlan.cells.length}</span>
@@ -354,7 +354,7 @@ export function BulkApplyPopover({
                     ) : null}
                   </p>
                 ) : (
-                  <p className="text-text-faint mt-1 text-[11px]">
+                  <p className="text-text-faint mt-1 text-xs">
                     {t("os.bulk.attHint")}
                   </p>
                 )}
@@ -386,7 +386,7 @@ export function BulkApplyPopover({
                   onChange={(e) => setTextbook(e.target.value)}
                   placeholder={t("os.bulk.bookPh")}
                   aria-label={t("os.bulk.bookAria")}
-                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
+                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                 />
                 <input
                   type="text"
@@ -394,13 +394,13 @@ export function BulkApplyPopover({
                   onChange={(e) => setHomeworkToday(e.target.value)}
                   placeholder={t("os.bulk.hwTodayPh")}
                   aria-label={t("os.bulk.hwTodayAria")}
-                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
+                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                 />
-                <p className="text-text-faint text-[11px]">{t("os.bulk.onlyFilled")}</p>
+                <p className="text-text-faint text-xs">{t("os.bulk.onlyFilled")}</p>
               </>
             ) : null}
             <div className="flex items-center justify-between">
-              <label className="text-text-dim flex cursor-pointer items-center gap-1 text-[11px]">
+              <label className="text-text-dim flex cursor-pointer items-center gap-1 text-xs">
                 <input
                   type="checkbox"
                   checked={onlyEmpty}

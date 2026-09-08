@@ -1,0 +1,50 @@
+﻿{
+    "created_at":  "2026-09-07T20:30:01.8172811+09:00",
+    "source_root":  "D:/eywa_refactoring",
+    "source_head":  "488964cf2dd39e9d2101def94b8446fbb2cfe77d",
+    "destination_root":  "C:/Users/user/orca/workspaces/eywa_refactoring/대규모-디자인-수정",
+    "destination_branch":  "BIGSHOL/대규모-디자인-수정",
+    "decision":  "버튼형 메뉴 진입은 사용자 확정 구현 방향. iframe과 창모드 구조는 검토 의견.",
+    "files":  [
+                  {
+                      "name":  "CONVERSATION.md",
+                      "bytes":  12989,
+                      "sha256":  "d05abd47ef7e0798dbe6a397ab12b8854b2fd9cd675cae31bcce2db31ff5d05d"
+                  },
+                  {
+                      "name":  "HANDOFF.md",
+                      "bytes":  31933,
+                      "sha256":  "000ef96b8cd3ce85a85a7c6d6a95dc87fb5309517df3dfd390e0b0ed2c5f807d"
+                  },
+                  {
+                      "name":  "navigation-compact-2026-09-07.md",
+                      "bytes":  26136,
+                      "sha256":  "c097e645f5a7260bf68060042b040ae85ff543a20ef9051753cf5ec91493a0ea"
+                  },
+                  {
+                      "name":  "navigation-compact-desktop.png",
+                      "bytes":  81883,
+                      "sha256":  "51fd70d68bad33190031632be13c9235072a891a52cd3a450677f4c1116a15c0"
+                  },
+                  {
+                      "name":  "navigation-compact-mobile.png",
+                      "bytes":  41764,
+                      "sha256":  "118d8fa3c7c5f2581fc865175fe12c50b1e79ec1c9bce71cb0620c1f8380b7ef"
+                  },
+                  {
+                      "name":  "navigation-compact-preview.html",
+                      "bytes":  50993,
+                      "sha256":  "2fb5cda5f8828d6c797316a67ddb1e874adff6202f9c8f4c4436ee4637b9f0f3"
+                  },
+                  {
+                      "name":  "reference-menu-buttons.png",
+                      "bytes":  140476,
+                      "sha256":  "307e45322110a00438c3306933d3a3e7408df0886320bdd23fc607d9984161ab"
+                  },
+                  {
+                      "name":  "reference-sidebar.png",
+                      "bytes":  38223,
+                      "sha256":  "7ff98ec4a866a0f3a642bb99ca242bc6dba1632444396893138cf15cd77dfb75"
+                  }
+              ]
+}

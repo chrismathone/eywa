@@ -61,7 +61,7 @@ function RailLine({
   return (
     <div>
       <div className="flex items-center gap-1.5">
-        <span className="text-text-dim w-[52px] shrink-0 text-[11.5px] font-extrabold">{label}</span>
+        <span className="text-text-dim w-[52px] shrink-0 text-xs font-extrabold">{label}</span>
         <div className="relative h-[14px] min-w-0 flex-1">
           <div
             className={`absolute top-[4px] right-0 left-0 ${
@@ -80,7 +80,7 @@ function RailLine({
           ) : null}
         </div>
       </div>
-      {text ? <div className="text-foreground truncate pl-[58px] text-[11.5px] leading-tight font-bold">{text}</div> : null}
+      {text ? <div className="text-foreground truncate pl-[58px] text-xs leading-tight font-bold">{text}</div> : null}
     </div>
   );
 }
@@ -99,7 +99,7 @@ export function GoalRailRows({
   title?: string;
 }) {
   if (rail.start == null || rail.now == null) {
-    return <span className="text-text-faint text-[11px]">{RAIL_STATUS_LABEL["no-data"]}</span>;
+    return <span className="text-text-faint text-xs">{RAIL_STATUS_LABEL["no-data"]}</span>;
   }
   const hasGoal = rail.end != null && rail.end > rail.start;
   const nowX = railX(rail, rail.now) ?? 0;

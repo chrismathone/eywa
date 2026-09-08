@@ -31,8 +31,8 @@ type Props = {
 };
 
 const SIZE_CLASS: Record<PillSize, string> = {
-  sm: "px-2.5 py-[3px] text-[11px]",
-  md: "px-3 py-[5px] text-[14px]",
+  sm: "px-2.5 py-[3px] text-xs",
+  md: "px-3 py-[5px] text-sm",
 };
 
 const SOFT_CLASS: Record<PillColor, string> = {

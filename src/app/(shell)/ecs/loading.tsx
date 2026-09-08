@@ -11,12 +11,14 @@ export default function EcsLandingLoading() {
         <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-4 w-72 animate-pulse rounded" />
       </div>
-      {/* 툴바 스켈레톤 — 실제 툴바는 카드 껍데기가 없고 컨트롤이 h-8이다(툴바 규약 2026-09-01).
-          껍데기를 그리면 로딩→본문에서 카드가 사라지며 화면이 튄다(스켈레톤=실표면 동일 캐논). */}
+      {/* 면 탭(주간/오늘) — 실화면은 헤더 바로 아래 `EcsFaceTabs` 한 줄이다. */}
+      <div className="bg-bg-soft h-(--control-h) w-40 animate-pulse rounded-lg" />
+      {/* 툴바 스켈레톤 — 실제 툴바는 카드 껍데기가 없고 컨트롤 높이는 `--control-h`다(v5 control-scale;
+          09-01 "h-(--control-h) 고정" 캐논을 대체). 옛 32px로 두면 로딩→본문에서 툴바 줄이 6px씩 줄며 본문이 튄다. */}
       <div className="flex flex-wrap items-center gap-3 px-1 py-1">
-        <div className="bg-bg-soft h-8 w-40 animate-pulse rounded-lg" />
-        <div className="bg-bg-soft h-8 w-44 animate-pulse rounded-lg" />
-        <div className="bg-bg-soft h-8 w-36 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-(--control-h) w-40 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-(--control-h) w-44 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-(--control-h) w-36 animate-pulse rounded-lg" />
       </div>
       <div className="bg-card shadow-card rounded-2xl px-3 py-2.5">
         <div className="border-line border-b px-1 pb-2">

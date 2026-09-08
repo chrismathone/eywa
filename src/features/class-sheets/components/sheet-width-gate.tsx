@@ -26,17 +26,17 @@ export function SheetWidthGate({ children }: { children: ReactNode }) {
       <div className="sheet-too-narrow min-h-0 flex-1 items-center justify-center px-4">
         <div className="bg-card shadow-card flex max-w-[19rem] flex-col items-center gap-2 rounded-2xl px-5 py-6 text-center">
           <EyIcon name="window" size={26} className="text-text-faint" />
-          <p className="text-foreground text-[15px] font-bold">창이 너무 좁습니다</p>
-          <p className="text-text-dim text-[13px] leading-relaxed">
+          <p className="text-foreground text-base font-bold">창이 너무 좁습니다</p>
+          <p className="text-text-dim text-sm leading-relaxed">
             영어 강사 시트는 하루치 수업 한 칸이 다 들어와야 쓸 수 있습니다. 창을 넓히거나, 화면 배율을
             크게 해 둔 상태라면 배율을 낮춰 주세요.
           </p>
-          <p className="text-text-faint text-[12px]">
+          <p className="text-text-faint text-xs">
             최소 <span className="num">{SHEET_MIN_WIDTH}px</span>
           </p>
           <Link
             href="/ecs"
-            className="text-primary mt-1 text-[13px] font-bold underline-offset-2 hover:underline"
+            className="text-primary mt-1 text-sm font-bold underline-offset-2 hover:underline"
           >
             반 목록으로
           </Link>

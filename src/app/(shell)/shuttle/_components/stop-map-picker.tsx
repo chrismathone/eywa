@@ -30,7 +30,7 @@ const Impl = dynamic(() => import("./stop-map-picker-impl").then((m) => m.StopMa
 export function StopMapPicker(props: Omit<StopMapPickerImplProps, "appKey">) {
   if (!MAP_AVAILABLE) {
     return (
-      <p className="border-line text-text-dim rounded-xl border border-dashed px-3 py-2 text-[11.5px]">
+      <p className="border-line text-text-dim rounded-xl border border-dashed px-3 py-2 text-xs">
         지도 키가 설정되지 않아 좌표를 직접 입력합니다 — 카카오 지도에서 위치를 찾아 위도·경도를 아래
         칸에 넣으세요. (배포에 <span className="num">NEXT_PUBLIC_KAKAO_MAP_KEY</span>를 넣으면 지도가
         바로 뜹니다.)

@@ -38,11 +38,14 @@ export const DEFAULT_WINDOW = { w: 480, h: 560 };
  * 없는 메뉴는 DEFAULT_WINDOW. 캔버스보다 크면 cascadeNext에서 clamp됨.
  */
 export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
+  // 운영실 — 지표 줄·오늘 브리핑·접힌 2차 줄이 들어가는 폭(2026-09-07 창으로 전환).
+  dashboard: { w: 1180, h: 820 },
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
   // 시간표(개발중) — 같은 격자를 그리므로 같은 크기. 없으면 기본 480×560으로 열려 표가 통째로 접힌다.
   "timetable-dev": { w: 1040, h: 680 },
-  classes: { w: 1100, h: 700 }, // 8열 표 + 필터바(과목·강사·요일·정렬·검색) — 넓으면 한 줄
-  billing: { w: 760, h: 620 }, // 수납/교재/지출 책갈피 + 다열 표라 폭이 넓음
+  classes: { w: 1100, h: 700 }, // 고정 8열 표(16/18px 글자, 열 머리 필터)가 가로 스크롤 없이 서는 폭 — v5 최소 창(2026-09-04 주석 갱신; 필터바는 없어졌다)
+  // 수납 표 15열(min-w 1080)이 가로 스크롤 없이 서는 폭 — v5 "창마다 최소 크기"(2026-09-04, 옛 760×620). 교재·지출·계산기 면도 상속.
+  billing: { w: 1160, h: 720 },
   // 학생×30~31일 매트릭스. 폭이 좁으면 이름 칼럼이 글자당 줄바꿈돼 행이 2배로 커지고(세로 스크롤
   // 유발), 1280이면 30·31일 달 모두 이름이 한 줄로 펴져 콘텐츠가 ~488px로 줄어든다(세로 스크롤 제거).
   attendance: { w: 1280, h: 620 },
@@ -65,6 +68,19 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   mcs: { w: 1240, h: 760 },
   lesson_reports: { w: 980, h: 720 }, // 수업보고서 발송 관리 — 발송 큐 + 강사별 작성률 + 목록(다열 표·필터)
   consultations: { w: 760, h: 640 }, // 상담 목록(카드)·상세(내용+AI 7섹션) — 읽기 콘텐츠라 기본 480은 좁음. 상세 id도 prefix 상속
+  // 회의록 — 목록 행(제목 | 상태·녹음·참석·작성자·일시 고정 열 24rem)이 한 줄에 서고 상세(AI 8섹션·전사)가 읽히는 폭.
+  // 학생상담과 같은 값(디자인 v5 13단계 2026-09-04 — 기본 480이면 제목 칸이 남지 않았다). 상세 id도 prefix 상속.
+  meetings: { w: 760, h: 640 },
+  // 퇴원관리 — 월별 추이·과목별 분포(2열)와 명단·사유 분석(2열)이 `lg`(1024px)부터 나란히 선다. 그 아래로 열면
+  // 툴바(드롭다운 5 + 검색)가 세 줄로 감기고 차트가 한 열로 쌓인다. 상세(withdrawals/<id>)도 prefix 상속.
+  withdrawals: { w: 1040, h: 720 },
+  // 학생목록 — 5열 표(학생·상태·수강 과목·담당 강사·연락처)가 16px 글자로 한 줄에 서는 폭(디자인 v5 2026-09-03:
+  // 이 크기가 곧 **최소 크기**다 — 기본 480이면 표가 통째로 접혔다). 열 머리가 필터라 표는 가로 스크롤 없이 이 폭에 맞춘다.
+  // 학생 상세(students/<id>)도 prefix로 이 크기를 상속한다(탭 6개 화면이라 480보다 낫다).
+  students: { w: 960, h: 680 },
+  // 등록상담 칸반 — **4열 고정**(원장 2026-09-03 "창이 줄어들어도 4열 유지 · 탭 접힘 금지"). 칸 4개 × 250 + 틈이 들어가는 폭.
+  // 기본 480이면 칸이 120px이라 이름도 못 적는다. 상세(enrollment/<id>)도 prefix로 이 크기를 상속한다.
+  enrollment: { w: 1120, h: 720 },
 
   // 직원 목록 — 직원명부 시트와 같은 15열(소속·이름·직급·계약구분·메일·입사일·전화·현재계약·조건·갱신일…).
   // 기본 480은 두 열도 안 들어간다. 넓게 열고 부족한 폭은 가로 스크롤로.
@@ -135,6 +151,24 @@ export function routeWindowSize(id: string): { w: number; h: number } | undefine
   }
   return undefined;
 }
+
+/**
+ * 창 **최소 크기** = 그 메뉴의 기본 크기(`ROUTE_WINDOW_SIZE`, 없으면 `DEFAULT_WINDOW`).
+ * 원장 2026-09-03: *"창이 줄어들어도 기존 4열 스타일을 유지하는 게 오히려 가독성이 뛰어남 · 창 크기를 최소 크기보다
+ * 줄이려고 할 때 경고를 띄우고 줄어들지 않도록"* — 화면은 이 크기에서 설계됐고(탭 접힘 금지) 그 아래로는 리사이즈가
+ * 멈춘다(`resizeRect`의 `min`). 스냅·타일·작은 모니터로 그래도 작아지면 창 안 `WindowMinSizeNotice`가 선다.
+ * ⚠️ 캔버스가 그보다 작으면 캔버스가 상한이다 — 소비처가 `min(…, bounds)`로 접는다(창이 화면 밖으로 나가는 것보다 낫다).
+ */
+export function windowMinSize(id: string): { w: number; h: number } {
+  return routeWindowSize(id) ?? DEFAULT_WINDOW;
+}
+
+/**
+ * 창 크롬이 먹는 크기 — 창 rect(타이틀바 포함)와 본문 iframe(창 안 `window.inner*`)의 차.
+ * FloatingWindow: 타이틀바 `h-9`(36) + 그 아래 선 1 + 바깥 테두리 상하 2 → 세로 39 / 좌우 테두리 2.
+ * ⚠️ 타이틀바 높이를 바꾸면 여기도 함께 — 안 맞으면 정확히 최소 크기로 연 창에 "최소 크기 위반" 안내가 뜬다.
+ */
+export const WINDOW_CHROME = { w: 2, h: 39 } as const;
 
 /**
  * 커서(스테이지 로컬 sx,sy) 위치에서 새 창이 뜨도록 배치 — 타이틀바가 커서 바로 아래(약간 좌상)에
@@ -373,13 +407,28 @@ export function pointInRect(px: number, py: number, r: Rect): boolean {
   return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 }
 
-/** 8방향 핸들 리사이즈 — 델타 적용 + 최소크기(이동변 보정) + 캔버스 clamp. */
+/**
+ * 리사이즈 바닥 — 그 창의 최소 크기(`windowMinSize`)를 캔버스 안으로 접은 값. 전역 MIN_W/MIN_H가 절대 하한.
+ * 힌트("최소 크기 1120×720")를 띄우는 쪽(use-pointer-resize)도 같은 함수로 바닥을 알아본다.
+ */
+export function resizeFloor(min: { w: number; h: number } | undefined, bounds: Bounds): { w: number; h: number } {
+  return {
+    w: Math.max(MIN_W, Math.min(min?.w ?? MIN_W, bounds.width)),
+    h: Math.max(MIN_H, Math.min(min?.h ?? MIN_H, bounds.height)),
+  };
+}
+
+/**
+ * 8방향 핸들 리사이즈 — 델타 적용 + 최소크기(이동변 보정) + 캔버스 clamp.
+ * `min` = 그 창의 최소 크기(라우트 창은 `windowMinSize`). 없으면 전역 MIN_W/MIN_H.
+ */
 export function resizeRect(
   rect: Rect,
   handle: ResizeHandle,
   dx: number,
   dy: number,
   bounds: Bounds,
+  min?: { w: number; h: number },
 ): Rect {
   let left = rect.x;
   let top = rect.y;
@@ -391,13 +440,14 @@ export function resizeRect(
   if (handle.includes("w")) left = rect.x + dx;
   if (handle.includes("n")) top = rect.y + dy;
 
-  if (right - left < MIN_W) {
-    if (handle.includes("w")) left = right - MIN_W;
-    else right = left + MIN_W;
+  const floor = resizeFloor(min, bounds);
+  if (right - left < floor.w) {
+    if (handle.includes("w")) left = right - floor.w;
+    else right = left + floor.w;
   }
-  if (bottom - top < MIN_H) {
-    if (handle.includes("n")) top = bottom - MIN_H;
-    else bottom = top + MIN_H;
+  if (bottom - top < floor.h) {
+    if (handle.includes("n")) top = bottom - floor.h;
+    else bottom = top + floor.h;
   }
 
   return clampRect({ x: left, y: top, w: right - left, h: bottom - top }, bounds);

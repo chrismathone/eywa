@@ -34,7 +34,7 @@ const NEEDS_NOTE: ReadonlySet<string> = new Set(["late", "absent"]);
 /** 활성색 — 원스크린 알약과 **같은 상수**(`ATT_SOLID`). 각자 적으면 한쪽만 고쳐져 갈린다. */
 const ON_CLS: Record<BasicAttendance, string> = ATT_SOLID;
 
-const READONLY_CLS = "bg-bg-soft text-text-dim rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap";
+const READONLY_CLS = "bg-bg-soft text-text-dim rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap";
 
 export function TodayAttendancePills({
   status,
@@ -161,14 +161,14 @@ function Pill({
             ? t("att.pill.clear")
             : t("att.pill.setPresent")
       }
-      className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap transition ${
+      className={`cursor-pointer rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap transition ${
         active ? ON_CLS[status] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
       }`}
     >
       {label}
       {/* 메모가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다. */}
       {active && note ? (
-        <span aria-hidden className="ml-0.5 align-middle text-[8px]">
+        <span aria-hidden className="ml-0.5 align-middle text-xs">
           ●
         </span>
       ) : null}

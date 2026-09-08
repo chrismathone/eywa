@@ -34,22 +34,22 @@ export function PublicStaffForm({
         <CheckCircle2 className="text-primary size-12" />
         <p className="text-foreground text-lg font-bold">등록이 완료되었습니다</p>
         <div className="bg-card w-full rounded-2xl p-5 shadow-card">
-          <p className="text-text-dim text-[13px]">아래 정보로 로그인할 수 있습니다</p>
+          <p className="text-text-dim text-sm">아래 정보로 로그인할 수 있습니다</p>
           <dl className="mt-3 space-y-2 text-left">
             <div>
-              <dt className="text-text-dim text-[12px]">아이디</dt>
-              <dd className="num text-foreground text-[15px] font-bold break-all">{done.email}</dd>
+              <dt className="text-text-dim text-xs">아이디</dt>
+              <dd className="num text-foreground text-base font-bold break-all">{done.email}</dd>
             </div>
             <div>
-              <dt className="text-text-dim text-[12px]">초기 비밀번호</dt>
-              <dd className="num text-foreground text-[15px] font-bold">{done.password}</dd>
+              <dt className="text-text-dim text-xs">초기 비밀번호</dt>
+              <dd className="num text-foreground text-base font-bold">{done.password}</dd>
             </div>
           </dl>
-          <p className="text-text-dim mt-3 text-[12px]">
+          <p className="text-text-dim mt-3 text-xs">
             로그인 후 &lsquo;내 정보&rsquo;에서 비밀번호를 꼭 변경해 주세요.
           </p>
         </div>
-        <p className="text-text-dim text-[12px]">{academyName}</p>
+        <p className="text-text-dim text-xs">{academyName}</p>
       </div>
     );
   }
@@ -57,9 +57,9 @@ export function PublicStaffForm({
   return (
     <div className="mx-auto w-full max-w-[820px] space-y-4 px-3 py-6">
       <header className="text-center">
-        <p className="text-text-dim text-[12px] font-bold">{academyName}</p>
+        <p className="text-text-dim text-xs font-bold">{academyName}</p>
         <h1 className="text-foreground mt-0.5 text-lg font-bold">직원 등록</h1>
-        <p className="text-text-dim mt-1 text-[13px]">
+        <p className="text-text-dim mt-1 text-sm">
           아래 직원 명부를 작성해 제출하면 로그인 계정이 함께 만들어집니다.
         </p>
       </header>

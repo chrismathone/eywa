@@ -88,7 +88,7 @@ export function TextbookMentField({
         className={`border-line bg-background text-foreground placeholder:text-text-faint focus:ring-primary/40 min-h-[76px] w-full rounded-lg border px-3 py-2 text-sm focus:ring-1 focus:outline-none ${TEXTAREA_AUTOSIZE}`}
         placeholder={DEFAULT_TEXTBOOK_MENT}
       />
-      <p className="text-text-faint text-[11px]">
+      <p className="text-text-faint text-xs">
         학부모에게 보내는 안내 문구입니다 (메모는 사무실 내부용이라 나가지 않습니다) ·{" "}
         {"{학생}·{교재명}·{금액}"}은 학생마다 자동으로 채워집니다 · 입력을 멈추면 자동 저장됩니다.
       </p>

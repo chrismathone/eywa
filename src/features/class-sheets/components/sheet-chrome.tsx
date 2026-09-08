@@ -137,7 +137,7 @@ export function SheetClassPicker({
           trailing={
             shownTeacher ? (
               <span
-                className="text-text-dim text-[15px] font-extrabold whitespace-nowrap"
+                className="text-text-dim text-base font-extrabold whitespace-nowrap"
                 title={`${t("chrome.homeroom")} ${shownTeacher}`}
               >
                 {shownTeacher}

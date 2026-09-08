@@ -7,24 +7,23 @@ import { Paperclip } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { usePrefs } from "@/components/workspace/use-prefs";
 import type { StaffRow } from "@/features/staff/server/queries";
 import { StaffRowLink } from "./staff-row-link";
-import { normalizeOrder, visibleColumns, type StaffColumnKey } from "./staff-columns";
-
+import { useStaffViewPrefs } from "./staff-view-prefs";
+import { normalizeOrder, visibleColumns, type StaffColumnKey } from "@/features/staff/columns";
 
 const CELL = "px-3 py-2.5";
 
 /**
  * 직원 목록 표 — **보이는 열과 순서를 사용자가 고른다**(원장 지시 2026-07-31).
- * 설정이 브라우저 저장(usePrefs)이라 표를 클라이언트에서 그린다. 행 데이터는 서버가 만든 그대로 받는다.
- * 과목 라벨·색은 `useSubjectMaps()`(학원설정 단일 소스) — 코드에 과목을 박지 않는다.
+ * 열 설정은 계정(`ui_prefs.staff`)이 진실이고 `StaffViewPrefsProvider`가 서버 시드로 첫 렌더부터 그 값으로 그린다(클릭은 즉시).
+ * 행 데이터는 서버가 만든 그대로 받는다. 과목 라벨·색은 `useSubjectMaps()`(학원설정 단일 소스) — 코드에 과목을 박지 않는다.
  */
 export function StaffTable({ rows }: { rows: StaffRow[] }) {
   const subjects = useSubjectMaps();
-  const order = normalizeOrder(usePrefs((s) => s.staffColumnOrder));
-  const hidden = usePrefs((s) => s.staffColumnHidden);
-  const cols = visibleColumns(order, hidden);
+  const { view } = useStaffViewPrefs();
+  const order = normalizeOrder(view.columnOrder);
+  const cols = visibleColumns(order, view.columnHidden);
 
   const render: Record<StaffColumnKey, (s: StaffRow) => ReactNode> = {
     department: (s) => <span className="font-medium">{s.department ?? "—"}</span>,
@@ -37,6 +36,17 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
           ariaLabel={`${s.displayName} 상세`}
           className="group inline-flex items-center gap-1.5"
         >
+          {/* 시간표 강사 색(근무 설정) — **정해 둔 사람만** 사각형이 선다(원장 2026-09-07).
+              색이 곧 시간표에서 그 사람을 찾는 단서라, 명부에서 누가 무슨 색인지 바로 보이게 한다.
+              ⚠️ 색은 사람이 고른 자유 hex라 토큰이 아니다 → 인라인 style(문자열 그대로 저장된 값). */}
+          {s.bgColor ? (
+            <span
+              aria-hidden
+              title={`시간표 색 ${s.bgColor}`}
+              className="border-line inline-block size-3.5 shrink-0 rounded-xs border"
+              style={{ background: s.bgColor }}
+            />
+          ) : null}
           <span className="text-foreground font-bold group-hover:underline">{s.displayName}</span>
           <EditingBadge scope={`staff:${s.id}`} />
         </WindowLink>
@@ -122,13 +132,16 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
 
   return (
     <table
-      className="[&_td]:border-line [&_th]:border-line w-full border-collapse [&_td]:border [&_th]:border"
+      // 열 제목은 한 줄(nowrap) — 16px에선 17열의 max-content 합이 표 폭을 넘겨 auto 레이아웃이 열을 좁히고 제목이 글자 단위로 꺾여 머리 행이 100px 넘게 자랐다(실측 2026-09-04).
+      className="[&_td]:border-line [&_th]:border-line w-full border-collapse [&_td]:border [&_th]:border [&_th]:whitespace-nowrap"
       style={{ minWidth: Math.max(560, cols.length * 116) }}
     >
       <thead>
-        <tr className="bg-bg-soft/70 text-foreground text-left text-[0.9em]">
+        {/* 열 제목은 전부 가운데(데이터 표 규약 2026-08-05 — 숫자 열도 제목은 가운데, 본문 값만 우측), 나머지 본문은 좌측 그대로.
+            크기는 본문과 같다(옛 0.9em은 v5에서 14.4px). */}
+        <tr className="bg-bg-soft/70 text-foreground text-center">
           {cols.map((k) => (
-            <th key={k} className={`${CELL} font-bold ${rightAligned.has(k) ? "text-right" : ""}`}>
+            <th key={k} className={`${CELL} font-bold`}>
               {LABEL[k]}
             </th>
           ))}

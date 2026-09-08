@@ -64,13 +64,13 @@ export function PlanTable({
             {/* flex-wrap — 칩이 셋(시기·줄 추가·내용 복사)이라 글씨 크기를 키우면 한 줄을 넘길 수 있다.
                 안 감싸면 넘친 칩이 옆 카드 배경에 덮여 "라벨이 잘린" 것처럼 보인다(디자인 규칙). */}
             <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${term.tone}`}>
+              <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${term.tone}`}>
                 {termLabel}
               </span>
               {canEdit ? (
                 <button
                   type="button"
-                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
+                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
                   onClick={() => handlers.addLine(date, slotStart, term.key, defaultArea)}
                 >
                   {sheetT(lang, "plan.addRow")}
@@ -85,7 +85,7 @@ export function PlanTable({
               {canEdit ? (
                 <button
                   type="button"
-                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold"
+                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
                   title={sheetTf(lang, "plan.copy.title", { term: termLabel })}
                   onClick={() => handlers.copySlot(date, slotStart, term.key)}
                 >
@@ -98,7 +98,7 @@ export function PlanTable({
               // — 안 줄이면 가변인 진도·과제가 남는 폭을 뒤집어쓰고 슬리버로 무너진다(today-columns ⚠️).
               // 하한: 구분 = 영역 라벨 2~3자+네이티브 셀렉트 화살표 ≈ 70 → 76 · 시간 = 머리
               // '페이지/시간' 11px bold ≈ 61 → 64 · × = 아이콘14+패딩4 → 22. (표 안 주석 금지 — 파일 상단 ⚠️)
-              <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
+              <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed" }}>
                 <colgroup>
                   <col style={{ width: 76 }} />
                   <col style={{ width: 106 }} />
@@ -109,7 +109,7 @@ export function PlanTable({
                 </colgroup>
                 <thead>
                   {/* 헤더 밴드 — 원본 시트의 노란 머리글(시기·구분·교재·시간·진도·과제)과 같은 역할. */}
-                  <tr className="bg-bg-soft text-foreground text-left text-[11px]">
+                  <tr className="bg-bg-soft text-foreground text-left text-xs">
                     <th className="rounded-l-md py-0.5 pl-1 font-bold">{sheetT(lang, "plan.col.kind")}</th>
                     <th className="py-0.5 font-bold">{sheetT(lang, "plan.col.book")}</th>
                     {/* '페이지' → '시간'(원장 2026-08-11) → **'페이지/시간'**(원장 2026-08-13 "둘 중 아무거나
@@ -140,7 +140,7 @@ export function PlanTable({
                 </tbody>
               </table>
             ) : term.key === "regular" ? (
-              <p className="text-text-dim px-1 py-0.5 text-[12px] font-semibold">{sheetT(lang, "plan.empty")}</p>
+              <p className="text-text-dim px-1 py-0.5 text-xs font-semibold">{sheetT(lang, "plan.empty")}</p>
             ) : null}
             {/* ⚠️ 내신이 비었을 땐 **아무것도 안 그린다**(원장 2026-08-10 "이런 trash 공간 제거") —
                 예전엔 빈 문자열을 담은 <p>가 남아 '내신' 칩 밑에 padding만큼 빈 띠가 깔렸다. */}

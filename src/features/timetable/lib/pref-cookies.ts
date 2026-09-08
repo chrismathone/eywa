@@ -12,6 +12,9 @@ export const EMPTY_DAYS_COOKIE = "eywa-tt-emptydays";
 /** 기본뷰 '빈 교시 접기' 선호 — "collapse" | "expand". */
 export const EMPTY_PERIODS_COOKIE = "eywa-tt-emptyperiods";
 
+/** '학생 명단 접기' 선호 — "hide" | "show". 계정(ui_prefs)이 진실이고 이건 이관용 폴백(위 둘과 같은 규약). */
+export const STUDENTS_COOKIE = "eywa-tt-students";
+
 /**
  * 통합뷰 '1시간 단위'(섹션별 압축) 선호 — **과목별**로 기억한다.
  *

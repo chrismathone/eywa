@@ -156,7 +156,7 @@ export default async function RetentionBoardPage({
               ariaLabel="정렬"
             />
           </div>
-          <span className="text-text-dim num ml-auto text-[11px]">
+          <span className="text-text-dim num ml-auto text-xs">
             {total}명{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
           </span>
         </div>
@@ -195,7 +195,7 @@ function Stat({
           <Icon size={13} strokeWidth={1.8} />
         </span>
       </header>
-      <p className="tabular text-foreground mt-2 text-[26px] leading-none">{value}</p>
+      <p className="tabular text-foreground mt-2 text-3xl leading-none">{value}</p>
     </div>
   );
 }

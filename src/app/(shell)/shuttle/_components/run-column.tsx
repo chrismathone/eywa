@@ -64,7 +64,7 @@ export function RunColumn({
     //    좌·우를 깎아 "테두리 짤림"으로 보인다(stop-column과 같은 이유, 원장 2026-08-19).
     <div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-1 py-0.5">
       {vehicles.length === 0 && (
-        <p className="text-text-faint px-1 text-[12.5px]">
+        <p className="text-text-faint px-1 text-xs">
           차량이 없습니다 — 아래에서 먼저 차량을 만드세요.
         </p>
       )}
@@ -74,9 +74,9 @@ export function RunColumn({
         return (
           <section key={v.id} className="bg-card rounded-2xl p-3 shadow-[var(--shadow-card)]">
             <div className="mb-2 flex items-baseline justify-between gap-2">
-              <h3 className="text-foreground text-[13.5px] font-bold">{v.name}</h3>
+              <h3 className="text-foreground text-sm font-bold">{v.name}</h3>
               {v.driverName && (
-                <span className="text-text-faint truncate text-[11.5px]">{v.driverName}</span>
+                <span className="text-text-faint truncate text-xs">{v.driverName}</span>
               )}
             </div>
 
@@ -103,7 +103,7 @@ export function RunColumn({
                           {runTitle(r)}
                         </span>
                       </span>
-                      <span className="text-text-faint text-[11.5px]">
+                      <span className="text-text-faint text-xs">
                         {range && <span className="num">{range}</span>}
                         {range && " · "}
                         <span className="num">{riders}</span>명
@@ -113,7 +113,7 @@ export function RunColumn({
                 );
               })}
               {mine.length === 0 && (
-                <li className="text-text-faint px-1 py-1 text-[11.5px]">회차가 없습니다</li>
+                <li className="text-text-faint px-1 py-1 text-xs">회차가 없습니다</li>
               )}
             </ul>
 

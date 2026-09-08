@@ -215,7 +215,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
               <h2 className="text-foreground text-sm font-bold">AI 케어 인사이트</h2>
             </div>
             {student.aiCareGeneratedAt ? (
-              <span className="text-muted-foreground num text-[11px]">
+              <span className="text-muted-foreground num text-xs">
                 {formatCreatedAt(student.aiCareGeneratedAt)}
               </span>
             ) : null}
@@ -236,7 +236,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
                     className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-3 py-2.5"
                   >
                     <span
-                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${PRIORITY_COLOR[f.priority]}`}
+                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-xs font-medium ${PRIORITY_COLOR[f.priority]}`}
                     >
                       {PRIORITY_LABEL[f.priority]}
                     </span>

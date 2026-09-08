@@ -247,7 +247,7 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
                   ))}
                   {results.truncated ? (
                     // 자른 사실을 밝힌다 — 20명만 보여주고 "이게 전부"인 척하면 데스크가 없는 학생으로 오해한다.
-                    <li className="text-text-faint px-3 py-1.5 text-[11px]">
+                    <li className="text-text-faint px-3 py-1.5 text-xs">
                       맞는 학생이 더 있습니다 — 이름을 더 입력해 좁혀 주세요.
                     </li>
                   ) : null}
@@ -331,7 +331,7 @@ export function AbsenceIntakeDialog({ today, onClose }: { today: string; onClose
             <div className="border-line mt-1 max-h-52 space-y-2 overflow-y-auto rounded-lg border p-2">
               {[...byDate.entries()].map(([date, list]) => (
                 <div key={date}>
-                  <p className="text-text-dim text-[11px] font-bold">{formatKoreanDate(date)}</p>
+                  <p className="text-text-dim text-xs font-bold">{formatKoreanDate(date)}</p>
                   {list.map((c) => (
                     <label key={c.key} className="hover:bg-bg-soft flex items-center gap-2 rounded px-1 py-1 text-xs">
                       <input

@@ -97,7 +97,7 @@ export function ScorePanel({
         </div>
       </div>
 
-      <p className="text-text-faint mt-3 mb-3 text-[11px]">
+      <p className="text-text-faint mt-3 mb-3 text-xs">
         4점 척도 — 1점(미흡) / 2점(기준 이하) / 3점(기준 충족) / 4점(우수) · 같은 점수를 다시 누르면 해제
       </p>
 
@@ -121,7 +121,7 @@ export function ScorePanel({
                       id={`cr-q-${qi}`}
                       className="border-line/60 flex flex-col gap-1.5 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <span className="min-w-0 text-[13px] break-keep">
+                      <span className="min-w-0 text-sm break-keep">
                         <span className="num text-text-dim mr-1.5">{qi + 1}.</span>
                         {item}
                       </span>

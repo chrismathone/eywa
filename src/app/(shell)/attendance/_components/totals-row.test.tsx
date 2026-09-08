@@ -9,7 +9,7 @@ import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
 import { rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
-import { AttendanceSearchBox, AttendanceSearchProvider } from "./search-context";
+import { AttendanceSearchProvider, AttendanceSearchToggle } from "./search-context";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/features/attendance/server/actions", () => ({
@@ -142,11 +142,13 @@ function renderSheet(money: TeacherMoney | null = MONEY) {
   const view = render(
     <AttendanceSearchProvider rows={SEARCH_ROWS}>
       <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
-        <AttendanceSearchBox />
+        <AttendanceSearchToggle />
         <MatrixTable groups={GROUPS} days={DAYS} holidays={{}} showGroups money={money} ordered={ORDERED} />
       </GridProvider>
     </AttendanceSearchProvider>,
   );
+  // 입력칸은 토글(§10) 뒤에 있다 — 접혀 있으면 '검색'을 눌러 펼친다.
+  if (!screen.queryByLabelText("학생 검색")) fireEvent.click(screen.getByRole("button", { name: "검색" }));
   return { ...view, input: screen.getByLabelText("학생 검색") as HTMLInputElement };
 }
 

@@ -366,7 +366,7 @@ function ScheduleCell({ schedule }: { schedule: StudentClassRow["schedule"] }) {
             {g.days.map((d) => (
               <span
                 key={d}
-                className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-bold ${DAY_CHIP[d] ?? "bg-bg-soft text-text-dim"}`}
+                className={`inline-flex size-5 items-center justify-center rounded-sm text-xs font-bold ${DAY_CHIP[d] ?? "bg-bg-soft text-text-dim"}`}
               >
                 {d}
               </span>

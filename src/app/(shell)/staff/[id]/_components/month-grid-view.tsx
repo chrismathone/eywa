@@ -66,7 +66,7 @@ export function MonthGridView({
           {heads.map((h, i) => (
             <div
               key={h}
-              className={`px-2 py-1.5 text-center text-[11px] font-bold ${
+              className={`px-2 py-1.5 text-center text-xs font-bold ${
                 i === 0 ? "text-danger" : i === 6 ? "text-primary" : "text-text-faint"
               }`}
             >
@@ -116,7 +116,7 @@ export function MonthGridView({
                       }`}
                     >
                       <span
-                        className={`absolute top-1 right-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular ${
+                        className={`absolute top-1 right-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs tabular ${
                           isToday
                             ? "bg-primary text-primary-foreground font-bold"
                             : cell.inMonth
@@ -127,7 +127,7 @@ export function MonthGridView({
                         {cell.day}
                       </span>
                       {overflow > 0 ? (
-                        <span className="text-text-faint absolute bottom-0.5 left-1 text-[10px]">
+                        <span className="text-text-faint absolute bottom-0.5 left-1 text-xs">
                           +{overflow}건 더
                         </span>
                       ) : null}
@@ -159,7 +159,7 @@ export function MonthGridView({
                         top: NUM_ROW + bar.lane * LANE_H,
                         height: LANE_H - 3,
                       }}
-                      className={`pointer-events-auto absolute truncate rounded-sm px-1 text-left text-[11px] leading-[17px] ${canEdit ? "cursor-grab active:cursor-grabbing" : ""} ${rounded} ${
+                      className={`pointer-events-auto absolute truncate rounded-sm px-1 text-left text-xs leading-[17px] ${canEdit ? "cursor-grab active:cursor-grabbing" : ""} ${rounded} ${
                         t.done
                           ? "bg-bg-soft text-text-faint line-through hover:bg-bg-soft/70"
                           : "bg-primary/15 text-foreground hover:bg-primary/25"

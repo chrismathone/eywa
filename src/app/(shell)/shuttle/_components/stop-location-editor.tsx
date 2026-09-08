@@ -97,10 +97,10 @@ export function StopLocationEditor({
       {/* 🔴 **좌표는 접어 둔다** — 손으로 위경도를 치는 건 사람이 할 일이 아니다. 지도가 뜨면 클릭으로,
           그전엔 주소로 충분하다. 그래도 아는 값을 넣고 싶은 사람을 막지는 않는다(펼치면 나온다).
           ⚠️ 좌표가 이미 있으면 처음부터 펼쳐 둔다 — 들어 있는 값을 숨기면 왜 못 고치는지 알 수 없다. */}
-      <details className="text-text-dim text-[11.5px]" open={hasCoords(stop)}>
+      <details className="text-text-dim text-xs" open={hasCoords(stop)}>
         <summary className="cursor-pointer select-none">좌표 직접 입력 (선택)</summary>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <label className="text-text-dim flex items-center gap-1 text-[11.5px]">
+          <label className="text-text-dim flex items-center gap-1 text-xs">
             위도
             <input
               value={lat}
@@ -111,7 +111,7 @@ export function StopLocationEditor({
               className={cn(SHUTTLE_INPUT, "num w-32")}
             />
           </label>
-          <label className="text-text-dim flex items-center gap-1 text-[11.5px]">
+          <label className="text-text-dim flex items-center gap-1 text-xs">
             경도
             <input
               value={lng}
@@ -122,7 +122,7 @@ export function StopLocationEditor({
               className={cn(SHUTTLE_INPUT, "num w-32")}
             />
           </label>
-          <label className="text-text-dim flex items-center gap-1 text-[11.5px]">
+          <label className="text-text-dim flex items-center gap-1 text-xs">
             반경
             <input
               value={radius}
@@ -137,10 +137,10 @@ export function StopLocationEditor({
       </details>
 
       {halfFilled && (
-        <p className="text-danger text-[11.5px]">위도와 경도를 함께 입력하세요.</p>
+        <p className="text-danger text-xs">위도와 경도를 함께 입력하세요.</p>
       )}
       {!MAP_AVAILABLE && (
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           지도 키가 들어오면 여기에 지도가 떠서 클릭으로 좌표까지 찍힙니다. 그전에는 주소만 채워 두면
           됩니다.
         </p>

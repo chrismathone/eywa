@@ -29,8 +29,8 @@ export function StudentTally({
       {items
         .filter((it) => it.always || it.n > 0)
         .map((it) => (
-          <span key={it.label} className="text-[13px]">
-            <b className={`num ${it.cls} text-[17px] font-bold`}>{it.n}</b>{" "}
+          <span key={it.label} className="text-sm">
+            <b className={`num ${it.cls} text-lg font-bold`}>{it.n}</b>{" "}
             <span className="text-text-dim">{it.label}</span>
           </span>
         ))}

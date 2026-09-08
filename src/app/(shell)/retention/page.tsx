@@ -96,7 +96,7 @@ export default async function RetentionPage() {
         <section className="bg-card shadow-card overflow-hidden rounded-2xl">
           <header className="border-line border-b px-5 py-4">
             <p className="micro">오늘 큐</p>
-            <h2 className="text-foreground mt-1 text-[15px] font-bold">누구부터 챙길까</h2>
+            <h2 className="text-foreground mt-1 text-base font-bold">누구부터 챙길까</h2>
           </header>
           <ActionQueue rows={queue} />
         </section>

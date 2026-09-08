@@ -110,13 +110,13 @@ export function SeatBoard({
             className={`${TOOLBAR_CHIP} tabular-nums ${p.start === activeStart ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
           >
             {p.start}
-            <span className="ml-1.5 text-[11px] font-medium opacity-80">{p.classIds.length}개 반</span>
+            <span className="ml-1.5 text-xs font-medium opacity-80">{p.classIds.length}개 반</span>
           </Link>
         ))}
       </div>
 
       <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-2.5">
-        <span className="text-foreground text-[15px] font-bold tabular-nums">
+        <span className="text-foreground text-base font-bold tabular-nums">
           {activeStart}
           {view.length > 0 ? (
             <span className="text-text-dim ml-2 text-xs font-medium">
@@ -156,7 +156,7 @@ export function SeatBoard({
       </div>
 
       {showJj ? (
-        <p className="text-text-dim px-1 text-[12px]">
+        <p className="text-text-dim px-1 text-xs">
           듣기 레벨·누적 암기 단어수는 영어 시트 JJ 칸과 같은 기록입니다.
         </p>
       ) : null}

@@ -7,7 +7,11 @@ import { BigStat } from "@/components/atoms/big-stat";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { FilterSelect } from "@/components/filter-select";
+import { SearchToggle } from "@/components/search-toggle";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -16,92 +20,35 @@ import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
-import { SearchForm } from "@/components/search-form";
+import { loadStaffListPrefs } from "@/features/staff/server/list-prefs";
 import {
-  TOOLBAR_SEG_BOX,
-  TOOLBAR_SEG_BOX_WRAP,
-  TOOLBAR_SEG_ITEM,
-  TOOLBAR_SEG_OFF,
-  TOOLBAR_SEG_ON_PRIMARY,
-} from "@/components/toolbar-controls";
+  DEFAULT_STAFF_LIST_PREFS,
+  parseStaffEmp,
+  parseStaffListPrefs,
+  parseStaffPer,
+  parseStaffRole,
+  parseStaffSort,
+  parseStaffStatus,
+  pickStaffFilterPrefs,
+  pickStaffViewPrefs,
+  STAFF_PER_DEFAULT,
+  STAFF_PER_OPTIONS,
+  STAFF_ROLE_OPTIONS,
+  STAFF_SORT_OPTIONS,
+  STAFF_STATUS_DEFAULT,
+  STAFF_STATUS_OPTIONS,
+  type StaffFilterPrefs,
+  type StaffSortKey,
+} from "@/features/staff/list-prefs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
 import { StaffTableScaleBox, StaffTableScaleControl } from "./_components/table-scale";
 import { StaffColumnPicker } from "./_components/staff-column-picker";
 import { StaffQrSection } from "./_components/staff-qr-section";
 import { StaffTable } from "./_components/staff-table";
+import { StaffRememberPrefs, StaffViewPrefsProvider } from "./_components/staff-view-prefs";
 import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "직원관리 — eywa" };
-
-// 페이지 크기 선택(원장 요청 2026-07-28) — 기본 10명, 창에서 10/30/50 선택.
-const PER_OPTIONS = [10, 30, 50] as const;
-const DEFAULT_PER = 10;
-
-type RoleKey =
-  | "all"
-  | "master"
-  | "admin"
-  | "manager"
-  | "teacher"
-  | "counselor"
-  | "accountant";
-type StatusKey = "all" | "active" | "inactive" | "pending";
-
-/** 상태 필터 기본값 — 일상 화면은 재직만(퇴사자는 '퇴사'·'전체'에서 본다). */
-const DEFAULT_STATUS: StatusKey = "active";
-
-const ROLE_FILTERS: { key: RoleKey; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "master", label: "원장" },
-  { key: "admin", label: "관리자" },
-  { key: "manager", label: "매니저" },
-  { key: "teacher", label: "강사" },
-  { key: "counselor", label: "상담" },
-  { key: "accountant", label: "회계" },
-];
-
-const STATUS_FILTERS: { key: StatusKey; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "active", label: "재직" },
-  { key: "inactive", label: "퇴사" },
-  { key: "pending", label: "대기" },
-];
-
-// 정렬 선택(원장 요청 2026-07-28) — 검색과 별개로 목록 정렬 축을 고른다. 기본 = 역할순(권한 위계).
-type SortKey = "role" | "name" | "dept" | "emp" | "hire";
-const SORT_FILTERS: { key: SortKey; label: string }[] = [
-  { key: "role", label: "역할순" },
-  { key: "name", label: "이름순" },
-  { key: "dept", label: "부서순" },
-  { key: "emp", label: "근무형태순" },
-  { key: "hire", label: "입사일순" },
-];
-
-function buildStaffHref(p: {
-  role: RoleKey;
-  status: StatusKey;
-  subject: string; // "all" 또는 과목 key(학원설정)
-  emp: string; // "all" 또는 근무형태(정규직/아르바이트/프리랜서)
-  q: string;
-  sort: SortKey;
-  per: number;
-  page?: number;
-}): string {
-  const sp = new URLSearchParams();
-  if (p.role !== "all") sp.set("role", p.role);
-  // 🔴 상태만 기본값이 'all'이 아니라 **'재직'** 이다(2026-08-07) — 여기서 'all'을 생략하면 URL에
-  // status가 사라지고, 페이지가 그걸 다시 '재직'으로 읽어 **'전체'를 영원히 못 고른다**(원장 제보).
-  // 생략할 값은 "기본값"이지 "all"이 아니다.
-  if (p.status !== DEFAULT_STATUS) sp.set("status", p.status);
-  if (p.subject !== "all") sp.set("subject", p.subject);
-  if (p.emp !== "all") sp.set("emp", p.emp);
-  if (p.q) sp.set("q", p.q);
-  if (p.sort !== "role") sp.set("sort", p.sort);
-  if (p.per !== DEFAULT_PER) sp.set("per", String(p.per));
-  if (p.page && p.page > 1) sp.set("page", String(p.page));
-  const s = sp.toString();
-  return s ? `/staff?${s}` : "/staff";
-}
 
 /** 페이지 번호 나열(1 … 현재±2 … 끝) — 눈에 띄는 번호형 페이저용. null = 말줄임. */
 function pageNumbers(page: number, totalPages: number): (number | null)[] {
@@ -116,7 +63,7 @@ function pageNumbers(page: number, totalPages: number): (number | null)[] {
 }
 
 /** 정렬 비교기 — null(미입력)은 항상 뒤로, 동률은 이름 가나다순. */
-function sortStaff(rows: StaffRow[], sort: SortKey): StaffRow[] {
+function sortStaff(rows: StaffRow[], sort: StaffSortKey): StaffRow[] {
   const byName = (a: StaffRow, b: StaffRow) => a.displayName.localeCompare(b.displayName, "ko");
   const nullsLast = (a: string | null, b: string | null) => {
     if (!a && !b) return 0;
@@ -151,8 +98,8 @@ export default async function StaffPage({
   searchParams: Promise<{
     invited?: string;
     tab?: string;
-    role?: RoleKey;
-    status?: StatusKey;
+    role?: string;
+    status?: string;
     subject?: string;
     emp?: string;
     q?: string;
@@ -161,34 +108,39 @@ export default async function StaffPage({
     page?: string;
   }>;
 }) {
-  await requireAccess("staff");
-  const user = await getCurrentUser();
-  const canManage = !!user && (await canWriteTenant(user.systemRole, "staff"));
+  const user = await requireAccess("staff");
   const sp = await searchParams;
-  // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
-
-  const invited = sp.invited;
-  const role: RoleKey = (sp.role as RoleKey) ?? "all";
-  // 기본 상태 = **재직**(원장 2026-08-07). 목록 쿼리가 이제 퇴사자까지 내려주므로(그래야 '퇴사' 칩이
-  // 동작한다) 기본값을 all로 두면 평소 화면에 퇴사자가 섞인다 — 일상 화면은 종전과 같게 재직만.
-  // '전체'(재직+퇴사+대기 동시)는 ?status=all로 명시된다(buildStaffHref 주석 참조).
-  const status: StatusKey = (sp.status as StatusKey) ?? DEFAULT_STATUS;
-  const q = sp.q ?? "";
-  const sort: SortKey = SORT_FILTERS.some((f) => f.key === sp.sort) ? (sp.sort as SortKey) : "role";
-  const per = (PER_OPTIONS as readonly number[]).includes(Number(sp.per)) ? Number(sp.per) : DEFAULT_PER;
-  const page = Math.max(1, Number(sp.page) || 1);
-
+  // 보기 설정은 계정 귀속(users.ui_prefs.staff, 원장 2026-08-04) — URL(명시값) → 저장값 → 기본값. 조회 실패(null)면 기본값으로
+  // 그리되 이번 렌더는 저장하지 않는다(다른 축을 기본값으로 덮지 않게). 서로 독립인 조회는 한 번에(B4) — 저장값은 메모리 필터에만
+  // 쓰여 목록 쿼리와 무관하다(학생·수업목록은 저장값이 서버 페이징 쿼리에 들어가 순서가 있지만 여기는 전건을 받아 거른다).
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
-  // 과목 라벨·색은 학원설정 단일 소스(buildSubjectMaps) — 하드코딩 금지 규칙.
-  const [rawAll, superAdminIds, settings] = await Promise.all([
+  const [prefsLoaded, rawAll, superAdminIds, settings, canManage] = await Promise.all([
+    loadStaffListPrefs(),
     getStaffList(),
     getSuperAdminIds(),
     getTenantSettings(),
+    canWriteTenant(user.systemRole, "staff"),
   ]);
+  const prefs = prefsLoaded ?? DEFAULT_STAFF_LIST_PREFS;
+  // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
+
+  const invited = sp.invited;
+  const role = parseStaffRole(sp.role ?? prefs.role);
+  // 기본 상태 = **재직**(원장 2026-08-07). 목록 쿼리가 퇴사자까지 내려주므로(그래야 '퇴사'가 동작한다) 기본을 all로 두면 평소
+  // 화면에 퇴사자가 섞인다. '전체'는 ?status=all로만. 🔴 상태·검색어는 저장하지 않는다(늘 재직에서 시작).
+  const status = parseStaffStatus(sp.status);
+  const q = sp.q ?? "";
+  const sort = parseStaffSort(sp.sort ?? prefs.sort);
+  const per = parseStaffPer(sp.per ?? prefs.per);
+  const emp = parseStaffEmp(sp.emp ?? prefs.emp);
+  const page = Math.max(1, Number(sp.page) || 1);
+
+  // 과목 라벨·색은 학원설정 단일 소스(buildSubjectMaps) — 하드코딩 금지 규칙.
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  // 과목·근무형태 필터(원장 요청 2026-07-28) — 과목 선택지는 학원설정에서, 근무형태는 이력서 3종.
-  const subject = subjectMaps.options.some((o) => o.value === sp.subject) ? (sp.subject as string) : "all";
-  const emp = (EMPLOYMENT_TYPES as readonly string[]).includes(sp.emp ?? "") ? (sp.emp as string) : "all";
+  // 과목 필터(원장 요청 2026-07-28) — 선택지는 학원설정. URL·저장값 어느 쪽이든 지금 선택지에 있을 때만(흡수된 과목이 보이지 않는
+  // 필터로 남지 않게 — 화면 한정 보정, 계정에는 원값이 남는다).
+  const subjectRaw = sp.subject ?? prefs.subject;
+  const subject = subjectMaps.options.some((o) => o.value === subjectRaw) ? subjectRaw : "all";
   const all = rawAll
     .map((s) => ({
       ...s,
@@ -231,21 +183,86 @@ export default async function StaffPage({
       count: onDuty.filter((s) => s.subjects.includes(o.value)).length,
     }))
     .filter((s) => s.count > 0);
-  const current = { role, status, subject, emp, q, sort, per };
+
+  // 저장할 필터 — 저장값과 **같은 파서**를 지나고(빈 값이 저장값과 영영 달라 렌더마다 저장하지 않게), URL 값이 선택지 밖이면
+  // 보여 주기만 하고 저장값은 유지. 🔴 **필터 5축만** 싣는다(pickStaffFilterPrefs) — 열·글자 크기까지 실으면 서버 렌더 시점의
+  // 사본이 방금 클릭한 값을 되돌려 쓴다(뒤로 가기 캐시·클릭 직후 필터 전환, 적대적 리뷰 2026-09-04). 그 셋은 Provider가 클릭
+  // 자리에서 따로 저장한다. 🔴 상태·검색어는 없다.
+  const current: StaffFilterPrefs = pickStaffFilterPrefs(
+    parseStaffListPrefs({
+      role: sp.role === undefined || parseStaffRole(sp.role) === sp.role ? role : prefs.role,
+      // URL의 과목이 지금 선택지 밖이면(흡수된 과목·오타) 보여 주기만 하고 저장값은 지킨다 — 다른 4축과 같은 왕복 검사.
+      subject: sp.subject === undefined || subject === sp.subject ? subjectRaw : prefs.subject,
+      emp: sp.emp === undefined || parseStaffEmp(sp.emp) === sp.emp ? emp : prefs.emp,
+      sort: sp.sort === undefined || parseStaffSort(sp.sort) === sp.sort ? sort : prefs.sort,
+      per: sp.per === undefined || String(parseStaffPer(sp.per)) === sp.per ? per : prefs.per,
+    }),
+  );
+  const savedFilters = prefsLoaded ? pickStaffFilterPrefs(prefsLoaded) : null;
+  // 계정 생성 직후의 `?invited=` 배너(+옛 `tab`)는 1회성 — 필터·검색을 바꾸면 함께 지운다(안 지우면 다음 필터에도 "계정이 생성되었습니다"가
+  // 따라다닌다). 쪽 넘김(pageHref)은 애초에 안 싣는다.
+  const INVITE_PARAMS = ["invited", "tab"];
 
   // 대시보드 집계는 전체(all) 기준 — 목록만 per명으로 슬라이스(메모리 페이지네이션, 기본 10).
   const total = staff.length;
   const totalPages = Math.max(1, Math.ceil(total / per));
   const pageStaff = staff.slice((page - 1) * per, page * per);
-  const pageHref = (p: number) => buildStaffHref({ ...current, page: p });
+
+  /**
+   * 쪽 넘김 링크가 들고 갈 파라미터 — 기본값과 다르거나 **URL이 명시한** 축은 그대로 적는다(URL 값은 보정하지 않고 원값).
+   * 저장값에서 온 축도 값이 기본값과 다르면 적히므로, 링크를 따라가도 지금 보는 필터가 그대로다.
+   */
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (sp.role !== undefined) params.set("role", sp.role);
+    else if (role !== "all") params.set("role", role);
+    if (status !== STAFF_STATUS_DEFAULT) params.set("status", status);
+    if (sp.subject !== undefined) params.set("subject", sp.subject);
+    else if (subject !== "all") params.set("subject", subject);
+    if (sp.emp !== undefined) params.set("emp", sp.emp);
+    else if (emp !== "all") params.set("emp", emp);
+    if (sp.sort !== undefined) params.set("sort", sp.sort);
+    else if (sort !== "role") params.set("sort", sort);
+    if (sp.per !== undefined) params.set("per", sp.per);
+    else if (per !== STAFF_PER_DEFAULT) params.set("per", String(per));
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/staff?${s}` : "/staff";
+  };
+
+  // 페이저 링크·칸 치수 — control-scale(높이 = 라벨 + 4). 세로 패딩으로 높이를 만들지 않는다(v5).
+  const pagerLink = `${CONTROL_H} ${CONTROL_LABEL} border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 font-medium transition`;
+  const pagerDisabled = `${CONTROL_H} ${CONTROL_LABEL} border-line text-text-faint inline-flex cursor-default items-center rounded-lg border px-3 opacity-40`;
 
   return (
+    // 표 보기 3키(볼 열·순서·글자 크기)는 계정값을 서버 시드로 받아 첫 렌더부터 그 값으로 그린다(플래시·하이드레이션 불일치 없음).
+    // 조회 실패(null)면 기본값으로 시드하되 클릭 저장은 그대로 된다(부분 객체라 다른 키를 안 건드린다).
+    <StaffViewPrefsProvider initial={pickStaffViewPrefs(prefs)}>
     <div className="space-y-5">
-      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 */}
+      {savedFilters ? <StaffRememberPrefs current={current} saved={savedFilters} /> : null}
+      {/* 머리 — 지시서 §10: 상시 버튼 = Primary '직원 등록' + 텍스트 '등록 QR' 둘(급여·휴가는 플래그가 꺼져 있다). 설명 문장은 뺐다(§4). */}
       <PageHeader
         eyebrow="운영"
         title="직원관리"
-        description="직원 계정·역할과 담당 현황을 관리합니다"
+        actions={
+          <>
+            {PAYROLL_ENABLED && user.systemRole === "master" ? (
+              <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
+                <Wallet className="size-4" />
+                월별 급여
+              </Button>
+            ) : null}
+            {STAFF_LEAVES_ENABLED && canManage ? (
+              <Button variant="outline" render={<WindowLink href="/staff/leaves" title="휴가 관리" />}>
+                <CalendarClock className="size-4" />
+                휴가 관리
+              </Button>
+            ) : null}
+            {canManage ? <StaffQrSection tenantId={user.tenantId} /> : null}
+            {canManage ? <NewStaffTrigger /> : null}
+          </>
+        }
       />
 
       {/* 직원 대시보드(원장 요청 2026-07-28) — 전직원 수 · 근무형태별 · 과목별 */}
@@ -259,164 +276,123 @@ export default async function StaffPage({
         <section className="bg-card shadow-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3">
           <span className="micro">과목별</span>
           {subjectStats.map((s) => (
-            <span key={s.key} className="inline-flex items-center gap-1.5 text-[13px]">
+            <span key={s.key} className="inline-flex items-center gap-1.5 text-sm">
               <Pill color={s.color}>{s.label}</Pill>
               <span className="num text-foreground font-bold">{s.count}</span>
-              <span className="text-text-dim text-[11px]">명</span>
+              <span className="text-text-dim text-xs">명</span>
             </span>
           ))}
           {empUnset > 0 ? (
-            <span className="text-text-faint ml-auto text-[11.5px]">근무형태 미입력 {empUnset}명</span>
+            <span className="text-text-faint ml-auto text-xs">근무형태 미입력 {empUnset}명</span>
           ) : null}
         </section>
       ) : null}
 
-      {/* Filter bar */}
-      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표가 자기 테두리를 가져 선이 겹쳤다. */}
-      <div className="space-y-2 px-1 py-1">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">역할</span>
-            <div className={TOOLBAR_SEG_BOX}>
-            {ROLE_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildStaffHref({ ...current, role: f.key })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${role === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {f.label}
-              </Link>
-            ))}
-            </div>
-          </div>
-          <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">상태</span>
-            <div className={TOOLBAR_SEG_BOX}>
-            {STATUS_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildStaffHref({ ...current, status: f.key })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${status === f.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {f.label}
-              </Link>
-            ))}
-            </div>
-          </div>
-          <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">과목</span>
-            <div className={TOOLBAR_SEG_BOX_WRAP}>
-            <Link
-              href={buildStaffHref({ ...current, subject: "all" })}
-              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === "all" ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-            >
-              전체
-            </Link>
-            {subjectMaps.options.map((o) => (
-              <Link
-                key={o.value}
-                href={buildStaffHref({ ...current, subject: o.value })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === o.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {o.label}
-              </Link>
-            ))}
-            </div>
-          </div>
-          <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">근무형태</span>
-            <div className={TOOLBAR_SEG_BOX_WRAP}>
-            {["all", ...EMPLOYMENT_TYPES].map((t) => (
-              <Link
-                key={t}
-                href={buildStaffHref({ ...current, emp: t })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${emp === t ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {t === "all" ? "전체" : t}
-              </Link>
-            ))}
-            </div>
-          </div>
-          <span className="bg-line h-4 w-px" aria-hidden />
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">정렬</span>
-            <div className={TOOLBAR_SEG_BOX}>
-            {SORT_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildStaffHref({ ...current, sort: f.key })}
-                // 정렬은 종전부터 soft 톤 — 색은 그대로 두고 모양·높이만 맞춘다.
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${
-                  sort === f.key ? "bg-primary-soft text-primary font-medium" : TOOLBAR_SEG_OFF
-                }`}
-              >
-                {f.label}
-              </Link>
-            ))}
-            </div>
-          </div>
-          <SearchForm
-            placeholder="이름·이메일·연락처"
-            defaultValue={q}
-            resetParams={["invited", "tab"]}
-          />
+      {/* 필터 — 라벨 하나씩(드롭다운, §10). 옛 세그먼트 칩 5묶음(역할 7·상태 4·과목 N·근무형태 4·정렬 5)을 걷었다.
+          🔴 이 표는 볼 열과 순서를 사용자가 고르므로(열을 숨길 수 있다) 열 머리에 필터를 심지 않는다 — 숨긴 열에 걸린 필터를
+             되돌릴 자리가 사라진다. 등록상담과 같은 "라벨 드롭다운 한 줄" 형이다. 검색은 눌러야 나온다.
+          "전체"도 URL에 명시(explicitAll) — 저장값을 이기려면 값이어야 한다. 상태만 저장 안 함(기본 재직, 전체는 status=all). */}
+      <div className="flex flex-wrap items-center gap-2.5 px-1 py-1">
+        <FilterSelect
+          paramName="role"
+          clearParams={INVITE_PARAMS}
+          value={role}
+          options={STAFF_ROLE_OPTIONS}
+          axisLabel="역할"
+          ariaLabel="역할 필터"
+          allValue="all"
+          explicitAll
+          prefixOnlyFor="all"
+          className="w-auto"
+          triggerClassName={TOOLBAR_SELECT}
+        />
+        <FilterSelect
+          paramName="status"
+          clearParams={INVITE_PARAMS}
+          value={status}
+          options={STAFF_STATUS_OPTIONS}
+          axisLabel="상태"
+          ariaLabel="상태 필터"
+          allValue={STAFF_STATUS_DEFAULT}
+          allLabel="재직"
+          className="w-auto"
+          triggerClassName={TOOLBAR_SELECT}
+        />
+        <FilterSelect
+          paramName="subject"
+          clearParams={INVITE_PARAMS}
+          value={subject}
+          options={subjectMaps.options}
+          axisLabel="과목"
+          ariaLabel="과목 필터"
+          allValue="all"
+          explicitAll
+          prefixOnlyFor="all"
+          className="w-auto"
+          triggerClassName={TOOLBAR_SELECT}
+        />
+        <FilterSelect
+          paramName="emp"
+          clearParams={INVITE_PARAMS}
+          value={emp}
+          options={EMPLOYMENT_TYPES.map((t) => ({ value: t, label: t }))}
+          axisLabel="계약구분"
+          ariaLabel="계약구분 필터"
+          allValue="all"
+          explicitAll
+          prefixOnlyFor="all"
+          className="w-auto"
+          triggerClassName={TOOLBAR_SELECT}
+        />
+        <FilterSelect
+          paramName="sort"
+          clearParams={INVITE_PARAMS}
+          value={sort}
+          options={STAFF_SORT_OPTIONS.filter((o) => o.value !== "role")}
+          axisLabel="정렬"
+          ariaLabel="정렬 기준"
+          allValue="role"
+          allLabel="역할순"
+          explicitAll
+          className="w-auto"
+          triggerClassName={TOOLBAR_SELECT}
+        />
+        <div className="ml-auto flex items-center gap-2">
+          <SearchToggle placeholder="이름·이메일·연락처" defaultValue={q} resetParams={INVITE_PARAMS} />
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="micro">
-            결과 <span className="text-foreground font-bold">{total}</span>명
-            {totalPages > 1 ? (
-              <span className="text-text-faint ml-2 normal-case">
-                · {page}/{totalPages} 페이지
-              </span>
-            ) : null}
-          </p>
-          <div className="flex items-center gap-1">
-            <span className="micro mr-0.5">표시</span>
-            {PER_OPTIONS.map((n) => (
-              <Link
-                key={n}
-                href={buildStaffHref({ ...current, per: n })}
-                className={`num shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
-                  per === n
-                    ? "border-primary bg-primary text-primary-foreground font-bold"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
-                {n}
-              </Link>
-            ))}
-            <span className="text-text-faint ml-0.5 text-[11px]">명씩</span>
-          </div>
-          {/* 표 글자 크기 −/+ · 볼 열 고르기(원장 지시 2026-07-31) — 둘 다 개인 설정으로 영속. */}
+      {/* 결과 줄 — 숫자 + 표 보기 설정 셋(표시 수·글자 크기·볼 열)이 한 자리에(§10 "설정은 한 곳"). 둘 다 계정에 저장된다. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1">
+        <p className="text-text-dim text-sm whitespace-nowrap">
+          결과 <span className="text-foreground font-bold">{total}</span>명
+          {totalPages > 1 ? (
+            <span className="num ml-1.5">
+              · {page}/{totalPages}
+            </span>
+          ) : null}
+          {q ? <span className="ml-1.5">· &ldquo;{q}&rdquo; 검색</span> : null}
+        </p>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <FilterSelect
+            paramName="per"
+            clearParams={INVITE_PARAMS}
+            value={String(per)}
+            options={STAFF_PER_OPTIONS.filter((n) => n !== STAFF_PER_DEFAULT).map((n) => ({ value: String(n), label: `${n}명` }))}
+            axisLabel="표시"
+            ariaLabel="한 쪽에 보일 직원 수"
+            allValue={String(STAFF_PER_DEFAULT)}
+            allLabel={`${STAFF_PER_DEFAULT}명`}
+            explicitAll
+            className="w-auto"
+            triggerClassName={TOOLBAR_SELECT}
+          />
+          {/* 표 글자 크기 −/+ · 볼 열 고르기(원장 지시 2026-07-31) — 둘 다 계정 설정(ui_prefs.staff). */}
           <div className="flex items-center gap-1.5">
-            <span className="micro">글자</span>
+            <span className="text-text-dim text-sm">글자</span>
             <StaffTableScaleControl />
           </div>
           <StaffColumnPicker />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {PAYROLL_ENABLED && user?.systemRole === "master" ? (
-            <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
-              <Wallet className="size-4" />
-              월별 급여
-            </Button>
-          ) : null}
-          {STAFF_LEAVES_ENABLED && canManage ? (
-            <Button variant="outline" render={<WindowLink href="/staff/leaves" title="휴가 관리" />}>
-              <CalendarClock className="size-4" />
-              휴가 관리
-            </Button>
-          ) : null}
-          {canManage && user ? <StaffQrSection tenantId={user.tenantId} /> : null}
-          {canManage && user ? (
-            <NewStaffTrigger />
-          ) : null}
         </div>
       </div>
 
@@ -428,29 +404,30 @@ export default async function StaffPage({
       ) : null}
 
       {total === 0 ? (
-        <EmptyState image="staff" icon={() => <Users size={32} strokeWidth={1.8} />} title="등록된 직원이 없습니다" />
+        // 필터가 위 드롭다운 줄에 있어 표를 치워도 되돌릴 컨트롤이 남는다(열 머리 필터 화면과 다른 점).
+        <EmptyState image="staff" icon={() => <Users size={32} strokeWidth={1.8} />} title={q ? "검색 결과 없음" : "직원이 없습니다"} />
       ) : (
         <>
-          {/* list(테이블) 형식 — 원장 지시 2026-07-28(카드 그리드에서 전환). 좁은 창은 가로 스크롤. */}
+          {/* list(테이블) 형식 — 원장 지시 2026-07-28(카드 그리드에서 전환). 열 17개를 사용자가 고르므로 좁으면 가로 스크롤
+              (필터가 열 머리에 없어 상자로 싸도 잘릴 팝업이 없다). */}
           {/* 표 형태(원장 지시 2026-07-31) — 셀마다 테두리를 그어 시트처럼 읽히게. 열 순서도 직원명부 시트와 같은
-              소속 → 이름 → 직급 순. 글자 크기는 StaffTableScaleBox가 em 기준으로 한 번에 조절한다. */}
-          <StaffTableScaleBox className="bg-card shadow-card overflow-x-auto rounded-2xl">
-            <StaffTable rows={pageStaff} />
+              소속 → 이름 → 직급 순. 글자 크기는 StaffTableScaleBox가 em 기준으로 한 번에 조절한다(기본 16px). */}
+          {/* 넘치면 잡고 끌어서 가로 이동(원장 2026-09-04 *"가로스크롤이 제일 아래에 있어서 힘드니까 드래그 스크롤 가능하게"*) —
+              행 클릭은 5px 안 움직임이면 그대로 산다(DragScrollArea가 실제로 끌었을 때만 뒤따르는 click 1회를 삼킨다). */}
+          <StaffTableScaleBox className="bg-card shadow-card rounded-2xl">
+            <DragScrollArea className="rounded-[inherit]">
+              <StaffTable rows={pageStaff} />
+            </DragScrollArea>
           </StaffTableScaleBox>
           {/* 눈에 띄는 번호형 페이저(원장 지시 2026-07-28 — 표준 컴팩트 페이저는 존재감이 약해 이 목록만 강조형) */}
           {totalPages > 1 ? (
             <nav className="flex flex-wrap items-center justify-center gap-1.5 pt-1" aria-label="페이지 이동">
               {page > 1 ? (
-                <Link
-                  href={pageHref(page - 1)}
-                  className="border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition"
-                >
+                <Link href={pageHref(page - 1)} className={pagerLink}>
                   ← 이전
                 </Link>
               ) : (
-                <span className="border-line text-text-faint inline-flex cursor-default items-center rounded-lg border px-3 py-1.5 text-sm opacity-40">
-                  ← 이전
-                </span>
+                <span className={pagerDisabled}>← 이전</span>
               )}
               {pageNumbers(page, totalPages).map((n, i) =>
                 n === null ? (
@@ -462,9 +439,9 @@ export default async function StaffPage({
                     key={n}
                     href={pageHref(n)}
                     aria-current={n === page ? "page" : undefined}
-                    className={`num inline-flex min-w-9 items-center justify-center rounded-lg border px-2.5 py-1.5 text-sm transition ${
+                    className={`num ${CONTROL_H} ${CONTROL_LABEL} inline-flex min-w-(--control-h) items-center justify-center rounded-lg border px-2.5 transition ${
                       n === page
-                        ? "border-primary bg-primary text-primary-foreground font-bold shadow-sm"
+                        ? "border-primary bg-primary text-primary-foreground font-bold"
                         : "border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft"
                     }`}
                   >
@@ -473,21 +450,17 @@ export default async function StaffPage({
                 ),
               )}
               {page < totalPages ? (
-                <Link
-                  href={pageHref(page + 1)}
-                  className="border-line bg-card text-foreground hover:border-primary/40 hover:bg-bg-soft inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium shadow-sm transition"
-                >
+                <Link href={pageHref(page + 1)} className={pagerLink}>
                   다음 →
                 </Link>
               ) : (
-                <span className="border-line text-text-faint inline-flex cursor-default items-center rounded-lg border px-3 py-1.5 text-sm opacity-40">
-                  다음 →
-                </span>
+                <span className={pagerDisabled}>다음 →</span>
               )}
             </nav>
           ) : null}
         </>
       )}
     </div>
+    </StaffViewPrefsProvider>
   );
 }

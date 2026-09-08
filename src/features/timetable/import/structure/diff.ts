@@ -2,6 +2,7 @@
 // create/update/keep/remove로 분류하고 강의실 충돌·경고를 모은다. **쓰기 없음** — 미리보기/드라이런 전용.
 // 키 = (classId, day, startTime): 한 반은 요일·시작시각당 하나의 슬롯. 같은 키 복수 강사 = 합반(teachers[] 병합).
 
+import { roomToken } from "../../lib/room-token";
 import { detectScheduleConflicts } from "./conflicts";
 import type {
   DryRunReport,
@@ -11,11 +12,8 @@ import type {
   TargetSchedule,
 } from "./types";
 
-/** 방 라벨을 비교 토큰으로("본원303"→"303", "SKY"→"SKY", 없으면 ""). */
-function roomTok(r: string | null): string {
-  if (!r) return "";
-  return (r.match(/\b(\d{3}|SKY)\b/i)?.[1] ?? r.trim()).toUpperCase();
-}
+/** 방 라벨을 비교 토큰으로("본원303"→"303", "SKY"→"SKY", 없으면 "") — 앱 단일 소스(`lib/room-token.ts`). */
+const roomTok = roomToken;
 /** 결정적 FNV-1a 해시(env 무관) — 변경분 조작/스테일 차단(Phase 2 apply 재검증용). */
 function fnv1a(s: string): string {
   let h = 2166136261 >>> 0;

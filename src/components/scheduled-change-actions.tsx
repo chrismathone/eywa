@@ -99,7 +99,7 @@ export function ScheduledChangeActions({
         />
       ) : null}
       {error ? (
-        <span className="text-danger max-w-[16rem] truncate text-[11px]" title={error}>
+        <span className="text-danger max-w-[16rem] truncate text-xs" title={error}>
           {error}
         </span>
       ) : null}

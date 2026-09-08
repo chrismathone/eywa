@@ -68,7 +68,10 @@ async function BrandPanel() {
         preload
         className="object-cover"
       />
-      {/* 텍스트 가독 오버레이 — 사진 위 흰 글자 대비 확보 */}
+      {/* 텍스트 가독 오버레이 — 사진 위 흰 글자 대비 확보.
+          🔴 사진 위 글자에 알파를 먹이지 말 것(옛 white/60·70·75·85) — 2026-09-08 원장이 캡처로
+          흐려진 "같은 자리,"를 지목했다. 화면 글자를 흐리게 하지 않는다는 같은 날 규칙(글자색 한 값)의
+          비로그인 판이다. 위계가 필요하면 굵기·크기로. */}
       <div
         className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-black/35"
         aria-hidden
@@ -85,24 +88,25 @@ async function BrandPanel() {
         )}
         <div className="leading-tight">
           <p className="text-sm font-bold tracking-tight">{wordmark}</p>
-          <p className="text-[11px] text-white/70">{academyLine}</p>
+          <p className="text-xs text-white">{academyLine}</p>
         </div>
       </div>
 
       <div className="relative my-auto space-y-7 py-12">
         <h2 className="font-bold tracking-tight text-5xl xl:text-[3.75rem]">
           매일 같은 시간,<br />
-          <span className="text-white/60">같은 자리,</span><br />
-          한 권의 일지.
+          <span className="text-white">같은 자리,</span><br />
+          한 화면에 모인 하루.
         </h2>
-        <p className="max-w-md text-base leading-relaxed text-white/85">
-          출석부, 시간표, 수강료, 상담 기록.<br />
-          {subject}의 하루를 한 곳에 모아두는<br />
-          가벼운 학원관리 도구입니다.
+        {/* 🔴 기능을 **나열하지 말 것**(원장 2026-09-08 "너무 그렇게 메뉴 나열하지말고 간단하게") —
+            메뉴가 늘 때마다 고쳐야 하고 읽히지도 않는다. 옛 문구 "출석부, 시간표, 수강료, 상담 기록"이 그래서 낡았다. */}
+        <p className="max-w-md text-base leading-relaxed text-white">
+          {subject} 운영에 필요한 것만,<br />
+          빠르고 단순하게.
         </p>
       </div>
 
-      <p className="relative text-[12px] font-medium text-white/75">
+      <p className="relative text-xs font-medium text-white">
         {academyName ? `${academyName} · ` : ""}학원 운영의 하루가 여기서 시작됩니다
       </p>
     </aside>

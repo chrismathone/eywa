@@ -201,6 +201,9 @@ export const SHEET_DICT = {
   "toolbar.thisWeek": { ko: "눌러서 이번 주로", en: "Click for this week" },
   "toolbar.dow": { ko: "요일", en: "Day" },
   "toolbar.all": { ko: "전체", en: "All" },
+  // v5 §10에서 요일 칩 줄이 `요일: 전체` 드롭다운이 됐다 — 트리거 접근성 이름과 항목 hint의 "오늘"이 새로 필요하다.
+  "toolbar.dow.aria": { ko: "요일 필터", en: "Day filter" },
+  "toolbar.today": { ko: "오늘", en: "Today" },
   // 🔴 `today.stat.attendance`(출결 = 찍은 학생 수)와 **다른 것**이다 — 이쪽은 출석부로 가는 링크다.
   "toolbar.attendance": { ko: "출석부", en: "Attendance book" },
   "toolbar.attendance.title": {
@@ -1138,6 +1141,8 @@ export const SHEET_DICT = {
   },
   "att.period.disabledNoClass": { ko: "반을 고르면 세션으로 볼 수 있습니다", en: "Pick a class to switch to sessions" },
   "att.period.aria": { ko: "날짜축 전환", en: "Switch date axis" },
+  // v5 §10에서 이 축은 `기간: 세션` 드롭다운이 됐다 — 축 이름이 값 앞에 붙는다(옛 세그먼트엔 없던 자리).
+  "att.period": { ko: "기간", en: "Period" },
   "att.period.session": { ko: "세션", en: "Session" },
   "att.period.month": { ko: "월", en: "Month" },
   "att.view": { ko: "보기", en: "View" },
@@ -1446,6 +1451,9 @@ export const SHEET_DICT = {
   "stu.basis.mine": { ko: "담당 과목 기준", en: "your subjects" },
   "stu.basis.settings": { ko: "학원설정 과목 기준", en: "the academy's subjects" },
   "stu.excel": { ko: "엑셀 내보내기", en: "Export to Excel" },
+  // v5 §9·§10: 내보내기·가져오기가 텍스트 더보기 메뉴 하나로 묶였다 — 축 이름과 가져오기 항목이 새로 필요하다.
+  "stu.excelAxis": { ko: "엑셀", en: "Excel" },
+  "stu.excelImport": { ko: "엑셀 가져오기", en: "Import from Excel" },
   "stu.count.pre": { ko: "결과 ", en: "Found " },
   "stu.count.post": { ko: "명", en: " students" },
   "stu.count.pages": { ko: "{page}/{total} 페이지", en: "page {page} of {total}" },
@@ -1459,6 +1467,8 @@ export const SHEET_DICT = {
   "stu.col.parentPhone": { ko: "학부모 연락처", en: "Parent contact" },
   "stu.rowAria": { ko: "{name} 학생 정보", en: "{name} — student profile" },
   "stu.filter.all": { ko: "전체", en: "All" },
+  // v5 학생목록의 토글 하나(§10) — 옛 필터바에서 살아남은 유일한 칩이라 사전에 없던 낱말이다.
+  "stu.filter.noEnr": { ko: "미수강 제외", en: "Hide unenrolled" },
   "stu.filter.status": { ko: "상태", en: "Status" },
   "stu.filter.statusAria": { ko: "상태 필터", en: "Status filter" },
   "stu.filter.status.enrolled": { ko: "재원", en: "Enrolled" },
@@ -1632,6 +1642,11 @@ export const SHEET_DICT = {
   },
   "os.class.attendOnly": { ko: "출결만", en: "Attendance only" },
   "os.class.lentChip": { ko: "위임중", en: "Covered" },
+  // v5 §10에서 세그먼트가 `축: 값` 드롭다운이 됐다 — 축 이름과 항목 힌트가 새로 필요하다.
+  "os.write.axis": { ko: "작성", en: "Written" },
+  "os.ment.axis": { ko: "멘트", en: "Message" },
+  "os.ment.aHint": { ko: "한 문단", en: "One paragraph" },
+  "os.ment.bHint": { ko: "수업 내용 + 태도", en: "Lesson + attitude" },
   "os.write.all": { ko: "전체", en: "All" },
   "os.write.written": { ko: "작성", en: "Written" },
   "os.write.unwritten": { ko: "미작성", en: "Not written" },
@@ -1660,6 +1675,8 @@ export const SHEET_DICT = {
     en: "Tap through attendance for today's classes only",
   },
   "os.quick": { ko: "출결 모드", en: "Attendance mode" },
+  // v5 §10: 면 전환이 `보기: 카드` 드롭다운이 됐다 — 축 이름이 새로 필요하다.
+  "os.face.axis": { ko: "보기", en: "View" },
   "os.face.card": { ko: "카드", en: "Cards" },
   "os.face.table": { ko: "표", en: "Table" },
   "os.face.sendStatus": { ko: "발송 현황", en: "Send status" },
@@ -2984,6 +3001,9 @@ export const SHEET_DICT = {
   // ⚠️ 요일+시각 — 한국어는 붙여 쓰고(`월14:30`) 영어는 띄운다(`Mon 14:30`).
   "cls.dayAt": { ko: "{dow}{time}", en: "{dow} {time}" },
   "cls.filter.status": { ko: "상태", en: "Status" },
+  // v5 §10: 상태 선택지의 "전체"와 보기 축 이름 — 옛 화면엔 축 이름이 없어 사전에도 없었다.
+  "cls.filter.all": { ko: "전체", en: "All" },
+  "cls.view": { ko: "보기", en: "View" },
   "cls.filter.statusAria": { ko: "상태 필터", en: "Status filter" },
   "cls.filter.subject": { ko: "과목", en: "Subject" },
   "cls.filter.subjectAria": { ko: "과목 필터", en: "Subject filter" },
@@ -3007,13 +3027,20 @@ export const SHEET_DICT = {
 
   // ── 예정된 변경 배너(반 상세·학생 상세 공용) ─────────────────────
   "sched.title": { ko: "예정된 변경", en: "Scheduled changes" },
-  "sched.count": { ko: "{n}건", en: "· {n}" },
-  // 시간표 가져오기가 미뤄 둔 **반 자체** 변경(담임·강의실·반 이름) 한 줄 — 반 상세 배너.
-  "sched.move": { ko: "{when}부터 {from} → {to} 이동", en: "Moves from {from} to {to} on {when}" },
-  "sched.join": { ko: "{when}부터 {name} 합류", en: "Joins {name} on {when}" },
-  // 전출은 "그만둠"이 아니라 "다른 반으로 옮겨감"이다 — 같은 말로 쓰면 반 상세가 거짓말을 한다.
-  "sched.transferOut": { ko: "{when}에 {name}에서 다른 반으로 이동", en: "Leaves {name} for another class on {when}" },
-  "sched.leave": { ko: "{when}에 {name} 수강 종료", en: "Enrolment in {name} ends on {when}" },
+  "sched.count": { ko: "{n}건", en: "· {n}" },
+
+  // 시간표 가져오기가 미뤄 둔 **반 자체** 변경(담임·강의실·반 이름) 한 줄 — 반 상세 배너.
+
+  "sched.move": { ko: "{when}부터 {from} → {to} 이동", en: "Moves from {from} to {to} on {when}" },
+
+  "sched.join": { ko: "{when}부터 {name} 합류", en: "Joins {name} on {when}" },
+
+  // 전출은 "그만둠"이 아니라 "다른 반으로 옮겨감"이다 — 같은 말로 쓰면 반 상세가 거짓말을 한다.
+
+  "sched.transferOut": { ko: "{when}에 {name}에서 다른 반으로 이동", en: "Leaves {name} for another class on {when}" },
+
+  "sched.leave": { ko: "{when}에 {name} 수강 종료", en: "Enrolment in {name} ends on {when}" },
+
   "sched.classChange": { ko: "{md}부터 {what} {from} → {to}", en: "From {md}, {what}: {from} → {to}" },
 
   // ── 수업 상세(/classes/[id]) ─────────────────────────────────────
@@ -3024,9 +3051,12 @@ export const SHEET_DICT = {
   // 🔴 수는 `num`(고정폭 숫자) 안에 남겨야 해서 앞·뒤 조각으로 나눈다 — 조각이 아니라 **한 문장의 양끝**이다.
   "cls.d.enrolledPre": { ko: "· 재원생 ", en: "· " },
   "cls.d.enrolledPost": { ko: "명", en: " enrolled" },
-  // 인수인계 후보 목록의 힌트 — 과목 라벨은 학원설정에서 오고 이 둘만 문구다.
-  "cls.d.sameSubject": { ko: "이 반 과목", en: "Same subject" },
-  "cls.d.noSubject": { ko: "과목 미지정", en: "No subject set" },
+  // 인수인계 후보 목록의 힌트 — 과목 라벨은 학원설정에서 오고 이 둘만 문구다.
+
+  "cls.d.sameSubject": { ko: "이 반 과목", en: "Same subject" },
+
+  "cls.d.noSubject": { ko: "과목 미지정", en: "No subject set" },
+
   "cls.d.edit": { ko: "반 수정", en: "Edit this class" },
   "cls.d.sheetWin": { ko: "영어 강사 시트", en: "English class sheet" },
   "cls.d.attendance": { ko: "오늘 출석 입력", en: "Take today's attendance" },

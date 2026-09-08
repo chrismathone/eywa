@@ -123,7 +123,7 @@ export default async function AttendanceByDatePage({
           <header className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="eyebrow">처리 현황</p>
-              <h2 className="text-foreground mt-0.5 text-[15px] font-bold">오늘 출결 입력 추적</h2>
+              <h2 className="text-foreground mt-0.5 text-base font-bold">오늘 출결 입력 추적</h2>
             </div>
             <div className="flex items-center gap-3 text-sm">
               <span className="text-text-dim">
@@ -160,17 +160,17 @@ export default async function AttendanceByDatePage({
                         style={{ width: `${p.rate}%` }}
                       />
                     </div>
-                    <span className="text-text-faint num text-[11px]">
+                    <span className="text-text-faint num text-xs">
                       {p.recorded}/{p.expected}
                     </span>
                   </div>
                 </div>
                 {p.unprocessed > 0 ? (
-                  <span className="text-danger bg-danger/10 border-danger/20 shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium">
+                  <span className="text-danger bg-danger/10 border-danger/20 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium">
                     미처리 {p.unprocessed}
                   </span>
                 ) : (
-                  <span className="text-green shrink-0 text-[11px]">완료</span>
+                  <span className="text-green shrink-0 text-xs">완료</span>
                 )}
                 <Link
                   href={`/attendance/${date}/${p.classId}`}
@@ -218,17 +218,17 @@ export default async function AttendanceByDatePage({
                     </div>
                     <div className="flex items-center gap-1.5">
                       {gAbsent > 0 ? (
-                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.absent}`}>
+                        <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR.absent}`}>
                           결석 {gAbsent}
                         </span>
                       ) : null}
                       {gLate > 0 ? (
-                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.late}`}>
+                        <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR.late}`}>
                           지각 {gLate}
                         </span>
                       ) : null}
                       {gAbsent === 0 && gLate === 0 ? (
-                        <span className="text-green text-[11px]">전원 출석</span>
+                        <span className="text-green text-xs">전원 출석</span>
                       ) : null}
                       <ChevronRight className="text-text-faint size-3 transition group-open:rotate-90" />
                     </div>

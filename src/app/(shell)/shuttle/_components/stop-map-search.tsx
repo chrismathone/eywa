@@ -90,15 +90,15 @@ export function StopMapSearch({
 
       {/* 🔴 상태를 빈 상자로 두지 않는다 — 무엇이 일어나는지 늘 한 줄로 말한다. */}
       {phase.kind === "searching" && (
-        <p className="text-text-faint text-[11.5px]">검색 중입니다…</p>
+        <p className="text-text-faint text-xs">검색 중입니다…</p>
       )}
       {phase.kind === "failed" && (
-        <p className="text-danger text-[11.5px]">
+        <p className="text-danger text-xs">
           검색하지 못했습니다 — 지도를 직접 누르거나 위도·경도를 아래 칸에 넣으세요.
         </p>
       )}
       {phase.kind === "done" && phase.hits.length === 0 && (
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           검색 결과가 없습니다 — 지도를 직접 눌러도 됩니다.
         </p>
       )}
@@ -115,9 +115,9 @@ export function StopMapSearch({
                   "hover:bg-muted flex w-full cursor-pointer flex-col items-start justify-center gap-0.5 px-2.5 py-1.5 text-left",
                 )}
               >
-                <span className="text-foreground text-[12.5px] font-bold">{hit.name}</span>
+                <span className="text-foreground text-xs font-bold">{hit.name}</span>
                 {hit.address && (
-                  <span className="text-text-faint text-[11.5px]">{hit.address}</span>
+                  <span className="text-text-faint text-xs">{hit.address}</span>
                 )}
               </button>
             </li>

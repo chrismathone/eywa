@@ -26,7 +26,7 @@ export default async function RetentionMessagesPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <RetentionTabs />
-        <p className="text-text-dim text-[12px]">실제 발송은 하지 않습니다 — 초안 복사 후 직접 전송하세요.</p>
+        <p className="text-text-dim text-xs">실제 발송은 하지 않습니다 — 초안 복사 후 직접 전송하세요.</p>
       </div>
 
       {queue.length === 0 ? (
@@ -42,13 +42,13 @@ export default async function RetentionMessagesPage() {
             <section key={r.id} className="bg-card border-line shadow-card rounded-2xl border p-4">
               <header className="mb-3 flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-foreground text-[13px] font-bold">
+                  <p className="text-foreground text-sm font-bold">
                     {r.name}{" "}
-                    <span className="text-text-dim text-[11px] font-normal">
+                    <span className="text-text-dim text-xs font-normal">
                       {[r.grade, r.school].filter(Boolean).join(" · ")}
                     </span>
                   </p>
-                  <p className="text-text-dim mt-0.5 truncate text-[11px]">
+                  <p className="text-text-dim mt-0.5 truncate text-xs">
                     {r.risk.reasons.slice(0, 2).join(" · ")}
                   </p>
                 </div>

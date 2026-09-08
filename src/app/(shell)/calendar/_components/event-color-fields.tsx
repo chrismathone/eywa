@@ -39,7 +39,7 @@ export function TagLegend({
             onClick={() => onPick(on ? "" : t.id)}
             aria-pressed={on}
             title={`${t.name} · ${colorLabel(t.color)}`}
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition ${
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
               on
                 ? "border-primary text-foreground font-medium"
                 : "border-line text-text-dim hover:border-primary/50 hover:text-foreground"
@@ -63,7 +63,7 @@ export function EventPreview({ title, color }: { title: string; color: CalendarC
   const chip = chipProps(color);
   return (
     <span
-      className={`inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[12px] leading-tight font-medium ${chip.className}`}
+      className={`inline-block max-w-full truncate rounded px-1.5 py-0.5 text-xs leading-tight font-medium ${chip.className}`}
       style={chip.style}
     >
       {title}
@@ -88,7 +88,7 @@ export function EventColorField({
     const dot = dotProps(selectedTag.color);
     return (
       <div className="space-y-1.5">
-        <p className="text-text-dim flex flex-wrap items-center gap-1.5 text-[12px] break-keep">
+        <p className="text-text-dim flex flex-wrap items-center gap-1.5 text-xs break-keep">
           <span
             className={`size-4 shrink-0 rounded-full ${dot.className}`}
             style={dot.style}
@@ -104,7 +104,7 @@ export function EventColorField({
   return (
     <div className="space-y-1.5">
       <ColorPicker value={color} onChange={onColorChange} label="일정 색" />
-      <p className="text-text-faint text-[11px] break-keep">
+      <p className="text-text-faint text-xs break-keep">
         태그 없이 등록할 때 쓰는 색입니다 — 태그를 고르면 태그색이 우선합니다.
       </p>
       <EventPreview title="이렇게 보입니다" color={color} />

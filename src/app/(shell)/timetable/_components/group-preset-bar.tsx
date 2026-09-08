@@ -77,14 +77,14 @@ export function GroupPresetBar({
   return (
     <>
       <span className="ml-auto inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-text-dim inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold">
+        <span className="text-text-dim inline-flex shrink-0 items-center gap-1 text-xs font-semibold">
           <BookMarked className="size-3" />
           저장된 배치
           <span className="text-text-faint num">{presets.length}</span>
           {saving ? <Loader2 className="text-primary size-3 animate-spin" /> : null}
         </span>
-        {error ? <span className="text-danger text-[11px]">{error}</span> : null}
-        {limitMsg ? <span className="text-danger text-[11px]">{limitMsg}</span> : null}
+        {error ? <span className="text-danger text-xs">{error}</span> : null}
+        {limitMsg ? <span className="text-danger text-xs">{limitMsg}</span> : null}
 
         {naming ? (
           <span className="inline-flex items-center gap-1">
@@ -104,13 +104,13 @@ export function GroupPresetBar({
               }}
               maxLength={30}
               placeholder="예: 학기 배치"
-              className="border-line focus:border-primary bg-card w-36 rounded-lg border px-2 py-0.5 text-[11px] outline-none"
+              className="border-line focus:border-primary bg-card w-36 rounded-lg border px-2 py-0.5 text-xs outline-none"
               aria-label="저장할 배치 이름"
             />
             <button
               type="button"
               onClick={commit}
-              className="text-primary inline-flex items-center gap-0.5 text-[11px] font-medium hover:underline"
+              className="text-primary inline-flex items-center gap-0.5 text-xs font-medium hover:underline"
             >
               <Check className="size-3" />
               {overwriting ? "덮어쓰기" : "저장"}
@@ -133,7 +133,7 @@ export function GroupPresetBar({
               type="button"
               onClick={() => setNaming(true)}
               title="지금 화면의 배치를 이름 붙여 보관함에 저장합니다(바로 저장됩니다)"
-              className="border-line bg-card text-text-dim hover:text-foreground inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px]"
+              className="border-line bg-card text-text-dim hover:text-foreground inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-0.5 text-xs"
             >
               <Save className="size-3" />
               저장
@@ -145,7 +145,7 @@ export function GroupPresetBar({
               onClick={() => setListOpen((v) => !v)}
               disabled={presets.length === 0}
               title={presets.length ? "저장해 둔 배치를 골라 불러옵니다" : "아직 저장한 배치가 없습니다"}
-              className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] transition disabled:opacity-40 ${
+              className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-40 ${
                 listOpen
                   ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line bg-card text-text-dim hover:text-foreground"
@@ -170,7 +170,7 @@ export function GroupPresetBar({
       {listOpen && presets.length > 0 ? (
         <ul className="border-primary/25 mt-1.5 w-full space-y-1 border-t pt-1.5">
           {presets.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+            <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
               <span className="text-foreground min-w-24 font-medium">{p.name}</span>
               <span className="text-text-faint num">{p.groups.length}줄</span>
               {/* 누가·언제 — "이거 누가 언제 만든 배치더라"를 알아야 고를 수 있다(원장 지시). */}

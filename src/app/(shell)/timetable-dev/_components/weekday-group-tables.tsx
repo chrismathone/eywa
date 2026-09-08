@@ -191,7 +191,7 @@ function SubSlotContent({
       }`}
     >
       {isHapban ? (
-        <span className="text-amber bg-amber/15 -mx-1 -mt-1 mb-0.5 shrink-0 rounded-t-md px-1 py-0.5 text-center num text-[9px] font-bold whitespace-nowrap">
+        <span className="text-amber bg-amber/15 -mx-1 -mt-1 mb-0.5 shrink-0 rounded-t-md px-1 py-0.5 text-center num text-xs font-bold whitespace-nowrap">
           합반 {merged.length}반
         </span>
       ) : null}
@@ -355,7 +355,7 @@ function GroupTable({
             >
               {/* sticky 헤더는 불투명 base(bg-card) 위에 반투명 밴드색을 얹는다 — soft 토큰은 12% 알파라
                   셀 자체를 그 색으로 두면 스크롤 시 본문(학생 이름)이 비쳐 보인다. */}
-              <div className={`${g.band} px-2 py-1.5 text-center text-[12px] font-bold`}>{g.title}</div>
+              <div className={`${g.band} px-2 py-1.5 text-center text-xs font-bold`}>{g.title}</div>
             </th>
           ))}
         </tr>
@@ -368,7 +368,7 @@ function GroupTable({
                 colSpan={t.days.length}
                 className={`bg-bg-soft ${GRID} sticky top-[30px] z-10 border-b border-r px-2 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
               >
-                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-[12px] font-bold">{t.name}</span>
+                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-xs font-bold">{t.name}</span>
               </th>
             )),
           )}
@@ -385,10 +385,10 @@ function GroupTable({
                     className={`bg-card ${GRID} sticky top-[60px] z-10 border-b border-r ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                   >
                     {/* 불투명 base + 반투명 tint(위 그룹밴드와 동일 이유 — 비침 방지). */}
-                    <div className={`${g.tint} text-text-dim px-1 py-1 text-center text-[10px] leading-tight font-bold`}>
+                    <div className={`${g.tint} text-text-dim px-1 py-1 text-center text-xs leading-tight font-bold`}>
                       {DAY_LABEL[d] ?? d}
                       {date ? (
-                        <span className="text-text-faint block text-[9px] font-normal">{date}</span>
+                        <span className="text-text-faint block text-xs font-normal">{date}</span>
                       ) : null}
                     </div>
                   </th>
@@ -423,8 +423,8 @@ function GroupTable({
             : isCollapsed(row.key);
           const labelBase = `bg-bg-soft ${periodCellSticky} ${periodDivider} border-b ${GRID} font-bold whitespace-nowrap`;
           const labelCls = labelCollapsed
-            ? `${labelBase} text-text-dim overflow-hidden px-2 py-0 align-middle text-[10px] [.tt-editing_&]:text-foreground [.tt-editing_&]:py-2 [.tt-editing_&]:align-top [.tt-editing_&]:text-[12px]`
-            : `${labelBase} text-foreground px-2 py-2 align-top text-[12px]`;
+            ? `${labelBase} text-text-dim overflow-hidden px-2 py-0 align-middle text-xs [.tt-editing_&]:text-foreground [.tt-editing_&]:py-2 [.tt-editing_&]:align-top [.tt-editing_&]:text-xs`
+            : `${labelBase} text-foreground px-2 py-2 align-top text-xs`;
           const labelText = mathN !== null ? `${Math.ceil(mathN / 2)}교시` : row.label;
           const timeText =
             mathN !== null
@@ -447,15 +447,15 @@ function GroupTable({
                       {labelText}
                       {labelCollapsed ? (
                         <>
-                          <span className="text-text-faint ml-1 num text-[9px] font-normal [.tt-editing_&]:hidden">
+                          <span className="text-text-faint ml-1 num text-xs font-normal [.tt-editing_&]:hidden">
                             {timeText}
                           </span>
-                          <div className="text-text-faint mt-0.5 hidden num text-[10px] [.tt-editing_&]:block">
+                          <div className="text-text-faint mt-0.5 hidden num text-xs [.tt-editing_&]:block">
                             {timeText}
                           </div>
                         </>
                       ) : (
-                        <div className="text-text-faint mt-0.5 num text-[10px]">{timeText}</div>
+                        <div className="text-text-faint mt-0.5 num text-xs">{timeText}</div>
                       )}
                     </>
                   )}

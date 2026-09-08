@@ -25,9 +25,9 @@ export function EnrolledStatCard({
             <UserCheck size={17} strokeWidth={1.8} />
           </span>
           <div>
-            <p className="text-text-dim text-[13px] font-medium">재원</p>
+            <p className="text-text-dim text-sm font-medium">재원</p>
             <p className="mt-0.5 flex items-baseline gap-1">
-              <span className="tabular text-foreground text-[34px] leading-none font-bold">
+              <span className="tabular text-foreground text-4xl leading-none font-bold">
                 {enrolled}
               </span>
               <span className="text-text-dim text-xs">명</span>

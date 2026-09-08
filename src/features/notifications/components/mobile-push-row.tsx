@@ -116,7 +116,7 @@ export function MobilePushRow() {
 
   if (needsInstall) {
     return (
-      <p className="text-text-faint border-line border-b px-3 py-2 text-[11px] leading-snug break-keep">
+      <p className="text-text-faint border-line border-b px-3 py-2 text-xs leading-snug break-keep">
         아이폰에서 알림을 받으려면 사파리 하단 <b>공유</b> → <b>홈 화면에 추가</b> 후, 그 아이콘으로 들어와
         여기서 켜주세요.
       </p>
@@ -129,7 +129,7 @@ export function MobilePushRow() {
         type="button"
         onClick={() => void (subscribed ? disable() : enable())}
         disabled={busy}
-        className="hover:bg-bg-soft flex w-full items-center gap-1.5 px-3 py-2 text-left text-[11px] transition disabled:opacity-60"
+        className="hover:bg-bg-soft flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs transition disabled:opacity-60"
       >
         <EyIcon name="bell" size={13} className="text-primary shrink-0" />
         <span className="text-foreground font-bold">{subscribed ? "휴대폰 알림 끄기" : "휴대폰 알림 켜기"}</span>
@@ -138,7 +138,7 @@ export function MobilePushRow() {
         </span>
       </button>
       {error ? (
-        <p className="text-danger px-3 pb-2 text-[11px] leading-snug break-keep">{error}</p>
+        <p className="text-danger px-3 pb-2 text-xs leading-snug break-keep">{error}</p>
       ) : null}
     </div>
   );

@@ -101,7 +101,7 @@ export async function getTeacherColorMap(db?: TimetableDb): Promise<TeacherColor
   const map: TeacherColorMap = {};
   for (const u of data ?? []) {
     if (!u.bg_color) continue;
-    const c = { bg: u.bg_color as string, text: (u.text_color as string | null) ?? "#1d1d1f" };
+    const c = { bg: u.bg_color as string, text: (u.text_color as string | null) ?? "#121212" };
     if (u.display_name) map[u.display_name as string] = c;
     if (u.english_name) map[u.english_name as string] = c;
   }
@@ -442,6 +442,8 @@ export type StudentLine = {
   endDate?: string | null;
   /** 등록 30일 이내 = 신입(셀에서 빨강 강조). ijw의 신입 윈도우 단순 근사(과목별 첫등록 아님). */
   isNew?: boolean;
+  /** 등록 31~60일(신입 빨강 다음 단계) — 신입과 상호배타. */
+  isRecent?: boolean;
   /** 수강 시작일(YYYY-MM-DD). ijw 익스포터의 30/60일 신입색·정렬 가중치 계산용(재원/대기만). */
   enrollmentDate?: string | null;
   /** 타 반에서 이동해 들어온 학생(셀에서 초록 강조). */
@@ -540,6 +542,8 @@ export async function getWeeklyScheduleWithStudents(
   const db = opts?.db;
   const weekEnd = weekEndOf(referenceDate); // 재구성 윈도우 끝(ref+6, ijw useSubjectClassStudents)
   const newCutoff = shiftDays(referenceDate, -30); // 신입: 기준일 30일 이내 시작
+  // 준신입: 30일 초과 60일 이내(원장 2026-09-07) — 신입 빨강이 꺼진 뒤에도 두 달째까지는  한눈에 보이게 한 단계 옅은 색을 준다. 경계는 `[newCutoff, ...]`(신입)와 겹치지 않는다.
+  const recentCutoff = shiftDays(referenceDate, -60);
   const withdrawnFloor = shiftDays(referenceDate, -30); // 퇴원 표시 윈도우: 기준일 1달(30일) 전까지(클러터 캡, 2026-07-14 원장 1년→1달)
 
   // skipCounts — 이 함수는 바로 아래에서 정확한 로스터를 조회하므로 근사 카운트 쿼리(전 enrollment)를
@@ -641,6 +645,9 @@ export async function getWeeklyScheduleWithStudents(
       // 전입 배지도 신입과 동일한 30일 창(2026-07-13 사용자 결정) — 이동 30일 뒤엔 일반 재원으로 표시.
       isTransferredIn: status !== "withdrawn" && r.is_transferred_in === true && start >= newCutoff,
       isNew: status !== "withdrawn" && start >= newCutoff && r.is_transferred_in !== true,
+      // 🔴 신입과 **상호배타**(start < newCutoff) — 겹치면 두 색이 한 줄에서 다툰다. 전입은 여기서도 제외.
+      isRecent:
+        status !== "withdrawn" && start >= recentCutoff && start < newCutoff && r.is_transferred_in !== true,
       enrollmentDate: start,
       attendanceDays: r.attendance_days ?? [],
       englishName: s.english_name ?? null,

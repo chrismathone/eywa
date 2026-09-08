@@ -32,7 +32,7 @@ describe("형광 반 표기(marker)", () => {
   it("표기 규약은 한 곳에서만 정의된다 — 인라인 복사가 없다", () => {
     const src = read("src/components/ui/marker-trigger.ts");
     expect(src).toContain("bg-marker");
-    expect(src).toContain("text-[21px]");
+    expect(src).toContain("text-2xl");
     // 🔴 서버 컴포넌트가 import하면 런타임에 값이 사라진다([[#81]]) — 이 파일은 클라 모듈이면 안 된다.
     // ⚠️ 문자열 포함 여부로 보면 **주석에 적힌 경고 문구까지 걸린다**(이 가드를 처음 짤 때 실제로 걸렸다)
     //    → 지시문은 반드시 자기 줄에 홀로 서야 효력이 있으므로 **줄 단위**로 본다.

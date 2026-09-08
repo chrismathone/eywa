@@ -372,20 +372,20 @@ export function AttendanceInputForm({
                     {/* 보강 = 이 반 수강생이 아님. 표식이 없으면 명단에 섞여 "이 반 학생"으로 오인된다. */}
                     {r.isMakeup ? (
                       <span
-                        className="bg-purple/10 text-purple border-purple/20 rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
+                        className="bg-purple/10 text-purple border-purple/20 rounded-full border px-1.5 py-0.5 text-xs font-medium"
                         title="이 반 수강생이 아닌 보강(수업외) 참석 — 처리현황 '예정' 인원에는 포함되지 않습니다"
                       >
                         보강
                       </span>
                     ) : null}
                     {r.existingRecordId ? (
-                      <span className="text-text-dim text-[10px]">· 이전 기록 있음</span>
+                      <span className="text-text-dim text-xs">· 이전 기록 있음</span>
                     ) : null}
                     {/* 하루에 교시가 둘 이상인 학생(0196a) — 이 화면은 학생당 한 줄이라 접어서 보여 준다.
                         접었다는 사실과 무엇을 접었는지를 밝히지 않으면 "왜 시수가 2지?"로만 남는다. */}
                     {r.slotCount > 1 ? (
                       <span
-                        className="bg-bg-soft text-text-dim border-line rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
+                        className="bg-bg-soft text-text-dim border-line rounded-full border px-1.5 py-0.5 text-xs font-medium"
                         title={`${slotBreakdown(r.slots)} — 저장하면 이 날 ${r.slotCount}개 교시가 모두 같은 상태가 됩니다. 교시별로 다르게 두려면 영어 수업 시트에서 고치세요.`}
                       >
                         {r.slotCount}교시
@@ -404,7 +404,7 @@ export function AttendanceInputForm({
                       </button>
                     ) : null}
                     {hasExtra ? (
-                      <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px]">
+                      <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs">
                         {cell.note ? <Pencil className="size-2.5" /> : null}
                         {cell.homeworkRequired ? <BookOpen className="size-2.5" /> : null}
                         {cell.units ? <span className="num font-bold">{cell.units}</span> : null}

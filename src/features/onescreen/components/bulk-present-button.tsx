@@ -44,7 +44,7 @@ export function BulkPresentButton({ count, alreadyMarked, busy, onApply }: BulkP
             ? t("os.present.allDone")
             : t("os.present.none")
       }
-      className={`rounded-pill border px-1.5 py-px text-[10px] font-bold whitespace-nowrap transition ${
+      className={`rounded-pill border px-1.5 py-px text-xs font-bold whitespace-nowrap transition ${
         disabled
           ? "border-line text-text-faint cursor-default"
           : "border-primary text-primary hover:bg-primary-soft cursor-pointer"

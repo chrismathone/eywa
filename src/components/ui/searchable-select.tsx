@@ -30,6 +30,8 @@ export function SearchableSelect({
   compact = false,
   defaultOpen,
   onOpenChange,
+  valuePrefix,
+  prefixOnlyFor,
 }: {
   options: ComboOption[];
   value?: string;
@@ -43,7 +45,7 @@ export function SearchableSelect({
   /**
    * 트리거 버튼의 **박스 스타일**만 교체(테두리·높이·padding·글자크기·라운드). 레이아웃(flex·w-full·
    * 화살표 정렬)은 항상 유지된다. ⚠️ 촘촘한 표 안에서는 기본값(py-2·px-3·text-sm)이 옆 입력칸(h-8·px-2·
-   * text-[12px])보다 눈에 띄게 커서 줄이 들쭉날쭉해진다(원장 2026-07-23 지적) → 그 자리에선 이웃과 같은
+   * text-xs)보다 눈에 띄게 커서 줄이 들쭉날쭉해진다(원장 2026-07-23 지적) → 그 자리에선 이웃과 같은
    * 클래스를 넘길 것. 미지정이면 기존 기본값 그대로(다른 화면 영향 없음).
    */
   triggerClassName?: string;
@@ -60,6 +62,17 @@ export function SearchableSelect({
    * 물들이면 요청받지 않은 화면까지 바뀐다. **길고 자주 갈아타는 목록**(반·학생 전환)에서만 켤 것.
    */
   highlightSelected?: boolean;
+  /**
+   * 트리거 라벨 앞에 붙는 축 이름("기간" → `기간: 최근 7일`). 목록 안 항목은 그대로다.
+   * 툴바에 드롭다운이 여럿 설 때 고른 값만 남으면 어느 축인지 안 읽힌다('완료'가 후속인지 상태인지) —
+   * 학생상담 리뷰 확정 결함(2026-09-03). FilterSelect `axisLabel`이 넘긴다.
+   */
+  valuePrefix?: string;
+  /**
+   * 이 값이 골라져 있으면 트리거에 **축 이름만** 적는다(`학년` — `학년: 전체`가 아니라). 열 머리 필터(HeaderFilter)가 "안 걸린
+   * 축"에 쓴다: 값을 비워 placeholder로 흉내 내면 글자가 옅어지고 목록에 ✓가 안 선다(리뷰 2026-09-03). 값은 진짜로 골라져 있다.
+   */
+  prefixOnlyFor?: string;
   /**
    * 촘촘한 표 안(높이 24px 안팎)에 놓일 때 — 화살표와 좌우 간격을 줄인다. 기본 화살표(16px)는 24px 박스에서
    * 글자 자리를 먹어 값이 잘린다. ⚠️ 레이아웃 클래스를 **분기해서 한 벌만** 내보낼 것(`gap-2`와 `gap-1`을
@@ -126,12 +139,20 @@ export function SearchableSelect({
       highlightOn ? "border-amber/60 bg-amber-soft text-amber" : "border-border bg-card text-foreground"
     }`;
 
+  /**
+   * 🔴 `aria-label`은 **버튼 안의 글자를 덮는다** — 축 이름만 주면 화면 낭독기가 "과목 필터"까지만 읽고
+   *    지금 고른 값을 영영 안 읽는다(재리뷰 2026-09-04. `HrefSelect`는 처음부터 트리거에 안 달았다).
+   *    서술 라벨이 필요한 자리에선 **값을 붙여 한 이름으로** 만든다("과목 필터: 수학").
+   */
+  const a11yValue = selected ? selected.label : (placeholder ?? null);
+  const a11yName = ariaLabel ? (a11yValue ? `${ariaLabel}: ${a11yValue}` : ariaLabel) : undefined;
+
   return (
     <div ref={ref} className={`relative ${className ?? ""}`}>
       {name ? <input type="hidden" name={name} value={current} /> : null}
       <button
         type="button"
-        aria-label={ariaLabel}
+        aria-label={a11yName}
         onClick={() => setOpen(!open)}
         className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >
@@ -139,7 +160,13 @@ export function SearchableSelect({
         <span
           className={`truncate ${selected ? "" : "text-text-faint"} ${highlightOn ? "font-bold" : ""}`}
         >
-          {selected ? selected.label : placeholder}
+          {selected
+            ? valuePrefix
+              ? prefixOnlyFor !== undefined && selected.value === prefixOnlyFor
+                ? valuePrefix
+                : `${valuePrefix}: ${selected.label}`
+              : selected.label
+            : placeholder}
         </span>
         {/* 꼬리표는 라벨 뒤·쉐브론 앞, 줄어들지 않는다 — 라벨만 남은 폭에서 접힌다. */}
         {trailing ? <span className="ml-auto shrink-0">{trailing}</span> : null}
@@ -209,7 +236,7 @@ export function SearchableSelect({
               })
             )}
             {overflow > 0 ? (
-              <li className="text-text-faint px-3 py-1.5 text-[11px]">
+              <li className="text-text-faint px-3 py-1.5 text-xs">
                 +{overflow}개 더 — 검색으로 좁히세요
               </li>
             ) : null}

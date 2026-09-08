@@ -144,7 +144,7 @@ export function TimetableViewSettings({
               <button
                 type="button"
                 onClick={reset}
-                className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-[11px]"
+                className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs"
               >
                 <RotateCcw size={10} strokeWidth={1.8} aria-hidden />
                 전체
@@ -185,7 +185,7 @@ export function TimetableViewSettings({
                     type="button"
                     onClick={() => toggleGrade(g)}
                     aria-pressed={on}
-                    className={`rounded-lg border px-1 py-1 text-[11px] transition ${
+                    className={`rounded-lg border px-1 py-1 text-xs transition ${
                       on
                         ? "border-primary bg-primary text-primary-foreground font-medium"
                         : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -197,7 +197,7 @@ export function TimetableViewSettings({
               })}
             </div>
 
-            <p className="text-text-dim mb-2 text-[11px] leading-relaxed">
+            <p className="text-text-dim mb-2 text-xs leading-relaxed">
               {noneSelected
                 ? "아무것도 고르지 않으면 전체 학년을 봅니다."
                 : "학생 기준으로 걸러집니다. 학년이 섞인 반은 사라지지 않고 명단만 좁아집니다."}
@@ -210,7 +210,7 @@ export function TimetableViewSettings({
             <div className="border-line mb-2 border-t pt-2">
               <div className="mb-1.5 flex items-baseline justify-between gap-2">
                 <span className="text-foreground text-xs font-semibold">표시</span>
-                <span className="text-text-faint text-[10px]">바로 적용됩니다</span>
+                <span className="text-text-faint text-xs">바로 적용됩니다</span>
               </div>
               <TimetableFontToggle />
               {showColor ? (

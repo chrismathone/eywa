@@ -97,18 +97,46 @@ export const SEAT_CELL_NAME_LADDER: SeatNameLadder = {
 };
 
 /**
- * '출결 모드'(`/attendance/quick`) 학생 칩 — 폰 3열 기준.
- * 360px 화면 − 본문 좌우 24px − 카드 좌우 24px = 312px, 3열(간격 8px×2)이면 열 98.7px,
- * 칸 좌우 여백 8px을 빼 **90px**. 터치 타겟(44px 높이)은 그대로 두고 글씨만 줄인다.
+ * 칸 폭에 **비례해 커지는** 이름 글자 — `font-size: clamp(min, N cqw, max)`.
+ *
+ * 원장 2026-09-04(좌석표 캡처): *"출결에도 학생 이름이 최대한 꽉 차게 해줄것. 우리 스타일대로."* — 디자인 v5 "라벨 안 글자를
+ * 최대로". 위 사다리는 **가장 좁을 때**만 보고 고르므로 창을 넓혀 칸이 세 배가 되어도 글자는 13px 그대로였다(캡처의
+ * 135px 칸에 13px 이름). 칸 폭을 컨테이너 쿼리 단위(`cqw`)로 읽으면 이름 폭(em)에 맞춰 칸을 채우는 크기가 CSS에서 나온다:
+ * `N cqw = 채움 비율 ÷ 이름 폭(em)` — 세 글자 이름은 33.3cqw, `김하늘A`(3.7em)는 27cqw. 좌석표 가장 좁은 칸(내용 폭 39px) = 13px
+ * (옛 사다리와 같다) / 135px 칸 = 24px(상한). ⚠️ `cqw`는 컨테이너의 **내용 상자**(padding 제외) 기준이라 기본 채움 비율은 1이다 —
+ * 실측(2026-09-04)에서 0.9로 잡았더니 47px 칸이 11.8px로 옛 13px보다 작아졌다.
+ *
+ * 소비처 규약: 이름을 감싸는 **칸에 `@container`**(inline-size)를 달고 이름 `<span>`에 이 값을 `style.fontSize`로 준다.
+ * 하한(`minPx`)에서도 넘치면 종전처럼 말줄임 + 툴팁(`fitSeatName(...).clipped`가 그 판정을 그대로 준다).
+ * 상한 24px(`text-xl`) = 화면 제목 크기 — 이름이 그보다 커질 이유가 없다. px 숫자는 이 파일(허용 목록)에만 둔다.
  */
-export const QUICK_CHIP_NAME_LADDER: SeatNameLadder = {
-  widthPx: 90,
-  steps: [
-    { px: 15, className: "text-[15px]" },
-    { px: 14, className: "text-sm" },
-    { px: 13, className: "text-[13px]" },
-  ],
-};
+export function fluidNameFontSize(
+  name: string,
+  opts: { minPx: number; maxPx: number; /** 칸 내용 폭 중 이름이 쓸 비율(기본 1 — 배지 자리를 남겨야 하는 칩만 낮춘다). */ fill?: number },
+): string {
+  const width = Math.max(nameDisplayWidth(name), 0.5);
+  const cqw = Math.floor(((opts.fill ?? 1) * 100 * 10) / width) / 10;
+  return `clamp(${opts.minPx}px, ${cqw}cqw, ${opts.maxPx}px)`;
+}
+
+/** 출결 칸(좌석표·출결 모드·랩실 칩) 공통 상한 — 24px(`text-xl`). */
+export const NAME_FILL_MAX_PX = 24;
+
+/**
+ * 소비처별 **하한**(px) — 그 칸의 가장 좁은 폭에서 옛 사다리와 같은 값(회귀 아님). 🔴 px 숫자는 이 파일에만 —
+ * 소비처가 `minPx: 13`처럼 직접 적으면 이 규약이 화면마다 갈린다(적대 리뷰 2026-09-04).
+ */
+export const NAME_FILL_MIN_PX = {
+  /** 좌석표 칸(내용 폭 39px) — 세 글자 13px, 접미사 이름은 11px 하한에서 말줄임. */
+  seatCell: SEAT_CELL_NAME_LADDER.steps[2].px,
+  /** 출결 모드 타일(폰 3열 ≈ 90px 칸). */
+  quickTile: 13,
+  /** 랩실 칩(148px 격자, 배지 자리를 남긴 폭). */
+  labChip: SEAT_CHIP_NAME_LADDER.steps[2].px,
+} as const;
+
+/** 랩실 칩이 이름에 쓰는 폭 비율 — 오른쪽 위 상태 배지·'결' 버튼 자리(20px)를 남긴다. */
+export const LAB_CHIP_NAME_FILL = 0.75;
 
 export type SeatNameFit = {
   /** 그 이름에 씌울 글씨 크기 클래스. */

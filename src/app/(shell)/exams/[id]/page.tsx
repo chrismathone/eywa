@@ -129,12 +129,12 @@ export default async function ExamDetailPage({
 function Stat({ label, value, unit }: { label: string; value: number | null; unit: string }) {
   return (
     <div>
-      <p className="text-text-dim text-[13px] font-medium">{label}</p>
+      <p className="text-text-dim text-sm font-medium">{label}</p>
       <p className="mt-1.5 flex items-baseline justify-center gap-1">
-        <span className="num text-foreground text-[27px] font-bold leading-none tracking-tight">
+        <span className="num text-foreground text-3xl font-bold leading-none tracking-tight">
           {value ?? "—"}
         </span>
-        {unit ? <span className="text-text-dim text-[13px] font-medium">{unit}</span> : null}
+        {unit ? <span className="text-text-dim text-sm font-medium">{unit}</span> : null}
       </p>
     </div>
   );

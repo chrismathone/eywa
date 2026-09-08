@@ -180,7 +180,7 @@ export function ContractHistory({
                     </p>
                   )}
                   {r.terms || r.memo ? (
-                    <p className="text-text-dim mt-0.5 text-[11px] break-keep">
+                    <p className="text-text-dim mt-0.5 text-xs break-keep">
                       {[r.terms, r.memo].filter(Boolean).join(" · ")}
                     </p>
                   ) : null}

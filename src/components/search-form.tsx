@@ -4,6 +4,7 @@ import { useRef, useTransition, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
+import { TOOLBAR_SEARCH_BOX } from "@/components/toolbar-controls";
 
 /**
  * 공통 검색 폼 — 기존 GET <form>(문서 전체 새로고침 = 화면 깜빡 + 스크롤/포커스 유실)을
@@ -17,6 +18,7 @@ export function SearchForm({
   inputWidth = "w-32",
   className = "ml-auto flex items-center gap-2",
   resetParams = [],
+  autoFocus = false,
 }: {
   paramName?: string;
   placeholder: string;
@@ -26,6 +28,8 @@ export function SearchForm({
   className?: string;
   /** 검색 시 함께 제거할 파라미터(page는 항상 제거). */
   resetParams?: string[];
+  /** 토글로 펼쳐질 때(SearchToggle) 커서를 바로 넣는다 — 버튼이 사라진 자리에서 포커스를 잃지 않게. */
+  autoFocus?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
@@ -47,16 +51,19 @@ export function SearchForm({
 
   return (
     <form onSubmit={onSubmit} className={className}>
-      {/* 높이 h-8 = 공용 Button 기본 크기(툴바 한 줄 정렬, 원장 2026-09-01). */}
-      <div className="border-border bg-bg-soft text-text-dim flex h-8 items-center gap-2 rounded-lg border px-2.5">
-        <EyIcon name="search" size={13} />
+      {/* 치수 = TOOLBAR_SEARCH_BOX(control-scale) — 툴바 한 줄에서 버튼·칩과 같은 높이·라벨. */}
+      <div className={TOOLBAR_SEARCH_BOX}>
+        <EyIcon name="search" size={16} />
         <input
           ref={inputRef}
           type="search"
           name={paramName}
           defaultValue={defaultValue ?? ""}
           placeholder={placeholder}
-          className={`text-foreground placeholder:text-text-faint ${inputWidth} bg-transparent text-xs focus:outline-none`}
+          autoFocus={autoFocus}
+          // 안 글자는 16px(sm 라벨) — 상자 라벨 18px보다 한 단계 작게, 자리표시자·검색어가 더 보이게(원장 2026-09-04 재고관리 캡처,
+          // "스타일 통일" — 앱의 검색 입력이 전부 같은 값).
+          className={`text-foreground placeholder:text-text-faint ${inputWidth} h-full bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none`}
         />
       </div>
       <Button type="submit" variant="outline" disabled={pending}>

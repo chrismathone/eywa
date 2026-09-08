@@ -455,7 +455,7 @@ export function MonthPlanView({
                             ? t("mp.ebook.drop.title")
                             : t("mp.ebook.add.title")
                         }
-                        className="text-text-dim hover:bg-bg-soft cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold"
+                        className="text-text-dim hover:bg-bg-soft cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-xs font-bold"
                       >
                         {t(hasEbook ? "mp.ebook.drop" : "mp.ebook.add")}
                       </button>
@@ -502,14 +502,14 @@ export function MonthPlanView({
                     <span className="flex flex-wrap items-center justify-center gap-1.5 pr-10">
                       <span className="num">{date ? monthDay(date) : "—"}</span>
                       {date && !teaches ? (
-                        <span className="text-[10px]">{t("mp.noClassDay")}</span>
+                        <span className="text-xs">{t("mp.noClassDay")}</span>
                       ) : null}
                       {/* ⚠️ 휴강 날은 아래 라벨 줄이 이미 `휴강 · 추석`을 적는다 — 여기 또 붙이면 같은
                           말이 두 번이다. 휴일인데 **수업하는 날**(반별 예외 `open`)에는 이 알약이
                           유일한 표시라 그때는 남긴다. */}
                       {holidayName && kind !== "off" ? (
                         <span
-                          className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT.inert}`}
+                          className={`rounded-pill px-1.5 py-px text-xs font-bold ${TONE_SOFT.inert}`}
                         >
                           {holidayName}
                         </span>
@@ -517,7 +517,7 @@ export function MonthPlanView({
                       {v && tone && v.status !== "ok" && v.status !== "empty" ? (
                         <span
                           title={MP_STATUS_HINT[v.status]}
-                          className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${TONE_SOFT[tone]}`}
+                          className={`rounded-pill px-1.5 py-px text-xs font-bold ${TONE_SOFT[tone]}`}
                         >
                           {MP_STATUS_LABEL[v.status]}
                         </span>
@@ -532,7 +532,7 @@ export function MonthPlanView({
                               ? t("mp.off.undo.title")
                               : t("mp.off.title")
                           }
-                          className="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-[10px] font-bold hover:bg-white"
+                          className="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-full border border-black/40 bg-white/70 px-1.5 py-px text-xs font-bold hover:bg-white"
                         >
                           {t(off ? "mp.off.undo" : "mp.off")}
                         </button>

@@ -84,21 +84,21 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
           이 달 지출 내역이 없습니다. 위 “지출 등록”으로 추가하세요.
         </div>
       ) : (
-        <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
+        <DragScrollArea className="bg-card shadow-card rounded-2xl">
           <table className="w-full min-w-[1000px] text-sm">
-            <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
+            <thead className="border-line bg-bg-soft/50 text-text-dim border-b text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
               <tr>
-                <th className="micro px-3 py-2 text-left">일자</th>
-                <th className="micro px-3 py-2 text-left">부서명</th>
-                <th className="micro px-3 py-2 text-left">성명</th>
-                <th className="micro px-3 py-2 text-left">제목</th>
-                <th className="micro px-3 py-2 text-left">분류</th>
-                <th className="micro px-3 py-2 text-right">총액</th>
-                <th className="micro px-2 py-2 text-center">증빙</th>
-                <th className="micro px-2 py-2 text-center">작성</th>
-                <th className="micro px-2 py-2 text-center">원장</th>
-                <th className="micro px-2 py-2 text-center">대표</th>
-                <th className="micro px-2 py-2 text-center">집행자</th>
+                <th className="px-3 py-2 text-left">일자</th>
+                <th className="px-3 py-2 text-left">부서명</th>
+                <th className="px-3 py-2 text-left">성명</th>
+                <th className="px-3 py-2 text-left">제목</th>
+                <th className="px-3 py-2 text-left">분류</th>
+                <th className="px-3 py-2 text-right">총액</th>
+                <th className="px-2 py-2 text-center">증빙</th>
+                <th className="px-2 py-2 text-center">작성</th>
+                <th className="px-2 py-2 text-center">원장</th>
+                <th className="px-2 py-2 text-center">대표</th>
+                <th className="px-2 py-2 text-center">집행자</th>
                 <th className="px-2 py-2" />
               </tr>
             </thead>
@@ -130,7 +130,7 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
                       <button
                         type="button"
                         onClick={() => setReceiptsFor(r)}
-                        className="text-text-faint hover:text-foreground focus-visible:ring-primary/50 inline-flex max-w-[88px] items-center gap-1 rounded-sm px-1 py-0.5 text-[11px] focus:outline-none focus-visible:ring-1"
+                        className="text-text-faint hover:text-foreground focus-visible:ring-primary/50 inline-flex max-w-[88px] items-center gap-1 rounded-sm px-1 py-0.5 text-xs focus:outline-none focus-visible:ring-1"
                         title={`증빙자료${r.receiptType ? ` · ${r.receiptType}` : ""}`}
                         aria-label={`${r.title} 증빙자료 ${r.receiptUrls.length > 0 ? `${r.receiptUrls.length}건` : "없음"}`}
                       >

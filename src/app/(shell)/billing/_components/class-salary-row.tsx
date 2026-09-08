@@ -25,7 +25,7 @@ function SaveBtn() {
     <button
       type="submit"
       disabled={pending}
-      className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition disabled:opacity-40"
+      className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
       저장
@@ -46,21 +46,21 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
 
   return (
     <tr className="border-line/60 border-b last:border-0">
-      <td className="text-foreground px-3 py-2 text-[12px] font-medium whitespace-nowrap">{row.className}</td>
-      <td className="text-text-dim px-3 py-2 text-[11px] whitespace-nowrap">{row.teacherName ?? "—"}</td>
+      <td className="text-foreground px-3 py-2 text-xs font-medium whitespace-nowrap">{row.className}</td>
+      <td className="text-text-dim px-3 py-2 text-xs whitespace-nowrap">{row.teacherName ?? "—"}</td>
       <td className="px-3 py-2">
         {effective ? (
-          <span className="text-text-dim text-[11px]">
+          <span className="text-text-dim text-xs">
             {effective}
             {!row.manualGroup && row.autoGroup ? <span className="text-text-faint"> (이름 자동)</span> : null}
           </span>
         ) : (
           // ⚠️ 추정하지 않는다(원장 결정) — 영어 코드명 반은 사람이 지정할 때까지 미분류로 둔다.
-          <span className="text-amber-700 text-[11px]">미분류</span>
+          <span className="text-amber-700 text-xs">미분류</span>
         )}
         {row.appliesDows?.length ? (
           <span
-            className="text-text-faint ml-1.5 text-[10px]"
+            className="text-text-faint ml-1.5 text-xs"
             title="이 요일 수업분만 비율제로 계산합니다(나머지 요일은 제외)"
           >
             {formatDowKeys(row.appliesDows)}만
@@ -73,7 +73,7 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
           <select
             name="salaryGroup"
             defaultValue={row.manualGroup ?? ""}
-            className="border-line bg-card text-foreground rounded-md border px-1.5 py-1 text-[11px]"
+            className="border-line bg-card text-foreground rounded-md border px-1.5 py-1 text-xs"
           >
             <option value="">자동(이름)</option>
             {SALARY_GROUPS.map((g) => (
@@ -82,23 +82,23 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
               </option>
             ))}
           </select>
-          <label className="text-text-dim inline-flex items-center gap-0.5 text-[11px]">
+          <label className="text-text-dim inline-flex items-center gap-0.5 text-xs">
             <input
               name="commissionRate"
               defaultValue={row.commissionRate ?? ""}
               inputMode="decimal"
               placeholder="비율"
-              className="border-line bg-card text-foreground w-14 rounded-md border px-1.5 py-1 text-[11px]"
+              className="border-line bg-card text-foreground w-14 rounded-md border px-1.5 py-1 text-xs"
             />
             %
           </label>
           {/* 적용 요일 — 반 하나에 주말·평일이 섞인 경우(예: 토+수) 주말분만 비율제로 인정한다.
               전부 비우면 전 요일(안분 없음). 그 달 시수 기록이 없으면 화면이 '산정 보류'로 밝힌다. */}
-          <span className="text-text-faint text-[10px]" title="비율제를 적용할 요일 — 비우면 전 요일">
+          <span className="text-text-faint text-xs" title="비율제를 적용할 요일 — 비우면 전 요일">
             요일
           </span>
           {DOWS.map((d) => (
-            <label key={d.key} className="text-text-dim inline-flex items-center gap-0.5 text-[10px]">
+            <label key={d.key} className="text-text-dim inline-flex items-center gap-0.5 text-xs">
               <input
                 type="checkbox"
                 name={`dow_${d.key}`}
@@ -109,8 +109,8 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
             </label>
           ))}
           <SaveBtn />
-          {state?.error ? <span className="text-danger text-[11px]">{state.error}</span> : null}
-          {state?.ok ? <span className="text-text-faint text-[11px]">저장됨</span> : null}
+          {state?.error ? <span className="text-danger text-xs">{state.error}</span> : null}
+          {state?.ok ? <span className="text-text-faint text-xs">저장됨</span> : null}
         </form>
       </td>
     </tr>

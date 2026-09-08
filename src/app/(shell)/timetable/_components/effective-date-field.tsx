@@ -37,7 +37,7 @@ export function EffectiveDateField({
   const immediate = isImmediate(value, today);
 
   const chip = (active: boolean) =>
-    `rounded-pill border px-2 py-0.5 text-[11px] font-medium transition disabled:opacity-40 ${
+    `rounded-pill border px-2 py-0.5 text-xs font-medium transition disabled:opacity-40 ${
       active
         ? "border-primary bg-primary text-primary-foreground"
         : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -46,7 +46,7 @@ export function EffectiveDateField({
   return (
     <div className="border-line bg-bg-soft mt-3 rounded-lg border p-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-text-dim flex items-center gap-1 text-[11px] font-bold">
+        <span className="text-text-dim flex items-center gap-1 text-xs font-bold">
           <CalendarDays size={13} aria-hidden="true" /> 적용일
         </span>
         <button type="button" disabled={disabled} onClick={() => onChange(today)} className={chip(value === today)}>
@@ -63,13 +63,13 @@ export function EffectiveDateField({
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           aria-label="적용일 직접 선택"
-          className="border-line bg-card text-foreground num rounded-lg border px-2 py-0.5 text-[11px] disabled:opacity-40"
+          className="border-line bg-card text-foreground num rounded-lg border px-2 py-0.5 text-xs disabled:opacity-40"
         />
       </div>
       {invalid ? (
-        <p className="text-danger mt-1.5 text-[11px]">{invalid}</p>
+        <p className="text-danger mt-1.5 text-xs">{invalid}</p>
       ) : (
-        <p className="text-text-faint mt-1.5 text-[11px]">
+        <p className="text-text-faint mt-1.5 text-xs">
           {immediate ? (
             <>지금 바로 적용됩니다.</>
           ) : (

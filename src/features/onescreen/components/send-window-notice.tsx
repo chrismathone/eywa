@@ -27,7 +27,7 @@ export function SendWindowNotice({ start, end }: { start: string; end: string })
   );
   if (!hint) return null;
   return (
-    <div className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-[12.5px]">
+    <div className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-xs">
       {/* "수업 보고서" 한정 표기 — 반 공지는 시간창 미적용(G1 확정)이라 ClassNote 전체로 말하면 과약속. */}
       <span className="text-foreground font-bold">{tf("os.sw.title", { hint })}</span>
       <span>{t("os.sw.body")}</span>

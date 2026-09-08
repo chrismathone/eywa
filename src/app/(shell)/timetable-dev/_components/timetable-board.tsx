@@ -459,7 +459,7 @@ function DayEditPopover({
         <p className="text-foreground text-sm font-bold">
           <span className="text-text-dim font-normal">{target.name} · </span>등원 요일
         </p>
-        <p className="text-text-faint mt-1 text-[11px]">이 반에서 오는 요일만 선택(전부 = 전 요일 등원).</p>
+        <p className="text-text-faint mt-1 text-xs">이 반에서 오는 요일만 선택(전부 = 전 요일 등원).</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {covers.map((d) => {
             const on = sel.has(d);
@@ -558,7 +558,7 @@ function ClassPickPopover({
         <p className="text-foreground text-sm font-bold">
           <span className="text-text-dim font-normal">{target.name} · </span>합반으로 이동
         </p>
-        <p className="text-text-faint mt-1 text-[11px]">
+        <p className="text-text-faint mt-1 text-xs">
           합반 수업입니다 — 이동할 반{showDays ? "과 등원 요일을" : "을"} 선택하세요.
         </p>
         <div className="mt-3 flex flex-col gap-1.5">
@@ -581,14 +581,14 @@ function ClassPickPopover({
               >
                 <IndexBadge badge={String(c.index)} />
                 <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip">{c.className}</span>
-                {c.disabled ? <span className="shrink-0 text-[10px]">이미 소속</span> : null}
+                {c.disabled ? <span className="shrink-0 text-xs">이미 소속</span> : null}
               </button>
             );
           })}
         </div>
         {showDays ? (
           <>
-            <p className="text-text-dim mt-3 text-[11px] font-bold">등원 요일 (전부 = 전 요일)</p>
+            <p className="text-text-dim mt-3 text-xs font-bold">등원 요일 (전부 = 전 요일)</p>
             <div className="mt-1.5 flex flex-wrap gap-2">
               {covers.map((d) => {
                 const on = sel.has(d);
@@ -667,12 +667,12 @@ function EndEnrollmentConfirm({
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-foreground text-sm font-bold">수강 종료</p>
-        <p className="text-text-dim mt-2 text-[13px] leading-relaxed">
+        <p className="text-text-dim mt-2 text-sm leading-relaxed">
           <b className="text-foreground">{target.name}</b> 학생을{" "}
           <b className="text-foreground">{target.className}</b> 반에서{" "}
           <b className="text-foreground">오늘({today})</b> 수강 종료할까요?
         </p>
-        <p className="text-text-faint mt-1 text-[11px]">
+        <p className="text-text-faint mt-1 text-xs">
           이 반의 퇴원 목록으로 이동합니다. 다른 반 수강은 유지됩니다.
         </p>
         {error ? <p className="text-chart-4 mt-2 text-xs">{error}</p> : null}
@@ -892,7 +892,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       {children}
       <DragOverlay dropAnimation={null}>
         {dragName ? (
-          <div className="border-primary bg-card text-foreground pointer-events-none inline-flex cursor-grabbing items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] font-medium shadow-lg">
+          <div className="border-primary bg-card text-foreground pointer-events-none inline-flex cursor-grabbing items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-medium shadow-lg">
             <GripVertical className="text-primary size-3.5" />
             {dragName}
           </div>

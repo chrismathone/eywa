@@ -27,7 +27,7 @@ export function ComposeTab({
 
   return (
     <div className="space-y-4">
-      <div className="border-line inline-flex rounded-full border p-0.5 text-[13px]">
+      <div className="border-line inline-flex rounded-full border p-0.5 text-sm">
         {(
           [
             ["single", "개별 학생"],

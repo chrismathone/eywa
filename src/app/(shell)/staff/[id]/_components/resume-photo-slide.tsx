@@ -21,7 +21,7 @@ export function ResumePhotoSlide({ urls }: { urls: (string | null)[] }) {
           // eslint-disable-next-line @next/next/no-img-element -- signed URL 미리보기(최적화 불필요)
           <img src={url} alt={`증명사진 ${current + 1}`} className="size-full object-cover" />
         ) : (
-          <span className="text-text-faint px-2 text-center text-[10px] leading-tight">증명사진 없음</span>
+          <span className="text-text-faint px-2 text-center text-xs leading-tight">증명사진 없음</span>
         )}
       </div>
       {slots.length > 1 ? (
@@ -30,7 +30,7 @@ export function ResumePhotoSlide({ urls }: { urls: (string | null)[] }) {
             type="button"
             onClick={() => step(-1)}
             aria-label="이전 사진"
-            className="text-text-dim hover:text-foreground px-0.5 text-[11px] leading-none"
+            className="text-text-dim hover:text-foreground px-0.5 text-xs leading-none"
           >
             ‹
           </button>
@@ -48,7 +48,7 @@ export function ResumePhotoSlide({ urls }: { urls: (string | null)[] }) {
             type="button"
             onClick={() => step(1)}
             aria-label="다음 사진"
-            className="text-text-dim hover:text-foreground px-0.5 text-[11px] leading-none"
+            className="text-text-dim hover:text-foreground px-0.5 text-xs leading-none"
           >
             ›
           </button>

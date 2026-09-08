@@ -123,23 +123,23 @@ export function QuickMarkSheet({
       >
         <header className="mb-3 flex items-start gap-2">
           <div className="min-w-0">
-            <p className="text-foreground truncate text-[17px] font-bold">
+            <p className="text-foreground truncate text-lg font-bold">
               {name.primary}
               {name.secondary ? (
-                <span className="text-text-faint ml-1.5 text-[13px] font-normal">
+                <span className="text-text-faint ml-1.5 text-sm font-normal">
                   {name.secondary}
                 </span>
               ) : null}
               {schoolGrade ? (
-                <span className="text-text-faint ml-1.5 text-[13px] font-normal">{schoolGrade}</span>
+                <span className="text-text-faint ml-1.5 text-sm font-normal">{schoolGrade}</span>
               ) : null}
             </p>
-            <p className="text-text-dim truncate text-[13px]">{className}</p>
+            <p className="text-text-dim truncate text-sm">{className}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-text-dim hover:bg-bg-soft ml-auto min-h-11 shrink-0 rounded-xl px-3 text-[15px] font-bold"
+            className="text-text-dim hover:bg-bg-soft ml-auto min-h-11 shrink-0 rounded-xl px-3 text-base font-bold"
           >
             {t("quick.close")}
           </button>
@@ -154,7 +154,7 @@ export function QuickMarkSheet({
                 type="button"
                 onClick={() => choose(m)}
                 aria-pressed={on}
-                className={`min-h-14 flex-1 rounded-2xl text-[17px] font-bold transition ${
+                className={`min-h-14 flex-1 rounded-2xl text-lg font-bold transition ${
                   on ? ATT_SOLID[m] : `${ATT_SOFT[m]} border ${ATT_SOFT_BORDER[m]}`
                 }`}
               >
@@ -181,7 +181,7 @@ export function QuickMarkSheet({
                사유 칩을 누르면 `noteOnly`가 "기록이 없어 메모만 남길 수 없습니다"로 또 거절된다. */
         mode === "absent" && isAbsent ? (
           <>
-            <p className="text-text-dim mb-2 text-[13px]">
+            <p className="text-text-dim mb-2 text-sm">
               <span className="text-danger font-bold">{t("quick.absent.saved")}</span> ·{" "}
               {t("quick.absent.addReason")}
             </p>
@@ -195,7 +195,7 @@ export function QuickMarkSheet({
           </>
         ) : null}
 
-        {error ? <p className="text-danger mt-3 text-[13px] font-medium">{error}</p> : null}
+        {error ? <p className="text-danger mt-3 text-sm font-medium">{error}</p> : null}
       </div>
     </>
   );

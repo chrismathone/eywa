@@ -126,6 +126,14 @@ export function formatKoreanDate(ymd: string): string {
 }
 
 /**
+ * `formatKoreanDate` 라벨을 `PeriodNav`에 세울 때의 `labelWidth` — 최장 "2026년 12월 31일 (수)"(18px 굵게 실측 182px)가
+ * ×1.4 뒤 213px에 들어간다(최장 실측 182px, 여유 13px). 원스크린 상단 바·ECS 오늘 면·셔틀 날짜 면이 같은 라벨을
+ * 쓰므로 폭도 여기 하나 — 그전엔 ECS 오늘 면 180 · 셔틀 152로 갈려 있었다(디자인 v5 18단계 리뷰).
+ * 주 라벨은 `WEEK_LABEL_W`(timetable/lib/week.ts).
+ */
+export const DAY_LABEL_W = 152;
+
+/**
  * "YYYY-MM" → 그 달의 첫날·마지막날. 목록/달력의 **월 단위 조회 범위**를 만드는 단일 소스.
  * ⚠️ `new Date(ymd)`는 UTC 파싱이라 KST에서 하루 밀린다 — 말일은 `Date.UTC(y, m, 0)`으로 구한다.
  */

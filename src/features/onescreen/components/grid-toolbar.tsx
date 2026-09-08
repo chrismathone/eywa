@@ -76,7 +76,7 @@ export function GridToolbar({
   const tf = useSheetTf();
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
-      <span className="text-text-dim text-[12px]">
+      <span className="text-text-dim text-xs">
         {t("os.bar.shown")} <span className="text-foreground font-bold">{total}</span> ·{" "}
         {t("os.bar.sendable")} <span className="text-foreground font-bold">{sendReady}</span>
         {sendable > sendReady ? (
@@ -100,12 +100,12 @@ export function GridToolbar({
         ) : null}
       </span>
       {navHint ? (
-        <span className="text-text-faint hidden text-[11px] lg:inline">
+        <span className="text-text-faint hidden text-xs lg:inline">
           · {t("os.bar.keyHint")}
         </span>
       ) : null}
       {prev.has ? (
-        <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-[12px]">
+        <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-xs">
           <input
             type="checkbox"
             checked={prev.show}

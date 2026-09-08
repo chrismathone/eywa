@@ -61,7 +61,7 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
   return (
     <div className="flex items-center justify-end gap-2">
       <span
-        className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] ${issue || failed ? tone : "text-[color:var(--text-faint)]"}`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap text-xs ${issue || failed ? tone : "text-[color:var(--text-faint)]"}`}
         title={`${sheetTf(lang, "sync.title", { when: fullSince(state.syncedAt, lang) })}${
           state.rowCount != null ? sheetTf(lang, "sync.titleRows", { n: state.rowCount }) : ""
         }${state.issue ? sheetTf(lang, "sync.titleIssue", { issue: state.issue }) : ""}`}

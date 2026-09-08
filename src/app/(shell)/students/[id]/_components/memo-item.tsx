@@ -72,16 +72,16 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
       <header className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <span
-            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-medium ${
               memoCategoryColor(memo.category)
             }`}
           >
             {memoCategoryLabel(memo.category)}
           </span>
           {memo.createdByName ? (
-            <span className="text-muted-foreground text-[11px]">{memo.createdByName}</span>
+            <span className="text-muted-foreground text-xs">{memo.createdByName}</span>
           ) : null}
-          <span className="text-muted-foreground num text-[10px]">
+          <span className="text-muted-foreground num text-xs">
             {new Date(memo.createdAt).toLocaleString("ko-KR", {
               timeZone: "Asia/Seoul",
               year: "numeric",
@@ -130,7 +130,7 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
             ))}
           </select>
           {/* 검색 허용(0250a) — 작성 폼과 같은 이름·같은 뜻. 끄면 학생 검색에서 이 메모가 빠진다. */}
-          <label className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-[11px]">
+          <label className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs">
             <input
               type="checkbox"
               name="searchable"
@@ -157,14 +157,14 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
                 localDraft.discard();
                 setEditing(false);
               }}
-              className="text-muted-foreground text-[11px]"
+              className="text-muted-foreground text-xs"
             >
               취소
             </button>
             <button
               type="submit"
               disabled={pending}
-              className="text-chart-1 inline-flex items-center gap-1 text-[11px] font-medium"
+              className="text-chart-1 inline-flex items-center gap-1 text-xs font-medium"
             >
               {pending ? <Loader2 className="size-3 animate-spin" /> : null}
               저장

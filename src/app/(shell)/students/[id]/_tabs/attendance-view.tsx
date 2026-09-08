@@ -140,7 +140,7 @@ export function AttendanceView({
         <AttendanceList records={monthRecords} />
       )}
 
-      <div className="text-text-dim flex flex-wrap gap-2 text-[11px]">
+      <div className="text-text-dim flex flex-wrap gap-2 text-xs">
         {ATTENDANCE_STATUS_ORDER.map((k) => (
           <span key={k} className={`rounded-full border px-1.5 py-0.5 ${attendanceStatusColor(k)}`}>
             {attendanceStatusLabel(k)}

@@ -6,6 +6,8 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 // 색은 인라인 hex(스크린샷 안정): 시험=primary #153e75, 과제=blue #2962ce. 격자/축은 회색.
 // ⚠️ CSS 변수를 못 쓴다(워커 headless 렌더에 앱 스타일시트가 없다) — 그래서 여기만 hex를 적는다.
 //    globals.css의 `--primary`/`--blue`를 바꾸면 **이 두 값도 함께** 고칠 것(v4에서 blue를 조였다).
+// ⚠️ 이 그래프는 **학부모 문서**다(parent-report-card → 공유 링크 `/r/…`·인쇄·ClassNote 이미지) — 디자인 v5의
+//    화면 글자 승격(14 바닥) 밖이라 눈금 11은 종이 서식 스케일이다. 강사뷰를 손볼 때 같이 키우지 말 것(18단계 리뷰).
 
 const W = 660;
 const H = 200;
@@ -99,7 +101,7 @@ function MetricBlock({
   if (!hasTrend(points, metric)) return null;
   return (
     <div>
-      <h3 className="mb-1.5 flex items-center gap-1.5 text-[13px] font-bold" style={{ color }}>
+      <h3 className="mb-1.5 flex items-center gap-1.5 text-sm font-bold" style={{ color }}>
         <span className="inline-block size-2 rounded-full" style={{ backgroundColor: color }} aria-hidden />
         {title}
       </h3>

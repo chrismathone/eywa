@@ -50,7 +50,7 @@ export function StatusDialog({
       <form onSubmit={(e) => { e.preventDefault(); void onSubmit(new FormData(e.currentTarget)); }} className="flex flex-col gap-3">
         <input type="hidden" name="id" value={asset.id} />
         {mismatch ? (
-          <div className="border-amber/40 bg-amber-soft text-amber flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-[12px]">
+          <div className="border-amber/40 bg-amber-soft text-amber flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs">
             <span className="flex-1">
               {mismatch.reason} — <b>{assetStatusLabel(mismatch.expected)}</b>로 맞출 수 있습니다.
             </span>

@@ -106,7 +106,7 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
         </div>
         {isConverted ? (
           // 🔴 서버가 던지는 문장과 **같은 상수** — 한쪽만 고치면 안내가 갈린다.
-          <p className="text-text-dim text-[11px]">{ENROLLED_REVERT_BLOCKED}</p>
+          <p className="text-text-dim text-xs">{ENROLLED_REVERT_BLOCKED}</p>
         ) : null}
         {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
         <footer className="flex items-center justify-end gap-2 pt-1">

@@ -33,7 +33,7 @@ export function ScheduledChangeBanner({
   if (changes.length === 0) return null;
   return (
     <div className="border-blue/30 bg-blue-soft/50 rounded-xl border px-4 py-3">
-      <p className="text-blue inline-flex items-center gap-1.5 text-[13px] font-bold">
+      <p className="text-blue inline-flex items-center gap-1.5 text-sm font-bold">
         <CalendarClock className="size-4" aria-hidden="true" />
         {sheetT(lang, "sched.title")}{" "}
         {changes.length > 1 ? sheetTf(lang, "sched.count", { n: changes.length }) : null}

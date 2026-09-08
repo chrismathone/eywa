@@ -12,7 +12,11 @@ export default function McsLandingLoading() {
         <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded" />
       </div>
-      <div className="bg-bg-soft h-[34px] w-[260px] shrink-0 animate-pulse rounded-lg" />
+      {/* 상단 바(기간 네비 + 반 선택) — 높이는 컨트롤과 같은 변수(`--control-h`), 고정 px로 적지 않는다. */}
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="bg-bg-soft h-(--control-h) w-44 shrink-0 animate-pulse rounded-lg" />
+        <div className="bg-bg-soft h-(--control-h) w-28 shrink-0 animate-pulse rounded-lg" />
+      </div>
       {[0, 1].map((g) => (
         <section key={g} className="flex flex-col gap-2">
           <div className="bg-bg-soft h-5 w-24 animate-pulse rounded" />

@@ -19,17 +19,10 @@ import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  SHUTTLE_ACTION,
-  SHUTTLE_CHIP,
-  SHUTTLE_CHIP_OFF,
-  SHUTTLE_CHIP_ON,
-  SHUTTLE_ROW_TEXT,
-} from "@/features/shuttle/control-size";
+import { SHUTTLE_PHONE_CONTROLS, SHUTTLE_ROW_TEXT, SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_BOARD_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import {
   SEASON_LABEL,
-  SEASONS,
   runTitle,
   type Season,
   type ShuttleRun,
@@ -47,6 +40,8 @@ import { RunColumn } from "./run-column";
 import { StopColumn } from "./stop-column";
 import { StudentPool } from "./student-pool";
 import { StopMasterDialog } from "./stop-master-dialog";
+import { ShuttleSeasonSelect } from "./shuttle-day-nav";
+import { ShuttlePrintMenu } from "./shuttle-print-menu";
 
 /**
  * 셔틀 노선 편성 보드 — 3열(회차 / 노선 / 학생). 편집은 드래그&드롭이 기본이다
@@ -189,6 +184,10 @@ export function ShuttleBoardClient({
     }
   }
 
+  // 머리의 값(§4 설명 문장 대신) — 보드가 이미 실은 것만 센다(추가 조회 0). 🔴 `students`는 배정 **가능한** 재원생 전원이라
+  //    '학생 N명'이라 적으면 거짓 숫자다(리뷰 2026-09-04) — 배정된 사람은 `assignedIds`.
+  const boardSummary = `차량 ${vehicles.length}대 · 회차 ${runs.length}개 · 정류장 ${stops.length}곳 · 배정 ${assignedIds.size}명`;
+
   return (
     <DndContext
       // SSR 하이드레이션 불일치 방지 — dnd-kit은 명시 id가 없으면 자동 id를 만든다([[#51]]).
@@ -199,74 +198,45 @@ export function ShuttleBoardClient({
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragLabel(null)}
     >
+      {/* 머리(지시서 §10, 디자인 v5 17단계 2026-09-04): 설명 문장 → 값(차량·회차·정류장·학생 수) · 상시 버튼 =
+          Primary '정류장 관리'(쓰기 권한) + 텍스트 '인쇄 ▾'(오늘 노선표·전체 편성표 — 옛 outline 셋).
+          📱 인쇄는 **거친 포인터**(손으로 쓰는 기기)에서 감춘다(원장 2026-08-19: *"모바일에서는 인쇄 버튼 필요 없을거같은데"*)
+             — 폭 기준(`md:`)이면 좁은 플로팅 창에서도 사라져서, 기준은 폭이 아니라 포인터다. 순수 CSS(JS 조건 마운트는
+             첫 페인트에 번쩍이는 CLS + hydration 불일치). */}
       <PageHeader
         eyebrow="셔틀"
         title="노선 편성"
-        embedLabel={`${SEASON_LABEL[season]} 노선`}
-        description="차량·회차별 정류장 순서와 승하차 학생을 편성합니다."
+        embedLabel={`${SEASON_LABEL[season]} 노선 · ${boardSummary}`}
+        description={boardSummary}
         actions={
-          <>
-            {/* 인쇄는 플로팅 창 + A4 규약 — `(print)` 라우트를 새 창으로 연다(design-conventions).
-                📱 **좁은 화면에선 감춘다**(원장 2026-08-19: *"모바일에서는 인쇄 버튼 필요 없을거같은데"*) —
-                폰에서 노선표를 뽑는 일이 없는데 헤더 한 줄을 통째로 먹고, 그만큼 오늘 할 일이 밀린다.
-                ⚠️ 순수 CSS로 감춘다(JS 조건 마운트는 첫 페인트에 번쩍였다 사라지는 CLS + hydration 불일치).
-                🔑 기준은 폭이 아니라 **포인터**(`pointer-coarse`)다 — 셔틀 창은 ROUTE_WINDOW_SIZE에 없어
-                   기본 480px로 열리므로, 폭 기준(`md:`)으로 감추면 **데스크톱 플로팅 창에서도** 인쇄가
-                   사라진다. 감추려는 건 좁은 화면이 아니라 **손으로 쓰는 기기**다. */}
-            <span className="flex items-center gap-2 pointer-coarse:hidden">
-              <Button
-                variant="outline"
-                className={SHUTTLE_ACTION}
-                onClick={() => window.open(`/shuttle/route?season=${season}`, "_blank")}
-              >
-                오늘 노선표 인쇄
-              </Button>
-              <Button
-                variant="outline"
-                className={SHUTTLE_ACTION}
-                onClick={() => window.open(`/shuttle/route?season=${season}&d=all`, "_blank")}
-              >
-                전체 편성표 인쇄
-              </Button>
+          // 📱 머리 버튼도 폰에선 44px — 툴바 래퍼와 같은 변수 덮어쓰기(SHUTTLE_PHONE_CONTROLS).
+          <span className={`flex items-center gap-2 ${SHUTTLE_PHONE_CONTROLS}`}>
+            <span className="pointer-coarse:hidden">
+              <ShuttlePrintMenu season={season} />
             </span>
-            {canWrite && (
-              <Button variant="outline" className={SHUTTLE_ACTION} onClick={() => setStopDialogOpen(true)}>
-                정류장 관리
-              </Button>
-            )}
-          </>
+            {canWrite && <Button onClick={() => setStopDialogOpen(true)}>정류장 관리</Button>}
+          </span>
         }
       />
 
-      {/* 📐 **면 전환 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*).
-          종전엔 제목줄 / 탭 / 시즌칩으로 상단만 세 줄이었고, 탭 바는 가로 880px 중 200px만 쓰고
-          나머지가 빈 띠였다. 탭을 `min-w-0`로 줄이고 남는 폭을 시즌 칩이 쓴다.
+      {/* 📐 **면 전환 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*). 시즌은 `시즌: 학기중`
+          드롭다운(§10 — 옛 알약 칩 둘). 탭을 `min-w-0`로 줄이고 남는 폭을 시즌이 쓴다.
           📱 폰엔 사이드바(하부탭)가 없어 '오늘 등하원'으로 갈 길이 이 탭뿐이다(faces.ts).
           🔴 FaceTabs는 공용 컴포넌트라 손대지 않는다 — 감싸는 자리만 바꾼다. */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2">
-        <span className="min-w-0 basis-full sm:basis-auto">
+      <div className={SHUTTLE_TOOLBAR}>
+        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
           <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_BOARD_PATH} ariaLabel="셔틀 면 전환" />
         </span>
-        {SEASONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            aria-pressed={s === season}
-            onClick={() => router.push(`/shuttle?season=${s}`)}
-            className={cn(SHUTTLE_CHIP, s === season ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
-          >
-            {SEASON_LABEL[s]}
-          </button>
-        ))}
+        <ShuttleSeasonSelect season={season} hrefFor={(s) => `${SHUTTLE_BOARD_PATH}?season=${s}`} />
         {!canWrite && (
-          <span className="text-text-faint text-[12.5px] whitespace-nowrap">
+          <span className="text-text-faint text-sm whitespace-nowrap">
             열람 전용 — 편성은 사무실에서 수정합니다
           </span>
         )}
       </div>
 
       {error && (
-        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-[12.5px]">
+        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
           {error}
         </div>
       )}
@@ -324,7 +294,7 @@ export function ShuttleBoardClient({
 
       <DragOverlay dropAnimation={null}>
         {dragLabel ? (
-          <span className="border-primary/40 bg-card text-foreground rounded-pill border px-2.5 py-1 text-[12.5px] font-bold shadow-lg">
+          <span className="border-primary/40 bg-card text-foreground rounded-pill border px-2.5 py-1 text-xs font-bold shadow-lg">
             {dragLabel}
           </span>
         ) : null}
@@ -345,7 +315,7 @@ export function ShuttleBoardClient({
       )}
 
       {activeRun && (
-        <p className="text-text-faint text-[11.5px]">
+        <p className="text-text-faint text-xs">
           {runTitle(activeRun)} — 정류장 {activeRun.stops.filter((s) => s.kind === "stop").length}곳 ·
           배정 {activeRun.stops.reduce((n, s) => n + s.riders.length, 0)}명
         </p>

@@ -1,19 +1,10 @@
 import { ParamLink } from "./_components/param-link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
+import { ParamSelect } from "./_components/param-select";
+import { Layers } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { Toolbar } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
-import {
-  TOOLBAR_CHIP,
-  TOOLBAR_CHIP_OFF,
-  TOOLBAR_CHIP_ON,
-  TOOLBAR_SEG_BOX,
-  TOOLBAR_SEG_BOX_WRAP,
-  TOOLBAR_SEG_ITEM,
-  TOOLBAR_SEG_OFF,
-  TOOLBAR_SEG_ON_PRIMARY,
-} from "@/components/toolbar-controls";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -61,12 +52,13 @@ import { pickScheduledGroupsForWeek } from "@/features/timetable/scheduled-group
 import { getScheduledGroupPlans } from "@/features/timetable/server/scheduled-groups-queries";
 import { buildTimetableSearchIndex, timetableSearchScope } from "@/features/timetable/lib/student-search";
 import {
-  TimetableSearchBox,
   TimetableSearchEmptyNote,
+  TimetableSearchToggle,
   TimetableSearchProvider,
 } from "./_components/search-context";
 import { kstMinutesOfDay, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
+import { RosterMoveArea } from "./_components/roster-move";
 import { IntegratedEditBoard } from "./_components/integrated-edit-board";
 import {
   TimetableEditProvider,
@@ -81,10 +73,13 @@ import {
   COMPACT1H_NONE,
   EMPTY_DAYS_COOKIE,
   EMPTY_PERIODS_COOKIE,
+  STUDENTS_COOKIE,
   readCompact1hFor,
 } from "@/features/timetable/lib/pref-cookies";
 import { TimetableViewPrefsSync } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
+import { ClassMoveProvider } from "./_components/class-move-context";
+import { buildClassMoveIndex } from "@/features/timetable/lib/class-move";
 import { TimetableColorPrefSync } from "./_components/color-mode-toggle";
 import { TimetableFontPrefSync, TimetableZoomArea } from "./_components/font-size-toggle";
 import { TimetableViewSettings } from "./_components/view-settings";
@@ -117,10 +112,10 @@ type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string; gedit?: string; etrack?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; kind?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string; students?: string; gedit?: string; etrack?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw, gedit: geditRaw, etrack: etrackRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, kind: kindRaw, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw, students: studentsRaw, gedit: geditRaw, etrack: etrackRaw } = await searchParams;
   // 정규/특강/전체 — 기본 = 정규(특강 제외). 특강은 방학 단기강좌라 정규 주간표에 섞이면 시야가 흐려진다.
   const kind = parseTimetableKind(kindRaw);
   const cookieStore = await cookies();
@@ -173,6 +168,10 @@ export default async function TimetablePage({
   //    남의 반 명단까지 바뀐다 → 관리자(classes=full)만. `canWriteTenant`는 scoped 강사도 통과하므로
   //    쓰면 안 된다(perm-matrix `canManageTenant` 주석). 서버 액션도 같은 게이트로 잠갔다(#77).
   const canEdit = rel !== "past" && (await canManageTenant(user.systemRole, "classes"));
+  // 명단 이동(통합뷰에서 대기/퇴원으로 끌어 놓기) = **학생 기록 변경**이라 문이 다르다 — 서버 액션의
+  // 게이트(canManageStudentRecords = students full)와 같은 모양이어야 한다(#77: 끌 수는 있는데 저장에서
+  // 거절당하면 그게 더 나쁘다). 강사는 학생 기록 열람 전용(원장 2026-08-18).
+  const canEditRoster = rel !== "past" && (await canManageTenant(user.systemRole, "students"));
   // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
   const effectiveDate = isFutureWeek ? week : undefined;
 
@@ -215,6 +214,11 @@ export default async function TimetablePage({
   const collapseEmptyPeriods = emptyperiodsRaw
     ? emptyperiodsRaw === "collapse"
     : savedCollapseEmptyPeriods;
+  // '학생 명단 접기'(2026-09-04 원장) — 셀에 반 이름·강의실·인원만 남기고 명단을 감춘다. 기본 = 펼침.
+  // 우선순위는 위 둘과 같다(URL → 계정 → 쿠키 → 기본값). 명단을 감추면 셀·행 높이도 함께 줄어든다.
+  const savedHideStudents =
+    viewPrefs.hideStudents ?? cookieStore.get(STUDENTS_COOKIE)?.value === "hide";
+  const hideStudents = studentsRaw ? studentsRaw === "hide" : savedHideStudents;
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
@@ -264,10 +268,17 @@ export default async function TimetablePage({
   // 비수업 블록(감독·준비·회의·연차, 0138a) — **강사뷰에서만** 그린다. 반이 아니라서 다른 뷰·집계에
   // 섞으면 수업 수가 부풀고 과목/구분 칩에도 새어 나온다. subject 확정 뒤에 읽어야 해서(위 Promise.all은
   // subject를 아직 모른다) 여기서 조회 — 강사뷰일 때만 도는 경량 쿼리다.
-  const scheduleBlocks =
-    view === "teacher" && subject
-      ? await getTeacherScheduleBlocks(subject, referenceDate, teacherId)
-      : [];
+  // ⚠️ 기본뷰에서도 **편집 권한자에 한해** 읽는다 — 반 블록 이동 판정의 강사 축이 이걸 봐야
+  //    "그 시간에 그 강사는 회의/연차"인 칸을 초록으로 칠하지 않는다(적대 리뷰 2026-09-04).
+  //    화면엔 안 그린다(반이 아니라서 다른 뷰에 섞으면 수업 수가 부푼다) — 판정 재료로만 쓴다.
+  // ⚠️ 블록은 **과목별로 저장**된다(`teacher_schedule_blocks.subject`) — 영어로 등록된 연차·회의는
+  //    수학 시간표의 이동 판정에 안 잡힌다(같은 과목 안에서만 참인 축이다).
+  // 🔴 여기서 곧바로 await하지 않는다 — 기본뷰는 가장 많이 여는 화면이라 직렬 왕복이 첫 페인트를 민다(B4).
+  //    아래 다른 조회들과 겹쳐 돌리고 **쓰기 직전에** 기다린다.
+  const needsBlocks = subject && (view === "teacher" || canEdit);
+  const scheduleBlocksPromise = needsBlocks
+    ? getTeacherScheduleBlocks(subject, referenceDate, teacherId)
+    : Promise.resolve([]);
 
   // '시트 반영' 버튼 = sheet_sync 권한(기본 원장·관리자·실장, owner에서 조정) + 지원 과목(math·english) + 연동 ON.
   // 상태는 **현재 보는 과목** 기준. (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 —
@@ -283,6 +294,8 @@ export default async function TimetablePage({
   // 미래 날짜로 적용해 둔 가져오기(예약) — 툴바 배지의 재료. 예약이 없으면 0행이라 비용이 사실상 없고,
   // 권한자에게만 도는 쿼리다(배지의 × 가 권한자 전용이라 남에게 보여줄 이유가 없다).
   const scheduled = canSync && canManageImport ? await getScheduledImports() : [];
+  // 위에서 미리 띄워 둔 근무 블록(판정 재료·강사뷰 격자) — 여기서 한 번 기다린다.
+  const scheduleBlocks = await scheduleBlocksPromise;
   // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(그 과목 전용 시트).
   const sheetUrl = sheetsStatus?.spreadsheetId
     ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
@@ -505,11 +518,13 @@ export default async function TimetablePage({
       <TimetableViewPrefsSync
         hideEmptyDays={hideEmptyDays}
         collapseEmptyPeriods={collapseEmptyPeriods}
+        hideStudents={hideStudents}
         subject={subject}
         sections={compactList}
         englishTrack={carriedTrack}
         savedHideEmptyDays={viewPrefs.hideEmptyDays}
         savedCollapseEmptyPeriods={viewPrefs.collapseEmptyPeriods}
+        savedHideStudents={viewPrefs.hideStudents}
         savedSections={viewPrefs.compact1h?.[subject] ?? null}
         savedEnglishTrack={viewPrefs.englishTrack}
       />
@@ -544,11 +559,16 @@ export default async function TimetablePage({
       {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
       <Toolbar>
+        {/* 왼쪽 묶음(주 이동·필터·검색·설정·엑셀) / 오른쪽 묶음(집계·ECS·편집) — 창을 줄이면 **묶음 단위로** 줄이 바뀐다
+            (원장 2026-09-04 *"창 크기를 조절했을때도 헤더 정렬이 이루어질 수 있게"* — 종전엔 항목 하나(엑셀·시트)만 둘째 줄
+            왼쪽에 떨어지고 집계·편집이 그 오른쪽에 붙어 어디가 왼쪽 묶음의 끝인지 안 읽혔다).
+            ⚠️ 폰 레일(compact-chrome)에선 묶음 상자를 없앤다(display: contents) — 레일은 직계 항목을 한 줄로 흘린다. */}
+        <div className="toolbar-group flex min-w-0 flex-wrap items-center gap-3">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
         {/* 미래 날짜로 적용해 둔 변경 — 이번 주 화면엔 흔적이 없어 여기 상시로 붙인다(원장 2026-08-28).
             라벨=시트 열기 · ×=예약 취소. 예약이 없으면 아무것도 안 그린다(평소 비용 0). */}
@@ -563,97 +583,92 @@ export default async function TimetablePage({
         ))}
         <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 교실뷰는 과목·구분 칩을 접는다 — 전 과목·전 구분이 한 지도에 그려져야 참이다(요일·과목
+        {/* 교실뷰는 과목·구분을 접는다 — 전 과목·전 구분이 한 지도에 그려져야 참이다(요일·과목
             하이라이트는 RoomMapView 안의 클라 칩이 담당). */}
         {isRooms ? null : (
-        <>
-        {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰 비허용 과목으로 전환 시 기본뷰로.
-            ⚠️ flex-wrap 필수 — 과목이 많은 학원(과학·국어·사회…)에서 칩이 한 줄로 강제되면 툴바가
-            가로로 넘친다(칩 자체가 shrink-0이라 줄지도 않음). 형제인 toolbar-actions와 동일 규약. */}
-        <div className="flex items-center gap-1.5">
-          <span className="micro shrink-0 compact-chrome:hidden">과목</span>
-          {/* 과목 수는 학원설정을 따라 늘어난다 — 묶음 안에서 줄바꿈되는 변형(그 상수 주석). */}
-          <div className={TOOLBAR_SEG_BOX_WRAP}>
-          {available.map((k) => (
-            <ParamLink
-              key={k}
-              href={buildHref({
-                // 🔴 과목마다 기본 뷰가 다르다 — **일부러 바꿔 보던 중이 아니면** 새 과목의 기본 뷰를 따른다
-                //    (그게 이 설정의 뜻이다: "영어를 열면 통합뷰"). 벗어나 있었다면 그 선택을 실어 나른다.
-                //    ⚠️ '벗어났나' 판정은 강등 전(`view`)으로 한다 — 강등된 effView로 재면 설정이 강사뷰인
-                //    과목에서 "안 벗어났는데 벗어난 것"으로 잡힌다. 강등은 **결과값에** 적용한다.
-                view: (() => {
-                  const carried = viewForSubjectSwitch(view, thisSubjectDefaultView, defaultViewOf(k));
-                  return carried === "teacher" && !allowsTeacherView(k) ? "basic" : carried;
-                })(),
-                defaultView: defaultViewOf(k),
-                subject: k,
-                defaultSubject,
-                kind,
-                week,
-                thisWk,
-                // 과목 전환 = '1시간 단위'를 안 싣는다(섹션 order가 과목마다 달라 엉뚱한 섹션이 접힌다).
-                // 파라미터가 없으면 서버가 **그 과목 쿠키**를 읽으므로, 초기화가 아니라 "그 과목에서 내가
-                // 마지막으로 정해둔 값"으로 복원된다(2026-07-23 — 과목별 기억 도입 전엔 매번 초기화였음).
-                // ⚠️ 단 '미사용 요일'·'빈 교시 접기' 상태는 과목과 무관한 표시 취향이라 **유지**한다 — 다른
-                // 네비(주 이동·뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
-                hideEmptyDays,
-                collapseEmptyPeriods,
-                // 프로그램 필터는 **영어에만 있는 축**이라 다른 과목으로 갈 땐 안 싣는다(싣고 가면 그 과목
-                // 반이 전부 english_track=null이라 'eie'에서 화면이 통째로 빈다). 영어로 돌아올 땐 계정값 복원.
-                englishTrack: k === "english" ? englishTrack : undefined,
-              })}
-              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === k ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-            >
-              {subjectMaps.labelOf(k)}
-            </ParamLink>
-          ))}
-          </div>
-        </div>
-        <span className="bg-line h-4 w-px" aria-hidden />
-
-        {/* 정규 / 특강 / 전체 — 특강(방학 단기강좌)을 정규 주간표와 분리해 본다(원장 요구 2026-07-22).
-            기본은 정규라 파라미터 없는 URL = 지금까지의 화면. 과목 칩은 이 구분에 실제 있는 과목만 뜬다. */}
-        <div className="flex items-center gap-1.5">
-          <span className="micro shrink-0 compact-chrome:hidden">구분</span>
-          <div className={TOOLBAR_SEG_BOX}>
-          {TIMETABLE_KINDS.map((k) => (
-            <ParamLink
-              key={k}
-              href={buildHref({
-                view: effView,
-                defaultView: thisSubjectDefaultView,
-                subject,
-                defaultSubject,
-                kind: k,
-                week,
-                thisWk,
-                compact1h: compactList,
-                hideEmptyDays,
-                collapseEmptyPeriods,
-                englishTrack: carriedTrack,
-              })}
-              className={`${TOOLBAR_SEG_ITEM} shrink-0 ${kind === k ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-            >
-              {TIMETABLE_KIND_LABEL[k]}
-            </ParamLink>
-          ))}
-          </div>
-        </div>
-        <span className="bg-line h-4 w-px" aria-hidden />
-
-        {/* 프로그램(전체/EiE/인재원 영어) — 영어 과목에서만. ECS 랜딩의 같은 칩과 **같은 어휘**다
-            (원장 2026-08-04 "상단 헤더에 토글버튼", 2026-08-11 통합뷰에도 요청).
-            ⚠️ 라벨·비대칭 계약은 english-track.ts 단일 소스에서 온다 — 여기서 문자열을 새로 적지 말 것. */}
-        {trackApplies ? (
           <>
-            <div className="flex items-center gap-1.5">
-              <span className="micro shrink-0 compact-chrome:hidden">프로그램</span>
-              <div className={TOOLBAR_SEG_BOX}>
-              {ENGLISH_TRACK_FILTERS.map((t) => (
-                <ParamLink
-                  key={t}
-                  href={buildHref({
+            {/* 과목 · 구분 · 프로그램 — 지시서 §10(원장 2026-09-03 *"지시서 그대로"*): 세그먼트 칩 묶음이 아니라 `축: 값`
+                드롭다운 하나씩. 옛 칩 줄은 과목 수만큼 늘어나 툴바를 2줄로 밀었고(과학·국어·사회…) 축 이름이 따로 서 있었다.
+                항목은 서버가 만든 href(ParamSelect = ParamLink와 같은 무플래시 이동 + 미저장 가드). */}
+            {/* 이 구분에 과목이 하나도 없으면(특강 0개 등) 고를 게 없다 — "과목: —"에 빈 목록을 여는 것보다 안 그리는 게 낫다.
+                되돌아갈 길은 옆 구분 드롭다운(TIMETABLE_KINDS는 데이터로 거르지 않는다). */}
+            {available.length === 0 ? null : (
+            <ParamSelect
+              axisLabel="과목"
+              ariaLabel="과목 선택"
+              value={subject}
+              options={available.map((k) => ({
+                value: k,
+                label: subjectMaps.labelOf(k),
+                href: buildHref({
+                  // 🔴 과목마다 기본 뷰가 다르다 — **일부러 바꿔 보던 중이 아니면** 새 과목의 기본 뷰를 따른다
+                  //    (그게 이 설정의 뜻이다: "영어를 열면 통합뷰"). 벗어나 있었다면 그 선택을 실어 나른다.
+                  //    ⚠️ '벗어났나' 판정은 강등 전(`view`)으로 한다 — 강등된 effView로 재면 설정이 강사뷰인
+                  //    과목에서 "안 벗어났는데 벗어난 것"으로 잡힌다. 강등은 **결과값에** 적용한다.
+                  view: (() => {
+                    const carried = viewForSubjectSwitch(view, thisSubjectDefaultView, defaultViewOf(k));
+                    return carried === "teacher" && !allowsTeacherView(k) ? "basic" : carried;
+                  })(),
+                  defaultView: defaultViewOf(k),
+                  subject: k,
+                  defaultSubject,
+                  kind,
+                  week,
+                  thisWk,
+                  // 과목 전환 = '1시간 단위'를 안 싣는다(섹션 order가 과목마다 달라 엉뚱한 섹션이 접힌다).
+                  // 파라미터가 없으면 서버가 **그 과목 쿠키**를 읽으므로, 초기화가 아니라 "그 과목에서 내가
+                  // 마지막으로 정해둔 값"으로 복원된다(2026-07-23 — 과목별 기억 도입 전엔 매번 초기화였음).
+                  // ⚠️ 단 '미사용 요일'·'빈 교시 접기' 상태는 과목과 무관한 표시 취향이라 **유지**한다 — 다른
+                  // 네비(주 이동·뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
+                  hideEmptyDays,
+                  collapseEmptyPeriods,
+                  hideStudents,
+                  // 프로그램 필터는 **영어에만 있는 축**이라 다른 과목으로 갈 땐 안 싣는다(싣고 가면 그 과목
+                  // 반이 전부 english_track=null이라 'eie'에서 화면이 통째로 빈다). 영어로 돌아올 땐 계정값 복원.
+                  englishTrack: k === "english" ? englishTrack : undefined,
+                }),
+              }))}
+            />
+            )}
+
+            {/* 정규 / 특강 / 전체 — 특강(방학 단기강좌)을 정규 주간표와 분리해 본다(원장 요구 2026-07-22).
+                기본은 정규라 파라미터 없는 URL = 지금까지의 화면. 과목 목록은 이 구분에 실제 있는 과목만 뜬다. */}
+            <ParamSelect
+              axisLabel="구분"
+              ariaLabel="정규·특강 구분"
+              value={kind}
+              options={TIMETABLE_KINDS.map((k) => ({
+                value: k,
+                label: TIMETABLE_KIND_LABEL[k],
+                href: buildHref({
+                  view: effView,
+                  defaultView: thisSubjectDefaultView,
+                  subject,
+                  defaultSubject,
+                  kind: k,
+                  week,
+                  thisWk,
+                  compact1h: compactList,
+                  hideEmptyDays,
+                  collapseEmptyPeriods,
+                  hideStudents,
+                  englishTrack: carriedTrack,
+                }),
+              }))}
+            />
+
+            {/* 프로그램(전체/EiE/인재원 영어) — 영어 과목에서만. ECS 랜딩의 같은 칩과 **같은 어휘**다
+                (원장 2026-08-04 "상단 헤더에 토글버튼", 2026-08-11 통합뷰에도 요청).
+                ⚠️ 라벨·비대칭 계약은 english-track.ts 단일 소스에서 온다 — 여기서 문자열을 새로 적지 말 것. */}
+            {trackApplies ? (
+              <ParamSelect
+                axisLabel="프로그램"
+                ariaLabel="영어 프로그램 필터"
+                value={englishTrack}
+                options={ENGLISH_TRACK_FILTERS.map((t) => ({
+                  value: t,
+                  label: ENGLISH_TRACK_FILTER_LABEL[t],
+                  href: buildHref({
                     view: effView,
                     defaultView: thisSubjectDefaultView,
                     subject,
@@ -664,56 +679,39 @@ export default async function TimetablePage({
                     compact1h: compactList,
                     hideEmptyDays,
                     collapseEmptyPeriods,
+                    hideStudents,
                     englishTrack: t,
-                  })}
-                  className={`${TOOLBAR_SEG_ITEM} shrink-0 ${englishTrack === t ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-                >
-                  {ENGLISH_TRACK_FILTER_LABEL[t]}
-                </ParamLink>
-              ))}
-              </div>
-            </div>
-            <span className="bg-line h-4 w-px" aria-hidden />
+                  }),
+                }))}
+              />
+            ) : null}
           </>
-        ) : null}
-        </>
         )}
 
-        {/* 뷰 토글 — 강사뷰는 허용 과목(영어 또는 강사별시간표 설정 보유)에서만 노출. */}
-        <div className="flex items-center gap-1.5">
-          <span className="micro shrink-0 compact-chrome:hidden">뷰</span>
-          <div className={TOOLBAR_SEG_BOX}>
-          {([
-            { key: "basic", label: "기본뷰", icon: Columns3 },
-            { key: "integrated", label: "통합뷰", icon: LayoutGrid },
-            ...(teacherViewAllowed
-              ? [{ key: "teacher" as ViewMode, label: "강사뷰", icon: Users }]
-              : []),
-            // 교실뷰 — 관리자 전용(강사 스코프 지도는 거짓, roomsViewAllowed 주석 참조).
-            ...(roomsViewAllowed
-              ? [{ key: "rooms" as ViewMode, label: "교실뷰", icon: DoorOpen }]
-              : []),
-          ] as { key: ViewMode; label: string; icon: LucideIcon }[]).map((v) => {
-            const Icon = v.icon;
-            return (
-              <ParamLink
-                key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
-                className={`${TOOLBAR_SEG_ITEM} inline-flex shrink-0 items-center gap-1.5 ${effView === v.key ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                <Icon size={11} strokeWidth={1.8} />
-                {v.label}
-              </ParamLink>
-            );
-          })}
-          </div>
-        </div>
+        {/* 뷰 — 기본뷰/통합뷰/(강사뷰: 허용 과목에서만)/(교실뷰: 관리자 전용, roomsViewAllowed 주석 참조).
+            아이콘은 뺐다(§10 툴바 아이콘 열 제거 — 글자가 곧 뜻이다). */}
+        <ParamSelect
+          axisLabel="뷰"
+          ariaLabel="시간표 보기 방식"
+          value={effView}
+          options={(
+            [
+              { key: "basic", label: "기본뷰" },
+              { key: "integrated", label: "통합뷰" },
+              ...(teacherViewAllowed ? [{ key: "teacher" as ViewMode, label: "강사뷰" }] : []),
+              ...(roomsViewAllowed ? [{ key: "rooms" as ViewMode, label: "교실뷰" }] : []),
+            ] as { key: ViewMode; label: string }[]
+          ).map((v) => ({
+            value: v.key,
+            label: v.label,
+            href: buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView }),
+          }))}
+        />
 
-        {/* 학생 검색 — 이름을 치면 **그 학생이 든 수업(칸)만** 남는다(원장 2026-08-20).
-            서버 왕복 0(이미 내려온 명단으로 클라 판정)이라 글자마다 표가 다시 그려지지 않는다.
-            ⚠️ 새 줄을 만들지 않는다 — 툴바 레일(.toolbar-rail)의 한 항목으로 눕는다. 앞 구분선은
-            컴포넌트가 직접 그린다(숨을 때 선만 남지 않게). 교실뷰·배치 편집·편집 모드에선 스스로 물러난다. */}
-        <TimetableSearchBox />
+        {/* 학생 검색 — 이름을 치면 **그 학생이 든 수업(칸)만** 남는다(원장 2026-08-20). 눌러야 나온다(§10 "검색은
+            필요할 때만") · 검색어가 걸려 있으면 펼친 채. 서버 왕복 0(이미 내려온 명단으로 클라 판정)이라 글자마다 표가
+            다시 그려지지 않는다. 교실뷰·배치 편집·편집 모드에선 스스로 물러난다. */}
+        <TimetableSearchToggle />
 
         {/* 강사뷰 '미사용 요일'·기본뷰 '빈 교시 접기'·'색 강도'는 **뷰 설정 팝오버 안으로** 옮겼다
             (2026-07-24 원장 "시간표도 깔끔하게"). 셋 다 "무엇이 어떻게 보이나"라 학년 필터와 같은 성격이고,
@@ -730,7 +728,7 @@ export default async function TimetablePage({
                 *"통합뷰에서 편집모드를 누르고, 통합뷰의 그 자체를 드래그하고 싶은거야"*).
                 누르면 같은 서식 그대로 **수업명 행만** 남고 그 위에서 반을 끌어 줄을 바꾼다. */}
             <ParamLink
-              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
               title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
               className={`${TOOLBAR_CHIP} gap-1.5 ${groupEditing ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
             >
@@ -778,6 +776,7 @@ export default async function TimetablePage({
                   compact1h: compactList,
                   hideEmptyDays,
                   collapseEmptyPeriods: !collapseEmptyPeriods,
+                  hideStudents,
                   englishTrack: carriedTrack,
                 })
               : undefined
@@ -796,17 +795,39 @@ export default async function TimetablePage({
                   compact1h: compactList,
                   hideEmptyDays: !hideEmptyDays,
                   collapseEmptyPeriods,
+                  hideStudents,
                   englishTrack: carriedTrack,
                 })
               : undefined
           }
           hideEmptyDaysOn={hideEmptyDays}
+          hideStudentsHref={
+            // '학생 명단' 토글은 명단을 그리는 뷰에서만(기본뷰·통합뷰) — 강사뷰·교실뷰엔 명단 자체가 없어
+            // 항목이 서 있으면 눌러도 아무 일도 안 일어난다.
+            effView === "basic" || effView === "integrated"
+              ? buildHref({
+                  view: effView,
+                  defaultView: thisSubjectDefaultView,
+                  subject,
+                  defaultSubject,
+                  kind,
+                  week,
+                  thisWk,
+                  compact1h: compactList,
+                  hideEmptyDays,
+                  collapseEmptyPeriods,
+                  hideStudents: !hideStudents,
+                  englishTrack: carriedTrack,
+                })
+              : undefined
+          }
+          hideStudentsOn={hideStudents}
         />
 
         {/* 학년 필터가 걸린 채로 이 과목·이 주에 보이는 학생이 0명이면, 화면이 그냥 비어 있어 고장으로
             보인다. 배지만으론 부족해 한 줄로 명시한다(필터 때문임을 알아야 되돌릴 수 있다). */}
         {viewPrefs.grades && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
-          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-xs">
             학년 필터에 걸려 표시할 수업이 없습니다 — 뷰 설정에서 학년을 넓혀 보세요.
           </span>
         ) : null}
@@ -816,7 +837,7 @@ export default async function TimetablePage({
             ⚠️ 학년 필터 안내와 조건이 겹칠 수 있어 프로그램 쪽을 먼저 잡는다(학년은 계정 설정이라 안 보이지만
             프로그램은 바로 위 칩에서 눈에 보이는 원인이다). */}
         {englishTrack !== "all" && slots.length === 0 && kindSlots.some((s) => s.subject === subject) ? (
-          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-[11px]">
+          <span className="bg-accent text-accent-foreground rounded-full px-2.5 py-0.5 text-xs">
             프로그램 필터(
             {ENGLISH_TRACK_FILTER_LABEL[englishTrack]})에 걸려 표시할 수업이 없습니다 — &lsquo;전체&rsquo;로
             바꿔 보세요.
@@ -838,7 +859,9 @@ export default async function TimetablePage({
         </>
         )}
 
+        </div>
         <div className="rail-spacer ml-auto" aria-hidden />
+        <div className="toolbar-group flex flex-wrap items-center gap-3">
 
         {/* 학생 집계 — 최상위 프레임은 PageHeader 우측(문법 ②), 창(임베드)은 헤더 줄을 접으므로
             여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
@@ -868,9 +891,10 @@ export default async function TimetablePage({
         {effView === "basic" && slots.length > 0 && canEdit ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
-            <TimetableEditControls />
+            <TimetableEditControls rosterHidden={hideStudents} />
           </>
         ) : null}
+        </div>
       </Toolbar>
 
       {/* 검색 결과 0건 — 빈 격자만 남기면 "시간표가 고장났다"로 읽힌다. 왜 비었는지(어느 주·어느 과목에
@@ -929,9 +953,12 @@ export default async function TimetablePage({
           initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
           initialPresets={groupPresets}
           initialCompactSections={compactList}
-          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
       ) : isIntegrated ? (
+        // 통합뷰 명단 이동(대기/퇴원 드롭) — 🔴 zoom 래퍼 **바깥**에 DndContext를 둔다([[#98]]: 안쪽이면
+        // fixed인 DragOverlay가 zoom 좌표계로 들어가 고스트가 커서와 어긋난다. 기본뷰와 같은 배치).
+        <RosterMoveArea canEdit={canEditRoster} today={today}>
         <TimetableZoomArea>
           <RichGridView
             slots={slots}
@@ -941,8 +968,10 @@ export default async function TimetablePage({
             teacherNicknames={teacherNicknames}
             compactSections={compactSections}
             customGroups={customGroups}
+            hideStudents={hideStudents}
           />
         </TimetableZoomArea>
+        </RosterMoveArea>
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
@@ -964,23 +993,39 @@ export default async function TimetablePage({
           </div>
         </TimetableZoomArea>
       ) : (
+        <ClassMoveProvider
+          index={
+            canEdit
+              ? buildClassMoveIndex(
+                  // 🔴 강사 근무 블록(감독·회의·연차)도 강사 축에 태운다 — 학생 축엔 학생이 0명이라 안 걸린다.
+                  [...allSlots, ...scheduleBlocks],
+                  [...new Set(slots.map((s) => s.classId ?? s.id))],
+                )
+              : null
+          }
+        >
         <TimetableDndArea>
           {/* ⚠️ zoom은 DndContext **안쪽**에 — 바깥에 두면 fixed인 DragOverlay가 커서와 어긋난다. */}
           <TimetableZoomArea>
             <div className="flex min-h-0 flex-1 flex-col">
               {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수·.tt-editing으로 즉시 펼침(평소 격자 지형 복원). */}
-              <EmptyPeriodScope>
+              {/* 반 블록 이동 판정 재료 — **그 주 전 과목 슬롯**(allSlots)을 서버에서 한 번 접어 내려보낸다.
+                  🔴 새 조회가 0건이다(page가 이미 받아 둔 값) · 화면에 뜬 반 + 그 반이 쓰는 강사·방과 겹칠 수 있는
+                     슬롯만 실어 payload를 줄인다(class-move.ts 주석). 반 드래그가 없는 화면(권한 없음)엔 null. */}
+              <EmptyPeriodScope collapsed={collapseEmptyPeriods} hideStudents={hideStudents}>
                 <WeekdayGroupTables
                   slots={slots}
                   config={periodsConfig}
                   weekMonday={week}
                   weekdayGrouping={weekdayGrouping}
                   collapseEmptyPeriods={collapseEmptyPeriods}
+                  hideStudents={hideStudents}
                 />
               </EmptyPeriodScope>
             </div>
           </TimetableZoomArea>
         </TimetableDndArea>
+        </ClassMoveProvider>
       )}
       </div>
       </TimetableSearchProvider>
@@ -1017,6 +1062,11 @@ function buildHref(opts: {
    */
   collapseEmptyPeriods?: boolean;
   /**
+   * '학생 명단 접기' 상태 — 위 둘과 동일 규약: 값이 오면 **양방향 명시 직렬화**(hide/show),
+   * 미지정(undefined)만 생략(=계정/쿠키 기본).
+   */
+  hideStudents?: boolean;
+  /**
    * 통합뷰 '배치 편집' 모드. **true일 때만** 직렬화한다 — 위 두 표시 설정과 달리 '기억할 취향'이 아니라
    * 지금 켠 작업 모드라, 다른 링크(주 이동·과목 전환)는 파라미터를 안 실어 자연스럽게 읽기 전용으로 돌아간다.
    */
@@ -1047,6 +1097,7 @@ function buildHref(opts: {
   if (opts.hideEmptyDays !== undefined) params.set("emptydays", opts.hideEmptyDays ? "hide" : "show");
   if (opts.collapseEmptyPeriods !== undefined)
     params.set("emptyperiods", opts.collapseEmptyPeriods ? "collapse" : "expand");
+  if (opts.hideStudents !== undefined) params.set("students", opts.hideStudents ? "hide" : "show");
   if (opts.gedit) params.set("gedit", "1");
   if (opts.englishTrack !== undefined) params.set("etrack", opts.englishTrack);
   const q = params.toString();

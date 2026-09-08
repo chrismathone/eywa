@@ -88,6 +88,8 @@ const BOARD: LiveBoard = {
 
 const renderChart = () => {
   const view = render(<SeatingChart board={BOARD} />);
+  // 입력칸은 토글(§10) 뒤에 있다 — 접혀 있으면 '검색'을 눌러 펼친다.
+  if (!screen.queryByLabelText("학생 검색")) fireEvent.click(screen.getByRole("button", { name: "검색" }));
   return { ...view, input: screen.getByLabelText("학생 검색") as HTMLInputElement };
 };
 const type = (input: HTMLInputElement, v: string) => fireEvent.change(input, { target: { value: v } });
@@ -192,10 +194,12 @@ describe("좌석표 과목 필터", () => {
       </OperationsProvider>,
     );
 
-  it("칩을 누르면 그 과목 반 카드만 남는다", () => {
+  it("과목 드롭다운에서 고르면 그 과목 반 카드만 남는다", () => {
     renderMixed();
     expect(screen.getByText("영어반")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "수학" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    // 항목은 Portal 드롭다운의 `menuitem`(폰 레일에서 잘리지 않게 HrefSelect 값 모드로 옮겼다, 2026-09-04).
+    fireEvent.click(screen.getByRole("menuitem", { name: "수학" }));
     expect(screen.getByText("수학반")).toBeTruthy();
     expect(screen.queryByText("영어반")).toBeNull();
   });
@@ -216,7 +220,8 @@ describe("좌석표 과목 필터", () => {
 
   it("고르면 계정에 저장한다(뷰 세팅은 계정 귀속)", () => {
     renderMixed();
-    fireEvent.click(screen.getByRole("button", { name: "영어" }));
+    fireEvent.click(screen.getByRole("button", { name: /^과목:/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "영어" }));
     expect(saveSubject).toHaveBeenCalledWith("english");
   });
 

@@ -38,7 +38,7 @@ export function CopyPrevWeek({
   };
 
   return (
-    <div className="border-line bg-bg-soft flex flex-wrap items-center gap-2 rounded-2xl border border-dashed px-4 py-2.5 text-[13px]">
+    <div className="border-line bg-bg-soft flex flex-wrap items-center gap-2 rounded-2xl border border-dashed px-4 py-2.5 text-sm">
       <span className="text-text-dim">이 주는 아직 비어 있어요.</span>
       <button
         type="button"
@@ -56,11 +56,11 @@ export function CopyPrevWeek({
         className="bg-card border-line backdrop:bg-ink/40 m-auto w-full max-w-md rounded-xl border p-5 shadow-lg"
       >
         <h3 className="text-foreground text-sm font-bold">지난주 계획 가져오기</h3>
-        <div className="text-text-dim mt-3 space-y-1.5 text-[13px]">
+        <div className="text-text-dim mt-3 space-y-1.5 text-sm">
           <p>
             지난주 수업계획과 주간 목표를 <b className="text-foreground">{weekLabelText}</b>로 복사합니다.
           </p>
-          <ul className="list-disc space-y-0.5 pl-4 text-[12px]">
+          <ul className="list-disc space-y-0.5 pl-4 text-xs">
             <li>학생 기록(출석·상태·개인 진도)은 복사하지 않습니다.</li>
             <li>이미 계획이 있는 교시는 통째로 건너뜁니다(덮어쓰기 없음).</li>
             <li>이번 주 시간표에 없는 교시는 복사하지 않고 알려드립니다.</li>

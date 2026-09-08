@@ -52,16 +52,16 @@ export function EnrollmentListCard({
                   <WindowLink
                     href={`/enrollment/${c.id}`}
                     title={c.name}
-                    className="text-foreground truncate text-[13px] font-medium hover:underline"
+                    className="text-foreground truncate text-sm font-medium hover:underline"
                   >
                     {c.name}
                   </WindowLink>
-                  {c.meta ? <p className="text-text-faint truncate text-[11px]">{c.meta}</p> : null}
+                  {c.meta ? <p className="text-text-faint truncate text-xs">{c.meta}</p> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <Pill color={o.color}>{o.label}</Pill>
                   {c.date ? (
-                    <span className="text-text-faint num text-[10px]">{c.date.slice(5)}</span>
+                    <span className="text-text-faint num text-xs">{c.date.slice(5)}</span>
                   ) : null}
                 </div>
               </li>

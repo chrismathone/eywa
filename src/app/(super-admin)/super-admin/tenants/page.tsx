@@ -43,7 +43,7 @@ export default async function TenantsListPage({
         action={
           <Link
             href="/super-admin/tenants/new"
-            className="bg-primary text-primary-foreground shadow-primary-glow inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-bold"
+            className="bg-primary text-primary-foreground shadow-primary-glow inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold"
           >
             <EyIcon name="plus" size={12} /> 신규 학원 발급
           </Link>
@@ -66,12 +66,12 @@ export default async function TenantsListPage({
               name="q"
               defaultValue={q}
               placeholder="학원명·slug 검색"
-              className="border-line text-foreground flex-1 rounded-sm border bg-transparent px-2.5 py-1.5 text-[12px]"
+              className="border-line text-foreground flex-1 rounded-sm border bg-transparent px-2.5 py-1.5 text-xs"
             />
             <input type="hidden" name="plan" value={planFilter} />
             <button
               type="submit"
-              className="border-line text-text-dim hover:text-foreground rounded-sm border px-3 py-1.5 text-[12px] font-bold"
+              className="border-line text-text-dim hover:text-foreground rounded-sm border px-3 py-1.5 text-xs font-bold"
             >
               검색
             </button>
@@ -86,7 +86,7 @@ export default async function TenantsListPage({
 
         {/* Table */}
         <section className="bg-card border-line shadow-card overflow-hidden rounded-md border">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-xs">
             <thead>
               <tr className="bg-bg-soft text-text-dim border-line border-b">
                 <th className="px-4 py-2 text-left font-bold">학원명</th>
@@ -116,7 +116,7 @@ export default async function TenantsListPage({
                         {t.name}
                       </Link>
                     </td>
-                    <td className="text-text-dim px-4 py-2.5 font-mono text-[11px]">{t.slug}</td>
+                    <td className="text-text-dim px-4 py-2.5 font-mono text-xs">{t.slug}</td>
                     <td className="text-foreground px-4 py-2.5 text-right tabular-nums">
                       {fmt(t.userCount)}
                     </td>
@@ -148,8 +148,8 @@ export default async function TenantsListPage({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-card border-line shadow-card rounded-md border p-3.5">
-      <p className="text-text-dim font-mono text-[10px] tracking-wider uppercase">{label}</p>
-      <p className="text-foreground mt-1 text-[20px] font-bold tabular-nums">{value}</p>
+      <p className="text-text-dim font-mono text-xs tracking-wider uppercase">{label}</p>
+      <p className="text-foreground mt-1 text-xl font-bold tabular-nums">{value}</p>
     </div>
   );
 }

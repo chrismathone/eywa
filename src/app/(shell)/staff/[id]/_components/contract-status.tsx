@@ -146,7 +146,7 @@ export function ContractStatus({
           ) : (
             <>
               <p className="num text-text-dim mt-1.5 text-base font-bold">{periodLabel(current)}</p>
-              <p className="text-text-faint mt-1 text-[11px]">
+              <p className="text-text-faint mt-1 text-xs">
                 아직 기입된 계약이 없어 <b>입사일({hireDate}) + 1년</b>으로 계산한 값입니다 — 실제 계약서를
                 &lsquo;{actionLabel}&rsquo;으로 넣으면 이 자리와 히스토리에 함께 남습니다.
               </p>

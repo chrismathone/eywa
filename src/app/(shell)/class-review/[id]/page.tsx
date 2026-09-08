@@ -21,6 +21,7 @@ import {
   observerLimitOf,
 } from "@/features/class-review/server/queries";
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 export const metadata = { title: "수업 평가 상세 — eywa" };
 
@@ -141,7 +142,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
 
       {/* 강사(자기 평가 전용) — 화면에 본인 것만 있다는 사실을 먼저 말한다(점수를 종합으로 오해하지 않게). */}
       {selfOnly ? (
-        <p className="bg-bg-soft/60 text-text-dim rounded-2xl px-4 py-3 text-[13px]">
+        <p className="bg-bg-soft/60 text-text-dim rounded-2xl px-4 py-3 text-sm">
           본인 평가만 표시됩니다 — 평가자 채점과 종합 결과는 사무실에서 관리합니다.
         </p>
       ) : null}
@@ -184,8 +185,8 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
       </div>
 
       {/* 문항 × 평가자 매트릭스 */}
-      <div className="bg-card overflow-x-auto rounded-2xl shadow-card">
-        <table className="w-full min-w-[860px] border-collapse text-[13px]">
+      <DragScrollArea className="bg-card rounded-2xl shadow-card">
+        <table className="w-full min-w-[860px] border-collapse text-sm">
           <thead>
             <tr className="border-line bg-bg-soft/60 border-b text-left">
               <th className="text-text-dim w-10 px-3 py-2.5 text-xs font-medium">No.</th>
@@ -194,7 +195,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
                 <th key={c.slot} className="w-20 px-2 py-2.5 text-center text-xs font-medium">
                   <span className="text-foreground font-bold">{c.label}</span>
                   {c.totals.answered === 0 ? (
-                    <span className="text-text-dim block text-[10px] font-normal">미제출</span>
+                    <span className="text-text-dim block text-xs font-normal">미제출</span>
                   ) : null}
                 </th>
               ))}
@@ -298,7 +299,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
             </tr>
           </tfoot>
         </table>
-      </div>
+      </DragScrollArea>
 
       {/* 평가자 관리(지정 모드) — 미채점 평가자 교체. 서버 액션이 같은 조건·미채점 여부를 재검증한다(#77). */}
       {canManageObservers ? (

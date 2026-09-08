@@ -27,7 +27,7 @@ export function EnrollmentChangeModal({
   const total = newCount + withdrawnCount;
 
   if (total === 0) {
-    return <span className="text-text-faint text-[12px]">이번 달 {deltaText}</span>;
+    return <span className="text-text-faint text-xs">이번 달 {deltaText}</span>;
   }
 
   return (
@@ -36,7 +36,7 @@ export function EnrollmentChangeModal({
         render={
           <button
             type="button"
-            className="text-text-dim hover:text-foreground text-[12px] underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="text-text-dim hover:text-foreground text-xs underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           />
         }
       >
@@ -93,7 +93,7 @@ function Section({
             ))}
           </ul>
           {totalCount > items.length ? (
-            <p className="text-text-dim mt-2 text-[11px]">최근 {items.length}명만 표시합니다.</p>
+            <p className="text-text-dim mt-2 text-xs">최근 {items.length}명만 표시합니다.</p>
           ) : null}
         </>
       )}

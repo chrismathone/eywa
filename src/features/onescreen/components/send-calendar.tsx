@@ -24,7 +24,7 @@ const EMPTY_DAYS: Map<string, SendDay> = new Map();
 
 function Legend({ tone, label }: { tone: string; label: string }) {
   return (
-    <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
+    <span className="text-text-faint inline-flex items-center gap-1 text-xs">
       <span className={`size-2 rounded-full ${tone}`} aria-hidden />
       {label}
     </span>
@@ -40,7 +40,7 @@ function DayCellBody({ day }: { day: SendDay | undefined }) {
   return (
     <span className="mt-0.5 flex flex-col items-start gap-0.5">
       <span
-        className={`tabular text-[11px] font-bold ${
+        className={`tabular text-xs font-bold ${
           day.target === 0 ? "text-text-faint" : allSent ? "text-primary" : "text-text-dim"
         }`}
         // 분자·분모는 "학부모에게 나갔나"라는 **사실**이고(출처 무관), 아래 배지는 "지금 내가 누를 게
@@ -57,16 +57,16 @@ function DayCellBody({ day }: { day: SendDay | undefined }) {
         {day.sent}/{day.target}
       </span>
       {day.problem > 0 ? (
-        <span className="bg-danger/10 text-danger rounded-pill px-1 text-[10px] font-bold">
+        <span className="bg-danger/10 text-danger rounded-pill px-1 text-xs font-bold">
           {tf("os.cal.problem", { n: day.problem })}
         </span>
       ) : day.actionable > 0 ? (
         // ⚠️ '미발송'이 아니라 '보낼 수 있음' — 미발송 전부를 재촉하면 옛 이관분까지 재촉하는 거짓말이 된다.
-        <span className="bg-amber-soft text-amber rounded-pill px-1 text-[10px] font-bold">
+        <span className="bg-amber-soft text-amber rounded-pill px-1 text-xs font-bold">
           {tf("os.cal.sendableN", { n: day.actionable })}
         </span>
       ) : day.pending > 0 ? (
-        <span className="text-text-faint text-[10px]">{tf("os.cal.pending", { n: day.pending })}</span>
+        <span className="text-text-faint text-xs">{tf("os.cal.pending", { n: day.pending })}</span>
       ) : null}
     </span>
   );
@@ -86,7 +86,7 @@ function ModeToggle({ mode, onMode }: { mode: "calendar" | "list"; onMode: (m: "
           type="button"
           onClick={() => onMode(m)}
           aria-pressed={mode === m}
-          className={`rounded-full px-2 py-0.5 text-[11px] font-bold transition ${
+          className={`rounded-full px-2 py-0.5 text-xs font-bold transition ${
             mode === m ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
           }`}
         >
@@ -188,7 +188,7 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
             >
               <EyIcon name="chevronLeft" size={16} />
             </button>
-            <h3 className="text-foreground min-w-[92px] text-center text-[13px] font-bold">
+            <h3 className="text-foreground min-w-[92px] text-center text-sm font-bold">
               {sheetMonthLabel(month, monthLabel(month), lang)}
             </h3>
             <button
@@ -204,17 +204,17 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
             <button
               type="button"
               onClick={() => setMonth(monthOf(todayYmd))}
-              className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2 py-1 text-[11px] font-bold"
+              className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2 py-1 text-xs font-bold"
             >
               {t("os.cal.thisMonth")}
             </button>
           ) : null}
           {loading ? (
-            <span className="text-text-faint text-[12px]">{t("os.hist.loadingMore")}</span>
+            <span className="text-text-faint text-xs">{t("os.hist.loadingMore")}</span>
           ) : error ? (
-            <span className="text-danger text-[12px]">{error}</span>
+            <span className="text-danger text-xs">{error}</span>
           ) : (
-            <span className="text-text-faint text-[12px]">
+            <span className="text-text-faint text-xs">
               {tf("os.cal.sum", { n: sum.total, sent: sum.sent, target: sum.target })}
               {sum.actionable > 0 ? (
                 <span className="text-amber font-bold">
@@ -239,7 +239,7 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
             {[0, 1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className={`pb-1 text-center text-[11px] font-bold ${
+                className={`pb-1 text-center text-xs font-bold ${
                   i === 0 ? "text-danger" : "text-text-faint"
                 }`}
               >
@@ -273,7 +273,7 @@ export function SendCalendarBoard({ todayYmd }: { todayYmd: string }) {
                   }`}
                 >
                   <span
-                    className={`tabular text-[11px] ${
+                    className={`tabular text-xs ${
                       isToday ? "text-primary font-bold" : hasData ? "text-foreground font-bold" : "text-text-faint"
                     }`}
                   >

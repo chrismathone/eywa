@@ -138,7 +138,7 @@ export default async function EnrollmentDetailPage({
             </span>
             {procBadge ? (
               <span
-                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${procBadge.class}`}
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${procBadge.class}`}
               >
                 {procBadge.spin ? <Loader2 className="size-3 animate-spin" /> : null}
                 {procBadge.label}
@@ -237,14 +237,14 @@ export default async function EnrollmentDetailPage({
                     title={sib.prospectName}
                     className="bg-card hover:bg-bg-soft border-border flex flex-1 items-center justify-between gap-2 rounded-lg border px-3 py-2 transition"
                   >
-                    <span className="text-foreground flex items-center gap-2 text-[13px]">
+                    <span className="text-foreground flex items-center gap-2 text-sm">
                       <span className="num text-text-dim">
                         {new Date(sib.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
                       </span>
                       {sSubject ? <span>· {sSubject}</span> : null}
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${sBadge.class}`}>
+                      <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${sBadge.class}`}>
                         {sBadge.label}
                       </span>
                       <ExternalLink className="text-text-faint size-3.5" />
@@ -308,7 +308,7 @@ export default async function EnrollmentDetailPage({
       <div className="space-y-3">
         <SectionHeader icon={ClipboardList} title="상담 기록">
           {consult.fromPublicIntake ? (
-            <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap">
+            <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap">
               학부모 직접 제출
             </span>
           ) : null}
@@ -444,7 +444,7 @@ export default async function EnrollmentDetailPage({
       {showChecklistPane ? (
         <div className="space-y-3">
           <SectionHeader icon={ClipboardCheck} iconClass="text-chart-1" title="사전 체크리스트">
-            <span className="text-text-faint text-[10px] whitespace-nowrap">학부모 작성</span>
+            <span className="text-text-faint text-xs whitespace-nowrap">학부모 작성</span>
           </SectionHeader>
           <SectionCard title="상담 전 응답">
             {f.intakeChecklist ? (
@@ -529,7 +529,7 @@ export default async function EnrollmentDetailPage({
 function Card({ title, icon, children }: { title: string; icon?: EywaIconName; children: ReactNode }) {
   return (
     <section className="bg-card border-line rounded-2xl border p-4">
-      <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-[13px] font-bold">
+      <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-sm font-bold">
         {icon ? <EyIcon name={icon} size={15} /> : null}
         {title}
       </h3>
@@ -609,7 +609,7 @@ function InfoCard({
       {chips.length > 0 ? (
         <div className="mt-1 flex flex-wrap gap-1.5">
           {chips.map((t) => (
-            <span key={t} className="bg-bg-soft text-text-dim rounded px-2 py-0.5 text-[11px]">
+            <span key={t} className="bg-bg-soft text-text-dim rounded px-2 py-0.5 text-xs">
               {t}
             </span>
           ))}
@@ -638,7 +638,7 @@ function AiAnalysisPanel({
             <p className="eyebrow">AI 분석 결과</p>
             <h3 className="text-foreground mt-1 text-base font-bold">진단 요약</h3>
           </div>
-          <span className="text-muted-foreground num text-[10px]">
+          <span className="text-muted-foreground num text-xs">
             {formatCreatedAt(analysis.generatedAt)}
           </span>
         </header>

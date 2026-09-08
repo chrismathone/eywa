@@ -103,7 +103,7 @@ export default async function TimetablePlanComparePage({
       <div className="flex flex-col gap-4">
         {header}
         <div className="bg-card shadow-card rounded-2xl px-5 py-10">
-          <p className="text-danger text-center text-[13px]">{gate.error}</p>
+          <p className="text-danger text-center text-sm">{gate.error}</p>
         </div>
       </div>
     );
@@ -120,7 +120,7 @@ export default async function TimetablePlanComparePage({
       <div className="flex flex-col gap-4">
         {header}
         <div className="bg-card shadow-card rounded-2xl px-5 py-10">
-          <p className="text-text-dim text-center text-[13px]">
+          <p className="text-text-dim text-center text-sm">
             비교하려면 계획이 있는 달이 <span className="num font-semibold">2개</span> 이상 필요합니다.
             {desc.length === 1 ? ` 지금은 ${planMonthLabel(desc[0].month)} 하나뿐입니다.` : ""} 시간표(개발중)에서
             다음 달 계획을 먼저 만들어 주세요.
@@ -170,7 +170,7 @@ export default async function TimetablePlanComparePage({
 
       <div className="bg-card shadow-card flex flex-col gap-3 rounded-2xl px-4 py-3">
         <MonthPairPicker months={desc} a={monthA} b={monthB} />
-        <p className="text-text-dim text-[12px]">
+        <p className="text-text-dim text-xs">
           <span className="text-foreground font-semibold">{beforeLabel}</span>을 기준으로{" "}
           <span className="text-foreground font-semibold">{afterLabel}</span>이 어떻게 달라졌는지 봅니다.
           {monthA === monthB ? " 같은 달을 골라 두어 모든 칸이 '동일'로 나옵니다." : ""}

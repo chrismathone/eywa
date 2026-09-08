@@ -849,7 +849,7 @@ export const OUTCOME_COLOR: Record<OutcomeKey, string> = {
   consulted: "var(--color-blue)",
   ai_done: "var(--color-purple)",
   enrolled: "var(--color-chart-2)",
-  declined: "var(--color-text-faint)",
+  declined: "var(--color-neutral-fill)",
   no_show: "var(--color-danger)",
 };
 

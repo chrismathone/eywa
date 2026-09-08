@@ -6,6 +6,7 @@ import { AlertCircle, Coins, Loader2, Pencil, Plus, Save, Trash2, X } from "@/co
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import {
   createTuitionItem,
   updateTuitionItem,
@@ -122,7 +123,7 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
           </div>
           {/* 단가표와 계산기가 서로 다른 말을 쓰면(여긴 '월 단가', 저긴 '월 고정') 같은 것을 두 이름으로
               배우게 된다 — 여기서 고른 종류가 **계산기에서 무엇이 되는지**를 적어 둔다. */}
-          <p className="text-text-faint -mt-1 text-[11px] leading-snug">
+          <p className="text-text-faint -mt-1 text-xs leading-snug">
             <span className="text-primary font-medium">회당 단가</span> → 계산기에서 &lsquo;회당&rsquo;(단가 ×
             시수) · <span className="font-medium">월 단가</span> → &lsquo;월 고정&rsquo;(금액을 그대로).
             <br />
@@ -201,7 +202,7 @@ function PricingModeCell({ id, mode }: { id: string; mode: string | null }) {
               type="submit"
               aria-pressed={on}
               title={on ? `${m.label} — 다시 누르면 미지정으로` : PRICING_MODE_EFFECT[m.value]}
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] transition ${
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
                 on
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-line text-text-dim hover:bg-bg-soft hover:text-foreground"
@@ -213,7 +214,7 @@ function PricingModeCell({ id, mode }: { id: string; mode: string | null }) {
         );
       })}
       {!mode ? (
-        <span className="border-amber/40 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-[11px] font-bold">
+        <span className="border-amber/40 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-xs font-bold">
           미지정
         </span>
       ) : null}
@@ -268,16 +269,16 @@ export function TuitionPricesTable({
           description="과목 단가·할인 프리셋을 등록하면 계산기에서 골라 자동으로 채워집니다."
         />
       ) : (
-        <div className="bg-card border-line shadow-card overflow-auto rounded-2xl border">
+        <DragScrollArea className="bg-card shadow-card rounded-2xl">
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
-            <thead className="border-line border-b [&_th]:whitespace-nowrap">
+            <thead className="border-line text-text-dim border-b text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
               <tr>
-                <th className="micro px-4 py-3 text-left">분류</th>
-                <th className="micro px-4 py-3 text-left">단가 종류</th>
-                <th className="micro px-4 py-3 text-left">항목명</th>
-                <th className="micro px-4 py-3 text-right">단가 · 할인액</th>
-                <th className="micro px-4 py-3 text-left">상태</th>
-                <th className="micro px-4 py-3 text-right">관리</th>
+                <th className="px-4 py-3 text-left">분류</th>
+                <th className="px-4 py-3 text-left">단가 종류</th>
+                <th className="px-4 py-3 text-left">항목명</th>
+                <th className="px-4 py-3 text-right">단가 · 할인액</th>
+                <th className="px-4 py-3 text-left">상태</th>
+                <th className="px-4 py-3 text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
@@ -292,10 +293,10 @@ export function TuitionPricesTable({
                     <PricingModeCell id={r.id} mode={r.pricingMode} />
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className="text-foreground text-[13px] font-bold">{r.name}</span>
-                    {r.note ? <span className="text-text-faint ml-1.5 text-[11px]">{r.note}</span> : null}
+                    <span className="text-foreground text-sm font-bold">{r.name}</span>
+                    {r.note ? <span className="text-text-faint ml-1.5 text-xs">{r.note}</span> : null}
                   </td>
-                  <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+                  <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
                     {r.category === DISCOUNT_CATEGORY ? "−" : ""}
                     {KRW.format(r.price)}
                   </td>
@@ -322,10 +323,10 @@ export function TuitionPricesTable({
               <tbody className="divide-line divide-y">
                 <tr className="bg-bg-soft">
                   <td colSpan={6} className="px-4 py-2">
-                    <span className="text-text-dim text-[12px] font-bold">
+                    <span className="text-text-dim text-xs font-bold">
                       중지됨 <span className="num">{stopped.length}</span>개
                     </span>
-                    <span className="text-text-faint ml-1.5 text-[11px]">
+                    <span className="text-text-faint ml-1.5 text-xs">
                       — 계산기·수납 어디에도 나오지 않습니다. &lsquo;중지&rsquo;를 누르면 다시 사용합니다.
                     </span>
                   </td>
@@ -341,10 +342,10 @@ export function TuitionPricesTable({
                       <PricingModeCell id={r.id} mode={r.pricingMode} />
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="text-foreground text-[13px] font-bold">{r.name}</span>
-                      {r.note ? <span className="text-text-faint ml-1.5 text-[11px]">{r.note}</span> : null}
+                      <span className="text-foreground text-sm font-bold">{r.name}</span>
+                      {r.note ? <span className="text-text-faint ml-1.5 text-xs">{r.note}</span> : null}
                     </td>
-                    <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
+                    <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
                       {r.category === DISCOUNT_CATEGORY ? "−" : ""}
                       {KRW.format(r.price)}
                     </td>
@@ -366,7 +367,7 @@ export function TuitionPricesTable({
               </tbody>
             ) : null}
           </table>
-        </div>
+        </DragScrollArea>
       )}
 
       {open === "new" ? <TuitionDialog onClose={() => setOpen(null)} /> : null}

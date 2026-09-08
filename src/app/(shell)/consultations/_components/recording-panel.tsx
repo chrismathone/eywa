@@ -136,13 +136,13 @@ export function RecordingPanel({
       {aiReport ? (
         <div className="space-y-2">
           {aiGeneratedAt || modelLabel ? (
-            <p className="text-text-faint inline-flex items-center gap-1.5 text-[11px]">
+            <p className="text-text-faint inline-flex items-center gap-1.5 text-xs">
               {aiGeneratedAt
                 ? `생성 ${new Date(aiGeneratedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`
                 : null}
               {modelLabel ? (
                 <span
-                  className="border-line inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]"
+                  className="border-line inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs"
                   title="이 분석을 생성한 AI 모델"
                 >
                   <Sparkles className="size-2.5" />
@@ -155,8 +155,8 @@ export function RecordingPanel({
             {SECTIONS.map((s) =>
               aiReport[s.key]?.trim() ? (
                 <div key={s.key} className="px-3 py-2">
-                  <dt className="text-primary text-[11px] font-bold">{s.label}</dt>
-                  <dd className="text-foreground mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed">
+                  <dt className="text-primary text-xs font-bold">{s.label}</dt>
+                  <dd className="text-foreground mt-0.5 whitespace-pre-wrap text-sm leading-relaxed">
                     {aiReport[s.key]}
                   </dd>
                 </div>

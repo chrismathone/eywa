@@ -41,23 +41,23 @@ function CasInput({
   if (cell?.conflict) {
     return (
       <div className="border-danger bg-danger/5 space-y-1 rounded-md border px-1.5 py-1">
-        <p className="text-danger text-[11px] leading-tight">
+        <p className="text-danger text-xs leading-tight">
           {t("cell.conflict.server")} <b>{cell.conflict.serverValue ?? t("cell.conflict.empty")}</b>
         </p>
-        <p className="text-text-dim truncate text-[11px]">
+        <p className="text-text-dim truncate text-xs">
           {t("cell.conflict.mine")} {value || t("cell.conflict.empty")}
         </p>
         <div className="flex gap-1">
           <button
             type="button"
-            className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-[11px] font-semibold"
+            className="border-line-strong text-foreground cursor-pointer rounded-full border px-1.5 text-xs font-semibold"
             onClick={() => handlers.resolveConflict(saveKey, "server")}
           >
             {t("cell.conflict.useServer")}
           </button>
           <button
             type="button"
-            className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-[11px] font-medium"
+            className="border-danger text-danger cursor-pointer rounded-full border px-1.5 text-xs font-medium"
             onClick={() => handlers.resolveConflict(saveKey, "mine")}
           >
             {t("cell.conflict.useMine")}
@@ -103,7 +103,7 @@ export const PlanRow = memo(function PlanRow({
   // 셀렉트도 알약처럼 — 닫힌 상태(평소 보이는 모습)에 색·굵기가 그대로 실린다.
   // 치수는 시트 공통 박스(SHEET_BOX_FRAME = h-5·rounded-sm)를 그대로 쓴다 — 여기만 h-6으로 두면
   // 같은 줄의 교재·시간 칸과 높이가 어긋난다(높이를 덧붙여 덮지 말 것: 이기는 쪽은 CSS 순서가 정한다).
-  const areaCls = `${SHEET_BOX_FRAME} w-full cursor-pointer px-1 text-[13px] font-bold outline-none focus:border-primary ${SUBJECT_SOFT[areaTone]}`;
+  const areaCls = `${SHEET_BOX_FRAME} w-full cursor-pointer px-1 text-sm font-bold outline-none focus:border-primary ${SUBJECT_SOFT[areaTone]}`;
 
   return (
     <tr className="align-top">
@@ -126,7 +126,7 @@ export const PlanRow = memo(function PlanRow({
           </select>
         ) : (
           <span
-            className={`${SHEET_BOX_FRAME} inline-flex w-full items-center justify-center truncate px-1 text-[13px] font-bold ${SUBJECT_SOFT[areaTone]}`}
+            className={`${SHEET_BOX_FRAME} inline-flex w-full items-center justify-center truncate px-1 text-sm font-bold ${SUBJECT_SOFT[areaTone]}`}
           >
             {areaLabel}
           </span>

@@ -25,7 +25,7 @@ function TagPreview({ name, color }: { name: string; color: CalendarColor }) {
   const chip = chipProps(color);
   return (
     <span
-      className={`inline-block max-w-[160px] truncate rounded px-1.5 py-0.5 text-[12px] leading-tight font-medium ${chip.className}`}
+      className={`inline-block max-w-[160px] truncate rounded px-1.5 py-0.5 text-xs leading-tight font-medium ${chip.className}`}
       style={chip.style}
     >
       {name.trim() || "일정 제목"}
@@ -185,7 +185,7 @@ export function TagManager({ tags, onClose }: { tags: CalendarTag[]; onClose: ()
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-foreground text-sm font-bold">태그 관리</h2>
-        <p className="text-text-dim mt-1 text-[12px] break-keep">
+        <p className="text-text-dim mt-1 text-xs break-keep">
           태그 색을 바꾸면 그 태그가 달린 일정 전부가 새 색으로 보입니다. 색은 기본 7색 중에 고르거나,
           무지개 동그라미를 눌러 <b className="text-foreground">직접 선택</b>할 수 있습니다.
         </p>

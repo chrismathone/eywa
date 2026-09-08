@@ -33,22 +33,22 @@ export function SignalSection({
         <span className="text-text-dim flex size-6 items-center justify-center">
           <Icon size={14} strokeWidth={1.8} />
         </span>
-        <h3 className="text-foreground text-[13px] font-bold">{title}</h3>
-        <span className="text-text-faint num ml-auto text-[11px]">{rows.length}</span>
+        <h3 className="text-foreground text-sm font-bold">{title}</h3>
+        <span className="text-text-faint num ml-auto text-xs">{rows.length}</span>
       </header>
       {rows.length === 0 ? (
-        <p className="text-text-faint px-4 py-5 text-[12px]">{empty}</p>
+        <p className="text-text-faint px-4 py-5 text-xs">{empty}</p>
       ) : (
         <ul className="divide-line divide-y">
           {rows.map((r) => (
             <li key={r.id} className="hover:bg-bg-soft/50 transition">
               <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
-                  <p className="text-foreground text-[12px] font-bold">
-                    {r.name} <span className="text-text-faint text-[10px] font-normal">{r.sub}</span>
+                  <p className="text-foreground text-xs font-bold">
+                    {r.name} <span className="text-text-faint text-xs font-normal">{r.sub}</span>
                   </p>
                 </div>
-                <span className={`shrink-0 text-[11px] font-medium ${NOTE_CLASS[r.noteTone ?? "dim"]}`}>
+                <span className={`shrink-0 text-xs font-medium ${NOTE_CLASS[r.noteTone ?? "dim"]}`}>
                   {r.note}
                 </span>
               </WindowLink>

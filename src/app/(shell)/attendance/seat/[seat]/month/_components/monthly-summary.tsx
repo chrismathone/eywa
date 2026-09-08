@@ -13,7 +13,7 @@ export function MonthlySummary({
   const confirmedMin =
     min != null ? ` (${min}분 × ${formatSessionUnits(summary.confirmedUnits)})` : "";
   return (
-    <p className="text-foreground text-[13px] leading-snug break-keep">
+    <p className="text-foreground text-sm leading-snug break-keep">
       예정 <span className="num font-bold">{summary.classCount}</span>반 ·{" "}
       <span className="num font-bold">{summary.studentCount}</span>명
       <span className="text-text-faint mx-1.5">│</span>
@@ -31,7 +31,7 @@ export function MonthlySummary({
 
 export function MonthlyLegend() {
   return (
-    <p className="text-text-dim flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+    <p className="text-text-dim flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <span>
         <i className="bg-att-present mr-1 inline-block size-2.5 rounded-sm align-middle" />
         출석

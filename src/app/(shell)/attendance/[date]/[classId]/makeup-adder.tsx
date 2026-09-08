@@ -95,7 +95,7 @@ export function AttendanceMakeupAdder({
                     className="hover:bg-bg-soft flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left"
                   >
                     <span className="text-foreground font-medium">{s.name}</span>
-                    <span className="text-text-faint text-[11px]">{s.label}</span>
+                    <span className="text-text-faint text-xs">{s.label}</span>
                   </button>
                 ))
               )}

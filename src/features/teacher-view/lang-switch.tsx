@@ -62,7 +62,7 @@ export function TeacherLangSwitch() {
       className="flex items-center gap-1.5 px-2 py-1.5"
     >
       <EyIcon name="globe" size={16} strokeWidth={1.8} className="text-text-dim shrink-0" />
-      <span className="text-text-dim shrink-0 text-[13px]">{sheetT(lang, "lang.label")}</span>
+      <span className="text-text-dim shrink-0 text-sm">{sheetT(lang, "lang.label")}</span>
       <span className="border-line ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-lg border p-0.5">
         {SHEET_LANGS.map((l) => (
           <button
@@ -74,7 +74,7 @@ export function TeacherLangSwitch() {
             // ⚠️ `lang` 속성을 함께 준다 — 한글 폰트 스택 안에서 `English`가 자간이 어긋나 보이는 것을 막고,
             //    스크린리더가 각 칸을 그 언어로 읽는다.
             lang={l}
-            className={`cursor-pointer rounded-md px-2 py-0.5 text-[12px] font-medium transition disabled:cursor-wait disabled:opacity-60 ${
+            className={`cursor-pointer rounded-md px-2 py-0.5 text-xs font-medium transition disabled:cursor-wait disabled:opacity-60 ${
               lang === l ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
             }`}
           >

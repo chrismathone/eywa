@@ -35,7 +35,7 @@ export function HolderDialog({
   if (blockedReason) {
     return (
       <DialogShell title={`사용자 — ${asset.assetCode}`} onClose={onClose}>
-        <p className="text-[12.5px]">{blockedReason}</p>
+        <p className="text-xs">{blockedReason}</p>
         <div className="flex justify-end">
           <Button type="button" variant="outline" onClick={onClose}>
             닫기

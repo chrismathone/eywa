@@ -42,19 +42,19 @@ export function ScoreInput({
           const raw = e.target.value.replace(/[^0-9]/g, "");
           onChange(raw === "" ? null : clamp(parseInt(raw, 10) || 0, max));
         }}
-        className="border-line focus:border-primary tabular h-8 w-10 rounded-sm border bg-background px-1 text-center text-[13px] font-bold outline-none"
+        className="border-line focus:border-primary tabular h-8 w-10 rounded-sm border bg-background px-1 text-center text-sm font-bold outline-none"
       />
-      <span className="text-text-faint tabular text-[11px]">/</span>
+      <span className="text-text-faint tabular text-xs">/</span>
       {allowMax && onMax ? (
         // 빈칸 편집 허용(분모를 지우면 옛 값으로 스냅백하던 버그, 2026-07-24). onMax는 유효값만 받는다.
         <TestMaxInput
           max={max}
           onCommit={onMax}
           ariaLabel={tf("os.score.maxAria", { label })}
-          className="border-line focus:border-primary tabular h-8 w-8 rounded-sm border bg-background px-0.5 text-center text-[11px] outline-none"
+          className="border-line focus:border-primary tabular h-8 w-8 rounded-sm border bg-background px-0.5 text-center text-xs outline-none"
         />
       ) : (
-        <span className="text-text-faint tabular text-[11px]">{max}</span>
+        <span className="text-text-faint tabular text-xs">{max}</span>
       )}
     </div>
   );

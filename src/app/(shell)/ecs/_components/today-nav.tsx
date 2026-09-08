@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import {
   TOOLBAR_SEG_BOX,
   TOOLBAR_SEG_ITEM,
   TOOLBAR_SEG_OFF,
   TOOLBAR_SEG_ON_PRIMARY,
 } from "@/components/toolbar-controls";
-import { addDays, formatKoreanDate } from "@/lib/date-kst";
+import { addDays, DAY_LABEL_W, formatKoreanDate } from "@/lib/date-kst";
 import { PeriodNav } from "@/components/period-nav";
 import { sheetDateLabelEn, sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { EcsDatePicker } from "./today-date-picker";
@@ -71,18 +72,19 @@ export function EcsTodayModeTabs({
  *
  * 🔴 **폰엔 사이드바가 없다** — 하부탭(SUBTABS_BY_MENU)에만 두면 영어 강사는 출결 모드로 갈 길이
  *    아예 없다(셔틀 '오늘 등하원'에서 겪은 그대로). 원스크린 상단 바에 있는 것과 **같은 링크**다.
- * ⚠️ 면 전환 칩(보기/모드/날짜)과 달리 **다른 라우트**라 알약 대신 테두리 버튼으로 구분한다 —
- *    같은 모양이면 "ECS의 네 번째 면"으로 읽힌다.
+ * ⚠️ 면 전환 칩(보기/모드/날짜)과 달리 **다른 라우트**다. 옛 테두리 버튼(`h-8`·`text-xs`)은 "면 칩과 같은 네이비 채움이면 ECS의
+ *    네 번째 면으로 읽힌다"는 이유였는데, 디자인 v5 18단계에서 원스크린 상단 바와 **같은 Primary**로 통일했다 — 한 강사가
+ *    오가는 두 화면의 같은 링크는 같은 모양이어야 한다. 면으로 안 읽히는 근거는 채움이 아니라 **자리**다: 면 칩은 세그먼트
+ *    묶음 안에 서고 이 버튼은 묶음 밖에 홀로 선다(같은 줄에 네이비 채움이 셋 서는 건 감수).
  */
 export function EcsQuickAttendanceLink({ lang = "ko" }: { lang?: SheetLang }) {
   return (
-    <Link
-      href="/attendance/quick"
-      title={sheetT(lang, "nav.quickAttendance.title")}
-      className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground inline-flex h-8 shrink-0 items-center rounded-lg border px-2.5 text-xs font-bold whitespace-nowrap"
+    <Button
+      render={<Link href="/attendance/quick" title={sheetT(lang, "nav.quickAttendance.title")} />}
+      className="shrink-0"
     >
       {sheetT(lang, "nav.quickAttendance")}
-    </Link>
+    </Button>
   );
 }
 
@@ -159,8 +161,7 @@ export function EcsDayNav({
         prevAriaLabel={sheetT(lang, "nav.prevDay")}
         nextAriaLabel={sheetT(lang, "nav.nextDay")}
         currentTitle={sheetT(lang, "nav.today")}
-        // "2026년 12월 26일 (수)"(최장)까지 안 넘치는 고정 폭 — 넉넉히 잡는다(좁아서 넘치는 쪽이 더 나쁘다).
-        labelWidth={180}
+        labelWidth={DAY_LABEL_W}
       />
       <EcsDatePicker date={date} mode={mode} view={view} />
     </div>

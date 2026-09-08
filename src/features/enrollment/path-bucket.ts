@@ -35,7 +35,7 @@ export const PATH_BUCKET_COLOR: Record<PathBucket, string> = {
   "간판·광고": "var(--color-gold)",
   "워크인·주변": "var(--color-purple)",
   기타: "var(--color-amber)",
-  미기재: "var(--color-text-faint)",
+  미기재: "var(--color-neutral-fill)",
 };
 
 // 실측 표기를 근거로 한 규칙. 새 표기가 늘면 여기 추가하고 테스트도 함께 늘린다.

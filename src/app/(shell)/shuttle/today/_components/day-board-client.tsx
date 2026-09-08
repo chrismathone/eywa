@@ -1,30 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaceTabs } from "@/components/face-tabs";
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
+import { HrefSelect } from "@/components/href-select";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
-import { addDays, formatKoreanDate } from "@/lib/date-kst";
-import { cn } from "@/lib/utils";
 import {
   DIRECTION_LABEL,
-  SEASONS,
-  SEASON_LABEL,
   type Season,
   type ShuttleRun,
   type ShuttleTrip,
   type ShuttleVehicle,
 } from "@/features/shuttle/types";
-import {
-  SHUTTLE_ACTION,
-  SHUTTLE_CHIP,
-  SHUTTLE_CHIP_OFF,
-  SHUTTLE_CHIP_ON,
-} from "@/features/shuttle/control-size";
+import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_TODAY_PATH, shuttleFaces } from "@/features/shuttle/faces";
 import {
   mergePlanAndLog,
@@ -44,9 +34,10 @@ import type { BoardingLog } from "@/features/shuttle/server/queries";
 import type { AssignableStudent } from "@/features/shuttle/server/students";
 import { RideExceptionDialog } from "./ride-exception-dialog";
 import { RunPanel } from "./run-panel";
+import { ShuttleDayNav } from "../../_components/shuttle-day-nav";
 import { VehicleHeader } from "./vehicle-header";
 
-/** 등하원 필터 칩 — 아침엔 등원만, 저녁엔 하원만 본다(폰에서 목록이 절반이 된다). */
+/** 등하원 보기 드롭다운 항목 — 아침엔 등원만, 저녁엔 하원만 본다(폰에서 목록이 절반이 된다). */
 const DIR_FILTERS: { value: DirectionFilter; label: string }[] = [
   { value: "all", label: "전체" },
   { value: "in", label: DIRECTION_LABEL.in },
@@ -171,7 +162,7 @@ export function DayBoardClient({
   );
   /** 위 요약은 **보고 있는 것**의 합이다(필터를 걸면 같이 줄어야 "남은 일"이 맞는다). */
   const totals = useMemo(() => sumProgress(groups), [groups]);
-  /** 필터 칩에 붙일 방향별 남은 수 — 누르기 전에 어느 쪽에 일이 남았는지 보인다. */
+  /** 등하원 드롭다운 항목 hint에 붙일 방향별 남은 수(필터와 무관한 전체 기준) — 열면 어느 쪽에 일이 남았는지 보인다. 닫힌 상태의 합은 요약 줄 '미기록'. */
   const remainByDir = useMemo(() => {
     const of = (d: DirectionFilter) =>
       countProgress(filterByDirection(byRun, d).flatMap((r) => r.rows)).unmarked;
@@ -188,83 +179,53 @@ export function DayBoardClient({
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      {/* 📐 **면 전환 + 날짜 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*).
-          종전엔 탭 / 날짜·시즌 / 요약이 각각 한 줄이라 **상단만 330px**였다 — 창 높이의 절반이
-          머리라 첫 학생이 겨우 보였다. 탭 바는 `min-w-0`으로 줄어들고(안에서 가로 스크롤),
-          남는 폭을 날짜·시즌이 쓴다. 좁아지면 `toolbar-rail`이 눕혀 한 줄을 유지한다.
-          🔴 FaceTabs는 **공용 컴포넌트라 손대지 않는다** — 수납·학생상세 등이 같이 쓴다.
-             여기선 감싸는 자리만 바꾼다.
-          ⚠️ 앞·뒤 이동은 ←/→ **글자**가 아니라 아이콘이다 — 글리프는 폰트·플랫폼마다 크기가 널뛰어
-             같은 줄의 버튼과 밑선이 어긋나고, 한글 자모로 오인되기도 한다([[#12]]). */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2">
-        <span className="min-w-0 basis-full sm:basis-auto">
+      {/* 📐 **면 전환 + 날짜 + 시즌을 한 줄로**(2026-09-03, 원장 *"한 페이지에 정보가 너무 많다"*). 날짜 이동은 앱
+          전역 PeriodNav + 시즌 드롭다운(공용 ShuttleDayNav — 옛 outline 아이콘 버튼 둘 + 알약 칩 둘, 디자인 v5 17단계).
+          탭 바는 `min-w-0`으로 줄어들고 남는 폭을 날짜·시즌이 쓴다. 좁아지면 `toolbar-rail`이 눕혀 한 줄을 유지한다.
+          🔴 FaceTabs는 **공용 컴포넌트라 손대지 않는다** — 수납·학생상세 등이 같이 쓴다. 여기선 감싸는 자리만 바꾼다. */}
+      <div className={SHUTTLE_TOOLBAR}>
+        <span className="min-w-0 flex-1 basis-full sm:basis-auto">
           <FaceTabs faces={shuttleFaces(season)} active={SHUTTLE_TODAY_PATH} ariaLabel="셔틀 면 전환" />
         </span>
-        <Button
-          variant="outline"
-          aria-label="어제"
-          className={SHUTTLE_ACTION}
-          render={<Link href={href(addDays(date, -1))} />}
-        >
-          <EyIcon name="chevronLeft" size={16} />
-        </Button>
-        <span className="text-foreground px-1 text-[14.5px] font-bold whitespace-nowrap">
-          {formatKoreanDate(date)}
-        </span>
-        <Button
-          variant="outline"
-          aria-label="내일"
-          className={SHUTTLE_ACTION}
-          render={<Link href={href(addDays(date, 1))} />}
-        >
-          <EyIcon name="chevronRight" size={16} />
-        </Button>
-        {SEASONS.map((s) => (
-          <Link
-            key={s}
-            href={href(date, s)}
-            aria-current={s === season ? "page" : undefined}
-            className={cn(SHUTTLE_CHIP, s === season ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
-          >
-            {SEASON_LABEL[s]}
-          </Link>
-        ))}
+        <ShuttleDayNav date={date} today={today} season={season} hrefFor={href} />
       </div>
 
       {/* 등하원 + 요약을 **한 레일**로 — 폰에서 상단 크롬이 세 줄이 되면 첫 호차까지 스크롤이 필요하다
-          ("모바일 상단 크롬 = 한 줄" 규약 · 제보의 "아주 필요한 기능만"). 칩의 남은 수는 **필터와 무관한
-          전체 기준**이라 누르기 전에 어느 쪽에 일이 있는지 보인다. */}
-      <div className="toolbar-rail flex flex-wrap items-center gap-2 text-[12.5px]">
-        <span className="flex items-center gap-1.5" role="radiogroup" aria-label="등하원 보기">
-          {DIR_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              role="radio"
-              aria-checked={dirFilter === f.value}
-              onClick={() => pickDirection(f.value)}
-              className={cn(SHUTTLE_CHIP, dirFilter === f.value ? SHUTTLE_CHIP_ON : SHUTTLE_CHIP_OFF)}
-            >
-              {f.label}
-              {remainByDir[f.value] > 0 && (
-                <span className={`num text-[11.5px] ${dirFilter === f.value ? "" : "text-amber"}`}>
-                  {remainByDir[f.value]}
-                </span>
-              )}
-            </button>
-          ))}
-        </span>
+          ("모바일 상단 크롬 = 한 줄" 규약 · 제보의 "아주 필요한 기능만"). */}
+      <div className={`${SHUTTLE_TOOLBAR} text-sm`}>
+        {/* 등하원 보기 = `등하원: 전체` 드롭다운(§10 — 옛 알약 칩 셋). 계정 귀속 상태(URL 아님)라 `HrefSelect`의 **값 모드**
+            (`onSelect`) — 목록이 Portal이라 폰의 `.toolbar-rail`(overflow-y hidden) 안에서도 열리고 검색 입력이 없다
+            (`SearchableSelect`는 인라인 목록이라 잘려서 안 열렸다 — 셔틀 리뷰 🔴 2026-09-04). 항목 옆 `hint` = 방향별
+            미기록 수(**필터와 무관한 전체 기준**). */}
+        <HrefSelect
+          axisLabel="등하원"
+          ariaLabel="등하원 보기"
+          value={dirFilter}
+          onSelect={(v) => pickDirection(v as DirectionFilter)}
+          options={DIR_FILTERS.map((f) => ({
+            value: f.value,
+            label: f.label,
+            hint: remainByDir[f.value] > 0 ? `${remainByDir[f.value]}명 남음` : undefined,
+          }))}
+        />
         {/* 📐 **0인 숫자를 색 알약으로 강조하지 않는다**(2026-09-03). 아침엔 탑승·미탑승이 둘 다 0이라
             초록·빨강 알약 두 개가 아무 뜻 없이 눈을 끌었고, 정작 할 일인 '미기록'이 그 사이에 묻혔다.
-            🔴 '미기록 N'은 **옆 칩의 '전체 N'과 같은 값**이라 아예 뺐다(같은 숫자를 두 번 세지 않는다) —
-               할 일의 크기는 칩이 이미 말한다. 여기 남는 건 **일어난 일**(탑승·미탑승)뿐이고,
-               0이면 흐린 글자, 하나라도 있으면 그때 색 알약이 된다.
-            🔴 필터를 걸면 이 숫자는 **보고 있는 것**의 합이다 — 무엇의 합인지 밝히지 않으면 옆 칩의
+            🔴 **'미기록 N'은 닫힌 상태에서도 보여야 한다** — 옛 칩이 방향별 남은 수를 상시 보였는데 드롭다운으로 접으며
+               사라졌다(셔틀 리뷰 🟠 2026-09-04). 할 일(미기록)은 caution, 일어난 일(탑승·미탑승)은 positive/critical —
+               전부 0이면 흐린 글자. 방향별 분할은 드롭다운 항목의 hint가 든다.
+            🔴 필터를 걸면 이 숫자는 **보고 있는 것**의 합이다 — 무엇의 합인지 밝히지 않으면 드롭다운 hint의
                전체 기준 숫자와 어긋나 보인다. */}
         <span className="text-text-dim whitespace-nowrap">
           {dirFilter !== "all" && `${DIRECTION_LABEL[dirFilter]} `}예정{" "}
           <span className="num text-foreground font-bold">{totals.planned}</span>명
         </span>
+        {totals.unmarked > 0 ? (
+          <Pill color={TONE_COLOR.caution}>미기록 {totals.unmarked}</Pill>
+        ) : (
+          <span className="text-text-faint whitespace-nowrap">
+            미기록 <span className="num">0</span>
+          </span>
+        )}
         {totals.boarded > 0 ? (
           <Pill color={TONE_COLOR.positive}>탑승 {totals.boarded}</Pill>
         ) : (
@@ -284,11 +245,8 @@ export function DayBoardClient({
             🔴 `exceptionsReady`(0229a 적용) 전에는 **버튼을 아예 안 그린다** — 없는 기능을 약속하면
                눌렀을 때 한글 에러만 나온다([[#95]]). */}
         {canWrite && exceptionsReady && (
-          <Button
-            variant="outline"
-            className={cn(SHUTTLE_ACTION, "ml-auto")}
-            onClick={() => setExceptionOpen(true)}
-          >
+          // 이 면의 상시 버튼 하나 = Primary(§10). 폰 44px은 래퍼 변수가 올린다.
+          <Button className="ml-auto" onClick={() => setExceptionOpen(true)}>
             일회성 변경
             {exceptions.length > 0 && (
               <span className="num text-text-dim">{exceptions.length}</span>
@@ -301,7 +259,7 @@ export function DayBoardClient({
       </div>
 
       {error && (
-        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-[12.5px]">
+        <div className="border-danger/30 bg-danger-soft text-danger rounded-xl border px-3 py-2 text-xs">
           {error}
         </div>
       )}

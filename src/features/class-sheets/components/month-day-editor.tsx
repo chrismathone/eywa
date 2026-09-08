@@ -162,16 +162,16 @@ export function MonthDayEditor({
       <DialogContent className="max-h-[88vh] overflow-y-auto px-2 sm:max-w-3xl" showCloseButton={false}>
         <DialogHeader className="gap-1 px-2">
           <div className="flex flex-wrap items-center gap-2">
-            <DialogTitle className="text-[15px] font-bold">
+            <DialogTitle className="text-base font-bold">
               <span className="num">{dayLabel(date, lang)}</span> {t("plan.editor.title")}
             </DialogTitle>
-            <span className="text-text-dim text-[12.5px] font-semibold">{className}</span>
+            <span className="text-text-dim text-xs font-semibold">{className}</span>
             <span className="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={goWeek}
                 disabled={closing}
-                className="border-line-strong text-text-dim hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2.5 py-1 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
+                className="border-line-strong text-text-dim hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2.5 py-1 text-xs font-bold disabled:cursor-default disabled:opacity-60"
                 title={t("month.editor.toWeek.title")}
               >
                 {t("month.editor.toWeek")}
@@ -180,7 +180,7 @@ export function MonthDayEditor({
                 type="button"
                 onClick={close}
                 disabled={closing}
-                className="border-line-strong text-foreground hover:border-primary hover:text-primary inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
+                className="border-line-strong text-foreground hover:border-primary hover:text-primary inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold disabled:cursor-default disabled:opacity-60"
               >
                 {closing ? (
                   t("toolbar.saving")
@@ -193,19 +193,19 @@ export function MonthDayEditor({
             </span>
           </div>
           {/* 창을 닫아야 반영되는 게 아니라는 걸 밝힌다 — 시트와 같은 자동저장이다. */}
-          <p className="text-text-faint text-[11.5px]">
+          <p className="text-text-faint text-xs">
             {t("month.editor.hint")}
           </p>
         </DialogHeader>
 
         {state.kind === "loading" ? (
-          <p className="text-text-dim px-2 py-6 text-[13px]">{t("month.editor.loading")}</p>
+          <p className="text-text-dim px-2 py-6 text-sm">{t("month.editor.loading")}</p>
         ) : state.kind === "error" ? (
-          <p className="border-danger/40 bg-danger-soft text-danger mx-2 rounded-lg border px-3 py-2 text-[12.5px] font-semibold">
+          <p className="border-danger/40 bg-danger-soft text-danger mx-2 rounded-lg border px-3 py-2 text-xs font-semibold">
             {state.message}
           </p>
         ) : slots.length === 0 ? (
-          <p className="text-text-dim px-2 py-6 text-[13px]">{t("month.editor.noSlots")}</p>
+          <p className="text-text-dim px-2 py-6 text-sm">{t("month.editor.noSlots")}</p>
         ) : (
           <div className="min-w-0">
             {slots.map((slot) => (
@@ -252,17 +252,17 @@ function DaySlot({
   return (
     <section className="min-w-0">
       <div className="bg-bg-soft flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1">
-        <span className="num text-[13px] font-bold">
+        <span className="num text-sm font-bold">
           {slot.slotStart}
           {slot.slotEnd ? `~${slot.slotEnd}` : ""}
         </span>
-        {periodLabel ? <span className="text-text-dim text-[11.5px] font-semibold">{periodLabel}</span> : null}
-        <span className="text-text-dim text-[12px]">
+        {periodLabel ? <span className="text-text-dim text-xs font-semibold">{periodLabel}</span> : null}
+        <span className="text-text-dim text-xs">
           {teacherNameFor(slot.teacherLabel, teacherNames, lang) ?? t("month.noTeacher")}
         </span>
         {slot.seat ? (
           <span
-            className="border-line-strong text-text-dim rounded-full border px-1.5 text-[10.5px] leading-4 font-bold"
+            className="border-line-strong text-text-dim rounded-full border px-1.5 text-xs leading-4 font-bold"
             title={t("month.seat.title")}
           >
             {tf("month.seat", { seat: slot.seat })}

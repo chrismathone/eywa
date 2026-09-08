@@ -46,8 +46,8 @@ export function PhotoCard({
       <Image src={src} alt={alt} fill sizes={sizes} preload={preload} className="object-cover" />
       {caption ? (
         <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-5 pt-10 pb-4 text-white">
-          <p className="text-[14px] font-bold">{caption}</p>
-          {sub ? <p className="mt-0.5 text-[12px] text-white/80">{sub}</p> : null}
+          <p className="text-sm font-bold">{caption}</p>
+          {sub ? <p className="mt-0.5 text-xs text-white/80">{sub}</p> : null}
         </figcaption>
       ) : null}
     </figure>

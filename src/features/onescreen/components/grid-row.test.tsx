@@ -125,7 +125,9 @@ describe("결석 행 — 보고서 입력은 잠긴다", () => {
     expect(screen.getByLabelText("학생 일일테스트")).toBeDisabled();
     expect(screen.getByLabelText("학생 확인테스트")).toBeDisabled();
     // 태도는 native select가 아니라 base-ui 드롭다운(버튼) — fieldset[disabled]이 버튼까지 먹는지 확인한다.
-    expect(screen.getByLabelText("학생 태도")).toBeDisabled();
+    // ⚠️ 접근성 이름엔 **지금 값이 붙는다**("학생 태도: 보통") — `aria-label`이 버튼 글자를 덮어 값이 안 읽히던 것을
+    //    고치면서(재리뷰 2026-09-04, searchable-select.tsx) 이름이 `축: 값`이 됐다. 그래서 앞부분으로 찾는다.
+    expect(screen.getByLabelText(/^학생 태도/)).toBeDisabled();
     expect(screen.getByLabelText("학생 과제 수행률")).toBeDisabled();
     expect(screen.getByLabelText("학생 수학 교재명")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("학생 수학 오늘 과제")).toHaveAttribute("readonly");

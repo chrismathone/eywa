@@ -53,7 +53,7 @@ export function DiffTable({
 }) {
   if (rows.length === 0) {
     return (
-      <p className="text-text-dim px-1 py-10 text-center text-[13px]">
+      <p className="text-text-dim px-1 py-10 text-center text-sm">
         이 조건에 해당하는 칸이 없습니다.
       </p>
     );
@@ -65,12 +65,12 @@ export function DiffTable({
         {/* 표 이름은 `<caption class="sr-only">`이 아니라 aria-label로 — sr-only는 position:absolute라
             positioned 부모가 없으면 스크롤 컨테이너를 뚫고 나가 가짜 스크롤바를 만든다([[#79]]). */}
         <table
-          className="w-full min-w-[680px] border-collapse text-[13px]"
+          className="w-full min-w-[680px] border-collapse text-sm"
           aria-label={`${beforeLabel}과 ${afterLabel}의 시간표 계획 비교 결과`}
         >
           <thead>
             {/* 열 제목은 가운데, 열 구분선은 한 단계 옅게(--line-faint) — 표 규약(2026-08-05). */}
-            <tr className="border-line text-text-dim border-b text-[12px] font-semibold [&>*:not(:first-child)]:border-line-faint [&>*:not(:first-child)]:border-l">
+            <tr className="border-line text-text-dim border-b text-xs font-semibold [&>*:not(:first-child)]:border-line-faint [&>*:not(:first-child)]:border-l">
               <th scope="col" className="px-3 py-2 text-center">
                 구분
               </th>
@@ -144,7 +144,7 @@ export function DiffTable({
         </table>
       </div>
       {totalCount > rows.length ? (
-        <p className="text-text-dim px-1 text-[12px]">
+        <p className="text-text-dim px-1 text-xs">
           {/* 표시 상한 — 위 요약 카드의 숫자는 상한과 무관한 전체 건수다([[#89]]). */}
           전체 <span className="num font-semibold">{totalCount}</span>건 중 앞{" "}
           <span className="num font-semibold">{rows.length}</span>건만 표시했습니다. 범위 칩으로 좁혀

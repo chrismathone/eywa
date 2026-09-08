@@ -43,7 +43,7 @@ export function ProgressModePills({
             disabled={disabled}
             title={PROGRESS_MODE_HINT[m]}
             className={`rounded-pill border font-bold transition-colors disabled:opacity-50 ${
-              compact ? "px-1.5 py-px text-[10px]" : "px-2.5 py-1 text-[11px]"
+              compact ? "px-1.5 py-px text-xs" : "px-2.5 py-1 text-xs"
             } ${
               on
                 ? "border-primary bg-primary-soft text-primary"

@@ -49,7 +49,7 @@ export function RecapDayBlock({
     <section className="space-y-3">
       {/* 하루짜리 요약에도 날짜를 적는다 — 페이지 제목은 "오늘 출결"이라 여기가 유일한 근거다. */}
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h2 className={`font-bold ${single ? "text-[15px]" : "text-base"}`}>{formatKoreanDate(day.date)}</h2>
+        <h2 className={`font-bold ${single ? "text-base" : "text-base"}`}>{formatKoreanDate(day.date)}</h2>
         {day.holiday ? (
           <span className="text-text-faint text-xs">휴원일 · {day.holiday}</span>
         ) : (
@@ -138,12 +138,12 @@ function Lane({
           {count}
         </span>
         {hidden > 0 ? (
-          <span className="num text-text-faint text-[11px]">과목 필터로 {hidden}건 숨김</span>
+          <span className="num text-text-faint text-xs">과목 필터로 {hidden}건 숨김</span>
         ) : null}
-        {hint && count > 0 ? <span className="text-text-faint text-[11px]">{hint}</span> : null}
+        {hint && count > 0 ? <span className="text-text-faint text-xs">{hint}</span> : null}
       </h3>
       {count === 0 ? (
-        <p className="bg-card shadow-card text-text-faint rounded-2xl px-3 py-3 text-[13px]">{empty}</p>
+        <p className="bg-card shadow-card text-text-faint rounded-2xl px-3 py-3 text-sm">{empty}</p>
       ) : (
         <ul className="bg-card shadow-card divide-line divide-y rounded-2xl">{children}</ul>
       )}
@@ -155,11 +155,11 @@ function EventRow({ event }: { event: RecapEvent }) {
   const subjects = useSubjectMaps();
   return (
     <li className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">
-      <span className={`${ATT_SOFT[event.status]} shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold`}>
+      <span className={`${ATT_SOFT[event.status]} shrink-0 rounded-full px-2 py-0.5 text-xs font-bold`}>
         {RECAP_STATUS_LABEL[event.status]}
       </span>
       <span className="font-bold">{event.studentName}</span>
-      {event.schoolGrade ? <span className="text-text-faint text-[11px]">{event.schoolGrade}</span> : null}
+      {event.schoolGrade ? <span className="text-text-faint text-xs">{event.schoolGrade}</span> : null}
       <span className="text-text-dim text-xs">
         {event.className}
         <span className="text-text-faint"> · {subjects.labelOf(event.subject) || "과목 없음"}</span>
@@ -172,7 +172,7 @@ function EventRow({ event }: { event: RecapEvent }) {
         // 🔴 사전 통보를 뺀 나머지가 문턱 미만이면 **톤만** 내린다(숫자는 그대로 — 감추면 다음 사람이
         //    같은 판단을 다시 할 수 없다).
         <span
-          className={`num shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+          className={`num shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
             isRepeatAbsenceDanger(event.recentAbsences, event.recentPlanned)
               ? "bg-danger-soft text-danger"
               : "bg-bg-soft text-text-dim"

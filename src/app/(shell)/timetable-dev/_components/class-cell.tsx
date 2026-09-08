@@ -178,19 +178,19 @@ export function ClassCell({
               className="block h-full w-full px-2 py-1 text-left"
             >
               <div className="flex items-baseline justify-between gap-1.5">
-                <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
+                <span className="min-w-0 overflow-hidden whitespace-nowrap text-clip text-sm font-bold">{slot.className}</span>
                 {/* 반교시(1행)면 아래 줄이 없으니 강의실을 이름과 같은 줄에 붙인다(정보 손실 방지). */}
                 {subSlot !== "full" && slot.classroomName ? (
-                  <span className="shrink-0 whitespace-nowrap text-[11px] opacity-75">{slot.classroomName}</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs opacity-75">{slot.classroomName}</span>
                 ) : null}
-                <span className="num shrink-0 text-[12px] opacity-70">{active.length}</span>
+                <span className="num shrink-0 text-xs opacity-70">{active.length}</span>
               </div>
               {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시.
                   ⚠️ 강의실 줄은 **항상 렌더**(없으면 nbsp 자리표시) — 셀마다 헤더 높이(2줄)를 일정하게 유지해
                   인접 반의 학생 이름이 가로로 줄맞춤되게 한다(강의실 유무로 헤더가 1↔2줄 되며 명단이 17px 어긋나던 것 해소).
                   ⚠️ 2행(full)일 때만 — 반교시(1행)는 위 이름 줄에 강의실을 붙인다. */}
               {subSlot === "full" ? (
-              <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
+              <div className="flex items-center justify-end gap-1 text-xs opacity-75">
                 <span className="overflow-hidden whitespace-nowrap text-clip">
                   {slot.classroomName || " "}
                 </span>
@@ -205,7 +205,7 @@ export function ClassCell({
         {/* 학생 명단 — 재원(이 영역만 스크롤+페이드) / 대기·퇴원(고정 박스, 각자 스크롤)을 분리.
             신입=빨강·전입=초록·퇴원=취소선. 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). */}
         {showRoster ? (
-          <div className={`flex min-h-0 flex-1 flex-col text-[13px] ${handover ? "bg-blue-soft" : "bg-card"}`}>
+          <div className={`flex min-h-0 flex-1 flex-col text-sm ${handover ? "bg-blue-soft" : "bg-card"}`}>
             {/* 재원 — 이 영역만 스크롤(스크롤바 숨김 + 위·아래 페이드). 10칸 기본, 넘으면 스크롤.
                 재원 공통 + 분리등원 요일 칸 + 전입예정(편집)을 포함. flex-1이라 대기/퇴원이 있으면
                 그만큼 줄어 재원≈10칸, 없으면 재원이 더 넓게 채운다(짧으면 페이드 없음). */}
@@ -231,7 +231,7 @@ export function ClassCell({
                         const dayStudents = partialActive.filter((s) => (s.attendanceDays ?? []).includes(day));
                         const col = (
                           <>
-                            <div className="text-text-faint bg-bg-soft/60 px-1 py-px text-center text-[9px] font-bold">
+                            <div className="text-text-faint bg-bg-soft/60 px-1 py-px text-center text-xs font-bold">
                               {DAY_LABEL[day] ?? day}
                             </div>
                             {dayStudents.length > 0 ? (
@@ -262,7 +262,7 @@ export function ClassCell({
                                 ),
                               )
                             ) : editing ? (
-                              <div className="text-text-faint/70 flex min-h-[22px] items-center justify-center text-[9px]">
+                              <div className="text-text-faint/70 flex min-h-[22px] items-center justify-center text-xs">
                                 여기로
                               </div>
                             ) : (
@@ -295,7 +295,7 @@ export function ClassCell({
               {/* 전입 예정(편집 모드) — 다른 반에서 끌어온 학생을 도착 셀에 초록 미리보기로(재원 스크롤 안). */}
               {incomingHere.length > 0 ? (
                 <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
-                  <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide">
+                  <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide">
                     <span>전입 예정</span>
                     <span className="num">{incomingHere.length}</span>
                   </div>
@@ -310,7 +310,7 @@ export function ClassCell({
                           {s.name}
                         </span>
                         {dayTag ? (
-                          <span className="text-primary shrink-0 text-[10px] font-bold">[{dayTag}]</span>
+                          <span className="text-primary shrink-0 text-xs font-bold">[{dayTag}]</span>
                         ) : null}
                       </div>
                     );

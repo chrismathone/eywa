@@ -42,9 +42,11 @@ export function PeriodNav({
   prevAriaLabel,
   nextAriaLabel,
   currentTitle,
-  labelWidth = 112,
+  labelWidth: labelWidthBase = 112,
   pending: externalPending = false,
   onNavigate,
+  prevDisabled = false,
+  nextDisabled = false,
 }: {
   /** 가운데에 적을 기간 — "2026년 8월" · "8월 3일~9일". 호출부의 포맷 함수를 그대로. */
   label: string;
@@ -79,6 +81,12 @@ export function PeriodNav({
    * 🔴 가로챈 화면은 **자기 순서를 다 지킨 뒤** 실제 이동까지 책임진다(안 하면 버튼이 먹통이 된다).
    */
   onNavigate?: (href: string) => void | Promise<void>;
+  /**
+   * 그 방향에 더 갈 기간이 없으면(데이터 경계 — 공휴일 표의 2024·2030년) 화살표를 **잠근다**.
+   * 🔴 같은 href를 넘겨 "눌리는데 아무 일도 없게" 만들지 말 것 — `router.push(같은 URL)`가 재조회 + 히스토리 항목을 남긴다.
+   */
+  prevDisabled?: boolean;
+  nextDisabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -91,6 +99,8 @@ export function PeriodNav({
    * 배지와 같은 사실을 말하지만 배지는 글자라 눈이 늦게 가고, 화살표는 손이 가는 자리다.
    * ⚠️ '이번 기간'이면 둘 다 평범하다(항상 하나가 칠해져 있으면 신호가 아니다).
    */
+  // ⚠️ 잠긴 화살표엔 채색을 얹지 않는다 — `disabled:hover:*`가 `lit`의 hover 톤을 이겨 마우스를 얹으면 색이 빠진다
+  //    (잠긴 컨트롤이 hover에 반응하는 꼴). '과거/미래 조회' 배지가 같은 신호를 들고 있어 잃는 게 없다.
   const litPrev = relation === "past";
   const litNext = relation === "future";
 
@@ -109,35 +119,40 @@ export function PeriodNav({
     startTransition(() => router.push(href));
   };
 
-  // 🔴 높이는 **h-8(32px) 고정** — 공용 `<Button>` 기본 크기와 같은 값이다(원장 2026-09-01
-  //    *"전체적으로 버튼높이 등을 통일"*). 툴바 한 줄에 버튼·드롭다운·기간 네비가 나란히 서므로
-  //    하나라도 다르면 줄이 울퉁불퉁해 보인다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
+  // 🔴 높이·라벨은 **control-scale 한 벌**(높이 = 라벨 + 4px, 원장 2026-09-03) — 공용 `<Button>`·툴바 칩과
+  //    같은 값이라 한 줄에 나란히 서도 밑선이 맞는다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
+  //    (09-01 "h-8 고정"은 이 규칙으로 대체.)
   const arrow =
-    "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex h-full cursor-pointer items-center justify-center px-2.5 transition disabled:cursor-default disabled:opacity-50";
+    "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex h-full cursor-pointer items-center justify-center px-2 transition disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-dim";
 
   // 칠해진 화살표 — hover 톤까지 덮어써야 마우스를 얹었을 때 색이 도로 풀리지 않는다.
   const lit = "bg-primary text-primary-foreground hover:bg-primary-deep hover:text-primary-foreground";
 
+  // 🔴 폭은 **고정**(원장 2026-09-01 "이동해도 크기 변동 안 되고 고정되게" — min이면 글자 수가 바뀔 때 화살표가 움찔한다).
+  //    호출부의 labelWidth는 옛 13px 라벨에 맞춘 값이라 v5 라벨(18px)에 맞춰 1.4배로 도출한다(고정폭은 그대로).
+  const labelWidth = Math.ceil(labelWidthBase * 1.4);
+
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <div
-        className={`border-line-strong inline-flex h-8 items-center overflow-hidden rounded-lg border ${
+        className={`border-line-strong inline-flex h-(--control-h) items-center overflow-hidden rounded-lg border ${
           pending || handing || externalPending ? "opacity-70" : ""
         }`}
       >
         <button
           type="button"
-          className={cn(arrow, litPrev && lit)}
+          className={cn(arrow, litPrev && !prevDisabled && lit)}
           aria-label={prevAriaLabel ?? "이전"}
+          disabled={prevDisabled}
           onClick={() => go(prevHref)}
         >
-          <ChevronLeft className="size-3.5" />
+          <ChevronLeft className="size-[1em] text-(length:--control-label)" />
         </button>
         <button
           type="button"
           // 이미 이번 기간이면 눌러도 갈 곳이 없다 — 비활성으로 그 사실을 모양에 담는다.
           disabled={isCurrent}
-          className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-[13px] font-bold whitespace-nowrap transition ${
+          className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-(length:--control-label) leading-none font-bold whitespace-nowrap transition ${
             isCurrent ? "text-foreground cursor-default" : "text-foreground hover:bg-bg-soft cursor-pointer"
           }`}
           style={{ width: labelWidth }}
@@ -148,15 +163,16 @@ export function PeriodNav({
         </button>
         <button
           type="button"
-          className={cn(arrow, litNext && lit)}
+          className={cn(arrow, litNext && !nextDisabled && lit)}
           aria-label={nextAriaLabel ?? "다음"}
+          disabled={nextDisabled}
           onClick={() => go(nextHref)}
         >
-          <ChevronRight className="size-3.5" />
+          <ChevronRight className="size-[1em] text-(length:--control-label)" />
         </button>
       </div>
       {badge ? (
-        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${badge.tone}`}>
+        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${badge.tone}`}>
           {badge.label}
         </span>
       ) : null}

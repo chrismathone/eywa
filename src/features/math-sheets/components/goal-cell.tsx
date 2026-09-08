@@ -44,14 +44,14 @@ export function GoalCell({
     <div className="border-line mt-1.5 rounded-lg border border-dashed p-1.5">
       {/* 라벨 서식은 고정열의 학생 이름과 **같고 크기만 절반**(원장 2026-09-02 *"이달 목표도 학생 이름과 같은
           서식으로"* → *"이달목표는 50%로 줄여"* — student-head-cell `NAME_TEXT` 20px의 절반 = 14px... 반올림해 14px). */}
-      <div className="text-foreground mb-1 flex items-center gap-1 text-[14px] leading-tight font-extrabold">
+      <div className="text-foreground mb-1 flex items-center gap-1 text-sm leading-tight font-extrabold">
         이 달 목표
         {/* 표기 흔들림을 판정으로 다 접을 수는 없어서(학년 표기가 빠지면 다른 책과 구분이 안 된다)
             **실제로 나간 책을 그대로 목표에 넣는** 길을 하나 둔다 — 가장 흔한 입력이기도 하다. */}
         {canEdit && actualBooks.length > 0 && actualBooks[0] !== bookValue ? (
           <button
             type="button"
-            className="text-primary hover:bg-primary-soft ml-auto cursor-pointer rounded px-1 py-px text-[10px] font-bold"
+            className="text-primary hover:bg-primary-soft ml-auto cursor-pointer rounded px-1 py-px text-xs font-bold"
             title={`실제로 나간 교재 "${actualBooks[0]}"를 목표로 넣습니다`}
             onClick={() => {
               setBookOverride(actualBooks[0]!);
@@ -63,7 +63,7 @@ export function GoalCell({
         ) : null}
       </div>
       <input
-        className="border-line-faint mb-1 w-full rounded border px-1.5 py-1 text-[13px] font-bold disabled:bg-transparent"
+        className="border-line-faint mb-1 w-full rounded border px-1.5 py-1 text-sm font-bold disabled:bg-transparent"
         list="mcs-book-options"
         placeholder="교재"
         value={bookValue}
@@ -83,7 +83,7 @@ export function GoalCell({
         locked={!canEdit}
       />
       {actualBooks.length > 0 ? (
-        <div className="text-text-faint mt-1 text-[11.5px] leading-snug">실제 {actualBooks.join(" · ")}</div>
+        <div className="text-text-faint mt-1 text-xs leading-snug">실제 {actualBooks.join(" · ")}</div>
       ) : null}
     </div>
   );

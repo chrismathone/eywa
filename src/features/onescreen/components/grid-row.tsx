@@ -47,7 +47,10 @@ const TD_BASE = "px-2 py-1.5 align-top";
 // ⚠️ `border-t`(1px)와 `border-t-2`를 한 className에 같이 두지 말 것 — 둘 다 border-top-width라
 //    어느 쪽이 이기는지 생성 CSS 순서에 달린다. 아예 다른 상수로 갈라 충돌 자체를 없앤다.
 const TD = `border-line border-t ${TD_BASE}`;
-const TD_GROUP = `border-t-2 border-t-text-faint/50 ${TD_BASE}`;
+// 🔴 색은 **글자 토큰이 아니라 면 토큰**(`--neutral-fill`)에서 온다 — 2026-09-08에 글자색이 한 값
+//    (#121212)이 되면서 `border-t-text-faint/50`이던 이 선이 함께 진해졌다(#ABABAF → #898989).
+//    선은 글자가 아니라 구조라 그 통일 대상이 아니다(globals.css: "테두리는 그대로").
+const TD_GROUP = `border-t-2 border-t-neutral-fill/50 ${TD_BASE}`;
 // 문구·특이사항 textarea — 내용에 따라 자동 확장(공용 상수, 미지원 브라우저는 각 칸의 min-h가 폴백).
 // 표 모드는 좁은 칸이 여러 개라 손잡이를 남기는 변형을 쓴다(폼 입력칸은 손잡이 없는 TEXTAREA_AUTOSIZE).
 const AUTOSIZE = TEXTAREA_AUTOSIZE_RESIZABLE;
@@ -150,7 +153,7 @@ function GridProgressCell({
           placeholder={t("os.row.progressPh")}
           aria-label={tf("os.row.progressAria", { name: student.name, subject: su.name })}
           title={su.today.includes("\n") ? su.today : undefined}
-          className={`border-line focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-[12px] leading-[1.2] outline-none ${
+          className={`border-line focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none ${
             locked ? "bg-bg-soft text-text-dim" : "bg-card"
           }`}
         />
@@ -301,7 +304,7 @@ export function GridBodyRow({
         ? t("os.row.sentLocked")
         : null;
   const mentBase =
-    "border-line focus:border-primary scrollbar-thin w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none";
+    "border-line focus:border-primary scrollbar-thin w-full rounded-sm border px-2 py-1 text-xs leading-snug outline-none";
   /**
    * 잠긴 칸의 톤 — 🔴 **결석만이 아니라 잠긴 모든 이유**에 붙인다(2026-08-14).
    * 예전엔 `isAbsent`만 봐서, **발송 완료로 잠긴 행이 평소와 똑같이 보였다**. 칸은 readOnly라 커서는
@@ -359,7 +362,7 @@ export function GridBodyRow({
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
                 title={t("os.row.makeupRemove")}
                 aria-label={tf("os.row.makeupRemoveAria", { name: student.name })}
-                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
+                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-xs font-bold transition hover:text-white"
               >
                 {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
                 <EyIcon name="close" size={8} />
@@ -367,7 +370,7 @@ export function GridBodyRow({
             ) : (
               // 발송분 등 뺄 수 없는 행 — 버튼을 없애기만 하면 "왜 안 되지"가 남는다(적대 리뷰).
               <span
-                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-xs font-bold"
                 title={makeupRemoveBlockReason(liveStatus, lang) ?? undefined}
               >
                 {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
@@ -378,7 +381,7 @@ export function GridBodyRow({
               카피는 "미확인"(읽음 신호 커버리지 75%라 "안 읽음" 단정 금지). 모든 행에 표시(반 필터에 숨지 않게). */}
           {unreadBadge ? (
             <span
-              className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+              className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-xs font-bold"
               title={tf("os.row.unreadTitle", { n: unreadBadge.count })}
             >
               {tf("os.row.unread", { n: unreadBadge.count })}
@@ -388,7 +391,7 @@ export function GridBodyRow({
               regression은 의도적 제외(실측 소음) — roster-signals.ts 참조. */}
           {showProgressBadge ? (
             <span
-              className="bg-danger-soft text-danger shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+              className="bg-danger-soft text-danger shrink-0 rounded-pill px-1 py-px text-xs font-bold"
               title={t("os.row.jumpTitle")}
             >
               {t("os.row.jump")}
@@ -399,7 +402,7 @@ export function GridBodyRow({
             파란 배경"). `subject.name`은 같은 과목 두 반일 때 로스터가 반 이름을 이어 붙인 **유일화 라벨**이라
             그대로 칠하면 알약이 반 이름까지 삼켜 행마다 폭·모양이 달라진다. 반 이름은 학년 태그와 같은 톤으로 밖에. */}
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
-          <span className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${toneSoftClass(tone)}`}>
+          <span className={`rounded-pill px-1.5 py-px text-xs font-bold ${toneSoftClass(tone)}`}>
             {subject.subjectLabel || subject.name}
           </span>
           {/* 병합된 보강 행(classId 없음·makeup) — 알약엔 순수 과목 라벨('수학')만 칠해 정규 행과 똑같아 보이므로,
@@ -422,14 +425,14 @@ export function GridBodyRow({
                 onClick={() => actions.onRemoveMakeup?.(student, subject.name)}
                 title={t("os.row.makeupRemove")}
                 aria-label={tf("os.row.makeupRemoveAria2", { name: student.name, subject: subject.name })}
-                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-[9px] font-bold transition hover:text-white"
+                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-xs font-bold transition hover:text-white"
               >
                 {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
               <span
-                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+                className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-xs font-bold"
                 title={
                   subject.classId
                     ? undefined
@@ -441,9 +444,9 @@ export function GridBodyRow({
             )
           ) : null}
           {subject.subjectLabel && subject.name !== subject.subjectLabel && subject.className ? (
-            <span className="text-text-faint text-[10px]">{subject.className}</span>
+            <span className="text-text-faint text-xs">{subject.className}</span>
           ) : null}
-          <span className="text-text-faint text-[10px]">{student.tag}</span>
+          <span className="text-text-faint text-xs">{student.tag}</span>
         </div>
         {/* 출결 인라인 입력(2-2) — 행(반) 단위. 보강(수동추가)·반 모호(같은 과목 2반)는 pill 불가 → 배지만. */}
         <div className="mt-1">
@@ -459,7 +462,7 @@ export function GridBodyRow({
             />
           ) : att !== MARK_PRESENT ? (
             <span
-              className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${
+              className={`rounded-pill px-1.5 py-px text-xs font-bold ${
                 att === MARK_LATE ? "bg-amber-soft text-amber" : "bg-danger text-white"
               }`}
             >
@@ -482,7 +485,7 @@ export function GridBodyRow({
           />
         ) : (
           <span
-            className="text-text-faint text-[13px]"
+            className="text-text-faint text-sm"
             title={
               gen.attReadOnly
                 ? t("os.units.noPerm")
@@ -578,7 +581,7 @@ export function GridBodyRow({
             data-nav-col="textbook"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
-            className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
+            className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-xs outline-none"
           />
           {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
           {/* 진도 셀과 같은 처방 — 시트 초안은 교시마다 과제가 있어 한 줄 input이면 붙어 보인다(2026-08-07). */}
@@ -609,12 +612,12 @@ export function GridBodyRow({
             data-nav-col="homeworkToday"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
-            className="border-line bg-card focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-[12px] leading-[1.2] outline-none"
+            className="border-line bg-card focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none"
           />
           {/* 뜻이 행 종류에 따라 갈린다(2026-08-05) — 반이 붙은 행이면 "정규까지 하고 보강도 했다"라
               제목이 "(정규+보강)"이 된다. 켜는 사람이 무엇을 켜는지 알 수 있게 툴팁으로 밝힌다. */}
           <label
-            className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]"
+            className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-xs"
             title={
               subject.classId
                 ? t("os.row.makeupBoth")
@@ -648,7 +651,7 @@ export function GridBodyRow({
             readOnly={rowLocked}
             placeholder={rowPlaceholder ?? t("os.row.notePh")}
             aria-label={tf("os.row.noteAria", { name: student.name })}
-            className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE} ${
+            className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border px-2 py-1 text-xs leading-snug outline-none ${AUTOSIZE} ${
               lockedTone || "bg-amber-soft/30"
             }`}
           />
@@ -711,7 +714,7 @@ export function GridBodyRow({
                       ? t("os.row.genAbsent")
                       : t("os.row.genNoProgress") // 미발송 반은 위 optoutRow 분기가 먼저 잡는다
               }
-              className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-bold disabled:opacity-50 ${
+              className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-xs font-bold disabled:opacity-50 ${
                 hasDraft ? "text-primary" : "text-text-dim"
               }`}
             >
@@ -747,7 +750,7 @@ export function GridBodyRow({
               type="button"
               onClick={() => actions.onOpenCard(student.id)}
               title={t("os.row.cardTitle")}
-              className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-1.5 py-1 text-[11px] font-bold"
+              className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-1.5 py-1 text-xs font-bold"
             >
               {t("os.row.card")}
             </button>
@@ -767,7 +770,7 @@ export function GridBodyRow({
               색은 사유 성격에 맞춘다: 결석=위험, 발송됨=완료, 남은 입력=주의(할 일). */}
           {sendGate.label ? (
             <span
-              className={`text-center text-[10px] font-bold ${
+              className={`text-center text-xs font-bold ${
                 sendGate.reasons[0] === "absent"
                   ? "text-danger"
                   : sendGate.reasons[0] === "sent"
@@ -785,7 +788,7 @@ export function GridBodyRow({
           {mentWarnings.map((w) => (
             <span
               key={w}
-              className="text-amber text-center text-[10px] font-bold"
+              className="text-amber text-center text-xs font-bold"
               title={t(MENT_WARNING_HINT[w])}
             >
               {t(MENT_WARNING_LABEL[w])}
@@ -793,12 +796,12 @@ export function GridBodyRow({
           ))}
           {/* 발송 상태 배지(큐·실패 등) — 발송 완료 라벨은 위 게이트가 이미 말했으므로 중복 표시하지 않는다. */}
           {!alreadySent && badge ? (
-            <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
+            <span className={`text-center text-xs font-bold ${badge.cls}`}>{badge.label}</span>
           ) : null}
           {/* 학부모 읽음(0122a) — 양성 배지만(카드와 동일 규약, types.ts). 표는 세로 여유가 있어 풀 라벨. */}
           {subject.classnoteReadAt ? (
             <span
-              className="text-primary text-center text-[10px] font-bold"
+              className="text-primary text-center text-xs font-bold"
               title={tf("os.row.readTitle", { when: readAtLabel(subject.classnoteReadAt, lang) })}
             >
               {t("os.row.read")}

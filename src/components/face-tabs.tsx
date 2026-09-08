@@ -60,7 +60,8 @@ export function FaceTabs({
         ref={scrollerRef}
         role="tablist"
         aria-label={ariaLabel}
-        className="scrollbar-hide border-border bg-card flex items-center gap-0.5 overflow-x-auto rounded-2xl border px-1.5 py-1.5"
+        // 툴바 세그먼트와 같은 치수·라운드(control-scale): 카드 껍데기·알약 없이 한 줄, 라벨이 높이의 90%.
+        className="scrollbar-hide border-line flex h-(--control-h) items-center gap-0.5 overflow-x-auto rounded-lg border px-0.5"
       >
         {faces.map((f, i) => {
           const on = f.key === active;
@@ -73,7 +74,7 @@ export function FaceTabs({
                 replace
                 role="tab"
                 aria-current={on ? "page" : undefined}
-                className={`block shrink-0 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition ${
+                className={`block shrink-0 rounded-md px-2 text-(length:--control-label) leading-none font-medium whitespace-nowrap transition ${
                   on
                     ? "bg-primary text-primary-foreground"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -89,13 +90,13 @@ export function FaceTabs({
       {canLeft ? (
         <div
           aria-hidden
-          className="from-card pointer-events-none absolute inset-y-px left-px w-10 rounded-l-2xl bg-gradient-to-r to-transparent"
+          className="from-background pointer-events-none absolute inset-y-px left-px w-10 rounded-l-lg bg-gradient-to-r to-transparent"
         />
       ) : null}
       {canRight ? (
         <div
           aria-hidden
-          className="from-card pointer-events-none absolute inset-y-px right-px w-10 rounded-r-2xl bg-gradient-to-l to-transparent"
+          className="from-background pointer-events-none absolute inset-y-px right-px w-10 rounded-r-lg bg-gradient-to-l to-transparent"
         />
       ) : null}
     </div>

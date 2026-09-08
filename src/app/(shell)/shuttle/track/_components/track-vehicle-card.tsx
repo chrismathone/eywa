@@ -40,9 +40,9 @@ export function TrackVehicleCard({
   return (
     <section className="bg-card flex flex-col gap-2 rounded-2xl p-3 shadow-[var(--shadow-card)]">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h2 className="text-foreground text-[15px] font-bold">{vehicle.vehicleName}</h2>
+        <h2 className="text-foreground text-base font-bold">{vehicle.vehicleName}</h2>
         {vehicle.driverName && (
-          <span className="text-text-dim text-[11.5px]">
+          <span className="text-text-dim text-xs">
             기사 {vehicle.driverName}
             {vehicle.driverPhone && (
               <a
@@ -63,17 +63,17 @@ export function TrackVehicleCard({
             <>
               <Pill color={TONE_COLOR[TRIP_TONE.running]}>{TRIP_STATE_LABEL.running}</Pill>
               {firstTime(running.run) && (
-                <span className="text-foreground num text-[14px] font-bold">
+                <span className="text-foreground num text-sm font-bold">
                   {firstTime(running.run)}
                 </span>
               )}
-              <span className="text-text-dim text-[12.5px] font-bold">{runTitle(running.run)}</span>
-              <span className="text-text-faint num ml-auto text-[11.5px] font-bold">
+              <span className="text-text-dim text-xs font-bold">{runTitle(running.run)}</span>
+              <span className="text-text-faint num ml-auto text-xs font-bold">
                 {progressLabel(running.progress)}
               </span>
             </>
           ) : (
-            <span className="text-text-faint text-[12.5px]">운행 중 아님</span>
+            <span className="text-text-faint text-xs">운행 중 아님</span>
           )}
         </div>
       )}

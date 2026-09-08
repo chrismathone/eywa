@@ -2,6 +2,8 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { saveAttendanceSort } from "@/features/attendance/server/prefs-actions";
 import {
   ATTENDANCE_SORT_KEYS,
@@ -13,7 +15,7 @@ import {
 import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
- * 출석부 행 정렬 선택.
+ * 출석부 행 정렬 선택 — `정렬: 이름순` 드롭다운(지시서 §10, 2026-09-04 12단계: 옛 native `<select>` h-8·12px → 앱 공용 드롭다운 모양).
  *
  * ⚠️ URL 파라미터가 아니라 **계정 설정**(`users.ui_prefs.attendance.sort`)에 저장한다 — 원장 상시 지시
  *    "모든 뷰 세팅은 계정 귀속". 다른 PC에서 열어도 같은 정렬로 열린다(localStorage는 포트 포함 origin
@@ -28,25 +30,24 @@ export function AttendanceSortSelect({ value }: { value: AttendanceSortKey }) {
   const [pending, startTransition] = useTransition();
 
   return (
-    <select
-      aria-label={t("att.sort.aria")}
-      value={value}
-      disabled={pending}
-      onChange={(e) => {
-        const next = parseAttendanceSortKey(e.target.value);
-        if (next === value) return;
-        startTransition(async () => {
-          await saveAttendanceSort(next);
-          router.refresh();
-        });
-      }}
-      className="border-line bg-card text-foreground hover:bg-bg-soft h-8 rounded-lg border px-2 text-xs disabled:opacity-60"
-    >
-      {ATTENDANCE_SORT_KEYS.map((k) => (
-        <option key={k} value={k}>
-          {attendanceSortLabelOf(k, lang)}
-        </option>
-      ))}
-    </select>
+    // v5 §10 드롭다운(`정렬: 이름순`) + 화면 언어 — 이름은 사전이 아니라 `sort-rows.ts`가 단일 소스라 `attendanceSortLabelOf(k, lang)`.
+    <span className={`shrink-0 ${pending ? "opacity-60" : ""}`}>
+      <SearchableSelect
+        options={ATTENDANCE_SORT_KEYS.map((k) => ({ value: k, label: attendanceSortLabelOf(k, lang) }))}
+        value={value}
+        onValueChange={(v) => {
+          const next = parseAttendanceSortKey(v);
+          if (next === value || pending) return;
+          startTransition(async () => {
+            await saveAttendanceSort(next);
+            router.refresh();
+          });
+        }}
+        ariaLabel={t("att.sort.aria")}
+        valuePrefix={t("att.sort")}
+        triggerClassName={TOOLBAR_SELECT}
+        className="w-auto"
+      />
+    </span>
   );
 }

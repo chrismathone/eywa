@@ -86,7 +86,7 @@ function Badge({ done, title, children }: { done: boolean; title: string; childr
   return (
     <span
       title={title}
-      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
+      className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${
         done ? "bg-bg-soft text-text-dim" : "bg-amber-soft text-amber"
       }`}
     >
@@ -281,26 +281,26 @@ function ClassCard({
   return (
     <section className="bg-card shadow-card rounded-2xl">
       <header className="border-line flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3">
-        <span className="num text-foreground shrink-0 text-[15px] font-bold tabular-nums">
+        <span className="num text-foreground shrink-0 text-base font-bold tabular-nums">
           {card.startsAt}
           {card.endsAt ? <span className="text-text-dim font-medium">~{card.endsAt}</span> : null}
         </span>
         {/* 🔴 반 이름 표기는 언어를 따른다(원장 2026-09-03) — 판정은 `classNameFor` 한 곳. */}
-        <span className="text-foreground min-w-0 truncate text-[15px] font-bold" title={shownClassName}>
+        <span className="text-foreground min-w-0 truncate text-base font-bold" title={shownClassName}>
           {shownClassName}
         </span>
         {/* 임시 위임(0173a) — 주간 랜딩·원스크린 반 칩과 같은 앰버 규약(남의 반임을 목록에서부터 가른다). */}
         {card.delegated ? (
-          <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-bold">
+          <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-full border px-1.5 py-0.5 text-xs font-bold">
             {t("today.chip.delegated")}
           </span>
         ) : null}
         {live ? (
-          <span className="bg-primary-soft text-primary shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold">
+          <span className="bg-primary-soft text-primary shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold">
             {t("today.chip.live")}
           </span>
         ) : null}
-        <span className="text-text-dim shrink-0 text-[12px]">
+        <span className="text-text-dim shrink-0 text-xs">
           {tf("today.students", { n: card.students.length })}
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -394,7 +394,7 @@ function ClassCard({
                 '시간 변경된 기록 N건'과 같은 규약). 계획뿐 아니라 학생 기록(태도·특이사항)도 같은 실종이
                 가능해 함께 센다. 되돌릴 곳(주간 시트)까지 함께 가리킨다. */}
             {card.hiddenLines > 0 || card.hiddenMarks > 0 ? (
-              <p className="text-text-dim mt-1 text-[12px]">
+              <p className="text-text-dim mt-1 text-xs">
                 이 화면에 안 나오는 {[
                   card.hiddenLines > 0 ? `계획 ${card.hiddenLines}건` : null,
                   card.hiddenMarks > 0 ? `학생 기록 ${card.hiddenMarks}건` : null,
@@ -406,7 +406,7 @@ function ClassCard({
             ) : null}
             <Link
               href={`/ecs/${card.classId}?week=${weekMonday}`}
-              className="text-primary mt-1 inline-block text-[13px] font-bold underline-offset-2 hover:underline"
+              className="text-primary mt-1 inline-block text-sm font-bold underline-offset-2 hover:underline"
             >
               {t("today.link.weekSheet")}
             </Link>
@@ -432,7 +432,7 @@ function ClassCard({
                   disabled={bulkBusy}
                   onClick={bulkPresent}
                   title={t("today.bulkPresent.title")}
-                  className="border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
+                  className="border-line-strong text-foreground hover:text-primary hover:border-primary shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold disabled:cursor-default disabled:opacity-60"
                 >
                   {bulkBusy
                     ? t("toolbar.saving")
@@ -443,7 +443,7 @@ function ClassCard({
               ) : null}
             </div>
             {card.students.length === 0 ? (
-              <p className="text-text-faint text-[13px]">
+              <p className="text-text-faint text-sm">
                 {t("today.noStudents")}
                 {card.canMarkAttendance ? t("today.noStudents.makeup") : ""}
               </p>
@@ -473,7 +473,7 @@ function ClassCard({
                 맥락(그 반)을 URL에 싣는다. 없는 반이면 서버가 조용히 '전체'로 떨군다(2026-08-07). */}
             <Link
               href={`/onescreen?date=${date}&class=${card.classId}`}
-              className="text-primary mt-2 inline-block text-[13px] font-bold underline-offset-2 hover:underline"
+              className="text-primary mt-2 inline-block text-sm font-bold underline-offset-2 hover:underline"
             >
               {t("today.link.report")}
             </Link>

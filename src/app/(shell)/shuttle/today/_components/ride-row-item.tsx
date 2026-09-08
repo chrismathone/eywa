@@ -126,7 +126,8 @@ export function RideRowItem({
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
         <span
           className={cn(
-            "text-[14px] font-bold sm:text-[12.5px]",
+            // 줄의 학생 이름 — 폰·데스크톱 모두 16px(옛 데스크톱 14는 가독성 P0 아래, 디자인 v5 17단계).
+            "text-sm font-bold",
             skipped ? "text-text-dim line-through" : "text-foreground",
           )}
         >
@@ -139,7 +140,7 @@ export function RideRowItem({
           <>
             <Pill color={TONE_COLOR.inert}>오늘 안 탐</Pill>
             {row.exceptionMemo && (
-              <span className="text-text-dim text-[11.5px]">{row.exceptionMemo}</span>
+              <span className="text-text-dim text-xs">{row.exceptionMemo}</span>
             )}
           </>
         )}
@@ -148,7 +149,7 @@ export function RideRowItem({
             🔴 다만 **예정에 없던 탑승**은 남긴다 — 묶음 머리가 설명하지 못하는 예외라
                이유가 그 줄에 붙어 있어야 한다. */}
         {row.runStopId === null && (
-          <span className="text-text-faint min-w-0 text-[11.5px]">예정에 없던 탑승</span>
+          <span className="text-text-faint min-w-0 text-xs">예정에 없던 탑승</span>
         )}
       </div>
 
@@ -157,7 +158,7 @@ export function RideRowItem({
           대신 되돌리는 문만 남긴다(오클릭에서 빠져나올 길을 잠그지 않는다, [[#103]]). */}
       {skipped ? (
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-text-faint text-[11.5px]">
+          <span className="text-text-faint text-xs">
             {row.status ? `기록: ${BOARDING_STATUS_LABEL[row.status]}` : "오늘은 태우지 않습니다"}
           </span>
           {canWrite && canEditException && row.exceptionId && (
@@ -214,7 +215,7 @@ export function RideRowItem({
           )}
         </div>
       ) : (
-        <span className="text-text-dim shrink-0 text-[11.5px]">
+        <span className="text-text-dim shrink-0 text-xs">
           {row.status ? BOARDING_STATUS_LABEL[row.status] : "미기록"}
         </span>
       )}
@@ -232,7 +233,7 @@ export function RideRowItem({
         />
       )}
       {row.status === "missed" && !canWrite && row.memo && (
-        <span className="text-danger shrink-0 text-[11.5px]">{row.memo}</span>
+        <span className="text-danger shrink-0 text-xs">{row.memo}</span>
       )}
     </li>
   );

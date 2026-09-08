@@ -116,12 +116,12 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
             </WindowLink>
           )}
           {doc.kind === "file" && isPreviewableType(doc.typeLabel) ? (
-            <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap">
+            <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-xs font-bold whitespace-nowrap">
               미리보기
             </span>
           ) : null}
           {doc.kind === "link" ? (
-            <span className="text-blue bg-blue-soft shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap">
+            <span className="text-blue bg-blue-soft shrink-0 rounded px-1.5 py-0.5 text-xs font-bold whitespace-nowrap">
               외부 링크
             </span>
           ) : null}

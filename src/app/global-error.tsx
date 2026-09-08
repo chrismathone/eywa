@@ -32,7 +32,7 @@ export default function GlobalError({
           alignItems: "center",
           justifyContent: "center",
           background: "#f5f5f7",
-          color: "#1d1d1f",
+          color: "#121212",
           fontFamily:
             "Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         }}
@@ -48,7 +48,7 @@ export default function GlobalError({
           }}
         >
           <p style={{ fontWeight: 700, fontSize: 16, margin: 0 }}>eywa를 여는 데 문제가 생겼습니다</p>
-          <p style={{ marginTop: 8, fontSize: 14, color: "#5b5b60" }}>
+          <p style={{ marginTop: 8, fontSize: 14, color: "#121212" }}>
             잠시 뒤 다시 시도해 주세요. 계속 같은 화면이면 원장님께 알려 주세요.
           </p>
           <button
@@ -69,7 +69,7 @@ export default function GlobalError({
             다시 시도
           </button>
           {error.digest ? (
-            <p style={{ marginTop: 16, fontSize: 11, color: "#8a8a90" }}>오류 번호 {error.digest}</p>
+            <p style={{ marginTop: 16, fontSize: 11, color: "#121212" }}>오류 번호 {error.digest}</p>
           ) : null}
         </div>
       </body>

@@ -164,7 +164,7 @@ export function RouteWindow({ win }: { win: Win }) {
       ) : null}
       {dragging ? (
         <div className="bg-card absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <span className="text-text-faint text-[13px] font-medium">{win.params.title}</span>
+          <span className="text-text-faint text-sm font-medium">{win.params.title}</span>
         </div>
       ) : null}
     </div>

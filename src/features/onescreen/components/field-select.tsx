@@ -86,12 +86,12 @@ export function FieldSelect({
       // 박스를 통째로 받은 자리(ECS)는 그 표면의 입력칸과 한 벌이라는 뜻 → 화살표도 촘촘하게.
       compact={box !== undefined}
       // ⚠️ 이웃 텍스트 입력과 **완전히 같은 치수**(원장 2026-07-23 "네모박스 크기가 너무 다름").
-      //    표·카드·일괄 세 표면의 입력칸이 모두 `border-line bg-card h-8 px-2 text-[12px]`이고
+      //    표·카드·일괄 세 표면의 입력칸이 모두 `border-line bg-card h-8 px-2 text-xs`이고
       //    라운드만 다르다. 기본 트리거(py-2·px-3·text-sm)를 그대로 쓰면 한 줄에서 이 칸만 커진다.
       //    ⚠️ 새 표면에 FieldSelect를 놓을 땐 그 자리 입력칸 클래스와 대조해볼 것.
       triggerClassName={
         box ??
-        `border-line bg-card text-foreground focus:border-primary h-8 border px-2 text-[12px] outline-none ${
+        `border-line bg-card text-foreground focus:border-primary h-8 border px-2 text-xs outline-none ${
           radius === "sm" ? "rounded-sm" : "rounded-lg"
         }`
       }

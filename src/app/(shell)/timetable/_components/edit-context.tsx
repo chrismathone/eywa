@@ -22,6 +22,36 @@ export type DayEditTarget = {
   coveringDays: string[];
 };
 
+/**
+ * 대기 중인 **반 블록 이동** 한 건 — 반 이름 머리를 끌어 격자 칸에 놓았을 때 쌓인다.
+ * 🔴 학생 이동과 **같은 규약**: 화면에 표식만 남고, 반영은 '저장'을 눌러야 일어난다(서버 `moveClassSlots`).
+ */
+export type QueuedClassMove = {
+  /** 블록의 기준 배치(스케줄) id — 큐·머리 표식의 키. */
+  slotId: string;
+  classId: string;
+  className: string;
+  fromDay: string;
+  fromStart: string;
+  /**
+   * 이 블록이 **함께 옮기는** 배치들과 각자의 도착 자리 — 화면의 한 블록이 실제로는 배치 여러 줄이다
+   * (연속 교시·월목 병합). 저장은 이 목록을 그대로 서버에 넘긴다.
+   * 🔴 기준 줄만 옮기면 화면은 통째로 간 것처럼 보이는데 나머지 줄이 제자리에 남는다(적대 리뷰 2026-09-04).
+   */
+  moves: { slotId: string; toDay: string; toStart: string }[];
+  /** 기준 줄의 도착 요일(머리 표식용). */
+  toDay: string;
+  /** 기준 줄의 도착 시작시각(`HH:MM:SS`) — 끝시각은 원래 길이로 서버가 계산한다(시수 보존). */
+  toStart: string;
+  /** 이 블록이 가는 요일들(중복 없이, 표식이 `→ 화·금 16:20`으로 적는다). */
+  toDays: string[];
+  /**
+   * 큐잉 시점의 적용 **의도**(학생 이동 큐와 같은 앵커) — `null` = 즉시, `'YYYY-MM-DD'` = 그 주 예약.
+   * 🔴 없으면 미래 주에서 반만 옮겼을 때 화면은 그 주를 적용일로 보여 주는데 저장은 오늘로 나간다(F2).
+   */
+  effectiveOn: string | null;
+};
+
 /** 마우스 오버 중인 학생(편집 모드 Delete=오늘 수강 종료용). ref로 추적해 hover마다 리렌더 안 함. */
 export type HoveredStudent = { enrollmentId: string; studentId: string; name: string; className: string };
 
@@ -61,9 +91,17 @@ export type IncomingStudent = {
 };
 
 export interface TimetableEditState {
-  editing: boolean;
-  /** 편집 모드 토글(툴바 컨트롤이 호출). */
-  setEditing: (v: boolean) => void;
+  /**
+   * 드래그로 옮길 수 있는가 = **편집 권한 + 이번/미래 주**(과거 주는 조회 전용). 옛 '편집 모드' 토글을 대신한다
+   * (원장 2026-09-04 *"편집모드 없이 바로 드래그 되도록 하자. 대신 저장을 눌러야 반영"*) — 켜고 끄는 상태가
+   * 아니라 **권한의 다른 이름**이라, 화면에 토글이 없다. 반영은 여전히 '저장'을 눌러야 한다(큐 → RPC).
+   */
+  canDrag: boolean;
+  /**
+   * 🔴 "지금 끌고 있나"는 **여기 없다** — [`drag-flag.ts`](./drag-flag.ts)의 모듈 플래그 + `body.tt-dragging`
+   *    클래스가 나른다. 이 컨텍스트에 넣었더니 집는 **그 순간** 소비처(셀 59 + 줄 350)가 통째로 다시 그려져
+   *    **픽업이 멈칫**했다(원장 제보 2026-09-04, CPU 프로파일로 확인 — 상위가 전부 React 커밋이었다).
+   */
   /** enrollmentId → 이 학생이 어디로 이동 예정인지(없으면 이동 없음). 출발 셀이 취소선+→대상 표시에 사용. */
   pending: Map<string, PendingTarget>;
   /** toSlotId(=도착 셀 slot.id, 스케줄 id) → 그 셀로 전입 예정인 학생들. 도착 셀이 초록 미리보기 행으로 표시. */
@@ -84,8 +122,12 @@ export interface TimetableEditState {
     toDays?: string[];
     fromDays?: string[];
   }) => void;
-  /** 압축된 이동 대기 건수. */
+  /** 압축된 이동 대기 건수(학생 + 반). */
   pendingCount: number;
+  /** slotId → 그 배치가 갈 곳(대기 중). 셀 머리가 `→ 화 3교시` 표식을 그린다. */
+  classMoves: Map<string, QueuedClassMove>;
+  /** 반 블록을 격자 칸에 놓았을 때(보드가 호출). 같은 배치를 다시 놓으면 마지막 것만 남는다. */
+  queueClassMove: (move: QueuedClassMove) => void;
   save: () => void;
   cancel: () => void;
   saving: boolean;
@@ -116,8 +158,9 @@ export interface TimetableEditState {
 
 const noop = () => {};
 export const TimetableEditContext = createContext<TimetableEditState>({
-  editing: false,
-  setEditing: noop,
+  canDrag: false,
+  classMoves: new Map(),
+  queueClassMove: noop,
   pending: new Map(),
   incoming: new Map(),
   queueMove: noop,

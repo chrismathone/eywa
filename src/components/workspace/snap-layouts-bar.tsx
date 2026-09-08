@@ -55,7 +55,7 @@ export function SnapLayoutsBar() {
             })}
           </div>
           <span
-            className="text-text-dim absolute text-center text-[10px] font-medium"
+            className="text-text-dim absolute text-center text-xs font-medium"
             style={{ left: item.box.x - bar.x, top: item.box.y - bar.y + item.box.h + 3, width: item.box.w }}
           >
             {LABEL[item.template]}

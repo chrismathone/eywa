@@ -37,31 +37,31 @@ export function NotificationAlertDialog({
             <span className="break-keep">{item?.title ?? ""}</span>
           </DialogTitle>
           {item?.body ? (
-            <DialogDescription className="text-foreground pt-1 text-[13px] leading-relaxed break-keep">
+            <DialogDescription className="text-foreground pt-1 text-sm leading-relaxed break-keep">
               {item.body}
             </DialogDescription>
           ) : null}
         </DialogHeader>
         {extraCount > 0 ? (
-          <p className="text-text-dim text-[12px]">외 {extraCount}건의 새 알림이 더 있습니다(벨에서 확인).</p>
+          <p className="text-text-dim text-xs">외 {extraCount}건의 새 알림이 더 있습니다(벨에서 확인).</p>
         ) : null}
 
         {/* 컴퓨터 알림 안내 — 이 팝업은 eywa 화면을 볼 때만 보인다. 권한을 켜야 **다른 창을 보고 있어도**
             윈도우 알림으로 뜬다. 실제 알림이 온 지금이 켜기를 안내할 가장 좋은 순간(원장 2026-07-15). */}
         {perm === "default" ? (
           <div className="border-primary/30 bg-primary-soft/40 rounded-md border px-3 py-2.5">
-            <p className="text-foreground text-[12px] leading-relaxed break-keep">
+            <p className="text-foreground text-xs leading-relaxed break-keep">
               <b>컴퓨터 알림을 켜면</b> eywa를 보고 있지 않아도 이런 알림을 윈도우 알림으로 바로 받습니다.
             </p>
             <Button size="sm" className="mt-2 w-full" onClick={onEnableDesktop}>
               <EyIcon name="bell" size={13} /> 컴퓨터 알림 켜기
             </Button>
-            <p className="text-text-faint mt-1.5 text-[11px] leading-snug break-keep">
+            <p className="text-text-faint mt-1.5 text-xs leading-snug break-keep">
               브라우저가 &lsquo;알림 허용&rsquo;을 물어보면 <b>허용</b>을 눌러주세요.
             </p>
           </div>
         ) : perm === "denied" ? (
-          <p className="text-text-faint border-line rounded-md border px-3 py-2 text-[11px] leading-snug break-keep">
+          <p className="text-text-faint border-line rounded-md border px-3 py-2 text-xs leading-snug break-keep">
             컴퓨터 알림이 차단돼 있어 eywa 화면을 볼 때만 알림이 보입니다 — 주소창의 자물쇠 &gt; 알림에서
             &lsquo;허용&rsquo;으로 바꾸면 윈도우 알림으로도 받습니다.
           </p>

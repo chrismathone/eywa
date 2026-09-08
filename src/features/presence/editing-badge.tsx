@@ -30,7 +30,7 @@ export function EditingBadge({ scope, className }: { scope: string; className?: 
   }`;
   return (
     <span
-      className={`bg-amber inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-[2px] align-middle text-[11px] font-bold text-white ${className ?? ""}`}
+      className={`bg-amber inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-[2px] align-middle text-xs font-bold text-white ${className ?? ""}`}
       title={tf("presence.title", {
         names: others.map((o) => o.userName || t("presence.someone")).join(", "),
       })}

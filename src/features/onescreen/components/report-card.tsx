@@ -257,7 +257,7 @@ export function ReportCard({
               {student.subjects.length > 1 ? t("os.card.kickerSubjects") : t("os.card.kicker")}
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="text-foreground text-[15px] font-bold">
+              <p className="text-foreground text-base font-bold">
                 {tf("os.card.title", { name: student.name })}
               </p>
               {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
@@ -271,7 +271,7 @@ export function ReportCard({
                   onClick={() => onRemoveMakeup(subject.name)}
                   title={t("os.row.makeupRemove")}
                   aria-label={tf("os.row.makeupRemoveAria", { name: student.name })}
-                  className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-[10px] font-bold transition hover:text-white"
+                  className="bg-amber-soft text-amber hover:bg-amber inline-flex cursor-pointer items-center gap-0.5 rounded-pill px-1.5 py-px text-xs font-bold transition hover:text-white"
                 >
                   {t("os.card.makeup")}
                   <EyIcon name="close" size={9} />
@@ -279,7 +279,7 @@ export function ReportCard({
               ) : student.isMakeup || (subject.makeup && !subject.classId) ? (
                 // 뺄 수 없는 행 — 왜인지 툴팁으로 남긴다(버튼만 없애면 "왜 안 되지"가 남는다).
                 <span
-                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-xs font-bold"
                   title={makeupRemoveBlockReason(rep.classnoteStatus, lang) ?? undefined}
                 >
                   {t("os.card.makeup")}
@@ -289,7 +289,7 @@ export function ReportCard({
                   수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
               {unreadBadge ? (
                 <span
-                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-xs font-bold"
                   title={tf("os.row.unreadTitle", { n: unreadBadge.count })}
                 >
                   {tf("os.row.unread", { n: unreadBadge.count })}
@@ -297,7 +297,7 @@ export function ReportCard({
               ) : null}
               {showProgressBadge ? (
                 <span
-                  className="bg-danger-soft text-danger rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  className="bg-danger-soft text-danger rounded-pill px-1.5 py-px text-xs font-bold"
                   title={t("os.card.jumpTitle")}
                 >
                   {t("os.row.jump")}
@@ -306,7 +306,7 @@ export function ReportCard({
               {/* '수업보고서 미발송' 반 — 아래 입력이 왜 전부 잠겼는지 카드 머리에서 먼저 밝힌다(2026-08-19). */}
               {optoutRow ? (
                 <span
-                  className="border-line text-text-dim rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                  className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
                   title={reportOptoutNotice(lang)}
                 >
                   {reportOptoutShort(lang)}
@@ -347,7 +347,7 @@ export function ReportCard({
             </>
           ) : (
             <span
-              className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${
+              className={`rounded-pill px-2 py-0.5 text-xs font-bold ${
                 student.attendance === MARK_LATE
                   ? "bg-amber-soft text-amber"
                   : student.attendance === MARK_ABSENT
@@ -376,7 +376,7 @@ export function ReportCard({
                 type="button"
                 onClick={() => setSelIdx(i)}
                 aria-pressed={on}
-                className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
+                className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-xs font-bold transition ${
                   on
                     ? "bg-primary text-primary-foreground"
                     : "border-line text-text-dim hover:bg-bg-soft border"
@@ -401,7 +401,7 @@ export function ReportCard({
       {/* 결석 잠금 사유 — **잠긴 칸 바로 위**에 적는다(2026-07-30 "왜 비활성화됐는지 알 방법이 없다").
           출결 알약은 이 위에 살아 있으므로, 되돌리는 법까지 한 줄로 안내한다. */}
       {isAbsent && !alreadySent ? (
-        <p className="border-danger/30 bg-danger-soft/40 text-text-dim mx-3 mt-2 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+        <p className="border-danger/30 bg-danger-soft/40 text-text-dim mx-3 mt-2 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
           <b className="text-danger">{t("os.card.absentLockWord")}</b>
           {t("os.card.absentLockA")}
           <b>{t("os.card.absentLockWord2")}</b>
@@ -434,7 +434,7 @@ export function ReportCard({
               onChange={(e) => onTextbook(subjectName, e.target.value)}
               placeholder={t("os.card.bookPh")}
               aria-label={tf("os.card.bookAria", { subject: subjectName })}
-              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-[12px] outline-none transition-colors"
+              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
             />
             <button
               type="button"
@@ -445,7 +445,7 @@ export function ReportCard({
                   ? t("os.row.makeupBoth")
                   : t("os.row.makeupOnly")
               }
-              className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
+              className={`shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold transition ${
                 subject.makeup ? "bg-amber-soft text-amber" : "border-line text-text-dim hover:bg-bg-soft border"
               }`}
             >
@@ -490,7 +490,7 @@ export function ReportCard({
             }}
             placeholder={t("os.card.hwTodayPh")}
             aria-label={tf("os.card.hwTodayAria", { subject: subjectName })}
-            className="border-line bg-card focus:border-primary scrollbar-thin mt-1.5 w-full min-w-0 resize-none rounded-lg border px-2 py-1.5 text-[12px] leading-relaxed outline-none transition-colors"
+            className="border-line bg-card focus:border-primary scrollbar-thin mt-1.5 w-full min-w-0 resize-none rounded-lg border px-2 py-1.5 text-xs leading-relaxed outline-none transition-colors"
           />
         </div>
 
@@ -501,7 +501,7 @@ export function ReportCard({
             value={cardEval.note}
             onChange={(e) => onNote(e.target.value)}
             placeholder={t("os.card.notePh")}
-            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
           />
         </div>
         </div>
@@ -522,7 +522,7 @@ export function ReportCard({
               <p className="micro text-text-faint">{tf("os.card.reportOf", { subject: subjectName })}</p>
               {/* 상단 멘트 모드 토글의 하단 반영 — 모드가 바뀌면 이 배지와 아래 입력 구성이 함께 바뀐다. */}
               <span
-                className="border-line text-text-dim rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
                 title={
                   para
                     ? t("os.card.modeBTitle")
@@ -535,7 +535,7 @@ export function ReportCard({
                   막힌 사람은 그걸 못 본다(원장 2026-07-30 "왜 비활성화됐는지 알 방법이 없다"와 같은 함정). */}
               {isAbsent && !alreadySent ? (
                 <span
-                  className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-1.5 py-px text-[10px] font-bold"
+                  className="border-danger/40 bg-danger-soft text-danger rounded-pill border px-1.5 py-px text-xs font-bold"
                   title={t("os.card.absentBadgeTitle")}
                 >
                   {t("os.gate.absent")}
@@ -566,21 +566,21 @@ export function ReportCard({
             // 모드 B — 저장·발송 계약은 그대로 단일 문자열, 화면만 2칸(joinComment이 빈 줄로 합침).
             <div className="flex flex-1 flex-col gap-1.5">
               <label className="flex flex-1 flex-col gap-1">
-                <span className="text-text-faint text-[11px] font-bold">{t("os.card.para1")}</span>
+                <span className="text-text-faint text-xs font-bold">{t("os.card.para1")}</span>
                 <textarea
                   value={paras.p1}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(e.target.value, paras.p2))}
                   placeholder={tf("os.card.para1Ph", { subject: subjectName })}
-                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1">
-                <span className="text-text-faint text-[11px] font-bold">{t("os.card.para2")}</span>
+                <span className="text-text-faint text-xs font-bold">{t("os.card.para2")}</span>
                 <textarea
                   value={paras.p2}
                   onChange={(e) => onSubjectDraft(subjectName, joinComment(paras.p1, e.target.value))}
                   placeholder={t("os.card.para2Ph")}
-                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+                  className="border-line focus:border-primary scrollbar-thin min-h-[84px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
                 />
               </label>
             </div>
@@ -589,7 +589,7 @@ export function ReportCard({
               value={rep.draft}
               onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
               placeholder={tf("os.card.mentPh", { subject: subjectName })}
-              className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+              className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
             />
           )}
         </div>
@@ -601,7 +601,7 @@ export function ReportCard({
             value={rep.trendDraft ?? ""}
             onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
             placeholder={t("os.card.trendPh")}
-            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
           />
         </div>
         </fieldset>
@@ -624,7 +624,7 @@ export function ReportCard({
               **비활성인데 사유 알약이 없는 상태가 생길 수 없다**. */}
           {sendGate.label ? (
             <span
-              className={`rounded-pill border px-2 py-0.5 text-[11px] font-bold ${
+              className={`rounded-pill border px-2 py-0.5 text-xs font-bold ${
                 sendGate.reasons[0] === "absent"
                   ? "border-danger/40 bg-danger-soft text-danger"
                   : sendGate.reasons[0] === "sent"
@@ -641,7 +641,7 @@ export function ReportCard({
           {mentWarnings.map((w) => (
             <span
               key={w}
-              className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-[11px] font-bold"
+              className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold"
               title={t(MENT_WARNING_HINT[w])}
             >
               {t(MENT_WARNING_LABEL[w])}
@@ -649,13 +649,13 @@ export function ReportCard({
           ))}
           {/* 발송 완료는 위 사유 알약이 이미 말했다 — 같은 말을 두 번 붙이지 않는다(표뷰와 동일). */}
           {!alreadySent && cnBadge ? (
-            <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span>
+            <span className={`text-xs font-bold ${cnBadge.cls}`}>{cnBadge.label}</span>
           ) : null}
           {/* 학부모 읽음(0122a) — 양성 배지만(없음 = 미읽음이 아니라 동기화 안 됨일 수 있음, types.ts 규약).
               원장 목록의 "읽음"과 같은 뜻·같은 툴팁 표기 — 강사도 확인 가능하게(원장 지시 2026-07-27). */}
           {subject.classnoteReadAt ? (
             <span
-              className="text-primary text-[11px] font-bold"
+              className="text-primary text-xs font-bold"
               title={tf("os.row.readTitle", { when: readAtLabel(subject.classnoteReadAt, lang) })}
             >
               {t("os.card.read")}
@@ -667,7 +667,7 @@ export function ReportCard({
             다시 보내면 기존 글은 그대로 둔 채 새 글만 하나 더 붙는다(되돌릴 수단 없음). 그래서 버튼을 잠근다.
             정말 다시 보내야 하면 아래 '링크 재발급'(상태 리셋) 또는 관리자 발송 콘솔의 '재발송'을 쓴다. */}
         {alreadySent ? (
-          <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+          <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
               {t("os.card.sentLockA")}
@@ -684,7 +684,7 @@ export function ReportCard({
         {/* 회수 완료 — '발송'이 곧 재발송이다(별도 버튼을 두지 않는다, 원장 2026-08-06:
             *"회수하고 클래스노트 발송 버튼 누르면 그게 재발송 아닌가"*). 발송 시 새 토큰이 발급된다. */}
         {liveStatus === "recalled" ? (
-          <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+          <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="check" size={13} className="text-primary mt-0.5 shrink-0" />
             <span>
               {t("os.card.recalledA")}
@@ -742,14 +742,14 @@ export function ReportCard({
         >
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px] font-bold">
+              <p className="text-text-faint text-xs font-bold">
                 {t("os.attach.empty")}{" "}
                 <span className="text-text-dim">
                   {atts.length}/{MAX_ATTACHMENTS}
                 </span>
               </p>
               <label
-                className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-[11px] font-bold ${
+                className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-xs font-bold ${
                   uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
                 }`}
               >
@@ -771,7 +771,7 @@ export function ReportCard({
             {/* 거짓 약속 차단(2026-07-21) — 학원설정에서 첨부가 꺼져 있으면 저장은 되지만 /r·인쇄·ClassNote
                 어디에도 안 실린다(워커도 파일첨부 경로를 안 탐). 강사가 헛수고하지 않도록 입력 시점에 고지. */}
             {attachmentsHidden ? (
-              <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-[11px] leading-snug">
+              <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-xs leading-snug">
                 {t("os.attach.offA")}
                 <b>{t("os.attach.offB")}</b>
                 {t("os.attach.offC")} {t("os.card.attachOffAsk")}
@@ -792,7 +792,7 @@ export function ReportCard({
                       // 비이미지(문서·오디오) = 파일 칩
                       <div className="bg-card text-text-dim flex h-16 w-full flex-col items-center justify-center gap-0.5 rounded px-1 text-center">
                         <EyIcon name="file" size={16} className="text-text-faint" />
-                        <span className="w-full truncate text-[10px]">{a.name}</span>
+                        <span className="w-full truncate text-xs">{a.name}</span>
                       </div>
                     )}
                     <button
@@ -807,7 +807,7 @@ export function ReportCard({
                 ))}
               </div>
             ) : (
-              <p className="text-text-faint text-[11px]">
+              <p className="text-text-faint text-xs">
                 {t("os.card.attachHint")}
               </p>
             )}
@@ -819,8 +819,8 @@ export function ReportCard({
         {rep.sent && sharePath ? (
           <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px] font-bold">{t("os.card.shareLink")}</p>
-              <div className="flex items-center gap-2 text-[10px]">
+              <p className="text-text-faint text-xs font-bold">{t("os.card.shareLink")}</p>
+              <div className="flex items-center gap-2 text-xs">
                 {typeof rep.viewCount === "number" && rep.viewCount > 0 ? (
                   <span className="text-text-dim">{tf("os.card.views", { n: rep.viewCount })}</span>
                 ) : null}
@@ -829,7 +829,7 @@ export function ReportCard({
             </div>
             {rep.revoked ? (
               <div className="flex items-center justify-between gap-2">
-                <p className="text-text-dim text-[11px]">{t("os.card.revokedHint")}</p>
+                <p className="text-text-dim text-xs">{t("os.card.revokedHint")}</p>
                 <div className="flex items-center gap-1.5">
                   {/* ⚠️ 링크를 막아도 **ClassNote 게시글(스크린샷)은 남아 있다** — 지우려면 회수해야 한다. */}
                   {/* 열람 전용에선 회수 숨김 — 아래 게시판 블록의 RecallButton과 같은 이유. */}
@@ -849,7 +849,7 @@ export function ReportCard({
             ) : (
               <>
                 <div className="flex items-center gap-2">
-                  <code className="text-text-dim min-w-0 flex-1 truncate text-[11px]">{shareUrl}</code>
+                  <code className="text-text-dim min-w-0 flex-1 truncate text-xs">{shareUrl}</code>
                   <Button
                     variant="outline"
                     size="sm"

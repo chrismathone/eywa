@@ -346,15 +346,15 @@ export function IntegratedEditBoard({
         {/* 편집 바 = **한 줄**(원장 2026-08-06 "2행으로 존재하는데 1개로 개편"). 보관함 컨트롤은
             래퍼 없이 여기 얹히고, 목록만 열렸을 때 `w-full`로 아랫줄에 펼쳐진다. */}
         <div className="border-primary/40 bg-primary-soft/40 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3 py-2">
-          <span className="text-primary shrink-0 text-[12px] font-bold">그룹 설정 중</span>
-          <span className="text-text-dim text-[11px]">
+          <span className="text-primary shrink-0 text-xs font-bold">그룹 설정 중</span>
+          <span className="text-text-dim text-xs">
             반 이름을 <b>잡고 끌어</b> 다른 줄에 놓으세요.
           </span>
-          <label className="text-text-dim flex shrink-0 items-center gap-1.5 text-[11px]" title="끄면 ‘N교시 시작’ 자동 묶음으로 돌아갑니다(줄 정의는 보관)">
+          <label className="text-text-dim flex shrink-0 items-center gap-1.5 text-xs" title="끄면 ‘N교시 시작’ 자동 묶음으로 돌아갑니다(줄 정의는 보관)">
             <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
             커스텀 줄
           </label>
-          <label className="text-text-dim flex shrink-0 items-center gap-1.5 text-[11px]">
+          <label className="text-text-dim flex shrink-0 items-center gap-1.5 text-xs">
             <input type="checkbox" checked={showOthers} onChange={(e) => setShowOthers(e.target.checked)} />
             미배정 줄
           </label>
@@ -365,7 +365,7 @@ export function IntegratedEditBoard({
             maxLength={30}
             aria-label="미배정 묶음 제목"
             title="미배정 줄의 제목"
-            className="border-line focus:border-primary bg-card w-24 shrink-0 rounded-lg border px-2 py-0.5 text-[11px] outline-none"
+            className="border-line focus:border-primary bg-card w-24 shrink-0 rounded-lg border px-2 py-0.5 text-xs outline-none"
           />
           <GroupPresetBar
             presets={presets}
@@ -411,12 +411,12 @@ export function IntegratedEditBoard({
                   header={
                     isOthers ? (
                       <>
-                        <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{section.label}</span>
-                        <span className="border-line text-text-dim rounded-full border px-1.5 py-0.5 text-[10px]">
+                        <span className="text-foreground text-sm font-bold whitespace-nowrap">{section.label}</span>
+                        <span className="border-line text-text-dim rounded-full border px-1.5 py-0.5 text-xs">
                           미배정
                         </span>
                         {!showOthers ? (
-                          <span className="text-amber inline-flex items-center gap-1 text-[11px]">
+                          <span className="text-amber inline-flex items-center gap-1 text-xs">
                             <AlertTriangle size={12} aria-hidden="true" />
                             저장하면 이 줄은 통합뷰에서 숨겨집니다
                           </span>
@@ -445,7 +445,7 @@ export function IntegratedEditBoard({
                             <ChevronDown className="size-3" />
                           </button>
                         </span>
-                        <span className="text-text-faint num shrink-0 text-[11px]">{ri + 1}</span>
+                        <span className="text-text-faint num shrink-0 text-xs">{ri + 1}</span>
                         <input
                           value={groups[ri]?.title ?? ""}
                           onChange={(e) =>
@@ -454,11 +454,11 @@ export function IntegratedEditBoard({
                           placeholder={`줄 ${ri + 1}`}
                           maxLength={30}
                           aria-label="줄 제목"
-                          className="border-line focus:border-primary text-foreground w-52 rounded-lg border px-2 py-0.5 text-[13px] font-bold outline-none"
+                          className="border-line focus:border-primary text-foreground w-52 rounded-lg border px-2 py-0.5 text-sm font-bold outline-none"
                         />
                       </>
                     ) : (
-                      <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{section.label}</span>
+                      <span className="text-foreground text-sm font-bold whitespace-nowrap">{section.label}</span>
                     )
                   }
                   action={
@@ -467,7 +467,7 @@ export function IntegratedEditBoard({
                         type="button"
                         onClick={() => setGroups((gs) => gs.filter((g) => g.id !== rowId))}
                         title="줄 삭제 — 이 줄의 반은 미배정으로 내려갑니다"
-                        className="text-text-faint hover:text-danger ml-auto inline-flex shrink-0 items-center gap-1 text-[11px]"
+                        className="text-text-faint hover:text-danger ml-auto inline-flex shrink-0 items-center gap-1 text-xs"
                       >
                         <Trash2 className="size-3" />줄 삭제
                       </button>
@@ -479,7 +479,7 @@ export function IntegratedEditBoard({
             <button
               type="button"
               onClick={addGroup}
-              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border border-dashed px-3 py-1.5 text-[12px]"
+              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border border-dashed px-3 py-1.5 text-xs"
             >
               <Plus className="size-3" />줄 추가
             </button>
@@ -489,17 +489,17 @@ export function IntegratedEditBoard({
         {/* 저장 바 — 창 데이터입력 폼 규약과 같은 하단 고정. 되돌릴 수 없는 건 저장뿐이라 여기 모은다.
             sticky-save-bar 마커 = main 하단 패딩 제거(바 밀착, globals.css [[#110]]). */}
         <div className="sticky-save-bar border-line bg-card/95 sticky bottom-0 z-30 flex flex-wrap items-center gap-2 rounded-t-xl border-t px-3 py-2 backdrop-blur">
-          {error ? <span className="text-danger text-[12px]">{error}</span> : null}
+          {error ? <span className="text-danger text-xs">{error}</span> : null}
           {confirmLeave ? (
-            <span className="text-amber text-[12px]">아직 반영하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
+            <span className="text-amber text-xs">아직 반영하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
           ) : null}
-          <span className="text-text-faint text-[11px]">
+          <span className="text-text-faint text-xs">
             줄 {groups.length}개 · 반 {cards.length}개
           </span>
           {/* 초기화 — 화면만 되돌린다(저장 전이라 DB 무변). 되돌릴 게 없으면 아예 안 보인다. */}
           {dirty ? (
             confirmReset ? (
-              <span className="text-amber ml-auto inline-flex items-center gap-2 text-[12px]">
+              <span className="text-amber ml-auto inline-flex items-center gap-2 text-xs">
                 지금까지 옮긴 걸 버리고 처음 상태로?
                 <button type="button" onClick={resetToInitial} className="text-danger font-bold hover:underline">
                   초기화
@@ -535,7 +535,7 @@ export function IntegratedEditBoard({
               **'실제 반영'**. 이쪽만 통합뷰를 바꾸고, 위쪽은 보관함에만 넣는다. 되돌릴 수 없는
               유일한 동작이라 확인을 한 번 받는다. */}
           {confirmApply ? (
-            <span className="text-amber inline-flex items-center gap-2 text-[12px]">
+            <span className="text-amber inline-flex items-center gap-2 text-xs">
               이 배치를 통합뷰에 반영할까요?
               <button
                 type="button"
@@ -577,7 +577,7 @@ export function IntegratedEditBoard({
       <DragOverlay dropAnimation={null}>
         {dragCard ? (
           <div
-            className={`border-primary text-foreground pointer-events-none flex h-full w-full cursor-grabbing items-center justify-center rounded-sm border-2 px-1 text-center text-[13px] font-bold shadow-lg ${
+            className={`border-primary text-foreground pointer-events-none flex h-full w-full cursor-grabbing items-center justify-center rounded-sm border-2 px-1 text-center text-sm font-bold shadow-lg ${
               dragCard.bgColor ? "" : `${subjectSoftClass} bg-card`
             }`}
             style={
@@ -589,7 +589,7 @@ export function IntegratedEditBoard({
             <span className="overflow-hidden whitespace-nowrap text-clip">{dragCard.className}</span>
           </div>
         ) : dragRow ? (
-          <span className="bg-card border-primary text-foreground shadow-card pointer-events-none inline-flex cursor-grabbing items-center gap-1.5 rounded-lg border-2 px-3 py-1.5 text-[13px] font-bold whitespace-nowrap">
+          <span className="bg-card border-primary text-foreground shadow-card pointer-events-none inline-flex cursor-grabbing items-center gap-1.5 rounded-lg border-2 px-3 py-1.5 text-sm font-bold whitespace-nowrap">
             <GripVertical className="size-3.5" aria-hidden="true" />
             {dragRow.title}
           </span>
@@ -638,13 +638,13 @@ function EditSection({
           <EyIcon name="clock" size={13} />
         </span>
         {header}
-        <span className="text-text-dim shrink-0 text-[12px] whitespace-nowrap">{section.cards.length}개 수업</span>
+        <span className="text-text-dim shrink-0 text-xs whitespace-nowrap">{section.cards.length}개 수업</span>
         {/* '1시간 단위' — 통합뷰 섹션 헤더에 있던 토글의 새 자리(원장 2026-08-13). 이 줄에 교시 체계가
             다른 반이 섞여 있으면 체계별로 표를 나눠 그린다(빈 교시 행이 서로를 가리지 않게). */}
         {compact ? (
           <label
             title="이 줄에 교시 체계가 다른 반이 섞여 있으면 체계별로 나눠 그립니다 (내 화면에만 적용)"
-            className="text-text-dim hover:text-foreground flex shrink-0 cursor-pointer items-center gap-1 text-[11px] whitespace-nowrap"
+            className="text-text-dim hover:text-foreground flex shrink-0 cursor-pointer items-center gap-1 text-xs whitespace-nowrap"
           >
             <input type="checkbox" checked={compact.on} onChange={compact.onToggle} />
             1시간 단위
@@ -669,7 +669,7 @@ function EditSection({
         )}
         trailing={
           <div
-            className={`border-line text-text-faint flex w-14 shrink-0 items-center justify-center border-l border-dashed text-center text-[10px] leading-tight ${
+            className={`border-line text-text-faint flex w-14 shrink-0 items-center justify-center border-l border-dashed text-center text-xs leading-tight ${
               boxActive ? "bg-primary-soft text-primary" : ""
             }`}
             style={{ height: NAME_H }}

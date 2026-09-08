@@ -37,6 +37,21 @@ export const CELL_H = 352;
  */
 export const PERIOD_ROW_H = CELL_H / 2;
 
+/**
+ * **학생 명단을 접었을 때의 셀 높이** — 수업명 헤더 존(HEADER_H 60) + 셀 패딩 16.
+ * 명단만 감추고 높이를 그대로 두면 칸의 4/5가 빈 채로 남아 '접기'가 아무 소용이 없다(원장 2026-09-04).
+ * ⚠️ CELL_H와 **같은 산식**을 쓴다 — 헤더 존이 바뀌면 둘 다 따라 움직여야 한다.
+ */
+export const NO_ROSTER_CELL_H = 76;
+
+/** 명단을 접었을 때의 교시 행 높이(px) — 셀 높이와 같은 관계(수학계열은 교시 2칸이 한 셀). */
+export const NO_ROSTER_PERIOD_ROW_H = NO_ROSTER_CELL_H / 2;
+
+/** 교시 행 높이 — 명단을 접었으면 헤더만 남는 높이. 화면·스코프 래퍼가 같은 함수를 쓴다. */
+export function periodRowFullHeight(hideStudents: boolean): number {
+  return hideStudents ? NO_ROSTER_PERIOD_ROW_H : PERIOD_ROW_H;
+}
+
 /** 접힌 빈 교시 행 높이(px) — 교시 라벨 한 줄이 들어가는 최소 밴드. */
 export const EMPTY_PERIOD_ROW_H = 36;
 

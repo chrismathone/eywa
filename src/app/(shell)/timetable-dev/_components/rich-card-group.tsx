@@ -176,7 +176,7 @@ function LabelColumn({
   wdH: number;
   namesOnly?: boolean;
 }) {
-  const cell = `${GRID} text-text-dim flex items-center justify-center border-b text-[10px] font-bold`;
+  const cell = `${GRID} text-text-dim flex items-center justify-center border-b text-xs font-bold`;
   const rail = `bg-bg-soft ${GRID} sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]`;
   if (namesOnly)
     return (
@@ -199,19 +199,19 @@ function LabelColumn({
           {/* 학원장이 교시 이름을 비우면 시간대가 이름 자리로 올라온다(2026-08-13, periodListLabel).
               ⚠️ `nowrap` — 시간대(`14:20~15:00`)가 줄바꿈되면 교시 한 칸이 두 줄로 부풀어 축이 어긋난다.
                  폭은 LABEL_W가 책임진다(둘을 같이 볼 것). */}
-          <span className="text-foreground text-[10px] font-bold whitespace-nowrap">{p.label || p.time}</span>
+          <span className="text-foreground text-xs font-bold whitespace-nowrap">{p.label || p.time}</span>
           {/* 주말 섹션은 시각이 비어 온다(카드마다 시각이 달라 행에 못 적는다 — class-grid `weekendSelfShift`).
               교시표에 없는 시각의 행은 라벨 자체가 시각이라 같은 값을 두 번 적지 않는다(`slotPeriodRow` 폴백). */}
-          {p.label && p.time && p.time !== p.label ? <span className="text-[7px]">{p.time}</span> : null}
+          {p.label && p.time && p.time !== p.label ? <span className="text-xs">{p.time}</span> : null}
         </div>
       ))}
-      <div className={`text-primary ${GRID} flex items-center justify-center border-b text-[10px] font-bold`} style={{ height: activeH }}>
+      <div className={`text-primary ${GRID} flex items-center justify-center border-b text-xs font-bold`} style={{ height: activeH }}>
         재원
       </div>
       {/* 대기·퇴원은 그 섹션에 한 명도 없으면 라벨까지 통째로 접는다 — 카드 쪽과 같은 높이라 정렬이 유지된다. */}
       {holdH > 0 ? <div className={`${cell} text-rose`} style={{ height: holdH }}>대기</div> : null}
       {wdH > 0 ? (
-        <div className={`${GRID} text-text-dim flex items-center justify-center text-[10px] font-bold`} style={{ height: wdH }}>
+        <div className={`${GRID} text-text-dim flex items-center justify-center text-xs font-bold`} style={{ height: wdH }}>
           퇴원
         </div>
       ) : null}
@@ -275,7 +275,7 @@ export function ClassColumn({
           <div
             {...edit.handleProps}
             title={`${card.className} — 끌어서 다른 줄로 옮기기`}
-            className="flex h-full w-full cursor-grab items-center justify-center gap-1 px-1 text-center text-[13px] font-bold select-none active:cursor-grabbing"
+            className="flex h-full w-full cursor-grab items-center justify-center gap-1 px-1 text-center text-sm font-bold select-none active:cursor-grabbing"
           >
             <GripVertical className="size-3 shrink-0 opacity-45" />
             <span className="overflow-hidden whitespace-nowrap text-clip">{card.className}</span>
@@ -301,14 +301,14 @@ export function ClassColumn({
             >
               {/* 이름은 **두 줄까지** 접는다 — 칸 너비를 고정하면서(DAY_COL_W) 2요일 반 카드가 70px까지
                   좁아져 한 줄로는 `고등E_고1 특별 S` 같은 이름이 통째로 잘린다. 전체 이름은 title에도 있다. */}
-              <span className="line-clamp-2 w-full text-[13px] leading-tight font-bold break-keep">
+              <span className="line-clamp-2 w-full text-sm leading-tight font-bold break-keep">
                 {card.className}
               </span>
               {/* 강의실 — 전용 행 대신 수업명 바로 아래(원장 2026-08-11 "LS6 / 화 602 / 금 603 이렇게").
                   헤더색 위에 얹히므로 색을 따로 주지 않고 투명도만 낮춘다(반색이 어두우면 흰 글자가 유지된다).
                   ⚠️ namesOnly(배치 편집)에선 헤더가 NAME_H(40px)로 좁아 두 줄이 안 들어간다 → 안 그린다. */}
               {namesOnly ? null : (
-                <span className="line-clamp-1 w-full text-[9px] leading-tight font-normal opacity-70" title={card.classroomLabel}>
+                <span className="line-clamp-1 w-full text-xs leading-tight font-normal opacity-70" title={card.classroomLabel}>
                   {card.classroomLabel}
                 </span>
               )}
@@ -325,17 +325,17 @@ export function ClassColumn({
           ⚠️ 넘치면 카드 안에서 **잘린다**(overflow-hidden) — 옆 반 칸 위로 삐져나오지 않게. */}
       <div className={`${GRID} flex min-w-0 items-center justify-center overflow-hidden border-b`} style={{ height: TEACHER_H }}>
         {!card.teacherName ? (
-          <span className="text-text-faint text-[11px]">-</span>
+          <span className="text-text-faint text-xs">-</span>
         ) : damimColor ? (
           <span
-            className="overflow-hidden rounded px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-clip"
+            className="overflow-hidden rounded px-1.5 py-0.5 text-xs font-bold whitespace-nowrap text-clip"
             style={{ background: damimColor.bg, color: damimColor.text }}
           >
             {card.teacherName}
             <TeacherNick name={card.teacherName} map={teacherNicknames} />
           </span>
         ) : (
-          <span className="text-foreground overflow-hidden text-[11px] font-bold whitespace-nowrap text-clip">
+          <span className="text-foreground overflow-hidden text-xs font-bold whitespace-nowrap text-clip">
             {card.teacherName}
             <TeacherNick name={card.teacherName} map={teacherNicknames} />
           </span>
@@ -358,14 +358,14 @@ export function ClassColumn({
       {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드. */}
       <RosterSection h={activeH} rows={group.rosterRows.active} count={card.active.length} className={`bg-card ${GRID} border-b`}>
         {card.activeCount === 0 ? (
-          <div className="text-text-faint py-2 text-center text-[10px]">-</div>
+          <div className="text-text-faint py-2 text-center text-xs">-</div>
         ) : (
           card.active.map((s, i) => <RosterRow key={s.studentId ?? `a-${i}`} s={s} />)
         )}
       </RosterSection>
       <RosterSection h={holdH} rows={group.rosterRows.hold} count={card.hold.length} className={`bg-rose-soft/30 ${GRID} border-b`}>
         {card.hold.length === 0 ? (
-          <div className="text-text-faint text-center text-[10px]">-</div>
+          <div className="text-text-faint text-center text-xs">-</div>
         ) : (
           card.hold.map((s, i) => <RosterRow key={s.studentId ?? `h-${i}`} s={s} />)
         )}
@@ -373,7 +373,7 @@ export function ClassColumn({
       {/* 퇴원 — 재원/대기와 동일 서식, 진회색 배경+흰 글자 톤으로 구분 */}
       <RosterSection h={wdH} rows={group.rosterRows.withdrawn} count={card.withdrawn.length} className="bg-bg-soft">
         {card.withdrawn.length === 0 ? (
-          <div className="text-text-faint text-center text-[10px]">-</div>
+          <div className="text-text-faint text-center text-xs">-</div>
         ) : (
           card.withdrawn.map((s, i) => <RosterRow key={s.studentId ?? `w-${i}`} s={s} />)
         )}
@@ -408,7 +408,7 @@ function RosterSection({
   const overflowing = count > rows;
   return (
     <div
-      className={`${className} scrollbar-hide overflow-y-auto p-1 text-[13px]`}
+      className={`${className} scrollbar-hide overflow-y-auto p-1 text-sm`}
       style={{
         height: h,
         // 아래 12px에 걸쳐 서서히 사라지게 — 잘린 이름이 "여기서 끝"으로 안 읽히도록.
@@ -428,14 +428,14 @@ function RosterSection({
 /** 담임 이름 뒤 `(영어이름)` — 한국인 강사이고 닉네임이 등록돼 있을 때만. 원어민·미등록은 안 그린다. */
 function TeacherNick({ name, map }: { name: string; map?: TeacherNicknameMap }) {
   const nick = map?.[name];
-  return nick ? <span className="text-[9px] font-bold opacity-85">({nick})</span> : null;
+  return nick ? <span className="text-xs font-bold opacity-85">({nick})</span> : null;
 }
 
 function DayHead({ day }: { day: DayOfWeek }) {
   const weekend = day === "sat" || day === "sun";
   return (
     <div
-      className={`${GRID} flex items-center justify-center border-r text-[10px] font-bold last:border-r-0 ${
+      className={`${GRID} flex items-center justify-center border-r text-xs font-bold last:border-r-0 ${
         weekend ? "text-rose" : "text-text-dim"
       }`}
     >
@@ -497,9 +497,9 @@ function Cell({
  * 글자를 키우면 안 된다 — 잠깐 그렇게 뒀다가 폭 고정으로 되돌리며 함께 되돌렸다.
  */
 function cellFont(text: string): string {
-  if (text.length >= 4) return "text-[8px] tracking-tight whitespace-nowrap";
-  if (text.length === 3) return "text-[9px] tracking-tight whitespace-nowrap";
-  return "text-[10px] whitespace-nowrap";
+  if (text.length >= 4) return "text-xs tracking-tight whitespace-nowrap";
+  if (text.length === 3) return "text-xs tracking-tight whitespace-nowrap";
+  return "text-xs whitespace-nowrap";
 }
 
 /**
@@ -527,7 +527,7 @@ function RosterRow({ s }: { s: GridStudent }) {
     </>
   );
   // ⚠️ 클래스 문자열도 기본뷰 StudentRow와 동일하게 유지할 것(px-2 py-[3px] leading-tight + hover:bg-bg-soft).
-  //    글자 크기는 명단 컨테이너의 text-[13px]에서 상속 — 기본뷰 class-cell과 같은 값이다.
+  //    글자 크기는 명단 컨테이너의 text-sm에서 상속 — 기본뷰 class-cell과 같은 값이다.
   const cls = `block overflow-hidden whitespace-nowrap text-clip px-2 py-[3px] leading-tight ${tone}`;
   const trigger = s.studentId ? (
     <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>

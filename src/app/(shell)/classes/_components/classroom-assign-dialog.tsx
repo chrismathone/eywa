@@ -262,7 +262,7 @@ function SummaryCell({
   return (
     <div className="border-border bg-muted/30 rounded-md border px-3 py-2">
       <p className={`num text-xl font-bold ${color}`}>{value}</p>
-      <p className="text-text-dim text-[11px]">{label}</p>
+      <p className="text-text-dim text-xs">{label}</p>
     </div>
   );
 }
@@ -272,8 +272,8 @@ export function ClassroomAssignButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        <Sparkles className="size-4" />
+      {/* 머리의 텍스트 Secondary(지시서 §10: 상시 버튼 = Primary '새 반' + 텍스트 하나) — 테두리·아이콘 없이 글자만. */}
+      <Button variant="ghost" className="text-primary" onClick={() => setOpen(true)}>
         강의실 자동배정
       </Button>
       {open ? <AssignDialog onClose={() => setOpen(false)} /> : null}

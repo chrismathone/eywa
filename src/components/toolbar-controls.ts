@@ -9,8 +9,11 @@
  * 1. **툴바를 감싸는 카드 껍데기를 두지 않는다.** 컨트롤이 저마다 테두리를 갖고 있어 줄은 그대로
  *    읽히고, 아래 목록·칸이 각자 테두리를 가지면 선이 이중으로 겹쳐 보인다.
  *    ⚠️ 그 바가 `sticky`면 배경까지 빼면 안 된다 — 스크롤 내용이 비친다(`bg-background`를 남길 것).
- * 2. **높이는 h-8 한 값.** 공용 [`Button`](@/components/ui/button) 기본 크기와 같다. 한 줄에
+ * 2. **높이·라벨은 [`control-scale.ts`](@/components/ui/control-scale) 한 벌**(`h-(--control-h)` 22px ·
+ *    라벨 18px `leading-none`) — 공용 [`Button`](@/components/ui/button) 기본 크기와 같다. 한 줄에
  *    버튼·드롭다운·기간 네비·검색이 나란히 서므로 하나라도 다르면 줄이 울퉁불퉁하다.
+ *    ⚠️ 2026-09-03: 종전 "h-8 고정"은 원장의 90% 규칙(라벨이 높이의 90%)으로 **대체**됐다 — 높이가
+ *       라벨에서 도출된다. 값을 바꾸려면 globals.css `--control-*` 한 곳.
  *    🔴 세로 패딩(`py-*`)으로 높이를 만들지 말 것 — 글자 크기가 바뀌면 같이 흔들린다.
  * 3. **라운드는 덜 둥근 쪽으로.** 묶음 상자 `rounded-lg`, 그 안의 칩·링크 `rounded-md`.
  *    🔴 툴바에 알약(`rounded-full`) 묶음을 쓰지 않는다.
@@ -29,13 +32,13 @@
  *    그래서 톤(`border-border bg-card text-foreground`)은 SearchableSelect 기본과 **같은 값**을 다시 적는다.
  */
 export const TOOLBAR_SELECT =
-  "border-border bg-card text-foreground flex h-8 items-center rounded-md border px-3 text-sm";
+  "border-border bg-card text-foreground flex h-(--control-h) items-center rounded-md border px-2.5 text-(length:--control-label) leading-none";
 
 /**
  * 세그먼트(뷰 토글·기간 프리셋 등) **묶음 상자**. 안쪽 칩은 [`TOOLBAR_SEG_ITEM`].
  * 높이를 `h-8`로 고정하고 안쪽 여백(`p-0.5`)만큼 칩이 작아진다.
  */
-export const TOOLBAR_SEG_BOX = "border-line inline-flex h-8 items-center gap-0.5 rounded-lg border p-0.5";
+export const TOOLBAR_SEG_BOX = "border-line inline-flex h-(--control-h) items-center gap-0.5 rounded-lg border px-0.5";
 
 /**
  * 항목 수가 **정해지지 않은** 묶음(예: 학원설정을 따라 늘어나는 과목 칩)용 — 안에서 줄바꿈이 된다.
@@ -44,10 +47,11 @@ export const TOOLBAR_SEG_BOX = "border-line inline-flex h-8 items-center gap-0.5
  *    한 줄일 땐 `min-h-8`이 `h-8`과 같은 높이라 다른 묶음과 나란히 선다.
  */
 export const TOOLBAR_SEG_BOX_WRAP =
-  "border-line inline-flex min-h-8 flex-wrap items-center gap-0.5 rounded-lg border p-0.5";
+  "border-line inline-flex min-h-(--control-h) flex-wrap items-center gap-0.5 rounded-lg border px-0.5";
 
 /** 세그먼트 묶음 **안쪽** 칩/링크의 공통 부분 — 선택 여부에 따른 톤은 호출부가 잇는다. */
-export const TOOLBAR_SEG_ITEM = "rounded-md px-2.5 py-1 text-xs transition";
+export const TOOLBAR_SEG_ITEM =
+  "rounded-md px-2 text-(length:--control-label) leading-none whitespace-nowrap transition";
 
 /**
  * 세그먼트 칩 **톤**.
@@ -63,21 +67,22 @@ export const TOOLBAR_SEG_ITEM = "rounded-md px-2.5 py-1 text-xs transition";
 export const TOOLBAR_SEG_ON = "bg-foreground text-background font-medium";
 /** 학원색 반전 — 종전 `border-primary bg-primary text-primary-foreground font-medium`의 테두리 뺀 값. */
 export const TOOLBAR_SEG_ON_PRIMARY = "bg-primary text-primary-foreground font-medium";
-export const TOOLBAR_SEG_OFF = "text-text-dim hover:text-foreground hover:bg-bg-soft";
+export const TOOLBAR_SEG_OFF = "text-text-dim hover:text-foreground hover:bg-bg-soft font-medium";
 
 /**
  * 묶음에 안 들어간 **홀로 선 토글 칩**(예: "미수강 제외"·"퇴원 감추기"). 눌러서 상태가 남으므로
  * 칩이지만, 툴바 한 줄에 서므로 높이·라운드는 버튼 계열을 따른다(위 규약 3).
  */
-export const TOOLBAR_CHIP = "inline-flex h-8 shrink-0 items-center rounded-lg border px-2.5 text-xs transition";
+export const TOOLBAR_CHIP =
+  "inline-flex h-(--control-h) shrink-0 items-center rounded-lg border px-2 text-(length:--control-label) leading-none whitespace-nowrap transition";
 
 /** 그 홀로 선 칩의 톤 — 켜짐 / 꺼짐. */
 export const TOOLBAR_CHIP_ON = "border-primary bg-primary text-primary-foreground font-medium";
-export const TOOLBAR_CHIP_OFF = "border-line text-text-dim hover:text-foreground hover:bg-bg-soft";
+export const TOOLBAR_CHIP_OFF = "border-line text-text-dim hover:text-foreground hover:bg-bg-soft font-medium";
 
 /**
  * 툴바 안 검색 입력 박스 — 공용 [`SearchForm`](@/components/search-form)이 쓰는 것과 같은 값.
  * 자기 폼을 따로 든 화면(학생목록처럼 필터 상태를 함께 커밋하는 곳)이 모양만 맞출 때 쓴다.
  */
 export const TOOLBAR_SEARCH_BOX =
-  "border-border bg-bg-soft text-text-dim flex h-8 items-center gap-2 rounded-lg border px-2.5";
+  "border-border bg-bg-soft text-text-dim flex h-(--control-h) items-center gap-1.5 rounded-lg border px-2 text-(length:--control-label) leading-none";

@@ -150,7 +150,7 @@ export async function ActivityLogTab({ userId, page }: { userId: string; page: n
                         <p className="text-foreground text-sm font-medium break-keep">{head}</p>
                         <ul className="mt-1 space-y-0.5">
                           {changes.map((c, i) => (
-                            <li key={i} className="text-text-dim flex gap-1.5 text-[13px] break-keep">
+                            <li key={i} className="text-text-dim flex gap-1.5 text-sm break-keep">
                               <span className="text-text-faint select-none">·</span>
                               <span>{c}</span>
                             </li>

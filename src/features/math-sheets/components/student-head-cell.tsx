@@ -20,7 +20,7 @@ export const HEAD_CELL_W = "w-[232px]";
  * 이름·학교학년의 서식 한 벌 — 원장 2026-09-02 *"현재 크기 2배로"*(14→28px) 뒤 *"너무 커졌네 70%로 줄이고"*
  * → 28×0.7 ≈ **20px**. '이 달 목표' 라벨은 같은 서식에서 크기만 절반(*"이달목표는 50%로"* → 14px, goal-cell.tsx).
  */
-export const NAME_TEXT = "text-[20px] leading-tight font-extrabold break-keep";
+export const NAME_TEXT = "text-xl leading-tight font-extrabold break-keep";
 
 function fmtDate(d: string | null): string {
   return d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "";
@@ -129,7 +129,7 @@ export function StudentHeadCell({
               .filter(Boolean)
               .join(" · ")}
           />
-          <div className="num mt-1 flex items-baseline gap-1.5 text-[10.5px]">
+          <div className="num mt-1 flex items-baseline gap-1.5 text-xs">
             {r.rail.status === "not-started" ? (
               // 🔴 아직 수업이 한 번도 안 지난 달은 **판정하지 않는다** — "0%"는 거짓 진행률이다(적대적 리뷰 2026-09-02).
               <span className="text-text-faint font-bold">{RAIL_STATUS_LABEL["not-started"]}</span>

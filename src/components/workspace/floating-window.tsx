@@ -199,8 +199,8 @@ export function FloatingWindow({
 
           {/* 정중앙: 창 이름 — 좌우 그룹 너비와 무관하게 바 한가운데 고정(absolute). 드래그 통과(pointer-events-none). */}
           <span className="pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[46%] -translate-x-1/2 items-center justify-center gap-1.5">
-            <span className="text-foreground truncate text-[12px] font-bold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
-            {win.params.subtitle ? <span className="text-text-faint shrink-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
+            <span className="text-foreground truncate text-xs font-bold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
+            {win.params.subtitle ? <span className="text-text-faint shrink-0 truncate text-xs">{win.params.subtitle}</span> : null}
           </span>
 
           {/* 우측 그룹: 최소화 · 최대화 · 닫기 (Windows식 창 컨트롤) */}
@@ -291,6 +291,15 @@ export function FloatingWindow({
             </div>
           </div>
         ) : null}
+
+        {/* 리사이즈가 그 창의 최소 크기에 닿았을 때만 보이는 힌트 — use-pointer-resize가 DOM으로 켠다(리렌더 0).
+            원장 2026-09-03 "최소 크기보다 줄이려고 할 때 경고를 띄우고 줄어들지 않도록". */}
+        <div
+          data-min-hint
+          hidden
+          aria-live="polite"
+          className="bg-foreground text-background pointer-events-none absolute right-2 bottom-2 z-20 rounded-md px-2 py-1 text-xs font-bold whitespace-nowrap"
+        />
 
         {/* 8방향 리사이즈 핸들 (스포트라이트 상단 창은 잠금) */}
         {spot

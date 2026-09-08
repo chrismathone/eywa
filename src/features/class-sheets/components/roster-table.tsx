@@ -177,7 +177,7 @@ export const RosterTable = memo(function RosterTable({
   }, [roster, data.students, collapsedGroups]);
   return (
     <div className="border-line-strong mt-1.5 border-t pt-1">
-      <table className="w-full border-collapse text-[13px]" style={{ tableLayout: "fixed" }}>
+      <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed" }}>
         {/* ⚠️ 학교 열은 뺐다(원장 2026-08-06) — 남은 폭은 전부 '특이사항'이 가져간다.
             학교·학년은 학생 이름 툴팁과 학생목록에 있고, 교시 카드에서 매일 보는 값이 아니다. */}
         {/* 폭은 **꼭 필요한 만큼만** 고정하고 남는 건 전부 '특이사항'이 가져간다(원장 2026-08-06
@@ -207,7 +207,7 @@ export const RosterTable = memo(function RosterTable({
           {/* 헤더 밴드 — 원본 시트의 노란 머리글 줄이 하던 일(본문과 확실히 구분). 회색 밴드 + dim 굵은 글씨. */}
           {/* 머리글도 **굵게 + foreground**(원장 2026-08-06 "전체 텍스트를 굵게할것") — dim 보통굵기는
               한 발짝만 떨어져도 안 읽혔다. */}
-          <tr className="bg-bg-soft text-foreground text-left text-[11px]">
+          <tr className="bg-bg-soft text-foreground text-left text-xs">
             {/* '학생' 머리가 곧 재원 섹션의 접기 버튼(이 섹션엔 라벨 행이 없다). */}
             <th className="rounded-l-md py-0.5 pl-1 font-bold">
               <GroupToggle
@@ -251,7 +251,7 @@ export const RosterTable = memo(function RosterTable({
                 <tr key={`label:${row.key}`} className="bg-bg-soft">
                   <td
                     colSpan={rosterColSpan(form)}
-                    className="text-foreground px-1 py-0.5 text-[11px] font-bold"
+                    className="text-foreground px-1 py-0.5 text-xs font-bold"
                     title={groupHint(row.key)}
                   >
                     <GroupToggle

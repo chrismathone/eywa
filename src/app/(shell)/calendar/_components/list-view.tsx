@@ -6,8 +6,8 @@ import { shortDate } from "./event-row";
 
 /**
  * 목록(표) 뷰 — 조건(연도·태그)에 맞는 일정을 표로 조사한다(0224a 다중 뷰).
- * 서버 컴포넌트: 데이터·필터는 page가 URL로 확정해 내려준다. 표 규약 = 열 제목 가운데 +
- * 열 구분선 `--line-faint`(doc-list 선례), 가로 넘침은 자체 스크롤(페이지 가로 스크롤 금지).
+ * 서버 컴포넌트: 데이터·필터는 page가 URL로 확정해 내려준다. 표 규약 = 열 제목 가운데 16px 굵게 +
+ * 열 구분선 `--line-faint`(doc-list 선례), 본문 16px, 가로 넘침은 자체 스크롤(페이지 가로 스크롤 금지).
  */
 
 function spanDays(start: string, end: string): number {
@@ -24,16 +24,16 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
   }
 
   return (
-    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
+    <DragScrollArea className="bg-card shadow-card rounded-2xl">
       <table className="w-full min-w-[760px] text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-[--line-faint]">
         <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
-          <tr>
-            <th className="micro px-3 py-2 text-center">날짜</th>
-            <th className="micro px-3 py-2 text-center">시간</th>
-            <th className="micro px-3 py-2 text-center">일수</th>
-            <th className="micro px-3 py-2 text-center">태그</th>
-            <th className="micro px-3 py-2 text-center">제목</th>
-            <th className="micro px-3 py-2 text-center">작성</th>
+          <tr className="text-text-dim text-sm [&_th]:font-bold">
+            <th className="px-3 py-2 text-center">날짜</th>
+            <th className="px-3 py-2 text-center">시간</th>
+            <th className="px-3 py-2 text-center">일수</th>
+            <th className="px-3 py-2 text-center">태그</th>
+            <th className="px-3 py-2 text-center">제목</th>
+            <th className="px-3 py-2 text-center">작성</th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -43,19 +43,19 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
             const dot = dotProps(eventDisplayColor(e));
             return (
               <tr key={e.id} className="hover:bg-bg-soft/30">
-                <td className="num px-3 py-2 text-xs whitespace-nowrap">
+                <td className="num px-3 py-2 text-sm whitespace-nowrap">
                   {shortDate(e.startDate)}
                   {e.endDate !== e.startDate ? (
                     <span className="text-text-dim"> ~ {shortDate(e.endDate)}</span>
                   ) : null}
                 </td>
-                <td className="num text-text-dim px-3 py-2 text-xs whitespace-nowrap">
+                <td className="num text-text-dim px-3 py-2 text-sm whitespace-nowrap">
                   {time ?? <span className="text-text-faint">종일</span>}
                 </td>
-                <td className="num text-text-dim px-3 py-2 text-center text-xs whitespace-nowrap">
+                <td className="num text-text-dim px-3 py-2 text-center text-sm whitespace-nowrap">
                   {days}일
                 </td>
-                <td className="px-3 py-2 text-xs whitespace-nowrap">
+                <td className="px-3 py-2 text-sm whitespace-nowrap">
                   {e.tag ? (
                     <span className="inline-flex items-center gap-1.5">
                       <span
@@ -69,8 +69,8 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
                     <span className="text-text-faint">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-xs font-medium break-keep">{e.title}</td>
-                <td className="text-text-dim px-3 py-2 text-xs whitespace-nowrap">
+                <td className="px-3 py-2 text-sm font-medium break-keep">{e.title}</td>
+                <td className="text-text-dim px-3 py-2 text-sm whitespace-nowrap">
                   {e.createdByName ?? <span className="text-text-faint">—</span>}
                 </td>
               </tr>
@@ -78,7 +78,7 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
           })}
         </tbody>
       </table>
-      <p className="text-text-dim border-line border-t px-3 py-2 text-right text-[12px]">
+      <p className="text-text-dim border-line border-t px-3 py-2 text-right text-sm">
         총 <span className="num font-semibold">{events.length}</span>건
       </p>
     </DragScrollArea>

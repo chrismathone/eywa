@@ -48,7 +48,7 @@ export function TodayCopySlot({
       type="button"
       disabled={busy}
       title={t("today.copy.title")}
-      className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-[12px] font-bold disabled:cursor-default disabled:opacity-60"
+      className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold disabled:cursor-default disabled:opacity-60"
       onClick={() => {
         setBusy(true);
         void store

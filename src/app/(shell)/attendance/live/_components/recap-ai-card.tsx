@@ -77,7 +77,7 @@ export function RecapAiCard({ from, to, state }: { from: string; to: string; sta
           <Sparkles size={15} />
         </span>
         <h2 className="text-sm font-bold">AI 정리</h2>
-        {modelLabel && state?.brief ? <span className="text-text-faint text-[11px]">{modelLabel}</span> : null}
+        {modelLabel && state?.brief ? <span className="text-text-faint text-xs">{modelLabel}</span> : null}
         <Button
           type="button"
           variant="outline"
@@ -101,26 +101,26 @@ export function RecapAiCard({ from, to, state }: { from: string; to: string; sta
 
       <div className="mt-3">
         {analyzing ? (
-          <p className="text-text-dim text-[13px]">정리 중입니다… 완료되면 이 카드가 자동으로 갱신됩니다.</p>
+          <p className="text-text-dim text-sm">정리 중입니다… 완료되면 이 카드가 자동으로 갱신됩니다.</p>
         ) : state?.brief ? (
           <div className="space-y-2">
-            <p className="text-[15px] leading-snug font-bold">{state.brief.headline}</p>
-            <ul className="text-text-dim list-disc space-y-1 pl-4 text-[13px] leading-relaxed">
+            <p className="text-base leading-snug font-bold">{state.brief.headline}</p>
+            <ul className="text-text-dim list-disc space-y-1 pl-4 text-sm leading-relaxed">
               {state.brief.points.map((point, i) => (
                 <li key={i}>{point}</li>
               ))}
             </ul>
           </div>
         ) : (
-          <p className="text-text-faint text-[13px]">
+          <p className="text-text-faint text-sm">
             아래 집계가 이 화면의 사실입니다. 문장으로 정리해 두려면 「AI로 정리」를 누르세요.
           </p>
         )}
         {/* 후검증 탈락·생성 실패는 숨기지 않는다 — 다만 아래 집계는 멀쩡하다는 사실을 함께 말한다. */}
         {state?.status === "failed" && state.error ? (
-          <p className="text-amber mt-2 text-[12px]">{state.error}</p>
+          <p className="text-amber mt-2 text-xs">{state.error}</p>
         ) : null}
-        {error ? <p className="text-danger mt-2 text-[12px]">{error}</p> : null}
+        {error ? <p className="text-danger mt-2 text-xs">{error}</p> : null}
       </div>
     </section>
   );

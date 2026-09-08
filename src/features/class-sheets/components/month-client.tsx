@@ -222,7 +222,7 @@ export function MonthClient({
         ) : (
           <>
             <span
-              className="text-text-dim text-[12.5px]"
+              className="text-text-dim text-xs"
               title={t("month.fill.title")}
             >
               {t("bulk.plan")}{" "}
@@ -232,7 +232,7 @@ export function MonthClient({
               {t("month.fill.unit")} <span className="num">({data.fill.pct}%)</span>
             </span>
             {offDays > 0 ? (
-              <span className="text-amber inline-flex items-center gap-1.5 text-[12.5px] font-bold">
+              <span className="text-amber inline-flex items-center gap-1.5 text-xs font-bold">
                 <span className="border-amber bg-amber-soft inline-block size-2 rounded-[2px] border" aria-hidden />
                 {t("month.offGoal")} <span className="num">{tf("month.days", { n: offDays })}</span>
               </span>
@@ -274,7 +274,7 @@ export function MonthClient({
       </div>
 
       {error ? (
-        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold">
           {tf("month.error.goal", { error })}
           <button type="button" onClick={dismissError} className="ml-auto cursor-pointer underline">
             {t("popup.close")}
@@ -283,7 +283,7 @@ export function MonthClient({
       ) : null}
 
       {view === "mp" && plan.error ? (
-        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-danger/40 bg-danger-soft text-danger flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold">
           {tf("month.error.plan", { error: plan.error })}
           <button type="button" onClick={plan.dismissError} className="ml-auto cursor-pointer underline">
             {t("popup.close")}
@@ -293,12 +293,12 @@ export function MonthClient({
       {/* 🔴 0239a는 원장이 손으로 적용한다 — 적용 전에도 이 화면은 살아야 하고([[#95]]), **원인을
           단정하지 않는다**(표가 없는 것과 조회가 실패한 것은 다른 사실이다). */}
       {view === "mp" && data.mp.status === "missing-table" ? (
-        <p className="border-amber/40 bg-amber-soft text-amber rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-amber/40 bg-amber-soft text-amber rounded-lg border px-3 py-1.5 text-xs font-semibold">
           {t("month.mp.notReady")}
         </p>
       ) : null}
       {view === "mp" && data.mp.status === "failed" ? (
-        <p className="border-danger/40 bg-danger-soft text-danger rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold">
+        <p className="border-danger/40 bg-danger-soft text-danger rounded-lg border px-3 py-1.5 text-xs font-semibold">
           {t("month.mp.loadFailed")}
         </p>
       ) : null}

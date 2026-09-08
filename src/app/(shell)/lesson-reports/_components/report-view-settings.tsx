@@ -89,16 +89,16 @@ export function ReportViewSettings({
   const thisMonth = monthRange(monthOf(todayYmd));
   const isThisMonth = draft.from === thisMonth.from && draft.to === thisMonth.to;
 
-  const sel = "border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none";
+  const sel = "border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none";
   const chip = (on: boolean) =>
-    `rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition ${
+    `rounded-full border px-2.5 py-0.5 text-xs font-bold transition ${
       on ? "border-primary bg-primary text-primary-foreground" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
     }`;
 
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition ${
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold transition ${
           active
             ? "border-primary bg-primary text-primary-foreground"
             : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -120,7 +120,7 @@ export function ReportViewSettings({
                   //    "초기화"가 조용히 해제하면 표의 줄 세우기가 이유 없이 되돌아간다(적대검수).
                   setDraft({ ...defaultReportFilters(todayYmd), sort: draft.sort, dir: draft.dir })
                 }
-                className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-[11px]"
+                className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs"
               >
                 <RotateCcw size={10} strokeWidth={1.8} aria-hidden />
                 초기화
@@ -128,7 +128,7 @@ export function ReportViewSettings({
             </div>
 
             {/* 기간 — 월 이동은 밖(상단 1줄)에 남겨 두고, 여기선 범위 직접 지정과 전체 기간만 다룬다. */}
-            <p className="text-text-faint mb-1 text-[11px] font-bold">기간</p>
+            <p className="text-text-faint mb-1 text-xs font-bold">기간</p>
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
               <button type="button" onClick={() => patch(thisMonth)} aria-pressed={isThisMonth} className={chip(isThisMonth)}>
                 이번 달
@@ -151,7 +151,7 @@ export function ReportViewSettings({
                 className={sel}
                 aria-label="시작일"
               />
-              <span className="text-text-faint text-[12px]">~</span>
+              <span className="text-text-faint text-xs">~</span>
               <input
                 type="date"
                 value={draft.to ?? ""}
@@ -162,7 +162,7 @@ export function ReportViewSettings({
             </div>
 
             <div className="mb-3 grid grid-cols-[42px_1fr] items-center gap-x-2 gap-y-1.5">
-              <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-teacher">강사</label>
+              <label className="text-text-faint text-xs font-bold" htmlFor="rvs-teacher">강사</label>
               <select
                 id="rvs-teacher"
                 value={draft.teacher ?? ""}
@@ -175,7 +175,7 @@ export function ReportViewSettings({
                 ))}
               </select>
 
-              <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-subject">과목</label>
+              <label className="text-text-faint text-xs font-bold" htmlFor="rvs-subject">과목</label>
               <select
                 id="rvs-subject"
                 value={draft.subject ?? ""}
@@ -195,7 +195,7 @@ export function ReportViewSettings({
                      팝오버 전체가 죽지 않게. 타입상으론 필수지만 런타임 방어가 싸다. */}
               {(options.classes ?? []).length > 0 ? (
                 <>
-                  <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-class">반</label>
+                  <label className="text-text-faint text-xs font-bold" htmlFor="rvs-class">반</label>
                   <select
                     id="rvs-class"
                     value={draft.classId ?? ""}
@@ -212,13 +212,13 @@ export function ReportViewSettings({
                       고를 수 있어 옛 학기 반은 목록엔 있어도 이 드롭다운엔 없다 — 자유입력이 없으니
                       기대치를 문구로 맞춘다(안 적으면 "왜 그 반이 없지"가 된다). */}
                   <span />
-                  <span className="text-text-faint text-[10px] leading-snug">
+                  <span className="text-text-faint text-xs leading-snug">
                     최근 60일에 보고서가 있는 반만 — 이관분은 반 정보가 없어 제외됩니다
                   </span>
                 </>
               ) : null}
 
-              <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-status">상태</label>
+              <label className="text-text-faint text-xs font-bold" htmlFor="rvs-status">상태</label>
               <select
                 id="rvs-status"
                 value={draft.status ?? ""}
@@ -232,7 +232,7 @@ export function ReportViewSettings({
                 <option value={IMPORT_FILTER}>이관(edutrix)</option>
               </select>
 
-              <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-read">읽음</label>
+              <label className="text-text-faint text-xs font-bold" htmlFor="rvs-read">읽음</label>
               <select
                 id="rvs-read"
                 value={draft.read ?? ""}
@@ -250,7 +250,7 @@ export function ReportViewSettings({
                   `?? false`는 배포 중 버전 스큐(구 서버 페이로드에 이 키 없음) 런타임 방어(위 classes와 동일). */}
               {(options.mentSourceReady ?? false) ? (
                 <>
-                  <label className="text-text-faint text-[11px] font-bold" htmlFor="rvs-ment">멘트</label>
+                  <label className="text-text-faint text-xs font-bold" htmlFor="rvs-ment">멘트</label>
                   <select
                     id="rvs-ment"
                     value={draft.mentSource ?? ""}
@@ -265,7 +265,7 @@ export function ReportViewSettings({
                   </select>
                   {/* 소급 없음 — 도입 이후 저장분만 구분된다. 안 적으면 "왜 옛 보고서가 안 걸리지"가 된다. */}
                   <span />
-                  <span className="text-text-faint text-[10px] leading-snug">
+                  <span className="text-text-faint text-xs leading-snug">
                     도입(2026-08-18) 이후 저장된 보고서만 구분됩니다 — 이전 보고서는 &lsquo;전체&rsquo;에서만 보입니다
                   </span>
                 </>

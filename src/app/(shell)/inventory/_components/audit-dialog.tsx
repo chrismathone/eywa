@@ -41,7 +41,7 @@ export function AuditDialog({ assets, presetAssetId, today, onClose }: { assets:
   if (suggest) {
     return (
       <DialogShell title="실사를 기록했습니다" onClose={onClose}>
-        <p className="text-[12.5px]">
+        <p className="text-xs">
           <span className="font-mono font-bold">{picked?.assetCode}</span>을(를) <b>미확인</b>으로 기록했습니다. 자산 상태를{" "}
           <b>분실</b>로 표시할까요? (지금 {picked ? assetStatusLabel(picked.status) : ""}) — 자동으로 바뀌지 않습니다.
         </p>
