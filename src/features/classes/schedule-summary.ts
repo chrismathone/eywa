@@ -27,6 +27,19 @@ export type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export const DAY_ORDER: DayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
+/**
+ * **이 분(分) 이하로 비면 쉬는 시간으로 보고 한 자리로 잇는다** (원장 2026-09-08:
+ * *"10분 비는건 사실상 쉬는시간이니 그냥 이런경우에 붙여줘"*).
+ *
+ * 🔴 **2026-07-30 결정의 명시적 반전**이다 — 그때는 *"10분이라도 비면 쉬었다 다시 앉는 별개 자리"*라
+ *    딱 붙은 것(앞 종료 == 뒤 시작)만 이었다. 되돌리지 말 것.
+ * 🔑 실측(2026-09-08, 활성 반·오늘 유효 슬롯)으로 안전을 확인했다 — 같은 반·같은 요일에서 연속한 교시
+ *    사이의 공백은 **0분 281건 · 10분 35건 · 20분 5건이 전부**다. 저녁·점심 같은 큰 공백이 아예 없어서
+ *    "집에 갔다 다시 오는 자리"를 실수로 이을 위험이 없다. ⚠️ 공백이 더 다양해지면 이 값을 다시 재라.
+ * 🔴 **20분(5건)은 안 잇는다 — 원장 확정**(2026-09-08 *"20분은 냅두고 10분만"*). 이 값을 올리지 말 것.
+ */
+export const BREAK_GAP_MINUTES = 10;
+
 
 /** 요약이 필요로 하는 최소 슬롯 모양 — `ClassScheduleSlot`이 구조적으로 만족한다. */
 export type SummarySlot = {
@@ -60,7 +73,10 @@ export type ScheduleDayRow = {
   days: DayKey[];
   /** 그 요일에 앉는 자리들 — 붙은 교시는 이어져 있다(`mergeTimeRanges`). 시작시각 순. */
   ranges: { start: string; end: string }[];
-  /** 하루에 앉는 총 분. */
+  /**
+   * 하루에 **가르치는** 총 분 — 원래 슬롯 길이의 합.
+   * ⚠️ `ranges`의 폭 합과 다를 수 있다(쉬는 시간을 건너뛰고 이었으므로). 시수는 이 값이다.
+   */
   minutes: number;
 };
 
@@ -171,8 +187,10 @@ const byStart = (a: ScheduleRow, b: ScheduleRow) =>
  * DP5 = `14:20~15:00` + `15:00~15:40` → **`14:20~15:40`**(2줄 → 1줄). 학부모·강사에게 이 반은
  * "2시 20분부터 3시 40분까지" 한 덩어리지, 40분짜리 두 개가 아니다.
  *
- * ⚠️ **딱 붙었을 때만**(앞 종료 == 뒤 시작). 10분이라도 비면 쉬었다 다시 앉는 별개 자리다
- *    (실측 고등E_고2 심화 `19:20~20:10` / `20:20~21:10` — 이어버리면 없는 수업 10분이 생긴다).
+ * ⚠️ **여기(시각 축)는 딱 붙었을 때만 잇는다**(앞 종료 == 뒤 시작) — 이 줄들이 **시수(`minutes`)의 재료**라
+ *    쉬는 시간을 건너뛰고 이으면 안 가르친 10분이 시수에 들어간다.
+ * 🔑 화면에 보이는 **요일 축(`groupByDay`)은 반대로 쉬는 시간을 잇는다**(원장 2026-09-08). 두 축의 규칙이
+ *    다른 건 목적이 다르기 때문이다 — 요일 축은 "언제부터 언제까지 앉아 있나", 시각 축은 "몇 분 가르치나".
  * ⚠️ **요일 집합이 같을 때만.** 월만 2교시인데 월~금을 통째로 이으면 화~금이 거짓이 된다.
  * ⚠️ 같은 요일에 같은 시각이 두 번 있는 행(`count > days.length`)은 잇지 않는다 — 어느 쪽을 이을지
  *    결정할 근거가 없다.
@@ -217,6 +235,8 @@ function mergeAdjacent(rows: ScheduleRow[]): ScheduleRow[] {
  * 🔑 시각 묶음(`groupByTime`)과 답이 다를 수 있고 그게 맞다: `월~금 14:20~15:00` + `월 15:00~15:40`은
  *    시각 축에선 요일 집합이 달라 못 이어 2줄이지만(`mergeAdjacent` 규칙), 요일 축에선
  *    **월 14:20~15:40 / 화~금 14:20~15:00**으로 각 요일의 사실을 그대로 말한다.
+ * 🔴 여기서는 **쉬는 시간(<=`BREAK_GAP_MINUTES`)도 건너뛰고 잇는다**(원장 2026-09-08). 그래서 `ranges`의
+ *    폭 합 != `minutes`일 수 있다 — 시수는 원래 슬롯에서 따로 더한다(아래 주석).
  * ⚠️ `mergeTimeRanges`가 완전 중복 구간을 한 번만 남긴다 — 화면 줄이 목적이라 맞다(회차·시수는
  *    여기서 만들지 않고 `current`(ScheduleRow)가 그대로 담당한다).
  */
@@ -234,15 +254,19 @@ export function groupByDay(slots: SummarySlot[]): ScheduleDayRow[] {
     const raw = byDay.get(day);
     if (!raw) continue;
     const ranges = mergeTimeRanges(raw);
+    // 🔴 수업 분(分)은 **이어진 폭이 아니라 원래 슬롯 길이의 합**이다 — 쉬는 시간을 건너뛰고 이었으니
+    //    `end - start`로 재면 안 가르친 10분이 시수에 들어간다(원장이 이으라 한 건 **표시**다).
+    const seen = new Set<string>();
+    const minutes = raw.reduce((n, r) => {
+      const key = `${r.start}~${r.end}`;
+      if (seen.has(key)) return n; // 완전 중복(이력 겹침)은 한 번만 — mergeTimeRanges와 같은 규칙
+      seen.add(key);
+      return n + slotMinutes(r.start, r.end);
+    }, 0);
     const sig = ranges.map((r) => `${r.start}~${r.end}`).join("|");
     const row = bySig.get(sig);
     if (row) row.days.push(day);
-    else
-      bySig.set(sig, {
-        days: [day],
-        ranges,
-        minutes: ranges.reduce((n, r) => n + slotMinutes(r.start, r.end), 0),
-      });
+    else bySig.set(sig, { days: [day], ranges, minutes });
   }
   // 요일 축이므로 **가장 이른 요일 순** — 시각 순으로 정렬하면 다시 시각이 주인이 된다.
   return [...bySig.values()].sort((a, b) => dayIndex(a.days[0]) - dayIndex(b.days[0]));
@@ -325,11 +349,15 @@ export function formatRow(row: ScheduleRow): string {
  * (시작,종료) 시각 구간들을 시작시각순 정렬 후 **딱 붙은 것만** 잇는다 — mergeAdjacent와 같은 규칙의
  * 구간 버전(학생 상세 '수업' 탭 스케줄 셀용, 2026-08-18 원장 *"영어 수업을 스마트하게 보여주면 좋겠는데"*).
  * 영어는 40분 교시가 연달아 붙어 `16:20~17:20`+`17:20~18:10` 나열이 길었다 → `16:20~18:10` 한 구간.
- * ⚠️ 10분이라도 비면 별개 구간 유지(없는 수업 시간을 만들지 않는다 — mergeAdjacent docblock과 동일).
- * 겹치는 구간(17:00~17:40 vs 17:20~18:10)도 잇지 않는다 — 겹침은 데이터 이상이라 그대로 보여야 눈에 띈다.
+ * 🔴 **쉬는 시간(<=`BREAK_GAP_MINUTES`)은 건너뛰고 잇는다**(원장 2026-09-08 — 2026-07-30 결정의 반전).
+ *    `19:20~20:10` + `20:20~22:00` → **`19:20~22:00`**. 근거·안전 확인은 그 상수의 docblock에.
+ * ⚠️ 이건 **표시용 구간**이다 — 이어진 폭(끝-시작)에는 쉬는 10분이 들어 있으니 **시수로 쓰지 말 것**.
+ *    수업 분(分)은 원래 슬롯 길이를 따로 더한다(`groupByDay`의 minutes, `mergeAdjacent`의 시각 축).
+ * ⚠️ 겹치는 구간(17:00~17:40 vs 17:20~18:10)은 잇지 않는다 — 겹침은 데이터 이상이라 그대로 보여야 눈에 띈다.
  */
 export function mergeTimeRanges(
   ranges: Array<{ start: string; end: string }>,
+  maxGapMinutes: number = BREAK_GAP_MINUTES,
 ): Array<{ start: string; end: string }> {
   const sorted = [...ranges]
     .map((r) => ({ start: hm(r.start), end: hm(r.end) }))
@@ -343,8 +371,12 @@ export function mergeTimeRanges(
     if (seen.has(key)) continue; // 완전 중복(이력 중첩)은 한 번만
     seen.add(key);
     const open = out[out.length - 1];
-    if (open && open.end === r.start) open.end = r.end;
-    else out.push({ ...r });
+    // 0 <= 공백 <= 허용치일 때만 잇는다. 음수(겹침)는 데이터 이상이라 안 잇고 그대로 드러낸다.
+    const gap = open ? (toMinutes(r.start) ?? 0) - (toMinutes(open.end) ?? 0) : Number.NaN;
+    if (open && gap >= 0 && gap <= maxGapMinutes) {
+      // ⚠️ 끝을 **앞으로 되감지 않는다** — 시각이 깨진 행(종료<시작)이 섞이면 구간이 조용히 잘린다.
+      if (r.end > open.end) open.end = r.end;
+    } else out.push({ ...r });
   }
   return out;
 }

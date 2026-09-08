@@ -203,7 +203,7 @@ describe("summarizeSchedule — 묶기 규칙", () => {
 });
 
 describe("summarizeSchedule — 붙은 교시 잇기(mergeAdjacent)", () => {
-  it("🔴 10분이라도 비면 안 잇는다 — 없는 수업 시간이 생긴다", () => {
+  it("🔴 시각 축은 딱 붙은 것만 잇는다 — 이 줄이 시수의 재료라 쉬는 10분이 들어가면 안 된다", () => {
     // 실측 고등E_고2 심화 수요일: 19:20~20:10 / 20:20~21:10 / 21:10~22:00.
     const s = summarizeSchedule(
       [
@@ -213,10 +213,13 @@ describe("summarizeSchedule — 붙은 교시 잇기(mergeAdjacent)", () => {
       ],
       TODAY,
     );
-    // 20:10~20:20은 쉬는 시간 → 앞 하나는 홀로, 뒤 둘만 이어진다.
     expect(s.current.map(formatRow)).toEqual(["수 19:20~20:10", "수 20:20~22:00"]);
-    expect(s.sessions).toBe(2);
+    // 🔴 화면(요일 축)은 반대로 쉬는 10분을 건너뛰고 한 자리로 잇는다(원장 2026-09-08).
+    expect(s.byDay.map(dayLine)).toEqual(["수 19:20~22:00"]);
+    expect(s.sessions).toBe(1);
+    // 🔴 그래도 **시수는 안 부푼다** — 이어진 폭(160분)이 아니라 가르친 150분.
     expect(s.minutes).toBe(50 + 100);
+    expect(s.byDay[0].minutes).toBe(150);
   });
 
   it("3개가 줄줄이 붙으면 한 줄로", () => {
@@ -337,17 +340,37 @@ describe("formatMinutes", () => {
 });
 
 describe("mergeTimeRanges — 학생 수업탭 스케줄 셀의 연속 구간 병합", () => {
-  it("실측 중고E_중1 의치대: 붙은 두 교시만 잇고 틈 있는 교시는 별개", () => {
-    // 16:20~17:20 + 17:20~18:10 은 딱 붙음 → 병합. 18:10~18:20 틈이 있는 18:20~19:20 은 별개.
+  it("실측 중고E_중1 의치대: 10분 쉼도 건너뛰고 한 구간(원장 2026-09-08 반전)", () => {
     expect(
       mergeTimeRanges([
         { start: "17:20", end: "18:10" },
         { start: "16:20", end: "17:20" },
         { start: "18:20", end: "19:20" },
       ]),
+    ).toEqual([{ start: "16:20", end: "19:20" }]);
+  });
+
+  it("허용치를 넘는 공백(20분)은 그대로 별개 — 원장 확정 \"20분은 냅두고 10분만\"", () => {
+    expect(
+      mergeTimeRanges([
+        { start: "15:00", end: "16:00" },
+        { start: "16:20", end: "17:00" },
+      ]),
     ).toEqual([
-      { start: "16:20", end: "18:10" },
-      { start: "18:20", end: "19:20" },
+      { start: "15:00", end: "16:00" },
+      { start: "16:20", end: "17:00" },
+    ]);
+  });
+
+  it("허용치는 인자로 넘길 수 있다 — 0이면 옛 규칙(딱 붙은 것만)", () => {
+    expect(
+      mergeTimeRanges([
+        { start: "19:20", end: "20:10" },
+        { start: "20:20", end: "21:10" },
+      ], 0),
+    ).toEqual([
+      { start: "19:20", end: "20:10" },
+      { start: "20:20", end: "21:10" },
     ]);
   });
 
@@ -362,16 +385,13 @@ describe("mergeTimeRanges — 학생 수업탭 스케줄 셀의 연속 구간 �
     ).toEqual([{ start: "16:20", end: "19:20" }]);
   });
 
-  it("틈이 있으면(고등E_고2 심화 10분 쉼) 잇지 않는다", () => {
+  it("10분 쉼(고등E_고2 심화)은 건너뛰고 한 구간으로", () => {
     expect(
       mergeTimeRanges([
         { start: "19:20", end: "20:10" },
         { start: "20:20", end: "21:10" },
       ]),
-    ).toEqual([
-      { start: "19:20", end: "20:10" },
-      { start: "20:20", end: "21:10" },
-    ]);
+    ).toEqual([{ start: "19:20", end: "21:10" }]);
   });
 
   it("겹치는 구간은 잇지 않고, 완전 중복은 한 번만", () => {
@@ -419,7 +439,8 @@ describe("groupByDay — 요일이 줄의 주인", () => {
       ]),
       TODAY,
     );
-    expect(s.byDay.map(dayLine)).toEqual(["화·금 18:20~20:10, 20:20~21:10"]);
+    // 앞 둘은 딱 붙고 20:20은 10분 쉼 — 셋 다 한 자리로 이어진다(원장 2026-09-08).
+    expect(s.byDay.map(dayLine)).toEqual(["화·금 18:20~21:10"]);
     // 🔴 축을 뒤집어도 줄이 늘지 않는다 — 시각축 2줄이 요일축 1줄이 된다(2026-09-07 실측 154→127줄).
     expect(s.byDay.length).toBeLessThanOrEqual(s.current.length);
   });
@@ -448,9 +469,18 @@ describe("groupByDay — 요일이 줄의 주인", () => {
     expect(s.byDay.map(dayLine)).toEqual(["월 14:20~15:40", "화~금 14:20~15:00"]);
   });
 
-  it("10분이라도 비면 따로 — 없는 수업 시간을 만들지 않는다", () => {
+  it("10분 쉼은 한 자리로 잇되 하루 수업 분은 안 부푼다", () => {
     const s = summarizeSchedule([slot("wed", "19:20", "20:10"), slot("wed", "20:20", "21:10")], TODAY);
-    expect(s.byDay.map(dayLine)).toEqual(["수 19:20~20:10, 20:20~21:10"]);
+    expect(s.byDay.map(dayLine)).toEqual(["수 19:20~21:10"]);
+    expect(s.byDay[0].minutes).toBe(50 + 50); // 이어진 폭 110분이 아니라 가르친 100분
+  });
+
+  it("20분 비면 그대로 둘 — 허용치 밖(실측 중등E_초등 브릿지 A)", () => {
+    const s = summarizeSchedule(
+      [slot("tue", "15:00", "16:00"), slot("tue", "16:20", "17:00")],
+      TODAY,
+    );
+    expect(s.byDay.map(dayLine)).toEqual(["화 15:00~16:00, 16:20~17:00"]);
   });
 
   it("만료 배치는 요일축에도 안 샌다", () => {
