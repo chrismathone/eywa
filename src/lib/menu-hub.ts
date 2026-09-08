@@ -100,8 +100,9 @@ export const HUB_GROUPS: HubGroup[] = [
     items: keep([
       fromMenu("timetable", "과목별 수업 배치·조회"),
       // 강사 시트는 영어·수학이 **독립 권한**이라 버튼도 둘이다(사이드바에선 한 줄 + 하부탭이었다).
-      face("ecs", "/ecs", "영어 강사 시트", "영어 반별 주간 수업·진도", { icon: "spreadsheet" }),
-      { menuKey: "mcs", href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.ecs, desc: "수학 반별 월간 진도" },
+      // 아이콘은 형제 한 쌍(열/행) — 나란히 서므로 같은 글리프를 쓰지 말 것.
+      face("ecs", "/ecs", "영어 강사 시트", "영어 반별 주간 수업·진도"),
+      { menuKey: "mcs", href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.mcs, desc: "수학 반별 월간 진도" },
       fromMenu("attendance", "월별 출석부·오늘 출결"),
       fromMenu("classes", "반 목록·반 정보 관리"),
       fromMenu("lesson_reports", "수업보고서 작성·발송"),

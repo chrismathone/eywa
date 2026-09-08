@@ -89,6 +89,8 @@ export const EYWA_ICON_CATALOG = [
   { name: "messages", label: "대화 목록", family: "interface", meaning: "여러 대화와 상담" },
   { name: "pin", label: "고정", family: "interface", meaning: "위치와 항목 고정" },
   { name: "spreadsheet", label: "표 문서", family: "interface", meaning: "행과 열 데이터" },
+  { name: "sheetColumns", label: "열 시트", family: "interface", meaning: "세로 열로 나뉜 표" },
+  { name: "sheetRows", label: "행 시트", family: "interface", meaning: "가로 행으로 나뉜 표" },
   { name: "square", label: "사각형", family: "interface", meaning: "창과 선택 영역" },
   { name: "arrowLeft", label: "왼쪽 화살표", family: "interface", meaning: "이전 위치로 이동" },
   { name: "calculator", label: "계산기", family: "interface", meaning: "금액과 수치 계산" },
@@ -373,6 +375,23 @@ const EXTENDED_ICON_GLYPHS = {
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M6 9h12M6 14h12" />
       <line x1="11" y1="7" x2="11" y2="17" />
+    </>
+  ),
+  // 강사 시트 형제 — 같은 틀, 선의 **방향**만 다르다(영어=요일 열 / 수학=학생 행).
+  // 🔴 이 둘의 구분선은 세트의 '안쪽 여백' 관례와 달리 **테두리까지 닿는다**: 띄우면 표가 아니라 떠 있는
+  //    획으로 읽히고, 특히 열 갈래는 20px에서 한글 자모 'ㅠ'로 보였다([[#12]] 계열).
+  sheetColumns: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="9" y1="3" x2="9" y2="21" />
+      <line x1="15" y1="3" x2="15" y2="21" />
+    </>
+  ),
+  sheetRows: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="3" y1="15" x2="21" y2="15" />
     </>
   ),
   square: <rect x="4" y="4" width="16" height="16" rx="1.5" />,
@@ -1175,8 +1194,9 @@ export const MENU_ICON = {
   consultations: "messages",
   withdrawals: "userMinus",
   retention: "shield",
-  ecs: "spreadsheet", // English Class Sheet — 시트 이식 정체성(sheet_sync와 아이콘 공유 허용 선례: owner/kiosk=settings)
-  mcs: "spreadsheet", // Math Class Sheet — ECS와 같은 성격(시트)이라 같은 글리프를 쓴다
+  // 🔴 영어·수학 강사 시트는 **수업 업무군에 나란히 서는 버튼 둘**이라 같은 글리프를 쓰면 구분이 안 된다(2026-09-08).
+  ecs: "sheetColumns", // English Class Sheet — 주간(요일 열)
+  mcs: "sheetRows", // Math Class Sheet — 월간(학생 행 × 수업일)
   lesson_reports: "report",
   staff: "userSettings",
   billing: "wallet",
