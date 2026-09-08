@@ -92,7 +92,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                ③ `[scrollbar-gutter:stable]`은 **inline-end 한쪽에만** 자리를 판다 — 0이면 좌우가 눈에 띄게 비대칭이 된다.
               ⚠️ 라우트마다 다른 값을 주고 싶어도 **여기서 `x-pathname`으로 가르지 말 것**: 이 `<main>`은 soft nav에서
                  재렌더되지 않아 창을 처음 연 라우트 값에 굳는다(같은 이유로 `x-embed` 판정이 한 번 폐기됐다 —
-                 `page-header.tsx` 주석). 꼭 필요하면 `WindowMinSizeNotice`처럼 **창 안에서 `usePathname()`으로** 읽어야 한다. */}
+                 `page-header.tsx` 주석). 꼭 필요하면 `WindowMinSizeNotice`처럼 **창 안에서 `usePathname()`으로** 읽어야 한다.
+              🔑 **베젤이 아예 필요 없는 화면은 여기가 아니라 화면이 말한다** — 페이지 루트에 `.edge-to-edge`를 달면
+                 globals.css `main.embed-main:has(.edge-to-edge)`가 그 창만 좌우·아래 0 + 거터 해제로 만든다
+                 (`.sticky-save-bar`와 같은 결, 시간표 선례 — 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*). */}
           <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
