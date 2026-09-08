@@ -148,7 +148,9 @@ export async function generateDailyBriefing(
       absenceAnchor,
     ] = await Promise.all([
       // 어제 마감: asOf=어제 + nowMinutes=1440(전 수업 시작됨) — '어제 무단결석·어제 미작성'이 정확해진다.
-      getTodayActionSignals({}, { db, asOf: { date: yesterday, nowMinutes: 1440 } }),
+      // 🔴 timetable=false — '내일 시간표 예약'은 어제 기준으로 모으면 '오늘'을 가리켜 라벨과 어긋난다.
+      //    briefing-digest가 payload에서 어차피 비우므로 조회 자체를 건너뛴다(헛도는 왕복 2회 제거).
+      getTodayActionSignals({ timetable: false }, { db, asOf: { date: yesterday, nowMinutes: 1440 } }),
       // 오늘: 어제 미기록 반·오늘 휴가·승인 대기만(나머지 도메인은 어제 수집분과 중복이라 스킵).
       getTodayActionSignals(
         {
@@ -159,6 +161,7 @@ export async function generateDailyBriefing(
           students: false,
           billing: false,
           owner: false,
+          timetable: false,
         },
         { db },
       ),

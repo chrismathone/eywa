@@ -22,7 +22,94 @@ const EMPTY: TodayActionsRaw = {
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
+  dayArrivals: { starting: [], ending: [] },
+  newIntakeToday: { count: 0, names: [] },
+  scheduledTomorrow: null,
 };
+
+describe("오늘 사람 변동·접수·내일 예약 (운영실 검토 2026-09-09)", () => {
+  it("사전 통보 결석은 숫자를 깎지 않고 note로만 가른다", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      absentToday: [
+        { studentId: "s1", name: "김하늘", subject: "math", preNotified: false },
+        { studentId: "s2", name: "박서준", subject: "math", preNotified: true },
+      ],
+    });
+    const absent = items.find((item) => item.key === "absent");
+    expect(absent?.count).toBe(2); // 🔴 깎지 않는다
+    expect(absent?.note).toBe("연락 필요 1 · 사전 통보 1");
+    // 미리보기는 연락해야 할 학생부터.
+    expect(absent?.detail).toBe("김하늘");
+  });
+
+  it("전부 사전 통보면 '연락 필요 0'이라고 말한다(연락할 사람이 없다는 사실이 곧 정보다)", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      absentToday: [{ studentId: "s1", name: "김하늘", subject: "math", preNotified: true }],
+    });
+    const absent = items.find((item) => item.key === "absent");
+    expect(absent?.count).toBe(1);
+    expect(absent?.note).toBe("연락 필요 0 · 사전 통보 1");
+    // 연락 대상이 없으면 미리보기는 결석자 전체에서 뽑는다(빈 이름 금지).
+    expect(absent?.detail).toBe("김하늘");
+  });
+
+  it("전부 무통보면 note를 달지 않는다(숫자만으로 전원이 연락 대상)", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      absentToday: [{ studentId: "s1", name: "김하늘", subject: "math", preNotified: false }],
+    });
+    expect(items.find((item) => item.key === "absent")?.note).toBeNull();
+  });
+
+  it("오늘 첫 수업·마지막 수업은 학생 단위 항목이고 라벨에 '퇴원'을 쓰지 않는다", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      dayArrivals: {
+        starting: [{ studentId: "s1", name: "김하늘" }],
+        ending: [
+          { studentId: "s2", name: "박서준" },
+          { studentId: "s3", name: "이서연" },
+        ],
+      },
+    });
+    const start = items.find((item) => item.key === "arrivals-start");
+    const end = items.find((item) => item.key === "arrivals-end");
+    expect(start?.label).toBe("오늘 첫 수업");
+    expect(start?.count).toBe(1);
+    expect(start?.href).toBe("/students/s1"); // 한 명이면 그 학생으로
+    expect(end?.label).toBe("오늘 마지막 수업");
+    expect(end?.label).not.toContain("퇴원");
+    expect(end?.count).toBe(2);
+    expect(end?.href).toBe("/students"); // 여럿이면 목록으로
+  });
+
+  it("오늘 접수 건수는 미리보기 배열 길이가 아니라 총계를 쓴다", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      newIntakeToday: { count: 7, names: ["가", "나", "다"] },
+    });
+    const intake = items.find((item) => item.key === "intake-today");
+    expect(intake?.count).toBe(7);
+    expect(intake?.detail).toBe("가·나·다 외 4");
+  });
+
+  it("내일 시간표 예약은 건수 없는 상태 신호이고 갈래를 note로 적는다", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      scheduledTomorrow: { date: "2026-09-10", hasStructure: true, hasEnrollment: true },
+    });
+    const scheduled = items.find((item) => item.key === "scheduled-tomorrow");
+    expect(scheduled?.count).toBeNull();
+    expect(scheduled?.note).toBe("수업 배치 · 학생 반이동");
+    expect(scheduled?.menuKey).toBe("timetable");
+  });
+
+  it("새 신호가 없으면 항목도 없다(빈 구역 금지)", () => {
+    expect(buildTodayActions(EMPTY)).toEqual([]);
+  });
+});
 
 describe("buildTodayActions", () => {
   it("모든 신호 0이면 빈 배열(패널이 '정상' 표시)", () => {
@@ -33,8 +120,8 @@ describe("buildTodayActions", () => {
     const items = buildTodayActions({
       ...EMPTY,
       absentToday: [
-        { studentId: "1", name: "김민준", subject: "math" },
-        { studentId: "2", name: "이서연", subject: "math" },
+        { studentId: "1", name: "김민준", subject: "math", preNotified: false },
+        { studentId: "2", name: "이서연", subject: "math", preNotified: false },
       ],
     });
     expect(items).toHaveLength(1);
@@ -95,7 +182,7 @@ describe("buildTodayActions", () => {
     it("라벨 리졸버가 없으면 분해를 비운다(과목 raw 키 노출 금지)", () => {
       const items = buildTodayActions({
         ...EMPTY,
-        absentToday: [{ studentId: "1", name: "김민준", subject: "math" }],
+        absentToday: [{ studentId: "1", name: "김민준", subject: "math", preNotified: false }],
       });
       expect(items[0]!.bySubject).toEqual([]);
     });
@@ -105,9 +192,9 @@ describe("buildTodayActions", () => {
         {
           ...EMPTY,
           absentToday: [
-            { studentId: "1", name: "김민준", subject: "math" },
-            { studentId: "2", name: "이서연", subject: "english" },
-            { studentId: "3", name: "박지호", subject: "math" },
+            { studentId: "1", name: "김민준", subject: "math", preNotified: false },
+            { studentId: "2", name: "이서연", subject: "english", preNotified: false },
+            { studentId: "3", name: "박지호", subject: "math", preNotified: false },
           ],
           unrecordedYesterday: [
             { classId: "c1", className: "LS2a", subject: "english" },
@@ -147,8 +234,8 @@ describe("buildTodayActions", () => {
         {
           ...EMPTY,
           absentToday: [
-            { studentId: "1", name: "김민준", subject: "math" },
-            { studentId: "2", name: "이서연", subject: null },
+            { studentId: "1", name: "김민준", subject: "math", preNotified: false },
+            { studentId: "2", name: "이서연", subject: null, preNotified: false },
           ],
         },
         { subjectLabel: label },
@@ -289,7 +376,7 @@ describe("buildTodayActions", () => {
   it("정렬: danger → amber → info, 같은 심각도는 건수 desc, 카운트 없는 신호는 뒤", () => {
     const items = buildTodayActions({
       ...EMPTY,
-      absentToday: [{ studentId: "1", name: "a", subject: "math" }],
+      absentToday: [{ studentId: "1", name: "a", subject: "math", preNotified: false }],
       requestedTextbooks: 9,
       makeeduIssue: { kind: "stale", detail: "30시간째 미동기" },
       leavesToday: [{ name: "박지훈" }],

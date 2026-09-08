@@ -155,6 +155,7 @@ export default async function TodayPage() {
       staff: access.read.staff,
       staffApprovals: access.manageStaff,
       owner: access.read.owner,
+      timetable: access.read.timetable,
     }),
     access.read.students
       ? dashboardQuery("enrollment change 7d", getEnrollmentChangeLast7d(), EMPTY_ENROLLMENT_CHANGE)

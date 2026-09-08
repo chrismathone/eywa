@@ -16,6 +16,9 @@ const EMPTY_RAW: TodayActionsRaw = {
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
+  dayArrivals: { starting: [], ending: [] },
+  newIntakeToday: { count: 0, names: [] },
+  scheduledTomorrow: null,
 };
 
 const BASE: BuildDailyBriefingInput = {
@@ -34,9 +37,9 @@ const RICH = buildDailyBriefingPayload({
   yesterdayRaw: {
     ...EMPTY_RAW,
     absentToday: [
-      { studentId: "s1", name: "김민준", subject: "math" },
-      { studentId: "s2", name: "박서연", subject: "math" },
-      { studentId: "s3", name: "정호", subject: "math" },
+      { studentId: "s1", name: "김민준", subject: "math", preNotified: false },
+      { studentId: "s2", name: "박서연", subject: "math", preNotified: false },
+      { studentId: "s3", name: "정호", subject: "math", preNotified: false },
     ],
     // 수납 영역 재료 — '지출 결재 대기'는 운영실에서 뺐다(2026-08-29)라 교재 신청이 그 자리를 맡는다.
     requestedTextbooks: 4,

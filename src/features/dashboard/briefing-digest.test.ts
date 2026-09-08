@@ -20,6 +20,9 @@ const EMPTY_RAW: TodayActionsRaw = {
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
+  dayArrivals: { starting: [], ending: [] },
+  newIntakeToday: { count: 0, names: [] },
+  scheduledTomorrow: null,
 };
 
 const BASE: BuildDailyBriefingInput = {
@@ -39,7 +42,7 @@ describe("buildDailyBriefingPayload", () => {
       ...BASE,
       yesterdayRaw: {
         ...EMPTY_RAW,
-        absentToday: [{ studentId: "s1", name: "김민준", subject: "math" }],
+        absentToday: [{ studentId: "s1", name: "김민준", subject: "math", preNotified: false }],
         unwrittenReportsToday: { count: 2, names: ["김민준", "이서연"], bySubject: [] },
         leavesToday: [{ name: "어제휴가자" }], // asOf=어제 수집분 — 버려져야 함
         leavesPending: 9,

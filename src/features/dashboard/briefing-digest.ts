@@ -175,6 +175,12 @@ export function buildDailyBriefingPayload(input: BuildDailyBriefingInput): Daily
     // 휴가는 attention이 아니라 '오늘 예정' 섹션으로 분리.
     leavesToday: [],
     leavesPending: 0,
+    // 🔴 아래 셋은 **어제 수집분**이라 라벨('오늘 첫 수업'·'내일 시간표 적용')과 사실이 어긋난다 —
+    //    브리핑에선 뺀다(위 휴가와 같은 규약). 이 셋은 운영실 화면에서 **지금 수집분**으로만 선다.
+    //    되살리려면 라벨을 날짜 축에 맞춰 다시 지어야 한다(YESTERDAY_RELABEL 방식).
+    dayArrivals: { starting: [], ending: [] },
+    newIntakeToday: { count: 0, names: [] },
+    scheduledTomorrow: null,
     sourceIssues: [],
   };
   const attention = buildTodayActions(merged, { subjectLabel: input.subjectLabel }).map((item) =>

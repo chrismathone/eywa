@@ -30,6 +30,8 @@ export type DashboardAccess = {
     owner: boolean;
     staff: boolean;
     students: boolean;
+    /** 내일 발효되는 시간표 예약 신호(2026-09-09) — 이 갈래를 지우면 그 신호도 함께 지울 것. */
+    timetable: boolean;
   };
   write: {
     billing: boolean;
@@ -54,6 +56,7 @@ export function resolveDashboardAccess(role: SystemRole, matrix: AccessMatrix): 
       owner: canAccess(role, "owner", matrix),
       staff: canAccess(role, "staff", matrix),
       students: canAccess(role, "students", matrix),
+      timetable: canAccess(role, "timetable", matrix),
     },
     write: {
       billing: canWrite(role, "billing", matrix),
