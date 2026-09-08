@@ -39,7 +39,13 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 
 /** 활성 면의 데이터 — 자산 면은 자산 전건(항상 받는 것)만으로 그린다. */
 type FaceLoad =
-  | { kind: "assets"; status: TableStatus }
+  /**
+   * 자산 면도 **대여 기록을 함께 받는다** — 장부와 자산 상태가 어긋난 것을 표시하고(원장 2026-09-08
+   * *"연동 가능하게 배선해야할듯"*), 대여 중인 자산의 사용자 편집을 막는 재료다.
+   * 🔴 조회에 실패하면 **빈 배열이 아니라 null** — 빈 배열로 삼키면 열린 대여가 있는 자산이 전부
+   *    '어긋남'으로 보인다(없는 사실을 만드는 쪽이 훨씬 나쁘다).
+   */
+  | { kind: "assets"; status: TableStatus; loans: InventoryLoan[] | null }
   | ({ kind: "loans" } & FaceData<InventoryLoan>)
   | ({ kind: "audits" } & FaceData<InventoryAudit>)
   | ({ kind: "supplies" } & FaceData<InventorySupply>);
@@ -53,7 +59,12 @@ function loadFace(tab: InventoryTab): Promise<FaceLoad> {
     case "supplies":
       return getSupplies().then((r) => ({ kind: "supplies", ...r }));
     default:
-      return Promise.resolve({ kind: "assets", status: "ok" });
+      return getLoans().then((r) => ({
+        kind: "assets" as const,
+        // 자산 면의 준비 상태는 자산 표가 정한다 — 대여 조회 실패가 자산 화면을 잠그지 않는다.
+        status: "ok" as TableStatus,
+        loans: r.status === "ok" ? r.rows : null,
+      }));
   }
 }
 
@@ -113,7 +124,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       <FaceTabs faces={inventoryFaces(counts)} active={tab} ariaLabel="재고관리 면 전환" />
       {/* 분류는 클라 컴포넌트 여럿(표·툴바·다이얼로그 4개)이 읽으므로 prop 배선 대신 프로바이더 하나로 준다. */}
       <InventoryCategoriesProvider categories={categories.rows}>
-        {face.kind === "assets" ? <AssetsFace assets={assets.rows} canWrite={editable} today={today} hideDisposed={prefs.hideDisposed} /> : null}
+        {face.kind === "assets" ? (
+          <AssetsFace
+            assets={assets.rows}
+            loans={face.loans}
+            canWrite={editable}
+            today={today}
+            hideDisposed={prefs.hideDisposed}
+          />
+        ) : null}
         {face.kind === "loans" ? <LoansFace loans={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
         {face.kind === "audits" ? <AuditsFace audits={face.rows} assets={assetOptions} canWrite={editable} today={today} /> : null}
         {face.kind === "supplies" ? (

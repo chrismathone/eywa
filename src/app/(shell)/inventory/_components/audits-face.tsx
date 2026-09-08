@@ -6,6 +6,7 @@ import { auditResultLabel } from "@/features/inventory/audit-result";
 import { matchesTextQuery } from "@/features/inventory/filter";
 import type { AssetOption, InventoryAudit } from "@/features/inventory/types";
 import { AuditDialog } from "./audit-dialog";
+import { AuditEditDialog } from "./audit-edit-dialog";
 import { DashCell } from "./cell-bits";
 import { ListToolbar } from "./list-toolbar";
 import { SortableTable, type Column } from "./sortable-table";
@@ -16,6 +17,8 @@ import { useSort } from "./use-sort";
 export function AuditsFace({ audits, assets, canWrite, today }: { audits: InventoryAudit[]; assets: AssetOption[]; canWrite: boolean; today: string }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  // 행 더블클릭 = 수정(원장 2026-09-08) — 자산 표·소모품 면과 **같은 진입 방식**이다.
+  const [editing, setEditing] = useState<InventoryAudit | null>(null);
   const { sort, toggle } = useSort();
   const rows = useMemo(
     () => audits.filter((d) => matchesTextQuery([d.auditCode, d.assetCode, d.assetModel, d.location, d.auditorName, d.action], query)),
@@ -37,7 +40,7 @@ export function AuditsFace({ audits, assets, canWrite, today }: { audits: Invent
         query={query}
         onQueryChange={setQuery}
         placeholder="실사ID, 자산ID, 확인자 검색"
-        summary={`${rows.length}건`}
+        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정·삭제" : ""}`}
         actions={canWrite ? <ToolbarButton variant="primary" onClick={() => setOpen(true)}>+ 실사 기록</ToolbarButton> : null}
       />
       <div className="bg-card shadow-card rounded-2xl p-2">
@@ -48,9 +51,11 @@ export function AuditsFace({ audits, assets, canWrite, today }: { audits: Invent
           sort={sort}
           onSort={toggle}
           emptyText={audits.length === 0 ? "실사 이력이 없습니다" : "조건에 맞는 이력이 없습니다"}
+          onRowDoubleClick={canWrite ? (d) => setEditing(d) : undefined}
         />
       </div>
       {open ? <AuditDialog assets={assets} today={today} onClose={() => setOpen(false)} /> : null}
+      {editing ? <AuditEditDialog audit={editing} today={today} onClose={() => setEditing(null)} /> : null}
     </section>
   );
 }

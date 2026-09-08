@@ -1,8 +1,9 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { updateSupplyQty } from "@/features/inventory/server/supply-actions";
+import { deleteSupply, updateSupplyQty } from "@/features/inventory/server/supply-actions";
 import type { InventorySupply } from "@/features/inventory/types";
+import { DeleteRowButton } from "./delete-row-button";
 import { DialogShell, FIELD, Field, FormError, TEXTAREA, useSubmit } from "./form-bits";
 
 /** 소모품 수량 수정 — 수량 + 최종확인일 + 확인자(기본 = 로그인한 사람) + 비고. */
@@ -29,7 +30,15 @@ export function SupplyDialog({ supply, today, userName, onClose }: { supply: Inv
         </div>
         <Field label="비고"><textarea name="note" defaultValue={supply.note ?? ""} maxLength={500} className={TEXTAREA} /></Field>
         <FormError error={error} />
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          <DeleteRowButton
+            id={supply.id}
+            action={deleteSupply}
+            label={`소모품 삭제 — ${supply.name}`}
+            confirm="이 줄을 지웁니다. 되돌릴 수 없습니다(수량 이력도 함께 사라집니다)."
+            successMessage="소모품을 지웠습니다"
+            onDone={onClose}
+          />
           <Button type="button" variant="outline" onClick={onClose}>취소</Button>
           <Button type="submit" disabled={busy}>저장</Button>
         </div>

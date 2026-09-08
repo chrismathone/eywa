@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { nextAssetCode } from "@/features/inventory/asset-code";
-import { createAsset, updateAsset } from "@/features/inventory/server/asset-actions";
+import { createAsset, deleteAsset, updateAsset } from "@/features/inventory/server/asset-actions";
 import { ASSET_STATUSES, ASSET_STATUS_LABEL } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
+import { DeleteRowButton } from "./delete-row-button";
 import { useCategoryMaps } from "./categories-context";
 import { DialogShell, FIELD, Field, FormError, SELECT, TEXTAREA, useSubmit } from "./form-bits";
 
@@ -109,7 +110,17 @@ export function AssetDialog({
         <div className="sm:col-span-2">
           <FormError error={error} />
         </div>
-        <div className="flex justify-end gap-2 sm:col-span-2">
+        <div className="flex items-center justify-end gap-2 sm:col-span-2">
+          {mode === "edit" && asset ? (
+            <DeleteRowButton
+              id={asset.id}
+              action={deleteAsset}
+              label={`자산 삭제 — ${asset.assetCode}`}
+              confirm="이 자산과 함께 그 자산의 대여·실사 이력이 모두 지워집니다. 되돌릴 수 없습니다. (대여 중인 자산은 반납 처리 후에 지울 수 있습니다)"
+              successMessage="자산을 지웠습니다"
+              onDone={onClose}
+            />
+          ) : null}
           <Button type="button" variant="outline" onClick={onClose}>취소</Button>
           <Button type="submit" disabled={busy}>{mode === "create" ? "등록" : "저장"}</Button>
         </div>

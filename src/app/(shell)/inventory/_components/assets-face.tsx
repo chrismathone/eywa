@@ -6,11 +6,13 @@ import { PrintWindowButton } from "@/components/workspace/print-window";
 import { assetFilterChips, filterAssets, type AssetFilterKey } from "@/features/inventory/filter";
 import { saveInventoryPrefs } from "@/features/inventory/server/prefs";
 import { needsAction } from "@/features/inventory/status";
-import type { InventoryAsset } from "@/features/inventory/types";
+import { holderEditBlockReason, loanMismatchMap } from "@/features/inventory/loan-link";
+import type { InventoryAsset, InventoryLoan } from "@/features/inventory/types";
 import { assetColumns } from "./asset-columns";
 import { AssetDialog } from "./asset-dialog";
 import { useCategoryMaps } from "./categories-context";
 import { ExcelDialog } from "./excel-dialog";
+import { HolderDialog } from "./holder-dialog";
 import { ListToolbar } from "./list-toolbar";
 import { QrDialog } from "./qr-dialog";
 import { SortableTable } from "./sortable-table";
@@ -21,6 +23,7 @@ type Dialog =
   | { kind: "create" }
   | { kind: "edit"; asset: InventoryAsset }
   | { kind: "status"; asset: InventoryAsset }
+  | { kind: "holder"; asset: InventoryAsset; blockedReason: string | null }
   | { kind: "qr"; asset: InventoryAsset }
   | { kind: "excel" }
   | null;
@@ -36,11 +39,14 @@ type Dialog =
  */
 export function AssetsFace({
   assets,
+  loans,
   canWrite,
   today,
   hideDisposed: hideDisposedInitial,
 }: {
   assets: InventoryAsset[];
+  /** 대여 기록 — **null이면 판정하지 않는다**(조회 실패를 '어긋남'으로 읽지 않게, page.tsx 주석). */
+  loans: InventoryLoan[] | null;
   canWrite: boolean;
   today: string;
   /** 저장된 보기 설정(users.ui_prefs.inventory) — 토글은 바꾸는 순간 저장한다([[#90]]). */
@@ -53,6 +59,16 @@ export function AssetsFace({
   const [dialog, setDialog] = useState<Dialog>(null);
   const { sort, toggle } = useSort();
   const chips = useMemo(() => assetFilterChips(assets, cats.list), [assets, cats]);
+  // 장부와 어긋난 자산(열린 대여가 없는데 '대여중') — 판정·맞출 값은 순수 규약 한 곳에서.
+  const mismatches = useMemo(
+    () => (loans ? loanMismatchMap(assets, loans) : new Map()),
+    [assets, loans],
+  );
+  const loansByAsset = useMemo(() => {
+    const m = new Map<string, InventoryLoan[]>();
+    for (const l of loans ?? []) m.set(l.assetId, [...(m.get(l.assetId) ?? []), l]);
+    return m;
+  }, [loans]);
   // 폐기 숨김(원장 2026-09-02) — '폐기' 칩을 고른 동안은 토글과 무관하게 보인다(숨긴 채 폐기 필터가 빈 표면 "왜 없지").
   const rows = useMemo(() => {
     const base = filterAssets(assets, chip, query);
@@ -70,9 +86,21 @@ export function AssetsFace({
       assetColumns(cats, {
         noOf: (asset) => noById.get(asset.id) ?? null,
         onStatusDoubleClick: canWrite ? (asset) => setDialog({ kind: "status", asset }) : undefined,
+        // 사용자 칸 더블클릭 = 사용자 지정(원장 2026-09-08). 대여 중이면 창이 안내로 바뀐다.
+        onHolderDoubleClick: canWrite
+          ? (asset) =>
+              setDialog({
+                kind: "holder",
+                asset,
+                blockedReason: loans
+                  ? holderEditBlockReason(asset, loansByAsset.get(asset.id) ?? [])
+                  : null,
+              })
+          : undefined,
+        mismatchOf: (asset) => mismatches.get(asset.id) ?? null,
         onQrClick: (asset) => setDialog({ kind: "qr", asset }),
       }),
-    [canWrite, noById, cats],
+    [canWrite, noById, cats, loans, loansByAsset, mismatches],
   );
   const existingCodes = useMemo(() => assets.map((a) => a.assetCode), [assets]);
   const close = () => setDialog(null);
@@ -97,7 +125,7 @@ export function AssetsFace({
             폐기 숨김
           </ToolbarChip>
         }
-        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정 · 상태 칸 더블클릭 = 상태 변경" : ""}`}
+        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정 · 상태·사용자 칸 더블클릭 = 그 칸만 변경" : ""}`}
         actions={
           <>
             {canWrite ? <ToolbarButton onClick={() => setDialog({ kind: "excel" })}>엑셀</ToolbarButton> : null}
@@ -124,7 +152,17 @@ export function AssetsFace({
 
       {dialog?.kind === "create" ? <AssetDialog mode="create" existingCodes={existingCodes} today={today} onClose={close} /> : null}
       {dialog?.kind === "edit" ? <AssetDialog mode="edit" asset={dialog.asset} existingCodes={existingCodes} today={today} onClose={close} /> : null}
-      {dialog?.kind === "status" ? <StatusDialog asset={dialog.asset} today={today} onClose={close} /> : null}
+      {dialog?.kind === "status" ? (
+        <StatusDialog
+          asset={dialog.asset}
+          today={today}
+          mismatch={mismatches.get(dialog.asset.id) ?? null}
+          onClose={close}
+        />
+      ) : null}
+      {dialog?.kind === "holder" ? (
+        <HolderDialog asset={dialog.asset} blockedReason={dialog.blockedReason} onClose={close} />
+      ) : null}
       {dialog?.kind === "qr" ? <QrDialog asset={dialog.asset} onClose={close} /> : null}
       {dialog?.kind === "excel" ? <ExcelDialog onClose={close} /> : null}
     </section>

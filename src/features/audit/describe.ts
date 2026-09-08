@@ -780,6 +780,79 @@ export function auditDetail(
       if (cats.length > 0) parts.push(`분류 추가 ${cats.join("·")}`);
       return join(...parts);
     }
+    // 사용자(보유자) 지정 — 누가 갖고 있는지가 바뀐 사실 자체가 감사 대상이다.
+    case "inventory_asset_holder": {
+      const code = str(m.assetCode);
+      const from = str(m.from);
+      const to = str(m.to);
+      return join(
+        code ? `「${code}」 사용자` : "사용자",
+        from && to ? `${from} → ${to}` : to ? `→ ${to}` : from ? `${from} → (비움)` : "(비움)",
+      );
+    }
+    // 삭제 3종 — 행이 사라지므로 **로그가 유일한 근거**다. 함께 지워진 것까지 적는다.
+    case "inventory_asset_delete": {
+      const code = str(m.assetCode);
+      const model = str(m.model);
+      const loans = num(m.cascadedLoans);
+      const audits = num(m.cascadedAudits);
+      const cascade = [loans ? `대여 ${loans}건` : null, audits ? `실사 ${audits}건` : null].filter(Boolean).join("·");
+      return join(
+        code ? `「${code}」 삭제` : "삭제",
+        model,
+        cascade ? `${cascade} 함께 삭제` : null,
+      );
+    }
+    case "inventory_loan_delete": {
+      const code = str(m.assetCode);
+      const who = str(m.borrowerName);
+      const restored = assetStatusLabel(str(m.restoredAssetStatus));
+      return join(
+        code ? `「${code}」 대여 기록 삭제` : "대여 기록 삭제",
+        who,
+        restored ? `자산 상태 ${restored}로 되돌림` : null,
+      );
+    }
+    case "inventory_audit_delete": {
+      const code = str(m.auditCode);
+      const on = str(m.auditedOn);
+      const result = auditResultLabel(str(m.result));
+      return join(code ? `「${code}」 삭제` : "실사 삭제", on, result);
+    }
+    case "inventory_audit_update": {
+      const code = str(m.auditCode);
+      const from = m.from as Record<string, unknown> | undefined;
+      const to = m.to as Record<string, unknown> | undefined;
+      const fromResult = auditResultLabel(str(from?.result));
+      const toResult = auditResultLabel(str(to?.result));
+      const fromOn = str(from?.auditedOn);
+      const toOn = str(to?.auditedOn);
+      return join(
+        code ? `「${code}」 수정` : "실사 수정",
+        fromResult && toResult && fromResult !== toResult ? `${fromResult} → ${toResult}` : toResult,
+        fromOn && toOn && fromOn !== toOn ? `${fromOn} → ${toOn}` : toOn,
+      );
+    }
+    case "inventory_supply_delete": {
+      const code = str(m.itemCode);
+      const name = str(m.name);
+      const qty = num(m.qty);
+      return join(
+        [code ? `「${code}」` : null, name].filter(Boolean).join(" ") || "소모품",
+        "삭제",
+        qty !== null ? `수량 ${qty}` : null,
+      );
+    }
+    // 대여 기록 수정 — 대여자가 바뀌면 자산의 '사용자'도 함께 바뀐다(그 사실을 한 줄로).
+    case "inventory_loan_update": {
+      const code = str(m.assetCode);
+      const from = str(m.from);
+      const to = str(m.to);
+      return join(
+        code ? `「${code}」 대여 수정` : "대여 수정",
+        from && to && from !== to ? `대여자 ${from} → ${to}` : to ? `대여자 ${to}` : null,
+      );
+    }
     case "inventory_supply_update": {
       const code = str(m.itemCode);
       const name = str(m.name);

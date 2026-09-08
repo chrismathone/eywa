@@ -8,12 +8,18 @@ import type { AssetOption, InventoryLoan } from "@/features/inventory/types";
 import { DashCell, UnknownCell } from "./cell-bits";
 import { ListToolbar } from "./list-toolbar";
 import { LoanDialog } from "./loan-dialog";
+import { LoanEditDialog } from "./loan-edit-dialog";
 import { ReturnDialog } from "./return-dialog";
 import { SortableTable, type Column } from "./sortable-table";
 import { LoanStatusPill } from "@/features/inventory/components/status-pill";
 import { useSort } from "./use-sort";
 
-type Dialog = { kind: "start" } | { kind: "return"; loan: InventoryLoan } | null;
+// 행 더블클릭 = 수정(원장 2026-09-08 *"대여자는 어디서 수정함?"*) — 자산 표와 같은 진입 방식이다.
+type Dialog =
+  | { kind: "start" }
+  | { kind: "return"; loan: InventoryLoan }
+  | { kind: "edit"; loan: InventoryLoan }
+  | null;
 
 /** 대여이력 면 — `이력ID · 자산ID · 대여자 · 소속 · 대여일 · 반납예정 · 반납일 · 상태 · 비고`. 대여중 행에만 '반납'. */
 export function LoansFace({ loans, assets, canWrite, today }: { loans: InventoryLoan[]; assets: AssetOption[]; canWrite: boolean; today: string }) {
@@ -46,7 +52,7 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
         query={query}
         onQueryChange={setQuery}
         placeholder="이력ID, 자산ID, 대여자 검색"
-        summary={`${rows.length}건`}
+        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정·삭제" : ""}`}
         actions={canWrite ? <ToolbarButton variant="primary" onClick={() => setDialog({ kind: "start" })}>+ 대여 시작</ToolbarButton> : null}
       />
       <div className="bg-card shadow-card rounded-2xl p-2">
@@ -57,6 +63,7 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
           sort={sort}
           onSort={toggle}
           emptyText={loans.length === 0 ? "대여 이력이 없습니다" : "조건에 맞는 이력이 없습니다"}
+          onRowDoubleClick={canWrite ? (l) => setDialog({ kind: "edit", loan: l }) : undefined}
           actions={
             canWrite
               ? (l) =>
@@ -70,6 +77,7 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
         />
       </div>
       {dialog?.kind === "start" ? <LoanDialog assets={assets} today={today} onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === "edit" ? <LoanEditDialog loan={dialog.loan} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === "return" ? <ReturnDialog loan={dialog.loan} today={today} onClose={() => setDialog(null)} /> : null}
     </section>
   );

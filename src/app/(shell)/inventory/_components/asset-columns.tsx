@@ -20,6 +20,10 @@ export function assetColumns(
     /** 자산 마스터 순서의 고정 번호(1부터) — 정렬·필터해도 그 자산의 번호는 그대로(라벨 인쇄 범위가 이 번호를 가리킨다). */
     noOf?: (a: InventoryAsset) => number | null;
     onStatusDoubleClick?: (a: InventoryAsset) => void;
+    /** 사용자 칸 더블클릭 = 사용자 지정(원장 2026-09-08). */
+    onHolderDoubleClick?: (a: InventoryAsset) => void;
+    /** 대여 장부와 어긋난 자산인가 — 상태 칸에 표식을 단다(판정은 `loan-link.ts`). */
+    mismatchOf?: (a: InventoryAsset) => { expected: string; reason: string } | null;
     onQrClick?: (a: InventoryAsset) => void;
   } = {},
 ): Column<InventoryAsset>[] {
@@ -32,14 +36,35 @@ export function assetColumns(
     { key: "acquiredOn", label: "입고일", width: 100, render: (a) => <UnknownCell v={a.acquiredOn} num />, className: "whitespace-nowrap" },
     {
       key: "status", label: "상태", width: 92,
-      render: (a) => <AssetStatusPill status={a.status} />,
+      // 🔴 어긋난 자산은 상태 옆에 `!` — 색을 바꾸지 않는다(상태 색은 그 상태의 뜻이라 건드리면 거짓이 된다).
+      render: (a) => {
+        const m = opts.mismatchOf?.(a) ?? null;
+        return (
+          <span className="inline-flex items-center gap-1">
+            <AssetStatusPill status={a.status} />
+            {m ? (
+              <span
+                className="text-amber text-[11px] font-bold"
+                title={`${m.reason} — 상태 칸을 더블클릭해 맞출 수 있습니다`}
+              >
+                !
+              </span>
+            ) : null}
+          </span>
+        );
+      },
       sortValue: (a) => assetStatusLabel(a.status),
       className: "whitespace-nowrap",
       onDoubleClick: opts.onStatusDoubleClick,
     },
     // 폐기 자산은 값이 남아 있어도 "—"(브리프 규약) — 지난 위치는 수정 폼에서 보인다.
     { key: "location", label: "현위치", width: 128, render: (a) => <DashCell v={a.status === "disposed" ? null : a.location} />, sortValue: (a) => (a.status === "disposed" ? null : a.location), className: "whitespace-nowrap" },
-    { key: "holderName", label: "사용자", width: 88, render: (a) => <DashCell v={a.holderName} />, className: "whitespace-nowrap" },
+    {
+      key: "holderName", label: "사용자", width: 88,
+      render: (a) => <DashCell v={a.holderName} />,
+      className: "whitespace-nowrap",
+      onDoubleClick: opts.onHolderDoubleClick,
+    },
     { key: "lastAuditedOn", label: "최종실사", width: 100, render: (a) => <DashCell v={a.lastAuditedOn} num />, className: "whitespace-nowrap" },
     { key: "disposedOn", label: "폐기일", width: 100, render: (a) => <DashCell v={a.disposedOn} num />, className: "whitespace-nowrap" },
     { key: "note", label: "비고", minWidth: 160, render: (a) => <span className="text-text-dim" title={a.note ?? undefined}>{a.note ?? ""}</span>, className: "whitespace-nowrap" },

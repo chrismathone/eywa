@@ -55,3 +55,46 @@ export async function updateSupplyQty(fd: FormData): Promise<InventoryActionStat
   revalidatePath("/inventory");
   return { ok: true };
 }
+
+/**
+ * **소모품 삭제** — 잘못 등록한 줄을 지운다(원장 2026-09-08 *"소모품도 마찬가지"*).
+ * ⚠️ 딸린 표가 없어(FK 없음) 이 행만 사라진다. 되짚을 근거가 로그뿐이라 내용을 스냅샷으로 남긴다.
+ */
+export async function deleteSupply(fd: FormData): Promise<InventoryActionState> {
+  const ctx = await requireInventoryWrite();
+  if ("error" in ctx) return ctx;
+  const id = idField(fd);
+  if (!id) return { error: "소모품을 찾지 못했습니다" };
+
+  const admin = createAdminClient();
+  const { data: cur, error: curErr } = await admin
+    .from("inventory_supplies")
+    .select("item_code, name, maker_model, qty, location, checked_on, checker_name, note")
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (curErr) return { error: friendlyInventoryError(curErr, "소모품을 불러오지 못했습니다") };
+  if (!cur) return { error: "소모품을 찾지 못했습니다" };
+
+  const { error } = await admin.from("inventory_supplies").delete().eq("id", id).eq("tenant_id", ctx.tenantId);
+  if (error) return { error: friendlyInventoryError(error, "소모품을 지우지 못했습니다") };
+
+  await logAction({
+    action: "inventory_supply_delete",
+    targetType: "inventory_supply",
+    targetLabel: cur.item_code ? `${cur.item_code} ${cur.name}` : cur.name,
+    metadata: {
+      supplyId: id,
+      itemCode: cur.item_code,
+      name: cur.name,
+      makerModel: cur.maker_model,
+      qty: cur.qty,
+      location: cur.location,
+      checkedOn: cur.checked_on,
+      checkerName: cur.checker_name,
+      note: cur.note,
+    },
+  });
+  revalidatePath("/inventory");
+  return { ok: true };
+}

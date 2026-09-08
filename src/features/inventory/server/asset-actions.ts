@@ -9,6 +9,7 @@ import { buildCategoryMaps } from "../category";
 import { dateField, idField, textField } from "../form";
 import { isAssetStatus } from "../status";
 import { friendlyInventoryError, requireInventoryWrite } from "./access";
+import { holderEditBlockReason } from "../loan-link";
 import { loadCategoriesForWrite } from "./category-queries";
 
 /**
@@ -233,6 +234,97 @@ export async function setAssetStatus(fd: FormData): Promise<InventoryActionState
     targetType: "inventory_asset",
     targetLabel: cur.asset_code,
     metadata: { assetId: id, assetCode: cur.asset_code, from: cur.status, to: status, disposedOn: status === "disposed" ? disposed.value : null },
+  });
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * **사용자(보유자) 지정** — 자산 표의 '사용자' 칸 더블클릭(원장 2026-09-08
+ * *"재고 관리에서 더블클릭해도 사용자 수정을 할 수 없네 … 더블클릭에서 지정할 수 있도록"*).
+ *
+ * 🔴 **대여 중인 자산은 여기서 못 고친다** — 그 값은 대여자에서 파생된 스냅샷이라, 한쪽만 고치면
+ *    자산 표와 대여 표가 다른 이름을 말한다. 판정은 순수 규약 [`holderEditBlockReason`](../loan-link.ts)이고
+ *    서버가 **다시 계산**한다([[#77]] — 화면에서 막았다고 끝이 아니다).
+ * ⚠️ 이름은 자유 입력이다 — 실데이터에 `셔틀담당`·`확인필요`처럼 계정이 없는 값이 들어 있다.
+ *    계정을 고르면 `holder_user_id`도 함께 적어 나중에 사람이 바뀌어도 되짚을 수 있게 한다.
+ */
+export async function setAssetHolder(fd: FormData): Promise<InventoryActionState> {
+  const ctx = await requireInventoryWrite();
+  if ("error" in ctx) return ctx;
+  const id = idField(fd);
+  if (!id) return { error: "자산을 찾지 못했습니다" };
+  const holder = textField(fd, "holderName", "사용자", 80);
+  if ("error" in holder) return holder;
+  const holderUserId = idField(fd, "holderUserId");
+
+  const admin = createAdminClient();
+  const [{ data: cur, error: curErr }, { data: loans, error: loanErr }] = await Promise.all([
+    admin.from("inventory_assets").select("asset_code, status, holder_name").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle(),
+    admin.from("inventory_loans").select("status").eq("asset_id", id).eq("tenant_id", ctx.tenantId),
+  ]);
+  if (curErr) return { error: friendlyInventoryError(curErr, "자산을 불러오지 못했습니다") };
+  if (!cur) return { error: "자산을 찾지 못했습니다" };
+  if (loanErr) return { error: friendlyInventoryError(loanErr, "대여 여부를 확인하지 못했습니다") };
+  const blocked = holderEditBlockReason({ status: cur.status }, (loans ?? []).map((l) => ({ status: l.status as string })));
+  if (blocked) return { error: blocked };
+
+  const { error } = await admin
+    .from("inventory_assets")
+    .update({ holder_name: holder.value, holder_user_id: holder.value ? holderUserId : null })
+    .eq("id", id)
+    .eq("tenant_id", ctx.tenantId);
+  if (error) return { error: friendlyInventoryError(error, "사용자를 저장하지 못했습니다") };
+
+  await logAction({
+    action: "inventory_asset_holder",
+    targetType: "inventory_asset",
+    targetLabel: cur.asset_code,
+    metadata: { assetId: id, assetCode: cur.asset_code, from: cur.holder_name, to: holder.value },
+  });
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * **자산 삭제** — 잘못 등록한 것을 지운다(원장 2026-09-08 *"실수로 등록했을때 삭제할 수 있도록 배선처리"*).
+ *
+ * 🔴 **대여·실사 이력이 함께 지워진다**(FK `on delete cascade`) — 화면이 그 사실을 먼저 말하고,
+ *    지워질 건수를 세어 보여 준 뒤에만 누르게 한다.
+ * 🔴 열린 대여가 있으면 거절한다 — 남이 갖고 있는 물건을 장부에서 지우는 것은 실수 정정이 아니다.
+ * ⚠️ 감사로그에 **지워진 자산의 내용을 스냅샷으로 남긴다** — 행이 사라지면 되짚을 근거가 로그뿐이다.
+ */
+export async function deleteAsset(fd: FormData): Promise<InventoryActionState> {
+  const ctx = await requireInventoryWrite();
+  if ("error" in ctx) return ctx;
+  const id = idField(fd);
+  if (!id) return { error: "자산을 찾지 못했습니다" };
+
+  const admin = createAdminClient();
+  const [{ data: cur, error: curErr }, { count: openLoans, error: openErr }, { count: loanCount }, { count: auditCount }] =
+    await Promise.all([
+      admin.from("inventory_assets").select("asset_code, category, maker, model, status, location, holder_name").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle(),
+      admin.from("inventory_loans").select("id", { count: "exact", head: true }).eq("tenant_id", ctx.tenantId).eq("asset_id", id).eq("status", "out"),
+      admin.from("inventory_loans").select("id", { count: "exact", head: true }).eq("tenant_id", ctx.tenantId).eq("asset_id", id),
+      admin.from("inventory_audits").select("id", { count: "exact", head: true }).eq("tenant_id", ctx.tenantId).eq("asset_id", id),
+    ]);
+  if (curErr) return { error: friendlyInventoryError(curErr, "자산을 불러오지 못했습니다") };
+  if (!cur) return { error: "자산을 찾지 못했습니다" };
+  if (openErr) return { error: friendlyInventoryError(openErr, "대여 여부를 확인하지 못했습니다") };
+  if ((openLoans ?? 0) > 0) return { error: "대여 중인 자산입니다 — 반납 처리 후에 지울 수 있습니다" };
+
+  const { error } = await admin.from("inventory_assets").delete().eq("id", id).eq("tenant_id", ctx.tenantId);
+  if (error) return { error: friendlyInventoryError(error, "자산을 지우지 못했습니다") };
+
+  await logAction({
+    action: "inventory_asset_delete",
+    targetType: "inventory_asset",
+    targetLabel: cur.asset_code,
+    metadata: {
+      assetId: id, assetCode: cur.asset_code, category: cur.category, maker: cur.maker, model: cur.model,
+      status: cur.status, location: cur.location, holderName: cur.holder_name,
+      cascadedLoans: loanCount ?? 0, cascadedAudits: auditCount ?? 0,
+    },
   });
   refresh();
   return { ok: true };
