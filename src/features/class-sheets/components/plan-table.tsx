@@ -100,7 +100,9 @@ export function PlanTable({
               // '페이지/시간' 11px bold ≈ 61 → 64 · × = 아이콘14+패딩4 → 22. (표 안 주석 금지 — 파일 상단 ⚠️)
               <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed" }}>
                 <colgroup>
-                  <col style={{ width: 76 }} />
+                  {/* 구분 76 → 90(2026-09-08): 네이티브 셀렉트는 화살표 16px을 먼저 먹어 76px에선
+                      영역 라벨이 잘렸다. 늘린 14px은 카드 폭(TODAY_PLAN_W 406→420)에서 나온다. */}
+                  <col style={{ width: 90 }} />
                   <col style={{ width: 106 }} />
                   <col style={{ width: 64 }} />
                   <col />
