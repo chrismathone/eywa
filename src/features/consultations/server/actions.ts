@@ -9,6 +9,7 @@ import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { kstDateOf, kstLocalToIso } from "@/lib/date-kst";
+import { stripPastedMarkup } from "../paste-cleanup";
 
 type CareFocus = {
   priority: "high" | "medium" | "low";
@@ -237,7 +238,8 @@ export async function createStudentConsultation(
       category: input.category,
       subject: input.subject,
       audience: input.audience,
-      summary: input.summary,
+      // 붙여넣기로 딸려 온 화면 코드 조각을 걷어낸다(원장 2026-09-09 *"그 조각만 걷어내. 앞으로 가져올때도 조심"*).
+      summary: stripPastedMarkup(input.summary),
       follow_up_action: input.followUpAction,
       follow_up_date: input.followUpDate,
       follow_up_done: input.followUpDone,
@@ -298,7 +300,8 @@ export async function updateStudentConsultation(
       category: input.category,
       subject: input.subject,
       audience: input.audience,
-      summary: input.summary,
+      // 붙여넣기로 딸려 온 화면 코드 조각을 걷어낸다(원장 2026-09-09 *"그 조각만 걷어내. 앞으로 가져올때도 조심"*).
+      summary: stripPastedMarkup(input.summary),
       follow_up_action: input.followUpAction,
       follow_up_date: input.followUpDate,
       follow_up_done: input.followUpDone,
