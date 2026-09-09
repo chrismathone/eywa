@@ -60,8 +60,17 @@ export const SHEET_TEXTAREA = `border-line-strong text-foreground focus:border-p
 /**
  * 읽기 전용 칸 — 같은 박스에 회색 바탕이라 "여기는 못 고친다"가 모양으로 보인다.
  * (알약으로 두면 편집 가능한 줄과 높이가 달라 열이 들쭉날쭉해진다.)
+ *
+ * 🔴 **가로도 가운데** — 편집 가능한 출결·태도 칸은 `justify-center`인데 이 상수만 빠져 있어, 같은 열에서
+ *    **고칠 수 있는 행은 값이 가운데·못 고치는 행은 왼쪽**이었다(원장 2026-09-09 *"내용이 열정렬 전혀
+ *    안되어있는것 같은데"*). 읽기 전용은 지난 날짜·권한 없는 강사·조퇴/공결처럼 **한 표에 섞여 나오는**
+ *    상태라 그 차이가 그대로 들쭉날쭉으로 보인다. (attendance-check의 '사유만 열리는' 갈래는 이미 손으로
+ *    `justify-center`를 붙여 두고 있었다 = 어긋남을 그 자리에서만 때운 흔적.)
+ * ⚠️ `center`가 아니라 **`center-safe`**다 — 잘림(`truncate`)과 함께 걸린 가운데 정렬은 내용이 넘칠 때
+ *    글자를 왼쪽으로도 밀어내 **앞뒤가 함께 잘린다**(roster-table 특이사항 머리 주석과 같은 함정).
+ *    safe는 넘치는 순간에만 왼쪽 정렬로 물러나므로 `매우 안좋음`(태도 열 하한)이 잘릴 일이 없다.
  */
-export const SHEET_BOX_READONLY = `${SHEET_BOX} bg-bg-soft text-text-dim inline-flex w-full items-center truncate px-1`;
+export const SHEET_BOX_READONLY = `${SHEET_BOX} bg-bg-soft text-text-dim inline-flex w-full items-center justify-center-safe truncate px-1`;
 
 /** 유닛 칸 — 굵기는 컴포넌트가 정한다(기본 1은 흐리게, 고치면 굵게). 바탕은 위와 같은 흰색. */
 export const SHEET_BOX_UNITS = `${SHEET_BOX_FRAME} focus:border-primary ${SHEET_TEXT} bg-card w-full px-0.5`;

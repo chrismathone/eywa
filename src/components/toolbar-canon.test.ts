@@ -236,6 +236,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",
   // 연차 관리(2026-09-08, 새 화면) — 만들 때부터 부품으로. 자리는 직원관리(원장 2026-09-09).
   "src/app/(shell)/staff/annual-leave/_adjust-table.tsx",
+  // 직원관리(2026-09-09) — 필터 줄·결과 줄이 손으로 적은 flex였다(좁아지면 검색만 둘째 줄 오른쪽에 떨어짐).
+  "src/app/(shell)/staff/page.tsx",
   "src/app/(shell)/meetings/page.tsx",
   "src/app/(shell)/withdrawals/page.tsx",
   // 수납(2026-09-04, 14단계) — 월 네비 부품·면 툴바가 부품을 읽는다(수납 면·환불·정산은 BillingMonthNav 경유라 직접 import 없음).

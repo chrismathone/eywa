@@ -177,7 +177,17 @@ export const RosterTable = memo(function RosterTable({
   }, [roster, data.students, collapsedGroups]);
   return (
     <div className="border-line-strong mt-1.5 border-t pt-1">
-      <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed" }}>
+      {/* 열 구분선 — 표 한 곳에서 첫 칸만 빼고 `border-l-line-faint`(데이터 표 규약 2026-08-05).
+          🔑 **같은 칸(RosterSlotCells)을 쓰는 형제 표 [seat-day-table](./seat-day-table.tsx)은 2026-08-19에
+             이미 이렇게 옮겼는데 이 표와 오늘 면 통합 표만 안 따라왔다** — [today-columns](../lib/today-columns.ts)
+             주석이 "아래 표가 이미 `border-l-line-faint`로 하던 것"이라고 적고 있어 문서와 코드가 갈려 있었다
+             (원장 2026-09-09 *"내용이 열정렬 전혀 안되어있는것 같은데"*).
+          ⚠️ 칸마다 붙이지 않는다 — 이 표는 행 종류가 셋(값 행·섹션 라벨 행·퇴원 요약 행)이라 한 군데를
+             빠뜨리면 그 행만 선이 끊긴다. 라벨·요약 행은 `colSpan` 한 칸이라 `:first-child`로 저절로 빠진다. */}
+      <table
+        className="w-full border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint"
+        style={{ tableLayout: "fixed" }}
+      >
         {/* ⚠️ 학교 열은 뺐다(원장 2026-08-06) — 남은 폭은 전부 '특이사항'이 가져간다.
             학교·학년은 학생 이름 툴팁과 학생목록에 있고, 교시 카드에서 매일 보는 값이 아니다. */}
         {/* 폭은 **꼭 필요한 만큼만** 고정하고 남는 건 전부 '특이사항'이 가져간다(원장 2026-08-06

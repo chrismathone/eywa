@@ -150,7 +150,11 @@ export function RosterSlotCells({
 }) {
   // 화면 언어 — 이 칸들의 툴팁·접근성 이름도 사전을 거친다(하드코딩된 한국어를 남기지 않는다).
   const lang = useSheetLang();
-  const dividerCls = withDivider ? "border-line-strong border-l" : "";
+  // 🔑 `ecs-slot-edge`는 **스타일이 없는 표식 클래스**다 — 통합 표(today-roster-table)가 표 한 곳에서 거는
+  //    옅은 열 구분선(`border-l-line-faint`)을 이 칸에서만 빼내려고 쓴다. 안 빼면 side 유틸이 이겨서
+  //    (design-conventions "데이터 표": 셀이 전면 색을 가져도 `border-l-*`가 이긴다) **교시 경계의 진한
+  //    선이 옅은 선으로 덮인다** — 위층 계획 카드와 아래층 명단을 잇는 그 선이 이 표의 뼈대다.
+  const dividerCls = withDivider ? "ecs-slot-edge border-line-strong border-l" : "";
   const textCols = rosterTextCols(form);
   if (entry === null) {
     const offTitle = sheetT(lang, "roster.notEnrolled");
