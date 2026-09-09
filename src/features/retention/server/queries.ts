@@ -62,6 +62,7 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
   if (!students || students.length === 0) return [];
 
   const ids = students.map((s) => s.id);
+  // 창의 기준은 **KST 오늘** — `toIsoDate`가 이제 KST 날짜를 준다(roster.ts 주석).
   const today = new Date();
   const since = (days: number) => toIsoDate(addDays(today, -days));
 

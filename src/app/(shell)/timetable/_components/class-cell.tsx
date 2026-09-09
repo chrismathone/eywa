@@ -195,7 +195,7 @@ export function ClassCell({
   const realClassId = slot.classId ?? slot.id;
   // 반 블록 드래그 — **반 이름 머리**를 잡으면 그 배치가 통째로 움직인다(원장 2026-09-04 *"반이름을 잡고 드래그하면
   // 반 드래그"*). 판정 재료(실효 강사·방·자리 여부·원래 길이)를 data에 실어 보내 격자 칸이 그것만으로 판정한다.
-  // ⚠️ 리스너는 **머리 껍데기 div**에 붙인다 — 안쪽 링크의 더블클릭(반 정보 창)은 그대로 살아 있어야 한다.
+  // ⚠️ 리스너는 **머리 껍데기 div**에 붙인다 — 안쪽 링크의 클릭(반 정보 창)은 그대로 살아 있어야 한다.
   const canDragBlock = canDrag && !!moveParts && moveParts.length > 0;
   const blockDrag = useDraggable({
     id: `block:${slot.id}`,
@@ -273,9 +273,10 @@ export function ClassCell({
               />
             }
           >
-            {/* 🔴 반 정보는 **더블클릭**으로 연다(원장 2026-09-04) — 학생 행과 같은 규약. */}
+            {/* 🔴 반 정보는 **한 번 클릭**으로 연다(원장 2026-09-09 *"더블클릭으로 작동하는걸 그냥 클릭으로.
+                대신 드래그와 안겹쳐지게 조심해서"* — 2026-09-04의 더블클릭 규약을 뒤집은 것). 드래그와의
+                겹침은 보드 루트의 `swallowClickAfterDrag`가 막는다(움직였으면 그 클릭은 드래그의 잔향이다). */}
             <WindowLink
-              openOn="doubleClick"
               href={`/classes/${slot.classId ?? slot.id}`}
               title={renameNote ?? (slot.classroomName ? `${slot.className} · ${slot.classroomName}` : slot.className)}
               ariaLabel={`${slot.className} 반 정보`}

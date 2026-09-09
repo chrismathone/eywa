@@ -345,9 +345,12 @@ function ConsultationCard({
               </p>
             </div>
             {/* 오른쪽 2단 — 위 비고(표식) / 아래 시각. 40px 안에 표식(≤24) + 시각(16)이 들어간다(상담사·요약은 위 title). */}
+            {/* 🔴 시각은 **표식이 있든 없든 항상 아래**다(원장 2026-09-09 *"아이콘이 없는 날짜는 상단에 있는데,
+                있는것 없는것 동일하게 날짜 하단으로"*) — `justify-between`은 자식이 하나(표식 없음)면 그
+                하나를 **위로** 붙여서 카드마다 날짜 높이가 들쭉날쭉했다. `mt-auto`가 그 경우에도 아래로 민다. */}
             <div className="flex h-full shrink-0 flex-col items-end justify-between">
               <CardMarkBadge mark={mark} hasAiAnalysis={c.hasAiAnalysis || c.outcome === "ai_done"} />
-              <span className="num text-text-faint text-sm leading-none whitespace-nowrap">
+              <span className="num text-text-faint mt-auto text-sm leading-none whitespace-nowrap">
                 <RelativeTime iso={c.consultedAt} nowMs={nowMs} />
               </span>
             </div>

@@ -1,4 +1,5 @@
 import "server-only";
+import { kstDateOf } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
@@ -290,8 +291,12 @@ export function enrollmentDuration(startIso: string | null, endIso: string | nul
   if (!startIso) return "—";
   const start = new Date(startIso);
   const end = endIso ? new Date(endIso) : new Date();
-  let years = end.getFullYear() - start.getFullYear();
-  let months = end.getMonth() - start.getMonth();
+  // 🔴 연·월은 **KST 달력**으로 센다 — `end.getFullYear()/getMonth()`는 런타임 로컬(서버=UTC)이라
+  //    매달 1일 새벽(KST 00~09시)에 재원 기간이 한 달 짧게 나온다.
+  const [sy, sm] = (kstDateOf(start) ?? "1970-01-01").split("-").map(Number);
+  const [ey, em] = (kstDateOf(end) ?? "1970-01-01").split("-").map(Number);
+  let years = (ey ?? 0) - (sy ?? 0);
+  let months = (em ?? 1) - (sm ?? 1);
   if (months < 0) {
     years -= 1;
     months += 12;

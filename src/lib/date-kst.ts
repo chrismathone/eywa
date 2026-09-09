@@ -45,6 +45,23 @@ export function kstMonth(d: Date = new Date()): string {
 }
 
 /**
+ * KST 기준 "지금"을 `datetime-local` 입력이 받는 모양(`YYYY-MM-DDTHH:mm`)으로.
+ * 🔴 `new Date()`의 로컬 게터로 만들지 말 것 — 그 값은 **런타임 시간대**라 SSR(서버=UTC)과 브라우저(KST)가
+ *    다른 기본값을 렌더한다(9시간 어긋난 시각이 폼에 박힌 채 저장된다).
+ */
+export function kstDateTimeLocal(d: Date = new Date()): string {
+  return `${kstToday(d)}T${kstTimeOf(d) ?? "00:00"}`;
+}
+
+/**
+ * KST 기준 올해(숫자). 🔴 `new Date().getFullYear()`를 쓰지 말 것 — 서버는 UTC라 **1월 1일 00:00~08:59 KST**
+ * 구간에 **작년**이 나온다(연도 기본값·연도 칩이 통째로 한 해 어긋난다).
+ */
+export function kstYear(d: Date = new Date()): number {
+  return Number(kstToday(d).slice(0, 4));
+}
+
+/**
  * 타임스탬프(ISO 문자열·Date) → **KST 시각**("HH:MM"). 파싱 불가·빈값은 null(없는 시각을 지어내지 않는다).
  * 🔴 `iso.slice(11, 16)`을 쓰지 말 것 — 그건 **UTC 시각**이라 화면에 9시간 이른 시각이 찍힌다
  *    (셔틀 "13:46 출발"이 "04:46 출발"로 보인다). 날짜 쪽 `kstDateOf`와 같은 이유·같은 규약이다.
@@ -153,6 +170,17 @@ export function formatKoreanDate(ymd: string): string {
 }
 
 /**
+ * YYYY-MM-DD → "2026년 7월 14일 월요일"(요일 **긴 이름**). 출석부 날짜 머리처럼 요일을 풀어 쓰는 자리용.
+ *
+ * 🔴 `Intl.DateTimeFormat`을 쓰지 않는다 — `timeZone`을 빠뜨리면 **런타임의 시간대**로 포맷돼서 서버(UTC)와
+ *    브라우저(KST)가 다른 답을 낼 수 있다. 여기는 이미 확정된 날짜 문자열이라 계산이 필요 없다.
+ */
+export function formatKoreanDateLong(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return `${y}년 ${m}월 ${d}일 ${DOW_KO[weekdayIndexOf(ymd)]}요일`;
+}
+
+/**
  * `formatKoreanDate` 라벨을 `PeriodNav`에 세울 때의 `labelWidth` — 최장 "2026년 12월 31일 (수)"(18px 굵게 실측 182px)가
  * ×1.4 뒤 213px에 들어간다(최장 실측 182px, 여유 13px). 원스크린 상단 바·ECS 오늘 면·셔틀 날짜 면이 같은 라벨을
  * 쓰므로 폭도 여기 하나 — 그전엔 ECS 오늘 면 180 · 셔틀 152로 갈려 있었다(디자인 v5 18단계 리뷰).
@@ -168,6 +196,17 @@ export function monthRange(month: string): { from: string; to: string } {
   const [y, m] = month.split("-").map(Number);
   const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate(); // m월 0일 = (m-1)월 말일
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/**
+ * "YYYY-MM" → 그 달 **KST 1일 00:00**의 절대시각(ISO). `timestamptz` 컬럼과 비교하는 **월 경계의 단일 소스**.
+ *
+ * 🔴 `new Date(y, m, 1).toISOString()`을 쓰지 말 것 — 그건 **런타임 로컬 자정**이라 서버(UTC)에선
+ *    `YYYY-MM-01T00:00:00Z`가 되고, 이는 KST로 **오전 9시**다. 그 9시간 동안의 상담·수납이 앞 달로 샌다.
+ */
+export function kstMonthStartIso(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, 1, -9, 0, 0)).toISOString();
 }
 
 /** 달 이동(-1/+1). 연 경계를 넘어간다. */

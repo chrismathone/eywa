@@ -205,7 +205,7 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
     auditRows === null || enrollmentRows === null
       ? [
           {
-            date: new Date().toISOString().slice(0, 10),
+            date: kstToday(),
             source: "audit" as const,
             title: "변경 기록 일부를 불러오지 못했습니다",
             detail: "배치 이력은 아래에 그대로 보입니다. 계속되면 알려주세요.",

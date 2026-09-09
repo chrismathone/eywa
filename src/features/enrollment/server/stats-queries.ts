@@ -1,4 +1,5 @@
 import "server-only";
+import { kstYear } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
@@ -109,7 +110,7 @@ export async function getEnrollmentStats(
   const supabase = await createClient();
   const startM0 = 0;
   const isAll = year === null;
-  const fromY = isAll ? (span?.from ?? new Date().getFullYear()) : year;
+  const fromY = isAll ? (span?.from ?? kstYear()) : year;
   const months = isAll ? ((span?.to ?? fromY) - fromY + 1) * 12 : 12;
   const start = kstMonthStartIso(fromY, startM0);
   const end = kstMonthStartIso(fromY, startM0 + months);
@@ -194,7 +195,7 @@ export async function getConsultationDistribution(
 ): Promise<ConsultationDistribution> {
   const supabase = await createClient();
   const isAll = year === null;
-  const fromY = isAll ? (span?.from ?? new Date().getFullYear()) : year;
+  const fromY = isAll ? (span?.from ?? kstYear()) : year;
   const toY = isAll ? (span?.to ?? fromY) : year;
   const start = kstMonthStartIso(fromY, 0);
   const end = kstMonthStartIso(toY + 1, 0);
@@ -300,7 +301,7 @@ export async function getStatsYears(): Promise<number[]> {
             new Date(iso),
           ),
         )
-      : new Date().getFullYear();
+      : kstYear();
   const from = yearOf(first?.consulted_at);
   const to = yearOf(last?.consulted_at);
   const out: number[] = [];

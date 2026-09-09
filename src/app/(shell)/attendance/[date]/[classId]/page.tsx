@@ -1,4 +1,7 @@
 import { notFound } from "next/navigation";
+// 🔴 날짜 라벨은 **KST 단일 소스**(date-kst) — 화면마다 `Intl.DateTimeFormat`을 만들면
+//    `timeZone`을 빠뜨린 곳이 런타임 시간대(서버=UTC)로 포맷된다.
+import { formatKoreanDateLong } from "@/lib/date-kst";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -13,17 +16,6 @@ import { attendanceLockMessage, isWithinAttendanceEditWindow } from "@/features/
 import { AttendanceInputForm } from "./input-form";
 
 export const metadata = { title: "출석 입력 — eywa" };
-
-function formatKoreanDate(iso: string) {
-  const [y, m, d] = iso.split("-");
-  const date = new Date(Number(y), Number(m) - 1, Number(d));
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  }).format(date);
-}
 
 export default async function AttendanceInputPage({
   params,
@@ -49,10 +41,10 @@ export default async function AttendanceInputPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <BackLink href={`/attendance/${date}`} label={`${formatKoreanDate(date)}로`} />
+      <BackLink href={`/attendance/${date}`} label={`${formatKoreanDateLong(date)}로`} />
 
       <header className="border-line space-y-1 border-b pb-5">
-        <p className="eyebrow">{formatKoreanDate(date)}</p>
+        <p className="eyebrow">{formatKoreanDateLong(date)}</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">{klass.className}</h1>
         <p className="text-text-dim text-sm">
           {subjectMaps.labelOf(klass.subject)}

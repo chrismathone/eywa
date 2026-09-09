@@ -96,9 +96,8 @@ function SegmentHeader({
           />
         }
       >
-        {/* 반 정보는 더블클릭(class-cell과 같은 규약). */}
+        {/* 반 정보는 한 번 클릭(class-cell과 같은 규약, 원장 2026-09-09). */}
         <WindowLink
-          openOn="doubleClick"
           href={`/classes/${realClassId}`}
           title={slot.className}
           ariaLabel={`${slot.className} 반 정보`}

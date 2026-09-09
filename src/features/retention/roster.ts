@@ -8,11 +8,18 @@ import {
   type RiskResult,
 } from "./risk";
 import { averageHomeworkScore } from "./homework-score";
+import { kstToday } from "@/lib/date-kst";
 
 export const ATTEND_WINDOW_DAYS = 30;
 
+/**
+ * 그 순간의 **KST 날짜**(YYYY-MM-DD).
+ * 🔴 `d.toISOString().slice(0, 10)`이었다 — 그건 **UTC 날짜**라 서버(Vercel=UTC)에서 한국 새벽
+ *    (00~09시)에 하루 전이 나온다. 이 값이 출결 창의 경계·"오늘 이후" 판정에 쓰이므로 그대로 두면
+ *    새벽에 명단이 통째로 하루 밀렸다(전역 KST 규칙, [`date-kst`](@/lib/date-kst)).
+ */
 export function toIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return kstToday(d);
 }
 export function addDays(d: Date, days: number): Date {
   const n = new Date(d);

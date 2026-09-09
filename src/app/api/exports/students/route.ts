@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { kstToday } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
 import { attachmentFilename } from "@/lib/http/content-disposition";
 import {
@@ -54,7 +55,8 @@ export async function GET(request: Request) {
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const wb = await buildStudentsWorkbook(students, subjects.labelOf);
   const buf = await wb.xlsx.writeBuffer();
-  const date = new Date().toISOString().slice(0, 10);
+  // 파일명 날짜는 **KST 오늘** — UTC로 뽑으면 한국 새벽(00~09시)에 어제 날짜가 박힌다.
+  const date = kstToday();
   return new NextResponse(buf, {
     headers: {
       "Content-Type":

@@ -4,7 +4,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
@@ -1054,8 +1054,9 @@ export async function getStudentAttendanceStats(
   days = 30,
 ): Promise<AttendanceWindowStats> {
   const supabase = await createClient();
-  const start = new Date();
-  start.setDate(start.getDate() - days);
+  // 🔴 창의 기준은 **KST 오늘**이고 비교 대상도 날짜 컬럼(`session_date`)이다 — `new Date()`로
+  //    잡으면 서버가 UTC라 한국 새벽(00~09시)에 창이 하루 밀려 출석률이 어제 것으로 보인다.
+  const startYmd = addDays(kstToday(), -days);
 
   /**
    * 🔴 `attendance_records`는 **정정을 새 행으로 남기는 append-only 표**다 — 그대로 세면 한 번
@@ -1069,7 +1070,7 @@ export async function getStudentAttendanceStats(
     .from("attendance_records")
     .select("id, student_id, class_id, session_date, slot_start, status, recorded_at")
     .eq("student_id", studentId)
-    .gte("session_date", start.toISOString().slice(0, 10));
+    .gte("session_date", startYmd);
   if (error) throw new Error(`출결 통계 조회 실패: ${error.message}`);
 
   const rows = effectiveAttendanceRecords(
@@ -1506,13 +1507,14 @@ export async function getStudentAttendanceCalendar(
   days = 60,
 ): Promise<StudentAttendanceDay[]> {
   const supabase = await createClient();
-  const start = new Date();
-  start.setDate(start.getDate() - days);
+  // 🔴 창의 기준은 **KST 오늘**이고 비교 대상도 날짜 컬럼(`session_date`)이다 — `new Date()`로
+  //    잡으면 서버가 UTC라 한국 새벽(00~09시)에 창이 하루 밀려 출석률이 어제 것으로 보인다.
+  const startYmd = addDays(kstToday(), -days);
   const { data } = await supabase
     .from("attendance_records")
     .select(`session_date, status, class:class_id ( class_name )`)
     .eq("student_id", studentId)
-    .gte("session_date", start.toISOString().slice(0, 10))
+    .gte("session_date", startYmd)
     .order("session_date", { ascending: false });
   if (!data) return [];
   return data.map((r) => {

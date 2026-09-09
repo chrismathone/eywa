@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { kstToday } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attachmentFilename } from "@/lib/http/content-disposition";
@@ -12,7 +13,8 @@ const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 export async function GET(req: Request) {
   const user = await requireAccess("timetable");
   const subject = new URL(req.url).searchParams.get("subject") ?? "math";
-  const date = new Date().toISOString().slice(0, 10);
+  // 파일명 날짜는 **KST 오늘** — UTC로 뽑으면 한국 새벽(00~09시)에 어제 날짜가 박힌다.
+  const date = kstToday();
   // 담당 스코프 = 화면과 동일 단일 소스(강사/겸직 강사뷰면 본인 반만, 관리자 뷰면 undefined=전체).
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 라운드트립 '수강편집' 시트는 그리드와 달리 teacherId 스코프가 안 걸리는 **테넌트 전체 수강 명단**이라

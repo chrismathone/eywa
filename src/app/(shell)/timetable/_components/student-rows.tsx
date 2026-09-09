@@ -15,10 +15,13 @@ import { RECENT_ROW_CLASS } from "./timetable-color";
  * 시간표 셀 학생 행(단일 셀·합반 공용) — class-cell.tsx에서 추출(200줄 규칙).
  * 합반 통합 명단용 추가: badge(반 인덱스 칩 "1"/"1,2") + blockingClassIds(드래그 data — 소속 반 이동 차단).
  *
- * 🔴 **여는 동작은 더블클릭**(원장 2026-09-04 *"클릭해야 열리던걸 더블클릭해서 열리도록 바꾸고, 편집모드 없이
- *    바로 드래그"*): 편집 모드가 사라져 모든 행이 상시 드래그 대상이라, 맨 클릭이 창을 열면 끌려다 만 손이
- *    매번 창을 연다. 그래서 읽기 전용 행까지 **한 화면 안에서 같은 규약**으로 맞춘다(같은 표에서 어떤 줄은
- *    한 번, 어떤 줄은 두 번이면 그게 더 나쁘다). 같은 함정의 선례 = 드래그-팬 표의 여는 동작([[#97]]).
+ * 🔴 **여는 동작은 한 번 클릭**(원장 2026-09-09 *"그냥 클릭으로 바꿔줘. 더블클릭으로 작동하는걸 그냥 클릭으로.
+ *    대신 드래그와 안겹쳐지게 조심해서"*) — 2026-09-04의 더블클릭 규약을 뒤집은 것이다.
+ *    그때 더블클릭으로 갔던 이유(편집 모드가 없어져 모든 행이 상시 드래그 대상이라, 끌려다 만 손이 매번 창을
+ *    연다)는 **여전히 유효하고**, 그래서 지금은 그 충돌을 **동작이 아니라 판정**으로 막는다:
+ *    끌었으면(포인터가 `DRAG_MOVE_EPSILON`px 넘게 움직였으면) 뒤따르는 클릭을 보드 루트가 삼킨다
+ *    ([`swallowClickAfterDrag`](./drag-flag.ts)). 제자리 클릭만 창을 연다.
+ * ⚠️ 읽기 전용 행까지 **한 화면 안에서 같은 규약**이다(같은 표에서 어떤 줄은 한 번, 어떤 줄은 두 번이면 더 나쁘다).
  */
 
 /** 셀 학생 1명 — 런타임엔 StudentLine 전체가 도착하므로 hover용 필드(영문명·분리등원)도 포함. */
@@ -95,7 +98,7 @@ function NameInner({ name, meta, badge }: { name: string; meta: string; badge?: 
 }
 
 /**
- * 학생 이름 = 학생 상세 창(더블클릭). studentId가 없으면(구버전 데이터) 평범한 글자.
+ * 학생 이름 = 학생 상세 창(클릭). studentId가 없으면(구버전 데이터) 평범한 글자.
  * hover 카드는 호출부가 감싼다 — 드래그 행·읽기 행이 같은 카드를 쓴다.
  */
 function StudentNameLink({
@@ -119,7 +122,6 @@ function StudentNameLink({
       href={`/students/${studentId}`}
       title={name}
       ariaLabel={`${name} 학생 정보`}
-      openOn="doubleClick"
       className={className}
       {...rest}
     >
@@ -130,7 +132,7 @@ function StudentNameLink({
 
 /**
  * 학생 한 줄(드래그 가능) — 편집 권한이 있는 사용자의 기본 행. 끌어서 반 이동/요일 이동,
- * **더블클릭**으로 학생 정보 창, **우클릭**으로 등원 요일 편집(2요일+ 셀). 이동 예정이면 취소선 + 대상 마커.
+ * **클릭**으로 학생 정보 창, **우클릭**으로 등원 요일 편집(2요일+ 셀). 이동 예정이면 취소선 + 대상 마커.
  * ⚠️ 드래그 리스너는 바깥 div에, 여는 동작은 안쪽 링크에 둔다(포인터 이벤트가 위로 버블링해 둘 다 산다).
  */
 export function DraggableStudentRow(props: DraggableRowProps) {
@@ -158,7 +160,7 @@ type DraggableRowProps = {
   /** hover 카드 재료 — 읽기 행과 같은 카드를 띄운다(권한이 있다고 정보가 사라지면 안 된다). */
   student?: StudentQuick;
   enrollmentId: string;
-  /** 학생 id — Delete=오늘 수강 종료 hover 추적 + 더블클릭 상세 링크. */
+  /** 학생 id — Delete=오늘 수강 종료 hover 추적 + 클릭 상세 링크. */
   studentId?: string;
   classId: string;
   className: string;
@@ -303,7 +305,7 @@ function StudentRowView({
         onMouseLeave?.(e);
         setHovered(null);
       }}
-      // 🔴 요일 편집은 **우클릭** — 더블클릭이 학생 창을 여는 자리라 클릭 계열이 남지 않았다([[#97]]와 같은 규약).
+      // 🔴 요일 편집은 **우클릭** — 클릭이 학생 창을 여는 자리라 클릭 계열이 남지 않았다([[#97]]와 같은 규약).
       onContextMenu={
         canEditDays
           ? (e) => {
@@ -321,8 +323,8 @@ function StudentRowView({
       }
       title={
         canEditDays
-          ? "끌어서 이동 · 더블클릭 = 학생 정보 · 우클릭 = 등원 요일"
-          : "끌어서 이동 · 더블클릭 = 학생 정보"
+          ? "끌어서 이동 · 클릭 = 학생 정보 · 우클릭 = 등원 요일"
+          : "끌어서 이동 · 클릭 = 학생 정보"
       }
       className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${searchTone} ${isDragging ? "opacity-40" : ""} ${moving ? "opacity-60" : ""}`}
     >
@@ -352,7 +354,7 @@ function StudentCard({ student }: { student: StudentQuick }) {
   );
 }
 
-/** 학생 한 줄(드래그 불가 — 편집 권한 없음·과거 주) — hover 시 학생 정보 카드, **더블클릭** 시 학생 상세 창. */
+/** 학생 한 줄(드래그 불가 — 편집 권한 없음·과거 주) — hover 시 학생 정보 카드, **클릭** 시 학생 상세 창. */
 export function StudentRow({
   student,
   name,

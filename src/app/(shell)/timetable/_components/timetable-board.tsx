@@ -36,7 +36,14 @@ import {
   type IncomingStudent,
   type PendingTarget,
 } from "./edit-context";
-import { setTimetableDragging, swallowDoubleClickAfterDrag, type ClassDragInfo } from "./drag-flag";
+import {
+  noteDragPointerDown,
+  noteDragPointerUp,
+  setTimetableDragging,
+  swallowClickAfterDrag,
+  swallowDoubleClickAfterDrag,
+  type ClassDragInfo,
+} from "./drag-flag";
 import { SAME_SPOT_TITLE, annotateDropCells, annotateStudentBlocks, clearDropCells, markHotCells, placementAt } from "./grid-drop-cell";
 import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 // 칸 좌표 속성 이름은 **일반 모듈**에서 — 클라 모듈 재-export를 두면 서버 파일이 실수로 그걸 집어
@@ -789,7 +796,7 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
       <span className="print:hidden text-text-faint text-xs">
         {rosterHidden
           ? "학생 명단을 접어 둔 상태입니다 — 반 이름을 끌면 반 자체를 옮길 수 있습니다"
-          : "학생을 끌어 반을 옮기고, 반 이름을 끌면 반 자체를 옮깁니다 · 더블클릭으로 상세를 엽니다"}
+          : "학생을 끌어 반을 옮기고, 반 이름을 끌면 반 자체를 옮깁니다 · 클릭으로 상세를 엽니다"}
       </span>
     );
   }
@@ -1189,7 +1196,17 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     >
       {/* 드래그 직후의 더블클릭은 창 열기가 아니다 — 캡처에서 삼킨다(drag-flag.ts `swallowDoubleClickAfterDrag`).
           `display: contents`라 격자 레이아웃(flex 사슬)엔 아무 영향이 없다. */}
-      <div className="contents" onDoubleClickCapture={swallowDoubleClickAfterDrag}>
+      <div
+        className="contents"
+        onDoubleClickCapture={swallowDoubleClickAfterDrag}
+        // 끌었다가 **제자리에** 놓은 것도 드래그로 친다(drag-flag `noteDragPointerUp` 주석) — dnd-kit이
+        // 활성화 문턱을 못 넘긴 짧은 드래그는 브라우저엔 평범한 클릭이라, 두 번 하면 창이 열렸다.
+        // 상세는 이제 **한 번 클릭**으로 열린다(원장 2026-09-09) — 끌었다 놓은 뒤의 클릭은 삼켜야
+        // 옮길 때마다 창이 함께 열리지 않는다(drag-flag `swallowClickAfterDrag`).
+        onClickCapture={swallowClickAfterDrag}
+        onPointerDownCapture={noteDragPointerDown}
+        onPointerUpCapture={noteDragPointerUp}
+      >
         {children}
       </div>
       {/* 고스트 = **원본 줄 그대로**, 파일 이동처럼 반투명(원장 2026-09-04). 이름만 남긴 칩으로 바꾸면

@@ -4,8 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DRAG_DBLCLICK_GRACE_MS,
+  DRAG_MOVE_EPSILON,
   getArmedRow,
   holdArmedRow,
+  noteDragPointerDown,
+  noteDragPointerUp,
   setArmedRow,
   setTimetableDragging,
   swallowDoubleClickAfterDrag,
@@ -121,6 +124,23 @@ describe("드래그 직후의 더블클릭은 창 열기가 아니다", () => {
     const e = ev();
     swallowDoubleClickAfterDrag(e);
     expect(e.calls).toEqual({ stop: 0, prevent: 0 });
+  });
+
+  it("🔴 끌었다가 **제자리에** 놓아도 드래그로 친다(dnd-kit 문턱을 못 넘긴 짧은 드래그)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2099-01-01T00:00:00Z"));
+    // 눌렀다 그대로 뗀 것(0px) = 진짜 클릭 → 더블클릭이 살아 있어야 한다(창 열기 기능 자체).
+    noteDragPointerDown({ clientX: 100, clientY: 100 });
+    noteDragPointerUp({ clientX: 100, clientY: 100 });
+    const still = ev();
+    swallowDoubleClickAfterDrag(still);
+    expect(still.calls).toEqual({ stop: 0, prevent: 0 });
+    // 끌었다 제자리 근처에 놓은 것(문턱 초과) = 드래그의 잔향 → 뒤따르는 더블클릭은 삼킨다.
+    noteDragPointerDown({ clientX: 100, clientY: 100 });
+    noteDragPointerUp({ clientX: 100 + DRAG_MOVE_EPSILON, clientY: 100 });
+    const after = ev();
+    swallowDoubleClickAfterDrag(after);
+    expect(after.calls).toEqual({ stop: 1, prevent: 1 });
   });
 
   it("끌고 있는 중·끝난 직후엔 삼키고, 유예가 지나면 다시 둔다", () => {

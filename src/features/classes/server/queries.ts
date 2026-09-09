@@ -6,7 +6,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { enrollmentPhaseOn, isEnrollmentOnRosterOn, type EnrollmentPhase } from "@/features/enrollments/eligibility";
-import { kstToday } from "@/lib/date-kst";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 import { listMakeupPoolClassIds } from "@/features/attendance/server/makeup-pool";
@@ -953,7 +953,9 @@ export async function getClassAttendanceStats(
   days = 30,
 ): Promise<ClassAttendanceStats> {
   const supabase = await createClient();
-  const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  // 🔴 날짜 컬럼(`session_date`)과 비교하는 값이라 **KST 오늘**에서 센다 — UTC로 뽑으면 한국 새벽에
+  //    창이 하루 밀려 출결 집계가 화면과 어긋난다.
+  const since = addDays(kstToday(), -days);
 
   const { data } = await supabase
     .from("attendance_records")

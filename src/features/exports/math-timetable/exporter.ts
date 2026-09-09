@@ -1,5 +1,6 @@
 /* eslint-disable -- ijw-calander excelExport.ts 충실 이식(vendored). 로직 무변경 = 출력 동일이 목표라 스타일/any 룰 비적용. import만 eywa-로컬로 조정. */
 import type { TimetableClass, Teacher, UnifiedStudent } from './types';
+import { kstTimeOf, kstToday } from "@/lib/date-kst";
 import {
     MATH_GROUPED_PERIODS,
     MATH_GROUP_PERIOD_IDS,
@@ -347,8 +348,8 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                 const dd = String(d.getDate()).padStart(2, '0');
                 return `${y}-${m}-${dd}`;
             }
-            const t = new Date();
-            return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+            // 기준일 폴백도 **KST 오늘**(서버는 UTC라 한국 새벽에 어제가 찍힌다).
+            return kstToday();
         })();
 
     // ─── 한 워크시트(탭) 렌더링 헬퍼 ───
@@ -531,8 +532,8 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
     sheet.mergeCells(summaryRow, 1, summaryRow, totalCols);
     const sumCell = sheet.getCell(summaryRow, 1);
     // 생성 시각 (HH:mm, 24시간) — 시트가 언제 갱신됐는지 가독성
-    const _genNow = new Date();
-    const genHHmm = `${String(_genNow.getHours()).padStart(2, '0')}:${String(_genNow.getMinutes()).padStart(2, '0')}`;
+    // 생성 시각도 **KST** — 서버가 UTC라 로컬 게터로 찍으면 시트에 9시간 이른 시각이 남는다.
+    const genHHmm = kstTimeOf(new Date()) ?? '00:00';
     sumCell.value = `${subjectFilter || '수학'} ${weekLabel}    |    재원 ${totalActive}명    |    신입(30일) ${totalNew30}명    |    반이동 ${totalTransferIn}명    |    대기 ${totalHold}명    |    퇴원 ${totalWithdrawn}명    |    기준일: ${refStr} ${genHHmm}`;
     sumCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } };
     sumCell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Malgun Gothic' };

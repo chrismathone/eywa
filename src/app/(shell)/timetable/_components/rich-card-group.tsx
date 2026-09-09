@@ -361,7 +361,6 @@ export function ClassColumn({
             }
           >
             <WindowLink
-              openOn="doubleClick"
               href={`/classes/${card.classId}`}
               title={card.className}
               ariaLabel={`${card.className} 반 정보`}
@@ -537,7 +536,7 @@ function RosterRowShell({
       onPointerOver={() => onArm?.()}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      title="끌어서 대기·퇴원으로 · 더블클릭 = 학생 정보"
+      title="끌어서 대기·퇴원으로 · 클릭 = 학생 정보"
       className={`cursor-grab touch-none select-none active:cursor-grabbing ${dnd?.isDragging ? "opacity-40" : ""}`}
     >
       {children}
@@ -736,7 +735,7 @@ function RosterRow({
   //    글자 크기는 명단 컨테이너의 text-sm에서 상속 — 기본뷰 class-cell과 같은 값이다.
   const cls = `block overflow-hidden whitespace-nowrap text-clip px-2 py-[3px] leading-tight ${tone}`;
   const nameNode = s.studentId ? (
-    <WindowLink openOn="doubleClick" href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>
+    <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>
       {inner}
     </WindowLink>
   ) : (

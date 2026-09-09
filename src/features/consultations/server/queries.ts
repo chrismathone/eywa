@@ -5,7 +5,7 @@ import {
   followUpUrgency,
   type FollowUpUrgency,
 } from "@/features/consultations/follow-up-urgency";
-import { kstToday } from "@/lib/date-kst";
+import { kstDateOf, kstMonth, kstMonthStartIso, kstToday, shiftMonth } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
@@ -500,9 +500,8 @@ export async function getConsultationFunnel(
   monthCount = 6,
 ): Promise<ConsultationFunnelPoint> {
   const supabase = await createClient();
-  const since = new Date();
-  since.setMonth(since.getMonth() - monthCount);
-  const sinceIso = since.toISOString();
+  // 🔴 **KST 달 경계** — 로컬 자정(서버=UTC)으로 자르면 KST 오전 9시가 되어 그 9시간이 앞 달로 샌다.
+  const sinceIso = kstMonthStartIso(shiftMonth(kstMonth(), -monthCount));
   const teacherId = await effectiveTeacherId();
 
   // 강사: 자기가 쓴 학생상담 건수만. 등록상담·전환은 상담실 지표라 **조회 자체를 안 한다**(노출 0).
@@ -559,14 +558,14 @@ export async function getConsultationByCategory(
   monthCount = 6,
 ): Promise<CategoryBucket[]> {
   const supabase = await createClient();
-  const since = new Date();
-  since.setMonth(since.getMonth() - monthCount);
+  // 🔴 **KST 달 경계** — 위 퍼널과 같은 규약(로컬 자정으로 자르면 KST 오전 9시가 되어 9시간이 앞 달로 샌다).
+  const sinceIso = kstMonthStartIso(shiftMonth(kstMonth(), -monthCount));
   const teacherId = await effectiveTeacherId();
 
   // 강사: 본인 상담만 집계(RPC는 상담자 인자가 없다 — 위 teacherOwnConsultations 주석 참조).
   if (teacherId) {
     const counts = new Map<string, number>();
-    for (const r of await teacherOwnConsultations(teacherId, since.toISOString())) {
+    for (const r of await teacherOwnConsultations(teacherId, sinceIso)) {
       const k = r.category ?? "other";
       counts.set(k, (counts.get(k) ?? 0) + 1);
     }
@@ -576,7 +575,7 @@ export async function getConsultationByCategory(
   // DB group-by RPC(0040a) — 전건 fetch + JS Map 집계는 PostgREST ~1000행에서 잘려(#54) 데모 상담 1340행 중
   // 340행을 잃고 카테고리 분포가 과소집계됐다. 집계를 DB로 내려 1쿼리·무절단.
   const { data } = await supabase.rpc("consultation_category_counts", {
-    p_since: since.toISOString(),
+    p_since: sinceIso,
   });
   return (data ?? []).map((r: { category: string; count: number }) => ({
     category: r.category ?? "other",
@@ -588,16 +587,18 @@ export type MonthlyBucket = { month: string; enrollment: number; student: number
 
 export async function getConsultationTrend(monthCount = 6): Promise<MonthlyBucket[]> {
   const supabase = await createClient();
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth() - monthCount + 1, 1);
+  // 🔴 달 축은 전부 **KST** — 경계도 버킷 키도(섞이면 경계 근처 건이 옆 달로 샌다).
+  const thisMonth = kstMonth();
+  const startMonth = shiftMonth(thisMonth, -(monthCount - 1));
+  const startIso = kstMonthStartIso(startMonth);
   const teacherId = await effectiveTeacherId();
 
   const byMonth = new Map<string, { enrollment: number; student: number }>();
   if (teacherId) {
     // 강사: 본인 학생상담만. 등록상담 라인은 강사 도메인이 아니라 0으로 남긴다(조회도 안 한다).
-    for (const r of await teacherOwnConsultations(teacherId, start.toISOString())) {
-      const d = new Date(r.consulted_at);
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    for (const r of await teacherOwnConsultations(teacherId, startIso)) {
+      const k = kstDateOf(r.consulted_at)?.slice(0, 7);
+      if (!k) continue;
       const cur = byMonth.get(k) ?? { enrollment: 0, student: 0 };
       byMonth.set(k, { enrollment: 0, student: cur.student + 1 });
     }
@@ -605,7 +606,7 @@ export async function getConsultationTrend(monthCount = 6): Promise<MonthlyBucke
     // DB group-by RPC(0040a) — 양 테이블 전건 fetch + JS 버킷팅은 ~1000행에서 잘려(#54) 추세 student 라인이
     // 과소집계됐다(데모 student_consultations 1340행/6개월). 월별 집계를 DB로 내려 무절단.
     const { data } = await supabase.rpc("consultation_monthly_trend", {
-      p_start: start.toISOString(),
+      p_start: startIso,
     });
     for (const r of (data ?? []) as { month: string; enrollment: number; student: number }[]) {
       byMonth.set(r.month, { enrollment: Number(r.enrollment), student: Number(r.student) });
@@ -615,8 +616,7 @@ export async function getConsultationTrend(monthCount = 6): Promise<MonthlyBucke
   // 데이터 없는 달도 0으로 채워 monthCount개 버킷 유지(기존 출력 형태 보존).
   const buckets: MonthlyBucket[] = [];
   for (let i = 0; i < monthCount; i++) {
-    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const k = shiftMonth(startMonth, i);
     const hit = byMonth.get(k);
     buckets.push({ month: k, enrollment: hit?.enrollment ?? 0, student: hit?.student ?? 0 });
   }

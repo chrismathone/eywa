@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
-import { kstDateOf, kstLocalToIso } from "@/lib/date-kst";
+import { addDays, kstDateOf, kstLocalToIso, kstToday } from "@/lib/date-kst";
 import { stripPastedMarkup } from "../paste-cleanup";
 
 type CareFocus = {
@@ -62,7 +62,8 @@ export async function runStudentCareAnalysis(
         .from("attendance_records")
         .select("status")
         .eq("student_id", studentId)
-        .gte("session_date", new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)),
+        // 날짜 컬럼이라 **KST 오늘** 기준 30일 — UTC로 세면 한국 새벽에 창이 하루 밀린다.
+        .gte("session_date", addDays(kstToday(), -30)),
       supabase
         .from("enrollments")
         .select(`start_date, end_date, class:class_id ( class_name, subject )`)
@@ -142,7 +143,8 @@ export async function runStudentCareAnalysis(
     return { error: `AI 호출 실패: ${msg}` };
   }
 
-  const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
+  // 모델 버전 꼬리 날짜도 **KST 오늘** — UTC로 뽑으면 한국 새벽에 어제 날짜가 기록에 남는다.
+  const modelVersion = `${modelId}-${kstToday()}`;
 
   const { error } = await supabase
     .from("students")

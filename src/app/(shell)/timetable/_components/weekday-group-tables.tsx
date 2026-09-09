@@ -116,8 +116,11 @@ const GROUP_DIVIDER = "border-l-2 border-l-ink/60"; // 그룹 첫 컬럼 왼쪽(
 const ROW_DIVIDER = "border-b-2 border-b-ink/60"; // 교시(셀) 아래 — 병합 셀은 블록 끝에서만 그어진다
 // border-collapse에선 2px가 인접 1px GRID보다 넓어 자동 우선하므로 이웃 셀은 손대지 않아도 이중선이 안 생긴다.
 // 강사 이름 줄 높이(px) — 아래 요일 줄의 sticky top 오프셋과 **같은 값**이어야 한다(어긋나면 세로 스크롤에서
-// 두 줄이 겹치거나 틈이 벌어진다). 이름 20px(line-height 1.35 = 27) + 상하 여백 12 = 39 → 40.
-const TEACHER_HEAD_H = 40;
+// 두 줄이 겹치거나 틈이 벌어진다).
+// 🔴 **글자를 줄인 만큼 띠도 줄인다**(원장 2026-09-09 *"여기 여백 너무 많은데? 글자 크기 줄인만큼 상하 여백
+//    줄여야지"*) — 이름이 `text-lg`(20px)에서 `text-sm`(16px)로 내려왔는데 높이가 40으로 남아 있어서
+//    빈 띠만 두꺼웠다. 16px × leading-tight(1.25) = 20 + 상하 여백 8 = 28 → 여유 4px 더해 **32**.
+const TEACHER_HEAD_H = 32;
 
 // 요일 → 월요일로부터의 오프셋(일수). 요일 헤더 날짜 라벨 계산용.
 const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
@@ -446,7 +449,7 @@ function GroupTable({
                 colSpan={t.days.length}
                 // 이름이 표의 첫 줄이라 sticky top=0. 높이는 아래 요일 줄의 오프셋과 묶여 있어 **명시**한다.
                 style={{ height: TEACHER_HEAD_H }}
-                className={`bg-bg-soft ${GRID} sticky top-0 z-10 border-b border-r px-0.5 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
+                className={`bg-bg-soft ${GRID} sticky top-0 z-10 border-b border-r px-0.5 py-1 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
               >
                 {/* 🔴 이름 크기 = **칸 안 학생 이름과 같은 값**(`text-sm`, 원장 2026-09-09 *"기본뷰 선생님 글자
                     크기 언제 줄일건데"* → *"학생이름하고 같은 사이즈로 하라고"*). 2026-09-07의 "이름 1.5배
@@ -454,7 +457,7 @@ function GroupTable({
                     같은 값이라 두 뷰가 갈리지 않는다(학생 줄은 class-cell의 `text-sm` 컨테이너를 물려받는다).
                     넘치면 잘린다(생략표 없음 = 고밀도 규약). 머리 높이는 `TEACHER_HEAD_H`가 따로 잡으므로
                     글자만 줄여도 요일 줄의 sticky 오프셋은 그대로다. */}
-                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-sm font-bold">{t.name}</span>
+                <span className="text-foreground block overflow-hidden text-sm leading-tight font-bold whitespace-nowrap text-clip">{t.name}</span>
               </TeacherHeadCell>
             )),
           )}

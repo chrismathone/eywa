@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useRouter } from "next/navigation";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
@@ -27,12 +28,8 @@ import {
   validateAudioFile,
 } from "@/lib/audio-upload";
 
-function nowLocalIso(): string {
-  // datetime-local input needs `YYYY-MM-DDTHH:mm`
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+/** datetime-local 기본값 — **KST 지금**(런타임 시간대로 만들면 SSR과 브라우저가 9시간 어긋난다). */
+const nowLocalIso = (): string => kstDateTimeLocal();
 
 export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const router = useRouter();

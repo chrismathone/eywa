@@ -60,6 +60,51 @@ export function swallowDoubleClickAfterDrag(e: { stopPropagation(): void; preven
   e.preventDefault();
 }
 
+/**
+ * **끌었다가 제자리에 놓기**도 드래그로 친다 — 원장 제보 2026-09-09 *"드래그 후 그 위치 그대로 놓을때
+ * 더블클릭으로 인식하네. 취소가 안되고?"*.
+ *
+ * 🔴 위 `dragEndedAt`은 **dnd-kit이 실제로 드래그를 시작했을 때만** 찍힌다. 그런데 살짝 잡았다 제자리에
+ *    놓으면 활성화 문턱(거리)을 못 넘어 드래그가 시작조차 안 되고, 브라우저에는 **평범한 클릭**으로 남는다.
+ *    그걸 두 번 하면 크롬이 더블클릭으로 세어 반 정보 창이 열린다(놓은 자리는 그대로인데 창만 뜬다).
+ * 🔑 가르는 기준은 **움직였는가**다 — 진짜 더블클릭은 두 번 다 제자리(0~1px)지만, 끌었다 놓으면 그 사이
+ *    포인터가 움직인다. 그래서 `DRAG_MOVE_EPSILON`px 넘게 움직인 pointerup만 "드래그가 끝났다"로 친다
+ *    (문턱이 없으면 더블클릭으로 창을 여는 기능 자체가 통째로 죽는다).
+ * 사용 = DnD 영역 루트의 `onPointerDownCapture`/`onPointerUpCapture`(더블클릭 삼킴과 같은 자리).
+ */
+export const DRAG_MOVE_EPSILON = 4;
+
+/**
+ * 드래그 **직후의 클릭**을 삼킨다 — 시간표 상세가 2026-09-09부터 **한 번 클릭**으로 열리기 때문이다
+ * (원장 *"그냥 클릭으로 바꿔줘. 더블클릭으로 작동하는걸 그냥 클릭으로. 대신 드래그와 안겹쳐지게 조심해서"*).
+ *
+ * 🔴 클릭으로 열면 **끌었다 놓는 동작도 클릭으로 끝난다** — 브라우저는 pointerdown/up이 같은 요소면
+ *    움직임과 무관하게 click을 낸다. 그대로 두면 학생을 옮길 때마다 상세 창이 함께 열린다.
+ * 🔑 가르는 기준은 더블클릭 삼킴과 **같다** — 움직였으면 드래그, 제자리면 클릭(`noteDragPointerUp`).
+ * ⚠️ 유예는 짧게: click은 pointerup 바로 뒤에 오므로 400ms면 충분하고, 길면 놓자마자 누른 **진짜 클릭**까지 먹는다.
+ */
+export const DRAG_CLICK_GRACE_MS = 400;
+
+export function swallowClickAfterDrag(e: { stopPropagation(): void; preventDefault(): void }): void {
+  if (!dragging && (dragEndedAt === 0 || Date.now() - dragEndedAt >= DRAG_CLICK_GRACE_MS)) return;
+  e.stopPropagation();
+  e.preventDefault();
+}
+let pointerDownAt: { x: number; y: number } | null = null;
+
+export function noteDragPointerDown(e: { clientX: number; clientY: number }): void {
+  pointerDownAt = { x: e.clientX, y: e.clientY };
+}
+
+export function noteDragPointerUp(e: { clientX: number; clientY: number }): void {
+  const from = pointerDownAt;
+  pointerDownAt = null;
+  if (!from) return;
+  const moved =
+    Math.abs(e.clientX - from.x) >= DRAG_MOVE_EPSILON || Math.abs(e.clientY - from.y) >= DRAG_MOVE_EPSILON;
+  if (moved) dragEndedAt = Date.now();
+}
+
 function subscribe(cb: () => void): () => void {
   subscribers.add(cb);
   return () => {

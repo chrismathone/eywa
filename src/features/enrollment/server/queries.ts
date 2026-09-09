@@ -1,4 +1,5 @@
 import "server-only";
+import { kstDateOf, kstMonth, kstMonthStartIso, kstYear, shiftMonth } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
@@ -129,9 +130,9 @@ export type ConsultationListRow = {
 
 /** 프리셋 시작 시각(그 달 1일 00:00). 월 경계로 잘라야 월별 집계가 반쪽 달로 시작하지 않는다. */
 function rangeStartIso(range: RangePreset): string {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth() - (RANGE_MONTHS[range] - 1), 1);
-  return start.toISOString();
+  // 🔴 **KST 달 경계** — `new Date(y, m, 1)`은 런타임 로컬 자정이라 서버(UTC)에선 KST 오전 9시가 되어
+  //    그 9시간의 상담이 앞 달로 샌다(date-kst `kstMonthStartIso` 주석).
+  return kstMonthStartIso(shiftMonth(kstMonth(), -(RANGE_MONTHS[range] - 1)));
 }
 
 export type ConsultationFilter = {
@@ -358,7 +359,8 @@ export async function getConsultationMinYear(): Promise<number> {
     .order("consulted_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (!data?.consulted_at) return new Date().getFullYear();
+  // 🔴 기본값도 **KST 올해** — `new Date().getFullYear()`는 서버가 UTC라 1/1 새벽에 작년이 나온다.
+  if (!data?.consulted_at) return kstYear();
   // KST 기준 연도 — 1월 1일 00시 UTC 저장분이 전년으로 밀리지 않게.
   return Number(
     new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric" }).format(
@@ -887,26 +889,25 @@ export type ConversionTrendPoint = {
 
 export async function getMonthlyConversionTrend(months = 6): Promise<ConversionTrendPoint[]> {
   const supabase = await createClient();
-  const now = new Date();
-  // Earliest month start
-  const earliest = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  // 🔴 달 축은 전부 **KST** — 경계도 버킷 키도(섞이면 경계 근처 건이 옆 달로 샌다).
+  const thisMonth = kstMonth();
   const { data } = await supabase
     .from("enrollment_consultations")
     .select("outcome, consulted_at")
-    .gte("consulted_at", earliest.toISOString());
+    .gte("consulted_at", kstMonthStartIso(shiftMonth(thisMonth, -(months - 1))));
 
   // group by YYYY-MM
   const buckets = new Map<string, { total: number; consulted: number; enrolled: number }>();
   for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const key = shiftMonth(thisMonth, -i);
     buckets.set(key, { total: 0, consulted: 0, enrolled: 0 });
   }
 
   for (const r of data ?? []) {
-    const d = new Date(r.consulted_at);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const b = buckets.get(key);
+    // 🔴 버킷 키도 **KST 날짜**에서 뽑는다 — `new Date(...).getMonth()`는 서버가 UTC라 매달 1일 새벽 건이
+    //    앞 달 칸에 들어간다(경계와 키가 서로 다른 축이면 합계가 안 맞는다).
+    const key = kstDateOf(r.consulted_at)?.slice(0, 7);
+    const b = key ? buckets.get(key) : undefined;
     if (!b) continue;
     b.total += 1;
     if (["consulted", "ai_done", "enrolled"].includes(r.outcome)) b.consulted += 1;
@@ -938,8 +939,7 @@ export type ConsultantStats = {
 
 export async function getConsultantPerformance(months = 3): Promise<ConsultantStats[]> {
   const supabase = await createClient();
-  const now = new Date();
-  const since = new Date(now.getFullYear(), now.getMonth() - months + 1, 1).toISOString();
+  const since = kstMonthStartIso(shiftMonth(kstMonth(), -(months - 1)));
 
   const { data } = await supabase
     .from("enrollment_consultations")

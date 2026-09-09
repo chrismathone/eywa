@@ -17,7 +17,13 @@ import {
 
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { endSingleEnrollment, holdSingleEnrollment } from "@/features/students/server/actions";
-import { setTimetableDragging, swallowDoubleClickAfterDrag } from "./drag-flag";
+import {
+  noteDragPointerDown,
+  noteDragPointerUp,
+  setTimetableDragging,
+  swallowClickAfterDrag,
+  swallowDoubleClickAfterDrag,
+} from "./drag-flag";
 
 /**
  * 통합뷰 명단 이동 — 학생 줄을 **대기/퇴원 칸으로 끌어다 놓는다**(원장 2026-09-07).
@@ -139,7 +145,14 @@ export function RosterMoveArea({
         onDragEnd={onDragEnd}
       >
         {/* 드래그 직후의 더블클릭은 창 열기가 아니다 — 캡처에서 삼킨다(drag-flag.ts, 기본뷰 DnD 영역과 같은 규약). */}
-        <div className="contents" onDoubleClickCapture={swallowDoubleClickAfterDrag}>
+        <div
+          className="contents"
+          onDoubleClickCapture={swallowDoubleClickAfterDrag}
+          // 기본뷰와 **같은 규약** — 제자리 드롭이 클릭으로 새어 더블클릭이 되는 것을 막는다.
+          onClickCapture={swallowClickAfterDrag}
+          onPointerDownCapture={noteDragPointerDown}
+          onPointerUpCapture={noteDragPointerUp}
+        >
           {children}
         </div>
         {/* 고스트는 **원본 그대로**(이름/학교학년 + 같은 tone) — 파일 이동처럼 조금 연하게. */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Save } from "@/components/icons/eywa-icon-compat";
@@ -57,17 +58,14 @@ const AUDIENCE_OPTIONS: { value: StudentConsultationAudience; label: string }[] 
   { value: "both", label: "학부모+학생" },
 ];
 
-function nowLocalIso(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+/** datetime-local 기본값 — **KST 지금**(런타임 시간대로 만들면 SSR과 브라우저가 9시간 어긋난다). */
+const nowLocalIso = (): string => kstDateTimeLocal();
 
-function isoToLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+/**
+ * 저장된 절대시각 → `datetime-local` 입력 값. 🔴 **KST로 읽는다** — 런타임 로컬 게터로 풀면 서버(UTC)
+ * 렌더에서 9시간 이른 시각이 폼에 박히고, 사용자가 손대지 않고 저장하면 그 값이 그대로 들어간다.
+ */
+const isoToLocal = (iso: string): string => kstDateTimeLocal(new Date(iso));
 
 function SubmitButton({ mode }: { mode: Mode }) {
   const { pending } = useFormStatus();

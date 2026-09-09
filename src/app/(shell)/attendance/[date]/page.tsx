@@ -1,4 +1,7 @@
 import Link from "next/link";
+// 🔴 날짜 라벨은 **KST 단일 소스**(date-kst) — 화면마다 `Intl.DateTimeFormat`을 만들면
+//    `timeZone`을 빠뜨린 곳이 런타임 시간대(서버=UTC)로 포맷된다.
+import { formatKoreanDateLong } from "@/lib/date-kst";
 import { CheckCircle2, ChevronRight, ClipboardCheck, Pencil } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -38,17 +41,6 @@ const STATUS_COLOR: Record<string, string> = Object.fromEntries(
     `${ATT_SOFT[k]} ${ATT_SOFT_BORDER[k]}`,
   ])
 );
-
-function formatKoreanDate(iso: string) {
-  const [y, m, d] = iso.split("-");
-  const date = new Date(Number(y), Number(m) - 1, Number(d));
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  }).format(date);
-}
 
 export default async function AttendanceByDatePage({
   params,
@@ -91,7 +83,7 @@ export default async function AttendanceByDatePage({
     <div className="space-y-6">
       <PageHeader
         title="출석부"
-        description={`${formatKoreanDate(date)} · 반별 출결 입력`}
+        description={`${formatKoreanDateLong(date)} · 반별 출결 입력`}
       />
 
       {saved ? (

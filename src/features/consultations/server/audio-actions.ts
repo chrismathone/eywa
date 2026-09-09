@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { kstToday } from "@/lib/date-kst";
 import { redirect } from "next/navigation";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
@@ -162,7 +163,7 @@ export async function runStudentConsultationAnalysis(
       .update({
         ai_report: report,
         ai_summary: report.summary,
-        ai_model_version: `${model}-${new Date().toISOString().slice(0, 10)}`,
+        ai_model_version: `${model}-${kstToday()}`,
         ai_generated_at: new Date().toISOString(),
         // 텍스트 분석도 완료 상태로(오디오 없이 분석한 경우 idle→completed).
         processing_status: "completed",

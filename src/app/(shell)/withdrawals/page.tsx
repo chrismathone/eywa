@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { kstDateOf, kstMonth, shiftMonth } from "@/lib/date-kst";
 import {
   UserMinus,
   CalendarClock,
@@ -49,17 +50,18 @@ function isConsulted(r: { metadata: { consultation?: { adminCalledParent: boolea
 
 /** 최근 12개월 퇴원 추이(기간 축 제외 모집단) — 모듈 함수라 RSC 본문 아님(new Date 허용, #11). */
 function monthlyWithdrawals(rows: { withdrawnAt: string | null }[]): WithdrawalMonthPoint[] {
-  const now = new Date();
+  // 🔴 달 축은 **KST** — `new Date().getMonth()`는 서버가 UTC라 매달 1일 새벽에 12개월 창이 한 달 밀린다.
+  const thisMonth = kstMonth();
   const months: { key: string; point: WithdrawalMonthPoint }[] = [];
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    months.push({ key, point: { label: `${d.getMonth() + 1}월`, count: 0 } });
+    const key = shiftMonth(thisMonth, -i);
+    months.push({ key, point: { label: `${Number(key.slice(5))}월`, count: 0 } });
   }
   const idx = new Map(months.map((m, i) => [m.key, i]));
   for (const r of rows) {
     if (!r.withdrawnAt) continue;
-    const i = idx.get(r.withdrawnAt.slice(0, 7));
+    // 🔴 버킷 키도 **KST 날짜**에서 — `.slice(0, 7)`은 UTC 달이라 1일 새벽 퇴원이 앞 달 칸에 들어간다.
+    const i = idx.get(kstDateOf(r.withdrawnAt)?.slice(0, 7) ?? "");
     if (i != null) months[i]!.point.count++;
   }
   return months.map((m) => m.point);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { kstToday } from "@/lib/date-kst";
 import { UserCheck, UserMinus } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { deactivateStaff } from "@/features/staff/server/actions";
@@ -35,10 +36,8 @@ export function DeactivateButton({
   const isInactive = currentStatus === "inactive";
   // 퇴사일(원장 지시 2026-08-07) — 기본값 오늘. 계약 이력에 '퇴사 (날짜)' 줄로 남는다.
   // ⚠️ new Date()를 렌더 중 부르면 RSC lint(#11)에 걸리므로 클라 컴포넌트인 여기서 lazy 초기값으로.
-  const [resignDate, setResignDate] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
+  // 🔴 **KST 오늘** — 런타임 로컬(SSR=UTC)로 만들면 한국 새벽에 어제가 기본 퇴사일로 박힌다.
+  const [resignDate, setResignDate] = useState(() => kstToday());
 
   if (!isInactive && homeroomClasses.length + assistClasses.length > 0) {
     return (

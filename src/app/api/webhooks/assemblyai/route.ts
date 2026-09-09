@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { kstToday } from "@/lib/date-kst";
 import { NextResponse } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { getTranscript } from "@/lib/ai/assemblyai";
@@ -796,7 +797,7 @@ async function analyzeConsultationAndPersist(
     ...(extracted ? { formSuggestions: extracted } : {}),
   };
 
-  const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
+  const modelVersion = `${modelId}-${kstToday()}`;
 
   await runWrite(
     "consultation.analysis",
@@ -974,7 +975,7 @@ async function handleStudentConsultation(
         .update({
           ai_report: report,
           ai_summary: report.summary,
-          ai_model_version: `${model}-${new Date().toISOString().slice(0, 10)}`,
+          ai_model_version: `${model}-${kstToday()}`,
           ai_generated_at: new Date().toISOString(),
           processing_status: "completed",
           processing_error: null,

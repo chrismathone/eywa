@@ -1,5 +1,6 @@
 "use client";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { kstYear } from "@/lib/date-kst";
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "@/components/icons/eywa-icon-compat";
@@ -44,7 +45,9 @@ const billingName = (r: StudentBillingRow) => {
 };
 
 export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
-  const latestYear = invoices[0]?.period ? Number(invoices[0].period.slice(0, 4)) : new Date().getFullYear();
+  // 🔴 **KST 올해** — 이 컴포넌트는 SSR도 되므로 `new Date().getFullYear()`면 서버(UTC)와 브라우저(KST)가
+  //    1/1 새벽에 다른 연도를 내 하이드레이션이 갈린다([[#108]] 계열).
+  const latestYear = invoices[0]?.period ? Number(invoices[0].period.slice(0, 4)) : kstYear();
   const [year, setYear] = useState(latestYear);
   const [statusFilter, setStatusFilter] = useState("all"); // all | paid | pending
   const [pageSize, setPageSize] = useState(10);

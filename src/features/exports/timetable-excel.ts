@@ -1,4 +1,5 @@
 import "server-only";
+import { kstToday } from "@/lib/date-kst";
 import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
@@ -77,7 +78,9 @@ export async function buildTimetableWorkbook(
   const subjectHex = (subject: string) => PILL_HEX[subjectMaps.colorOf(subject)];
 
   // 데이터 수집: schedule + class + 학생. 폐지(is_active=false)·종강(closed_at<오늘) 반은 제외(시간표 화면과 일관).
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // 🔴 **KST 오늘** — 종강 반 판정(`closed_at < 오늘`)에 쓰는 값이라 UTC로 뽑으면 한국 새벽에
+  //    하루 어긋나 그날 종강한 반이 엑셀에만 남거나 빠진다(화면은 KST 기준이다).
+  const todayIso = kstToday();
   // B2: 무페이징 select는 1000행에서 조용히 잘려 반·교시가 통째로 증발한다 → fetchAllPaged(id tie-break).
   // 강사 스코프는 조인 필터로 DB에서 건다(전건 받아 JS에서 버리지 않음).
   const schedules = await fetchAllPaged<ScheduleRow>((from, to) => {
