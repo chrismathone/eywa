@@ -3,6 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { resolveLeavePeriod, type LeavePeriod } from "@/features/leave/accrual";
+import {
+  grantedTotal,
+  leaveRowMatchesPeriod,
+  remainingDays,
+  roundDays,
+  sumAdjustments,
+} from "@/features/leave/balance";
 import { applyLeaveGrantOverride } from "@/features/leave/test-grants";
 import { isLeaveKind, type LeaveKind } from "@/features/leave/request-days";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -533,14 +540,23 @@ export async function getMyLineTemplates(): Promise<ApprovalLineTemplate[]> {
 export type LeaveBalance = {
   hireDate: string | null;
   period: LeavePeriod | null;
+  /** 조정 합계(+이월 / −차감, 0251a). 표가 없거나 조회 실패면 0. */
+  adjustment: number;
+  /** 총 부여 = 법정 계산분 + 조정. 화면·기안 거절이 함께 보는 값. */
+  granted: number;
   used: number;
   pending: number;
   remaining: number;
 };
 
 /**
- * 내 연차 현황 — 부여는 **입사일에서 계산**하고(accrual.ts), 사용·대기는 결재 문서에서 센다.
- * 잔여 = 부여 − 승인 − 진행중(진행중을 미리 빼야 같은 연차를 두 번 올리지 못한다).
+ * 내 연차 현황 — 부여는 **입사일에서 계산**하고(accrual.ts), 여기에 수기 **조정**(이월·특별휴가, 0251a)을
+ * 더한다. 사용·대기는 결재 문서에서 센다.
+ * 잔여 = (부여 + 조정) − 승인 − 진행중(진행중을 미리 빼야 같은 연차를 두 번 올리지 못한다).
+ *
+ * ⚠️ 조정 조회는 **fail-soft로 0**이다(0251a 미적용 포함) — 여기서 막으면 결재함 첫 화면이 통째로
+ *    죽는다([[#95]]). 0으로 떨어지면 잔여가 **덜** 잡히는 방향이라(초과 사용은 안 열린다) 안전한 쪽이고,
+ *    같은 값을 보는 기안 액션은 반대로 **소리 내어 거절**한다(이유를 알려야 사무실에 문의할 수 있다).
  */
 export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
   const supabase = await createClient();
@@ -549,31 +565,49 @@ export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
   const hireDate = (me?.hire_date as string | null) ?? null;
   // 테스트 계정 부여 오버라이드(파일럿 전용 — test-grants.ts) 적용 후의 부여가 이 화면의 진실이다.
   const period = applyLeaveGrantOverride(userId, resolveLeavePeriod(hireDate, today));
-  const zero = { hireDate, period, used: 0, pending: 0, remaining: period?.granted ?? 0 };
-  if (!period) return zero;
+  if (!period) {
+    return { hireDate, period, adjustment: 0, granted: 0, used: 0, pending: 0, remaining: 0 };
+  }
 
-  // 본인·한 구간이라 행 수가 작다(상한 명시로 절단 위험 차단, B2).
-  const { data, error } = await supabase
-    .from("leave_forms")
-    .select("days, doc:approval_documents!leave_forms_document_id_fkey(status)")
-    .eq("user_id", userId)
-    .eq("period_start", period.start)
-    .limit(500);
-  if (error || !data) return zero;
+  // 두 조회는 서로 독립 — 함께 받는다(B4). 본인·한 구간이라 행 수가 작다(상한 명시로 절단 위험 차단, B2).
+  // 조정은 0251a RLS가 **본인 행만** 열어 준다(관리자 표는 서버에서 admin으로 읽는다).
+  const [formsRes, adjRes] = await Promise.all([
+    supabase
+      .from("leave_forms")
+      .select("period_start, period_end, days, doc:approval_documents!leave_forms_document_id_fkey(status)")
+      .eq("user_id", userId)
+      // SQL은 겹치는 창까지 넓게 받고, 어느 구간의 것인지는 `leaveRowMatchesPeriod`(중앙 날짜)가 정한다 —
+      // 입사일 정정으로 경계가 밀려도 이미 쓴 연차가 사라지거나 다음 해로 넘어가지 않는다.
+      .lte("period_start", period.end)
+      .gte("period_end", period.start)
+      .limit(500),
+    supabase
+      .from("leave_adjustments")
+      .select("period_start, period_end, days")
+      .eq("user_id", userId)
+      .lte("period_start", period.end)
+      .gte("period_end", period.start)
+      .limit(500),
+  ]);
+
+  const inPeriod = (r: { period_start?: unknown; period_end?: unknown }) =>
+    leaveRowMatchesPeriod({ periodStart: String(r.period_start), periodEnd: String(r.period_end) }, period);
+
+  const adjustment = adjRes.error
+    ? 0
+    : sumAdjustments((adjRes.data ?? []).filter(inPeriod).map((r) => ({ days: num(r.days) })));
+  const granted = grantedTotal(period.granted, adjustment);
+  const zero = { hireDate, period, adjustment, granted, used: 0, pending: 0, remaining: granted };
+  if (formsRes.error || !formsRes.data) return zero;
 
   let used = 0;
   let pending = 0;
-  for (const row of data as Raw[]) {
+  for (const row of (formsRes.data as Raw[]).filter(inPeriod)) {
     const doc = row.doc as { status?: string } | null;
     if (doc?.status === "approved") used += num(row.days);
     else if (doc?.status === "pending") pending += num(row.days);
   }
-  const r2 = (v: number) => Math.round(v * 100) / 100; // 0.25(반반차) 해상도 보존
-  return {
-    hireDate,
-    period,
-    used: r2(used),
-    pending: r2(pending),
-    remaining: Math.max(0, r2(period.granted - used - pending)),
-  };
+  used = roundDays(used);
+  pending = roundDays(pending);
+  return { hireDate, period, adjustment, granted, used, pending, remaining: remainingDays({ granted, used, pending }) };
 }

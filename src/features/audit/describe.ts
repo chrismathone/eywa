@@ -4,6 +4,8 @@ import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { formatSettingChange, type SettingChange } from "@/features/owner/settings-diff";
 import { SECTION_LABELS } from "@/features/owner/settings-types";
 import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/features/approvals/types";
+import { formatSignedDays } from "@/features/leave/balance";
+import { formatLeaveDays } from "@/features/leave/request-days";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import {
@@ -949,6 +951,18 @@ export function auditDetail(
         );
       }
       return null; // 품의서 등 상세 없는 양식 — 대상 열이 문서 제목을 보여준다
+    }
+    // 연차 조정(0251a) — metadata: days(가감) · before/after(총 부여) · period · reason.
+    case "leave_adjust":
+    case "leave_adjust_delete": {
+      const days = num(m.days);
+      const after = num(m.after);
+      return join(
+        days === null ? null : formatSignedDays(days),
+        after === null ? null : `총 ${formatLeaveDays(after)}`,
+        str(m.period) ? `기간 ${str(m.period)}` : null,
+        str(m.reason), // 사유는 사람이 한글로 적은 값 — 그대로가 가장 정확하다
+      );
     }
     case "approval_decide": {
       // 후결 확인(부재자가 나중에 확인)만 metadata 모양이 다르다.

@@ -19,6 +19,9 @@
 //    0170a SQL은 보류 가능(코드가 계약 읽기를 admin client로 우회) — 접근 복구되면 실행해 DB 잔여 구멍을 닫는다.
 // 원복: node scripts/staff-access/revert-narrow-staff-menu.mjs logs/narrow-staff-menu-<ts>.json --apply
 //
+// ⚠️ 이 명단에서 이승엽·김예원을 빼면 '연차 관리'(/staff/annual-leave)도 함께 죽는다 — 그 화면은
+// requireAccess("staff")를 먼저 지나기 때문에 명단(features/leave/access.ts)에 남아 있어도 버튼이 안 뜨고
+// 에러도 없이 기능만 사라진다.
 // 🔴 GRANTEES에서 사람을 **빼기 전에 반드시 원장에게 다시 물을 것**(원장 지시 2026-08-11):
 //    김예원·오은진·엄소윤은 **데스크 직원**이라 계정 관리(역할·이메일·비번 재설정)가 업무에 필요하다.
 //    "예외가 많으니 정리하자"류로 조용히 지우면 데스크 업무가 막힌다 — 사유를 상기시키고 확인받은 뒤에만 뺀다.

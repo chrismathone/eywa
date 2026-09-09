@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { useResultToast } from "@/components/action-toast";
 import {
   Dialog,
   DialogClose,
@@ -42,27 +42,9 @@ export function TurnChip() {
   );
 }
 
-/**
- * 액션 결과를 토스트로 흘린다(성공 시 서버가 revalidate하므로 화면은 알아서 갱신된다).
- * onSuccess는 **새 성공 상태에 한 번만** 부른다 — seen 가드 없이 열림 상태를 만지면
- * 같은 성공 상태가 재마운트마다 다시 닫아 "재오픈 즉시 닫힘"이 된다([[#67]]).
- */
-export function useResultToast(state: ApprovalActionState, onSuccess?: () => void) {
-  const seen = useRef<ApprovalActionState>(undefined);
-  const onSuccessRef = useRef(onSuccess);
-  useEffect(() => {
-    onSuccessRef.current = onSuccess; // 인라인 함수를 받아도 아래 effect가 재실행되지 않게 ref로
-  });
-  useEffect(() => {
-    if (!state || state === seen.current) return;
-    seen.current = state;
-    if (state.error) toast.error(state.error);
-    else if (state.ok) {
-      toast.success(state.notice ?? "처리했습니다");
-      onSuccessRef.current?.();
-    }
-  }, [state]);
-}
+// 액션 결과 토스트 훅은 연차 조정 화면(직원관리)도 쓴다 — 사본을 늘리지 않으려 공용
+// [`@/components/action-toast`]로 옮기고 여기서 다시 내보낸다(기존 import 경로 `./_decide-panel`은 그대로 산다).
+export { useResultToast };
 
 type Decision = "approved" | "rejected" | "final";
 

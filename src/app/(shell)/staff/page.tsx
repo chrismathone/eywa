@@ -15,6 +15,8 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canAdjustLeave } from "@/features/leave/access";
 import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -114,12 +116,14 @@ export default async function StaffPage({
   // 그리되 이번 렌더는 저장하지 않는다(다른 축을 기본값으로 덮지 않게). 서로 독립인 조회는 한 번에(B4) — 저장값은 메모리 필터에만
   // 쓰여 목록 쿼리와 무관하다(학생·수업목록은 저장값이 서버 페이징 쿼리에 들어가 순서가 있지만 여기는 전건을 받아 거른다).
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
-  const [prefsLoaded, rawAll, superAdminIds, settings, canManage] = await Promise.all([
+  const [prefsLoaded, rawAll, superAdminIds, settings, canManage, isSuperAdmin] = await Promise.all([
     loadStaffListPrefs(),
     getStaffList(),
     getSuperAdminIds(),
     getTenantSettings(),
     canWriteTenant(user.systemRole, "staff"),
+    // 연차 관리 버튼 노출 판정용 — 판정 단일 소스(super-admin.ts)를 그대로 쓴다(요청 캐시 1회).
+    isCurrentUserSuperAdmin(),
   ]);
   const prefs = prefsLoaded ?? DEFAULT_STAFF_LIST_PREFS;
   // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
@@ -241,7 +245,7 @@ export default async function StaffPage({
     <StaffViewPrefsProvider initial={pickStaffViewPrefs(prefs)}>
     <div className="space-y-5">
       {savedFilters ? <StaffRememberPrefs current={current} saved={savedFilters} /> : null}
-      {/* 머리 — 지시서 §10: 상시 버튼 = Primary '직원 등록' + 텍스트 '등록 QR' 둘(급여·휴가는 플래그가 꺼져 있다). 설명 문장은 뺐다(§4). */}
+      {/* 머리 — 지시서 §10: 상시 버튼 = Primary '직원 등록' + 텍스트 '등록 QR', 그리고 조정 담당에게만 '연차 관리'(급여·옛 휴가 관리는 플래그가 꺼져 있다). 설명 문장은 뺐다(§4). */}
       <PageHeader
         eyebrow="운영"
         title="직원관리"
@@ -251,6 +255,18 @@ export default async function StaffPage({
               <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
                 <Wallet className="size-4" />
                 월별 급여
+              </Button>
+            ) : null}
+            {/* 연차 관리 — 연차 **부여 일수**(이월·특별휴가·정산)를 고치는 자리(원장 2026-09-09:
+                *"직원관리에 버튼 연동해주지 전자결재에 있는게 연차를 관리하는게 이상하자나"*).
+                휴가 신청·결재는 여전히 전자결재다. 명단(박소선·이승엽·김예원)+super_admin에게만 보이고
+                실제 차단은 그 페이지·서버 액션이 같은 함수로 한다([[#77]]). */}
+            {canAdjustLeave(user.id, isSuperAdmin) ? (
+              <Button variant="outline" render={<WindowLink href="/staff/annual-leave" title="연차 관리" />}>
+                {/* 아이콘은 옛 '휴가 관리'(CalendarClock)와 **다른 것**으로 — 그 플래그를 되살리면
+                    두 버튼이 나란히 서는데 같은 그림이면 무엇이 무엇인지 못 가린다. */}
+                <EyIcon name="calendarCheck" size={16} />
+                연차 관리
               </Button>
             ) : null}
             {STAFF_LEAVES_ENABLED && canManage ? (

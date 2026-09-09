@@ -107,6 +107,10 @@ export const AUDIT_ACTIONS = {
   approval_withdraw: "전자결재 회수",
   approval_comment: "전자결재 댓글",
   approval_comment_delete: "전자결재 댓글 삭제",
+  // 연차 조정(0251a) — 결재 문서가 아니라 **자격(부여 일수)** 을 바꾸는 행위라 별도 키다.
+  // 남의 연차를 늘리고 줄이는 일이라 누가·언제·왜가 반드시 남아야 한다.
+  leave_adjust: "연차 조정",
+  leave_adjust_delete: "연차 조정 취소",
   // 학생 기록 변경 전수 감사(2026-08-18) — "퇴원을 누가 했는지 역검수가 안 된다"(원장). 상태 전환·정보
   // 수정·삭제·수강 종료·관리 도구 일괄 처리까지 **학생 레코드를 바꾸는 모든 경로**가 actor를 남긴다.
   student_create: "학생 등록",
