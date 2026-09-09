@@ -140,12 +140,16 @@ describe("EcsLandingList — Shouting 구역", () => {
     expect(within(row("PJ1")).getByTitle(/Shouting/).className).not.toContain("green");
   });
 
-  it("머리 줄이 이 칸의 이름을 대신 말한다 — EiE 반이 없으면 항목 자체가 없다", () => {
+  // ⚠️ 2026-09-09: 머리 **요약 줄**(반 N개·담임 N명·교시 작성·Shouting·미작성·완료)은 원장 지시로 걷었고,
+  //    그 자리를 **열 제목**(샤우팅 / 작성률)이 대신한다. 행에 열 머리가 없다는 사정은 그대로라, 이름을
+  //    붙여 주는 자리가 있는지를 계속 잠근다 — 다만 잠그는 대상이 요약 숫자에서 제목으로 바뀌었다.
+  it("열 제목이 이 칸의 이름을 대신 말한다 — EiE 반이 없으면 '샤우팅' 제목 자체가 없다", () => {
     const { unmount } = render(<EcsLandingList cards={[eie({ shoutingSlots: 2 })]} weekMonday="2026-08-24" />);
-    expect(screen.getByText("Shouting").parentElement).toHaveTextContent("2/6");
+    expect(screen.getByText("샤우팅")).toBeTruthy();
+    expect(screen.getByText("작성률")).toBeTruthy();
     unmount();
     render(<EcsLandingList cards={[card()]} weekMonday="2026-08-24" />);
-    expect(screen.queryByText("Shouting")).toBeNull();
+    expect(screen.queryByText("샤우팅")).toBeNull();
   });
 
   it("스크린리더에도 되돌린다 — 행에는 열 머리가 없다", () => {
@@ -187,12 +191,20 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
     expect(classNamesIn(panel("인재원 영어"))).toEqual(["미분류반"]);
   });
 
-  it("단 머리의 작성률은 **그 단 몫만** 센다(옆 단 숫자가 섞이면 프로그램별로 못 읽는다)", () => {
+  // 🔴 2026-09-09 원장 지시로 **단 머리의 작성률·반 개수와 전체 요약 줄을 걷었다** — 같은 숫자를 행이
+  //    이미 말하고 있었다. 되살리지 말 것: 그 자리는 이제 열 제목이 쓴다.
+  it("단 머리엔 숫자가 없다 — 작성률·반 개수·전체 요약은 걷었고 그 자리는 열 제목이 쓴다", () => {
     render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
-    expect(within(panel("EiE")).getByText("작성")).toHaveTextContent("6/6");
-    expect(within(panel("인재원 영어")).getByText("작성")).toHaveTextContent("0/6");
-    // 머리 줄(전체)은 둘을 합한 값 그대로.
-    expect(screen.getByText("교시 작성")).toHaveTextContent("6/12");
+    expect(screen.queryByText("교시 작성")).toBeNull();
+    expect(within(panel("EiE")).queryByText("작성")).toBeNull();
+    expect(within(panel("EiE")).getByText("작성률")).toBeTruthy();
+    // 반별 숫자는 행에 그대로 있다(요약만 걷은 것이지 사실을 지운 게 아니다).
+    // ⚠️ `mixed` 픽스처의 반 이름을 쓴다 — 이 describe의 카드는 위 Shouting 절과 다른 벌이다.
+    const anyRow = screen
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("aria-label") ?? "")
+      .find((l) => l.includes("작성 교시"));
+    expect(anyRow).toBeTruthy();
   });
 
   it("🔴 창이 좁으면 **1단 상하** — 두 단이 위아래로 쌓이고 단 안도 한 열이다(원장 2026-08-28)", () => {
@@ -227,11 +239,12 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
     expect(px(label)).toBeGreaterThan(px(teacher));
   });
 
-  it("한 담임이 두 프로그램을 맡으면 **양쪽 단에 묶음이 하나씩**, 머리 줄 담임 수는 1명", () => {
+  it("한 담임이 두 프로그램을 맡으면 **양쪽 단에 묶음이 하나씩** 선다", () => {
     render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
     // 단 안에서는 담임이 프로그램 아래 층(h4)이다.
     expect(screen.getAllByRole("heading", { level: 4, name: "김태건" })).toHaveLength(2);
-    expect(screen.getByText(/^담임/)).toHaveTextContent("담임 1명");
+    // ⚠️ 머리 줄 '담임 N명'은 2026-09-09에 요약 줄과 함께 걷었다 — 사람 수를 세던 자리가 사라졌다.
+    expect(screen.queryByText(/^담임 \d+명/)).toBeNull();
   });
 });
 

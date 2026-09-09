@@ -12,7 +12,7 @@ import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
 import { groupLandingByMyRole, MY_ROLE_LABEL } from "@/features/class-sheets/landing-my-role";
 import { applyTodayOrder } from "@/features/class-sheets/today-order";
 import { LandingOrderRows } from "@/features/class-sheets/components/landing-order-rows";
-import { landingCardPct, summarizeLanding } from "@/features/class-sheets/landing-summary";
+import { landingCardPct } from "@/features/class-sheets/landing-summary";
 import { shoutingCountOf, summarizeShouting } from "@/features/class-sheets/landing-shouting";
 import { splitLandingByProgram } from "@/features/class-sheets/landing-programs";
 import { monthOfWeek } from "@/features/class-sheets/face-nav";
@@ -84,94 +84,24 @@ export function EcsLandingList({
    */
   canReorder?: boolean;
 }) {
-  const s = summarizeLanding(cards);
-  const shout = summarizeShouting(cards);
-  /**
-   * 지금 목록에 EiE 반이 **하나라도** 있을 때만 머리 줄에 이 항목을 낸다('인재원 영어'만 보는 중이면
-   * Shouting이라는 지표 자체가 없다). 행의 구역은 흐름마다 따로 판정한다 — TeacherGroupFlow 참조.
-   */
-  const showShouting = shout.classes > 0;
-  // 머리 줄의 '담임 N명' — 좌우로 갈라도 **사람 수는 하나**다(양쪽에 걸친 담임을 두 번 세지 않는다).
-  const teacherCount = groupLandingByTeacher(cards).length;
+
   // 한쪽이 비면 null = 나누지 않는다(반쪽을 비워 두면 화면 절반이 낭비다).
   const panels = splitLandingByProgram(cards);
   return (
     <section className="bg-card shadow-card rounded-2xl px-3 py-2.5">
-      {/* 머리 = 이 주 전체 작성 상황 한 줄. 카드마다 흩어져 있던 숫자를 한 번만 말한다. */}
-      <div className="border-line mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b px-1 pb-2">
-        {/* 🔴 내 화면이면 **내 이름이 맨 앞**이고 가장 크다(원장 2026-09-05 *"'추민아'를 아래 '담임'보다
-            글씨 크기 20% 키워줘. 반 9개는 이름 뒤로"*). 지켜야 하는 건 **비율이지 px가 아니다** —
-            타입 스케일 v5(2026-09-08)가 묶음 머리를 15px → `text-base`(18px)로 올렸으므로 이름도
-            **한 단계 위 `text-lg`(20px)**로 함께 올린다(옛 임의 px 값(18px)을 그대로 두면 묶음 머리와
-            같은 크기가 되어 지시가 조용히 무효가 된다).
-            🔴 다시 줄이거나 '반 N개' 뒤로 보내지 말 것. 사무실 화면은 주어가 사람이 아니라 그대로 둔다. */}
-        {viewerName ? (
+      {/* 🔴 요약 줄(반 N개·담임 N명·교시 작성·Shouting·미작성·완료)은 **걷었다**(원장 2026-09-09 캡처
+          *"이것도 제거"*) — 같은 숫자를 아래 단 머리·담임 줄·행이 이미 말하고 있었다.
+          ⚠️ **강사 본인 화면의 이름은 남긴다** — 원장 2026-09-05 *"'추민아'를 아래 '담임'보다 글씨 크기 20%
+             키워줘"*로 못박은 자리다(요약을 걷는 것과 이름을 지우는 것은 다른 일이다). */}
+      {viewerName ? (
+        <div className="border-line mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b px-1 pb-2">
           <h2 className="text-foreground text-lg font-extrabold">{viewerName}</h2>
-        ) : (
-          <h2 className="text-foreground text-sm font-bold">
-            반 <span className="num">{s.classes}</span>개
-          </h2>
-        )}
-        {viewerName ? (
-          <p className="text-text-dim text-xs">
-            반 <span className="num text-foreground font-bold">{s.classes}</span>개
-          </p>
-        ) : (
-          <p className="text-text-dim text-xs">
-            담임 <span className="num text-foreground font-bold">{teacherCount}</span>명
-          </p>
-        )}
-        <p
-          className="text-text-dim text-xs"
-          // 분모가 왜 그 수인지 화면에 적어 둔다 — 안 적으면 추석 주에 "교시가 줄었다"만 보인다.
-          title="분모는 이 주 배정 교시입니다. 학원 휴일은 쓸 의무가 없어 분모에서 빠지고, 휴일에 쓴 계획은 그대로 인정됩니다."
-        >
-          교시 작성{" "}
-          <span className="num text-foreground font-bold">
-            {s.filled}/{s.scheduled}
-          </span>{" "}
-          <span className="num">({s.pct}%)</span>
-        </p>
-        {/* Shouting(0230a) — **행의 새 칸이 무엇인지 이름을 붙이는 자리**이기도 하다(행엔 열 머리가 없다). */}
-        {showShouting ? (
-          <p
-            className="text-text-dim text-xs"
-            title="EiE 반의 이번 주 Shouting 체크 — 분모는 작성률과 같은 '이 주 배정 교시'입니다"
-          >
-            Shouting{" "}
-            <span className="num text-foreground font-bold">
-              {shout.checked}/{shout.scheduled}
-            </span>{" "}
-            <span className="num">({shout.pct}%)</span>
-          </p>
-        ) : null}
-        {s.untouched > 0 ? (
-          <p className="text-text-dim text-xs">
-            미작성 <span className="num text-foreground font-bold">{s.untouched}</span>반
-          </p>
-        ) : null}
-        {s.done > 0 ? (
-          <p className="text-text-dim text-xs">
-            완료 <span className="num text-foreground font-bold">{s.done}</span>반
-          </p>
-        ) : null}
-        {/* 배정 교시가 0인 반은 '미작성'과 갈라 말한다 — 사무실이 못 고칠 일을 재촉받지 않게.
-            ⚠️ 여기엔 **수업일이 전부 휴일인 반**도 든다(행에서는 `휴`로 갈라 보인다). 한 줄로 뭉치는 대신
-               사유를 툴팁에 적는다 — 머리 줄에 상태를 하나 더 세우면 다섯 숫자가 여섯이 된다. */}
-        {s.idle > 0 ? (
-          <p
-            className="text-text-dim text-xs"
-            title="이 주에 쓸 교시가 없는 반 — 배정이 없거나, 수업일이 모두 학원 휴일인 반입니다(행의 `휴` 표시)."
-          >
-            이 주 수업 없음 <span className="num text-foreground font-bold">{s.idle}</span>반
-          </p>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {panels ? (
         <div className="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-5">
           {panels.map((p) => {
-            const ps = summarizeLanding(p.cards);
             return (
               // 오른쪽 단에만 세로 구분선. **세로선은 행 높이만큼 길어** 가로선과 같은 농도면 훨씬
               // 세게 읽힌다 → 한 단계 옅은 `--line-faint`(표 규약과 같은 이유).
@@ -189,16 +119,10 @@ export function EcsLandingList({
                   <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-lg font-extrabold">
                     {p.label}
                   </h3>
-                  <span className="text-text-dim text-xs">
-                    <span className="num">{ps.classes}</span>반
-                  </span>
-                  <span className="text-text-dim ml-auto text-xs">
-                    작성{" "}
-                    <span className="num text-foreground font-bold">
-                      {ps.filled}/{ps.scheduled}
-                    </span>{" "}
-                    <span className="num">({ps.pct}%)</span>
-                  </span>
+                  {/* 🔴 반 개수·단 작성률은 걷었다(원장 2026-09-09 *"반개수도 제거"* · *"선생님 총 작성비율은
+                      필요없고 행제목으로 대체"*) — 그 자리에 **열 제목**을 세운다. 행에는 열 머리가 없어
+                      `2/6`·`0/6` 두 숫자가 무엇인지 눌러 봐야 알았다. */}
+                  <LandingColumnTitles showShouting={summarizeShouting(p.cards).classes > 0} />
                 </div>
                 {/* 단 안에선 담임이 프로그램 **아래** 층이다 — 제목 층을 실제 구조대로 내린다
                     (스크린리더가 제목으로 훑을 때 두 축이 같은 층이면 포함 관계가 안 보인다). */}
@@ -219,6 +143,12 @@ export function EcsLandingList({
       ) : (
         // ⚠️ 좌우로 안 가르는 흐름(한 프로그램만 있을 때)도 **같은 축**으로 묶어야 한다 —
         //    한쪽만 배선하면 EiE가 0개인 강사에게만 옛 담임별 묶음이 남는다(2026-09-05 실제로 그랬다).
+        <>
+        {/* 🔴 열 제목은 **여기에도** 있어야 한다 — 좌우로 안 가르는 화면(한 프로그램만·강사 본인)에서
+            제목이 사라지면 그 사람들만 `2/6`이 무엇인지 알 수 없다(반쪽 배선 금지, 위 주석과 같은 이유). */}
+        <div className="border-line mb-2 flex items-baseline border-b px-1 pb-1.5">
+          <LandingColumnTitles showShouting={summarizeShouting(cards).classes > 0} />
+        </div>
         <TeacherGroupFlow
           cards={cards}
           weekMonday={weekMonday}
@@ -228,8 +158,33 @@ export function EcsLandingList({
           landingOrder={landingOrder}
           canReorder={canReorder}
         />
+        </>
       )}
     </section>
+  );
+}
+
+/**
+ * 목록 오른쪽 숫자 열의 **제목**(원장 2026-09-09: *"이게 샤우팅과 작성률이잖아. 상단 행제목 추가."*
+ * + *"우측 인재원 영어도 마찬가지"*).
+ *
+ * 🔴 폭은 행이 쓰는 값과 **같은 상수**를 본다 — 따로 적으면 제목이 숫자 위에서 어긋난다.
+ *    (Shouting 52px · 작성 44px(w-11) · 막대 40px(w-10) · 사이 gap-2 8px, 행 오른쪽 여백 px-1.5.)
+ * ⚠️ Shouting 구역이 없는 흐름(인재원 영어)에선 제목도 안 세운다 — 빈 칸에 이름만 남으면 "여긴 왜 비었나"가 된다.
+ * ⚠️ EiE 단엔 행 끝에 '월간' 배지가 하나 더 붙는다 — 제목 줄에도 **보이지 않는 같은 크기**를 둬서 줄을 맞춘다.
+ */
+function LandingColumnTitles({ showShouting }: { showShouting: boolean }) {
+  return (
+    <span className="text-text-faint ml-auto flex shrink-0 items-center gap-2 pr-1.5 text-xs font-bold">
+      {showShouting ? <span className="w-[52px] text-right">샤우팅</span> : null}
+      <span className="w-11 text-right">작성률</span>
+      <span className="w-10" aria-hidden />
+      {showShouting ? (
+        <span aria-hidden className="invisible ml-1 rounded-full border px-1.5 py-px text-xs font-bold">
+          월간
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -299,10 +254,8 @@ function TeacherGroupFlow({
             <span className="text-text-dim shrink-0 text-xs">
               <span className="num">{g.summary.classes}</span>반
             </span>
-            {/* 그 담임 몫의 작성 상황 — "누가 안 썼나"가 이 화면의 질문이라 묶음 머리에 숫자를 붙인다. */}
-            <span className="num text-text-dim ml-auto shrink-0 text-xs">
-              {g.summary.filled}/{g.summary.scheduled}
-            </span>
+            {/* 🔴 담임 몫 작성률은 뺐다(원장 2026-09-09 *"선생님 총 작성비율은 필요없고 행제목으로 대체"*) —
+                그 자리는 위 단 머리의 **열 제목**이 쓴다. 반별 숫자는 아래 행에 그대로 있다. */}
           </div>
           {/* 🔴 순서는 **묶음 안에서만** 바뀐다 — 담임/부담임(과 EiE/인재원)은 취향이 아니라 사실이라
               칸을 넘나들면 화면이 거짓말을 한다. `SortableContext`가 묶음마다 하나라 구조로 막힌다. */}
@@ -444,11 +397,11 @@ function TeacherGroupFlow({
                   {card.englishTrack === "eie" ? (
                     <Link
                       href={`/ecs/${card.classId}/month?month=${monthOfWeek(weekMonday)}&week=${weekMonday}&view=mp`}
-                      title={`${shownName} 월간 계획서(MP) 열기`}
+                      title={`${shownName} 월간 계획서 열기`}
                       aria-label={`${shownName} 월간 계획서 열기`}
                       className="border-line-strong text-text-dim hover:bg-bg-soft hover:text-foreground ml-1 shrink-0 rounded-full border px-1.5 py-px text-xs font-bold transition"
                     >
-                      MP
+                      월간
                     </Link>
                   ) : null}
                   </>

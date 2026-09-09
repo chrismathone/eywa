@@ -156,11 +156,14 @@ describe("⑤ 랜딩 목록 순서 — 묶음 안에서만", () => {
     expect(actions).toContain("todayOrder:");
   });
 
-  it("🔴 이름이 묶음 머리(15px)보다 크고 맨 앞이다 — 원장 2026-09-05 '20% 키워줘·반 9개는 이름 뒤로'", () => {
+  /**
+   * ⚠️ 2026-09-09: 머리 **요약 줄**(반 N개·담임 N명·교시 작성…)을 원장 지시로 걷으면서 '반 9개'가 사라졌다.
+   *    남은 것은 **강사 본인 이름 하나**이고, 그 크기(원장 2026-09-05 '20% 키워줘')는 그대로 잠근다 —
+   *    걷어낸 것은 요약이지 이름이 아니다.
+   */
+  it("🔴 강사 본인 화면의 이름은 남고 크기도 그대로다 — 원장 2026-09-05 '20% 키워줘'", () => {
     expect(list).toContain('<h2 className="text-foreground text-lg font-extrabold">{viewerName}</h2>');
-    const iName = list.indexOf("{viewerName}</h2>");
-    const iCount = list.indexOf("{s.classes}</span>개", iName);
-    expect(iName).toBeGreaterThan(-1);
-    expect(iCount).toBeGreaterThan(iName); // 반 N개가 이름 뒤
+    // 요약 숫자는 걷었다(되살리면 같은 숫자를 두 번 말하게 된다).
+    expect(list).not.toContain("{s.classes}</span>개");
   });
 });
