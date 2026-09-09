@@ -9,7 +9,9 @@ import { useTimetableEdit } from "./edit-context";
 import { holdArmedRow, setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { HoverCard, StudentInfoCard } from "./hover-cards";
 import { useSearchTone } from "./search-context";
-import { RECENT_ROW_CLASS } from "./timetable-color";
+import { movingTone, RECENT_ROW_CLASS, useTimetableColorMode } from "./timetable-color";
+import { shortMoveDate } from "@/features/timetable/lib/move-date";
+import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
 
 /**
  * 시간표 셀 학생 행(단일 셀·합반 공용) — class-cell.tsx에서 추출(200줄 규칙).
@@ -38,6 +40,13 @@ export type StudentQuick = {
   /** 등록 31~60일(신입 다음 단계). */
   isRecent?: boolean;
   isTransferredIn?: boolean;
+  /**
+   * **예약된 반 이동**(DB에 이미 저장된 것) — 나갈 예정 / 들어올 예정. 연보라 '이동 대기'로 표시하고
+   * 툴팁이 기존 반 이름을 말한다(원장 2026-09-09). 판정·짝짓기는 서버(`pairScheduledMoves`) 단일 소스.
+   * ⚠️ 저장 **전**의 큐(`useTimetableEdit().pending`)와 다른 축이다 — 색은 같고 문구가 다르다.
+   */
+  movingOut?: { on: string; className: string | null };
+  movingIn?: { on: string; className: string | null };
   /** 수강 시작일(YYYY-MM-DD) — hover에서 신입 시작일·전입일 표시용. 런타임엔 StudentLine 전체가 도착. */
   enrollmentDate?: string | null;
   englishName?: string | null;
@@ -104,23 +113,35 @@ function NameInner({ name, meta, badge }: { name: string; meta: string; badge?: 
 function StudentNameLink({
   studentId,
   name,
+  title,
   className,
   children,
   ...rest
 }: {
   studentId?: string;
   name: string;
+  /**
+   * 툴팁 문구 — 미지정이면 학생 이름. 예약 이동 줄이 "언제 어디로 가는지"를 여기 싣는다.
+   * 🔴 **이름 자체를 갈아치우지 말 것** — `ariaLabel`이 이름에서 나오므로, 툴팁 문장을 이름 자리에
+   *    넣으면 스크린리더가 "이동 대기 — … 학생 정보"를 읽는다(사람 이름이 사라진다).
+   */
+  title?: string;
   className: string;
   children: ReactNode;
 } & Pick<ComponentProps<typeof WindowLink>, "onMouseEnter" | "onMouseLeave" | "onMouseMove">) {
   // 🔴 `...rest`를 반드시 흘려보낸다 — [`HoverCard`](./hover-cards.tsx)는 **트리거 엘리먼트에** hover 핸들러를
   //    주입한다(cloneElement). 이 래퍼가 그걸 삼키면 읽기 전용 줄(강사·뷰어·과거 주·대기·퇴원)의 정보 카드가
   //    통째로 죽는다 — 관리자가 이번 주에서 보면 드래그 줄이라 멀쩡해 눈에 안 띈다(적대 리뷰 2026-09-04).
-  if (!studentId) return <span className={className} {...rest}>{children}</span>;
+  if (!studentId)
+    return (
+      <span className={className} title={title || undefined} {...rest}>
+        {children}
+      </span>
+    );
   return (
     <WindowLink
       href={`/students/${studentId}`}
-      title={name}
+      title={title || name}
       ariaLabel={`${name} 학생 정보`}
       className={className}
       {...rest}
@@ -246,31 +267,85 @@ function StudentRowView({
   onArm?: () => void;
 }) {
   const { pending, setHovered, openDayEdit } = useTimetableEdit();
-  // 🔴 검색 표식은 드래그 줄에도 붙인다 — 검색은 이제 권한과 무관하게 켜져 있어서(옛 편집 모드가 끄던 것),
-  //    안 붙이면 **관리자에게만** "누구를 찾았는지"가 사라진다(그 기능의 존재 이유가 그 표식이다).
-  const searchTone = useSearchTone(student ?? { name, grade: null, school: null }, tone);
+  const colorMode = useTimetableColorMode();
   const target = pending.get(enrollmentId);
   const moving = !!target && !target.sameClass; // 반 이동=취소선+dim / 같은 반 요일 편집=배지만
+  /**
+   * 🔴 **예약 이동**(적용일이 오늘보다 뒤)은 연보라 '이동 대기'(원장 2026-09-09) — 오늘 옮기는 것과
+   *    뜻이 다르다(그날까지는 이 반 학생이다). 즉시 이동은 종전 그대로 취소선+화살표.
+   * ⚠️ 아직 **저장 전**이라 문구가 그렇게 말한다(예약으로 저장된 것과 색은 같고 말이 다르다 — move-note.ts).
+   */
+  const scheduledMove = moving && target!.scheduled;
+  /**
+   * **이미 저장된 예약 이동**(DB) — 저장 전 큐와 색은 같고 문구가 다르다(move-note.ts).
+   * 🔴 끌어 옮기는 중이면 큐가 이긴다 — 사람이 방금 한 일이 화면의 주인공이다.
+   */
+  const saved = moving
+    ? null
+    : savedMoveView({
+        status: student?.status,
+        movingOut: student?.movingOut,
+        movingIn: student?.movingIn,
+        thisClassName: className,
+      });
+  const waiting = scheduledMove || !!saved;
+  const moveTitle = scheduledMove
+    ? moveWaitTitle({
+        side: "out",
+        fromClassName: className,
+        toClassName: target!.toClassName,
+        on: target!.applyOn,
+        saved: false,
+      })
+    : (saved?.title ?? "");
+  // 🔴 검색 표식은 드래그 줄에도 붙인다 — 검색은 이제 권한과 무관하게 켜져 있어서(옛 편집 모드가 끄던 것),
+  //    안 붙이면 **관리자에게만** "누구를 찾았는지"가 사라진다(그 기능의 존재 이유가 그 표식이다).
+  // ⚠️ 예약 tone은 **바탕**으로 넘긴다(덧붙이지 않는다) — 검색에 걸리면 검색 표식이 이겨야 하고,
+  //    두 클래스를 이어 붙이면 같은 축 유틸이 겹쳐 승자를 CSS 순서가 정한다([[#116]]).
+  const searchTone = useSearchTone(
+    student ?? { name, grade: null, school: null },
+    waiting ? movingTone(colorMode) : tone,
+  );
   const canEditDays = (coveringDays?.length ?? 0) >= 2 && !!slotId;
   const isDragging = dnd?.isDragging ?? false;
   // 🔴 줄 **내용**은 메모이즈한다 — dnd-kit은 드래그 중 `over`가 바뀔 때마다 무장된 줄을 다시 그린다.
   //    같은 엘리먼트를 돌려주면 React가 그 서브트리를 통째로 건너뛴다.
-  const targetKey = target ? `${target.sameClass ? "day" : "move"}:${(target.toDays ?? []).join(",")}` : "";
+  // 🔴 예약 이동은 **날짜까지** 키에 담는다 — 담지 않으면 툴바·팝업으로 날짜를 바꿔도 줄이 옛 날짜를 계속 보여 준다.
+  const targetKey = target
+    ? target.sameClass
+      ? `day:${(target.toDays ?? []).join(",")}`
+      : `move:${scheduledMove ? (target.applyOn ?? "") : ""}`
+    : saved
+      ? // 저장된 예약 — `→`는 나감, `←`는 들어옴(방향이 곧 뜻이다).
+        `${saved.side === "out" ? "out" : "in"}:${saved.on}`
+      : "";
   const body = useMemo(
     () => (
       <>
         <StudentNameLink
           studentId={studentId}
           name={name}
+          title={moveTitle}
           className={`min-w-0 ${NAME_CLASS} ${moving ? "line-through" : ""}`}
         >
           <NameInner name={name} meta={targetKey ? "" : meta} badge={badge} />
         </StudentNameLink>
-        {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌). */}
+        {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌).
+            🔴 예약 이동은 **그 건의 날짜**를 함께 적는다 — 툴바 값 하나만 보면 건별 날짜가 안 보인다
+               (원장 2026-09-09 날짜 팝업 지시). 좁은 칸이라 `9/15`까지만, 전문은 title에. */}
         {targetKey ? (
           targetKey.startsWith("day") ? (
             <span className="text-primary shrink-0 text-xs font-bold">
               →{dayChangeLabel(targetKey.slice(4) ? targetKey.slice(4).split(",") : [])}
+            </span>
+          ) : targetKey.startsWith("out:") || targetKey.startsWith("in:") ? (
+            <span className="text-purple shrink-0 text-xs font-bold">
+              {targetKey.startsWith("out:") ? "→" : "←"}
+              {shortMoveDate(targetKey.slice(targetKey.indexOf(":") + 1))}
+            </span>
+          ) : targetKey.length > "move:".length ? (
+            <span className="text-purple shrink-0 text-xs font-bold">
+              →{shortMoveDate(targetKey.slice("move:".length))}
             </span>
           ) : (
             <span className="text-primary shrink-0 text-xs">→</span>
@@ -278,7 +353,9 @@ function StudentRowView({
         ) : null}
       </>
     ),
-    [studentId, name, meta, badge, moving, targetKey],
+    // ⚠️ `moveTitle`도 넣는다 — 예약 이동 툴팁이 줄 안(링크)에 붙어 있어서, 날짜가 바뀌었는데 이 값이
+    //    안 바뀌면 메모가 옛 문장을 붙들고 있는다(`targetKey`가 날짜를 담지만 문구는 반 이름도 쓴다).
+    [studentId, name, meta, badge, moving, targetKey, moveTitle],
   );
   const row = (
     <div
@@ -321,12 +398,14 @@ function StudentRowView({
             }
           : undefined
       }
+      // 🔴 예약 이동이면 **그 사실**이 툴팁이다(기존 반 이름 포함, 원장 명시) — 조작법 안내보다 그게 먼저다.
       title={
-        canEditDays
+        moveTitle ||
+        (canEditDays
           ? "끌어서 이동 · 클릭 = 학생 정보 · 우클릭 = 등원 요일"
-          : "끌어서 이동 · 클릭 = 학생 정보"
+          : "끌어서 이동 · 클릭 = 학생 정보")
       }
-      className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${searchTone} ${isDragging ? "opacity-40" : ""} ${moving ? "opacity-60" : ""}`}
+      className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${searchTone} ${isDragging ? "opacity-40" : ""} ${moving && !scheduledMove ? "opacity-60" : ""}`}
     >
       {body}
     </div>
@@ -357,34 +436,62 @@ function StudentCard({ student }: { student: StudentQuick }) {
 /** 학생 한 줄(드래그 불가 — 편집 권한 없음·과거 주) — hover 시 학생 정보 카드, **클릭** 시 학생 상세 창. */
 export function StudentRow({
   student,
+  className: cardName = "",
   name,
   meta,
   tone,
   badge,
 }: {
   student: StudentQuick;
+  /** 이 줄이 서 있는 반 이름 — 예약 이동 툴팁의 '기존 반'/'가는 반' 한쪽을 채운다. */
+  className?: string;
   name: string;
   meta: string;
   tone: string;
   /** 합반 인덱스 배지("1"/"1,2") — 통합 명단에서만. */
   badge?: string;
 }) {
+  const colorMode = useTimetableColorMode();
+  /**
+   * 읽기 전용 줄에도 **예약 이동은 보여야 한다** — 편집 권한이 없다고 사실이 사라지면 안 된다
+   * (강사·과거 주 화면에서 "이 아이 곧 옮겨 가네"를 못 보면 그게 곧 정보 손실이다).
+   */
+  const saved = savedMoveView({
+    status: student.status,
+    movingOut: student.movingOut,
+    movingIn: student.movingIn,
+    thisClassName: cardName,
+  });
   // 학생 검색에 걸린 줄이면 표식(안 걸리면 tone 그대로 = 지금까지와 완전히 동일). 남은 칸 안에서
   // **누구를 찾았는지**를 보여 준다 — 같은 반의 다른 학생은 그대로 보여야 "어느 반 몇 번째"가 읽힌다.
-  const rowTone = useSearchTone(student, tone);
+  const rowTone = useSearchTone(student, saved ? movingTone(colorMode) : tone);
   // `select-none` — 더블클릭이 여는 동작이라 글자가 선택돼 파랗게 남지 않게(드래그 줄과 같은 규약).
   const rowCls = `${NAME_CLASS} select-none px-2 py-[3px] leading-tight`;
+  const inner = (
+    <>
+      <NameInner name={name} meta={saved ? "" : meta} badge={badge} />
+      {/* 예약 이동 — `→`는 나감, `←`는 들어옴. 전문(기존 반 이름 포함)은 툴팁에. */}
+      {saved ? (
+        <span className="text-xs font-bold">
+          {" "}
+          {saved.side === "out" ? "→" : "←"}
+          {shortMoveDate(saved.on)}
+        </span>
+      ) : null}
+    </>
+  );
   const trigger = student.studentId ? (
     <StudentNameLink
       studentId={student.studentId}
       name={name}
+      title={saved?.title}
       className={`${rowCls} hover:bg-bg-soft ${rowTone}`}
     >
-      <NameInner name={name} meta={meta} badge={badge} />
+      {inner}
     </StudentNameLink>
   ) : (
-    <div className={`${rowCls} ${rowTone}`}>
-      <NameInner name={name} meta={meta} badge={badge} />
+    <div className={`${rowCls} ${rowTone}`} title={saved?.title || undefined}>
+      {inner}
     </div>
   );
   return (

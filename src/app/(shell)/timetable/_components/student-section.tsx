@@ -91,6 +91,8 @@ export function StudentSection({
           <StudentRow
             key={s.enrollmentId ?? `s-${i}`}
             student={s}
+            // 합반 통합 명단은 줄마다 소속 반이 다르다 — 예약 이동 툴팁이 **그 줄의 반**을 말해야 한다.
+            className={s.ownClassName ?? className}
             name={s.name}
             meta={metaLabel(s.school, s.grade)}
             tone={tone(s)}

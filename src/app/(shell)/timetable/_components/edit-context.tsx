@@ -10,6 +10,23 @@ export type PendingTarget = {
   toDays?: string[];
   /** 같은 반 요일 편집(반 이동 아님) — true면 이동 화살표 대신 "→요일" 변경 배지. */
   sameClass?: boolean;
+  /** 출발 반 이름 — 도착 쪽 미리보기의 '어디서 오는지'와 툴팁이 같은 값을 읽는다. */
+  fromClassName?: string;
+  /**
+   * 이 **한 건**이 실제로 적용될 날짜(`YYYY-MM-DD`) — 드롭 팝업에서 고른 값이 있으면 그것,
+   * 없으면 툴바 적용일·큐 앵커. `null` = 즉시(오늘).
+   * 🔴 화면이 **건별 날짜**를 보여줄 수 있게 provider가 미리 풀어서 넣는다(툴바 값과 어긋나면
+   *    무엇이 저장되는지 알 수 없다 — 원장 2026-09-09 날짜 팝업 지시의 전제).
+   */
+  applyOn: string | null;
+  /**
+   * 이 건에만 **얼려 둔** 날짜(드롭 팝업에서 기본값과 다른 날을 고른 경우) — `null`이면 툴바 '적용일'을 따른다.
+   * 🔴 `applyOn`과 구분해야 한다: 툴바 날짜가 잡혀 있으면 **모든 건**의 `applyOn`이 차 있으므로,
+   *    이 값이 없으면 툴바가 "건별 날짜 N건"을 전건으로 잘못 센다(거짓 요약).
+   */
+  frozenOn: string | null;
+  /** 적용일이 오늘보다 뒤 = **예약 이동**(연보라 '이동 대기'). 저장 전 큐 상태다. */
+  scheduled: boolean;
 };
 
 /** 같은 반 요일 편집 팝오버 대상(편집 모드에서 학생 클릭 시). coveringDays=그 셀이 덮는 요일(월/목 등). */
@@ -88,6 +105,43 @@ export type IncomingStudent = {
   fromClassName: string;
   /** 목적지 등원 요일(드롭한 요일 존) — 전입 예정 미리보기에 [목] 같은 라벨. []=전 요일. */
   attendanceDays?: string[];
+  /** 이 건의 적용일(`null` = 즉시) — 출발 쪽 `PendingTarget.applyOn`과 **같은 값**이다. */
+  applyOn: string | null;
+  /**
+   * 저장하면 **대기 칸에 앉는가** — 미리보기를 그릴 자리의 단일 판정.
+   * 🔴 `scheduled`(예약)와 **다른 축**이다: 오늘 옮기더라도 지금 휴원 중이면 새 수강도 휴원으로 태어나
+   *    (반 이동 RPC 0228a가 `on_hold`를 승계한다) 도착 반에서 **대기**로 보인다. 둘을 뭉치면
+   *    "오늘부터 재원"이라는 거짓 미리보기가 된다.
+   */
+  landsInHold: boolean;
+  /**
+   * 적용일이 미래 = 저장하면 **그날까지 대기**로 앉는다(RPC가 새 수강의 start_date를 그날로 잡고,
+   * 명단 쿼리는 `start > 기준일`을 대기로 읽는다) — 미리보기도 그 자리에 그려야 거짓말이 아니다.
+   */
+  scheduled: boolean;
+};
+
+/**
+ * 드롭 → **날짜 지정 팝업** 대상(원장 2026-09-09 *"드래그를 놓을때 기본뷰건 통합뷰건 날짜를 지정할 수 있게.
+ * (드랍을 하면 날짜지정 팝업)"*).
+ *
+ * 🔴 팝업에서 고른 값은 **그 건의 날짜**가 되고, 툴바 '적용일'은 고르지 않은 건들의 기본값으로 남는다
+ *    (툴바를 없애면 여러 건을 한 날짜로 미는 경로가 사라진다).
+ * 🔴 기본값과 **같은 날짜**를 고르면 얼리지 않는다(`moveOn = null`) — 즉시 의도를 절대 날짜로 얼리면
+ *    자정을 넘겨 저장할 때 그 날짜가 과거가 돼 서버 소급 가드에 거부된다(timetable-board `Queued` 주석).
+ */
+export type MoveDateTarget = {
+  enrollmentId: string;
+  fromClassId: string;
+  fromClassName: string;
+  toClassId: string;
+  toClassName: string;
+  name: string;
+  toSlotId?: string;
+  toDays?: string[];
+  fromDays?: string[];
+  /** 지금 휴원(대기) 중인 수강인가 — 반 이동 RPC가 `on_hold`를 승계하므로 미리보기 자리가 달라진다. */
+  fromHold?: boolean;
 };
 
 export interface TimetableEditState {
@@ -107,6 +161,12 @@ export interface TimetableEditState {
   /** toSlotId(=도착 셀 slot.id, 스케줄 id) → 그 셀로 전입 예정인 학생들. 도착 셀이 초록 미리보기 행으로 표시. */
   incoming: Map<string, IncomingStudent[]>;
   /**
+   * **반 id** → 그 반으로 전입 예정인 학생들 — 통합뷰(카드=반)가 읽는다.
+   * 🔴 `incoming`(셀 slot.id 키)과 **같은 큐**에서 나오지만 키가 다르다: 통합뷰 카드엔 slot이 없고,
+   *    기본뷰에서 큐잉한 건은 slot.id로만 들어 있어 통합뷰가 못 찾는다(뷰를 오가면 큐가 살아남는다).
+   */
+  incomingByClass: Map<string, IncomingStudent[]>;
+  /**
    * 편집 모드에서 학생을 셀(또는 요일 존)로 드롭했을 때 호출(보드의 델타 버퍼에 누적).
    * ⚠️ fromClassId/toClassId는 **실제 반 id**(스케줄 id 아님). toSlotId는 도착 셀 slot.id(마커 키).
    * toDays는 드롭한 요일 존의 등원 요일([]=공통 존=전 요일).
@@ -121,7 +181,18 @@ export interface TimetableEditState {
     toSlotId?: string;
     toDays?: string[];
     fromDays?: string[];
+    /** 이 건에만 지정된 적용일 — 드롭 날짜 팝업이 채운다. 미지정=툴바 적용일·큐 앵커를 따른다. */
+    moveOn?: string | null;
+    /** 휴원 중인 수강인가(도착 반에서 대기로 앉는다 — RPC가 `on_hold`를 승계). */
+    fromHold?: boolean;
   }) => void;
+  /**
+   * 드롭 → 날짜 지정 팝업을 연다(기본뷰·통합뷰 공용). 확인해야 큐에 들어간다 — 취소하면 아무 일도 없다.
+   * 🔴 반 이동(교차 반)에만 쓴다. 같은 반 요일 편집은 드롭이 아니라 클릭이라 이 문을 안 지난다.
+   * 🔴 **큐잉을 못 하는 상태면 팝업조차 안 연다**(과거 주·다른 주 큐 잔류) — 열어 놓고 확인 뒤에 조용히
+   *    버리면 "저장 대기에 들어갔다"는 거짓 성공 토스트가 뜬다(게이트는 여는 자리에 있어야 한다).
+   */
+  openMoveDate: (t: MoveDateTarget) => void;
   /** 압축된 이동 대기 건수(학생 + 반). */
   pendingCount: number;
   /** slotId → 그 배치가 갈 곳(대기 중). 셀 머리가 `→ 화 3교시` 표식을 그린다. */
@@ -150,6 +221,8 @@ export interface TimetableEditState {
   weekMismatch: boolean;
   /** 마우스 오버 중인 학생 등록(편집 모드 Delete=오늘 수강 종료). ref 세팅이라 리렌더 없음. null=해제. */
   setHovered: (h: HoveredStudent | null) => void;
+  /** 오늘(KST) — 예약 이동('이동 대기') 판정의 기준. 화면이 제 날짜를 새로 만들지 않게 provider가 내려준다. */
+  today: string;
   /** 편집 모드에서 학생 클릭 → 같은 반 요일 편집 팝오버 열기. */
   openDayEdit: (t: DayEditTarget) => void;
   /** 합반 드롭 → 반+요일 선택 팝업 열기(외부 학생 어디든 / 멤버의 다른 세그먼트). */
@@ -163,7 +236,9 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   queueClassMove: noop,
   pending: new Map(),
   incoming: new Map(),
+  incomingByClass: new Map(),
   queueMove: noop,
+  openMoveDate: noop,
   pendingCount: 0,
   save: noop,
   cancel: noop,
@@ -175,6 +250,7 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   dateFloor: "",
   queueDate: null,
   weekMismatch: false,
+  today: "",
   setHovered: noop,
   openDayEdit: noop,
   openClassPick: noop,

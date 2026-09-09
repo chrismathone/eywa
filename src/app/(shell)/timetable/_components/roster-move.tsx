@@ -17,6 +17,7 @@ import {
 
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { endSingleEnrollment, holdSingleEnrollment } from "@/features/students/server/actions";
+import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 import {
   noteDragPointerDown,
   noteDragPointerUp,
@@ -24,21 +25,33 @@ import {
   swallowClickAfterDrag,
   swallowDoubleClickAfterDrag,
 } from "./drag-flag";
+import { useTimetableEdit } from "./edit-context";
+import { annotateStudentBlocks, clearDropCells } from "./grid-drop-cell";
+import { refuse } from "./move-toast";
 
 /**
- * 통합뷰 명단 이동 — 학생 줄을 **대기/퇴원 칸으로 끌어다 놓는다**(원장 2026-09-07).
+ * 통합뷰 명단 드래그 — **대기/퇴원 칸**(2026-09-07)과 **다른 반의 재원 칸**(2026-09-09)을 함께 받는다.
  *
- * *"학생을 드래그해서 대기/퇴원으로 이동할 수 있도록 만들것. 퇴원으로 이동시 다시 알림이 뜨도록하고 해당
- *  과목에서 수강종료 시킬것"* → *"오늘 날자가 아니라 날짜를 지정할 수 있게(디폴트를 오늘날짜)"* →
- * *"대기도 마찬가지"* → *"통합뷰에서만"*.
+ * 2026-09-07 원장: *"학생을 드래그해서 대기/퇴원으로 이동할 수 있도록 만들것. 퇴원으로 이동시 다시 알림이
+ *  뜨도록하고 해당 과목에서 수강종료 시킬것"* → *"오늘 날자가 아니라 날짜를 지정할 수 있게(디폴트를
+ *  오늘날짜)"* → *"대기도 마찬가지"* → *"통합뷰에서만"*.
+ * 2026-09-09 원장: *"드래그만 되고 적용이 안되네. 통합뷰에서도 학생 드래그 기능 추가시켜"* → (무엇을?)
+ *  *"드래그 이동"* — 즉 **반과 반 사이 이동**. 종전엔 드롭 대상이 대기·퇴원 둘뿐이라 한 반 **안**에서만
+ *  움직였다.
  *
- * 🔴 **저장 경로를 새로 만들지 않는다** — 퇴원 = `endSingleEnrollment`(반 상세·학생 상세와 같은 액션,
- *    종료 규약은 `endEnrollmentById` 단일 소스), 대기 = `holdSingleEnrollment`. 화면이 게이트가 아니므로
- *    두 액션 모두 서버에서 `canManageStudentRecords`(students full)로 한 번 더 막는다(#77).
- * 🔴 **떨어뜨리는 것만으로 바뀌지 않는다** — 되돌리기 어려운 변경이라 확인 팝업을 한 번 거친다(기본뷰
- *    Delete=수강 종료와 같은 규약).
- * 🔴 드롭은 **같은 반 안에서만** 받는다 — 남의 반 대기 칸에 떨어뜨리는 것은 '반 이동'이라 다른 동작이고,
- *    통합뷰엔 그 판정(학생·강사·강의실 충돌)이 없다.
+ * 🔴 **저장 경로를 새로 만들지 않는다** — 퇴원 = `endSingleEnrollment`, 대기 = `holdSingleEnrollment`,
+ *    **반 이동 = 기본뷰와 같은 큐**(`useTimetableEdit().openMoveDate` → `queueMove` → 저장에서
+ *    `moveEnrollmentsBatch`). 두 벌이 되면 한쪽만 고쳐진다.
+ * 🔴 **떨어뜨리는 것만으로 바뀌지 않는다** — 대기·퇴원은 확인 팝업, 반 이동은 **적용일 팝업**을 거친다
+ *    (원장 2026-09-09 *"드랍을 하면 날짜지정 팝업"*).
+ * 🔴 **축이 둘이라 권한도 둘이다** — 대기·퇴원은 학생 기록 변경(students full, `canEdit` prop),
+ *    반 이동은 시간표 편집(classes manage, `useTimetableEdit().canDrag`). 한쪽만 있어도 그쪽은 된다.
+ * 🔴 **다른 반의 대기·퇴원 칸은 받지 않는다** — "남의 반 대기로 보내기"는 지금 어떤 저장 경로도 없다.
+ *    조용히 무시하지 않고 **왜 안 되는지 말한다**(거절인지 고장인지 구분되게).
+ * 🔴 못 가는 반은 기본뷰와 **같은 기계**로 미리 막는다 — 집는 순간 그 학생의 다른 과목 일정을 받아
+ *    (`/api/timetable/student-busy`) `annotateStudentBlocks`가 반 카드에 빗금을 친다.
+ *    ⚠️ **서버 액션이 아니라 라우트 핸들러**여야 한다([[#102]]) — 서버 액션 응답은 현재 라우트의 RSC
+ *       트리를 다시 적용해서, 드래그 도중이면 끌던 줄이 언마운트되고 드래그가 통째로 죽는다.
  * ⚠️ DndContext는 zoom 래퍼 **바깥**에 있다 — 안쪽이면 `position:fixed`인 DragOverlay가 zoom 좌표계로
  *    들어가 커서와 어긋난다([[#98]], 기본뷰와 같은 배치).
  */
@@ -51,29 +64,33 @@ export type RosterDragData = {
   name: string;
   meta: string;
   tone: string;
+  /** 이 학생의 등원 요일(분리등원, 비면 전 요일) — 반 이동 시 출발 요일(no-op 판정·요일 승계). */
+  attendanceDays?: string[];
   /** 지금 어느 칸에 있나 — 같은 칸에 다시 놓는 것은 아무 일도 아니다(팝업조차 뜨면 안 된다). */
   from: "active" | "hold";
 };
 
-export type RosterDropKind = "hold" | "withdrawn";
+/** 재원 칸은 **다른 반에서 오는 학생**을 받는다(반 이동). 대기·퇴원은 같은 반 안의 상태 변경. */
+export type RosterDropKind = "active" | "hold" | "withdrawn";
 
-/** 드롭 칸 id — `classId`를 담아 **같은 반인지**를 놓는 순간 판정한다. */
+/** 드롭 칸 id — dnd-kit 안에서 유일하기만 하면 된다(판정은 `data`로 한다, id 파싱 금지). */
 export function rosterDropId(classId: string, kind: RosterDropKind): string {
   return `roster-drop:${classId}:${kind}`;
 }
 
-function parseDropId(id: string): { classId: string; kind: RosterDropKind } | null {
-  const m = /^roster-drop:(.+):(hold|withdrawn)$/.exec(id);
-  return m ? { classId: m[1]!, kind: m[2] as RosterDropKind } : null;
-}
+/**
+ * 드롭 칸이 싣는 것 — **id를 쪼개지 말 것**(기본뷰 드롭존과 같은 규약: 반 이름이 필요한데 id엔 없다).
+ */
+export type RosterDropData = { classId: string; className: string; kind: RosterDropKind };
 
 /**
  * 이 화면에서 명단을 옮길 수 있나 + 오늘 날짜.
  * 🔴 값은 **드래그 중에 안 바뀐다**(권한·날짜뿐) — 끄는 상태를 여기 넣으면 집는 순간 카드 전부가 다시
  *    그려진다(기본뷰에서 실제로 났던 픽업 렉. `drag-flag.ts` 주석).
  */
-const RosterMoveContext = createContext<{ enabled: boolean; today: string }>({
+const RosterMoveContext = createContext<{ enabled: boolean; canMoveClass: boolean; today: string }>({
   enabled: false,
+  canMoveClass: false,
   today: "",
 });
 
@@ -96,35 +113,112 @@ export function RosterMoveArea({
   today,
   children,
 }: {
+  /** 학생 기록을 바꿀 수 있나(students full) — **대기·퇴원** 축의 문. */
   canEdit: boolean;
   today: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  // 🔴 **반 이동 축**은 시간표 편집 권한(classes manage)이고 큐도 기본뷰와 공유한다 — 저장 경로를 두 벌로
+  //    만들지 않는다. `canDrag`는 권한 + 이번/미래 주라서 과거 주에선 이 축이 통째로 닫힌다(#77).
+  const { canDrag, openMoveDate, dateFloor } = useTimetableEdit();
   const [drag, setDrag] = useState<RosterDragData | null>(null);
   const [pending, setPending] = useState<(RosterDragData & { kind: RosterDropKind }) | null>(null);
   // 집는 순간의 drag data 스냅샷 — 끌던 줄이 언마운트되면 dnd-kit `active.data`가 빈 객체가 된다(timetable-board와
   // 같은 안전망, drag-flag.ts `holdArmedRow` 주석).
   const dragRef = useRef<RosterDragData | null>(null);
+  /**
+   * 지금 끌고 있는 학생이 **못 가는 반** → 이유(기본뷰와 같은 맵·같은 문구).
+   * 🔴 화면(빗금)과 드롭 거절이 **같은 맵**을 읽는다 — 갈리면 "빗금인데 들어가네"가 된다.
+   * 🔴 비어 있는 것이 정상 상태다(fail-open) — 조회가 늦거나 실패하면 아무것도 안 막는다(표식은 게이트가 아니다).
+   */
+  const blockRef = useRef<Map<string, string>>(new Map());
   // 5px 넘게 끌어야 드래그 — 그래야 줄의 더블클릭(학생 정보)이 그대로 산다([[#97]]와 같은 규약).
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  const value = useMemo(() => ({ enabled: canEdit, today }), [canEdit, today]);
+  const value = useMemo(
+    () => ({ enabled: canEdit, canMoveClass: canDrag, today }),
+    [canEdit, canDrag, today],
+  );
 
-  const onDragEnd = useCallback((e: DragEndEvent) => {
-    setTimetableDragging(false);
-    setDrag(null);
-    const data = dragRef.current ?? (e.active.data.current as RosterDragData | undefined);
-    dragRef.current = null;
-    const target = e.over ? parseDropId(String(e.over.id)) : null;
-    if (!data || !target) return;
-    // 남의 반 칸 = 반 이동이라 여기서 처리하지 않는다(조용히 무시 — 화면은 제자리로 돌아간다).
-    if (target.classId !== data.classId) return;
-    // 제자리(대기 → 대기) — 바뀌는 게 없으니 확인 팝업도 띄우지 않는다.
-    if (target.kind === "hold" && data.from === "hold") return;
-    setPending({ ...data, kind: target.kind });
-  }, []);
+  const onDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      setTimetableDragging(false);
+      setDrag(null);
+      const data = dragRef.current ?? (e.active.data.current as RosterDragData | undefined);
+      dragRef.current = null;
+      // 🔴 막힌 반 목록을 **먼저 읽고** 표식을 걷는다 — 순서가 바뀌면 놓는 순간 맵이 비어 빗금이 무의미해진다.
+      const blocked = new Map(blockRef.current);
+      blockRef.current = new Map();
+      clearDropCells(document);
+      const target = (e.over?.data.current as RosterDropData | undefined) ?? null;
+      if (!data || !target) return; // 아무 데도 아닌 곳 = 취소(사용자가 의도한 무동작이라 말하지 않는다)
+      if (target.classId === data.classId) {
+        // ── 같은 반 안 ── 재원 칸에 도로 놓은 것은 제자리다(팝업조차 뜨면 안 된다).
+        // 🔴 단 **대기 → 재원**은 제자리가 아니라 "여기선 못 한다" — 조용히 삼키면 고장으로 읽힌다
+        //    (원장 2026-09-08 *"드랍해도 아무런 반응이 없음"*). 수강 단위 대기 해제는 지금 저장 경로가
+        //    학생 상세(재원 복구)뿐이라 그 자리를 알려 준다.
+        if (target.kind === "active") {
+          if (data.from === "hold")
+            refuse(`${data.name} 학생의 대기 해제는 학생 상세에서 합니다 — 여기서는 되돌릴 수 없습니다.`);
+          return;
+        }
+        if (target.kind === "hold" && data.from === "hold") return;
+        if (!canEdit) return refuse("학생 기록을 바꿀 권한이 없습니다.");
+        setPending({ ...data, kind: target.kind });
+        return;
+      }
+      // ── 다른 반 ── 재원 칸만 '반 이동'이다. 대기·퇴원 칸엔 저장 경로가 없어 **왜 안 되는지 말한다**.
+      if (target.kind !== "active")
+        return refuse(
+          `${target.className} 반의 ${target.kind === "hold" ? "대기" : "퇴원"} 칸으로는 옮길 수 없습니다 — 반을 옮기려면 그 반의 재원 명단에 놓아 주세요.`,
+        );
+      if (!canDrag) return refuse("반 이동은 시간표 편집 권한이 있어야 합니다(과거 주는 조회 전용).");
+      const why = blocked.get(target.classId);
+      if (why) return refuse(`${data.name} 학생은 ${target.className} 반으로 옮길 수 없습니다 — ${why}`);
+      // 🔴 큐잉은 **적용일 팝업 확인 뒤**(원장 2026-09-09) — 여기서 바로 넣으면 날짜를 물어볼 자리가 없다.
+      // ⚠️ 통합뷰 명단 칸엔 요일 축이 없다 → 목적지 등원 요일은 **전 요일**([]). 요일을 나누려면 기본뷰에서.
+      openMoveDate({
+        enrollmentId: data.enrollmentId,
+        fromClassId: data.classId,
+        fromClassName: data.className,
+        toClassId: target.classId,
+        toClassName: target.className,
+        name: data.name,
+        toDays: [],
+        fromDays: data.attendanceDays ?? [],
+        // 휴원 중인 수강은 반을 옮겨도 휴원이 승계된다(RPC 0228a) → 도착 반 미리보기는 **대기** 칸에.
+        fromHold: data.from === "hold",
+      });
+    },
+    [canEdit, canDrag, openMoveDate],
+  );
 
-  if (!canEdit) return <>{children}</>;
+  /**
+   * 집는 순간 그 학생의 **다른 과목 일정**을 받아 못 가는 반에 빗금을 친다(기본뷰와 같은 기계).
+   * 🔴 늦게 도착해도 괜찮다 — 도착하면 그때 빗금이 서고, 그 전에 놓으면 종전처럼 서버 규칙만 적용된다.
+   *    이미 다른 드래그가 시작됐으면 버린다(응답이 뒤늦게 와서 남의 드래그에 빗금을 치지 않게).
+   */
+  const loadBlocks = useCallback(
+    (d: RosterDragData | null) => {
+      blockRef.current = new Map();
+      if (!d?.studentId || !dateFloor || !canDrag) return;
+      const q = new URLSearchParams({ studentId: d.studentId, week: dateFloor, exclude: d.classId });
+      void fetch(`/api/timetable/student-busy?${q.toString()}`, { cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<{ windows: StudentBusyWindow[] }>) : { windows: [] }))
+        .then(({ windows }) => {
+          if (dragRef.current !== d || windows.length === 0) return;
+          blockRef.current = annotateStudentBlocks(document, windows);
+        })
+        .catch(() => {
+          /* 표식은 도움이지 게이트가 아니다 — 실패하면 아무것도 안 막는다 */
+        });
+    },
+    [dateFloor, canDrag],
+  );
+
+  // 🔴 두 축 중 **하나라도** 열려 있으면 끌 수 있어야 한다 — 종전엔 `canEdit`(학생 기록)만 봐서,
+  //    시간표는 편집할 수 있는데 학생 기록 권한이 없는 계정은 반 이동조차 못 했다.
+  if (!canEdit && !canDrag) return <>{children}</>;
 
   return (
     <RosterMoveContext.Provider value={value}>
@@ -136,9 +230,12 @@ export function RosterMoveArea({
           const d = (e.active.data.current as RosterDragData | undefined) ?? null;
           dragRef.current = d;
           setDrag(d);
+          loadBlocks(d);
         }}
         onDragCancel={() => {
           dragRef.current = null;
+          blockRef.current = new Map();
+          clearDropCells(document);
           setTimetableDragging(false);
           setDrag(null);
         }}

@@ -282,6 +282,8 @@ export function HapbanCell({
                                 <StudentRow
                                   key={s.enrollmentId ?? `p-${day}-${i}`}
                                   student={s}
+                                  // 합반 분리등원 줄은 소속 반이 저마다 다르다 — 끌 수 있는 줄과 **같은 값**을 넘긴다.
+                                  className={owner?.className ?? s.ownClassName}
                                   name={s.name}
                                   meta={metaLabel(s.school, s.grade)}
                                   tone={timetableStudentTone(colorMode, s)}

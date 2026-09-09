@@ -18,10 +18,18 @@ import {
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { useClassFilter, useSearchTone } from "./search-context";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { holdTone, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
+import { holdTone, movingTone, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 import { holdArmedRow, setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
-import { rosterDropId, useRosterMove, type RosterDragData } from "./roster-move";
+import { rosterDropId, useRosterMove, type RosterDragData, type RosterDropData } from "./roster-move";
+// ⚠️ `movedCellBox` — 접힌 칸이 아래 행의 가로선을 덮던 것(2026-09-09). 기하는 row-span 단일 소스에 있다.
 import { movedByTarget, movedCellBox, visibleSpanRows } from "@/features/timetable/lib/row-span";
+import { useTimetableEdit, type IncomingStudent, type PendingTarget } from "./edit-context";
+import { shortMoveDate } from "@/features/timetable/lib/move-date";
+import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
+// 🔴 학생 드래그 빗금은 **반 단위**라 카드가 자기 id를 DOM에 달아 둔다(기본뷰 셀과 같은 표식·같은 CSS).
+//    좌표(요일·시각)는 화면에 안 그려지는 숨은 표식이 들고 있다(rich-grid-view.tsx) — 카드 하나에
+//    요일·교시가 여럿이라 카드 자신은 한 좌표로 답할 수 없다.
+import { CLASS_CELL_ID_ATTR, CLASS_CELL_NAME_ATTR } from "@/features/timetable/lib/grid-attrs";
 
 /**
  * 표 격자선 — 통합뷰는 **격자 자체가 정보**라 데이터 표(열=`--line-faint`)와 규약이 다르다.
@@ -184,7 +192,34 @@ export function RichCardGroupBoard({
 }) {
   // 섹션 안에서는 모든 카드가 같은 높이(행이 맞물려 시트처럼 읽힌다) — 높이는 그 섹션의 최대 인원.
   // '학생 명단 접기'면 세 섹션을 0행으로 — 높이·라벨·행이 **같은 값 하나**를 보므로 카드와 라벨열이 어긋나지 않는다.
-  const rosterRows = hideStudents ? { active: 0, hold: 0, withdrawn: 0 } : group.rosterRows;
+  /**
+   * 🔴 **전입 예정 미리보기가 들어갈 자리를 함께 잡는다** — 안 잡으면 대기 0명인 줄에서는 대기 섹션 자체가
+   *    안 그려져(`rows <= 0` → null) 예약 이동 미리보기가 **통째로 안 보인다**(끌어다 놓았는데 아무 일도
+   *    안 일어난 것처럼 보인다 — 원장 2026-09-09 제보의 그 증상).
+   * 🔑 큐가 비면 더하는 값이 0이라 **평소 화면은 한 픽셀도 안 바뀐다**(편집 중에만 자란다).
+   * ⚠️ 라벨열도 같은 값(`activeH`·`holdH`)을 쓰므로 두 열의 줄이 함께 맞는다.
+   * ⚠️ '학생 명단 접기'면 그대로 0 — 접어 둔 화면에 미리보기만 튀어나오면 접은 뜻이 사라진다(툴바가 대신 알린다).
+   */
+  const { incomingByClass } = useTimetableEdit();
+  const extraRows = (kind: "now" | "later") =>
+    hideStudents
+      ? 0
+      : group.cards.reduce(
+          (max, c) =>
+            Math.max(
+              max,
+              (incomingByClass.get(c.classId) ?? []).filter((s) =>
+                kind === "later" ? s.landsInHold : !s.landsInHold,
+              ).length,
+            ),
+          0,
+        );
+  const baseRows = hideStudents ? { active: 0, hold: 0, withdrawn: 0 } : group.rosterRows;
+  const rosterRows = {
+    active: baseRows.active + extraRows("now"),
+    hold: baseRows.hold + extraRows("later"),
+    withdrawn: baseRows.withdrawn,
+  };
   const activeH = sectionH(rosterRows.active);
   const holdH = sectionH(rosterRows.hold);
   const wdH = sectionH(rosterRows.withdrawn);
@@ -320,6 +355,18 @@ export function ClassColumn({
    *    읽히는 게 먼저다(폭을 0까지 줄이면 스크롤이 없어지는 대신 아무것도 못 읽는다).
    */
   const editFlex = namesOnly ? { flex: `1 1 ${EDIT_CARD_MIN_W}px`, minWidth: EDIT_CARD_MIN_W, maxWidth: CARD_W } : null;
+  /**
+   * 저장 대기 중인 이동 — **카드 하나가 한 번만** 컨텍스트를 구독하고 줄에는 prop으로 내려보낸다.
+   * 🔴 줄마다 구독하면(카드당 10~20줄 × 42카드) 큐가 바뀔 때마다 수백 줄이 함께 다시 그려진다
+   *    (기본뷰가 픽업 렉으로 겪었던 것과 같은 계열 — drag-flag.ts 주석).
+   */
+  const { pending: pendingMoves, incomingByClass } = useTimetableEdit();
+  const incomingAll = incomingByClass.get(card.classId) ?? [];
+  // 🔴 미리보기는 **저장하면 실제로 앉을 자리**에 그린다 — 즉시 이동은 재원, 예약 이동은 대기
+  //    (RPC가 새 수강의 start_date를 적용일로 잡고, 명단은 `start > 기준일`을 대기로 읽는다).
+  //    자리를 안 가르면 "오늘부터 이 반 학생"이라는 거짓 약속이 된다(원장 2026-09-09 지시의 핵심).
+  const incomingNow = incomingAll.filter((s) => !s.landsInHold);
+  const incomingLater = incomingAll.filter((s) => s.landsInHold);
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#121212" }
@@ -328,6 +375,12 @@ export function ClassColumn({
   return (
     <div
       ref={edit?.setNodeRef}
+      // 🔴 학생을 끌 때 "이 반엔 못 간다"를 **카드 통째로** 칠한다(빗금 그림은 globals.css 한 곳,
+      //    격자 칸과 같은 표식). 판정 단위가 반이라 카드 전체가 막히는 것이 맞다 — 일부만 치면
+      //    "다른 칸엔 놓을 수 있나?"로 읽힌다.
+      // ⚠️ 좌표(요일·시각)는 여기 안 싣는다 — 카드 하나가 요일·교시 여럿이라 한 좌표로 답할 수 없다.
+      //    숨은 좌표 표식은 rich-grid-view.tsx가 슬롯에서 그대로 그린다(같은 `annotateStudentBlocks`가 읽는다).
+      {...(namesOnly ? {} : { [CLASS_CELL_ID_ATTR]: card.classId, [CLASS_CELL_NAME_ATTR]: card.className })}
       className={`${CARD_EDGE} flex flex-col ${editFlex ? "" : "shrink-0"} ${edit ? "relative" : ""} ${
         edit?.dragging ? "opacity-35" : ""
       }`}
@@ -442,30 +495,56 @@ export function ClassColumn({
           ))}
         </div>
       ))}
-      {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드. */}
-      <RosterSection h={activeH} rows={rosterRows.active} count={card.active.length} className={`bg-card ${GRID} border-b`}>
-        {card.activeCount === 0 ? (
+      {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드.
+          🔴 **다른 반에서 끌어온 학생을 받는 칸**이기도 하다(원장 2026-09-09 "드래그 이동") — 대기·퇴원과
+             달리 이 칸은 *남의 반* 학생을 받는다. */}
+      <RosterSection
+        h={activeH}
+        rows={rosterRows.active}
+        count={card.active.length + incomingNow.length}
+        className={`bg-card ${GRID} border-b`}
+        drop={{ classId: card.classId, className: card.className, kind: "active" }}
+      >
+        {card.activeCount === 0 && incomingNow.length === 0 ? (
           <EmptyDash />
         ) : (
           card.active.map((s, i) => (
-            <RosterRow key={s.studentId ?? `a-${i}`} s={s} classId={card.classId} cardName={card.className} />
+            <RosterRow
+              key={s.studentId ?? `a-${i}`}
+              s={s}
+              classId={card.classId}
+              cardName={card.className}
+              move={pendingMoves.get(s.enrollmentId ?? "")}
+            />
           ))
         )}
+        {incomingNow.map((s) => (
+          <IncomingRow key={`in-${s.enrollmentId}`} s={s} toClassName={card.className} />
+        ))}
       </RosterSection>
       <RosterSection
         h={holdH}
         rows={rosterRows.hold}
-        count={card.hold.length}
+        count={card.hold.length + incomingLater.length}
         className={`bg-bg-soft ${GRID} border-b`}
-        dropId={rosterDropId(card.classId, "hold")}
+        drop={{ classId: card.classId, className: card.className, kind: "hold" }}
       >
-        {card.hold.length === 0 ? (
+        {card.hold.length === 0 && incomingLater.length === 0 ? (
           <EmptyDash />
         ) : (
           card.hold.map((s, i) => (
-            <RosterRow key={s.studentId ?? `h-${i}`} s={s} classId={card.classId} cardName={card.className} />
+            <RosterRow
+              key={s.studentId ?? `h-${i}`}
+              s={s}
+              classId={card.classId}
+              cardName={card.className}
+              move={pendingMoves.get(s.enrollmentId ?? "")}
+            />
           ))
         )}
+        {incomingLater.map((s) => (
+          <IncomingRow key={`in-${s.enrollmentId}`} s={s} toClassName={card.className} />
+        ))}
       </RosterSection>
       {/* 퇴원 — 재원/대기와 동일 서식, 진회색 배경+흰 글자 톤으로 구분 */}
       <RosterSection
@@ -473,7 +552,7 @@ export function ClassColumn({
         rows={rosterRows.withdrawn}
         count={card.withdrawn.length}
         className="bg-bg-soft"
-        dropId={rosterDropId(card.classId, "withdrawn")}
+        drop={{ classId: card.classId, className: card.className, kind: "withdrawn" }}
       >
         {card.withdrawn.length === 0 ? (
           <EmptyDash />
@@ -546,7 +625,7 @@ function RosterRowShell({
       onPointerOver={() => onArm?.()}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      title="끌어서 대기·퇴원으로 · 클릭 = 학생 정보"
+      title="끌어서 다른 반·대기·퇴원으로 · 클릭 = 학생 정보"
       className={`cursor-grab touch-none select-none active:cursor-grabbing ${dnd?.isDragging ? "opacity-40" : ""}`}
     >
       {children}
@@ -563,6 +642,37 @@ function EmptyDash() {
 }
 
 /**
+ * **전입 예정 미리보기 한 줄** — 다른 반에서 끌어와 아직 저장하지 않은 학생(원장 2026-09-09 *"미래에
+ * 이동할 반에서는 '대기'생 상태가 되는것"*).
+ *
+ * 🔴 저장하면 실제로 앉을 자리에 그린다 — 즉시 이동은 **재원**, 예약 이동은 **대기** 칸(호출부가 가른다).
+ * 🔴 **저장 전이라는 사실**을 점선으로 말한다 — 예약으로 이미 저장된 줄과 색(연보라)이 같기 때문이다.
+ *    문구도 `moveWaitTitle(saved:false)`가 그렇게 적는다(같은 색, 다른 말).
+ * ⚠️ 좁은 칸이라 화면엔 이름 + 날짜만 — 어디서 오는지(기존 반)는 툴팁이 말한다(원장 명시).
+ */
+function IncomingRow({ s, toClassName }: { s: IncomingStudent; toClassName: string }) {
+  return (
+    <div
+      title={moveWaitTitle({
+        side: "in",
+        fromClassName: s.fromClassName,
+        toClassName,
+        on: s.applyOn,
+        saved: false,
+      })}
+      // ⚠️ 테두리는 `border`가 아니라 **`outline`** — border는 줄 높이를 2px 밀어서 섹션이 미리 잡아 둔
+      //    높이(`STU_H` × 행 수)를 넘긴다(그만큼 아래 줄이 잘려 보인다). outline은 레이아웃 밖이라 안 민다.
+      className={`flex items-baseline justify-between gap-1 overflow-hidden rounded-[2px] px-2 py-[3px] leading-tight whitespace-nowrap outline-1 outline-dashed -outline-offset-1 ${
+        s.scheduled ? "bg-purple-soft text-purple outline-purple/50" : "bg-primary-soft text-primary outline-primary/50"
+      }`}
+    >
+      <span className="min-w-0 overflow-hidden text-clip">← {s.name}</span>
+      <span className="shrink-0 text-xs font-bold">{s.scheduled ? shortMoveDate(s.applyOn) : "전입"}</span>
+    </div>
+  );
+}
+
+/**
  * 명단 섹션 한 칸(재원/대기/퇴원 공용).
  * - `rows`가 0이면 **아예 안 그린다**(그 섹션에 인원이 한 명도 없는 그룹 — 빈 "-" 줄이 사라진다).
  * - 인원이 표시 행수를 넘으면 카드 안에서만 스크롤한다. 카드 높이는 그대로라 이단 스크롤이 안 생긴다.
@@ -574,26 +684,42 @@ function RosterSection({
   rows,
   count,
   className,
-  dropId,
+  drop,
   children,
 }: {
   h: number;
   rows: number;
   count: number;
   className: string;
-  /** 대기·퇴원 칸이면 드롭 대상 id — 없으면(재원) 그냥 목록이다. */
-  dropId?: string;
+  /**
+   * 이 칸이 받는 것 — 재원=다른 반에서 오는 학생(반 이동) · 대기/퇴원=같은 반 안의 상태 변경.
+   * 🔴 **반 이름까지 싣는다**(id를 쪼개지 말 것) — 거절·팝업 문구가 반 이름을 필요로 한다.
+   */
+  drop?: RosterDropData;
   children: React.ReactNode;
 }) {
   // 🔴 훅은 이른 반환보다 **앞에** — 조건부로 부르면 훅 순서가 깨진다.
-  const { setNodeRef, isOver } = useDroppable({ id: dropId ?? "roster-drop:none", disabled: !dropId });
+  const { setNodeRef, isOver, active } = useDroppable({
+    id: drop ? rosterDropId(drop.classId, drop.kind) : "roster-drop:none",
+    data: drop,
+    disabled: !drop,
+  });
+  /**
+   * 🔴 **받을 수 없는 드래그엔 링을 켜지 않는다** — 재원 칸은 *남의 반* 학생만 받고, 대기·퇴원 칸은
+   *    *제 반* 학생만 받는다. 안 가르면 놓을 수 없는 자리가 "여기 놓으세요"로 빛나고, 놓으면 아무 일도
+   *    안 일어나 고장으로 읽힌다(원장 2026-09-08 *"드랍해도 아무런 반응이 없음"*의 반대편 얼굴).
+   * ⚠️ 못 가는 반(빗금)까지는 여기서 못 가른다 — 그건 카드 전체를 덮는 빗금이 말한다(같은 드래그, 다른 층).
+   */
+  const fromClassId = (active?.data.current as { classId?: string } | undefined)?.classId;
+  const accepts =
+    !!drop && !!fromClassId && (drop.kind === "active" ? fromClassId !== drop.classId : fromClassId === drop.classId);
   if (rows <= 0) return null;
   const overflowing = count > rows;
   return (
     <div
-      ref={dropId ? setNodeRef : undefined}
+      ref={drop ? setNodeRef : undefined}
       // 받을 수 있는 칸이라는 신호는 **끌고 있을 때만** 뜬다(평소엔 아무 표시도 없다).
-      className={`${className} scrollbar-hide overflow-y-auto p-1 text-sm ${isOver ? "ring-primary ring-2 ring-inset" : ""}`}
+      className={`${className} scrollbar-hide overflow-y-auto p-1 text-sm ${isOver && accepts ? "ring-primary ring-2 ring-inset" : ""}`}
       style={{
         height: h,
         // 아래 12px에 걸쳐 서서히 사라지게 — 잘린 이름이 "여기서 끝"으로 안 읽히도록.
@@ -706,21 +832,25 @@ function RosterRow({
   s,
   classId,
   cardName,
+  move,
 }: {
   s: GridStudent;
   /** 이 줄이 속한 반 — 드롭 판정(같은 반인지)과 확인 팝업 문구에 쓴다. */
   classId?: string;
   cardName?: string;
+  /** 저장 대기 중인 이동(카드가 한 번 읽어 내려보낸다 — 줄마다 컨텍스트를 구독하지 않게). */
+  move?: PendingTarget;
 }) {
   const withdrawn = s.status === "withdrawn";
-  // 명단 이동(대기/퇴원 드롭) — 권한이 있고 **아직 살아 있는 수강**만 집는다(퇴원 줄은 끝난 기록이다).
+  // 명단 이동 — 축이 둘이다: 대기·퇴원(학생 기록 권한) / 다른 반으로 이동(시간표 편집 권한).
+  // 🔴 **하나라도** 열려 있으면 줄을 집을 수 있어야 한다(어디에 놓을 수 있는지는 놓는 순간 판정한다).
   // ⚠️ 훅은 분기와 무관하게 항상 같은 순서로 부른다.
-  const { enabled } = useRosterMove();
+  const { enabled, canMoveClass } = useRosterMove();
   const rowKey = `rc:${s.enrollmentId ?? s.studentId ?? ""}`;
   const armed = useIsArmedRow(rowKey);
   // 터치·펜엔 hover가 없어 무장이 안 걸린다 → 그 기기에선 모든 줄을 무장한다(기본뷰와 같은 규약).
   const touch = useTouchCapable();
-  const movable = enabled && !withdrawn && !!s.enrollmentId && !!classId;
+  const movable = (enabled || canMoveClass) && !withdrawn && !!s.enrollmentId && !!classId;
   const colorMode = useTimetableColorMode();
   // 재원/대기는 기본뷰와 **같은 tone 헬퍼**(색 강도 모드 반영). 예전엔 여기서 pastel 색을 손으로 박아
   // 뷰 설정 '색 강도'를 바꿔도 통합뷰만 안 따라왔다. 퇴원은 통합뷰에만 있는 섹션이라 전용 tone 유지.
@@ -730,26 +860,72 @@ function RosterRow({
     : s.status === "hold"
       ? holdTone(colorMode)
       : timetableStudentTone(colorMode, s);
+  /**
+   * 저장 대기 중인 **반 이동** — 기본뷰 학생 줄과 같은 규약.
+   * 🔴 적용일이 미래면 연보라 '이동 대기'(원장 2026-09-09), 오늘이면 종전대로 취소선+화살표.
+   * ⚠️ 예약 tone은 **바탕**으로 넘긴다(덧붙이지 않는다) — 검색에 걸리면 검색 표식이 이겨야 하고,
+   *    두 클래스를 이어 붙이면 같은 축 유틸이 겹쳐 승자를 CSS 순서가 정한다([[#116]]).
+   */
+  const moving = !!move && !move.sameClass;
+  const scheduledMove = moving && move!.scheduled;
+  /**
+   * **이미 저장된 예약 이동** — 저장 전 큐(`move`)와 색은 같고 문구가 다르다(`saved: true`).
+   * 🔴 지금 끌어 옮기는 중이면(큐) 그쪽이 이긴다 — 사람이 방금 한 일이 화면의 주인공이다.
+   */
+  const saved = moving ? null : savedMoveView({ status: s.status, movingOut: s.movingOut, movingIn: s.movingIn, thisClassName: cardName ?? "" });
+  const waiting = scheduledMove || !!saved;
   // 검색에 걸린 학생 표식 — 기본뷰 StudentRow와 같은 함수(같은 필드로 판정, 같은 클래스로 표시).
-  const tone = useSearchTone(s, baseTone);
+  const tone = useSearchTone(s, waiting ? movingTone(colorMode) : baseTone);
   const meta = schoolGradeLabel(s.school, s.grade);
+  const moveTitle = moving
+    ? moveWaitTitle({
+        side: "out",
+        fromClassName: cardName ?? "",
+        toClassName: move!.toClassName,
+        on: move!.applyOn,
+        saved: false,
+      })
+    : (saved?.title ?? "");
   // 기본뷰 StudentRow와 같은 조립 — 이름이 먼저, 메타는 `/`로 붙어 좁으면 메타부터 잘린다(생략부호 없이 clip).
   const inner = (
     <>
-      {s.name}
-      {/* 학교·학년 꼬리는 한 단계 작게(14px, v5 바닥) — 이름은 그대로 두고 꼬리만 줄여 좁은 2요일 카드에서도 덜 잘린다. */}
-      {meta ? <span className="text-xs opacity-90">/{meta}</span> : null}
+      <span className={moving && !scheduledMove ? "line-through" : ""}>{s.name}</span>
+      {/* 학교·학년 꼬리는 한 단계 작게(14px, v5 바닥) — 이름은 그대로 두고 꼬리만 줄여 좁은 2요일 카드에서도 덜 잘린다.
+          🔴 이동 대기 줄은 꼬리 대신 **어디로·언제 가는지**를 적는다(좁은 칸이라 둘 다는 안 들어간다). */}
+      {moving ? (
+        <span className={`text-xs font-bold ${scheduledMove ? "" : "text-primary"}`}>
+          {" "}
+          →{scheduledMove ? shortMoveDate(move!.applyOn) : ""}
+        </span>
+      ) : saved ? (
+        // 🔴 방향이 곧 뜻이다 — `→`는 나감, `←`는 들어옴. 날짜는 그 사건이 **언제**인지.
+        <span className="text-xs font-bold">
+          {" "}
+          {saved.side === "out" ? "→" : "←"}
+          {shortMoveDate(saved.on)}
+        </span>
+      ) : meta ? (
+        <span className="text-xs opacity-90">/{meta}</span>
+      ) : null}
     </>
   );
   // ⚠️ 클래스 문자열도 기본뷰 StudentRow와 동일하게 유지할 것(px-2 py-[3px] leading-tight + hover:bg-bg-soft).
   //    글자 크기는 명단 컨테이너의 text-sm에서 상속 — 기본뷰 class-cell과 같은 값이다.
   const cls = `block overflow-hidden whitespace-nowrap text-clip px-2 py-[3px] leading-tight ${tone}`;
   const nameNode = s.studentId ? (
-    <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:bg-bg-soft`}>
+    <WindowLink
+      href={`/students/${s.studentId}`}
+      // 🔴 이동 대기면 **그 사실**이 툴팁이다(기존 반 이름 포함, 원장 2026-09-09 명시).
+      title={moveTitle || s.name}
+      ariaLabel={`${s.name} 학생 정보`}
+      className={`${cls} hover:bg-bg-soft`}
+    >
       {inner}
     </WindowLink>
   ) : (
-    <div className={cls}>{inner}</div>
+    <div className={cls} title={moveTitle || undefined}>
+      {inner}
+    </div>
   );
   const trigger = movable ? (
     <MovableRosterRow
@@ -763,6 +939,8 @@ function RosterRow({
         name: s.name,
         meta,
         tone,
+        // 출발 시점 등원 요일 — 반 이동의 no-op 판정(같은 반·같은 요일)에 쓰인다(기본뷰 drag data와 같은 칸).
+        attendanceDays: s.attendanceDays,
         from: s.status === "hold" ? "hold" : "active",
       }}
     >

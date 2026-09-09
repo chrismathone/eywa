@@ -28,6 +28,13 @@ export type GridStudent = {
   /** 등록 31~60일(신입 다음 단계). */
   isRecent?: boolean;
   isTransferredIn?: boolean;
+  /**
+   * **예약된 반 이동**(DB에 이미 저장된 것) — 나갈 예정 / 들어올 예정. 연보라 '이동 대기'로 표시하고
+   * 툴팁이 기존 반 이름을 말한다(원장 2026-09-09). 판정·짝짓기는 서버(`pairScheduledMoves`) 단일 소스.
+   * ⚠️ 저장 **전**의 큐(`useTimetableEdit().pending`)와 다른 축이다 — 색은 같고 문구가 다르다.
+   */
+  movingOut?: { on: string; className: string | null };
+  movingIn?: { on: string; className: string | null };
   englishName?: string | null;
   // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재·최근 진도·수강 시작일.
   attendanceDays?: string[];

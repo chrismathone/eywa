@@ -118,3 +118,18 @@ export function timetableStudentTone(
   if (s.isRecent) return RECENT_ROW_CLASS;
   return "text-foreground";
 }
+
+/**
+ * **예약된 반 이동**('이동 대기') 한 줄 tone — 연보라(원장 2026-09-09: *"기존 수업에서는 '연보라색 계열'로
+ * '이동 대기' 상태가 되고, 미래에 이동할 반에서는 '대기'생 상태가 되는것"*).
+ *
+ * 🔴 대기(파랑 `#a4c2f4`)와 **다른 색**이어야 한다 — 같은 칸(대기 구획)에 나란히 서기 때문이다:
+ *    파랑 = 그냥 대기 / 연보라 = 반이동으로 들어올 사람. 색이 같으면 그 둘을 구분할 방법이 사라진다.
+ * 🔴 색은 의미색 캐논의 `special`(purple = 예외·대체) 토큰을 쓴다 — 화면 파일에 hex를 적지 않는다.
+ * ⚠️ 출발 반과 도착 반이 **같은 색**이다(한 사건의 두 쪽) — 갈라 칠하면 같은 이동으로 안 읽힌다.
+ */
+export function movingTone(mode: TimetableColorMode): string {
+  if (mode === "pastel") return "bg-purple-soft text-purple";
+  if (mode === "mid") return "bg-purple/15 font-medium text-purple";
+  return "bg-purple/25 font-bold text-purple"; // vivid = 가장 또렷
+}

@@ -6,6 +6,8 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
+import { shortMoveDate } from "@/features/timetable/lib/move-date";
+import { moveWaitTitle } from "@/features/timetable/lib/move-note";
 import { readableTextColor } from "@/lib/color-utils";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
@@ -377,6 +379,7 @@ export function ClassCell({
                                   <StudentRow
                                     key={s.enrollmentId ?? `p-${day}-${i}`}
                                     student={s}
+                                    className={slot.className}
                                     name={s.name}
                                     meta={metaLabel(s.school, s.grade)}
                                     tone={timetableStudentTone(colorMode, s)}
@@ -412,7 +415,9 @@ export function ClassCell({
                     </div>
                   </div>
                 ) : null}
-              {/* 전입 예정(편집 모드) — 다른 반에서 끌어온 학생을 도착 셀에 초록 미리보기로(재원 스크롤 안). */}
+              {/* 전입 예정(편집 모드) — 다른 반에서 끌어온 학생을 도착 셀에 초록 미리보기로(재원 스크롤 안).
+                  🔴 적용일이 미래인 건은 **연보라 '이동 대기'**(원장 2026-09-09) — 저장해도 그날까지는 이 반
+                     학생이 아니라 대기다. 색을 안 가르면 "오늘부터 온다"는 거짓 약속이 된다. */}
               {incomingHere.length > 0 ? (
                 <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
                   <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide">
@@ -423,13 +428,30 @@ export function ClassCell({
                     // 등원 요일 라벨 — 분리등원 학생이면 이 셀에서 오는 요일([월])을 표시(누가·어느 요일 오는지).
                     const dayTag = incomingDayLabel(s.attendanceDays, covers);
                     return (
-                      <div key={s.enrollmentId} className={`${ROW_CLASS} bg-primary-soft/30 text-primary`}>
+                      <div
+                        key={s.enrollmentId}
+                        title={
+                          s.scheduled
+                            ? moveWaitTitle({
+                                side: "in",
+                                fromClassName: s.fromClassName,
+                                toClassName: slot.className,
+                                on: s.applyOn,
+                                saved: false,
+                              })
+                            : `${s.fromClassName} 반에서 전입 예정 — '저장'을 눌러야 반영됩니다`
+                        }
+                        className={`${ROW_CLASS} ${s.scheduled ? "bg-purple-soft text-purple" : "bg-primary-soft/30 text-primary"}`}
+                      >
                         {/* 전입 예정: 좁은 칸에선 출발 반이름 대신 **학생이름**을 보여준다(누가 들어오는지 우선). */}
                         <span className="inline-flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap text-clip">
                           <EyIcon name="userPlus" size={11} className="shrink-0" aria-hidden="true" />
                           {s.name}
                         </span>
-                        {dayTag ? (
+                        {/* 🔴 예약이면 **그 날짜**를 적는다(요일 라벨보다 먼저) — 언제 오는지가 먼저 알고 싶은 것이다. */}
+                        {s.scheduled ? (
+                          <span className="text-purple shrink-0 text-xs font-bold">{shortMoveDate(s.applyOn)}</span>
+                        ) : dayTag ? (
                           <span className="text-primary shrink-0 text-xs font-bold">[{dayTag}]</span>
                         ) : null}
                       </div>

@@ -7,6 +7,14 @@ import {
 } from "@/features/timetable/lib/class-grid";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
+import { classWindowsFromSlots } from "@/features/timetable/lib/class-windows";
+import {
+  CLASS_CELL_DAY_ATTR,
+  CLASS_CELL_END_ATTR,
+  CLASS_CELL_ID_ATTR,
+  CLASS_CELL_NAME_ATTR,
+  CLASS_CELL_START_ATTR,
+} from "@/features/timetable/lib/grid-attrs";
 import { RichCardGroupBoard } from "./rich-card-group";
 import { SearchedCell } from "./search-context";
 
@@ -51,6 +59,19 @@ export function RichGridView({
 }) {
   const groups = buildRichCardGroups(slots, config, compactSections, customGroups);
   const subjectSoftClass = SUBJECT_SOFT[subjectMaps.colorOf(slots[0]?.subject ?? "")];
+  /**
+   * 학생 드래그 빗금(못 가는 반)의 **좌표 표식** — 화면엔 안 그린다(`hidden`).
+   *
+   * 🔴 판정은 기본뷰와 **같은 기계**(`annotateStudentBlocks`)가 한다 — 그 기계는 `[data-class-id]` 요소에서
+   *    요일·시각을 읽는데, 통합뷰 카드는 요일·교시가 여럿이라 한 좌표로 답할 수 없다. 그래서 좌표는
+   *    여기서 슬롯 그대로 깔고, **빗금은 카드가 받는다**(카드는 `data-class-id`만 단다 —
+   *    좌표 없는 요소도 같은 함수가 표시 대상으로는 잡는다).
+   * 🔴 좌표를 칸에 달지 **않는** 이유: 미니격자 칸마다 달면 빗금이 카드 안에서 이중으로 겹쳐 그려진다
+   *    (카드 한 겹 + 칸 한 겹). 표시는 한 겹이어야 "이 반은 못 간다"로 읽힌다.
+   * ⚠️ 서버 컴포넌트라 이 표식은 렌더 비용이 0이다(정적 DOM). `grid-attrs.ts`는 클라 모듈이 아니라
+   *    일반 모듈이므로 서버에서 import해도 런타임 undefined가 되지 않는다([[#81]]).
+   */
+  const busyMarkers = classWindowsFromSlots(slots);
 
   return (
     // ⚠️ 자체 overflow-y-auto 금지 — 셸 스크롤과 중첩돼 우측 이단 스크롤바가 생긴다(2026-07-06).
@@ -63,6 +84,21 @@ export function RichGridView({
     // "읽기 전용 · N개 수업 · 편집은 기본뷰" 머리 문구는 뺐다(원장 2026-09-04 *"영어 통합뷰에서 멘트 삭제"*) — 수업 수는
     // 툴바의 검색 칩이, 편집 가능 여부는 편집 버튼의 유무가 이미 말한다(설명 문장 금지, 지시서 §4).
     <div>
+      {/* 좌표 표식 — 화면 밖(hidden). 학생을 집는 순간 보드가 이걸 읽어 못 가는 반에 빗금을 친다. */}
+      <div hidden aria-hidden>
+        {busyMarkers.map((w) => (
+          <span
+            key={`${w.classId}|${w.day}|${w.start}|${w.end}`}
+            {...{
+              [CLASS_CELL_ID_ATTR]: w.classId,
+              [CLASS_CELL_NAME_ATTR]: w.className,
+              [CLASS_CELL_DAY_ATTR]: w.day,
+              [CLASS_CELL_START_ATTR]: w.start,
+              [CLASS_CELL_END_ATTR]: w.end,
+            }}
+          />
+        ))}
+      </div>
       {/* 섹션 = 한 판(스프레드시트의 다음 시트처럼 이어 붙임). 카드 사이는 구분선만. */}
       <div className="bg-card shadow-card w-max max-w-full overflow-hidden rounded-2xl">
         {groups.map((g) => (
