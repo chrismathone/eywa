@@ -104,7 +104,7 @@ export function remainingDays(args: { granted: number; used: number; pending: nu
 
 /**
  * "총 부여를 N일로" 입력 → 실제로 적을 **가감 값**. 화면은 총 일수를 받고 DB엔 차이만 쌓는다
- * (0251a: 덮어쓰기가 아니라 행 누적 — 왜 바뀌었는지가 남는다).
+ * (0252a: 덮어쓰기가 아니라 행 누적 — 왜 바뀌었는지가 남는다).
  */
 export function deltaForTotal(targetTotal: number, currentTotal: number): number {
   return roundDays(targetTotal - currentTotal);

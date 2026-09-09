@@ -23,9 +23,9 @@ describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 �
   });
 
   it("메뉴 루트는 사이드바와 **같은 id·같은 제목**(진입 경로가 달라도 창은 한 벌)", () => {
-    expect(deepLinkWindow("/students", "학생목록 — eywa")).toEqual({
+    expect(deepLinkWindow("/students", "원생목록 — eywa")).toEqual({
       id: "students",
-      title: "학생목록",
+      title: "원생목록",
     });
   });
 
@@ -50,7 +50,7 @@ describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 �
   it("라우트가 제목을 안 달았으면(루트 기본값) 문서 제목을 믿지 않고 메뉴 라벨로", () => {
     expect(deepLinkWindow("/students/123", APP_DEFAULT_TITLE)).toEqual({
       id: "students/123",
-      title: "학생목록",
+      title: "원생목록",
     });
     // 메뉴 밖 + 제목도 없으면 마지막 폴백.
     expect(deepLinkWindow("/kiosk-settings", APP_DEFAULT_TITLE)?.title).toBe("보기");

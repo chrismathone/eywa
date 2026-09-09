@@ -157,7 +157,7 @@ describe("표가 없어도 죽지 않는다([[#95]])", () => {
     // 공백을 지운 형태로 본다.
     expect(queries.replace(/\s+/g, " ")).toContain("const adjustment = adjRes.error ? 0");
     const admin = read("src/features/leave/server/admin.ts");
-    // 표 없음(0251a 전)만 0으로 — 그 밖의 실패는 throw해서 기안이 이유를 말할 수 있게 한다.
+    // 표 없음(0252a 전)만 0으로 — 그 밖의 실패는 throw해서 기안이 이유를 말할 수 있게 한다.
     expect(admin).toContain("if (isMissingRelation(error)) return 0;");
   });
 

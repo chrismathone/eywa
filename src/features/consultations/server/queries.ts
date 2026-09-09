@@ -200,6 +200,17 @@ export type ConsultationListFilters = {
   range?: "all" | "7d" | "30d";
   cat?: "all" | StudentConsultationCategory;
   urg?: "all" | "overdue" | "today" | "soon" | "later" | "done";
+  /** 상담사(=작성자) `users.id`. 옵션은 **실제 상담이 있는 사람만**(getConsultationFilterOptions). */
+  counselor?: string;
+  /**
+   * 과목 — 학원설정 과목 **키**(`math`)를 받는다.
+   * 🔴 저장값은 키가 아니라 **한글 라벨**이다(실측 2026-09-09: `영어` 530 · `수학` 313 · 없음 949 — 이 칸이
+   *    자유 입력이고 makeedu 이관분도 라벨로 들어왔다). 그래서 키·라벨 **둘 다**로 맞춘다(`.in`) — 키만 보면
+   *    한 건도 안 걸리고, 라벨만 URL에 실으면 과목명을 바꾸는 순간 저장된 링크가 죽는다.
+   */
+  subject?: string;
+  /** `subject` 키에 대응하는 학원설정 한글 라벨(호출부가 buildSubjectMaps로 구해 넘긴다 — 서버 쿼리가 설정을 또 읽지 않게). */
+  subjectLabel?: string | null;
 };
 
 /**
@@ -226,6 +237,15 @@ export async function getStudentConsultationsPage(
 
   // 카테고리
   if (filters.cat && filters.cat !== "all") qb = qb.eq("category", filters.cat);
+
+  // 상담사(작성자) — 강사 스코프가 이미 자기 것만 남겼으면 이 필터는 사실상 무동작이다(같은 조건).
+  if (filters.counselor && filters.counselor !== "all") qb = qb.eq("counselor_id", filters.counselor);
+
+  // 과목 — 저장값이 한글 라벨이라 키·라벨 둘 다 허용(위 타입 주석).
+  if (filters.subject && filters.subject !== "all") {
+    const wanted = [filters.subject, filters.subjectLabel].filter((v): v is string => !!v);
+    qb = qb.in("subject", [...new Set(wanted)]);
+  }
 
   // 후속 긴급도 — followUpUrgency()와 동일 의미를 SQL로
   const today = kstToday();
@@ -277,6 +297,40 @@ export async function getStudentConsultationsPage(
 
   return { rows: (data ?? []).map(mapRow), total: count ?? 0 };
 }
+
+/**
+ * 목록 필터 드롭다운의 **상담사 선택지** — 원장 2026-09-09 *"상담 필터에 강사명도 있어야함."*
+ *
+ * 🔴 직원 명부(users)를 그대로 세우지 않는다 — 상담을 한 번도 안 쓴 사람까지 34명 넘게 서면 고르기가 더 어렵다.
+ *    **실제로 상담 기록이 있는 사람만**(실측 2026-09-09: 34명) 세운다(보고서 목록의 강사 옵션과 같은 규약).
+ * 🔴 강사 스코프를 그대로 물려받는다 — 목록이 본인 것만 보이는 계정에게 남의 이름을 고르게 하면 고를수록 0건이다.
+ * ⚠️ distinct는 PostgREST가 못 하므로 counselor_id만 **전건 페이지네이션**으로 받아 접는다(B2 — bare select 금지).
+ *    컬럼 하나(uuid)뿐이라 가볍고, 요청 캐시(React cache)라 한 화면에서 한 번만 돈다.
+ */
+export const getConsultationCounselorOptions = cache(async (): Promise<{ id: string; name: string }[]> => {
+  const supabase = await createClient();
+  // 강사는 **자기가 쓴 상담만** 보므로 이 필터에 고를 것이 하나뿐이다 — 선택지를 만들지 않는다(화면도 줄을 감춘다).
+  if (await effectiveTeacherId()) return [];
+  const rows = await fetchAllPaged<{ counselor_id: string | null }>((from, to) =>
+    supabase
+      .from("student_consultations")
+      .select("counselor_id")
+      .not("counselor_id", "is", null)
+      // OFFSET 페이지가 흔들리지 않게 유일값으로 줄 세운다.
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const ids = [...new Set(rows.map((r) => r.counselor_id).filter((v): v is string => !!v))];
+  if (ids.length === 0) return [];
+  const users = await fetchInChunks<{ id: string; display_name: string | null }>(ids, (chunk) =>
+    supabase.from("users").select("id, display_name").in("id", chunk),
+  );
+  return users
+    // 이름이 없는 계정은 세우지 않는다 — 빈 라벨을 고르면 무엇을 고른 건지 알 수 없다.
+    .filter((u) => !!u.display_name?.trim())
+    .map((u) => ({ id: u.id, name: u.display_name!.trim() }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+});
 
 export type StudentOption = {
   id: string;

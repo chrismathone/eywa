@@ -40,7 +40,7 @@ const MAX_REASON = 200;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const TABLE_MISSING_MSG =
-  "연차 조정 표가 아직 준비되지 않았습니다 — 마이그레이션 0251a를 적용하면 바로 쓸 수 있습니다";
+  "연차 조정 표가 아직 준비되지 않았습니다 — 마이그레이션 0252a를 적용하면 바로 쓸 수 있습니다";
 
 async function requireAdjuster() {
   const user = await getCurrentUser();
@@ -97,7 +97,7 @@ async function loadTarget(tenantId: string, userId: string) {
 
 /**
  * 조정 추가 — 폼은 **가감(±N)** 또는 **총 부여(N일로)** 중 하나로 받고, 저장은 언제나 가감 한 줄이다
- * (0251a: 덮어쓰기가 아니라 행 누적 — 합이 곧 답이고 이력이 곧 근거).
+ * (0252a: 덮어쓰기가 아니라 행 누적 — 합이 곧 답이고 이력이 곧 근거).
  */
 export async function addLeaveAdjustment(
   _prev: LeaveActionState,

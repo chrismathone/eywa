@@ -15,7 +15,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { parseMentSource } from "@/features/onescreen/ment-source";
 import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 import { STUCK_MINUTES } from "../classnote-queue";
-import { IMPORT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
+import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
 
 /**
@@ -339,8 +339,11 @@ export async function listReports(
   }
   if (filters.from) q = q.gte("report_date", filters.from);
   if (filters.to) q = q.lte("report_date", filters.to);
-  // "이관" 필터는 source, 그 외는 classnote_status.
+  // "이관" 필터는 source, "미발송"은 NULL(등호로 못 잡는다), 그 외는 classnote_status.
   if (filters.status === IMPORT_FILTER) q = q.eq("source", "edutrix_import");
+  else if (filters.status === UNSENT_FILTER)
+    // 발송 이력이 없는 native 보고서 = 알림·발송 큐 카드가 말하는 '미발송'과 같은 집합(이관분 제외).
+    q = q.is("classnote_status", null).or("source.is.null,source.neq.edutrix_import");
   else if (filters.status) q = q.eq("classnote_status", filters.status);
   if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
   // 담임 이름 부분검색 — 이름이 이 표의 컬럼(teacher_name)이라 조인·id 해석 없이 한 줄이다.

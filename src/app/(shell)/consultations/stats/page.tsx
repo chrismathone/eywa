@@ -26,7 +26,7 @@ export default async function ConsultationStatsPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/consultations" label="학생상담으로" />
+      <BackLink href="/consultations" label="원생상담으로" />
 
       {/* 스코프를 화면에 밝힌다 — 같은 제목 아래 사람마다 다른 수치가 나오면 "숫자가 틀렸다"로 읽힌다. */}
       <header className="border-border border-b pb-5">
@@ -45,7 +45,7 @@ export default async function ConsultationStatsPage() {
         {funnel.teacherScoped ? null : (
           <Stat label="등록상담" value={funnel.enrollmentConsultations} unit="건" />
         )}
-        <Stat label={funnel.teacherScoped ? "내 학생상담" : "학생상담"} value={funnel.studentConsultations} unit="건" />
+        <Stat label={funnel.teacherScoped ? "내 원생상담" : "원생상담"} value={funnel.studentConsultations} unit="건" />
         {funnel.teacherScoped ? null : (
           <>
             <Stat label="학생 전환" value={funnel.enrolled} unit="건" highlight="text-chart-2" />

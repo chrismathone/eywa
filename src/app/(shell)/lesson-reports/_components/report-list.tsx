@@ -97,15 +97,18 @@ export function ReportList({
   initial,
   canSend,
   todayYmd,
+  initialStatus,
 }: {
   options: ReportFilterOptions;
   initial: Result;
   canSend: boolean; // lesson_reports 쓰기 권한(관리자 발송 열 노출 여부) — 서버 액션이 최종 게이트
   todayYmd: string; // KST 오늘 — 서버가 넘긴다(클라에서 new Date()로 구하면 첫 렌더가 서버와 어긋난다)
+  /** 주소로 받은 상태 필터(`?status=…`). 서버 첫 페인트와 **같은 값**을 초기 state에 넣는다. */
+  initialStatus?: string;
 }) {
   const router = useRouter();
   const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
-  const [filters, setFilters] = useState<ReportListFilters>(() => defaultReportFilters(todayYmd));
+  const [filters, setFilters] = useState<ReportListFilters>(() => defaultReportFilters(todayYmd, initialStatus));
   const [result, setResult] = useState<Result>(initial);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);

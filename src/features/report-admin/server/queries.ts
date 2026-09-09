@@ -9,6 +9,8 @@ import { fetchReportOptoutClassIds } from "@/features/classes/server/report-opto
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
 import { classnoteMinDate } from "@/features/onescreen/classnote-guard";
+import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
+import { filterUnsentSendable, type UnsentRow } from "../unsent-sendable";
 import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 // 임시 위임(0173a) — 위임된 (반, 날짜)의 대상(분모)을 대체 강사로 옮기는 순수 규칙.
 import { buildDelegateAttribution, type DelegateAttribution } from "../writing-rate-delegation";
@@ -147,6 +149,19 @@ export type ClassnoteQueueView = {
   expiredUnsent: number;
   /** 오늘(KST) — 화면이 각 행의 재발송 남은 날을 계산하는 기준. 클라 시계를 믿지 않는다(nowMs와 같은 취지). */
   todayKst: string;
+  /**
+   * **저장만 되고 아직 발송 이력이 없는 보고서**(classnote_status IS NULL) 중 지금 보낼 수 있는 건수.
+   *
+   * 🔴 위 `summary`(대기·처리중·실패…)는 **큐에 들어온 행만** 센다 — 아직 안 보낸 건은 구조적으로 0이다.
+   *    그래서 알림이 "미발송 5건"이라고 말하는데 카드는 "0 대기 0 처리중"이라 원장이 *"알림이 틀린거야?"*라고
+   *    물었다(2026-09-09 — 알림이 옳았다). 이 숫자가 그 간극을 메운다.
+   * ⚠️ 게이트는 발송 콘솔·알림과 **같은 한 벌**([`unsent-sendable.ts`](src/features/report-admin/unsent-sendable.ts)) —
+   *    보낼 수 없는 건(기한 밖·과목 미허용·미발송 반·멘트 없음·그날 결석)은 세지 않는다.
+   */
+  /** ⚠️ 조회·게이트가 실패하면 **null**이다(0이 아니다) — 화면은 그때 줄을 감춘다("미발송 0건"이라는 거짓 안심 금지). */
+  unsentSendable: number | null;
+  /** 그중 가장 오래된 보고서 날짜(YYYY-MM-DD) — 기한이 임박한 쪽을 먼저 보게. 없으면 null. */
+  unsentOldestDate: string | null;
 };
 
 // 워커 하트비트가 이 분(minutes) 이상 끊기면 오프라인(watch 데몬 15초 폴 → 넉넉히 3분).
@@ -154,6 +169,84 @@ const WORKER_OFFLINE_MINUTES = 3;
 
 /** 재발송 기한이 지난 실패를 목록에 더 남겨 두는 날수 — '기한 만료'라는 결말을 보고 나서 사라지게. */
 const EXPIRED_GRACE_DAYS = 3;
+
+/**
+ * **아직 안 보낸 보고서**(발송 이력 없음) 중 지금 보낼 수 있는 것 — 발송 큐 카드의 '미발송' 수.
+ *
+ * 🔴 큐 조회(`.not("classnote_status","is",null)`)는 이 행들을 한 건도 못 본다 — 카드가 "0 대기"라고
+ *    말하는 동안 저장만 된 보고서가 기한을 넘겨 사라진다(원장 제보 2026-09-09).
+ * ⚠️ 창은 **발송 기한(오늘 포함 7일)** 그대로다 — 그 밖은 어떤 경로로도 못 나가므로 재촉해도 소용없다.
+ * ⚠️ 조회·게이트가 실패하면 **0이 아니라 null**을 돌려준다(화면은 그때 이 줄을 감춘다) — 실패를
+ *    "미발송 없음"으로 읽으면 거짓 안심이다.
+ */
+async function loadSendableUnsent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  today: string,
+  classnoteSubjects: readonly string[],
+): Promise<{ count: number; oldestDate: string | null } | null> {
+  try {
+    const minDate = classnoteMinDate(today);
+    // 전건 페이지네이션(B2) — 세는 쿼리를 무페이징 select로 만들면 1000행에서 조용히 잘린다.
+    // order에 id를 함께 넣어 OFFSET 페이지가 흔들리지 않게 한다.
+    const raw = await fetchAllPaged<{
+      id: string;
+      student_id: string;
+      subject: string | null;
+      report_date: string;
+      class_id: string | null;
+      makeup: boolean | null;
+      notes: string | null;
+    }>((from, to) =>
+      supabase
+        .from("lesson_reports")
+        .select("id, student_id, subject, report_date, class_id, makeup, notes")
+        .is("classnote_status", null)
+        .is("revoked_at", null)
+        .or("source.is.null,source.neq.edutrix_import")
+        .gte("report_date", minDate)
+        .order("report_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    if (raw.length === 0) return { count: 0, oldestDate: null };
+
+    const rows: UnsentRow[] = raw.map((r) => ({
+      id: r.id,
+      studentId: r.student_id,
+      reportDate: String(r.report_date).slice(0, 10),
+      subject: r.subject,
+      classId: r.class_id,
+      makeup: r.makeup,
+      ment: r.notes,
+    }));
+    const [optoutClassIds, absenceBlockedKeys] = await Promise.all([
+      fetchReportOptoutClassIds(supabase, tenantId),
+      // 보강은 결석 게이트 밖이라 후보에서 뺀다(발송 콘솔과 같은 규약).
+      getAbsenceBlockedKeys(
+        supabase,
+        tenantId,
+        rows
+          .filter((r) => !r.makeup)
+          .map((r) => ({ studentId: r.studentId, reportDate: r.reportDate, subject: r.subject, classId: r.classId })),
+      ),
+    ]);
+    const sendable = filterUnsentSendable(rows, {
+      today,
+      classnoteSubjects,
+      optoutClassIds,
+      absenceBlockedKeys,
+      absenceKeyOf: (r) =>
+        absenceKeyOf({ studentId: r.studentId, reportDate: r.reportDate, subject: r.subject, classId: r.classId }),
+    });
+    return {
+      count: sendable.length,
+      oldestDate: sendable.length > 0 ? sendable[0]!.reportDate : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * ClassNote 발송 큐 현황(원장 보고서 관리 Part A) — 최근 N일 발송요청 보고서의 상태 집계 + 주의목록 + 워커 상태.
@@ -277,6 +370,9 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   });
 
   const settings = await getTenantSettings();
+  // 🔴 위 조회 넷은 전부 **발송 이력이 있는** 행이라, 저장만 하고 안 보낸 건은 한 건도 안 잡힌다.
+  //    카드가 "0 대기"인데 알림은 "미발송 5건"이던 간극이 여기서 메워진다(원장 제보 2026-09-09).
+  const unsent = await loadSendableUnsent(supabase, user.tenantId, today, settings.report.classnoteSubjects);
   return {
     summary,
     items,
@@ -288,6 +384,8 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
     sendEnabled: settings.report.classnoteSendEnabled,
     expiredUnsent: expiredUnsentCount ?? 0,
     todayKst: today,
+    unsentSendable: unsent ? unsent.count : null,
+    unsentOldestDate: unsent?.oldestDate ?? null,
   };
 }
 

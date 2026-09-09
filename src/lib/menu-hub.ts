@@ -115,12 +115,12 @@ export const HUB_GROUPS: HubGroup[] = [
   },
   {
     id: "student",
-    label: "학생",
+    label: "원생",
     icon: MENU_ICON.students,
     kind: "hub",
-    note: "학생 기록을 보고 성적을 관리합니다.",
+    note: "원생 기록을 보고 성적을 관리합니다.",
     items: keep([
-      fromMenu("students", "학생 명단·상세 기록"),
+      fromMenu("students", "원생 명단·상세 기록"),
       fromMenu("exams", "시험 성적 입력·분석"),
     ]),
   },
@@ -133,7 +133,9 @@ export const HUB_GROUPS: HubGroup[] = [
     items: keep([
       fromMenu("consultations", "재원생 상담 기록"),
       fromMenu("enrollment", "신규 등록상담 접수·배정"),
-      fromMenu("retention", "이탈 위험 학생 관리"),
+      // 신규생 관리 — 등록상담(들어오기 전)과 이탈 방어(흔들릴 때) 사이의 90일을 맡는다.
+      fromMenu("newcomers", "신입 90일 체크리스트"),
+      fromMenu("retention", "이탈 위험 원생 관리"),
       fromMenu("withdrawals", "퇴원·수강 종료 기록"),
     ]),
   },

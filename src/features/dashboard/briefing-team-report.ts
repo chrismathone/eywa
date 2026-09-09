@@ -121,6 +121,8 @@ export const AREA_BY_MENU: Readonly<Record<string, TeamArea>> = {
   timetable: "수업",
   classes: "수업",
   students: "학생",
+  // 신규생 관리 — 학생 기록이 아니라 **들어온 뒤 챙기는 절차**라 학생 영역에 둔다(상담·수납과 축이 다르다).
+  newcomers: "학생",
   consultations: "상담",
   enrollment: "상담",
   meetings: "상담",

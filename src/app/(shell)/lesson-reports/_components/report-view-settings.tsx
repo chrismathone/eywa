@@ -7,6 +7,7 @@ import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import {
   IMPORT_FILTER,
+  UNSENT_FILTER,
   activeReportFilterCount,
   defaultReportFilters,
   type ReportListFilters,
@@ -229,6 +230,8 @@ export function ReportViewSettings({
                 {STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>{classnoteBadge(s)?.label ?? s}</option>
                 ))}
+                {/* 미발송 = classnote_status IS NULL — 등호로 못 잡아 특수값. 알림·발송 큐 카드가 여기로 보낸다. */}
+                <option value={UNSENT_FILTER}>미발송(저장만 됨)</option>
                 <option value={IMPORT_FILTER}>이관(edutrix)</option>
               </select>
 

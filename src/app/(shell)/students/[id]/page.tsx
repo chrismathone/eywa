@@ -60,7 +60,7 @@ export default async function StudentDetailPage({
     if ((await accessLevelTenant(user.systemRole, "students")) === "scoped") {
       return (
         <div className="space-y-6">
-          <BackLink href="/students" label="학생목록으로" />
+          <BackLink href="/students" label="원생목록으로" />
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">담당 학생만 열람할 수 있어요</p>
             <p className="text-text-dim mt-1 text-sm">
@@ -127,7 +127,7 @@ export default async function StudentDetailPage({
 
   return (
     <div className="space-y-6">
-      <BackLink href="/students" label="학생목록으로" />
+      <BackLink href="/students" label="원생목록으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

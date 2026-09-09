@@ -1260,6 +1260,8 @@ export const MENU_ICON = {
   consultations: "messages",
   withdrawals: "userMinus",
   retention: "shield",
+  // 신규생 관리 — 체크리스트 7항목이 정체성이다(이탈 방어의 "방패"와 뜻이 달라 그림도 다르다).
+  newcomers: "userCheck",
   // 🔴 영어·수학 강사 시트는 **수업 업무군에 나란히 서는 버튼 둘**이라 같은 글리프를 쓰면 구분이 안 된다(2026-09-08).
   ecs: "sheetColumns", // English Class Sheet — 주간(요일 열)
   mcs: "sheetRows", // Math Class Sheet — 월간(학생 행 × 수업일)

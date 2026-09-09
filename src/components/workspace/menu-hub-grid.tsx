@@ -28,18 +28,23 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
   const router = useRouter();
   const isDesktop = useIsDesktop();
   const showDesktop = useShowDesktop();
+  const sendHubToBack = useMenuHub((s) => s.sendToBack);
   const closeHub = useMenuHub((s) => s.close);
 
   return useCallback(
     (dest: HubDest, shift = false) => {
       void recordMenuVisit(dest.menuKey);
-      closeHub();
+      // 🔴 닫지 않고 **배경으로 내린다** — 닫으면 그 자리에 메뉴 판 전체가 펼쳐져 화면이 튄다
+      //    (원장 2026-09-09 *"배경이 '메뉴' 전체로 바뀌는데 어색한거 같은데"*). 창은 그 위에 뜬다.
+      sendHubToBack();
       const item = navItemByKey(dest.menuKey);
       if (!isDesktop) {
         router.push(dest.href);
         return;
       }
       if (item && navPresentation(item) === "desktop") {
+        // 배경 자체를 보여 달라는 뜻이라 허브는 **닫는다**(배경에 남으면 그 배경을 가린다).
+        closeHub();
         showDesktop();
         return;
       }
@@ -48,7 +53,7 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
       if (shift) store.openNewInstance("route", params);
       else store.open("route", params);
     },
-    [closeHub, isDesktop, router, showDesktop],
+    [sendHubToBack, closeHub, isDesktop, router, showDesktop],
   );
 }
 

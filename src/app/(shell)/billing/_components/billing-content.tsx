@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { kstMonth, kstToday } from "@/lib/date-kst";
 import { BigStat } from "@/components/atoms/big-stat";
 import { PageHeader } from "@/components/page-header";
@@ -320,7 +321,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               value={KRW.format(summary.totalCollected)}
               unit="원"
               tone="green"
-              icon={<EyIcon name="check" size={16} />}
+              icon={<MenuGlyph name="check" size={22} />}
               sub={`${summary.paidCount}건`}
             />
             <BigStat

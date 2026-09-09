@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BigStat } from "@/components/atoms/big-stat";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -154,7 +155,7 @@ export default async function ApprovalsPage({
                 label="연차 부여"
                 value={formatLeaveDays(balance.granted)}
                 tone="primary"
-                icon={<EyIcon name="calendarCheck" size={16} />}
+                icon={<MenuGlyph name="calendarCheck" size={22} />}
                 // 조정(이월·특별휴가)이 있으면 어디서 온 일수인지 밝힌다 — 법정 계산과 다른 숫자가
                 // 아무 설명 없이 떠 있으면 본인도 사무실도 근거를 못 찾는다.
                 sub={
@@ -171,19 +172,19 @@ export default async function ApprovalsPage({
                 label="사용"
                 value={formatLeaveDays(balance.used)}
                 tone="blue"
-                icon={<EyIcon name="history" size={16} />}
+                icon={<MenuGlyph name="history" size={22} />}
               />
               <BigStat
                 label="결재중"
                 value={formatLeaveDays(balance.pending)}
                 tone="amber"
-                icon={<EyIcon name="clock" size={16} />}
+                icon={<MenuGlyph name="clock" size={22} />}
               />
               <BigStat
                 label="잔여"
                 value={formatLeaveDays(balance.remaining)}
                 tone={balance.remaining > 0 ? "green" : "danger"}
-                icon={<EyIcon name="wallet" size={16} />}
+                icon={<MenuGlyph name="wallet" size={22} />}
                 sub={leavePeriodLabel(period)}
               />
             </section>

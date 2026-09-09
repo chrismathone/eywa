@@ -54,11 +54,11 @@ export default async function AnnualLeavePage() {
         </p>
       ) : null}
 
-      {/* 0251a 미적용 — 표는 그대로 읽히고 편집만 잠긴다([[#95]] expand/contract). */}
+      {/* 0252a 미적용 — 표는 그대로 읽히고 편집만 잠긴다([[#95]] expand/contract). */}
       {!overview.loadError && !overview.tableReady ? (
         <p className="border-line bg-bg-soft/50 text-text-dim rounded-xl border border-dashed px-4 py-2.5 text-sm break-keep">
           연차 조정 표가 아직 준비되지 않았습니다 — 마이그레이션{" "}
-          <span className="num">0251a</span>를 적용하면 바로 쓸 수 있습니다. 그전까지 아래 숫자는
+          <span className="num">0252a</span>를 적용하면 바로 쓸 수 있습니다. 그전까지 아래 숫자는
           법정 부여(입사일 계산) 기준입니다.
         </p>
       ) : null}

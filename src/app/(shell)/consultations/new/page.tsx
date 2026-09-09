@@ -6,7 +6,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { ConsultationForm } from "../_components/consultation-form";
 import { AudioConsultationForm } from "../_components/audio-consultation-form";
 
-export const metadata = { title: "새 학생상담 — eywa" };
+export const metadata = { title: "새 원생상담 — eywa" };
 
 export default async function NewConsultationPage({
   searchParams,
@@ -23,10 +23,10 @@ export default async function NewConsultationPage({
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <BackLink href="/consultations" label="학생상담으로" />
+      <BackLink href="/consultations" label="원생상담으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
-        <p className="eyebrow">새 학생상담</p>
+        <p className="eyebrow">새 원생상담</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">상담 기록 추가</h1>
         <p className="text-muted-foreground text-sm">
           학생/학부모 면담을 기록합니다. 후속 조치 날짜를 지정하면 기한이 다가올수록 색상으로 알려드립니다.

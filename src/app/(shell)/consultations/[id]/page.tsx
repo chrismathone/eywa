@@ -51,11 +51,11 @@ export default async function ConsultationDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <BackLink href="/consultations" label="학생상담으로" />
+      <BackLink href="/consultations" label="원생상담으로" />
 
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="min-w-0 space-y-1.5">
-          <p className="eyebrow">학생상담 상세</p>
+          <p className="eyebrow">원생상담 상세</p>
           <h1 className="font-bold tracking-tight text-foreground flex flex-wrap items-center gap-2 text-2xl">
             <WindowLink
               href={`/students/${item.studentId}`}

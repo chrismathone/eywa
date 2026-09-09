@@ -7,9 +7,14 @@ import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
  * 🔴 여기 쓰이는 그림은 손으로 그린 SVG가 아니라 **이미지 생성으로 만든 PNG**다(codex). 다시 선화 글리프로
  *    되돌리지 말 것 — 그러면 이미지 생성을 쓴 의미가 사라진다(원장이 그 이유로 한 번 반려했다).
  *
- * 범위는 **탭과 내부 탭뿐**이다(원장 지시 *"탭 및 내부 탭"*) — 사이드바 업무군·메뉴 버튼·강사 '내 메뉴'.
- * 버튼 안 보조 아이콘·툴바 글리프는 그대로 [`EyIcon`](./eywa-icons.tsx) 선화를 쓴다.
- * 🔴 앱 전체 아이콘을 이걸로 갈아치우지 말 것 — 저장 버튼까지 알록달록한 스티커가 되면 위계가 무너진다.
+ * 범위는 **탭·내부 탭 + 표시 자리**다. 처음엔 탭뿐이었고(원장 2026-09-08 *"탭 및 내부 탭"*), 2026-09-09에
+ * *"자체 아이콘 세트도 메뉴 탭 스타일처럼"* · *"우리가 코덱스로 만든 스타일이 있잖아. 그걸로"* 지시로 **빅 스탯
+ * 지표 칩**(`<BigStat icon=…>`)까지 넓혔다 — 같은 이름(`users`·`listChecks`)이 사이드바에선 스티커, 지표 칩에선
+ * 선화로 보여 "이건 아직 미제작이냐"는 물음이 나왔던 자리다.
+ * 🔴 **조작(操作) 자리는 그대로 선화**다 — 버튼 안 보조 아이콘·툴바 글리프·입력 안 아이콘·상태 배너는
+ *    [`EyIcon`](./eywa-icons.tsx). 저장 버튼까지 알록달록한 스티커가 되면 위계가 무너진다(그 판단은 불변).
+ * 🔑 가르는 기준은 크기가 아니라 **역할**이다: "무엇에 대한 화면·수치인가"를 가리키면 스티커, "누르면 무슨 일이
+ *    일어나는가"를 가리키면 선화.
  *
  * ⚠️ 색이 그림에 박혀 있어 `className`의 글자색(`text-white` 등)을 **따라가지 않는다**. 채택한 스티커 화풍은
  *    굵은 흰 테두리를 둘러 남색 활성 배경 위에서도 형태가 분리돼 읽힌다(시안 검수에서 확인한 채택 근거).
@@ -19,15 +24,16 @@ import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 /** `public/icons/<name>.png`가 실제로 있는 이름 — 가드가 파일 목록과 대조한다. */
 export const MENU_GLYPH_NAMES = new Set<string>([
-  "archive", "bellRing", "book", "bookMarked", "bus", "busStop",
+  "alarm", "alert", "archive", "bellRing", "book", "bookMarked", "bus", "busStop",
+  "calendarCheck", "chart", "check", "percent", "sparkle", "trash", "userX",
   "calendar", "clipboardCheck", "clipboardList", "clock", "eraser", "exam",
   "folder", "formInput", "graduationCap", "help", "history", "invoice",
   "key", "layoutGrid", "listChecks", "mapPin", "megaphone", "messages",
   "note", "palette", "receipt", "report", "screen", "scrollText",
   "seatGrid", "settings", "sheetColumns", "sheetRows", "shield", "spreadsheet",
   "star", "steering", "sync", "tablet", "tag", "undo",
-  "userMinus", "userPlus", "userSettings", "users", "wallet", "weekGrid",
-  "wrench",
+  "userCheck", "userMinus", "userPlus", "userSettings", "users", "wallet",
+  "weekGrid", "wrench",
 ]);
 
 export function hasMenuGlyph(name: string): boolean {

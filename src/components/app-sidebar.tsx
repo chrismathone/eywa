@@ -69,8 +69,10 @@ function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
  *
  * 활성 표시(데스크톱): 메뉴 클릭이 라우트 이동이 아니라 플로팅 창을 열므로 active는 윈도우 스토어로 구동한다 —
  *  · 포커스된 창의 메뉴 = 풀 하이라이트
- *  · 열려 있지만 비포커스 = 점(dot)
  *  · 포커스된 창이 없음(빈 데스크톱) = 아무 메뉴도 활성 아님
+ * 🔴 **열려 있는 다른 창은 표시하지 않는다**(원장 2026-09-09 *"열려있는 창 모두 표시하지말고 현재 보고 있는
+ *    창만 탭에서 표시"*) — 창을 여럿 띄우면 줄이 여럿 칠해져 "지금 어디를 보고 있나"가 안 읽혔다.
+ *    옛 표식(연한 채움 + 점)을 되살리지 말 것.
  * 모바일(라우트 이동)에서는 기존 pathname 기준을 유지.
  *
  * 데스크톱 제스처: 클릭=창 열기(cascade 위치) / 오른쪽으로 드래그=드롭 지점에 창 꺼내기.
@@ -164,9 +166,17 @@ export function AppSidebar({
   const frequent = frequentFor(gate, frequentKeys);
   const workGroups = hubGroupsFor(HUB_GROUPS, gate);
   const supportGroups = hubGroupsFor(SUPPORT_GROUPS, gate);
-  const hubOpenId = useMenuHub((s) => s.groupId);
+  const hubGroupId = useMenuHub((s) => s.groupId);
+  const hubMode = useMenuHub((s) => s.mode);
+  // 🔴 표시(활성 줄)는 **고르는 중(overlay)** 일 때만 허브를 따른다 — 메뉴를 고른 뒤 허브가 배경으로
+  //    내려가면 그때부터 "지금 보고 있는 것"은 포커스된 창이다. 배경까지 칠하면 줄이 둘이 되어
+  //    "지금 어디를 보고 있나"가 다시 흐려진다(원장 2026-09-09에 고친 그 문제).
+  const hubOpenId = hubMode === "overlay" ? hubGroupId : null;
   const toggleHub = useMenuHub((s) => s.toggle);
   const closeHub = useMenuHub((s) => s.close);
+  // 레일(즐겨찾기·바로 여는 업무군)에서 화면을 열 때도 허브는 **닫지 않고 배경으로 내린다** —
+  // 닫으면 그 순간 배경이 메뉴 판 전체로 바뀌어 원장이 지적한 그 튐이 그대로 재현된다.
+  const sendHubToBack = useMenuHub((s) => s.sendToBack);
 
   return (
     <TooltipProvider delay={200}>
@@ -191,6 +201,9 @@ export function AppSidebar({
             onClick={(e) => {
               if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
               e.preventDefault();
+              // 🔴 배경에 깔린 업무군 판을 **먼저 걷는다** — 안 걷으면 '메뉴로'를 눌러도 그 판이 그대로 덮고 있어
+              //    아무 일도 안 일어난 것처럼 보인다(허브가 배경 층으로 남을 수 있게 된 뒤의 함정).
+              closeHub();
               showDesktop();
             }}
             tabIndex={expanded ? undefined : -1}
@@ -251,11 +264,10 @@ export function AppSidebar({
                     expanded={expanded}
                     motion={motion}
                     onShowDesktop={showDesktop}
-                    onOpen={closeHub}
+                    onOpen={sendHubToBack}
                     pathname={pathname}
                     focusedId={focusedId}
                     hasFocus={hasFocus}
-                    openIds={openIds}
                     hubOpen={hubOpenId !== null}
                   />
                 ) : null;
@@ -274,12 +286,11 @@ export function AppSidebar({
                 motion={motion}
                 onShowDesktop={showDesktop}
                 onToggleHub={toggleHub}
-                onCloseHub={closeHub}
+                onCloseHub={sendHubToBack}
                 hubOpenId={hubOpenId}
                 pathname={pathname}
                 focusedId={focusedId}
                 hasFocus={hasFocus}
-                openIds={openIds}
               />
             ))}
           </NavSection>
@@ -296,12 +307,11 @@ export function AppSidebar({
                   motion={motion}
                   onShowDesktop={showDesktop}
                   onToggleHub={toggleHub}
-                  onCloseHub={closeHub}
+                  onCloseHub={sendHubToBack}
                   hubOpenId={hubOpenId}
                   pathname={pathname}
                   focusedId={focusedId}
                   hasFocus={hasFocus}
-                  openIds={openIds}
                 />
               ))}
             </NavSection>
@@ -446,29 +456,27 @@ function railState(
     pathname,
     focusedId,
     hasFocus,
-    openIds,
     hubOpen = false,
   }: {
     isDesktop: boolean;
     pathname: string;
     focusedId: string | null;
     hasFocus: boolean;
-    openIds: Set<string>;
     /** 메뉴 허브가 떠 있나 — 그동안은 배경 라우트(운영실) 표시를 양보한다(활성 줄이 둘이면 지금 어디인지 모호). */
     hubOpen?: boolean;
   },
 ) {
   const presentation = navPresentation(item);
   const winId = windowId("route", item.menuKey);
-  const isOpen = isDesktop && presentation === "window" && openIds.has(winId);
   const active = isDesktop
     ? presentation === "desktop"
       ? !hasFocus && !hubOpen && isItemActive(item.href, pathname)
       : hasFocus && focusedId === winId
     : isItemActive(item.href, pathname);
+  // 🔴 열려 있는 창은 표시하지 않는다(원장 2026-09-09) — 표시는 **지금 보고 있는 창 하나**뿐이다.
+  //    `openIds`는 포커스 판정(hasFocus)에만 남는다.
   return {
     active,
-    openOnly: isOpen && !active,
     atTop: isDesktop && presentation === "window" && hasFocus && focusedId === winId,
   };
 }
@@ -484,7 +492,6 @@ function MenuRail({
   pathname,
   focusedId,
   hasFocus,
-  openIds,
   hubOpen = false,
 }: {
   item: NavItem;
@@ -492,15 +499,14 @@ function MenuRail({
   expanded: boolean;
   motion: boolean;
   onShowDesktop: () => void;
-  /** 화면을 열면 떠 있던 메뉴 허브는 닫는다(작업 화면이 앞으로 온다). */
+  /** 화면을 열면 떠 있던 메뉴 허브는 **배경으로 내린다**(작업 화면이 앞으로 온다 — 배경은 안 바뀐다). */
   onOpen: () => void;
   pathname: string;
   focusedId: string | null;
   hasFocus: boolean;
-  openIds: Set<string>;
   hubOpen?: boolean;
 }) {
-  const st = railState(item, { isDesktop, pathname, focusedId, hasFocus, openIds, hubOpen });
+  const st = railState(item, { isDesktop, pathname, focusedId, hasFocus, hubOpen });
   return (
     <div
       onClick={() => {
@@ -512,7 +518,6 @@ function MenuRail({
       <RailItem
         item={item}
         active={st.active}
-        openOnly={st.openOnly}
         atTop={st.atTop}
         isDesktop={isDesktop}
         expanded={expanded}
@@ -539,7 +544,6 @@ function GroupRail({
   pathname,
   focusedId,
   hasFocus,
-  openIds,
 }: {
   group: HubGroup;
   isDesktop: boolean;
@@ -547,12 +551,12 @@ function GroupRail({
   motion: boolean;
   onShowDesktop: () => void;
   onToggleHub: (id: string) => void;
+  /** 화면을 열었을 때 — 허브를 **배경으로 내린다**(닫지 않는다). */
   onCloseHub: () => void;
   hubOpenId: string | null;
   pathname: string;
   focusedId: string | null;
   hasFocus: boolean;
-  openIds: Set<string>;
 }) {
   const direct = group.kind === "direct" ? navItemByKey(group.items[0]!.menuKey) : undefined;
   if (direct) {
@@ -567,7 +571,6 @@ function GroupRail({
         pathname={pathname}
         focusedId={focusedId}
         hasFocus={hasFocus}
-        openIds={openIds}
         hubOpen={hubOpenId !== null}
       />
     );
@@ -577,9 +580,9 @@ function GroupRail({
   const focusedHere =
     hasFocus && group.items.some((d) => windowId("route", d.menuKey) === focusedId);
   const active = hubOpen || focusedHere;
-  // 이 업무군의 화면이 열려는 있으나 포커스는 아님 → 점.
-  const openOnly =
-    !active && isDesktop && group.items.some((d) => openIds.has(windowId("route", d.menuKey)));
+  // 🔴 **열려 있는 창을 표시하지 않는다**(원장 2026-09-09 *"열려있는 창 모두 표시하지말고 현재 보고 있는
+  //    창만 탭에서 표시"*) — 창을 여럿 띄우면 줄이 여럿 칠해져 "지금 어디를 보고 있나"가 안 읽혔다.
+  //    표시는 **포커스 하나**뿐이다. 점·연한 채움을 되살리지 말 것(`openIds`는 포커스 판정에만 쓴다).
 
   return (
     <button
@@ -589,7 +592,7 @@ function GroupRail({
       aria-label={`${group.label} 메뉴`}
       title={expanded ? undefined : group.label}
       className={`group relative flex h-9 w-full shrink-0 items-center rounded-md text-sm ${
-        active ? "text-primary-foreground" : openOnly ? "text-foreground" : "text-text-dim hover:text-foreground"
+        active ? "text-primary-foreground" : "text-text-dim hover:text-foreground"
       }`}
     >
       <span
@@ -610,9 +613,6 @@ function GroupRail({
             같은 기호가 반복돼 이름을 읽는 데 방해가 됐다. */}
         <span className="truncate font-medium">{group.label}</span>
       </span>
-      {openOnly ? (
-        <span aria-hidden className="bg-primary absolute top-1/2 right-2 size-1.5 -translate-y-1/2 rounded-full" />
-      ) : null}
     </button>
   );
 }
@@ -620,7 +620,6 @@ function GroupRail({
 function RailItem({
   item,
   active,
-  openOnly,
   atTop,
   isDesktop,
   expanded,
@@ -628,8 +627,8 @@ function RailItem({
   onShowDesktop,
 }: {
   item: NavItem;
+  /** 🔴 **지금 보고 있는 창 하나**만 참이다 — 열려 있는 다른 창은 표시하지 않는다(원장 2026-09-09). */
   active: boolean;
-  openOnly: boolean;
   /** 이 메뉴 창이 이미 최상단(포커스)임 — 다시 누르면 "첫 화면"(메뉴 루트)으로 리셋. */
   atTop: boolean;
   isDesktop: boolean;
@@ -672,11 +671,7 @@ function RailItem({
     store.open("route", params);
   }
 
-  const fg = active
-    ? "text-primary-foreground"
-    : openOnly
-      ? "text-foreground"
-      : "text-text-dim group-hover:text-foreground";
+  const fg = active ? "text-primary-foreground" : "text-text-dim group-hover:text-foreground";
 
   const link = (
     <Link
@@ -723,9 +718,7 @@ function RailItem({
         className={`pointer-events-none absolute inset-y-0 z-0 rounded-[9px] ${
           active
             ? "bg-primary shadow-primary-glow opacity-100"
-            : openOnly
-              ? "bg-sidebar-accent opacity-100"
-              : "bg-sidebar-accent opacity-0 group-hover:opacity-100"
+            : "bg-sidebar-accent opacity-0 group-hover:opacity-100"
         } ${motion ? `transition-[left,right,opacity,box-shadow] duration-200 ${EASE}` : ""}`}
       />
       <MenuGlyph
@@ -740,15 +733,6 @@ function RailItem({
       >
         {item.label}
       </span>
-      {openOnly ? (
-        <span
-          className={`bg-primary z-10 size-1.5 shrink-0 rounded-full ${
-            expanded
-              ? "relative ml-auto mr-1"
-              : "absolute bottom-1 left-1/2 -translate-x-1/2"
-          }`}
-        />
-      ) : null}
     </Link>
   );
 

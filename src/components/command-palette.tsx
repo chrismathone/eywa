@@ -38,7 +38,8 @@ const DATA_ICON: Record<PaletteHit["kind"], EywaIconName> = {
 };
 const SECTION_LABEL: Record<string, string> = {
   menu: "메뉴",
-  student: "학생",
+  // 팰릿 구역 이름도 메뉴와 같은 말로(원장 2026-09-09) — 옆 구역이 "메뉴"라 둘이 갈리면 어색하다.
+  student: "원생",
   class: "수업",
   consultation: "상담",
   enrollment: "등록상담",
@@ -188,7 +189,7 @@ export function CommandPalette({
       }
       return;
     }
-    const dest = { id: "consultations", title: "학생상담", href: "/consultations" };
+    const dest = { id: "consultations", title: "원생상담", href: "/consultations" };
     if (isDesktop) openWindow("route", dest);
     else router.push(dest.href);
   }

@@ -12,6 +12,7 @@ import { PhotoCard } from "@/components/atoms/photo-card";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   followUpUrgency,
+  getConsultationCounselorOptions,
   getStudentConsultationCounts,
   getStudentConsultationsPage,
   type StudentConsultationCategory,
@@ -26,8 +27,10 @@ import { cookies } from "next/headers";
 import type { CSSProperties } from "react";
 import { CATEGORY_META, URGENCY_META } from "./_components/consultation-meta";
 import { relativeTimeKo } from "@/lib/relative-time";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
-export const metadata = { title: "학생상담 — eywa" };
+export const metadata = { title: "원생상담 — eywa" };
 
 type RangeKey = "all" | "7d" | "30d";
 type CategoryKey = "all" | StudentConsultationCategory;
@@ -125,6 +128,10 @@ export default async function ConsultationsPage({
     range?: RangeKey;
     cat?: CategoryKey;
     urg?: UrgencyKey;
+    /** 상담사 `users.id`(원장 2026-09-09 *"상담 필터에 강사명도 있어야함."*). */
+    who?: string;
+    /** 과목 — 학원설정 **키**(`math`). 저장값은 한글 라벨이라 쿼리가 키·라벨 둘 다로 맞춘다. */
+    subject?: string;
     q?: string;
     page?: string;
     size?: string;
@@ -135,15 +142,26 @@ export default async function ConsultationsPage({
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const cat: CategoryKey = (sp.cat as CategoryKey) ?? "all";
   const urg: UrgencyKey = (sp.urg as UrgencyKey) ?? "all";
+  const who = sp.who ?? "";
+  const subject = sp.subject ?? "";
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
   // 쪽 크기: URL(이번 창의 측정값) → 기기 쿠키(지난번 측정값) → 기본값. 서버·클라 clamp가 같은 상수라 왕복하지 않는다.
   const jar = await cookies();
   const size = clampPageSize(sp.size ?? jar.get(pageSizeCookieName(PAGE_SIZE_KEY))?.value, DEFAULT_PAGE_SIZE);
 
-  const [{ rows: items, total }, counts] = await Promise.all([
-    getStudentConsultationsPage({ q, range, cat, urg }, page, size),
+  // 🔴 과목 선택지는 **학원설정 단일 소스**(하드코딩 금지) — 라벨도 여기서 나온다. 저장값이 한글 라벨이라
+  //    쿼리에 라벨을 함께 넘겨 키·라벨 둘 다로 맞춘다(queries.ts 주석).
+  const settings = await getTenantSettings();
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const [{ rows: items, total }, counts, counselorOptions] = await Promise.all([
+    getStudentConsultationsPage(
+      { q, range, cat, urg, counselor: who || undefined, subject: subject || undefined, subjectLabel: subject ? subjects.labelOf(subject) : null },
+      page,
+      size,
+    ),
     getStudentConsultationCounts(),
+    getConsultationCounselorOptions(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / size));
   const { total: totalAll, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
@@ -154,6 +172,8 @@ export default async function ConsultationsPage({
     if (range !== "all") params.set("range", range);
     if (cat !== "all") params.set("cat", cat);
     if (urg !== "all") params.set("urg", urg);
+    if (who) params.set("who", who);
+    if (subject) params.set("subject", subject);
     if (q) params.set("q", q);
     if (size !== DEFAULT_PAGE_SIZE) params.set("size", String(size));
     if (p > 1) params.set("page", String(p));
@@ -235,6 +255,29 @@ export default async function ConsultationsPage({
             className="w-auto"
             triggerClassName={TOOLBAR_SELECT}
           />
+          {/* 상담사 — 실제로 상담을 쓴 사람만 선다(직원 명부 전체가 아니다). 강사 계정은 자기 것만 보여
+              선택지가 없으므로 줄 자체를 감춘다(고를 것이 하나뿐인 필터는 자리만 차지한다). */}
+          {counselorOptions.length > 0 ? (
+          <FilterSelect
+            paramName="who"
+            value={who}
+            options={counselorOptions.map((c) => ({ value: c.id, label: c.name }))}
+            axisLabel="상담사"
+            ariaLabel="상담사 필터"
+            className="w-auto"
+            triggerClassName={TOOLBAR_SELECT}
+          />
+          ) : null}
+          {/* 과목 — 선택지·라벨은 학원설정이 단일 소스(코드에 과목을 적지 않는다). */}
+          <FilterSelect
+            paramName="subject"
+            value={subject}
+            options={subjects.options}
+            axisLabel="과목"
+            ariaLabel="과목 필터"
+            className="w-auto"
+            triggerClassName={TOOLBAR_SELECT}
+          />
           <SearchToggle placeholder="학생명·요약" defaultValue={q} />
         </div>
       </div>
@@ -307,7 +350,16 @@ export default async function ConsultationsPage({
             <ul
               data-autopage-list=""
               className="columns-[44rem] gap-x-8 [&>li]:break-inside-avoid"
-              style={{ ...ROW_GRID_VARS, columnCount: "var(--cols, auto)", columnFill: "auto", height: "var(--list-h, auto)" }}
+              // 🔴 `column-fill`도 변수로 받는다(기본 `balance`) — 상수 `auto`로 두면 **높이가 없는 모든 순간이 1단**이
+              //    된다(측정 전 첫 페인트 + AutoPageSize가 높이를 못 적는 갈래). 원장 제보 2026-09-09
+              //    *"카테고리를 바꾸고 다시 전체로 돌아오니까 3단이던게 1단으로"*가 정확히 그 상태였다.
+              style={{
+                ...ROW_GRID_VARS,
+                columnCount: "var(--cols, auto)",
+                // CSSProperties의 columnFill은 리터럴 유니온이라 변수를 못 받는다 — 값은 유효한 CSS다.
+                columnFill: "var(--col-fill, balance)" as React.CSSProperties["columnFill"],
+                height: "var(--list-h, auto)",
+              }}
             >
               {items.map((c) => {
                 const urgency = URGENCY_META[followUpUrgency(c.followUpDate, c.followUpDone)];

@@ -540,7 +540,7 @@ export async function getMyLineTemplates(): Promise<ApprovalLineTemplate[]> {
 export type LeaveBalance = {
   hireDate: string | null;
   period: LeavePeriod | null;
-  /** 조정 합계(+이월 / −차감, 0251a). 표가 없거나 조회 실패면 0. */
+  /** 조정 합계(+이월 / −차감, 0252a). 표가 없거나 조회 실패면 0. */
   adjustment: number;
   /** 총 부여 = 법정 계산분 + 조정. 화면·기안 거절이 함께 보는 값. */
   granted: number;
@@ -550,11 +550,11 @@ export type LeaveBalance = {
 };
 
 /**
- * 내 연차 현황 — 부여는 **입사일에서 계산**하고(accrual.ts), 여기에 수기 **조정**(이월·특별휴가, 0251a)을
+ * 내 연차 현황 — 부여는 **입사일에서 계산**하고(accrual.ts), 여기에 수기 **조정**(이월·특별휴가, 0252a)을
  * 더한다. 사용·대기는 결재 문서에서 센다.
  * 잔여 = (부여 + 조정) − 승인 − 진행중(진행중을 미리 빼야 같은 연차를 두 번 올리지 못한다).
  *
- * ⚠️ 조정 조회는 **fail-soft로 0**이다(0251a 미적용 포함) — 여기서 막으면 결재함 첫 화면이 통째로
+ * ⚠️ 조정 조회는 **fail-soft로 0**이다(0252a 미적용 포함) — 여기서 막으면 결재함 첫 화면이 통째로
  *    죽는다([[#95]]). 0으로 떨어지면 잔여가 **덜** 잡히는 방향이라(초과 사용은 안 열린다) 안전한 쪽이고,
  *    같은 값을 보는 기안 액션은 반대로 **소리 내어 거절**한다(이유를 알려야 사무실에 문의할 수 있다).
  */
@@ -570,7 +570,7 @@ export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
   }
 
   // 두 조회는 서로 독립 — 함께 받는다(B4). 본인·한 구간이라 행 수가 작다(상한 명시로 절단 위험 차단, B2).
-  // 조정은 0251a RLS가 **본인 행만** 열어 준다(관리자 표는 서버에서 admin으로 읽는다).
+  // 조정은 0252a RLS가 **본인 행만** 열어 준다(관리자 표는 서버에서 admin으로 읽는다).
   const [formsRes, adjRes] = await Promise.all([
     supabase
       .from("leave_forms")

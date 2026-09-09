@@ -25,13 +25,13 @@ import { isMissingRelation, type LeaveLoadError } from "@/features/approvals/ser
  * 연차 관리(직원관리) 조회 — 직원별 **부여·조정·사용·잔여**를 한 표로.
  *
  * 🔴 **admin 클라이언트 + `tenant_id` 명시 필터**([[#104]]). 남의 연차를 보는 화면이라 세션 RLS로는
- *    본인 행만 나오고(0251a 정책이 self-read), leave_forms도 결재 관계자만 읽힌다 — 그래서 서버가
+ *    본인 행만 나오고(0252a 정책이 self-read), leave_forms도 결재 관계자만 읽힌다 — 그래서 서버가
  *    권한(`canAdjustLeave`)을 먼저 확인하고 admin으로 읽는다. 호출부(page)가 게이트를 통과시킨다.
  *
  * 🔑 잔여 산식은 [`balance.ts`](../../leave/balance.ts) **한 곳**에서 온다 — 내 연차 현황(getMyLeaveBalance)·
  *    기안 거절(submitLeaveDraft)과 같은 식이라 "화면엔 18일인데 기안은 15일까지"가 안 생긴다.
  *
- * ⚠️ 0251a 미적용이어도 **화면은 산다**([[#95]]) — 조정 조회만 fail-soft로 비우고 `tableReady=false`를
+ * ⚠️ 0252a 미적용이어도 **화면은 산다**([[#95]]) — 조정 조회만 fail-soft로 비우고 `tableReady=false`를
  *    올려 편집을 잠근다(법정 부여·사용·잔여는 그대로 보인다).
  */
 
@@ -57,7 +57,7 @@ export type LeaveOverviewRow = {
 
 export type LeaveOverview = {
   rows: LeaveOverviewRow[];
-  /** 0251a 적용 여부 — false면 화면이 배너를 띄우고 조정 버튼을 잠근다. */
+  /** 0252a 적용 여부 — false면 화면이 배너를 띄우고 조정 버튼을 잠근다. */
   tableReady: boolean;
   loadError?: LeaveLoadError;
 };
@@ -142,7 +142,7 @@ async function loadAdjustments(tenantId: string, userIds: string[]): Promise<Adj
       return { data: (data ?? []) as AdjRaw[], error };
     });
   } catch (e) {
-    // 표 미적용(0251a 전)만 조용히 넘긴다 — 그 밖의 실패는 화면이 알아야 한다.
+    // 표 미적용(0252a 전)만 조용히 넘긴다 — 그 밖의 실패는 화면이 알아야 한다.
     if (isMissingRelation({ message: e instanceof Error ? e.message : String(e) })) return null;
     throw e;
   }
@@ -288,7 +288,7 @@ export async function reservedLeaveDays(args: {
 /**
  * 한 사람·한 구간의 조정 합계 — **기안 잔여 판정**(submitLeaveDraft)이 쓴다.
  *
- * 🔴 표가 없으면 0(0251a 전에도 기안은 되어야 한다). 그 밖의 실패는 **throw** 한다 —
+ * 🔴 표가 없으면 0(0252a 전에도 기안은 되어야 한다). 그 밖의 실패는 **throw** 한다 —
  *    조용히 0으로 떨어뜨리면 이월 연차를 받은 사람이 이유도 모르고 기안을 거절당한다.
  */
 export async function adjustmentDaysFor(args: {

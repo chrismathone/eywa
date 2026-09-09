@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": attachmentFilename(`학생목록_${date}.xlsx`),
+      "Content-Disposition": attachmentFilename(`원생목록_${date}.xlsx`),
     },
   });
 }

@@ -1,4 +1,5 @@
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import type { EywaIconName } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { BigStat, type BigStatTone } from "@/components/atoms/big-stat";
 import { formatWonShort } from "../format";
 import type { RetentionStats } from "../server/queries";
@@ -22,7 +23,7 @@ export function PulseTiles({ stats }: { stats: RetentionStats }) {
           label={t.label}
           value={t.value}
           tone={t.tone}
-          icon={<EyIcon name={t.icon} size={16} />}
+          icon={<MenuGlyph name={t.icon} size={22} />}
         />
       ))}
     </section>

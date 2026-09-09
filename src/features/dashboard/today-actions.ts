@@ -19,7 +19,7 @@ export type TodayActionsRaw = {
    * ⚠️ "무단결석"이 아니다: 공결 상태는 폐지돼(2026-07-10) 사전 통보 결석도 전부 `absent`로 저장된다.
    * 라벨을 다시 "무단결석"으로 되돌리지 말 것 — 연락 없이 빠진 학생 수로 읽혀 실제보다 과장된다.
    */
-  absentToday: { studentId: string; name: string; subject: string | null }[];
+  absentToday: { studentId: string; name: string; subject: string | null; preNotified: boolean }[];
   /**
    * 어제 출석 미기록 반. `subject`는 미리보기 이름을 **과목별로 고르게** 뽑는 데 쓴다 —
    * 이름순 앞 2개만 뽑으면 한 과목(한글 이름 반)만 계속 노출된다(gotcha #84). 필수 필드로 둔 건
@@ -28,6 +28,13 @@ export type TodayActionsRaw = {
   unrecordedYesterday: { classId: string; className: string; subject: string }[];
   /** 어제 날짜(YYYY-MM-DD) — 일별 미처리 페이지 링크용 */
   yesterday: string;
+  /**
+   * **오늘 이미 끝난 교시**인데 아직 출결이 다 안 찍힌 반(운영실 검토 2026-09-09 합의 1순위).
+   * 🔴 분모는 "오늘 배정된 교시"가 아니라 **끝난 교시**다([`day-recording.ts`](./day-recording.ts)) —
+   *    수업 중인 반까지 세면 130반 규모의 거짓 경보가 된다.
+   * ⚠️ 헤더의 `처리 중 N/M`과 **축이 다르다**(그쪽은 시작한 교시 기준 합계) — 그래서 항목 note에 기준을 적는다.
+   */
+  unrecordedToday: { classId: string; className: string; subject: string }[];
   /** 최근 7일 녹음 전사/AI 분석 실패 건수(테이블별) */
   failedAnalysis: { meetings: number; enrollment: number; consultations: number };
   /** makeedu 동기화 이상(자동 동기화 ON일 때만) — 없으면 null */
@@ -43,6 +50,27 @@ export type TodayActionsRaw = {
   leavesPending: number;
   /** 오늘 휴가 중인 직원 */
   leavesToday: { name: string }[];
+  /**
+   * 오늘 **처음 오는 학생 · 오늘이 마지막인 학생**(운영실 검토 2026-09-09, 3/3 합의).
+   * 🔴 판정은 수강 행이 아니라 **학생 단위**다([`day-arrivals.ts`](./day-arrivals.ts)) — 반을 하나 더 받은
+   *    학생이 '첫 수업'으로, 반 하나만 뺀 학생이 '마지막 수업'으로 잡히던 실측 오류를 그 순수 함수가 막는다.
+   * ⚠️ 라벨은 '퇴원'이 아니라 **'오늘 마지막 수업'** — 휴원으로 들어가는 학생도 여기 잡힌다.
+   */
+  dayArrivals: { starting: { studentId: string; name: string }[]; ending: { studentId: string; name: string }[] };
+  /** 오늘 접수된 등록상담(QR 공개접수·데스크 입력) — 칸반을 열기 전엔 아무도 모른다. */
+  newIntakeToday: { count: number; names: string[] };
+  /**
+   * **신규생 체크리스트 지연** — 등록 90일 안 학생 중 기한이 지난 필수 항목이 있는 사람(원장 2026-09-09
+   * *"당연히 운영실에서 관리되고 있는지 관리 안되고있는지 확인해야겠지?"*).
+   * 🔴 판정은 신규생 탭과 **같은 순수 함수**([`newcomers/onboarding-items.ts`]) — 두 화면이 다른 수를 말하면 안 된다.
+   * ⚠️ '필요시' 항목(2개월 콜)은 안 센다 · 첫 수업일을 모르는 항목은 기한이 없어 지연이 아니다.
+   */
+  newcomerOverdue: { count: number; names: string[] };
+  /**
+   * **내일** 발효되는 시간표 예약(개명·담임 교체·배치·반이동). 없으면 null.
+   * 🔴 오늘 발효분은 cron이 이미 적용했으므로 세지 않는다 — 알아야 하는 건 "내일 아침 뭐가 바뀌나"다.
+   */
+  scheduledTomorrow: { date: string; hasStructure: boolean; hasEnrollment: boolean } | null;
   /**
    * 오늘 수업(시작됨)이 있는데 아직 보고서 0건인 학생 — 미작성 리마인더(5단계-1).
    * `bySubject`는 **학생×과목** 건수라 합이 count(학생 수)보다 클 수 있다(두 과목 다 미작성인 학생).
@@ -239,6 +267,12 @@ export function buildTodayActions(
   const { subjectLabel } = opts;
 
   if (raw.absentToday.length > 0) {
+    // 🔴 **숫자는 깎지 않는다**(사전 통보 결석도 오늘 결석이다 — 원장 2026-08-29 규약과 같은 결).
+    //    가르는 것은 **연락 대상**뿐이라 이름 미리보기가 무통보를 앞세우고, 내역은 note가 말한다.
+    //    실측 2026-09-09: 최근 14일 결석 303건 중 사전 통보 78건(4분의 1)이 이미 양해된 건이었다.
+    const unnotified = raw.absentToday.filter((student) => !student.preNotified);
+    const preNotifiedCount = raw.absentToday.length - unnotified.length;
+    const absentPreview = unnotified.length > 0 ? unnotified : raw.absentToday;
     items.push({
       key: "absent",
       severity: "danger",
@@ -246,12 +280,102 @@ export function buildTodayActions(
       label: "오늘 결석",
       count: raw.absentToday.length,
       unit: "명",
-      detail: nameList(raw.absentToday.map((s) => s.name)),
-      note: null,
+      detail: nameList(absentPreview.map((s) => s.name), 3, absentPreview.length),
+      note: preNotifiedCount > 0 ? `연락 필요 ${unnotified.length} · 사전 통보 ${preNotifiedCount}` : null,
       // 학생은 이미 dedupe돼 있다 — 두 과목에서 결석한 학생은 두 과목 모두에 잡히지 않고 첫 기록 과목에만 든다.
       bySubject: groupBySubject(raw.absentToday, subjectLabel),
       href: "/attendance",
       menuKey: "attendance",
+      requiredAccess: "read",
+    });
+  }
+
+  // ── 오늘 사람 변동 — 맞이·환송·명단 수정으로 이어지는 신호(운영실 검토 2026-09-09, 3/3 합의).
+  //    헤더 재원 증감은 '이번 달', 추세 카드는 '7일'이라 "오늘 맞이할 아이"를 아무 화면도 말해 주지 않았다.
+  if (raw.dayArrivals.starting.length > 0) {
+    const only = raw.dayArrivals.starting.length === 1 ? raw.dayArrivals.starting[0] : null;
+    items.push({
+      key: "arrivals-start",
+      severity: "amber",
+      label: "오늘 첫 수업",
+      count: raw.dayArrivals.starting.length,
+      unit: "명",
+      detail: nameList(raw.dayArrivals.starting.map((s) => s.name)),
+      note: null,
+      bySubject: [], // 학생 단위 판정이라 과목 축이 없다(한 학생이 여러 과목으로 시작할 수 있다).
+      href: only ? `/students/${only.studentId}` : "/students",
+      menuKey: "students",
+      requiredAccess: "read",
+    });
+  }
+  if (raw.dayArrivals.ending.length > 0) {
+    const only = raw.dayArrivals.ending.length === 1 ? raw.dayArrivals.ending[0] : null;
+    items.push({
+      key: "arrivals-end",
+      severity: "amber",
+      // 🔴 '퇴원'이 아니다 — 휴원으로 들어가는 학생도 여기 잡힌다(day-arrivals.ts 주석).
+      label: "오늘 마지막 수업",
+      count: raw.dayArrivals.ending.length,
+      unit: "명",
+      detail: nameList(raw.dayArrivals.ending.map((s) => s.name)),
+      note: null,
+      bySubject: [],
+      href: only ? `/students/${only.studentId}` : "/students",
+      menuKey: "students",
+      requiredAccess: "read",
+    });
+  }
+
+  if (raw.newIntakeToday.count > 0) {
+    items.push({
+      key: "intake-today",
+      severity: "info",
+      label: "오늘 접수된 상담",
+      count: raw.newIntakeToday.count,
+      unit: "건",
+      detail: nameList(raw.newIntakeToday.names, 3, raw.newIntakeToday.count),
+      note: null,
+      bySubject: [],
+      href: "/enrollment",
+      menuKey: "enrollment",
+      requiredAccess: "read",
+    });
+  }
+
+  // 신규생 관리 — 등록 직후 90일은 되돌리기 가장 쉬운 구간이라, 놓친 절차를 그날 알아야 한다.
+  if (raw.newcomerOverdue.count > 0) {
+    items.push({
+      key: "newcomer-overdue",
+      severity: "amber",
+      label: "신규생 관리 지연",
+      count: raw.newcomerOverdue.count,
+      unit: "명",
+      detail: nameList(raw.newcomerOverdue.names, 3, raw.newcomerOverdue.count),
+      note: "사전 콜·첫 수업 안내·OJT·만족도 콜 기준",
+      bySubject: [],
+      href: "/newcomers",
+      menuKey: "newcomers",
+      requiredAccess: "read",
+    });
+  }
+
+  if (raw.scheduledTomorrow) {
+    const scheduledParts = [
+      raw.scheduledTomorrow.hasStructure ? "수업 배치" : null,
+      raw.scheduledTomorrow.hasEnrollment ? "학생 반이동" : null,
+    ].filter((part): part is string => part !== null);
+    items.push({
+      key: "scheduled-tomorrow",
+      severity: "info",
+      label: "내일 시간표 적용 예정",
+      count: null,
+      unit: null,
+      detail: null,
+      // 무엇이 바뀌는지(반 이름·담임)는 시간표 배지가 말한다 — 여기선 갈래만.
+      note: scheduledParts.length > 0 ? scheduledParts.join(" · ") : null,
+      bySubject: [],
+      href: "/timetable",
+      menuKey: "timetable",
       requiredAccess: "read",
     });
   }
@@ -363,6 +487,27 @@ export function buildTodayActions(
       href: only ? `/students/${only.studentId}` : "/students",
       menuKey: "students",
       requiredAccess: "write",
+    });
+  }
+
+  if (raw.unrecordedToday.length > 0) {
+    items.push({
+      key: "unrecorded-today",
+      severity: "amber",
+      label: "오늘 출석 미기록",
+      count: raw.unrecordedToday.length,
+      unit: "개 반",
+      detail: nameList(
+        balancedTake(raw.unrecordedToday, (c) => c.subject, 2).map((c) => c.className),
+        2,
+        raw.unrecordedToday.length,
+      ),
+      // 🔑 기준을 적는다 — 헤더의 '처리 중 N/M'은 **시작한** 교시 기준이라 두 숫자가 다를 수 있다.
+      note: "종료된 교시 기준",
+      bySubject: groupBySubject(raw.unrecordedToday, subjectLabel),
+      href: "/attendance/live",
+      menuKey: "attendance",
+      requiredAccess: "read",
     });
   }
 

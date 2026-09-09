@@ -30,7 +30,7 @@ import { formatLeaveDays } from "@/features/leave/request-days";
  *
  * 🔑 입력 방식이 둘인 이유: 사무실이 실제로 말하는 건 *"이 사람 연차 18개로 해줘"*(총 부여)인데,
  *    이월·특별휴가처럼 *"3일 더"*(가감)로 말할 때도 있다. 화면이 둘 다 받고 **저장은 언제나 가감
- *    한 줄**이다 — 총 일수를 그대로 덮어쓰면 왜 바뀌었는지가 사라진다(0251a 머리주석).
+ *    한 줄**이다 — 총 일수를 그대로 덮어쓰면 왜 바뀌었는지가 사라진다(0252a 머리주석).
  * ⚠️ 미리보기 숫자는 화면 계산일 뿐 판정이 아니다 — 서버가 저장 직전에 다시 계산한다(그 사이 다른
  *    관리자가 조정했을 수 있다).
  */
@@ -40,7 +40,7 @@ const NUM_CELL = "num px-2.5 py-2 text-right";
 
 type Props = {
   rows: LeaveOverviewRow[];
-  /** 0251a 미적용이면 조정 버튼을 잠근다(표는 그대로 읽힌다). */
+  /** 0252a 미적용이면 조정 버튼을 잠근다(표는 그대로 읽힌다). */
   tableReady: boolean;
 };
 
@@ -143,7 +143,7 @@ export function AdjustTable({ rows, tableReady }: Props) {
                     className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-md border px-2 py-1 text-xs font-semibold transition disabled:opacity-40"
                     title={
                       !tableReady
-                        ? "연차 조정 표(0251a)가 아직 준비되지 않았습니다"
+                        ? "연차 조정 표(0252a)가 아직 준비되지 않았습니다"
                         : !r.period
                           ? "입사일이 없어 조정할 수 없습니다"
                           : `${r.name} 연차 조정`

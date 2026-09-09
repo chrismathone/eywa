@@ -1,4 +1,4 @@
--- 0251a — 연차 **조정 행**(이월·특별휴가·중도 정산 차감)
+-- 0252a — 연차 **조정 행**(이월·특별휴가·중도 정산 차감)
 --
 -- 원장 지시 2026-09-08: *"전자결재에서 관리자랑 김예원이 직원들의 연차갯수를 조정해야하는데 해당 기능이
 -- 없음"* (관리자 = 박소선·이승엽·김예원).
@@ -53,7 +53,7 @@ create table if not exists public.leave_adjustments (
 );
 
 comment on table public.leave_adjustments is
-  '연차 조정 행(이월·특별휴가·정산 차감). 부여는 users.hire_date에서 계산(accrual.ts)하고 이 표는 그 위에 더해진다 — 잔여 = 법정부여 + 조정합 − 사용 − 결재중. 축은 (직원, 연차 구간). 0251a';
+  '연차 조정 행(이월·특별휴가·정산 차감). 부여는 users.hire_date에서 계산(accrual.ts)하고 이 표는 그 위에 더해진다 — 잔여 = 법정부여 + 조정합 − 사용 − 결재중. 축은 (직원, 연차 구간). 0252a';
 comment on column public.leave_adjustments.days is
   '가감 일수(+부여 / −차감). 덮어쓰지 않고 행을 쌓아 합이 곧 조정값이다.';
 comment on column public.leave_adjustments.period_start is
@@ -87,6 +87,6 @@ alter table public.leave_forms
 update public.leave_forms set days = 0.25 where leave_kind = 'quarter' and days = 0.3;
 
 comment on column public.leave_forms.days is
-  '차감 일수 — 연차 1일 단위 / 반차 0.5 / 반반차 0.25(0251a에서 numeric(5,2)로 넓힘: numeric(4,1)은 0.25를 0.3으로 반올림했다).';
+  '차감 일수 — 연차 1일 단위 / 반차 0.5 / 반반차 0.25(0252a에서 numeric(5,2)로 넓힘: numeric(4,1)은 0.25를 0.3으로 반올림했다).';
 
 notify pgrst, 'reload schema';

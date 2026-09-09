@@ -226,6 +226,7 @@ const CANON_SURFACES = [
   "src/features/class-sheets/components/seat-day-face.tsx",
   "src/features/math-sheets/components/month-client.tsx",
   "src/app/(shell)/retention/board/page.tsx",
+  "src/app/(shell)/newcomers/page.tsx",
   "src/app/(shell)/owner/_components/audit-face.tsx",
   "src/app/(shell)/class-review/_components/review-table.tsx",
   "src/app/(shell)/class-review/template/page.tsx",

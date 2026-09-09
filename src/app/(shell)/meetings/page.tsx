@@ -2,7 +2,8 @@ import type { CSSProperties } from "react";
 import { Mic, RefreshCw } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
-import { EyIcon } from "@/components/icons/eywa-icons";
+
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { toneColor } from "@/lib/design/semantic-color";
 import { BigStat } from "@/components/atoms/big-stat";
@@ -249,7 +250,7 @@ export default async function MeetingsPage({
       {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
         <BigStat label="전체 회의" value={all.length} unit="건" tone="primary" icon={<Mic size={16} strokeWidth={1.8} />} />
-        <BigStat label="AI 분석 완료" value={completed} unit="건" tone="gold" icon={<EyIcon name="sparkle" size={16} />} />
+        <BigStat label="AI 분석 완료" value={completed} unit="건" tone="gold" icon={<MenuGlyph name="sparkle" size={22} />} />
         <BigStat label="처리 중" value={inProgress} unit="건" tone="rose" icon={<RefreshCw size={16} strokeWidth={1.8} />} />
       </section>
 

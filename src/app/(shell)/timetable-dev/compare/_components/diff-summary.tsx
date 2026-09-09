@@ -1,5 +1,6 @@
 import { BigStat, type BigStatTone } from "@/components/atoms/big-stat";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import type { EywaIconName } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import {
   PLAN_DIFF_KINDS,
@@ -58,7 +59,7 @@ export function DiffSummary({
           unit="칸"
           sub={sub[kind]}
           tone={TONE_COLOR[PLAN_DIFF_TONE[kind]] as BigStatTone}
-          icon={<EyIcon name={KIND_ICON[kind]} size={16} />}
+          icon={<MenuGlyph name={KIND_ICON[kind]} size={22} />}
         />
       ))}
     </div>

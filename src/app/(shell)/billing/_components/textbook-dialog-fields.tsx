@@ -49,7 +49,9 @@ export function TextbookFields({
             options={catalog.map((c) => ({
               value: c.id,
               label: c.title,
-              hint: `${c.price.toLocaleString()}원${c.bookDetail ? ` · ${c.bookDetail}` : ""}`,
+              // 금액·상세는 열로(신청 화면과 같은 규약 — searchable-select `meta`).
+              hint: `${c.price.toLocaleString()}원`,
+              meta: c.bookDetail ?? "",
             }))}
             placeholder="단가표에서 선택..."
             searchPlaceholder="교재명 검색..."

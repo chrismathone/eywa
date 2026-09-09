@@ -66,6 +66,33 @@ export function kstTimeOf(value: unknown): string | null {
   }).format(d);
 }
 
+/**
+ * `<input type="datetime-local">`이 보낸 값(**타임존이 없는** `YYYY-MM-DDTHH:mm`)을 **KST로 읽어** ISO로.
+ *
+ * 🔴 왜 필요한가(원장 제보 2026-09-09 *"'상담 시각'이 방금전인데 버그 아닌가?"*): 그 입력의 값은 브라우저의
+ *    **로컬 벽시계**(여기선 KST)인데 서버 액션이 `new Date(값)`으로 읽었다. 서버(Vercel)는 **UTC**라 같은 글자를
+ *    UTC로 해석해 **정확히 9시간 뒤**로 저장됐다 — 실측: 13:12 KST에 만든 상담이 13:12Z(=22:12 KST)로 앉았고,
+ *    미래 시각이라 목록의 상대 시각이 전부 "방금 전"으로 찍혔다. 오후 3시 이후 입력분은 **날짜까지 다음 날**로 넘어간다
+ *    (최근 60일 KST 시각 분포에서 00시 245건·22시 35건 = 학원 운영시간 밖).
+ * 🔑 이미 타임존이 붙은 값(`…Z`·`+09:00`)은 **그대로** 읽는다 — 녹음 상담 폼처럼 클라이언트에서 이미 변환해
+ *    보내는 경로가 있어서, 여기서 또 KST를 붙이면 그쪽이 거꾸로 9시간 어긋난다.
+ * @returns ISO 문자열. 빈 값·해석 불가는 null(없는 시각을 지어내지 않는다).
+ */
+export function kstLocalToIso(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text) return null;
+  // 타임존이 이미 있으면 그 값이 진실이다.
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text);
+  const iso = hasZone
+    ? text
+    : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(text)
+      ? `${text}+09:00`
+      : text;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 /** KST 기준 현재 시각의 자정 기준 분(0–1439) — 서버 UTC에서 now.getHours()가 9시간 어긋나는 것 방지. */
 export function kstMinutesOfDay(d: Date = new Date()): number {
   const parts = new Intl.DateTimeFormat("en-CA", {

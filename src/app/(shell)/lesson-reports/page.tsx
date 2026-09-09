@@ -121,7 +121,11 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
           : tab === "ai_ment"
             ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
             : // 첫 페인트도 클라 초기 state와 **같은 기본 범위**(이번 달)로 — 안 맞추면 열자마자 목록이 한 번 바뀐다.
-              Promise.all([getReportFilterOptions(), listReports(defaultReportFilters(kstToday()))]).then(([filterOptions, firstPage]) => ({
+              // `?status=` — 알림·발송 큐 카드가 "미발송 N건"에서 이 목록으로 곧장 보낸다(그 N건만 걸러서).
+              Promise.all([
+                getReportFilterOptions(),
+                listReports(defaultReportFilters(kstToday(), sp.status)),
+              ]).then(([filterOptions, firstPage]) => ({
                 filterOptions,
                 initialList: {
                   rows: firstPage.rows ?? [],
@@ -169,7 +173,19 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
-        <ReportList options={tabData.filterOptions} initial={tabData.initialList} canSend={canSendReports} todayYmd={kstToday()} />
+        <ReportList
+          // 🔴 **상태가 바뀌면 새로 마운트한다** — 클라 컴포넌트라 `useState(initial)`는 첫 마운트에만 돌고,
+          //    같은 라우트에서 `?status=`만 바뀐 소프트 내비는 인스턴스를 그대로 둔다. key가 없으면 이미 목록
+          //    탭을 보던 사람이 "미발송 N건"을 눌러도 **아무 일도 안 일어난 것처럼** 보인다(이번 제보의 원인과
+          //    같은 종류의 침묵). 적대적 리뷰 2026-09-09에서 잡았다.
+          key={sp.status ?? "all"}
+          options={tabData.filterOptions}
+          initial={tabData.initialList}
+          canSend={canSendReports}
+          todayYmd={kstToday()}
+          // 🔴 클라 초기 state가 서버 첫 페인트와 **같은 필터**여야 한다 — 안 맞추면 열자마자 목록이 한 번 바뀐다.
+          initialStatus={sp.status}
+        />
       ) : null}
 
       {tab === "recall" && "recallOptions" in tabData ? (

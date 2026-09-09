@@ -158,6 +158,16 @@ export function reportOrderSpecs(sort?: ReportSortKey, dir: "asc" | "desc" = "as
 export const IMPORT_FILTER = "__import__";
 
 /**
+ * 상태 필터 특수값: **미발송**(저장만 하고 발송 이력이 없는 native 보고서) = `classnote_status IS NULL`.
+ *
+ * 🔴 `.eq("classnote_status", …)`로는 표현할 수 없어(NULL은 등호로 안 잡힌다) 별도 값이 필요하다.
+ *    이게 없으면 "미발송 N건"이라는 알림·카드에서 목록으로 넘어와도 **그 N건만 골라 볼 방법이 없다**
+ *    (이번 달 전체를 눈으로 훑어야 했다 — 원장 제보 2026-09-09의 절반이 그것이다).
+ * ⚠️ 이관분(edutrix_import)은 제외한다 — 그쪽은 Edutrix가 이미 학부모에게 보낸 것이라 '미발송'이 아니다.
+ */
+export const UNSENT_FILTER = "__unsent__";
+
+/**
  * 목록 기본 조회 범위 = **이번 달**(원장 지시 2026-07-21).
  *
  * ⚠️ 왜 전체 기간이 기본이면 안 되는가(실측): lesson_reports 17,346행에 2년치가 섞여 있어 '강사' 열로
@@ -167,11 +177,13 @@ export const IMPORT_FILTER = "__import__";
  *
  * 서버 첫 페인트(page.tsx)와 클라 초기 state가 **같은 함수**를 써야 첫 화면이 어긋나지 않는다.
  */
-export function defaultReportFilters(todayYmd: string): ReportListFilters {
+export function defaultReportFilters(todayYmd: string, status?: string): ReportListFilters {
   const month = todayYmd.slice(0, 7);
   const [y, m] = month.split("-").map(Number);
   const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
-  return { page: 0, from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+  // 주소로 받은 상태(`?status=…`)는 **첫 페인트와 클라 초기 state가 같은 값**을 써야 한다 —
+  // 한쪽만 반영하면 열자마자 목록이 한 번 바뀐다(기간 기본값이 그래서 여기 있다).
+  return { page: 0, from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}`, status: status || undefined };
 }
 
 /**

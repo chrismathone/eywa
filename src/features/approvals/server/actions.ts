@@ -22,7 +22,7 @@ import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { nextDocNo } from "../doc-no";
 import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
 import { isMissingRelation } from "./queries";
-// 잔여 산식은 한 곳에서만 — 조정(0251a)이 붙은 뒤로 "화면은 18일인데 기안은 15일까지"가 생기지 않게
+// 잔여 산식은 한 곳에서만 — 조정(0252a)이 붙은 뒤로 "화면은 18일인데 기안은 15일까지"가 생기지 않게
 // 부여·사용 조회를 직원관리 '연차 관리' 화면과 **같은 함수**로 공유한다.
 import { adjustmentDaysFor, reservedLeaveDays } from "@/features/leave/server/admin";
 import {
@@ -341,7 +341,7 @@ export async function submitLeaveDraft(
   if (invalid) return { error: invalid };
   const days = countLeaveDays(start, end, kind);
 
-  // 부여 = 법정 계산 + **조정**(이월·특별휴가, 0251a) — 화면(getMyLeaveBalance)과 같은 식(balance.ts)이라
+  // 부여 = 법정 계산 + **조정**(이월·특별휴가, 0252a) — 화면(getMyLeaveBalance)과 같은 식(balance.ts)이라
   // 잔여 숫자가 두 곳에서 갈리지 않는다. 조정 조회가 진짜로 실패하면 **거절하지 않고 알린다**
   // (조용히 0으로 떨어뜨리면 이월을 받은 사람이 이유도 모르고 기안을 못 한다).
   let reserved: number;
