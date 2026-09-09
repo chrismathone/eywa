@@ -2,7 +2,8 @@ import Link from "next/link";
 import { BookOpen, Users, UserCheck, SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
-import { EyIcon } from "@/components/icons/eywa-icons";
+
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,6 @@ export async function generateMetadata() {
 }
 
 const PAGE_SIZE = 50;
-
 
 // 보기(표/카드) — 지시서 §9 "보기 전환은 2차": 세그먼트 칩 대신 라벨 하나(`보기: 표`). 값은 계정 보기 설정에 남는다.
 const VIEW_OPTION_KEYS = [{ value: "cards" as ViewMode, key: "cls.view.cards" as const }];
@@ -258,7 +258,7 @@ export default async function ClassesPage({
       {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 정상 = 초록(의미색 캐논). */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <BigStat label={sheetT(lang, "cls.stat.total")} value={stats.total} unit={sheetT(lang, "cls.unit.class")} tone="primary" icon={<BookOpen size={16} strokeWidth={1.8} />} />
-        <BigStat label={sheetT(lang, "cls.stat.active")} value={active} unit={sheetT(lang, "cls.unit.class")} tone="green" icon={<EyIcon name="check" size={16} />} />
+        <BigStat label={sheetT(lang, "cls.stat.active")} value={active} unit={sheetT(lang, "cls.unit.class")} tone="green" icon={<MenuGlyph name="check" size={22} />} />
         <BigStat label={sheetT(lang, "cls.stat.seats")} value={totalSeats} unit={sheetT(lang, "cls.unit.people")} tone="blue" icon={<Users size={16} strokeWidth={1.8} />} />
         <BigStat
           label={sheetT(lang, "cls.stat.avg")}

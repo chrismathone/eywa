@@ -12,7 +12,8 @@ const KO_DATE_FULL = new Intl.DateTimeFormat("ko-KR", {
 });
 
 import { BigStat } from "@/components/atoms/big-stat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { EnrollmentChangeModal } from "./enrollment-change-modal";
 import type { EnrollmentChangeStudent } from "@/features/dashboard/server/queries";
 
@@ -87,7 +88,7 @@ export function CommandBand({
         {enrollment ? (
           <BigStat
             label="재원생"
-            icon={<EyIcon name="users" size={16} />}
+            icon={<MenuGlyph name="users" size={22} />}
             tone="blue"
             value={enrollment.count.toLocaleString("ko-KR")}
             unit="명"
@@ -109,7 +110,7 @@ export function CommandBand({
         {attendance ? (
           <BigStat
             label="오늘 출석률"
-            icon={<EyIcon name="check" size={16} />}
+            icon={<MenuGlyph name="check" size={22} />}
             tone="primary"
             value={attendance.rate == null ? "—" : String(Math.round(attendance.rate))}
             unit={attendance.rate == null ? "" : "%"}
@@ -120,14 +121,14 @@ export function CommandBand({
           <>
             <BigStat
               label="수납률"
-              icon={<EyIcon name="chart" size={16} />}
+              icon={<MenuGlyph name="chart" size={22} />}
               tone="gold"
               value={billing.paymentRate == null ? "—" : String(Math.round(billing.paymentRate))}
               unit={billing.paymentRate == null ? "" : "%"}
             />
             <BigStat
               label="이번 달 미수"
-              icon={<EyIcon name="wallet" size={16} />}
+              icon={<MenuGlyph name="wallet" size={22} />}
               tone={billing.outstanding > 0 ? "danger" : "neutral"}
               value={outstandingDisplay.value}
               unit={outstandingDisplay.unit}

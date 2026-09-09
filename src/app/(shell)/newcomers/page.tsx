@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { BigStat } from "@/components/atoms/big-stat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
@@ -54,17 +55,17 @@ export default async function NewcomersPage({
           unit="건"
           tone="danger"
           valueClass={overdue > 0 ? "text-danger" : undefined}
-          icon={<EyIcon name="alarm" size={16} />}
+          icon={<MenuGlyph name="alarm" size={22} />}
           sub="기한이 지난 미완료"
         />
-        <BigStat label="오늘·임박" value={dueSoon} unit="건" tone="gold" icon={<EyIcon name="clock" size={16} />} sub="사흘 안" />
-        <BigStat label="관리 대상" value={view.rows.length} unit="명" tone="primary" icon={<EyIcon name="users" size={16} />} sub={`최근 ${NEWCOMER_WINDOW_DAYS}일 등록`} />
+        <BigStat label="오늘·임박" value={dueSoon} unit="건" tone="gold" icon={<MenuGlyph name="clock" size={22} />} sub="사흘 안" />
+        <BigStat label="관리 대상" value={view.rows.length} unit="명" tone="primary" icon={<MenuGlyph name="users" size={22} />} sub={`최근 ${NEWCOMER_WINDOW_DAYS}일 등록`} />
         <BigStat
           label="완료율"
           value={rate}
           unit="%"
           tone="blue"
-          icon={<EyIcon name="listChecks" size={16} />}
+          icon={<MenuGlyph name="listChecks" size={22} />}
           sub={`기한이 온 ${dueAll}건 중 ${doneAll}건`}
         />
       </section>

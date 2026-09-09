@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/empty-state";
 import { BigStat } from "@/components/atoms/big-stat";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { formatKoreanDate } from "@/lib/date-kst";
 import type { RangeRecap } from "@/features/attendance/recap/range";
 import type { RecapTeacherLine } from "@/features/attendance/recap/digest";
@@ -90,7 +91,7 @@ export function RecapView({
           value={absentTotal}
           unit="건"
           tone={t.absentUrgent > 0 ? "danger" : t.absentPending > 0 ? "amber" : "green"}
-          icon={<EyIcon name="userX" size={16} />}
+          icon={<MenuGlyph name="userX" size={22} />}
           valueClass={absentTotal > 0 ? "text-danger" : undefined}
           sub={
             t.absentUrgent > 0
@@ -105,7 +106,7 @@ export function RecapView({
           value={otherTotal}
           unit="건"
           tone="amber"
-          icon={<EyIcon name="clock" size={16} />}
+          icon={<MenuGlyph name="clock" size={22} />}
           sub={`지각 ${t.late} · 조퇴 ${t.earlyLeave} · 보강 ${t.makeup}`}
         />
         {/* ⚠️ 여러 날을 덮으면 같은 반이 금·토 각각 한 번씩 세어진다 — 그래서 단위가 '반'이 아니라
@@ -115,7 +116,7 @@ export function RecapView({
           value={t.unmarkedClasses}
           unit={recap.days.length > 1 ? "건" : "반"}
           tone={t.unmarkedClasses > 0 ? "amber" : "green"}
-          icon={<EyIcon name="clipboardList" size={16} />}
+          icon={<MenuGlyph name="clipboardList" size={22} />}
           sub={t.unmarkedClasses > 0 ? `학생 ${t.unmarkedStudents}명이 기록 없음` : "전 반 입력 완료"}
         />
         {/* ⚠️ 기록이 0건이면 "0%"는 사실이 아니다 — 입력률이 0인 게 아니라 아무도 안 찍은 것이다
@@ -125,7 +126,7 @@ export function RecapView({
           value={t.inputRate ?? "—"}
           unit={t.inputRate == null ? "기록 없음" : "%"}
           tone={t.inputRate != null && t.inputRate >= 90 ? "green" : "amber"}
-          icon={<EyIcon name="percent" size={16} />}
+          icon={<MenuGlyph name="percent" size={22} />}
           sub={`${t.cells}칸 중 ${t.recorded}칸 · ${t.slots}교시`}
         />
       </section>

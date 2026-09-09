@@ -1,7 +1,7 @@
 "use client";
 
 import { BigStat } from "@/components/atoms/big-stat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { InventoryStats } from "@/features/inventory/stats";
 import { ACTION_NEEDED_ID } from "@/features/inventory/ui-ids";
 
@@ -22,9 +22,9 @@ export function StatsRow({ stats }: { stats: InventoryStats }) {
   };
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-      <BigStat label="전체 자산" value={stats.total} unit="대" sub="폐기 제외" icon={<EyIcon name="archive" size={16} />} />
-      <BigStat label="사용중" value={stats.inUse} unit="대" tone="green" icon={<EyIcon name="check" size={16} />} />
-      <BigStat label="대여중" value={stats.onLoan} unit="대" sub="대여이력 연동" tone="blue" icon={<EyIcon name="users" size={16} />} />
+      <BigStat label="전체 자산" value={stats.total} unit="대" sub="폐기 제외" icon={<MenuGlyph name="archive" size={22} />} />
+      <BigStat label="사용중" value={stats.inUse} unit="대" tone="green" icon={<MenuGlyph name="check" size={22} />} />
+      <BigStat label="대여중" value={stats.onLoan} unit="대" sub="대여이력 연동" tone="blue" icon={<MenuGlyph name="users" size={22} />} />
       <BigStat
         label="조치필요"
         value={stats.needsAction}
@@ -32,11 +32,11 @@ export function StatsRow({ stats }: { stats: InventoryStats }) {
         sub="분실 · 확인 · 미등록 · 수리"
         tone="danger"
         valueClass={stats.needsAction > 0 ? "text-danger" : undefined}
-        icon={<EyIcon name="alert" size={16} />}
+        icon={<MenuGlyph name="alert" size={22} />}
         onClick={stats.needsAction > 0 ? openActionList : undefined}
         ariaLabel={stats.needsAction > 0 ? `조치필요 ${stats.needsAction}대 — 목록 열기` : undefined}
       />
-      <BigStat label="폐기" value={stats.disposed} unit="대" sub="이력 보존" icon={<EyIcon name="trash" size={16} />} />
+      <BigStat label="폐기" value={stats.disposed} unit="대" sub="이력 보존" icon={<MenuGlyph name="trash" size={22} />} />
     </div>
   );
 }
