@@ -301,7 +301,8 @@ export function TeacherGridView({
   };
 
   return (
-    <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
+    // 🔴 팬 없음 — 강사 열을 끌어 순서를 바꾸는 격자다(기본뷰와 같은 규약, 원장 2026-09-09).
+    <DragScrollArea barX pan={false} className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
       <table className="border-separate border-spacing-0 text-sm" style={{ tableLayout: "fixed", width: tableW }}>
         <colgroup>
           <col style={{ width: TIME_COL_W }} />

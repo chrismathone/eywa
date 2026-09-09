@@ -448,9 +448,13 @@ function GroupTable({
                 style={{ height: TEACHER_HEAD_H }}
                 className={`bg-bg-soft ${GRID} sticky top-0 z-10 border-b border-r px-0.5 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
               >
-                {/* 이름 1.5배(원장 2026-09-07) — 격자에서 열을 찾는 기준이 강사 이름이라 가장 크게 읽혀야 한다.
-                    토큰 스케일에 21px이 없어 한 칸 위인 20px(text-lg). 넘치면 잘린다(생략표 없음 = 고밀도 규약). */}
-                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-lg font-bold">{t.name}</span>
+                {/* 🔴 이름 크기 = **칸 안 학생 이름과 같은 값**(`text-sm`, 원장 2026-09-09 *"기본뷰 선생님 글자
+                    크기 언제 줄일건데"* → *"학생이름하고 같은 사이즈로 하라고"*). 2026-09-07의 "이름 1.5배
+                    (text-lg)"를 원장이 명시로 뒤집은 것이다 — **되돌리지 말 것**. 강사뷰 열 머리(teacher-grid)도
+                    같은 값이라 두 뷰가 갈리지 않는다(학생 줄은 class-cell의 `text-sm` 컨테이너를 물려받는다).
+                    넘치면 잘린다(생략표 없음 = 고밀도 규약). 머리 높이는 `TEACHER_HEAD_H`가 따로 잡으므로
+                    글자만 줄여도 요일 줄의 sticky 오프셋은 그대로다. */}
+                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-sm font-bold">{t.name}</span>
               </TeacherHeadCell>
             )),
           )}
@@ -703,7 +707,10 @@ export function WeekdayGroupTables({
   const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP], teacherOrder);
 
   return (
-    <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
+    // 🔴 팬(잡고 끌기) 없음 — 이 격자는 **학생·반 블록을 끌어 옮기는 곳**이라 같은 포인터를 다툰다
+    //    (원장 2026-09-09 *"학생 드래그 이동 때문에 드래그로 스크롤 이동하는건 시간표에서 제외시켜야겠어"*).
+    //    가로 이동은 굵은 스크롤바(barX)·휠·Shift+휠로 한다.
+    <DragScrollArea barX pan={false} className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
       {/* ijw식 가로 배치 — 평일 그룹(월목/화금/수) 한 판 + 주말 한 판을 우측에 나란히
           (주말은 시작시각이 달라 자체 교시열). 세로 스택 대신 가로로 공간 효율. */}
       <div className="flex items-start gap-3">

@@ -111,8 +111,12 @@ describe("드래그 직후의 더블클릭은 창 열기가 아니다", () => {
 
   it("드래그가 없었으면 그대로 둔다", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-09T10:00:00Z"));
-    // 앞선 테스트의 드래그 종료 시각이 남아 있을 수 있으니 유예를 확실히 지나간 뒤 판정한다.
+    // 🔴 **가짜 시각을 아주 먼 미래로** 둔다 — `dragEndedAt`은 앞선 테스트가 **진짜 시계**로 찍어 둔 값이라
+    //    가짜 시각을 오늘 10:00Z에 맞추면 실제 시각이 그보다 늦은 저녁(19시 KST 이후)엔 차이가 **음수**가
+    //    되어 유예 안으로 읽힌다. 그래서 이 테스트는 하루의 앞부분에만 통과하는 **시한 결함**이었다
+    //    (2026-09-09 19:41 KST 실측 — 같은 날 09:40 UTC 전체 실행에선 통과했다).
+    //    앞으로 옮기기만 하면 어떤 시각에 돌려도 유예를 확실히 지난다.
+    vi.setSystemTime(new Date("2099-01-01T00:00:00Z"));
     vi.advanceTimersByTime(DRAG_DBLCLICK_GRACE_MS * 2);
     const e = ev();
     swallowDoubleClickAfterDrag(e);

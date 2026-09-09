@@ -12,6 +12,13 @@ import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuick } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
 import type { MovePart } from "@/features/timetable/lib/class-move";
+import {
+  CLASS_CELL_DAY_ATTR,
+  CLASS_CELL_END_ATTR,
+  CLASS_CELL_ID_ATTR,
+  CLASS_CELL_NAME_ATTR,
+  CLASS_CELL_START_ATTR,
+} from "@/features/timetable/lib/grid-attrs";
 import { holdTone, useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
@@ -226,6 +233,16 @@ export function ClassCell({
   return (
     <div
       ref={setDroppableRef}
+      // 학생을 끌 때 "이 반엔 못 간다"를 칠하려면 칸이 **자기 좌표를 알고 있어야** 한다
+      // (격자 칸의 `data-cell-*`와 같은 수법 — 칸마다 React를 돌리지 않고 DOM에 직접 칠한다).
+      // 🔴 판정 단위는 반이라 `classId`가 열쇠고, 시각은 그 반 칸이 실제로 차지하는 구간이다.
+      {...{
+        [CLASS_CELL_ID_ATTR]: realClassId,
+        [CLASS_CELL_NAME_ATTR]: slot.className,
+        [CLASS_CELL_DAY_ATTR]: slot.dayOfWeek,
+        [CLASS_CELL_START_ATTR]: String(slot.startTime).slice(0, 5),
+        [CLASS_CELL_END_ATTR]: String(slot.endTime).slice(0, 5),
+      }}
       className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2px] transition ${
         isOver ? "ring-primary ring-2" : ""
       }`}

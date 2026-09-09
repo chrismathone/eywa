@@ -37,7 +37,8 @@ import {
   type PendingTarget,
 } from "./edit-context";
 import { setTimetableDragging, swallowDoubleClickAfterDrag, type ClassDragInfo } from "./drag-flag";
-import { SAME_SPOT_TITLE, annotateDropCells, clearDropCells, markHotCells, placementAt } from "./grid-drop-cell";
+import { SAME_SPOT_TITLE, annotateDropCells, annotateStudentBlocks, clearDropCells, markHotCells, placementAt } from "./grid-drop-cell";
+import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 // 칸 좌표 속성 이름은 **일반 모듈**에서 — 클라 모듈 재-export를 두면 서버 파일이 실수로 그걸 집어
 // 런타임 undefined가 된다([[#81]], 실제로 한 번 그렇게 깨졌다).
 import { CELL_DAY_ATTR, CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs";
@@ -860,6 +861,8 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
 /** 학생 줄이 드래그에 싣는 것(student-rows.tsx `ArmedStudentRow`의 data) — 고스트·판정에 쓰는 칸. */
 type StudentDragData = {
   classId?: string;
+  /** 그 학생 id — 집는 순간 **그 학생의 다른 과목 일정**을 받아 못 가는 반에 빗금을 치는 데 쓴다. */
+  studentId?: string;
   fromClassName?: string;
   name?: string;
   meta?: string;
@@ -910,7 +913,7 @@ const preferDayZone: CollisionDetection = (args) => {
  *    전략도 기본값(WhileDragging = 시작 시 1회)을 쓴다.
  */
 export function TimetableDndArea({ children }: { children: ReactNode }) {
-  const { canDrag, queueMove, queueClassMove, openClassPick } = useTimetableEdit();
+  const { canDrag, queueMove, queueClassMove, openClassPick, dateFloor } = useTimetableEdit();
   // 반 이동 판정 재료(서버 색인 → 요일별). 없으면 반 드래그가 없는 화면이다.
   const moveLookup = useClassMoveIndex();
   // 끌리는 줄의 **원본 모습**(이름·학교학년·톤·폭) — 고스트를 셀 안 줄과 똑같이 그리기 위한 재료.
@@ -953,6 +956,12 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
   //    객체로 바꾼다(drag-flag.ts `holdArmedRow` 주석). 무장 잠금이 1차 방어고 이 스냅샷은 안전망이다(줄이 어떤
   //    이유로든 다시 그려져도 놓는 순간 출발 반·수강 id가 남아 있게).
   const studentDragRef = useRef<StudentDragData | null>(null);
+  /**
+   * 지금 끌고 있는 학생이 **못 가는 반** → 이유. 집는 순간 서버에서 그 학생의 다른 일정을 받아 채운다.
+   * 🔴 화면(빗금)과 드롭 거절이 **같은 맵**을 읽는다 — 갈리면 빗금 없는 칸이 거절되거나 그 반대가 된다.
+   * 🔴 비어 있는 것이 정상 상태다(fail-open) — 조회가 늦거나 실패하면 아무것도 안 막는다.
+   */
+  const studentBlockRef = useRef<Map<string, string>>(new Map());
   const cellAtPointer = useCallback((): HTMLElement | null => {
     const p = pointerRef.current;
     if (!p) return null;
@@ -971,6 +980,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     hotRef.current = null;
     pointerRef.current = null;
     subjectRef.current = null;
+    studentBlockRef.current = new Map();
     clearDropCells(document);
   }, [trackPointer]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -1011,9 +1021,36 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     }
     // 폭은 집은 줄의 실측 폭 — 파일 드래그처럼 "그 줄이 그대로 떠 있는" 느낌이 되게(칩으로 줄이면 딴 물건이 된다).
     const width = Math.round(e.active.rect.current.initial?.width ?? 0);
-    studentDragRef.current = (e.active.data.current as StudentDragData | undefined) ?? null;
+    const sData = (e.active.data.current as StudentDragData | undefined) ?? null;
+    studentDragRef.current = sData;
     setDrag({ name: data?.name ?? "학생", meta: data?.meta ?? "", tone: data?.tone ?? "", badge: data?.badge, width });
     setTimetableDragging(true);
+    /**
+     * 🔴 **못 가는 반을 미리 막는다**(원장 2026-09-09 *"영어를 듣는 학생이면 영어 스케줄 때문에 이동이
+     * 불가능한 곳은 [빗금] 이런느낌으로 차단시켜"*). 재료는 그 학생 한 명의 그 주 배치라 가볍고,
+     * 화면이 갖고 있지 않은 **다른 과목**이라 집는 순간 한 번 받아 온다(왕복 1회 · 학생-busy 주석 참조).
+     * 🔴 늦게 도착해도 괜찮다 — 도착하면 그때 빗금이 서고, 그 전에 놓으면 종전처럼 서버 규칙만 적용된다.
+     *    이미 다른 드래그가 시작됐으면 버린다(응답이 뒤늦게 와서 남의 드래그에 빗금을 치지 않게).
+     */
+    const dragToken = sData;
+    // 새 드래그는 **빈 판**에서 시작한다 — 앞 드래그의 답이 남아 있으면 다른 학생에게 그 차단이 적용된다.
+    studentBlockRef.current = new Map();
+    if (sData?.studentId && dateFloor) {
+      // 🔴 **서버 액션이 아니라 라우트 핸들러**다 — 서버 액션 응답은 현재 라우트의 RSC 트리를 다시
+      //    적용해서([[#102]]) 드래그 도중이면 끌던 줄이 언마운트되고 드래그가 통째로 죽는다.
+      const q = new URLSearchParams({ studentId: sData.studentId, week: dateFloor });
+      if (sData.classId) q.set("exclude", sData.classId);
+      void fetch(`/api/timetable/student-busy?${q.toString()}`, { cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<{ windows: StudentBusyWindow[] }>) : { windows: [] }))
+        .then(({ windows }) => {
+          // 늦게 온 답은 버린다 — 그 사이 다른 학생을 집었으면 남의 드래그에 빗금을 치게 된다.
+          if (studentDragRef.current !== dragToken || windows.length === 0) return;
+          studentBlockRef.current = annotateStudentBlocks(document, windows);
+        })
+        .catch(() => {
+          /* 표식은 도움이지 게이트가 아니다 — 실패하면 아무것도 안 막는다 */
+        });
+    }
   }
 
   function onDragEnd(e: DragEndEvent) {
@@ -1028,6 +1065,8 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // 학생 드래그 스냅샷은 여기서 한 번 꺼내고 비운다(어느 갈래로 빠져나가든 다음 드래그에 안 남게).
     const studentData = studentDragRef.current;
     studentDragRef.current = null;
+    // 🔴 **막힌 반 목록을 먼저 읽는다** — 바로 아래 `stopTracking()`이 맵을 비운다(칸 표식과 같은 함정).
+    const studentBlocks = new Map(studentBlockRef.current);
     setDrag(null);
     setTimetableDragging(false);
     stopTracking();
@@ -1109,6 +1148,11 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // 규칙 ②(hapban.ts) — 이미 그 반에 열린 수강이 있으면 옮기지 않는다(저장 시 GiST 충돌 방지).
     if (!target) return refuse(`${data?.name ?? "이 학생"}은(는) 이미 그 반 수강이 있습니다.`);
     const toClassId = target.toClassId;
+    // 🔴 빗금 친 반은 **놓아도 안 간다** — 화면과 거절이 **같은 맵·같은 문구**를 쓴다(갈리면 "빗금인데 들어가네"가 된다).
+    //    맵이 비어 있으면(조회 실패·늦음) 아무것도 안 막는다 — 표식은 도움이지 게이트가 아니다.
+    const blockedWhyStudent = studentBlocks.get(toClassId);
+    if (blockedWhyStudent)
+      return refuse(`${data?.name ?? "이 학생"}은(는) 그 반으로 옮길 수 없습니다 — ${blockedWhyStudent}`);
     const fromDays = data?.attendanceDays ?? []; // 출발 시점 등원 요일(no-op 판정)
     const toDays = zoneAttendanceDays(target.day); // 요일 존=[그 요일], 공통 존=[]
     // 같은 반이면 요일이 바뀔 때만(2일↔1일 편집), 교차 반이면 항상 이동.

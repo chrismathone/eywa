@@ -26,6 +26,7 @@ export function DragScrollArea({
   scrollY = false,
   hideBar = false,
   fadeTone = "ink",
+  pan = true,
 }: {
   children: ReactNode;
   className?: string;
@@ -54,6 +55,16 @@ export function DragScrollArea({
    * 하단 독 칩처럼 배경이 한 겹이고 스크롤바를 감춘 곳에 쓴다(페이드가 유일한 "더 있음" 신호).
    */
   fadeTone?: "ink" | "surface";
+  /**
+   * '잡고 끌기'(팬)를 쓸지. 기본 true. **끄면 휠·스크롤바·키보드 스크롤만 남는다**(페이드·막대는 그대로).
+   *
+   * 🔴 끄는 자리 = **같은 포인터로 무언가를 끌어 옮기는 화면**(원장 2026-09-09 *"학생 드래그 이동 때문에
+   *    드래그로 스크롤 이동하는건 시간표에서 제외시켜야겠어"*). 아래 `skip()`이 dnd-kit 손잡이를 피해 가긴
+   *    하지만 그건 **손잡이 위에서 시작한 포인터**만 살린다 — 격자 빈 곳을 스쳐 잡거나 5px 문턱을 넘기 전에
+   *    손잡이를 벗어나면 팬이 포인터를 캡처해(`setPointerCapture`) 드래그가 통째로 죽는다([[#97]] 계열).
+   * ⚠️ 드래그가 없는 넓은 표(교실 뷰 등)에서는 켠 채로 둘 것 — 좁은 창에서 표를 옮기는 가장 쉬운 수단이다.
+   */
+  pan?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false, top: false, bottom: false });
@@ -88,6 +99,9 @@ export function DragScrollArea({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // 팬을 끈 화면은 리스너 자체를 안 단다 — 조건부로 `return`만 해도 pointerdown이 캡처 단계에서
+    // 먼저 도는 자리가 생겨 드래그와 다툰다.
+    if (!pan) return;
     let down = false;
     let dragging = false;
     let pid = -1;
@@ -205,7 +219,7 @@ export function DragScrollArea({
       window.removeEventListener("pointercancel", onUp);
       stopMomentum();
     };
-  }, [momentum]);
+  }, [momentum, pan]);
 
   return (
     <div className={`relative overflow-hidden ${className}`}>
@@ -227,7 +241,7 @@ export function DragScrollArea({
             : scrollY
               ? "overflow-auto overscroll-x-contain"
               : "overflow-x-auto overflow-y-hidden overscroll-x-contain"
-        } ${hideBar && !barX ? "scrollbar-hide" : ""} ${grabbable ? "cursor-grab" : ""}`}
+        } ${hideBar && !barX ? "scrollbar-hide" : ""} ${pan && grabbable ? "cursor-grab" : ""}`}
       >
         {children}
       </div>

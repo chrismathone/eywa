@@ -1548,3 +1548,34 @@ html[data-stage="on"] main {
     display: none;
   }
 }
+
+/* ── 드래그 중 "여기엔 못 놓는다" 표식 ────────────────────────────────────────────
+   원장 2026-09-09: *"영어를 듣는 학생이면 영어 스케줄 때문에 이동이 불가능한 곳은 [빗금] 이런느낌으로
+   차단시켜"* → *"반 드래그도 마찬가지. 이동 불가능한 곳은 사전 차단."*
+
+   🔴 **격자 칸(반 드래그)과 반 카드(학생 드래그)가 같은 표식**을 쓴다 — 두 드래그가 서로 다른 그림을
+      쓰면 "빨간 건 무슨 뜻인가"를 두 번 배워야 한다. 붙이는 쪽은 DOM 직칠(annotateDropCells·보드)이라
+      여기 CSS 한 곳이 그림의 단일 소스다.
+   🔴 색이 아니라 **빗금**이다 — 못 가는 칸을 통째로 빨갛게 칠하면 화면 절반이 경고가 되어 아무도 안 읽는다
+      (2026-09-04에 그래서 안 칠했었다). 빗금은 "여긴 자리가 아니다"를 배경으로만 말하고 글자는 그대로 읽힌다.
+   ⚠️ 레이어 밖(unlayered)이라 유틸리티보다 뒤에 온다 — 칸이 이미 배경 유틸을 갖고 있어도 빗금이 이긴다.
+      배경**색**은 안 건드린다(background-image만) — 밑의 반 색·주말 회색이 그대로 비쳐야 어디였는지 안다. */
+[data-drag-blocked] {
+  position: relative;
+}
+/* 🔴 배경이 아니라 **덮개**여야 한다 — 반 카드는 머리(반 색)와 본문(`bg-card`)이 제 배경을 칠하므로
+   컨테이너 배경에 빗금을 그리면 자식들 뒤에 깔려 **하나도 안 보인다**(격자 빈 칸에서만 보였다).
+   ⚠️ `pointer-events:none` 필수 — 덮개가 포인터를 먹으면 `elementsFromPoint`가 칸 대신 이걸 집어
+      드롭 판정이 통째로 죽는다. */
+[data-drag-blocked]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--danger) 34%, transparent) 0 3px,
+    transparent 3px 9px
+  );
+}

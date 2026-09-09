@@ -26,6 +26,26 @@ export const CELL_COL_ATTR = "data-cell-col";
 export const CELL_OK_ATTR = "data-cell-ok";
 /** 포인터가 올라간 칸(블록이 여러 칸이면 그 칸들 전부). */
 export const CELL_HOT_ATTR = "data-cell-hot";
+/**
+ * **못 가는 칸**에 붙는다(원장 2026-09-09 *"반 드래그도 마찬가지. 이동 불가능한 곳은 사전 차단."*).
+ *
+ * 🔴 2026-09-04의 "갈 수 있는 칸만 칠한다"를 원장이 명시로 뒤집은 것이다 — 되돌리지 말 것. 다만 색이
+ *    아니라 **빗금**이라 화면이 경고로 뒤덮이지 않는다(빗금 = "여긴 자리가 아니다", 초록 = "여기로 가라").
+ * ⚠️ '제자리'(SAME_SPOT)는 막힌 게 아니라 취소라 이 표식을 붙이지 않는다 — 붙이면 원래 자리가 금지 구역으로
+ *    보인다. 빗금 그림은 globals.css `[data-drag-blocked]` 한 곳(격자 칸과 반 카드가 같은 표식을 쓴다).
+ */
+export const DRAG_BLOCKED_ATTR = "data-drag-blocked";
+
+/**
+ * 반 **카드** 칸이 다는 좌표 — 학생을 끌 때 "이 반엔 못 간다"를 DOM에 직접 칠하기 위한 것
+ * (격자 칸의 `data-cell-*`와 같은 수법·같은 이유: 칸마다 React를 돌리면 그게 곧 픽업 렉이다).
+ * 🔴 판정 단위는 **반**이라 `id`가 열쇠다 — 한 반이 여러 칸(요일·교시)으로 그려지므로 막힐 땐 전부 함께 막힌다.
+ */
+export const CLASS_CELL_ID_ATTR = "data-class-id";
+export const CLASS_CELL_NAME_ATTR = "data-class-name";
+export const CLASS_CELL_DAY_ATTR = "data-class-day";
+export const CLASS_CELL_START_ATTR = "data-class-start";
+export const CLASS_CELL_END_ATTR = "data-class-end";
 
 /** 표 자신의 식별자(`wd`·`we`). */
 export const GRID_ID_ATTR = "data-grid";

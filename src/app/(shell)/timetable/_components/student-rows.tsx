@@ -199,6 +199,10 @@ function ArmedStudentRow(props: DraggableRowProps) {
       enrollmentId: props.enrollmentId,
       attendanceDays: props.attendanceDays,
       blockingClassIds: props.blockingClassIds,
+      // 🔴 집는 순간 **그 학생의 다른 과목 일정**을 받아 못 가는 반에 빗금을 치려면 학생 id가 필요하다
+      //    (원장 2026-09-09 *"영어를 듣는 학생이면 영어 스케줄 때문에 이동이 불가능한 곳은 … 차단시켜"*).
+      //    없으면(구버전 데이터) 조회를 건너뛰고 종전대로 동작한다(fail-open).
+      studentId: props.studentId,
     },
   });
   return (

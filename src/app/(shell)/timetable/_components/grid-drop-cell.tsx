@@ -10,6 +10,12 @@ import {
   CELL_GRID_ATTR,
   CELL_HOT_ATTR,
   CELL_OK_ATTR,
+  CLASS_CELL_DAY_ATTR,
+  CLASS_CELL_END_ATTR,
+  CLASS_CELL_ID_ATTR,
+  CLASS_CELL_NAME_ATTR,
+  CLASS_CELL_START_ATTR,
+  DRAG_BLOCKED_ATTR,
   CELL_ROW_ATTR,
   CELL_START_ATTR,
   GRID_ID_ATTR,
@@ -24,6 +30,11 @@ import {
   type MoveTarget,
   type PlacedWindow,
 } from "@/features/timetable/lib/class-move";
+import {
+  blockedClassesForStudent,
+  type ClassCellCoord,
+  type StudentBusyWindow,
+} from "@/features/timetable/lib/student-busy";
 
 /**
  * 격자 칸(요일 × 교시) — 반 블록의 **드롭 대상 표면**.
@@ -154,17 +165,24 @@ export function annotateDropCells(
     const anchorAt = placed?.find((w) => w.slotId === subject.slotId) ?? placed?.[0];
     if (anchorAt && anchorAt.day === from.day && anchorAt.start.slice(0, 5) === from.start.slice(0, 5)) {
       el.removeAttribute(CELL_OK_ATTR);
+      // 🔴 제자리는 **막힌 게 아니라 취소**다 — 빗금을 치면 원래 자리가 금지 구역으로 보인다.
+      el.removeAttribute(DRAG_BLOCKED_ATTR);
       el.title = SAME_SPOT_TITLE;
       continue;
     }
     const blockers = classMoveBlockers(subject, target, lookup);
     if (blockers.length === 0) {
       el.setAttribute(CELL_OK_ATTR, "1");
+      el.removeAttribute(DRAG_BLOCKED_ATTR);
       // ⚠️ 격자의 열 축은 **강사**인데 옮겨도 담당은 그대로다(요일·시각만 바뀐다) — 남의 강사 열에 놓으면
       //    저장 뒤 제 강사 열로 돌아간다. 그 사실을 미리 적어 둔다(적대 리뷰 2026-09-04).
       el.title = "여기로 옮길 수 있습니다 · 담당·강의실은 그대로입니다";
     } else {
       el.removeAttribute(CELL_OK_ATTR);
+      // 🔴 **막힌 칸을 눈으로도 막는다**(원장 2026-09-09 *"이동 불가능한 곳은 사전 차단"*) — 2026-09-04의
+      //    "갈 수 있는 칸만 칠한다"를 뒤집은 것이고, 대신 색이 아니라 빗금이라 화면이 경고로 안 뒤덮인다.
+      //    이유는 여전히 `title`에만 적는다(끄는 동안엔 안 보이고, 놓으면 거절 토스트가 같은 말을 한다).
+      el.setAttribute(DRAG_BLOCKED_ATTR, "1");
       el.title = blockersText(blockers);
     }
   }
@@ -214,6 +232,47 @@ export function clearDropCells(root: Document | HTMLElement): void {
   for (const el of root.querySelectorAll<HTMLElement>(`[${CELL_DAY_ATTR}]`)) {
     el.removeAttribute(CELL_OK_ATTR);
     el.removeAttribute(CELL_HOT_ATTR);
+    el.removeAttribute(DRAG_BLOCKED_ATTR);
     el.removeAttribute("title");
   }
+  // 🔴 학생 드래그가 반 카드에 친 빗금도 여기서 함께 걷는다 — 걷는 자리가 둘이면 한쪽만 남아
+  //    드래그가 끝난 화면에 빗금이 눌러앉는다.
+  for (const el of root.querySelectorAll<HTMLElement>(`[${DRAG_BLOCKED_ATTR}]`)) {
+    el.removeAttribute(DRAG_BLOCKED_ATTR);
+    el.removeAttribute("title");
+  }
+}
+
+/**
+ * 학생을 끌 때 **못 가는 반**에 빗금을 친다(원장 2026-09-09) — 반 블록의 `annotateDropCells`와 같은 수법:
+ * 칸마다 React를 돌리지 않고 DOM에 직접 칠한다(칸이 수백 개라 그 자체가 픽업 렉이다).
+ *
+ * 🔴 판정 단위는 **반**이라 한 반이 막히면 그 반의 **모든 칸**에 빗금이 선다 — 한 칸만 치면 "다른 칸엔
+ *    놓을 수 있나?"로 읽힌다.
+ * 🔴 **모르면 안 친다** — 창이 비면(조회 실패·다른 일정 없음) 아무 칸도 안 막힌다(fail-open, student-busy.ts).
+ * @returns 막힌 반 → 이유(드롭 거절이 같은 문구를 쓴다 — 화면과 거절 사유가 갈리면 안 된다)
+ */
+export function annotateStudentBlocks(
+  root: Document | HTMLElement,
+  windows: readonly StudentBusyWindow[],
+): Map<string, string> {
+  const els = [...root.querySelectorAll<HTMLElement>(`[${CLASS_CELL_ID_ATTR}]`)];
+  const cells: ClassCellCoord[] = [];
+  for (const el of els) {
+    const classId = el.getAttribute(CLASS_CELL_ID_ATTR);
+    const day = el.getAttribute(CLASS_CELL_DAY_ATTR);
+    const start = el.getAttribute(CLASS_CELL_START_ATTR);
+    const end = el.getAttribute(CLASS_CELL_END_ATTR);
+    if (!classId || !day || !start || !end) continue;
+    cells.push({ classId, className: el.getAttribute(CLASS_CELL_NAME_ATTR) ?? "", day, start, end });
+  }
+  const blocked = blockedClassesForStudent(cells, windows);
+  for (const el of els) {
+    const classId = el.getAttribute(CLASS_CELL_ID_ATTR);
+    const why = classId ? blocked.get(classId) : undefined;
+    if (!why) continue;
+    el.setAttribute(DRAG_BLOCKED_ATTR, "1");
+    el.title = why;
+  }
+  return blocked;
 }

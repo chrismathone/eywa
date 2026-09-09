@@ -193,7 +193,9 @@ export function RichCardGroupBoard({
     // 🔴 배치 편집엔 `barX`를 걸지 않는다 — `overflow-x: scroll`은 **넘치지 않아도 트랙을 예약**해서
     //    꽉 찬 thumb의 **가짜 스크롤바**가 줄마다 남는다([[#87]]). 원장 캡처에서 다 들어가는 줄(2·3·6)에도
     //    바가 그려져 있던 게 그것이다. 넘침 판정은 브라우저에 맡긴다(auto).
-    <DragScrollArea barX={!namesOnly} className={`${GRID} border-t`}>
+    // 🔴 배치 편집(namesOnly)에는 **팬도** 걸지 않는다 — 카드를 끌어 줄을 바꾸는 모드라 같은 포인터를
+    //    다툰다(기본뷰·강사뷰와 같은 규약, 원장 2026-09-09). 읽기 모드는 끌어 옮길 것이 없어 그대로 둔다.
+    <DragScrollArea barX={!namesOnly} pan={!namesOnly} className={`${GRID} border-t`}>
       {/* 🔴 배치 편집은 `w-max`가 아니라 **화면 폭**이다 — w-max면 카드가 제 폭을 고집해 flex가 안 줄어든다. */}
       <div className={`flex items-stretch ${namesOnly ? "w-full" : "w-max"}`}>
         <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} namesOnly={namesOnly} />
