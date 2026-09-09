@@ -148,18 +148,18 @@ export function TeacherGridView({
    * 🔴 서로 다른 반이면 병합하지 않는다(반이 곧 정체다) — 그때는 레인이 갈려 나란히 선다.
    */
   /**
-   * 축 하한보다 이른 슬롯 처리 — **하한 줄에 세우고 실제 시각은 표식으로 남긴다**
-   * (원장 2026-09-09: *"그냥 강제로 2시로 끌어내려 … 왼쪽상단에 메모가 있다고 표시해놓고 실제 수업시간 표시해줘"*).
+   * 축 하한보다 이른 슬롯 처리 — **그 열의 이른 수업 전부를 같은 간격만큼 아래로 민다**
+   * (원장 2026-09-09: *"그냥 강제로 2시로 끌어내려"* → *"정은지 선생님 반 끌어내린채로 3개 그대로 보이게.
+   * 3개 다 끌어내려야지"*).
    *
-   * 🔴 **같은 (강사·요일·반)의 이른 슬롯은 하나로 잇는다** — 안 그러면 같은 칸에 겹쳐 그려져 뒤엣것이
-   *    조용히 사라진다(실측: 토요일 `고등E_고3 정규` 10·11·12시 세 교시 중 한 칸만 남았다). 실제로도
-   *    10:00~13:00 연속 수업이라 병합이 사실에 더 가깝고, 표식 문구도 전 구간을 말한다.
-   * 🔴 칸 길이는 **실제 길이가 아니라 고정 3칸**이다 — 실제 3시간을 그대로 그리면 하한부터 3시간을
-   *    차지해 그 시간대 진짜 수업과 겹쳐 거짓이 되고, 클램프로 10분 조각을 만들면 반 이름조차 안 읽힌다.
-   *    자리는 "여기 있다"만 말하고, 언제인지는 표식이 말한다.
-   * 🔴 서로 다른 반이면 병합하지 않는다(반이 곧 정체다) — 레인이 갈려 나란히 선다.
+   * 🔴 **합치지 않는다** — 처음엔 연속 세 교시를 한 덩어리로 이었는데, 원장이 곧바로 "3개 그대로"라고
+   *    바로잡았다. 교시가 셋이면 화면에도 셋이어야 한다(합치면 몇 교시인지가 사라진다).
+   * 🔴 미는 양은 **열마다 하나**(가장 이른 수업이 하한에 닿는 만큼) — 슬롯마다 다르게 밀면 붙어 있던
+   *    교시가 벌어지거나 겹친다. 같은 오프셋이라 **길이도 간격도 실제 그대로** 유지된다.
+   * 🔴 칸마다 **실제 시각을 표식으로** 남긴다(왼쪽 위 삼각형) — 그리는 자리가 진짜 시각이 아니라는 사실을
+   *    화면에 남기지 않으면 시간표가 조용히 거짓말을 한다.
+   * ⚠️ 밀린 칸이 그 시간대 진짜 수업과 겹치면 레인이 갈려 **나란히** 선다(겹침 처리는 원래 있던 기계 그대로).
    */
-  const OFF_AXIS_ROWS = 3;
   const minOfTime = (t: string): number | null => {
     const [h, m] = String(t).split(":").map(Number);
     return Number.isFinite(h) && Number.isFinite(m) ? (h as number) * 60 + (m as number) : null;
@@ -169,26 +169,24 @@ export function TeacherGridView({
     if (axisFloorMin == null) return slots;
     const early = slots.filter((s) => (minOfTime(s.startTime) ?? Infinity) < axisFloorMin);
     if (early.length === 0) return slots;
-    const merged = new Map<string, { slot: (typeof slots)[number]; startMin: number; endMin: number }>();
+    // 열(강사·요일)마다 가장 이른 시작 — 그만큼만 민다.
+    const firstByCol = new Map<string, number>();
     for (const s of early) {
-      const key = `${teacherOf(s)}|${s.dayOfWeek}|${s.classId ?? s.className}`;
+      const key = `${teacherOf(s)}|${s.dayOfWeek}`;
       const a = minOfTime(s.startTime) ?? 0;
-      const b = minOfTime(s.endTime) ?? a;
-      const prev = merged.get(key);
-      merged.set(
-        key,
-        prev
-          ? { slot: prev.slot, startMin: Math.min(prev.startMin, a), endMin: Math.max(prev.endMin, b) }
-          : { slot: s, startMin: a, endMin: b },
-      );
+      firstByCol.set(key, Math.min(firstByCol.get(key) ?? a, a));
     }
     const earlyIds = new Set(early.map((s) => s.id));
-    const pulled = [...merged.values()].map(({ slot, startMin, endMin }) => {
+    const pulled = early.map((s) => {
+      const key = `${teacherOf(s)}|${s.dayOfWeek}`;
+      const shift = axisFloorMin - (firstByCol.get(key) ?? axisFloorMin);
+      const a = minOfTime(s.startTime) ?? axisFloorMin;
+      const b = minOfTime(s.endTime) ?? a + stepMin;
       offAxisNotes.set(
-        slot.id,
-        `실제 수업 시각 ${minToHM(startMin)}~${minToHM(endMin)} — 표에서는 축 시작(${minToHM(axisFloorMin)})으로 끌어내려 표시합니다`,
+        s.id,
+        `실제 수업 시각 ${minToHM(a)}~${minToHM(b)} — 표에서는 축 시작(${minToHM(axisFloorMin)})에 맞춰 끌어내려 표시합니다`,
       );
-      return { ...slot, startTime: minToHM(axisFloorMin), endTime: minToHM(axisFloorMin + OFF_AXIS_ROWS * stepMin) };
+      return { ...s, startTime: minToHM(a + shift), endTime: minToHM(b + shift) };
     });
     return [...slots.filter((s) => !earlyIds.has(s.id)), ...pulled];
   })();

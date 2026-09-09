@@ -425,8 +425,11 @@ export const SHEET_DICT = {
   // ── 면·모드·날짜 네비 ─────────────────────────────────────────────
   "nav.face": { ko: "보기", en: "View" },
   "nav.face.today": { ko: "오늘", en: "Today" },
-  "nav.face.week": { ko: "주간 시트", en: "Weekly sheet" },
-  "nav.face.room": { ko: "305 · JJ실", en: "305 · JJ room" },
+  // 원장 2026-09-09: *"주간시트 / 305,JJ실 → 담임별 작성률 / JJ실 작성률"* → 곧이어 *"수정. 담임별/JJ실"*.
+  // 🔴 두 칩은 **무엇으로 묶어 보는가**를 말한다(담임별로 묶은 반 목록 / JJ실 한 자리) — 화면 이름이 아니라
+  //    보기 축이라 짧게 적는다. 영어도 같은 축으로.
+  "nav.face.week": { ko: "담임별", en: "By homeroom" },
+  "nav.face.room": { ko: "JJ실", en: "JJ room" },
   "nav.face.room.title": {
     ko: "305호 집중자율수업실 — 그 시각 여러 반을 한 표로",
     en: "Room 305 self-study — several classes at the same time in one table",
