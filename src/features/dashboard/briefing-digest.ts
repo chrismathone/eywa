@@ -178,6 +178,8 @@ export function buildDailyBriefingPayload(input: BuildDailyBriefingInput): Daily
     // 🔴 아래 셋은 **어제 수집분**이라 라벨('오늘 첫 수업'·'내일 시간표 적용')과 사실이 어긋난다 —
     //    브리핑에선 뺀다(위 휴가와 같은 규약). 이 셋은 운영실 화면에서 **지금 수집분**으로만 선다.
     //    되살리려면 라벨을 날짜 축에 맞춰 다시 지어야 한다(YESTERDAY_RELABEL 방식).
+    // ⚠️ 어제 수집분의 '오늘 미기록'은 곧 어제 미기록이라 위 `unrecordedYesterday`와 **같은 사실을 두 번** 말한다.
+    unrecordedToday: [],
     dayArrivals: { starting: [], ending: [] },
     newIntakeToday: { count: 0, names: [] },
     scheduledTomorrow: null,

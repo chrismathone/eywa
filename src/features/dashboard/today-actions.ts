@@ -28,6 +28,13 @@ export type TodayActionsRaw = {
   unrecordedYesterday: { classId: string; className: string; subject: string }[];
   /** 어제 날짜(YYYY-MM-DD) — 일별 미처리 페이지 링크용 */
   yesterday: string;
+  /**
+   * **오늘 이미 끝난 교시**인데 아직 출결이 다 안 찍힌 반(운영실 검토 2026-09-09 합의 1순위).
+   * 🔴 분모는 "오늘 배정된 교시"가 아니라 **끝난 교시**다([`day-recording.ts`](./day-recording.ts)) —
+   *    수업 중인 반까지 세면 130반 규모의 거짓 경보가 된다.
+   * ⚠️ 헤더의 `처리 중 N/M`과 **축이 다르다**(그쪽은 시작한 교시 기준 합계) — 그래서 항목 note에 기준을 적는다.
+   */
+  unrecordedToday: { classId: string; className: string; subject: string }[];
   /** 최근 7일 녹음 전사/AI 분석 실패 건수(테이블별) */
   failedAnalysis: { meetings: number; enrollment: number; consultations: number };
   /** makeedu 동기화 이상(자동 동기화 ON일 때만) — 없으면 null */
@@ -456,6 +463,27 @@ export function buildTodayActions(
       href: only ? `/students/${only.studentId}` : "/students",
       menuKey: "students",
       requiredAccess: "write",
+    });
+  }
+
+  if (raw.unrecordedToday.length > 0) {
+    items.push({
+      key: "unrecorded-today",
+      severity: "amber",
+      label: "오늘 출석 미기록",
+      count: raw.unrecordedToday.length,
+      unit: "개 반",
+      detail: nameList(
+        balancedTake(raw.unrecordedToday, (c) => c.subject, 2).map((c) => c.className),
+        2,
+        raw.unrecordedToday.length,
+      ),
+      // 🔑 기준을 적는다 — 헤더의 '처리 중 N/M'은 **시작한** 교시 기준이라 두 숫자가 다를 수 있다.
+      note: "종료된 교시 기준",
+      bySubject: groupBySubject(raw.unrecordedToday, subjectLabel),
+      href: "/attendance/live",
+      menuKey: "attendance",
+      requiredAccess: "read",
     });
   }
 

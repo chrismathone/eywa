@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstMonth, kstToday, monthRange } from "@/lib/date-kst";
@@ -53,7 +54,15 @@ export type ClassProcessing = {
   rate: number; // 완료율 0~100
 };
 
-export async function getDailyProcessingStatus(date: string): Promise<ClassProcessing[]> {
+/**
+ * 그날의 반별 출결 처리 현황(예정·기록·미처리).
+ * 🔑 **요청 캐시**(React `cache`) — 운영실 한 화면에서 헤더의 `처리 중 N/M`과 '오늘 출석 미기록' 신호가
+ *    같은 날짜로 각각 부른다. 캐시가 없으면 **같은 무거운 계산이 한 요청에 두 번** 돈다(반응속도 1순위).
+ *    인자(date)가 키라 스냅샷 날짜 조회는 그대로 따로 돈다.
+ */
+export const getDailyProcessingStatus = cache(async function getDailyProcessingStatus(
+  date: string,
+): Promise<ClassProcessing[]> {
   const supabase = await createClient();
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
   const dayEnum = DOW_ENUM[dow];
@@ -163,7 +172,7 @@ export async function getDailyProcessingStatus(date: string): Promise<ClassProce
   // 미처리 많은 반 먼저(운영 우선순위), 동률이면 반명.
   rows.sort((a, b) => b.unprocessed - a.unprocessed || a.className.localeCompare(b.className, "ko"));
   return rows;
-}
+});
 
 export type AttendanceStatus =
   | "present"

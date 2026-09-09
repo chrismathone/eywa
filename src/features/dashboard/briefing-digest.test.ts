@@ -20,6 +20,7 @@ const EMPTY_RAW: TodayActionsRaw = {
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
+  unrecordedToday: [],
   dayArrivals: { starting: [], ending: [] },
   newIntakeToday: { count: 0, names: [] },
   scheduledTomorrow: null,

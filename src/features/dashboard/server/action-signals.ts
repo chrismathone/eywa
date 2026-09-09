@@ -12,7 +12,9 @@ import { buildHolidayMap } from "@/features/attendance/calendar";
 import { isHolidayOn } from "@/features/class-sheets/lib/holiday";
 import { isPreNotified } from "../absence-reasons";
 import { resolveDayArrivals, type DayEnrollmentRow } from "../day-arrivals";
+import { classesWithFinishedPeriod } from "../day-recording";
 import { isReportTrackedSubject } from "../report-subjects";
+import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
 import { getUnassignedEnrolledStudents } from "./queries";
 import {
   enrollmentAttendsOnDay,
@@ -94,6 +96,12 @@ export type TodayActionSignalScope = {
   billing?: boolean;
   /** 오늘 휴가 현황(read) */
   staff?: boolean;
+  /**
+   * **지금 시각 기준** '오늘 출석 미기록'(끝난 교시). 생략하면 attendance와 같다(기존 호출 보존).
+   * 🔴 일일 브리핑은 false로 끈다 — 어제 재생분은 `unrecordedYesterday`와 **같은 날짜·같은 쿼리**가 되고,
+   *    오늘 수집분은 payload에서 어차피 비운다(같은 무거운 조회를 두 번 돌리지 않는다).
+   */
+  attendanceNow?: boolean;
   /** 휴가 승인 대기(manage-staff). 생략하면 staff와 같아 기존 호출을 보존한다. */
   staffApprovals?: boolean;
   owner?: boolean;
@@ -172,7 +180,7 @@ async function unrecordedClassesSignal(
       .or(`valid_to.is.null,valid_to.gte.${date}`),
     db,
   );
-  const scheduleRows = rowsOrThrow(scheduleResult, "yesterday schedules") as unknown as ClassScheduleRow[];
+  const scheduleRows = rowsOrThrow(scheduleResult, `${date} schedules`) as unknown as ClassScheduleRow[];
   const classNames = new Map<string, { name: string; subject: string }>();
   for (const row of scheduleRows) {
     const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
@@ -265,6 +273,53 @@ async function unrecordedClassesSignal(
  * ⚠️ **eywa에 보고서를 쓰는 과목만** 센다(report-subjects.ts) — 영어는 ClassNote에 직접 쓰므로
  *    여기선 늘 0건이라, 세면 신호가 아니라 소음이 된다.
  */
+/**
+ * 오늘 **이미 끝난 교시인데 아직 다 못 찍은 반** — 운영실 검토 2026-09-09 합의 1순위.
+ *
+ * 🔑 명단·기록 판정은 **새로 짜지 않고** 출결 정본 [`getDailyProcessingStatus`](../../attendance/server/queries.ts)를
+ *    그대로 쓴다 — 헤더의 `처리 중 N/M`과 **같은 소스**라야 한 화면에서 두 숫자가 어긋나지 않는다
+ *    (그 함수는 요청 캐시라 한 화면에서 두 번 불러도 계산은 한 번이다).
+ * 🔴 여기서 더하는 것은 **시각 축 하나**뿐이다: 아직 안 끝난 교시를 세면 130반 규모의 거짓 경보가 된다.
+ * ⚠️ 정본이 세션 클라이언트 전용이라 이 신호는 **cron(admin db) 경로에서 못 쓴다** — 그래서 브리핑은
+ *    `attendanceNow: false`로 끈다(그쪽은 이 신호를 payload에서 어차피 비운다).
+ */
+async function unrecordedTodaySignal(
+  supabase: Supabase,
+  date: string,
+  nowMinutes: number,
+  db?: TenantScope,
+): Promise<TodayActionsRaw["unrecordedToday"]> {
+  const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
+    new Date(`${date}T00:00:00Z`).getUTCDay()
+  ]!;
+  // 가벼운 시각 조회 — 반 메타·명단은 정본이 들고 온다.
+  const slotResult = await scopeTenant(
+    supabase
+      .from("class_schedules")
+      .select("class_id, start_time, end_time")
+      .eq("day_of_week", dayKey)
+      .lte("valid_from", date)
+      .or(`valid_to.is.null,valid_to.gte.${date}`),
+    db,
+  );
+  const slots = rowsOrThrow(slotResult, `${date} slot times`) as {
+    class_id: string;
+    start_time: string | null;
+    end_time: string | null;
+  }[];
+  const finished = classesWithFinishedPeriod(
+    slots.map((row) => ({ classId: row.class_id, startTime: row.start_time, endTime: row.end_time })),
+    nowMinutes,
+  );
+  if (finished.size === 0) return []; // 아직 끝난 교시가 없다 — 무거운 조회를 아예 안 돈다.
+
+  const processing = await getDailyProcessingStatus(date);
+  return processing
+    .filter((row) => row.unprocessed > 0 && finished.has(row.classId))
+    .map((row) => ({ classId: row.classId, className: row.className, subject: row.subject }))
+    .sort((a, b) => a.className.localeCompare(b.className, "ko"));
+}
+
 /**
  * 오늘 **첫 수업 · 마지막 수업** 학생 — 왕복 2회.
  * ① 오늘 시작/종료하는 수강에서 **학생 id만** 뽑고 ② 그 학생들의 **수강 전건**을 받아 순수 함수가 판정한다.
@@ -590,6 +645,7 @@ export async function getTodayActionSignals(
     .then((st) => buildHolidayMap(st.operations.holidays))
     .catch(() => null);
   const staffApprovalsEnabled = scope.staffApprovals ?? enabled("staff");
+  const attendanceNowEnabled = scope.attendanceNow ?? enabled("attendance");
 
   const failedCount = async (
     table: "meeting_minutes" | "enrollment_consultations" | "student_consultations",
@@ -619,6 +675,7 @@ export async function getTodayActionSignals(
     unwrittenReports,
     unassignedEnrolled,
     classnoteAttention,
+    unrecordedTodayClasses,
     dayArrivals,
     newIntake,
     scheduledTomorrow,
@@ -890,6 +947,21 @@ export async function getTodayActionSignals(
       },
     ),
     collectSignal(
+      attendanceNowEnabled,
+      {
+        key: "attendance-today-unrecorded",
+        label: "오늘 출결 처리",
+        href: "/attendance/live",
+        menuKey: "attendance",
+        requiredAccess: "read",
+      },
+      [] as TodayActionsRaw["unrecordedToday"],
+      () =>
+        isHolidayOn(holidayMap, today)
+          ? Promise.resolve([] as TodayActionsRaw["unrecordedToday"])
+          : unrecordedTodaySignal(supabase, today, nowMinutes, db),
+    ),
+    collectSignal(
       enabled("students"),
       {
         key: "day-arrivals",
@@ -1007,6 +1079,7 @@ export async function getTodayActionSignals(
     unwrittenReports,
     unassignedEnrolled,
     classnoteAttention,
+    unrecordedTodayClasses,
     dayArrivals,
     newIntake,
     scheduledTomorrow,
@@ -1016,6 +1089,7 @@ export async function getTodayActionSignals(
     absentToday: [...seen].map(([studentId, info]) => ({ studentId, ...info })),
     unrecordedYesterday: dailyProcessing.value,
     yesterday,
+    unrecordedToday: unrecordedTodayClasses.value,
     failedAnalysis: {
       meetings: failedMeetings.value,
       enrollment: failedEnrollment.value,

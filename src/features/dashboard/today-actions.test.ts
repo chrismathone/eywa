@@ -22,6 +22,7 @@ const EMPTY: TodayActionsRaw = {
   unassignedEnrolled: [],
   unassignedEnrolledTotal: 0,
   classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
+  unrecordedToday: [],
   dayArrivals: { starting: [], ending: [] },
   newIntakeToday: { count: 0, names: [] },
   scheduledTomorrow: null,
@@ -104,6 +105,42 @@ describe("오늘 사람 변동·접수·내일 예약 (운영실 검토 2026-09-
     expect(scheduled?.count).toBeNull();
     expect(scheduled?.note).toBe("수업 배치 · 학생 반이동");
     expect(scheduled?.menuKey).toBe("timetable");
+  });
+
+  it("오늘 출석 미기록은 기준(종료된 교시)을 note로 밝히고 어제 것과 따로 선다", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      unrecordedToday: [
+        { classId: "c1", className: "초등M 개별 BS1B", subject: "math" },
+        { classId: "c2", className: "LT6", subject: "english" },
+      ],
+      unrecordedYesterday: [{ classId: "c3", className: "KW3", subject: "english" }],
+    });
+    const today = items.find((item) => item.key === "unrecorded-today");
+    const yesterday = items.find((item) => item.key === "unrecorded");
+    expect(today?.label).toBe("오늘 출석 미기록");
+    expect(today?.count).toBe(2);
+    expect(today?.unit).toBe("개 반");
+    // 🔑 헤더의 '처리 중 N/M'과 축이 달라 숫자가 갈릴 수 있다 — 기준을 화면에 적는다.
+    expect(today?.note).toBe("종료된 교시 기준");
+    expect(today?.href).toBe("/attendance/live");
+    // 어제 것은 그대로 남는다(마감이 지난 것과 오늘 재촉은 다른 일).
+    expect(yesterday?.label).toBe("어제 출석 미기록");
+    expect(yesterday?.count).toBe(1);
+  });
+
+  it("오늘 미기록 미리보기는 과목별로 고르게 뽑는다(한 과목만 뜨지 않게, #84)", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      unrecordedToday: [
+        { classId: "c1", className: "가반", subject: "math" },
+        { classId: "c2", className: "나반", subject: "math" },
+        { classId: "c3", className: "LT6", subject: "english" },
+      ],
+    });
+    const today = items.find((item) => item.key === "unrecorded-today");
+    expect(today?.detail).toContain("LT6");
+    expect(today?.detail).toContain("외 1");
   });
 
   it("새 신호가 없으면 항목도 없다(빈 구역 금지)", () => {
