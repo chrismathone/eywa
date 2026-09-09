@@ -166,9 +166,17 @@ export function AppSidebar({
   const frequent = frequentFor(gate, frequentKeys);
   const workGroups = hubGroupsFor(HUB_GROUPS, gate);
   const supportGroups = hubGroupsFor(SUPPORT_GROUPS, gate);
-  const hubOpenId = useMenuHub((s) => s.groupId);
+  const hubGroupId = useMenuHub((s) => s.groupId);
+  const hubMode = useMenuHub((s) => s.mode);
+  // 🔴 표시(활성 줄)는 **고르는 중(overlay)** 일 때만 허브를 따른다 — 메뉴를 고른 뒤 허브가 배경으로
+  //    내려가면 그때부터 "지금 보고 있는 것"은 포커스된 창이다. 배경까지 칠하면 줄이 둘이 되어
+  //    "지금 어디를 보고 있나"가 다시 흐려진다(원장 2026-09-09에 고친 그 문제).
+  const hubOpenId = hubMode === "overlay" ? hubGroupId : null;
   const toggleHub = useMenuHub((s) => s.toggle);
   const closeHub = useMenuHub((s) => s.close);
+  // 레일(즐겨찾기·바로 여는 업무군)에서 화면을 열 때도 허브는 **닫지 않고 배경으로 내린다** —
+  // 닫으면 그 순간 배경이 메뉴 판 전체로 바뀌어 원장이 지적한 그 튐이 그대로 재현된다.
+  const sendHubToBack = useMenuHub((s) => s.sendToBack);
 
   return (
     <TooltipProvider delay={200}>
@@ -193,6 +201,9 @@ export function AppSidebar({
             onClick={(e) => {
               if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
               e.preventDefault();
+              // 🔴 배경에 깔린 업무군 판을 **먼저 걷는다** — 안 걷으면 '메뉴로'를 눌러도 그 판이 그대로 덮고 있어
+              //    아무 일도 안 일어난 것처럼 보인다(허브가 배경 층으로 남을 수 있게 된 뒤의 함정).
+              closeHub();
               showDesktop();
             }}
             tabIndex={expanded ? undefined : -1}
@@ -253,7 +264,7 @@ export function AppSidebar({
                     expanded={expanded}
                     motion={motion}
                     onShowDesktop={showDesktop}
-                    onOpen={closeHub}
+                    onOpen={sendHubToBack}
                     pathname={pathname}
                     focusedId={focusedId}
                     hasFocus={hasFocus}
@@ -275,7 +286,7 @@ export function AppSidebar({
                 motion={motion}
                 onShowDesktop={showDesktop}
                 onToggleHub={toggleHub}
-                onCloseHub={closeHub}
+                onCloseHub={sendHubToBack}
                 hubOpenId={hubOpenId}
                 pathname={pathname}
                 focusedId={focusedId}
@@ -296,7 +307,7 @@ export function AppSidebar({
                   motion={motion}
                   onShowDesktop={showDesktop}
                   onToggleHub={toggleHub}
-                  onCloseHub={closeHub}
+                  onCloseHub={sendHubToBack}
                   hubOpenId={hubOpenId}
                   pathname={pathname}
                   focusedId={focusedId}
@@ -488,7 +499,7 @@ function MenuRail({
   expanded: boolean;
   motion: boolean;
   onShowDesktop: () => void;
-  /** 화면을 열면 떠 있던 메뉴 허브는 닫는다(작업 화면이 앞으로 온다). */
+  /** 화면을 열면 떠 있던 메뉴 허브는 **배경으로 내린다**(작업 화면이 앞으로 온다 — 배경은 안 바뀐다). */
   onOpen: () => void;
   pathname: string;
   focusedId: string | null;
@@ -540,6 +551,7 @@ function GroupRail({
   motion: boolean;
   onShowDesktop: () => void;
   onToggleHub: (id: string) => void;
+  /** 화면을 열었을 때 — 허브를 **배경으로 내린다**(닫지 않는다). */
   onCloseHub: () => void;
   hubOpenId: string | null;
   pathname: string;
