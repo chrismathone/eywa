@@ -18,6 +18,7 @@ import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
 import { ScheduledChangeActions } from "@/components/scheduled-change-actions";
 import { getScheduledForStudent } from "@/features/enrollments/server/scheduled-queries";
 import { kstToday } from "@/lib/date-kst";
+import { isInternalPath } from "@/lib/navigation";
 import { StatusAction } from "./_components/status-action";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { OverviewTab } from "./_tabs/overview-tab";
@@ -38,12 +39,17 @@ export default async function StudentDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; back?: string }>;
 }) {
   const user = await requireAccess("students");
   const { id } = await params;
-  const { tab: tabParam } = await searchParams;
+  const { tab: tabParam, back: backParam } = await searchParams;
   const requestedTab = isStudentTabKey(tabParam) ? tabParam : "overview";
+  // 학생을 **어디서 열었는지** — 영구 삭제 뒤 돌아갈 자리다(원장 2026-09-09: 신규생 관리에서 삭제하면
+  // 그 창이 원생목록으로 바뀌어 신규생 관리로 못 돌아갔다). 목록마다 링크에 `?back=<경로>`를 달면 된다.
+  // 🔴 여기서 **서버가 검증**한다 — 값을 그대로 `location.replace`에 넘기므로 `//evil.com`·`https://…`
+  //    같은 외부 주소가 들어오면 열린 리다이렉트가 된다. 앱 내부 절대경로 한 갈래만 통과시킨다.
+  const backHref = isInternalPath(backParam) ? backParam : "/students";
 
   // '수납' 탭은 학생(students) 권한이 아니라 **수납(billing) 권한**으로 잠근다 — 학생 상세는 강사(scoped)·
   // 뷰어(readonly)도 열 수 있어서, 탭 하나가 billing=none 역할에게 청구·납입 금액을 통째로 노출하고 있었다.
@@ -177,7 +183,7 @@ export default async function StudentDetailPage({
               <RunCareAiButton studentId={student.id} hasExisting={hasCareAi} />
             ) : null}
             {canDeleteStudent ? (
-              <DeleteStudentButton studentId={student.id} studentName={student.name} />
+              <DeleteStudentButton studentId={student.id} studentName={student.name} backHref={backHref} />
             ) : null}
           </div>
         </div>

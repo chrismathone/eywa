@@ -21,7 +21,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { holdTone, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
 import { holdArmedRow, setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { rosterDropId, useRosterMove, type RosterDragData } from "./roster-move";
-import { movedByTarget, visibleSpanRows } from "@/features/timetable/lib/row-span";
+import { movedByTarget, movedCellBox, visibleSpanRows } from "@/features/timetable/lib/row-span";
 
 /**
  * 표 격자선 — 통합뷰는 **격자 자체가 정보**라 데이터 표(열=`--line-faint`)와 규약이 다르다.
@@ -430,7 +430,9 @@ export function ClassColumn({
                   <div
                     key={m.from}
                     className="absolute inset-x-0 z-[1]"
-                    style={{ top: m.offset * PERIOD_H, height: m.span * PERIOD_H }}
+                    // 상자는 `movedCellBox`가 정한다 — 행 경계에서 끝나는 칸은 그 행 구분선(1px) 자리를
+                    // 비워 준다(안 비우면 겹쳐 그린 칸이 선을 덮어 그 줄만 가로선이 사라진다).
+                    style={movedCellBox(m, PERIOD_H)}
                   >
                     <Cell card={card} order={m.from} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
                   </div>

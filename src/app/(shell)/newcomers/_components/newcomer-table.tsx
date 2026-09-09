@@ -203,8 +203,12 @@ export function NewcomerTable({
               <tr key={row.studentId} className={`border-line-faint border-b ${overdue ? "bg-danger-soft/40" : ""}`}>
                 <td className="px-2 py-1">
                   {/* 이름 열이 좁아졌다(원장 2026-09-09) — 넘치면 자르고 전체 이름은 title에. */}
+                  {/* 🔴 `?back=/newcomers` — 상세는 이 창 안에서 **드릴인**으로 열리므로, 거기서 학생을
+                      영구 삭제하면 돌아올 자리를 알려 주지 않는 한 이 창이 원생목록으로 바뀐다
+                      (원장 2026-09-09 *"신규생관리로 들어가려고 하니까 자꾸 원생목록으로 가지네"*).
+                      값은 학생 상세가 `isInternalPath`로 검증한 뒤에만 쓴다. */}
                   <WindowLink
-                    href={`/students/${row.studentId}`}
+                    href={`/students/${row.studentId}?back=/newcomers`}
                     title={`${row.name} ${schoolGradeLabel(row.school, row.grade) || ""}`.trim()}
                     className="flex min-w-0 items-baseline gap-1.5 hover:underline"
                   >

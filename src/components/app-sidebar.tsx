@@ -40,6 +40,21 @@ const EASE = "ease-[cubic-bezier(0.22,0.61,0.36,1)]";
 
 const RAIL_DRAG = 16; // 레일 아이콘을 오른쪽(캔버스)으로 이만큼 끌면 그 자리에 창 꺼내기
 
+/**
+ * 펼침 사이드바에서 묶음 머리글이 차지하는 띠 높이(px) — 접기 애니메이션(`transition-[height]`)이
+ * 숫자를 요구해서 고정값이다.
+ *
+ * 🔴 **글자 높이에서 도출한 값이다** — `text-xs`(타입 스케일 v5에서 14px) × `--text-xs--line-height`(1.45)
+ *    ≈ 20.3px. 머리글은 `bottom-0`으로 아래에 붙으므로 남는 위쪽이 곧 구분선과의 간격이다:
+ *    · 첫 묶음(선 없음) 24 − 20.3 ≈ **3.7px** 위 여백
+ *    · 그 외 34 − 20.3 ≈ **13.7px**(맨 위 1px이 구분선, 나머지가 선↔글자 간격)
+ * ⚠️ 글자 크기·줄높이 토큰이 또 오르면 **이 두 값도 함께 재어 올릴 것** — 안 그러면 `overflow-hidden`이
+ *    머리글 위를 자르거나 구분선이 글자를 가로지른다(시간표 `NAME_ROOM_H`·`PERIOD_H`가 v5에서 겪은 결함과
+ *    같은 계열이다: 고정 높이가 글자 상승을 안 따라옴).
+ */
+const SECTION_HEAD_H = 34;
+const SECTION_HEAD_H_FIRST = 24;
+
 function isItemActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -430,18 +445,38 @@ function NavSection({
   return (
     <div className="flex w-full flex-col gap-1">
       <div
-        style={{ height: expanded ? 22 : first ? 6 : 13 }}
-        className={`relative flex shrink-0 items-center overflow-hidden ${
+        style={{ height: expanded ? (first ? SECTION_HEAD_H_FIRST : SECTION_HEAD_H) : first ? 6 : 13 }}
+        className={`relative flex shrink-0 overflow-hidden ${
           motion ? `transition-[height] duration-200 ${EASE}` : ""
         }`}
       >
+        {/* 펼침 묶음 구분선 — 묶음 **위**에 가로선을 긋는다(원장 2026-09-09 *"자주 방문한 메뉴, 전체 업무,
+            지원 3개의 카테고리를 좀 강조해야겠어. 구분선을 지어주든가."*). 첫 묶음엔 없다 — 바로 위 브랜드
+            줄이 이미 `border-b`를 긋고 있어 선이 두 겹이 된다.
+            🔴 색은 `--line`(앱의 구조선 단일 소스) — 사이드바 오른쪽 경계·브랜드 줄과 같은 농도라 따로 논다는
+            느낌 없이 얹힌다. hex를 적지 말 것. */}
+        {!first ? (
+          <span
+            aria-hidden="true"
+            className={`bg-line absolute top-0 right-3 left-3 h-px ${
+              expanded ? "opacity-100" : "opacity-0"
+            } ${motion ? "transition-opacity duration-200" : ""}`}
+          />
+        ) : null}
+        {/* 머리글은 **아래로 붙인다**(`bottom-0`) — 자기 메뉴 줄에 가깝고 구분선에서 멀어야 "이 선 아래가
+            한 묶음"으로 읽힌다(가운데 정렬이면 선에 더 붙어 위 묶음의 꼬리처럼 보인다).
+            🔴 크기는 `text-xs`(14px) 그대로 — 메뉴 이름이 `text-sm`(16px)이라 키우면 위계가 뒤집힌다.
+            색도 이미 한계다(09-08부터 `--text-faint`·`--foreground`가 같은 `#121212`) → 강조는 **굵기·자간·
+            구분선·여백**으로 낸다. 토큰만 의도에 맞게 `text-foreground`로 바꿔 둔다(3단 회색이 되살아나도
+            머리글은 진하게 남는다). */}
         <span
-          className={`text-text-faint absolute left-[17px] text-xs font-bold whitespace-nowrap ${
+          className={`text-foreground absolute bottom-0 left-[17px] text-xs font-bold tracking-wide whitespace-nowrap ${
             expanded ? "opacity-100" : "opacity-0"
           } ${motion ? "transition-opacity duration-200" : ""}`}
         >
           {label}
         </span>
+        {/* 접힘(아이콘 레일) — 라벨이 안 보이니 짧은 가운데 선만으로 묶음을 가른다(기존 그대로). */}
         {!first ? (
           <span
             aria-hidden="true"

@@ -376,3 +376,20 @@ export function subTabsForMenu(menuKey: MenuKey): SubTab[] {
   if (all.length <= 1 && !all.some((s) => s.menuKey)) return [];
   return all;
 }
+
+/**
+ * 이 값이 **앱 안 절대경로**인가 — 화면이 준 문자열을 `location.replace`·`redirect` 대상으로 쓰기 전 게이트.
+ *
+ * 🔴 `startsWith("/")` 하나로는 부족하다: `//evil.com`은 **프로토콜 상대 URL**이라 브라우저가 외부 호스트로
+ *    읽고(열린 리다이렉트), 백슬래시를 섞은 `/\\evil.com`도 일부 브라우저가 같게 취급한다. 스킴 구분자(`://`)와
+ *    제어문자(구분자를 숨기는 우회)도 함께 막는다.
+ * ⚠️ 쿼리·해시는 허용한다(`/students?tab=billing` 같은 정상 복귀 지점) — 막을 것은 **호스트가 바뀌는 것**뿐이다.
+ */
+export function isInternalPath(v: string | undefined | null): v is string {
+  if (!v || typeof v !== "string") return false;
+  if (!v.startsWith("/")) return false;
+  if (v.startsWith("//") || v.startsWith("/\\")) return false;
+  // 제어문자로 스킴 구분자를 숨기는 우회 차단(유니코드 이스케이프라 no-control-regex가 안 물린다).
+  if (/[\u0000-\u001f\u007f]/.test(v)) return false;
+  return !v.includes("://");
+}

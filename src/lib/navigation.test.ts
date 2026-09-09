@@ -7,6 +7,7 @@ import {
   navPresentation,
   subTabsForMenu,
   menuSearchKeywords,
+  isInternalPath,
   NAV_GROUPS,
 } from "./navigation";
 
@@ -253,5 +254,31 @@ describe("검색 별칭 — 사람이 부르는 말로도 찾힌다", () => {
       expect(new Set(list).size, `${item.menuKey} 별칭 중복`).toBe(list.length);
     }
     expect(useless).toEqual([]);
+  });
+});
+
+describe("isInternalPath — 복귀 경로는 앱 안 절대경로만", () => {
+  it("앱 안 경로는 통과(쿼리·해시 포함)", () => {
+    for (const p of ["/newcomers", "/students", "/students?tab=billing", "/students/1#memo"]) {
+      expect(isInternalPath(p), p).toBe(true);
+    }
+  });
+
+  it("🔴 프로토콜 상대 URL은 외부다 — `//`·`/\\`를 막는다", () => {
+    for (const p of ["//evil.com", "//evil.com/students", "/\\evil.com"]) {
+      expect(isInternalPath(p), p).toBe(false);
+    }
+  });
+
+  it("절대 URL·스킴은 거절", () => {
+    for (const p of ["https://evil.com", "http://a", "javascript:alert(1)", "/x://y"]) {
+      expect(isInternalPath(p), p).toBe(false);
+    }
+  });
+
+  it("상대경로·빈 값·제어문자는 거절", () => {
+    for (const p of ["students", "", undefined, null, "/a\nb", "/a\tb"]) {
+      expect(isInternalPath(p as string | undefined), String(p)).toBe(false);
+    }
   });
 });
