@@ -22,7 +22,7 @@ function metaLabel(school: string | null | undefined, grade: string | null | und
   return sg === "-" ? "" : sg;
 }
 
-export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
+export function TeacherChip({ slot, offAxisNote }: { slot: ClassDetailQuick; offAxisNote?: string | null }) {
   const [open, setOpen] = useState(false);
   const subjects = useSubjectMaps();
   // 학생 검색 — 걸린 반의 칩만 남는다. ⚠️ 훅은 조건 없이 전부 부른 **뒤에** 내보낸다(훅 규칙).
@@ -39,7 +39,18 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
   return (
     // 블록(병합 셀) 전체를 채운다 — 시트 병합 셀처럼 접힘 상태에선 색면이 블록을 꽉 채우고
     // (반명은 상단), 펼침 상태에선 색 헤더 한 줄 + 아래 학생 명단. 레인 구조상 블록당 칩 1개.
-    <div className="border-line flex min-h-0 flex-1 flex-col overflow-hidden rounded-[3px] border">
+    <div className="border-line relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[3px] border">
+      {/* 🔺 축 밖 수업 표식 — 스프레드시트 메모처럼 **왼쪽 위 삼각형**(원장 2026-09-09: 오전 한 반 때문에
+          축이 통째로 늘어나던 것을 2시로 끌어내리면서 *"왼쪽상단에 메모가 있다고 표시해놓고 실제 수업시간
+          표시해줘"*). 🔴 이 칩은 그려진 자리가 **진짜 시각이 아니다** — 그 사실을 화면에 남기지 않으면
+          시간표가 조용히 거짓말을 한다. 실제 시각은 삼각형 툴팁과 hover 카드(schedule)에 그대로 있다. */}
+      {offAxisNote ? (
+        <span
+          title={offAxisNote}
+          aria-label={offAxisNote}
+          className="border-t-danger absolute top-0 left-0 z-10 size-0 border-t-[7px] border-r-[7px] border-r-transparent"
+        />
+      ) : null}
       <HoverCard
         width={230}
         card={

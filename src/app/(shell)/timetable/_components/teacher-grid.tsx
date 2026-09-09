@@ -36,7 +36,13 @@ import { SearchedCell } from "./search-context";
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
 
-const TIME_COL_W = 48; // "14:20" 한 줄 라벨
+/**
+ * 시각열 폭 — `10:00` 한 줄이 **안 접히는** 값(원장 2026-09-09 캡처: 세 글자씩 세 줄로 잘려 있었다).
+ * 🔴 48px은 글자가 12px이던 시절 예산이다 — 타입 스케일 v5가 `text-xs`를 14px로 올리면서 라벨(≈38px)
+ *    + 좌우 패딩 8 + 테두리 2 = 48px이 **정확히 경계**가 됐고, 반올림 한 픽셀에 접혔다
+ *    (명단 줄 높이 `STU_H` 24→26과 같은 계열의 뒷북 상수).
+ */
+const TIME_COL_W = 56;
 const DAY_COL_W = 65; // 반명+방 chip(학생 없음). 강사×요일이 많아 가로 스크롤(2026-07-06 96→65 사용자 지정).
 const LANE_COL_W = 64; // 다중 레인(LAB 서브컬럼) 폭 — 레벨코드 반명(LT2 등) 기준. 시트도 좁은 서브컬럼.
 // 행 높이 = 분당 1.4px 고정(스텝 무관 블록 높이 동일 — step 10=14px/행, step 30=42px/행: 60분 수업은 항상 84px).
@@ -96,6 +102,7 @@ export function TeacherGridView({
   sectionLineMins,
   stepMin = 10,
   pxPerMin,
+  axisFloorMin,
   breakRanges,
   excludedTeachers,
   teacherOrder,
@@ -116,6 +123,14 @@ export function TeacherGridView({
   stepMin?: number;
   /** 세로 밀도(분당 px) — 과목 설정 teacherViewPxPerMin. 미설정 = 폴백 PX_PER_MIN(1.4). */
   pxPerMin?: number;
+  /**
+   * 시간축 **하한**(분). 이 시각보다 이른 수업이 있어도 축을 그 위로 늘리지 않고, 그 수업을 하한 줄에
+   * 끌어내려 그린다(원장 2026-09-09: *"이 1개 반 때문에 지금 오전이 표시되고 있는데, 그냥 강제로 2시로
+   * 끌어내려"*). 실측: 토요일 고3 한 반(10:00) 때문에 평일 오전 4시간이 통째로 빈 칸이었다.
+   * 🔴 끌어내린 칩엔 **표식과 실제 시각**을 남긴다 — 안 그러면 시간표가 조용히 거짓말을 한다.
+   * ⚠️ 값은 화면이 정하지 않는다 — 호출부가 **학원설정 교시표의 첫 교시**에서 뽑아 넘긴다(하드코딩 금지).
+   */
+  axisFloorMin?: number;
   /** 강사 컬럼 순서 — 과목 설정 teacherViewOrder. 미설정 = 시트 미러 + 자리(JJ·LAB) 최우측. */
   teacherOrder?: readonly string[];
   /** 쉬는 시간 범위(HH:MM~HH:MM) — 과목 설정 teacherViewBreaks. 앞뒤 수업 붙은 강사 컬럼에만 셀 표시. */
@@ -125,6 +140,59 @@ export function TeacherGridView({
   /** true(기본) = 강사마다 월~토 전 요일 컬럼(수업 없는 요일도 빈 컬럼으로). false = 수업 있는 요일만. */
   showUnusedDays?: boolean;
 }) {
+  /**
+   * 축 하한보다 이른 슬롯은 **한 칸에 겹쳐 그려진다** — 그대로 두면 같은 열·같은 줄의 뒤엣것이 조용히
+   * 사라진다(실측 2026-09-09: 토요일 `고등E_고3 정규` 10·11·12시 세 교시 중 **한 칸만** 남았다).
+   * 그래서 같은 (강사·요일·반)의 이른 슬롯은 **하나로 잇는다** — 실제로도 10:00~13:00 연속 수업이라
+   * 병합이 사실에 더 가깝고, 표식 문구도 전 구간(`10:00~13:00`)을 말하게 된다.
+   * 🔴 서로 다른 반이면 병합하지 않는다(반이 곧 정체다) — 그때는 레인이 갈려 나란히 선다.
+   */
+  /**
+   * 축 하한보다 이른 슬롯 처리 — **하한 줄에 세우고 실제 시각은 표식으로 남긴다**
+   * (원장 2026-09-09: *"그냥 강제로 2시로 끌어내려 … 왼쪽상단에 메모가 있다고 표시해놓고 실제 수업시간 표시해줘"*).
+   *
+   * 🔴 **같은 (강사·요일·반)의 이른 슬롯은 하나로 잇는다** — 안 그러면 같은 칸에 겹쳐 그려져 뒤엣것이
+   *    조용히 사라진다(실측: 토요일 `고등E_고3 정규` 10·11·12시 세 교시 중 한 칸만 남았다). 실제로도
+   *    10:00~13:00 연속 수업이라 병합이 사실에 더 가깝고, 표식 문구도 전 구간을 말한다.
+   * 🔴 칸 길이는 **실제 길이가 아니라 고정 3칸**이다 — 실제 3시간을 그대로 그리면 하한부터 3시간을
+   *    차지해 그 시간대 진짜 수업과 겹쳐 거짓이 되고, 클램프로 10분 조각을 만들면 반 이름조차 안 읽힌다.
+   *    자리는 "여기 있다"만 말하고, 언제인지는 표식이 말한다.
+   * 🔴 서로 다른 반이면 병합하지 않는다(반이 곧 정체다) — 레인이 갈려 나란히 선다.
+   */
+  const OFF_AXIS_ROWS = 3;
+  const minOfTime = (t: string): number | null => {
+    const [h, m] = String(t).split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? (h as number) * 60 + (m as number) : null;
+  };
+  const offAxisNotes = new Map<string, string>();
+  const gridSlots = ((): typeof slots => {
+    if (axisFloorMin == null) return slots;
+    const early = slots.filter((s) => (minOfTime(s.startTime) ?? Infinity) < axisFloorMin);
+    if (early.length === 0) return slots;
+    const merged = new Map<string, { slot: (typeof slots)[number]; startMin: number; endMin: number }>();
+    for (const s of early) {
+      const key = `${teacherOf(s)}|${s.dayOfWeek}|${s.classId ?? s.className}`;
+      const a = minOfTime(s.startTime) ?? 0;
+      const b = minOfTime(s.endTime) ?? a;
+      const prev = merged.get(key);
+      merged.set(
+        key,
+        prev
+          ? { slot: prev.slot, startMin: Math.min(prev.startMin, a), endMin: Math.max(prev.endMin, b) }
+          : { slot: s, startMin: a, endMin: b },
+      );
+    }
+    const earlyIds = new Set(early.map((s) => s.id));
+    const pulled = [...merged.values()].map(({ slot, startMin, endMin }) => {
+      offAxisNotes.set(
+        slot.id,
+        `실제 수업 시각 ${minToHM(startMin)}~${minToHM(endMin)} — 표에서는 축 시작(${minToHM(axisFloorMin)})으로 끌어내려 표시합니다`,
+      );
+      return { ...slot, startTime: minToHM(axisFloorMin), endTime: minToHM(axisFloorMin + OFF_AXIS_ROWS * stepMin) };
+    });
+    return [...slots.filter((s) => !earlyIds.has(s.id)), ...pulled];
+  })();
+
   const dayDates = dayDateLabels(weekMonday);
   // 행 높이 = 분당 px 고정(스텝 무관 블록 크기 동일). 가로줄 시각은 step 격자에 스냅(격자 밖이면 silent drop 방지).
   // 밀도는 과목 설정(teacherViewPxPerMin) 우선, 미설정이면 PX_PER_MIN(=DEFAULT_TEACHER_VIEW_PX_PER_MIN).
@@ -137,7 +205,7 @@ export function TeacherGridView({
   const excludedSet = new Set(excludedTeachers ?? []);
 
   // 강사 목록 = 슬롯 강사 라벨, 시트 좌→우 순서. 각 강사의 요일은 실제 가르치는 요일만(자연순 월→토).
-  const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(
+  const teacherNames = Array.from(new Set(gridSlots.map(teacherOf))).sort(
     buildTeacherComparator(teacherOrder),
   );
   const colorFor = (name: string): { bg: string; text: string } | null => {
@@ -149,7 +217,7 @@ export function TeacherGridView({
   };
   const teachers: TeacherCol[] = teacherNames
     .map((name) => {
-      const daySet = new Set(slots.filter((s) => teacherOf(s) === name).map((s) => s.dayOfWeek as DayOfWeek));
+      const daySet = new Set(gridSlots.filter((s) => teacherOf(s) === name).map((s) => s.dayOfWeek as DayOfWeek));
       // 기본 = 월~토 전 컬럼(빈 요일 포함, 일요일은 수업 있을 때만). 토글 해제 시 수업 요일만.
       const days = DAY_ORDER.filter((d) =>
         showUnusedDays ? d !== "sun" || daySet.has(d) : daySet.has(d),
@@ -160,12 +228,19 @@ export function TeacherGridView({
 
   // 행 = 시간 격자(데이터 범위 ∪ 시트 폴백 14:20~22:00, 단위=stepMin). 절대 시각축이라 토요일 오후도
   // 자연 정렬(옛 교시축의 rowOf 'mon' 주말 핵이 필요 없어짐).
-  const rows = buildTenMinuteRows(slots, undefined, stepMin);
+  const allRows = buildTenMinuteRows(gridSlots, undefined, stepMin);
+  /**
+   * 하한 밖 행을 잘라 낸다 — `slotRowSpan`이 축 범위로 클램프하므로, 이른 수업은 **첫 줄에 붙어** 그려진다.
+   * ⚠️ 전부 잘려 나가면(하한이 그 주 전 수업보다 늦으면) 원래 축을 그대로 쓴다 — 빈 표를 만들지 않는다.
+   */
+  const floorRows = axisFloorMin == null ? allRows : allRows.filter((r) => r.startMin >= axisFloorMin);
+  const rows = floorRows.length > 0 ? floorRows : allRows;
+  // 🔴 표식은 **슬롯 id로** 찾는다 — 그려진 시각은 이미 하한으로 바뀌어 있어 시각으로는 판정할 수 없다.
 
   // 강사×요일: 같은 시간 범위 병렬 반 = 한 그룹(합반, colSpan 셀) → 그룹 단위 레인 패킹.
   const prepared = teachers.map((t) => {
     const cols = t.days.map((day) => {
-      const colSlots = slots.filter((s) => teacherOf(s) === t.name && s.dayOfWeek === day);
+      const colSlots = gridSlots.filter((s) => teacherOf(s) === t.name && s.dayOfWeek === day);
       // ⚠️ 슬롯=블록 1:1(접기 없음) — 한 수업이 2교시 연속이어도 시트처럼 교시별 셀 2개로(2026-07-06).
       const intervals = buildSlotIntervals(colSlots, stepMin);
       const { groups, laneCount } = packGroups(intervals);
@@ -239,6 +314,9 @@ export function TeacherGridView({
                 // 아래로 흐르는 본문이 px-2 py-1 패딩 링 사이로 비쳐 보였다(#74와 같은 부류). 안쪽 span만
                 // bg를 갖고 있었기 때문 → th에도 불투명 배경 폴백.
                 // 여백을 좁혀 이름 3자를 살린다(폭 변화 0) — v5 글자 상승 뒤 47px 가용에 18px×3=54px이 안 들어갔다.
+                // 🔴 담임 이름은 **명단 학생 이름과 같은 크기**(text-sm 16px, 원장 2026-09-09 *"시간표 탭에서
+                //    담임 글자 크기를 학생 글자 크기와 동일하게"*) — 칸 안 학생 줄이 `text-sm`이라 열 머리만
+                //    한 단계 크면 같은 표에서 두 위계가 다투었다. 닉네임은 보조라 한 단계 아래.
                 className={`sticky top-0 z-20 border-b px-0.5 py-1 text-center ${t.color ? "" : "bg-bg-soft"} ${TEACHER_EDGE} ${GRID}`}
                 style={{
                   height: HEAD_TEACHER_H,
@@ -247,10 +325,10 @@ export function TeacherGridView({
               >
                 {/* 한국인 강사는 `한글이름(영어이름)`(원장 2026-08-13) — 영어과는 서로를 닉네임으로 부른다.
                     원어민은 이름이 곧 영어라 그대로. 닉네임은 한 단계 작게 — 이름이 먼저 읽혀야 한다. */}
-                <span className={`block overflow-hidden text-base leading-tight font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
+                <span className={`block overflow-hidden text-sm leading-tight font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
                   {t.name}
                   {teacherNicknames?.[t.name] ? (
-                    <span className="text-sm font-bold opacity-85">({teacherNicknames[t.name]})</span>
+                    <span className="text-xs font-bold opacity-85">({teacherNicknames[t.name]})</span>
                   ) : null}
                 </span>
               </th>
@@ -383,7 +461,13 @@ export function TeacherGridView({
                               // 방 = 슬롯 방(slot_room_label)만 — classroomName은 반의 "기본" 강의실이라
                               // 시트 미러가 아니다(JJ LAB=305인데 반 기본방이 뜨는 오류). 이주희(라벨 null)는
                               // 시트 셀처럼 방 미표기.
-                              return <TeacherChip key={s.id} slot={{ ...s, classroomName: s.slotRoomLabel }} />;
+                              return (
+                                <TeacherChip
+                                  key={s.id}
+                                  slot={{ ...s, classroomName: s.slotRoomLabel }}
+                                  offAxisNote={offAxisNotes.get(s.id) ?? null}
+                                />
+                              );
                             })}
                           </div>
                         </div>

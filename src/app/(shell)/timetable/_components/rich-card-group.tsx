@@ -92,6 +92,12 @@ const CARD_W = 275;
  * ⚠️ 대가: 2요일 반의 카드가 70px이라 긴 반 이름이 한 줄에 안 들어간다 → 헤더에서 이름을 두 줄까지 접는다.
  */
 const DAY_COL_W = CARD_W / 5;
+/**
+ * 배치 편집(그룹 설정) 카드의 **최소 폭** — 이 아래로는 안 줄인다.
+ * 실측 기준: 가장 긴 반 이름 `중등E_초등 브릿지 C2`(14자)가 두 줄로 접혀 읽히는 폭. 더 줄이면 이름이
+ * 세 줄이 되어 줄 높이가 튀고, 그때는 스크롤이 없어진 대신 아무것도 못 읽는다.
+ */
+const EDIT_CARD_MIN_W = 116;
 const SECTION_PAD = 8; // p-1(4px) 상하
 // 명단 섹션 높이는 **그룹 내 최대 인원**(`group.rosterRows`, 상한 12)에서 온다 — 고정 행수 상수는 폐지.
 // 배경·상한 근거는 class-grid.ts `rosterRows` 주석 참조(2026-07-27 "세로 여백이 너무 많다").
@@ -184,8 +190,12 @@ export function RichCardGroupBoard({
   const cards = renderCard ? group.cards : group.cards.filter((c) => classVisible(c.classId));
 
   return (
-    <DragScrollArea barX className={`${GRID} border-t`}>
-      <div className="flex w-max items-stretch">
+    // 🔴 배치 편집엔 `barX`를 걸지 않는다 — `overflow-x: scroll`은 **넘치지 않아도 트랙을 예약**해서
+    //    꽉 찬 thumb의 **가짜 스크롤바**가 줄마다 남는다([[#87]]). 원장 캡처에서 다 들어가는 줄(2·3·6)에도
+    //    바가 그려져 있던 게 그것이다. 넘침 판정은 브라우저에 맡긴다(auto).
+    <DragScrollArea barX={!namesOnly} className={`${GRID} border-t`}>
+      {/* 🔴 배치 편집은 `w-max`가 아니라 **화면 폭**이다 — w-max면 카드가 제 폭을 고집해 flex가 안 줄어든다. */}
+      <div className={`flex items-stretch ${namesOnly ? "w-full" : "w-max"}`}>
         <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} namesOnly={namesOnly} />
         {cards.map((c) =>
           renderCard ? renderCard(c, common) : <ClassColumn key={c.classId} card={c} {...common} />,
@@ -290,6 +300,16 @@ export function ClassColumn({
   // 🔴 카드 **최소 폭 = 3칸**(144px) — padCardDays가 못 채우는 주말 전용 반(토·일 하루)은 1칸(48px)이라 학생 이름이 통째로
   //    잘렸다(실측 2026-09-04 수학 통합뷰 20줄). 칸은 `1fr`이라 폭이 남으면 요일 칸이 그만큼 넓어질 뿐 정렬은 안 깨진다.
   const cardW = namesOnly ? CARD_W : Math.max(3, days.length) * DAY_COL_W;
+  /**
+   * 배치 편집(그룹 설정)에서는 카드 폭을 **화면에 맞춰 줄인다**(원장 2026-09-09: *"수업당 열너비가 너무
+   * 넓어서 화면을 넘어가서 이동시키기가 매우 안좋아 … 하단에 스크롤이 없으면 좋겠다"*).
+   * 🔴 여기서만 유연하다 — 통합뷰 본체는 카드 안에 요일 격자·명단이 들어가 폭이 곧 **데이터 크기**라
+   *    줄이면 학생 이름이 잘린다(2026-09-08에 한 글자분 넓혔던 그 이유). 배치 편집은 수업명 칩뿐이라
+   *    좁아져도 잃는 정보가 없다.
+   * ⚠️ 하한(`EDIT_CARD_MIN_W`)은 지킨다 — 한 줄에 반이 많으면 결국 스크롤이 돌아오지만, 그때는 이름이
+   *    읽히는 게 먼저다(폭을 0까지 줄이면 스크롤이 없어지는 대신 아무것도 못 읽는다).
+   */
+  const editFlex = namesOnly ? { flex: `1 1 ${EDIT_CARD_MIN_W}px`, minWidth: EDIT_CARD_MIN_W, maxWidth: CARD_W } : null;
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#121212" }
@@ -298,10 +318,10 @@ export function ClassColumn({
   return (
     <div
       ref={edit?.setNodeRef}
-      className={`${CARD_EDGE} flex shrink-0 flex-col ${edit ? "relative" : ""} ${
+      className={`${CARD_EDGE} flex flex-col ${editFlex ? "" : "shrink-0"} ${edit ? "relative" : ""} ${
         edit?.dragging ? "opacity-35" : ""
       }`}
-      style={{ width: cardW, ...edit?.style }}
+      style={editFlex ? { ...editFlex, ...edit?.style } : { width: cardW, ...edit?.style }}
     >
       {/* 끼워질 자리 — 끌고 있는 열이 **이 열 앞**에 들어간다는 표시(놓기 전에 결과를 보여준다). */}
       {edit?.insertBefore ? (
@@ -320,7 +340,10 @@ export function ClassColumn({
             className="flex h-full w-full cursor-grab items-center justify-center gap-1 px-1 text-center text-sm font-bold select-none active:cursor-grabbing"
           >
             <GripVertical className="size-3 shrink-0 opacity-45" />
-            <span className="overflow-hidden whitespace-nowrap text-clip">{card.className}</span>
+            {/* 🔴 칩이 화면에 맞춰 좁아지므로(EDIT_CARD_MIN_W) 이름은 **두 줄까지 접는다** — 한 줄로 두면
+                `중등E_초등 브릿지 D`가 말줄임도 없이 글자 중간에서 잘린다(원장 캡처 2026-09-09).
+                평소 카드 헤더가 같은 이유로 이미 `line-clamp-2`다 — 같은 규약을 편집 모드에도 맞춘다. */}
+            <span className="line-clamp-2 min-w-0 break-keep">{card.className}</span>
           </div>
         ) : (
           <HoverCard

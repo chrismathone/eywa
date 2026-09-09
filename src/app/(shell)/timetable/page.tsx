@@ -17,7 +17,7 @@ import {
   getWeeklyScheduleWithStudents,
 } from "@/features/timetable/server/queries";
 import { isSpecialSlotLabel, resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
-import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
+import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { buildRichClassCards, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
@@ -380,6 +380,25 @@ export default async function TimetablePage({
   const teacherViewStep = subjectRow?.teacherViewStep ?? 10;
   const teacherViewPxPerMin = subjectRow?.teacherViewPxPerMin;
   const teacherViewBreaks = subjectRow?.teacherViewBreaks ?? [];
+  /**
+   * 강사뷰 시간축 **하한** — 학원설정 교시표의 **첫 교시 시작**(설정 단일 소스, 하드코딩 금지).
+   *
+   * 원장 2026-09-09: *"이 1개 반 때문에 지금 오전이 표시되고 있는데, 그냥 강제로 2시로 끌어내려."*
+   * 실측(영어 9월 2주차): 토요일 `고등E_고3 정규` 한 반이 10:00에 있어 축이 10:00부터 그려졌고
+   * **평일 오전 4시간이 통째로 빈 칸**이었다. 하한을 두면 그 반은 첫 줄에 끌려 내려오고(표식 + 실제 시각),
+   * 나머지는 실제로 수업하는 시간대만 본다.
+   * ⚠️ 교시표를 바꾸면 축도 따라 움직인다 — 그게 설정 단일 소스로 두는 이유다.
+   */
+  const teacherAxisFloorMin = (() => {
+    const table = weekdayTableFor(subject, periodsConfig);
+    const starts = Object.values(table)
+      .map((p) => {
+        const [h, m] = String(p.startTime ?? "").split(":").map(Number);
+        return Number.isFinite(h) && Number.isFinite(m) ? (h as number) * 60 + (m as number) : null;
+      })
+      .filter((v): v is number => v != null);
+    return starts.length > 0 ? Math.min(...starts) : undefined;
+  })();
   // '가로줄 제외 강사'는 **라벨 문자열로** 열과 맞물린다 — 슬롯 라벨을 한글 이름으로 바꾼 뒤에도
   // 예전에 저장된 값("Hannah"·"이주희")이 계속 맞도록 같은 해석기를 통과시킨다(마이그레이션 불필요).
   const teacherLabelMap = await getTeacherLabelMap();
@@ -989,6 +1008,7 @@ export default async function TimetablePage({
               stepMin={teacherViewStep}
               pxPerMin={teacherViewPxPerMin}
               breakRanges={teacherViewBreaks}
+              axisFloorMin={teacherAxisFloorMin}
               excludedTeachers={teacherViewExcluded}
               teacherOrder={teacherViewOrder}
               showUnusedDays={!hideEmptyDays}
