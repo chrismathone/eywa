@@ -237,7 +237,8 @@ function TeacherGroups({
                           style={{ width: `${card.pct}%` }}
                         />
                       </span>
-                      <span className="num text-text-faint w-9 shrink-0 text-right text-xs">
+                      {/* w-9(36px)에선 v5 14px `100%`(≈38px)가 두 줄(`100` / `%`)로 꺾였다(실브라우저 2026-09-08) → w-11. */}
+                      <span className="num text-text-faint w-11 shrink-0 text-right text-xs whitespace-nowrap">
                         {card.pct}%
                       </span>
                     </>

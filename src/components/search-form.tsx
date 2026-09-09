@@ -15,7 +15,9 @@ export function SearchForm({
   paramName = "q",
   placeholder,
   defaultValue,
-  inputWidth = "w-32",
+  // 기본 폭 w-32(128px) → w-52(208px): 2026-09-08 v5 글자 기준 실측 — 안 글자 16px에서 학생목록 `이름·학교·연락처·메모`≈175px,
+  // 수업목록 `수업명, 강사, 강의실 검색`≈180px, 영어 `Name, school, phone or memo`≈200px이라 128px 상자에선 자리표시자가 말줄임 없이 끊겼다.
+  inputWidth = "w-52",
   className = "ml-auto flex items-center gap-2",
   resetParams = [],
   autoFocus = false,

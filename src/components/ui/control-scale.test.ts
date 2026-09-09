@@ -80,10 +80,19 @@ describe("타입 스케일 v5 — 임의 px 글자 크기를 화면에 적지 �
 });
 
 describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트롤이 한 벌을 읽는다", () => {
-  it("세로 채움 70% — 높이 = 라벨 ÷ --control-fill, 세 벌이 같은 비율(원장 2026-09-08) · 기본 라벨 18px 확정", () => {
+  it("세로 채움 — 높이 = 라벨 ÷ --control-fill, 세 벌이 같은 비율 · 기본 라벨 18px 확정", () => {
     const css = readFileSync(join(SRC, "app/globals.css"), "utf8");
     // 채움 비율은 한 곳에서만 정한다 — 크기마다 고정 여백(옛 "라벨 + 8px")을 다시 적으면 채움이 또 갈린다.
-    expect(css).toMatch(/--control-fill: 0\.7;/);
+    // 🔴 **값을 리터럴로 잠그지 말 것**(2026-09-08): 0.7을 박아 둔 탓에 원장이 0.62로 내리는 순간
+    //    가드가 빨개졌다 — 이 가드가 지켜야 하는 건 "비율이 한 곳에서 나오고 세 벌이 그걸 나눈다"는
+    //    **구조**이지 특정 숫자가 아니다. 숫자는 눈으로 정하는 값이다(원장이 캡처를 보고 고른다).
+    const fill = /--control-fill: (0\.\d+);/.exec(css);
+    expect(fill, "--control-fill이 globals.css에 한 번은 정의돼야 한다").not.toBeNull();
+    // 상·하한만 잠근다: 0.8 위면 글자가 상자에 붙고, 0.5 아래면 컨트롤이 제 라벨의 두 배로 뚱뚱해진다.
+    const ratio = Number(fill![1]);
+    expect(ratio).toBeGreaterThanOrEqual(0.5);
+    expect(ratio).toBeLessThanOrEqual(0.8);
+    expect(css.match(/--control-fill:/g)).toHaveLength(1);
     for (const suffix of ["-sm", "", "-lg"]) {
       expect(css, `--control-label${suffix}`).toMatch(
         new RegExp(`--control-label${suffix}: \\d+px;`),

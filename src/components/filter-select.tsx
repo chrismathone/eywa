@@ -104,9 +104,12 @@ export function FilterSelect({
   // 실제로 하나를 골랐을 때만 표기가 켜진다("전체"는 반을 고른 게 아니다 — 위 `marker` 주석).
   const markerOn = marker && (value ?? allValue) !== allValue && (value ?? "") !== "";
 
+  // 기본 폭은 내용 폭(w-auto) — 옛 `w-44`(176px)는 14px 시절 예산이라 v5(라벨 18px)에선 감사로그 액션
+  // 라벨(`시간표 계획 만들기(현재 시간표 복사)` ≈274px)이 잘렸다. v5에서 손본 툴바가 넘기는 값과 같다.
+  // 2026-09-08 v5 글자 기준 실측: 예산 = 176 − px-2.5 20 − border 2 − gap 8 − chevron 16 = 130px < 174~274px.
   return (
     <SearchableSelect
-      className={className ?? (markerOn ? MARKER_WIDTH : "w-44")}
+      className={className ?? (markerOn ? MARKER_WIDTH : "w-auto")}
       value={value ?? allValue}
       onValueChange={navigate}
       placeholder={axisLabel ?? allLabel}

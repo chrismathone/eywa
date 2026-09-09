@@ -233,8 +233,11 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
             {/* 페이지네이션 */}
             <div className="text-text-dim mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2">
+                {/* 2026-09-08 v5 글자 기준 실측: 기본 트리거(px-3·text-sm 16px·쉐브론 16)라 라벨 자리 = 폭 − 50.
+                    w-20(80px)은 라벨 자리 30px라 `10개`(≈35px)·`100개`(≈45px) 둘 다 `10…`으로 잘려 구분이 안 됐다
+                    → w-28(112px, 라벨 자리 62px). w-24는 말줄임 여유가 1px라 부족. */}
                 <SearchableSelect
-                  className="w-20"
+                  className="w-28"
                   value={String(pageSize)}
                   onValueChange={(v) => {
                     setPageSize(Number(v));

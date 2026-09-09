@@ -105,10 +105,13 @@ export function MobileTopNav({
       </div>
 
       {/* 메뉴 grid (모든 cell 균등 너비) — 햄버거로 펼쳤을 때만. 선택하면 닫혀 본문 공간 확보. */}
+      {/* 셀 하한 96→140px (2026-09-08 v5 글자 기준 실측): 라벨이 text-xs 12→14px로 오르며 96px 셀의 라벨 예산
+          60px(= 96 − px-2 16 − 글리프 14 − gap 6)에 '선생님 원스크린'(≈102px)·'데이터베이스'(≈84px)가 잘렸다.
+          140px이면 375·412px 폰 모두 2열(라벨 예산 141~160px ≥ 102px) — 대가는 격자가 5행→7행으로 길어지는 것뿐. */}
       {open ? (
       <ul
         className="grid gap-1 px-2 py-1.5"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))" }}
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}
       >
         {items.map((item) => {
           const active = isItemActive(item.href, pathname);

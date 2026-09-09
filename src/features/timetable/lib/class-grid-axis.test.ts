@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PERIODS_CONFIG } from "./periods";
-import { ROSTER_ROW_CAP, buildRichCardGroups, padCardDays, type GridSlot } from "./class-grid";
+import { ROSTER_ACTIVE_MIN_ROWS, ROSTER_ROW_CAP, buildRichCardGroups, padCardDays, type GridSlot } from "./class-grid";
 
 /**
  * 통합뷰 카드 요일축 = **그 반이 실제 수업하는 요일만**(원장 지시 2026-08-11 "수업없는 요일 열도 숨겨버리고").
@@ -88,12 +88,24 @@ const stu = (name: string, status: "active" | "hold" | "withdrawn") =>
 describe("rosterRows — 명단 섹션 행수", () => {
   const rowsOf = (slots: GridSlot[]) => buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG)[0].rosterRows;
 
-  it("그룹 내 최대 인원으로 맞춘다(고정 12행 아님)", () => {
+  // 🔴 2026-09-08 뒤집힘(원장 *"재원생이 10명은 기본으로 공간 배정. 통합뷰에서"*): 재원 섹션은 인원이 적어도
+  //    **10줄 자리를 잡는다**. 그 위로는 종전대로 그룹 내 최대 인원을 따라가고 상한 12는 그대로다.
+  //    ⚠️ 대가: 인원이 적은 반만 모인 줄은 카드가 그만큼 길어진다(2026-07-27 "세로 여백이 너무 많다"의 반대 방향).
+  it("재원은 인원이 적어도 10줄을 잡는다(원장 2026-09-08)", () => {
     const rows = rowsOf([
       slotWithStudents("a", "mon", [stu("가", "active"), stu("나", "active")]),
       slotWithStudents("b", "mon", [stu("다", "active")]),
     ]);
-    expect(rows.active).toBe(2); // max(2,1) — 고정 12가 아니다
+    expect(rows.active).toBe(ROSTER_ACTIVE_MIN_ROWS);
+  });
+
+  it("10명을 넘으면 그룹 내 최대 인원을 따라간다(고정 10이 아니다)", () => {
+    const eleven = Array.from({ length: 11 }, (_, i) => stu(`학생${i}`, "active"));
+    const rows = rowsOf([
+      slotWithStudents("a", "mon", eleven),
+      slotWithStudents("b", "mon", [stu("다", "active")]),
+    ]);
+    expect(rows.active).toBe(11);
   });
 
   it("12명을 넘으면 12에서 자른다(넘는 만큼은 카드 안 스크롤 + 페이드)", () => {
@@ -101,8 +113,8 @@ describe("rosterRows — 명단 섹션 행수", () => {
     expect(rowsOf([slotWithStudents("a", "mon", many)]).active).toBe(ROSTER_ROW_CAP);
   });
 
-  it("재원이 0명인 반도 한 줄은 남긴다('-' 표시 자리)", () => {
-    expect(rowsOf([slotWithStudents("a", "mon", [])]).active).toBe(1);
+  it("재원이 0명인 반도 '-' 자리를 잡는다(이제 기본 10줄)", () => {
+    expect(rowsOf([slotWithStudents("a", "mon", [])]).active).toBe(ROSTER_ACTIVE_MIN_ROWS);
   });
 
   // 🔴 2026-09-07 뒤집힘(원장 *"대기/퇴원을 항상 보여줄것"*): 예전엔 0명이면 섹션을 통째로 안 그렸는데,

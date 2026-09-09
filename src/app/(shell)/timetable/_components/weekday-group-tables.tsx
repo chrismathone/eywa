@@ -1,4 +1,6 @@
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { sortTeachersByOrder, teacherGroupKey, type TeacherOrderByGroup } from "@/features/timetable/lib/teacher-order";
+import { TeacherHeadCell } from "./teacher-head-cell";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import {
   periodListLabel,
@@ -80,8 +82,11 @@ const WEEKEND_KEYS = new Set<DayOfWeek>(["sat", "sun"]);
 // 엑셀식 격자 — table-layout:fixed + colgroup으로 요일 컬럼 폭을 못박는다(줄맞춤).
 // 폭은 스프레드시트/엑셀 기준(실측 교시 79·요일 51px)에서 **가독성 위해 요일열만 +**(52→60px). 단독(수)/주말(토·일) 2배(120px).
 // (좁은 셀 본문은 이름 우선 — 생략(…) 없이 넘치면 잘림(clip), 전체 정보는 hover 카드. 스프레드시트식 고밀도.)
-const PERIOD_COL_W = 80;
-const DAY_COL_W = 60;
+// 80→96(2026-09-08 전수검사): '빈 교시 접기'의 접힌 밴드가 `3교시 14:30~16:20`을 한 줄에 못 담아 시각이
+// `14:`에서 끊겼다. 시각은 시작만 적고(아래) 열도 넓힌다(96 − px 16 − 격자 1 = 79 ≥ 36+4+39).
+const PERIOD_COL_W = 96;
+// 60→66(2026-09-08 전수검사): 한 요일만 수업하는 강사의 머리칸(colSpan 1)이 20px 볼드 3자(60px)를 못 담았다.
+const DAY_COL_W = 66;
 // 단독(병합 안 되는) 요일은 2배 폭 — wide 집합은 호출부가 그룹 구성에서 도출(평일=단독 그룹 요일, 주말=토/일).
 const dayColW = (d: DayOfWeek, wide: Set<DayOfWeek>) => (wide.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
@@ -137,15 +142,18 @@ type TeacherCol = { name: string; days: DayOfWeek[] };
 type GroupCols = GroupDef & { teachers: TeacherCol[] };
 
 /** 슬롯에서 그룹별 컬럼(강사→요일) 구성. 해당 그룹 요일에 수업 있는 강사만, 요일은 그룹 순서. */
-function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): GroupCols[] {
-  const teachers = Array.from(new Set(slots.map((s) => s.teacherName ?? "—"))).sort((a, b) =>
-    a.localeCompare(b, "ko"),
-  );
+function buildGroups(
+  slots: ScheduleSlotWithStudents[],
+  defs: GroupDef[],
+  order?: TeacherOrderByGroup,
+): GroupCols[] {
+  const teachers = Array.from(new Set(slots.map((s) => s.teacherName ?? "—")));
   const out: GroupCols[] = [];
   for (const def of defs) {
     const groupDaySet = new Set(def.days);
     const cols: TeacherCol[] = [];
-    for (const t of teachers) {
+    // 묶음마다 **그 사람이 저장한 순서**(없으면 가나다순) — 원장 2026-09-08 "월목 / 화금 / 수 그룹 내에서".
+    for (const t of sortTeachersByOrder(teachers, order?.[teacherGroupKey(def.days)])) {
       const days = sortDaysByGroup(
         Array.from(
           new Set(
@@ -427,17 +435,23 @@ function GroupTable({
           />
           {groups.flatMap((g, gi) =>
             g.teachers.map((t, ti) => (
-              <th
+              // 머리칸 = 끌어서 순서 바꾸기(같은 요일 묶음 안에서, 계정 저장) — teacher-head-cell.tsx.
+              // px-2 → px-0.5(2026-09-08 전수검사): colSpan 1(66px) 칸에 20px 볼드 3자가 들어가게 여백만 좁힌다.
+              <TeacherHeadCell
                 key={`${g.title}-${t.name}`}
+                subject={subject}
+                groupKey={teacherGroupKey(g.days)}
+                teachers={g.teachers.map((x) => x.name)}
+                name={t.name}
                 colSpan={t.days.length}
                 // 이름이 표의 첫 줄이라 sticky top=0. 높이는 아래 요일 줄의 오프셋과 묶여 있어 **명시**한다.
                 style={{ height: TEACHER_HEAD_H }}
-                className={`bg-bg-soft ${GRID} sticky top-0 z-10 border-b border-r px-2 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
+                className={`bg-bg-soft ${GRID} sticky top-0 z-10 border-b border-r px-0.5 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
               >
                 {/* 이름 1.5배(원장 2026-09-07) — 격자에서 열을 찾는 기준이 강사 이름이라 가장 크게 읽혀야 한다.
                     토큰 스케일에 21px이 없어 한 칸 위인 20px(text-lg). 넘치면 잘린다(생략표 없음 = 고밀도 규약). */}
                 <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-lg font-bold">{t.name}</span>
-              </th>
+              </TeacherHeadCell>
             )),
           )}
         </tr>
@@ -525,11 +539,12 @@ function GroupTable({
                       {labelText}
                       {labelCollapsed ? (
                         <>
+                          {/* 접힌 밴드는 한 줄이라 시작 시각만(끝까지 적으면 96px에서도 끊긴다). 펼치면 두 줄 전체가 나온다. */}
                           <span className="text-text-faint ml-1 num text-xs font-normal [.tt-editing_&]:hidden">
-                            {timeText}
+                            {timeText.split("~")[0]}
                           </span>
                           <div className="text-text-faint mt-0.5 hidden num text-xs [.tt-editing_&]:block">
-                            {timeText}
+                            {timeText.split("~")[0]}
                           </div>
                         </>
                       ) : (
@@ -650,6 +665,7 @@ export function WeekdayGroupTables({
   weekdayGrouping = "mon-thu",
   collapseEmptyPeriods = false,
   hideStudents = false,
+  teacherOrder,
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
@@ -664,6 +680,8 @@ export function WeekdayGroupTables({
    * 🔴 명단만 감추는 게 아니라 **행 높이도 함께** 줄인다(안 줄이면 칸의 4/5가 빈 채로 남아 접는 뜻이 없다).
    */
   hideStudents?: boolean;
+  /** 이 과목의 **내** 강사 열 순서(요일 묶음 키 → 이름). 없으면 가나다순. 저장은 머리칸 드래그가 한다. */
+  teacherOrder?: TeacherOrderByGroup;
 }) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
@@ -681,8 +699,8 @@ export function WeekdayGroupTables({
   const weekdayWide = new Set<DayOfWeek>(weekdayDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days));
   const weekendWide = new Set<DayOfWeek>(["sat", "sun"]);
 
-  const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs);
-  const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP]);
+  const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs, teacherOrder);
+  const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP], teacherOrder);
 
   return (
     <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">

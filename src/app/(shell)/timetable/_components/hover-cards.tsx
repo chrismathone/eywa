@@ -2,6 +2,7 @@
 
 import {
   cloneElement,
+  useEffect,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
@@ -22,6 +23,20 @@ import { isTimetableDragging, useTimetableDragging } from "./drag-flag";
 const HOVER_MAX_H = 320;
 
 /**
+ * **지금 열려 있는 카드들의 닫기 함수** — 새 카드가 열리면 나머지를 전부 닫는다.
+ *
+ * 🔴 왜 필요한가: 트리거의 `mouseleave`만 믿으면 카드가 화면에 **쌓인다**(원장 제보 2026-09-08
+ *    *"마우스 올린게 다 남아있는데 … 호버링정보 꺼져야할거같은데 안꺼지네"* — 스샷에 6장이 겹쳐 있었다).
+ *    학생 줄은 포인터가 올라오면 무장(`ArmedStudentRow`)으로 **컴포넌트가 갈리면서 DOM 노드가 교체**되는데,
+ *    커서 아래에서 노드가 떨어져 나가면 브라우저는 그 노드에 `mouseleave`를 **보내지 않는다**. 그러면 그 줄의
+ *    카드는 열린 채로 굳고, 지나간 줄마다 하나씩 남는다.
+ * 🔑 그래서 방어를 **셋** 둔다: ① 새 카드가 열리면 나머지를 닫는다(동시에 하나) ② 열려 있는 동안 문서
+ *    포인터를 지켜보다 트리거 밖으로 나가거나 트리거가 DOM에서 사라지면 닫는다 ③ 스크롤·클릭·창 이탈·Esc에도 닫는다.
+ * ⚠️ 모듈 전역이라 창(iframe)마다 별개다 — 창 하나 안에서 카드는 최대 한 장.
+ */
+const OPEN_CARDS = new Set<() => void>();
+
+/**
  * 시간표 hover 정보 카드 — 커서 위치 기준 포털(고정·z최상위·pointer-events-none).
  * overflow 컨테이너(셀·DragScrollArea)에 안 잘리도록 document.body로 portal(ijw 패턴).
  * children(트리거)에 cloneElement로 hover 핸들러를 주입 — 추가 DOM 노드 없음.
@@ -38,7 +53,13 @@ export function HoverCard({
   width?: number;
   children: ReactElement;
 }) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{
+    x: number;
+    y: number;
+    el: HTMLElement;
+    /** 카드를 연 순간의 트리거 자리 — 노드가 갈려도 "커서가 아직 그 줄 위인가"를 이걸로 판정한다. */
+    rect: DOMRect;
+  } | null>(null);
   // 카드가 **열려 있는 동안만** 드래그 신호를 구독한다 — 커서가 줄 위에 있는 채로 드래그가 시작되면
   // 이미 열린 카드가 그대로 떠 있어 끄는 내내 따라다닌다(show()만 막아선 그 경우가 안 막힌다).
   const dragging = useTimetableDragging(pos != null);
@@ -57,9 +78,59 @@ export function HoverCard({
     // 다 붙은 학생 카드는 300px를 넘어 창(기본 680px) 아래로 잘렸다. 실측 대신 카드에 max-height를
     // 걸고(내부 스크롤) **같은 상수**로 클램프해 항상 화면 안에 들어오게 한다(적대 감사 UX).
     if (y + HOVER_MAX_H > vh - 8) y = Math.max(8, vh - 8 - HOVER_MAX_H);
-    setPos({ x, y });
+    // 동시에 하나 — 이전 카드들을 먼저 닫는다(닫히는 쪽이 자기 Set 항목을 지운다).
+    for (const close of [...OPEN_CARDS]) close();
+    // 🔴 트리거 노드를 **상태에 함께** 담는다(ref가 아니라) — 안전망이 "커서가 아직 이 줄 위인가"를 물을
+    //    앵커다. `currentTarget`은 이벤트 처리가 끝나면 null이 되므로 지금 붙잡아야 한다.
+    const el = e.currentTarget as HTMLElement;
+    setPos({ x, y, el, rect: el.getBoundingClientRect() });
   }
   const hide = () => setPos(null);
+
+  // 열려 있는 동안만 도는 안전망 — 트리거의 `mouseleave`가 안 오는 경우를 덮는다(위 주석).
+  useEffect(() => {
+    if (!pos) return;
+    const close = () => setPos(null);
+    OPEN_CARDS.add(close);
+
+    const { el, rect } = pos;
+    function onPointerMove(ev: PointerEvent) {
+      if (el.isConnected) {
+        const target = ev.target;
+        if (!(target instanceof Node) || !el.contains(target)) close();
+        return;
+      }
+      // 트리거가 DOM에서 빠졌다(무장 스왑으로 노드가 교체됐다) — 이제 leave도 contains도 못 쓴다.
+      // 🔴 그렇다고 바로 닫으면 **줄에 올리자마자 카드가 꺼진다**(스왑은 마우스를 올리는 그 순간 일어난다).
+      //    커서가 아직 그 줄 자리 안이면 유지하고, 자리를 벗어났을 때만 닫는다. 새 노드가 곧
+      //    자기 mouseenter로 앵커를 다시 잡는다. (스크롤은 따로 닫으므로 자리가 밀려 어긋날 일이 없다.)
+      const inside =
+        ev.clientX >= rect.left && ev.clientX <= rect.right && ev.clientY >= rect.top && ev.clientY <= rect.bottom;
+      if (!inside) close();
+    }
+    function onEsc(ev: KeyboardEvent) {
+      if (ev.key === "Escape") close();
+    }
+
+    // ⚠️ capture로 듣는다 — 중간에서 stopPropagation 하는 표(드래그 팬 영역)가 있어도 도달해야 한다.
+    document.addEventListener("pointermove", onPointerMove, true);
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("wheel", close, true);
+    document.addEventListener("scroll", close, true);
+    document.addEventListener("keydown", onEsc, true);
+    document.addEventListener("visibilitychange", close);
+    window.addEventListener("blur", close);
+    return () => {
+      OPEN_CARDS.delete(close);
+      document.removeEventListener("pointermove", onPointerMove, true);
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("wheel", close, true);
+      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("keydown", onEsc, true);
+      document.removeEventListener("visibilitychange", close);
+      window.removeEventListener("blur", close);
+    };
+  }, [pos]);
 
   const child = children as unknown as ReactElement<{
     onMouseEnter?: (e: ReactMouseEvent) => void;

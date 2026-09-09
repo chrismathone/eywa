@@ -47,10 +47,11 @@ function ProgressChecks({ row }: { row: TextbookOrderRow }) {
       {PROGRESS_CHECKS.map((c) => {
         const on = row[c.key];
         return (
+          // 2026-09-08 v5 글자 기준 실측: text-xs 14px 한글 2자 24.2 + 아이콘 12 + gap 2 + border 2 = 40.2px라 40px에선 '등'/'록'으로 접혔다 → 44px.
           <span
             key={c.key}
             title={on ? `${c.label} 완료` : `${c.label} 대기`}
-            className={`inline-flex w-[40px] shrink-0 items-center justify-center gap-0.5 rounded-full border py-0.5 text-xs font-medium ${
+            className={`inline-flex w-[44px] shrink-0 items-center justify-center gap-0.5 rounded-full border py-0.5 text-xs font-medium ${
               on ? c.on : "border-line text-text-faint"
             }`}
           >

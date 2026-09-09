@@ -18,8 +18,8 @@ import {
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 import { useClassFilter, useSearchTone } from "./search-context";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { HOLD_SECTION_CLASS, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
-import { setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
+import { holdTone, timetableStudentTone, useTimetableColorMode, withdrawnTone } from "./timetable-color";
+import { holdArmedRow, setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { rosterDropId, useRosterMove, type RosterDragData } from "./roster-move";
 import { movedByTarget, visibleSpanRows } from "@/features/timetable/lib/row-span";
 
@@ -46,10 +46,22 @@ export const NAME_H = 40;
 const NAME_ROOM_H = 54;
 const TEACHER_H = 24;
 const DAYHEAD_H = 22;
-const PERIOD_H = 26;
+/**
+ * 교시 한 행의 높이 — 라벨 열이 **두 줄**(`2교시` + `16:20~18:10`, 각 14px `leading-none`)을 담는다.
+ * 🔴 2026-09-08: 26px이던 값이 타입 스케일 v5(라벨 12→14px)를 안 따라와 두 줄 28px이 넘쳐 **아래 행 글자와
+ *    겹쳤다**(실브라우저 캡처: `16:20~18:10`과 `3교시`가 포개짐). 카드 쪽 미니격자·이동 오버레이도 같은 값을
+ *    쓰므로 여기 하나만 올리면 줄이 함께 맞는다. ⚠️ 라벨 글자 크기를 바꾸면 이 값도 같이.
+ */
+const PERIOD_H = 32;
 // 학생 1행 높이 — 기본뷰 StudentRow 실측(13px × leading-tight + py-[3px] = 23.1px)에 맞춘 값.
 // ⚠️ 서식을 기본뷰와 동일하게 두는 한 이 값도 함께 따라가야 한다(안 그러면 행이 잘린다).
-const STU_H = 24;
+/**
+ * 학생 한 줄의 높이 — **실제 줄 높이와 같아야 한다**(명단 섹션 높이가 `줄 수 × 이 값`이라서).
+ * 🔴 2026-09-08: 24px이던 값이 타입 스케일 v5(명단 글자 `text-sm` 14→16px)를 안 따라와, 실제 줄(16 × 1.25
+ *    + `py-[3px]` 6 = 26px)보다 작아졌다 → 섹션이 학생을 **반 줄에서 잘랐다**(원장 캡처: 이름이 가로로 잘린 채 끝남).
+ * ⚠️ 줄의 글자 크기나 세로 여백을 바꾸면 **이 값도 같이** 바꿀 것(둘이 갈리면 또 잘린다).
+ */
+const STU_H = 26;
 /**
  * 교시축(좌측 라벨열) 폭 — **시간대 한 줄이 안 깨지는 최소치**.
  *
@@ -64,9 +76,12 @@ const LABEL_W = 104;
 /**
  * 5요일 반(DP6)의 카드 폭 — 아래 `DAY_COL_W`의 기준값이다.
  * 2026-09-04(v5 글자 승격 뒤): 176(칸 35px)에선 16px 학생 줄 `박세아A/칠성초2`가 3요일 카드(105px)에서 학교·학년부터 잘렸다
- * (원장 *"각종 뷰에서 텍스트 빠져나오지 않게"*) → 240(칸 48px, 3요일 144px·2요일 96px). 통합뷰는 폭이 데이터 크기라 가로 스크롤+잡고 끌기.
+ * (원장 *"각종 뷰에서 텍스트 빠져나오지 않게"*) → 240(칸 48px). 통합뷰는 폭이 데이터 크기라 가로 스크롤+잡고 끌기.
+ * 2026-09-08: 240도 **중학교 이름에서 모자랐다** — `김태희/경명여중2`의 학년 숫자가 3요일 카드(144px)에서 잘렸다
+ * (원장 캡처 *"열너비도 조금씩만 더 증가해서 하단 중학생 학년이 나올정도까지만"*). 275(칸 55px, 3요일 165px)로
+ * **한 글자분(+21px)만** 넓힌다. 🔴 더 넓히지 말 것 — 통합뷰는 반이 가로로 늘어서라 칸이 넓어질수록 한 화면에 덜 들어온다.
  */
-const CARD_W = 240;
+const CARD_W = 275;
 /**
  * 요일 한 칸의 폭 — **주5일 기준 고정**(원장 2026-08-11 "열너비는 dp처럼 주5일 기준에 맞춰").
  *
@@ -196,9 +211,6 @@ function LabelColumn({
   namesOnly?: boolean;
 }) {
   const cell = `${GRID} text-text-dim flex items-center justify-center border-b text-xs font-bold`;
-  // 대기 라벨은 색 띠 위에 얹히므로 **글자색을 상속하지 않는다** — `cell`의 text-text-dim과 겹치면
-  // 승자를 CSS 순서가 정해(같은 축 유틸, [[#116]]) 카드 쪽(잉크)과 레일 쪽이 다른 색이 된다.
-  const cellNoColor = `${GRID} flex items-center justify-center border-b text-xs font-bold`;
   const rail = `bg-bg-soft ${GRID} sticky left-0 z-20 flex shrink-0 flex-col self-stretch border-r shadow-[4px_0_10px_-6px_rgba(29,29,31,0.18)]`;
   if (namesOnly)
     return (
@@ -234,7 +246,7 @@ function LabelColumn({
         </div>
       ) : null}
       {/* 대기·퇴원은 **항상** 선다(원장 2026-09-07) — 카드 쪽 높이와 같아 정렬이 유지된다. */}
-      {holdH > 0 ? <div className={`${cellNoColor} ${HOLD_SECTION_CLASS}`} style={{ height: holdH }}>대기</div> : null}
+      {holdH > 0 ? <div className={cell} style={{ height: holdH }}>대기</div> : null}
       {wdH > 0 ? (
         <div className={`${GRID} text-text-dim flex items-center justify-center text-xs font-bold`} style={{ height: wdH }}>
           퇴원
@@ -410,7 +422,7 @@ export function ClassColumn({
         h={holdH}
         rows={rosterRows.hold}
         count={card.hold.length}
-        className={`${HOLD_SECTION_CLASS} ${GRID} border-b`}
+        className={`bg-bg-soft ${GRID} border-b`}
         dropId={rosterDropId(card.classId, "hold")}
       >
         {card.hold.length === 0 ? (
@@ -495,6 +507,8 @@ function RosterRowShell({
       {...(dnd?.attributes ?? {})}
       {...(dnd?.listeners ?? {})}
       // ⚠️ `pointerover`(버블링) — enter/leave는 자식을 오갈 때 놓치기 쉽고, 같은 값 재설정은 무동작이다.
+      // 🔴 누르는 순간 무장을 잠근다(학생 줄과 같은 규약 — drag-flag.ts `holdArmedRow` 주석).
+      onPointerDownCapture={() => holdArmedRow()}
       onPointerOver={() => onArm?.()}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -637,7 +651,7 @@ function Cell({
  * "크리스틴"·"플로렌스"(4자)가 들어오면서 35px 칸에서 **두 줄로 쪼개져** 행 높이가 들쭉날쭉해졌다.
  * 자르지 않고(사람 이름을 클립하면 누군지 모른다) 줄여서 한 줄에 넣는다 — 전체 이름은 title 툴팁에도 있다.
  *
- * ⚠️ 칸 너비는 **어느 카드든 DAY_COL_W(35px) 고정**이라(원장 2026-08-11 "dp처럼 주5일 기준") 요일 수로
+ * ⚠️ 칸 너비는 **어느 카드든 DAY_COL_W 고정**이라(원장 2026-08-11 "dp처럼 주5일 기준") 요일 수로
  * 글자를 키우면 안 된다 — 잠깐 그렇게 뒀다가 폭 고정으로 되돌리며 함께 되돌렸다.
  */
 function cellFont(text: string): string {
@@ -676,7 +690,12 @@ function RosterRow({
   const colorMode = useTimetableColorMode();
   // 재원/대기는 기본뷰와 **같은 tone 헬퍼**(색 강도 모드 반영). 예전엔 여기서 pastel 색을 손으로 박아
   // 뷰 설정 '색 강도'를 바꿔도 통합뷰만 안 따라왔다. 퇴원은 통합뷰에만 있는 섹션이라 전용 tone 유지.
-  const baseTone = withdrawn ? withdrawnTone(colorMode) : timetableStudentTone(colorMode, s);
+  // 퇴원·대기는 **사람에게 붙는 칩**이다(섹션 배경이 아니라) — 원장 2026-09-08 *"대기 셀 색상이 아니고 퇴원생처럼"*.
+  const baseTone = withdrawn
+    ? withdrawnTone(colorMode)
+    : s.status === "hold"
+      ? holdTone(colorMode)
+      : timetableStudentTone(colorMode, s);
   // 검색에 걸린 학생 표식 — 기본뷰 StudentRow와 같은 함수(같은 필드로 판정, 같은 클래스로 표시).
   const tone = useSearchTone(s, baseTone);
   const meta = schoolGradeLabel(s.school, s.grade);

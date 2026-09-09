@@ -316,12 +316,14 @@ export default async function StudentsPage({
               행 = 이름(학교·학년) + 상태 + 과목 + 담당 강사 + 연락처 한 줄, 행 사이 헤어라인(§11). */}
           <div className="bg-card shadow-card rounded-2xl">
             <table className="w-full table-fixed text-sm max-md:min-w-[46rem]">
-              {/* 열 폭 — 최소 창(958)에서 상태 머리 `상태: 예비·상담 ⌄`(128px)가 들어가는 16%(153−24). 이름 열 287px = 이름·학교학년·표식. */}
+              {/* 열 폭 — 2026-09-08 v5 글자 기준 실측(트리거 라벨 16px, 표 폭 935): 라벨 자리 = 열폭 − th px-3 24 − 크롬 32(px-1 8 + gap-2 8 + 쉐브론 16).
+                  상태 18% → 112px ≥ `상태: 예비·상담`(110px) / 담당 강사 20% → 131px ≥ `담당 강사: 이수진`(125px).
+                  옛 30/16/20/18/16은 14px 시절 예산(`상태: 예비·상담 ⌄` 128px)이라 v5에서 `truncate`가 발동했다. 늘린 몫은 이름(30→28%, 238px ≥ 이름+학교학년 151px)·과목(20→18%)에서. */}
               <colgroup>
-                <col className="w-[30%]" />
-                <col className="w-[16%]" />
-                <col className="w-[20%]" />
+                <col className="w-[28%]" />
                 <col className="w-[18%]" />
+                <col className="w-[18%]" />
+                <col className="w-[20%]" />
                 <col className="w-[16%]" />
               </colgroup>
               <thead className="border-line border-b">

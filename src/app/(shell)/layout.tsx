@@ -76,7 +76,27 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           {/* pt-3(창 전용) — 타이틀바가 바로 위에 있어 상단 여백을 조인다(2026-07-20 세로 회수). */}
           {/* pb — 스크롤 끝에서 마지막 줄이 창 바닥에 딱 붙어 "빠듯"했다(원장 2026-08-14, 강사 ECS 시트).
               세 셸(창·미니셸·풀셸)에 같은 여백을 준다 — 한 곳만 주면 화면마다 끝이 다르게 느껴진다. */}
-          <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-3 pt-3 pb-8 lg:px-6 lg:pb-10 [scrollbar-gutter:stable]">
+          {/* 창 본문 — **베젤을 없앤다**(원장 2026-09-08: *"창 열었을때 여백을 정말 최소화"* · *"좌우는 특히"* ·
+              *"베젤이 있으니까 오히려 공간낭비"* · *"시간표는 특히"* · *"베젤 필요한 곳에만 베젤을 남겨둬야할거같은데"*).
+              종전 `px-3 lg:px-6`(12/24px)은 **모든 창에 일률적으로** 붙던 여백이라, 넓은 화면에서 좌우 48px을
+              먹었다. 지금은 셸이 여백을 만들지 않고, **베젤이 필요한 화면은 자기가 준다** — 실제로 문서형 26개
+              라우트(전자결재·수업평가·이력서·문서·설정 등)가 이미 `p-6`·`p-4 md:p-6`를 스스로 갖고 있어서
+              그동안 **이중 여백**이었다(그게 원장이 본 공간낭비다). 시간표·출석부·강사 시트처럼 폭이 곧 정보인
+              화면은 이제 창 끝까지 쓴다.
+              🔴 **0이 아니라 `px-1`(4px)인 이유가 셋이다 — 0으로 내리지 말 것**(전수 조사 2026-09-08):
+               ① 카드 테두리는 `border`가 아니라 **박스 밖에 그려지는 그림자 링**이고 이 `<main>`은 `overflow-auto`라,
+                  여백이 0이면 전폭 카드의 **좌·우 세로선만 잘린다**([[#114]]). 특히 `loading.tsx` 스켈레톤은
+                  거의 전부가 전폭 `shadow-card` 띠라 로딩 화면이 통째로 테두리 없는 회색 덩어리가 된다.
+               ② 플로팅 창은 **리사이즈 핸들(좌·우 각 6px)을 콘텐츠 위에 겹쳐** 깐다 — 여백이 0이면 맨 좌우가
+                  클릭 불가가 된다.
+               ③ `[scrollbar-gutter:stable]`은 **inline-end 한쪽에만** 자리를 판다 — 0이면 좌우가 눈에 띄게 비대칭이 된다.
+              ⚠️ 라우트마다 다른 값을 주고 싶어도 **여기서 `x-pathname`으로 가르지 말 것**: 이 `<main>`은 soft nav에서
+                 재렌더되지 않아 창을 처음 연 라우트 값에 굳는다(같은 이유로 `x-embed` 판정이 한 번 폐기됐다 —
+                 `page-header.tsx` 주석). 꼭 필요하면 `WindowMinSizeNotice`처럼 **창 안에서 `usePathname()`으로** 읽어야 한다.
+              🔑 **베젤이 아예 필요 없는 화면은 여기가 아니라 화면이 말한다** — 페이지 루트에 `.edge-to-edge`를 달면
+                 globals.css `main.embed-main:has(.edge-to-edge)`가 그 창만 좌우·아래 0 + 거터 해제로 만든다
+                 (`.sticky-save-bar`와 같은 결, 시간표 선례 — 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*). */}
+          <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />

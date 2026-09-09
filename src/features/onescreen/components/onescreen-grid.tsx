@@ -299,15 +299,15 @@ export function OneScreenGrid({
             표 한 곳에서 거는 이유: 행 종류가 여럿이고(본문·참고행·묶음 첫 행) 앞으로 늘 수 있어, 한 군데를
             빠뜨리면 그 행만 세로선이 끊긴다. 너비와 **색을 같이** 지정한다 — 색을 빼면 Tailwind v4 기본
             border-color(currentColor)가 먹어 진한 선이 된다. */}
-        <table className="w-full min-w-[1304px] table-fixed border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
+        <table className="w-full min-w-[1348px] table-fixed border-collapse text-xs [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
           {/* ⚠️ 주석을 `<col />`과 **같은 줄**에 두지 말 것 — 사이의 공백이 JSX 텍스트 노드로 남아
               "whitespace text nodes cannot be a child of <colgroup>" 하이드레이션 에러가 난다(표뷰 전체가
               클라 재렌더로 떨어져 클릭이 먹통처럼 보임, #75류). 줄바꿈이 낀 공백만 컴파일러가 제거한다. */}
           <colgroup>
             {/* 선택 */}
             <col className="w-[34px]" />
-            {/* 학생·반 */}
-            <col className="w-[128px]" />
+            {/* 학생·반 — v5 글자 상승 뒤 128px에선 `이름/학교학년`이 끊겼다(2026-09-08 전수검사). */}
+            <col className="w-[144px]" />
             {/* 수업타임(시수) — 전용 열(원장 2026-08-05 "타임이 너무 작다 … 열을 하나 더 추가해서라도").
                 이름칸 안에 끼워 넣으면 pill과 자리를 다퉈 계속 작아진다. 늘어난 폭은 아래 '학부모 문구'
                 (유일한 가변 열)가 내준다 — 원장: "우측 입력창의 열너비를 줄이면 될". */}
@@ -326,8 +326,8 @@ export function OneScreenGrid({
             <col className="w-[140px]" />
             {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
             <col />
-            {/* 자동작성 · 카드 · 발송 */}
-            <col className="w-[132px]" />
+            {/* 자동작성 · 카드 · 발송 — 첨부 개수 배지가 붙으면 132px에서 라벨이 끊겼다(2026-09-08). */}
+            <col className="w-[160px]" />
           </colgroup>
           <thead>
             <tr className="bg-bg-soft">
@@ -341,7 +341,7 @@ export function OneScreenGrid({
                 />
               </th>
               <th className={TH}>
-                {/* 고정 폭 열(128px)이라 버튼이 옆에 나란히 못 선다 — 넘치면 아랫줄로 접는다
+                {/* 고정 폭 열(144px — 2026-09-08 v5 글자 기준 실측으로 128→144)이라 버튼이 옆에 나란히 못 선다 — 넘치면 아랫줄로 접는다
                     (docs/design-conventions.md "고정 폭 표 칸의 가로 나열은 flex-wrap"). nowrap은 TH가 이미
                     걸고 있어 낱말이 쪼개지지는 않는다. */}
                 <span className="flex flex-wrap items-center justify-center gap-1">

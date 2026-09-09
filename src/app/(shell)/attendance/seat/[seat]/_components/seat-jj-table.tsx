@@ -170,7 +170,9 @@ function SeatJjClass({
             특이사항은 width 없는 마지막 <col>이라 **잔여를 받는다**(시트와 같은 규약). */}
         <colgroup>
           <col style={{ width: "22%" }} />
-          <col style={{ width: "14%" }} />
+          {/* 출결 — 2026-09-08: 14%로는 v5 글자(16px)에서 「결석 사유」 입력이 못 들어갔다.
+              🔑 늘린 몫은 **잔여를 받는 마지막 특이사항 칸**에서만 나온다(다른 칸은 안 줄어든다). */}
+          <col style={{ width: "20%" }} />
           <col style={{ width: "14%" }} />
           {cols.map((c) => (
             <col key={c.field} style={{ width: c.field === "memorizedWords" ? "14%" : "12%" }} />

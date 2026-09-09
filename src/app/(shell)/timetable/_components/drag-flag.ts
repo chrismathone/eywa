@@ -30,6 +30,7 @@ export function setTimetableDragging(next: boolean, kind: "student" | "class" = 
     document.body.classList.toggle("tt-dragging-class", next && kind === "class");
   }
   if (dragging === next) return;
+  if (!next) dragEndedAt = Date.now();
   dragging = next;
   for (const cb of subscribers) cb();
 }
@@ -37,6 +38,26 @@ export function setTimetableDragging(next: boolean, kind: "student" | "class" = 
 /** 지금 끌고 있나 — 렌더 밖(이벤트 핸들러)에서 읽는 용도(hover 카드 억제 등). */
 export function isTimetableDragging(): boolean {
   return dragging;
+}
+
+/**
+ * 드래그 **직후의 더블클릭**을 삼킨다(원장 2026-09-09 *"드래그하다가 더블클릭이 발생하지 않도록 뭔가 조정"*).
+ *
+ * 🔴 왜: 크롬은 더블클릭을 **요소가 아니라 시간·좌표**로 센다 — 짧게 끌다 제자리(또는 막힌 칸)에 놓고 곧바로 다시
+ *    잡으면 두 번째 pointerup이 더블클릭이 되어 학생·반 창이 열린다. 끌고 있는 중이거나 끝난 지 얼마 안 됐으면
+ *    그 더블클릭은 "열기"가 아니라 드래그의 잔향이다. dnd-kit은 pointerup에서 드래그를 끝내고 그 뒤에 click·dblclick이
+ *    오므로, 끝난 시각으로 판정한다(창 열기 자체는 WindowLink `openOn="doubleClick"` 그대로 — 여기선 잡아먹기만 한다).
+ * ⚠️ 유예는 OS 더블클릭 간격(윈도우 기본 500ms)보다 조금 길게 — 두 번째 누름이 그 안에 와야 더블클릭이 되므로
+ *    이보다 늦은 더블클릭은 진짜 더블클릭이다.
+ * 사용 = DnD 영역 루트의 `onDoubleClickCapture`(캡처라 안쪽 WindowLink 핸들러 앞에서 멈춘다).
+ */
+export const DRAG_DBLCLICK_GRACE_MS = 700;
+let dragEndedAt = 0;
+
+export function swallowDoubleClickAfterDrag(e: { stopPropagation(): void; preventDefault(): void }): void {
+  if (!dragging && (dragEndedAt === 0 || Date.now() - dragEndedAt >= DRAG_DBLCLICK_GRACE_MS)) return;
+  e.stopPropagation();
+  e.preventDefault();
 }
 
 function subscribe(cb: () => void): () => void {
@@ -89,10 +110,49 @@ export type ClassDragInfo = {
 let armedRow: string | null = null;
 const armedSubscribers = new Set<() => void>();
 
+/**
+ * **눌린 포인터가 무장 줄을 잡고 있는 동안** 무장을 다른 줄로 넘기지 않는다.
+ *
+ * 🔴 왜(원장 제보 2026-09-09 *"드래그 이동하려고 하니까 '출발 반을 알 수 없어서 옮기지 못했다'는 알림"*): 끄는
+ *    동안 고스트는 `pointer-events:none`이라 포인터가 지나는 **다른 줄**의 `pointerover`가 그대로 불린다 → 그 줄이
+ *    무장되고 원래 줄은 평소 줄로 돌아가 `useDraggable`이 **언마운트** → dnd-kit이 `active.data`를 빈 객체로
+ *    바꾼다(core.esm "It's possible for the active node to unmount while dragging" → defaultData). 놓는 순간
+ *    출발 반·수강 id가 전부 사라져 거절로 떨어졌다. 학생 줄이 빽빽한 수학 기본뷰에선 거의 매번이다.
+ * ⚠️ `dragging` 플래그만으론 부족하다 — 활성화 문턱(5px) **앞**(pointerdown~드래그 시작)에도 같은 일이 난다.
+ *    그래서 "끌고 있다"가 아니라 **"누르고 있다"**에 건다(줄의 `onPointerDownCapture`). 풀리는 건 window의
+ *    pointerup·pointercancel·blur(창 밖에서 놓거나 포커스를 잃어도 잠긴 채 남지 않게).
+ */
+let armHeld = false;
+
+function releaseArmedRow(): void {
+  armHeld = false;
+  if (typeof window === "undefined") return;
+  window.removeEventListener("pointerup", releaseArmedRow);
+  window.removeEventListener("pointercancel", releaseArmedRow);
+  window.removeEventListener("blur", releaseArmedRow);
+}
+
+/** 줄을 누르는 순간 부른다 — 놓을 때까지 무장 줄이 바뀌지 않는다. */
+export function holdArmedRow(): void {
+  if (armHeld) return;
+  armHeld = true;
+  if (typeof window === "undefined") return;
+  window.addEventListener("pointerup", releaseArmedRow);
+  window.addEventListener("pointercancel", releaseArmedRow);
+  window.addEventListener("blur", releaseArmedRow);
+}
+
 export function setArmedRow(key: string | null): void {
   if (armedRow === key) return;
+  // 🔴 누르고 있거나 끌고 있는 동안은 바꾸지 않는다 — 바꾸면 끌던 줄이 언마운트돼 드롭 데이터가 사라진다(위 주석).
+  if (armHeld || dragging) return;
   armedRow = key;
   for (const cb of armedSubscribers) cb();
+}
+
+/** 지금 무장된 줄의 키 — 렌더 밖(테스트·진단)용. 화면은 `useIsArmedRow`로 구독한다. */
+export function getArmedRow(): string | null {
+  return armedRow;
 }
 
 function subscribeArmed(cb: () => void): () => void {

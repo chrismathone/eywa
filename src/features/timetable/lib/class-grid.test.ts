@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildRichCardGroups, teacherColor, type GridSlot } from "./class-grid";
+import { ROSTER_ACTIVE_MIN_ROWS, buildRichCardGroups, teacherColor, type GridSlot } from "./class-grid";
 import { DEFAULT_PERIODS_CONFIG, settingsToPeriodsConfig } from "./periods";
 
 const C = DEFAULT_PERIODS_CONFIG;
@@ -166,7 +166,8 @@ describe("buildRichCardGroups", () => {
     // *"대기/퇴원을 항상 보여줄것"*) — 사람이 빠질 때마다 카드가 밀리지 않고, 끌어다 놓을 자리가 늘 있다.
     expect(g.rosterRows.hold).toBe(1);
     expect(g.rosterRows.withdrawn).toBe(1);
-    expect(g.rosterRows.active).toBe(1);
+    // 🔴 재원만 바닥이 다르다 — 기본 10줄(원장 2026-09-08 *"재원생이 10명은 기본으로 공간 배정"*).
+    expect(g.rosterRows.active).toBe(ROSTER_ACTIVE_MIN_ROWS);
   });
 
   it("끝 가까운 섹션도 자기가 쓰는 교시만 — 10교시 시작 → 10교시 한 행", () => {

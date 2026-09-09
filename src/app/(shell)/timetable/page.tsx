@@ -511,7 +511,10 @@ export default async function TimetablePage({
       {/* 학생 검색 — 툴바 입력칸과 세 뷰(기본·통합·강사)가 같은 값을 보게 감싼다. 편집 공급자 **안쪽**이라
           검색이 편집 모드를 읽고 스스로 물러난다(search-context.tsx 주석). */}
       <TimetableSearchProvider index={searchIndex} scope={searchScope} enabled={searchEnabled}>
-      <div className="flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
+      {/* `.edge-to-edge` — 창(임베드)에선 셸 <main>의 좌우·아래 베젤과 스크롤바 거터를 0으로(globals.css
+          `main.embed-main:has(.edge-to-edge)`, 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*).
+          ⚠️ loading.tsx 루트와 **같은 className**이어야 한다(스켈레톤→본문에서 폭이 튀지 않게, 가드 window-bezel). */}
+      <div className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
       {/* 표시 선호('미사용 요일'·'빈 교시 접기'·'1시간 단위')를 **계정에** 기억(0146a) + 쿠키 폴백 —
           창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. 셋을 한 컴포넌트로 합친 이유(동시 쓰기
           충돌)는 prefs-sync.tsx 주석 참조. */}
@@ -1020,6 +1023,7 @@ export default async function TimetablePage({
                   weekdayGrouping={weekdayGrouping}
                   collapseEmptyPeriods={collapseEmptyPeriods}
                   hideStudents={hideStudents}
+                  teacherOrder={viewPrefs.teacherOrder?.[subject]}
                 />
               </EmptyPeriodScope>
             </div>

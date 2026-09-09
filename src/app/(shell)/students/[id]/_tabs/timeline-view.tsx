@@ -84,7 +84,8 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
             <ChevronLeft className="size-4" />
           </button>
           <SearchableSelect
-            className="w-40"
+            // w-52(208px): 라벨 자리 162px ≥ `2026년 9월 · 12건` ≈150px(18px 글자) — 2026-09-08 v5 글자 기준 실측. w-40은 `· N건`이 잘렸고 w-48은 두 자리 건수에서 다시 모자란다.
+            className="w-52"
             triggerClassName={TOOLBAR_SELECT}
             ariaLabel="월 선택"
             value={String(safeIdx)}

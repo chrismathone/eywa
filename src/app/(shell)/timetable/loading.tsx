@@ -1,9 +1,11 @@
 // 시간표 초기 로드 스트리밍 — 무거운 getWeeklyScheduleWithStudents(전 슬롯·학생·교재·진도)가 도는
 // 동안 Next가 이 loading을 Suspense fallback으로 즉시 스트리밍한다(특히 창=iframe으로 열 때 첫 페인트가
 // 빈 화면이 아니라 스켈레톤). 툴바가 데이터(과목칩·인원)에 의존해 부분 페인트가 안 되므로 셸 전체 스켈레톤.
+// `.edge-to-edge` = page.tsx 루트와 같은 마커(창에서 좌우·아래 베젤 0) — 스켈레톤이 본문과 같은 폭으로 서야 데이터
+// 도착 때 안 튄다. 두 루트의 className은 가드(window-bezel.test)가 같게 잠근다.
 export default function TimetableLoading() {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
+    <div className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
       {/* PageHeader 근사 스켈레톤 — 창(임베드)은 헤더 줄을 통째로 접으므로(집계=툴바 우측) 스켈레톤도
           통째 숨김, 최상위 프레임만 풀 3줄(스켈레톤↔실렌더 높이 정합). */}
       <header className="shrink-0 px-1 compact-chrome:hidden">

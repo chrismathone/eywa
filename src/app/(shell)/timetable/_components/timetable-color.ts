@@ -67,7 +67,26 @@ export function subjectHeaderStyle(
  *    각각 1.8:1·1.1:1(WCAG 하한 4.5)로 **안 읽힌다**. 대비가 먼저라 잉크로 두고, 흰 글씨를 쓰려면 배경을 더
  *    진한 파랑으로 바꾸는 별도 결정이 필요하다.
  */
+/**
+ * @deprecated 섹션 **배경**으로 쓰지 말 것 — 2026-09-08부터 대기는 퇴원처럼 **사람에게 붙는 칩**이다(`holdTone`).
+ * 남겨 둔 이유는 색 값의 출처를 한 곳에 두기 위해서다(원장이 준 스프레드시트 표준색).
+ */
 export const HOLD_SECTION_CLASS = "bg-[#a4c2f4] text-ink"; // 대기 = light cornflower blue 1 (대비 9.5:1)
+
+/**
+ * 대기 학생 한 줄 tone — **퇴원과 같은 모양**(원장 2026-09-08: *"대기 셀 색상이 아니고 퇴원생처럼 저렇게 해줘야지"*).
+ *
+ * 🔴 종전엔 `HOLD_SECTION_CLASS`를 **섹션 배경**으로 깔아서, 대기 학생이 0명인 반까지 파란 띠가 통째로 그어졌다
+ *    (스샷: 열두 칸 중 아홉이 `-` 하나만 든 파란 칸). 색은 **사람에게 붙는 표시**여야지 빈 칸을 칠하는 게 아니다.
+ * 🔑 색 값은 원장이 준 그대로(`bg-[#a4c2f4]`) — 뜻이 바뀐 게 아니라 붙는 자리가 바뀐 것이다.
+ * ⚠️ 글자는 흰색이 아니라 잉크다 — 이 배경에서 흰 글씨는 1.8:1로 안 읽힌다(위 상수 주석과 같은 이유).
+ * ⚠️ Tailwind는 소스에 **적힌 글자 그대로** 스캔한다 — 색 값을 조립하지 말 것(에러 없이 색이 안 붙는다).
+ */
+export function holdTone(mode: TimetableColorMode): string {
+  if (mode === "pastel") return "bg-[#a4c2f4]/70 text-ink font-medium";
+  if (mode === "mid") return "bg-[#a4c2f4]/85 text-ink font-medium";
+  return "bg-[#a4c2f4] text-ink font-bold"; // vivid = 가장 또렷
+}
 export const RECENT_ROW_CLASS = "bg-[#f4cccc] text-[#7f1d1d]"; // 등록 31~60일 = light red 1 (대비 6.9:1)
 
 /**

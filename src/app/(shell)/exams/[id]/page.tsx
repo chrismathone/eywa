@@ -108,6 +108,12 @@ export default async function ExamDetailPage({
             // 고른 반의 점수 행이 아래를 채운다 = ECS·출석부와 같은 "지금 어느 반" 자리(원장 2026-08-18).
             // 여기엔 "전체"가 없고 늘 한 반이 잡혀 있어 표기가 항상 켜진다.
             marker
+            // 폭은 내용 폭 — 출석부(attendance/page.tsx)와 같은 방식. 표기 기본 폭 `MARKER_WIDTH`(300px)는
+            // 21px 시절 예산이라 v5(text-2xl 28px)에선 `중등E_초등 브릿지 A (12명)`이 말줄임으로 잘린다.
+            // 2026-09-08 v5 글자 기준 실측: 예산 300 − border 2 − px-3.5 28 − gap 8 − chevron 16 = 246px
+            // < 반 이름만 ≈262px(인원까지 ≈346px). 부모가 flex-wrap이라 좁으면 줄이 접힌다.
+            // 🔴 MARKER_WIDTH 자체는 ECS·MCS 상단 바가 같이 쓰므로 여기서 건드리지 않는다.
+            className="w-auto"
           />
         )}
       </div>

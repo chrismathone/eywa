@@ -36,11 +36,12 @@ import {
   type IncomingStudent,
   type PendingTarget,
 } from "./edit-context";
-import { setTimetableDragging, type ClassDragInfo } from "./drag-flag";
-import { annotateDropCells, clearDropCells, markHotCells, placementAt } from "./grid-drop-cell";
+import { setTimetableDragging, swallowDoubleClickAfterDrag, type ClassDragInfo } from "./drag-flag";
+import { SAME_SPOT_TITLE, annotateDropCells, clearDropCells, markHotCells, placementAt } from "./grid-drop-cell";
 // 칸 좌표 속성 이름은 **일반 모듈**에서 — 클라 모듈 재-export를 두면 서버 파일이 실수로 그걸 집어
 // 런타임 undefined가 된다([[#81]], 실제로 한 번 그렇게 깨졌다).
-import { CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs";
+import { CELL_DAY_ATTR, CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs";
+import { toast } from "sonner";
 import { useClassMoveIndex } from "./class-move-context";
 import type { MoveSubject } from "@/features/timetable/lib/class-move";
 import { moveClassSlots } from "@/features/timetable/server/move-actions";
@@ -856,6 +857,41 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
  * 드롭 대상 우선순위 — 요일 존(class:slotId:day, 콜론 3조각)이 셀(class:slotId, 2조각)과 겹치면 요일 존을 택한다.
  * 그래야 "목 칸에 드롭 = 목만 등원"이 셀 전체 드롭(=전 요일)보다 우선한다. slotId는 UUID라 콜론이 없어 조각 수로 구분.
  */
+/** 학생 줄이 드래그에 싣는 것(student-rows.tsx `ArmedStudentRow`의 data) — 고스트·판정에 쓰는 칸. */
+type StudentDragData = {
+  classId?: string;
+  fromClassName?: string;
+  name?: string;
+  meta?: string;
+  tone?: string;
+  badge?: string;
+  enrollmentId?: string;
+  attendanceDays?: string[];
+  blockingClassIds?: string[];
+};
+
+/**
+ * 드롭이 **거절될 때 이유를 말한다** — 원장 제보 2026-09-08 *"드래그는 되는데 드랍해도 아무런 반응이 없음"*.
+ *
+ * 🔴 학생 드롭 경로엔 조용한 `return`이 다섯 갈래 있었다(놓을 칸 못 찾음 · 출발 반 모름 · 이미 그 반에
+ *    수강 있음 · 같은 반·같은 요일 · 반 블록이 갈 수 없는 칸). 전부 아무 표시가 없어서 **거절인지 고장인지
+ *    구분할 수 없었다**. 규칙을 바꾸는 게 아니라 **말을 붙이는 것**이다(판정은 그대로).
+ * ⚠️ 아무 데도 아닌 곳에 놓은 것(=취소)은 말하지 않는다 — 그건 사용자가 의도한 무동작이라 토스트가 소음이다.
+ */
+function refuse(reason: string): void {
+  // 막힌 이유가 여럿이면(강사·학생·강의실 나열) 문장이 길다 — 읽을 시간을 준다(기본 4초는 두 줄도 못 읽는다).
+  toast.info(reason, { duration: reason.length > 80 ? 9000 : 4000 });
+}
+
+/**
+ * 큐에 쌓였다는 사실을 **말한다** — 이동은 즉시가 아니라 '저장'에서 반영된다(원장 2026-09-04 규약).
+ * 🔴 성공에도 말이 없으면 거절과 구분이 안 된다(원장 2026-09-08 *"드랍해도 아무런 반응이 없음"*).
+ *    툴바의 '이동 대기 N건' 바가 이미 있지만, 격자를 보고 있는 눈에서 그 줄은 멀다.
+ */
+function queued(what: string): void {
+  toast.success(`${what} — '저장'을 눌러야 반영됩니다`);
+}
+
 const preferDayZone: CollisionDetection = (args) => {
   // 🔴 반 블록을 끌 때는 **학생 드롭존을 고르지 않는다** — 반은 격자 칸(포인터 아래 DOM)으로 놓는데,
   //    dnd-kit이 셀 드롭존을 `over`로 잡으면 그 셀에 학생용 남색 링(`ring-primary`)이 켜져
@@ -900,8 +936,23 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     }
     return null;
   }, []);
+  /**
+   * 좌표 아래의 **아무 격자 칸**(막힌 칸 포함) — 놓을 수 없는 칸에 놓았을 때 **이유**를 말하려고 찾는다
+   * (막힌 칸은 `annotateDropCells`가 `title`에 이유를 적어 둔다). 갈 수 있는 칸만 찾는 `okCellAt`과 짝.
+   */
+  const anyCellAt = useCallback((x: number, y: number): HTMLElement | null => {
+    for (const el of document.elementsFromPoint(x, y)) {
+      const cell = (el as HTMLElement).closest?.(`[${CELL_DAY_ATTR}]`) as HTMLElement | null;
+      if (cell) return cell;
+    }
+    return null;
+  }, []);
   /** 지금 끌고 있는 블록의 판정 재료 — 하이라이트가 "이 블록이 차지할 칸 전부"를 켜는 데 쓴다. */
   const subjectRef = useRef<MoveSubject | null>(null);
+  // 🔴 집는 순간의 학생 드래그 data를 **스냅샷**으로 든다 — dnd-kit은 끌던 줄이 언마운트되면 `active.data`를 빈
+  //    객체로 바꾼다(drag-flag.ts `holdArmedRow` 주석). 무장 잠금이 1차 방어고 이 스냅샷은 안전망이다(줄이 어떤
+  //    이유로든 다시 그려져도 놓는 순간 출발 반·수강 id가 남아 있게).
+  const studentDragRef = useRef<StudentDragData | null>(null);
   const cellAtPointer = useCallback((): HTMLElement | null => {
     const p = pointerRef.current;
     if (!p) return null;
@@ -945,6 +996,12 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       // 갈 수 있는 칸을 **DOM에 직접** 칠한다(칸마다 React를 돌리면 그게 곧 픽업 렉 — grid-drop-cell.tsx 주석).
       if (moveLookup) {
         annotateDropCells(document, info.subject, { day: info.fromDay, start: info.fromStart }, moveLookup);
+        // 🔴 놓을 수 있는 칸이 **하나도 없으면 집는 순간 말한다** — 초록 칸이 안 켜지는 것을 "표시가 안 된다"로 읽는다
+        //    (원장 제보 2026-09-09 *"놓을 수 있는 칸을 미리 구역으로 표시해주면"* — 표시는 있었고 켜질 칸이 없었다).
+        //    끌고 있는 동안은 툴팁이 안 뜨므로, 이유는 놓는 순간의 거절 토스트가 말한다.
+        if (document.querySelectorAll(`[${CELL_OK_ATTR}="1"]`).length === 0) {
+          toast.info(`${info.className} 반을 놓을 수 있는 칸이 지금 없습니다 — 칸에 놓아 보면 막힌 이유를 알려 드립니다`);
+        }
       }
       // 놓을 자리는 포인터 아래 칸으로 찾는다(드롭존을 새로 만들지 않는다).
       const act = e.activatorEvent as PointerEvent | undefined;
@@ -954,6 +1011,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     }
     // 폭은 집은 줄의 실측 폭 — 파일 드래그처럼 "그 줄이 그대로 떠 있는" 느낌이 되게(칩으로 줄이면 딴 물건이 된다).
     const width = Math.round(e.active.rect.current.initial?.width ?? 0);
+    studentDragRef.current = (e.active.data.current as StudentDragData | undefined) ?? null;
     setDrag({ name: data?.name ?? "학생", meta: data?.meta ?? "", tone: data?.tone ?? "", badge: data?.badge, width });
     setTimetableDragging(true);
   }
@@ -964,6 +1022,12 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     //    지운 뒤에 좌표로 칸을 찾으면 항상 빈손이라 드롭이 조용히 사라진다(실측).
     const isBlockDrag = String(e.active.id).startsWith("block:");
     const cellHit = isBlockDrag ? cellAtPointer() : null;
+    // 갈 수 있는 칸이 아니면 **그 자리의 아무 칸**을 찾아 이유(`title`)를 미리 읽어 둔다 — `stopTracking()`이 title까지 지운다.
+    const blockedCell = isBlockDrag && !cellHit && pointerRef.current ? anyCellAt(pointerRef.current.x, pointerRef.current.y) : null;
+    const blockedWhy = blockedCell?.title ?? "";
+    // 학생 드래그 스냅샷은 여기서 한 번 꺼내고 비운다(어느 갈래로 빠져나가든 다음 드래그에 안 남게).
+    const studentData = studentDragRef.current;
+    studentDragRef.current = null;
     setDrag(null);
     setTimetableDragging(false);
     stopTracking();
@@ -975,12 +1039,21 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // ── 반 블록을 격자 칸에 놓았을 때 — 큐에만 쌓고 '저장'에서 반영한다(학생 이동과 같은 규약).
     if (activeIdStr.startsWith("block:")) {
       const src = active.data.current as unknown as ClassDragInfo | undefined;
-      if (!src || !cellHit) return;
+      if (!src) return;
+      if (!cellHit) {
+        // 제자리에 도로 놓은 것 = 취소(말하지 않는다). 막힌 칸이면 **왜** 막혔는지 말한다 — "칸을 찾지 못했다"는
+        // 포인터가 격자 밖일 때만 맞는 말이다(원장 제보 2026-09-09: 칸 위에 놓았는데 그 문구가 떴다).
+        if (blockedWhy === SAME_SPOT_TITLE) return;
+        return refuse(
+          blockedWhy ? `그 칸에는 놓을 수 없습니다 — ${blockedWhy}` : "놓을 칸을 찾지 못했습니다 — 격자 칸 위에 놓아 주세요.",
+        );
+      }
       // 블록 전체가 어디로 가는지 — 칸이 들고 있는 좌표로 계산한다(하이라이트와 **같은 함수**).
       const placed = placementAt(cellHit, src.subject, document);
-      if (!placed || placed.length === 0) return;
+      if (!placed || placed.length === 0) return refuse("그 칸에는 이 반을 놓을 수 없습니다.");
       const anchor = placed.find((w) => w.slotId === src.slotId) ?? placed[0]!;
       if (src.fromDay === anchor.day && src.fromStart.slice(0, 5) === anchor.start.slice(0, 5)) return;
+      queued(`${src.className} 반을 옮깁니다`);
       queueClassMove({
         slotId: src.slotId,
         classId: src.classId,
@@ -998,21 +1071,13 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     if (!over || !activeIdStr.startsWith("student:")) return;
     // 도착 정보는 드롭존 data에서 읽는다(id 파싱 금지) — classId=실제 반 id, slotId=셀 id, day=요일 존이면 요일.
     const overData = over.data.current as DropData | undefined;
-    if (!overData?.classId) return;
-    const data = active.data.current as
-      | {
-          classId?: string;
-          fromClassName?: string;
-          name?: string;
-          enrollmentId?: string;
-          attendanceDays?: string[];
-          blockingClassIds?: string[];
-        }
-      | undefined;
+    if (!overData?.classId) return refuse("반 칸 위에 놓아 주세요.");
+    // 스냅샷 우선(집던 줄이 그새 언마운트됐어도 살아 있다) — 없을 때만 dnd-kit의 현재 data.
+    const data = studentData ?? (active.data.current as StudentDragData | undefined);
     // 분리등원 요일 칸에서 온 드래그는 id가 `student:{id}:{day}`로 유니크 → id 파싱 대신 data.enrollmentId 우선.
     const enrollmentId = data?.enrollmentId ?? activeIdStr.slice("student:".length);
     const fromClassId = data?.classId ?? ""; // 출발 반 id(실제 반 id)
-    if (!fromClassId) return;
+    if (!fromClassId) return refuse("출발 반을 알 수 없어 옮기지 못했습니다.");
     // 합반 드롭 = 반+요일 선택 팝업(외부 학생 어디든 / 멤버의 다른 세그먼트) — 조용히 대표 반으로 보내지
     // 않고 명시적으로 고르게 한다. 세그먼트 드롭=그 반, 요일존 드롭=그 요일이 미리 선택된 채 열림.
     if (shouldOpenClassPick(fromClassId, overData)) {
@@ -1041,12 +1106,15 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       { classId: fromClassId, blockingClassIds: data?.blockingClassIds },
       { ...overData, memberClassIds: overData.memberClasses?.map((c) => c.classId) },
     );
-    if (!target) return;
+    // 규칙 ②(hapban.ts) — 이미 그 반에 열린 수강이 있으면 옮기지 않는다(저장 시 GiST 충돌 방지).
+    if (!target) return refuse(`${data?.name ?? "이 학생"}은(는) 이미 그 반 수강이 있습니다.`);
     const toClassId = target.toClassId;
     const fromDays = data?.attendanceDays ?? []; // 출발 시점 등원 요일(no-op 판정)
     const toDays = zoneAttendanceDays(target.day); // 요일 존=[그 요일], 공통 존=[]
     // 같은 반이면 요일이 바뀔 때만(2일↔1일 편집), 교차 반이면 항상 이동.
-    if (fromClassId === toClassId && sameDaySet(fromDays, toDays)) return;
+    if (fromClassId === toClassId && sameDaySet(fromDays, toDays))
+      return refuse("같은 반·같은 요일이라 바뀐 것이 없습니다.");
+    queued(`${data?.name ?? "학생"} → ${overData?.className ?? "다른 반"}`);
     queueMove({
       enrollmentId,
       fromClassId,
@@ -1068,13 +1136,18 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
+        studentDragRef.current = null;
         setDrag(null);
         setBlockGhost(null);
         setTimetableDragging(false);
         stopTracking();
       }}
     >
-      {children}
+      {/* 드래그 직후의 더블클릭은 창 열기가 아니다 — 캡처에서 삼킨다(drag-flag.ts `swallowDoubleClickAfterDrag`).
+          `display: contents`라 격자 레이아웃(flex 사슬)엔 아무 영향이 없다. */}
+      <div className="contents" onDoubleClickCapture={swallowDoubleClickAfterDrag}>
+        {children}
+      </div>
       {/* 고스트 = **원본 줄 그대로**, 파일 이동처럼 반투명(원장 2026-09-04). 이름만 남긴 칩으로 바꾸면
           "무엇을 끌고 있는지"는 알아도 "어느 줄을 집었는지"가 사라진다 — 같은 이름이 여러 반에 있다. */}
       {/* 🔴 오버레이는 히트테스트를 가로채면 안 된다 — 반 드롭은 포인터 아래 칸을 읽는다(위 `okCellAt`). */}

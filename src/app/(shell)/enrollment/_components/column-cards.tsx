@@ -256,12 +256,15 @@ function ConsultationCard({
           <div className="flex h-10 items-center justify-between gap-3">
             <div className="flex min-w-0 flex-1 items-center">
               {/* 이름 + (학교학년) 한 줄 — 옛 두 줄("백시후" / "초3 수창초")을 합친 것. */}
-              {/* 이름이 행을 채운다(2xl 28px) — 학교학년은 한 단계 아래(lg 20px), 같은 밑선. */}
-              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-2xl leading-none font-bold">
+              {/* 이름 xl(24px) — 학교학년은 두 단계 아래(sm 16px), 같은 밑선.
+                  🔴 2026-09-08 2xl(28)/lg(20) → xl/sm: v5 스케일에서 28px 이름 + 20px 학교학년이 칸 예산(≈145px)을
+                     넘어 실브라우저에서 이름이 **`김.`** 한 글자로 잘렸다(등록 완료 칸, 오른쪽 표식이 자리를 먼저 먹는다).
+                     이름이 안 읽히면 카드의 존재 이유가 없다 — 크기보다 이름이 먼저다. */}
+              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-xl leading-none font-bold">
                 <span className="min-w-0 truncate">
                   {c.prospectName}
                   {gradeLabel ? (
-                    <span className="text-text-dim ml-1 text-lg font-semibold">({gradeLabel})</span>
+                    <span className="text-text-dim ml-1 text-sm font-semibold">({gradeLabel})</span>
                   ) : null}
                 </span>
                 {c.personConsultCount > 1 ? (
