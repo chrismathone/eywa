@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/features/audit/server/log";
 
 export type LogActionState = { ok?: boolean; error?: string } | undefined;
 
@@ -28,7 +29,7 @@ export async function logRetentionAction(
   if (summary.length < 2) return { error: "조치 내용을 입력해주세요" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("student_consultations").insert({
+  const { data: created, error } = await supabase.from("student_consultations").insert({
     tenant_id: user.tenantId,
     student_id: studentId,
     counselor_id: user.id,
@@ -38,8 +39,21 @@ export async function logRetentionAction(
     summary,
     follow_up_date: followUpDate,
     follow_up_done: false,
-  });
+  }).select("id").single();
   if (error) return { error: error.message };
+
+  // 🔴 요약 본문은 담지 않는다(상담 내용 금지) — 학생상담 기록(student_consultation_create)과 같은 규약.
+  //    대상 열의 학생 이름은 metadata.studentId를 뷰어가 해석한다(auditTargetName).
+  await logAction({
+    action: "retention_action_create",
+    targetType: "student_consultation",
+    metadata: {
+      consultationId: created?.id ?? null,
+      studentId,
+      source: "retention",
+      followUpDate,
+    },
+  });
 
   revalidatePath("/retention");
   revalidatePath("/retention/messages");
@@ -68,6 +82,11 @@ export async function campaignAdd(studentId: string): Promise<CampaignResult> {
     trigger_reason: "renewal_risk",
   });
   if (error) return { ok: false, error: error.message };
+  await logAction({
+    action: "retention_campaign_add",
+    targetType: "campaign_target",
+    metadata: { studentId, triggerReason: "renewal_risk" },
+  });
   revalidatePath("/retention/campaign");
   revalidatePath("/retention");
   return { ok: true };
@@ -83,11 +102,19 @@ export async function campaignSetStatus(targetId: string, status: string): Promi
   const patch: Record<string, unknown> = { status };
   if (status === "contacted") patch.contacted_at = new Date().toISOString();
   if (status === "enrolled" || status === "declined") patch.decided_at = new Date().toISOString();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("reenrollment_campaign_targets")
     .update(patch)
-    .eq("id", targetId);
+    .eq("id", targetId)
+    .select("student_id"); // 추가 왕복 없이 로그용 학생 id 확보 + 0행이면 안 남긴다
   if (error) return { ok: false, error: error.message };
+  if (updated?.length) {
+    await logAction({
+      action: "retention_campaign_status",
+      targetType: "campaign_target",
+      metadata: { studentId: updated[0].student_id, targetId, status },
+    });
+  }
   revalidatePath("/retention/campaign");
   revalidatePath("/retention");
   return { ok: true };
@@ -100,8 +127,28 @@ export async function campaignRemove(targetId: string): Promise<CampaignResult> 
   if (!(await canWriteTenant(user.systemRole, "retention"))) return { ok: false, error: "이탈 방어 권한이 없습니다" };
   if (!targetId) return { ok: false, error: "대상 ID가 누락되었습니다" };
   const supabase = await createClient();
-  const { error } = await supabase.from("reenrollment_campaign_targets").delete().eq("id", targetId);
+  const { data: removed, error } = await supabase
+    .from("reenrollment_campaign_targets")
+    .delete()
+    .eq("id", targetId)
+    .select("student_id, status");
   if (error) return { ok: false, error: error.message };
+  const gone = removed?.[0];
+  if (gone) {
+    // 🔴 학생 이름을 그 자리에서 굳힌다 — 나중에 그 학생이 삭제되면 id로는 아무것도 못 읽는다.
+    //    조회 실패해도 기록은 남긴다(이름만 빠진 채로 — 삭제 흔적이 사라지는 쪽이 훨씬 나쁘다).
+    const { data: stu } = await supabase
+      .from("students")
+      .select("name")
+      .eq("id", gone.student_id)
+      .maybeSingle();
+    await logAction({
+      action: "retention_campaign_remove",
+      targetType: "campaign_target",
+      targetLabel: stu?.name ?? null,
+      metadata: { studentId: gone.student_id, targetId, status: gone.status },
+    });
+  }
   revalidatePath("/retention/campaign");
   revalidatePath("/retention");
   return { ok: true };

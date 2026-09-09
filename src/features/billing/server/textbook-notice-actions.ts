@@ -14,6 +14,7 @@
  */
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -246,6 +247,29 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
     if (linkErr) console.error("[textbook] 공지 연결 기록 실패 — 중복 차단이 약해집니다", linkErr.message);
   }
 
+  /**
+   * 감사로그 — **학부모에게 나간 발송 + 요청서에 박힌 발송 표식**.
+   *
+   * ⚠️ 공지 레일(`sendOnescreenNotice`)도 자체적으로 `classnote_notice_send`를 한 줄 남긴다. 그 줄은
+   *    "공지 1건이 큐에 올라갔다"는 사실이고, 여기 줄은 "**어느 교재 요청서**가 발송 처리됐다"는 다른
+   *    사실이다 — 후자가 없으면 위 `classnote_notice_id` 쓰기(= 그 요청서를 영구히 재발송 불가로 만드는
+   *    중복 차단 표식)에 흔적이 하나도 안 남는다.
+   * 🔴 `dryRun`·`test`를 그대로 싣는다 — 실제로 안 나간 발송을 "보냈다"로 적으면 감사로그가 거짓이 된다.
+   */
+  await logAction({
+    action: "textbook_notice_send",
+    targetType: "textbook_order",
+    targetLabel: `학생 ${students.length}명 · 요청서 ${sendableIds.size}건`,
+    metadata: {
+      orderIds: [...sendableIds],
+      studentCount: students.length,
+      queued: res.queued ?? 0,
+      noticeId: res.noticeId ?? null,
+      dryRun: res.dryRun ?? false,
+      test: input.test ?? false,
+      skippedCount: merged.length,
+    },
+  });
   // 다음 발송의 기본값으로 남긴다(중간저장) — best-effort라 실패해도 발송 결과엔 영향 없음.
   await saveMyTextbookMent(ment);
   return { ok: true, queued: res.queued ?? 0, dryRun: res.dryRun, skipped: merged };

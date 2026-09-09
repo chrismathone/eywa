@@ -18,6 +18,14 @@
  * ⚠️ 로그인 화면(`/attendance/seat/jj`)은 이 파일을 쓰지 않는다 — 그쪽 문은 ECS 게이트다
  *    (`class-sheets/server/actions.ts`). 두 문을 한 액션으로 합치지 말 것: 자리 권한(아르바이트·viewer)이
  *    영어 시트 권한을 우회하는 뒷문이 된다.
+ *
+ * 🔴 **여기엔 감사로그(`logAction`)가 없다 — 빠뜨린 게 아니다**(2026-09-09 출결 감사 배선 때 확인).
+ *    `logAction`은 실행자를 세션(`getCurrentUser`)에서 읽는데 이 문은 **PIN 전용이라 로그인이 아예 없다**
+ *    (`gateSeatPinOnly`는 로그인 상태를 보지도 않는다). 부르면 조용히 no-op이 되어 "감사로그를 달았다"는
+ *    거짓 커버리지만 남는다 — 같은 이유로 줄의 `updated_by`도 설계상 null이다(위 게이트 주석).
+ *    ⚠️ 이 갈래를 진짜로 남기려면 **감사 도메인에 무기명 actor 경로가 먼저** 필요하다:
+ *    `audit_logs`의 insert 정책이 `actor_id = auth.uid()`(0219a)라 admin 클라이언트까지 함께 가야 한다.
+ *    그건 이 파일이 아니라 `features/audit`의 결정 사항이다.
  */
 import {
   applyPlanPatches,

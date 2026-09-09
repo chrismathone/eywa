@@ -231,6 +231,100 @@ export const AUDIT_ACTIONS = {
   inventory_excel_import: "재고관리 엑셀 반영",
   // 분류(0247a) — 엑셀에 없는 분류를 적으면 확인 뒤 자동으로 만들어진다(삭제·이름변경 경로는 아직 없다).
   inventory_category_create: "자산 분류 추가",
+
+  // ── 2026-09-09 전수 보강 ────────────────────────────────────────────────────
+  // 원장 지시: *"기능이 추가되거나 변동되는건 모두 감사로그에 남도록 해야함."* 2026-08-18 소급 퇴원
+  // 사고 뒤 붙인 감사로그가 **학생 레코드 경로에만** 걸려 있어서, 그 뒤 만들어진 기능 20여 개는 흔적이
+  // 0이었다(출결 일괄 변경·수업보고서·지출·급여명세서·서식 삭제·시간표 가져오기…).
+  // 🔴 여기 라벨이 없으면 원장 화면에 **영문 키가 그대로** 뜬다(그래서 이 표를 가드가 잠근다).
+
+  // 출결 — 🔴 `metadata.backdated`가 참이면 **지난 날짜 소급**이다(2026-08-18 사고와 같은 모양).
+  attendance_save: "출석부 반별 저장",
+  attendance_cell: "출결 입력·정정",
+  attendance_clear: "출결 지우기",
+  attendance_note: "출결 메모 수정",
+  attendance_bulk: "출결 일괄 입력",
+  attendance_range: "출결 범위 채우기",
+  attendance_range_clear: "출결 범위 지우기",
+  attendance_makeup_link: "보강–결석분 연결",
+  attendance_followup: "출결 확인 기록",
+  attendance_input_request: "출결 입력 요청",
+  attendance_desk_confirm_request: "데스크 확인 요청",
+  // 자리(랩실·JJ실) 출결. ⚠️ 아래 셋은 **중첩 삼항**으로 만들어져 레지스트리 스캐너가 못 잡는다 —
+  //    가드를 믿고 빠뜨리지 말 것(그래서 이 주석을 남긴다).
+  seat_attendance_set: "자리 출결 입력",
+  seat_attendance_clear: "자리 출결 지우기",
+  seat_attendance_note: "자리 결석 사유 수정",
+  seat_attendance_fill: "자리 출결 일괄",
+
+  // 수업보고서·발송 — 학부모에게 **나간 것**이라 되짚기가 가장 절실하다.
+  lesson_report_save: "수업보고서 저장",
+  share_link_revoke: "학부모 공유 링크 회수",
+  share_link_reissue: "학부모 공유 링크 재발급",
+  report_attachment_add: "수업보고서 첨부 추가",
+  report_attachment_remove: "수업보고서 첨부 삭제",
+  report_covers_date: "수업보고서 대상일 변경",
+  classnote_send: "ClassNote 발송",
+  classnote_resend: "ClassNote 재발송",
+  classnote_bulk_send: "ClassNote 일괄 발송",
+  classnote_stuck_reset: "ClassNote 멈춘 발송 초기화",
+  class_sheet_plan_line: "수업계획 줄 변경",
+  class_sheet_plan_copy: "수업계획 이전 회차 복사",
+
+  // 돈 — 🔴 **금액은 담지 않는다**(아래 '금액' 주석 참조).
+  expense_create: "지출결의서 작성",
+  expense_update: "지출결의서 수정",
+  expense_delete: "지출결의서 삭제",
+  expense_approval: "지출 결재 체크·해제",
+  expense_duplicate: "지출결의서 복제",
+  expense_receipt_type: "지출 증빙 유형 변경",
+  expense_receipt_add: "지출 증빙 첨부",
+  expense_receipt_remove: "지출 증빙 삭제",
+  refund_request_create: "환불 요청서 작성",
+  refund_request_update: "환불 요청서 수정",
+  refund_request_delete: "환불 요청서 삭제",
+  textbook_notice_send: "교재 요청서 학부모 발송",
+  session_terms_refresh: "청구 회차 계획 갱신",
+  session_term_confirm_class: "청구 회차 반 일괄 확정",
+  session_term_confirm: "청구 회차 확정",
+  session_term_unconfirm: "청구 회차 확정 해제",
+  session_term_carryover: "청구 회차 이월",
+  // 🔴 급여는 **"무슨 일이 있었나"만** 남긴다 — 조정한 항목 이름조차 안 담는다("인센티브를 고쳤다"
+  //    만으로도 그 사람 급여 사정이 읽힌다). metadata는 `{userId, period}`뿐이다.
+  payslip_adjust: "급여명세서 조정 저장",
+  payslip_issue: "급여명세서 발행",
+  payslip_unissue: "급여명세서 발행 취소",
+
+  // 서식·분류·알림·업무
+  document_create: "서식 등록",
+  document_update: "서식 수정",
+  document_delete: "서식 삭제",
+  document_pin: "서식 상단 고정 전환",
+  document_category_create: "서식 분류 추가",
+  document_category_rename: "서식 분류 이름 변경",
+  document_category_move: "서식 분류 순서 변경",
+  document_category_delete: "서식 분류 삭제",
+  retention_action_create: "이탈 방어 조치 기록",
+  retention_campaign_add: "재등록 캠페인 추가",
+  retention_campaign_status: "재등록 캠페인 상태 변경",
+  retention_campaign_remove: "재등록 캠페인 제외",
+  notion_task_done: "Notion 업무 완료 전환",
+  notion_task_due_move: "Notion 업무 마감일 이동",
+  notion_task_create: "Notion 업무 생성",
+  notion_task_comment: "Notion 업무 댓글",
+  staff_notion_map: "Notion 계정 연결 변경",
+
+  // 시간표 가져오기 — 한 번에 수백 슬롯·수강을 바꾼다. metadata의 `snapshotId`가 되돌릴 근거다.
+  timetable_import_apply: "시간표 가져오기 반영",
+  timetable_structure_apply: "영어 시트 구조 반영",
+  timetable_structure_rollback: "영어 시트 구조 되돌림",
+
+  // 공지·브리핑
+  announcement_create: "직원 공지 등록",
+  announcement_update: "직원 공지 수정",
+  announcement_delete: "직원 공지 삭제",
+  announcement_pin: "직원 공지 고정 전환",
+  briefing_regenerate: "일일 브리핑 다시 생성",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

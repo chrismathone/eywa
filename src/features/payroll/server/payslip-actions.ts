@@ -1,11 +1,26 @@
 "use server";
 
 // 급여명세서 월별 조정 저장·발행 — 원장 전용. 저장소는 payslips(0205a, master 전용 RLS).
-// ⚠️ 급여성 액션은 **audit_logs를 남기지 않는다** — 감사 화면이 admin/manager에게 열려 있어
-//    거기에 급여 PII가 새기 때문(class-salary-actions.ts·comp-actions.ts와 같은 선례).
+//
+// 🔴🔴 **감사로그는 "무슨 일이 있었나"만 남기고 "얼마"는 절대 남기지 않는다.**
+//   · 남긴다: 대상 직원 id · 대상 월 · 발행/발행취소/조정저장 중 무엇인지.
+//   · 🔴 안 남긴다: 금액·인센티브·공제·시급·배분율·패널티 수치 — **하나도**.
+//   이유: 급여는 **본 것 자체가 사고**인 값이라 자물쇠 하나에 기대지 않는다. (2026-09-09에 감사로그
+//   읽기를 master·super_admin으로 좁혔다[0253a] — 그전까지는 로그인한 전 직원이 읽을 수 있었다.) 반면
+//   payslips는 master 전용 RLS + 하드 픽스 명단(payslip-access.ts)으로 잠근 표다. 금액을 metadata에
+//   실으면 그 잠금 두 겹이 **한 줄로 무의미해진다.**
+//   이 갈래는 새로 지어낸 규칙이 아니라 0120a(`log_activity` redact: hourly_rate·monthly_base·
+//   salary_type·commission_rate)가 이미 쓰던 규약 그대로다 — **바뀐 사실은 기록하되 값은 가린다.**
+//   ⚠️ 종전 주석은 "급여성 액션은 audit_logs를 아예 안 남긴다"였다(class-salary-actions.ts·
+//      comp-actions.ts는 지금도 그렇다 — 그쪽은 users의 log_activity 트리거가 redact된 기록을 이미
+//      남긴다). payslips에는 **그 트리거가 없어**(0081a·0084a 대상 표 목록 밖) 발행·발행취소가
+//      어디에도 안 남았다 → 원장 지시(2026-09-09 "기능이 추가되거나 변동되는건 모두 감사로그에")에
+//      따라 **값 없는 사실 기록만** 연다.
+//   ⚠️ 이 파일에 새 액션을 더할 때도 같은 규칙 — metadata에 숫자를 넣기 전에 위 이유를 다시 읽을 것.
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { resolvePenaltyPoints } from "../payslip";
 import { PAYSLIP_DENIED_MSG } from "../payslip-access";
 import { canViewPayslipNow } from "./payslip-gate";
@@ -111,6 +126,14 @@ export async function savePayslipAdjustments(
   // 0205a 미적용이면 표가 없다 — 무슨 일인지 분명히 말한다(조용히 성공한 척하지 않는다).
   if (error) return reject(`저장 실패: ${error.message}`, formData);
 
+  // 🔴 값은 담지 않는다(파일 머리 주석) — 조정한 **항목 이름**조차 담지 않는다. "인센티브를 고쳤다"만으로도
+  //    그 사람 급여에 무슨 일이 있었는지가 읽히기 때문. 남기는 건 "누가 · 누구의 · 어느 달을 · 언제 고쳤나"뿐이다.
+  await logAction({
+    action: "payslip_adjust",
+    targetType: "payslip",
+    targetLabel: period,
+    metadata: { userId: teacherId, period },
+  });
   revalidatePath(`/payroll/${teacherId}/payslip`);
   revalidatePath("/attendance");
   return { ok: true, nonce: Date.now() };
@@ -168,6 +191,14 @@ export async function issuePayslip(
   );
   if (error) return { error: `발행 실패: ${error.message}` };
 
+  // 발행 = 그 시점 명세서를 **동결**해 서명·지급의 근거로 삼는 행위 → 남는 흔적이 있어야 한다.
+  // 🔴 print_payload(=금액 전체)는 물론 netPay 한 줄도 담지 않는다(파일 머리 주석).
+  await logAction({
+    action: "payslip_issue",
+    targetType: "payslip",
+    targetLabel: period,
+    metadata: { userId: teacherId, period },
+  });
   revalidatePath(`/payroll/${teacherId}/payslip`);
   return { ok: true, nonce: Date.now() };
 }
@@ -194,6 +225,14 @@ export async function unissuePayslip(
     .eq("period", period);
   if (error) return { error: `발행 취소 실패: ${error.message}` };
 
+  // 🔴 셋 중 **가장 중요한 줄** — 동결을 푸는 행위라, 이미 서명·지급된 명세서의 값이 이 뒤에 바뀔 수 있다.
+  //    "왜 지급액과 명세서가 다르지"의 답이 여기서만 나온다.
+  await logAction({
+    action: "payslip_unissue",
+    targetType: "payslip",
+    targetLabel: period,
+    metadata: { userId: teacherId, period },
+  });
   revalidatePath(`/payroll/${teacherId}/payslip`);
   return { ok: true, nonce: Date.now() };
 }

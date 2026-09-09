@@ -11,6 +11,7 @@ import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { humanizeDbError } from "@/lib/supabase/db-error";
+import { logAction } from "@/features/audit/server/log";
 import { resolveReportDate } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -141,6 +142,27 @@ async function upsertAdminReport(
   } catch {
     /* 진도 반영 실패는 저장을 막지 않음 */
   }
+  /**
+   * 감사로그 — 강사 경로(`saveLessonReport`)와 **같은 액션 키**를 쓰고 `via`로만 가른다.
+   * "이 보고서를 누가 마지막으로 고쳤나"는 문이 어디였든 한 필터로 찾아야 하는 질문이라서다.
+   * 🔴 여기는 **남의 학생** 보고서를 사무실이 직접 쓰는 자리다 — `lesson_reports`에 `updated_by`가
+   *    없어 행만 봐서는 사무실이 손댔다는 사실이 전혀 안 남는다.
+   * ⚠️ 내부 공용 함수라 저장·발송 두 진입점이 여기 한 번씩만 들른다(중복 없음).
+   * ⚠️ 본문(notes)은 담지 않는다 — id·날짜·반이면 그 행을 되짚는다.
+   */
+  await logAction({
+    action: "lesson_report_save",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: data.id,
+      studentId: input.studentId,
+      date: reportDate,
+      subject: input.subject || null,
+      classId: input.classId || null,
+      via: "admin",
+      ...(input.makeup ? { makeup: true } : {}),
+    },
+  });
   return { ok: true, id: data.id, shareToken: data.share_token };
 }
 
@@ -275,6 +297,21 @@ export async function saveAndQueueAdminReport(
     })
     .eq("id", saved.id);
   if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
+  // 🔴 학부모에게 나가는 순간 — 위 조기 반환들(dry_run·subject_off·absent·name_conflict·already_sent·
+  //    processing·revoked)은 아무것도 안 나간 것이라 여기 안 온다(강사 경로와 같은 규약).
+  await logAction({
+    action: "classnote_send",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: saved.id,
+      studentId: input.studentId,
+      date: reportDate,
+      subject: input.subject,
+      classId,
+      via: "admin_compose",
+      status: allowed ? "queued" : "too_old",
+    },
+  });
   return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old" };
 }
 
@@ -339,6 +376,10 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   let targets: BulkTarget[] = [];
   let subjectOff = 0;
   let optoutSkipped = 0;
+  // 감사로그 라벨용 이름 — 아래 조회에 컬럼만 얹어 모은다(추가 왕복 0). 대량 발송 한 줄에
+  // "어느 반 · 누구에게 나갔나"가 없으면 되짚을 게 건수뿐이다.
+  const sentClassNames: string[] = [];
+  const studentNameById = new Map<string, string>();
   if (input.test) {
     // 테스트 학생(학원이) — 탈원 상태일 수 있어 이름으로 조회(반 해석 경로로 안 뽑힘). 발송 과목 첫 번째로.
     const firstSendable = allowedSubjects.find((k) => isClassnoteSubjectEnabled(k, allowedSubjects));
@@ -353,6 +394,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     if (!t) return { ok: false, error: `테스트 학생(${BULK_TEST_STUDENT_NAME})을 찾을 수 없습니다` };
     // 테스트 학생(학원이)은 반 해석 경로 밖이라 classId 없음 → 과목이 단위(예전과 동일).
     targets = [{ studentId: t.id as string, subject: firstSendable, classId: null, teacherName: input.teacherName?.trim() || null }];
+    studentNameById.set(t.id as string, BULK_TEST_STUDENT_NAME);
   } else {
     const classIds = [...new Set(input.classIds ?? [])].slice(0, BULK_CLASS_CAP);
     if (!classIds.length) return { ok: false, error: "대상 반을 선택하세요" };
@@ -360,11 +402,12 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     //    반(0174a)은 **여기서 다시 거른다**. 조용히 빼지 않고 optoutSkipped로 사유를 돌려준다.
     const { data: classes } = await supabase
       .from("classes")
-      .select("id, subject, teacher_id, report_optout")
+      .select("id, class_name, subject, teacher_id, report_optout")
       .in("id", classIds)
       .eq("is_active", true);
     optoutSkipped = (classes ?? []).filter((c) => c.report_optout === true).length;
     const sendableClasses = (classes ?? []).filter((c) => c.report_optout !== true);
+    for (const c of sendableClasses) if (c.class_name) sentClassNames.push(c.class_name as string);
     const subjectByClass = new Map(sendableClasses.map((c) => [c.id as string, c.subject as string | null]));
     const teacherByClass = new Map(sendableClasses.map((c) => [c.id as string, c.teacher_id as string | null]));
     const teacherIds = [...new Set([...teacherByClass.values()].filter(Boolean))] as string[];
@@ -378,10 +421,11 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       supabase.from("enrollments").select("class_id, student_id").in("class_id", chunk).is("end_date", null),
     );
     const studentIds = [...new Set(enr.map((e) => e.student_id))];
-    const students = await fetchInChunks<{ id: string; status: string }>(studentIds, (chunk) =>
-      supabase.from("students").select("id, status").in("id", chunk),
+    const students = await fetchInChunks<{ id: string; status: string; name: string | null }>(studentIds, (chunk) =>
+      supabase.from("students").select("id, status, name").in("id", chunk),
     );
     const statusById = new Map(students.map((s) => [s.id, s.status]));
+    for (const s of students) if (s.name) studentNameById.set(s.id, s.name);
     const override = input.teacherName?.trim() || null;
     // (학생,**반**) dedup — 0134a. 예전엔 (학생,과목)이라 같은 과목 두 반을 고르면 **한 건만** 나갔다
     // (관리자가 정규 반과 특강 반을 함께 선택하면 특강 몫이 조용히 사라짐). 이제 반마다 1건이다.
@@ -510,12 +554,64 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   // teacher_name까지 되받는다 — 진도 점프 경고의 "같은 선생님" 축(2026-08-20). 대량은 반 담당강사가
   // 행마다 달라 입력값을 다시 짝지으면 어긋나기 쉽다 → 저장된 값을 그대로 쓴다.
   const authored: { id: string; student_id: string; subject: string | null; teacher_name: string | null }[] = [];
+  // ⚠️ 상태 확정 카운터를 **작성 루프보다 먼저** 선언한다 — 아래 감사로그 클로저가 중간 실패 경로에서도
+  //    읽어야 하는데, 뒤에 선언하면 그 시점엔 TDZ라 로그 자체가 터진다.
+  let conflicts = 0;
+  let queued = 0;
+  let tooOld = 0;
+  const queuedIds: string[] = [];
+  /**
+   * 🔴 한 번 눌러 **최대 400명의 학부모에게** 같은 카드가 나가는 자리다 — 되돌릴 수 없으니 반드시 남긴다.
+   * 🔴 **중간 실패 경로에서도** 부른다: 청크가 100건씩이라 3번째 청크가 실패해도 앞의 200건은 **이미
+   *    학부모에게 나간다**. 성공 경로에만 달면 그 200건이 감사로그에 한 줄도 안 남는다(가장 되짚어야 할 사고).
+   * ⚠️ 건별 400줄이 아니라 **한 줄 요약**(대량 처리 규약). 대신 되짚을 반 이름·학생 이름·건수를 담는다.
+   * ⚠️ dry-run(발송 스위치 OFF)은 위에서 이미 반환했다 — 여기 오면 실제로 행을 만들었다는 뜻이다.
+   * ⚠️ 본문(notes)은 담지 않는다(학부모에게 나간 문장 자체는 lesson_reports 행에 그대로 있다).
+   */
+  let bulkLogged = false;
+  const logBulkSend = async (failed?: string) => {
+    if (bulkLogged || authored.length === 0) return;
+    bulkLogged = true;
+    const queuedSet = new Set(queuedIds);
+    const sentNames = authored
+      .filter((r) => queuedSet.has(r.id))
+      .map((r) => studentNameById.get(r.student_id))
+      .filter((n): n is string => Boolean(n));
+    await logAction({
+      action: "classnote_bulk_send",
+      targetType: "lesson_report",
+      targetLabel: input.test ? `테스트(${BULK_TEST_STUDENT_NAME})` : sentClassNames.slice(0, 5).join(", ") || null,
+      metadata: {
+        date: reportDate,
+        test: input.test ?? false,
+        // 고른 반(미발송 반 제외 후) — 그 반에 재원생이 0명이면 실제 발송은 없을 수 있다(건수는 아래 필드).
+        classIds: (input.classIds ?? []).slice(0, 20),
+        classNames: sentClassNames.slice(0, 20),
+        reportCount: authored.length,
+        queued,
+        studentNames: sentNames.slice(0, 20),
+        conflicts,
+        tooOld,
+        skippedExisting,
+        absent,
+        subjectOff,
+        optoutSkipped,
+        overflow,
+        // 도중에 끊긴 발송 — 앞 청크는 이미 나갔다는 사실을 로그가 말해야 한다.
+        ...(failed ? { failedMidway: true, error: failed } : {}),
+      },
+    });
+  };
   for (let i = 0; i < rowsToAuthor.length; i += 100) {
     const { data, error } = await supabase
       .from("lesson_reports")
       .upsert(rowsToAuthor.slice(i, i + 100), { onConflict: "tenant_id,student_id,report_date,unit_key" })
       .select("id, student_id, subject, teacher_name");
-    if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
+    if (error) {
+      // 앞 청크가 이미 행을 만들었을 수 있다(발송 상태는 아직 안 붙었지만 내용은 DB에 있다).
+      await logBulkSend(humanizeDbError(error.message, "조회"));
+      return { ok: false, error: humanizeDbError(error.message, "조회") };
+    }
     authored.push(...((data ?? []) as typeof authored));
   }
 
@@ -523,7 +619,6 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   const queueIds = authored.filter((r) => !conflicted.has(r.student_id)).map((r) => r.id);
 
   // ── 6. 상태 확정 — 동명이인 name_conflict / too_old(전 달 1일 이전) / 나머지 queued. .is(null) 경합 이중방어. ──
-  let conflicts = 0;
   for (let i = 0; i < conflictIds.length; i += 100) {
     const { data } = await supabase
       .from("lesson_reports")
@@ -536,8 +631,6 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   // reportDate 균일 → 개별/원스크린 경로(saveAndQueueAdminReport:164)와 동일하게 too_old 일괄 판정.
   // 과거 날짜가 전 달 1일보다 오래면 워커가 어차피 안 집는다(classnote-core.mjs:100 report_date>=md) → too_old로 명시(큐 고아·오해성공 방지).
   const allowed = isClassnoteAllowed(reportDate);
-  let queued = 0;
-  let tooOld = 0;
   for (let i = 0; i < queueIds.length; i += 100) {
     const { data, error } = await supabase
       .from("lesson_reports")
@@ -551,7 +644,12 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       .in("id", queueIds.slice(i, i + 100))
       .is("classnote_status", null)
       .select("id");
-    if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
+    if (allowed) queuedIds.push(...(data ?? []).map((r) => r.id as string));
+    if (error) {
+      // 🔴 여기서 끊겨도 **앞 청크는 이미 큐에 올라가 학부모에게 나간다** — 로그 없이 끝내면 안 된다.
+      await logBulkSend(humanizeDbError(error.message, "발송"));
+      return { ok: false, error: humanizeDbError(error.message, "발송") };
+    }
     if (allowed) queued += (data ?? []).length;
     else tooOld += (data ?? []).length;
   }
@@ -577,6 +675,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     );
   }
 
+  await logBulkSend();
   return { ok: true, queued, conflicts, skippedExisting, absent, subjectOff, optoutSkipped, overflow, tooOld };
 }
 

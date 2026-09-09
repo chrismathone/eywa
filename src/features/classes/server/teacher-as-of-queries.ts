@@ -1,4 +1,5 @@
 import "server-only";
+import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
@@ -32,16 +33,22 @@ const loadTeacherTransitions = cache(
 
     // 로그와 반 이름 인덱스는 서로 독립이라 병렬(B4).
     const [logs, classRows] = await Promise.all([
+      // 🔴 감사로그는 **좁은 문**으로 읽는다(`systemAuditQuery`) — 원장 2026-09-09 *"감사로그는 마스터
+      //    이상급으로만"* 으로 정책을 좁혔기 때문에, 세션 클라로 읽으면 강사에게 이 화면이 통째로 빈다.
+      //    그 문이 tenant·action을 직접 걸고, 인계·담임 변경은 그 반을 보는 사람이면 이미 아는 사실이다.
       fetchAllPaged<{ metadata: Record<string, unknown> | null; target_label: string | null; created_at: string }>(
-        (from, to) =>
-          supabase
-            .from("audit_logs")
-            .select("metadata, target_label, created_at")
-            // 인수인계 적용 + **폼에서 담임을 바꾼 것**(class_update, 2026-08-04 신설) 둘 다가 전이다.
-            .in("action", ["class_handover_apply", "class_update"])
+        async (from, to) => {
+          // 인수인계 적용 + **폼에서 담임을 바꾼 것**(class_update, 2026-08-04 신설) 둘 다가 전이다.
+          const scope = await systemAuditScope(["class_handover_apply", "class_update"]);
+          if (!scope) return { data: [], error: null } as never;
+          return auditScoped(
+            scope.admin.from("audit_logs").select("metadata, target_label, created_at"),
+            scope,
+          )
             .gte("created_at", since)
             .order("created_at")
-            .range(from, to),
+            .range(from, to) as never;
+        },
       ).catch(() => []),
       // 🔴 whitelist(이름→id)라 무페이징 select 금지(B2). 활성/비활성 **전부** 담는다 —
       //    종강한 반의 옛 인계도 이력이고, 중복 이름 판정은 좁게 보면 거짓 유일이 된다.

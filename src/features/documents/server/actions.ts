@@ -16,6 +16,7 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import type { UploadTicket } from "@/lib/storage/types";
 import { RESUME_FORM_TYPE } from "@/features/staff/resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/server/resume-access";
+import { logAction } from "@/features/audit/server/log";
 import { FALLBACK_CATEGORY, normalizeLinkUrl } from "../categories";
 import { getDocumentCategories } from "./category-queries";
 
@@ -123,6 +124,19 @@ export async function registerUploadedDocument(
     await removeObject(path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
     return { error: `등록 실패: ${error?.message ?? "unknown"}` };
   }
+  await logAction({
+    action: "document_create",
+    targetType: "document",
+    targetLabel: title,
+    metadata: {
+      documentId: data.id,
+      kind: "file",
+      category: cat.category,
+      fileName,
+      fileSize: verified.size || null,
+      mimeType: verified.contentType || null,
+    },
+  });
   revalidatePath("/documents");
   return { ok: true, id: data.id, nonce: Date.now() };
 }
@@ -157,6 +171,13 @@ export async function createTextDocument(
     .select("id")
     .single();
   if (error || !data) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
+  // 🔴 본문(body)은 담지 않는다 — 감사로그는 "누가 언제"를 남기는 곳이고 내용은 문서 행이 갖는다.
+  await logAction({
+    action: "document_create",
+    targetType: "document",
+    targetLabel: title,
+    metadata: { documentId: data.id, kind: "text", category: cat.category },
+  });
   revalidatePath("/documents");
   return { ok: true, id: data.id, nonce: Date.now() };
 }
@@ -196,6 +217,12 @@ export async function createLinkDocument(
     .select("id")
     .single();
   if (error || !data) return { error: `등록 실패: ${error?.message ?? "unknown"}` };
+  await logAction({
+    action: "document_create",
+    targetType: "document",
+    targetLabel: title,
+    metadata: { documentId: data.id, kind: "link", category: cat.category, linkUrl: link.url },
+  });
   revalidatePath("/documents");
   return { ok: true, id: data.id, nonce: Date.now() };
 }
@@ -234,12 +261,28 @@ export async function updateDocument(
 
   const supabase = await createClient();
   // 직원 연결 문서(이력서·계약서)는 이 표면에서 조작 불가(#77) — 관리도 /staff 쪽 전용 액션으로만.
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("academy_documents")
     .update(patch)
     .eq("id", id)
-    .is("staff_user_id", null);
+    .is("staff_user_id", null)
+    // ⚠️ select 없이 로그를 남기면 0행 갱신(없는 id·이력서 id)도 "고쳤다"고 적힌다 — 감사로그가
+    //    실제로 없었던 변경을 주장하면 역검수가 오히려 틀린 곳을 가리킨다. 바뀐 행이 있을 때만 남긴다.
+    .select("id");
   if (error) return { error: `수정 실패: ${error.message}` };
+  if (updated?.length) {
+    await logAction({
+      action: "document_update",
+      targetType: "document",
+      targetLabel: title,
+      metadata: {
+        documentId: id,
+        category: cat.category,
+        ...(formData.has("body") ? { bodyEdited: true } : {}),
+        ...(patch.link_url ? { linkUrl: patch.link_url } : {}),
+      },
+    });
+  }
   revalidatePath("/documents");
   revalidatePath(`/documents/${id}`);
   return { ok: true, id, nonce: Date.now() };
@@ -253,7 +296,7 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("academy_documents")
-    .select("file_path, form_type, uploaded_by")
+    .select("title, kind, category, file_path, form_type, uploaded_by")
     .eq("id", id)
     .is("staff_user_id", null) // 직원 연결 문서는 여기서 안 지운다(#77) — 이력서는 deleteStaffResume 전용
     .maybeSingle();
@@ -273,6 +316,20 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
     .select("id"); // select 없으면 0행 삭제도 성공으로 보고된다.
   if (error) return { error: humanizeDbError(error.message, "삭제") };
   if (!deleted?.length) return { error: "문서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
+  // 🔴 지운 뒤엔 이름을 되찾을 곳이 없다 — 삭제 직전 제목을 그대로 스냅샷으로 남긴다(id만 남으면
+  //    나중에 그게 무슨 서식이었는지 아무도 모른다). 이력서라도 담는 건 제목까지 — form_data는 절대 안 담는다.
+  await logAction({
+    action: "document_delete",
+    targetType: "document",
+    targetLabel: row?.title ?? null,
+    metadata: {
+      documentId: id,
+      kind: row?.kind ?? null,
+      category: row?.category ?? null,
+      hadFile: Boolean(row?.file_path),
+      uploadedBy: row?.uploaded_by ?? null,
+    },
+  });
   if (row?.file_path) await removeObject(row.file_path, { bucket: MEDIA_KIND.document.supabaseBucket }).catch(() => {});
   revalidatePath("/documents");
   return { ok: true };
@@ -321,12 +378,21 @@ export async function toggleDocumentPin(
   if ("error" in gate) return { error: gate.error };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("academy_documents")
     .update({ pinned, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .is("staff_user_id", null);
+    .is("staff_user_id", null)
+    .select("id, title"); // 제목은 로그 라벨용 — 같은 왕복에서 받아 온다(추가 조회 0).
   if (error) return { error: `고정 변경 실패: ${error.message}` };
+  if (updated?.length) {
+    await logAction({
+      action: "document_pin",
+      targetType: "document",
+      targetLabel: updated[0].title ?? null,
+      metadata: { documentId: id, pinned },
+    });
+  }
   revalidatePath("/documents");
   return { ok: true };
 }

@@ -36,6 +36,40 @@ function tsFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/**
+ * `action:` 뒤의 **표현식 전체**를 잘라 낸다 — 괄호·중괄호 깊이를 세면서 depth 0의 `,`에서 끊는다.
+ *
+ * 🔴 2026-09-09: 종전엔 정규식이 **줄바꿈에서 끊겼다.** 그래서 자리 출결의 여러 줄 **중첩 삼항**
+ *    (`seat_attendance_note` / `_clear` / `_set`)을 통째로 못 봤고, 세 키가 등록 없이 지나가
+ *    원장 화면에 영문이 뜰 뻔했다. 가드가 못 보는 모양이 있으면 그건 가드가 아니다.
+ */
+function actionExprs(block: string): string[] {
+  const out: string[] = [];
+  let k = 0;
+  while ((k = block.indexOf("action:", k)) !== -1) {
+    let d = 0;
+    let q: string | null = null;
+    let e = k + "action:".length;
+    for (; e < block.length; e++) {
+      const c = block[e];
+      if (q) {
+        if (c === String.fromCharCode(92)) e++;
+        else if (c === q) q = null;
+        continue;
+      }
+      if (c === '"' || c === "'" || c === '`') q = c;
+      else if (c === "(" || c === "[" || c === "{") d++;
+      else if (c === ")" || c === "]" || c === "}") {
+        if (d === 0) break;
+        d--;
+      } else if (c === "," && d === 0) break;
+    }
+    out.push(block.slice(k + "action:".length, e));
+    k = e;
+  }
+  return out;
+}
+
 /** logAction( … ) 호출 블록에서 action 문자열 리터럴을 뽑는다(삼항 `a ? "x" : "y"` 포함). */
 function usedActions(): Map<string, Set<string>> {
   const found = new Map<string, Set<string>>();
@@ -52,7 +86,8 @@ function usedActions(): Map<string, Set<string>> {
         else if (c === ")") depth--;
         j++;
       }
-      for (const m of src.slice(i, j).matchAll(/action:\s*([^,\n]+)/g)) {
+      for (const expr0 of actionExprs(src.slice(i, j))) {
+        const m = [expr0, expr0] as const;
         // 🔴 **비교 피연산자는 액션이 아니다** — `action: kind === "rotate" ? "a_create" : "a_toggle"`처럼
         //    삼항의 **조건**에 문자열이 있으면 그것까지 액션으로 오인해 "미등록"이라 오탐한다
         //    (2026-08-07 실제 발생: intake-token-actions의 "rotate"로 main이 빨개졌다. 실제 기록값은

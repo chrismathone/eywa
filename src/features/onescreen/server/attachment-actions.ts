@@ -15,6 +15,7 @@ import {
 } from "@/lib/storage/media-storage";
 import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
+import { logAction } from "@/features/audit/server/log";
 import { teacherOwnsStudent } from "./scope";
 
 // 수업 보고서 학생 사진 첨부(P2b) — documents 2단계 티켓 업로드 패턴(issue→클라 uploadToTicket→register).
@@ -199,6 +200,23 @@ export async function registerReportAttachment(
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
     return { ok: false, error: `등록 실패: ${error.message}` };
   }
+  // 감사로그 — 첨부 변경은 CLASSNOTE_RESET으로 **발송 상태를 지운다**(위 주석). 그래서 "왜 발송됨이
+  // 미발송으로 돌아갔나"의 답이 이 줄뿐인 경우가 있다. 파일 이름·경로는 스토리지 대조용.
+  await logAction({
+    action: "report_attachment_add",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: row.id,
+      studentId: input.studentId,
+      date: input.reportDate ?? kstToday(),
+      subject: input.subject ?? null,
+      classId: input.classId ?? null,
+      fileName: input.name || null,
+      path: input.path,
+      // 발송 상태를 실제로 되돌렸는가(없던 상태를 지운 건 표시하지 않는다).
+      ...(row.classnote_status ? { classnoteReset: row.classnote_status } : {}),
+    },
+  });
   return { ok: true, attachments: next };
 }
 
@@ -222,6 +240,22 @@ export async function removeReportAttachment(
     .eq("id", row.id);
   if (error) return { ok: false, error: `삭제 실패: ${error.message}` };
   await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
+  // 🔴 파일은 스토리지에서 **실제로 지워진다** — 되돌릴 수 없으니 누가 지웠는지가 유일한 근거다.
+  //    (위 멱등 분기 = 이미 없던 첨부는 여기 안 온다.)
+  await logAction({
+    action: "report_attachment_remove",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: row.id,
+      studentId: input.studentId,
+      date: input.reportDate ?? kstToday(),
+      subject: input.subject ?? null,
+      classId: input.classId ?? null,
+      fileName: current.find((a) => a.path === input.path)?.name ?? null,
+      path: input.path,
+      ...(row.classnote_status ? { classnoteReset: row.classnote_status } : {}),
+    },
+  });
   return { ok: true, attachments: next };
 }
 

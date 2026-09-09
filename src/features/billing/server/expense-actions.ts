@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
 import { kstToday } from "@/lib/date-kst";
@@ -77,6 +78,14 @@ function won(v: FormDataEntryValue | null): number {
 }
 
 const VALID_ROLES = new Set(["author", "director", "ceo", "executor"]);
+// 감사로그에 "누가 어느 칸을 체크/해제했나"를 한글로 남기기 위한 라벨. ⚠️ 화면 쪽 같은 표(expenses-table.tsx
+// TOGGLE_ROLES)는 `"use client"` 모듈이라 서버에서 import하면 런타임 undefined다([[#81]]) → 여기 따로 둔다.
+const APPROVAL_ROLE_LABEL: Record<string, string> = {
+  author: "작성",
+  director: "원장",
+  ceo: "대표",
+  executor: "집행자",
+};
 const today = () => kstToday();
 
 // 지출결의서 쓰기 스코프 — 사무실(billing 쓰기)="full"(전건 관리·결재), 강사(expense_requests 쓰기)="own"(본인 것만).
@@ -160,29 +169,50 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
   if (invalid) return invalid;
 
   const supabase = await createClient();
-  const { error } = await supabase.from("expenses").insert({
-    tenant_id: user.tenantId,
-    title: f.title,
-    category: f.category,
-    amount: f.amount,
-    currency: f.currency,
-    expense_date: f.expenseDate,
-    vendor: f.vendor,
-    department: f.department,
-    author: f.author ?? user.displayName,
-    position: f.position,
-    payment_method: f.paymentMethod,
-    bank_name: f.bankName,
-    account_number: f.accountNumber,
-    memo: f.memo,
-    line_items: f.lineItems,
-    // 작성자 user id — 강사 "본인 것만" 스코프 소스(사무실이 만들어도 기록 = 실제 작성자 추적).
-    created_by: user.id,
-    // 작성 단계는 저장 즉시 체크(ijw 패리티). 원장/대표/집행자는 목록에서 토글.
-    approval_checks: { author: { checked: true, date: today() } },
-  });
+  // ⚠️ `.maybeSingle()` — 강사(own)도 자기 행은 select 정책을 통과하지만(0158a: delete/select 조건 동일),
+  //    혹시 표현이 안 돌아와도 **저장 성공을 에러로 뒤집지 않게** single()은 쓰지 않는다.
+  const { data: created, error } = await supabase
+    .from("expenses")
+    .insert({
+      tenant_id: user.tenantId,
+      title: f.title,
+      category: f.category,
+      amount: f.amount,
+      currency: f.currency,
+      expense_date: f.expenseDate,
+      vendor: f.vendor,
+      department: f.department,
+      author: f.author ?? user.displayName,
+      position: f.position,
+      payment_method: f.paymentMethod,
+      bank_name: f.bankName,
+      account_number: f.accountNumber,
+      memo: f.memo,
+      line_items: f.lineItems,
+      // 작성자 user id — 강사 "본인 것만" 스코프 소스(사무실이 만들어도 기록 = 실제 작성자 추적).
+      created_by: user.id,
+      // 작성 단계는 저장 즉시 체크(ijw 패리티). 원장/대표/집행자는 목록에서 토글.
+      approval_checks: { author: { checked: true, date: today() } },
+    })
+    .select("id")
+    .maybeSingle();
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "expense_create",
+    targetType: "expense",
+    targetLabel: f.title,
+    // 🔴 계좌번호(bank_name·account_number)는 담지 않는다 — 계좌는 "누가 무엇을 했나"에 아무것도 더하지
+    //    않으면서, 로그가 새는 순간 가장 크게 새는 값이다. (2026-09-09에 감사로그 읽기를 master·super_admin
+    //    으로 좁혔지만[0253a] 그건 자물쇠고, 자물쇠가 생겼다고 안 넣어도 될 것을 넣지는 않는다.)
+    metadata: {
+      expenseId: created?.id ?? null,
+      amount: f.amount,
+      currency: f.currency,
+      category: f.category,
+      expenseDate: f.expenseDate,
+    },
+  });
   revalidatePath("/billing");
   revalidatePath("/expense-requests");
   return { ok: true };
@@ -205,6 +235,12 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
   if (invalid) return invalid;
 
   const supabase = await createClient();
+  // 감사로그용 이전값 — 금액이 언제 얼마에서 얼마로 바뀌었는지가 "왜 다른가"의 답이다(교재 신청 감사와 같은 결).
+  const { data: before } = await supabase
+    .from("expenses")
+    .select("title, amount, currency, category, expense_date")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase
     .from("expenses")
     .update({
@@ -228,6 +264,23 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
     .eq("id", id);
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "expense_update",
+    targetType: "expense",
+    targetLabel: f.title,
+    metadata: {
+      expenseId: id,
+      amount: f.amount,
+      currency: f.currency,
+      category: f.category,
+      expenseDate: f.expenseDate,
+      // 이전값은 **바뀐 것만** — 안 바뀐 칸까지 실으면 진짜 변경이 묻힌다.
+      ...(before && Number(before.amount) !== f.amount ? { amountBefore: Number(before.amount) } : {}),
+      ...(before && before.title !== f.title ? { titleBefore: before.title } : {}),
+      ...(before && before.category !== f.category ? { categoryBefore: before.category } : {}),
+      ...(before && before.expense_date !== f.expenseDate ? { expenseDateBefore: before.expense_date } : {}),
+    },
+  });
   revalidatePath("/billing");
   revalidatePath("/expense-requests");
   return { ok: true };
@@ -248,7 +301,12 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
 
   const supabase = await createClient();
   // 첨부 증빙 파일도 함께 정리(고아 객체 방지) — RLS로 같은 테넌트 행만 읽힌다.
-  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
+  // 🔴 제목·금액도 **여기서** 읽는다 — 지운 뒤엔 행에서 되짚을 수 없다(textbook_order_delete와 같은 규약).
+  const { data: row } = await supabase
+    .from("expenses")
+    .select("receipt_urls, title, amount, currency, category, expense_date")
+    .eq("id", id)
+    .maybeSingle();
   const paths = parseReceipts(row?.receipt_urls)
     .map((r) => r.path)
     .filter((p) => isTenantReceiptPath(p, user.tenantId, id));
@@ -256,9 +314,27 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
     await removeObject(p, { bucket: RECEIPTS_BUCKET }).catch(() => {});
   }
 
-  const { error } = await supabase.from("expenses").delete().eq("id", id);
+  // `.select("id")` = 실제로 지워진 행 확인. RLS에 막히면 PostgREST가 **에러 없이 0행**을 지운다 —
+  // 그때 로그를 남기면 감사로그가 일어나지 않은 삭제를 사실로 적는다(안 지워졌으면 기록도 안 남긴다).
+  const { data: gone, error } = await supabase.from("expenses").delete().eq("id", id).select("id");
   if (error) return { error: error.message };
 
+  if (gone?.length) {
+    await logAction({
+      action: "expense_delete",
+      targetType: "expense",
+      targetLabel: row?.title ?? null,
+      // 삭제는 되짚을 원본이 없다 — 금액·증빙 수까지 남긴다(계좌번호는 여전히 제외).
+      metadata: {
+        expenseId: id,
+        amount: Number(row?.amount ?? 0),
+        currency: row?.currency ?? null,
+        category: row?.category ?? null,
+        expenseDate: row?.expense_date ?? null,
+        receiptsRemoved: paths.length,
+      },
+    });
+  }
   revalidatePath("/billing");
   revalidatePath("/expense-requests");
   return { ok: true };
@@ -283,11 +359,12 @@ export async function toggleExpenseApproval(
   const supabase = await createClient();
   const { data: row, error: readErr } = await supabase
     .from("expenses")
-    .select("approval_checks")
+    .select("approval_checks, title") // title = 감사로그 '대상' 라벨(같은 왕복에서 함께 읽는다)
     .eq("id", id)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
   if (!row) return { error: "지출을 찾을 수 없습니다" };
+  const title = row.title as string | null;
 
   // 기존 결재 상태를 정규화(문자열 이중 인코딩 파싱 + 유효 역할만)해 merge — 잡키·문자열 오염 방지.
   const base = normalizeApprovalChecks(row.approval_checks);
@@ -300,6 +377,21 @@ export async function toggleExpenseApproval(
     .eq("id", id);
   if (error) return { error: error.message };
 
+  // 🔴 **방향을 반드시 남긴다** — "누가 결재를 눌렀나"만큼 "누가 해제했나"가 중요하다(해제는 이미 승인된
+  //    지출을 되돌리는 행위라, 방향 없이 "결재 변경"만 남기면 역검수에서 둘을 구분할 수 없다).
+  await logAction({
+    action: "expense_approval",
+    targetType: "expense",
+    targetLabel: title ?? null,
+    metadata: {
+      expenseId: id,
+      role,
+      roleLabel: APPROVAL_ROLE_LABEL[role] ?? role,
+      checked,
+      direction: checked ? "승인" : "해제",
+      approvalStatus,
+    },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -329,28 +421,47 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
     return { error: "본인이 작성한 지출결의서만 복제할 수 있습니다" };
   }
 
-  const { error } = await supabase.from("expenses").insert({
-    tenant_id: user.tenantId,
-    title: src.title,
-    category: src.category,
-    amount: src.amount,
-    currency: src.currency ?? DEFAULT_CURRENCY,
-    expense_date: today(),
-    vendor: src.vendor,
-    department: src.department,
-    author: user.displayName,
-    position: null,
-    payment_method: src.payment_method,
-    bank_name: src.bank_name,
-    account_number: src.account_number,
-    memo: src.memo,
-    line_items: src.line_items,
-    created_by: user.id,
-    approval_status: "pending",
-    approval_checks: { author: { checked: true, date: today() } },
-  });
+  const { data: created, error } = await supabase
+    .from("expenses")
+    .insert({
+      tenant_id: user.tenantId,
+      title: src.title,
+      category: src.category,
+      amount: src.amount,
+      currency: src.currency ?? DEFAULT_CURRENCY,
+      expense_date: today(),
+      vendor: src.vendor,
+      department: src.department,
+      author: user.displayName,
+      position: null,
+      payment_method: src.payment_method,
+      bank_name: src.bank_name,
+      account_number: src.account_number,
+      memo: src.memo,
+      line_items: src.line_items,
+      created_by: user.id,
+      approval_status: "pending",
+      approval_checks: { author: { checked: true, date: today() } },
+    })
+    .select("id")
+    .maybeSingle();
   if (error) return { error: error.message };
 
+  // 복제는 **같은 금액의 지출이 하나 더 생기는** 일이라 create와 갈라 둔다 — 중복 지출을 되짚을 때
+  // "새로 쓴 것"과 "복제한 것"이 구분돼야 하고, 원본 id(sourceId)가 그 대조의 유일한 실마리다.
+  await logAction({
+    action: "expense_duplicate",
+    targetType: "expense",
+    targetLabel: src.title as string | null,
+    metadata: {
+      expenseId: created?.id ?? null,
+      sourceId: id,
+      amount: Number(src.amount ?? 0),
+      currency: src.currency ?? DEFAULT_CURRENCY,
+      category: src.category ?? null,
+      expenseDate: today(),
+    },
+  });
   revalidatePath("/billing");
   revalidatePath("/expense-requests");
   return { ok: true };
@@ -382,6 +493,11 @@ export async function setExpenseReceiptType(
     .eq("id", id);
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "expense_receipt_type",
+    targetType: "expense",
+    metadata: { expenseId: id, receiptType: type || null },
+  });
   revalidatePath("/billing");
   revalidatePath("/expense-requests");
   return { ok: true };
@@ -473,6 +589,12 @@ export async function addExpenseReceipt(
     return { error: error.message };
   }
 
+  await logAction({
+    action: "expense_receipt_add",
+    targetType: "expense",
+    // 파일 이름은 남기되 경로(테넌트/지출/uuid)는 남기지 않는다 — 감사로그를 읽는 사람이 알아야 할 건 "무엇이 붙었나"다.
+    metadata: { expenseId: id, fileName: name || path.split("/").pop() || null, receiptCount: list.length },
+  });
   revalidatePath("/billing");
   revalidatePath("/expense-requests");
   return { ok: true };
@@ -501,7 +623,9 @@ export async function removeExpenseReceipt(
   const supabase = await createClient();
   const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
   if (!row) return { error: "지출을 찾을 수 없습니다" };
-  const list = parseReceipts(row.receipt_urls).filter((r) => r.path !== path);
+  const current = parseReceipts(row.receipt_urls);
+  const removed = current.find((r) => r.path === path); // 감사로그에 남길 파일 이름(지운 뒤엔 못 읽는다)
+  const list = current.filter((r) => r.path !== path);
   const { error } = await supabase
     .from("expenses")
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
@@ -510,6 +634,17 @@ export async function removeExpenseReceipt(
 
   if (!isLegacy) await removeObject(path, { bucket: RECEIPTS_BUCKET }).catch(() => {});
 
+  // 🔴 증빙 삭제는 **되돌릴 수 없다**(스토리지 객체까지 지운다) — "영수증이 언제 사라졌나"의 유일한 답이다.
+  await logAction({
+    action: "expense_receipt_remove",
+    targetType: "expense",
+    metadata: {
+      expenseId: id,
+      fileName: removed?.name || path.split("/").pop() || null,
+      legacy: isLegacy,
+      receiptCount: list.length,
+    },
+  });
   revalidatePath("/billing");
   revalidatePath("/expense-requests");
   return { ok: true };

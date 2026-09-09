@@ -1,4 +1,5 @@
 import "server-only";
+import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
 import { kstDateOf, kstMonth, kstMonthStartIso, kstYear, shiftMonth } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
@@ -1013,10 +1014,14 @@ export async function findMergeSuccessor(lostId: string): Promise<string | null>
   const seen = new Set<string>([lostId]);
   let cur = lostId;
   for (let hop = 0; hop < MERGE_CHAIN_MAX; hop += 1) {
-    const { data, error } = await supabase
-      .from("audit_logs")
-      .select("metadata")
-      .eq("action", "consultation_merge")
+    // 🔴 감사로그는 **좁은 문**으로 읽는다 — 원장 2026-09-09 *"감사로그는 마스터 이상급으로만"* 으로
+    //    정책을 좁혔기 때문에, 세션 클라로 읽으면 병합된 상담 링크가 강사에게만 404가 된다.
+    const scope = await systemAuditScope(["consultation_merge"]);
+    if (!scope) return null;
+    const { data, error } = await auditScoped(
+      scope.admin.from("audit_logs").select("metadata"),
+      scope,
+    )
       .contains("metadata", { loserIds: [cur] })
       .order("created_at", { ascending: false })
       .limit(1)

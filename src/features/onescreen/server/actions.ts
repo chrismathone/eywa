@@ -51,6 +51,7 @@ import {
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
+import { logAction } from "@/features/audit/server/log";
 import type { OneScreenStudent, PrevReport } from "../types";
 
 export type SaveLessonReportInput = {
@@ -277,6 +278,29 @@ export async function saveLessonReport(
       /* 출결 칸 생성 실패는 보고서 저장을 막지 않는다(로그는 헬퍼가 남긴다) */
     }
   }
+
+  /**
+   * 감사로그 — **누가 이 보고서를 고쳤나**의 유일한 근거다.
+   * 🔴 `lesson_reports`에는 `updated_by`가 없고, `created_by`는 갱신 때 DB 트리거가 **원 작성자를
+   *    보존**한다(위 upsert 주석). 즉 사무실이 남의 보고서를 고쳐도 행에는 흔적이 안 남는다.
+   * ⚠️ 본문(notes)·특이사항은 **담지 않는다** — 학생 사적 내용이고, id·날짜·반이면 그 행을 되짚는다.
+   * ⚠️ 발송(`saveAndQueueClassnote`)은 이 함수를 그대로 거치므로 저장 1줄 + 발송 1줄이 남는다
+   *    (같은 보고서 id로 이어 읽힌다 — 발송이 내용까지 바꿨다는 사실이 저장 줄에 남아야 한다).
+   */
+  await logAction({
+    action: "lesson_report_save",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: data.id,
+      studentId: input.studentId,
+      date: reportDate,
+      subject: input.subject || null,
+      classId: input.classId || null,
+      via: "teacher",
+      created: !priorRow,
+      ...(input.makeup ? { makeup: true } : {}),
+    },
+  });
 
   return { ok: true, id: data.id, shareToken: data.share_token };
 }
@@ -520,6 +544,28 @@ export async function saveAndQueueClassnote(
     })
     .eq("id", saved.id);
   if (error) return { ok: false, error: error.message };
+  /**
+   * 🔴 **학부모에게 나가는 순간**이라 반드시 남긴다(ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없다).
+   * ⚠️ 위 조기 반환들(dry_run·subject_off·report_optout·absent·no_attendance·already_sent·processing·
+   *    revoked·recall_pending·name_conflict)은 **아무것도 안 나간 것**이라 여기 안 온다 —
+   *    "발송 기록"이 실제 발송만 뜻하게 유지한다.
+   * ⚠️ `too_old`도 큐에 안 올라가지만(워커가 안 집는다) 사람은 발송을 눌렀으므로 상태를 함께 남긴다.
+   */
+  await logAction({
+    action: "classnote_send",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: saved.id,
+      studentId: input.studentId,
+      date: reportDate,
+      subject: input.subject || null,
+      classId: input.classId || null,
+      via: "teacher",
+      status: allowed ? "queued" : "too_old",
+      // 회수했던 건을 다시 보낸 경우 — 위에서 공유 토큰을 새로 발급했다(옛 링크는 죽었다).
+      ...(prior?.classnote_status === "recalled" ? { fromRecalled: true } : {}),
+    },
+  });
   // 발송 허용 시간창 밖이면 대기 안내(실제 지연은 워커 게이트 담당 — 여기선 문구만). 창 안·무제한 = undefined.
   const sendWindowHint =
     allowed
@@ -557,6 +603,17 @@ export async function revokeShareLink(shareToken: string): Promise<{ ok: boolean
     .update({ revoked_at: new Date().toISOString(), revoked_by: user.id })
     .eq("id", report.id);
   if (error) return { ok: false, error: error.message };
+  // 🔴 학부모가 보던 링크를 **끄는** 동작 — 밖으로 나갔던 것을 되돌리는 일이라 흔적이 필수다.
+  //    (행의 `revoked_by`가 남긴 하지만 재발급 한 번에 지워진다 — 아래 reissue가 null로 되돌린다.)
+  await logAction({
+    action: "share_link_revoke",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: report.id,
+      studentId: report.student_id,
+      date: report.report_date,
+    },
+  });
   return { ok: true };
 }
 
@@ -606,6 +663,22 @@ export async function reissueShareLink(
     })
     .eq("id", report.id);
   if (error) return { ok: false, error: error.message };
+  /**
+   * 🔴 재발급은 **옛 링크를 죽이고 발송 상태를 지운다** — 학부모가 갖고 있던 주소가 404가 되고,
+   *    발송 완료였던 건이 '미발송'으로 돌아가 재발송이 열린다(수정 금지를 푸는 유일한 문).
+   *    행에는 그 사실이 남지 않으므로(전부 null로 리셋) 이 줄이 유일한 근거다.
+   */
+  await logAction({
+    action: "share_link_reissue",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: report.id,
+      studentId: report.student_id,
+      date: report.report_date,
+      // 되돌린 발송 상태 — 'success'였다면 학부모에게 이미 나간 건을 다시 열었다는 뜻이다.
+      prevStatus: (report.classnote_status as string | null) ?? null,
+    },
+  });
   return { ok: true, shareToken: newToken };
 }
 

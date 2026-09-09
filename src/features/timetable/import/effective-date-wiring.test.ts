@@ -61,7 +61,9 @@ describe("서버 액션이 적용일을 실제로 쓴다", () => {
     expect(s).toMatch(/const today = effective;/);
     // ⚠️ 안 넘기면 RPC 기본값 current_date(DB 시각)로 떨어져 KST 자정 근처에서 하루가 어긋난다.
     expect(s).toMatch(/p_effective_date: effective/);
-    expect(s.match(/applyDiff\(user, supabase, fresh\.diff, eff\.date\)/g)).toHaveLength(2);
+    // 4번째 인자가 `eff.date`(서버 검증한 적용일)인 것이 이 가드의 핵심 — 뒤에 인자가 더 붙는 것은
+    // 허용하되(감사로그 출처 등), 날짜 자리가 다른 값으로 바뀌면 여전히 걸린다.
+    expect(s.match(/applyDiff\(user, supabase, fresh\.diff, eff\.date[,)]/g)).toHaveLength(2);
   });
 
   it("반이동 — 두 진입점 모두 적용일을 서버 검증한다", () => {

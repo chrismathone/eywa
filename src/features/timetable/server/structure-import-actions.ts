@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
+import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
@@ -350,8 +351,29 @@ export async function applyStructureImport(
 
   const { data, error } = await supabase.rpc("apply_english_structure", { p_payload: payload, p_today: today });
   if (error) return { error: error.message };
-  revalidatePath("/timetable");
   const res = (data ?? {}) as { snapshotId?: string; closed?: number; inserted?: number; classUpdated?: number };
+
+  // 감사로그 — 한 번에 수백 칸의 배치와 담임이 바뀌는 동작이라, 되돌릴 근거(`snapshotId`)와 언제부터인지
+  // (`effectiveDate`)를 한 줄로 남긴다(건별 계획은 스냅샷 payload에 있다). 🔴 `acknowledgedConflicts`도
+  // 싣는다 — 차단 충돌을 **누가 확인하고 밀어붙였는지**가 나중에 "왜 이 반이 겹쳤나"의 유일한 답이다.
+  await logAction({
+    action: "timetable_structure_apply",
+    targetType: "timetable",
+    targetLabel: "영어 시트 구조",
+    metadata: {
+      subject,
+      effectiveDate: eff.date,
+      // 예약 적용(오늘이 아님)이면 실제 반영은 그날 일어난다 — 감사로그에서 둘을 구분할 수 있어야 한다.
+      scheduled: eff.date > kstToday(),
+      closed: res.closed ?? 0,
+      inserted: res.inserted ?? 0,
+      classUpdated: res.classUpdated ?? 0,
+      acknowledgedConflicts: needAck.length,
+      snapshotId: res.snapshotId ?? null,
+    },
+  });
+
+  revalidatePath("/timetable");
   return {
     applied: { closed: res.closed ?? 0, inserted: res.inserted ?? 0, classUpdated: res.classUpdated ?? 0 },
     effectiveDate: eff.date,
@@ -377,7 +399,22 @@ export async function rollbackStructureImport(snapshotId: string): Promise<Rollb
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("rollback_english_structure", { p_snapshot_id: snapshotId });
   if (error) return { error: error.message };
-  revalidatePath("/timetable");
   const res = (data ?? {}) as { deleted?: number; restored?: number; classReverted?: number };
+
+  // 🔴 되돌리기는 반드시 남긴다 — 적용만 기록하면 "적용은 있는데 지금 시간표엔 없다"가 되어, 되돌린
+  //    사람을 찾을 방법이 0이 된다(적용 로그의 snapshotId와 같은 값으로 짝이 맞춰진다).
+  await logAction({
+    action: "timetable_structure_rollback",
+    targetType: "timetable",
+    targetLabel: "영어 시트 구조",
+    metadata: {
+      snapshotId,
+      deleted: res.deleted ?? 0,
+      restored: res.restored ?? 0,
+      classReverted: res.classReverted ?? 0,
+    },
+  });
+
+  revalidatePath("/timetable");
   return { reverted: { deleted: res.deleted ?? 0, restored: res.restored ?? 0, classReverted: res.classReverted ?? 0 } };
 }

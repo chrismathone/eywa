@@ -1,4 +1,5 @@
 import "server-only";
+import { auditScoped, systemAuditScope, type SystemReadableAuditAction } from "@/features/audit/server/system-read";
 import { createClient } from "@/lib/supabase/server";
 import { auditActionLabel } from "@/features/audit/server/log";
 import { auditActorName, auditDetail } from "@/features/audit/describe";
@@ -33,6 +34,27 @@ import {
  *    classId를 안 남기던 시절(실측: 반 로그 중 classId 보유 21건)이 있어서다. 이름 매칭은 개명하면
  *    끊기지만, 끊겨도 **없는 줄이 생길 뿐** 남의 반 이력이 섞이지는 않는다(같은 이름 반이 없다는 전제).
  */
+/**
+ * 반 이력에 싣는 감사로그 action — `target_type = "class"`로 실제로 쌓이는 것 전부(2026-09-09 전수 확인).
+ * ⚠️ 반에 대한 새 감사 action을 만들면 여기와 `SYSTEM_READABLE_AUDIT_ACTIONS`에 함께 추가할 것
+ *    (안 넣으면 그 줄만 이력에서 조용히 빠진다).
+ */
+const CLASS_HISTORY_ACTIONS: readonly SystemReadableAuditAction[] = [
+  "class_update",
+  "class_archive",
+  "class_unarchive",
+  "class_end_term",
+  "class_reopen_term",
+  "class_schedule_move",
+  "class_handover_apply",
+  "class_handover_schedule",
+  "class_handover_cancel",
+  "class_handover_bulk",
+  "class_delegate",
+  "class_delegate_revoke",
+  "classroom_auto_assign",
+];
+
 export async function getClassHistory(classId: string): Promise<ClassHistoryEntry[]> {
   const supabase = await createClient();
   // 반 이름은 **구 감사로그 매칭 키**라 여기서 직접 읽는다(호출부가 이름을 넘기게 하면 상세 페이지의
@@ -58,10 +80,16 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
       actor_name: string | null;
       metadata: Record<string, unknown> | null;
       created_at: string;
-    }>((from, to) =>
-      supabase
-        .from("audit_logs")
-        .select("action, actor_name, metadata, created_at")
+    }>(async (from, to) => {
+      // 🔴 감사로그는 **좁은 문**으로 읽는다 — 원장 2026-09-09 *"감사로그는 마스터 이상급으로만"* 으로
+      //    정책을 좁혔기 때문에, 세션 클라로 읽으면 강사에게 이 이력이 통째로 빈다. 허용 목록은
+      //    `target_type = "class"`로 실제로 쌓이는 12개를 **모두** 덮으므로 사라지는 줄은 없다.
+      const scope = await systemAuditScope(CLASS_HISTORY_ACTIONS);
+      if (!scope) return { data: [], error: null } as never;
+      return auditScoped(
+        scope.admin.from("audit_logs").select("action, actor_name, metadata, created_at"),
+        scope,
+      )
         .eq("target_type", "class")
         // 이름이 비면 classId만으로 — 빈 문자열을 or에 넣으면 라벨이 빈 남의 로그가 딸려온다.
         .or(
@@ -70,8 +98,8 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
             : `metadata->>classId.eq.${classId}`,
         )
         .order("created_at", { ascending: false })
-        .range(from, to),
-    ).catch(() => null),
+        .range(from, to) as never;
+    }).catch(() => null),
     supabase
       .from("class_delegations")
       .select("delegate_user_id, from_date, to_date, reason, revoked_at, created_at")

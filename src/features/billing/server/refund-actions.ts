@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -86,6 +87,7 @@ export async function saveRefundRequest(
       .eq("id", id)
       .eq("form_type", REFUND_FORM_TYPE);
     if (error) return { error: `저장 실패: ${error.message}` };
+    await logAction({ action: "refund_request_update", ...refundAuditFields(id, data, prev) });
     revalidateRefund(id);
     return { ok: true, id, nonce: Date.now(), redirectTo: `/billing/refunds/${id}` };
   }
@@ -107,8 +109,42 @@ export async function saveRefundRequest(
     .select("id")
     .single();
   if (error || !row) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
+  await logAction({ action: "refund_request_create", ...refundAuditFields(row.id, data, null) });
   revalidateRefund(row.id);
   return { ok: true, id: row.id, nonce: Date.now(), redirectTo: `/billing/refunds/${row.id}` };
+}
+
+/**
+ * 환불 요청서 감사로그의 **대상·상세만** 만든다(action 키는 호출부가 리터럴로 적는다).
+ *
+ * ⚠️ 액션 키를 이 함수의 **인자로 받지 말 것** — `actions-registry.test.ts`가 `logAction(` 괄호 안의
+ *    문자열 리터럴만 스캔해서 AUDIT_ACTIONS 등록 여부를 검사한다. 키를 변수로 넘기면 그 가드가
+ *    **아무것도 못 보고 통과**하고, 라벨 미등록 키가 원장 화면에 영문 그대로 뜬다(가드가 막으려던 바로 그 사고).
+ *
+ * 🔴 **계좌번호·주소는 담지 않는다.** 되짚는 데 필요 없는 값이고, 로그가 새면 가장 크게 새는 값이다
+ *    (2026-09-09에 감사로그 읽기를 master·super_admin으로 좁혔지만[0253a] 그건 자물쇠일 뿐이다). 이 서식은 그래서 `restricted:true`로 저장되고 0072a restrictive RLS가 사무실
+ *    역할만 통과시키는데, 계좌를 metadata에 실으면 그 잠금이 그대로 무의미해진다(CLAUDE.md 외부전송
+ *    금지 필드 목록의 '환불요청서 계좌'와 같은 취지).
+ * 🔴 **환불 금액은 담는다** — 되짚을 대상이 그것이고, 금액만으론 사람을 특정하지 못한다.
+ * 🔑 '환불완료' 전이(빈 값 → 날짜)는 돈이 실제로 나간 시점이라 따로 표시한다 — 처리자는 `stampCompletion`이
+ *    행에도 못박지만, 그건 **최초 1회만** 남아서 "나중에 누가 완료를 풀었나"는 감사로그에만 남는다.
+ */
+function refundAuditFields(id: string, data: RefundRequestData, prev: RefundRequestData | null) {
+  const completed = data.result.completedDate.trim() !== "";
+  const wasCompleted = (prev?.result.completedDate ?? "").trim() !== "";
+  return {
+    targetType: "refund_request",
+    targetLabel: refundTitle(data),
+    metadata: {
+      documentId: id,
+      studentName: data.student.name || null,
+      totalAmount: data.refund.totalAmount || null,
+      requestDate: data.student.requestDate || null,
+      completedDate: data.result.completedDate || null,
+      // 이번 저장에서 완료 상태가 **바뀌었을 때만** — 매 저장마다 실으면 진짜 전이가 묻힌다.
+      ...(completed !== wasCompleted ? { completionChange: completed ? "완료" : "완료 해제" } : {}),
+    },
+  };
 }
 
 /**
@@ -148,12 +184,36 @@ export async function deleteRefundRequest(id: string): Promise<{ ok?: boolean; e
   if ("error" in gate) return { error: gate.error };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // 지운 뒤엔 되짚을 행이 없다 — 학생·금액을 **삭제 전에** 읽어 둔다(expense_delete와 같은 규약).
+  const { data: before } = await supabase
+    .from("academy_documents")
+    .select("title, form_data")
+    .eq("id", id)
+    .eq("form_type", REFUND_FORM_TYPE)
+    .maybeSingle();
+  const { data: gone, error } = await supabase
     .from("academy_documents")
     .delete()
     .eq("id", id)
-    .eq("form_type", REFUND_FORM_TYPE);
+    .eq("form_type", REFUND_FORM_TYPE)
+    .select("id");
   if (error) return { error: `삭제 실패: ${error.message}` };
+
+  // RLS에 막히면 PostgREST가 에러 없이 0행을 지운다 — 안 지워진 삭제를 감사로그가 사실로 적지 않게 한다.
+  if (gone?.length) {
+    const d = before ? normalizeRefund(before.form_data) : null;
+    await logAction({
+      action: "refund_request_delete",
+      targetType: "refund_request",
+      targetLabel: (before?.title as string | null) ?? null,
+      metadata: {
+        documentId: id,
+        studentName: d?.student.name || null,
+        totalAmount: d?.refund.totalAmount || null,
+        completedDate: d?.result.completedDate || null,
+      },
+    });
+  }
   revalidateRefund(id);
   return { ok: true };
 }

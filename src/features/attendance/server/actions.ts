@@ -19,6 +19,7 @@ import { noteMakeupAgainstAbsence } from "./makeup-note-action";
 import { fetchAbsenceCells, pickAbsenceNoteTarget } from "./absence-cell";
 import type { RecordedVia } from "@/features/attendance/live/recorded-via";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -45,6 +46,25 @@ function revalidateAttendanceSurfaces() {
   revalidatePath("/attendance");
   revalidatePath("/ecs");
   revalidatePath("/onescreen");
+}
+
+/**
+ * 감사로그 metadata 조각 — **무엇을 찍었는지**를 한 줄로(`{ present: 28, absent: 2 }`).
+ * 건별로 N행을 남기지 않기 위한 요약이라, 되짚을 식별자(`studentIds`)와 **짝으로만** 쓴다.
+ */
+function countByStatus(list: readonly { status: Status }[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of list) out[r.status] = (out[r.status] ?? 0) + 1;
+  return out;
+}
+
+/**
+ * 소급 입력(지난 날짜) 표식 — 2026-08-18 사고("재원생 7명을 7월 날짜로 소급 퇴원")와 **같은 모양**이라
+ * 감사로그에서 눈에 띄어야 한다. 날짜는 metadata에 이미 있지만, 플래그가 있어야 액션 필터·검색으로
+ * "소급된 건만" 훑을 수 있다. 없으면 키 자체를 안 넣는다(평시 행을 늘리지 않는다).
+ */
+function backdatedFlag(dates: readonly string[], today: string): { backdated?: true } {
+  return dates.some((d) => d < today) ? { backdated: true } : {};
 }
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
@@ -311,6 +331,35 @@ export async function saveAttendance(
     }
   }
 
+  /**
+   * 감사로그 — 반별 폼 저장은 **한 번에 한 반·한 날짜**라 한 줄로 요약한다(학생 수만큼 남기면
+   * 감사로그가 출결로 뒤덮여 정작 삭제·소급 줄이 묻힌다).
+   * 🔴 `redirect()`는 throw라 **반드시 그 앞에서** 부른다.
+   */
+  await logAction({
+    action: "attendance_save",
+    targetType: "attendance",
+    metadata: {
+      classId,
+      date,
+      count: saved,
+      created: inserts.length,
+      updated: updates.length,
+      statuses: countByStatus(rows),
+      studentIds: rows.map((r) => r.studentId),
+      // 🔴 "몇 건이 붙었나"를 빼서 만들지 않는다 — `unlinked`(결석 칸을 못 찾음)와 `linkError`(권한·DB 실패)는
+      //    **서로 다른 실패**라 하나로 빼면 로그가 붙지도 않은 연결을 붙었다고 말한다. 있는 그대로 싣는다.
+      ...(makeupLinks.length > 0
+        ? {
+            makeupRequested: makeupLinks.length,
+            makeupUnlinked: unlinked,
+            ...(linkError ? { makeupFailed: true } : {}),
+          }
+        : {}),
+      ...backdatedFlag([date], kstToday()),
+    },
+  });
+
   // G4: 전원 기록 완료 전이 감지 → 담당 강사 벨(백그라운드, 응답 안 막음 — 실패해도 저장 무사).
   after(() =>
     notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date, actorId: user.id }),
@@ -482,6 +531,23 @@ export async function setAttendanceCell(input: {
     if (!row?.id) return { error: "그날 출결 기록이 없어 메모만 남길 수 없습니다 — 먼저 출결을 입력하세요" };
     const { error } = await supabase.from("attendance_records").update({ note: noteVal }).eq("id", row.id);
     if (error) return { error: error.message };
+    /**
+     * 감사로그 — 이 경로만 **7일 편집창을 면제**받는다(원장 2026-08-06). 면제된 문은 언제 열렸는지가
+     * 남아야 하므로 상태 변경과 같은 급으로 기록한다.
+     * 🔴 메모 **본문은 싣지 않는다** — 결석 사유엔 병원·가정사가 그대로 적힌다. 비웠는지 채웠는지만.
+     */
+    await logAction({
+      action: "attendance_note",
+      targetType: "attendance",
+      metadata: {
+        studentId,
+        classId,
+        date: sessionDate,
+        ...(slot ? { slotStart: slot } : {}),
+        cleared: noteVal === null,
+        ...backdatedFlag([sessionDate], kstToday()),
+      },
+    });
     if (!input.quiet) revalidateAttendanceSurfaces();
     return { ok: true };
   }
@@ -509,6 +575,23 @@ export async function setAttendanceCell(input: {
     if (slot !== null) del = del.eq("slot_start", slot);
     const { error } = await del;
     if (error) return { error: error.message };
+    /**
+     * 감사로그 — **지우기가 이 파일에서 가장 값진 줄**이다. 출결 행은 스스로 `recorded_by`·`recorded_at`을
+     * 담고 있어 "누가 찍었나"는 행만 봐도 되지만, 지우면 그 증거가 행과 **함께** 사라진다(2026-08-18
+     * 소급 퇴원 사고가 커진 것과 같은 모양). 여기 남기지 않으면 되짚을 자리가 0이다.
+     */
+    await logAction({
+      action: "attendance_clear",
+      targetType: "attendance",
+      metadata: {
+        studentId,
+        classId,
+        date: sessionDate,
+        ...(slot ? { slotStart: slot } : {}),
+        ...(input.source ? { source: input.source } : {}),
+        ...backdatedFlag([sessionDate], kstToday()),
+      },
+    });
     if (!input.quiet) revalidateAttendanceSurfaces();
     return { ok: true };
   }
@@ -562,6 +645,8 @@ export async function setAttendanceCell(input: {
   if ("error" in deskGate) return deskGate;
 
   const nowIso = new Date().toISOString();
+  // 감사로그용 — 아래 분기가 id 목록을 소비하기 전에 **덮어쓰기였는지**를 굳혀 둔다.
+  const overwrote = updateIds.length > 0 || promoteIds.length > 0;
   if (updateIds.length > 0 || promoteIds.length > 0) {
     const patch: Record<string, unknown> = withVia(
       { status, recorded_by: user.id, recorded_at: nowIso },
@@ -625,6 +710,27 @@ export async function setAttendanceCell(input: {
     const wrote = await insertWithVia(supabase, row);
     if (wrote.error) return { error: wrote.error };
   }
+
+  /**
+   * 감사로그 — 단건 셀 저장. 🔴 값진 쪽은 **정정(덮어쓰기)** 이다: update는 그 행의 `status`·`recorded_by`를
+   * 제자리에서 갈아끼우므로 **이전 상태와 이전 입력자가 함께 사라진다**. 새로 연 칸은 행 자체가
+   * 실행자를 담지만(`recorded_by`), 덮어쓴 칸은 여기 말고 되짚을 자리가 없다 — 그래서 `prevStatus`를 싣는다.
+   */
+  await logAction({
+    action: "attendance_cell",
+    targetType: "attendance",
+    metadata: {
+      studentId,
+      classId,
+      date: sessionDate,
+      ...(slot ? { slotStart: slot } : {}),
+      status,
+      ...(overwrote ? { overwrote: true, prevStatus } : { created: true }),
+      ...(unitsProvided ? { units: unitsVal } : {}),
+      ...(input.source ? { source: input.source } : {}),
+      ...backdatedFlag([sessionDate], kstToday()),
+    },
+  });
 
   // G4: 셀 저장(삽입/갱신)마다 완료 전이 검사 — 삭제 경로는 위에서 조기 반환이라 미발화(기록 제거는 완료가 아님).
   after(() =>
@@ -816,6 +922,29 @@ export async function linkMakeupToAbsence(input: {
 
   for (const res of await Promise.all(writes)) {
     if (res.error) return { error: res.error.message };
+  }
+  /**
+   * 감사로그 — 이 액션은 보강한 날 칸의 **시수를 올린다**(급여 재료). 멱등 가드가 깨지면 조용한 과지급이라
+   * "누가 언제 몇 시수를 얹었나"가 남아야 한다.
+   * ⚠️ 아무것도 안 쓴 호출(이미 연결됨 + 결석 메모도 이미 있음)은 남기지 않는다 — 없는 변경을 기록하지 않는다.
+   * 🔴 메모 **본문은 싣지 않는다**(결석 사유가 섞인 칸에 덧붙이는 경로다).
+   */
+  if (writes.length > 0) {
+    await logAction({
+      action: "attendance_makeup_link",
+      targetType: "attendance",
+      metadata: {
+        studentId,
+        classId,
+        ...(absentClassId !== classId ? { absentClassId } : {}),
+        absentDate,
+        makeupDate,
+        addUnits,
+        units,
+        absenceNoted: !!absentTarget,
+        ...(alreadyLinked ? { alreadyLinked: true } : {}),
+      },
+    });
   }
   // 셀 액션과 같은 계약 — 기록이 늘거나 바뀐 날에만 완료 전이 검사(결석일은 메모만이라 미발화).
   if (!alreadyLinked) {
@@ -1092,6 +1221,35 @@ export async function setAttendanceBulk(input: {
     if (wrote.error) return { error: wrote.error };
   }
 
+  /**
+   * 감사로그 — 일괄은 **한 줄로 요약**한다(300칸을 300행으로 남기면 감사로그가 못 읽는 물건이 된다).
+   * 대신 되짚을 식별자(`studentIds`·`classIds`·`date`)를 함께 담아 "무엇이 바뀌었나"를 복원할 수 있게.
+   * ⚠️ 게이트에 걸려 한 칸도 안 쓴 요청은 남기지 않는다(`allowed`가 비면 write가 0건이다).
+   */
+  if (allowed.length > 0) {
+    const wroteClassIds = [...new Set(allowed.map((c) => c.classId))];
+    await logAction({
+      action: "attendance_bulk",
+      targetType: "attendance",
+      metadata: {
+        // 반이 하나면 '대상' 열이 반 이름으로 읽힌다(auditTargetName) — 여럿이면 지어내지 않고 목록만.
+        ...(wroteClassIds.length === 1 ? { classId: wroteClassIds[0] } : {}),
+        classIds: wroteClassIds,
+        date: sessionDate,
+        status,
+        count: allowed.length,
+        created: inserts.length,
+        blocked: cells.length - allowed.length,
+        studentIds: [...new Set(allowed.map((c) => c.studentId))],
+        ...(slot ? { slotStart: slot } : {}),
+        ...(input.fillEmptyOnly ? { fillEmptyOnly: true } : {}),
+        ...(input.source ? { source: input.source } : {}),
+        ...(bulkUnitsProvided ? { units: bulkUnitsVal } : {}),
+        ...backdatedFlag([sessionDate], kstToday()),
+      },
+    });
+  }
+
   // G4: 반마다 '전원 기록 완료' 전이 검사(셀 액션과 동일) — 백그라운드라 응답을 막지 않는다.
   after(async () => {
     for (const classId of classIds) {
@@ -1289,6 +1447,29 @@ export async function setAttendanceRange(input: {
       const { error } = await supabase.from("attendance_records").delete().in("id", ids.slice(i, i + CHUNK));
       if (error) return { error: error.message };
     }
+    /**
+     * 감사로그 — **범위 지우기**. 단건 지우기와 같은 이유로 이 파일에서 가장 값진 줄이고, 규모까지 크다
+     * (한 번에 최대 300칸 + 그 칸의 정정 이력 행까지 통째로 사라진다). 지워진 행은 `recorded_by`를
+     * 데리고 가므로 여기 말고는 되짚을 자리가 0이다.
+     */
+    if (ids.length > 0) {
+      // 🔴 위쪽 `classIds`/`studentIds`는 **거르기 전(cells) 목록**이다 — 실제로 지운 칸(`allowed`)에서 다시 뽑는다.
+      const wroteClassIds = [...new Set(allowed.map((c) => c.classId))];
+      await logAction({
+        action: "attendance_range_clear",
+        targetType: "attendance",
+        metadata: {
+          ...(wroteClassIds.length === 1 ? { classId: wroteClassIds[0] } : {}),
+          classIds: wroteClassIds,
+          dates: [...new Set(allowed.map((c) => c.sessionDate))].sort(),
+          count: allowed.length,
+          rows: ids.length,
+          blocked: cells.length - allowed.length,
+          studentIds: [...new Set(allowed.map((c) => c.studentId))],
+          ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
+        },
+      });
+    }
     revalidateAttendanceSurfaces();
     return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
   }
@@ -1382,6 +1563,28 @@ export async function setAttendanceRange(input: {
       if (wrote.error) return { error: wrote.error };
     }
   }
+
+  /**
+   * 감사로그 — 범위 채우기도 **한 줄 요약**(일괄과 같은 규약). 다른 점은 날짜가 칸마다 다르다는 것뿐이라
+   * `dates`를 함께 싣는다. 범위는 가로로도 끌리므로 **지난 날짜가 섞이기 쉬운 경로**다(소급 표식이 특히 유효).
+   */
+  const rangeClassIds = [...new Set(allowed.map((c) => c.classId))];
+  await logAction({
+    action: "attendance_range",
+    targetType: "attendance",
+    metadata: {
+      ...(rangeClassIds.length === 1 ? { classId: rangeClassIds[0] } : {}),
+      classIds: rangeClassIds,
+      dates: [...new Set(allowed.map((c) => c.sessionDate))].sort(),
+      status,
+      count: allowed.length,
+      created: inserts.length,
+      blocked: cells.length - allowed.length,
+      studentIds: [...new Set(allowed.map((c) => c.studentId))],
+      ...(unitsProvided ? { units: unitsVal } : {}),
+      ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
+    },
+  });
 
   // G4: (반·날짜) 조합마다 '전원 기록 완료' 전이 검사 — 셀·일괄 액션과 동일. 백그라운드라 응답을 안 막는다.
   // ⚠️ 조합 수 상한: 한 달치를 통째로 끌면 (반×날짜)가 수백이 되어 백그라운드가 그만큼 쿼리를 돈다.

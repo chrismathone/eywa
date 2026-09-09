@@ -15,6 +15,7 @@ import "server-only";
  *    admin 클라이언트 + `tenant_id` 명시 필터. 모든 select/update가 tenant_id + class_id + id 3중 조건.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAction } from "@/features/audit/server/log";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { normalizePlanText, SKILL_AREA_SLUG_RE } from "../lib/plan-codec";
 import { planLineFromRow } from "../lib/plan-line";
@@ -86,6 +87,33 @@ const KO_DOW = ["일", "월", "화", "수", "목", "금", "토"] as const;
 function koDowOf(ymd: string): string {
   const d = new Date(`${ymd}T00:00:00Z`);
   return Number.isNaN(d.getTime()) ? "?" : (KO_DOW[d.getUTCDay()] ?? "?");
+}
+
+// ── 감사로그 ────────────────────────────────────────────────────────────────
+
+/**
+ * 계획 줄의 **구조 변경**만 감사로그에 남긴다(줄 추가·시기/순서 이동·삭제·이전 회차 복사).
+ *
+ * 🔴 **셀 값 저장(`applyPlanPatches`)은 일부러 안 남긴다** — 그쪽은 타이핑 디바운스로 칸마다 들어오는
+ *    저장이라, 한 줄씩 남기면 한 사람의 한 교시 입력이 감사로그를 수백 줄로 덮어 정작 "누가 지웠나"
+ *    같은 줄이 묻힌다(회의 메모장 저장을 뺀 것과 같은 판단, log.ts 주석 참조).
+ * 🔵 **공개 PIN 경로(`/seat/jj`)에서 비로그인으로 들어오면 `logAction`이 조용히 no-op** 한다
+ *    (`getCurrentUser()`가 null). 계정 없는 사람을 누군가의 이름으로 적지 않는다는 `actorId: null`
+ *    규약과 같은 결이고, 그 경로의 흔적은 계획 행의 `updated_by`가 비어 있다는 사실뿐이다.
+ *    ⚠️ 남는 건 **로그인한 채 공개 화면을 쓴 경우**뿐이라, 그때만 `viaPin`으로 "행에는 작성자를 안
+ *    남기는 문으로 들어왔다"를 표시한다(감사 actor와 행 작성자가 갈리는 이유를 읽을 수 있게).
+ */
+async function logPlanChange(
+  action: string,
+  grant: PlanWriteGrant,
+  detail: Record<string, unknown>,
+): Promise<void> {
+  await logAction({
+    action,
+    targetType: "class_sheet_plan",
+    // targetLabel은 비운다 — 뷰어가 metadata.classId를 반 이름으로 풀어 '대상' 열에 보여준다(조회 0회).
+    metadata: { classId: grant.classId, ...detail, ...(grant.actorId ? {} : { viaPin: true }) },
+  });
 }
 
 // ── 필드 CAS 배치 저장 ────────────────────────────────────────────────────────
@@ -203,7 +231,7 @@ export async function insertPlanLine(
     return { ok: false, error: "잘못된 요청입니다(시기)" };
   }
   if (!SKILL_AREA_SLUG_RE.test(input.skillArea)) return { ok: false, error: "잘못된 요청입니다(영역)" };
-  return rpcSlotLines("ecs_create_plan_line", {
+  const res = await rpcSlotLines("ecs_create_plan_line", {
     p_tenant: grant.tenantId,
     p_actor: grant.actorId,
     p_class: grant.classId,
@@ -212,6 +240,15 @@ export async function insertPlanLine(
     p_term_mode: input.termMode,
     p_skill_area: input.skillArea,
   });
+  if (res.ok) {
+    await logPlanChange("ecs_plan_line_add", grant, {
+      planDate: input.planDate,
+      slotStart: input.slotStart,
+      termMode: input.termMode,
+      skillArea: input.skillArea,
+    });
+  }
+  return res;
 }
 
 type PlanRowKey = { id: string; class_id: string; plan_date: string; slot_start: string };
@@ -237,7 +274,7 @@ async function assertLineInClass(
   classId: string,
   lineId: string,
   scope?: PlanWriteScope,
-): Promise<{ ok: true } | { ok: false; code: "gone" | "foreign"; error: string }> {
+): Promise<{ ok: true; row: PlanRowKey } | { ok: false; code: "gone" | "foreign"; error: string }> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("class_sheet_plan_lines")
@@ -251,7 +288,9 @@ async function assertLineInClass(
   if (scope && !inScope(data as PlanRowKey, scope)) {
     return { ok: false, code: "foreign", error: "이 교시의 행이 아닙니다" };
   }
-  return { ok: true };
+  // 행을 함께 돌려준다 — 삭제 감사로그가 "어느 날 어느 교시 줄이 사라졌나"를 조회 없이 남기도록
+  // (지운 뒤에는 그 사실을 되물을 곳이 없다).
+  return { ok: true, row: data as PlanRowKey };
 }
 
 export async function relocatePlanLine(
@@ -264,13 +303,22 @@ export async function relocatePlanLine(
   }
   const own = await assertLineInClass(grant.tenantId, grant.classId, input.lineId, scope);
   if (!own.ok) return { ok: false, error: own.error };
-  return rpcSlotLines("ecs_move_plan_line", {
+  const lineNo = Math.max(1, Math.min(20, Math.round(input.lineNo)));
+  const res = await rpcSlotLines("ecs_move_plan_line", {
     p_tenant: grant.tenantId,
     p_actor: grant.actorId,
     p_line_id: input.lineId,
     p_term_mode: input.termMode,
-    p_line_no: Math.max(1, Math.min(20, Math.round(input.lineNo))),
+    p_line_no: lineNo,
   });
+  if (res.ok) {
+    await logPlanChange("ecs_plan_line_move", grant, {
+      lineId: input.lineId,
+      termMode: input.termMode,
+      lineNo,
+    });
+  }
+  return res;
 }
 
 export async function removePlanLine(
@@ -284,10 +332,19 @@ export async function removePlanLine(
     if (own.code === "foreign") return { ok: false, error: own.error };
     return { ok: true, lines: [] };
   }
-  return rpcSlotLines("ecs_delete_plan_line", {
+  const res = await rpcSlotLines("ecs_delete_plan_line", {
     p_tenant: grant.tenantId,
     p_line_id: input.lineId,
   });
+  // 🔴 위 멱등 성공(이미 지워진 행)은 여기 안 온다 — 실제로 지운 것만 남긴다.
+  if (res.ok) {
+    await logPlanChange("ecs_plan_line_delete", grant, {
+      lineId: input.lineId,
+      planDate: String(own.row.plan_date).slice(0, 10),
+      slotStart: hhmmOf(own.row.slot_start),
+    });
+  }
+  return res;
 }
 
 /**
@@ -352,6 +409,19 @@ export async function copyPlanSlotFromPrevious(
     planDate: input.planDate,
     slotStart: input.slotStart,
   });
+
+  // 한 번 누름 = 여러 줄이 한꺼번에 채워지는 구조 변경이라 **한 줄로 요약**한다(줄마다 남기지 않는다).
+  // ⚠️ 이어받기(carry)는 계획 복사가 0줄이어도 학생 칸을 채운다 — 둘 중 하나라도 바뀌었으면 남긴다.
+  if ((r.copied ?? 0) > 0 || carry.patches.length > 0) {
+    await logPlanChange("ecs_plan_copy", grant, {
+      planDate: input.planDate,
+      slotStart: input.slotStart,
+      termMode: input.termMode,
+      copied: r.copied ?? 0,
+      sourceDate: r.sourceDate ?? null,
+      carried: carry.patches.length,
+    });
+  }
 
   return {
     ok: true,

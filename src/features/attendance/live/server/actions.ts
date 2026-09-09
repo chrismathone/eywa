@@ -10,6 +10,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
@@ -119,6 +120,27 @@ export async function recordFollowup(input: {
         : "확인 기록을 저장하지 못했습니다 — 잠시 후 다시 시도해 주세요",
     };
   }
+  /**
+   * 감사로그 — 확인 기록은 **"학부모에게 연락했다"는 사실 주장**이라(신규생 체크와 같은 결) 나중에
+   * "안 왔다는데 확인은 했다고 돼 있네"를 되짚을 수 있어야 한다. upsert라 **덮어쓰기가 흔한** 경로이기도
+   * 하다(데스크가 전화한 뒤 결과를 고쳐 적는 게 정상 흐름) — 이전 값은 남지 않는다.
+   * 🔴 `note`(사유 원문)와 `outcome`은 싣지 않는다 — 병원·가정사가 그대로 적히는 칸이고, `outcome`의
+   *    `sick`도 미성년자 건강 정보다. 메모가 있었는지(`hasNote`)만 남긴다.
+   */
+  await logAction({
+    action: "attendance_followup",
+    targetType: "attendance",
+    metadata: {
+      studentId,
+      classId,
+      date: sessionDate,
+      ...(slot ? { slotStart: slot } : {}),
+      signal: input.signal,
+      state: input.state,
+      ...(via ? { contactedVia: via } : {}),
+      hasNote: note !== null,
+    },
+  });
   revalidatePath("/attendance/live");
   return { ok: true, id: (data?.id as string) ?? "" };
 }
@@ -208,6 +230,20 @@ export async function requestAttendanceInput(input: {
       actorId: user.id,
     })),
   );
+  /**
+   * 감사로그 — **밖으로 나가는 요청**(강사 여럿의 벨이 울린다)이라 누가 보냈는지가 남아야 한다.
+   * dedup을 통과한 신규분만 여기 온다(이미 보낸 건은 위에서 `sent:false`로 빠진다) = 벨 1회 : 로그 1줄.
+   */
+  await logAction({
+    action: "attendance_input_request",
+    targetType: "attendance",
+    metadata: {
+      classId,
+      date: sessionDate,
+      ...(slot ? { slotStart: slot } : {}),
+      recipients: recipients.length,
+    },
+  });
   revalidatePath("/attendance/live");
   return { ok: true, sent: true };
 }
@@ -336,6 +372,22 @@ export async function requestDeskConfirm(input: {
       actorId: user.id,
     })),
   );
+  /**
+   * 감사로그 — 위 요청의 거울상(강사 → 데스크). 같은 규약: dedup 신규분만 오므로 벨 1회 : 로그 1줄.
+   * 🔴 미입력 학생 **명단은 싣지 않는다** — 건수면 되짚기에 충분하고(그 반·그 교시로 다시 셀 수 있다),
+   *    알림 본문에 이미 이름이 나갔다고 감사로그까지 명단을 이고 있을 이유는 없다.
+   */
+  await logAction({
+    action: "attendance_desk_confirm_request",
+    targetType: "attendance",
+    metadata: {
+      classId,
+      date: sessionDate,
+      ...(slot ? { slotStart: slot } : {}),
+      recipients: recipients.length,
+      pending: pendingIds.length,
+    },
+  });
   revalidatePath("/attendance/live");
   return { ok: true, sent: true };
 }

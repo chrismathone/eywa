@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { reportError } from "@/lib/observability/report-error";
+import { logAction } from "@/features/audit/server/log";
 import { normalizeNoticeAudience } from "@/features/notices/audience";
 import { generateDailyBriefing } from "./briefing";
 
@@ -51,6 +52,15 @@ export async function createAnnouncement(
   });
   if (error) return { error: error.message };
 
+  // 직원 공지는 전 직원이 보는 글이라 "누가 이 문구를 올렸나"가 역검수 대상이다(원장 2026-09-09).
+  // ⚠️ 본문(content)은 싣지 않는다 — 감사로그는 '누가·언제·무엇을'이지 글 보관소가 아니다(제목으로 찾는다).
+  await logAction({
+    action: "announcement_create",
+    targetType: "announcement",
+    targetLabel: input.title,
+    metadata: { audience: input.audience, pinned: input.pinned },
+  });
+
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -83,6 +93,13 @@ export async function updateAnnouncement(
     .eq("id", input.id);
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "announcement_update",
+    targetType: "announcement",
+    targetLabel: input.title,
+    metadata: { announcementId: input.id, audience: input.audience, pinned: input.pinned },
+  });
+
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -101,8 +118,27 @@ export async function deleteAnnouncement(
   if (!id) return { error: "공지 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 🔴 제목은 지우기 **전에** 읽는다 — 지운 뒤엔 읽을 곳이 없어 감사로그가 uuid만 남은 "—" 줄이 된다
+  //    (지운 글일수록 "무엇을 지웠나"가 역검수의 핵심이다). 실패해도 삭제는 진행한다(best-effort).
+  const { data: before } = await supabase
+    .from("announcements")
+    .select("title, audience, pinned")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase.from("announcements").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "announcement_delete",
+    targetType: "announcement",
+    targetLabel: (before?.title as string | null) ?? null,
+    metadata: {
+      announcementId: id,
+      audience: (before?.audience as string | null) ?? null,
+      pinned: (before?.pinned as boolean | null) ?? null,
+    },
+  });
 
   revalidatePath("/dashboard");
   return { ok: true };
@@ -171,6 +207,16 @@ export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: 
     }
   }
 
+  // 유료 AI 호출을 사람이 눌러 다시 태우는 경로 — 회의 재분석·AI 케어 분석과 같은 결로 남긴다(비용 역검수).
+  // 🔴 claim이 성공한 뒤에만 남긴다: 위 "이미 생성 중" 반환은 **아무것도 쓰지 않은** 경로라 로그 대상이 아니다
+  //    (남기면 연타 한 번에 같은 줄이 여러 개 쌓여 정작 진짜 실행이 묻힌다).
+  await logAction({
+    action: "briefing_regenerate",
+    targetType: "briefing",
+    targetLabel: date,
+    metadata: { briefingDate: date, hadPrevious: Boolean(existing) },
+  });
+
   revalidatePath("/dashboard");
   after(async () => {
     await generateDailyBriefing(tenantId, { notifyOnFirstGeneration: false });
@@ -193,11 +239,24 @@ export async function toggleAnnouncementPin(
   if (!id) return { error: "공지 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("announcements")
+    .select("title")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("announcements")
     .update({ pinned, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return { error: error.message };
+
+  await logAction({
+    action: "announcement_pin",
+    targetType: "announcement",
+    targetLabel: (before?.title as string | null) ?? null,
+    metadata: { announcementId: id, pinned },
+  });
 
   revalidatePath("/dashboard");
   return { ok: true };

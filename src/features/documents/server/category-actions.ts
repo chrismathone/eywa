@@ -6,6 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { isLinkedSource } from "../linked";
 import { FALLBACK_CATEGORY, nextCategoryKey } from "../categories";
+import { logAction } from "@/features/audit/server/log";
 import { documentCategoriesTag } from "./category-queries";
 
 // 서식 저장소 분류 관리(0161a) — 학원장/관리자가 분류를 추가·이름변경·순서변경·삭제한다.
@@ -75,6 +76,12 @@ export async function createDocumentCategory(
     is_system: false,
   });
   if (error) return { error: `분류 추가 실패: ${error.message}` };
+  await logAction({
+    action: "document_category_create",
+    targetType: "document_category",
+    targetLabel: parsed.label,
+    metadata: { key, label: parsed.label },
+  });
   invalidate(g.user.tenantId);
   return { ok: true, nonce: Date.now() };
 }
@@ -95,6 +102,8 @@ export async function renameDocumentCategory(
   const { data: rows, error: readErr } = await supabase.from("document_categories").select("key, label");
   if (readErr) return { error: `분류 조회 실패: ${readErr.message}` };
   if (!rows?.some((r) => r.key === key)) return { error: "분류를 찾을 수 없습니다" };
+  // 바꾸기 **전** 이름 — 고친 뒤엔 어디에도 안 남아서 "무엇이 무엇으로"를 되짚을 수 없다.
+  const before = rows?.find((r) => r.key === key)?.label ?? null;
   if (rows.some((r) => r.key !== key && r.label === parsed.label)) {
     return { error: `이미 "${parsed.label}" 분류가 있습니다` };
   }
@@ -106,6 +115,12 @@ export async function renameDocumentCategory(
     .select("key"); // select 없으면 0행 갱신도 성공으로 보고된다.
   if (error) return { error: `이름 변경 실패: ${error.message}` };
   if (!updated?.length) return { error: "분류를 찾을 수 없습니다" };
+  await logAction({
+    action: "document_category_rename",
+    targetType: "document_category",
+    targetLabel: parsed.label,
+    metadata: { key, from: before, to: parsed.label },
+  });
   invalidate(g.user.tenantId);
   return { ok: true, nonce: Date.now() };
 }
@@ -121,7 +136,7 @@ export async function moveDocumentCategory(
   const supabase = await createClient();
   const { data, error: readErr } = await supabase
     .from("document_categories")
-    .select("key, sort_order")
+    .select("key, label, sort_order")
     .order("sort_order", { ascending: true })
     .order("key", { ascending: true });
   if (readErr) return { error: `분류 조회 실패: ${readErr.message}` };
@@ -144,6 +159,12 @@ export async function moveDocumentCategory(
   );
   const failed = results.find((r) => r.error);
   if (failed?.error) return { error: `순서 변경 실패: ${failed.error.message}` };
+  await logAction({
+    action: "document_category_move",
+    targetType: "document_category",
+    targetLabel: rows[idx].label ?? null,
+    metadata: { key, direction, fromIndex: idx + 1, toIndex: swap + 1, total: rows.length },
+  });
   invalidate(g.user.tenantId);
   return { ok: true };
 }
@@ -196,6 +217,19 @@ export async function deleteDocumentCategory(
   if (error) return { error: `분류 삭제 실패: ${error.message}` };
   if (!deleted?.length) return { error: "분류를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
 
+  // 🔴 지운 분류 이름은 여기서 스냅샷(행이 사라지면 key만으로는 무엇이었는지 못 읽는다).
+  //    옮긴 문서 건수까지 남겨야 "그때 12건이 기타로 갔다"를 나중에 확인할 수 있다.
+  await logAction({
+    action: "document_category_delete",
+    targetType: "document_category",
+    targetLabel: target.label,
+    metadata: {
+      key,
+      absorbedInto: into,
+      absorbedIntoLabel: rows?.find((r) => r.key === into)?.label ?? null,
+      movedDocuments: toMove ?? 0,
+    },
+  });
   invalidate(g.user.tenantId);
   return { ok: true, moved: toMove ?? 0 };
 }

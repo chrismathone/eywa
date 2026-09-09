@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant, getUserPermMatrix } from "@/lib/auth/perm-matrix";
+import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/features/audit/server/log";
 import { canAccess } from "@/lib/permissions";
 import { humanizeNotionError } from "@/features/staff/notion-tasks";
 import type { ContentLine } from "@/features/staff/notion-tasks";
@@ -60,13 +62,39 @@ export async function prepareNotionMapping(
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
   const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  // 이메일 자동연결은 수동 연결과 **같은 컬럼**(users.notion_user_id)을 말없이 바꾼다 — 바꾸기 전
+  // 상태를 먼저 읽어, 비어 있던 사람이 matched로 돌아온 경우에만 남긴다. 이미 연결돼 있던 걸 다시
+  // 연 것까지 세면 다이얼로그를 열 때마다 "연결함"이 쌓여 없던 변경을 주장하게 된다.
+  // 못 읽었으면 남기지 않는다 — 거짓 기록보다 빠진 기록이 낫다.
+  let wasUnmapped = false;
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("users")
+      .select("notion_user_id")
+      .eq("id", staffId)
+      .maybeSingle();
+    const row = data as { notion_user_id?: string | null } | null;
+    wasUnmapped = row ? !row.notion_user_id : false;
+  } catch {
+    wasUnmapped = false;
+  }
   try {
     const prep = await prepareStaffNotionMappingRow(
       staffId,
       actor.tenantId,
       await canWriteTenant(actor.systemRole, "staff"),
     );
-    if (prep.state === "matched") revalidatePath(`/staff/${staffId}`);
+    if (prep.state === "matched") {
+      revalidatePath(`/staff/${staffId}`);
+      if (wasUnmapped) {
+        await logAction({
+          action: "staff_notion_map",
+          targetType: "user",
+          metadata: { userId: staffId, auto: true, matchedBy: "email" },
+        });
+      }
+    }
     return { ok: true, prep };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
@@ -97,6 +125,13 @@ export async function toggleTaskDone(
   if (!gate.ok) return gate;
   try {
     await setTaskDoneRow(pageId, done);
+    // 외부(Notion) 데이터를 바꾸는 쓰기 — 우리 DB엔 흔적이 안 남으므로 감사로그가 유일한 근거다.
+    // ⚠️ 업무 제목은 클라가 pageId만 넘겨 알 수 없다 — 라벨은 비우고 상세만 metadata.pageId로 남긴다.
+    await logAction({
+      action: "notion_task_done",
+      targetType: "notion_task",
+      metadata: { pageId, done },
+    });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
@@ -114,6 +149,11 @@ export async function moveTaskDue(
   if (!gate.ok) return gate;
   try {
     await moveTaskDueRow(pageId, newDue, oldStart, oldDue);
+    await logAction({
+      action: "notion_task_due_move",
+      targetType: "notion_task",
+      metadata: { pageId, from: oldDue, to: newDue, ...(oldStart ? { fromStart: oldStart } : {}) },
+    });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
@@ -136,6 +176,13 @@ export async function createStaffTask(
   if (!notionId) return { ok: false, error: "이 직원의 Notion 계정이 연결되지 않아 업무를 만들 수 없습니다" };
   try {
     await createStaffTaskRow(dbId, notionId, { ...input, title });
+    // 여기선 제목을 알고 있으니 라벨로 남긴다. metadata.userId는 담당 직원(뷰어가 이름으로 해석).
+    await logAction({
+      action: "notion_task_create",
+      targetType: "notion_task",
+      targetLabel: title,
+      metadata: { userId: staffId, due: input.due, ...(input.start ? { start: input.start } : {}) },
+    });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
@@ -170,6 +217,12 @@ export async function addTaskCommentAction(
   if (!t) return { ok: false, error: "댓글 내용을 입력하세요" };
   try {
     await addTaskComment(pageId, t.slice(0, 1800), actor.displayName || "직원");
+    // 🔴 댓글 본문은 담지 않는다(내용은 Notion이 갖는다) — 남긴 사실과 길이까지만.
+    await logAction({
+      action: "notion_task_comment",
+      targetType: "notion_task",
+      metadata: { pageId, length: t.length },
+    });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
@@ -183,7 +236,15 @@ export async function setStaffNotionUserId(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor || !(await canWriteTenant(actor.systemRole, "staff"))) return { ok: false, error: "권한이 없습니다" };
-  const res = await setStaffNotionUserIdRow(staffId, notionUserId?.trim() || null, actor.tenantId);
-  if (res.ok) revalidatePath(`/staff/${staffId}`);
+  const nextId = notionUserId?.trim() || null;
+  const res = await setStaffNotionUserIdRow(staffId, nextId, actor.tenantId);
+  if (res.ok) {
+    revalidatePath(`/staff/${staffId}`);
+    await logAction({
+      action: "staff_notion_map",
+      targetType: "user",
+      metadata: { userId: staffId, notionUserId: nextId, cleared: nextId === null },
+    });
+  }
   return res;
 }

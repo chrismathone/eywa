@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
@@ -130,6 +131,14 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     if (error) return { error: `정리 실패: ${error.message}` };
   }
 
+  // 한 달 전체를 다시 계산하고 **확정 안 된 stale 행을 지우는** 일이라 한 줄 남긴다(행마다가 아니라 실행 단위).
+  // 확정값(confirmed_*)은 건드리지 않으므로 청구 금액은 안 변한다 — 그 사실이 로그에서도 읽히게 removed를 함께.
+  await logAction({
+    action: "session_terms_refresh",
+    targetType: "invoice_session_term",
+    targetLabel: `${period} 계획 갱신`,
+    metadata: { period, refreshed, removed: staleUnconfirmed.length, invoices: invoices.length },
+  });
   revalidatePath("/billing");
   return { ok: true, refreshed };
 }
@@ -191,6 +200,23 @@ export async function confirmClassTerms(
     if (uerr) return { error: uerr.message };
     confirmed += ids.length;
   }
+
+  // 🔴 한 번에 반 전체 청구 회차·단가를 못박는 자리 = 돈이 실제로 결정되는 지점. 단가·회차를 남긴다
+  //    (`invoice_create`가 amountTotal을 남기는 것과 같은 결 — 금액 없이 "누가 눌렀다"만 남기면
+  //     "왜 이 학생 청구가 다른가"에 답할 수 없다). classId는 뷰어가 반 이름으로 풀어 준다.
+  await logAction({
+    action: "session_term_confirm_class",
+    targetType: "invoice_session_term",
+    targetLabel: `${period} 반 일괄 확정`,
+    metadata: {
+      period,
+      classId,
+      unitPrice,
+      // 회차를 지정하면 전원 같은 값, 아니면 각자 계획 N(월중 등록·퇴원으로 반 안에서도 다르다).
+      sessions: override,
+      confirmedCount: confirmed,
+    },
+  });
   revalidatePath("/billing");
   return { confirmed };
 }
@@ -213,6 +239,13 @@ export async function confirmSessionTerm(
   if (!Number.isFinite(unitPrice) || unitPrice < 0) return { error: "회당 단가를 확인해 주세요" };
 
   const supabase = await createClient();
+  // 반·이전 확정값을 함께 읽는다 — classId는 뷰어가 반 이름으로 풀어 주고(감사로그 '대상'), 이전 확정값은
+  // "얼마에서 얼마로 고쳤나"의 답이다(행에는 마지막 값만 남는다).
+  const { data: before } = await supabase
+    .from("invoice_session_terms")
+    .select("class_id, confirmed_sessions, unit_price")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase
     .from("invoice_session_terms")
     .update({
@@ -225,6 +258,22 @@ export async function confirmSessionTerm(
     .eq("id", id);
   if (error) return { error: error.message };
 
+  const hadPrev = before?.confirmed_sessions !== null && before?.confirmed_sessions !== undefined;
+  await logAction({
+    action: "session_term_confirm",
+    targetType: "invoice_session_term",
+    metadata: {
+      termId: id,
+      classId: before?.class_id ?? null,
+      sessions,
+      unitPrice,
+      amount: sessions * unitPrice,
+      // 재확정(이미 확정돼 있던 행을 고침)일 때만 이전값 — 최초 확정엔 실을 이전값이 없다.
+      ...(hadPrev
+        ? { sessionsBefore: before!.confirmed_sessions, unitPriceBefore: Number(before!.unit_price ?? 0) }
+        : {}),
+    },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -242,12 +291,29 @@ export async function unconfirmSessionTerm(
   if (!id) return { error: "대상이 없습니다" };
 
   const supabase = await createClient();
+  // 🔴 확정 해제는 확정값을 **null로 지운다** — 지우기 전에 읽지 않으면 "얼마였는지"가 영영 사라진다.
+  const { data: before } = await supabase
+    .from("invoice_session_terms")
+    .select("class_id, confirmed_sessions, unit_price, amount")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase
     .from("invoice_session_terms")
     .update({ confirmed_sessions: null, unit_price: null, amount: null, confirmed_by: null, confirmed_at: null })
     .eq("id", id);
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "session_term_unconfirm",
+    targetType: "invoice_session_term",
+    metadata: {
+      termId: id,
+      classId: before?.class_id ?? null,
+      sessionsBefore: before?.confirmed_sessions ?? null,
+      unitPriceBefore: before?.unit_price === null || before?.unit_price === undefined ? null : Number(before.unit_price),
+      amountBefore: before?.amount === null || before?.amount === undefined ? null : Number(before.amount),
+    },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -362,6 +428,26 @@ export async function setSessionTermCarryover(
     .eq("id", id);
   if (error) return { error: error.message };
 
+  // 이월은 **급여 상한을 올리는 유일한 근거**라 누가·언제·왜가 남아야 한다. 행에도 carryover_by/at/note가
+  // 박히지만 그건 **마지막 한 번만** 남는다 — 값을 두 번 고치면 앞 기록이 덮이므로 이력은 여기에만 남는다.
+  // ⚠️ 컷오버(전 달 근거 행 없음)로 사유를 받아 통과시킨 건은 특히 되짚을 일이 생긴다 → cutover를 함께.
+  await logAction({
+    action: "session_term_carryover",
+    targetType: "invoice_session_term",
+    targetLabel: `${period} 회차 이월`,
+    metadata: {
+      termId: id,
+      period,
+      studentId,
+      classId: term.class_id ?? null,
+      carryoverOut: checked.out,
+      carryoverIn: checked.in,
+      outBefore: Number(term.carryover_out) || 0,
+      inBefore: Number(term.carryover_in) || 0,
+      cutover,
+      note: note || null,
+    },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }

@@ -37,6 +37,18 @@ import { auditResultLabel } from "@/features/inventory/audit-result";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
+  // ── 2026-09-09 전수 보강 — 여기 없으면 감사로그 '대상' 열에 영문이 그대로 뜬다. ──
+  expense: "지출결의서",
+  refund_request: "환불 요청서",
+  invoice_session_term: "청구 회차",
+  payslip: "급여명세서",
+  class_sheet_plan: "수업계획",
+  announcement: "직원 공지",
+  briefing: "일일 브리핑",
+  document_category: "서식 분류",
+  campaign_target: "재등록 캠페인 대상",
+  notion_task: "Notion 업무",
+  timetable: "시간표",
   staff: "직원",
   // 같은 "직원"이지만 호출부마다 target_type 표기가 달라 실제로 쌓여 있다(user 6행·users 3행) — 셋 다 한글로.
   user: "직원",

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAction } from "@/features/audit/server/log";
 import { SEAT_DB_LABEL, hhmm, isPayrollSeat, type SeatKey } from "../seat";
 import { pickSaveTargets } from "../../save-targets";
 import { gateSeatWrite, rosterKeys } from "./gate";
@@ -73,6 +74,45 @@ export async function setSeatCell(input: {
     noteOnly: input.noteOnly === true,
   });
   if (typeof changed === "string") return { error: changed };
+
+  /**
+   * 감사로그 — 자리 기록도 출결(=시수·급여 재료)이라 반 출석부와 같은 급으로 남긴다. `via`(menu·duty)까지
+   * 담는 이유는 **자리 담당 토글로 들어온 쓰기**가 메뉴 권한 없이 열리는 문이라서다.
+   *
+   * 🔴 **공개 PIN(`via==="pin"`) 쓰기는 여기 안 남는다** — `logAction`이 세션(getCurrentUser)에서 실행자를
+   *    읽는데 그 화면엔 로그인이 없다(행의 `recorded_by`도 같은 이유로 null이다). 즉 자리 출결의 **무기명
+   *    갈래는 감사 사각지대**이고, 이건 이 파일에서 고칠 수 있는 문제가 아니다(감사 도메인에 무기명
+   *    actor 경로가 필요하다 — audit_logs의 insert 정책이 `actor_id = auth.uid()`라 admin 경로도 함께).
+   *    실측 최근 90일 자리 쓰기 440건 중 149건(34%)이 이 갈래다.
+   * ⚠️ `changed === 0`(사유만 적으려는데 붙일 행이 그새 사라짐) = 아무것도 안 썼다 → 남기지 않는다.
+   */
+  const noteOnly = input.noteOnly === true;
+  // ⚠️ 사유만 저장인데 `note`가 안 왔으면 `notePatch`가 키를 빼서 **아무것도 안 바뀐다** — 안 남긴다
+  //    (남기면 "사유를 비웠다"는 없는 변경을 기록하게 된다).
+  if (changed > 0 && !(noteOnly && input.note === undefined)) {
+    await logAction({
+      action: noteOnly
+        ? "seat_attendance_note"
+        : input.status === null
+          ? "seat_attendance_clear"
+          : "seat_attendance_set",
+      targetType: "attendance",
+      metadata: {
+        studentId: input.studentId,
+        classId: input.classId,
+        date: input.date,
+        slotStart: slot,
+        seat: input.seat,
+        via: g.via,
+        // 🔴 사유 **본문은 싣지 않는다**(병원·가정사) — 비웠는지 채웠는지만.
+        ...(noteOnly
+          ? { cleared: input.note === null || input.note === "" }
+          : input.status !== null
+            ? { status: input.status, rows: changed }
+            : { rows: changed }),
+      },
+    });
+  }
 
   revalidatePath("/attendance/seat");
   revalidatePath("/attendance");
@@ -156,6 +196,29 @@ export async function fillSeatSlot(input: {
       : first.error;
   if (error) return { error: error.message };
 
+  /**
+   * 감사로그 — 일괄은 **한 줄로 요약**(반 출석부 일괄과 같은 규약). 되짚을 식별자로 실제로 쓴 칸의
+   * `studentIds`·`classIds`를 담는다. 🔴 공개 PIN 갈래가 안 남는 것은 `setSeatCell` 주석 그대로다.
+   * ⚠️ 이미 찍힌 칸을 걸러 0건이 된 요청은 위에서 조기 반환이라 여기 오지 않는다(빈 로그 없음).
+   */
+  const wroteClassIds = [...new Set(rows.map((r) => r.class_id))];
+  await logAction({
+    action: "seat_attendance_fill",
+    targetType: "attendance",
+    metadata: {
+      ...(wroteClassIds.length === 1 ? { classId: wroteClassIds[0] } : {}),
+      classIds: wroteClassIds,
+      date: input.date,
+      slotStart: slot,
+      seat: input.seat,
+      status: input.status,
+      count: rows.length,
+      skipped: built.length - rows.length,
+      studentIds: [...new Set(rows.map((r) => r.student_id))],
+      via: g.via,
+    },
+  });
+
   revalidatePath("/attendance/seat");
   revalidatePath("/attendance");
   revalidatePath("/seat");
@@ -235,7 +298,9 @@ async function writeOne(
       if ((dayRows?.length ?? 0) > 0)
         return "담임이 출석부/원스크린에서 찍은 기록입니다 — 미체크로 되돌리려면 그쪽에서 지워주세요";
     }
-    return 1;
+    // 🔴 **실제로 지운 행 수**를 돌려준다(종전엔 0행이어도 1) — 감사로그가 "지웠다"고 말하려면 정말
+    //    지웠어야 한다(그새 다른 창이 먼저 지운 칸이면 0 = 로그 없음). 소비처가 없어 계약 변화는 없다.
+    return deleted?.length ?? 0;
   }
 
   if (isPayrollSeat(p.seat)) {

@@ -5,6 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getMyNotifications, type NotificationView } from "./queries";
 import type { NotificationItem } from "../types";
 
+// ⚠️ 이 파일의 액션엔 **일부러 감사로그(logAction)를 달지 않는다**(2026-09-09 전수 점검).
+// 넷 다 RLS가 `recipient_id = auth.uid()`로 잠근 **본인 받은함**만 바꾼다(0074a: select·update·delete
+// 정책 전부) — id를 넘겨도 남의 알림은 0행이라, 다른 사람이 관찰할 수 있는 변화가 하나도 없다.
+// 읽음·보관은 하루에도 수십 번 눌리는 칸이라 남기면 감사로그가 그 사람 벨 조작으로 뒤덮여
+// 정작 삭제 같은 줄이 묻힌다(회의록 메모장 저장을 뺀 것과 같은 판단).
+// 🔴 **남에게 알림을 보내는 쪽**(notify.ts·events.ts)은 이 규칙 밖이다 — 거긴 남의 화면을 바꾼다.
+// 🔴 알림 영구 삭제도 여기선 본인 것뿐이라 뺐다. 남의 알림을 지우는 경로가 새로 생기면 그건 남길 것.
+
 /** 벨 데이터 새로고침(클라 NotificationBell가 마운트·열기·폴링에서 호출). view=받은함/보관함. */
 export async function fetchMyNotifications(
   view: NotificationView = "active",

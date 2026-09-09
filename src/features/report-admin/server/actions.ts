@@ -8,6 +8,7 @@ import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { humanizeDbError } from "@/lib/supabase/db-error";
+import { logAction } from "@/features/audit/server/log";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
@@ -49,9 +50,11 @@ export async function retryClassnote(
   // (한 번도 큐에 안 오른 행)과 이관(edutrix_import, Edutrix가 이미 학부모에게 발송한 것)은 id를 직접
   // 넘겨도 서버에서 거부. 이관 2,324건(윈도 내)이 큐에 오르는 과거 대량 오발송 재연 벡터 차단.
   // 취소(revoked_at)된 행도 제외 — 워커가 영원히 클레임 안 해 좀비 queued가 되던 구멍.
+  // ⚠️ 임베드는 FK 이름을 명시한다(#94). 학생 이름은 **감사로그 라벨용** — 일괄 재발송 한 줄에
+  //    "누구에게 다시 나갔나"가 안 적히면 되짚을 방법이 건수뿐이다(recall-actions와 같은 규약).
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, class_id, student_id, makeup, notes")
+    .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
     .in("id", ids.slice(0, 200))
     .not("classnote_status", "is", null)
     .neq("source", "edutrix_import")
@@ -106,6 +109,27 @@ export async function retryClassnote(
     })
     .in("id", requeueIds);
   if (error) return { ok: false, error: humanizeDbError(error.message, "재발송") };
+  // 🔴 학부모 게시판에 **글이 하나 더 붙는** 동작이라 반드시 남긴다. 일괄이므로 **한 줄 요약**
+  //    (건별 N줄 금지) — 대신 되짚을 id·이름을 함께 담는다(재발송은 최대 200건이라 id는 50개로 자른다).
+  const requeuedSet = new Set(requeueIds);
+  const names = allowed
+    .filter((r) => requeuedSet.has(r.id as string))
+    .map((r) => (r.students as { name?: string } | null)?.name)
+    .filter((n): n is string => Boolean(n));
+  await logAction({
+    action: "classnote_resend",
+    targetType: "lesson_report",
+    targetLabel: names.slice(0, 5).join(", ") || null,
+    metadata: {
+      via: "admin_console",
+      reportCount: requeueIds.length,
+      studentNames: names.slice(0, 20),
+      reportIds: requeueIds.slice(0, 50),
+      ...(requeueIds.length > 50 ? { reportIdsTruncated: requeueIds.length - 50 } : {}),
+      skipped,
+      absentSkipped,
+    },
+  });
   return { ok: true, requeued: requeueIds.length, skipped, absentSkipped };
 }
 
@@ -143,7 +167,8 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   // 대상 조회 — 미발송 native만. source NULL(구컬럼 이전 행)은 native로 간주(현 DB 0건, too_old가 최종 방어).
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, class_id, student_id, makeup, notes")
+    // 학생 이름은 감사로그 라벨용(위 retryClassnote와 같은 이유). 임베드엔 FK 이름 명시(#94).
+    .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
     .in("id", capped)
     .is("classnote_status", null)
     .or("source.is.null,source.neq.edutrix_import")
@@ -213,6 +238,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     conflicts = (data ?? []).length;
   }
   let queued = 0;
+  let queuedIds: string[] = [];
   if (queueIds.length) {
     const { data, error } = await supabase
       .from("lesson_reports")
@@ -228,6 +254,31 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
       .select("id");
     if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
     queued = (data ?? []).length;
+    queuedIds = (data ?? []).map((r) => r.id as string);
+  }
+  // 🔴 관리자가 **강사 대신** 학부모에게 내보낸 기록 — 일괄이라 한 줄 요약(건별 금지).
+  //    동명이인 차단(name_conflict)도 상태를 바꾸는 쓰기라 아무것도 안 나갔어도 함께 남긴다.
+  if (queued > 0 || conflicts > 0) {
+    const queuedSet = new Set(queuedIds);
+    const names = sendable
+      .filter((r) => queuedSet.has(r.id as string))
+      .map((r) => (r.students as { name?: string } | null)?.name)
+      .filter((n): n is string => Boolean(n));
+    await logAction({
+      action: "classnote_send",
+      targetType: "lesson_report",
+      targetLabel: names.slice(0, 5).join(", ") || null,
+      metadata: {
+        via: "admin_console",
+        reportCount: queued,
+        studentNames: names.slice(0, 20),
+        reportIds: queuedIds.slice(0, 50),
+        ...(queuedIds.length > 50 ? { reportIdsTruncated: queuedIds.length - 50 } : {}),
+        conflicts,
+        absentSkipped,
+        emptyMent,
+      },
+    });
   }
   return {
     ok: true,
@@ -259,7 +310,21 @@ export async function resetStuckClassnote(): Promise<{ ok: boolean; reset?: numb
     .lt("classnote_processing_at", cutoff)
     .select("id");
   if (error) return { ok: false, error: humanizeDbError(error.message, "복구") };
-  return { ok: true, reset: (data ?? []).length };
+  const reset = (data ?? []).length;
+  // 멈춘 건을 다시 큐에 올리는 일 = **워커가 다시 게시를 시도**한다(학부모 표면에 닿는다).
+  // 되돌린 게 없으면 남기지 않는다(버튼을 눌러도 대상이 0이면 아무 일도 안 일어난 것이다).
+  if (reset > 0) {
+    await logAction({
+      action: "classnote_stuck_reset",
+      targetType: "lesson_report",
+      metadata: {
+        reportCount: reset,
+        reportIds: (data ?? []).slice(0, 50).map((r) => r.id as string),
+        stuckMinutes: STUCK_MINUTES,
+      },
+    });
+  }
+  return { ok: true, reset };
 }
 
 /**
@@ -489,6 +554,19 @@ export async function setReportCoversDate(
     .eq("id", id);
   if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
 
+  // 🔴 이 값은 그 학생·날짜를 **작성률 분모에서 빼는** 면제라, 강사 평가에 그대로 닿는다.
+  //    행의 covers_by/covers_at은 **현재 상태**만 담고 해제하면 함께 지워진다(위 update의 null 분기)
+  //    — "누가 면제를 걸었다가 풀었나"는 이 줄에만 남는다. 사유(note)는 사람이 적은 짧은 메모라 담는다.
+  await logAction({
+    action: "report_covers_date",
+    targetType: "lesson_report",
+    metadata: {
+      reportId: id,
+      coversDate: date || null,
+      cleared: !date,
+      ...(date && (note ?? "").trim() ? { note: (note ?? "").trim().slice(0, 200) } : {}),
+    },
+  });
   revalidatePath("/lesson-reports");
   return { ok: true };
 }

@@ -4,6 +4,7 @@ import ExcelJS from "exceljs";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { logAction } from "@/features/audit/server/log";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
 import { canManageTimetableImport, TIMETABLE_IMPORT_DENIED_MSG } from "./import-access";
 import { kstToday } from "@/lib/date-kst";
@@ -274,7 +275,7 @@ export async function applyTimetableImport(
     const hash = importDiffHash(fresh.diff);
     if (hash !== expectedHash)
       return { error: "수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
-    return await applyDiff(user, supabase, fresh.diff, eff.date);
+    return await applyDiff(user, supabase, fresh.diff, eff.date, { kind: "file", subject });
   } finally {
     // ⚠️ return await 필수(위) — 프로미스만 반환하면 적용 완료 전에 리스가 풀린다.
     if (provider && lease === "claimed") await releaseSheetSyncLease(supabase, provider);
@@ -316,7 +317,7 @@ export async function applySheetImport(
     const hash = importDiffHash(fresh.diff);
     if (hash !== expectedHash)
       return { error: "시트 또는 수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
-    return await applyDiff(user, supabase, fresh.diff, eff.date);
+    return await applyDiff(user, supabase, fresh.diff, eff.date, { kind: "sheet", subject });
   } finally {
     if (lease === "claimed") await releaseSheetSyncLease(supabase, provider);
   }
@@ -336,6 +337,8 @@ async function applyDiff(
   supabase: Awaited<ReturnType<typeof createClient>>,
   diff: ImportDiff,
   effective: string,
+  /** 감사로그에 남길 출처 — 같은 결과라도 "엑셀 파일을 올린 것"과 "시트를 되읽은 것"은 다른 사건이다. */
+  source: { kind: "file" | "sheet"; subject?: string },
 ): Promise<ApplyState> {
   const today = effective;
 
@@ -377,6 +380,39 @@ async function applyDiff(
   }
 
   let failed = 0;
+  let heldAdds = 0;
+
+  /**
+   * 감사로그 한 줄 요약 — 위 `timetable_import_logs`는 **화면 소비처가 없는** 쓰기 전용 이력이라, 한 번에
+   * 수백 건이 움직이는 이 동작이 원장이 보는 감사로그 화면에서는 통째로 안 보였다(원장 2026-09-09
+   * *"기능이 추가되거나 변동되는건 모두 감사로그에 남도록"*). 건별이 아니라 요약으로 남기되 되돌릴
+   * 근거(`snapshotId`)와 언제부터인지(`effectiveDate`)를 반드시 싣는다 — 건별 명단은 스냅샷 payload에
+   * 이미 있고, 여기까지 실으면 한 줄이 수백 줄이 되어 정작 삭제·퇴원 줄이 묻힌다.
+   *
+   * 🔴 `abortedAt`이 있는 호출 = **일부만 적용된 채 중단된** 경우다. 이 경로는 `timetable_import_logs`
+   *    조차 안 남아서(중단이 그 insert보다 앞이다) 수강 수백 건이 바뀌고도 흔적이 0이었다 — 되돌릴
+   *    근거가 가장 필요한 경우라 오히려 반드시 남긴다.
+   */
+  const logImport = (abortedAt?: string) =>
+    logAction({
+      action: "timetable_import_apply",
+      targetType: "timetable",
+      targetLabel: source.kind === "sheet" ? "구글 시트 수강편집" : "엑셀 수강편집",
+      metadata: {
+        source: source.kind,
+        subject: source.subject ?? null,
+        effectiveDate: today,
+        moved: diff.moves.length,
+        removed: diff.removes.length,
+        // 중단이면 '추가'는 한 건도 안 들어갔다 — 계획 수를 적으면 안 한 일을 했다고 적는 셈이다.
+        added: abortedAt ? 0 : diff.adds.length,
+        heldAdds,
+        // ⚠️ `failed`도 싣는다: "적용했는데 몇 건은 안 들어갔다"가 나중에 유일한 단서가 된다.
+        failed,
+        snapshotId: snapshotId ?? null,
+        ...(abortedAt ? { abortedAt } : {}),
+      },
+    });
 
   // 2) 이동 — 일괄이동 RPC 재사용
   if (diff.moves.length > 0) {
@@ -432,7 +468,6 @@ async function applyDiff(
   //    (반 이동 RPC 0228a와 같은 결). ⚠️ 조용히 건너뛰면 "왜 이 아이만 안 들어왔지"가 된다 — 넣되
   //    승계 건수를 결과에 적는다. 판정은 enrollmentOnHoldForStatus 단일 소스.
   //    id(PK) 조회라 청크당 행 수 ≤ 청크 크기 → fetchInChunks로 충분(1000행 캡 무관, B3).
-  let heldAdds = 0;
   if (diff.adds.length > 0) {
     // ⚠️ fetchInChunks는 error를 삼키지 않고 **throw**한다(B3) — 여기서 새어 나가면 이미 적용된
     //    이동·삭제를 남긴 채 서버 액션이 통째로 실패한다(다이얼로그는 결과를 못 받는다). 위 이동 RPC
@@ -446,6 +481,8 @@ async function applyDiff(
       statusById = new Map(statusRows.map((r) => [r.id, r.status]));
     } catch (e) {
       console.error("[timetable-import] 학생 상태 조회 실패:", e);
+      // 이동·삭제는 이미 커밋됐다 — 중단이라고 흔적을 안 남기면 그 변경이 통째로 무기록이 된다.
+      await logImport("student_status_lookup");
       return {
         error:
           "학생 상태를 확인하지 못해 '추가'를 중단했습니다(이동·삭제는 적용됨). 잠시 후 다시 시도해 주세요.",
@@ -502,6 +539,11 @@ async function applyDiff(
     details: diff,
     actor_id: user.id,
   });
+
+  // 6) 감사로그(위 logImport 주석 참조). ⚠️ 변경이 0건이면 남기지 않는다 — 미리보기와 같은 결과라
+  //    아무 행도 안 바뀌었는데 "가져오기 반영" 줄이 서면 감사로그가 헛줄로 늘어난다.
+  const changed = diff.moves.length + diff.removes.length + diff.adds.length;
+  if (changed > 0) await logImport();
 
   revalidatePath("/timetable");
   return {

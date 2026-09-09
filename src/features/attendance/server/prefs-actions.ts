@@ -1,5 +1,15 @@
 "use server";
 
+/**
+ * 출석부 **개인 보기 설정** — 접힌 반·정렬·날짜축·퇴직자 숨김. 전부 `users.ui_prefs.attendance`(본인 계정)다.
+ *
+ * 🔴 **이 파일엔 감사로그(`logAction`)가 없다 — 빠뜨린 게 아니다**(2026-09-09 출결 감사 배선 때 확인).
+ *    여기서 바뀌는 건 **내 화면이 어떻게 보이는지**뿐이고 출결·시수·급여·집계는 이 값을 한 글자도 읽지
+ *    않는다(각 함수 주석의 "표시 렌즈"). 남기면 감사로그가 접기/펼치기로 뒤덮여 정작 되짚어야 할 줄
+ *    (출결 삭제·소급 변경)이 묻힌다 — 회의록 메모장(`updateMeetingNotepad`)을 일부러 안 남기는 것과 같은 결.
+ * ⚠️ 이 파일에 **남의 화면·학원 단위 설정**을 저장하는 액션이 생기면 그건 다른 물건이다(그땐 남긴다).
+ */
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import {
