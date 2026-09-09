@@ -19,6 +19,7 @@ const EMPTY_RAW: TodayActionsRaw = {
   unrecordedToday: [],
   dayArrivals: { starting: [], ending: [] },
   newIntakeToday: { count: 0, names: [] },
+  newcomerOverdue: { count: 0, names: [] },
   scheduledTomorrow: null,
 };
 

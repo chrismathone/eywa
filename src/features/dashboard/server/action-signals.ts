@@ -14,6 +14,7 @@ import { isPreNotified } from "../absence-reasons";
 import { resolveDayArrivals, type DayEnrollmentRow } from "../day-arrivals";
 import { classesWithFinishedPeriod } from "../day-recording";
 import { isReportTrackedSubject } from "../report-subjects";
+import { ONBOARDING_ITEMS, newcomerWindowStart, statusOf } from "@/features/newcomers/onboarding-items";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
 import { getUnassignedEnrolledStudents } from "./queries";
 import {
@@ -107,6 +108,8 @@ export type TodayActionSignalScope = {
   owner?: boolean;
   /** 내일 발효되는 시간표 예약(read). */
   timetable?: boolean;
+  /** 신규생 체크리스트 지연(read) — 0251a 미적용이면 조회가 실패해도 화면은 조용하다(fail-soft). */
+  newcomers?: boolean;
 };
 
 type Collected<T> = { value: T; issue: TodaySignalSourceIssue | null };
@@ -394,6 +397,87 @@ async function dayArrivalsSignal(
  * 🔴 오늘 발효분은 cron이 이미 적용했으므로 세지 않는다. 알아야 하는 건 "내일 아침 뭐가 바뀌나"다.
  * ⚠️ 그 조회를 그대로 부르지 않는 이유: 세션 클라이언트 전용이라 admin `db`로 도는 브리핑에선 조용히 0건이 된다.
  */
+/**
+ * **신규생 체크리스트 지연** — 등록 후 90일 안 학생 중 기한이 지난 필수 항목이 하나라도 있는 사람.
+ *
+ * 원장 2026-09-09: *"당연히 운영실에서 관리되고 있는지 관리 안되고있는지 확인해야겠지?"*
+ * 🔴 판정은 화면과 **같은 순수 함수**([`onboarding-items.ts`])를 쓴다 — 여기서 기한을 다시 계산하면
+ *    운영실과 탭이 다른 수를 말한다. 조회만 다르고(운영실은 admin 주입 경로가 있다) 규칙은 한 벌이다.
+ * 🔴 '필요시' 항목(2개월 콜)은 세지 않는다 — 선택 항목을 재촉하면 매달 전원이 빨갛게 된다.
+ * ⚠️ 0251a 미적용이면 체크 표가 없다 → 조회가 throw하고 `collectSignal`이 그 신호만 조용히 비운다
+ *    (다른 신호는 그대로 산다). 표가 생기는 날부터 저절로 켜진다.
+ */
+async function newcomerOverdueSignal(
+  supabase: Supabase,
+  today: string,
+  db: TenantScope,
+): Promise<TodayActionsRaw["newcomerOverdue"]> {
+  // 🔴 창은 신규생 탭과 **같은 함수**에서 온다 — 하루가 어긋나면 경계의 학생이 한쪽에만 뜬다.
+  const since = newcomerWindowStart(today);
+  const students = await fetchAllPaged<{ id: string; name: string; enrolled_at: string | null }>((from, to) =>
+    scopeTenant(
+      supabase
+        .from("students")
+        .select("id, name, enrolled_at")
+        .in("status", ["enrolled", "on_hold"])
+        .gte("enrolled_at", since)
+        .order("enrolled_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to),
+      db,
+    ),
+  );
+  if (students.length === 0) return { count: 0, names: [] };
+  const ids = students.map((s) => s.id);
+
+  // 첫 수업일 = 가장 이른 수강 시작일(탭과 같은 규칙 — 출결로 잡으면 지난 뒤에야 알게 된다).
+  const enrollments = await fetchInChunks<{ student_id: string; start_date: string | null }>(ids, (chunk) =>
+    scopeTenant(supabase.from("enrollments").select("student_id, start_date").in("student_id", chunk), db),
+  );
+  const firstClassBy = new Map<string, string>();
+  for (const e of enrollments) {
+    const d = e.start_date ? String(e.start_date).slice(0, 10) : null;
+    if (!d) continue;
+    const prev = firstClassBy.get(e.student_id);
+    if (!prev || d < prev) firstClassBy.set(e.student_id, d);
+  }
+
+  // 🔴 0251a 미적용은 **실패가 아니라 "아직 켜지지 않음"** 이다 — throw로 두면 브리핑이 매일 '신호 실패'를
+  //    보고해 진짜 실패가 그 잡음에 묻힌다. 표가 없을 때만 조용히 0으로 접고, 다른 실패는 그대로 올린다.
+  let checks: { student_id: string; item_key: string; done_on: string | null }[];
+  try {
+    checks = await fetchInChunks<{ student_id: string; item_key: string; done_on: string | null }>(ids, (chunk) =>
+      scopeTenant(
+        supabase.from("student_onboarding_checks").select("student_id, item_key, done_on").in("student_id", chunk),
+        db,
+      ),
+    );
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (/PGRST205|PGRST20[12]|42P01|does not exist|Could not find the table/i.test(raw)) return { count: 0, names: [] };
+    throw e;
+  }
+  const checkBy = new Map<string, Record<string, string | null>>();
+  for (const c of checks) {
+    const bucket = checkBy.get(c.student_id) ?? {};
+    bucket[c.item_key] = c.done_on ? String(c.done_on).slice(0, 10) : null;
+    checkBy.set(c.student_id, bucket);
+  }
+
+  const names: string[] = [];
+  for (const s of students) {
+    const enrolledOn = s.enrolled_at ? String(s.enrolled_at).slice(0, 10) : null;
+    if (!enrolledOn) continue;
+    const anchors = { enrolledOn, firstClassOn: firstClassBy.get(s.id) ?? null };
+    const done = checkBy.get(s.id) ?? {};
+    const overdue = ONBOARDING_ITEMS.some(
+      (item) => !item.optional && statusOf(item, anchors, done[item.key], today) === "overdue",
+    );
+    if (overdue) names.push(s.name);
+  }
+  return { count: names.length, names };
+}
+
 async function scheduledTomorrowSignal(
   supabase: Supabase,
   tomorrow: string,
@@ -678,6 +762,7 @@ export async function getTodayActionSignals(
     unrecordedTodayClasses,
     dayArrivals,
     newIntake,
+    newcomerOverdue,
     scheduledTomorrow,
   ] = await Promise.all([
     collectSignal(
@@ -1006,6 +1091,18 @@ export async function getTodayActionSignals(
       },
     ),
     collectSignal(
+      enabled("newcomers"),
+      {
+        key: "newcomer-overdue",
+        label: "신규생 관리 지연",
+        href: "/newcomers",
+        menuKey: "newcomers",
+        requiredAccess: "read",
+      },
+      { count: 0, names: [] } as TodayActionsRaw["newcomerOverdue"],
+      () => newcomerOverdueSignal(supabase, today, db),
+    ),
+    collectSignal(
       enabled("timetable"),
       {
         key: "scheduled-tomorrow",
@@ -1082,6 +1179,7 @@ export async function getTodayActionSignals(
     unrecordedTodayClasses,
     dayArrivals,
     newIntake,
+    newcomerOverdue,
     scheduledTomorrow,
   ];
 
@@ -1111,6 +1209,7 @@ export async function getTodayActionSignals(
     classnoteAttention: classnoteAttention.value,
     dayArrivals: dayArrivals.value,
     newIntakeToday: newIntake.value,
+    newcomerOverdue: newcomerOverdue.value,
     scheduledTomorrow: scheduledTomorrow.value,
     sourceIssues: collected.flatMap((result) => (result.issue ? [result.issue] : [])),
   };

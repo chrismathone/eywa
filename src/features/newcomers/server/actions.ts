@@ -1,0 +1,60 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { createClient } from "@/lib/supabase/server";
+import { kstToday } from "@/lib/date-kst";
+import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
+
+/**
+ * 신규생 체크리스트 한 칸 — 완료/해제(0251a `student_onboarding_checks`).
+ *
+ * 🔴 게이트는 메뉴 쓰기 권한 하나(`canWriteTenant("newcomers")`) — 강사는 readonly라 통과하지 못한다
+ *    (학생 기록을 강사가 못 바꾸게 한 2026-08-18 결정과 같은 결). 화면에서 감추는 것은 게이트가 아니다([[#77]]).
+ * 🔴 항목 키는 **앱 상수에 있는 것만** 받는다 — 임의 문자열이 들어오면 화면에 안 보이는 유령 행이 쌓인다.
+ * 🔴 해제는 **행을 지우지 않고** `done_on`을 비운다 — 메모·처리자 기록이 함께 사라지면 "누가 체크했다 풀었나"를
+ *    되짚을 수 없다.
+ * ⚠️ 0251a 미적용이면 표가 없다 — 그때는 한글로 그 사실을 돌려준다(영문 원문 노출 금지).
+ */
+export async function setOnboardingCheck(input: {
+  studentId: string;
+  itemKey: string;
+  /** true=완료, false=해제. */
+  done: boolean;
+  /** 완료일(YYYY-MM-DD). 없으면 오늘 — 뒤늦게 기록할 때 실제 날짜를 넣을 수 있다. */
+  doneOn?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "newcomers")))
+    return { ok: false, error: "신규생 관리 쓰기 권한이 없습니다" };
+  if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
+  if (!ONBOARDING_ITEM_KEYS.includes(input.itemKey)) return { ok: false, error: "알 수 없는 항목입니다" };
+
+  const doneOn = input.done ? (/^\d{4}-\d{2}-\d{2}$/.test(input.doneOn ?? "") ? input.doneOn! : kstToday()) : null;
+  const supabase = await createClient();
+  const { error } = await supabase.from("student_onboarding_checks").upsert(
+    {
+      tenant_id: user.tenantId,
+      student_id: input.studentId,
+      item_key: input.itemKey,
+      done_on: doneOn,
+      done_by: input.done ? user.id : null,
+    },
+    // 일반 유니크(0251a)라 이 축으로 추론이 된다 — 부분 유니크였으면 42P10으로 전건 실패한다([[#113]]).
+    { onConflict: "tenant_id,student_id,item_key" },
+  );
+  if (error) {
+    const missing = /does not exist|Could not find the table|PGRST205|42P01/i.test(error.message);
+    return {
+      ok: false,
+      error: missing
+        ? "신규생 체크 표가 아직 만들어지지 않았습니다(0251a 적용 후 사용할 수 있습니다)"
+        : "체크를 저장하지 못했습니다 — 다시 시도해 주세요",
+    };
+  }
+  revalidatePath("/newcomers");
+  return { ok: true };
+}

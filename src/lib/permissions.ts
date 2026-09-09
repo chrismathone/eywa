@@ -47,6 +47,7 @@ export const MENU_KEYS = [
   "consultations",
   "withdrawals",
   "retention",
+  "newcomers",
   "ecs",
   "mcs",
   "lesson_reports",
@@ -88,6 +89,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   consultations: "학생상담",
   withdrawals: "퇴원관리",
   retention: "이탈 방어",
+  newcomers: "신규생 관리",
   ecs: "영어 강사 시트",
   mcs: "수학 강사 시트",
   lesson_reports: "수업보고서",
@@ -164,6 +166,10 @@ export const MENU_ACCESS: AccessMatrix = {
   withdrawals: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   // 이탈 방어(리텐션) — 위험도 기반 재등록 방어. 강사는 담당 학생만(scoped), 회계는 매출 위험 열람.
   retention: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 신규생 관리 — 신입 등록 후 90일 체크리스트(사전 콜·첫 수업 안내·OJT·만족도 콜). **데스크 업무**라
+  // 사무실 역할만 연다. 🔴 강사=none인 이유는 퇴원관리와 같다: 이 목록은 **테넌트 전역 신입 명단**이라
+  // 강사 스코핑이 없어, readonly로 열면 담당하지 않는 학생까지 통째로 보인다(#77 계열 누수).
+  newcomers: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
   // English Class Sheet(ECS) — 영어 반별 주간 수업계획서/출석부(구글시트 이식). 강사=scoped(담당 반만,
   // 게이트는 requireEcsClassAccess 공용 함수 — effectiveTeacherScope 상시 적용). viewer=readonly(열람만).
   // 출석 체크 쓰기는 이 키가 아니라 attendance 게이트(비파괴 markPresentIfAbsent)가 별도 판정.
@@ -331,6 +337,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   consultations: "consultations",
   withdrawals: "withdrawals",
   retention: "retention",
+  newcomers: "newcomers",
   ecs: "ecs",
   mcs: "mcs",
   "lesson-reports": "lesson_reports",

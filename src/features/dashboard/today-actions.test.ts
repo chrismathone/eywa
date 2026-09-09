@@ -25,6 +25,7 @@ const EMPTY: TodayActionsRaw = {
   unrecordedToday: [],
   dayArrivals: { starting: [], ending: [] },
   newIntakeToday: { count: 0, names: [] },
+  newcomerOverdue: { count: 0, names: [] },
   scheduledTomorrow: null,
 };
 
@@ -531,5 +532,27 @@ describe("수업보고서 작성 대상", () => {
       { studentId: "s1", subject: "math" },
     ]);
     expect(findMissingLessonReportPairs(targets, new Set(["s1::math-a", "s1::math-b"]), [])).toEqual([]);
+  });
+});
+
+describe("신규생 관리 지연", () => {
+  it("지연이 있으면 항목이 서고 이름 미리보기·기준 note가 붙는다", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      newcomerOverdue: { count: 4, names: ["김유하", "김나윤", "정윤헌", "이해율A"] },
+    });
+    const item = items.find((i) => i.key === "newcomer-overdue");
+    expect(item).toBeDefined();
+    expect(item!.count).toBe(4);
+    expect(item!.unit).toBe("명");
+    expect(item!.href).toBe("/newcomers");
+    expect(item!.menuKey).toBe("newcomers");
+    // 재촉 기준을 적어 둔다 — "무엇이 지연인지" 없이 숫자만 세우면 무슨 조치를 할지 알 수 없다.
+    expect(item!.note).toContain("사전 콜");
+  });
+
+  it("0이면 항목 자체가 없다(빈 줄을 세우지 않는다)", () => {
+    const items = buildTodayActions({ ...EMPTY, newcomerOverdue: { count: 0, names: [] } });
+    expect(items.some((i) => i.key === "newcomer-overdue")).toBe(false);
   });
 });

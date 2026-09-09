@@ -60,6 +60,13 @@ export type TodayActionsRaw = {
   /** 오늘 접수된 등록상담(QR 공개접수·데스크 입력) — 칸반을 열기 전엔 아무도 모른다. */
   newIntakeToday: { count: number; names: string[] };
   /**
+   * **신규생 체크리스트 지연** — 등록 90일 안 학생 중 기한이 지난 필수 항목이 있는 사람(원장 2026-09-09
+   * *"당연히 운영실에서 관리되고 있는지 관리 안되고있는지 확인해야겠지?"*).
+   * 🔴 판정은 신규생 탭과 **같은 순수 함수**([`newcomers/onboarding-items.ts`]) — 두 화면이 다른 수를 말하면 안 된다.
+   * ⚠️ '필요시' 항목(2개월 콜)은 안 센다 · 첫 수업일을 모르는 항목은 기한이 없어 지연이 아니다.
+   */
+  newcomerOverdue: { count: number; names: string[] };
+  /**
    * **내일** 발효되는 시간표 예약(개명·담임 교체·배치·반이동). 없으면 null.
    * 🔴 오늘 발효분은 cron이 이미 적용했으므로 세지 않는다 — 알아야 하는 건 "내일 아침 뭐가 바뀌나"다.
    */
@@ -331,6 +338,23 @@ export function buildTodayActions(
       bySubject: [],
       href: "/enrollment",
       menuKey: "enrollment",
+      requiredAccess: "read",
+    });
+  }
+
+  // 신규생 관리 — 등록 직후 90일은 되돌리기 가장 쉬운 구간이라, 놓친 절차를 그날 알아야 한다.
+  if (raw.newcomerOverdue.count > 0) {
+    items.push({
+      key: "newcomer-overdue",
+      severity: "amber",
+      label: "신규생 관리 지연",
+      count: raw.newcomerOverdue.count,
+      unit: "명",
+      detail: nameList(raw.newcomerOverdue.names, 3, raw.newcomerOverdue.count),
+      note: "사전 콜·첫 수업 안내·OJT·만족도 콜 기준",
+      bySubject: [],
+      href: "/newcomers",
+      menuKey: "newcomers",
       requiredAccess: "read",
     });
   }

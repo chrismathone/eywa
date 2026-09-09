@@ -166,6 +166,8 @@ export async function generateDailyBriefing(
           billing: false,
           owner: false,
           timetable: false,
+          // 신규생 지연은 **어제 수집분**(위 호출)이 이미 담는다 — 같은 무거운 조회를 두 번 돌리지 않는다.
+          newcomers: false,
           // 브리핑은 '지금 미기록'을 쓰지 않는다(payload에서 비운다) — 조회 자체를 건너뛴다.
           attendanceNow: false,
         },

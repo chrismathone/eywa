@@ -186,6 +186,9 @@ export const NAV_GROUPS: NavGroup[] = [
       // 등록상담은 별도 권한(menuKey=enrollment)을 가지므로 숨기지 않고 독립 진입점을 제공한다.
       { href: "/enrollment", label: "등록상담", icon: MENU_ICON.enrollment, menuKey: "enrollment" },
       { href: "/retention", label: "이탈 방어", icon: MENU_ICON.retention, menuKey: "retention" },
+      // 신규생 관리 — 신입 등록 후 7·30·60·90일 체크리스트(원장 2026-09-09). 이탈 방어와 축이 다르다:
+      // 저쪽은 "지금 흔들리는 재원생", 이쪽은 "들어온 지 얼마 안 된 학생을 절차대로 챙겼나".
+      { href: "/newcomers", label: "신규생 관리", icon: MENU_ICON.newcomers, menuKey: "newcomers" },
       { href: "/withdrawals", label: "퇴원관리", icon: MENU_ICON.withdrawals, menuKey: "withdrawals" },
     ],
   },

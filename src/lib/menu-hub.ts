@@ -133,6 +133,8 @@ export const HUB_GROUPS: HubGroup[] = [
     items: keep([
       fromMenu("consultations", "재원생 상담 기록"),
       fromMenu("enrollment", "신규 등록상담 접수·배정"),
+      // 신규생 관리 — 등록상담(들어오기 전)과 이탈 방어(흔들릴 때) 사이의 90일을 맡는다.
+      fromMenu("newcomers", "신입 90일 체크리스트"),
       fromMenu("retention", "이탈 위험 학생 관리"),
       fromMenu("withdrawals", "퇴원·수강 종료 기록"),
     ]),
