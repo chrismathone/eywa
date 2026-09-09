@@ -23,6 +23,12 @@ import {
 } from "@/features/enrollments/server/actions";
 import { endSingleEnrollment } from "@/features/students/server/actions";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
+import {
+  freezeMoveDate,
+  isScheduledMove,
+  resolveApplyDate,
+  shortMoveDate,
+} from "@/features/timetable/lib/move-date";
 import { resolveDropTarget, shouldOpenClassPick, type HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, sameDaySet, zoneAttendanceDays } from "@/features/timetable/lib/split-attendance";
 import {
@@ -31,6 +37,7 @@ import {
   type ClassPickCandidate,
   type ClassPickTarget,
   type DayEditTarget,
+  type MoveDateTarget,
   type QueuedClassMove,
   type HoveredStudent,
   type IncomingStudent,
@@ -50,6 +57,8 @@ import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 // 런타임 undefined가 된다([[#81]], 실제로 한 번 그렇게 깨졌다).
 import { CELL_DAY_ATTR, CELL_OK_ATTR } from "@/features/timetable/lib/grid-attrs";
 import { toast } from "sonner";
+// 🔴 거절·큐잉 문구는 **통합뷰와 공유**한다(move-toast.ts) — 뷰마다 만들면 같은 거절이 다르게 들린다.
+import { queued, refuse } from "./move-toast";
 import { useClassMoveIndex } from "./class-move-context";
 import type { MoveSubject } from "@/features/timetable/lib/class-move";
 import { moveClassSlots } from "@/features/timetable/server/move-actions";
@@ -67,6 +76,15 @@ type Queued = PendingMove & {
    * 거부된다(적대 리뷰 확정) — 즉시는 날짜가 아니라 null로 남긴다.
    */
   effectiveOn: string | null;
+  /** 휴원 중인 수강인가 — 도착 반 미리보기를 대기 칸에 그릴지 가른다(RPC 0228a가 `on_hold`를 승계). */
+  fromHold?: boolean;
+  /**
+   * 이 **한 건**에만 지정된 적용일 — 드롭 날짜 팝업이 채운다(원장 2026-09-09 *"드랍을 하면 날짜지정 팝업"*).
+   * `null` = 지정 안 함 → 툴바 '적용일' > 큐 앵커 순으로 따라간다([`resolveApplyDate`](@/features/timetable/lib/move-date)).
+   * 🔴 팝업이 **기본값과 같은 날짜**를 돌려주면 여기 안 채운다 — 즉시 의도를 절대 날짜로 얼리면 자정을
+   *    넘긴 저장이 서버 소급 가드에 거부된다(위 `effectiveOn` 주석과 같은 함정).
+   */
+  moveOn: string | null;
 };
 
 /** 도착 셀 slot.id → 반 id 매핑용 드롭 대상 data(요일 존/공통 존 공통). */
@@ -142,6 +160,12 @@ export function TimetableEditProvider({
   // 합반 드롭 → 반+요일 선택 팝업(외부 학생 어디든 / 멤버의 다른 세그먼트). 선택해야 큐잉, 취소=무효.
   const [classPick, setClassPick] = useState<ClassPickTarget | null>(null);
   const openClassPick = useCallback((t: ClassPickTarget) => setClassPick(t), []);
+  /**
+   * 드롭 → **날짜 지정 팝업**(원장 2026-09-09 *"드래그를 놓을때 기본뷰건 통합뷰건 날짜를 지정할 수 있게"*).
+   * 🔴 확인해야 큐에 들어간다 — 떨어뜨리는 것만으로는 아무 일도 안 일어난다(취소 = 무효).
+   * 🔴 기본뷰·통합뷰가 **같은 팝업**을 쓴다(provider가 소유) — 뷰마다 만들면 날짜 규약이 갈린다.
+   */
+  const [moveDate, setMoveDate] = useState<MoveDateTarget | null>(null);
 
   // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 **확인 팝업**. 입력창 타이핑 중엔 무시.
   // ⚠️ 옛 '편집 모드'가 이 단축키의 문이었는데 모드가 사라졌다 — 이제 편집 권한(canDrag)이 곧 문이고,
@@ -192,6 +216,9 @@ export function TimetableEditProvider({
         ex.toClassName = q.toClassName;
         ex.toSlotId = q.toSlotId;
         ex.toDays = q.toDays;
+        // 🔴 건별 적용일도 **마지막 드롭의 것**이 이긴다 — 같은 학생을 다시 끌어 다른 날짜를 고르면
+        //    그게 사람의 최신 의도다(목적지만 갱신하고 날짜를 안 갱신하면 화면과 저장이 갈린다).
+        ex.moveOn = q.moveOn;
       } else {
         net.set(q.enrollmentId, { ...q });
         order.push(q.enrollmentId);
@@ -203,18 +230,39 @@ export function TimetableEditProvider({
       .filter((m) => m.fromClassId !== m.toClassId || !sameDaySet(m.fromDays, m.toDays));
   }, [queue]);
 
+  // 대기 배치의 적용 앵커(첫 항목의 큐잉 의도). 저장은 지금 보는 주가 아니라 이 값을 쓴다 — 큐가 주
+  // 이동을 넘어 살아남으므로, 저장 시점 화면에 묶으면 미래주 예약이 오늘자로 적용되거나 즉시 이동이
+  // 미래로 예약되는 뒤바뀜이 생긴다(적대 감사 F2).
+  // ⚠️ "배치가 살아있는가"는 raw 큐가 아니라 **압축본(resolved)** 기준 — A→B→A처럼 전부 되돌린 net no-op
+  // 큐를 raw 기준으로 잡으면, 주 이동 후 '대기 0건'인데 편집이 잠기는 유령 잠금이 생긴다(적대 리뷰 확정).
+  // 🔴 앵커는 **두 큐의 합집합**에서 잡는다 — 반 블록만 대기 중일 때 학생 큐만 보면 `queueDate`가 null이 되어
+  //    화면은 미래 주 날짜를 보여 주는데 저장은 오늘로 나간다(적대 리뷰 2026-09-04, F2와 같은 결함).
+  const liveAnchor =
+    resolved.length > 0 ? (queue[0]?.effectiveOn ?? null) : classQueue.length > 0 ? classQueue[0]!.effectiveOn : null;
+  const hasPending = resolved.length > 0 || classQueue.length > 0;
+  const queueDate = hasPending ? liveAnchor : null;
+  const weekMismatch = hasPending && liveAnchor !== queueIntent;
+
   // enrollmentId → 최종 대상. 출발 셀이 취소선+→대상(반이동) 또는 "→요일"(같은 반 요일편집) 마커를 그리는 데 사용.
   const pending = useMemo<Map<string, PendingTarget>>(() => {
     const m = new Map<string, PendingTarget>();
-    for (const r of resolved)
+    for (const r of resolved) {
+      // 건별 날짜 > 툴바 적용일 > 큐 앵커 — **저장과 같은 함수**를 쓴다(보이는 날짜와 저장되는 날짜가 갈리면
+      // 무엇이 반영될지 알 수 없다). 🔴 같은 반 요일 편집은 날짜 축이 없다(attendance_days 즉시 갱신).
+      const applyOn = r.fromClassId === r.toClassId ? null : resolveApplyDate(r.moveOn, scheduledDate, queueDate);
       m.set(r.enrollmentId, {
         toClassId: r.toClassId,
         toClassName: r.toClassName,
         toDays: r.toDays,
         sameClass: r.fromClassId === r.toClassId,
+        fromClassName: r.fromClassName,
+        applyOn,
+        frozenOn: r.fromClassId === r.toClassId ? null : (r.moveOn ?? null),
+        scheduled: isScheduledMove(applyOn, today),
       });
+    }
     return m;
-  }, [resolved]);
+  }, [resolved, scheduledDate, queueDate, today]);
 
   // 도착 셀 slot.id(=toSlotId) → 전입 예정 학생들. 도착 셀이 초록 미리보기 행을 그리는 데 사용.
   // 마커는 "그 셀"에 붙어야 하므로 반 id가 아니라 셀 slot.id로 키잉(한 반이 여러 셀에 걸쳐도 드롭한 셀만).
@@ -224,17 +272,46 @@ export function TimetableEditProvider({
     for (const r of resolved) {
       if (r.fromClassId === r.toClassId) continue; // 같은 반 요일 편집 → 전입 예정 아님
       const key = r.toSlotId ?? r.toClassId;
+      const applyOn = resolveApplyDate(r.moveOn, scheduledDate, queueDate);
       const arr = m.get(key) ?? [];
       arr.push({
         enrollmentId: r.enrollmentId,
         name: r.name,
         fromClassName: r.fromClassName,
         attendanceDays: r.toDays, // 도착 요일 존의 등원 요일([목] 등) — 미리보기 라벨용
+        applyOn,
+        scheduled: isScheduledMove(applyOn, today),
+        landsInHold: isScheduledMove(applyOn, today) || r.fromHold === true,
       });
       m.set(key, arr);
     }
     return m;
-  }, [resolved]);
+  }, [resolved, scheduledDate, queueDate, today]);
+
+  /**
+   * 같은 큐를 **반 id**로 묶은 것 — 통합뷰 카드(=반)가 읽는다.
+   * 🔴 `incoming`(셀 키)과 따로 만드는 이유: 기본뷰에서 큐잉한 건은 `toSlotId`로만 들어 있어 통합뷰가
+   *    못 찾는다(뷰를 오가도 큐는 살아남는다 — 그때 도착 카드가 조용히 비면 "적용이 안 된다"로 읽힌다).
+   */
+  const incomingByClass = useMemo<Map<string, IncomingStudent[]>>(() => {
+    const m = new Map<string, IncomingStudent[]>();
+    for (const r of resolved) {
+      if (r.fromClassId === r.toClassId) continue;
+      const applyOn = resolveApplyDate(r.moveOn, scheduledDate, queueDate);
+      const arr = m.get(r.toClassId) ?? [];
+      arr.push({
+        enrollmentId: r.enrollmentId,
+        name: r.name,
+        fromClassName: r.fromClassName,
+        attendanceDays: r.toDays,
+        applyOn,
+        scheduled: isScheduledMove(applyOn, today),
+        landsInHold: isScheduledMove(applyOn, today) || r.fromHold === true,
+      });
+      m.set(r.toClassId, arr);
+    }
+    return m;
+  }, [resolved, scheduledDate, queueDate, today]);
 
   function queueMove(move: {
     enrollmentId: string;
@@ -246,13 +323,20 @@ export function TimetableEditProvider({
     toSlotId?: string;
     toDays?: string[];
     fromDays?: string[];
-  }) {
-    if (!canEdit) return; // 과거 주 등 편집 불가 주에서는 어떤 경로로도 큐잉되지 않는다(F1).
-    // 다른 주의 대기 이동이 남아 있으면 섞지 않는다 — 한 번의 저장은 하나의 적용일로 나가므로,
-    // 섞이면 어느 한쪽이 반드시 틀린 날짜로 적용된다(F2). 저장/취소로 정리한 뒤 편집하게 한다.
+    /** 드롭 날짜 팝업이 고른 날짜(기본값과 같으면 null로 온다 — 즉시 의도를 얼리지 않는다). */
+    moveOn?: string | null;
+    /** 휴원 중인 수강인가 — 도착 반 미리보기 자리(재원/대기)를 가른다. */
+    fromHold?: boolean;
+  }): boolean {
+    // ⚠️ 돌려주는 값은 **큐에 들어갔는가** — 호출부가 성공 토스트를 띄울지 가른다(막혔는데 "대기에 넣었다"고
+    //    말하면 그게 거짓말이다). 컨텍스트 타입은 `=> void`라 안 읽는 소비처는 그대로 둔다.
+    if (!canEdit) return false; // 과거 주 등 편집 불가 주에서는 어떤 경로로도 큐잉되지 않는다(F1).
+    // 다른 주의 대기 이동이 남아 있으면 섞지 않는다 — 앵커(`queueDate`)는 큐 전체에 하나뿐이라,
+    // 섞이면 날짜를 안 고른 건들이 반드시 틀린 주로 적용된다(F2). 저장/취소로 정리한 뒤 편집하게 한다.
+    // ⚠️ 건별 날짜(팝업)는 이 축과 별개다 — 그건 절대 날짜라 주를 옮겨도 안 흔들린다.
     if (weekMismatch) {
       setError("다른 주에서 대기 중인 이동이 있습니다. 저장하거나 취소한 뒤 편집하세요.");
-      return;
+      return false;
     }
     setError(null);
     setFailed([]);
@@ -260,14 +344,30 @@ export function TimetableEditProvider({
       // 전부 되돌린(net no-op) 낡은 배치는 새 배치를 시작하기 전에 비운다 — 안 비우면 raw 큐에 남은
       // 낡은 앵커(effectiveOn)가 새 이동의 적용일을 오염시킨다(적대 리뷰 확정 결함의 나머지 반쪽).
       const base = compressMoves(prev).length === 0 ? [] : prev;
-      return [...base, { ...move, effectiveOn: queueIntent }];
+      return [...base, { ...move, moveOn: move.moveOn ?? null, effectiveOn: queueIntent }];
     });
+    return true;
   }
 
-  // 합반 반+요일 선택 팝업 적용 → 고른 반·요일로 이동 큐잉. toSlotId=그 반 세그먼트 slot(전입예정 배지 인덱스 정확).
-  function applyClassPick(picked: ClassPickCandidate, days: string[]) {
+  /**
+   * 날짜 팝업을 열기 전에 **큐잉과 같은 두 문**을 지난다(#77: 게이트는 팝업 안이 아니라 여는 자리에).
+   * 안 그러면 팝업을 띄워 날짜까지 고르게 한 뒤 조용히 버리게 된다.
+   */
+  function openMoveDate(t: MoveDateTarget) {
+    if (!canEdit) return refuse("과거 주는 편집할 수 없습니다 — 현재 주로 이동한 뒤 옮겨 주세요.");
+    if (weekMismatch) {
+      setError("다른 주에서 대기 중인 이동이 있습니다. 저장하거나 취소한 뒤 편집하세요.");
+      return refuse("다른 주에서 대기 중인 이동이 있습니다 — 저장하거나 취소한 뒤 편집하세요.");
+    }
+    setMoveDate(t);
+  }
+
+  // 합반 반+요일 선택 팝업 적용 → 고른 반·요일·날짜로 이동 큐잉. toSlotId=그 반 세그먼트 slot(전입예정 배지 인덱스 정확).
+  // 🔴 합반 드롭엔 팝업을 **하나만** 띄운다 — 반·요일 팝업 뒤에 날짜 팝업을 또 띄우면 드롭 한 번에 창이 둘이다.
+  //    그래서 날짜 칸을 그 팝업 안에 넣었다(규약은 같다: 기본값과 같으면 안 얼린다).
+  function applyClassPick(picked: ClassPickCandidate, days: string[], moveOn: string | null) {
     if (!classPick) return;
-    queueMove({
+    const ok = queueMove({
       enrollmentId: classPick.enrollmentId,
       fromClassId: classPick.fromClassId,
       fromClassName: classPick.fromClassName,
@@ -277,8 +377,17 @@ export function TimetableEditProvider({
       toSlotId: picked.slotId,
       toDays: days,
       fromDays: classPick.fromDays,
+      moveOn,
     });
+    if (ok) queued(`${classPick.name} → ${picked.className}`);
     setClassPick(null);
+  }
+
+  /** 드롭 날짜 팝업 확인 → 그 날짜로 큐잉. 취소하면 아무 일도 없다(떨어뜨린 것만으로는 안 바뀐다). */
+  function applyMoveDate(moveOn: string | null) {
+    if (!moveDate) return;
+    if (queueMove({ ...moveDate, moveOn })) queued(`${moveDate.name} → ${moveDate.toClassName}`);
+    setMoveDate(null);
   }
 
   // 같은 반 요일 편집(팝오버) → toClassId=fromClassId + 선택 요일로 큐잉(저장 시 반영). fromClassName은 배지에 안 쓰임.
@@ -298,36 +407,21 @@ export function TimetableEditProvider({
     setDayEdit(null);
   }
 
-  const compressed = compressMoves(queue);
-
-  // 대기 배치의 적용 앵커(첫 항목의 큐잉 의도). 저장은 지금 보는 주가 아니라 이 값을 쓴다 — 큐가 주
-  // 이동을 넘어 살아남으므로, 저장 시점 화면에 묶으면 미래주 예약이 오늘자로 적용되거나 즉시 이동이
-  // 미래로 예약되는 뒤바뀜이 생긴다(적대 감사 F2).
-  // ⚠️ "배치가 살아있는가"는 raw 큐가 아니라 **compressed** 기준 — A→B→A처럼 전부 되돌린 net no-op
-  // 큐를 raw 기준으로 잡으면, 주 이동 후 '대기 0건'인데 편집이 잠기는 유령 잠금이 생긴다(적대 리뷰 확정).
-  // 🔴 앵커는 **두 큐의 합집합**에서 잡는다 — 반 블록만 대기 중일 때 학생 큐만 보면 `queueDate`가 null이 되어
-  //    화면은 미래 주 날짜를 보여 주는데 저장은 오늘로 나간다(적대 리뷰 2026-09-04, F2와 같은 결함).
-  const liveAnchor =
-    compressed.length > 0 ? (queue[0]?.effectiveOn ?? null) : classQueue.length > 0 ? classQueue[0]!.effectiveOn : null;
-  const hasPending = compressed.length > 0 || classQueue.length > 0;
-  const queueDate = hasPending ? liveAnchor : null;
-  const weekMismatch = hasPending && liveAnchor !== queueIntent;
-
   // 미저장 이동이 있는 채로 새로고침·탭 닫기 하면 경고(가져오기 다이얼로그와 동일 패턴).
   // 앱 내 주/과목 이동은 weekMismatch 경고 + queueDate 앵커로 이미 안전하므로 여기선 문서 이탈만 막는다(F7).
   useEffect(() => {
     // 반 블록만 대기 중이어도 경고한다 — 미저장은 미저장이다(학생 큐만 보던 것을 고침, 적대 리뷰 2026-09-04).
-    if (compressed.length === 0 && classQueue.length === 0) return;
+    if (resolved.length === 0 && classQueue.length === 0) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [compressed.length, classQueue.length]);
+  }, [resolved.length, classQueue.length]);
 
   async function save() {
-    if (compressed.length === 0 && classQueue.length === 0) {
+    if (resolved.length === 0 && classQueue.length === 0) {
       setQueue([]);
       setClassQueue([]);
       setScheduledDate(null);
@@ -344,26 +438,55 @@ export function TimetableEditProvider({
     setFailed([]);
     try {
       // 교차 반 이동 = move_enrollments_batch(적용일 split). 같은 반 요일 편집 = attendance_days 갱신(전입 플래그 없음).
-      const moves = compressed.filter((m) => m.fromClassId !== m.toClassId);
-      const dayEdits = compressed.filter((m) => m.fromClassId === m.toClassId);
+      const moves = resolved.filter((m) => m.fromClassId !== m.toClassId);
+      const dayEdits = resolved.filter((m) => m.fromClassId === m.toClassId);
+      /**
+       * 🔴 이미 서버에 나간 이동 — **어느 경로로 빠져나가든 큐에서 빼야 한다.** 안 빼고 사람이 '저장'을
+       *    다시 누르면 그 학생이 **한 번 더** 옮겨진다(목적지가 다른 반이면 GiST도 안 막아 준다).
+       *    요일 편집이 실패해 중간에 돌아설 때도 마찬가지라 이 집합은 두 단계가 함께 본다.
+       */
+      const committed = new Set<string>();
       if (moves.length > 0) {
-        const res = await moveEnrollmentsBatch(
-          moves.map((m) => ({
-            enrollmentId: m.enrollmentId,
-            newClassId: m.toClassId,
-            attendanceDays: m.toDays ?? [],
-          })),
-          // ⚠️ 적용일 = 사용자가 명시한 날짜 > **큐의 앵커 의도**(null=즉시 → 미지정으로 넘겨 서버
-          // current_date). 지금 보는 주(effectiveDate)는 절대 안 쓴다 — 주를 옮겨도 저장 결과가 바뀌면
-          // 안 되고(F2), 즉시 의도를 날짜로 얼리면 자정 넘긴 저장이 소급 가드에 거부된다(적대 리뷰 확정).
-          scheduledDate ?? queueDate ?? undefined,
-        );
-        if (res.error) {
-          setError(res.error);
+        /**
+         * 🔴 **적용일별로 묶어 한 번씩** 부른다 — RPC 인자가 배치 하나에 날짜 하나라, 건별 날짜가 섞여
+         *    있으면 한 번의 호출로는 어느 한쪽이 반드시 틀린 날짜로 나간다(팝업 날짜 지시의 핵심).
+         * ⚠️ 적용일 = 건별 > 툴바 > 큐 앵커([`resolveApplyDate`]) — 화면(pending.applyOn)과 **같은 함수**다.
+         *    `null`(즉시)은 RPC에 날짜를 안 넘긴다(서버 current_date, 자정 넘긴 저장도 안전).
+         */
+        const groups = new Map<string, typeof moves>();
+        for (const m of moves) {
+          const key = resolveApplyDate(m.moveOn, scheduledDate, queueDate) ?? "";
+          const list = groups.get(key);
+          if (list) list.push(m);
+          else groups.set(key, [m]);
+        }
+        // 🔴 성공한 건은 **큐에서 빼야** 한다 — 한 묶음이 실패해 큐를 통째로 남기면, 다시 저장할 때
+        //    이미 옮겨진 학생이 **한 번 더** 옮겨진다(GiST가 다른 반이면 안 막아 준다).
+        const groupErrors: string[] = [];
+        const groupFails: string[] = [];
+        for (const [on, list] of groups) {
+          const res = await moveEnrollmentsBatch(
+            list.map((m) => ({
+              enrollmentId: m.enrollmentId,
+              newClassId: m.toClassId,
+              attendanceDays: m.toDays ?? [],
+            })),
+            on || undefined,
+          );
+          if (res.error) {
+            groupErrors.push(on ? `${on} 적용분: ${res.error}` : res.error);
+            continue;
+          }
+          for (const m of list) committed.add(m.enrollmentId);
+          const fails = (res.results ?? []).filter((r) => !r.ok);
+          if (fails.length > 0) groupFails.push(...fails.map((f) => f.error ?? f.enrollmentId));
+        }
+        if (groupFails.length > 0) setFailed(groupFails);
+        if (groupErrors.length > 0) {
+          setError(groupErrors.join(" · "));
+          setQueue((prev) => prev.filter((q) => !committed.has(q.enrollmentId)));
           return;
         }
-        const fails = (res.results ?? []).filter((r) => !r.ok);
-        if (fails.length > 0) setFailed(fails.map((f) => f.error ?? f.enrollmentId));
       }
       if (dayEdits.length > 0) {
         const r2 = await updateEnrollmentsAttendanceBatch(
@@ -371,6 +494,8 @@ export function TimetableEditProvider({
         );
         if (r2.error) {
           setError(r2.error);
+          // 반 이동은 이미 나갔다 — 그 건들은 큐에서 뺀다(다시 저장해도 두 번 안 옮겨지게).
+          if (committed.size > 0) setQueue((prev) => prev.filter((q) => !committed.has(q.enrollmentId)));
           return;
         }
       }
@@ -437,8 +562,10 @@ export function TimetableEditProvider({
         canDrag,
         pending,
         incoming,
+        incomingByClass,
         queueMove,
-        pendingCount: compressed.length + classQueue.length,
+        openMoveDate,
+        pendingCount: resolved.length + classQueue.length,
         classMoves: new Map(classQueue.map((m) => [m.slotId, m])),
         queueClassMove,
         save,
@@ -451,6 +578,7 @@ export function TimetableEditProvider({
         dateFloor,
         queueDate,
         weekMismatch,
+        today,
         setHovered,
         openDayEdit,
         openClassPick,
@@ -471,9 +599,123 @@ export function TimetableEditProvider({
         <DayEditPopover target={dayEdit} onCancel={() => setDayEdit(null)} onApply={applyDayEdit} />
       ) : null}
       {classPick ? (
-        <ClassPickPopover target={classPick} onCancel={() => setClassPick(null)} onApply={applyClassPick} />
+        <ClassPickPopover
+          target={classPick}
+          dateFloor={dateFloor}
+          defaultDate={scheduledDate ?? dateFloor}
+          onCancel={() => setClassPick(null)}
+          onApply={applyClassPick}
+        />
+      ) : null}
+      {moveDate ? (
+        <MoveDatePopover
+          target={moveDate}
+          dateFloor={dateFloor}
+          defaultDate={scheduledDate ?? dateFloor}
+          today={today}
+          onCancel={() => setMoveDate(null)}
+          onApply={applyMoveDate}
+        />
       ) : null}
     </TimetableEditContext.Provider>
+  );
+}
+
+/**
+ * 드롭 → **적용일 팝업**(기본뷰·통합뷰 공용, 원장 2026-09-09 *"드랍을 하면 날짜지정 팝업"*).
+ *
+ * 🔴 확인해야 큐에 들어간다 — 떨어뜨린 것만으로는 아무 일도 안 일어난다(취소 = 무효).
+ * 🔴 기본값은 **툴바 '적용일'**(안 바꿨으면 이 주의 바닥 날짜)이고, 그대로 확인하면 얼리지 않는다
+ *    (`freezeMoveDate` → null → 툴바를 나중에 바꿔도 이 건이 따라온다). 다른 날짜를 고르면 그 건만 고정.
+ * 🔴 과거 날짜는 못 고른다(`min`) — 서버도 같은 규칙으로 거절하지만(#77) 여기서 먼저 막아 헛수고를 없앤다.
+ * ⚠️ Esc·바깥 클릭 = 취소. 확인 버튼 autofocus(Enter 한 번으로 끝나게 — 드롭마다 뜨는 창이라 손이 무거우면 안 된다).
+ */
+function MoveDatePopover({
+  target,
+  dateFloor,
+  defaultDate,
+  today,
+  onCancel,
+  onApply,
+}: {
+  target: MoveDateTarget;
+  dateFloor: string;
+  defaultDate: string;
+  today: string;
+  onCancel: () => void;
+  onApply: (moveOn: string | null) => void;
+}) {
+  const [date, setDate] = useState(defaultDate);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  const tooEarly = !!date && date < dateFloor;
+  const scheduled = isScheduledMove(date, today);
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
+      <div
+        className="bg-card border-line w-[320px] rounded-xl border p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="반 이동 적용일"
+      >
+        <p className="text-foreground text-sm font-bold">
+          <span className="text-text-dim font-normal">{target.name} · </span>반 이동
+        </p>
+        <p className="text-text-faint mt-1 text-xs">
+          <b className="text-text-dim">{target.fromClassName || "현재 반"}</b> →{" "}
+          <b className="text-text-dim">{target.toClassName}</b>
+        </p>
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <span className="text-text-dim shrink-0">적용일</span>
+          <input
+            type="date"
+            aria-label="반 이동 적용일"
+            min={dateFloor}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            autoFocus
+            className="border-line h-(--control-h) flex-1 rounded-lg border px-2 text-sm"
+          />
+        </label>
+        {/* 🔴 고른 날짜가 **무슨 뜻인지** 그 자리에서 말한다 — 예약이면 그날까지 옛 반에 남고 새 반엔 대기로 앉는다.
+            (RPC가 옛 수강 end_date·새 수강 start_date를 그날로 잡는 것을 사람 말로 옮긴 것) */}
+        <p className="text-text-faint mt-2 text-xs">
+          {scheduled ? (
+            <>
+              <b className="text-purple">{date}</b>부터 이동합니다 — 그때까지는 <b>{target.fromClassName || "현재 반"}</b>에
+              남고, <b>{target.toClassName}</b>에는 <b>대기</b>로 표시됩니다.
+            </>
+          ) : (
+            <>저장하면 바로 이동합니다.</>
+          )}
+        </p>
+        {tooEarly ? <p className="text-chart-4 mt-2 text-xs">적용일은 {dateFloor} 이후여야 합니다.</p> : null}
+        <p className="text-text-faint mt-2 text-xs">반영은 &lsquo;저장&rsquo;을 눌러야 일어납니다.</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-3 py-1.5 text-xs font-medium transition"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={() => onApply(freezeMoveDate(date, defaultDate))}
+            disabled={!date || tooEarly}
+            className="bg-primary text-primary-foreground hover:bg-primary/85 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+          >
+            이동 예약
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -578,13 +820,21 @@ function DayEditPopover({
  */
 function ClassPickPopover({
   target,
+  dateFloor,
+  defaultDate,
   onCancel,
   onApply,
 }: {
   target: ClassPickTarget;
+  /** 고를 수 있는 가장 이른 날(오늘 또는 조회 주 월요일) — 과거 소급 금지. */
+  dateFloor: string;
+  /** 팝업 기본 날짜(툴바 '적용일' ?? dateFloor) — 그대로 확인하면 얼리지 않는다. */
+  defaultDate: string;
   onCancel: () => void;
-  onApply: (picked: ClassPickCandidate, days: string[]) => void;
+  onApply: (picked: ClassPickCandidate, days: string[], moveOn: string | null) => void;
 }) {
+  // 🔴 합반도 **드롭 한 번에 창 하나** — 반·요일과 같은 팝업에서 날짜까지 고른다(MoveDatePopover와 같은 규약).
+  const [date, setDate] = useState(defaultDate);
   const covers = target.coveringDays;
   const showDays = covers.length >= 2; // 단일 요일 셀이면 요일 선택 의미 없음(전 요일)
   const [pickedId, setPickedId] = useState<string | null>(
@@ -679,7 +929,21 @@ function ClassPickPopover({
             </div>
           </>
         ) : null}
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <span className="text-text-dim shrink-0">적용일</span>
+          <input
+            type="date"
+            aria-label="반 이동 적용일"
+            min={dateFloor}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="border-line h-(--control-h) flex-1 rounded-lg border px-2 text-sm"
+          />
+        </label>
         {noDay ? <p className="text-chart-4 mt-2 text-xs">최소 한 요일은 선택해야 합니다.</p> : null}
+        {date && date < dateFloor ? (
+          <p className="text-chart-4 mt-2 text-xs">적용일은 {dateFloor} 이후여야 합니다.</p>
+        ) : null}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
@@ -690,8 +954,8 @@ function ClassPickPopover({
           </button>
           <button
             type="button"
-            onClick={() => picked && onApply(picked, toDays)}
-            disabled={!picked || noDay}
+            onClick={() => picked && onApply(picked, toDays, freezeMoveDate(date, defaultDate))}
+            disabled={!picked || noDay || !date || date < dateFloor}
             className="bg-primary text-primary-foreground hover:bg-primary/85 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
           >
             이동
@@ -777,6 +1041,7 @@ function EndEnrollmentConfirm({
  */
 export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?: boolean }) {
   const {
+    pending,
     pendingCount,
     save,
     cancel,
@@ -789,6 +1054,15 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
     queueDate,
     weekMismatch,
   } = useTimetableEdit();
+  /**
+   * 건별로 날짜를 따로 고른 이동 — 툴바 입력 하나만 보여 주면 **저장되는 날짜를 거짓으로 말한다**
+   * (원장 2026-09-09 날짜 팝업 지시의 대가: 날짜의 출처가 둘이 됐다).
+   * 🔴 툴바는 "고르지 않은 건들의 기본값"이라고 이름을 바꾸고, 따로 고른 건은 날짜별로 몇 건인지 적는다.
+   *    각 건이 어느 날짜인지는 **줄 자체**가 `→ 9/15`로 말한다(여기선 요약만).
+   */
+  const perItem = [...pending.values()].filter((t) => !t.sameClass && !!t.frozenOn);
+  const perItemDates = [...new Set(perItem.map((t) => t.frozenOn!))].sort();
+  const followsToolbar = pendingCount - perItem.length;
   // 표시·저장 모두 "큐가 만들어진 주"를 앵커로 — 주를 옮겨도 적용일 표시가 실제 적용값과 어긋나지 않게(F2).
   const anchorDate = queueDate ?? dateFloor;
   // 🔴 아무것도 안 옮겼으면 **한 글자도 그리지 않는다**(원장 2026-09-09 *"멘트는 숨겨서 1행으로 만들어"*).
@@ -807,9 +1081,13 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
             <Pencil className="size-3" />
             <span className="num">{pendingCount}건</span> 이동 대기
           </span>
-          {/* 적용일(즉시=오늘/조회 주, 예정일=날짜 지정). 이동은 이 날짜에 반영(옛 반은 그날 전까지 유지). */}
-          <label className="text-text-dim inline-flex items-center gap-1">
-            적용일
+          {/* 적용일(즉시=오늘/조회 주, 예정일=날짜 지정). 이동은 이 날짜에 반영(옛 반은 그날 전까지 유지).
+              드롭 팝업에서 날짜를 따로 고른 건은 이 값을 안 따른다 — 그래서 라벨이 '기본'이다. */}
+          <label
+            className="text-text-dim inline-flex items-center gap-1"
+            title="드롭할 때 날짜를 따로 고르지 않은 이동에 적용됩니다"
+          >
+            {perItem.length > 0 ? "기본 적용일" : "적용일"}
             <input
               type="date"
               aria-label="이동 적용일"
@@ -838,6 +1116,19 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
             <X className="size-3" />
             취소
           </button>
+          {/* 건별 날짜 요약 — 연보라(예약 이동과 같은 뜻의 색). 하나하나는 줄에 붙은 `→ 9/15`가 말한다. */}
+          {perItem.length > 0 ? (
+            <span
+              className="text-purple font-medium"
+              title={perItem
+                .map((t) => `${t.toClassName} ${shortMoveDate(t.frozenOn)}`)
+                .join(" · ")}
+            >
+              건별 날짜 <span className="num">{perItem.length}건</span>
+              {perItemDates.length <= 3 ? ` (${perItemDates.map(shortMoveDate).join("·")})` : null}
+              {followsToolbar > 0 ? <span className="text-text-faint"> · 나머지 {followsToolbar}건은 기본 적용일</span> : null}
+            </span>
+          ) : null}
         </>
       ) : null}
       {/* 대기 이동이 다른 주에서 만들어졌음을 명시 — 저장은 그 앵커 기준으로 나가고, 새 편집은 막혀 있다(F2).
@@ -879,28 +1170,6 @@ type StudentDragData = {
   blockingClassIds?: string[];
 };
 
-/**
- * 드롭이 **거절될 때 이유를 말한다** — 원장 제보 2026-09-08 *"드래그는 되는데 드랍해도 아무런 반응이 없음"*.
- *
- * 🔴 학생 드롭 경로엔 조용한 `return`이 다섯 갈래 있었다(놓을 칸 못 찾음 · 출발 반 모름 · 이미 그 반에
- *    수강 있음 · 같은 반·같은 요일 · 반 블록이 갈 수 없는 칸). 전부 아무 표시가 없어서 **거절인지 고장인지
- *    구분할 수 없었다**. 규칙을 바꾸는 게 아니라 **말을 붙이는 것**이다(판정은 그대로).
- * ⚠️ 아무 데도 아닌 곳에 놓은 것(=취소)은 말하지 않는다 — 그건 사용자가 의도한 무동작이라 토스트가 소음이다.
- */
-function refuse(reason: string): void {
-  // 막힌 이유가 여럿이면(강사·학생·강의실 나열) 문장이 길다 — 읽을 시간을 준다(기본 4초는 두 줄도 못 읽는다).
-  toast.info(reason, { duration: reason.length > 80 ? 9000 : 4000 });
-}
-
-/**
- * 큐에 쌓였다는 사실을 **말한다** — 이동은 즉시가 아니라 '저장'에서 반영된다(원장 2026-09-04 규약).
- * 🔴 성공에도 말이 없으면 거절과 구분이 안 된다(원장 2026-09-08 *"드랍해도 아무런 반응이 없음"*).
- *    툴바의 '이동 대기 N건' 바가 이미 있지만, 격자를 보고 있는 눈에서 그 줄은 멀다.
- */
-function queued(what: string): void {
-  toast.success(`${what} — '저장'을 눌러야 반영됩니다`);
-}
-
 const preferDayZone: CollisionDetection = (args) => {
   // 🔴 반 블록을 끌 때는 **학생 드롭존을 고르지 않는다** — 반은 격자 칸(포인터 아래 DOM)으로 놓는데,
   //    dnd-kit이 셀 드롭존을 `over`로 잡으면 그 셀에 학생용 남색 링(`ring-primary`)이 켜져
@@ -919,7 +1188,7 @@ const preferDayZone: CollisionDetection = (args) => {
  *    전략도 기본값(WhileDragging = 시작 시 1회)을 쓴다.
  */
 export function TimetableDndArea({ children }: { children: ReactNode }) {
-  const { canDrag, queueMove, queueClassMove, openClassPick, dateFloor } = useTimetableEdit();
+  const { canDrag, queueMove, queueClassMove, openClassPick, openMoveDate, dateFloor } = useTimetableEdit();
   // 반 이동 판정 재료(서버 색인 → 요일별). 없으면 반 드래그가 없는 화면이다.
   const moveLookup = useClassMoveIndex();
   // 끌리는 줄의 **원본 모습**(이름·학교학년·톤·폭) — 고스트를 셀 안 줄과 똑같이 그리기 위한 재료.
@@ -1164,8 +1433,26 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     // 같은 반이면 요일이 바뀔 때만(2일↔1일 편집), 교차 반이면 항상 이동.
     if (fromClassId === toClassId && sameDaySet(fromDays, toDays))
       return refuse("같은 반·같은 요일이라 바뀐 것이 없습니다.");
-    queued(`${data?.name ?? "학생"} → ${overData?.className ?? "다른 반"}`);
-    queueMove({
+    // 🔴 **같은 반 요일 편집은 날짜 팝업을 안 띄운다** — `attendance_days`는 날짜 축이 없는 값이라
+    //    (RPC도 즉시 갱신) 고를 것이 없다. 물으면 지킬 수 없는 약속이 된다.
+    if (fromClassId === toClassId) {
+      queued(`${data?.name ?? "학생"} 등원 요일 변경`);
+      queueMove({
+        enrollmentId,
+        fromClassId,
+        fromClassName: data?.fromClassName ?? "다른 반",
+        toClassId,
+        toClassName: overData?.className ?? "다른 반",
+        name: data?.name ?? "학생",
+        toSlotId: overData?.slotId,
+        toDays,
+        fromDays,
+      });
+      return;
+    }
+    // 🔴 반 이동은 **놓는 순간 날짜를 묻는다**(원장 2026-09-09 *"드랍을 하면 날짜지정 팝업"*) —
+    //    확인해야 큐에 들어간다(취소 = 아무 일도 없음). 토스트도 확인 뒤에 뜬다.
+    openMoveDate({
       enrollmentId,
       fromClassId,
       fromClassName: data?.fromClassName ?? "다른 반",

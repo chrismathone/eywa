@@ -24,6 +24,7 @@ import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
 import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
+import { pairScheduledMoves, type ScheduledMoveRow } from "../lib/scheduled-move";
 import type { TeacherColorMap } from "../lib/class-grid";
 import {
   buildTeacherLabelMap,
@@ -448,6 +449,16 @@ export type StudentLine = {
   enrollmentDate?: string | null;
   /** 타 반에서 이동해 들어온 학생(셀에서 초록 강조). */
   isTransferredIn?: boolean;
+  /**
+   * **예약된 반 이동**(이미 저장돼 그날 저절로 일어날 것) — 원장 2026-09-09 *"연보라색 계열로 '이동 대기'"*.
+   *
+   * 🔴 저장 **전**의 큐(브라우저에만 있는 것)와 다르다 — 이건 DB에 들어 있고 '취소'로 사라지지 않는다.
+   *    화면은 색을 같게(연보라) 두되 **문구로 가른다**([`moveWaitTitle`](../lib/move-note.ts)).
+   * ⚠️ 상대 반 이름은 **화면에 뜬 반 안에서만** 찾는다 — 못 찾으면 null(모르는 것을 지어내지 않는다).
+   */
+  movingOut?: { on: string; className: string | null };
+  /** 이 반으로 **들어올** 예정(그때까지는 대기) — `movingOut`의 반대쪽. */
+  movingIn?: { on: string; className: string | null };
   /** 분리등원 요일 — []=전 요일, ['mon','thu']=월목만. 비어있지 않으면 셀에 배지로 표시. */
   attendanceDays?: string[];
   /** 영문 이름(ijw englishName) — 통합뷰 명단에 "이름 (English)"로 표시. 없으면 미표시. */
@@ -598,6 +609,92 @@ export async function getWeeklyScheduleWithStudents(
     return q.order("id").range(from, to);
   });
 
+  /**
+   * **예약된 반 이동** 짝짓기 — 이미 저장돼 그날 저절로 일어날 이동(원장 2026-09-09 '이동 대기').
+   * 🔴 새 컬럼·새 표 없이 두 수강 행(`old.end_date === new.start_date`)을 한 사건으로 잇는 것뿐이다.
+   */
+  const toMoveRow = (r: {
+    id: string;
+    class_id: string;
+    student_id: string;
+    start_date: string;
+    end_date: string | null;
+    is_transferred: boolean | null;
+    is_transferred_in: boolean | null;
+  }): ScheduledMoveRow => ({
+    id: r.id,
+    classId: r.class_id,
+    studentId: r.student_id,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    isTransferred: r.is_transferred === true,
+    isTransferredIn: r.is_transferred_in === true,
+  });
+  const classNameById = new Map(slots.map((s) => [s.classId, s.className]));
+  let scheduledMoves = pairScheduledMoves(rows.map(toMoveRow), referenceDate);
+  /**
+   * 🔴 **짝이 조회 창 밖일 때만** 한 번 더 묻는다 — 도착 수강은 `start_date`가 미래라
+   *    위 명단 쿼리(`start_date <= weekEnd`)에 안 걸린다. 즉 "9/20에 옮김"을 이번 주에서 보면
+   *    출발 줄만 있고 **어느 반으로 가는지가 없다** — 원장이 툴팁에 요구한 바로 그 정보다.
+   * ⚠️ 대개 0건이라 왕복이 아예 안 생긴다(예약된 이동이 있을 때만 한 번). 화면 밖 반이라 이름은
+   *    임베드로 함께 받는다(`enrollments → classes`는 FK가 하나라 힌트가 필요 없다, [[#94]]).
+   */
+  const unmated = new Set<string>();
+  for (const m of [...scheduledMoves.out.values(), ...scheduledMoves.in.values()])
+    if (!m.otherClassId) unmated.add(m.on);
+  const unmatedStudents = [
+    ...new Set(
+      rows
+        .filter(
+          (r) =>
+            (r.is_transferred && r.end_date && unmated.has(r.end_date)) ||
+            (r.is_transferred_in && unmated.has(r.start_date)),
+        )
+        .map((r) => r.student_id),
+    ),
+  ];
+  if (unmatedStudents.length > 0) {
+    type MateRow = {
+      id: string;
+      class_id: string;
+      student_id: string;
+      start_date: string;
+      end_date: string | null;
+      is_transferred: boolean | null;
+      is_transferred_in: boolean | null;
+      class: { class_name?: string | null } | { class_name?: string | null }[] | null;
+    };
+    const mates = await fetchAllPagedInChunks<MateRow>(unmatedStudents, (chunk, from, to) => {
+      let q = supabase
+        .from("enrollments")
+        .select(
+          "id, class_id, student_id, start_date, end_date, is_transferred, is_transferred_in, class:class_id ( class_name )",
+        )
+        .in("student_id", chunk);
+      if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+      return q.order("id").range(from, to);
+    }).catch(() => [] as MateRow[]); // 이름을 못 받아도 날짜는 말할 수 있다(조회 실패가 줄을 지우면 안 된다)
+    if (mates.length > 0) {
+      const byId = new Map(rows.map((r) => [r.id, toMoveRow(r)]));
+      for (const m of mates) {
+        if (!byId.has(m.id)) byId.set(m.id, toMoveRow(m));
+        const k = Array.isArray(m.class) ? m.class[0] : m.class;
+        if (k?.class_name && !classNameById.has(m.class_id)) classNameById.set(m.class_id, k.class_name);
+      }
+      // ⚠️ 합집합으로 **다시** 짝짓는다 — 한 학생이 같은 날 두 과목을 옮기면 그제야 모호해지는데,
+      //    그건 손실이 아니라 사실이다(엉뚱한 반 이름을 적는 것보다 안 적는 편이 맞다).
+      scheduledMoves = pairScheduledMoves([...byId.values()], referenceDate);
+    }
+  }
+  const scheduledSide = (
+    side: "out" | "in",
+    enrollmentId: string,
+  ): { on: string; className: string | null } | undefined => {
+    const hit = (side === "out" ? scheduledMoves.out : scheduledMoves.in).get(enrollmentId);
+    if (!hit) return undefined;
+    return { on: hit.on, className: hit.otherClassId ? (classNameById.get(hit.otherClassId) ?? null) : null };
+  };
+
   // (class_id:student_id) → 표시할 한 줄. 같은 반 다중 수강기록(재등록 등)은 재원>대기>퇴원 우선, 같으면 최신 시작.
   const statusRank = (st: StudentLine["status"]) => (st === "active" ? 0 : st === "hold" ? 1 : 2);
   const chosen = new Map<string, StudentLine>();
@@ -651,6 +748,9 @@ export async function getWeeklyScheduleWithStudents(
       enrollmentDate: start,
       attendanceDays: r.attendance_days ?? [],
       englishName: s.english_name ?? null,
+      // 🔴 퇴원 줄엔 안 붙인다 — 이미 끝난 기록에 "곧 옮겨 갑니다"는 거짓이다.
+      movingOut: status === "withdrawn" ? undefined : scheduledSide("out", r.id),
+      movingIn: status === "withdrawn" ? undefined : scheduledSide("in", r.id),
     };
 
     const key = `${r.class_id}:${r.student_id}`;
