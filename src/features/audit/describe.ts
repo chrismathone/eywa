@@ -7,6 +7,7 @@ import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/featur
 import { formatSignedDays } from "@/features/leave/balance";
 import { formatLeaveDays } from "@/features/leave/request-days";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
+import { ONBOARDING_ITEMS } from "@/features/newcomers/onboarding-items";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import {
   BOARDING_STATUS_LABEL,
@@ -518,6 +519,12 @@ export function auditDetail(
     case "student_bulk_delete": {
       const n = num(m.count);
       return n === null ? null : `${n}명 (관리 도구 · 수강 없는 학생 정리)`;
+    }
+    case "newcomer_check":
+    case "newcomer_uncheck": {
+      // 항목 이름은 신규생 체크리스트 정의가 단일 소스 — 여기 라벨을 다시 적으면 항목을 바꿀 때 갈린다.
+      const item = ONBOARDING_ITEMS.find((i) => i.key === str(m.itemKey));
+      return join(ctx.nameOf(m.studentId), item?.label ?? str(m.itemKey), str(m.doneOn));
     }
     case "enrollment_assign": {
       return join(

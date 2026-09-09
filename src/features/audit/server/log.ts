@@ -132,6 +132,10 @@ export const AUDIT_ACTIONS = {
   enrollment_delete: "수업 이력 삭제",
   student_bulk_withdraw: "학생 일괄 퇴원(데이터 정리)",
   student_bulk_delete: "학생 일괄 삭제(데이터 정리)",
+  // 신규생 체크리스트(2026-09-09) — 칸 하나가 "학부모에게 전화했다"는 **사실 주장**이라, 나중에
+  // "안 왔다는데 콜은 했다고 돼 있네"를 되짚을 수 있어야 한다. 해제도 함께 남긴다(그쪽이 더 중요한 흔적).
+  newcomer_check: "신규생 체크 완료",
+  newcomer_uncheck: "신규생 체크 해제",
   // 2차 확장(2026-08-18 원장 "모든 행동에 기록이 남도록 범인 찾기 가능하게") — 수강을 바꾸는 나머지 경로.
   enrollment_assign: "반 배정",
   enrollment_move: "반 이동",
