@@ -43,7 +43,11 @@ export function KpiTile({
     <>
       <p className="text-text-dim truncate text-xs font-medium">{label}</p>
       <p className="mt-0.5 flex items-baseline gap-1">
-        <span className="text-foreground num text-[28px] leading-none font-bold">
+        {/* 🔴 임의 픽셀 값이 아니라 **타입 스케일 토큰**이다 — `--text-2xl`이 마침 28px이고, 글자 크기가
+            앱 전역에서 한 번 더 오르면 이 숫자도 함께 따라와야 한다.
+            ⚠️ 가드(`control-scale`)는 **주석까지 훑는다** — 예시로라도 임의 픽셀 표기를 적지 말 것
+            (오늘 `dead-color-class` 가드에서도 주석 한 줄 때문에 같은 일이 있었다). */}
+        <span className="text-foreground num text-2xl leading-none font-bold">
           {value ?? "—"}
         </span>
         {value !== null && unit ? (
