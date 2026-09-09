@@ -20,7 +20,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
 import { applyAppliedToBoardAtt } from "../lib/applied-attendance";
@@ -280,7 +279,25 @@ function ClassCard({
 
   return (
     <section className="bg-card shadow-card rounded-2xl">
-      <header className="border-line flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3">
+      {/* 🔴 **머리 줄 자체가 접기 버튼**이다(원장 2026-09-09 *"이거 접기 버튼 없애고, 없애도 행 누르면
+          접히게"*) — 오른쪽 끝 셰브런을 없앤 자리를 줄 전체가 대신한다. 안에 링크·버튼이 하나도 없어서
+          (전부 표시용 span·배지) 클릭이 겹치지 않는다 — 나중에 이 줄에 버튼을 넣는다면 그 버튼에서
+          `stopPropagation`을 해야 한다.
+          ⚠️ `<header>`는 포커스를 못 받으므로 `role`·`tabIndex`·Enter/Space를 직접 단다(키보드로도 접힌다).
+          ⚠️ 눌리는 줄이라는 신호는 hover 배경 하나 — 셰브런이 사라졌으니 이것마저 없으면 눌러 볼 이유가 없다. */}
+      <header
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        title={`${shownClassName} ${t(open ? "common.collapse" : "common.expand")}`}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          setOpen((v) => !v);
+        }}
+        className="border-line hover:bg-bg-soft flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3 transition select-none"
+      >
         <span className="num text-foreground shrink-0 text-base font-bold tabular-nums">
           {card.startsAt}
           {card.endsAt ? <span className="text-text-dim font-medium">~{card.endsAt}</span> : null}
@@ -336,22 +353,6 @@ function ClassCard({
               )}
             </Badge>
           ) : null}
-          {/* 접기 = ECS 로스터 GroupToggle과 같은 어포던스(회전 셰브런, 테두리 없는 인라인 버튼). */}
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="text-text-dim hover:text-foreground inline-flex cursor-pointer items-center p-1 transition"
-            aria-expanded={open}
-            aria-label={`${shownClassName} ${t(open ? "common.collapse" : "common.expand")}`}
-            title={`${shownClassName} ${t(open ? "common.collapse" : "common.expand")}`}
-          >
-            <EyIcon
-              name="chevronRight"
-              size={12}
-              strokeWidth={2.5}
-              className={`shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
-            />
-          </button>
         </span>
       </header>
 

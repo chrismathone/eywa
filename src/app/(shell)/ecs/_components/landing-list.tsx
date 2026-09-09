@@ -5,7 +5,7 @@ import { monthDay } from "@/features/timetable/scheduled-import";
 //    RTL이 렌더할 수 없어 이 파일의 단위 테스트 17개가 통째로 죽는다(실측). 페이지가 이미 들고 있는 값을
 //    **prop으로 받는다**. 기본값은 `ko`(= 표기 불변)라 안 넘겨도 화면이 깨지지 않고, 페이지가 넘기는지는
 //    가드(`name-wiring`)가 잠근다.
-import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { classNameFor } from "@/features/teacher-view/class-name";
 import type { SheetLandingCard } from "@/features/class-sheets/server/queries";
 import { groupLandingByTeacher } from "@/features/class-sheets/landing-groups";
@@ -120,9 +120,8 @@ export function EcsLandingList({
                     {p.label}
                   </h3>
                   {/* 🔴 반 개수·단 작성률은 걷었다(원장 2026-09-09 *"반개수도 제거"* · *"선생님 총 작성비율은
-                      필요없고 행제목으로 대체"*) — 그 자리에 **열 제목**을 세운다. 행에는 열 머리가 없어
-                      `2/6`·`0/6` 두 숫자가 무엇인지 눌러 봐야 알았다. */}
-                  <LandingColumnTitles showShouting={summarizeShouting(p.cards).classes > 0} />
+                      필요없고 행제목으로 대체"*). 열 제목은 **담임 줄 위**에 붙는다(아래 TeacherGroupFlow) —
+                      단 머리에 두면 제목과 숫자가 화면 위아래로 멀어진다(원장 시안 비교 2026-09-09). */}
                 </div>
                 {/* 단 안에선 담임이 프로그램 **아래** 층이다 — 제목 층을 실제 구조대로 내린다
                     (스크린리더가 제목으로 훑을 때 두 축이 같은 층이면 포함 관계가 안 보인다). */}
@@ -143,12 +142,6 @@ export function EcsLandingList({
       ) : (
         // ⚠️ 좌우로 안 가르는 흐름(한 프로그램만 있을 때)도 **같은 축**으로 묶어야 한다 —
         //    한쪽만 배선하면 EiE가 0개인 강사에게만 옛 담임별 묶음이 남는다(2026-09-05 실제로 그랬다).
-        <>
-        {/* 🔴 열 제목은 **여기에도** 있어야 한다 — 좌우로 안 가르는 화면(한 프로그램만·강사 본인)에서
-            제목이 사라지면 그 사람들만 `2/6`이 무엇인지 알 수 없다(반쪽 배선 금지, 위 주석과 같은 이유). */}
-        <div className="border-line mb-2 flex items-baseline border-b px-1 pb-1.5">
-          <LandingColumnTitles showShouting={summarizeShouting(cards).classes > 0} />
-        </div>
         <TeacherGroupFlow
           cards={cards}
           weekMonday={weekMonday}
@@ -158,7 +151,6 @@ export function EcsLandingList({
           landingOrder={landingOrder}
           canReorder={canReorder}
         />
-        </>
       )}
     </section>
   );
@@ -170,20 +162,36 @@ export function EcsLandingList({
  *
  * 🔴 폭은 행이 쓰는 값과 **같은 상수**를 본다 — 따로 적으면 제목이 숫자 위에서 어긋난다.
  *    (Shouting 52px · 작성 44px(w-11) · 막대 40px(w-10) · 사이 gap-2 8px, 행 오른쪽 여백 px-1.5.)
- * ⚠️ Shouting 구역이 없는 흐름(인재원 영어)에선 제목도 안 세운다 — 빈 칸에 이름만 남으면 "여긴 왜 비었나"가 된다.
- * ⚠️ EiE 단엔 행 끝에 '월간' 배지가 하나 더 붙는다 — 제목 줄에도 **보이지 않는 같은 크기**를 둬서 줄을 맞춘다.
+ * ⚠️ Shouting 구역이 없는 흐름(인재원 영어)에선 '샤우팅' 제목도 안 세운다 — 빈 칸에 이름만 남으면 "여긴 왜 비었나"가 된다.
+ * ⚠️ '주간'을 붙인 이유(원장 2026-09-09 *"작성률 → 주간 작성률"*): 이 숫자의 분모는 **이 주 배정 교시**라,
+ *    그냥 '작성률'이면 달 전체나 누적으로 읽힌다.
+ * ⚠️ 행 끝엔 '달력' 배지가 하나 더 붙는다(두 단 모두) — 제목 줄에도 **보이지 않는 같은 크기**를 둬서 줄을 맞춘다.
  */
-function LandingColumnTitles({ showShouting }: { showShouting: boolean }) {
+function LandingColumnTitles({ showShouting, lang }: { showShouting: boolean; lang: SheetLang }) {
   return (
-    <span className="text-text-faint ml-auto flex shrink-0 items-center gap-2 pr-1.5 text-xs font-bold">
-      {showShouting ? <span className="w-[52px] text-right">샤우팅</span> : null}
-      <span className="w-11 text-right">작성률</span>
-      <span className="w-10" aria-hidden />
-      {showShouting ? (
-        <span aria-hidden className="invisible ml-1 rounded-full border px-1.5 py-px text-xs font-bold">
-          월간
-        </span>
-      ) : null}
+    // 🔴 **행의 꼬리 구조를 그대로 본뜬다** — 안쪽 묶음(gap-2 + 오른쪽 여백)이 행 링크의 꼬리이고, '달력'
+    //    배지는 그 **밖에서** `ml-1`로 붙는다. 한 겹으로 뭉치면 gap이 한 번 더 끼어 12px씩 왼쪽으로 쏠린다
+    //    (원장 2026-09-09 *"열정렬 제대로 해. 한쪽으로 쏠리지 않게"* — 실측으로 어긋난 값이 딱 그만큼이었다).
+    // 🔴 '주간 작성률'은 **숫자 + 막대 두 칸에 걸친다**(44+8+40=92px) — 라벨이 숫자 칸(44px)보다 넓어서
+    //    그 칸에만 맞추면 왼쪽으로 흘러 '샤우팅'과 겹친다. 숫자와 막대는 어차피 같은 지표라 한 제목이 맞다.
+    // ⚠️ `-mr-1`은 담임 줄 자체의 좌우 여백(px-1)을 되돌린다 — 행은 그 여백 **밖까지** 뻗어 있어서,
+    //    상쇄하지 않으면 제목이 통째로 4px 왼쪽으로 쏠린다(실측값이 정확히 그만큼이었다).
+    <span className="text-text-faint -mr-1 ml-auto flex shrink-0 items-center text-xs font-bold">
+      <span className="flex items-center gap-2 pr-1.5">
+        {showShouting ? (
+          <span className="w-[52px] text-right">{sheetT(lang, "landing.col.shouting")}</span>
+        ) : null}
+        <span className="w-[92px] text-right whitespace-nowrap">{sheetT(lang, "landing.col.rate")}</span>
+      </span>
+      {/* 행 끝의 '달력' 배지 자리 — 보이지 않는 같은 크기로 줄을 맞춘다.
+          ⚠️ 배지가 **두 단 모두**에 붙으므로(2026-09-09) 이 자리도 흐름과 무관하게 항상 잡는다 —
+             `showShouting`에 매달면 인재원 영어 단만 제목이 배지 폭만큼 오른쪽으로 쏠린다.
+          🔴 글자도 **배지와 같은 사전 값**을 쓴다(빈 칸이 아니라 같은 글자) — 영어 화면에서 배지만
+             `Calendar`가 되면 이 자리가 그만큼 좁아져 제목 줄이 어긋난다. `face.cal`·`face.mp`는
+             두 언어 모두 같은 글자라 어느 쪽을 써도 폭이 같다. */}
+      <span aria-hidden className="invisible ml-1 rounded-full border px-1.5 py-px text-xs font-bold">
+        {sheetT(lang, "face.cal")}
+      </span>
     </span>
   );
 }
@@ -254,6 +262,9 @@ function TeacherGroupFlow({
             <span className="text-text-dim shrink-0 text-xs">
               <span className="num">{g.summary.classes}</span>반
             </span>
+            {/* 열 제목은 **담임 줄 위**(원장 2026-09-09 시안 비교) — 제목과 숫자가 한 눈에 붙어 있어야
+                `0/6`이 무엇인지 바로 읽힌다. 흐름 안 모든 묶음이 같은 폭을 쓰므로 줄이 어긋나지 않는다. */}
+            <LandingColumnTitles showShouting={showShouting} lang={lang} />
             {/* 🔴 담임 몫 작성률은 뺐다(원장 2026-09-09 *"선생님 총 작성비율은 필요없고 행제목으로 대체"*) —
                 그 자리는 위 단 머리의 **열 제목**이 쓴다. 반별 숫자는 아래 행에 그대로 있다. */}
           </div>
@@ -390,20 +401,23 @@ function TeacherGroupFlow({
                       <span className="bg-primary block h-full rounded-full" style={{ width: `${pct}%` }} />
                     </span>
                   </Link>
-                  {/* 계획(MP) 진입로 — 🔴 **여기 없으면 주소를 아는 사람만 쓴다**(MCS에서 수학만 맡은
-                      강사 9명에게 링크가 0개였던 것과 같은 구멍). EiE 반에만 붙고, 여는 달은 주간 시트의
-                      '달력' 버튼과 **같은 규칙**([monthOfWeek](@/features/class-sheets/face-nav))이다.
+                  {/* 달력 진입로 — 🔴 **여기 없으면 주소를 아는 사람만 쓴다**(MCS에서 수학만 맡은
+                      강사 9명에게 링크가 0개였던 것과 같은 구멍). 여는 달은 주간 시트의 '달력' 버튼과
+                      **같은 규칙**([monthOfWeek](@/features/class-sheets/face-nav))이다.
+                      🔴 **두 프로그램 모두에 붙는다**(원장 2026-09-09 *"인재원 영어에도 '월간' 바로가기해"*
+                         → *"달력 으로 바로가면 되잖아. 월간 -> 달력으로 이름 변경하자. 전부"*). 여는 면은
+                         그 반이 실제로 가진 달력이다 — EiE는 월간 계획서(`mp`), 인재원 영어는 달력(`cal`).
+                         이름을 하나로 맞춘 이유: 두 면은 같은 자리에 서지 않으므로 강사에겐 '이 반의 달력'
+                         하나로 읽힌다(`SHEET_FACE_LABEL`도 둘 다 '달력'이다).
                       🔴 `<a>` 안에 `<a>`를 넣을 수 없어 행 링크의 **형제**로 둔다(행 전체는 여전히 주간). */}
-                  {card.englishTrack === "eie" ? (
-                    <Link
-                      href={`/ecs/${card.classId}/month?month=${monthOfWeek(weekMonday)}&week=${weekMonday}&view=mp`}
-                      title={`${shownName} 월간 계획서 열기`}
-                      aria-label={`${shownName} 월간 계획서 열기`}
-                      className="border-line-strong text-text-dim hover:bg-bg-soft hover:text-foreground ml-1 shrink-0 rounded-full border px-1.5 py-px text-xs font-bold transition"
-                    >
-                      월간
-                    </Link>
-                  ) : null}
+                  <Link
+                    href={`/ecs/${card.classId}/month?month=${monthOfWeek(weekMonday)}&week=${weekMonday}&view=${card.englishTrack === "eie" ? "mp" : "cal"}`}
+                    title={sheetTf(lang, "landing.calendarLink", { name: shownName })}
+                    aria-label={sheetTf(lang, "landing.calendarLink", { name: shownName })}
+                    className="border-line-strong text-text-dim hover:bg-bg-soft hover:text-foreground ml-1 shrink-0 rounded-full border px-1.5 py-px text-xs font-bold transition"
+                  >
+                    {sheetT(lang, card.englishTrack === "eie" ? "face.mp" : "face.cal")}
+                  </Link>
                   </>
                 ),
               };

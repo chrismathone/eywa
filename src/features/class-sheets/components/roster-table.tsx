@@ -238,10 +238,24 @@ export const RosterTable = memo(function RosterTable({
             {/* 특이사항 머리도 **가운데**(원장 2026-08-19 "라벨 줄맞춤") — 이 열은 잔여 폭을 다 받아
                 넓은데, 라벨만 왼쪽에 붙어 있어 앞 열(누적 암기 단어수)에 딸린 것처럼 보였다.
                 본문 값은 좌측 정렬 유지(표 규약 2026-08-05: 머리는 가운데, 값은 왼쪽). */}
-            {/* ⚠️ `whitespace-nowrap` — JJ 폼은 이 열이 30px까지 좁아져(2026-08-28 열 다이어트) 라벨이
-                두 줄로 접힌다. 접히면 그 카드만 학생 줄이 아래로 밀려 나란한 카드의 `grid-rows-subgrid`
-                줄맞춤이 깨진다(roster-form ⚠️와 같은 이유). 넘치면 접지 말고 옆으로 흘려보낸다. */}
-            <th className="rounded-r-md py-0.5 text-center font-bold whitespace-nowrap">{t("roster.col.note")}</th>
+            {/* ⚠️ 한 줄 고정 — JJ 폼은 이 열이 30px까지 좁아져(2026-08-28 열 다이어트) 라벨이 두 줄로
+                접힌다. 접히면 그 카드만 학생 줄이 아래로 밀려 나란한 카드의 `grid-rows-subgrid` 줄맞춤이
+                깨진다(roster-form ⚠️와 같은 이유).
+                🔴 그렇다고 **옆으로 흘려보내지도 않는다**(원장 2026-09-09 *"특이사항 열 삐져나오는것도 수정"*) —
+                   흘러나온 글자는 헤더 밴드(회색 라운드) 밖으로 새어 다음 카드 위에 겹쳐 보인다. 열 안에서
+                   말줄임으로 자르고 전문은 `title`로 남긴다. 자를 뿐 접지 않으니 머리 높이는 그대로다.
+                ⚠️ `<th>`에 직접 걸면 table-fixed 칸이라 잘리지 않는다 — 안쪽 블록이 폭을 받아야 한다.
+                ⚠️ 가운데 정렬(2026-08-19 규약)과 말줄임을 **한 요소에 같이 걸지 말 것** — 넘치는 줄에서
+                   가운데 정렬은 글자를 왼쪽으로도 밀어내 앞뒤가 **함께** 잘린다(끝의 `…` 하나로 안 끝난다).
+                   바깥이 flex로 가운데를 잡고 **안쪽만** 폭을 받아 자르면, 들어갈 땐 가운데·넘칠 땐
+                   끝에만 `…`가 붙는다. */}
+            <th className="rounded-r-md py-0.5 font-bold">
+              <span className="flex justify-center">
+                <span className="min-w-0 truncate" title={t("roster.col.note")}>
+                  {t("roster.col.note")}
+                </span>
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody className="divide-line divide-y">

@@ -70,7 +70,9 @@ export const SHEET_FACE_LABEL: Record<SheetFace, string> = {
   week: "주간",
   cal: "달력",
   rail: "진도표",
-  mp: "계획(MP)",
+  // 🔴 EiE에선 이 면이 곧 **그 반의 달력**이다(원장 2026-09-09 *"EiE는 MP -> 달력으로. 기존 달력뷰는
+  //    인재원영어에서만"*) — 두 면이 한 화면에 함께 서지 않으므로 이름이 겹쳐도 헷갈리지 않는다.
+  mp: "달력",
 };
 
 export const SHEET_FACES: readonly SheetFace[] = ["week", "cal", "rail"];
@@ -85,7 +87,11 @@ export const SHEET_FACES: readonly SheetFace[] = ["week", "cal", "rail"];
  * 🔴 화면에서 칸을 감추는 것은 게이트가 아니다(#77) — 서버 조회·저장·인쇄가 각자 같은 판정을 한 번 더 한다.
  */
 export function sheetFacesFor(isEie: boolean): readonly SheetFace[] {
-  return isEie ? [...SHEET_FACES, "mp"] : SHEET_FACES;
+  // 🔴 EiE는 **주간 + 달력(=월간 계획서)** 둘뿐이다(원장 2026-09-09: *"EiE는 MP -> 달력으로. 기존 달력뷰는
+  //    인재원영어에서만"* + *"EiE는 진도표도 숨겨"*). EiE의 달력은 학부모에게 나가는 월간 계획서 그 자체라,
+  //    같은 달을 세 가지로 보여 주던 옛 구성은 고를 이유 없는 갈래만 늘렸다.
+  // 🔴 인재원 영어는 **종전 그대로** 주간·달력·진도표 — MP는 EiE 전용이라는 2026-09-01 결정은 불변이다.
+  return isEie ? ["week", "mp"] : SHEET_FACES;
 }
 
 /**
@@ -96,7 +102,7 @@ export const SHEET_FACE_TITLE: Record<SheetFace, string> = {
   week: "그 주의 출결·태도·수업계획을 함께 쓰는 화면",
   cal: "한 달을 달력으로 — 날짜 칸을 누르면 그 날 계획을 그 자리에서 엽니다",
   rail: "한 달을 진도표로 — 영역별로 무엇을 언제 나갔는지 가로로 훑습니다",
-  mp: "학부모에게 나가는 월간 계획서 — 미리 쓴 계획과 실제 진도를 나란히 대조하고 인쇄합니다",
+  mp: "한 달을 달력으로 — 학부모에게 나가는 월간 계획서이자, 미리 쓴 계획과 실제 진도를 대조하는 자리입니다",
 };
 
 /**

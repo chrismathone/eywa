@@ -158,7 +158,7 @@ export const SHEET_DICT = {
   //    모아 보는 **보기(표)**이고 저쪽은 그 날 무엇을 나갔는지 적는 **칸**이다. 영어로 둘 다 `Progress`면
   //    탭과 열이 같은 말이 되어 무엇을 누르는지 알 수 없다(가드 `lang-wiring`이 이 뭉침을 잡는다).
   "face.rail": { ko: "진도표", en: "Progress table" },
-  "face.mp": { ko: "계획(MP)", en: "Plan (MP)" },
+  "face.mp": { ko: "달력", en: "Calendar" },
   "face.week.title": {
     ko: "그 주의 출결·태도·수업계획을 함께 쓰는 화면",
     en: "Write attendance, attitude and lesson plans for the week in one place",
@@ -273,6 +273,16 @@ export const SHEET_DICT = {
     ko: "를 열어 주세요. 반 배정 문의는 사무실로.",
     en: ". For class assignments, please ask the office.",
   },
+
+  // 목록 오른쪽 숫자 열의 **제목**(원장 2026-09-09 *"이게 샤우팅과 작성률이잖아. 상단 행제목 추가"*).
+  // ⚠️ 열 폭은 **한글 머리 기준**(샤우팅 52px · 작성률 92px)이라 영어는 짧은 낱말로 고른다 — 길면
+  //    `whitespace-nowrap` 제목이 왼쪽으로 흘러 옆 제목과 겹친다.
+  "landing.col.shouting": { ko: "샤우팅", en: "Shouting" },
+  "landing.col.rate": { ko: "주간 작성률", en: "Weekly fill" },
+  // 행 끝 '달력' 진입로의 접근성 이름 — 🔴 **문장 전체**를 사전에 둔다(조각 `이름 + "달력 열기"`로
+  //    이으면 영어 어순이 무너진다). 여는 면이 EiE(월간 계획서)든 인재원 영어(달력)든 사람에게는 '이 반의
+  //    달력'이라 이름은 하나다.
+  "landing.calendarLink": { ko: "{name} 달력 열기", en: "Open {name} calendar" },
 
   // ── '오늘' 면 ─────────────────────────────────────────────────────
   // 🔴 **문장 전체**를 담는다(조각 `머리+수+꼬리`로 두면 en 어순이 무너지고, 조각 하나가 다른 키와

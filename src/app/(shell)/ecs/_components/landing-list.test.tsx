@@ -47,8 +47,8 @@ function row(className: string) {
   return link;
 }
 
-/** 그 반의 계획(MP) 링크 — 없으면 null(인재원 영어·미분류 반은 이 문이 없다). */
-function mpLink(className: string) {
+/** 그 반의 '달력' 링크 — 행 링크가 아닌 형제 링크(2026-09-09부터 **두 프로그램 모두**에 붙는다). */
+function calLink(className: string) {
   return (
     screen
       .getAllByRole("link")
@@ -146,7 +146,9 @@ describe("EcsLandingList — Shouting 구역", () => {
   it("열 제목이 이 칸의 이름을 대신 말한다 — EiE 반이 없으면 '샤우팅' 제목 자체가 없다", () => {
     const { unmount } = render(<EcsLandingList cards={[eie({ shoutingSlots: 2 })]} weekMonday="2026-08-24" />);
     expect(screen.getByText("샤우팅")).toBeTruthy();
-    expect(screen.getByText("작성률")).toBeTruthy();
+    // ⚠️ '주간' 접두는 원장 지시(2026-09-09) — 이 숫자의 분모가 **그 주 배정 교시**라 그냥 '작성률'이면
+    //    달 전체나 누적으로 읽힌다.
+    expect(screen.getByText("주간 작성률")).toBeTruthy();
     unmount();
     render(<EcsLandingList cards={[card()]} weekMonday="2026-08-24" />);
     expect(screen.queryByText("샤우팅")).toBeNull();
@@ -197,7 +199,7 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
     render(<EcsLandingList cards={mixed} weekMonday="2026-08-24" />);
     expect(screen.queryByText("교시 작성")).toBeNull();
     expect(within(panel("EiE")).queryByText("작성")).toBeNull();
-    expect(within(panel("EiE")).getByText("작성률")).toBeTruthy();
+    expect(within(panel("EiE")).getByText("주간 작성률")).toBeTruthy();
     // 반별 숫자는 행에 그대로 있다(요약만 걷은 것이지 사실을 지운 게 아니다).
     // ⚠️ `mixed` 픽스처의 반 이름을 쓴다 — 이 describe의 카드는 위 Shouting 절과 다른 벌이다.
     const anyRow = screen
@@ -249,19 +251,25 @@ describe("EcsLandingList — 프로그램 좌우 분단", () => {
 });
 
 /**
- * 계획(MP) 진입로 — 🔴 **여기 없으면 주소를 아는 사람만 쓴다**(MCS에서 수학만 맡은 강사 9명에게
- * 링크가 0개였던 것과 같은 구멍). 그리고 MP는 **EiE 반에만** 있다(원장 2026-09-01).
+ * 달력 진입로 — 🔴 **여기 없으면 주소를 아는 사람만 쓴다**(MCS에서 수학만 맡은 강사 9명에게
+ * 링크가 0개였던 것과 같은 구멍).
+ *
+ * 🔴 2026-09-09 원장 지시로 **두 프로그램 모두**에 붙는다(*"인재원 영어에도 '월간' 바로가기해"* →
+ *    *"달력 으로 바로가면 되잖아. 월간 -> 달력으로 이름 변경하자. 전부"*). 이름은 하나('달력')지만
+ *    **여는 면은 그 반이 실제로 가진 달력**이다 — EiE는 월간 계획서(`mp`), 인재원 영어는 달력(`cal`).
+ *    그래서 "MP는 EiE 반에만"(2026-09-01)이라는 상위 결정은 그대로다.
  */
-describe("EcsLandingList — 계획(MP) 진입로", () => {
-  it("EiE 반에는 MP 링크가 붙고, 여는 달은 그 주가 속한 달이다", () => {
+describe("EcsLandingList — 달력 진입로", () => {
+  it("EiE 반은 계획(MP)을 열고, 여는 달은 그 주가 속한 달이다", () => {
     // 2026-08-31(월) 주는 목요일이 9/3이라 **9월** 주다(monthOfWeek — 월요일의 달이 아니다).
     render(<EcsLandingList cards={[eie({ className: "JP2" })]} weekMonday="2026-08-31" />);
-    const link = mpLink("JP2");
+    const link = calLink("JP2");
     expect(link).not.toBeNull();
     expect(link!.getAttribute("href")).toBe("/ecs/c1/month?month=2026-09&week=2026-08-31&view=mp");
+    expect(link!.textContent).toBe("달력");
   });
 
-  it("🔴 인재원 영어·미분류 반에는 붙지 않는다(정확히 일치하는 반에만 연다)", () => {
+  it("🔴 인재원 영어·미분류 반도 붙되 **달력(cal)** 면을 연다 — MP는 EiE 전용이라는 결정 불변", () => {
     render(
       <EcsLandingList
         cards={[
@@ -271,7 +279,14 @@ describe("EcsLandingList — 계획(MP) 진입로", () => {
         weekMonday="2026-08-24"
       />,
     );
-    expect(mpLink("중등E_중1 TOP")).toBeNull();
-    expect(mpLink("미분류반")).toBeNull();
+    for (const [name, id] of [
+      ["중등E_중1 TOP", "c2"],
+      ["미분류반", "c3"],
+    ] as const) {
+      const link = calLink(name);
+      expect(link).not.toBeNull();
+      expect(link!.getAttribute("href")).toBe(`/ecs/${id}/month?month=2026-08&week=2026-08-24&view=cal`);
+      expect(link!.getAttribute("href")).not.toContain("view=mp");
+    }
   });
 });

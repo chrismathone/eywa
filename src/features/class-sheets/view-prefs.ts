@@ -142,7 +142,10 @@ export function normalizeEcsMonthView(raw: unknown): EcsMonthView {
  * 🔴 화면에서 탭만 숨기면 주소를 직접 치면 열린다(#77) → 서버 조회가 이 함수를 통과시킨다.
  */
 export function clampEcsMonthView(view: EcsMonthView, isEie: boolean): EcsMonthView {
-  return view === "mp" && !isEie ? DEFAULT_ECS_MONTH_VIEW : view;
+  // 🔴 EiE는 달력(=`mp`) 하나뿐이다(원장 2026-09-09) — 저장값이 달력·진도표여도 그 반에선 열 수 없다.
+  if (isEie) return "mp";
+  // 인재원 영어엔 MP가 없다 — 저장값이 `mp`인 계정이 그 반을 열면 기본(달력)으로 떨어뜨린다.
+  return view === "mp" ? DEFAULT_ECS_MONTH_VIEW : view;
 }
 
 /**
