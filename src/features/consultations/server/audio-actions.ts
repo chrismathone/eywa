@@ -135,8 +135,14 @@ export async function runStudentConsultationAnalysis(
     .single();
   if (!row) return { error: "상담을 찾을 수 없습니다" };
 
-  const text = (row.transcription || row.summary || "").trim();
-  if (text.length < 10) return { error: "분석할 상담 내용(전사 또는 요약)이 너무 짧습니다" };
+  // 🔴 **AI 분석은 녹음(전사)에만**(원장 2026-09-09 *"AI 분석은 '녹음'에만 분석되도록 해줘"*) —
+  //    상담 요약은 사람이 직접 쓴 글이라 그걸 다시 AI로 요약하면 같은 말을 두 번 하는 셈이고,
+  //    붙여 넣은 잡음(웹 화면 조각 등)까지 분석 입력이 된다. `summary` 폴백을 되살리지 말 것.
+  const text = String(row.transcription ?? "").trim();
+  if (!text) {
+    return { error: "녹음 전사가 있어야 AI 분석을 할 수 있습니다 — 상담 요약만으로는 분석하지 않습니다" };
+  }
+  if (text.length < 10) return { error: "분석할 녹음 전사가 너무 짧습니다" };
 
   const student = (Array.isArray(row.student) ? row.student[0] : row.student) as
     | { name?: string; grade?: string | null; school?: string | null }

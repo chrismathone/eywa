@@ -564,8 +564,10 @@ export async function regenerateMeetingAnalysis(
   if (!m) return { error: "회의록을 찾을 수 없습니다" };
   const transcription = String(m.transcription ?? "").trim();
   const notepad = String(m.content ?? "").trim();
-  if (!transcription && !notepad) {
-    return { error: "전사나 메모가 있어야 AI로 정리할 수 있습니다" };
+  // 🔴 **녹음(전사)이 있어야 돈다**(원장 2026-09-09) — 메모만으로 돌리면 사람이 쓴 글을 AI가 다시 쓰는 것이라
+  //    회의록의 사실이 한 겹 흐려진다. 메모는 여전히 **전사와 함께** 분석 입력이 된다(아래 formatted).
+  if (!transcription) {
+    return { error: "녹음 전사가 있어야 AI로 정리할 수 있습니다 — 메모만으로는 분석하지 않습니다" };
   }
 
   const attendees = Array.isArray(m.attendees) ? (m.attendees as string[]) : [];
