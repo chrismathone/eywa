@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
 
@@ -16,6 +16,10 @@ import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
  * 🔴 항목 키는 **앱 상수에 있는 것만** 받는다 — 임의 문자열이 들어오면 화면에 안 보이는 유령 행이 쌓인다.
  * 🔴 해제는 **행을 지우지 않고** `done_on`을 비운다 — 메모·처리자 기록이 함께 사라지면 "누가 체크했다 풀었나"를
  *    되짚을 수 없다.
+ * 🔴 **쓰기는 admin 클라이언트**다 — 0251a는 0242a·0247a와 같은 설계라 **select 정책만** 있고, 세션
+ *    클라이언트로 upsert하면 RLS가 조용히 거부한다(표가 생기는 순간 터지는 종류라 적대적 리뷰가 잡았다).
+ *    admin은 RLS를 우회하므로 ① `tenant_id`를 명시해 쓰고 ② **그 학생이 이 학원 학생인지 먼저 확인**한다
+ *    (안 하면 남의 학원 학생 id로 이 학원에 유령 체크 행이 생긴다).
  * ⚠️ 0251a 미적용이면 표가 없다 — 그때는 한글로 그 사실을 돌려준다(영문 원문 노출 금지).
  */
 export async function setOnboardingCheck(input: {
@@ -34,8 +38,17 @@ export async function setOnboardingCheck(input: {
   if (!ONBOARDING_ITEM_KEYS.includes(input.itemKey)) return { ok: false, error: "알 수 없는 항목입니다" };
 
   const doneOn = input.done ? (/^\d{4}-\d{2}-\d{2}$/.test(input.doneOn ?? "") ? input.doneOn! : kstToday()) : null;
-  const supabase = await createClient();
-  const { error } = await supabase.from("student_onboarding_checks").upsert(
+  const admin = createAdminClient();
+  // admin은 RLS 우회 — 이 학생이 **이 학원 학생인지**가 유일한 격리선이다.
+  const { data: student } = await admin
+    .from("students")
+    .select("id")
+    .eq("id", input.studentId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (!student) return { ok: false, error: "학생을 찾을 수 없습니다" };
+
+  const { error } = await admin.from("student_onboarding_checks").upsert(
     {
       tenant_id: user.tenantId,
       student_id: input.studentId,
