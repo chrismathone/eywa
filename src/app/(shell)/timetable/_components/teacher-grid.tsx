@@ -171,8 +171,16 @@ export function TeacherGridView({
     return Number.isFinite(h) && Number.isFinite(m) ? (h as number) * 60 + (m as number) : null;
   };
   const offAxisNotes = new Map<string, string>();
+  /**
+   * 🔴 **하한 뒤에 수업이 하나라도 있어야** 하한을 적용한다 — 안 그러면 밀기와 축 자르기가 어긋나
+   *    수업이 통째로 축 밖으로 나가 **안 보인다**(적대적 리뷰 2026-09-09에서 잡았다).
+   *    실제로 날 수 있는 상황: 토요일 특강만 있는 주처럼 그 주 수업이 전부 하한보다 이른 경우 —
+   *    그때는 축을 자르지 않고 **원래대로** 그린다(볼 것이 아무것도 없는 표보다 낫다).
+   */
+  const floorApplies =
+    axisFloorMin != null && slots.some((s) => (minOfTime(s.startTime) ?? -Infinity) >= axisFloorMin);
   const gridSlots = ((): typeof slots => {
-    if (axisFloorMin == null) return slots;
+    if (axisFloorMin == null || !floorApplies) return slots;
     const early = slots.filter((s) => (minOfTime(s.startTime) ?? Infinity) < axisFloorMin);
     if (early.length === 0) return slots;
     // 열(강사·요일)마다 가장 이른 시작 — 그만큼만 민다.
@@ -237,8 +245,8 @@ export function TeacherGridView({
    * 하한 밖 행을 잘라 낸다 — `slotRowSpan`이 축 범위로 클램프하므로, 이른 수업은 **첫 줄에 붙어** 그려진다.
    * ⚠️ 전부 잘려 나가면(하한이 그 주 전 수업보다 늦으면) 원래 축을 그대로 쓴다 — 빈 표를 만들지 않는다.
    */
-  const floorRows = axisFloorMin == null ? allRows : allRows.filter((r) => r.startMin >= axisFloorMin);
-  const rows = floorRows.length > 0 ? floorRows : allRows;
+  // 자르는 조건은 미는 조건과 **같아야 한다**(`floorApplies`) — 갈리면 슬롯이 축 밖으로 새어 나간다.
+  const rows = floorApplies && axisFloorMin != null ? allRows.filter((r) => r.startMin >= axisFloorMin) : allRows;
   // 🔴 표식은 **슬롯 id로** 찾는다 — 그려진 시각은 이미 하한으로 바뀌어 있어 시각으로는 판정할 수 없다.
 
   // 강사×요일: 같은 시간 범위 병렬 반 = 한 그룹(합반, colSpan 셀) → 그룹 단위 레인 패킹.
