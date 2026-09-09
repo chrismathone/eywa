@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 import { HubGrid, useOpenMenu } from "./menu-hub-grid";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor } from "@/lib/menu-hub";
+import type { MenuLayout } from "@/features/owner/menu-layout";
 import type { AccessMatrix, SystemRole } from "@/lib/permissions";
 import { railWidth } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
@@ -30,10 +31,13 @@ export function MenuHubPanel({
   systemRole,
   permMatrix,
   canTeacherView = false,
+  menuLayout,
 }: {
   systemRole: SystemRole;
   permMatrix?: AccessMatrix;
   canTeacherView?: boolean;
+  /** 학원 설정 '왼쪽 탭'(보기 설정) — 사이드바와 **같은 값**을 봐야 왼쪽과 본문이 같은 목록을 그린다. */
+  menuLayout?: MenuLayout;
 }) {
   const groupId = useMenuHub((s) => s.groupId);
   const mode = useMenuHub((s) => s.mode);
@@ -64,6 +68,7 @@ export function MenuHubPanel({
     permMatrix,
     canTeacherView,
     isMaster: systemRole === "master",
+    menuLayout,
   }).find((g) => g.id === groupId);
   if (!group) return null;
 

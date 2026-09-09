@@ -78,7 +78,7 @@ export const MENU_KEYS = [
  * ⚠️ 새 메뉴키를 추가하면 여기도 함께 — 빠지면 화면·감사로그에 영문 키가 그대로 샌다(raw 노출 금지).
  */
 export const MENU_LABEL: Record<MenuKey, string> = {
-  dashboard: "운영실",
+  dashboard: "대시보드",
   timetable: "시간표",
   attendance: "출석부",
   seat_attendance: "랩실·JJ실 출석부",

@@ -82,17 +82,31 @@ export function weekTitle(monday: string): string {
 }
 
 /**
- * "2026년 6월 4주차 (22일~28일)" — 달 경계면 "29일~7/5일". (ijw TimetableManager.tsx:2320-2335)
+ * "2026년 6월 4주차 (22~28일)" — 달 경계면 "29~7/5일". (ijw TimetableManager.tsx:2320-2335)
+ *
+ * ⚠️ 범위 앞쪽의 `일`은 뺐다(2026-09-09) — `22일~28일`의 첫 `일`은 뒤에서 곧바로 다시 나와 뜻을 더하지
+ *    않으면서 라벨을 18px 늘렸고, 그 폭 때문에 시간표 툴바가 두 줄이 됐다. 달을 걸칠 때 `29~7/5일`도
+ *    "29일부터 7월 5일까지"로 읽는 데 문제가 없다(월 표기가 슬래시로 이미 갈려 있다).
  * @param monday 그 주 월요일(YYYY-MM-DD)
  */
 /**
  * 주 라벨 칸의 **고정** 폭(px) — `PeriodNav labelWidth`에 그대로 넣는다(원장 2026-09-01 *"이동해도 크기
- * 변동안되고 고정되게"*). 최장 경우는 달을 걸치는 주 `2026년 12월 5주차 (28일~1/3일)`이고 그 폭에 맞췄다.
- * ⚠️ `weekLabel` 포맷을 바꾸면 **이 값도 같이** 재어 볼 것(좁으면 글자가 칸을 넘는다).
+ * 변동안되고 고정되게"*).
+ *
+ * 🔑 값의 근거(2026-09-09 재측정, 원장 *"주차를 표현하는 곳을 조금 좁게하면 충분히 공간 나올거같은데"*):
+ *    2024~2030년 **모든 주 366개**의 라벨을 실제로 만들어 크롬에서 Pretendard 18px/700로 잰 최장값이
+ *    `2024년 10월 5주차 (28~11/3일)` = **268px**이다. 버튼 좌우 패딩 16px을 더해 284px, 여기에 여유
+ *    3px을 얹어 287px → `PeriodNav`가 ×1.4 하므로 **205**를 넘긴다(205×1.4 = 287).
+ * ⚠️ 종전 232(=325px)는 옛 포맷(`28일~11/3일`, 286px)에 잡아 둔 값이라 **39px이 비어 있었다** — 그
+ *    빈 폭 때문에 시간표 툴바가 한 줄에 안 들어가 학생 집계가 둘째 줄로 밀렸다.
+ * 🔴 **좁히려고 글자를 자르지 않는다** — 날짜가 잘린 라벨은 화살표가 흔들리는 것보다 나쁘다(그래서 폭을
+ *    줄이기 전에 포맷을 먼저 줄였다). 감싸는 상자가 `overflow-hidden`이라 넘치면 **조용히 잘린다**.
+ * ⚠️ `weekLabel` 포맷을 바꾸면 **이 값도 같이** 재어 볼 것(추정하지 말고 실제로 잴 것 — 366개 주를
+ *    전수로 만들어 재야 진짜 최장이 나온다. 눈대중한 "12월 5주차"는 최장이 아니었다).
  * ⚠️ 여기 두는 이유: 라벨을 만드는 자리와 그 폭이 같은 파일에 있어야 한쪽만 바뀌지 않는다. 그리고 이 파일은
  *    순수 모듈이라 서버·클라 어디서 읽어도 값이 산다(`"use client"` 파일의 상수는 서버에서 undefined다 [[#81]]).
  */
-export const WEEK_LABEL_W = 232;
+export const WEEK_LABEL_W = 205;
 
 export function weekLabel(monday: string): string {
   const m = parse(monday);
@@ -102,7 +116,7 @@ export function weekLabel(monday: string): string {
   const endDay = sun.getUTCDate();
   const endMonth = sun.getUTCMonth() + 1;
   const range =
-    month === endMonth ? `${startDay}일~${endDay}일` : `${startDay}일~${endMonth}/${endDay}일`;
+    month === endMonth ? `${startDay}~${endDay}일` : `${startDay}~${endMonth}/${endDay}일`;
   return `${weekTitle(monday)} (${range})`;
 }
 

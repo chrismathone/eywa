@@ -315,7 +315,7 @@ export default async function StudentsPage({
               폰에선 이 팝업이 유일한 필터다). 폰은 표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다.
               행 = 이름(학교·학년) + 상태 + 과목 + 담당 강사 + 연락처 한 줄, 행 사이 헤어라인(§11). */}
           <div className="bg-card shadow-card rounded-2xl">
-            <table className="w-full table-fixed text-sm max-md:min-w-[46rem]">
+            <table className="w-full table-fixed text-sm max-md:min-w-[46rem] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
               {/* 열 폭 — 2026-09-08 v5 글자 기준 실측(트리거 라벨 16px, 표 폭 935): 라벨 자리 = 열폭 − th px-3 24 − 크롬 32(px-1 8 + gap-2 8 + 쉐브론 16).
                   상태 18% → 112px ≥ `상태: 예비·상담`(110px) / 담당 강사 20% → 131px ≥ `담당 강사: 이수진`(125px).
                   옛 30/16/20/18/16은 14px 시절 예산(`상태: 예비·상담 ⌄` 128px)이라 v5에서 `truncate`가 발동했다. 늘린 몫은 이름(30→28%, 238px ≥ 이름+학교학년 151px)·과목(20→18%)에서. */}
@@ -460,7 +460,11 @@ export default async function StudentsPage({
                           {s.teacherNames.length > 0 ? s.teacherNames.map(showTeacher).join("·") : "—"}
                         </span>
                       </td>
-                      <td className="text-text-dim num text-right whitespace-nowrap">{s.parentPhone ?? "—"}</td>
+                      {/* 🔴 우측 정렬이 아니다 — 전화번호는 **자릿수를 견주는 수가 아니라 식별자**다(합계도 대소도 없다).
+                          오른쪽에 붙여 두면 가운데 있는 열 제목과 이 열만 따로 놀고, 번호가 없는 행의 `—`가
+                          표 오른쪽 끝에 홀로 매달린다. 본문 좌측(데이터 표 규약) 그대로 둔다.
+                          ⚠️ `num`(고정폭 숫자)은 남긴다 — 자릿수가 같아야 번호가 위아래로 줄을 이룬다. */}
+                      <td className="text-text-dim num whitespace-nowrap">{s.parentPhone ?? "—"}</td>
                     </tr>
                   );
                 })}

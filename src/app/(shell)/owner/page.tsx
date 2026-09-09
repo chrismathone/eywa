@@ -15,6 +15,7 @@ import { BillingSection } from "./_components/billing-section";
 import { NotificationsSection } from "./_components/notifications-section";
 import { ConsultationsSection } from "./_components/consultations-section";
 import { PermissionsSection } from "./_components/permissions-section";
+import { NavigationSection } from "./_components/navigation-section";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
@@ -133,6 +134,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           </div>
         )
       ) : null}
+      {/* 왼쪽 탭 — 보기 설정이라 **권한(master 전용)과 달리 위임 계정도 편집**한다(saveOwnerSection이 owner 쓰기로 게이트).
+          권한을 대체하지 않기 때문에 여기서 켜도 못 보던 화면이 열리지 않는다. */}
+      {tab === "navigation" ? <NavigationSection initial={settings.navigation} /> : null}
       {tab === "popups" ? <PopupsFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">

@@ -791,17 +791,16 @@ export function TimetableEditControls({ rosterHidden = false }: { rosterHidden?:
   } = useTimetableEdit();
   // 표시·저장 모두 "큐가 만들어진 주"를 앵커로 — 주를 옮겨도 적용일 표시가 실제 적용값과 어긋나지 않게(F2).
   const anchorDate = queueDate ?? dateFloor;
-  if (pendingCount === 0 && !error && failed.length === 0) {
-    return (
-      <span className="print:hidden text-text-faint text-xs">
-        {rosterHidden
-          ? "학생 명단을 접어 둔 상태입니다 — 반 이름을 끌면 반 자체를 옮길 수 있습니다"
-          : "학생을 끌어 반을 옮기고, 반 이름을 끌면 반 자체를 옮깁니다 · 클릭으로 상세를 엽니다"}
-      </span>
-    );
-  }
+  // 🔴 아무것도 안 옮겼으면 **한 글자도 그리지 않는다**(원장 2026-09-09 *"멘트는 숨겨서 1행으로 만들어"*).
+  //    종전엔 여기서 사용법 한 줄을 늘 띄웠는데 그 글이 350px쯤 돼서, 툴바가 상시 두 줄이 되고 학생 집계가
+  //    둘째 줄로 밀렸다(원장이 우상단에 두라고 한 그 값이다). 드래그 사용법은 도움말이 이미 설명하고,
+  //    실제로 끌어 보면 드롭 칸이 보이므로 상시 안내로 세로 한 줄을 살 이유가 없다.
+  // ⚠️ 되살리려면 **툴바 밖**에 둘 것(툴바 줄 수를 늘리지 않는 자리) — 여기로 되돌리면 두 줄이 재발한다.
+  if (pendingCount === 0 && !error && failed.length === 0) return null;
   return (
     <div className="print:hidden flex flex-wrap items-center gap-2 text-xs">
+      {/* 툴바와 가르는 세로줄 — 그릴 게 생겼을 때만 함께 선다(호출부에 두면 빈 줄만 남는다). */}
+      <span className="bg-line h-4 w-px" aria-hidden />
       {pendingCount > 0 ? (
         <>
           <span className="text-primary inline-flex items-center gap-1.5 font-medium">

@@ -9,6 +9,7 @@ import {
   hubGroupsFor,
 } from "./menu-hub";
 import { NAV_GROUPS, SUBTABS_BY_MENU } from "./navigation";
+import type { MenuLayout } from "@/features/owner/menu-layout";
 import { MENU_ACCESS, type AccessMatrix, type MenuKey } from "./permissions";
 
 const ALL = [...HUB_GROUPS, ...SUPPORT_GROUPS];
@@ -161,5 +162,45 @@ describe("면(하부탭)도 갈 길이 남아야 한다 — 사이드바에서 �
       }
     }
     expect(missing).toEqual([]);
+  });
+});
+
+/**
+ * 학원 설정 '왼쪽 탭'(`navigation.menus`)이 **실제로 이 목록을 바꾸는지** — 설정 배선의 5단계(검증)다.
+ * 소비처가 없는 설정은 만들지 않는다는 규약(CLAUDE.md)의 증거를 여기 둔다.
+ */
+describe("왼쪽 탭 설정 — 보기만 바꾼다(권한 아님)", () => {
+  const base = { systemRole: "master" as const, isMaster: true, canTeacherView: true };
+  const hrefsOf = (layout?: MenuLayout) =>
+    hubGroupsFor(HUB_GROUPS, { ...base, menuLayout: layout }).flatMap((g) => g.items.map((d) => d.href));
+
+  it("🔴 설정이 비면 지금과 글자 그대로 같다", () => {
+    expect(hrefsOf([])).toEqual(hrefsOf(undefined));
+    expect(hrefsOf(undefined)).toContain("/newcomers");
+  });
+
+  it("감춘 목적지는 목록에서 빠진다 — 같은 메뉴의 다른 면은 그대로", () => {
+    const after = hrefsOf([{ href: "/attendance/live", hidden: true }]);
+    expect(after).not.toContain("/attendance/live");
+    expect(after).toContain("/attendance"); // 부모 메뉴는 산다(면 단위 판정)
+  });
+
+  it("감춘 메뉴는 '자주 방문한 메뉴' 줄에서도 빠진다 — 감췄는데 맨 위에 남으면 안 된다", () => {
+    const favs = frequentFor({ ...base, menuLayout: [{ href: "/students", hidden: true }] }, ["students", "billing"]);
+    expect(favs.map((d) => d.menuKey)).toEqual(["billing"]);
+  });
+
+  it("순서를 정하면 업무군 안에서 그 순서로 선다", () => {
+    const counsel = (layout?: MenuLayout) =>
+      hubGroupsFor(HUB_GROUPS, { ...base, menuLayout: layout }).find((g) => g.id === "counsel")!.items.map((d) => d.href);
+    const before = counsel(undefined);
+    const moved = counsel([{ href: "/newcomers", order: 0 }]);
+    expect(moved[0]).toBe("/newcomers");
+    expect([...moved].sort()).toEqual([...before].sort()); // 사라진 것도 생긴 것도 없다
+  });
+
+  it("🔴 학원 설정 자신은 감춰지지 않는다 — 저장값이 그렇게 적혀 있어도(돌아올 길)", () => {
+    const support = hubGroupsFor(SUPPORT_GROUPS, { ...base, menuLayout: [{ href: "/owner", hidden: true }] });
+    expect(support.find((g) => g.id === "owner")?.items.map((d) => d.href)).toContain("/owner");
   });
 });

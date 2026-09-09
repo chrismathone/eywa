@@ -75,12 +75,15 @@ export default async function EnrollmentDetailPage({
 }) {
   const user = await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses, settings, siblings, canWrite] = await Promise.all([
+  const [consult, allClasses, settings, siblings, canWrite, canRequestTextbook] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
     getTenantSettings(),
     getSiblingConsultations(id), // 같은 학생의 다른 등록상담(반복 접수) — 없으면 빈 배열
     canWriteTenant(user.systemRole, "enrollment"), // 읽기 전용 역할엔 브리프 생성 버튼을 안 준다
+    // 수학 반 배정 직후 '교재 신청서' 경로를 그릴지(원장 2026-09-09) — 못 여는 사람에게 그리면
+    // 눌러도 권한 화면으로 튕기는 죽은 버튼이 된다. 진짜 게이트는 교재 화면의 requireAccess다([[#77]]).
+    canWriteTenant(user.systemRole, "textbook_requests"),
   ]);
   if (!consult) {
     // 🔴 병합으로 사라진 상담이면 **404 대신 남은 쪽으로 보낸다**(원장 2026-09-01 제보) — 병합
@@ -192,6 +195,7 @@ export default async function EnrollmentDetailPage({
             recommendedIds={consult.recommendedClasses.map((r) => r.id)}
             alreadyConverted={!!consult.studentId}
             linkedStudentId={consult.studentId}
+            canRequestTextbook={canRequestTextbook}
           />
           <ConsultationDeleteButton id={consult.id} />
         </div>

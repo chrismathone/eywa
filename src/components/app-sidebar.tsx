@@ -17,6 +17,7 @@ import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
 import { type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { HUB_GROUPS, SUPPORT_GROUPS, frequentFor, hubGroupsFor, type HubGroup } from "@/lib/menu-hub";
+import type { MenuLayout } from "@/features/owner/menu-layout";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import { useMenuHub } from "./workspace/menu-hub-store";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
@@ -89,6 +90,7 @@ export function AppSidebar({
   canTeacherView = false,
   canOtherTeacherView = false,
   frequentKeys,
+  menuLayout,
 }: {
   systemRole: SystemRole;
   email: string;
@@ -104,6 +106,11 @@ export function AppSidebar({
   canOtherTeacherView?: boolean;
   /** 자주 방문한 메뉴(많이 → 최근 순, 권한 통과분). 비면 기본값으로 떨어진다. */
   frequentKeys?: MenuKey[];
+  /**
+   * 학원 설정 '왼쪽 탭'(보기 설정 — 권한 아님). 비면 지금과 똑같이 동작한다.
+   * ⚠️ 감춘 메뉴는 '자주 방문한 메뉴' 줄에서도 빠진다 — 안 그러면 "감췄는데 맨 위에 그대로"가 된다.
+   */
+  menuLayout?: MenuLayout;
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
   const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
@@ -161,6 +168,7 @@ export function AppSidebar({
     permMatrix,
     canTeacherView,
     isMaster: systemRole === "master",
+    menuLayout,
   };
   // 자주 방문한 메뉴 — 서버가 계정 기록에서 뽑아 순서대로 내려준다(없으면 기본값).
   const frequent = frequentFor(gate, frequentKeys);

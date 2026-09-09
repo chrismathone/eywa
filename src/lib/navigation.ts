@@ -24,6 +24,20 @@ export type NavItem = {
    * 떼었다(원장 지시 2026-08-17). 메커니즘은 다음 하위 카테고리 메뉴를 위해 보존.
    */
   subOf?: MenuKey;
+  /**
+   * 검색 팰릿(Shift+F)에서만 쓰는 **다른 이름**. 화면엔 절대 안 나온다(라벨은 여전히 `label` 하나뿐).
+   *
+   * 계기(원장 2026-09-09): *"'신입생 관리' 탭을 만들었는데 찾을 수가 없네."* 라벨은 "신규생 관리"라
+   * 팰릿 키워드(`라벨+그룹+영문키`)에 **"신입생"이 한 글자도 없어서 검색 결과가 0건**이었다.
+   *
+   * 🔴 **라벨 변경이 아니다** — 축이 다르다. 라벨은 "이 화면의 이름", 별칭은 "사람이 부르는 말"이라
+   *    [[라벨만 바꾼다]] 규약(데이터 바인딩을 갈아끼우지 말 것)과 충돌하지 않는다.
+   * 🔴 **추측 금지** — 근거 있는 것만 넣는다: ① 예전 라벨(개칭 전에 부르던 이름) ② 코드·결정 로그가
+   *    그 화면을 실제로 그렇게 부르는 말. "이렇게 부를 것 같다"는 넣지 않는다(엉뚱한 화면이 검색에 뜬다).
+   * ⚠️ 다른 메뉴의 **라벨과 같은 말**은 넣을 수 없다(가드가 막는다) — 넣으면 "출석부"를 쳤을 때
+   *    엉뚱한 메뉴가 함께 서서 검색이 오히려 더 나빠진다.
+   */
+  aliases?: readonly string[];
 };
 
 export type NavGroup = {
@@ -144,12 +158,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         href: "/dashboard",
-        label: "운영실",
+        label: "대시보드",
         icon: MENU_ICON.dashboard,
         menuKey: "dashboard",
+        // 2026-09-09 개칭 전 이름 — 이 문서·결정 로그가 아직 전부 "운영실"이라 직원도 그렇게 부른다.
+        aliases: ["운영실"],
       },
       // 캘린더 — 학원 공용 일정(원장 2026-08-18 도입). 매일 여는 자리라 홈 그룹.
-      { href: "/calendar", label: "캘린더", icon: MENU_ICON.calendar, menuKey: "calendar" },
+      // ⚠️ 별칭에 "달력"을 넣지 말 것 — 강사뷰 번역에서 캘린더와 달력은 **다른 것**으로 갈라 둔 말이다(lang-wiring 가드).
+      { href: "/calendar", label: "캘린더", icon: MENU_ICON.calendar, menuKey: "calendar", aliases: ["일정"] },
     ],
   },
   {
@@ -166,13 +183,14 @@ export const NAV_GROUPS: NavGroup[] = [
       // ⚠️ **부모의 권한키는 `ecs`다** — `ecs`가 none인 사람은 이 줄 자체가 안 보여 수학 시트로도
       //    못 간다(두 키의 기본값이 같아서 지금은 그런 사람이 없다). 영어만 닫을 일이 생기면
       //    그때 부모를 중립 라우트로 빼야 한다.
-      { href: "/ecs", label: "강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs" },
-      { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
+      // 라벨은 영어·수학을 묶은 이름이라, 정작 "영어 강사 시트"로 찾으면 안 나왔다(버튼형 메뉴는 그 이름으로 그린다).
+      { href: "/ecs", label: "강사 시트", icon: MENU_ICON.ecs, menuKey: "ecs", aliases: ["영어 강사 시트"] },
+      { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance", aliases: ["출결"] },
       // 🔴 자리 출석부(랩실·JJ실)는 **사이드바 항목이 아니다**(원장 2026-08-14: "따로 빼지말고").
       //    출석부 안 강사 드롭다운에서 [선생님] / [LAB·JJ] / [퇴직] 그룹으로 고른다 — 자리는 메뉴가
       //    아니라 **강사 축의 한 갈래**다. 라우트(/attendance/seat/*)와 권한 키는 그대로 있고
       //    진입만 그 드롭다운으로 좁힌다.
-      { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes" },
+      { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes", aliases: ["반 목록"] },
       // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
       { href: "/lesson-reports", label: "수업보고서", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
     ],
@@ -182,38 +200,43 @@ export const NAV_GROUPS: NavGroup[] = [
     //    데이터·권한키(`students`)는 그대로다(이름 변경 = 라벨만).
     label: "원생",
     items: [
-      { href: "/students", label: "원생목록", icon: MENU_ICON.students, menuKey: "students" },
-      { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menuKey: "exams" },
-      { href: "/consultations", label: "원생상담", icon: MENU_ICON.consultations, menuKey: "consultations" },
+      // 2026-09-09 개칭 전 이름(학생 → 원생) — 개칭 당일부터 한동안은 옛 이름으로 찾는다.
+      { href: "/students", label: "원생목록", icon: MENU_ICON.students, menuKey: "students", aliases: ["학생목록", "학생"] },
+      { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menuKey: "exams", aliases: ["시험"] },
+      { href: "/consultations", label: "원생상담", icon: MENU_ICON.consultations, menuKey: "consultations", aliases: ["학생상담"] },
       // 등록상담은 별도 권한(menuKey=enrollment)을 가지므로 숨기지 않고 독립 진입점을 제공한다.
       { href: "/enrollment", label: "등록상담", icon: MENU_ICON.enrollment, menuKey: "enrollment" },
       { href: "/retention", label: "이탈 방어", icon: MENU_ICON.retention, menuKey: "retention" },
       // 신규생 관리 — 신입 등록 후 7·30·60·90일 체크리스트(원장 2026-09-09). 이탈 방어와 축이 다르다:
       // 저쪽은 "지금 흔들리는 재원생", 이쪽은 "들어온 지 얼마 안 된 학생을 절차대로 챙겼나".
-      { href: "/newcomers", label: "신규생 관리", icon: MENU_ICON.newcomers, menuKey: "newcomers" },
+      // 🔴 원장이 부르는 이름은 **"신입생 관리"**다(2026-09-09 *"'신입생 관리' 탭을 만들었는데 찾을 수가 없네"*).
+      //    라벨엔 "신입"이 없어 팰릿 검색이 0건이었다 — 이 별칭이 그 절반을 갚는다.
+      { href: "/newcomers", label: "신규생 관리", icon: MENU_ICON.newcomers, menuKey: "newcomers", aliases: ["신입생", "신입", "온보딩"] },
       { href: "/withdrawals", label: "퇴원관리", icon: MENU_ICON.withdrawals, menuKey: "withdrawals" },
     ],
   },
   {
     label: "운영",
     items: [
-      { href: "/staff", label: "직원관리", icon: MENU_ICON.staff, menuKey: "staff" },
-      { href: "/billing", label: "수납관리", icon: MENU_ICON.billing, menuKey: "billing" },
+      { href: "/staff", label: "직원관리", icon: MENU_ICON.staff, menuKey: "staff", aliases: ["강사"] },
+      { href: "/billing", label: "수납관리", icon: MENU_ICON.billing, menuKey: "billing", aliases: ["청구", "수강료"] },
       // 셔틀 — 노선 편성(행선지·승하차 배정)과 일별 등하원 기록. makeedu 노랑버스에서 이관(원장 2026-08-19).
-      { href: "/shuttle", label: "셔틀", icon: MENU_ICON.shuttle, menuKey: "shuttle" },
+      { href: "/shuttle", label: "셔틀", icon: MENU_ICON.shuttle, menuKey: "shuttle", aliases: ["노랑버스", "버스"] },
       // 재고관리 — 전자기기 자산관리대장(자산·대여·실사·소모품). 구글시트 시안 이식(원장 2026-09-02). 하부탭 없음.
-      { href: "/inventory", label: "재고관리", icon: MENU_ICON.inventory, menuKey: "inventory" },
+      { href: "/inventory", label: "재고관리", icon: MENU_ICON.inventory, menuKey: "inventory", aliases: ["자산관리대장", "자산"] },
       // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
       { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menuKey: "textbook_requests", hidden: true },
       // 지출결의서(강사 제출) = 강사 '내 메뉴' 전용 진입. 사이드바엔 숨김(사무실은 /billing 지출 면), 창/타이틀 해석용 유지.
       { href: "/expense-requests", label: "지출결의서", icon: MENU_ICON.expense_requests, menuKey: "expense_requests", hidden: true },
       { href: "/meetings", label: "회의록", icon: MENU_ICON.meetings, menuKey: "meetings" },
       // 수업 평가 체크리스트(참관) — 테스트 단계: 기본 전원 none이라 개인 예외(이승엽)에게만 보인다.
-      { href: "/class-review", label: "수업 평가", icon: MENU_ICON.class_review, menuKey: "class_review" },
+      { href: "/class-review", label: "수업 평가", icon: MENU_ICON.class_review, menuKey: "class_review", aliases: ["참관"] },
       // 전자결재(기안·결재함, 첫 양식 = 휴가신청서) — 테스트 단계: 기본 전원 none이라 코드 명단(이승엽·김예원)에게만 보인다.
-      { href: "/approvals", label: "전자결재", icon: MENU_ICON.approvals, menuKey: "approvals" },
+      // 첫 양식이 휴가신청서이고 옛 /leave 전용 화면은 폐기됐다 — 휴가를 내려면 여기뿐이라 "휴가"로도 찾아야 한다.
+      { href: "/approvals", label: "전자결재", icon: MENU_ICON.approvals, menuKey: "approvals", aliases: ["기안", "휴가"] },
       // 데이터베이스 = 학원 각종 서식(빈 양식 파일·앱 작성 문서) 저장소 — 윈도우 탐색기형 뷰.
-      { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menuKey: "documents" },
+      // 라벨은 "데이터베이스"지만 실체는 학원 각종 **서식** 저장소다(permissions.ts 주석과 같은 말).
+      { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menuKey: "documents", aliases: ["서식", "양식"] },
     ],
   },
   {
@@ -286,6 +309,16 @@ export function activeSubTabHref(
  * 🔴 목적지의 라벨·주소·아이콘은 **여기(NAV_GROUPS) 한 곳**이 진실이다 — 다른 표면(버튼형 메뉴 허브 등)이
  *    같은 값을 다시 적으면 이름을 바꿀 때 한쪽만 바뀐다.
  */
+/**
+ * 검색 팰릿이 이 메뉴를 찾는 데 쓰는 말 뭉치 — **단일 소스**.
+ * 라벨 + 그룹 이름 + 영문 키(`billing` 같은 영문 입력) + [[별칭]](사람이 부르는 다른 이름).
+ * 🔴 팰릿과 가드가 **같은 함수**를 봐야 "이 말로 찾아진다"는 테스트가 진짜 검증이 된다
+ *    (규칙을 두 벌로 적으면 한쪽만 고쳐져도 초록이 뜬다).
+ */
+export function menuSearchKeywords(item: NavItem, groupLabel: string): string {
+  return `${item.label} ${groupLabel} ${item.menuKey} ${(item.aliases ?? []).join(" ")}`.toLowerCase();
+}
+
 export function navItemByKey(menuKey: MenuKey): NavItem | undefined {
   for (const group of NAV_GROUPS) {
     for (const item of group.items) if (item.menuKey === menuKey) return item;

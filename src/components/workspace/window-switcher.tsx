@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, ChevronUp, LayoutPanelTop, X } from "@/components/icons/eywa-icon-compat";
 import { NAV_GROUPS } from "@/lib/navigation";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import type { EywaIconName } from "@/components/icons/eywa-icons";
+// 🔴 창 칩·배경 카드의 메뉴 아이콘은 **사이드바와 같은 스티커 글리프**다(원장 2026-09-09
+//    *"좌하단 떠있는 창들 아이콘 안바꾼듯"*) — 같은 메뉴가 자리마다 다른 그림이면 눈이 못 잇는다.
+//    `MenuGlyph`는 스티커가 없는 이름이면 알아서 선 아이콘으로 떨어진다.
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { useWindowStore, instanceLabel } from "./window-store";
 import { useCloseWindow } from "./use-close-window";
@@ -181,9 +185,9 @@ export function WindowSwitcher() {
                         className="flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-1 pl-3 transition"
                       >
                         {iconName ? (
-                          <EyIcon name={iconName} size={13} strokeWidth={1.8} />
+                          <MenuGlyph name={iconName} size={14} />
                         ) : (
-                          <EyIcon name="user" size={12} />
+                          <MenuGlyph name="user" size={13} />
                         )}
                         <span className="max-w-[120px] truncate">{label}</span>
                       </button>

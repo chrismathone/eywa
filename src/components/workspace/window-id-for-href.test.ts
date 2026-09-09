@@ -9,13 +9,13 @@ import { withEmbed } from "./embed-context";
 
 /**
  * `windowIdForHref` = "이 href를 어느 창으로 여나" — 사이드바 밖 링크(WindowLink·알림 벨)가 전부 이걸 지난다.
- * 🔴 2026-09-07부터 **운영실도 창이다**(원장 지시로 2026-09-03 결정을 뒤집었다). 그때 창을 막았던 이유 둘은
+ * 🔴 2026-09-07부터 **대시보드도 창이다**(원장 지시로 2026-09-03 결정을 뒤집었다). 그때 창을 막았던 이유 둘은
  *    함께 해소했다: 스토어의 '옛 dashboard 창 제거' 정리를 걷어냈고, `withEmbed`가 **해시를 분리**해
  *    `…?embed=1#x`로 붙인다(옛 구현은 `…#x?embed=1`이라 창 안에 풀 셸이 떴다).
  */
 describe("windowIdForHref", () => {
-  it("운영실도 창 id를 돌려준다 — 해시·쿼리가 붙어도 같은 창", () => {
-    expect(windowIdForHref("/dashboard")).toEqual({ id: "dashboard", navLabel: "운영실" });
+  it("대시보드도 창 id를 돌려준다 — 해시·쿼리가 붙어도 같은 창", () => {
+    expect(windowIdForHref("/dashboard")).toEqual({ id: "dashboard", navLabel: "대시보드" });
     expect(windowIdForHref("/dashboard#daily-briefing")?.id).toBe("dashboard");
     expect(windowIdForHref("/dashboard?x=1#assistant")?.id).toBe("dashboard");
   });

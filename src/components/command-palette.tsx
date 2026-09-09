@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
-import { NAV_GROUPS, navPresentation } from "@/lib/navigation";
+import { NAV_GROUPS, menuSearchKeywords, navPresentation } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
@@ -80,8 +80,10 @@ export function CommandPalette({
           icon: item.icon,
           menuKey: item.menuKey,
           presentation: navPresentation(item),
-          // menuKey 포함 → 영문 입력("billing")으로도 검색됨
-          keywords: `${item.label} ${group.label} ${item.menuKey}`.toLowerCase(),
+          // 라벨+그룹+영문 키+별칭 — 규칙은 [`menuSearchKeywords`](@/lib/navigation) 한 곳에 있다.
+          // 🔴 별칭이 붙은 이유: 라벨에 없는 말로 찾으면 **0건**이었다(원장 2026-09-09 — 라벨
+          //    "신규생 관리"를 *"신입생 관리"*로 찾아 못 찾음). 별칭은 검색에만 실리고 화면엔 안 나온다.
+          keywords: menuSearchKeywords(item, group.label),
         });
       }
     }

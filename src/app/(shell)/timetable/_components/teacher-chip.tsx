@@ -33,6 +33,12 @@ export function TeacherChip({ slot, offAxisNote }: { slot: ClassDetailQuick; off
   const headerStyle = slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
     : undefined;
+  /**
+   * 축 밖 표식(왼쪽 위 삼각형)의 **테두리 색** — 반 색이 무엇이든 표식이 보이게 하는 유일한 장치다.
+   * 반 색이 지정돼 있으면 그 색에서 읽히는 색(흰색/검정)을, 없으면 과목 연한 틴트 위라 흰색을 쓴다
+   * (연한 바탕에선 빨강이 이미 또렷해서 테두리는 경계만 만들면 된다).
+   */
+  const markEdgeColor = slot.classBgColor ? readableTextColor(slot.classBgColor) : "#ffffff";
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
   if (!visible) return null;
 
@@ -45,11 +51,23 @@ export function TeacherChip({ slot, offAxisNote }: { slot: ClassDetailQuick; off
           표시해줘"*). 🔴 이 칩은 그려진 자리가 **진짜 시각이 아니다** — 그 사실을 화면에 남기지 않으면
           시간표가 조용히 거짓말을 한다. 실제 시각은 삼각형 툴팁과 hover 카드(schedule)에 그대로 있다. */}
       {offAxisNote ? (
-        <span
-          title={offAxisNote}
-          aria-label={offAxisNote}
-          className="border-t-danger absolute top-0 left-0 z-10 size-0 border-t-[7px] border-r-[7px] border-r-transparent"
-        />
+        // 🔴 **테두리를 두른다** — 종전엔 빨강 삼각형 하나였는데 반 색이 짙은 파랑이면 그 위에서 거의
+        //    안 보였다(원장 2026-09-09: *"메모 색깔이 파란색이랑 겹쳐서 거의 안보여 … 혹시 나중에 반색상
+        //    바꾸더라도 스마트하게"*). 색을 하나 더 고르는 대신 **바탕에서 읽히는 색**(`readableTextColor`,
+        //    학원 브랜드색·반 색이 이미 쓰는 그 함수)으로 한 겹 깔고 그 위에 빨강을 얹는다 —
+        //    어떤 반 색을 새로 넣어도 테두리가 알아서 흰색/검정으로 갈려 표식이 사라지지 않는다.
+        // ⚠️ 뜻(경고)은 빨강이 그대로 들고 있다 — 테두리는 **보이게 하는 장치**지 다른 상태가 아니다.
+        <span title={offAxisNote} aria-label={offAxisNote} className="absolute top-0 left-0 z-10">
+          <span
+            aria-hidden
+            className="absolute top-0 left-0 size-0 border-r-[9px] border-t-[9px] border-r-transparent"
+            style={{ borderTopColor: markEdgeColor }}
+          />
+          <span
+            aria-hidden
+            className="border-t-danger absolute top-0 left-0 size-0 border-t-[7px] border-r-[7px] border-r-transparent"
+          />
+        </span>
       ) : null}
       <HoverCard
         width={230}

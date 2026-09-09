@@ -2,6 +2,7 @@
 
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, type HubDest } from "@/lib/menu-hub";
+import type { MenuLayout } from "@/features/owner/menu-layout";
 import type { AccessMatrix, SystemRole } from "@/lib/permissions";
 import { HubGrid, useOpenMenu } from "./menu-hub-grid";
 
@@ -18,10 +19,13 @@ export function MenuBoard({
   systemRole,
   permMatrix,
   canTeacherView = false,
+  menuLayout,
 }: {
   systemRole: SystemRole;
   permMatrix?: AccessMatrix;
   canTeacherView?: boolean;
+  /** 학원 설정 '왼쪽 탭'(보기 설정) — 🔴 **모바일엔 사이드바가 없어 이 화면이 유일한 메뉴**라 여기도 같은 값을 봐야 한다. */
+  menuLayout?: MenuLayout;
 }) {
   const open = useOpenMenu();
   const groups = hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], {
@@ -29,6 +33,7 @@ export function MenuBoard({
     permMatrix,
     canTeacherView,
     isMaster: systemRole === "master",
+    menuLayout,
   });
   const direct = groups.filter((g) => g.kind === "direct");
   const hubs = groups.filter((g) => g.kind !== "direct");

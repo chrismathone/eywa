@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { logAction } from "@/features/audit/server/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
@@ -42,7 +43,7 @@ export async function setOnboardingCheck(input: {
   // admin은 RLS 우회 — 이 학생이 **이 학원 학생인지**가 유일한 격리선이다.
   const { data: student } = await admin
     .from("students")
-    .select("id")
+    .select("id, name")
     .eq("id", input.studentId)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
@@ -68,6 +69,16 @@ export async function setOnboardingCheck(input: {
         : "체크를 저장하지 못했습니다 — 다시 시도해 주세요",
     };
   }
+  // 🔴 **쓰기는 감사로그로 남긴다**(원장 2026-09-09 *"기능이 추가되거나 변동되는건 모두 감사로그에
+  //    남도록 해야함"*). 이 칸은 "학부모에게 전화했다"는 **사실 주장**이라, 나중에 "안 왔다는데 콜은
+  //    했다고 돼 있네"를 되짚을 수 있어야 한다. 체크만큼 **해제**도 남긴다(해제가 더 중요한 흔적이다).
+  // ⚠️ `logAction`은 실패해도 조용히 넘어간다(본 작업을 막지 않는다) — 그래서 저장 뒤에 부른다.
+  await logAction({
+    action: input.done ? "newcomer_check" : "newcomer_uncheck",
+    targetType: "student",
+    targetLabel: student.name ?? null,
+    metadata: { studentId: input.studentId, itemKey: input.itemKey, doneOn },
+  });
   revalidatePath("/newcomers");
   return { ok: true };
 }

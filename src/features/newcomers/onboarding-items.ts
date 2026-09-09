@@ -79,7 +79,22 @@ export type OnboardingItemStatus =
   /** 아직 여유 */
   | "upcoming"
   /** 기한을 모른다(첫 수업일 미정) — 지연이 아니다 */
-  | "pending";
+  | "pending"
+  /** 이 기능이 생기기 **전에** 기한이 지난 항목 — 지연이 아니다(아래 `NEWCOMER_BASELINE_DATE`) */
+  | "waived";
+
+/**
+ * 이 기능이 문을 연 날 — **이 날짜보다 앞선 기한은 지연으로 세지 않는다.**
+ *
+ * 원장 2026-09-09: *"오늘 생긴 기능이므로 지나간 미완료 건에 대해서는 됐고, 지금부터 보여지는 31건에
+ * 대해서만 진행하도록."* 체크리스트가 오늘 생겼는데 등록은 90일 전부터 있어서, 그냥 계산하면 **134건이
+ * 전부 빨강**이 된다 — 아무도 기록할 수 없었던 기간의 미기록을 "놓쳤다"고 부르는 것은 거짓이고, 그 빨강이
+ * 진짜 지연(오늘부터 쌓일 것)을 묻는다.
+ *
+ * 🔴 **값을 앞당기지 말 것** — 앞당기면 그 순간 옛 기한이 되살아나 화면이 다시 빨개진다.
+ * ⚠️ 완료 체크는 기준일과 무관하다 — 옛 항목도 실제로 했다면 체크할 수 있고 완료로 남는다.
+ */
+export const NEWCOMER_BASELINE_DATE = "2026-09-09";
 
 /** '임박'으로 볼 남은 날수 — 후속조치 카드(오늘·임박)와 같은 창. */
 export const DUE_SOON_DAYS = 3;
@@ -103,12 +118,27 @@ export function statusOf(
   anchors: NewcomerAnchors,
   doneOn: string | null | undefined,
   today: string,
+  /** 이 날짜보다 앞선 기한은 지연이 아니다(기능 시작일). 테스트가 다른 값을 넣을 수 있게 인자로 둔다. */
+  baseline: string = NEWCOMER_BASELINE_DATE,
 ): OnboardingItemStatus {
+  // 완료는 기준일과 무관하다 — 옛 항목도 실제로 했다면 체크할 수 있고 완료로 남는다.
   if (doneOn) return "done";
   const due = dueDateOf(item, anchors);
   if (!due) return "pending";
+  // 🔴 기능이 생기기 **전에** 지난 기한은 "놓친 것"이 아니다 — 기록할 방법 자체가 없었다.
+  if (due < baseline) return "waived";
   if (due < today) return "overdue";
   return daysBetween(today, due) <= DUE_SOON_DAYS ? "due" : "upcoming";
+}
+
+/** `upcoming`·`due` 항목이 며칠 남았나 — 화면의 `D-n` 표기용. 기한이 없으면 null. */
+export function daysLeftOf(
+  item: OnboardingItemDef,
+  anchors: NewcomerAnchors,
+  today: string,
+): number | null {
+  const due = dueDateOf(item, anchors);
+  return due ? daysBetween(today, due) : null;
 }
 
 /** 등록 경과일로 나눈 관리 구간 — 원장이 말한 7·30·60·90일. */
@@ -169,13 +199,14 @@ export function progressOf(
   checks: NewcomerChecks,
   today: string,
   items: readonly OnboardingItemDef[] = ONBOARDING_ITEMS,
+  baseline: string = NEWCOMER_BASELINE_DATE,
 ): NewcomerProgress {
   let dueTotal = 0;
   let doneCount = 0;
   let overdue = 0;
   let dueSoon = 0;
   for (const item of items) {
-    const status = statusOf(item, anchors, checks[item.key], today);
+    const status = statusOf(item, anchors, checks[item.key], today, baseline);
     if (item.optional) continue;
     if (status === "done") {
       // 기한 전에 미리 한 것도 분모·분자에 함께 넣는다(비율이 100을 넘지 않게).
@@ -192,7 +223,8 @@ export function progressOf(
       dueTotal += 1;
       dueSoon += 1;
     }
-    // upcoming·pending은 분모 밖 — 아직 할 때가 아니거나 기한을 모른다.
+    // upcoming·pending·waived는 분모 밖 — 아직 할 때가 아니거나, 기한을 모르거나,
+    // 기능이 생기기 전이라 **기록할 방법 자체가 없었던** 항목이다.
   }
   return {
     dueTotal,

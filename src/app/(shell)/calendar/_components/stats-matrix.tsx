@@ -23,8 +23,34 @@ const NONE_KEY = "__none__";
 const ALL_KEY = "__all__";
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
-/** 열 구분선 — 표 규약(행 구분선보다 한 단계 옅게, `docs/design-conventions.md`). */
+/**
+ * 열 구분선 — 표 규약(행 구분선보다 한 단계 옅게, `docs/design-conventions.md`).
+ *
+ * ⚠️ 규약은 "셀마다 말고 **표 한 곳**에서 `[&_tr>*:not(:first-child)]`로 걸라"고 하지만 이 표만
+ *    예외다 — 태그 칸이 `rowSpan`이라 연도 2·3행에는 그 칸이 아예 없고, 그 행에서는 **연도 칸이
+ *    `:first-child`가 된다**. 표 한 곳에서 걸면 그 행들만 태그↔연도 사이 선이 끊겨 세로선이
+ *    계단처럼 토막 난다. 그래서 여기서만 칸마다 붙이되, 값은 이 상수 하나에서 온다.
+ */
 const DIVIDER = "border-line-faint border-l";
+
+/**
+ * 열 폭(%) — `table-fixed`이라 **내용이 폭을 못 흔든다**.
+ *
+ * 🔴 자동 폭이면 12개 월 열이 서로 다른 폭이 된다: 브라우저가 각 열의 최장 내용에서 폭을 뽑아
+ *    `1월`보다 `12월`이 넓고, 두 자리 건수가 선 달이 또 넓어진다. 이 표는 태그 × 월 **행렬**이라
+ *    열 폭이 균등해야 같은 달을 세로로 훑을 때 숫자가 줄을 이룬다(원장 2026-09-09 *"내용이 열정렬
+ *    전혀 안되어있는것 같은데"*). 앱의 다른 데이터 표(재고·신규생·학생·자리 출석부)도 전부
+ *    `table-fixed` + `colgroup`이고 이 표만 빠져 있었다.
+ * ⚠️ **px이 아니라 %** — 태그 열만 폭을 비워 두면 창을 최대화했을 때 남는 폭을 그 열이 **혼자** 먹어
+ *    태그 1,500px 옆에 50px짜리 월 열이 선다. %는 표 폭을 그대로 나눠 갖게 해서 넓히든 좁히든
+ *    **월 12칸의 균등**이 유지된다(학생목록 colgroup과 같은 방식).
+ * ⚠️ 하한(`min-w-[820px]`) 기준 실측: 월 6% = 49px ≥ `12월`(굵게 34 + px-1.5 12) · 연도 7% = 57 ≥
+ *    `2026`(고정폭 38 + px-2 16) · 태그 14% = 115(점 8 + 틈 6 + px-3 24 + 이름 ~77).
+ */
+const TAG_W = "14%";
+const YEAR_W = "7%";
+const MONTH_W = "6%"; // × 12 = 72%
+const TOTAL_W = "7%";
 
 const emptyMonths = () => Array.from({ length: 12 }, () => 0);
 const yearOf = (e: EventRowData) => Number(e.startDate.slice(0, 4));
@@ -134,7 +160,16 @@ export function StatsMatrix({
   return (
     <>
       <DragScrollArea className="bg-card shadow-card rounded-2xl">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[820px] table-fixed text-sm">
+          <colgroup>
+            {/* 태그 · 연도 · 12개월(균등) · 합계 = 100% */}
+            <col style={{ width: TAG_W }} />
+            <col style={{ width: YEAR_W }} />
+            {MONTHS.map((m) => (
+              <col key={m} style={{ width: MONTH_W }} />
+            ))}
+            <col style={{ width: TOTAL_W }} />
+          </colgroup>
           <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
             <tr className="text-text-dim text-sm [&_th]:font-bold">
               <th className="px-3 py-2 text-center">태그</th>
@@ -159,13 +194,16 @@ export function StatsMatrix({
                     className={g.strong ? "bg-bg-soft/40" : "hover:bg-bg-soft/30"}
                   >
                     {yi === 0 ? (
+                      // 고정 폭이 됐으니 긴 태그 이름은 칸 안에서 자른다(전문은 마우스 오버).
+                      // ⚠️ `truncate`는 **점(dot)이 아니라 이름 span**에 건다 — 인라인 요소엔 overflow가
+                      //    안 먹고([[#111]]), 점까지 같이 줄면 색 표식이 사라진다.
                       <td
                         rowSpan={years.length}
-                        className={`px-3 py-2 align-top text-sm whitespace-nowrap ${
+                        className={`overflow-hidden px-3 py-2 align-top text-sm ${
                           g.strong ? "font-bold" : ""
                         } ${g.key === NONE_KEY ? "text-text-dim" : ""}`}
                       >
-                        <span className="inline-flex items-center gap-1.5">
+                        <span className="flex items-center gap-1.5" title={g.label}>
                           {dot ? (
                             <span
                               className={`size-2 shrink-0 rounded-full ${dot.className}`}
@@ -173,13 +211,17 @@ export function StatsMatrix({
                               aria-hidden
                             />
                           ) : null}
-                          {g.label}
+                          <span className="min-w-0 truncate">{g.label}</span>
                         </span>
                       </td>
                     ) : null}
                     <td className={`num text-text-dim px-2 py-2 text-center text-sm ${DIVIDER}`}>
                       {y}
                     </td>
+                    {/* 🔑 건수는 **우측이 아니라 가운데**다 — 데이터 표 규약의 "본문 좌측"도, 금액·수량의
+                        "숫자는 우측"도 여기선 아니다. 이 칸은 목록의 값이 아니라 **행렬의 눈금**이고
+                        (같은 달을 세로로, 같은 태그를 가로로 읽는다) 1~2자리라 자릿수를 맞출 것도 없다.
+                        위아래 줄맞춤은 `num`(고정폭 숫자) + 균등 열 폭이 이미 잡아 준다. */}
                     {arr.map((n, i) => (
                       <td key={i} className={`num px-1.5 py-2 text-center text-sm ${DIVIDER}`}>
                         <CountCell

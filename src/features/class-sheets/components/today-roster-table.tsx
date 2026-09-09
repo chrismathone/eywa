@@ -122,8 +122,15 @@ export const TodayRosterTable = memo(function TodayRosterTable({
     //    (원장 2026-08-11 *"학생은 붙어있잖아? 이것도 그냥 붙여버려. 마치 엑셀처럼"*). 두 층이 각자
     //    상자를 두르면 사이에 여백과 테두리가 겹쳐 격자가 끊긴다.
     <>
+        {/* 열 구분선 — 표 한 곳에서 첫 칸만 빼고 `border-l-line-faint`(데이터 표 규약 2026-08-05).
+            형제 표 셋 중 [seat-day-table](./seat-day-table.tsx)만 옮겨져 있었다(주간 시트 주석 참조).
+            🔴 **교시 경계(`ecs-slot-edge`)는 뺀다** — 그 칸의 진한 선(`border-line-strong`)이 위층 계획
+               카드와 아래층 명단을 한 격자로 잇는 뼈대인데, side 유틸(`border-l-line-faint`)이 전면 색을
+               이겨서 그냥 걸면 옅은 선으로 덮인다(roster-slot-cells `dividerCls` 주석).
+            ⚠️ 폭은 안 건드린다 — `table-fixed` + `<col>` 지정 폭이라 겹친 테두리는 열 경계 위에 그려질 뿐
+               `todaySlotOffset`이 잡아 둔 교시 시작점을 밀지 않는다. */}
         <table
-          className="border-collapse text-sm"
+          className="border-collapse text-sm [&_tr>*:not(:first-child):not(.ecs-slot-edge)]:border-l [&_tr>*:not(:first-child):not(.ecs-slot-edge)]:border-l-line-faint"
           style={{ tableLayout: "fixed", width: todayContentWidth(slots.length) }}
         >
         <colgroup>
@@ -154,7 +161,8 @@ export const TodayRosterTable = memo(function TodayRosterTable({
             </th>
             {slots.map((slot) => (
               <Fragment key={slot.slotStart}>
-                <th className="border-line-strong border-l py-0.5 text-center font-bold">
+                {/* 머리도 칸과 **같은 표식**을 단다 — 안 달면 머리 줄에서만 교시 경계가 옅은 선이 된다. */}
+                <th className="ecs-slot-edge border-line-strong border-l py-0.5 text-center font-bold">
                   {t("roster.col.attendance")}
                 </th>
                 <th className="py-0.5 text-center font-bold" title={t("roster.col.unit.title")}>

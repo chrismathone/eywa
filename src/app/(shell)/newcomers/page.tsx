@@ -1,15 +1,22 @@
 import { PageHeader } from "@/components/page-header";
-import { BigStat } from "@/components/atoms/big-stat";
-
-import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { getNewcomers, NEWCOMER_WINDOW_DAYS } from "@/features/newcomers/server/queries";
-import { BUCKET_LABEL, NEWCOMER_BUCKETS, type NewcomerBucket } from "@/features/newcomers/onboarding-items";
+import {
+  BUCKET_LABEL,
+  NEWCOMER_BUCKETS,
+  ONBOARDING_ITEMS,
+  statusOf,
+  type NewcomerAnchors,
+  type NewcomerBucket,
+} from "@/features/newcomers/onboarding-items";
 import { NewcomerTable } from "./_components/newcomer-table";
 
 export const metadata = { title: "신규생 관리 — eywa" };
+
+/** 미완료만 보기 — 지연·오늘·임박이 하나라도 있는 학생. */
+const OPEN_ONLY = "open";
 
 /**
  * 신규생 관리 — 원장 2026-09-09: *"신입 등록부터 3개월까지 7일, 30일, 60일, 90일 까지 관리하는거야.
@@ -17,66 +24,101 @@ export const metadata = { title: "신규생 관리 — eywa" };
  *
  * 화면은 **한 표**다 — 학생 한 줄 × 체크 7칸. 창(7·30·60·90일)은 위 칩으로 좁힌다.
  * 🔴 지표는 "얼마나 했나"가 아니라 **"놓친 게 있나"**를 먼저 말한다(지연 → 오늘·임박 → 대상 수 → 완료율).
+ * 🔴 지표는 **큰 카드가 아니라 인라인 한 줄**이다(원장 2026-09-09: *"카드로 표시되고 있는거 너무 거창하게
+ *    하지말고, 시간표처럼 간단하게 공간차지 덜했으면"*) — 시간표 학생 집계와 같은 문법이고, 여기서는
+ *    **눌러서 거르는** 칩이라 "지연 134건"을 보고 곧바로 그 명단으로 갈 수 있다(원장 *"미완료건을 확인할
+ *    방법이 없음"*).
  * ⚠️ 0251a 미적용이면 표는 그대로 뜨고 체크만 잠긴다([[#95]]) — 배너가 그 사실을 한글로 밝힌다.
  */
 export default async function NewcomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ bucket?: string }>;
+  searchParams: Promise<{ bucket?: string; only?: string }>;
 }) {
   const viewer = await requireAccess("newcomers");
   const sp = await searchParams;
   const bucket = (NEWCOMER_BUCKETS as readonly string[]).includes(sp.bucket ?? "")
     ? (sp.bucket as NewcomerBucket)
     : null;
+  const openOnly = sp.only === OPEN_ONLY;
 
   const [view, canWrite] = await Promise.all([getNewcomers(), canWriteTenant(viewer.systemRole, "newcomers")]);
   // 창 필터는 화면 안에서만 좁힌다 — 지표(지연·임박)는 **전체 대상** 기준이라야 "지금 놓친 게 몇 건인지"가 흔들리지 않는다.
-  const rows = bucket ? view.rows.filter((r) => r.bucket === bucket) : view.rows;
+  const openOf = (r: (typeof view.rows)[number]) => r.progress.overdue + r.progress.dueSoon > 0;
+  const rows = view.rows
+    .filter((r) => (bucket ? r.bucket === bucket : true))
+    .filter((r) => (openOnly ? openOf(r) : true));
   const overdue = view.rows.reduce((n, r) => n + r.progress.overdue, 0);
   const dueSoon = view.rows.reduce((n, r) => n + r.progress.dueSoon, 0);
   const doneAll = view.rows.reduce((n, r) => n + r.progress.doneCount, 0);
   const dueAll = view.rows.reduce((n, r) => n + r.progress.dueTotal, 0);
   const rate = dueAll === 0 ? 100 : Math.round((doneAll / dueAll) * 100);
+  const openCount = view.rows.filter(openOf).length;
   const countOf = (b: NewcomerBucket) => view.rows.filter((r) => r.bucket === b).length;
+  const hrefWith = (next: { bucket?: NewcomerBucket | null; only?: boolean }) => {
+    const b = next.bucket === undefined ? bucket : next.bucket;
+    const o = next.only === undefined ? openOnly : next.only;
+    const qs = [b ? `bucket=${b}` : null, o ? `only=${OPEN_ONLY}` : null].filter(Boolean).join("&");
+    return qs ? `/newcomers?${qs}` : "/newcomers";
+  };
+  // 🔴 "기한이 온 건"은 아직 아무도 안 끝낸 상태에서도 **왜 그런지**를 말해야 한다 — 기능 시작일
+  //    이전 기한은 세지 않으므로(`waived`) 분모가 작다. 그 사실을 한 줄로 남긴다.
+  const waived = view.rows.reduce((n, r) => {
+    const anchors: NewcomerAnchors = { enrolledOn: r.enrolledOn, firstClassOn: r.firstClassOn };
+    return (
+      n +
+      ONBOARDING_ITEMS.filter(
+        (item) => !item.optional && statusOf(item, anchors, r.checks[item.key], view.today) === "waived",
+      ).length
+    );
+  }, 0);
 
   return (
-    <div className="space-y-5 compact-chrome:space-y-3">
-      <PageHeader
-        eyebrow="재원 관리"
-        title="신규생 관리"
-        description={`등록 후 ${NEWCOMER_WINDOW_DAYS}일까지의 신입생을 체크리스트로 챙깁니다 · 기한은 등록일과 첫 수업일에서 자동으로 계산됩니다`}
-      />
-
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <BigStat
-          label="지연"
-          value={overdue}
-          unit="건"
-          tone="danger"
-          valueClass={overdue > 0 ? "text-danger" : undefined}
-          icon={<MenuGlyph name="alarm" size={22} />}
-          sub="기한이 지난 미완료"
-        />
-        <BigStat label="오늘·임박" value={dueSoon} unit="건" tone="gold" icon={<MenuGlyph name="clock" size={22} />} sub="사흘 안" />
-        <BigStat label="관리 대상" value={view.rows.length} unit="명" tone="primary" icon={<MenuGlyph name="users" size={22} />} sub={`최근 ${NEWCOMER_WINDOW_DAYS}일 등록`} />
-        <BigStat
-          label="완료율"
-          value={rate}
-          unit="%"
-          tone="blue"
-          icon={<MenuGlyph name="listChecks" size={22} />}
-          sub={`기한이 온 ${dueAll}건 중 ${doneAll}건`}
-        />
-      </section>
+    <div className="space-y-4 compact-chrome:space-y-3">
+      {/* 설명 줄은 뺐다(원장 2026-09-09 *"'등록 후 ~ 됩니다' 제거해 필요없어. 공간낭비"*) —
+          기한이 어떻게 계산되는지는 각 칸의 툴팁이 그 자리에서 말한다. */}
+      <PageHeader eyebrow="재원 관리" title="신규생 관리" />
 
       <Toolbar>
+        {/* 지표 = 인라인 칩. 지연·오늘·임박은 **눌러서 그 명단으로** 좁힌다. */}
+        <ToolbarSegment label="현황" wrap>
+          <ToolbarSegmentItem active={openOnly} href={hrefWith({ only: !openOnly })}>
+            미완료 {openCount}명
+          </ToolbarSegmentItem>
+        </ToolbarSegment>
+        <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
+          <span className="text-sm">
+            <b className={`num text-lg font-bold ${overdue > 0 ? "text-danger" : "text-text-faint"}`}>{overdue}</b>{" "}
+            <span className="text-text-dim">지연</span>
+          </span>
+          <span className="text-sm">
+            <b className={`num text-lg font-bold ${dueSoon > 0 ? "text-amber" : "text-text-faint"}`}>{dueSoon}</b>{" "}
+            <span className="text-text-dim">오늘·임박</span>
+          </span>
+          <span className="text-sm">
+            <b className="num text-primary text-lg font-bold">{view.rows.length}</b>{" "}
+            <span className="text-text-dim">대상</span>
+          </span>
+          <span className="text-sm" title={`기한이 온 ${dueAll}건 중 ${doneAll}건 완료`}>
+            <b className="num text-lg font-bold text-green">{rate}</b>{" "}
+            <span className="text-text-dim">% 완료</span>
+          </span>
+          {waived > 0 ? (
+            <span
+              className="text-text-faint text-xs"
+              title="이 기능이 생기기 전에 기한이 지난 항목입니다 — 기록할 방법이 없었으므로 지연으로 세지 않습니다"
+            >
+              (기준일 이전 <span className="num">{waived}</span>건 제외)
+            </span>
+          ) : null}
+        </span>
+        <div className="rail-spacer ml-auto" aria-hidden />
         <ToolbarSegment label="구간" wrap>
-          <ToolbarSegmentItem active={bucket === null} href="/newcomers">
+          <ToolbarSegmentItem active={bucket === null} href={hrefWith({ bucket: null })}>
             전체 {view.rows.length}
           </ToolbarSegmentItem>
           {NEWCOMER_BUCKETS.filter((b) => b !== "over").map((b) => (
-            <ToolbarSegmentItem key={b} active={bucket === b} href={`/newcomers?bucket=${b}`}>
+            <ToolbarSegmentItem key={b} active={bucket === b} href={hrefWith({ bucket: b })}>
               {BUCKET_LABEL[b]} {countOf(b)}
             </ToolbarSegmentItem>
           ))}
@@ -91,7 +133,17 @@ export default async function NewcomersPage({
         </p>
       ) : null}
 
-      <NewcomerTable rows={rows} today={view.today} canWrite={canWrite && view.checksAvailable} />
+      {/* ⚠️ 구간 필터가 함께 걸려 있으면 "모두 챙겼다"고 말하지 않는다 — 그 구간만 깨끗한 것이지
+          전체가 깨끗한 게 아니다(빈 화면이 사실보다 좋게 말하면 안 된다). */}
+      {openOnly && rows.length === 0 ? (
+        <p className="text-text-faint border-line rounded-lg border border-dashed px-4 py-8 text-center text-sm">
+          {bucket
+            ? `${BUCKET_LABEL[bucket]} 구간에는 지연·임박한 항목이 없습니다.`
+            : `지연·임박한 항목이 없습니다 — 최근 ${NEWCOMER_WINDOW_DAYS}일 신규생을 모두 챙겼습니다.`}
+        </p>
+      ) : (
+        <NewcomerTable rows={rows} today={view.today} canWrite={canWrite && view.checksAvailable} />
+      )}
     </div>
   );
 }

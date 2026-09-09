@@ -45,6 +45,7 @@ export function TextbookRequestClient({
   account,
   requesterName,
   viewerUserId,
+  initialStudentIds,
 }: {
   rows: TextbookOrderRow[];
   students: StudentOption[];
@@ -56,12 +57,21 @@ export function TextbookRequestClient({
   requesterName: string;
   /** 보는 사람 계정 id — 소유 판정 합집합(0174a). 이름이 달라도 본인이 만든 요청은 본인 것. */
   viewerUserId: string;
+  /** `?studentId=`로 실려 온 학생(등록상담에서 수학 반 배정 직후 넘어온 링크). 없으면 빈 폼 그대로. */
+  initialStudentIds?: string[];
 }) {
   // 성공 시 목록은 서버 액션 revalidatePath로 자동 갱신. 폼 값은 유지(같은 학생 다른 교재 연속 요청에 편함).
   const [state, formAction, pending] = useActionState(requestTextbook, undefined);
 
   // 전 필드 controlled — 우측 실시간 미리보기의 데이터 소스이자, '교재 검색'(단가표) 자동입력 대상.
-  const [studentIds, setStudentIds] = useState<string[]>([]);
+  // 🔴 **내 목록에 있는 학생만** 초기값으로 받는다 — 스코프 밖 id를 그대로 담으면 칩에 이름 대신
+  //    raw UUID가 뜨고(UI에 raw 코드 금지) 저장은 서버에서 거절돼 이유 없는 실패가 된다.
+  const [studentIds, setStudentIds] = useState<string[]>(() =>
+    (initialStudentIds ?? []).filter((id) => students.some((s) => s.id === id)),
+  );
+  // 링크로 왔는데 그 학생이 내 목록에 없으면(담당 스코프 밖·퇴원) **말해 준다** — 그냥 비우면
+  // "링크를 눌렀는데 아무것도 안 채워졌다"가 되어 원인을 아무도 모른다.
+  const prefillDropped = (initialStudentIds ?? []).some((id) => !students.some((s) => s.id === id));
   const [teacherName, setTeacherName] = useState(requesterName);
   const [requestDate, setRequestDate] = useState(kstToday());
   const [bookName, setBookName] = useState("");
@@ -285,6 +295,12 @@ export function TextbookRequestClient({
                 {studentIds.map((id) => (
                   <input key={id} type="hidden" name="studentId" value={id} />
                 ))}
+                {prefillDropped && studentIds.length === 0 ? (
+                  <span className="text-gold block text-xs break-keep">
+                    링크로 넘어온 학생을 담당 목록에서 찾지 못해 선택하지 못했습니다 — 직접 검색해 추가해
+                    주세요.
+                  </span>
+                ) : null}
                 {state?.fieldErrors?.studentId ? (
                   <span className="text-danger text-xs">{state.fieldErrors.studentId}</span>
                 ) : null}

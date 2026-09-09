@@ -155,7 +155,9 @@ export function AttendanceCheck({
             }}
             aria-label={`${studentName} ${label} 사유`}
             title={`${note ? `사유: ${note}\n` : ""}수정 기간이 지나 상태는 못 바꿉니다 — 사유는 언제든 고칠 수 있습니다`}
-            className={`${SHEET_BOX_READONLY} cursor-pointer justify-center`}
+            // 가운데 정렬은 이제 `SHEET_BOX_READONLY`가 들고 있다(같은 열의 다른 읽기 전용 갈래도 함께
+            // 맞았다) — 여기서 또 적으면 같은 축 유틸이 겹쳐 승자를 CSS 생성 순서가 정한다([[#116]]).
+            className={`${SHEET_BOX_READONLY} cursor-pointer`}
           >
             {label}
           </button>

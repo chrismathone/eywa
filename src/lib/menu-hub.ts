@@ -1,6 +1,11 @@
 import { navItemByKey, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
+import {
+  isMenuHiddenByLayout,
+  sortByMenuLayout,
+  type MenuLayout,
+} from "@/features/owner/menu-layout";
 
 /**
  * 버튼형 메뉴 — **왼쪽에서 업무군을 고르면 본문에 그 업무의 메뉴 버튼이 뜬다**(원장 2026-09-07 확정:
@@ -79,7 +84,7 @@ function billingFace(href: string, desc?: string, extra?: Partial<HubDest>): Hub
 export const HUB_GROUPS: HubGroup[] = [
   {
     id: "dashboard",
-    label: "운영실",
+    label: "대시보드",
     icon: MENU_ICON.dashboard,
     kind: "direct",
     items: keep([fromMenu("dashboard")]),
@@ -197,6 +202,13 @@ export const SUPPORT_GROUPS: HubGroup[] = [
     //    여기서는 같은 11면을 **범주 제목으로 묶어** 고르게만 한다 — 주소·권한·화면 모두 그대로다.
     items: keep([
       face("owner", "/owner", "프로필·브랜드", undefined, { section: "학원 정보", icon: "palette" }),
+      // 왼쪽 탭 — 프로필·브랜드와 같은 범주에 둔다(둘 다 "이 학원 화면이 어떻게 보이나"를 정한다).
+      // 🔴 이 면은 감출 수 없는 `/owner`와 함께 서므로, 무엇을 감추든 여기로 돌아올 길이 남는다.
+      // 🔴 그림은 **아무도 안 쓰는 것**으로 골라야 한다(가드 `menu-glyph.test.ts`: 서로 다른 메뉴가 같은
+      //    그림을 쓰면 실패). `layoutGrid`는 대시보드가, `sheetRows`는 수학 강사 시트가 이미 쓴다.
+      //    실제로 남아 있는 그림은 아홉 개뿐이라(alarm·alert·calendarCheck·chart·check·percent·sparkle·trash·userX)
+      //    그중 "고르는 목록"에 가장 가까운 `check`를 쓴다.
+      face("owner", "/owner?tab=navigation", "왼쪽 탭", undefined, { section: "학원 정보", icon: "check" }),
       face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영", icon: "clock" }),
       face("owner", "/owner?tab=subjects", "과목 운영", undefined, { section: "수업·운영", icon: "tag" }),
       face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내", icon: "invoice" }),
@@ -236,19 +248,33 @@ type Gate = {
   canTeacherView?: boolean;
   /** master 전용 목적지 노출. */
   isMaster?: boolean;
+  /**
+   * 학원 설정 '왼쪽 탭'(`navigation.menus`) — **보기만** 정한다. 권한이 아니다:
+   * 여기서 켜도 권한이 없으면 안 서고, 여기서 꺼도 주소를 치면 열린다([[#77]]).
+   * 비면(기본) 지금과 글자 그대로 같다 — 전부 표시·코드 순서. 규약 = [`menu-layout.ts`](@/features/owner/menu-layout).
+   */
+  menuLayout?: MenuLayout;
 };
 
 function allowed(dest: HubDest, gate: Gate): boolean {
   if (!canAccess(gate.systemRole, dest.menuKey, gate.permMatrix)) return false;
   if (dest.teacherOnly && !gate.canTeacherView) return false;
   if (dest.masterOnly && !gate.isMaster) return false;
+  // 🔴 권한 **뒤에** 본다 — 순서를 바꿔도 결과는 같지만, "권한이 먼저 거른다"가 이 설정의 정의다.
+  if (isMenuHiddenByLayout(dest.href, gate.menuLayout)) return false;
   return true;
 }
 
-/** 이 사람에게 보이는 업무군 — 자식이 하나도 없으면 그 업무군은 서지 않는다(죽은 입구 금지). */
+/**
+ * 이 사람에게 보이는 업무군 — 자식이 하나도 없으면 그 업무군은 서지 않는다(죽은 입구 금지).
+ * 업무군 **안**의 순서는 학원 설정을 따른다(`menuLayout`) — 저장값이 없으면 코드 순서 그대로.
+ */
 export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
   return groups
-    .map((g) => ({ ...g, items: g.items.filter((d) => allowed(d, gate)) }))
+    .map((g) => ({
+      ...g,
+      items: sortByMenuLayout(g.items.filter((d) => allowed(d, gate)), gate.menuLayout),
+    }))
     .filter((g) => g.items.length > 0);
 }
 

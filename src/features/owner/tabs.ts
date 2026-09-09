@@ -18,6 +18,7 @@ export type OwnerTab =
   | "notifications"
   | "consultations"
   | "permissions"
+  | "navigation"
   | "popups"
   | "data"
   | "audit"
@@ -46,6 +47,10 @@ export const OWNER_TABS: readonly OwnerTabDef[] = [
   { key: "notifications", label: "알림·약관", href: "/owner?tab=notifications", group: "설정" },
   { key: "consultations", label: "상담 양식", href: "/owner?tab=consultations", group: "설정" },
   { key: "permissions", label: "역할·권한", href: "/owner?tab=permissions", group: "설정" },
+  // 왼쪽 탭 = 사이드바에 **무엇을 보일지·어떤 순서로**(원장 2026-09-09 *"설정에서 탭 하나 추가해서
+  // 왼쪽 탭 설정이 있으면 좋겠네"*). 역할·권한 바로 뒤에 두는 건 둘이 같은 물음("누가 무엇을 보나")에
+  // 답해서다 — 단 이쪽은 **규칙이 아니라 취향**이고, 권한을 대체하지 않는다(menu-layout.ts 참조).
+  { key: "navigation", label: "왼쪽 탭", href: "/owner?tab=navigation", group: "설정" },
   // 관리 그룹(구 /admin 흡수) — 팝업 공지·데이터 정리(고아+중복 통합)·감사·연동.
   { key: "popups", label: "팝업 공지", href: "/owner?tab=popups", group: "관리" },
   { key: "data", label: "데이터 정리", href: "/owner?tab=data", group: "관리" },

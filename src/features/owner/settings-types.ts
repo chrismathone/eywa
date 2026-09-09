@@ -3,6 +3,8 @@
 // 섹션별 부분 저장(saveOwnerSection)이라 SECTION_SCHEMAS로 섹션 단위 검증.
 import { z } from "zod";
 import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
+// 감출 수 없는 목적지 판정 — 스키마(저장 거부)와 적용(isMenuHiddenByLayout)이 **같은 함수**를 본다.
+import { isLayoutHideLocked } from "./menu-layout";
 // 보관 가능한 배치 수는 **화면도 읽는 값**이라 zod 없는 순수 모듈에 산다(클라 번들에 zod 유입 방지).
 import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 
@@ -474,6 +476,35 @@ export const permissionsSchema = z
   });
 export type PermissionsSettings = z.infer<typeof permissionsSchema>;
 
+// === 사이드바(왼쪽 탭) 표시 — 보기 설정, 권한 아님 ===
+// 규약·적용은 [`menu-layout.ts`](./menu-layout.ts) 단일 소스. 여기 담기는 건 **바뀐 줄만**(sparse)이고,
+// 비어 있으면 지금과 똑같이 동작한다(전부 표시·코드 순서). 판정 단위가 menuKey가 아니라 목적지 주소인
+// 이유도 그 파일에 적혀 있다(한 메뉴가 버튼 여럿을 갖는다 — 수납 7면·설정 11면…).
+export const menuLayoutRowSchema = z.object({
+  href: z.string().min(1).max(120).regex(/^\//, "앱 안 주소여야 합니다"),
+  hidden: z.boolean().optional(),
+  order: z.number().int().min(0).max(199).optional(),
+});
+export const navigationSchema = z
+  .object({
+    // 상한은 목적지 총수보다 넉넉히 — 목적지가 늘어도 저장이 막히지 않게(지금 47개).
+    menus: z.array(menuLayoutRowSchema).max(200),
+  })
+  .superRefine((v, ctx) => {
+    const seen = new Set<string>();
+    for (const r of v.menus) {
+      if (seen.has(r.href)) {
+        ctx.addIssue({ code: "custom", message: `같은 메뉴가 두 번 담겼습니다 (${r.href})` });
+      }
+      seen.add(r.href);
+      // 자기잠금 방지 — 적용 단계(isMenuHiddenByLayout)와 이중 방어(DB 직접 변조 대비).
+      if (r.hidden && isLayoutHideLocked(r.href)) {
+        ctx.addIssue({ code: "custom", message: "학원 설정 자신은 사이드바에서 감출 수 없습니다" });
+      }
+    }
+  });
+export type NavigationSettings = z.infer<typeof navigationSchema>;
+
 export const tenantSettingsSchema = z.object({
   version: z.literal(1),
   profile: profileSchema,
@@ -483,6 +514,7 @@ export const tenantSettingsSchema = z.object({
   consultations: consultationsSchema,
   report: reportSchema,
   permissions: permissionsSchema,
+  navigation: navigationSchema,
 });
 export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
 
@@ -495,6 +527,7 @@ export const SECTION_SCHEMAS = {
   consultations: consultationsSchema,
   report: reportSchema,
   permissions: permissionsSchema,
+  navigation: navigationSchema,
 } as const;
 export type SectionKey = keyof typeof SECTION_SCHEMAS;
 
@@ -507,4 +540,5 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
   consultations: "상담 양식",
   report: "보고서",
   permissions: "역할별 메뉴 권한",
+  navigation: "사이드바(왼쪽 탭) 표시",
 };
