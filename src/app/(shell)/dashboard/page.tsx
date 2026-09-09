@@ -63,7 +63,7 @@ async function dashboardQuery<T>(label: string, query: Promise<T>, fallback: T):
   }
 }
 
-export const metadata = { title: "운영실 — eywa" };
+export const metadata = { title: "대시보드 — eywa" };
 // 일일 브리핑 '다시 생성'(regenerateDailyBriefing) 서버 액션이 이 라우트로 POST되고 after()로
 // 백그라운드 AI 호출을 이어간다 — 응답 종료 뒤 작업이 잘리지 않게 여유를 둔다.
 export const maxDuration = 60;

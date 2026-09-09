@@ -75,6 +75,11 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   consultations: {
     templates: "상담 양식",
   },
+  navigation: {
+    // 줄마다 목적지 주소(href)라 이름이 없다 → diffArray가 "N개 → M개"까지만 남긴다.
+    // 주소를 감사로그에 그대로 싣지 않는 건 의도 — 화면에 raw 경로를 내보내지 않는다.
+    menus: "왼쪽 탭 표시·순서",
+  },
   report: {
     allowTeacherTestMax: "강사 문항수 변경 허용",
     classnoteSendWindowStart: "발송 시작 시각",

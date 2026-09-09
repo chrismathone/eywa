@@ -86,7 +86,7 @@ export function BriefingAutoRefresh({ checkedAt }: { checkedAt: string }) {
     <span className="relative inline-flex flex-wrap items-center gap-x-1.5" aria-live="polite" aria-atomic="true">
       <time dateTime={checkedAt}>마지막 확인 {CHECKED_AT_FORMATTER.format(new Date(checkedAt))}</time>
       <span aria-hidden="true">·</span>
-      <span>운영실을 보는 동안 5분마다 갱신</span>
+      <span>대시보드를 보는 동안 5분마다 갱신</span>
       {/* relative 필수 — sr-only는 absolute라 positioned 부모가 없으면 main의 클리핑을 뚫고 문서를 늘린다(gotchas #79). */}
       <span className="sr-only">KST 날짜가 바뀌거나 화면으로 돌아올 때도 다시 확인합니다.</span>
     </span>

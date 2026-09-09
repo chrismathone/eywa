@@ -150,7 +150,7 @@ export function PermissionsSection({
         <p className="text-text-dim mt-1 text-xs leading-relaxed">
           셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
           (현재 {overrides.length}개 변경). 선생님 원스크린·내 학습은 역할 전용이라 고정이고, 학생 역할과
-          원장의 설정·관리자 도구·운영실 접근은 잠글 수 없습니다. 강사 운영실은 담당 범위 집계가 없어 비활성화됩니다.
+          원장의 설정·관리자 도구·대시보드 접근은 잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
         </p>
         <DragScrollArea className="border-border mt-4 rounded-md border">
           <table className="w-full border-collapse text-xs">

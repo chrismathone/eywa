@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { MenuBoard } from "@/components/workspace/menu-board";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { canUseTeacherView } from "@/lib/auth/view-mode";
@@ -19,12 +20,19 @@ export const metadata: Metadata = { title: "메뉴" };
 export default async function MenuPage() {
   const user = await getCurrentUser();
   if (!user) return null;
-  const [permMatrix, canTeacherView] = await Promise.all([getUserPermMatrix(), canUseTeacherView()]);
+  // ⚠️ 셋 다 **새 왕복이 아니다** — 셸 레이아웃이 같은 요청에서 이미 부른 것들이라 React cache가 합친다
+  //    (getTenantSettings는 tenantId별 unstable_cache까지 얹혀 있다). "가벼운 화면" 규칙 그대로.
+  const [permMatrix, canTeacherView, settings] = await Promise.all([
+    getUserPermMatrix(),
+    canUseTeacherView(),
+    getTenantSettings(),
+  ]);
   return (
     <MenuBoard
       systemRole={user.systemRole}
       permMatrix={permMatrix}
       canTeacherView={canTeacherView}
+      menuLayout={settings.navigation.menus}
     />
   );
 }

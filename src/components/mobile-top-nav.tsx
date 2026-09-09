@@ -8,6 +8,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { NAV_GROUPS, findNavItem, type NavItem } from "@/lib/navigation";
+import { isMenuHiddenByLayout, type MenuLayout } from "@/features/owner/menu-layout";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 
@@ -36,6 +37,7 @@ export function MobileTopNav({
   brand = "EYWA",
   logoSrc,
   permMatrix,
+  menuLayout,
 }: {
   systemRole: SystemRole;
   email: string;
@@ -43,11 +45,20 @@ export function MobileTopNav({
   brand?: string;
   logoSrc?: string | null;
   permMatrix?: AccessMatrix;
+  /**
+   * 학원 설정 '왼쪽 탭'(보기 설정) — 🔴 **폰엔 사이드바가 없어 이 줄이 메뉴다.** 여기까지 안 보면
+   *    원장이 감춘 메뉴가 PC에선 사라지고 폰에선 그대로 서서, 같은 설정이 기기마다 다른 말을 한다.
+   * ⚠️ 면(`?tab=`) 목적지는 이 줄에 애초에 없다(부모 메뉴만 그린다) — 감춰도 여기선 달라질 게 없다.
+   */
+  menuLayout?: MenuLayout;
 }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
   const items: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter(
-    (item) => !item.hidden && canAccess(systemRole, item.menuKey, permMatrix),
+    (item) =>
+      !item.hidden &&
+      canAccess(systemRole, item.menuKey, permMatrix) &&
+      !isMenuHiddenByLayout(item.href, menuLayout),
   );
   // 현재 메뉴명 — 옛 AppHeader의 h1을 여기로. 모르는 경로(상세 페이지 등)는 브랜드만 두고 생략한다
   // (지어내지 않는다 — 본문 PageHeader가 맥락을 이미 준다).

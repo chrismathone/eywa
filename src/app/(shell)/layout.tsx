@@ -313,13 +313,14 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           canTeacherView={canTeacherView}
           canOtherTeacherView={canOtherTeacherView}
           frequentKeys={frequentKeys}
+          menuLayout={settings.navigation.menus}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥lg + 마우스): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} className="lg:pointer-fine:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={settings.navigation.menus} className="lg:pointer-fine:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
@@ -352,6 +353,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           systemRole={user.systemRole}
           permMatrix={permMatrix}
           canTeacherView={canTeacherView}
+          menuLayout={settings.navigation.menus}
         />
       </HideInFrame>
 

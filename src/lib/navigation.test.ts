@@ -1,21 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { menuKeyForPath } from "./permissions";
+import { MENU_ACCESS, MENU_LABEL, MENU_KEYS, menuKeyForPath } from "./permissions";
 import {
   activeSubTabHref,
   findNavGroup,
   findNavItem,
   navPresentation,
   subTabsForMenu,
+  menuSearchKeywords,
   NAV_GROUPS,
 } from "./navigation";
 
 describe("navigation presentation", () => {
-  // 🔴 2026-09-07 뒤집힘(원장: *"운영실도 다른창들처럼 만들어주고"*) — 배경은 이제 메뉴 화면(`/menu`)이고
+  // 🔴 2026-09-07 뒤집힘(원장: *"대시보드도 다른창들처럼 만들어주고"*) — 배경은 이제 메뉴 화면(`/menu`)이고
   //    운영실은 다른 메뉴와 같은 **창**이다. 옛 규약(presentation:"desktop")을 되살리지 말 것.
-  it("운영실도 다른 메뉴와 같은 창이다", () => {
+  it("대시보드도 다른 메뉴와 같은 창이다", () => {
     const dashboard = findNavItem("/dashboard");
     expect(dashboard).toBeTruthy();
-    expect(dashboard!.label).toBe("운영실");
+    expect(dashboard!.label).toBe("대시보드");
     expect(navPresentation(dashboard!)).toBe("window");
   });
 
@@ -152,5 +153,105 @@ describe("하부탭 활성 — 접두가 겹치면 긴 쪽이 이긴다", () => 
     const billing = subTabsForMenu("billing");
     expect(activeSubTabHref(billing, "/billing")).toBe("/billing");
     expect(activeSubTabHref(billing, "/billing?tab=textbooks")).toBe("/billing?tab=textbooks");
+  });
+});
+
+/**
+ * 🔴 **새 메뉴를 만들 때 빠뜨리기 쉬운 배선**을 구조로 잠근다.
+ *
+ * 계기(원장 2026-09-09): *"'신입생 관리' 탭을 만들었는데 찾을 수가 없네. 자동 배정이 안되어있네."*
+ * 실제 원인은 권한도 등록도 아니었지만(둘 다 정상이었다), 그걸 **확인하는 데만 한참 걸렸다** —
+ * "메뉴 하나가 제대로 붙었나"를 한 번에 말해 주는 자리가 없어서다. 그래서 여기서 잠근다.
+ *
+ * ⚠️ 사이드바 노출(허브 업무군 편입)은 여기가 아니라 [`menu-hub.test.ts`](./menu-hub.test.ts)가 잠근다
+ *    — 버튼형 전환(2026-09-07) 뒤로 사이드바를 그리는 건 NAV_GROUPS가 아니라 HUB_GROUPS라서다.
+ *    두 벌로 만들지 말고 그쪽을 볼 것.
+ */
+describe("새 메뉴 배선 — 권한 표·라벨·경로 매핑이 함께 있어야 한다", () => {
+  const items = NAV_GROUPS.flatMap((g) => g.items);
+
+  it("NAV_GROUPS의 모든 menuKey가 권한 기본값 표(MENU_ACCESS)에 있다", () => {
+    // 타입(AccessMatrix = Record<MenuKey, …>)이 이미 잠그지만, 표가 손으로 편집되거나 키가
+    // 문자열로 새어 들어와도 잡히도록 런타임에서도 본다. 빠지면 canAccess가 undefined를 읽어 터진다.
+    const missing = items
+      .map((i) => i.menuKey)
+      .filter((k) => !(k in MENU_ACCESS) || !(k in MENU_LABEL));
+    expect(missing).toEqual([]);
+  });
+
+  it("권한 표의 모든 셀이 8개 역할을 다 채운다(빈 칸 = 조용한 차단)", () => {
+    for (const key of MENU_KEYS) {
+      expect(Object.keys(MENU_ACCESS[key]).length, `${key} 역할 수`).toBe(8);
+    }
+  });
+
+  /**
+   * 🔑 여기가 **실제로 안 잠겨 있던 자리**다 — `PATH_SEGMENT_TO_MENU`는 `Record<string, MenuKey>`라
+   *    메뉴가 빠져도 타입이 통과한다. 빠지면 `menuKeyForPath`가 null이 되고, 셸의 뷰-경로 정합성 가드가
+   *    fail-open으로 지나가 강사 미니셸이 강사가 못 여는 페이지를 감쌀 수 있다.
+   */
+  it("모든 메뉴 주소가 자기 menuKey로 되풀린다(menuKeyForPath) — 숨김 메뉴도 포함", () => {
+    const broken = items
+      .filter((i) => menuKeyForPath(i.href) !== i.menuKey)
+      .map((i) => `${i.href} → ${menuKeyForPath(i.href) ?? "null"} (기대: ${i.menuKey})`);
+    expect(broken).toEqual([]);
+  });
+
+  it("신규생 관리(2026-09-09 신설)도 같은 배선을 통과한다", () => {
+    const item = items.find((i) => i.menuKey === "newcomers");
+    expect(item).toMatchObject({ href: "/newcomers", label: "신규생 관리" });
+    expect(item!.hidden).not.toBe(true);
+    // 데스크 업무라 사무실은 열리고 강사는 막힌다(테넌트 전역 명단이라 강사 스코핑이 없다 — 퇴원관리와 같은 판단).
+    expect(MENU_ACCESS.newcomers.master).toBe("full");
+    expect(MENU_ACCESS.newcomers.teacher).toBe("none");
+    expect(menuKeyForPath("/newcomers")).toBe("newcomers");
+  });
+});
+
+/**
+ * 검색 별칭 — 원장 2026-09-09: *"'신입생 관리' 탭을 만들었는데 **찾을 수가 없네**."*
+ * 라벨은 "신규생 관리"라 팰릿 키워드에 "신입"이 한 글자도 없어 검색이 0건이었다.
+ * 🔴 별칭은 **검색 전용**이다 — 화면 라벨은 여전히 `label` 하나뿐(라벨 변경 규약과 다른 축).
+ */
+describe("검색 별칭 — 사람이 부르는 말로도 찾힌다", () => {
+  const rows = NAV_GROUPS.flatMap((g) => g.items.map((i) => ({ item: i, group: g.label })));
+  const labels = new Set(rows.map((r) => r.item.label));
+  /** 팰릿과 **같은 함수**로 매칭을 재현한다(팰릿은 `keywords.includes(q)` 한 줄). */
+  const hits = (q: string) =>
+    rows.filter((r) => menuSearchKeywords(r.item, r.group).includes(q.toLowerCase())).map((r) => r.item.menuKey);
+
+  it("🔴 원장이 부르는 이름 '신입생'으로 신규생 관리가 나온다", () => {
+    expect(hits("신입생")).toEqual(["newcomers"]);
+    expect(hits("신입")).toEqual(["newcomers"]);
+  });
+
+  it("개칭 전 이름으로도 나온다(운영실 → 대시보드 · 학생 → 원생)", () => {
+    expect(hits("운영실")).toEqual(["dashboard"]);
+    expect(hits("학생목록")).toEqual(["students"]);
+    expect(hits("학생상담")).toEqual(["consultations"]);
+  });
+
+  it("별칭이 다른 메뉴의 라벨과 겹치지 않는다 — 겹치면 엉뚱한 메뉴가 함께 선다", () => {
+    const bad: string[] = [];
+    for (const { item } of rows) {
+      for (const a of item.aliases ?? []) {
+        if (labels.has(a) && a !== item.label) bad.push(`${item.menuKey}: "${a}"는 다른 메뉴의 라벨`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("무의미한 별칭을 넣지 않는다 — 이미 라벨·그룹·영문키로 찾히는 말", () => {
+    const useless: string[] = [];
+    for (const { item, group } of rows) {
+      const base = `${item.label} ${group} ${item.menuKey}`.toLowerCase();
+      for (const a of item.aliases ?? []) {
+        if (!a.trim()) useless.push(`${item.menuKey}: 빈 별칭`);
+        else if (base.includes(a.toLowerCase())) useless.push(`${item.menuKey}: "${a}"는 이미 찾힌다`);
+      }
+      const list = item.aliases ?? [];
+      expect(new Set(list).size, `${item.menuKey} 별칭 중복`).toBe(list.length);
+    }
+    expect(useless).toEqual([]);
   });
 });

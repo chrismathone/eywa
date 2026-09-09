@@ -51,9 +51,9 @@ const QUICKSTART: { title: string; desc: string; href: string; hrefLabel: string
 const MENUS: { id: MenuKey; label: string; href: string; description: string }[] = [
   {
     id: "dashboard",
-    label: "운영실",
+    label: "대시보드",
     href: "/dashboard",
-    description: "Eywa가 우선순위를 정리하는 운영실 — 긴급·승인·오늘 할 일과 수업 흐름을 실행 순서로 봅니다.",
+    description: "Eywa가 우선순위를 정리하는 대시보드 — 긴급·승인·오늘 할 일과 수업 흐름을 실행 순서로 봅니다.",
   },
   {
     id: "teacher_onescreen",
@@ -243,7 +243,7 @@ const FAQ: { q: string; a: string }[] = [
     a: "직접 챙겨야 하는 일이 생겼을 때만 옵니다 — 결석이 쌓였을 때(3·5·10회), 상담 후속 조치 기한, 아직 안 나간 수업보고서, 발송 실패, 진도가 갑자기 튀거나 겹쳤을 때, 성적 하락, 미납, 반 배정·이동, 학부모가 ClassNote에 새 글이나 댓글을 남겼을 때입니다. 같은 건으로 두 번 울리지 않게 되어 있어요.",
   },
   {
-    q: "운영실 맨 위 브리핑은 누가 쓰나요?",
+    q: "대시보드 맨 위 브리핑은 누가 쓰나요?",
     a: "AI가 하루 한 번 그날의 수업·학생·상담·수납·운영을 훑어 정리합니다. 숫자와 학생 명단은 AI가 지어내는 것이 아니라 실제 데이터에서 뽑은 값이고, AI는 그것을 문장으로 옮기는 역할만 해요. 페이지를 열어보는 것만으로는 다시 실행되지 않습니다.",
   },
   {
