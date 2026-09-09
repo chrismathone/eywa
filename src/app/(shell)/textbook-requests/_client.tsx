@@ -130,7 +130,9 @@ export function TextbookRequestClient({
   const catalogOptions = catalog.map((c) => ({
     value: c.id,
     label: c.title,
-    hint: `${c.price.toLocaleString()}원${c.bookDetail ? ` · ${c.bookDetail}` : ""}`,
+    // 금액·상세를 **열로** 가른다(원장 2026-09-09 "목록 열맞춤") — 한 문자열로 붙이면 이름 길이에 밀려 들쭉날쭉.
+    hint: `${c.price.toLocaleString()}원`,
+    meta: c.bookDetail ?? "",
   }));
   const pickCatalog = (id: string) => {
     const c = catalog.find((x) => x.id === id);

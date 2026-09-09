@@ -22,6 +22,11 @@ import {
   CONSULTATION_CATEGORY_LABEL,
 } from "@/features/consultations/labels";
 import { meetingReportSectionLabel } from "@/features/meetings/report-sections";
+import {
+  TEXTBOOK_CHECK_LABEL,
+  describeTextbookChanges,
+  type TextbookFieldChange,
+} from "@/features/billing/textbook-audit";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { assetStatusLabel } from "@/features/inventory/status";
 import { assetCategoryLabel } from "@/features/inventory/category";
@@ -36,6 +41,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   student: "학생",
   academy_documents: "서식 문서",
   invoice: "청구서",
+  textbook_order: "교재 신청",
   exam: "시험",
   payroll: "급여",
   class: "반",
@@ -440,6 +446,22 @@ export function auditDetail(
     case "withdrawal_update": {
       const reason = str(m.reason);
       return join(ctx.nameOf(m.studentId), reason ? `사유: ${reason}` : null);
+    }
+    // 교재 신청 전수 감사(2026-09-09) — 금액 수정의 '범인 찾기'가 목적이라 **전후 값**을 그대로 적는다.
+    case "textbook_order_update": {
+      const changes = Array.isArray(m.changes) ? (m.changes as TextbookFieldChange[]) : null;
+      return join(str(m.target), describeTextbookChanges(changes));
+    }
+    case "textbook_order_create":
+    case "textbook_order_delete": {
+      // 만든·지운 시점의 값(금액 포함)을 남긴다 — 지워지면 행에서 되짚을 수 없다.
+      const price = typeof m.price === "number" ? `${m.price.toLocaleString("ko-KR")}원` : null;
+      const count = typeof m.count === "number" && m.count > 1 ? `${m.count}명 일괄` : null;
+      return join(str(m.target), price, count);
+    }
+    case "textbook_order_check": {
+      const label = TEXTBOOK_CHECK_LABEL[str(m.field) ?? ""] ?? str(m.field);
+      return join(str(m.target), label ? `${label} ${m.checked ? "체크" : "해제"}` : null);
     }
     // 학생 기록 변경 전수 감사(2026-08-18) — 누가·언제·어느 학생을 바꿨는지 역검수용.
     case "student_withdraw": {

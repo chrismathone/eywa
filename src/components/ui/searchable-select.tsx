@@ -3,7 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
-export type ComboOption = { value: string; label: string; hint?: string };
+export type ComboOption = {
+  value: string;
+  label: string;
+  /** 이름 뒤에 붙는 부가 정보. `meta`가 함께 있으면 **오른쪽 열**로 서고, 없으면 종전처럼 이름 옆에 붙는다. */
+  hint?: string;
+  /**
+   * 오른쪽 끝 열(상세·분류 등). 🔑 이 값이 있는 줄은 **열 맞춤**으로 그린다 — 이름이 남는 폭을 먹고
+   * `hint`(금액 등)는 숫자 정렬로 오른쪽에 선다(원장 2026-09-09 *"목록 열맞춤"* — 교재 단가표 검색에서
+   * 금액이 이름 길이를 따라 들쭉날쭉했다). 값이 없는 소비처는 예전 모양 그대로다.
+   */
+  meta?: string;
+};
 
 /**
  * 검색형 콤보박스 — 옵션이 수백 개인 native `<select>`(학생·반 선택 등)를 대체한다.
@@ -219,10 +230,21 @@ export function SearchableSelect({
                       onClick={() => choose(o.value)}
                       className={`flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${rowTone}`}
                     >
-                      <span className="truncate">
-                        {o.label}
-                        {o.hint ? <span className="text-text-faint ml-1 text-xs">{o.hint}</span> : null}
-                      </span>
+                      {o.meta !== undefined ? (
+                        // 열 맞춤 — 이름(남는 폭) · 금액(숫자 정렬, 오른쪽) · 상세(고정 폭).
+                        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                          <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                          {o.hint ? (
+                            <span className="num text-text-dim shrink-0 text-right text-xs">{o.hint}</span>
+                          ) : null}
+                          <span className="text-text-faint w-12 shrink-0 truncate text-right text-xs">{o.meta}</span>
+                        </span>
+                      ) : (
+                        <span className="truncate">
+                          {o.label}
+                          {o.hint ? <span className="text-text-faint ml-1 text-xs">{o.hint}</span> : null}
+                        </span>
+                      )}
                       {isCurrent ? (
                         <EyIcon
                           name="check"

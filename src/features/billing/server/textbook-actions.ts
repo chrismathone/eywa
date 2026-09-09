@@ -7,6 +7,13 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/features/audit/server/log";
+import {
+  TEXTBOOK_CHECK_LABEL,
+  diffTextbookOrder,
+  textbookAuditTarget,
+  type TextbookAuditSnapshot,
+} from "../textbook-audit";
 import { ownsTextbookRequest } from "../textbook-ownership";
 
 // 교재신청(textbook_orders) CRUD — invoices actions 골격 본뜸. 상태 전환 시 해당 타임스탬프를
@@ -30,6 +37,34 @@ export type TextbookState =
  */
 const DELETE_BLOCKED_MSG =
   "이 요청서를 지울 권한이 없습니다 — 요청서에 적힌 담당 선생님 이름이 본인과 다르면 관리자에게 요청해주세요.";
+
+/**
+ * 감사 기록에 담을 칸 — **바꾸기 전에** 이 모양으로 한 번 읽는다(원장 2026-09-09 *"이거 전부 다 감사로그에
+ * 남겨 — 금액 수정같은거"*). 지우는 경로에서도 같은 스냅샷을 남겨야 "무엇을 지웠나"가 남는다.
+ */
+const AUDIT_COLS = "student_id, student_name, teacher_name, book_name, book_detail, price, request_date, notes";
+
+type AuditRow = {
+  student_name?: string | null;
+  teacher_name?: string | null;
+  book_name?: string | null;
+  book_detail?: string | null;
+  price?: number | string | null;
+  request_date?: string | null;
+  notes?: string | null;
+};
+
+function snapshotOf(row: AuditRow | null | undefined): TextbookAuditSnapshot {
+  return {
+    studentName: row?.student_name ?? null,
+    teacherName: row?.teacher_name ?? null,
+    bookName: row?.book_name ?? null,
+    bookDetail: row?.book_detail ?? null,
+    price: row?.price ?? null,
+    requestDate: row?.request_date ?? null,
+    notes: row?.notes ?? null,
+  };
+}
 
 const CHECK_COLS: Record<string, string> = {
   registered: "registered_at",
@@ -96,6 +131,17 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
     .single();
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "textbook_order_create",
+    targetType: "textbook_order",
+    targetLabel: textbookAuditTarget({ studentName, bookName: f.bookName }),
+    metadata: {
+      orderId: data?.id ?? null,
+      target: textbookAuditTarget({ studentName, bookName: f.bookName }),
+      price: f.price,
+      surface: "billing",
+    },
+  });
   revalidatePath("/billing");
   return { ok: true, createdId: (data?.id as string | undefined) ?? undefined };
 }
@@ -155,6 +201,25 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
     .select("id, student_name");
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "textbook_order_create",
+    targetType: "textbook_order",
+    targetLabel: textbookAuditTarget({
+      studentName: studentIds.length === 1 ? (nameById.get(studentIds[0]!) ?? null) : null,
+      bookName: f.bookName,
+    }),
+    metadata: {
+      // 일괄이면 학생마다 행이 생기지만 기록은 한 줄 — 대상 수를 함께 남긴다(행 id 전부).
+      orderIds: (data ?? []).map((r) => r.id as string),
+      target: textbookAuditTarget({
+        studentName: studentIds.length === 1 ? (nameById.get(studentIds[0]!) ?? null) : null,
+        bookName: f.bookName,
+      }),
+      price: f.price,
+      count: studentIds.length,
+      surface: "request",
+    },
+  });
   revalidatePath("/textbook-requests");
   revalidatePath("/billing"); // 사무실 교재 면에도 즉시 반영
   // 생성 직후 학생별 요청서 자동 발행용.
@@ -173,10 +238,12 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
 async function loadEditableRequest(
   supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
-): Promise<{ error: string } | { ok: true }> {
+): Promise<{ error: string } | { ok: true; before: TextbookAuditSnapshot }> {
+  // 감사 기록용 스냅샷을 **같은 조회에서** 함께 받는다(바꾸기 전 값이 있어야 "누가 뭘 고쳤나"를 적는다).
   const { data: row } = await supabase
     .from("textbook_orders")
-    .select("student_id, teacher_name, created_by, registered_at, ordered_at, paid_at")
+    // ⚠️ `AUDIT_COLS`가 이미 student_id를 담는다 — 여기서 또 적으면 같은 칸을 두 번 요청하게 된다.
+    .select(`created_by, registered_at, ordered_at, paid_at, ${AUDIT_COLS}`)
     .eq("id", id)
     .single();
   if (!row) return { error: "교재 요청을 찾을 수 없습니다" };
@@ -195,7 +262,7 @@ async function loadEditableRequest(
   if (row.registered_at || row.ordered_at || row.paid_at) {
     return { error: "사무실에서 처리 중인 요청은 수정·삭제할 수 없습니다" };
   }
-  return { ok: true };
+  return { ok: true, before: snapshotOf(row as AuditRow) };
 }
 
 export async function updateTextbookRequest(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
@@ -222,6 +289,21 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
     })
     .eq("id", id);
   if (error) return { error: error.message };
+  const changes = diffTextbookOrder(gate.before, {
+    bookName: f.bookName,
+    bookDetail: f.bookDetail,
+    price: f.price,
+    notes: f.notes,
+  });
+  if (changes.length > 0) {
+    const target = textbookAuditTarget({ studentName: gate.before.studentName, bookName: f.bookName });
+    await logAction({
+      action: "textbook_order_update",
+      targetType: "textbook_order",
+      targetLabel: target,
+      metadata: { orderId: id, target, changes, surface: "request" },
+    });
+  }
   revalidatePath("/textbook-requests");
   revalidatePath("/billing");
   return { ok: true };
@@ -244,6 +326,14 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
   if (error) return { error: error.message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
+  const deletedTarget = textbookAuditTarget(gate.before);
+  await logAction({
+    action: "textbook_order_delete",
+    targetType: "textbook_order",
+    targetLabel: deletedTarget,
+    // 지운 뒤엔 행에서 되짚을 수 없다 — 금액까지 남긴다.
+    metadata: { orderId: id, target: deletedTarget, price: Number(gate.before.price ?? 0), surface: "request" },
+  });
   revalidatePath("/textbook-requests");
   revalidatePath("/billing");
   return { ok: true };
@@ -260,6 +350,13 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
 
   const supabase = await createClient();
   const studentName = await resolveStudentName(supabase, f.studentId);
+  // 바꾸기 전 값 — 감사 기록의 '이전' 칸(원장 2026-09-09 "금액 수정같은거 전부 감사로그에").
+  const { data: beforeRow } = await supabase
+    .from("textbook_orders")
+    .select(AUDIT_COLS)
+    .eq("id", id)
+    .single();
+  const before = snapshotOf(beforeRow as AuditRow | null);
   const { error } = await supabase
     .from("textbook_orders")
     .update({
@@ -276,6 +373,24 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
     .eq("id", id);
   if (error) return { error: error.message };
 
+  const changes = diffTextbookOrder(before, {
+    studentName,
+    teacherName: f.teacherName,
+    bookName: f.bookName,
+    bookDetail: f.bookDetail,
+    price: f.price,
+    requestDate: f.requestDate,
+    notes: f.notes,
+  });
+  if (changes.length > 0) {
+    const target = textbookAuditTarget({ studentName, bookName: f.bookName });
+    await logAction({
+      action: "textbook_order_update",
+      targetType: "textbook_order",
+      targetLabel: target,
+      metadata: { orderId: id, target, changes, surface: "billing" },
+    });
+  }
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -297,7 +412,7 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
   // 다른 체크 상태가 있어야 status를 재도출 → 현재 행 조회(RLS 격리).
   const { data: row } = await supabase
     .from("textbook_orders")
-    .select("registered_at, ordered_at, paid_at")
+    .select(`registered_at, ordered_at, paid_at, ${AUDIT_COLS}`)
     .eq("id", id)
     .single();
   if (!row) return { error: "교재신청을 찾을 수 없습니다" };
@@ -325,6 +440,21 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
   const { error } = await supabase.from("textbook_orders").update(patch).eq("id", id);
   if (error) return { error: error.message };
 
+  const checkTarget = textbookAuditTarget(snapshotOf(row as AuditRow));
+  await logAction({
+    action: "textbook_order_check",
+    targetType: "textbook_order",
+    targetLabel: checkTarget,
+    // 체크는 돈이 오간 사실(납부)까지 담는다 — 해제도 같은 무게로 남긴다.
+    metadata: {
+      orderId: id,
+      target: checkTarget,
+      field,
+      fieldLabel: TEXTBOOK_CHECK_LABEL[field] ?? field,
+      checked,
+      status,
+    },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }
@@ -337,11 +467,25 @@ export async function deleteTextbookOrder(_prev: TextbookState, formData: FormDa
   if (!id) return { error: "교재신청 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 지우기 전 스냅샷 — 지운 뒤엔 무엇을 지웠는지 되짚을 방법이 없다.
+  const { data: beforeRow } = await supabase
+    .from("textbook_orders")
+    .select(AUDIT_COLS)
+    .eq("id", id)
+    .single();
   // 위와 같은 이유로 지운 행 수를 확인한다(0행 = 권한에 막힘, 에러는 안 난다).
   const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
   if (error) return { error: error.message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
 
+  const before = snapshotOf(beforeRow as AuditRow | null);
+  const deletedTarget = textbookAuditTarget(before);
+  await logAction({
+    action: "textbook_order_delete",
+    targetType: "textbook_order",
+    targetLabel: deletedTarget,
+    metadata: { orderId: id, target: deletedTarget, price: Number(before.price ?? 0), surface: "billing" },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }

@@ -107,6 +107,13 @@ export const AUDIT_ACTIONS = {
   approval_withdraw: "전자결재 회수",
   approval_comment: "전자결재 댓글",
   approval_comment_delete: "전자결재 댓글 삭제",
+  // 교재 신청 전수 감사(2026-09-09) — 단가표 23,500원 교재가 신청서엔 22,500원으로 적혀 있었는데
+  // *"범인 찾기가 실패하네"*(원장). `textbook_orders`를 바꾸는 경로 일곱이 기록을 한 줄도 안 남기고 있었다.
+  // 금액은 신청 시점 **스냅샷**이라 단가표를 따라가지 않는다 → "왜 다른가"의 답은 누가 언제 고쳤나뿐이다.
+  textbook_order_create: "교재 신청 등록",
+  textbook_order_update: "교재 신청 수정",
+  textbook_order_delete: "교재 신청 삭제",
+  textbook_order_check: "교재 처리 상태 변경",
   // 학생 기록 변경 전수 감사(2026-08-18) — "퇴원을 누가 했는지 역검수가 안 된다"(원장). 상태 전환·정보
   // 수정·삭제·수강 종료·관리 도구 일괄 처리까지 **학생 레코드를 바꾸는 모든 경로**가 actor를 남긴다.
   student_create: "학생 등록",
