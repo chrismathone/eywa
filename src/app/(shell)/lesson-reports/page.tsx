@@ -174,6 +174,11 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
 
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
         <ReportList
+          // 🔴 **상태가 바뀌면 새로 마운트한다** — 클라 컴포넌트라 `useState(initial)`는 첫 마운트에만 돌고,
+          //    같은 라우트에서 `?status=`만 바뀐 소프트 내비는 인스턴스를 그대로 둔다. key가 없으면 이미 목록
+          //    탭을 보던 사람이 "미발송 N건"을 눌러도 **아무 일도 안 일어난 것처럼** 보인다(이번 제보의 원인과
+          //    같은 종류의 침묵). 적대적 리뷰 2026-09-09에서 잡았다.
+          key={sp.status ?? "all"}
           options={tabData.filterOptions}
           initial={tabData.initialList}
           canSend={canSendReports}
