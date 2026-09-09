@@ -17,8 +17,22 @@ import { TextbookRequestClient } from "./_client";
  * 교재 요청 — 강사 미니셸 '내 메뉴' 진입(강사 스코프). 강사는 본인 담당 학생 교재를 요청하고
  * 진행상태(신청→주문→납부)를 조회. 사무실 역할(master/admin/accountant)은 전체 열람(처리는 /billing 교재 면).
  */
-export default async function TextbookRequestsPage() {
+export default async function TextbookRequestsPage({
+  searchParams,
+}: {
+  /**
+   * `?studentId=` — 다른 화면에서 **그 학생으로 바로 신청서를 쓰라고** 보낸 링크(등록상담에서 수학 반을
+   * 배정한 직후, 원장 2026-09-09). 값은 학생 선택칸의 초기값일 뿐이라 폼 동작·권한은 하나도 안 바뀐다.
+   * ⚠️ 넘어온 id가 이 사람의 학생 목록에 없으면 클라가 조용히 무시한다(강사 스코프 밖 학생을 이 링크로
+   *    끌어오지 않는다 + 이름 없는 raw UUID가 칩으로 뜨는 것 방지).
+   */
+  searchParams: Promise<{ studentId?: string | string[] }>;
+}) {
   const user = await requireAccess("textbook_requests");
+  const sp = await searchParams;
+  const initialStudentIds = (Array.isArray(sp.studentId) ? sp.studentId : [sp.studentId])
+    .map((v) => (v ?? "").trim())
+    .filter(Boolean);
   // teacher(또는 겸직-강사뷰)면 본인 담당 학생만. isTeacher는 클라 UI(스코프 톤)에도 전달.
   const teacherId = await effectiveTeacherId();
   const isTeacher = teacherId !== null;
@@ -55,6 +69,7 @@ export default async function TextbookRequestsPage() {
       requesterName={user.displayName}
       // 소유 판정 합집합(0174a) — 이름을 다르게 적어도 본인이 만든 요청은 본인 것.
       viewerUserId={user.id}
+      initialStudentIds={initialStudentIds}
     />
   );
 }

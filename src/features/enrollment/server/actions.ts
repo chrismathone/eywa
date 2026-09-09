@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { after } from "next/server";
 import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
+import { normalizeAssignStartDate } from "@/features/enrollment/assign-start-date";
 import { canonicalSchoolName } from "@/features/schools/school-name";
 import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
 import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
@@ -671,7 +672,20 @@ export async function deleteEnrollmentConsultation(
 export type ConvertToStudentState =
   // notice = 동명이인이라 접미사(A·B·C)를 붙여 등록했다는 안내. 조용히 바꾸면 직원이 나중에
   // "내가 넣은 이름이 아닌데?" 하고 헤맨다 — 바꿨으면 그 자리에서 말한다.
-  | { error?: string; studentId?: string; existingStudentId?: string; notice?: string }
+  | {
+      error?: string;
+      studentId?: string;
+      existingStudentId?: string;
+      notice?: string;
+      /**
+       * 이번에 **실제로 만들어진** 수강의 반 id. 화면이 "수학 반을 배정했나"를 이걸로 판정한다 —
+       * 🔴 클라가 고른 체크박스로 세면 안 된다(기존 학생 재사용 시 이미 등록된 반은 서버가 걸러내므로,
+       *    아무 수강도 안 생겼는데 "교재 신청하세요"가 뜬다). 만든 쪽이 만든 것을 돌려준다.
+       */
+      assignedClassIds?: string[];
+      /** 확정된 배정일(= 새 수강의 start_date). 화면이 "언제부터"를 사실대로 되짚어 말하기 위해. */
+      startDate?: string;
+    }
   | undefined;
 
 /**
@@ -731,6 +745,14 @@ export async function convertConsultationToStudent(
   }
 
   const today = kstToday();
+  // 배정일(원장 2026-09-09 "배정날짜 지정할 수 있게") — 규칙은 클라 다이얼로그와 **같은 함수**이고
+  // 진짜 게이트는 여기다([[#77]]). 학생을 만들기 **전에** 거른다: 날짜가 잘못됐다고 학생만 남기면
+  // 다음 시도가 자연키 충돌 경로로 떨어져 사람이 이유를 못 찾는다.
+  // ⚠️ `as string`으로 캐스팅하지 않는다 — FormData 값은 File일 수 있고 그때 `.trim()`이 던진다.
+  //    이 파일의 다른 칸과 같은 관용구(String(...) ?? "")로 받는다.
+  const startAt = normalizeAssignStartDate(String(formData.get("startDate") ?? ""), today);
+  if ("error" in startAt) return { error: startAt.error };
+  const startDate = startAt.date;
 
   // 자연키(같은 이름·학교·학년의 재원 학생) 값 — 중복 안내에도 재사용.
   const studentName = overrideName || c.prospect_name;
@@ -752,6 +774,9 @@ export async function convertConsultationToStudent(
       parent_name: overrideParentName ?? c.parent_name,
       parent_phone: overrideParentPhone ?? c.parent_phone,
       status: "enrolled",
+      // 🔴 등록일은 **오늘**이지 배정일이 아니다 — 이 칸은 대시보드 '이번 달 신입생'·학원생 증감의 축이라,
+      //    배정일을 따라 미래로 밀면 오늘 등록한 학생이 신규 집계에서 조용히 사라진다(원장이 시킨 건
+      //    "수업이 언제부터인가"이지 "언제 등록했나"가 아니다).
       enrolled_at: today,
     })
     .select("id")
@@ -816,7 +841,7 @@ export async function convertConsultationToStudent(
       tenant_id: c.tenant_id,
       student_id: studentId,
       class_id: classId,
-      start_date: today,
+      start_date: startDate,
     }));
     const { error: enrErr } = await supabase.from("enrollments").insert(rows);
     if (enrErr) {
@@ -839,7 +864,7 @@ export async function convertConsultationToStudent(
       await logAction({
         action: "enrollment_assign",
         targetType: "student",
-        metadata: { studentId, classId, startDate: today, source: "enrollment_consultation" },
+        metadata: { studentId, classId, startDate, source: "enrollment_consultation" },
       });
     }
   }
@@ -855,6 +880,8 @@ export async function convertConsultationToStudent(
   revalidatePath("/students");
   return {
     studentId,
+    assignedClassIds: assignClassIds,
+    startDate,
     notice: uniqueName.suffixed
       ? `이미 '${studentName}' 학생이 있어 '${uniqueName.name}'(으)로 등록했습니다. 다른 학생이면 그대로 두고, 같은 학생이면 학생 목록에서 정리하세요.`
       : undefined,
