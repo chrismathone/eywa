@@ -28,7 +28,8 @@ import { PAGE_SIZE_MAX, PAGE_SIZE_MIN, pageSizeCookieName } from "./page-size";
  *    그땐 규격의 식으로 센다(`columnCountOf`, 적대적 리뷰 2026-09-03에서 잡힘: 2단 창의 아래 절반이 비어 있었다).
  * 🔴 **단은 채워서 세운다**(원장 2026-09-04 *"큰 창으로 가면 하나의 단에 학생 수가 너무 적다"*): 다단의 기본(balance)은 행을 단마다
  *    고르게 나눠 30행·3단이면 10·10·10이 된다 — 큰 창일수록 단마다 더 성겨 보였다. 그래서 이 컴포넌트가 루트에 CSS 변수 둘을
- *    적는다: `--cols` = min(폭이 허락하는 단 수, ceil(항목 수 ÷ 한 단 행 수)) · `--list-h` = 한 단 높이(2단 이상일 때만).
+ *    적는다: `--cols` = min(폭이 허락하는 단 수, ceil(항목 수 ÷ 한 단 행 수)) · `--list-h` = 한 단 높이(2단 이상일 때만)
+ *    + `--col-fill`(= 높이를 적었을 때만 `auto`).
  *    목록은 `column-count: var(--cols)` + `column-fill: auto` + `height: var(--list-h)`로 **위에서 아래로 단을 채우고**, 제목·테두리
  *    격자는 `repeat(var(--cols, auto-fill), …)`로 같은 단 수를 쓴다(항목이 한 단에 다 들어가면 1단 = 최소 창과 같은 모양).
  *    ⚠️ 단 수 측정은 늘 **폭**에서 한다 — `column-count`를 우리가 적은 뒤 그 값을 읽으면 단이 줄어든 만큼 다음 측정이 또 줄어 1단까지 수렴한다.
@@ -90,13 +91,25 @@ export function AutoPageSize({
       const items = list.children.length;
       const effCols = Math.min(cols, Math.max(1, Math.ceil(items / rows)));
       el.style.setProperty("--cols", String(effCols));
-      // 🔴 높이 고정은 **지금 실린 항목이 다 들어갈 때만** — `column-fill: auto` + 고정 높이인데 용량(행×단)이
-      //    항목보다 작으면 남는 행이 상자 **오른쪽 바깥 넘침 단**으로 새어 나간다(창을 줄이는 동안 가로 스크롤,
-      //    진동 가드에 걸린 갈래에선 다음 resize까지 남는다 — 적대적 재리뷰 2026-09-04). 모자라면 auto 높이로
-      //    떨어뜨려 전부 보이게 두고, 서버가 새 size를 주면 다음 측정에서 다시 고정한다.
-      const fitsInBox = Math.ceil(items / Math.max(1, rows)) <= cols;
-      if (effCols > 1 && fitsInBox) el.style.setProperty("--list-h", `${rows * rowPx + 2}px`);
-      else el.style.removeProperty("--list-h");
+      // 🔴🔴 `--cols`를 2 이상으로 적었으면 **높이도 반드시 함께** 적는다 — `column-fill: auto`는 높이가
+      //    `auto`면 단을 나누지 않고 **첫 단에 전부 쏟아붓는다**(2·3단 자리는 빈 채로 남는다). 원장 제보
+      //    2026-09-09: *"카테고리를 바꾸고 다시 전체로 돌아오니까 3단이던게 1단으로 표시되네."* — 종전 코드가
+      //    "한 단 용량(행×단)보다 항목이 많으면 auto로 떨어뜨린다"고 했는데, 그 auto가 곧 1단이었다.
+      // 🔴 대신 높이를 **지금 실린 항목에서** 뽑는다(한 단 행 수와 `ceil(항목÷단)` 중 큰 값) — 고정 높이가
+      //    항목보다 짧으면 남는 행이 상자 **오른쪽 바깥 넘침 단**으로 새어 나가기 때문이다(2026-09-04 적대
+      //    재리뷰에서 잡은 갈래). 항목이 많으면 상자가 세로로 길어져 스크롤될 뿐, 단은 정상으로 선다
+      //    (서버가 새 size를 주면 다음 측정에서 다시 창에 맞는 높이로 돌아온다).
+      // 🔴 `--col-fill`은 **높이를 적을 때만** auto다 — 목록의 기본값은 `balance`라서, 아직 측정 전(첫 페인트)이거나
+      //    이 컴포넌트가 값을 못 적은 어떤 경우에도 단이 고르게 나뉜다. 종전엔 목록이 `column-fill: auto`를 상수로
+      //    들고 있어서 **높이가 없는 모든 순간이 곧 1단**이었다(측정 전 한 프레임 + 위 갈래).
+      const heightRows = Math.max(rows, Math.ceil(items / effCols));
+      if (effCols > 1) {
+        el.style.setProperty("--list-h", `${heightRows * rowPx + 2}px`);
+        el.style.setProperty("--col-fill", "auto");
+      } else {
+        el.style.removeProperty("--list-h");
+        el.style.removeProperty("--col-fill");
+      }
       if (fit === size || (fit > size && fit - size < 2)) return;
       const last = lastRequest.current;
       if (last && last.to === size && last.from === fit) return; // A→B 직후의 B→A = 진동
