@@ -52,7 +52,7 @@ export function StatsCharts({
       <section className="bg-card border-border rounded-2xl border p-4">
         <header className="mb-2">
           <p className="eyebrow">사유별 분포</p>
-          <h2 className="text-foreground mt-1 text-sm font-bold">학생상담 카테고리</h2>
+          <h2 className="text-foreground mt-1 text-sm font-bold">원생상담 카테고리</h2>
         </header>
         {pieData.length === 0 ? (
           <p className="text-muted-foreground py-12 text-center text-sm">데이터 없음</p>
@@ -95,7 +95,7 @@ export function StatsCharts({
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="enrollment" name="등록상담" fill="var(--color-chart-1)" />
-                <Bar dataKey="student" name="학생상담" fill="var(--color-gold)" />
+                <Bar dataKey="student" name="원생상담" fill="var(--color-gold)" />
               </BarChart>
             </ResponsiveContainer>
           </div>

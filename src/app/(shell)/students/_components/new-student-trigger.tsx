@@ -13,8 +13,8 @@ export function NewStudentTrigger() {
   const openFormWindow = useOpenFormWindow();
 
   return (
-    <Button onClick={(e) => openFormWindow("/students/new", "새 학생", e)}>
-      <EyIcon name="plus" size={13} className="mr-1" />새 학생
+    <Button onClick={(e) => openFormWindow("/students/new", "새 원생", e)}>
+      <EyIcon name="plus" size={13} className="mr-1" />새 원생
     </Button>
   );
 }

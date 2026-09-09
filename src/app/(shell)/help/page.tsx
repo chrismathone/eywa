@@ -24,9 +24,9 @@ const QUICKSTART: { title: string; desc: string; href: string; hrefLabel: string
   },
   {
     title: "학생 등록하기",
-    desc: "학생목록에서 한 명씩 등록하거나, 엑셀 파일로 여러 명을 한 번에 올릴 수 있어요.",
+    desc: "원생목록에서 한 명씩 등록하거나, 엑셀 파일로 여러 명을 한 번에 올릴 수 있어요.",
     href: "/students",
-    hrefLabel: "학생목록",
+    hrefLabel: "원생목록",
   },
   {
     title: "반에 배정하기",
@@ -97,7 +97,7 @@ const MENUS: { id: MenuKey; label: string; href: string; description: string }[]
   },
   {
     id: "students",
-    label: "학생목록",
+    label: "원생목록",
     href: "/students",
     description:
       "학생을 등록·검색하고, 상세에서 수강 반·출결·성적·상담 이력을 봅니다. 엑셀로 여러 명을 한 번에 등록할 수도 있어요.",
@@ -117,7 +117,7 @@ const MENUS: { id: MenuKey; label: string; href: string; description: string }[]
   },
   {
     id: "consultations",
-    label: "학생상담",
+    label: "원생상담",
     href: "/consultations",
     description: "재원생 면담 기록. 녹음하면 AI가 학습·정서 케어 포인트를 정리하고, 후속 조치를 챙겨줍니다.",
   },
@@ -212,7 +212,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "엑셀·구글시트로 학생이나 시간표를 가져올 수 있나요?",
-    a: "네. 학생목록·시간표의 ‘가져오기’를 쓰면 됩니다. 먼저 ‘엑셀’로 내보내 그 형식대로 편집한 뒤 다시 올리면, 무엇이 바뀌는지 미리보기로 보여주고 확인을 받은 다음 반영합니다. 구글시트로 편집했다면 .xlsx로 내려받아 올리면 돼요.",
+    a: "네. 원생목록·시간표의 ‘가져오기’를 쓰면 됩니다. 먼저 ‘엑셀’로 내보내 그 형식대로 편집한 뒤 다시 올리면, 무엇이 바뀌는지 미리보기로 보여주고 확인을 받은 다음 반영합니다. 구글시트로 편집했다면 .xlsx로 내려받아 올리면 돼요.",
   },
   {
     q: "상담이나 회의를 녹음하면 어떻게 되나요?",

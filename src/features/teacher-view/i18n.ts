@@ -1447,8 +1447,8 @@ export const SHEET_DICT = {
   },
 
   // ── 학생목록(/students) — 머리·툴바 필터·표 ─────────────────────
-  "stu.title": { ko: "학생목록", en: "Student list" },
-  "stu.eyebrow": { ko: "학생 관리", en: "Student management" },
+  "stu.title": { ko: "원생목록", en: "Student list" },
+  "stu.eyebrow": { ko: "원생 관리", en: "Student management" },
   "stu.desc": { ko: "재원 {n}명 · {basis}", en: "{n} enrolled · {basis}" },
   "stu.basis.mine": { ko: "담당 과목 기준", en: "your subjects" },
   "stu.basis.settings": { ko: "학원설정 과목 기준", en: "the academy's subjects" },

@@ -640,7 +640,9 @@ describe("🔴 학생목록은 사전만 본다 — 화면 파일에 한글 리�
   });
 
   it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
-    expect(sheetT("ko", "stu.title")).toBe("학생목록");
+    // ⚠️ 2026-09-09에 **이름만** 바뀌었다(원장 *"메뉴와 관련된 모든 학생을 원생으로"*) — 이 핀은
+    //    en 전환 때 한국어가 조용히 바뀌는 것을 막는 자물쇠라, 의도적 개명이면 여기 값을 함께 고친다.
+    expect(sheetT("ko", "stu.title")).toBe("원생목록");
     expect(sheetTf("ko", "stu.desc", { n: 3, basis: sheetT("ko", "stu.basis.mine") })).toBe(
       "재원 3명 · 담당 과목 기준",
     );
