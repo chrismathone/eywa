@@ -10,6 +10,7 @@ import {
   inclusiveDateWindowStart,
   formatKoreanDate,
   kstDateOf,
+  kstLocalToIso,
   kstTimeOf,
 } from "./date-kst";
 
@@ -139,5 +140,31 @@ describe("kstTimeOf — 타임스탬프를 KST 시각으로(UTC slice 금지)", 
     expect(kstTimeOf("   ")).toBeNull();
     expect(kstTimeOf("garbage")).toBeNull();
     expect(kstTimeOf(new Date(NaN))).toBeNull();
+  });
+});
+
+describe("kstLocalToIso — datetime-local 값은 KST로 읽는다", () => {
+  it("타임존 없는 벽시계는 KST로 해석한다(서버 UTC에서 9시간 밀리던 것)", () => {
+    // 원장 제보 2026-09-09: 13:12 KST에 만든 상담이 13:12Z(=22:12 KST)로 앉아 목록이 전부 "방금 전".
+    expect(kstLocalToIso("2026-09-09T13:12")).toBe("2026-09-09T04:12:00.000Z");
+    expect(kstLocalToIso("2026-09-09T13:12:30")).toBe("2026-09-09T04:12:30.000Z");
+  });
+
+  it("오후 입력이 다음 날로 넘어가지 않는다", () => {
+    // 16:00 KST → 07:00Z(같은 날). 예전엔 16:00Z = 다음 날 01:00 KST가 됐다.
+    expect(kstLocalToIso("2026-09-09T16:00")).toBe("2026-09-09T07:00:00.000Z");
+  });
+
+  it("타임존이 이미 붙은 값은 그대로 읽는다(녹음 폼은 클라에서 변환해 보낸다)", () => {
+    expect(kstLocalToIso("2026-09-09T04:12:00.000Z")).toBe("2026-09-09T04:12:00.000Z");
+    expect(kstLocalToIso("2026-09-09T13:12:00+09:00")).toBe("2026-09-09T04:12:00.000Z");
+  });
+
+  it("빈 값·해석 불가는 null(없는 시각을 지어내지 않는다)", () => {
+    expect(kstLocalToIso("")).toBeNull();
+    expect(kstLocalToIso("   ")).toBeNull();
+    expect(kstLocalToIso(null)).toBeNull();
+    expect(kstLocalToIso(undefined)).toBeNull();
+    expect(kstLocalToIso("어제")).toBeNull();
   });
 });

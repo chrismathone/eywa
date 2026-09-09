@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
-import { kstDateOf } from "@/lib/date-kst";
+import { kstDateOf, kstLocalToIso } from "@/lib/date-kst";
 
 type CareFocus = {
   priority: "high" | "medium" | "low";
@@ -231,7 +231,9 @@ export async function createStudentConsultation(
       tenant_id: user.tenantId,
       student_id: input.studentId,
       counselor_id: input.counselorId ?? user.id,
-      consulted_at: new Date(input.consultedAt).toISOString(),
+      // 🔴 `new Date(값)`으로 읽지 말 것 — 폼이 보내는 건 **타임존 없는 KST 벽시계**라 서버(UTC)가
+      //    그대로 읽으면 9시간 뒤로 앉는다(원장 제보 2026-09-09, date-kst `kstLocalToIso` 주석).
+      consulted_at: kstLocalToIso(input.consultedAt) ?? new Date().toISOString(),
       category: input.category,
       subject: input.subject,
       audience: input.audience,
@@ -290,7 +292,9 @@ export async function updateStudentConsultation(
     .update({
       student_id: input.studentId,
       counselor_id: input.counselorId ?? user.id,
-      consulted_at: new Date(input.consultedAt).toISOString(),
+      // 🔴 `new Date(값)`으로 읽지 말 것 — 폼이 보내는 건 **타임존 없는 KST 벽시계**라 서버(UTC)가
+      //    그대로 읽으면 9시간 뒤로 앉는다(원장 제보 2026-09-09, date-kst `kstLocalToIso` 주석).
+      consulted_at: kstLocalToIso(input.consultedAt) ?? new Date().toISOString(),
       category: input.category,
       subject: input.subject,
       audience: input.audience,
