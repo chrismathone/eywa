@@ -32,6 +32,8 @@ import {
 } from "@/features/onescreen/classnote-guard";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
+import { UNSENT_FILTER } from "@/features/report-admin/report-filters";
+import { filterUnsentSendable, type UnsentRow } from "@/features/report-admin/unsent-sendable";
 import {
   absenceDigestBody,
   buildAbsenceEvents,
@@ -539,7 +541,7 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
 
   const { data, error } = await admin
     .from("lesson_reports")
-    .select("id, student_id, report_date, subject, class_id, makeup, student:student_id ( name )")
+    .select("id, student_id, report_date, subject, class_id, makeup, notes, student:student_id ( name )")
     .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
     .is("classnote_status", null)
     .is("revoked_at", null)
@@ -551,46 +553,54 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   if (error) throw new Error(`detectUnsentReports query: ${error.message}`);
 
   const subjects = buildSubjectMaps(settings.operations.subjects);
-  // '수업보고서 미발송' 반(0174a)은 재촉하지 않는다 — 그 반은 애초에 보고서를 안 쓰기로 한 반이고,
-  // 재촉을 줄이는 방향은 항상 안전하다(보낼 수 있는데 안 조르는 건 거짓말이 아니다).
-  // ⚠️ class_id가 NULL인 건(보강·이관분)은 반 판정이 불가능하니 그대로 둔다 — 모르면 빼지 않는다.
-  const optoutClassIds = await fetchReportOptoutClassIds(admin, tenantId);
-  const gated = (data ?? []).filter(
-    (row) =>
-      isClassnoteAllowed(row.report_date as string, today) &&
-      isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects) &&
-      !(row.class_id && optoutClassIds.has(row.class_id as string)),
-  );
-  // 결석 게이트(#77) — 발송 콘솔(sendClassnoteForUnsent)과 게이트 동일 불변식: 원스크린 save는 결석도
-  // 저장하는 게 정책이라, 결석이라 **보낼 수 없는** 저장분을 '미발송'으로 재촉하면 거짓 알림이 된다.
-  // 보강 보고서(makeup)는 게이트 제외(발송 콘솔과 동일). 조회 실패는 throw → 외곽 try/catch가 기록
-  // (그날 재촉 생략 = fail-closed, 다음 cron 재시도).
-  // 반 단위 판정(0134a) — 발송 콘솔과 동일 규약(게이트 불변식이 갈라지면 "보낼 수 없는 건"을 재촉한다).
-  const gateKeyOf = (row: (typeof gated)[number]) => ({
-    studentId: row.student_id as string,
-    reportDate: (row.report_date as string).slice(0, 10),
-    subject: row.subject as string | null,
-    classId: (row.class_id as string | null) ?? null,
+  // 🔴 게이트는 발송 콘솔·발송 큐 카드와 **같은 한 벌**([`unsent-sendable.ts`]) — 갈라지면 "보낼 수 없는 건"을
+  //    재촉하거나(거짓 알림) 카드 숫자와 알림 숫자가 어긋난다([[#77]]).
+  //    기한·과목 opt-in·'수업보고서 미발송' 반(0174a)·**멘트 유무**·그날 결석이 한 함수 안에 있다.
+  //    ⚠️ 멘트 게이트는 2026-09-09에 여기로 들어왔다 — 종전엔 알림만 이 항목이 없어, 발송 콘솔이 거절하는
+  //       빈 멘트 보고서까지 재촉하고 있었다.
+  //    ⚠️ class_id가 NULL인 건(보강·이관분)은 반 판정이 불가능하니 그대로 둔다 — 모르면 빼지 않는다.
+  const rows: (UnsentRow & { studentName: string })[] = (data ?? []).map((row) => {
+    const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
+    return {
+      id: row.id as string,
+      studentId: row.student_id as string,
+      reportDate: (row.report_date as string).slice(0, 10),
+      subject: row.subject as string | null,
+      classId: (row.class_id as string | null) ?? null,
+      makeup: row.makeup as boolean | null,
+      ment: (row.notes as string | null) ?? null,
+      studentName: student?.name ?? "(학생)",
+    };
   });
-  const absentBlocked = await getAbsenceBlockedKeys(
+  const optoutClassIds = await fetchReportOptoutClassIds(admin, tenantId);
+  // 결석 게이트(#77): 원스크린 save는 결석도 저장하는 게 정책이라, 결석이라 **보낼 수 없는** 저장분을
+  // '미발송'으로 재촉하면 거짓 알림이 된다. 보강 보고서(makeup)는 게이트 제외(발송 콘솔과 동일).
+  // 반 단위 판정(0134a). 조회 실패는 throw → 외곽 try/catch가 기록(그날 재촉 생략 = fail-closed).
+  const keyOf = (row: UnsentRow) => ({
+    studentId: row.studentId,
+    reportDate: row.reportDate,
+    subject: row.subject,
+    classId: row.classId,
+  });
+  const absenceBlockedKeys = await getAbsenceBlockedKeys(
     admin,
     tenantId,
-    gated.filter((row) => !row.makeup).map(gateKeyOf),
+    rows.filter((row) => !row.makeup).map(keyOf),
   );
   const candidates = buildUnsentReportEvents(
-    gated
-      .filter((row) => row.makeup || !absentBlocked.has(absenceKeyOf(gateKeyOf(row))))
-      .map((row) => {
-        const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
-        const subject = row.subject as string | null;
-        return {
-          reportId: row.id as string,
-          studentId: row.student_id as string,
-          studentName: student?.name ?? "(학생)",
-          subjectLabel: (subject ? subjects.labelOf(subject) : null) ?? subject ?? "수업",
-          reportDate: (row.report_date as string).slice(0, 10),
-        };
-      }),
+    filterUnsentSendable(rows, {
+      today,
+      classnoteSubjects: settings.report.classnoteSubjects,
+      optoutClassIds,
+      absenceBlockedKeys,
+      absenceKeyOf: (row) => absenceKeyOf(keyOf(row)),
+    }).map((row) => ({
+      reportId: row.id,
+      studentId: row.studentId,
+      studentName: row.studentName,
+      subjectLabel: (row.subject ? subjects.labelOf(row.subject) : null) ?? row.subject ?? "수업",
+      reportDate: row.reportDate,
+    })),
   );
   const cold = await isColdStart(admin, tenantId, "unsent_report");
   const fresh = (await recordNew(admin, tenantId, "unsent_report", candidates, cold)) as UnsentReportEvent[];
@@ -608,7 +618,9 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
         body: masterBody,
         // ⚠️ 발송 콘솔은 '목록'(tab=list, ReportList가 sendClassnoteForUnsent 호출)이다 —
         // tab=writing은 '작성률' 표라 미발송 목록도 발송 버튼도 없다(적대 리뷰 확정 결함, 2026-07-17).
-        link: "/lesson-reports?tab=list",
+        // 목록에서 **그 건들만** 걸러 보여 준다(`status=__unsent__`) — 종전엔 이번 달 전건이 떠서
+        // 원장이 "알림엔 미발송이 많은데 들어가면 없다"고 물었다(2026-09-09 — 알림이 옳았다).
+        link: `/lesson-reports?tab=list&status=${encodeURIComponent(UNSENT_FILTER)}`,
         actorId: null,
       });
     }

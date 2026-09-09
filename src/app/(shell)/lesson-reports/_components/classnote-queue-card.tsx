@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
+import { UNSENT_FILTER } from "@/features/report-admin/report-filters";
 import { AlertTriangle } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
@@ -192,7 +195,10 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   // 거짓 완료를 띄우고 자동 갱신까지 꺼 버린다(적대 검수 확정 결함).
   const [epoch, setEpoch] = useState(0);
   const view = live && live.base === served ? live.data : served;
-  const { summary, items, pending, workers, days, expiredUnsent, todayKst } = view;
+  const { summary, items, pending, workers, days, expiredUnsent, todayKst, unsentSendable, unsentOldestDate } = view;
+  // 창(embed) 안이면 embed=1을 유지해야 크롬리스가 안 깨진다(FaceTabs와 같은 규약).
+  const embed = useEmbed();
+  const unsentHref = `/lesson-reports?tab=list&status=${encodeURIComponent(UNSENT_FILTER)}`;
 
   // 자동 갱신 조건·주기는 순수 함수 단일 소스 — 표시 문구도 같은 판정을 쓴다.
   const workerOnline = workers.some((w) => w.online);
@@ -425,6 +431,19 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
         {/* stuck은 processing의 하위집합 — '주의'로 분리 계상하므로 여기선 제외(3분할 합=전체 유지) */}
         <BigStatInline label="대기·처리중" value={summary.queued + summary.processing - summary.stuck} />
         <BigStatInline label="주의" value={attention} valueClass={attention > 0 ? "text-danger" : undefined} />
+        {/* 🔴 위 셋은 **큐에 들어온 것**만 센다 — 저장만 하고 발송을 안 누른 건은 구조적으로 0이라,
+            알림이 "미발송 5건"이라 해도 이 카드는 "0 대기"였다(원장 2026-09-09 *"알림이 틀린거야?"* —
+            알림이 옳았다). 그래서 같은 줄에 세우고, 누르면 목록에서 그 건만 걸러 보여 준다.
+            ⚠️ 조회 실패(-1)면 줄을 감춘다 — 0으로 그리면 "미발송 없음"이라는 거짓 안심이 된다. */}
+        {(unsentSendable ?? 0) > 0 ? (
+          <Link
+            href={embed ? withEmbed(unsentHref) : unsentHref}
+            className="rounded-md outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/55"
+            title="저장만 되고 아직 발송 이력이 없는 보고서 — 눌러서 목록에서 확인·발송"
+          >
+            <BigStatInline label="미발송(저장만)" value={unsentSendable ?? 0} valueClass="text-amber" />
+          </Link>
+        ) : null}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Stat label="대기" value={summary.queued} tone="border-line text-text-dim border" />
@@ -459,6 +478,17 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
 
       {/* 기한을 넘겨 잃은 건 — 되살릴 수 없으므로 목록이 아니라 한 줄 경고로만(원장이 볼 곳은 위 주의 목록).
           같은 학생이 계속 쌓인다면 원인(ClassNote 보드 배정·구분 이름)이 아직 안 고쳐졌다는 뜻이다. */}
+      {(unsentSendable ?? 0) > 0 ? (
+        <p className="bg-amber-soft text-amber mt-3 rounded-md px-3 py-2 text-xs break-keep">
+          <b>{unsentSendable}건</b>은 선생님이 저장만 하고 발송을 누르지 않은 보고서입니다
+          {unsentOldestDate ? ` (가장 오래된 것 ${unsentOldestDate.slice(5).replace("-", "/")})` : ""} — 위 대기·처리중에는
+          아직 들어오지 않은 건이라 이 카드의 다른 숫자에는 잡히지 않습니다.{" "}
+          <Link href={embed ? withEmbed(unsentHref) : unsentHref} className="font-bold underline underline-offset-2">
+            목록에서 보기
+          </Link>
+        </p>
+      ) : null}
+
       {expiredUnsent > 0 ? (
         <p className="bg-amber-soft text-amber mt-3 rounded-md px-3 py-2 text-xs">
           최근 30일 <b>{expiredUnsent}건</b>은 재발송 기한(7일)을 넘겨 학부모에게 나가지 못했습니다 — 같은 학생이

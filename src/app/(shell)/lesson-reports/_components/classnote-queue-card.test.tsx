@@ -68,6 +68,8 @@ function waitingView(over: Partial<ClassnoteQueueView> = {}): ClassnoteQueueView
     sendEnabled: true,
     expiredUnsent: 0,
     todayKst: "2026-07-22",
+    unsentSendable: 0,
+    unsentOldestDate: null,
     ...over,
   };
 }
@@ -85,6 +87,8 @@ function drainedView(over: Partial<ClassnoteQueueView> = {}): ClassnoteQueueView
     sendEnabled: true,
     expiredUnsent: 0,
     todayKst: "2026-07-22",
+    unsentSendable: 0,
+    unsentOldestDate: null,
     ...over,
   };
 }
