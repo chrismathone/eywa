@@ -62,7 +62,7 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
  * 비로그인·super_admin(테넌트 설정 위에 있음)·조회 실패는 테넌트 매트릭스 그대로(fail-open, 위와 동일 철학).
  *
  * ⚠️ **코드 기반 개인 예외**(파일럿 기능)도 같은 자리에서 얹는다 — 지금은 휴가관리(2026-08-14,
- *    이승엽·김예원)뿐이다. 저장된 설정보다 **먼저** 넣어 원장이 owner 콘솔에서 덮어쓸 수 있게 한다.
+ *    이승엽·김예원 + 연차 조정 담당 박소선)뿐이다. 저장된 설정보다 **먼저** 넣어 원장이 owner 콘솔에서 덮어쓸 수 있게 한다.
  *    이렇게 두면 사이드바·requireAccess·서버 액션이 전부 한 게이트를 공유한다(#77).
  */
 export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {

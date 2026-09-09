@@ -17,10 +17,14 @@ import {
   validateLeaveRange,
   type LeaveKind,
 } from "@/features/leave/request-days";
+import { formatSignedDays, grantedTotal, remainingDays } from "@/features/leave/balance";
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
 import { nextDocNo } from "../doc-no";
 import { normalizeLine, normalizeRefs, validateApprovalLine } from "../line";
 import { isMissingRelation } from "./queries";
+// 잔여 산식은 한 곳에서만 — 조정(0252a)이 붙은 뒤로 "화면은 18일인데 기안은 15일까지"가 생기지 않게
+// 부여·사용 조회를 직원관리 '연차 관리' 화면과 **같은 함수**로 공유한다.
+import { adjustmentDaysFor, reservedLeaveDays } from "@/features/leave/server/admin";
 import {
   APPROVAL_FORM_LABEL,
   EXPENSE_CATEGORIES,
@@ -139,28 +143,6 @@ async function activeStaffIds(tenantId: string): Promise<string[]> {
     .limit(500); // 직원 수십 명 규모 — 절단 방지용 명시 상한(B2)
   if (error) throw new Error(`결재자 후보 확인 실패 — ${error.message}`);
   return (data ?? []).map((u) => String(u.id));
-}
-
-/** 이 구간에서 이미 잡아 둔 연차(승인 + 진행중). 진행중도 빼야 같은 연차를 두 번 올리지 못한다. */
-async function reservedLeaveDays(args: {
-  tenantId: string;
-  userId: string;
-  periodStart: string;
-}): Promise<number> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("leave_forms")
-    .select("days, doc:approval_documents!leave_forms_document_id_fkey(status)")
-    .eq("tenant_id", args.tenantId)
-    .eq("user_id", args.userId)
-    .eq("period_start", args.periodStart)
-    .limit(500); // 한 사람·한 구간(1년)이라 상한에 닿지 않는다(절단 방지용 명시 상한, B2)
-  if (error) throw new Error(`잔여 연차 확인 실패 — ${error.message}`);
-  const total = (data ?? []).reduce((acc, r) => {
-    const status = (r as { doc?: { status?: string } | null }).doc?.status;
-    return status === "approved" || status === "pending" ? acc + Number(r.days ?? 0) : acc;
-  }, 0);
-  return Math.round(total * 100) / 100; // 0.25(반반차) 해상도 보존 — 소수 1자리 반올림 금지
 }
 
 // ── 기안(상신) 공통 파이프라인 ───────────────────────────────────────────────
@@ -359,18 +341,29 @@ export async function submitLeaveDraft(
   if (invalid) return { error: invalid };
   const days = countLeaveDays(start, end, kind);
 
+  // 부여 = 법정 계산 + **조정**(이월·특별휴가, 0252a) — 화면(getMyLeaveBalance)과 같은 식(balance.ts)이라
+  // 잔여 숫자가 두 곳에서 갈리지 않는다. 조정 조회가 진짜로 실패하면 **거절하지 않고 알린다**
+  // (조용히 0으로 떨어뜨리면 이월을 받은 사람이 이유도 모르고 기안을 못 한다).
   let reserved: number;
+  let adjustment: number;
   try {
-    reserved = await reservedLeaveDays({ tenantId: user.tenantId, userId: user.id, periodStart: period.start });
+    [reserved, adjustment] = await Promise.all([
+      reservedLeaveDays({ tenantId: user.tenantId, userId: user.id, period }),
+      adjustmentDaysFor({ tenantId: user.tenantId, userId: user.id, period }),
+    ]);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "잔여 연차 확인 실패" };
   }
-  const remaining = Math.max(0, Math.round((period.granted - reserved) * 100) / 100); // 0.25 단위 보존
+  const granted = grantedTotal(period.granted, adjustment);
+  const remaining = remainingDays({ granted, used: reserved, pending: 0 });
   if (days > remaining) {
+    const grantedNote = adjustment === 0
+      ? formatLeaveDays(granted)
+      : `${formatLeaveDays(granted)}(법정 ${formatLeaveDays(period.granted)} · 조정 ${formatSignedDays(adjustment)})`;
     return {
       error:
         remaining <= 0
-          ? `남은 연차가 없습니다 (${period.label} 부여 ${formatLeaveDays(period.granted)} 전부 사용·결재중)`
+          ? `남은 연차가 없습니다 (${period.label} 부여 ${grantedNote} 전부 사용·결재중)`
           : `잔여 연차 ${formatLeaveDays(remaining)}보다 많이 신청할 수 없습니다 (신청 ${formatLeaveDays(days)})`,
     };
   }
@@ -397,9 +390,11 @@ export async function submitLeaveDraft(
         reason,
         period_start: period.start,
         period_end: period.end,
-        granted_days: period.granted,
+        // 🔑 동결값은 **그때 실제로 쓸 수 있던 부여**(법정 + 조정)다 — 법정분만 적으면 이월을 받은 사람의
+        //    문서가 "부여 15일인데 18일째 사용"처럼 읽힌다.
+        granted_days: granted,
       }),
-    auditMetadata: { days, remaining, granted: period.granted, period: leavePeriodLabel(period) },
+    auditMetadata: { days, remaining, granted, period: leavePeriodLabel(period) },
   });
 }
 

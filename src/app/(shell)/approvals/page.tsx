@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { leavePeriodLabel } from "@/features/leave/accrual";
 import { formatLeaveDays } from "@/features/leave/request-days";
+import { formatSignedDays } from "@/features/leave/balance";
 import { getApprovalBoxes, getMyLeaveBalance, needsMyDeferredConfirm } from "@/features/approvals/server/queries";
 import { DocList } from "./_components/doc-list";
 
@@ -152,10 +153,16 @@ export default async function ApprovalsPage({
             <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
               <BigStat
                 label="연차 부여"
-                value={formatLeaveDays(period.granted)}
+                value={formatLeaveDays(balance.granted)}
                 tone="primary"
                 icon={<MenuGlyph name="calendarCheck" size={22} />}
-                sub={period.label}
+                // 조정(이월·특별휴가)이 있으면 어디서 온 일수인지 밝힌다 — 법정 계산과 다른 숫자가
+                // 아무 설명 없이 떠 있으면 본인도 사무실도 근거를 못 찾는다.
+                sub={
+                  balance.adjustment === 0
+                    ? period.label
+                    : `${period.label} · 법정 ${formatLeaveDays(period.granted)} · 조정 ${formatSignedDays(balance.adjustment)}`
+                }
               />
               {/* ⚠️ BigStat의 tone은 **아이콘 칩에만** 칠해진다 — 아이콘이 없으면 톤을 줘도 화면엔
                   아무 색도 안 나온다(v4 이전 이 세 칸이 그래서 통째로 무채색이었다).

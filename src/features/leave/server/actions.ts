@@ -1,0 +1,294 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { kstToday } from "@/lib/date-kst";
+import { logAction } from "@/features/audit/server/log";
+import { resolveLeavePeriod } from "../accrual";
+import { applyLeaveGrantOverride } from "../test-grants";
+import { formatLeaveDays } from "../request-days";
+import {
+  deltaForTotal,
+  formatSignedDays,
+  grantedTotal,
+  leaveRowMatchesPeriod,
+  MAX_LEAVE_DELTA,
+  MAX_LEAVE_TOTAL,
+  roundDays,
+} from "../balance";
+import { canAdjustLeave, LEAVE_ADJUST_DENIED_MSG } from "../access";
+import { adjustmentDaysFor, reservedLeaveDays } from "./admin";
+import { isMissingRelation } from "@/features/approvals/server/queries";
+import type { LeaveActionState } from "../action-state";
+
+/**
+ * 연차 조정 쓰기 — 이월·특별휴가 부여와 정산 차감(원장 2026-09-08).
+ *
+ * 🔴 게이트는 **화면과 같은 함수**(`canAdjustLeave`) — 직원관리를 볼 수 있다고 남의 연차까지 고칠 수
+ *    있는 건 아니다([[#77]]). 직원관리 메뉴는 데스크 직원 여럿에게 열려 있으니, 이 액션이 좁은 명단을
+ *    한 번 더 본다.
+ * 🔴 **구간·현재값은 클라를 믿지 않고 서버가 다시 계산한다** — 폼이 보낸 period나 "현재 총 부여"를
+ *    그대로 쓰면 오래된 화면(다른 사람이 그 사이 조정한 경우)이 남의 조정을 덮어 쓴 값을 적는다.
+ * ⚠️ admin(service_role)은 RLS 우회 — 모든 쿼리에 `tenant_id` 명시 필터([[#104]]).
+ */
+
+const MAX_REASON = 200;
+// 일수 상한은 화면 미리보기와 **같은 상수**를 읽는다(balance.ts) — 값이 갈리면 버튼은 열려 있는데
+// 서버만 거절하거나 그 반대가 된다. MAX_LEAVE_DELTA는 DB check(±100)와 같은 값이다.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const TABLE_MISSING_MSG =
+  "연차 조정 표가 아직 준비되지 않았습니다 — 마이그레이션 0252a를 적용하면 바로 쓸 수 있습니다";
+
+async function requireAdjuster() {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" as const };
+  if (!canAdjustLeave(user.id, await isCurrentUserSuperAdmin())) {
+    return { error: LEAVE_ADJUST_DENIED_MSG as string };
+  }
+  return { user };
+}
+
+/** 0.25(반반차) 단위인가 — 연차 차감 해상도와 같은 격자에만 값을 놓는다. */
+function isQuarterStep(v: number): boolean {
+  return Math.round(v * 100) % 25 === 0;
+}
+
+/** 조정 대상 + 그 사람의 현재 구간·부여·사용을 한 번에 확정한다(액션 둘이 공유). */
+async function loadTarget(tenantId: string, userId: string) {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("users")
+    .select("id, display_name, hire_date, status, system_role")
+    .eq("id", userId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error) return { error: `직원 조회 실패 — ${error.message}` };
+  if (!data) return { error: "대상 직원을 찾을 수 없습니다" };
+  if (data.status === "inactive") return { error: "퇴사한 직원의 연차는 조정할 수 없습니다" };
+  if (data.system_role === "student") return { error: "학생 계정은 연차 대상이 아닙니다" };
+
+  const today = kstToday();
+  const period = applyLeaveGrantOverride(userId, resolveLeavePeriod((data.hire_date as string | null) ?? null, today));
+  if (!period) {
+    return {
+      error: "입사일이 등록되지 않아 연차 구간을 계산할 수 없습니다 — 직원관리에서 입사일을 먼저 등록하세요",
+    };
+  }
+
+  const [adjustment, reserved] = await Promise.all([
+    adjustmentDaysFor({ tenantId, userId, period }),
+    reservedLeaveDays({ tenantId, userId, period }),
+  ]);
+  return {
+    target: {
+      id: userId,
+      name: ((data.display_name as string | null) ?? "").trim() || "(이름 없음)",
+      period,
+      adjustment,
+      /** 이미 쓴 + 결재중 — 총 부여를 이 아래로 내리면 잔여가 음수가 된다. */
+      reserved,
+      currentTotal: grantedTotal(period.granted, adjustment),
+    },
+  };
+}
+
+/**
+ * 조정 추가 — 폼은 **가감(±N)** 또는 **총 부여(N일로)** 중 하나로 받고, 저장은 언제나 가감 한 줄이다
+ * (0252a: 덮어쓰기가 아니라 행 누적 — 합이 곧 답이고 이력이 곧 근거).
+ */
+export async function addLeaveAdjustment(
+  _prev: LeaveActionState,
+  formData: FormData,
+): Promise<LeaveActionState> {
+  const gate = await requireAdjuster();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const userId = String(formData.get("userId") ?? "").trim();
+  if (!UUID_RE.test(userId)) return { error: "대상 직원을 선택하세요" };
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "조정 사유를 적어 주세요 — 나중에 누구도 이유를 되찾지 못합니다" };
+  if (reason.length > MAX_REASON) return { error: `사유는 ${MAX_REASON}자를 넘을 수 없습니다` };
+
+  const mode = String(formData.get("mode") ?? "delta") === "total" ? "total" : "delta";
+  // 🔴 **빈 칸을 먼저 거른다** — `Number("")`는 NaN이 아니라 **0**이라 그냥 통과하고, '총 부여를 지정'
+  //    모드에서 그 0이 "총 0일로"로 읽혀 사유만 적고 엔터를 친 순간 그 직원의 연차가 통째로 0이 된다
+  //    (사용 이력이 없으면 하한 검사도 0 < 0이라 안 걸린다 — 적대 리뷰 2026-09-08).
+  const daysRaw = String(formData.get("days") ?? "").trim();
+  if (!daysRaw) return { error: "일수를 입력하세요" };
+  const raw = Number(daysRaw);
+  if (!Number.isFinite(raw)) return { error: "일수를 숫자로 입력하세요" };
+  if (!isQuarterStep(raw)) return { error: "연차는 0.25일(반반차) 단위로만 조정할 수 있습니다" };
+
+  let loaded;
+  try {
+    loaded = await loadTarget(user.tenantId, userId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "연차 조회 실패" };
+  }
+  if ("error" in loaded) return { error: loaded.error };
+  const { target } = loaded;
+
+  let delta: number;
+  if (mode === "total") {
+    const total = roundDays(raw);
+    if (total < 0) return { error: "총 부여 일수는 0일보다 작을 수 없습니다" };
+    if (total > MAX_LEAVE_TOTAL) return { error: `총 부여 일수는 ${MAX_LEAVE_TOTAL}일을 넘을 수 없습니다` };
+    delta = deltaForTotal(total, target.currentTotal);
+    if (delta === 0) {
+      return { error: `이미 총 ${formatLeaveDays(target.currentTotal)}입니다 — 바뀌는 값이 없습니다` };
+    }
+  } else {
+    delta = roundDays(raw);
+    if (delta === 0) return { error: "0일은 조정이 아닙니다 — 늘릴 일수(+)나 줄일 일수(−)를 입력하세요" };
+  }
+  if (Math.abs(delta) > MAX_LEAVE_DELTA) {
+    return { error: `한 번에 조정할 수 있는 일수는 ${MAX_LEAVE_DELTA}일까지입니다` };
+  }
+
+  const newTotal = grantedTotal(target.period.granted, roundDays(target.adjustment + delta));
+  // 🔴 이미 쓴(승인)·결재중인 일수 아래로는 못 내린다 — 내리면 잔여가 음수가 되는데 화면은 0으로 가려
+  //    "다 썼다"처럼 보이고, 정작 승인된 휴가는 그대로 남는다(숫자가 사실과 어긋난 채 조용히 굳는다).
+  if (newTotal < target.reserved) {
+    return {
+      error: `이미 사용·결재중인 ${formatLeaveDays(target.reserved)}보다 적게 조정할 수 없습니다 (요청 결과 ${formatLeaveDays(newTotal)})`,
+    };
+  }
+  // 한 줄 상한(MAX_DELTA)만 두면 가감을 여러 번 쌓아 얼마든지 넘길 수 있다 — **결과 총액**도 막는다
+  // (총 부여 모드에서 사용자에게 말한 상한과 같은 값이어야 말이 맞는다).
+  if (newTotal > MAX_LEAVE_TOTAL) {
+    return {
+      error: `총 부여 일수는 ${MAX_LEAVE_TOTAL}일을 넘을 수 없습니다 (요청 결과 ${formatLeaveDays(newTotal)})`,
+    };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("leave_adjustments").insert({
+    tenant_id: user.tenantId,
+    user_id: userId,
+    period_start: target.period.start,
+    period_end: target.period.end,
+    days: delta,
+    reason,
+    created_by: user.id,
+  });
+  if (error) return { error: isMissingRelation(error) ? TABLE_MISSING_MSG : `저장 실패 — ${error.message}` };
+
+  await logAction({
+    action: "leave_adjust",
+    targetType: "user",
+    targetLabel: target.name,
+    metadata: {
+      days: delta,
+      before: target.currentTotal,
+      after: newTotal,
+      period: `${target.period.start} ~ ${target.period.end}`,
+      reason,
+    },
+  });
+  revalidatePath("/staff/annual-leave");
+  revalidatePath("/approvals"); // 본인 결재함의 연차 현황(잔여)도 바뀐다
+  return {
+    ok: true,
+    notice: `${target.name} 연차 ${formatSignedDays(delta)} — 총 ${formatLeaveDays(newTotal)}`,
+  };
+}
+
+/**
+ * 조정 취소(행 삭제) — 잘못 적은 한 줄을 되돌린다. 감사로그가 삭제 사실을 남긴다.
+ *
+ * 🔑 `loadTarget`을 쓰지 않는다 — 그쪽은 **새 조정을 넣을 수 있는가**를 묻는 문(재직·입사일 필수)이라,
+ *    퇴사했거나 입사일이 비는 사람의 잘못된 행을 **영영 못 지우는** 막다른 길이 된다. 지우는 것은
+ *    자격을 늘리지 않으므로 그 조건을 요구하지 않고, **잔여 하한만** 같은 구간일 때 확인한다.
+ */
+export async function deleteLeaveAdjustment(
+  _prev: LeaveActionState,
+  formData: FormData,
+): Promise<LeaveActionState> {
+  const gate = await requireAdjuster();
+  if ("error" in gate) return { error: gate.error };
+  const { user } = gate;
+
+  const id = String(formData.get("adjustmentId") ?? "").trim();
+  if (!UUID_RE.test(id)) return { error: "삭제할 조정을 찾을 수 없습니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readError } = await admin
+    .from("leave_adjustments")
+    .select("id, user_id, days, reason, period_start, period_end")
+    .eq("id", id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readError) {
+    return { error: isMissingRelation(readError) ? TABLE_MISSING_MSG : `조회 실패 — ${readError.message}` };
+  }
+  if (!row) return { error: "이미 삭제된 조정입니다" };
+
+  const targetId = String(row.user_id);
+  const { data: person } = await admin
+    .from("users")
+    .select("display_name, hire_date")
+    .eq("id", targetId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  const name = ((person?.display_name as string | null) ?? "").trim() || "(이름 없음)";
+  const period = applyLeaveGrantOverride(
+    targetId,
+    resolveLeavePeriod((person?.hire_date as string | null) ?? null, kstToday()),
+  );
+
+  const removed = Number(row.days) || 0;
+  // 지난 구간의 행이면 지금 잔여와 무관하다 — 현재 구간의 사용량으로 옛 행을 막으면 영영 못 지운다.
+  const samePeriod =
+    period !== null &&
+    leaveRowMatchesPeriod(
+      { periodStart: String(row.period_start), periodEnd: String(row.period_end) },
+      period,
+    );
+  let after: number | null = null;
+  if (samePeriod) {
+    let adjustment: number;
+    let reserved: number;
+    try {
+      [adjustment, reserved] = await Promise.all([
+        adjustmentDaysFor({ tenantId: user.tenantId, userId: targetId, period }),
+        reservedLeaveDays({ tenantId: user.tenantId, userId: targetId, period }),
+      ]);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "연차 조회 실패" };
+    }
+    after = grantedTotal(period.granted, roundDays(adjustment - removed));
+    if (after < reserved) {
+      return {
+        error: `이 조정을 지우면 총 ${formatLeaveDays(after)}이 되어 이미 사용·결재중인 ${formatLeaveDays(reserved)}보다 적어집니다`,
+      };
+    }
+  }
+
+  const { error } = await admin
+    .from("leave_adjustments")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { error: `삭제 실패 — ${error.message}` };
+
+  await logAction({
+    action: "leave_adjust_delete",
+    targetType: "user",
+    targetLabel: name,
+    metadata: {
+      days: removed,
+      // 지난 구간이면 "총 몇 일이 됐는지"를 모른다 — 현재 구간 숫자를 적으면 딴 구간의 사실이 된다.
+      ...(after === null ? {} : { after }),
+      period: `${row.period_start} ~ ${row.period_end}`,
+      reason: String(row.reason ?? ""),
+    },
+  });
+  revalidatePath("/staff/annual-leave");
+  revalidatePath("/approvals"); // 본인 결재함의 연차 현황(잔여)도 바뀐다
+  return { ok: true, notice: `${name} 연차 조정 ${formatSignedDays(removed)}을 취소했습니다` };
+}

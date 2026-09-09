@@ -639,6 +639,16 @@ describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", (
     { action: "approval_submit", meta: { days: 1, period: "2026-01-02 ~ 2027-01-01", granted: 100, remaining: 99 }, banned: ["days", "granted", "remaining", "period"] },
     { action: "approval_submit", meta: { amount: 120000, spendDate: "2026-08-10", category: "운영비" }, banned: ["amount", "spendDate", "category"] },
     { action: "approval_withdraw", meta: null },
+    {
+      action: "leave_adjust",
+      meta: { days: 3, before: 15, after: 18, period: "2026-01-02 ~ 2027-01-01", reason: "2025년도 미사용 연차 이월" },
+      banned: ["days", "before", "after", "period", "reason"],
+    },
+    {
+      action: "leave_adjust_delete",
+      meta: { days: -1.5, after: 15, period: "2026-01-02 ~ 2027-01-01", reason: "정산 차감 취소" },
+      banned: ["days", "after", "period", "reason"],
+    },
     { action: "approval_comment", meta: { docId: DOC } },
     { action: "approval_comment_delete", meta: { commentId: DOC2, docId: DOC } },
     {
