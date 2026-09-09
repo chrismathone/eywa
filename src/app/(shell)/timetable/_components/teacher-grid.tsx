@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { TeacherHeadCell } from "./teacher-head-cell";
 import { readableTextColor } from "@/lib/color-utils";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
@@ -43,6 +44,8 @@ const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, 
  *    (명단 줄 높이 `STU_H` 24→26과 같은 계열의 뒷북 상수).
  */
 const TIME_COL_W = 56;
+/** 강사뷰 열 순서의 저장 묶음 키 — 기본뷰의 요일 묶음(`mon-thu`…)과 한 그릇에 살되 서로 안 섞이게. */
+export const TEACHER_VIEW_ORDER_GROUP = "teacherview";
 const DAY_COL_W = 65; // 반명+방 chip(학생 없음). 강사×요일이 많아 가로 스크롤(2026-07-06 96→65 사용자 지정).
 const LANE_COL_W = 64; // 다중 레인(LAB 서브컬럼) 폭 — 레벨코드 반명(LT2 등) 기준. 시트도 좁은 서브컬럼.
 // 행 높이 = 분당 1.4px 고정(스텝 무관 블록 높이 동일 — step 10=14px/행, step 30=42px/행: 60분 수업은 항상 84px).
@@ -106,6 +109,7 @@ export function TeacherGridView({
   breakRanges,
   excludedTeachers,
   teacherOrder,
+  subject,
   showUnusedDays = true,
 }: {
   slots: ScheduleSlotWithStudents[];
@@ -131,8 +135,10 @@ export function TeacherGridView({
    * ⚠️ 값은 화면이 정하지 않는다 — 호출부가 **학원설정 교시표의 첫 교시**에서 뽑아 넘긴다(하드코딩 금지).
    */
   axisFloorMin?: number;
-  /** 강사 컬럼 순서 — 과목 설정 teacherViewOrder. 미설정 = 시트 미러 + 자리(JJ·LAB) 최우측. */
+  /** 강사 컬럼 순서 — **계정 저장 우선**, 없으면 과목 설정 teacherViewOrder, 그것도 없으면 시트 미러 + 자리 최우측. */
   teacherOrder?: readonly string[];
+  /** 지금 보고 있는 과목 키 — 드래그 저장이 과목별로 갈린다(기본뷰와 같은 축). */
+  subject?: string;
   /** 쉬는 시간 범위(HH:MM~HH:MM) — 과목 설정 teacherViewBreaks. 앞뒤 수업 붙은 강사 컬럼에만 셀 표시. */
   breakRanges?: { start: string; end: string }[];
   /** 가로줄(큰 섹션 경계) 미표시 강사 라벨 — 과목 설정 teacherViewLineExcluded. */
@@ -305,8 +311,19 @@ export function TeacherGridView({
               style={{ height: HEAD_TEACHER_H + HEAD_DAY_H }}
             />
             {prepared.map((t) => (
-              <th
+              // 🔴 **끌어서 강사 순서를 바꾼다**(원장 2026-09-09: *"강사뷰에서도 기본뷰처럼 강사 드래그해서
+              //    위치 바꾸도록. 사용자별 저장"*) — 기본뷰가 쓰던 머리칸을 **그대로** 재사용한다(드래그 규약·
+              //    저장 경로·병합이 한 벌이라야 두 뷰가 갈리지 않는다).
+              // 🔑 묶음 키는 `teacherview` 하나 — 강사뷰는 요일 묶음 축이 없고 열이 곧 강사다(기본뷰는
+              //    `mon-thu`처럼 요일 묶음마다 순서를 따로 가진다).
+              // ⚠️ 저장은 **계정**(`ui_prefs.timetable.teacherOrder`)이라 학원설정 '강사 순서'(전 직원 공용)와
+              //    **다른 축**이다 — 개인 저장이 있으면 그걸 먼저 쓴다(page.tsx에서 합친다).
+              <TeacherHeadCell
                 key={t.name}
+                subject={subject ?? "-"}
+                groupKey={TEACHER_VIEW_ORDER_GROUP}
+                teachers={prepared.map((x) => x.name)}
+                name={t.name}
                 colSpan={t.cols.reduce((a, c) => a + c.laneCount, 0)}
                 // ⚠️ 색이 없는 강사(색 미지정 + 영어 시트 강사 목록 밖)면 th 자체가 투명이라, sticky 헤더
                 // 아래로 흐르는 본문이 px-2 py-1 패딩 링 사이로 비쳐 보였다(#74와 같은 부류). 안쪽 span만
@@ -329,7 +346,7 @@ export function TeacherGridView({
                     <span className="text-xs font-bold opacity-85">({teacherNicknames[t.name]})</span>
                   ) : null}
                 </span>
-              </th>
+              </TeacherHeadCell>
             ))}
           </tr>
           {/* 요일 행 — 강사 밴드 바로 아래에 sticky. 다중 레인 요일은 레인 수만큼 가로 병합. */}

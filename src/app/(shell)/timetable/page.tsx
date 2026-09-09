@@ -90,7 +90,7 @@ import { WeekNav } from "./_components/week-nav";
 import { ScheduledImportBadge } from "./_components/scheduled-import-badge";
 import { getScheduledImports } from "@/features/timetable/server/scheduled-import-queries";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
-import { TeacherGridView } from "./_components/teacher-grid";
+import { TEACHER_VIEW_ORDER_GROUP, TeacherGridView } from "./_components/teacher-grid";
 import { TeacherOrderDialog } from "./_components/teacher-order-dialog";
 import { RoomMapView } from "./_components/room-map-view";
 import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
@@ -408,7 +408,19 @@ export default async function TimetablePage({
   );
   // 강사 컬럼 순서도 **라벨 문자열로** 열과 맞물린다 — 제외 강사와 같은 해석기를 통과시켜야
   // 예전에 닉네임으로 저장된 값도 계속 맞는다(마이그레이션 불필요).
-  const teacherViewOrder = resolveTeacherLabels(subjectRow?.teacherViewOrder ?? [], teacherLabelMap);
+  /**
+   * 강사뷰 열 순서 — **계정 저장이 먼저**(원장 2026-09-09 *"강사 드래그해서 위치 바꾸도록. 사용자별 저장"*),
+   * 없으면 학원설정 '강사 순서'(전 직원 공용), 그것도 없으면 시트 미러 + 자리(JJ·LAB) 최우측.
+   * 🔴 둘을 합치지 않는다 — 개인이 한 번이라도 끌었으면 그 사람 화면은 그 순서다(설정이 개인 선택을
+   *    덮으면 "끌어도 원래대로 돌아온다"가 된다). 순서는 정렬 힌트라 목록에 없는 강사는 뒤에 붙는다.
+   */
+  const personalTeacherViewOrder = viewPrefs.teacherOrder?.[subject]?.[TEACHER_VIEW_ORDER_GROUP];
+  const teacherViewOrder = resolveTeacherLabels(
+    personalTeacherViewOrder && personalTeacherViewOrder.length > 0
+      ? personalTeacherViewOrder
+      : (subjectRow?.teacherViewOrder ?? []),
+    teacherLabelMap,
+  );
   /**
    * 담임·강사 헤더에 `한글이름(영어이름)`을 적을 때 쓰는 맵 — **영어 과목에서만**(원장 2026-08-13).
    * 🔴 과목을 가리는 이유: 닉네임은 영어과 문화다. 실측(활성 12명 중) **김은정(Celine)이 비영어 반 8개**
@@ -1011,6 +1023,7 @@ export default async function TimetablePage({
               axisFloorMin={teacherAxisFloorMin}
               excludedTeachers={teacherViewExcluded}
               teacherOrder={teacherViewOrder}
+              subject={subject}
               showUnusedDays={!hideEmptyDays}
             />
           </div>
