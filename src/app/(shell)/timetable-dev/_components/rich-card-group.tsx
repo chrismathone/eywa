@@ -39,7 +39,10 @@ export const NAME_H = 40;
  * 정상 모드 헤더 = **수업명 + 그 아래 강의실**(원장 2026-08-11 *"강의실을 수업명 아래로 넣고 강의실 행 제거"*).
  * 전용 강의실 행(34px)을 없앤 대신 헤더가 14px 늘어 카드마다 순 20px을 회수한다.
  */
-const NAME_ROOM_H = 54;
+// ⚠️ 정상 통합뷰(`timetable/_components/rich-card-group.tsx`)와 **같은 값**이어야 한다 — 헤더 구성
+//    (반 이름 `text-sm line-clamp-2` + 강의실 `text-xs`)이 글자까지 같아서 54px이면 여기서도 테두리가
+//    강의실 글자를 가로지른다(2026-09-09 실측 59.5px). 그쪽 상수 주석에 근거가 있다.
+const NAME_ROOM_H = 60;
 const TEACHER_H = 24;
 const DAYHEAD_H = 22;
 const PERIOD_H = 26;
