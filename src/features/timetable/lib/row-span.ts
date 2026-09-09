@@ -149,3 +149,28 @@ export function movedByTarget(plan?: RowSpanPlan | null): Map<number, (MovedSpan
   }
   return out;
 }
+
+/**
+ * 접힌 칸이 놓일 **픽셀 상자** — 칸을 절대배치할 때 그리는 쪽이 쓴다.
+ *
+ * 🔴 **행 경계에 딱 맞게 끝나는 칸은 1px 짧게 그린다** — 행 높이(`rowH`)는 구분선(border-b)을 **포함한**
+ *    피치라, `span * rowH`를 그대로 쓰면 칸의 마지막 1px이 그 행의 구분선 자리를 덮어 **그 줄만 가로선이
+ *    사라진다**(원장 2026-09-09: *"JJ / 전양원 사이에 줄 생기도록"*). 접힌 칸은 위에 겹쳐 그려지므로
+ *    (`z-index`) 아래 행이 그린 선을 가린다 — 자리를 비워 줘야 다시 보인다.
+ * 🔑 **span 안쪽 경계는 그대로 덮는다**(1.5칸짜리 60분 수업 가운데를 선이 가로지르면 안 된다) — 돌려주는
+ *    건 **끝나는 자리** 한 곳뿐이다. 그래서 판정이 `offset + span`이 정수냐다(실측: 15:00~16:00은
+ *    `0 + 1.5`라 행 중간에서 끝나 해당 없음 / 16:00~17:00은 `0.5 + 1.5 = 2`라 경계에서 끝난다).
+ * ⚠️ 소수 누적오차가 있어 정수 판정은 반올림 거리로 본다(`0.5 + 1.5`가 `1.9999…`로 떨어질 수 있다).
+ */
+export function movedCellBox(
+  m: Pick<MovedSpan, "offset" | "span">,
+  rowH: number,
+  borderPx = 1,
+): { top: number; height: number } {
+  const end = m.offset + m.span;
+  const endsOnRowLine = Math.abs(end - Math.round(end)) < 1e-6;
+  return {
+    top: m.offset * rowH,
+    height: m.span * rowH - (endsOnRowLine ? borderPx : 0),
+  };
+}
