@@ -28,7 +28,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import type { PlanWriteGrant, PlanWriteScope } from "@/features/class-sheets/server/plan-write";
 import { seatHasJjFields } from "../jj-fields";
-import { hhmm, type SeatKey } from "../seat";
+import { SEAT_NAME, hhmm, type SeatKey } from "../seat";
 import { gateSeatPinOnly, rosterKeys } from "./gate";
 import { fetchSeatSlotPlanLines, type SeatClassPlan } from "./jj-plan";
 
@@ -156,7 +156,12 @@ export async function gateSeatPlanWrite(input: {
   // 작성자 = null. 이 문으로 들어온 사람은 계정이 없다(있어도 이 문은 계정을 안 본다).
   return {
     ok: true,
-    grant: { tenantId: gate.tenantId, classId: input.classId, actorId: null },
+    grant: {
+      tenantId: gate.tenantId,
+      classId: input.classId,
+      actorId: null,
+      doorName: `${SEAT_NAME[input.seat]} PIN(비로그인)`,
+    },
     scope: { planDate: input.date, slotStart: slot },
   };
 }

@@ -111,10 +111,10 @@ describe("③ 빈 칸에만 쓴다 — 두 일괄이 같은 함수를 탄다", (
   });
 });
 
-describe("④ 비로그인 PIN 화면엔 '다음 교시'가 안 간다", () => {
-  it("공개 페이지는 앞 교시 결석만 넘긴다", () => {
+describe("④ 비로그인 PIN 화면도 다음 행선지를 받는다 — 원장 2026-09-10 'seat/lab에서도 자리 출석부와 동일해야해'", () => {
+  it("공개 페이지는 앞 교시 결석과 다음 행선지를 함께 넘긴다(옛 자리 전용 함수는 안 쓴다)", () => {
     expect(publicPage).toContain("prevAbsentByCell={prevAbsentByCell}");
-    expect(publicPage).not.toContain("nextStartByStudent");
+    expect(publicPage).toContain("nextStartByStudent=");
     expect(publicPage).not.toContain("nextSeatPeriodByStudent");
   });
 

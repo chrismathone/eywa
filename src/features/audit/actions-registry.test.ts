@@ -70,15 +70,20 @@ function actionExprs(block: string): string[] {
   return out;
 }
 
-/** logAction( … ) 호출 블록에서 action 문자열 리터럴을 뽑는다(삼항 `a ? "x" : "y"` 포함). */
+/** logAction( … )(·logSeatAction·logActionAs·logActionAtDoor) 호출 블록에서 action 문자열 리터럴을 뽑는다(삼항 `a ? "x" : "y"` 포함). */
 function usedActions(): Map<string, Set<string>> {
   const found = new Map<string, Set<string>>();
   for (const file of tsFiles(SRC)) {
     const src = fs.readFileSync(file, "utf8");
-    if (!src.includes("logAction(")) continue;
-    let i = 0;
-    while ((i = src.indexOf("logAction(", i)) !== -1) {
-      let j = i + "logAction(".length;
+    // 🔴 감싼 헬퍼(`logSeatAction(g, seat, {…})`·`logActionAs(actor, {…})`·`logActionAtDoor(door, {…})`)도 같은 액션 키를 싣는다 —
+    //    `logAction(`만 찾으면 그 호출부가 통째로 스캔 밖으로 빠져 미등록 키가 조용히 샌다
+    //    (2026-09-10 자리 PIN 감사 도입 때 자리 출결 3곳이 그렇게 빠질 뻔했다).
+    //    ⚠️ 이름을 **정확히** 적는다 — `log…Action…(`으로 넓히면 `logSuperAdminAction(`처럼 **다른 표**에
+    //    쓰는 로거까지 잡혀 거짓 '미등록'이 뜬다(그 키들은 audit_logs 레지스트리 대상이 아니다).
+    if (!/\blog(?:Seat)?Action(?:As|AtDoor)?\(|\blogPlanChange\(/.test(src)) continue;
+    for (const call of src.matchAll(/\blog(?:Seat)?Action(?:As|AtDoor)?\(/g)) {
+      const i = call.index;
+      let j = i + call[0].length;
       let depth = 1;
       while (j < src.length && depth > 0) {
         const c = src[j];
@@ -100,7 +105,13 @@ function usedActions(): Map<string, Set<string>> {
           found.get(q[1])!.add(rel);
         }
       }
-      i = j;
+    }
+    // `logPlanChange("ecs_plan_line_add", grant, …)`처럼 **첫 인자로 키를 넘기는** 감싼 헬퍼도 본다 —
+    // 안 보면 진도 줄 감사 키 4종이 미등록인 채로 감사 화면에 영문 키를 냈다(적대적 리뷰 2026-09-10).
+    for (const pm of src.matchAll(/\blogPlanChange\(\s*"([a-z][a-z0-9_]*)"/g)) {
+      const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
+      if (!found.has(pm[1])) found.set(pm[1], new Set());
+      found.get(pm[1])!.add(rel);
     }
   }
   return found;

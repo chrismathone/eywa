@@ -68,7 +68,9 @@ describe("③ 공개 PIN 화면은 **보기만** 한다", () => {
     expect(PUBLIC_PAGE).toContain("getSeatPeriodChoices");
     expect(PUBLIC_PAGE).not.toContain("moveSeatStudentPeriod");
     expect(PUBLIC_PAGE).not.toContain("clearSeatPeriodChoices");
-    expect(PUBLIC_PAGE).not.toContain("SeatAllDay");
+    // '전체' 보기(원장 2026-09-10 '동일해야해')는 SeatAllDay를 쓰되 **이동을 끈 채**다.
+    expect(PUBLIC_PAGE).toContain("<SeatAllDay");
+    expect(PUBLIC_PAGE).toContain("canMove={false}");
   });
 
   it("🔴 두 화면이 **같은 명단**을 그린다 — 로그인 쪽에만 얹으면 서로 다른 사실을 말한다", () => {

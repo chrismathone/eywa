@@ -221,6 +221,7 @@ export function NoteForm({
   onSave,
   onCancel,
   onDraft,
+  maxLength,
 }: {
   initial: string;
   label: string;
@@ -233,6 +234,8 @@ export function NoteForm({
    *    안 주면(ECS·원스크린) 종전 그대로 저장/취소 두 버튼이다.
    */
   onDraft?: (text: string) => void;
+  /** 글자 수 상한 — 서버가 같은 값으로 거절하는 화면만 넘긴다(자리 출석부 `SEAT_NOTE_MAXLEN`). 없으면 무제한(종전). */
+  maxLength?: number;
 }) {
   const t = useSheetT();
   const [text, setText] = useState(initial);
@@ -259,6 +262,7 @@ export function NoteForm({
           if (e.key === "Escape") onCancel();
         }}
         rows={2}
+        maxLength={maxLength}
         placeholder={t("os.att.notePh")}
         className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-xs outline-none"
       />

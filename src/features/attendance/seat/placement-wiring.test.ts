@@ -67,7 +67,20 @@ describe("② 게이트 — 옮길 수 있는 사람만, 되돌릴 수도 있다
 
   it("공개 화면은 배치를 **보기만** 한다 — 드래그를 열지 않는다", () => {
     expect(PUBLIC_PAGE).toContain("placements={placements.rows}");
-    expect(PUBLIC_PAGE).not.toContain("canMove");
+    // '전체' 보기(원장 2026-09-10 'seat/lab에서도 자리 출석부와 동일')가 SeatAllDay를 쓰면서 이동 prop이 생겼다 —
+    // 값은 언제나 false여야 한다(PIN엔 감사로그에 남길 사람이 없다: 원장 '이것도 감사로그에 남아야함').
+    expect(PUBLIC_PAGE).toContain("canMove={false}");
+    expect(PUBLIC_PAGE).toContain("canMovePlacement={false}");
+    // 🔴 이동 prop은 **모두 리터럴 false**여야 한다 — `canMove={placementsDay.ready}`처럼 다른 식이 들어오면 PIN에서
+    //    드래그가 열린다(적대적 리뷰 2026-09-10: 옛 가드는 `={true}`·`={can…`만 막아 그런 식이 통과했다).
+    const moveProps = [...PUBLIC_PAGE.matchAll(/canMove(?:Placement)?=\{([^}]*)\}/g)].map((m) => m[1]);
+    expect(moveProps.length).toBeGreaterThan(0);
+    expect(moveProps.every((v) => v === "false")).toBe(true);
+    expect(PUBLIC_PAGE).not.toMatch(/canChoosePeriod=/);
+    expect(PUBLIC_PAGE).not.toContain("onClearPeriodChoices");
+    // JSX 축약형(`<SeatBoard canMove />`)은 `={…}`가 없어 위 검사를 비껴간다 — 이름만 서도 참이다.
+    expect(PUBLIC_PAGE).not.toMatch(/\scanMove(?:Placement)?(?=[\s/>])/);
+    expect(PUBLIC_PAGE).not.toMatch(/\bcanChoosePeriod\b/);
     expect(PUBLIC_PAGE).not.toContain("moveSeatStudent");
     expect(PUBLIC_PAGE).not.toContain("resetSeatPlacements");
   });

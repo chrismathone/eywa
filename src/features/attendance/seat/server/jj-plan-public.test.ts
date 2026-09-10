@@ -169,7 +169,8 @@ describe("공개 자리 진도 쓰기 게이트", () => {
     const gate = await write();
     expect(gate).toEqual({
       ok: true,
-      grant: { tenantId: TENANT, classId: IN_ROSTER, actorId: null },
+      // 작성자는 지어내지 않고(null) 감사로그엔 문 이름이 선다(2026-09-10 무기명 경로).
+      grant: { tenantId: TENANT, classId: IN_ROSTER, actorId: null, doorName: "JJ실 PIN(비로그인)" },
       // 🔴 범위를 함께 돌려줘야 쓰기가 "오늘 그 교시" 밖으로 못 나간다(줄 id는 반에만 묶여 있다).
       scope: { planDate: TODAY, slotStart: SLOT },
     });

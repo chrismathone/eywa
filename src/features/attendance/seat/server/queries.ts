@@ -6,7 +6,16 @@ import { effectiveAttendanceRecords } from "@/features/attendance/effective-reco
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
-import { groupByStart, hhmm, isPayrollSeat, SEAT_DB_LABEL, type SeatKey, type SeatPeriod, type SeatSlot } from "../seat";
+import {
+  groupByStart,
+  hhmm,
+  isPayrollSeat,
+  PIN_NOTE_SEATS,
+  SEAT_DB_LABEL,
+  type SeatKey,
+  type SeatPeriod,
+  type SeatSlot,
+} from "../seat";
 
 export type SeatStudent = {
   id: string;
@@ -20,8 +29,9 @@ export type SeatStudent = {
   /** 자리에서 찍힌 기록인가 — 반 출석부에서 찍힌 기록과 구분해 보여준다(시수 귀속이 다르다). */
   fromSeat: boolean;
   /**
-   * 그 칸에 적힌 사유 메모(`attendance_records.note`) — 카드 마우스 오버로만 보인다(원장 2026-08-28).
-   * 🔴 **비로그인 PIN 경로는 항상 null이다** — 아래 select 분기 주석 참조(병원·수술·가족 일정이 그대로 적힌다).
+   * 그 칸에 적힌 사유 메모(`attendance_records.note`) — 카드 아래 한 줄 + 마우스 오버(원장 2026-08-28·09-10).
+   * 🔴 **비로그인 PIN 경로는 `PIN_NOTE_SEATS`(랩실)만 채운다** — 원장 2026-09-10 *"읽기·쓰기 둘 다 열기"*.
+   *    그 밖의 자리 PIN은 여전히 null이다(병원·수술·가족 일정이 그대로 적힌다, 아래 select 분기).
    */
   note: string | null;
   /**
@@ -198,31 +208,40 @@ async function loadSeatDay(
       status: "present" | "absent" | "late";
       seat_label: string | null;
       recorded_at: string;
-      /** 사유 메모 — 로그인 화면에서만 채워진다(공개 PIN은 조회조차 안 한다, 아래 분기 주석). */
+      /** 사유 메모 — 로그인 화면 + `PIN_NOTE_SEATS`(랩실) PIN에서만 채워진다(아래 분기 주석). */
       note?: string | null;
       /** 로그인 화면에서만 채워진다 — 공개(PIN) 경로는 아예 조회하지 않는다(아래 주석). */
       recorder?: { display_name: string | null }[];
     }>(classIds, (chunk) =>
-      // 🔴 공개(PIN) 경로에선 **직원 이름도 사유 메모도 아예 안 가져온다** — 지금 화면이 안 그린다고 해도,
-      //    로그인 없이 열리는 페이지로 직원 신상·학생 신상이 건너가는 것 자체를 막는다(나중에 누가 그리면 끝).
-      //    ⚠️ 사유 메모(`note`)엔 `병원`·`수술`·`가족여행`이 그대로 적혀 있다(실데이터) — 직원 이름보다
-      //       오히려 더 민감하다. 로그인 분기에만 싣는다.
+      // 🔴 공개(PIN) 경로에선 **직원 이름은 아예 안 가져온다** — 로그인 없이 열리는 페이지로 직원 신상이 건너가는
+      //    것 자체를 막는다(나중에 누가 그리면 끝).
+      // 🔴 **사유 메모(`note`)는 `PIN_NOTE_SEATS`(랩실) PIN에서만** 싣는다 — 원장 2026-09-10 *"seat/lab에서도 자리
+      //    출석부와 동일해야해"* → 메모를 PIN에서 *"읽기·쓰기 둘 다 열기"*. 메모엔 `병원`·`수술`·`가족여행`이 그대로
+      //    적혀 있어(실데이터) **자리마다 따로** 연다 — 그 밖의 자리 PIN은 여전히 조회조차 안 한다(화면이 안 그려도
+      //    페이지 소스로 건너가므로 "안 그리면 된다"가 아니다).
       //    tenantId가 넘어온 경로 = admin 클라이언트 = 공개 경로다.
       //    ⚠️ select 문자열을 삼항으로 만들면 PostgREST 타입 파서가 못 읽는다 → 분기를 통째로 나눈다.
-      tenantId
+      tenantId && PIN_NOTE_SEATS.includes(seat)
         ? supabase
             .from("attendance_records")
-            .select("id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at")
+            .select("id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, note")
             .in("class_id", chunk)
             .eq("session_date", date)
             .eq("tenant_id", tenantId)
-        : supabase
-            .from("attendance_records")
-            .select(
-              "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, note, recorder:recorded_by ( display_name )",
-            )
-            .in("class_id", chunk)
-            .eq("session_date", date),
+        : tenantId
+          ? supabase
+              .from("attendance_records")
+              .select("id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at")
+              .in("class_id", chunk)
+              .eq("session_date", date)
+              .eq("tenant_id", tenantId)
+          : supabase
+              .from("attendance_records")
+              .select(
+                "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, note, recorder:recorded_by ( display_name )",
+              )
+              .in("class_id", chunk)
+              .eq("session_date", date),
     ),
   ]);
 
