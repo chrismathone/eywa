@@ -10,6 +10,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   padCardDays,
   teacherColor,
+  type GridCell,
   type GridStudent,
   type RichCardGroup,
   type RichClassCard,
@@ -22,7 +23,12 @@ import { holdTone, movingTone, timetableStudentTone, useTimetableColorMode, with
 import { holdArmedRow, setArmedRow, useIsArmedRow, useTouchCapable } from "./drag-flag";
 import { rosterDropId, useRosterMove, type RosterDragData, type RosterDropData } from "./roster-move";
 // ⚠️ `movedCellBox` — 접힌 칸이 아래 행의 가로선을 덮던 것(2026-09-09). 기하는 row-span 단일 소스에 있다.
-import { movedByTarget, movedCellBox, visibleSpanRows } from "@/features/timetable/lib/row-span";
+import {
+  movedByTarget,
+  movedCellBox,
+  movedCellStartsOnRowLine,
+  visibleSpanRows,
+} from "@/features/timetable/lib/row-span";
 import { useTimetableEdit, type IncomingStudent, type PendingTarget } from "./edit-context";
 import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
@@ -478,19 +484,34 @@ export function ClassColumn({
             // 접힌 칸을 그 안에 절대배치한다. 넘치는 부분은 아래 행 위로 그려진다(그 자리는 어차피 빈 칸이다).
             <div key={d} className="relative h-full">
               <Cell card={card} order={p.order} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
-              {(moved.get(p.order) ?? []).map((m) =>
-                card.cells[`${m.from}:${d}`] ? (
+              {(moved.get(p.order) ?? []).map((m) => {
+                const mc = card.cells[`${m.from}:${d}`];
+                if (!mc) return null;
+                // 🔴 **칠할 게 있는 칸에만** 바탕·테두리를 준다 — 라벨도 자리도 없는 칸은 `Cell`이
+                //    배경 없이 테두리만 그리므로(아래 `cellPaintsBackground`), 바탕을 깔면 1.5행이
+                //    **흰 구멍**이 되어 그 열의 교시선만 사라진다(담임 미지정 신설 반에서 난다).
+                const paints = cellPaintsBackground(mc);
+                return (
                   <div
                     key={m.from}
-                    className="absolute inset-x-0 z-[1]"
+                    // 🔴 `bg-card` = **불투명 바탕**. 접힌 칸은 제 span 안쪽 교시선을 덮는 게 규약인데
+                    //    (60분 수업 가운데를 선이 가로지르면 두 칸으로 읽힌다), 자리 칸(JJ·LAB)만
+                    //    `bg-*-soft`(알파 0.12)라 아래 선이 그대로 비쳐 **색에 따라 규약이 갈렸다**
+                    //    (원장 2026-09-10 *"JJ에서는 가로선이 보이는데, 왜 전양원 위로는 안보이지?"*).
+                    //    바탕을 깔면 반투명 색이 카드 흰 바탕 위에 얹혀 색은 그대로, 선만 사라진다([[#74]]).
+                    // 🔴 `border-t` = 행 한가운데서 시작하는 칸만 **제 위 경계를 직접** 긋는다
+                    //    (행 머리에서 시작하는 칸은 격자가 이미 그었다 — 둘 다 그으면 2px).
+                    className={`absolute inset-x-0 z-[1] ${paints ? "bg-card" : ""} ${
+                      paints && !movedCellStartsOnRowLine(m) ? `${GRID} border-t` : ""
+                    }`}
                     // 상자는 `movedCellBox`가 정한다 — 행 경계에서 끝나는 칸은 그 행 구분선(1px) 자리를
                     // 비워 준다(안 비우면 겹쳐 그린 칸이 선을 덮어 그 줄만 가로선이 사라진다).
                     style={movedCellBox(m, PERIOD_H)}
                   >
                     <Cell card={card} order={m.from} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
                   </div>
-                ) : null,
-              )}
+                );
+              })}
             </div>
           ))}
         </div>
@@ -755,6 +776,17 @@ function DayHead({ day }: { day: DayOfWeek }) {
   );
 }
 
+/**
+ * 이 칸이 **제 배경을 칠하나** — 자리(LAB·JJ) 또는 라벨이 있을 때만 칠한다.
+ *
+ * 🔴 접힌 칸 오버레이가 불투명 바탕(`bg-card`)을 깔지 말지의 **단일 판정**이다. 안 칠하는 칸에 바탕을
+ *    깔면 1.5행이 흰 구멍이 되어 그 열의 교시선만 사라진다(칠할 게 없으면 덮을 이유도 없다).
+ * ⚠️ 그래서 `Cell`도 이 함수로 갈래를 탄다 — 두 곳에서 따로 판정하면 조용히 갈린다.
+ */
+function cellPaintsBackground(c: GridCell | undefined): boolean {
+  return !!c && (c.isLab || !!c.label);
+}
+
 function Cell({
   card,
   order,
@@ -787,7 +819,8 @@ function Cell({
       </div>
     );
   }
-  if (!c.label) return <div className={base} title={c.time || undefined} />;
+  // 여기까지 왔으면 `isLab`은 false라 판정은 곧 "라벨이 있나"다 — 오버레이와 **같은 함수**를 탄다.
+  if (!cellPaintsBackground(c)) return <div className={base} title={c.time || undefined} />;
   // 저장된 강사색(ijw) 우선 — 라벨(한글명·영문닉네임)이 users 맵에 있으면 그 hex. 없으면 라벨 해시색.
   const tc = teacherColors[c.label];
   const text = abbrev(c.label);

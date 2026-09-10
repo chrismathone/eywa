@@ -1,6 +1,15 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { movedByTarget, movedCellBox, planRowSpans, visibleSpanRows } from "./row-span";
+import {
+  movedByTarget,
+  movedCellBox,
+  movedCellStartsOnRowLine,
+  planRowSpans,
+  visibleSpanRows,
+} from "./row-span";
 
 const row = (order: number, time: string) => ({ order, time });
 
@@ -99,5 +108,69 @@ describe("movedCellBox — 접힌 칸이 행 구분선을 먹지 않는다", () 
   it("소수 누적오차가 있어도 경계로 본다", () => {
     const box = movedCellBox({ offset: 0.5, span: 1.4999999999 }, H);
     expect(box.height).toBeCloseTo(1.5 * H - 1, 6); // -1이 적용됐다 = 경계로 봤다
+  });
+});
+
+describe("movedCellStartsOnRowLine — 위 경계를 누가 긋나", () => {
+  it("행 머리에서 시작하면 격자가 이미 그었다 — 칸은 안 긋는다", () => {
+    // 15:00~16:00 = 15:00 행 **처음부터** → 바로 위 행의 border-b가 그 선이다.
+    const { moved } = planRowSpans(MIXED);
+    expect(movedCellStartsOnRowLine(moved["900.5"]!)).toBe(true);
+  });
+
+  it("🔴 행 한가운데서 시작하면 그 자리엔 아무 선도 없다 — 칸이 제 위 테두리를 긋는다", () => {
+    // 16:00~17:00 = 15:40 행 **절반부터** → 위 칸(JJ)과 맞닿는데 경계가 안 보였다
+    // (원장 2026-09-10 "전양원 위로는 안보이지").
+    const { moved } = planRowSpans(MIXED);
+    expect(movedCellStartsOnRowLine(moved["960"]!)).toBe(false);
+  });
+
+  it("소수 누적오차가 있어도 행 머리로 본다", () => {
+    expect(movedCellStartsOnRowLine({ offset: 1e-12 })).toBe(true);
+    expect(movedCellStartsOnRowLine({ offset: 0.25 })).toBe(false);
+  });
+});
+
+/**
+ * 🔴 기하만 맞아선 안 된다 — **그리는 쪽이 불투명 바탕을 깔아야** "span 안쪽 선을 덮는다"가 성립한다.
+ * 2026-09-10 이전엔 자리 칸(JJ·LAB)만 `bg-*-soft`(알파 0.12)라 덮은 선이 그대로 비쳐, 같은 규약이
+ * **칸 색에 따라 갈렸다**(원장: *"JJ에서는 가로선이 보이는데, 왜 전양원 위로는 안보이지?"*).
+ * ⚠️ `timetable-dev`는 개발 사본이라 검사 대상이 아니다(CLAUDE.md).
+ */
+describe("접힌 칸을 그리는 쪽 — 불투명 바탕 + 조건부 위 테두리", () => {
+  const consumer = readFileSync(
+    join(process.cwd(), "src/app/(shell)/timetable/_components/rich-card-group.tsx"),
+    "utf8",
+  );
+
+  /**
+   * 🔴 **파일 전체가 아니라 그 요소만** 본다 — 아무 데나 같은 글자가 있으면 통과하는 가드는
+   * 오버레이에서 바탕을 떼어내도 초록이다(적대적 리뷰 2026-09-10에서 실제로 뮤테이션으로 재현).
+   * `style={movedCellBox(`가 접힌 칸 오버레이의 지문이라 그 **바로 앞** className만 잘라 본다.
+   */
+  const overlayClass = (() => {
+    const at = consumer.indexOf("style={movedCellBox(");
+    expect(at, "접힌 칸 오버레이(style={movedCellBox(…)})를 못 찾았다").toBeGreaterThan(0);
+    const head = consumer.slice(0, at);
+    const from = head.lastIndexOf("className={");
+    expect(from, "오버레이 앞에 className이 없다").toBeGreaterThan(0);
+    return head.slice(from);
+  })();
+
+  // ⚠️ 유틸 **순서**로 잠그지 말 것 — 손으로 한 번 정리하면 동작이 같은데 게이트만 깨진다.
+  it("오버레이가 불투명 바탕(`bg-card`)을 깐다", () => {
+    expect(overlayClass).toContain("bg-card");
+  });
+
+  it("위 테두리는 `movedCellStartsOnRowLine`이 아닐 때만 그린다", () => {
+    expect(overlayClass).toContain("movedCellStartsOnRowLine(m)");
+    // 🔴 조건의 **모양**만 보면 else 가지를 비워도 통과한다 — 그 자리에 실제로 테두리가 있어야 한다.
+    expect(overlayClass).toMatch(/!\s*movedCellStartsOnRowLine\(m\)[\s\S]{0,60}border-t/);
+  });
+
+  it("칠할 게 없는 칸엔 바탕도 테두리도 안 준다(흰 구멍 방지)", () => {
+    expect(overlayClass).toMatch(/paints\s*\?\s*"bg-card"/);
+    expect(overlayClass).toMatch(/paints\s*&&\s*!\s*movedCellStartsOnRowLine\(m\)/);
+    expect(consumer).toMatch(/const paints = cellPaintsBackground\(/);
   });
 });

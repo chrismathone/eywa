@@ -160,6 +160,8 @@ export function movedByTarget(plan?: RowSpanPlan | null): Map<number, (MovedSpan
  * 🔑 **span 안쪽 경계는 그대로 덮는다**(1.5칸짜리 60분 수업 가운데를 선이 가로지르면 안 된다) — 돌려주는
  *    건 **끝나는 자리** 한 곳뿐이다. 그래서 판정이 `offset + span`이 정수냐다(실측: 15:00~16:00은
  *    `0 + 1.5`라 행 중간에서 끝나 해당 없음 / 16:00~17:00은 `0.5 + 1.5 = 2`라 경계에서 끝난다).
+ * 🔴 **"덮는다"는 칸이 불투명할 때만 성립한다** — 그리는 쪽이 접힌 칸에 불투명 바탕을 깔아야 한다
+ *    (자리 칸 JJ·LAB은 `bg-*-soft` = 알파 0.12라 아래 선이 그대로 비쳤다, 2026-09-10).
  * ⚠️ 소수 누적오차가 있어 정수 판정은 반올림 거리로 본다(`0.5 + 1.5`가 `1.9999…`로 떨어질 수 있다).
  */
 export function movedCellBox(
@@ -173,4 +175,18 @@ export function movedCellBox(
     top: m.offset * rowH,
     height: m.span * rowH - (endsOnRowLine ? borderPx : 0),
   };
+}
+
+/**
+ * 접힌 칸의 **위 모서리가 교시 구분선과 겹치나**.
+ *
+ * 겹치면(=`offset`이 정수) 격자가 이미 그 자리에 선을 그렸으니 칸은 아무것도 안 그린다. 겹치지 않으면
+ * (행 한가운데서 시작하면) 그 자리엔 **어떤 선도 없다** — 바로 위 칸과 맞닿아 있어도 경계가 안 보인다
+ * (원장 2026-09-10: *"초등 브릿지 B JJ에서는 가로선이 보이는데, 왜 전양원 위로는 안보이지?"* — 실측:
+ * JJ는 행 머리에서 시작해 위 선이 있고, 전양원은 16:00에 시작해 행 한가운데라 위 선이 없었다).
+ * 그래서 이 경우에만 칸이 **제 위 테두리를 직접 그린다** — 아래 모서리는 안 그린다(다음 칸이 제 위
+ * 테두리를 그리므로 둘 다 그리면 2px이 된다. 아래가 비어 있으면 흰 바탕과 색 블록의 경계가 이미 보인다).
+ */
+export function movedCellStartsOnRowLine(m: Pick<MovedSpan, "offset">): boolean {
+  return Math.abs(m.offset - Math.round(m.offset)) < 1e-6;
 }
