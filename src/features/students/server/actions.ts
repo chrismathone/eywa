@@ -1181,7 +1181,18 @@ export async function clearDupSuspect(
   const { error } = await supabase.from("students").update({ dup_suspect: false }).eq("id", id);
   if (error) return { error: error.message };
 
+  // 학생 레코드를 바꾸는 모든 경로는 감사로그 필수(원장 2026-08-18). 이 해제는 **통합 후보를 없애는**
+  // 판단이기도 하다(중복 병합의 접미사 신호가 이 표식을 본다) — 누가 "다른 사람이 맞다"고 확정했는지
+  // 남지 않으면 나중에 되짚을 근거가 0이다.
+  await logAction({
+    action: "student_dup_confirm",
+    targetType: "student",
+    metadata: { studentId: id },
+  });
+
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
+  // 통합 후보 목록(데이터 정리 면)이 이 표식을 읽는다 — 해제하면 그 자리에서 후보가 빠져야 한다.
+  revalidatePath("/owner");
   return { ok: true };
 }
