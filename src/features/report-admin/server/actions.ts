@@ -13,6 +13,7 @@ import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescr
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { SENT_STATUS_SUCCESS, UNREAD_MATCHABLE_OR } from "../unread-filter";
 import { parseMentSource } from "@/features/onescreen/ment-source";
 import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 import { STUCK_MINUTES } from "../classnote-queue";
@@ -440,10 +441,11 @@ export async function listReports(
   if (filters.read === "read") q = q.not("classnote_read_at", "is", null);
   else if (filters.read === "unread") {
     q = q
-      .eq("classnote_status", "success")
+      .eq("classnote_status", SENT_STATUS_SUCCESS)
       .is("classnote_read_at", null)
-      // 매칭 가능: edutrix분은 edutrix_share_token 백필된 행만, native분(source≠edutrix_import, NULL 포함)은 항상
-      .or("edutrix_share_token.not.is.null,source.is.null,source.neq.edutrix_import");
+      // 매칭 가능: edutrix분은 edutrix_share_token 백필된 행만, native분(source≠edutrix_import, NULL 포함)은 항상.
+      // 🔴 절 문자열은 [`unread-filter.ts`](../unread-filter) 단일 소스 — 운영실 집계가 같은 값을 쓴다.
+      .or(UNREAD_MATCHABLE_OR);
   }
   q = q.range(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE - 1);
 

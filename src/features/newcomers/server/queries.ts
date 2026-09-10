@@ -97,10 +97,22 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
   const ids = students.map((s) => s.id);
   if (ids.length === 0) return { today, rows: [], checksAvailable: true, checksError: null };
 
-  // 첫 수업일 = 가장 이른 수강 시작일. 학생별 최솟값이라 전건이 필요하다(청크 + 페이지네이션, B2/B3).
-  const enrollments = await fetchInChunks<{ student_id: string; start_date: string | null }>(ids, (chunk) =>
-    supabase.from("enrollments").select("student_id, start_date").in("student_id", chunk),
-  );
+  // 🔴 수강·체크는 서로 **독립**이다 — 줄지어 await하면 라운드트립이 합산된다(B4). 이 조회는 운영실
+  //    한 화면에서도 도는 경로라(창마다 셸이 재실행된다) 한 왕복이 그대로 곱해진다.
+  const [enrollments, checksResult] = await Promise.all([
+    // 첫 수업일 = 가장 이른 수강 시작일. 학생별 최솟값이라 전건이 필요하다(청크 + 페이지네이션, B2/B3).
+    fetchInChunks<{ student_id: string; start_date: string | null }>(ids, (chunk) =>
+      supabase.from("enrollments").select("student_id, start_date").in("student_id", chunk),
+    ),
+    // 체크 — 0251a 미적용이면 표가 없다. 그때도 화면은 살고(빈 체크) 저장만 잠긴다([[#95]]).
+    fetchInChunks<{ student_id: string; item_key: string; done_on: string | null }>(ids, (chunk) =>
+      supabase.from("student_onboarding_checks").select("student_id, item_key, done_on").in("student_id", chunk),
+    ).then(
+      (rows) => ({ ok: true as const, rows }),
+      (e: unknown) => ({ ok: false as const, error: e }),
+    ),
+  ]);
+
   const firstClassBy = new Map<string, string>();
   for (const e of enrollments) {
     const d = ymd(e.start_date);
@@ -109,21 +121,17 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
     if (!prev || d < prev) firstClassBy.set(e.student_id, d);
   }
 
-  // 체크 — 0251a 미적용이면 표가 없다. 그때도 화면은 살고(빈 체크) 저장만 잠긴다([[#95]]).
   let checksAvailable = true;
   let checksError: NewcomersView["checksError"] = null;
   const checkBy = new Map<string, Record<string, string | null>>();
-  try {
-    const checks = await fetchInChunks<{ student_id: string; item_key: string; done_on: string | null }>(
-      ids,
-      (chunk) => supabase.from("student_onboarding_checks").select("student_id, item_key, done_on").in("student_id", chunk),
-    );
-    for (const c of checks) {
+  if (checksResult.ok) {
+    for (const c of checksResult.rows) {
       const bucket = checkBy.get(c.student_id) ?? {};
       bucket[c.item_key] = ymd(c.done_on);
       checkBy.set(c.student_id, bucket);
     }
-  } catch (e) {
+  } else {
+    const e = checksResult.error;
     const raw = e instanceof Error ? e.message : String(e);
     checksAvailable = false;
     checksError = isMissingRelationText(raw)

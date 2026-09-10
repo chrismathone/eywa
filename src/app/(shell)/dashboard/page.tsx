@@ -37,6 +37,7 @@ import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
 import { SlimTrend, hasTrendContent } from "./_components/slim-trend";
 import { OneScreenDashboard } from "./_onescreen/one-screen";
+import { resolveSkin } from "./_onescreen/skin";
 
 const EMPTY_ENROLLMENT_CHANGES = {
   newCount: 0,
@@ -80,12 +81,13 @@ export default async function TodayPage({
    *    둘지 정하면 그때 기본값을 바꾼다(그 시점에 이 분기와 옛 배치는 함께 지운다 — 두 대시보드를
    *    오래 들고 있으면 한쪽만 고쳐진다).
    */
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; skin?: string }>;
 }) {
   const user = await requireAccess("dashboard");
   // requireAccess에서 이미 읽은 요청 캐시 재사용 — 추가 DB 왕복 없이 브리핑 링크를 역할별로 거른다.
   const permissionMatrix = await getPermMatrix();
-  if ((await searchParams).view === "one") {
+  const sp = await searchParams;
+  if (sp.view === "one") {
     return (
       // 🔴 이 화면만 셸의 하단 여백을 덮는다 — 스크롤이 없는 화면이라 그 여백이 곧 세로 낭비다.
       <div className="h-full min-h-0">
@@ -93,6 +95,9 @@ export default async function TodayPage({
           systemRole={user.systemRole}
           permMatrix={permissionMatrix}
           tenantId={user.tenantId}
+          // `?skin=bi` — 껍데기 비교안(원장 2026-09-10 *"두가지다 볼 수 있게"*). 데이터·판정은 한 벌이라
+          // 한쪽을 고를 때 이 줄과 `_onescreen/skin.ts`만 걷어내면 된다.
+          skin={resolveSkin(sp.skin)}
         />
       </div>
     );

@@ -32,6 +32,10 @@ export type DashboardAccess = {
     students: boolean;
     /** 내일 발효되는 시간표 예약 신호(2026-09-09) — 이 갈래를 지우면 그 신호도 함께 지울 것. */
     timetable: boolean;
+    /** 신규생 90일 칸(한 화면 대시보드 `?view=one`) — 이 블록이 빠지면 이 갈래도 함께 뺄 것. */
+    newcomers: boolean;
+    /** '학생 위험' 줄의 퇴원위험 칸 — 숫자는 저장된 브리핑 payload에서 온다(새 조회 없음). */
+    retention: boolean;
   };
   write: {
     billing: boolean;
@@ -57,6 +61,8 @@ export function resolveDashboardAccess(role: SystemRole, matrix: AccessMatrix): 
       staff: canAccess(role, "staff", matrix),
       students: canAccess(role, "students", matrix),
       timetable: canAccess(role, "timetable", matrix),
+      newcomers: canAccess(role, "newcomers", matrix),
+      retention: canAccess(role, "retention", matrix),
     },
     write: {
       billing: canWrite(role, "billing", matrix),
