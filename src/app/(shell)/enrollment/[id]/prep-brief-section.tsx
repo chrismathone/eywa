@@ -1,5 +1,5 @@
 /**
- * 사전 상담 브리프(상담지) 표시 — 등록상담 상세 상단. 상담을 **시작하기 전에** 읽는 카드다.
+ * 사전 상담 브리프(상담지) 표시 — 상담을 **시작하기 전에** 읽는 카드다.
  *
  * ⚠️ 여기 나오는 반·잔여석·금액은 전부 생성 시점 스냅샷(`record.facts`)이다 — 화면이 지금 DB를
  *    다시 읽지 않는다. "그때 이 자료로 상담했다"가 재현돼야 하기 때문(인쇄물 동결과 같은 정책).
@@ -8,6 +8,16 @@
  * 본문은 **기본 접힘**(`PrepBriefCollapse`) — 길어서 등록상담 상세의 나머지(접수 정보·AI 분석·
  * 수강 이력)를 통째로 밀어냈다. 헤더(제목·헤드라인·모델 라벨·생성시각·인쇄/갱신)와 생성 진행바·
  * 실패 안내는 접혀 있어도 항상 보인다.
+ *
+ * ── `past`(상담 완료 이후 단계) ────────────────────────────────────────────────
+ * 원장 2026-09-10: *"사실 브리프는 상담완료 칸반 이후로는 필요없을듯"* → *"지난 브리프로 이름을
+ * 바꿔버리던지 처리해버리고 중요한건 배정된 반이니까"*. 그래서 **지우지 않고 격을 내린다**:
+ *  · 제목이 `상담 준비 브리프` → **`지난 상담 브리프`**(끝난 상담을 '준비'라 부르면 거짓말이다)
+ *  · 브랜드 틴트(눈에 띄는 자리) → 무채색 카드로. 자리도 페이지 맨 아래로 내려간다(page.tsx)
+ *  · **'다시 작성'을 감춘다** — 지난 기록을 새로 만들 이유가 없고 AI 호출은 돈이 든다
+ *  · **'인쇄'는 남긴다** — 이미 만들어 둔 문서를 여는 것이라 새 호출이 없고, 상담 뒤에 원본을
+ *    다시 뽑아야 하는 일(학부모 재문의·인수인계)이 실제로 있다
+ * 🔴 데이터(`prep_brief` 스냅샷)는 **한 줄도 지우지 않는다** — 표시·이름·자리만 바뀐다.
  */
 import { AlertCircle, AlertTriangle, ClipboardCheck, HelpCircle, MessageSquare, Printer, ShieldCheck } from "@/components/icons/eywa-icon-compat";
 import { PrintWindowButton } from "@/components/workspace/print-window";
@@ -17,12 +27,17 @@ import { PrepBriefButton } from "./prep-brief-button";
 import { PrepBriefCollapse } from "./prep-brief-collapse";
 import { PrepBriefProgress } from "./prep-brief-progress";
 
+/** 상담이 끝난 뒤의 제목 — '준비'가 아니라 '지난'. 문구를 두 곳에 적지 않게 상수로. */
+const TITLE_NOW = "상담 준비 브리프";
+const TITLE_PAST = "지난 상담 브리프";
+
 export function PrepBriefSection({
   consultationId,
   record,
   status,
   errorText,
   canWrite,
+  past = false,
 }: {
   consultationId: string;
   record: PrepBriefRecord | null;
@@ -30,8 +45,18 @@ export function PrepBriefSection({
   status: "generating" | "failed" | null;
   errorText: string | null;
   canWrite: boolean;
+  /**
+   * 칸반 '상담 전'을 지난 건인가(`stageOfCard(card) !== "before"`).
+   * 🔴 판정은 호출부가 **board-stages 단일 소스**로 한다 — 여기서 outcome 문자열을 비교하지 말 것.
+   */
+  past?: boolean;
 }) {
   const generating = status === "generating";
+  const title = past ? TITLE_PAST : TITLE_NOW;
+  // 🔴 '다시 작성'은 상담 전에만. 안 보이는 것을 다시 만들 수는 없어야 하고, 지난 기록을 새 사실로
+  //    덮어쓰면 "그때 이 자료로 상담했다"는 스냅샷 성질이 깨진다(AI 호출은 명시 버튼일 때만 — 감춰도
+  //    페이지 로드가 호출을 만들지 않으므로 캐싱 규약은 그대로다).
+  const showRegenerate = canWrite && !generating && !past;
   const failedLine =
     status === "failed" ? (
       <p className="text-destructive inline-flex items-center gap-1 text-xs">
@@ -47,7 +72,7 @@ export function PrepBriefSection({
           <div className="min-w-0 flex-1 space-y-1">
             <h2 className="text-foreground inline-flex items-center gap-2 text-sm font-bold">
               <ClipboardCheck className="text-primary size-4" />
-              상담 준비 브리프
+              {title}
             </h2>
             {generating ? (
               <div className="pt-1">
@@ -61,9 +86,7 @@ export function PrepBriefSection({
             )}
             {failedLine}
           </div>
-          {canWrite && !generating ? (
-            <PrepBriefButton consultationId={consultationId} exists={false} />
-          ) : null}
+          {showRegenerate ? <PrepBriefButton consultationId={consultationId} exists={false} /> : null}
         </div>
       </section>
     );
@@ -79,12 +102,17 @@ export function PrepBriefSection({
   });
 
   return (
-    <section className="border-primary/20 bg-primary-soft/20 space-y-4 rounded-2xl border p-5">
+    // past = 무채색(격을 내린 자리) / 상담 전 = 브랜드 틴트(지금 읽어야 하는 문서).
+    <section
+      className={`space-y-4 rounded-2xl border p-5 ${
+        past ? "border-line bg-bg-soft/40" : "border-primary/20 bg-primary-soft/20"
+      }`}
+    >
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h2 className="text-foreground inline-flex items-center gap-2 text-sm font-bold">
-            <ClipboardCheck className="text-primary size-4" />
-            상담 준비 브리프
+            <ClipboardCheck className={`size-4 ${past ? "text-text-dim" : "text-primary"}`} />
+            {title}
             {record.source === "fallback" ? (
               // 폴백을 AI 결과처럼 보이게 두면 상담사가 "AI가 검토했다"고 오해한다 — 정직하게 구분.
               <span className="border-border text-text-dim rounded-md border px-1.5 py-0.5 text-xs font-medium">
@@ -98,20 +126,27 @@ export function PrepBriefSection({
           </h2>
           <p className="text-foreground text-lg font-semibold break-keep">{b.headline}</p>
           <p className="text-text-dim text-xs">
-            <span className="num">{generated}</span> 기준 학원 데이터로 작성 · 상담 전 확인용
+            <span className="num">{generated}</span> 기준 학원 데이터로 작성 ·{" "}
+            {past ? "상담 전에 만든 문서(기록 보관용)" : "상담 전 확인용"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* 🔴 '인쇄'는 past에서도 남긴다 — **이미 만들어 둔 스냅샷을 여는 것**이라 AI 호출이 없고,
+              상담이 끝난 뒤에 원본을 다시 뽑아야 하는 일(학부모 재문의·인수인계)이 실제로 있다.
+              반대로 '다시 작성'은 호출이 돈이고 지난 기록을 덮으므로 past에선 감춘다(showRegenerate). */}
+          {/* ⚠️ 창 제목은 **문서 이름 그대로**다(카드 제목을 따라가지 않는다) — 인쇄물 자체는 언제나
+              '상담 준비 브리프'라는 이름의 동결 스냅샷이라, 창만 '지난…'으로 부르면 열어 본 종이와
+              어긋난다(`(print)/enrollment/[id]/prep`의 metadata.title과 같은 문자열). */}
           <PrintWindowButton
             id={`print/enrollment-prep/${consultationId}`}
             href={`/enrollment/${consultationId}/prep`}
-            title="상담 준비 브리프"
+            title={TITLE_NOW}
             variant="outline"
           >
             <Printer className="size-4" />
             인쇄
           </PrintWindowButton>
-          {canWrite && !generating ? <PrepBriefButton consultationId={consultationId} exists /> : null}
+          {showRegenerate ? <PrepBriefButton consultationId={consultationId} exists /> : null}
         </div>
       </header>
 
@@ -123,7 +158,7 @@ export function PrepBriefSection({
       ) : null}
       {failedLine}
 
-      <PrepBriefCollapse>
+      <PrepBriefCollapse label={past ? TITLE_PAST : "브리프"} muted={past}>
         <Block icon={MessageSquare} title="오프닝 멘트">
           <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-line">{b.opening}</p>
         </Block>

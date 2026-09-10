@@ -15,7 +15,17 @@
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 
-export function PrepBriefCollapse({ children }: { children: React.ReactNode }) {
+export function PrepBriefCollapse({
+  children,
+  label = "브리프",
+  muted = false,
+}: {
+  children: React.ReactNode;
+  /** 접기/펼치기 버튼에 쓸 이름 — 상담이 끝난 뒤엔 '지난 브리프'로 바뀐다(제목과 같은 말을 쓴다). */
+  label?: string;
+  /** 상담이 끝난 뒤(격을 내린 자리) — 브랜드 틴트 테두리를 무채색으로. 카드 배경과 함께 눈을 덜 끈다. */
+  muted?: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -24,9 +34,11 @@ export function PrepBriefCollapse({ children }: { children: React.ReactNode }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="border-primary/20 bg-card/60 hover:bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition"
+        className={`bg-card/60 hover:bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+          muted ? "border-line" : "border-primary/20"
+        }`}
       >
-        {open ? "브리프 접기" : "브리프 펼치기"}
+        {open ? `${label} 접기` : `${label} 펼치기`}
         <ChevronDown
           className={`text-text-faint size-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
         />

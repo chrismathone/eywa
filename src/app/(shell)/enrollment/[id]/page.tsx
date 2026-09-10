@@ -35,6 +35,11 @@ import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
 import { ChecklistView } from "../_components/checklist-view";
 import { PrepBriefSection } from "./prep-brief-section";
+import { AssignedClassesSection } from "./assigned-classes-section";
+import { detailPanelsFor } from "@/features/enrollment/detail-panels";
+import { getAssignedClasses } from "@/features/enrollment/server/assigned-classes";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { canViewClassDetail } from "@/features/classes/server/class-scope";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -112,6 +117,52 @@ export default async function EnrollmentDetailPage({
   const subjectLabel = f.subject ? subjectMaps.labelOf(f.subject) : null;
   const consultationDateLabel =
     f.consultationDate ?? new Date(consult.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
+
+  /**
+   * 브리프·배정 카드의 자리 판정 — **순수 함수 단일 소스**([detail-panels](src/features/enrollment/detail-panels.ts)),
+   * 재료는 칸반과 같은 `stageOfCard`뿐이다(화면에서 `outcome` 문자열을 직접 비교하지 않는다).
+   * ⚠️ 배정 조회는 '등록 완료' 칸일 때만 돈다 — 나머지 상담에 왕복을 더하지 않는다(B4·B7).
+   */
+  const { pastBrief, showAssigned } = detailPanelsFor({
+    outcome: consult.outcome,
+    assignedClassCount: consult.assignedClassCount,
+  });
+  // 반 상세를 못 여는 사람에겐 링크를 안 건다(죽은 링크 금지) — 상담사(counselor)는 등록상담 full이지만
+  // 수업목록이 `none`이라 실제로 이 경우다. scoped(강사)는 반마다 담당 여부를 본다(chokepoint 재사용).
+  const [assigned, classLevel] = showAssigned
+    ? await Promise.all([
+        getAssignedClasses(consult.studentId, f.subject),
+        accessLevelTenant(user.systemRole, "classes"),
+      ])
+    : ([null, "none"] as const);
+  const canOpenClass =
+    classLevel === "none"
+      ? false
+      : classLevel !== "scoped" ||
+        // scoped는 반마다 다르다 — 한 반이라도 못 열면 전부 텍스트로(부분 링크는 더 헷갈린다).
+        (assigned?.ok
+          ? (await Promise.all(assigned.rows.map((c) => canViewClassDetail(c.classId)))).every(Boolean)
+          : false);
+
+  /**
+   * 브리프 카드 — **한 벌만 만들고 자리만 바꾼다**(위/아래에 각각 쓰면 props가 갈린다).
+   * 아직 안 만든 건은 '상담 전'에만 권유하고, 만들어 둔 건·생성 중인 건은 어느 칸에서든 남는다.
+   *
+   * ⚠️ 지난 건의 **실패 상태만 남은 카드는 안 그린다**(`failed` + 브리프 없음 + pastBrief) — 다시
+   *    만들 수 없는 문서의 실패 안내와 "만들어 드립니다" 소개문만 남아, 할 수 없는 일을 권하는 꼴이 된다.
+   *    생성 중(`generating`)은 곧 결과가 생기므로 그대로 그린다.
+   */
+  const briefNode =
+    consult.prepBrief || consult.prepBriefStatus === "generating" || !pastBrief ? (
+      <PrepBriefSection
+        consultationId={id}
+        record={consult.prepBrief}
+        status={consult.prepBriefStatus}
+        errorText={consult.prepBriefError}
+        canWrite={canWrite}
+        past={pastBrief}
+      />
+    ) : null;
 
   const badge = outcomeBadge(consult.outcome);
   const procBadge = PROCESSING_BADGE[consult.processingStatus];
@@ -201,21 +252,22 @@ export default async function EnrollmentDetailPage({
         </div>
       </header>
 
-      {/* 사전 상담 브리프 — 상담 *전* 준비 문서라 헤더 바로 아래(상담 기록보다 먼저 읽는다).
-          아직 안 만든 건 대기·예약 건에만 권유한다 — 이미 끝난 상담에 "브리프 만들기"를 띄우면 노이즈다.
-          한 번 만든 브리프는 상태와 무관하게 계속 보인다(상담 중 참조 + 인쇄 재출력). */}
-      {consult.prepBrief ||
-      consult.prepBriefStatus ||
-      consult.outcome === "pending" ||
-      consult.outcome === "scheduled" ? (
-        <PrepBriefSection
-          consultationId={id}
-          record={consult.prepBrief}
-          status={consult.prepBriefStatus}
-          errorText={consult.prepBriefError}
-          canWrite={canWrite}
+      {/* 배정된 반 — 상담이 끝나면 **여기가 주인공**이다(원장 2026-09-10 *"중요한건 배정된 반이니까"*).
+          브리프가 쓰던 자리를 그대로 물려받고, 브리프는 '지난 상담 브리프'가 되어 페이지 맨 아래로 간다. */}
+      {showAssigned && assigned ? (
+        <AssignedClassesSection
+          assigned={assigned}
+          hasStudent={!!consult.studentId}
+          canOpenClass={canOpenClass}
+          // 배정 조회가 이 상담 과목으로 좁혀져 있으므로 빈 목록 문구도 그 과목을 말한다.
+          subjectLabel={subjectLabel}
         />
       ) : null}
+
+      {/* 상담 준비 브리프 — 상담 *전* 준비 문서라 '상담 전' 칸에서는 헤더 바로 아래(상담 기록보다 먼저 읽는다).
+          아직 안 만든 건 '상담 전' 칸에만 권유한다 — 이미 끝난 상담에 "브리프 만들기"를 띄우면 노이즈다.
+          🔴 한 번 만든 브리프는 **지우지 않는다** — 끝난 상담에서는 이름·톤을 내려(pastBrief) 아래로 옮길 뿐이다. */}
+      {!pastBrief ? briefNode : null}
 
       {/* 같은 학생의 다른 등록상담(반복 접수) — 학생 연결 또는 자연키(이름+학교+학년)로 묶은 다른 상담 건.
           카드의 '상담 N건' 배지와 동일 그룹. 각 건을 창으로 열어 나머지 상담을 확인·정리. 등록상담만 대상. */}
@@ -524,6 +576,10 @@ export default async function EnrollmentDetailPage({
           />
         ) : null}
       </div>
+
+      {/* 지난 상담 브리프 — 상담이 끝난 뒤엔 준비물이 아니라 기록이라 맨 아래(기본 접힘).
+          🔴 위쪽 `briefNode`와 **같은 한 벌**이다(둘 중 하나만 렌더된다). */}
+      {pastBrief ? briefNode : null}
     </div>
   );
 }
