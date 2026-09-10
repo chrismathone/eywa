@@ -6,8 +6,10 @@ import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadPublicSeatJjPlans } from "@/features/attendance/seat/server/jj-plan-public";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
+import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
 import { readSeatPinSession, resolvePinSigningSecret } from "@/features/attendance/seat/server/pin-session";
 import {
+  ambiguousClassIds,
   parseSeatKey,
   pickPeriodIndex,
   SEAT_NAME,
@@ -91,6 +93,22 @@ export default async function PublicSeatPage({
       : Promise.resolve({}),
   ]);
 
+  /**
+   * 앞 교시 결석 — **이미 이 화면에 있는 사실**을 접은 것뿐이다(교시 칩을 눌러 앞 교시를 열면 그 결석이
+   * 그대로 보인다). 그래서 공개 화면에도 내려보낸다. 이 일괄이 없으면 당번이 교시마다 스무 명을 다시 찍는다.
+   *
+   * 🔴 **'다음 교시'(`nextStartByStudent`)는 안 넘긴다** — 이 화면에 새 정보를 더하지 않는다는 규약
+   *    (사유 메모를 조회조차 안 하는 것과 같은 결). 로그인 화면에만 붙는다.
+   */
+  const prevAbsentByCell = period
+    ? prevPeriodAbsences(
+        seatDayCells(day.periods, day.rosterByPeriod),
+        period.start,
+        // 모호한 반은 아무도 못 쓰는 칸이라 표식·수에서 뺀다(서버 일괄과 같은 집합).
+        ambiguousClassIds(period),
+      )
+    : undefined;
+
   // 🔴 본문 폭을 캡하지 않는다 — 셸 `<main>`(px-3 lg:px-6, max-w 없음)과 **같은 폭**이다.
   //    원장 2026-09-03: *"월별 출석부와 같은 화면 크기로. 접근 방법만 다르지 기능이 다르지 않기
   //    때문에"*(seat/jj 로 접속했을 때의 화면 너비). 그전엔 `max-w-5xl`(1024px)이라 한 교시에 반이
@@ -126,6 +144,7 @@ export default async function PublicSeatPage({
           //    (병원·수술·가족 일정이 적힌다) 입력만 열어 두면 화면엔 영영 안 보이는 유령 기록이 된다.
           publicPin
           hrefFor={`/seat/${seat}?start=`}
+          prevAbsentByCell={prevAbsentByCell}
           // 진도 구획은 명단에 오른 반 중 계획이 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={
             Object.keys(plans).length > 0

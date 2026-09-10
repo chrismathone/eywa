@@ -19,8 +19,15 @@ import { AttitudeCheck } from "@/features/class-sheets/components/attitude-check
 import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
+import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
-import { PrevAbsenceHint, SeatMarkButtons, SeatReasonInput } from "./seat-mark-extras";
+import {
+  PrevAbsenceHint,
+  SeatMarkButtons,
+  SeatPeriodHints,
+  SeatReasonInput,
+  type SeatPeriodHintData,
+} from "./seat-mark-extras";
 
 const INPUT =
   "border-line focus:border-primary h-8 w-full rounded-lg border bg-card px-2 text-sm font-semibold outline-none disabled:opacity-60";
@@ -57,6 +64,8 @@ type JjTableProps = {
   onSaveNote: (classId: string, studentId: string, note: string, status: SeatStatus | null) => void;
   /** 사유 칸을 그릴 것인가 — 비로그인 PIN 화면은 false(그 경로는 사유를 조회하지 않는다). */
   showReason: boolean;
+  /** 같은 날 교시 사이 신호(앞 교시 결석 · 다음 교시) — 표시 전용. */
+  hints: SeatPeriodHintData;
   onSave: (classId: string, studentId: string, next: SeatStatus | null, prev: SeatStatus | null) => void;
   onSaveField: (classId: string, studentId: string, field: JjMarkField, value: string) => void;
   onFillClass: (classId: string) => void;
@@ -90,6 +99,7 @@ export function SeatJjTable(props: JjTableProps) {
           noteOf={props.noteOf}
           onSaveNote={props.onSaveNote}
           showReason={props.showReason}
+          hints={props.hints}
           onSave={props.onSave}
           onSaveField={props.onSaveField}
           onFillClass={props.onFillClass}
@@ -108,6 +118,7 @@ function SeatJjClass({
   noteOf,
   onSaveNote,
   showReason,
+  hints,
   onSave,
   onSaveField,
   onFillClass,
@@ -181,7 +192,8 @@ function SeatJjClass({
         </colgroup>
         <thead>
           <tr className="bg-bg-soft text-foreground text-xs">
-            <th className="px-2 py-1.5 text-center font-bold">이름</th>
+            {/* 이름 열은 본문도 가운데다(원장 2026-09-10) — 머리와 좌우 여백을 맞춘다. */}
+            <th className="px-1 py-1.5 text-center font-bold">이름</th>
             <th className="px-1 py-1.5 text-center font-bold">출결</th>
             <th className="px-1 py-1.5 text-center font-bold" title="이 교시의 수업 태도 — 누를 때마다 5단 눈금을 돕니다">
               {ROSTER_FIXED_LABEL.attitude}
@@ -202,7 +214,11 @@ function SeatJjClass({
             const noteTitle = seatNoteTitle(cur, s.note);
             return (
               <tr key={s.id} title={noteTitle ?? undefined}>
-                <td className="px-2 py-1.5">
+                {/* 이름 칸 — **가운데 정렬 + 좌우 여백 최소**(원장 2026-09-10: *"이름도 가운데정렬시켜주고
+                    여백 최소화"*). 두 줄(이름 / 학교학년) 모두 가운데다.
+                    ⚠️ 세로 여백은 그대로 둔다 — 줄 높이는 옆 칸의 출결 버튼이 정하고, 그 탭 타겟을 줄이면
+                       폰에서 못 누른다(지시도 '좌우 여백'이었다). */}
+                <td className="px-1 py-1.5 text-center">
                   <p className="truncate font-bold" title={noteTitle ? `${s.name} · ${noteTitle}` : s.name}>
                     {s.name}
                   </p>
@@ -246,6 +262,13 @@ function SeatJjClass({
                     />
                     ) : null}
                     <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
+                    {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 교시(표시 전용, 랩실과 같은 부품). */}
+                    <SeatPeriodHints
+                      prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(r.classId, s.id)]}
+                      nextStart={hints.nextStartByStudent?.[s.id]}
+                      seatName={hints.seatName}
+                      cur={cur}
+                    />
                   </div>
                 </td>
                 {/* 태도 — 영어 시트와 **같은 부품**(5단 눈금 순환). 옛 자유입력 값도 그대로 보여준다. */}

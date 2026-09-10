@@ -256,6 +256,7 @@ export const AUDIT_ACTIONS = {
   seat_attendance_clear: "자리 출결 지우기",
   seat_attendance_note: "자리 결석 사유 수정",
   seat_attendance_fill: "자리 출결 일괄",
+  seat_attendance_fill_prev: "자리 출결 앞 교시 결석 일괄",
 
   // 수업보고서·발송 — 학부모에게 **나간 것**이라 되짚기가 가장 절실하다.
   lesson_report_save: "수업보고서 저장",

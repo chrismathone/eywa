@@ -3,11 +3,13 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
+import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
-import type { SeatKey } from "@/features/attendance/seat/seat";
+import { SEAT_NAME, type SeatKey } from "@/features/attendance/seat/seat";
 import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { seatPlanApi } from "@/features/attendance/seat/seat-plan-api";
+import type { SeatPeriodHintData } from "./seat-mark-extras";
 import { useSeatBoardSaves } from "./seat-board-saves";
 import { SeatJjTable } from "./seat-jj-table";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
@@ -51,6 +53,8 @@ export function SeatBoard({
   readOnly,
   hrefFor,
   publicPin,
+  prevAbsentByCell,
+  nextStartByStudent,
   plans,
 }: {
   seat: SeatKey;
@@ -61,6 +65,18 @@ export function SeatBoard({
   readOnly: boolean;
   hrefFor: string;
   /**
+   * 앞 교시가 결석인 칸 → 그 교시 시각(`classId|studentId` → "HH:MM", `prevPeriodAbsences`).
+   * 🔴 서버가 만든 **제안**일 뿐이다 — 이 값으로 아무것도 자동 저장하지 않는다(버튼을 눌러야 쓴다).
+   * ⚠️ 상태로 안 걸러진 채 온다 — 낙관 오버레이(`statusOf`)를 얹은 뒤 화면이 다시 거른다.
+   */
+  prevAbsentByCell?: Readonly<Record<string, string>>;
+  /**
+   * 오늘 이 자리에서 다시 오는 다음 교시(학생 id → "HH:MM").
+   * 🔴 **로그인 화면에만 내려온다** — 비로그인 PIN 화면은 이 prop 자체를 안 받는다(그쪽엔 새 정보를
+   *    내려보내지 않는다는 규약. 사유 칸과 같은 결).
+   */
+  nextStartByStudent?: Readonly<Record<string, string>>;
+  /**
    * 비로그인 PIN 화면인가 — 참이면 **사유 칸을 안 그린다**(그 경로는 사유를 조회하지 않는다).
    * ⚠️ `plans.viaPin`으로 대신 판정하지 말 것 — 계획이 없는 자리·교시엔 `plans` 자체가 안 넘어와서
    *    공개 화면인데도 거짓이 된다.
@@ -68,8 +84,20 @@ export function SeatBoard({
   publicPin?: boolean;
   plans?: SeatPlans;
 }) {
-  const { pending, error, statusOf, noteOf, mergeFields, save, saveNote, fill, saveField, flushFields, applyCarried } =
-    useSeatBoardSaves(seat, date, activeStart);
+  const {
+    pending,
+    error,
+    statusOf,
+    noteOf,
+    mergeFields,
+    save,
+    saveNote,
+    fill,
+    fillPrevAbsent,
+    saveField,
+    flushFields,
+    applyCarried,
+  } = useSeatBoardSaves(seat, date, activeStart);
   const showJj = seatHasJjFields(seat);
   // 문 선택은 여기 한 줄 — 참조 고정(계획 블록이 `memo`라 매 렌더 새 객체면 표가 통째로 다시 그려진다).
   const viaPin = plans?.viaPin ?? false;
@@ -97,6 +125,24 @@ export function SeatBoard({
   const total = all.length;
   const checked = all.filter((v) => v !== null).length;
   const waiting = total - checked;
+  /**
+   * 앞 교시 결석자 중 **아직 안 찍힌 칸** 수 — 버튼 라벨이 이 수를 그대로 쓴다.
+   * 🔴 낙관 오버레이(`statusOf`)를 얹은 뒤 센다 — 방금 출석으로 고친 학생이 그 수에 남아 있으면
+   *    버튼이 거짓말을 한다. 0이면 버튼을 아예 세우지 않는다.
+   * 🔴 **칸 키로 중복을 접는다** — 같은 반이 한 교시에 두 줄로 서면(중복 슬롯) 명단에 같은 학생이 두 번
+   *    들어와 라벨이 "4명"이라 적고 서버는 2건만 쓴다(서버도 같은 키로 접는다, `prevAbsentFillTargets`).
+   */
+  const prevAbsentWaiting = prevAbsentByCell
+    ? new Set(
+        view.flatMap((r) =>
+          r.students
+            .filter((s) => statusOf(r.classId, s) === null && prevAbsentByCell[seatCellKey(r.classId, s.id)])
+            .map((s) => seatCellKey(r.classId, s.id)),
+        ),
+      ).size
+    : 0;
+  /** 표 두 벌에 그대로 넘기는 신호 한 묶음 — 이름은 자리 키가 아니라 사람이 읽는 방 이름이다. */
+  const hints: SeatPeriodHintData = { prevAbsentByCell, nextStartByStudent, seatName: SEAT_NAME[seat] };
   const listenN = view.flatMap((r) => r.students).filter((s) => s.listeningLevel).length;
   const wordsN = view.flatMap((r) => r.students).filter((s) => s.memorizedWords).length;
 
@@ -135,6 +181,19 @@ export function SeatBoard({
         </span>
         {!readOnly && waiting > 0 ? (
           <div className="ml-auto flex flex-wrap gap-2">
+            {/* 🔴 '자동 결석'이 아니라 **사람이 누르는 한 번**이다(원장 2026-09-10 지시의 안전한 형태).
+                후보가 0명이면 아예 안 선다 — 세워 두고 "0명"이라 적으면 화면이 거짓말을 한다. */}
+            {prevAbsentWaiting > 0 ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => fillPrevAbsent()}
+                title="앞 교시에 결석으로 찍힌 학생 중 이 교시가 아직 비어 있는 칸만 결석으로 채웁니다 — 이미 찍힌 칸은 건드리지 않습니다"
+                className="border-att-absent text-att-absent-ink rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+              >
+                앞 교시 결석자 {prevAbsentWaiting}명 결석
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={pending}
@@ -181,6 +240,7 @@ export function SeatBoard({
             onSave={save}
             onSaveNote={saveNote}
             showReason={!publicPin}
+            hints={hints}
             onSaveField={saveField}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
@@ -194,6 +254,7 @@ export function SeatBoard({
             onSave={save}
             onSaveNote={saveNote}
             showReason={!publicPin}
+            hints={hints}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
             pending={pending}

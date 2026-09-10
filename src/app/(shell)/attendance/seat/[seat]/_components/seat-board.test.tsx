@@ -18,6 +18,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/features/attendance/seat/server/actions", () => ({
   setSeatCell: vi.fn(),
   fillSeatSlot: vi.fn(),
+  fillSeatPrevAbsent: vi.fn(),
 }));
 vi.mock("@/features/attendance/seat/server/mark-actions", () => ({
   setSeatJjField,

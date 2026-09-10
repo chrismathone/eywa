@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
-import { SEAT_DB_LABEL, hhmm, isPayrollSeat, type SeatKey } from "../seat";
+import { SEAT_DB_LABEL, ambiguousClassIds, hhmm, isPayrollSeat, type SeatKey } from "../seat";
+import { prevAbsentFillTargets, seatDayCells } from "../prev-period";
 import { pickSaveTargets } from "../../save-targets";
 import { gateSeatWrite, rosterKeys } from "./gate";
+import { getPublicSeatDay, getSeatDay } from "./queries";
 
 export type SeatStatus = "present" | "absent" | "late";
 export type SeatResult = { ok: true; changed: number } | { error: string };
@@ -143,58 +145,19 @@ export async function fillSeatSlot(input: {
     : [...roster.classes.entries()];
   if (input.classId && !roster.classes.has(input.classId)) return { error: "이 교시에 없는 반입니다" };
 
-  const built = targets.flatMap(([classId, studentIds]) =>
-    studentIds.map((studentId) => ({
-      tenant_id: g.tenantId,
-      class_id: classId,
-      student_id: studentId,
-      session_date: input.date,
-      slot_start: slot,
-      status: input.status,
-      seat_label: isPayrollSeat(input.seat) ? SEAT_DB_LABEL[input.seat] : null,
-      recorded_by: g.userId,
-      recorded_via: "seat",
-    })),
-  );
-  if (built.length === 0) return { ok: true, changed: 0 };
-
   const supabase = g.via === "pin" ? createAdminClient() : await createClient();
-  // 🔴 중복 행 방지 재확인(2026-08-17 감사 P1-4) — 명단의 '미체크'는 화면 스냅샷이라, 그 사이 생긴
-  //    기록(같은 교시 행·비급여 자리의 "그날 전체" 행)이 있으면 그 칸은 건너뛴다. 특히 비급여 자리(JJ)의
-  //    day-level 행은 담임 시수와 같은 축이라 blind insert가 시수·회차를 이중 계상한다(writeOne 주석 참조).
-  //    자리판 3종 밖 day-level 상태(조퇴 등)도 여기서 자연히 보호된다(그 칸에 insert 안 함).
-  const classIdsForDup = [...new Set(built.map((r) => r.class_id))];
-  const { data: existingDup, error: dupErr } = await supabase
-    .from("attendance_records")
-    .select("class_id, student_id, slot_start")
-    .eq("tenant_id", g.tenantId)
-    .eq("session_date", input.date)
-    .in("class_id", classIdsForDup)
-    // 서버측 축소(B2) — 같은 교시 행 + "그날 전체"(slot null) 행만. 전 슬롯을 다 받으면 화이트리스트가
-    // 1000행 silent 절단으로 뚫린다(#54). 이 필터면 상한 ≈ 명단 × 2라 절단 불가.
-    .or(`slot_start.eq.${slot},slot_start.is.null`);
-  // 🔴 확인 실패 = 안 쓴다(B3 — error 삼키고 blind insert하면 이 가드가 정확히 막으려던 중복이 난다).
-  if (dupErr) return { error: "기존 기록 확인에 실패해 저장하지 않았습니다 — 다시 시도해 주세요" };
-  const taken = new Set(
-    (existingDup ?? [])
-      .filter((r) => hhmm(r.slot_start) === slot || (!isPayrollSeat(input.seat) && r.slot_start == null))
-      .map((r) => `${r.class_id}|${r.student_id}`),
-  );
-  const rows = built.filter((r) => !taken.has(`${r.class_id}|${r.student_id}`));
+  const filled = await insertSeatFill(supabase, {
+    tenantId: g.tenantId,
+    userId: g.userId,
+    seat: input.seat,
+    date: input.date,
+    slot,
+    status: input.status,
+    byClass: new Map(targets),
+  });
+  if ("error" in filled) return filled;
+  const { rows, skipped } = filled;
   if (rows.length === 0) return { ok: true, changed: 0 };
-  const first = await supabase.from("attendance_records").insert(rows);
-  const error =
-    first.error && /recorded_via/i.test(first.error.message)
-      ? (await supabase.from("attendance_records").insert(
-          // recorded_via가 필수 키인 객체 리터럴이라 delete가 TS2790 — 구조분해로 그 키만 뺀다(동작 동일).
-          rows.map((r) => {
-            const { recorded_via, ...rest } = r;
-            void recorded_via;
-            return rest;
-          }),
-        )).error
-      : first.error;
-  if (error) return { error: error.message };
 
   /**
    * 감사로그 — 일괄은 **한 줄로 요약**(반 출석부 일괄과 같은 규약). 되짚을 식별자로 실제로 쓴 칸의
@@ -213,7 +176,7 @@ export async function fillSeatSlot(input: {
       seat: input.seat,
       status: input.status,
       count: rows.length,
-      skipped: built.length - rows.length,
+      skipped,
       studentIds: [...new Set(rows.map((r) => r.student_id))],
       via: g.via,
     },
@@ -223,6 +186,186 @@ export async function fillSeatSlot(input: {
   revalidatePath("/attendance");
   revalidatePath("/seat");
   return { ok: true, changed: rows.length };
+}
+
+/**
+ * 일괄 — **앞 교시에 결석이던 학생**의 아직 빈 칸만 결석으로 채운다.
+ *
+ * 원장 2026-09-10: *"이 학생이 이전수업에 결석이였으면 자동 결석체크할 수 있도록"*.
+ * 🔴🔴 **자동이 아니라 버튼 한 번**이다 — 화면을 열기만 해서는 한 칸도 안 쓴다(셔틀 "신호만, 자동
+ *    쓰기 없음"·재고 "제안만"과 같은 결). 출결은 시수→급여와 학부모 결석 알림에 닿아, 조용히 찍히면
+ *    되돌릴 방법이 없다.
+ * 🔴 **대상은 서버가 다시 계산한다** — 화면이 보낸 목록을 믿으면 그새 출석으로 고친 칸을 덮는다([[#77]]).
+ *    빈 칸만 채우는 비파괴 규약은 `fillSeatSlot`과 **같은 함수**(`insertSeatFill`)가 지킨다.
+ */
+export async function fillSeatPrevAbsent(input: {
+  seat: SeatKey;
+  date: string;
+  slotStart: string;
+}): Promise<SeatResult> {
+  const g = await gateSeatWrite(input.seat, input.date);
+  if ("error" in g) return g;
+
+  const slot = hhmm(input.slotStart);
+  // 하루치를 한 번만 읽는다 — 앞 교시 판정에 그 날 전 교시 명단·상태가 필요하다(rosterKeys는 한 교시뿐).
+  const day =
+    g.via === "pin"
+      ? await getPublicSeatDay(g.tenantId, input.seat, input.date)
+      : await getSeatDay(input.seat, input.date);
+  const period = day.periods.find((p) => p.start === slot);
+  if (!period) return { error: "그 시각에는 이 자리 수업이 없습니다" };
+
+  // 같은 반·같은 시작·다른 종료(저장키로 구분 불가)는 `rosterKeys`와 **같은 규약**으로 제외한다.
+  // 🔑 화면(표식·버튼 수)도 **같은 인자**로 같은 함수를 돌린다 — 갈리면 "3명"이라 적고 2명만 쓴다.
+  const targets = prevAbsentFillTargets(
+    seatDayCells(day.periods, day.rosterByPeriod),
+    slot,
+    ambiguousClassIds(period),
+  );
+  if (targets.length === 0) return { ok: true, changed: 0 };
+
+  const byClass = new Map<string, string[]>();
+  for (const t of targets) byClass.set(t.classId, [...(byClass.get(t.classId) ?? []), t.studentId]);
+  /** 칸 → 근거(앞 교시). 감사로그가 **실제로 쓴 행**의 근거만 적는다(건너뛴 칸은 안 적는다). */
+  const prevByCell = new Map(targets.map((t) => [`${t.classId}|${t.studentId}`, t.prevStart]));
+
+  const supabase = g.via === "pin" ? createAdminClient() : await createClient();
+  const filled = await insertSeatFill(supabase, {
+    tenantId: g.tenantId,
+    userId: g.userId,
+    seat: input.seat,
+    date: input.date,
+    slot,
+    status: "absent",
+    byClass,
+  });
+  if ("error" in filled) return filled;
+  const { rows, skipped } = filled;
+  if (rows.length === 0) return { ok: true, changed: 0 };
+
+  /**
+   * 감사로그 — 일괄과 같은 모양에 **근거(앞 교시)**를 더한다. 공개 PIN 갈래가 안 남는 건 위와 같다.
+   * 🔴 `prevStarts`가 이 로그의 핵심이다 — 이 액션은 "앞 교시가 결석이었으니 이 교시도"라는 **추론**이라,
+   *    근거 교시를 안 적으면 나중에 그 앞 교시 기록이 고쳐졌을 때 왜 찍혔는지 되짚을 길이 사라진다.
+   */
+  const prevClassIds = [...new Set(rows.map((r) => r.class_id))];
+  const prevStarts = [
+    ...new Set(rows.map((r) => prevByCell.get(`${r.class_id}|${r.student_id}`)).filter(Boolean)),
+  ].sort();
+  await logAction({
+    action: "seat_attendance_fill_prev",
+    targetType: "attendance",
+    metadata: {
+      ...(prevClassIds.length === 1 ? { classId: prevClassIds[0] } : {}),
+      classIds: prevClassIds,
+      date: input.date,
+      slotStart: slot,
+      seat: input.seat,
+      status: "absent",
+      // 근거 = 이 칸들을 결석으로 제안한 **앞 교시**(대개 하나, 학생마다 다를 수 있어 배열).
+      prevStarts,
+      count: rows.length,
+      skipped,
+      studentIds: [...new Set(rows.map((r) => r.student_id))],
+      via: g.via,
+    },
+  });
+
+  revalidatePath("/attendance/seat");
+  revalidatePath("/attendance");
+  revalidatePath("/seat");
+  return { ok: true, changed: rows.length };
+}
+
+/** 일괄이 만드는 행의 재료(반·학생만 다르다). */
+type SeatFillBase = {
+  tenantId: string;
+  userId: string | null;
+  seat: SeatKey;
+  date: string;
+  slot: string;
+  status: Extract<SeatStatus, "present" | "absent">;
+};
+
+/**
+ * 일괄이 만드는 행 한 줄 — **타입도 이 함수에서 뽑는다**(`ReturnType`).
+ * 🔴 `seat_label: string | null`을 타입으로 따로 적으면 자리 축 가드(`seat-axes.test.ts`)가 그 줄을
+ *    "출처 모를 값"으로 잡는다 — 실제로 잡혔다. 라벨이 나오는 자리는 코드 한 줄이어야 한다.
+ */
+function seatFillRow(p: SeatFillBase, classId: string, studentId: string) {
+  return {
+    tenant_id: p.tenantId,
+    class_id: classId,
+    student_id: studentId,
+    session_date: p.date,
+    slot_start: p.slot,
+    status: p.status,
+    seat_label: isPayrollSeat(p.seat) ? SEAT_DB_LABEL[p.seat] : null,
+    recorded_by: p.userId,
+    recorded_via: "seat",
+  };
+}
+type SeatFillRow = ReturnType<typeof seatFillRow>;
+
+/**
+ * 두 일괄(교시 전체 · 앞 교시 결석자)이 공유하는 **비파괴 쓰기** — 빈 칸에만 행을 만든다.
+ *
+ * 🔴 한 벌로 두는 이유: 이 함수 안의 중복 방지(아래)가 자리 출결의 이중 계상을 막는 유일한 곳이다.
+ *    일괄을 하나 더 만들면서 이 규약을 복붙하면 한쪽만 고쳐진다.
+ * 반환 = 실제로 쓴 행 + 건너뛴 칸 수(감사로그가 그대로 담는다).
+ */
+async function insertSeatFill(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
+  p: SeatFillBase & {
+    /** 반 → 학생 id. 호출부가 '미체크로 보이는 칸'만 담아 넘기고, 여기서 한 번 더 확인한다. */
+    byClass: ReadonlyMap<string, readonly string[]>;
+  },
+): Promise<{ error: string } | { rows: SeatFillRow[]; skipped: number }> {
+  const built: SeatFillRow[] = [...p.byClass.entries()].flatMap(([classId, studentIds]) =>
+    studentIds.map((studentId) => seatFillRow(p, classId, studentId)),
+  );
+  if (built.length === 0) return { rows: [], skipped: 0 };
+
+  // 🔴 중복 행 방지 재확인(2026-08-17 감사 P1-4) — 명단의 '미체크'는 화면 스냅샷이라, 그 사이 생긴
+  //    기록(같은 교시 행·비급여 자리의 "그날 전체" 행)이 있으면 그 칸은 건너뛴다. 특히 비급여 자리(JJ)의
+  //    day-level 행은 담임 시수와 같은 축이라 blind insert가 시수·회차를 이중 계상한다(writeOne 주석 참조).
+  //    자리판 3종 밖 day-level 상태(조퇴 등)도 여기서 자연히 보호된다(그 칸에 insert 안 함).
+  const classIdsForDup = [...new Set(built.map((r) => r.class_id))];
+  const { data: existingDup, error: dupErr } = await supabase
+    .from("attendance_records")
+    .select("class_id, student_id, slot_start")
+    .eq("tenant_id", p.tenantId)
+    .eq("session_date", p.date)
+    .in("class_id", classIdsForDup)
+    // 서버측 축소(B2) — 같은 교시 행 + "그날 전체"(slot null) 행만. 전 슬롯을 다 받으면 화이트리스트가
+    // 1000행 silent 절단으로 뚫린다(#54). 이 필터면 상한 ≈ 명단 × 2라 절단 불가.
+    .or(`slot_start.eq.${p.slot},slot_start.is.null`);
+  // 🔴 확인 실패 = 안 쓴다(B3 — error 삼키고 blind insert하면 이 가드가 정확히 막으려던 중복이 난다).
+  if (dupErr) return { error: "기존 기록 확인에 실패해 저장하지 않았습니다 — 다시 시도해 주세요" };
+  const taken = new Set(
+    (existingDup ?? [])
+      .filter((r) => hhmm(r.slot_start) === p.slot || (!isPayrollSeat(p.seat) && r.slot_start == null))
+      .map((r) => `${r.class_id}|${r.student_id}`),
+  );
+  const rows = built.filter((r) => !taken.has(`${r.class_id}|${r.student_id}`));
+  if (rows.length === 0) return { rows: [], skipped: built.length };
+
+  const first = await supabase.from("attendance_records").insert(rows);
+  const error =
+    first.error && /recorded_via/i.test(first.error.message)
+      ? (
+          await supabase.from("attendance_records").insert(
+            // recorded_via가 필수 키인 객체 리터럴이라 delete가 TS2790 — 구조분해로 그 키만 뺀다(동작 동일).
+            rows.map((r) => {
+              const { recorded_via, ...rest } = r;
+              void recorded_via;
+              return rest;
+            }),
+          )
+        ).error
+      : first.error;
+  if (error) return { error: error.message };
+  return { rows, skipped: built.length - rows.length };
 }
 
 /**
