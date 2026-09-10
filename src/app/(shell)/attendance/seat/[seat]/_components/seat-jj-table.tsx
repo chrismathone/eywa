@@ -81,8 +81,15 @@ export function SeatJjTable(props: JjTableProps) {
   // 계획을 하나라도 그리면 **모든 열**을 그 폭으로 넓힌다 — 열마다 폭이 다르면 나란한 표가 어긋난다.
   const anyPlan = props.rosters.some((r) => props.plan?.plans[r.classId]);
   return (
+    /**
+     * 🔴 **속살까지 줄맞춤 = `grid-rows-subgrid`**(원장 2026-09-10 ⑦: 세 카드의 수업계획 블록 높이가
+     *    달라 아래 표 머리가 서로 다른 높이에서 시작했다). 카드마다 계획 줄 수·presence 배지가 달라서
+     *    높이만 맞추면(items-stretch) 안쪽 구획이 그대로 어긋난다 — 행을 셋(머리·계획·표)으로 못박고
+     *    카드가 그 행을 **물려받는다**.
+     * ⚠️ `items-start`를 쓰면 안 된다 — 카드가 내용 높이로 줄어들어 행을 안 채우고 줄맞춤이 죽는다.
+     */
     <div
-      className="grid items-start gap-3 overflow-x-auto"
+      className="grid grid-rows-[auto_auto_auto] gap-3 overflow-x-auto"
       style={{
         gridTemplateColumns: jjClassColumns(
           props.rosters.length,
@@ -136,7 +143,7 @@ function SeatJjClass({
     [onCarried, classId],
   );
   return (
-    <section className="border-line min-w-0 overflow-hidden rounded-2xl border">
+    <section className="border-line row-span-3 grid min-w-0 grid-rows-subgrid overflow-hidden rounded-2xl border">
       <header className="bg-bg-soft border-line flex flex-wrap items-center gap-2 border-b px-3 py-1.5 text-sm">
         <span className="min-w-0 truncate font-bold" title={r.className}>
           {r.className}
@@ -174,7 +181,11 @@ function SeatJjClass({
           onCarried={handleCarried}
           flushHost={plan.flushFields}
         />
-      ) : null}
+      ) : (
+        // 🔴 계획 구획이 없는 카드도 **그 행을 차지해야** 한다 — 안 그러면 표가 계획 행으로 올라와
+        //    옆 카드와 다시 어긋난다(권한 없는 반·랩실이 그 경우다).
+        <div />
+      )}
       <table className="w-full table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-[var(--line-faint)]">
         {/* 여섯 칸 — 영어 시트 JJ 폼과 **같은 순서**(이름 · 출결 · 태도 · 자유 입력 · 특이사항).
             ⚠️ 폭은 %다(시트는 px). 이 표는 반 수만큼 열이 갈리는 격자 안에 들어가 폭이 고정이 아니다.

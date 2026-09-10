@@ -63,7 +63,7 @@ describe("② 게이트 — 옮길 수 있는 사람만, 되돌릴 수도 있다
   });
 
   it("로그인 화면은 랩실 + 오늘(또는 지난 날짜 쓰기 권한) + 표 적용됨일 때만 연다", () => {
-    expect(SHELL_PAGE).toMatch(/canMovePlacement\s*=\s*seat === "lab" && !readOnly && placements\.ready/);
+    expect(SHELL_PAGE).toMatch(/canMovePlacement\s*=\s*seat === "lab" && !readOnly && placementsDay\.ready/);
   });
 });
 

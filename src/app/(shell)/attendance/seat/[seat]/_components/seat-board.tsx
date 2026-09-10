@@ -1,11 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
-import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
+import { SeatPeriodChips } from "./seat-period-chips";
 import { SEAT_NAME, type SeatKey } from "@/features/attendance/seat/seat";
 import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { seatPlanApi } from "@/features/attendance/seat/seat-plan-api";
@@ -68,6 +67,8 @@ export function SeatBoard({
   placements,
   canMove = false,
   placementNotice,
+  showChips = true,
+  showAllChip = false,
 }: {
   seat: SeatKey;
   date: string;
@@ -112,6 +113,10 @@ export function SeatBoard({
   canMove?: boolean;
   /** 배치를 못 쓰는 이유(한글) — 있으면 한 줄로 알린다. 없으면 아무 말도 안 한다. */
   placementNotice?: string | null;
+  /** 교시 칩 줄을 여기서 그릴 것인가 — '전체' 보기는 페이지가 위에 한 번만 그린다. */
+  showChips?: boolean;
+  /** 칩 줄에 '전체'를 세울 것인가(랩실만). */
+  showAllChip?: boolean;
 }) {
   const {
     pending,
@@ -199,18 +204,10 @@ export function SeatBoard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="toolbar-rail flex shrink-0 items-center gap-1.5 overflow-x-auto">
-        {periods.map((p) => (
-          <Link
-            key={p.start}
-            href={`${hrefFor}${p.start}`}
-            className={`${TOOLBAR_CHIP} tabular-nums ${p.start === activeStart ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
-          >
-            {p.start}
-            <span className="ml-1.5 text-xs font-medium opacity-80">{p.classIds.length}개 반</span>
-          </Link>
-        ))}
-      </div>
+      {/* '전체' 보기에선 칩 줄을 **페이지가 위에 한 번만** 그린다 — 교시마다 반복되면 화면이 칩으로 덮인다. */}
+      {showChips ? (
+        <SeatPeriodChips periods={periods} activeStart={activeStart} hrefFor={hrefFor} showAll={showAllChip} />
+      ) : null}
 
       <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-2.5">
         <span className="text-foreground text-base font-bold tabular-nums">

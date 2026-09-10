@@ -31,17 +31,55 @@ export type SeatNextDestination = {
 
 const EMPTY: SeatNextDestination = { startByStudent: {}, roomByStudent: {} };
 
+/**
+ * 교시 **여러 개**를 한 번에 — '전체' 보기(원장 2026-09-10 ⑨)가 교시 수만큼 왕복을 늘리지 않게,
+ * 조회는 하루 한 벌이고 "이보다 늦게 시작하는" 판정만 교시마다 JS에서 돌린다(B6).
+ */
+export async function getSeatNextDestinationsBySlot(
+  studentIds: readonly string[],
+  date: string,
+  /** 기준 교시들("HH:MM") — 각각에 대해 그 뒤 첫 수업을 찾는다. */
+  afterStarts: readonly string[],
+): Promise<Record<string, SeatNextDestination>> {
+  const empty = Object.fromEntries(afterStarts.map((k) => [hhmm(k), EMPTY]));
+  if (studentIds.length === 0 || afterStarts.length === 0) return empty;
+  const loaded = await loadDaySlots(studentIds, date);
+  if (!loaded) return empty;
+  return Object.fromEntries(
+    afterStarts.map((raw) => {
+      const after = hhmm(raw);
+      return [after, foldAfter(loaded, after)];
+    }),
+  );
+}
+
 export async function getSeatNextDestinations(
   studentIds: readonly string[],
   date: string,
   /** 지금 교시 시작시각 — 이보다 **늦게 시작하는** 수업만 다음 행선지다. */
   afterStart: string,
 ): Promise<SeatNextDestination> {
-  if (studentIds.length === 0) return EMPTY;
+  const bySlot = await getSeatNextDestinationsBySlot(studentIds, date, [afterStart]);
+  return bySlot[hhmm(afterStart)] ?? EMPTY;
+}
+
+/** 하루치 재료(수강 × 그 요일 배치 × 강의실 이름) — 교시 판정은 이 뒤에 JS로 돈다. */
+type DaySlots = {
+  live: {
+    student_id: string;
+    class_id: string;
+    attendance_days: string[] | null;
+  }[];
+  /** 반 → 그 요일 배치들(시작시각 오름차순 아님, 폴딩에서 최소를 고른다). */
+  slotsByClass: Map<string, { start: string; room: string | null }[]>;
+  todayIdx: number;
+};
+
+async function loadDaySlots(studentIds: readonly string[], date: string): Promise<DaySlots | null> {
+  if (studentIds.length === 0) return null;
   const supabase = await createClient();
   const dowKey = DOW_KEYS[new Date(`${date}T00:00:00Z`).getUTCDay()]!;
   const todayIdx = dowIndexOf(dowKey);
-  const after = hhmm(afterStart);
 
   // 그날 유효한 수강 — 반 축이 아니라 **학생 축**이라 이 자리 밖 과목까지 함께 들어온다.
   const enrollments = await fetchInChunks<{
@@ -73,7 +111,7 @@ export async function getSeatNextDestinations(
     ),
   );
   const classIds = [...new Set(live.map((e) => e.class_id))];
-  if (classIds.length === 0) return EMPTY;
+  if (classIds.length === 0) return null;
 
   // 그 요일에 **그 날짜로 유효한** 배치만(이력 행을 그대로 읽으면 끝난 교시가 미래로 보인다, [[#88]]).
   const slots = await fetchInChunks<{
@@ -89,36 +127,49 @@ export async function getSeatNextDestinations(
       .select("class_id, start_time, slot_room_label, classroom:classroom_id ( name )")
       .in("class_id", chunk)
       .eq("day_of_week", dowKey)
-      .gt("start_time", after)
       .lte("valid_from", date)
       .or(`valid_to.is.null,valid_to.gte.${date}`),
   );
-  if (slots.length === 0) return EMPTY;
+  if (slots.length === 0) return null;
 
   // 라벨 정규화의 사전 — 등록된 강의실 이름(폐강의실 포함: 라벨을 이름으로 맞추는 데만 쓴다, [[#122]]).
   const { data: rooms } = await supabase.from("classrooms").select("name");
   const known = (rooms ?? []).map((r) => r.name as string).filter(Boolean);
 
-  /** 반 → 그 요일 남은 교시 중 **가장 이른** 것. 같은 시각이 여럿이면 먼저 온 행(안정 선택). */
-  const nextByClass = new Map<string, { start: string; room: string | null }>();
+  const slotsByClass = new Map<string, { start: string; room: string | null }[]>();
   for (const sl of slots) {
-    const start = hhmm(sl.start_time);
-    const cur = nextByClass.get(sl.class_id);
-    if (cur && cur.start <= start) continue;
     const embedded = Array.isArray(sl.classroom) ? sl.classroom[0] : sl.classroom;
     const raw = embedded?.name ?? sl.slot_room_label ?? null;
-    nextByClass.set(sl.class_id, { start, room: canonicalRoomName(raw, known) });
+    const list = slotsByClass.get(sl.class_id) ?? [];
+    list.push({ start: hhmm(sl.start_time), room: canonicalRoomName(raw, known) });
+    slotsByClass.set(sl.class_id, list);
   }
+  return {
+    live: live.map((e) => ({
+      student_id: e.student_id,
+      class_id: e.class_id,
+      attendance_days: e.attendance_days,
+    })),
+    slotsByClass,
+    todayIdx,
+  };
+}
 
-  /** 반별 그 요일 등원 여부 — 분리등원(attendance_days) 학생은 오늘 안 오는 반이 있다. */
+/** 기준 교시 뒤 **첫 수업**을 학생별로 접는다 — 순수 계산(왕복 0). */
+function foldAfter({ live, slotsByClass, todayIdx }: DaySlots, after: string): SeatNextDestination {
   const startByStudent: Record<string, string> = {};
   const roomByStudent: Record<string, string> = {};
   for (const e of live) {
-    const next = nextByClass.get(e.class_id);
-    if (!next) continue;
-    // 그 반이 오늘 도는 요일인지는 위 쿼리가 이미 걸렀다 → 학생의 분리등원만 본다.
+    // 반별 그 요일 등원 여부 — 분리등원(attendance_days) 학생은 오늘 안 오는 반이 있다.
+    // 그 반이 오늘 도는 요일인지는 조회가 이미 걸렀다 → 학생의 분리등원만 본다.
     const dows = resolveAttendDows(e.attendance_days, [todayIdx]);
     if (dows.length > 0 && !dows.includes(todayIdx)) continue;
+    let next: { start: string; room: string | null } | null = null;
+    for (const sl of slotsByClass.get(e.class_id) ?? []) {
+      if (sl.start <= after) continue;
+      if (!next || sl.start < next.start) next = sl;
+    }
+    if (!next) continue;
     const cur = startByStudent[e.student_id];
     if (cur && cur <= next.start) continue;
     startByStudent[e.student_id] = next.start;

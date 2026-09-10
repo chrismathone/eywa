@@ -69,9 +69,11 @@ describe("② 대상은 서버가 다시 계산한다", () => {
   });
 
   it("🔑 화면도 **같은 인자**로 같은 함수를 돌린다 — 갈리면 버튼이 'N명'이라 적고 그보다 적게 쓴다", () => {
-    for (const page of [shellPage, publicPage]) {
-      expect(page).toMatch(/prevPeriodAbsences\([\s\S]{0,200}ambiguousClassIds\(period\)/);
-    }
+    // ⚠️ 로그인 화면은 '전체' 보기(2026-09-10 ⑨)가 생기며 교시가 여러 개라, 같은 인자를 **작은 헬퍼**로
+    //    묶어 두 갈래(교시 하나 / 전체)가 한 자리에서 같은 규약을 쓴다. 공개 PIN은 교시 하나 그대로.
+    expect(shellPage).toMatch(/prevAbsentFor\s*=\s*\(start: string, blocked: string\[\]\)[\s\S]{0,160}prevPeriodAbsences\(cells, start, blocked\)/);
+    expect(shellPage).toMatch(/prevAbsentFor\([\s\S]{0,60}ambiguousClassIds\(p(eriod)?\)\)/);
+    expect(publicPage).toMatch(/prevPeriodAbsences\([\s\S]{0,200}ambiguousClassIds\(period\)/);
   });
 
   it("게이트를 통과한 뒤에만 쓴다(자리·날짜 판정은 기존 문 그대로)", () => {
@@ -115,8 +117,8 @@ describe("④ 비로그인 PIN 화면엔 '다음 교시'가 안 간다", () => {
   });
 
   it("로그인 페이지는 둘 다 넘긴다", () => {
-    expect(shellPage).toContain("prevAbsentByCell={prevAbsentByCell}");
-    expect(shellPage).toContain("nextStartByStudent={nextStartByStudent}");
+    expect(shellPage).toContain("prevAbsentByCell={prevAbsentFor(");
+    expect(shellPage).toContain("nextStartByStudent={nextBySlot[");
   });
 
   it("보드는 prop이 없으면 그 줄을 안 그린다(기본값을 지어내지 않는다)", () => {

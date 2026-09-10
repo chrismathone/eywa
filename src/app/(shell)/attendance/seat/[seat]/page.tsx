@@ -31,8 +31,9 @@ import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
-import { getSeatPlacements } from "@/features/attendance/seat/server/placements";
-import { getSeatNextDestinations } from "@/features/attendance/seat/server/next-destination";
+import { getSeatPlacementsForDay } from "@/features/attendance/seat/server/placements";
+import { getSeatNextDestinationsBySlot } from "@/features/attendance/seat/server/next-destination";
+import { SeatPeriodChips, SEAT_ALL_PERIODS } from "./_components/seat-period-chips";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
 
@@ -90,9 +91,21 @@ export default async function SeatAttendancePage({
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? "") ? dateParam! : today;
   const day = await getSeatDay(seat, date);
 
+  /**
+   * **'전체' 보기**(원장 2026-09-10 ⑨ *"한번에 오늘 전체 볼 수 있게. 스크롤링으로 시간대별로 분리해서"*).
+   * 🔴 **랩실만** 연다 — JJ실은 교시마다 진도(수업계획) 블록이 붙어서 하루치를 펼치면 조회도 화면도
+   *    교시 수만큼 불어난다(B6). 그래서 칩도 랩실에서만 세운다.
+   * 🔑 조회는 **늘리지 않았다** — 하루 명단은 원래 `getSeatDay` 한 번이고, 배치·다음 행선지도 하루치를
+   *    한 번 받아 교시별로 나눈다(`getSeatPlacementsForDay`·`getSeatNextDestinationsBySlot`).
+   */
+  const allowAllView = seat === "lab";
+  const viewAll = allowAllView && startParam === SEAT_ALL_PERIODS;
+
   const fallbackIdx = pickPeriodIndex(day.periods, date === today ? kstNowHm() : "00:00");
-  const idx = startParam ? day.periods.findIndex((p) => p.start === startParam) : fallbackIdx;
+  const idx = startParam && !viewAll ? day.periods.findIndex((p) => p.start === startParam) : fallbackIdx;
   const period = day.periods[idx >= 0 ? idx : fallbackIdx] ?? null;
+  /** 이번에 그릴 교시들 — '전체'면 그날 전부, 아니면 고른 하나. */
+  const shown = viewAll ? day.periods : period ? [period] : [];
 
   // 지난 날짜 쓰기는 사무실만 — 자리 전용 권한(아르바이트)은 오늘만. 서버 액션이 같은 판정을 다시 한다(#77).
   const canEditPast = await canWriteTenant(user.systemRole, "attendance");
@@ -100,7 +113,7 @@ export default async function SeatAttendancePage({
 
   // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
   // 🔴 계획은 **자리 권한이 아니라 영어 시트 권한**이 연다 — 아르바이트·viewer에겐 반마다 빈 값이 온다.
-  const [rosters, plans, placements, nextDest] = await Promise.all([
+  const [rosters, plans, placementsDay, nextBySlot] = await Promise.all([
     period && seatHasJjFields(seat)
       ? attachJjMarks(day.rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
       : Promise.resolve(period ? (day.rosterByPeriod[period.start] ?? []) : []),
@@ -113,36 +126,30 @@ export default async function SeatAttendancePage({
           period.start,
         )
       : Promise.resolve({}),
-    // 자리 **배치**(드래그로 옮긴 자리, 0254a) — fail-soft라 표가 없어도 화면은 그대로 산다([[#95]]).
-    period
-      ? getSeatPlacements(user.tenantId, seat, date, period.start)
-      : Promise.resolve({ rows: [], ready: false, reason: null }),
+    // 자리 **배치**(드래그로 옮긴 자리, 0254a) — 하루치 한 번(교시는 화면에서 나눈다).
+    // fail-soft라 표가 없어도 화면은 그대로 산다([[#95]]).
+    getSeatPlacementsForDay(user.tenantId, seat, date),
     /**
      * **다음 행선지**(원장 2026-09-10 *"17:20 304호 가야함처럼"*) — 이 자리만이 아니라 **오늘 전 과목**의
      * 다음 수업을 본다. 그래서 순수 함수(`nextSeatPeriodByStudent`, 이 자리 교시만)로는 못 구하고 조회가
      * 든다. 🔵 명단은 `day`에 이미 있으므로 위 `rosters`를 기다리지 않는다(직렬 워터폴 금지, B4).
+     * 🔵 **교시 여러 개를 한 벌로** 받는다 — '전체' 보기가 왕복을 교시 수만큼 늘리지 않게(B6).
      * 🔴 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면엔 이 prop 자체를 안 넘긴다(동선 정보).
      */
-    period
-      ? getSeatNextDestinations(
-          [
-            ...new Set(
-              (day.rosterByPeriod[period.start] ?? []).flatMap((r) => r.students.map((s) => s.id)),
-            ),
-          ],
-          date,
-          period.start,
-        )
-      : Promise.resolve({ startByStudent: {}, roomByStudent: {} }),
+    getSeatNextDestinationsBySlot(
+      [...new Set(shown.flatMap((p) => (day.rosterByPeriod[p.start] ?? []).flatMap((r) => r.students.map((s) => s.id))))],
+      date,
+      shown.map((p) => p.start),
+    ),
   ]);
 
   /**
    * 드래그·초기화를 열 것인가 — **랩실 + 오늘(또는 지난 날짜 쓰기 권한) + 0254a 적용됨**.
    * 🔴 서버 액션이 같은 판정을 다시 한다([[#77]]) — 이 값은 화면을 정할 뿐 게이트가 아니다.
    */
-  const canMovePlacement = seat === "lab" && !readOnly && placements.ready;
+  const canMovePlacement = seat === "lab" && !readOnly && placementsDay.ready;
   // 못 쓰는 이유는 **쓸 수 있어야 할 때만** 말한다(지난 날짜 조회 중엔 배너가 소음이다).
-  const placementNotice = seat === "lab" && !readOnly && !placements.ready ? placements.reason : null;
+  const placementNotice = seat === "lab" && !readOnly && !placementsDay.ready ? placementsDay.reason : null;
 
   /**
    * 같은 날 교시 사이 신호 — **이미 받아 온 하루치**(`day`)에서 순수 함수로 뽑는다(왕복 0회).
@@ -152,11 +159,11 @@ export default async function SeatAttendancePage({
   const cells = period ? seatDayCells(day.periods, day.rosterByPeriod) : null;
   // ⚠️ 모호한 반(같은 반·같은 시작·다른 종료)은 아무도 못 쓰는 칸이라 표식·수에서 뺀다 — 서버 일괄이
   //    쓰는 집합과 **같은 인자**여야 버튼의 "N명"이 실제로 쓰는 수와 맞는다.
-  const prevAbsentByCell =
-    cells && period ? prevPeriodAbsences(cells, period.start, ambiguousClassIds(period)) : undefined;
-  // ⚠️ 방을 모르면 `nextRoomByStudent`에 키가 없고 화면은 시각만 적는다(지어내지 않는다).
-  const nextStartByStudent = nextDest.startByStudent;
-  const nextRoomByStudent = nextDest.roomByStudent;
+  const prevAbsentFor = (start: string, blocked: string[]) =>
+    cells ? prevPeriodAbsences(cells, start, blocked) : undefined;
+
+  /** 교시 칩·'전체' 칩이 함께 쓰는 주소 앞자락 — 값만 뒤에 붙는다(두 곳에 문자열을 적지 않게). */
+  const hrefFor = `/attendance/seat/${seat}?date=${date}&start=`;
 
   const href = (q: { date?: string; start?: string }) => {
     const sp = new URLSearchParams();
@@ -223,6 +230,45 @@ export default async function SeatAttendancePage({
           title={`이 날은 ${SEAT_NAME[seat]} 수업이 없습니다`}
           description="날짜를 옮기거나 시간표에서 자리 배치를 확인하세요."
         />
+      ) : viewAll ? (
+        /**
+         * **'전체' 보기** — 교시를 위에서 아래로 이어 붙인다(원장 2026-09-10 ⑨ *"스크롤링으로 시간대별로
+         * 분리해서"*). 교시마다 제 요약 줄(시각·반 수·인원·체크)이 경계를 만든다.
+         *
+         * 🔴 **일괄 버튼은 교시 안에만** 둔다(요약 줄에 그대로 붙어 있다) — 하루치를 한 번에 찍는 버튼은
+         *    만들지 않는다(오클릭 한 번이 하루를 뭉갠다).
+         * 🔑 조회는 안 늘었다 — 명단·배치·다음 행선지 모두 위에서 하루치를 한 번 받아 나눈 것이다.
+         */
+        <>
+          <SeatPeriodChips
+            periods={day.periods.map((p) => ({ start: p.start, classIds: p.slots.map((s) => s.classId) }))}
+            activeStart={SEAT_ALL_PERIODS}
+            hrefFor={hrefFor}
+            showAll={allowAllView}
+          />
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
+            {day.periods.map((p) => (
+              <SeatBoard
+                key={`${seat}|${date}|${p.start}`}
+                seat={seat}
+                date={date}
+                periods={[]}
+                showChips={false}
+                activeStart={p.start}
+                rosters={day.rosterByPeriod[p.start] ?? []}
+                readOnly={readOnly}
+                hrefFor={hrefFor}
+                prevAbsentByCell={prevAbsentFor(p.start, ambiguousClassIds(p))}
+                nextStartByStudent={nextBySlot[p.start]?.startByStudent}
+                nextRoomByStudent={nextBySlot[p.start]?.roomByStudent}
+                placements={placementsDay.bySlot[p.start] ?? []}
+                canMove={canMovePlacement}
+                // 배너는 맨 위 교시에만 — 교시마다 같은 문장이 서면 화면이 경고로 덮인다.
+                placementNotice={p.start === day.periods[0]?.start ? placementNotice : null}
+              />
+            ))}
+          </div>
+        </>
       ) : (
         <SeatBoard
           key={`${seat}|${date}|${period.start}`}
@@ -233,16 +279,17 @@ export default async function SeatAttendancePage({
             ends: p.ends,
             classIds: p.slots.map((s) => s.classId),
           }))}
+          showAllChip={allowAllView}
           activeStart={period.start}
           rosters={rosters}
           readOnly={readOnly}
-          hrefFor={`/attendance/seat/${seat}?date=${date}&start=`}
-          prevAbsentByCell={prevAbsentByCell}
-          // 🔵 '다음 교시'는 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면(`/seat/:key`)엔 이 prop을
+          hrefFor={hrefFor}
+          prevAbsentByCell={prevAbsentFor(period.start, ambiguousClassIds(period))}
+          // 🔵 '다음 행선지'는 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면(`/seat/:key`)엔 이 prop을
           //    아예 안 넘긴다(그 경로는 사유도 조회하지 않는다는 규약과 같은 결).
-          nextStartByStudent={nextStartByStudent}
-          nextRoomByStudent={nextRoomByStudent}
-          placements={placements.rows}
+          nextStartByStudent={nextBySlot[period.start]?.startByStudent}
+          nextRoomByStudent={nextBySlot[period.start]?.roomByStudent}
+          placements={placementsDay.bySlot[period.start] ?? []}
           canMove={canMovePlacement}
           placementNotice={placementNotice}
           // 진도 구획은 계획을 볼 수 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.

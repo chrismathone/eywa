@@ -22,6 +22,7 @@ const shellPage = strip(read("src", "app", "(shell)", "attendance", "seat", "[se
 const publicPage = strip(read("src", "app", "(seat)", "seat", "[seat]", "page.tsx"));
 const noteForm = strip(read("src", "features", "onescreen", "components", "attendance-pills.tsx"));
 const nextDest = strip(read("src", "features", "attendance", "seat", "server", "next-destination.ts"));
+const chips = strip(read(...DIR, "seat-period-chips.tsx"));
 
 describe("① 출결은 세 버튼 · 같은 폭 · 언제나 셋", () => {
   it("세 상태를 목록으로 돌려 그린다 — 상태별 조건부 렌더가 없다", () => {
@@ -139,13 +140,14 @@ describe("⑧ 다음 행선지 = 시각 + 강의실", () => {
     expect(nextDest).toContain("canonicalRoomName(");
   });
   it("🔴 로그인 화면에만 내려간다 — 공개 PIN엔 동선을 안 보낸다", () => {
-    expect(shellPage).toContain("nextRoomByStudent={nextRoomByStudent}");
+    expect(shellPage).toContain("nextRoomByStudent={nextBySlot[");
     expect(publicPage).not.toContain("nextRoomByStudent");
     expect(publicPage).not.toContain("getSeatNextDestinations");
   });
   it("이 자리 교시만 보던 것을 오늘 전 과목으로 넓혔다(수강 축 조회)", () => {
     expect(nextDest).toContain('.from("enrollments")');
-    expect(nextDest).toContain('.gt("start_time", after)');
+    // 🔵 '전체' 보기(⑨) 이후 조회는 하루치 한 벌이고, "이보다 늦게 시작" 판정만 교시마다 JS에서 돈다.
+    expect(nextDest).toContain("if (sl.start <= after) continue;");
   });
 });
 
@@ -159,5 +161,40 @@ describe("⑫ 메모는 입력하는 동안 자동 저장(그날 그 교시 기�
   });
   it("저장 경로는 기존 `noteOnly` 하나 — 새 경로를 만들지 않는다", () => {
     for (const src of [lab, jj]) expect(src).toContain("onSaveNote(");
+  });
+});
+
+describe("⑦ JJ실 카드는 속살까지 줄맞춤(`grid-rows-subgrid`)", () => {
+  it("부모가 행 셋을 못박고 카드가 그 행을 물려받는다", () => {
+    expect(jj).toContain("grid grid-rows-[auto_auto_auto]");
+    expect(jj).toContain("row-span-3 grid min-w-0 grid-rows-subgrid");
+  });
+  it("`items-start`를 쓰지 않는다 — 카드가 내용 높이로 줄면 줄맞춤이 죽는다", () => {
+    expect(jj).not.toContain("items-start");
+  });
+  it("계획 구획이 없는 카드도 그 행을 차지한다(빈 자리)", () => {
+    const block = jj.slice(jj.indexOf("{plan && slotPlan ?"));
+    expect(block.slice(0, 900)).toContain("<div />");
+  });
+});
+
+describe("⑨ '전체' 보기 — 하루를 한 번에, 조회는 안 늘린다", () => {
+  it("칩 줄은 **한 벌**이고 '전체'는 랩실에서만 선다", () => {
+    expect(chips).toContain("export function SeatPeriodChips");
+    expect(shellPage).toContain('const allowAllView = seat === "lab";');
+    expect(shellPage).toContain("showAll={allowAllView}");
+  });
+  it("교시마다 조회를 새로 하지 않는다 — 배치·다음 행선지는 하루치 한 벌", () => {
+    expect(shellPage).toContain("getSeatPlacementsForDay(user.tenantId, seat, date)");
+    expect(shellPage).toContain("getSeatNextDestinationsBySlot(");
+    // 교시 수만큼 도는 자리에 조회 함수가 들어가면 안 된다.
+    const loop = shellPage.slice(shellPage.indexOf("day.periods.map((p) => ("));
+    expect(loop).not.toContain("await ");
+  });
+  it("🔴 하루치를 한 번에 찍는 일괄 버튼은 만들지 않는다 — 교시 요약 줄 안에만 둔다", () => {
+    expect(shellPage).not.toMatch(/fillSeat|일괄|전원 출석/);
+  });
+  it("'전체'에선 칩 줄을 교시마다 반복하지 않는다", () => {
+    expect(shellPage).toContain("showChips={false}");
   });
 });

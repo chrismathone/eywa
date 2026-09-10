@@ -28,38 +28,63 @@ function missingTable(err: { code?: string; message?: string }): boolean {
   return err.code === "42P01" || err.code === "PGRST205" || /seat_placements/i.test(err.message ?? "");
 }
 
-export async function getSeatPlacements(
+/**
+ * **하루치 한 번에** — 교시별로 갈라 돌려준다.
+ * 🔑 '전체' 보기(원장 2026-09-10 ⑨ *"한번에 오늘 전체 볼 수 있게"*)가 교시 수만큼 왕복을 늘리지
+ *    않도록, 조회는 언제나 하루 한 번이고 교시는 화면에서 나눈다(B6 — 창마다 그 비용이 곱해진다).
+ *    하루 배치 줄은 많아야 수십 개라 통째로 받아도 절단 걱정이 없다.
+ */
+export type SeatPlacementDayLoad = {
+  bySlot: Record<string, SeatPlacement[]>;
+  ready: boolean;
+  reason: string | null;
+};
+
+export async function getSeatPlacementsForDay(
   tenantId: string,
   seat: SeatKey,
   date: string,
-  slotStart: string,
-): Promise<SeatPlacementLoad> {
+): Promise<SeatPlacementDayLoad> {
   const { data, error } = await createAdminClient()
     .from("seat_placements")
-    .select("student_id, from_class_id, to_class_id")
+    .select("slot_start, student_id, from_class_id, to_class_id")
     .eq("tenant_id", tenantId)
     .eq("seat", seat)
     .eq("session_date", date)
-    .eq("slot_start", hhmm(slotStart))
     // 🔑 정렬을 못박아 **서버 렌더와 클라 첫 렌더가 같은 순서**를 그린다(옮겨 온 학생은 명단 끝에
     //    `applied` 순으로 붙으므로, 순서가 흔들리면 하이드레이션이 갈린다).
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
 
   if (error) {
-    return NOT_READY(
-      missingTable(error)
+    return {
+      bySlot: {},
+      ready: false,
+      reason: missingTable(error)
         ? "자리 배치 기능이 아직 켜지지 않았습니다 — 관리자에게 문의하세요(0254a 미적용)."
         : "자리 배치를 불러오지 못했습니다 — 드래그·초기화만 잠시 잠깁니다.",
-    );
+    };
   }
-  return {
-    rows: (data ?? []).map((r) => ({
+  const bySlot: Record<string, SeatPlacement[]> = {};
+  for (const r of data ?? []) {
+    const slot = hhmm(r.slot_start as string);
+    (bySlot[slot] ??= []).push({
       studentId: r.student_id as string,
       fromClassId: r.from_class_id as string,
       toClassId: r.to_class_id as string,
-    })),
-    ready: true,
-    reason: null,
-  };
+    });
+  }
+  return { bySlot, ready: true, reason: null };
+}
+
+/** 교시 하나치 — 위 하루치를 그 교시로 좁힌 것(왕복은 같다). */
+export async function getSeatPlacements(
+  tenantId: string,
+  seat: SeatKey,
+  date: string,
+  slotStart: string,
+): Promise<SeatPlacementLoad> {
+  const day = await getSeatPlacementsForDay(tenantId, seat, date);
+  if (!day.ready) return NOT_READY(day.reason ?? "자리 배치를 불러오지 못했습니다");
+  return { rows: day.bySlot[hhmm(slotStart)] ?? [], ready: true, reason: null };
 }
