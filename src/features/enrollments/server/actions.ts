@@ -15,6 +15,20 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { enrollmentAssignBlockReason } from "../eligibility";
 import { enrollmentDeleteBlockReason, type EnrollmentRecordCounts } from "../deletable";
+import {
+  applyDateEdit,
+  dateEditConfirmMessage,
+  dateEditConfirmTitle,
+  dateEditConfirmToken,
+  enrollmentDateEditError,
+  newlyExcludedAttendanceRanges,
+  transferPairRisk,
+  type AttendanceShrink,
+  type DateEditRisk,
+  type EnrollmentDateField,
+  type EnrollmentWindow,
+  type ExcludedRange,
+} from "../date-edit";
 
 export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
@@ -348,14 +362,83 @@ export async function updateEnrollmentsAttendanceBatch(
   return { count: applied.length };
 }
 
-export type UpdateEnrollmentDatesState = { ok?: boolean; error?: string } | undefined;
+/**
+ * 새 기간 밖으로 밀려나는 출결을 **센다**(행은 안 받는다, B2 — `count:"exact"` + `limit(1)`).
+ * `limit(1)`로 받는 한 행은 문구에 적을 **가장 최근 날짜** 하나뿐이다.
+ *
+ * ⚠️ 조회가 실패하면 `null`을 돌려 **확인을 건너뛴다**(저장은 막지 않는다). 못 셌다는 이유로
+ *    정정을 봉쇄하면 정작 고치러 온 사람이 손을 묶인다 — 이 확인은 안전벨트지 자물쇠가 아니다
+ *    (판정 실패 시 fail-open은 삭제 가드와 반대 방향인데, 그쪽은 **되돌릴 수 없는** 삭제고
+ *     이쪽은 날짜를 다시 고치면 그만이라 위험의 크기가 다르다).
+ */
+async function countAttendanceOutside(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  args: { studentId: string; classId: string; ranges: ExcludedRange[] },
+): Promise<AttendanceShrink | null> {
+  if (args.ranges.length === 0) return null;
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  // 구간은 한 번의 편집에서 0~1개다(date-edit.ts 주석) — 그래도 전부 세고 합친다. 서로 독립이라 병렬(B4).
+  const results = await Promise.all(
+    args.ranges.map(async (r) => {
+      let q = supabase
+        .from("attendance_records")
+        .select("session_date", { count: "exact" })
+        .eq("student_id", args.studentId)
+        .eq("class_id", args.classId)
+        .gte("session_date", r.from);
+      if (r.to !== null) q = q.lte("session_date", r.to);
+      const { data, count, error } = await q
+        .order("session_date", { ascending: false })
+        .limit(1);
+      if (error) {
+        console.error("[enrollments] 기간 밖 출결 확인 실패:", error.message);
+        return null;
+      }
+      const last = (data ?? [])[0]?.session_date as string | undefined;
+      return { count: count ?? 0, lastDate: last ?? null };
+    }),
+  );
+
+  // 한 구간이라도 못 셌으면 숫자가 거짓이 된다 — 통째로 포기하고 확인을 건너뛴다.
+  if (results.some((r) => r === null)) return null;
+  const rows = results as { count: number; lastDate: string | null }[];
+  const count = rows.reduce((acc, r) => acc + r.count, 0);
+  const lastDate = rows.reduce<string | null>(
+    (acc, r) => (r.lastDate && (!acc || r.lastDate > acc) ? r.lastDate : acc),
+    null,
+  );
+  // count>0인데 날짜가 없을 수는 없지만(같은 쿼리의 결과다), 그때는 확인을 건너뛴다 —
+  // 문구에 "마지막 —"이라고 적느니 안 묻는 게 낫다.
+  return count > 0 && lastDate ? { count, lastDate } : null;
+}
+
+/**
+ * 확인이 필요할 때 화면에 돌려주는 재료 — 저장은 **아직 일어나지 않았다**.
+ * ⚠️ `value`를 함께 돌려주는 건 React 19가 제출 때마다 폼을 리셋해([[#83]]) 사용자가 고른 날짜가
+ *    입력칸에서 사라지기 때문이다. 화면은 이 값을 들고 확인 버튼을 그린다.
+ */
+export type EnrollmentDateConfirm = {
+  token: string;
+  /** 걸린 위험에 맞춘 제목 — 화면이 고정 문구를 쓰면 위험 조합에 따라 거짓이 된다. */
+  title: string;
+  message: string;
+  field: EnrollmentDateField;
+  value: string | null;
+};
+
+export type UpdateEnrollmentDatesState =
+  | { ok?: boolean; error?: string; confirm?: EnrollmentDateConfirm }
+  | undefined;
 
 /**
  * 수강 시작/종료일 직접 수정 (관리자 정정). owner(원장) 콘솔 권한 이상만(master).
  * enrollments는 시간 구간(temporal) 테이블이라 날짜 변경이 타임머신·시간표에 그대로 반영된다.
  * GiST EXCLUDE(enrollments_no_overlap = 같은 학생+같은 반 기간 겹침)에 걸리면 친절 메시지로 거부.
+ *
+ * 🔴 **조용히 깨지는 것이 있으면 한 번 더 묻는다**(2026-09-10) — ① 이미 찍힌 출결이 새 기간 밖으로
+ *    밀려나거나 ② 반이동 짝의 기준일이 움직이는 경우. 막지 않는 이유와 "왜 확인인가"는
+ *    [`date-edit.ts`](../date-edit.ts) 머리 주석이 단일 소스다. 확인의 게이트는 **여기**다([[#77]]):
+ *    매번 다시 계산해 클라가 돌려준 서명과 정확히 같을 때만 통과시킨다.
  */
 export async function updateEnrollmentDates(
   _prev: UpdateEnrollmentDatesState,
@@ -371,36 +454,91 @@ export async function updateEnrollmentDates(
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const field = String(formData.get("field") ?? "").trim(); // "start" | "end"
   const raw = String(formData.get("value") ?? "").trim();
+  // 화면이 확인창에서 돌려보낸 서명. 없으면 빈 문자열이라 아래 비교에서 자연히 걸린다.
+  const confirmed = String(formData.get("confirm") ?? "").trim();
 
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
   if (field !== "start" && field !== "end") return { error: "잘못된 필드입니다" };
 
   const value = raw || null;
-  if (field === "start" && !value) return { error: "시작일은 비울 수 없습니다" };
-  if (value && !ISO_DATE.test(value)) return { error: "날짜 형식이 올바르지 않습니다" };
 
   const supabase = await createClient();
   const { data: current, error: fetchErr } = await supabase
     .from("enrollments")
-    .select("start_date, end_date, student_id, class_id")
+    .select("start_date, end_date, student_id, class_id, is_transferred, is_transferred_in")
     .eq("id", enrollmentId)
     .single();
   if (fetchErr || !current) return { error: "수강 정보를 찾을 수 없습니다" };
 
-  // 시작 ≤ 종료 검증(ISO 문자열은 사전식 비교가 곧 날짜 비교).
-  const nextStart = field === "start" ? (value as string) : (current.start_date as string);
-  const nextEnd = field === "end" ? value : (current.end_date as string | null);
-  if (nextEnd && nextStart > nextEnd) {
-    return { error: "시작일이 종료일보다 늦을 수 없습니다" };
+  // 형식·시작≤종료 검증은 순수 함수 한 곳에서(Vitest로 잠금) — 문구는 종전 그대로다.
+  const prevWindow: EnrollmentWindow & { isTransferredIn: boolean } = {
+    startDate: current.start_date as string,
+    endDate: (current.end_date as string | null) ?? null,
+    isTransferred: (current.is_transferred as boolean | null) ?? false,
+    isTransferredIn: (current.is_transferred_in as boolean | null) ?? false,
+  };
+  const invalid = enrollmentDateEditError(field, value, prevWindow);
+  if (invalid) return { error: invalid };
+
+  const nextWindow = applyDateEdit(prevWindow, field, value);
+  const nextStart = nextWindow.startDate;
+  const nextEnd = nextWindow.endDate;
+
+  // ── 저장하면 조용히 깨지는 것들을 모아 한 번에 묻는다(둘 다면 문장이 둘). ─────────────────
+  // ① 이번 편집이 **새로** 기간 밖으로 밀어내는 출결. 넓히는 편집은 구간이 비어 조회조차 안 한다(왕복 0).
+  const shrink = await countAttendanceOutside(supabase, {
+    studentId: current.student_id as string,
+    classId: current.class_id as string,
+    ranges: newlyExcludedAttendanceRanges(prevWindow, nextWindow),
+  });
+  const risks: DateEditRisk[] = [];
+  if (shrink) risks.push({ kind: "attendanceOutside", shrink });
+  // ② 아직 오지 않은 반이동 짝의 기준일을 옮기는가(순수 판정 — 조회 없음).
+  //    오늘은 서버(KST)가 정한다 — 클라 시계를 믿으면 타임존이 어긋나 경고가 하루씩 밀린다.
+  const pair = transferPairRisk(prevWindow, field, value, kstToday());
+  if (pair) risks.push(pair);
+
+  if (risks.length > 0) {
+    const token = dateEditConfirmToken(enrollmentId, field, value, risks);
+    // 🔴 서명이 정확히 같을 때만 통과 — 확인창을 띄운 뒤 사실이 바뀌면 새 내용으로 다시 묻는다.
+    if (confirmed !== token) {
+      return {
+        confirm: {
+          token,
+          // 제목도 서버가 정한다 — 화면이 "출결이…"로 고정하면 짝만 걸린 편집에서 거짓말이 된다.
+          title: dateEditConfirmTitle(risks),
+          message: dateEditConfirmMessage(field, value, risks),
+          field,
+          value,
+        },
+      };
+    }
   }
 
-  // 종료를 비우면(null) 재원중 복귀 = withdrawal_reason도 해제.
-  const patch: { start_date?: string; end_date?: string | null; withdrawal_reason?: string | null } =
+  /**
+   * 종료를 비우면(null) 재원중 복귀 = `withdrawal_reason`도 해제.
+   *
+   * 🔴 **`is_transferred`도 함께 푼다**(2026-09-10 적대 리뷰). 정본인 이동 취소
+   *    ([`cancelScheduledEnrollment`](./scheduled-actions.ts))가 세 필드를 같이 되돌리는데 여기만
+   *    표식을 남기고 있었다. 남기면 두 가지가 조용히 깨진다:
+   *      ① 전출 행을 되살리면 도착지 수강은 그대로라 학생이 **두 반 명단에 동시에** 선다
+   *         (GiST는 `(학생, 반)` 축이라 다른 반은 안 막는다).
+   *      ② 그 상태에서 옆의 '수강 종료 · 오늘까지'를 누르면 종료 규약이 **배타**로 읽혀
+   *         (`isEnrollmentEndedOn(오늘, 오늘, true)` = true) 버튼이 약속한 *"내일부터 빠집니다"*가
+   *         그 자리에서 거짓이 된다.
+   *    되살린 수강은 더 이상 "이동으로 끝난 수강"이 아니므로 표식을 지우는 것이 사실에도 맞다.
+   */
+  const patch: {
+    start_date?: string;
+    end_date?: string | null;
+    withdrawal_reason?: string | null;
+    is_transferred?: boolean;
+  } =
     field === "start"
       ? { start_date: value as string }
       : value
         ? { end_date: value }
-        : { end_date: null, withdrawal_reason: null };
+        : { end_date: null, withdrawal_reason: null, is_transferred: false };
 
   const { error } = await supabase.from("enrollments").update(patch).eq("id", enrollmentId);
   if (error) {
@@ -428,6 +566,10 @@ export async function updateEnrollmentDates(
       field,
       from: field === "start" ? current.start_date : current.end_date,
       to: value,
+      // 🔴 "깨지는 걸 알고도 저장했다"는 사실을 남긴다 — 나중에 "왜 이 학생이 그날 명단에 없지",
+      //    "왜 이동이 종료로 뜨지"를 되짚을 때 이게 유일한 흔적이다(원장 규약: 변동은 모두 감사로그).
+      ...(shrink ? { attendanceOutside: shrink.count, attendanceOutsideLast: shrink.lastDate } : {}),
+      ...(pair ? { transferPairBroken: pair.anchor } : {}),
     },
   });
 

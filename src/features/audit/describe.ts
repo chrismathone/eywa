@@ -560,10 +560,16 @@ export function auditDetail(
     }
     case "enrollment_dates_update": {
       const f = str(m.field);
+      // 조용히 깨지는 걸 **알고도** 저장한 정정은 그 사실을 함께 적는다(2026-09-10) — 저장 전에
+      // 확인을 받은 건이라, 나중에 "왜 그날 명단에 없지"·"왜 이동이 종료로 뜨지"를 되짚을 흔적이다.
+      const outside = num(m.attendanceOutside);
+      const pairAnchor = str(m.transferPairBroken);
       return join(
         ctx.nameOf(m.studentId),
         ctx.nameOf(m.classId),
         f ? `${f === "start" ? "시작" : "종료"}일 ${str(m.from) ?? "—"} → ${str(m.to) ?? "—"}` : null,
+        outside && outside > 0 ? `출결 ${outside}건이 기간 밖(확인 후 저장)` : null,
+        pairAnchor ? `반 이동 짝(${pairAnchor}) 끊김(확인 후 저장)` : null,
       );
     }
     case "student_merge": {
