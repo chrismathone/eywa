@@ -18,7 +18,7 @@ import type { MediaKind, UploadTicket } from "./types";
 // 되돌릴 수 있는 안전장치처럼 보였다(= ClassNote Cloud Run 폴백과 같은 지뢰). 경로가 하나면 그 오해가 없다.
 // ⚠️ 호출부(server action)는 throw를 try/catch로 `{error}` 변환.
 
-const AUDIO_MAX = 50 * 1024 * 1024; // 50MB (클라 validateAudioFile과 동일 — 필요 시 함께 상향)
+const AUDIO_MAX = 100 * 1024 * 1024; // 100MB (원장 2026-09-10) — 🔴 클라 MAX_AUDIO_SIZE와 **같은 값**이어야 한다
 const RECEIPT_MAX = 10 * 1024 * 1024; // 10MB
 const BRANDING_MAX = 5 * 1024 * 1024; // 5MB
 const DOCUMENT_MAX = 20 * 1024 * 1024; // 20MB — 스캔 PDF 등 큰 서식 고려
