@@ -20,18 +20,23 @@
  *    **이름의 글꼴과 색**뿐이라 인원 수·검색·드래그·엑셀은 한 글자도 달라지지 않는다.
  *
  * ## 안 붙이는 경우 — 모르면·뜻을 잃었으면 **안 붙인다**
- * 🔴 그 주 그 요일에 그 반의 자리 교시가 **하나뿐**이면 안 붙인다. 옮길 자리가 없으면 "영구 이동"이
- *    성립하지 않는다(자리 출석부의 `SEAT_PERIOD_ONE_SLOT`과 같은 판정).
- * 🔴 고정된 교시가 그 주 시간표에 **없으면**(배치가 바뀌었다) 안 붙인다 — 지난 사실을 현재로 읽히게
- *    하는 쪽이 표식이 없는 것보다 나쁘다.
+ * 🔴 **하나뿐인 자기 교시로** 고정했으면 안 붙인다 — 옮긴 게 아니다.
+ *    ⚠️ 원장 2026-09-10 *"다른 시간으로 옮기는게 목적"* 이후로는 자기 반에 자리 교시가 하나뿐이어도 **남의 반
+ *    자리 교시**로 옮길 수 있고, 그 경우엔 붙는다. 목표 교시가 그날 실제로 도는지는 화면에 선 슬롯이 아니라
+ *    **학원 전체 배치**(`liveStarts`)로 본다 — 과목·프로그램·강사 범위 필터 뒤엔 남의 반 교시가 안 보인다.
+ *    🔴 판정은 **자리 출석부와 같은 함수**([`seatChoiceTarget`](../../attendance/seat/period-choice.ts))다 — 그 반의
+ *    다른 수업 시각으로의 고정은 둘 다 버린다(기록 키가 겹친다). 두 화면이 한 고정을 다르게 말하면 안 된다.
+ * 🔴 고정된 교시가 그 주에 **안 돌면**(배치가 바뀌었다) 안 붙인다 — 지난 사실을 현재로 읽히게
+ *    하는 쪽이 표식이 없는 것보다 나쁘다. 학원 전체 배치를 모르면(조회 실패) 자기 교시로만 판정한다.
  * 🔴 `effective_from`보다 **이전 주**엔 안 붙인다. 과거는 기록이지 계획이 아니다(0255a 주석과 같은 결).
  * 🔴 퇴원 줄엔 안 붙인다 — 고정은 지워지지 않고 남는데, 나간 학생에게 파란 밑줄이 서면 "지금 다니는
  *    아이"로 읽힌다.
  */
 import { hhmm, MOVABLE_SEATS, SEAT_NAME, seatKeyOf, type SeatKey } from "@/features/attendance/seat/seat";
+import { seatChoiceTarget } from "@/features/attendance/seat/period-choice";
 import { DAY_LABEL } from "./split-attendance";
 import { specialSlotLabel } from "./teacher-label";
-import { dateOfDowInWeek } from "./week";
+import { dateOfDowInWeek, slotLiveOnDate } from "./week";
 
 /**
  * 표시 서식 **단일 소스** — 원장 지시 그대로 파란 글씨 + 밑줄 + 이탤릭.
@@ -57,6 +62,45 @@ export type SeatPinRow = {
 
 /** 표식이 붙은 한 건 — 툴팁 문구를 만드는 재료. */
 export type SeatPinHit = { seat: SeatKey; dayOfWeek: string; slotStart: string };
+
+/**
+ * 그 주 요일마다 **실제로 도는** 자리 교시 — 키 `자리|요일`(`lab|thu`) → 시작 시각("HH:MM") 집합.
+ * 🔑 **학원 전체** 기준이다(보는 사람·필터와 무관). 다른 시간으로 옮긴 고정의 목표 교시는 남의 반 자리 교시라,
+ *    화면에 선 슬롯(과목·프로그램·강사 범위 뒤)만으로는 그날 도는지 알 수 없다.
+ */
+export type SeatLiveStarts = ReadonlyMap<string, ReadonlySet<string>>;
+
+/** 시간표가 받는 표식 재료 한 벌 — `liveStarts`는 고정이 있을 때만 조회하고, 모르면 null. */
+export type SeatPinData = { pins: readonly SeatPinRow[]; liveStarts: SeatLiveStarts | null };
+
+/** 조회하지 않는 뷰(교실뷰)·고정 0줄·조회 실패의 빈 값. */
+export const NO_SEAT_PINS: SeatPinData = { pins: [], liveStarts: null };
+
+/**
+ * 자리 라벨이 붙은 배치 행 → 그 주에 **실제로 도는** `자리|요일` 교시 집합.
+ * 판정은 시간표와 같은 규약이다 — 요일 칸의 실제 날짜로 유효기간을 잰다(`slotLiveOnDate`), 자리는 `movableSeatOf`.
+ */
+export function buildSeatLiveStarts(
+  rows: readonly {
+    dayOfWeek: string;
+    startTime: string;
+    slotTeacherLabel: string | null;
+    validFrom?: string | null;
+    validTo?: string | null;
+  }[],
+  referenceDate: string,
+): SeatLiveStarts {
+  const out = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const seat = movableSeatOf(r.slotTeacherLabel);
+    if (!seat || !slotLiveOnDate(r, referenceDate)) continue;
+    const key = `${seat}|${r.dayOfWeek}`;
+    let set = out.get(key);
+    if (!set) out.set(key, (set = new Set()));
+    set.add(hhmm(r.startTime));
+  }
+  return out;
+}
 
 /** 시간표 축과 같은 요일 순서 — 툴팁에 여러 건이 실릴 때 월→일로 정렬한다. */
 const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -113,16 +157,27 @@ type PinStudentLike = { studentId: string; status?: string; seatPinNote?: string
  */
 export function applySeatPinMarks<S extends PinStudentLike, T extends PinSlotLike<S>>(
   slots: readonly T[],
-  v: { pins: readonly SeatPinRow[]; referenceDate: string },
+  v: { pins: readonly SeatPinRow[]; referenceDate: string; liveStarts?: SeatLiveStarts | null },
 ): T[] {
   if (v.pins.length === 0) return slots as T[];
 
   // ① 그 주에 **실제로 도는** 자리 교시를 (자리|반|요일)로 모은다. 슬롯은 이미 요일 칸의 날짜로
   //    유효성이 걸러져 있어(`slotLiveOnDate`), 끝난 배치가 섞이지 않는다.
   const startsByKey = new Map<string, Set<string>>();
+  // 반|요일 → 그 반의 **다른**(자리가 아닌) 수업 시작 — 자리 출석부 `busyStartsByClass`와 같은 재료.
+  const busyByKey = new Map<string, Set<string>>();
   for (const s of slots) {
     const seat = movableSeatOf(s.slotTeacherLabel);
-    if (!seat) continue;
+    if (!seat) {
+      // 🔴 라벨이 붙은 교시만 센다 — 자리 출석부(`loadSeatDay`)가 라벨 있는 슬롯만 읽어 같은 판정을 한다.
+      if (s.slotTeacherLabel) {
+        const busyKey = `${s.classId}|${s.dayOfWeek}`;
+        let busy = busyByKey.get(busyKey);
+        if (!busy) busyByKey.set(busyKey, (busy = new Set()));
+        busy.add(hhmm(s.startTime));
+      }
+      continue;
+    }
     const key = `${seat}|${s.classId}|${s.dayOfWeek}`;
     let set = startsByKey.get(key);
     if (!set) startsByKey.set(key, (set = new Set()));
@@ -137,9 +192,21 @@ export function applySeatPinMarks<S extends PinStudentLike, T extends PinSlotLik
     // 그 요일 칸의 **실제 날짜**로 시작일을 판정한다 — 주 단위로 재면 전환 주가 통째로 어긋난다.
     const date = dateOfDowInWeek(v.referenceDate, p.dayOfWeek);
     if (!date || p.effectiveFrom > date) continue;
-    const starts = startsByKey.get(`${seat}|${p.classId}|${p.dayOfWeek}`);
-    // 자리 교시가 하나뿐이면 옮길 자리가 없고, 고정된 교시가 사라졌으면 그 고정은 이미 뜻을 잃었다.
-    if (!starts || starts.size < 2 || !starts.has(p.slotStart)) continue;
+    const own = startsByKey.get(`${seat}|${p.classId}|${p.dayOfWeek}`);
+    // 그 반이 그날 이 자리에 아예 안 오면(배치가 바뀌었다) 고정은 이미 뜻을 잃었다.
+    if (!own) continue;
+    // 🔴 **자리 출석부와 같은 판정**(`seatChoiceTarget`) — 두 화면이 한 고정을 다르게 말하면 안 된다(3차 리뷰).
+    //    목표는 제 반 자리 교시이거나, 그날 이 자리에 **실제로 도는**(학원 전체 `liveStarts`) 교시이면서 그 반의
+    //    다른 수업과 안 겹쳐야 한다. 학원 전체 배치를 모르면 제 반 교시로만 본다(모르면 안 붙인다).
+    const target = seatChoiceTarget({
+      chosen: p.slotStart,
+      classSlots: [...own],
+      periodStarts: v.liveStarts ? [...(v.liveStarts.get(`${seat}|${p.dayOfWeek}`) ?? [])] : undefined,
+      busyStarts: [...(busyByKey.get(`${p.classId}|${p.dayOfWeek}`) ?? [])],
+    });
+    if (!target) continue;
+    // 하나뿐인 자기 교시로 고정 = 옮긴 게 아니다(결과가 고정이 없을 때와 같다).
+    if (own.size < 2 && own.has(target)) continue;
     let byStudent = hitsByClass.get(p.classId);
     if (!byStudent) hitsByClass.set(p.classId, (byStudent = new Map()));
     const list = byStudent.get(p.studentId);
