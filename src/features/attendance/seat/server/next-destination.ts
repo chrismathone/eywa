@@ -3,12 +3,23 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
-import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
+import { DOW_KEYS, dowIndexOf } from "@/features/attendance/calendar";
 import { canonicalRoomName } from "@/features/attendance/live/seating-floors";
+import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { hhmm } from "../seat";
+import {
+  foldNextDestination,
+  type NextDestinationDay,
+  type NextDestinationSlot,
+  type SeatNextDestination,
+  type SeatStays,
+} from "../next-destination";
+
+export type { SeatNextDestination };
 
 /**
- * **다음 행선지** — 이 자리 수업이 끝난 뒤 그 학생이 오늘 갈 곳(시각 + 강의실).
+ * **다음 행선지** — 이 자리 수업이 끝난 뒤 그 학생이 오늘 갈 곳(시각 + 강의실). 조회는 여기서 하고, 학생별로
+ * 접는 규칙은 순수 모듈 [`next-destination.ts`](../next-destination.ts)가 한다(Vitest).
  *
  * 원장 2026-09-10: *"다음 17:20 이면 무슨 말인지 도대체 알 수가 없음. **17:20 304호 가야함** 처럼
  * 해줘"* + *"강의실은 다 있을테니"*.
@@ -19,18 +30,15 @@ import { hhmm } from "../seat";
  *    `slot_room_label`은 `302`처럼 건물명이 없는 호수라 그대로 적으면 `본원302`와 다른 방으로 읽힌다.
  *    ⚠️ 애매하면(`602` = 바른602·본원602) 손대지 않는다.
  * 🔴 **방을 모르면 시각만** 돌려준다(키 없음) — 지어낸 방 이름은 아이를 엉뚱한 데로 보낸다.
+ * 🔴 **교시를 옮기는 자리(랩실)는 이 자리 배치를 교시 선택을 얹은 명단으로 잰다**(원장 2026-09-10 *"다른 시간으로
+ *    옮기기"* 이후) — 호출부가 `stays`([`seatStaysFor`](../next-destination.ts))를 넘기면 그날 이 자리 반들의
+ *    배치를 **같은 조회**에 얹어 읽고(옮겨 가는 교시의 강의실), 접기가 이 자리 라벨 배치를 빼고 명단의 교시를
+ *    넣는다. 안 넘기면 옛 동작 그대로(JJ실).
  * 🔑 **비로그인 PIN 화면도 같은 함수를 쓴다**(원장 2026-09-10 *"seat/lab에서도 자리 출석부와 동일해야해"*) —
  *    종전엔 로그인 화면 전용이었다. PIN 경로는 세션이 없어 `tenantId`를 넘기면 **admin + 명시 `tenant_id`
  *    필터**로 읽는다 — 🔴 admin은 RLS를 우회하므로 이 필터가 **유일한 격리선**이다(세 조회 모두에 건다).
  * ⚠️ 왕복은 셋 고정(수강 · 배치 · 강의실 이름) — 학생 수만큼 늘지 않는다(B2·B3, 청크 헬퍼).
  */
-export type SeatNextDestination = {
-  /** 학생 id → 다음 수업 시작시각("HH:MM"). */
-  startByStudent: Record<string, string>;
-  /** 학생 id → 그 수업의 강의실 이름. **모르면 키가 없다.** */
-  roomByStudent: Record<string, string>;
-};
-
 const EMPTY: SeatNextDestination = { startByStudent: {}, roomByStudent: {} };
 
 /**
@@ -42,17 +50,24 @@ export async function getSeatNextDestinationsBySlot(
   date: string,
   /** 기준 교시들("HH:MM") — 각각에 대해 그 뒤 첫 수업을 찾는다. */
   afterStarts: readonly string[],
-  /** 비로그인 PIN 경로 — 주면 admin + 이 테넌트 필터로 읽는다(세션이 없다). */
-  tenantId?: string,
+  opts: {
+    /** 비로그인 PIN 경로 — 주면 admin + 이 테넌트 필터로 읽는다(세션이 없다). */
+    tenantId?: string;
+    /**
+     * 교시를 옮기는 자리(랩실)의 명단 재료 — `seatStaysFor`로 **교시 선택을 얹은 명단**에서 만든다.
+     * 없으면 옛 동작(배치표 그대로 — JJ실·옛 호출부).
+     */
+    stays?: SeatStays;
+  } = {},
 ): Promise<Record<string, SeatNextDestination>> {
   const empty = Object.fromEntries(afterStarts.map((k) => [hhmm(k), EMPTY]));
   if (studentIds.length === 0 || afterStarts.length === 0) return empty;
-  const loaded = await loadDaySlots(studentIds, date, tenantId);
+  const loaded = await loadDaySlots(studentIds, date, opts.tenantId, opts.stays?.classIds ?? []);
   if (!loaded) return empty;
   return Object.fromEntries(
     afterStarts.map((raw) => {
       const after = hhmm(raw);
-      return [after, foldAfter(loaded, after)];
+      return [after, foldNextDestination(loaded, after, opts.stays)];
     }),
   );
 }
@@ -67,23 +82,14 @@ export async function getSeatNextDestinations(
   return bySlot[hhmm(afterStart)] ?? EMPTY;
 }
 
-/** 하루치 재료(수강 × 그 요일 배치 × 강의실 이름) — 교시 판정은 이 뒤에 JS로 돈다. */
-type DaySlots = {
-  live: {
-    student_id: string;
-    class_id: string;
-    attendance_days: string[] | null;
-  }[];
-  /** 반 → 그 요일 배치들(시작시각 오름차순 아님, 폴딩에서 최소를 고른다). */
-  slotsByClass: Map<string, { start: string; room: string | null }[]>;
-  todayIdx: number;
-};
-
+/** 하루치 재료(수강 × 그 요일 배치 × 강의실 이름) — 교시 판정은 이 뒤에 순수 함수로 돈다. */
 async function loadDaySlots(
   studentIds: readonly string[],
   date: string,
-  tenantId?: string,
-): Promise<DaySlots | null> {
+  tenantId: string | undefined,
+  /** 그날 이 자리에 걸린 반들(`stays.classIds`) — 옮겨 가는 교시의 강의실을 알려고 배치 조회에 얹는다. */
+  seatClassIds: readonly string[],
+): Promise<NextDestinationDay | null> {
   if (studentIds.length === 0) return null;
   const supabase = tenantId ? createAdminClient() : await createClient();
   const dowKey = DOW_KEYS[new Date(`${date}T00:00:00Z`).getUTCDay()]!;
@@ -122,19 +128,25 @@ async function loadDaySlots(
   );
   const classIds = [...new Set(live.map((e) => e.class_id))];
   if (classIds.length === 0) return null;
+  // 🔑 이 자리 반들을 **같은 id 목록**에 얹는다 — 새 왕복이 아니다(대개 한 청크 안). 수강이 없는 반의 배치는
+  //    학생 후보가 되지 않고, 이 자리 교시의 강의실을 아는 데만 쓰인다(접기 쪽 `seatRoomByStart`).
+  //    🔴 아래 배치 조회는 **이 목록**을 받는다 — 옛 `classIds`로 되돌려도 tsc·eslint는 못 잡는다(동작 잠금 = 같은
+  //    폴더 `next-destination.test.ts`).
+  const slotClassIds = [...new Set([...classIds, ...seatClassIds])];
 
   // 그 요일에 **그 날짜로 유효한** 배치만(이력 행을 그대로 읽으면 끝난 교시가 미래로 보인다, [[#88]]).
   const slots = await fetchInChunks<{
     class_id: string;
     start_time: string;
     slot_room_label: string | null;
+    slot_teacher_label: string | null;
     classroom: { name: string }[] | { name: string } | null;
-  }>(classIds, (chunk) => {
+  }>(slotClassIds, (chunk) => {
     let q = supabase
       .from("class_schedules")
       // 🔑 임베드는 **컬럼으로** 건다(`classroom:classroom_id ( name )`) — 시간표 조회와 같은 모양이라
       //    FK가 둘로 갈릴 여지가 없다([[#94]]는 표 대 표가 모호할 때의 규약이다).
-      .select("class_id, start_time, slot_room_label, classroom:classroom_id ( name )")
+      .select("class_id, start_time, slot_room_label, slot_teacher_label, classroom:classroom_id ( name )")
       .in("class_id", chunk)
       .eq("day_of_week", dowKey)
       .lte("valid_from", date)
@@ -150,45 +162,22 @@ async function loadDaySlots(
   const { data: rooms } = await roomQ;
   const known = (rooms ?? []).map((r) => r.name as string).filter(Boolean);
 
-  const slotsByClass = new Map<string, { start: string; room: string | null }[]>();
+  const slotsByClass = new Map<string, NextDestinationSlot[]>();
   for (const sl of slots) {
     const embedded = Array.isArray(sl.classroom) ? sl.classroom[0] : sl.classroom;
     const raw = embedded?.name ?? sl.slot_room_label ?? null;
     const list = slotsByClass.get(sl.class_id) ?? [];
-    list.push({ start: hhmm(sl.start_time), room: canonicalRoomName(raw, known) });
+    list.push({
+      start: hhmm(sl.start_time),
+      room: canonicalRoomName(raw, known),
+      // 자리 판정은 단일 소스(별칭 `이주희`·`랩실`까지) — 여기서 문자열을 다시 비교하지 않는다.
+      seatLabel: specialSlotLabel(sl.slot_teacher_label),
+    });
     slotsByClass.set(sl.class_id, list);
   }
   return {
-    live: live.map((e) => ({
-      student_id: e.student_id,
-      class_id: e.class_id,
-      attendance_days: e.attendance_days,
-    })),
+    live: live.map((e) => ({ studentId: e.student_id, classId: e.class_id, attendanceDays: e.attendance_days })),
     slotsByClass,
     todayIdx,
   };
-}
-
-/** 기준 교시 뒤 **첫 수업**을 학생별로 접는다 — 순수 계산(왕복 0). */
-function foldAfter({ live, slotsByClass, todayIdx }: DaySlots, after: string): SeatNextDestination {
-  const startByStudent: Record<string, string> = {};
-  const roomByStudent: Record<string, string> = {};
-  for (const e of live) {
-    // 반별 그 요일 등원 여부 — 분리등원(attendance_days) 학생은 오늘 안 오는 반이 있다.
-    // 그 반이 오늘 도는 요일인지는 조회가 이미 걸렀다 → 학생의 분리등원만 본다.
-    const dows = resolveAttendDows(e.attendance_days, [todayIdx]);
-    if (dows.length > 0 && !dows.includes(todayIdx)) continue;
-    let next: { start: string; room: string | null } | null = null;
-    for (const sl of slotsByClass.get(e.class_id) ?? []) {
-      if (sl.start <= after) continue;
-      if (!next || sl.start < next.start) next = sl;
-    }
-    if (!next) continue;
-    const cur = startByStudent[e.student_id];
-    if (cur && cur <= next.start) continue;
-    startByStudent[e.student_id] = next.start;
-    if (next.room) roomByStudent[e.student_id] = next.room;
-    else delete roomByStudent[e.student_id]; // 더 이른 수업의 방을 남겨 두면 엉뚱한 방을 적는다
-  }
-  return { startByStudent, roomByStudent };
 }

@@ -12,6 +12,7 @@ import {
   getSeatNextDestinationsBySlot,
   type SeatNextDestination,
 } from "@/features/attendance/seat/server/next-destination";
+import { seatStaysFor } from "@/features/attendance/seat/next-destination";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
 import { readSeatPinSession, resolvePinSigningSecret } from "@/features/attendance/seat/server/pin-session";
@@ -145,6 +146,8 @@ export default async function PublicSeatPage({
      * 🔴 세션이 없어 테넌트를 넘긴다 → admin + 명시 `tenant_id` 필터(격리선)로 읽는다.
      * 🔵 교시 여러 개를 한 벌로 — '전체' 보기가 왕복을 교시 수만큼 늘리지 않게(B6).
      * 🔴 **랩실 PIN만**(`sameAsLogin`) — JJ실 PIN엔 종전대로 안 싣는다(왕복도 0).
+     * 🔴 이 자리 교시는 로그인 화면과 **같은 명단**(교시 선택을 얹은 `rosterByPeriod`)으로 잰다(`seatStaysFor`) —
+     *    배치표로 재면 옮겨 나간 랩실을 안내하고 옮겨 가는 교시는 못 적는다.
      */
     sameAsLogin
       ? getSeatNextDestinationsBySlot(
@@ -156,7 +159,7 @@ export default async function PublicSeatPage({
           ],
           date,
           shown.map((p) => p.start),
-          session.tenantId,
+          { tenantId: session.tenantId, stays: seatStaysFor(seat, rosterByPeriod) },
         )
       : Promise.resolve<Record<string, SeatNextDestination>>({}),
     // '전체' 보기의 배치는 하루치 한 번(교시는 화면에서 나눈다).

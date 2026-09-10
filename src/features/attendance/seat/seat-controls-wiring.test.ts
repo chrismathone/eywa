@@ -22,6 +22,7 @@ const shellPage = strip(read("src", "app", "(shell)", "attendance", "seat", "[se
 const publicPage = strip(read("src", "app", "(seat)", "seat", "[seat]", "page.tsx"));
 const noteForm = strip(read("src", "features", "onescreen", "components", "attendance-pills.tsx"));
 const nextDest = strip(read("src", "features", "attendance", "seat", "server", "next-destination.ts"));
+const nextPure = strip(read("src", "features", "attendance", "seat", "next-destination.ts"));
 const chips = strip(read(...DIR, "seat-period-chips.tsx"));
 const allDay = strip(read(...DIR, "seat-all-day.tsx"));
 
@@ -154,7 +155,33 @@ describe("⑧ 다음 행선지 = 시각 + 강의실", () => {
   it("이 자리 교시만 보던 것을 오늘 전 과목으로 넓혔다(수강 축 조회)", () => {
     expect(nextDest).toContain('.from("enrollments")');
     // 🔵 '전체' 보기(⑨) 이후 조회는 하루치 한 벌이고, "이보다 늦게 시작" 판정만 교시마다 JS에서 돈다.
-    expect(nextDest).toContain("if (sl.start <= after) continue;");
+    //    2026-09-10(14): 그 판정(접기)은 순수 모듈로 옮겼다(Vitest) — 조회는 교시마다 그 함수를 부른다.
+    expect(nextPure).toContain("if (next.start <= after) return;");
+    expect(nextDest).toContain("foldNextDestination(loaded, after, opts.stays)");
+  });
+
+  it("🔴 이 자리 교시는 교시 선택을 얹은 명단으로 잰다 — 옮겨 나간 랩실을 안내하지 않는다(원장 2026-09-10 '다른 시간으로')", () => {
+    // 두 페이지가 **같은 함수·같은 명단**(`applySeatDayChoices`를 거친 `rosterByPeriod`)으로 재료를 만든다 —
+    // 원본(`day.rosterByPeriod`)을 넘기면 옮긴 학생이 원래 교시에 남아 옮겨 나간 랩실을 다시 안내한다.
+    for (const page of [shellPage, publicPage]) {
+      expect(page).toContain("const rosterByPeriod = applySeatDayChoices(day, periodChoiceLoad, date);");
+      expect(page).toContain("stays: seatStaysFor(seat, rosterByPeriod)");
+      expect(page).not.toContain("seatStaysFor(seat, day.rosterByPeriod)");
+    }
+    // 교시를 옮기는 자리(랩실)만 이 규칙을 탄다 — JJ실은 옛 동작(배치표 그대로).
+    expect(nextPure).toContain("if (!MOVABLE_SEATS.includes(seat)) return undefined;");
+    // 조회는 자리 라벨을 함께 받고(단일 소스로 판정), 접기는 이 자리 배치를 빼고 명단의 교시를 넣는다.
+    expect(nextDest).toContain("slot_teacher_label, classroom:classroom_id ( name )");
+    expect(nextDest).toContain("specialSlotLabel(sl.slot_teacher_label)");
+    expect(nextPure).toContain("if (seatLabel && sl.seatLabel === seatLabel) continue;");
+    expect(nextPure).toContain("stays.startsByStudent[studentId]");
+    // 옮겨 가는 교시의 강의실 — 이 자리 반들을 **같은 배치 조회**에 얹는다(새 왕복 없음, B4·B6).
+    expect(nextDest).toContain("const slotClassIds = [...new Set([...classIds, ...seatClassIds])];");
+    // 🔴 선언만 보면 안 된다 — 조회가 옛 `classIds`를 받아도 tsc·eslint(경고, 종료 0)·위 줄이 다 통과한다.
+    //    재료가 조회까지 가는지(호출부 → 로더 → 배치 조회)를 본다. 동작 잠금은 `server/next-destination.test.ts`.
+    expect(nextDest).toContain("loadDaySlots(studentIds, date, opts.tenantId, opts.stays?.classIds ?? [])");
+    expect(nextDest).toContain("}>(slotClassIds, (chunk) => {");
+    expect(nextDest).not.toContain("}>(classIds, (chunk) => {");
   });
 });
 

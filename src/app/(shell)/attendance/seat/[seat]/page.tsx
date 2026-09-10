@@ -33,6 +33,7 @@ import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
 import { getSeatPlacementsForDay } from "@/features/attendance/seat/server/placements";
 import { getSeatNextDestinationsBySlot } from "@/features/attendance/seat/server/next-destination";
+import { seatStaysFor } from "@/features/attendance/seat/next-destination";
 import { SeatPeriodChips, SEAT_ALL_PERIODS } from "./_components/seat-period-chips";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
@@ -148,13 +149,16 @@ export default async function SeatAttendancePage({
      * 다음 수업을 본다. 그래서 순수 함수(`nextSeatPeriodByStudent`, 이 자리 교시만)로는 못 구하고 조회가
      * 든다. 🔵 명단은 `day`에 이미 있으므로 위 `rosters`를 기다리지 않는다(직렬 워터폴 금지, B4).
      * 🔵 **교시 여러 개를 한 벌로** 받는다 — '전체' 보기가 왕복을 교시 수만큼 늘리지 않게(B6).
-     * 🔴 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면엔 이 prop 자체를 안 넘긴다(동선 정보).
+     * 🔵 비로그인 PIN 화면(랩실)도 **같은 함수·같은 재료**다(원장 2026-09-10 *"seat/lab에서도 … 동일해야해"*).
      */
     getSeatNextDestinationsBySlot(
       // 🔑 **옮긴 뒤의 명단**으로 모은다 — 다른 시간에서 옮겨 온 학생도 그 교시의 다음 행선지를 받는다.
       [...new Set(shown.flatMap((p) => (rosterByPeriod[p.start] ?? []).flatMap((r) => r.students.map((s) => s.id))))],
       date,
       shown.map((p) => p.start),
+      // 🔴 이 자리 교시는 배치표가 아니라 **교시 선택을 얹은 명단**으로 잰다 — 배치표로 재면 옮겨 나간 랩실을
+      //    안내하고 옮겨 가는 교시는 못 적는다. 교시를 옮기는 자리(랩실)만이고 JJ실은 옛 규칙 그대로다.
+      { stays: seatStaysFor(seat, rosterByPeriod) },
     ),
   ]);
 
