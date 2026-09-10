@@ -265,7 +265,7 @@ export function NoteForm({
       <div className="flex items-center justify-end gap-1">
         {onDraft ? (
           // 자동 저장 중 — 되돌릴 것이 없으니 '취소'를 세우지 않는다(누르면 이미 저장된 글이 남아 거짓말).
-          <span className="text-text-faint mr-auto text-xs">자동 저장됩니다</span>
+          <span className="text-text-faint mr-auto text-xs">{t("os.att.autosave")}</span>
         ) : (
           <button
             type="button"

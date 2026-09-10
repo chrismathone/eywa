@@ -157,7 +157,8 @@ describe("⑫ 메모는 입력하는 동안 자동 저장(그날 그 교시 기�
   });
   it("자동 저장일 때는 '취소'를 세우지 않는다 — 이미 저장된 글이라 거짓말이 된다", () => {
     expect(noteForm).toContain("onDraft ? (");
-    expect(noteForm).toContain("자동 저장됩니다");
+    // 🔴 문구는 **사전**에서 온다 — 이 파일은 강사뷰 en 전환 대상이라 한글 리터럴이 0이어야 한다.
+    expect(noteForm).toContain('t("os.att.autosave")');
   });
   it("저장 경로는 기존 `noteOnly` 하나 — 새 경로를 만들지 않는다", () => {
     for (const src of [lab, jj]) expect(src).toContain("onSaveNote(");
