@@ -2,6 +2,7 @@
 
 // 배열형 설정(과목·직급·학년·교시·학기·공휴일) 편집기 — 행 추가/삭제 + 인라인 입력.
 import { useId, useRef } from "react";
+import periodStyles from "./period-list.module.css";
 import {
   DndContext,
   KeyboardSensor,
@@ -289,7 +290,7 @@ function PeriodRow({
         transform: transform ? `translate3d(0, ${Math.round(transform.y)}px, 0)` : undefined,
         transition,
       }}
-      className={`flex flex-wrap items-center gap-2 ${
+      className={`${periodStyles.row} ${
         isDragging ? "bg-bg-soft relative z-10 rounded-md opacity-90 shadow-sm" : ""
       }`}
     >
@@ -315,6 +316,7 @@ function PeriodRow({
         title="비워 두면 시간표·시트에 이름 없이 시간대만 표시됩니다"
         onChange={(e) => onPatch({ label: e.target.value })}
       />
+      <div className={periodStyles.times}>
       <input
         type="time"
         // 2026-09-08 v5 글자 기준 실측: ko-KR time 입력은 text-sm 16px에서 콘텐츠 113 + px-2.5 20 + 테두리 2
@@ -330,6 +332,7 @@ function PeriodRow({
         value={row.endTime}
         onChange={(e) => onPatch({ endTime: e.target.value })}
       />
+      </div>
       <RemoveButton onClick={onRemove} />
     </div>
   );
@@ -367,7 +370,7 @@ export function PeriodListEditor({
     onChange(arrayMove(value, from, to));
   };
   return (
-    <div className="space-y-2">
+    <div className={`${periodStyles.list} space-y-2`}>
       <DndContext id={uid} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">

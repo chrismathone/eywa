@@ -1,4 +1,3 @@
-import { UserCheck } from "@/components/icons/eywa-icon-compat";
 import type { PillColor } from "@/components/atoms/pill";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 
@@ -17,17 +16,14 @@ export function EnrolledStatCard({
   subjects: SubjectStat[]; // count>0만, 정렬은 호출부(내림차순)
 }) {
   return (
-    <section className="bg-card shadow-card rounded-2xl p-5">
+    <section className="border-y border-line px-2 py-3">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-7">
         {/* 재원 총원 — 빅 스탯(문법 ②) 톤 */}
         <div className="flex shrink-0 items-center gap-3.5">
-          <span className="bg-primary-soft text-primary flex size-10 items-center justify-center rounded-xl">
-            <UserCheck size={17} strokeWidth={1.8} />
-          </span>
           <div>
             <p className="text-text-dim text-sm font-medium">재원</p>
             <p className="mt-0.5 flex items-baseline gap-1">
-              <span className="tabular text-foreground text-4xl leading-none font-bold">
+              <span className="tabular text-foreground text-2xl leading-none font-bold">
                 {enrolled}
               </span>
               <span className="text-text-dim text-xs">명</span>
@@ -42,7 +38,7 @@ export function EnrolledStatCard({
         {subjects.length === 0 ? (
           <p className="text-text-faint self-center text-xs">과목별 수강 데이터가 없습니다.</p>
         ) : (
-          <div className="grid flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-2.5">
+          <div className="grid flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1.5">
             {subjects.map((s) => {
               const pct = enrolled > 0 ? Math.round((s.count / enrolled) * 100) : 0;
               return (

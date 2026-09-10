@@ -4,6 +4,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -283,14 +284,14 @@ export default async function StaffPage({
       />
 
       {/* 직원 대시보드(원장 요청 2026-07-28) — 전직원 수 · 근무형태별 · 과목별 */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+      <StatStrip>
         <BigStat label="전직원" value={onDuty.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
         {EMPLOYMENT_TYPES.map((t) => (
           <BigStat key={t} label={t} value={empCount(t)} unit="명" tone="neutral" />
         ))}
-      </section>
+      </StatStrip>
       {subjectStats.length > 0 ? (
-        <section className="bg-card shadow-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3">
+        <section className="border-line flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-1 pb-2">
           <span className="micro">과목별</span>
           {subjectStats.map((s) => (
             <span key={s.key} className="inline-flex items-center gap-1.5 text-sm">

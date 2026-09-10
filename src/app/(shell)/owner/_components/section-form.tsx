@@ -131,7 +131,7 @@ export function SettingsCard({
   span2?: boolean;
 }) {
   return (
-    <section className={`bg-card shadow-card rounded-2xl p-5 ${span2 ? "xl:col-span-2" : ""}`}>
+    <section data-span-all={span2 ? "" : undefined} className={`bg-card shadow-card rounded-2xl p-5 ${span2 ? "xl:col-span-2" : ""}`}>
       <h3 className="text-foreground text-sm font-bold">{title}</h3>
       {description ? <p className="text-text-dim mt-1 text-xs">{description}</p> : null}
       <div className="mt-4">{children}</div>

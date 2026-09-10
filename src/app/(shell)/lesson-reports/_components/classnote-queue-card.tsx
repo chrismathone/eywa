@@ -60,7 +60,7 @@ function hhmmKst(iso: string | null): string {
 // 세부 상태 칩(알약) — 위계는 위 BigStatInline 3개가 잡고, 여기는 내역 분해용 보조 라벨.
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className={`rounded-full px-3 py-1 ${tone}`}>
+    <div className={`rounded-md px-2 py-0.5 ${tone}`}>
       <span className="num text-sm font-bold">{value}</span>
       <span className="ml-1 text-xs font-medium">{label}</span>
     </div>
@@ -78,9 +78,9 @@ function BigStatInline({
   valueClass?: string;
 }) {
   return (
-    <div>
-      <p className="text-text-dim text-xs font-medium">{label}</p>
-      <p className={`num mt-1 text-3xl font-bold leading-none ${valueClass ?? "text-foreground"}`}>
+    <div className="flex items-baseline gap-2">
+      <p className="text-text-dim text-sm font-medium">{label}</p>
+      <p className={`num text-xl font-bold leading-none ${valueClass ?? "text-foreground"}`}>
         {value}
       </p>
     </div>
@@ -357,7 +357,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   const attention = attentionCount(summary);
 
   return (
-    <section className="bg-card shadow-card rounded-2xl px-5 py-5">
+    <section className="bg-card border-line rounded-lg border px-3 py-3">
       {!view.sendEnabled ? (
         <div className="border-danger bg-danger/5 text-danger mb-3 rounded-md border px-3 py-2 text-xs">
           <b>dry-run 모드</b> — 재발송을 눌러도 실제 전송되지 않습니다(저장/큐잉 안 함). 학원 설정 &gt; 보고서에서{" "}
@@ -412,12 +412,15 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                 {/* 실행환경(로그 위치·최근 경고) — 연동 PC는 물리적으로 다른 컴퓨터라 파일을 열어볼 수 없다.
                     2026-07-21: 로그 폴더를 못 만들어 watch.log가 한 줄도 안 남았고, 같은 이유로 프로비저닝
                     마커까지 죽어 하루 1회 작업이 15초마다 돌았다 — 그때 웹에 아무 단서가 없었다. */}
-                {w.env.logDir ? (
-                  <span className="text-text-faint max-w-[300px] truncate" title={`워커 로그 폴더: ${w.env.logDir}`}>
-                    로그 {w.env.logDir}
-                  </span>
-                ) : null}
-                {w.env.recent.length > 0 ? <WorkerIssues lines={w.env.recent} now={view.nowMs} /> : null}
+                <div className="flex flex-wrap justify-end gap-3">
+                  {w.env.logDir ? (
+                    <details className="max-w-[300px] text-right">
+                      <summary className="cursor-pointer">로그 위치</summary>
+                      <span className="break-all text-xs">{w.env.logDir}</span>
+                    </details>
+                  ) : null}
+                  {w.env.recent.length > 0 ? <WorkerIssues lines={w.env.recent} now={view.nowMs} /> : null}
+                </div>
               </div>
             ))
           )}
@@ -426,7 +429,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
 
       {/* 상태 집계 — 핵심 3계열(발송완료·대기/처리중·주의)은 큰 숫자로 위계화(문법 ②),
           세부 분해(대기·처리중·실패·오래됨·동명이인·공유 보드·멈춤)는 아래 알약 칩으로 유지. */}
-      <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-line py-2">
         <BigStatInline label="발송완료" value={summary.success} valueClass="text-green" />
         {/* stuck은 processing의 하위집합 — '주의'로 분리 계상하므로 여기선 제외(3분할 합=전체 유지) */}
         <BigStatInline label="대기·처리중" value={summary.queued + summary.processing - summary.stuck} />
@@ -445,7 +448,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
           </Link>
         ) : null}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <details className="mt-2"><summary className="cursor-pointer text-xs">상태별 상세 집계</summary><div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Stat label="대기" value={summary.queued} tone="border-line text-text-dim border" />
         <Stat label="처리중" value={summary.processing} tone="border-line text-text-dim border" />
         <Stat label="실패" value={summary.failed} tone="bg-danger/10 text-danger" />
@@ -453,7 +456,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
         <Stat label="동명이인" value={summary.nameConflict} tone="bg-amber-soft text-amber" />
         <Stat label="공유 보드" value={summary.blockedShared} tone="bg-amber-soft text-amber" />
         {summary.stuck > 0 ? <Stat label="멈춤" value={summary.stuck} tone="bg-danger/10 text-danger" /> : null}
-      </div>
+      </div></details>
 
       {/* 관리 버튼 */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -498,7 +501,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
 
       {/* 주의 목록 */}
       {items.length === 0 ? (
-        <p className="text-text-faint mt-3 text-sm">주의가 필요한 발송이 없습니다 — 모두 정상입니다.</p>
+        <p className="text-text-faint mt-3 text-sm">큐에 조치가 필요한 발송이 없습니다.</p>
       ) : (
         <DragScrollArea className="border-line mt-3 rounded-md border">
           <table className="w-full min-w-[560px] text-left text-xs">

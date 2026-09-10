@@ -79,17 +79,15 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
       </p>
 
       {view.splitCount === 0 ? (
-        <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
-          이 달 저장된 분배 스냅샷이 없습니다.{" "}
-          <Link href={`/billing?tab=verify&period=${p}`} className="text-primary underline-offset-2 hover:underline">
-            시수 검증
-          </Link>
-          에서 분배 스냅샷을 저장하면 여기서 강사 정산이 산정됩니다. (그 전에{" "}
-          <Link href={`/billing?tab=sessions&period=${p}`} className="text-primary underline-offset-2 hover:underline">
-            회차 확정
-          </Link>
-          이 필요합니다.)
-        </div>
+        <section className="rounded-lg border border-line p-4">
+          <h2 className="text-base font-bold">정산을 준비해 주세요</h2>
+          <p className="mt-1 text-sm">이 달 저장된 분배 스냅샷이 없습니다.</p>
+          <ol className="mt-3 grid gap-2 sm:grid-cols-3">
+            <li className="rounded-md bg-bg-soft p-3"><Link href={`/billing?tab=sessions&period=${p}`} className="text-primary font-bold hover:underline">1. 회차 확정 →</Link><p className="mt-1 text-xs">학생별 회차·단가 확인</p></li>
+            <li className="rounded-md bg-bg-soft p-3"><Link href={`/billing?tab=verify&period=${p}`} className="text-primary font-bold hover:underline">2. 시수 검증 →</Link><p className="mt-1 text-xs">실제 수업 확인 후 분배 스냅샷 저장</p></li>
+            <li className="rounded-md bg-bg-soft p-3"><b>3. 강사 정산</b><p className="mt-1 text-xs">이 화면에서 강사별 산정 결과 확인</p></li>
+          </ol>
+        </section>
       ) : (
         <DragScrollArea className="border-line rounded-2xl border">
           <table className="w-full min-w-[52rem] text-sm">

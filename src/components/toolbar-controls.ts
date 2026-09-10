@@ -9,11 +9,11 @@
  * 1. **툴바를 감싸는 카드 껍데기를 두지 않는다.** 컨트롤이 저마다 테두리를 갖고 있어 줄은 그대로
  *    읽히고, 아래 목록·칸이 각자 테두리를 가지면 선이 이중으로 겹쳐 보인다.
  *    ⚠️ 그 바가 `sticky`면 배경까지 빼면 안 된다 — 스크롤 내용이 비친다(`bg-background`를 남길 것).
- * 2. **높이·라벨은 [`control-scale.ts`](@/components/ui/control-scale) 한 벌**(`h-(--control-h)` 22px ·
+ * 2. **높이·라벨은 [`control-scale.ts`](@/components/ui/control-scale) 한 벌**(`h-(--control-h)` ·
  *    라벨 18px `leading-none`) — 공용 [`Button`](@/components/ui/button) 기본 크기와 같다. 한 줄에
  *    버튼·드롭다운·기간 네비·검색이 나란히 서므로 하나라도 다르면 줄이 울퉁불퉁하다.
- *    ⚠️ 2026-09-03: 종전 "h-8 고정"은 원장의 90% 규칙(라벨이 높이의 90%)으로 **대체**됐다 — 높이가
- *       라벨에서 도출된다. 값을 바꾸려면 globals.css `--control-*` 한 곳.
+ *    높이는 globals.css `--control-label`과 `--control-fill`에서 도출한다(현재 18px / 0.62).
+ *    값을 바꾸려면 `--control-*` 한 곳에서 바꾼다.
  *    🔴 세로 패딩(`py-*`)으로 높이를 만들지 말 것 — 글자 크기가 바뀌면 같이 흔들린다.
  * 3. **라운드는 덜 둥근 쪽으로.** 묶음 상자 `rounded-lg`, 그 안의 칩·링크 `rounded-md`.
  *    🔴 툴바에 알약(`rounded-full`) 묶음을 쓰지 않는다.
@@ -36,7 +36,7 @@ export const TOOLBAR_SELECT =
 
 /**
  * 세그먼트(뷰 토글·기간 프리셋 등) **묶음 상자**. 안쪽 칩은 [`TOOLBAR_SEG_ITEM`].
- * 높이를 `h-8`로 고정하고 안쪽 여백(`p-0.5`)만큼 칩이 작아진다.
+ * 높이는 `--control-h`, 안쪽 항목은 테두리 2px를 제외한 높이를 채운다.
  */
 export const TOOLBAR_SEG_BOX = "border-line inline-flex h-(--control-h) items-center gap-0.5 rounded-lg border px-0.5";
 
@@ -44,14 +44,14 @@ export const TOOLBAR_SEG_BOX = "border-line inline-flex h-(--control-h) items-ce
  * 항목 수가 **정해지지 않은** 묶음(예: 학원설정을 따라 늘어나는 과목 칩)용 — 안에서 줄바꿈이 된다.
  * 🔴 `TOOLBAR_SEG_BOX`에 `flex-wrap`·`h-auto`를 덧붙여 쓰지 말 것: 같은 축의 유틸이 겹치면 승자를
  *    문자열 순서가 아니라 **생성된 CSS 순서**가 정해서 눈으로 못 읽는 버그가 된다([[#116]]).
- *    한 줄일 땐 `min-h-8`이 `h-8`과 같은 높이라 다른 묶음과 나란히 선다.
+ *    한 줄일 땐 `min-h-(--control-h)`가 고정 묶음과 같은 높이라 나란히 선다.
  */
 export const TOOLBAR_SEG_BOX_WRAP =
   "border-line inline-flex min-h-(--control-h) flex-wrap items-center gap-0.5 rounded-lg border px-0.5";
 
 /** 세그먼트 묶음 **안쪽** 칩/링크의 공통 부분 — 선택 여부에 따른 톤은 호출부가 잇는다. */
 export const TOOLBAR_SEG_ITEM =
-  "rounded-md px-2 text-(length:--control-label) leading-none whitespace-nowrap transition";
+  "inline-flex h-[calc(var(--control-h)-2px)] shrink-0 items-center justify-center rounded-md px-2 text-(length:--control-label) leading-none whitespace-nowrap transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary";
 
 /**
  * 세그먼트 칩 **톤**.

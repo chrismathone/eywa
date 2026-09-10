@@ -2980,7 +2980,7 @@ export const SHEET_DICT = {
   },
   "cls.stat.total": { ko: "전체 반", en: "In total" },
   "cls.stat.active": { ko: "운영 중", en: "Running now" },
-  "cls.stat.seats": { ko: "등록 학생", en: "Students enrolled" },
+  "cls.stat.seats": { ko: "수강 등록", en: "Class enrollments" },
   "cls.stat.avg": { ko: "반당 평균", en: "Average per class" },
   // 🔴 영어엔 단위가 없다 — `All classes 94`가 곧 문장이라 `개`에 해당하는 낱말을 지어내면
   //    `94 classes classes`가 된다. BigStat은 빈 문자열이면 그 자리를 아예 안 그린다.

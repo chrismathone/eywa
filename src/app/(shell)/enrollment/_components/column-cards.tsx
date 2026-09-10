@@ -253,20 +253,18 @@ function ConsultationCard({
               못 박고 이름은 접히지 않게 잘린다(`truncate`, 전문은 마우스 오버 title 첫 줄). 오른쪽 층은 표식이
               없어도 자리를 잡아 카드마다 키가 같다.
               ⚠️ `flex-wrap`을 다시 넣지 말 것 — 한 장만 두 줄이 되면 그 카드만 키가 커진다. */}
-          <div className="flex h-10 items-center justify-between gap-3">
+          <div className="flex h-10 items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-center">
               {/* 이름 + (학교학년) 한 줄 — 옛 두 줄("백시후" / "초3 수창초")을 합친 것. */}
               {/* 이름 xl(24px) — 학교학년은 두 단계 아래(sm 16px), 같은 밑선.
                   🔴 2026-09-08 2xl(28)/lg(20) → xl/sm: v5 스케일에서 28px 이름 + 20px 학교학년이 칸 예산(≈145px)을
                      넘어 실브라우저에서 이름이 **`김.`** 한 글자로 잘렸다(등록 완료 칸, 오른쪽 표식이 자리를 먼저 먹는다).
                      이름이 안 읽히면 카드의 존재 이유가 없다 — 크기보다 이름이 먼저다. */}
-              <p className="text-foreground flex min-w-0 items-center gap-1.5 text-xl leading-none font-bold">
-                <span className="min-w-0 truncate">
-                  {c.prospectName}
-                  {gradeLabel ? (
-                    <span className="text-text-dim ml-1 text-sm font-semibold">({gradeLabel})</span>
-                  ) : null}
-                </span>
+              <p className="text-foreground flex min-w-0 flex-1 items-center gap-1 text-xl leading-none font-bold">
+                <span className="shrink-0 whitespace-nowrap">{c.prospectName}</span>
+                {gradeLabel ? (
+                  <span className="text-text-dim min-w-0 truncate text-sm font-medium" title={gradeLabel}>({gradeLabel})</span>
+                ) : null}
                 {c.personConsultCount > 1 ? (
                   // 배지 클릭 = 그 학생의 등록상담 전건 팝오버(나머지 상담 열람). base-ui Menu는 body로
                   // portal되어 스크롤 컬럼에 안 잘리고, 트리거의 preventDefault/stopPropagation로 카드 창-내비를 막는다.
@@ -277,15 +275,16 @@ function ConsultationCard({
                           role="button"
                           tabIndex={0}
                           title={`이 학생의 등록상담 ${c.personConsultCount}건 — 눌러서 나머지 상담 보기`}
+                          aria-label={`이 학생의 등록상담 ${c.personConsultCount}건 보기`}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                           }}
-                          className="bg-amber-soft text-amber shrink-0 cursor-pointer rounded-full px-2 py-0.5 text-sm leading-none font-bold hover:brightness-95"
+                          className="bg-amber-soft text-amber shrink-0 cursor-pointer rounded-md px-1 py-0.5 text-xs leading-none font-bold hover:brightness-95"
                         />
                       }
                     >
-                      상담 {c.personConsultCount}건
+                      {c.personConsultCount}건
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-64 p-1.5">
                       <div className="flex items-center justify-between gap-2 px-1 pb-1">

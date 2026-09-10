@@ -55,15 +55,18 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
 
   return (
     <section className="space-y-3">
-      {/* 머리 — 숫자 + Primary 하나('새 환불 요청서'). 옛 `micro`(대문자 소라벨) 문장은 값 위주 한 줄로. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+      {/* 기간·결과·등록을 한 줄에서 확인한다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1">
+        {all.length > 0 ? (
+          <BillingMonthNav period={period} hrefFor={monthHref} months={monthsWithData} defaultPeriod={defaultPeriod} ariaLabel="환불 월 선택" />
+        ) : null}
         <p className="text-text-dim text-sm">
-          <span className="text-foreground font-bold">{monthLabel(period)}</span> 환불 요청서{" "}
+          환불 요청서{" "}
           <span className="num text-foreground font-bold">{monthRows.length}</span>건
           <span className="text-text-faint ml-2">· 전체 {all.length}건 · 환불처리일자 기준(미입력 시 작성월)</span>
         </p>
         {canWrite ? (
-          <Button render={<WindowLink href="/billing/refunds/new" title="환불 요청서 작성" />}>
+          <Button className="ml-auto shrink-0" render={<WindowLink href="/billing/refunds/new" title="환불 요청서 작성" />}>
             <Plus className="size-4" />새 환불 요청서
           </Button>
         ) : null}
@@ -78,18 +81,6 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
         />
       ) : (
         <>
-          {/* 툴바 — 월 이동(공용). 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
-          <div className="flex flex-wrap items-center gap-2.5 px-1">
-            <BillingMonthNav
-              period={period}
-              hrefFor={monthHref}
-              months={monthsWithData}
-              defaultPeriod={defaultPeriod}
-              ariaLabel="환불 월 선택"
-            />
-            <span className="text-text-faint num ml-auto text-sm whitespace-nowrap">환불 기록 {monthsWithData.length}개월</span>
-          </div>
-
           {monthRows.length === 0 ? (
             <div className="bg-card border-line text-text-dim rounded-2xl border px-4 py-10 text-center text-sm">
               {monthLabel(period)}에 작성된 환불 요청서가 없습니다.

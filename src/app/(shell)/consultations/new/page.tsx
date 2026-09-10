@@ -22,10 +22,10 @@ export default async function NewConsultationPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-4">
       <BackLink href="/consultations" label="원생상담으로" />
 
-      <header className="border-border space-y-1 border-b pb-5">
+      <header className="border-border space-y-1 border-b pb-3">
         <p className="eyebrow">새 원생상담</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">상담 기록 추가</h1>
         <p className="text-muted-foreground text-sm">

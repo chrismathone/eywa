@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { cn } from "@/lib/utils";
 
@@ -28,13 +28,17 @@ import { cn } from "@/lib/utils";
  */
 export type PeriodRelation = "past" | "current" | "future";
 
-const RELATION_BADGE: Record<Exclude<PeriodRelation, "current">, { label: string; tone: string }> = {
+const RELATION_BADGE: Record<
+  Exclude<PeriodRelation, "current">,
+  { label: string; tone: string }
+> = {
   past: { label: "과거 조회", tone: "bg-amber-soft text-amber" },
   future: { label: "미래 조회", tone: "bg-blue-soft text-blue" },
 };
 
 export function PeriodNav({
   label,
+  labelControl,
   prevHref,
   nextHref,
   currentHref,
@@ -50,6 +54,8 @@ export function PeriodNav({
 }: {
   /** 가운데에 적을 기간 — "2026년 8월" · "8월 3일~9일". 호출부의 포맷 함수를 그대로. */
   label: string;
+  /** 직접 기간을 선택하는 화면의 중앙 컨트롤. 없으면 기존 '이번 기간으로' 버튼. */
+  labelControl?: ReactNode;
   prevHref: string;
   nextHref: string;
   /** 라벨을 눌렀을 때 갈 곳(이번 달·이번 주). */
@@ -119,14 +125,15 @@ export function PeriodNav({
     startTransition(() => router.push(href));
   };
 
-  // 🔴 높이·라벨은 **control-scale 한 벌**(높이 = 라벨 + 4px, 원장 2026-09-03) — 공용 `<Button>`·툴바 칩과
+  // 높이·라벨은 control-scale 한 벌(--control-label / --control-fill) — 공용 `<Button>`·툴바 칩과
   //    같은 값이라 한 줄에 나란히 서도 밑선이 맞는다. 세로 패딩으로 높이를 만들지 말 것(글자 크기가 바뀌면 흔들린다).
   //    (09-01 "h-8 고정"은 이 규칙으로 대체.)
   const arrow =
     "text-text-dim hover:text-primary hover:bg-bg-soft inline-flex h-full cursor-pointer items-center justify-center px-2 transition disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-dim";
 
   // 칠해진 화살표 — hover 톤까지 덮어써야 마우스를 얹었을 때 색이 도로 풀리지 않는다.
-  const lit = "bg-primary text-primary-foreground hover:bg-primary-deep hover:text-primary-foreground";
+  const lit =
+    "bg-primary text-primary-foreground hover:bg-primary-deep hover:text-primary-foreground";
 
   // 🔴 폭은 **고정**(원장 2026-09-01 "이동해도 크기 변동 안 되고 고정되게" — min이면 글자 수가 바뀔 때 화살표가 움찔한다).
   //    호출부의 labelWidth는 옛 13px 라벨에 맞춘 값이라 v5 라벨(18px)에 맞춰 1.4배로 도출한다(고정폭은 그대로).
@@ -148,19 +155,32 @@ export function PeriodNav({
         >
           <ChevronLeft className="size-[1em] text-(length:--control-label)" />
         </button>
-        <button
-          type="button"
-          // 이미 이번 기간이면 눌러도 갈 곳이 없다 — 비활성으로 그 사실을 모양에 담는다.
-          disabled={isCurrent}
-          className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-(length:--control-label) leading-none font-bold whitespace-nowrap transition ${
-            isCurrent ? "text-foreground cursor-default" : "text-foreground hover:bg-bg-soft cursor-pointer"
-          }`}
-          style={{ width: labelWidth }}
-          title={isCurrent ? undefined : (currentTitle ?? "눌러서 이번 기간으로")}
-          onClick={() => go(currentHref)}
-        >
-          {label}
-        </button>
+        {labelControl ? (
+          <div
+            className="border-line-faint h-full shrink-0 border-x"
+            style={{ width: labelWidth }}
+          >
+            {labelControl}
+          </div>
+        ) : (
+          <button
+            type="button"
+            // 이미 이번 기간이면 눌러도 갈 곳이 없다 — 비활성으로 그 사실을 모양에 담는다.
+            disabled={isCurrent}
+            className={`border-line-faint num h-full shrink-0 border-x px-2 text-center text-(length:--control-label) leading-none font-bold whitespace-nowrap transition ${
+              isCurrent
+                ? "text-foreground cursor-default"
+                : "text-foreground hover:bg-bg-soft cursor-pointer"
+            }`}
+            style={{ width: labelWidth }}
+            title={
+              isCurrent ? undefined : (currentTitle ?? "눌러서 이번 기간으로")
+            }
+            onClick={() => go(currentHref)}
+          >
+            {label}
+          </button>
+        )}
         <button
           type="button"
           className={cn(arrow, litNext && !nextDisabled && lit)}
@@ -172,7 +192,9 @@ export function PeriodNav({
         </button>
       </div>
       {badge ? (
-        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${badge.tone}`}>
+        <span
+          className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${badge.tone}`}
+        >
           {badge.label}
         </span>
       ) : null}

@@ -47,21 +47,27 @@ export function HelpBrowser({
         </section>
       ) : null}
 
+      <nav aria-label="도움말 목차" className="flex flex-wrap gap-2 border-b border-line pb-2">
+        {filteredSteps.length > 0 && <a href="#help-start" className="inline-flex h-(--control-h) items-center rounded-md border border-line px-2 text-sm hover:bg-primary-soft">빠른 시작 {filteredSteps.length}</a>}
+        {filteredMenus.length > 0 && <a href="#help-menus" className="inline-flex h-(--control-h) items-center rounded-md border border-line px-2 text-sm hover:bg-primary-soft">메뉴 안내 {filteredMenus.length}</a>}
+        {filteredFaq.length > 0 && <a href="#help-faq" className="inline-flex h-(--control-h) items-center rounded-md border border-line px-2 text-sm hover:bg-primary-soft">자주 묻는 질문 {filteredFaq.length}</a>}
+      </nav>
+
       {/* 빠른 시작 — 처음 사용자를 위한 순서 */}
       {filteredSteps.length > 0 ? (
-        <section>
+        <section id="help-start" className="scroll-mt-3">
           <header className="mb-3">
             <p className="micro">처음이신가요?</p>
             <h2 className="text-foreground mt-0.5 text-lg font-bold">빠른 시작 — 이 순서로 준비하세요</h2>
           </header>
           <ol className="bg-card border-line shadow-card space-y-1 rounded-2xl border p-2">
-            {filteredSteps.map((s, i) => (
+            {filteredSteps.map((s) => (
               <li
                 key={s.title}
                 className="hover:bg-bg-soft/60 flex items-start gap-3 rounded-lg px-3 py-2.5 transition"
               >
                 <span className="bg-primary mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white tabular-nums">
-                  {i + 1}
+                  {quickstart.indexOf(s) + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -91,7 +97,7 @@ export function HelpBrowser({
 
       {/* 메뉴 가이드 */}
       {filteredMenus.length > 0 ? (
-        <section>
+        <section id="help-menus" className="scroll-mt-3">
           <header className="mb-3">
             <p className="micro">{menus.length}개 메뉴 안내</p>
             <h2 className="text-foreground mt-0.5 text-lg font-bold">기능 한눈에 보기</h2>
@@ -115,7 +121,7 @@ export function HelpBrowser({
                     <EyIcon name={iconName} size={14} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-foreground text-sm font-bold break-keep">{m.label}</h3>
+                    <h3 className="text-foreground text-sm font-bold break-keep"><a href={m.href} className="hover:text-primary hover:underline">{m.label} <span aria-hidden>↗</span></a></h3>
                     <p className="text-text-dim mt-1 text-xs leading-relaxed break-keep">{m.description}</p>
                   </div>
                 </div>
@@ -127,7 +133,7 @@ export function HelpBrowser({
 
       {/* FAQ */}
       {filteredFaq.length > 0 ? (
-        <section>
+        <section id="help-faq" className="scroll-mt-3">
           <header className="mb-3">
             <p className="micro">FAQ</p>
             <h2 className="text-foreground mt-0.5 text-lg font-bold">자주 묻는 질문</h2>

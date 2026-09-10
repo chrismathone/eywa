@@ -1,0 +1,24 @@
+.list { container-type: inline-size; }
+.row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 4px 6px;
+}
+.row > button:first-child { grid-column: 1; grid-row: 1; }
+.row > input { grid-column: 2; grid-row: 1; width: 100%; min-width: 0; }
+.row > button:last-child { grid-column: 3; grid-row: 1; }
+.times {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-column: 2;
+  grid-row: 2;
+  align-items: center;
+  gap: 6px;
+}
+.times > input { width: 100%; min-width: 0; }
+@container (min-width: 400px) {
+  .row { grid-template-columns: 20px 72px minmax(0, 1fr) 24px; }
+  .times { grid-column: 3; grid-row: 1; }
+  .row > button:last-child { grid-column: 4; }
+}

@@ -78,24 +78,28 @@ export async function getDocumentsPage(
 }
 
 /**
- * 폴더 팬 카운트 — 분류별 + 전체. 분류가 동적이 되면서(0161a) "분류마다 head count"는 N+1이라
- * group-by RPC 1쿼리로(B2, 0039a/0040a 패턴). 문서가 없는 분류는 RPC가 행을 안 주므로 호출부가 0으로 읽는다.
+ * 폴더 건수는 탐색기와 동일한 공개 범위로 집계한다. 분류별 N+1 조회 없이 분류만 페이지 단위로 읽는다.
+ * 조회 실패는 null로 반환해 빈 분류(0)와 구분한다.
  */
-export async function getDocumentCategoryCounts(): Promise<Record<string, number> & { all: number }> {
+export async function getDocumentCategoryCounts(): Promise<(Record<string, number> & { all: number }) | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("document_category_counts");
-  if (error) {
-    // 카운트 실패가 목록 자체를 못 열게 만들면 안 된다 — 0으로 폴백하되 로그는 남긴다.
-    console.error("[documents/queries] document_category_counts RPC 오류", error);
-    return { all: 0 };
-  }
   const out: Record<string, number> & { all: number } = { all: 0 };
-  for (const r of (data ?? []) as { category: string; count: number }[]) {
-    const n = Number(r.count) || 0;
-    out[r.category] = n;
-    out.all += n;
+  // 옛 RPC는 직원 전용 문서를 포함한다. 목록과 같은 RLS·제외 조건으로 분류만 읽는다.
+  // PostgREST 반환 상한 때문에 나눠 읽고, 중간 실패 시 부분 합계를 전체처럼 표시하지 않는다.
+  const batch = 1000;
+  for (let offset = 0; ; offset += batch) {
+    const { data, error } = await supabase.from("academy_documents")
+      .select("category").is("staff_user_id", null).order("id").range(offset, offset + batch - 1);
+    if (error) {
+      console.error("[documents/queries] 문서 분류 집계 실패", error);
+      return null;
+    }
+    for (const row of data ?? []) {
+      out[row.category] = (out[row.category] ?? 0) + 1;
+      out.all++;
+    }
+    if (!data || data.length < batch) return out;
   }
-  return out;
 }
 
 export type DocumentDetail = DocumentRow & { body: string | null; filePath: string | null };

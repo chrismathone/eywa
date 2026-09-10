@@ -145,7 +145,7 @@ export function LiveBoardClient({
               </span>
             )}
             <span className="text-text-dim whitespace-nowrap">
-              출발 전 <span className="num">{summary.ready}</span>
+              출발 기록 없음 <span className="num">{summary.ready}</span>
             </span>
             <span className="text-text-dim whitespace-nowrap">
               종료 <span className="num">{summary.done}</span>
@@ -175,6 +175,7 @@ export function LiveBoardClient({
         )}
       </div>
 
+      {tripsReady && summary.ready > 0 ? <p className="text-xs">예정 시각과 실제 운행은 다를 수 있습니다. 출발·종료 기록을 기준으로 상태를 표시합니다.</p> : null}
       {/* 🔴 0243a 미적용 — 상태를 그리는 대신 **왜 안 보이는지**를 말한다(빈 화면은 고장으로 읽힌다). */}
       {!tripsReady && (
         <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed px-3 py-2 text-xs">
