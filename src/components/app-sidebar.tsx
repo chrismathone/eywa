@@ -35,6 +35,17 @@ import {
 } from "@/components/workspace/prefetch-embed";
 
 // 펼침/접힘 모핑 이징 — 창 스냅과 동일 톤. 모션 OFF면 적용 안 함.
+/**
+ * 사이드바 줄의 **라벨 시작 x** — 두 종류의 줄이 같은 자리에서 글자를 시작해야 한다.
+ *
+ * 계기(원장 2026-09-10): *"탭 글씨 줄맞춤 안되어있네. 이런 기본적인것"*. 업무군 줄(`GroupRail`)은
+ * 아이콘을 절대배치하고 라벨 왼쪽 여백을 42px로 줬는데, 바로 여는 줄(`RailItem` — 운영실·회의록·
+ * 자주 방문한 메뉴)은 흐름 배치라 `pl-[17px]`(17) + 아이콘(18) + `gap-2.5`(10) = **45px**였다.
+ * 3px 차이라 한 줄만 있을 땐 안 보였는데, 회의록을 왼쪽 탭으로 빼면서 업무군 줄 **사이에** 서자 드러났다.
+ * 🔴 값을 두 곳에 적지 말 것 — 한쪽만 고치면 다시 어긋난다(가드가 17+18+10=45를 잠근다).
+ */
+const RAIL_LABEL_ML = "ml-[45px]";
+
 const EASE = "ease-[cubic-bezier(0.22,0.61,0.36,1)]";
 
 const RAIL_DRAG = 16; // 레일 아이콘을 오른쪽(캔버스)으로 이만큼 끌면 그 자리에 창 꺼내기
@@ -643,7 +654,7 @@ function GroupRail({
         <MenuGlyph name={group.icon} size={18} />
       </span>
       <span
-        className={`relative ml-[42px] flex min-w-0 flex-1 items-center gap-1 overflow-hidden pr-2 whitespace-nowrap ${
+        className={`relative ${RAIL_LABEL_ML} flex min-w-0 flex-1 items-center gap-1 overflow-hidden pr-2 whitespace-nowrap ${
           expanded ? "max-w-[220px] opacity-100" : "max-w-0 opacity-0"
         } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
       >
