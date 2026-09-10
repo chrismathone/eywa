@@ -88,8 +88,19 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
             } ${entry.endedOn ? "line-through" : ""}`}
             ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
           >
-            {/* 학교·학년은 이름 툴팁에도 남긴다(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다). */}
-            <span title={meta ? `${meta.name} · ${schoolGrade} — 클릭하면 학생 정보` : undefined}>
+            {/* 학교·학년은 이름 툴팁에도 남긴다(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다).
+                🔴 **잘리는 건 화면에 보이는 그 글자**라 툴팁도 `names.primary`(그 줄에 실제로 적힌
+                   이름)를 앞세운다 — 한국어 화면에선 `meta.name`과 **글자까지 같고**, 영어 화면에서만
+                   영어 이름이 온다(한글 이름은 둘째 줄이 제 툴팁으로 들고 있다).
+                ⚠️ 학교·학년이 없으면 `·`도 안 붙인다 — 안 그러면 `이서은A ·  — 클릭하면…`처럼
+                   구분점만 떠 있는 툴팁이 된다(빈 값에 슬래시를 안 그리는 것과 같은 규칙). */}
+            <span
+              title={
+                meta
+                  ? `${names.primary || meta.name}${schoolGrade ? ` · ${schoolGrade}` : ""} — 클릭하면 학생 정보`
+                  : undefined
+              }
+            >
               {names.primary || "?"}
             </span>
           </WindowLink>

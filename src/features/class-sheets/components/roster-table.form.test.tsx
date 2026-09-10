@@ -126,6 +126,25 @@ describe("로스터 표 — 이름 뒤 /학교학년", () => {
     expect(nameCell(container).textContent).not.toContain("/");
   });
 
+  // 원장 2026-09-10: *"나머지는 마우스 올리면 풀로 보이게 툴팁같은걸로 대체."*
+  // 열은 더 안 넓히고 잘린 값을 툴팁이 갚는다 — 그러니 **잘리는 그 요소**에 전문이 있어야 한다.
+  it("🔴 잘리는 학교학년 칸이 전문을 `title`로 들고 있다", () => {
+    const { container } = renderTable("default", vi.fn(), withSchool);
+    const sg = [...nameCell(container).querySelectorAll("span")].find((s) =>
+      s.textContent?.startsWith("/"),
+    );
+    expect(sg?.getAttribute("title")).toBe("김덕현/침산중1");
+  });
+
+  it("🔴 학교·학년이 없으면 툴팁도 이름만 — 구분점(`·`)만 뜬 채로 남지 않는다", () => {
+    const { container } = renderTable("default");
+    const titles = [...nameCell(container).querySelectorAll("[title]")].map((e) =>
+      e.getAttribute("title"),
+    );
+    expect(titles).toContain("김학생 — 클릭하면 학생 정보");
+    expect(titles.some((t) => t?.includes("·") || t?.includes("/"))).toBe(false);
+  });
+
   it("🔴 이름 열 폭은 폼이 정한다 — JJ 폼은 고정 열이 많아 비율로 물러선다", () => {
     const { container } = renderTable("default", vi.fn(), withSchool);
     expect(container.querySelector("col")!.style.width).toBe(`${TODAY_NAME_W}px`);
