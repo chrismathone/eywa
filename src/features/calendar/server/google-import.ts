@@ -27,11 +27,23 @@ import {
 const PAST_DAYS = 30;
 const FUTURE_DAYS = 400;
 
-function loadServiceAccount(): { email: string; key: string } | null {
-  // 전용 키가 있으면 그것, 없으면 같은 프로젝트의 기존 키로 떨어진다(원장 2026-09-10: 새로 만들지 말 것).
-  const raw =
-    process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY ?? process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (!raw) return null;
+/**
+ * 서비스 계정 키 로드. 실패 사유를 **갈라서** 돌려준다.
+ * 🔴 "키 없음"과 "형식 이상"을 한 문장으로 뭉치면 진단이 왕복한다 — 2026-09-10에 실제로
+ *    "Vercel에 넣었는데?"와 "그건 로컬 파일입니다"를 두 번 주고받았다. 어느 이름이 있고 없는지를 적는다.
+ */
+function loadServiceAccount(): { ok: true; email: string; key: string } | { ok: false; reason: string } {
+  const dedicated = process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY;
+  const fallback = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  const raw = dedicated ?? fallback;
+  const which = dedicated ? "GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY" : "FIREBASE_SERVICE_ACCOUNT_KEY";
+  if (!raw) {
+    return {
+      ok: false,
+      reason:
+        "서비스 계정 키가 이 환경에 없습니다 — GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY 또는 FIREBASE_SERVICE_ACCOUNT_KEY 중 하나를 Vercel(Production)에 넣고 재배포하세요.",
+    };
+  }
   let parsed: { client_email?: string; private_key?: string };
   try {
     parsed = JSON.parse(raw) as typeof parsed;
@@ -39,12 +51,13 @@ function loadServiceAccount(): { email: string; key: string } | null {
     try {
       parsed = JSON.parse(Buffer.from(raw, "base64").toString("utf8")) as typeof parsed;
     } catch {
-      return null;
+      return { ok: false, reason: `${which} 값을 JSON으로 읽지 못했습니다(원문·base64 둘 다 실패).` };
     }
   }
-  return parsed.client_email && parsed.private_key
-    ? { email: parsed.client_email, key: parsed.private_key }
-    : null;
+  if (!parsed.client_email || !parsed.private_key) {
+    return { ok: false, reason: `${which}에 client_email 또는 private_key가 없습니다.` };
+  }
+  return { ok: true, email: parsed.client_email, key: parsed.private_key };
 }
 
 export type ImportSummary = {
@@ -125,10 +138,15 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
     deleted: 0,
     failed: [],
   };
-  if (sources.length === 0 || !sa) {
+  if (sources.length === 0 || !sa.ok) {
     summary.failed.push({
       calendarId: "-",
-      reason: sources.length === 0 ? "GOOGLE_CALENDAR_IDS 미설정" : "서비스 계정 키 없음",
+      reason:
+        sources.length === 0
+          ? "GOOGLE_CALENDAR_IDS 미설정 — `태그이름|캘린더ID` 줄바꿈 구분으로 넣으세요."
+          : sa.ok
+            ? "알 수 없음"
+            : sa.reason,
     });
     return summary;
   }
