@@ -14,7 +14,7 @@ import type { GridDay } from "../lib/grid";
 import type { RosterGroupKey } from "../lib/roster-order";
 import type { SheetMark } from "../lib/roster-form";
 import { buildGridRows } from "../lib/grid-rows";
-import { TODAY_PLAN_W } from "../lib/today-columns";
+import { SHEET_DAY_MAX_W, TODAY_PLAN_W } from "../lib/today-columns";
 import type { PlanLineDTO } from "../server/actions";
 import type { SheetHandlers } from "./sheet-client";
 import type { SheetSaveStore } from "./use-sheet-saves";
@@ -22,7 +22,12 @@ import { PeriodBlock } from "./period-block";
 import { DayBulk } from "./day-bulk";
 
 const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
-// 요일 열 폭 = 오늘 면 교시 카드 폭과 **같은 상수**(today-columns 단일 소스) — 따로 적으면 두 화면이 갈린다.
+// 요일 열의 **최소** 폭 = 오늘 면 교시 카드 폭과 같은 상수(today-columns 단일 소스) — 따로 적으면 두 화면이 갈린다.
+// 🔴 2026-09-10부터 **최소**다(그전엔 고정). 원장 *"우측 공간 많으니까 적절히 열너비 조정"* — 요일이
+//    두셋뿐인 반(실측 43반 중 2일 10 · 3일 30)은 창 오른쪽이 통째로 비어 있었는데, 정작 카드 안에서는
+//    특이사항이 잔여 폭을 못 받아 좁았다. 이제 남는 폭을 요일들이 고르게 나눠 갖는다.
+// ⚠️ **최소값은 그대로 둔다** — 2026-08-17의 "3열이 한 페이지에"(3×420+24 = 1284 ≤ 가용 1330)가 이 값에
+//    걸려 있다. 넓히는 쪽으로만 움직이므로 그 결정은 어떤 폭에서도 깨지지 않는다.
 const COL_W = TODAY_PLAN_W;
 const GAP_X = 12; // gap-x-3 — 밴드가 열 사이 틈까지 덮어야 본문이 안 비친다
 // 교시 행 사이 간격(옛 gap-y-2). row-gap이 아니라 **행마다 붙는 전용 트랙**이다 — 아래 주석 참조.
@@ -59,7 +64,15 @@ export const SheetGrid = memo(function SheetGrid({
   shouting: Record<string, boolean>;
 }) {
   const rows = useMemo(() => buildGridRows(days), [days]);
-  const columns = `repeat(${days.length}, ${COL_W}px)`;
+  // 🔴 `minmax(0, 1fr)` — **0**이 최소인 이유: `1fr`(=`minmax(auto, 1fr)`)로 두면 카드 안 내용의
+  //    min-content가 트랙을 밀어 올려 폭이 내용 따라 들쭉날쭉해진다. 실제 최소는 아래 `minWidth`가
+  //    바깥에서 잡는다(계산이 한 곳에 모여 있어야 밴드와 본문이 같은 격자를 쓴다).
+  const columns = `repeat(${days.length}, minmax(0, 1fr))`;
+  const gaps = Math.max(0, days.length - 1) * GAP_X;
+  // 최소 = 종전 고정 폭 그대로(3열 한 페이지 유지) · 최대 = 요일이 한둘뿐인 반이 화면을 통째로
+  // 차지하지 않게(카드 한 장이 두 장 몫을 넘지 않는다).
+  const minWidth = days.length * COL_W + gaps;
+  const maxWidth = days.length * SHEET_DAY_MAX_W + gaps;
 
   if (days.length === 0) {
     // 랜딩 빈 상태와 동일 스타일(부모가 flex가 아니라 self-center는 무효 — 카드형으로 통일)
@@ -71,8 +84,11 @@ export const SheetGrid = memo(function SheetGrid({
   }
 
   return (
-    // w-max — 밴드가 열 전체 폭(가로 스크롤 폭)을 덮게. 부모 폭에 맞추면 스크롤 시 오른쪽이 샌다.
-    <div className="w-max pb-2">
+    // 폭은 `100%`이되 **최소는 종전 고정 폭**(min-width) — 좁으면 넘쳐 스크롤되고(밴드가 그 폭을 그대로
+    // 덮으므로 스크롤해도 오른쪽이 새지 않는다), 넓으면 남는 폭을 요일들이 나눠 갖는다.
+    // ⚠️ `w-max`(=max-content)로 되돌리지 말 것 — max-content는 `1fr`을 내용 폭으로 접어서 아무리 넓은
+    //    창에서도 카드가 안 늘어난다(그러면 이 변경이 통째로 무효다).
+    <div className="w-full pb-2" style={{ minWidth, maxWidth }}>
       {/* sticky 밴드 — 불투명 배경 + 아래 여백 포함. z-10: 본문 위, StatusCell 팝오버(포털 z-50) 아래. */}
       <div
         className="bg-background sticky top-0 z-10 grid pb-2"

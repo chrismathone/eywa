@@ -179,13 +179,12 @@ export const TodayRosterTable = memo(function TodayRosterTable({
                   </th>
                 ))}
                 {/* 머리는 가운데 — 주간 시트와 **같은 규약**(둘이 갈리면 같은 표로 안 읽힌다). */}
-                {/* ⚠️ 주간 표와 **같은 규약**(roster-table 주석 참조) — 접지도(머리 높이가 갈린다) 흘려보내지도
-                    (옆 교시 위로 겹친다) 않고 열 안에서 말줄임, 전문은 `title`. */}
-                <th className="py-0.5 font-bold">
-                  <span className="flex justify-center">
-                    <span className="min-w-0 truncate" title={t("roster.col.note")}>
-                      {t("roster.col.note")}
-                    </span>
+                {/* ⚠️ 주간 표와 **같은 규약**(roster-table 주석 참조) — 흘려보내지 않고(옆 교시 위로
+                    겹친다) 열 안에서 `leading-tight` 두 줄까지 접는다. 오늘 면은 이 열이 111~185px이라
+                    실제로는 늘 한 줄이지만, 두 표가 같은 머리를 다르게 그리면 곧 갈린다. */}
+                <th className="py-0.5 text-center leading-tight font-bold">
+                  <span className="line-clamp-2" title={t("roster.col.note")}>
+                    {t("roster.col.note")}
                   </span>
                 </th>
               </Fragment>

@@ -4,6 +4,7 @@ import { RosterTable } from "./roster-table";
 import type { ClassSheetWeekData } from "../server/queries";
 import type { RosterEntry } from "../lib/grid";
 import type { SheetHandlers } from "./sheet-client";
+import { TODAY_NAME_W, weeklyNameWidth } from "../lib/today-columns";
 
 // 로스터 **폼**(기본 / JJ 전용) 회귀 가드 — 원장 2026-08-13: *"점수 → 시험 점수"*, *"JJ 수업만 …
 // 점수를 없애고 듣기 레벨, 누적 암기 단어수를 추가"*. 지켜야 할 것:
@@ -31,9 +32,9 @@ const data = {
   students: { "stu-1": { name: "김학생", school: null, grade: null, englishName: null } },
 } as unknown as ClassSheetWeekData;
 
-function renderTable(form: "default" | "selfStudy", saveMark = vi.fn()) {
+function renderTable(form: "default" | "selfStudy", saveMark = vi.fn(), sheet = data) {
   const handlers = { saveMark } as unknown as SheetHandlers;
-  render(
+  const view = render(
     <table>
       <tbody>
         <tr>
@@ -42,7 +43,7 @@ function renderTable(form: "default" | "selfStudy", saveMark = vi.fn()) {
               date={DATE}
               slotStart={SLOT}
               roster={roster}
-              data={data}
+              data={sheet}
               marks={{
                 [`stu-1|${DATE}|${SLOT}`]: {
                   status: null,
@@ -64,7 +65,7 @@ function renderTable(form: "default" | "selfStudy", saveMark = vi.fn()) {
       </tbody>
     </table>,
   );
-  return { saveMark };
+  return { saveMark, container: view.container };
 }
 
 const headers = () => screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
@@ -99,5 +100,56 @@ describe("로스터 표 — 폼별 열", () => {
     const [studentId, date, slot, status, note, patch] = saveMark.mock.calls[0];
     expect([studentId, date, slot, status, note]).toEqual(["stu-1", DATE, SLOT, null, null]);
     expect(patch).toEqual({ memorizedWords: "1300" });
+  });
+});
+
+// 이름 칸 = `이름/학교학년` 한 줄(원장 2026-09-10 *"김원중/경명여중3 이렇게"*).
+describe("로스터 표 — 이름 뒤 /학교학년", () => {
+  const withSchool = {
+    canMarkAttendanceByDate: { [DATE]: true },
+    students: { "stu-1": { name: "김덕현", school: "침산중", grade: "중1", englishName: null } },
+  } as unknown as ClassSheetWeekData;
+
+  // 하네스가 표를 표 안에 넣어 렌더하므로 **안쪽 표**의 첫 본문 칸이 이름 칸이다.
+  const nameCell = (c: HTMLElement) =>
+    c.querySelectorAll("table")[1]!.querySelector("tbody td")!;
+
+  it("압축 표기로 이름 옆에 붙는다 — `김덕현/침산중1`(공백 join 금지)", () => {
+    const { container } = renderTable("default", vi.fn(), withSchool);
+    const text = nameCell(container).textContent ?? "";
+    expect(text).toContain("김덕현/침산중1");
+    expect(text).not.toContain("침산중 중1");
+  });
+
+  it("🔴 학교·학년이 없으면 슬래시도 없다 — `김학생/`처럼 꼬리만 남기지 않는다", () => {
+    const { container } = renderTable("default");
+    expect(nameCell(container).textContent).not.toContain("/");
+  });
+
+  // 원장 2026-09-10: *"나머지는 마우스 올리면 풀로 보이게 툴팁같은걸로 대체."*
+  // 열은 더 안 넓히고 잘린 값을 툴팁이 갚는다 — 그러니 **잘리는 그 요소**에 전문이 있어야 한다.
+  it("🔴 잘리는 학교학년 칸이 전문을 `title`로 들고 있다", () => {
+    const { container } = renderTable("default", vi.fn(), withSchool);
+    const sg = [...nameCell(container).querySelectorAll("span")].find((s) =>
+      s.textContent?.startsWith("/"),
+    );
+    expect(sg?.getAttribute("title")).toBe("김덕현/침산중1");
+  });
+
+  it("🔴 학교·학년이 없으면 툴팁도 이름만 — 구분점(`·`)만 뜬 채로 남지 않는다", () => {
+    const { container } = renderTable("default");
+    const titles = [...nameCell(container).querySelectorAll("[title]")].map((e) =>
+      e.getAttribute("title"),
+    );
+    expect(titles).toContain("김학생 — 클릭하면 학생 정보");
+    expect(titles.some((t) => t?.includes("·") || t?.includes("/"))).toBe(false);
+  });
+
+  it("🔴 이름 열 폭은 폼이 정한다 — JJ 폼은 고정 열이 많아 비율로 물러선다", () => {
+    const { container } = renderTable("default", vi.fn(), withSchool);
+    expect(container.querySelector("col")!.style.width).toBe(`${TODAY_NAME_W}px`);
+    cleanup();
+    const jj = renderTable("selfStudy", vi.fn(), withSchool);
+    expect(jj.container.querySelector("col")!.style.width).toBe(weeklyNameWidth("selfStudy"));
   });
 });
