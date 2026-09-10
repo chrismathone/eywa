@@ -5,6 +5,7 @@ import { brandLabels, getPublicBranding } from "@/features/owner/server/public-b
 import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadPublicSeatJjPlans } from "@/features/attendance/seat/server/jj-plan-public";
+import { getSeatPlacements } from "@/features/attendance/seat/server/placements";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
 import { readSeatPinSession, resolvePinSigningSecret } from "@/features/attendance/seat/server/pin-session";
@@ -83,7 +84,7 @@ export default async function PublicSeatPage({
   // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
   // 🔴 계획 재료는 **그날 그 자리 그 교시 명단**에 있는 반만 온다 — 로그인 화면이 ECS 게이트로 고르는
   //    자리에서, 여기는 PIN 쿠키 + 오늘 + 명단 화이트리스트가 고른다(서버가 정하고 저장 때 다시 본다).
-  const [rosters, plans] = await Promise.all([
+  const [rosters, plans, placements] = await Promise.all([
     period && seatHasJjFields(seat)
       ? // JJ실은 듣기·단어 칸이 붙는다 — 이미 적힌 값을 안 보여주면 담당자가 빈 칸으로 보고 다시 적는다.
         attachJjMarks(day.rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
@@ -91,6 +92,18 @@ export default async function PublicSeatPage({
     period
       ? loadPublicSeatJjPlans(seat, session.tenantId, date, period.start)
       : Promise.resolve({}),
+    /**
+     * 자리 **배치**(드래그로 옮긴 자리) — **보기만** 한다(`canMove`를 안 넘긴다).
+     * 🔴 이 화면에서 옮기지는 못한다 — 원장이 *"이것도 감사로그에 남아야함"*을 못박았는데 여기엔
+     *    로그인이 없어 실행자를 남길 수 없다(자리 출결의 무기명 갈래가 이미 감사 사각지대다).
+     * 🔑 그래도 **읽기는 한다** — 안 그러면 같은 방을 보는 두 화면이 "누가 어디 앉아 있나"를 다르게
+     *    말해 당번이 엉뚱한 카드를 찾는다(출결 귀속은 어느 쪽이든 원래 반으로 같다).
+     * ⚠️ 새 정보를 더하는 게 아니라 **같은 명단을 다르게 묶어 보여줄 뿐**이라, 사유·다음 교시처럼
+     *    공개 화면에서 빼는 축과는 결이 다르다.
+     */
+    period
+      ? getSeatPlacements(session.tenantId, seat, date, period.start)
+      : Promise.resolve({ rows: [], ready: false, reason: null }),
   ]);
 
   /**
@@ -145,6 +158,8 @@ export default async function PublicSeatPage({
           publicPin
           hrefFor={`/seat/${seat}?start=`}
           prevAbsentByCell={prevAbsentByCell}
+          // 🔴 `canMove`는 넘기지 않는다(기본 false) — 이 화면은 배치를 **보기만** 한다.
+          placements={placements.rows}
           // 진도 구획은 명단에 오른 반 중 계획이 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={
             Object.keys(plans).length > 0

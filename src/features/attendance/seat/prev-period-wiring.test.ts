@@ -44,7 +44,10 @@ describe("① 자동으로 찍지 않는다 — 사람이 누르는 버튼 하�
   });
 
   it("버튼 수는 낙관 오버레이를 얹은 뒤 센다 — 방금 출석으로 고친 학생이 남으면 안 된다", () => {
-    expect(board).toMatch(/statusOf\(r\.classId, s\) === null && prevAbsentByCell\[/);
+    // 🔴 축이 `r.classId`(놓인 묶음)가 아니라 **`s.homeClassId`(원래 반)**다(2026-09-10 자리 배치 도입) —
+    //    드래그로 옮긴 학생의 출결은 언제나 원래 반에 저장되므로, 묶음 id로 세면 옮긴 학생이 늘 '미체크'로
+    //    보여 버튼이 실제로 쓰는 수보다 많게 적힌다.
+    expect(board).toMatch(/statusOf\(s\.homeClassId, s\) === null &&\s*prevAbsentByCell\[/);
   });
 });
 
@@ -66,9 +69,11 @@ describe("② 대상은 서버가 다시 계산한다", () => {
   });
 
   it("🔑 화면도 **같은 인자**로 같은 함수를 돌린다 — 갈리면 버튼이 'N명'이라 적고 그보다 적게 쓴다", () => {
-    for (const page of [shellPage, publicPage]) {
-      expect(page).toMatch(/prevPeriodAbsences\([\s\S]{0,200}ambiguousClassIds\(period\)/);
-    }
+    // ⚠️ 로그인 화면은 '전체' 보기(2026-09-10 ⑨)가 생기며 교시가 여러 개라, 같은 인자를 **작은 헬퍼**로
+    //    묶어 두 갈래(교시 하나 / 전체)가 한 자리에서 같은 규약을 쓴다. 공개 PIN은 교시 하나 그대로.
+    expect(shellPage).toMatch(/prevAbsentFor\s*=\s*\(start: string, blocked: string\[\]\)[\s\S]{0,160}prevPeriodAbsences\(cells, start, blocked\)/);
+    expect(shellPage).toMatch(/prevAbsentFor\([\s\S]{0,60}ambiguousClassIds\(p(eriod)?\)\)/);
+    expect(publicPage).toMatch(/prevPeriodAbsences\([\s\S]{0,200}ambiguousClassIds\(period\)/);
   });
 
   it("게이트를 통과한 뒤에만 쓴다(자리·날짜 판정은 기존 문 그대로)", () => {
@@ -112,8 +117,8 @@ describe("④ 비로그인 PIN 화면엔 '다음 교시'가 안 간다", () => {
   });
 
   it("로그인 페이지는 둘 다 넘긴다", () => {
-    expect(shellPage).toContain("prevAbsentByCell={prevAbsentByCell}");
-    expect(shellPage).toContain("nextStartByStudent={nextStartByStudent}");
+    expect(shellPage).toContain("prevAbsentByCell={prevAbsentFor(");
+    expect(shellPage).toContain("nextStartByStudent={nextBySlot[");
   });
 
   it("보드는 prop이 없으면 그 줄을 안 그린다(기본값을 지어내지 않는다)", () => {
@@ -129,7 +134,9 @@ describe("표시는 두 화면이 같은 부품을 쓴다", () => {
 
   it("임계값 이름이 아니라 실제 교시 시각을 적는다([[#121]])", () => {
     expect(extras).toContain("앞 교시({prevAbsentStart}) 결석");
-    expect(extras).toContain("다음 {nextStart}");
+    // 🔴 2026-09-10: '다음 17:20'은 무엇을 하라는 말인지 안 읽혀 **시각 + 어디로**가 됐다
+    //    (원장 *"17:20 304호 가야함처럼"*). 방을 모르면 시각 + '다음 수업'.
+    expect(extras).toContain("{nextStart} {nextRoom ? `${nextRoom} 이동` : \"다음 수업\"}");
     // '직전'·'방금'처럼 시각을 감추는 말을 쓰지 말 것.
     expect(extras).not.toMatch(/방금 결석|직전 교시 결석/);
   });
@@ -146,6 +153,7 @@ describe("표시는 두 화면이 같은 부품을 쓴다", () => {
   });
 
   it("버튼 수는 칸 키로 중복을 접는다 — 서버가 접는 것과 같은 축", () => {
-    expect(board).toMatch(/new Set\([\s\S]{0,400}seatCellKey\(r\.classId, s\.id\)\)/);
+    // 위와 같은 이유로 키의 반 축도 `s.homeClassId`다(서버 `prevAbsentFillTargets`는 수강 반으로 접는다).
+    expect(board).toMatch(/new Set\([\s\S]{0,400}seatCellKey\(s\.homeClassId, s\.id\)\)/);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { SlotPlanBlock } from "@/features/class-sheets/components/slot-plan-block";
 import type { PlanWriteApi } from "@/features/class-sheets/components/plan-api";
@@ -20,12 +20,12 @@ import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
-import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
 import {
   PrevAbsenceHint,
-  SeatMarkButtons,
+  SeatMarkTriad,
+  SeatMemoMark,
+  SeatNotePopover,
   SeatPeriodHints,
-  SeatReasonInput,
   type SeatPeriodHintData,
 } from "./seat-mark-extras";
 
@@ -81,8 +81,15 @@ export function SeatJjTable(props: JjTableProps) {
   // 계획을 하나라도 그리면 **모든 열**을 그 폭으로 넓힌다 — 열마다 폭이 다르면 나란한 표가 어긋난다.
   const anyPlan = props.rosters.some((r) => props.plan?.plans[r.classId]);
   return (
+    /**
+     * 🔴 **속살까지 줄맞춤 = `grid-rows-subgrid`**(원장 2026-09-10 ⑦: 세 카드의 수업계획 블록 높이가
+     *    달라 아래 표 머리가 서로 다른 높이에서 시작했다). 카드마다 계획 줄 수·presence 배지가 달라서
+     *    높이만 맞추면(items-stretch) 안쪽 구획이 그대로 어긋난다 — 행을 셋(머리·계획·표)으로 못박고
+     *    카드가 그 행을 **물려받는다**.
+     * ⚠️ `items-start`를 쓰면 안 된다 — 카드가 내용 높이로 줄어들어 행을 안 채우고 줄맞춤이 죽는다.
+     */
     <div
-      className="grid items-start gap-3 overflow-x-auto"
+      className="grid grid-rows-[auto_auto_auto] gap-3 overflow-x-auto"
       style={{
         gridTemplateColumns: jjClassColumns(
           props.rosters.length,
@@ -136,7 +143,7 @@ function SeatJjClass({
     [onCarried, classId],
   );
   return (
-    <section className="border-line min-w-0 overflow-hidden rounded-2xl border">
+    <section className="border-line row-span-3 grid min-w-0 grid-rows-subgrid overflow-hidden rounded-2xl border">
       <header className="bg-bg-soft border-line flex flex-wrap items-center gap-2 border-b px-3 py-1.5 text-sm">
         <span className="min-w-0 truncate font-bold" title={r.className}>
           {r.className}
@@ -174,16 +181,23 @@ function SeatJjClass({
           onCarried={handleCarried}
           flushHost={plan.flushFields}
         />
-      ) : null}
+      ) : (
+        // 🔴 계획 구획이 없는 카드도 **그 행을 차지해야** 한다 — 안 그러면 표가 계획 행으로 올라와
+        //    옆 카드와 다시 어긋난다(권한 없는 반·랩실이 그 경우다).
+        <div />
+      )}
       <table className="w-full table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-[var(--line-faint)]">
         {/* 여섯 칸 — 영어 시트 JJ 폼과 **같은 순서**(이름 · 출결 · 태도 · 자유 입력 · 특이사항).
             ⚠️ 폭은 %다(시트는 px). 이 표는 반 수만큼 열이 갈리는 격자 안에 들어가 폭이 고정이 아니다.
             특이사항은 width 없는 마지막 <col>이라 **잔여를 받는다**(시트와 같은 규약). */}
         <colgroup>
           <col style={{ width: "22%" }} />
-          {/* 출결 — 2026-09-08: 14%로는 v5 글자(16px)에서 「결석 사유」 입력이 못 들어갔다.
-              🔑 늘린 몫은 **잔여를 받는 마지막 특이사항 칸**에서만 나온다(다른 칸은 안 줄어든다). */}
-          <col style={{ width: "20%" }} />
+          {/* 출결 — 2026-09-10: **세 버튼(출석·결석·지각)이 같은 폭으로 한 줄에** 서야 해서 20%→27%.
+              두 글자 라벨 3개 + 간격이 들어갈 최소치다(실측: 440px 열 기준 칸당 ≈32px, 두 글자 28px +
+              좌우 2px. 더 좁히면 글자가 칸을 넘는다, [[#116]]).
+              🔑 늘린 몫은 **잔여를 받는 마지막 특이사항 칸**에서만 나온다(다른 칸은 안 줄어든다).
+              ⚠️ 사유 입력칸이 팝업으로 내려가 이 칸의 세로 높이는 오히려 줄었다. */}
+          <col style={{ width: "25%" }} />
           <col style={{ width: "14%" }} />
           {cols.map((c) => (
             <col key={c.field} style={{ width: c.field === "memorizedWords" ? "14%" : "12%" }} />
@@ -226,51 +240,21 @@ function SeatJjClass({
                     {schoolGradeLabel(s.school, s.grade) || " "}
                   </p>
                 </td>
-                {/* 출결 칸에도 같은 툴팁을 명시로 단다 — `<tr>` 하나만 믿지 않는다(줄에 건 title은
-                    자식이 자기 title을 안 가질 때만 올라오고, 여기가 사유를 보러 오는 첫 자리다). */}
-                <td className="px-1 py-1.5" title={noteTitle ?? undefined}>
-                  <div className="flex flex-wrap items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      disabled={readOnly || pending}
-                      onClick={() => onSave(r.classId, s.id, cur === "present" ? null : "present", cur)}
-                      className={`min-w-[40px] rounded-lg border px-1.5 py-1 text-xs font-bold disabled:cursor-default ${
-                        cur ? SEAT_TONE[cur] : "border-line bg-card border-dashed text-text-dim"
-                      }`}
-                    >
-                      {cur ? SEAT_LABEL[cur] : "출석"}
-                    </button>
-                    {!readOnly ? (
-                      <SeatMarkButtons
-                        cur={cur}
-                        studentName={s.name}
-                        pending={pending}
-                        onMark={(next) => onSave(r.classId, s.id, next, cur)}
-                      />
-                    ) : null}
-                  </div>
-                  {/* 결석·지각이면 그 자리에서 사유를 적고(원장 2026-09-08), 아직 안 찍힌 칸엔
-                      **지난 결석**을 적는다 — 랩실 카드와 **같은 부품**이라 두 화면이 안 갈린다. */}
-                  <div className="mt-1">
-                    {showReason ? (
-                    <SeatReasonInput
-                      value={noteOf(r.classId, s)}
-                      status={cur}
-                      studentName={s.name}
-                      disabled={readOnly || pending}
-                      onChange={(next) => onSaveNote(r.classId, s.id, next, cur)}
-                    />
-                    ) : null}
-                    <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
-                    {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 교시(표시 전용, 랩실과 같은 부품). */}
-                    <SeatPeriodHints
-                      prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(r.classId, s.id)]}
-                      nextStart={hints.nextStartByStudent?.[s.id]}
-                      seatName={hints.seatName}
-                      cur={cur}
-                    />
-                  </div>
-                </td>
+                {/* 출결 칸 — 세 버튼 + 사유 팝업 + 메모 삼각형. 줄마다 제 상태·앵커를 가져야 해서
+                    **작은 컴포넌트**로 뺀다(map 안에서는 ref를 못 만든다). */}
+                <JjAttendanceCell
+                  classId={r.classId}
+                  student={s}
+                  cur={cur}
+                  note={noteOf(r.classId, s)}
+                  noteTitle={noteTitle}
+                  showReason={showReason}
+                  readOnly={readOnly}
+                  pending={pending}
+                  hints={hints}
+                  onSave={onSave}
+                  onSaveNote={onSaveNote}
+                />
                 {/* 태도 — 영어 시트와 **같은 부품**(5단 눈금 순환). 옛 자유입력 값도 그대로 보여준다. */}
                 <td className="px-1 py-1.5">
                   <AttitudeCheck
@@ -314,5 +298,89 @@ function SeatJjClass({
         </tbody>
       </table>
     </section>
+  );
+}
+
+/**
+ * JJ실 **출결 칸** 한 줄 — 세 버튼(출석·결석·지각) + 사유 팝업 + 메모 삼각형.
+ *
+ * 🔴 랩실 카드와 **같은 부품**(`SeatMarkTriad`·`SeatNotePopover`·`SeatMemoMark`)을 쓴다 — 두 화면에
+ *    각자 그리면 한쪽만 고쳐진다(2026-09-08 `seatMarkOf` 사고와 같은 결).
+ * 🔑 줄마다 제 팝업 상태와 **앵커 ref**가 필요해서 작은 컴포넌트로 뺐다(`map` 안에서는 ref를 못 만든다).
+ * ⚠️ 사유 팝업은 **공개 PIN 화면에서 안 열린다**(`showReason=false`) — 그 경로는 사유를 조회조차 안 한다.
+ */
+function JjAttendanceCell({
+  classId,
+  student: s,
+  cur,
+  note,
+  noteTitle,
+  showReason,
+  readOnly,
+  pending,
+  hints,
+  onSave,
+  onSaveNote,
+}: {
+  classId: string;
+  student: SeatClassRoster["students"][number];
+  cur: SeatStatus | null;
+  note: string | null;
+  noteTitle: string | null;
+  showReason: boolean;
+  readOnly: boolean;
+  pending: boolean;
+  hints: SeatPeriodHintData;
+  onSave: (classId: string, studentId: string, next: SeatStatus | null, prev: SeatStatus | null) => void;
+  onSaveNote: (classId: string, studentId: string, note: string, status: SeatStatus | null) => void;
+}) {
+  const anchorRef = useRef<HTMLTableCellElement | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const canNote = showReason && !readOnly;
+
+  return (
+    <td ref={anchorRef} className="relative px-1 py-1.5" title={noteTitle ?? undefined}>
+      <SeatNotePopover
+        open={noteOpen}
+        onOpenChange={setNoteOpen}
+        anchorRef={anchorRef}
+        note={note}
+        status={cur}
+        studentName={s.name}
+        onSave={(text) => onSaveNote(classId, s.id, text, cur)}
+      >
+        {/* 🔴 우클릭 = 상태를 안 바꾸고 사유·특이사항만([[#97]] 규약). `preventDefault`는 못 여는 칸에서도. */}
+        <div
+          onContextMenu={(e) => {
+            e.preventDefault();
+            if (canNote) setNoteOpen(true);
+          }}
+        >
+          <SeatMarkTriad
+            cur={cur}
+            studentName={s.name}
+            disabled={readOnly || pending}
+            onMark={(next) => {
+              // 고른 것을 다시 누르면 미체크로([[#103]]). 결석·지각을 새로 고르면 사유 창이 이어서.
+              const same = cur === next;
+              onSave(classId, s.id, same ? null : next, cur);
+              setNoteOpen(!same && canNote && (next === "absent" || next === "late"));
+            }}
+          />
+        </div>
+      </SeatNotePopover>
+      {showReason ? <SeatMemoMark note={note} status={cur} /> : null}
+      <div className="mt-1">
+        <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
+        {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 행선지(표시 전용, 랩실과 같은 부품). */}
+        <SeatPeriodHints
+          prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(classId, s.id)]}
+          nextStart={hints.nextStartByStudent?.[s.id]}
+          nextRoom={hints.nextRoomByStudent?.[s.id]}
+          seatName={hints.seatName}
+          cur={cur}
+        />
+      </div>
+    </td>
   );
 }

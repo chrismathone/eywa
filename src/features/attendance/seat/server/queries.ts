@@ -66,6 +66,13 @@ export type SeatClassRoster = {
   className: string;
   /** "HH:MM" — 같은 교시라도 반마다 다를 수 있다. */
   end: string;
+  /**
+   * 학원설정이 아니라 **반이 들고 있는 색**(`classes.bg_color`/`text_color`, ijw 패리티) — 시간표
+   * 카드 헤더가 쓰는 것과 **같은 소스**다(원장 2026-09-10 *"반이름은 설정된 반색상으로 색칠해주고"*).
+   * 🔴 null이면 칠하지 않는다 — 지어낸 색은 반을 잘못 알아보게 만든다.
+   */
+  bgColor: string | null;
+  textColor: string | null;
   students: SeatStudent[];
 };
 
@@ -160,11 +167,15 @@ async function loadSeatDay(
 
   // 반 이름 · 수강생 · 그날 출결 — 서로 독립이라 병렬(B4). id 수십 개까지 갈 수 있어 청크 헬퍼(B3).
   const [classes, enrollments, records, prevAbsenceRows] = await Promise.all([
-    fetchInChunks<{ id: string; class_name: string }>(classIds, (chunk) => {
-      let q = supabase.from("classes").select("id, class_name").in("id", chunk);
-      if (tenantId) q = q.eq("tenant_id", tenantId);
-      return q;
-    }),
+    // 🔵 `bg_color`/`text_color`는 **이미 있는 컬럼**(0054a 계열)이라 새 스키마를 요구하지 않는다([[#95]]).
+    fetchInChunks<{ id: string; class_name: string; bg_color: string | null; text_color: string | null }>(
+      classIds,
+      (chunk) => {
+        let q = supabase.from("classes").select("id, class_name, bg_color, text_color").in("id", chunk);
+        if (tenantId) q = q.eq("tenant_id", tenantId);
+        return q;
+      },
+    ),
     // ⚠️ PostgREST 임베드는 타입상 **배열**로 온다(실제로는 1건) — 아래에서 첫 원소로 접는다.
     fetchInChunks<{
       class_id: string;
@@ -262,6 +273,8 @@ async function loadSeatDay(
   }
 
   const nameById = new Map(classes.map((c) => [c.id, c.class_name]));
+  /** 반 색 — 시간표 카드 헤더와 같은 소스(`classes.bg_color`/`text_color`). 없으면 안 칠한다. */
+  const colorById = new Map(classes.map((c) => [c.id, { bg: c.bg_color, text: c.text_color }]));
   const slots: SeatSlot[] = seatRows.map((r) => ({
     classId: r.class_id as string,
     className: nameById.get(r.class_id as string) ?? "(이름 없는 반)",
@@ -335,6 +348,8 @@ async function loadSeatDay(
       classId: slot.classId,
       className: slot.className,
       end: hhmm(slot.end),
+      bgColor: colorById.get(slot.classId)?.bg ?? null,
+      textColor: colorById.get(slot.classId)?.text ?? null,
       students: (studentsByClass.get(slot.classId) ?? [])
         .map((s) =>
           toSeatStudent(

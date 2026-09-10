@@ -50,6 +50,8 @@ const seatDay: SeatDay = {
         classId: IN_ROSTER,
         className: "중등E_초5 의치대",
         end: "17:00",
+        bgColor: null,
+        textColor: null,
         students: [
           {
             id: "s1",
@@ -68,7 +70,7 @@ const seatDay: SeatDay = {
           },
         ],
       },
-      { classId: NON_ENGLISH, className: "수학 보충", end: "17:00", students: [] },
+      { classId: NON_ENGLISH, className: "수학 보충", end: "17:00", bgColor: null, textColor: null, students: [] },
     ],
   },
 };
