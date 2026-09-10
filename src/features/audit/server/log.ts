@@ -24,6 +24,32 @@ export const AUDIT_ACTIONS = {
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",
   consultation_merge: "등록상담 병합",
+  // 등록상담 전수(2026-09-10 원장 *"상담등록에 대해서는 감사로직이 안남나?"*) — QR 접수가 이름·학교·학년
+  // 일치로 **다른 아이(동명이인)** 에 자동 연결됐는데, 접수·자동 연결·상태 변경·이름 수정 어느 것도 기록이
+  // 없어 누가 무엇을 했는지 되짚을 수 없었다(김근우 건). 자동 연결은 DB 트리거가 직접 쓴다(0257a).
+  enrollment_consultation_create: "등록상담 작성",
+  enrollment_consultation_intake: "등록상담 QR 접수(학부모)",
+  enrollment_consultation_update: "등록상담 수정",
+  enrollment_consultation_outcome: "등록상담 상태 변경",
+  enrollment_consultation_delete: "등록상담 삭제",
+  consultation_autolink: "등록상담 학생 자동 연결",
+  consultation_link_existing: "등록상담 → 기존 학생 재사용",
+  consultation_unlink: "등록상담 학생 연결 해제",
+  // 🔴 아래 넷은 logAction을 **감싼 함수**(class-sheets/server/plan-write.ts `logPlanChange`)로 기록된다 —
+  //    레지스트리 가드가 `logAction(` 안의 리터럴만 봐서 라벨 없이 영문으로 떴다(2026-09-10 원장 제보
+  //    `ecs_plan_copy`, 하루 74건). 가드를 감싼 함수 호출·직접 insert·SQL 표식까지 넓혔다(actions-registry.test.ts).
+  ecs_plan_line_add: "강사 시트 수업계획 줄 추가",
+  ecs_plan_line_move: "강사 시트 수업계획 줄 이동",
+  ecs_plan_line_delete: "강사 시트 수업계획 줄 삭제",
+  ecs_plan_copy: "강사 시트 수업계획 이전 회차 복사",
+  // 세션 없는 경로가 audit_logs에 **직접 insert**하는 키 — 같은 이유로 가드 밖이었다.
+  calendar_google_import: "구글 캘린더 가져오기",
+  // 2026-09-01 일회성 스크립트가 남긴 행(각 1건) — 코드엔 더 이상 없지만 행이 남아 영문으로 떴다.
+  enrollment_create: "수강 등록(스크립트)",
+  attendance_update: "출결 수정(스크립트)",
+  // 수업보고서 보드 명단 핀(board-roster-actions.ts) — audit_logs에 **직접 insert**라 가드가 못 봤다(아직 행 0건).
+  classnote_child_link: "ClassNote 자녀 보드 연결",
+  classnote_child_unlink: "ClassNote 자녀 보드 연결 해제",
   staff_role_change: "역할 변경",
   staff_delete: "직원 삭제",
   staff_password_reset: "직원 비밀번호 재설정",

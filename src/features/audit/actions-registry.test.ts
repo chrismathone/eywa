@@ -185,6 +185,118 @@ describe("감사로그 액션 레지스트리", () => {
 });
 
 /**
+ * 🔴 2026-09-10 원장 제보(감사로그에 영문 `ecs_plan_copy`) — 위 스캐너가 못 본 세 갈래.
+ *   ① logAction을 **감싼 함수**에 키를 넘기는 호출(`logPlanChange("ecs_plan_copy", …)`) — 하루 74건이 영문으로 떴다
+ *   ② 세션 없는 경로의 **직접 insert**(`calendar_google_import`·QR 접수) — `logAction(`이 아예 없다
+ *   ③ **DB 트리거**가 쓰는 키(등록상담 자동 연결, 0257a) — SQL은 `-- audit-action` 표식을 단 줄만 본다
+ * 셋 다 "가드가 못 보는 모양이 있으면 그건 가드가 아니다"(위 actionExprs 주석)와 같은 뿌리다.
+ */
+function addFound(found: Map<string, Set<string>>, key: string, file: string) {
+  const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
+  if (!found.has(key)) found.set(key, new Set());
+  found.get(key)!.add(rel);
+}
+
+/** src 파일 본문을 **한 번만** 읽는다 — 아래 스캐너들이 전부 쓰는데 매번 읽으면 5초 타임아웃에 걸린다. */
+let srcCache: Array<{ file: string; src: string }> | null = null;
+function srcFiles(): Array<{ file: string; src: string }> {
+  srcCache ??= tsFiles(SRC).map((file) => ({ file, src: fs.readFileSync(file, "utf8") }));
+  return srcCache;
+}
+
+/**
+ * logAction을 **감싼 함수** — 첫 번째 인자를 그대로 `action`으로 넘기는 `log*` 함수만.
+ * 🔴 이름만 보고 잡으면 오탐이 난다: `logImport(abortedAt)`는 첫 인자가 **중단 단계 이름**
+ *    (`"student_status_lookup"`)이고 액션은 안에서 `"timetable_import_apply"`로 박혀 있다.
+ */
+function wrapperNames(): Set<string> {
+  const names = new Set<string>();
+  const decl = /(?:function\s+(log[A-Z]\w*)\s*\(|const\s+(log[A-Z]\w*)\s*=\s*(?:async\s*)?\()\s*([A-Za-z_]\w*)/g;
+  for (const { src } of srcFiles()) {
+    if (!src.includes("logAction(")) continue;
+    for (const m of src.matchAll(decl)) {
+      const name = m[1] ?? m[2];
+      const param = m[3];
+      if (!name || !param || name === "logAction") continue;
+      const k = src.indexOf("logAction(", m.index);
+      if (k === -1 || k - (m.index ?? 0) > 2000) continue;
+      const call = src.slice(k, k + 600);
+      const passesParam =
+        new RegExp(`\\baction\\s*:\\s*${param}\\b`).test(call) ||
+        (param === "action" && /\baction\s*[,}\r\n]/.test(call));
+      if (passesParam) names.add(name);
+    }
+  }
+  return names;
+}
+
+/** 감싼 함수를 `이름("키", …)`로 부르는 곳 — 어느 파일에서 부르든 전부. */
+function wrapperActions(): Map<string, Set<string>> {
+  const found = new Map<string, Set<string>>();
+  const names = [...wrapperNames()];
+  if (names.length === 0) return found;
+  const re = new RegExp(`\\b(?:${names.join("|")})\\(\\s*"([a-z][a-z0-9_]*)"`, "g");
+  for (const { file, src } of srcFiles()) for (const m of src.matchAll(re)) addFound(found, m[1]!, file);
+  return found;
+}
+
+/** src에서 audit_logs에 **직접 insert**하는 파일의 `action: "…"` 리터럴. */
+function directInsertActions(): Map<string, Set<string>> {
+  const found = new Map<string, Set<string>>();
+  for (const { file, src } of srcFiles()) {
+    if (!src.includes('from("audit_logs")') || !src.includes(".insert(")) continue;
+    for (const m of src.matchAll(/action:\s*"([a-z][a-z0-9_]*)"/g)) addFound(found, m[1]!, file);
+  }
+  return found;
+}
+
+/** SQL 마이그레이션에서 `'값', -- audit-action`(또는 audit-target-type) 표식을 단 값. */
+const MIGRATIONS = path.join(process.cwd(), "supabase", "migrations");
+function sqlMarked(marker: "audit-action" | "audit-target-type"): Map<string, Set<string>> {
+  const found = new Map<string, Set<string>>();
+  if (!fs.existsSync(MIGRATIONS)) return found;
+  const re = new RegExp(`'([a-z][a-z0-9_]*)'[^\\n]*--\\s*${marker}\\b`, "g");
+  for (const name of fs.readdirSync(MIGRATIONS)) {
+    if (!name.endsWith(".sql")) continue;
+    const p = path.join(MIGRATIONS, name);
+    const src = fs.readFileSync(p, "utf8");
+    if (!src.includes("audit_logs")) continue;
+    for (const m of src.matchAll(re)) addFound(found, m[1], p);
+  }
+  return found;
+}
+
+describe("감사로그 액션 레지스트리 — 감싼 함수·직접 insert·DB 트리거(2026-09-10)", () => {
+  // 전체 src 스캔이라 느리다 — 병렬 실행 부하에서 기본 5초에 헛실패하지 않게 넉넉히(기억: 가드 테스트 헛실패).
+  it("스캔이 실제로 동작한다(세 갈래 모두 알려진 키를 찾는다)", () => {
+    const wrappers = wrapperNames();
+    expect(wrappers.has("logPlanChange"), "감싼 함수 탐지가 logPlanChange를 못 찾음 — 스캔 방식을 갱신할 것").toBe(true);
+    // 🔴 첫 인자가 액션이 아닌 log* 함수는 감싼 함수가 아니다 — logImport의 첫 인자는 중단 단계 이름이다(오탐 방지).
+    expect(wrappers.has("logImport"), "logImport를 감싼 함수로 오인 — 첫 인자를 액션으로 넘기는지 판정이 깨졌다").toBe(false);
+    expect(wrapperActions().has("ecs_plan_copy")).toBe(true);
+    const direct = directInsertActions();
+    expect(direct.has("calendar_google_import")).toBe(true);
+    expect(direct.has("enrollment_consultation_intake")).toBe(true);
+    expect(sqlMarked("audit-action").has("consultation_autolink")).toBe(true);
+  }, 30_000);
+
+  it("세 갈래가 쓰는 모든 액션이 AUDIT_ACTIONS에 한글 라벨로 등록돼 있다", () => {
+    const registry = registryKeys();
+    const all = new Map<string, Set<string>>();
+    for (const found of [wrapperActions(), directInsertActions(), sqlMarked("audit-action")]) {
+      for (const [key, files] of found) for (const f of files) addFound(all, key, path.join(process.cwd(), f));
+    }
+    const missing = [...all]
+      .filter(([key]) => !registry.has(key))
+      .map(([key, files]) => `${key}  ←  ${[...files].join(", ")}`);
+    expect(
+      missing,
+      `AUDIT_ACTIONS 미등록 액션 — 감사로그 화면에 영문 키가 그대로 노출된다:\n  ${missing.join("\n  ")}`,
+    ).toEqual([]);
+  }, 30_000);
+});
+
+/**
  * '대상' 열 접두(target_type)도 같은 뿌리로 샜다 — 2026-08-17엔 attendance 등 5종, 2026-08-20엔
  * calendar_event·calendar_tag가 라벨 없이 영문으로 떠 있었다(describe.test.ts의 수기 목록은 사람이
  * 갱신해야 해서 늘 늦는다). 호출부를 **전수 스캔**해 AUDIT_TYPE_LABEL과 맞춘다.
@@ -214,6 +326,16 @@ describe("감사로그 대상 유형 라벨", () => {
         if (!used.has(m[1])) used.set(m[1], path.relative(process.cwd(), file).split(path.sep).join("/"));
       }
     }
+    // src의 **직접 insert**(snake 표기)와 SQL 트리거 표식이 쓰는 대상 유형도 — 위 액션 가드와 같은 세 갈래.
+    // (2026-09-10: 구글 캘린더 가져오기의 "calendar"가 이 틈으로 영문 그대로 떠 있었다.)
+    for (const { file, src } of srcFiles()) {
+      if (!src.includes('from("audit_logs")') || !src.includes(".insert(")) continue;
+      for (const m of src.matchAll(/target_type:\s*"([a-z_]+)"/g)) {
+        if (!used.has(m[1])) used.set(m[1], path.relative(process.cwd(), file).split(path.sep).join("/"));
+      }
+    }
+    for (const [t, files] of sqlMarked("audit-target-type")) if (!used.has(t)) used.set(t, [...files][0]!);
+    expect(used.has("calendar"), "직접 insert 대상 유형 스캔이 동작하지 않음").toBe(true);
     expect(used.size, "target_type을 하나도 못 찾음 — 스캔 방식을 갱신할 것").toBeGreaterThan(10);
     const labels = labelKeys();
     const missing = [...used].filter(([t]) => !labels.has(t)).map(([t, f]) => `${t}  ←  ${f}`);
