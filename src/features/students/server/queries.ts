@@ -1,21 +1,21 @@
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
-import { resolveTeacherLabel, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { invoiceOutstanding } from "@/features/billing/calc";
+import { settingsToPeriodsConfig, enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import {
-  slotPeriodRow,
-  periodRowText,
-  settingsToPeriodsConfig,
-  enumDayToKo,
-  type DayOfWeek,
-} from "@/features/timetable/lib/periods";
+  buildClassSlots,
+  liveScheduleRows,
+  roomBookOf,
+  type ClassSlot,
+  type ScheduleRow,
+} from "../lib/class-slots";
 import { goalAchieved } from "../grades-meta";
 import {
   subjectAxisOf,
@@ -790,21 +790,9 @@ export const getStudentEnrollments = cache(async function getStudentEnrollments(
 // 요일 묶음 + 교시 라벨 접기는 [`classes/schedule-periods.ts`](../../classes/schedule-periods.ts)로
 // 옮겼다(2026-09-10) — 등록상담 '배정된 반' 카드가 같은 표기를 써야 해서. 여긴 타입만 다시 내보낸다.
 export type { ScheduleGroup };
-// 개별 슬롯(요일 하나 × 시작시각 하나) — 주간 시간표 그리드 배치용(교시 체계가 과목마다 달라 시각 기준 병합).
-export type ClassSlot = {
-  day: DayOfWeek;
-  startTime: string;
-  periodLabel: string;
-  room: string | null;
-  /**
-   * **그 교시의 담당**(반 담임이 아니다) — 원장 2026-09-07 *"영어 주간 시간표에서 스케줄마다 다
-   * 선생님이 다르고 JJ실도 있을텐데 표현 제대로"*. 영어는 한 반이 교시마다 담당이 갈린다.
-   * 없으면 반 담임으로 떨어진다(시간표·ECS와 같은 폴백 사슬).
-   */
-  teacherName: string | null;
-  /** 자리(LAB·JJ) 교시면 그 이름 — 사람이 아니라 방이라 화면이 다르게 그린다. */
-  seat: string | null;
-};
+// 개별 슬롯(요일 하나 × 시작시각 하나)의 모양·만드는 규칙은 [`lib/class-slots.ts`](../lib/class-slots.ts)
+// (순수, Vitest — 2026-09-11 꺼냄). 여긴 다시 내보낸다.
+export type { ClassSlot };
 export type StudentClassRow = {
   enrollmentId: string;
   classId: string;
@@ -822,6 +810,21 @@ export type StudentClassRow = {
   classDays: string[];
 };
 
+/** `class_schedules` 조회 행 — 슬롯 FK(교시 담당·강의실)와 시트 라벨을 함께 싣는다. */
+type ScheduleDbRow = {
+  id: string;
+  class_id: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  slot_room_label: string | null;
+  classroom_id: string | null;
+  teacher_id: string | null;
+  slot_teacher_label: string | null;
+};
+
 export async function getStudentClassesDetail(studentId: string): Promise<StudentClassRow[]> {
   const supabase = await createClient();
   const { data: ens } = await supabase
@@ -836,29 +839,39 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
 
   const classIds = [...new Set(ens.map((e) => e.class_id))];
 
-  // 반별 스케줄(요일·시각) — valid_from/valid_to 포함. ⚠️ class_schedules는 운영 이력을 함께 담아(#88)
-  // 전 행을 그리면 끝난 교시가 현재 스케줄로 보인다(실측 중고E_중1 의치대: 현재 3교시인데 만료 6행이 섞여
-  // 요일당 9줄) — 아래 enrollment별 기준일(refDate)로 유효 슬롯만 남긴다.
-  const { data: scheds } = await supabase
-    .from("class_schedules")
-    // 🔴 교시 담당(FK)·라벨을 함께 읽는다 — 없으면 화면이 반 담임을 칸마다 반복해 "교시마다 다른
-    //    선생님"이 통째로 안 보인다(실측: 영어 한 반이 교시마다 갈리고 JJ 교시가 섞인다).
-    .select(
-      "class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_room_label, teacher_id, slot_teacher_label",
-    )
-    .in("class_id", classIds);
-  type SchedSlot = {
-    day: DayOfWeek;
-    startTime: string;
-    endTime: string;
-    validFrom: string | null;
-    validTo: string | null;
-    roomLabel: string | null;
-    teacherId: string | null;
-    teacherLabel: string | null;
-  };
-  const schedByClass = new Map<string, SchedSlot[]>();
-  for (const s of scheds ?? []) {
+  // 🔴 서로 독립인 네 조회를 한 번에(B4) — 배치 · 등록 강의실 · 강사 라벨 맵 · 학원설정(뒤 둘은 React cache).
+  // ① 반별 배치(valid_from/valid_to 포함). ⚠️ class_schedules는 운영 이력을 함께 담아(#88) 반 몇 개로도 행이
+  //    쌓인다 → id 목록 × 이력 표 = `fetchAllPagedInChunks`(청크 **안에서** 1,000행 침묵 절단 방지, B2 —
+  //    수업목록이 그렇게 반의 요일을 통째로 잃었다). 교시 담당(FK)·라벨과 **강의실 FK**를 함께 읽는다 —
+  //    없으면 칸마다 반 담임이 반복되고(교시마다 다른 선생님이 안 보인다) 시트 라벨 `606`이 그대로 적힌다.
+  // ② 등록 강의실 전건(테넌트 RLS, 보관된 방 포함) — FK → 이름(`본원606`), FK 없는 맨숫자 라벨 → 등록 이름
+  //    정정의 근거(좌석표·ECS와 같은 규약 · 목록은 whitelist라 무페이징 금지). ⚠️ 표시 전용이라 실패해도 탭은
+  //    산다(라벨·반 기본 강의실로 떨어진다).
+  const [scheds, roomRows, labelMap, settings] = await Promise.all([
+    fetchAllPagedInChunks<ScheduleDbRow>(classIds, (chunk, from, to) =>
+      supabase
+        .from("class_schedules")
+        .select(
+          "id, class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_room_label, classroom_id, teacher_id, slot_teacher_label",
+        )
+        .in("class_id", chunk)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{ id: string; name: string }>((from, to) =>
+      supabase.from("classrooms").select("id, name").order("id").range(from, to),
+    ).catch((err: unknown) => {
+      console.error("[students] 강의실 목록 조회 실패 — 슬롯 라벨·반 기본 강의실로 표시", err);
+      return [] as { id: string; name: string }[];
+    }),
+    getTeacherLabelMap(),
+    // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준.
+    getTenantSettings(),
+  ]);
+  const rooms = roomBookOf(roomRows);
+
+  const schedByClass = new Map<string, ScheduleRow[]>();
+  for (const s of scheds) {
     const arr = schedByClass.get(s.class_id) ?? [];
     arr.push({
       day: s.day_of_week as DayOfWeek,
@@ -866,9 +879,10 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       endTime: String(s.end_time).slice(0, 5),
       validFrom: s.valid_from ? String(s.valid_from).slice(0, 10) : null,
       validTo: s.valid_to ? String(s.valid_to).slice(0, 10) : null,
-      roomLabel: (s.slot_room_label as string | null) ?? null,
-      teacherId: (s.teacher_id as string | null) ?? null,
-      teacherLabel: (s.slot_teacher_label as string | null) ?? null,
+      roomId: s.classroom_id ?? null,
+      roomLabel: s.slot_room_label ?? null,
+      teacherId: s.teacher_id ?? null,
+      teacherLabel: s.slot_teacher_label ?? null,
     });
     schedByClass.set(s.class_id, arr);
   }
@@ -878,15 +892,9 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   //    그 왕복이 그대로 곱해졌다. 반 인원이 필요한 화면(수업 탭 배정 다이얼로그·반 이동)은
   //    `getClassesList()`가 주는 값을 쓴다 — 거기가 이미 단일 소스다.
 
-  /**
-   * 교시 담당 이름 — **시간표·ECS와 같은 두 함수**로 해석한다(갈리면 같은 교시가 화면마다 다른 사람이 된다).
-   * ① 라벨(`Song` 같은 닉네임)을 `resolveTeacherLabel`로 표시명(`송지혜`)으로 ② 없으면 슬롯 FK의 계정 이름.
-   * 🔴 **라벨이 먼저**다 — 라벨과 FK가 서로 다른 사람을 가리키는 슬롯이 실제로 있다(changelog 2026-07-29).
-   * ⚠️ 자리(LAB·JJ)는 라벨이 곧 방 이름이라 `specialSlotLabel`이 걸러 사람 자리에 안 들어간다.
-   */
-  const slotTeacherIds = [
-    ...new Set((scheds ?? []).map((s) => (s.teacher_id as string | null) ?? null).filter((v): v is string => !!v)),
-  ];
+  // 교시 담당 이름 — 라벨 없이 슬롯 FK만 있는 교시의 계정 이름(해석 규칙은 class-slots `buildClassSlots`).
+  // 배치를 받아야 id를 알므로 여기만 진짜 의존 await.
+  const slotTeacherIds = [...new Set(scheds.map((s) => s.teacher_id).filter((v): v is string => !!v))];
   const slotTeacherNames = new Map<string, string>();
   if (slotTeacherIds.length > 0) {
     const rows = await fetchInChunks<{ id: string; display_name: string | null }>(slotTeacherIds, (chunk) =>
@@ -894,10 +902,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     ).catch(() => []);
     for (const u of rows) if (u.display_name) slotTeacherNames.set(u.id, u.display_name);
   }
-  const labelMap = await getTeacherLabelMap();
 
-  // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준 — getTenantSettings는 React cache라 추가 쿼리 0.
-  const periodsConfig = settingsToPeriodsConfig((await getTenantSettings()).operations);
+  const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const today = kstToday();
 
   return ens.map((e) => {
@@ -912,7 +918,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     const teacher = klass
       ? ((Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as { display_name?: string } | undefined)
       : undefined;
-    // 반 기본 강의실(classes.classroom_id) — 슬롯 라벨(slot_room_label)이 없을 때 상속.
+    // 반 기본 강의실(classes.classroom_id) — 슬롯에 강의실 FK·라벨이 **둘 다** 없을 때 상속(수학 반 전부).
     const defaultRoom =
       ((Array.isArray(klass?.classroom) ? klass?.classroom[0] : klass?.classroom) as { name?: string } | undefined)
         ?.name ?? null;
@@ -921,35 +927,24 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     const subject = klass?.subject ?? "other";
     const attDays = (Array.isArray(e.attendance_days) ? e.attendance_days : []) as string[];
     const attKo = attDays.map((d) => enumDayToKo(d as DayOfWeek));
-    const allSlots = schedByClass.get(e.class_id) ?? [];
-    // 유효 슬롯만(#88 — 만료 배치가 현재 스케줄로 보이는 것 방지). 기준일 = 수강 중이면 오늘,
+    // 유효 슬롯만(#88 — 규칙은 class-slots `liveScheduleRows`). 기준일 = 수강 중이면 오늘,
     // 지난 수강이면 **그 수강의 마지막 날**(당시 스케줄이 사실 — 오늘 기준이면 종강 반은 전멸한다).
-    // valid_to는 포함(inclusive) 경계 — slotPhase·시간표 쿼리(valid_to.gte)와 동일.
     const endYmd = e.end_date ? String(e.end_date).slice(0, 10) : null;
     const refDate = endYmd && endYmd < today ? endYmd : today;
-    const liveSlots = allSlots.filter(
-      (s) => (!s.validTo || s.validTo >= refDate) && (!s.validFrom || s.validFrom <= refDate),
-    );
-    // 전 슬롯이 이력뿐인 특이 데이터는 옛 동작(전 행)으로 폴백 — "시간 미정"으로 거짓 축소하지 않는다.
-    const rawSlots = liveSlots.length > 0 ? liveSlots : allSlots;
+    const rawSlots = liveScheduleRows(schedByClass.get(e.class_id) ?? [], refDate);
     // 반 운영 요일(분리등원 선택지) = 이 반 **유효** 스케줄의 distinct 요일(요일순 — 만료 요일 금지).
     const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => rawSlots.some((s) => s.day === d));
-    // 등원요일 필터(분리등원) = groupSchedule과 동일 규칙. 각 슬롯에 과목별 교시 라벨 부착(그리드 셀 힌트).
-    const slots: ClassSlot[] = rawSlots
-      .filter((s) => attKo.length === 0 || attKo.includes(enumDayToKo(s.day)))
-      .map((s) => ({
-        day: s.day,
-        startTime: s.startTime,
-        periodLabel: periodRowText(slotPeriodRow(subject, s.startTime, s.day, periodsConfig, s.endTime)),
-        // 슬롯별 강의실 라벨 우선, 없으면 반 기본 강의실 상속(메인 시간표와 동일 규칙).
-        room: s.roomLabel ?? defaultRoom,
-        // 자리(LAB·JJ)면 사람이 아니라 방 — 담당 이름은 비우고 `seat`에 담는다.
-        seat: specialSlotLabel(s.teacherLabel),
-        teacherName: specialSlotLabel(s.teacherLabel)
-          ? null
-          : (resolveTeacherLabel(s.teacherLabel, labelMap) ??
-            (s.teacherId ? (slotTeacherNames.get(s.teacherId) ?? null) : null)),
-      }));
+    // 등원요일 필터(분리등원)·교시 라벨·교시 담당·자리·강의실 = class-slots `buildClassSlots`
+    // (텍스트 요약 groupSchedule과 같은 등원 요일 필터 · 강의실은 좌석표·ECS와 같은 FK 우선 규칙).
+    const slots: ClassSlot[] = buildClassSlots(rawSlots, {
+      subject,
+      attendanceDaysKo: attKo,
+      periodsConfig,
+      classRoomName: defaultRoom,
+      rooms,
+      labelMap,
+      userNameById: slotTeacherNames,
+    });
     return {
       enrollmentId: e.id,
       classId: e.class_id,

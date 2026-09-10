@@ -5,6 +5,7 @@ import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
 import type { DayOfWeek, PeriodsConfig } from "@/features/timetable/lib/periods";
 import {
   buildSubjectPeriodGrid,
+  type GridRowMode,
   type SubjectPeriodGrid,
   type WeekGridRow,
 } from "@/features/students/lib/week-grid";
@@ -15,10 +16,12 @@ const DAY_KO: Record<DayOfWeek, string> = {
 const GRID = "border-ink/20";
 
 /**
- * 과목 탭 — 교시 행 × 요일 열, 실제 시간표 기본뷰 패리티. 평일표 + (있으면)주말표.
- * 단일 학생이라 한 칸 0/1개 수업. 연속 교시는 세로 rowSpan 병합, 수학계열은 2교시 묶음 라벨.
- * tableHeight = 카드 고정 총높이(가장 교시 많은 과목 기준) — 표가 이 높이를 채우도록 행 높이를 조정해
- * 탭을 바꿔도 높이가 안 흔들린다(교시 적은 과목은 행이 늘어남).
+ * 과목 탭 — 교시 행 × 요일 열, 그 과목 시간표 패리티. 평일표 + (있으면)주말표.
+ * 단일 학생이라 한 칸 0/1개 수업. 연속 교시는 **보이는 내용(반·담당·자리·방)이 같고 시간이 이어질 때만**
+ * 세로 rowSpan 병합(week-grid-merge.ts), 수학계열은 2교시 묶음 라벨.
+ * 행 구성(rowMode)은 그 과목 시간표가 처음 여는 뷰의 규칙 — 통합뷰 과목(영어)은 수업 있는 교시만.
+ * tableHeight = 카드 고정 총높이(실제로 그리는 행이 가장 많은 표 기준) — 표가 이 높이를 채우도록 행 높이를
+ * 조정해 탭을 바꿔도 높이가 안 흔들린다(행 적은 과목은 행이 늘어남).
  */
 export function StudentPeriodGrid({
   rows,
@@ -26,15 +29,17 @@ export function StudentPeriodGrid({
   config,
   subjects,
   tableHeight,
+  rowMode,
 }: {
   rows: WeekGridRow[];
   subject: string;
   config: PeriodsConfig;
   subjects: SubjectMaps;
   tableHeight: number;
+  rowMode: GridRowMode;
 }) {
-  const weekday = buildSubjectPeriodGrid(rows, subject, false, config);
-  const weekend = buildSubjectPeriodGrid(rows, subject, true, config);
+  const weekday = buildSubjectPeriodGrid(rows, subject, false, config, rowMode);
+  const weekend = buildSubjectPeriodGrid(rows, subject, true, config, rowMode);
   const hasWeekday = weekday.days.length > 0;
   const hasWeekend = weekend.days.length > 0;
   if (!hasWeekday && !hasWeekend) {

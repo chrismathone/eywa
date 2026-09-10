@@ -15,6 +15,7 @@ import {
 } from "./periods";
 
 import { planRowSpans, type RowSpanPlan } from "./row-span";
+import { keepUsedRows } from "./used-rows";
 
 export type GridStudent = {
   name: string;
@@ -288,23 +289,10 @@ function shiftedWeekendRow(
 }
 const clampRows = (n: number, min: number) => Math.min(ROSTER_ROW_CAP, Math.max(min, Number.isFinite(n) ? n : min));
 
-/**
- * 아무 카드도 쓰지 않는 교시 행을 **통째로 뺀다**(원장 2026-08-11 *"수업없는 교시행도 숨겨버려"*).
- *
- * 🔴 뒤집힌 규약 두 가지 — 되돌리기 전에 여기를 읽을 것:
- *  · 2026-07-06 "5칸 윈도우의 위·아래 패딩은 컨텍스트라 유지" → **폐기**(끝단 빈 행도 뺀다).
- *  · 2026-07-27 "중간 빈 구간은 물결(〜〜〜) 한 줄로 접는다" → **폐기**(접는 게 아니라 없앤다).
- *    행 라벨에 "1교시·8교시"처럼 교시 번호가 그대로 남아서, 사이가 비었다는 사실은 라벨로 읽힌다.
- *
- * ⚠️ **전부 비면 원본을 돌려준다** — 격자가 0행인 카드는 "반이 깨진 것"으로 보인다. 셀이 하나도 없는
- *    카드는 정상 상태가 아니지만(슬롯이 있어야 카드가 생긴다), 방어적으로 윈도우를 남긴다.
- * ⚠️ '1시간 단위' 토글은 **여전히 의미가 있다** — 그 토글의 본체는 행 숨김이 아니라 **교시 체계가 다른
- *    반을 부그룹으로 쪼개는 것**이다(안 쪼개면 두 체계의 union이 전 행을 덮어 아무것도 안 없어진다).
- */
-function keepUsedRows(rows: GridPeriodRow[], usedOrders: Set<number>): GridPeriodRow[] {
-  const kept = rows.filter((r) => usedOrders.has(r.order));
-  return kept.length > 0 ? kept : rows;
-}
+// 아무 카드도 쓰지 않는 교시 행 빼기 = `used-rows.ts` `keepUsedRows`(학생 수업 탭 격자와 **같은 함수** —
+// 규약·뒤집힌 역사는 그쪽 주석, 2026-09-11 꺼냄).
+// ⚠️ '1시간 단위' 토글은 **여전히 의미가 있다** — 그 토글의 본체는 행 숨김이 아니라 **교시 체계가 다른
+//    반을 부그룹으로 쪼개는 것**이다(안 쪼개면 두 체계의 union이 전 행을 덮어 아무것도 안 없어진다).
 /** 주말 섹션의 groupOrder(=sectionKey). 교시 체계가 없어 '1시간 단위' 압축 대상이 아니다. */
 export const WEEKEND_ORDER = 100000;
 /**
