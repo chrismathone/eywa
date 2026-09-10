@@ -148,10 +148,7 @@ export function Donut({
               strokeDashoffset={-start}
               transform="rotate(-90 80 80)"
             >
-              <title>
-                {d.label}: {number(d.value)}
-                {unit} ({length.toFixed(1)}%)
-              </title>
+              <title>{`${d.label}: ${number(d.value)}${unit} (${length.toFixed(1)}%)`}</title>
             </circle>
           );
         })}
@@ -217,9 +214,9 @@ export function Columns({
         role="img"
         aria-labelledby={id}
       >
-        <title id={id}>
-          {series.map((v) => v.name).join("·")} 비교 ({unit})
-        </title>
+        <title
+          id={id}
+        >{`${series.map((v) => v.name).join("·")} 비교 (${unit})`}</title>
         {[min, (min + max) / 2, max].map((v) => (
           <g key={v}>
             <line
@@ -252,10 +249,7 @@ export function Columns({
                     rx="2"
                     fill={v.color}
                   >
-                    <title>
-                      {label} {v.name}: {number(value)}
-                      {unit}
-                    </title>
+                    <title>{`${label} ${v.name}: ${number(value)}${unit}`}</title>
                   </rect>
                   {(valueLabels === "all" || j === series.length - 1) && (
                     <text
@@ -373,9 +367,7 @@ export function AttendanceHistory({
                 rx="2"
                 fill={heat[Math.max(0, Math.min(10, Math.floor(p.rate / 10)))]}
               >
-                <title>
-                  {p.date}: {p.rate.toFixed(1)}% · {p.total}칸
-                </title>
+                <title>{`${p.date}: ${p.rate.toFixed(1)}% · ${p.total}칸`}</title>
               </rect>
             )}
             {p.rate === 0 && (

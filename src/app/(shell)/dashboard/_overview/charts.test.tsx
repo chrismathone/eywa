@@ -1,8 +1,46 @@
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
+import { act } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { Columns, Donut, AttendanceHistory, COLORS } from "./charts";
 
 describe("overview chart integrity", () => {
+  it("hydrates all SVG titles without replacing the server-rendered charts", async () => {
+    const charts = (
+      <div>
+        <Donut label="재원" data={[{ label: "초등", value: 184 }]} />
+        <Columns
+          labels={["9월"]}
+          series={[{ name: "수납", color: COLORS[0], values: [12961] }]}
+          unit="만원"
+        />
+        <AttendanceHistory
+          points={[{ date: "2026-09-10", rate: 92.4, total: 327 }]}
+        />
+      </div>
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(charts);
+    document.body.append(container);
+    const firstCircle = container.querySelector("circle");
+    const onRecoverableError = vi.fn();
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    try {
+      await act(async () => {
+        root = hydrateRoot(container, charts, { onRecoverableError });
+      });
+      expect(onRecoverableError).not.toHaveBeenCalled();
+      expect(container.querySelector("circle")).toBe(firstCircle);
+      expect(container.querySelector("circle title")?.textContent).toBe(
+        "초등: 184명 (100.0%)",
+      );
+    } finally {
+      await act(async () => {
+        root?.unmount();
+      });
+      container.remove();
+    }
+  });
   it("keeps donut legend colors aligned when the first category is zero", () => {
     const html = renderToStaticMarkup(
       <Donut
