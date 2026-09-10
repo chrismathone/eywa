@@ -166,7 +166,17 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       // 캘린더 — 학원 공용 일정(원장 2026-08-18 도입). 매일 여는 자리라 홈 그룹.
       // ⚠️ 별칭에 "달력"을 넣지 말 것 — 강사뷰 번역에서 캘린더와 달력은 **다른 것**으로 갈라 둔 말이다(lang-wiring 가드).
-      { href: "/calendar", label: "캘린더", icon: MENU_ICON.calendar, menuKey: "calendar", aliases: ["일정"] },
+      // 🔴 메뉴에서 뺀다(원장 2026-09-10) — 구글 달력을 **한 방향으로 끌어와 내부 참고용**으로만 쓴다.
+      //    `hidden`이라 사이드바·모바일내비·팰릿엔 안 뜨지만 라우트·창 해석·아이콘맵은 그대로다
+      //    (주소를 아는 사람은 열 수 있고, 이 표를 읽는 다른 화면도 안 깨진다).
+      {
+        href: "/calendar",
+        label: "캘린더",
+        icon: MENU_ICON.calendar,
+        menuKey: "calendar",
+        aliases: ["일정"],
+        hidden: true,
+      },
     ],
   },
   {

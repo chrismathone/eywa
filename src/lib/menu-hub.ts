@@ -89,13 +89,10 @@ export const HUB_GROUPS: HubGroup[] = [
     kind: "direct",
     items: keep([fromMenu("dashboard")]),
   },
-  {
-    id: "calendar",
-    label: "캘린더",
-    icon: MENU_ICON.calendar,
-    kind: "direct",
-    items: keep([fromMenu("calendar")]),
-  },
+  // 🔴 **캘린더는 메뉴에 세우지 않는다** (원장 2026-09-10: *"캘린더 탭은 메뉴에서 제외시켜. 그냥 내부
+  //    구글 달력용으로 사용할예정임."* → *"즉, 동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"*).
+  //    표(`calendar_events`, 6,533행)와 라우트는 **그대로 산다** — 다른 기능이 읽어 쓰는 **재료**로 남기고
+  //    사람이 드나드는 입구만 닫는 것이다. 지우면 그 재료가 함께 사라진다.
   {
     id: "class",
     label: "수업",
