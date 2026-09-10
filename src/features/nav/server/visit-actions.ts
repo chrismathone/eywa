@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { MENU_KEYS, type MenuKey } from "@/lib/permissions";
-import { MENU_VISITS_KEY, MENU_VISITS_NS, bumpVisit, parseVisits } from "../menu-visits";
+import { MENU_VISITS_KEY, MENU_VISITS_NS, bumpVisit, isVisitCounted, parseVisits } from "../menu-visits";
 
 /**
  * 메뉴를 열었다는 사실 1회 기록 — 왼쪽 '자주 방문한 메뉴' 목록의 재료(원장 2026-09-07).
@@ -16,6 +16,8 @@ import { MENU_VISITS_KEY, MENU_VISITS_NS, bumpVisit, parseVisits } from "../menu
  */
 export async function recordMenuVisit(menuKey: string): Promise<void> {
   if (!(MENU_KEYS as readonly string[]).includes(menuKey)) return;
+  // 대시보드·설정·도움말은 세지 않는다(원장 2026-09-10) — 판정은 menu-visits 단일 소스.
+  if (!isVisitCounted(menuKey)) return;
   const user = await getCurrentUser();
   if (!user) return;
   const admin = createAdminClient();

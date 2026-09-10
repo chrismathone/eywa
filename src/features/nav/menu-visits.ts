@@ -13,6 +13,22 @@ import type { MenuKey } from "@/lib/permissions";
  * ⚠️ 표시 개수는 호출부가 정한다(사이드바는 4줄).
  */
 
+/**
+ * **세지 않는 메뉴** (원장 2026-09-10: *"'자주 방문한 메뉴'에서는 대시보드, 설정, 도움말이 카운팅되지 않게"*).
+ *
+ * 🔴 셋 다 **"자주 가니까 위에 올려 두면 편한 메뉴"가 아니다** — 대시보드는 곧 배경 화면 자체가 되고,
+ *    설정·도움말은 이미 사이드바 아래 '지원' 줄에 **고정**으로 서 있다. 세면 항상 상위를 차지해
+ *    정작 자주 쓰는 업무 메뉴를 **네 줄 밖으로 밀어낸다**(그 목록의 존재 이유가 사라진다).
+ * ⚠️ 기록 시점(`recordMenuVisit`)과 표시 시점(`topVisitedMenus`) **둘 다** 이 집합을 본다 —
+ *    기록만 막으면 **이미 쌓인 횟수**가 남아 그 메뉴가 계속 목록에 뜨고, 표시만 막으면 jsonb가 계속 자란다.
+ */
+export const MENU_VISIT_EXCLUDED: ReadonlySet<string> = new Set(["dashboard", "owner", "help"]);
+
+/** 이 메뉴를 '자주 방문한 메뉴'에 세는가. */
+export function isVisitCounted(menuKey: string): boolean {
+  return !MENU_VISIT_EXCLUDED.has(menuKey);
+}
+
 /** `ui_prefs.nav.visits`에 담기는 모양 — 키는 menuKey, 값은 [횟수, 마지막 방문(ms)]. */
 export type MenuVisitMap = Record<string, [count: number, lastAt: number]>;
 
@@ -72,6 +88,7 @@ export function topVisitedMenus(
 ): MenuKey[] {
   const ok = new Set<string>(allowed);
   return rankVisits(visits)
-    .filter((k) => ok.has(k))
+    // 🔴 이미 쌓여 있는 횟수도 여기서 막는다 — 기록을 멈춘 것만으론 옛 숫자가 계속 목록에 뜬다.
+    .filter((k) => ok.has(k) && isVisitCounted(k))
     .slice(0, limit) as MenuKey[];
 }
