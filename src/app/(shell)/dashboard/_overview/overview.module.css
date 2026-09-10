@@ -15,6 +15,7 @@
 }
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 18px;
   align-items: center;
@@ -44,6 +45,7 @@
 }
 .headerTools {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
 }
@@ -88,7 +90,7 @@
   opacity: 0.5;
   cursor: wait;
 }
-.classicLink {
+.briefingLink {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -217,7 +219,7 @@
   white-space: nowrap;
 }
 .jump:hover,
-.classicLink:hover {
+.briefingLink:hover {
   color: var(--primary);
   text-decoration: underline;
 }
@@ -869,9 +871,6 @@
     margin-top: 5px;
     font-size: var(--text-xs);
   }
-  .classicLink {
-    display: none;
-  }
   .headerTools {
     gap: 8px;
   }
@@ -967,9 +966,6 @@
     font-size: var(--text-xs);
   }
   .footer > span:last-child {
-    display: none;
-  }
-  .classicLink {
     display: none;
   }
 }

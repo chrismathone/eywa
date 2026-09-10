@@ -355,7 +355,7 @@ async function notifyMasterOnce(tenantId: string, date: string, payload: DailyBr
       title: "오늘의 운영 브리핑이 준비됐습니다",
       body: buildFallbackTeamReport(payload).headline.slice(0, 120),
       // 보고는 운영실 2차 줄(접힌 <details id="daily-briefing">) 안에 있다 — 해시로 그 줄을 펼친 채 착지(DetailsHashOpen).
-      link: "/dashboard#daily-briefing",
+      link: "/dashboard/briefing#daily-briefing",
     })),
   );
   await admin.from("daily_briefings").update({ notified_at: new Date().toISOString() }).eq("id", row.id);

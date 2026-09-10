@@ -9,8 +9,23 @@ import {
   mergeMostPermissive,
   resolveMatrix,
   SYSTEM_ROLES,
+  roleHome,
   type UserPermissionOverride,
 } from "./permissions";
+
+describe("기본 대시보드 착지", () => {
+  it("사무실 계정은 대시보드, 강사와 학생은 기존 전용 홈을 사용한다", () => {
+    expect(roleHome("master")).toBe("/dashboard");
+    expect(roleHome("admin")).toBe("/dashboard");
+    expect(roleHome("teacher")).toBe("/onescreen");
+    expect(roleHome("student")).toBe("/my-learning");
+  });
+  it("대시보드 권한을 제거한 계정은 순환 리다이렉트 없이 안내 화면으로 간다", () => {
+    const matrix = { ...MENU_ACCESS, dashboard: { ...MENU_ACCESS.dashboard, admin: "none" as const } };
+    expect(roleHome("admin", matrix)).toBe("/menu");
+    expect(canAccess("admin", "dashboard", matrix)).toBe(false);
+  });
+});
 
 describe("canWrite — 쓰기 게이트(full|scoped만 통과, readonly/none 차단)", () => {
   it("full/scoped는 통과", () => {
