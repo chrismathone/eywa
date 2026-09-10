@@ -385,7 +385,7 @@ export async function getEnrolledStatCounts(): Promise<{
       .eq("status", "enrolled");
     return teacherStudentIds ? q.in("id", teacherStudentIds) : q;
   };
-  const [{ count }, ens] = await Promise.all([
+  const [{ count, error: countError }, ens] = await Promise.all([
     enrolledCountQ(),
     fetchAllPaged<{
       student_id: string;
@@ -401,6 +401,7 @@ export async function getEnrolledStatCounts(): Promise<{
     ),
   ]);
 
+  if (countError) throw new Error(`재원생 집계 실패: ${countError.message}`);
   // 과목별 distinct 학생 — 강사 스코프는 JS로 교차(.in() 414 회피).
   const bySubject = new Map<string, Set<string>>();
   for (const e of ens) {

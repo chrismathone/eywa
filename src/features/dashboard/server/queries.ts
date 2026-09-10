@@ -264,6 +264,7 @@ export async function getMostRecentAttendanceSnapshot(): Promise<AttendanceSnaps
   const { data: recent, error } = await supabase
     .from("attendance_records")
     .select("session_date")
+    .lte("session_date", today)
     .order("session_date", { ascending: false })
     .limit(1);
   if (error) throw new Error(`recent attendance date: ${error.message}`);
