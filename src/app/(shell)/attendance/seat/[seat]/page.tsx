@@ -36,6 +36,9 @@ import { getSeatNextDestinationsBySlot } from "@/features/attendance/seat/server
 import { SeatPeriodChips, SEAT_ALL_PERIODS } from "./_components/seat-period-chips";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
+import { SeatAllDay } from "./_components/seat-all-day";
+import { getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
+import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
 
 export const metadata: Metadata = { title: "랩실·JJ실 출석부 — eywa" };
 
@@ -113,7 +116,7 @@ export default async function SeatAttendancePage({
 
   // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
   // 🔴 계획은 **자리 권한이 아니라 영어 시트 권한**이 연다 — 아르바이트·viewer에겐 반마다 빈 값이 온다.
-  const [rosters, plans, placementsDay, nextBySlot] = await Promise.all([
+  const [rosters, plans, placementsDay, nextBySlot, periodChoiceLoad] = await Promise.all([
     period && seatHasJjFields(seat)
       ? attachJjMarks(day.rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
       : Promise.resolve(period ? (day.rosterByPeriod[period.start] ?? []) : []),
@@ -141,6 +144,11 @@ export default async function SeatAttendancePage({
       date,
       shown.map((p) => p.start),
     ),
+    /**
+     * 자리 **교시 선택**(0255a) — 하루짜리 이동 + 그 요일 상시 고정. 하루/한 요일치 두 번뿐이고
+     * 교시 수와 무관하다(B6). fail-soft라 표가 없어도 화면은 지금까지 그대로 산다([[#95]]).
+     */
+    getSeatPeriodChoices(user.tenantId, seat, date),
   ]);
 
   /**
@@ -148,6 +156,19 @@ export default async function SeatAttendancePage({
    * 🔴 서버 액션이 같은 판정을 다시 한다([[#77]]) — 이 값은 화면을 정할 뿐 게이트가 아니다.
    */
   const canMovePlacement = seat === "lab" && !readOnly && placementsDay.ready;
+
+  /**
+   * **교시 선택**(0255a) — 하루에 자리 수업이 두 번 있는 반에서 "이 학생은 어느 쪽인가".
+   * 🔴 배치(0254a)와 **다른 표·다른 가용성**이다 — 한쪽 SQL만 적용돼 있어도 나머지 한쪽은 돈다.
+   * 🔑 교시를 건너는 드래그는 '전체' 보기에만 있다(교시가 하나면 건널 곳이 없다). 하지만 **감추기는
+   *    두 보기 모두**에 적용된다 — 안 그러면 같은 날을 두 방식으로 열었을 때 명단이 갈린다.
+   */
+  const canChoosePeriod = seat === "lab" && !readOnly && periodChoiceLoad.ready;
+  const periodChoices = resolveSeatPeriodChoices({
+    moves: periodChoiceLoad.moves,
+    pins: periodChoiceLoad.pins,
+    date,
+  });
   // 못 쓰는 이유는 **쓸 수 있어야 할 때만** 말한다(지난 날짜 조회 중엔 배너가 소음이다).
   const placementNotice = seat === "lab" && !readOnly && !placementsDay.ready ? placementsDay.reason : null;
 
@@ -246,28 +267,27 @@ export default async function SeatAttendancePage({
             hrefFor={hrefFor}
             showAll={allowAllView}
           />
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
-            {day.periods.map((p) => (
-              <SeatBoard
-                key={`${seat}|${date}|${p.start}`}
-                seat={seat}
-                date={date}
-                periods={[]}
-                showChips={false}
-                activeStart={p.start}
-                rosters={day.rosterByPeriod[p.start] ?? []}
-                readOnly={readOnly}
-                hrefFor={hrefFor}
-                prevAbsentByCell={prevAbsentFor(p.start, ambiguousClassIds(p))}
-                nextStartByStudent={nextBySlot[p.start]?.startByStudent}
-                nextRoomByStudent={nextBySlot[p.start]?.roomByStudent}
-                placements={placementsDay.bySlot[p.start] ?? []}
-                canMove={canMovePlacement}
-                // 배너는 맨 위 교시에만 — 교시마다 같은 문장이 서면 화면이 경고로 덮인다.
-                placementNotice={p.start === day.periods[0]?.start ? placementNotice : null}
-              />
-            ))}
-          </div>
+          <SeatAllDay
+            seat={seat}
+            date={date}
+            moves={periodChoiceLoad.moves}
+            pins={periodChoiceLoad.pins}
+            slotsByClass={day.slotsByClass}
+            markedSlotsByCell={day.markedSlotsByCell}
+            canMove={canChoosePeriod}
+            readOnly={readOnly}
+            hrefFor={hrefFor}
+            canMovePlacement={canMovePlacement}
+            placementNotice={placementNotice}
+            periods={day.periods.map((p) => ({
+              start: p.start,
+              rosters: day.rosterByPeriod[p.start] ?? [],
+              prevAbsentByCell: prevAbsentFor(p.start, ambiguousClassIds(p)),
+              nextStartByStudent: nextBySlot[p.start]?.startByStudent,
+              nextRoomByStudent: nextBySlot[p.start]?.roomByStudent,
+              placements: placementsDay.bySlot[p.start] ?? [],
+            }))}
+          />
         </>
       ) : (
         <SeatBoard
@@ -292,6 +312,10 @@ export default async function SeatAttendancePage({
           placements={placementsDay.bySlot[period.start] ?? []}
           canMove={canMovePlacement}
           placementNotice={placementNotice}
+          periodChoices={periodChoices}
+          slotsByClass={day.slotsByClass}
+          markedSlotsByCell={day.markedSlotsByCell}
+          canChoosePeriod={canChoosePeriod}
           // 진도 구획은 계획을 볼 수 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={
             Object.keys(plans).length > 0

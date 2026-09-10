@@ -263,6 +263,12 @@ export const AUDIT_ACTIONS = {
   seat_placement_move: "자리 이동(드래그)",
   seat_placement_reset: "자리 이동 초기화",
 
+  // 자리 **교시 선택**(0255a) — 하루에 자리 수업이 두 번 있는 반에서 "이 학생은 어느 쪽인가".
+  // 🔴 배치(위)와 다른 축이다: 저쪽은 같은 교시의 **반 묶음**, 이쪽은 같은 반의 **교시**.
+  seat_period_move: "자리 교시 이동(오늘)",
+  seat_period_pin: "자리 교시 고정(상시)",
+  seat_period_clear: "자리 교시 지정 해제",
+
   // 수업보고서·발송 — 학부모에게 **나간 것**이라 되짚기가 가장 절실하다.
   lesson_report_save: "수업보고서 저장",
   share_link_revoke: "학부모 공유 링크 회수",

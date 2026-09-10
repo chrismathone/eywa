@@ -6,6 +6,7 @@ import {
   moveSeatStudent,
   resetSeatPlacements,
 } from "@/features/attendance/seat/server/placement-actions";
+import { clearSeatPeriodChoices } from "@/features/attendance/seat/server/period-actions";
 import type { SeatKey } from "@/features/attendance/seat/seat";
 
 /**
@@ -78,4 +79,36 @@ export function useSeatPlacementMoves(seat: SeatKey, date: string, activeStart: 
   );
 
   return { overlay, movePending: pending, moveError: error, moveStudent, resetPlacements };
+}
+
+/**
+ * **교시 지정 해제**(0255a) — 교시 하나만 그리는 보기에서 쓰는 갈래.
+ *
+ * 🔴 왜 따로 필요한가: '전체' 보기는 바깥(`SeatAllDay`)이 낙관 오버레이까지 들고 있어 제 것을 넘겨준다.
+ *    교시 하나 보기엔 그 바깥이 없는데, **해제할 길이 없으면 감춰진 학생을 되돌릴 방법이 사라진다**
+ *    (화면엔 아무 표시도 안 남으므로 "왜 이 아이가 없지"로 끝난다).
+ * 🔑 낙관 반영을 안 한다 — 서버가 지운 뒤 `router.refresh()`로 서버 줄을 다시 받는다. 해제는 드물고,
+ *    여기서 오버레이를 또 만들면 같은 상태가 두 곳에 생긴다.
+ */
+export function useSeatPeriodClear(seat: SeatKey, date: string) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const clearClass = useCallback(
+    (classId: string) => {
+      setError(null);
+      startTransition(async () => {
+        const res = await clearSeatPeriodChoices({ seat, date, classId });
+        if ("error" in res) {
+          setError(res.error);
+          return;
+        }
+        router.refresh();
+      });
+    },
+    [date, router, seat],
+  );
+
+  return { clearPending: pending, clearError: error, clearClass };
 }

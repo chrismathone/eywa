@@ -60,7 +60,9 @@ describe("② 대상은 서버가 다시 계산한다", () => {
 
   it("서버 액션이 순수 규칙을 스스로 돌린다 — 자기가 읽은 하루치로", () => {
     expect(actions).toMatch(
-      /prevAbsentFillTargets\(\s*seatDayCells\(day\.periods, day\.rosterByPeriod\),\s*slot,/,
+      // 2026-09-10: 하루치에 **교시 선택(0255a)을 얹은 뒤** 센다 — 안 얹으면 다른 교시에 서 있는
+      //   학생까지 결석으로 채워 화면의 "앞 교시 결석자 N명"과 갈린다.
+      /prevAbsentFillTargets\(\s*seatDayCells\(day\.periods, rosterByPeriod\),\s*slot,/,
     );
   });
 

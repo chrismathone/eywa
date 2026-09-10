@@ -42,6 +42,14 @@ export const SEAT_ROOM: Record<SeatKey, string> = { lab: "603호", jj: "305호" 
 export const USABLE_SEAT_KEYS: readonly SeatKey[] = ["lab", "jj"];
 
 /**
+ * **자리를 옮길 수 있는 자리** — 배치(0254a)·교시 선택(0255a) 둘 다 여기에만 연다.
+ * 지금은 랩실뿐이다(원장 지시가 `/seat/lab`이고, JJ실은 교시마다 진도 블록이 붙은 다른 표다).
+ * ⚠️ 게이트(`move-gate.ts`)와 조회(`server/period-choice.ts`)가 **같은 상수**를 봐야 한다 — 그래서
+ *    둘 다 아닌 이 순수 모듈에 둔다(서로 import하면 순환이 생겨 초기화 순서에 기댄다).
+ */
+export const MOVABLE_SEATS: readonly SeatKey[] = ["lab"];
+
+/**
  * **공개 PIN 문** — 로그인 없이 `/seat/:key`로 들어와 그 자리 오늘 명단을 찍을 수 있는 자리.
  * 랩실 + JJ실(원장 2026-08-19: *"/seat/jj 도 같은 방법으로 만들자"*).
  *

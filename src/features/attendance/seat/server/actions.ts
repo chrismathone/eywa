@@ -9,6 +9,11 @@ import { prevAbsentFillTargets, seatDayCells } from "../prev-period";
 import { applySeatPlacements } from "../placement";
 import { pickSaveTargets } from "../../save-targets";
 import { gateSeatWrite, rosterKeys } from "./gate";
+import { getSeatPeriodChoices } from "./period-choice";
+import {
+  applySeatPeriodChoicesByPeriod,
+  resolveSeatPeriodChoices,
+} from "../period-choice";
 import { getPublicSeatDay, getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
 
@@ -58,7 +63,7 @@ export async function setSeatCell(input: {
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null);
+  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null, g.tenantId);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
   if (!roster.keys.has(`${input.classId}|${input.studentId}`)) {
     return { error: "이 교시 명단에 없는 학생입니다" };
@@ -139,7 +144,7 @@ export async function fillSeatSlot(input: {
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null);
+  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null, g.tenantId);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
   if (input.classId && !roster.classes.has(input.classId)) return { error: "이 교시에 없는 반입니다" };
@@ -238,17 +243,26 @@ export async function fillSeatPrevAbsent(input: {
 
   const slot = hhmm(input.slotStart);
   // 하루치를 한 번만 읽는다 — 앞 교시 판정에 그 날 전 교시 명단·상태가 필요하다(rosterKeys는 한 교시뿐).
-  const day =
+  const [day, choiceLoad] = await Promise.all([
     g.via === "pin"
-      ? await getPublicSeatDay(g.tenantId, input.seat, input.date)
-      : await getSeatDay(input.seat, input.date);
+      ? getPublicSeatDay(g.tenantId, input.seat, input.date)
+      : getSeatDay(input.seat, input.date),
+    getSeatPeriodChoices(g.tenantId, input.seat, input.date),
+  ]);
   const period = day.periods.find((p) => p.start === slot);
   if (!period) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
   // 같은 반·같은 시작·다른 종료(저장키로 구분 불가)는 `rosterKeys`와 **같은 규약**으로 제외한다.
   // 🔑 화면(표식·버튼 수)도 **같은 인자**로 같은 함수를 돌린다 — 갈리면 "3명"이라 적고 2명만 쓴다.
+  // 🔴 교시 선택(0255a)을 얹은 명단으로 센다 — 안 얹으면 다른 교시에 서 있는 학생까지 결석으로
+  //    채운다(화면의 "앞 교시 결석자 N명"과 갈린다).
+  const rosterByPeriod = applySeatPeriodChoicesByPeriod(day.rosterByPeriod, {
+    choices: resolveSeatPeriodChoices({ moves: choiceLoad.moves, pins: choiceLoad.pins, date: input.date }),
+    slotsByClass: day.slotsByClass,
+    markedSlotsByCell: day.markedSlotsByCell,
+  });
   const targets = prevAbsentFillTargets(
-    seatDayCells(day.periods, day.rosterByPeriod),
+    seatDayCells(day.periods, rosterByPeriod),
     slot,
     ambiguousClassIds(period),
   );

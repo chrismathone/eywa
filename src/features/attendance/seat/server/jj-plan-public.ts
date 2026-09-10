@@ -98,7 +98,7 @@ export async function loadPublicSeatJjPlans(
   if ("error" in gate || gate.tenantId !== tenantId) return {};
 
   const slot = hhmm(slotStart);
-  const roster = await rosterKeys(seat, date, slot, tenantId);
+  const roster = await rosterKeys(seat, date, slot, tenantId, tenantId);
   if (!roster) return {};
   const classIds = [...roster.classes.keys()];
   if (classIds.length === 0) return {};
@@ -146,7 +146,7 @@ export async function gateSeatPlanWrite(input: {
   if ("error" in gate) return { ok: false, error: gate.error };
 
   const slot = hhmm(input.slotStart);
-  const roster = await rosterKeys(input.seat, input.date, slot, gate.tenantId);
+  const roster = await rosterKeys(input.seat, input.date, slot, gate.tenantId, gate.tenantId);
   if (!roster) return { ok: false, error: "그 시각에는 이 자리 수업이 없습니다" };
   if (!roster.classes.has(input.classId)) return { ok: false, error: "이 교시에 없는 반입니다" };
 

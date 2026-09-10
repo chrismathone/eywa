@@ -4,9 +4,11 @@ import {
   isSeatDragGesture,
   mergeSeatPlacements,
   seatHomeClassOf,
+  seatMoveBlockReason,
   seatResetCounts,
   seatResetTargets,
   SEAT_DRAG_THRESHOLD_PX,
+  SEAT_MOVE_MARKED_ERROR,
   validateSeatMove,
   type SeatPlacement,
 } from "./placement";
@@ -176,5 +178,46 @@ describe("서버 줄 + 낙관 오버레이 합치기", () => {
     expect(merged).toEqual([]); // 제 반 = 배치 없음
     const { applied } = applySeatPlacements(RS, mergeSeatPlacements(RS, server, { c: "JP1" }));
     expect(applied).toHaveLength(1);
+  });
+});
+
+describe("출결이 찍힌 학생은 드래그 절대 불가 (원장 2026-09-10)", () => {
+  const MARKED = [
+    { classId: "JP1", students: [{ id: "a", status: "present" }, { id: "b", status: null }] },
+    { classId: "LT6", students: [{ id: "c", status: null }] },
+  ];
+
+  it("상태가 있으면 이유를 돌려주고, 없으면 null이다", () => {
+    expect(seatMoveBlockReason("present")).toBe(SEAT_MOVE_MARKED_ERROR);
+    expect(seatMoveBlockReason("absent")).toBe(SEAT_MOVE_MARKED_ERROR);
+    expect(seatMoveBlockReason("late")).toBe(SEAT_MOVE_MARKED_ERROR);
+    expect(seatMoveBlockReason(null)).toBeNull();
+    expect(seatMoveBlockReason(undefined)).toBeNull();
+  });
+
+  it("서버 판정도 막는다 — 화면이 잠갔더라도 다시 본다([[#77]])", () => {
+    expect(validateSeatMove(MARKED, { studentId: "a", toClassId: "LT6" })).toEqual({
+      error: SEAT_MOVE_MARKED_ERROR,
+    });
+  });
+
+  it("제 반으로 도로 끄는 것(그 학생만 초기화)도 막는다 — 지시가 \x22절대 불가\x22다", () => {
+    expect(validateSeatMove(MARKED, { studentId: "a", toClassId: "JP1" })).toEqual({
+      error: SEAT_MOVE_MARKED_ERROR,
+    });
+  });
+
+  it("미체크 학생은 그대로 옮겨진다", () => {
+    expect(validateSeatMove(MARKED, { studentId: "b", toClassId: "LT6" })).toEqual({
+      ok: true,
+      fromClassId: "JP1",
+      isReset: false,
+    });
+  });
+
+  it("명단 밖 판정이 먼저다 — 상태를 볼 학생 자체가 없다", () => {
+    expect(validateSeatMove(MARKED, { studentId: "zzz", toClassId: "LT6" })).toEqual({
+      error: "이 교시 명단에 없는 학생입니다",
+    });
   });
 });

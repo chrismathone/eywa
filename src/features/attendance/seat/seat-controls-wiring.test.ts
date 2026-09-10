@@ -23,6 +23,7 @@ const publicPage = strip(read("src", "app", "(seat)", "seat", "[seat]", "page.ts
 const noteForm = strip(read("src", "features", "onescreen", "components", "attendance-pills.tsx"));
 const nextDest = strip(read("src", "features", "attendance", "seat", "server", "next-destination.ts"));
 const chips = strip(read(...DIR, "seat-period-chips.tsx"));
+const allDay = strip(read(...DIR, "seat-all-day.tsx"));
 
 describe("① 출결은 세 버튼 · 같은 폭 · 언제나 셋", () => {
   it("세 상태를 목록으로 돌려 그린다 — 상태별 조건부 렌더가 없다", () => {
@@ -196,6 +197,8 @@ describe("⑨ '전체' 보기 — 하루를 한 번에, 조회는 안 늘린다"
     expect(shellPage).not.toMatch(/fillSeat|일괄|전원 출석/);
   });
   it("'전체'에선 칩 줄을 교시마다 반복하지 않는다", () => {
-    expect(shellPage).toContain("showChips={false}");
+    // 교시 판은 2026-09-10부터 `SeatAllDay`(바깥 드래그 컨텍스트)가 그린다 — 칩은 위에 한 번뿐이다.
+    expect(allDay).toContain("showChips={false}");
+    expect(shellPage).toContain("<SeatAllDay");
   });
 });

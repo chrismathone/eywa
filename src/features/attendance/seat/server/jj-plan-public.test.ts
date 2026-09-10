@@ -73,6 +73,9 @@ const seatDay: SeatDay = {
       { classId: NON_ENGLISH, className: "수학 보충", end: "17:00", bgColor: null, textColor: null, students: [] },
     ],
   },
+  // 교시 선택(0255a)의 재료 — 이 반들은 그 날 자리 교시가 하나뿐이라 고를 것이 없다.
+  slotsByClass: { [IN_ROSTER]: [SLOT], [NON_ENGLISH]: [SLOT] },
+  markedSlotsByCell: {},
 };
 
 vi.mock("./queries", () => ({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
@@ -11,7 +11,7 @@ import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { seatPlanApi } from "@/features/attendance/seat/seat-plan-api";
 import type { SeatPeriodHintData } from "./seat-mark-extras";
 import { useSeatBoardSaves } from "./seat-board-saves";
-import { useSeatPlacementMoves } from "./seat-board-moves";
+import { useSeatPeriodClear, useSeatPlacementMoves } from "./seat-board-moves";
 import { SeatJjTable } from "./seat-jj-table";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import { SeatLabGrid } from "./seat-lab-grid";
@@ -22,6 +22,10 @@ import {
   seatResetTargets,
   type SeatPlacement,
 } from "@/features/attendance/seat/placement";
+import {
+  applySeatPeriodChoices,
+  seatChoiceKey,
+} from "@/features/attendance/seat/period-choice";
 
 type PeriodChip = { start: string; ends: string[]; classIds: string[] };
 
@@ -70,6 +74,13 @@ export function SeatBoard({
   placementNotice,
   showChips = true,
   showAllChip = false,
+  periodChoices,
+  slotsByClass,
+  markedSlotsByCell,
+  onClearPeriodChoices,
+  externalDnd = false,
+  onRegisterMove,
+  canChoosePeriod = false,
 }: {
   seat: SeatKey;
   date: string;
@@ -118,6 +129,31 @@ export function SeatBoard({
   showChips?: boolean;
   /** 칩 줄에 '전체'를 세울 것인가(랩실만). */
   showAllChip?: boolean;
+  /**
+   * **교시 선택**(0255a) — `반id|학생id` → 그 학생이 설 교시. 이미 그 날짜로 접힌 값이다
+   * (하루짜리 > 상시 고정, `resolveSeatPeriodChoices`).
+   * 🔴 이 화면은 **감추기만** 한다 — 다른 교시로 정해진 학생을 이 교시 명단에서 뺀다. 없던 학생을
+   *    세우지 않는다(학생은 이미 제 반의 모든 자리 교시에 들어 있다).
+   */
+  periodChoices?: Readonly<Record<string, string>>;
+  /** 반 id → 그 날 이 자리에 걸린 교시들. 선택이 그 날 없는 교시를 가리키면 **선택을 버린다**. */
+  slotsByClass?: Readonly<Record<string, readonly string[]>>;
+  /** `반id|학생id` → 이미 기록이 있는 교시들. **사실이 규칙을 이긴다**(기록 있는 칸은 안 감춘다). */
+  markedSlotsByCell?: Readonly<Record<string, readonly string[]>>;
+  /** 그 반의 교시 지정(오늘 이동 + 이 요일 고정)을 지운다. 없으면 [해제] 버튼을 안 세운다. */
+  onClearPeriodChoices?: (classId: string) => void;
+  /** 바깥에 이미 `DndContext`가 있다('전체' 보기) — 교시를 건너는 드래그를 그쪽이 받는다. */
+  externalDnd?: boolean;
+  /**
+   * 바깥 컨텍스트에 **이 교시의 반 묶음 이동 처리기**를 등록한다('전체' 보기).
+   * 🔑 이동 구현을 두 벌로 만들지 않으려는 것이다 — 낙관 반영·원복·초기화가 전부 이 훅 안에 있다.
+   */
+  onRegisterMove?: (start: string, move: ((studentId: string, toClassId: string, homeClassId: string) => void) | null) => void;
+  /**
+   * 교시를 옮길 수 있나(0255a) — **배치(0254a)와 가용성이 따로**라 손잡이 판정에 함께 들어간다.
+   * 🔴 배치만 보고 잠그면 0254a 미적용일 때 교시 이동까지 조용히 죽는다.
+   */
+  canChoosePeriod?: boolean;
 }) {
   const {
     pending,
@@ -160,7 +196,32 @@ export function SeatBoard({
     date,
     activeStart,
   );
-  const raw = mergeFields(rosters);
+  /**
+   * 교시 지정 해제 — '전체' 보기는 바깥이 낙관 오버레이째로 제 것을 넘겨주고, 교시 하나 보기는 이
+   * 훅을 쓴다. 🔴 **양쪽 다 없으면** 감춰진 학생을 되돌릴 길이 화면에서 사라진다.
+   */
+  const { clearPending, clearError, clearClass } = useSeatPeriodClear(seat, date);
+  const clearPeriod = onClearPeriodChoices ?? (canChoosePeriod ? clearClass : undefined);
+  // 바깥 `DndContext`('전체' 보기)가 이 교시의 반 묶음 이동을 부를 수 있게 처리기를 넘겨 둔다.
+  useEffect(() => {
+    if (!onRegisterMove) return;
+    onRegisterMove(activeStart, moveStudent);
+    return () => onRegisterMove(activeStart, null);
+  }, [activeStart, moveStudent, onRegisterMove]);
+  /**
+   * **교시 선택**(0255a)을 먼저 얹는다 — 다른 교시로 정해진 학생을 이 교시 명단에서 뺀다.
+   * 🔴 배치(반 묶음)보다 **앞이다** — 감춰진 학생을 옮길 수는 없으니, 순서가 뒤집히면 없는 카드에
+   *    배치를 얹는 꼴이 된다. 선택이 없으면 결과는 입력과 글자 그대로 같다.
+   */
+  const inPeriod = periodChoices
+    ? applySeatPeriodChoices(rosters, {
+        slotStart: activeStart,
+        choices: periodChoices,
+        slotsByClass: slotsByClass ?? {},
+        markedSlotsByCell: markedSlotsByCell ?? {},
+      })
+    : rosters;
+  const raw = mergeFields(inPeriod);
   /**
    * 배치를 얹은 명단 — 서버 줄 + 화면 오버레이를 합쳐 **순수 함수 한 벌**로 그린다.
    * 🔴 학생마다 `homeClassId`(원래 반)가 붙는다 — 아래 모든 조회·저장은 묶음 id가 아니라 그 값을 쓴다.
@@ -169,6 +230,22 @@ export function SeatBoard({
   const placed = applySeatPlacements(raw, mergeSeatPlacements(raw, placements ?? [], overlay));
   const view = placed.rosters;
   const resetCounts = seatResetCounts(placed.applied);
+  /**
+   * 반별 **이 교시로 지정된** 학생 수 — 머리줄 [교시 지정 N명 해제]가 그대로 쓴다.
+   * 🔑 지정된 학생은 **지금 이 교시에만** 서 있으므로, 버튼도 그 교시에서만 뜬다(감춰진 교시에
+   *    버튼이 서면 아무도 없는 반에 [해제]가 붙는다).
+   */
+  const periodChoiceCounts = periodChoices
+    ? view.reduce<Record<string, number>>((acc, r) => {
+        for (const s of r.students) {
+          // 🔴 세는 축은 묶음(`r.classId`)이 아니라 **원래 반**이다 — 배치로 남의 묶음에 앉은 학생을
+          //    묶음 축으로 세면 [해제]가 엉뚱한 반에 붙고, 누르면 남의 반 지정을 지운다.
+          if (periodChoices[seatChoiceKey(s.homeClassId, s.id)] !== activeStart) continue;
+          acc[s.homeClassId] = (acc[s.homeClassId] ?? 0) + 1;
+        }
+        return acc;
+      }, {})
+    : {};
   const resetAllTargets = seatResetTargets(placed.applied);
   const all = view.flatMap((r) => r.students.map((s) => statusOf(s.homeClassId, s)));
   const total = all.length;
@@ -312,6 +389,11 @@ export function SeatBoard({
           {moveError}
         </p>
       ) : null}
+      {clearError ? (
+        <p className="text-att-absent-ink bg-att-absent/30 border-att-absent rounded-xl border px-3 py-2 text-xs">
+          {clearError}
+        </p>
+      ) : null}
       {/* 0254a가 아직 안 돌았거나 조회가 실패했을 때 — 화면은 그대로 살고 드래그·초기화만 잠긴다([[#95]]). */}
       {placementNotice ? (
         <p className="text-text-dim bg-bg-soft/60 border-line rounded-xl border px-3 py-2 text-xs">
@@ -346,7 +428,7 @@ export function SeatBoard({
             hints={hints}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
-            pending={pending || movePending}
+            pending={pending || movePending || clearPending}
             canMove={canMove}
             onMove={(studentId, toClassId) => {
               const home = view
@@ -362,6 +444,11 @@ export function SeatBoard({
               )
             }
             resetCounts={resetCounts}
+            periodStart={activeStart}
+            externalDnd={externalDnd}
+            canDrag={canMove || canChoosePeriod}
+            periodChoiceCounts={periodChoiceCounts}
+            onClearPeriodChoices={clearPeriod}
           />
         )}
       </div>

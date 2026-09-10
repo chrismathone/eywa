@@ -21,6 +21,8 @@ const LAB = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", 
 const DRAG = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "_components", "seat-drag.ts"));
 const SHELL_PAGE = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "page.tsx"));
 const PUBLIC_PAGE = strip(read("src", "app", "(seat)", "seat", "[seat]", "page.tsx"));
+const GATE = strip(read("src", "features", "attendance", "seat", "server", "move-gate.ts"));
+const PERIOD_ACTIONS = strip(read("src", "features", "attendance", "seat", "server", "period-actions.ts"));
 const AUDIT = read("src", "features", "audit", "server", "log.ts");
 
 describe("① 출결과 다른 축 — 배치는 attendance_records를 건드리지 않는다", () => {
@@ -43,16 +45,24 @@ describe("① 출결과 다른 축 — 배치는 attendance_records를 건드리
 });
 
 describe("② 게이트 — 옮길 수 있는 사람만, 되돌릴 수도 있다", () => {
-  it("이동·초기화가 **같은 문**을 지난다", () => {
-    expect(ACTIONS).toContain("gateSeatWrite");
-    const move = ACTIONS.slice(ACTIONS.indexOf("export async function moveSeatStudent"));
-    const reset = ACTIONS.slice(ACTIONS.indexOf("export async function resetSeatPlacements"));
-    for (const fn of [move, reset]) expect(fn).toContain("gatePlacementWrite(");
+  it("이동 계열 **전부**가 같은 문 한 벌을 지난다 — 배치·초기화·교시 선택", () => {
+    // 🔴 문은 `move-gate.ts` 하나다(2026-09-10 교시 선택이 생기며 뽑아냈다) — 두 벌이면 언젠가
+    //    한쪽만 조여지고, 그때 화면은 아무 말도 안 한다.
+    expect(GATE).toContain("gateSeatWrite");
+    const fns = [
+      ACTIONS.slice(ACTIONS.indexOf("export async function moveSeatStudent")),
+      ACTIONS.slice(ACTIONS.indexOf("export async function resetSeatPlacements")),
+      PERIOD_ACTIONS.slice(PERIOD_ACTIONS.indexOf("export async function moveSeatStudentPeriod")),
+      PERIOD_ACTIONS.slice(PERIOD_ACTIONS.indexOf("export async function clearSeatPeriodChoices")),
+    ];
+    for (const fn of fns) expect(fn).toContain("gateSeatMoveWrite(");
+    // 🔴 게이트 파일은 서버 액션이 아니다([[#119]]) — 되면 화면이 직접 불러 tenantId·userId를 받는다.
+    expect(GATE).not.toContain("use server");
   });
 
   it("🔴 비로그인 공개 PIN 갈래는 거절한다 — 감사로그에 실행자를 못 남기는 동작은 열지 않는다", () => {
-    expect(ACTIONS).toMatch(/via === "pin"/);
-    expect(ACTIONS).toContain("로그인한 뒤에만");
+    expect(GATE).toMatch(/via === "pin"/);
+    expect(GATE).toContain("로그인한 뒤에만");
   });
 
   it("공개 화면은 배치를 **보기만** 한다 — 드래그를 열지 않는다", () => {

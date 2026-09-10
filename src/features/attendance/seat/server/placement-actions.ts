@@ -3,14 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
-import { ambiguousClassIds, hhmm, SEAT_NAME, type SeatKey } from "../seat";
+import { ambiguousClassIds, hhmm, type SeatKey } from "../seat";
 import {
   applySeatPlacements,
   seatResetTargets,
   validateSeatMove,
   type SeatPlacement,
 } from "../placement";
-import { gateSeatWrite } from "./gate";
+import { gateSeatMoveWrite } from "./move-gate";
 import { getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
 
@@ -19,7 +19,7 @@ export type SeatPlacementResult = { ok: true; changed: number } | { error: strin
 /**
  * 자리 **배치**(드래그로 옮긴 자리) 쓰기 — 0254a `seat_placements`.
  *
- * 🔴🔴 **출결을 건드리지 않는다.** 이 파일은 `attendance_records`에 select도 update도 하지 않는다
+ * 🔴🔴 **출결을 쓰지 않는다.** 이 파일은 `attendance_records`에 insert·update·delete를 한 번도 하지 않는다
  *    (자리 배치는 "카드가 어느 묶음에 놓였나"이고, 출결 귀속은 언제나 학생의 수강 반이다 —
  *    `placement.ts` 머리 주석). 원장 *"클릭으로 출결되는거랑 중복액션되지않게 잘 분리해서"*의 데이터 층
  *    구현이 이것이다: 축이 아예 다른 표라 두 동작이 서로를 덮을 수 없다.
@@ -27,42 +27,34 @@ export type SeatPlacementResult = { ok: true; changed: number } | { error: strin
  *    남아야함"*을 못박았는데, 그 화면엔 로그인이 없어 `logAction`이 실행자를 못 읽는다(자리 출결의
  *    무기명 갈래가 이미 감사 사각지대다 — `actions.ts` 주석, 실측 최근 90일 440건 중 149건). **남길 수
  *    없는 동작은 열지 않는다.** 공개 화면은 배치를 **보기만** 한다.
+ * ⚠️ 출결 상태를 **읽기는** 한다 — 원장 2026-09-10 *"출결이 찍힌 학생은 드래그 절대 불가"*. 읽는 값은
+ *    이미 `getSeatDay`가 명단에 얹어 둔 `status`라 새 왕복이 없고, 판정 문장은 순수 소스
+ *    [`seatMoveBlockReason`](../placement.ts) 하나다(화면 비활성과 서버 거절이 같은 말을 한다).
  * 🔴 **게이트는 출결과 같은 문**(`gateSeatWrite`) — 옮길 수 있는 사람과 찍을 수 있는 사람이 갈리면
  *    당번이 자리를 못 고친다. 초기화도 **같은 게이트**라 옮긴 사람은 되돌릴 수 있다.
  */
 
-/** 지금은 랩실만 — 원장 지시가 `/seat/lab`이고, JJ실은 진도(수업계획) 블록이 붙은 다른 표다. */
-const MOVABLE_SEATS: readonly SeatKey[] = ["lab"];
-
-type Gate = { userId: string; tenantId: string; via: "menu" | "duty" };
-
-/** 배치 쓰기의 공통 문 — 자리 게이트 + 랩실 한정 + **공개 PIN 제외**. */
-async function gatePlacementWrite(seat: SeatKey, date: string): Promise<Gate | { error: string }> {
-  if (!MOVABLE_SEATS.includes(seat)) {
-    return { error: `${SEAT_NAME[seat]}은 자리 이동을 쓰지 않습니다` };
-  }
-  const g = await gateSeatWrite(seat, date);
-  if ("error" in g) return g;
-  // 🔴 무기명(PIN) 쓰기는 감사로그를 남길 수 없다 — 위 머리 주석.
-  if (g.via === "pin" || !g.userId) {
-    return { error: "자리 이동은 로그인한 뒤에만 할 수 있습니다 — 출결 체크는 그대로 됩니다" };
-  }
-  return { userId: g.userId, tenantId: g.tenantId, via: g.via };
-}
-
-/** 그 교시 명단(반 묶음) — 배치 판정의 재료. 모호한 반(같은 반·같은 시작·다른 종료)은 뺀다. */
+/**
+ * 그 교시 명단(반 묶음) — 배치 판정의 재료. 모호한 반(같은 반·같은 시작·다른 종료)은 뺀다.
+ *
+ * ⚠️ `status`를 함께 싣는다 — 원장 2026-09-10 *"출결이 찍힌 학생은 드래그 절대 불가"*의 서버 쪽 판정
+ *    재료다. **새 조회가 아니다**(`getSeatDay`가 이미 그날 출결을 받아 명단에 얹어 둔 값이다).
+ */
 async function periodRosters(
   seat: SeatKey,
   date: string,
   slot: string,
-): Promise<{ classId: string; students: { id: string }[] }[] | null> {
+): Promise<{ classId: string; students: { id: string; status: string | null }[] }[] | null> {
   const day = await getSeatDay(seat, date);
   const period = day.periods.find((p) => p.start === slot);
   if (!period) return null;
   const blocked = new Set(ambiguousClassIds(period));
   return (day.rosterByPeriod[period.start] ?? [])
     .filter((r) => !blocked.has(r.classId))
-    .map((r) => ({ classId: r.classId, students: r.students.map((s) => ({ id: s.id })) }));
+    .map((r) => ({
+      classId: r.classId,
+      students: r.students.map((s) => ({ id: s.id, status: s.status })),
+    }));
 }
 
 function revalidateSeat(): void {
@@ -85,7 +77,7 @@ export async function moveSeatStudent(input: {
   studentId: string;
   toClassId: string;
 }): Promise<SeatPlacementResult> {
-  const g = await gatePlacementWrite(input.seat, input.date);
+  const g = await gateSeatMoveWrite(input.seat, input.date);
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
@@ -184,7 +176,7 @@ export async function resetSeatPlacements(input: {
   /** 없으면 그 교시 전체(단체 초기화). */
   classId?: string;
 }): Promise<SeatPlacementResult> {
-  const g = await gatePlacementWrite(input.seat, input.date);
+  const g = await gateSeatMoveWrite(input.seat, input.date);
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);

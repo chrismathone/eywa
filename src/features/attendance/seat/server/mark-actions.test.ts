@@ -29,7 +29,7 @@ describe("JJ 전용 칸 쓰기 가드", () => {
     // 명단 밖 학생은 거절 — 로그인 없는 사람이 학원 전체 학생에 닿는 길을 만들지 않는다.
     expect(src).toMatch(/이 교시 명단에 없는 학생입니다/);
     // PIN 경로는 세션이 없어 RLS로 명단을 못 읽는다 → admin + 쿠키 tenantId로 화이트리스트를 만든다.
-    expect(src).toMatch(/rosterKeys\([\s\S]{0,120}g\.via === "pin" \? g\.tenantId : null\)/);
+    expect(src).toMatch(/rosterKeys\([\s\S]{0,120}g\.via === "pin" \? g\.tenantId : null, g\.tenantId\)/);
     // "로그인 출석부에서만" 거절 문구는 사라져야 한다(화면엔 있는데 서버가 거절 = 금지).
     expect(src).not.toMatch(/로그인 출석부에서만/);
   });

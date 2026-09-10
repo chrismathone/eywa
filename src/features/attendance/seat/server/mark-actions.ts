@@ -53,7 +53,7 @@ export async function setSeatJjField(input: {
 
   const slot = hhmm(input.slotStart);
   // 공개 PIN 경로는 세션이 없어 RLS로 명단을 못 읽는다 → admin + 쿠키의 tenantId(출결 쓰기와 같은 규약).
-  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null);
+  const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null, g.tenantId);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
   if (!roster.keys.has(`${input.classId}|${input.studentId}`)) {
     return { error: "이 교시 명단에 없는 학생입니다" };

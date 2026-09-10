@@ -23,7 +23,11 @@ import {
 } from "@/features/attendance/seat/name-fit";
 import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
-import { SEAT_DRAG_THRESHOLD_PX, type PlacedStudent } from "@/features/attendance/seat/placement";
+import {
+  SEAT_DRAG_THRESHOLD_PX,
+  seatMoveBlockReason,
+  type PlacedStudent,
+} from "@/features/attendance/seat/placement";
 import type { SeatClassRoster, SeatStudent } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_TONE } from "./seat-status";
@@ -43,15 +47,42 @@ export type PlacedSeatRoster = Omit<SeatClassRoster, "students"> & {
 };
 
 /** 드래그 데이터 — id 파싱 금지(시간표 규약과 같다), 판정은 `data`로만. */
-type CardDrag = {
+export type CardDrag = {
   studentId: string;
   /** 출결이 저장되는 반(= 수강 반). 배치가 바뀌어도 이 값은 안 바뀐다. */
   homeClassId: string;
   /** 지금 **화면에서 서 있는** 묶음 — 같은 묶음에 도로 놓는 것은 아무 일도 아니다. */
   sectionClassId: string;
+  /**
+   * 이 카드가 서 있는 **교시**("HH:MM") — '전체' 보기에서 교시를 건너 끌었는지 가르는 축이다.
+   * 🔴 교시 하나만 그리는 보기에서도 채운다 — 비면 바깥 컨텍스트가 "같은 교시"로 오인한다.
+   */
+  start: string;
+  /**
+   * 이미 출결이 찍힌 카드인가 — 원장 *"출결이 찍힌 학생은 드래그 절대 불가"*.
+   * 🔴 손잡이가 꺼져 있어 평소엔 여기 올 일이 없지만, 판정을 **드롭 쪽에서도** 같은 함수로 한 번 더
+   *    본다(둘이 갈리면 어느 쪽이 진짜인지 알 수 없다).
+   */
+  marked: boolean;
   name: string;
   meta: string;
 };
+
+/** 드롭 대상 데이터 — (교시 × 반 묶음). '전체' 보기는 두 값이 다 필요하다. */
+export type SeatDropTarget = { classId: string; start: string };
+
+/**
+ * 끌고 있는 카드의 모습 — 교시 안 컨텍스트와 '전체' 보기 컨텍스트가 **같은 조각**을 쓴다
+ * (두 벌이면 한쪽만 손질돼 화면이 갈린다).
+ */
+export function SeatDragCard({ drag }: { drag: CardDrag }) {
+  return (
+    <div className="bg-card border-primary text-foreground pointer-events-none rounded-xl border-2 px-2.5 py-2 text-left shadow-lg">
+      <span className="block leading-none font-bold">{drag.name}</span>
+      <span className="text-text-dim text-xs">{drag.meta || " "}</span>
+    </div>
+  );
+}
 
 /**
  * 랩실 출석부 — 이름 카드에 출결만. JJ 전용 칸은 여기에 넣지 않는다.
@@ -77,6 +108,11 @@ export function SeatLabGrid({
   onMove,
   onResetClass,
   resetCounts,
+  periodStart,
+  externalDnd = false,
+  periodChoiceCounts,
+  onClearPeriodChoices,
+  canDrag,
 }: {
   rosters: PlacedSeatRoster[];
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
@@ -96,7 +132,28 @@ export function SeatLabGrid({
   onResetClass: (classId: string) => void;
   /** 반 묶음 id → 그 묶음으로 옮겨 온 학생 수. 0(키 없음)이면 [초기화]를 세우지 않는다. */
   resetCounts: Readonly<Record<string, number>>;
+  /**
+   * 이 격자가 그리는 교시("HH:MM") — 드롭 대상·드래그 데이터의 축이다.
+   * 🔴 '전체' 보기에선 교시가 여럿이라 이 값이 없으면 어디서 어디로 끌었는지 알 수 없다.
+   */
+  periodStart: string;
+  /**
+   * 바깥에 이미 `DndContext`가 있다('전체' 보기) — 참이면 **여기서 컨텍스트를 만들지 않는다**.
+   * 🔴 중첩 컨텍스트를 만들면 안쪽이 먼저 먹어 교시를 건너는 드롭이 영영 바깥에 안 닿는다.
+   */
+  externalDnd?: boolean;
+  /** 반 묶음 id → 그 반에서 **교시가 지정된** 학생 수(0255a). 0이면 [교시 지정 해제]를 안 세운다. */
+  periodChoiceCounts?: Readonly<Record<string, number>>;
+  onClearPeriodChoices?: (classId: string) => void;
+  /**
+   * 카드를 **집을 수 있나** — `canMove`(반 묶음 배치)와 **따로**다.
+   * 🔴 두 축은 표가 다르고 가용성도 다르다(0254a ↔ 0255a). 배치만 보고 손잡이를 끄면, 0254a가
+   *    아직 안 돌았을 때 **교시 이동까지 함께 죽는다**(에러도 안 난다 — 그냥 안 잡힌다).
+   */
+  canDrag?: boolean;
 }) {
+  // 한쪽 축만 열려 있어도 집을 수는 있어야 한다 — 무엇이 되는지는 드롭 때 판정한다.
+  const draggable = canDrag ?? canMove;
   const [drag, setDrag] = useState<CardDrag | null>(null);
   // 🔑 문턱 = 순수 함수와 **같은 상수**. 이보다 덜 움직이면 드래그가 시작조차 안 하고 클릭(출결)이 나간다.
   const sensors = useSensors(
@@ -121,12 +178,18 @@ export function SeatLabGrid({
           canMove={canMove}
           onResetClass={onResetClass}
           resetCount={resetCounts[r.classId] ?? 0}
+          periodStart={periodStart}
+          periodChoiceCount={periodChoiceCounts?.[r.classId] ?? 0}
+          onClearPeriodChoices={onClearPeriodChoices}
+          canDrag={draggable}
         />
       ))}
     </>
   );
 
-  if (!canMove) return body;
+  // 바깥에 컨텍스트가 있으면('전체' 보기) 여기서 또 만들지 않는다 — 중첩되면 안쪽이 드롭을 먼저 먹어
+  // 교시를 건너는 이동이 영영 성립하지 않는다.
+  if (!draggable || externalDnd) return body;
 
   return (
     <DndContext
@@ -143,7 +206,7 @@ export function SeatLabGrid({
       onDragEnd={(e: DragEndEvent) => {
         endSeatDrag();
         const card = e.active.data.current as CardDrag | undefined;
-        const to = e.over?.data.current as { classId?: string } | undefined;
+        const to = e.over?.data.current as Partial<SeatDropTarget> | undefined;
         setDrag(null);
         // 🔴 집는 순간의 스냅샷이 비면 아무것도 하지 않는다([[#129]]: 끌던 줄이 언마운트되면 data가 빈다).
         if (!card || !to?.classId) return;
@@ -154,14 +217,7 @@ export function SeatLabGrid({
       }}
     >
       {body}
-      <DragOverlay dropAnimation={null}>
-        {drag ? (
-          <div className="bg-card border-primary text-foreground pointer-events-none rounded-xl border-2 px-2.5 py-2 text-left shadow-lg">
-            <span className="block leading-none font-bold">{drag.name}</span>
-            <span className="text-text-dim text-xs">{drag.meta || " "}</span>
-          </div>
-        ) : null}
-      </DragOverlay>
+      <DragOverlay dropAnimation={null}>{drag ? <SeatDragCard drag={drag} /> : null}</DragOverlay>
     </DndContext>
   );
 }
@@ -181,6 +237,10 @@ function SeatClassSection({
   canMove,
   onResetClass,
   resetCount,
+  periodStart,
+  periodChoiceCount,
+  onClearPeriodChoices,
+  canDrag,
 }: {
   roster: PlacedSeatRoster;
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
@@ -195,11 +255,17 @@ function SeatClassSection({
   canMove: boolean;
   onResetClass: (classId: string) => void;
   resetCount: number;
+  periodStart: string;
+  periodChoiceCount: number;
+  onClearPeriodChoices?: (classId: string) => void;
+  canDrag: boolean;
 }) {
+  // 🔴 드롭 id·데이터에 **교시**가 들어간다 — '전체' 보기는 같은 반이 교시마다 한 번씩 서므로,
+  //    반 id만으로는 id가 겹치고(dnd-kit이 하나만 인식) 어디에 놓았는지도 알 수 없다.
   const { setNodeRef, isOver } = useDroppable({
-    id: `seat-drop:${r.classId}`,
-    data: { classId: r.classId },
-    disabled: !canMove,
+    id: `seat-drop:${periodStart}:${r.classId}`,
+    data: { classId: r.classId, start: periodStart } satisfies SeatDropTarget,
+    disabled: !canDrag,
   });
   const left = r.students.filter((s) => statusOf(s.homeClassId, s) === null).length;
   /**
@@ -227,6 +293,20 @@ function SeatClassSection({
         <span className="text-text-faint text-xs tabular-nums">{r.students.length}명</span>
         <span className="text-text-faint text-xs tabular-nums">~{r.end}</span>
         <span className="ml-auto flex items-center gap-1.5">
+          {/* 🔴 교시가 지정된 학생이 있을 때만 선다(배치 [초기화]와 같은 규약) — 누르면 그 반의 **그날
+              🔴 조건에 `canMove`(배치 가용성)를 넣지 말 것 — 0254a만 안 돌아도 해제가 함께 죽는다.
+              지정과 그 요일 고정을 함께** 지운다(하나만 지우면 다음 날 도로 옮겨지거나 오늘이 안 돌아온다). */}
+          {periodChoiceCount > 0 && onClearPeriodChoices ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onClearPeriodChoices(r.classId)}
+              title="이 반의 교시 지정(오늘 이동 + 이 요일 고정)을 지웁니다 — 출결 기록은 그대로입니다"
+              className="border-line bg-card text-text-dim rounded-full border px-2.5 py-0.5 text-xs font-semibold disabled:opacity-50"
+            >
+              교시 지정 {periodChoiceCount}명 해제
+            </button>
+          ) : null}
           {/* 🔴 되돌릴 것이 있을 때만 선다 — 0건인데 [초기화]가 서 있으면 "뭔가 꼬였나" 싶어 누르게 된다. */}
           {canMove && resetCount > 0 ? (
             <button
@@ -257,6 +337,7 @@ function SeatClassSection({
             key={`${s.homeClassId}|${s.id}`}
             student={s}
             sectionClassId={r.classId}
+            periodStart={periodStart}
             statusOf={statusOf}
             noteOf={noteOf}
             onSave={onSave}
@@ -265,7 +346,7 @@ function SeatClassSection({
             hints={hints}
             readOnly={readOnly}
             pending={pending}
-            canMove={canMove}
+            canMove={canDrag}
           />
         ))}
       </ul>
@@ -276,6 +357,7 @@ function SeatClassSection({
 function SeatCard({
   student: s,
   sectionClassId,
+  periodStart,
   statusOf,
   noteOf,
   onSave,
@@ -289,6 +371,8 @@ function SeatCard({
   student: PlacedStudent<SeatStudent>;
   /** 이 카드가 지금 서 있는 묶음 — 드래그 no-op 판정에만 쓴다(저장 축은 `homeClassId`). */
   sectionClassId: string;
+  /** 이 카드가 서 있는 교시 — '전체' 보기에서 교시를 건너 끌었는지 가르는 축. */
+  periodStart: string;
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
   noteOf: (classId: string, student: SeatClassRoster["students"][number]) => string | null;
   onSave: (classId: string, studentId: string, next: SeatStatus | null, prev: SeatStatus | null) => void;
@@ -302,25 +386,38 @@ function SeatCard({
   const meta = schoolGradeLabel(s.school, s.grade);
   const anchorRef = useRef<HTMLLIElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  // 🔴 저장·상태 조회는 **원래 반**으로 — 놓인 묶음이 아니다(머리 주석).
+  const cur = statusOf(s.homeClassId, s);
+  const note = noteOf(s.homeClassId, s);
+  /**
+   * 출결이 찍혔으면 손잡이를 잠근다 — 원장 2026-09-10 *"출결이 찍힌 학생은 드래그 절대 불가"*.
+   * 🔑 낙관 오버레이가 얹힌 `cur`를 본다(서버 왕복 전에도 곧바로 잠긴다) — 방금 찍고 바로 끄는
+   *    동작이 서버 거절로 되돌아가는 것보다, 애초에 안 잡히는 쪽이 정직하다.
+   */
+  const moveBlocked = seatMoveBlockReason(cur);
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
-    id: `seat-card:${s.homeClassId}:${s.id}`,
+    id: `seat-card:${periodStart}:${s.homeClassId}:${s.id}`,
     data: {
       studentId: s.id,
       homeClassId: s.homeClassId,
       sectionClassId,
+      start: periodStart,
+      marked: moveBlocked !== null,
       name: s.name,
       meta,
     } satisfies CardDrag,
-    disabled: !canMove,
+    disabled: !canMove || moveBlocked !== null,
   });
-  // 🔴 저장·상태 조회는 **원래 반**으로 — 놓인 묶음이 아니다(머리 주석).
-  const cur = statusOf(s.homeClassId, s);
-  const note = noteOf(s.homeClassId, s);
   // 긴 이름(동명이인 알파벳 접미사)은 잘라내지 않고 그 칩만 글씨를 줄인다.
   const fit = fitSeatName(s.name, SEAT_CHIP_NAME_LADDER);
   // 사유 메모는 카드 전체의 툴팁이다(원장 2026-08-28 "마우스 오버시 결석사유") — 카드 안
   // 어디에 올려도 뜨도록 <li>에 단다. 자기 title을 가진 자식(잘린 이름·특이사항)만 자기 것을 띄운다.
-  const noteTitle = seatNoteTitle(cur, note);
+  /**
+   * 카드 툴팁 — 사유 메모가 있으면 그것이 먼저다(그게 이 자리의 원래 쓰임이다).
+   * 🔑 메모가 없고 **옮길 수 있는 사람인데 잠긴 카드**면 그 이유를 대신 띄운다 — 안 그러면
+   *    "왜 이 카드만 안 잡히지"가 되고, 원인 없는 무반응은 고장으로 읽힌다.
+   */
+  const noteTitle = seatNoteTitle(cur, note) ?? (canMove ? moveBlocked : null);
   /** 사유·특이사항 창을 여는 유일한 문 — 공개 PIN 화면(showReason=false)에선 열리지 않는다. */
   const openNote = () => {
     if (showReason && !readOnly) setNoteOpen(true);

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
 import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
+import { getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
+import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadPublicSeatJjPlans } from "@/features/attendance/seat/server/jj-plan-public";
 import { getSeatPlacements } from "@/features/attendance/seat/server/placements";
@@ -84,7 +86,7 @@ export default async function PublicSeatPage({
   // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
   // 🔴 계획 재료는 **그날 그 자리 그 교시 명단**에 있는 반만 온다 — 로그인 화면이 ECS 게이트로 고르는
   //    자리에서, 여기는 PIN 쿠키 + 오늘 + 명단 화이트리스트가 고른다(서버가 정하고 저장 때 다시 본다).
-  const [rosters, plans, placements] = await Promise.all([
+  const [rosters, plans, placements, periodChoiceLoad] = await Promise.all([
     period && seatHasJjFields(seat)
       ? // JJ실은 듣기·단어 칸이 붙는다 — 이미 적힌 값을 안 보여주면 담당자가 빈 칸으로 보고 다시 적는다.
         attachJjMarks(day.rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
@@ -104,6 +106,13 @@ export default async function PublicSeatPage({
     period
       ? getSeatPlacements(session.tenantId, seat, date, period.start)
       : Promise.resolve({ rows: [], ready: false, reason: null }),
+    /**
+     * 자리 **교시 선택**(0255a) — 배치와 **같은 이유로 읽는다**: 여기서 정하지는 못해도, 안 읽으면
+     * 같은 방을 보는 두 화면이 서로 다른 명단을 말한다(로그인 화면엔 없는 학생이 여기엔 서 있다).
+     * 🔴 새 정보를 더하는 게 아니라 **같은 명단에서 뺄 사람을 빼는 것**이라, 사유·다음 교시처럼
+     *    공개 화면에서 막는 축과는 결이 다르다.
+     */
+    getSeatPeriodChoices(session.tenantId, seat, date),
   ]);
 
   /**
@@ -160,6 +169,14 @@ export default async function PublicSeatPage({
           prevAbsentByCell={prevAbsentByCell}
           // 🔴 `canMove`는 넘기지 않는다(기본 false) — 이 화면은 배치를 **보기만** 한다.
           placements={placements.rows}
+          // 교시 선택도 **보기만** — 로그인 화면과 같은 명단을 그리려는 것이다(위 조회 주석).
+          periodChoices={resolveSeatPeriodChoices({
+            moves: periodChoiceLoad.moves,
+            pins: periodChoiceLoad.pins,
+            date,
+          })}
+          slotsByClass={day.slotsByClass}
+          markedSlotsByCell={day.markedSlotsByCell}
           // 진도 구획은 명단에 오른 반 중 계획이 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={
             Object.keys(plans).length > 0

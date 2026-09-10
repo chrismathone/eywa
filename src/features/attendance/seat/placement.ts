@@ -43,6 +43,25 @@ export type PlacedStudent<S> = S & {
   movedFromClassId: string | null;
 };
 
+/**
+ * **출결이 찍힌 카드는 못 옮긴다** — 원장 2026-09-10 *"출결이 찍힌 학생은 드래그 절대 불가"*.
+ *
+ * 🔴 이유는 화면이 아니라 **기록**이다. 교시 간 이동([`period-choice.ts`](./period-choice.ts))은 그 학생을
+ *    앞 교시에서 지우고 뒤 교시에 세우는데, 이미 찍힌 출결은 `slot_start`가 앞 교시로 박혀 있어 **아무도
+ *    안 보는 칸에 고아로 남는다**(자리 시수는 그 행에서 나온다 = 조용한 시수 오차).
+ * 🔴 **반 묶음 이동에도 똑같이 건다** — 원장 지시가 "절대 불가"이고, 축을 갈라 한쪽만 열어 두면
+ *    "왜 이 카드만 안 잡히지"가 된다.
+ * 🔑 **빠져나갈 문은 남는다** — [초기화]는 드래그가 아니라 버튼이고 출결을 한 줄도 안 건드린다
+ *    (출결은 애초에 `homeClassId`에 저장돼 있어 카드가 되돌아가도 그대로다). 체크를 지우면 다시 잡힌다.
+ */
+export const SEAT_MOVE_MARKED_ERROR =
+  "출결이 찍힌 학생은 옮길 수 없습니다 — 체크를 지운 뒤 옮기세요";
+
+/** 이 카드를 못 옮기는 이유(없으면 null) — 화면(비활성·툴팁)과 서버(거절)가 같은 문장을 쓴다. */
+export function seatMoveBlockReason(status: string | null | undefined): string | null {
+  return status ? SEAT_MOVE_MARKED_ERROR : null;
+}
+
 /** 드래그로 칠 최소 이동 거리(px) — 이보다 덜 움직이면 **클릭(출결 토글)**이다. */
 export const SEAT_DRAG_THRESHOLD_PX = 5;
 
@@ -149,13 +168,20 @@ export function seatResetCounts(applied: readonly SeatPlacement[]): Record<strin
  * 드래그 한 번의 판정 — **서버가 다시 돌린다**([[#77]]: 화면이 보낸 목록을 믿지 않는다).
  * `isReset`(제 반으로 도로 끌기)이면 배치 줄을 **지운다**(그 학생만 초기화).
  */
-export function validateSeatMove<S extends { id: string }>(
+export function validateSeatMove<S extends { id: string; status?: string | null }>(
   rosters: readonly PlacementRoster<S>[],
   move: { studentId: string; toClassId: string },
 ): { ok: true; fromClassId: string; isReset: boolean } | { error: string } {
   const home = seatHomeClassOf(rosters, move.studentId);
   if (home === null) return { error: "이 교시 명단에 없는 학생입니다" };
   if (!rosters.some((r) => r.classId === move.toClassId)) return { error: "이 교시에 없는 반입니다" };
+  // 🔴 화면에서 손잡이를 비활성해도 서버가 다시 본다([[#77]]) — 두 사람이 같은 카드를 열어 두면
+  //    한쪽이 찍는 사이 다른 쪽이 끌 수 있다(그 순간이 정확히 고아 행이 생기는 지점이다).
+  const marked = rosters
+    .find((r) => r.classId === home)
+    ?.students.find((s) => s.id === move.studentId)?.status;
+  const blocked = seatMoveBlockReason(marked);
+  if (blocked) return { error: blocked };
   return { ok: true, fromClassId: home, isReset: home === move.toClassId };
 }
 

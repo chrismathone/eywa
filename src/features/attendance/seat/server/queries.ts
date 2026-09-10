@@ -82,6 +82,18 @@ export type SeatDay = {
   periods: SeatPeriod[];
   /** 교시 start("HH:MM") → 반별 명단. */
   rosterByPeriod: Record<string, SeatClassRoster[]>;
+  /**
+   * 반 id → 그 날 이 자리에 걸린 교시 시작시각(오름차순, 중복 없음).
+   * 🔑 **교시 선택**(0255a)의 재료다 — 하루에 자리 수업이 두 번 있는 반에서만 고를 것이 생긴다
+   *    (실측 8개 반×요일). 새 조회가 아니라 위 `periods`를 반 축으로 뒤집은 것이다.
+   */
+  slotsByClass: Record<string, string[]>;
+  /**
+   * `반id|학생id` → 그 날 이 자리에서 **이미 기록이 있는** 교시들.
+   * 🔴 교시 선택이 **사실을 못 덮게** 하는 재료다([`period-choice.ts`](../period-choice.ts)) — 기록이 있는
+   *    교시에서는 감추지 않는다. 교시가 안 붙은 날 단위 행(`slot_start` null)은 담지 않는다.
+   */
+  markedSlotsByCell: Record<string, string[]>;
 };
 
 function toSeatStudent(
@@ -161,7 +173,8 @@ async function loadSeatDay(
   const { data: rawSlots } = await slotQ;
 
   const seatRows = (rawSlots ?? []).filter((r) => specialSlotLabel(r.slot_teacher_label) === wantLabel);
-  if (seatRows.length === 0) return { date, periods: [], rosterByPeriod: {} };
+  if (seatRows.length === 0)
+    return { date, periods: [], rosterByPeriod: {}, slotsByClass: {}, markedSlotsByCell: {} };
 
   const classIds = [...new Set(seatRows.map((r) => r.class_id as string))];
 
@@ -333,6 +346,24 @@ async function loadSeatDay(
   const periodCountByClass = new Map<string, number>();
   for (const p of periods)
     for (const s of p.slots) periodCountByClass.set(s.classId, (periodCountByClass.get(s.classId) ?? 0) + 1);
+  /**
+   * 반 → 그 날 이 자리 교시들(교시 선택 0255a의 재료). `periods`가 이미 시작시각 오름차순이라
+   * 이 배열도 정렬돼 있고, 같은 교시에 그 반이 두 줄이어도 한 번만 담는다.
+   */
+  const slotsByClass: Record<string, string[]> = {};
+  for (const p of periods)
+    for (const s of p.slots) {
+      const list = (slotsByClass[s.classId] ??= []);
+      if (!list.includes(p.start)) list.push(p.start);
+    }
+  /** (반|학생) → 이미 기록이 있는 교시. 날 단위 행(교시 없음)은 담지 않는다 — 감출지 판정의 근거가 못 된다. */
+  const markedSlotsByCell: Record<string, string[]> = {};
+  for (const r of effective) {
+    const slot = hhmm(r.slot_start);
+    if (!slot) continue;
+    const list = (markedSlotsByCell[`${r.class_id}|${r.student_id}`] ??= []);
+    if (!list.includes(slot)) list.push(slot);
+  }
   const dayLevelFallback = (classId: string, studentId: string) => {
     if (isPayrollSeat(seat)) return undefined;
     if ((periodCountByClass.get(classId) ?? 0) !== 1) return undefined;
@@ -362,5 +393,5 @@ async function loadSeatDay(
     }));
   }
 
-  return { date, periods, rosterByPeriod };
+  return { date, periods, rosterByPeriod, slotsByClass, markedSlotsByCell };
 }
