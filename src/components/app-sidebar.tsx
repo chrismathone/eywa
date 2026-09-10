@@ -28,8 +28,7 @@ import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarWidth } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
 import { useShowDesktop } from "@/components/workspace/use-show-desktop";
-import { withEmbed } from "@/components/workspace/embed-context";
-import { iframeRegistry } from "@/components/workspace/route-window";
+import { openMenuWindow } from "@/components/workspace/open-menu-window";
 import {
   cancelScheduledPrefetch,
   scheduleEmbedPrefetch,
@@ -518,10 +517,7 @@ function railState(
     : isItemActive(item.href, pathname);
   // 🔴 열려 있는 창은 표시하지 않는다(원장 2026-09-09) — 표시는 **지금 보고 있는 창 하나**뿐이다.
   //    `openIds`는 포커스 판정(hasFocus)에만 남는다.
-  return {
-    active,
-    atTop: isDesktop && presentation === "window" && hasFocus && focusedId === winId,
-  };
+  return { active };
 }
 
 /** 메뉴 한 줄 — 즐겨찾기·바로 여는 업무군(운영실·캘린더·도움말)이 쓴다. 제스처는 RailItem 그대로. */
@@ -561,7 +557,6 @@ function MenuRail({
       <RailItem
         item={item}
         active={st.active}
-        atTop={st.atTop}
         isDesktop={isDesktop}
         expanded={expanded}
         motion={motion}
@@ -663,7 +658,6 @@ function GroupRail({
 function RailItem({
   item,
   active,
-  atTop,
   isDesktop,
   expanded,
   motion,
@@ -672,8 +666,6 @@ function RailItem({
   item: NavItem;
   /** 🔴 **지금 보고 있는 창 하나**만 참이다 — 열려 있는 다른 창은 표시하지 않는다(원장 2026-09-09). */
   active: boolean;
-  /** 이 메뉴 창이 이미 최상단(포커스)임 — 다시 누르면 "첫 화면"(메뉴 루트)으로 리셋. */
-  atTop: boolean;
   isDesktop: boolean;
   expanded: boolean;
   motion: boolean;
@@ -695,23 +687,14 @@ function RailItem({
       return;
     }
     const params = { id: item.menuKey, title: item.label, href: item.href };
-    const store = useWindowStore.getState();
     // shift+클릭 = 같은 메뉴를 새 창으로 한 벌 더(듀얼).
     if (e.shiftKey) {
-      store.openNewInstance("route", params);
+      useWindowStore.getState().openNewInstance("route", params);
       return;
     }
-    // 이미 최상단(포커스)인 창을 다시 누르면 그 창을 "첫 화면"(메뉴 루트)으로 되돌린다 —
-    // 상세 드릴인·하부탭 전환에서 한 번에 처음으로(뒤로 버튼과 동일하게 그 창 iframe만 replace).
-    // 이미 루트면 homeNav가 null → 무동작. (닫았다 여는 번거로움 제거.)
-    if (atTop) {
-      const winId = windowId("route", item.menuKey);
-      const target = store.homeNav(winId);
-      if (target) iframeRegistry.get(winId)?.contentWindow?.location.replace(withEmbed(target));
-      return;
-    }
-    // 일반 클릭 = 기존 창 포커스/열기(비포커스면 최상단으로, 없으면 새로 열기).
-    store.open("route", params);
+    // 🔴 포커스/리셋 판정은 **메뉴 판과 같은 함수**를 쓴다 — 갈리면 같은 메뉴가 사이드바에서 누를 때와
+    //    메뉴 판에서 누를 때 다르게 동작한다(원장 2026-09-10 제보의 원인이 그 갈림이었다).
+    openMenuWindow(params);
   }
 
   const fg = active ? "text-primary-foreground" : "text-text-dim group-hover:text-foreground";

@@ -12,6 +12,7 @@ import { useIsDesktop } from "./use-is-desktop";
 import { useMenuHub } from "./menu-hub-store";
 import { useShowDesktop } from "./use-show-desktop";
 import { useWindowStore } from "./window-store";
+import { openMenuWindow } from "./open-menu-window";
 
 /**
  * 메뉴 버튼 격자 + **메뉴를 여는 단 하나의 방법** — 첫 화면(menu-board)과 업무군 허브(menu-hub-panel)가
@@ -48,10 +49,17 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
         showDesktop();
         return;
       }
-      const store = useWindowStore.getState();
       const params = { id: dest.menuKey, title: dest.label, href: dest.href };
-      if (shift) store.openNewInstance("route", params);
-      else store.open("route", params);
+      if (shift) {
+        useWindowStore.getState().openNewInstance("route", params);
+        return;
+      }
+      // 🔴 **이미 보고 있는 메뉴를 다시 고르면 첫 화면으로 되돌린다** (원장 2026-09-10:
+      //    *"회의록을 작성 완료하고 분석 끝난 상태에서 다시 메뉴에서 회의록을 누르면 기존 화면이 유지됨"*).
+      //    종전엔 `store.open()`만 불러 **포커스만** 했다 — 드릴인은 창 iframe 안에서 일어나
+      //    `params.href`가 루트 그대로라 아무 데도 안 갔다. 사이드바 줄엔 있던 규칙이 여기엔 없어서,
+      //    메뉴 판을 거치는 목적지(= 업무군 안 전부)가 같은 증상이었다. 판정은 `openMenuWindow` 한 곳.
+      openMenuWindow(params);
     },
     [sendHubToBack, closeHub, isDesktop, router, showDesktop],
   );

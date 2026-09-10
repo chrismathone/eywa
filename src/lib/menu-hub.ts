@@ -176,14 +176,24 @@ export const HUB_GROUPS: HubGroup[] = [
       face("shuttle", "/shuttle/track", "실시간 위치", undefined, { tool: true, icon: "mapPin" }),
     ]),
   },
+  // 🔴 **회의록은 업무군에 넣지 않고 왼쪽 탭 한 줄로 세운다** (원장 2026-09-10:
+  //    *"회의록은 따로 왼쪽 탭으로 빼주고"*). `direct`라 누르면 메뉴 판을 거치지 않고 바로 열린다.
+  //    ⚠️ 업무군에서 뺐다고 권한이 달라지지 않는다 — menuKey는 그대로 `meetings`다.
+  {
+    id: "meetings",
+    label: "회의록",
+    icon: MENU_ICON.meetings,
+    kind: "direct",
+    items: keep([fromMenu("meetings")]),
+  },
   {
     id: "document",
     label: "문서·결재",
-    icon: MENU_ICON.meetings,
+    // ⚠️ 회의록이 빠지면서 아이콘도 넘겨줬다 — 같은 글리프를 두 줄이 쓰면 어느 줄인지 안 읽힌다.
+    icon: MENU_ICON.approvals,
     kind: "hub",
     note: "기록과 결재 문서입니다.",
     items: keep([
-      fromMenu("meetings", "회의 녹음·AI 정리"),
       fromMenu("approvals", "기안·결재함"),
       fromMenu("documents", "서식·문서 저장소"),
     ]),
