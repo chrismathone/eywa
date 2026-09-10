@@ -84,6 +84,22 @@ export function kstTimeOf(value: unknown): string | null {
 }
 
 /**
+ * 타임스탬프(ISO 문자열·Date) → **KST 짧은 표기** `yy.mm.dd hh:mm`(24시간). 원장 지정 서식
+ * (2026-09-10, 시간표 '시트 반영' 옆 최근 반영 시각). 파싱 불가·빈값은 null —
+ * 🔴 **빈 문자열을 돌려주지 말 것**: 빈 칸은 "방금 했음"으로 읽힌다. 호출부가 null을 받아
+ * `아직 반영 안 함` 같은 **말이 되는 문구**를 직접 적는다.
+ *
+ * 🔴 자리 계산은 `kstDateOf`·`kstTimeOf`에 맡긴다(`Asia/Seoul` 고정) — 서버가 UTC라
+ *    `toISOString().slice()`로 자르면 한국 새벽에 하루가 어긋난다.
+ */
+export function kstShortStamp(value: unknown): string | null {
+  const date = kstDateOf(value);
+  const time = kstTimeOf(value);
+  if (!date || !time) return null;
+  return `${date.slice(2).replaceAll("-", ".")} ${time}`;
+}
+
+/**
  * `<input type="datetime-local">`이 보낸 값(**타임존이 없는** `YYYY-MM-DDTHH:mm`)을 **KST로 읽어** ISO로.
  *
  * 🔴 왜 필요한가(원장 제보 2026-09-09 *"'상담 시각'이 방금전인데 버그 아닌가?"*): 그 입력의 값은 브라우저의
