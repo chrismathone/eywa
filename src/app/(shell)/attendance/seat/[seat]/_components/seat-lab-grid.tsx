@@ -74,11 +74,21 @@ export type SeatDropTarget = { classId: string; start: string };
  * 끌고 있는 카드의 모습 — 교시 안 컨텍스트와 '전체' 보기 컨텍스트가 **같은 조각**을 쓴다
  * (두 벌이면 한쪽만 손질돼 화면이 갈린다).
  */
-export function SeatDragCard({ drag }: { drag: CardDrag }) {
+/** 끄는 동안 카드 아래 적는 한 줄 — 놓으면 무엇이 바뀌는지(`ok: false`면 놓아도 안 되는 이유). */
+export type SeatDragHint = { text: string; ok: boolean };
+
+export function SeatDragCard({ drag, hint }: { drag: CardDrag; hint?: SeatDragHint | null }) {
   return (
     <div className="bg-card border-primary text-foreground pointer-events-none rounded-xl border-2 px-2.5 py-2 text-left shadow-lg">
       <span className="block leading-none font-bold">{drag.name}</span>
       <span className="text-text-dim text-xs">{drag.meta || " "}</span>
+      {/* 🔑 놓기 **전에** 무엇이 바뀌는지 말한다 — 다른 시간으로 옮기기(주 동작)와 같은 시간 안 자리만
+          옮기기(부수 동작)를 가르는 유일한 신호다. 못 놓는 자리면 그 이유를 같은 자리에 적는다. */}
+      {hint ? (
+        <span className={`mt-1 block text-xs font-semibold ${hint.ok ? "text-primary" : "text-att-absent-ink"}`}>
+          {hint.text}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -292,7 +302,18 @@ function SeatClassSection({
       >
         <span className="font-bold">{r.className}</span>
         <span className={`${subText} text-xs tabular-nums`}>{r.students.length}명</span>
-        <span className={`${subText} text-xs tabular-nums`}>~{r.end}</span>
+        {/* 🔑 다른 시간에서 옮겨 온 묶음은 끝나는 시각 대신 **어디서 왔는지**를 적는다 — 이 교시엔 그 반
+            슬롯이 없어 `~끝` 시각이 이 교시의 것이 아니다. 출결이 원래 반으로 가는 이유도 이 표식이 말한다. */}
+        {r.visiting ? (
+          <span
+            className="border-line bg-card text-text-dim rounded-full border px-2 py-0.5 text-xs font-semibold"
+            title="이 교시에 수업이 없는 반에서 옮겨 온 학생입니다 — 출결은 원래 반으로 기록됩니다"
+          >
+            다른 시간에서 옴 · 원래 {r.visiting.fromSlots.join("·")}
+          </span>
+        ) : (
+          <span className={`${subText} text-xs tabular-nums`}>~{r.end}</span>
+        )}
         <span className="ml-auto flex items-center gap-1.5">
           {/* 🔴 교시가 지정된 학생이 있을 때만 선다(배치 [초기화]와 같은 규약) — 누르면 그 반의 **그날
               🔴 조건에 `canMove`(배치 가용성)를 넣지 말 것 — 0254a만 안 돌아도 해제가 함께 죽는다.

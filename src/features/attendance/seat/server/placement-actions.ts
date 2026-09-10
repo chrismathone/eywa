@@ -13,6 +13,7 @@ import {
 import { gateSeatMoveWrite } from "./move-gate";
 import { getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
+import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 
 export type SeatPlacementResult = { ok: true; changed: number } | { error: string };
 
@@ -41,15 +42,22 @@ export type SeatPlacementResult = { ok: true; changed: number } | { error: strin
  *    재료다. **새 조회가 아니다**(`getSeatDay`가 이미 그날 출결을 받아 명단에 얹어 둔 값이다).
  */
 async function periodRosters(
+  tenantId: string,
   seat: SeatKey,
   date: string,
   slot: string,
 ): Promise<{ classId: string; students: { id: string; status: string | null }[] }[] | null> {
-  const day = await getSeatDay(seat, date);
+  // 🔴 **교시 선택(0255a)을 얹은 명단**이어야 화면과 같다 — 다른 시간에서 옮겨 온 학생은 목표 교시에
+  //    서 있어서, 거기서 옆 반 묶음으로 옮기는(배치) 것도 된다. 안 얹으면 "이 교시 명단에 없는 학생"으로
+  //    거절되고, 반대로 다른 교시로 간 학생을 원래 교시에서 옮기는 것이 통과한다. 둘은 독립이라 병렬(B4).
+  const [day, choiceLoad] = await Promise.all([
+    getSeatDay(seat, date),
+    getSeatPeriodChoices(tenantId, seat, date),
+  ]);
   const period = day.periods.find((p) => p.start === slot);
   if (!period) return null;
   const blocked = new Set(ambiguousClassIds(period));
-  return (day.rosterByPeriod[period.start] ?? [])
+  return (applySeatDayChoices(day, choiceLoad, date)[period.start] ?? [])
     .filter((r) => !blocked.has(r.classId))
     .map((r) => ({
       classId: r.classId,
@@ -81,7 +89,7 @@ export async function moveSeatStudent(input: {
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const rosters = await periodRosters(input.seat, input.date, slot);
+  const rosters = await periodRosters(g.tenantId, input.seat, input.date, slot);
   if (!rosters) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
   const check = validateSeatMove(rosters, { studentId: input.studentId, toClassId: input.toClassId });
@@ -180,7 +188,7 @@ export async function resetSeatPlacements(input: {
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const rosters = await periodRosters(input.seat, input.date, slot);
+  const rosters = await periodRosters(g.tenantId, input.seat, input.date, slot);
   if (!rosters) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
   const load = await getSeatPlacements(g.tenantId, input.seat, input.date, slot);

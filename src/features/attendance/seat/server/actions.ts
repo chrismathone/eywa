@@ -17,11 +17,7 @@ import { prevAbsentFillTargets, seatDayCells } from "../prev-period";
 import { applySeatPlacements } from "../placement";
 import { pickSaveTargets } from "../../save-targets";
 import { gateSeatWrite, rosterKeys } from "./gate";
-import { getSeatPeriodChoices } from "./period-choice";
-import {
-  applySeatPeriodChoicesByPeriod,
-  resolveSeatPeriodChoices,
-} from "../period-choice";
+import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 import { getPublicSeatDay, getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
 
@@ -294,11 +290,8 @@ export async function fillSeatPrevAbsent(input: {
   // 🔑 화면(표식·버튼 수)도 **같은 인자**로 같은 함수를 돌린다 — 갈리면 "3명"이라 적고 2명만 쓴다.
   // 🔴 교시 선택(0255a)을 얹은 명단으로 센다 — 안 얹으면 다른 교시에 서 있는 학생까지 결석으로
   //    채운다(화면의 "앞 교시 결석자 N명"과 갈린다).
-  const rosterByPeriod = applySeatPeriodChoicesByPeriod(day.rosterByPeriod, {
-    choices: resolveSeatPeriodChoices({ moves: choiceLoad.moves, pins: choiceLoad.pins, date: input.date }),
-    slotsByClass: day.slotsByClass,
-    markedSlotsByCell: day.markedSlotsByCell,
-  });
+  //    다른 시간에서 옮겨 온 학생은 목표 교시에 서므로 "그 학생의 앞 교시"도 옮긴 뒤의 명단으로 잰다.
+  const rosterByPeriod = applySeatDayChoices(day, choiceLoad, input.date);
   const targets = prevAbsentFillTargets(
     seatDayCells(day.periods, rosterByPeriod),
     slot,

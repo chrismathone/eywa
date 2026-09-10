@@ -2,7 +2,14 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DOW_KEYS } from "@/features/attendance/calendar";
 import { hhmm, MOVABLE_SEATS, type SeatKey } from "../seat";
-import type { SeatPeriodMove, SeatPeriodPin } from "../period-choice";
+import {
+  applySeatPeriodChoicesByPeriod,
+  blankSeatCell,
+  resolveSeatPeriodChoices,
+  type SeatPeriodMove,
+  type SeatPeriodPin,
+} from "../period-choice";
+import type { SeatClassRoster, SeatDay } from "./queries";
 
 /**
  * 자리 **교시 선택** 조회 — 0255a `seat_period_moves`/`seat_period_pins`.
@@ -86,4 +93,27 @@ export async function getSeatPeriodChoices(
     ready: true,
     reason: null,
   };
+}
+
+/**
+ * 그 날 명단에 **교시 선택을 얹은 결과**(감추기 + 다른 시간에서 옮겨 온 학생 세우기) — 서버 쪽 **한 벌**.
+ *
+ * 소비처: 출결 게이트(`rosterKeys`) · 앞 교시 결석 일괄 · 교시 이동 · 배치 · 교시 하나 보기 화면.
+ * '전체' 보기만 낙관 반영 때문에 클라가 같은 순수 함수([`applySeatPeriodChoicesByPeriod`])를 직접 부른다.
+ * 🔴 **재료를 여기서만 모은다** — 호출부마다 인자를 손으로 적으면 한 곳만 `offSlotByCell`을 빠뜨려 그 경로만
+ *    "옮겨 가서 찍힌 학생"을 원래 교시에 되살린다(화면과 서버 명단이 갈린다).
+ */
+export function applySeatDayChoices(
+  day: Pick<SeatDay, "rosterByPeriod" | "slotsByClass" | "markedSlotsByCell" | "busyStartsByClass" | "offSlotByCell">,
+  load: Pick<SeatPeriodChoiceLoad, "moves" | "pins">,
+  date: string,
+): Record<string, SeatClassRoster[]> {
+  return applySeatPeriodChoicesByPeriod(day.rosterByPeriod, {
+    choices: resolveSeatPeriodChoices({ moves: load.moves, pins: load.pins, date }),
+    slotsByClass: day.slotsByClass,
+    markedSlotsByCell: day.markedSlotsByCell,
+    busyStartsByClass: day.busyStartsByClass,
+    offSlotByCell: day.offSlotByCell,
+    blank: blankSeatCell,
+  });
 }

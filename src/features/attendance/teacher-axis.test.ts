@@ -366,6 +366,25 @@ describe("강사 전체 보기의 교시 귀속 — 원장 제보 2026-08-10 김
     }
   });
 
+  it("🔴 자리 라벨이 박힌 기록(랩실 자리 시수)은 어느 강사 몫도 아니다 — 반 교시 밖 시각이어도", () => {
+    // 자리 출석부 '다른 시간으로 옮기기'(원장 2026-09-10): 그 반 슬롯이 없는 시각에 찍힌 자리 기록은
+    // 슬롯 판정만으로는 담임 폴백을 타 담임 값이 된다 — 정산(tier-rows)은 seat_label로 빼므로 화면 ≠ 정산.
+    const owns = (who: string | null, slotStart: string | null, seatLabel: string | null) =>
+      ownsAttendanceSlot({
+        scopeTeacherId: who,
+        homeroomTeacherId: JEONG,
+        slots: monSlots,
+        date: "2026-08-10",
+        slotStart,
+        seatLabel,
+      });
+    expect(owns(JEONG, "19:40", "LAB"), "슬롯 없는 시각의 자리 기록").toBe(false);
+    expect(owns(JEONG, "19:40", null), "같은 시각의 반 기록은 종전대로 담임 폴백").toBe(true);
+    expect(owns(JEONG, "16:20", "LAB"), "자리 기록은 담임 교시 시각이어도 담임 값이 아니다").toBe(false);
+    expect(owns(null, "19:40", "LAB"), "반별 보기는 전부 그 반 몫").toBe(true);
+    expect(owns(JEONG, "16:20", "  "), "공백 라벨은 라벨이 아니다").toBe(true);
+  });
+
   it("반별 보기는 담임 시작일을 넘겨도 영향 없다 — 반 관점에선 그 기록이 맞다", () => {
     expect(
       ownsAttendanceSlot({

@@ -75,6 +75,9 @@ const seatDay: SeatDay = {
   // 교시 선택(0255a)의 재료 — 이 반들은 그 날 자리 교시가 하나뿐이라 고를 것이 없다.
   slotsByClass: { [IN_ROSTER]: [SLOT], [NON_ENGLISH]: [SLOT] },
   markedSlotsByCell: {},
+  // 다른 시간으로 옮기기(2026-09-10)의 재료 — JJ실은 교시를 옮기지 않으므로 늘 비어 있다.
+  busyStartsByClass: {},
+  offSlotByCell: {},
 };
 
 vi.mock("./queries", () => ({

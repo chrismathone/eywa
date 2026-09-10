@@ -81,6 +81,7 @@ export function SeatBoard({
   externalDnd = false,
   onRegisterMove,
   canChoosePeriod = false,
+  choicesApplied = false,
 }: {
   seat: SeatKey;
   date: string;
@@ -132,8 +133,9 @@ export function SeatBoard({
   /**
    * **교시 선택**(0255a) — `반id|학생id` → 그 학생이 설 교시. 이미 그 날짜로 접힌 값이다
    * (하루짜리 > 상시 고정, `resolveSeatPeriodChoices`).
-   * 🔴 이 화면은 **감추기만** 한다 — 다른 교시로 정해진 학생을 이 교시 명단에서 뺀다. 없던 학생을
-   *    세우지 않는다(학생은 이미 제 반의 모든 자리 교시에 들어 있다).
+   * 🔑 `choicesApplied`가 참이면 `rosters`가 이미 얹은 결과라 여기선 **세는 데만** 쓴다([교시 지정 N명 해제]).
+   *    거짓이면(공개 PIN 화면) 이 교시 명단만으로 **감추기만** 한다 — 다른 시간에서 옮겨 온 학생을 세울
+   *    재료(다른 교시 명단)가 여기 없다.
    */
   periodChoices?: Readonly<Record<string, string>>;
   /** 반 id → 그 날 이 자리에 걸린 교시들. 선택이 그 날 없는 교시를 가리키면 **선택을 버린다**. */
@@ -154,6 +156,13 @@ export function SeatBoard({
    * 🔴 배치만 보고 잠그면 0254a 미적용일 때 교시 이동까지 조용히 죽는다.
    */
   canChoosePeriod?: boolean;
+  /**
+   * `rosters`가 이미 **교시 선택을 얹은** 명단인가(감추기 + 다른 시간에서 옮겨 온 묶음) — 서버(교시 하나 보기
+   * `applySeatDayChoices`)나 '전체' 보기가 하루치 순수 함수로 만든 결과를 넘길 때 참.
+   * 🔴 참인데 여기서 다시 거르면 옮겨 온 학생이 사라지지는 않지만(`visiting` 묶음은 건너뛴다) 두 번 판정한다.
+   *    거짓이면(공개 PIN 화면) 이 교시 명단만으로 **감추기만** 한다 — 옮겨 온 학생을 세울 재료가 여기 없다.
+   */
+  choicesApplied?: boolean;
 }) {
   const {
     pending,
@@ -213,14 +222,18 @@ export function SeatBoard({
    * 🔴 배치(반 묶음)보다 **앞이다** — 감춰진 학생을 옮길 수는 없으니, 순서가 뒤집히면 없는 카드에
    *    배치를 얹는 꼴이 된다. 선택이 없으면 결과는 입력과 글자 그대로 같다.
    */
-  const inPeriod = periodChoices
-    ? applySeatPeriodChoices(rosters, {
-        slotStart: activeStart,
-        choices: periodChoices,
-        slotsByClass: slotsByClass ?? {},
-        markedSlotsByCell: markedSlotsByCell ?? {},
-      })
-    : rosters;
+  const inPeriod =
+    choicesApplied || !periodChoices
+      ? rosters
+      : applySeatPeriodChoices(rosters, {
+          slotStart: activeStart,
+          choices: periodChoices,
+          slotsByClass: slotsByClass ?? {},
+          markedSlotsByCell: markedSlotsByCell ?? {},
+          // 🔑 칩 줄의 교시가 곧 그날 이 자리의 교시다 — 다른 시간으로 옮긴 학생도 제 교시에서 감춘다
+          //    (서버 `rosterKeys`가 그 칸을 거절하므로, 보이게 두면 누르는 순간 에러가 난다).
+          periodStarts: periods.length > 0 ? periods.map((p) => p.start) : undefined,
+        });
   const raw = mergeFields(inPeriod);
   /**
    * 배치를 얹은 명단 — 서버 줄 + 화면 오버레이를 합쳐 **순수 함수 한 벌**로 그린다.

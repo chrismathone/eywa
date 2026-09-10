@@ -206,8 +206,20 @@ export function ownsAttendanceSlot(input: {
    *    남기면 남의 기록이 하루치 보이고, 빼면 **자기 기록이 사라진다** — 덜 지우는 쪽을 고른다.
    */
   homeroomSince?: string | null;
+  /**
+   * 그 기록의 **자리 라벨**(`attendance_records.seat_label`, 0208a) — 있으면 자리 시수 행이다.
+   *
+   * 🔴 자리 기록은 **어느 강사 몫도 아니다** — 자리 슬롯에서 `resolveTaughtBy`가 `seat`로 비우는 것과 같은 결.
+   *    슬롯으로만 판정하면 **그 반의 자리 교시 밖 시각**에 찍힌 자리 기록(자리 출석부 '다른 시간으로 옮기기',
+   *    원장 2026-09-10)은 그 시각에 반 슬롯이 없어 **담임 폴백**을 타고 담임 몫 값이 된다 — 정산액(tier-rows)은
+   *    `seat_label`로 그 행을 빼므로 화면 시수 ≠ 정산 시수가 된다.
+   * ⚠️ 반별 보기(scope 없음)는 그대로 전부 그 반 몫이다 — 이 판정은 강사 렌즈에만 건다.
+   * ⚠️ JJ실은 `seat_label`을 안 박는다(담임 시수와 같은 사실, `PAYROLL_SEAT_KEYS`) — 그래서 여기 안 걸린다.
+   */
+  seatLabel?: string | null;
 }): boolean {
   if (!input.scopeTeacherId) return true;
+  if (input.seatLabel?.trim()) return false;
   if (input.homeroomSince && input.date < input.homeroomSince) return false;
   if (!input.slotStart) return true;
   return (

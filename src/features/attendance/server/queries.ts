@@ -845,7 +845,7 @@ export async function getMonthlyAttendanceMatrix(
    * 이 교시가 **이 표의 주인 몫인가** — 규칙·근거는 축 단일 소스 `ownsAttendanceSlot` 주석.
    * (반별 보기는 scope가 없어 항상 true = 종전과 완전히 동일한 숫자.)
    */
-  const ownsSlot = (date: string, slotStart: string | null): boolean =>
+  const ownsSlot = (date: string, slotStart: string | null, seatLabel: string | null = null): boolean =>
     ownsAttendanceSlot({
       scopeTeacherId,
       homeroomTeacherId,
@@ -853,6 +853,9 @@ export async function getMonthlyAttendanceMatrix(
       date,
       slotStart,
       homeroomSince: scopeSince,
+      // 🔴 자리 시수 행(랩실)은 어느 강사 몫도 아니다 — 그 반 자리 교시 밖에 찍힌 행(교시 이동)이
+      //    담임 폴백으로 담임 값에 섞이지 않게(정산 tier-rows가 같은 행을 `seat_label`로 뺀다).
+      seatLabel,
     });
 
   /**
@@ -980,11 +983,13 @@ export async function getMonthlyAttendanceMatrix(
       status: AttendanceStatus;
       note: string | null;
       session_units: number | string | null;
+      /** 자리 시수 행 표식(0208a) — 강사 렌즈에서 이 행을 어느 강사 몫으로도 안 세는 근거(`ownsAttendanceSlot`). */
+      seat_label: string | null;
       recorded_at: string;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("student_id, session_date, slot_start, status, note, session_units, recorded_at")
+        .select("student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_at")
         .eq("class_id", classId)
         .in("student_id", chunk)
         .gte("session_date", startIso)
@@ -1030,7 +1035,7 @@ export async function getMonthlyAttendanceMatrix(
       const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
       // 주인 몫이면 칸 값(marks/units/slots)으로, 아니면 표시 전용(ghosts)으로 — 값과 표시를 갈라야
       // 합계·출석률·격자가 한 숫자를 말한다(AttendanceMatrix.ghosts 주석).
-      const mine = ownsSlot(r.session_date, slot);
+      const mine = ownsSlot(r.session_date, slot, r.seat_label);
       (mine ? cell.slots : cell.others).push({
         slot,
         status: r.status as AttendanceStatus,

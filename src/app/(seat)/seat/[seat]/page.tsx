@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
 import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
-import { getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
+import { applySeatDayChoices, getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
 import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadPublicSeatJjPlans } from "@/features/attendance/seat/server/jj-plan-public";
@@ -92,7 +92,17 @@ export default async function PublicSeatPage({
   }
 
   const date = kstToday();
-  const day = await getPublicSeatDay(session.tenantId, seat, date);
+  /**
+   * 하루 명단 + 자리 **교시 선택**(0255a) — 서로 독립이라 병렬(B4). 로그인 화면과 같은 순서다: 선택을 **먼저** 받아야
+   * 명단에 얹을 수 있다 — 다른 시간으로 옮긴 학생은 목표 교시에 서고 원래 교시에선 빠진다(다음 행선지·앞 교시
+   * 결석도 옮긴 뒤 명단으로 잰다). 🔴 서버 쓰기 게이트(`rosterKeys`)와 **같은 함수**라 화면에 선 학생 = 찍을 수 있는
+   * 학생이다(안 얹으면 옮겨 온 학생이 이 태블릿에 안 보여 못 찍는다).
+   */
+  const [day, periodChoiceLoad] = await Promise.all([
+    getPublicSeatDay(session.tenantId, seat, date),
+    getSeatPeriodChoices(session.tenantId, seat, date),
+  ]);
+  const rosterByPeriod = applySeatDayChoices(day, periodChoiceLoad, date);
   /**
    * **로그인 화면과 같게 연 자리**(랩실) — 특이사항 읽기·쓰기 · 다음 행선지 · '전체' 보기. 원장 2026-09-10 지시는
    * 랩실 한정이라 그 밖의 자리 PIN(JJ실)은 종전 규약(이 화면에 새 정보를 더하지 않는다) 그대로다.
@@ -111,14 +121,14 @@ export default async function PublicSeatPage({
   /** 이번에 그릴 교시들 — '전체'면 오늘 전부, 아니면 고른 하나. */
   const shown = viewAll ? day.periods : period ? [period] : [];
 
-  // 명단(듣기·단어)과 계획(진도)·배치·교시 선택·다음 행선지는 서로 독립이라 병렬(B4).
+  // 명단(듣기·단어)과 계획(진도)·배치·다음 행선지는 서로 독립이라 병렬(B4).
   // 🔴 계획 재료는 **그날 그 자리 그 교시 명단**에 있는 반만 온다 — 로그인 화면이 ECS 게이트로 고르는
   //    자리에서, 여기는 PIN 쿠키 + 오늘 + 명단 화이트리스트가 고른다(서버가 정하고 저장 때 다시 본다).
-  const [rosters, plans, placements, periodChoiceLoad, nextBySlot, placementsDay] = await Promise.all([
+  const [rosters, plans, placements, nextBySlot, placementsDay] = await Promise.all([
     period && !viewAll && seatHasJjFields(seat)
       ? // JJ실은 듣기·단어 칸이 붙는다 — 이미 적힌 값을 안 보여주면 담당자가 빈 칸으로 보고 다시 적는다.
-        attachJjMarks(day.rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
-      : Promise.resolve(period ? (day.rosterByPeriod[period.start] ?? []) : []),
+        attachJjMarks(rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
+      : Promise.resolve(period ? (rosterByPeriod[period.start] ?? []) : []),
     period && !viewAll
       ? loadPublicSeatJjPlans(seat, session.tenantId, date, period.start)
       : Promise.resolve({}),
@@ -131,11 +141,6 @@ export default async function PublicSeatPage({
       ? getSeatPlacements(session.tenantId, seat, date, period.start)
       : Promise.resolve({ rows: [], ready: false, reason: null }),
     /**
-     * 자리 **교시 선택**(0255a) — 배치와 **같은 이유로 읽는다**: 여기서 정하지는 못해도, 안 읽으면
-     * 같은 방을 보는 두 화면이 서로 다른 명단을 말한다.
-     */
-    getSeatPeriodChoices(session.tenantId, seat, date),
-    /**
      * **다음 행선지**(원장 2026-09-10 *"17:20 304호 가야함처럼"*) — 로그인 화면과 **같은 함수**다.
      * 🔴 세션이 없어 테넌트를 넘긴다 → admin + 명시 `tenant_id` 필터(격리선)로 읽는다.
      * 🔵 교시 여러 개를 한 벌로 — '전체' 보기가 왕복을 교시 수만큼 늘리지 않게(B6).
@@ -145,7 +150,8 @@ export default async function PublicSeatPage({
       ? getSeatNextDestinationsBySlot(
           [
             ...new Set(
-              shown.flatMap((p) => (day.rosterByPeriod[p.start] ?? []).flatMap((r) => r.students.map((s) => s.id))),
+              // 🔑 **옮긴 뒤의 명단**으로 모은다 — 다른 시간에서 옮겨 온 학생도 그 교시의 다음 행선지를 받는다.
+              shown.flatMap((p) => (rosterByPeriod[p.start] ?? []).flatMap((r) => r.students.map((s) => s.id))),
             ),
           ],
           date,
@@ -161,7 +167,8 @@ export default async function PublicSeatPage({
    * 앞 교시 결석 — **이미 이 화면에 있는 사실**을 접은 것뿐이다(교시 칩을 눌러 앞 교시를 열면 그 결석이
    * 그대로 보인다). 이 일괄이 없으면 당번이 교시마다 스무 명을 다시 찍는다.
    */
-  const cells = seatDayCells(day.periods, day.rosterByPeriod);
+  // 🔴 **선택을 얹은 명단**으로 잰다 — 서버 일괄(`fillSeatPrevAbsent`)이 같은 명단을 쓴다(버튼의 N = 실제로 쓰는 수).
+  const cells = seatDayCells(day.periods, rosterByPeriod);
   const prevAbsentByCell = period
     ? prevPeriodAbsences(
         cells,
@@ -210,8 +217,13 @@ export default async function PublicSeatPage({
             date={date}
             moves={periodChoiceLoad.moves}
             pins={periodChoiceLoad.pins}
-            slotsByClass={day.slotsByClass}
-            markedSlotsByCell={day.markedSlotsByCell}
+            // 하루치 재료를 통째로 — '전체' 보기는 클라가 같은 순수 함수로 다시 접는다(로그인 화면과 같다).
+            choiceDay={{
+              slotsByClass: day.slotsByClass,
+              markedSlotsByCell: day.markedSlotsByCell,
+              busyStartsByClass: day.busyStartsByClass,
+              offSlotByCell: day.offSlotByCell,
+            }}
             canMove={false}
             readOnly={false}
             hrefFor={hrefFor}
@@ -252,8 +264,8 @@ export default async function PublicSeatPage({
           placements={placements.rows}
           // 교시 선택도 **보기만** — 로그인 화면과 같은 명단을 그리려는 것이다(위 조회 주석).
           periodChoices={periodChoices}
-          slotsByClass={day.slotsByClass}
-          markedSlotsByCell={day.markedSlotsByCell}
+          // 🔑 `rosters`는 이미 교시 선택을 얹은 명단이다(위 `applySeatDayChoices`) — 보드가 다시 거르지 않는다.
+          choicesApplied
           // 진도 구획은 명단에 오른 반 중 계획이 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={
             Object.keys(plans).length > 0
