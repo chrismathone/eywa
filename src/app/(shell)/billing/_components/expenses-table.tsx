@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Check, Copy, Loader2, Paperclip, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -35,7 +36,14 @@ const TOGGLE_ROLES: { role: Exclude<ApprovalRole, "author">; label: string }[] =
   { role: "executor", label: "집행자" },
 ];
 
-export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
+/**
+ * 표가 비었을 때 **왜 비었는지** — 안 주면 "이 달 지출이 없다"(사실). 주면 그 문구 대신 이유를 적고
+ * 되돌아갈 길(`clearHref`)을 함께 낸다. 🔴 분류·검색으로 걸러 0건인데 "이 달 지출 내역이 없습니다"라고
+ * 하면 거짓말이라 필요한 갈래다(원장 2026-09-10 지출 검색).
+ */
+type EmptyReason = { title: string; hint?: string; clearHref?: string };
+
+export function ExpensesTable({ rows, empty }: { rows: ExpenseRow[]; empty?: EmptyReason }) {
   const [dialog, setDialog] = useState<{ expense: ExpenseRow | null } | null>(null);
   const [receiptsFor, setReceiptsFor] = useState<ExpenseRow | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ExpenseRow | null>(null);
@@ -80,8 +88,18 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
       </div>
 
       {rows.length === 0 ? (
-        <div className="border-line text-text-faint rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
-          이 달 지출 내역이 없습니다. 위 “지출 등록”으로 추가하세요.
+        <div className="border-line text-text-faint flex flex-col items-center gap-3 rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
+          <div className="space-y-1">
+            <p className={empty ? "text-text-dim font-medium" : ""}>
+              {empty?.title ?? "이 달 지출 내역이 없습니다. 위 “지출 등록”으로 추가하세요."}
+            </p>
+            {empty?.hint ? <p className="max-w-md text-xs">{empty.hint}</p> : null}
+          </div>
+          {empty?.clearHref ? (
+            <Button variant="outline" size="sm" render={<Link href={empty.clearHref} />}>
+              이 달 전체 보기
+            </Button>
+          ) : null}
         </div>
       ) : (
         <DragScrollArea className="bg-card shadow-card rounded-2xl">
