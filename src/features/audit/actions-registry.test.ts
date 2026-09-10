@@ -188,7 +188,7 @@ describe("감사로그 액션 레지스트리", () => {
  * 🔴 2026-09-10 원장 제보(감사로그에 영문 `ecs_plan_copy`) — 위 스캐너가 못 본 세 갈래.
  *   ① logAction을 **감싼 함수**에 키를 넘기는 호출(`logPlanChange("ecs_plan_copy", …)`) — 하루 74건이 영문으로 떴다
  *   ② 세션 없는 경로의 **직접 insert**(`calendar_google_import`·QR 접수) — `logAction(`이 아예 없다
- *   ③ **DB 트리거**가 쓰는 키(등록상담 자동 연결, 0257a) — SQL은 `-- audit-action` 표식을 단 줄만 본다
+ *   ③ **DB 트리거**가 쓰는 키(등록상담 자동 연결, 0258a) — SQL은 `-- audit-action` 표식을 단 줄만 본다
  * 셋 다 "가드가 못 보는 모양이 있으면 그건 가드가 아니다"(위 actionExprs 주석)와 같은 뿌리다.
  */
 function addFound(found: Map<string, Set<string>>, key: string, file: string) {

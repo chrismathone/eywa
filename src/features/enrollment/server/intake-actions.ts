@@ -279,7 +279,7 @@ export async function submitPublicIntake(
     const tenantId = tok.tenant_id as string;
     // 감사로그 — 학부모는 계정이 없어 logAction(세션 필요)이 no-op이다 → admin으로 직접 쓴다(구글 캘린더
     // 임포트와 같은 결). 🔴 actor_id는 비운다: 계정 없는 사람을 누군가의 이름으로 적지 않는다.
-    // 이 접수가 기존 학생에 **자동 연결**됐다면 그 사실은 DB 트리거가 따로 남긴다(consultation_autolink, 0257a)
+    // 이 접수가 기존 학생에 **자동 연결**됐다면 그 사실은 DB 트리거가 따로 남긴다(consultation_autolink, 0258a)
     // — 2026-09-10 김근우 건은 접수·연결 어느 쪽도 흔적이 없어 무슨 일이 있었는지 되짚지 못했다.
     try {
       await admin.from("audit_logs").insert({

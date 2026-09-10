@@ -1,4 +1,4 @@
--- 0257a_consultation_autolink_homonym_guard.sql (손수 alpha)
+-- 0258a_consultation_autolink_homonym_guard.sql (손수 alpha)
 --
 -- 배경(2026-09-10 실사고 — 김근우 건):
 --   학부모가 QR로 접수한 **새 학생** 김근우(대구일중 중1)가, 이미 재원 중인 **다른 아이** 김근우(대구일중 중1,
@@ -69,7 +69,7 @@ create or replace function public.eywa_cs_match_rule(
     -- tier2: 연락처(9자리+) 숫자 일치 + 이름 (0107a 그대로)
     when length(public.eywa_phone_digits(c_phone)) >= 9
          and public.eywa_phone_digits(c_phone) = public.eywa_phone_digits(s_phone) then 'phone_name'
-    -- tier1: 이름 + 학교 + 학년 — 단 양쪽이 확실한 국내 번호이고 서로 다르면 다른 가족(0257a)
+    -- tier1: 이름 + 학교 + 학년 — 단 양쪽이 확실한 국내 번호이고 서로 다르면 다른 가족(0258a)
     when public.eywa_school_norm(c_school) = public.eywa_school_norm(s_school)
          and regexp_replace(coalesce(c_grade, ''), '\s+', '', 'g') = regexp_replace(coalesce(s_grade, ''), '\s+', '', 'g')
          and not (public.eywa_phone_kr(c_phone) is not null
@@ -223,47 +223,47 @@ begin
   -- 이름·학교·학년은 같고 보호자 번호가 다르다 = 동명이인(김근우 건의 모양) → 연결하지 않는다
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중1', '01011112222',
                                    '홍길동', '대구일중', '중1', '010-3333-4444') is null,
-    '0257a: 번호가 다른 동명이인이 매칭됨';
+    '0258a: 번호가 다른 동명이인이 매칭됨';
   assert public.eywa_cs_match('홍길동', '대구일중', '중1', '01011112222',
                               '홍길동', '대구일중', '중1', '010-3333-4444') = false,
-    '0257a: eywa_cs_match가 규칙과 다름';
+    '0258a: eywa_cs_match가 규칙과 다름';
   -- 같은 가족(번호 같음, 표기만 다름) → 연락처·이름 규칙으로 연결
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중1', '010-3333-4444',
                                    '홍길동', '대구일중', '중1', '01033334444') = 'phone_name',
-    '0257a: 같은 번호가 매칭 안 됨';
+    '0258a: 같은 번호가 매칭 안 됨';
   -- 연락처가 한쪽에 없으면 종전대로 이름·학교·학년
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중1', null,
                                    '홍길동', '대구일중', '중1', '010-3333-4444') = 'name_school_grade',
-    '0257a: 연락처 없는 상담이 매칭 안 됨';
+    '0258a: 연락처 없는 상담이 매칭 안 됨';
   -- 번호가 아닌 값(짧은 금액·암호화 흔적·번호 두 개)은 모순 증거로 치지 않는다 → 종전대로
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중3', '338000',
                                    '홍길동', '대구일중', '중3', '010-3333-4444') = 'name_school_grade',
-    '0257a: 짧은 잡음이 연결을 막음';
+    '0258a: 짧은 잡음이 연결을 막음';
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중1', '333D2100E8110C4617AB',
                                    '홍길동', '대구일중', '중1', '010-3333-4444') = 'name_school_grade',
-    '0257a: 암호화 흔적이 연결을 막음';
+    '0258a: 암호화 흔적이 연결을 막음';
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중1', '010-1111-2222 / 010-5555-6666',
                                    '홍길동', '대구일중', '중1', '010-3333-4444') = 'name_school_grade',
-    '0257a: 번호 두 개가 연결을 막음';
+    '0258a: 번호 두 개가 연결을 막음';
   -- +82 표기도 국내 번호로 본다(다른 번호면 모순)
-  assert public.eywa_phone_kr('+82 10-1111-2222') = '01011112222', '0257a: +82 정규화';
-  assert public.eywa_phone_kr('02-123-4567') = '021234567', '0257a: 9자리 지역번호';
-  assert public.eywa_phone_kr('338000') is null, '0257a: 짧은 값은 번호가 아님';
-  assert public.eywa_phone_kr('010-0000-0000') is null, '0257a: 0 자리채움은 번호가 아님';
+  assert public.eywa_phone_kr('+82 10-1111-2222') = '01011112222', '0258a: +82 정규화';
+  assert public.eywa_phone_kr('02-123-4567') = '021234567', '0258a: 9자리 지역번호';
+  assert public.eywa_phone_kr('338000') is null, '0258a: 짧은 값은 번호가 아님';
+  assert public.eywa_phone_kr('010-0000-0000') is null, '0258a: 0 자리채움은 번호가 아님';
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중1', '010-0000-0000',
                                    '홍길동', '대구일중', '중1', '010-3333-4444') = 'name_school_grade',
-    '0257a: 0 자리채움이 연결을 막음';
+    '0258a: 0 자리채움이 연결을 막음';
   assert public.eywa_cs_match_rule('홍길동', '대구일중', '중1', '+82 10-1111-2222',
                                    '홍길동', '대구일중', '중1', '010-3333-4444') is null,
-    '0257a: +82 번호의 모순을 놓침';
+    '0258a: +82 번호의 모순을 놓침';
   -- 학교 표기 흔들림(0107a) 유지
   assert public.eywa_cs_match_rule('홍길동', '대구일중학교', '중1', null,
                                    '홍길동', '대구일중', '중1', null) = 'name_school_grade',
-    '0257a: 학교 정규화 회귀';
+    '0258a: 학교 정규화 회귀';
   -- 이름이 다르면(접미사 포함) 무엇이 같아도 불일치
   assert public.eywa_cs_match_rule('홍길동A', '대구일중', '중1', '010-3333-4444',
                                    '홍길동', '대구일중', '중1', '010-3333-4444') is null,
-    '0257a: 이름이 다른데 매칭됨';
+    '0258a: 이름이 다른데 매칭됨';
 end $$;
 
 commit;

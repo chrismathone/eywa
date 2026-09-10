@@ -26,7 +26,7 @@ export const AUDIT_ACTIONS = {
   consultation_merge: "등록상담 병합",
   // 등록상담 전수(2026-09-10 원장 *"상담등록에 대해서는 감사로직이 안남나?"*) — QR 접수가 이름·학교·학년
   // 일치로 **다른 아이(동명이인)** 에 자동 연결됐는데, 접수·자동 연결·상태 변경·이름 수정 어느 것도 기록이
-  // 없어 누가 무엇을 했는지 되짚을 수 없었다(김근우 건). 자동 연결은 DB 트리거가 직접 쓴다(0257a).
+  // 없어 누가 무엇을 했는지 되짚을 수 없었다(김근우 건). 자동 연결은 DB 트리거가 직접 쓴다(0258a).
   enrollment_consultation_create: "등록상담 작성",
   enrollment_consultation_intake: "등록상담 QR 접수(학부모)",
   enrollment_consultation_update: "등록상담 수정",

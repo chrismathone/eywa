@@ -1113,7 +1113,7 @@ export function auditDetail(
       return join(who ? `연결 학생 ${who}` : null, m.hadRecording === true ? "녹음 포함" : null);
     }
     case "consultation_autolink": {
-      // DB 트리거가 쓴다(0257a). 실행자는 '시스템(자동 연결)'이고, 그 저장을 한 직원은 userId로만 남는다.
+      // DB 트리거가 쓴다(0258a). 실행자는 '시스템(자동 연결)'이고, 그 저장을 한 직원은 userId로만 남는다.
       const who = ctx.nameOf(m.studentId);
       const rule = str(m.rule);
       const via = str(m.via);
