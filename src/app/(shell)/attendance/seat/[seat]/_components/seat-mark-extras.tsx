@@ -5,6 +5,7 @@ import { Popover } from "@base-ui/react/popover";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
 import { SEAT_LABEL } from "./seat-status";
 import { seatNoteTitle } from "@/features/attendance/seat/note-title";
+import { SEAT_NOTE_MAXLEN } from "@/features/attendance/seat/seat";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 
 /**
@@ -140,6 +141,8 @@ export function SeatNotePopover({
             <NoteForm
               initial={note ?? ""}
               label={`${studentName} · ${label}`}
+              // 서버(`setSeatCell`)가 같은 상한으로 거절한다 — 입력칸에서 먼저 멈춰야 '저장된 척'이 안 생긴다.
+              maxLength={SEAT_NOTE_MAXLEN}
               onDraft={onSave}
               onCancel={() => onOpenChange(false)}
               onSave={(text) => {

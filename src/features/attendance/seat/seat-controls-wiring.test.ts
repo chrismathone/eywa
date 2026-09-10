@@ -79,10 +79,10 @@ describe("② 사유는 팝업 — 카드 아래 입력칸이 아니다", () => 
     }
   });
 
-  it("🔴 비로그인 공개 화면에선 팝업이 열리지 않는다", () => {
+  it("🔴 비로그인 공개 화면의 팝업은 PIN_NOTE_SEATS(랩실)에서만 열린다 — 원장 2026-09-10 '읽기·쓰기 둘 다 열기'", () => {
     expect(lab).toContain("if (showReason && !readOnly) setNoteOpen(true);");
     expect(jj).toContain("const canNote = showReason && !readOnly;");
-    expect(publicPage).toContain("publicPin");
+    expect(publicPage).toContain("publicPin={!PIN_NOTE_SEATS.includes(seat)}");
   });
 
   it("폼은 수학·영어 시트와 **같은 것**(NoteForm) — 두 화면이 다른 낱말을 쓰지 않게", () => {
@@ -140,10 +140,16 @@ describe("⑧ 다음 행선지 = 시각 + 강의실", () => {
   it("강의실 이름은 등록된 정본으로 정규화한다([[#115]])", () => {
     expect(nextDest).toContain("canonicalRoomName(");
   });
-  it("🔴 로그인 화면에만 내려간다 — 공개 PIN엔 동선을 안 보낸다", () => {
+  it("공개 PIN 화면에도 같은 조회로 내려간다 — 원장 2026-09-10 'seat/lab에서도 자리 출석부와 동일해야해'", () => {
     expect(shellPage).toContain("nextRoomByStudent={nextBySlot[");
-    expect(publicPage).not.toContain("nextRoomByStudent");
-    expect(publicPage).not.toContain("getSeatNextDestinations");
+    expect(publicPage).toContain("nextRoomByStudent=");
+    expect(publicPage).toContain("getSeatNextDestinationsBySlot(");
+    // 🔴 PIN 다음 행선지는 랩실(`PIN_NOTE_SEATS`)만 — 지시는 랩실 한정, JJ실 PIN은 종전대로 안 싣는다.
+    expect(publicPage).toContain("const sameAsLogin = PIN_NOTE_SEATS.includes(seat);");
+    expect(publicPage).toMatch(/sameAsLogin\s*\?\s*getSeatNextDestinationsBySlot\(/);
+    // 🔴 PIN은 세션이 없어 테넌트를 넘겨 admin으로 읽는다 — 세 조회 모두에 tenant 필터가 **격리선**이다.
+    expect(nextDest).toContain('if (tenantId) q = q.eq("tenant_id", tenantId);');
+    expect(nextDest).toContain('if (tenantId) roomQ = roomQ.eq("tenant_id", tenantId);');
   });
   it("이 자리 교시만 보던 것을 오늘 전 과목으로 넓혔다(수강 축 조회)", () => {
     expect(nextDest).toContain('.from("enrollments")');

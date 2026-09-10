@@ -6,8 +6,9 @@
  * 이 파일이 잠그는 것은 셋이고, 셋 다 **조용히 깨지는** 종류다:
  *  ① 두 화면이 **같은 부품**을 쓴다 — 각자 버튼을 그리면 한쪽만 고쳐진다(오늘 고친 `seatMarkOf`가 그랬다).
  *  ② 사유만 저장할 땐 **상태를 쓰지 않는다**(`noteOnly`) — 같이 실으면 그새 다른 창이 고친 값을 되돌린다.
- *  ③ **비로그인 PIN 화면엔 사유 칸이 없다** — 그 경로는 사유를 조회조차 안 하므로(병원·수술·가족 일정)
- *     입력만 열어 두면 저장은 되는데 화면엔 영영 안 보이는 유령이 된다.
+ *  ③ **비로그인 PIN 화면의 사유는 `PIN_NOTE_SEATS`(랩실)만** — 원장 2026-09-10 *"seat/lab에서도 자리 출석부와
+ *     동일해야해"* → PIN 메모 *"읽기·쓰기 둘 다 열기"*(랩실). 그 밖의 자리 PIN은 사유를 조회조차 안 하므로
+ *     (병원·수술·가족 일정) 입력만 열어 두면 화면엔 영영 안 보이는 유령이 된다 — 그래서 조회·화면·서버가 한 배열을 본다.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,15 +58,20 @@ describe("② 사유만 저장할 땐 상태를 쓰지 않는다", () => {
     expect(saves).toContain("noteOnly: true");
   });
 
-  it("서버는 noteOnly면 status를 패치에서 뺀다", () => {
-    // 급여 자리(랩실)·비급여(JJ) 두 갈래 모두.
-    expect(actions.match(/\.\.\.\(p\.noteOnly \? \{\} : \{ status: p\.status \}\)/g)?.length).toBe(2);
+  it("서버는 noteOnly면 **메모만** 고친다 — 상태·기록자·자리 라벨을 안 건드린다", () => {
+    // 급여 자리(랩실)·비급여(JJ) 두 갈래 모두. 🔴 기록자(`recorded_by`)를 메모로 덮으면 "누가 찍었나"가 바뀌고
+    //    PIN이면 null로 지워진다 — 반 출석부 noteOnly와 같은 규약(적대적 리뷰 2026-09-10).
+    expect(actions.match(/p\.noteOnly\s*\?\s*notePatch\(p\.note\)/g)?.length).toBe(2);
   });
 
   it("noteOnly는 행을 만들지도, 지우지도, 교시를 옮기지도 않는다", () => {
     expect(actions).toContain("if (p.noteOnly) return 0;");
     expect(actions).toContain("if (p.status === null && !p.noteOnly)");
-    expect(actions).toContain("promoteIds.length > 0 && !p.noteOnly");
+    // 사유만이면 이 교시 행에만 — 날 단위 행만 있으면 거절(보지도 못한 담임 메모를 덮거나, 조용히 버려 "저장됨"만 남긴다).
+    expect(actions).toMatch(/if \(p\.noteOnly\) \{\s*if \(updateIds\.length === 0\) \{\s*return "담임이/);
+    // 상태 검증은 사유만 저장엔 걸지 않는다(공결·보강 칸에도 사유는 적혀야 한다).
+    expect(actions).toContain("input.noteOnly !== true && input.status !== null");
+    expect(actions).toContain("SEAT_WRITE_STATUSES.includes(input.status)");
   });
 
   it("메모를 안 넘기면 기존 메모를 유지한다(키 자체를 안 넣는다)", () => {
@@ -77,9 +83,29 @@ describe("② 사유만 저장할 땐 상태를 쓰지 않는다", () => {
   });
 });
 
-describe("③ 비로그인 PIN 화면엔 사유가 없다", () => {
+describe("③ 비로그인 PIN 화면의 사유는 PIN_NOTE_SEATS(랩실)만 — 원장 2026-09-10 '읽기·쓰기 둘 다 열기'", () => {
+  it("조회·화면·서버 거절이 같은 한 배열(PIN_NOTE_SEATS)을 본다", () => {
+    expect(queries).toContain("tenantId && PIN_NOTE_SEATS.includes(seat)");
+    expect(publicPage).toContain("publicPin={!PIN_NOTE_SEATS.includes(seat)}");
+    expect(actions).toContain("!PIN_NOTE_SEATS.includes(input.seat)");
+  });
+
+  it("🔴 PIN 쓰기도 감사로그에 남는다 — logAction은 사용자가 없으면 건너뛴다", () => {
+    expect(actions).toContain("logSeatAction(g, input.seat,");
+    expect(actions).not.toContain("await logAction(");
+  });
+
   it("공개 페이지가 publicPin을 넘긴다", () => {
     expect(publicPage).toMatch(/<SeatBoard[\s\S]*?publicPin[\s\S]*?\/>/);
+  });
+
+  it("🔴 메모는 문자열만 받고 길이 상한이 있다 — 숫자·배열로 PIN 거절을 비껴가지 못한다", () => {
+    expect(actions).toContain('typeof input.note !== "string"');
+    expect(actions).toContain("note.length > SEAT_NOTE_MAXLEN");
+  });
+
+  it("🔴 '전체' 보기는 메모를 여는 자리에서만 — SeatAllDay엔 publicPin이 없다", () => {
+    expect(publicPage).toContain('const allowAllView = seat === "lab" && sameAsLogin;');
   });
 
   it("보드가 그 값으로 두 표의 사유 칸을 끈다", () => {

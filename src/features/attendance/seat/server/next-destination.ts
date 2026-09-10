@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
@@ -18,8 +19,9 @@ import { hhmm } from "../seat";
  *    `slot_room_label`은 `302`처럼 건물명이 없는 호수라 그대로 적으면 `본원302`와 다른 방으로 읽힌다.
  *    ⚠️ 애매하면(`602` = 바른602·본원602) 손대지 않는다.
  * 🔴 **방을 모르면 시각만** 돌려준다(키 없음) — 지어낸 방 이름은 아이를 엉뚱한 데로 보낸다.
- * 🔴 **로그인 화면 전용**이다 — 비로그인 PIN 경로는 이 함수를 부르지 않는다(동선은 사유·직원 이름과
- *    같은 결의 정보다). 그래서 세션 클라이언트(RLS)만 쓴다.
+ * 🔑 **비로그인 PIN 화면도 같은 함수를 쓴다**(원장 2026-09-10 *"seat/lab에서도 자리 출석부와 동일해야해"*) —
+ *    종전엔 로그인 화면 전용이었다. PIN 경로는 세션이 없어 `tenantId`를 넘기면 **admin + 명시 `tenant_id`
+ *    필터**로 읽는다 — 🔴 admin은 RLS를 우회하므로 이 필터가 **유일한 격리선**이다(세 조회 모두에 건다).
  * ⚠️ 왕복은 셋 고정(수강 · 배치 · 강의실 이름) — 학생 수만큼 늘지 않는다(B2·B3, 청크 헬퍼).
  */
 export type SeatNextDestination = {
@@ -40,10 +42,12 @@ export async function getSeatNextDestinationsBySlot(
   date: string,
   /** 기준 교시들("HH:MM") — 각각에 대해 그 뒤 첫 수업을 찾는다. */
   afterStarts: readonly string[],
+  /** 비로그인 PIN 경로 — 주면 admin + 이 테넌트 필터로 읽는다(세션이 없다). */
+  tenantId?: string,
 ): Promise<Record<string, SeatNextDestination>> {
   const empty = Object.fromEntries(afterStarts.map((k) => [hhmm(k), EMPTY]));
   if (studentIds.length === 0 || afterStarts.length === 0) return empty;
-  const loaded = await loadDaySlots(studentIds, date);
+  const loaded = await loadDaySlots(studentIds, date, tenantId);
   if (!loaded) return empty;
   return Object.fromEntries(
     afterStarts.map((raw) => {
@@ -75,9 +79,13 @@ type DaySlots = {
   todayIdx: number;
 };
 
-async function loadDaySlots(studentIds: readonly string[], date: string): Promise<DaySlots | null> {
+async function loadDaySlots(
+  studentIds: readonly string[],
+  date: string,
+  tenantId?: string,
+): Promise<DaySlots | null> {
   if (studentIds.length === 0) return null;
-  const supabase = await createClient();
+  const supabase = tenantId ? createAdminClient() : await createClient();
   const dowKey = DOW_KEYS[new Date(`${date}T00:00:00Z`).getUTCDay()]!;
   const todayIdx = dowIndexOf(dowKey);
 
@@ -90,15 +98,17 @@ async function loadDaySlots(studentIds: readonly string[], date: string): Promis
     on_hold: boolean | null;
     is_transferred: boolean | null;
     attendance_days: string[] | null;
-  }>([...studentIds], (chunk) =>
-    supabase
+  }>([...studentIds], (chunk) => {
+    let q = supabase
       .from("enrollments")
       .select("student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
       .in("student_id", chunk)
       .not("on_hold", "is", true)
       .lte("start_date", date)
-      .or(`end_date.is.null,end_date.gte.${date}`),
-  );
+      .or(`end_date.is.null,end_date.gte.${date}`);
+    if (tenantId) q = q.eq("tenant_id", tenantId);
+    return q;
+  });
   const live = enrollments.filter((e) =>
     isEnrollmentActiveOn(
       {
@@ -119,8 +129,8 @@ async function loadDaySlots(studentIds: readonly string[], date: string): Promis
     start_time: string;
     slot_room_label: string | null;
     classroom: { name: string }[] | { name: string } | null;
-  }>(classIds, (chunk) =>
-    supabase
+  }>(classIds, (chunk) => {
+    let q = supabase
       .from("class_schedules")
       // 🔑 임베드는 **컬럼으로** 건다(`classroom:classroom_id ( name )`) — 시간표 조회와 같은 모양이라
       //    FK가 둘로 갈릴 여지가 없다([[#94]]는 표 대 표가 모호할 때의 규약이다).
@@ -128,12 +138,16 @@ async function loadDaySlots(studentIds: readonly string[], date: string): Promis
       .in("class_id", chunk)
       .eq("day_of_week", dowKey)
       .lte("valid_from", date)
-      .or(`valid_to.is.null,valid_to.gte.${date}`),
-  );
+      .or(`valid_to.is.null,valid_to.gte.${date}`);
+    if (tenantId) q = q.eq("tenant_id", tenantId);
+    return q;
+  });
   if (slots.length === 0) return null;
 
   // 라벨 정규화의 사전 — 등록된 강의실 이름(폐강의실 포함: 라벨을 이름으로 맞추는 데만 쓴다, [[#122]]).
-  const { data: rooms } = await supabase.from("classrooms").select("name");
+  let roomQ = supabase.from("classrooms").select("name");
+  if (tenantId) roomQ = roomQ.eq("tenant_id", tenantId);
+  const { data: rooms } = await roomQ;
   const known = (rooms ?? []).map((r) => r.name as string).filter(Boolean);
 
   const slotsByClass = new Map<string, { start: string; room: string | null }[]>();

@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { collectAuditNameIds, systemActorMatches, SYSTEM_ACTOR_PREFIX } from "../describe";
@@ -35,14 +36,8 @@ export const AUDIT_ACTIONS = {
   consultation_autolink: "등록상담 학생 자동 연결",
   consultation_link_existing: "등록상담 → 기존 학생 재사용",
   consultation_unlink: "등록상담 학생 연결 해제",
-  // 🔴 아래 넷은 logAction을 **감싼 함수**(class-sheets/server/plan-write.ts `logPlanChange`)로 기록된다 —
-  //    레지스트리 가드가 `logAction(` 안의 리터럴만 봐서 라벨 없이 영문으로 떴다(2026-09-10 원장 제보
-  //    `ecs_plan_copy`, 하루 74건). 가드를 감싼 함수 호출·직접 insert·SQL 표식까지 넓혔다(actions-registry.test.ts).
-  ecs_plan_line_add: "강사 시트 수업계획 줄 추가",
-  ecs_plan_line_move: "강사 시트 수업계획 줄 이동",
-  ecs_plan_line_delete: "강사 시트 수업계획 줄 삭제",
-  ecs_plan_copy: "강사 시트 수업계획 이전 회차 복사",
-  // 세션 없는 경로가 audit_logs에 **직접 insert**하는 키 — 같은 이유로 가드 밖이었다.
+  // (ecs_plan_* 4종은 아래 '진도 줄 구조 변경' 블록 — 같은 날 자리 PIN 감사 세션이 먼저 등록했다.)
+  // 세션 없는 경로가 audit_logs에 **직접 insert**하는 키 — 레지스트리 가드가 `log…(` 호출만 봐서 밖이었다.
   calendar_google_import: "구글 캘린더 가져오기",
   // 2026-09-01 일회성 스크립트가 남긴 행(각 1건) — 코드엔 더 이상 없지만 행이 남아 영문으로 떴다.
   enrollment_create: "수강 등록(스크립트)",
@@ -308,6 +303,12 @@ export const AUDIT_ACTIONS = {
   classnote_stuck_reset: "ClassNote 멈춘 발송 초기화",
   class_sheet_plan_line: "수업계획 줄 변경",
   class_sheet_plan_copy: "수업계획 이전 회차 복사",
+  // 진도 줄 구조 변경 — `plan-write.ts` `logPlanChange`가 **실제로 쓰는** 키(위 둘은 옛 키 — 옛 행 표시용으로 남긴다).
+  // 🔴 등록이 빠져 감사 화면에 영문 키가 그대로 떴다(적대적 리뷰 2026-09-10) — 스캐너가 이제 첫 인자 리터럴도 본다.
+  ecs_plan_line_add: "수업계획 줄 추가",
+  ecs_plan_line_move: "수업계획 줄 이동",
+  ecs_plan_line_delete: "수업계획 줄 삭제",
+  ecs_plan_copy: "수업계획 지난 회차 복사",
 
   // 돈 — 🔴 **금액은 담지 않는다**(아래 '금액' 주석 참조).
   expense_create: "지출결의서 작성",
@@ -397,6 +398,63 @@ export async function logAction(args: LogArgs): Promise<void> {
   } catch {
     // 감사 기록 실패는 본 작업을 막지 않음
   }
+}
+
+/**
+ * **로그인 사용자가 없는 쓰기**(비로그인 PIN 화면 등)를 남긴다 — 행위자는 사람 대신 **그 문의 이름**.
+ *
+ * 원장 2026-09-10: *"기능이 추가되거나 변동되는건 모두 감사로그에 남도록 해야함"* — 그런데 `logAction`은
+ * 로그인 사용자가 없으면 **조용히 건너뛴다**(아래 `if (!user) return`). 그래서 자리 PIN 화면의 출결 쓰기가
+ * 통째로 감사 사각지대였다(실측 최근 90일 440건 중 149건). 이 함수가 그 구멍을 막는다.
+ * 🔴 **admin 클라이언트 + 명시 `tenant_id`** — 세션이 없어 RLS insert 정책(`audit_logs_insert_own`)을 못
+ *    통과한다. 호출부가 **검증을 끝낸 테넌트**(PIN 쿠키 서명 확인 등)만 넘길 것.
+ * ⚠️ `actor_id`는 null이다(컬럼이 nullable, 0031a) — 사람을 지어내지 않는다. `actor_name`에 문 이름을 적어
+ *    감사로그 화면에서 "누가"가 빈칸이 아니라 "랩실 PIN(비로그인)"으로 읽힌다.
+ * best-effort — `logAction`과 같이 실패해도 본 작업을 막지 않는다.
+ */
+export async function logActionAs(
+  actor: { tenantId: string; actorName: string },
+  args: LogArgs,
+): Promise<void> {
+  try {
+    await createAdminClient()
+      .from("audit_logs")
+      .insert({
+        tenant_id: actor.tenantId,
+        actor_id: null,
+        actor_name: actor.actorName,
+        action: args.action,
+        target_type: args.targetType ?? null,
+        target_label: args.targetLabel ?? null,
+        metadata: args.metadata ?? null,
+      });
+  } catch {
+    // 감사 기록 실패는 본 작업을 막지 않음
+  }
+}
+
+/**
+ * **문(門)으로 들어온 쓰기**의 감사로그 — 로그인한 사람이 있으면 그 사람(`logAction`), 없으면 문 이름(`logActionAs`).
+ *
+ * 🔑 비로그인 PIN 화면이라도 **로그인된 기기**에서 열리면 세션이 있다(메뉴 권한이 없어 PIN 문으로 들어온 경우).
+ *    그때 문 이름으로만 적으면 종전(`logAction` — 그 계정으로 남던 것)보다 귀속이 퇴보한다 → 세션을 먼저 본다.
+ * 🔴 세션 테넌트가 문의 테넌트와 **다르면** 세션을 믿지 않는다(남의 학원 계정 이름으로 적지 않는다).
+ */
+export async function logActionAtDoor(
+  door: { tenantId: string; doorName: string },
+  args: LogArgs,
+): Promise<void> {
+  let user: Awaited<ReturnType<typeof getCurrentUser>> | null = null;
+  try {
+    user = await getCurrentUser();
+  } catch {
+    user = null;
+  }
+  if (user && user.tenantId === door.tenantId) {
+    await logAction(args);
+    return;
+  }
+  await logActionAs({ tenantId: door.tenantId, actorName: door.doorName }, args);
 }
 
 export type AuditLogRow = {

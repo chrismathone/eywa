@@ -6,11 +6,7 @@ import { PIN_SEAT_KEYS, USABLE_SEAT_KEYS, ambiguousClassIds, hhmm, type SeatKey 
 import { getSeatDuties } from "./duty";
 import { readSeatPinSession } from "./pin-session";
 import { getPublicSeatDay, getSeatDay } from "./queries";
-import { getSeatPeriodChoices } from "./period-choice";
-import {
-  applySeatPeriodChoicesByPeriod,
-  resolveSeatPeriodChoices,
-} from "../period-choice";
+import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 
 export type SeatGateOk = { ok: true; userId: string | null; tenantId: string; via: "menu" | "duty" | "pin" };
 
@@ -87,7 +83,8 @@ export async function gateSeatPinOnly(
 /**
  * 그 교시 명단에 실제로 있는 (반, 학생) 조합만 통과시킨다. 모호한 반(같은 반·같은 시작·다른 종료)은 제외.
  *
- * 🔴 **교시 선택(0255a)을 얹은 뒤**의 명단이다 — 다른 교시로 정해진 학생은 여기 없다. 안 얹으면
+ * 🔴 **교시 선택(0255a)을 얹은 뒤**의 명단이다 — 다른 교시로 정해진 학생은 여기 없고, **다른 시간에서
+ *    옮겨 온 학생은 여기 있다**(원래 반 id로 — 출결은 언제나 수강 반으로 저장된다). 안 얹으면
  *    일괄 버튼(`남은 N명 출석`)이 **화면에 없는 학생까지** 찍고, 그 칸은 아무도 안 보는 자리에 남아
  *    자리 시수를 부풀린다(화면은 이미 거른 명단으로 N을 센다).
  * ⚠️ 이미 기록이 있는 칸은 안 감춰진다(사실이 규칙을 이긴다) — 그래서 잘못 찍은 칸을 **고칠 길은 늘 남는다**.
@@ -117,11 +114,8 @@ export async function rosterKeys(
   const period = day.periods.find((p) => p.start === hhmm(slotStart));
   if (!period) return null;
   // 🔑 화면이 그린 것과 **같은 함수·같은 재료**로 거른다 — 갈리면 버튼의 N과 실제로 쓰는 수가 어긋난다.
-  const rosterByPeriod = applySeatPeriodChoicesByPeriod(day.rosterByPeriod, {
-    choices: resolveSeatPeriodChoices({ moves: choiceLoad.moves, pins: choiceLoad.pins, date }),
-    slotsByClass: day.slotsByClass,
-    markedSlotsByCell: day.markedSlotsByCell,
-  });
+  //    다른 시간에서 옮겨 온 학생도 여기서 목표 교시에 선다(원래 교시에선 빠진다) — 그래서 그 칸만 찍힌다.
+  const rosterByPeriod = applySeatDayChoices(day, choiceLoad, date);
   const blocked = new Set(ambiguousClassIds(period));
   const keys = new Set<string>();
   const classes = new Map<string, string[]>();

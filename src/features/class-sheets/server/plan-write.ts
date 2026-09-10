@@ -15,7 +15,7 @@ import "server-only";
  *    admin 클라이언트 + `tenant_id` 명시 필터. 모든 select/update가 tenant_id + class_id + id 3중 조건.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { logAction } from "@/features/audit/server/log";
+import { logAction, logActionAtDoor } from "@/features/audit/server/log";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { normalizePlanText, SKILL_AREA_SLUG_RE } from "../lib/plan-codec";
 import { planLineFromRow } from "../lib/plan-line";
@@ -38,6 +38,11 @@ export type PlanWriteGrant = {
    *    (출결 `recorded_by`·JJ 칸 `updated_by`가 PIN일 때 null인 것과 같은 정직함).
    */
   actorId: string | null;
+  /**
+   * 무기명 문의 이름(감사로그 행위자 자리) — `actorId`가 null인 문(공개 PIN)이 넘긴다(`JJ실 PIN(비로그인)`).
+   * 로그인된 기기면 그 계정이 이긴다(`logActionAtDoor`).
+   */
+  doorName?: string;
 };
 
 /**
@@ -97,23 +102,24 @@ function koDowOf(ymd: string): string {
  * 🔴 **셀 값 저장(`applyPlanPatches`)은 일부러 안 남긴다** — 그쪽은 타이핑 디바운스로 칸마다 들어오는
  *    저장이라, 한 줄씩 남기면 한 사람의 한 교시 입력이 감사로그를 수백 줄로 덮어 정작 "누가 지웠나"
  *    같은 줄이 묻힌다(회의 메모장 저장을 뺀 것과 같은 판단, log.ts 주석 참조).
- * 🔵 **공개 PIN 경로(`/seat/jj`)에서 비로그인으로 들어오면 `logAction`이 조용히 no-op** 한다
- *    (`getCurrentUser()`가 null). 계정 없는 사람을 누군가의 이름으로 적지 않는다는 `actorId: null`
- *    규약과 같은 결이고, 그 경로의 흔적은 계획 행의 `updated_by`가 비어 있다는 사실뿐이다.
- *    ⚠️ 남는 건 **로그인한 채 공개 화면을 쓴 경우**뿐이라, 그때만 `viaPin`으로 "행에는 작성자를 안
- *    남기는 문으로 들어왔다"를 표시한다(감사 actor와 행 작성자가 갈리는 이유를 읽을 수 있게).
+ * 🔴 **공개 PIN 경로(`/seat/jj`, `actorId` null)도 남긴다**(2026-09-10 — 종전엔 `logAction`이 비로그인이면
+ *    조용히 no-op이었다). `logActionAtDoor`가 로그인된 기기면 그 계정, 아니면 문 이름(`grant.doorName`)으로 적는다.
+ *    계정 없는 사람을 누군가의 이름으로 지어내지 않는 것은 그대로다(`actor_id` null).
+ *    `viaPin`은 "행에는 작성자를 안 남기는 문으로 들어왔다"는 표시다(감사 actor와 행 작성자가 갈리는 이유).
  */
 async function logPlanChange(
   action: string,
   grant: PlanWriteGrant,
   detail: Record<string, unknown>,
 ): Promise<void> {
-  await logAction({
+  const args = {
     action,
     targetType: "class_sheet_plan",
     // targetLabel은 비운다 — 뷰어가 metadata.classId를 반 이름으로 풀어 '대상' 열에 보여준다(조회 0회).
     metadata: { classId: grant.classId, ...detail, ...(grant.actorId ? {} : { viaPin: true }) },
-  });
+  };
+  if (grant.actorId) await logAction(args);
+  else await logActionAtDoor({ tenantId: grant.tenantId, doorName: grant.doorName ?? "자리 PIN(비로그인)" }, args);
 }
 
 // ── 필드 CAS 배치 저장 ────────────────────────────────────────────────────────

@@ -70,15 +70,20 @@ function actionExprs(block: string): string[] {
   return out;
 }
 
-/** logAction( … ) 호출 블록에서 action 문자열 리터럴을 뽑는다(삼항 `a ? "x" : "y"` 포함). */
+/** logAction( … )(·logSeatAction·logActionAs·logActionAtDoor) 호출 블록에서 action 문자열 리터럴을 뽑는다(삼항 `a ? "x" : "y"` 포함). */
 function usedActions(): Map<string, Set<string>> {
   const found = new Map<string, Set<string>>();
   for (const file of tsFiles(SRC)) {
     const src = fs.readFileSync(file, "utf8");
-    if (!src.includes("logAction(")) continue;
-    let i = 0;
-    while ((i = src.indexOf("logAction(", i)) !== -1) {
-      let j = i + "logAction(".length;
+    // 🔴 감싼 헬퍼(`logSeatAction(g, seat, {…})`·`logActionAs(actor, {…})`·`logActionAtDoor(door, {…})`)도 같은 액션 키를 싣는다 —
+    //    `logAction(`만 찾으면 그 호출부가 통째로 스캔 밖으로 빠져 미등록 키가 조용히 샌다
+    //    (2026-09-10 자리 PIN 감사 도입 때 자리 출결 3곳이 그렇게 빠질 뻔했다).
+    //    ⚠️ 이름을 **정확히** 적는다 — `log…Action…(`으로 넓히면 `logSuperAdminAction(`처럼 **다른 표**에
+    //    쓰는 로거까지 잡혀 거짓 '미등록'이 뜬다(그 키들은 audit_logs 레지스트리 대상이 아니다).
+    if (!/\blog(?:Seat)?Action(?:As|AtDoor)?\(|\blogPlanChange\(/.test(src)) continue;
+    for (const call of src.matchAll(/\blog(?:Seat)?Action(?:As|AtDoor)?\(/g)) {
+      const i = call.index;
+      let j = i + call[0].length;
       let depth = 1;
       while (j < src.length && depth > 0) {
         const c = src[j];
@@ -100,7 +105,13 @@ function usedActions(): Map<string, Set<string>> {
           found.get(q[1])!.add(rel);
         }
       }
-      i = j;
+    }
+    // `logPlanChange("ecs_plan_line_add", grant, …)`처럼 **첫 인자로 키를 넘기는** 감싼 헬퍼도 본다 —
+    // 안 보면 진도 줄 감사 키 4종이 미등록인 채로 감사 화면에 영문 키를 냈다(적대적 리뷰 2026-09-10).
+    for (const pm of src.matchAll(/\blogPlanChange\(\s*"([a-z][a-z0-9_]*)"/g)) {
+      const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
+      if (!found.has(pm[1])) found.set(pm[1], new Set());
+      found.get(pm[1])!.add(rel);
     }
   }
   return found;
@@ -185,11 +196,13 @@ describe("감사로그 액션 레지스트리", () => {
 });
 
 /**
- * 🔴 2026-09-10 원장 제보(감사로그에 영문 `ecs_plan_copy`) — 위 스캐너가 못 본 세 갈래.
- *   ① logAction을 **감싼 함수**에 키를 넘기는 호출(`logPlanChange("ecs_plan_copy", …)`) — 하루 74건이 영문으로 떴다
- *   ② 세션 없는 경로의 **직접 insert**(`calendar_google_import`·QR 접수) — `logAction(`이 아예 없다
- *   ③ **DB 트리거**가 쓰는 키(등록상담 자동 연결, 0258a) — SQL은 `-- audit-action` 표식을 단 줄만 본다
- * 셋 다 "가드가 못 보는 모양이 있으면 그건 가드가 아니다"(위 actionExprs 주석)와 같은 뿌리다.
+ * 🔴 2026-09-10 원장 제보(감사로그에 영문 `ecs_plan_copy`) — `logAction(` 호출만 보던 스캐너가 못 본 갈래.
+ *   ① logAction을 **감싼 헬퍼**(`logPlanChange("ecs_plan_copy", …)`·`logActionAs`·`logActionAtDoor`) — 위
+ *      usedActions가 **이름으로** 본다(같은 날 자리 PIN 감사 세션이 넓혔다).
+ *   ② 세션 없는 경로의 **직접 insert**(`from("audit_logs").insert({ action: "…" })` — 구글 캘린더 가져오기·
+ *      보드 명단 핀) — `log…(` 호출이 아예 없어 ①로도 안 잡힌다. 아래 directInsertActions가 본다.
+ *   ③ **DB 트리거**가 쓰는 키(등록상담 자동 연결, 0258a) — SQL은 `-- audit-action` 표식을 단 줄만 본다.
+ * 모두 "가드가 못 보는 모양이 있으면 그건 가드가 아니다"(위 actionExprs 주석)와 같은 뿌리다.
  */
 function addFound(found: Map<string, Set<string>>, key: string, file: string) {
   const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
@@ -202,42 +215,6 @@ let srcCache: Array<{ file: string; src: string }> | null = null;
 function srcFiles(): Array<{ file: string; src: string }> {
   srcCache ??= tsFiles(SRC).map((file) => ({ file, src: fs.readFileSync(file, "utf8") }));
   return srcCache;
-}
-
-/**
- * logAction을 **감싼 함수** — 첫 번째 인자를 그대로 `action`으로 넘기는 `log*` 함수만.
- * 🔴 이름만 보고 잡으면 오탐이 난다: `logImport(abortedAt)`는 첫 인자가 **중단 단계 이름**
- *    (`"student_status_lookup"`)이고 액션은 안에서 `"timetable_import_apply"`로 박혀 있다.
- */
-function wrapperNames(): Set<string> {
-  const names = new Set<string>();
-  const decl = /(?:function\s+(log[A-Z]\w*)\s*\(|const\s+(log[A-Z]\w*)\s*=\s*(?:async\s*)?\()\s*([A-Za-z_]\w*)/g;
-  for (const { src } of srcFiles()) {
-    if (!src.includes("logAction(")) continue;
-    for (const m of src.matchAll(decl)) {
-      const name = m[1] ?? m[2];
-      const param = m[3];
-      if (!name || !param || name === "logAction") continue;
-      const k = src.indexOf("logAction(", m.index);
-      if (k === -1 || k - (m.index ?? 0) > 2000) continue;
-      const call = src.slice(k, k + 600);
-      const passesParam =
-        new RegExp(`\\baction\\s*:\\s*${param}\\b`).test(call) ||
-        (param === "action" && /\baction\s*[,}\r\n]/.test(call));
-      if (passesParam) names.add(name);
-    }
-  }
-  return names;
-}
-
-/** 감싼 함수를 `이름("키", …)`로 부르는 곳 — 어느 파일에서 부르든 전부. */
-function wrapperActions(): Map<string, Set<string>> {
-  const found = new Map<string, Set<string>>();
-  const names = [...wrapperNames()];
-  if (names.length === 0) return found;
-  const re = new RegExp(`\\b(?:${names.join("|")})\\(\\s*"([a-z][a-z0-9_]*)"`, "g");
-  for (const { file, src } of srcFiles()) for (const m of src.matchAll(re)) addFound(found, m[1]!, file);
-  return found;
 }
 
 /** src에서 audit_logs에 **직접 insert**하는 파일의 `action: "…"` 리터럴. */
@@ -266,24 +243,19 @@ function sqlMarked(marker: "audit-action" | "audit-target-type"): Map<string, Se
   return found;
 }
 
-describe("감사로그 액션 레지스트리 — 감싼 함수·직접 insert·DB 트리거(2026-09-10)", () => {
+describe("감사로그 액션 레지스트리 — 직접 insert·DB 트리거(2026-09-10)", () => {
   // 전체 src 스캔이라 느리다 — 병렬 실행 부하에서 기본 5초에 헛실패하지 않게 넉넉히(기억: 가드 테스트 헛실패).
-  it("스캔이 실제로 동작한다(세 갈래 모두 알려진 키를 찾는다)", () => {
-    const wrappers = wrapperNames();
-    expect(wrappers.has("logPlanChange"), "감싼 함수 탐지가 logPlanChange를 못 찾음 — 스캔 방식을 갱신할 것").toBe(true);
-    // 🔴 첫 인자가 액션이 아닌 log* 함수는 감싼 함수가 아니다 — logImport의 첫 인자는 중단 단계 이름이다(오탐 방지).
-    expect(wrappers.has("logImport"), "logImport를 감싼 함수로 오인 — 첫 인자를 액션으로 넘기는지 판정이 깨졌다").toBe(false);
-    expect(wrapperActions().has("ecs_plan_copy")).toBe(true);
+  it("스캔이 실제로 동작한다(두 갈래 모두 알려진 키를 찾는다)", () => {
     const direct = directInsertActions();
-    expect(direct.has("calendar_google_import")).toBe(true);
-    expect(direct.has("enrollment_consultation_intake")).toBe(true);
+    expect(direct.has("calendar_google_import"), "직접 insert 스캔이 구글 캘린더 가져오기를 못 찾음 — 스캔 방식을 갱신할 것").toBe(true);
+    expect(direct.has("classnote_child_link")).toBe(true);
     expect(sqlMarked("audit-action").has("consultation_autolink")).toBe(true);
   }, 30_000);
 
-  it("세 갈래가 쓰는 모든 액션이 AUDIT_ACTIONS에 한글 라벨로 등록돼 있다", () => {
+  it("직접 insert·DB 트리거가 쓰는 모든 액션이 AUDIT_ACTIONS에 한글 라벨로 등록돼 있다", () => {
     const registry = registryKeys();
     const all = new Map<string, Set<string>>();
-    for (const found of [wrapperActions(), directInsertActions(), sqlMarked("audit-action")]) {
+    for (const found of [directInsertActions(), sqlMarked("audit-action")]) {
       for (const [key, files] of found) for (const f of files) addFound(all, key, path.join(process.cwd(), f));
     }
     const missing = [...all]

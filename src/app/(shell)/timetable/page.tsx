@@ -17,7 +17,7 @@ import {
   getWeeklyScheduleWithStudents,
 } from "@/features/timetable/server/queries";
 import { isSpecialSlotLabel, resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
-import { applySeatPinMarks } from "@/features/timetable/lib/seat-pin-mark";
+import { applySeatPinMarks, NO_SEAT_PINS } from "@/features/timetable/lib/seat-pin-mark";
 import { getSeatPins } from "@/features/timetable/server/seat-pins";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { buildRichClassCards, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
@@ -201,7 +201,7 @@ export default async function TimetablePage({
     // 시간표에서 … 파란글씨에 밑줄+이탤릭체로"*. 교실뷰는 명단이 클라까지 오지 않아(인원 수만) 표식이
     // 붙을 자리가 없으므로 그 뷰일 땐 왕복도 하지 않는다(위 `classroomsForMap`과 같은 판정 자리).
     // 🔑 여기 **병렬**로 둔 것이 요점 — 아래 `slots` 뒤에 await하면 직렬 워터폴이 된다(B4).
-    paramView === "rooms" && roomsViewAllowed ? Promise.resolve([]) : getSeatPins(user.tenantId),
+    paramView === "rooms" && roomsViewAllowed ? Promise.resolve(NO_SEAT_PINS) : getSeatPins(user.tenantId, referenceDate),
   ]);
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
@@ -316,9 +316,10 @@ export default async function TimetablePage({
   // 프로그램 필터는 **반 단위**(학년 필터와 축이 다르다 — 저쪽은 학생 단위라 혼합 반이 살아남아야 한다).
   // 비대칭 계약 주의: '인재원 영어' = "EiE가 아닌 전부"(미분류 포함) — keepEnglishTrack 주석 참조.
   // 마지막에 자리(랩실) **교시 고정** 표식을 얹는다 — 세 뷰(기본·통합·강사)가 이 한 벌을 함께 쓴다.
-  // 🔴 필터 **뒤**여야 한다: '그 반의 자리 교시가 2개 이상인가' 판정이 화면에 실제로 선 슬롯 기준이라야
-  //    필터로 반쪽만 남은 주에 "옮길 자리가 있다"고 거짓말하지 않는다(고정 두 교시는 같은 반·같은 필터라
-  //    함께 들어오거나 함께 빠진다). 고정이 0줄이면 입력을 그대로 돌려주므로 평소 비용은 0이다.
+  // 🔴 필터 **뒤**여야 한다: '그 반이 그날 이 자리에 오는가'는 화면에 실제로 선 슬롯 기준이다(필터로 빠진 반엔
+  //    표식을 얹을 명단도 없다). 반면 **다른 시간으로 옮긴** 고정의 목표 교시는 남의 반 자리 교시라 필터·강사
+  //    범위 뒤엔 안 보인다 → 학원 전체 배치(`liveStarts`, 고정이 있을 때만 조회)로 본다. 고정이 0줄이면 입력을
+  //    그대로 돌려주므로 평소 비용은 0이다.
   const slots = applySeatPinMarks(
     applyGradeFilter(
       keepEnglishTrack(
@@ -327,7 +328,7 @@ export default async function TimetablePage({
       ),
       viewPrefs.grades,
     ),
-    { pins: seatPins, referenceDate },
+    { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
   );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
   // English Class Sheet 바로가기 — 지금 보는 과목이 ECS 대상일 때만. 조건은 ECS의 정식 게이트

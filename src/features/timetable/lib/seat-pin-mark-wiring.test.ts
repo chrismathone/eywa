@@ -51,11 +51,13 @@ describe("자리 교시 고정 표식 배선", () => {
     expect(page).toContain("getSeatPins");
     expect(page).toContain("applySeatPinMarks");
     // 🔴 병렬이어야 한다 — `slots` 뒤에 await하면 직렬 워터폴(B4).
-    const call = page.indexOf("getSeatPins(user.tenantId)");
+    const call = page.indexOf("getSeatPins(user.tenantId, referenceDate)");
     const promiseAll = page.indexOf("await Promise.all([");
     const closeAll = page.indexOf("]);", promiseAll);
     expect(call, "getSeatPins 호출을 못 찾았다").toBeGreaterThan(0);
     expect(call, "getSeatPins는 초기 Promise.all 안에 있어야 한다(B4)").toBeLessThan(closeAll);
+    // 🔑 다른 시간으로 옮긴 고정은 학원 전체 배치로 확인한다 — 이 재료가 빠지면 그 고정엔 표식이 조용히 안 붙는다.
+    expect(page).toContain("liveStarts: seatPins.liveStarts");
   });
 
   it("조회는 admin 클라이언트 + 명시 tenant_id 필터 + 페이지네이션 + fail-soft", () => {
@@ -67,12 +69,19 @@ describe("자리 교시 고정 표식 배선", () => {
     // 무페이징 select 금지(B2) — 고정이 쌓이면 1000행에서 조용히 잘린다.
     expect(src).toContain("fetchAllPaged");
     // 0255a 미적용에도 시간표는 살아야 한다([[#95]]).
-    expect(src).toMatch(/catch\s*\{[\s\S]*return \[\]/);
+    expect(src).toMatch(/catch\s*\{[\s\S]*return NO_SEAT_PINS/);
+    // 🔑 배치(학원 전체 자리 교시)는 **고정이 있을 때만** 묻는다 — 평소 왕복은 늘지 않는다(B6).
+    expect(src).toContain("if (pins.length === 0) return NO_SEAT_PINS;");
     // 🔴 클라이언트 생성도 try 안이어야 한다 — 밖이면 키 누락 한 번에 시간표 전체가 500이다.
     const tryAt = src.indexOf("try {");
     const clientAt = src.indexOf("createAdminClient()");
     expect(tryAt, "try 블록이 없다").toBeGreaterThan(0);
     expect(clientAt, "createAdminClient()는 try 안에서 불러야 한다").toBeGreaterThan(tryAt);
+  });
+
+  it("🔴 고정이 어느 교시를 가리키는지는 자리 출석부와 같은 함수(seatChoiceTarget)가 정한다", () => {
+    // 따로 판정하면 한 학생을 시간표는 '17:00 고정'이라 하고 자리 출석부는 15:40에 세운다(3차 리뷰).
+    expect(read(MARK)).toContain("seatChoiceTarget(");
   });
 
   it("주간 시간표는 '영구 고정'만 읽는다 — 하루짜리 이동은 안 싣는다", () => {

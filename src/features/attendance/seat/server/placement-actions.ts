@@ -13,6 +13,7 @@ import {
 import { gateSeatMoveWrite } from "./move-gate";
 import { getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
+import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 
 export type SeatPlacementResult = { ok: true; changed: number } | { error: string };
 
@@ -24,9 +25,9 @@ export type SeatPlacementResult = { ok: true; changed: number } | { error: strin
  *    `placement.ts` 머리 주석). 원장 *"클릭으로 출결되는거랑 중복액션되지않게 잘 분리해서"*의 데이터 층
  *    구현이 이것이다: 축이 아예 다른 표라 두 동작이 서로를 덮을 수 없다.
  * 🔴 **비로그인 공개 PIN(`/seat/:key`)에서는 쓰지 않는다** — 원장이 같은 문장에서 *"이것도 감사로그에
- *    남아야함"*을 못박았는데, 그 화면엔 로그인이 없어 `logAction`이 실행자를 못 읽는다(자리 출결의
- *    무기명 갈래가 이미 감사 사각지대다 — `actions.ts` 주석, 실측 최근 90일 440건 중 149건). **남길 수
- *    없는 동작은 열지 않는다.** 공개 화면은 배치를 **보기만** 한다.
+ *    남아야함"*을 못박았다. 2026-09-10부터 PIN 출결 쓰기는 문 이름(`랩실 PIN(비로그인)`)으로 남지만, 그건
+ *    "어느 문으로 들어왔나"지 **옮긴 사람**이 아니다 — 누가 옮겼는지가 요점인 동작은 여전히 열지 않는다.
+ *    공개 화면은 배치를 **보기만** 한다.
  * ⚠️ 출결 상태를 **읽기는** 한다 — 원장 2026-09-10 *"출결이 찍힌 학생은 드래그 절대 불가"*. 읽는 값은
  *    이미 `getSeatDay`가 명단에 얹어 둔 `status`라 새 왕복이 없고, 판정 문장은 순수 소스
  *    [`seatMoveBlockReason`](../placement.ts) 하나다(화면 비활성과 서버 거절이 같은 말을 한다).
@@ -41,15 +42,22 @@ export type SeatPlacementResult = { ok: true; changed: number } | { error: strin
  *    재료다. **새 조회가 아니다**(`getSeatDay`가 이미 그날 출결을 받아 명단에 얹어 둔 값이다).
  */
 async function periodRosters(
+  tenantId: string,
   seat: SeatKey,
   date: string,
   slot: string,
 ): Promise<{ classId: string; students: { id: string; status: string | null }[] }[] | null> {
-  const day = await getSeatDay(seat, date);
+  // 🔴 **교시 선택(0255a)을 얹은 명단**이어야 화면과 같다 — 다른 시간에서 옮겨 온 학생은 목표 교시에
+  //    서 있어서, 거기서 옆 반 묶음으로 옮기는(배치) 것도 된다. 안 얹으면 "이 교시 명단에 없는 학생"으로
+  //    거절되고, 반대로 다른 교시로 간 학생을 원래 교시에서 옮기는 것이 통과한다. 둘은 독립이라 병렬(B4).
+  const [day, choiceLoad] = await Promise.all([
+    getSeatDay(seat, date),
+    getSeatPeriodChoices(tenantId, seat, date),
+  ]);
   const period = day.periods.find((p) => p.start === slot);
   if (!period) return null;
   const blocked = new Set(ambiguousClassIds(period));
-  return (day.rosterByPeriod[period.start] ?? [])
+  return (applySeatDayChoices(day, choiceLoad, date)[period.start] ?? [])
     .filter((r) => !blocked.has(r.classId))
     .map((r) => ({
       classId: r.classId,
@@ -81,7 +89,7 @@ export async function moveSeatStudent(input: {
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const rosters = await periodRosters(input.seat, input.date, slot);
+  const rosters = await periodRosters(g.tenantId, input.seat, input.date, slot);
   if (!rosters) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
   const check = validateSeatMove(rosters, { studentId: input.studentId, toClassId: input.toClassId });
@@ -180,7 +188,7 @@ export async function resetSeatPlacements(input: {
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
-  const rosters = await periodRosters(input.seat, input.date, slot);
+  const rosters = await periodRosters(g.tenantId, input.seat, input.date, slot);
   if (!rosters) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
   const load = await getSeatPlacements(g.tenantId, input.seat, input.date, slot);

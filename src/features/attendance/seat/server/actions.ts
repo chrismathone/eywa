@@ -3,21 +3,27 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { logAction } from "@/features/audit/server/log";
-import { SEAT_DB_LABEL, ambiguousClassIds, hhmm, isPayrollSeat, type SeatKey } from "../seat";
+import { logSeatAction } from "./audit";
+import {
+  PIN_NOTE_SEATS,
+  SEAT_DB_LABEL,
+  SEAT_NOTE_MAXLEN,
+  ambiguousClassIds,
+  hhmm,
+  isPayrollSeat,
+  type SeatKey,
+} from "../seat";
 import { prevAbsentFillTargets, seatDayCells } from "../prev-period";
 import { applySeatPlacements } from "../placement";
 import { pickSaveTargets } from "../../save-targets";
 import { gateSeatWrite, rosterKeys } from "./gate";
-import { getSeatPeriodChoices } from "./period-choice";
-import {
-  applySeatPeriodChoicesByPeriod,
-  resolveSeatPeriodChoices,
-} from "../period-choice";
+import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 import { getPublicSeatDay, getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
 
 export type SeatStatus = "present" | "absent" | "late";
+/** 런타임 검증용 — 자리판이 쓰는 상태 3종(`SeatStatus`와 같은 집합). 타입은 클라가 보낸 값을 막지 못한다. */
+const SEAT_WRITE_STATUSES: readonly string[] = ["present", "absent", "late"];
 export type SeatResult = { ok: true; changed: number } | { error: string };
 
 /** 0212a(recorded_via) 컬럼이 없으면 빼고 재시도 — 자리 기록을 죽이지 않는다(#95). 성공 = null. */
@@ -63,6 +69,34 @@ export async function setSeatCell(input: {
   if ("error" in g) return g;
 
   const slot = hhmm(input.slotStart);
+  // 🔴 서버 액션 인자는 클라가 마음대로 보낸다 — 메모는 **문자열·null·undefined만** 받는다. 숫자·배열을 그대로
+  //    두면 아래 거절을 비껴가 text 칸에 `"12345"`·`'["병원"]'`로 저장된다(적대적 리뷰 2026-09-10).
+  //    앞뒤 공백은 떼고 빈 값은 "비움" — 반 출석부(`noteVal`)와 같은 규약. 비로그인 문도 쓰니 길이 상한을 둔다.
+  // 🔴 상태도 **런타임에** 좁힌다 — 자리판 3종 밖(공결·보강)이 비로그인 문으로 자리 시수 행에 들어가면 안 된다
+  //    (DB enum엔 `excused`·`makeup`이 있어 그대로 저장된다 — 적대적 리뷰 2026-09-10).
+  //    ⚠️ 사유만 저장(`noteOnly`)은 상태를 쓰지 않으므로 검사하지 않는다 — 화면은 그 칸의 현재 상태를 그대로
+  //    실어 보내고, 반 출석부가 공결·보강으로 찍은 랩실 칸에도 사유는 적혀야 한다(JJ실은 `writeOne`이 그 칸을
+  //    통째로 출석부로 돌려보낸다 — 종전 그대로).
+  if (input.noteOnly !== true && input.status !== null && !SEAT_WRITE_STATUSES.includes(input.status)) {
+    return { error: "잘못된 상태입니다" };
+  }
+  if (input.note !== undefined && input.note !== null && typeof input.note !== "string") {
+    return { error: "잘못된 특이사항입니다" };
+  }
+  const note = typeof input.note === "string" ? input.note.trim() : input.note;
+  if (typeof note === "string" && note.length > SEAT_NOTE_MAXLEN) {
+    return { error: `특이사항은 ${SEAT_NOTE_MAXLEN}자 이내로 적어 주세요` };
+  }
+  // 🔴 비로그인 PIN 문에서 사유 메모를 쓰는 건 **`PIN_NOTE_SEATS`(랩실)만**이다 — 화면에서만 감추면 우회 폭([[#77]]).
+  //    그 밖의 자리(JJ실) PIN은 메모를 조회조차 안 하므로 거기로 적은 메모는 화면엔 영영 안 보이는 유령이 된다.
+  //    ⚠️ 상태를 바꾸며 메모를 비우는 것(null·빈 값)은 막지 않는다 — 출결 찍기가 멈춘다.
+  if (
+    g.via === "pin" &&
+    !PIN_NOTE_SEATS.includes(input.seat) &&
+    (input.noteOnly === true || (typeof note === "string" && note !== ""))
+  ) {
+    return { error: "이 자리의 비로그인 화면에서는 특이사항을 적을 수 없습니다 — 로그인 화면에서 적어 주세요" };
+  }
   const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null, g.tenantId);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
   if (!roster.keys.has(`${input.classId}|${input.studentId}`)) {
@@ -79,7 +113,7 @@ export async function setSeatCell(input: {
     classId: input.classId,
     studentId: input.studentId,
     status: input.status,
-    note: input.note,
+    note,
     noteOnly: input.noteOnly === true,
   });
   if (typeof changed === "string") return { error: changed };
@@ -88,18 +122,16 @@ export async function setSeatCell(input: {
    * 감사로그 — 자리 기록도 출결(=시수·급여 재료)이라 반 출석부와 같은 급으로 남긴다. `via`(menu·duty)까지
    * 담는 이유는 **자리 담당 토글로 들어온 쓰기**가 메뉴 권한 없이 열리는 문이라서다.
    *
-   * 🔴 **공개 PIN(`via==="pin"`) 쓰기는 여기 안 남는다** — `logAction`이 세션(getCurrentUser)에서 실행자를
-   *    읽는데 그 화면엔 로그인이 없다(행의 `recorded_by`도 같은 이유로 null이다). 즉 자리 출결의 **무기명
-   *    갈래는 감사 사각지대**이고, 이건 이 파일에서 고칠 수 있는 문제가 아니다(감사 도메인에 무기명
-   *    actor 경로가 필요하다 — audit_logs의 insert 정책이 `actor_id = auth.uid()`라 admin 경로도 함께).
-   *    실측 최근 90일 자리 쓰기 440건 중 149건(34%)이 이 갈래다.
+   * 🔴 **공개 PIN(`via==="pin"`) 쓰기도 남긴다**(원장 2026-09-10 — 기능 변동은 모두 감사로그) — 행위자는 사람이
+   *    없어 `랩실 PIN(비로그인)`으로 적힌다([`logSeatAction`](./audit.ts) → `logActionAs`). 종전엔 `logAction`이
+   *    로그인 사용자가 없으면 건너뛰어 PIN 쓰기가 통째로 사각지대였다(실측 최근 90일 440건 중 149건).
    * ⚠️ `changed === 0`(사유만 적으려는데 붙일 행이 그새 사라짐) = 아무것도 안 썼다 → 남기지 않는다.
    */
   const noteOnly = input.noteOnly === true;
   // ⚠️ 사유만 저장인데 `note`가 안 왔으면 `notePatch`가 키를 빼서 **아무것도 안 바뀐다** — 안 남긴다
   //    (남기면 "사유를 비웠다"는 없는 변경을 기록하게 된다).
-  if (changed > 0 && !(noteOnly && input.note === undefined)) {
-    await logAction({
+  if (changed > 0 && !(noteOnly && note === undefined)) {
+    await logSeatAction(g, input.seat, {
       action: noteOnly
         ? "seat_attendance_note"
         : input.status === null
@@ -115,7 +147,7 @@ export async function setSeatCell(input: {
         via: g.via,
         // 🔴 사유 **본문은 싣지 않는다**(병원·가정사) — 비웠는지 채웠는지만.
         ...(noteOnly
-          ? { cleared: input.note === null || input.note === "" }
+          ? { cleared: note === null || note === "" }
           : input.status !== null
             ? { status: input.status, rows: changed }
             : { rows: changed }),
@@ -140,6 +172,8 @@ export async function fillSeatSlot(input: {
   status: Extract<SeatStatus, "present" | "absent">;
   classId?: string;
 }): Promise<SeatResult> {
+  // 🔴 런타임에 좁힌다(`setSeatCell`과 같은 이유) — 일괄은 출석·결석 둘뿐이다.
+  if (input.status !== "present" && input.status !== "absent") return { error: "잘못된 상태입니다" };
   const g = await gateSeatWrite(input.seat, input.date);
   if ("error" in g) return g;
 
@@ -196,11 +230,11 @@ export async function fillSeatSlot(input: {
 
   /**
    * 감사로그 — 일괄은 **한 줄로 요약**(반 출석부 일괄과 같은 규약). 되짚을 식별자로 실제로 쓴 칸의
-   * `studentIds`·`classIds`를 담는다. 🔴 공개 PIN 갈래가 안 남는 것은 `setSeatCell` 주석 그대로다.
+   * `studentIds`·`classIds`를 담는다. 🔴 공개 PIN 갈래도 같은 헬퍼(`logSeatAction`)로 남는다.
    * ⚠️ 이미 찍힌 칸을 걸러 0건이 된 요청은 위에서 조기 반환이라 여기 오지 않는다(빈 로그 없음).
    */
   const wroteClassIds = [...new Set(rows.map((r) => r.class_id))];
-  await logAction({
+  await logSeatAction(g, input.seat, {
     action: "seat_attendance_fill",
     targetType: "attendance",
     metadata: {
@@ -256,11 +290,8 @@ export async function fillSeatPrevAbsent(input: {
   // 🔑 화면(표식·버튼 수)도 **같은 인자**로 같은 함수를 돌린다 — 갈리면 "3명"이라 적고 2명만 쓴다.
   // 🔴 교시 선택(0255a)을 얹은 명단으로 센다 — 안 얹으면 다른 교시에 서 있는 학생까지 결석으로
   //    채운다(화면의 "앞 교시 결석자 N명"과 갈린다).
-  const rosterByPeriod = applySeatPeriodChoicesByPeriod(day.rosterByPeriod, {
-    choices: resolveSeatPeriodChoices({ moves: choiceLoad.moves, pins: choiceLoad.pins, date: input.date }),
-    slotsByClass: day.slotsByClass,
-    markedSlotsByCell: day.markedSlotsByCell,
-  });
+  //    다른 시간에서 옮겨 온 학생은 목표 교시에 서므로 "그 학생의 앞 교시"도 옮긴 뒤의 명단으로 잰다.
+  const rosterByPeriod = applySeatDayChoices(day, choiceLoad, input.date);
   const targets = prevAbsentFillTargets(
     seatDayCells(day.periods, rosterByPeriod),
     slot,
@@ -288,7 +319,7 @@ export async function fillSeatPrevAbsent(input: {
   if (rows.length === 0) return { ok: true, changed: 0 };
 
   /**
-   * 감사로그 — 일괄과 같은 모양에 **근거(앞 교시)**를 더한다. 공개 PIN 갈래가 안 남는 건 위와 같다.
+   * 감사로그 — 일괄과 같은 모양에 **근거(앞 교시)**를 더한다. 공개 PIN 갈래도 같은 헬퍼로 남는다.
    * 🔴 `prevStarts`가 이 로그의 핵심이다 — 이 액션은 "앞 교시가 결석이었으니 이 교시도"라는 **추론**이라,
    *    근거 교시를 안 적으면 나중에 그 앞 교시 기록이 고쳐졌을 때 왜 찍혔는지 되짚을 길이 사라진다.
    */
@@ -296,7 +327,7 @@ export async function fillSeatPrevAbsent(input: {
   const prevStarts = [
     ...new Set(rows.map((r) => prevByCell.get(`${r.class_id}|${r.student_id}`)).filter(Boolean)),
   ].sort();
-  await logAction({
+  await logSeatAction(g, input.seat, {
     action: "seat_attendance_fill_prev",
     targetType: "attendance",
     metadata: {
@@ -448,6 +479,8 @@ async function writeOne(
     noteOnly?: boolean;
   },
 ): Promise<number | string> {
+  // 사유만 저장인데 메모가 안 왔다 = 고칠 것이 없다(빈 update를 보내지 않는다).
+  if (p.noteOnly && p.note === undefined) return 0;
   const base = supabase
     .from("attendance_records")
     .select("id, recorded_at")
@@ -502,14 +535,19 @@ async function writeOne(
     if (existing) {
       const err = await seatUpdate(
         supabase,
-        {
-          ...(p.noteOnly ? {} : { status: p.status }),
-          seat_label: SEAT_DB_LABEL[p.seat],
-          recorded_by: p.userId,
-          recorded_at: new Date().toISOString(),
-          recorded_via: "seat",
-          ...notePatch(p.note),
-        },
+        // 🔴 사유만이면 **메모만** 고친다 — 반 출석부 `noteOnly`와 같은 규약(적대적 리뷰 2026-09-10).
+        //    `recorded_by`·`recorded_at`은 "누가 출결을 찍었나"라 메모로 덮으면 사실이 바뀌고(PIN이면 null로
+        //    지워진다), `seat_label`을 얹으면 반 출석부 기록이 메모 한 줄에 자리 기록으로 둔갑한다.
+        p.noteOnly
+          ? notePatch(p.note)
+          : {
+              status: p.status,
+              seat_label: SEAT_DB_LABEL[p.seat],
+              recorded_by: p.userId,
+              recorded_at: new Date().toISOString(),
+              recorded_via: "seat",
+              ...notePatch(p.note),
+            },
         [existing],
       );
       return err ?? 1;
@@ -537,16 +575,29 @@ async function writeOne(
     }
     if (updateIds.length > 0 || promoteIds.length > 0) {
       const nowIso = new Date().toISOString();
-      const basePatch = {
-        ...(p.noteOnly ? {} : { status: p.status }),
-        recorded_by: p.userId,
-        recorded_at: nowIso,
-        recorded_via: "seat",
-        ...notePatch(p.note),
-      };
-      // 🔴 승격(day-level 행을 이 교시로 옮기기)은 **상태 쓰기의 부수효과**다 — 사유만 적는데 교시를
-      //    옮기면 다른 교시 칸이 미체크로 뒤집힌다.
-      if (promoteIds.length > 0 && !p.noteOnly) {
+      // 🔴 사유만이면 메모만(위 급여 갈래와 같은 규약 — "누가 찍었나"를 메모로 덮지 않는다).
+      const basePatch = p.noteOnly
+        ? notePatch(p.note)
+        : {
+            status: p.status,
+            recorded_by: p.userId,
+            recorded_at: nowIso,
+            recorded_via: "seat",
+            ...notePatch(p.note),
+          };
+      // 🔴 사유만이면 **이 교시 행에만** 단다 — 날 단위 행(담임이 그날 전체로 찍은 것)만 있으면 거절한다.
+      //    교시가 둘 이상인 반은 그 행을 자리 화면에 안 그려(카드는 미체크) 보지도 못한 담임 메모를 덮어쓰게 되고,
+      //    조용히 건너뛰면 "저장됨"·감사로그만 남는다(적대적 리뷰 2026-09-10). 지우기 갈래의 날 단위 거절과 같은 규약이다.
+      if (p.noteOnly) {
+        if (updateIds.length === 0) {
+          return "담임이 출석부/원스크린에서 그날 전체로 찍은 기록입니다 — 사유는 그쪽에서 고쳐 주세요";
+        }
+        const err = await seatUpdate(supabase, basePatch, updateIds);
+        return err ?? updateIds.length;
+      }
+      // 🔴 승격(day-level 행을 이 교시로 옮기기)은 **상태 쓰기의 부수효과**다(사유만이면 위에서 끝났다) — 사유만
+      //    적는데 교시를 옮기면 다른 교시 칸이 미체크로 뒤집힌다.
+      if (promoteIds.length > 0) {
         const err = await seatUpdate(supabase, { ...basePatch, slot_start: p.slot }, promoteIds);
         if (err) return err;
       }
