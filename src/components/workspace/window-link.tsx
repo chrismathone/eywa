@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { MouseEvent, ReactNode } from "react";
 import { findNavItem, navPresentation } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
+import { useMenuHub } from "./menu-hub-store";
 import { useIsDesktop } from "./use-is-desktop";
 import { useInFrame } from "./use-in-frame";
 import { useWorkspaceEnabled } from "./workspace-enabled";
@@ -35,7 +36,7 @@ export function windowIdForHref(href: string): { id: string; navLabel?: string }
   if (extra) return { id: path.replace(/^\//, ""), navLabel: extra };
   const item = findNavItem(path);
   if (!item) return null;
-  if (navPresentation(item) === "desktop") return null;
+  if (navPresentation(item) === "desktop" && item.href === path) return null;
   if (item.href === path) return { id: item.menuKey, navLabel: item.label };
   return { id: path.replace(/^\//, ""), navLabel: item.label };
 }
@@ -92,6 +93,10 @@ export function WindowLink({
     if (e.metaKey || e.ctrlKey || e.altKey) return true;
     onNavigate?.(); // 이동이 확정된 뒤에만 — 새 탭으로 빠지는 경우엔 부르지 않는다.
     const resolved = windowIdForHref(href);
+    if (!resolved && href.split(/[?#]/)[0] === "/dashboard" && isDesktop && workspaceEnabled && !inFrame) {
+      useMenuHub.getState().close();
+      useWindowStore.getState().showDesktop();
+    }
     if (!resolved) return false; // 메뉴 라우트가 아니면 기본 이동
     // 창(iframe) 안에서 shift+클릭 = 드릴인 대신 **부모 워크스페이스에 새 플로팅 창**으로 연다.
     // iframe은 별도 문서라 window-store에 직접 접근 못 함 → 부모(workspace-canvas)에 postMessage하면

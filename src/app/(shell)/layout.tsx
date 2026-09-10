@@ -343,7 +343,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} />
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
-      <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} />
+      <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} homeHref={canAccess(user.systemRole, "dashboard", permMatrix) ? "/dashboard" : "/menu"} />
 
       {/* 업무군 메뉴 허브(버튼형, 원장 2026-09-07) — 사이드바에서 업무군을 고르면 본문에 메뉴 버튼이 뜬다.
           ⚠️ 캔버스와 **형제**로 둔다(캔버스 안에 넣으면 창들과 같은 층에 갇혀 z·포인터가 얽힌다).

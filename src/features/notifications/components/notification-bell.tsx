@@ -188,10 +188,12 @@ export function NotificationBell() {
       run(() => markNotificationsRead([n.id]));
     }
     if (!n.link) return;
+    // 저장된 예전 브리핑 알림도 새 관리 화면으로 연결한다.
+    const link = n.link === "/dashboard#daily-briefing" ? "/dashboard/briefing#daily-briefing" : n.link;
     // 외부 링크(ClassNote 학부모 글 등)는 eywa를 벗어나므로 먼저 확인받는다 — router.push는 앱 내부 경로 전용이라
     // 절대 URL을 넘기면 동작하지 않는다. 확인 후 새 탭으로 열어 작업 중이던 eywa 화면을 잃지 않게 한다.
-    if (isExternal(n.link)) {
-      setPendingLink(n.link);
+    if (isExternal(link)) {
+      setPendingLink(link);
       return;
     }
     // ⚠️ 앱 내부 경로는 **플로팅 창**으로 연다 — router.push는 창 뒤 배경 프레임만 바꾼다(2026-07-27 원장 제보
@@ -202,14 +204,14 @@ export function NotificationBell() {
     // ⚠️ 운영실도 이제 **다른 메뉴와 같은 창**이다(원장 2026-09-07) — 특례가 사라졌다.
     //    해시(`/dashboard#daily-briefing`)는 창 주소에 그대로 실려 그 자리로 스크롤된다
     //    (`withEmbed`가 해시를 분리해 붙인다 — 안 그러면 embed가 프래그먼트로 들어가 창 안에 풀 셸이 뜬다).
-    const resolved = onWorkspace ? windowIdForHref(n.link) : null;
+    const resolved = onWorkspace ? windowIdForHref(link) : null;
     if (resolved) {
       useWindowStore
         .getState()
-        .open("route", { id: resolved.id, title: resolved.navLabel ?? n.title, href: n.link });
+        .open("route", { id: resolved.id, title: resolved.navLabel ?? n.title, href: link });
       return;
     }
-    router.push(n.link);
+    router.push(link);
   }
 
   const badge = unread > 99 ? "99+" : String(unread);

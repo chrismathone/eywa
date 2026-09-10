@@ -39,6 +39,7 @@ export function Pagination({
   hrefForPage,
   total,
   lang = DEFAULT_SHEET_LANG,
+  scroll,
 }: {
   page: number;
   totalPages: number;
@@ -51,6 +52,8 @@ export function Pagination({
    * 사무실 화면·기존 호출부는 한 글자도 안 바뀐다.
    */
   lang?: SheetLang;
+  /** 같은 화면의 명단만 넘길 때 false로 지정해 읽던 스크롤 위치를 유지한다. */
+  scroll?: boolean;
 }) {
   if (totalPages <= 1) return null;
   return (
@@ -58,7 +61,7 @@ export function Pagination({
       className="mx-auto flex max-w-xs items-center justify-between gap-2 pt-2"
       aria-label={sheetT(lang, "common.pageAria")}
     >
-      <PageStep href={hrefForPage(page - 1)} disabled={page <= 1}>
+      <PageStep href={hrefForPage(page - 1)} disabled={page <= 1} scroll={scroll}>
         <EyIcon name="chevronLeft" size={12} />
         {sheetT(lang, "common.prev")}
       </PageStep>
@@ -66,7 +69,7 @@ export function Pagination({
         {page} / {totalPages}
         {total != null ? sheetTf(lang, "common.pageCount", { n: total }) : ""}
       </span>
-      <PageStep href={hrefForPage(page + 1)} disabled={page >= totalPages}>
+      <PageStep href={hrefForPage(page + 1)} disabled={page >= totalPages} scroll={scroll}>
         {sheetT(lang, "common.next")}
         <EyIcon name="chevronRight" size={12} />
       </PageStep>
@@ -79,16 +82,18 @@ export function PageStep({
   href,
   disabled,
   children,
+  scroll,
 }: {
   href: string;
   disabled: boolean;
   children: React.ReactNode;
+  scroll?: boolean;
 }) {
   if (disabled) {
     return <span className={`${PAGER_STEP_BASE} ${PAGER_STEP_DISABLED}`}>{children}</span>;
   }
   return (
-    <Link href={href} className={`${PAGER_STEP_BASE} ${PAGER_STEP_ENABLED}`}>
+    <Link href={href} scroll={scroll} className={`${PAGER_STEP_BASE} ${PAGER_STEP_ENABLED}`}>
       {children}
     </Link>
   );

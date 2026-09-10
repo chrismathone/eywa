@@ -288,8 +288,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                 className={query.isFetching ? s.spinning : ""}
               />
             </button>
-            <Jump href="/dashboard" className={s.classicLink}>
-              기존 대시보드
+            <Jump href="/dashboard/briefing" className={s.briefingLink}>
+              일일 브리핑
             </Jump>
           </div>
         </header>
@@ -1241,7 +1241,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           <Panel
             title="학원 공지"
             note="최근 공지 · 대상 권한 반영"
-            href="/dashboard"
+            href="/dashboard/announcements"
             sections={[v.notices]}
           >
             <div className={s.notices}>
@@ -1261,7 +1261,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             {v.notices?.data?.length === 0 && (
               <p className={s.empty}>등록된 공지가 없습니다.</p>
             )}
-            <Jump href="/dashboard">공지 관리 열기</Jump>
+            <Jump href="/dashboard/announcements">공지 관리 열기</Jump>
           </Panel>
         </div>
 

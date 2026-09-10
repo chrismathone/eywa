@@ -41,14 +41,14 @@ export function deepLinkWindow(
   documentTitle: string,
 ): { id: string; title: string } | null {
   const path = (pathname.split("?")[0] ?? "").split("#")[0];
-  if (!path.startsWith("/") || path === "/") return null;
+  if (!path.startsWith("/") || path === "/" || path === "/menu") return null;
   // 🔴 프로토콜 상대 경로(`//evil.com`·`/\evil.com`)는 **상대 URL로 쓰면 남의 origin**이 된다 —
   //    iframe src에 그대로 실리면 eywa 창틀 안에 남의 사이트가 뜨는 피싱 경로가 열린다.
   //    (그런 주소는 라우트가 없어 404지만 **셸은 그대로 렌더된다** — 훅은 돌아간다.)
   if (path.startsWith("//") || path.startsWith("/\\")) return null;
 
   const item = findNavItem(path);
-  if (item && navPresentation(item) === "desktop") return null;
+  if (item && item.href === path && navPresentation(item) === "desktop") return null;
 
   const resolved = windowIdForHref(path);
   // 메뉴 루트(= 사이드바를 누른 것과 같은 화면)면 사이드바와 **같은 제목**을 쓴다 — 문서 제목을
