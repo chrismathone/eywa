@@ -50,6 +50,7 @@ export function ReportPreview({
   attachments,
   attachmentUrls,
   trendRows,
+  templateMode,
 }: {
   ctx: ReportPreviewContext;
   student: OneScreenStudent;
@@ -60,6 +61,11 @@ export function ReportPreview({
   attachmentUrls?: Record<string, string>;
   /** 지난 회차 시험·과제 이력(지연 조회). 아직 안 왔으면 undefined = 그래프만 비고 나머지는 그대로 그린다. */
   trendRows?: TrendReportRow[];
+  /**
+   * 템플릿 모드(영어, 사용자 2026-09-10) — 조립된 글(draft)이 본문. 학부모 카드에 **그대로** 넘긴다:
+   * 미리보기가 따로 판정하면 /r·ClassNote 이미지와 갈린다. 안 넘기면 수학 카드 그대로.
+   */
+  templateMode?: boolean;
 }) {
   // 🔴 껍데기(머리·안내)만 언어를 탄다 — 아래 ParentReportCard는 **학부모가 보는 것 그대로**라
   //    한국어 고정이다(미리보기가 발송물과 달라지면 미리보기의 존재 이유가 없어진다).
@@ -132,6 +138,7 @@ export function ReportPreview({
           settings={ctx.settings}
           attachments={resolved}
           trend={trend}
+          templateMode={templateMode}
         />
       </div>
       {imagesPending ? (

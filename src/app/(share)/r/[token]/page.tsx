@@ -133,6 +133,9 @@ export default async function PublicLessonReportPage({
         settings={rpt}
         attachments={attachmentImgs}
         trend={trend}
+        // 영어 = 템플릿 모드(사용자 2026-09-10) — notes가 템플릿으로 조립된 글 그 자체라 항목 칸 대신 본문으로.
+        // subject는 이미 위 SELECT에 있다 — 새 컬럼을 넣지 않는다(없는 컬럼 하나가 /r 전체를 죽인다, #95).
+        templateMode={report.subject === "english"}
       />
     </div>
   );

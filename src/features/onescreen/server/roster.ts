@@ -139,6 +139,14 @@ type OnescreenSessionRow = {
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
+      /** 영어 템플릿 모드(2026-09-10) — 영어 행만 실린다(saveOnescreenSession 입력과 같은 키). */
+      templateId?: string;
+      nextTest?: string;
+      aiIntro?: string;
+      aiComment?: string;
+      templateHash?: string;
+      aiFactsHash?: string;
+      composedFactsHash?: string;
       /**
        * 행(수업) 단위 평가값 — 2026-08-13. 이 항목이 있는 행만 독립 값을 갖고, 없으면 아래 세션 컬럼
        * (학생 단위)으로 폴백한다(row-fields.ts `resolveRowFields`). 옛 세션은 전부 후자라 동작 불변.
@@ -1368,6 +1376,14 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         // 자동작성 스냅샷(0214a) — 초안과 같은 규약으로 복원. 없으면 미복원(발송본 notes 복원 행은 스냅샷을
         // 모른다 — 그 경우 저장 시 서버 sticky(resolveMentSource)가 기존 라벨로 보수 판정한다.
         if (entry?.autoDraft?.trim()) su.autoDraft = entry.autoDraft;
+        // 영어 템플릿 모드(2026-09-10) — 영어 행만 실려 있다(수학 세션엔 키 자체가 없어 아래는 전부 건너뛴다).
+        if (entry?.templateId) su.templateId = entry.templateId;
+        if (entry?.nextTest != null) su.nextTest = entry.nextTest;
+        if (entry?.aiIntro != null) su.aiIntro = entry.aiIntro;
+        if (entry?.aiComment != null) su.aiComment = entry.aiComment;
+        if (entry?.templateHash) su.templateHash = entry.templateHash;
+        if (entry?.aiFactsHash) su.aiFactsHash = entry.aiFactsHash;
+        if (entry?.composedFactsHash) su.composedFactsHash = entry.composedFactsHash;
         // 행 단위 평가값(2026-08-13) — 지정된 행만 실려 있다. 없으면 su.*를 undefined로 두어
         // resolveRowFields가 학생 값(아래 sess 컬럼)으로 폴백한다 = 옛 세션 하위호환.
         if (entry?.attitude !== undefined) su.attitude = entry.attitude;

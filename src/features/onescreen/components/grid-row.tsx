@@ -26,7 +26,7 @@ import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { makeupBadgeLabel } from "../makeup-label";
 import { makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { resolveRowFields } from "../row-fields";
-import type { OneScreenStudent } from "../types";
+import type { OneScreenStudent, Subject } from "../types";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import {
@@ -54,6 +54,8 @@ const TD_GROUP = `border-t-2 border-t-neutral-fill/50 ${TD_BASE}`;
 // 문구·특이사항 textarea — 내용에 따라 자동 확장(공용 상수, 미지원 브라우저는 각 칸의 min-h가 폴백).
 // 표 모드는 좁은 칸이 여러 개라 손잡이를 남기는 변형을 쓴다(폼 입력칸은 손잡이 없는 TEXTAREA_AUTOSIZE).
 const AUTOSIZE = TEXTAREA_AUTOSIZE_RESIZABLE;
+// 영어 행 경고 칩(카드 칸의 칩과 같은 톤 — 표 칸이 좁아 여백만 줄였다).
+const ENGLISH_FLAG = "border-amber/40 bg-amber-soft text-amber rounded-pill border px-1.5 py-0.5 text-xs font-bold";
 
 /** 필드 편집 핸들러(카드뷰와 같은 state·저장로직 공유 — studentId 파라미터 버전). */
 export type GridFieldHandlers = {
@@ -97,6 +99,12 @@ export type GridRowActions = {
   onRemoveMakeup?: (student: OneScreenStudent, subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false라 버튼을 열지 않는다(서버도 같은 판정으로 막는다). */
   canRemoveMakeup?: (studentId: string, subjectName: string) => boolean;
+  /** 영어 행 경고 셋(칸 바뀜·AI 코멘트 옛 값·이름 없음) — 카드 칸·발송 확인과 같은 판정(english-draft.ts). */
+  englishFlagsOf?: (
+    student: OneScreenStudent,
+    subject: Subject,
+    rep: SubjectReport | undefined,
+  ) => { stale: boolean; aiStale: boolean; nameMissing: boolean; needsAi: boolean };
 };
 
 /** 표 표시 설정(학원 설정 유래). */
@@ -263,7 +271,11 @@ export function GridBodyRow({
   const canSend = sendGate.canSend; // 열람 전용 포함 — 판정·사유는 send-gate 단일 소스
   // 멘트와 기록 칸이 서로 다른 말을 하는지(시험날 진도·멘트에만 있는 점수) — **막지 않고 알린다**.
   // 학부모 카드엔 멘트와 기록이 나란히 보이므로 어긋나면 학부모가 두 사실을 동시에 받는다(2026-07-30 감사).
-  const mentWarnings = checkMentConsistency({
+  // 영어 행 = 템플릿 모드(2026-09-10, 카드와 같은 규약) — 2칸 나누기·추세·멘트 불일치 경고를 쓰지 않는다.
+  const isEnglishRow = subject.subjectKey === "english";
+  // 영어 행 경고 셋 — 판정은 부모가 넘긴 함수(카드·발송 확인과 같은 english-draft.ts). 없으면(테스트 등) 안 그린다.
+  const englishFlags = isEnglishRow ? actions.englishFlagsOf?.(student, subject, rep) : undefined;
+  const mentWarnings = isEnglishRow ? [] : checkMentConsistency({
     ment: rep?.draft ?? "",
     progress: subject.today ?? "",
     dailyTest: rowEval.tests.daily.score != null ? "y" : "",
@@ -655,7 +667,7 @@ export function GridBodyRow({
               lockedTone || "bg-amber-soft/30"
             }`}
           />
-          {config.noticeMode === "B" ? (
+          {config.noticeMode === "B" && !isEnglishRow ? (
             // 모드 B — 카드 모드와 동일 계약: 화면만 2칸, 값은 joinComment이 빈 줄로 합친 **단일 문자열**
             // (저장·발송 경로 무변경). 표는 폭이 좁아 칸 제목을 placeholder로 겸한다.
             <>
@@ -686,14 +698,42 @@ export function GridBodyRow({
               className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[72px]`}
             />
           )}
-          <textarea
-            value={rep?.trendDraft ?? ""}
-            onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
-            readOnly={rowLocked}
-            placeholder={mentPlaceholder ?? t("os.row.trendPh")}
-            aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
-            className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px]`}
-          />
+          {englishFlags &&
+          (englishFlags.stale || englishFlags.aiStale || englishFlags.nameMissing || englishFlags.needsAi) ? (
+            // 영어 행 경고 — 표만 쓰는 강사도 보게(카드 칸과 같은 판정). 긴 설명은 title로, 고치기는 카드에서.
+            <div className="flex flex-wrap gap-1">
+              {englishFlags.needsAi ? (
+                <span className={ENGLISH_FLAG} title={t("os.tpl.needAi")}>
+                  {t("os.tpl.gridNeedAi")}
+                </span>
+              ) : null}
+              {englishFlags.stale ? (
+                <span className={ENGLISH_FLAG} title={t("os.tpl.stale")}>
+                  {t("os.tpl.gridStale")}
+                </span>
+              ) : null}
+              {englishFlags.aiStale ? (
+                <span className={ENGLISH_FLAG} title={t("os.tpl.aiStale")}>
+                  {t("os.tpl.gridAiStale")}
+                </span>
+              ) : null}
+              {englishFlags.nameMissing ? (
+                <span className={ENGLISH_FLAG} title={t("os.tpl.nameMissing")}>
+                  {t("os.tpl.gridName")}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {isEnglishRow ? null : (
+            <textarea
+              value={rep?.trendDraft ?? ""}
+              onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
+              readOnly={rowLocked}
+              placeholder={mentPlaceholder ?? t("os.row.trendPh")}
+              aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
+              className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px]`}
+            />
+          )}
         </div>
       </td>
       <td className={td}>

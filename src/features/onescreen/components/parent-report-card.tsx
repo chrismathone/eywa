@@ -35,6 +35,26 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** 보고 글이 비었을 때 문구 — 수학 '학부모 전달 내용'과 영어 템플릿 본문이 같은 문구를 쓴다(강사가 빈 발송을 눈으로 안다). */
+const EMPTY_NOTES = "작성된 보고 내용이 없습니다.";
+
+/**
+ * 템플릿 모드 본문(영어 보고서, 사용자 2026-09-10 — "템플릿 여러 개 + 발송 전 수정").
+ * 강사가 템플릿으로 조립한 글(`notes`)이 **보고서 본문 그 자체**다 — 진도·숙제·테스트·코멘트가 이미
+ * 섹션 머리말(📍·📅·💡·💌)과 함께 글 안에 들어 있다. 그래서 제목 줄을 달지 않는다(글이 "안녕하세요 학부모님"으로
+ * 스스로 시작한다).
+ * 글씨는 수학 '학부모 전달 내용'(16px)보다 한 단계 크게 — 워커가 800px·2배로 `.report-capture`를 캡처하고
+ * 학부모는 그 이미지를 폰으로 읽는다(글이 곧 보고서라 가장 크게 읽혀야 한다).
+ */
+function TemplateBody({ text }: { text: string | null }) {
+  const body = (text ?? "").replace(/\r\n?/g, "\n").trim();
+  return (
+    <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
+      <p className="text-foreground text-xl leading-relaxed break-keep whitespace-pre-wrap">{body || EMPTY_NOTES}</p>
+    </section>
+  );
+}
+
 /** "달성초"(학교) + "초3"(학년) → "달성초3". 학교명 끝 글자(초/중/고)와 학년 앞 글자가 겹치면 중복 제거해 붙임. 불일치면 공백 조인. */
 export function fmtSchoolGrade(school?: string | null, grade?: string | null): string {
   if (!school) return grade || "-";
@@ -71,6 +91,11 @@ export type ParentReportCardProps = {
   settings: ReportSettings; // 학원 운영 > 보고서 표시 토글
   attachments: { path: string; name: string; url: string }[]; // 이미 signed URL 해석된 첨부(실패분 제외)
   trend?: TrendPoint[]; // 성적 추이 그래프 점(fetchReportTrendRows→buildTrendPoints). 없으면 그래프 미표시.
+  /**
+   * 템플릿 모드(영어) — `notes`가 템플릿으로 조립된 글 그 자체라 항목 칸 대신 그 글을 본문으로 그린다.
+   * 호스트가 `subject === "english"`로 켠다(/r·인쇄·원스크린 미리보기). 기본 false = 수학 카드 그대로.
+   */
+  templateMode?: boolean;
 };
 
 /** 학부모 보고서 카드(max-w-md 컬럼) — /r·/print 공용. 표시 항목은 전부 settings 토글 준수. */
@@ -82,6 +107,7 @@ export function ParentReportCard({
   settings: rpt,
   attachments,
   trend,
+  templateMode = false,
 }: ParentReportCardProps) {
   // "2026년 07월 10일" — 제목에 합쳐 쓰므로 0패딩 고정 포맷(원장 요청 표기). YYYY-MM-DD 문자열 분해라 TZ 무관.
   const [ry, rm, rd] = (report.reportDate ?? "").split("-");
@@ -132,7 +158,13 @@ export function ParentReportCard({
         <Field label="담임" value={report.teacherName || "-"} />
       </Section>
 
-      {showToday ? (
+      {/* 템플릿 모드(영어) — 조립된 글이 곧 본문이다. 아래 '오늘 수업'·'평가'·학습 추이·'학부모 전달 내용'·
+          학습 추세는 **전부 건너뛴다**: 같이 그리면 같은 진도·숙제가 글 안과 칸에 두 번 나간다.
+          🔴 'showParentNote' 토글을 보지 않는다 — 수학에선 여러 칸 중 하나지만 여기선 글이 곧 보고서라,
+             끄면 학생 정보만 남은 빈 카드가 학부모에게 나간다. 머리·학생 정보·첨부·바닥글은 수학과 같다. */}
+      {templateMode ? <TemplateBody text={report.notes} /> : null}
+
+      {!templateMode && showToday ? (
         <Section title="오늘 수업">
           {rpt.showTextbook && report.textbook ? <Field label="교재" value={report.textbook} /> : null}
           {/* 진도가 중단된 날(시험 등)은 나간 차시가 없다 — '진도' 라벨로 내보내면 학부모에게 거짓이라 라벨만 바꾼다.
@@ -151,7 +183,7 @@ export function ParentReportCard({
       ) : null}
 
       {/* 평가 — 시험점수(일일/확인/레거시 합본)·지난 과제(수행 상태)·수업 태도(2026-07-10 원장 요청 분리). */}
-      {showEval ? (
+      {!templateMode && showEval ? (
         <Section title="평가">
           {report.dailyTest ? <Field label="일일테스트" value={report.dailyTest} /> : null}
           {report.checkTest ? <Field label="확인테스트" value={report.checkTest} /> : null}
@@ -167,22 +199,22 @@ export function ParentReportCard({
       {/* 학습 추이 그래프(시험·과제, 순수 SVG) — 지표별 유효점 2개 이상일 때만(위 showTrendGraph에서 판정).
           위치: '학부모 전달 내용' 위(2026-07-10 원장 요청 — 숫자 추이를 먼저, 서술은 아래).
           제목 "성적 추이"→"학습 추이"(2026-07-10 원장 요청, 라벨만). */}
-      {showTrendGraph ? (
+      {!templateMode && showTrendGraph ? (
         <Section title="학습 추이">
           <ReportTrendGraph points={trend!} />
         </Section>
       ) : null}
 
-      {rpt.showParentNote ? (
+      {!templateMode && rpt.showParentNote ? (
         <Section title="학부모 전달 내용">
           <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">
-            {report.notes || "작성된 보고 내용이 없습니다."}
+            {report.notes || EMPTY_NOTES}
           </p>
         </Section>
       ) : null}
 
       {/* 학습 추세(종합분석) — 0091a. 내용 있을 때만 노출(빈 회차엔 섹션 자체를 숨김). */}
-      {rpt.showTrendNote && report.trendNote ? (
+      {!templateMode && rpt.showTrendNote && report.trendNote ? (
         <Section title="학습 추세">
           <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">{report.trendNote}</p>
         </Section>

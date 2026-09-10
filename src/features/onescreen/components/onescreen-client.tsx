@@ -50,6 +50,32 @@ import { ProgressCard } from "./progress-card";
 import { SheetSourceCard } from "./sheet-source-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
+// 영어 템플릿 모드(2026-09-10) — 영어 행은 멘트 대신 템플릿 글(수학 경로 불변).
+import { EnglishTemplatePanel } from "./english-template-panel";
+import { generateEnglishMent } from "../server/english-ment-actions";
+import { listMyReportTemplates } from "@/features/report-templates/server/actions";
+import { BUILTIN_ENGLISH_TEMPLATE, type ReportTemplate } from "@/features/report-templates/defaults";
+import { englishTestText } from "@/features/report-templates/values";
+import { textHash } from "@/features/report-templates/provenance";
+import {
+  aiFactsHashOf,
+  canRecompose,
+  composeEnglishDraft,
+  findTemplateIn,
+  factTokensOf,
+  isAiStale,
+  isNameMissing,
+  isTemplateStale,
+  isTextOutdated,
+  isUntouchedTemplateDraft,
+  needsAiFirst,
+  outputAckKey,
+  pendingNeedsAi,
+  templateFactsKey,
+  templateNeedsAi,
+  type EnglishGenStatus,
+  type EnglishRowFacts,
+} from "../english-draft";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -85,6 +111,11 @@ const NoticeComposer = dynamic(() => import("./notice-composer").then((m) => m.N
   ssr: false,
   loading: ViewSkeleton,
 });
+// 템플릿 관리 창(2026-09-10) — 영어 행에서 '템플릿 관리'를 누를 때만 쓰므로 첫 로드에서 뺀다(B5, 위와 같은 이유).
+const TemplateManager = dynamic(
+  () => import("@/features/report-templates/components/template-manager").then((m) => m.TemplateManager),
+  { ssr: false },
+);
 import {
   buildGridRows,
   rowKey,
@@ -195,6 +226,14 @@ function initReports(students: OneScreenStudent[]): ReportsState {
         revoked: !!su.revokedAt,
         viewCount: su.viewCount,
         attachments: su.attachments ?? [],
+        // 영어 템플릿 모드(2026-09-10) — 세션 복원값. 수학 행은 전부 undefined(세션에 키가 없다).
+        templateId: su.templateId,
+        nextTest: su.nextTest,
+        aiIntro: su.aiIntro,
+        aiComment: su.aiComment,
+        templateHash: su.templateHash, // 템플릿 글 지문 — 없으면(옛 세션·가져온 글) 저장 직전 재조립 대상이 아니다
+        aiFactsHash: su.aiFactsHash,
+        composedFactsHash: su.composedFactsHash,
       };
   }
   return out;
@@ -391,6 +430,42 @@ export function OneScreenClient({
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
+  // 영어 템플릿 모드(2026-09-10) — 내 템플릿 목록(맨 앞은 기본). **영어 행이 있을 때만** 한 번 불러온다
+  // (첫 페인트 밖 · 수학만 가르치는 강사는 호출 0). 실패해도 기본 템플릿은 그대로 쓴다.
+  const [englishTemplates, setEnglishTemplates] = useState<ReportTemplate[]>([BUILTIN_ENGLISH_TEMPLATE]);
+  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  // 목록을 한 번이라도 받았는가(성공·실패 무관) — 받기 전엔 사용자 템플릿을 "없다"고 단정하지 않는다.
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [templateListFailed, setTemplateListFailed] = useState(false);
+  const hasEnglishRows = useMemo(
+    () => students.some((s) => s.subjects.some((su) => su.subjectKey === "english")),
+    [students],
+  );
+  useEffect(() => {
+    if (!hasEnglishRows) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await listMyReportTemplates();
+        if (cancelled) return;
+        setEnglishTemplates(res.templates);
+        setTemplateNotice(res.notice);
+        // 🔴 안내(notice)가 붙은 목록은 기본 템플릿뿐인 **불완전한** 목록이다(DB 오류·표 없음·권한) — 실패로 친다.
+        //    안 치면 사용자 템플릿 행에 '삭제됨' 거짓 칩이 서고, 자동작성이 기본 템플릿으로 바꿔 끼워 선택을 잃었다(적대 재리뷰).
+        if (res.notice) setTemplateListFailed(true);
+      } catch {
+        // 목록을 못 받아도 기본 템플릿으로 계속 쓸 수 있다 — 화면을 막지 않되 **알린다**
+        // (말없이 기본으로 바꿔 끼우면 고른 템플릿과 다른 글이 나간다).
+        if (!cancelled) setTemplateListFailed(true);
+      } finally {
+        if (!cancelled) setTemplatesLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasEnglishRows]);
   const [bulkGen, setBulkGen] = useState(false); // 표 일괄 자동작성 진행중
   const [bulkBusy, setBulkBusy] = useState<"save" | "send" | null>(null); // 일괄 저장/발송 진행중 — 재진입·행발송 잠금(#9/#10)
 
@@ -416,6 +491,10 @@ export function OneScreenClient({
   // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
   const studentsRef = useRef(students);
   const reportsRef = useRef(reports);
+  // 영어 템플릿 목록·로딩 여부 미러 — 일괄 자동작성(비동기 루프) 중 목록이 도착해도 다음 행부터 본다.
+  const englishTemplatesRef = useRef(englishTemplates);
+  const templatesLoadedRef = useRef(templatesLoaded);
+  const templateListFailedRef = useRef(templateListFailed);
   // 출결 in-flight 미러 — 상단 스트립 방송이 **내가 방금 누른 알약**을 되돌리지 않게(응답 역전 방지).
   const attPendingRef = useRef(attPending);
   // ref 미러는 render 중이 아니라 effect에서 갱신(react-hooks/refs). 타이머는 800ms 뒤라 항상 최신 반영.
@@ -423,6 +502,9 @@ export function OneScreenClient({
     studentsRef.current = students;
     reportsRef.current = reports;
     attPendingRef.current = attPending;
+    englishTemplatesRef.current = englishTemplates;
+    templatesLoadedRef.current = templatesLoaded;
+    templateListFailedRef.current = templateListFailed;
   });
   /**
    * 상단 '오늘 출석 미입력' 스트립이 기록한 칸을 이 화면에 반영한다(원장 제보 2026-08-20 —
@@ -529,6 +611,19 @@ export function OneScreenClient({
               textbook: su.textbook ?? "",
               makeup: su.makeup ?? false,
               homeworkToday: su.homeworkToday ?? "",
+              // 영어 템플릿 모드(2026-09-10) — **영어 행만** 싣는다(수학 세션 모양 불변). 로스터가 같은 키로 복원한다.
+              ...(su.subjectKey === "english"
+                ? {
+                    templateId: r?.[su.name]?.templateId ?? "",
+                    nextTest: r?.[su.name]?.nextTest ?? "",
+                    aiIntro: r?.[su.name]?.aiIntro ?? "",
+                    aiComment: r?.[su.name]?.aiComment ?? "",
+                    // 지문 둘(english-draft.ts) — 새로고침 뒤에도 "템플릿 글 그대로인가"·"AI가 옛 값 기준인가"를 판정한다.
+                    templateHash: r?.[su.name]?.templateHash ?? "",
+                    aiFactsHash: r?.[su.name]?.aiFactsHash ?? "",
+                    composedFactsHash: r?.[su.name]?.composedFactsHash ?? "",
+                  }
+                : {}),
               // 행 단위 평가값(태도·점수·과제 수행률·특이사항) — 지정된 행만 싣는다(row-fields.ts).
               // 미지정 행은 옛 세션과 같은 모양으로 남아 로스터가 학생 값으로 폴백한다(하위호환).
               ...(hasRowOverrides(su)
@@ -1714,13 +1809,378 @@ export function OneScreenClient({
     if (sheet.textbook) setTextbookFor(selected.id, su.name, sheet.textbook);
     if (sheet.homework) setHomeworkTodayFor(selected.id, su.name, sheet.homework);
   }
+  // ── 영어 템플릿 모드(2026-09-10) — 영어 행은 멘트 대신 **템플릿 글**을 만든다(수학 경로 불변) ──
+  // 조립·판정은 english-draft.ts(순수·Vitest)가 한다 — 여기선 칸 값을 모으고 결과를 행에 쓴다.
+  /**
+   * 이 행이 고른 템플릿. 없거나 지워졌으면 **null** — 호출부가 기본 템플릿으로 채우되 그 사실을 알린다
+   * (말없이 다른 템플릿으로 바꿔 끼우면 강사가 고른 것과 다른 글이 나간다, 적대 리뷰 2026-09-10).
+   * ⚠️ 비동기 경로(자동작성·저장·복사)는 `englishTemplatesRef.current`를 넘긴다 — 일괄 작성 중 도착한 목록도 본다.
+   */
+  function findTemplate(
+    templateId: string | undefined,
+    list: readonly ReportTemplate[] = englishTemplates,
+  ): ReportTemplate | null {
+    return findTemplateIn(list, templateId, BUILTIN_ENGLISH_TEMPLATE);
+  }
+  /**
+   * 영어 행의 사실 — 표시 필드는 저장(buildReportFields)과 **같은 함수**로 만들고(오늘 과제 쪽수 후보정·테스트 표기)
+   * 평가값은 행 단위(row-fields.ts)로 읽는다. 템플릿 글과 AI 지문이 모두 이 값에서 나온다.
+   */
+  function englishFactsOf(student: OneScreenStudent, su: Subject): EnglishRowFacts {
+    const rowEval = resolveRowFields(student, su);
+    const fields = buildReportFields({
+      subject: su,
+      homework: rowEval.homework,
+      attitude: rowEval.attitude,
+      tests: rowEval.tests,
+      draft: "",
+      showDailyTest,
+      showCheckTest,
+    });
+    return {
+      studentName: student.name,
+      teacherName,
+      progress: su.today ?? "",
+      homeworkToday: fields.homeworkToday,
+      dailyTest: fields.dailyTest,
+      checkTest: fields.checkTest,
+      attitude: rowEval.attitude ?? "",
+      homework: rowEval.homework,
+      note: rowEval.note,
+    };
+  }
+  /**
+   * 미리보기에 실을 영어 글 — 템플릿 글 그대로면 **저장·복사 때 실제로 나갈 글**(지금 칸 값으로 다시 짠 글)을 보여 준다.
+   * 렌더 중이라 상태는 바꾸지 않는다. 고친 글·가져온 글은 그대로("학부모가 받는 화면 그대로"가 거짓이 되지 않게).
+   */
+  function englishPreviewDraft(student: OneScreenStudent, su: Subject, rep: SubjectReport | undefined): string {
+    const found = findTemplate(rep?.templateId);
+    if (!found || !canRecompose(found, rep)) return rep?.draft ?? "";
+    return composeEnglishDraft(found, englishFactsOf(student, su), rep ?? {});
+  }
+  /** 경고 셋(칸 달라짐·AI 코멘트가 옛 값 기준·이름 없음) — 카드 칸·표 행·발송 확인이 같은 판정을 쓴다. */
+  function englishRowFlags(student: OneScreenStudent, su: Subject, rep: SubjectReport | undefined) {
+    const found = findTemplate(rep?.templateId);
+    const template = found ?? BUILTIN_ENGLISH_TEMPLATE;
+    const facts = englishFactsOf(student, su);
+    const aiStale = isAiStale(template, facts, rep);
+    // 🔴 글이 옛 칸 값을 담고 있는데 저장·복사가 자동으로 못 맞추는가(템플릿 삭제·목록 실패·AI 글 없음·고친 글) —
+    //    템플릿과 무관한 지문으로 판정한다(못 찾은 템플릿으로 판정하면 옛 점수가 경고 없이 나갔다, 적대 재리뷰).
+    const textOutdated = isTextOutdated(found, facts, rep);
+    return {
+      stale: (!!found && isTemplateStale(found, facts, rep)) || textOutdated,
+      aiStale,
+      nameMissing: isNameMissing(template, rep, student.name),
+      // 'AI 글 없음' = 글의 템플릿에 AI 칸이 새로 생겼거나(템플릿 편집) 고른 템플릿이 AI 글을 기다리는 중.
+      // 템플릿을 못 찾았으면 판정하지 않는다(기본 템플릿으로 판정하면 거짓 칩이 선다) — 대신 '템플릿 없음'.
+      needsAi:
+        (!!found && needsAiFirst(found, rep)) ||
+        pendingNeedsAi(rep?.pendingTemplateId ? findTemplate(rep.pendingTemplateId) : null, rep),
+      // 글의 템플릿이 목록에서 사라졌다(삭제) — 목록을 제대로 받았을 때만 단정한다.
+      templateGone: !!rep?.templateId && !found && templatesLoaded && !templateListFailed,
+      // 내보내기(발송·저장·복사·링크) 전에 물을 조건 — 판정은 이것 하나. 강사가 같은 값에서 이미 '그대로'라고 답했으면
+      // 다시 묻지 않는다(칩은 그대로 남는다 — 확인은 지문이 아니라 따로 적는다).
+      outdated: (aiStale || textOutdated) && rep?.outputAck !== outputAckKey(rep, facts),
+    };
+  }
+  /**
+   * '그대로 보낼/저장할/복사할까요?'에 **예**라고 답했으면 그 값으로 확인된 것으로 **따로 적는다**(outputAck) — 같은 값인
+   * 동안 같은 확인을 되풀이하지 않고, 값이 또 바뀌면 다시 묻는다(손으로 고친 글에 풀리지 않는 확인이 매번 떠 OK만 누르게
+   * 됐다). 🔴 지문·칩은 건드리지 않는다(english-draft `outputAckKey`). 화면 메모리에만 둔다(새로 열면 다시 묻는다).
+   */
+  function acknowledgeEnglishOutput(student: OneScreenStudent, su: Subject) {
+    const rep = reportsRef.current[student.id]?.[su.name];
+    if (!rep) return;
+    const ack = outputAckKey(rep, englishFactsOf(student, su));
+    patchReport(student.id, su.name, (r) => ({ ...r, outputAck: ack }));
+  }
+  /** 이 영어 행의 템플릿을 아직 확인할 수 없다(목록이 오는 중) — 곧 다시 짤 수 있게 되니 내보내기를 잠깐 미룬다. */
+  function englishTemplateNotReady(rep: SubjectReport | undefined): boolean {
+    return (
+      !!rep?.templateId && !templatesLoadedRef.current && !findTemplate(rep.templateId, englishTemplatesRef.current)
+    );
+  }
+  /**
+   * 영어 행을 내보내기 전(발송·저장·복사) 한 번 묻는다 — 글이 고치기 전 값을 담고 있을 때만(`outdated`, 판정 하나).
+   * 예라고 하면 확인된 것으로 친다. @returns 계속해도 되면 true
+   */
+  function confirmEnglishOutput(
+    student: OneScreenStudent,
+    su: Subject | undefined,
+    key: "os.tpl.outdatedSend" | "os.tpl.outdatedSave" | "os.tpl.outdatedCopy",
+  ): boolean {
+    if (!su || su.subjectKey !== "english") return true;
+    const rep = reportsRef.current[student.id]?.[su.name];
+    // 목록이 아직 오는 중이면 잠깐 미룬다 — 곧 다시 짤 수 있게 되는데 지금 '그대로'를 권하면 옛 글이 나간다.
+    if (englishTemplateNotReady(rep)) {
+      toast.message(t("os.tpl.loading"));
+      return false;
+    }
+    if (!englishRowFlags(student, su, rep).outdated) return true;
+    if (!window.confirm(t(key))) return false;
+    acknowledgeEnglishOutput(student, su);
+    return true;
+  }
+  /** 일괄 작업 대상 중 글이 고치기 전 값을 담은 영어 행(확인 창에 이름을 적는다). */
+  function outdatedEnglishRows<T extends { student: OneScreenStudent; subject: Subject }>(rows: readonly T[]): T[] {
+    return rows.filter(
+      (r) =>
+        r.subject.subjectKey === "english" &&
+        englishRowFlags(r.student, r.subject, reportsRef.current[r.student.id]?.[r.subject.name]).outdated,
+    );
+  }
+  /**
+   * 🔴 템플릿이 마지막으로 만든 글 **그대로**면 지금 칸 값으로 다시 조립한다(저장·복사 직전). 자동작성 뒤 점수·숙제를
+   *    고치면 글만 옛 값으로 남아 학부모 카드(/r)·복사본이 기록과 다른 말을 했다(적대 리뷰 2026-09-10).
+   *    판정은 **지문**(templateHash) — 고친 글·'이전 회차 가져오기'로 넣은 글·옛 세션 글은 건드리지 않는다
+   *    (`draft === autoDraft`로 판정했더니 가져온 글이 저장 때 조용히 사라졌다, 적대 재리뷰 2026-09-10).
+   */
+  function freshEnglishDraft(
+    student: OneScreenStudent,
+    subjectName: string,
+  ): { draft: string; autoDraft: string | undefined } {
+    const rep = reportsRef.current[student.id]?.[subjectName];
+    const draft = rep?.draft ?? "";
+    const su = student.subjects.find((x) => x.name === subjectName);
+    const found = findTemplate(rep?.templateId, englishTemplatesRef.current);
+    // AI 칸 템플릿인데 AI 글이 없으면 다시 짜지 않는다(코멘트 빠진 글이 저장·복사되지 않게 — canRecompose).
+    if (!su || !found || !canRecompose(found, rep)) return { draft, autoDraft: rep?.autoDraft };
+    const facts = englishFactsOf(student, su);
+    const text = composeEnglishDraft(found, facts, rep ?? {});
+    const factsKey = templateFactsKey(facts, rep?.nextTest ?? "", factTokensOf(found));
+    if (text !== draft || rep?.composedFactsHash !== factsKey) {
+      patchReport(student.id, subjectName, (r) => ({
+        ...r,
+        draft: text,
+        autoDraft: text,
+        templateHash: textHash(text),
+        composedFactsHash: factsKey,
+      }));
+    }
+    return { draft: text, autoDraft: text };
+  }
+  /**
+   * 영어 행 자동작성 — AI 인사말·코멘트를 받아 고른 템플릿에 채운다. 결과를 **상태로 돌려준다**
+   * (일괄 작성은 `quiet`로 부르고 토스트를 모아서 한 번에 알린다).
+   */
+  async function generateEnglishDraftFor(
+    student: OneScreenStudent,
+    su: Subject,
+    quiet = false,
+  ): Promise<EnglishGenStatus> {
+    const subjectName = su.name;
+    const rep0 = reportsRef.current[student.id]?.[subjectName];
+    // 대기 중인 선택(AI 글이 없어 아직 글에 못 쓴 템플릿)이 있으면 그것으로 — 자동작성이 그 선택을 완성한다.
+    const found0 = findTemplate(rep0?.pendingTemplateId ?? rep0?.templateId, englishTemplatesRef.current);
+    // 목록을 받기 전·못 받았을 땐 사용자 템플릿이 "없다"고 단정하지 않는다 — 기본 템플릿으로 바꿔 끼우면 고른 템플릿이
+    // 조용히 사라진다(적대 재리뷰 2026-09-10). 기다렸다(또는 새로 고친 뒤) 다시 누르게 한다.
+    if (!found0 && (!templatesLoadedRef.current || templateListFailedRef.current)) {
+      if (!quiet) toast.message(t(templateListFailedRef.current ? "os.tpl.listFailedRetry" : "os.tpl.loading"));
+      return "loading";
+    }
+    const draftBefore = rep0?.draft ?? "";
+    // 🔴 고친 글(템플릿 글 그대로가 아님)을 자동작성이 말없이 덮지 않는다 — 다시 채우기와 같은 확인(일괄 작성은 글 있는
+    //    행을 애초에 건너뛴다). 'AI 코멘트 옛 값' 경고의 해법이 곧 자동작성이라 더 중요하다(적대 재리뷰 2026-09-10).
+    if (
+      !quiet &&
+      draftBefore.trim() &&
+      !isUntouchedTemplateDraft(rep0) &&
+      !window.confirm(t("os.tpl.autoOverwriteConfirm"))
+    ) {
+      return "cancelled";
+    }
+    let ai: { intro: string; comment: string; factsHash: string } | null = null;
+    // 템플릿에 AI 칸이 하나도 없으면 AI를 부르지 않는다(헛돈 쓰지 않게).
+    if (templateNeedsAi(found0 ?? BUILTIN_ENGLISH_TEMPLATE)) {
+      const idx = student.subjects.indexOf(su);
+      // 🔴 반 전체 안내를 개인 관찰과 갈라 준다 — 수학 자동작성과 **같은 모집단**(지금 화면의 로스터 전체)으로
+      //    판정한다(class-notice.ts). 안 가르면 한 반 글이 서로 복사본이 된다(2026-08-13 실측).
+      const classNotices = detectClassNotices(
+        studentsRef.current.flatMap((st) =>
+          st.subjects.map((row) => ({ classId: row.classId, note: resolveRowFields(st, row).note })),
+        ),
+      );
+      const base = buildReportCommentInput(student, idx, classNotices); // 태도·과제·특이사항 — 수학과 같은 층
+      const facts = englishFactsOf(student, su);
+      const nextTest = rep0?.nextTest ?? "";
+      try {
+        const res = await generateEnglishMent({
+          studentName: student.name,
+          progress: facts.progress,
+          homeworkToday: facts.homeworkToday,
+          testText: englishTestText({ daily: facts.dailyTest, check: facts.checkTest }),
+          nextTest,
+          attitude: base.attitude,
+          homework: base.homework,
+          specialNote: base.specialNote,
+          classContext: (su.classId && classNarratives[su.classId]) || "",
+          classNotice: base.classNotice ?? "",
+        });
+        // 지문은 **보낸 사실**로 남긴다 — 기다리는 동안 점수가 바뀌면 곧바로 'AI 코멘트가 옛 값 기준'이 뜬다.
+        if (res.ok) ai = { intro: res.intro, comment: res.comment, factsHash: aiFactsHashOf(facts, nextTest) };
+      } catch {
+        // 아래에서 알린다
+      }
+      if (!ai) {
+        // 🔴 AI가 실패하면 **글을 건드리지 않는다** — 코멘트 빈 글이 발송 게이트(멘트 필수)를 통과해 나가면 안 되고,
+        //    지난 AI 코멘트를 ""로 덮어 되살릴 길을 없애서도 안 된다(적대 리뷰 2026-09-10).
+        if (!quiet) toast.message(t("os.tpl.aiFailed"));
+        return "ai_failed";
+      }
+    }
+    const nowRep = reportsRef.current[student.id]?.[subjectName];
+    // 🔴 만드는 동안 강사가 **직접** 고쳤으면 글은 덮지 않는다(다시 채우기의 확인과 같은 원칙). 저장 직전 재조립처럼
+    //    템플릿 글 그대로 바뀐 것은 고친 게 아니다(지문으로 가른다).
+    if ((nowRep?.draft ?? "") !== draftBefore && !isUntouchedTemplateDraft(nowRep)) {
+      // AI 결과는 버리지 않되 **대기칸**에 둔다(버리면 같은 글을 또 돈 들여 만든다). 🔴 글에 든 AI 문장·지문은 그대로
+      //    둬야 한다 — 새 지문을 바로 쓰면 옛 코멘트가 든 글이 'AI 코멘트 옛 값' 경고 없이 나간다(적대 재리뷰 2026-09-10).
+      //    '다시 채우기'가 대기칸으로 채우고 지문을 옮긴다.
+      if (ai) {
+        const got = ai;
+        patchReport(student.id, subjectName, (r) => ({ ...r, pendingAi: got }));
+      }
+      if (!quiet) toast.message(t("os.tpl.editedDuringGen"));
+      return "edited";
+    }
+    // 조립은 **지금** 칸 값·템플릿으로 — 기다리는 동안 진도·다음 시간 테스트·템플릿이 바뀌었을 수 있다.
+    const nowStudent = studentsRef.current.find((s) => s.id === student.id) ?? student;
+    const nowSu = nowStudent.subjects.find((x) => x.name === subjectName) ?? su;
+    const wantId = nowRep?.pendingTemplateId ?? nowRep?.templateId;
+    const found = findTemplate(wantId, englishTemplatesRef.current);
+    const templateId = found ? wantId : undefined;
+    const aiIntro = ai ? ai.intro : nowRep?.aiIntro;
+    const aiComment = ai ? ai.comment : nowRep?.aiComment;
+    const aiFactsHash = ai ? ai.factsHash : nowRep?.aiFactsHash;
+    const nowFacts = englishFactsOf(nowStudent, nowSu);
+    const text = composeEnglishDraft(found ?? BUILTIN_ENGLISH_TEMPLATE, nowFacts, {
+      nextTest: nowRep?.nextTest,
+      aiIntro,
+      aiComment,
+    });
+    patchReport(student.id, subjectName, (r) => ({
+      ...r,
+      templateId,
+      draft: text,
+      autoDraft: text, // 작성 방식 스냅샷(0214a) — 수학과 같은 규약
+      templateHash: textHash(text),
+      composedFactsHash: templateFactsKey(
+        nowFacts,
+        nowRep?.nextTest ?? "",
+        factTokensOf(found ?? BUILTIN_ENGLISH_TEMPLATE),
+      ),
+      aiIntro,
+      aiComment,
+      aiFactsHash,
+      pendingAi: undefined, // 새 AI 글이 들어갔으니 대기칸은 버린다
+      pendingTemplateId: undefined, // 고른 템플릿이 글이 됐다
+      // 🔴 새 글이다 — 앞선 '그대로' 확인은 옛 글에 대한 것이라 버린다(안 버리면 새 글이 확인 없이 나갔다, 적대 재리뷰).
+      outputAck: undefined,
+    }));
+    if (found) return "ok";
+    if (!quiet) toast.message(t("os.tpl.templateMissing"));
+    return "template_fallback";
+  }
+  /**
+   * 템플릿으로 다시 채우기 — 지금 칸 값 + 마지막 AI 인사말·코멘트로 글을 다시 만든다(AI 재호출 없음).
+   * 🔴 강사가 손본 글이면 먼저 묻는다 — 말없이 덮으면 고친 문장이 사라진다.
+   */
+  function refillEnglishFor(student: OneScreenStudent, subjectName: string, templateId?: string) {
+    const su = student.subjects.find((x) => x.name === subjectName);
+    if (!su) return;
+    const rep = reportsRef.current[student.id]?.[subjectName];
+    const nextId = templateId ?? rep?.pendingTemplateId ?? rep?.templateId;
+    const found = findTemplate(nextId, englishTemplatesRef.current);
+    if (!found && (!templatesLoadedRef.current || templateListFailedRef.current)) {
+      toast.message(t(templateListFailedRef.current ? "os.tpl.listFailedRetry" : "os.tpl.loading"));
+      return;
+    }
+    const keptId = found ? nextId : undefined;
+    const template = found ?? BUILTIN_ENGLISH_TEMPLATE;
+    // 작성 중 수정으로 대기칸에 받아 둔 AI 글이 있으면 그것으로 채운다(지문도 함께 옮긴다).
+    const pending = rep?.pendingAi;
+    const ai = pending
+      ? { aiIntro: pending.intro, aiComment: pending.comment, aiFactsHash: pending.factsHash }
+      : { aiIntro: rep?.aiIntro, aiComment: rep?.aiComment, aiFactsHash: rep?.aiFactsHash };
+    // 🔴 AI 칸이 있는 템플릿인데 AI 글을 한 번도 못 만든 행 — 사실 줄만 있는 글이 '멘트 있음'으로 발송 게이트를
+    //    지나면 안 된다(AI 실패 때 글을 안 바꾸는 것과 같은 원칙, 적대 재리뷰 2026-09-10).
+    // 🔴 글의 템플릿(templateId)은 **바꾸지 않는다** — 바꾸면 글·지문은 옛 템플릿인데 판정은 새 템플릿으로 해서, 그사이
+    //    고친 점수를 못 알아보고 옛 값이 저장·복사됐다(적대 재리뷰). 고른 것은 대기(pendingTemplateId)로만 둔다.
+    if (templateNeedsAi(template) && !ai.aiIntro?.trim() && !ai.aiComment?.trim()) {
+      const pendingTemplateId = keptId === rep?.templateId ? undefined : keptId;
+      patchReport(student.id, subjectName, (r) => ({ ...r, pendingTemplateId }));
+      toast.message(t("os.tpl.needAiFirst"));
+      return;
+    }
+    // 🔴 템플릿이 만든 글 그대로가 아니면(고친 글·가져온 글·옛 글) 먼저 묻는다 — 판정은 지문(english-draft.ts).
+    const edited = !!rep?.draft?.trim() && !isUntouchedTemplateDraft(rep);
+    if (edited && !window.confirm(t("os.tpl.overwriteConfirm"))) return;
+    if (!found) toast.message(t("os.tpl.templateMissing"));
+    const facts = englishFactsOf(student, su);
+    const text = composeEnglishDraft(template, facts, {
+      nextTest: rep?.nextTest,
+      aiIntro: ai.aiIntro,
+      aiComment: ai.aiComment,
+    });
+    patchReport(student.id, subjectName, (r) => ({
+      ...r,
+      templateId: keptId,
+      draft: text,
+      autoDraft: text,
+      templateHash: textHash(text),
+      composedFactsHash: templateFactsKey(facts, rep?.nextTest ?? "", factTokensOf(template)),
+      ...ai,
+      pendingAi: undefined,
+      pendingTemplateId: undefined,
+      // 🔴 새 글이다 — 앞선 '그대로' 확인은 옛 글에 대한 것이라 버린다(다시 채우기로 옛 코멘트가 돌아와도 다시 묻는다).
+      outputAck: undefined,
+    }));
+  }
+  /** 템플릿 바꾸기 — 아직 글이 없으면 고르기만(자동작성 때 그 템플릿으로 채워진다), 있으면 다시 채운다. */
+  function setEnglishTemplateFor(student: OneScreenStudent, subjectName: string, templateId: string) {
+    const rep = reportsRef.current[student.id]?.[subjectName];
+    if (!rep?.draft?.trim()) {
+      patchReport(student.id, subjectName, (r) => ({ ...r, templateId, pendingTemplateId: undefined }));
+      return;
+    }
+    refillEnglishFor(student, subjectName, templateId);
+  }
+  function setNextTestFor(studentId: string, subjectName: string, text: string) {
+    patchReport(studentId, subjectName, (r) => ({ ...r, nextTest: text }));
+  }
+  /**
+   * 글 복사 — 영어 반 보드 자동 발송이 열리기 전까지 강사가 ClassNote에 붙여 넣는 **유일한** 길.
+   * 🔴 복사가 실패하면 실패라고 말한다 — 성공 토스트만 띄우면 앞 학생 글이 클립보드에 남은 채 붙여 넣어진다.
+   */
+  async function copyEnglishText(student: OneScreenStudent, subjectName: string) {
+    // 🔴 영어는 지금 '글 복사'가 학부모에게 닿는 **실제 경로**다(ClassNote 발송 과목이 아니다) — 발송 확인과 같은 판정으로 묻는다.
+    const su = student.subjects.find((x) => x.name === subjectName);
+    if (!confirmEnglishOutput(student, su, "os.tpl.outdatedCopy")) return;
+    const text = freshEnglishDraft(student, subjectName).draft.trim();
+    if (!text) {
+      toast.message(t("os.tpl.copyEmpty"));
+      return;
+    }
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      toast.success(t("os.tpl.copied"));
+    } catch {
+      toast.error(t("os.tpl.copyFailed"));
+    }
+  }
   // AI 학부모 멘트 + 학습 추세 생성 코어(카드·표 공용) — 멘트 실패 시 결정적 템플릿 폴백,
   // 추세는 표본 부족/실패면 조용히 생략(기존 값 유지). 둘을 학생별 병렬(Promise.all)로 생성해 지연 최소화.
-  async function generateDraftFor(student: OneScreenStudent, subjectName: string) {
+  async function generateDraftFor(
+    student: OneScreenStudent,
+    subjectName: string,
+    opts?: { quiet?: boolean },
+  ): Promise<EnglishGenStatus | undefined> {
     if (readonlyView) return; // 조용히 — 상위 진입(autoWrite*)이 이미 토스트를 띄운다(일괄이면 N개가 쌓인다)
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     if (idx < 0) return;
     const su = student.subjects[idx];
+    // 🔑 영어 행 = 템플릿 모드(2026-09-10) — 멘트·추세 대신 템플릿 글을 만든다. 수학 경로는 아래 그대로다.
+    if (su?.subjectKey === "english") return generateEnglishDraftFor(student, su, opts?.quiet ?? false);
     // ⚠️ 과목**키**(math…)여야 한다 — su.name엔 반 이름이 붙을 수 있어 폴백도 subjectLabel 먼저.
     const subjectKey = su?.subjectKey || su?.subjectLabel || su?.name || undefined;
     // 반 공통 서술(G6) — 이 행의 반 서술을 생성 재료로 동봉(없으면 기존 동작). 카드·표·일괄 공용 경로라 전부 커버.
@@ -1833,21 +2293,28 @@ export function OneScreenClient({
       return;
     }
     setBulkGen(true);
+    // 영어 행 결과는 모아서 한 번에 알린다(행마다 토스트를 띄우면 30개가 쌓인다) — 글을 안 바꾼 행은 '완료'에서 뺀다.
+    let englishSkipped = 0;
+    let templateFallback = false;
     try {
       for (const r of rows) {
         setGenKey(`${r.student.id}::${r.subject.name}`);
         const student = latestRow(r.student.id, r.subject.name) ?? r.student;
-        await generateDraftFor(student, r.subject.name);
+        const status = await generateDraftFor(student, r.subject.name, { quiet: true });
+        if (status === "loading" || status === "ai_failed" || status === "edited") englishSkipped++;
+        else if (status === "template_fallback") templateFallback = true;
       }
     } finally {
       setGenKey(null);
       setBulkGen(false);
     }
     toast.success(
-      tf("os.c.genDone", { n: rows.length }) +
+      tf("os.c.genDone", { n: rows.length - englishSkipped }) +
         (preserved ? tf("os.c.genPreserved", { n: preserved }) : "") +
         (skipped ? tf("os.c.genSkipped", { n: skipped }) : ""),
     );
+    if (englishSkipped) toast.message(tf("os.tpl.bulkSkipped", { n: englishSkipped }));
+    if (templateFallback) toast.message(t("os.tpl.templateMissing"));
   }
   // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
   // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
@@ -2129,8 +2596,10 @@ export function OneScreenClient({
       ATTITUDE,
     );
     // 멘트는 별도 계획 — 초안이 빈 행 중 직전 멘트가 있는 것만. 적용은 아래 확인 다이얼로그 뒤에.
+    // 🔴 영어 행은 뺀다 — 영어 글은 템플릿이 **지난 회차 진도·점수**까지 담은 전문이라, 가져오면 오늘 기록과 다른 글이
+    //    그대로 나간다(적대 재리뷰 2026-09-10). 영어는 자동작성·다시 채우기로 새로 만든다.
     const commentPlan = planPrevComments(
-      rows.map((r) => ({
+      rows.filter((r) => r.subject.subjectKey !== "english").map((r) => ({
         studentId: r.student.id,
         subjectName: r.subject.name,
         prevNote: r.student.subjects.find((su) => su.name === r.subject.name)?.prevReport?.note,
@@ -2217,7 +2686,9 @@ export function OneScreenClient({
     const su = student.subjects[idx];
     // ⚠️ 최신 초안은 ref에서(일괄 루프 중 사용자 편집·앞 행 patch 반영) — closure `reports`는 클릭 시점 스냅샷이라 유실 위험(#10).
     const existing = reportsRef.current[student.id]?.[subjectName];
-    const draft = existing?.draft ?? "";
+    // 영어 행: 손대지 않은 자동 글이면 지금 칸 값으로 다시 조립해서 저장한다(기록과 다른 글이 나가지 않게).
+    const fresh = su?.subjectKey === "english" ? freshEnglishDraft(student, subjectName) : null;
+    const draft = fresh ? fresh.draft : (existing?.draft ?? "");
     // 표시 필드(교재·진도·시험·태도·멘트…)는 **카드 미리보기와 같은 함수**로 만든다(report-fields.ts).
     // 여기서 따로 조립하면 "화면에 보이던 것"과 "학부모가 받은 것"이 조용히 갈라진다.
     // 🔴 평가값(태도·점수·과제 수행률)은 **행 단위**로 해석한다(row-fields.ts) — 보강은 정규와 따로 나가는
@@ -2251,7 +2722,7 @@ export function OneScreenClient({
         // 보강 행의 소속(어느 수업 시간에 한 보강인가) — 반 필터 앵커(0171a). 정규 행이면 서버가 무시한다.
         makeupClassId: su?.makeupClassId ?? null,
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
-        mentSource: computeClientMentSource(draft, existing?.autoDraft),
+        mentSource: computeClientMentSource(draft, fresh ? fresh.autoDraft : existing?.autoDraft),
       },
     };
   }
@@ -2315,6 +2786,8 @@ export function OneScreenClient({
       toast.message(t("os.c.needProgress"));
       return;
     }
+    // 영어 행 — AI 인사말·코멘트가 옛 값 기준이면 묻는다(학부모 링크·인쇄는 저장된 글을 그대로 보여 준다).
+    if (!confirmEnglishOutput(selected, su, "os.tpl.outdatedSave")) return;
     const res = await saveRecord(selected, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? t("os.c.saveFail"));
@@ -2342,6 +2815,9 @@ export function OneScreenClient({
       toast.message(t("os.c.bulkBusy"));
       return;
     }
+    // 영어 행 — AI 코멘트가 고치기 전 값 기준이면 한 번 묻는다(표 행 발송·일괄 확인과 같은 판정, english-draft.ts).
+    const suCard = selected.subjects.find((x) => x.name === subjectName);
+    if (!confirmEnglishOutput(selected, suCard, "os.tpl.outdatedSend")) return;
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 표 sendRow와 동일. 워커 최종 관문이 무조건 차단하므로
     // 여기서 큐잉해 봐야 "발송 대기" 표시 후 실패로 뒤집히는 혼란만 남는다. 이유를 즉시 말하고 막는다.
     if (!(reports[selected.id]?.[subjectName]?.draft ?? "").trim()) {
@@ -2428,6 +2904,9 @@ export function OneScreenClient({
       toast.error(tf("os.c.emptyMentRow", { name: student.name }));
       return;
     }
+    // 영어 행 — AI 코멘트가 고치기 전 값 기준이면 한 번 묻는다(카드 칩·표 칩·일괄 확인과 같은 판정, english-draft.ts).
+    const suRow = student.subjects.find((x) => x.name === subjectName);
+    if (!confirmEnglishOutput(student, suRow, "os.tpl.outdatedSend")) return;
     const res = await queueOne(student, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? t("os.c.sendFail"));
@@ -2497,6 +2976,32 @@ export function OneScreenClient({
       );
       return;
     }
+    // 영어 행 중 AI 인사말·코멘트가 옛 값 기준인 행 — 저장하면 학부모 링크·인쇄에 그대로 보이니 **누구인지** 적고 묻는다.
+    // 영어 행의 템플릿 목록이 아직 오는 중이면 잠깐 미룬다(곧 다시 짤 수 있게 된다 — 지금 '그대로'를 권하지 않는다).
+    if (
+      rows.some(
+        (r) =>
+          r.subject.subjectKey === "english" &&
+          englishTemplateNotReady(reportsRef.current[r.student.id]?.[r.subject.name]),
+      )
+    ) {
+      toast.message(t("os.tpl.loading"));
+      return;
+    }
+    // 🔴 일괄 확인은 '확인됨'으로 적지 않는다 — 이름이 5명까지만 적히는 창 하나로 이후 행별 복사·발송 확인까지 꺼지면 안 된다.
+    const outdatedRows = outdatedEnglishRows(rows);
+    const aiStaleNames = [...new Set(outdatedRows.map((r) => r.student.name))];
+    if (
+      aiStaleNames.length &&
+      !window.confirm(
+        tf("os.tpl.bulkSaveOutdated", {
+          n: aiStaleNames.length,
+          names: aiStaleNames.slice(0, 5).join(", "),
+          more: aiStaleNames.length > 5 ? tf("os.c.lineMore", { n: aiStaleNames.length - 5 }) : "",
+        }),
+      )
+    )
+      return;
     setBulkBusy("save");
     let ok = 0;
     let fail = 0;
@@ -2614,6 +3119,29 @@ export function OneScreenClient({
       toast.message(tf("os.c.sendNoneMent", { n: emptyMentRows.length }));
       return;
     }
+    // 영어 행 중 AI 코멘트가 고치기 전 값으로 쓰인 행 — 막지 않고 **누구인지** 알린다(위 줄들과 같은 규약).
+    // 저장 직전 재조립은 사실 줄만 새로 쓰므로, 여기서 안 알리면 점수와 코멘트가 서로 다른 글이 나간다.
+    // 영어 행의 템플릿 목록이 아직 오는 중이면 잠깐 미룬다(곧 다시 짤 수 있게 된다 — 지금 '그대로'를 권하지 않는다).
+    if (
+      rows.some(
+        (r) =>
+          r.subject.subjectKey === "english" &&
+          englishTemplateNotReady(reportsRef.current[r.student.id]?.[r.subject.name]),
+      )
+    ) {
+      toast.message(t("os.tpl.loading"));
+      return;
+    }
+    // 🔴 일괄 확인은 '확인됨'으로 적지 않는다 — 이름이 5명까지만 적히는 창 하나로 이후 행별 복사·발송 확인까지 꺼지면 안 된다.
+    const outdatedRows = outdatedEnglishRows(rows);
+    const aiStaleNames = [...new Set(outdatedRows.map((r) => r.student.name))];
+    const aiStaleLine = aiStaleNames.length
+      ? tf("os.tpl.lineOutdated", {
+          n: aiStaleNames.length,
+          names: aiStaleNames.slice(0, 5).join(", "),
+          more: aiStaleNames.length > 5 ? tf("os.c.lineMore", { n: aiStaleNames.length - 5 }) : "",
+        })
+      : "";
     const absentLine = absentRows ? tf("os.c.lineAbsent", { n: absentRows }) : "";
     const sentLine = alreadySentRows
       ? tf("os.c.lineSent", { n: alreadySentRows })
@@ -2622,7 +3150,7 @@ export function OneScreenClient({
       !window.confirm(
         tf("os.c.sendConfirm", {
           n: rows.length,
-          lines: `${emptyMentLine}${progressLine}${uncheckedLine}${gapLine}${absentLine}${sentLine}`,
+          lines: `${emptyMentLine}${progressLine}${uncheckedLine}${gapLine}${aiStaleLine}${absentLine}${sentLine}`,
         }),
       )
     )
@@ -2780,6 +3308,13 @@ export function OneScreenClient({
     if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
       if (!opts?.silent) toast.message(t("os.c.attachNeedProgress"));
       return 0;
+    }
+    // 영어 행 — 첫 첨부는 지금 글로 보고서를 자동 저장한다(저장된 글은 학부모 링크·인쇄에 그대로 보인다). 글이 고치기 전
+    // 값을 담고 있으면 발송·저장과 같은 판정으로 묻고, 일괄(조용히)은 그 행을 건너뛴다(요약의 '건너뜀'에 잡힌다).
+    if (!reports[student.id]?.[subjectName]?.sent && su0?.subjectKey === "english") {
+      if (opts?.silent) {
+        if (englishRowFlags(student, su0, reportsRef.current[student.id]?.[subjectName]).outdated) return 0;
+      } else if (!confirmEnglishOutput(student, su0, "os.tpl.outdatedSave")) return 0;
     }
     const studentId = student.id;
     const subject = subjectKeyFor(student, subjectName);
@@ -3135,6 +3670,8 @@ export function OneScreenClient({
             onRemoveMakeup: (student, subjectName) => void removeMakeupRow(student, subjectName),
             canRemoveMakeup: (studentId, subjectName) =>
               canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
+            // 영어 행 경고 칩 — 카드 칸·발송 확인과 같은 판정(english-draft.ts).
+            englishFlagsOf: englishRowFlags,
           }}
           bulkActions={{
             onSaveAll: saveAllVisible,
@@ -3316,7 +3853,50 @@ export function OneScreenClient({
                     />
                   </>
                 }
+                // 영어 행 — 학부모 링크 복사도 발송·복사와 같은 확인을 거친다(링크는 저장된 글을 그대로 보여 준다).
+                shareCopyWarning={
+                  previewSubject?.subjectKey === "english" &&
+                  englishRowFlags(selected, previewSubject, previewReport).outdated
+                    ? t("os.tpl.outdatedLink")
+                    : null
+                }
+                // 영어 행 템플릿 칸(2026-09-10) — 영어 행에서만 그린다(카드도 영어 행일 때만 이 자리를 쓴다).
+                templatePanel={
+                  previewSubject?.subjectKey === "english" ? (
+                    <EnglishTemplatePanel
+                      templates={englishTemplates}
+                      state={{
+                        // 고른 선택이 대기 중이면 그걸 보여 준다('AI 글 없음' 칩이 자동작성을 권한다).
+                        templateId:
+                          previewReport?.pendingTemplateId ?? previewReport?.templateId ?? BUILTIN_ENGLISH_TEMPLATE.id,
+                        // 지금 글을 실제로 만든 템플릿 — 대기 중이면 칩이 그 이름을 함께 적는다(드롭다운과 글이 다를 때).
+                        appliedTemplateId: previewReport?.templateId ?? BUILTIN_ENGLISH_TEMPLATE.id,
+                        nextTest: previewReport?.nextTest ?? "",
+                        // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
+                        ...englishRowFlags(selected, previewSubject, previewReport),
+                      }}
+                      notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
+                      handlers={{
+                        onTemplate: (id) => setEnglishTemplateFor(selected, previewSubject.name, id),
+                        onNextTest: (v) => setNextTestFor(selected.id, previewSubject.name, v),
+                        onRefill: () => refillEnglishFor(selected, previewSubject.name),
+                        onCopy: () => void copyEnglishText(selected, previewSubject.name),
+                        onManage: () => setTemplateManagerOpen(true),
+                      }}
+                    />
+                  ) : null
+                }
               />
+              {templateManagerOpen ? (
+                <TemplateManager
+                  open
+                  onOpenChange={setTemplateManagerOpen}
+                  templates={englishTemplates}
+                  onTemplatesChange={setEnglishTemplates}
+                  teacherName={teacherName}
+                  notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
+                />
+              ) : null}
             </div>
 
             {/* 4열째 — 학부모가 받는 화면 그대로(실시간). ≥1680px에서만 옆에 서고, 그보다 좁으면
@@ -3327,11 +3907,17 @@ export function OneScreenClient({
                   ctx={previewCtx}
                   student={selected}
                   subject={previewSubject}
-                  draft={previewReport?.draft ?? ""}
+                  draft={
+                    previewSubject.subjectKey === "english"
+                      ? englishPreviewDraft(selected, previewSubject, previewReport)
+                      : (previewReport?.draft ?? "")
+                  }
                   trendDraft={previewReport?.trendDraft}
                   attachments={previewReport?.attachments ?? []}
                   attachmentUrls={attUrls}
                   trendRows={trendRows}
+                  // 영어 행 = 템플릿 글만 싣는 카드(학부모 /r·인쇄와 같은 판정: subject === "english").
+                  templateMode={previewSubject.subjectKey === "english"}
                 />
               </div>
             ) : null}

@@ -52,6 +52,35 @@ export type SubjectReport = {
   revoked?: boolean;
   viewCount?: number;
   attachments?: { path: string; name: string }[]; // 학생 사진 첨부(P2b)
+  // ── 영어 템플릿 모드(2026-09-10) — 영어 행에서만 쓴다. 세션에 실려 새로고침에도 남는다. ──
+  /** 고른 템플릿 id(없으면 기본 템플릿). */
+  templateId?: string;
+  /** 다음 시간 테스트 안내 — 템플릿 `{다음테스트}` 칸. */
+  nextTest?: string;
+  /** 마지막 AI 인사말·코멘트 — 템플릿을 바꾸거나 다시 채울 때 AI를 다시 부르지 않고 쓴다. */
+  aiIntro?: string;
+  aiComment?: string;
+  /**
+   * 템플릿이 **마지막으로 만든 글**의 지문(provenance.ts) — 이것과 같은 글만 "손대지 않은 템플릿 글"이다.
+   * `draft === autoDraft`로 판정하면 '이전 회차 가져오기'로 넣은 글도 템플릿 글로 오인해 다시 조립한다.
+   */
+  templateHash?: string;
+  /** AI 코멘트를 쓸 때 넘긴 사실의 지문 — 지금 칸 값과 다르면 "코멘트가 옛 값 기준" 경고(저장해도 안 사라진다). */
+  aiFactsHash?: string;
+  /** 지금 글을 짤 때 쓴 칸 값의 지문(english-draft `templateFactsKey`) — 템플릿과 무관한 "옛 값 담김" 판정용. */
+  composedFactsHash?: string;
+  /**
+   * 자동작성 중 강사가 글을 고쳐 **글에 넣지 못한** AI 결과 — 화면 메모리에만 둔다(세션에 안 싣는다).
+   * '다시 채우기'가 이것으로 채우고 지문을 옮긴다. 글에 든 AI 문장·지문은 그대로여야 'AI 코멘트 옛 값' 판정이 산다.
+   */
+  pendingAi?: { intro: string; comment: string; factsHash: string };
+  /**
+   * 강사가 고른 템플릿인데 AI 글이 없어 **아직 글에 못 쓴 것**(화면 메모리 전용). 🔴 `templateId`(글을 만든 템플릿)는
+   * AI 글이 생길 때까지 바꾸지 않는다 — 바꾸면 판정이 어긋나 고친 점수가 옛 값으로 나갔다. 자동작성이 이 선택을 완성한다.
+   */
+  pendingTemplateId?: string;
+  /** 강사가 '그대로 내보낸다'고 확인한 시점의 값(english-draft `outputAckKey`, 화면 메모리 전용) — 확인 창만 본다. */
+  outputAck?: string;
 };
 
 const MAX_ATTACHMENTS = 6;
@@ -118,6 +147,8 @@ export function ReportCard({
   subjectIndex,
   onSubjectIndex,
   todayInputs,
+  templatePanel,
+  shareCopyWarning = null,
   readonlyView = false,
 }: {
   student: OneScreenStudent;
@@ -167,6 +198,16 @@ export function ReportCard({
    * 배선은 원래 있던 자리(onescreen-client)에 그대로 두고, 이 카드는 **자리만** 내준다.
    */
   todayInputs?: ReactNode;
+  /**
+   * 영어 행의 **템플릿 칸**(2026-09-10) — todayInputs와 같은 슬롯 규약(배선은 onescreen-client, 카드는 자리만).
+   * 영어 행일 때만 그린다. 수학 행은 이 값을 넘겨도 무시한다.
+   */
+  templatePanel?: ReactNode;
+  /**
+   * 학부모 링크를 복사하기 전에 물을 문장(없으면 묻지 않는다) — 영어 행에서 AI 인사말·코멘트가 옛 값 기준일 때만
+   * 부모가 넘긴다. 링크는 저장된 글을 그대로 보여 주므로 발송·글 복사와 같은 확인을 거친다. 판정은 부모 몫.
+   */
+  shareCopyWarning?: string | null;
   /** '다른 강사 뷰'(열람 전용) — 카드 입력·발송·저장·공유링크 조작 전부 잠금(2026-08-19). */
   readonlyView?: boolean;
 }) {
@@ -227,8 +268,12 @@ export function ReportCard({
     attendanceUnchecked: !attendance?.readOnly && isAttendanceUnchecked(subject),
   });
   const canQueue = sendGate.canSend; // 열람 전용 포함 — 판정·사유는 send-gate 단일 소스
+  // 영어 행 = 템플릿 모드(2026-09-10) — 글이 템플릿으로 조립되므로 2칸 나누기·학습 추세·멘트 불일치 경고를
+  // 쓰지 않는다(수학 행은 아래 판정이 그대로다).
+  const isEnglishRow = subject.subjectKey === "english";
   // 멘트 ↔ 기록 불일치(시험날 진도·멘트에만 있는 점수) — 표뷰와 같은 판정. 막지 않고 알린다.
-  const mentWarnings = checkMentConsistency({
+  // ⚠️ 영어 템플릿 글은 '테스트 : …' 줄을 일부러 담는다 — 이 경고를 걸면 모든 영어 글이 헛경고를 단다.
+  const mentWarnings = isEnglishRow ? [] : checkMentConsistency({
     ment: rep.draft ?? "",
     progress: subject.today ?? "",
     dailyTest: cardEval.tests.daily.score != null ? "y" : "",
@@ -244,7 +289,8 @@ export function ReportCard({
   // 📌 영어 발송이 시작되면 RPC에 과목을 넘겨 과목별로 세고 이 게이트를 그때 푼다.
   const unreadBadge = hasMathSubject ? parentUnreadBadge(student.parentRead) : null;
   // 멘트 모드 B = 초안을 2문단(수업 내용 / 태도·특이사항)으로 나눠 편집. 값은 단일 문자열 그대로 저장.
-  const para = noticeMode === "B";
+  // 영어 템플릿 글은 문단이 여럿이라 2칸으로 쪼개면 템플릿이 망가진다 → 영어 행은 늘 한 칸.
+  const para = noticeMode === "B" && !isEnglishRow;
   const paras = splitComment(rep.draft);
 
   return (
@@ -524,12 +570,14 @@ export function ReportCard({
               <span
                 className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
                 title={
-                  para
-                    ? t("os.card.modeBTitle")
-                    : t("os.card.modeATitle")
+                  isEnglishRow
+                    ? t("os.card.templateBadgeTitle")
+                    : para
+                      ? t("os.card.modeBTitle")
+                      : t("os.card.modeATitle")
                 }
               >
-                {para ? t("os.ment.b") : t("os.ment.a")}
+                {isEnglishRow ? t("os.card.templateBadge") : para ? t("os.ment.b") : t("os.ment.a")}
               </span>
               {/* 🔴 잠근 이유를 **잠긴 칸 옆에** 적는다 — 발송 버튼 옆 사유 알약은 한참 아래라, 문구를 쓰려다
                   막힌 사람은 그걸 못 본다(원장 2026-07-30 "왜 비활성화됐는지 알 방법이 없다"와 같은 함정). */}
@@ -562,6 +610,8 @@ export function ReportCard({
               <EyIcon name="sparkle" size={13} /> {generating ? t("os.card.generating") : t("os.row.gen")}
             </Button>
           </div>
+          {/* 영어 행 템플릿 칸(2026-09-10) — 배선은 onescreen-client, 카드는 자리만(todayInputs와 같은 슬롯 규약). */}
+          {isEnglishRow ? templatePanel : null}
           {para ? (
             // 모드 B — 저장·발송 계약은 그대로 단일 문자열, 화면만 2칸(joinComment이 빈 줄로 합침).
             <div className="flex flex-1 flex-col gap-1.5">
@@ -588,22 +638,30 @@ export function ReportCard({
             <textarea
               value={rep.draft}
               onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
-              placeholder={tf("os.card.mentPh", { subject: subjectName })}
-              className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
+              placeholder={
+                isEnglishRow ? t("os.card.mentPhTemplate") : tf("os.card.mentPh", { subject: subjectName })
+              }
+              // 영어 템플릿 글은 20줄 안팎이라 기본 높이로는 절반도 안 보인다 — 영어 행만 키운다.
+              className={`border-line focus:border-primary scrollbar-thin ${
+                isEnglishRow ? "min-h-[280px]" : "min-h-[110px]"
+              } flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
             />
           )}
         </div>
 
-        {/* 학습 추세(종합분석) — 4a. '자동 작성'이 최근 시험·과제 흐름을 요약해 채운다. 표본 부족 시 빈 채로 둠(수동 입력 가능). */}
-        <div className="flex flex-col gap-1.5">
-          <p className="micro text-text-faint">{t("os.card.trend")}</p>
-          <textarea
-            value={rep.trendDraft ?? ""}
-            onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
-            placeholder={t("os.card.trendPh")}
-            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
-          />
-        </div>
+        {/* 학습 추세(종합분석) — 4a. '자동 작성'이 최근 시험·과제 흐름을 요약해 채운다. 표본 부족 시 빈 채로 둠(수동 입력 가능).
+            영어 행은 그리지 않는다 — 추세는 수학 점수 이력에서 나오고, 영어 카드는 템플릿 글만 싣는다. */}
+        {isEnglishRow ? null : (
+          <div className="flex flex-col gap-1.5">
+            <p className="micro text-text-faint">{t("os.card.trend")}</p>
+            <textarea
+              value={rep.trendDraft ?? ""}
+              onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
+              placeholder={t("os.card.trendPh")}
+              className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
+            />
+          </div>
+        )}
         </fieldset>
 
         {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.
@@ -854,6 +912,7 @@ export function ReportCard({
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      if (shareCopyWarning && !window.confirm(shareCopyWarning)) return;
                       // 복사는 **지금 열려 있는 호스트** 기준으로 — env가 비었거나 도메인이 달라도 유효한 주소가 나간다.
                       void navigator.clipboard?.writeText(`${window.location.origin}${sharePath}`);
                       toast.success(t("os.card.copied"));
