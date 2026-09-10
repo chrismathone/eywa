@@ -9,6 +9,7 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { setOnboardingCheck } from "@/features/newcomers/server/actions";
+import { STATUS_STYLE, cellBoxClass, cellMarkOf } from "@/features/newcomers/cell-display";
 import {
   ONBOARDING_ITEMS,
   daysBetween,
@@ -17,6 +18,7 @@ import {
   progressOf,
   statusOf,
   type NewcomerAnchors,
+  type OnboardingItemDef,
   type OnboardingItemStatus,
 } from "@/features/newcomers/onboarding-items";
 import type { NewcomerRow } from "@/features/newcomers/server/queries";
@@ -26,34 +28,22 @@ import type { NewcomerRow } from "@/features/newcomers/server/queries";
  *
  * 🔴 칸은 **체크박스가 아니라 상태**다: 완료 / 지연 / 오늘·임박 / 예정(D-n) / 기한 없음 / 기준일 전.
  *    체크박스만 두면 "아직 할 때가 아닌 것"과 "놓친 것"이 같아 보인다.
- * 🔴 **칸을 통째로 칠한다**(원장 2026-09-09 *"체크를 하게되면 셀을 전체 색칠해버려서 마치 프로그레스바처럼
- *    보이도록 해"*) — 한 행을 가로로 훑으면 왼쪽부터 채워진 띠가 되어 "어디까지 왔나"가 한눈에 보인다.
- *    그래서 항목 열은 **폭이 전부 같아야 한다**(칸마다 폭이 다르면 띠가 울퉁불퉁해 진도로 안 읽힌다).
+ * 🔴 **칠하는 것은 완료뿐**이고 나머지는 흰 바탕 + 글자다 — 모양·글자·색 규약은
+ *    [`cell-display.ts`](src/features/newcomers/cell-display.ts) **한 곳**에 있다(여기에 색 맵을 만들지 말 것).
+ * 🔴 항목 열은 **폭이 전부 같다**(원장 *"모든 열너비 통일시킬 수 있으면 통일"*) — 같은 자리에서 같은
+ *    항목을 비교하기 위해서다. 열 순서를 진행 순서로 읽히게 만들지 말 것(기준일이 둘이라 기한이
+ *    왼쪽→오른쪽으로 오지 않는다).
  * 🔴 낙관 반영 후 실패하면 **되돌린다** — 저장 안 된 체크가 화면에만 남으면 그게 가장 나쁜 거짓말이다.
  */
 
 /**
- * 열 폭(%) — `table-fixed`라 내용이 폭을 못 흔든다(원장 *"모든 열너비 통일시킬 수 있으면 통일"*).
+ * 열 폭(%) — `table-fixed`라 내용이 폭을 못 흔든다.
  * 🔴 항목 열은 **남는 폭을 정확히 n등분**한다 — 값을 하나씩 적어 두면 항목이 늘 때 합이 100을 벗어난다.
  */
 const NAME_W = 15;
 const ENROLLED_W = 8;
 const FIRST_CLASS_W = 9;
 const ITEM_W = (100 - NAME_W - ENROLLED_W - FIRST_CLASS_W) / ONBOARDING_ITEMS.length;
-
-/**
- * 상태별 칸 모양 — **칸 전체**를 칠한다.
- * ⚠️ 색은 의미색 캐논 그대로(완료=초록 / 지연=빨강 / 임박=앰버 / 그 밖=무채색).
- *    `waived`(기능 시작 전 기한)는 **경고가 아니다** — 옅은 회색으로 "셀 것 없음"을 말한다.
- */
-const STATUS_STYLE: Record<OnboardingItemStatus, { fill: string; label: string }> = {
-  done: { fill: "bg-green text-white", label: "완료" },
-  overdue: { fill: "bg-danger text-white", label: "지연" },
-  due: { fill: "bg-amber text-white", label: "오늘·임박" },
-  upcoming: { fill: "bg-bg-soft/50 text-green", label: "예정" },
-  pending: { fill: "bg-bg-soft/30 text-text-faint", label: "기한 없음(첫 수업일 미정)" },
-  waived: { fill: "bg-bg-soft/30 text-text-faint", label: "기능 시작 전 기한 — 세지 않습니다" },
-};
 
 /** `26.10.01` — 연도까지(원장 2026-09-09 *"첫 수업 열은 연도까지 붙여줘 26.10.01 이렇게"*). */
 function shortDate(ymd: string): string {
@@ -62,7 +52,7 @@ function shortDate(ymd: string): string {
 
 function Cell({
   row,
-  itemKey,
+  item,
   status,
   due,
   daysLeft,
@@ -71,7 +61,7 @@ function Cell({
   busy,
 }: {
   row: NewcomerRow;
-  itemKey: string;
+  item: OnboardingItemDef;
   status: OnboardingItemStatus;
   due: string | null;
   daysLeft: number | null;
@@ -80,9 +70,12 @@ function Cell({
   busy: boolean;
 }) {
   const meta = STATUS_STYLE[status];
-  const doneOn = row.checks[itemKey];
+  const mark = cellMarkOf(status, daysLeft);
+  const doneOn = row.checks[item.key];
   const title = [
     meta.label,
+    // ⚠️ 점선 테두리의 뜻을 글로도 남긴다 — 모양만으로는 "왜 색이 없나"를 못 읽는다.
+    item.optional ? "필요시 항목 — 지연·완료율에서 세지 않습니다" : null,
     due ? `기한 ${due}` : "기한 없음 — 첫 수업일이 정해지면 계산됩니다",
     doneOn ? `완료 ${doneOn}` : null,
     canWrite ? (status === "done" ? "눌러서 해제" : "눌러서 완료") : null,
@@ -90,7 +83,7 @@ function Cell({
     .filter(Boolean)
     .join(" · ");
   return (
-    // 🔴 패딩 없는 칸 — 칠이 칸을 꽉 채워야 가로로 이어진 띠(진도)로 읽힌다.
+    // 🔴 패딩 없는 칸 — 완료 칠이 칸을 꽉 채워야 "초록 칸 개수 = 진도"로 읽힌다.
     <td className="p-0">
       <button
         type="button"
@@ -99,16 +92,18 @@ function Cell({
         title={title}
         aria-label={`${row.name} — ${title}`}
         aria-pressed={status === "done"}
-        className={`num flex h-7 w-full items-center justify-center text-xs font-bold transition disabled:cursor-default ${meta.fill} ${
-          canWrite && !busy ? "hover:brightness-95" : ""
-        }`}
+        // ⚠️ 테두리는 **모든 상태가 1px씩** 가진다(대개 투명) — 지연·임박에서만 border를 붙이면
+        //    그 칸만 글자가 1px 밀려 표가 들쭉날쭉해진다(box-border라 높이 28px은 불변).
+        className={`num flex h-7 w-full items-center justify-center border text-xs transition disabled:cursor-default ${cellBoxClass(
+          status,
+          item.optional === true,
+        )} ${canWrite && !busy ? (status === "done" ? "hover:brightness-95" : "hover:bg-muted") : ""}`}
       >
-        {status === "done" ? (
+        {/* 🔴 `blank`는 **일부러 빈 칸**이다(기준일 이전) — `—`를 채워 넣지 말 것. 이유는 title이 말한다. */}
+        {mark.kind === "check" ? (
           <EyIcon name="check" size={14} />
-        ) : status === "upcoming" && daysLeft !== null ? (
-          // 🔴 남은 날을 **초록**으로 적는다(원장 *"옆에 초록색으로 D-n 처럼 몇일 남았다고"*) —
-          //    흐린 칸만으로는 "아직 안 왔다"까지만 알고 "언제 오나"를 모른다.
-          <span>D-{daysLeft}</span>
+        ) : mark.kind === "text" ? (
+          <span>{mark.text}</span>
         ) : null}
       </button>
     </td>
@@ -251,7 +246,7 @@ export function NewcomerTable({
                     <Cell
                       key={item.key}
                       row={row}
-                      itemKey={item.key}
+                      item={item}
                       status={status}
                       due={dueDateOf(item, anchors)}
                       daysLeft={daysLeftOf(item, anchors, today)}
