@@ -8,6 +8,8 @@ import { logAction } from "@/features/audit/server/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
+import { ANY_SUBJECT, isSubjectKey } from "../subject-rows";
+import { isMissingSubjectColumn } from "./cohort";
 
 /**
  * 신규생 체크리스트 한 칸 — 완료/해제(0251a `student_onboarding_checks`).
@@ -22,9 +24,16 @@ import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
  *    admin은 RLS를 우회하므로 ① `tenant_id`를 명시해 쓰고 ② **그 학생이 이 학원 학생인지 먼저 확인**한다
  *    (안 하면 남의 학원 학생 id로 이 학원에 유령 체크 행이 생긴다).
  * ⚠️ 0251a 미적용이면 표가 없다 — 그때는 한글로 그 사실을 돌려준다(영문 원문 노출 금지).
+ * 🔴 **과목별로 저장한다**(0256a, 원장 2026-09-10 "과목별로 따로") — 수학 사전 콜과 영어 사전 콜은 다른 사람이
+ *    거는 다른 전화다. 화면이 보낸 과목은 **서버가 다시 확인한다**([[#77]]): 그 학생이 그 과목 반을 실제로
+ *    듣고 있어야 한다(안 그러면 화면에 안 보이는 과목으로 유령 체크가 쌓인다).
+ * ⚠️ 0256a가 아직 안 돌았으면 과목 칸이 없다 — 그때는 **옛 모양(학생 단위)** 으로 저장한다([[#95]]).
+ *    화면은 그 사실을 배너로 밝힌다(과목별로 보이지만 체크는 두 과목에 함께 걸린다).
  */
 export async function setOnboardingCheck(input: {
   studentId: string;
+  /** 과목 키 — 그 줄의 과목. null/빈 값이면 과목 무관(수강이 없는 학생 줄). */
+  subject?: string | null;
   itemKey: string;
   /** true=완료, false=해제. */
   done: boolean;
@@ -37,6 +46,8 @@ export async function setOnboardingCheck(input: {
     return { ok: false, error: "신규생 관리 쓰기 권한이 없습니다" };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
   if (!ONBOARDING_ITEM_KEYS.includes(input.itemKey)) return { ok: false, error: "알 수 없는 항목입니다" };
+  const subject = (input.subject ?? ANY_SUBJECT).trim();
+  if (subject !== ANY_SUBJECT && !isSubjectKey(subject)) return { ok: false, error: "알 수 없는 과목입니다" };
 
   const doneOn = input.done ? (/^\d{4}-\d{2}-\d{2}$/.test(input.doneOn ?? "") ? input.doneOn! : kstToday()) : null;
   const admin = createAdminClient();
@@ -49,17 +60,49 @@ export async function setOnboardingCheck(input: {
     .maybeSingle();
   if (!student) return { ok: false, error: "학생을 찾을 수 없습니다" };
 
-  const { error } = await admin.from("student_onboarding_checks").upsert(
-    {
-      tenant_id: user.tenantId,
-      student_id: input.studentId,
-      item_key: input.itemKey,
-      done_on: doneOn,
-      done_by: input.done ? user.id : null,
-    },
-    // 일반 유니크(0251a)라 이 축으로 추론이 된다 — 부분 유니크였으면 42P10으로 전건 실패한다([[#113]]).
-    { onConflict: "tenant_id,student_id,item_key" },
-  );
+  // 🔴 과목은 **그 학생이 실제로 듣는 과목**이어야 한다([[#77]]) — 반은 학생 한 명분이라 수 개뿐이다.
+  if (subject !== ANY_SUBJECT) {
+    const { data: enr, error: enrErr } = await admin
+      .from("enrollments")
+      .select("class_id")
+      .eq("tenant_id", user.tenantId)
+      .eq("student_id", input.studentId);
+    if (enrErr) return { ok: false, error: "체크를 저장하지 못했습니다 — 다시 시도해 주세요" };
+    const classIds = [...new Set((enr ?? []).map((e) => e.class_id as string | null).filter((v): v is string => !!v))];
+    let hit = false;
+    if (classIds.length > 0) {
+      const { data: cls, error: clsErr } = await admin
+        .from("classes")
+        .select("id")
+        .eq("tenant_id", user.tenantId)
+        .eq("subject", subject)
+        .in("id", classIds)
+        .limit(1);
+      if (clsErr) return { ok: false, error: "체크를 저장하지 못했습니다 — 다시 시도해 주세요" };
+      hit = (cls ?? []).length > 0;
+    }
+    if (!hit) return { ok: false, error: "이 학생은 그 과목을 듣지 않습니다" };
+  }
+
+  const record = {
+    tenant_id: user.tenantId,
+    student_id: input.studentId,
+    item_key: input.itemKey,
+    done_on: doneOn,
+    done_by: input.done ? user.id : null,
+  };
+  // 일반 유니크라 이 축으로 추론이 된다 — 부분 유니크였으면 42P10으로 전건 실패한다([[#113]]).
+  let { error } = await admin
+    .from("student_onboarding_checks")
+    .upsert({ ...record, subject }, { onConflict: "tenant_id,student_id,subject,item_key" });
+  let storedSubject: string = subject;
+  if (error && isMissingSubjectColumn(error)) {
+    // 0256a 미적용 — 과목 칸이 없다. 옛 모양(학생 단위)으로 저장한다([[#95]]).
+    ({ error } = await admin
+      .from("student_onboarding_checks")
+      .upsert(record, { onConflict: "tenant_id,student_id,item_key" }));
+    storedSubject = ANY_SUBJECT;
+  }
   if (error) {
     const missing = /does not exist|Could not find the table|PGRST205|42P01/i.test(error.message);
     return {
@@ -77,7 +120,9 @@ export async function setOnboardingCheck(input: {
     action: input.done ? "newcomer_check" : "newcomer_uncheck",
     targetType: "student",
     targetLabel: student.name ?? null,
-    metadata: { studentId: input.studentId, itemKey: input.itemKey, doneOn },
+    // 🔴 과목도 남긴다 — "영어 콜은 했다는데"를 되짚으려면 어느 과목의 체크였는지가 필요하다.
+    //    `subjectStored`는 실제로 저장된 축이다(0256a 전이면 과목 무관으로 떨어진다).
+    metadata: { studentId: input.studentId, itemKey: input.itemKey, doneOn, subject, subjectStored: storedSubject },
   });
   revalidatePath("/newcomers");
   return { ok: true };

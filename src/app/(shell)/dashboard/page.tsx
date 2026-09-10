@@ -36,8 +36,7 @@ import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
 import { SlimTrend, hasTrendContent } from "./_components/slim-trend";
-import { OneScreenDashboard } from "./_onescreen/one-screen";
-import { resolveSkin } from "./_onescreen/skin";
+import { OverviewDashboard } from "./_overview/overview-server";
 
 const EMPTY_ENROLLMENT_CHANGES = {
   newCount: 0,
@@ -73,14 +72,7 @@ export const maxDuration = 60;
 export default async function TodayPage({
   searchParams,
 }: {
-  /**
-   * `?view=one` — **한 화면 대시보드**(원장 2026-09-09 *"스크롤 없이 한 화면에"*) 미리 보기.
-   *
-   * 🔴 아직 기본값을 갈아치우지 않는다 — 공지 **등록·수정 UI가 이 화면에만** 있어서, 지금 통째로
-   *    바꾸면 재설계가 아니라 기능 삭제가 된다. 원장이 새 배치를 눈으로 확인하고 공지 관리를 어디에
-   *    둘지 정하면 그때 기본값을 바꾼다(그 시점에 이 분기와 옛 배치는 함께 지운다 — 두 대시보드를
-   *    오래 들고 있으면 한쪽만 고쳐진다).
-   */
+  /** 새 전체 현황은 명시적으로 `?view=one`에서만 제공한다. 기본 대시보드와 공지 관리는 유지한다. */
   searchParams: Promise<{ view?: string; skin?: string }>;
 }) {
   const user = await requireAccess("dashboard");
@@ -88,19 +80,7 @@ export default async function TodayPage({
   const permissionMatrix = await getPermMatrix();
   const sp = await searchParams;
   if (sp.view === "one") {
-    return (
-      // 🔴 이 화면만 셸의 하단 여백을 덮는다 — 스크롤이 없는 화면이라 그 여백이 곧 세로 낭비다.
-      <div className="h-full min-h-0">
-        <OneScreenDashboard
-          systemRole={user.systemRole}
-          permMatrix={permissionMatrix}
-          tenantId={user.tenantId}
-          // `?skin=bi` — 껍데기 비교안(원장 2026-09-10 *"두가지다 볼 수 있게"*). 데이터·판정은 한 벌이라
-          // 한쪽을 고를 때 이 줄과 `_onescreen/skin.ts`만 걷어내면 된다.
-          skin={resolveSkin(sp.skin)}
-        />
-      </div>
-    );
+    return <OverviewDashboard />;
   }
   const access = resolveDashboardAccess(user.systemRole, permissionMatrix);
   const canManageAnnouncements =

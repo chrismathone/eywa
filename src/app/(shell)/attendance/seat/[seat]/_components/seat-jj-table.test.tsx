@@ -36,7 +36,6 @@ const roster: SeatClassRoster = {
       recordedBy: null,
       fromSeat: false,
       note: null,
-    prevAbsence: null,
       attitude: null,
       listeningLevel: "L3",
       memorizedWords: null,

@@ -155,34 +155,6 @@ export function SeatNotePopover({
 }
 
 /**
- * **지난 결석 사유** 한 줄 — 원장 2026-09-08 *"JJ와 LAB 수업의 경우 이전수업이 결석인 경우에 사유를
- * 확인할 수 있도록"*.
- *
- * 🔴 오늘 칸이 이미 찍혔으면 안 보여 준다 — 오늘 사유 칸 바로 옆에 지난 사유가 나란히 서면 어느 것이
- *    오늘 것인지 헷갈린다(그게 지금 고치고 있는 종류의 버그다).
- * ⚠️ 사유가 없으면 날짜만 적는다 — "결석했는데 사유는 안 적혀 있다"도 알아야 할 사실이다.
- */
-export function PrevAbsenceHint({
-  prev,
-  cur,
-}: {
-  prev: { date: string; note: string | null } | null | undefined;
-  cur: SeatStatus | null;
-}) {
-  if (!prev || cur !== null) return null;
-  const md = monthDay(prev.date);
-  return (
-    <p
-      className="text-att-absent-ink/80 truncate text-xs"
-      title={`지난 수업(${prev.date}) 결석${prev.note ? ` · ${prev.note}` : " — 사유 미기재"}`}
-    >
-      지난 결석 {md}
-      {prev.note ? ` · ${prev.note}` : ""}
-    </p>
-  );
-}
-
-/**
  * 같은 날 교시 사이 신호 **한 묶음** — 표 두 벌이 그대로 물려 받는다(props를 셋으로 늘리지 않는다).
  * 🔴 `nextStartByStudent`는 **로그인 화면에서만** 채워진다(비로그인 PIN엔 새 정보를 안 내려보낸다).
  */
@@ -261,10 +233,4 @@ export function SeatPeriodHints({
       ) : null}
     </>
   );
-}
-
-/** "2026-09-04" → "9/4". 이미 KST 날짜 문자열이라 파싱하지 않는다(타임존 되밀림 금지). */
-function monthDay(iso: string): string {
-  const [, m, d] = iso.split("-");
-  return m && d ? `${Number(m)}/${Number(d)}` : iso;
 }

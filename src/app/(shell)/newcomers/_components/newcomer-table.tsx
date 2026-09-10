@@ -8,6 +8,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import { setOnboardingCheck } from "@/features/newcomers/server/actions";
 import { STATUS_STYLE, cellBoxClass, cellHoverClass, cellMarkOf } from "@/features/newcomers/cell-display";
 import {
@@ -43,12 +44,22 @@ import type { NewcomerRow } from "@/features/newcomers/server/queries";
  * 열 폭(%) — `table-fixed`라 내용이 폭을 못 흔든다.
  * 🔴 항목 열은 **남는 폭을 정확히 n등분**한다 — 값을 하나씩 적어 두면 항목이 늘 때 합이 100을 벗어난다.
  */
-const NAME_W = 15;
-const ENROLLED_W = 8;
-const FIRST_CLASS_W = 9;
-const ITEM_W = (100 - NAME_W - ENROLLED_W - FIRST_CLASS_W) / ONBOARDING_ITEMS.length;
+/**
+ * 🔴 학생 칸을 **셋으로** 가른다(원장 2026-09-10 *"열을 그냥 하나 만들어서 이름 따로 학교학년 따로 과목
+ *    따로 3개열"*) — 한 칸에 이어 쓰면 이름 길이마다 학교 글자가 들쭉날쭉해 세로로 못 훑는다.
+ */
+const NAME_W = 9;
+const SCHOOL_W = 8;
+const SUBJECT_W = 6;
+const ENROLLED_W = 7;
+const FIRST_CLASS_W = 11;
+const ITEM_W =
+  (100 - NAME_W - SCHOOL_W - SUBJECT_W - ENROLLED_W - FIRST_CLASS_W) / ONBOARDING_ITEMS.length;
 
-/** `26.10.01` — 연도까지(원장 2026-09-09 *"첫 수업 열은 연도까지 붙여줘 26.10.01 이렇게"*). */
+/**
+ * `26.10.01` — 연도까지(원장 2026-09-09 *"첫 수업 열은 연도까지 붙여줘 26.10.01 이렇게"*).
+ * 🔴 등록일도 **같은 모양**이다(원장 2026-09-10 *"등록일과 수업 날짜방식 통일 .으로"* · *"등록일도 yy.mm.dd로"*).
+ */
 function shortDate(ymd: string): string {
   return `${ymd.slice(2, 4)}.${ymd.slice(5, 7)}.${ymd.slice(8, 10)}`;
 }
@@ -127,6 +138,8 @@ export function NewcomerTable({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [, start] = useTransition();
   const router = useRouter();
+  // 🔴 과목 라벨은 **학원설정** 단일 소스 — raw 키(`math`)를 화면에 내보내지 않는다. 훅이라 이른 return보다 앞.
+  const { labelOf } = useSubjectMaps();
 
   if (rows.length === 0) {
     return (
@@ -139,19 +152,25 @@ export function NewcomerTable({
   const checksOf = (row: NewcomerRow): Record<string, string | null> => {
     const merged = { ...row.checks };
     for (const item of ONBOARDING_ITEMS) {
-      const key = `${row.studentId}|${item.key}`;
+      // 🔴 낙관 반영 키는 **줄(학생 × 과목)** 단위다 — 학생 id만 쓰면 수학 줄에서 누른 체크가 영어 줄에도 번진다.
+      const key = `${row.rowKey}|${item.key}`;
       if (key in patch) merged[item.key] = patch[key] ?? null;
     }
     return merged;
   };
 
   const toggle = (row: NewcomerRow, itemKey: string, currentlyDone: boolean) => {
-    const key = `${row.studentId}|${itemKey}`;
+    const key = `${row.rowKey}|${itemKey}`;
     const prev = checksOf(row)[itemKey] ?? null;
     setPatch((p) => ({ ...p, [key]: currentlyDone ? null : today }));
     setBusyKey(key);
     start(async () => {
-      const res = await setOnboardingCheck({ studentId: row.studentId, itemKey, done: !currentlyDone });
+      const res = await setOnboardingCheck({
+        studentId: row.studentId,
+        subject: row.subject,
+        itemKey,
+        done: !currentlyDone,
+      });
       setBusyKey(null);
       if (!res.ok) {
         // 되돌린다 — 저장 안 된 체크가 화면에만 남으면 "했다고 알고 안 한" 것이 된다.
@@ -168,9 +187,11 @@ export function NewcomerTable({
     // 열이 10개라 좁은 창에선 넘친다 — 넘치는 영역의 기본 인터랙션은 **잡고 끌기**(앱 규약).
     // ⚠️ 5px 넘게 끌어야 팬이라 제자리 클릭(체크)은 그대로 산다([[#97]]).
     <DragScrollArea>
-      <table className="w-full min-w-[52rem] table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
+      <table className="w-full min-w-[60rem] table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-line-faint">
         <colgroup>
           <col style={{ width: `${NAME_W}%` }} />
+          <col style={{ width: `${SCHOOL_W}%` }} />
+          <col style={{ width: `${SUBJECT_W}%` }} />
           <col style={{ width: `${ENROLLED_W}%` }} />
           <col style={{ width: `${FIRST_CLASS_W}%` }} />
           {ONBOARDING_ITEMS.map((item) => (
@@ -179,7 +200,9 @@ export function NewcomerTable({
         </colgroup>
         <thead>
           <tr className="border-line text-text-dim border-b text-center text-xs font-bold">
-            <th className="px-2 py-2 text-left">학생</th>
+            <th className="px-2 py-2 text-left">이름</th>
+            <th className="px-1 py-2">학교·학년</th>
+            <th className="px-1 py-2">과목</th>
             <th className="px-1 py-2">등록일</th>
             <th className="px-1 py-2">첫 수업</th>
             {ONBOARDING_ITEMS.map((item) => (
@@ -198,45 +221,61 @@ export function NewcomerTable({
             const live = progressOf(anchors, checks, today);
             const overdue = live.overdue > 0;
             return (
-              <tr key={row.studentId} className={`border-line-faint border-b ${overdue ? "bg-danger-soft/40" : ""}`}>
+              <tr key={row.rowKey} className={`border-line-faint border-b ${overdue ? "bg-danger-soft/40" : ""}`}>
                 <td className="px-2 py-1">
-                  {/* 이름 열이 좁아졌다(원장 2026-09-09) — 넘치면 자르고 전체 이름은 title에. */}
                   {/* 🔴 `?back=/newcomers` — 상세는 이 창 안에서 **드릴인**으로 열리므로, 거기서 학생을
                       영구 삭제하면 돌아올 자리를 알려 주지 않는 한 이 창이 원생목록으로 바뀐다
                       (원장 2026-09-09 *"신규생관리로 들어가려고 하니까 자꾸 원생목록으로 가지네"*).
-                      값은 학생 상세가 `isInternalPath`로 검증한 뒤에만 쓴다. */}
+                      값은 학생 상세가 `isInternalPath`로 검증한 뒤에만 쓴다.
+                      ⚠️ `block`이어야 잘린다 — 인라인 `<a>`의 말줄임은 아무 일도 안 한다([[#111]]). */}
                   <WindowLink
                     href={`/students/${row.studentId}?back=/newcomers`}
-                    title={`${row.name} ${schoolGradeLabel(row.school, row.grade) || ""}`.trim()}
-                    className="flex min-w-0 items-baseline gap-1.5 hover:underline"
+                    title={row.name}
+                    className="text-foreground block truncate font-bold hover:underline"
                   >
-                    <span className="text-foreground shrink-0 font-bold">{row.name}</span>
-                    <span className="text-text-faint min-w-0 truncate text-xs">
-                      {schoolGradeLabel(row.school, row.grade) || "—"}
-                    </span>
+                    {row.name}
                   </WindowLink>
+                </td>
+                <td
+                  className="text-text-dim truncate px-1 py-1 text-center text-xs"
+                  title={schoolGradeLabel(row.school, row.grade) || undefined}
+                >
+                  {schoolGradeLabel(row.school, row.grade) || "—"}
+                </td>
+                <td className="px-1 py-1 text-center text-xs">
+                  {row.subject ? (
+                    <span className="text-foreground font-semibold">{labelOf(row.subject)}</span>
+                  ) : (
+                    <span className="text-text-faint" title="수강(반 배정)이 아직 없어 과목을 알 수 없습니다">
+                      —
+                    </span>
+                  )}
                 </td>
                 {/* 🔴 경과일은 **첫 수업일 기준으로만** 센다(원장 2026-09-09 *"등록일에는 +n 해줄 필요
                     없을것 같고, 첫 수업일 기준으로만"*) — 체크 항목 넷이 첫 수업일에 매달려 있어서
                     "며칠 됐나"가 실제로 뜻을 갖는 자리도 그쪽이다. */}
                 <td className="text-text-dim num px-1 py-1 text-center whitespace-nowrap">
-                  {row.enrolledOn.slice(5).replace("-", "/")}
+                  {shortDate(row.enrolledOn)}
                 </td>
                 <td className="text-text-dim num px-1 py-1 text-center whitespace-nowrap">
                   {row.firstClassOn ? (
-                    <>
-                      {shortDate(row.firstClassOn)}
-                      {(() => {
-                        const n = daysBetween(row.firstClassOn, today);
-                        // 아직 안 온 첫 수업은 `D-n`(초록) — 지난 것은 `+n`(옅게). 같은 값이지만
-                        // "며칠 남았다"와 "며칠 됐다"는 다른 사실이라 표기를 가른다.
-                        return n < 0 ? (
-                          <span className="ml-1 text-xs font-bold text-green">D{n}</span>
-                        ) : (
-                          <span className="text-text-faint ml-1 text-xs">+{n}</span>
-                        );
-                      })()}
-                    </>
+                    (() => {
+                      const n = daysBetween(row.firstClassOn, today);
+                      // 🔴 날짜와 D-day를 **두 칸 격자**로 세운다(원장 2026-09-10 *"첫수업도 날짜랑 D-day
+                      //    정렬되게"*) — 날짜는 오른쪽 맞춤, D-day는 고정 폭 왼쪽 맞춤이라 줄마다 같은 자리에 선다.
+                      // 🔴 지난 날은 `+n`이 아니라 **`D+n`**(원장 *"+는 D+n 이렇게"*). 아직 안 온 첫 수업은
+                      //    `D-n`(초록) — "며칠 남았다"와 "며칠 됐다"는 다른 사실이라 색을 가른다.
+                      return (
+                        <span className="grid grid-cols-[auto_3.25rem] items-baseline justify-center gap-1">
+                          <span className="text-right">{shortDate(row.firstClassOn)}</span>
+                          {n < 0 ? (
+                            <span className="text-left text-xs font-bold text-green">D{n}</span>
+                          ) : (
+                            <span className="text-text-faint text-left text-xs">D+{n}</span>
+                          )}
+                        </span>
+                      );
+                    })()
                   ) : (
                     <span className="text-text-faint" title="수강(반 배정)이 아직 없어 첫 수업일을 알 수 없습니다">
                       미정
@@ -254,7 +293,7 @@ export function NewcomerTable({
                       due={dueDateOf(item, anchors)}
                       daysLeft={daysLeftOf(item, anchors, today)}
                       canWrite={canWrite}
-                      busy={busyKey === `${row.studentId}|${item.key}`}
+                      busy={busyKey === `${row.rowKey}|${item.key}`}
                       onToggle={() => toggle(row, item.key, status === "done")}
                     />
                   );

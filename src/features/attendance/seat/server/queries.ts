@@ -1,30 +1,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { groupByStart, hhmm, isPayrollSeat, SEAT_DB_LABEL, type SeatKey, type SeatPeriod, type SeatSlot } from "../seat";
-
-/** 지난 결석을 얼마나 거슬러 볼 것인가 — 그 반의 직전 몇 주. 길게 잡으면 옛 결석이 계속 붙어 다닌다. */
-const PREV_ABSENCE_DAYS = 30;
-
-type PrevAbsenceRow = {
-  class_id: string;
-  student_id: string;
-  session_date: string;
-  status: string;
-  note: string | null;
-};
-
-/** "YYYY-MM-DD" ± n일 — KST 날짜 문자열끼리만 다룬다(Date로 파싱하면 타임존이 하루를 민다). */
-function shiftDays(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const t = Date.UTC(y, (m ?? 1) - 1, d ?? 1) + days * 86400000;
-  return new Date(t).toISOString().slice(0, 10);
-}
 
 export type SeatStudent = {
   id: string;
@@ -42,15 +24,6 @@ export type SeatStudent = {
    * 🔴 **비로그인 PIN 경로는 항상 null이다** — 아래 select 분기 주석 참조(병원·수술·가족 일정이 그대로 적힌다).
    */
   note: string | null;
-  /**
-   * **지난 결석**(같은 반, 오늘 이전 30일 안의 가장 최근 결석·공결) — 원장 2026-09-08
-   * *"JJ와 LAB 수업의 경우 이전수업이 결석인 경우에 사유를 확인할 수 있도록"*.
-   *
-   * 🔑 "직전 수업"이 아니라 **"지난 결석"**으로 잡는다 — 직전 수업을 정확히 집으려면 그 반의 전 기록을
-   *    끌어와야 하고(90일 × 명단 = 1000행 넘김, B2), 화면 문구도 `지난 결석 9/4`라 사실 그대로다.
-   * 🔴 **비로그인 PIN 경로는 항상 null** — 사유엔 `병원`·`수술`·`가족여행`이 적힌다(위 note와 같은 규약).
-   */
-  prevAbsence: { date: string; note: string | null } | null;
   /**
    * JJ 전용 칸 — 영어 시트 JJ 폼과 **같은 행**(`class_sheet_student_marks`). 랩실은 항상 null.
    * 🔴 `attitude`는 marks의 `status`(태도 5단 눈금)다 — 위 `status`(출결)와 **다른 축**이다.
@@ -106,7 +79,6 @@ function toSeatStudent(
         recorder?: { display_name: string | null }[] | { display_name: string | null };
       }
     | undefined,
-  prev?: { date: string; note: string | null } | null,
 ): SeatStudent {
   const recorder = Array.isArray(rec?.recorder) ? rec.recorder[0] : rec?.recorder;
   return {
@@ -118,7 +90,6 @@ function toSeatStudent(
     recordedBy: recorder?.display_name ?? null,
     fromSeat: !!rec?.seat_label,
     note: rec?.note ?? null,
-    prevAbsence: prev ?? null,
     attitude: null,
     listeningLevel: null,
     memorizedWords: null,
@@ -179,7 +150,7 @@ async function loadSeatDay(
   const classIds = [...new Set(seatRows.map((r) => r.class_id as string))];
 
   // 반 이름 · 수강생 · 그날 출결 — 서로 독립이라 병렬(B4). id 수십 개까지 갈 수 있어 청크 헬퍼(B3).
-  const [classes, enrollments, records, prevAbsenceRows] = await Promise.all([
+  const [classes, enrollments, records] = await Promise.all([
     // 🔵 `bg_color`/`text_color`는 **이미 있는 컬럼**(0054a 계열)이라 새 스키마를 요구하지 않는다([[#95]]).
     fetchInChunks<{ id: string; class_name: string; bg_color: string | null; text_color: string | null }>(
       classIds,
@@ -253,37 +224,7 @@ async function loadSeatDay(
             .in("class_id", chunk)
             .eq("session_date", date),
     ),
-    /**
-     * **지난 결석**(오늘 이전 30일) — 사유를 그 자리에서 확인하려고 함께 받는다.
-     * 🔴 공개(PIN) 경로는 **아예 조회하지 않는다** — 사유엔 병원·수술·가족 일정이 적힌다(위 분기와 같은 규약).
-     * ⚠️ 결석·공결 행만 받는다(전 기록을 받으면 명단 × 30일이 1000행을 넘는다, B2). 청크 안 페이징까지.
-     */
-    tenantId
-      ? Promise.resolve([] as PrevAbsenceRow[])
-      : fetchAllPagedInChunks<PrevAbsenceRow>(classIds, (chunk, from, to) =>
-          supabase
-            .from("attendance_records")
-            .select("class_id, student_id, session_date, status, note")
-            .in("class_id", chunk)
-            .in("status", ["absent", "excused"])
-            .gte("session_date", shiftDays(date, -PREV_ABSENCE_DAYS))
-            .lt("session_date", date)
-            .order("id", { ascending: true })
-            .range(from, to),
-        ),
   ]);
-
-  /** (반|학생) → 가장 최근 결석. 같은 날 여러 교시면 사유가 적힌 쪽을 남긴다. */
-  const prevAbsenceByKey = new Map<string, { date: string; note: string | null }>();
-  for (const r of prevAbsenceRows) {
-    const key = `${r.class_id}|${r.student_id}`;
-    const cur = prevAbsenceByKey.get(key);
-    if (!cur || r.session_date > cur.date) {
-      prevAbsenceByKey.set(key, { date: r.session_date, note: r.note ?? null });
-    } else if (r.session_date === cur.date && !cur.note && r.note) {
-      prevAbsenceByKey.set(key, { date: cur.date, note: r.note });
-    }
-  }
 
   const nameById = new Map(classes.map((c) => [c.id, c.class_name]));
   /** 반 색 — 시간표 카드 헤더와 같은 소스(`classes.bg_color`/`text_color`). 없으면 안 칠한다. */
@@ -386,7 +327,6 @@ async function loadSeatDay(
           toSeatStudent(
             s,
             recByKey.get(`${slot.classId}|${s.id}|${p.start}`) ?? dayLevelFallback(slot.classId, s.id),
-            prevAbsenceByKey.get(`${slot.classId}|${s.id}`) ?? null,
           ),
         )
         .sort((a, b) => (a.grade ?? "").localeCompare(b.grade ?? "", "ko") || a.name.localeCompare(b.name, "ko")),

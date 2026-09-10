@@ -33,7 +33,6 @@ import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_TONE } from "./seat-status";
 import { beginSeatDrag, endSeatDrag, seatPointerDown, seatPointerUp, swallowSeatClickAfterDrag } from "./seat-drag";
 import {
-  PrevAbsenceHint,
   SeatMarkTriad,
   SeatMemoMark,
   SeatNotePopover,
@@ -269,29 +268,31 @@ function SeatClassSection({
   });
   const left = r.students.filter((s) => statusOf(s.homeClassId, s) === null).length;
   /**
-   * 반 이름 알약 — **반이 들고 있는 색**(`classes.bg_color`)이 있을 때만 칠한다(원장 2026-09-10).
-   * 🔴 색이 없으면 지금 모습 그대로다(지어낸 색 금지). 🔴 **의미색(출결 초록·앰버·빨강)과 다투지 않게
-   *    이름 알약에만** 두른다 — 학생 카드 배경을 칠하면 출결 상태가 안 읽힌다.
-   * ⚠️ `text_color`가 비어 있으면 본문 글자색(#121212)으로 — 시간표 카드 헤더와 같은 폴백이다.
+   * 반 머리줄 색 — **반이 들고 있는 색**(`classes.bg_color`)으로 **줄 전체**를 칠한다(원장 2026-09-10
+   * *"반이름은 설정된 반색상으로 색칠해주고"* → *"색상은 행전체를 색칠해"*). 처음엔 이름 알약에만 둘렀는데,
+   * 원장이 줄 전체로 정정했다 — 알약으로 되돌리지 말 것.
+   * 🔴 색이 없으면 지금 모습 그대로다(지어낸 색 금지). 🔴 **학생 카드는 칠하지 않는다** — 카드 배경은 출결
+   *    의미색(초록·앰버·빨강)의 자리라, 거기까지 반 색을 깔면 출결 상태가 안 읽힌다. 머리줄까지만이다.
+   * ⚠️ `text_color`가 비어 있으면 본문 글자색(#121212)으로 — 시간표 카드 헤더와 같은 폴백이다. 칠해진 줄에선
+   *    보조 글자(인원·종료시각)를 옅은 회색 토큰 대신 **같은 글자색의 투명도**로 낮춘다(회색은 반 색 위에서 안 읽힌다).
    */
-  const namePill = r.bgColor
+  const headColor = r.bgColor
     ? { background: r.bgColor, color: r.textColor ?? "#121212" }
     : undefined;
+  const subText = headColor ? "opacity-75" : "text-text-faint";
 
   return (
     <section
       ref={setNodeRef}
       className={`overflow-hidden rounded-2xl border ${isOver ? "border-primary bg-primary-soft/40" : "border-line"}`}
     >
-      <header className="bg-bg-soft border-line flex items-center gap-2 border-b px-3 py-1.5 text-sm">
-        <span
-          className={`font-bold ${namePill ? "rounded-md px-2 py-0.5" : ""}`}
-          style={namePill}
-        >
-          {r.className}
-        </span>
-        <span className="text-text-faint text-xs tabular-nums">{r.students.length}명</span>
-        <span className="text-text-faint text-xs tabular-nums">~{r.end}</span>
+      <header
+        className={`border-line flex items-center gap-2 border-b px-3 py-1.5 text-sm ${headColor ? "" : "bg-bg-soft"}`}
+        style={headColor}
+      >
+        <span className="font-bold">{r.className}</span>
+        <span className={`${subText} text-xs tabular-nums`}>{r.students.length}명</span>
+        <span className={`${subText} text-xs tabular-nums`}>~{r.end}</span>
         <span className="ml-auto flex items-center gap-1.5">
           {/* 🔴 교시가 지정된 학생이 있을 때만 선다(배치 [초기화]와 같은 규약) — 누르면 그 반의 **그날
               🔴 조건에 `canMove`(배치 가용성)를 넣지 말 것 — 0254a만 안 돌아도 해제가 함께 죽는다.
@@ -504,7 +505,6 @@ function SeatCard({
             </span>
           ) : null}
           {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 교시(표시 전용, JJ실과 같은 부품). */}
-          <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
           <SeatPeriodHints
             prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(s.homeClassId, s.id)]}
             nextStart={hints.nextStartByStudent?.[s.id]}

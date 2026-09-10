@@ -21,7 +21,6 @@ import type { SeatClassRoster } from "@/features/attendance/seat/server/queries"
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import {
-  PrevAbsenceHint,
   SeatMarkTriad,
   SeatMemoMark,
   SeatNotePopover,
@@ -371,7 +370,6 @@ function JjAttendanceCell({
       </SeatNotePopover>
       {showReason ? <SeatMemoMark note={note} status={cur} /> : null}
       <div className="mt-1">
-        <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
         {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 행선지(표시 전용, 랩실과 같은 부품). */}
         <SeatPeriodHints
           prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(classId, s.id)]}

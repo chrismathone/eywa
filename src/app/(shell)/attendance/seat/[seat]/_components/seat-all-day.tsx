@@ -269,31 +269,35 @@ export function SeatAllDay({
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
         {periods.map((p, i) => (
-          <SeatBoard
-            key={`${seat}|${date}|${p.start}`}
-            seat={seat}
-            date={date}
-            periods={[]}
-            showChips={false}
-            activeStart={p.start}
-            rosters={p.rosters}
-            readOnly={readOnly}
-            hrefFor={hrefFor}
-            prevAbsentByCell={p.prevAbsentByCell}
-            nextStartByStudent={p.nextStartByStudent}
-            nextRoomByStudent={p.nextRoomByStudent}
-            placements={p.placements}
-            canMove={canMovePlacement}
-            // 배너는 맨 위 교시에만 — 교시마다 같은 문장이 서면 화면이 경고로 덮인다.
-            placementNotice={i === 0 ? placementNotice : null}
-            periodChoices={periodChoices}
-            slotsByClass={slotsByClass}
-            markedSlotsByCell={markedSlotsByCell}
-            onClearPeriodChoices={canMove ? onClearPeriodChoices : undefined}
-            externalDnd
-            onRegisterMove={onRegisterMove}
-            canChoosePeriod={canMove}
-          />
+          // 🔴 교시 판은 **줄어들지 않는다**(`shrink-0`) — 판 루트가 `flex-1 min-h-0`라 그대로 두면 교시 7개가
+          //    화면 높이를 나눠 가지며 **각자 찌그러져 잘린다**(원장 제보 2026-09-10 *"전체로 했을때 스크롤
+          //    있어야지. 무스크롤이라서 화면이 다 짤림"*). 넘치는 높이는 바깥 `overflow-auto`가 스크롤로 받는다.
+          <div key={`${seat}|${date}|${p.start}`} className="shrink-0">
+            <SeatBoard
+              seat={seat}
+              date={date}
+              periods={[]}
+              showChips={false}
+              activeStart={p.start}
+              rosters={p.rosters}
+              readOnly={readOnly}
+              hrefFor={hrefFor}
+              prevAbsentByCell={p.prevAbsentByCell}
+              nextStartByStudent={p.nextStartByStudent}
+              nextRoomByStudent={p.nextRoomByStudent}
+              placements={p.placements}
+              canMove={canMovePlacement}
+              // 배너는 맨 위 교시에만 — 교시마다 같은 문장이 서면 화면이 경고로 덮인다.
+              placementNotice={i === 0 ? placementNotice : null}
+              periodChoices={periodChoices}
+              slotsByClass={slotsByClass}
+              markedSlotsByCell={markedSlotsByCell}
+              onClearPeriodChoices={canMove ? onClearPeriodChoices : undefined}
+              externalDnd
+              onRegisterMove={onRegisterMove}
+              canChoosePeriod={canMove}
+            />
+          </div>
         ))}
       </div>
       <DragOverlay dropAnimation={null}>{drag ? <SeatDragCard drag={drag} /> : null}</DragOverlay>
