@@ -21,12 +21,18 @@ import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatDay } from "@/features/attendance/seat/server/queries";
 import {
   USABLE_SEAT_KEYS,
+  ambiguousClassIds,
   parseUsableSeatKey,
   pickPeriodIndex,
   SEAT_NAME,
   SEAT_ROOM,
 } from "@/features/attendance/seat/seat";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
+import {
+  nextSeatPeriodByStudent,
+  prevPeriodAbsences,
+  seatDayCells,
+} from "@/features/attendance/seat/prev-period";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
 import { mondayOf } from "@/features/timetable/lib/week";
@@ -111,6 +117,18 @@ export default async function SeatAttendancePage({
       : Promise.resolve({}),
   ]);
 
+  /**
+   * 같은 날 교시 사이 신호 — **이미 받아 온 하루치**(`day`)에서 순수 함수로 뽑는다(왕복 0회).
+   * 🔴 여기서 나오는 건 **제안·표시**일 뿐이다. 결석은 사람이 버튼을 눌러야 찍히고, 그때도 서버가
+   *    대상을 다시 계산한다([[#77]]).
+   */
+  const cells = period ? seatDayCells(day.periods, day.rosterByPeriod) : null;
+  // ⚠️ 모호한 반(같은 반·같은 시작·다른 종료)은 아무도 못 쓰는 칸이라 표식·수에서 뺀다 — 서버 일괄이
+  //    쓰는 집합과 **같은 인자**여야 버튼의 "N명"이 실제로 쓰는 수와 맞는다.
+  const prevAbsentByCell =
+    cells && period ? prevPeriodAbsences(cells, period.start, ambiguousClassIds(period)) : undefined;
+  const nextStartByStudent = cells && period ? nextSeatPeriodByStudent(cells, period.start) : undefined;
+
   const href = (q: { date?: string; start?: string }) => {
     const sp = new URLSearchParams();
     sp.set("date", q.date ?? date);
@@ -190,6 +208,10 @@ export default async function SeatAttendancePage({
           rosters={rosters}
           readOnly={readOnly}
           hrefFor={`/attendance/seat/${seat}?date=${date}&start=`}
+          prevAbsentByCell={prevAbsentByCell}
+          // 🔵 '다음 교시'는 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면(`/seat/:key`)엔 이 prop을
+          //    아예 안 넘긴다(그 경로는 사유도 조회하지 않는다는 규약과 같은 결).
+          nextStartByStudent={nextStartByStudent}
           // 진도 구획은 계획을 볼 수 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={
             Object.keys(plans).length > 0

@@ -10,10 +10,17 @@ import {
   SEAT_CHIP_NAME_LADDER,
 } from "@/features/attendance/seat/name-fit";
 import { seatNoteTitle } from "@/features/attendance/seat/note-title";
+import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
-import { PrevAbsenceHint, SeatMarkButtons, SeatReasonInput } from "./seat-mark-extras";
+import {
+  PrevAbsenceHint,
+  SeatMarkButtons,
+  SeatPeriodHints,
+  SeatReasonInput,
+  type SeatPeriodHintData,
+} from "./seat-mark-extras";
 
 /** 랩실 출석부 — 이름 카드에 출결만. JJ 전용 칸은 여기에 넣지 않는다. */
 export function SeatLabGrid({
@@ -23,6 +30,7 @@ export function SeatLabGrid({
   onSave,
   onSaveNote,
   showReason,
+  hints,
   onFillClass,
   readOnly,
   pending,
@@ -34,6 +42,8 @@ export function SeatLabGrid({
   onSaveNote: (classId: string, studentId: string, note: string, status: SeatStatus | null) => void;
   /** 사유 칸을 그릴 것인가 — 비로그인 PIN 화면은 false(그 경로는 사유를 조회하지 않는다). */
   showReason: boolean;
+  /** 같은 날 교시 사이 신호(앞 교시 결석 · 다음 교시) — 표시 전용. */
+  hints: SeatPeriodHintData;
   onFillClass: (classId: string) => void;
   readOnly: boolean;
   pending: boolean;
@@ -127,6 +137,13 @@ export function SeatLabGrid({
                       />
                       ) : null}
                       <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
+                      {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 교시(표시 전용, JJ실과 같은 부품). */}
+                      <SeatPeriodHints
+                        prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(r.classId, s.id)]}
+                        nextStart={hints.nextStartByStudent?.[s.id]}
+                        seatName={hints.seatName}
+                        cur={cur}
+                      />
                     </div>
                   </li>
                 );

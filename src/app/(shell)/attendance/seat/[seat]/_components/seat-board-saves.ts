@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { fillSeatSlot, setSeatCell, type SeatStatus } from "@/features/attendance/seat/server/actions";
+import {
+  fillSeatPrevAbsent,
+  fillSeatSlot,
+  setSeatCell,
+  type SeatStatus,
+} from "@/features/attendance/seat/server/actions";
 import { setSeatJjField } from "@/features/attendance/seat/server/mark-actions";
 import { seatOverlayKey, type JjMarkField } from "@/features/attendance/seat/jj-fields";
 // 사유 메모를 언제 비우는지는 **출결 모드와 같은 규약**을 그대로 쓴다(원장 2026-09-08 "다른 출결과 동일하게").
@@ -171,6 +176,29 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
     [activeStart, date, flushFields, router, seat],
   );
 
+  /**
+   * **앞 교시 결석자만** 결석으로 채운다(원장 2026-09-10) — 일괄과 같은 모양·같은 비파괴 규약.
+   *
+   * 🔴 대상 목록을 **보내지 않는다** — 서버가 그 날 명단을 다시 읽어 스스로 고른다([[#77]]).
+   *    화면 스냅샷을 실어 보내면 그새 출석으로 고친 칸이 결석으로 덮인다.
+   * ⚠️ 서버가 0건을 돌려줄 수 있다(그새 누가 채웠다) — 새로 고치면 버튼이 스스로 사라지는 게 답이다.
+   */
+  const fillPrevAbsent = useCallback(() => {
+    setError(null);
+    startTransition(async () => {
+      await flushFields();
+      const res = await fillSeatPrevAbsent({ seat, date, slotStart: activeStart });
+      const fail = failMessage(res);
+      if (fail) {
+        setError(fail);
+        return;
+      }
+      setOver({});
+      setNoteOver({});
+      router.refresh();
+    });
+  }, [activeStart, date, flushFields, router, seat]);
+
   const saveField = useCallback(
     (classId: string, studentId: string, field: JjMarkField, value: string) => {
       const key = keyOf(classId, studentId);
@@ -247,5 +275,18 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
     [keyOf],
   );
 
-  return { pending, error, statusOf, noteOf, mergeFields, save, saveNote, fill, saveField, flushFields, applyCarried };
+  return {
+    pending,
+    error,
+    statusOf,
+    noteOf,
+    mergeFields,
+    save,
+    saveNote,
+    fill,
+    fillPrevAbsent,
+    saveField,
+    flushFields,
+    applyCarried,
+  };
 }

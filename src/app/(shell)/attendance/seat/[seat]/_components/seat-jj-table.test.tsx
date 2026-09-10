@@ -17,6 +17,9 @@ vi.mock("@/features/class-sheets/server/actions", () => ({
 
 afterEach(cleanup);
 
+/** 교시 사이 신호 — 이 파일의 관심사가 아니라 빈 값으로 둔다(전용 검증은 prev-period-wiring.test.ts). */
+const hints = { seatName: "JJ실" };
+
 const roster: SeatClassRoster = {
   classId: "c1",
   className: "중등E_초5 의치대",
@@ -51,6 +54,7 @@ describe("JJ실 출석부 표", () => {
         showReason
         onSave={vi.fn()}
         onSaveField={vi.fn()}
+        hints={hints}
         onFillClass={vi.fn()}
         readOnly={false}
         pending={false}
@@ -73,6 +77,7 @@ describe("JJ실 출석부 표", () => {
         showReason
         onSave={vi.fn()}
         onSaveField={onSaveField}
+        hints={hints}
         onFillClass={vi.fn()}
         readOnly={false}
         pending={false}
@@ -98,6 +103,7 @@ describe("JJ실 출석부 표", () => {
         showReason
         onSave={vi.fn()}
         onSaveField={vi.fn()}
+        hints={hints}
         onFillClass={vi.fn()}
         readOnly={false}
         pending={false}
@@ -163,6 +169,7 @@ describe("JJ실 출석부 진도(수업계획)", () => {
     onSave: vi.fn(),
     onSaveField: vi.fn(),
     onFillClass: vi.fn(),
+    hints,
     readOnly: false,
     pending: false,
   };
