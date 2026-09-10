@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
+import { TOOLBAR_CHIP, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import { SeatPeriodChips } from "./seat-period-chips";
@@ -248,7 +249,7 @@ export function SeatBoard({
                   );
                 }}
                 title="이 교시에서 드래그로 옮긴 자리를 전부 원래 반으로 되돌립니다 — 출결 기록은 그대로입니다"
-                className="border-line bg-card text-text-dim rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+                className={`${TOOLBAR_CHIP} border-line bg-card text-text-dim font-semibold disabled:opacity-50`}
               >
                 전체 초기화 {resetAllTargets.length}명
               </button>
@@ -263,7 +264,7 @@ export function SeatBoard({
                 disabled={pending}
                 onClick={() => fillPrevAbsent()}
                 title="앞 교시에 결석으로 찍힌 학생 중 이 교시가 아직 비어 있는 칸만 결석으로 채웁니다 — 이미 찍힌 칸은 건드리지 않습니다"
-                className="border-att-absent text-att-absent-ink rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+                className={`${TOOLBAR_CHIP} border-att-absent text-att-absent-ink font-semibold disabled:opacity-50`}
               >
                 앞 교시 결석자 {prevAbsentWaiting}명 결석
               </button>
@@ -272,7 +273,7 @@ export function SeatBoard({
               type="button"
               disabled={pending}
               onClick={() => fill("present")}
-              className="border-primary bg-primary text-primary-foreground rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+              className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_ON} font-semibold disabled:opacity-50`}
             >
               남은 {waiting}명 출석
             </button>
@@ -280,7 +281,7 @@ export function SeatBoard({
               type="button"
               disabled={pending}
               onClick={() => fill("absent")}
-              className="border-att-absent text-att-absent-ink rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+              className={`${TOOLBAR_CHIP} border-att-absent text-att-absent-ink font-semibold disabled:opacity-50`}
             >
               남은 {waiting}명 결석
             </button>
