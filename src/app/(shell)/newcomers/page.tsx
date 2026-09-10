@@ -11,6 +11,7 @@ import {
   type NewcomerAnchors,
   type NewcomerBucket,
 } from "@/features/newcomers/onboarding-items";
+import { careCellMatches, parseCareCellParam } from "@/features/newcomers/care-cells";
 import { NewcomerTable } from "./_components/newcomer-table";
 
 export const metadata = { title: "신규생 관리 — eywa" };
@@ -33,7 +34,7 @@ const OPEN_ONLY = "open";
 export default async function NewcomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ bucket?: string; only?: string }>;
+  searchParams: Promise<{ bucket?: string; only?: string; item?: string }>;
 }) {
   const viewer = await requireAccess("newcomers");
   const sp = await searchParams;
@@ -41,13 +42,20 @@ export default async function NewcomersPage({
     ? (sp.bucket as NewcomerBucket)
     : null;
   const openOnly = sp.only === OPEN_ONLY;
+  /**
+   * `?item=` — 운영실 '신규생 케어' 칸에서 넘어온 필터.
+   * 🔴 **숫자를 센 조건과 정확히 같은 함수**(`careCellMatches`)로 거른다 — 두 곳이 각자 계산하면
+   *    "12건이라더니 목록엔 9명"이 된다. 모르는 값이면 아무것도 안 거른다(빈 목록보다 전체가 낫다).
+   */
+  const itemCell = parseCareCellParam(sp.item);
 
   const [view, canWrite] = await Promise.all([getNewcomers(), canWriteTenant(viewer.systemRole, "newcomers")]);
   // 창 필터는 화면 안에서만 좁힌다 — 지표(지연·임박)는 **전체 대상** 기준이라야 "지금 놓친 게 몇 건인지"가 흔들리지 않는다.
   const openOf = (r: (typeof view.rows)[number]) => r.progress.overdue + r.progress.dueSoon > 0;
   const rows = view.rows
     .filter((r) => (bucket ? r.bucket === bucket : true))
-    .filter((r) => (openOnly ? openOf(r) : true));
+    .filter((r) => (openOnly ? openOf(r) : true))
+    .filter((r) => (itemCell ? careCellMatches(itemCell, r, view.today) : true));
   const overdue = view.rows.reduce((n, r) => n + r.progress.overdue, 0);
   const dueSoon = view.rows.reduce((n, r) => n + r.progress.dueSoon, 0);
   const doneAll = view.rows.reduce((n, r) => n + r.progress.doneCount, 0);
@@ -55,10 +63,13 @@ export default async function NewcomersPage({
   const rate = dueAll === 0 ? 100 : Math.round((doneAll / dueAll) * 100);
   const openCount = view.rows.filter(openOf).length;
   const countOf = (b: NewcomerBucket) => view.rows.filter((r) => r.bucket === b).length;
-  const hrefWith = (next: { bucket?: NewcomerBucket | null; only?: boolean }) => {
+  const hrefWith = (next: { bucket?: NewcomerBucket | null; only?: boolean; item?: string | null }) => {
     const b = next.bucket === undefined ? bucket : next.bucket;
     const o = next.only === undefined ? openOnly : next.only;
-    const qs = [b ? `bucket=${b}` : null, o ? `only=${OPEN_ONLY}` : null].filter(Boolean).join("&");
+    const i = next.item === undefined ? (itemCell?.key ?? null) : next.item;
+    const qs = [b ? `bucket=${b}` : null, o ? `only=${OPEN_ONLY}` : null, i ? `item=${i}` : null]
+      .filter(Boolean)
+      .join("&");
     return qs ? `/newcomers?${qs}` : "/newcomers";
   };
   // 🔴 "기한이 온 건"은 아직 아무도 안 끝낸 상태에서도 **왜 그런지**를 말해야 한다 — 기능 시작일
@@ -85,6 +96,13 @@ export default async function NewcomersPage({
           <ToolbarSegmentItem active={openOnly} href={hrefWith({ only: !openOnly })}>
             미완료 {openCount}명
           </ToolbarSegmentItem>
+          {/* 🔴 걸린 필터는 반드시 보이고 해제할 수 있어야 한다 — 운영실에서 링크로 들어오면
+              화면엔 "왜 명단이 짧은지"를 말해 주는 것이 이 칩뿐이다. */}
+          {itemCell ? (
+            <ToolbarSegmentItem active href={hrefWith({ item: null })}>
+              {itemCell.label} {rows.length}명 · 해제
+            </ToolbarSegmentItem>
+          ) : null}
         </ToolbarSegment>
         <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
           <span className="text-sm">
@@ -135,7 +153,11 @@ export default async function NewcomersPage({
 
       {/* ⚠️ 구간 필터가 함께 걸려 있으면 "모두 챙겼다"고 말하지 않는다 — 그 구간만 깨끗한 것이지
           전체가 깨끗한 게 아니다(빈 화면이 사실보다 좋게 말하면 안 된다). */}
-      {openOnly && rows.length === 0 ? (
+      {itemCell && rows.length === 0 ? (
+        <p className="text-text-faint border-line rounded-lg border border-dashed px-4 py-8 text-center text-sm">
+          {itemCell.label} 항목에 지금 챙길 학생이 없습니다.
+        </p>
+      ) : openOnly && rows.length === 0 ? (
         <p className="text-text-faint border-line rounded-lg border border-dashed px-4 py-8 text-center text-sm">
           {bucket
             ? `${BUCKET_LABEL[bucket]} 구간에는 지연·임박한 항목이 없습니다.`

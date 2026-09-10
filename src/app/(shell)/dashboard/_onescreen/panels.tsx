@@ -1,7 +1,9 @@
 import { WindowLink } from "@/components/workspace/window-link";
-import { PanelEmpty } from "./tiles";
+import { PanelEmpty, StatChip } from "./tiles";
 import type { TodayActionItem } from "@/features/dashboard/today-actions";
 import type { WatchItem } from "@/features/dashboard/onescreen/watchlist";
+import type { CareCellCount } from "@/features/newcomers/care-cells";
+import type { PriorityLine } from "@/features/dashboard/onescreen/priority-lines";
 
 /**
  * 한 화면 대시보드의 **본문 세 칸** — 오늘 할 일 / 살펴볼 학생 / 브리핑·공지.
@@ -146,6 +148,119 @@ export function BriefingNote({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 신규생 케어 — 절차별 **미완료 학생 수**(오늘 기한 도래 + 지연).
+ *
+ * 🔴 라벨·판정·필터는 [`care-cells`](@/features/newcomers/care-cells) 한 벌에서 온다 — 화면이 이름을
+ *    새로 짓거나 기한을 다시 계산하지 않는다(신규생 목록과 다른 수를 말하게 된다).
+ * 🔴 **누르면 그 칸을 센 조건과 같은 필터**로 목록에 간다(`?item=`) — 두 곳이 같은 함수를 부른다.
+ */
+export function CareCells({ cells }: { cells: CareCellCount[] }) {
+  return (
+    <div className="flex flex-wrap content-start gap-1">
+      {cells.map((c) => (
+        <StatChip
+          key={c.key}
+          label={c.label}
+          value={String(c.count)}
+          tone={c.tone}
+          href={`/newcomers?item=${c.key}`}
+          // 🔴 지연과 임박은 급함이 다르다 — 한 숫자로 합쳐 놓았으니 툴팁이 그 사실을 갈라 적는다.
+          title={
+            c.kind === "noFirstClass"
+              ? "첫 수업일이 없어 사전 콜·안내 기한이 아직 안 잡힌 등록생"
+              : `${c.label} — 지연 ${c.overdue} · 오늘·임박 ${c.count - c.overdue}`
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 우선 확인 — **분야별 대표 세 줄**(순위표가 아니다).
+ *
+ * 🔴 여기서 순위를 매기지 않는다 — [`priority-lines`](@/features/dashboard/onescreen/priority-lines)가
+ *    고정 버킷 순서로 이미 골라 놓은 배열을 **자르기만** 한다. AI 호출은 0이다.
+ */
+export function PriorityList({ lines, max = 3 }: { lines: PriorityLine[]; max?: number }) {
+  if (lines.length === 0) return <PanelEmpty>지금 먼저 볼 것이 없습니다</PanelEmpty>;
+  return (
+    <ul className="min-w-0">
+      {lines.slice(0, max).map((line) => (
+        <li key={line.key}>
+          <WindowLink
+            href={line.href}
+            title={[line.title, line.detail, line.hint].filter(Boolean).join(" · ")}
+            className="hover:bg-bg-soft/60 -mx-1 flex min-w-0 items-center gap-1.5 rounded px-1 text-xs leading-tight"
+          >
+            <span
+              aria-hidden
+              className={`h-3 w-[2px] shrink-0 rounded-full ${line.tone === "critical" ? "bg-danger" : "bg-amber"}`}
+            />
+            <span className="text-foreground shrink-0 font-bold">{line.title}</span>
+            <span className="text-text-dim min-w-0 flex-1 truncate">{line.detail}</span>
+          </WindowLink>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * 학생 위험 — **출결 · 퇴원** 둘뿐이다.
+ *
+ * 🔴 학습·숙제·학부모 만족도 칸을 만들지 않는다 — 구조화된 재료가 없어서, 세워 두면 **빈 0이
+ *    "문제 없음"으로 읽힌다**(권한 없는 타일을 안 세우는 것과 같은 규칙).
+ * 🔴 수납은 여기 넣지 않는다 — 같은 화면의 수납 타일이 이미 미납 건수를 말한다.
+ * 🔴 모르는 값은 `—`다(0이 아니다).
+ */
+export type RiskRow = {
+  key: string;
+  label: string;
+  /** 학생 수. **모르면 null**. */
+  value: string | null;
+  unit: string;
+  /** 왜 위험인가 — 결정론 문장 그대로(retention `reasons`·기준 문구). */
+  reason: string;
+  tone: "critical" | "caution" | "inert";
+  href?: string;
+  title?: string;
+};
+
+export function RiskRows({ rows }: { rows: RiskRow[] }) {
+  if (rows.length === 0) return <PanelEmpty>표시할 위험 신호가 없습니다</PanelEmpty>;
+  return (
+    <ul className="min-w-0">
+      {rows.map((r) => {
+        const body = (
+          <span className="flex min-w-0 items-baseline gap-1.5 text-xs leading-tight">
+            <span className="text-foreground shrink-0 font-bold">{r.label}</span>
+            <span
+              className={`num shrink-0 font-bold ${r.tone === "critical" ? "text-danger" : r.tone === "caution" ? "text-amber" : "text-text-dim"}`}
+            >
+              {r.value ?? "—"}
+              {r.value !== null ? r.unit : ""}
+            </span>
+            <span className="text-text-dim min-w-0 flex-1 truncate">{r.reason}</span>
+          </span>
+        );
+        return (
+          <li key={r.key} title={r.title}>
+            {r.href ? (
+              <WindowLink href={r.href} className="hover:bg-bg-soft/60 -mx-1 block rounded px-1">
+                {body}
+              </WindowLink>
+            ) : (
+              body
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

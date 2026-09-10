@@ -35,9 +35,20 @@ export type DashboardAreas = {
    * payload가 master 관점 전신호(0114a)라, 그 권한 범위로 생성된 판이 있을 때만 켠다.
    */
   briefing: boolean;
+  /** 신규생 관리 — '신규생 케어' 칸 줄과 '우선 확인' 세 줄. */
+  newcomers: boolean;
+  /**
+   * 이탈 방어 — '학생 위험' 줄의 **퇴원위험** 칸.
+   * ⚠️ 숫자는 저장된 브리핑 payload에서 오므로 `briefing`이 함께 켜져야 실제로 선다(아래 참조).
+   */
+  retention: boolean;
+  /** 수업보고서 — '학생 위험' 줄의 **숙제 · 학부모 확인** 칸(재료가 `lesson_reports`다). */
+  lessonReports: boolean;
 };
 
 export type KpiKey = "students" | "attendance" | "billing" | "todo";
+/** 행2 — 신규생 케어 · 우선 확인 · 학생 위험. */
+export type CareKey = "care" | "priority" | "risk";
 export type BodyKey = "todo" | "watchlist" | "briefing" | "outstanding";
 export type ChartKey = "attendance7d" | "enroll4w";
 
@@ -47,9 +58,14 @@ export type GridCell<K extends string> = { key: K; span: number };
 export type DashboardPlan = {
   /** 행1(88px 고정) — 최대 4칸. */
   kpis: GridCell<KpiKey>[];
-  /** 행2(1fr) — 목록. 이 화면의 본문이다. */
+  /**
+   * 행2(100px 고정) — 신규생·위험 띠. 비면 **행 자체가 없어져** 본문이 그 높이를 먹는다.
+   * 🔴 본문(행3)에 끼워 넣지 않는다 — 본문이 네 칸이 되면 '오늘 할 일'이 3/12로 좁아져 라벨이 잘린다.
+   */
+  care: GridCell<CareKey>[];
+  /** 행3(1fr) — 목록. 이 화면의 본문이다. */
   body: GridCell<BodyKey>[];
-  /** 행3(168px) — 차트 최대 2개. 비면 행 자체가 없어지고 행2가 그 높이를 먹는다. */
+  /** 행4(168px) — 차트 최대 2개. 비면 행 자체가 없어지고 본문이 그 높이를 먹는다. */
   charts: GridCell<ChartKey>[];
   /** 아무 칸도 못 세우는 권한 — 화면을 마운트하지 말 것(빈 격자를 그리지 않는다). */
   empty: boolean;
@@ -76,9 +92,16 @@ function distribute(count: number): number[] {
   return Array.from({ length: count }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
-function laneOf<K extends string>(keys: K[]): GridCell<K>[] {
-  const spans = distribute(keys.length);
+function laneOf<K extends string>(keys: K[], spans: number[] = distribute(keys.length)): GridCell<K>[] {
   return keys.map((key, i) => ({ key, span: spans[i] ?? 0 }));
+}
+
+/** 균등 배분(합 12 유지) — 남는 폭은 앞쪽 칸에 얹는다. */
+function evenSpans(count: number): number[] {
+  if (count <= 0) return [];
+  const base = Math.floor(12 / count);
+  const rest = 12 - base * count;
+  return Array.from({ length: count }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
 /** '오늘 할 일'에 실릴 신호가 하나라도 있는 권한인가 — 없으면 그 타일도 목록도 세우지 않는다. */
@@ -97,7 +120,21 @@ export function buildDashboardPlan(areas: DashboardAreas): DashboardPlan {
   //    목록이라, 타일이 그것뿐이면 한 화면에 같은 값이 두 번 적힌다(§2 "같은 값 두 번 금지").
   if (hasAnySignal(areas) && tiles.length >= 2) tiles.push("todo");
 
-  // ── 행2 본문 ──────────────────────────────────────────────────────────────
+  // ── 행2 신규생·위험 띠 ──────────────────────────────────────────────────────
+  // 신규생 케어 · 우선 확인 · 학생 위험.
+  // 🔴 **재료가 있는 칸만** 세운다 — 빈 칸을 세워 두면 "문제 없음"으로 읽힌다(§8-4). 그래서 재료가
+  //    없는 축(학습·숙제·학부모 만족도)은 아예 칸을 만들지 않는다 — 0은 "정상"으로 읽혀 더 해롭다.
+  const care: CareKey[] = [];
+  // 케어 칸은 **숫자만** 담아 신규생 열람 권한이면 선다.
+  if (areas.newcomers) care.push("care");
+  // 🔴 '우선 확인'은 **학생 이름과 학생 상세 링크**를 담는다 — 이름을 알아도 되는 사람에게만 세운다
+  //    ('살펴볼 학생' 칸과 같은 규약). 지금 기본 권한에선 둘이 늘 함께지만, 개인 예외로 갈릴 수 있다.
+  if (areas.newcomers && areas.students) care.push("priority");
+  // 위험 줄의 칸들은 재료가 따로다: 출결 = 결석 위험 조회 / 숙제·학부모 확인 = 수업보고서 /
+  // 퇴원위험 = **저장된 브리핑 payload**(그래서 retention 메뉴 + 브리핑 열람이 함께 있어야 한다, 0114a).
+  if (areas.attendance || areas.lessonReports || (areas.retention && areas.briefing)) care.push("risk");
+
+  // ── 행3 본문 ──────────────────────────────────────────────────────────────
   const body: BodyKey[] = [];
   if (hasAnySignal(areas)) body.push("todo");
   // 살펴볼 학생 = 결석 위험 ∪ 상담 후속. **이름을 알아도 되는 사람**(학생 열람)에게만, 그리고
@@ -108,26 +145,31 @@ export function buildDashboardPlan(areas: DashboardAreas): DashboardPlan {
   //    수납만 보이는 역할(회계)에선 그 화면이 타일 하나로 끝나 버리므로 여기서 되살린다.
   if (areas.billing && body.length < 2) body.push("outstanding");
 
-  // ── 행3 차트 ──────────────────────────────────────────────────────────────
+  // ── 행4 차트 ──────────────────────────────────────────────────────────────
   const charts: ChartKey[] = [];
   if (areas.attendance) charts.push("attendance7d");
   if (areas.students) charts.push("enroll4w");
 
   return {
     kpis: laneOf(tiles),
+    // 🔴 이 행만 **균등 배분**이다 — 세 칸이 전부 "라벨 + 숫자 + 짧은 사유" 모양이라 5/4/3으로 나누면
+    //    마지막 칸(위험 네 줄)에서 사유가 통째로 잘린다(본문 행은 첫 칸만 길어서 5/4/3이 맞다).
+    care: laneOf(care, evenSpans(care.length)),
     body: laneOf(body),
     charts: laneOf(charts),
-    empty: tiles.length === 0 && body.length === 0 && charts.length === 0,
+    // 🔴 새 행을 더할 땐 이 판정에도 더할 것 — 안 더하면 그 행만 서는 권한에서 화면이 통째로 안 뜬다.
+    empty: tiles.length === 0 && care.length === 0 && body.length === 0 && charts.length === 0,
   };
 }
 
 /** 그 칸이 계획에 있나 — 페이지가 **조회를 만들기 전에** 물어보는 자리다. */
 export function planIncludes(
   plan: DashboardPlan,
-  key: KpiKey | BodyKey | ChartKey,
+  key: KpiKey | CareKey | BodyKey | ChartKey,
 ): boolean {
   return (
     plan.kpis.some((c) => c.key === key) ||
+    plan.care.some((c) => c.key === key) ||
     plan.body.some((c) => c.key === key) ||
     plan.charts.some((c) => c.key === key)
   );

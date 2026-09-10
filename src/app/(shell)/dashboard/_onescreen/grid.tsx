@@ -18,26 +18,42 @@ import type { CSSProperties, ReactNode } from "react";
 
 /** 행1 — KPI 타일. 88px은 숫자 28px + 라벨/보조 두 줄이 들어가는 최소치다. */
 const KPI_ROW = "88px";
-/** 행3 — 차트. 168px 미만이면 7일 선의 y축 변화가 눈에 안 보인다(창일 때). */
+/**
+ * 행2 — 신규생 케어 · 우선 확인 · 학생 위험. 112px은 **머리 한 줄 + 네 줄 목록**(위험 칸이 가장 길다:
+ * 결석·숙제·학부모·퇴원위험)이 들어가는 최소치다 — 여백 12 + 머리 20 + 4 + 줄 4×18 = 108.
+ * 🔴 더 키우지 말 것 — 이 화면의 세로는 본문(1fr)에서 그대로 빠진다. 🔴 줄이지도 말 것 — 넘치면
+ * `overflow-hidden`이 **말없이 잘라** 마지막 신호(퇴원위험)가 사라진다.
+ */
+const CARE_ROW = "112px";
+/** 마지막 행 — 차트. 168px 미만이면 7일 선의 y축 변화가 눈에 안 보인다(창일 때). */
 const CHART_ROW = "168px";
 
 export function OneScreenGrid({
   kpis,
+  care,
   body,
   charts,
+  gap = "gap-2",
 }: {
   kpis: ReactNode;
+  /** 신규생·위험 행 — 재료가 하나도 없으면 `null`이고, 그러면 **행 자체가 없어진다**. */
+  care: ReactNode | null;
   body: ReactNode;
   /** 차트 행 — 볼 수 있는 과거 데이터가 없으면 `null`이고, 그러면 **행 자체가 없어져** 본문이 그 높이를 먹는다. */
   charts: ReactNode | null;
+  /** 격자 간격 — 껍데기(skin)가 정한다(밀도안은 더 좁다). */
+  gap?: string;
 }) {
-  const rows = charts ? `${KPI_ROW} minmax(0,1fr) ${CHART_ROW}` : `${KPI_ROW} minmax(0,1fr)`;
+  const rows = [KPI_ROW, care ? CARE_ROW : null, "minmax(0,1fr)", charts ? CHART_ROW : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <div
-      className="grid h-full min-h-0 grid-cols-12 gap-2"
+      className={`grid h-full min-h-0 grid-cols-12 ${gap}`}
       style={{ gridTemplateRows: rows }}
     >
       {kpis}
+      {care}
       {body}
       {charts}
     </div>
