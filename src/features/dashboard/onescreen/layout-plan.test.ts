@@ -89,7 +89,7 @@ describe("한 화면 격자 계획", () => {
   // 2026-09-10 재설계(codex·grok 합의, 원장 승인): 같은 값을 두 번 적던 칸 셋을 걷었다 —
   // 상단 '오늘 할 일' KPI(아래 목록과 같은 숫자) · '우선 확인'(할 일 목록과 글자까지 겹침) ·
   // '오늘 브리핑' 산문(문단의 23건과 목록의 21명이 단위가 달라 서로를 부정했다).
-  it("전권한 = KPI 3 · 신규생·위험 2(균등 6/6) · 본문 2(6/6) · 차트 2", () => {
+  it("전권한 = KPI 3 · 신규생·위험 2(균등 6/6) · 본문 2(6/6) · 차트 4", () => {
     const p = buildDashboardPlan(ALL);
     expect(keys(p.kpis)).toEqual(["students", "attendance", "billing"]);
     expect(keys(p.care)).toEqual(["care", "risk"]);
@@ -97,7 +97,8 @@ describe("한 화면 격자 계획", () => {
     expect(p.care.map((c) => c.span)).toEqual([6, 6]);
     expect(keys(p.body)).toEqual(["todo", "watchlist"]);
     expect(p.body.map((c) => c.span)).toEqual([6, 6]);
-    expect(keys(p.charts)).toEqual(["attendance7d", "enroll4w"]);
+    // 🔴 차트는 넷이다(2026-09-10) — 원장이 두 번 제시한 레퍼런스가 아래를 차트 격자로 채운다.
+    expect(keys(p.charts)).toEqual(["attendance7d", "enroll4w", "grades", "payments"]);
     // 🔴 미납 상위 목록은 전권한 화면에선 버린다(수납 타일 하나로 충분하다).
     expect(planIncludes(p, "outstanding")).toBe(false);
     // 🔴 걷어낸 셋이 되살아나지 않는다.
@@ -115,23 +116,21 @@ describe("한 화면 격자 계획", () => {
     expect(keys(p.care)).toEqual(["risk"]);
   });
 
-  it("수납만 — 타일 하나 전폭 + 미납 상위 목록을 본문으로 되살린다", () => {
+  it("수납만 — 타일 하나 전폭 + 미납 상위 목록 + 수납 상태 차트", () => {
     const p = buildDashboardPlan(areas({ billing: true }));
     expect(keys(p.kpis)).toEqual(["billing"]);
-    expect(p.kpis[0].span).toBe(12);
+    expect(p.kpis.map((c) => c.span)).toEqual([12]);
     expect(keys(p.body)).toEqual(["todo", "outstanding"]);
-    // 볼 수 있는 과거 데이터가 없으니 차트 행은 아예 없다(빈 상자를 세우지 않는다).
-    expect(p.charts).toEqual([]);
-    // 신규생·위험 재료가 하나도 없으면 그 행도 통째로 없다.
-    expect(p.care).toEqual([]);
+    // 🔴 수납 상태 차트는 **새 조회가 0**이다 — 타일이 이미 받은 값을 나눠 그린다.
+    expect(keys(p.charts)).toEqual(["payments"]);
   });
 
-  it("학생만 — 재원생 타일 + 4주 막대, 살펴볼 학생은 없다", () => {
+  it("학생만 — 재원생 타일 + 4주 막대 + 학년 구성, 확인이 필요한 학생은 없다", () => {
     const p = buildDashboardPlan(areas({ students: true }));
     expect(keys(p.kpis)).toEqual(["students"]);
-    expect(keys(p.charts)).toEqual(["enroll4w"]);
-    // 결석·상담 둘 다 못 보면 '살펴볼 학생'에 담을 근거가 없다.
+    // 출결·상담을 못 보면 담을 갈래가 없어 그 목록은 서지 않는다.
     expect(planIncludes(p, "watchlist")).toBe(false);
+    expect(keys(p.charts)).toEqual(["enroll4w", "grades"]);
   });
 
   it("신규생만 — 케어 칸 하나가 12열을 다 쓴다", () => {

@@ -61,6 +61,28 @@ export async function getEnrolledStudentCount(): Promise<number> {
   return count ?? 0;
 }
 
+/**
+ * **학년별 재원생** — 대시보드 구성 막대(레퍼런스 `Headcount by Dept`에 대응)의 재료.
+ *
+ * 🔴 `fetchAllPaged`로 받는다 — 재원생이 1000명을 넘기면 무페이징 select는 **에러 없이 잘려**
+ *    그만큼의 학년이 조용히 사라진다(B2). 지금 339명이라 한 장이지만 상한을 두지 않는다.
+ * 🔴 `grade` **한 칸만** 받는다 — 이름·학교는 이 막대에 필요 없고, 받으면 payload만 커진다.
+ * ⚠️ 라벨은 그대로 쓴다 — 학년 표기는 학원설정이 단일 소스이고 여기서 손대면 두 곳이 갈린다.
+ *    빈 값은 순수부(`countByLabel`)가 "미지정"으로 모은다(버리면 합계가 재원생 수와 안 맞는다).
+ */
+export async function getGradeComposition(): Promise<(string | null)[]> {
+  const supabase = await createClient();
+  const rows = await fetchAllPaged<{ grade: string | null }>((from, to) =>
+    supabase
+      .from("students")
+      .select("grade")
+      .eq("status", "enrolled")
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows.map((r) => r.grade);
+}
+
 export type EnrollmentChangeStudent = {
   id: string;
   name: string;

@@ -87,9 +87,17 @@ describe("한 화면 대시보드 배선", () => {
     expect(read(ONE_SCREEN)).toContain("newcomers: false");
   });
 
-  it("차트를 새로 추가하지 않았다 — 이 화면의 차트는 둘뿐이다", () => {
-    const src = read("src/app/(shell)/dashboard/_onescreen/charts.tsx");
-    const exported = [...src.matchAll(/export function (\w+)/g)].map((m) => m[1]);
-    expect(exported.sort()).toEqual(["AttendanceTrend", "WeeklyChangeBars"]);
+  // 🔴 2026-09-10 뒤집힘 — 옛 가드는 "차트는 둘뿐이다"였다. 원장이 참고 이미지를 두 번 제시하고
+  //    *"디자인을 너무 무시한거 아냐"* + *"이 공간낭비 어쩔꺼야"*라고 지적해 차트 격자로 채웠다.
+  //    이제 잠그는 것은 **개수가 아니라 무게**다 — 차트 라이브러리를 들이면 바탕화면의 첫 페인트가
+  //    그 청크를 기다린다(B5). 순수 SVG·div로만 그린다는 약속을 대신 잠근다.
+  it("차트에 라이브러리를 들이지 않는다 — 순수 SVG·div로만 그린다", () => {
+    // 주석엔 "recharts를 쓰지 않는다"는 사연이 적혀 있다 — 코드만 본다.
+    const src = code("src/app/(shell)/dashboard/_onescreen/charts.tsx");
+    for (const lib of ["recharts", "chart.js", "d3", "victory", "nivo"]) {
+      expect(src).not.toContain(lib);
+    }
+    // 도넛·파이 금지(각도는 눈으로 비교가 안 된다).
+    expect(src).not.toContain("<circle");
   });
 });

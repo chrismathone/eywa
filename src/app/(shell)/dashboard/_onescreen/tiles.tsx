@@ -75,7 +75,7 @@ export function KpiTile({
       <div className="text-text-dim mt-0.5 truncate text-xs">{sub ?? null}</div>
       {bar && bar.length > 0 ? (
         <div
-          className="border-line mt-1.5 flex h-1.5 w-full overflow-hidden rounded-full border"
+          className="border-line mt-1 flex h-1 w-full overflow-hidden rounded-full border"
           title={barTitle}
           aria-label={barTitle}
         >

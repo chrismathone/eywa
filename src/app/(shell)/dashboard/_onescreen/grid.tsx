@@ -16,8 +16,14 @@ import type { CSSProperties, ReactNode } from "react";
  *    등록상담 목록뷰가 같은 이유로 `h-full`을 쓴다(원장 *"이 어색한 여백은 뭐야"*).
  */
 
-/** 행1 — KPI 타일. 88px은 숫자 28px + 라벨/보조 두 줄이 들어가는 최소치다. */
-const KPI_ROW = "88px";
+/**
+ * 행1 — KPI 타일. **104px**: 라벨 + 숫자 + 보조 한 줄 + **막대 한 줄**.
+ * 🔴 88px이던 것을 올렸다 — 2026-09-10에 타일 안 막대를 넣으면서 칸을 넘겨,
+ *    `overflow-hidden`이 **머리 라벨을 말없이 잘랐다**(원장 제보 "b는 상단 텍스트 짤려").
+ *    밀도안(B)은 머리에 색 띠(3px)까지 있어 먼저 터진다.
+ * ⚠️ 여기를 다시 줄이려면 막대를 함께 없애야 한다 — 둘은 같은 높이를 나눠 쓴다.
+ */
+const KPI_ROW = "104px";
 /**
  * 행2 — 신규생 케어 · 우선 확인 · 학생 위험. 112px은 **머리 한 줄 + 네 줄 목록**(위험 칸이 가장 길다:
  * 결석·숙제·학부모·퇴원위험)이 들어가는 최소치다 — 여백 12 + 머리 20 + 4 + 줄 4×18 = 108.
@@ -25,8 +31,15 @@ const KPI_ROW = "88px";
  * `overflow-hidden`이 **말없이 잘라** 마지막 신호(퇴원위험)가 사라진다.
  */
 const CARE_ROW = "112px";
-/** 마지막 행 — 차트. 168px 미만이면 7일 선의 y축 변화가 눈에 안 보인다(창일 때). */
-const CHART_ROW = "168px";
+/**
+ * 마지막 행 — 차트. **남는 높이를 여기가 갖는다**(본문이 아니라).
+ *
+ * 🔴 2026-09-10 뒤집힘 — 원장 제보 *"이 공간낭비 어쩔꺼야"*. 본문(목록)이 `1fr`이라 8줄짜리
+ *    목록이 화면 높이의 70%를 빈 칸으로 들고 있었고, 정작 차트는 168px에 눌려 있었다.
+ *    원장이 두 번 보여 준 레퍼런스(HR 대시보드)는 **아래가 차트 격자**다 — 그 자리가 여기다.
+ * ⚠️ 차트가 없으면 이 행 자체가 없고 그때는 본문이 남는 높이를 갖는다(아래 `bodyRow`).
+ */
+const CHART_ROW_MIN = "200px";
 
 export function OneScreenGrid({
   kpis,
@@ -44,7 +57,9 @@ export function OneScreenGrid({
   /** 격자 간격 — 껍데기(skin)가 정한다(밀도안은 더 좁다). */
   gap?: string;
 }) {
-  const rows = [KPI_ROW, care ? CARE_ROW : null, "minmax(0,1fr)", charts ? CHART_ROW : null]
+  // 🔴 본문은 **내용만큼만**, 남는 높이는 차트가 갖는다. 차트가 없을 때만 본문이 1fr이다.
+  const bodyRow = charts ? "minmax(120px,auto)" : "minmax(0,1fr)";
+  const rows = [KPI_ROW, care ? CARE_ROW : null, bodyRow, charts ? `minmax(${CHART_ROW_MIN},1fr)` : null]
     .filter(Boolean)
     .join(" ");
   return (

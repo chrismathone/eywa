@@ -45,7 +45,9 @@ import {
   paymentBarTitle,
 } from "@/features/dashboard/onescreen/tile-bar";
 import { formatWon } from "@/features/billing/textbook-notice";
-import { AttendanceTrend, WeeklyChangeBars } from "./charts";
+import { AttendanceTrend, CompositionBars, WeeklyChangeBars } from "./charts";
+import { countByLabel, toCompositionBars } from "@/features/dashboard/onescreen/composition";
+import { getGradeComposition } from "@/features/dashboard/server/queries";
 import { Cell, OneScreenGrid } from "./grid";
 import {
   CareCells,
@@ -131,6 +133,7 @@ export async function OneScreenDashboard({
     outstanding,
     trend,
     weekly,
+    grades,
     newcomers,
     homework,
     unread,
@@ -179,6 +182,8 @@ export async function OneScreenDashboard({
       ? soft("7일 추세", getTrendDataLast7Days(tenantId, { attendance: true, billing: false }))
       : skip,
     need("enroll4w") ? soft("4주 증감", getWeeklyChange()) : skip,
+    // 학년 구성 — grade 한 칸만 받는다(payload 최소). 재원생 339명이라 한 장이지만 페이지네이션은 지킨다.
+    need("grades") ? soft("학년 구성", getGradeComposition()) : skip,
     // 신규생 조회는 **신규생 탭과 같은 함수**다(판정·창이 갈리지 않게). 위 `newcomers: false`로 같은
     // 재료를 두 번 긁지 않는다.
     need("care") ? soft("신규생", getNewcomers()) : skip,
@@ -547,6 +552,51 @@ export async function OneScreenDashboard({
                     <PanelEmpty>증감을 불러오지 못했습니다</PanelEmpty>
                   ) : (
                     <WeeklyChangeBars buckets={weekly} />
+                  )}
+                </Panel>
+              </Cell>
+            ) : null}
+
+            {chartOf("grades") > 0 ? (
+              <Cell span={chartOf("grades")}>
+                <Panel sk={sk} title="학년별 재원생" href="/students">
+                  {(() => {
+                    // 🔴 조회 실패와 "학생이 0명"을 구분한다 — 실패를 빈 막대로 그리지 않는다.
+                    if (grades === null) return <PanelEmpty>학년 구성을 불러오지 못했습니다</PanelEmpty>;
+                    const c = toCompositionBars(countByLabel(grades as (string | null)[]));
+                    return (
+                      <CompositionBars
+                        bars={c.bars}
+                        hiddenCount={c.hiddenCount}
+                        hiddenValue={c.hiddenValue}
+                        emptyLabel="재원생이 없습니다"
+                      />
+                    );
+                  })()}
+                </Panel>
+              </Cell>
+            ) : null}
+
+            {chartOf("payments") > 0 ? (
+              <Cell span={chartOf("payments")}>
+                <Panel sk={sk} title="이번 달 수납 상태" href="/billing">
+                  {payment === null ? (
+                    <PanelEmpty>수납을 불러오지 못했습니다</PanelEmpty>
+                  ) : (
+                    // ⚠️ **건수 축**이다 — 같은 화면 수납 타일의 주숫자(수납률)는 금액 기준이라 축이 다르다.
+                    //    그래서 제목 옆이 아니라 막대 라벨이 `완납·부분납·미납`이라 스스로 말한다.
+                    <CompositionBars
+                      bars={
+                        toCompositionBars([
+                          { label: "완납", value: payment.paidCount },
+                          { label: "부분납", value: payment.partialCount },
+                          { label: "미납", value: payment.fullyUnpaidCount },
+                        ]).bars
+                      }
+                      hiddenCount={0}
+                      hiddenValue={0}
+                      emptyLabel="이번 달 청구가 없습니다"
+                    />
                   )}
                 </Panel>
               </Cell>

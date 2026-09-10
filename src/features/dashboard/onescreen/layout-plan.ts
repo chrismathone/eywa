@@ -63,7 +63,13 @@ export type CareKey = "care" | "risk";
  *    `21명`이 **단위가 달라** 한 화면이 스스로를 부정했다. 할 일은 목록이 이미 실행 가능한 형태로 말한다.
  */
 export type BodyKey = "todo" | "watchlist" | "outstanding";
-export type ChartKey = "attendance7d" | "enroll4w";
+/**
+ * 행4 — 차트 격자.
+ * 🔴 2026-09-10에 늘렸다(원장: 참고 이미지 두 번 제시 + *"디자인을 너무 무시한거 아냐"* +
+ *    *"이 공간낭비 어쩔꺼야"*). 레퍼런스 뼈대가 **위 KPI 줄 + 아래 차트 격자**라 아래를 비워 두는 것이
+ *    곧 지시 위반이었다. `grades`·`payments`는 **새 조회를 거의 안 늘린다**(수납은 이미 받은 값 재사용).
+ */
+export type ChartKey = "attendance7d" | "enroll4w" | "grades" | "payments";
 
 /** 12열 격자 위의 한 칸. `span`은 12분율이고 한 행의 합은 언제나 12다(가드가 잠근다). */
 export type GridCell<K extends string> = { key: K; span: number };
@@ -156,6 +162,10 @@ export function buildDashboardPlan(areas: DashboardAreas): DashboardPlan {
   const charts: ChartKey[] = [];
   if (areas.attendance) charts.push("attendance7d");
   if (areas.students) charts.push("enroll4w");
+  // 학년 구성 — 학생을 볼 수 있으면 선다(이름을 안 담고 **수만** 담는다).
+  if (areas.students) charts.push("grades");
+  // 수납 상태 — **새 조회 0**이다(같은 화면의 수납 타일이 이미 받은 값을 나눠 그린다).
+  if (areas.billing) charts.push("payments");
 
   return {
     kpis: laneOf(tiles),
