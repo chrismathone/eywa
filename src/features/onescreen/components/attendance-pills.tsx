@@ -220,11 +220,19 @@ export function NoteForm({
   label,
   onSave,
   onCancel,
+  onDraft,
 }: {
   initial: string;
   label: string;
   onSave: (text: string) => void;
   onCancel: () => void;
+  /**
+   * **입력하는 동안 자동 저장**(원장 2026-09-10 자리 출석부 *"실시간 저장도"*) — 글자마다 불린다.
+   * 🔵 넘기는 쪽이 디바운스를 갖고 있어야 한다(자리 화면은 `saveNote`가 800ms 디바운스 + 언마운트 flush).
+   * ⚠️ 이 prop을 주면 **취소 버튼이 사라진다** — 이미 저장된 글을 '취소'라 부르면 거짓말이다.
+   *    안 주면(ECS·원스크린) 종전 그대로 저장/취소 두 버튼이다.
+   */
+  onDraft?: (text: string) => void;
 }) {
   const t = useSheetT();
   const [text, setText] = useState(initial);
@@ -239,7 +247,10 @@ export function NoteForm({
       <textarea
         ref={ref}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          onDraft?.(e.target.value);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -252,13 +263,18 @@ export function NoteForm({
         className="border-line bg-card focus:border-primary w-full resize-none rounded-md border px-1.5 py-1 text-xs outline-none"
       />
       <div className="flex items-center justify-end gap-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-xs"
-        >
-          {t("os.att.cancel")}
-        </button>
+        {onDraft ? (
+          // 자동 저장 중 — 되돌릴 것이 없으니 '취소'를 세우지 않는다(누르면 이미 저장된 글이 남아 거짓말).
+          <span className="text-text-faint mr-auto text-xs">자동 저장됩니다</span>
+        ) : (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-text-faint hover:text-foreground cursor-pointer px-1.5 py-0.5 text-xs"
+          >
+            {t("os.att.cancel")}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onSave(text)}

@@ -28,14 +28,11 @@ import {
   SEAT_ROOM,
 } from "@/features/attendance/seat/seat";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
-import {
-  nextSeatPeriodByStudent,
-  prevPeriodAbsences,
-  seatDayCells,
-} from "@/features/attendance/seat/prev-period";
+import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
 import { getSeatPlacements } from "@/features/attendance/seat/server/placements";
+import { getSeatNextDestinations } from "@/features/attendance/seat/server/next-destination";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
 
@@ -103,7 +100,7 @@ export default async function SeatAttendancePage({
 
   // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
   // 🔴 계획은 **자리 권한이 아니라 영어 시트 권한**이 연다 — 아르바이트·viewer에겐 반마다 빈 값이 온다.
-  const [rosters, plans, placements] = await Promise.all([
+  const [rosters, plans, placements, nextDest] = await Promise.all([
     period && seatHasJjFields(seat)
       ? attachJjMarks(day.rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
       : Promise.resolve(period ? (day.rosterByPeriod[period.start] ?? []) : []),
@@ -120,6 +117,23 @@ export default async function SeatAttendancePage({
     period
       ? getSeatPlacements(user.tenantId, seat, date, period.start)
       : Promise.resolve({ rows: [], ready: false, reason: null }),
+    /**
+     * **다음 행선지**(원장 2026-09-10 *"17:20 304호 가야함처럼"*) — 이 자리만이 아니라 **오늘 전 과목**의
+     * 다음 수업을 본다. 그래서 순수 함수(`nextSeatPeriodByStudent`, 이 자리 교시만)로는 못 구하고 조회가
+     * 든다. 🔵 명단은 `day`에 이미 있으므로 위 `rosters`를 기다리지 않는다(직렬 워터폴 금지, B4).
+     * 🔴 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면엔 이 prop 자체를 안 넘긴다(동선 정보).
+     */
+    period
+      ? getSeatNextDestinations(
+          [
+            ...new Set(
+              (day.rosterByPeriod[period.start] ?? []).flatMap((r) => r.students.map((s) => s.id)),
+            ),
+          ],
+          date,
+          period.start,
+        )
+      : Promise.resolve({ startByStudent: {}, roomByStudent: {} }),
   ]);
 
   /**
@@ -140,7 +154,9 @@ export default async function SeatAttendancePage({
   //    쓰는 집합과 **같은 인자**여야 버튼의 "N명"이 실제로 쓰는 수와 맞는다.
   const prevAbsentByCell =
     cells && period ? prevPeriodAbsences(cells, period.start, ambiguousClassIds(period)) : undefined;
-  const nextStartByStudent = cells && period ? nextSeatPeriodByStudent(cells, period.start) : undefined;
+  // ⚠️ 방을 모르면 `nextRoomByStudent`에 키가 없고 화면은 시각만 적는다(지어내지 않는다).
+  const nextStartByStudent = nextDest.startByStudent;
+  const nextRoomByStudent = nextDest.roomByStudent;
 
   const href = (q: { date?: string; start?: string }) => {
     const sp = new URLSearchParams();
@@ -154,9 +170,9 @@ export default async function SeatAttendancePage({
       <PageHeader
         eyebrow="출석부"
         title={`${SEAT_NAME[seat]} ${SEAT_ROOM[seat]}`}
-        embedLabel={`${SEAT_NAME[seat]} · ${dateLabel(date)}`}
-        // ⚠️ 부제로 날짜를 또 적지 않는다 — 아래 날짜 네비가 같은 줄에서 이미 말하고 있다(둘이 나란히
-        //    같은 날짜를 적으면 어느 쪽이 진짜인지 헷갈린다). 창(embed) 한 줄 라벨엔 그대로 들어간다.
+        // 🔴 날짜를 여기 또 적지 않는다(원장 2026-09-10 ⑥) — 오른쪽 `PeriodNav`가 같은 줄에서 이미
+        //    같은 날짜를 말하고 있었다. 기간 네비가 앱 전역 단일 소스라 남기는 쪽은 그쪽이다.
+        embedLabel={SEAT_NAME[seat]}
         actions={
           <div className="flex items-center gap-1.5">
             {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). */}
@@ -225,6 +241,7 @@ export default async function SeatAttendancePage({
           // 🔵 '다음 교시'는 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면(`/seat/:key`)엔 이 prop을
           //    아예 안 넘긴다(그 경로는 사유도 조회하지 않는다는 규약과 같은 결).
           nextStartByStudent={nextStartByStudent}
+          nextRoomByStudent={nextRoomByStudent}
           placements={placements.rows}
           canMove={canMovePlacement}
           placementNotice={placementNotice}

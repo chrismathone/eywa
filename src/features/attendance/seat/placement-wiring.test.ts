@@ -132,10 +132,10 @@ describe("⑤ 드래그와 클릭(출결)은 겹치지 않는다", () => {
     expect(LAB).toContain("endSeatDrag()");
   });
 
-  it("`결`·`지` 버튼은 드래그 손잡이가 아니다 — 손잡이는 카드 본체 하나뿐", () => {
-    // listeners/attributes가 붙는 자리가 한 곳(카드 버튼)인지.
-    expect(LAB.match(/\{\.\.\.listeners\}/g)).toHaveLength(1);
-    const marks = LAB.slice(LAB.indexOf("<SeatMarkButtons"));
+  it("출결 세 버튼은 드래그 손잡이가 아니다 — 손잡이는 카드 본체 하나뿐", () => {
+    // 손잡이(dnd listeners)가 붙는 자리가 한 곳인지. 못 끄는 카드엔 아예 안 붙는다.
+    expect(LAB.match(/\{\.\.\.\(canMove \? listeners : \{\}\)\}/g)).toHaveLength(1);
+    const marks = LAB.slice(LAB.indexOf("<SeatMarkTriad"));
     expect(marks).not.toContain("listeners");
   });
 });

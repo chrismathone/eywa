@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -26,13 +26,14 @@ import { seatCellKey } from "@/features/attendance/seat/prev-period";
 import { SEAT_DRAG_THRESHOLD_PX, type PlacedStudent } from "@/features/attendance/seat/placement";
 import type { SeatClassRoster, SeatStudent } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
-import { SEAT_LABEL, SEAT_TONE } from "./seat-status";
+import { SEAT_TONE } from "./seat-status";
 import { beginSeatDrag, endSeatDrag, seatPointerDown, seatPointerUp, swallowSeatClickAfterDrag } from "./seat-drag";
 import {
   PrevAbsenceHint,
-  SeatMarkButtons,
+  SeatMarkTriad,
+  SeatMemoMark,
+  SeatNotePopover,
   SeatPeriodHints,
-  SeatReasonInput,
   type SeatPeriodHintData,
 } from "./seat-mark-extras";
 
@@ -103,12 +104,7 @@ export function SeatLabGrid({
   );
 
   const body = (
-    <div
-      className="contents"
-      onPointerDownCapture={seatPointerDown}
-      onPointerUpCapture={seatPointerUp}
-      onClickCapture={swallowSeatClickAfterDrag}
-    >
+    <>
       {rosters.map((r) => (
         <SeatClassSection
           key={r.classId}
@@ -127,7 +123,7 @@ export function SeatLabGrid({
           resetCount={resetCounts[r.classId] ?? 0}
         />
       ))}
-    </div>
+    </>
   );
 
   if (!canMove) return body;
@@ -304,6 +300,8 @@ function SeatCard({
   canMove: boolean;
 }) {
   const meta = schoolGradeLabel(s.school, s.grade);
+  const anchorRef = useRef<HTMLLIElement | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
     id: `seat-card:${s.homeClassId}:${s.id}`,
     data: {
@@ -317,96 +315,124 @@ function SeatCard({
   });
   // 🔴 저장·상태 조회는 **원래 반**으로 — 놓인 묶음이 아니다(머리 주석).
   const cur = statusOf(s.homeClassId, s);
+  const note = noteOf(s.homeClassId, s);
   // 긴 이름(동명이인 알파벳 접미사)은 잘라내지 않고 그 칩만 글씨를 줄인다.
   const fit = fitSeatName(s.name, SEAT_CHIP_NAME_LADDER);
   // 사유 메모는 카드 전체의 툴팁이다(원장 2026-08-28 "마우스 오버시 결석사유") — 카드 안
-  // 어디에 올려도 뜨도록 <li>에 단다. 자기 title을 가진 자식(잘린 이름)만 자기 것을 띄운다.
-  const noteTitle = seatNoteTitle(cur, s.note);
+  // 어디에 올려도 뜨도록 <li>에 단다. 자기 title을 가진 자식(잘린 이름·특이사항)만 자기 것을 띄운다.
+  const noteTitle = seatNoteTitle(cur, note);
+  /** 사유·특이사항 창을 여는 유일한 문 — 공개 PIN 화면(showReason=false)에선 열리지 않는다. */
+  const openNote = () => {
+    if (showReason && !readOnly) setNoteOpen(true);
+  };
 
-  // ⚠️ 카드에 `touch-none`을 걸지 않는다 — dnd-kit 권장이지만 이 화면은 카드가 격자를 가득 채워서
-  //    손가락으로 목록을 굴릴 자리가 카드밖에 없다(자리 태블릿에서 스크롤이 통째로 죽는다). 터치에서
-  //    드래그가 잘 안 걸리는 쪽을 택한다 — 자리 옮기기는 데스크의 편의 기능이고, 출결은 그대로 된다.
+  /**
+   * 출결 세 버튼 — **고른 것을 다시 누르면 미체크로 되돌아간다**([[#103]] 되돌릴 문을 잠그지 말 것).
+   * 결석·지각을 새로 고르면 사유 창이 **이어서** 열린다(상태는 이미 저장됐다 — 안 적어도 된다).
+   */
+  const mark = (next: SeatStatus) => {
+    const same = cur === next;
+    onSave(s.homeClassId, s.id, same ? null : next, cur);
+    if (!same && (next === "absent" || next === "late")) openNote();
+    else setNoteOpen(false);
+  };
+
+  // 카드에 `touch-none`을 걸지 않는다 — dnd-kit 권장이지만 이 화면은 카드가 격자를 가득 채워서
+  // 손가락으로 목록을 굴릴 자리가 카드밖에 없다(자리 태블릿에서 스크롤이 통째로 죽는다). 터치에서
+  // 드래그가 잘 안 걸리는 쪽을 택한다 — 자리 옮기기는 데스크의 편의 기능이고, 출결은 그대로 된다.
   return (
-    <li className={`relative ${isDragging ? "opacity-40" : ""}`} title={noteTitle ?? undefined}>
-      <button
-        type="button"
-        ref={setNodeRef}
-        {...attributes}
-        {...listeners}
-        disabled={readOnly || pending}
-        onClick={() => onSave(s.homeClassId, s.id, cur === "present" ? null : "present", cur)}
-        className={`@container border-line flex h-full min-h-[54px] w-full flex-col items-start rounded-xl border px-2.5 py-2 text-left transition disabled:cursor-default ${
-          cur ? SEAT_TONE[cur] : "bg-card border-dashed"
-        }`}
+    <li
+      ref={anchorRef}
+      className={`relative flex flex-col gap-1 ${isDragging ? "opacity-40" : ""}`}
+      title={noteTitle ?? undefined}
+    >
+      <SeatNotePopover
+        open={noteOpen}
+        onOpenChange={setNoteOpen}
+        anchorRef={anchorRef}
+        note={note}
+        status={cur}
+        studentName={s.name}
+        onSave={(text) => onSaveNote(s.homeClassId, s.id, text, cur)}
       >
-        {/* `pr-5` = 오른쪽 위 상태 배지·'결' 버튼 자리를 비워 둔다(안 비우면 긴 이름이
-            배지 밑으로 들어간다). 글자는 칩 폭에 비례(name-fit.ts `fluidNameFontSize`, 원장 2026-09-04
-            "출결에도 이름 꽉 차게") — 배지 자리를 뺀 폭만 쓴다(`LAB_CHIP_NAME_FILL`). 하한에서도 넘칠 때만
-            말줄임 + 전체 이름 툴팁. 버튼은 `h-full` — 격자 한 줄 안에서 이름이 상한(24px)에 닿은 칩과
-            긴 이름이라 작아진 칩의 높이가 갈리지 않게(li가 줄 높이로 늘고 버튼이 그걸 채운다). */}
-        <span
-          className="w-full truncate pr-5 leading-none font-bold"
-          style={{
-            fontSize: fluidNameFontSize(s.name, {
-              minPx: NAME_FILL_MIN_PX.labChip,
-              maxPx: NAME_FILL_MAX_PX,
-              fill: LAB_CHIP_NAME_FILL,
-            }),
+        {/* 카드 본체 = **드래그 손잡이 + 우클릭 특이사항**. 종전엔 이 자리가 '누르면 출석' 버튼이었는데,
+            출결이 세 버튼으로 내려오면서 클릭 축이 하나로 정리됐다(원장 *"클릭으로 출결되는거랑
+            중복액션되지않게"*) — 본체 클릭은 이제 아무 일도 안 한다.
+            🔴 우클릭인 이유: 이 카드는 끌 수 있어서 좌클릭·더블클릭이 이미 다른 뜻이다([[#97]]).
+               `preventDefault`는 **열 수 없는 칸에서도 항상** 부른다(브라우저 메뉴가 뜨면 드래그가 죽는다). */}
+        {/* 🔴 못 끄는 카드엔 dnd 속성을 안 붙인다 — dnd-kit이 `role="button"`·`tabIndex`를 얹어서,
+            아무 일도 안 하는 칸이 키보드로 눌리는 버튼처럼 보인다.
+            🔴 드래그 직후의 클릭은 **이 손잡이에서만** 삼킨다 — 격자 루트에 걸면 방금 드래그한 뒤
+               옆 카드의 출결 버튼을 누른 **진짜 클릭**까지 먹는다(세 버튼은 손잡이 밖 형제다). */}
+        <div
+          ref={setNodeRef}
+          {...(canMove ? attributes : {})}
+          {...(canMove ? listeners : {})}
+          onPointerDownCapture={seatPointerDown}
+          onPointerUpCapture={seatPointerUp}
+          onClickCapture={swallowSeatClickAfterDrag}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            openNote();
           }}
-          // 이름이 잘린 칩에서는 이름 툴팁이 <li>의 사유를 가린다 → 둘을 이어 붙인다.
-          title={fit.clipped ? (noteTitle ? `${s.name} · ${noteTitle}` : s.name) : (noteTitle ?? undefined)}
+          title={showReason && !readOnly ? "우클릭: 특이사항·사유 입력" : undefined}
+          className={`@container border-line flex min-h-[54px] w-full flex-col items-start rounded-xl border px-2.5 py-2 text-left ${
+            cur ? SEAT_TONE[cur] : "bg-card border-dashed"
+          } ${canMove ? "cursor-grab" : ""}`}
         >
-          {s.name}
-        </span>
-        <span className="text-xs opacity-80">{meta || " "}</span>
-      </button>
-      {cur ? (
-        <span className="pointer-events-none absolute top-1.5 right-2 text-xs font-extrabold">
-          {SEAT_LABEL[cur]}
-        </span>
-      ) : null}
-      {!readOnly ? (
-        <span className="absolute top-1.5 right-1.5 flex items-center gap-1">
-          <SeatMarkButtons
+          {/* 글자는 칩 폭에 비례(name-fit.ts `fluidNameFontSize`, 원장 2026-09-04 "출결에도 이름 꽉 차게").
+              `pr-3` = 모서리 메모 삼각형 자리만 비운다(옛 `pr-5`는 사라진 상태 배지·결/지 버튼 자리였다 —
+              그 배지가 이름과 겹쳐 보인다는 제보가 2026-09-10 ⑤였고, 세 버튼으로 내려가며 함께 사라졌다).
+              하한에서도 넘칠 때만 말줄임 + 전체 이름 툴팁. */}
+          <span
+            className="w-full truncate pr-3 leading-none font-bold"
+            style={{
+              fontSize: fluidNameFontSize(s.name, {
+                minPx: NAME_FILL_MIN_PX.labChip,
+                maxPx: NAME_FILL_MAX_PX,
+                fill: LAB_CHIP_NAME_FILL,
+              }),
+            }}
+            // 이름이 잘린 칩에서는 이름 툴팁이 <li>의 사유를 가린다 → 둘을 이어 붙인다.
+            title={fit.clipped ? (noteTitle ? `${s.name} · ${noteTitle}` : s.name) : (noteTitle ?? undefined)}
+          >
+            {s.name}
+          </span>
+          <span className="text-xs opacity-80">{meta || " "}</span>
+          {/* 특이사항 한 줄 — 이름 아래(원장 2026-09-10 ④ *"길면 잘라버리고 마우스 올리면 전체"*).
+              🔴 인라인 요소엔 자르기가 안 먹는다([[#111]]) — 블록으로 세운다. */}
+          {showReason && note ? (
+            <span className="block w-full truncate text-xs font-semibold opacity-80" title={note}>
+              {note}
+            </span>
+          ) : null}
+          {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 교시(표시 전용, JJ실과 같은 부품). */}
+          <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
+          <SeatPeriodHints
+            prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(s.homeClassId, s.id)]}
+            nextStart={hints.nextStartByStudent?.[s.id]}
+            nextRoom={hints.nextRoomByStudent?.[s.id]}
+            seatName={hints.seatName}
             cur={cur}
-            studentName={s.name}
-            pending={pending}
-            compact
-            onMark={(next) => onSave(s.homeClassId, s.id, next, cur)}
           />
-        </span>
-      ) : null}
+        </div>
+      </SeatNotePopover>
+      {/* 메모가 있으면 모서리 삼각형(스프레드시트식) — 무채색이라 출결 의미색과 다투지 않는다. */}
+      {showReason ? <SeatMemoMark note={note} status={cur} /> : null}
       {/* 옮겨 온 카드는 **어디서 왔는지 적는다** — 출결은 원래 반으로 가므로, 안 적으면 화면이
           "이 반 학생"이라는 거짓말을 한다. */}
       {s.movedFromClassId ? (
         <span
-          className="border-line bg-bg-soft text-text-dim pointer-events-none absolute bottom-1 left-1.5 rounded border px-1 text-xs font-semibold"
+          className="border-line bg-bg-soft text-text-dim pointer-events-none absolute top-1 left-1.5 rounded border px-1 text-xs font-semibold"
           title="드래그로 옮겨 온 자리입니다 — 출결은 원래 반으로 기록됩니다"
         >
           자리 이동
         </span>
       ) : null}
-      {/* 결석·지각이면 그 자리에서 사유를 적는다(원장 2026-09-08) — 아직 안 찍힌 칸엔
-          **지난 결석**을 대신 적어 "왜 안 왔었는지"를 묻지 않고도 알 수 있게 한다. */}
-      <div className="mt-1 px-0.5">
-        {showReason ? (
-          <SeatReasonInput
-            value={noteOf(s.homeClassId, s)}
-            status={cur}
-            studentName={s.name}
-            disabled={readOnly || pending}
-            onChange={(next) => onSaveNote(s.homeClassId, s.id, next, cur)}
-          />
-        ) : null}
-        <PrevAbsenceHint prev={s.prevAbsence} cur={cur} />
-        {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 교시(표시 전용, JJ실과 같은 부품). */}
-        <SeatPeriodHints
-          prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(s.homeClassId, s.id)]}
-          nextStart={hints.nextStartByStudent?.[s.id]}
-          seatName={hints.seatName}
-          cur={cur}
-        />
-      </div>
+      {/* 🔴 지난 날짜(readOnly)에도 **숨기지 않고 잠근다** — 감추면 상태가 배경색으로만 남아
+          "무슨 색이 무슨 뜻인지" 되짚어야 한다(색만으로 뜻을 나르지 않는다). 원장 지시의
+          "버튼 수·폭이 상태에 따라 변하지 않는다"와도 같은 결이다. */}
+      <SeatMarkTriad cur={cur} studentName={s.name} disabled={readOnly || pending} onMark={mark} />
     </li>
   );
 }

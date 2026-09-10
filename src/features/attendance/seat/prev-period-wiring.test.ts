@@ -132,7 +132,9 @@ describe("표시는 두 화면이 같은 부품을 쓴다", () => {
 
   it("임계값 이름이 아니라 실제 교시 시각을 적는다([[#121]])", () => {
     expect(extras).toContain("앞 교시({prevAbsentStart}) 결석");
-    expect(extras).toContain("다음 {nextStart}");
+    // 🔴 2026-09-10: '다음 17:20'은 무엇을 하라는 말인지 안 읽혀 **시각 + 어디로**가 됐다
+    //    (원장 *"17:20 304호 가야함처럼"*). 방을 모르면 시각 + '다음 수업'.
+    expect(extras).toContain("{nextStart} {nextRoom ? `${nextRoom} 이동` : \"다음 수업\"}");
     // '직전'·'방금'처럼 시각을 감추는 말을 쓰지 말 것.
     expect(extras).not.toMatch(/방금 결석|직전 교시 결석/);
   });

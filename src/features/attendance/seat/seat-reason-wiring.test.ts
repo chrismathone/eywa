@@ -31,14 +31,21 @@ describe("① JJ실·랩실이 같은 부품을 쓴다", () => {
     ["JJ실", jj],
     ["랩실", lab],
   ] as const) {
-    it(`${name}은 결·지 버튼과 사유 칸을 공용 부품에서 가져온다`, () => {
+    it(`${name}은 출결 버튼·사유 팝업·메모 표식을 공용 부품에서 가져온다`, () => {
+      // 🔴 2026-09-10 원장 지시로 부품이 바뀌었다(옛 `SeatMarkButtons`·`SeatReasonInput`):
+      //    ① 출결 = **세 버튼 같은 폭**(`SeatMarkTriad`) ② 사유 = 카드 아래 입력칸이 아니라 **팝업**
+      //    (`SeatNotePopover`) ③ 메모가 있으면 **모서리 삼각형**(`SeatMemoMark`).
+      //    잠그는 성질은 그대로다 — 두 화면이 **같은 한 벌**을 쓴다.
       expect(src).toContain("./seat-mark-extras");
-      expect(src).toContain("<SeatMarkButtons");
-      expect(src).toContain("<SeatReasonInput");
+      expect(src).toContain("<SeatMarkTriad");
+      expect(src).toContain("<SeatNotePopover");
+      expect(src).toContain("<SeatMemoMark");
       expect(src).toContain("<PrevAbsenceHint");
     });
 
-    it(`${name}에 결석 버튼을 직접 그리지 않는다 — 한쪽만 고쳐지는 갈림을 막는다`, () => {
+    it(`${name}에 옛 인라인 사유 칸·결/지 버튼이 남아 있지 않다`, () => {
+      expect(src).not.toContain("<SeatReasonInput");
+      expect(src).not.toContain("<SeatMarkButtons");
       expect(src).not.toMatch(/aria-label=\{`\$\{s\.name\} 결석`\}/);
     });
   }

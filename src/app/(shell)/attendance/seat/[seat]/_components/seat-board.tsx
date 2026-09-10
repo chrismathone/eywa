@@ -63,6 +63,7 @@ export function SeatBoard({
   publicPin,
   prevAbsentByCell,
   nextStartByStudent,
+  nextRoomByStudent,
   plans,
   placements,
   canMove = false,
@@ -87,6 +88,11 @@ export function SeatBoard({
    *    내려보내지 않는다는 규약. 사유 칸과 같은 결).
    */
   nextStartByStudent?: Readonly<Record<string, string>>;
+  /**
+   * 학생 id → 그 다음 수업의 **강의실 이름**(등록된 정본). 모르면 키가 없다 — 화면은 시각만 적는다.
+   * 🔴 `nextStartByStudent`와 같은 규약으로 **로그인 화면에만** 내려온다.
+   */
+  nextRoomByStudent?: Readonly<Record<string, string>>;
   /**
    * 비로그인 PIN 화면인가 — 참이면 **사유 칸을 안 그린다**(그 경로는 사유를 조회하지 않는다).
    * ⚠️ `plans.viaPin`으로 대신 판정하지 말 것 — 계획이 없는 자리·교시엔 `plans` 자체가 안 넘어와서
@@ -182,7 +188,12 @@ export function SeatBoard({
       ).size
     : 0;
   /** 표 두 벌에 그대로 넘기는 신호 한 묶음 — 이름은 자리 키가 아니라 사람이 읽는 방 이름이다. */
-  const hints: SeatPeriodHintData = { prevAbsentByCell, nextStartByStudent, seatName: SEAT_NAME[seat] };
+  const hints: SeatPeriodHintData = {
+    prevAbsentByCell,
+    nextStartByStudent,
+    nextRoomByStudent,
+    seatName: SEAT_NAME[seat],
+  };
   const listenN = view.flatMap((r) => r.students).filter((s) => s.listeningLevel).length;
   const wordsN = view.flatMap((r) => r.students).filter((s) => s.memorizedWords).length;
 
