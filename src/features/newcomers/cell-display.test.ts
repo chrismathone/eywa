@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { STATUS_STYLE, cellBoxClass, cellMarkOf } from "./cell-display";
-import { ONBOARDING_ITEMS, type OnboardingItemStatus } from "./onboarding-items";
+import { STATUS_STYLE, cellBoxClass, cellHoverClass, cellMarkOf } from "./cell-display";
+import { ONBOARDING_ITEMS, progressOf, type OnboardingItemStatus } from "./onboarding-items";
 
 /**
  * 신규생 체크 칸의 **표시** 회귀 가드.
@@ -73,20 +73,77 @@ describe("칸 모양", () => {
     }
   });
 
-  it("통짜 채움은 완료뿐 — 나머지는 흰 바탕이다", () => {
+  it("통짜 채움(초록)은 완료뿐", () => {
     for (const status of ALL) {
-      const filled = cellBoxClass(status, false).includes("bg-");
+      const filled = cellBoxClass(status, false).includes("bg-green");
       expect(filled, `${status}가 칸을 통째로 칠한다`).toBe(status === "done");
     }
   });
 
   it("재촉 색은 지연(danger)·오늘·임박(amber)에만 붙는다", () => {
-    expect(cellBoxClass("overdue", false)).toContain("danger");
+    expect(cellBoxClass("overdue", false)).toContain("text-danger");
     expect(cellBoxClass("due", false)).toContain("amber");
     for (const status of ["upcoming", "pending", "waived"] as const) {
-      expect(cellBoxClass(status, false)).not.toContain("danger");
+      expect(cellBoxClass(status, false)).not.toContain("text-danger");
+      expect(cellBoxClass(status, false)).not.toContain("border-danger");
       expect(cellBoxClass(status, false)).not.toContain("amber");
     }
+  });
+
+  it("마우스 오버는 배경 있는 칸만 밝기로 — 틴트를 회색으로 덮지 않는다", () => {
+    for (const status of ALL) {
+      const hover = cellHoverClass(status, false);
+      const hasBg = cellBoxClass(status, false).includes("bg-");
+      expect(hover, status).toBe(hasBg ? "hover:brightness-95" : "hover:bg-muted");
+    }
+  });
+});
+
+/**
+ * 원장 2026-09-10: *"신규생 관리에서 지난 기간에 되지 않았던 항목들 전부 연붉은색 계열로 셀 색칠해줘"*.
+ * `waived`를 완전히 비웠더니 표의 왼쪽 절반이 흰 공백이 됐고, 그 칸들이 곧 "그때 안 한 것"인데
+ * 화면이 아무 말도 안 했다. 🔴 칠하는 것은 **표시**일 뿐 세는 것이 아니다(아래 마지막 검사).
+ */
+describe("지난 기간에 안 된 칸 = 연붉은 틴트", () => {
+  const TINT = "bg-danger-soft";
+
+  it("지연·기준일 이전만 칠한다 — 아직 기한이 안 왔거나 이미 한 칸은 안 칠한다", () => {
+    for (const status of ALL) {
+      const tinted = cellBoxClass(status, false).includes(TINT);
+      const past = status === "overdue" || status === "waived";
+      expect(tinted, `${status}`).toBe(past);
+    }
+  });
+
+  it("기준일 이전 칸은 틴트만 — 글자도 테두리 색도 없다", () => {
+    expect(cellMarkOf("waived", -40)).toEqual({ kind: "blank" });
+    const box = cellBoxClass("waived", false);
+    expect(box).toContain(TINT);
+    expect(box).toContain("border-transparent");
+    expect(box).not.toContain("font-bold");
+  });
+
+  it("지연과 클래스가 다르다 — '오늘 손 쓸 수 있는 것'과 '이미 지나간 것'이 뭉개지면 안 된다", () => {
+    const overdue = cellBoxClass("overdue", false);
+    const waived = cellBoxClass("waived", false);
+    expect(overdue).not.toBe(waived);
+    // 지연만 또렷하다: 빨강 굵은 글자 + 1px 빨강 테두리.
+    expect(overdue).toContain("text-danger");
+    expect(overdue).toContain("border-danger");
+    expect(overdue).toContain("font-bold");
+  });
+
+  it("🔴 칠해도 집계는 그대로 — 기준일 이전은 분모에도 지연에도 안 들어간다", () => {
+    // 전부 기준일(2026-09-09) 이전에 기한이 지난 학생. 화면은 전부 연붉게 칠하지만…
+    const progress = progressOf(
+      { enrolledOn: "2026-06-01", firstClassOn: "2026-06-05" },
+      {},
+      "2026-09-10",
+      ONBOARDING_ITEMS,
+      "2026-09-09",
+    );
+    // …세는 쪽은 한 건도 안 센다(원장 *"지나간 미완료 건에 대해서는 됐고"*).
+    expect(progress).toEqual({ dueTotal: 0, doneCount: 0, overdue: 0, dueSoon: 0, rate: 100 });
   });
 });
 
@@ -112,9 +169,18 @@ describe("'필요시' 항목(2개월 콜)", () => {
     expect(box).not.toBe(cellBoxClass("done", false));
   });
 
-  it("기준일 이전(waived)은 필요시여도 빈 칸 — 점선조차 없다", () => {
-    expect(cellBoxClass("waived", true)).toBe(cellBoxClass("waived", false));
-    expect(cellBoxClass("waived", true)).not.toContain("border-dashed");
+  it("기준일 이전(waived)은 필요시여도 빈 칸 — 틴트도 점선도 없다", () => {
+    const box = cellBoxClass("waived", true);
+    expect(box).not.toContain("border-dashed");
+    // 🔴 필수가 아니라 "안 됐다"가 성립하지 않는다 — 필수 칸과 달리 연붉은 틴트를 안 받는다.
+    expect(box).not.toContain("bg-danger-soft");
+    expect(box).not.toBe(cellBoxClass("waived", false));
+  });
+
+  it("필요시 항목은 어떤 상태에서도 연붉은 틴트를 안 받는다", () => {
+    for (const status of ALL) {
+      expect(cellBoxClass(status, true), status).not.toContain("bg-danger-soft");
+    }
   });
 });
 
