@@ -20,6 +20,7 @@ type ClassSelectRow = {
   class_name: string;
   subject: string;
   report_optout: boolean | null;
+  closed_at: string | null;
   teacher: { id?: string; display_name?: string; status?: string } | { id?: string; display_name?: string; status?: string }[] | null;
 };
 
@@ -133,7 +134,7 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
     fetchAllPaged<ClassSelectRow>((f, t) =>
       supabase
         .from("classes")
-        .select("id, class_name, subject, report_optout, teacher:teacher_id ( id, display_name, status )")
+        .select("id, class_name, subject, report_optout, closed_at, teacher:teacher_id ( id, display_name, status )")
         .eq("is_active", true)
         .order("class_name")
         .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
@@ -142,6 +143,14 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
     loadSlotAxisByClass(from, to),
   ]);
 
+  // 🔴 **종강한 반은 그 뒤 기간에서 뺀다** (원장 제보 2026-09-10: *"0명인 학생 반은 왜 뜨는거야?
+  //    수업도 종강처리 된거같은데"* — `[특강] 고등개별`·`[특강]중2-2 문제 풀이반`이 8/27 종강인데
+  //    9월 출석부에 `0명 시수 0`으로 서 있었다).
+  //    `closed_at`을 찍어도 `is_active`는 true로 남아서, 활성만 보던 이 목록엔 계속 걸렸다.
+  //    ⚠️ **그 반이 실제로 돌던 달에는 그대로 보여야 한다** — 지난 달 출석부는 기록이라 감추면 안 된다.
+  //       그래서 "종강일이 조회 구간 시작보다 앞설 때"만 뺀다(일별 출결이 쓰던 `closed_at >= date`와 같은 규약).
+  const liveRows = classRows.filter((c) => !c.closed_at || c.closed_at >= from);
+
   // 교시 담당으로만 등장하는 사람(담임 반이 0개인 강사)도 이름이 필요하다 — 한 번에 조회.
   const axisNames = await loadAxisTeacherNames([
     ...new Set(
@@ -149,7 +158,7 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
     ),
   ]);
 
-  return classRows.map((c) => {
+  return liveRows.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
       | { id?: string; display_name?: string; status?: string }
       | undefined;
