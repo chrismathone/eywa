@@ -14,6 +14,7 @@ const KO_DATE_FULL = new Intl.DateTimeFormat("ko-KR", {
 import { BigStat } from "@/components/atoms/big-stat";
 
 import { MenuGlyph } from "@/components/icons/menu-glyph";
+import { paymentRateDisplay } from "@/features/billing/calc";
 import { EnrollmentChangeModal } from "./enrollment-change-modal";
 import type { EnrollmentChangeStudent } from "@/features/dashboard/server/queries";
 
@@ -119,11 +120,16 @@ export function CommandBand({
         ) : null}
         {billing ? (
           <>
+            {/* 🔴 미수가 남아 있으면 100%로 적지 않는다 — 타일과 같은 표기 규칙(billing/calc). */}
             <BigStat
               label="수납률"
               icon={<MenuGlyph name="chart" size={22} />}
               tone="gold"
-              value={billing.paymentRate == null ? "—" : String(Math.round(billing.paymentRate))}
+              value={
+                billing.paymentRate == null
+                  ? "—"
+                  : paymentRateDisplay(billing.paymentRate, billing.outstanding)
+              }
               unit={billing.paymentRate == null ? "" : "%"}
             />
             <BigStat

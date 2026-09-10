@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summarizeInvoices, invoiceOutstanding, paymentRateOf, type InvoiceSummaryInput } from "./calc";
+import { summarizeInvoices, invoiceOutstanding, paymentRateOf, paymentRateDisplay, unpaidBreakdown, type InvoiceSummaryInput } from "./calc";
 
 const row = (p: Partial<InvoiceSummaryInput>): InvoiceSummaryInput => ({
   amountTotal: 0,
@@ -147,5 +147,49 @@ describe("paymentRateOf (수납률 — 단일 공식)", () => {
   it("실청구 0 이하 → 0 (0-나눗셈 방어)", () => {
     expect(paymentRateOf(50, 0)).toBe(0);
     expect(paymentRateOf(50, -10)).toBe(0);
+  });
+});
+
+describe("paymentRateDisplay — 미수가 있으면 100%로 적지 않는다", () => {
+  // 🔴 실사고 재현(원장 2026-09-10 *"미납건이 존재하는데 100%?"*): 2026-09 실측
+  //    실청구 129,664,875 / 수납 129,287,375 = 99.7089% 인데 Math.round가 100으로 적었다.
+  it("99.7089%는 100이 아니라 99.7로 적는다", () => {
+    expect(paymentRateDisplay(99.7089, 377_500)).toBe("99.7");
+  });
+
+  it("미수가 1원이라도 있으면 99.9를 넘지 않는다", () => {
+    expect(paymentRateDisplay(99.999, 1)).toBe("99.9");
+    expect(paymentRateDisplay(100, 1)).toBe("99.9");
+  });
+
+  it("미수가 0이면 100 — 다 받은 달을 못 받은 것처럼 적지 않는다", () => {
+    expect(paymentRateDisplay(100, 0)).toBe("100");
+    expect(paymentRateDisplay(99.999, 0)).toBe("100");
+  });
+
+  it("미수 판정은 금액이지 건수가 아니다 — 잔액 0이면 다 받은 것", () => {
+    expect(paymentRateDisplay(100, -500)).toBe("100");
+  });
+
+  it("보통 구간은 소수 한 자리", () => {
+    expect(paymentRateDisplay(93.1829, 9_458_375)).toBe("93.2");
+  });
+
+  it("값이 없으면 —", () => {
+    expect(paymentRateDisplay(Number.NaN, 0)).toBe("—");
+  });
+});
+
+describe("unpaidBreakdown — 부분납과 전액 미납을 뭉치지 않는다", () => {
+  it("전부 부분납이면 '미납'이라 적지 않는다", () => {
+    expect(unpaidBreakdown({ partialCount: 26, fullyUnpaidCount: 0 })).toBe("부분납 26건");
+  });
+
+  it("둘 다 있으면 나란히", () => {
+    expect(unpaidBreakdown({ partialCount: 3, fullyUnpaidCount: 2 })).toBe("미납 2건 · 부분납 3건");
+  });
+
+  it("둘 다 0이면 빈칸이 아니라 '미수 없음'", () => {
+    expect(unpaidBreakdown({ partialCount: 0, fullyUnpaidCount: 0 })).toBe("미수 없음");
   });
 });

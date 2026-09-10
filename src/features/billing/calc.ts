@@ -44,6 +44,36 @@ export function paymentRateOf(collected: number, netBilled: number): number {
 }
 
 /**
+ * 수납률 **표시 문자열**(값이 아니라 글자를 만드는 단일 소스).
+ *
+ * 🔴 **미수가 남아 있으면 절대 `100`으로 적지 않는다** (원장 제보 2026-09-10: *"미납건이 존재하는데 100%?"*).
+ *    2026-09 실측: 실청구 129,664,875원 중 수납 129,287,375원 = **99.7089%** 인데 화면이 `Math.round`로
+ *    **100%**를 적었고, 같은 카드 부제엔 `미납 26건`이 있어 화면이 스스로 모순됐다. 반올림이 만든 거짓말이라
+ *    **소수 첫째 자리**로 내려 적고, 그래도 100.0이 되면 99.9에서 멈춘다(미수가 있는데 100은 어떤 반올림으로도 참이 아니다).
+ * ⚠️ 반대쪽도 거짓말이다 — 미수가 0인데 99.9로 적으면 다 받은 달을 못 받은 것처럼 만든다. 그래서 `outstanding<=0`이면 `100`.
+ * ⚠️ 미수 판정은 **금액**(`outstanding`)이지 건수가 아니다 — 부분납 건이 있어도 잔액이 0이면 다 받은 것이다.
+ */
+/**
+ * 미수 **건수** 표기 — 부분납과 전액 미납을 뭉치지 않는다.
+ *
+ * 🔴 2026-09 실측 26건은 **전부 부분납**이고 전액 미납은 0건이었다. 이걸 "미납 26건"이라 적으면
+ *    대부분 낸 학부모 26명을 안 낸 사람으로 만든다 — 화면이 사람을 잘못 부르는 종류의 거짓말이다.
+ * ⚠️ 둘 다 0이면 빈 문자열이 아니라 **"미수 없음"** — 빈칸은 "아직 안 셌다"로 읽힌다.
+ */
+export function unpaidBreakdown(v: { partialCount: number; fullyUnpaidCount: number }): string {
+  const parts: string[] = [];
+  if (v.fullyUnpaidCount > 0) parts.push(`미납 ${v.fullyUnpaidCount}건`);
+  if (v.partialCount > 0) parts.push(`부분납 ${v.partialCount}건`);
+  return parts.length === 0 ? "미수 없음" : parts.join(" · ");
+}
+
+export function paymentRateDisplay(rate: number, outstanding: number): string {
+  if (!Number.isFinite(rate)) return "—";
+  if (outstanding <= 0) return String(Math.round(Math.min(rate, 100)));
+  return Math.min(rate, 99.9).toFixed(1);
+}
+
+/**
  * 청구서 배열 → 요약 KPI (순수, 네트워크 0).
  * 페이지가 월 전체를 한 번만 fetch한 뒤 이 함수로 요약을 도출해 이중 fetch를 없앤다.
  *

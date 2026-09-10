@@ -31,6 +31,8 @@ import {
 } from "@/features/dashboard/server/queries";
 import { getWeeklyChange } from "@/features/dashboard/onescreen/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
+import { paymentRateDisplay, unpaidBreakdown } from "@/features/billing/calc";
+import { formatWon } from "@/features/billing/textbook-notice";
 import { dailyBriefingSummary } from "../_components/daily-briefing-card";
 import { AttendanceTrend, WeeklyChangeBars } from "./charts";
 import { Cell, OneScreenGrid } from "./grid";
@@ -191,8 +193,10 @@ export async function OneScreenDashboard({
                     <span className="text-text-faint">이번 달 증감을 불러오지 못했습니다</span>
                   ) : (
                     <>
-                      이번 달 <span className="num text-green font-bold">+{changes.newCount}</span>
-                      {" · "}
+                      {/* 🔴 무엇의 증감인지 적는다(원장 2026-09-10 *"+1, -6 보다. 신규원생 +1, 퇴원생 -6"*) —
+                          부호만으로는 무엇이 늘고 줄었는지 읽는 사람이 되짚어야 한다. */}
+                      신규 <span className="num text-green font-bold">+{changes.newCount}</span>
+                      {" · 퇴원 "}
                       <span className="num text-amber font-bold">-{changes.withdrawnCount}</span>
                     </>
                   )
@@ -235,14 +239,15 @@ export async function OneScreenDashboard({
             <Cell span={kpiOf("billing")}>
               <KpiTile
                 label="이번 달 수납"
-                value={payment === null ? null : String(Math.round(payment.paymentRate))}
+                // 🔴 미수가 남아 있으면 100%로 적지 않는다 — 표기 규칙은 billing/calc 단일 소스.
+                value={payment === null ? null : paymentRateDisplay(payment.paymentRate, payment.outstanding)}
                 unit="%"
                 href="/billing"
-                tone={payment === null ? "inert" : payment.unpaidCount > 0 ? "caution" : "positive"}
+                tone={payment === null ? "inert" : payment.outstanding > 0 ? "caution" : "positive"}
                 sub={
                   payment === null
                     ? "수납을 불러오지 못했습니다"
-                    : `미납 ${payment.unpaidCount}건 · ${payment.paidCount}/${payment.totalCount}`
+                    : `금액 기준 · 미수 ${formatWon(payment.outstanding)}원 · ${unpaidBreakdown(payment)}`
                 }
               />
             </Cell>

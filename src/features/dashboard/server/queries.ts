@@ -539,7 +539,12 @@ export type PaymentSnapshot = {
   period: string;
   totalCount: number;
   paidCount: number;
+  /** 부분납 + 전액 미납 (밴드 "미수 N건"의 기존 의미). */
   unpaidCount: number;
+  /** 🔴 갈라 둔다 — 2026-09 실측은 26건이 **전부 부분납**이고 전액 미납은 0건이었다.
+   *  둘을 뭉쳐 "미납 26건"이라 적으면 대부분 낸 학부모를 안 낸 것처럼 말한다. */
+  partialCount: number;
+  fullyUnpaidCount: number;
   paymentRate: number;
   outstanding: number;
 };
@@ -582,6 +587,8 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
     totalCount: s.totalCount,
     paidCount: s.paidCount,
     unpaidCount: s.unpaidCount + s.partialCount, // 밴드 '미수 N건' = 미수+부분납(기존 의미 유지)
+    partialCount: s.partialCount,
+    fullyUnpaidCount: s.unpaidCount,
     paymentRate: s.paymentRate,
     outstanding: s.outstanding,
   };
