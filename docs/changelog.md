@@ -1,5 +1,26 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-10 (5) — 최소화한 창이 문서를 통째로 로드하던 것 (폰트 preload 경고의 진짜 원인)
+
+원장 제보: 프로덕션 콘솔에 Pretendard woff2 `preloaded but not used` 경고가 **주기적으로 계속 쌓인다**
+(`timetable?embed=1`·`ecs?embed=1`·`menu`·최상위 프레임).
+
+**폰트 배선은 멀쩡했다** — preload URL이 `?dpl=`까지 `@font-face` src와 동일 · 프로덕션·dev 문서 11개에서
+`FontFace.status`가 전부 `loaded` · 웜 캐시 `transferSize:0`·`duration:0`(창 N개여도 네트워크는 1회, `immutable`) ·
+콜드 1회 2,057,988B/548ms로 **FCP(780ms)보다 먼저** 도착. 즉 `preload:true`는 제 일을 하고 있다.
+
+원인은 **창 시스템**이었다. 최소화한 창은 언마운트가 아니라 `display:none`으로 감추는데
+([`floating-window.tsx`](src/components/workspace/floating-window.tsx), 문서·스크롤 보존이 목적) stagger 활성화가
+그걸 안 보고 iframe `src`를 채워 **레이아웃이 0인 문서**가 셸·인증·DB 쿼리·RSC 렌더를 전부 치르고 글리프는
+한 자도 안 그렸다(→ preload를 받아 놓고 안 씀 = 경고). 실측: 같은 페이지에서 보이는 창은 `loaded`,
+최소화 창은 폰트를 받고도 `unloaded`.
+
+[`route-window.tsx`](src/components/workspace/route-window.tsx)의 `activated`가 `win.minimized`를 함께 보게 해
+**복원될 때** 로드한다. 🔴 이미 로드된 창은 그대로 산다(BL3 warm 풀·스크롤 보존 불변) — 막는 건 "한 번도 안 연 채
+최소화로 복원된 창"뿐이다. 부수 효과로 B6("창 N개 = 인증·설정 쿼리 N배")를 보이지도 않는 창에서 치르던 비용이 사라진다.
+가드 = `route-window-minimized.test.ts`(고치기 전 2건 실패 확인). 상세·실측표 = [[#131]].
+
+
 ## 2026-09-10 (4) — 구글 캘린더 **한 방향 임포트** cron (하루 2회, 06:00·18:00 KST)
 
 원장 2026-09-10: *"캘린더 탭은 메뉴에서 제외시켜. 그냥 내부 구글 달력용으로 사용할예정임."* →

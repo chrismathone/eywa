@@ -41,13 +41,19 @@ export function RouteWindow({ win }: { win: Win }) {
   // 복원 시 창 최대 6개가 iframe src를 동시에 로드하면 셸+페이지가 6× 동시 렌더(인증·DB 라운드트립
   // 폭발)된다. 포커스 창만 즉시 로드하고 나머지는 z순서대로 stagger 마운트 → 동시 부하 분산.
   // 한 번 활성화되면 유지(activated). 포커스되면 즉시(0ms) 활성화.
-  const [activated, setActivated] = useState(isFocused);
+  // 🔴 **최소화된 창은 활성화하지 않는다** — 최소화는 언마운트가 아니라 `display:none`(floating-window.tsx)이라
+  //    문서를 로드해도 레이아웃이 0이다: 셸·인증·DB 쿼리를 전부 치르고 글리프는 한 자도 안 그린다.
+  //    그 탓에 2MB Pretendard preload가 창 수만큼 "preloaded but not used" 경고를 찍었다
+  //    (2026-09-10 실측: 최소화 창 문서는 폰트를 받고도 FontFace가 `unloaded`). 복원될 때 로드한다.
+  //    ⚠️ 이미 활성화된 창은 activated가 유지돼 최소화해도 문서·스크롤이 보존된다(BL3 warm 풀 포함) —
+  //    보존 대상은 "열어봤던 창"이고, 여기서 막는 건 "한 번도 안 연 채 최소화로 복원된 창"이다.
+  const [activated, setActivated] = useState(isFocused && !win.minimized);
   useEffect(() => {
-    if (activated) return;
+    if (activated || win.minimized) return;
     const delay = isFocused ? 0 : 250 + Math.max(0, order.indexOf(win.id)) * 250;
     const t = setTimeout(() => setActivated(true), delay);
     return () => clearTimeout(t);
-  }, [activated, isFocused, order, win.id]);
+  }, [activated, win.minimized, isFocused, order, win.id]);
 
   // 타이틀바 새로고침 버튼 → 이 창 iframe만 현재 URL로 reload(전체 F5 대신 = 셸·다른 창 재실행 없음).
   // nonce가 bump되면 스켈레톤을 다시 띄우고(리로드 중 빈 깜빡임 방지) 현재 문서를 reload(드릴인 URL 보존).
