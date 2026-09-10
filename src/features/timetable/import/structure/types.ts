@@ -164,6 +164,17 @@ export interface ExistingSchedule {
   teacherId: string | null;
   classroomId: string | null;
   slotTeacherLabel: string | null;
+  /**
+   * 같은 라벨을 **시트에 적히는 표기**로 해석한 값(`resolveTeacherLabel`) — `Jane`→`추민아`, `이주희`→`LAB`.
+   *
+   * 🔴 왜 두 벌인가: '시트 반영'(export)은 강사 밴드에 **해석된 이름**을 쓰는데(queries.ts
+   * `slotTeacherLabel: resolveTeacherLabel(...)`) DB엔 **원문 닉네임**이 그대로 남는다. 그래서 diff가
+   * 원문끼리만 비교하면 **손대지 않은 슬롯 전건이 '변경'** 이 된다(실측 2026-09-10: 유효 321칸 중 199칸).
+   * 비교는 이 해석값까지 함께 보고, 저장·표시는 원문(`slotTeacherLabel`)을 그대로 쓴다
+   * (원문 보존은 teacher-label.ts 📌 규약 — ijw 임포트·시트 동기의 원본이라 UPDATE 금지).
+   * 서버가 못 채우면 `null`/미지정 = 종전과 동일한 원문 비교로 폴백한다(조회 실패가 판정을 안 바꾼다).
+   */
+  slotTeacherDisplay?: string | null;
   slotRoomLabel: string | null;
   mergeGroup: string | null; // 합반 — keep/update 시 보존
   validFrom: string; // "YYYY-MM-DD"

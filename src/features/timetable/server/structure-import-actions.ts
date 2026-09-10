@@ -10,6 +10,8 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { shiftDays } from "@/features/timetable/lib/week";
 import { sheetsProvider, supportsStructureImport } from "@/features/integrations/sheets-provider";
+import { getTeacherLabelMap } from "@/features/timetable/server/queries";
+import { resolveTeacherLabel } from "@/features/timetable/lib/teacher-label";
 import {
   claimSheetSyncLease,
   releaseSheetSyncLease,
@@ -67,7 +69,9 @@ async function loadStructureContext(
   const today = asOf;
   const hm = (t: string | null) => (t ? String(t).slice(0, 5) : null);
 
-  const [classes, users, rooms, sched] = await Promise.all([
+  // 🔴 라벨맵 = '시트 반영'(export)이 강사 밴드를 쓸 때 쓰는 것과 **같은 해석기**(queries.ts와 한 소스).
+  //    안 태우면 시트엔 `추민아`가 적히는데 DB엔 `Jane`이 남아 비교가 전건 어긋난다(아래 slotTeacherDisplay).
+  const [classes, users, rooms, sched, labelMap] = await Promise.all([
     fetchAllPaged<{ id: string; class_name: string; subject: string; teacher_id: string | null; classroom_id: string | null }>(
       (from, to) =>
         supabase.from("classes").select("id, class_name, subject, teacher_id, classroom_id").eq("subject", SUBJECT).eq("is_active", true).range(from, to),
@@ -102,6 +106,7 @@ async function loadStructureContext(
         .or(`valid_to.is.null,valid_to.gte.${today}`)
         .range(from, to),
     ),
+    getTeacherLabelMap(),
   ]);
 
   const ctx: ExistingContext = {
@@ -125,7 +130,10 @@ async function loadStructureContext(
     return {
       id: s.id, classId: s.class_id, className: cl?.class_name ?? "", day: s.day_of_week as DayOfWeek,
       startTime: hm(s.start_time)!, endTime: hm(s.end_time), teacherId: s.teacher_id, classroomId: s.classroom_id,
-      slotTeacherLabel: s.slot_teacher_label, slotRoomLabel: s.slot_room_label, mergeGroup: s.merge_group,
+      slotTeacherLabel: s.slot_teacher_label,
+      // 원문은 그대로 두고(저장·동기의 원본) **비교용 해석값만** 덧붙인다 — diff가 두 값 다 보고 판정한다.
+      slotTeacherDisplay: resolveTeacherLabel(s.slot_teacher_label, labelMap),
+      slotRoomLabel: s.slot_room_label, mergeGroup: s.merge_group,
       validFrom: s.valid_from, validTo: s.valid_to,
     };
   });
