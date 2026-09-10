@@ -34,7 +34,8 @@ export async function DuplicatesFace({ page, isEmbed }: { page: number; isEmbed:
           ) : null}
         </h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          이름·학년·학교가 같거나, 이름·학년이 같고 학부모 연락처가 동일한 학생들. 통합하면 모든
+          이름·학년·학교가 같거나, 이름·학년이 같고 학부모 연락처가 동일하거나, 동기화가 이름 겹침으로
+          자동 구분(접미사)한 학생들. 무엇이 같아서 후보인지는 그룹마다 표시됩니다. 통합하면 모든
           수강·출석·수납·상담·메모가 보존할 학생으로 이전되고 나머지 중복 학생은 퇴원 처리됩니다.
         </p>
       </header>

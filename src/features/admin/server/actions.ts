@@ -75,8 +75,14 @@ export async function mergeStudents(
       status: "withdrawn",
       withdrawn_at: today,
       notes: `중복 병합: ${keeperId}와 통합됨 (${today})`,
+      dup_suspect: false,
     })
     .eq("id", mergeeId);
+
+  // 🔴 살아남은 쪽의 '의심' 표식도 내린다 — 안 내리면 keeper가 접미사 학생일 때(예: `권민서B`를 보존)
+  //    상세 배너는 계속 *"중복 병합으로 합치세요"* 라고 하는데 짝은 이미 퇴원해 후보가 0건이라,
+  //    원장이 제보한 "합칠 곳이 없음"이 병합 직후에 그대로 재현된다. 병합 = 사람이 답을 낸 것이다.
+  await supabase.from("students").update({ dup_suspect: false }).eq("id", keeperId);
 
   await logAction({
     action: "student_merge",
