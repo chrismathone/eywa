@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { Distribution } from "@/features/dashboard/overview/model";
+import { dashboardDate } from "@/features/dashboard/overview/display";
+import { DetailPopup } from "./detail-popup";
 import s from "./overview.module.css";
 
 export const COLORS = [
@@ -14,6 +16,17 @@ export const COLORS = [
 ];
 export const number = (n: number) => n.toLocaleString("ko-KR");
 export const money = (n: number) => `${number(Math.round(n / 10_000))}만원`;
+/** 차트 눈금과 막대 라벨용 축약 금액. 원 단위 원본은 툴팁과 수치 표에 유지한다. */
+export function chartMoney(n: number) {
+  const amount = Math.abs(n);
+  const [scale, unit] =
+    amount >= 100_000_000
+      ? ([100_000_000, "억"] as const)
+      : amount >= 10_000
+        ? ([10_000, "만"] as const)
+        : ([1, "원"] as const);
+  return `${(n / scale).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit}`;
+}
 type Datum = { label: string; value: number; color?: string };
 
 function useChartWidth(initial: number) {
@@ -58,11 +71,13 @@ export function Bars({
   unit = "명",
   color = COLORS[0],
   limit,
+  title = "전체 분포",
 }: {
   data: Datum[];
   unit?: string;
   color?: string;
   limit?: number;
+  title?: string;
 }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   const shown = limit ? data.slice(0, limit) : data;
@@ -92,10 +107,9 @@ export function Bars({
         ))}
       </div>
       {limit && data.length > limit && (
-        <details className={s.details}>
-          <summary>전체 {data.length}개 보기</summary>
-          <Bars data={data.slice(limit)} unit={unit} color={color} />
-        </details>
+        <DetailPopup title={title} label={`전체 ${data.length}개 보기`}>
+          <Bars data={data} unit={unit} color={color} />
+        </DetailPopup>
       )}
     </>
   );
@@ -276,31 +290,36 @@ export function Columns({
         ))}
       </svg>
       <Legend items={series.map((v) => ({ label: v.name, color: v.color }))} />
-      <details className={s.dataTable}>
-        <summary>차트 수치 보기</summary>
-        <table>
-          <thead>
-            <tr>
-              <th>기간</th>
-              {series.map((v) => (
-                <th key={v.name}>
-                  {v.name} ({unit})
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {labels.map((label, i) => (
-              <tr key={label}>
-                <th>{label}</th>
+      <DetailPopup
+        title={`${series.map((v) => v.name).join("·")} 수치`}
+        label="차트 수치 보기"
+        align="end"
+      >
+        <div className={s.dataTable}>
+          <table>
+            <thead>
+              <tr>
+                <th>기간</th>
                 {series.map((v) => (
-                  <td key={v.name}>{number(v.values[i] ?? 0)}</td>
+                  <th key={v.name}>
+                    {v.name} ({unit})
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
+            </thead>
+            <tbody>
+              {labels.map((label, i) => (
+                <tr key={label}>
+                  <th>{label}</th>
+                  {series.map((v) => (
+                    <td key={v.name}>{number(v.values[i] ?? 0)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </DetailPopup>
     </>
   );
 }
@@ -367,7 +386,7 @@ export function AttendanceHistory({
                 rx="2"
                 fill={heat[Math.max(0, Math.min(10, Math.floor(p.rate / 10)))]}
               >
-                <title>{`${p.date}: ${p.rate.toFixed(1)}% · ${p.total}칸`}</title>
+                <title>{`${dashboardDate(p.date)}: ${p.rate.toFixed(1)}% · ${p.total}칸`}</title>
               </rect>
             )}
             {p.rate === 0 && (
@@ -395,29 +414,34 @@ export function AttendanceHistory({
           </g>
         ))}
       </svg>
-      <details className={s.dataTable}>
-        <summary>날짜별 수치 보기</summary>
-        <table>
-          <thead>
-            <tr>
-              <th>날짜</th>
-              <th>등원율</th>
-              <th>출결 기록</th>
-            </tr>
-          </thead>
-          <tbody>
-            {points.map((p) => (
-              <tr key={p.date}>
-                <th>{p.date}</th>
-                <td>
-                  {p.rate === null ? "기록 없음" : `${p.rate.toFixed(1)}%`}
-                </td>
-                <td>{number(p.total)}칸</td>
+      <DetailPopup
+        title="최근 14일 등원율"
+        label="날짜별 수치 보기"
+        align="end"
+      >
+        <div className={s.dataTable}>
+          <table>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>등원율</th>
+                <th>출결 기록</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
+            </thead>
+            <tbody>
+              {points.map((p) => (
+                <tr key={p.date}>
+                  <th>{dashboardDate(p.date)}</th>
+                  <td>
+                    {p.rate === null ? "기록 없음" : `${p.rate.toFixed(1)}%`}
+                  </td>
+                  <td>{number(p.total)}칸</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </DetailPopup>
     </>
   );
 }

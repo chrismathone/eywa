@@ -51,6 +51,7 @@ import {
 } from "@/features/dashboard/server/queries";
 import { unexplainedAbsences } from "@/features/dashboard/absence-reasons";
 import { careStatus } from "./care";
+import { staffDisplayRole, upcomingAdmissionsEvents } from "./display";
 import {
   distribution,
   datedWithdrawals,
@@ -268,10 +269,10 @@ async function newcomers(): Promise<CareSummary> {
 
 async function staff() {
   const db = await createClient();
-  const rows = await fetchAllPaged<{ system_role: string }>((from, to) =>
+  const rows = await fetchAllPaged<{ id: string; system_role: string }>((from, to) =>
     db
       .from("users")
-      .select("system_role")
+      .select("id,system_role")
       .eq("status", "active")
       .neq("system_role", "student")
       .order("id")
@@ -286,7 +287,7 @@ async function staff() {
     accountant: "회계",
     viewer: "열람",
   };
-  return distribution(rows.map((r) => labels[r.system_role] ?? r.system_role));
+  return distribution(rows.map((r) => labels[staffDisplayRole(r)] ?? r.system_role));
 }
 
 async function operations(
@@ -504,17 +505,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
         results.flatMap((r) => r.events).map((e) => [e.id, e]),
       ).values(),
     ];
-    return events
-      .filter(
-        (e) =>
-          e.endDate >= today &&
-          e.startDate <= end &&
-          e.source === "manual" &&
-          !/^\s*\[취소\]/.test(e.title) &&
-          !e.title.includes("예약 금지") &&
-          !e.tag?.name.includes("운영팀 중요일정"),
-      )
-      .sort((a, b) => a.startDate.localeCompare(b.startDate))
+    return upcomingAdmissionsEvents(events, today, end)
       .map(({ id, title, startDate, endDate, startTime, source }) => ({
         id,
         title,
