@@ -364,6 +364,11 @@ export const AUDIT_ACTIONS = {
   announcement_delete: "직원 공지 삭제",
   announcement_pin: "직원 공지 고정 전환",
   briefing_regenerate: "일일 브리핑 다시 생성",
+
+  // 인재원 학습 프로그램 짝(students.ijw_student_id, 0259a) — 학생 행을 바꾸므로 기록한다.
+  student_ijw_link: "인재원 학습 계정 연결",
+  student_ijw_unlink: "인재원 학습 계정 연결 해제",
+  student_ijw_link_bulk: "인재원 학습 계정 일괄 연결",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

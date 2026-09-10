@@ -39,6 +39,7 @@ import {
   reportEvidenceKind,
 } from "@/features/attendance/derive-from-reports";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { teacherProcessing, type ProcessingRecord, type TeacherProcessing } from "../teacher-processing";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -52,6 +53,7 @@ export type ClassProcessing = {
   recorded: number; // 기록된 학생 수
   unprocessed: number; // 미처리
   rate: number; // 완료율 0~100
+  byTeacher?: TeacherProcessing[];
 };
 
 /**
@@ -70,7 +72,7 @@ export const getDailyProcessingStatus = cache(async function getDailyProcessingS
   // 그 요일에 수업이 있는 반(중복 제거)
   const { data: sched, error: scheduleError } = await supabase
     .from("class_schedules")
-    .select("class_id")
+    .select("class_id, day_of_week, start_time, teacher_id, slot_teacher_label, valid_from, valid_to")
     .eq("day_of_week", dayEnum)
     .lte("valid_from", date)
     .or(`valid_to.is.null,valid_to.gte.${date}`);
@@ -83,13 +85,14 @@ export const getDailyProcessingStatus = cache(async function getDailyProcessingS
     id: string;
     class_name: string;
     subject: string;
+    teacher_id: string | null;
     is_active: boolean;
     closed_at: string | null;
     teacher: { display_name?: string } | { display_name?: string }[] | null;
   }>(classIds, (chunk) =>
     supabase
       .from("classes")
-      .select("id, class_name, subject, is_active, closed_at, teacher:teacher_id ( display_name )")
+      .select("id, class_name, subject, teacher_id, is_active, closed_at, teacher:teacher_id ( display_name )")
       .in("id", chunk)
       .eq("is_active", true),
   );
@@ -119,10 +122,10 @@ export const getDailyProcessingStatus = cache(async function getDailyProcessingS
           .order("id", { ascending: true })
           .range(from, to),
     ),
-    fetchAllPagedInChunks<{ id: string; class_id: string; student_id: string }>(activeClassIds, (chunk, from, to) =>
+    fetchAllPagedInChunks<ProcessingRecord & { id: string; class_id: string }>(activeClassIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("id, class_id, student_id")
+        .select("id, class_id, student_id, slot_start, seat_label")
         .eq("session_date", date)
         .in("class_id", chunk)
         .order("id", { ascending: true })
@@ -163,6 +166,16 @@ export const getDailyProcessingStatus = cache(async function getDailyProcessingS
       className: c.class_name,
       subject: c.subject,
       teacherName: teacher?.display_name ?? null,
+      byTeacher: teacherProcessing({
+        date,
+        homeroomTeacherId: c.teacher_id,
+        slots: (sched ?? []).filter((s) => s.class_id === c.id).map((s) => ({
+          dayOfWeek: s.day_of_week, startTime: s.start_time, teacherId: s.teacher_id,
+          slotTeacherLabel: s.slot_teacher_label, validFrom: s.valid_from, validTo: s.valid_to,
+        })),
+        expectedStudents: expectedByClass.get(c.id) ?? new Set(),
+        records: records.filter((r) => r.class_id === c.id),
+      }),
       expected,
       recorded,
       unprocessed: Math.max(0, expected - recorded),

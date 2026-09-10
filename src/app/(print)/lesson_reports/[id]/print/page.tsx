@@ -123,6 +123,8 @@ export default async function LessonReportPrintPage({
           settings={rpt}
           attachments={attachmentImgs}
           trend={trend}
+          // 영어 = 템플릿 모드 — /r과 같은 판정(강사 미리보기 = 실제 발송물). subject는 이미 SELECT에 있다(#95).
+          templateMode={report.subject === "english"}
         />
       </div>
     </div>

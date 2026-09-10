@@ -17,6 +17,22 @@ const ctx = (names: Record<string, string> = {}) => ({
   subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key,
 });
 
+describe("auditDetail — 인재원 학습 계정 짝(2026-09-10)", () => {
+  it("연결·일괄·해제 모두 어느 계정인지 적는다(이름이 아이디 그대로면 한 번만)", () => {
+    expect(auditDetail("student_ijw_link", { studentId: SID, ijwId: "ijwgsy", ijwName: "공서연" }, ctx())).toBe(
+      "인재원 계정 ijwgsy(공서연)",
+    );
+    expect(auditDetail("student_ijw_link_bulk", { studentId: SID, ijwId: "ijwgsy", ijwName: "ijwgsy" }, ctx())).toBe(
+      "인재원 계정 ijwgsy",
+    );
+    expect(auditDetail("student_ijw_unlink", { studentId: SID, ijwId: "ijwgsy" }, ctx())).toBe("인재원 계정 ijwgsy");
+  });
+
+  it("아이디가 없는 기록은 빈 칸 — 영문 키가 새지 않는다", () => {
+    expect(auditDetail("student_ijw_unlink", { studentId: SID }, ctx())).toBeNull();
+  });
+});
+
 describe("auditDetail — 학원 설정 변경 내역(2026-08-27 감사 커버리지)", () => {
   it("무엇이 바뀌었는지가 섹션명과 함께 나온다", () => {
     const detail = auditDetail(

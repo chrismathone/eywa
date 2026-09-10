@@ -130,8 +130,7 @@ function classTaughtBy(c: AttendanceMatrix["classes"][number], teacherId: string
  * 요약 허브(강사 미선택)의 강사 목록 — 강사별 반 수·과목·**오늘 입력 현황**.
  * 오늘 현황은 getDailyProcessingStatus(일별 처리 현황과 같은 소스) 한 번 — 허브가 뜰 때만 부른다.
  * ⚠️ 그 조회는 테넌트 전체(오늘 수업 반)라, 화면의 과목 필터로 좁힌 `classes`에 든 반만 집계에 넣는다.
- * ⚠️ 오늘 현황은 **반 단위**라 교시 담당이 여럿인 반은 그 사람들에게 같은 반이 각각 한 번씩 세어진다
- *    (반을 교시로 쪼개 세면 담임 화면의 종전 숫자가 흔들린다 — 여기선 "내가 오늘 볼 반"이 맞다).
+ * 오늘 예정·입력은 강사 출석부와 같은 교시 담당 기준. 남의 교시 기록을 담임 카드에 합산하지 않는다.
  */
 async function buildHubTeachers(
   classes: AttendanceMatrix["classes"],
@@ -165,11 +164,13 @@ async function buildHubTeachers(
     for (const t of teachersOfClass.get(r.classId) ?? []) {
       const acc = byTeacher.get(t.id);
       if (!acc) continue;
+      const own = r.byTeacher?.find((count) => count.teacherId === t.id);
+      if (!own || own.expected === 0) continue;
       const cur = acc.today ?? { classes: 0, doneClasses: 0, expected: 0, recorded: 0 };
       cur.classes++;
-      cur.expected += r.expected;
-      cur.recorded += r.recorded;
-      if (r.expected > 0 && r.unprocessed === 0) cur.doneClasses++;
+      cur.expected += own.expected;
+      cur.recorded += own.recorded;
+      if (own.recorded >= own.expected) cur.doneClasses++;
       acc.today = cur;
     }
   }

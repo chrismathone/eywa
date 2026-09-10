@@ -15,6 +15,7 @@
 }
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 18px;
   align-items: center;
@@ -44,6 +45,7 @@
 }
 .headerTools {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
 }
@@ -87,14 +89,6 @@
 .refresh:disabled {
   opacity: 0.5;
   cursor: wait;
-}
-.classicLink {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--text-xs);
-  color: var(--foreground);
-  white-space: nowrap;
 }
 .kpis {
   display: grid;
@@ -206,6 +200,8 @@
   line-height: 1.4;
 }
 .jump {
+  /* 화면 아래 카드의 숨김 접근성 제목도 링크 안에 배치해 바깥 문서 스크롤을 막는다. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -216,8 +212,7 @@
   color: var(--foreground);
   white-space: nowrap;
 }
-.jump:hover,
-.classicLink:hover {
+.jump:hover {
   color: var(--primary);
   text-decoration: underline;
 }
@@ -299,22 +294,60 @@
   margin-top: 10px;
   color: var(--foreground);
 }
-.details > summary,
-.dataTable > summary {
+.detailButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
   cursor: pointer;
-  list-style: none;
+  color: var(--foreground);
 }
-.details > summary::before,
-.dataTable > summary::before {
-  content: "+";
-  margin-right: 4px;
+.detailButton:hover {
+  color: var(--primary);
+  text-decoration: underline;
 }
-.details[open] > summary::before,
-.dataTable[open] > summary::before {
-  content: "−";
+.dataTrigger {
+  text-align: right;
+  margin-top: 6px;
+  font-size: var(--text-xs);
 }
-.details[open] > .bars {
+.detailPopup {
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+.popupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e4eaf0;
+}
+.popupClose {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.popupClose:hover {
+  background: #f1f4f7;
+}
+.popupBody {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 16px 20px 20px;
+}
+.popupBody > p + p {
   margin-top: 12px;
+}
+.detailPopup :is(button, a):focus-visible {
+  outline: 2px solid #327fa8;
+  outline-offset: 3px;
 }
 .donutLayout {
   display: flex;
@@ -557,6 +590,19 @@
   display: flex;
   flex-direction: column;
 }
+.subjectSchedule + .subjectSchedule {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e4eaf0;
+}
+.subjectHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: var(--text-xs);
+}
 .scheduleRow {
   display: flex;
   gap: 10px;
@@ -626,14 +672,14 @@
 .operations {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 .operation {
   display: flex;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid #e7ecf2;
-  padding: 10px 0;
+  padding: 6px 0;
 }
 .operation:first-child {
   padding-top: 1px;
@@ -647,7 +693,7 @@
   flex: 1;
 }
 .operation > b {
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   letter-spacing: -0.03em;
   color: var(--foreground);
   font-weight: 700;
@@ -667,22 +713,22 @@
 .notices {
   margin-bottom: 14px;
 }
-.notices > details {
+.noticeTrigger {
   border-bottom: 1px solid #e7ecf2;
   padding: 10px 0;
   font-size: var(--text-xs);
 }
-.notices > details:first-child {
+.noticeTrigger:first-child {
   padding-top: 0;
 }
-.notices summary {
+.noticeTrigger .detailButton {
+  width: 100%;
   display: flex;
   justify-content: space-between;
   gap: 10px;
   cursor: pointer;
-  list-style: none;
 }
-.notices summary > span {
+.noticeTrigger .detailButton > span {
   overflow-wrap: anywhere;
 }
 .notices em {
@@ -699,7 +745,7 @@
   color: var(--foreground);
   white-space: nowrap;
 }
-.notices p {
+.noticeContent {
   color: var(--foreground);
   white-space: pre-wrap;
   margin: 10px 0 0;
@@ -869,9 +915,6 @@
     margin-top: 5px;
     font-size: var(--text-xs);
   }
-  .classicLink {
-    display: none;
-  }
   .headerTools {
     gap: 8px;
   }
@@ -967,9 +1010,6 @@
     font-size: var(--text-xs);
   }
   .footer > span:last-child {
-    display: none;
-  }
-  .classicLink {
     display: none;
   }
 }

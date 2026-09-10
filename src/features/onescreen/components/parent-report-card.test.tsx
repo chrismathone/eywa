@@ -1,0 +1,208 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { ParentReportCard, type ParentReportCardProps } from "./parent-report-card";
+import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
+import { buildTrendPoints } from "../report-trend";
+import type { ReportSettings } from "@/features/owner/settings-types";
+
+/**
+ * 학부모 보고서 카드 — **수학 출력 불변 + 영어 템플릿 모드**.
+ *
+ * 🔴 이 카드는 학부모에게 매일 나가는 수학 보고서(/r 공개 링크·ClassNote 게시 이미지·인쇄)의 원본이다.
+ *    템플릿 모드(영어)를 더하면서 수학 카드가 **글자 하나라도** 바뀌면 안 된다 — 그래서 템플릿 모드 도입 **직전**
+ *    카드의 정적 마크업 해시를 골든 값으로 박았다(2026-09-10, 원본 컴포넌트에서 실측).
+ *    ⚠️ 카드 모양을 **의도적으로** 바꾸면 이 해시가 깨진다 — 그때는 테스트를 고치기 전에 "수학 학부모 카드가
+ *       왜 바뀌는지"를 커밋 메시지에 적고 해시를 갱신한다(돈 계열 골든마스터와 같은 규약).
+ *    ⚠️ 표시 토글은 기본값(DEFAULT_SETTINGS)에 기대지 않고 카드가 읽는 칸을 전부 명시한다 — 기본값이 바뀌어도
+ *       이 테스트가 흔들리지 않게.
+ */
+
+const SETTINGS: ReportSettings = {
+  ...DEFAULT_SETTINGS.report,
+  title: "수업 보고서",
+  showLogo: true,
+  showAcademyName: true,
+  showFooter: true,
+  footerNote: "",
+  showTextbook: true,
+  showProgress: true,
+  showDailyTest: true,
+  showCheckTest: true,
+  showHomework: true,
+  showHomeworkToday: true,
+  showAttitude: true,
+  showParentNote: true,
+  showTrendNote: true,
+  showTrendGraph: true,
+  showAttachments: true,
+};
+
+/** 모든 칸이 차 있는 수학 보고서 — 오늘 수업·평가·학습 추이·전달 내용·추세·첨부·바닥글이 전부 그려진다. */
+const FULL: ParentReportCardProps = {
+  report: {
+    reportDate: "2026-09-10",
+    teacherName: "박소선",
+    textbook: "개념원리 중1-1",
+    progress: "수학 1-1-1 소인수분해\n수학 1-1-2 최대공약수",
+    dailyTest: "20문제 중 18개 맞음",
+    checkTest: "10문제 중 9개 맞음",
+    examInfo: null,
+    homeworkScore: "90%",
+    homeworkToday: "개념편 p10~16",
+    attitude: "매우 좋음",
+    notes: "원과 현을 무리 없이 따라왔습니다.",
+    trendNote: "최근 3회 상승세입니다.",
+    makeup: false,
+    hasClass: true,
+  },
+  student: { name: "이윤건", school: "달성초", grade: "초2" },
+  academyName: "인재원",
+  logoSrc: "https://example.test/logo.png",
+  settings: SETTINGS,
+  attachments: [
+    { path: "t/a.png", name: "a.png", url: "https://example.test/a.png" },
+    { path: "t/b.pdf", name: "b.pdf", url: "https://example.test/b.pdf" },
+  ],
+  trend: buildTrendPoints(
+    [
+      { id: "r1", date: "2026-09-01", examInfo: "20문제 중 16개", homeworkScore: "100%" },
+      { id: "r2", date: "2026-09-05", examInfo: "20문제 중 12개", homeworkScore: "80%" },
+      { id: "r3", date: "2026-09-10", examInfo: "20문제 중 18개", homeworkScore: "90%" },
+    ],
+    "r3",
+  ),
+};
+
+/** 빈 칸이 많은 보고서 — 레거시 합본 점수·보강·학생 없음·빈 전달 내용·바닥글 끔 분기. */
+const SPARSE: ParentReportCardProps = {
+  report: {
+    reportDate: "2026-09-10",
+    teacherName: null,
+    textbook: null,
+    progress: null,
+    dailyTest: null,
+    checkTest: null,
+    examInfo: "4/5",
+    homeworkScore: null,
+    homeworkToday: null,
+    attitude: null,
+    notes: null,
+    trendNote: null,
+    makeup: true,
+    hasClass: false,
+  },
+  student: null,
+  academyName: "인재원",
+  logoSrc: null,
+  settings: { ...SETTINGS, showFooter: false, showTrendNote: false },
+  attachments: [],
+};
+
+/** 템플릿 모드 도입 직전(2026-09-10) 원본 컴포넌트의 정적 마크업 SHA-256. */
+const GOLDEN = {
+  FULL: "b2e6adcf65bdb1fdfc5bcb42090ca0ff361d6f021dfeee818bb0c8a990cff0b4",
+  SPARSE: "954922ef759e90eed08e34fbce0e1a4ad9cdd5eeb5338fc4e4fb9d03473d5169",
+};
+
+const markup = (p: ParentReportCardProps) => renderToStaticMarkup(<ParentReportCard {...p} />);
+const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
+describe("ParentReportCard — 수학(기본) 출력 불변", () => {
+  it("🔴 templateMode를 안 넘기면 템플릿 모드 도입 전과 글자 하나 다르지 않다(골든 해시)", () => {
+    expect(sha(markup(FULL))).toBe(GOLDEN.FULL);
+    expect(sha(markup(SPARSE))).toBe(GOLDEN.SPARSE);
+  });
+
+  it("templateMode={false}도 안 넘긴 것과 같다", () => {
+    expect(markup({ ...FULL, templateMode: false })).toBe(markup(FULL));
+    expect(markup({ ...SPARSE, templateMode: false })).toBe(markup(SPARSE));
+  });
+});
+
+describe("ParentReportCard — 템플릿 모드(영어)", () => {
+  const EIE = [
+    "안녕하세요 학부모님, 부원장입니다! 😊❤️",
+    "",
+    "📍 오늘의 진도",
+    "부원장 선생님 수업 : Unit 1~3 핵심 내용 전체 리뷰",
+    "",
+    "💌 부원장 코멘트 (Feedback)",
+    "서연이가 구문을 척척 찾아냈습니다.",
+  ].join("\n");
+  const english = (notes: string | null, over: Partial<ParentReportCardProps> = {}) =>
+    markup({ ...FULL, report: { ...FULL.report, notes }, templateMode: true, ...over });
+
+  it("조립된 글이 본문이다", () => {
+    const html = english(EIE);
+    expect(html).toContain("안녕하세요 학부모님, 부원장입니다! 😊❤️");
+    expect(html).toContain("📍 오늘의 진도");
+    expect(html).toContain("서연이가 구문을 척척 찾아냈습니다.");
+  });
+
+  it("오늘 수업·평가·학습 추이·학부모 전달 내용·학습 추세 칸을 그리지 않는다(같은 내용이 두 번 나가지 않게)", () => {
+    const html = english(EIE);
+    for (const title of ["오늘 수업", "평가", "학습 추이", "학부모 전달 내용", "학습 추세"]) {
+      expect(html).not.toContain(`>${title}<`);
+    }
+    // 항목 칸의 값도 안 나간다 — 진도·점수·추세 문장.
+    expect(html).not.toContain("소인수분해");
+    expect(html).not.toContain("20문제 중 18개 맞음");
+    expect(html).not.toContain("최근 3회 상승세입니다.");
+    // 학습 추이 그래프(viewBox 660×200) — svg 요소 개수로 세면 첨부 받기 아이콘까지 걸린다.
+    // ⚠️ 이 파일에 여는 꺾쇠+svg 글자를 적지 말 것 — 아이콘 가드(eywa-icon-mapping.test)가 인라인 SVG로 센다.
+    expect(markup(FULL)).toContain('viewBox="0 0 660 200"'); // 수학에선 그려진다(아래 부정 검사의 짝)
+    expect(html).not.toContain('viewBox="0 0 660 200"');
+  });
+
+  it("머리·학생 정보·첨부·바닥글은 수학과 같다", () => {
+    const html = english(EIE);
+    expect(html).toContain("2026년 09월 10일 수업 보고서");
+    expect(html).toContain(">학생 정보<");
+    expect(html).toContain("이윤건");
+    expect(html).toContain(">첨부<");
+    expect(html).toContain("https://example.test/a.png");
+    expect(html).toContain("인재원 · 2026년 09월 10일");
+    expect(html).toContain("report-capture"); // 워커 캡처 선택자
+  });
+
+  it("'학부모 전달 내용' 토글을 꺼도 본문은 나간다(글이 곧 보고서)", () => {
+    const html = english(EIE, { settings: { ...SETTINGS, showParentNote: false } });
+    expect(html).toContain("📍 오늘의 진도");
+  });
+
+  it("글이 비면 기존 빈 문구를 그대로 보여 준다", () => {
+    for (const empty of [null, "", "  \n  "]) {
+      expect(english(empty)).toContain("작성된 보고 내용이 없습니다.");
+    }
+  });
+
+  it("CRLF도 줄바꿈으로 읽는다", () => {
+    const html = english("가\r\n나");
+    expect(html).toContain("가\n나");
+    expect(html).not.toContain("\r");
+  });
+});
+
+describe("호스트 배선 — /r·인쇄", () => {
+  const ROOT = process.cwd();
+  const R_PAGE = path.join(ROOT, "src", "app", "(share)", "r", "[token]", "page.tsx");
+  const PRINT_PAGE = path.join(ROOT, "src", "app", "(print)", "lesson_reports", "[id]", "print", "page.tsx");
+
+  it("둘 다 과목으로 템플릿 모드를 켠다(같은 판정 = 강사 미리보기 = 실제 발송물)", () => {
+    for (const f of [R_PAGE, PRINT_PAGE]) {
+      expect(readFileSync(f, "utf8"), f).toContain('templateMode={report.subject === "english"}');
+    }
+  });
+
+  it("🔴 SELECT에 새 컬럼을 끼우지 않았다(없는 컬럼 하나가 /r 전체를 죽인다, #95)", () => {
+    expect(readFileSync(R_PAGE, "utf8")).toContain(
+      '"id, tenant_id, student_id, class_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments, makeup"',
+    );
+    expect(readFileSync(PRINT_PAGE, "utf8")).toContain(
+      '"id, student_id, class_id, subject, report_date, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments, makeup"',
+    );
+  });
+});

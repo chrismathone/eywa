@@ -517,6 +517,16 @@ export function auditDetail(
       // 삭제된 학생은 uuid로 이름을 되찾을 수 없다 — 기록 시점의 이름을 metadata에 실어 보존.
       return str(m.studentName) ?? ctx.nameOf(m.studentId);
     }
+    // 인재원 학습 계정 짝(2026-09-10) — **어느 계정**이 걸렸고 끊겼는지(대상 열이 학생 이름이다). 끊은 기록도 옛 계정을
+    // 싣는다 — 잘못 이은 짝을 나중에 되짚는 게 이 로그의 목적이다. 인재원 이름이 로그인 아이디 그대로면 한 번만 적는다.
+    case "student_ijw_link":
+    case "student_ijw_link_bulk":
+    case "student_ijw_unlink": {
+      const id = str(m.ijwId);
+      if (!id) return null;
+      const name = str(m.ijwName);
+      return name && name !== id ? `인재원 계정 ${id}(${name})` : `인재원 계정 ${id}`;
+    }
     case "enrollment_end": {
       const reason = reasonDisplay(str(m.reason));
       return join(

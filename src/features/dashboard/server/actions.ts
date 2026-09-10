@@ -15,6 +15,12 @@ import { generateDailyBriefing } from "./briefing";
 
 export type AnnouncementActionState = { error?: string; ok?: boolean } | undefined;
 
+function revalidateDashboard() {
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/announcements");
+  revalidatePath("/dashboard/briefing");
+}
+
 function readForm(formData: FormData) {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
   const audience = normalizeNoticeAudience(get("audience"));
@@ -61,7 +67,7 @@ export async function createAnnouncement(
     metadata: { audience: input.audience, pinned: input.pinned },
   });
 
-  revalidatePath("/dashboard");
+  revalidateDashboard();
   return { ok: true };
 }
 
@@ -100,7 +106,7 @@ export async function updateAnnouncement(
     metadata: { announcementId: input.id, audience: input.audience, pinned: input.pinned },
   });
 
-  revalidatePath("/dashboard");
+  revalidateDashboard();
   return { ok: true };
 }
 
@@ -140,7 +146,7 @@ export async function deleteAnnouncement(
     },
   });
 
-  revalidatePath("/dashboard");
+  revalidateDashboard();
   return { ok: true };
 }
 
@@ -217,7 +223,7 @@ export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: 
     metadata: { briefingDate: date, hadPrevious: Boolean(existing) },
   });
 
-  revalidatePath("/dashboard");
+  revalidateDashboard();
   after(async () => {
     await generateDailyBriefing(tenantId, { notifyOnFirstGeneration: false });
   });
@@ -258,6 +264,6 @@ export async function toggleAnnouncementPin(
     metadata: { announcementId: id, pinned },
   });
 
-  revalidatePath("/dashboard");
+  revalidateDashboard();
   return { ok: true };
 }

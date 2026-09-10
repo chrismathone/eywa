@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -11,6 +11,8 @@ import {
   type Section,
 } from "@/features/dashboard/overview/model";
 import { useOverview } from "./use-overview";
+import { DetailPopup } from "./detail-popup";
+import { CurrentClasses } from "./current-classes";
 import {
   Bars,
   Columns,
@@ -21,6 +23,7 @@ import {
   COLORS,
   number,
   money,
+  chartMoney,
 } from "./charts";
 import s from "./overview.module.css";
 
@@ -33,6 +36,7 @@ const clock = (at: number) =>
   });
 const shortDate = (date: string) => date.slice(5).replace("-", "/");
 const monthLabel = (month: string) => `${Number(month.slice(5))}월`;
+const subscribeHydration = () => () => {};
 
 function OpenIcon({ size = 14 }: { size?: number }) {
   return <EyIcon name="externalLink" size={size} aria-hidden />;
@@ -176,6 +180,11 @@ function InlineStat({
 }
 
 export function Overview({ initial }: { initial: OverviewSnapshot }) {
+  const hydrated = useSyncExternalStore(
+    subscribeHydration,
+    () => true,
+    () => false,
+  );
   const query = useOverview(initial);
   const snapshot = query.data;
   const v = snapshot.sections;
@@ -190,10 +199,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
     : null;
   const care = v.newcomers?.data;
   const schedule = v.schedule?.data;
-  const nextSchedule = schedule?.filter((slot) => slot.status !== "done");
-  const visibleSchedule = nextSchedule?.length
-    ? nextSchedule.slice(0, 5)
-    : schedule?.slice(-5);
   const consultations = v.consultations?.data;
   const admissions = v.admissions?.data;
   const homework = v.homework?.data;
@@ -263,7 +268,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             >
               <i className={failed ? s.dotWarning : s.dotLive} />
               <span>
-                {query.isFetching
+                {hydrated && query.isFetching
                   ? "최신 정보 확인 중"
                   : failed
                     ? "일부 정보 갱신 필요"
@@ -279,18 +284,15 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               className={s.refresh}
               type="button"
               onClick={() => void query.refetch({ cancelRefetch: false })}
-              disabled={query.isFetching}
+              disabled={hydrated && query.isFetching}
               aria-label="전체 정보 새로고침"
             >
               <EyIcon
                 name="sync"
                 size={17}
-                className={query.isFetching ? s.spinning : ""}
+                className={hydrated && query.isFetching ? s.spinning : ""}
               />
             </button>
-            <Jump href="/dashboard" className={s.classicLink}>
-              기존 대시보드
-            </Jump>
           </div>
         </header>
 
@@ -473,10 +475,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     },
                   ]}
                 />
-                <p className={s.footnote}>
-                  입력 진행률은 반별 예정학생 기준이며, 위 출결은 교시마다 별도
-                  집계합니다.
-                </p>
               </>
             )}
           </Panel>
@@ -525,7 +523,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   className={s.footnote}
                   title={`${number(bill.outstanding)}원`}
                 >
-                  미수 {number(bill.outstanding)}원 · 청구−할인−납부, 상태 반영
+                  미수 {number(bill.outstanding)}원
                 </p>
               </>
             )}
@@ -594,7 +592,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                       {delta}명
                     </strong>
                   </b>
-                  <span>처리일 기준 · 날짜 미상 시스템 정리 제외</span>
                 </div>
                 <Columns
                   labels={change.map((r) => monthLabel(r.month))}
@@ -623,6 +620,14 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           >
             {billing && (
               <>
+                <div className={s.chartHeadline}>
+                  <b>
+                    {thisMonth} 수납{" "}
+                    <strong>
+                      {bill ? chartMoney(bill.totalCollected) : "—"}
+                    </strong>
+                  </b>
+                </div>
                 <Columns
                   labels={billing.map((r) => monthLabel(r.period))}
                   series={[
@@ -640,13 +645,9 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     },
                   ]}
                   unit="원"
-                  format={(n) => number(Math.round(n / 10_000))}
+                  format={chartMoney}
                   valueLabels="last"
                 />
-                <p className={s.footnote}>
-                  세로축 만원 · 실청구 = 청구액−할인액 · 입금일별 매출과
-                  다릅니다.
-                </p>
               </>
             )}
           </Panel>
@@ -672,10 +673,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     color: COLORS[i % COLORS.length],
                   }))}
                   limit={6}
+                  title="과목별 수강"
                 />
-                <p className={s.footnote}>
-                  여러 과목을 수강하면 각 과목에 포함됩니다.
-                </p>
               </>
             )}
           </Panel>
@@ -686,7 +685,12 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             sections={[v.students]}
           >
             {student && (
-              <Bars data={student.grades} limit={7} color={COLORS[1]} />
+              <Bars
+                data={student.grades}
+                limit={7}
+                color={COLORS[1]}
+                title="학년별 재원생"
+              />
             )}
           </Panel>
           <Panel
@@ -695,7 +699,9 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             href="/students"
             sections={[v.students]}
           >
-            {student && <Bars data={student.schools} limit={6} />}
+            {student && (
+              <Bars data={student.schools} limit={6} title="학교별 재원생" />
+            )}
           </Panel>
           <Panel
             title="등록 상담 전환"
@@ -733,9 +739,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             {v.attendanceTrend?.data && (
               <>
                 <AttendanceHistory points={v.attendanceTrend.data} />
-                <p className={s.footnote}>
-                  기록 없는 날은 비워 둡니다. 오늘 수치는 입력에 따라 바뀝니다.
-                </p>
               </>
             )}
           </Panel>
@@ -743,7 +746,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             title="반복 결석 학생"
             note={
               v.absences?.data?.anchor
-                ? `${shortDate(v.absences.data.anchor)}까지 14일 · 사전 통보 제외 3칸 이상`
+                ? `${shortDate(v.absences.data.anchor)}까지 14일 · 사전 통보 제외 3회 이상`
                 : "최근 14일 · 사전 통보 제외"
             }
             href="/attendance"
@@ -767,26 +770,28 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                       <span>{row.studentName}</span>
                       <b>
                         {row.unexplained}
-                        <small>칸</small>
+                        <small>회</small>
                       </b>
                     </div>
                   ))}
                 </div>
                 {v.absences.data.rows.length > 6 && (
-                  <details className={s.details}>
-                    <summary>전체 {v.absences.data.rows.length}명 보기</summary>
+                  <DetailPopup
+                    title="반복 결석 학생"
+                    label={`전체 ${v.absences.data.rows.length}명 보기`}
+                  >
                     <div className={s.riskNames}>
-                      {v.absences.data.rows.slice(6).map((row) => (
+                      {v.absences.data.rows.map((row) => (
                         <div key={row.studentId}>
                           <span>{row.studentName}</span>
                           <b>
                             {row.unexplained}
-                            <small>칸</small>
+                            <small>회</small>
                           </b>
                         </div>
                       ))}
                     </div>
-                  </details>
+                  </DetailPopup>
                 )}
                 {v.absences.data.rows.length === 0 && (
                   <p className={s.footnote}>
@@ -832,9 +837,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     },
                   ]}
                 />
-                <p className={s.footnote}>
-                  두 항목에 중복 포함 가능 · 판정 제외 {homework.unparsed}건
-                </p>
+                <p className={s.footnote}>판정 제외 {homework.unparsed}건</p>
               </>
             )}
             {unread && (
@@ -849,8 +852,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   }
                 />
                 <p className={s.footnote}>
-                  최근 {unread.windowDays}일 · {subjects(unread.subjects)} ·
-                  읽음 동기화 대상
+                  최근 {unread.windowDays}일 · {subjects(unread.subjects)}
                 </p>
               </div>
             )}
@@ -966,8 +968,10 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   회색: 예정·기한 미정·기능 시작 전 항목
                 </p>
                 {carePeople !== null && carePeople > 0 && (
-                  <details className={s.details}>
-                    <summary>확인이 필요한 학생 {carePeople}명</summary>
+                  <DetailPopup
+                    title="신규생 케어 확인"
+                    label={`확인이 필요한 학생 ${carePeople}명`}
+                  >
                     {care.items
                       .filter((item) => !item.optional && item.needs.length)
                       .map((item) => (
@@ -976,7 +980,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                           {item.needs.map((p) => p.name).join(", ")}
                         </p>
                       ))}
-                  </details>
+                  </DetailPopup>
                 )}
               </>
             ) : (
@@ -986,7 +990,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           <Panel
             title="강사 시트 작성 현황"
             note="현재 시트의 기간·보기 필터 기준"
-            href={snapshot.allowed.includes("ecs") ? "/ecs" : "/mcs"}
             sections={[v.englishSheet, v.mathSheet]}
           >
             {(
@@ -1053,68 +1056,25 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               ))}
           </Panel>
           <Panel
-            title="오늘 수업 일정"
+            title="현재 수업 현황"
             note={
-              schedule
-                ? `${schedule.length}개 시간대 · ${nextSchedule?.length ? "진행·예정 수업 우선" : "마지막 수업부터 확인"}`
+              v.schedule?.at
+                ? `${clock(v.schedule.at)} 기준 · 과목별`
                 : "오늘 시간표"
             }
             href="/timetable"
             sections={[v.schedule]}
           >
             {schedule && (
-              <>
-                <div className={s.schedule}>
-                  {visibleSchedule?.map((slot) => (
-                    <WindowLink
-                      href={`/classes/${slot.classId}`}
-                      key={slot.id}
-                      className={s.scheduleRow}
-                    >
-                      <time>
-                        {slot.startTime.slice(0, 5)}
-                        <small>{slot.endTime.slice(0, 5)}</small>
-                      </time>
-                      <i
-                        className={
-                          slot.status === "ongoing"
-                            ? s.scheduleLive
-                            : slot.status === "done"
-                              ? s.scheduleDone
-                              : s.scheduleSoon
-                        }
-                      />
-                      <span>
-                        <b>{slot.className}</b>
-                        <small>
-                          {slot.teacherName ?? "강사 미정"} ·{" "}
-                          {slot.classroomName ?? "교실 미정"}
-                        </small>
-                      </span>
-                      <em>
-                        {slot.status === "ongoing"
-                          ? "진행"
-                          : slot.status === "done"
-                            ? "종료"
-                            : "예정"}
-                      </em>
-                    </WindowLink>
-                  ))}
-                </div>
-                {schedule.length === 0 && (
-                  <p className={s.empty}>오늘 예정된 수업이 없습니다.</p>
-                )}
-                {schedule.length > 5 && (
-                  <Jump href="/timetable">
-                    전체 {schedule.length}개 시간대 보기
-                  </Jump>
-                )}
-              </>
+              <CurrentClasses
+                schedule={schedule}
+                subjects={snapshot.subjects}
+              />
             )}
           </Panel>
           <Panel
-            title="다가오는 학원 일정"
-            note="오늘부터 7일 · 취소·예약 차단·근무 일정 제외"
+            title="다가오는 레벨테스트·첫 수업"
+            note="오늘부터 7일"
             sections={[v.calendar]}
           >
             <div className={s.notices}>
@@ -1129,12 +1089,16 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               ))}
             </div>
             {v.calendar?.data?.length === 0 && (
-              <p className={s.empty}>다가오는 7일간 일정이 없습니다.</p>
+              <p className={s.empty}>
+                다가오는 7일간 레벨테스트·첫 수업 일정이 없습니다.
+              </p>
             )}
             {(v.calendar?.data?.length ?? 0) > 6 && (
-              <details className={s.details}>
-                <summary>전체 {v.calendar!.data!.length}개 일정 보기</summary>
-                {v.calendar!.data!.slice(6).map((event) => (
+              <DetailPopup
+                title="다가오는 레벨테스트·첫 수업"
+                label={`전체 ${v.calendar!.data!.length}개 일정 보기`}
+              >
+                {v.calendar!.data!.map((event) => (
                   <div key={event.id} className={s.calendarEvent}>
                     <time>
                       {shortDate(event.startDate)}
@@ -1143,12 +1107,12 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     <span>{event.title}</span>
                   </div>
                 ))}
-              </details>
+              </DetailPopup>
             )}
           </Panel>
           <Panel
             title="직원 구성"
-            note="재직 중 · 시스템 역할 기준"
+            note="재직 중 · 운영 역할 기준"
             href="/staff"
             sections={[v.staff]}
           >
@@ -1163,7 +1127,12 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     </>
                   }
                 />
-                <Bars data={staff} limit={5} color={COLORS[1]} />
+                <Bars
+                  data={staff}
+                  limit={5}
+                  color={COLORS[1]}
+                  title="직원 구성"
+                />
               </>
             )}
           </Panel>
@@ -1199,7 +1168,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             title={`${thisMonth} 지출 내역`}
             note={
               v.expenses?.data
-                ? `지출일 기준 · ${v.expenses.data.count}건 · ${v.expenses.data.primaryCurrency}`
+                ? `지출일 기준 · ${v.expenses.data.count}건`
                 : "당월 지출결의서 기준"
             }
             href={`/billing?tab=expenses&period=${snapshot.today.slice(0, 7)}`}
@@ -1212,15 +1181,24 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     label: c.category,
                     value: c.amount,
                   }))}
-                  unit={v.expenses.data.primaryCurrency}
+                  unit={
+                    v.expenses.data.primaryCurrency === "KRW"
+                      ? "원"
+                      : v.expenses.data.primaryCurrency
+                  }
                   color={COLORS[3]}
                   limit={5}
+                  title="분류별 지출"
                 />
                 <div className={s.separated}>
                   {v.expenses.data.byCurrency.map((c) => (
                     <InlineStat
                       key={c.currency}
-                      label={`${c.currency} 지출 합계`}
+                      label={
+                        c.currency === "KRW"
+                          ? "지출 합계"
+                          : `${c.currency} 지출 합계`
+                      }
                       value={
                         c.currency === "KRW"
                           ? money(c.total)
@@ -1232,44 +1210,43 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                 {v.expenses.data.count === 0 && (
                   <p className={s.empty}>이번 달 지출 내역이 없습니다.</p>
                 )}
-                <p className={s.footnote}>
-                  분류별 막대는 주 통화 기준 · 서로 다른 통화는 별도 합산
-                </p>
               </>
             )}
           </Panel>
           <Panel
             title="학원 공지"
             note="최근 공지 · 대상 권한 반영"
-            href="/dashboard"
+            href="/dashboard/announcements"
             sections={[v.notices]}
           >
             <div className={s.notices}>
               {v.notices?.data?.map((notice) => (
-                <details key={notice.id}>
-                  <summary>
-                    <span>
-                      {notice.pinned && <em>고정</em>}
-                      {notice.title}
-                    </span>
-                    <time>{shortDate(notice.createdAt.slice(0, 10))}</time>
-                  </summary>
-                  <p>{notice.content}</p>
-                </details>
+                <DetailPopup
+                  key={notice.id}
+                  title={notice.title}
+                  plain
+                  label={
+                    <>
+                      <span>
+                        {notice.pinned && <em>고정</em>}
+                        {notice.title}
+                      </span>
+                      <time>{shortDate(notice.createdAt.slice(0, 10))}</time>
+                    </>
+                  }
+                >
+                  <p className={s.noticeContent}>{notice.content}</p>
+                </DetailPopup>
               ))}
             </div>
             {v.notices?.data?.length === 0 && (
               <p className={s.empty}>등록된 공지가 없습니다.</p>
             )}
-            <Jump href="/dashboard">공지 관리 열기</Jump>
+            <Jump href="/dashboard/announcements">공지 관리 열기</Jump>
           </Panel>
         </div>
 
         <footer className={s.footer}>
-          <span>
-            수치는 eywa에 저장된 데이터를 기준으로 자동 갱신됩니다. 외부 연동
-            정보는 해당 서비스의 동기화 후 반영됩니다.
-          </span>
           <span>EYWA / OVERVIEW</span>
         </footer>
       </div>
