@@ -298,7 +298,13 @@ export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
  */
 export function frequentFor(gate: Gate, keys?: readonly MenuKey[]): HubDest[] {
   const source = keys && keys.length > 0 ? keys : DEFAULT_FREQUENT_KEYS;
-  return keep(source.map((k) => fromMenu(k))).filter((d) => allowed(d, gate));
+  return keep(source.map((k) => fromMenu(k)))
+    .filter((d) => allowed(d, gate))
+    // 🔴 **메뉴에서 감춘 항목은 여기에도 안 뜬다** — 감추기 전에 쌓인 방문 기록이 남아 있어서,
+    //    이 줄이 없으면 사이드바에서 뺀 메뉴가 '자주 방문한 메뉴'로 되살아난다(캘린더가 그랬다,
+    //    원장 2026-09-10 *"캘린더 탭은 메뉴에서 제외시켜"*). 앞으로 감출 메뉴도 이 규칙을 그냥 물려받는다.
+    //    ⚠️ `navItemByKey`는 **첫 항목**을 돌려주므로, 하위 면만 hidden인 메뉴(수납·셔틀 등)는 안 걸린다.
+    .filter((d) => navItemByKey(d.menuKey)?.hidden !== true);
 }
 
 const routePath = (href: string): string => href.split(/[?#]/, 1)[0] ?? href;

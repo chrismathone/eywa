@@ -204,3 +204,21 @@ describe("왼쪽 탭 설정 — 보기만 바꾼다(권한 아님)", () => {
     expect(support.find((g) => g.id === "owner")?.items.map((d) => d.href)).toContain("/owner");
   });
 });
+
+describe("메뉴에서 감춘 항목은 '자주 방문한 메뉴'에도 안 뜬다", () => {
+  const gate = { systemRole: "master" as const };
+
+  it("🔴 캘린더는 방문 기록이 아무리 많아도 안 선다 — 감추기 전 기록으로 되살아나면 안 된다", () => {
+    const rows = frequentFor(gate, ["calendar", "students"]);
+    expect(rows.map((d) => d.menuKey)).not.toContain("calendar");
+    expect(rows.map((d) => d.menuKey)).toContain("students");
+  });
+
+  it("하위 면만 감춘 메뉴(수납)는 그대로 뜬다 — 과잉 차단 금지", () => {
+    expect(frequentFor(gate, ["billing"]).map((d) => d.menuKey)).toContain("billing");
+  });
+
+  it("기본값에도 감춘 메뉴가 없다", () => {
+    expect(frequentFor(gate).map((d) => d.menuKey)).not.toContain("calendar");
+  });
+});
