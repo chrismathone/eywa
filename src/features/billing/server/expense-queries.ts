@@ -190,13 +190,15 @@ function mapExpenseRow(r: any): ExpenseRow {
 export async function getExpensesForMonth(period: string): Promise<ExpenseRow[]> {
   const supabase = await createClient();
   const { start, end } = monthRange(period);
-  const { data } = await supabase
+  const data = await fetchAllPaged((from, to) => supabase
     .from("expenses")
     .select(EXPENSE_COLS)
     .gte("expense_date", start)
     .lt("expense_date", end)
-    .order("expense_date", { ascending: false });
-  return (data ?? []).map(mapExpenseRow);
+    .order("expense_date", { ascending: false })
+    .order("id")
+    .range(from, to));
+  return data.map(mapExpenseRow);
 }
 
 // 강사 '지출결의서' 면 — 본인이 작성(created_by=본인)한 결의서 전건(최신순). 강사 스코프의 단일 소스.

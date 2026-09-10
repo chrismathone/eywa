@@ -434,6 +434,9 @@ export async function getClassesStats(): Promise<{ total: number; active: number
     classBase().eq("is_active", true).is("closed_at", null),
     seatsQuery,
   ]);
+  for (const result of [total, active, seats]) {
+    if (result.error) throw new Error(`수업 집계 실패: ${result.error.message}`);
+  }
   return { total: total.count ?? 0, active: active.count ?? 0, totalSeats: seats.count ?? 0 };
 }
 

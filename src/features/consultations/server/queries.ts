@@ -177,7 +177,7 @@ export async function getStudentConsultationCounts(): Promise<StudentConsultatio
     const q = supabase.from("student_consultations").select("*", { count: "exact", head: true });
     return teacherId ? q.eq("counselor_id", teacherId) : q;
   };
-  const [{ count: total }, { count: lastWeek }, { count: pending }, { count: overdue }] =
+  const results =
     await Promise.all([
       base(),
       base().gte("consulted_at", isoDaysAgo(7)),
@@ -187,6 +187,10 @@ export async function getStudentConsultationCounts(): Promise<StudentConsultatio
         .not("follow_up_date", "is", null)
         .lt("follow_up_date", today),
     ]);
+  for (const result of results) {
+    if (result.error) throw new Error(`상담 집계 실패: ${result.error.message}`);
+  }
+  const [{ count: total }, { count: lastWeek }, { count: pending }, { count: overdue }] = results;
   return {
     total: total ?? 0,
     lastWeek: lastWeek ?? 0,
