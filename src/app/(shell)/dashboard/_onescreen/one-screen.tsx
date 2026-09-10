@@ -13,7 +13,6 @@ import {
   todayAttendanceKpi,
 } from "@/features/dashboard/onescreen/kpi";
 import { LOW_HOMEWORK_RATE } from "@/features/dashboard/onescreen/homework-risk";
-import { buildPriorityLines, priorityOverflow } from "@/features/dashboard/onescreen/priority-lines";
 import { buildWatchlist, watchlistOverflow } from "@/features/dashboard/onescreen/watchlist";
 import { buildCareCells } from "@/features/newcomers/care-cells";
 import { getNewcomers } from "@/features/newcomers/server/queries";
@@ -29,7 +28,6 @@ import {
   getFollowUpConsultations,
   getMonthlyEnrollmentChanges,
   getPaymentRateThisMonth,
-  getRecentAnnouncements,
   getTopOutstandingCached,
   getTrendDataLast7Days,
 } from "@/features/dashboard/server/queries";
@@ -40,15 +38,18 @@ import {
 } from "@/features/dashboard/onescreen/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { paymentRateDisplay, unpaidBreakdown } from "@/features/billing/calc";
+import {
+  attendanceBar,
+  attendanceBarTitle,
+  paymentBar,
+  paymentBarTitle,
+} from "@/features/dashboard/onescreen/tile-bar";
 import { formatWon } from "@/features/billing/textbook-notice";
-import { dailyBriefingSummary } from "../_components/daily-briefing-card";
 import { AttendanceTrend, WeeklyChangeBars } from "./charts";
 import { Cell, OneScreenGrid } from "./grid";
 import {
-  BriefingNote,
   CareCells,
   OutstandingList,
-  PriorityList,
   RiskRows,
   TodoList,
   Watchlist,
@@ -127,7 +128,6 @@ export async function OneScreenDashboard({
     risks,
     followUps,
     briefing,
-    announcements,
     outstanding,
     trend,
     weekly,
@@ -170,8 +170,10 @@ export async function OneScreenDashboard({
       ? soft("결석 위험", getAbsenceRiskCached(tenantId))
       : skip,
     need("watchlist") && access.read.consultations ? soft("상담 후속", getFollowUpConsultations(8)) : skip,
-    need("briefing") ? soft("일일 브리핑", getDailyBriefing(tenantId, today)) : skip,
-    need("briefing") ? soft("공지", getRecentAnnouncements(systemRole, 3)) : skip,
+    // 🔴 브리핑 **패널은 없앴지만 조회는 남는다** — 위험 줄의 `퇴원위험`이 이 payload의
+    //    `spotlights`에서 오기 때문이다(0114a). 게이트를 그 칸으로 옮긴다.
+    canSeeBriefing && need("risk") ? soft("일일 브리핑", getDailyBriefing(tenantId, today)) : skip,
+    // 공지는 브리핑 패널이 유일한 소비처였다 — 패널이 없어졌으니 조회도 없앤다(왕복 −1, 이 자리는 비운다).
     need("outstanding") ? soft("미납 상위", getTopOutstandingCached(tenantId)) : skip,
     need("attendance7d")
       ? soft("7일 추세", getTrendDataLast7Days(tenantId, { attendance: true, billing: false }))
@@ -192,7 +194,7 @@ export async function OneScreenDashboard({
   const attRate = closedAttendanceRate(att, attState?.snapshot ?? null, today);
   /**
    * 🔴 **시간표 조회 실패도 '실패'다.** 시간표가 없으면 `startedClassIds`가 비어 판정이 `none`이 되고,
-   *    타일이 *"오늘 시작한 수업이 없습니다"* 라고 **거짓을 말한다**(수업은 돌고 있는데 화면만 조용하다).
+   *    타일이 *"오늘 시작한 수업 없음"* 라고 **거짓을 말한다**(수업은 돌고 있는데 화면만 조용하다).
    *    이 화면이 가장 조심해야 하는 실패 모드라, 세 조회 중 하나라도 못 받으면 숫자를 안 적는다.
    */
   const attFailed = attState === null || attState.todayProcessingIssue || schedule === null;
@@ -206,7 +208,7 @@ export async function OneScreenDashboard({
       )
     : [];
 
-  // ── 살펴볼 학생 ─────────────────────────────────────────────────────────────
+  // ── 확인이 필요한 학생 ─────────────────────────────────────────────────────
   /**
    * 🔴 본문 칸은 **안쪽 스크롤이 없어 넘치면 말없이 잘린다** — 그러면 "외 N명"이 거짓이 된다
    *    (화면엔 6줄인데 8줄을 세운 셈). 신규생·위험 띠가 세로를 112px 가져갔으므로 줄 수를 그만큼 줄인다.
@@ -220,9 +222,8 @@ export async function OneScreenDashboard({
   // 🔴 조회 실패(`briefing === null`)를 "오늘 보고 없음"으로 위장하지 않는다 — 그 헬퍼가
   //    `unavailable` 인자로 그 구분을 이미 들고 있다([[#95]] 계열: 표 미적용도 여기로 떨어진다).
   const briefingRow = briefing as DailyBriefingRow | null;
-  const briefingSummary = dailyBriefingSummary(briefingRow, briefing === null);
 
-  // ── 신규생 케어 ─────────────────────────────────────────────────────────────
+  // ── 신규생 관리 ─────────────────────────────────────────────────────────────
   /**
    * 🔴 **체크를 못 읽으면 숫자를 적지 않는다.** 0251a 미적용이면 체크가 통째로 비어 모든 항목이
    *    '지연'으로 잡히는데(아무도 기록할 수 없었으니 당연하다) 그 숫자를 크게 적으면 **없는 사실**이 된다.
@@ -237,32 +238,7 @@ export async function OneScreenDashboard({
         ? `대상 ${newcomers.rows.length}명`
         : (newcomers.checksError?.summary ?? "체크 기록이 아직 켜지지 않았습니다");
 
-  // ── 우선 확인 ───────────────────────────────────────────────────────────────
-  // 🔴 여기서 순위를 매기지 않는다 — 이미 만들어진 결정론 배열을 **고정 버킷 순서**로 고를 뿐이다.
-  //    스포트라이트는 브리핑 payload(cron 산출)라 **새 조회가 0**이고 사전 통보 결석 제외도 그쪽이 이미 했다.
-  const priorityLines = buildPriorityLines({
-    today: newcomers?.today ?? today,
-    newcomers: careUsable
-      ? newcomers.rows.map((r) => ({
-          studentId: r.studentId,
-          name: r.name,
-          enrolledOn: r.enrolledOn,
-          firstClassOn: r.firstClassOn,
-          checks: r.checks,
-        }))
-      : null,
-    spotlights: briefingRow?.payload?.spotlights ?? null,
-    todos,
-  });
-  const priorityMore = priorityOverflow(priorityLines);
-  /**
-   * 🔴 **재료를 하나도 못 받았을 때만** "불러오지 못했습니다"라고 적는다 — 재료가 있는데 걸릴 게 없는
-   *    0줄은 정상이고, 그 둘을 같은 말로 적으면 "확인할 것 없음"이 실패를 덮는다.
-   */
-  const priorityReady =
-    careUsable || (briefingRow?.payload?.spotlights ?? null) !== null || signals !== null;
-
-  // ── 학생 위험 ───────────────────────────────────────────────────────────────
+  // ── 학생 관리 현황 ─────────────────────────────────────────────────────────
   // 🔴 **재료가 있는 축만** 세운다 — 수업태도는 93% 채워져 있어도 하향 등급이 0건이라(실측 2026-09-10)
   //    "태도 주의 0명"이 영원히 서고 그 0은 "문제 없음"으로 읽힌다. 학부모 만족도는 구조화 기록이 없다.
   // 🔴 수납은 넣지 않는다 — 같은 화면의 수납 타일이 이미 미납 건수를 말한다(§2 같은 값 두 번 금지).
@@ -338,7 +314,7 @@ export async function OneScreenDashboard({
         churn === null
           ? briefing === null
             ? "브리핑을 불러오지 못했습니다"
-            : "오늘 브리핑에 이탈 집계가 없습니다"
+            : "집계 없음"
           : churn > 0
             ? (churnTop?.reasons[0] ?? "오늘 브리핑 기준")
             : "오늘 브리핑 기준",
@@ -413,8 +389,26 @@ export async function OneScreenDashboard({
                   attFailed
                     ? "출결을 불러오지 못했습니다"
                     : att.mode === "none"
-                      ? "오늘 시작한 수업이 없습니다"
-                      : `시작한 ${att.startedClasses}개 반 · 기록 ${att.recorded}/${att.expected}명`
+                      ? "오늘 시작한 수업 없음"
+                      : `시작 ${att.startedClasses}곳 중 ${att.unmarkedClasses}곳이 아직 0명 · 찍힌 인원 ${att.recorded}/${att.expected}`
+                }
+                // 🔴 막대는 **반 단위**다(주숫자와 같은 축) — 학생 수를 그리면 수업 중인 반이 분모에 들어가
+                //    아침부터 빨갛다. 조회 실패·오늘 수업 없음이면 빈 배열이라 막대가 아예 안 선다.
+                bar={
+                  attFailed || att.mode === "none"
+                    ? undefined
+                    : attendanceBar({
+                        startedClasses: att.startedClasses,
+                        unmarkedClasses: att.unmarkedClasses,
+                      })
+                }
+                barTitle={
+                  attFailed || att.mode === "none"
+                    ? undefined
+                    : attendanceBarTitle({
+                        startedClasses: att.startedClasses,
+                        unmarkedClasses: att.unmarkedClasses,
+                      })
                 }
               />
             </Cell>
@@ -436,39 +430,15 @@ export async function OneScreenDashboard({
                     ? "수납을 불러오지 못했습니다"
                     : `금액 기준 · 미수 ${formatWon(payment.outstanding)}원 · ${unpaidBreakdown(payment)}`
                 }
+                // ⚠️ 주숫자(수납률)는 **금액 기준**인데 이 막대는 **건수 축**이다 — 그래서 부제가
+                //    "금액 기준"이라고 먼저 말하고, 막대 설명이 "건수 기준"이라고 다시 말한다.
+                //    둘 중 하나라도 라벨을 지우면 그 순간 화면이 거짓말을 시작한다.
+                bar={payment === null ? undefined : paymentBar(payment)}
+                barTitle={payment === null ? undefined : paymentBarTitle(payment)}
               />
             </Cell>
           ) : null}
 
-          {kpiOf("todo") > 0 ? (
-            <Cell span={kpiOf("todo")}>
-              <KpiTile
-                sk={sk}
-                label="오늘 할 일"
-                shortLabel="할 일"
-                // 🔴 **건수를 합치지 않는다**(§2) — 신호마다 단위가 달라(명·건·개 반) 합계는 뜻이 없다.
-                //    "몇 가지 일이 남았나"만 세고, 무엇인지는 바로 아래 목록이 말한다.
-                value={signals === null ? null : String(todos.length)}
-                unit="가지"
-                tone={
-                  signals === null
-                    ? "inert"
-                    : todos.some((t) => t.severity === "danger")
-                      ? "critical"
-                      : todos.length > 0
-                        ? "caution"
-                        : "positive"
-                }
-                sub={
-                  signals === null
-                    ? "신호를 불러오지 못했습니다"
-                    : todos.length === 0
-                      ? "지금 처리할 일이 없습니다"
-                      : todos.slice(0, 2).map((t) => t.label).join(" · ")
-                }
-              />
-            </Cell>
-          ) : null}
         </>
       }
       care={
@@ -476,7 +446,7 @@ export async function OneScreenDashboard({
           <>
             {careOf("care") > 0 ? (
               <Cell span={careOf("care")}>
-                <StripPanel sk={sk} title="신규생 케어" note={careNote} href="/newcomers">
+                <StripPanel sk={sk} title="신규생 관리" note={careNote} href="/newcomers">
                   {careUsable ? (
                     <CareCells cells={careCells} />
                   ) : (
@@ -491,25 +461,10 @@ export async function OneScreenDashboard({
               </Cell>
             ) : null}
 
-            {careOf("priority") > 0 ? (
-              <Cell span={careOf("priority")}>
-                <StripPanel
-                  sk={sk}
-                  title="우선 확인"
-                  note={priorityMore > 0 ? `분야별 대표 · 외 ${priorityMore}건` : "분야별 대표"}
-                >
-                  {priorityReady ? (
-                    <PriorityList lines={priorityLines} />
-                  ) : (
-                    <PanelEmpty>재료를 불러오지 못했습니다</PanelEmpty>
-                  )}
-                </StripPanel>
-              </Cell>
-            ) : null}
 
             {careOf("risk") > 0 ? (
               <Cell span={careOf("risk")}>
-                <StripPanel sk={sk} title="학생 위험">
+                <StripPanel sk={sk} title="학생 관리 현황">
                   <RiskRows rows={riskRows} />
                 </StripPanel>
               </Cell>
@@ -533,7 +488,7 @@ export async function OneScreenDashboard({
 
           {bodyOf("watchlist") > 0 ? (
             <Cell span={bodyOf("watchlist")}>
-              <Panel sk={sk} title="살펴볼 학생" count={watch.length > 0 ? `${watch.length + watchMore}명` : undefined}>
+              <Panel sk={sk} title="확인이 필요한 학생" count={watch.length > 0 ? `${watch.length + watchMore}명` : undefined}>
                 {risks === null && followUps === null ? (
                   <PanelEmpty>명단을 불러오지 못했습니다</PanelEmpty>
                 ) : (
@@ -543,17 +498,6 @@ export async function OneScreenDashboard({
             </Cell>
           ) : null}
 
-          {bodyOf("briefing") > 0 ? (
-            <Cell span={bodyOf("briefing")}>
-              <Panel sk={sk} title="오늘 브리핑">
-                <BriefingNote
-                  summary={briefingSummary.text}
-                  tone={briefingSummary.tone}
-                  announcements={(announcements ?? []).map((a) => ({ id: a.id, title: a.title }))}
-                />
-              </Panel>
-            </Cell>
-          ) : null}
 
           {bodyOf("outstanding") > 0 ? (
             <Cell span={bodyOf("outstanding")}>

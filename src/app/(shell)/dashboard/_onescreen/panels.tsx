@@ -58,7 +58,7 @@ function Row({
  * 못 여는 화면 링크를 그리면 눌러도 튕기는 죽은 줄이 된다([[#77]]).
  */
 export function TodoList({ items, max = 10 }: { items: TodayActionItem[]; max?: number }) {
-  if (items.length === 0) return <PanelEmpty>지금 처리할 일이 없습니다</PanelEmpty>;
+  if (items.length === 0) return <PanelEmpty>지금 처리할 일 없음</PanelEmpty>;
   const shown = items.slice(0, max);
   const rest = items.length - shown.length;
   return (
@@ -86,7 +86,7 @@ export function TodoList({ items, max = 10 }: { items: TodayActionItem[]; max?: 
  * 🔴 결석 **사유 원문은 안 올린다** — 그 값엔 병원·가정사가 그대로 적혀 있다.
  */
 export function Watchlist({ items, overflow }: { items: WatchItem[]; overflow: number }) {
-  if (items.length === 0) return <PanelEmpty>지금 살펴볼 학생이 없습니다</PanelEmpty>;
+  if (items.length === 0) return <PanelEmpty>확인이 필요한 학생 없음</PanelEmpty>;
   return (
     <>
       <ul className="min-w-0">

@@ -46,10 +46,23 @@ export type DashboardAreas = {
   lessonReports: boolean;
 };
 
-export type KpiKey = "students" | "attendance" | "billing" | "todo";
-/** 행2 — 신규생 케어 · 우선 확인 · 학생 위험. */
-export type CareKey = "care" | "priority" | "risk";
-export type BodyKey = "todo" | "watchlist" | "briefing" | "outstanding";
+export type KpiKey = "students" | "attendance" | "billing";
+/**
+ * 🔴 상단 '오늘 할 일' KPI는 **없앴다**(원장 승인 2026-09-10, codex·grok 합의) — 바로 아래 같은 이름의
+ *    목록이 같은 숫자를 푼다. 한 화면에 같은 값이 두 번 적히면 읽는 사람이 둘을 대조하느라 멈춘다.
+ */
+/**
+ * 행2 — 신규생 케어 · 학생 관리 현황.
+ * 🔴 '우선 확인'은 **없앴다**(합의) — 담는 것이 `오늘 미작성 보고서 21명` 한 줄뿐이라 바로 아래
+ *    '오늘 할 일' 목록과 글자까지 겹쳤다.
+ */
+export type CareKey = "care" | "risk";
+/**
+ * 행3 — 목록.
+ * 🔴 '오늘 브리핑'(산문 한 문단)은 **없앴다**(합의) — 문단이 말한 `보고서 미작성 23건`과 옆 목록의
+ *    `21명`이 **단위가 달라** 한 화면이 스스로를 부정했다. 할 일은 목록이 이미 실행 가능한 형태로 말한다.
+ */
+export type BodyKey = "todo" | "watchlist" | "outstanding";
 export type ChartKey = "attendance7d" | "enroll4w";
 
 /** 12열 격자 위의 한 칸. `span`은 12분율이고 한 행의 합은 언제나 12다(가드가 잠근다). */
@@ -116,9 +129,6 @@ export function buildDashboardPlan(areas: DashboardAreas): DashboardPlan {
   if (areas.students) tiles.push("students");
   if (areas.attendance) tiles.push("attendance");
   if (areas.billing) tiles.push("billing");
-  // 🔴 '오늘 할 일' 타일은 **다른 타일이 2개 이상일 때만** 세운다 — 바로 아래가 같은 숫자를 푼
-  //    목록이라, 타일이 그것뿐이면 한 화면에 같은 값이 두 번 적힌다(§2 "같은 값 두 번 금지").
-  if (hasAnySignal(areas) && tiles.length >= 2) tiles.push("todo");
 
   // ── 행2 신규생·위험 띠 ──────────────────────────────────────────────────────
   // 신규생 케어 · 우선 확인 · 학생 위험.
@@ -127,9 +137,7 @@ export function buildDashboardPlan(areas: DashboardAreas): DashboardPlan {
   const care: CareKey[] = [];
   // 케어 칸은 **숫자만** 담아 신규생 열람 권한이면 선다.
   if (areas.newcomers) care.push("care");
-  // 🔴 '우선 확인'은 **학생 이름과 학생 상세 링크**를 담는다 — 이름을 알아도 되는 사람에게만 세운다
-  //    ('살펴볼 학생' 칸과 같은 규약). 지금 기본 권한에선 둘이 늘 함께지만, 개인 예외로 갈릴 수 있다.
-  if (areas.newcomers && areas.students) care.push("priority");
+
   // 위험 줄의 칸들은 재료가 따로다: 출결 = 결석 위험 조회 / 숙제·학부모 확인 = 수업보고서 /
   // 퇴원위험 = **저장된 브리핑 payload**(그래서 retention 메뉴 + 브리핑 열람이 함께 있어야 한다, 0114a).
   if (areas.attendance || areas.lessonReports || (areas.retention && areas.briefing)) care.push("risk");
@@ -140,7 +148,6 @@ export function buildDashboardPlan(areas: DashboardAreas): DashboardPlan {
   // 살펴볼 학생 = 결석 위험 ∪ 상담 후속. **이름을 알아도 되는 사람**(학생 열람)에게만, 그리고
   // 두 갈래 중 하나라도 볼 수 있을 때만 — 학생만 보이고 출결·상담이 다 막히면 담을 것이 없다.
   if (areas.students && (areas.attendance || areas.consultations)) body.push("watchlist");
-  if (areas.briefing) body.push("briefing");
   // 🔑 미납 상위 목록은 **전권한 화면에선 버린 것**이다(수납 타일 하나로 충분하고 본문 세 칸이 꽉 찬다).
   //    수납만 보이는 역할(회계)에선 그 화면이 타일 하나로 끝나 버리므로 여기서 되살린다.
   if (areas.billing && body.length < 2) body.push("outstanding");

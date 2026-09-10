@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { BarSegment } from "@/features/dashboard/onescreen/tile-bar";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { TileTone } from "@/features/dashboard/onescreen/kpi";
@@ -14,12 +15,24 @@ import { SKINS, type SkinClasses } from "./skin";
  *    존재하고, 한쪽을 지울 땐 이 prop과 그 파일만 걷어내면 된다.
  */
 
+/**
+ * 막대 조각의 색 — **의미색 캐논 그대로**다(정상=green / 주의=amber / 위험=danger).
+ * 🔴 여기서 새 색을 만들지 말 것. 정의 안 된 토큰은 조용히 아무 색도 안 칠한다.
+ */
+const BAR_TONE: Record<BarSegment["tone"], string> = {
+  positive: "bg-green",
+  caution: "bg-amber",
+  critical: "bg-danger",
+};
+
 export function KpiTile({
   label,
   shortLabel,
   value,
   unit,
   sub,
+  bar,
+  barTitle,
   tone = "inert",
   href,
   title,
@@ -33,6 +46,14 @@ export function KpiTile({
   unit?: string;
   /** 보조 한 줄 — 그 숫자를 보고 무엇을 할지 정하는 데 필요한 것만. */
   sub?: ReactNode;
+  /**
+   * 숫자 아래 **막대 한 줄**(원장 2026-09-10 "좀 더 시각화 … 텍스트를 최소한으로").
+   * 🔴 이미 화면에 적힌 숫자만 그린다 — 막대가 새 사실을 만들지 않는다.
+   * ⚠️ 값을 모르면 넘기지 말 것(빈 배열) — 0%짜리 빈 막대는 "하나도 안 됐다"는 거짓 주장이다.
+   */
+  bar?: readonly BarSegment[];
+  /** 막대의 마우스 오버 설명 — 주숫자와 **축이 다를 때** 반드시 준다(수납: 금액 vs 건수). */
+  barTitle?: string;
   tone?: TileTone;
   /** 누르면 여는 화면. 없으면 그냥 숫자 판이다(못 여는 사람에겐 넘기지 않는다 — 죽은 링크 금지). */
   href?: string;
@@ -52,6 +73,17 @@ export function KpiTile({
         ) : null}
       </p>
       <div className="text-text-dim mt-0.5 truncate text-xs">{sub ?? null}</div>
+      {bar && bar.length > 0 ? (
+        <div
+          className="border-line mt-1.5 flex h-1.5 w-full overflow-hidden rounded-full border"
+          title={barTitle}
+          aria-label={barTitle}
+        >
+          {bar.map((seg) => (
+            <span key={seg.key} className={BAR_TONE[seg.tone]} style={{ width: `${seg.pct}%` }} />
+          ))}
+        </div>
+      ) : null}
     </>
   );
 
