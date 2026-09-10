@@ -29,11 +29,14 @@ import { usePrefs } from "./use-prefs";
  */
 export function MenuHubPanel({
   systemRole,
+  isSuperAdmin,
   permMatrix,
   canTeacherView = false,
   menuLayout,
 }: {
   systemRole: SystemRole;
+  /** 총괄(super_admin) — master 전용 목적지를 함께 연다. */
+  isSuperAdmin?: boolean;
   permMatrix?: AccessMatrix;
   canTeacherView?: boolean;
   /** 학원 설정 '왼쪽 탭'(보기 설정) — 사이드바와 **같은 값**을 봐야 왼쪽과 본문이 같은 목록을 그린다. */
@@ -67,7 +70,8 @@ export function MenuHubPanel({
     systemRole,
     permMatrix,
     canTeacherView,
-    isMaster: systemRole === "master",
+    // 🔴 총괄(super_admin)도 통과 — 사이드바 게이트와 같은 규약(한쪽만 고치면 입구가 갈린다).
+    isMaster: systemRole === "master" || isSuperAdmin,
     menuLayout,
   }).find((g) => g.id === groupId);
   if (!group) return null;
