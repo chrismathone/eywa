@@ -476,6 +476,12 @@ export type StudentLine = {
     homeworkScore: string | null;
     teacherName: string | null;
   } | null;
+  /**
+   * 자리(랩실) **교시 고정**(0255a `seat_period_pins`) 표식 문구 — 있으면 이름을 파란 밑줄 이탤릭으로
+   * 그리고 이 문장이 툴팁이 된다(`랩실 교시 고정 · 목 16:20`). 판정·서식은
+   * [`seat-pin-mark.ts`](../lib/seat-pin-mark.ts) 단일 소스 — 화면에서 다시 만들지 말 것.
+   */
+  seatPinNote?: string;
 };
 export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
 

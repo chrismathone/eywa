@@ -12,6 +12,7 @@ import { useSearchTone } from "./search-context";
 import { movingTone, RECENT_ROW_CLASS, useTimetableColorMode } from "./timetable-color";
 import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
+import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
 
 /**
  * 시간표 셀 학생 행(단일 셀·합반 공용) — class-cell.tsx에서 추출(200줄 규칙).
@@ -47,6 +48,11 @@ export type StudentQuick = {
    */
   movingOut?: { on: string; className: string | null };
   movingIn?: { on: string; className: string | null };
+  /**
+   * 자리(랩실) **교시 고정** 표식 문구(0255a) — 있으면 이름이 파란 밑줄 이탤릭이 되고 이 문장이 툴팁이다.
+   * 판정·서식은 [`seat-pin-mark.ts`](../../../../features/timetable/lib/seat-pin-mark.ts) 단일 소스.
+   */
+  seatPinNote?: string;
   /** 수강 시작일(YYYY-MM-DD) — hover에서 신입 시작일·전입일 표시용. 런타임엔 StudentLine 전체가 도착. */
   enrollmentDate?: string | null;
   englishName?: string | null;
@@ -96,11 +102,30 @@ export function IndexBadge({ badge }: { badge?: string }) {
 }
 
 /** 이름 덩어리(배지 + 이름 + /학교학년). 이동 대기 행은 메타를 숨겨 화살표 자리를 만든다. */
-function NameInner({ name, meta, badge }: { name: string; meta: string; badge?: string }) {
+function NameInner({
+  name,
+  meta,
+  badge,
+  pinNote,
+}: {
+  name: string;
+  meta: string;
+  badge?: string;
+  /** 자리(랩실) 교시 고정 — 이름만 파란 밑줄 이탤릭 + 그 문장이 툴팁(원장 2026-09-10). */
+  pinNote?: string;
+}) {
   return (
     <>
       <IndexBadge badge={badge} />
-      {name}
+      {/* 🔴 표식은 **이름 span에만** 얹는다 — 줄에는 이미 tone(신입 빨강·전입 초록·검색 표식)이 붙어 있어
+          같은 축 유틸을 이어 붙이면 승자를 CSS 순서가 정한다([[#116]]). 자식이면 상속을 확실히 이긴다. */}
+      {pinNote ? (
+        <span className={SEAT_PIN_MARK_CLASS} title={pinNote}>
+          {name}
+        </span>
+      ) : (
+        name
+      )}
       {meta ? <span className="opacity-90">/{meta}</span> : null}
     </>
   );
@@ -307,6 +332,8 @@ function StudentRowView({
     waiting ? movingTone(colorMode) : tone,
   );
   const canEditDays = (coveringDays?.length ?? 0) >= 2 && !!slotId;
+  // 자리(랩실) 교시 고정 — 서버가 명단에 실어 보낸 문구 그대로(화면이 판정을 다시 하지 않는다).
+  const pinNote = student?.seatPinNote;
   const isDragging = dnd?.isDragging ?? false;
   // 🔴 줄 **내용**은 메모이즈한다 — dnd-kit은 드래그 중 `over`가 바뀔 때마다 무장된 줄을 다시 그린다.
   //    같은 엘리먼트를 돌려주면 React가 그 서브트리를 통째로 건너뛴다.
@@ -328,7 +355,7 @@ function StudentRowView({
           title={moveTitle}
           className={`min-w-0 ${NAME_CLASS} ${moving ? "line-through" : ""}`}
         >
-          <NameInner name={name} meta={targetKey ? "" : meta} badge={badge} />
+          <NameInner name={name} meta={targetKey ? "" : meta} badge={badge} pinNote={pinNote} />
         </StudentNameLink>
         {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌).
             🔴 예약 이동은 **그 건의 날짜**를 함께 적는다 — 툴바 값 하나만 보면 건별 날짜가 안 보인다
@@ -355,7 +382,8 @@ function StudentRowView({
     ),
     // ⚠️ `moveTitle`도 넣는다 — 예약 이동 툴팁이 줄 안(링크)에 붙어 있어서, 날짜가 바뀌었는데 이 값이
     //    안 바뀌면 메모가 옛 문장을 붙들고 있는다(`targetKey`가 날짜를 담지만 문구는 반 이름도 쓴다).
-    [studentId, name, meta, badge, moving, targetKey, moveTitle],
+    // ⚠️ `pinNote`도 넣는다 — 빠뜨리면 고정을 걸거나 푼 뒤 그 줄만 옛 모습을 붙들고 있는다.
+    [studentId, name, meta, badge, moving, targetKey, moveTitle, pinNote],
   );
   const row = (
     <div
@@ -469,7 +497,7 @@ export function StudentRow({
   const rowCls = `${NAME_CLASS} select-none px-2 py-[3px] leading-tight`;
   const inner = (
     <>
-      <NameInner name={name} meta={saved ? "" : meta} badge={badge} />
+      <NameInner name={name} meta={saved ? "" : meta} badge={badge} pinNote={student.seatPinNote} />
       {/* 예약 이동 — `→`는 나감, `←`는 들어옴. 전문(기존 반 이름 포함)은 툴팁에. */}
       {saved ? (
         <span className="text-xs font-bold">

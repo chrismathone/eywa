@@ -1,5 +1,19 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-10 (8) — 시간표: 랩실 교시를 **영구 고정**한 학생 이름 = 파란 글씨 + 밑줄 + 이탤릭
+
+원장 *"랩실 시간대를 영구 이동한 학생은 시간표에서 이렇게 바로 알아볼 수 있게, 파란글씨에 밑줄+이탤릭체로"*.
+재료는 0255a `seat_period_pins`(상시 고정)뿐이고 하루짜리 `seat_period_moves`는 안 읽는다. 판정·서식 단일 소스 =
+[`seat-pin-mark.ts`](../src/features/timetable/lib/seat-pin-mark.ts)(`SEAT_PIN_MARK_CLASS` = `text-blue italic underline`,
+툴팁 `랩실 교시 고정 · 목 16:20`), 조회 = [`server/seat-pins.ts`](../src/features/timetable/server/seat-pins.ts)(admin +
+`tenant_id` 필터 + `fetchAllPaged` + **fail-soft** — 0255a 미적용인 지금은 표식만 안 붙고 화면은 글자 그대로 같다),
+배선 = 시간표 페이지 초기 `Promise.all`(왕복 추가 0, 교실뷰는 조회 생략) → `applySeatPinMarks(slots)` → 세 뷰가 같은 문구를 읽는다.
+🔑 **표식은 칸이 아니라 학생에게 붙는다**: 영어의 기본 뷰인 **통합뷰**는 카드 명단이 반 단위(`first.students`)라 교시 축이
+없고, 기본뷰는 요일을 가로 병합한다 — 칸에 매달면 원장이 매일 여는 화면에서 표식이 통째로 안 보인다. 그래서 그 반 명단이
+뜨는 곳이면 어디서나 같은 모양이고 무엇이 고정됐는지는 툴팁이 말한다. 🔴 안 붙이는 경우: 그 요일 자리 교시가 하나뿐 ·
+고정 교시가 그 주 시간표에 없음 · `effective_from` 이전 주 · 퇴원 줄 · 교시를 못 옮기는 자리(JJ). 🔴 명단에서 학생을 빼거나
+더하지 않는다(인원·검색·드래그·엑셀 불변). 가드 = `seat-pin-mark.test.ts`·`seat-pin-mark-wiring.test.ts`.
+
 ## 2026-09-10 (7) — 자리 출석부: 출결 찍힌 카드는 못 옮긴다 + **교시 선택**(하루 2회 도는 반의 "이 학생은 어느 쪽인가", 0255a)
 
 원장 지시 두 줄에 대한 구현이다. ① *"출결이 찍힌 학생은 드래그 절대 불가"* ② *"그 학생만 그 시간대에
