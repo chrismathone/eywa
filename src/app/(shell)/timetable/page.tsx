@@ -17,6 +17,8 @@ import {
   getWeeklyScheduleWithStudents,
 } from "@/features/timetable/server/queries";
 import { isSpecialSlotLabel, resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
+import { applySeatPinMarks, NO_SEAT_PINS } from "@/features/timetable/lib/seat-pin-mark";
+import { getSeatPins } from "@/features/timetable/server/seat-pins";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { buildRichClassCards, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -179,7 +181,7 @@ export default async function TimetablePage({
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
-  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap] = await Promise.all([
+  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins] = await Promise.all([
     // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
     // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
     //    그 시트를 되읽는 구조 가져오기가 그 반을 버리고 배치를 마감한다(fetchSlots 주석).
@@ -195,6 +197,11 @@ export default async function TimetablePage({
     // 강의실 목록(교실뷰 컬럼 축) — 그 뷰일 때만(소형 참조 쿼리, B4로 병렬).
     // 교실뷰는 과목의 기본 뷰가 될 수 없으므로(전 과목 지도) 파라미터로만 들어온다 = 여기서 확정 가능.
     paramView === "rooms" && roomsViewAllowed ? getClassroomsLite() : Promise.resolve([]),
+    // 자리(랩실) **교시 고정** 표식 재료(0255a) — 원장 2026-09-10 *"랩실 시간대를 영구 이동한 학생은
+    // 시간표에서 … 파란글씨에 밑줄+이탤릭체로"*. 교실뷰는 명단이 클라까지 오지 않아(인원 수만) 표식이
+    // 붙을 자리가 없으므로 그 뷰일 땐 왕복도 하지 않는다(위 `classroomsForMap`과 같은 판정 자리).
+    // 🔑 여기 **병렬**로 둔 것이 요점 — 아래 `slots` 뒤에 await하면 직렬 워터폴이 된다(B4).
+    paramView === "rooms" && roomsViewAllowed ? Promise.resolve(NO_SEAT_PINS) : getSeatPins(user.tenantId, referenceDate),
   ]);
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
@@ -308,12 +315,20 @@ export default async function TimetablePage({
   // 빈 화면에 갇힌다. 칩은 "학원이 무엇을 운영하나", 필터는 "내가 누구를 보나"로 층을 나눈다.
   // 프로그램 필터는 **반 단위**(학년 필터와 축이 다르다 — 저쪽은 학생 단위라 혼합 반이 살아남아야 한다).
   // 비대칭 계약 주의: '인재원 영어' = "EiE가 아닌 전부"(미분류 포함) — keepEnglishTrack 주석 참조.
-  const slots = applyGradeFilter(
-    keepEnglishTrack(
-      kindSlots.filter((s) => s.subject === subject),
-      englishTrack,
+  // 마지막에 자리(랩실) **교시 고정** 표식을 얹는다 — 세 뷰(기본·통합·강사)가 이 한 벌을 함께 쓴다.
+  // 🔴 필터 **뒤**여야 한다: '그 반이 그날 이 자리에 오는가'는 화면에 실제로 선 슬롯 기준이다(필터로 빠진 반엔
+  //    표식을 얹을 명단도 없다). 반면 **다른 시간으로 옮긴** 고정의 목표 교시는 남의 반 자리 교시라 필터·강사
+  //    범위 뒤엔 안 보인다 → 학원 전체 배치(`liveStarts`, 고정이 있을 때만 조회)로 본다. 고정이 0줄이면 입력을
+  //    그대로 돌려주므로 평소 비용은 0이다.
+  const slots = applySeatPinMarks(
+    applyGradeFilter(
+      keepEnglishTrack(
+        kindSlots.filter((s) => s.subject === subject),
+        englishTrack,
+      ),
+      viewPrefs.grades,
     ),
-    viewPrefs.grades,
+    { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
   );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
   // English Class Sheet 바로가기 — 지금 보는 과목이 ECS 대상일 때만. 조건은 ECS의 정식 게이트

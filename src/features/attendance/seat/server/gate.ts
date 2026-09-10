@@ -6,6 +6,7 @@ import { PIN_SEAT_KEYS, USABLE_SEAT_KEYS, ambiguousClassIds, hhmm, type SeatKey 
 import { getSeatDuties } from "./duty";
 import { readSeatPinSession } from "./pin-session";
 import { getPublicSeatDay, getSeatDay } from "./queries";
+import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 
 export type SeatGateOk = { ok: true; userId: string | null; tenantId: string; via: "menu" | "duty" | "pin" };
 
@@ -79,26 +80,54 @@ export async function gateSeatPinOnly(
   return { ok: true, tenantId: pin.tenantId };
 }
 
-/** 그 교시 명단에 실제로 있는 (반, 학생) 조합만 통과시킨다. 모호한 반(같은 반·같은 시작·다른 종료)은 제외. */
+/**
+ * 그 교시 명단에 실제로 있는 (반, 학생) 조합만 통과시킨다. 모호한 반(같은 반·같은 시작·다른 종료)은 제외.
+ *
+ * 🔴 **교시 선택(0255a)을 얹은 뒤**의 명단이다 — 다른 교시로 정해진 학생은 여기 없고, **다른 시간에서
+ *    옮겨 온 학생은 여기 있다**(원래 반 id로 — 출결은 언제나 수강 반으로 저장된다). 안 얹으면
+ *    일괄 버튼(`남은 N명 출석`)이 **화면에 없는 학생까지** 찍고, 그 칸은 아무도 안 보는 자리에 남아
+ *    자리 시수를 부풀린다(화면은 이미 거른 명단으로 N을 센다).
+ * ⚠️ 이미 기록이 있는 칸은 안 감춰진다(사실이 규칙을 이긴다) — 그래서 잘못 찍은 칸을 **고칠 길은 늘 남는다**.
+ */
 export async function rosterKeys(
   seat: SeatKey,
   date: string,
   slotStart: string,
+  /** 공개(PIN) 경로면 그 테넌트 — 명단 조회를 admin으로 돌린다. 로그인 경로는 null. */
   tenantId: string | null,
-): Promise<{ keys: Set<string>; classes: Map<string, string[]> } | null> {
-  const day = tenantId ? await getPublicSeatDay(tenantId, seat, date) : await getSeatDay(seat, date);
+  /** 교시 선택을 읽을 테넌트(언제나 있다) — 그 표는 RLS 정책이 0개라 admin으로만 읽힌다([[#104]]). */
+  choiceTenantId: string,
+): Promise<{
+  keys: Set<string>;
+  classes: Map<string, string[]>;
+  /**
+   * 그 교시 **전체 명단**(찍힌 칸 포함) — 자리 배치(`applySeatPlacements`)를 얹을 때 쓴다.
+   * 🔴 `classes`(미체크만)로는 배치를 못 얹는다 — 이미 찍힌 학생도 화면에선 옮겨 앉아 있어서,
+   *    미체크 목록만 보면 "이 반 출석"이 화면과 다른 집합을 채운다.
+   */
+  rosters: { classId: string; students: { id: string }[] }[];
+} | null> {
+  const [day, choiceLoad] = await Promise.all([
+    tenantId ? getPublicSeatDay(tenantId, seat, date) : getSeatDay(seat, date),
+    getSeatPeriodChoices(choiceTenantId, seat, date),
+  ]);
   const period = day.periods.find((p) => p.start === hhmm(slotStart));
   if (!period) return null;
+  // 🔑 화면이 그린 것과 **같은 함수·같은 재료**로 거른다 — 갈리면 버튼의 N과 실제로 쓰는 수가 어긋난다.
+  //    다른 시간에서 옮겨 온 학생도 여기서 목표 교시에 선다(원래 교시에선 빠진다) — 그래서 그 칸만 찍힌다.
+  const rosterByPeriod = applySeatDayChoices(day, choiceLoad, date);
   const blocked = new Set(ambiguousClassIds(period));
   const keys = new Set<string>();
   const classes = new Map<string, string[]>();
-  for (const roster of day.rosterByPeriod[period.start] ?? []) {
+  const rosters: { classId: string; students: { id: string }[] }[] = [];
+  for (const roster of rosterByPeriod[period.start] ?? []) {
     if (blocked.has(roster.classId)) continue;
     classes.set(
       roster.classId,
       roster.students.filter((s) => s.status === null).map((s) => s.id),
     );
+    rosters.push({ classId: roster.classId, students: roster.students.map((s) => ({ id: s.id })) });
     for (const s of roster.students) keys.add(`${roster.classId}|${s.id}`);
   }
-  return { keys, classes };
+  return { keys, classes, rosters };
 }

@@ -42,6 +42,14 @@ export const SEAT_ROOM: Record<SeatKey, string> = { lab: "603호", jj: "305호" 
 export const USABLE_SEAT_KEYS: readonly SeatKey[] = ["lab", "jj"];
 
 /**
+ * **자리를 옮길 수 있는 자리** — 배치(0254a)·교시 선택(0255a) 둘 다 여기에만 연다.
+ * 지금은 랩실뿐이다(원장 지시가 `/seat/lab`이고, JJ실은 교시마다 진도 블록이 붙은 다른 표다).
+ * ⚠️ 게이트(`move-gate.ts`)와 조회(`server/period-choice.ts`)가 **같은 상수**를 봐야 한다 — 그래서
+ *    둘 다 아닌 이 순수 모듈에 둔다(서로 import하면 순환이 생겨 초기화 순서에 기댄다).
+ */
+export const MOVABLE_SEATS: readonly SeatKey[] = ["lab"];
+
+/**
  * **공개 PIN 문** — 로그인 없이 `/seat/:key`로 들어와 그 자리 오늘 명단을 찍을 수 있는 자리.
  * 랩실 + JJ실(원장 2026-08-19: *"/seat/jj 도 같은 방법으로 만들자"*).
  *
@@ -51,6 +59,23 @@ export const USABLE_SEAT_KEYS: readonly SeatKey[] = ["lab", "jj"];
  *    담임 정산에서 빠진다. 가드: `seat-axes.test.ts`.
  */
 export const PIN_SEAT_KEYS: readonly SeatKey[] = ["lab", "jj"];
+
+/**
+ * **비로그인 PIN 화면을 로그인 화면과 같게 연 자리** — 사유 메모(특이사항) 읽기·쓰기 + 다음 행선지.
+ * 원장 2026-09-10: *"seat/lab에서도 자리 출석부와 동일해야해"* + PIN에서 메모를 어떻게 할지 묻자
+ * **"읽기·쓰기 둘 다 열기"**(랩실).
+ * 🔴 **자리마다 따로 연다** — 메모엔 `병원`·`수술`·`가족여행`이 그대로 적힌다. JJ실 PIN은 이 결정 밖이라 닫혀 있다.
+ *    조회(select 분기)·화면(`publicPin`)·서버 쓰기 거절이 **이 한 배열**을 본다 — 셋이 갈리면 조회는 막았는데
+ *    화면이 적게 하거나(유령 기록), 화면은 막았는데 서버가 받는다(우회 폭, [[#77]]).
+ * ⚠️ 직원 이름(`recorded_by`)은 여기서도 PIN으로 안 내려간다 — 원장이 연 것은 메모다.
+ */
+export const PIN_NOTE_SEATS: readonly SeatKey[] = ["lab"];
+
+/**
+ * 자리 출결 **사유 메모 길이 상한** — 서버가 거절한다(`setSeatCell`). 비로그인 PIN 문도 메모를 쓰게 되면서
+ * (2026-09-10) 길이 제한 없는 text 칸이 로그인 없이 열리는 것을 막는다. 실사용 메모는 한두 줄이다.
+ */
+export const SEAT_NOTE_MAXLEN = 500;
 
 /**
  * **자리 시수** — 출결을 쓸 때 `attendance_records.seat_label`을 박는 자리(0208a). 지금은 랩실만.

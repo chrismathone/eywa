@@ -9,6 +9,7 @@ import type { IntakeChecklist } from "../intake-checklist";
 import type { PrepBriefRecord } from "../prep-brief";
 import { DEFAULT_RANGE, RANGE_MONTHS, type RangePreset } from "../range";
 import { outcomesOfStage, type BoardStageKey } from "../board-stages";
+import { countAssignedClasses } from "./assigned-classes";
 
 /** prep_brief jsonb 방어 — 형태가 맞을 때만 통과(옛 스냅샷·수기 편집으로 깨진 값이 렌더를 죽이지 않게). */
 function isPrepBriefRecord(v: unknown): v is PrepBriefRecord {
@@ -684,22 +685,12 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
 
   // 연결 학생의 미종료 수강 수(목록과 동일 기준: 상담 과목의 수강만 = 이 상담이 실제 배정됐는가).
   // 상담 과목이 있으면 그 과목 수강만 카운트(교차과목 오매몰 차단), 미상이면 전체 수강 폴백.
+  // ⚠️ 필터 본문은 [`assigned-classes.ts`](./assigned-classes.ts)로 옮겼다(2026-09-10) — 상세 화면의
+  //    '배정된 반' 카드가 **같은 조건으로 행을 편다**. 세는 곳과 펴는 곳이 갈리면 "반 배정 완료"라면서
+  //    반이 한 줄도 안 서는 화면이 된다.
   const linkedStudentId = (c as { student_id?: string | null }).student_id ?? null;
   const consultSubject = (c as { subject?: string | null }).subject ?? null;
-  let assignedClassCount = 0;
-  if (linkedStudentId) {
-    let q = supabase
-      .from("enrollments")
-      .select(consultSubject ? "*, class:class_id!inner ( subject )" : "*", {
-        count: "exact",
-        head: true,
-      })
-      .eq("student_id", linkedStudentId)
-      .or(`end_date.is.null,end_date.gte.${kstToday()}`);
-    if (consultSubject) q = q.eq("class.subject", consultSubject);
-    const { count } = await q;
-    assignedClassCount = count ?? 0;
-  }
+  const assignedClassCount = await countAssignedClasses(supabase, linkedStudentId, consultSubject);
 
   const printPayload =
     (ai?.print_payload as

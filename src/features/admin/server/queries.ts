@@ -6,9 +6,15 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WITHDRAW_CANDIDATE_DAYS, selectWithdrawCandidates } from "../withdraw-candidates";
 import { groupSameNameStudents } from "../same-name";
+import {
+  groupDuplicateCandidates,
+  type DuplicateReason,
+} from "../duplicate-candidates";
 
 export type DuplicateGroup = {
   key: string;
+  /** 이 그룹이 후보가 된 근거 — 화면이 행마다 "무엇이 같아서 후보인지"를 적는다. */
+  reasons: DuplicateReason[];
   students: {
     id: string;
     name: string;
@@ -16,14 +22,19 @@ export type DuplicateGroup = {
     school: string | null;
     status: string;
     enrolledAt: string | null;
+    /** 동기화가 이름 충돌로 자동 구분(접미사)한 학생 — 학생 상세의 '정상 확인'이 내린다. */
+    dupSuspect: boolean;
   }[];
 };
 
 /**
- * 중복 의심 학생 그룹. 두 신호를 union-find로 병합 (F6):
- *  (a) 이름+학년+학교가 모두 같음 (기존 자연키)
- *  (b) 이름+학년이 같고 학부모 연락처(숫자만)가 동일 — 학교칸만 다르거나 비어도 잡음
- * 같은 컴포넌트에 2명 이상이면 중복 후보.
+ * 중복 의심 학생 그룹. 판정·근거·정렬은 순수 모듈
+ * [`groupDuplicateCandidates`](../duplicate-candidates.ts)가 **단일 소스**이고 여기서는 재료만 읽는다.
+ *
+ * 🔴 접미사 신호(`auto_suffix`)가 여기 붙어 있는 이유는 그 파일 주석 참조 — 요약하면, 동기화가
+ *    `권민서` → `권민서A`처럼 이름을 갈라 놓으면 "이름이 글자까지 같아야 한다"는 옛 두 신호로는
+ *    **영원히** 후보가 못 돼서, 학생 상세 배너가 가리키는 이 화면이 늘 비어 있었다(원장 2026-09-10).
+ * 🔴 **자동 병합은 없다** — 이 함수는 후보만 만들고, 합치는 것은 사람이 `mergeStudents`를 누를 때다.
  */
 export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
   const supabase = await createClient();
@@ -40,66 +51,43 @@ export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
     status: string;
     enrolled_at: string | null;
     parent_phone: string | null;
+    dup_suspect: boolean | null;
   }>((from, to) =>
     supabase
       .from("students")
-      .select("id, name, grade, school, status, enrolled_at, parent_phone")
+      .select("id, name, grade, school, status, enrolled_at, parent_phone, dup_suspect")
       .neq("status", "withdrawn")
       .order("id")
       .range(from, to),
   );
   if (data.length === 0) return [];
 
-  // 같은 키를 공유하는 학생들을 엮을 버킷 구성
-  const buckets = new Map<string, string[]>();
-  const addToBucket = (key: string, id: string) => {
-    const arr = buckets.get(key) ?? [];
-    arr.push(id);
-    buckets.set(key, arr);
-  };
-  for (const r of data) {
-    const base = `${r.name.toLowerCase().trim()}::${r.grade ?? ""}`;
-    addToBucket(`nat::${base}::${r.school ?? ""}`, r.id);
-    const phone = (r.parent_phone ?? "").replace(/\D/g, "");
-    if (phone) addToBucket(`ph::${base}::${phone}`, r.id);
-  }
+  const groups = groupDuplicateCandidates(
+    data.map((r) => ({
+      id: r.id,
+      name: r.name,
+      grade: r.grade,
+      school: r.school,
+      parentPhone: r.parent_phone,
+      dupSuspect: r.dup_suspect === true,
+      status: r.status,
+      enrolledAt: r.enrolled_at,
+    })),
+  );
 
-  // union-find: 버킷 내 학생들을 같은 컴포넌트로 합침
-  const parent = new Map<string, string>(data.map((r) => [r.id, r.id]));
-  const find = (x: string): string => {
-    let root = x;
-    while (parent.get(root) !== root) root = parent.get(root)!;
-    while (parent.get(x) !== root) {
-      const next = parent.get(x)!;
-      parent.set(x, root);
-      x = next;
-    }
-    return root;
-  };
-  const union = (a: string, b: string) => parent.set(find(a), find(b));
-  for (const ids of buckets.values()) {
-    for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
-  }
-
-  // 컴포넌트별로 학생 모으기 → 2명 이상만
-  const byId = new Map(data.map((r) => [r.id, r]));
-  const comps = new Map<string, DuplicateGroup>();
-  for (const r of data) {
-    const root = find(r.id);
-    const g = comps.get(root) ?? { key: root, students: [] };
-    const s = byId.get(r.id)!;
-    g.students.push({
+  return groups.map((g) => ({
+    key: g.key,
+    reasons: g.reasons,
+    students: g.students.map((s) => ({
       id: s.id,
       name: s.name,
       grade: s.grade,
       school: s.school,
       status: s.status,
-      enrolledAt: s.enrolled_at,
-    });
-    comps.set(root, g);
-  }
-
-  return Array.from(comps.values()).filter((g) => g.students.length >= 2);
+      enrolledAt: s.enrolledAt,
+      dupSuspect: s.dupSuspect === true,
+    })),
+  }));
 }
 
 /** '같은 이름' 섹션의 한 줄 — 데스크가 **같은 사람인지 다른 사람인지** 고를 근거를 나란히 싣는다. */
@@ -137,10 +125,11 @@ export async function findSameNameStudents(): Promise<SameNameStudentGroup[]> {
       school: string | null;
       status: string;
       parent_phone: string | null;
+      dup_suspect: boolean | null;
     }>((from, to) =>
       supabase
         .from("students")
-        .select("id, name, grade, school, status, parent_phone")
+        .select("id, name, grade, school, status, parent_phone, dup_suspect")
         .neq("status", "withdrawn")
         .order("id")
         .range(from, to),
@@ -155,6 +144,8 @@ export async function findSameNameStudents(): Promise<SameNameStudentGroup[]> {
       grade: r.grade,
       school: r.school,
       parentPhone: r.parent_phone,
+      // 통합 섹션이 접미사 신호로 이미 잡는 쌍인지 판단하려면 이 표식이 필요하다(두 섹션 중복 노출 방지).
+      dupSuspect: r.dup_suspect === true,
       status: r.status,
     })),
   );

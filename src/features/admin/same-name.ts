@@ -18,13 +18,20 @@
  *    기존 중복 의심 쿼리와 같은 결이다.
  */
 
-/** 판정에 필요한 최소 재료 — 화면이 어떤 필드를 더 싣든 이 판정은 이 넷만 본다. */
+import { duplicateReasons } from "./duplicate-candidates";
+
+/** 판정에 필요한 최소 재료 — 화면이 어떤 필드를 더 싣든 이 판정은 이것만 본다. */
 export type SameNameInput = {
   id: string;
   name: string;
   grade: string | null;
   school: string | null;
   parentPhone: string | null;
+  /**
+   * 동기화 자동 접미사 표식(0078a). 통합 섹션의 세 번째 신호(`auto_suffix`)가 이 값을 보므로 **그쪽이
+   * 잡는 쌍인지**를 정확히 판단하려면 함께 넘겨야 한다(안 넘기면 그 쌍이 두 섹션에 동시에 뜬다).
+   */
+  dupSuspect?: boolean;
 };
 
 /**
@@ -41,19 +48,14 @@ export function sameNameKey(name: string): string {
 /**
  * 기존 **중복 의심**(통합 섹션)이 이미 잡고 있는 쌍인가.
  *
- * 🔑 [`findDuplicateStudents`](./server/queries.ts)의 두 신호를 **그대로** 옮긴 것이다(이름+학년+학교 /
- *    이름+학년+학부모 연락처). 같은 쌍이 두 섹션에 뜨면 데스크는 통합을 눌러야 할지 개명을 해야 할지
- *    모른다 — 그래서 여기서 뺀다.
- * ⚠️ 이름 비교는 **그쪽 규약(trim+소문자)** 을 쓴다. 이쪽 정규화(공백 접기)로 판단하면, 중복 의심이
- *    실제로는 못 잡는 쌍(`김 수아` vs `김수아`)을 "이미 잡혔다"고 착각해 **양쪽에서 사라진다**.
+ * 🔑 판정은 [`duplicateReasons`](./duplicate-candidates.ts) **단일 소스**에 위임한다 — 종전엔 그쪽 두
+ *    신호를 여기에 손으로 베껴 뒀는데, 2026-09-10에 통합 쪽에 세 번째 신호(접미사)가 붙으면서 사본이
+ *    한 발 뒤처지면 같은 쌍이 두 섹션에 동시에 뜨는 구조였다.
+ * ⚠️ 이름 비교 규약도 그쪽 것을 그대로 쓴다(trim+소문자). 이쪽 정규화(공백 접기)로 판단하면, 중복
+ *    의심이 실제로는 못 잡는 쌍(`김 수아` vs `김수아`)을 "이미 잡혔다"고 착각해 **양쪽에서 사라진다**.
  */
 function alreadySuspectedPair(a: SameNameInput, b: SameNameInput): boolean {
-  const base = (s: SameNameInput) => `${s.name.trim().toLowerCase()}::${s.grade ?? ""}`;
-  if (base(a) !== base(b)) return false;
-  if ((a.school ?? "") === (b.school ?? "")) return true; // (a) 이름+학년+학교
-  const digits = (v: string | null) => (v ?? "").replace(/\D/g, "");
-  const pa = digits(a.parentPhone);
-  return pa !== "" && pa === digits(b.parentPhone); // (b) 이름+학년+연락처
+  return duplicateReasons(a, b).length > 0;
 }
 
 /** 한 그룹 = 같은 이름을 쓰는 학생들(2명 이상). `key`는 정규화된 이름이라 목록에서 안정적이다. */

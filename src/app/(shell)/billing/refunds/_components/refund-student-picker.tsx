@@ -65,7 +65,7 @@ export function RefundStudentPicker({ formRef }: { formRef: React.RefObject<HTML
     setNote({
       text: skipped.length
         ? `${head} — 이미 입력된 ${skipped.map(labelOf).join("·")}은(는) 그대로 뒀습니다.`
-        : `${head}. 환불사유·차감내역·환불금액은 직접 입력하세요.`,
+        : `${head}. 환불사유·미환불금액·환불금액은 직접 입력하세요.`,
       overwrite: skipped.length ? values : undefined,
     });
   }

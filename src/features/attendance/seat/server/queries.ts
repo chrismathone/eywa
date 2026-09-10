@@ -1,30 +1,22 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
-import { groupByStart, hhmm, isPayrollSeat, SEAT_DB_LABEL, type SeatKey, type SeatPeriod, type SeatSlot } from "../seat";
-
-/** 지난 결석을 얼마나 거슬러 볼 것인가 — 그 반의 직전 몇 주. 길게 잡으면 옛 결석이 계속 붙어 다닌다. */
-const PREV_ABSENCE_DAYS = 30;
-
-type PrevAbsenceRow = {
-  class_id: string;
-  student_id: string;
-  session_date: string;
-  status: string;
-  note: string | null;
-};
-
-/** "YYYY-MM-DD" ± n일 — KST 날짜 문자열끼리만 다룬다(Date로 파싱하면 타임존이 하루를 민다). */
-function shiftDays(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const t = Date.UTC(y, (m ?? 1) - 1, d ?? 1) + days * 86400000;
-  return new Date(t).toISOString().slice(0, 10);
-}
+import {
+  groupByStart,
+  hhmm,
+  isPayrollSeat,
+  PIN_NOTE_SEATS,
+  SEAT_DB_LABEL,
+  type SeatKey,
+  type SeatPeriod,
+  type SeatSlot,
+} from "../seat";
+import type { SeatVisiting } from "../period-choice";
 
 export type SeatStudent = {
   id: string;
@@ -38,19 +30,11 @@ export type SeatStudent = {
   /** 자리에서 찍힌 기록인가 — 반 출석부에서 찍힌 기록과 구분해 보여준다(시수 귀속이 다르다). */
   fromSeat: boolean;
   /**
-   * 그 칸에 적힌 사유 메모(`attendance_records.note`) — 카드 마우스 오버로만 보인다(원장 2026-08-28).
-   * 🔴 **비로그인 PIN 경로는 항상 null이다** — 아래 select 분기 주석 참조(병원·수술·가족 일정이 그대로 적힌다).
+   * 그 칸에 적힌 사유 메모(`attendance_records.note`) — 카드 아래 한 줄 + 마우스 오버(원장 2026-08-28·09-10).
+   * 🔴 **비로그인 PIN 경로는 `PIN_NOTE_SEATS`(랩실)만 채운다** — 원장 2026-09-10 *"읽기·쓰기 둘 다 열기"*.
+   *    그 밖의 자리 PIN은 여전히 null이다(병원·수술·가족 일정이 그대로 적힌다, 아래 select 분기).
    */
   note: string | null;
-  /**
-   * **지난 결석**(같은 반, 오늘 이전 30일 안의 가장 최근 결석·공결) — 원장 2026-09-08
-   * *"JJ와 LAB 수업의 경우 이전수업이 결석인 경우에 사유를 확인할 수 있도록"*.
-   *
-   * 🔑 "직전 수업"이 아니라 **"지난 결석"**으로 잡는다 — 직전 수업을 정확히 집으려면 그 반의 전 기록을
-   *    끌어와야 하고(90일 × 명단 = 1000행 넘김, B2), 화면 문구도 `지난 결석 9/4`라 사실 그대로다.
-   * 🔴 **비로그인 PIN 경로는 항상 null** — 사유엔 `병원`·`수술`·`가족여행`이 적힌다(위 note와 같은 규약).
-   */
-  prevAbsence: { date: string; note: string | null } | null;
   /**
    * JJ 전용 칸 — 영어 시트 JJ 폼과 **같은 행**(`class_sheet_student_marks`). 랩실은 항상 null.
    * 🔴 `attitude`는 marks의 `status`(태도 5단 눈금)다 — 위 `status`(출결)와 **다른 축**이다.
@@ -66,7 +50,21 @@ export type SeatClassRoster = {
   className: string;
   /** "HH:MM" — 같은 교시라도 반마다 다를 수 있다. */
   end: string;
+  /**
+   * 학원설정이 아니라 **반이 들고 있는 색**(`classes.bg_color`/`text_color`, ijw 패리티) — 시간표
+   * 카드 헤더가 쓰는 것과 **같은 소스**다(원장 2026-09-10 *"반이름은 설정된 반색상으로 색칠해주고"*).
+   * 🔴 null이면 칠하지 않는다 — 지어낸 색은 반을 잘못 알아보게 만든다.
+   */
+  bgColor: string | null;
+  textColor: string | null;
   students: SeatStudent[];
+  /**
+   * **다른 시간에서 옮겨 온 학생 묶음**이면 원래 반의 자리 교시들(교시 선택 0255a, 원장 2026-09-10 *"다른
+   * 시간으로 이동"*). 이 교시엔 그 반 슬롯이 없으므로 `end`는 원래 교시의 끝이다(화면이 안 적는다).
+   * 🔴 반 id·이름·색은 **원래 반** 것이다 — 출결이 원래 반으로 저장되므로 화면도 그 반 이름을 단다.
+   * 조회(`loadSeatDay`)는 이 칸을 채우지 않는다 — [`applySeatPeriodChoicesByPeriod`](../period-choice.ts)가 만든다.
+   */
+  visiting?: SeatVisiting | null;
 };
 
 export type SeatDay = {
@@ -75,6 +73,28 @@ export type SeatDay = {
   periods: SeatPeriod[];
   /** 교시 start("HH:MM") → 반별 명단. */
   rosterByPeriod: Record<string, SeatClassRoster[]>;
+  /**
+   * 반 id → 그 날 이 자리에 걸린 교시 시작시각(오름차순, 중복 없음).
+   * 🔑 **교시 선택**(0255a)의 재료다 — 하루에 자리 수업이 두 번 있는 반에서만 고를 것이 생긴다
+   *    (실측 8개 반×요일). 새 조회가 아니라 위 `periods`를 반 축으로 뒤집은 것이다.
+   */
+  slotsByClass: Record<string, string[]>;
+  /**
+   * `반id|학생id` → 그 날 이 자리에서 **이미 기록이 있는** 교시들.
+   * 🔴 교시 선택이 **사실을 못 덮게** 하는 재료다([`period-choice.ts`](../period-choice.ts)) — 기록이 있는
+   *    교시에서는 감추지 않는다. 교시가 안 붙은 날 단위 행(`slot_start` null)은 담지 않는다.
+   */
+  markedSlotsByCell: Record<string, string[]>;
+  /**
+   * 반 id → 그 날 이 반의 **다른**(이 자리가 아닌) 수업 시작 — 교시 이동의 **겹침 방지** 재료.
+   * 🔴 그 시각으로 옮기면 자리 기록과 반 수업 기록이 같은 `(반·학생·날짜·교시)` 키가 되어 서로를 덮는다.
+   */
+  busyStartsByClass: Record<string, string[]>;
+  /**
+   * `반id|학생id` → 교시 → **그 반의 이 자리 교시 밖**에서 이미 찍힌 이 자리 기록(다른 시간으로 옮겨 가서
+   * 찍힌 것). 사실이 규칙을 이긴다 — 교시 선택이 지워져도 이 기록은 그 교시에 선다.
+   */
+  offSlotByCell: Record<string, Record<string, SeatStudent>>;
 };
 
 function toSeatStudent(
@@ -87,7 +107,6 @@ function toSeatStudent(
         recorder?: { display_name: string | null }[] | { display_name: string | null };
       }
     | undefined,
-  prev?: { date: string; note: string | null } | null,
 ): SeatStudent {
   const recorder = Array.isArray(rec?.recorder) ? rec.recorder[0] : rec?.recorder;
   return {
@@ -99,7 +118,6 @@ function toSeatStudent(
     recordedBy: recorder?.display_name ?? null,
     fromSeat: !!rec?.seat_label,
     note: rec?.note ?? null,
-    prevAbsence: prev ?? null,
     attitude: null,
     listeningLevel: null,
     memorizedWords: null,
@@ -154,17 +172,30 @@ async function loadSeatDay(
   const { data: rawSlots } = await slotQ;
 
   const seatRows = (rawSlots ?? []).filter((r) => specialSlotLabel(r.slot_teacher_label) === wantLabel);
-  if (seatRows.length === 0) return { date, periods: [], rosterByPeriod: {} };
+  if (seatRows.length === 0)
+    return {
+      date,
+      periods: [],
+      rosterByPeriod: {},
+      slotsByClass: {},
+      markedSlotsByCell: {},
+      busyStartsByClass: {},
+      offSlotByCell: {},
+    };
 
   const classIds = [...new Set(seatRows.map((r) => r.class_id as string))];
 
   // 반 이름 · 수강생 · 그날 출결 — 서로 독립이라 병렬(B4). id 수십 개까지 갈 수 있어 청크 헬퍼(B3).
-  const [classes, enrollments, records, prevAbsenceRows] = await Promise.all([
-    fetchInChunks<{ id: string; class_name: string }>(classIds, (chunk) => {
-      let q = supabase.from("classes").select("id, class_name").in("id", chunk);
-      if (tenantId) q = q.eq("tenant_id", tenantId);
-      return q;
-    }),
+  const [classes, enrollments, records] = await Promise.all([
+    // 🔵 `bg_color`/`text_color`는 **이미 있는 컬럼**(0054a 계열)이라 새 스키마를 요구하지 않는다([[#95]]).
+    fetchInChunks<{ id: string; class_name: string; bg_color: string | null; text_color: string | null }>(
+      classIds,
+      (chunk) => {
+        let q = supabase.from("classes").select("id, class_name, bg_color, text_color").in("id", chunk);
+        if (tenantId) q = q.eq("tenant_id", tenantId);
+        return q;
+      },
+    ),
     // ⚠️ PostgREST 임베드는 타입상 **배열**로 온다(실제로는 1건) — 아래에서 첫 원소로 접는다.
     fetchInChunks<{
       class_id: string;
@@ -203,65 +234,46 @@ async function loadSeatDay(
       status: "present" | "absent" | "late";
       seat_label: string | null;
       recorded_at: string;
-      /** 사유 메모 — 로그인 화면에서만 채워진다(공개 PIN은 조회조차 안 한다, 아래 분기 주석). */
+      /** 사유 메모 — 로그인 화면 + `PIN_NOTE_SEATS`(랩실) PIN에서만 채워진다(아래 분기 주석). */
       note?: string | null;
       /** 로그인 화면에서만 채워진다 — 공개(PIN) 경로는 아예 조회하지 않는다(아래 주석). */
       recorder?: { display_name: string | null }[];
     }>(classIds, (chunk) =>
-      // 🔴 공개(PIN) 경로에선 **직원 이름도 사유 메모도 아예 안 가져온다** — 지금 화면이 안 그린다고 해도,
-      //    로그인 없이 열리는 페이지로 직원 신상·학생 신상이 건너가는 것 자체를 막는다(나중에 누가 그리면 끝).
-      //    ⚠️ 사유 메모(`note`)엔 `병원`·`수술`·`가족여행`이 그대로 적혀 있다(실데이터) — 직원 이름보다
-      //       오히려 더 민감하다. 로그인 분기에만 싣는다.
+      // 🔴 공개(PIN) 경로에선 **직원 이름은 아예 안 가져온다** — 로그인 없이 열리는 페이지로 직원 신상이 건너가는
+      //    것 자체를 막는다(나중에 누가 그리면 끝).
+      // 🔴 **사유 메모(`note`)는 `PIN_NOTE_SEATS`(랩실) PIN에서만** 싣는다 — 원장 2026-09-10 *"seat/lab에서도 자리
+      //    출석부와 동일해야해"* → 메모를 PIN에서 *"읽기·쓰기 둘 다 열기"*. 메모엔 `병원`·`수술`·`가족여행`이 그대로
+      //    적혀 있어(실데이터) **자리마다 따로** 연다 — 그 밖의 자리 PIN은 여전히 조회조차 안 한다(화면이 안 그려도
+      //    페이지 소스로 건너가므로 "안 그리면 된다"가 아니다).
       //    tenantId가 넘어온 경로 = admin 클라이언트 = 공개 경로다.
       //    ⚠️ select 문자열을 삼항으로 만들면 PostgREST 타입 파서가 못 읽는다 → 분기를 통째로 나눈다.
-      tenantId
+      tenantId && PIN_NOTE_SEATS.includes(seat)
         ? supabase
             .from("attendance_records")
-            .select("id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at")
+            .select("id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, note")
             .in("class_id", chunk)
             .eq("session_date", date)
             .eq("tenant_id", tenantId)
-        : supabase
-            .from("attendance_records")
-            .select(
-              "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, note, recorder:recorded_by ( display_name )",
-            )
-            .in("class_id", chunk)
-            .eq("session_date", date),
+        : tenantId
+          ? supabase
+              .from("attendance_records")
+              .select("id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at")
+              .in("class_id", chunk)
+              .eq("session_date", date)
+              .eq("tenant_id", tenantId)
+          : supabase
+              .from("attendance_records")
+              .select(
+                "id, class_id, student_id, session_date, slot_start, status, seat_label, recorded_at, note, recorder:recorded_by ( display_name )",
+              )
+              .in("class_id", chunk)
+              .eq("session_date", date),
     ),
-    /**
-     * **지난 결석**(오늘 이전 30일) — 사유를 그 자리에서 확인하려고 함께 받는다.
-     * 🔴 공개(PIN) 경로는 **아예 조회하지 않는다** — 사유엔 병원·수술·가족 일정이 적힌다(위 분기와 같은 규약).
-     * ⚠️ 결석·공결 행만 받는다(전 기록을 받으면 명단 × 30일이 1000행을 넘는다, B2). 청크 안 페이징까지.
-     */
-    tenantId
-      ? Promise.resolve([] as PrevAbsenceRow[])
-      : fetchAllPagedInChunks<PrevAbsenceRow>(classIds, (chunk, from, to) =>
-          supabase
-            .from("attendance_records")
-            .select("class_id, student_id, session_date, status, note")
-            .in("class_id", chunk)
-            .in("status", ["absent", "excused"])
-            .gte("session_date", shiftDays(date, -PREV_ABSENCE_DAYS))
-            .lt("session_date", date)
-            .order("id", { ascending: true })
-            .range(from, to),
-        ),
   ]);
 
-  /** (반|학생) → 가장 최근 결석. 같은 날 여러 교시면 사유가 적힌 쪽을 남긴다. */
-  const prevAbsenceByKey = new Map<string, { date: string; note: string | null }>();
-  for (const r of prevAbsenceRows) {
-    const key = `${r.class_id}|${r.student_id}`;
-    const cur = prevAbsenceByKey.get(key);
-    if (!cur || r.session_date > cur.date) {
-      prevAbsenceByKey.set(key, { date: r.session_date, note: r.note ?? null });
-    } else if (r.session_date === cur.date && !cur.note && r.note) {
-      prevAbsenceByKey.set(key, { date: cur.date, note: r.note });
-    }
-  }
-
   const nameById = new Map(classes.map((c) => [c.id, c.class_name]));
+  /** 반 색 — 시간표 카드 헤더와 같은 소스(`classes.bg_color`/`text_color`). 없으면 안 칠한다. */
+  const colorById = new Map(classes.map((c) => [c.id, { bg: c.bg_color, text: c.text_color }]));
   const slots: SeatSlot[] = seatRows.map((r) => ({
     classId: r.class_id as string,
     className: nameById.get(r.class_id as string) ?? "(이름 없는 반)",
@@ -320,6 +332,60 @@ async function loadSeatDay(
   const periodCountByClass = new Map<string, number>();
   for (const p of periods)
     for (const s of p.slots) periodCountByClass.set(s.classId, (periodCountByClass.get(s.classId) ?? 0) + 1);
+  /**
+   * 반 → 그 날 이 자리 교시들(교시 선택 0255a의 재료). `periods`가 이미 시작시각 오름차순이라
+   * 이 배열도 정렬돼 있고, 같은 교시에 그 반이 두 줄이어도 한 번만 담는다.
+   */
+  const slotsByClass: Record<string, string[]> = {};
+  for (const p of periods)
+    for (const s of p.slots) {
+      const list = (slotsByClass[s.classId] ??= []);
+      if (!list.includes(p.start)) list.push(p.start);
+    }
+  /** (반|학생) → 이미 기록이 있는 교시. 날 단위 행(교시 없음)은 담지 않는다 — 감출지 판정의 근거가 못 된다. */
+  const markedSlotsByCell: Record<string, string[]> = {};
+  for (const r of effective) {
+    const slot = hhmm(r.slot_start);
+    if (!slot) continue;
+    const list = (markedSlotsByCell[`${r.class_id}|${r.student_id}`] ??= []);
+    if (!list.includes(slot)) list.push(slot);
+  }
+  /**
+   * 반 → 그 날 이 반의 **다른** 수업 시작(이 자리가 아닌 교시) — 교시 이동이 반 수업과 겹치지 않게.
+   * 🔑 새 조회가 아니다 — 위에서 받은 그 요일 라벨 슬롯(`rawSlots`)을 반 축으로 접은 것이다.
+   * ⚠️ 라벨이 없는 교시(담당만 있는 슬롯)는 그 조회에 안 들어온다. 실측 2026-09-10 랩실 반 15개는 전부 영어이고
+   *    유효 슬롯 145개가 전부 라벨을 들고 있다 — 라벨 없는 반이 랩실을 쓰게 되면 여기를 다시 볼 것.
+   */
+  const seatClassIdSet = new Set(classIds);
+  const busyStartsByClass: Record<string, string[]> = {};
+  for (const r of rawSlots ?? []) {
+    const classId = r.class_id as string;
+    if (!seatClassIdSet.has(classId)) continue;
+    if (specialSlotLabel(r.slot_teacher_label) === wantLabel) continue;
+    const start = hhmm(r.start_time as string);
+    if (!start) continue;
+    const list = (busyStartsByClass[classId] ??= []);
+    if (!list.includes(start)) list.push(start);
+  }
+  /**
+   * (반|학생) → 교시 → **그 반의 이 자리 교시 밖**에서 이미 찍힌 이 자리 기록(다른 시간으로 옮겨 가서 찍힌 것).
+   * 🔴 **이 자리 라벨이 박힌 기록만** — 반 수업 기록(라벨 없음)을 자리 방문으로 읽으면 안 된다. 그래서 라벨을
+   *    안 박는 비급여 자리(JJ실)엔 늘 비어 있다(JJ실은 교시를 옮기지 않는다).
+   * 🔴 **그날 이 자리 명단에 있는 학생만**(`studentsByClass`) — 명단 밖 학생은 이 경로로도 안 들어온다.
+   */
+  const periodStartSet = new Set(periods.map((p) => p.start));
+  const offSlotByCell: Record<string, Record<string, SeatStudent>> = {};
+  for (const r of effective) {
+    const slot = hhmm(r.slot_start);
+    if (!slot || !periodStartSet.has(slot)) continue;
+    if (specialSlotLabel(r.seat_label) !== wantLabel) continue;
+    if ((slotsByClass[r.class_id] ?? []).includes(slot)) continue;
+    // ⚠️ 상태로는 거르지 않는다 — 제 교시 칸(`recByKey`)과 같은 규약이다. 반 출석부가 그 칸을 조퇴·공결로
+    //    고쳐도 자리 라벨은 남으므로, 여기서 거르면 그 기록이 아무도 안 보는 칸에 숨고 학생이 제 교시에 되살아난다.
+    const base = (studentsByClass.get(r.class_id) ?? []).find((s) => s.id === r.student_id);
+    if (!base) continue;
+    (offSlotByCell[`${r.class_id}|${r.student_id}`] ??= {})[slot] = toSeatStudent(base, r);
+  }
   const dayLevelFallback = (classId: string, studentId: string) => {
     if (isPayrollSeat(seat)) return undefined;
     if ((periodCountByClass.get(classId) ?? 0) !== 1) return undefined;
@@ -335,17 +401,18 @@ async function loadSeatDay(
       classId: slot.classId,
       className: slot.className,
       end: hhmm(slot.end),
+      bgColor: colorById.get(slot.classId)?.bg ?? null,
+      textColor: colorById.get(slot.classId)?.text ?? null,
       students: (studentsByClass.get(slot.classId) ?? [])
         .map((s) =>
           toSeatStudent(
             s,
             recByKey.get(`${slot.classId}|${s.id}|${p.start}`) ?? dayLevelFallback(slot.classId, s.id),
-            prevAbsenceByKey.get(`${slot.classId}|${s.id}`) ?? null,
           ),
         )
         .sort((a, b) => (a.grade ?? "").localeCompare(b.grade ?? "", "ko") || a.name.localeCompare(b.name, "ko")),
     }));
   }
 
-  return { date, periods, rosterByPeriod };
+  return { date, periods, rosterByPeriod, slotsByClass, markedSlotsByCell, busyStartsByClass, offSlotByCell };
 }

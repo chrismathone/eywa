@@ -35,6 +35,8 @@ const rosters: SeatClassRoster[] = [
     classId: "c1",
     className: "중등E_초5 의치대",
     end: "17:00",
+    bgColor: null,
+    textColor: null,
     students: [
       {
         id: "s1",
@@ -45,7 +47,6 @@ const rosters: SeatClassRoster[] = [
         recordedBy: null,
         fromSeat: false,
       note: null,
-    prevAbsence: null,
         attitude: null,
         listeningLevel: null,
         memorizedWords: null,

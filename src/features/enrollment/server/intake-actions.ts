@@ -10,7 +10,7 @@ import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canonicalSchoolName } from "@/features/schools/school-name";
 import { generatePrepBriefOnIntake } from "@/features/enrollment/server/prep-generate";
-import { logAction } from "@/features/audit/server/log";
+import { logAction, logActionAs } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { parseIntakeChecklist } from "@/features/enrollment/intake-checklist-parse";
@@ -277,6 +277,20 @@ export async function submitPublicIntake(
   if (inserted?.id) {
     const consultationId = inserted.id as string;
     const tenantId = tok.tenant_id as string;
+    // 감사로그 — 학부모는 계정이 없어 logAction(세션 필요)이 no-op이다 → 세션 없는 쓰기의 단일 진입점
+    // `logActionAs`(admin + 명시 tenant, best-effort)로 남긴다. 테넌트는 위에서 **검증한 토큰**에서 온다.
+    // 🔴 actor_id는 비운다: 계정 없는 사람을 누군가의 이름으로 적지 않는다(행위자 칸은 '학부모(QR 접수)').
+    // 이 접수가 기존 학생에 **자동 연결**됐다면 그 사실은 DB 트리거가 따로 남긴다(consultation_autolink, 0258a)
+    // — 2026-09-10 김근우 건은 접수·연결 어느 쪽도 흔적이 없어 무슨 일이 있었는지 되짚지 못했다.
+    await logActionAs(
+      { tenantId, actorName: "학부모(QR 접수)" },
+      {
+        action: "enrollment_consultation_intake",
+        targetType: "enrollment_consultations",
+        targetLabel: prospectName,
+        metadata: { consultationId, subject },
+      },
+    );
     after(() => generatePrepBriefOnIntake(consultationId, tenantId));
   }
 

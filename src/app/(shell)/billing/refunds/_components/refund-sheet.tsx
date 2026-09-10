@@ -221,9 +221,9 @@ export function RefundSheet({
             </td>
           </tr>
           <tr>
-            <th className={head}>차감내역</th>
+            <th className={head}>미환불금액</th>
             <td className={cell} colSpan={2}>
-              {areaField("r_deductionDetails", r.deductionDetails, 4, "차감 내역(수강 회차·교재비 등)")}
+              {areaField("r_deductionDetails", r.deductionDetails, 4, "미환불금액(수강 회차·교재비 등)")}
             </td>
           </tr>
           <tr>

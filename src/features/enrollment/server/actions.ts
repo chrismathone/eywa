@@ -28,6 +28,7 @@ import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/re
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -192,6 +193,14 @@ export async function createEnrollmentConsultation(
 
   if (error || !data) return { error: error?.message ?? "저장 실패" };
 
+  // 등록상담 전수 감사로그(2026-09-10 김근우 건) — 등록상담은 작성·수정·상태·삭제 어느 것도 흔적이 없었다.
+  await logAction({
+    action: "enrollment_consultation_create",
+    targetType: "enrollment_consultations",
+    targetLabel: parsed.data.prospectName,
+    metadata: { consultationId: data.id, subject: parsed.data.subject || null },
+  });
+
   revalidatePath("/enrollment");
   redirect(`/enrollment/${data.id}`);
 }
@@ -239,6 +248,14 @@ async function createConsultationWithAudio(
     .select("id")
     .single();
   if (insertErr || !consult) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
+
+  // 전사 제출이 실패해도 상담 행은 이미 생겼다 — 생성 사실은 여기서 남긴다(2026-09-10 김근우 건).
+  await logAction({
+    action: "enrollment_consultation_create",
+    targetType: "enrollment_consultations",
+    targetLabel: data.prospectName,
+    metadata: { consultationId: consult.id, subject: data.subject || null, withAudio: true },
+  });
 
   const err = await insertRecordingAndTranscribe(admin, {
     tenantId: user.tenantId,
@@ -408,7 +425,11 @@ export async function updateEnrollmentConsultation(
   // 기존 learning_history를 읽어 prevAcademy/lastScore만 갱신(AI 파생 weakSubjects 등 보존).
   const { data: existing } = await supabase
     .from("enrollment_consultations")
-    .select("learning_history, outcome, from_public_intake")
+    // 뒤의 이름·학교…상담 내용 칸 = 감사로그 "무엇이 바뀌었나"의 저장 전 값
+    // (consultation-audit.ts CONSULTATION_AUDIT_FIELDS와 같은 목록 — 가드 테스트가 잠근다).
+    .select(
+      "learning_history, outcome, from_public_intake, prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, student_phone, subject, consultant_id, parent_request",
+    )
     .eq("id", id)
     .single();
   const lh: Record<string, unknown> = { ...((existing?.learning_history as Record<string, unknown>) ?? {}) };
@@ -423,10 +444,11 @@ export async function updateEnrollmentConsultation(
     !!existing?.from_public_intake &&
     ["pending", "scheduled"].includes(String(existing?.outcome ?? ""));
 
+  const row = buildConsultationRow(parsed.data);
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({
-      ...buildConsultationRow(parsed.data),
+      ...row,
       learning_history: Object.keys(lh).length > 0 ? lh : null,
       ...(promoteToConsulted ? { outcome: "consulted" } : {}),
       updated_at: new Date().toISOString(),
@@ -434,6 +456,22 @@ export async function updateEnrollmentConsultation(
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // 감사로그(2026-09-10 김근우 건) — 이름·학교·학년·보호자는 자동 연결의 키라 전후 값까지, 연락처·상담 내용은
+  // 항목 이름만. 아무것도 안 바뀐 저장(그냥 '저장'을 누름)은 남기지 않는다(감사로그가 소음에 묻힌다).
+  const summary = summarizeConsultationChanges(existing, row);
+  if (summary.changed.length > 0 || promoteToConsulted) {
+    await logAction({
+      action: "enrollment_consultation_update",
+      targetType: "enrollment_consultations",
+      targetLabel: parsed.data.prospectName,
+      metadata: {
+        consultationId: id,
+        ...summary,
+        ...(promoteToConsulted ? { outcomeTo: "consulted" } : {}),
+      },
+    });
+  }
 
   // 수정 중 새 녹음 첨부(QR 접수건을 상담사가 수정하며 상담 녹음) — 전사·13섹션 분석 재실행.
   const audioPath = String(formData.get("audioPath") ?? "").trim();
@@ -493,7 +531,7 @@ export async function setEnrollmentOutcome(
   // 따라서 전환 판정은 outcome==='enrolled'만(연결 여부로 상태 이동을 막지 않음).
   const { data: cur } = await supabase
     .from("enrollment_consultations")
-    .select("outcome")
+    .select("outcome, prospect_name")
     .eq("id", id)
     .single();
   if (!cur) return { error: "상담을 찾을 수 없습니다" };
@@ -509,6 +547,17 @@ export async function setEnrollmentOutcome(
     .update({ outcome, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return { error: error.message };
+
+  // 감사로그(2026-09-10 김근우 건 — 누가 '재원생 등록'으로 바꿨는지 되짚을 수 없었다). 칸반 드래그도 이 액션이다.
+  // 같은 상태로 다시 저장한 건 바뀐 게 없으니 남기지 않는다.
+  if (cur.outcome !== outcome) {
+    await logAction({
+      action: "enrollment_consultation_outcome",
+      targetType: "enrollment_consultations",
+      targetLabel: cur.prospect_name ?? null,
+      metadata: { consultationId: id, from: cur.outcome, to: outcome },
+    });
+  }
 
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${id}`);
@@ -567,6 +616,19 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
   if (Object.keys(d).length === 0) return { error: "바꿀 칸이 없습니다" };
 
   const supabase = await createClient();
+  // 감사로그용 저장 전 값(2026-09-10 김근우 건) — 아래 과목·상담사 검증과 **독립**이라 먼저 띄워 두고(B4) 저장
+  // 직전에 받는다. 조회가 실패해도 저장은 막지 않는다(기록만 비고, 요약 함수는 모르는 걸 추측하지 않는다).
+  const beforeRead = supabase
+    .from("enrollment_consultations")
+    .select(
+      "prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, student_phone, subject, consultant_id, parent_request",
+    )
+    .eq("id", id)
+    .maybeSingle()
+    .then(
+      (r) => r.data,
+      () => null,
+    );
   const row: Record<string, unknown> = {};
   if (d.prospectName !== undefined) row.prospect_name = d.prospectName;
   if (d.prospectSchool !== undefined) row.prospect_school = canonicalSchoolName(d.prospectSchool);
@@ -593,6 +655,8 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
     row.consultant_id = d.consultantId;
   }
 
+  const before = await beforeRead;
+
   // RLS 밖(다른 학원)·삭제된 id면 0행 갱신인데 에러가 없다 — select로 실제로 바뀐 행을 확인한다.
   const { data: updated, error } = await supabase
     .from("enrollment_consultations")
@@ -602,6 +666,16 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
     .maybeSingle();
   if (error) return { error: error.message };
   if (!updated) return { error: "상담을 찾을 수 없습니다" };
+
+  const summary = summarizeConsultationChanges(before, row);
+  if (summary.changed.length > 0) {
+    await logAction({
+      action: "enrollment_consultation_update",
+      targetType: "enrollment_consultations",
+      targetLabel: (typeof row.prospect_name === "string" ? row.prospect_name : null) ?? before?.prospect_name ?? null,
+      metadata: { consultationId: id, ...summary, via: "list" },
+    });
+  }
 
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${id}`);
@@ -633,7 +707,7 @@ export async function deleteEnrollmentConsultation(
   // RLS 스코프 — 같은 테넌트 상담만 조회/삭제. 음성 경로 정리를 위해 audio_path만 선조회.
   const { data: c } = await supabase
     .from("enrollment_consultations")
-    .select("id, audio_path")
+    .select("id, audio_path, prospect_name, student_id")
     .eq("id", id)
     .single();
   if (!c) return { error: "상담을 찾을 수 없습니다" };
@@ -655,6 +729,20 @@ export async function deleteEnrollmentConsultation(
   // 2) row 삭제(RLS). consultation_ai_analysis·consultation_recordings는 FK cascade.
   const { error } = await supabase.from("enrollment_consultations").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  // 감사로그(2026-09-10) — 삭제는 녹음·전사·AI 분석이 통째로 사라지는 일이라 누가 지웠는지가 유일한 근거다.
+  await logAction({
+    action: "enrollment_consultation_delete",
+    targetType: "enrollment_consultations",
+    targetLabel: c.prospect_name ?? null,
+    // 🔴 `paths`로 세지 말 것 — 그건 **지울 수 있는**(학원 경로·ASCII 파일명) 것만 담아서, 레거시·한글 파일명
+    //    녹음이 있던 상담을 지워도 "녹음 포함"이 안 찍힌다(적대 리뷰 2026-09-10). 있었는지는 행으로 본다.
+    metadata: {
+      consultationId: id,
+      studentId: c.student_id ?? null,
+      hadRecording: !!(c as { audio_path?: string | null }).audio_path || (recRows?.length ?? 0) > 0,
+    },
+  });
 
   revalidatePath("/enrollment");
   if (redirectTo) redirect(redirectTo);
@@ -874,6 +962,17 @@ export async function convertConsultationToStudent(
     .from("enrollment_consultations")
     .update({ student_id: studentId, outcome: "enrolled" })
     .eq("id", consultationId);
+
+  // 기존 학생 재사용(자연키 충돌 경로)은 **새 학생을 안 만들고 이미 있는 기록에 붙이는** 일이라 따로 남긴다
+  // (2026-09-10 김근우 건 — 동명이인이 조용히 합쳐지는 것과 같은 모양이라 되짚을 흔적이 있어야 한다).
+  if (reusedExisting) {
+    await logAction({
+      action: "consultation_link_existing",
+      targetType: "enrollment_consultations",
+      targetLabel: c.prospect_name ?? null,
+      metadata: { consultationId, studentId },
+    });
+  }
 
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${consultationId}`);

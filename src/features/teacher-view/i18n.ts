@@ -1817,6 +1817,9 @@ export const SHEET_DICT = {
   "os.att.notePh": { ko: "예: 학원버스 지연 / 병결(부모 연락)", en: "e.g. shuttle was late / sick (parent called)" },
   "os.att.cancel": { ko: "취소", en: "Cancel" },
   "os.att.save": { ko: "저장", en: "Save" },
+  // 자리 출석부 사유 팝업이 **입력하는 동안 저장**할 때(원장 2026-09-10 *"실시간 저장도"*) — 그 자리엔
+  // '취소'가 서지 않으므로(이미 저장된 글이라 거짓말) 대신 이 문장을 적는다.
+  "os.att.autosave": { ko: "자동 저장됩니다", en: "Saved as you type" },
   "os.units.absent": {
     ko: "결석은 수업타임(시수)을 쓰지 않습니다 — 출석·지각으로 바꾸면 입력할 수 있습니다",
     en: "An absence uses no class units — switch to present or late to enter them",

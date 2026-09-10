@@ -70,15 +70,20 @@ function actionExprs(block: string): string[] {
   return out;
 }
 
-/** logAction( … ) 호출 블록에서 action 문자열 리터럴을 뽑는다(삼항 `a ? "x" : "y"` 포함). */
+/** logAction( … )(·logSeatAction·logActionAs·logActionAtDoor) 호출 블록에서 action 문자열 리터럴을 뽑는다(삼항 `a ? "x" : "y"` 포함). */
 function usedActions(): Map<string, Set<string>> {
   const found = new Map<string, Set<string>>();
   for (const file of tsFiles(SRC)) {
     const src = fs.readFileSync(file, "utf8");
-    if (!src.includes("logAction(")) continue;
-    let i = 0;
-    while ((i = src.indexOf("logAction(", i)) !== -1) {
-      let j = i + "logAction(".length;
+    // 🔴 감싼 헬퍼(`logSeatAction(g, seat, {…})`·`logActionAs(actor, {…})`·`logActionAtDoor(door, {…})`)도 같은 액션 키를 싣는다 —
+    //    `logAction(`만 찾으면 그 호출부가 통째로 스캔 밖으로 빠져 미등록 키가 조용히 샌다
+    //    (2026-09-10 자리 PIN 감사 도입 때 자리 출결 3곳이 그렇게 빠질 뻔했다).
+    //    ⚠️ 이름을 **정확히** 적는다 — `log…Action…(`으로 넓히면 `logSuperAdminAction(`처럼 **다른 표**에
+    //    쓰는 로거까지 잡혀 거짓 '미등록'이 뜬다(그 키들은 audit_logs 레지스트리 대상이 아니다).
+    if (!/\blog(?:Seat)?Action(?:As|AtDoor)?\(|\blogPlanChange\(/.test(src)) continue;
+    for (const call of src.matchAll(/\blog(?:Seat)?Action(?:As|AtDoor)?\(/g)) {
+      const i = call.index;
+      let j = i + call[0].length;
       let depth = 1;
       while (j < src.length && depth > 0) {
         const c = src[j];
@@ -100,7 +105,13 @@ function usedActions(): Map<string, Set<string>> {
           found.get(q[1])!.add(rel);
         }
       }
-      i = j;
+    }
+    // `logPlanChange("ecs_plan_line_add", grant, …)`처럼 **첫 인자로 키를 넘기는** 감싼 헬퍼도 본다 —
+    // 안 보면 진도 줄 감사 키 4종이 미등록인 채로 감사 화면에 영문 키를 냈다(적대적 리뷰 2026-09-10).
+    for (const pm of src.matchAll(/\blogPlanChange\(\s*"([a-z][a-z0-9_]*)"/g)) {
+      const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
+      if (!found.has(pm[1])) found.set(pm[1], new Set());
+      found.get(pm[1])!.add(rel);
     }
   }
   return found;
@@ -185,6 +196,79 @@ describe("감사로그 액션 레지스트리", () => {
 });
 
 /**
+ * 🔴 2026-09-10 원장 제보(감사로그에 영문 `ecs_plan_copy`) — `logAction(` 호출만 보던 스캐너가 못 본 갈래.
+ *   ① logAction을 **감싼 헬퍼**(`logPlanChange("ecs_plan_copy", …)`·`logActionAs`·`logActionAtDoor`) — 위
+ *      usedActions가 **이름으로** 본다(같은 날 자리 PIN 감사 세션이 넓혔다).
+ *   ② 세션 없는 경로의 **직접 insert**(`from("audit_logs").insert({ action: "…" })` — 구글 캘린더 가져오기·
+ *      보드 명단 핀) — `log…(` 호출이 아예 없어 ①로도 안 잡힌다. 아래 directInsertActions가 본다.
+ *   ③ **DB 트리거**가 쓰는 키(등록상담 자동 연결, 0258a) — SQL은 `-- audit-action` 표식을 단 줄만 본다.
+ * 모두 "가드가 못 보는 모양이 있으면 그건 가드가 아니다"(위 actionExprs 주석)와 같은 뿌리다.
+ */
+function addFound(found: Map<string, Set<string>>, key: string, file: string) {
+  const rel = path.relative(process.cwd(), file).split(path.sep).join("/");
+  if (!found.has(key)) found.set(key, new Set());
+  found.get(key)!.add(rel);
+}
+
+/** src 파일 본문을 **한 번만** 읽는다 — 아래 스캐너들이 전부 쓰는데 매번 읽으면 5초 타임아웃에 걸린다. */
+let srcCache: Array<{ file: string; src: string }> | null = null;
+function srcFiles(): Array<{ file: string; src: string }> {
+  srcCache ??= tsFiles(SRC).map((file) => ({ file, src: fs.readFileSync(file, "utf8") }));
+  return srcCache;
+}
+
+/** src에서 audit_logs에 **직접 insert**하는 파일의 `action: "…"` 리터럴. */
+function directInsertActions(): Map<string, Set<string>> {
+  const found = new Map<string, Set<string>>();
+  for (const { file, src } of srcFiles()) {
+    if (!src.includes('from("audit_logs")') || !src.includes(".insert(")) continue;
+    for (const m of src.matchAll(/action:\s*"([a-z][a-z0-9_]*)"/g)) addFound(found, m[1]!, file);
+  }
+  return found;
+}
+
+/** SQL 마이그레이션에서 `'값', -- audit-action`(또는 audit-target-type) 표식을 단 값. */
+const MIGRATIONS = path.join(process.cwd(), "supabase", "migrations");
+function sqlMarked(marker: "audit-action" | "audit-target-type"): Map<string, Set<string>> {
+  const found = new Map<string, Set<string>>();
+  if (!fs.existsSync(MIGRATIONS)) return found;
+  const re = new RegExp(`'([a-z][a-z0-9_]*)'[^\\n]*--\\s*${marker}\\b`, "g");
+  for (const name of fs.readdirSync(MIGRATIONS)) {
+    if (!name.endsWith(".sql")) continue;
+    const p = path.join(MIGRATIONS, name);
+    const src = fs.readFileSync(p, "utf8");
+    if (!src.includes("audit_logs")) continue;
+    for (const m of src.matchAll(re)) addFound(found, m[1], p);
+  }
+  return found;
+}
+
+describe("감사로그 액션 레지스트리 — 직접 insert·DB 트리거(2026-09-10)", () => {
+  // 전체 src 스캔이라 느리다 — 병렬 실행 부하에서 기본 5초에 헛실패하지 않게 넉넉히(기억: 가드 테스트 헛실패).
+  it("스캔이 실제로 동작한다(두 갈래 모두 알려진 키를 찾는다)", () => {
+    const direct = directInsertActions();
+    expect(direct.has("calendar_google_import"), "직접 insert 스캔이 구글 캘린더 가져오기를 못 찾음 — 스캔 방식을 갱신할 것").toBe(true);
+    expect(direct.has("classnote_child_link")).toBe(true);
+    expect(sqlMarked("audit-action").has("consultation_autolink")).toBe(true);
+  }, 30_000);
+
+  it("직접 insert·DB 트리거가 쓰는 모든 액션이 AUDIT_ACTIONS에 한글 라벨로 등록돼 있다", () => {
+    const registry = registryKeys();
+    const all = new Map<string, Set<string>>();
+    for (const found of [directInsertActions(), sqlMarked("audit-action")]) {
+      for (const [key, files] of found) for (const f of files) addFound(all, key, path.join(process.cwd(), f));
+    }
+    const missing = [...all]
+      .filter(([key]) => !registry.has(key))
+      .map(([key, files]) => `${key}  ←  ${[...files].join(", ")}`);
+    expect(
+      missing,
+      `AUDIT_ACTIONS 미등록 액션 — 감사로그 화면에 영문 키가 그대로 노출된다:\n  ${missing.join("\n  ")}`,
+    ).toEqual([]);
+  }, 30_000);
+});
+
+/**
  * '대상' 열 접두(target_type)도 같은 뿌리로 샜다 — 2026-08-17엔 attendance 등 5종, 2026-08-20엔
  * calendar_event·calendar_tag가 라벨 없이 영문으로 떠 있었다(describe.test.ts의 수기 목록은 사람이
  * 갱신해야 해서 늘 늦는다). 호출부를 **전수 스캔**해 AUDIT_TYPE_LABEL과 맞춘다.
@@ -214,6 +298,16 @@ describe("감사로그 대상 유형 라벨", () => {
         if (!used.has(m[1])) used.set(m[1], path.relative(process.cwd(), file).split(path.sep).join("/"));
       }
     }
+    // src의 **직접 insert**(snake 표기)와 SQL 트리거 표식이 쓰는 대상 유형도 — 위 액션 가드와 같은 세 갈래.
+    // (2026-09-10: 구글 캘린더 가져오기의 "calendar"가 이 틈으로 영문 그대로 떠 있었다.)
+    for (const { file, src } of srcFiles()) {
+      if (!src.includes('from("audit_logs")') || !src.includes(".insert(")) continue;
+      for (const m of src.matchAll(/target_type:\s*"([a-z_]+)"/g)) {
+        if (!used.has(m[1])) used.set(m[1], path.relative(process.cwd(), file).split(path.sep).join("/"));
+      }
+    }
+    for (const [t, files] of sqlMarked("audit-target-type")) if (!used.has(t)) used.set(t, [...files][0]!);
+    expect(used.has("calendar"), "직접 insert 대상 유형 스캔이 동작하지 않음").toBe(true);
     expect(used.size, "target_type을 하나도 못 찾음 — 스캔 방식을 갱신할 것").toBeGreaterThan(10);
     const labels = labelKeys();
     const missing = [...used].filter(([t]) => !labels.has(t)).map(([t, f]) => `${t}  ←  ${f}`);

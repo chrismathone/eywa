@@ -50,6 +50,8 @@ const seatDay: SeatDay = {
         classId: IN_ROSTER,
         className: "중등E_초5 의치대",
         end: "17:00",
+        bgColor: null,
+        textColor: null,
         students: [
           {
             id: "s1",
@@ -60,7 +62,6 @@ const seatDay: SeatDay = {
             recordedBy: null,
             fromSeat: false,
       note: null,
-    prevAbsence: null,
             attitude: null,
             listeningLevel: null,
             memorizedWords: null,
@@ -68,9 +69,15 @@ const seatDay: SeatDay = {
           },
         ],
       },
-      { classId: NON_ENGLISH, className: "수학 보충", end: "17:00", students: [] },
+      { classId: NON_ENGLISH, className: "수학 보충", end: "17:00", bgColor: null, textColor: null, students: [] },
     ],
   },
+  // 교시 선택(0255a)의 재료 — 이 반들은 그 날 자리 교시가 하나뿐이라 고를 것이 없다.
+  slotsByClass: { [IN_ROSTER]: [SLOT], [NON_ENGLISH]: [SLOT] },
+  markedSlotsByCell: {},
+  // 다른 시간으로 옮기기(2026-09-10)의 재료 — JJ실은 교시를 옮기지 않으므로 늘 비어 있다.
+  busyStartsByClass: {},
+  offSlotByCell: {},
 };
 
 vi.mock("./queries", () => ({
@@ -165,7 +172,8 @@ describe("공개 자리 진도 쓰기 게이트", () => {
     const gate = await write();
     expect(gate).toEqual({
       ok: true,
-      grant: { tenantId: TENANT, classId: IN_ROSTER, actorId: null },
+      // 작성자는 지어내지 않고(null) 감사로그엔 문 이름이 선다(2026-09-10 무기명 경로).
+      grant: { tenantId: TENANT, classId: IN_ROSTER, actorId: null, doorName: "JJ실 PIN(비로그인)" },
       // 🔴 범위를 함께 돌려줘야 쓰기가 "오늘 그 교시" 밖으로 못 나간다(줄 id는 반에만 묶여 있다).
       scope: { planDate: TODAY, slotStart: SLOT },
     });

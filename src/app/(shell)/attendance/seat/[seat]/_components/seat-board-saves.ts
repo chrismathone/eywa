@@ -126,7 +126,8 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
     (classId: string, studentId: string, note: string, status: SeatStatus | null) => {
       const key = keyOf(classId, studentId);
       const snapKey = `${key}|note`;
-      setNoteOver((m) => ({ ...m, [key]: note || null }));
+      // 공백만이면 서버가 비움으로 저장한다(trim) — 표식도 같은 판정이라야 새로고침 전후가 같다.
+      setNoteOver((m) => ({ ...m, [key]: note.trim() || null }));
       setError(null);
       const prevTimer = timers.current.get(snapKey);
       if (prevTimer) clearTimeout(prevTimer);

@@ -28,7 +28,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import type { PlanWriteGrant, PlanWriteScope } from "@/features/class-sheets/server/plan-write";
 import { seatHasJjFields } from "../jj-fields";
-import { hhmm, type SeatKey } from "../seat";
+import { SEAT_NAME, hhmm, type SeatKey } from "../seat";
 import { gateSeatPinOnly, rosterKeys } from "./gate";
 import { fetchSeatSlotPlanLines, type SeatClassPlan } from "./jj-plan";
 
@@ -98,7 +98,7 @@ export async function loadPublicSeatJjPlans(
   if ("error" in gate || gate.tenantId !== tenantId) return {};
 
   const slot = hhmm(slotStart);
-  const roster = await rosterKeys(seat, date, slot, tenantId);
+  const roster = await rosterKeys(seat, date, slot, tenantId, tenantId);
   if (!roster) return {};
   const classIds = [...roster.classes.keys()];
   if (classIds.length === 0) return {};
@@ -146,7 +146,7 @@ export async function gateSeatPlanWrite(input: {
   if ("error" in gate) return { ok: false, error: gate.error };
 
   const slot = hhmm(input.slotStart);
-  const roster = await rosterKeys(input.seat, input.date, slot, gate.tenantId);
+  const roster = await rosterKeys(input.seat, input.date, slot, gate.tenantId, gate.tenantId);
   if (!roster) return { ok: false, error: "그 시각에는 이 자리 수업이 없습니다" };
   if (!roster.classes.has(input.classId)) return { ok: false, error: "이 교시에 없는 반입니다" };
 
@@ -156,7 +156,12 @@ export async function gateSeatPlanWrite(input: {
   // 작성자 = null. 이 문으로 들어온 사람은 계정이 없다(있어도 이 문은 계정을 안 본다).
   return {
     ok: true,
-    grant: { tenantId: gate.tenantId, classId: input.classId, actorId: null },
+    grant: {
+      tenantId: gate.tenantId,
+      classId: input.classId,
+      actorId: null,
+      doorName: `${SEAT_NAME[input.seat]} PIN(비로그인)`,
+    },
     scope: { planDate: input.date, slotStart: slot },
   };
 }

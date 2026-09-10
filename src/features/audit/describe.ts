@@ -34,6 +34,7 @@ import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { assetStatusLabel } from "@/features/inventory/status";
 import { assetCategoryLabel } from "@/features/inventory/category";
 import { auditResultLabel } from "@/features/inventory/audit-result";
+import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
 
 /** 대상 유형(target_type) → 한글 — 감사로그 '대상' 열 접두. 미등록 유형은 원문 폴백. */
 export const AUDIT_TYPE_LABEL: Record<string, string> = {
@@ -78,6 +79,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 캘린더(0218a) — 위와 같은 누락. 일정 삭제 로그의 대상이 영문 "calendar_event"로 떠 있었다.
   calendar_event: "일정",
   calendar_tag: "캘린더 태그",
+  // 구글 캘린더 가져오기(시스템 직접 insert) — 가드가 `targetType:` 카멜 표기만 봐서 영문 "calendar"가 샜다(2026-09-10).
+  calendar: "캘린더",
   // 회의록·학생상담(2026-08-25) — 없으면 '대상' 칸에 영문 "meeting"·"student_consultation"이 그대로 뜬다.
   meeting: "회의록",
   student_consultation: "학생 상담",
@@ -134,6 +137,12 @@ const join = (...parts: Array<string | null>): string | null => {
 const HANGUL_RE = /[가-힣]/;
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/** 등록상담 진행 상태 → 한글(코드 고정 enum, 단일 소스 OUTCOME_PILL). 🔴 모르는 값은 null — 영문을 흘리지 않는다. */
+const outcomeKo = (v: unknown): string | null => {
+  const s = str(v);
+  return s ? (OUTCOME_PILL[s]?.label ?? null) : null;
+};
 
 /** 바이트 → 사람이 읽는 크기. 0·비수는 null(없는 걸 "0B"로 적으면 노이즈). */
 const fileSize = (v: unknown): string | null => {
@@ -570,10 +579,16 @@ export function auditDetail(
     }
     case "enrollment_dates_update": {
       const f = str(m.field);
+      // 조용히 깨지는 걸 **알고도** 저장한 정정은 그 사실을 함께 적는다(2026-09-10) — 저장 전에
+      // 확인을 받은 건이라, 나중에 "왜 그날 명단에 없지"·"왜 이동이 종료로 뜨지"를 되짚을 흔적이다.
+      const outside = num(m.attendanceOutside);
+      const pairAnchor = str(m.transferPairBroken);
       return join(
         ctx.nameOf(m.studentId),
         ctx.nameOf(m.classId),
         f ? `${f === "start" ? "시작" : "종료"}일 ${str(m.from) ?? "—"} → ${str(m.to) ?? "—"}` : null,
+        outside && outside > 0 ? `출결 ${outside}건이 기간 밖(확인 후 저장)` : null,
+        pairAnchor ? `반 이동 짝(${pairAnchor}) 끊김(확인 후 저장)` : null,
       );
     }
     case "student_merge": {
@@ -1067,6 +1082,107 @@ export function auditDetail(
       return join(
         losers ? `상담 ${losers}건 병합` : null,
         fields.length ? `버린 값: ${fields.join(", ")}` : null,
+      );
+    }
+
+    // ── 등록상담(2026-09-10 김근우 건) ───────────────────────────────────────────────
+    case "enrollment_consultation_create":
+    case "enrollment_consultation_intake": {
+      const subject = str(m.subject);
+      return join(
+        action === "enrollment_consultation_intake" ? "학부모 QR 접수" : null,
+        subject ? ctx.subjectLabel(subject) : null, // 과목은 학원설정 단일 소스(하드코딩 금지)
+        m.withAudio === true ? "녹음 포함" : null,
+      );
+    }
+    case "enrollment_consultation_update": {
+      // 이름·학교·학년·보호자는 자동 연결의 키라 전후 값까지(consultation-audit.ts). 연락처·상담 내용은 항목 이름만.
+      const detailed = arr(m.changes)
+        .map((c) => (c && typeof c === "object" ? (c as Meta) : null))
+        .filter((c): c is Meta => !!c && !!str(c.field));
+      const shown = new Set(detailed.map((c) => str(c.field)));
+      const rest = arr(m.changed)
+        .map(str)
+        .filter((f): f is string => !!f && !shown.has(f));
+      const outcomeTo = outcomeKo(m.outcomeTo);
+      return join(
+        m.via === "list" ? "목록에서" : null,
+        ...detailed.map((c) => `${str(c.field)} ${str(c.from) ?? "(빈 값)"} → ${str(c.to) ?? "(빈 값)"}`),
+        rest.length ? rest.join(", ") : null,
+        outcomeTo ? `상태 → ${outcomeTo}` : null,
+      );
+    }
+    case "enrollment_consultation_outcome": {
+      const from = outcomeKo(m.from);
+      const to = outcomeKo(m.to);
+      if (!to) return null;
+      return from ? `${from} → ${to}` : `→ ${to}`;
+    }
+    case "enrollment_consultation_delete": {
+      const who = ctx.nameOf(m.studentId);
+      return join(who ? `연결 학생 ${who}` : null, m.hadRecording === true ? "녹음 포함" : null);
+    }
+    case "consultation_autolink": {
+      // DB 트리거가 쓴다(0258a). 실행자는 '시스템(자동 연결)'이고, 그 저장을 한 직원은 userId로만 남는다.
+      const who = ctx.nameOf(m.studentId);
+      const rule = str(m.rule);
+      const via = str(m.via);
+      const by = ctx.nameOf(m.userId);
+      return join(
+        who ? `→ ${who}` : null,
+        rule === "name_school_grade" ? "이름·학교·학년 일치" : rule === "phone_name" ? "연락처·이름 일치" : null,
+        via === "intake"
+          ? "학부모 QR 접수 때"
+          : via === "consultation"
+            ? "상담 저장 때"
+            : via === "student"
+              ? "학생 등록·수정 때"
+              : null,
+        by ? `${by}의 저장으로` : null,
+      );
+    }
+    case "consultation_link_existing": {
+      const who = ctx.nameOf(m.studentId);
+      return join(who ? `→ ${who}` : null, "같은 이름·학교·학년 재원생 재사용");
+    }
+    case "consultation_unlink": {
+      const who = ctx.nameOf(m.studentId);
+      return join(who ? `${who}에서 분리` : null, str(m.reason));
+    }
+
+    // ── 강사 시트 수업계획(plan-write.ts logPlanChange) — '대상' 열이 반 이름을 이미 보여준다 ─────────
+    case "ecs_plan_line_add":
+    case "ecs_plan_line_move":
+    case "ecs_plan_line_delete":
+    case "ecs_plan_copy": {
+      const date = str(m.planDate);
+      const slot = str(m.slotStart);
+      const source = str(m.sourceDate);
+      const copied = num(m.copied);
+      return join(
+        date ? (slot ? `${date} ${slot}` : date) : slot,
+        source ? `${source} 회차에서` : null,
+        copied !== null ? `${copied}줄 복사` : null,
+        m.termMode === "exam" ? "시험 기간" : null,
+        m.viaPin === true ? "공개 PIN 화면" : null,
+      );
+    }
+
+    // ── 구글 캘린더 가져오기(시스템) ────────────────────────────────────────────────────
+    case "calendar_google_import": {
+      const cnt = (v: unknown, label: string): string | null => {
+        const n = num(v);
+        return n ? `${label} ${n.toLocaleString("ko-KR")}건` : null;
+      };
+      const failed = arr(m.failed).length;
+      return (
+        join(
+          cnt(m.inserted, "추가"),
+          cnt(m.updated, "갱신"),
+          cnt(m.deleted, "삭제"),
+          cnt(m.skippedEdited, "직접 고친 일정 유지"),
+          failed ? `실패 ${failed}건` : null,
+        ) ?? "변경 없음"
       );
     }
 

@@ -32,6 +32,7 @@ import {
 import { useTimetableEdit, type IncomingStudent, type PendingTarget } from "./edit-context";
 import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
+import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
 // 🔴 학생 드래그 빗금은 **반 단위**라 카드가 자기 id를 DOM에 달아 둔다(기본뷰 셀과 같은 표식·같은 CSS).
 //    좌표(요일·시각)는 화면에 안 그려지는 숨은 표식이 들고 있다(rich-grid-view.tsx) — 카드 하나에
 //    요일·교시가 여럿이라 카드 자신은 한 좌표로 답할 수 없다.
@@ -922,7 +923,13 @@ function RosterRow({
   // 기본뷰 StudentRow와 같은 조립 — 이름이 먼저, 메타는 `/`로 붙어 좁으면 메타부터 잘린다(생략부호 없이 clip).
   const inner = (
     <>
-      <span className={moving && !scheduledMove ? "line-through" : ""}>{s.name}</span>
+      {/* 자리(랩실) 교시 고정 — 기본뷰 학생 줄과 **같은 서식 상수·같은 문구**(뷰마다 다르게 보이면 안 된다). */}
+      <span
+        className={`${moving && !scheduledMove ? "line-through" : ""}${s.seatPinNote ? ` ${SEAT_PIN_MARK_CLASS}` : ""}`}
+        title={s.seatPinNote || undefined}
+      >
+        {s.name}
+      </span>
       {/* 학교·학년 꼬리는 한 단계 작게(14px, v5 바닥) — 이름은 그대로 두고 꼬리만 줄여 좁은 2요일 카드에서도 덜 잘린다.
           🔴 이동 대기 줄은 꼬리 대신 **어디로·언제 가는지**를 적는다(좁은 칸이라 둘 다는 안 들어간다). */}
       {moving ? (

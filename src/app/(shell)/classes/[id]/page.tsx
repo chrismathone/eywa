@@ -440,8 +440,24 @@ export default async function ClassDetailPage({
                         )}
                         {/* 종료일이 있어도 **당일까지는 재원**이라 목록에 남는다(eligibility 단일 소스).
                             그때 "~ 현재"라고 쓰면 거짓말이라 실제 종료일을 보여준다 — 개별(JJ·BS) 반은
-                            하루짜리 수강이 흔해 이 표기가 곧 "오늘까지"라는 뜻이 된다. */}
-                        {s.endDate ? (
+                            하루짜리 수강이 흔해 이 표기가 곧 "오늘까지"라는 뜻이 된다.
+                            🔴 종료일도 시작일과 **같이** 더블클릭으로 고친다(원장 제보 2026-09-10:
+                            *"더블클릭으로 시작날짜는 수정되는데 종료날짜는 수정이 안되네"*). 2026-06-30에
+                            일부러 뺐던 건 그때 이 명단이 `end_date is null`만 세워서 종료일을 넣는 순간
+                            학생이 사라졌기 때문인데, 그 전제는 이제 없다 — 명단은 `leaving`(종료 예정)을
+                            그대로 세우고, 옆의 '수강 종료'가 이미 같은 값을 쓴다. 학생 상세 수업 탭·퇴원
+                            상세와 같은 한 벌([EditableDateCell])이라 화면마다 갈리지 않는다. */}
+                        {canEditDates ? (
+                          /* ⚠️ `emptyLabel`로 **이 화면이 쓰던 말**(`~ 현재`, 강사뷰 영어 전환 대상)을 그대로
+                             넘긴다 — 편집을 여는 것과 라벨을 바꾸는 것은 다른 일이고, 안 쓰던 `재원중`이
+                             명단 전 줄에 새로 서면 원장이 요청하지 않은 화면 변화가 된다. */
+                          <EditableDateCell
+                            enrollmentId={s.enrollmentId}
+                            field="end"
+                            value={s.endDate}
+                            emptyLabel={sheetT(lang, "cls.d.toNow")}
+                          />
+                        ) : s.endDate ? (
                           <>
                             {"~"}
                             <span className="num">{s.endDate}</span>
