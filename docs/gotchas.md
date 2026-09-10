@@ -2007,3 +2007,48 @@ diff가 **원문과 해석값을 둘 다** 본다(OR). 원문은 그대로 둔�
 왕복하는 두 방향은 **같은 정규화 함수를 태우거나**, 아니면 원문을 함께 실어 보내야 한다.
 🔑 **진단 레시피**: 왕복을 코드와 같은 규약으로 **오프라인 재현**해 (create/update/keep/remove)를 원인 축별로
 쪼개면(강사/방/종료/날짜) 어느 칸이 범인인지 한 번에 나온다 — 화면 숫자와 정확히 같아지면 모델이 맞은 것이다.
+
+## #131 **`display:none`인 iframe은 preload한 폰트를 "안 쓴다"** — 최소화한 창이 문서를 통째로 로드하고 있었다 (2026-09-10)
+
+원장 제보: 프로덕션 콘솔에 `PretendardVariable-….woff2 was preloaded using link preload but not used within
+a few seconds from the window's load event`가 **주기적으로 계속 쌓인다**(`timetable?embed=1`·`ecs?embed=1`·
+`menu`·최상위 프레임).
+
+**폰트 배선은 멀쩡했다.** 흔한 용의자를 실측으로 전부 지웠다 — preload URL과 `@font-face`의 `src`가
+**`?dpl=`(스큐 프로텍션 쿼리)까지 글자 그대로 같고**(한쪽에만 붙어 두 번 받는 그 함정이 아니다), `crossorigin`도
+맞고, `--font-pretendard` 변수·`<html>` 클래스도 배선돼 있다. 프로덕션·dev 문서 **11개**(최상위 4 · iframe 7)에서
+`FontFace.status`가 전부 `loaded`였다. 비용도 실측했다: 콜드 캐시 1회 요청 **2,057,988B / 548ms**,
+웜 캐시 `transferSize:0`·`duration:0`. `_next/static/media`는 `immutable`이라 **창 N개 = 네트워크 1회 +
+나머지는 공짜 캐시 히트**다(중복 다운로드 없음).
+
+**진짜 원인은 창 시스템이었다.** [`floating-window.tsx`](src/components/workspace/floating-window.tsx)는 최소화한
+창을 언마운트하지 않고 Tailwind `hidden`(= `display:none`)으로 감춘다(문서·스크롤 보존이 목적). 그런데
+[`route-window.tsx`](src/components/workspace/route-window.tsx)의 stagger 활성화가 그걸 **안 보고** 최소화
+상태에서도 iframe `src`를 채웠다. `display:none` 문서는 레이아웃이 0이라 글리프를 한 자도 안 그리므로
+**preload는 받아 놓고 폰트를 안 쓴다** → 크롬이 문서마다 경고를 찍는다.
+
+실측 대조(같은 페이지·같은 순간, 최소화 창 하나를 심고 새로고침):
+
+| iframe | 표시 | 폰트 요청 | `FontFace.status` |
+|---|---|---|---|
+| `/dashboard?embed=1` | 보임 | 1 | **loaded** |
+| `/newcomers?…&embed=1` | `display:none` | 1 | **unloaded** |
+
+`visibility:hidden`·화면 밖(`left:-5000px`)은 **레이아웃이 살아 있어 정상적으로 쓴다** — `display:none`만 이렇다.
+
+🔑 **경고는 증상이고 손해는 그 아래 있었다**: 최소화된 창이 셸 레이아웃·인증·DB 쿼리·RSC 렌더·하이드레이션을
+**아무도 못 보는 문서**에 대해 전부 치르고 있었다(B6가 걱정하던 "창 N개 = 인증·설정 쿼리 N배"가 보이지도 않는
+창에서 일어난 것). `minimize`는 창을 `order`에 남기므로 그대로 영속되고 **페이지를 열 때마다 되살아난다** —
+그래서 "주기적으로 쌓인다"였다.
+
+**고침**: `activated`가 `win.minimized`를 함께 본다 — 최소화 창은 **복원될 때** 로드한다.
+🔴 **이미 로드된 창은 그대로 살려 둔다**(`activated`는 한 번 서면 유지) — 최소화·BL3 warm 풀의 "문서·스크롤
+보존"이 그 위에 서 있다. 막는 건 **한 번도 안 연 채 최소화로 복원된 창**뿐이다.
+가드 = `route-window-minimized.test.ts`(고치기 전 2건 실패를 실제로 확인했다).
+
+⚠️ **`preload:false`로 "고치지" 말 것** — 실측상 preload는 제 일을 하고 있다(콜드 캐시에서 폰트가 **573ms**에
+끝나 FCP **780ms** 전에 도착). 2MB 한글 폰트라 빼면 첫 페인트가 시스템 폰트로 튄다.
+⚠️ JetBrains Mono는 이미 `preload:false`다(2026-07-19 de-mono) — **같은 경고를 한 번 겪고** 그렇게 고친 자리라,
+이번에도 폰트 설정을 의심하기 쉬웠다.
+⚠️ **서브프레임 경고는 도구에 따라 부모 콘솔 목록에 안 잡힌다** — 재현을 경고 문구로 기다리지 말고
+`document.fonts`를 훑어 **`status === "unloaded"`인 face**를 찾을 것(그게 곧 "preload했는데 안 씀"이다).

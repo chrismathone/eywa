@@ -628,6 +628,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#128** `overflow-hidden` 카드 안에서 `absolute`로 띄운 겹판은 **카드 경계에서 잘린다**(DOM은 있는데 안 보임 = z-index 아니라 잘림) — 겹판만 **포털+fixed**로 꺼내고 스크롤 재계산·앵커 이탈 시 닫기·초점 이동까지 함께 (⚠️ 첫 프레임은 `visibility` 말고 `opacity`+`pointer-events-none`)
 - **#129** **끌던 줄이 언마운트되면 dnd-kit `active.data`가 빈 객체가 된다** — 무장(arming) 줄이 드래그 중 `pointerover`로 갈아타 "출발 반을 알 수 없어"(수학 기본뷰). 고침 = 누르는 동안 무장 잠금(`holdArmedRow`) + 집는 순간 data 스냅샷 · ⚠️ 터치 기기(전 줄 무장)에선 재현 안 됨 · 곁가지 = 막힌 칸 거절은 **이유**를 말한다·드래그 직후 더블클릭은 삼킨다(700ms)
 - **#130** 내보낸 걸 그대로 되읽었는데 **“전건 변경”** — export는 **해석한 이름**(`Jane`→`추민아`)을 시트에 쓰고 import는 **DB 원문**과 비교했다(실측 유효 321칸 중 **199칸**이 강사만 다른 update, 방·종료시각은 0건). 🔑 **왕복하는 두 방향은 같은 정규화를 태울 것**(고침 = `slotTeacherDisplay`를 함께 실어 원문·해석값 둘 다 비교, 원문은 UPDATE 금지) · ⚠️ 곁가지(미해결): export는 **요일 칸마다 이번 주 그 요일 날짜**로, import는 **적용일 하루**로 유효 행을 골라 반영↔가져오기 사이에 바꾼 배치가 `생성 1·제거 1`로 되돌아온다 — 바꿨으면 **반영을 다시 누르고** 가져올 것
+- **#131** `display:none`인 iframe은 **preload한 폰트를 안 쓴다** — 최소화한 창(=`hidden`)이 문서를 통째로 로드하고 있었다(셸·인증·DB·RSC를 **아무도 못 보는 문서**에 전부 지불, B6가 걱정하던 그 비용). 폰트 배선은 멀쩡했다(preload URL ≡ `@font-face` src, `?dpl=`까지 동일 · 웜 캐시 `transferSize:0` · 콜드 573ms < FCP 780ms) · 🔑 진단은 경고 문구가 아니라 `document.fonts`의 **`status:"unloaded"`** · ⚠️ `preload:false`로 고치지 말 것 · `visibility:hidden`·화면 밖은 정상(레이아웃이 산다)
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)
