@@ -5,32 +5,31 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
-import { NAV_GROUPS, menuSearchKeywords, navPresentation } from "@/lib/navigation";
-import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, type HubDest } from "@/lib/menu-hub";
+import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
-import { useShowDesktop } from "@/components/workspace/use-show-desktop";
+import { useOpenMenu } from "@/components/workspace/menu-hub-grid";
 import { windowIdForHref } from "@/components/workspace/window-link";
 import { isPaletteHotkey, PALETTE_OPEN_MESSAGE } from "@/lib/palette-hotkey";
-import type { PaletteHit } from "@/features/search/server/queries";
+import {
+  EMPTY_PALETTE_RESULT,
+  PALETTE_LIMIT,
+  type PaletteHit,
+  type PaletteKind,
+  type PaletteSearchResult,
+} from "@/features/search/palette";
 
 /** 헤더 검색 버튼 등 외부 요소가 팰릿을 여는 데 쓰는 커스텀 이벤트 이름. */
 export const COMMAND_PALETTE_OPEN_EVENT = "eywa:open-command-palette";
 
-type Command = {
-  href: string;
-  label: string;
-  group: string;
-  icon: EywaIconName;
-  menuKey: MenuKey;
-  presentation: "desktop" | "window";
-  keywords: string;
-};
+/** 메뉴 후보 한 줄 — 목적지(HubDest) + 업무군 이름 + 검색어 뭉치. */
+type Command = { dest: HubDest; group: string; keywords: string };
 
 /** 평면 결과 항목(키보드 이동 단위) — 메뉴(클라) 또는 데이터(서버 검색). */
 type Item = { kind: "menu"; cmd: Command } | { kind: "data"; hit: PaletteHit };
 
-const DATA_ICON: Record<PaletteHit["kind"], EywaIconName> = {
+const DATA_ICON: Record<PaletteKind, EywaIconName> = {
   student: "user",
   class: "book",
   consultation: "messages",
@@ -47,20 +46,29 @@ const SECTION_LABEL: Record<string, string> = {
 const sectionOf = (item: Item): string => (item.kind === "menu" ? "menu" : item.hit.kind);
 
 /**
- * 검색 팰릿. 정적 메뉴(canAccess 게이트, 클라 즉시 필터) + 데이터 검색(학생/수업/상담/등록상담,
+ * 검색 팰릿. 메뉴(권한 게이트, 클라 즉시 필터) + 데이터 검색(원생/수업/상담/등록상담,
  * /api/search/palette 서버 fetch, 디바운스). 헤더 검색 버튼 클릭으로 열림. 입력 전엔 안 펼침.
+ *
+ * 🔴 메뉴 축의 출처는 **메뉴 화면·사이드바와 같은 목록**(`HUB_GROUPS`+`SUPPORT_GROUPS`)이고, 여는 방법도
+ *    같은 함수(`useOpenMenu`)다 — 두 벌로 만들면 한쪽만 고쳐진다(예전엔 `NAV_GROUPS`만 읽어서 수학 강사
+ *    시트·수납/설정 면들이 **검색으로 갈 길이 없었다**).
+ * 🔴 학원 설정 '왼쪽 탭'(`menuLayout`)은 **여기에 안 건다** — 그건 왼쪽에 무엇을 세울지 정하는 보기 설정이고,
+ *    검색은 "숨겨도 주소로는 열린다"와 같은 결의 발견성 경로다(감추면 그 메뉴로 갈 길이 통째로 사라진다).
  */
 export function CommandPalette({
   systemRole,
   permMatrix,
+  canTeacherView = false,
 }: {
   systemRole: SystemRole;
   permMatrix?: AccessMatrix;
+  /** 겸직(담당 반 보유) — 담당 반을 전제로 만든 메뉴(원스크린·출결 모드)의 쓸모 판정. 사이드바와 같은 규약. */
+  canTeacherView?: boolean;
 }) {
   const router = useRouter();
   const isDesktop = useIsDesktop();
   const openWindow = useWindowStore((s) => s.open);
-  const showDesktop = useShowDesktop();
+  const openMenu = useOpenMenu();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -68,27 +76,25 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
 
-  const commands = useMemo<Command[]>(() => {
-    const list: Command[] = [];
-    for (const group of NAV_GROUPS) {
-      for (const item of group.items) {
-        if (item.hidden || !canAccess(systemRole, item.menuKey, permMatrix)) continue;
-        list.push({
-          href: item.href,
-          label: item.label,
+  const commands = useMemo<Command[]>(
+    () =>
+      hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], {
+        systemRole,
+        permMatrix,
+        canTeacherView,
+        isMaster: systemRole === "master",
+      }).flatMap((group) =>
+        group.items.map((dest) => ({
+          dest,
           group: group.label,
-          icon: item.icon,
-          menuKey: item.menuKey,
-          presentation: navPresentation(item),
-          // 라벨+그룹+영문 키+별칭 — 규칙은 [`menuSearchKeywords`](@/lib/navigation) 한 곳에 있다.
+          // 라벨+업무군+영문 키+별칭 — 규칙은 [`hubSearchKeywords`](@/lib/menu-hub) 한 곳에 있다.
           // 🔴 별칭이 붙은 이유: 라벨에 없는 말로 찾으면 **0건**이었다(원장 2026-09-09 — 라벨
           //    "신규생 관리"를 *"신입생 관리"*로 찾아 못 찾음). 별칭은 검색에만 실리고 화면엔 안 나온다.
-          keywords: menuSearchKeywords(item, group.label),
-        });
-      }
-    }
-    return list;
-  }, [systemRole, permMatrix]);
+          keywords: hubSearchKeywords(dest, group.label),
+        })),
+      ),
+    [systemRole, permMatrix, canTeacherView],
+  );
 
   const q = query.trim().toLowerCase();
   const menuResults = useMemo(
@@ -102,11 +108,11 @@ export function CommandPalette({
     return () => clearTimeout(t);
   }, [query]);
 
-  const { data: dataHits = [], isFetching } = useQuery<PaletteHit[]>({
+  const { data: result = EMPTY_PALETTE_RESULT, isFetching } = useQuery<PaletteSearchResult>({
     queryKey: ["palette-search", debounced],
     queryFn: () =>
       fetch(`/api/search/palette?q=${encodeURIComponent(debounced)}`).then((r) =>
-        r.ok ? (r.json() as Promise<PaletteHit[]>) : [],
+        r.ok ? (r.json() as Promise<PaletteSearchResult>) : EMPTY_PALETTE_RESULT,
       ),
     enabled: open && debounced.length >= 2,
     staleTime: 30_000,
@@ -115,9 +121,9 @@ export function CommandPalette({
   const items = useMemo<Item[]>(
     () => [
       ...menuResults.map((cmd) => ({ kind: "menu" as const, cmd })),
-      ...(q ? dataHits.map((hit) => ({ kind: "data" as const, hit })) : []),
+      ...(q ? result.hits.map((hit) => ({ kind: "data" as const, hit })) : []),
     ],
-    [menuResults, dataHits, q],
+    [menuResults, result, q],
   );
 
   // 열 때 항상 초기화. 이벤트 핸들러에서만 호출 → effect 본문 setState 회피.
@@ -158,11 +164,9 @@ export function CommandPalette({
 
   function go(item: Item) {
     closePalette();
+    // 메뉴는 **메뉴 화면·사이드바와 같은 방법**으로 연다(창/배경 판정·방문 기록이 한 곳에 있다).
     if (item.kind === "menu") {
-      const cmd = item.cmd;
-      if (isDesktop && cmd.presentation === "desktop") showDesktop();
-      else if (isDesktop) openWindow("route", { id: cmd.menuKey, title: cmd.label, href: cmd.href });
-      else router.push(cmd.href);
+      openMenu(item.cmd.dest);
       return;
     }
     const hit = item.hit;
@@ -233,7 +237,7 @@ export function CommandPalette({
                 setActive(0);
               }}
               onKeyDown={onInputKeyDown}
-              placeholder="메뉴 · 학생 · 수업 · 상담 검색…"
+              placeholder="메뉴 · 원생 · 수업 · 상담 검색…"
               aria-label="검색"
               autoComplete="off"
               className="text-foreground placeholder:text-text-faint flex-1 bg-transparent text-sm focus:outline-none"
@@ -252,12 +256,17 @@ export function CommandPalette({
                   const section = sectionOf(item);
                   const showHeader = i === 0 || sectionOf(items[i - 1]) !== section;
                   const key =
-                    item.kind === "menu" ? `m:${item.cmd.href}` : `d:${item.hit.kind}:${item.hit.id}`;
+                    item.kind === "menu" ? `m:${item.cmd.dest.href}` : `d:${item.hit.kind}:${item.hit.id}`;
                   return (
                     <Fragment key={key}>
                       {showHeader ? (
                         <li className="text-text-faint px-3 pt-2 pb-1 font-mono text-xs tracking-wider uppercase">
                           {SECTION_LABEL[section]}
+                          {/* 🔴 상한에 걸린 축은 그 사실을 적는다 — 실데이터에서 '김'은 원생 252명이 걸리는데
+                              8건만 보여 주고 끝내면 사람은 "검색이 안 된다"고 읽는다([[#89]]). */}
+                          {result.more.includes(section as PaletteKind)
+                            ? ` · 상위 ${PALETTE_LIMIT}건`
+                            : ""}
                         </li>
                       ) : null}
                       <li>
@@ -276,14 +285,14 @@ export function CommandPalette({
                             }`}
                           >
                             {item.kind === "menu" ? (
-                              <EyIcon name={item.cmd.icon} size={14} strokeWidth={1.8} />
+                              <EyIcon name={item.cmd.dest.icon} size={14} strokeWidth={1.8} />
                             ) : (
                               <EyIcon name={DATA_ICON[item.hit.kind]} size={14} />
                             )}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate font-medium">
-                              {item.kind === "menu" ? item.cmd.label : item.hit.title}
+                              {item.kind === "menu" ? item.cmd.dest.label : item.hit.title}
                             </span>
                             {item.kind === "data" && item.hit.subtitle ? (
                               <span
