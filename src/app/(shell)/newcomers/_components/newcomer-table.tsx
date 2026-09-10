@@ -9,7 +9,7 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { setOnboardingCheck } from "@/features/newcomers/server/actions";
-import { STATUS_STYLE, cellBoxClass, cellMarkOf } from "@/features/newcomers/cell-display";
+import { STATUS_STYLE, cellBoxClass, cellHoverClass, cellMarkOf } from "@/features/newcomers/cell-display";
 import {
   ONBOARDING_ITEMS,
   daysBetween,
@@ -28,8 +28,11 @@ import type { NewcomerRow } from "@/features/newcomers/server/queries";
  *
  * 🔴 칸은 **체크박스가 아니라 상태**다: 완료 / 지연 / 오늘·임박 / 예정(D-n) / 기한 없음 / 기준일 전.
  *    체크박스만 두면 "아직 할 때가 아닌 것"과 "놓친 것"이 같아 보인다.
- * 🔴 **칠하는 것은 완료뿐**이고 나머지는 흰 바탕 + 글자다 — 모양·글자·색 규약은
- *    [`cell-display.ts`](src/features/newcomers/cell-display.ts) **한 곳**에 있다(여기에 색 맵을 만들지 말 것).
+ * 🔴 **통짜 채움은 완료뿐**이고, **지난 기간에 안 된 칸(지연·기준일 이전)은 연붉은 틴트**다. 나머지는
+ *    흰 바탕 + 글자 — 모양·글자·색 규약은 [`cell-display.ts`](src/features/newcomers/cell-display.ts)
+ *    **한 곳**에 있다(여기에 색 맵을 만들지 말 것).
+ * 🔴 **틴트는 표시일 뿐 집계가 아니다** — 지연 수·완료율 분모는 `progressOf` 그대로다(기준일 이전은
+ *    칠하되 세지 않는다). 칠해졌다는 이유로 숫자를 바꾸지 말 것.
  * 🔴 항목 열은 **폭이 전부 같다**(원장 *"모든 열너비 통일시킬 수 있으면 통일"*) — 같은 자리에서 같은
  *    항목을 비교하기 위해서다. 열 순서를 진행 순서로 읽히게 만들지 말 것(기준일이 둘이라 기한이
  *    왼쪽→오른쪽으로 오지 않는다).
@@ -97,7 +100,7 @@ function Cell({
         className={`num flex h-7 w-full items-center justify-center border text-xs transition disabled:cursor-default ${cellBoxClass(
           status,
           item.optional === true,
-        )} ${canWrite && !busy ? (status === "done" ? "hover:brightness-95" : "hover:bg-muted") : ""}`}
+        )} ${canWrite && !busy ? cellHoverClass(status, item.optional === true) : ""}`}
       >
         {/* 🔴 `blank`는 **일부러 빈 칸**이다(기준일 이전) — `—`를 채워 넣지 말 것. 이유는 title이 말한다. */}
         {mark.kind === "check" ? (
