@@ -15,6 +15,7 @@ import { SEAT_BADGE_W, seatFixedCols, seatTableMinWidth } from "../lib/seat-day-
 import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
 import { shortClassLabel } from "../lib/seat-day";
 import { groupRosterRows, type RosterGroupKey } from "../lib/roster-order";
+import { sortSeatRowsByClass } from "../lib/seat-day-order";
 import type { RosterEntry } from "../lib/grid";
 import { GroupToggle, useGroupHint } from "./roster-table";
 import { RosterSlotCells } from "./roster-slot-cells";
@@ -58,7 +59,11 @@ export function SeatDayTable({
       sizes[group.key] = group.rows.length;
       if (group.label) out.push({ kind: "label", key: group.key, count: group.rows.length });
       if (collapsedGroups.includes(group.key)) continue;
-      for (const entry of group.rows) out.push({ kind: "row", entry, navRow: navRow++ });
+      // 🔴 반별로 묶는다(원장 2026-09-10) — 섹션은 groupRosterRows가 정하고, 그 **안에서만** 반으로 다시 세운다.
+      //    안정 정렬이라 반 안의 순서(재원=가나다 / 퇴원=최신 종료일 먼저)는 그대로다.
+      //    navRow는 정렬 **뒤에** 매긴다 — Enter 세로 이동이 눈에 보이는 순서를 따라가야 한다([[#103]]).
+      for (const entry of sortSeatRowsByClass(group.rows, (e) => e.row))
+        out.push({ kind: "row", entry, navRow: navRow++ });
     }
     return { rows: out, counts: sizes };
   }, [students, collapsedGroups]);

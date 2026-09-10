@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { ECS_FONT_SIZE_ZOOM } from "../font-size";
-import { seatAttKey, shortClassLabel } from "../lib/seat-day";
+import { seatAttKey } from "../lib/seat-day";
 import type { RosterGroupKey } from "../lib/roster-order";
 import { DEFAULT_ECS_COLLAPSED_ROSTER_GROUPS } from "../view-prefs";
 import { rosterTextCols, type SheetMark } from "../lib/roster-form";
@@ -63,9 +63,12 @@ export function SeatDayClient({ data }: { data: SeatDayData }) {
               <h2 className="text-foreground text-lg font-extrabold tracking-tight">
                 {p.periodLabel ? `${p.periodLabel} · ${range}` : range}
               </h2>
-              <p className="text-text-dim text-xs">
-                {p.classNames.map(shortClassLabel).join(" · ")} · {students.length}명
-              </p>
+              {/*
+                🔴 반 목록·인원수 부제는 없앴다(원장 2026-09-10 *"이 내용 필요없음"*).
+                반별 정렬이 들어가면서 **반은 각 학생 줄의 배지가**, **인원수는 표 머리 `학생 N`이**
+                이미 말한다(퇴원·보강·기록은 그 섹션 라벨 행이 제 건수를 단다) — 부제는 그 둘의 중복이었다.
+                ⚠️ 되살리지 말 것. 인원수를 다시 보여야 하면 표 머리(GroupToggle)를 고칠 자리다.
+              */}
               {mixedForms ? (
                 <span
                   className="border-line text-text-dim rounded-full border px-2 py-px text-xs font-bold"
