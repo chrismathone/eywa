@@ -44,7 +44,7 @@ export type RefundRequestData = {
   };
   refund: {
     paymentDetails: string; // 결제내역 (여러 줄)
-    deductionDetails: string; // 차감내역 (여러 줄)
+    deductionDetails: string; // 미환불금액 (여러 줄) — 라벨만 2026-09-10 개명, 키는 옛 이름 그대로
     totalAmount: string; // 총 환불금액
     method: Record<RefundMethodKey, string>;
   };
@@ -214,7 +214,7 @@ export function refundFieldList(d: RefundRequestData): { label: string; value: s
     { label: "총수업횟수", value: d.student.totalSessions },
     { label: "환불요청일자", value: d.student.requestDate },
     { label: "결제내역", value: d.refund.paymentDetails },
-    { label: "차감내역", value: d.refund.deductionDetails },
+    { label: "미환불금액", value: d.refund.deductionDetails },
     { label: "총환불금액", value: d.refund.totalAmount },
     { label: "환불방식-계좌", value: d.refund.method.account },
     { label: "환불방식-인터넷카드", value: d.refund.method.internetCard },
