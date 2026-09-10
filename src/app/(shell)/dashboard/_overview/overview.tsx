@@ -847,13 +847,12 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     },
                   ]}
                 />
-                <p className={s.footnote}>판정 제외 {homework.unparsed}건</p>
               </>
             )}
             {unread && (
               <div className={s.separated}>
                 <InlineStat
-                  label={`발송 ${unread.graceHours}시간 후 미확인`}
+                  label={`수업보고서 발송 ${unread.graceHours}시간 후 미확인`}
                   value={
                     <>
                       {number(unread.reports)}
