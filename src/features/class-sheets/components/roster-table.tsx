@@ -35,7 +35,7 @@ import { attendanceOrMakeup } from "../lib/makeup-roster";
 import { rosterColSpan, rosterTextCols, type RosterForm, type SheetMark } from "../lib/roster-form";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
-import { TODAY_BASE_COLS, TODAY_NAME_W } from "../lib/today-columns";
+import { TODAY_BASE_COLS, weeklyNameWidth } from "../lib/today-columns";
 // 셀 구현은 **공용 모듈**(roster-slot-cells) — 오늘 면 통합 표(today-roster-table)와 같은 셀을 쓴다
 // (원장 2026-08-11 "쓸데없이 중복되는 컴포넌트가 다수" — 여기 인라인이던 것을 추출, 동작 불변).
 import {
@@ -199,11 +199,15 @@ export const RosterTable = memo(function RosterTable({
         {/* 2026-08-17 열 다이어트(원장 "줄일 수 있는 곳은 다 줄여보자") — 이름 열은 영어이름이 둘째 줄로
             내려가(RosterNameCell 두 줄 표기) 한 줄 몫(60)만 남기고, 폭 수치는 전부 today-columns·roster-form
             상수로 모았다. 하한 근거는 그 파일들 주석 참조. */}
+        {/* 🔴 이름 열은 2026-09-10부터 **폼이 정한다**(`weeklyNameWidth`) — 이름 뒤에 `/학교학년`이
+            같은 줄로 붙어서(원장 *"학생이름 → 학생이름/학교학년"*) 한 줄 몫(60)으로는 못 담는다.
+            기본 폼은 116px 고정, JJ 폼은 15%(고정 열이 309라 116을 고정으로 주면 특이사항이 0이 된다).
+            근거·실측은 today-columns의 `weeklyNameWidth` 주석. */}
         {/* ⚠️ 출결·유닛·태도 폭은 오늘 면과 **같은 상수**(TODAY_BASE_COLS) — 한쪽만 고치면 두 화면이 갈린다.
             ⚠️ 유닛 칸은 열 폭을 그대로 채운다(w-full) — 예전 46px 고정 입력이 열보다 넓어
                양옆 칸 위로 겹쳐 그려지던 문제(원장 2026-08-06 "너무 겹치네")가 구조적으로 사라졌다. */}
         <colgroup>
-          <col style={{ width: TODAY_NAME_W }} />
+          <col style={{ width: weeklyNameWidth(form) }} />
           {TODAY_BASE_COLS.map((w, i) => (
             <col key={i} style={{ width: w }} />
           ))}
@@ -248,22 +252,21 @@ export const RosterTable = memo(function RosterTable({
             {/* 특이사항 머리도 **가운데**(원장 2026-08-19 "라벨 줄맞춤") — 이 열은 잔여 폭을 다 받아
                 넓은데, 라벨만 왼쪽에 붙어 있어 앞 열(누적 암기 단어수)에 딸린 것처럼 보였다.
                 본문 값은 좌측 정렬 유지(표 규약 2026-08-05: 머리는 가운데, 값은 왼쪽). */}
-            {/* ⚠️ 한 줄 고정 — JJ 폼은 이 열이 30px까지 좁아져(2026-08-28 열 다이어트) 라벨이 두 줄로
-                접힌다. 접히면 그 카드만 학생 줄이 아래로 밀려 나란한 카드의 `grid-rows-subgrid` 줄맞춤이
-                깨진다(roster-form ⚠️와 같은 이유).
-                🔴 그렇다고 **옆으로 흘려보내지도 않는다**(원장 2026-09-09 *"특이사항 열 삐져나오는것도 수정"*) —
-                   흘러나온 글자는 헤더 밴드(회색 라운드) 밖으로 새어 다음 카드 위에 겹쳐 보인다. 열 안에서
-                   말줄임으로 자르고 전문은 `title`로 남긴다. 자를 뿐 접지 않으니 머리 높이는 그대로다.
-                ⚠️ `<th>`에 직접 걸면 table-fixed 칸이라 잘리지 않는다 — 안쪽 블록이 폭을 받아야 한다.
-                ⚠️ 가운데 정렬(2026-08-19 규약)과 말줄임을 **한 요소에 같이 걸지 말 것** — 넘치는 줄에서
-                   가운데 정렬은 글자를 왼쪽으로도 밀어내 앞뒤가 **함께** 잘린다(끝의 `…` 하나로 안 끝난다).
-                   바깥이 flex로 가운데를 잡고 **안쪽만** 폭을 받아 자르면, 들어갈 땐 가운데·넘칠 땐
-                   끝에만 `…`가 붙는다. */}
-            <th className="rounded-r-md py-0.5 font-bold">
-              <span className="flex justify-center">
-                <span className="min-w-0 truncate" title={t("roster.col.note")}>
-                  {t("roster.col.note")}
-                </span>
+            {/* 🔴 **옆으로 흘려보내지 않는다**(원장 2026-09-09 *"특이사항 열 삐져나오는것도 수정"*) —
+                   흘러나온 글자는 헤더 밴드(회색 라운드) 밖으로 새어 다음 카드 위에 겹쳐 보인다.
+                🔴 그런데 **자르지도 않는다**(원장 2026-09-10 *"JJ 특이사항이 너무 짤리니까 행제목정도만
+                   표시될 수 있도록"*) — JJ 폼에서 이 열은 29px이라 말줄임이 곧 `특…`이었다.
+                🔑 그래서 **접는다(최대 2줄)**. 2026-09-09엔 "접으면 머리 높이가 갈린다"고 봤지만, 실측
+                   (2026-09-10 크롬, Pretendard 14px/700)으로 그 전제가 틀렸다: 옆의 자유 입력 머리가
+                   **이미 두 줄**이다(`시험 점수` 55.5 > 52 · `누적 암기 단어수` 98 > 78). 즉 두 폼 모두
+                   머리 행이 39px(2줄)이고, 여기를 `leading-tight` 두 줄로 맞추면 **높이가 그대로**다.
+                   한글은 음절 사이에서 접히므로 26px만 있어도 `특이/사항`이 온전히 선다(실측).
+                ⚠️ `leading-tight`를 빼지 말 것 — 없으면 줄높이 1.45라 2줄이 44.6px이 되어 그 카드만
+                   머리가 커지고 나란한 카드의 `grid-rows-subgrid` 줄맞춤이 깨진다.
+                ⚠️ `line-clamp-2`가 상한이다(3줄 이상이면 `…`) — 가운데 정렬은 `<th>`가 잡는다. */}
+            <th className="rounded-r-md py-0.5 text-center leading-tight font-bold">
+              <span className="line-clamp-2" title={t("roster.col.note")}>
+                {t("roster.col.note")}
               </span>
             </th>
           </tr>

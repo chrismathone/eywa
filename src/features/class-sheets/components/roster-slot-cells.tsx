@@ -50,7 +50,18 @@ export type StudentMeta = {
 };
 
 /**
- * 이름 칸 — 클릭=학생 정보(WindowLink, #86). 한글 이름 13px 굵게(원장 2026-08-10 "크기 통일").
+ * 이름 칸 — 클릭=학생 정보(WindowLink, #86). 이름 13px 굵게(원장 2026-08-10 "크기 통일").
+ *
+ * **이름 뒤에 `/학교학년`이 같은 줄로 붙는다**(원장 2026-09-10: *"학생이름 → 학생이름/학교학년 으로.
+ * 예를 들면 김원중/경명여중3 이렇게."* → 주간 시트도 같게, *"이름 옆에"*).
+ * 🔴 표기는 [`schoolGradeLabel`](@/lib/format/school-grade) **한 곳**이다 — `경명여중`+`중3` → `경명여중3`.
+ *    여기서 `${school} ${grade}`로 새로 조립하지 말 것(공백 join 금지, 전역 표기 규약).
+ * 🔴 **번역하지 않는다** — 학교명은 사람이 입력한 사실이라 영어 화면에서도 그대로다(teacher-view 규약).
+ * 🔴 **학교·학년이 없으면 슬래시도 없다** — `김덕현/`처럼 꼬리만 남기지 않는다(빈 값 = 아예 안 그린다).
+ * ⚠️ **아래 줄로 내리지 말 것**(원장 *"이름 옆에"*) — 두 줄이 되면 그 행만 키가 커져 나란한 카드의
+ *    `grid-rows-subgrid` 줄맞춤이 깨진다.
+ * ⚠️ 이름은 `shrink-0`(절대 안 잘린다, 실측 최장 4자 ≈ 56px) + 학교학년만 `min-w-0 truncate` — 좁은
+ *    칸에서 먼저 양보하는 쪽은 **덧붙인 정보**여야 한다([[#111]]: 밀도 높은 표에서 `flex-wrap` 금지).
  *
  * 영어이름은 **아래 줄 작은 회색 한 줄**이다(원장 2026-08-17 "학생들 영어이름 어떻게 하면 깔끔하게
  * 보이게 할 수 있을려나"). 그전의 괄호 병기("김나윤A (Chloe)")는 좁은 칸에서 "김나윤A (" 다음 줄
@@ -61,23 +72,39 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
   // 🔴 주/보조 이름 판정은 [`studentNameParts`](@/features/teacher-view/student-name) **한 곳**이다 —
   //    화면마다 `lang === "en" ? …`를 적으면 한쪽만 고쳐진다. 여기선 그 결과를 그리기만 한다.
   const names = studentNameParts(meta?.name, meta?.englishName, useSheetLang());
+  // 없으면 빈 문자열 — 아래에서 슬래시째 안 그린다.
+  const schoolGrade = schoolGradeLabel(meta?.school, meta?.grade);
   return (
     <td className="py-px pr-1">
-      {/* 첫 줄: 한글 이름(+퇴원일). flex+min-w-0라 긴 이름이 truncate로 잘리고 날짜는 안 밀린다. */}
+      {/* 첫 줄: 이름 + /학교학년 (+퇴원일). flex+min-w-0라 학교학년이 truncate로 잘리고 날짜는 안 밀린다. */}
       <div className="flex min-w-0 items-center gap-1">
-        <WindowLink
-          href={`/students/${entry.studentId}`}
-          title={meta?.name}
-          className={`min-w-0 truncate text-sm font-bold underline-offset-2 hover:underline ${
-            entry.historical ? "text-text-dim" : "text-foreground"
-          } ${entry.endedOn ? "line-through" : ""}`}
-          ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
-        >
-          {/* 학교·학년은 이름 툴팁(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다). */}
-          <span title={meta ? `${meta.name} · ${schoolGradeLabel(meta.school, meta.grade)} — 클릭하면 학생 정보` : undefined}>
-            {names.primary || "?"}
-          </span>
-        </WindowLink>
+        {/* 이름과 학교학년은 **한 덩어리**(사이 간격 0) — `김원중/경명여중3`이 한 낱말로 읽혀야 한다. */}
+        <span className="flex min-w-0 items-center">
+          <WindowLink
+            href={`/students/${entry.studentId}`}
+            title={meta?.name}
+            className={`max-w-full shrink-0 truncate text-sm font-bold underline-offset-2 hover:underline ${
+              entry.historical ? "text-text-dim" : "text-foreground"
+            } ${entry.endedOn ? "line-through" : ""}`}
+            ariaLabel={meta ? `${meta.name} 학생 정보` : "학생 정보"}
+          >
+            {/* 학교·학년은 이름 툴팁에도 남긴다(학교 열은 2026-08-06에 뺐다 — 정보는 남긴다). */}
+            <span title={meta ? `${meta.name} · ${schoolGrade} — 클릭하면 학생 정보` : undefined}>
+              {names.primary || "?"}
+            </span>
+          </WindowLink>
+          {/* 보조 표기라 한 단계 작게(둘째 줄 영어이름과 같은 위계). ⚠️ `text-text-dim`은 지금
+              `--foreground`와 **같은 색**이다(2026-09-08 글자색 통일) — 색으로 위계를 만들지 못하니
+              크기·굵기가 그 일을 한다. 토큰을 `text-text-faint` 등으로 바꿔도 결과는 같다. */}
+          {schoolGrade ? (
+            <span
+              className="text-text-dim min-w-0 truncate text-xs font-semibold"
+              title={`${names.primary}/${schoolGrade}`}
+            >
+              /{schoolGrade}
+            </span>
+          ) : null}
+        </span>
         {entry.endedOn ? (
           <span className="text-text-dim num shrink-0 text-sm" title={`${entry.endedOn} 수강 종료`}>
             {entry.endedOn.slice(5)}
