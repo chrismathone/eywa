@@ -1,0 +1,65 @@
+import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { hhmm, type SeatKey } from "../seat";
+import type { SeatPlacement } from "../placement";
+
+/**
+ * 자리 **배치**(드래그로 옮긴 자리) 조회 — 0254a `seat_placements`.
+ *
+ * 🔴 **admin 클라이언트 + 명시 `tenant_id` 필터**로만 읽는다 — 이 표는 RLS 정책이 0개라 세션
+ *    클라이언트로 읽으면 **에러 없이 0행**이 온다([[#104]]). 비로그인 PIN 화면도 같은 함수를 쓴다
+ *    (배치를 안 보여 주면 두 화면이 서로 다른 자리를 말한다 — 출결 귀속은 어느 쪽이든 같지만
+ *    "누가 어디 앉아 있나"가 갈리면 당번이 엉뚱한 카드를 찾는다).
+ * 🔴 **fail-soft**([[#95]]) — 0254a가 아직 안 돌았어도 이 화면은 매일 도는 자리 출석부다. 표가 없으면
+ *    배치 0줄(= 지금까지의 화면 그대로)로 떨어지고 드래그·초기화만 잠긴다. throw 금지.
+ */
+export type SeatPlacementLoad = {
+  rows: SeatPlacement[];
+  /** 배치를 쓸 수 있나 — false면 드래그·초기화를 잠그고 배너가 사실을 말한다. */
+  ready: boolean;
+  /** 왜 못 쓰는가(한글). 표가 없는 것과 그냥 실패한 것은 다른 문구다. */
+  reason: string | null;
+};
+
+const NOT_READY = (reason: string): SeatPlacementLoad => ({ rows: [], ready: false, reason });
+
+/** 표가 아직 없다(SQL 미적용)와 그냥 실패를 가른다 — 원인을 단정하지 않기 위해서다. */
+function missingTable(err: { code?: string; message?: string }): boolean {
+  return err.code === "42P01" || err.code === "PGRST205" || /seat_placements/i.test(err.message ?? "");
+}
+
+export async function getSeatPlacements(
+  tenantId: string,
+  seat: SeatKey,
+  date: string,
+  slotStart: string,
+): Promise<SeatPlacementLoad> {
+  const { data, error } = await createAdminClient()
+    .from("seat_placements")
+    .select("student_id, from_class_id, to_class_id")
+    .eq("tenant_id", tenantId)
+    .eq("seat", seat)
+    .eq("session_date", date)
+    .eq("slot_start", hhmm(slotStart))
+    // 🔑 정렬을 못박아 **서버 렌더와 클라 첫 렌더가 같은 순서**를 그린다(옮겨 온 학생은 명단 끝에
+    //    `applied` 순으로 붙으므로, 순서가 흔들리면 하이드레이션이 갈린다).
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    return NOT_READY(
+      missingTable(error)
+        ? "자리 배치 기능이 아직 켜지지 않았습니다 — 관리자에게 문의하세요(0254a 미적용)."
+        : "자리 배치를 불러오지 못했습니다 — 드래그·초기화만 잠시 잠깁니다.",
+    );
+  }
+  return {
+    rows: (data ?? []).map((r) => ({
+      studentId: r.student_id as string,
+      fromClassId: r.from_class_id as string,
+      toClassId: r.to_class_id as string,
+    })),
+    ready: true,
+    reason: null,
+  };
+}

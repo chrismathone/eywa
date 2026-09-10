@@ -11,9 +11,17 @@ import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { seatPlanApi } from "@/features/attendance/seat/seat-plan-api";
 import type { SeatPeriodHintData } from "./seat-mark-extras";
 import { useSeatBoardSaves } from "./seat-board-saves";
+import { useSeatPlacementMoves } from "./seat-board-moves";
 import { SeatJjTable } from "./seat-jj-table";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import { SeatLabGrid } from "./seat-lab-grid";
+import {
+  applySeatPlacements,
+  mergeSeatPlacements,
+  seatResetCounts,
+  seatResetTargets,
+  type SeatPlacement,
+} from "@/features/attendance/seat/placement";
 
 type PeriodChip = { start: string; ends: string[]; classIds: string[] };
 
@@ -56,6 +64,9 @@ export function SeatBoard({
   prevAbsentByCell,
   nextStartByStudent,
   plans,
+  placements,
+  canMove = false,
+  placementNotice,
 }: {
   seat: SeatKey;
   date: string;
@@ -83,6 +94,18 @@ export function SeatBoard({
    */
   publicPin?: boolean;
   plans?: SeatPlans;
+  /**
+   * 자리 **배치**(드래그로 옮긴 자리, 0254a) — 서버가 준 줄. `undefined`면 배치 축 자체가 없다.
+   * 🔴 출결 귀속이 아니다(`placement.ts` 머리 주석) — 옮겨도 저장은 언제나 원래 반으로 나간다.
+   */
+  placements?: readonly SeatPlacement[];
+  /**
+   * 드래그·초기화를 열 것인가 — **로그인 + 쓰기 가능 + 0254a 적용됨**일 때만 참.
+   * 🔴 비로그인 PIN 화면은 언제나 거짓이다(감사로그에 실행자를 못 남기는 동작은 열지 않는다).
+   */
+  canMove?: boolean;
+  /** 배치를 못 쓰는 이유(한글) — 있으면 한 줄로 알린다. 없으면 아무 말도 안 한다. */
+  placementNotice?: string | null;
 }) {
   const {
     pending,
@@ -120,8 +143,22 @@ export function SeatBoard({
         : undefined,
     [plans, planApi, date, activeStart, applyCarried, flushFields],
   );
-  const view = mergeFields(rosters);
-  const all = view.flatMap((r) => r.students.map((s) => statusOf(r.classId, s)));
+  const { overlay, movePending, moveError, moveStudent, resetPlacements } = useSeatPlacementMoves(
+    seat,
+    date,
+    activeStart,
+  );
+  const raw = mergeFields(rosters);
+  /**
+   * 배치를 얹은 명단 — 서버 줄 + 화면 오버레이를 합쳐 **순수 함수 한 벌**로 그린다.
+   * 🔴 학생마다 `homeClassId`(원래 반)가 붙는다 — 아래 모든 조회·저장은 묶음 id가 아니라 그 값을 쓴다.
+   * ⚠️ 배치가 없으면(JJ실·평소) 결과는 입력과 글자 그대로 같다(`homeClassId === classId`).
+   */
+  const placed = applySeatPlacements(raw, mergeSeatPlacements(raw, placements ?? [], overlay));
+  const view = placed.rosters;
+  const resetCounts = seatResetCounts(placed.applied);
+  const resetAllTargets = seatResetTargets(placed.applied);
+  const all = view.flatMap((r) => r.students.map((s) => statusOf(s.homeClassId, s)));
   const total = all.length;
   const checked = all.filter((v) => v !== null).length;
   const waiting = total - checked;
@@ -136,8 +173,11 @@ export function SeatBoard({
     ? new Set(
         view.flatMap((r) =>
           r.students
-            .filter((s) => statusOf(r.classId, s) === null && prevAbsentByCell[seatCellKey(r.classId, s.id)])
-            .map((s) => seatCellKey(r.classId, s.id)),
+            .filter(
+              (s) =>
+                statusOf(s.homeClassId, s) === null && prevAbsentByCell[seatCellKey(s.homeClassId, s.id)],
+            )
+            .map((s) => seatCellKey(s.homeClassId, s.id)),
         ),
       ).size
     : 0;
@@ -179,8 +219,34 @@ export function SeatBoard({
             </span>
           ) : null}
         </span>
-        {!readOnly && waiting > 0 ? (
+        {(!readOnly && waiting > 0) || (canMove && resetAllTargets.length > 0) ? (
           <div className="ml-auto flex flex-wrap gap-2">
+            {/* 🔴 **되돌릴 것이 있을 때만** 선다(원장 2026-09-10 *"반별 '초기화' 단체 '초기화'"*). 반별과
+                같은 서버 액션·같은 판정이고 범위만 다르다 — 그래서 반별 건수의 합이 언제나 이 수와 같다.
+                🔴 확인은 **전체에만** 둔다(반별은 대상이 적고 되돌리기 쉽다). */}
+            {canMove && resetAllTargets.length > 0 ? (
+              <button
+                type="button"
+                disabled={movePending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `이 교시에서 드래그로 옮긴 ${resetAllTargets.length}명을 원래 반으로 되돌립니다.\n이미 찍힌 출결은 그대로 남습니다. 계속할까요?`,
+                    )
+                  )
+                    return;
+                  resetPlacements(
+                    resetAllTargets.map((t) => t.studentId),
+                  );
+                }}
+                title="이 교시에서 드래그로 옮긴 자리를 전부 원래 반으로 되돌립니다 — 출결 기록은 그대로입니다"
+                className="border-line bg-card text-text-dim rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+              >
+                전체 초기화 {resetAllTargets.length}명
+              </button>
+            ) : null}
+            {!readOnly && waiting > 0 ? (
+              <>
             {/* 🔴 '자동 결석'이 아니라 **사람이 누르는 한 번**이다(원장 2026-09-10 지시의 안전한 형태).
                 후보가 0명이면 아예 안 선다 — 세워 두고 "0명"이라 적으면 화면이 거짓말을 한다. */}
             {prevAbsentWaiting > 0 ? (
@@ -210,6 +276,8 @@ export function SeatBoard({
             >
               남은 {waiting}명 결석
             </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -227,6 +295,18 @@ export function SeatBoard({
       {error ? (
         <p className="text-att-absent-ink bg-att-absent/30 border-att-absent rounded-xl border px-3 py-2 text-xs">
           {error}
+        </p>
+      ) : null}
+      {/* 🔵 배치(드래그) 실패는 출결 실패와 **다른 줄**로 알린다 — 두 축이 섞이면 무엇이 안 됐는지 모른다. */}
+      {moveError ? (
+        <p className="text-att-absent-ink bg-att-absent/30 border-att-absent rounded-xl border px-3 py-2 text-xs">
+          {moveError}
+        </p>
+      ) : null}
+      {/* 0254a가 아직 안 돌았거나 조회가 실패했을 때 — 화면은 그대로 살고 드래그·초기화만 잠긴다([[#95]]). */}
+      {placementNotice ? (
+        <p className="text-text-dim bg-bg-soft/60 border-line rounded-xl border px-3 py-2 text-xs">
+          {placementNotice}
         </p>
       ) : null}
 
@@ -257,7 +337,22 @@ export function SeatBoard({
             hints={hints}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
-            pending={pending}
+            pending={pending || movePending}
+            canMove={canMove}
+            onMove={(studentId, toClassId) => {
+              const home = view
+                .flatMap((r) => r.students)
+                .find((s) => s.id === studentId)?.homeClassId;
+              if (!home) return;
+              moveStudent(studentId, toClassId, home);
+            }}
+            onResetClass={(classId) =>
+              resetPlacements(
+                seatResetTargets(placed.applied, classId).map((t) => t.studentId),
+                classId,
+              )
+            }
+            resetCounts={resetCounts}
           />
         )}
       </div>

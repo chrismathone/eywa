@@ -35,6 +35,7 @@ import {
 } from "@/features/attendance/seat/prev-period";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
+import { getSeatPlacements } from "@/features/attendance/seat/server/placements";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
 
@@ -102,7 +103,7 @@ export default async function SeatAttendancePage({
 
   // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
   // 🔴 계획은 **자리 권한이 아니라 영어 시트 권한**이 연다 — 아르바이트·viewer에겐 반마다 빈 값이 온다.
-  const [rosters, plans] = await Promise.all([
+  const [rosters, plans, placements] = await Promise.all([
     period && seatHasJjFields(seat)
       ? attachJjMarks(day.rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
       : Promise.resolve(period ? (day.rosterByPeriod[period.start] ?? []) : []),
@@ -115,7 +116,19 @@ export default async function SeatAttendancePage({
           period.start,
         )
       : Promise.resolve({}),
+    // 자리 **배치**(드래그로 옮긴 자리, 0254a) — fail-soft라 표가 없어도 화면은 그대로 산다([[#95]]).
+    period
+      ? getSeatPlacements(user.tenantId, seat, date, period.start)
+      : Promise.resolve({ rows: [], ready: false, reason: null }),
   ]);
+
+  /**
+   * 드래그·초기화를 열 것인가 — **랩실 + 오늘(또는 지난 날짜 쓰기 권한) + 0254a 적용됨**.
+   * 🔴 서버 액션이 같은 판정을 다시 한다([[#77]]) — 이 값은 화면을 정할 뿐 게이트가 아니다.
+   */
+  const canMovePlacement = seat === "lab" && !readOnly && placements.ready;
+  // 못 쓰는 이유는 **쓸 수 있어야 할 때만** 말한다(지난 날짜 조회 중엔 배너가 소음이다).
+  const placementNotice = seat === "lab" && !readOnly && !placements.ready ? placements.reason : null;
 
   /**
    * 같은 날 교시 사이 신호 — **이미 받아 온 하루치**(`day`)에서 순수 함수로 뽑는다(왕복 0회).
@@ -212,6 +225,9 @@ export default async function SeatAttendancePage({
           // 🔵 '다음 교시'는 **로그인 화면에만** 내려간다 — 비로그인 PIN 화면(`/seat/:key`)엔 이 prop을
           //    아예 안 넘긴다(그 경로는 사유도 조회하지 않는다는 규약과 같은 결).
           nextStartByStudent={nextStartByStudent}
+          placements={placements.rows}
+          canMove={canMovePlacement}
+          placementNotice={placementNotice}
           // 진도 구획은 계획을 볼 수 있는 반이 하나라도 있을 때만 — 없으면 prop 자체를 안 넘긴다.
           plans={
             Object.keys(plans).length > 0

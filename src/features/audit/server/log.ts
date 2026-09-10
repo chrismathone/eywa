@@ -257,6 +257,10 @@ export const AUDIT_ACTIONS = {
   seat_attendance_note: "자리 결석 사유 수정",
   seat_attendance_fill: "자리 출결 일괄",
   seat_attendance_fill_prev: "자리 출결 앞 교시 결석 일괄",
+  // 자리 **배치**(드래그로 옮긴 자리, 0254a) — 출결과 다른 축이라 라벨도 갈라 적는다. 되돌리기는
+  // 반별·전체·학생 한 명이 **같은 키**를 쓰고 `metadata.scope`로 구분된다.
+  seat_placement_move: "자리 이동(드래그)",
+  seat_placement_reset: "자리 이동 초기화",
 
   // 수업보고서·발송 — 학부모에게 **나간 것**이라 되짚기가 가장 절실하다.
   lesson_report_save: "수업보고서 저장",

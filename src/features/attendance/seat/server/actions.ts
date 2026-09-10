@@ -6,9 +6,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { SEAT_DB_LABEL, ambiguousClassIds, hhmm, isPayrollSeat, type SeatKey } from "../seat";
 import { prevAbsentFillTargets, seatDayCells } from "../prev-period";
+import { applySeatPlacements } from "../placement";
 import { pickSaveTargets } from "../../save-targets";
 import { gateSeatWrite, rosterKeys } from "./gate";
 import { getPublicSeatDay, getSeatDay } from "./queries";
+import { getSeatPlacements } from "./placements";
 
 export type SeatStatus = "present" | "absent" | "late";
 export type SeatResult = { ok: true; changed: number } | { error: string };
@@ -140,10 +142,38 @@ export async function fillSeatSlot(input: {
   const roster = await rosterKeys(input.seat, input.date, slot, g.via === "pin" ? g.tenantId : null);
   if (!roster) return { error: "그 시각에는 이 자리 수업이 없습니다" };
 
-  const targets = input.classId
-    ? [[input.classId, roster.classes.get(input.classId) ?? []] as const]
-    : [...roster.classes.entries()];
   if (input.classId && !roster.classes.has(input.classId)) return { error: "이 교시에 없는 반입니다" };
+
+  /**
+   * "이 반 출석"은 **화면이 보여 준 그 묶음**을 채운다 — 자리 배치(드래그)로 옮겨 온 학생은 그 묶음에
+   * 서 있고, 옮겨 나간 학생은 거기 없다(원장 2026-09-10 배치 도입).
+   *
+   * 🔴 배치를 안 보면 버튼이 **화면과 다른 집합**을 채운다: 손님은 안 찍히는데 `남은 N명`은 그대로라
+   *    "눌렀는데 안 된다"가 된다. 반대로 옮겨 나간 학생은 화면에 없는데 조용히 찍힌다.
+   * 🔴 **저장은 여전히 학생마다 원래 반(수강 반)으로** 나간다 — `byClass`의 키는 화면 묶음이 아니라
+   *    `roster.classes`의 반 id 그대로다(배치는 출결 귀속을 바꾸지 않는다).
+   * ⚠️ 교시 전체 일괄(`classId` 없음)은 배치와 무관하다 — 어차피 그 교시 전원이라 집합이 같다.
+   */
+  const sectionOf = input.classId
+    ? new Map(
+        applySeatPlacements(
+          roster.rosters,
+          (await getSeatPlacements(g.tenantId, input.seat, input.date, slot)).rows,
+        ).applied.map((p) => [p.studentId, p.toClassId]),
+      )
+    : null;
+  const targets: (readonly [string, string[]])[] = input.classId
+    ? (() => {
+        const byHome = new Map<string, string[]>();
+        for (const [homeClassId, studentIds] of roster.classes) {
+          for (const id of studentIds) {
+            if ((sectionOf?.get(id) ?? homeClassId) !== input.classId) continue;
+            byHome.set(homeClassId, [...(byHome.get(homeClassId) ?? []), id]);
+          }
+        }
+        return [...byHome.entries()];
+      })()
+    : [...roster.classes.entries()];
 
   const supabase = g.via === "pin" ? createAdminClient() : await createClient();
   const filled = await insertSeatFill(supabase, {

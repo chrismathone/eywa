@@ -44,7 +44,10 @@ describe("① 자동으로 찍지 않는다 — 사람이 누르는 버튼 하�
   });
 
   it("버튼 수는 낙관 오버레이를 얹은 뒤 센다 — 방금 출석으로 고친 학생이 남으면 안 된다", () => {
-    expect(board).toMatch(/statusOf\(r\.classId, s\) === null && prevAbsentByCell\[/);
+    // 🔴 축이 `r.classId`(놓인 묶음)가 아니라 **`s.homeClassId`(원래 반)**다(2026-09-10 자리 배치 도입) —
+    //    드래그로 옮긴 학생의 출결은 언제나 원래 반에 저장되므로, 묶음 id로 세면 옮긴 학생이 늘 '미체크'로
+    //    보여 버튼이 실제로 쓰는 수보다 많게 적힌다.
+    expect(board).toMatch(/statusOf\(s\.homeClassId, s\) === null &&\s*prevAbsentByCell\[/);
   });
 });
 
@@ -146,6 +149,7 @@ describe("표시는 두 화면이 같은 부품을 쓴다", () => {
   });
 
   it("버튼 수는 칸 키로 중복을 접는다 — 서버가 접는 것과 같은 축", () => {
-    expect(board).toMatch(/new Set\([\s\S]{0,400}seatCellKey\(r\.classId, s\.id\)\)/);
+    // 위와 같은 이유로 키의 반 축도 `s.homeClassId`다(서버 `prevAbsentFillTargets`는 수강 반으로 접는다).
+    expect(board).toMatch(/new Set\([\s\S]{0,400}seatCellKey\(s\.homeClassId, s\.id\)\)/);
   });
 });

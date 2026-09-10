@@ -85,20 +85,31 @@ export async function rosterKeys(
   date: string,
   slotStart: string,
   tenantId: string | null,
-): Promise<{ keys: Set<string>; classes: Map<string, string[]> } | null> {
+): Promise<{
+  keys: Set<string>;
+  classes: Map<string, string[]>;
+  /**
+   * 그 교시 **전체 명단**(찍힌 칸 포함) — 자리 배치(`applySeatPlacements`)를 얹을 때 쓴다.
+   * 🔴 `classes`(미체크만)로는 배치를 못 얹는다 — 이미 찍힌 학생도 화면에선 옮겨 앉아 있어서,
+   *    미체크 목록만 보면 "이 반 출석"이 화면과 다른 집합을 채운다.
+   */
+  rosters: { classId: string; students: { id: string }[] }[];
+} | null> {
   const day = tenantId ? await getPublicSeatDay(tenantId, seat, date) : await getSeatDay(seat, date);
   const period = day.periods.find((p) => p.start === hhmm(slotStart));
   if (!period) return null;
   const blocked = new Set(ambiguousClassIds(period));
   const keys = new Set<string>();
   const classes = new Map<string, string[]>();
+  const rosters: { classId: string; students: { id: string }[] }[] = [];
   for (const roster of day.rosterByPeriod[period.start] ?? []) {
     if (blocked.has(roster.classId)) continue;
     classes.set(
       roster.classId,
       roster.students.filter((s) => s.status === null).map((s) => s.id),
     );
+    rosters.push({ classId: roster.classId, students: roster.students.map((s) => ({ id: s.id })) });
     for (const s of roster.students) keys.add(`${roster.classId}|${s.id}`);
   }
-  return { keys, classes };
+  return { keys, classes, rosters };
 }
