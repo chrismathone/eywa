@@ -7,6 +7,7 @@ import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { groupByStart, hhmm, isPayrollSeat, SEAT_DB_LABEL, type SeatKey, type SeatPeriod, type SeatSlot } from "../seat";
+import type { SeatVisiting } from "../period-choice";
 
 export type SeatStudent = {
   id: string;
@@ -47,6 +48,13 @@ export type SeatClassRoster = {
   bgColor: string | null;
   textColor: string | null;
   students: SeatStudent[];
+  /**
+   * **다른 시간에서 옮겨 온 학생 묶음**이면 원래 반의 자리 교시들(교시 선택 0255a, 원장 2026-09-10 *"다른
+   * 시간으로 이동"*). 이 교시엔 그 반 슬롯이 없으므로 `end`는 원래 교시의 끝이다(화면이 안 적는다).
+   * 🔴 반 id·이름·색은 **원래 반** 것이다 — 출결이 원래 반으로 저장되므로 화면도 그 반 이름을 단다.
+   * 조회(`loadSeatDay`)는 이 칸을 채우지 않는다 — [`applySeatPeriodChoicesByPeriod`](../period-choice.ts)가 만든다.
+   */
+  visiting?: SeatVisiting | null;
 };
 
 export type SeatDay = {
@@ -67,6 +75,16 @@ export type SeatDay = {
    *    교시에서는 감추지 않는다. 교시가 안 붙은 날 단위 행(`slot_start` null)은 담지 않는다.
    */
   markedSlotsByCell: Record<string, string[]>;
+  /**
+   * 반 id → 그 날 이 반의 **다른**(이 자리가 아닌) 수업 시작 — 교시 이동의 **겹침 방지** 재료.
+   * 🔴 그 시각으로 옮기면 자리 기록과 반 수업 기록이 같은 `(반·학생·날짜·교시)` 키가 되어 서로를 덮는다.
+   */
+  busyStartsByClass: Record<string, string[]>;
+  /**
+   * `반id|학생id` → 교시 → **그 반의 이 자리 교시 밖**에서 이미 찍힌 이 자리 기록(다른 시간으로 옮겨 가서
+   * 찍힌 것). 사실이 규칙을 이긴다 — 교시 선택이 지워져도 이 기록은 그 교시에 선다.
+   */
+  offSlotByCell: Record<string, Record<string, SeatStudent>>;
 };
 
 function toSeatStudent(
@@ -145,7 +163,15 @@ async function loadSeatDay(
 
   const seatRows = (rawSlots ?? []).filter((r) => specialSlotLabel(r.slot_teacher_label) === wantLabel);
   if (seatRows.length === 0)
-    return { date, periods: [], rosterByPeriod: {}, slotsByClass: {}, markedSlotsByCell: {} };
+    return {
+      date,
+      periods: [],
+      rosterByPeriod: {},
+      slotsByClass: {},
+      markedSlotsByCell: {},
+      busyStartsByClass: {},
+      offSlotByCell: {},
+    };
 
   const classIds = [...new Set(seatRows.map((r) => r.class_id as string))];
 
@@ -305,6 +331,42 @@ async function loadSeatDay(
     const list = (markedSlotsByCell[`${r.class_id}|${r.student_id}`] ??= []);
     if (!list.includes(slot)) list.push(slot);
   }
+  /**
+   * 반 → 그 날 이 반의 **다른** 수업 시작(이 자리가 아닌 교시) — 교시 이동이 반 수업과 겹치지 않게.
+   * 🔑 새 조회가 아니다 — 위에서 받은 그 요일 라벨 슬롯(`rawSlots`)을 반 축으로 접은 것이다.
+   * ⚠️ 라벨이 없는 교시(담당만 있는 슬롯)는 그 조회에 안 들어온다. 실측 2026-09-10 랩실 반 15개는 전부 영어이고
+   *    유효 슬롯 145개가 전부 라벨을 들고 있다 — 라벨 없는 반이 랩실을 쓰게 되면 여기를 다시 볼 것.
+   */
+  const seatClassIdSet = new Set(classIds);
+  const busyStartsByClass: Record<string, string[]> = {};
+  for (const r of rawSlots ?? []) {
+    const classId = r.class_id as string;
+    if (!seatClassIdSet.has(classId)) continue;
+    if (specialSlotLabel(r.slot_teacher_label) === wantLabel) continue;
+    const start = hhmm(r.start_time as string);
+    if (!start) continue;
+    const list = (busyStartsByClass[classId] ??= []);
+    if (!list.includes(start)) list.push(start);
+  }
+  /**
+   * (반|학생) → 교시 → **그 반의 이 자리 교시 밖**에서 이미 찍힌 이 자리 기록(다른 시간으로 옮겨 가서 찍힌 것).
+   * 🔴 **이 자리 라벨이 박힌 기록만** — 반 수업 기록(라벨 없음)을 자리 방문으로 읽으면 안 된다. 그래서 라벨을
+   *    안 박는 비급여 자리(JJ실)엔 늘 비어 있다(JJ실은 교시를 옮기지 않는다).
+   * 🔴 **그날 이 자리 명단에 있는 학생만**(`studentsByClass`) — 명단 밖 학생은 이 경로로도 안 들어온다.
+   */
+  const periodStartSet = new Set(periods.map((p) => p.start));
+  const offSlotByCell: Record<string, Record<string, SeatStudent>> = {};
+  for (const r of effective) {
+    const slot = hhmm(r.slot_start);
+    if (!slot || !periodStartSet.has(slot)) continue;
+    if (specialSlotLabel(r.seat_label) !== wantLabel) continue;
+    if ((slotsByClass[r.class_id] ?? []).includes(slot)) continue;
+    // ⚠️ 상태로는 거르지 않는다 — 제 교시 칸(`recByKey`)과 같은 규약이다. 반 출석부가 그 칸을 조퇴·공결로
+    //    고쳐도 자리 라벨은 남으므로, 여기서 거르면 그 기록이 아무도 안 보는 칸에 숨고 학생이 제 교시에 되살아난다.
+    const base = (studentsByClass.get(r.class_id) ?? []).find((s) => s.id === r.student_id);
+    if (!base) continue;
+    (offSlotByCell[`${r.class_id}|${r.student_id}`] ??= {})[slot] = toSeatStudent(base, r);
+  }
   const dayLevelFallback = (classId: string, studentId: string) => {
     if (isPayrollSeat(seat)) return undefined;
     if ((periodCountByClass.get(classId) ?? 0) !== 1) return undefined;
@@ -333,5 +395,5 @@ async function loadSeatDay(
     }));
   }
 
-  return { date, periods, rosterByPeriod, slotsByClass, markedSlotsByCell };
+  return { date, periods, rosterByPeriod, slotsByClass, markedSlotsByCell, busyStartsByClass, offSlotByCell };
 }
