@@ -24,10 +24,13 @@ import { createClient } from "@/lib/supabase/server";
  * full이라 무제한 유지(뷰 전환은 스코프/크롬만 바꾸고 권한 불변 — view-mode.ts 규약). readonly
  * (회계·뷰어)는 사무실 역할이라 종전대로 무제한.
  */
-const READ_GRACE_DAYS = 60;
+export const READ_GRACE_DAYS = 60;
 
-/** 이 강사가 학생 상세를 열람할 수 있는 반 id 합집합(요청당 캐시). 실패는 좁은 쪽으로 떨어진다. */
-const teacherViewableClassIds = cache(async (userId: string): Promise<string[]> => {
+/**
+ * 이 강사가 학생 상세를 열람할 수 있는 반 id 합집합(요청당 캐시). 실패는 좁은 쪽으로 떨어진다.
+ * JJ실(ijw/server/viewer.ts)도 **같은 갈래**를 쓴다 — 여기를 바꾸면 두 화면이 함께 바뀐다(상세엔 뜨는데 JJ실엔 없는 일이 없게).
+ */
+export const teacherViewableClassIds = cache(async (userId: string): Promise<string[]> => {
   const supabase = await createClient();
   const today = kstToday();
   const [own, slots, delegated] = await Promise.all([
@@ -42,6 +45,43 @@ const teacherViewableClassIds = cache(async (userId: string): Promise<string[]> 
       ...delegated,
     ]),
   ];
+});
+
+/** 세 갈래를 **따로** 들고 있는 스코프 — 교시 행은 유효기간까지(지금 도는지 판정용, [[#88]]). */
+export type TeacherClassScope = {
+  /** 담임(classes.teacher_id) — 반 단위 단일 값이라 그 자체가 '지금'이다. */
+  own: string[];
+  /** 교시 담당 행 — 마감된 이력 행까지 담는다. */
+  slots: { classId: string; validFrom: string | null; validTo: string | null }[];
+  /** 임시 위임(오늘 ±7일). */
+  delegated: string[];
+};
+
+/**
+ * 엄격판 — 담임·교시 담당 조회가 실패하면 **던진다**(JJ실용, ijw/server/viewer.ts). 조용히 빈 갈래로 떨어지면 강사에게
+ * "담당 학생 없음"이 사실처럼 보인다(적대 재리뷰 2026-09-10). 갈래는 위 `teacherViewableClassIds`와 **같다** — 한쪽을
+ * 바꾸면 여기도 함께 바꿀 것(가드: ijw/tenant-guard.test.ts). 학생 상세의 기본판 동작(실패 = 그 갈래만 빈 채)은 그대로다.
+ * ⚠️ 위임 갈래는 getDelegatedClassIdsInRange가 오류를 안에서 삼켜(빈 배열) 여기서도 감지하지 못한다.
+ */
+export const teacherClassScopeStrict = cache(async (userId: string): Promise<TeacherClassScope> => {
+  const supabase = await createClient();
+  const today = kstToday();
+  const [own, slots, delegated] = await Promise.all([
+    supabase.from("classes").select("id").eq("teacher_id", userId),
+    supabase.from("class_schedules").select("class_id, valid_from, valid_to").eq("teacher_id", userId),
+    getDelegatedClassIdsInRange(userId, addDays(today, -7), addDays(today, 7)),
+  ]);
+  if (own.error) throw new Error(`teacher scope (homeroom): ${own.error.message}`);
+  if (slots.error) throw new Error(`teacher scope (slots): ${slots.error.message}`);
+  return {
+    own: (own.data ?? []).map((r) => r.id as string),
+    slots: (slots.data ?? []).map((r) => ({
+      classId: r.class_id as string,
+      validFrom: (r.valid_from as string | null) ?? null,
+      validTo: (r.valid_to as string | null) ?? null,
+    })),
+    delegated,
+  };
 });
 
 /**
