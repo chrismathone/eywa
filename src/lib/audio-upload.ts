@@ -10,7 +10,25 @@ export const ACCEPTED_AUDIO_TYPES = [
   "audio/webm",
   "audio/ogg",
 ];
-export const MAX_AUDIO_SIZE = 50 * 1024 * 1024; // 50 MB — Supabase free-tier cap
+/**
+ * 업로드 오디오 상한 — **100MB**(원장 2026-09-10 *"100MB까지 허용해줘"*, 종전 50MB).
+ *
+ * 🔴 이 값은 **서버 [`AUDIO_MAX`](./storage/media-storage.ts)와 짝**이다 — 한쪽만 올리면 클라가
+ *    통과시킨 파일을 서버가 티켓 발급에서 거절해서, 사용자는 "형식도 크기도 맞는데 업로드 준비 실패"라는
+ *    설명 없는 오류만 본다. 바꿀 땐 반드시 둘 다.
+ * ⚠️ 옛 주석의 "Supabase free-tier cap"은 낡았다 — 유료 전환(2026-07-29) 후 버킷 상한은
+ *    `meeting-recordings`·`consultation-recordings` 모두 **200MB**로 이미 열려 있다(실측 2026-09-10).
+ *    즉 지금 병목은 스토리지가 아니라 이 상수였다.
+ */
+export const MAX_AUDIO_SIZE = 100 * 1024 * 1024;
+
+/**
+ * 화면에 적는 상한 표기 — `"100MB"`.
+ * 🔴 **화면 파일에 숫자를 손으로 적지 말 것.** 2026-09-10에 상한을 50→100MB로 올렸을 때 회의록 폼과
+ *    등록상담 녹음 칸이 `MP3/M4A/WAV · 50MB`를 글자로 들고 있어 **화면만 옛 숫자**로 남아 있었다
+ *    (올릴 수 있는데 못 올린다고 적혀 있으면 아무도 시도하지 않는다).
+ */
+export const MAX_AUDIO_SIZE_LABEL = `${MAX_AUDIO_SIZE / 1024 / 1024}MB`;
 const EXT_RE = /\.(mp3|m4a|wav|webm|ogg)$/i;
 
 export function formatBytes(n: number): string {

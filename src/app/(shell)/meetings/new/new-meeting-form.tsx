@@ -26,6 +26,7 @@ import {
   formatSeconds,
   kstTimestamp,
   validateAudioFile,
+  MAX_AUDIO_SIZE_LABEL,
 } from "@/lib/audio-upload";
 
 /** datetime-local 기본값 — **KST 지금**(런타임 시간대로 만들면 SSR과 브라우저가 9시간 어긋난다). */
@@ -426,7 +427,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
             >
               <Upload className="text-muted-foreground size-5" />
               <span className="text-foreground block text-sm font-medium">파일 업로드</span>
-              <span className="text-muted-foreground text-xs">MP3/M4A/WAV · 50MB</span>
+              <span className="text-muted-foreground text-xs">MP3/M4A/WAV · {MAX_AUDIO_SIZE_LABEL}</span>
             </button>
             <button
               type="button"
