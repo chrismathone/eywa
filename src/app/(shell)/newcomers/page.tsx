@@ -72,6 +72,14 @@ export default async function NewcomersPage({
       .join("&");
     return qs ? `/newcomers?${qs}` : "/newcomers";
   };
+  /**
+   * 🔴 위 넷은 전부 **체크 기록**에서 나온다 — 조회가 실패했으면 숫자를 지어내지 않고 `—`로 둔다
+   *    (실제 0과 구분되게). ⚠️ 표가 아직 없는 것(0251a 미적용)은 실패가 아니라 "아직 안 켜짐"이라
+   *    그대로 센다 — 그땐 체크가 0건인 것이 사실이고, 배너가 저장이 잠긴 사실을 따로 말한다.
+   */
+  const counted = view.checksError === null;
+  const stat = (n: number) => (counted ? n : "—");
+  const unknownTitle = "체크 기록을 불러오지 못해 셀 수 없습니다";
   // 🔴 "기한이 온 건"은 아직 아무도 안 끝낸 상태에서도 **왜 그런지**를 말해야 한다 — 기능 시작일
   //    이전 기한은 세지 않으므로(`waived`) 분모가 작다. 그 사실을 한 줄로 남긴다.
   const waived = view.rows.reduce((n, r) => {
@@ -94,7 +102,7 @@ export default async function NewcomersPage({
         {/* 지표 = 인라인 칩. 지연·오늘·임박은 **눌러서 그 명단으로** 좁힌다. */}
         <ToolbarSegment label="현황" wrap>
           <ToolbarSegmentItem active={openOnly} href={hrefWith({ only: !openOnly })}>
-            미완료 {openCount}명
+            미완료 {stat(openCount)}명
           </ToolbarSegmentItem>
           {/* 🔴 걸린 필터는 반드시 보이고 해제할 수 있어야 한다 — 운영실에서 링크로 들어오면
               화면엔 "왜 명단이 짧은지"를 말해 주는 것이 이 칩뿐이다. */}
@@ -105,23 +113,28 @@ export default async function NewcomersPage({
           ) : null}
         </ToolbarSegment>
         <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
-          <span className="text-sm">
-            <b className={`num text-lg font-bold ${overdue > 0 ? "text-danger" : "text-text-faint"}`}>{overdue}</b>{" "}
+          <span className="text-sm" title={counted ? undefined : unknownTitle}>
+            <b className={`num text-lg font-bold ${counted && overdue > 0 ? "text-danger" : "text-text-faint"}`}>
+              {stat(overdue)}
+            </b>{" "}
             <span className="text-text-dim">지연</span>
           </span>
-          <span className="text-sm">
-            <b className={`num text-lg font-bold ${dueSoon > 0 ? "text-amber" : "text-text-faint"}`}>{dueSoon}</b>{" "}
+          <span className="text-sm" title={counted ? undefined : unknownTitle}>
+            <b className={`num text-lg font-bold ${counted && dueSoon > 0 ? "text-amber" : "text-text-faint"}`}>
+              {stat(dueSoon)}
+            </b>{" "}
             <span className="text-text-dim">오늘·임박</span>
           </span>
+          {/* 🔴 '대상'은 체크가 아니라 **학생 명단**에서 나온다 — 체크 조회가 실패해도 이 수는 사실이다. */}
           <span className="text-sm">
             <b className="num text-primary text-lg font-bold">{view.rows.length}</b>{" "}
             <span className="text-text-dim">대상</span>
           </span>
-          <span className="text-sm" title={`기한이 온 ${dueAll}건 중 ${doneAll}건 완료`}>
-            <b className="num text-lg font-bold text-green">{rate}</b>{" "}
+          <span className="text-sm" title={counted ? `기한이 온 ${dueAll}건 중 ${doneAll}건 완료` : unknownTitle}>
+            <b className={`num text-lg font-bold ${counted ? "text-green" : "text-text-faint"}`}>{stat(rate)}</b>{" "}
             <span className="text-text-dim">% 완료</span>
           </span>
-          {waived > 0 ? (
+          {counted && waived > 0 ? (
             <span
               className="text-text-faint text-xs"
               title="이 기능이 생기기 전에 기한이 지난 항목입니다 — 기록할 방법이 없었으므로 지연으로 세지 않습니다"
