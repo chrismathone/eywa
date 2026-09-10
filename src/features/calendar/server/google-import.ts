@@ -1,0 +1,285 @@
+import "server-only";
+import { google } from "googleapis";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  canOverwrite,
+  planDeletions,
+  LEGACY_SNAPSHOT_MEMO_PREFIX,
+  parseCalendarSources,
+  toImportedRow,
+  type GoogleEventLike,
+  type ImportedEventRow,
+} from "../google-import";
+
+/**
+ * **구글 캘린더 → eywa 한 방향 임포트**(IO). 순수 변환·판정은 [`google-import.ts`](../google-import.ts).
+ *
+ * 원장 2026-09-10: *"동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"* + 하루 2회(06:00·18:00 KST).
+ *
+ * 🔴 **읽기만 한다** — 구글에 쓰지 않는다(서비스 계정 권한도 `일정 세부정보 보기`까지만 받았다).
+ * 🔴 **손으로 만든 일정은 절대 안 건드린다** — 모든 쓰기·삭제가 `google_event_id is not null`로 좁혀진다.
+ * 🔴 **조회 실패한 캘린더는 삭제 정리를 건너뛴다** — 빈 목록을 "구글에서 다 지워졌다"로 읽으면 그 캘린더가
+ *    통째로 사라진다(조회 실패와 '일정 0건'은 다른 사실이다).
+ * ⚠️ admin 클라이언트 = RLS 우회 → 모든 쿼리에 **tenant_id 명시 필터**.
+ */
+
+/** 과거·미래 창 — 지난 일정은 기록으로 조금만, 앞은 넉넉히(연간 행사가 1년 뒤에 잡힌다). */
+const PAST_DAYS = 30;
+const FUTURE_DAYS = 400;
+
+function loadServiceAccount(): { email: string; key: string } | null {
+  // 전용 키가 있으면 그것, 없으면 같은 프로젝트의 기존 키로 떨어진다(원장 2026-09-10: 새로 만들지 말 것).
+  const raw =
+    process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY ?? process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (!raw) return null;
+  let parsed: { client_email?: string; private_key?: string };
+  try {
+    parsed = JSON.parse(raw) as typeof parsed;
+  } catch {
+    try {
+      parsed = JSON.parse(Buffer.from(raw, "base64").toString("utf8")) as typeof parsed;
+    } catch {
+      return null;
+    }
+  }
+  return parsed.client_email && parsed.private_key
+    ? { email: parsed.client_email, key: parsed.private_key }
+    : null;
+}
+
+export type ImportSummary = {
+  tenantId: string;
+  calendars: number;
+  inserted: number;
+  updated: number;
+  skippedEdited: number;
+  unchanged: number;
+  deleted: number;
+  failed: { calendarId: string; reason: string }[];
+};
+
+type ExistingRow = {
+  id: string;
+  google_event_id: string | null;
+  updated_at: string | null;
+  google_synced_at: string | null;
+  title: string | null;
+  memo: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  tag_id: string | null;
+};
+
+/**
+ * 내용이 그대로면 UPDATE를 보내지 않는다.
+ * 🔴 안 그러면 **12시간마다 1,077행을 전부 다시 쓴다** — 바뀐 게 없어도 `updated_at`이 올라가
+ *    "사람이 고쳤나" 판정(`canOverwrite`)의 근거까지 흐려진다.
+ * ⚠️ `start_time`은 DB가 `16:00:00`으로 돌려주고 우리는 `16:00`을 만든다 — 앞 5글자로 비교한다.
+ */
+function unchanged(prev: ExistingRow, next: { title: string; memo: string | null; startDate: string; endDate: string; startTime: string | null; endTime: string | null }, tagId: string | null): boolean {
+  const t = (v: string | null) => (v ? v.slice(0, 5) : null);
+  return (
+    prev.title === next.title &&
+    prev.memo === next.memo &&
+    prev.start_date === next.startDate &&
+    prev.end_date === next.endDate &&
+    t(prev.start_time) === next.startTime &&
+    t(prev.end_time) === next.endTime &&
+    prev.tag_id === tagId
+  );
+}
+
+/** 태그 이름 → id. 없으면 만든다(이름은 원장이 정한 것이라 임의로 바꾸지 않는다). */
+async function resolveTagId(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  name: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("calendar_tags")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("name", name)
+    .maybeSingle();
+  if (data?.id) return String(data.id);
+  const { data: made } = await admin
+    .from("calendar_tags")
+    .insert({ tenant_id: tenantId, name })
+    .select("id")
+    .maybeSingle();
+  return made?.id ? String(made.id) : null;
+}
+
+export async function runGoogleCalendarImport(tenantId: string): Promise<ImportSummary> {
+  const sources = parseCalendarSources(process.env.GOOGLE_CALENDAR_IDS);
+  const sa = loadServiceAccount();
+  const summary: ImportSummary = {
+    tenantId,
+    calendars: sources.length,
+    inserted: 0,
+    updated: 0,
+    skippedEdited: 0,
+    unchanged: 0,
+    deleted: 0,
+    failed: [],
+  };
+  if (sources.length === 0 || !sa) {
+    summary.failed.push({
+      calendarId: "-",
+      reason: sources.length === 0 ? "GOOGLE_CALENDAR_IDS 미설정" : "서비스 계정 키 없음",
+    });
+    return summary;
+  }
+
+  const auth = new google.auth.JWT({
+    email: sa.email,
+    key: sa.key,
+    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+  });
+  const cal = google.calendar({ version: "v3", auth });
+  const admin = createAdminClient();
+
+  const now = Date.now();
+  const windowStart = new Date(now - PAST_DAYS * 86_400_000);
+  const windowEnd = new Date(now + FUTURE_DAYS * 86_400_000);
+  const startYmd = new Date(windowStart.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+  const endYmd = new Date(windowEnd.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+
+  for (const src of sources) {
+    let events: GoogleEventLike[];
+    try {
+      const collected: GoogleEventLike[] = [];
+      let pageToken: string | undefined;
+      do {
+        const res = await cal.events.list({
+          calendarId: src.calendarId,
+          timeMin: windowStart.toISOString(),
+          timeMax: windowEnd.toISOString(),
+          // 반복 일정을 **회차별로 펼친다** — 그래야 각 회차가 제 날짜에 서고 id도 회차마다 다르다.
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 2500,
+          pageToken,
+        });
+        collected.push(...((res.data.items ?? []) as GoogleEventLike[]));
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
+      events = collected;
+    } catch (e) {
+      // 🔴 이 캘린더는 **손도 대지 않고** 넘어간다(삭제 정리 포함).
+      summary.failed.push({
+        calendarId: src.calendarId,
+        reason: e instanceof Error ? e.message.slice(0, 200) : "조회 실패",
+      });
+      continue;
+    }
+
+    const tagId = await resolveTagId(admin, tenantId, src.tagName);
+    const rows = events
+      .map((ev) => toImportedRow(ev, src.tagName))
+      .filter((r): r is ImportedEventRow => r !== null);
+    const seen = new Set(rows.map((r) => r.googleEventId));
+
+    const { data: existingRaw } = await admin
+      .from("calendar_events")
+      .select("id, google_event_id, updated_at, google_synced_at, title, memo, start_date, end_date, start_time, end_time, tag_id")
+      .eq("tenant_id", tenantId)
+      .eq("google_calendar_id", src.calendarId)
+      .gte("start_date", startYmd)
+      .lte("start_date", endYmd);
+    const existing = (existingRaw ?? []) as ExistingRow[];
+    const byGoogleId = new Map(
+      existing.filter((r) => r.google_event_id).map((r) => [r.google_event_id as string, r]),
+    );
+
+    // 🔴 첫 회차 정리 — 9/3 스냅샷이 남긴 **구글 id 없는** 같은 태그·같은 기간 행을 치운다.
+    //    안 치우면 겹치는 기간이 두 벌이 된다(실측 창 안 160행). 창 밖 과거 6,108행은 2016년까지
+    //    거슬러 가는 유일한 기록이라 손대지 않는다(쿼리가 창으로 좁혀져 있다).
+    //    새 임포트 메모 접두는 글자가 달라 이번에 넣은 행이 걸릴 일은 없다. 2회차부터는 대상 0건.
+    if (tagId) {
+      await admin
+        .from("calendar_events")
+        .delete()
+        .eq("tenant_id", tenantId)
+        .eq("tag_id", tagId)
+        .is("google_event_id", null)
+        .like("memo", `${LEGACY_SNAPSHOT_MEMO_PREFIX}%`)
+        .gte("start_date", startYmd)
+        .lte("start_date", endYmd);
+    }
+
+    const syncedAt = new Date().toISOString();
+    for (const row of rows) {
+      const prev = byGoogleId.get(row.googleEventId);
+      const payload = {
+        tenant_id: tenantId,
+        google_calendar_id: src.calendarId,
+        google_event_id: row.googleEventId,
+        google_synced_at: syncedAt,
+        title: row.title,
+        memo: row.memo,
+        start_date: row.startDate,
+        end_date: row.endDate,
+        start_time: row.startTime,
+        end_time: row.endTime,
+        tag_id: tagId,
+      };
+      if (!prev) {
+        const { error } = await admin.from("calendar_events").insert(payload);
+        if (!error) summary.inserted += 1;
+        continue;
+      }
+      if (!canOverwrite({ updatedAt: prev.updated_at, googleSyncedAt: prev.google_synced_at })) {
+        summary.skippedEdited += 1;
+        continue;
+      }
+      // 바뀐 게 없으면 쓰지 않는다(회차마다 전건 UPDATE 방지).
+      if (unchanged(prev, row, tagId)) {
+        summary.unchanged += 1;
+        continue;
+      }
+      const { error } = await admin
+        .from("calendar_events")
+        .update(payload)
+        .eq("id", prev.id)
+        .eq("tenant_id", tenantId);
+      if (!error) summary.updated += 1;
+    }
+
+    // 구글에서 사라진 회차 정리 — **이 캘린더에서 온 행만**, 창 안에서만.
+    const gone = planDeletions([...byGoogleId.keys()], seen);
+    // 🔴 청크로 **전부** 지운다 — 상한으로 자르고 전체 수를 세면 화면이 안 지운 것까지 지웠다고 말한다.
+    for (let i = 0; i < gone.length; i += 200) {
+      const chunk = gone.slice(i, i + 200);
+      const { error } = await admin
+        .from("calendar_events")
+        .delete()
+        .eq("tenant_id", tenantId)
+        .eq("google_calendar_id", src.calendarId)
+        .in("google_event_id", chunk);
+      if (!error) summary.deleted += chunk.length;
+    }
+  }
+
+  // 감사로그 — 시스템 이벤트라 actor는 없다(원장 규약: 기능 변동은 전부 감사로그).
+  await admin.from("audit_logs").insert({
+    tenant_id: tenantId,
+    actor_id: null,
+    actor_name: "시스템(구글 캘린더 임포트)",
+    action: "calendar_google_import",
+    target_type: "calendar",
+    target_label: `캘린더 ${summary.calendars}개`,
+    metadata: {
+      inserted: summary.inserted,
+      updated: summary.updated,
+      skippedEdited: summary.skippedEdited,
+      unchanged: summary.unchanged,
+      deleted: summary.deleted,
+      failed: summary.failed,
+    },
+  });
+
+  return summary;
+}

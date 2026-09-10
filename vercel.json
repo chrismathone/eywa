@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["icn1"],
+  "regions": [
+    "icn1"
+  ],
   "ignoreCommand": "git rev-parse -q --verify HEAD^2 >/dev/null && exit 1 || git diff --quiet HEAD^ HEAD -- ':(exclude)docs' ':(exclude)scripts' ':(exclude).claude' ':(exclude)*.md'",
   "crons": [
     {
@@ -22,6 +24,14 @@
     {
       "path": "/api/cron/daily-briefing",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/google-calendar-import",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/google-calendar-import",
+      "schedule": "0 9 * * *"
     }
   ]
 }
