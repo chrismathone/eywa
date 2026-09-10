@@ -51,17 +51,24 @@ export default async function NewcomersPage({
 
   const [view, canWrite] = await Promise.all([getNewcomers(), canWriteTenant(viewer.systemRole, "newcomers")]);
   // 창 필터는 화면 안에서만 좁힌다 — 지표(지연·임박)는 **전체 대상** 기준이라야 "지금 놓친 게 몇 건인지"가 흔들리지 않는다.
-  const openOf = (r: (typeof view.rows)[number]) => r.progress.overdue + r.progress.dueSoon > 0;
-  const rows = view.rows
+  /**
+   * 🔴 표는 **학생 × 과목**이다(0256a, 원장 2026-09-10 *"여러 과목이면 과목별로 행이 존재해야함"*) — 칸·지연·
+   *    완료율은 과목 행으로 센다(수학 콜과 영어 콜은 다른 전화다). 하지만 **"N명"은 학생 수**다 — 과목 행 수를
+   *    명으로 적으면 두 과목 학생이 두 명으로 센다. 그래서 명은 `view.rows`(학생 한 줄)나 중복 제거(`studentsIn`)로.
+   */
+  const openOf = (r: (typeof view.subjectRows)[number]) => r.progress.overdue + r.progress.dueSoon > 0;
+  const rows = view.subjectRows
     .filter((r) => (bucket ? r.bucket === bucket : true))
     .filter((r) => (openOnly ? openOf(r) : true))
     .filter((r) => (itemCell ? careCellMatches(itemCell, r, view.today) : true));
-  const overdue = view.rows.reduce((n, r) => n + r.progress.overdue, 0);
-  const dueSoon = view.rows.reduce((n, r) => n + r.progress.dueSoon, 0);
-  const doneAll = view.rows.reduce((n, r) => n + r.progress.doneCount, 0);
-  const dueAll = view.rows.reduce((n, r) => n + r.progress.dueTotal, 0);
+  const studentsIn = (list: readonly { studentId: string }[]) => new Set(list.map((r) => r.studentId)).size;
+  const overdue = view.subjectRows.reduce((n, r) => n + r.progress.overdue, 0);
+  const dueSoon = view.subjectRows.reduce((n, r) => n + r.progress.dueSoon, 0);
+  const doneAll = view.subjectRows.reduce((n, r) => n + r.progress.doneCount, 0);
+  const dueAll = view.subjectRows.reduce((n, r) => n + r.progress.dueTotal, 0);
   const rate = dueAll === 0 ? 100 : Math.round((doneAll / dueAll) * 100);
-  const openCount = view.rows.filter(openOf).length;
+  // 미완료 **명** — 과목 한 줄이라도 걸린 학생(중복 제거).
+  const openCount = studentsIn(view.subjectRows.filter(openOf));
   const countOf = (b: NewcomerBucket) => view.rows.filter((r) => r.bucket === b).length;
   const hrefWith = (next: { bucket?: NewcomerBucket | null; only?: boolean; item?: string | null }) => {
     const b = next.bucket === undefined ? bucket : next.bucket;
@@ -82,7 +89,7 @@ export default async function NewcomersPage({
   const unknownTitle = "체크 기록을 불러오지 못해 셀 수 없습니다";
   // 🔴 "기한이 온 건"은 아직 아무도 안 끝낸 상태에서도 **왜 그런지**를 말해야 한다 — 기능 시작일
   //    이전 기한은 세지 않으므로(`waived`) 분모가 작다. 그 사실을 한 줄로 남긴다.
-  const waived = view.rows.reduce((n, r) => {
+  const waived = view.subjectRows.reduce((n, r) => {
     const anchors: NewcomerAnchors = { enrolledOn: r.enrolledOn, firstClassOn: r.firstClassOn };
     return (
       n +
@@ -96,7 +103,12 @@ export default async function NewcomersPage({
     <div className="space-y-4 compact-chrome:space-y-3">
       {/* 설명 줄은 뺐다(원장 2026-09-09 *"'등록 후 ~ 됩니다' 제거해 필요없어. 공간낭비"*) —
           기한이 어떻게 계산되는지는 각 칸의 툴팁이 그 자리에서 말한다. */}
-      <PageHeader eyebrow="재원 관리" title="신규생 관리" />
+      {/* 🔴 창(embed)·모바일에선 **머리를 통째로 접는다**(원장 2026-09-10 *"이중제목 안들어가게 정리"*) — 창
+          제목줄이 이미 "신규생 관리"라 컴팩트 머리가 같은 말을 한 번 더 적고 있었다. 설명 줄을 대신 넣지도
+          않는다(원장 2026-09-09 *"공간낭비"*로 뺀 줄이다). 넓은 전체 화면에선 그대로 선다. */}
+      <div className="compact-chrome:hidden">
+        <PageHeader eyebrow="재원 관리" title="신규생 관리" />
+      </div>
 
       <Toolbar>
         {/* 지표 = 인라인 칩. 지연·오늘·임박은 **눌러서 그 명단으로** 좁힌다. */}
@@ -108,7 +120,7 @@ export default async function NewcomersPage({
               화면엔 "왜 명단이 짧은지"를 말해 주는 것이 이 칩뿐이다. */}
           {itemCell ? (
             <ToolbarSegmentItem active href={hrefWith({ item: null })}>
-              {itemCell.label} {rows.length}명 · 해제
+              {itemCell.label} {studentsIn(rows)}명 · 해제
             </ToolbarSegmentItem>
           ) : null}
         </ToolbarSegment>
@@ -161,6 +173,14 @@ export default async function NewcomersPage({
           {view.checksError
             ? view.checksError.summary
             : "체크 기록 표가 아직 만들어지지 않았습니다 — 목록은 그대로 보이지만 체크는 저장되지 않습니다(0251a 적용 필요)."}
+        </p>
+      ) : null}
+
+      {/* 🔴 0256a 전이면 과목 칸이 없다 — 줄은 과목별로 서도 체크는 두 과목에 함께 걸린다. 숨기지 않는다. */}
+      {view.checksAvailable && !view.subjectChecks ? (
+        <p className="bg-amber-soft text-amber rounded-md px-3 py-2 text-sm break-keep">
+          과목별 체크가 아직 켜지지 않았습니다 — 지금은 한 과목 줄에서 체크하면 그 학생의 다른 과목 줄에도 같이
+          걸립니다(0256a 적용 필요).
         </p>
       ) : null}
 

@@ -3,7 +3,7 @@ import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   NEWCOMER_WINDOW_DAYS,
   ONBOARDING_ITEMS,
@@ -13,6 +13,8 @@ import {
   type NewcomerBucket,
   type NewcomerProgress,
 } from "../onboarding-items";
+import { buildSubjectAnchors, collapseChecks, effectiveChecks, indexChecks } from "../subject-rows";
+import { loadCheckRows, loadEnrollmentSubjects } from "./cohort";
 
 export { NEWCOMER_WINDOW_DAYS };
 
@@ -33,6 +35,21 @@ export { NEWCOMER_WINDOW_DAYS };
 
 export type NewcomerRow = {
   studentId: string;
+  /**
+   * 과목 키(학원설정 `subjects[].key`) — **학생 × 과목 한 줄**(원장 2026-09-10 *"여러 과목이면 과목별로
+   * 행이 존재해야함"*). 수강이 없으면 null. 🔴 라벨은 화면이 학원설정으로 붙인다(raw 키 노출 금지).
+   * 학생 한 줄로 접은 행(`NewcomersView.rows`)은 언제나 null이다.
+   */
+  subject: string | null;
+  /** 표의 줄 키 — `학생id|과목`(접은 행은 학생 id). */
+  rowKey: string;
+  /**
+   * **학생 한 줄로 접은 행에만** — 그 학생의 과목 행들. 운영실 칸 판정(`careCellMatches`)이 이것을 보고
+   * "어느 과목이라도 걸리면 그 학생이 걸린다"로 센다.
+   * 🔴 접은 체크 + 가장 이른 첫 수업일로 판정하면 **늦게 시작하는 과목의 콜이 기한 전에 '지연'**이 된다
+   *    (첫 수업일을 앞 과목에서 빌려 쓰므로) — 그래서 판정은 언제나 과목 행으로 한다.
+   */
+  subjects?: NewcomerRow[];
   name: string;
   school: string | null;
   grade: string | null;
@@ -50,7 +67,15 @@ export type NewcomerRow = {
 
 export type NewcomersView = {
   today: string;
+  /**
+   * **학생 한 줄**(과목을 접은 것) — 운영실·브리핑처럼 "N명"을 세는 자리가 쓴다. 🔴 `rows.length`는 학생 수다.
+   * 체크는 **모든 과목이 끝나야 완료**로 접었고, 칸 판정은 `subjects`(과목 행)로 한다.
+   */
   rows: NewcomerRow[];
+  /** **학생 × 과목** — 신규생 관리 표(0256a). 수강이 없는 학생은 과목 null 한 줄. */
+  subjectRows: NewcomerRow[];
+  /** 과목별 체크를 저장할 수 있나(0256a 적용). false면 체크가 과목 무관으로 저장된다 — 화면이 밝힌다. */
+  subjectChecks: boolean;
   /** 0251a가 적용돼 체크를 저장할 수 있나. false면 화면이 배너로 밝히고 체크를 잠근다. */
   checksAvailable: boolean;
   /** 체크 조회가 표 부재가 아닌 이유로 실패했을 때의 한글 사유(원문은 툴팁). */
@@ -95,41 +120,28 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
       .range(from, to),
   );
   const ids = students.map((s) => s.id);
-  if (ids.length === 0) return { today, rows: [], checksAvailable: true, checksError: null };
+  if (ids.length === 0)
+    return { today, rows: [], subjectRows: [], checksAvailable: true, checksError: null, subjectChecks: true };
 
   // 🔴 수강·체크는 서로 **독립**이다 — 줄지어 await하면 라운드트립이 합산된다(B4). 이 조회는 운영실
   //    한 화면에서도 도는 경로라(창마다 셸이 재실행된다) 한 왕복이 그대로 곱해진다.
+  // 🔴 조회는 운영실 신호(`newcomerOverdueSignal`)와 **같은 함수**다([`cohort.ts`](./cohort.ts)) — 한쪽만 과목을
+  //    알면 같은 학생을 두 화면이 다르게 말한다.
   const [enrollments, checksResult] = await Promise.all([
-    // 첫 수업일 = 가장 이른 수강 시작일. 학생별 최솟값이라 전건이 필요하다(청크 + 페이지네이션, B2/B3).
-    fetchInChunks<{ student_id: string; start_date: string | null }>(ids, (chunk) =>
-      supabase.from("enrollments").select("student_id, start_date").in("student_id", chunk),
-    ),
-    // 체크 — 0251a 미적용이면 표가 없다. 그때도 화면은 살고(빈 체크) 저장만 잠긴다([[#95]]).
-    fetchInChunks<{ student_id: string; item_key: string; done_on: string | null }>(ids, (chunk) =>
-      supabase.from("student_onboarding_checks").select("student_id, item_key, done_on").in("student_id", chunk),
-    ).then(
-      (rows) => ({ ok: true as const, rows }),
-      (e: unknown) => ({ ok: false as const, error: e }),
-    ),
+    loadEnrollmentSubjects(supabase, ids),
+    loadCheckRows(supabase, ids),
   ]);
-
-  const firstClassBy = new Map<string, string>();
-  for (const e of enrollments) {
-    const d = ymd(e.start_date);
-    if (!d) continue;
-    const prev = firstClassBy.get(e.student_id);
-    if (!prev || d < prev) firstClassBy.set(e.student_id, d);
-  }
+  // 🔴 `today`를 넘긴다 — 끝난 과목(그만둔 과목)은 줄을 세우지 않는다(아래 순수 함수 주석).
+  const { bySubject, earliest } = buildSubjectAnchors(enrollments, today);
 
   let checksAvailable = true;
   let checksError: NewcomersView["checksError"] = null;
-  const checkBy = new Map<string, Record<string, string | null>>();
+  let subjectChecks = true;
+  let checkIndex = indexChecks([]);
   if (checksResult.ok) {
-    for (const c of checksResult.rows) {
-      const bucket = checkBy.get(c.student_id) ?? {};
-      bucket[c.item_key] = ymd(c.done_on);
-      checkBy.set(c.student_id, bucket);
-    }
+    checkIndex = indexChecks(checksResult.rows);
+    // 0256a 전이면 체크는 전부 과목 무관('')으로 읽혔다 — 그 사실을 화면이 밝히도록 올려 보낸다.
+    subjectChecks = checksResult.subjectAware;
   } else {
     const e = checksResult.error;
     const raw = e instanceof Error ? e.message : String(e);
@@ -139,26 +151,55 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
       : { summary: "체크 기록을 불러오지 못했습니다 — 화면의 체크는 비어 보일 수 있습니다", raw };
   }
 
-  const rows: NewcomerRow[] = students
-    .map((s) => {
-      const enrolledOn = ymd(s.enrolled_at);
-      if (!enrolledOn) return null; // 등록일이 없으면 창을 셀 수 없다 — 대상이 아니다.
-      const firstClassOn = firstClassBy.get(s.id) ?? null;
-      const checks = checkBy.get(s.id) ?? {};
+  const itemKeys = ONBOARDING_ITEMS.map((item) => item.key);
+  const rows: NewcomerRow[] = [];
+  const subjectRows: NewcomerRow[] = [];
+  for (const s of students) {
+    const enrolledOn = ymd(s.enrolled_at);
+    if (!enrolledOn) continue; // 등록일이 없으면 창을 셀 수 없다 — 대상이 아니다.
+    const base = {
+      studentId: s.id,
+      name: s.name,
+      school: s.school,
+      grade: s.grade,
+      enrolledOn,
+      elapsedDays: daysBetween(enrolledOn, today),
+      bucket: bucketOf(enrolledOn, today),
+    };
+    const subjMap = bySubject.get(s.id);
+    // 과목 순서는 키 순으로 고정한다 — 서버 렌더와 클라 첫 렌더가 같은 줄 순서를 그려야 한다.
+    const subjects = subjMap ? [...subjMap.keys()].sort() : [];
+
+    // ① 과목 행 — 과목마다 **제 첫 수업일·제 체크**. 수강이 없으면 과목 null 한 줄(반 배정 전 신입이
+    //    가장 챙길 대상이라 사라지면 안 된다).
+    const perSubject: NewcomerRow[] = (subjects.length > 0 ? subjects : [null]).map((subject) => {
+      const firstClassOn = subject ? (subjMap?.get(subject) ?? null) : (earliest.get(s.id) ?? null);
+      const checks = effectiveChecks(checkIndex, s.id, subject);
       return {
-        studentId: s.id,
-        name: s.name,
-        school: s.school,
-        grade: s.grade,
-        enrolledOn,
+        ...base,
+        subject,
+        rowKey: `${s.id}|${subject ?? ""}`,
         firstClassOn,
-        elapsedDays: daysBetween(enrolledOn, today),
-        bucket: bucketOf(enrolledOn, today),
         checks,
         progress: progressOf({ enrolledOn, firstClassOn }, checks, today, ONBOARDING_ITEMS),
       };
-    })
-    .filter((r): r is NewcomerRow => r !== null);
+    });
+    subjectRows.push(...perSubject);
 
-  return { today, rows, checksAvailable, checksError };
+    // ② 학생 한 줄 — 옛 모양 그대로(가장 이른 첫 수업일). 체크는 **모든 과목이 끝나야 완료**로 접는다.
+    //    칸 판정은 `subjects`(과목 행)가 한다 — 과목이 없으면 이 줄 자체가 과목 행과 같다.
+    const firstClassOn = earliest.get(s.id) ?? null;
+    const checks = collapseChecks(checkIndex, s.id, subjects, itemKeys);
+    rows.push({
+      ...base,
+      subject: null,
+      rowKey: s.id,
+      firstClassOn,
+      checks,
+      progress: progressOf({ enrolledOn, firstClassOn }, checks, today, ONBOARDING_ITEMS),
+      ...(subjects.length > 0 ? { subjects: perSubject } : {}),
+    });
+  }
+
+  return { today, rows, subjectRows, checksAvailable, checksError, subjectChecks };
 });

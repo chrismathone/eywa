@@ -64,6 +64,13 @@ export type CareRow = {
   /** 첫 수업일 — 모르면 null. */
   firstClassOn: string | null;
   checks: Readonly<Record<string, string | null | undefined>>;
+  /**
+   * 그 학생의 **과목 행들**(0256a) — 있으면 칸 판정은 이것으로 한다: **어느 과목이라도 걸리면 그 학생이 걸린다**.
+   * 🔴 학생 한 줄(접은 체크 + 가장 이른 첫 수업일)로 판정하면 **늦게 시작하는 과목의 콜이 기한 전에 '지연'**이
+   *    된다(첫 수업일을 앞 과목에서 빌려 쓰므로). 이 필드 덕에 운영실(`buildCareCells(newcomers.rows)`)과
+   *    '우선 확인'이 **호출부를 안 바꾸고** 과목별로 맞게 센다(세는 단위는 여전히 학생이다).
+   */
+  subjects?: readonly CareRow[];
 };
 
 /**
@@ -76,6 +83,10 @@ export function careCellMatches(
   today: string,
   baseline: string = NEWCOMER_BASELINE_DATE,
 ): boolean {
+  // 과목 행이 있으면 그 행들로 판정한다 — 한 과목이라도 걸리면 그 학생이 이 칸에 든다(위 `subjects`).
+  if (row.subjects && row.subjects.length > 0) {
+    return row.subjects.some((s) => careCellMatches(cell, s, today, baseline));
+  }
   if (cell.kind === "noFirstClass") return row.firstClassOn === null;
   const status = statusOf(
     cell.item,
@@ -95,6 +106,11 @@ export function careCellOverdue(
   today: string,
   baseline: string = NEWCOMER_BASELINE_DATE,
 ): boolean {
+  // 판정 축은 `careCellMatches`와 같다 — 과목 행이 있으면 한 과목이라도 지연이면 그 학생은 지연이다.
+  //    두 함수가 다른 축을 보면 운영실 칸의 "지연 N"이 칸 숫자보다 커질 수 있다.
+  if (row.subjects && row.subjects.length > 0) {
+    return row.subjects.some((s) => careCellOverdue(cell, s, today, baseline));
+  }
   if (cell.kind === "noFirstClass") return false;
   return (
     statusOf(

@@ -15,6 +15,8 @@ import { resolveDayArrivals, type DayEnrollmentRow } from "../day-arrivals";
 import { classesWithFinishedPeriod } from "../day-recording";
 import { isReportTrackedSubject } from "../report-subjects";
 import { ONBOARDING_ITEMS, newcomerWindowStart, statusOf } from "@/features/newcomers/onboarding-items";
+import { buildSubjectAnchors, effectiveChecks, indexChecks } from "@/features/newcomers/subject-rows";
+import { loadCheckRows, loadEnrollmentSubjects, type ScopeFn } from "@/features/newcomers/server/cohort";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
 import { getUnassignedEnrolledStudents } from "./queries";
 import {
@@ -430,49 +432,44 @@ async function newcomerOverdueSignal(
   if (students.length === 0) return { count: 0, names: [] };
   const ids = students.map((s) => s.id);
 
-  // 첫 수업일 = 가장 이른 수강 시작일(탭과 같은 규칙 — 출결로 잡으면 지난 뒤에야 알게 된다).
-  const enrollments = await fetchInChunks<{ student_id: string; start_date: string | null }>(ids, (chunk) =>
-    scopeTenant(supabase.from("enrollments").select("student_id, start_date").in("student_id", chunk), db),
-  );
-  const firstClassBy = new Map<string, string>();
-  for (const e of enrollments) {
-    const d = e.start_date ? String(e.start_date).slice(0, 10) : null;
-    if (!d) continue;
-    const prev = firstClassBy.get(e.student_id);
-    if (!prev || d < prev) firstClassBy.set(e.student_id, d);
-  }
-
+  // 🔴 수강(과목)·체크는 신규생 탭과 **같은 조회·같은 규칙**이다([`cohort.ts`](../../newcomers/server/cohort.ts),
+  //    0256a 과목별) — 한쪽만 과목을 알면 탭은 "영어 사전 콜 대기"인데 운영실은 "완료"라고 말한다.
+  //    admin 경로라 테넌트 필터가 **유일한 격리선**이다(scopeTenant).
+  const scope: ScopeFn = (q) => scopeTenant(q, db);
+  const [enrollments, checksResult] = await Promise.all([
+    loadEnrollmentSubjects(supabase, ids, scope),
+    loadCheckRows(supabase, ids, scope),
+  ]);
   // 🔴 0251a 미적용은 **실패가 아니라 "아직 켜지지 않음"** 이다 — throw로 두면 브리핑이 매일 '신호 실패'를
   //    보고해 진짜 실패가 그 잡음에 묻힌다. 표가 없을 때만 조용히 0으로 접고, 다른 실패는 그대로 올린다.
-  let checks: { student_id: string; item_key: string; done_on: string | null }[];
-  try {
-    checks = await fetchInChunks<{ student_id: string; item_key: string; done_on: string | null }>(ids, (chunk) =>
-      scopeTenant(
-        supabase.from("student_onboarding_checks").select("student_id, item_key, done_on").in("student_id", chunk),
-        db,
-      ),
-    );
-  } catch (e) {
+  //    (0256a 미적용 — 과목 칸만 없는 것 — 은 조회 쪽이 알아서 옛 모양으로 다시 읽는다.)
+  if (!checksResult.ok) {
+    const e = checksResult.error;
     const raw = e instanceof Error ? e.message : String(e);
     if (/PGRST205|PGRST20[12]|42P01|does not exist|Could not find the table/i.test(raw)) return { count: 0, names: [] };
     throw e;
   }
-  const checkBy = new Map<string, Record<string, string | null>>();
-  for (const c of checks) {
-    const bucket = checkBy.get(c.student_id) ?? {};
-    bucket[c.item_key] = c.done_on ? String(c.done_on).slice(0, 10) : null;
-    checkBy.set(c.student_id, bucket);
-  }
+  // 탭과 같은 인자 — 끝난 과목은 줄이 없어야 두 화면이 같은 학생을 같게 말한다.
+  const { bySubject, earliest } = buildSubjectAnchors(enrollments, today);
+  const checkIndex = indexChecks(checksResult.rows);
 
   const names: string[] = [];
   for (const s of students) {
     const enrolledOn = s.enrolled_at ? String(s.enrolled_at).slice(0, 10) : null;
     if (!enrolledOn) continue;
-    const anchors = { enrolledOn, firstClassOn: firstClassBy.get(s.id) ?? null };
-    const done = checkBy.get(s.id) ?? {};
-    const overdue = ONBOARDING_ITEMS.some(
-      (item) => !item.optional && statusOf(item, anchors, done[item.key], today) === "overdue",
-    );
+    const subjMap = bySubject.get(s.id);
+    const subjects: (string | null)[] = subjMap && subjMap.size > 0 ? [...subjMap.keys()] : [null];
+    // 🔴 **한 과목이라도 지연이면 그 학생은 지연**이다 — 과목을 접어 한 줄로 판정하면 늦게 시작하는
+    //    과목의 콜이 기한 전인데 '지연'이 되고(첫 수업일을 앞 과목에서 빌려 쓴다), 반대로 한 과목만 한 콜이
+    //    '완료'가 된다. 과목마다 **제 첫 수업일·제 체크**로 판정한다(탭의 과목 행과 같은 재료).
+    const overdue = subjects.some((subject) => {
+      const firstClassOn = subject ? (subjMap?.get(subject) ?? null) : (earliest.get(s.id) ?? null);
+      const done = effectiveChecks(checkIndex, s.id, subject);
+      return ONBOARDING_ITEMS.some(
+        (item) =>
+          !item.optional && statusOf(item, { enrolledOn, firstClassOn }, done[item.key], today) === "overdue",
+      );
+    });
     if (overdue) names.push(s.name);
   }
   return { count: names.length, names };
