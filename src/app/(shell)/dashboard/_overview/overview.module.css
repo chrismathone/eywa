@@ -798,11 +798,25 @@
   gap: 7px;
   margin-top: 10px;
 }
-.riskNames > div {
+.riskNames > :is(div, a) {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   font-size: var(--text-xs);
+}
+.riskNames > a {
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: 4px;
+}
+.riskNames > a:hover {
+  background: #f1f4f7;
+}
+.riskNames > a:hover > span,
+.studentLink {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .riskNames b {
   color: var(--danger);

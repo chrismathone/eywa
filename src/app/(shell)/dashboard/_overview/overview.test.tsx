@@ -7,6 +7,7 @@ import {
   screen,
   within,
   cleanup,
+  waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -151,7 +152,7 @@ describe("overview display contracts", () => {
     expect(html).toContain("레벨테스트");
     expect(html).not.toContain('href="/calendar"');
   });
-  it("반복 결석 전체 목록은 별도 팝업에서 회 단위로 보여준다", () => {
+  it("반복 결석 전체 목록은 별도 팝업에서 회 단위로 표시하고 학생 출결 상세로 연결한다", async () => {
     mocks.data = snapshot();
     mocks.data.sections.absences = {
       at: 100,
@@ -169,6 +170,11 @@ describe("overview display contracts", () => {
     const view = render(<Overview initial={mocks.data} />);
     expect(view.container.textContent).toContain("3회 이상");
     expect(view.container.textContent).not.toContain("일일 브리핑");
+    expect(
+      within(view.container)
+        .getByRole("link", { name: "학생0 출결 상세 · 결석 3회" })
+        .getAttribute("href"),
+    ).toBe("/students/s0?tab=attendance");
     fireEvent.click(
       screen.getByRole("button", { name: "반복 결석 학생 자세히 보기" }),
     );
@@ -177,6 +183,13 @@ describe("overview display contracts", () => {
     expect(within(popup).getByText("학생0")).toBeTruthy();
     expect(within(popup).getByText("학생6")).toBeTruthy();
     expect(popup.textContent).not.toContain("칸");
+    const link = within(popup).getByRole("link", {
+      name: "학생6 출결 상세 · 결석 3회",
+    });
+    expect(link.getAttribute("href")).toBe("/students/s6?tab=attendance");
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     cleanup();
   });
 });

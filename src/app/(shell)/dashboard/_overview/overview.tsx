@@ -766,13 +766,18 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                 />
                 <div className={s.riskNames}>
                   {v.absences.data.rows.slice(0, 6).map((row) => (
-                    <div key={row.studentId}>
+                    <WindowLink
+                      key={row.studentId}
+                      href={`/students/${row.studentId}?tab=attendance`}
+                      title={`${row.studentName} 출결`}
+                      ariaLabel={`${row.studentName} 출결 상세 · 결석 ${row.unexplained}회`}
+                    >
                       <span>{row.studentName}</span>
                       <b>
                         {row.unexplained}
                         <small>회</small>
                       </b>
-                    </div>
+                    </WindowLink>
                   ))}
                 </div>
                 {v.absences.data.rows.length > 6 && (
@@ -782,13 +787,18 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   >
                     <div className={s.riskNames}>
                       {v.absences.data.rows.map((row) => (
-                        <div key={row.studentId}>
+                        <WindowLink
+                          key={row.studentId}
+                          href={`/students/${row.studentId}?tab=attendance`}
+                          title={`${row.studentName} 출결`}
+                          ariaLabel={`${row.studentName} 출결 상세 · 결석 ${row.unexplained}회`}
+                        >
                           <span>{row.studentName}</span>
                           <b>
                             {row.unexplained}
                             <small>회</small>
                           </b>
-                        </div>
+                        </WindowLink>
                       ))}
                     </div>
                   </DetailPopup>
@@ -977,7 +987,19 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                       .map((item) => (
                         <p key={item.label}>
                           <b>{item.label}</b> ·{" "}
-                          {item.needs.map((p) => p.name).join(", ")}
+                          {item.needs.map((p, index) => (
+                            <span key={p.id}>
+                              {index > 0 && ", "}
+                              <WindowLink
+                                href={`/students/${p.id}`}
+                                title={`${p.name} 학생 상세`}
+                                className={s.studentLink}
+                                ariaLabel={`${p.name} 학생 상세`}
+                              >
+                                {p.name}
+                              </WindowLink>
+                            </span>
+                          ))}
                         </p>
                       ))}
                   </DetailPopup>
