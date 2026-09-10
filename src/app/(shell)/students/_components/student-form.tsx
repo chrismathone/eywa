@@ -3,7 +3,11 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import {
+  AlertCircle,
+  Loader2,
+  Save,
+} from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createStudent,
@@ -77,7 +81,11 @@ function SubmitButton({ mode }: { mode: Mode }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+      {pending ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <Save className="size-4" />
+      )}
       {mode === "create" ? "등록" : "저장"}
     </Button>
   );
@@ -96,7 +104,10 @@ export function StudentForm({
   scope?: string;
 }) {
   const action = mode === "create" ? createStudent : updateStudent;
-  const [state, formAction] = useActionState<StudentFormState, FormData>(action, undefined);
+  const [state, formAction] = useActionState<StudentFormState, FormData>(
+    action,
+    undefined,
+  );
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
@@ -106,7 +117,10 @@ export function StudentForm({
   // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 전 필드 언컨트롤드라 onRestore 불필요.
   // status는 빈 옵션 없이 항상 'prospect' 등 기본값이 제출되므로 빈 폼 오탐 배너 방지로 의미판정서 제외.
   const draft = useFormDraft({
-    scope: mode === "create" ? "student:new" : `student:${initialValue?.id ?? "edit"}`,
+    scope:
+      mode === "create"
+        ? "student:new"
+        : `student:${initialValue?.id ?? "edit"}`,
     formRef,
     ignoreForBanner: ["status"],
   });
@@ -158,279 +172,317 @@ export function StudentForm({
   // 학년 옵션 = 설정(operations.gradeLevels) 또는 기본. '기타'는 설정과 무관하게 항상 노출(미분류 catch-all).
   // 현재값(v.grade)은 설정 목록에 없어도 합쳐 편집 시 유실 방지.
   const grades = Array.from(
-    new Set([...(gradeLevels ?? GRADES), ...(v.grade ? [v.grade] : []), "기타"]),
+    new Set([
+      ...(gradeLevels ?? GRADES),
+      ...(v.grade ? [v.grade] : []),
+      "기타",
+    ]),
   );
 
   return (
-    <form action={formAction} ref={formRef} className="space-y-5">
-      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+    <form
+      action={formAction}
+      ref={formRef}
+      className="space-y-4"
+      onInvalidCapture={(event) => {
+        const details = (event.target as HTMLElement).closest("details");
+        if (details) details.open = true;
+      }}
+    >
+      <DraftBanner
+        savedAt={draft.draftSavedAt}
+        onRestore={draft.restore}
+        onDiscard={draft.discard}
+      />
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="이름 *" htmlFor="name" error={errors.name}>
-          <input
-            id="name"
-            name="name"
-            defaultValue={v.name}
-            required
-            className={inputClass}
-            placeholder="예: 김민준"
-          />
-        </Field>
-        <Field label="ClassNote 이름" htmlFor="classnoteName" hint="동명이인 구분용 — 비우면 학생 이름 사용">
-          <input
-            id="classnoteName"
-            name="classnoteName"
-            defaultValue={v.classnoteName ?? ""}
-            className={inputClass}
-            placeholder='예: 김서윤(중2)'
-          />
-        </Field>
-        <Field label="영문 이름" htmlFor="englishName">
-          <input
-            id="englishName"
-            name="englishName"
-            defaultValue={v.englishName ?? ""}
-            className={inputClass}
-            placeholder="예: Minjun Kim"
-          />
-        </Field>
-        <Field label="학년" htmlFor="grade">
-          <select id="grade" name="grade" defaultValue={v.grade ?? ""} className={inputClass}>
-            <option value="">선택</option>
-            {grades.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="학교" htmlFor="school">
-          <input
-            id="school"
-            name="school"
-            defaultValue={v.school ?? ""}
-            className={inputClass}
-            placeholder="예: 서일고"
-          />
-        </Field>
-        <Field label="학번" htmlFor="studentCode">
-          <input
-            id="studentCode"
-            name="studentCode"
-            defaultValue={v.studentCode ?? ""}
-            className={inputClass}
-            placeholder="(선택)"
-          />
-        </Field>
-        <Field label="출결번호" htmlFor="attendanceCode">
-          <input
-            id="attendanceCode"
-            name="attendanceCode"
-            inputMode="numeric"
-            defaultValue={v.attendanceCode ?? ""}
-            className={inputClass}
-            placeholder="키오스크 체크인 번호"
-          />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="성별" htmlFor="gender">
-          <select id="gender" name="gender" defaultValue={v.gender ?? ""} className={inputClass}>
-            <option value="">선택</option>
-            <option value="male">남</option>
-            <option value="female">여</option>
-          </select>
-        </Field>
-        <Field label="생년월일" htmlFor="birthDate">
-          <input
-            id="birthDate"
-            name="birthDate"
-            type="date"
-            defaultValue={v.birthDate ?? ""}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="학생 연락처" htmlFor="studentPhone">
-          <input
-            id="studentPhone"
-            name="studentPhone"
-            type="tel"
-            inputMode="tel"
-            defaultValue={v.studentPhone ?? ""}
-            className={inputClass}
-            placeholder="010-0000-0000"
-          />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="원생 집전화" htmlFor="homePhone">
-          <input
-            id="homePhone"
-            name="homePhone"
-            type="tel"
-            inputMode="tel"
-            defaultValue={v.homePhone ?? ""}
-            className={inputClass}
-            placeholder="053-000-0000"
-          />
-        </Field>
-        <Field label="기타 알림 연락처" htmlFor="otherPhone">
-          <input
-            id="otherPhone"
-            name="otherPhone"
-            type="tel"
-            inputMode="tel"
-            defaultValue={v.otherPhone ?? ""}
-            className={inputClass}
-            placeholder="(선택)"
-          />
-        </Field>
-        <Field label="닉네임" htmlFor="nickname">
-          <input
-            id="nickname"
-            name="nickname"
-            defaultValue={v.nickname ?? ""}
-            className={inputClass}
-            placeholder="(선택)"
-          />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="이메일" htmlFor="email">
-          <input
-            id="email"
-            name="email"
-            type="email"
-            defaultValue={v.email ?? ""}
-            className={inputClass}
-            placeholder="(선택)"
-          />
-        </Field>
-        <Field label="졸업연도" htmlFor="graduationYear">
-          <input
-            id="graduationYear"
-            name="graduationYear"
-            inputMode="numeric"
-            defaultValue={v.graduationYear ?? ""}
-            className={inputClass}
-            placeholder="예: 2027"
-          />
-        </Field>
-        <Field label="우편번호" htmlFor="zipCode">
-          <input
-            id="zipCode"
-            name="zipCode"
-            inputMode="numeric"
-            defaultValue={v.zipCode ?? ""}
-            className={inputClass}
-            placeholder="(선택)"
-          />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="주소" htmlFor="address">
-          <input
-            id="address"
-            name="address"
-            defaultValue={v.address ?? ""}
-            className={inputClass}
-            placeholder="(선택)"
-          />
-        </Field>
-        <Field label="상세주소" htmlFor="addressDetail">
-          <input
-            id="addressDetail"
-            name="addressDetail"
-            defaultValue={v.addressDetail ?? ""}
-            className={inputClass}
-            placeholder="(선택)"
-          />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="학부모 이름" htmlFor="parentName">
-          <input
-            id="parentName"
-            name="parentName"
-            defaultValue={v.parentName ?? ""}
-            className={inputClass}
-            placeholder="예: 김아버지"
-          />
-        </Field>
-        <Field label="학부모 연락처" htmlFor="parentPhone" error={errors.parentPhone}>
-          <input
-            id="parentPhone"
-            name="parentPhone"
-            type="tel"
-            defaultValue={v.parentPhone ?? ""}
-            className={inputClass}
-            placeholder="010-1234-5678"
-            inputMode="tel"
-          />
-        </Field>
-        <Field label="보호자 관계" htmlFor="parentRelation">
-          <select
-            id="parentRelation"
-            name="parentRelation"
-            defaultValue={v.parentRelation ?? ""}
-            className={inputClass}
+      <fieldset className="space-y-3 border-t border-line pt-3">
+        <legend className="px-1 text-base font-bold">기본 정보</legend>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="이름 *" htmlFor="name" error={errors.name}>
+            <input
+              id="name"
+              name="name"
+              defaultValue={v.name}
+              required
+              className={inputClass}
+              placeholder="예: 김민준"
+            />
+          </Field>
+          <Field label="학교" htmlFor="school">
+            <input
+              id="school"
+              name="school"
+              defaultValue={v.school ?? ""}
+              className={inputClass}
+              placeholder="예: 서일고"
+            />
+          </Field>
+          <Field label="학년" htmlFor="grade">
+            <select
+              id="grade"
+              name="grade"
+              defaultValue={v.grade ?? ""}
+              className={inputClass}
+            >
+              <option value="">선택</option>
+              {grades.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="ClassNote 이름"
+            htmlFor="classnoteName"
+            hint="동명이인 구분용 — 비우면 학생 이름 사용"
           >
-            <option value="">선택</option>
-            <option value="부">부</option>
-            <option value="모">모</option>
-            <option value="조부">조부</option>
-            <option value="조모">조모</option>
-            <option value="기타">기타</option>
-          </select>
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="상태" htmlFor="status">
-          <select
-            id="status"
-            name="status"
-            defaultValue={v.status}
-            className={inputClass}
+            <input
+              id="classnoteName"
+              name="classnoteName"
+              defaultValue={v.classnoteName ?? ""}
+              className={inputClass}
+              placeholder="예: 김서윤(중2)"
+            />
+          </Field>
+          <Field label="영문 이름" htmlFor="englishName">
+            <input
+              id="englishName"
+              name="englishName"
+              defaultValue={v.englishName ?? ""}
+              className={inputClass}
+              placeholder="예: Minjun Kim"
+            />
+          </Field>
+          <Field label="학생 연락처" htmlFor="studentPhone">
+            <input
+              id="studentPhone"
+              name="studentPhone"
+              type="tel"
+              inputMode="tel"
+              defaultValue={v.studentPhone ?? ""}
+              className={inputClass}
+              placeholder="010-0000-0000"
+            />
+          </Field>
+        </div>
+      </fieldset>
+      <fieldset className="space-y-3 border-t border-line pt-3">
+        <legend className="px-1 text-base font-bold">보호자 연락처</legend>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="학부모 이름" htmlFor="parentName">
+            <input
+              id="parentName"
+              name="parentName"
+              defaultValue={v.parentName ?? ""}
+              className={inputClass}
+              placeholder="예: 김아버지"
+            />
+          </Field>
+          <Field
+            label="학부모 연락처"
+            htmlFor="parentPhone"
+            error={errors.parentPhone}
           >
-            {Object.entries(STATUS_LABEL).map(([k, label]) => (
-              <option key={k} value={k}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="등록일" htmlFor="enrolledAt">
-          <input
-            id="enrolledAt"
-            name="enrolledAt"
-            type="date"
-            defaultValue={v.enrolledAt ?? ""}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="퇴원일" htmlFor="withdrawnAt" error={errors.withdrawnAt}>
-          <input
-            id="withdrawnAt"
-            name="withdrawnAt"
-            type="date"
-            defaultValue={v.withdrawnAt ?? ""}
-            className={inputClass}
-          />
-        </Field>
-      </div>
-
+            <input
+              id="parentPhone"
+              name="parentPhone"
+              type="tel"
+              defaultValue={v.parentPhone ?? ""}
+              className={inputClass}
+              placeholder="010-1234-5678"
+              inputMode="tel"
+            />
+          </Field>
+          <Field label="보호자 관계" htmlFor="parentRelation">
+            <select
+              id="parentRelation"
+              name="parentRelation"
+              defaultValue={v.parentRelation ?? ""}
+              className={inputClass}
+            >
+              <option value="">선택</option>
+              <option value="부">부</option>
+              <option value="모">모</option>
+              <option value="조부">조부</option>
+              <option value="조모">조모</option>
+              <option value="기타">기타</option>
+            </select>
+          </Field>
+        </div>
+      </fieldset>
+      <fieldset className="space-y-3 border-t border-line pt-3">
+        <legend className="px-1 text-base font-bold">등록 상태</legend>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="상태" htmlFor="status">
+            <select
+              id="status"
+              name="status"
+              defaultValue={v.status}
+              className={inputClass}
+            >
+              {Object.entries(STATUS_LABEL).map(([k, label]) => (
+                <option key={k} value={k}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="등록일" htmlFor="enrolledAt">
+            <input
+              id="enrolledAt"
+              name="enrolledAt"
+              type="date"
+              defaultValue={v.enrolledAt ?? ""}
+              className={inputClass}
+            />
+          </Field>
+          <Field
+            label="퇴원일"
+            htmlFor="withdrawnAt"
+            error={errors.withdrawnAt}
+          >
+            <input
+              id="withdrawnAt"
+              name="withdrawnAt"
+              type="date"
+              defaultValue={v.withdrawnAt ?? ""}
+              className={inputClass}
+            />
+          </Field>
+        </div>
+      </fieldset>
+      <details className="rounded-lg border border-line p-3">
+        <summary className="cursor-pointer text-sm font-bold">
+          추가 정보 · 출결번호, 생년월일, 주소 등
+        </summary>
+        <div className="mt-3">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="학번" htmlFor="studentCode">
+              <input
+                id="studentCode"
+                name="studentCode"
+                defaultValue={v.studentCode ?? ""}
+                className={inputClass}
+                placeholder="(선택)"
+              />
+            </Field>
+            <Field label="출결번호" htmlFor="attendanceCode">
+              <input
+                id="attendanceCode"
+                name="attendanceCode"
+                inputMode="numeric"
+                defaultValue={v.attendanceCode ?? ""}
+                className={inputClass}
+                placeholder="키오스크 체크인 번호"
+              />
+            </Field>
+            <Field label="성별" htmlFor="gender">
+              <select
+                id="gender"
+                name="gender"
+                defaultValue={v.gender ?? ""}
+                className={inputClass}
+              >
+                <option value="">선택</option>
+                <option value="male">남</option>
+                <option value="female">여</option>
+              </select>
+            </Field>
+            <Field label="생년월일" htmlFor="birthDate">
+              <input
+                id="birthDate"
+                name="birthDate"
+                type="date"
+                defaultValue={v.birthDate ?? ""}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="원생 집전화" htmlFor="homePhone">
+              <input
+                id="homePhone"
+                name="homePhone"
+                type="tel"
+                inputMode="tel"
+                defaultValue={v.homePhone ?? ""}
+                className={inputClass}
+                placeholder="053-000-0000"
+              />
+            </Field>
+            <Field label="기타 알림 연락처" htmlFor="otherPhone">
+              <input
+                id="otherPhone"
+                name="otherPhone"
+                type="tel"
+                inputMode="tel"
+                defaultValue={v.otherPhone ?? ""}
+                className={inputClass}
+                placeholder="(선택)"
+              />
+            </Field>
+            <Field label="닉네임" htmlFor="nickname">
+              <input
+                id="nickname"
+                name="nickname"
+                defaultValue={v.nickname ?? ""}
+                className={inputClass}
+                placeholder="(선택)"
+              />
+            </Field>
+            <Field label="이메일" htmlFor="email">
+              <input
+                id="email"
+                name="email"
+                type="email"
+                defaultValue={v.email ?? ""}
+                className={inputClass}
+                placeholder="(선택)"
+              />
+            </Field>
+            <Field label="졸업연도" htmlFor="graduationYear">
+              <input
+                id="graduationYear"
+                name="graduationYear"
+                inputMode="numeric"
+                defaultValue={v.graduationYear ?? ""}
+                className={inputClass}
+                placeholder="예: 2027"
+              />
+            </Field>
+            <Field label="우편번호" htmlFor="zipCode">
+              <input
+                id="zipCode"
+                name="zipCode"
+                inputMode="numeric"
+                defaultValue={v.zipCode ?? ""}
+                className={inputClass}
+                placeholder="(선택)"
+              />
+            </Field>
+            <Field label="주소" htmlFor="address">
+              <input
+                id="address"
+                name="address"
+                defaultValue={v.address ?? ""}
+                className={inputClass}
+                placeholder="(선택)"
+              />
+            </Field>
+            <Field label="상세주소" htmlFor="addressDetail">
+              <input
+                id="addressDetail"
+                name="addressDetail"
+                defaultValue={v.addressDetail ?? ""}
+                className={inputClass}
+                placeholder="(선택)"
+              />
+            </Field>
+          </div>
+        </div>
+      </details>
       <Field label="메모 / 특이사항" htmlFor="notes">
         <textarea
           id="notes"
@@ -474,7 +526,10 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="text-foreground block text-sm font-medium">
+      <label
+        htmlFor={htmlFor}
+        className="text-foreground block text-sm font-medium"
+      >
         {label}
       </label>
       {children}

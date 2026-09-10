@@ -50,7 +50,7 @@ export async function CalculatorPanel({ sp }: { sp: Sp }) {
   return (
     <div className="space-y-4 print:space-y-0">
       <div className="print:hidden">
-        <FaceTabs faces={SUB_FACES} active={sub} ariaLabel="수강료 계산기 면 전환" />
+        <FaceTabs faces={SUB_FACES} active={sub} level="secondary" ariaLabel="수강료 계산기 면 전환" />
       </div>
       {sub === "prices" ? (
         <TuitionPricesPanel sp={sp} />

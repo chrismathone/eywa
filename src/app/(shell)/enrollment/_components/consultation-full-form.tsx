@@ -307,7 +307,11 @@ export function ConsultationFullForm({
 
       {/* 녹음 바 — 생성·수정 공통. 저장 시 자동 전사·13섹션 AI 분석(입력값 보존).
           수정: 녹음은 여러 행으로 **누적**(0068a) — 여러 상담사가 각자 추가하고, 분석은 전체 합본으로 갱신. */}
-      <div className="border-primary/25 bg-primary/5 space-y-2.5 rounded-2xl border p-3">
+      <details className="border-line rounded-lg border px-3 py-2">
+        <summary className="cursor-pointer text-sm font-bold">
+          상담 녹음·파일 첨부 <span className="ml-2 font-medium" aria-live="polite">{recordingActive ? "녹음 중 · 열어서 정지" : audioFile ? audioFile.name : existingRecordings.length > 0 ? `기존 녹음 ${existingRecordings.length}개 · 추가 가능` : "선택 · 저장 후 전사·AI 분석"}</span>
+        </summary>
+        <div className="mt-3 space-y-2.5">
         {!isCreate && existingRecordings.length > 0 ? (
           <p className="text-text-dim flex items-center gap-1.5 text-xs">
             <Mic className="size-3.5" />
@@ -342,7 +346,8 @@ export function ConsultationFullForm({
             )}
           </p>
         </div>
-      </div>
+        </div>
+      </details>
 
       {/* 상단 탭바 — overflow-y-hidden: overflow-x-auto가 버튼 -mb-px로 세로 1px 넘쳐 세로 스크롤바가
           생기던 것 차단(가로만 스크롤). */}

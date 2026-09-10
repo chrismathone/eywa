@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { Check, FileText, Loader2, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { TextbookDialog } from "./textbook-dialog";
@@ -42,7 +42,11 @@ export function TextbooksTable({
   logoUrl,
   account,
   todayKst,
+  toolbar,
+  emptyTitle,
 }: {
+  toolbar?: ReactNode;
+  emptyTitle?: string;
   rows: TextbookOrderRow[];
   students: StudentOption[];
   catalog: CatalogOption[];
@@ -90,8 +94,9 @@ export function TextbooksTable({
 
   return (
     <>
-      <div className="flex items-center justify-end">
-        <Button size="sm" onClick={() => setDialog({ order: null })}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {toolbar}
+        <Button size="sm" className="shrink-0" onClick={() => setDialog({ order: null })}>
           <Plus className="size-4" />
           교재 신청 등록
         </Button>
@@ -99,11 +104,11 @@ export function TextbooksTable({
 
       {rows.length === 0 ? (
         <div className="border-line text-text-faint rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
-          교재신청 내역이 없습니다. 위 “교재 신청 등록”으로 추가하세요.
+          {emptyTitle ?? "교재신청 내역이 없습니다. 위 ‘교재 신청 등록’으로 추가하세요."}
         </div>
       ) : (
       <DragScrollArea className="bg-card shadow-card rounded-2xl">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[800px] text-sm">
           <thead className="border-line bg-bg-soft/50 text-text-dim border-b text-sm [&_th]:font-bold [&_th]:whitespace-nowrap">
             <tr>
               <th className="px-4 py-2 text-left">신청일</th>
@@ -124,7 +129,7 @@ export function TextbooksTable({
               const elapsedLabel = shouldShowElapsed(r, elapsed) ? elapsed : null;
               return (
                 <tr key={r.id} className={`hover:bg-bg-soft/30 ${isBusy ? "opacity-50" : ""}`}>
-                  <td className="px-4 py-2 text-xs">
+                  <td className="px-4 py-2 text-xs whitespace-nowrap">
                     <div className="flex flex-wrap items-center gap-1">
                       <span className="num text-text-dim">{r.requestDate ?? "—"}</span>
                       {elapsedLabel !== null ? (
@@ -148,8 +153,8 @@ export function TextbooksTable({
                       <div className="text-text-faint mt-0.5 text-xs whitespace-pre-wrap">메모: {r.notes}</div>
                     ) : null}
                   </td>
-                  <td className="text-foreground px-4 py-2 text-xs">{r.studentName ?? "—"}</td>
-                  <td className="text-text-dim px-4 py-2 text-xs">{r.teacherName ?? "—"}</td>
+                  <td className="text-foreground px-4 py-2 text-xs whitespace-nowrap">{r.studentName ?? "—"}</td>
+                  <td className="text-text-dim px-4 py-2 text-xs whitespace-nowrap">{r.teacherName ?? "—"}</td>
                   <td className="px-4 py-2">
                     <div className="flex flex-wrap items-center gap-1">
                       {CHECKS.map((c) => {
@@ -183,7 +188,7 @@ export function TextbooksTable({
                       </p>
                     ) : null}
                   </td>
-                  <td className="num text-foreground px-4 py-2 text-right text-xs font-medium">{won(r.price)}</td>
+                  <td className="num text-foreground px-4 py-2 text-right text-xs font-medium whitespace-nowrap">{won(r.price)}</td>
                   <td className="px-2 py-2">
                     <div className="flex items-center justify-end gap-1">
                       <button

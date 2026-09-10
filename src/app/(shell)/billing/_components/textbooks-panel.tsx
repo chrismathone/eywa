@@ -1,5 +1,11 @@
-import { BookText, Clock, CircleDollarSign, Receipt } from "@/components/icons/eywa-icon-compat";
+import {
+  BookText,
+  Clock,
+  CircleDollarSign,
+  Receipt,
+} from "@/components/icons/eywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
 import { SearchToggle } from "@/components/search-toggle";
@@ -17,16 +23,41 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TextbooksTable } from "./textbooks-table";
+import styles from "./textbooks-panel.module.css";
 
 const KRW = new Intl.NumberFormat("ko-KR");
-const won = (n: number) => `${KRW.format(n)}원`;
 
 // 하단 체크 버튼(등록·납부·주문)과 라벨·순서 일치. 각 항목 = "그 단계가 아직 안 된 것", 완료 = 3체크 전부.
-const FILTERS: { key: string; label: string; title: string; count: (s: TextbookStats) => number }[] = [
-  { key: "reg", label: "등록 안 됨", title: "아직 등록 안 된 건", count: (s) => s.needReg },
-  { key: "pay", label: "납부 안 됨", title: "아직 납부 안 된 건", count: (s) => s.needPay },
-  { key: "order", label: "주문 안 됨", title: "아직 주문 안 된 건", count: (s) => s.needOrder },
-  { key: "done", label: "완료", title: "등록·납부·주문 모두 완료", count: (s) => s.done },
+const FILTERS: {
+  key: string;
+  label: string;
+  title: string;
+  count: (s: TextbookStats) => number;
+}[] = [
+  {
+    key: "reg",
+    label: "등록 안 됨",
+    title: "아직 등록 안 된 건",
+    count: (s) => s.needReg,
+  },
+  {
+    key: "pay",
+    label: "납부 안 됨",
+    title: "아직 납부 안 된 건",
+    count: (s) => s.needPay,
+  },
+  {
+    key: "order",
+    label: "주문 안 됨",
+    title: "아직 주문 안 된 건",
+    count: (s) => s.needOrder,
+  },
+  {
+    key: "done",
+    label: "완료",
+    title: "등록·납부·주문 모두 완료",
+    count: (s) => s.done,
+  },
 ];
 
 type Sp = { status?: string; q?: string; page?: string };
@@ -38,17 +69,20 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   const page = Math.max(1, Number(sp.page) || 1);
 
   // settings·user는 다이얼로그 실시간 미리보기(요청서 카드: 학원명·로고·계좌)용. 둘 다 React 캐시라 저비용.
-  const [{ rows, total }, stats, students, catalog, settings, user] = await Promise.all([
-    getTextbookOrdersPage({ filter: status, q }, page, PAGE_SIZE),
-    getTextbookStats(),
-    getStudentOptions(),
-    getCatalogOptions(),
-    getTenantSettings(),
-    getCurrentUser(),
-  ]);
+  const [{ rows, total }, stats, students, catalog, settings, user] =
+    await Promise.all([
+      getTextbookOrdersPage({ filter: status, q }, page, PAGE_SIZE),
+      getTextbookStats(),
+      getStudentOptions(),
+      getCatalogOptions(),
+      getTenantSettings(),
+      getCurrentUser(),
+    ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const academyName = settings.profile.name || "인재원";
-  const logoUrl = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
+  const logoUrl = user
+    ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId)
+    : null;
   const account = accountForTarget(settings.billing, "textbook");
   const todayKst = kstToday(); // 신청일 경과 라벨 계산 기준(서버 KST) — 클라에 주입.
 
@@ -63,70 +97,100 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   return (
     <div className="space-y-4">
       {/* KPI — 공용 BigStat(옛 로컬 Kpi 카드는 링 위에 border를 겹쳐 선이 이중이었다, v5 ④). */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <BigStat label="전체 신청" value={stats.total} unit="건" tone="blue" icon={<BookText size={16} strokeWidth={1.8} />} />
+      <StatStrip label="전체 교재 신청 현황" className={styles.summary}>
         <BigStat
-          label="처리 대기"
-          value={stats.pending}
+          label="전체 신청"
+          value={stats.total}
+          unit="건"
+          tone="blue"
+          icon={<BookText size={16} strokeWidth={1.8} />}
+        />
+        <BigStat
+          label="등록 대기"
+          value={stats.needReg}
           unit="건"
           tone="amber"
-          sub="등록·납부·주문 미완"
           icon={<Clock size={16} strokeWidth={1.8} />}
         />
-        <BigStat label="미납 합계" value={won(stats.unpaidAmount)} tone="danger" icon={<CircleDollarSign size={16} strokeWidth={1.8} />} />
-        <BigStat label="총 신청액" value={won(stats.totalAmount)} tone="primary" icon={<Receipt size={16} strokeWidth={1.8} />} />
-      </section>
+        <BigStat
+          label="납부 대기"
+          value={stats.needPay}
+          unit="건"
+          tone="amber"
+          icon={<Clock size={16} strokeWidth={1.8} />}
+        />
+        <BigStat
+          label="주문 대기"
+          value={stats.needOrder}
+          unit="건"
+          tone="amber"
+          icon={<Clock size={16} strokeWidth={1.8} />}
+        />
+        <BigStat
+          label="미납 합계"
+          value={KRW.format(stats.unpaidAmount)}
+          unit="원"
+          tone="danger"
+          icon={<CircleDollarSign size={16} strokeWidth={1.8} />}
+        />
+        <BigStat
+          label="총 신청액"
+          value={KRW.format(stats.totalAmount)}
+          unit="원"
+          tone="primary"
+          icon={<Receipt size={16} strokeWidth={1.8} />}
+        />
+      </StatStrip>
 
       {/* 결과 줄 + 필터(지시서 §10): 옛 칩 5개(전체 N·등록 N·납부 N·주문 N·완료 N) + 상시 검색창 → `상태: 전체` 라벨 하나
           (항목 옆에 건수) + 검색 토글. 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1">
-        <p className="text-text-dim text-sm whitespace-nowrap">
-          교재신청 <span className="num text-foreground font-bold">{total}</span>건
-          {q ? <span className="ml-1.5">· &ldquo;{q}&rdquo; 검색</span> : null}
-          {totalPages > 1 ? (
-            <span className="num ml-1.5">
-              · {page}/{totalPages}
-            </span>
-          ) : null}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterSelect
-            paramName="status"
-            value={status === "all" ? "" : status}
-            options={FILTERS.map((f) => ({ value: f.key, label: f.label, hint: `${f.count(stats)}건` }))}
-            axisLabel="상태"
-            ariaLabel="진행 상태 필터"
-            className="w-auto"
-            triggerClassName={TOOLBAR_SELECT}
-          />
-          <SearchToggle placeholder="교재명·학생" defaultValue={q} />
-        </div>
-      </div>
-
-      {total === 0 ? (
-        <TextbooksTable
-          rows={[]}
-          students={students}
-          catalog={catalog}
-          academyName={academyName}
-          logoUrl={logoUrl}
-          account={account}
-          todayKst={todayKst}
-        />
-      ) : (
-        <>
-          <TextbooksTable
-            rows={rows}
-            students={students}
-            catalog={catalog}
-            academyName={academyName}
-            logoUrl={logoUrl}
-            account={account}
-            todayKst={todayKst}
-          />
-          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
-        </>
-      )}
+      <TextbooksTable
+        toolbar={
+          <>
+            <p className="text-text-dim text-sm whitespace-nowrap">
+              교재신청{" "}
+              <span className="num text-foreground font-bold">{total}</span>건
+              {q ? (
+                <span className="ml-1.5">· &ldquo;{q}&rdquo; 검색</span>
+              ) : null}
+              {totalPages > 1 ? (
+                <span className="num ml-1.5">
+                  · {page}/{totalPages}
+                </span>
+              ) : null}
+            </p>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <FilterSelect
+                paramName="status"
+                value={status === "all" ? "" : status}
+                options={FILTERS.map((f) => ({
+                  value: f.key,
+                  label: f.label,
+                  hint: `${f.count(stats)}건`,
+                }))}
+                axisLabel="상태"
+                ariaLabel="진행 상태 필터"
+                className="w-auto"
+                triggerClassName={TOOLBAR_SELECT}
+              />
+              <SearchToggle placeholder="교재명·학생" defaultValue={q} />
+            </div>
+          </>
+        }
+        rows={rows}
+        students={students}
+        catalog={catalog}
+        academyName={academyName}
+        logoUrl={logoUrl}
+        account={account}
+        todayKst={todayKst}
+        emptyTitle={
+          q || status !== "all"
+            ? "조건에 맞는 교재신청이 없습니다. 위에서 검색·상태 필터를 바꿀 수 있습니다."
+            : undefined
+        }
+      />
+      <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
     </div>
   );
 }

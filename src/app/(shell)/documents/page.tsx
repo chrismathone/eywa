@@ -92,9 +92,9 @@ export default async function DocumentsPage({
   const sortHref = (next: SortState<DocumentSortKey>) => buildHref({ sort: next });
 
   const folders: FolderItem[] = [
-    { key: null, label: "전체 문서", count: counts.all },
+    { key: null, label: "전체 문서", count: counts?.all ?? null },
     // 문서가 0건인 분류는 RPC가 행을 안 주므로 0으로 채운다(폴더 자체는 항상 보인다).
-    ...categories.map((c) => ({ key: c.key, label: c.label, count: counts[c.key] ?? 0 })),
+    ...categories.map((c) => ({ key: c.key, label: c.label, count: counts ? counts[c.key] ?? 0 : null })),
   ];
   const linkedFolders: FolderItem[] = linkedCounts
     ? LINKED_SOURCES.map((s) => ({ key: s.key as string, label: s.label, count: linkedCounts[s.key] }))

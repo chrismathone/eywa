@@ -12,6 +12,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { SearchToggle } from "@/components/search-toggle";
 import { PageHeader } from "@/components/page-header";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -273,7 +274,7 @@ export default async function WithdrawalsPage({
       ) : (
         <>
       {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+      <StatStrip>
         <BigStat label="전체 퇴원" value={all.length} unit="명" tone="rose" icon={<UserMinus size={16} strokeWidth={1.8} />} />
         <BigStat label="최근 30일" value={recent} unit="명" tone="danger" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
         <BigStat
@@ -285,7 +286,7 @@ export default async function WithdrawalsPage({
           icon={<ListChecks size={16} strokeWidth={1.8} />}
         />
         <BigStat label="필터 결과" value={rows.length} unit="명" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
-      </section>
+      </StatStrip>
 
       {/* 툴바 — 지시서 §10: 축마다 라벨 하나(`유형: 퇴원` · `기간: 최근 30일` · 사유 · 과목 · 상담), 검색은 눌러야 나온다.
           옛 칩 묶음 넷(유형 2 · 기간 4 · 과목 N · 상담 3) + `micro` 소라벨 + 상시 검색창 두 줄을 한 줄로 걷었다.
@@ -362,6 +363,7 @@ export default async function WithdrawalsPage({
               </span>
             </header>
             <div className="space-y-3">
+              {subjectRows.some((r) => !r.lastClassSubject) ? <p className="text-xs">과목 미상 {subjectRows.filter((r) => !r.lastClassSubject).length}명 포함 · 마지막 수강 과목이 기록되지 않은 학생입니다.</p> : null}
               {subjects.map((s) => (
                 <div key={s.label}>
                   <div className="mb-1 flex items-baseline justify-between">
@@ -452,6 +454,7 @@ export default async function WithdrawalsPage({
             <header className="border-line border-b px-5 py-4">
               <p className="micro text-amber">사유 분석</p>
               <h2 className="text-foreground mt-1 text-base font-bold">상위 퇴원 사유</h2>
+              <p className="mt-1 text-xs">{reasonRows.length}명 기준 · 사유 필터 제외{reasonCounts.has("미기재") ? ` · 사유 미기재 ${reasonCounts.get("미기재")}명 포함` : ""}</p>
             </header>
             <div className="space-y-3 p-5">
               {topReasons.map(([reason, count]) => {
@@ -462,7 +465,7 @@ export default async function WithdrawalsPage({
                       <span className="text-foreground text-xs font-bold">{reason}</span>
                       <span className="text-text-dim num text-xs">
                         <span className="text-foreground font-bold">{count}</span>명 ·{" "}
-                        {((count / rows.length) * 100).toFixed(0)}%
+                        {((count / Math.max(reasonRows.length, 1)) * 100).toFixed(0)}%
                       </span>
                     </div>
                     <div className="bg-bg-soft h-2 overflow-hidden rounded-full">
@@ -485,7 +488,7 @@ export default async function WithdrawalsPage({
                   {/* 구 font-mono uppercase 코딩틱 라벨 → 한글 12px semibold 승격 */}
                   <p className="text-amber text-xs font-bold">자동 요약</p>
                   <p className="text-foreground mt-0.5 text-xs leading-relaxed">
-                    {topReasons[0]
+                    {topReasons[0]?.[0] === "미기재" ? "사유 미기재가 가장 많습니다. 기록된 사유를 보완해야 퇴원 원인을 비교할 수 있습니다." : topReasons[0]
                       ? `현재 가장 빈번한 퇴원 사유는 "${topReasons[0][0]}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
                       : "퇴원 사유가 등록되면 인사이트가 표시됩니다."}
                   </p>

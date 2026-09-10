@@ -119,7 +119,7 @@ function LiveRunPanel({
         {/* 방향은 바로 앞 배지가 이미 말한다 — 제목은 "3회차"까지만(2026-09-03 밀도 개선). */}
         <span className="text-text-dim text-xs font-bold">{runShortTitle(run)}</span>
         {/* 🔴 0243a가 없으면 상태를 말하지 않는다 — '출발 전'은 사실이 아니라 "모른다"이다. */}
-        {tripsReady && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{TRIP_STATE_LABEL[state]}</Pill>}
+        {tripsReady && <Pill color={TONE_COLOR[TRIP_TONE[state]]}>{state === "ready" ? "출발 기록 없음" : TRIP_STATE_LABEL[state]}</Pill>}
         {tripsReady && alert !== "none" && (
           <Pill color={TONE_COLOR[RUN_ALERT_TONE[alert]]}>{RUN_ALERT_LABEL[alert]}</Pill>
         )}

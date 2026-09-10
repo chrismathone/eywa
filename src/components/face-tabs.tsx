@@ -21,10 +21,12 @@ export function FaceTabs({
   faces,
   active,
   ariaLabel = "면 전환",
+  level = "primary",
 }: {
   faces: Face[];
   active: string;
   ariaLabel?: string;
+  level?: "primary" | "secondary";
 }) {
   const embed = useEmbed();
   const scrollerRef = useRef<HTMLElement>(null);
@@ -58,26 +60,26 @@ export function FaceTabs({
     <div className="relative">
       <nav
         ref={scrollerRef}
-        role="tablist"
         aria-label={ariaLabel}
-        // 툴바 세그먼트와 같은 치수·라운드(control-scale): 카드 껍데기·알약 없이 한 줄, 라벨이 높이의 90%.
-        className="scrollbar-hide border-line flex h-(--control-h) items-center gap-0.5 overflow-x-auto rounded-lg border px-0.5"
+        // URL을 여는 링크 탐색이다. 버튼 탭의 ARIA 역할 대신 현재 페이지를 알린다.
+        className={`scrollbar-hide border-line flex min-h-(--control-h) items-stretch gap-1 overflow-x-auto ${
+          level === "primary" ? "border-b pb-1" : "w-fit max-w-full rounded-lg border bg-bg-soft/40 px-0.5"
+        }`}
       >
         {faces.map((f, i) => {
           const on = f.key === active;
           const newGroup = i > 0 && f.group !== faces[i - 1].group;
           return (
-            <span key={f.key} className="flex items-center">
+            <span key={f.key} className="flex shrink-0 items-center">
               {newGroup ? <span aria-hidden className="bg-border mx-1 h-4 w-px shrink-0" /> : null}
               <Link
                 href={embed ? withEmbed(f.href) : f.href}
                 replace
-                role="tab"
                 aria-current={on ? "page" : undefined}
-                className={`block shrink-0 rounded-md px-2 text-(length:--control-label) leading-none font-medium whitespace-nowrap transition ${
+                className={`inline-flex h-(--control-h) shrink-0 items-center rounded-md px-2 text-(length:--control-label) leading-none whitespace-nowrap transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary ${
                   on
-                    ? "bg-primary text-primary-foreground"
-                    : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                    ? level === "primary" ? "bg-primary text-primary-foreground font-medium" : "bg-primary-soft text-primary font-bold"
+                    : "text-text-dim hover:text-foreground hover:bg-bg-soft font-medium"
                 }`}
               >
                 {f.label}

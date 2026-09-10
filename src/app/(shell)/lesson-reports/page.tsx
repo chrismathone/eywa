@@ -138,12 +138,12 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   const [queue, tabData] = await Promise.all([queueP, tabP]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-3">
       {/* 수제 헤더 → PageHeader 수렴(2026-07-19) — 창(embed)에선 컴팩트 1행으로 접힌다(제목은 창 타이틀바). */}
       <PageHeader
         eyebrow="발송 관리"
         title="수업보고서"
-        description="발송 큐는 위에서 상시 확인. 작성률·반 구성·보고서 목록은 탭으로 나눕니다. 작성은 선생님 원스크린에서 진행합니다."
+        description="발송 현황과 보고서 작성률을 확인합니다. 강사 작성은 원스크린에서 진행합니다."
       />
 
       {!isSettings ? (

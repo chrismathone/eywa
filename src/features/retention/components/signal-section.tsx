@@ -34,7 +34,7 @@ export function SignalSection({
           <Icon size={14} strokeWidth={1.8} />
         </span>
         <h3 className="text-foreground text-sm font-bold">{title}</h3>
-        <span className="text-text-faint num ml-auto text-xs">{rows.length}</span>
+        <span className="text-text-faint num ml-auto shrink-0 whitespace-nowrap text-xs">{rows.length}명 표시</span>
       </header>
       {rows.length === 0 ? (
         <p className="text-text-faint px-4 py-5 text-xs">{empty}</p>

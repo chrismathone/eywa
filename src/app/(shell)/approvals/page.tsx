@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
@@ -150,7 +151,7 @@ export default async function ApprovalsPage({
         <>
           {/* 내 연차 현황 — 휴가가 첫 양식이라 결재함 위에 요약으로 둔다(기안 전에 잔여를 먼저 본다). */}
           {period ? (
-            <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+            <StatStrip>
               <BigStat
                 label="연차 부여"
                 value={formatLeaveDays(balance.granted)}
@@ -187,7 +188,7 @@ export default async function ApprovalsPage({
                 icon={<MenuGlyph name="wallet" size={22} />}
                 sub={leavePeriodLabel(period)}
               />
-            </section>
+            </StatStrip>
           ) : (
             <p className="border-line bg-bg-soft/50 text-text-dim rounded-xl border px-4 py-2.5 text-sm">
               입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실(직원관리)에 등록을 요청하세요.

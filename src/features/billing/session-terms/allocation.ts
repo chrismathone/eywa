@@ -29,6 +29,9 @@ export type TeacherAllocation = {
   actualAmount: number; // 실측 금액 합(원) — 단가 있는 행만
   diffAmount: number; // 실측 − 확정
   missingPriceRows: number; // 단가 없어 금액 집계 제외된 행 수
+  pricedRows: number; // 0원 단가도 계산 가능한 행이다.
+  missingConfirmedRows: number;
+  confirmedPricedRows: number;
 };
 
 const UNASSIGNED = "미배정";
@@ -53,15 +56,21 @@ export function aggregateTeacherAllocations(rows: AllocationRowInput[]): Teacher
         actualAmount: 0,
         diffAmount: 0,
         missingPriceRows: 0,
+        pricedRows: 0,
+        missingConfirmedRows: 0,
+        confirmedPricedRows: 0,
         classNames: new Set<string>(),
       };
       byTeacher.set(key, agg);
     }
     agg.rowCount++;
+    if (r.unitPrice !== null) agg.pricedRows++;
     if (r.className) agg.classNames.add(r.className);
 
     if (r.confirmedSessions !== null) {
       agg.confirmedSessions += r.confirmedSessions;
+      if (r.amount !== null || r.unitPrice !== null) agg.confirmedPricedRows++;
+      else if (r.confirmedSessions > 0) agg.missingConfirmedRows++;
       const confirmedAmount =
         r.amount ?? (r.unitPrice !== null ? r.confirmedSessions * r.unitPrice : 0);
       agg.confirmedAmount += confirmedAmount;
@@ -88,6 +97,11 @@ export function aggregateTeacherAllocations(rows: AllocationRowInput[]): Teacher
         b.confirmedAmount - a.confirmedAmount ||
         a.teacherName.localeCompare(b.teacherName, "ko"),
     );
+}
+
+export function allocationCoverage(t: Pick<TeacherAllocation, "missingPriceRows" | "pricedRows">): "complete" | "partial" | "unavailable" {
+  if (t.missingPriceRows === 0) return "complete";
+  return t.pricedRows > 0 ? "partial" : "unavailable";
 }
 
 /** 표시할 가치가 있는 행 — 전부 0(미확정·출석 0·단가없음 0)인 강사는 노이즈라 표에서 제외. */

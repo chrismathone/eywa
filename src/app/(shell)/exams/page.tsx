@@ -266,10 +266,15 @@ export default async function ExamsPage({
 
           {total === 0 ? (
             <EmptyState
+              compact
               image="exams"
               icon={() => <SearchX size={32} strokeWidth={1.8} />}
-              title="등록된 시험이 없습니다"
-              description="시험을 등록하고 반 전체 점수를 일괄 입력해 보세요."
+              title={
+                q || from || to || subject !== "all" || examType !== "all"
+                  ? "조건에 맞는 시험이 없습니다"
+                  : "등록된 시험이 없습니다"
+              }
+              description="위에서 검색 조건을 바꾸거나 시험을 등록할 수 있습니다."
             />
           ) : (
             <>

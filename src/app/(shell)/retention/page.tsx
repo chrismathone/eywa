@@ -13,7 +13,7 @@ import { RetentionGauge } from "@/features/retention/components/retention-gauge"
 import { PulseTiles } from "@/features/retention/components/pulse-tiles";
 import { ActionQueue } from "@/features/retention/components/action-queue";
 import { SignalSection, type SignalRow } from "@/features/retention/components/signal-section";
-import { formatWonShort, ddayLabel } from "@/features/retention/format";
+import { ddayLabel } from "@/features/retention/format";
 
 export const metadata = { title: "이탈 방어 — eywa" };
 
@@ -80,7 +80,7 @@ export default async function RetentionPage() {
 
   const headline =
     stats.risk > 0
-      ? `위험 ${stats.risk}명 · 관심 ${stats.warn}명. 매출 위험 ${formatWonShort(stats.revenueRisk)} 규모입니다.`
+      ? "위험 신호가 있는 학생의 상담·출결·재등록을 확인하세요."
       : "급한 위험 신호는 없습니다. 안정 학생 관리를 이어가세요.";
 
   return (
@@ -94,7 +94,7 @@ export default async function RetentionPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
         <section className="bg-card shadow-card overflow-hidden rounded-2xl">
-          <header className="border-line border-b px-5 py-4">
+          <header className="border-line border-b px-3 py-2">
             <p className="micro">오늘 큐</p>
             <h2 className="text-foreground mt-1 text-base font-bold">누구부터 챙길까</h2>
           </header>

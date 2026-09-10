@@ -84,21 +84,24 @@ export function BigStat({
   const Box = onClick ? "span" : "div";
   return (
     <Shell
+      data-stat=""
+      data-stat-action={onClick ? "" : undefined}
       {...(onClick ? { type: "button" as const, onClick, "aria-label": ariaLabel } : {})}
       className={`bg-card block w-full rounded-2xl p-4 compact-chrome:p-3 xl:p-5 ${onClick ? RAISED : "shadow-card"}`}
     >
-      <Box className="flex items-center justify-between gap-2">
+      <Box data-stat-label="" className="flex items-center justify-between gap-2">
         <span className="text-text-dim text-sm font-medium compact-chrome:text-xs">{label}</span>
         {icon ? (
           <span
             className={`${ICON_TONE[tone]} flex size-8 shrink-0 items-center justify-center rounded-xl compact-chrome:size-6 compact-chrome:rounded-lg`}
             aria-hidden="true"
+            data-stat-icon=""
           >
             {icon}
           </span>
         ) : null}
       </Box>
-      <Box className={`${size === "lg" ? "mt-3" : "mt-2.5"} flex items-baseline gap-1 compact-chrome:mt-1`}>
+      <Box data-stat-value="" className={`${size === "lg" ? "mt-3" : "mt-2.5"} flex items-baseline gap-1 compact-chrome:mt-1`}>
         <span
           className={`num font-bold leading-none tracking-tight compact-chrome:text-2xl ${
             size === "lg" ? "text-4xl" : "text-3xl"
@@ -110,7 +113,7 @@ export function BigStat({
       </Box>
       {/* 보조라인 자리는 값이 없을 때 **비워두되 높이를 잡아** 카드 4장의 밑선을 맞춘다 — 컴팩트에선 그
           예약 높이를 없애고(min-h-0) 실제 내용이 있을 때만 차지하게 한다. */}
-      <Box className="text-text-faint mt-1.5 block min-h-[17px] text-xs compact-chrome:mt-0.5 compact-chrome:min-h-0">
+      <Box data-stat-sub="" className="text-text-faint mt-1.5 block min-h-[17px] text-xs compact-chrome:mt-0.5 compact-chrome:min-h-0">
         {sub ?? null}
       </Box>
     </Shell>
