@@ -40,7 +40,8 @@ describe("① JJ실·랩실이 같은 부품을 쓴다", () => {
       expect(src).toContain("<SeatMarkTriad");
       expect(src).toContain("<SeatNotePopover");
       expect(src).toContain("<SeatMemoMark");
-      expect(src).toContain("<PrevAbsenceHint");
+      // 🔴 원장 2026-09-10 "지난 결석은 필요없어" — 09-08에 넣었던 한 줄을 뺐다. 되살리지 말 것.
+      expect(src).not.toContain("<PrevAbsenceHint");
     });
 
     it(`${name}에 옛 인라인 사유 칸·결/지 버튼이 남아 있지 않다`, () => {
@@ -85,11 +86,11 @@ describe("③ 비로그인 PIN 화면엔 사유가 없다", () => {
     expect(board.match(/showReason=\{!publicPin\}/g)?.length).toBe(2);
   });
 
-  it("사유·지난 결석은 로그인 경로에서만 조회한다 — PIN이면 아예 안 받는다", () => {
-    // tenantId가 넘어온 경로 = admin 클라이언트 = 공개(PIN) 경로다(queries.ts 주석).
-    expect(queries).toMatch(/tenantId\s*\?\s*Promise\.resolve\(\[\] as PrevAbsenceRow\[\]\)/);
-    // 결석만 받고(전 기록 아님) 청크 안에서 페이징한다(B2/B3).
-    expect(queries).toContain('.in("status", ["absent", "excused"])');
-    expect(queries).toContain("fetchAllPagedInChunks<PrevAbsenceRow>");
+  it("🔴 '지난 결석' 조회는 없다 — 원장 2026-09-10 \"지난 결석은 필요없어\"", () => {
+    // 09-08에 넣었던 30일 결석 조회(카드의 `지난 결석 8/28 · 사유` 한 줄)를 화면과 함께 걷었다.
+    // 조회만 남으면 자리 화면을 열 때마다 아무도 안 쓰는 왕복이 하나 더 돈다(창마다 곱해진다, B6).
+    expect(queries).not.toContain("PrevAbsenceRow");
+    expect(queries).not.toContain('.in("status", ["absent", "excused"])');
+    expect(queries).not.toContain("prevAbsence");
   });
 });
