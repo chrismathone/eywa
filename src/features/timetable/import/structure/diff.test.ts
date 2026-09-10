@@ -18,11 +18,12 @@ function slot(p: {
 }
 function existing(p: {
   id: string; classId: string; className: string; day: DayOfWeek; startTime: string; endTime: string;
-  slotTeacherLabel?: string | null; slotRoomLabel?: string | null;
+  slotTeacherLabel?: string | null; slotTeacherDisplay?: string | null; slotRoomLabel?: string | null;
 }): ExistingSchedule {
   return {
     id: p.id, classId: p.classId, className: p.className, day: p.day, startTime: p.startTime, endTime: p.endTime,
     teacherId: null, classroomId: null, slotTeacherLabel: p.slotTeacherLabel ?? null,
+    slotTeacherDisplay: p.slotTeacherDisplay ?? null,
     slotRoomLabel: p.slotRoomLabel ?? null, mergeGroup: null, validFrom: "2026-07-01", validTo: null,
   };
 }
@@ -106,5 +107,54 @@ describe("computeStructureDiff — apply용 해석 id 주입 + 합반 경고", (
     const c = d.planItems.find((p) => p.action === "create");
     expect(c?.teacherId).toBe("t1"); // 첫 강사만 연결
     expect(c?.teacherNames).toEqual(["Jane", "Anna"]);
+  });
+});
+
+// ── 회귀(2026-09-10): '시트 반영' 직후 '시트에서 가져오기'가 손대지 않은 슬롯을 전건 '변경'으로 잡았다 ──
+// export는 강사 밴드에 **해석된 이름**(`Jane`→`추민아`)을 적는데 DB엔 **원문 닉네임**이 남는다.
+// 원문끼리만 비교하면 유효 321칸 중 199칸이 "강사만 다른 update"가 됐다(실측 injaewon).
+describe("computeStructureDiff — 강사 라벨 왕복(원문 닉네임 ↔ 시트 표기)", () => {
+  const sheet = (teacherName: string) =>
+    match([slot({ classId: "c1", className: "A반", day: "mon", startTime: "15:00", endTime: "15:40", room: "301", teacherName })]);
+
+  it("DB 원문(Jane)과 시트 표기(추민아)가 같은 사람이면 keep — 변경이 아니다", () => {
+    const d = computeStructureDiff(
+      sheet("추민아"),
+      [existing({ id: "s1", classId: "c1", className: "A반", day: "mon", startTime: "15:00", endTime: "15:40", slotTeacherLabel: "Jane", slotTeacherDisplay: "추민아", slotRoomLabel: "301" })],
+    );
+    expect(d.plan).toEqual({ create: 0, update: 0, keep: 1, remove: 0 });
+  });
+
+  it("원문이 이미 시트 표기와 같으면(자리 LAB·JJ 등) 그대로 keep", () => {
+    const d = computeStructureDiff(
+      sheet("JJ"),
+      [existing({ id: "s1", classId: "c1", className: "A반", day: "mon", startTime: "15:00", endTime: "15:40", slotTeacherLabel: "JJ", slotTeacherDisplay: "JJ", slotRoomLabel: "301" })],
+    );
+    expect(d.plan.keep).toBe(1);
+  });
+
+  it("정말로 다른 강사면 여전히 update — 해석값도 원문도 안 맞는다", () => {
+    const d = computeStructureDiff(
+      sheet("육소희"),
+      [existing({ id: "s1", classId: "c1", className: "A반", day: "mon", startTime: "15:00", endTime: "15:40", slotTeacherLabel: "Jane", slotTeacherDisplay: "추민아", slotRoomLabel: "301" })],
+    );
+    expect(d.plan.update).toBe(1);
+    expect(d.planItems.find((p) => p.action === "update")?.teacherNames).toEqual(["육소희"]);
+  });
+
+  it("해석값이 없으면(라벨맵 조회 실패) 종전대로 원문만 비교 — 판정이 조용히 바뀌지 않는다", () => {
+    const d = computeStructureDiff(
+      sheet("추민아"),
+      [existing({ id: "s1", classId: "c1", className: "A반", day: "mon", startTime: "15:00", endTime: "15:40", slotTeacherLabel: "Jane", slotTeacherDisplay: null, slotRoomLabel: "301" })],
+    );
+    expect(d.plan.update).toBe(1);
+  });
+
+  it("강사가 같아도 방·종료시각이 다르면 update — OR가 다른 축까지 삼키지 않는다", () => {
+    const base = { id: "s1", classId: "c1", className: "A반", day: "mon" as DayOfWeek, startTime: "15:00", slotTeacherLabel: "Jane", slotTeacherDisplay: "추민아" };
+    const room = computeStructureDiff(sheet("추민아"), [existing({ ...base, endTime: "15:40", slotRoomLabel: "999" })]);
+    expect(room.plan.update).toBe(1);
+    const end = computeStructureDiff(sheet("추민아"), [existing({ ...base, endTime: "15:50", slotRoomLabel: "301" })]);
+    expect(end.plan.update).toBe(1);
   });
 });

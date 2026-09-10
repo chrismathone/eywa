@@ -83,7 +83,14 @@ export function computeStructureDiff(match: MatchResult, existing: ExistingSched
     const endSame = (e.endTime ?? "") === (t.endTime ?? "");
     const roomSame = roomTok(e.slotRoomLabel) === roomTok(t.room);
     // 강사: 기존 라벨이 있으면 목표 강사에 포함돼야 동일. 라벨 null(FK 상속)이면 보수적으로 동일 처리.
-    const teacherSame = e.slotTeacherLabel == null || tNames.includes(e.slotTeacherLabel);
+    // 🔴 **원문과 해석값을 둘 다 본다**(2026-09-10). '시트 반영'은 강사 밴드에 해석된 이름(`Jane`→`추민아`)을
+    //    적는데 DB엔 원문 닉네임이 남아 있어, 원문끼리만 비교하면 **아무도 안 건드린 슬롯이 전건 '변경'** 이
+    //    된다(실측: 반영 직후 되읽었더니 유효 321칸 중 199칸이 강사만 다른 update). 두 값 다 같은 사람을
+    //    가리키므로 이 OR는 **거짓 변경만 지운다** — 진짜로 다른 강사면 어느 쪽과도 안 맞아 그대로 update다.
+    const teacherSame =
+      e.slotTeacherLabel == null ||
+      tNames.includes(e.slotTeacherLabel) ||
+      (e.slotTeacherDisplay != null && tNames.includes(e.slotTeacherDisplay));
     if (endSame && roomSame && teacherSame) {
       counts.keep++;
     } else {
