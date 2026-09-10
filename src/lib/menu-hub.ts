@@ -1,4 +1,4 @@
-import { navItemByKey, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
+import { menuSearchKeywords, navItemByKey, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
 import {
@@ -292,6 +292,23 @@ export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
 export function frequentFor(gate: Gate, keys?: readonly MenuKey[]): HubDest[] {
   const source = keys && keys.length > 0 ? keys : DEFAULT_FREQUENT_KEYS;
   return keep(source.map((k) => fromMenu(k))).filter((d) => allowed(d, gate));
+}
+
+/**
+ * 검색 팰릿(Shift+F)이 이 **목적지**를 찾는 데 쓰는 말 뭉치.
+ *
+ * 🔴 팰릿의 메뉴 축은 이제 여기(HUB 목적지)를 읽는다 — 전엔 `NAV_GROUPS`만 읽어서, 메뉴 화면엔 있는데
+ *    검색으론 못 가는 목적지가 24개 있었다(수학 강사 시트 · 수납 6면 · 학원 설정 12면 · 오늘 출결 · 셔틀 3면 …).
+ *    사람이 눈으로 본 버튼은 이름으로도 찾혀야 한다.
+ * 🔴 **별칭은 그 메뉴 자신에게만** 붙인다(`href`가 메뉴 정의와 같을 때) — 면(`/billing?tab=…`)이 부모
+ *    별칭을 물려받으면 "청구" 한 번에 수납 면 7개가 통째로 선다. 별칭 규칙 자체는
+ *    [`menuSearchKeywords`](./navigation.ts) 한 곳이 정한다(두 벌로 적지 않는다).
+ */
+export function hubSearchKeywords(dest: HubDest, groupLabel: string): string {
+  const item = navItemByKey(dest.menuKey);
+  const own = item && item.href === dest.href ? menuSearchKeywords(item, groupLabel) : "";
+  // 면은 제 라벨 + 업무군 + 부모 권한키로 찾는다(부모 라벨은 own이 있을 때만 실린다).
+  return `${dest.label} ${groupLabel} ${dest.menuKey} ${own}`.toLowerCase();
 }
 
 const routePath = (href: string): string => href.split(/[?#]/, 1)[0] ?? href;

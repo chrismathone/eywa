@@ -340,7 +340,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       </div>
 
       {/* 검색 메뉴 점프 팰릿 — 헤더 검색 클릭으로 열림, 포털 렌더라 위치 무관 */}
-      <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} />
+      <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} />
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
       <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} />
