@@ -12,6 +12,7 @@ import {
   kstDateOf,
   kstLocalToIso,
   kstTimeOf,
+  kstShortStamp,
 } from "./date-kst";
 
 describe("date-kst — KST(Asia/Seoul) 기준 오늘/이번 달", () => {
@@ -140,6 +141,37 @@ describe("kstTimeOf — 타임스탬프를 KST 시각으로(UTC slice 금지)", 
     expect(kstTimeOf("   ")).toBeNull();
     expect(kstTimeOf("garbage")).toBeNull();
     expect(kstTimeOf(new Date(NaN))).toBeNull();
+  });
+});
+
+describe("kstShortStamp — `yy.mm.dd hh:mm`(원장 지정 서식, 시트 반영 옆)", () => {
+  it("KST로 찍는다 — UTC로 읽으면 날짜까지 하루 어긋난다", () => {
+    // 2026-09-10T04:40:29Z = 13:40 KST 같은 날.
+    expect(kstShortStamp("2026-09-10T04:40:29.408Z")).toBe("26.09.10 13:40");
+    // 한국 새벽 구간: UTC로는 9/9인데 KST로는 9/10 오전 1시다.
+    expect(kstShortStamp("2026-09-09T16:05:00.000Z")).toBe("26.09.10 01:05");
+    expect("2026-09-09T16:05:00.000Z".slice(0, 10)).toBe("2026-09-09"); // 옛 방식이 틀렸음을 못박음
+  });
+
+  it("24시간제 · 두 자리 고정(자정·한 자리 월/일)", () => {
+    expect(kstShortStamp("2026-01-02T15:00:00.000Z")).toBe("26.01.03 00:00");
+    expect(kstShortStamp("2026-12-31T14:59:00.000Z")).toBe("26.12.31 23:59");
+  });
+
+  it("타임존 표기가 달라도 같은 순간이면 같은 글자", () => {
+    expect(kstShortStamp("2026-09-10T04:40:00+00:00")).toBe(kstShortStamp("2026-09-10T04:40:00.000Z"));
+  });
+
+  it("Date 객체도 받는다", () => {
+    expect(kstShortStamp(new Date("2026-09-10T04:40:00.000Z"))).toBe("26.09.10 13:40");
+  });
+
+  it("🔴 빈값·형식오류는 null — 빈 문자열이면 화면에서 '방금 함'으로 읽힌다", () => {
+    expect(kstShortStamp(null)).toBeNull();
+    expect(kstShortStamp(undefined)).toBeNull();
+    expect(kstShortStamp("")).toBeNull();
+    expect(kstShortStamp("garbage")).toBeNull();
+    expect(kstShortStamp(new Date(NaN))).toBeNull();
   });
 });
 

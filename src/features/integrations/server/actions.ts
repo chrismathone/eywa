@@ -22,11 +22,13 @@ import { EDIT_SHEET_NAME } from "@/features/timetable/import/parse";
 import {
   isSheetExportSubject,
   sheetsProvider,
+  SHEET_EXPORT_SUBJECTS,
   type SheetExportSubject,
 } from "@/features/integrations/sheets-provider";
+import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
 import {
   claimSheetSyncLease,
-  isSheetSyncBusy,
+  isLeaseActive,
   SHEET_SYNC_BUSY_MSG,
 } from "@/features/integrations/server/sheet-sync-lease";
 
@@ -63,15 +65,66 @@ export async function checkMakeeduSyncWorkers(): Promise<{ workers: MakeeduWorke
   return { workers: await getMakeeduSyncWorkers(nowMs), nowMs };
 }
 
+/** 시간표 툴바 '엑셀·시트' 메뉴의 **과목별 '시트 반영' 한 줄**이 쓰는 재료. */
+export type SheetSyncRow = {
+  subject: SheetExportSubject;
+  /** 과목 한글 라벨 — 학원설정 단일 소스(`buildSubjectMaps`). raw 키(`english`)를 화면에 내보내지 않는다. */
+  label: string;
+  /** 대상 구글 시트가 등록돼 있는가(math는 학원설정 `googleSheetId` 폴백 포함). */
+  connected: boolean;
+  /** 지금 리스가 잡혀 있는가(새벽 자동 반영·다른 관리자 실행) — 버튼 선제 비활성. */
+  busy: boolean;
+  /** **마지막 성공 반영** 시각(ISO). 한 번도 안 했으면 null(빈 문자열 금지 — 빈 칸은 "방금 함"으로 읽힌다). */
+  lastSyncedAt: string | null;
+};
+
 /**
- * 시트 동기화 리스 진행 여부 폴링용 — 시간표 툴바가 주기 호출해 '시트 반영/가져오기' 버튼을
- * 선제 비활성+마우스오버 안내(새벽 자동 반영·다른 관리자 실행 모두). 서버 액션 리스 거부가 2차 방어.
- * (읽기 전용. 게이트 불필요 — 잠금 상태는 민감정보 아님, RLS로 테넌트 격리.)
+ * 시간표 툴바가 주기 호출(20초)하는 **과목별 시트 반영 상태** — 줄을 세울 과목 + 진행 중 여부 +
+ * 마지막 반영 시각을 한 번의 조회로 함께 준다(과목마다 따로 폴링하면 왕복이 배로 는다, B4).
+ *
+ * 🔴 줄을 세우는 기준은 **연동이 켜져 있는 과목**뿐이다 — 시트를 안 쓰는 과목에 죽은 줄을 세우지 않는다.
+ *    과목 목록은 코드 상수가 아니라 `SHEET_EXPORT_SUBJECTS`(전용 익스포터가 있는 과목 = 기술 레지스트리)
+ *    ∩ `user_integrations.sync_enabled`이고, **순서·라벨은 학원설정**(operations.subjects)을 따른다.
+ * 🔴 게이트는 시트 반영과 **같은 함수**(canManageSheetSync) — 화면에서만 감추면 우회된다(#77).
+ *    권한이 없으면 빈 배열(줄 0개)이라 메뉴에 아무 것도 안 선다.
  */
-export async function checkSheetSyncBusy(subject: string): Promise<boolean> {
-  if (!isSheetExportSubject(subject)) return false;
+export async function getSheetSyncRows(): Promise<SheetSyncRow[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  if (!(await canManageSheetSync(user.systemRole))) return [];
+
   const supabase = await createClient();
-  return isSheetSyncBusy(supabase, sheetsProvider(subject));
+  const [{ data }, settings] = await Promise.all([
+    supabase
+      .from("user_integrations")
+      .select("provider, spreadsheet_id, sync_enabled, last_synced_at, sync_started_at")
+      .in("provider", SHEET_EXPORT_SUBJECTS.map(sheetsProvider)),
+    getTenantSettings(),
+  ]);
+
+  const byProvider = new Map((data ?? []).map((r) => [r.provider as string, r]));
+  const maps = buildSubjectMaps(settings.operations.subjects);
+  // 학원설정의 과목 순서를 따른다(설정에 없는 키는 뒤로) — 화면마다 순서가 갈리지 않게.
+  const order = maps.options.map((o) => o.value);
+  const rank = (s: string) => (order.indexOf(s) < 0 ? Number.MAX_SAFE_INTEGER : order.indexOf(s));
+  const mathFallbackId = settings.notifications.googleSheetId.trim();
+
+  return [...SHEET_EXPORT_SUBJECTS]
+    .sort((a, b) => rank(a) - rank(b))
+    .flatMap((subject) => {
+      const row = byProvider.get(sheetsProvider(subject));
+      if (row?.sync_enabled !== true) return []; // 연동 OFF = 줄 없음
+      const sheetId = (row.spreadsheet_id as string | null) || (subject === "math" ? mathFallbackId : "");
+      return [
+        {
+          subject,
+          label: maps.labelOf(subject),
+          connected: !!sheetId,
+          busy: isLeaseActive(row.sync_started_at as string | null),
+          lastSyncedAt: (row.last_synced_at as string | null) ?? null,
+        },
+      ];
+    });
 }
 
 /**
@@ -422,7 +475,13 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
   };
 }
 
-export type SyncState = { error?: string; ok?: boolean } | undefined;
+export type SyncState = {
+  error?: string;
+  ok?: boolean;
+  /** 이번 반영이 **성공**했을 때만 채워지는 시각(ISO) — 화면이 '최근 반영'을 즉시 갱신하는 값.
+   *  🔴 실패 경로는 절대 채우지 않는다(실패했는데 방금 한 것처럼 보이면 최악이다). */
+  syncedAt?: string;
+} | undefined;
 
 /** 과목별 xlsx 버퍼 빌더 선택(레지스트리) — SHEET_EXPORT_SUBJECTS와 1:1. 구글시트는 수식(withFormulas). */
 async function buildTimetableBufferFor(
@@ -474,20 +533,28 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
   if (lease === "busy") return { error: SHEET_SYNC_BUSY_MSG };
 
   try {
+    // '1시간 단위' 압축(영어 통합 탭)은 **보고 있는 화면의 상태**라 그 과목을 보고 있을 때만 클라가 넘긴다.
+    // 툴바에서 **다른 과목**을 반영하면 값이 없으므로(undefined) 그 과목에 저장해 둔 계정 뷰 설정을 읽는다 —
+    // 🔴 보고 있는 과목의 압축 목록을 다른 과목 시트에 그대로 밀어 넣지 말 것(엉뚱한 교시가 접힌 시트가 나간다).
+    const compactSections =
+      compact1h ?? ((await getMyTimetableViewPrefs()).compact1h?.[subject] ?? []);
     // 과목 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에 통째 덮어쓰기
     // (서비스계정 용량 0이라 '생성' 불가 → '갱신'만). 대상 시트=과목당 전용 1개(수학·영어 분리).
-    const { buffer, formulaCells } = await buildTimetableBufferFor(subject, new Set(compact1h ?? []));
+    const { buffer, formulaCells } = await buildTimetableBufferFor(subject, new Set(compactSections));
     // '수강편집'은 가져오기 라운드트립용 기계 탭이라 사람이 볼 일이 없다 → 숨김(원장 요청 2026-08-04).
     // 데이터는 그대로 올라가므로 '시트에서 가져오기'는 계속 동작한다.
     await overwriteTimetableSheet(spreadsheetId, buffer, { hiddenTabs: [EDIT_SHEET_NAME] });
     // 정적 값 업로드(변환) 후 구글시트 수식 주입(방 행 파생·인원/퇴원수 COUNTA). 영어만 수집됨.
     if (formulaCells.length) await applySheetFormulas(spreadsheetId, INTEGRATED_SHEET_NAME, formulaCells);
+    // 🔴 **시트 쓰기가 끝난 뒤**의 시각이다(자동 반영 cron의 '사람 편집' 판정이 이 값과 시트 modifiedTime을
+    //    비교한다 — 미리 찍으면 SA가 쓴 것을 사람 편집으로 오판해 자동 반영이 영구 중단된다).
+    const syncedAt = new Date().toISOString();
     await supabase.from("user_integrations").upsert(
       {
         tenant_id: user.tenantId,
         provider,
         spreadsheet_id: spreadsheetId,
-        last_synced_at: new Date().toISOString(),
+        last_synced_at: syncedAt,
         last_error: null,
         sync_started_at: null, // 리스 해제(성공 기록과 원자적)
       },
@@ -503,7 +570,7 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
     });
 
     revalidatePath("/owner");
-    return { ok: true };
+    return { ok: true, syncedAt };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // best-effort: 즉시 토스트(return)가 1차 피드백 채널이고, 이 upsert는 다음 로드 때 보일 durable

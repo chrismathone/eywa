@@ -47,17 +47,17 @@ export async function claimSheetSyncLease(
 }
 
 /**
- * 리스 진행 중 여부(read-only) — 시간표 툴바가 폴링해 '시트 반영/가져오기' 버튼을 선제 비활성+안내.
- * (새벽 자동 반영·다른 관리자 수동 실행 모두 커버. 서버 액션 거부는 그대로 2차 방어.)
+ * 저장된 `sync_started_at` 하나로 "지금 리스가 잡혀 있나"를 판정(순수) — 시간표 툴바가 폴링해
+ * '시트 반영/가져오기' 버튼을 선제 비활성+안내한다(새벽 자동 반영·다른 관리자 수동 실행 모두 커버.
+ * 서버 액션의 리스 거부가 그대로 2차 방어).
+ *
+ * 🔴 stale 한도(3분)를 호출부에 복사하지 말 것 — 여기가 단일 소스다(claim 쪽과 같은 값이어야
+ *    "화면은 잠겨 있는데 서버는 통과"(또는 그 반대)가 안 생긴다).
  */
-export async function isSheetSyncBusy(supabase: Supa, provider: string): Promise<boolean> {
-  const { data } = await supabase
-    .from("user_integrations")
-    .select("sync_started_at")
-    .eq("provider", provider)
-    .maybeSingle();
-  const at = data?.sync_started_at ? new Date(data.sync_started_at as string).getTime() : null;
-  return at != null && Date.now() - at < LEASE_STALE_MS;
+export function isLeaseActive(syncStartedAt: string | null | undefined): boolean {
+  if (!syncStartedAt) return false;
+  const at = new Date(syncStartedAt).getTime();
+  return Number.isFinite(at) && Date.now() - at < LEASE_STALE_MS;
 }
 
 /**
