@@ -19,6 +19,7 @@ const PURE = strip(read("src", "features", "attendance", "seat", "placement.ts")
 const BOARD = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "_components", "seat-board.tsx"));
 const LAB = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "_components", "seat-lab-grid.tsx"));
 const DRAG = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "_components", "seat-drag.ts"));
+const ALL_DAY = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "_components", "seat-all-day.tsx"));
 const SHELL_PAGE = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "page.tsx"));
 const PUBLIC_PAGE = strip(read("src", "app", "(seat)", "seat", "[seat]", "page.tsx"));
 const GATE = strip(read("src", "features", "attendance", "seat", "server", "move-gate.ts"));
@@ -49,12 +50,14 @@ describe("② 게이트 — 옮길 수 있는 사람만, 되돌릴 수도 있다
     // 🔴 문은 `move-gate.ts` 하나다(2026-09-10 교시 선택이 생기며 뽑아냈다) — 두 벌이면 언젠가
     //    한쪽만 조여지고, 그때 화면은 아무 말도 안 한다.
     expect(GATE).toContain("gateSeatWrite");
+    // ⚠️ 옛 `moveSeatStudent`(같은 교시 안 배치 드래그)는 원장 2026-09-11로 쓰기 경로째 없앴다(③) — 남은 쓰기
+    //    셋이 같은 문을 지난다. 찾는 함수가 없으면 `slice(-1)`이 한 글자라 아래 검사가 헛돌지 않게 길이도 본다.
     const fns = [
-      ACTIONS.slice(ACTIONS.indexOf("export async function moveSeatStudent")),
       ACTIONS.slice(ACTIONS.indexOf("export async function resetSeatPlacements")),
       PERIOD_ACTIONS.slice(PERIOD_ACTIONS.indexOf("export async function moveSeatStudentPeriod")),
       PERIOD_ACTIONS.slice(PERIOD_ACTIONS.indexOf("export async function clearSeatPeriodChoices")),
     ];
+    for (const fn of fns) expect(fn.length).toBeGreaterThan(40);
     for (const fn of fns) expect(fn).toContain("gateSeatMoveWrite(");
     // 🔴 게이트 파일은 서버 액션이 아니다([[#119]]) — 되면 화면이 직접 불러 tenantId·userId를 받는다.
     expect(GATE).not.toContain("use server");
@@ -91,15 +94,16 @@ describe("② 게이트 — 옮길 수 있는 사람만, 되돌릴 수도 있다
 });
 
 describe("③ 서버가 대상을 다시 계산한다([[#77]])", () => {
-  it("이동은 **원래 반**을 화면에서 받지 않는다 — 그 교시 명단에서 다시 읽는다", () => {
-    const move = ACTIONS.slice(
-      ACTIONS.indexOf("export async function moveSeatStudent"),
-      ACTIONS.indexOf("export async function resetSeatPlacements"),
-    );
-    expect(move).toContain("validateSeatMove(rosters,");
-    expect(move).toContain("check.fromClassId");
-    // 입력 타입에 fromClassId가 없어야 한다(있으면 화면 값을 믿는 길이 생긴다).
-    expect(move).not.toMatch(/input\.fromClassId/);
+  it("🔴 배치를 **새로 만드는** 쓰기는 없다 — 원장 2026-09-11 '같은 시간대의 수업으로 옮기고 싶은게 아니야'", () => {
+    // 옛 `moveSeatStudent`(같은 교시 안 옆 반 묶음으로 끌기)는 클라 호출자와 함께 없앴다 — 호출자 없는 서버 액션은
+    // 그 자체로 열린 문이다. 드래그의 뜻은 다른 시간 하나(`moveSeatStudentPeriod`).
+    expect(ACTIONS).not.toMatch(/export async function moveSeatStudent\(/);
+    expect(ACTIONS).not.toContain(".upsert(");
+    expect(ACTIONS).not.toContain("validateSeatMove");
+    expect(PURE).not.toContain("export function validateSeatMove");
+    // 남은 쓰기(초기화)는 지우기만 한다 — 이미 옮겨 둔 줄을 되돌릴 길은 남긴다(고아 금지).
+    expect(ACTIONS).toContain('.from("seat_placements")');
+    expect(ACTIONS).toContain(".delete()");
   });
 
   it("초기화는 화면이 준 학생 목록을 쓰지 않는다 — 자리·날짜·교시(·반)만 받는다", () => {
@@ -120,13 +124,14 @@ describe("③ 서버가 대상을 다시 계산한다([[#77]])", () => {
 });
 
 describe("④ 감사로그 — 옮긴 것도 되돌린 것도 남는다", () => {
-  it("두 액션 모두 logAction을 부른다", () => {
-    expect(ACTIONS).toContain('action: "seat_placement_move"');
-    expect(ACTIONS.match(/action: "seat_placement_reset"/g)?.length).toBeGreaterThanOrEqual(2);
+  it("초기화는 logAction을 부른다 — 배치 쓰기는 이제 초기화 하나뿐이다(2026-09-11)", () => {
+    expect(ACTIONS).toContain('action: "seat_placement_reset"');
+    // 옛 드래그 이동 로그는 **쓰기 경로와 함께** 없어졌다 — 과거 행은 레지스트리가 계속 한글로 읽는다(아래).
+    expect(ACTIONS).not.toContain('action: "seat_placement_move"');
   });
 
-  it("어느 학생이 어느 반에서 어느 반으로 갔는지 남는다 — 이동·초기화가 같은 모양(`moves`)", () => {
-    expect(ACTIONS.match(/moves:/g)?.length).toBeGreaterThanOrEqual(3);
+  it("어느 학생이 어느 반에서 어느 반으로 되돌아갔는지 남는다 — 옛 이동 로그와 같은 모양(`moves`)", () => {
+    expect(ACTIONS.match(/moves:/g)?.length).toBeGreaterThanOrEqual(1);
     expect(ACTIONS).toMatch(/scope:/);
     for (const key of ["seat:", "date:", "slotStart:", "count:"]) expect(ACTIONS).toContain(key);
   });
@@ -143,16 +148,16 @@ describe("④ 감사로그 — 옮긴 것도 되돌린 것도 남는다", () => 
 });
 
 describe("⑤ 드래그와 클릭(출결)은 겹치지 않는다", () => {
-  it("문턱은 순수 함수와 **같은 상수**를 쓴다", () => {
-    expect(LAB).toContain("activationConstraint: { distance: SEAT_DRAG_THRESHOLD_PX }");
+  it("문턱은 순수 함수와 **같은 상수**를 쓴다 — 드래그 컨텍스트는 `SeatAllDay` 한 벌(2026-09-11)", () => {
+    expect(ALL_DAY).toContain("activationConstraint: { distance: SEAT_DRAG_THRESHOLD_PX }");
     expect(DRAG).toContain("isSeatDragGesture");
     expect(PURE).toContain("export const SEAT_DRAG_THRESHOLD_PX");
   });
 
   it("드래그 직후의 클릭을 삼킨다 — 안 그러면 옮기면서 출결까지 찍힌다", () => {
     expect(LAB).toContain("onClickCapture={swallowSeatClickAfterDrag}");
-    expect(LAB).toContain("beginSeatDrag()");
-    expect(LAB).toContain("endSeatDrag()");
+    expect(ALL_DAY).toContain("beginSeatDrag()");
+    expect(ALL_DAY).toContain("endSeatDrag()");
   });
 
   it("출결 세 버튼은 드래그 손잡이가 아니다 — 손잡이는 카드 본체 하나뿐", () => {

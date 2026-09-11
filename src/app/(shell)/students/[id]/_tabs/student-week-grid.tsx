@@ -2,25 +2,35 @@
 
 import { useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { subjectWeekdayPeriods, type PeriodsConfig } from "@/features/timetable/lib/periods";
-import type { WeekGridRow } from "@/features/students/lib/week-grid";
+import type { PeriodsConfig } from "@/features/timetable/lib/periods";
+import {
+  buildSubjectPeriodGrid,
+  type GridRowMode,
+  type WeekGridRow,
+} from "@/features/students/lib/week-grid";
 import { StudentPeriodGrid } from "./student-period-grid";
 
-// 교시 1칸 기준 높이 — 가장 교시 많은 과목(예: 영어 11교시) 기준. 교시 적은 과목은 이 총높이에
-// 맞춰 행 높이를 늘려 채운다 → 탭을 바꿔도 카드 높이가 안 흔들림(사용자 요청 2026-07-08).
+// 교시 1칸 기준 높이 — 과목 탭 중 **실제로 그리는 행이 가장 많은 표** 기준 총높이. 행이 적은 과목은 이
+// 총높이에 맞춰 행 높이를 늘려 채운다 → 탭을 바꿔도 카드 높이가 안 흔들림(사용자 요청 2026-07-08).
 const BASE_ROW_H = 46;
 
 /**
- * 학생 개인 주간 시간표(읽기전용) — 수업 탭 상단. 과목별 탭(수학/영어/…)으로 그 과목을 실제 시간표
- * 기본뷰처럼(교시축 + 연속 교시 rowSpan 병합) 본다. 데이터는 수업 탭이 이미 로드한 current 재사용(추가 쿼리 0).
- * 과목 라벨은 useSubjectMaps(설정 단일 소스). 첫 과목이 기본 탭.
+ * 학생 개인 주간 시간표(읽기전용) — 수업 탭 상단. 과목별 탭(수학/영어/…)으로 그 과목을 실제 시간표처럼
+ * (교시축 + 연속 교시 rowSpan 병합, 행 구성은 그 과목 시간표가 처음 여는 뷰의 규칙) 본다.
+ * 데이터는 수업 탭이 이미 로드한 current 재사용(추가 쿼리 0). 과목 라벨은 useSubjectMaps(설정 단일 소스).
  */
 export function StudentWeekGrid({
   rows,
   config,
+  usedRowSubjects,
 }: {
   rows: WeekGridRow[];
   config: PeriodsConfig;
+  /**
+   * '수업 있는 교시만' 그리는 과목 — 서버가 학원설정 `subjects[].defaultView`로 정한다(`rowModeForDefaultView`).
+   * 여기 없는 과목은 교시표 전부(기본뷰 규칙).
+   */
+  usedRowSubjects: readonly string[];
 }) {
   const subjects = useSubjectMaps();
   const [tab, setTab] = useState<string | null>(null);
@@ -32,9 +42,17 @@ export function StudentWeekGrid({
     .filter((v) => withSlots.some((r) => r.subject === v));
   const extra = [...new Set(withSlots.map((r) => r.subject))].filter((s) => !inSettings.includes(s));
   const subjectKeys = [...inSettings, ...extra];
-  // 탭 전환 시 높이 고정 — 가장 교시 많은 과목 기준 총높이(각 과목 표가 이 높이를 채우도록 행높이 조정).
-  const targetTableH =
-    BASE_ROW_H * Math.max(1, ...subjectKeys.map((s) => subjectWeekdayPeriods(s, config).length));
+  const modeOf = (s: string): GridRowMode => (usedRowSubjects.includes(s) ? "used" : "all");
+  // 탭 전환 시 높이 고정 — 각 과목 표가 **실제로 그리는** 행 수(평일·주말) 중 최대 기준.
+  // ⚠️ 교시표 길이로 재지 말 것 — '수업 있는 교시만' 과목(영어)은 15줄 표에서 몇 줄만 그려, 표 길이로 잡으면
+  //    다른 과목의 행이 까닭 없이 늘어난다(표를 두 번 짓지만 학생 한 명 분이라 비용은 무시할 만하다).
+  const shownRowCounts = subjectKeys.flatMap((s) =>
+    [false, true]
+      .map((weekend) => buildSubjectPeriodGrid(rows, s, weekend, config, modeOf(s)))
+      .filter((g) => g.days.length > 0)
+      .map((g) => g.rows.length),
+  );
+  const targetTableH = BASE_ROW_H * Math.max(1, ...shownRowCounts);
 
   // 슬롯 있는 행이 없으면 그리드 숨김(빈 판 방지).
   if (withSlots.length === 0) return null;
@@ -64,6 +82,7 @@ export function StudentWeekGrid({
           config={config}
           subjects={subjects}
           tableHeight={targetTableH}
+          rowMode={modeOf(active)}
         />
       </div>
     </section>

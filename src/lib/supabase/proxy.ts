@@ -130,7 +130,10 @@ export async function updateSession(request: NextRequest) {
   if (!hasAuthCookie) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname);
+    // Restore the exact view/filter after login, including dashboard previews.
+    // Keeping only pathname silently changed ?view=rooms back to the main dashboard.
+    url.search = "";
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
 

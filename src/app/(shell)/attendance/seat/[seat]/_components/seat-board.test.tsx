@@ -109,3 +109,43 @@ describe("자리 출석부 본문", () => {
     expect(screen.getByLabelText("이다윤A 듣기 레벨")).toHaveValue("");
   });
 });
+
+describe("마지막 수업 — 원장 2026-09-11 'LAB이나 JJ가 마지막 수업인 학생들은 마지막 수업이라고 표시하자'", () => {
+  const base = { date: "2026-08-14", periods, activeStart: "16:20", rosters, readOnly: false };
+
+  it("랩실 카드 — 조회가 **확인한** 학생에게만 적고, 모르면 아무것도 안 적는다", () => {
+    const href = "/attendance/seat/lab?date=2026-08-14&start=";
+    const { rerender } = render(<SeatBoard seat="lab" {...base} hrefFor={href} lastByStudent={{ s1: true }} />);
+    expect(screen.getByText("마지막 수업").getAttribute("title")).toContain("시간표 기준 오늘 남은 수업이 없습니다");
+
+    // 🔴 모름(값 없음)이면 안 적는다 — 다음 행선지가 없다는 **부재**로 추측하지 않는다.
+    rerender(<SeatBoard seat="lab" {...base} hrefFor={href} />);
+    expect(screen.queryByText("마지막 수업")).toBeNull();
+
+    // 다음 수업이 있으면 그쪽이 이긴다(둘은 함께 설 수 없다).
+    rerender(
+      <SeatBoard
+        seat="lab"
+        {...base}
+        hrefFor={href}
+        nextStartByStudent={{ s1: "17:20" }}
+        nextRoomByStudent={{ s1: "본원304" }}
+        lastByStudent={{ s1: true }}
+      />,
+    );
+    expect(screen.queryByText("마지막 수업")).toBeNull();
+    expect(screen.getByText("17:20 본원304 이동")).toBeTruthy();
+  });
+
+  it("JJ실 표도 같은 부품으로 적는다", () => {
+    render(
+      <SeatBoard
+        seat="jj"
+        {...base}
+        hrefFor="/attendance/seat/jj?date=2026-08-14&start="
+        lastByStudent={{ s1: true }}
+      />,
+    );
+    expect(screen.getByText("마지막 수업")).toBeTruthy();
+  });
+});

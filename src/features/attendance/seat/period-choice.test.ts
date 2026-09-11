@@ -364,8 +364,60 @@ describe("교시 이동 판정", () => {
     expect(validateSeatPeriodMove({ ...le1, markedReason: "출결이 찍힘" })).toEqual({ error: "출결이 찍힘" });
   });
 
-  it("이미 그 교시면 아무 일도 아니다", () => {
+  it("이미 그 교시면 아무 일도 아니다 — 문장은 '다른 시간에 놓으라'(원장 2026-09-11)", () => {
     expect(validateSeatPeriodMove({ ...le1, toSlot: "15:40" })).toEqual({ error: SEAT_PERIOD_SAME });
+    expect(SEAT_PERIOD_SAME).toContain("다른 시간 교시에 놓으세요");
+  });
+
+  describe("🔴 학생 축 — 그 시각에 그 학생의 다른 수업이 있으면 못 옮긴다(2026-09-11)", () => {
+    const math = {
+      classId: "EL2S",
+      className: "초등M 초4 EL2S",
+      start: "17:00",
+      end: "17:55",
+      room: "본원205",
+      seatLabel: null,
+    };
+
+    it("겹치면 그 수업(반 이름·시각)을 적어 거절한다", () => {
+      expect(validateSeatPeriodMove({ ...le1, studentClasses: [math], toEnds: ["17:40"] })).toEqual({
+        error: "그 시각에 이 학생의 다른 수업(초등M 초4 EL2S 17:00~17:55)이 있습니다 — 겹치는 시간으로는 옮길 수 없습니다",
+      });
+    });
+
+    it("반 축이 먼저다 — 같은 시각이면 반 축 문장(원장 2026-09-11 A 확정 — 그 축은 그대로 막는다)", () => {
+      expect(
+        validateSeatPeriodMove({
+          ...le1,
+          toSlot: "16:20",
+          studentClasses: [{ ...math, start: "16:20", end: "17:00" }],
+          toEnds: ["17:00"],
+        }),
+      ).toEqual({ error: SEAT_PERIOD_CLASS_BUSY });
+    });
+
+    it("🔴 목표 교시 안에서 시작하는 수업(17:20)도 겹침이다 — 교시 끝(`toEnds`)을 알아야 보인다", () => {
+      const late = { ...math, start: "17:20", end: "18:10" };
+      expect(validateSeatPeriodMove({ ...le1, studentClasses: [late], toEnds: ["17:40"] })).toEqual({
+        error: "그 시각에 이 학생의 다른 수업(초등M 초4 EL2S 17:20~18:10)이 있습니다 — 겹치는 시간으로는 옮길 수 없습니다",
+      });
+      // 끝을 모르면 판정하지 않는다(모르는 것으로 막지 않는다) — 이 차이가 곧 `toEnds`를 빠뜨리면 생기는 구멍이다.
+      expect(validateSeatPeriodMove({ ...le1, studentClasses: [late] })).toEqual({ ok: true, crossTime: true });
+    });
+
+    it("재료가 없으면(모름) 이 축은 판정하지 않는다 — 화면은 막지 않고 서버가 채워 다시 본다", () => {
+      expect(validateSeatPeriodMove({ ...le1, toEnds: ["17:40"] })).toEqual({ ok: true, crossTime: true });
+    });
+
+    it("경계 접촉은 겹침이 아니다(17:40 끝 → 17:40 시작)", () => {
+      expect(
+        validateSeatPeriodMove({
+          ...le1,
+          studentClasses: [{ ...math, start: "17:40", end: "18:30" }],
+          toEnds: ["17:40"],
+        }),
+      ).toEqual({ ok: true, crossTime: true });
+    });
   });
 });
 

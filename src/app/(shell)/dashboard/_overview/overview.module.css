@@ -49,6 +49,26 @@
   gap: 12px;
   align-items: center;
 }
+.classroomPreview {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #173e76;
+  border-radius: 6px;
+  color: #173e76;
+  background: #edf3fa;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.classroomPreview:hover {
+  background: #dfeaf6;
+}
+.classroomPreview:focus-visible {
+  outline: 2px solid #3284ad;
+  outline-offset: 3px;
+}
 .freshness {
   display: flex;
   align-items: center;
