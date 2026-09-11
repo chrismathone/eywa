@@ -10,6 +10,8 @@
  *    (CLAUDE.md #77: 행동을 재촉하는 표시는 그 행동의 실제 게이트와 같은 조건이어야 한다).
  */
 
+import { hasBodyMarkers, hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
+
 export type WriteFilter = "all" | "written" | "unwritten";
 
 /** 판정에 필요한 행 최소 shape — 컴포넌트 타입에 묶이지 않게 좁게 받는다(테스트 용이). */
@@ -32,9 +34,14 @@ export function isWriteTargetRow(row: WriteRow): boolean {
   return row.attendanceRaw !== "absent" && row.reportOptout !== true;
 }
 
-/** 행 1건이 '작성됨'인가 — 이미 저장/발송됐거나 문구 초안이 채워짐. */
+/**
+ * 행 1건이 '작성됨'인가 — 이미 저장/발송됐거나 문구 초안이 채워짐.
+ * 🔑 영어 글이 그림·사진 자리 줄**뿐**이면 저장됐어도 아직 안 쓴 것이다 — 빈 행에 사진부터 넣으면 첨부가 보고서를 먼저 저장해
+ *    `sent`가 서는데, 그 행을 '작성'으로 치면 '미작성' 목록에서 사라진다(적대 재리뷰 2026-09-11). 자리 줄이 없는 글은 예전 판정 그대로.
+ */
 export function isRowWritten(row: WriteRow): boolean {
-  return row.sent === true || !!row.draft?.trim();
+  if (hasTextBesidesMarkers(row.draft)) return true;
+  return row.sent === true && !hasBodyMarkers(row.draft);
 }
 
 /**

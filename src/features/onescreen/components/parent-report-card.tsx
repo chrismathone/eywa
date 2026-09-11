@@ -1,21 +1,19 @@
 import type { ReactNode } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
-import { JjExamSheet } from "@/features/ijw/components/jj-exam-sheet";
-import { JjStudySheet } from "@/features/ijw/components/jj-study-sheet";
-import { slotAvailability, type JjReportSnapshot } from "@/features/ijw/snapshot";
-import { splitImageSlots } from "@/features/report-templates/image-slots";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import type { JjReportSnapshot } from "@/features/ijw/snapshot";
 import { hasTrend, type TrendPoint } from "../report-trend";
-import { isImageAttachment } from "../attachment-utils";
+import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
 import { makeupTitleSuffix } from "../makeup-label";
 import { ReportTrendGraph } from "./report-trend-graph";
+import { EMPTY_NOTES, FileLink, TemplateBody, type CardAttachment } from "./report-template-body";
 
 // 학부모 수업 보고서 카드 — 공유 서버 컴포넌트(순수 프레젠테이션, 데이터는 props로만).
 // /r/[token](공개 학부모 링크·ClassNote 워커 스샷 대상)과 /lesson_reports/[id]/print(강사 PDF 미리보기)가
 // **같은 컴포넌트**를 렌더 → 발송물·미리보기 디자인 불일치를 구조적으로 제거.
 // ⚠️ .max-w-md 컬럼을 반환(ClassNote 워커가 `.max-w-md`를 스크린샷). 바깥 래퍼는 각 호스트가 제공.
+// 영어(템플릿 모드) 본문은 report-template-body.tsx — 그림 자리·첨부 자리 규칙도 거기 있다.
 
 /** 라벨/값 한 줄 — 좌측 라벨 + 우측 값(모바일 친화). 값의 줄바꿈(진도 "1.…\n2.…") 보존. */
 function Field({ label, value }: { label: string; value: string }) {
@@ -35,53 +33,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       {/* 섹션 제목: 13px→26px(2배)·faint→dim(더 진한 회색) — 2026-07-10 원장 요청. */}
       <h2 className="text-text-dim mb-3 text-3xl font-bold">{title}</h2>
       {children}
-    </section>
-  );
-}
-
-/** 보고 글이 비었을 때 문구 — 수학 '학부모 전달 내용'과 영어 템플릿 본문이 같은 문구를 쓴다(강사가 빈 발송을 눈으로 안다). */
-const EMPTY_NOTES = "작성된 보고 내용이 없습니다.";
-
-/**
- * 템플릿 모드 본문(영어 보고서, 사용자 2026-09-10 — "템플릿 여러 개 + 발송 전 수정").
- * 강사가 템플릿으로 조립한 글(`notes`)이 **보고서 본문 그 자체**다 — 진도·숙제·테스트·코멘트가 이미
- * 섹션 머리말(📍·📅·💡·💌)과 함께 글 안에 들어 있다. 그래서 제목 줄을 달지 않는다(글이 "안녕하세요 학부모님"으로
- * 스스로 시작한다).
- * 글씨는 수학 '학부모 전달 내용'(16px)보다 한 단계 크게 — 워커가 800px·2배로 `.report-capture`를 캡처하고
- * 학부모는 그 이미지를 폰으로 읽는다(글이 곧 보고서라 가장 크게 읽혀야 한다).
- *
- * 🔑 **그림 자리**(2026-09-11, image-slots.ts): 글 안의 `[시험결과지]`·`[학습분석지]` **한 줄**이 그 자리에 인재원 그림을
- *    세운다 — 그 줄에서 글을 끊고 그림을 끼운다. 재료는 저장할 때 서버가 받아 둔 동결본(`jj`, 0261a)이라
- *    /r·인쇄·ClassNote 캡처(이 카드의 스크린샷)가 같은 그림을 같은 자리에 싣는다.
- * 🔴 그릴 자료가 없으면(동결본 없음·그날 시험 없음) **아무것도 안 그린다** — 대괄호 글자를 학부모에게 내보내지 않는다.
- * 🔴 그림 자리가 없는 글은 예전과 **글자 하나 다르지 않다**(한 칸 그대로).
- */
-function TemplateBody({ text, jj }: { text: string | null; jj?: JjReportSnapshot | null }) {
-  const body = (text ?? "").replace(/\r\n?/g, "\n").trim();
-  const segments = splitImageSlots(body);
-  if (!segments.some((s) => s.kind === "slot")) return <TemplateText text={body || EMPTY_NOTES} />;
-  const avail = slotAvailability(jj);
-  // 같은 자리 줄이 두 번 있으면(강사가 글에서 복사해 둔 것 등) **처음 한 번만** 그린다 — 같은 그림이 두 장 나가지 않게.
-  const drawn = new Set<string>();
-  const blocks = segments.flatMap((seg, i): ReactNode[] => {
-    if (seg.kind === "text") return [<TemplateText key={`t${i}`} text={seg.text.trim()} />];
-    if (drawn.has(seg.key)) return [];
-    drawn.add(seg.key);
-    if (seg.key === "시험결과지") {
-      return avail.시험결과지 && jj
-        ? jj.exams.map((exam, j) => <JjExamSheet key={`e${i}-${j}`} exam={exam} layout="card" />)
-        : [];
-    }
-    return avail.학습분석지 && jj?.study ? [<JjStudySheet key={`s${i}`} study={jj.study} layout="card" />] : [];
-  });
-  return blocks.length ? <>{blocks}</> : <TemplateText text={EMPTY_NOTES} />;
-}
-
-/** 템플릿 글 한 칸(그림 자리 사이의 글 조각도 같은 칸) — 그림 칸이 생기기 전 본문과 같은 모양. */
-function TemplateText({ text }: { text: string }) {
-  return (
-    <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
-      <p className="text-foreground text-xl leading-relaxed break-keep whitespace-pre-wrap">{text}</p>
     </section>
   );
 }
@@ -120,7 +71,7 @@ export type ParentReportCardProps = {
   academyName: string;
   logoSrc: string | null; // 이미 해석된 로고 URL(없으면 null)
   settings: ReportSettings; // 학원 운영 > 보고서 표시 토글
-  attachments: { path: string; name: string; url: string }[]; // 이미 signed URL 해석된 첨부(실패분 제외)
+  attachments: CardAttachment[]; // 이미 signed URL 해석된 첨부(실패분 제외)
   trend?: TrendPoint[]; // 성적 추이 그래프 점(fetchReportTrendRows→buildTrendPoints). 없으면 그래프 미표시.
   /**
    * 템플릿 모드(영어) — `notes`가 템플릿으로 조립된 글 그 자체라 항목 칸 대신 그 글을 본문으로 그린다.
@@ -170,6 +121,12 @@ export function ParentReportCard({
     legacyTest ||
     (rpt.showHomework && report.homeworkScore) ||
     (rpt.showAttitude && report.attitude);
+  // 영어 글 속 첨부 자리(`[첨부: 이름]`) — 그 자리에 그린 첨부는 아래 '첨부' 칸에서 뺀다(같은 사진이 두 번 나가지 않게).
+  // 🔑 학원설정이 첨부 표시를 끄면 글 속 자리도 비운다(아래 칸과 같은 토글 — 미리보기가 발송물과 갈리지 않게).
+  const inline: ReadonlyMap<string, CardAttachment> =
+    templateMode && rpt.showAttachments ? pickInlineAttachments(report.notes, attachments) : new Map();
+  const inlinePaths = new Set([...inline.values()].map((a) => a.path));
+  const restAttachments = inlinePaths.size ? attachments.filter((a) => !inlinePaths.has(a.path)) : attachments;
 
   return (
     // ⚠️ report-capture = ClassNote 워커 스크린샷 대상 클래스(classnote-core.mjs가 이 선택자로 캡처).
@@ -199,7 +156,7 @@ export function ParentReportCard({
           학습 추세는 **전부 건너뛴다**: 같이 그리면 같은 진도·숙제가 글 안과 칸에 두 번 나간다.
           🔴 'showParentNote' 토글을 보지 않는다 — 수학에선 여러 칸 중 하나지만 여기선 글이 곧 보고서라,
              끄면 학생 정보만 남은 빈 카드가 학부모에게 나간다. 머리·학생 정보·첨부·바닥글은 수학과 같다. */}
-      {templateMode ? <TemplateBody text={report.notes} jj={jj} /> : null}
+      {templateMode ? <TemplateBody text={report.notes} jj={jj} inline={inline} /> : null}
 
       {!templateMode && showToday ? (
         <Section title="오늘 수업">
@@ -258,14 +215,15 @@ export function ParentReportCard({
       ) : null}
 
       {/* 학생 사진·파일 첨부 — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. 학원 설정 토글로 on/off.
-          이미지=인라인 / 문서·오디오=다운로드 링크(학부모가 /r 링크로 열어 받음. 스샷 안에선 링크가 클릭 불가). */}
-      {rpt.showAttachments && attachments.length ? (
+          이미지=인라인 / 문서·오디오=다운로드 링크(학부모가 /r 링크로 열어 받음. 스샷 안에선 링크가 클릭 불가).
+          영어 글 속 자리에 이미 그린 첨부는 여기서 뺀다(위 restAttachments). */}
+      {rpt.showAttachments && restAttachments.length ? (
         <Section title="첨부">
-          {attachments.some((a) => isImageAttachment(a.name || a.path)) ? (
+          {restAttachments.some((a) => isImageAttachment(a.name || a.path)) ? (
             // 이미지는 1열로 **크게** 세로 쌓기 — 스샷 1장에 보고서 본문 → 교재가 세로로 완결되게(2026-07-22 원장 방향).
             // ClassNote가 attached_images를 가로로 나열해 세로가 안 되는 문제를 스샷 내 세로 배치로 우회.
             <div className="mb-2 space-y-2">
-              {attachments
+              {restAttachments
                 .filter((a) => isImageAttachment(a.name || a.path))
                 .map((a) => (
                   // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 첨부(signed URL, 최적화 불필요)
@@ -273,23 +231,12 @@ export function ParentReportCard({
                 ))}
             </div>
           ) : null}
-          {attachments.some((a) => !isImageAttachment(a.name || a.path)) ? (
+          {restAttachments.some((a) => !isImageAttachment(a.name || a.path)) ? (
             <div className="space-y-1.5">
-              {attachments
+              {restAttachments
                 .filter((a) => !isImageAttachment(a.name || a.path))
                 .map((a) => (
-                  <a
-                    key={a.path}
-                    href={a.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    download={a.name}
-                    className="border-line bg-bg-soft hover:bg-line/30 flex items-center gap-2 rounded-md border px-3 py-2.5 no-underline"
-                  >
-                    <EyIcon name="fileDownload" size={20} className="text-primary shrink-0" />
-                    <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">{a.name}</span>
-                    <span className="text-text-faint shrink-0 text-xs">받기</span>
-                  </a>
+                  <FileLink key={a.path} att={a} />
                 ))}
             </div>
           ) : null}

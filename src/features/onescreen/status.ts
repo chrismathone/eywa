@@ -6,6 +6,7 @@
 import type { GridRow } from "./grid";
 import type { Subject } from "./types";
 import type { SubjectReport } from "./components/report-card";
+import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 
 // 발송완료 > 작성중(진도·초안 있음, 미발송) > 미작성(아무것도 안 함) > 제외(보낼 일이 없는 행).
 export type SendStatus = "sent" | "draft" | "todo" | "excluded";
@@ -22,7 +23,8 @@ export type SendStatus = "sent" | "draft" | "todo" | "excluded";
 export function rowSendStatus(rep: SubjectReport | undefined, subject: Subject): SendStatus {
   if (rep?.sent) return "sent";
   if (subject.reportOptout === true) return "excluded";
-  if ((rep?.draft && rep.draft.trim()) || (subject.today && subject.today.trim())) return "draft";
+  // 초안 = 학부모에게 나갈 글(영어 글의 그림·사진 자리 줄뿐이면 초안이 아니다 — 서버가 발송을 막는다).
+  if (hasTextBesidesMarkers(rep?.draft) || (subject.today && subject.today.trim())) return "draft";
   return "todo";
 }
 

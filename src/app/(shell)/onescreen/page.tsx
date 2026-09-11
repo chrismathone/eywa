@@ -6,6 +6,7 @@ import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { roleHome } from "@/lib/permissions";
 import { getTeacherRoster } from "@/features/onescreen/server/roster";
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
+import { getJjAccess } from "@/features/ijw/server/queries";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
@@ -50,9 +51,12 @@ export default async function OneScreenPage({
   // ⚠️ 로스터(전원 핫패스)에 새 컬럼을 넣지 않는다(#95) — 실패해도 sendName=null이라 실명으로 그대로 산다.
   // '다른 강사 뷰'(열람 전용)면 로스터·발송용 이름 모두 그 강사 기준(로스터는 내부에서 같은 판정 공유).
   const viewAs = await viewAsTeacher();
-  const [roster, sendName] = await Promise.all([
+  const [roster, sendName, jjAccess] = await Promise.all([
     getTeacherRoster(date, all === "1"),
     resolveReportAuthorName(user.tenantId, viewAs?.displayName ?? user.displayName),
+    // 인재원 짝 잇기 권한 — JJ실 짝 잇기 구역과 **같은 함수**(ijw/server/viewer.ts). 영어 칸 '미연결' 줄의 링크만 켠다.
+    // 실패해도 링크만 빠진다(관리자에게 요청하라는 문구로 떨어진다) — 전원 핫패스라 이 조회가 화면을 막으면 안 된다.
+    getJjAccess().catch(() => null),
   ]);
   // 진입 지정(2026-08-07) — '오늘 ECS' 카드에서 `?class=&student=`로 넘어온다.
   // 🔴 **로스터 안에 실제로 있을 때만** 넘긴다. 남의 반 id를 URL에 적어도 여기서 걸러지고(로스터는 이미
@@ -113,6 +117,7 @@ export default async function OneScreenPage({
       initialView={parseView(view)}
       initialClassName={initialClassName}
       initialStudentId={initialStudentId}
+      canLinkIjw={!!jjAccess?.canLink}
       />
     </>
   );

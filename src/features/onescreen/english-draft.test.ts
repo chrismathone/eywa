@@ -5,6 +5,7 @@ import {
   type ReportTemplate,
 } from "@/features/report-templates/defaults";
 import { textHash } from "@/features/report-templates/provenance";
+import { carryAttachmentLines, insertAttachmentLine } from "@/features/report-templates/attachment-lines";
 import {
   aiFactsHashOf,
   canRecompose,
@@ -21,6 +22,7 @@ import {
   refreshFactsKey,
   templateFactsKey,
   isUntouchedTemplateDraft,
+  templateHashOf,
   slotFactsFor,
   templateImageSlots,
   templateNeedsAi,
@@ -54,6 +56,34 @@ describe("isUntouchedTemplateDraft", () => {
   });
   it("🔴 가져온 글·옛 글(지문 없음)은 템플릿 글이 아니다 — draft===autoDraft여도", () => {
     expect(isUntouchedTemplateDraft({ draft: "어제 글", templateHash: undefined })).toBe(false);
+  });
+  it("🔑 첨부 자리 줄은 템플릿 글 밖 — 넣어도 '그대로'이고, 다시 짜도 따라온다", () => {
+    const rep = filled(BUILTIN_ENGLISH_TEMPLATE);
+    const withPhoto = insertAttachmentLine(rep.draft, 2, "시험지.jpg");
+    expect(isUntouchedTemplateDraft({ ...rep, draft: withPhoto })).toBe(true);
+    expect(isUntouchedTemplateDraft({ ...rep, draft: `${withPhoto} 감사합니다` })).toBe(false);
+    // 점수를 고친 뒤 다시 짠 글 — 사진 줄이 같은 자리에 남고, 새 지문으로 여전히 '그대로'다.
+    const changed = composeEnglishDraft(BUILTIN_ENGLISH_TEMPLATE, { ...FACTS, dailyTest: "20문제 중 15개 맞음" }, AI);
+    const carried = carryAttachmentLines(withPhoto, changed);
+    expect(carried).toContain("[첨부: 시험지.jpg]");
+    expect(isUntouchedTemplateDraft({ ...rep, draft: carried, templateHash: templateHashOf(changed) })).toBe(true);
+    // 첨부 줄이 없는 글의 지문은 예전 지문 그대로다(세션에 남은 옛 지문과 맞는다).
+    expect(templateHashOf(rep.draft)).toBe(textHash(rep.draft));
+  });
+  it("🔴 옛 템플릿이 첨부 줄을 품어도 지문 규칙이 같다 — 다시 짜도 '그대로' · '칸이 바뀜'이 거짓으로 서지 않는다", () => {
+    const T: ReportTemplate = { id: "u9", name: "첨부", body: "{학생} 진도: {진도}\n[첨부: 안내.pdf]\n테스트: {테스트}", builtIn: false };
+    const composed = composeEnglishDraft(T, FACTS, AI);
+    expect(composed).toContain("[첨부: 안내.pdf]");
+    const draft = carryAttachmentLines(insertAttachmentLine(composed, 1, "사진.jpg"), composed);
+    const rep = { ...AI, draft, templateHash: templateHashOf(composed) };
+    expect(isUntouchedTemplateDraft(rep)).toBe(true);
+    expect(isTemplateStale(T, FACTS, rep)).toBe(false);
+  });
+  it("🔴 AI 글에 CR이 섞여도 글은 LF 하나로(첨부 줄을 넣고 빼도 지문이 맞게)", () => {
+    const text = composeEnglishDraft(BUILTIN_ENGLISH_TEMPLATE, FACTS, { ...AI, aiComment: "가\r\n나\r다" });
+    expect(text).not.toContain("\r");
+    const rep = { ...AI, aiComment: "가\r\n나\r다", draft: insertAttachmentLine(text, 1, "a.jpg"), templateHash: templateHashOf(text) };
+    expect(isUntouchedTemplateDraft(rep)).toBe(true);
   });
 });
 
