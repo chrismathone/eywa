@@ -68,8 +68,9 @@ describe("자리 교시 고정 표식 배선", () => {
     expect(src, "admin은 RLS 우회라 tenant_id 필터가 필수").toContain('.eq("tenant_id", tenantId)');
     // 무페이징 select 금지(B2) — 고정이 쌓이면 1000행에서 조용히 잘린다.
     expect(src).toContain("fetchAllPaged");
-    // 0255a 미적용에도 시간표는 살아야 한다([[#95]]).
-    expect(src).toMatch(/catch\s*\{[\s\S]*return NO_SEAT_PINS/);
+    // 0255a 미적용에도 시간표는 살아야 한다([[#95]]) — 단 실패는 "고정 0줄"(`NO_SEAT_PINS`)이 아니라 **모름**
+    // (`SEAT_PINS_UNKNOWN`). 이름 표식에겐 둘 다 안 붙는 같은 결말이지만 통합뷰 *LAB은 모르면 칸을 안 세운다.
+    expect(src).toMatch(/catch\s*\{[\s\S]*return SEAT_PINS_UNKNOWN;/);
     // 🔑 배치(학원 전체 자리 교시)는 **고정이 있을 때만** 묻는다 — 평소 왕복은 늘지 않는다(B6).
     expect(src).toContain("if (pins.length === 0) return NO_SEAT_PINS;");
     // 🔴 클라이언트 생성도 try 안이어야 한다 — 밖이면 키 누락 한 번에 시간표 전체가 500이다.

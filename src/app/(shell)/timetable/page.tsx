@@ -18,7 +18,9 @@ import {
 } from "@/features/timetable/server/queries";
 import { isSpecialSlotLabel, resolveTeacherLabels } from "@/features/timetable/lib/teacher-label";
 import { applySeatPinMarks, NO_SEAT_PINS } from "@/features/timetable/lib/seat-pin-mark";
-import { getSeatPins } from "@/features/timetable/server/seat-pins";
+import { getSeatLiveSlots, getSeatPins } from "@/features/timetable/server/seat-pins";
+import { buildVirtualLabs, knownLabSources, NO_VIRTUAL_LABS } from "@/features/timetable/lib/virtual-lab";
+import { getSeatWeekMoves } from "@/features/timetable/server/seat-moves";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { buildRichClassCards, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -181,7 +183,7 @@ export default async function TimetablePage({
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
-  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins] = await Promise.all([
+  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins, seatMoves] = await Promise.all([
     // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
     // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
     //    그 시트를 되읽는 구조 가져오기가 그 반을 버리고 배치를 마감한다(fetchSlots 주석).
@@ -202,6 +204,13 @@ export default async function TimetablePage({
     // 붙을 자리가 없으므로 그 뷰일 땐 왕복도 하지 않는다(위 `classroomsForMap`과 같은 판정 자리).
     // 🔑 여기 **병렬**로 둔 것이 요점 — 아래 `slots` 뒤에 await하면 직렬 워터폴이 된다(B4).
     paramView === "rooms" && roomsViewAllowed ? Promise.resolve(NO_SEAT_PINS) : getSeatPins(user.tenantId, referenceDate),
+    // 통합뷰 **\*LAB 임시 칸** 재료(원장 2026-09-11) — 표시 주의 **하루 이동**(0255a `seat_period_moves`, 주 범위만).
+    // 통합뷰가 될 수 없는 뷰(파라미터로 기본·강사·교실을 명시)면 왕복하지 않는다 — 파라미터가 없으면 과목의 기본
+    // 뷰를 아직 몰라(영어 = 통합뷰) 받아 둔다. 🔑 여기 **병렬**로 둔 것이 요점(B4).
+    // 묻지 않은 것은 null(모름) — "이동 0줄"이 아니다(그 뷰는 어차피 통합뷰가 아니지만, 0줄로 두면 거짓 칸의 재료가 된다).
+    paramView === null || paramView === "integrated"
+      ? getSeatWeekMoves(user.tenantId, referenceDate)
+      : Promise.resolve(null),
   ]);
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
@@ -463,6 +472,30 @@ export default async function TimetablePage({
 
   const isIntegrated = effView === "integrated";
   const isRooms = effView === "rooms";
+  // 통합뷰 **\*LAB 임시 칸**(원장 2026-09-11 *"이동된 학생때문에 추가되는거니까 *LAB 같은식으로 임시 추가"*) —
+  // 자리 출석부에서 다른 시간 랩실로 옮겨 앉는(하루 이동·상시 고정) 학생의 요일·교시 칸. 판정은 자리 출석부와 같은 함수.
+  // 🔴 `slots`·카드 칸·교시축엔 **안 넣는다** — 이 값은 RichGridView 한 곳으로만 간다(인원·반 드래그·충돌·엑셀·
+  //    강사뷰·기본뷰 무관, 가드 virtual-lab-wiring). 배치 편집(수업명만)엔 격자가 없어 만들지 않는다.
+  // 🔴 고정·하루 이동 중 **하나라도 모르면**(조회 실패·안 물음) 칸을 안 세운다(`knownLabSources`) — 실패를 "0줄"로
+  //    읽으면 거짓 칸이 선다(하루 이동을 모르면 "오늘만 제 교시로" 되돌린 학생이 고정 교시에 서고, 고정을 모르면 고정
+  //    첫날이 "하루만"이 된다). 이름 표식(`applySeatPinMarks`)은 이 판정과 무관하게 고정만 본다.
+  // 🔑 고정·이동이 0건이어도 null이라 입력도 안 본다(추가 조회 0). 학원 전체 배치는 **초기 Promise.all 안에서 이미
+  //    읽혔다**(고정이 있으면 getSeatPins, 이동이 있으면 getSeatWeekMoves — 같은 React cache) → 여기 await는 늘 캐시
+  //    적중이라 직렬 왕복이 없다(B4).
+  // 🔴 `.catch(() => null)` = 이중 방어 — getSeatLiveSlots 안쪽 catch가 빠져도 부가 표시 하나 때문에 시간표 전체가
+  //    500이 되지 않게(여기는 어떤 try에도 싸여 있지 않다). 모르면 칸 없음.
+  const labSources = isIntegrated && !groupEditing ? knownLabSources(seatPins, seatMoves) : null;
+  const virtualLabs = labSources
+    ? buildVirtualLabs({
+        slots,
+        pins: labSources.pins,
+        moves: labSources.moves,
+        live: await getSeatLiveSlots(user.tenantId, referenceDate).catch(() => null),
+        referenceDate,
+        subject,
+        config: periodsConfig,
+      })
+    : NO_VIRTUAL_LABS;
   // 교실뷰 인라인 정원 편집 — 강의실은 owner 도메인이라 게이트도 owner 쓰기(그룹 설정과 동일 논리,
   // 서버 액션 updateClassroomCapacity가 같은 게이트로 2차 방어).
   const canEditRoomCapacity = isRooms && (await canWriteTenant(user.systemRole, "owner"));
@@ -1021,6 +1054,7 @@ export default async function TimetablePage({
             compactSections={compactSections}
             customGroups={customGroups}
             hideStudents={hideStudents}
+            virtualLabs={virtualLabs}
           />
         </TimetableZoomArea>
         </RosterMoveArea>
