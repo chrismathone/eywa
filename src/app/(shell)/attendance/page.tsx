@@ -775,6 +775,7 @@ export default async function AttendancePage({
       slotCounts={gridSource.slotCounts}
       lockBefore={lockBefore}
       initialCollapsed={viewPrefs.collapsed}
+      autoUnits={gridSource.autoUnits}
     >
       <div className="flex h-full min-h-0 flex-col gap-3 pb-3">
       {/* Toolbar — 월/범위/보기(+관리자 필터) 좌측, 살아있는 합계 우측. 이 화면의 유일한 크롬 줄. */}

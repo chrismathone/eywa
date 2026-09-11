@@ -255,6 +255,8 @@ export function OneScreenGrid({
                             classId: r.subject.classId,
                             isMakeup: r.student.isMakeup,
                             raw: r.subject.attendanceRaw,
+                            // 새 칸에 시수를 비우면 서버가 넣을 값(수학 자동 시수) — 팝오버 안내가 이 값을 말한다.
+                            autoUnits: r.subject.attendanceAutoUnits,
                           })),
                           status,
                           { onlyEmpty },

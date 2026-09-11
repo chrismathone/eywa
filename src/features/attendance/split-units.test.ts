@@ -62,8 +62,14 @@ describe("배선 — 부풀림이 다시 생기지 않게", () => {
   });
 
   it("🔴 화면은 명시 숫자를 곱하지 않는다(서버와 같은 규칙)", () => {
-    const src = read("app/(shell)/attendance/_components/grid-context.tsx");
-    expect(src).not.toContain("Math.round((raw ?? 1) * n * 10) / 10");
-    expect(src).toContain("if (raw !== null) return { s: v.status, u: raw };");
+    // 낙관값 규칙은 grid/optimistic-value.ts 한 벌(2026-09-11 grid-context에서 옮김 — 수학 자동 시수) — 격자는 그 함수를 부른다.
+    const grid = read("app/(shell)/attendance/_components/grid-context.tsx");
+    const rule = read("features/attendance/grid/optimistic-value.ts");
+    expect(grid).toContain("optimisticGridValue(");
+    for (const src of [grid, rule]) {
+      expect(src).not.toContain("Math.round((raw ?? 1) * n * 10) / 10");
+      expect(src).not.toMatch(/\(raw \?\? 1\) \* slotCount/);
+    }
+    expect(rule).toContain("if (raw !== null) return { s: v.status, u: raw };");
   });
 });

@@ -154,6 +154,12 @@ export type Subject = {
    * ⚠️ **학부모 보고서엔 안 나간다**(발송물이 아니라 기록). 급여 정산·청구 회차 소비는 이 값을 읽는다.
    */
   attendanceUnits?: number | null;
+  /**
+   * 이 반의 대상 날짜 **수학 자동 시수**(수업 길이 → 시수, 원장 2026-09-11, attendance/auto-units.ts) —
+   * 출결을 **처음** 찍을 때 서버가 넣는 값. 화면 '타임' 칸이 기록 없는 행에서 이 값을 기본으로 보여 준다.
+   * 1이거나 대상이 아니면 키가 없다(로스터는 전 강사 hot path라 모든 행에 null을 얹지 않는다).
+   */
+  attendanceAutoUnits?: number | null;
 
   // ── 오늘 보고서 발송 상태(과목별) — roster가 오늘 lesson_reports를 subject로 매칭해 채움 ──
   // 학생단위로 뭉개면 다과목(수학만 저장해도 영어까지 sent)이 오카운트되므로 과목별로 분리.

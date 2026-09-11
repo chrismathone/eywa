@@ -309,9 +309,16 @@ export function SessionUnitsField({
   size = "md",
   label,
   box,
+  autoUnits,
 }: {
   units: number | null | undefined;
   status: BasicAttendance | null;
+  /**
+   * **출결이 비어 있을 때** 처음 찍으면 들어갈 수학 자동 시수(수업 길이, auto-units.ts · 원장 2026-09-11).
+   * 🔴 화면이 보여 주는 기본값 = 저장될 값 — 비어 있는 칸에 '1'을 보여 두고 서버가 1.5를 넣으면 거짓 약속이다.
+   * 기록이 생긴 뒤엔 저장된 값(`units`)이 이긴다. 없음(null) = 자동값 없음(=1).
+   */
+  autoUnits?: number | null;
   pending: boolean;
   studentName: string;
   onSet: (status: BasicAttendance, extra?: AttendanceExtra) => void;
@@ -328,7 +335,9 @@ export function SessionUnitsField({
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
-  const saved = effectiveUnits(units);
+  // 출결이 비어 있으면 **처음 찍을 때 들어갈 값**을 보여 준다(수학 자동 시수) — 기록이 있으면 저장값.
+  const showAuto = status === null && autoUnits != null;
+  const saved = showAuto ? autoUnits : effectiveUnits(units);
   const [draft, setDraft] = useState<string | null>(null); // null = 편집 중 아님(서버 값 표시)
   const savedText = formatSessionUnits(saved);
   const big = size === "lg";
@@ -372,7 +381,7 @@ export function SessionUnitsField({
         `border-line focus:border-primary rounded-md border ${
           big ? "h-8 w-[54px] text-base" : "h-7 w-[46px] text-sm"
         }`
-      } ${saved === 1 ? "text-text-dim" : "text-foreground font-bold"}`}
+      } ${saved === 1 || showAuto ? "text-text-dim" : "text-foreground font-bold"}`}
     />
   );
 
@@ -382,6 +391,7 @@ export function SessionUnitsField({
       title={
         tf("os.units.title", { name: studentName }) +
         (status ? "" : t("os.units.titleNoStatus")) +
+        (showAuto ? tf("os.units.titleAuto", { n: savedText }) : "") +
         t("os.units.titleTail")
       }
     >

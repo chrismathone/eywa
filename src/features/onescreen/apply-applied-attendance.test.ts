@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAppliedAttendance } from "./apply-applied-attendance";
+import { mergedUnits, planMakeupMerge } from "./makeup-merge-plan";
 import type { OneScreenStudent, Subject } from "./types";
 
 const row = (over: Partial<Subject> = {}): Subject =>
@@ -79,11 +80,40 @@ describe("applyAppliedAttendance — 스트립이 기록한 칸만 화면에 반
     ).toBe("결석");
   });
 
-  it("메모·시수는 건드리지 않는다 — 스트립은 그 둘을 보내지 않는다", () => {
+  it("units 키가 없는 칸(갱신 — 기존 시수 보존)은 메모·시수를 건드리지 않는다", () => {
     const before = [stu("s1", [row({ attendanceNote: "병원", attendanceUnits: 2 })])];
     const after = applyAppliedAttendance(before, [{ studentId: "s1", classId: "c1" }], "present", NONE);
     expect(after[0]!.subjects[0]!.attendanceNote).toBe("병원");
     expect(after[0]!.subjects[0]!.attendanceUnits).toBe(2);
+  });
+
+  it("🔴 새로 만든 칸은 서버가 실제로 넣은 시수(수학 자동 시수 1.5)로 맞춘다 — 1로 남기면 안 된다", () => {
+    const before = [stu("s1", [row({ attendanceAutoUnits: 1.5 })])];
+    const after = applyAppliedAttendance(before, [{ studentId: "s1", classId: "c1", units: 1.5 }], "present", NONE);
+    expect(after[0]!.subjects[0]!.attendanceRaw).toBe("present");
+    expect(after[0]!.subjects[0]!.attendanceUnits).toBe(1.5);
+  });
+
+  it("units: null도 사실이다(비수학·조회 실패 = 1) — 상태가 같아도 시수가 다르면 맞춘다", () => {
+    // 낡은 화면(다른 곳에서 지운 칸이 '출석·2'로 남아 있음)에 서버가 새 행(null)을 만든 경우.
+    const before = [stu("s1", [row({ attendanceRaw: "present", attendanceUnits: 2 })])];
+    const after = applyAppliedAttendance(before, [{ studentId: "s1", classId: "c1", units: null }], "present", NONE);
+    expect(after).not.toBe(before);
+    expect(after[0]!.subjects[0]!.attendanceUnits).toBeNull();
+    // 상태·시수가 이미 같으면 참조 그대로(리렌더 0).
+    const same = [stu("s1", [row({ attendanceRaw: "present", attendanceUnits: 1.5 })])];
+    expect(applyAppliedAttendance(same, [{ studentId: "s1", classId: "c1", units: 1.5 }], "present", NONE)).toBe(same);
+  });
+
+  it("🔴 방송 뒤 보강 합침이 **1.5 기록 위에** 더한다 — 1 + 보강으로 덮어 0.5가 사라지지 않게", () => {
+    // 수학 165분 반, 빈 행 → 스트립 '전원 출석'이 새 행에 1.5를 넣고 방송했다.
+    const before = [stu("s1", [row({ subjectKey: "math", attendanceAutoUnits: 1.5 })])];
+    const after = applyAppliedAttendance(before, [{ studentId: "s1", classId: "c1", units: 1.5 }], "present", NONE);
+    const plan = planMakeupMerge(after[0]!.subjects, new Set(["math"]));
+    expect(plan.kind).toBe("ask");
+    const cand = plan.kind === "ask" ? plan.candidates[0]! : null;
+    expect(cand?.attendanceUnits).toBe(1.5);
+    expect(mergedUnits(cand?.attendanceUnits)).toBe(2.5); // 정규 1.5 + 보강 1
   });
 
   it("같은 학생의 **다른 반 행**은 그대로 — 반 단위로만 반영한다", () => {

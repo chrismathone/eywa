@@ -44,6 +44,8 @@ export type PlanSubject = {
   makeup?: boolean;
   attendanceRaw?: string | null;
   attendanceUnits?: number | null;
+  /** 출결이 없을 때 처음 찍으면 들어갈 수학 자동 시수(수업 길이, attendance/auto-units.ts). */
+  attendanceAutoUnits?: number | null;
 };
 
 export type MakeupMergePlan =
@@ -70,7 +72,9 @@ export function planMakeupMerge(
       classId: su.classId!,
       subjectKey: su.subjectKey!,
       attendanceRaw: su.attendanceRaw ?? null,
-      attendanceUnits: su.attendanceUnits ?? null,
+      // 🔴 출결이 **없는** 행의 '지금 값'은 처음 찍으면 들어갈 수학 자동 시수다(화면 '타임' 칸이 보여 주는 값,
+      //    2026-09-11). 안 그러면 확인창·합산이 1을 기준으로 삼아 화면(1.5)과 저장(1+보강)이 갈린다.
+      attendanceUnits: su.attendanceRaw ? (su.attendanceUnits ?? null) : (su.attendanceAutoUnits ?? su.attendanceUnits ?? null),
     }));
   return candidates.length > 0 ? { kind: "ask", candidates } : { kind: "separate" };
 }

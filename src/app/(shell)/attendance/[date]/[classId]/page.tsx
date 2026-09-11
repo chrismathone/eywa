@@ -13,6 +13,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
+import { getAutoUnitsForClassDay } from "@/features/attendance/server/auto-units";
 import { AttendanceInputForm } from "./input-form";
 
 export const metadata = { title: "출석 입력 — eywa" };
@@ -31,10 +32,13 @@ export default async function AttendanceInputPage({
     !isWithinAttendanceEditWindow(date, kstToday())
       ? attendanceLockMessage(date, kstToday())
       : null;
-  const [klass, rows, { operations }] = await Promise.all([
+  // 수학 자동 시수(수업 길이, 원장 2026-09-11) — 빈 시수 칸으로 **새로** 저장하면 서버가 넣는 값이라
+  // 폼이 그 칸의 기본값으로 보여 준다(보이는 기본값 = 저장될 값). 독립 조회라 병렬(B4).
+  const [klass, rows, { operations }, autoUnits] = await Promise.all([
     getClassMeta(classId),
     getAttendanceInputRows(classId, date),
     getTenantSettings(),
+    getAutoUnitsForClassDay(classId, date),
   ]);
   if (!klass) notFound();
   const subjectMaps = buildSubjectMaps(operations.subjects);
@@ -59,7 +63,7 @@ export default async function AttendanceInputPage({
           {locked}
         </p>
       ) : null}
-      <AttendanceInputForm classId={classId} date={date} rows={rows} locked={!!locked} />
+      <AttendanceInputForm classId={classId} date={date} rows={rows} locked={!!locked} autoUnits={autoUnits} />
     </div>
   );
 }

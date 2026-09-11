@@ -51,6 +51,15 @@ describe("planMakeupMerge", () => {
     expect(planMakeupMerge([row({ attendanceRaw: raw })], MINE).kind).toBe("ask");
   });
 
+  it("🔴 출결이 없는 행의 '지금 값'은 수학 자동 시수다(화면 '타임'과 같게) — 기록이 있으면 저장값", () => {
+    const empty = planMakeupMerge([row({ attendanceRaw: null, attendanceAutoUnits: 1.5 })], MINE);
+    if (empty.kind !== "ask") throw new Error("후보가 있어야 한다");
+    expect(empty.candidates[0]!.attendanceUnits).toBe(1.5);
+    const recorded = planMakeupMerge([row({ attendanceRaw: "present", attendanceUnits: null, attendanceAutoUnits: 1.5 })], MINE);
+    if (recorded.kind !== "ask") throw new Error("후보가 있어야 한다");
+    expect(recorded.candidates[0]!.attendanceUnits).toBeNull(); // 강사가 찍은 1(null) — 자동값으로 바꾸지 않는다
+  });
+
   it("이미 합쳐 둔 과목이 있으면 또 만들지 않는다(두 번 발송 방지)", () => {
     const plan = planMakeupMerge([row({ makeup: true })], MINE);
     expect(plan.kind).toBe("already");

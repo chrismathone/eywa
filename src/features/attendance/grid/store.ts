@@ -6,8 +6,19 @@
 //    실제로 바뀌는 칸은 한 번에 몇 개뿐이다(이전 활성·새 활성·선택 범위의 차집합).
 
 import { cellKey, moveCell, parseCellKey, rectKeys, type CellPos } from "./model";
+import { revertTarget, type Paint } from "./paint-chain";
 
-export type GridValue = { s: string; u: number | null } | null;
+/**
+ * 칸 값 — `s` 상태 · `u` 시수(null = 1).
+ * `d` = 수업보고서에서 **파생만** 된 칸(출결 행 없음) — 서버가 준 초기값에만 붙고 덮개(낙관값)엔 없다.
+ * 🔴 상태가 보여도 행이 없는 칸이라, 여기 저장하면 서버가 **새 행**을 만든다(수학 자동 시수를 받는다 —
+ *    `optimistic-value.ts` `isRecordless`). 이걸 모르면 격자·팝오버가 1을 약속하고 서버는 1.5를 넣는다.
+ */
+export type GridValue = { s: string; u: number | null; d?: true } | null;
+
+/** 낙관 쓰기 표식 — `paintLocal`이 돌려주고 `correctLocal`·`revertLocal`이 받는다(칠하기 전 자리 · 그때 칸의 주인). */
+export type LocalPaint = Paint<GridValue>;
+type GridInit = NonNullable<GridValue>;
 
 /** 칸이 실제로 보는 것 전부 — 이 객체의 **동일성**이 곧 리렌더 여부다(같으면 다시 안 그린다). */
 export type CellState = {
@@ -25,6 +36,9 @@ function sameState(a: CellState, b: CellState): boolean {
   return (
     a.value?.s === b.value?.s &&
     a.value?.u === b.value?.u &&
+    // `d`(파생 = 행 없음)도 사실이다 — 상태·시수가 같아도 파생 칸과 기록 칸은 다르다(팝오버가 이걸로 자동 시수를 가른다).
+    // 빼면 파생 칸에 같은 값을 기록한 뒤에도 스냅샷이 옛 `d`를 들고 있어 '행 없음'으로 오판한다.
+    !!a.value?.d === !!b.value?.d &&
     !a.value === !b.value &&
     a.active === b.active &&
     a.selected === b.selected &&
@@ -36,7 +50,7 @@ function sameState(a: CellState, b: CellState): boolean {
 export class GridStore {
   rows: readonly string[] = [];
   cols: readonly string[] = [];
-  private initial: Record<string, { s: string; u: number | null }> = {};
+  private initial: Record<string, GridInit> = {};
 
   active: CellPos | null = null;
   focus: CellPos | null = null;
@@ -45,6 +59,13 @@ export class GridStore {
   filling = false;
   selected: Set<string> = new Set();
   private overrides = new Map<string, GridValue>();
+  /**
+   * 칸의 주인 — 지금 보이는 덮개를 칠한 팝오버 쓰기(`paintLocal`). 다른 경로로 칠하거나 벗기면 비운다. 응답 보정·실패
+   * 되돌리기가 "그 사이 누가 이 칸을 가져갔나"를 **값이 아니라 주인**으로 가린다 — 빈 칸(null)은 동일성으로 못 가려서
+   * 팝오버 '지우기' 실패가 되돌아오지 않았다. 가져간 쪽이 앞 쓰기의 결과를 버리면 뒤 쓰기 실패가 저장된 적 없는 앞
+   * 값으로 굳어서, 적용 못 한 결과는 표식에 남기고 되돌릴 때 거슬러 간다(재리뷰 2026-09-11 — paint-chain.ts).
+   */
+  private owner = new Map<string, LocalPaint>();
 
   private cellSubs = new Map<string, Set<() => void>>();
   private snaps = new Map<string, CellState>();
@@ -68,7 +89,7 @@ export class GridStore {
   setSource(
     rows: readonly string[],
     cols: readonly string[],
-    initial: Record<string, { s: string; u: number | null }>,
+    initial: Record<string, GridInit>,
   ) {
     this.rows = rows;
     this.cols = cols;
@@ -85,8 +106,15 @@ export class GridStore {
     // ⚠️ 트레이드오프: 다른 사람이 같은 칸을 고쳤다면 새로고침 전까지 내 값이 보인다(동시 편집은 드물다).
     for (const [key, v] of [...this.overrides]) {
       const server = initial[key] ?? null;
-      if ((server?.s ?? null) === (v?.s ?? null) && (server?.u ?? null) === (v?.u ?? null)) {
+      if (
+        (server?.s ?? null) === (v?.s ?? null) &&
+        (server?.u ?? null) === (v?.u ?? null) &&
+        // 🔴 파생 값(`d` — 행 없음)은 내가 쓴 기록과 같은 사실이 아니다 — 서버가 **기록**을 싣고 올 때까지 덮개를 둔다
+        //    (내 저장보다 먼저 시작한 조회가 옛 파생 값을 싣고 와도 칸이 '행 없음'으로 되돌아가지 않게).
+        !!server?.d === !!v?.d
+      ) {
         this.overrides.delete(key);
+        this.owner.delete(key);
         this.pending.push(key);
       }
     }
@@ -152,7 +180,7 @@ export class GridStore {
     const v = this.initial[key] ?? null;
     if (!v) return EMPTY;
     const cached = this.snaps.get(`ssr:${key}`);
-    if (cached && cached.value?.s === v.s && cached.value?.u === v.u) return cached;
+    if (cached && cached.value?.s === v.s && cached.value?.u === v.u && !!cached.value?.d === !!v.d) return cached;
     const next: CellState = { ...EMPTY, value: v };
     this.snaps.set(`ssr:${key}`, next);
     return next;
@@ -175,11 +203,72 @@ export class GridStore {
   setLocal(entries: [string, GridValue][]) {
     for (const [k, v] of entries) {
       this.overrides.set(k, v);
+      this.owner.delete(k); // 다른 경로의 쓰기 — 팝오버 쓰기는 칠한 뒤 스스로 주인이 된다(paintLocal)
       this.indexCell(k);
     }
     const keys = entries.map(([k]) => k);
     this.notify(keys);
     this.bumpValues(keys);
+  }
+
+  /**
+   * 응답 보정 — `expected`가 **지금 그 칸의 값 그 객체**일 때만 `next`로 바꾼다(바꿨으면 true).
+   * 🔴 늦게 도착한 응답이 그 사이 같은 칸에 친 새 입력을 덮지 않게 한다(격자 단건·범위·팝오버 공용).
+   *    **동일성(===)** 비교다 — 같은 값을 다시 친 새 입력도 "바뀐 것"으로 본다(값 비교면 그 입력이
+   *    옛 응답 값으로 덮인다). 서버가 따라잡아 덮개가 벗겨졌어도 다른 객체라 손대지 않는다(이미 진실이다).
+   * ⚠️ `expected`가 null이면 판정하지 않는다(빈 칸은 동일성으로 가릴 수 없다).
+   */
+  setLocalIf(key: string, expected: GridValue, next: GridValue): boolean {
+    if (expected === null || this.valueOf(key) !== expected) return false;
+    this.setLocal([[key, next]]);
+    return true;
+  }
+
+  /**
+   * 낙관 쓰기 한 번 — 칠하기 **직전**의 자리와 그때 칸의 주인을 잡고 칠한 뒤, 이 쓰기를 칸의 주인으로 세운 표식을
+   * 돌려준다(격자 단건 pushCell이 `prev`를 칠하는 순간 잡는 것과 같은 규약). 팝오버를 **열 때** 잡으면 응답 전에 다시
+   * 연 팝오버가 그 자리를 덮는다.
+   */
+  paintLocal(key: string, next: GridValue): LocalPaint {
+    const had = this.overrides.has(key);
+    const paint: LocalPaint = { had, prev: had ? this.overrides.get(key)! : null, prevOwner: this.owner.get(key) ?? null };
+    this.setLocal([[key, next]]);
+    this.owner.set(key, paint);
+    return paint;
+  }
+
+  /**
+   * 응답 보정 — 칸이 아직 이 쓰기의 것이면 `next`로 바꾼다(바꿨으면 true). 그 사이 누가 가져갔으면 결과만 남긴다 —
+   * 가져간 쓰기가 나중에 실패하면 이 값으로 돌아온다(서버엔 이 값이 있다).
+   */
+  correctLocal(key: string, paint: LocalPaint, next: GridValue): boolean {
+    paint.fate = { value: next };
+    if (this.owner.get(key) !== paint) return false;
+    this.setLocal([[key, next]]);
+    this.owner.set(key, paint);
+    return true;
+  }
+
+  /**
+   * 저장 실패 되돌리기 — 칸이 아직 이 쓰기의 것일 때만. 칠하기 전에 덮개가 없었으면 **덮개를 벗겨** 서버 값을 보인다
+   * (저장이 안 됐으니 그게 진실이고, 파생 표식 `d`까지 그대로다). 있었으면 그 덮개로 — 단 그 덮개가 아직 응답을 기다리던
+   * 앞 쓰기의 것이면 그 결과를 따라간다(paint-chain.ts `revertTarget`). 그 사이 누가 가져갔으면 결과만 남긴다.
+   * 🔴 값을 새로 만들어 칠하지 말 것 — `d`가 빠져 서버 따라잡기와 영영 안 맞아 덮개가 새로고침 전까지 남는다.
+   */
+  revertLocal(key: string, paint: LocalPaint): boolean {
+    paint.fate = { revert: true };
+    if (this.owner.get(key) !== paint) return false;
+    const t = revertTarget(paint);
+    if (!t.drop) {
+      this.setLocal([[key, t.value]]);
+      if (t.owner) this.owner.set(key, t.owner);
+      return true;
+    }
+    this.overrides.delete(key);
+    this.owner.delete(key);
+    this.notify([key]);
+    this.bumpValues([key]);
+    return true;
   }
 
   // ── 합계(값) 구독 ──

@@ -28,6 +28,7 @@ import { CLASS_TAG_ALL } from "../class-tags";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
+import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
 import {
@@ -385,10 +386,19 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // ⚠️ 보강 보고서 조회는 반과 무관하다 — 스케줄과 **병렬**로(B4: 독립 await는 Promise.all).
   //    그날 내가 쓴 보강(수업외) 보고서 = 아래 수강생 로스터엔 절대 안 잡히는 행들의 유일한 원천.
   const [scheds, makeupReports, makeupAttRows] = await Promise.all([
-    fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
+    // end_time·자리 라벨·유효구간·요일은 **수학 자동 시수**(수업 길이, auto-units.ts) 재료 — 같은 행이라 왕복 0.
+    fetchInChunks<{
+      class_id: string;
+      start_time: string;
+      end_time: string;
+      day_of_week: string;
+      valid_from: string;
+      valid_to: string | null;
+      slot_teacher_label: string | null;
+    }>(allIds, (chunk) =>
       supabase
         .from("class_schedules")
-        .select("class_id, start_time")
+        .select("class_id, start_time, end_time, day_of_week, valid_from, valid_to, slot_teacher_label")
         .eq("day_of_week", dow)
         .in("class_id", chunk)
         .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
@@ -420,6 +430,22 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const prev = startByClass.get(s.class_id);
     if (prev === undefined) startByClass.set(s.class_id, t);
     else if (t && (prev === null || t < prev)) startByClass.set(s.class_id, t);
+  }
+  // 수학 자동 시수(수업 길이 → 시수, 원장 2026-09-11) — 출결을 **처음** 찍을 때 서버가 넣는 값과 같은 함수로
+  // 반마다 그날 값을 접는다. '타임' 칸이 기록 없는 행에서 이 값을 보여 준다(보이는 기본값 = 저장될 값).
+  const autoUnitsByClass = new Map<string, number>();
+  {
+    const schedsByClass = new Map<string, ReturnType<typeof toAutoUnitsSchedule>[]>();
+    for (const s of scheds) {
+      const list = schedsByClass.get(s.class_id) ?? [];
+      list.push(toAutoUnitsSchedule(s));
+      schedsByClass.set(s.class_id, list);
+    }
+    for (const c of allClasses) {
+      if (!isAutoUnitsSubject(c.subject)) continue;
+      const u = autoUnitsOn(targetDate, schedsByClass.get(c.id) ?? []);
+      if (u !== null) autoUnitsByClass.set(c.id, u);
+    }
   }
   // ⚠️ 그 요일에 수업이 없으면 **비운다** — 옛 코드는 담당 반 전체로 조용히 폴백해, 수요일 수업이 없는
   // 강사에게 담당 반 7개·학생 37명을 "오늘 목록"처럼 보여줬다(2026-07-22 이수진 사례, 타입 주석 참조).
@@ -1205,6 +1231,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       su.attendanceRaw = rec?.status ?? null;
       su.attendanceNote = rec?.note ?? null;
       su.attendanceUnits = rec?.units ?? null;
+      // 수학 자동 시수 — 값이 있을 때만 싣는다(hot path라 모든 행에 null을 얹지 않는다). 기록이 생긴 뒤엔
+      // 화면이 저장값(attendanceUnits)을 쓰므로 여기 남아 있어도 표시에 끼지 않는다(SessionUnitsField).
+      const autoUnits = autoUnitsByClass.get(su.classId);
+      if (autoUnits !== undefined) su.attendanceAutoUnits = autoUnits;
     }
     const pr = priorReport.get(os.id);
     // 🔴 이 폴백은 **학생 단위**(반 무관) 직전 회차다 — 정규/특강을 구분하지 못한다(원장 2026-07-23).

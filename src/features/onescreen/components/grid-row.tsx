@@ -496,6 +496,7 @@ export function GridBodyRow({
             onSet={(s, extra) => fields.onAttendance(student.id, subject.classId!, s, extra)}
             studentName={student.name}
             size="lg"
+            autoUnits={subject.attendanceAutoUnits}
           />
         ) : (
           <span

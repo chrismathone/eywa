@@ -269,6 +269,8 @@ export const AUDIT_ACTIONS = {
   attendance_range: "출결 범위 채우기",
   attendance_range_clear: "출결 범위 지우기",
   attendance_makeup_link: "보강–결석분 연결",
+  // 수학 자동 시수(원장 2026-09-11 "9월분만 보정") — scripts/_oneoff/backfill-math-auto-units.mjs가 --apply 때 한 줄 남긴다.
+  attendance_units_backfill: "수학 출석 시수 자동값 소급 보정",
   attendance_followup: "출결 확인 기록",
   attendance_input_request: "출결 입력 요청",
   attendance_desk_confirm_request: "데스크 확인 요청",

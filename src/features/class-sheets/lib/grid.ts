@@ -305,17 +305,7 @@ export function scheduledUnitsByDate(
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const date of weekDatesOf(weekMonday)) {
-    const dow = dowKeyOf(date);
-    const byStart = new Map<string, number>(); // 시각 → 분(중복 시각은 한 번만)
-    for (const s of schedules) {
-      if (s.dayOfWeek !== dow) continue;
-      if (s.validFrom > date) continue;
-      if (s.validTo && s.validTo < date) continue;
-      if (specialSlotLabel(s.slotTeacherLabel)) continue; // 자리는 수업 시수가 아니다
-      const start = normalizeSlotTime(s.startTime);
-      if (byStart.has(start)) continue;
-      byStart.set(start, slotMinutes(start, normalizeSlotTime(s.endTime)));
-    }
+    const byStart = liveSlotMinutesOn(date, schedules);
     if (byStart.size === 0) continue;
     const raw =
       mode === "periods"
@@ -326,6 +316,35 @@ export function scheduledUnitsByDate(
     if (units > 0 && units !== 1) out[date] = units;
   }
   return out;
+}
+
+/**
+ * 그 날짜에 **실제로 도는 교시**의 시작 시각 → 분 — `scheduledUnitsByDate`의 한 날짜치.
+ *
+ * 🔴 출석부 **수학 자동 시수**([`auto-units.ts`](../../attendance/auto-units.ts), 원장 2026-09-11)도
+ *    이 함수를 지난다. "그날 수업이 몇 분인가"를 두 곳에서 따로 세면 같은 반이 화면마다 다른 시수가 된다.
+ * 규칙: 요일 일치 · `valid_from ≤ date ≤ valid_to` · 자리(LAB·JJ)는 **언제나** 뺀다(`specialSlotLabel`) ·
+ *       같은 시작 시각은 한 번만(자리와 겹친 칸 등).
+ */
+export function liveSlotMinutesOn(
+  date: string,
+  schedules: readonly Pick<
+    GridScheduleRow,
+    "dayOfWeek" | "startTime" | "endTime" | "validFrom" | "validTo" | "slotTeacherLabel"
+  >[],
+): Map<string, number> {
+  const dow = dowKeyOf(date);
+  const byStart = new Map<string, number>(); // 시각 → 분(중복 시각은 한 번만)
+  for (const s of schedules) {
+    if (s.dayOfWeek !== dow) continue;
+    if (s.validFrom > date) continue;
+    if (s.validTo && s.validTo < date) continue;
+    if (specialSlotLabel(s.slotTeacherLabel)) continue; // 자리는 수업 시수가 아니다
+    const start = normalizeSlotTime(s.startTime);
+    if (byStart.has(start)) continue;
+    byStart.set(start, slotMinutes(start, normalizeSlotTime(s.endTime)));
+  }
+  return byStart;
 }
 
 /** "HH:MM" 두 개의 분 차이(음수·비정상은 0 — 시수를 지어내지 않는다). */

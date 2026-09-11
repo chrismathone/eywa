@@ -107,12 +107,18 @@ export function AttendanceInputForm({
   date,
   rows,
   locked,
+  autoUnits,
 }: {
   classId: string;
   date: string;
   rows: AttendanceInputRow[];
   /** 수정 기간(7일)이 지나 강사가 못 고치는 날 — 입력·저장을 전부 잠근다. */
   locked?: boolean;
+  /**
+   * 이 반·날짜 **수학 자동 시수**(수업 길이, auto-units.ts · 원장 2026-09-11) — 기록 없는 학생을 시수 칸
+   * 비운 채 저장하면 서버가 넣는 값이라 그 칸의 기본값(placeholder)으로 보여 준다. null = 빈 칸은 1.
+   */
+  autoUnits?: number | null;
 }) {
   const [state, formAction] = useActionState<SaveAttendanceState, FormData>(saveAttendance, undefined);
   // 이번 화면에서 새로 추가한 보강 학생(아직 저장 전) — 저장되면 서버 rows에 isMakeup으로 합류한다.
@@ -187,8 +193,9 @@ export function AttendanceInputForm({
   // 이미 명단에 있으면(정규 수강생이거나 이미 추가함) 중복 행을 만들지 않는다.
   function addMakeup(s: MakeupPick, choice?: MakeupConfirmChoice) {
     if (allRows.some((r) => r.studentId === s.id)) return;
-    // 확인창에서 고른 시수 — 1이면 기본값이라 초안을 비워 둔다(폼 규약: ""=1).
-    const unitsDraft = choice && choice.addUnits !== 1 ? formatSessionUnits(choice.addUnits) : "";
+    // 확인창에서 고른 시수 — 🔴 1도 **명시**("1")로 싣는다(2026-09-11). 빈 칸은 '기본'이라 수학 반에선 서버가
+    //    수업 길이 자동 시수(auto-units.ts)를 넣어, 확인창이 보여 준 숫자와 기록이 갈린다. "1"은 null로 저장된다.
+    const unitsDraft = choice ? formatSessionUnits(choice.addUnits) : "";
     if (choice?.absentDate) {
       setMakeupLinks((prev) => ({
         ...prev,
@@ -223,7 +230,8 @@ export function AttendanceInputForm({
         homeworkRequired: false,
         homeworkDone: false,
         units: unitsDraft,
-        expanded: !!unitsDraft,
+        // 1은 기본과 같은 값이라 펼치지 않는다(명시로 싣는 건 자동 시수를 막으려는 것뿐이다).
+        expanded: !!choice && choice.addUnits !== 1,
       },
     }));
   }
@@ -512,18 +520,26 @@ export function AttendanceInputForm({
                         value={cell.units}
                         readOnly={r.slotCount > 1}
                         onChange={(e) => patchOne(r.studentId, { units: e.target.value })}
-                        placeholder="1"
+                        // 🔴 기록이 **없는** 학생은 빈 칸으로 저장하면 서버가 수학 자동 시수(수업 길이)를 넣는다
+                        //    (auto-units.ts, 2026-09-11) — 빈 칸이 뜻하는 값을 그대로 보여 준다. 기록이 있으면 빈 칸 = 1.
+                        placeholder={r.recordIds.length === 0 && autoUnits ? formatSessionUnits(autoUnits) : "1"}
                         title={
                           r.slotCount > 1
                             ? `${r.slotCount}개 교시의 합입니다 — 교시별 시수는 영어 수업 시트에서 고치세요`
-                            : "정규 수업 1회 = 1 (빈 칸). 보강 연장 1.5·2, 부분 출석 0.5 등"
+                            : r.recordIds.length === 0 && autoUnits
+                              ? `빈 칸으로 저장하면 이 수업 길이로 ${formatSessionUnits(autoUnits)}회분이 들어갑니다(출석·지각·조퇴·보강). 다른 값이면 직접 적으세요`
+                              : "정규 수업 1회 = 1 (빈 칸). 보강 연장 1.5·2, 부분 출석 0.5 등"
                         }
                         className={`border-line bg-card text-foreground w-16 rounded-md border px-2 py-1.5 text-xs ${
                           r.slotCount > 1 ? "text-text-dim cursor-not-allowed" : ""
                         }`}
                       />
                       <span className="text-text-dim">
-                        {r.slotCount > 1 ? `회분 (${r.slotCount}개 교시 합)` : "회분 (빈 칸 = 1)"}
+                        {r.slotCount > 1
+                          ? `회분 (${r.slotCount}개 교시 합)`
+                          : r.recordIds.length === 0 && autoUnits
+                            ? `회분 (빈 칸 = ${formatSessionUnits(autoUnits)} · 수업 길이)`
+                            : "회분 (빈 칸 = 1)"}
                       </span>
                     </label>
                     <div className="flex flex-wrap items-center gap-3">
