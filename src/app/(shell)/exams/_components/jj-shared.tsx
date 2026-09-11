@@ -34,6 +34,15 @@ export function JjLinkColumnNotice({ teacher = false }: { teacher?: boolean }) {
   );
 }
 
+/** 표 위 한 줄 안내(주의 아님) — 반 정보 실패·모르는 반 등. 원문은 title 툴팁으로만. */
+export function JjNote({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <p className="border-line bg-bg-soft/60 text-text-dim rounded-2xl border px-4 py-2.5 text-xs" title={title}>
+      {children}
+    </p>
+  );
+}
+
 export function JjSkeleton() {
   return <div className="bg-card shadow-card h-64 animate-pulse rounded-2xl" />;
 }

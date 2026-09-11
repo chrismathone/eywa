@@ -9,7 +9,16 @@ import "server-only";
  * 🔴 조회 실패는 던지지 않는다(links.ts와 같은 규약) — 곁가지 구역이 화면 전체를 오류로 바꾸지 않게.
  * ⚠️ admin 클라이언트는 RLS를 우회한다 → students 조회마다 tenant_id를 건다(tenant-guard.test.ts가 잠근다).
  */
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { teacherClassScopeStrict } from "@/features/students/server/read-scope";
+import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
+import { readEnglishTrack } from "@/features/classes/english-track";
+import type { JjClassRef, JjMembership } from "../class-groups";
+import { viewableClassIds } from "../scope";
 import {
   IJW_SCHEMAS,
   type IjwDeckResult,
@@ -133,4 +142,87 @@ export async function getStudentJj(tenantId: string, studentId: string, from: st
     study: study.ok ? study.data : null,
     failed: !exams.ok ? exams : !study.ok ? study : null,
   };
+}
+
+/**
+ * 반별로 묶는 재료(2026-09-11 "학생별 반별 유기적으로") — **지금 도는 영어 반**(학원 전체) × 오늘 그 반 명단의 학생.
+ * 명단 판정은 eligibility.ts 단일 소스(휴원 포함 · 반이동은 반열림 — 옛 반·새 반 양쪽에 서지 않게, [[#125]]).
+ * 요청당 한 번(JJ실 표·반 칩·시험 결과 창이 함께 부른다). 던지지 않는다.
+ * ⚠️ 학원 전체 영어 반을 읽지만 강사 화면의 **행**은 이미 자기 학생뿐이다(스코프) — 묶음이 남의 학생을 끌어오지 않는다.
+ * ⚠️ 인재원 반(className)이 아니라 eywa 반이다(1:1이 아니다, class-groups.ts).
+ */
+export const loadJjMembership = cache(
+  async (tenantId: string): Promise<{ ok: true; membership: JjMembership } | IjwFailure> => {
+    const admin = createAdminClient();
+    const today = kstToday();
+    try {
+      const cls = await fetchAllPaged<{ id: string; class_name: string; english_track: string | null }>((from, to) =>
+        admin
+          .from("classes")
+          .select("id, class_name, english_track")
+          .eq("tenant_id", tenantId)
+          .eq("subject", "english")
+          .eq("is_active", true)
+          .order("id")
+          .range(from, to),
+      );
+      const enr = await fetchAllPagedInChunks<{
+        id: string;
+        student_id: string;
+        class_id: string;
+        start_date: string;
+        end_date: string | null;
+        is_transferred: boolean | null;
+      }>(
+        cls.map((c) => c.id),
+        (chunk, from, to) =>
+          admin
+            .from("enrollments")
+            .select("id, student_id, class_id, start_date, end_date, is_transferred")
+            .eq("tenant_id", tenantId)
+            .in("class_id", chunk)
+            .lte("start_date", today)
+            .or(`end_date.is.null,end_date.gte.${today}`)
+            .order("id")
+            .range(from, to),
+      );
+      const byStudent = new Map<string, string[]>();
+      for (const e of enr) {
+        // 쿼리의 end_date 조건은 프리필터일 뿐 — 반이동 당일의 옛 반은 여기서 떨어진다([[#125]]).
+        const onRoster = isEnrollmentOnRosterOn(
+          { startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred === true },
+          today,
+        );
+        if (!onRoster) continue;
+        const list = byStudent.get(e.student_id) ?? [];
+        if (!list.includes(e.class_id)) list.push(e.class_id);
+        byStudent.set(e.student_id, list);
+      }
+      const classes: JjClassRef[] = cls
+        .map((c) => ({ id: c.id, name: c.class_name, track: readEnglishTrack(c) }))
+        .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+      return { ok: true, membership: { classes, classIdsByStudent: byStudent } };
+    } catch (e) {
+      return localFailure(e, "jj-membership");
+    }
+  },
+);
+
+/**
+ * 반 칩 선택지 — 관리자는 지금 도는 영어 반 전부, 강사는 담당(세 갈래 — viewer.ts와 같은 엄격판) 반 중 영어 반만.
+ * 실패면 null(칩을 세우지 않는다 — 틀린 선택지보다 없는 칩이 낫다).
+ */
+export async function getJjClassOptions(viewer: JjViewer): Promise<JjClassRef[] | null> {
+  const res = await loadJjMembership(viewer.tenantId);
+  if (!res.ok) return null;
+  if (!viewer.teacherStudentIds) return [...res.membership.classes];
+  const teacherId = await effectiveTeacherId();
+  if (!teacherId) return [...res.membership.classes];
+  try {
+    // 요청 캐시라 viewer.ts가 이미 부른 조회를 다시 하지 않는다.
+    const mine = new Set(viewableClassIds(await teacherClassScopeStrict(teacherId)));
+    return res.membership.classes.filter((c) => mine.has(c.id));
+  } catch {
+    return null;
+  }
 }

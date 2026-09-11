@@ -60,19 +60,32 @@ const isJjType = (t: string) => t === "jj" || t === "jj_exam";
 export default async function ExamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ subject?: string; page?: string; q?: string; type?: string; from?: string; to?: string }>;
+  searchParams: Promise<{
+    subject?: string;
+    page?: string;
+    q?: string;
+    type?: string;
+    from?: string;
+    to?: string;
+    jjClass?: string;
+  }>;
 }) {
   const user = await requireAccess("exams");
   const sp = await searchParams;
-  const subject = sp.subject ?? "all";
-  const rawType = sp.type ?? "all";
+  // 같은 이름의 주소 값이 두 번 오면 배열이 된다 — 문자열일 때만 읽는다(`.trim()` TypeError·배열 필터 400으로 화면이
+  // 죽지 않게, 적대 리뷰 2026-09-11).
+  const one = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const subject = one(sp.subject) || "all";
+  const rawType = one(sp.type) || "all";
   const jjEnabled = !!ijwConfigFor(user.tenantId);
   // JJ 보기는 영어·연동 학원일 때만 — 과목을 바꾸면 '전체'로 돌아간다(주소에 남은 type=jj가 빈 표를 만들지 않게).
   const wantsJj = jjEnabled && subject === "english" && isJjType(rawType);
   const examType = isJjType(rawType) ? "all" : rawType;
-  const q = sp.q?.trim() || "";
-  const from = sp.from || "";
-  const to = sp.to || "";
+  const q = one(sp.q);
+  const from = one(sp.from);
+  const to = one(sp.to);
+  // JJ 반 칩(eywa 영어 반 id, 2026-09-11) — JJ 보기에서만 쓴다. 담당 밖·모르는 반이면 보기 쪽이 무시하고 그 사실을 적는다.
+  const jjClass = one(sp.jjClass);
   const page = Math.max(1, Number(sp.page) || 1);
 
   const loadRegular = () =>
@@ -123,10 +136,14 @@ export default async function ExamsPage({
   const typeFilters = jjAvailable ? [...TYPE_FILTERS, ...JJ_TYPES] : TYPE_FILTERS;
 
   // 필터/검색 href — 칩·검색은 page 리셋(page 미세팅).
-  const buildHref = (patch: Partial<{ subject: string; type: string; q: string; from: string; to: string }>) => {
-    const cur = { subject, type: activeType, q, from, to, ...patch };
+  const buildHref = (
+    patch: Partial<{ subject: string; type: string; q: string; from: string; to: string; jjClass: string }>,
+  ) => {
+    const cur = { subject, type: activeType, q, from, to, jjClass: jjMode ? jjClass : "", ...patch };
     // 영어가 아니면 JJ 보기가 없다 — 과목 칩을 누르면 유형을 '전체'로 되돌린다.
     if (cur.subject !== "english" && isJjType(cur.type)) cur.type = "all";
+    // 반 칩은 JJ 보기 전용 — 일반 목록으로 가면 버린다(주소에 남아 다음 JJ 진입을 몰래 좁히지 않게).
+    if (!isJjType(cur.type)) cur.jjClass = "";
     // 🔴 JJ ↔ 일반 목록을 오갈 땐 기간을 버린다 — 날짜 기준이 다르고(학습일·제출일 ↔ 시험일), JJ에서 누른 '검색'의
     //    기간이 일반 목록을 조용히 좁혀 "등록된 시험이 없습니다"가 떴다(적대 리뷰 2026-09-10). 반대 방향도 같다.
     if (isJjType(activeType) !== isJjType(cur.type)) {
@@ -139,6 +156,7 @@ export default async function ExamsPage({
     if (cur.q) params.set("q", cur.q);
     if (cur.from) params.set("from", cur.from);
     if (cur.to) params.set("to", cur.to);
+    if (cur.jjClass) params.set("jjClass", cur.jjClass);
     const s = params.toString();
     return s ? `/exams?${s}` : "/exams";
   };
@@ -193,6 +211,8 @@ export default async function ExamsPage({
         <form action="/exams" method="get" className="flex flex-wrap items-center gap-2">
           {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
           {activeType !== "all" ? <input type="hidden" name="type" value={activeType} /> : null}
+          {/* 기간을 바꿔 '검색'해도 고른 반은 그대로(반 칩은 표 위에 선다). */}
+          {jjMode && jjClass ? <input type="hidden" name="jjClass" value={jjClass} /> : null}
           {/* JJ 보기는 시험명 검색이 없다(인재원 목록 전체를 기간으로만 자른다). */}
           {jjMode ? null : (
             <div className={TOOLBAR_SEARCH_BOX}>
@@ -235,11 +255,22 @@ export default async function ExamsPage({
       {jjMode && viewer && jjRange ? (
         <div className="space-y-4">
           {/* 인재원 호출(0.1~1초)이 첫 페인트를 막지 않게 스켈레톤을 먼저 흘린다(B7). */}
-          <Suspense key={`${jjMode}:${jjRange.from}:${jjRange.to}`} fallback={<JjSkeleton />}>
+          {/* 반 칩(eywa 영어 반)은 보기 안에 선다 — 반 목록 조회가 페이지 첫 페인트를 막지 않게(B7). */}
+          <Suspense key={`${jjMode}:${jjRange.from}:${jjRange.to}:${jjClass}`} fallback={<JjSkeleton />}>
             {jjMode === "jj" ? (
-              <JjStudyView viewer={viewer} range={jjRange} />
+              <JjStudyView
+                viewer={viewer}
+                range={jjRange}
+                classFilter={jjClass || null}
+                classHref={(id) => buildHref({ jjClass: id ?? "" })}
+              />
             ) : (
-              <JjExamView viewer={viewer} range={jjRange} />
+              <JjExamView
+                viewer={viewer}
+                range={jjRange}
+                classFilter={jjClass || null}
+                classHref={(id) => buildHref({ jjClass: id ?? "" })}
+              />
             )}
           </Suspense>
           {/* 짝 잇기(관리자) — 표 **아래**에 둔다. 표보다 일이 많아(인재원 명단 + 학원 전체 이름 인원) 늦게 오는데,

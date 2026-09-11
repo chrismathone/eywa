@@ -43,6 +43,8 @@ import { getClassHistory } from "@/features/classes/server/history-queries";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetDowLabel, sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { seatMarkLabelOf } from "@/features/attendance/live/mark-state";
+import { ijwConfigFor } from "@/features/ijw/server/client";
+import { JjClassLink } from "@/app/(shell)/exams/_components/jj-class-link";
 
 export async function generateMetadata() {
   return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")} — eywa` };
@@ -136,6 +138,12 @@ export default async function ClassDetailPage({
   // students full)와 **같은 모양**이어야 한다(#77: 버튼은 보이는데 누르면 거절 방지).
   const canManageStudents = await canManageTenant(user.systemRole, "students");
   const canAssign = classLevel === "full" || canManageStudents;
+  // 인재원 학습(JJ실)을 이 반으로 좁혀 여는 입구(2026-09-11 "학생별 반별 유기적으로") — 연동 학원 · 영어 반 ·
+  // 성적관리 열람 권한일 때만. JJ 화면 자체의 게이트(강사 = 담당 영어 반)는 그쪽이 다시 본다(#77).
+  const showJjLink =
+    klass.subject === "english" &&
+    !!ijwConfigFor(user.tenantId) &&
+    (await accessLevelTenant(user.systemRole, "exams")) !== "none";
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
@@ -230,6 +238,7 @@ export default async function ClassDetailPage({
               Class Sheet
             </Button>
           ) : null}
+          {showJjLink ? <JjClassLink classId={klass.id} lang={lang} /> : null}
           <Button
             render={
               <WindowLink
