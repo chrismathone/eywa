@@ -18,6 +18,7 @@ import { parseMentSource } from "@/features/onescreen/ment-source";
 import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
+import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
 
 /**
@@ -34,7 +35,9 @@ import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
  * (#77 — 한 레코드의 모든 발송 표면이 같은 게이트를 통과해야 한다.)
  */
 function hasMent(r: { notes?: string | null }): boolean {
-  return !!(r.notes ?? "").trim();
+  // 영어 글의 자리 줄(인재원 그림·사진·PDF, image-slots.ts)은 글자가 아니다 — 자리 줄뿐인 글은 빈 멘트다(강사 경로의
+  // isSlotOnlyEnglishNotes·미발송 게이트 `hasSendableMent`와 **같은 함수**. 수학 글엔 자리 줄이 없어 결과가 같다).
+  return hasTextBesidesMarkers(r.notes);
 }
 
 export async function retryClassnote(

@@ -12,6 +12,12 @@
 //  · manual      = 자동작성 이력 없이 처음부터 직접 작성
 //
 // UI 라벨은 아래 MENT_SOURCE_LABEL 단일 소스(raw 키 화면 노출 금지 규칙).
+//
+// 🔑 영어 글 속 첨부 자리 줄(`[첨부: …]`, 2026-09-11)은 문장이 아니다 — 비었는지·같은지를 볼 때 빼고 본다. 사진 한 장 넣었다고
+//    '자동작성 후 수정'이 되지 않고, 사진만 있는 글은 멘트가 없는 것이다('직접 작성'으로 코퍼스에 들어가지 않게).
+import { withoutAttachmentLines } from "@/features/report-templates/attachment-lines";
+
+const sentencesOf = (s: string | null | undefined) => withoutAttachmentLines(s ?? "").trim();
 
 // 나열 순서 = 필터 <option> 순서 — 이 기능의 주 용도(직접 쓴 멘트 찾기)가 맨 앞.
 export const MENT_SOURCES = ["manual", "auto_edited", "auto"] as const;
@@ -45,9 +51,9 @@ export function computeClientMentSource(
   draft: string | null | undefined,
   autoDraft: string | null | undefined,
 ): MentSource | undefined {
-  const d = (draft ?? "").trim();
+  const d = sentencesOf(draft);
   if (!d) return undefined;
-  const a = (autoDraft ?? "").trim();
+  const a = sentencesOf(autoDraft);
   if (!a) return "manual";
   return d === a ? "auto" : "auto_edited";
 }
@@ -72,9 +78,9 @@ export function resolveMentSource(args: {
   prevNotes?: string | null;
   nextNotes?: string | null;
 }): MentSource | null {
-  const next = (args.nextNotes ?? "").trim();
+  const next = sentencesOf(args.nextNotes);
   if (!next) return null;
-  const prev = (args.prevNotes ?? "").trim();
+  const prev = sentencesOf(args.prevNotes);
   const prevSrc = parseMentSource(args.prevSource) ?? null;
   if (prev && next === prev) return prevSrc;
   const client = parseMentSource(args.client);

@@ -22,6 +22,7 @@ import {
   usedImageSlots,
   type ImageSlotKey,
 } from "@/features/report-templates/image-slots";
+import { withoutAttachmentLines } from "@/features/report-templates/attachment-lines";
 import { englishTemplateValues, englishTestText } from "@/features/report-templates/values";
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { englishFactsKey, textHash, type EnglishFacts } from "@/features/report-templates/provenance";
@@ -98,7 +99,20 @@ export function composeEnglishDraft(
     aiComment: parts.aiComment ?? "",
     slots: facts.slots,
   });
-  return fillReportTemplate(template.body, values, { decorationTokens: TEMPLATE_DECORATION_TOKENS }).text;
+  // 줄바꿈은 LF 하나로 — AI 문장에 CR이 섞이면 첨부 줄을 넣고 뺄 때 글이 한 글자 달라져 지문이 영영 안 맞는다(적대 리뷰 2026-09-11).
+  return fillReportTemplate(template.body, values, { decorationTokens: TEMPLATE_DECORATION_TOKENS }).text.replace(
+    /\r\n?/g,
+    "\n",
+  );
+}
+
+/**
+ * 템플릿 글의 **지문** — 첨부 자리 줄(`[첨부: …]`)을 뺀 글로 센다(강사가 넣은 줄이든 옛 템플릿이 품은 줄이든 같은 규칙).
+ * 🔴 지문을 **쓰는** 곳(onescreen-client 재조립 셋)과 **비교하는** 곳(`isUntouchedTemplateDraft`·`isTemplateStale`)이 이 함수 하나를
+ *    쓴다 — 한쪽만 첨부 줄을 빼면 그 행은 영영 '고친 글'이 된다(적대 리뷰 2026-09-11). 첨부 줄이 없는 글이면 예전 지문과 같다.
+ */
+export function templateHashOf(text: string): string {
+  return textHash(withoutAttachmentLines(text));
 }
 
 /** AI에 넘기는 사실(지문 재료) — 생성할 때와 확인할 때 **같은 함수**로 만든다. */
@@ -234,10 +248,15 @@ export function isTextOutdated(
   return !(template && canRecompose(template, rep));
 }
 
-/** 템플릿이 마지막으로 만든 글 **그대로**인가 — 이것만 저장·복사 직전에 다시 조립해도 된다. */
+/**
+ * 템플릿이 마지막으로 만든 글 **그대로**인가 — 이것만 저장·복사 직전에 다시 조립해도 된다.
+ * 🔑 강사가 넣은 첨부 자리 줄(`[첨부: …]`)은 빼고 본다 — 템플릿 글의 일부가 아니고, 다시 짤 때 따라온다
+ *    (`carryAttachmentLines`). 넣었다고 '고친 글'이 되면 그 뒤 점수를 고칠 때마다 다시 채우기가 필요하고, 다시 채우면
+ *    자리가 날아갔다(2026-09-11).
+ */
 export function isUntouchedTemplateDraft(rep: EnglishRowReport | undefined): boolean {
   const draft = rep?.draft ?? "";
-  return !!draft.trim() && !!rep?.templateHash && textHash(draft) === rep.templateHash;
+  return !!withoutAttachmentLines(draft).trim() && !!rep?.templateHash && templateHashOf(draft) === rep.templateHash;
 }
 
 /**
@@ -267,7 +286,7 @@ export function isTemplateStale(
 ): boolean {
   if (!rep?.templateHash || !rep.draft?.trim()) return false;
   // 🔴 'AI 글 없음' 상태여도 숨기지 않는다 — 숨겼더니 그사이 고친 점수가 경고 없이 옛 값으로 저장·복사됐다(적대 재리뷰).
-  return textHash(composeEnglishDraft(template, facts, rep)) !== rep.templateHash;
+  return templateHashOf(composeEnglishDraft(template, facts, rep)) !== rep.templateHash;
 }
 
 /**

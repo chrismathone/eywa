@@ -6,6 +6,7 @@
  * 🔑 칸(토큰)은 **눌러서 넣는다** — 손으로 `{다음테스트}`를 치다 오타가 나면 그 줄이 조용히 빠지므로
  *    (fill.ts 규칙 4) 입력은 칩이 대신하고, 저장은 validate.ts가 막는다(서버 액션이 같은 검사를 한다).
  * 🔑 미리보기는 실제 채우기 함수(fillReportTemplate)를 그대로 쓴다 — 여기 보이는 글이 학부모가 받는 모양이다.
+ *    그림 칸 자리엔 예시 자료로 그린 실제 결과지가 선다(template-fields.tsx — '들어갑니다' 상자 대신, 2026-09-11).
  * 🔑 기본 템플릿은 둘이다(기본 · 인재원 결과지, 2026-09-11) — 둘 다 읽기 전용이고 '복사해서 만들기'는 **보고 있는**
  *    기본 템플릿을 복사한다. 그림 칸은 한 줄을 통째로 차지하게 넣는다(줄 전체가 자리 표식일 때만 그림이 선다).
  */
@@ -55,6 +56,7 @@ export function TemplateManager({
   onTemplatesChange,
   teacherName,
   notice,
+  sampleDate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -63,6 +65,8 @@ export function TemplateManager({
   /** 미리보기의 `{작성자}` — 지금 사용자 이름. */
   teacherName: string;
   notice: string | null;
+  /** 미리보기 그림 칸의 예시 자료 날짜(YYYY-MM-DD, 원스크린 대상 날짜) — 결과지의 제출일·학습 기간이 이 날짜로 적힌다. */
+  sampleDate: string;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -219,7 +223,7 @@ export function TemplateManager({
                   {tf("os.tpl.unknown", { tokens: preview.unknownTokens.map((k) => `{${k}}`).join(", ") })}
                 </p>
               ) : null}
-              <TemplatePreview text={preview.text} />
+              <TemplatePreview text={preview.text} sampleDate={sampleDate} />
             </div>
             {editing.builtIn ? null : (
               <div className="flex flex-wrap justify-end gap-1.5">

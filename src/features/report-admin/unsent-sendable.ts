@@ -21,6 +21,7 @@
  *   · 그날 결석이면 제외(보강 보고서는 예외) — 판정은 호출부가 `getAbsenceBlockedKeys`로 미리 구한다.
  */
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
+import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 
 /** 게이트가 보는 보고서 행의 최소 모양 — 조회마다 컬럼이 조금씩 달라 필요한 것만 받는다. */
 export type UnsentRow = {
@@ -47,9 +48,13 @@ export type UnsentGateContext = {
   absenceKeyOf: (row: UnsentRow) => string;
 };
 
-/** 멘트가 실제로 적혀 있나 — 발송 콘솔 `hasMent`와 같은 규칙(공백만 있으면 없는 것). */
+/**
+ * 멘트가 실제로 적혀 있나 — 발송 콘솔 `hasMent`와 같은 규칙(공백만 있으면 없는 것). 영어 글의 그림·사진 자리 줄
+ * (`[시험결과지]`·`[첨부: …]`)뿐이어도 없는 것이다 — 강사 경로가 그런 글을 큐에 안 올리므로(isSlotOnlyEnglishNotes) 여기서 세면
+ * 알림이 '보낼 수 있다'고 재촉하는데 발송은 거절된다(#77). 수학 글엔 자리 줄이 없어 결과가 같다.
+ */
 export function hasSendableMent(ment: string | null | undefined): boolean {
-  return !!(ment ?? "").trim();
+  return hasTextBesidesMarkers(ment);
 }
 
 export function isUnsentSendable(row: UnsentRow, ctx: UnsentGateContext): boolean {

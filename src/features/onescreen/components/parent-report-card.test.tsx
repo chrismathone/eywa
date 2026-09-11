@@ -269,6 +269,54 @@ describe("ParentReportCard — 그림 자리(인재원, 2026-09-11)", () => {
   });
 });
 
+describe("ParentReportCard — 글 속 첨부 자리(사진·PDF, 2026-09-11)", () => {
+  const ATT = [
+    { path: "t/photo.png", name: "시험지.png", url: "https://example.test/photo.png" },
+    { path: "t/sheet.pdf", name: "문제지.pdf", url: "https://example.test/sheet.pdf" },
+    { path: "t/other.png", name: "other.png", url: "https://example.test/other.png" },
+  ];
+  const BODY = "첫 문단입니다\n[첨부: 시험지.png]\n진도 설명입니다\n[첨부: 문제지.pdf]\n\n💌 코멘트";
+  const html = (over: Partial<ParentReportCardProps> = {}, notes = BODY) =>
+    markup({ ...FULL, report: { ...FULL.report, notes }, attachments: ATT, templateMode: true, ...over });
+  const count = (h: string, s: string) => h.split(s).length - 1;
+  // ⚠️ 그림은 `src="…"`로 센다 — React 19 정적 렌더가 그림마다 머리에 preload 링크(href)를 따로 붙여 주소가 두 번 나온다.
+  const img = (u: string) => `src="${u}"`;
+  const PHOTO = img("https://example.test/photo.png");
+  const PDF = 'href="https://example.test/sheet.pdf"';
+
+  it("자리 줄 자리에 사진·PDF가 서고, 아래 '첨부' 칸엔 글 속에 없는 것만 남는다", () => {
+    const h = html();
+    expect(h.indexOf("첫 문단입니다")).toBeLessThan(h.indexOf(PHOTO));
+    expect(h.indexOf(PHOTO)).toBeLessThan(h.indexOf("진도 설명입니다"));
+    expect(h.indexOf("진도 설명입니다")).toBeLessThan(h.indexOf(PDF));
+    expect(count(h, PHOTO)).toBe(1); // 글 속 한 번 — 아래 칸에서 빠졌다
+    expect(count(h, PDF)).toBe(1);
+    expect(h.indexOf(">첨부<")).toBeLessThan(h.indexOf(img("https://example.test/other.png")));
+    expect(h).not.toContain("[첨부:");
+  });
+
+  it("글 속 자리가 전부면 아래 '첨부' 칸이 없다", () => {
+    expect(html({ attachments: ATT.slice(0, 2) })).not.toContain(">첨부<");
+  });
+
+  it("🔴 학원설정 첨부 표시가 꺼지면 글 속 자리도 비운다 · 못 찾은 이름은 아무것도 안 그린다", () => {
+    const off = html({ settings: { ...SETTINGS, showAttachments: false } });
+    expect(off).not.toContain("example.test/photo.png");
+    expect(off).not.toContain("[첨부:");
+    expect(off).toContain("진도 설명입니다");
+    const missing = html({}, "첫 문단입니다\n[첨부: 없는파일.jpg]\n둘째 문단입니다");
+    expect(missing).not.toContain("없는파일");
+    expect(missing).toContain("둘째 문단입니다");
+  });
+
+  it("같은 이름 자리가 두 번이면 한 번만 그린다 · 수학(템플릿 모드 아님)은 자리 줄을 읽지 않는다", () => {
+    expect(count(html({}, "가\n[첨부: 시험지.png]\n나\n[첨부: 시험지.png]"), PHOTO)).toBe(1);
+    const math = markup({ ...FULL, report: { ...FULL.report, notes: BODY }, attachments: ATT });
+    expect(count(math, PHOTO)).toBe(1); // 아래 '첨부' 칸 그대로
+    expect(math).toContain("[첨부: 시험지.png]"); // 수학 '학부모 전달 내용'은 글자 그대로(자리 줄을 해석하지 않는다)
+  });
+});
+
 describe("호스트 배선 — /r·인쇄", () => {
   const ROOT = process.cwd();
   const R_PAGE = path.join(ROOT, "src", "app", "(share)", "r", "[token]", "page.tsx");

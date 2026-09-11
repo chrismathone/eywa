@@ -276,9 +276,12 @@ export default async function ExamsPage({
           {/* 짝 잇기(관리자) — 표 **아래**에 둔다. 표보다 일이 많아(인재원 명단 + 학원 전체 이름 인원) 늦게 오는데,
               위에 두면 도착하는 순간 보고 있던 표를 밀어 내렸다(적대 재리뷰 2026-09-10). */}
           {jjMode === "jj" ? (
-            <Suspense fallback={null}>
-              <JjLinkSection viewer={viewer} />
-            </Suspense>
+            // `#jj-link` — 원스크린 영어 칸의 '인재원 미연결 → 연결하러 가기'가 여기로 온다(english-jj-status-line.tsx).
+            <div id="jj-link" className="scroll-mt-4">
+              <Suspense fallback={null}>
+                <JjLinkSection viewer={viewer} />
+              </Suspense>
+            </div>
           ) : null}
         </div>
       ) : (

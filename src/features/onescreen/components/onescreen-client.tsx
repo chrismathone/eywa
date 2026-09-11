@@ -40,6 +40,7 @@ import {
 } from "../server/attachment-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
+import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, uniqueAttachmentName } from "../attachment-utils";
 import type { AttendanceMark, CellState, OneScreenStudent, Subject } from "../types";
 import dynamic from "next/dynamic";
 import { OneScreenTopBar } from "./top-bar";
@@ -59,13 +60,20 @@ import {
   BUILTIN_ENGLISH_TEMPLATES,
   type ReportTemplate,
 } from "@/features/report-templates/defaults";
-import { stripImageSlots } from "@/features/report-templates/image-slots";
+import { hasTextBesidesMarkers, stripImageSlots, usedAttachmentNames } from "@/features/report-templates/image-slots";
+import {
+  attachmentLineIndex,
+  carryAttachmentLines,
+  hasTextBesidesAttachments,
+  insertAttachmentLine,
+  removeAttachmentLines,
+  withoutAttachmentLines,
+} from "@/features/report-templates/attachment-lines";
 import { englishTestText } from "@/features/report-templates/values";
 // 영어 행 인재원 하루치(2026-09-11) — 그림 칸(시험 결과지·학습 분석지) 재료. 카드로 연 행만 받는다.
 import { useEnglishJj } from "./use-english-jj";
 import { jjDayKey, jjDaySummary, jjKnownSlots, type JjDayCache } from "../jj-day";
 import type { EnglishJjStatus } from "./english-template-panel";
-import { textHash } from "@/features/report-templates/provenance";
 import {
   aiFactsHashOf,
   canRecompose,
@@ -77,6 +85,7 @@ import {
   isTemplateStale,
   isTextOutdated,
   isUntouchedTemplateDraft,
+  templateHashOf,
   needsAiFirst,
   outputAckKey,
   pendingNeedsAi,
@@ -303,6 +312,7 @@ export function OneScreenClient({
   reportSettings,
   academyName = "",
   logoSrc = null,
+  canLinkIjw = false,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -342,6 +352,11 @@ export function OneScreenClient({
   reportSettings?: ReportSettings;
   academyName?: string;
   logoSrc?: string | null;
+  /**
+   * 인재원 짝을 이을 수 있는가(학생 기록 관리 — ijw/server/viewer.ts `getJjAccess`, 페이지가 같은 함수로 내린다).
+   * 영어 칸 '인재원 미연결' 줄이 짝 잇기 자리로 가는 링크를 달지(아니면 관리자에게 요청하라고 적는다).
+   */
+  canLinkIjw?: boolean;
 }) {
   const router = useRouter();
   // 🔴 화면 문구만 갈린다 — 저장값(태도·과제 '미제출'·보강 행 이름 `과목 (보강)`)은 한국어 그대로다.
@@ -1911,7 +1926,8 @@ export function OneScreenClient({
   function englishPreviewDraft(student: OneScreenStudent, su: Subject, rep: SubjectReport | undefined): string {
     const found = findTemplate(rep?.templateId);
     if (!found || !canRecompose(found, rep)) return rep?.draft ?? "";
-    return composeEnglishDraft(found, englishFactsOf(student, su, rep), rep ?? {});
+    // 강사가 넣은 사진·PDF 자리 줄은 다시 짠 글에도 그 자리에 따라온다(image-slots.ts carryAttachmentLines).
+    return carryAttachmentLines(rep?.draft, composeEnglishDraft(found, englishFactsOf(student, su, rep), rep ?? {}));
   }
   /** 경고 셋(칸 달라짐·AI 코멘트가 옛 값 기준·이름 없음) — 카드 칸·표 행·발송 확인이 같은 판정을 쓴다. */
   function englishRowFlags(student: OneScreenStudent, su: Subject, rep: SubjectReport | undefined) {
@@ -2001,14 +2017,16 @@ export function OneScreenClient({
     // AI 칸 템플릿인데 AI 글이 없으면 다시 짜지 않는다(코멘트 빠진 글이 저장·복사되지 않게 — canRecompose).
     if (!su || !found || !canRecompose(found, rep)) return { draft, autoDraft: rep?.autoDraft };
     const facts = englishFactsOf(student, su, rep, jj.cacheRef.current);
-    const text = composeEnglishDraft(found, facts, rep ?? {});
+    const composed = composeEnglishDraft(found, facts, rep ?? {});
+    // 강사가 넣은 사진·PDF 자리 줄은 따라온다 — 지문(templateHash)은 첨부 줄을 뺀 템플릿 글로 남긴다(english-draft.ts).
+    const text = carryAttachmentLines(draft, composed);
     const factsKey = templateFactsKey(facts, rep?.nextTest ?? "", factTokensOf(found));
     if (text !== draft || rep?.composedFactsHash !== factsKey) {
       patchReport(student.id, subjectName, (r) => ({
         ...r,
         draft: text,
         autoDraft: text,
-        templateHash: textHash(text),
+        templateHash: templateHashOf(composed),
         composedFactsHash: factsKey,
       }));
     }
@@ -2038,7 +2056,8 @@ export function OneScreenClient({
     //    행을 애초에 건너뛴다). 'AI 코멘트 옛 값' 경고의 해법이 곧 자동작성이라 더 중요하다(적대 재리뷰 2026-09-10).
     if (
       !quiet &&
-      draftBefore.trim() &&
+      // 사진·PDF 줄만 있는 행은 '고친 글'이 아니다 — 묻지 않는다(그 줄은 새 글에 따라온다).
+      hasTextBesidesAttachments(draftBefore) &&
       !isUntouchedTemplateDraft(rep0) &&
       !window.confirm(t("os.tpl.autoOverwriteConfirm"))
     ) {
@@ -2098,7 +2117,11 @@ export function OneScreenClient({
     const nowRep = reportsRef.current[student.id]?.[subjectName];
     // 🔴 만드는 동안 강사가 **직접** 고쳤으면 글은 덮지 않는다(다시 채우기의 확인과 같은 원칙). 저장 직전 재조립처럼
     //    템플릿 글 그대로 바뀐 것은 고친 게 아니다(지문으로 가른다).
-    if ((nowRep?.draft ?? "") !== draftBefore && !isUntouchedTemplateDraft(nowRep)) {
+    // 사진·PDF 줄만 넣은 것은 고친 게 아니다(문장만 비교한다) — 그 줄은 아래 carryAttachmentLines가 새 글에 옮겨 심는다.
+    if (
+      withoutAttachmentLines(nowRep?.draft ?? "") !== withoutAttachmentLines(draftBefore) &&
+      !isUntouchedTemplateDraft(nowRep)
+    ) {
       // AI 결과는 버리지 않되 **대기칸**에 둔다(버리면 같은 글을 또 돈 들여 만든다). 🔴 글에 든 AI 문장·지문은 그대로
       //    둬야 한다 — 새 지문을 바로 쓰면 옛 코멘트가 든 글이 'AI 코멘트 옛 값' 경고 없이 나간다(적대 재리뷰 2026-09-10).
       //    '다시 채우기'가 대기칸으로 채우고 지문을 옮긴다.
@@ -2119,17 +2142,19 @@ export function OneScreenClient({
     const aiComment = ai ? ai.comment : nowRep?.aiComment;
     const aiFactsHash = ai ? ai.factsHash : nowRep?.aiFactsHash;
     const nowFacts = englishFactsOf(nowStudent, nowSu, nowRep, jj.cacheRef.current);
-    const text = composeEnglishDraft(found ?? BUILTIN_ENGLISH_TEMPLATE, nowFacts, {
+    const composed = composeEnglishDraft(found ?? BUILTIN_ENGLISH_TEMPLATE, nowFacts, {
       nextTest: nowRep?.nextTest,
       aiIntro,
       aiComment,
     });
+    // 강사가 넣어 둔 사진·PDF 자리 줄은 새 글에도 따라온다(지문은 첨부 줄을 뺀 템플릿 글 — english-draft.ts).
+    const text = carryAttachmentLines(nowRep?.draft, composed);
     patchReport(student.id, subjectName, (r) => ({
       ...r,
       templateId,
       draft: text,
       autoDraft: text, // 작성 방식 스냅샷(0214a) — 수학과 같은 규약
-      templateHash: textHash(text),
+      templateHash: templateHashOf(composed),
       composedFactsHash: templateFactsKey(
         nowFacts,
         nowRep?.nextTest ?? "",
@@ -2203,21 +2228,23 @@ export function OneScreenClient({
       return;
     }
     // 🔴 템플릿이 만든 글 그대로가 아니면(고친 글·가져온 글·옛 글) 먼저 묻는다 — 판정은 지문(english-draft.ts).
-    const edited = !!rep?.draft?.trim() && !isUntouchedTemplateDraft(rep);
+    const edited = hasTextBesidesAttachments(rep?.draft) && !isUntouchedTemplateDraft(rep);
     if (edited && !window.confirm(t("os.tpl.overwriteConfirm"))) return;
     if (!found) toast.message(t("os.tpl.templateMissing"));
     const facts = englishFactsOf(student, su, rep, jj.cacheRef.current);
-    const text = composeEnglishDraft(template, facts, {
+    const composed = composeEnglishDraft(template, facts, {
       nextTest: rep?.nextTest,
       aiIntro: ai.aiIntro,
       aiComment: ai.aiComment,
     });
+    // 사진·PDF 자리 줄은 다시 채워도 따라온다(덮기 확인은 문장을 고친 경우만 — 첨부 줄은 고친 글로 치지 않는다).
+    const text = carryAttachmentLines(rep?.draft, composed);
     patchReport(student.id, subjectName, (r) => ({
       ...r,
       templateId: keptId,
       draft: text,
       autoDraft: text,
-      templateHash: textHash(text),
+      templateHash: templateHashOf(composed),
       composedFactsHash: templateFactsKey(facts, rep?.nextTest ?? "", factTokensOf(template)),
       ...ai,
       pendingAi: undefined,
@@ -2229,7 +2256,8 @@ export function OneScreenClient({
   /** 템플릿 바꾸기 — 아직 글이 없으면 고르기만(자동작성 때 그 템플릿으로 채워진다), 있으면 다시 채운다. */
   function setEnglishTemplateFor(student: OneScreenStudent, subjectName: string, templateId: string) {
     const rep = reportsRef.current[student.id]?.[subjectName];
-    if (!rep?.draft?.trim()) {
+    // 사진·PDF 줄만 있는 행도 '글 없음' — 고르기만 한다(자동작성 때 그 템플릿으로 채워지고 사진 줄은 따라온다).
+    if (!hasTextBesidesAttachments(rep?.draft)) {
       patchReport(student.id, subjectName, (r) => ({ ...r, templateId, pendingTemplateId: undefined }));
       return;
     }
@@ -2374,8 +2402,9 @@ export function OneScreenClient({
     const skipped = keys?.length ? keys.length - eligible.length : 0; // 선택했지만 진도 없어 제외된 행(미선택=전체=0, 음수 방지 #11)
     // ⚠️ 이미 멘트가 있는 행은 **건너뛴다** — 손으로 다듬은 문구를 일괄 재생성이 확인 없이 덮어쓰던 문제(#12 확정).
     //    개별 '자동작성' 버튼(autoWriteRow)은 그 행만 명시 재생성하므로 재생성 의도는 그쪽으로.
+    // 사진·PDF 줄만 있는 행은 글이 없는 행이다(영어 — 그 줄은 새 글에 따라온다). 수학 글엔 첨부 줄이 없어 결과가 같다.
     const hasDraft = (r: (typeof eligible)[number]) =>
-      !!reportsRef.current[r.student.id]?.[r.subject.name]?.draft?.trim();
+      hasTextBesidesAttachments(reportsRef.current[r.student.id]?.[r.subject.name]?.draft);
     const rows = eligible.filter((r) => !hasDraft(r));
     const preserved = eligible.length - rows.length;
     if (rows.length === 0) {
@@ -2951,7 +2980,7 @@ export function OneScreenClient({
     if (!confirmEnglishOutput(selected, suCard, "os.tpl.outdatedSend")) return;
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 표 sendRow와 동일. 워커 최종 관문이 무조건 차단하므로
     // 여기서 큐잉해 봐야 "발송 대기" 표시 후 실패로 뒤집히는 혼란만 남는다. 이유를 즉시 말하고 막는다.
-    if (!(reports[selected.id]?.[subjectName]?.draft ?? "").trim()) {
+    if (!hasTextBesidesMarkers(reports[selected.id]?.[subjectName]?.draft)) {
       toast.error(tf("os.c.emptyMentSubject", { subject: subjectName }));
       return;
     }
@@ -3032,7 +3061,7 @@ export function OneScreenClient({
     }
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 워커 최종 관문이 무조건 차단하므로(빈 보고서가
     // 학부모에게 노출된 이날 사고) 여기서 보내봐야 실패 예약일 뿐이다. 이유를 즉시 말하고 막는다.
-    if (!(reports[student.id]?.[subjectName]?.draft ?? "").trim()) {
+    if (!hasTextBesidesMarkers(reports[student.id]?.[subjectName]?.draft)) {
       toast.error(tf("os.c.emptyMentRow", { name: student.name }));
       return;
     }
@@ -3238,8 +3267,9 @@ export function OneScreenClient({
         : "";
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 멘트 없는 행은 **발송 대상에서 제외**한다(워커
     // 최종 관문도 무조건 차단 — 이날 빈 보고서 22건이 학부모에게 노출된 사고). confirm에 누구인지 명시.
-    const emptyMentRows = rows.filter((r) => !(reports[r.student.id]?.[r.subject.name]?.draft ?? "").trim());
-    rows = rows.filter((r) => (reports[r.student.id]?.[r.subject.name]?.draft ?? "").trim());
+    // 영어 글의 그림·사진 자리 줄뿐인 행도 빈 멘트다(서버 isSlotOnlyEnglishNotes와 같은 판정 — hasTextBesidesMarkers).
+    const emptyMentRows = rows.filter((r) => !hasTextBesidesMarkers(reports[r.student.id]?.[r.subject.name]?.draft));
+    rows = rows.filter((r) => hasTextBesidesMarkers(reports[r.student.id]?.[r.subject.name]?.draft));
     const emptyMentNames = [...new Set(emptyMentRows.map((r) => r.student.name))];
     const emptyMentLine = emptyMentRows.length
       ? tf("os.c.lineMent", {
@@ -3541,9 +3571,44 @@ export function OneScreenClient({
   const addAttachments = (subjectName: string, files: File[]) =>
     selected ? addAttachmentsFor(selected, subjectName, files) : Promise.resolve();
 
+  /**
+   * 영어 글 속 사진·PDF(2026-09-11, 사용자 선택 "글 속 원하는 자리에") — 올린 뒤 **커서가 있던 줄**에 `[첨부: 이름]` 줄을 넣는다.
+   * 이름은 그 보고서 첨부와 겹치지 않게 정한다(자리 줄이 이름으로 첨부를 찾는다 — attachment-utils.ts). 올리기·저장 보장·게이트는
+   * 카드·표와 **같은 함수**(addAttachmentsFor)다. 🔴 못 올렸으면 줄을 넣지 않는다(가리킬 파일이 없는 줄).
+   * ⚠️ 줄은 글(초안)에 들어간다 — 다른 글 고치기처럼 저장·발송·PDF가 저장할 때 학부모 글에 실린다(그 셋은 늘 먼저 저장한다).
+   */
+  async function insertEnglishMediaFor(student: OneScreenStudent, subjectName: string, file: File) {
+    if (readonlyBlocked()) return;
+    // 커서 줄 — 파일을 고르고 자르는 동안에도 글칸은 마지막 커서를 기억한다(초점이 빠져도 selectionStart는 남는다).
+    const el = document.getElementById(ENGLISH_DRAFT_TEXTAREA_ID);
+    const before = reportsRef.current[student.id]?.[subjectName];
+    const draft0 = before?.draft ?? "";
+    // 이름은 지금 첨부 **와 글 속 자리 줄** 둘 다와 겹치지 않게 — 다른 화면에서 지운 첨부의 줄이 남아 있으면 새 사진이 그 옛
+    // 자리에 서고 새 줄은 무시된다(적대 리뷰 2026-09-11).
+    const name = uniqueAttachmentName(file.name, [
+      ...(before?.attachments ?? []).map((a) => a.name),
+      ...usedAttachmentNames(draft0),
+    ]);
+    // 자리는 **줄 내용**으로 기억한다(attachment-lines.ts) — 첫 첨부의 자동 저장이 글을 다시 짜거나 올리는 동안 강사가 계속 써도
+    // 같은 윗줄 아래에 선다(줄 번호로만 기억하면 머리말과 내용 사이로 갔다 — 적대 리뷰 2026-09-11).
+    const caret = el instanceof HTMLTextAreaElement ? el.selectionStart : null;
+    const placed = insertAttachmentLine(draft0, attachmentLineIndex(draft0, caret), name);
+    const named = name === file.name ? file : new File([file], name, { type: file.type });
+    const added = await addAttachmentsFor(student, subjectName, [named]);
+    if (!added) return;
+    patchReport(student.id, subjectName, (r) => ({ ...r, draft: carryAttachmentLines(placed, r.draft, { only: name }) }));
+  }
+
   async function removeAttachmentFor(student: OneScreenStudent, subjectName: string, path: string) {
     if (readonlyBlocked()) return;
     const studentId = student.id;
+    // 영어 글 속 그 첨부의 자리 줄도 함께 지운다(아래) — 지우기 **전** 이름과 '그 줄이 가리키던 첨부'를 잡아 둔다.
+    // 자리 줄은 이름이 같은 **첫** 첨부를 가리킨다(pickInlineAttachments) — 지운 게 그 첨부였을 때만 줄을 지운다
+    // (남겨 두면 같은 이름의 다른 첨부를 조용히 가리키게 된다 — 적대 리뷰 2026-09-11).
+    const list = reportsRef.current[studentId]?.[subjectName]?.attachments ?? [];
+    const removedName = list.find((a) => a.path === path)?.name;
+    const pointedHere = !!removedName && list.find((a) => a.name === removedName)?.path === path;
+    const englishRow = student.subjects.find((x) => x.name === subjectName)?.subjectKey === "english";
     const res = await removeReportAttachment({
       studentId,
       subject: subjectKeyFor(student, subjectName),
@@ -3555,10 +3620,13 @@ export function OneScreenClient({
       toast.error(res.error ?? t("os.c.attachDeleteFail"));
       return;
     }
+    const dropLine = englishRow && pointedHere;
     patchReport(studentId, subjectName, (r) => ({
       ...r,
       attachments: res.attachments ?? [],
       classnoteStatus: null, // 명시적 해제(undefined=미확인과 구분 — effectiveClassnoteStatus)
+      // 가리킬 파일이 없는 대괄호 줄을 글칸에 남기지 않는다(카드는 어차피 안 그린다).
+      ...(dropLine && removedName ? { draft: removeAttachmentLines(r.draft, removedName) } : {}),
     }));
     setAttUrls((prev) => {
       const n = { ...prev };
@@ -4018,6 +4086,11 @@ export function OneScreenClient({
                         // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
                         ...englishRowFlags(selected, previewSubject, previewReport),
                         jj: englishJjStatusOf(selected.id),
+                        canLinkJj: canLinkIjw,
+                        media: {
+                          busy: uploadingAttKey === rowKey(selected.id, previewSubject.name),
+                          full: (previewReport?.attachments?.length ?? 0) >= REPORT_ATTACHMENT_MAX,
+                        },
                       }}
                       notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
                       handlers={{
@@ -4032,6 +4105,7 @@ export function OneScreenClient({
                             force: true,
                             manual: true, // 사람이 누른 것 — 멈춤 차단기도 무시한다
                           }),
+                        onInsertFile: (file) => void insertEnglishMediaFor(selected, previewSubject.name, file),
                       }}
                     />
                   ) : null
@@ -4045,6 +4119,8 @@ export function OneScreenClient({
                   onTemplatesChange={setEnglishTemplates}
                   teacherName={teacherName}
                   notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
+                  // 미리보기 그림 칸의 예시 자료 날짜 — 보고 있는 날짜로(결과지 제출일·학습 기간이 그 날짜로 적힌다).
+                  sampleDate={activeDate}
                 />
               ) : null}
             </div>
