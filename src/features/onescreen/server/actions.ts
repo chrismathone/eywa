@@ -52,6 +52,8 @@ import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/r
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { logAction } from "@/features/audit/server/log";
+import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
+import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 
 export type SaveLessonReportInput = {
@@ -98,7 +100,14 @@ export type SaveLessonReportInput = {
  */
 export async function saveLessonReport(
   input: SaveLessonReportInput,
-): Promise<{ ok: boolean; id?: string; shareToken?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  id?: string;
+  shareToken?: string;
+  error?: string;
+  /** 저장은 됐지만 알릴 일 — 영어 그림 자리에 넣을 인재원 자료를 못 묶었다(jj-capture-plan.ts, 한국어 문장). */
+  warning?: string;
+}> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   // '다른 강사 뷰'(열람 전용) 차단 — 아래 담당 판정은 user.id(본인) 축이라 대부분 자연 거절되지만,
@@ -227,6 +236,16 @@ export async function saveLessonReport(
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
 
+  /**
+   * 영어 템플릿 글에 **그림 자리 줄**이 있으면 그날 인재원 자료를 받아 이 보고서에 묶는다(0261a, 2026-09-11) —
+   * 학부모 카드(/r·인쇄·ClassNote 캡처)가 그 묶음으로 그림을 그린다. 아래 후처리와 **나란히** 돌리고 마지막에
+   * 기다린다(B4). 🔴 수학·그림 없는 글은 부르지 않는다(저장이 느려지지 않게). 못 묶어도 저장은 성공이고 문장만 돌려준다.
+   * ⚠️ 발송(saveAndQueueClassnote)도 이 함수를 지나므로 보내는 순간의 자료로 다시 묶인다(인재원 설명서 ⑤).
+   */
+  const jjCapture = shouldCaptureJj(input.subject, input.notes)
+    ? captureReportJj({ tenantId: user.tenantId, reportId: data.id, studentId: input.studentId, date: reportDate })
+    : null;
+
   // 진도 컨테이너 반영(edutrix 이식) — 저장 성공 후 동기. 비수학·진도없음·이미반영은 내부에서 즉시 skip.
   // 실패해도 저장은 유지(비치명적, 백필로 보정 가능). RLS는 supabase(테넌트 스코프)가 담당.
   try {
@@ -302,7 +321,8 @@ export async function saveLessonReport(
     },
   });
 
-  return { ok: true, id: data.id, shareToken: data.share_token };
+  const warning = jjCapture ? await jjCapture : null;
+  return { ok: true, id: data.id, shareToken: data.share_token, ...(warning ? { warning } : {}) };
 }
 
 /**
@@ -329,6 +349,8 @@ export async function saveAndQueueClassnote(
   error?: string;
   /** 발송 허용 시간창 밖에 큐잉됨 — "HH:MM~HH:MM"(창 라벨). 워커가 창 진입 시 자동 발송(강사 안내용). */
   sendWindowHint?: string;
+  /** 저장 단계의 알림(영어 그림 자료를 못 묶음 — saveLessonReport `warning` 그대로). */
+  warning?: string;
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -400,17 +422,44 @@ export async function saveAndQueueClassnote(
   // 저장(upsert) — 권한 재검증(getCurrentUser+담당 활성수강생)은 saveLessonReport 내부.
   const saved = await saveLessonReport(input);
   if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
+  // 저장 단계 알림(영어 그림 자료) — 아래 어느 결과로 끝나든 함께 돌려준다(저장은 이미 끝났다).
+  const warn = saved.warning ? { warning: saved.warning } : {};
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
   // 공유 DB + 라이브 워커라 승인 전 실발송 방지(classnote_status 미변경 → 워커가 안 잡음).
   const settings = await getTenantSettings();
   if (!settings.report.classnoteSendEnabled) {
-    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "dry_run" };
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "dry_run", ...warn };
   }
 
   // 과목별 발송 게이트 — 학원설정 발송 허용 과목(현 운영=수학만)에 없으면 저장만 하고 큐잉 안 함(오발송 방지).
   if (!isClassnoteSubjectEnabled(input.subject, settings.report.classnoteSubjects)) {
-    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "subject_off" };
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "subject_off", ...warn };
+  }
+
+  // 🔴 영어 글이 그림 자리 줄뿐이면(글자 0) 큐에 올리지 않는다 — 저장은 이미 됐고 **발송만** 막는다(jj-capture-plan.ts).
+  if (isSlotOnlyEnglishNotes(input.subject, input.notes)) {
+    // 대기 중(queued) 재고 회수 — 옆 게이트들과 **같은 이유**: 안 지우면 "보내지 않았습니다" 안내 직후 워커가 자리 줄뿐인
+    // 카드를 게시한다(적대 재리뷰 2026-09-11). `.eq queued` 조건 = 그새 클레임된 processing은 건드리지 않는다.
+    if (prior?.classnote_status === "queued") {
+      try {
+        await supabase
+          .from("lesson_reports")
+          .update({ classnote_status: null, classnote_queued_at: null })
+          .eq("id", saved.id)
+          .eq("classnote_status", "queued");
+      } catch {
+        // best-effort — 어차피 에러 반환이라 강사 재시도가 뒤따른다(옆 게이트와 같다)
+      }
+    }
+    return {
+      ok: false,
+      // 저장은 됐다 — id·공유 링크를 함께 돌려줘 화면이 '저장 안 됨'으로 보이지 않게(적대 재리뷰).
+      id: saved.id,
+      shareToken: saved.shareToken,
+      error: "글이 그림 자리뿐이라 보내지 않았습니다(저장은 됐습니다) — 글을 채운 뒤 다시 보내 주세요",
+      ...warn,
+    };
   }
 
   // 🔴 '수업보고서 미발송' 반(0174a) 게이트 — **저장은 하고 큐잉만 막는다**(2026-08-19).
@@ -441,7 +490,7 @@ export async function saveAndQueueClassnote(
           .eq("id", saved.id)
           .eq("classnote_status", "queued");
       }
-      return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "report_optout" };
+      return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "report_optout", ...warn };
     }
   }
 
@@ -497,6 +546,7 @@ export async function saveAndQueueClassnote(
           id: saved.id,
           shareToken: saved.shareToken,
           status: absentBlocked ? "absent" : "no_attendance",
+          ...warn,
         };
       }
     } catch {
@@ -529,7 +579,7 @@ export async function saveAndQueueClassnote(
         classnote_error: "동명이인 감지 — 자동 발송 차단",
       })
       .eq("id", saved.id);
-    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict" };
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict", ...warn };
   }
 
   // too_old(전 달 1일 이전) 아니면 queued로 재적재(재발송). 오늘 저장은 항상 통과하나 규약상 명시.
@@ -574,7 +624,14 @@ export async function saveAndQueueClassnote(
           settings.report.classnoteSendWindowEnd,
         ) ?? undefined)
       : undefined;
-  return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old", sendWindowHint };
+  return {
+    ok: true,
+    id: saved.id,
+    shareToken: saved.shareToken,
+    status: allowed ? "queued" : "too_old",
+    sendWindowHint,
+    ...warn,
+  };
 }
 
 /**

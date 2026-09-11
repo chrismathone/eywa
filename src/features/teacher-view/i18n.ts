@@ -2331,6 +2331,35 @@ export const SHEET_DICT = {
     ko: "기본 템플릿은 고칠 수 없습니다 — 복사해서 내 템플릿으로 만드세요",
     en: "The built-in template can't be edited — copy it to make your own",
   },
+  // ── 인재원 그림 칸(2026-09-11) — 시험 결과지·학습 분석지 ──
+  "os.tpl.builtinJjName": { ko: "ECS 자동 + 인재원 결과지", en: "ECS auto + Injaewon sheets" },
+  "os.tpl.jjLoading": { ko: "인재원 자료를 불러오는 중…", en: "Loading Injaewon data…" },
+  "os.tpl.jjUnlinked": {
+    ko: "인재원 미연결 — 결과지·학습분석지 칸은 비워 둡니다",
+    en: "Not linked to Injaewon — the result sheet fields stay empty",
+  },
+  "os.tpl.jjUnlinkedTitle": {
+    ko: "성적관리 › 영어 › JJ실에서 이 학생을 인재원 학생과 연결하면 결과지·학습분석지가 들어갑니다",
+    en: "Link this student to their Injaewon account under Grades › English › JJ room to include the result sheets",
+  },
+  "os.tpl.jjSummary": {
+    ko: "인재원 · 오늘 시험 {exams}건 · 30일 학습 {answers}문제",
+    en: "Injaewon · {exams} tests today · {answers} answers in 30 days",
+  },
+  "os.tpl.jjFailed": { ko: "인재원 자료를 불러오지 못했습니다", en: "Couldn't load Injaewon data" },
+  "os.tpl.jjRetry": { ko: "다시 불러오기", en: "Load again" },
+  // 받아 둔 인재원 하루치를 **새로** 받는다(수업 중 본 시험·방금 이은 짝 반영, 2026-09-11 적대 리뷰).
+  "os.tpl.jjReload": { ko: "새로 고침", en: "Refresh" },
+  "os.tpl.slotHelp": {
+    ko: "그림 칸 — 그 줄 자리에 인재원 그림이 들어갑니다 · 자료가 없으면 줄이 빠집니다",
+    en: "Image fields — an Injaewon sheet goes where the line is · the line is left out when there is no data",
+  },
+  "os.tpl.slotExam": { ko: "여기에 인재원 시험 결과지가 들어갑니다", en: "The Injaewon test result sheet goes here" },
+  "os.tpl.slotStudy": { ko: "여기에 인재원 학습 분석지가 들어갑니다", en: "The Injaewon study analysis sheet goes here" },
+  "os.tpl.jjWarnBulk": {
+    ko: "\n그림 없이 저장된 영어 보고서 {n}건 — 인재원 자료를 받지 못했습니다(그 행을 열어 확인해 주세요)",
+    en: "\n{n} English reports were saved without the Injaewon sheets — open those rows to check",
+  },
   "os.card.queue": { ko: "ClassNote 발송", en: "Send to ClassNote" },
   "os.card.queueTitle": {
     ko: "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다",
@@ -3215,6 +3244,8 @@ export const SHEET_DICT = {
 
   // ── 수업 상세(/classes/[id]) ─────────────────────────────────────
   "cls.d.title": { ko: "수업 상세", en: "Class detail" },
+  // 반 상세 머리 → 성적관리 JJ실을 이 반으로 좁혀 연다(2026-09-11, jj-class-link.tsx).
+  "cls.d.jjStudy": { ko: "인재원 학습", en: "JJ Study" },
   "cls.d.back": { ko: "수업목록으로", en: "Back to the class list" },
   "cls.d.eyebrow": { ko: "수업 · 반", en: "This class" },
   "cls.d.endedAt": { ko: "종강 {date}", en: "Finished {date}" },

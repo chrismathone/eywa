@@ -54,8 +54,17 @@ import { ReportCard, type SubjectReport } from "./report-card";
 import { EnglishTemplatePanel } from "./english-template-panel";
 import { generateEnglishMent } from "../server/english-ment-actions";
 import { listMyReportTemplates } from "@/features/report-templates/server/actions";
-import { BUILTIN_ENGLISH_TEMPLATE, type ReportTemplate } from "@/features/report-templates/defaults";
+import {
+  BUILTIN_ENGLISH_TEMPLATE,
+  BUILTIN_ENGLISH_TEMPLATES,
+  type ReportTemplate,
+} from "@/features/report-templates/defaults";
+import { stripImageSlots } from "@/features/report-templates/image-slots";
 import { englishTestText } from "@/features/report-templates/values";
+// 영어 행 인재원 하루치(2026-09-11) — 그림 칸(시험 결과지·학습 분석지) 재료. 카드로 연 행만 받는다.
+import { useEnglishJj } from "./use-english-jj";
+import { jjDayKey, jjDaySummary, jjKnownSlots, type JjDayCache } from "../jj-day";
+import type { EnglishJjStatus } from "./english-template-panel";
 import { textHash } from "@/features/report-templates/provenance";
 import {
   aiFactsHashOf,
@@ -71,7 +80,9 @@ import {
   needsAiFirst,
   outputAckKey,
   pendingNeedsAi,
+  slotFactsFor,
   templateFactsKey,
+  templateImageSlots,
   templateNeedsAi,
   type EnglishGenStatus,
   type EnglishRowFacts,
@@ -432,7 +443,13 @@ export function OneScreenClient({
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
   // 영어 템플릿 모드(2026-09-10) — 내 템플릿 목록(맨 앞은 기본). **영어 행이 있을 때만** 한 번 불러온다
   // (첫 페인트 밖 · 수학만 가르치는 강사는 호출 0). 실패해도 기본 템플릿은 그대로 쓴다.
-  const [englishTemplates, setEnglishTemplates] = useState<ReportTemplate[]>([BUILTIN_ENGLISH_TEMPLATE]);
+  const [englishTemplates, setEnglishTemplates] = useState<ReportTemplate[]>(() => [...BUILTIN_ENGLISH_TEMPLATES]);
+  // 영어 행의 인재원 하루치(2026-09-11) — 카드로 연 행·자동작성·다시 채우기에서만 받는다(use-english-jj.ts).
+  const jj = useEnglishJj(activeDate);
+  // 다시 채우기가 인재원 자료를 기다리는 동안 또 누르면 '덮을까요?' 확인이 겹쳐 뜬다 — 진행 중인 (학생,과목)을 막는다.
+  const refillBusyRef = useRef(new Set<string>());
+  // 받는 중에 고른 **다른** 템플릿 — 끝난 뒤 그걸로 한 번 더 채운다(마지막 선택이 이긴다, 적대 재리뷰).
+  const refillNextRef = useRef(new Map<string, string>());
   const [templateNotice, setTemplateNotice] = useState<string | null>(null);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   // 목록을 한 번이라도 받았는가(성공·실패 무관) — 받기 전엔 사용자 템플릿을 "없다"고 단정하지 않는다.
@@ -767,6 +784,13 @@ export function OneScreenClient({
       : 0;
   const previewSubject = selected?.subjects[subjectIdx];
   const previewReport = selected && previewSubject ? reports[selected.id]?.[previewSubject.name] : undefined;
+  // 영어 행을 카드로 열면 그날 인재원 하루치를 받는다 — **연 행만**(첫 화면에서 전원을 부르지 않는다). 받은 뒤엔 캐시.
+  const jjOpenId = selected && previewSubject?.subjectKey === "english" ? selected.id : "";
+  const jjOpenOut = !!selected && rowOutOfClass(selected, previewSubject);
+  const jjEnsure = jj.ensure;
+  useEffect(() => {
+    if (jjOpenId) void jjEnsure(jjOpenId, { outOfClass: jjOpenOut });
+  }, [jjOpenId, jjOpenOut, jjEnsure]);
   // 학습 추이 이력 — 선택된 (학생, 과목) 1건만 **지연 조회**(첫 페인트 비용 0, actions.loadReportTrend 주석).
   // ⚠️ effect 본문에서 setState 금지(#25) → 요청 중복은 **ref**로 막고, state는 응답 콜백에서만 쓴다.
   //    "지금 보는 대상의 결과인지"는 렌더 중 키 비교로 판정한다(옛 학생 그래프가 새 학생에 남지 않게).
@@ -1826,7 +1850,14 @@ export function OneScreenClient({
    * 영어 행의 사실 — 표시 필드는 저장(buildReportFields)과 **같은 함수**로 만들고(오늘 과제 쪽수 후보정·테스트 표기)
    * 평가값은 행 단위(row-fields.ts)로 읽는다. 템플릿 글과 AI 지문이 모두 이 값에서 나온다.
    */
-  function englishFactsOf(student: OneScreenStudent, su: Subject): EnglishRowFacts {
+  function englishFactsOf(
+    student: OneScreenStudent,
+    su: Subject,
+    // 그림 칸 판정의 기준 글(자동 글 → 지금 글) — 인재원 자료를 아직 모를 때 중립으로 두는 데 쓴다(slotFactsFor).
+    rep?: SubjectReport,
+    // 렌더는 state, 비동기 경로(저장 직전 재조립·자동작성)는 ref를 넘긴다(use-english-jj.ts).
+    jjCache: JjDayCache = jj.cache,
+  ): EnglishRowFacts {
     const rowEval = resolveRowFields(student, su);
     const fields = buildReportFields({
       subject: su,
@@ -1847,7 +1878,31 @@ export function OneScreenClient({
       attitude: rowEval.attitude ?? "",
       homework: rowEval.homework,
       note: rowEval.note,
+      slots: slotFactsFor(
+        jjKnownSlots(jjCache[jjDayKey(student.id, activeDate)]),
+        rep?.autoDraft ?? rep?.draft ?? "",
+      ),
     };
+  }
+  /** 보강·수업외 행(담당 반 대신 같은 학원 학생) — 저장 입력과 인재원 조회가 같은 판정을 쓴다. */
+  function rowOutOfClass(student: OneScreenStudent, su: Subject | undefined): boolean {
+    return (student.isMakeup ?? false) || (!!su?.makeup && !su?.classId);
+  }
+  /** 패널 한 줄 요약 재료 — 아직 안 받았으면 '불러오는 중'(카드를 열면 곧 받는다). */
+  function englishJjStatusOf(studentId: string): EnglishJjStatus {
+    const key = jjDayKey(studentId, activeDate);
+    const st = jj.cache[key];
+    // 다시 받는 중이면 옛 요약 대신 '불러오는 중' — 다시 채우기·새로 고침을 눌렀는데 아무 일도 없어 보이지 않게(적대 리뷰).
+    if (!st || jj.pending.has(key)) return { kind: "loading" };
+    if (st.status === "unlinked") return { kind: "unlinked" };
+    if (st.status === "error") return { kind: "error", detail: st.message };
+    const sum = jjDaySummary(st);
+    return { kind: "ok", exams: sum?.exams ?? 0, answers: sum?.answers ?? 0 };
+  }
+  /** 미리보기에 실을 인재원 자료(받은 것만) — 발송본은 저장 때 서버가 다시 받은 것으로 그린다. */
+  function englishJjSnapshotOf(studentId: string) {
+    const st = jj.cache[jjDayKey(studentId, activeDate)];
+    return st?.status === "ok" ? st.snapshot : null;
   }
   /**
    * 미리보기에 실을 영어 글 — 템플릿 글 그대로면 **저장·복사 때 실제로 나갈 글**(지금 칸 값으로 다시 짠 글)을 보여 준다.
@@ -1856,13 +1911,13 @@ export function OneScreenClient({
   function englishPreviewDraft(student: OneScreenStudent, su: Subject, rep: SubjectReport | undefined): string {
     const found = findTemplate(rep?.templateId);
     if (!found || !canRecompose(found, rep)) return rep?.draft ?? "";
-    return composeEnglishDraft(found, englishFactsOf(student, su), rep ?? {});
+    return composeEnglishDraft(found, englishFactsOf(student, su, rep), rep ?? {});
   }
   /** 경고 셋(칸 달라짐·AI 코멘트가 옛 값 기준·이름 없음) — 카드 칸·표 행·발송 확인이 같은 판정을 쓴다. */
   function englishRowFlags(student: OneScreenStudent, su: Subject, rep: SubjectReport | undefined) {
     const found = findTemplate(rep?.templateId);
     const template = found ?? BUILTIN_ENGLISH_TEMPLATE;
-    const facts = englishFactsOf(student, su);
+    const facts = englishFactsOf(student, su, rep);
     const aiStale = isAiStale(template, facts, rep);
     // 🔴 글이 옛 칸 값을 담고 있는데 저장·복사가 자동으로 못 맞추는가(템플릿 삭제·목록 실패·AI 글 없음·고친 글) —
     //    템플릿과 무관한 지문으로 판정한다(못 찾은 템플릿으로 판정하면 옛 점수가 경고 없이 나갔다, 적대 재리뷰).
@@ -1891,7 +1946,7 @@ export function OneScreenClient({
   function acknowledgeEnglishOutput(student: OneScreenStudent, su: Subject) {
     const rep = reportsRef.current[student.id]?.[su.name];
     if (!rep) return;
-    const ack = outputAckKey(rep, englishFactsOf(student, su));
+    const ack = outputAckKey(rep, englishFactsOf(student, su, rep));
     patchReport(student.id, su.name, (r) => ({ ...r, outputAck: ack }));
   }
   /** 이 영어 행의 템플릿을 아직 확인할 수 없다(목록이 오는 중) — 곧 다시 짤 수 있게 되니 내보내기를 잠깐 미룬다. */
@@ -1945,7 +2000,7 @@ export function OneScreenClient({
     const found = findTemplate(rep?.templateId, englishTemplatesRef.current);
     // AI 칸 템플릿인데 AI 글이 없으면 다시 짜지 않는다(코멘트 빠진 글이 저장·복사되지 않게 — canRecompose).
     if (!su || !found || !canRecompose(found, rep)) return { draft, autoDraft: rep?.autoDraft };
-    const facts = englishFactsOf(student, su);
+    const facts = englishFactsOf(student, su, rep, jj.cacheRef.current);
     const text = composeEnglishDraft(found, facts, rep ?? {});
     const factsKey = templateFactsKey(facts, rep?.nextTest ?? "", factTokensOf(found));
     if (text !== draft || rep?.composedFactsHash !== factsKey) {
@@ -1989,6 +2044,10 @@ export function OneScreenClient({
     ) {
       return "cancelled";
     }
+    // 그림 칸 템플릿이면 인재원 하루치를 AI와 **나란히** 받는다(기다림을 늘리지 않게) — 조립 전에 기다린다.
+    // 🔴 자동작성은 **항상 새로** 받는다(force) — 카드를 수업 전에 열어 둔 채면 수업 중 본 시험이 빠진다(적대 리뷰 2026-09-11).
+    const jjOpts = { outOfClass: rowOutOfClass(student, su), force: true };
+    let jjReady = templateImageSlots(found0 ?? BUILTIN_ENGLISH_TEMPLATE).length ? jj.ensure(student.id, jjOpts) : null;
     let ai: { intro: string; comment: string; factsHash: string } | null = null;
     // 템플릿에 AI 칸이 하나도 없으면 AI를 부르지 않는다(헛돈 쓰지 않게).
     if (templateNeedsAi(found0 ?? BUILTIN_ENGLISH_TEMPLATE)) {
@@ -2028,6 +2087,14 @@ export function OneScreenClient({
         return "ai_failed";
       }
     }
+    // AI를 기다리는 동안 그림 칸 템플릿으로 바꿨으면 지금 받는다 — 클릭 때 템플릿으로만 판정하면 그림이 빠진다(적대 리뷰).
+    if (!jjReady) {
+      const repMid = reportsRef.current[student.id]?.[subjectName];
+      const tplMid = findTemplate(repMid?.pendingTemplateId ?? repMid?.templateId, englishTemplatesRef.current);
+      if (templateImageSlots(tplMid ?? BUILTIN_ENGLISH_TEMPLATE).length) jjReady = jj.ensure(student.id, jjOpts);
+    }
+    // 인재원 하루치 — 실패해도 글은 짠다(모르는 그림 칸은 기준 글 그대로 = 중립, slotFactsFor).
+    if (jjReady) await jjReady;
     const nowRep = reportsRef.current[student.id]?.[subjectName];
     // 🔴 만드는 동안 강사가 **직접** 고쳤으면 글은 덮지 않는다(다시 채우기의 확인과 같은 원칙). 저장 직전 재조립처럼
     //    템플릿 글 그대로 바뀐 것은 고친 게 아니다(지문으로 가른다).
@@ -2051,7 +2118,7 @@ export function OneScreenClient({
     const aiIntro = ai ? ai.intro : nowRep?.aiIntro;
     const aiComment = ai ? ai.comment : nowRep?.aiComment;
     const aiFactsHash = ai ? ai.factsHash : nowRep?.aiFactsHash;
-    const nowFacts = englishFactsOf(nowStudent, nowSu);
+    const nowFacts = englishFactsOf(nowStudent, nowSu, nowRep, jj.cacheRef.current);
     const text = composeEnglishDraft(found ?? BUILTIN_ENGLISH_TEMPLATE, nowFacts, {
       nextTest: nowRep?.nextTest,
       aiIntro,
@@ -2084,9 +2151,33 @@ export function OneScreenClient({
    * 템플릿으로 다시 채우기 — 지금 칸 값 + 마지막 AI 인사말·코멘트로 글을 다시 만든다(AI 재호출 없음).
    * 🔴 강사가 손본 글이면 먼저 묻는다 — 말없이 덮으면 고친 문장이 사라진다.
    */
-  function refillEnglishFor(student: OneScreenStudent, subjectName: string, templateId?: string) {
+  async function refillEnglishFor(student: OneScreenStudent, subjectName: string, templateId?: string) {
+    const busyKey = `${student.id}|${subjectName}`;
+    if (refillBusyRef.current.has(busyKey)) {
+      // 받는 중에 또 누름 — '다시 채우기' 연타는 버리고(확인 창이 겹쳐 뜬다), 다른 템플릿 고르기는 기억해 뒀다 끝난 뒤 채운다.
+      if (templateId) refillNextRef.current.set(busyKey, templateId);
+      return;
+    }
+    refillBusyRef.current.add(busyKey);
+    try {
+      await refillEnglishInner(student, subjectName, templateId);
+    } finally {
+      refillBusyRef.current.delete(busyKey);
+    }
+    const next = refillNextRef.current.get(busyKey);
+    refillNextRef.current.delete(busyKey);
+    if (next && next !== templateId) await refillEnglishFor(latestStudent(student, subjectName), subjectName, next);
+  }
+  async function refillEnglishInner(student: OneScreenStudent, subjectName: string, templateId?: string) {
     const su = student.subjects.find((x) => x.name === subjectName);
     if (!su) return;
+    // 그림 칸 템플릿이면 인재원 하루치를 먼저 **새로** 받는다 — 모르는 채로(또는 수업 전에 받아 둔 옛 값으로) 채우면
+    // 그림 줄이 지금 자료와 상관없이 정해진다(적대 리뷰 2026-09-11).
+    const rep0 = reportsRef.current[student.id]?.[subjectName];
+    const want = findTemplate(templateId ?? rep0?.pendingTemplateId ?? rep0?.templateId, englishTemplatesRef.current);
+    if (want && templateImageSlots(want).length) {
+      await jj.ensure(student.id, { outOfClass: rowOutOfClass(student, su), force: true });
+    }
     const rep = reportsRef.current[student.id]?.[subjectName];
     const nextId = templateId ?? rep?.pendingTemplateId ?? rep?.templateId;
     const found = findTemplate(nextId, englishTemplatesRef.current);
@@ -2115,7 +2206,7 @@ export function OneScreenClient({
     const edited = !!rep?.draft?.trim() && !isUntouchedTemplateDraft(rep);
     if (edited && !window.confirm(t("os.tpl.overwriteConfirm"))) return;
     if (!found) toast.message(t("os.tpl.templateMissing"));
-    const facts = englishFactsOf(student, su);
+    const facts = englishFactsOf(student, su, rep, jj.cacheRef.current);
     const text = composeEnglishDraft(template, facts, {
       nextTest: rep?.nextTest,
       aiIntro: ai.aiIntro,
@@ -2142,7 +2233,7 @@ export function OneScreenClient({
       patchReport(student.id, subjectName, (r) => ({ ...r, templateId, pendingTemplateId: undefined }));
       return;
     }
-    refillEnglishFor(student, subjectName, templateId);
+    void refillEnglishFor(student, subjectName, templateId);
   }
   function setNextTestFor(studentId: string, subjectName: string, text: string) {
     patchReport(studentId, subjectName, (r) => ({ ...r, nextTest: text }));
@@ -2155,7 +2246,10 @@ export function OneScreenClient({
     // 🔴 영어는 지금 '글 복사'가 학부모에게 닿는 **실제 경로**다(ClassNote 발송 과목이 아니다) — 발송 확인과 같은 판정으로 묻는다.
     const su = student.subjects.find((x) => x.name === subjectName);
     if (!confirmEnglishOutput(student, su, "os.tpl.outdatedCopy")) return;
-    const text = freshEnglishDraft(student, subjectName).draft.trim();
+    // 그림 자리 줄(`[시험결과지]`)은 글자로 내보내지 않는다 — 대괄호가 학부모 글에 그대로 붙여 넣어지면 안 된다.
+    // 🔴 복사 전엔 인재원을 **기다리지 않는다** — Safari는 클릭 처리 중에만 클립보드 쓰기를 허락해, 네트워크를 기다리면
+    //    복사가 실패한다(적대 재리뷰). 복사 글은 그림 줄을 어차피 지우므로 받아 둔 자료로 충분하다.
+    const text = stripImageSlots(freshEnglishDraft(student, subjectName).draft).trim();
     if (!text) {
       toast.message(t("os.tpl.copyEmpty"));
       return;
@@ -2726,6 +2820,36 @@ export function OneScreenClient({
       },
     };
   }
+  /**
+   * 저장·발송·글 복사 직전 — 템플릿 글 그대로(다시 짤 글)이고 그 템플릿에 그림 칸이 있으면, 인재원 하루치가 오래됐을 때
+   * (JJ_FRESH_MS) 새로 받는다. 수업 전에 받아 둔 '시험 0건'으로 다시 짜여 결과지 줄이 빠진 채 나가지 않게(적대 리뷰 2026-09-11).
+   * 서버는 글에 자리 줄이 **있을 때만** 자료를 묶으므로, 줄을 정하는 이 순간의 자료가 곧 발송물을 정한다.
+   */
+  async function refreshJjBeforeOutput(student: OneScreenStudent, subjectName: string): Promise<boolean> {
+    const su = student.subjects.find((x) => x.name === subjectName);
+    if (su?.subjectKey !== "english") return false;
+    const rep = reportsRef.current[student.id]?.[subjectName];
+    const found = findTemplate(rep?.templateId, englishTemplatesRef.current);
+    if (!found || !canRecompose(found, rep)) return false;
+    const slots = templateImageSlots(found);
+    if (!slots.length) return false;
+    // 템플릿이 쓰는 그림 칸이 '없음'으로 알려져 있으면 **항상 새로** 받는다 — 내용을 잃는 건 그 방향뿐이다(3분 안에 받아 둔
+    // '시험 0건'이어도 방금 본 시험이 있을 수 있다, 적대 재리뷰). 있음·모름은 신선도 규칙(3분, 실패는 1분)대로.
+    // 미연결은 '방금 본 시험'이 있을 수 없어 강제하지 않는다(행마다 서버를 한 번 더 부를 이유가 없다, 적대 재리뷰).
+    const cached = jj.cacheRef.current[jjDayKey(student.id, activeDate)];
+    const known = cached?.status === "ok" ? jjKnownSlots(cached) : null;
+    const force = !!known && slots.some((k) => known[k] === false);
+    await jj.ensure(student.id, { outOfClass: rowOutOfClass(student, su), force });
+    return true;
+  }
+  /**
+   * 기다린 뒤엔 **지금** 학생 값으로 저장한다 — 기다리는 동안 고친 칸이 빠지지 않게(적대 재리뷰 2026-09-11).
+   * 그사이 그 과목 행이 사라졌으면 넘겨받은 학생 그대로(없는 행으로 과목·반이 빈 보고서를 만들지 않게).
+   */
+  function latestStudent(student: OneScreenStudent, subjectName: string): OneScreenStudent {
+    const cur = studentsRef.current.find((s) => s.id === student.id);
+    return cur && cur.subjects.some((su) => su.name === subjectName) ? cur : student;
+  }
   // 보고서 저장 시 그 학생 진도를 확정 처리 — 표 모드엔 카드의 '진도 확정' 버튼이 없어 상단 진도·마감 지표가
   // 0에 고정되던 문제(#13). 이미 확정이면 no-op(불필요한 autosave 방지).
   function confirmProgressOnSave(studentId: string) {
@@ -2736,7 +2860,8 @@ export function OneScreenClient({
   async function saveRecord(student: OneScreenStudent, subjectName: string) {
     // 이중 방어(진입부들이 이미 막지만 새 진입부 대비) — 호출부가 res를 바로 쓰므로 실패 객체로 반환.
     if (readonlyView) return { ok: false, error: READONLY_TEACHER_VIEW_ERROR };
-    const built = buildSaveInputFor(student, subjectName);
+    const waited = await refreshJjBeforeOutput(student, subjectName);
+    const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
     const res = await saveLessonReport(built.input);
     if (res.ok) {
       // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사. 기존 첨부·상태는 유지(merge).
@@ -2755,7 +2880,8 @@ export function OneScreenClient({
   async function queueOne(student: OneScreenStudent, subjectName: string) {
     // 이중 방어 — saveRecord와 같은 이유(호출부 계약 유지: 실패 객체 반환).
     if (readonlyView) return { ok: false, error: READONLY_TEACHER_VIEW_ERROR };
-    const built = buildSaveInputFor(student, subjectName);
+    const waited = await refreshJjBeforeOutput(student, subjectName);
+    const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
     const res = await saveAndQueueClassnote(built.input);
     if (res.ok) {
       // ⚠️ 응답 status에는 DB 상태가 아닌 **결과 코드**도 섞여 있다(dry_run·subject_off·absent·already_sent).
@@ -2769,6 +2895,10 @@ export function OneScreenClient({
         classnoteStatus: badgeStatus,
       }));
       confirmProgressOnSave(student.id);
+    } else if (res.id) {
+      // 저장은 됐는데 **발송만** 막힌 경우(그림 자리뿐인 영어 글 등) — 저장된 상태·공유 링크는 반영한다(적대 재리뷰).
+      patchReport(student.id, subjectName, (r) => ({ ...r, sent: true, shareToken: res.shareToken ?? r.shareToken }));
+      confirmProgressOnSave(student.id); // 저장은 됐다 — saveRecord와 같은 규약(보고서 저장 = 진도 확정)
     }
     return res;
   }
@@ -2805,6 +2935,7 @@ export function OneScreenClient({
     } else {
       toast.success(tf("os.c.savedRecord", { subject: subjectName }));
     }
+    if (res.warning) toast.message(res.warning); // 영어 그림 자료를 못 묶었다(서버 문장)
   }
 
   // ClassNote 발송(카드) — 저장 + 큐 적재. 실제 게시는 로컬 워커가 백그라운드로(강사는 대기 안 함).
@@ -2829,6 +2960,7 @@ export function OneScreenClient({
       toast.error(res.error ?? t("os.c.queueFail"));
       return;
     }
+    if (res.warning) toast.message(res.warning); // 영어 그림 자료를 못 묶었다(서버 문장)
     if (res.status === "recall_pending") {
       toast.error(tf("os.c.recallingSubject", { subject: subjectName }));
       return;
@@ -2912,6 +3044,7 @@ export function OneScreenClient({
       toast.error(res.error ?? t("os.c.sendFail"));
       return;
     }
+    if (res.warning) toast.message(res.warning); // 영어 그림 자료를 못 묶었다(서버 문장)
     if (res.status === "name_conflict") {
       toast.error(tf("os.c.nameConflictRow", { name: student.name }));
     } else if (res.status === "recall_pending") {
@@ -3005,12 +3138,14 @@ export function OneScreenClient({
     setBulkBusy("save");
     let ok = 0;
     let fail = 0;
+    let jjWarn = 0; // 영어 그림 자료를 못 묶은 저장(저장은 성공) — 행마다 토스트를 쌓지 않고 한 줄로 센다
     try {
       for (const r of rows) {
         const student = latestRow(r.student.id, r.subject.name) ?? r.student;
         const res = await saveRecord(student, r.subject.name);
         if (res.ok) ok++;
         else fail++;
+        if (res.ok && res.warning) jjWarn++;
       }
     } finally {
       setBulkBusy(null);
@@ -3018,7 +3153,8 @@ export function OneScreenClient({
     toast.success(
       tf("os.c.saveDone", { n: ok }) +
         (fail ? tf("os.c.saveFailN", { n: fail }) : "") +
-        (skipped ? tf("os.c.saveSkipped", { n: skipped }) : ""),
+        (skipped ? tf("os.c.saveSkipped", { n: skipped }) : "") +
+        (jjWarn ? tf("os.tpl.jjWarnBulk", { n: jjWarn }) : ""),
     );
   }
   async function sendAllVisible(keys?: string[]) {
@@ -3166,11 +3302,13 @@ export function OneScreenClient({
     let sentSkip = 0; // 서버 중복 게시 가드에 걸린 행(다른 창에서 먼저 보낸 경우 등)
     let dry = 0;
     let fail = 0;
+    let jjWarn = 0; // 영어 그림 자료를 못 묶은 행(저장은 성공)
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
     try {
       for (const r of rows) {
         const student = latestRow(r.student.id, r.subject.name) ?? r.student;
         const res = await queueOne(student, r.subject.name);
+        if (res.ok && res.warning) jjWarn++;
         if (!res.ok) fail++;
         else if (res.status === "queued") {
           queued++;
@@ -3202,6 +3340,7 @@ export function OneScreenClient({
         (blocked ? tf("os.c.bulkBlocked", { n: blocked }) : "") +
         (skipped ? tf("os.c.bulkSkipped", { n: skipped }) : "") +
         (preSkipped ? tf("os.c.bulkPreSkipped", { n: preSkipped }) : "") +
+        (jjWarn ? tf("os.tpl.jjWarnBulk", { n: jjWarn }) : "") +
         (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
     );
   }
@@ -3324,7 +3463,8 @@ export function OneScreenClient({
       // 첨부 먼저 UX — 미저장 상태면 현재 초안으로 자동저장해 보고서 행을 먼저 만든다(첨부는 저장된 행에만).
       // 수동 '저장' 클릭을 없앨 뿐 결과는 "저장 후 첨부"와 동일(진짜 저장된 행).
       if (!reports[studentId]?.[subjectName]?.sent) {
-        const built = buildSaveInputFor(student, subjectName);
+        const waited = await refreshJjBeforeOutput(student, subjectName);
+        const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
         if (!built) {
           toast.error(t("os.c.attachNoInfo"));
           return 0;
@@ -3334,6 +3474,9 @@ export function OneScreenClient({
           toast.error(saved.error ?? t("os.c.saveFail"));
           return 0;
         }
+        // 영어 그림 자료를 못 묶었으면 여기서도 알린다 — 첨부가 저장을 대신했을 뿐 같은 사실이다(적대 재리뷰).
+        // 일괄 첨부(silent)는 행마다 띄우지 않는다(인재원이 멈추면 토스트가 쏟아진다).
+        if (saved.warning && !opts?.silent) toast.message(saved.warning);
         // 초안은 화면 값 그대로 둔다(위 saveRecord와 같은 이유 — 저장이 멘트를 쓰지 않는다).
         patchReport(studentId, subjectName, (r) => ({
           ...r,
@@ -3874,14 +4017,21 @@ export function OneScreenClient({
                         nextTest: previewReport?.nextTest ?? "",
                         // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
                         ...englishRowFlags(selected, previewSubject, previewReport),
+                        jj: englishJjStatusOf(selected.id),
                       }}
                       notice={templateNotice ?? (templateListFailed ? t("os.tpl.listFailed") : null)}
                       handlers={{
                         onTemplate: (id) => setEnglishTemplateFor(selected, previewSubject.name, id),
                         onNextTest: (v) => setNextTestFor(selected.id, previewSubject.name, v),
-                        onRefill: () => refillEnglishFor(selected, previewSubject.name),
+                        onRefill: () => void refillEnglishFor(selected, previewSubject.name),
                         onCopy: () => void copyEnglishText(selected, previewSubject.name),
                         onManage: () => setTemplateManagerOpen(true),
+                        onJjRetry: () =>
+                          void jj.ensure(selected.id, {
+                            outOfClass: rowOutOfClass(selected, previewSubject),
+                            force: true,
+                            manual: true, // 사람이 누른 것 — 멈춤 차단기도 무시한다
+                          }),
                       }}
                     />
                   ) : null
@@ -3918,6 +4068,8 @@ export function OneScreenClient({
                   trendRows={trendRows}
                   // 영어 행 = 템플릿 글만 싣는 카드(학부모 /r·인쇄와 같은 판정: subject === "english").
                   templateMode={previewSubject.subjectKey === "english"}
+                  // 그림 자리 줄에 그릴 인재원 하루치(화면이 받아 둔 것) — 발송본은 저장 때 다시 받은 것으로 그린다.
+                  jj={previewSubject.subjectKey === "english" ? englishJjSnapshotOf(selected.id) : null}
                 />
               </div>
             ) : null}

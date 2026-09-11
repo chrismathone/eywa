@@ -24,6 +24,7 @@ import { buildReportFields } from "../report-fields";
 import { buildTrendPoints, type TrendReportRow } from "../report-trend";
 import { isImageAttachment } from "../attachment-utils";
 import type { ReportSettings } from "@/features/owner/settings-types";
+import type { JjReportSnapshot } from "@/features/ijw/snapshot";
 import type { OneScreenStudent, Subject } from "../types";
 
 /** 아직 저장 안 한 오늘 회차를 그래프의 **현재 점**으로 끼워 넣기 위한 임시 id(실제 보고서 id와 안 겹친다). */
@@ -51,6 +52,7 @@ export function ReportPreview({
   attachmentUrls,
   trendRows,
   templateMode,
+  jj,
 }: {
   ctx: ReportPreviewContext;
   student: OneScreenStudent;
@@ -66,6 +68,11 @@ export function ReportPreview({
    * 미리보기가 따로 판정하면 /r·ClassNote 이미지와 갈린다. 안 넘기면 수학 카드 그대로.
    */
   templateMode?: boolean;
+  /**
+   * 영어 행의 인재원 하루치(화면이 받아 둔 것) — 글의 그림 자리 줄에 그린다. 발송본은 저장 때 서버가 다시 받은
+   * 저장본으로 그리므로, 여기 그림은 "지금 저장하면 들어갈 모양"이다.
+   */
+  jj?: JjReportSnapshot | null;
 }) {
   // 🔴 껍데기(머리·안내)만 언어를 탄다 — 아래 ParentReportCard는 **학부모가 보는 것 그대로**라
   //    한국어 고정이다(미리보기가 발송물과 달라지면 미리보기의 존재 이유가 없어진다).
@@ -139,6 +146,7 @@ export function ReportPreview({
           attachments={resolved}
           trend={trend}
           templateMode={templateMode}
+          jj={jj}
         />
       </div>
       {imagesPending ? (

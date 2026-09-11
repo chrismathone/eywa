@@ -5,6 +5,7 @@
  * 카드 미리보기·자동작성·다시 채우기가 같은 함수를 지나야 화면과 학부모 글이 갈리지 않는다.
  */
 import type { TemplateTokenKey } from "./defaults";
+import { imageSlotMarker, type ImageSlotKey } from "./image-slots";
 
 export type EnglishTemplateSource = {
   studentName: string;
@@ -18,6 +19,11 @@ export type EnglishTemplateSource = {
   nextTest: string;
   aiIntro: string;
   aiComment: string;
+  /**
+   * 그림 자리마다 **그릴 자료가 있는가**(2026-09-11) — 있으면 값이 자리 표식(`[시험결과지]`)이 되어 그 줄이 글에 남고,
+   * 없으면 빈 값이라 그 줄·문단이 빠진다. 무엇을 "있다"로 볼지는 호출부(english-draft `slotFactsFor`)가 정한다.
+   */
+  slots?: Partial<Record<ImageSlotKey, boolean>>;
 };
 
 /**
@@ -45,5 +51,7 @@ export function englishTemplateValues(src: EnglishTemplateSource): Record<Templa
     숙제: src.homeworkToday.trim(),
     다음테스트: src.nextTest.trim(),
     코멘트: src.aiComment.trim(),
+    시험결과지: src.slots?.시험결과지 ? imageSlotMarker("시험결과지") : "",
+    학습분석지: src.slots?.학습분석지 ? imageSlotMarker("학습분석지") : "",
   };
 }

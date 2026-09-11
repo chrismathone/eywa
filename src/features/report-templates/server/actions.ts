@@ -15,7 +15,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
-import { BUILTIN_ENGLISH_TEMPLATE, TEMPLATE_SUBJECT, type ReportTemplate } from "../defaults";
+import { BUILTIN_ENGLISH_TEMPLATES, TEMPLATE_SUBJECT, type ReportTemplate } from "../defaults";
 import { checkTemplateInput } from "../validate";
 
 type Fail = { ok: false; error: string };
@@ -44,10 +44,10 @@ function toTemplate(row: { id: string; name: string; body: string }): ReportTemp
   return { id: row.id, name: row.name, body: row.body, builtIn: false };
 }
 
-/** 내 템플릿 목록 — 맨 앞은 항상 기본 템플릿. 표가 없거나 조회가 실패해도 기본 템플릿은 준다. */
+/** 내 템플릿 목록 — 맨 앞은 항상 기본 템플릿(둘: 기본 · 인재원 결과지). 표가 없거나 조회가 실패해도 기본 템플릿은 준다. */
 export async function listMyReportTemplates(): Promise<{ templates: ReportTemplate[]; notice: string | null }> {
   const who = await actor();
-  if ("ok" in who) return { templates: [BUILTIN_ENGLISH_TEMPLATE], notice: who.error };
+  if ("ok" in who) return { templates: [...BUILTIN_ENGLISH_TEMPLATES], notice: who.error };
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("report_templates")
@@ -57,11 +57,11 @@ export async function listMyReportTemplates(): Promise<{ templates: ReportTempla
     .eq("subject", TEMPLATE_SUBJECT)
     .order("created_at", { ascending: true });
   if (error) {
-    if (isMissingTable(error)) return { templates: [BUILTIN_ENGLISH_TEMPLATE], notice: NOT_READY };
+    if (isMissingTable(error)) return { templates: [...BUILTIN_ENGLISH_TEMPLATES], notice: NOT_READY };
     reportError(error, { scope: "report-templates", step: "list" });
-    return { templates: [BUILTIN_ENGLISH_TEMPLATE], notice: "내 템플릿을 불러오지 못했습니다. 기본 템플릿으로 계속할 수 있습니다." };
+    return { templates: [...BUILTIN_ENGLISH_TEMPLATES], notice: "내 템플릿을 불러오지 못했습니다. 기본 템플릿으로 계속할 수 있습니다." };
   }
-  return { templates: [BUILTIN_ENGLISH_TEMPLATE, ...(data ?? []).map(toTemplate)], notice: null };
+  return { templates: [...BUILTIN_ENGLISH_TEMPLATES, ...(data ?? []).map(toTemplate)], notice: null };
 }
 
 /** 저장 — id가 있으면 내 템플릿 수정, 없으면 새로 만들기. 기본 템플릿은 고칠 수 없다(복사해서 만든다). */

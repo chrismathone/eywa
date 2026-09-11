@@ -6,7 +6,8 @@
  *    아무도 모른다. 저장 시점에 사람이 보는 문장으로 막는 게 유일한 기회다.
  */
 import { ENGLISH_TEMPLATE_TOKENS, TEMPLATE_BODY_MAX, TEMPLATE_NAME_MAX } from "./defaults";
-import { templateTokens } from "./fill";
+import { normalizeTokenName, templateTokens } from "./fill";
+import { IMAGE_SLOT_KEYS } from "./image-slots";
 
 export type TemplateInput = { name: string; body: string };
 export type TemplateCheck = { ok: true; name: string; body: string } | { ok: false; error: string };
@@ -29,5 +30,30 @@ export function checkTemplateInput(input: TemplateInput): TemplateCheck {
       error: `없는 칸이 있습니다: ${unknown.map((t) => `{${t}}`).join(", ")} — 아래 칸 목록에서 골라 넣어 주세요.`,
     };
   }
+  const slotError = imageSlotLineError(body);
+  if (slotError) return { ok: false, error: slotError };
   return { ok: true, name, body };
+}
+
+const SLOT_KEYS = new Set<string>(IMAGE_SLOT_KEYS);
+
+/**
+ * 🔴 그림 칸은 **한 줄에 혼자**, 템플릿에 **한 번씩만** — 문장 속에 섞이면 채운 값 `[시험결과지]`가 글자 그대로
+ * 학부모에게 나간다(카드·글 복사는 줄 전체가 표식일 때만 그림 자리로 본다, image-slots.ts). 두 번이면 같은 그림이
+ * 두 번 그려진다(적대 리뷰 2026-09-11). 두 키 모두 받침 없이 끝나 조사는 '는'이다.
+ */
+function imageSlotLineError(body: string): string | null {
+  const seen = new Set<string>();
+  for (const line of body.split("\n")) {
+    for (const m of line.matchAll(/\{([^{}\n]{1,20})\}/g)) {
+      const key = normalizeTokenName(m[1]!);
+      if (!SLOT_KEYS.has(key)) continue;
+      if (line.replace(/\s+/g, "") !== `{${key}}`) {
+        return `그림 칸 {${key}}는 한 줄에 혼자 두어야 합니다 — 앞뒤 글은 다른 줄로 옮겨 주세요.`;
+      }
+      if (seen.has(key)) return `그림 칸 {${key}}는 템플릿에 한 번만 넣을 수 있습니다.`;
+      seen.add(key);
+    }
+  }
+  return null;
 }

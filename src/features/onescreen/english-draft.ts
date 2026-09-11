@@ -11,10 +11,17 @@
  */
 import { fillReportTemplate, templateTokens } from "@/features/report-templates/fill";
 import {
+  BUILTIN_ENGLISH_TEMPLATES,
   TEMPLATE_AI_TOKENS,
   TEMPLATE_DECORATION_TOKENS,
   type ReportTemplate,
 } from "@/features/report-templates/defaults";
+import {
+  IMAGE_SLOT_KEYS,
+  imageSlotMarker,
+  usedImageSlots,
+  type ImageSlotKey,
+} from "@/features/report-templates/image-slots";
 import { englishTemplateValues, englishTestText } from "@/features/report-templates/values";
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { englishFactsKey, textHash, type EnglishFacts } from "@/features/report-templates/provenance";
@@ -30,6 +37,11 @@ export type EnglishRowFacts = {
   attitude: string;
   homework: string;
   note: string;
+  /**
+   * 그림 자리마다 그릴 인재원 자료가 있는가(2026-09-11) — `slotFactsFor`로 만든다. 없으면(옛 호출) 그림 칸은 빈 값.
+   * 🔑 이것도 '사실'이다: 자료가 생기거나 사라지면 템플릿 글 그대로인 글은 저장 직전 다시 짜이고, 고친 글엔 칩이 선다.
+   */
+  slots?: Partial<Record<ImageSlotKey, boolean>>;
 };
 
 /**
@@ -61,7 +73,8 @@ export function findTemplateIn(
   builtin: ReportTemplate,
 ): ReportTemplate | null {
   if (!templateId || templateId === builtin.id) return builtin;
-  return list.find((tp) => tp.id === templateId) ?? null;
+  // 기본 템플릿은 목록을 못 받아도(표 없음·조회 실패) 언제나 찾는다 — 코드가 주는 것이라 사라질 수 없다.
+  return BUILTIN_ENGLISH_TEMPLATES.find((tp) => tp.id === templateId) ?? list.find((tp) => tp.id === templateId) ?? null;
 }
 
 /** 템플릿에 AI 칸(인사말·코멘트)이 하나라도 있는가 — 없으면 AI를 부르지 않는다. */
@@ -83,6 +96,7 @@ export function composeEnglishDraft(
     nextTest: parts.nextTest ?? "",
     aiIntro: parts.aiIntro ?? "",
     aiComment: parts.aiComment ?? "",
+    slots: facts.slots,
   });
   return fillReportTemplate(template.body, values, { decorationTokens: TEMPLATE_DECORATION_TOKENS }).text;
 }
@@ -104,8 +118,13 @@ export function aiFactsHashOf(facts: EnglishRowFacts, nextTest: string): string 
   return englishFactsKey(aiFactsOf(facts, nextTest));
 }
 
-/** 템플릿 칸 중 '사실'(사람이 읽는 칸 값) 칸 — 이 값들이 바뀌면 글이 옛 값을 담게 된다. 순서 고정. */
-const FACT_TOKENS = ["학생", "작성자", "진도", "테스트", "숙제", "다음테스트"] as const;
+/**
+ * 템플릿 칸 중 '사실'(사람이 읽는 칸 값) 칸 — 이 값들이 바뀌면 글이 옛 값을 담게 된다. 순서 고정.
+ * 🔑 그림 칸(2026-09-11)도 사실이다 — 인재원 자료가 생기거나 사라지면 그 줄이 글에 들고 나야 한다. **뒤에 붙인다**:
+ *    칸 목록이 없는 옛 형식 지문은 앞 여섯 칸으로 셌으므로(LEGACY) 그 뜻을 바꾸지 않는다.
+ */
+const LEGACY_FACT_TOKENS = ["학생", "작성자", "진도", "테스트", "숙제", "다음테스트"] as const;
+const FACT_TOKENS = [...LEGACY_FACT_TOKENS, "시험결과지", "학습분석지"] as const;
 export type FactToken = (typeof FACT_TOKENS)[number];
 
 function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): string {
@@ -122,6 +141,9 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
       return facts.homeworkToday;
     case "다음테스트":
       return nextTest;
+    case "시험결과지":
+    case "학습분석지":
+      return facts.slots?.[token] ? imageSlotMarker(token) : "";
   }
 }
 
@@ -129,6 +151,29 @@ function factValue(token: FactToken, facts: EnglishRowFacts, nextTest: string): 
 export function factTokensOf(template: ReportTemplate): FactToken[] {
   const used = new Set<string>(templateTokens(template.body));
   return FACT_TOKENS.filter((k) => used.has(k));
+}
+
+/** 이 템플릿이 쓰는 그림 칸(고정 순서) — 있으면 자동작성·다시 채우기가 인재원 자료를 **먼저** 받는다. */
+export function templateImageSlots(template: ReportTemplate): ImageSlotKey[] {
+  const used = new Set<string>(templateTokens(template.body));
+  return IMAGE_SLOT_KEYS.filter((k) => used.has(k));
+}
+
+/**
+ * 그림 자리 사실 — 인재원 자료를 **알면** 그 가용성, **모르면**(아직 안 받음·받다 실패) 기준 글에 그 줄이 있었는지 그대로.
+ * 🔴 모를 때 "없음"으로 치면 저장·복사 직전 재조립이 그림 줄을 **조용히 지운다**(자료가 오기 전에 저장을 누른 행 ·
+ *    카드를 한 번도 안 연 표 행 · 새로 고친 뒤의 행). 그래서 모를 땐 판정을 **중립**으로 둔다 — 재조립도 칩도
+ *    자료가 도착하기 전엔 움직이지 않는다.
+ * 🔑 기준 글 = 자동작성이 마지막으로 넣은 글(autoDraft) → 없으면 지금 글. 강사가 그 줄을 지운 글이라도 기준이
+ *    자동 글이라 '칸이 바뀜'이 거짓으로 서지 않는다.
+ */
+export function slotFactsFor(
+  known: Readonly<Record<ImageSlotKey, boolean>> | null,
+  baselineText: string,
+): Record<ImageSlotKey, boolean> {
+  if (known) return { 시험결과지: !!known.시험결과지, 학습분석지: !!known.학습분석지 };
+  const had = new Set(usedImageSlots(baselineText));
+  return { 시험결과지: had.has("시험결과지"), 학습분석지: had.has("학습분석지") };
 }
 
 /**
@@ -139,7 +184,7 @@ export function factTokensOf(template: ReportTemplate): FactToken[] {
 export function templateFactsKey(
   facts: EnglishRowFacts,
   nextTest: string,
-  tokens: readonly FactToken[] = FACT_TOKENS,
+  tokens: readonly FactToken[] = LEGACY_FACT_TOKENS,
 ): string {
   const norm = (v: string) => (v ?? "").replace(/\s+/g, " ").trim();
   return `${tokens.join(",")}:${textHash(tokens.map((k) => norm(factValue(k, facts, nextTest))).join("␞"))}`;
@@ -148,7 +193,8 @@ export function templateFactsKey(
 /** 저장된 지문이 센 칸들(형식이 다르면 모든 칸). */
 function tokensOfKey(key: string): FactToken[] {
   const i = key.indexOf(":");
-  if (i < 0) return [...FACT_TOKENS];
+  // 옛 형식(칸 목록 없음)은 그림 칸이 생기기 전 여섯 칸으로 셌다 — 뜻을 바꾸면 옛 글이 전부 '옛 값'이 된다.
+  if (i < 0) return [...LEGACY_FACT_TOKENS];
   const listed = new Set(key.slice(0, i).split(",").filter(Boolean));
   return FACT_TOKENS.filter((k) => listed.has(k));
 }
