@@ -15,6 +15,7 @@ import { getTeacherAsOfIndex } from "@/features/classes/server/teacher-as-of-que
 import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
+import { usedRowSubjectsOf } from "@/features/students/lib/week-grid-row-mode";
 import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
@@ -78,6 +79,10 @@ export async function ClassesTab({
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
+  // 주간 격자의 행 구성 = 그 과목 시간표가 **처음 여는 뷰**의 규칙(학원설정 `subjects[].defaultView` 단일 소스).
+  // 통합뷰 과목(영어)은 수업 있는 교시만 — 두 교시 체계가 섞인 15줄 표를 다 그리면 원본과 다른 모양이 된다.
+  // 도출 규칙·실제 설정 픽스처·이 배선의 구조 가드 = week-grid-row-mode(.test).ts.
+  const usedRowSubjects = usedRowSubjectsOf(settings.operations.subjects);
 
   const today = kstToday();
   const hasEnded = (r: StudentClassRow) => (r.endDate ? r.endDate < today : false);
@@ -138,8 +143,8 @@ export async function ClassesTab({
 
   return (
     <div className="space-y-5">
-      {/* 주간 시간표(읽기전용) — 수강 중 반의 전 과목·전 강사 통합 + 과목별 교시 기본뷰 탭. 슬롯 없으면 null. */}
-      <StudentWeekGrid rows={current} config={periodsConfig} />
+      {/* 주간 시간표(읽기전용) — 수강 중 반의 과목별 교시 탭(행 구성 = 그 과목 시간표가 처음 여는 뷰의 규칙). 슬롯 없으면 null. */}
+      <StudentWeekGrid rows={current} config={periodsConfig} usedRowSubjects={usedRowSubjects} />
       <Section
         title="수강 중인 수업"
         rows={current}

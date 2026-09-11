@@ -62,6 +62,38 @@ describe("🔴 강의실 표기는 eywa 등록 이름으로 통일한다(FK 우�
     expect(src).toContain("classroom_id");
   });
 
+  /**
+   * 🔴 학생 수업 탭(2026-09-11) — 원장 *"…왜 학생 정보에서 수업 들어가면 그냥 606으로 되어있는 경우가 있지?"*.
+   *    규칙은 순수 모듈(`class-slots.ts`)에, FK를 싣는 조회는 `getStudentClassesDetail`에 있어 **둘 다** 본다.
+   *    Supabase 클라이언트에 DB 타입이 없어 select 문자열은 tsc를 안 받는다 — 컬럼이 빠져도 초록이다.
+   * ⚠️ `toContain("classroom_id")`로 보지 말 것 — 같은 함수의 반 임베드 `classroom:classroom_id ( name )`에 같은
+   *    글자가 있어 배치 select에서 빠져도 헛통과한다. 배치 select 문자열 **자체**를 뽑아 본다.
+   */
+  it("학생 수업 탭 은 배치의 강의실 FK를 싣고 등록 강의실로 정정한다", () => {
+    const rule = read("features", "students", "lib", "class-slots.ts");
+    expect(rule).toContain("canonicalRoomName");
+    expect(rule).toContain("resolveRoomName");
+
+    const q = read("features", "students", "server", "queries.ts");
+    const start = q.indexOf("export async function getStudentClassesDetail");
+    expect(start).toBeGreaterThan(-1);
+    const next = q.indexOf("\nexport ", start + 1);
+    const body = q.slice(start, next === -1 ? undefined : next);
+    const selectOf = (table: string) => {
+      const m = body.match(new RegExp(`\\.from\\(\\s*["']${table}["']\\s*\\)\\s*\\.select\\(\\s*(["'\`])([\\s\\S]*?)\\1`));
+      return m ? m[2]!.split(",").map((c) => c.trim()) : null;
+    };
+    // ① 배치 select 문자열 자체에 FK 컬럼 ② 그 값을 슬롯에 싣는다
+    expect(selectOf("class_schedules")).toContain("classroom_id");
+    expect(body).toMatch(/roomId:\s*s\.classroom_id\b/);
+    // ③ 등록 강의실 **조회 결과**로 만든 RoomBook을 넘긴다(빈 목록·인라인 리터럴이면 FK 이름을 못 찾는다)
+    expect(selectOf("classrooms")).toEqual(expect.arrayContaining(["id", "name"]));
+    expect(body).toMatch(/\brooms\s*=\s*roomBookOf\(\s*[A-Za-z_$][\w$]*\s*\)/);
+    const call = body.match(/buildClassSlots\(\s*[\w$]+\s*,\s*\{([\s\S]*?)\}\s*\)/);
+    expect(call).not.toBeNull();
+    expect(call![1]).toMatch(/(?:^|[\s{,])rooms(?:\s*:\s*rooms)?\s*(?:,|$)/m);
+  });
+
   it("🔴 학부모·사무실 표면은 영문 강의실 표기를 쓰지 않는다", () => {
     // 인쇄물·발송은 한국어 고정 — 학부모는 `Main 305`가 어디인지 모른다.
     const walk = (dir: string): string[] => {
