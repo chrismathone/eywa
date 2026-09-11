@@ -143,25 +143,43 @@ describe("⑤ 화면 — 두 축을 섞지 않는다", () => {
     expect(LAB).not.toContain("applySeatPeriodChoices");
   });
 
-  it("🔴 '전체' 보기는 바깥 컨텍스트 하나뿐 — 교시 판은 제 `DndContext`를 끈다", () => {
-    expect(ALL_DAY).toContain("externalDnd");
-    expect(LAB).toContain("if (!draggable || externalDnd) return body;");
+  it("🔴 드래그 컨텍스트는 `SeatAllDay` 한 벌뿐 — 교시 판·격자는 제 `DndContext`를 만들지 않는다", () => {
+    // 원장 2026-09-11 — '교시 하나' 보기에서도 다른 시간으로 옮긴다. 판정·낙관 반영·고정 질문이 두 벌이면 두 보기가
+    // 다른 말을 한다(종전엔 교시 하나 보기의 격자가 제 컨텍스트로 **같은 시간 배치 이동**만 했다).
+    expect(ALL_DAY.match(/<DndContext\b/g)).toHaveLength(1);
+    for (const src of [LAB, BOARD]) {
+      expect(src).not.toContain("<DndContext");
+      expect(src).not.toContain("externalDnd");
+    }
   });
 
-  it("🔴 손잡이는 두 축 중 **하나만 열려 있어도** 잡힌다 — 0254a 미적용이 교시 이동을 죽이지 않게", () => {
-    expect(BOARD).toContain("canDrag={canMove || canChoosePeriod}");
-    expect(LAB).toContain("const draggable = canDrag ?? canMove;");
+  it("🔴 손잡이는 교시 이동(0255a) 가용성만 본다 — 배치(0254a)가 안 돌아도 교시 이동은 산다", () => {
+    // 배치를 새로 만드는 드래그가 없어졌으므로(2026-09-11) 배치 가용성이 손잡이를 열 이유도 없다 — 옛 규약
+    // ("두 축 중 하나만 열려 있어도")의 목적(0254a 미적용이 교시 이동을 죽이지 않게)은 그대로 더 곧게 선다.
+    expect(BOARD).toContain("canDrag={canChoosePeriod}");
+    expect(BOARD).not.toContain("canMove || canChoosePeriod");
   });
 
-  it("🔑 다른 교시로는 **떨군 묶음의 반과 무관하게** 옮긴다 — 그 반의 다른 수업 시각만 거절한다", () => {
-    expect(ALL_DAY).toContain("checkPeriodMove(card, to.start)");
+  it("🔑 다른 교시로는 **떨군 묶음의 반과 무관하게** 옮긴다 — 드롭 데이터는 교시만, 그 반의 다른 수업 시각은 거절", () => {
+    expect(ALL_DAY).toContain("verdictOf(card, to.start)");
+    expect(LAB).toContain("export type SeatDropTarget = { start: string };");
     expect(PURE).toContain("SEAT_PERIOD_CLASS_BUSY");
     // 옛 규칙(같은 반 자리로만)은 원장이 "같은 시간은 의미없음"으로 뒤집었다 — 되살리지 말 것.
     expect(PURE).not.toContain("SEAT_PERIOD_SAME_CLASS_ONLY");
   });
 
-  it("같은 교시 안 반 묶음 이동(0254a)은 지우지 않았다 — 부수 동작으로 남는다", () => {
-    expect(ALL_DAY).toContain("movesByPeriod.current.get(card.start)");
+  it("🔴 같은 교시 안 반 묶음 이동(배치 드래그)은 **없앴다** — 원장 2026-09-11 '같은 시간대의 수업으로 옮기고 싶은게 아니야'", () => {
+    // 2026-09-10엔 "지우지 않고 부수 동작으로 남긴다"였다 — 원장이 다음 날 명시로 뒤집었다(가드 약화가 아니라 결정 반영:
+    // *"LAB실에서 내가 드래그하고 싶은건, '다른 시간대'의 수업임. 같은 시간대의 수업으로 옮기고 싶은게 아니야."*).
+    const MOVES = strip(read(...DIR, "seat-board-moves.ts"));
+    expect(ALL_DAY).not.toContain("movesByPeriod");
+    expect(ALL_DAY).not.toContain("onRegisterMove");
+    expect(BOARD).not.toContain("onRegisterMove");
+    expect(MOVES).not.toContain("moveSeatStudent(");
+    expect(PLACE_ACTIONS).not.toMatch(/export async function moveSeatStudent\(/);
+    // 🔑 이미 있는 줄은 고아가 되지 않게 **표시와 [초기화]가 남는다**.
+    expect(MOVES).toContain("resetSeatPlacements(");
+    expect(BOARD).toContain("applySeatPlacements(");
   });
 
   it("🔴 출결이 찍힌 카드는 화면·서버 양쪽에서 막힌다(원장 *절대 불가*)", () => {
@@ -214,5 +232,113 @@ describe("⑦ 강사 렌즈 — 자리 기록은 어느 강사 몫도 아니다"
   it("🔴 자리 라벨 행은 누구 몫으로도 안 센다 — 교시 밖 자리 기록이 담임 폴백으로 담임 값에 섞이지 않게", () => {
     expect(AXIS).toContain("if (input.seatLabel?.trim()) return false;");
     expect(ATT_QUERY).toContain("ownsSlot(r.session_date, slot, r.seat_label)");
+  });
+});
+
+describe("⑧ 드래그 = 다른 시간으로만 — 원장 2026-09-11 'LAB실에서 내가 드래그하고 싶은건 다른 시간대의 수업'", () => {
+  const ZONES = strip(read(...DIR, "seat-drop-zones.tsx"));
+  const CHIPS = strip(read(...DIR, "seat-period-chips.tsx"));
+  const VERDICT = strip(read(...SEAT, "drop-verdict.ts"));
+  const STUDENT = strip(read(...SEAT, "student-classes.ts"));
+
+  it("🔴 '교시 하나' 보기(랩실 로그인)도 `SeatAllDay` 한 벌이 그린다 — 교시 칩이 놓을 곳이다", () => {
+    expect(SHELL_PAGE).toContain('seat === "lab" ? (');
+    expect(SHELL_PAGE).toContain("shownStart={viewAll ? null : period.start}");
+    expect(ALL_DAY).toContain("Chip={canMove ? SeatDropChip : undefined}");
+    expect(CHIPS).toContain("<Chip");
+    // 칩 파일은 서버 페이지도 import한다 — dnd-kit을 여기서 부르면 서버 렌더가 깨진다(조각을 받아 끼울 뿐).
+    expect(CHIPS).not.toContain("@dnd-kit");
+    // 옮기기가 잠긴 화면(공개 PIN·지난 날짜)에선 놓을 곳이 아예 안 켜진다.
+    expect(ALL_DAY).toContain("verdictOf={canMove ? verdictOf : null}");
+  });
+
+  it("🔴 같은 시간에 놓으면 아무 일도 없다 — 막힌 게 아니라 취소(빗금 없음·에러 없음)", () => {
+    expect(VERDICT).toContain('if (toSlot === card.start) return { kind: "same", text: SEAT_PERIOD_SAME };');
+    expect(ALL_DAY).toContain('if (verdict.kind === "same") return;');
+    expect(ZONES).toContain('[DRAG_BLOCKED_ATTR]: verdict?.kind === "blocked" ? "1" : undefined');
+  });
+
+  it("🔴 미리 표시·끄는 카드 문장·드롭 거절이 **같은 함수**(`verdictOf` → `seatDropVerdict` → `validateSeatPeriodMove`)", () => {
+    expect(ALL_DAY).toContain("seatDropVerdict(card, toSlot, verdictInputs)");
+    expect(ALL_DAY).toContain("const verdict = verdictOf(card, to.start);");
+    expect(ZONES).toContain("ctx.verdictOf(ctx.card, start)");
+    expect(ZONES).toContain("seatDragHint(toStart ? ctx.verdictOf(card, toStart) : null)");
+    expect(VERDICT).toContain("validateSeatPeriodMove({");
+    // 빗금은 시간표와 같은 표식(그림은 globals.css 한 곳) — 새 그림을 만들지 않는다.
+    expect(ZONES).toContain('from "@/features/timetable/lib/grid-attrs"');
+  });
+
+  it("🔴 끄는 상태를 `SeatAllDay` state에 두지 않는다 — 집는 순간 교시 판 전부가 다시 그려지면 그게 렉이다", () => {
+    expect(ALL_DAY).not.toMatch(/useState<CardDrag/);
+    expect(ALL_DAY).not.toContain("useDndMonitor");
+    expect(ZONES).toContain("useDndMonitor");
+  });
+
+  it("🔴 `SeatAllDay`의 key엔 **보기(교시)가 없다** — 자리·날짜뿐(적대 리뷰 2026-09-11)", () => {
+    // 교시 칩·'전체' 칩은 같은 날의 보기 전환이다. key에 교시를 넣으면 칩을 누를 때마다 다시 마운트돼 낙관 반영이
+    // 버려지고(방금 옮긴 학생이 그 교시에 안 보인다), 기본 착지(시계로 고른 교시)는 새로고침이 교시 경계를 넘는 순간
+    // 화면을 갈아엎었다. 동작 잠금은 `seat-all-day.test.tsx`의 '보기를 바꿔도'.
+    const keys = [...SHELL_PAGE.matchAll(/<SeatAllDay\s+key=\{`([^`]*)`\}/g)].map((m) => m[1]);
+    expect(keys).toEqual(["${seat}|${date}"]);
+  });
+
+  it("🔴 고정 질문·호출 장부·에러는 `SeatAllDay` state가 아니라 **가게**에 있다 — 다시 마운트돼도 응답이 버려지지 않는다", () => {
+    // 적대 리뷰 2026-09-11: 질문은 서버 응답 **뒤에** 서는데, 그 사이 교시 칩·날짜 화살표·자리 전환을 누르면 화면이 새로
+    // 마운트돼 대기열째 버려졌다('고정할까요?'가 끝내 안 떴다). 동작 잠금은 `seat-all-day.test.tsx`의 '다시 마운트돼도'.
+    const PIN = strip(read(...DIR, "seat-pin-ask.tsx"));
+    expect(ALL_DAY).toContain("useSeatPinView()");
+    expect(ALL_DAY).not.toMatch(/useState<readonly SeatPinAsk/);
+    expect(ALL_DAY).not.toContain("callSeqRef");
+    expect(PIN).toContain("useSyncExternalStore(");
+    // 호출·[해제]·응답이 전부 장부 한 벌(`seat-pin-ledger.ts`)을 지난다 — 화면이 번호를 따로 세지 않는다.
+    for (const call of ["beginSeatPinMove(target)", "beginSeatPinClear({ seat, date, classId })", "settleSeatPinMove("]) {
+      expect(ALL_DAY).toContain(call);
+    }
+    // '앞으로도 고정'은 **그 질문의 자리·날짜**로 보낸다 — 다른 날 화면에서 답해도 그날로 간다.
+    expect(ALL_DAY).toContain("commitPeriodMove({ ...seatPinTargetOf(ask), fromSlot: ask.fromSlot, toSlot: ask.toSlot, pin: true }, null)");
+  });
+
+  it("🔴 학생 축 겹침은 화면·서버가 **같은 함수** — 서버는 자기 조회로 다시 채운다([[#77]])", () => {
+    const NEXT_SERVER = strip(read(...SEAT, "server", "next-destination.ts"));
+    expect(PURE).toContain("seatStudentClash(v.studentClasses, { start: v.toSlot, ends: v.toEnds ?? [] })");
+    expect(VERDICT).toContain("studentClasses: v.studentClasses?.[card.studentId]");
+    expect(ACTIONS).toContain("getSeatStudentClasses([input.studentId], input.date, input.seat)");
+    expect(ACTIONS).toContain("studentClasses: classesLoad.byStudent[input.studentId] ?? []");
+    // 서버는 게이트다 — 재료를 못 읽으면 쓰지 않는다(화면의 fail-open과 다르다). 조회 문이 실패를 `ok:false`로 돌려준다.
+    expect(ACTIONS).toContain("if (!classesLoad.ok) return { error: classesLoad.error };");
+    expect(NEXT_SERVER).toMatch(/catch \(err\) \{[\s\S]{0,200}return \{ ok: false, error: SEAT_STUDENT_CLASSES_FAILED \};/);
+    // 겹침 판정은 앱 단일 소스(경계 접촉은 겹침 아님).
+    expect(STUDENT).toContain('from "@/features/classes/overlap"');
+    // 화면 재료는 로그인 페이지만 싣는다(공개 PIN엔 드래그가 없다).
+    expect(SHELL_PAGE).toContain("studentClasses: nextDay.classesByStudent");
+    expect(PUBLIC_PAGE).not.toContain("studentClasses");
+  });
+
+  it("🔴 목표 교시의 **끝**까지 판정에 간다 — 빠지면 교시 안에서 시작하는 수업(17:00 교시 · 17:20 시작)을 화면·서버가 함께 통과시킨다", () => {
+    // 동작 잠금은 `drop-verdict.test`·`period-choice.test`·`server/period-actions.test`·`seat-all-day.test`의 '안에서 시작하는 수업'.
+    expect(VERDICT).toContain("toEnds: v.endsByStart[toSlot]");
+    expect(ALL_DAY).toContain("endsByStart: Object.fromEntries(periods.map((p) => [p.start, p.ends]))");
+    expect(SHELL_PAGE).toMatch(
+      /ends: p\.ends,\s*classIds: p\.slots\.map\(\(s\) => s\.classId\),\s*rosters: day\.rosterByPeriod\[p\.start\]/,
+    );
+    expect(ACTIONS).toContain("toEnds: day.periods.find((p) => p.start === toSlot)?.ends");
+  });
+
+  it("🔴 '전체' 보기의 교시 판도 놓을 곳이다 — 판이 가부 표식을 펼치고, 판은 **보이는 자리에서만** 받는다", () => {
+    // 원장 2026-09-11 *"아니 드래그는 '전체' 에서도 다른 시간으로 이동하려고하면 경고 문구 뜨면서 안됨"* — 해법은 집는 순간
+    // 판마다 가부와 이유가 보이는 것. 동작 잠금은 `seat-all-day.test.tsx`의 '전체' 보기 케이스.
+    expect(ALL_DAY).toContain("<SeatPeriodDropZone");
+    expect(ZONES).toContain("<div ref={setNodeRef} data-seat-drop-start={start} {...dropAttrs(verdict)}");
+    // 스크롤로 가려진 판의 사각형이 칩 줄을 덮어 보이지 않는 교시로 옮겨지던 것(적대 리뷰 2026-09-11) — 판은 판 상자 안에서만.
+    expect(ALL_DAY).toContain("seatDropCollision(args, boardsRef.current)");
+    expect(ALL_DAY).toContain("ref={boardsRef}");
+    expect(ZONES).toContain("if (chips.length > 0) return chips;");
+  });
+
+  it("거절(학생 축 포함)은 쓰기·감사로그보다 앞에서 돌아간다 — 새 감사로그 키 없음", () => {
+    const reject = ACTIONS.indexOf('if ("error" in check) return check;');
+    expect(reject).toBeGreaterThan(-1);
+    expect(reject).toBeLessThan(ACTIONS.indexOf('.from("seat_period_moves").upsert('));
+    expect(reject).toBeLessThan(ACTIONS.indexOf("await logAction("));
   });
 });

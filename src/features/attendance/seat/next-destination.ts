@@ -1,9 +1,9 @@
 /**
- * **다음 행선지**의 순수 규칙 — 조회([`server/next-destination.ts`](./server/next-destination.ts))가 받아 온
+ * **다음 행선지**의 순수 규칙 — 조회([`server/next-destination-day.ts`](./server/next-destination-day.ts))가 받아 온
  * 하루치를 학생별로 접는다(IO 없음, Vitest).
  *
  * 원장 2026-09-10: *"다음 17:20 이면 무슨 말인지 도대체 알 수가 없음. **17:20 304호 가야함** 처럼 해줘"* — 이
- * 자리 수업이 끝나면 그 학생이 오늘 **어디로 가는가**(시각 + 강의실).
+ * 자리 수업이 끝나면 그 학생이 오늘 **어디로 가는가**(시각 + 강의실, 강의실 규칙 = [`destination-room.ts`](./destination-room.ts)).
  *
  * 🔴 **이 자리 교시는 배치표가 아니라 교시 선택(0255a)을 얹은 명단이 진실이다.** 같은 날 교시 선택과
  *    *"다른 시간으로 옮기기"*가 들어오면서 배치표(`class_schedules`)만 보던 접기가 셋을 틀렸다:
@@ -17,6 +17,13 @@
  *    그 교시에 오는 학생이라 행선지도 같은 사실로 잰다(사실이 규칙을 이긴다: 찍힌 칸·옮겨 온 묶음 포함).
  * 🔴 **교시를 옮기는 자리(`MOVABLE_SEATS`, 랩실)만** 이 규칙을 탄다 — 그 밖의 자리(JJ실)는 `seatStaysFor`가
  *    undefined를 돌려 접기가 글자 그대로 옛 동작(그 반의 그 요일 배치 전부가 후보)이다.
+ *
+ * 같은 하루치에서 두 가지를 더 꺼낸다(새 왕복 0):
+ * - **마지막 수업**(원장 2026-09-11 *"LAB이나 JJ가 마지막 수업인 학생들은 '마지막 수업'이라고 표시하자"*) —
+ *   `lastByStudent`. 🔴 행선지가 없다는 **부재**로 추측하지 않는 명시 필드다(모름 ≠ 없음).
+ * - **학생별 이 자리 밖 수업** — 다른 시간으로 옮길 때 그 시각에 그 학생이 다른 수업에 있는지 보는 학생 축 재료
+ *   ([`student-classes.ts`](./student-classes.ts), 원장 2026-09-11 *"LAB실에서 내가 드래그하고 싶은건 '다른
+ *   시간대'의 수업"*).
  */
 import { resolveAttendDows } from "@/features/attendance/calendar";
 import type { SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
@@ -27,6 +34,13 @@ export type SeatNextDestination = {
   startByStudent: Record<string, string>;
   /** 학생 id → 그 수업의 강의실 이름. **모르면 키가 없다.** */
   roomByStudent: Record<string, string>;
+  /**
+   * 학생 id → true — 이 교시 뒤 오늘 남은 수업이 **없다고 확인된** 학생(= 이 교시가 오늘 마지막 수업).
+   * 🔴 **조회가 실제로 돈 학생**(그날 유효한 수강이 있는 학생)만 담긴다 — `startByStudent`에 키가 없다는 것만으로는
+   *    마지막이 아니다: 조회 안 함(JJ실 PIN)·조회 실패·대상 밖이면 **여기도 비어 있다**. 화면은 이 필드만 보고 적는다.
+   * ⚠️ `startByStudent`와 **겹치지 않는다**(한 학생이 둘 다에 들어가는 일은 없다).
+   */
+  lastByStudent: Record<string, true>;
 };
 
 /** 다음 행선지의 **이 자리 몫** — 교시 선택을 얹은 명단에서 뽑는다(`seatStaysFor`). */
@@ -76,17 +90,34 @@ export function seatStaysFor(seat: SeatKey, rosterByPeriod: RosterByPeriod): Sea
   return { seat, startsByStudent: seatStayStartsByStudent(rosterByPeriod), classIds: [...classIds].sort() };
 }
 
-/** 배치 한 줄 — 조회가 정규화까지 마쳐 넘긴다(강의실 = 등록된 정본, 자리 = `specialSlotLabel`). */
-export type NextDestinationSlot = { start: string; room: string | null; seatLabel: SpecialSlotLabel | null };
+/** 배치 한 줄 — 조회가 정규화까지 마쳐 넘긴다(강의실 = `destinationRoomOf`, 자리 = `specialSlotLabel`). */
+export type NextDestinationSlot = {
+  start: string;
+  /** 끝 시각("HH:MM") — 모르면 null. 학생 축 겹침 판정([`student-classes.ts`](./student-classes.ts)) 재료. */
+  end: string | null;
+  room: string | null;
+  seatLabel: SpecialSlotLabel | null;
+};
 
 /** 하루치 재료(그날 유효한 수강 × 그 요일 배치) — 교시 판정은 이 뒤에 JS로 돈다(교시마다 왕복 0). */
 export type NextDestinationDay = {
   live: readonly { studentId: string; classId: string; attendanceDays: readonly string[] | null }[];
   /** 반 → 그 요일 배치들(순서 무관 — 접을 때 가장 이른 것을 고른다). */
   slotsByClass: ReadonlyMap<string, readonly NextDestinationSlot[]>;
+  /** 반 → 반 이름(`classes.class_name`, 자리 명단 `SeatClassRoster.className`과 같은 원문). 모르면 키가 없다. */
+  classNames: ReadonlyMap<string, string>;
   /** 그 날짜의 요일 인덱스(0=일) — 분리등원 판정용. */
   todayIdx: number;
 };
+
+/**
+ * 분리등원(`attendance_days`) — 그 수강이 오늘 오는가. 반이 오늘 도는지는 조회가 이미 걸렀다.
+ * 🔑 접기와 학생 축([`student-classes.ts`](./student-classes.ts))이 **이 함수 한 벌**을 쓴다.
+ */
+export function attendsToday(e: NextDestinationDay["live"][number], todayIdx: number): boolean {
+  const dows = resolveAttendDows(e.attendanceDays, [todayIdx]);
+  return dows.length === 0 || dows.includes(todayIdx);
+}
 
 /**
  * 이 자리 교시 → 강의실 — **같은 시각의 이 자리 배치**에서만 얻는다.
@@ -115,6 +146,8 @@ function seatRoomByStart(
  * 교시를 넣는다. 다른 자리 배치(랩실에서 본 JJ실)는 진짜 행선지라 그대로 둔다. 안 주면 옛 동작 그대로다.
  * ⚠️ 같은 시각이면 먼저 담은 것이 남는다(수업 배치 → 이 자리 교시 순) — 한 학생이 같은 시각에 두 곳에 있는
  *    것은 시간표가 풀 문제라 여기서 고르지 않는다.
+ * 🔑 **마지막 수업**(`lastByStudent`)은 같은 후보에서 나온다 — 후보가 하나도 안 남은 학생이다. 그래서 규칙이 둘로
+ *    갈리지 않는다: 뒤에 이 자리 교시가 또 있으면(명단이 그렇게 말하면) 마지막이 아니고, 옮겨 나간 교시는 안 센다.
  */
 export function foldNextDestination(
   day: NextDestinationDay,
@@ -133,12 +166,12 @@ export function foldNextDestination(
   };
 
   const seatLabel = stays ? SEAT_DB_LABEL[stays.seat] : null;
+  /** 조회가 **실제로 돈** 학생 — 그날 유효한 수강이 있는 학생만(물었지만 수강이 없는 학생은 모름이다). */
   const students = new Set<string>();
   for (const e of day.live) {
     students.add(e.studentId);
-    // 분리등원(attendance_days) — 오늘 안 오는 반의 배치는 후보가 아니다. 반이 오늘 도는지는 조회가 걸렀다.
-    const dows = resolveAttendDows(e.attendanceDays, [day.todayIdx]);
-    if (dows.length > 0 && !dows.includes(day.todayIdx)) continue;
+    // 분리등원(attendance_days) — 오늘 안 오는 반의 배치는 후보가 아니다.
+    if (!attendsToday(e, day.todayIdx)) continue;
     for (const sl of day.slotsByClass.get(e.classId) ?? []) {
       // 🔴 이 자리 배치는 빼고, 아래에서 **명단이 말하는 교시**로 대신 넣는다(①②).
       if (seatLabel && sl.seatLabel === seatLabel) continue;
@@ -154,5 +187,7 @@ export function foldNextDestination(
       }
     }
   }
-  return { startByStudent, roomByStudent };
+  const lastByStudent: Record<string, true> = {};
+  for (const studentId of students) if (!(studentId in startByStudent)) lastByStudent[studentId] = true;
+  return { startByStudent, roomByStudent, lastByStudent };
 }

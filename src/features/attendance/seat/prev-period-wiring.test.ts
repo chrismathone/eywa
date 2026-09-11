@@ -22,7 +22,8 @@ const board = strip(read(...SEAT_DIR, "seat-board.tsx"));
 const saves = strip(read(...SEAT_DIR, "seat-board-saves.ts"));
 const jj = strip(read(...SEAT_DIR, "seat-jj-table.tsx"));
 const lab = strip(read(...SEAT_DIR, "seat-lab-grid.tsx"));
-const extras = strip(read(...SEAT_DIR, "seat-mark-extras.tsx"));
+/** 교시 사이 신호 줄 — `seat-mark-extras.tsx`에서 떼어 낸 제 파일(2026-09-11, 한 파일 200줄). */
+const hintsSrc = strip(read(...SEAT_DIR, "seat-period-hints.tsx"));
 const actions = strip(read("src", "features", "attendance", "seat", "server", "actions.ts"));
 const shellPage = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "page.tsx"));
 const publicPage = strip(read("src", "app", "(seat)", "seat", "[seat]", "page.tsx"));
@@ -135,23 +136,26 @@ describe("표시는 두 화면이 같은 부품을 쓴다", () => {
   });
 
   it("임계값 이름이 아니라 실제 교시 시각을 적는다([[#121]])", () => {
-    expect(extras).toContain("앞 교시({prevAbsentStart}) 결석");
+    expect(hintsSrc).toContain("앞 교시({prevAbsentStart}) 결석");
     // 🔴 2026-09-10: '다음 17:20'은 무엇을 하라는 말인지 안 읽혀 **시각 + 어디로**가 됐다
     //    (원장 *"17:20 304호 가야함처럼"*). 방을 모르면 시각 + '다음 수업'.
-    expect(extras).toContain("{nextStart} {nextRoom ? `${nextRoom} 이동` : \"다음 수업\"}");
+    expect(hintsSrc).toContain("{nextStart} {nextRoom ? `${nextRoom} 이동` : \"다음 수업\"}");
     // '직전'·'방금'처럼 시각을 감추는 말을 쓰지 말 것.
-    expect(extras).not.toMatch(/방금 결석|직전 교시 결석/);
+    expect(hintsSrc).not.toMatch(/방금 결석|직전 교시 결석/);
   });
 
   it("이미 찍힌 칸엔 앞 교시 결석을 안 적는다(어느 것이 이 교시의 사실인지 헷갈린다)", () => {
-    expect(extras).toContain("const showPrev = !!prevAbsentStart && cur === null;");
+    expect(hintsSrc).toContain("const showPrev = !!prevAbsentStart && cur === null;");
   });
 
   it("🔴 두 신호를 한 줄에 잇거나 자르지 않는다 — JJ 출결 칸은 ≈80px이라 뒤엣것이 통째로 사라진다", () => {
     // 적대 리뷰 2026-09-10: `·`로 이어 `truncate`하면 '다음 17:20'이 어떤 창 폭에서도 안 보였다.
-    const block = extras.slice(extras.indexOf("export function SeatPeriodHints"));
+    const block = hintsSrc.slice(hintsSrc.indexOf("export function SeatPeriodHints"));
     expect(block).not.toContain("truncate");
-    expect(block.match(/break-keep/g)?.length).toBe(2);
+    // 줄마다(앞 교시 결석 · 다음 행선지 · 마지막 수업) 제 `<p>`에서 어절 단위로 접힌다 — 줄이 늘어도 규약은 같다.
+    const lines = block.match(/<p\b/g)?.length ?? 0;
+    expect(lines).toBe(3);
+    expect(block.match(/break-keep/g)?.length).toBe(lines);
   });
 
   it("버튼 수는 칸 키로 중복을 접는다 — 서버가 접는 것과 같은 축", () => {

@@ -5,6 +5,10 @@
  * 클릭으로 출결되는거랑 중복액션되지않게 잘 분리해서"* → *"'초기화' 기능으로 원상태로 돌아갈 수 있게
  * 드래그한것을"* → *"반별 '초기화' 단체 '초기화'"*.
  *
+ * ⚠️ 2026-09-11 원장 *"LAB실에서 내가 드래그하고 싶은건, '다른 시간대'의 수업임. 같은 시간대의 수업으로 옮기고 싶은게
+ *    아니야."* — 배치를 **새로 만드는** 드래그는 없앴다. 이 모듈에 남은 것은 이미 있는 줄의 표시·[초기화] 규칙과, 교시
+ *    이동 드래그가 함께 쓰는 문턱(`SEAT_DRAG_THRESHOLD_PX`·`isSeatDragGesture`)·찍힌 카드 차단(`seatMoveBlockReason`)이다.
+ *
  * 🔴🔴 **배치는 출결 귀속이 아니다.** 이 화면은 한 방(랩실 603호)에 여러 반이 같은 시각에 들어오는
  *    자리라, 아이가 제 반 묶음이 아닌 옆 묶음에 앉는 일이 생긴다. 드래그가 바꾸는 것은 **그 자리·그 날짜·
  *    그 교시에 카드가 어느 반 묶음에 놓이는가**뿐이고, `attendance_records.class_id`(= 그 학생의 수강 반)는
@@ -49,8 +53,8 @@ export type PlacedStudent<S> = S & {
  * 🔴 이유는 화면이 아니라 **기록**이다. 교시 간 이동([`period-choice.ts`](./period-choice.ts))은 그 학생을
  *    앞 교시에서 지우고 뒤 교시에 세우는데, 이미 찍힌 출결은 `slot_start`가 앞 교시로 박혀 있어 **아무도
  *    안 보는 칸에 고아로 남는다**(자리 시수는 그 행에서 나온다 = 조용한 시수 오차).
- * 🔴 **반 묶음 이동에도 똑같이 건다** — 원장 지시가 "절대 불가"이고, 축을 갈라 한쪽만 열어 두면
- *    "왜 이 카드만 안 잡히지"가 된다.
+ * 🔴 **한 문장이다** — 교시 이동의 손잡이(화면)·놓을 곳 판정(`seatDropVerdict`)·서버 거절이 이 함수를 같이 쓴다
+ *    (배치를 새로 만드는 드래그는 2026-09-11로 없어졌다).
  * 🔑 **빠져나갈 문은 남는다** — [초기화]는 드래그가 아니라 버튼이고 출결을 한 줄도 안 건드린다
  *    (출결은 애초에 `homeClassId`에 저장돼 있어 카드가 되돌아가도 그대로다). 체크를 지우면 다시 잡힌다.
  */
@@ -164,26 +168,12 @@ export function seatResetCounts(applied: readonly SeatPlacement[]): Record<strin
   return out;
 }
 
-/**
- * 드래그 한 번의 판정 — **서버가 다시 돌린다**([[#77]]: 화면이 보낸 목록을 믿지 않는다).
- * `isReset`(제 반으로 도로 끌기)이면 배치 줄을 **지운다**(그 학생만 초기화).
+/*
+ * ⚠️ 배치를 **새로 만드는** 판정(옛 `validateSeatMove`)과 그 쓰기(옛 `moveSeatStudent`)는 없앴다 — 원장 2026-09-11
+ *    *"LAB실에서 내가 드래그하고 싶은건, '다른 시간대'의 수업임. 같은 시간대의 수업으로 옮기고 싶은게 아니야."*
+ *    드래그의 뜻은 다른 시간 하나다([`drop-verdict.ts`](./drop-verdict.ts)). 이미 있는 줄의 표시·[초기화]는 남는다
+ *    (지우면 이미 옮겨 둔 자리가 고아가 된다).
  */
-export function validateSeatMove<S extends { id: string; status?: string | null }>(
-  rosters: readonly PlacementRoster<S>[],
-  move: { studentId: string; toClassId: string },
-): { ok: true; fromClassId: string; isReset: boolean } | { error: string } {
-  const home = seatHomeClassOf(rosters, move.studentId);
-  if (home === null) return { error: "이 교시 명단에 없는 학생입니다" };
-  if (!rosters.some((r) => r.classId === move.toClassId)) return { error: "이 교시에 없는 반입니다" };
-  // 🔴 화면에서 손잡이를 비활성해도 서버가 다시 본다([[#77]]) — 두 사람이 같은 카드를 열어 두면
-  //    한쪽이 찍는 사이 다른 쪽이 끌 수 있다(그 순간이 정확히 고아 행이 생기는 지점이다).
-  const marked = rosters
-    .find((r) => r.classId === home)
-    ?.students.find((s) => s.id === move.studentId)?.status;
-  const blocked = seatMoveBlockReason(marked);
-  if (blocked) return { error: blocked };
-  return { ok: true, fromClassId: home, isReset: home === move.toClassId };
-}
 
 /**
  * 서버가 준 배치 줄 + 화면의 낙관 오버레이를 합친다 — 화면이 보는 배치의 **단일 소스**.
