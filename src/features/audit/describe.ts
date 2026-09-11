@@ -199,6 +199,12 @@ const FALLBACK_KEY_LABEL: Record<string, string> = {
   autoUnitsCells: "자동 시수 칸",
 };
 
+/** 폴백에서 **사람 id**에 붙일 라벨 — 이름만 서면 누구인지(학생? 강사?) 모른다. `라벨: 이름`으로 적는다. */
+const FALLBACK_ID_LABEL: Record<string, string> = {
+  // 출석부 강사 전체 보기에서 온 출결 저장(attendance_cell·attendance_range, 2026-09-11) — 시수를 그 강사 몫에만 나눴다.
+  scopeTeacherId: "강사 보기",
+};
+
 /**
  * 운영 스크립트가 남긴 실행자 식별자(`system:grant-class-review`) → 한글.
  * 실측 8종(2026-08-20) + 저장소에 남아 있는 스크립트 전수. 미등록 `system:*`도 접두를 그대로
@@ -259,7 +265,8 @@ export function collectAuditNameIds(rows: Array<{ metadata: Meta | null }>): {
     if (!m) continue;
     const sid = str(m.studentId);
     if (sid && UUID_RE.test(sid)) students.add(sid);
-    for (const key of ["userId", "newTeacherId", "delegateUserId"]) {
+    // scopeTeacherId = 출석부 강사 전체 보기의 주인(출결 저장 로그, 2026-09-11).
+    for (const key of ["userId", "newTeacherId", "delegateUserId", "scopeTeacherId"]) {
       const uid = str(m[key]);
       if (uid && UUID_RE.test(uid)) users.add(uid);
     }
@@ -1391,7 +1398,7 @@ export function auditDetail(
         if (!s) continue;
         if (UUID_RE.test(s)) {
           const n = ctx.nameOf(s);
-          if (n) parts.push(n);
+          if (n) parts.push(FALLBACK_ID_LABEL[k] ? `${FALLBACK_ID_LABEL[k]}: ${n}` : n);
           continue;
         }
         const clipped = s.length > 60 ? `${s.slice(0, 60)}…` : s;

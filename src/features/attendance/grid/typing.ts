@@ -6,7 +6,7 @@
 //    지각·조퇴·보강은 숫자로 표현할 수 없다(같은 1시수여도 상태가 다르다) → 팝오버가 담당한다.
 //    ⚠️ 숫자에 지각·조퇴를 끼워 넣지 말 것(예 "2=지각") — 그 숫자는 시수로 급여에 흘러간다.
 
-import { MAX_SESSION_UNITS, parseSessionUnits } from "../session-units";
+import { isDefaultUnitsRaw, MAX_SESSION_UNITS, parseSessionUnits } from "../session-units";
 
 /** 버퍼 최대 길이 — "12.5"(4자)까지. 더 길면 시수 상한을 넘어 어차피 거절된다. */
 const MAX_BUFFER = 4;
@@ -49,13 +49,29 @@ export function commitBuffer(buf: string | null): TypedValue | null {
   // 0 = 결석. 시수는 비운다(결석은 시수를 소비하지 않는다 — markNumber도 언제나 "0"으로 그린다).
   if (n === 0) return { status: "absent", units: "" };
   if (n > MAX_SESSION_UNITS) return null;
-  const parsed = parseSessionUnits(s);
+  // 원문 정규화는 팝오버와 **같은 함수**(`canonicalUnitsRaw`) — 두 경로가 서버·낙관값에 같은 원문을 넘긴다.
+  const units = canonicalUnitsRaw(s);
+  if (units === null) return null;
+  return { status: "present", units };
+}
+
+/**
+ * 시수 **원문 정규화** — 격자 타이핑(`commitBuffer`)과 팝오버가 칠할 값(`optimisticGridValue`)에 같은 원문을 넘기는 한 곳.
+ * · 비움(공백 포함) → "" = 기본(빈 칸이면 수학 자동 시수, 있는 행이면 1 — 서버 규약)
+ * · 그 밖 → `parseSessionUnits` 값의 표준 표기(쉼표 소수점 → 점)
+ * · 서버가 받지 않을 원문(형식 오류·0·상한 초과) → null(호출부가 막는다)
+ * 🔴 팝오버가 원문을 그대로 넘겼더니 `Number("1,5")`가 NaN이라 칸이 NaN을 칠하고 렌더가 무한히 돌아 화면이 통째로
+ *    오류로 떨어졌다(재리뷰 2026-09-11).
+ */
+export function canonicalUnitsRaw(raw: string): string | null {
+  if (isDefaultUnitsRaw(raw)) return "";
+  const parsed = parseSessionUnits(raw);
   if (!parsed.ok) return null;
   // 🔴 1은 **명시값 "1"**로 넘긴다(2026-09-11) — 저장값은 여전히 null(서버 parseSessionUnits가 1을 접는다)이지만,
   //    ""(=기본)로 넘기면 서버가 **수학 자동 시수**(수업 길이, auto-units.ts)를 넣는다. 사람이 친 1은 1이다
   //    (원장 2026-09-01 *"입력된 숫자가 입력되도록"*). ⚠️ 교시가 여럿인 날의 "교시마다 1" 의미도 불변 —
   //    서버 분배는 명시 숫자가 1이 아닐 때만(unitsVal !== null) 돈다.
-  return { status: "present", units: parsed.value === null ? "1" : String(parsed.value) };
+  return parsed.value === null ? "1" : String(parsed.value);
 }
 
 /** 칸의 현재 값(`s`=상태, `u`=시수) → 복사 버퍼에 담을 값(붙여넣기·Ctrl+Enter용). 빈 칸은 null. */

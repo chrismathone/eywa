@@ -56,9 +56,13 @@ describe("배선 — 부풀림이 다시 생기지 않게", () => {
   const read = (rel: string) => readFileSync(join(process.cwd(), "src", rel), "utf8");
 
   it("🔴 서버는 '그날 칸(교시 미지정)'일 때만 나눈다 — 교시 지정 저장(ECS)은 안 건드린다", () => {
+    // 배분 규칙은 scoped-split.ts `planDayCellUnits` 한 벌(2026-09-11 — 강사 보기에선 그 강사 몫 행에만 나누도록 옮김).
     const src = read("features/attendance/server/actions.ts");
-    expect(src).toContain("splitUnitsAcrossSlots(unitsVal!, updateIds.length)");
-    expect(src).toContain("slot === null && updateIds.length > 1");
+    const rule = read("features/attendance/scoped-split.ts");
+    expect(rule).toContain("splitUnitsAcrossSlots(input.unitsVal, receivers.length)");
+    expect(src).toMatch(/if \(slot === null\) \{[\s\S]{0,800}planDayCellUnits\(/);
+    // 액션이 직접 나누면 강사 보기의 몫 규칙을 건너뛴다 — 나누는 곳은 한 곳뿐이어야 한다.
+    expect(src).not.toContain("splitUnitsAcrossSlots(");
   });
 
   it("🔴 화면은 명시 숫자를 곱하지 않는다(서버와 같은 규칙)", () => {

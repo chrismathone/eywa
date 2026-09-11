@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isRecordless, optimisticGridValue } from "./optimistic-value";
+import type { GridValue } from "./store";
 
 const P = (units: string) => ({ status: "present" as const, units });
 const A = (units = "") => ({ status: "absent" as const, units });
@@ -45,5 +46,34 @@ describe("optimisticGridValue — 저장 전에 칸에 칠할 값(서버 저장 
 
   it("지우기(null)는 빈 칸", () => {
     expect(optimisticGridValue(null, { s: "present", u: 2 }, 1.5, 1)).toBeNull();
+  });
+});
+
+describe("🔴 어떤 원문도 NaN을 칠하지 않는다(재리뷰 2026-09-11 — NaN 스냅샷이 무한 렌더로 화면을 떨어뜨렸다)", () => {
+  it('"1,5"·"abc"·"  " × 교시 수 × 칸 상태 × 자동 시수 — 시수는 유한한 숫자이거나 null', () => {
+    const currents: GridValue[] = [null, { s: "absent", u: null }, { s: "present", u: null, d: true }];
+    for (const units of ["1,5", "abc", "  "]) {
+      for (const slotCount of [1, 2, 3]) {
+        for (const current of currents) {
+          for (const auto of [null, 1.5]) {
+            const u = optimisticGridValue(P(units), current, auto, slotCount)?.u ?? null;
+            expect(u === null || Number.isFinite(u), `${units}·${slotCount}교시·${JSON.stringify(current)}·${auto}`).toBe(
+              true,
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it('쉼표 소수점은 서버와 같은 값 — "1,5" = 1.5(교시가 여럿이어도 친 합계 그대로)', () => {
+    expect(optimisticGridValue(P("1,5"), { s: "absent", u: null }, null, 1)).toEqual({ s: "present", u: 1.5 });
+    expect(optimisticGridValue(P("1,5"), { s: "absent", u: null }, null, 2)).toEqual({ s: "present", u: 1.5 });
+  });
+
+  it("서버가 거절할 원문(형식 오류)은 시수를 안 칠한다 — 기본과 같은 값(교시가 여럿이면 교시 수)", () => {
+    expect(optimisticGridValue(P("abc"), { s: "absent", u: null }, null, 1)).toEqual({ s: "present", u: null });
+    expect(optimisticGridValue(P("abc"), { s: "absent", u: null }, null, 2)).toEqual({ s: "present", u: 2 });
+    expect(optimisticGridValue(P("  "), { s: "absent", u: null }, null, 2)).toEqual({ s: "present", u: 2 });
   });
 });

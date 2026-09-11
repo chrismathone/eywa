@@ -9,7 +9,9 @@ import {
   isDefaultUnitsRaw,
   parseSessionUnits,
 } from "@/features/attendance/session-units";
+import { canonicalUnitsRaw } from "@/features/attendance/grid/typing";
 import { useAutoUnits } from "./grid-context";
+import { scopeFieldsFor, useAttendanceScope } from "./scope-context";
 import { NOT_MINE_MESSAGE, STATUS_TONE, statusTextOf } from "@/features/attendance/cell-display";
 // 화면 언어 — 상태 이름은 `statusTextOf`(한글 맵 옆) 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -82,7 +84,16 @@ export function CellPopover({
    * 서버가 기존 메모를 두니 받는 쪽도 메모를 칠하지 않는다.
    */
   onSaved: (
-    next: { status: AttendanceStatus | null; units: number | null; note?: string; noteOnly?: true },
+    next: {
+      status: AttendanceStatus | null;
+      units: number | null;
+      /** 시수 칸 **원문**("" = 기본) — 받는 쪽(칸)이 격자 타이핑과 같은 함수로 칠할 값을 만든다(교시 합·자동 시수). */
+      unitsRaw?: string;
+      /** 성공 응답에서 서버가 새 행에 **실제로 넣은** 시수(자동 시수 판정을 탔을 때만) — 격자 단건 저장과 같은 보정. */
+      serverUnits?: number | null;
+      note?: string;
+      noteOnly?: true;
+    },
     opts?: { ifStill: unknown; revert?: true },
   ) => unknown;
 }) {
@@ -100,6 +111,8 @@ export function CellPopover({
   const recorded = recordedProp ?? status !== null;
   const autoHere = useAutoUnits(classId, sessionDate);
   const autoUnits = recorded ? null : autoHere;
+  // 강사 전체 보기의 주인 — 격자 저장과 **같은 필드**를 싣는다(이 팝오버가 격자를 우회하는 문이 되지 않게, #77).
+  const scope = useAttendanceScope();
   const [noteDraft, setNoteDraft] = useState(note);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -157,7 +170,12 @@ export function CellPopover({
     //    '지우기'는 행째 지우니 메모도 비운다("").
     const nextNote = next === null ? "" : withNote ? noteDraft.trim() : undefined;
     // 칠한 표식 — 아래 응답 보정·실패 되돌리기가 "칸이 아직 이 쓰기의 것일 때만" 움직이도록 되돌려 준다.
-    const token = onSaved({ status: next, units: parsedUnits, note: nextNote });
+    // 시수 원문을 함께 넘긴다 — 칠할 값은 받는 쪽(칸)이 격자 타이핑과 같은 함수로 만든다(교시가 여럿인 칸의 합, 리뷰 2026-09-11).
+    // 🔴 원문은 격자 타이핑과 **같은 정규화**(`canonicalUnitsRaw` — 쉼표 소수점 → 점)를 거친다. "1,5"를 그대로 넘기면 칸이
+    //    NaN을 칠해 렌더가 무한히 돌고 화면이 통째로 오류로 떨어졌다(재리뷰 2026-09-11). 위에서 검증했으니 null은 안 온다.
+    //    서버엔 원문을 그대로 보낸다(서버 parseSessionUnits가 같은 규칙으로 읽는다).
+    const raw = next === null ? {} : { unitsRaw: canonicalUnitsRaw(unitsDraft) ?? "" };
+    const token = onSaved({ status: next, units: parsedUnits, ...raw, note: nextNote });
     onClose();
     startTransition(async () => {
       const res = await setAttendanceCell({
@@ -166,6 +184,8 @@ export function CellPopover({
         sessionDate,
         status: next,
         ...(next === null ? {} : { units: unitsDraft, ...(withNote ? { note: noteDraft } : {}) }),
+        // 🔴 강사 전체 보기 칸은 그 강사 몫 교시의 합 — 서버가 시수를 그 몫에만 나눈다(원장 제보 2026-09-11).
+        ...scopeFieldsFor(scope, classId),
       });
       // 실패하면 격자를 원래 값으로 되돌린다(저장된 척 두지 않는다) — 그 사이 같은 칸에 새 입력이 들어갔으면
       // 그 입력을 지우지 않는다(칸의 주인, 성공 보정과 같은 규약). 돌아갈 자리는 표식에 들어 있다(`revert`).
@@ -173,7 +193,17 @@ export function CellPopover({
       // 성공 — 서버가 실제로 넣은 값으로 맞추고(새 행 + 숫자 안 고른 저장이면 자동 시수, 조회 실패면 null=1) 이 쓰기가 끝났다는
       // 결과를 남긴다(뒤 쓰기의 되돌리기·메모 따라잡기가 읽는다 — 끝났는지 모르면 응답 대기로 봐야 해서 옛 메모가 굳었다).
       // 🔴 그 사이 같은 칸에 새 입력이 들어갔으면 덮지 않는다(칸의 주인이 바뀌었으면 받는 쪽이 거절 — store.correctLocal).
-      else onSaved({ status: next, units: res?.autoUnits !== undefined ? res.autoUnits : parsedUnits, note: nextNote }, { ifStill: token });
+      else
+        onSaved(
+          {
+            status: next,
+            units: res?.autoUnits !== undefined ? res.autoUnits : parsedUnits,
+            ...raw,
+            ...(res?.autoUnits !== undefined ? { serverUnits: res.autoUnits } : {}),
+            note: nextNote,
+          },
+          { ifStill: token },
+        );
     });
   };
 

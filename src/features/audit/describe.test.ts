@@ -225,6 +225,25 @@ describe("collectAuditNameIds / auditTargetName", () => {
     expect(collectAuditNameIds(rows)).toEqual({ studentIds: [SID], userIds: [UID], classIds: [CID] });
   });
 
+  it("scopeTeacherId(출석부 강사 보기)도 users로 — 상세엔 '강사 보기: 이름', uuid는 안 보인다", () => {
+    expect(collectAuditNameIds([{ metadata: { studentId: SID, scopeTeacherId: UID } }])).toEqual({
+      studentIds: [SID],
+      userIds: [UID],
+      classIds: [],
+    });
+    for (const action of ["attendance_cell", "attendance_range"]) {
+      const d = auditDetail(
+        action,
+        { studentId: SID, date: "2026-09-10", units: 4, scopeTeacherId: UID },
+        ctx({ [SID]: "이윤건", [UID]: "Charlie" }),
+      );
+      expect(d, action).toContain("강사 보기: Charlie");
+      expect(d, action).not.toContain(UID);
+    }
+    // 이름을 못 구하면 uuid를 내보내지 않고 접는다.
+    expect(auditDetail("attendance_cell", { scopeTeacherId: UID }, ctx())).toBeNull();
+  });
+
   it("계정 조작(비밀번호·이메일): 영문 mode/키를 노출하지 않는다", () => {
     expect(auditDetail("staff_password_reset", { mode: "temp" }, ctx())).toBe("임시 비밀번호 발급");
     expect(auditDetail("staff_password_reset", { mode: "custom" }, ctx())).toBe("비밀번호 직접 설정");

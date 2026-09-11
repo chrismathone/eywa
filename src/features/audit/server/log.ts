@@ -563,6 +563,8 @@ export async function getAuditLogsPage(
       // 인수인계(newTeacherId)·담임 위임(delegateUserId)도 강사 이름 검색으로 찾히게(표시 측 collectAuditNameIds와 대칭).
       ors.push(`metadata->>newTeacherId.in.(${userIds.join(",")})`);
       ors.push(`metadata->>delegateUserId.in.(${userIds.join(",")})`);
+      // 출석부 강사 전체 보기(scopeTeacherId, 2026-09-11)도 그 강사 이름으로 찾히게.
+      ors.push(`metadata->>scopeTeacherId.in.(${userIds.join(",")})`);
     }
     if (userIds.length >= NAME_LOOKUP_LIMIT) nameLookupTruncated = true;
     q = q.or(ors.join(","));
