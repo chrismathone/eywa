@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ExternalLink, FilePlus2, Loader2, Search, Upload, UploadCloud } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { EmbedHiddenInput } from "@/components/embed-link";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   createLinkDocument,
@@ -29,7 +30,6 @@ export function DocumentToolbar({
   initialQuery,
   category,
   catParam,
-  embed,
   categories,
   sortParam,
 }: {
@@ -38,8 +38,6 @@ export function DocumentToolbar({
   category: string | null;
   /** 검색 폼이 유지할 현재 폴더 키 — 연동 폴더(교재 요청서 등)는 category가 아니라 이 값으로만 전달. */
   catParam?: string | null;
-  /** 플로팅 창(embed) 안이면 검색 GET에도 embed=1 유지(크롬리스 분기 유지). */
-  embed?: boolean;
   /** 현재 정렬 — 검색해도 정렬이 풀리지 않게 GET 폼이 같이 실어 보낸다. */
   sortParam?: { key: string; dir: string } | null;
   /** 학원장이 관리하는 분류 목록(0161a) — 코드 상수가 아니라 서버가 DB에서 읽어 내려준다. */
@@ -114,7 +112,9 @@ export function DocumentToolbar({
             <input type="hidden" name="dir" value={sortParam.dir} />
           </>
         ) : null}
-        {embed ? <input type="hidden" name="embed" value="1" /> : null}
+        {/* 창 안이면 검색 GET에도 embed=1(크롬리스 분기 유지) — 서버 헤더(x-embed)가 아니라 클라가 물리 프레임으로
+            판정한다. embed 없이 소프트 이동으로 들어온 첫 렌더에선 헤더 판정이 거짓이다(전수검사 2026-09-11). */}
+        <EmbedHiddenInput />
         {/* ⚠️ 다이얼로그 입력(inputCls)이 아니라 **툴바 검색 박스** — 공용 SearchForm과 같은 값
             (TOOLBAR_SEARCH_BOX). 이 폼은 cat/sort/dir/embed를 hidden으로 함께 커밋해 SearchForm을
             그대로 쓰진 못하지만, 모양은 같아야 옆 버튼들과 한 줄로 선다. */}

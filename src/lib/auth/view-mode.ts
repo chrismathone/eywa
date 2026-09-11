@@ -39,7 +39,8 @@ export const effectiveTeacherId = cache(async (): Promise<string | null> => {
   // ⚠️ 쓰기 귀속은 안 따라온다: perm-matrix 쓰기 캡 + readonlyTeacherViewError 가드가 저장·발송을 차단.
   const viewAs = await viewAsTeacher();
   if (viewAs) return viewAs.id;
-  // 겸직: 관리자 계열이 강사뷰 쿠키를 켰고, 실제 담당 반이 있을 때만.
+  // 겸직: 관리자 계열이 강사뷰 쿠키를 켰고, 실제 담당 반(또는 아래 오늘 위임)이 있을 때만.
+  // 🔑 이 두 조건은 노출·진입 판정(canUseTeacherView)과 같다 — 한쪽만 바꾸면 '보이는데 안 들어가지는' 버튼이 된다.
   const jar = await cookies();
   if (jar.get(VIEW_MODE_COOKIE)?.value !== "teacher") return null;
   const { classIds } = await getTeacherScope(user.id);
@@ -71,8 +72,12 @@ export const getShellView = cache(async (): Promise<ShellView> => {
 });
 
 /**
- * 겸직 여부 — 관리자 계열이면서 실제 담당 반이 있어 '강사뷰로 전환'을 제공할 수 있는 사용자.
- * 풀셸(사이드바)에서 토글 노출 판정용. head:true 카운트라 행을 받지 않음(B2 준수).
+ * 강사뷰 자격 — 관리자 계열이면서 **담당 반이 있거나 오늘 위임받은 반이 있는**(0173a) 사용자.
+ * 🔑 **노출과 진입의 단일 소스** — 풀셸 사이드바의 '강사뷰로 전환' 노출(레이아웃)과 그 버튼이 부르는 전환 액션
+ *    ([switchToTeacherView](@/features/shell/view-actions))이 이 함수 하나를 본다. 둘이 따로 판정하던 때(액션은
+ *    담당 반만 봤다) 위임만 받은 관리자에게 버튼은 서는데 눌러도 아무 일도 없었다(2026-09-11 전수검사).
+ *    들어간 뒤 매 요청의 판정(effectiveTeacherId)도 같은 두 조건이다 — 셋 중 하나만 바꾸지 말 것.
+ * head:true 카운트라 행을 받지 않음(B2 준수).
  */
 export const canUseTeacherView = cache(async (): Promise<boolean> => {
   const user = await getCurrentUser();

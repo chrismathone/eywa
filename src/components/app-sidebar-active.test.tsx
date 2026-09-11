@@ -1,0 +1,135 @@
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const nav = vi.hoisted(() => ({ pathname: "/dashboard" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+vi.mock("@/components/user-menu", () => ({ UserMenu: () => null }));
+vi.mock("@/features/notifications/components/notification-bell", () => ({ NotificationBell: () => null }));
+vi.mock("@/components/view-mode-toggle", () => ({ TeacherViewToggle: () => null }));
+vi.mock("@/components/other-teacher-view", () => ({ OtherTeacherViewPicker: () => null }));
+vi.mock("@/features/nav/server/visit-actions", () => ({ recordMenuVisit: vi.fn(async () => {}) }));
+vi.mock("@/components/workspace/use-is-desktop", () => ({ useIsDesktop: () => true }));
+vi.mock("@/components/workspace/use-sidebar-resize", () => ({
+  useSidebarWidth: () => ({ expanded: true, width: 216 }),
+}));
+
+import { AppSidebar } from "./app-sidebar";
+import { useWindowStore, windowId } from "./workspace/window-store";
+import { useMenuHub } from "./workspace/menu-hub-store";
+
+/**
+ * 사이드바 **'지금 보는 곳' 표시는 포커스 창이 지금 보여 주는 주소로 판정한다** — 창 id가 아니라.
+ *
+ * 계기(2026-09-11 메뉴·창 이동 전수검사): 창 id 비교(`route:<menuKey>` === 포커스)라서 ① 알림·링크로 연
+ * 경로 창(`route:attendance/live`)·상세 창(`route:students/abc`)이 앞이면 켜지는 줄이 하나도 없었고,
+ * ② 메뉴 판이 캔버스를 덮고 있어도 판 뒤에 가려진 창의 줄까지 켜져 두 업무군이 동시에 칠해졌다.
+ * 원장 규칙(2026-09-09 *"현재 보고 있는 창만 탭에서 표시"*)은 그대로다 — 켜지는 것은 지금 보이는 곳 하나.
+ */
+
+function focusWindow(paramId: string, href: string, navTop?: string) {
+  const id = windowId("route", paramId);
+  useWindowStore.setState({
+    windows: {
+      [id]: {
+        id,
+        kind: "route",
+        params: { id: paramId, title: "창", href },
+        rect: { x: 0, y: 0, w: 800, h: 600 },
+        minimized: false,
+        maximized: false,
+      },
+    },
+    order: [id],
+    focusedId: id,
+    nav: navTop ? { [id]: [navTop] } : {},
+    live: {},
+  });
+}
+
+const renderSidebar = () =>
+  render(<AppSidebar systemRole="master" email="owner@example.com" displayName="원장" />);
+const groupActive = (label: string) =>
+  screen.getByRole("button", { name: `${label} 메뉴` }).className.includes("text-primary-foreground");
+const rowCurrent = (label: string) =>
+  screen.getByRole("link", { name: label }).getAttribute("aria-current") === "page";
+
+describe("사이드바 '지금 보는 곳' — 포커스 창의 지금 주소로 판정", () => {
+  beforeEach(() => {
+    nav.pathname = "/dashboard";
+    useMenuHub.setState({ groupId: null });
+    useWindowStore.setState({ windows: {}, order: [], focusedId: null, nav: {}, live: {} });
+  });
+  afterEach(cleanup);
+
+  it("출석부 창을 보면 '출석부' 줄과 '수업' 업무군이 켜진다(종전 그대로)", () => {
+    focusWindow("attendance", "/attendance");
+    renderSidebar();
+    expect(rowCurrent("출석부")).toBe(true);
+    expect(groupActive("수업")).toBe(true);
+    expect(groupActive("원생")).toBe(false);
+  });
+
+  it("🔴 알림·링크로 연 옛 경로 창(route:attendance/live)도 같은 곳을 가리킨다", () => {
+    focusWindow("attendance/live", "/attendance/live");
+    renderSidebar();
+    expect(rowCurrent("출석부")).toBe(true);
+    expect(groupActive("수업")).toBe(true);
+  });
+
+  it("🔴 상세 창(원생 상세)이 앞이면 '원생목록'·'원생'이 켜진다", () => {
+    focusWindow("students/abc", "/students/abc");
+    renderSidebar();
+    expect(rowCurrent("원생목록")).toBe(true);
+    expect(groupActive("원생")).toBe(true);
+  });
+
+  it("🔴 학생 요약 창(검색 팰릿에서 연 원생 — 주소가 없는 창)이 앞이면 '원생목록'·'원생'이 켜진다", () => {
+    const id = windowId("student", "abc");
+    useWindowStore.setState({
+      windows: {
+        [id]: {
+          id,
+          kind: "student",
+          params: { id: "abc", title: "김지유" },
+          rect: { x: 0, y: 0, w: 480, h: 560 },
+          minimized: false,
+          maximized: false,
+        },
+      },
+      order: [id],
+      focusedId: id,
+      nav: {},
+      live: {},
+    });
+    renderSidebar();
+    expect(rowCurrent("원생목록")).toBe(true);
+    expect(groupActive("원생")).toBe(true);
+  });
+
+  it("🔴 창 안에서 다른 화면으로 드릴인했으면 지금 주소를 따른다(창 id가 아니라)", () => {
+    focusWindow("students", "/students", "/classes/xyz?embed=1");
+    renderSidebar();
+    expect(groupActive("수업")).toBe(true);
+    expect(groupActive("원생")).toBe(false);
+    expect(rowCurrent("원생목록")).toBe(false);
+  });
+
+  it("🔴 메뉴 판이 떠 있으면 판의 업무군만 켜진다 — 판에 가려 안 보이는 창의 줄은 끈다", () => {
+    focusWindow("timetable", "/timetable");
+    useMenuHub.setState({ groupId: "student" });
+    renderSidebar();
+    expect(groupActive("원생")).toBe(true);
+    expect(groupActive("수업")).toBe(false);
+    expect(rowCurrent("시간표")).toBe(false);
+  });
+
+  it("창이 없으면(빈 작업면) 대시보드 줄만 켜진다", () => {
+    renderSidebar();
+    expect(rowCurrent("대시보드")).toBe(true);
+    expect(rowCurrent("출석부")).toBe(false);
+    expect(groupActive("수업")).toBe(false);
+  });
+});

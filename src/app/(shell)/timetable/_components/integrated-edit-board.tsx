@@ -20,6 +20,8 @@ import {
 } from "@dnd-kit/core";
 import { AlertTriangle, ChevronDown, ChevronUp, GripVertical, Loader2, Plus, RotateCcw, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import { saveIntegrationGroups } from "@/features/owner/server/subject-actions";
 import {
   OTHERS_GROUP_ID,
@@ -96,6 +98,7 @@ export function IntegratedEditBoard({
   doneHref: string;
 }) {
   const router = useRouter();
+  const inFrame = useInFrame();
   // 5px 임계값 — 없으면 제목 입력·버튼 클릭이 드래그로 먹힌다(창 보드와 같은 값).
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -130,6 +133,8 @@ export function IntegratedEditBoard({
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmApply, setConfirmApply] = useState(false);
   const [saving, startSave] = useTransition();
+  /** '실제 반영' 뒤 통합뷰로 떠나는 중 — 풀 문서 이동은 트랜지션 밖이라 `saving`이 먼저 풀린다(그 사이 재클릭 방지). */
+  const [leaving, setLeaving] = useState(false);
   const [presetSaving, startPresetSave] = useTransition();
   const [presetError, setPresetError] = useState<string | null>(null);
   // '1시간 단위'(줄별) — 보관함과 같은 **즉시 저장**이다. 하단 '실제 반영'에 묶으면 줄 배치를 안 바꾸고
@@ -317,9 +322,13 @@ export function IntegratedEditBoard({
         setError(res.error);
         return;
       }
+      // ⚠️ 미저장 해제가 이동보다 **먼저** — 뒤면 풀 문서 이동에 beforeunload '떠나시겠습니까?'가 뜬다.
       clearTimetableUnsaved(); // 반영했으니 미저장 아님
-      router.push(doneHref, { scroll: false });
-      router.refresh();
+      // 🔴 `router.push`가 아니라 풀 문서 이동 — 서버 액션 직후의 push는 액션 응답이 이 편집 화면 트리를
+      //    다시 적용하면서 삼켜진다(#102: 반영됐는데 편집 화면에 머문다). 풀 로드라 통합뷰는 새 배치로
+      //    새로 그려진다(refresh 불필요). 스크롤은 맨 위로 돌아간다(옛 `scroll:false`는 클라 이동에만 있던 것).
+      setLeaving(true);
+      window.location.assign(inFrame ? withEmbed(doneHref) : doneHref);
     });
   }
 
@@ -540,10 +549,10 @@ export function IntegratedEditBoard({
               <button
                 type="button"
                 onClick={save}
-                disabled={saving}
+                disabled={saving || leaving}
                 className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
               >
-                {saving ? <Loader2 className="size-3 animate-spin" /> : null}
+                {saving || leaving ? <Loader2 className="size-3 animate-spin" /> : null}
                 반영
               </button>
               <button
@@ -558,7 +567,7 @@ export function IntegratedEditBoard({
             <button
               type="button"
               onClick={() => setConfirmApply(true)}
-              disabled={saving}
+              disabled={saving || leaving}
               title="지금 화면의 배치를 실제 통합뷰에 반영합니다"
               className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
             >

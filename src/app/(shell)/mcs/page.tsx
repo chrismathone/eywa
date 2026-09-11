@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+// 반 카드는 창 안에서 처음부터 embed를 싣는다(EmbedLink — 맨 Link면 창 주소 되붙이기에 기대게 되고 그 뒤 첫 새로고침이
+// 라우터 트리와 어긋나 한 번 더 받는다, 전수검사 리뷰 2026-09-11).
+import { EmbedLink } from "@/components/embed-link";
 import { PageHeader } from "@/components/page-header";
 import { PeriodNav } from "@/components/period-nav";
 import { shiftMonth, kstMonth } from "@/lib/date-kst";
@@ -182,7 +184,7 @@ function TeacherGroups({
           </Heading>
           <div className={columnsClass}>
             {group.cards.map((card) => (
-              <Link
+              <EmbedLink
                 key={card.classId}
                 href={`/mcs/${card.classId}/month?month=${month}`}
                 className="grid grid-cols-[minmax(0,1fr)_minmax(120px,0.7fr)] items-center gap-x-3 gap-y-0.5 px-2 py-2 transition hover:bg-primary-soft/40 focus-visible:outline-2 focus-visible:outline-primary"
@@ -243,7 +245,7 @@ function TeacherGroups({
                     </>
                   )}
                 </span>
-              </Link>
+              </EmbedLink>
             ))}
           </div>
         </section>

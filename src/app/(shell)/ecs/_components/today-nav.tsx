@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { EmbedLink } from "@/components/embed-link";
 import { Button } from "@/components/ui/button";
 import {
   TOOLBAR_SEG_BOX,
@@ -19,6 +19,9 @@ import { EcsDatePicker } from "./today-date-picker";
  * ⚠️ 모양은 **[WeekNav](../../timetable/_components/week-nav.tsx)를 그대로 따른다** — 같은 툴바에 나란히
  *    서는 컨트롤이라 여기만 다른 알약·테두리를 쓰면 그 줄이 통째로 어색해진다(원장 지적 2026-08-07
  *    "강사뷰 서식만 다르면 이상함"). 칩=`rounded-full`·소라벨=`.micro`·날짜=`.num`.
+ * 🔴 링크는 맨 `Link`가 아니라 [`EmbedLink`](@/components/embed-link) — 여긴 서버 컴포넌트라 창 여부를 모른다.
+ *    맨 `Link`면 창 안에서 면·모드를 바꿀 때 주소에서 embed=1이 빠지고, 뒤이은 새로고침이 창 안에 전체 셸을
+ *    그린다(메뉴·창 이동 전수검사 2026-09-11).
  */
 
 /**
@@ -52,16 +55,16 @@ export function EcsTodayModeTabs({
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">{sheetT(lang, "nav.mode")}</span>
       <div className={TOOLBAR_SEG_BOX}>
-        <Link href={base} className={chip(mode === "sheet")} aria-current={mode === "sheet" ? "page" : undefined}>
+        <EmbedLink href={base} className={chip(mode === "sheet")} aria-current={mode === "sheet" ? "page" : undefined}>
           {sheetT(lang, "nav.mode.sheet")}
-        </Link>
-        <Link
+        </EmbedLink>
+        <EmbedLink
           href={`${base}&mode=cards`}
           className={chip(mode === "cards")}
           aria-current={mode === "cards" ? "page" : undefined}
         >
           {sheetT(lang, "nav.mode.cards")}
-        </Link>
+        </EmbedLink>
       </div>
     </div>
   );
@@ -80,7 +83,7 @@ export function EcsTodayModeTabs({
 export function EcsQuickAttendanceLink({ lang = "ko" }: { lang?: SheetLang }) {
   return (
     <Button
-      render={<Link href="/attendance/quick" title={sheetT(lang, "nav.quickAttendance.title")} />}
+      render={<EmbedLink href="/attendance/quick" title={sheetT(lang, "nav.quickAttendance.title")} />}
       className="shrink-0"
     >
       {sheetT(lang, "nav.quickAttendance")}
@@ -104,21 +107,21 @@ export function EcsFaceTabs({
       <span className="micro mr-0.5">{sheetT(lang, "nav.face")}</span>
       <div className={TOOLBAR_SEG_BOX}>
         {showToday ? (
-          <Link href="/ecs?view=today" className={chip(face === "today")} aria-current={face === "today" ? "page" : undefined}>
+          <EmbedLink href="/ecs?view=today" className={chip(face === "today")} aria-current={face === "today" ? "page" : undefined}>
             {sheetT(lang, "nav.face.today")}
-          </Link>
+          </EmbedLink>
         ) : null}
-        <Link href="/ecs?view=week" className={chip(face === "week")} aria-current={face === "week" ? "page" : undefined}>
+        <EmbedLink href="/ecs?view=week" className={chip(face === "week")} aria-current={face === "week" ? "page" : undefined}>
           {sheetT(lang, "nav.face.week")}
-        </Link>
-        <Link
+        </EmbedLink>
+        <EmbedLink
           href="/ecs?view=room"
           className={chip(face === "room")}
           aria-current={face === "room" ? "page" : undefined}
           title={sheetT(lang, "nav.face.room.title")}
         >
           {sheetT(lang, "nav.face.room")}
-        </Link>
+        </EmbedLink>
       </div>
     </div>
   );

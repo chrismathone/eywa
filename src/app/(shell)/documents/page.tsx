@@ -128,7 +128,6 @@ export default async function DocumentsPage({
             initialQuery={q}
             category={cat}
             catParam={activeKey}
-            embed={embed}
             categories={categories}
             sortParam={sort}
           />

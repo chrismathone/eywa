@@ -1,4 +1,6 @@
-import Link from "next/link";
+// 창 안 이동은 처음부터 embed를 싣는다(EmbedLink) — 맨 Link면 창 주소 되붙이기(EmbedUrlKeeper)에 기대게 되고,
+// 그 뒤 첫 새로고침이 라우터 트리와 어긋나 한 번 더 받는다(전수검사 리뷰 2026-09-11).
+import { EmbedLink } from "@/components/embed-link";
 import { Pill } from "@/components/atoms/pill";
 import type { PillColor } from "@/components/atoms/pill";
 import { attHref } from "./att-href";
@@ -67,7 +69,7 @@ export function AttendanceHub({
 
   const row = (t: HubTeacher) => (
     <li key={t.id}>
-      <Link
+      <EmbedLink
         href={attHref({ classId: null, month, teacherId: t.id, subjectId, mode: "teacher" })}
         className={`hover:bg-bg-soft border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition ${t.retired ? "opacity-60" : ""}`}
       >
@@ -101,7 +103,7 @@ export function AttendanceHub({
         <span className="bg-primary-soft text-primary rounded-pill ml-auto shrink-0 px-2.5 py-1 text-xs font-bold">
           {sheetT(lang, "att.hub.open")}
         </span>
-      </Link>
+      </EmbedLink>
     </li>
   );
 
@@ -145,28 +147,28 @@ export function AttendanceHub({
                       <div
                         className={`border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${s.open ? "" : "opacity-60"}`}
                       >
-                        <Link href={s.href} className="hover:bg-bg-soft min-w-0 flex-1 rounded-lg">
+                        <EmbedLink href={s.href} className="hover:bg-bg-soft min-w-0 flex-1 rounded-lg">
                           <span className="text-foreground block truncate text-sm font-bold">
                             {s.name} <span className="text-text-faint font-medium">{s.room}</span>
                           </span>
                           <span className="text-text-dim block text-xs">
                             {sheetT(lang, s.open ? "att.hub.seatOpen" : "att.hub.seatClosed")}
                           </span>
-                        </Link>
-                        <Link
+                        </EmbedLink>
+                        <EmbedLink
                           href={s.monthHref}
                           className="bg-bg-soft text-text-dim hover:text-foreground rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold"
                         >
                           {sheetT(lang, "att.hub.monthly")}
-                        </Link>
-                        <Link
+                        </EmbedLink>
+                        <EmbedLink
                           href={s.href}
                           className={`rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold ${
                             s.open ? "bg-primary-soft text-primary" : "bg-bg-soft text-text-faint"
                           }`}
                         >
                           {sheetT(lang, s.open ? "att.hub.day" : "att.hub.prep")}
-                        </Link>
+                        </EmbedLink>
                       </div>
                     </li>
                   ))}

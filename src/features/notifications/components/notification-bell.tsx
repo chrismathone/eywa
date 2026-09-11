@@ -235,6 +235,9 @@ export function NotificationBell() {
     }
     const resolved = onWorkspace ? windowIdForHref(link) : null;
     if (resolved) {
+      // 🔴 떠 있는 메뉴 판을 닫는다 — 판(z-44)이 창 캔버스(z-40)를 덮어, 두면 방금 연 창이 판 밑에 깔려
+      //    아무 일도 없던 것처럼 보인다(2026-09-11 리뷰). 운영실 링크는 위에서 이미 닫는다.
+      useMenuHub.getState().close();
       useWindowStore
         .getState()
         .open("route", {

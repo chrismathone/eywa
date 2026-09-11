@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import { deleteClassReview } from "@/features/class-review/server/actions";
 
 /**
@@ -14,6 +16,8 @@ import { deleteClassReview } from "@/features/class-review/server/actions";
  *    문구에 제출 건수를 박아 "몇 명 것이 사라지는지"를 누르기 전에 보이게 한다.
  * ⚠️ 이동은 `window.location.assign` — 서버 액션 **직후의 `router.push`는 액션 응답이 현재
  *    페이지 RSC 트리를 다시 적용하면서 삼켜진다**(#102). 게다가 지워진 건의 상세에 남으면 404다.
+ * ⚠️ 창(iframe) 안이면 `embed=1`을 유지한다(원생 삭제와 같은 규칙) — 빠뜨리면 목록이 창 안에 **전체 셸**로
+ *    서버 렌더된다(창 전용 부품이 빠지고 공지 팝업·팰릿이 창 안에 들어온다, 전수검사 2026-09-11).
  */
 export function DeleteReviewButton({
   docId,
@@ -26,6 +30,7 @@ export function DeleteReviewButton({
   date: string;
   submittedCount: number;
 }) {
+  const inFrame = useInFrame();
   const [confirming, setConfirming] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -37,7 +42,8 @@ export function DeleteReviewButton({
     startTransition(async () => {
       const res = await deleteClassReview(undefined, fd);
       if (res?.ok) {
-        window.location.assign("/class-review"); // 삭제 후 목록으로(창 내 전체 이동)
+        // 삭제 후 목록으로(창 내 전체 이동) — 창 안이면 embed=1 유지.
+        window.location.assign(inFrame ? withEmbed("/class-review") : "/class-review");
       } else {
         setErr(res?.error ?? "삭제에 실패했습니다"); // 사유 노출, 확인 상태 유지
       }

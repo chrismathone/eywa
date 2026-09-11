@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from "react";
 import { formatKoreanDate } from "@/lib/date-kst";
+import { EmbedAnchor } from "@/components/embed-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { ATT_SOFT } from "@/features/attendance/status-color";
 import { OUTCOME_LABEL } from "@/features/attendance/live/queue";
@@ -223,12 +224,12 @@ export function UnmarkedRow({ row, date }: { row: RecapUnmarkedClass; date: stri
   const subjects = useSubjectMaps();
   return (
     <li className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">
-      <a
+      <EmbedAnchor
         href={`/attendance/${date}/${row.classId}`}
         className="hover:text-primary font-bold underline-offset-2 hover:underline"
       >
         {row.className}
-      </a>
+      </EmbedAnchor>
       <span className="text-text-faint text-xs">{subjects.labelOf(row.subject) || "과목 없음"}</span>
       <span className="num text-text-dim text-xs">{slotsLabel(row.slots)}</span>
       <span className="text-text-faint text-xs">{handlersLabel(row.teacherNames)}</span>
@@ -250,12 +251,12 @@ export function PartialRow({ row, date }: { row: RecapPartialClass; date: string
   return (
     <li className="space-y-1 px-3 py-2 text-sm">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <a
+        <EmbedAnchor
           href={`/attendance/${date}/${row.classId}`}
           className="hover:text-primary font-bold underline-offset-2 hover:underline"
         >
           {row.className}
-        </a>
+        </EmbedAnchor>
         <span className="text-text-faint text-xs">{subjects.labelOf(row.subject) || "과목 없음"}</span>
         <span className="text-text-faint text-xs">{handlersLabel(row.teacherNames)}</span>
         <span className="num text-amber ml-auto shrink-0 text-xs font-bold">

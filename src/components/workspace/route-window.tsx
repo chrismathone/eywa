@@ -4,12 +4,50 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWindowStore, type Win } from "./window-store";
 import { withEmbed } from "./embed-context";
+import { WINDOW_BUSY_MESSAGE } from "./use-recording-lock";
 
 /**
  * 라우트 창의 iframe 엘리먼트 레지스트리(런타임·모듈 전역). 타이틀바 뒤로(←) 버튼이
  * 해당 창 iframe의 history.back()을 호출할 수 있게 RouteWindow가 자기 iframe을 등록한다.
  */
 export const iframeRegistry = new Map<string, HTMLIFrameElement>();
+
+/**
+ * 창 iframe을 다른 주소로 **통째로** 옮긴다 — 창 크롬(← 뒤로·메뉴의 '첫 화면으로')의 단일 경로.
+ * 🔴 **언제나 `withEmbed`를 거친다.** 뒤로 기록은 iframe의 실제 주소를 그대로 적는데, 창 안에서 한 이동(기간 이동 등)이
+ *    embed=1을 떨어뜨린 주소가 거기 섞인다 — 그걸 그대로 열면 창 안에 **풀 셸**이 뜬다(전수검사 2026-09-11: ←만 embed를
+ *    안 붙였고 메뉴 재클릭은 붙였다). 첫 로드·복제(`src`)와 ⟳(`reloadTarget`)도 같은 규칙이다.
+ * `location.replace` = 창들이 공유하는 joint session history를 건드리지 않는다(다른 창이 되감기지 않게).
+ */
+export function navigateWindow(id: string, url: string): void {
+  iframeRegistry.get(id)?.contentWindow?.location.replace(withEmbed(url));
+}
+
+/**
+ * ⟳(이 창만 새로고침)이 갈 주소 — 지금 문서에 embed=1이 있으면 null(그대로 `reload()` — 스크롤 보존), 없으면 embed를
+ * 붙인 같은 주소. `reload()`는 지금 주소 그대로라, embed가 떨어진 문서를 새로고침하면 창 안에 풀 셸이 떴다.
+ * 아직 라우트를 싣기 전(about:blank)이면 null — 종전대로 둔다.
+ */
+export function reloadTarget(loc: { pathname: string; search: string; hash: string }): string | null {
+  if (!loc.pathname.startsWith("/")) return null;
+  if (new URLSearchParams(loc.search).get("embed") === "1") return null;
+  return withEmbed(loc.pathname + loc.search + loc.hash);
+}
+
+/**
+ * 창 iframe의 지금 문서와 `url`이 **해시만 다른** 같은 문서인가 — 그런 이동은 새 문서가 뜨지 않는다(해시로 스크롤만).
+ * 스켈레톤을 걸면 걷어 줄 load가 오지 않아 영영 덮인다(재리뷰 2026-09-11). 아직 라우트를 싣기 전이면 false.
+ */
+function isSameDocument(frame: HTMLIFrameElement, url: string): boolean {
+  try {
+    const loc = frame.contentWindow?.location;
+    if (!loc || !loc.pathname.startsWith("/")) return false;
+    const target = new URL(url, "http://same-document.invalid");
+    return target.pathname === loc.pathname && target.search === loc.search;
+  } catch {
+    return false;
+  }
+}
 
 /** 문서 제목에서 " — eywa" 류 접미사 제거(크롬 타이틀 표시용). */
 function cleanTitle(raw: string) {
@@ -69,13 +107,72 @@ export function RouteWindow({ win }: { win: Win }) {
     // 걸러져 reload가 영구 유실된다. 활성화돼 실제 reload를 수행할 때만 nonce 소비.
     if (!el || !activated) return;
     prevReload.current = reloadNonce;
-    setLoaded(false);
+    // 🔴 미저장 창은 떠나기 확인이 뜬다 — '머무르기'면 문서가 그대로인데 스켈레톤을 먼저 띄우면 폼을 영구히 덮는다
+    //    (리뷰 2026-09-11). 그런 창은 지금 덮지 않고(loaded 그대로) 문서가 **실제로 내려갈 때**(pagehide) 덮는다.
+    //    깨끗한 창은 종전대로 바로 덮는다(누른 느낌).
+    const holdCover = useWindowStore.getState().dirty[win.id] ?? false;
+    setLoaded((prev) => (holdCover ? prev : false));
     try {
-      el.contentWindow?.location.reload();
+      const cw = el.contentWindow;
+      if (cw) {
+        if (holdCover) cw.addEventListener("pagehide", () => setLoaded(false), { once: true });
+        // 창 안 이동이 embed=1을 떨어뜨린 문서면 붙여서 다시 연다(reload()는 지금 주소 그대로라 창 안에 풀 셸이 뜬다).
+        const target = reloadTarget(cw.location);
+        if (target) cw.location.replace(target);
+        else cw.location.reload();
+      }
     } catch {
       if (href) el.src = withEmbed(href); // same-origin 접근 막히면 src 재설정 폴백
     }
-  }, [reloadNonce, activated, href]);
+  }, [reloadNonce, activated, href, win.id]);
+
+  // 보관(닫힌) 창을 첫 화면 주소로 되살렸다(open()이 표식을 올림) — 그 창 iframe만 첫 화면으로 옮긴다.
+  // 보관 창은 미저장·녹음 중일 수 없다(그런 창은 보관하지 않고, 녹음 중엔 닫기가 잠긴다) — 떠나기 확인이 안 뜨니
+  // 스켈레톤을 먼저 띄워도 폼을 덮을 일이 없다. 덮어야 새 문서가 뜨기 전 옛 상세가 보이거나 눌리지 않는다(리뷰 2026-09-11).
+  const homeNonce = useWindowStore((s) => s.homeNonce[win.id] ?? 0);
+  const prevHome = useRef(homeNonce);
+  useEffect(() => {
+    if (homeNonce === prevHome.current) return;
+    prevHome.current = homeNonce;
+    const el = iframeRef.current;
+    // 아직 문서를 싣지 않은 창이면 옮길 것이 없다 — 활성화되면 src(첫 화면)로 뜬다(표식은 소비해 두 번 부르지 않는다).
+    if (!el || !activated || !href) return;
+    const target = withEmbed(href);
+    // 해시만 다른 이동이면 새 문서가 뜨지 않는다(해시로 스크롤만) — 덮지 않고 기록도 새로 시작하지 않는다(재리뷰 2026-09-11).
+    const sameDoc = isSameDocument(el, target);
+    setLoaded((prev) => (sameDoc ? prev : false));
+    if (!sameDoc) resetOnLoadRef.current = true; // 새 문서의 첫 로드에서 기록을 그 주소 하나로 다시 시작
+    try {
+      el.contentWindow?.location.replace(target);
+    } catch {
+      el.src = target;
+    }
+  }, [homeNonce, activated, href]);
+
+  // 녹음 잠금(use-recording-lock) — **이 창의 iframe이 보낸 것만** 받아 이 창 id에 싣는다. 창 id를 경로로 추측하면
+  // 드릴인(상세 → 수정)에서 없는 창을 잠가, 녹음 중인 진짜 창이 닫기·창 개수 한도의 축출에 노출됐다([[#69]] ①).
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const el = iframeRef.current;
+      if (!el || !e.source || e.source !== el.contentWindow) return;
+      const data = e.data as { type?: string; active?: boolean } | null;
+      if (data?.type !== WINDOW_BUSY_MESSAGE) return;
+      useWindowStore.getState().setWindowBusy(win.id, data.active === true);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [win.id]);
+
+  // 창이 사라지면(폭이 1024 아래로 줄어 캔버스가 창을 전부 내림 등) iframe도 함께 파괴돼, 녹음 잠금을 풀 신호(pagehide의
+  // active:false)를 받을 리스너가 없다 — 그대로 두면 잠금이 영영 남아, 폭을 되돌려도 그 창의 닫기·새로고침·뒤로·다른 화면
+  // 이동이 잠기고 창 개수 한도의 축출에서도 빠진다(재리뷰 2026-09-11). 그래서 언마운트 때 푼다.
+  // 🔴 **언마운트 전용** — 의존성은 창 id 하나(창마다 불변)다. 녹음이 계속되는 중에 다른 이유로(주소·제목 변경) cleanup이
+  //    돌면 안 된다. 창이 닫혀 이미 파괴됐으면 스토어가 없는 창의 잠금 보고를 버린다(무해).
+  useEffect(() => {
+    const id = win.id;
+    return () => useWindowStore.getState().setWindowBusy(id, false);
+  }, [win.id]);
 
   // iframe 등록 + 제목/URL 관찰 → 타이틀바 제목 + 창별 nav 스택 갱신(Idea A: 창 크롬이 제목·뒤로 소유).
   // 같은 창 안에서 서브라우트로 드릴인하면 document.title·location이 바뀌고 MutationObserver/popstate가
@@ -88,9 +185,24 @@ export function RouteWindow({ win }: { win: Win }) {
     // (open-menu-window: 면 전환·필터 주소). 아래 즉시 sync()는 아직 **옛 문서**를 보고하므로 초기화에 쓰지 않는다.
     if (prevHrefRef.current !== href) {
       prevHrefRef.current = href;
-      resetOnLoadRef.current = true;
+      // 해시만 다른 주소면 새 문서가 뜨지 않는다(해시로 스크롤만) — 덮지 않고 기록도 새로 시작하지 않는다. 덮으면 걷어 줄
+      // load가 없어 스켈레톤이 영영 남는다(재리뷰 2026-09-11).
+      const sameDoc = !!href && isSameDocument(el, withEmbed(href));
+      if (!sameDoc) resetOnLoadRef.current = true;
+      // 다른 화면으로 옮긴다 — 새 문서가 뜰 때까지 옛 화면이 보이고 눌리면 그 클릭이 고른 화면을 취소한다. 스켈레톤으로 덮는다.
+      // ⚠️ 미저장 창은 떠나기 확인이 뜰 수 있어 지금 덮지 않는다('머무르기'면 폼이 영구히 가려진다) — ⟳와 같이 문서가
+      //    **실제로 내려갈 때**(pagehide) 덮는다. '떠나기' 뒤 새 문서가 뜨기 전까지 옛 폼이 보이고 눌리지 않게(재리뷰 2026-09-11).
+      const dirtyNow = useWindowStore.getState().dirty[win.id] ?? false;
+      const holdCover = sameDoc || dirtyNow;
+      setLoaded((prev) => (holdCover ? prev : false));
+      if (!sameDoc && dirtyNow) {
+        el.contentWindow?.addEventListener("pagehide", () => setLoaded(false), { once: true });
+      }
     }
     let obs: MutationObserver | null = null;
+    // 새 문서의 첫 로드 보고인가 — onLoad만 켠다. 미저장 창의 이동 의도(← · 첫 화면)는 이 보고에서만 소비된다
+    // (같은 문서의 보고 — 제목 변경 등 — 가 의도를 먹으면 '머무르기' 뒤 기록이 사라진다, 재리뷰 2026-09-11).
+    let fromLoad = false;
     /** 관찰해서 스택에 보고했으면 true(아직 about:blank·autoClose로 닫힘이면 false). */
     const sync = (reset = false): boolean => {
       try {
@@ -117,7 +229,7 @@ export function RouteWindow({ win }: { win: Win }) {
         }
         const url = path + cw.location.search;
         const title = cleanTitle(doc.title || "") || fallbackTitle;
-        observeIframe(win.id, reset ? { title, url, reset: true } : { title, url });
+        observeIframe(win.id, { title, url, ...(reset ? { reset: true } : {}), ...(fromLoad ? { load: true } : {}) });
         return true;
       } catch {
         /* same-origin이라 정상 도달; 만약 막히면 무시(타이틀=params 유지) */
@@ -136,7 +248,9 @@ export function RouteWindow({ win }: { win: Win }) {
       useWindowStore.getState().setWindowDirty(win.id, false);
       // 메뉴가 첫 화면을 바꾼 뒤의 첫 로드면 스택을 새로 시작한다(실제로 보고한 뒤에만 표식을 내린다 —
       // 아직 about:blank인 로드가 표식을 먹어 버리면 진짜 새 문서가 옛 스택 위에 쌓인다).
+      fromLoad = true;
       if (sync(resetOnLoadRef.current)) resetOnLoadRef.current = false;
+      fromLoad = false;
       try {
         // head 서브트리 관찰 — <title> 텍스트 변경뿐 아니라 client-side nav 시 title 엘리먼트
         // 교체(Next 메타)까지 포착. popstate도 함께 들어 history.back() 후 즉시 동기화.
@@ -152,7 +266,9 @@ export function RouteWindow({ win }: { win: Win }) {
       }
     };
     el.addEventListener("load", onLoad);
-    sync(); // 이미 로드된 경우 대비
+    // 이미 로드된 경우 대비 — 단 주소가 막 바뀌었으면(위) 지금 문서는 **옛 문서**라 보고하지 않는다. 보고하면 옛 상세가
+    // 기록에 다시 쌓여 ←가 되살아나고, 누르면 고른 화면이 취소됐다(리뷰 2026-09-11). 새 문서는 첫 로드(onLoad)에서 보고한다.
+    if (!resetOnLoadRef.current) sync();
     return () => {
       el.removeEventListener("load", onLoad);
       obs?.disconnect();

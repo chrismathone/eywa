@@ -7,7 +7,7 @@ import { useCloseWindow } from "./use-close-window";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
-import { iframeRegistry } from "./route-window";
+import { navigateWindow } from "./route-window";
 import { WINDOW_TRANSITION } from "./motion";
 import { usePrefs } from "./use-prefs";
 import { spotlightTile, type ResizeHandle } from "./window-geometry";
@@ -50,9 +50,9 @@ export function FloatingWindow({
   // 드릴인했으면(canBack) 크롬 뒤로(←) 버튼을 띄운다 — 인페이지 "← …로" 백을 대체(Idea A).
   const live = useWindowStore((s) => s.live[win.id]);
 
-  // 녹음 등 "끊기면 유실" 작업이 이 창 안에서 진행 중이면 잠금 — 닫기(X)·배경보내기·Esc를 막아
-  // 우발적 종료로 녹음을 날리지 않게 한다(use-recording-lock이 창 본문 iframe에서 신호 발행 →
-  // workspace-canvas가 store.busy에 적재). 하단 독의 ✕도 **같은 값**을 본다(닫기 게이트 단일 소스).
+  // 녹음 등 "끊기면 유실" 작업이 이 창 안에서 진행 중이면 잠금 — 닫기(X)·새로고침·뒤로·Esc를 막아
+  // 우발적 종료로 녹음을 날리지 않게 한다(use-recording-lock이 창 본문 iframe에서 부모에 postMessage →
+  // RouteWindow가 **자기 iframe이 보낸 것만** store.busy에 싣는다). 하단 독의 ✕도 **같은 값**을 본다(닫기 게이트 단일 소스).
   const locked = useWindowStore((s) => s.busy[win.id] ?? false);
 
   // 미저장 변경(dirty) — 창 안 폼이 작성 중이면 닫기(X)·Esc 시 "정말 닫을까요?" 확인.
@@ -158,15 +158,19 @@ export function FloatingWindow({
           >
             {win.kind === "route" && live?.canBack ? (
               // 드릴인 상태에서만 뒤로(←) — 그 창 iframe만 한 단계 이전 URL로(location.replace, joint history 회피).
+              // 녹음 중엔 잠근다 — 옮기면 녹음이 끊긴다(⟳·✕와 같은 축, 리뷰 2026-09-11).
               <button
                 type="button"
                 aria-label="뒤로"
-                title="뒤로"
+                title={locked ? "녹음 중 — 정지 후 가능" : "뒤로"}
+                disabled={locked}
                 onClick={() => {
+                  if (locked) return;
                   const target = useWindowStore.getState().backNav(win.id);
-                  if (target) iframeRegistry.get(win.id)?.contentWindow?.location.replace(target);
+                  // 기록에서 꺼낸 주소엔 embed=1이 없을 수 있다(창 안 이동이 떨어뜨림) — navigateWindow가 늘 붙인다.
+                  if (target) navigateWindow(win.id, target);
                 }}
-                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition"
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-sm transition disabled:pointer-events-none disabled:opacity-40"
               >
                 <ArrowLeft size={14} strokeWidth={1.8} />
               </button>

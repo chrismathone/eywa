@@ -4,6 +4,7 @@
  */
 import { Pill } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { EmbedAnchor } from "@/components/embed-link";
 import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import type { JjTrack } from "@/features/ijw/class-groups";
 
@@ -57,9 +58,9 @@ export function JjDeckBreakdown({
                 <td className="px-4 py-2.5">
                   <span className="flex items-center gap-1.5 whitespace-nowrap">
                     {href ? (
-                      <a href={href} className="text-foreground text-sm font-bold hover:underline">
+                      <EmbedAnchor href={href} className="text-foreground text-sm font-bold hover:underline">
                         {it.label}
-                      </a>
+                      </EmbedAnchor>
                     ) : (
                       <span className={`text-sm font-bold ${it.classId ? "text-foreground" : "text-text-dim"}`}>{it.label}</span>
                     )}

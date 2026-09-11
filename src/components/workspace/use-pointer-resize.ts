@@ -2,16 +2,17 @@
 
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
 import { useWindowStore } from "./window-store";
-import { resizeFloor, resizeRect, windowMinSize, type Rect, type ResizeHandle } from "./window-geometry";
+import { resizeFloor, resizeRect, routeMinSize, type Rect, type ResizeHandle } from "./window-geometry";
 import { WINDOW_TRANSITION, motionDisabled } from "./motion";
 
 /**
  * 8방향 리사이즈 — 드래그와 동일하게 이동 중엔 ref transform/width/height만 직접
  * 갱신, pointerup에 store commit. 각 핸들 div에 start(handle)/move/up을 바인딩.
  *
- * 🔴 라우트 창은 **그 메뉴의 최소 크기**(`windowMinSize`)에서 멈춘다(원장 2026-09-03 *"창 크기를 최소 크기보다
- *    줄이려고 할 때 경고를 띄우고 줄어들지 않도록"*). 바닥에 닿으면 창 안 `[data-min-hint]`(FloatingWindow)에
- *    "최소 크기 W×H"를 보인다 — 리렌더 없이 DOM만 만진다(드래그 중 setState 금지 규약 그대로).
+ * 🔴 라우트 창은 **창이 지금 보는 화면의 최소 크기**(`routeMinSize` — `store.resizeBy`와 같은 바닥)에서 멈춘다
+ *    (원장 2026-09-03 *"창 크기를 최소 크기보다 줄이려고 할 때 경고를 띄우고 줄어들지 않도록"*). 창 id만으로 재면
+ *    출석부 창 안의 출결 모드가 1280에서 멈췄다(전수검사 2026-09-11). 바닥에 닿으면 창 안 `[data-min-hint]`
+ *    (FloatingWindow)에 "최소 크기 W×H"를 보인다 — 리렌더 없이 DOM만 만진다(드래그 중 setState 금지 규약 그대로).
  */
 export function usePointerResize(id: string, elRef: RefObject<HTMLDivElement | null>) {
   const startRef = useRef<{
@@ -30,7 +31,7 @@ export function usePointerResize(id: string, elRef: RefObject<HTMLDivElement | n
       const w = s.windows[id];
       if (!w) return;
       s.focus(id);
-      const min = w.kind === "route" ? windowMinSize(w.params.id) : undefined;
+      const min = routeMinSize(w, s.nav[id]);
       startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect, handle, min };
       rectRef.current = w.rect;
       s.setDragging(id); // 리사이즈 중 iframe 숨김

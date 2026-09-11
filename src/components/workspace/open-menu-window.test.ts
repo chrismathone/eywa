@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useWindowStore, windowId } from "./window-store";
 import { openMenuWindow } from "./open-menu-window";
 import { iframeRegistry } from "./route-window";
+
+// 녹음 중인 창을 옮기지 않았다는 안내(sonner) — 실제 토스트 대신 호출만 본다.
+const { toastWarning } = vi.hoisted(() => ({ toastWarning: vi.fn() }));
+vi.mock("sonner", () => ({ toast: { warning: toastWarning, info: vi.fn() } }));
 
 /**
  * **"메뉴를 다시 누르면 첫 화면으로"가 두 입구에서 같아야 한다.**
@@ -25,6 +29,9 @@ function reset() {
     nav: {},
     reloadNonce: {},
     dirty: {},
+    busy: {},
+    pendingNav: {},
+    homeNonce: {},
     cached: [],
     spotlight: false,
     spotlightRaised: [],
@@ -32,6 +39,13 @@ function reset() {
 }
 
 const PARAMS = { id: "meetings", title: "회의록", href: "/meetings" };
+
+/** 창 iframe 자리에 가짜를 꽂고 `location.replace` 호출을 돌려받는다(실제 문서 이동 대신). */
+function fakeFrame(winId: string) {
+  const replace = vi.fn();
+  iframeRegistry.set(winId, { contentWindow: { location: { replace } } } as unknown as HTMLIFrameElement);
+  return replace;
+}
 
 /** 창을 열고 RouteWindow가 첫 URL(루트)을 보고한 상태까지 — 실제 마운트 순서와 같게. */
 function openAtRoot() {
@@ -177,6 +191,140 @@ describe("openMenuWindow — 같은 창을 쓰는 다른 주소(면)는 그 주�
 });
 
 /**
+ * 닫았다가 다시 연 메뉴 — 전수검사 2026-09-11: 닫은 라우트 창은 빠른 재오픈용으로 iframe째 숨겨 보관(BL3)되는데,
+ * 메뉴로 다시 열면 **닫기 전 상세 화면**과 ←가 그대로 떴다(한 번 더 눌러야 목록). 원장 결정 = **첫 화면으로**
+ * (09-10 "메뉴 누르면 초기 목록"과 같은 결). 첫 화면에서 닫은 창은 지금처럼 즉시 보인다(보관의 속도 이점).
+ */
+describe("openMenuWindow — 닫은 메뉴(보관 창)를 다시 열면 첫 화면으로", () => {
+  beforeEach(reset);
+  afterEach(() => iframeRegistry.clear());
+
+  it("🔴 상세에서 닫은 창을 메뉴로 다시 열면 첫 화면(목록)으로 — ← 없음", () => {
+    openAtRoot();
+    drillIn();
+    const replace = fakeFrame(MEET);
+    useWindowStore.getState().close(MEET);
+    expect(useWindowStore.getState().cached).toContain(MEET);
+
+    openMenuWindow(PARAMS);
+
+    const st = useWindowStore.getState();
+    expect(st.windows[MEET]?.minimized).toBe(false);
+    expect(st.focusedId).toBe(MEET);
+    expect(st.nav[MEET]).toEqual(["/meetings"]);
+    expect(st.live[MEET]?.canBack).toBe(false);
+    // 옮기는 일은 스토어 표식을 받은 RouteWindow가 한다(스켈레톤 + 그 창 iframe만 — route-window-chrome 테스트).
+    // 규칙이 스토어에 있어야 창 링크·알림·인쇄로 되살려도 같다 — 여기서 또 옮기면 두 번 불러온다.
+    expect(st.homeNonce[MEET]).toBe(1);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("첫 화면에서 닫은 창은 다시 불러오지 않고 즉시 보인다 — 보관의 속도 이점", () => {
+    openAtRoot();
+    const replace = fakeFrame(MEET);
+    useWindowStore.getState().close(MEET);
+
+    openMenuWindow(PARAMS);
+
+    expect(useWindowStore.getState().windows[MEET]?.minimized).toBe(false);
+    expect(useWindowStore.getState().homeNonce[MEET]).toBeUndefined();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("다른 주소(면)로 되살리면 open()이 그 주소로 보낸다 — 두 번 불러오지 않는다", () => {
+    const ATT = windowId("route", "attendance");
+    openMenuWindow({ id: "attendance", title: "출석부", href: "/attendance" });
+    useWindowStore.getState().observeIframe(ATT, { title: "출석부", url: "/attendance?embed=1" });
+    useWindowStore.getState().observeIframe(ATT, { title: "상세", url: "/attendance/2026-09-11/abc?embed=1" });
+    const replace = fakeFrame(ATT);
+    useWindowStore.getState().close(ATT);
+
+    openMenuWindow({ id: "attendance", title: "오늘 출결", href: "/attendance/live" });
+
+    expect(useWindowStore.getState().windows[ATT]?.params.href).toBe("/attendance/live");
+    expect(replace).not.toHaveBeenCalled(); // iframe src 교체(RouteWindow)가 이미 그 주소로 간다
+  });
+});
+
+/**
+ * 스포트라이트(앨범) 중엔 **위로 올라온 창만** 보인다 — 포커스를 받았어도 가려진 창(opacity 0)은 맨 앞이 아니다.
+ * 전수검사 2026-09-11: 가려진 창을 '맨 앞'으로 보고 보이지도 않는 창의 자리(상세)를 첫 화면으로 날렸다.
+ */
+describe("openMenuWindow — 스포트라이트 중 '맨 앞' 판정", () => {
+  beforeEach(reset);
+  afterEach(() => iframeRegistry.clear());
+
+  it("🔴 포커스만 받고 가려진 창은 되돌리지 않고 앨범 위로 올린다", () => {
+    const STU = windowId("route", "students");
+    openAtRoot();
+    drillIn();
+    useWindowStore.getState().open("route", { id: "students", title: "원생목록", href: "/students" });
+    // 원생목록만 위 — 회의록은 포커스를 받았는데 위에 없는 상태(옛 open()이 만들던 모양)
+    useWindowStore.setState({ spotlight: true, spotlightRaised: [STU], focusedId: MEET });
+    const replace = fakeFrame(MEET);
+
+    openMenuWindow(PARAMS);
+
+    const st = useWindowStore.getState();
+    expect(st.spotlightRaised).toContain(MEET);
+    expect(st.nav[MEET]).toHaveLength(2); // 보고 있던 자리는 그대로 — 올라온 뒤 한 번 더 누르면 첫 화면
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("위로 올라와 있는 창은 종전대로 — 다시 누르면 첫 화면으로", () => {
+    openAtRoot();
+    drillIn();
+    useWindowStore.getState().enterSpotlight(MEET);
+    const replace = fakeFrame(MEET);
+
+    openMenuWindow(PARAMS);
+
+    expect(useWindowStore.getState().nav[MEET]).toEqual(["/meetings"]);
+    expect(replace).toHaveBeenCalledWith("/meetings?embed=1");
+  });
+});
+
+/**
+ * 녹음 중·미저장 창을 메뉴로 다시 눌렀을 때 — 리뷰 2026-09-11: 첫 화면 이동이 녹음 중인 창에도 걸렸고, 미저장 창에선
+ * 이동 **전에** 기록을 바꿔 떠나기 확인에서 '머무르기'를 고르면 기록과 화면이 어긋났다.
+ */
+describe("openMenuWindow — 녹음 중·미저장 창을 다시 눌렀을 때", () => {
+  beforeEach(() => {
+    reset();
+    toastWarning.mockClear();
+  });
+  afterEach(() => iframeRegistry.clear());
+
+  it("🔴 녹음 중인 창은 첫 화면으로 옮기지 않고 이유를 알린다", () => {
+    openAtRoot();
+    drillIn();
+    useWindowStore.getState().setWindowBusy(MEET, true);
+    const replace = fakeFrame(MEET);
+
+    openMenuWindow(PARAMS);
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(useWindowStore.getState().nav[MEET]).toHaveLength(2);
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔴 미저장 창은 첫 화면으로 옮기되(떠나기 확인이 글을 지킨다) 기록은 새 문서가 뜰 때 바꾼다", () => {
+    openAtRoot();
+    drillIn();
+    useWindowStore.getState().setWindowDirty(MEET, true);
+    const replace = fakeFrame(MEET);
+
+    openMenuWindow(PARAMS);
+
+    expect(replace).toHaveBeenCalledWith("/meetings?embed=1");
+    expect(useWindowStore.getState().nav[MEET]).toHaveLength(2); // '머무르기'면 이대로가 맞다
+    // '떠나기' — 새 문서의 첫 로드 보고(RouteWindow onLoad)에서만 기록이 바뀐다
+    useWindowStore.getState().observeIframe(MEET, { title: "회의록", url: "/meetings?embed=1", load: true });
+    expect(useWindowStore.getState().nav[MEET]).toEqual(["/meetings?embed=1"]);
+  });
+});
+
+/**
  * 구조 가드 — 판정이 **한 곳**에 있어야 한다. 이 규칙이 갈렸던 것이 원장 제보의 원인이라,
  * 두 입구가 다시 각자 `store.open("route", …)`을 부르기 시작하면 여기서 막는다.
  */
@@ -192,6 +340,15 @@ describe("구조 — 메뉴 입구 둘이 같은 함수를 쓴다", () => {
   it("🔴 homeNav는 openMenuWindow 밖에서 부르지 않는다 — 규칙이 갈리면 같은 버그가 재발한다", () => {
     for (const p of ["components/app-sidebar.tsx", "components/workspace/menu-hub-grid.tsx"]) {
       expect(read(p), p).not.toContain("homeNav(");
+    }
+  });
+
+  it("🔴 창 크롬(← 뒤로·메뉴의 첫 화면)은 iframe 주소를 직접 바꾸지 않는다 — navigateWindow(늘 embed=1)만", () => {
+    // 전수검사 2026-09-11: ←만 기록 주소를 그대로 열어 창 안에 풀 셸이 떴다(메뉴 재클릭은 withEmbed를 붙였다).
+    for (const p of ["components/workspace/floating-window.tsx", "components/workspace/open-menu-window.ts"]) {
+      const src = read(p);
+      expect(src, p).not.toContain("location.replace(");
+      expect(src, p).toContain("navigateWindow(");
     }
   });
 

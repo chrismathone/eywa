@@ -45,8 +45,20 @@ self.addEventListener("notificationclick", (event) => {
   const link = (event.notification.data && event.notification.data.link) || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      // 🔴 **PC면 새 탭**으로 연다 — 지금 탭을 옮기면 그 탭의 화면이 통째로 다시 실린다. PC 탭엔 작성 중인 것이 있을 수
+      //    있다(열어 둔 플로팅 창의 폼 · 강사 미니셸 원스크린 작성 중 · 셔틀 오늘 등하원 · 풀셸 배경 폼 — 전수검사 리뷰 2026-09-11).
+      //    PC 판정은 둘: ① 브라우저가 알려 주는 `userAgentData.mobile === false`(크로미움) ② 플로팅 창(iframe)이 window
+      //    클라이언트로 잡힌다(`frameType: "nested"`) = 창을 띄운 작업면. 창을 직접 옮기면 창 이름과 다른 화면 + 전체 셸이 뜬다.
+      // ⚠️ 한계: userAgentData가 없는 PC 브라우저(사파리·파이어폭스)에서 창을 하나도 안 띄웠으면 폰과 구분되지 않아 아래처럼
+      //    그 탭을 옮긴다 — 그 탭에서 작성 중이던 것이 있으면 날아간다.
+      const uaData = self.navigator && self.navigator.userAgentData;
+      const pcConfirmed = !!uaData && uaData.mobile === false;
+      if (pcConfirmed || clients.some((c) => c.frameType === "nested")) return self.clients.openWindow(link);
       // 이미 열려 있는 창이 있으면 그 창을 쓴다(폰에서 창이 여러 개 쌓이는 것 방지).
+      // ⚠️ `=== "top-level"`이 아니라 `!== "nested"`다 — 다른 창이 연 최상위 창("auxiliary")도 최상위이고,
+      //    frameType을 모르는 브라우저는 종전대로 첫 창을 써야 폰에서 창이 쌓이지 않는다.
       for (const client of clients) {
+        if (client.frameType === "nested") continue;
         if ("focus" in client) {
           if ("navigate" in client && link) client.navigate(link).catch(() => {});
           return client.focus();

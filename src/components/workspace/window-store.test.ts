@@ -1,5 +1,10 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { useWindowStore, windowId, instanceLabel, isDuplicate, baseWindowId, MAX_WINDOWS, CACHE_MAX } from "./window-store";
+import { ROUTE_WINDOW_SIZE } from "./window-geometry";
+
+// 창 개수 한도에 막혔을 때의 안내(sonner) — 실제 토스트 대신 호출만 본다.
+const { toastWarning } = vi.hoisted(() => ({ toastWarning: vi.fn() }));
+vi.mock("sonner", () => ({ toast: { warning: toastWarning, info: vi.fn() } }));
 
 const SID = windowId("route", "students/1");
 
@@ -13,6 +18,9 @@ function reset() {
     nav: {},
     reloadNonce: {},
     dirty: {},
+    busy: {},
+    pendingNav: {},
+    homeNonce: {},
     cached: [],
     spotlight: false,
     spotlightRaised: [],
@@ -59,7 +67,11 @@ describe("window-store showDesktop() — 배경(메뉴 화면) 보이기", () =>
 });
 
 describe("window-store observeIframe() — 첫 화면이 바뀐 뒤의 첫 로드(reset)", () => {
-  beforeEach(reset);
+  // 창이 있어야 보고를 받는다 — 없는 창의 보고는 스토어가 버린다(리뷰 2026-09-11).
+  beforeEach(() => {
+    reset();
+    useWindowStore.getState().open("route", { id: "students/1", title: "원생", href: "/students/1" });
+  });
 
   it("reset이면 스택을 그 주소 하나로 다시 시작한다(← 없음)", () => {
     const s = useWindowStore.getState();
@@ -330,5 +342,480 @@ describe("window-store close() — BL3 warm 캐시(재오픈 즉시화)", () => 
     expect(st.cached).toEqual([...rest, first!, extra]);
     expect(st.windows[second!]).toBeFalsy();
     expect(st.windows[first!]).toBeTruthy();
+  });
+});
+
+/**
+ * 창 개수 한도(MAX_WINDOWS) — 전수검사 2026-09-11: 창 7번째를 열면 가장 뒤 창이 **확인 없이** 사라졌다
+ * (작성 중인 글·녹음 중인 창 포함). 게다가 `windows`만 지워 제목·뒤로 기록·새로고침 표식이 남아, 같은 메뉴를
+ * 다시 열면 새 창에 옛 상세로 가는 ←가 섰다. 세 입구(open·openNewInstance·duplicate)가 같은 규칙이어야 한다.
+ */
+describe("window-store 창 개수 한도 — 미저장·녹음 중 창은 밀어내지 않는다", () => {
+  beforeEach(() => {
+    reset();
+    toastWarning.mockClear();
+  });
+
+  const [m1, m2, m3, m4, m5, m6, m7] = Array.from({ length: MAX_WINDOWS + 1 }, (_, i) =>
+    windowId("route", `m${i + 1}`),
+  );
+  const openM = (n: number) =>
+    useWindowStore.getState().open("route", { id: `m${n}`, title: `메뉴${n}`, href: `/m${n}` });
+  /** 창을 한도까지 연다 — 가장 뒤 = m1, 지금 보는 창 = m6. */
+  function fill() {
+    for (let i = 1; i <= MAX_WINDOWS; i++) openM(i);
+  }
+
+  it("🔴 가장 뒤 창이 미저장이면 건너뛰고 그다음 깨끗한 창을 밀어낸다", () => {
+    fill();
+    useWindowStore.getState().setWindowDirty(m1, true);
+
+    openM(7);
+
+    const st = useWindowStore.getState();
+    expect(st.windows[m1]).toBeTruthy(); // 작성 중인 글이 든 창은 남는다
+    expect(st.dirty[m1]).toBe(true);
+    expect(st.windows[m2]).toBeFalsy(); // 대신 그다음 깨끗한 창이 밀려난다
+    expect(st.windows[m7]).toBeTruthy();
+    expect(st.order).toHaveLength(MAX_WINDOWS);
+  });
+
+  it("🔴 녹음 중(busy) 창도 밀어내지 않는다 — iframe째 사라지면 녹음이 날아간다", () => {
+    fill();
+    useWindowStore.getState().setWindowBusy(m1, true);
+
+    openM(7);
+
+    const st = useWindowStore.getState();
+    expect(st.windows[m1]).toBeTruthy();
+    expect(st.busy[m1]).toBe(true);
+    expect(st.windows[m2]).toBeFalsy();
+  });
+
+  it("🔴 밀어낸 창의 흔적(제목·뒤로 기록·새로고침 표식)을 함께 지운다 — 같은 메뉴를 다시 열면 ← 없는 새 창", () => {
+    fill();
+    const s = useWindowStore.getState();
+    s.observeIframe(m1, { title: "메뉴1", url: "/m1?embed=1" });
+    s.observeIframe(m1, { title: "상세", url: "/m1/abc?embed=1" });
+    s.reloadWindow(m1);
+
+    openM(7); // 가장 뒤(깨끗한) m1이 밀려난다
+
+    let st = useWindowStore.getState();
+    expect(st.windows[m1]).toBeFalsy();
+    expect(st.live[m1]).toBeUndefined();
+    expect(st.nav[m1]).toBeUndefined();
+    expect(st.reloadNonce[m1]).toBeUndefined();
+
+    openM(1); // 다시 연다 — 새 RouteWindow의 첫 보고가 옛 기록 위에 쌓이면 안 된다
+    useWindowStore.getState().observeIframe(m1, { title: "메뉴1", url: "/m1?embed=1" });
+    st = useWindowStore.getState();
+    expect(st.nav[m1]).toEqual(["/m1?embed=1"]);
+    expect(st.live[m1]?.canBack).toBe(false);
+  });
+
+  it("🔴 밀어낼 창이 없으면 새 창을 열지 않고 이유를 알린다", () => {
+    fill();
+    const s = useWindowStore.getState();
+    [m1, m2, m3].forEach((id) => s.setWindowDirty(id, true));
+    [m4, m5].forEach((id) => s.setWindowBusy(id, true));
+    const before = useWindowStore.getState().order;
+
+    const opened = useWindowStore.getState().open("route", { id: "m7", title: "메뉴7", href: "/m7" });
+
+    const st = useWindowStore.getState();
+    expect(opened).toBe(false);
+    expect(st.windows[m7]).toBeFalsy();
+    expect(st.order).toEqual(before); // 아무 창도 사라지지 않았다
+    expect(st.focusedId).toBe(m6);
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+    expect(String(toastWarning.mock.calls[0]?.[0])).toContain("창을 하나 닫은 뒤");
+  });
+
+  it("새 인스턴스(shift+클릭)·창 복제도 같은 규칙 — 미저장 창을 건너뛴다", () => {
+    fill();
+    useWindowStore.getState().setWindowDirty(m1, true);
+
+    useWindowStore.getState().openNewInstance("route", { id: "m6", title: "메뉴6", href: "/m6" });
+    let st = useWindowStore.getState();
+    expect(st.windows[`${m6}#1`]).toBeTruthy();
+    expect(st.windows[m1]).toBeTruthy();
+    expect(st.windows[m2]).toBeFalsy();
+
+    useWindowStore.getState().duplicate(`${m6}#1`); // 지금 보는 창을 복제
+    st = useWindowStore.getState();
+    expect(st.windows[`${m6}#2`]).toBeTruthy();
+    expect(st.windows[m1]).toBeTruthy();
+    expect(st.windows[m3]).toBeFalsy();
+    expect(st.order).toHaveLength(MAX_WINDOWS);
+  });
+
+  it("자리가 없으면 새 인스턴스·창 복제도 열지 않고 알린다", () => {
+    fill();
+    const s = useWindowStore.getState();
+    [m1, m2, m3, m4, m5].forEach((id) => s.setWindowDirty(id, true));
+
+    expect(
+      useWindowStore.getState().openNewInstance("route", { id: "m6", title: "메뉴6", href: "/m6" }),
+    ).toBe(false);
+    expect(useWindowStore.getState().duplicate(m6)).toBe(false);
+
+    const st = useWindowStore.getState();
+    expect(Object.keys(st.windows)).toHaveLength(MAX_WINDOWS);
+    expect(st.focusedId).toBe(m6);
+    expect(toastWarning).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * 스포트라이트(앨범) 중 연 창 — 전수검사 2026-09-11: 사이드바·메뉴 판·팰릿·알림으로 연 창이 포커스만 받고
+ * 위에 안 올라가 **투명(opacity 0)·클릭 불가**로 떴다(아래 카드 줄에 카드만 한 장 늘었다).
+ * 원장 결정 = 앨범 위로 올린다(카드 클릭과 같은 규칙: 최대 3개, 넘치면 가장 오래 올라와 있던 것부터 내림).
+ */
+describe("window-store 스포트라이트 중 연 창은 앨범 위로 올린다", () => {
+  beforeEach(reset);
+
+  const STU = windowId("route", "students");
+  const CLS = windowId("route", "classes");
+  const MEET = windowId("route", "meetings");
+  const openR = (id: string) =>
+    useWindowStore.getState().open("route", { id, title: id, href: `/${id}` });
+  /** 앨범 — 수업목록만 위, 원생목록은 아래 카드 줄. */
+  function album() {
+    openR("students");
+    openR("classes");
+    useWindowStore.getState().enterSpotlight(CLS);
+    expect(useWindowStore.getState().spotlightRaised).toEqual([CLS]);
+  }
+
+  it("🔴 새 창은 포커스만 받고 가려지지 않는다 — 위로 올라온다", () => {
+    album();
+    openR("meetings");
+    const st = useWindowStore.getState();
+    expect(st.spotlight).toBe(true);
+    expect(st.focusedId).toBe(MEET);
+    expect(st.spotlightRaised).toContain(MEET);
+  });
+
+  it("🔴 아래 카드 줄에 있던 창을 다시 열어도 위로 올라온다", () => {
+    album();
+    openR("students");
+    expect(useWindowStore.getState().spotlightRaised).toContain(STU);
+  });
+
+  it("새 인스턴스(shift+클릭)·복원도 같은 규칙", () => {
+    album();
+    useWindowStore.getState().openNewInstance("route", { id: "classes", title: "classes", href: "/classes" });
+    expect(useWindowStore.getState().spotlightRaised).toContain(`${CLS}#1`);
+
+    useWindowStore.getState().minimize(STU); // 카드 줄의 창을 최소화했다가
+    useWindowStore.getState().restore(STU); // 되살리면
+    expect(useWindowStore.getState().spotlightRaised).toContain(STU);
+    expect(useWindowStore.getState().focusedId).toBe(STU);
+  });
+
+  it("위에 올라오는 창은 최대 3개 — 넘치면 가장 오래 올라와 있던 것부터 내린다", () => {
+    album(); // [수업목록]
+    openR("meetings");
+    openR("staff");
+    openR("billing");
+    expect(useWindowStore.getState().spotlightRaised).toEqual([
+      MEET,
+      windowId("route", "staff"),
+      windowId("route", "billing"),
+    ]);
+  });
+
+  it("스포트라이트가 아니면 아무것도 올리지 않는다", () => {
+    openR("students");
+    useWindowStore.getState().restore(STU);
+    expect(useWindowStore.getState().spotlightRaised).toEqual([]);
+  });
+});
+
+/**
+ * 리사이즈 바닥 = 창이 **지금 보는 화면**의 최소 크기 — 경로형 면이 부모 창 id로 합쳐진 뒤(전수검사 2026-09-11)
+ * 출석부 창(1280) 안에서 뜬 출결 모드(560)가 1280에서 멈췄다. 여는 크기는 그대로 창 id 기준이다.
+ */
+describe("window-store resizeBy() — 최소 크기는 창이 지금 보는 화면 기준", () => {
+  const ATT = windowId("route", "attendance");
+  const QUICK = ROUTE_WINDOW_SIZE["attendance/quick"];
+  let bounds: { width: number; height: number };
+  beforeEach(() => {
+    reset();
+    bounds = useWindowStore.getState().bounds;
+    useWindowStore.setState({ bounds: { width: 1600, height: 1000 } });
+  });
+  afterEach(() => {
+    useWindowStore.setState({ bounds });
+  });
+
+  it("🔴 출석부 창에서 출결 모드를 보고 있으면 출결 모드 폭까지 줄어든다(1280에서 멈추지 않는다)", () => {
+    useWindowStore.getState().open("route", { id: "attendance", title: "출결 모드", href: "/attendance/quick" });
+    expect(useWindowStore.getState().windows[ATT]?.rect.w).toBe(ROUTE_WINDOW_SIZE.attendance.w); // 여는 크기는 id 기준
+    useWindowStore.getState().resizeBy(ATT, { x: 0, y: 0, w: 1280, h: 900 }, "e", -2000, 0);
+    expect(useWindowStore.getState().windows[ATT]?.rect.w).toBe(QUICK.w);
+  });
+
+  it("🔴 다른 메뉴로 드릴인한 화면은 종전대로 창 크기 — 원생 창 안의 콜&상담 상세가 바닥을 1120으로 올리지 않는다", () => {
+    const STU = windowId("route", "students");
+    useWindowStore.getState().open("route", { id: "students", title: "원생목록", href: "/students" });
+    useWindowStore.getState().observeIframe(STU, { title: "원생목록", url: "/students?embed=1" });
+    useWindowStore.getState().observeIframe(STU, { title: "상담 상세", url: "/enrollment/abc?embed=1" });
+    useWindowStore.getState().resizeBy(STU, { x: 0, y: 0, w: 1300, h: 900 }, "e", -2000, 0);
+    expect(useWindowStore.getState().windows[STU]?.rect.w).toBe(ROUTE_WINDOW_SIZE.students.w);
+  });
+
+  it("같은 창이 월별 출석부로 돌아오면(뒤로 기록 맨 위) 다시 1280에서 멈춘다", () => {
+    useWindowStore.getState().open("route", { id: "attendance", title: "출결 모드", href: "/attendance/quick" });
+    useWindowStore.getState().observeIframe(ATT, { title: "출결 모드", url: "/attendance/quick?embed=1" });
+    useWindowStore.getState().observeIframe(ATT, { title: "출석부", url: "/attendance?embed=1" });
+    useWindowStore.getState().resizeBy(ATT, { x: 0, y: 0, w: 1400, h: 900 }, "e", -2000, 0);
+    expect(useWindowStore.getState().windows[ATT]?.rect.w).toBe(ROUTE_WINDOW_SIZE.attendance.w);
+  });
+});
+
+/**
+ * 보관(닫힌) 창 되살리기 — 리뷰 2026-09-11: 되살리기가 창 개수 한도를 우회했고(7개 → 다음 새 창이 둘을 밀어냄),
+ * '첫 화면' 규칙이 메뉴 입구에만 있어 창 링크·알림·인쇄로 되살리면 옛 상세와 ←가 그대로였다.
+ */
+describe("window-store 보관 창 되살리기 — 창 개수 한도·첫 화면·새 인스턴스", () => {
+  beforeEach(() => {
+    reset();
+    toastWarning.mockClear();
+  });
+
+  const A = windowId("route", "a");
+  const openA = () => useWindowStore.getState().open("route", { id: "a", title: "가", href: "/a" });
+  const openM = (n: number) =>
+    useWindowStore.getState().open("route", { id: `m${n}`, title: `메뉴${n}`, href: `/m${n}` });
+  /** 가 창에서 상세까지 들어갔다가 닫는다(보관). */
+  function closeAtDetail() {
+    openA();
+    useWindowStore.getState().observeIframe(A, { title: "가", url: "/a?embed=1" });
+    useWindowStore.getState().observeIframe(A, { title: "상세", url: "/a/x?embed=1" });
+    useWindowStore.getState().close(A);
+    expect(useWindowStore.getState().cached).toContain(A);
+  }
+
+  it("🔴 되살려도 한도를 넘지 않는다 — 뒤 창 하나를 밀어내고, 다음 새 창이 둘을 한꺼번에 밀지 않는다", () => {
+    closeAtDetail();
+    for (let i = 1; i <= MAX_WINDOWS; i++) openM(i);
+
+    expect(openA()).toBe(true);
+    let st = useWindowStore.getState();
+    expect(st.order).toHaveLength(MAX_WINDOWS);
+    expect(st.order).toContain(A);
+    expect(st.windows[windowId("route", "m1")]).toBeFalsy();
+
+    openM(7);
+    st = useWindowStore.getState();
+    expect(st.order).toHaveLength(MAX_WINDOWS);
+    expect(st.windows[windowId("route", "m2")]).toBeFalsy();
+    expect(st.windows[windowId("route", "m3")]).toBeTruthy(); // 한 번에 하나만
+  });
+
+  it("자리가 없으면 되살리지 않고 알린다", () => {
+    closeAtDetail();
+    for (let i = 1; i <= MAX_WINDOWS; i++) openM(i);
+    for (let i = 1; i < MAX_WINDOWS; i++) useWindowStore.getState().setWindowDirty(windowId("route", `m${i}`), true);
+
+    expect(openA()).toBe(false);
+    const st = useWindowStore.getState();
+    expect(st.cached).toContain(A);
+    expect(st.windows[A]?.minimized).toBe(true);
+    expect(st.order).not.toContain(A);
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔴 어느 입구든 첫 화면 주소로 되살리면 첫 화면으로 — 기록 [첫 화면]·← 없음·'첫 화면으로' 표식", () => {
+    closeAtDetail();
+    openA(); // 창 링크·알림·인쇄처럼 openMenuWindow를 안 거치는 입구도 같은 store.open
+    const st = useWindowStore.getState();
+    expect(st.nav[A]).toEqual(["/a"]);
+    expect(st.live[A]?.canBack).toBe(false);
+    expect(st.homeNonce[A]).toBe(1);
+  });
+
+  it("첫 화면에서 닫았는데 기록이 여러 칸이면 기록만 줄이고 다시 불러오지 않는다", () => {
+    openA();
+    const s = useWindowStore.getState();
+    s.observeIframe(A, { title: "가", url: "/a?embed=1" });
+    s.observeIframe(A, { title: "상세", url: "/a/x?embed=1" });
+    s.observeIframe(A, { title: "가", url: "/a?embed=1" }); // 창 안 링크로 목록에 돌아옴 — 기록 3칸
+    useWindowStore.getState().close(A);
+
+    openA();
+    const st = useWindowStore.getState();
+    expect(st.nav[A]).toEqual(["/a?embed=1"]);
+    expect(st.live[A]?.canBack).toBe(false);
+    expect(st.homeNonce[A]).toBeUndefined();
+  });
+
+  it("🔴 다른 화면(면)으로 옮기면 ←를 즉시 거둔다 — 새 문서가 뜨기 전 옛 ←로 고른 화면이 취소되지 않게", () => {
+    openA();
+    const s = useWindowStore.getState();
+    s.observeIframe(A, { title: "가", url: "/a?embed=1" });
+    s.observeIframe(A, { title: "상세", url: "/a/x?embed=1" });
+
+    useWindowStore.getState().open("route", { id: "a", title: "가 — 면", href: "/a/face" });
+
+    const st = useWindowStore.getState();
+    expect(st.windows[A]?.params.href).toBe("/a/face");
+    expect(st.nav[A]).toEqual(["/a/face"]);
+    expect(st.live[A]).toEqual({ title: "가 — 면", canBack: false });
+    expect(st.homeNonce[A]).toBeUndefined(); // 주소가 바뀌면 iframe src 교체가 옮긴다
+  });
+
+  it("🔴 원본이 보관 중이면 shift+클릭은 새 번호 대신 원본을 되살린다", () => {
+    openA();
+    useWindowStore.getState().close(A);
+
+    useWindowStore.getState().openNewInstance("route", { id: "a", title: "가", href: "/a" });
+
+    const st = useWindowStore.getState();
+    expect(st.order).toEqual([A]);
+    expect(st.windows[`${A}#1`]).toBeFalsy();
+    expect(st.cached).not.toContain(A);
+    expect(st.windows[A]?.minimized).toBe(false);
+  });
+});
+
+/**
+ * 녹음 중·미저장 창의 이동 — 리뷰 2026-09-11: ←·메뉴 '첫 화면으로'가 녹음 중인 창에도 걸렸고, 미저장 창에선 이동 **전에**
+ * 기록을 바꿔 떠나기 확인에서 '머무르기'를 고르면 기록과 화면이 어긋났다.
+ */
+describe("window-store 녹음 중·미저장 창의 이동", () => {
+  beforeEach(() => {
+    reset();
+    toastWarning.mockClear();
+  });
+
+  const A = windowId("route", "a");
+  function atDetail() {
+    useWindowStore.getState().open("route", { id: "a", title: "가", href: "/a" });
+    useWindowStore.getState().observeIframe(A, { title: "가", url: "/a?embed=1" });
+    useWindowStore.getState().observeIframe(A, { title: "상세", url: "/a/x?embed=1" });
+  }
+
+  it("🔴 녹음 중인 창은 어느 입구로도 다른 화면으로 옮기지 않는다 — 앞으로만 부르고 이유를 알린다", () => {
+    atDetail();
+    useWindowStore.getState().setWindowBusy(A, true);
+
+    useWindowStore.getState().open("route", { id: "a", title: "가 — 면", href: "/a/face" });
+
+    const st = useWindowStore.getState();
+    expect(st.windows[A]?.params.href).toBe("/a");
+    expect(st.nav[A]).toHaveLength(2);
+    expect(st.focusedId).toBe(A);
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔴 녹음 중이면 ←·첫 화면이 아무것도 바꾸지 않는다(첫 화면은 이유를 알린다)", () => {
+    atDetail();
+    useWindowStore.getState().setWindowBusy(A, true);
+
+    expect(useWindowStore.getState().backNav(A)).toBeNull();
+    expect(useWindowStore.getState().homeNav(A)).toBeNull();
+    expect(useWindowStore.getState().nav[A]).toHaveLength(2);
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it("🔴 미저장 창의 ←는 기록을 바로 바꾸지 않는다 — '머무르기'면 그대로, 새 문서가 그 주소로 뜨면 그때 바꾼다", () => {
+    atDetail();
+    useWindowStore.getState().setWindowDirty(A, true);
+
+    expect(useWindowStore.getState().backNav(A)).toBe("/a?embed=1");
+    let st = useWindowStore.getState();
+    expect(st.nav[A]).toHaveLength(2); // 떠나기 확인이 떠 있는 동안
+    expect(st.live[A]?.canBack).toBe(true);
+
+    // 옛 문서의 보고(제목 변경 등)가 와도 의도는 남는다
+    useWindowStore.getState().observeIframe(A, { title: "상세", url: "/a/x?embed=1" });
+    // '떠나기'를 고르면 새 문서가 그 주소로 뜬다 — 새 문서의 첫 로드 보고(RouteWindow onLoad)
+    useWindowStore.getState().observeIframe(A, { title: "가", url: "/a?embed=1", load: true });
+    st = useWindowStore.getState();
+    expect(st.nav[A]).toEqual(["/a?embed=1"]);
+    expect(st.live[A]?.canBack).toBe(false);
+    expect(st.pendingNav[A]).toBeUndefined();
+  });
+
+  it("미저장 창에서 '머무르기' 뒤 창 안에서 다른 곳으로 가면 의도는 버리고 종전대로 쌓는다", () => {
+    atDetail();
+    useWindowStore.getState().setWindowDirty(A, true);
+    useWindowStore.getState().backNav(A);
+
+    useWindowStore.getState().observeIframe(A, { title: "수정", url: "/a/x/edit?embed=1" });
+
+    const st = useWindowStore.getState();
+    expect(st.nav[A]).toEqual(["/a?embed=1", "/a/x?embed=1", "/a/x/edit?embed=1"]);
+    expect(st.pendingNav[A]).toBeUndefined();
+  });
+
+  it("미저장 창의 첫 화면 이동도 같다 — 새 문서가 뜰 때 기록을 첫 화면 하나로", () => {
+    atDetail();
+    useWindowStore.getState().setWindowDirty(A, true);
+
+    expect(useWindowStore.getState().homeNav(A)).toBe("/a");
+    expect(useWindowStore.getState().nav[A]).toHaveLength(2);
+
+    useWindowStore.getState().observeIframe(A, { title: "가", url: "/a?embed=1", load: true });
+    expect(useWindowStore.getState().nav[A]).toEqual(["/a?embed=1"]);
+  });
+
+  it("🔴 '머무르기' 뒤 같은 문서의 보고는 첫 화면 의도를 소비하지 않는다 — 새 문서의 로드 보고만", () => {
+    // 지금 문서의 경로가 첫 화면과 같고 쿼리만 다른 경우(달을 옮긴 목록) — 경로만 보면 '도착'으로 오인한다.
+    useWindowStore.getState().open("route", { id: "a", title: "가", href: "/a" });
+    const s = useWindowStore.getState();
+    s.observeIframe(A, { title: "가", url: "/a?embed=1" });
+    s.observeIframe(A, { title: "상세", url: "/a/x?embed=1" });
+    s.observeIframe(A, { title: "가 10월", url: "/a?month=10&embed=1" });
+    useWindowStore.getState().setWindowDirty(A, true);
+    expect(useWindowStore.getState().homeNav(A)).toBe("/a");
+
+    // '머무르기' — 같은 문서가 제목을 바꿔 보고한다
+    useWindowStore.getState().observeIframe(A, { title: "가 10월 · 수정 중", url: "/a?month=10&embed=1" });
+    expect(useWindowStore.getState().nav[A]).toHaveLength(3);
+    expect(useWindowStore.getState().live[A]?.canBack).toBe(true);
+
+    // 나중에 진짜로 떠나 새 문서가 뜨면 그때 첫 화면 하나로
+    useWindowStore.getState().observeIframe(A, { title: "가", url: "/a?embed=1", load: true });
+    expect(useWindowStore.getState().nav[A]).toEqual(["/a?embed=1"]);
+  });
+});
+
+describe("window-store 해시만 다른 주소는 같은 화면", () => {
+  beforeEach(reset);
+  const A = windowId("route", "a");
+
+  it("🔴 첫 화면 주소에 해시가 있어도 해시만 다르면 이미 첫 화면 — 다시 눌러도 옮기지 않고, 되살려도 다시 불러오지 않는다", () => {
+    // 해시만 다른 이동은 새 문서 로드가 없어 스켈레톤이 영영 안 걷힌다(재리뷰 2026-09-11).
+    useWindowStore.getState().open("route", { id: "a", title: "가", href: "/a#top" });
+    useWindowStore.getState().observeIframe(A, { title: "가", url: "/a?embed=1" });
+    expect(useWindowStore.getState().homeNav(A)).toBeNull();
+
+    useWindowStore.getState().close(A);
+    useWindowStore.getState().open("route", { id: "a", title: "가", href: "/a#top" });
+    expect(useWindowStore.getState().homeNonce[A]).toBeUndefined();
+  });
+});
+
+describe("window-store 없는 창의 보고는 흔적을 되살리지 않는다", () => {
+  beforeEach(reset);
+
+  it("🔴 닫힌(파괴된) 창의 늦은 제목·주소·잠금 보고는 버린다 — 같은 id로 다시 연 창이 물려받지 않게", () => {
+    const A = windowId("route", "a");
+    useWindowStore.getState().open("route", { id: "a", title: "가", href: "/a" });
+    useWindowStore.getState().setWindowDirty(A, true); // 미저장 창은 보관하지 않고 파괴한다
+    useWindowStore.getState().close(A);
+
+    useWindowStore.getState().observeIframe(A, { title: "상세", url: "/a/x?embed=1" });
+    useWindowStore.getState().setWindowBusy(A, true);
+
+    const st = useWindowStore.getState();
+    expect(st.windows[A]).toBeFalsy();
+    expect(st.nav[A]).toBeUndefined();
+    expect(st.live[A]).toBeUndefined();
+    expect(st.busy[A]).toBeUndefined();
   });
 });

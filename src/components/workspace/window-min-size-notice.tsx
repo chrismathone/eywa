@@ -50,7 +50,11 @@ export function WindowMinSizeNotice() {
   if (!inFrame || !size) return null;
   const win = windowIdForHref(pathname);
   if (!win) return null;
-  const min = windowMinSize(win.id);
+  // 🔴 이 화면(주소) 기준 — 경로형 면은 부모 창 id를 쓰므로 id로만 재면 출결 모드가 출석부(1280) 기준이 됐다
+  //    (전수검사 2026-09-11). 같은 메뉴 안에서는 리사이즈 바닥(routeMinSize)과 같은 답이다.
+  // ⚠️ 다른 메뉴로 드릴인한 화면(원생 창 안의 콜&상담 상세)에선 **다르다** — 여기 id는 같은 주소에서 뽑아 늘 그 화면의
+  //    메뉴라 안내는 그 화면 크기로 재고, 바닥은 창의 원래 id(원생) 크기로 잰다(창 안에서는 창의 원래 id를 모른다).
+  const min = windowMinSize(win.id, pathname);
   const [w] = size.split("x").map(Number);
   if (!Number.isFinite(w)) return null;
   // 창 rect의 최소 폭에서 크롬(테두리)을 뺀 것이 본문 iframe의 최소 폭이다. 1px은 반올림 오차라 위반이 아니다.

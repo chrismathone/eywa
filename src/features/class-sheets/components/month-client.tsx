@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PeriodNav } from "@/components/period-nav";
@@ -61,6 +62,7 @@ export function MonthClient({
   fromWeek: string | null;
 }) {
   const router = useRouter();
+  const embed = useEmbed();
   const [view, setView] = useState<EcsMonthView>(initialView);
   const [display, setDisplay] = useState(initialDisplay);
   const [role, setRole] = useState<GoalRole>("homeroom");
@@ -158,8 +160,11 @@ export function MonthClient({
   /**
    * 🔴 이동은 **편집 저장을 기다린 뒤**(주간 시트가 `store.flush()`를 기다리는 것과 같은 순서) —
    *    안 기다리면 방금 친 글자가 언마운트에 쓸려 간다.
+   * ⚠️ 창 안이면 이동 주소에 embed=1을 싣는다(반 선택·달 이동·면 전환이 전부 여기를 지난다) — 빼면 창 주소 되붙이기
+   *    (EmbedUrlKeeper)에 기대게 되고, 그 뒤 첫 새로고침이 라우터 트리와 어긋나 한 번 더 받는다(전수검사 리뷰 2026-09-11).
    */
-  const navigate = (href: string) => flushEdits().then(() => router.push(href));
+  const navigate = (href: string) =>
+    flushEdits().then(() => router.push(embed ? withEmbed(href) : href));
 
   const toggleChip = (key: keyof EcsMonthDisplay, label: string, title: string) => (
     <button

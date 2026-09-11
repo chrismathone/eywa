@@ -9,6 +9,8 @@ import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import { copyGoalsFromPreviousMonth, setMyMcsFontSize } from "../server/actions";
 import {
   MCS_FONT_SIZES,
@@ -44,6 +46,7 @@ export function MonthClient({
   const [fontSize, setFontSize] = useState<McsFontSize>(data.fontSize);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
+  const inFrame = useInFrame();
   const { goals, setField, flushAll, savedAt, error, dismissError } = useStudentGoals({
     classId: data.classId,
     month: data.month,
@@ -54,8 +57,11 @@ export function MonthClient({
   /**
    * 화면을 떠나는 이동은 전부 이 하나를 탄다 — 밀린 목표 저장을 끝낸 뒤 **하드 내비게이션**.
    * (서버 액션 직후의 `router.push`는 삼켜진다 — [[#102]]. 반 전환·달 이동이 같은 순서를 지킨다.)
+   * ⚠️ 창(iframe) 안이면 `embed=1`을 유지한다(원생 삭제와 같은 규칙) — 빼면 옮긴 달·반이 창 안에 **전체 셸**로
+   *    서버 렌더된다(창 전용 부품이 빠지고 공지 팝업·팰릿이 창 안에 들어온다, 전수검사 2026-09-11).
    */
-  const navigate = (href: string) => flushAll().then(() => window.location.assign(href));
+  const navigate = (href: string) =>
+    flushAll().then(() => window.location.assign(inFrame ? withEmbed(href) : href));
   const thisMonth = data.today.slice(0, 7);
   const relation = data.month === thisMonth ? "current" : data.month < thisMonth ? "past" : "future";
 
@@ -93,7 +99,14 @@ export function MonthClient({
         setCopyMsg("가져올 목표가 없습니다(지난 달 목표가 없거나 이미 다 적혀 있습니다).");
         return;
       }
-      window.location.reload();
+      // 창 안인데 주소에 embed가 없으면(목록 카드의 `<Link>`로 들어온 경우) 그대로 새로고침하면 창 안에 전체
+      // 셸이 뜬다 — embed를 실은 같은 주소로 다시 연다(replace라 뒤로가기 칸은 reload처럼 늘지 않는다).
+      if (inFrame && new URLSearchParams(window.location.search).get("embed") !== "1") {
+        const { pathname, search, hash } = window.location;
+        window.location.replace(withEmbed(`${pathname}${search}${hash}`));
+      } else {
+        window.location.reload();
+      }
     } catch {
       setCopyMsg("가져오지 못했습니다.");
     } finally {

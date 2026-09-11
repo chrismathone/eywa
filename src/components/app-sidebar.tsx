@@ -14,9 +14,16 @@ import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
-import { navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
+import { findNavItem, navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
 import { type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
-import { HUB_GROUPS, SUPPORT_GROUPS, frequentFor, hubGroupsFor, type HubGroup } from "@/lib/menu-hub";
+import {
+  HUB_GROUPS,
+  SUPPORT_GROUPS,
+  frequentFor,
+  hubGroupOfPath,
+  hubGroupsFor,
+  type HubGroup,
+} from "@/lib/menu-hub";
 import type { MenuLayout } from "@/features/owner/menu-layout";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import { useMenuHub } from "./workspace/menu-hub-store";
@@ -94,7 +101,9 @@ function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
  * UserMenu(로그아웃 포함)는 하단에 고정.
  *
  * 활성 표시(데스크톱): 메뉴 클릭이 라우트 이동이 아니라 플로팅 창을 열므로 active는 윈도우 스토어로 구동한다 —
- *  · 포커스된 창의 메뉴 = 풀 하이라이트
+ *  · 포커스된 창이 **지금 보여 주는 주소**의 메뉴 줄·업무군 = 풀 하이라이트(창 id가 아니라 주소 — 알림·링크로 연
+ *    상세 창도, 창 안에서 옮겨 간 화면도 같은 규칙으로 읽힌다)
+ *  · 메뉴 판(허브)이 떠 있음 = 그 판의 업무군만(판이 캔버스를 덮어 창은 안 보인다)
  *  · 포커스된 창이 없음(빈 데스크톱) = 아무 메뉴도 활성 아님
  * 🔴 **열려 있는 다른 창은 표시하지 않는다**(원장 2026-09-09 *"열려있는 창 모두 표시하지말고 현재 보고 있는
  *    창만 탭에서 표시"*) — 창을 여럿 띄우면 줄이 여럿 칠해져 "지금 어디를 보고 있나"가 안 읽혔다.
@@ -185,7 +194,18 @@ export function AppSidebar({
   );
   const openIds = new Set(openKey ? openKey.split("|") : []);
   const hasFocus = isDesktop && !!focusedId && openIds.has(focusedId);
-  // 포커스된 창이 **지금 보고 있는 주소** — 하부탭 활성 판정에 쓴다.
+  // 포커스된 창이 **지금 보여 주는 주소**(창 안 이동을 따라가는 nav 스택 맨 위, 아직 보고가 없으면 창의 첫 주소) —
+  // '지금 보는 곳' 표시의 단일 입력. 🔴 창 id로 비교하지 않는다(2026-09-11 전수검사): 알림·링크로 연 상세 창
+  // (`route:students/abc`)은 메뉴 id가 아니라 켜지는 줄이 없었고, 창 안에서 다른 화면으로 옮겨 가도 옛 줄이 켜져 있었다.
+  const focusedPath = useWindowStore((s) => {
+    const id = s.focusedId;
+    if (!id) return null;
+    const w = s.windows[id];
+    // 학생 요약 창(검색 팰릿의 원생 결과 — peek)은 주소가 없다. 보여 주는 것이 곧 그 원생이라 원생 상세 주소로 읽는다.
+    if (w?.kind === "student") return `/students/${w.params.id}`;
+    const stack = s.nav[id];
+    return stack?.[stack.length - 1] ?? w?.params.href ?? null;
+  });
   // 버튼형 메뉴(원장 2026-09-07 확정) — 왼쪽은 **업무군**만 세우고, 그 업무의 메뉴는 본문 버튼이 든다.
   // 🔴 목적지·권한 판정은 [`menu-hub.ts`](src/lib/menu-hub.ts) 한 곳 — 사이드바가 메뉴를 다시 적지 않는다.
   const gate = {
@@ -291,7 +311,7 @@ export function AppSidebar({
                     onShowDesktop={showDesktop}
                     onOpen={closeHub}
                     pathname={pathname}
-                    focusedId={focusedId}
+                    focusedPath={focusedPath}
                     hasFocus={hasFocus}
                     hubOpen={hubOpenId !== null}
                   />
@@ -314,7 +334,7 @@ export function AppSidebar({
                 onCloseHub={closeHub}
                 hubOpenId={hubOpenId}
                 pathname={pathname}
-                focusedId={focusedId}
+                focusedPath={focusedPath}
                 hasFocus={hasFocus}
               />
             ))}
@@ -335,7 +355,7 @@ export function AppSidebar({
                   onCloseHub={closeHub}
                   hubOpenId={hubOpenId}
                   pathname={pathname}
-                  focusedId={focusedId}
+                  focusedPath={focusedPath}
                   hasFocus={hasFocus}
                 />
               ))}
@@ -499,24 +519,27 @@ function railState(
   {
     isDesktop,
     pathname,
-    focusedId,
+    focusedPath,
     hasFocus,
     hubOpen = false,
   }: {
     isDesktop: boolean;
     pathname: string;
-    focusedId: string | null;
+    /** 포커스 창이 지금 보여 주는 주소(없으면 null) — 창 id가 아니라 이 주소가 어느 메뉴인지로 판정한다. */
+    focusedPath: string | null;
     hasFocus: boolean;
-    /** 메뉴 허브가 떠 있나 — 그동안은 배경 라우트(운영실) 표시를 양보한다(활성 줄이 둘이면 지금 어디인지 모호). */
+    /**
+     * 메뉴 허브가 떠 있나 — 그동안은 배경 라우트(운영실)도, 창 줄도 표시를 양보한다(허브가 캔버스를 불투명하게
+     * 덮어 그 화면들은 지금 안 보인다 — 켜 두면 허브의 업무군과 두 곳이 동시에 칠해진다).
+     */
     hubOpen?: boolean;
   },
 ) {
   const presentation = navPresentation(item);
-  const winId = windowId("route", item.menuKey);
   const active = isDesktop
     ? presentation === "desktop"
       ? !hasFocus && !hubOpen && isItemActive(item.href, pathname)
-      : hasFocus && focusedId === winId
+      : hasFocus && !hubOpen && !!focusedPath && findNavItem(focusedPath)?.menuKey === item.menuKey
     : isItemActive(item.href, pathname);
   // 🔴 열려 있는 창은 표시하지 않는다(원장 2026-09-09) — 표시는 **지금 보고 있는 창 하나**뿐이다.
   //    `openIds`는 포커스 판정(hasFocus)에만 남는다.
@@ -532,7 +555,7 @@ function MenuRail({
   onShowDesktop,
   onOpen,
   pathname,
-  focusedId,
+  focusedPath,
   hasFocus,
   hubOpen = false,
 }: {
@@ -544,11 +567,11 @@ function MenuRail({
   /** 화면을 열면 떠 있던 메뉴 허브는 **배경으로 내린다**(작업 화면이 앞으로 온다 — 배경은 안 바뀐다). */
   onOpen: () => void;
   pathname: string;
-  focusedId: string | null;
+  focusedPath: string | null;
   hasFocus: boolean;
   hubOpen?: boolean;
 }) {
-  const st = railState(item, { isDesktop, pathname, focusedId, hasFocus, hubOpen });
+  const st = railState(item, { isDesktop, pathname, focusedPath, hasFocus, hubOpen });
   return (
     <div
       onClick={() => {
@@ -583,7 +606,7 @@ function GroupRail({
   onCloseHub,
   hubOpenId,
   pathname,
-  focusedId,
+  focusedPath,
   hasFocus,
 }: {
   group: HubGroup;
@@ -596,7 +619,7 @@ function GroupRail({
   onCloseHub: () => void;
   hubOpenId: string | null;
   pathname: string;
-  focusedId: string | null;
+  focusedPath: string | null;
   hasFocus: boolean;
 }) {
   const direct = group.kind === "direct" ? navItemByKey(group.items[0]!.menuKey) : undefined;
@@ -610,16 +633,18 @@ function GroupRail({
         onShowDesktop={onShowDesktop}
         onOpen={onCloseHub}
         pathname={pathname}
-        focusedId={focusedId}
+        focusedPath={focusedPath}
         hasFocus={hasFocus}
         hubOpen={hubOpenId !== null}
       />
     );
   }
-  // 허브가 떠 있거나, 이 업무군의 화면이 지금 포커스면 활성.
+  // 허브가 떠 있으면 그 허브의 업무군, 아니면 포커스 창이 **지금 보여 주는 주소**가 속한 업무군이 활성.
+  // 🔴 허브가 떠 있는 동안엔 창 쪽 표시를 끈다 — 허브가 캔버스를 불투명하게 덮어 그 창은 안 보인다
+  //    (켜 두면 두 업무군이 동시에 칠해졌다, 2026-09-11 전수검사). 판정은 `hubGroupOfPath` 한 곳.
   const hubOpen = hubOpenId === group.id;
   const focusedHere =
-    hasFocus && group.items.some((d) => windowId("route", d.menuKey) === focusedId);
+    hasFocus && hubOpenId === null && !!focusedPath && hubGroupOfPath(focusedPath)?.id === group.id;
   const active = hubOpen || focusedHere;
   // 🔴 **열려 있는 창을 표시하지 않는다**(원장 2026-09-09 *"열려있는 창 모두 표시하지말고 현재 보고 있는
   //    창만 탭에서 표시"*) — 창을 여럿 띄우면 줄이 여럿 칠해져 "지금 어디를 보고 있나"가 안 읽혔다.

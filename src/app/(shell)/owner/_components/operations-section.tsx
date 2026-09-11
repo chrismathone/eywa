@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import type { OperationsSettings } from "@/features/owner/settings-types";
 import { RESUME_DEPARTMENTS } from "@/features/staff/resume";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
@@ -14,6 +16,8 @@ import {
   StringListEditor,
 } from "./list-editors";
 
+const SUBJECTS_TAB = "/owner?tab=subjects";
+
 export function OperationsSection({
   initial,
   classrooms,
@@ -23,6 +27,7 @@ export function OperationsSection({
 }) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const set = (patch: Partial<OperationsSettings>) => setO((prev) => ({ ...prev, ...patch }));
+  const inFrame = useInFrame();
 
   return (
     // 강의실은 관계형 테이블(classrooms) — jsonb 설정과 달리 자체 CRUD로 즉시 저장(중첩 <form> 방지 위해 폼 밖).
@@ -37,7 +42,13 @@ export function OperationsSection({
           <>
             1교시가 언제부터 언제까지인지 등 평일 수업 시간대. 과목 전용 교시가 없는 과목의 시간표 교시 축에
             적용됩니다. 과목별 교시는{" "}
-            <a href="/owner?tab=subjects" className="text-primary underline underline-offset-2">
+            {/* 🔴 `<Link>`가 아니라 맨 `<a>`(하드 이동)다 — 이 폼의 미저장 가드(useUnsavedGuard)는 `beforeunload`로
+                이탈을 막는데 소프트 이동은 그걸 안 거쳐 적던 교시가 말없이 날아간다. 대신 창 안이면 embed=1을
+                싣는다(빼면 학원 설정 창 안에 전체 셸이 뜬다 — 원생 삭제와 같은 규칙, 전수검사 2026-09-11). */}
+            <a
+              href={inFrame ? withEmbed(SUBJECTS_TAB) : SUBJECTS_TAB}
+              className="text-primary underline underline-offset-2"
+            >
               과목 운영 탭
             </a>
             에서.

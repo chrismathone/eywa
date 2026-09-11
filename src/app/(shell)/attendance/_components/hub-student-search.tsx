@@ -13,7 +13,9 @@
  * ⚠️ 결과 패널은 **툴바(relative)에 붙는 absolute**다 — 새 줄을 만들지 않는다(툴바 한 줄 규약).
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+// 결과 줄은 창 안에서 처음부터 embed를 싣는다(EmbedLink — 맨 Link면 창 주소 되붙이기에 기대게 되고 그 뒤 첫 새로고침이
+// 라우터 트리와 어긋나 한 번 더 받는다, 전수검사 리뷰 2026-09-11).
+import { EmbedLink } from "@/components/embed-link";
 import { StudentSearchBox } from "@/features/attendance/components/student-search-box";
 import { isSearchActive } from "@/features/attendance/student-search";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -173,7 +175,7 @@ export function HubStudentSearch({
                     </li>
                     {g.hits.map((h) => (
                       <li key={`${h.classId}:${h.studentId}`} className="col-span-full grid grid-cols-subgrid">
-                        <Link
+                        <EmbedLink
                           href={attHref({
                             // 강사가 정해지면 그 강사 **전체 출석부**(허브 카드와 같은 목적지),
                             // 담임이 없는 반(자리 등)은 그 반만 연다.
@@ -213,7 +215,7 @@ export function HubStudentSearch({
                           >
                             {h.attendLabel}
                           </span>
-                        </Link>
+                        </EmbedLink>
                       </li>
                     ))}
                   </Fragment>

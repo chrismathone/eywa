@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Popover } from "@base-ui/react/popover";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 
 /**
  * **`축: 값` 드롭다운 — 항목이 값이 아니라 href**(서버가 만든 주소로 이동한다).
@@ -58,6 +59,7 @@ export function HrefSelect({
   reselect?: boolean;
 }) {
   const router = useRouter();
+  const embed = useEmbed();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value) ?? null;
@@ -113,7 +115,9 @@ export function HrefSelect({
                           e.preventDefault();
                           if (isCurrent) return;
                           if (beforeNavigate && !beforeNavigate()) return;
-                          start(() => router.push(o.href!, { scroll: false }));
+                          // 창(iframe) 안이면 embed=1을 싣는다(PeriodNav·FaceTabs와 같은 규칙) — 빼면 뒤이은 새로고침이
+                          // 창 안에 전체 셸을 그린다. `<a href>`(새 탭 = 최상위)는 원래 주소 그대로 둔다.
+                          start(() => router.push(embed ? withEmbed(o.href!) : o.href!, { scroll: false }));
                         }}
                       >
                         <ItemBody label={o.label} hint={o.hint} isCurrent={isCurrent} />

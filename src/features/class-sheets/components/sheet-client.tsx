@@ -3,11 +3,12 @@
 // ECS 주간 시트 오케스트레이터 — state 소유·저장 큐·저널·presence·네비 flush.
 // 페이지가 key={classId:week}로 재마운트하므로 서버 데이터로 state가 재초기화된다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { EmbedLink } from "@/components/embed-link";
 // 강사뷰 화면 언어(2026-09-03) — 반 이름은 번역 대상이 아니고 안내·링크 글자만 사전을 탄다.
 import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { classNameFor } from "@/features/teacher-view/class-name";
 import { useRouter } from "next/navigation";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { toast } from "sonner";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import type { ClassSheetWeekData } from "../server/queries";
@@ -171,12 +172,13 @@ function TodayCardHead({
         {shown}
       </h2>
       {href ? (
-        <Link
+        // 창 안이면 embed=1을 싣는다(EmbedLink) — 오늘 면에서 주간 시트로 가는 자주 쓰는 링크.
+        <EmbedLink
           href={href}
           className="text-primary shrink-0 text-xs font-medium underline-offset-2 hover:underline"
         >
           {t("today.card.openWeek")}
-        </Link>
+        </EmbedLink>
       ) : null}
       {children}
     </div>
@@ -453,8 +455,13 @@ export function SheetClient({
   );
 
   // ── 네비(주/반 이동) — flush 성공 후에만 이동, 실패·미확정 시 중단(저널 보존) ─
+  // ⚠️ 창 안이면 이동 주소에 embed=1을 싣는다(반 선택·주 이동·면 전환이 전부 여기를 지난다) — 빼면 창 주소 되붙이기
+  //    (EmbedUrlKeeper)에 기대게 되고, 그 뒤 첫 새로고침이 라우터 트리와 어긋나 한 번 더 받는다(전수검사 리뷰 2026-09-11).
+  const embed = useEmbed();
   const navigate = useCallback(
-    async (href: string) => {
+    async (raw: string) => {
+      // 이동 주소는 여기서 한 번 정한다 — 아래 `router.push(href)` 모양은 출결 배선 가드가 잠근 순서다(저장 비운 뒤 이동).
+      const href = embed ? withEmbed(raw) : raw;
       const r = await store.flush();
       if (!r.ok) {
         const go = window.confirm(
@@ -465,7 +472,7 @@ export function SheetClient({
       await drainAttendanceSaves();
       router.push(href);
     },
-    [drainAttendanceSaves, router, store],
+    [drainAttendanceSaves, embed, router, store],
   );
 
   // ── 저널 복구 배너 적용 ────────────────────────────────────────────────────

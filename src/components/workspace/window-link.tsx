@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import type { MouseEvent, ReactNode } from "react";
-import { findNavItem, navPresentation } from "@/lib/navigation";
+import { findNavItem, navPresentation, SUBTABS_BY_MENU } from "@/lib/navigation";
+import { MENU_LABEL, type MenuKey } from "@/lib/permissions";
 import { useWindowStore } from "./window-store";
 import { useMenuHub } from "./menu-hub-store";
 import { useIsDesktop } from "./use-is-desktop";
@@ -17,11 +18,48 @@ import { cancelScheduledPrefetch, scheduleEmbedPrefetch } from "./prefetch-embed
  * **배경이 창에 가려 아무 일도 안 일어난 것처럼 보인다**([[#86]] — 원장 제보 2026-07-29:
  * "요청만 하고 받질 못함" = /me가 200인데 화면은 '열린 창이 없어요' 그대로).
  */
-const EXTRA_WINDOW_ROUTES: Record<string, string> = { "/me": "내 정보" };
+const EXTRA_WINDOW_ROUTES: Record<string, string> = {
+  "/me": "내 정보",
+  // 출석 키오스크 설정(원장 전용) — 사이드바에 없고 **도움말 링크가 유일한 입구**다. 창으로 못 열면 그 링크가
+  // 도움말 창을 통째로 키오스크 설정으로 바꾼다(2026-09-11 전수검사). id는 딥링크가 쓰던 경로 id 그대로.
+  "/kiosk-settings": MENU_LABEL.kiosk_settings,
+};
+
+const routePath = (href: string): string => href.split("?")[0].split("#")[0];
 
 /**
- * href(쿼리/해시 제외)를 창 id로 해석.
+ * 하부탭(`SUBTABS_BY_MENU`) 면의 창 — 메뉴 판·검색 팰릿이 여는 **그 창**과 글자까지 같은 id.
+ * - 경로로 갈리는 면(`/attendance/live`·`/attendance/quick`·`/shuttle/today` …) = **부모 메뉴 창**.
+ *   화면 안 면 탭이 이미 부모 창 안에서 바꿔 보여 주는 설계라 그쪽에 맞춘다(원장 결정 2026-09-11) — 입구마다
+ *   창 id가 갈리면 같은 화면이 두 벌 뜨고, 이미 떠 있는 창을 서로 못 알아본다.
+ * - `menuKey`를 단 독립 메뉴(`/mcs`) = 그 메뉴 창 — NAV_GROUPS에 없어 `findNavItem`으론 못 찾는다.
+ * 쿼리로 가르는 면(`/billing?tab=…`·`/owner?tab=…`)은 경로가 메뉴 루트와 같아 루트 판정이 먼저 잡는다(부모 창 그대로).
+ */
+function subTabWindow(path: string): { id: string; navLabel: string } | null {
+  for (const [parent, tabs] of Object.entries(SUBTABS_BY_MENU)) {
+    for (const t of tabs ?? []) {
+      if (routePath(t.href) !== path) continue;
+      return t.menuKey ? { id: t.menuKey, navLabel: MENU_LABEL[t.menuKey] } : { id: parent, navLabel: t.label };
+    }
+  }
+  return null;
+}
+
+/** 독립 메뉴 하부탭(`/mcs`)의 하위 경로(`/mcs/<반>/…`)가 속한 메뉴 — 메뉴 루트의 상세와 같은 규약(경로 id)으로 연다. */
+function subTabMenuUnder(path: string): MenuKey | null {
+  for (const tabs of Object.values(SUBTABS_BY_MENU)) {
+    for (const t of tabs ?? []) {
+      if (t.menuKey && path.startsWith(`${routePath(t.href)}/`)) return t.menuKey;
+    }
+  }
+  return null;
+}
+
+/**
+ * href(쿼리/해시 제외)를 창 id로 해석 — **창 id 규칙의 단일 소스**. 메뉴 판·검색 팰릿·창 링크·알림 벨·딥링크가
+ * 전부 이 함수를 지난다(갈리면 같은 화면이 입구마다 다른 창이 된다 — 가드 `window-identity.test.tsx`).
  * - 메뉴 루트(href === nav item href): id = menuKey (그 메뉴 창과 공유/토글).
+ * - 하부탭 면: 경로로 갈리는 면 = **부모 메뉴 창 id**, 독립 메뉴(`/mcs`) = 그 menuKey(`subTabWindow`).
  * - 상세·서브 라우트(/students/123, /staff/45/edit, /consultations/stats): id = 경로 기반 고유
  *   id("students/123" …) → 메뉴 창과 충돌하지 않음(첫 세그먼트 = menuKey라 아이콘도 부모 메뉴를 따름).
  * - 메뉴 영역 밖(외부·다운로드 등): null → 기본 네비게이션.
@@ -31,14 +69,19 @@ const EXTRA_WINDOW_ROUTES: Record<string, string> = { "/me": "내 정보" };
  *   (알림 "브리핑 준비됐습니다"의 착지 링크 — 적대적 리뷰 2026-09-03). 호출부(WindowLink·알림 벨)는 null이면 기본 이동으로 떨어진다.
  */
 export function windowIdForHref(href: string): { id: string; navLabel?: string } | null {
-  const path = href.split("?")[0].split("#")[0];
+  const path = routePath(href);
   const extra = EXTRA_WINDOW_ROUTES[path];
   if (extra) return { id: path.replace(/^\//, ""), navLabel: extra };
   const item = findNavItem(path);
-  if (!item) return null;
-  if (navPresentation(item) === "desktop" && item.href === path) return null;
-  if (item.href === path) return { id: item.menuKey, navLabel: item.label };
-  return { id: path.replace(/^\//, ""), navLabel: item.label };
+  if (item && item.href === path) {
+    if (navPresentation(item) === "desktop") return null;
+    return { id: item.menuKey, navLabel: item.label };
+  }
+  const face = subTabWindow(path);
+  if (face) return face;
+  if (item) return { id: path.replace(/^\//, ""), navLabel: item.label };
+  const menu = subTabMenuUnder(path);
+  return menu ? { id: path.replace(/^\//, ""), navLabel: MENU_LABEL[menu] } : null;
 }
 
 /**
@@ -61,6 +104,7 @@ export function WindowLink({
   onMouseMove,
   onNavigate,
   openOn = "click",
+  frameTarget = "self",
 }: {
   href: string;
   title?: string;
@@ -83,6 +127,14 @@ export function WindowLink({
    * **직접 이동**한다 — 단일 클릭을 삼켰으니 기본 네비게이션이 남아 있지 않다.
    */
   openOn?: "click" | "doubleClick";
+  /**
+   * 창(iframe) 안에서 눌렀을 때 어디로 여는가. 기본 `self` = 그 창 안에서 이동(드릴인 — 목록 → 상세).
+   * `window` = **부모 작업면에 그 화면의 창**을 연다(창 안 shift+클릭과 같은 `eywa-open-window` 신호) —
+   * 다른 메뉴로 가는 문(도움말의 메뉴 안내 등)이 쓴다. 드릴인이면 보던 창이 통째로 그 화면으로 바뀐다
+   * (2026-09-11 전수검사: 도움말 창이 학원 설정으로 바뀌었다).
+   * ⚠️ 창이 될 수 없는 주소(운영실 = 배경 · 메뉴 밖)는 여기서도 드릴인으로 떨어진다 — 그런 주소는 호출부가 가린다.
+   */
+  frameTarget?: "self" | "window";
 }) {
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
@@ -98,13 +150,20 @@ export function WindowLink({
       useWindowStore.getState().showDesktop();
     }
     if (!resolved) return false; // 메뉴 라우트가 아니면 기본 이동
-    // 창(iframe) 안에서 shift+클릭 = 드릴인 대신 **부모 워크스페이스에 새 플로팅 창**으로 연다.
+    // 창(iframe) 안에서 shift+클릭(또는 `frameTarget="window"`) = 드릴인 대신 **부모 워크스페이스에 플로팅 창**으로 연다.
     // iframe은 별도 문서라 window-store에 직접 접근 못 함 → 부모(workspace-canvas)에 postMessage하면
     // 그 리스너가 open("route")을 대신 호출한다(EmbedFocusSignal 브리지와 동일 방식).
-    if (inFrame && e.shiftKey) {
+    if (inFrame && (e.shiftKey || frameTarget === "window")) {
       e.preventDefault();
       window.parent.postMessage(
-        { type: "eywa-open-window", id: resolved.id, title: title ?? resolved.navLabel, href },
+        {
+          type: "eywa-open-window",
+          id: resolved.id,
+          title: title ?? resolved.navLabel,
+          href,
+          // Shift+클릭 = 최상위와 같은 뜻(같은 화면을 새 창으로 한 벌 더) — 받는 쪽(workspace-canvas)이 openNewInstance로 연다.
+          newInstance: e.shiftKey,
+        },
         window.location.origin,
       );
       return true;
@@ -153,9 +212,14 @@ export function WindowLink({
   // 임베드 iframe 내부에선 onClick이 창을 안 열고 일반 네비게이션으로 떨어진다(isDesktop=false).
   // 그 드릴인이 embed=1을 잃으면 하위 페이지가 풀 셸로 떠 사이드바가 이중 노출되므로, iframe 안의
   // 링크 href엔 embed=1을 유지한다(크롬리스 embed 분기로 self-heal). 최상위/모바일은 원본 href.
-  const linkHref = inFrame ? withEmbed(href) : href;
-  // BL4 — 데스크톱 최상위(창 열기)면 embed document, 그 외(모바일·iframe 드릴인)는 실제 이동 URL 프리워밍.
-  const prefetchEmbed = isDesktop && workspaceEnabled && !inFrame;
+  // ⚠️ `frameTarget="window"`로 창을 여는 링크는 창 안에서도 기본 이동이 없다 — 남는 건 Ctrl+클릭(새 탭 = 최상위
+  //    문서)뿐이라 원래 주소를 싣는다(embed가 붙으면 새 탭에 셸 없는 반쪽 화면이 뜬다).
+  const opensWindowFromFrame = frameTarget === "window" && windowIdForHref(href) !== null;
+  const linkHref = inFrame && !opensWindowFromFrame ? withEmbed(href) : href;
+  // BL4 — 예열은 **실제로 쓰일 문서**로 한다. 창 안에서는 창 열기 신호든 드릴인이든(위 `linkHref`가 withEmbed)
+  // 전부 embed 문서로 끝나고, 데스크톱 최상위는 창(embed 문서)을 연다. 모바일·작업면 없음만 원래 주소.
+  // 창 안에서 전체 셸 문서를 예열하면 아무도 안 쓰는 문서에 셸 렌더를 치른다(2026-09-11 리뷰 · 2026-09-12 재리뷰).
+  const prefetchEmbed = inFrame || (isDesktop && workspaceEnabled);
 
   return (
     <Link

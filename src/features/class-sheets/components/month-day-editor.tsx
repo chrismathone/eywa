@@ -19,6 +19,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { mondayOf } from "@/features/timetable/lib/week";
@@ -140,11 +141,14 @@ export function MonthDayEditor({
    * 채로 화면이 바뀌어, 주간 시트가 옛 값을 그린다(닫기와 같은 실패 모양). 주간 시트 자신도 이동 전에
    * 같은 순서를 지킨다(`sheet-client`의 `navigate`).
    */
+  // 창 안이면 embed=1을 싣는다 — 빼면 창 주소 되붙이기에 기대게 되고 그 뒤 첫 새로고침이 한 번 더 받는다(전수검사 리뷰 2026-09-11).
+  const embed = useEmbed();
   const goWeek = useCallback(() => {
     if (closing) return;
     setClosing(true);
-    void flushAll().then(() => router.push(`/ecs/${classId}?week=${mondayOf(date)}&day=${date}`));
-  }, [classId, closing, date, flushAll, router]);
+    const dest = `/ecs/${classId}?week=${mondayOf(date)}&day=${date}`;
+    void flushAll().then(() => router.push(embed ? withEmbed(dest) : dest));
+  }, [classId, closing, date, embed, flushAll, router]);
 
   return (
     <Dialog

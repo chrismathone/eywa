@@ -18,6 +18,12 @@ import {
   type SystemRole,
 } from "@/lib/permissions";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
+import { isTeacherMenuEntranceOpen } from "@/lib/navigation";
+
+// '강사 내 메뉴 표시' 빠른 토글에 세울 탭 — 강사 '내 메뉴'와 **같은 입구 정책**(isTeacherMenuEntranceOpen)으로 거른다.
+// 메뉴에서 뺀 탭(원장 2026-09-10 캘린더)은 켜도 꺼도 메뉴가 안 바뀌어 거짓 약속이 되므로 여기 세우지 않는다
+// (2026-09-11 리뷰). 그 탭의 페이지 접근은 아래 '역할별 메뉴 권한' 표에서 그대로 조정된다.
+const TEACHER_TOGGLE_KEYS = TEACHER_MENU_KEYS.filter(isTeacherMenuEntranceOpen);
 
 const ROLE_LABEL: Record<SystemRole, string> = {
   master: "원장",
@@ -117,9 +123,12 @@ export function PermissionsSection({
           강사 화면 우상단 <b>내 메뉴</b> 드롭다운에 보여줄 탭을 고릅니다. 끄면 그 탭이 숨겨지고 강사가 해당
           페이지에 접근할 수 없습니다(모든 강사 공통). <b>수업 마감(원스크린)</b>은 강사 홈이라 항상 표시됩니다.
           세부 권한(담당/읽기 등)은 아래 표에서 조정합니다.
+          {TEACHER_TOGGLE_KEYS.length < TEACHER_MENU_KEYS.length
+            ? " 메뉴에서 뺀 탭은 여기 나오지 않습니다 — 그 탭의 접근은 아래 표에서 조정합니다."
+            : null}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {TEACHER_MENU_KEYS.map((menu) => {
+          {TEACHER_TOGGLE_KEYS.map((menu) => {
             const shown = matrix[menu].teacher !== "none";
             const locked = menu === "teacher_onescreen";
             return (

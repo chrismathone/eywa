@@ -37,7 +37,7 @@ export function WindowSwitcher() {
   const closeWindow = useCloseWindow();
   // 닫기 가드 두 축 — 창 안에서 벌어지는 일이라 독은 스토어에 적재된 값으로만 안다.
   const dirty = useWindowStore((s) => s.dirty); // 미저장 폼(useUnsavedGuard → postMessage)
-  const busy = useWindowStore((s) => s.busy); // 녹음 등 끊기면 유실(use-recording-lock → BroadcastChannel)
+  const busy = useWindowStore((s) => s.busy); // 녹음 등 끊기면 유실(use-recording-lock → 부모 postMessage → RouteWindow)
   const enterSpotlight = useWindowStore((s) => s.enterSpotlight);
   const collapsed = usePrefs((s) => s.dockCollapsed);
   const setCollapsed = usePrefs((s) => s.setDockCollapsed);

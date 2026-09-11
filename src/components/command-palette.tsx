@@ -9,6 +9,7 @@ import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, type HubDe
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
+import { useMenuHub } from "@/components/workspace/menu-hub-store";
 import { useOpenMenu } from "@/components/workspace/menu-hub-grid";
 import { windowIdForHref } from "@/components/workspace/window-link";
 import { isPaletteHotkey, PALETTE_OPEN_MESSAGE } from "@/lib/palette-hotkey";
@@ -169,6 +170,9 @@ export function CommandPalette({
       openMenu(item.cmd.dest);
       return;
     }
+    // 🔴 데이터 결과도 떠 있는 메뉴 판을 닫는다 — 판(z-44)이 창 캔버스(z-40)를 덮어, 두면 방금 연 창이 판 밑에
+    //    깔린다(메뉴 결과는 `useOpenMenu`가 이미 닫는다 — 2026-09-11 리뷰). 모바일엔 판이 없어 닫아도 무해하다.
+    useMenuHub.getState().close();
     const hit = item.hit;
     if (hit.kind === "student") {
       // 학생은 요약 창(StudentWindow) 재사용

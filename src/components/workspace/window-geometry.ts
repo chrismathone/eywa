@@ -141,30 +141,78 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
 };
 
 /**
+ * 크기 표 매칭 — 정확 매칭 후 **세그먼트 경로 longest-prefix**로 폴백하고, 매칭된 키의 **깊이**(세그먼트 수)를 함께 준다.
+ * 깊이는 창 id와 창이 보는 주소 중 어느 쪽이 더 구체적으로 등록됐는지 가르는 데 쓴다(`windowMinSize`).
+ * ⚠️ 표에 직접 있는 키만 본다 — 주소에서 온 키가 `constructor` 같은 프로토타입 이름이면 함수를 크기로 읽는다.
+ */
+function routeSizeMatch(key: string): { size: { w: number; h: number }; depth: number } | undefined {
+  const seg = key.split("/");
+  for (let i = seg.length; i >= 1; i--) {
+    const k = seg.slice(0, i).join("/");
+    if (Object.prototype.hasOwnProperty.call(ROUTE_WINDOW_SIZE, k)) return { size: ROUTE_WINDOW_SIZE[k], depth: i };
+  }
+  return undefined;
+}
+
+/**
  * 라우트 창 id → 기본 크기. 정확 매칭 후 **세그먼트 경로 longest-prefix**로 폴백 →
  * 상세 라우트(예: "billing/expenses/<uuid>", "exams/123")가 부모 등록 크기를 상속한다.
  * 등록된 다중 세그먼트 키(staff/payroll·…/new)는 마지막 세그먼트가 정적이라 상세 id가 오인 매칭하지 않음.
  * 없으면 undefined(→ 호출부가 DEFAULT_WINDOW).
  */
 export function routeWindowSize(id: string): { w: number; h: number } | undefined {
-  if (ROUTE_WINDOW_SIZE[id]) return ROUTE_WINDOW_SIZE[id];
-  const seg = id.split("/");
-  for (let i = seg.length - 1; i >= 1; i--) {
-    const prefix = seg.slice(0, i).join("/");
-    if (ROUTE_WINDOW_SIZE[prefix]) return ROUTE_WINDOW_SIZE[prefix];
-  }
-  return undefined;
+  return routeSizeMatch(id)?.size;
+}
+
+/** 주소 → 크기 표의 키 모양(`/attendance/quick?embed=1#x` → `attendance/quick`). */
+function pathKey(href: string): string {
+  return (href.split(/[?#]/, 1)[0] ?? "").replace(/^\/+|\/+$/g, "");
+}
+
+/** 크기 표 키의 메뉴(첫 세그먼트) — `attendance/quick` → `attendance`. */
+function menuOf(key: string): string {
+  return key.split("/")[0] ?? key;
 }
 
 /**
- * 창 **최소 크기** = 그 메뉴의 기본 크기(`ROUTE_WINDOW_SIZE`, 없으면 `DEFAULT_WINDOW`).
+ * 창 **최소 크기** = 그 화면의 기본 크기(`ROUTE_WINDOW_SIZE`, 없으면 `DEFAULT_WINDOW`).
  * 원장 2026-09-03: *"창이 줄어들어도 기존 4열 스타일을 유지하는 게 오히려 가독성이 뛰어남 · 창 크기를 최소 크기보다
  * 줄이려고 할 때 경고를 띄우고 줄어들지 않도록"* — 화면은 이 크기에서 설계됐고(탭 접힘 금지) 그 아래로는 리사이즈가
  * 멈춘다(`resizeRect`의 `min`). 스냅·타일·작은 모니터로 그래도 작아지면 창 안 `WindowMinSizeNotice`가 선다.
  * ⚠️ 캔버스가 그보다 작으면 캔버스가 상한이다 — 소비처가 `min(…, bounds)`로 접는다(창이 화면 밖으로 나가는 것보다 낫다).
+ *
+ * 🔴 **같은 메뉴 안에서는 창이 지금 보는 화면**(`href`)으로 잰다. 경로형 면(오늘 출결·출결 모드·셔틀 면)은 부모 메뉴
+ *    창 하나를 쓰므로(전수검사 2026-09-11) id로만 재면 출석부 창(1280) 안에서 뜬 출결 모드(560)가 1280 기준이 되어,
+ *    리사이즈가 1280에서 멈추고 좁힌 창엔 "가로 N px 모자랍니다"가 떴다. 주소를 모르거나 등록이 없으면 종전대로 id.
+ * ⚠️ **주소의 메뉴(첫 세그먼트)가 창 id의 메뉴와 다르면 id** — 다른 메뉴로 드릴인한 화면(원생 창 안의 콜&상담 상세)이
+ *    창 바닥을 그 메뉴 크기로 바꾸지 않는다(종전 동작 유지). 인쇄 창(`print/<type>/…` ↔ `/enrollment/<id>/print`)도
+ *    메뉴가 달라 A4 크기 그대로다. 같은 메뉴라도 id가 더 구체적으로 등록돼 있으면 id가 이긴다(매칭 깊이 비교).
+ * ⚠️ 창 안 안내(`WindowMinSizeNotice`)는 id를 같은 주소에서 뽑으므로 늘 "같은 메뉴"다 — 다른 메뉴로 드릴인한 화면은
+ *    그 화면 크기로 안내한다(이 수리 전과 같다).
+ * ⚠️ **여는 크기는 이 함수가 아니다** — 여는 크기는 창 id(`routeWindowSize(params.id)`) 그대로다.
  */
-export function windowMinSize(id: string): { w: number; h: number } {
-  return routeWindowSize(id) ?? DEFAULT_WINDOW;
+export function windowMinSize(id: string, href?: string | null): { w: number; h: number } {
+  // 스토어 모양의 창 id(`route:attendance#1`)가 와도 크기 표 키 모양으로 — 접두와 복제 번호를 뗀다.
+  const key = id.replace(/^(route|student):/, "").split("#")[0] ?? id;
+  const byId = routeSizeMatch(key);
+  const path = href ? pathKey(href) : "";
+  const byPath = path && menuOf(path) === menuOf(key) ? routeSizeMatch(path) : undefined;
+  if (byPath && byPath.depth >= (byId?.depth ?? 0)) return byPath.size;
+  return byId?.size ?? DEFAULT_WINDOW;
+}
+
+/**
+ * 라우트 창의 **리사이즈 바닥** — 창이 지금 보는 화면(뒤로 기록 맨 위, 없으면 첫 화면) 기준 `windowMinSize`.
+ * 포인터 리사이즈(use-pointer-resize)와 `store.resizeBy`가 **이 함수 하나**를 쓴다 — 갈리면 같은 창이 경로마다 다른
+ * 크기에서 멈춘다. 라우트 창이 아니면 undefined(전역 MIN_W/MIN_H).
+ * ⚠️ `stack`은 창 id(`win.id`, 복제본 `#n` 포함)로 찾은 뒤로 기록이다 — `params.id`가 아니다.
+ */
+export function routeMinSize(
+  win: { kind: string; params: { id: string; href?: string } },
+  stack: readonly string[] | undefined,
+): { w: number; h: number } | undefined {
+  if (win.kind !== "route") return undefined;
+  return windowMinSize(win.params.id, stack?.[stack.length - 1] ?? win.params.href);
 }
 
 /**

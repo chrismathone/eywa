@@ -43,6 +43,36 @@ describe("창 최소 크기 = 그 메뉴의 기본 크기", () => {
     expect(r.h).toBe(MIN_H);
   });
 
+  it("🔴 같은 메뉴의 더 구체적인 화면이면 그 화면의 크기 — 출석부 창 안의 출결 모드는 1280이 아니다", () => {
+    // 전수검사 2026-09-11: 경로형 면(오늘 출결·출결 모드·셔틀 면)이 부모 창 id로 합쳐져, 출석부 창(1280) 안에서 뜬
+    // 출결 모드(560)가 1280 기준으로 재어졌다 — 리사이즈가 1280에서 멈추고 좁힌 창엔 "가로 N px 모자랍니다"가 떴다.
+    expect(windowMinSize("attendance", "/attendance/quick?embed=1")).toEqual(ROUTE_WINDOW_SIZE["attendance/quick"]);
+    expect(windowMinSize("attendance", "/attendance/quick")).toEqual(ROUTE_WINDOW_SIZE["attendance/quick"]);
+    // 창 id가 스토어 모양(`route:` 접두·복제 `#n`)으로 와도 같은 메뉴로 알아본다.
+    expect(windowMinSize("route:attendance#1", "/attendance/quick")).toEqual(ROUTE_WINDOW_SIZE["attendance/quick"]);
+  });
+
+  it("🔴 다른 메뉴로 드릴인한 화면은 종전대로 창 id 크기 — 이번 수리 범위 밖의 동작 변화를 만들지 않는다", () => {
+    // 원생 창(960) 안에서 콜&상담 상세로 들어가도 바닥이 1120으로 오르지 않는다.
+    expect(windowMinSize("students", "/enrollment/abc?embed=1")).toEqual(ROUTE_WINDOW_SIZE.students);
+    expect(windowMinSize("attendance", "/students/abc?embed=1")).toEqual(ROUTE_WINDOW_SIZE.attendance);
+  });
+
+  it("같은 메뉴의 상세는 종전대로 메뉴 크기를 상속하고, 주소를 모르거나 등록이 없으면 id로", () => {
+    expect(windowMinSize("attendance", "/attendance/2026-09-11/abc?embed=1")).toEqual(ROUTE_WINDOW_SIZE.attendance);
+    expect(windowMinSize("students/abc", "/students/abc/edit?embed=1")).toEqual(ROUTE_WINDOW_SIZE.students);
+    expect(windowMinSize("attendance")).toEqual(ROUTE_WINDOW_SIZE.attendance);
+    expect(windowMinSize("attendance", "/somewhere-else")).toEqual(ROUTE_WINDOW_SIZE.attendance);
+  });
+
+  it("🔴 인쇄 창은 주소가 메뉴 아래여도 A4 크기 — id가 더 구체적이면 id가 이긴다", () => {
+    expect(windowMinSize("print/enrollment/abc", "/enrollment/abc/print")).toEqual(ROUTE_WINDOW_SIZE["print/enrollment"]);
+    expect(windowMinSize("print/seat-month/lab/2026-09", "/attendance/seat/lab/month/print")).toEqual(
+      ROUTE_WINDOW_SIZE["print/seat-month"],
+    );
+    expect(windowMinSize("print/inventory-qr", "/inventory/qr/print")).toEqual(ROUTE_WINDOW_SIZE["print/inventory-qr"]);
+  });
+
   it("캔버스가 최소 크기보다 작으면 캔버스가 상한 — 창이 화면 밖으로 나가지 않는다", () => {
     const small = { width: 900, height: 600 };
     expect(resizeFloor({ w: 1120, h: 720 }, small)).toEqual({ w: 900, h: 600 });
@@ -53,9 +83,14 @@ describe("창 최소 크기 = 그 메뉴의 기본 크기", () => {
 });
 
 describe("배선 — 바닥·안내·탭 접힘 금지", () => {
-  it("포인터 리사이즈와 store.resizeBy가 같은 바닥(windowMinSize)을 쓴다", () => {
-    expect(read("components/workspace/use-pointer-resize.ts")).toContain("windowMinSize(w.params.id)");
-    expect(read("components/workspace/window-store.ts")).toContain("windowMinSize(w.params.id)");
+  it("포인터 리사이즈와 store.resizeBy가 같은 바닥(routeMinSize — 창이 지금 보는 화면 기준)을 쓴다", () => {
+    expect(read("components/workspace/use-pointer-resize.ts")).toContain("routeMinSize(w, s.nav[id])");
+    expect(read("components/workspace/window-store.ts")).toContain("routeMinSize(w, s.nav[id])");
+    // 창 id만으로 재던 옛 호출이 남으면 출석부 창 안의 출결 모드가 1280에서 멈춘다(전수검사 2026-09-11).
+    expect(read("components/workspace/use-pointer-resize.ts")).not.toContain("windowMinSize(w.params.id)");
+    expect(read("components/workspace/window-store.ts")).not.toContain("windowMinSize(w.params.id)");
+    // 창 안 안내도 같은 판정(주소 기준)이다.
+    expect(read("components/workspace/window-min-size-notice.tsx")).toContain("windowMinSize(win.id, pathname)");
     // 바닥에 닿으면 힌트 — FloatingWindow의 [data-min-hint]를 hook이 만진다.
     expect(read("components/workspace/floating-window.tsx")).toContain("data-min-hint");
     expect(read("components/workspace/use-pointer-resize.ts")).toContain("[data-min-hint]");

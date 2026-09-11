@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useTransition, type ReactNode } from "react";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { confirmTimetableNav } from "./timetable-unsaved";
 
 /**
@@ -32,6 +33,7 @@ export function ParamLink({
   title?: string;
 }) {
   const router = useRouter();
+  const embed = useEmbed();
   const [pending, start] = useTransition();
   return (
     <a
@@ -46,7 +48,9 @@ export function ParamLink({
         // 그룹 설정에서 아직 반영 안 한 배치가 있으면 확인부터 — 주·과목·구분·뷰 전환이 전부 여기를
         // 지나므로 한 곳만 막으면 된다(원장 2026-08-06 "편집중에 주 과목 뷰 바꿀때도 경고").
         if (!confirmTimetableNav()) return;
-        start(() => router.push(href, { scroll: false }));
+        // 창(iframe) 안이면 embed=1을 싣는다(PeriodNav·FaceTabs와 같은 규칙) — 빼면 뒤이은 새로고침이 창 안에
+        // 전체 셸을 그린다. `<a href>`(새 탭 = 최상위)는 원래 주소 그대로 둔다.
+        start(() => router.push(embed ? withEmbed(href) : href, { scroll: false }));
       }}
     >
       {children}

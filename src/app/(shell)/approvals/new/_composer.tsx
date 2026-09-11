@@ -7,6 +7,8 @@ import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { RichEditor } from "@/components/editor/rich-editor";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import {
   deleteLineTemplate,
   saveLineTemplate,
@@ -490,6 +492,7 @@ export function DraftComposer({
 /** 제출 결과 토스트 — 양식별 useActionState 3개가 같은 규약을 공유한다. */
 function useSubmitToast(state: ApprovalActionState) {
   const seen = useRef<ApprovalActionState>(undefined);
+  const inFrame = useInFrame();
   useEffect(() => {
     if (!state || state === seen.current) return;
     seen.current = state;
@@ -498,9 +501,13 @@ function useSubmitToast(state: ApprovalActionState) {
       toast.success(state.notice ?? "상신했습니다");
       // 상신 성공 = 방금 만든 문서로 이동(원장 2026-08-18: "alert만 뜨니까 인지가 안 됨").
       // ⚠️ 서버 액션 직후의 router.push는 액션 응답 RSC 적용에 삼켜진다([[#102]]) — window.location.assign.
-      if (state.docId) window.location.assign(`/approvals/${state.docId}`);
+      // ⚠️ 창(iframe) 안이면 embed=1 유지(원생 삭제와 같은 규칙) — 빼면 방금 만든 문서가 창 안에 전체 셸로 뜬다.
+      if (state.docId) {
+        const dest = `/approvals/${state.docId}`;
+        window.location.assign(inFrame ? withEmbed(dest) : dest);
+      }
     }
-  }, [state]);
+  }, [state, inFrame]);
 }
 
 function SubmitButton({ blocked }: { blocked: boolean }) {

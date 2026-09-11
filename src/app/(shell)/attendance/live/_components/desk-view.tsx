@@ -7,6 +7,7 @@
 import { useState, type ReactNode } from "react";
 import { CheckCircle2 } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
+import { EmbedAnchor } from "@/components/embed-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { OUTCOME_LABEL, orderQueueSubjects, type DeskQueue, type QueueStudent } from "@/features/attendance/live/queue";
 import { SearchScopeChip, StudentSearchToggle } from "@/features/attendance/components/student-search-box";
@@ -139,12 +140,12 @@ export function DeskView({
         </div>
       ) : null}
       {carryOver && carryOver.count > 0 && (
-        <a
+        <EmbedAnchor
           href={`/attendance/live?tab=desk&date=${carryOver.date}`}
           className="text-amber text-sm font-bold"
         >
           어제 남은 결석 {carryOver.count}건
-        </a>
+        </EmbedAnchor>
       )}
       {!searching && empty && queue.counts.done === 0 && (
         <EmptyState

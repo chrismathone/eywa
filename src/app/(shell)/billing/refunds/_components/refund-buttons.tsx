@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, Printer, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import { deleteRefundRequest } from "@/features/billing/server/refund-actions";
+
+const REFUNDS_HREF = "/billing?tab=refunds";
+const DELETE_FAILED = "삭제하지 못했습니다 — 연결을 확인하고 다시 눌러 주세요";
 
 /** 환불 요청서 뷰 인쇄 — 플로팅 창(iframe) 안이라 이 문서만 A4(print-portrait)로 인쇄된다. */
 export function PrintRefundButton() {
@@ -18,7 +22,7 @@ export function PrintRefundButton() {
 }
 
 export function DeleteRefundButton({ id, name }: { id: string; name: string }) {
-  const router = useRouter();
+  const inFrame = useInFrame();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -31,15 +35,20 @@ export function DeleteRefundButton({ id, name }: { id: string; name: string }) {
           disabled={busy}
           onClick={async () => {
             setBusy(true);
-            const res = await deleteRefundRequest(id);
+            // 액션 호출 자체가 실패(네트워크 등)해도 '처리 중'에 멈추지 않게 같은 실패 경로로 모은다.
+            // (finally로 풀지 않는다 — 성공 뒤 이동하는 동안 버튼이 다시 열려 두 번 지우게 된다.)
+            const res = await deleteRefundRequest(id).catch(() => ({ error: DELETE_FAILED }));
             if (res.error) {
               toast.error(res.error);
               setBusy(false);
               setConfirming(false);
               return;
             }
-            toast.success("환불 요청서를 삭제했습니다");
-            router.push("/billing?tab=refunds");
+            // 성공 토스트는 없다 — 곧바로 풀 문서 이동이라 읽을 틈이 없다(학생 삭제와 같은 규약).
+            // 🔴 `router.push`가 아니라 풀 문서 이동 — 서버 액션 직후의 push는 액션 응답이 이 페이지 트리를
+            //    다시 적용하면서 삼켜진다(#102). 삼켜지면 창에 방금 지운 요청서의 404가 남는다.
+            //    `replace`인 건 지운 요청서 주소가 죽은 칸이라서다(뒤로가기가 그 404에 걸리지 않게 — 학생 삭제와 같은 규약).
+            window.location.replace(inFrame ? withEmbed(REFUNDS_HREF) : REFUNDS_HREF);
           }}
           className="text-danger font-bold hover:underline"
         >

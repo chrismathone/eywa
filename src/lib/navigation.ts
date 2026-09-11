@@ -1,6 +1,6 @@
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
-import type { MenuKey } from "@/lib/permissions";
+import { canAccess, TEACHER_MENU_KEYS, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { OWNER_TABS } from "@/features/owner/tabs";
 
 export type NavItem = {
@@ -15,7 +15,16 @@ export type NavItem = {
   presentation?: "desktop" | "window";
   // 사이드바·모바일내비·팰릿에선 숨기되 findNavItem(창 해석)·아이콘맵엔 남긴다.
   // 예: 등록상담은 "상담" 메뉴의 FaceTabs 면이라 사이드바엔 안 뜨지만 창/링크 해석은 필요.
+  // 🔑 강사 '내 메뉴'도 이 표식을 따른다 — 메뉴에서 뺀 항목은 거기서도 닫힌다([teacherMenuKeysFor]).
+  //    강사 드롭다운이 유일한 입구인 면은 아래 `teacherMenuEntry`로 남긴다.
   hidden?: boolean;
+  /**
+   * `hidden`이어도 **강사 '내 메뉴'에는 남는다** — 사이드바·팰릿엔 없고 강사 드롭다운이 유일한 입구인
+   * 강사 전용 면(교재 요청·지출결의서)의 표식. `hidden` 없이 달면 아무 뜻이 없다(가드가 막는다).
+   * 🔑 이 예외를 **NAV 표 한 곳**에 적는 이유: 강사 메뉴 쪽에 명단을 따로 두면 "메뉴에서 뺐다"가 입구마다
+   *    갈린다 — 캘린더를 메뉴에서 뺐는데(원장 2026-09-10) 강사 드롭다운에만 남아 있던 게 그 실례다(2026-09-11).
+   */
+  teacherMenuEntry?: boolean;
   /**
    * **사이드바에서만** 이 메뉴를 부모 메뉴의 하부탭으로 내려 표시한다(독립 라우트·독립 창 유지).
    * `hidden`과 다른 점: 팰릿·모바일내비엔 그대로 남아 검색·이동이 된다(발견성 보존).
@@ -236,9 +245,9 @@ export const NAV_GROUPS: NavGroup[] = [
       // 재고관리 — 전자기기 자산관리대장(자산·대여·실사·소모품). 구글시트 시안 이식(원장 2026-09-02). 하부탭 없음.
       { href: "/inventory", label: "재고관리", icon: MENU_ICON.inventory, menuKey: "inventory", aliases: ["자산관리대장", "자산"] },
       // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
-      { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menuKey: "textbook_requests", hidden: true },
+      { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menuKey: "textbook_requests", hidden: true, teacherMenuEntry: true },
       // 지출결의서(강사 제출) = 강사 '내 메뉴' 전용 진입. 사이드바엔 숨김(사무실은 /billing 지출 면), 창/타이틀 해석용 유지.
-      { href: "/expense-requests", label: "지출결의서", icon: MENU_ICON.expense_requests, menuKey: "expense_requests", hidden: true },
+      { href: "/expense-requests", label: "지출결의서", icon: MENU_ICON.expense_requests, menuKey: "expense_requests", hidden: true, teacherMenuEntry: true },
       { href: "/meetings", label: "회의록", icon: MENU_ICON.meetings, menuKey: "meetings" },
       // 수업 평가 체크리스트(참관) — 테스트 단계: 기본 전원 none이라 개인 예외(이승엽)에게만 보인다.
       { href: "/class-review", label: "수업 평가", icon: MENU_ICON.class_review, menuKey: "class_review", aliases: ["참관"] },
@@ -335,6 +344,40 @@ export function navItemByKey(menuKey: MenuKey): NavItem | undefined {
     for (const item of group.items) if (item.menuKey === menuKey) return item;
   }
   return undefined;
+}
+
+/**
+ * 강사 미니셸 '내 메뉴'에 세울 메뉴 키 — **이 목록이 곧 강사뷰의 입구**다(강사 화면엔 사이드바도 팰릿도 없다).
+ * 레이아웃이 한 번 계산해 `TeacherMenu`에 키만 내려보낸다(클라에서 권한을 다시 판정하지 않는다). 세 축을 모두 지나야 선다:
+ *  ① **강사 행** — 학원이 강사에게 연 메뉴(학원설정 '강사 내 메뉴 표시').
+ *  ② **실제 역할** — 페이지 `requireAccess`가 여는 축. 겸직 강사뷰·'다른 강사 뷰'는 역할이 강사가 아니라서 ①만 보면
+ *     메뉴는 서는데 누르면 강사 홈으로 튕겼다(2026-09-11 전수검사 — 상담사는 다섯 개). 실 강사는 ①과 같은 답이다.
+ *     원스크린만 예외 — 그 페이지는 역할이 아니라 뷰(강사 미니셸인가)로 연다(관리자 계열은 이 칸이 none이다).
+ *  ③ **입구 정책** — 메뉴에서 뺀 항목(`hidden`)은 여기서도 닫는다. 단 `teacherMenuEntry`는 남긴다
+ *     ([isTeacherMenuEntranceOpen] — 학원설정 '강사 내 메뉴 표시' 토글과 같은 함수).
+ *
+ * `matrix`는 **현재 사용자 유효 매트릭스**(`getUserPermMatrix` — 개인 예외·super_admin 반영)여야 한다. 페이지 게이트가
+ * 보는 것과 같은 값이어야 "보이면 열린다"가 성립한다(#58 — 그래서 기본값 없이 필수 인자로 받는다).
+ * ⚠️ 담당 과목 축(영어·수학 시트는 그 과목을 맡았을 때만)은 여기가 아니라 레이아웃의 `showEcs`/`showMcs`다.
+ */
+export function teacherMenuKeysFor(realRole: SystemRole, matrix: AccessMatrix): MenuKey[] {
+  return TEACHER_MENU_KEYS.filter(
+    (menu) =>
+      canAccess("teacher", menu, matrix) &&
+      (menu === "teacher_onescreen" || canAccess(realRole, menu, matrix)) &&
+      isTeacherMenuEntranceOpen(menu),
+  );
+}
+
+/**
+ * 강사 '내 메뉴'의 **입구가 열려 있는** 메뉴인가 — 입구 정책의 단일 소스. 메뉴에서 뺀 항목(`hidden`)은 닫히고,
+ * `teacherMenuEntry`(강사 드롭다운이 유일한 입구)는 열린다. NAV 표에 없는 키(수학 시트 — 하부탭뿐)는 열림.
+ * 🔴 소비처가 둘이다 — 강사 '내 메뉴'([teacherMenuKeysFor])와 학원설정 '강사 내 메뉴 표시' 토글. **같은 함수**를
+ *    써야 한다: 한쪽만 거르면 토글에 켜도 꺼도 메뉴가 안 바뀌는 칸이 남는다(2026-09-11 리뷰 — 캘린더).
+ */
+export function isTeacherMenuEntranceOpen(menu: MenuKey): boolean {
+  const item = navItemByKey(menu);
+  return !item?.hidden || item.teacherMenuEntry === true;
 }
 
 export function findNavItem(pathname: string): NavItem | undefined {

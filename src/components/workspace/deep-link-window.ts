@@ -32,9 +32,9 @@ function ownPageTitle(documentTitle: string): string | null {
  *    주소로 연 창이 **서로를 못 알아보고 두 벌**이 된다(같은 화면이 두 개 뜬다).
  * 🔴 `presentation:"desktop"`(운영실)은 **main 자체가 작업면**이라 창으로 열지 않는다 — 열면 배경과
  *    창에 같은 화면이 겹치고, 스토어가 그 창을 레거시로 보고 지운다(`isLegacyDashboardWindow`).
- * ⚠️ 메뉴에 없는 라우트(`/kiosk-settings`·하부탭 전용 `/mcs` 등)도 **경로 그대로 id**로 연다 —
- *    안 열면 그 주소는 지금처럼 빈 바탕이다. 이 id는 사이드바 하부탭이 쓰는 `windowId("route", menuKey)`와
- *    같은 모양이라(`/mcs` → `mcs`) 하부탭으로 연 창과도 한 벌로 합쳐진다.
+ * ⚠️ 창 규약이 모르는 라우트도 **경로 그대로 id**로 연다 — 안 열면 그 주소는 지금처럼 빈 바탕이다.
+ *    하부탭 면(`/attendance/live` → 부모 출석부 창 · 독립 메뉴 `/mcs` → mcs 창)과 `/kiosk-settings`는
+ *    `windowIdForHref`가 직접 푼다 — 메뉴 판·링크·알림이 여는 창과 같은 id라 한 벌로 합쳐진다.
  */
 export function deepLinkWindow(
   pathname: string,

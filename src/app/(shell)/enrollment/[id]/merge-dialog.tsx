@@ -9,6 +9,8 @@ import { AlertCircle, ArrowRight, Loader2 } from "@/components/icons/eywa-icon-c
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import { COLUMN_LABEL } from "@/features/enrollment/merge-policy";
 import { outcomePill } from "@/features/enrollment/outcome-meta";
 import type { MergePlan } from "@/features/enrollment/merge-plan";
@@ -41,6 +43,7 @@ export function MergeDialog({
   const [pickedWinner, setPickedWinner] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
+  const inFrame = useInFrame();
 
   // ⚠️ `ids`는 배열 prop이라 그대로 deps에 넣으면 부모가 리렌더될 때마다 새 참조 = 요청이 끝없이 돈다.
   const idsKey = [...ids].sort().join(",");
@@ -87,8 +90,10 @@ export function MergeDialog({
       }
       // 🔴 지금 페이지가 지워진 쪽이면 그대로 두면 안 된다 — 없는 레코드를 계속 보여주게 된다.
       //    ⚠️ 서버 액션 직후의 router.push는 액션 응답이 덮어써 삼켜진다(gotcha #102) → location.assign.
+      //    창(iframe) 안이면 embed=1을 유지한다(원생 삭제와 같은 규칙) — 빼면 남은 상담이 창 안에 전체 셸로 뜬다.
       if (res.winnerId && res.winnerId !== currentId) {
-        window.location.assign(`/enrollment/${res.winnerId}`);
+        const dest = `/enrollment/${res.winnerId}`;
+        window.location.assign(inFrame ? withEmbed(dest) : dest);
         return;
       }
       onClose();

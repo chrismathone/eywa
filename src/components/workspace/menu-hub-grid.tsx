@@ -13,6 +13,7 @@ import { useMenuHub } from "./menu-hub-store";
 import { useShowDesktop } from "./use-show-desktop";
 import { useWindowStore } from "./window-store";
 import { openMenuWindow } from "./open-menu-window";
+import { windowIdForHref } from "./window-link";
 
 /**
  * 업무군 패널·검색에서 메뉴를 여는 공통 경로. 대시보드는 배경으로, 업무는 창으로 연다.
@@ -46,7 +47,9 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
         showDesktop();
         return;
       }
-      const params = { id: dest.menuKey, title: dest.label, href: dest.href };
+      // 🔴 창 id는 **창 링크·알림 벨·딥링크와 같은 함수**로 정한다 — 경로로 갈리는 면(오늘 출결·셔틀 면)을 여기선
+      //    부모 창, 링크에선 따로 된 창으로 열어 같은 화면이 두 벌 떴다(2026-09-11 전수검사). 면 = 부모 창(원장 결정).
+      const params = { id: windowIdForHref(dest.href)?.id ?? dest.menuKey, title: dest.label, href: dest.href };
       if (shift) {
         useWindowStore.getState().openNewInstance("route", params);
         return;

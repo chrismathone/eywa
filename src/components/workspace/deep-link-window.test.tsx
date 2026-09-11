@@ -35,9 +35,9 @@ describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 �
     expect(deepLinkWindow("/dashboard/announcements", "학원 공지 — eywa")).toEqual({ id: "dashboard/announcements", title: "학원 공지" });
   });
 
-  it("메뉴에 없는 라우트도 경로 그대로 창으로 연다(안 열면 그 주소는 빈 바탕)", () => {
-    // 하부탭 전용 /mcs는 findNavItem에 없지만 사이드바가 쓰는 창 id(windowId("route","mcs"))와 같은 모양이라
-    // 하부탭으로 연 창과 한 벌로 합쳐진다.
+  it("메뉴에 없는 라우트도 창으로 연다(안 열면 그 주소는 빈 바탕)", () => {
+    // 하부탭 전용 /mcs는 findNavItem에 없지만 windowIdForHref가 하부탭 목록에서 풀어 메뉴 판이 여는
+    // 창(windowId("route","mcs"))과 한 벌로 합쳐진다.
     expect(deepLinkWindow("/mcs", "수학 강사 시트 — eywa")).toEqual({
       id: "mcs",
       title: "수학 강사 시트",
@@ -50,8 +50,10 @@ describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 �
       id: "students/123",
       title: "원생목록",
     });
+    // 창 규약에 이름이 있는 라우트(키오스크 설정 — 도움말 링크가 유일한 입구)는 그 이름으로.
+    expect(deepLinkWindow("/kiosk-settings", APP_DEFAULT_TITLE)?.title).toBe("키오스크 설정");
     // 메뉴 밖 + 제목도 없으면 마지막 폴백.
-    expect(deepLinkWindow("/kiosk-settings", APP_DEFAULT_TITLE)?.title).toBe("보기");
+    expect(deepLinkWindow("/some-new-route", APP_DEFAULT_TITLE)?.title).toBe("보기");
   });
 
   it("쿼리·해시는 창 id에서 떨어진다(같은 화면의 필터 차이로 창이 갈리지 않게)", () => {

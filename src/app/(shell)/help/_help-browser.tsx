@@ -1,12 +1,43 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { EyIcon, MENU_ICON } from "@/components/icons/eywa-icons";
+import { useInFrame } from "@/components/workspace/use-in-frame";
+import { WindowLink, windowIdForHref } from "@/components/workspace/window-link";
 import type { MenuKey } from "@/lib/permissions";
 import { useHelpQuery } from "./_help-search";
 
 type MenuItem = { id: MenuKey; label: string; href: string; description: string };
 type FaqItem = { q: string; a: string };
 type QuickStep = { title: string; desc: string; href: string; hrefLabel: string };
+
+/**
+ * 도움말 안의 메뉴 링크 — 이 화면은 **"메뉴를 누르면 창으로 열립니다"**라고 약속한다. 그래서 창 안에서 눌러도
+ * 도움말 창을 그 화면으로 바꾸지 않고 **부모 작업면에 그 메뉴 창**을 연다(`frameTarget="window"`). 맨 `<a href>`였을 땐
+ * 도움말 창이 통째로 그 메뉴 화면이 되고 embed까지 빠져 창 안에 전체 셸이 떴다(2026-09-11 전수검사).
+ * 🔴 창이 될 수 없는 목적지(대시보드 = 이 창 **뒤의 배경**)는 창 안에선 링크를 걸지 않는다 — 걸면 배경 화면이
+ *    도움말 창 안에 뜬다. 최상위 프레임(폰·강사 미니셸)에선 평소처럼 이동한다.
+ */
+function MenuLink({
+  href,
+  className,
+  arrow,
+  children,
+}: {
+  href: string;
+  className: string;
+  /** 링크일 때만 붙는 화살표 — 글자만 남길 땐 누를 수 있어 보이면 안 된다. */
+  arrow: ReactNode;
+  children: ReactNode;
+}) {
+  const inFrame = useInFrame();
+  if (inFrame && !windowIdForHref(href)) return <span>{children}</span>;
+  return (
+    <WindowLink href={href} frameTarget="window" className={className}>
+      {children} {arrow}
+    </WindowLink>
+  );
+}
 
 export function HelpBrowser({
   menus,
@@ -72,12 +103,13 @@ export function HelpBrowser({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <h3 className="text-foreground text-sm font-bold break-keep">{s.title}</h3>
-                    <a
+                    <MenuLink
                       href={s.href}
                       className="text-primary hover:bg-primary-soft ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium transition"
+                      arrow={<EyIcon name="arrowRight" size={11} />}
                     >
-                      {s.hrefLabel} <EyIcon name="arrowRight" size={11} />
-                    </a>
+                      {s.hrefLabel}
+                    </MenuLink>
                   </div>
                   <p className="text-text-dim mt-1 text-xs leading-relaxed break-keep">{s.desc}</p>
                 </div>
@@ -121,7 +153,15 @@ export function HelpBrowser({
                     <EyIcon name={iconName} size={14} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-foreground text-sm font-bold break-keep"><a href={m.href} className="hover:text-primary hover:underline">{m.label} <span aria-hidden>↗</span></a></h3>
+                    <h3 className="text-foreground text-sm font-bold break-keep">
+                      <MenuLink
+                        href={m.href}
+                        className="hover:text-primary hover:underline"
+                        arrow={<span aria-hidden>↗</span>}
+                      >
+                        {m.label}
+                      </MenuLink>
+                    </h3>
                     <p className="text-text-dim mt-1 text-xs leading-relaxed break-keep">{m.description}</p>
                   </div>
                 </div>

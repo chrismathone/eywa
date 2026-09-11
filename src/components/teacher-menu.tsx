@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { canAccess, type AccessMatrix, type MenuKey } from "@/lib/permissions";
+import type { MenuKey } from "@/lib/permissions";
 // 강사뷰 화면 언어(2026-09-03) — 라벨은 사전에서, 스위치는 이 드롭다운 **하나**(원장 지정 자리).
 import { useSheetT } from "@/features/teacher-view/lang-context";
 import { TeacherLangSwitch } from "@/features/teacher-view/lang-switch";
@@ -23,9 +23,10 @@ import type { SheetDictKey } from "@/features/teacher-view/i18n";
  * 강사 미니멀 셸용 '내 메뉴' 드롭다운(B 옵션 — onescreen 허브 + 필요한 깊은 페이지 진입).
  * ⚠️ 여기엔 **강사 스코핑이 적용된 페이지만** 넣는다(teacher-scope.ts). 미스코프 페이지(대시보드 등)는
  * 테넌트 전체가 새므로 노출 금지 — 스코핑하면 그때 추가. (시간표는 getWeeklyScheduleWithStudents(teacherId) 스코핑 완료.)
- * 어떤 탭을 노출할지는 **학원설정(역할·권한)의 강사 접근 매트릭스**를 따른다 — 학원이 '강사 내 메뉴 표시'를
- * 끄면(teacher 접근=없음) 그 탭이 숨겨지고 페이지 접근도 차단된다(canWriteTenant/requireAccess 게이트와 일관).
- * teacher_onescreen(수업 마감)은 ROLE_LOCKED라 항상 표시.
+ * 어떤 탭을 노출할지는 레이아웃이 [teacherMenuKeysFor](@/lib/navigation)로 정해 `menus`로 내려준다 —
+ * ① 학원설정의 강사 접근('강사 내 메뉴 표시'를 끄면 그 탭이 숨고 페이지도 막힌다) ∧ ② 보는 사람의 **실제 역할**
+ * (겸직 강사뷰·'다른 강사 뷰'에서 누르면 튕기는 항목을 세우지 않는다) ∧ ③ 입구 정책(메뉴에서 뺀 항목은 여기서도 닫는다).
+ * teacher_onescreen(수업 마감)은 ROLE_LOCKED + 뷰 기준 게이트라 항상 표시.
  */
 // 🔴 라벨은 **사전 키**다(한국어 원문은 [i18n.ts](@/features/teacher-view/i18n) 한 곳) — 여기에 문자열을
 //    다시 적으면 한/영이 갈린다. 키는 `menu.item.<menuKey>`가 원칙이고, 같은 menuKey를 두 줄이 쓰는
@@ -54,6 +55,8 @@ const LINKS: { href: string; labelKey: SheetDictKey; icon: EywaIconName; menu: M
   // 지출결의서 — 강사가 본인 지출을 작성·제출 + 결재 진행상태 조회. 사무실은 /billing 지출 면에서 결재.
   { href: "/expense-requests", labelKey: "menu.item.expense_requests", icon: MENU_ICON.expense_requests, menu: "expense_requests" },
   // 캘린더 — 학원 공용 일정(강사 readonly 기본). 테넌트 공용 정보라 스코핑 무관.
+  // 🔴 지금은 **메뉴에서 뺀 항목**이라 서지 않는다(원장 2026-09-10 "캘린더 탭은 메뉴에서 제외") — NAV 표의 `hidden`을
+  //    teacherMenuKeysFor가 따른다. 되살릴 땐 그 표의 `hidden`만 푼다(이 줄은 그대로 둔다 — 입구 정책은 한 곳).
   { href: "/calendar", labelKey: "menu.item.calendar", icon: MENU_ICON.calendar, menu: "calendar" },
   // 전자결재 — 기본 teacher=none이라 파일럿 개인 예외 계정(테스터)에만 보인다. 문서 스코프는
   // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
@@ -66,13 +69,17 @@ const LINKS: { href: string; labelKey: SheetDictKey; icon: EywaIconName; menu: M
 ];
 
 export function TeacherMenu({
-  permMatrix,
+  menus,
   canReturnToAdmin = false,
   showEcs = true,
   showMcs = true,
   home = null,
 }: {
-  permMatrix: AccessMatrix;
+  /**
+   * 이 사람의 '내 메뉴'에 세울 메뉴 키 — 레이아웃이 [teacherMenuKeysFor](@/lib/navigation)로 계산해 내린다
+   * (강사 행 ∧ 보는 사람의 실제 역할 ∧ 입구 정책). 페이지 게이트와 같은 판정이라 **보이면 열린다**.
+   */
+  menus: readonly MenuKey[];
   /** 겸직(관리자 계열)이 강사뷰에 있을 때 → 드롭다운 하단에 '관리자뷰로 전환'. 실 강사는 false. */
   canReturnToAdmin?: boolean;
   /**
@@ -98,11 +105,12 @@ export function TeacherMenu({
 }) {
   // 화면 언어 — provider는 강사 미니셸에만 있다(관리자 풀셸은 한국어 고정, 원장 2026-09-03).
   const t = useSheetT();
-  // 학원 권한 매트릭스에서 강사 접근이 '없음'인 탭은 숨긴다(설정 반영). teacher_onescreen은 항상 통과(locked full).
+  // 세울 메뉴는 레이아웃이 정해 내려준다(menus). 🔴 여기서 권한 매트릭스로 다시 거르지 말 것 — 강사 행만 보면
+  // 겸직·'다른 강사 뷰'에서 누르면 강사 홈으로 튕기는 항목이 되살아난다(2026-09-11 전수검사).
   // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
   const visible = LINKS.filter(
     (l) =>
-      canAccess("teacher", l.menu, permMatrix) &&
+      menus.includes(l.menu) &&
       (l.menu !== "ecs" || showEcs) &&
       (l.menu !== "mcs" || showMcs),
   );

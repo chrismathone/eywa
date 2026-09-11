@@ -1236,6 +1236,13 @@ GET  http://localhost:3100/ecs?_rsc=…                        → 200   목적�
 **🔑 진단 순서**: 클릭이 "먹통"인데 에러가 없으면 콘솔보다 **네트워크 목록을 먼저** 본다.
 목적지 요청이 `200`으로 찍혀 있으면 그건 데이터·권한 문제가 아니라 **이동(라우터) 문제**다.
 
+**⚠️ 액션이 `redirect()`를 하는 경우는 더 나쁘다(2026-09-12)** — 클라가 `await action()`으로 부른 promise는 **NEXT_REDIRECT로
+reject**된다(Next 16 `server-action-reducer` — 라우터가 스스로 목적지로 가면서 호출부엔 예외를 던진다). 새 회의록 녹음 경로가
+그랬다: 성공인데 catch로 떨어져 원문 "NEXT_REDIRECT"가 잠깐 보이고, 버튼이 다시 열려(재클릭 = 업로드·전사 두 번) 성공 뒤
+정리(복구 조각·초안 삭제)가 **한 번도** 안 돌았다. → 프로그램으로 await하는 액션은 `redirect()` 대신 **id·경로를 돌려주고**
+호출부가 풀 문서 이동한다(`startMeetingFromAudio` = `createTextMeeting`과 같은 규약). `useActionState`/`<form action>`으로 쓰는
+액션의 `redirect()`는 이 함정이 아니다.
+
 ## #103 칸을 잠그면 **이동 경로와 뒷문**까지 함께 봐야 한다 — 잠금은 UI 한 줄이 아니다 (2026-08-07)
 
 원장 *"결석 체크하면 우측 입력창 비활성화 여부 쳌"* → 멘트만 잠갔더니 같은 날 *"결석을 눌렀는데
@@ -2079,3 +2086,27 @@ a few seconds from the window's load event`가 **주기적으로 계속 쌓인�
   가져오기(`import-invoices.cjs` = makeedu_id → **이름+학년 폴백**). 새 아이가 makeedu에 **접미사 없이 '김근우'** 로 원생 등록되면,
   학생 동기화가 기존 아이에 매칭하고(그 아이는 makeedu_id가 이미 차 있어 백필이 막힘) 새 원생은 eywa에 안 들어오며, 수납 줄은
   이름+학년 폴백으로 **기존 아이의 월 청구에 합쳐질 수 있다**. makeedu에서도 접미사 이름(김근우A)으로 등록할 것.
+
+## #133 창 안 **소프트 이동이 주소에서 `embed=1`을 지우면**, 다음 `router.refresh()`에 창 안에 **전체 셸**이 뜬다 (2026-09-12)
+
+**증상**: 출석부 창에서 달을 옮기거나(PeriodNav) 허브의 강사 줄(맨 `<Link>`)을 누른 뒤 정렬·기간을 바꾸면(= `router.refresh()`·
+서버 액션 재검증) 창 안에 사이드바까지 달린 **전체 셸**이 겹쳐 뜬다. 이동 **직후엔 멀쩡해 보인다** — 공유 레이아웃은 소프트
+이동에서 다시 안 그려지기 때문이다(그래서 첫 화면만 보고는 못 잡는다).
+
+**원인**: `proxy.ts`는 **주소의 embed 파라미터만** 보고 창 갈래를 고르고, `(shell)/layout.tsx`가 그 표식으로 창/전체 셸을 가른다.
+Next 16의 refresh는 **지금 주소로 공유 레이아웃까지** 다시 받는다(`refresh-reducer`). 소프트 이동의 href에 embed가 없으면 그 순간부터
+주소가 거짓이고, 다음 refresh가 그 거짓을 서버에 보낸다. 창 안 하드 이동(`location.assign/replace`·맨 `<a href="/…">`·GET 폼)은
+더 빠르다 — 그 자리에서 바로 전체 셸이다.
+
+**고침(2026-09-12)**:
+- 이동 부품(PeriodNav·HrefSelect 링크 모드·ParamLink·ECS 날짜·`EmbedLink`)이 `useEmbed()`면 `withEmbed` — 호출부 주소 빌더는 그대로.
+- 하드 이동은 `EmbedAnchor`·`EmbedHiddenInput`·`useInFrame() ? withEmbed(href) : href`(선례 원생 삭제). 가드 `embed-hard-nav-wiring.test.ts`.
+- 안전망 **`EmbedUrlKeeper`**(창 갈래 레이아웃에 한 번): 창 문서 주소에 embed가 없으면 `history.replaceState(null, "", withEmbed(…))`로
+  되붙인다 — Next의 history 패치가 ACTION_RESTORE로 canonicalUrl까지 갱신해 refresh·reload가 embed를 유지한다. 🔴 첫 인자는 **null**
+  (Next 내부 상태 객체면 라우터 동기화를 건너뛴다).
+- ⚠️ 복원은 **URL만** 바꾸고 라우터 트리의 page 키는 embed 없는 옛 값이라, **그 뒤 첫 refresh가 트리 불일치 재시도**(라우트 캐시
+  무효화·보이는 링크 재prefetch, 이미 한 번 어긋났으면 창 문서 새로고침)를 치른다. 그래서 키퍼는 **안전망**이고, 자주 도는 출처는
+  이동 시점에 embed를 싣는다.
+
+**교훈**: 창 여부를 **주소가 나른다**면 창 안의 모든 이동은 그 표식을 나르거나 되붙여야 한다. 창 안 이동을 검증할 땐 이동 한 번으로
+끝내지 말고 **refresh를 한 번 돌려** 볼 것.

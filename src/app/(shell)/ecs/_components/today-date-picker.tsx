@@ -8,6 +8,7 @@
  */
 import { useRouter } from "next/navigation";
 import { DatePickerButton } from "@/components/date-picker-button";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 
 export function EcsDatePicker({
   date,
@@ -19,9 +20,16 @@ export function EcsDatePicker({
   view?: "today" | "room";
 }) {
   const router = useRouter();
+  const embed = useEmbed();
   const href = (ymd: string) =>
     view === "room"
       ? `/ecs?view=room&date=${ymd}`
       : `/ecs?view=today&date=${ymd}${mode === "cards" ? "&mode=cards" : ""}`;
-  return <DatePickerButton value={date} onChange={(ymd) => router.push(href(ymd))} />;
+  // 창(iframe) 안이면 embed=1을 싣는다(PeriodNav와 같은 규칙) — 빼면 뒤이은 새로고침이 창 안에 전체 셸을 그린다.
+  return (
+    <DatePickerButton
+      value={date}
+      onChange={(ymd) => router.push(embed ? withEmbed(href(ymd)) : href(ymd))}
+    />
+  );
 }

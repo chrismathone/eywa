@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EmbedAnchor, EmbedHiddenInput } from "@/components/embed-link";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/atoms/pill";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -68,6 +69,7 @@ export default async function ExamsPage({
     from?: string;
     to?: string;
     jjClass?: string;
+    embed?: string;
   }>;
 }) {
   const user = await requireAccess("exams");
@@ -87,6 +89,10 @@ export default async function ExamsPage({
   // JJ 반 칩(eywa 영어 반 id, 2026-09-11) — JJ 보기에서만 쓴다. 담당 밖·모르는 반이면 보기 쪽이 무시하고 그 사실을 적는다.
   const jjClass = one(sp.jjClass);
   const page = Math.max(1, Number(sp.page) || 1);
+  // 플로팅 창(iframe) 안이면 주소 빌더가 embed=1을 싣는다(페이지·JJ 반 칩 — 학원 설정 감사로그 면과 같은 규칙).
+  // ⚠️ 하드 이동(칩·초기화·검색 폼)은 이 값에 기대지 않는다 — embed 없이 소프트 이동으로 들어온 첫 렌더에선 이 값이
+  //    거짓이라, 그쪽은 `EmbedAnchor`·`EmbedHiddenInput`이 클라에서 판정한다(전수검사 2026-09-11).
+  const isEmbed = one(sp.embed) === "1";
 
   const loadRegular = () =>
     Promise.all([
@@ -157,6 +163,7 @@ export default async function ExamsPage({
     if (cur.from) params.set("from", cur.from);
     if (cur.to) params.set("to", cur.to);
     if (cur.jjClass) params.set("jjClass", cur.jjClass);
+    if (isEmbed) params.set("embed", "1");
     const s = params.toString();
     return s ? `/exams?${s}` : "/exams";
   };
@@ -177,19 +184,22 @@ export default async function ExamsPage({
 
       {/* Filter bar */}
       {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표가 자기 테두리를 가져 선이 겹쳤다. */}
+      {/* ⚠️ 칩·초기화는 `<Link>`가 아니라 하드 이동(`EmbedAnchor`)이다 — 아래 검색 폼 입력은 `defaultValue`(비제어)라
+          소프트 이동이면 **옛 검색어·기간이 칸에 남아** '검색' 한 번에 도로 실린다(JJ ↔ 일반 전환 때 기간을 버리는
+          2026-09-10 수리가 그 순간 무너진다). embed는 `EmbedAnchor`가 창 안이면 싣는다. */}
       <div className="flex flex-col gap-2 px-1 py-1">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-1.5">
             <span className="micro shrink-0">과목</span>
             <div className={TOOLBAR_SEG_BOX_WRAP}>
             {subjects.filters.map((f) => (
-              <a
+              <EmbedAnchor
                 key={f.value}
                 href={buildHref({ subject: f.value })}
                 className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
-              </a>
+              </EmbedAnchor>
             ))}
             </div>
           </div>
@@ -197,13 +207,13 @@ export default async function ExamsPage({
             <span className="micro shrink-0">유형</span>
             <div className={TOOLBAR_SEG_BOX}>
             {typeFilters.map((f) => (
-              <a
+              <EmbedAnchor
                 key={f.value}
                 href={buildHref({ type: f.value })}
                 className={`${TOOLBAR_SEG_ITEM} shrink-0 ${activeType === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
-              </a>
+              </EmbedAnchor>
             ))}
             </div>
           </div>
@@ -213,6 +223,8 @@ export default async function ExamsPage({
           {activeType !== "all" ? <input type="hidden" name="type" value={activeType} /> : null}
           {/* 기간을 바꿔 '검색'해도 고른 반은 그대로(반 칩은 표 위에 선다). */}
           {jjMode && jjClass ? <input type="hidden" name="jjClass" value={jjClass} /> : null}
+          {/* 창 안이면 embed도 동행 — 안 실으면 제출 순간 창 안에 전체 셸이 뜬다(클라 판정: EmbedHiddenInput). */}
+          <EmbedHiddenInput />
           {/* JJ 보기는 시험명 검색이 없다(인재원 목록 전체를 기간으로만 자른다). */}
           {jjMode ? null : (
             <div className={TOOLBAR_SEARCH_BOX}>
@@ -245,9 +257,9 @@ export default async function ExamsPage({
           </label>
           <Button type="submit" variant="outline">검색</Button>
           {q || from || to ? (
-            <a href={buildHref({ q: "", from: "", to: "" })} className="text-text-faint hover:text-foreground text-xs underline">
+            <EmbedAnchor href={buildHref({ q: "", from: "", to: "" })} className="text-text-faint hover:text-foreground text-xs underline">
               초기화
-            </a>
+            </EmbedAnchor>
           ) : null}
         </form>
       </div>

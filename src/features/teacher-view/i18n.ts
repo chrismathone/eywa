@@ -1611,7 +1611,10 @@ export const SHEET_DICT = {
   "res.cancel": { ko: "취소", en: "Cancel" },
   "res.del.askNamed": { ko: "{name} 이력서 삭제?", en: "Delete {name}’s resume?" },
   "res.del.ask": { ko: "이 이력서 삭제?", en: "Delete this resume?" },
-  "res.del.done": { ko: "이력서를 삭제했습니다", en: "Resume deleted" },
+  "res.del.fail": {
+    ko: "삭제하지 못했습니다 — 연결을 확인하고 다시 눌러 주세요",
+    en: "Could not delete — check the connection and try again",
+  },
   "res.sr.selected": { ko: " 선택됨", en: " selected" },
   "res.sr.notSelected": { ko: " 선택 안 함", en: " not selected" },
   "res.sr.done": { ko: " 완료", en: " checked" },

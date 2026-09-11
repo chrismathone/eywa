@@ -8,6 +8,7 @@
 import { Pill } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EmbedAnchor } from "@/components/embed-link";
 import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import { summarizeStudyRows, type JjGroup } from "@/features/ijw/class-groups";
 import { formatStudyTime } from "@/features/ijw/contract";
@@ -98,9 +99,9 @@ function GroupRow({
           )}
           {ref?.track ? <Pill color="neutral">{ENGLISH_TRACK_LABEL[ref.track]}</Pill> : null}
           {ref && classHref ? (
-            <a href={classHref(ref.id)} className="text-text-faint hover:text-foreground text-xs underline">
+            <EmbedAnchor href={classHref(ref.id)} className="text-text-faint hover:text-foreground text-xs underline">
               이 반만
-            </a>
+            </EmbedAnchor>
           ) : null}
         </span>
       </th>

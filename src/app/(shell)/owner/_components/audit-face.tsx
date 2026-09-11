@@ -3,6 +3,7 @@ import { Pill, type PillColor } from "@/components/atoms/pill";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
+import { EmbedAnchor, EmbedHiddenInput } from "@/components/embed-link";
 import { EmptyState } from "@/components/empty-state";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { getAuditLogsPage, getAuditNameMap, AUDIT_ACTIONS, auditActionLabel } from "@/features/audit/server/log";
@@ -112,10 +113,12 @@ export async function AuditFace({
           ariaLabel="액션 필터"
         />
         {/* 텍스트+기간 검색(GET) — 서버 컴포넌트라 클라 JS 없이 폼 제출로 필터. tab·embed·action은
-            hidden으로 동행(안 실으면 제출 순간 audit 면·창 모드·액션 필터가 풀린다). 페이지는 1로 리셋. */}
+            hidden으로 동행(안 실으면 제출 순간 audit 면·창 모드·액션 필터가 풀린다). 페이지는 1로 리셋.
+            ⚠️ embed는 서버의 isEmbed가 아니라 `EmbedHiddenInput`(클라 판정) — embed 없이 소프트 이동으로 들어온
+            첫 렌더에선 isEmbed가 거짓이라 제출이 창 안에 전체 셸을 연다(전수검사 2026-09-11). */}
         <form method="get" action="/owner" className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="tab" value="audit" />
-          {isEmbed ? <input type="hidden" name="embed" value="1" /> : null}
+          <EmbedHiddenInput />
           {action && action !== "all" ? <input type="hidden" name="action" value={action} /> : null}
           <input
             type="search"
@@ -147,12 +150,12 @@ export async function AuditFace({
             검색
           </button>
           {query || dateFrom || dateTo ? (
-            <a
-              href={`/owner?tab=audit${isEmbed ? "&embed=1" : ""}${action && action !== "all" ? `&action=${action}` : ""}`}
+            <EmbedAnchor
+              href={`/owner?tab=audit${action && action !== "all" ? `&action=${action}` : ""}`}
               className="text-text-faint hover:text-foreground text-xs underline-offset-2 hover:underline"
             >
               초기화
-            </a>
+            </EmbedAnchor>
           ) : null}
         </form>
         <span className="text-text-faint num ml-auto text-xs">

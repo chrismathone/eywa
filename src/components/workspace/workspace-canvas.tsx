@@ -113,10 +113,10 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
     const unsub = subscribeWindowBusy((m) => {
       if (m.active) busy.add(m.winId);
       else busy.delete(m.winId);
-      // 잠금은 store에도 옮겨 담는다 — 창 자체 X(FloatingWindow)와 하단 독의 ✕(WindowSwitcher)가
-      // 같은 값을 보게 하는 단일 소스(구독을 화면마다 따로 두면 마운트 시점이 늦은 쪽은 진행 중인
-      // 녹음을 모른 채 창을 닫아버린다 — 독은 스포트라이트 진입/해제로 실제로 재마운트된다).
-      useWindowStore.getState().setWindowBusy(m.winId, m.active);
+      // ⚠️ 여기서는 **개수만** 센다 — 창 잠금(store.busy)은 RouteWindow가 자기 iframe의 신호로 정확한 창 id에 건다.
+      //    이 방송의 id는 경로로 추측한 것이라(상세 창 안에서 수정으로 들어가면 없는 창 id) 잠금에 쓰면 유령 잠금이
+      //    남았다 — 녹음 중에 그 id의 창을 새로 열면 영문 모르게 닫기가 막혔다(전수검사 2026-09-11 후속).
+      //    방송은 탭을 넘나들므로 다른 탭의 녹음도 이 탭의 새로고침을 막는다(종전 그대로).
       const need = busy.size > 0;
       if (need && !installed) {
         window.addEventListener("beforeunload", guard);
@@ -147,6 +147,8 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
         href?: string;
         autoClose?: boolean;
         dirty?: boolean;
+        /** 창 안 Shift+클릭(WindowLink) — 같은 화면을 새 창으로 한 벌 더. */
+        newInstance?: boolean;
       } | null;
       if (!data || !e.source) return;
       let sourceWinId: string | null = null;
@@ -176,13 +178,17 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
         // autoClose=true(useOpenFormWindow "새 X" 폼)면 제출 성공 후 창 자동 닫힘. shift+클릭(WindowLink)은
         // autoClose 없음 → false(그냥 새 창). spawnedBy=소스 창 id → autoClose로 닫힐 때 그 리스트 창도 reload
         // (최상위 router.refresh()는 배경만 갱신 = 소스 iframe엔 신규 항목이 stale로 남던 것 해소).
-        st.open("route", {
+        const params = {
           id: data.id,
           title: data.title ?? "보기",
           href: data.href,
           autoClose: data.autoClose === true,
           spawnedBy: sourceWinId,
-        });
+        };
+        // 창 안 Shift+클릭(`newInstance`) = 최상위 Shift+클릭과 같은 뜻 — 같은 화면을 새 창으로 한 벌 더.
+        // 종전엔 open()이라 이미 떠 있는 그 창이 그 주소로 옮겨져 보던 자리를 잃었다(2026-09-11 리뷰).
+        if (data.newInstance === true) st.openNewInstance("route", params);
+        else st.open("route", params);
         return;
       }
     };

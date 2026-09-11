@@ -25,8 +25,8 @@ import { analyzeMeeting, buildMeetingAnalysisInput } from "./ai";
 /**
  * Audio flow: client already uploaded the file to storage. Server creates the
  * meeting row, gets a signed URL, submits to AssemblyAI with a webhook callback,
- * then redirects to the detail page. The webhook does the rest (transcript fetch
- * + Claude analysis).
+ * then returns the new meeting id (the client navigates). The webhook does the rest
+ * (transcript fetch + Claude analysis).
  */
 export type UpdateMeetingTitleState = { error?: string; ok?: true } | undefined;
 
@@ -220,7 +220,7 @@ export type StartMeetingFromAudioInput = {
   audioSizeBytes: number;
 };
 
-export type StartMeetingFromAudioState = { error?: string } | undefined;
+export type StartMeetingFromAudioState = { error?: string; id?: string } | undefined;
 
 export async function startMeetingFromAudio(
   _prev: StartMeetingFromAudioState,
@@ -329,11 +329,18 @@ export async function startMeetingFromAudio(
       .from("meeting_minutes")
       .update({ processing_status: "failed", processing_error: ko })
       .eq("id", meeting.id);
-    return { error: ko };
+    // 🔴 행·오디오는 이미 있다 — id를 함께 돌려 호출부가 그 회의록으로 가게 한다(상세의 '처리 실패' 칸에 사유와
+    //    '전사부터 다시'가 뜬다). error만 주면 폼이 버튼을 다시 열어, 한 번 더 누르면 업로드·행·전사가 한 벌 더 생겼다.
+    revalidatePath("/meetings");
+    return { error: ko, id: meeting.id as string };
   }
 
   revalidatePath("/meetings");
-  redirect(`/meetings/${meeting.id}`);
+  // 🔴 redirect() 대신 id를 돌려준다 — 클라가 await하는 프로그램 호출이라 redirect()는 그 promise를
+  //    NEXT_REDIRECT로 reject시킨다(Next 16 server-action-reducer). 성공인데 폼이 catch로 떨어져 원문 오류가
+  //    보이고 버튼이 다시 열려, 한 번 더 누르면 업로드·전사가 두 번 됐다. 이동은 호출부가 정한다
+  //    (창/스탠드얼론) — createTextMeeting과 같은 규약.
+  return { id: meeting.id as string };
 }
 
 export type CreateTextMeetingState = { error?: string; id?: string } | undefined;

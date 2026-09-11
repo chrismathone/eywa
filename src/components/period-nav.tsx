@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { cn } from "@/lib/utils";
 
 /**
@@ -95,6 +96,7 @@ export function PeriodNav({
   nextDisabled?: boolean;
 }) {
   const router = useRouter();
+  const embed = useEmbed();
   const [pending, startTransition] = useTransition();
   const [handing, setHanding] = useState(false);
   const isCurrent = relation === "current";
@@ -110,7 +112,12 @@ export function PeriodNav({
   const litPrev = relation === "past";
   const litNext = relation === "future";
 
-  const go = (href: string) => {
+  const go = (raw: string) => {
+    // 🔴 창(iframe) 안이면 이동 주소에 embed=1을 싣는다(FaceTabs와 같은 규칙) — 빼면 주소에서 embed가 지워지고,
+    //    그 뒤 `router.refresh()`(출석부 정렬·기간 저장)·서버 액션 재검증이 공유 레이아웃을 embed 없는 주소로
+    //    다시 받아 **창 안에 전체 셸**이 뜬다(메뉴·창 이동 전수검사 2026-09-11). 가로챈 화면(onNavigate)도 이 주소를 받는다.
+    // ⚠️ 주소가 아닌 값(원스크린은 날짜 문자열을 넘긴다)엔 withEmbed가 손대지 않는다(앱 경로·상대 쿼리만 — embed-context.tsx).
+    const href = embed ? withEmbed(raw) : raw;
     if (onNavigate) {
       // 가로챈 화면이 저장 flush 같은 자기 순서를 지키는 동안에도 "가는 중"이 보여야 한다
       // — 아무 반응이 없으면 사람이 화살표를 두 번 누른다.

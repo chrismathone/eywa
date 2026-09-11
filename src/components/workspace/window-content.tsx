@@ -30,13 +30,20 @@ function StudentWindow({ win }: { win: Win }) {
   // 요약 창은 닫음(중복 제거) → 배경이 가려지던 문제 해소.
   function openDetail() {
     const routeId = `students/${id}`;
-    open("route", {
+    // 요약 창을 **먼저** 닫는다 — 곧 닫을 창이 '지금 보는 창'이라 자리를 지키는 바람에, 한도가 차 있으면 상세가 다른 창을
+    // 밀어내거나(깨끗한 창) 거절됐다(나머지가 전부 미저장 — 재리뷰 2026-09-11). 비킨 자리로 연다(같은 클릭 안이라 한 번에 그려진다).
+    close(win.id);
+    const opened = open("route", {
       id: routeId,
       title: data?.name ?? win.params.title,
       subtitle: win.params.subtitle,
       href: `/students/${id}`,
     });
-    close(win.id);
+    // 그래도 못 열었으면(이유 안내는 스토어가 띄웠다) 요약 창을 되살린다 — 볼 것이 아무것도 안 남지 않게.
+    if (!opened) {
+      open("student", win.params);
+      return;
+    }
     enterSpotlight(windowId("route", routeId));
   }
 

@@ -32,6 +32,7 @@ import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-pl
 import { makeupRowName } from "../makeup-label";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
+import { EmbedAnchor } from "@/components/embed-link";
 import {
   issueReportAttachmentUploadTicket,
   registerReportAttachment,
@@ -3751,24 +3752,24 @@ export function OneScreenClient({
         <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
           <span className="text-foreground font-bold">{t("os.c.noClassTitle")}</span>
           <span>{t("os.c.noClassBody")}</span>
-          <a
+          <EmbedAnchor
             href={`/onescreen?date=${date}&all=1${view === "card" ? "" : `&view=${view}`}`}
             className="text-primary font-bold underline underline-offset-2"
           >
             {t("os.c.showAll")}
-          </a>
+          </EmbedAnchor>
         </div>
       ) : null}
       {showingAll ? (
         <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
           <span className="font-bold">{t("os.c.showingAllTitle")}</span>
           <span>{t("os.c.showingAllBody")}</span>
-          <a
+          <EmbedAnchor
             href={`/onescreen?date=${date}${view === "card" ? "" : `&view=${view}`}`}
             className="font-bold underline underline-offset-2"
           >
             {t("os.c.showTodayOnly")}
-          </a>
+          </EmbedAnchor>
         </div>
       ) : null}
 

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { roleHome } from "@/lib/permissions";
-import { isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
+import { canUseTeacherView, isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
 import { canUseOtherTeacherView, loadViewAsTarget, VIEW_AS_COOKIE } from "@/lib/auth/view-as";
 import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
 import { ENGLISH_TEACHER_HOME, teacherHomeFromAssistantClasses } from "@/lib/auth/teacher-home-rule";
@@ -25,9 +25,31 @@ const COOKIE_OPTS = {
 };
 
 /**
- * 관리자 → 강사뷰. 겸직(풀셸 역할 + 실제 담당 반)만 허용. **착지 경로(강사 홈)를 반환** — 네비게이션은
- * 호출부(클라)가 `window.location`으로 확정한다(switchToAdminView와 대칭). 자격 미달이면 null(무동작).
+ * 그 강사의 강사 홈 — 담당 반 과목으로 가르고, 담당 반이 0개면 부담임(슬롯) 영어 반까지 본다.
+ * teacherViewHome()과 같은 규칙인데, 두 전환 액션은 방금 이 응답에서 세팅한 쿠키를 그 함수가 아직 못 읽어
+ * 여기서 직접 잇는다(규칙·ECS 접근 가드는 teacher-home 한 곳뿐). 부담임 판정은 ecsAssistantClassIds와 같은
+ * 파라미터판 단일 소스(englishAssistantClassIdsOf). 위임만 받은 관리자도 담당 반이 0개라 이 갈래를 탄다
+ * (위임 반은 원스크린 로스터에 선다).
+ * ⚠️ export하지 말 것 — "use server" 파일의 export는 전부 서버 액션이 된다(#119).
+ */
+async function teacherHomeOf(teacherId: string): Promise<string> {
+  const { classIds, subjects } = await getTeacherScope(teacherId);
+  if (classIds.length > 0) return teacherHomeForSubjects(subjects);
+  const assistantCount = (await englishAssistantClassIdsOf(teacherId)).length;
+  return teacherHomeForSubjects(
+    teacherHomeFromAssistantClasses(assistantCount) === ENGLISH_TEACHER_HOME ? ["english"] : [],
+  );
+}
+
+/**
+ * 관리자 → 강사뷰. **토글이 보이면 들어간다** — 자격은 노출과 같은 함수(`canUseTeacherView`: 담당 반 ≥1 또는
+ * 오늘 위임받은 반)로 판정한다. **착지 경로(강사 홈)를 반환** — 네비게이션은 호출부(클라)가 `window.location`으로
+ * 확정한다(switchToAdminView와 대칭). 자격이 확인되지 않으면 null — 세션 없음·자격 없음·조회 실패를 가르지 않으니
+ * 호출부는 원인을 단정하지 말고 알린다(view-mode-toggle).
  * 강사 홈은 담당 과목으로 갈린다(영어 전담=`/ecs`·그 외=`/onescreen`, 2026-08-07).
+ *
+ * 🔴 예전엔 여기만 **담당 반**으로 판정했다 — 노출은 위임까지 치는데 진입은 안 쳐서, 위임만 받은 관리자에게
+ *    버튼은 서는데 눌러도 쿠키가 안 걸려 아무 일도 없었다(2026-09-11 전수검사). 자격 조건을 여기 다시 적지 말 것.
  *
  * ⚠️ 여기서 redirect()(서버액션=soft nav)를 쓰지 않는 이유: soft nav은 **공유 (shell) 레이아웃을 Next
  * 라우터 캐시에 강사 미니셸로 남긴다** → 뒤로가기 시 그 캐시가 관리자 페이지를 강사 미니셸 크롬으로 감싸
@@ -37,15 +59,12 @@ const COOKIE_OPTS = {
 export async function switchToTeacherView(): Promise<string | null> {
   const user = await getCurrentUser();
   if (!user || !isFullShellRole(user.systemRole)) return null; // 실 강사·학생은 애초에 토글 미노출
-  const { classIds, subjects } = await getTeacherScope(user.id);
-  if (classIds.length === 0) return null; // 담당 반 없으면 강사뷰가 무의미 — 무시
+  if (!(await canUseTeacherView())) return null; // 담당 반도 위임도 없으면 강사뷰가 무의미 — 노출과 같은 판정
   const jar = await cookies();
   jar.set(VIEW_MODE_COOKIE, "teacher", COOKIE_OPTS);
   jar.delete(VIEW_AS_COOKIE); // '내 강사뷰'는 항상 본인 — 남아 있던 '다른 강사 뷰' 대상은 해제
-  // 착지 = 그 사람의 강사 홈(영어 전담이면 ECS, 2026-08-07). ⚠️ 여기서 `teacherViewHome()`을 쓰지 않는 이유:
-  // 그건 방금 **이 응답에서 세팅한** 쿠키를 다시 읽어야 하는데, 그 요청의 cookies()엔 아직 없다. 담당 반
-  // 과목은 이미 손에 있으므로 그걸 받는 갈래를 쓴다(규칙·ECS 접근 가드는 teacher-home 한 곳뿐).
-  return teacherHomeForSubjects(subjects);
+  // 착지 = 그 사람의 강사 홈(영어 전담이면 ECS, 2026-08-07). `teacherViewHome()`을 못 쓰는 이유는 teacherHomeOf 주석.
+  return teacherHomeOf(user.id);
 }
 
 /**
@@ -96,15 +115,8 @@ export async function switchToOtherTeacherView(targetId: string): Promise<string
     metadata: { targetUserId: target.id },
   });
 
-  // 착지 = 그 강사의 강사 홈(영어 전담=ECS). 담당 반이 0개면 부담임(슬롯) 영어 반까지 보고 판정 —
-  // teacherViewHome()과 같은 규칙이지만, 방금 세팅한 쿠키를 그 함수는 아직 못 읽어 여기서 직접 잇는다.
-  // 부담임 판정은 ecsAssistantClassIds와 같은 파라미터판 단일 소스(englishAssistantClassIdsOf).
-  const { classIds, subjects } = await getTeacherScope(target.id);
-  if (classIds.length > 0) return teacherHomeForSubjects(subjects);
-  const assistantCount = (await englishAssistantClassIdsOf(target.id)).length;
-  return teacherHomeForSubjects(
-    teacherHomeFromAssistantClasses(assistantCount) === ENGLISH_TEACHER_HOME ? ["english"] : [],
-  );
+  // 착지 = 그 강사의 강사 홈(영어 전담=ECS, 담당 반 0개면 부담임 영어 반까지) — 본인 전환과 같은 teacherHomeOf.
+  return teacherHomeOf(target.id);
 }
 
 export type TeacherViewTarget = { id: string; name: string };

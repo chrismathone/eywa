@@ -1,9 +1,11 @@
-import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PageHeader } from "@/components/page-header";
+import { WindowLink } from "@/components/workspace/window-link";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { requireAccess } from "@/lib/auth/require-access";
-import type { MenuKey } from "@/lib/permissions";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { getShellView, type ShellView } from "@/lib/auth/view-mode";
+import { menuKeyForPath, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { HelpBrowser } from "./_help-browser";
 import { HelpSearchProvider, HelpSearchToggle } from "./_help-search";
 
@@ -204,7 +206,8 @@ const MENUS: { id: MenuKey; label: string; href: string; description: string }[]
 const FAQ: { q: string; a: string }[] = [
   {
     q: "처음인데 어디서부터 시작하나요?",
-    a: "위 ‘빠른 시작’ 순서대로 하시면 됩니다 — 학원 설정 → 반 만들기 → 학생 등록 → 반 배정 → 매일 운영(출석·수납·상담). 대부분의 화면은 오른쪽 위 ‘새 ○○’ 버튼으로 바로 추가할 수 있어요.",
+    // ⚠️ 단계를 여기 나열하지 말 것 — 빠른 시작은 사람마다(권한으로) 걸러져서, 나열하면 화면에 없는 단계를 가리킨다(2026-09-12 재리뷰).
+    a: "위 ‘빠른 시작’ 순서대로 하시면 됩니다. 대부분의 화면은 오른쪽 위 ‘새 ○○’ 버튼으로 바로 추가할 수 있어요.",
   },
   {
     q: "메뉴가 창으로 뜨는데 어떻게 쓰나요?",
@@ -260,23 +263,47 @@ const FAQ: { q: string; a: string }[] = [
   },
 ];
 
+/**
+ * 이 사람이 이 링크로 **실제로 그 화면을 열 수 있나** — 도움말은 열 수 없는 화면을 링크하지 않는다(2026-09-11 리뷰:
+ * 관리자뷰의 '원스크린'이 원스크린 창에 운영실을 띄웠고, 원장 외 사무실 역할의 '학원 설정'·'출석 키오스크'는 떠돌이 창이 됐다).
+ * 🔴 새 규칙을 짓지 않는다 — **그 페이지 게이트와 같은 답**:
+ *  · 대부분 = `requireAccess(menu)`와 같은 행렬(`canAccessTenant` — 테넌트 권한·개인 예외·super_admin 반영, #58).
+ *  · 원스크린 = 역할이 아니라 **뷰**로 연다(그 페이지가 `getShellView() !== "teacher"`면 역할 홈으로 돌려보낸다).
+ *  · 강사뷰(미니셸) = 레이아웃의 뷰-경로 가드가 강사 행으로 한 번 더 막는다(`canAccess("teacher", …)`와 같은 행렬 —
+ *    겸직 관리자는 역할로는 열려도 강사뷰에선 돌려보내진다).
+ * 경로로 메뉴를 모르면(null) 통과 — 그 페이지 자신의 게이트가 판정한다(레이아웃 가드와 같은 fail-open).
+ */
+async function helpLinkOpens(menu: MenuKey | null, role: SystemRole, view: ShellView): Promise<boolean> {
+  if (!menu) return true;
+  if (menu === "teacher_onescreen") return view === "teacher";
+  if (!(await canAccessTenant(role, menu))) return false;
+  return view !== "teacher" || (await canAccessTenant("teacher", menu));
+}
+
 export default async function HelpPage() {
-  await requireAccess("help");
+  const [user, view] = await Promise.all([requireAccess("help"), getShellView()]);
+  // 두 목록을 함께 거른다 — 행렬은 요청 캐시라 판정이 늘어도 조회는 늘지 않는다.
+  const [quickOpens, menuOpens] = await Promise.all([
+    Promise.all(QUICKSTART.map((s) => helpLinkOpens(menuKeyForPath(s.href), user.systemRole, view))),
+    Promise.all(MENUS.map((m) => helpLinkOpens(m.id, user.systemRole, view))),
+  ]);
+  const quickstart = QUICKSTART.filter((_, i) => quickOpens[i]);
+  const menus = MENUS.filter((_, i) => menuOpens[i]);
 
   return (
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
     <HelpSearchProvider>
       <div className="space-y-6 compact-chrome:space-y-4">
         {/* 머리 — 값만(§12): 빠른 시작 단계 수 · 메뉴 수 · FAQ 수. 검색은 눌러야 나온다(§10). 옛 사진 히어로·"무엇을 도와드릴까요?"·
-            안내 문장은 걷었다(디자인 v5 13단계). */}
+            안내 문장은 걷었다(디자인 v5 13단계). 개수는 **이 사람에게 보이는 목록** 기준이다. */}
         <PageHeader
           eyebrow="안내"
           title="도움말"
-          description={`빠른 시작 ${QUICKSTART.length}단계 · 메뉴 ${MENUS.length}개 · FAQ ${FAQ.length}개`}
+          description={`빠른 시작 ${quickstart.length}단계 · 메뉴 ${menus.length}개 · FAQ ${FAQ.length}개`}
           actions={<HelpSearchToggle />}
         />
 
-        <HelpBrowser quickstart={QUICKSTART} menus={MENUS} faq={FAQ} />
+        <HelpBrowser quickstart={quickstart} menus={menus} faq={FAQ} />
 
         {/* 카드 = 링 하나(v5 ④) — 별도 border를 겹치지 않는다. 링크는 텍스트 Secondary(control-scale 치수, 한 줄에 한 벌). */}
         <section className="bg-card shadow-card flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-center">
@@ -290,12 +317,14 @@ export default async function HelpPage() {
               제품에서 사용하는 아이콘과 크기, 선, 의미 배정 규칙을 한눈에 확인하세요.
             </p>
           </div>
-          <Link
+          {/* 아이콘 시스템은 도움말의 면이라 창 규약상 **같은 도움말 창**이다 — 창 안에선 그 창 안 이동(드릴인).
+              맨 Link는 창 안에서 embed가 빠져 새로고침 한 번에 전체 셸로 뒤집힌다(2026-09-11 전수검사). */}
+          <WindowLink
             href="/help/icons"
             className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
           >
             아이콘 보기 <EyIcon name="arrowRight" size={18} className="opacity-60" />
-          </Link>
+          </WindowLink>
         </section>
 
         {/* 1:1 문의 — 옛 그라데이션 카드(흰 글자·글로우)를 같은 링 카드로(v5 ④·⑪ 장식 제거). 문구·번호는 그대로. */}

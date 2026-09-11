@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
@@ -15,6 +14,8 @@ import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { useInFrame } from "@/components/workspace/use-in-frame";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
@@ -128,12 +129,14 @@ export function ConsultationFullForm({
   const gradeOptions =
     currentGrade && !gradeLevels.includes(currentGrade) ? [...gradeLevels, currentGrade] : gradeLevels;
 
-  const router = useRouter();
+  const inFrame = useInFrame();
   const isCreate = mode === "create";
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [recordingActive, setRecordingActive] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  /** 저장이 끝나 상세로 떠나는 중 — 폼 전체를 잠근다(아래 form의 inert 주석). */
+  const [leaving, setLeaving] = useState(false);
   const busy = phase !== "idle";
 
   // 상단 탭(ijw 구조): 기본 정보 + 과목별 상담. AI 분석은 상세 화면에서 보여준다(폼은 입력 전용).
@@ -278,9 +281,13 @@ export function ConsultationFullForm({
         if (result?.ok && v.id) {
           clearDraft();
           notifySaved();
-          markSaved();
-          router.push(`/enrollment/${v.id}`);
-          router.refresh();
+          markSaved(); // ⚠️ 이동보다 먼저 — 뒤면 풀 문서 이동에 미저장 가드의 '떠나시겠습니까?'가 뜬다
+          // 🔴 `router.push`가 아니라 풀 문서 이동 — 서버 액션 직후의 push는 액션 응답이 이 수정 폼 트리를
+          //    다시 적용하면서 삼켜진다(#102: 저장됐는데 수정 폼에 그대로 머문다). 풀 로드라 상세는 항상 새로
+          //    그려진다(refresh 불필요). phase는 '저장 중…'인 채로 둔다 — 이동 중에 다시 누르면 녹음이 한 번 더 붙는다.
+          const dest = `/enrollment/${v.id}`;
+          setLeaving(true);
+          window.location.assign(inFrame ? withEmbed(dest) : dest);
         }
       }
     } catch (err) {
@@ -298,7 +305,10 @@ export function ConsultationFullForm({
   const errorMsg = submitError;
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-3">
+    // 🔴 저장 뒤 이동 대기 중엔 폼 전체를 잠근다(inert = 입력·포커스·클릭 불가). 풀 문서 이동은 응답이 올 때까지
+    //    이 화면이 살아 있는데, 그 사이 칸에 치면 ① 초안 자동저장이 방금 지운 초안을 pagehide에서 되살리고
+    //    ② 미저장 가드가 다시 dirty가 되어 이동에 '떠나시겠습니까?'가 뜬다.
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-3" inert={leaving}>
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
 

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { MobileTopNav } from "@/components/mobile-top-nav";
@@ -28,7 +28,7 @@ import { ViewAsChip } from "@/components/other-teacher-view";
 import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
-import { findNavItem } from "@/lib/navigation";
+import { findNavItem, teacherMenuKeysFor } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { MenuHubPanel } from "@/components/workspace/menu-hub-panel";
@@ -40,6 +40,7 @@ import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
+import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
 import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 
@@ -98,6 +99,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                  (`.sticky-save-bar`와 같은 결, 시간표 선례 — 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*). */}
           <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
+            {/* 창 안 소프트 이동(맨 Link·router.push)이 주소에서 embed=1을 지우면 되붙인다 — 안 붙이면 뒤이은
+                refresh·서버 액션·reload가 embed 없는 주소로 이 레이아웃을 다시 받아 창 안에 전체 셸이 뜬다
+                (전수검사 2026-09-11, embed-url-keeper.tsx). useSearchParams라 Suspense로 감싼다. */}
+            <Suspense fallback={null}>
+              <EmbedUrlKeeper />
+            </Suspense>
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />
             {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
@@ -122,8 +129,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 공유. 미업로드/실패면 null → 각 표면이 학원 building 마크로 폴백. 임베드는 위에서 이미 return(크롬 없음).
   const logoSrc = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
-  // 테넌트 권한 override + **개인 예외(userOverrides)** 반영 매트릭스 — 강사 '내 메뉴'·사이드바·팰릿·
-  // 모바일내비 메뉴 필터에 주입(클라 소비처). getUserPermMatrix = getTenantSettings(위에서 이미 fetch,
+  // 테넌트 권한 override + **개인 예외(userOverrides)** 반영 매트릭스 — 강사 '내 메뉴'(여기서 teacherMenuKeysFor로
+  // 계산해 키만 내린다)·사이드바·팰릿·모바일내비 메뉴 필터가 쓴다. getUserPermMatrix = getTenantSettings(위에서 이미 fetch,
   // cache 공유) + override + 현재 사용자 예외 + **super_admin 우회**(owner override 무시 = 코드 기본값).
   // 페이지 requireAccess와 같은 캐시를 공유해 추가 쿼리 0. 개인 예외는 자기 역할 행만 패치하므로
   // 아래 강사뷰 가드(canAccess("teacher", …))는 겸직 관리자에게 영향 없음.
@@ -176,6 +183,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 강사 홈(= '내 메뉴'에서 맨 위로 올릴 항목) — 영어 전담이면 ECS, 그 외 원스크린(원장 지시 2026-08-07).
   // 위 ecsForTeacher와 **같은 캐시**(effectiveTeacherScope·ecsAssistantClassIds)를 재사용하므로 추가 쿼리 0.
   const teacherHome = view === "teacher" ? await teacherViewHome() : null;
+
+  // '내 메뉴'에 세울 메뉴 — 강사 행 ∧ **실제 역할** ∧ 입구 정책(메뉴에서 뺀 항목), 판정은 teacherMenuKeysFor 한 곳.
+  // 🔴 실제 역할을 빼지 말 것(2026-09-11 전수검사): 페이지 requireAccess는 실제 역할로 여는데 강사 행만 보고 세우면,
+  //    겸직 강사뷰·'다른 강사 뷰'(열람 전용 — user는 보는 사람 자신)에서 누르면 강사 홈으로 튕기는 항목이 선다
+  //    (상담사는 다섯 개). permMatrix는 페이지 게이트와 같은 사용자 유효 매트릭스라 쿼리 0. 실 강사는 두 축이 같아 불변.
+  const teacherMenus = view === "teacher" ? teacherMenuKeysFor(user.systemRole, permMatrix) : [];
 
   // 강사뷰 화면 언어(원장 2026-09-03) — 크롬('내 메뉴')과 본문이 **한 값**을 봐야 하므로 셸에서 한 번 읽어
   // 아래 미니셸 전체를 감싼다. 🔴 관리자 풀셸·학생 미니셸에는 주입하지 않는다(원장: 관리자뷰 수정 불필요).
@@ -240,7 +253,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             {viewAs ? <ViewAsChip name={viewAs.displayName} /> : null}
             {view === "teacher" ? (
               <TeacherMenu
-                permMatrix={permMatrix}
+                menus={teacherMenus}
                 canReturnToAdmin={isFullShellRole(user.systemRole)}
                 showEcs={ecsForTeacher}
                 showMcs={mcsForTeacher}
