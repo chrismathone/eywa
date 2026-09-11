@@ -37,6 +37,9 @@ export function RouteWindow({ win }: { win: Win }) {
   const autoClosedRef = useRef(false);
   const href = win.params.href;
   const fallbackTitle = win.params.title;
+  // 메뉴가 이 창의 첫 화면을 바꾸면(open-menu-window) 새 문서의 첫 로드에서 nav 스택을 새로 시작한다 — 아래 effect.
+  const prevHrefRef = useRef(href);
+  const resetOnLoadRef = useRef(false);
 
   // 복원 시 창 최대 6개가 iframe src를 동시에 로드하면 셸+페이지가 6× 동시 렌더(인증·DB 라운드트립
   // 폭발)된다. 포커스 창만 즉시 로드하고 나머지는 z순서대로 stagger 마운트 → 동시 부하 분산.
@@ -81,16 +84,23 @@ export function RouteWindow({ win }: { win: Win }) {
     const el = iframeRef.current;
     if (!el) return;
     iframeRegistry.set(win.id, el);
+    // 메뉴가 이 창의 첫 화면(`params.href`)을 바꿨다 — **새 문서의 첫 로드**에서 nav 스택을 새로 시작한다
+    // (open-menu-window: 면 전환·필터 주소). 아래 즉시 sync()는 아직 **옛 문서**를 보고하므로 초기화에 쓰지 않는다.
+    if (prevHrefRef.current !== href) {
+      prevHrefRef.current = href;
+      resetOnLoadRef.current = true;
+    }
     let obs: MutationObserver | null = null;
-    const sync = () => {
+    /** 관찰해서 스택에 보고했으면 true(아직 about:blank·autoClose로 닫힘이면 false). */
+    const sync = (reset = false): boolean => {
       try {
         const doc = el.contentDocument;
         const cw = el.contentWindow;
-        if (!doc || !cw) return;
+        if (!doc || !cw) return false;
         // iframe이 아직 라우트를 로드하기 전엔 about:blank(pathname="blank") — 실제 라우트(절대경로)가
         // 들어오기 전까지는 스택을 건드리지 않는다(로딩 스켈레톤엔 ← 미표시, 닫기는 X가 담당).
         const path = cw.location.pathname;
-        if (cw.location.href === "about:blank" || !path.startsWith("/")) return;
+        if (cw.location.href === "about:blank" || !path.startsWith("/")) return false;
         // autoClose("새 X" 폼) 창: iframe이 초기 /X/new 경로를 벗어나면(제출 성공 → redirect/push)
         // 창을 닫고 배경 라우트를 새로고침(우측 패널의 닫기+목록 갱신을 창 패러다임으로 대체).
         if (win.params.autoClose && !autoClosedRef.current) {
@@ -102,15 +112,21 @@ export function RouteWindow({ win }: { win: Win }) {
             // 소스가 플로팅 창(iframe 안 "새 X")이면 그 창은 별도 문서라 router.refresh가 안 닿음 → 직접 reload
             // (신규 항목이 소스 리스트 창에 즉시 보이게). 이미 닫힌 창이면 no-op.
             if (win.params.spawnedBy) reloadWindow(win.params.spawnedBy);
-            return;
+            return false;
           }
         }
         const url = path + cw.location.search;
         const title = cleanTitle(doc.title || "") || fallbackTitle;
-        observeIframe(win.id, { title, url });
+        observeIframe(win.id, reset ? { title, url, reset: true } : { title, url });
+        return true;
       } catch {
         /* same-origin이라 정상 도달; 만약 막히면 무시(타이틀=params 유지) */
+        return false;
       }
+    };
+    // 관찰자·popstate용 — 인자를 넘기는 콜백(MutationObserver는 레코드 배열, popstate는 이벤트)이 `reset`으로 읽히지 않게.
+    const syncPlain = () => {
+      sync();
     };
     const onLoad = () => {
       // 전체 문서 로드(하드 리로드·⟳·브라우저 back)는 iframe React 컨텍스트를 파괴하며 언마운트 cleanup(미저장
@@ -118,17 +134,19 @@ export function RouteWindow({ win }: { win: Win }) {
       // 새 문서는 항상 clean에서 시작하므로 로드 시 dirty 해제(편집하면 새 폼의 가드가 다시 dirty를 올림).
       // (소프트 client nav[드릴인/백]은 load가 안 떠 이 경로를 안 타고, 폼 언마운트 cleanup이 이미 처리.)
       useWindowStore.getState().setWindowDirty(win.id, false);
-      sync();
+      // 메뉴가 첫 화면을 바꾼 뒤의 첫 로드면 스택을 새로 시작한다(실제로 보고한 뒤에만 표식을 내린다 —
+      // 아직 about:blank인 로드가 표식을 먹어 버리면 진짜 새 문서가 옛 스택 위에 쌓인다).
+      if (sync(resetOnLoadRef.current)) resetOnLoadRef.current = false;
       try {
         // head 서브트리 관찰 — <title> 텍스트 변경뿐 아니라 client-side nav 시 title 엘리먼트
         // 교체(Next 메타)까지 포착. popstate도 함께 들어 history.back() 후 즉시 동기화.
         const head = el.contentDocument?.head;
         obs?.disconnect();
         if (head) {
-          obs = new MutationObserver(sync);
+          obs = new MutationObserver(syncPlain);
           obs.observe(head, { childList: true, characterData: true, subtree: true });
         }
-        el.contentWindow?.addEventListener("popstate", sync);
+        el.contentWindow?.addEventListener("popstate", syncPlain);
       } catch {
         /* ignore */
       }
