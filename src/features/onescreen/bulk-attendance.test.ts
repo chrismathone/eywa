@@ -11,6 +11,29 @@ const row = (over: Partial<BulkAttRow> & { studentId: string }): BulkAttRow => (
   ...over,
 });
 
+describe("planBulkAttendance — 새 칸의 빈 시수(수학 자동 시수, 2026-09-11)", () => {
+  it("🔴 새로 기록될 칸에 시수를 비우면 들어갈 값 — 자동 시수가 섞이면 1만이 아니다", () => {
+    const plan = planBulkAttendance(
+      [
+        row({ studentId: "s1", autoUnits: 1.5 }),
+        row({ studentId: "s2", classId: "c2" }), // 자동값 없음 = 1
+        row({ studentId: "s3", classId: "c3", autoUnits: 1.5 }),
+        row({ studentId: "s4", raw: "absent", autoUnits: 2 }), // 덮어쓰기 — 기존 시수 보존이라 목록 밖
+      ],
+      "present",
+      { onlyEmpty: false },
+    );
+    expect(plan.newCellUnits).toEqual([1, 1.5]);
+  });
+
+  it("새 칸이 없으면 빈 목록 · 자동값이 없으면 [1]", () => {
+    expect(planBulkAttendance([row({ studentId: "s1", raw: "late" })], "present", { onlyEmpty: false }).newCellUnits).toEqual(
+      [],
+    );
+    expect(planBulkAttendance([row({ studentId: "s1" })], "present", { onlyEmpty: false }).newCellUnits).toEqual([1]);
+  });
+});
+
 describe("planBulkAttendance", () => {
   it("기록이 없는 행에 상태를 찍는다", () => {
     const plan = planBulkAttendance([row({ studentId: "s1" }), row({ studentId: "s2" })], "present", {

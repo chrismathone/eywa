@@ -17,6 +17,104 @@ beforeEach(() => {
   store.setSource([R1, R2], [D1, D2], {});
 });
 
+/**
+ * 팝오버의 낙관 쓰기 표식(재리뷰 2026-09-11) — 값 동일성으론 빈 칸(null)을 못 가려 '지우기' 실패가 안 돌아왔고,
+ * 되돌릴 값을 새로 만들면 파생 표식 `d`가 빠졌다. 칸의 주인(지금 값을 칠한 쓰기) + 칠하기 전 자리로 판정하고,
+ * 앞 쓰기가 응답을 기다리던 자리면 그 결과를 따라간다(paint-chain.ts).
+ */
+describe("낙관 쓰기 표식 — 응답 보정·실패 되돌리기(칸의 주인·사슬)", () => {
+  it("🔴 빈 칸을 칠해도('지우기') 실패하면 되돌린다 — 덮개를 벗겨 서버 값을 보인다", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null } });
+    const p = store.paintLocal(k, null);
+    expect(store.valueOf(k)).toBeNull();
+    expect(store.revertLocal(k, p)).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: null });
+  });
+
+  it("🔴 파생 칸은 표식 `d`까지 그대로 돌아오고, 그 뒤 서버가 바뀌면 그대로 따라간다", () => {
+    const k = K(R1, D1);
+    const server = { s: "present", u: null, d: true as const };
+    store.setSource([R1, R2], [D1, D2], { [k]: server });
+    const p = store.paintLocal(k, { s: "absent", u: null });
+    store.revertLocal(k, p);
+    expect(store.valueOf(k)).toBe(server);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "absent", u: null } });
+    expect(store.valueOf(k)).toEqual({ s: "absent", u: null });
+  });
+
+  it("칠한 뒤 누가 이 칸을 건드렸으면 되돌리지도 보정하지도 않는다", () => {
+    const k = K(R1, D1);
+    const p = store.paintLocal(k, { s: "absent", u: null });
+    store.setLocal([[k, { s: "late", u: null }]]); // 새 입력
+    expect(store.revertLocal(k, p)).toBe(false);
+    expect(store.correctLocal(k, p, { s: "absent", u: 1.5 })).toBe(false);
+    expect(store.valueOf(k)).toEqual({ s: "late", u: null });
+  });
+
+  it("칠하기 전에 덮개가 있었으면(서버가 아직 못 따라온 앞 입력) 그 덮개로 돌린다", () => {
+    const k = K(R1, D1);
+    const earlier = { s: "present", u: 1.5 };
+    store.setLocal([[k, earlier]]);
+    const p = store.paintLocal(k, { s: "absent", u: null });
+    store.revertLocal(k, p);
+    expect(store.valueOf(k)).toBe(earlier);
+  });
+
+  it("🔴 같은 칸에 연달아 저장하고 둘 다 실패하면 서버 값으로 — 앞이 먼저 실패해도", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null } });
+    const a = store.paintLocal(k, { s: "absent", u: null });
+    const b = store.paintLocal(k, { s: "late", u: null }); // 응답 전에 다시 열어 저장
+    expect(store.revertLocal(k, a)).toBe(false); // 칸은 이미 b의 것
+    expect(store.revertLocal(k, b)).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: null }); // 저장된 적 없는 '결석'에 굳지 않는다
+  });
+
+  it("🔴 …뒤가 먼저 실패하면 앞 값으로 돌아갔다가, 앞도 실패하면 서버 값으로", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null } });
+    const a = store.paintLocal(k, { s: "absent", u: null });
+    const b = store.paintLocal(k, { s: "late", u: null });
+    expect(store.revertLocal(k, b)).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "absent", u: null }); // a는 아직 응답 대기
+    expect(store.revertLocal(k, a)).toBe(true); // 칸이 a에게 돌아왔다
+    expect(store.valueOf(k)).toEqual({ s: "present", u: null });
+  });
+
+  it("🔴 앞 저장이 성공해 보정됐는데 뒤 저장이 실패하면 보정된 값으로 — 보정 전 낙관값에 굳지 않는다", () => {
+    const k = K(R1, D1);
+    const a = store.paintLocal(k, { s: "present", u: 1.5 }); // 빈 칸 → 자동 시수 낙관값
+    const b = store.paintLocal(k, null); // 응답 전에 '지우기'
+    expect(store.correctLocal(k, a, { s: "present", u: 1 })).toBe(false); // 서버가 실제로 넣은 값 — 칸은 b의 것
+    expect(store.revertLocal(k, b)).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: 1 });
+  });
+
+  it("…뒤가 먼저 실패하면 앞 낙관값으로 돌아갔다가, 앞의 보정이 오면 그 값으로", () => {
+    const k = K(R1, D1);
+    const a = store.paintLocal(k, { s: "present", u: 1.5 });
+    const b = store.paintLocal(k, null);
+    store.revertLocal(k, b);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: 1.5 });
+    expect(store.correctLocal(k, a, { s: "present", u: 1 })).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: 1 });
+  });
+
+  it("셋이 겹쳐 가운데가 먼저 실패해도 사슬을 거슬러 간다", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null } });
+    const a = store.paintLocal(k, { s: "absent", u: null });
+    const b = store.paintLocal(k, { s: "late", u: null });
+    const c = store.paintLocal(k, { s: "early", u: null });
+    expect(store.revertLocal(k, b)).toBe(false);
+    expect(store.revertLocal(k, c)).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "absent", u: null }); // b를 건너 a(응답 대기)의 값
+    expect(store.revertLocal(k, a)).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: null });
+  });
+});
+
 describe("낙관적 덮개 vs 서버 갱신", () => {
   it("🔴 서버가 아직 못 따라왔으면 내 값을 유지한다 — 통째로 벗기면 방금 친 칸이 깜빡인다", () => {
     store.setLocal([[K(R1, D1), { s: "present", u: null }]]);
@@ -48,6 +146,63 @@ describe("낙관적 덮개 vs 서버 갱신", () => {
     store.setLocal([[K(R1, D1), null]]);
     store.setSource([R1], [D1], initial);
     expect(store.valueOf(K(R1, D1))).toBeNull();
+  });
+});
+
+describe("setLocalIf — 늦은 응답이 새 입력을 덮지 않는다(팝오버·단건·범위 응답 보정)", () => {
+  it("칠해 둔 그 값이 그대로면 바꾼다", () => {
+    const k = K(R1, D1);
+    const shown = { s: "present", u: 1.5 };
+    store.setLocal([[k, shown]]);
+    expect(store.setLocalIf(k, shown, { s: "present", u: null })).toBe(true);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: null });
+  });
+
+  it("🔴 그 사이 같은 칸을 또 고쳤으면 손대지 않는다 — 같은 값을 다시 쳐도(새 객체) 새 입력이 이긴다", () => {
+    const k = K(R1, D1);
+    const shown = { s: "present", u: 1.5 };
+    store.setLocal([[k, shown]]);
+    store.setLocal([[k, { s: "present", u: 2 }]]); // 팝오버를 닫고 곧바로 '2'를 쳤다
+    expect(store.setLocalIf(k, shown, { s: "present", u: 1.5 })).toBe(false);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: 2 });
+    store.setLocal([[k, { s: "present", u: 1.5 }]]); // 같은 값을 다시 친 새 입력
+    expect(store.setLocalIf(k, shown, { s: "present", u: null })).toBe(false);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: 1.5 });
+  });
+
+  it("서버가 따라잡아 덮개가 벗겨졌으면(서버 값이 진실) 손대지 않는다", () => {
+    const k = K(R1, D1);
+    const shown = { s: "present", u: 1.5 };
+    store.setLocal([[k, shown]]);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: 1.5 } });
+    expect(store.setLocalIf(k, shown, { s: "present", u: null })).toBe(false);
+    expect(store.valueOf(k)).toEqual({ s: "present", u: 1.5 });
+  });
+
+  it("빈 칸(null)은 동일성으로 가릴 수 없다 — 판정하지 않는다", () => {
+    expect(store.setLocalIf(K(R1, D1), null, { s: "present", u: null })).toBe(false);
+    expect(store.valueOf(K(R1, D1))).toBeNull();
+  });
+});
+
+describe("파생 칸(d) — 상태·시수가 같아도 기록 칸과 다른 사실", () => {
+  it("🔴 파생 칸에 같은 값을 기록하면 스냅샷도 바뀐다 — 옛 d가 남으면 팝오버가 '행 없음'으로 오판한다", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null, d: true } });
+    store.subscribe(k)(() => {});
+    expect(store.snapshot(k).value).toEqual({ s: "present", u: null, d: true });
+    store.setLocal([[k, { s: "present", u: null }]]); // 명시 '1'을 쳤다 = 이제 행이 있다
+    expect(store.snapshot(k).value).toEqual({ s: "present", u: null });
+  });
+
+  it("🔴 서버가 아직 파생 값이면(내 저장 전에 시작한 조회) 내 기록 덮개를 안 벗긴다 — 기록을 싣고 오면 벗긴다", () => {
+    const k = K(R1, D1);
+    store.setLocal([[k, { s: "present", u: null }]]);
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null, d: true } });
+    expect(store.valueOf(k)).toEqual({ s: "present", u: null }); // 덮개 유지(d 없음)
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null } }); // 기록이 실려 왔다
+    store.setSource([R1, R2], [D1, D2], { [k]: { s: "absent", u: null } }); // 벗겨졌으니 이후 서버 값을 따라간다
+    expect(store.valueOf(k)).toEqual({ s: "absent", u: null });
   });
 });
 

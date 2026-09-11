@@ -1406,6 +1406,8 @@ export const SHEET_DICT = {
   "att.pop.saving": { ko: "저장 중…", en: "Saving…" },
   "att.pop.saveNote": { ko: "메모 저장", en: "Save note" },
   "att.pop.unitsPh": { ko: "시수(기본 1)", en: "Sessions (default 1)" },
+  // 수학 자동 시수(원장 2026-09-11) — 빈 칸으로 **처음** 찍으면 수업 길이 값이 들어간다(auto-units.ts).
+  "att.pop.unitsPhAuto": { ko: "시수(기본 {n} · 수업 길이)", en: "Sessions (default {n}, class length)" },
   "att.pop.unitsAria": { ko: "시수", en: "Sessions" },
   "att.pop.unitsTitle": {
     ko: "정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등",
@@ -1828,6 +1830,11 @@ export const SHEET_DICT = {
   "os.units.title": {
     ko: "{name} 수업타임 — 기본 1타임. 한 타임 더 했으면 2로 고치면 출석부에 그대로 들어갑니다.",
     en: "{name} class units — 1 by default. If you taught one more, change it to 2 and it goes straight into the attendance sheet.",
+  },
+  // 수학 자동 시수(원장 2026-09-11) — 출결이 비어 있는 칸에만 붙는다(처음 찍을 때 들어갈 값).
+  "os.units.titleAuto": {
+    ko: " (이 수업은 수업 길이로 기본 {n}타임이 들어갑니다)",
+    en: " (this class records {n} units by default, from its length)",
   },
   "os.units.titleNoStatus": {
     ko: " (지금 출결이 비어 있어 '출석'으로 함께 기록됩니다)",
@@ -2514,6 +2521,15 @@ export const SHEET_DICT = {
   "os.bulk.unitsHint": {
     ko: "예: 3시간 반 = 1.5 · 빈칸 = 기본(1) · 기존 기록의 시수는 유지",
     en: "e.g. a three-and-a-half hour class = 1.5 · empty = 1 · units already recorded are kept",
+  },
+  // 수학 자동 시수(원장 2026-09-11) — 새 칸에 시수를 비우면 수업 길이 값이 들어갈 때만(1이 아닐 때).
+  "os.bulk.unitsTitleAuto": {
+    ko: "이번에 새로 기록되는 칸의 수업타임(시수) — 빈칸이면 수업 길이대로({list}) 들어갑니다. 이미 기록된 칸의 시수는 바꾸지 않습니다",
+    en: "The class units for the cells newly recorded this time — empty uses each class length ({list}). Cells already recorded keep their units",
+  },
+  "os.bulk.unitsHintAuto": {
+    ko: "예: 3시간 반 = 1.5 · 빈칸 = 수업 길이대로({list}) · 기존 기록의 시수는 유지",
+    en: "e.g. a three-and-a-half hour class = 1.5 · empty = by class length ({list}) · units already recorded are kept",
   },
   "os.bulk.planRecord": { ko: "건 기록", en: " to record" },
   "os.bulk.planOver": { ko: " · 기존 기록 {n}건 덮어씀", en: " · {n} overwrite an existing record" },

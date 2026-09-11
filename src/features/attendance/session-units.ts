@@ -27,6 +27,16 @@ export function parseSessionUnits(raw: string | null | undefined): ParsedUnits {
   return { ok: true, value: rounded === 1 ? null : rounded };
 }
 
+/**
+ * 시수 원문이 **'기본'**인가 — 안 보냈거나(undefined·null) 공백. 서버가 수학 자동 시수를 넣을 수 있는
+ * 유일한 입력이다([`auto-units.ts`](./auto-units.ts), 원장 2026-09-11 *"그날 수업 길이로 자동"*).
+ * 🔴 **"1"은 명시다** — 저장값은 똑같이 null(=1)이지만, 사람이 1을 쳤으면 자동값으로 바꾸지 않는다
+ *    (원장 2026-09-01 *"입력된 숫자가 입력되도록"* 불변). 격자 타이핑이 1을 ""로 넘기던 것을 그래서 고쳤다.
+ */
+export function isDefaultUnitsRaw(raw: string | null | undefined): boolean {
+  return raw == null || raw.trim() === "";
+}
+
 /** 표시용 — 정수는 소수점 없이("2"), 소수는 한 자리("1.5"). */
 export function formatSessionUnits(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);

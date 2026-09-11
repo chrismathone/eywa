@@ -111,6 +111,22 @@ describe("SessionUnitsField", () => {
     expect(onSet).toHaveBeenCalledWith("present", { units: "1.5" });
   });
 
+  it("🔴 출결이 비어 있으면 처음 찍을 때 들어갈 수학 자동 시수를 보여 준다(보이는 기본값 = 저장될 값)", () => {
+    const onSet = vi.fn();
+    render(<SessionUnitsField {...base} units={null} status={null} onSet={onSet} autoUnits={1.5} />);
+    const input = screen.getByLabelText("학원이 수업타임") as HTMLInputElement;
+    expect(input.value).toBe("1.5");
+    expect(input.className).toContain("text-text-dim"); // 기본값이지 손댄 값이 아니다
+    fireEvent.blur(input, { target: { value: "1.5" } });
+    expect(onSet).not.toHaveBeenCalled(); // 그대로 두면 왕복 없음 — 알약 첫 체크가 서버 자동값으로 넣는다
+    expect(screen.getByTitle(/수업 길이로 기본 1.5타임/)).toBeTruthy();
+  });
+
+  it("기록이 생기면 저장값이 이긴다 — 자동값은 빈 칸에서만", () => {
+    render(<SessionUnitsField {...base} units={null} status="present" onSet={vi.fn()} autoUnits={1.5} />);
+    expect((screen.getByLabelText("학원이 수업타임") as HTMLInputElement).value).toBe("1");
+  });
+
   it("결석 — 인라인(md)은 아예 안 그리고, 전용 열(lg)은 왜 못 적는지 밝힌다(빈 칸 금지)", () => {
     const { container } = render(<SessionUnitsField {...base} units={null} status="absent" onSet={vi.fn()} />);
     expect(container.textContent).toBe("");

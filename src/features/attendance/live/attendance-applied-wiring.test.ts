@@ -20,6 +20,23 @@ describe("attendance applied broadcast wiring", () => {
     expect(src).toMatch(/slot:\s*saveSlot/);
   });
 
+  it("🔴 새로 만든 칸의 시수를 싣는다 — 스트립·출결 모드(수학 자동 시수, 2026-09-11)", () => {
+    // 안 실으면 원스크린 '타임'이 1로 남고, 이어지는 보강 합침이 1.5 기록을 1 + 보강으로 덮는다.
+    expect(read("src/features/attendance/live/components/strip-slot.tsx")).toMatch(
+      /cells:\s*busCellsFromBulk\(res\.applied\)/,
+    );
+    const quick = read("src/features/attendance/quick/components/quick-board.tsx");
+    expect(quick).toMatch(/cells:\s*\[busCellFromCell\(studentId, klass\.classId, res\)\]/);
+    expect(quick).toMatch(/cells:\s*busCellsFromBulk\(res\.applied\)/);
+    // 칸만 복사하던 옛 모양(시수를 떨어뜨림)이 되살아나지 않게.
+    for (const file of [
+      "src/features/attendance/live/components/strip-slot.tsx",
+      "src/features/attendance/quick/components/quick-board.tsx",
+    ]) {
+      expect(read(file), file).not.toMatch(/res\.applied\.map\(\(a\) => \(\{ studentId: a\.studentId, classId: a\.classId \}\)\)/);
+    }
+  });
+
   it("세 소비처가 모두 구독한다 — 원스크린·ECS 요약 카드·ECS 주간 시트", () => {
     for (const file of [
       "src/features/onescreen/components/onescreen-client.tsx",

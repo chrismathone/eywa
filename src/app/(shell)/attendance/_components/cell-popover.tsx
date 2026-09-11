@@ -3,7 +3,13 @@
 import { useState, useTransition } from "react";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
-import { parseSessionUnits } from "@/features/attendance/session-units";
+import {
+  COUNTABLE_STATUSES,
+  formatSessionUnits,
+  isDefaultUnitsRaw,
+  parseSessionUnits,
+} from "@/features/attendance/session-units";
+import { useAutoUnits } from "./grid-context";
 import { NOT_MINE_MESSAGE, STATUS_TONE, statusTextOf } from "@/features/attendance/cell-display";
 // 화면 언어 — 상태 이름은 `statusTextOf`(한글 맵 옆) 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -28,6 +34,7 @@ export function CellPopover({
   classId,
   sessionDate,
   status,
+  recorded: recordedProp,
   units,
   note,
   locked,
@@ -41,6 +48,11 @@ export function CellPopover({
   classId: string;
   sessionDate: string;
   status: AttendanceStatus | null;
+  /**
+   * 이 칸에 **출결 행**이 있는가 — 상태가 보여도 수업보고서 파생 칸은 행이 없다(저장하면 서버가 **새 행**을
+   * 만들어 수학 자동 시수를 넣는다, auto-units.ts). 생략하면 `status`가 있으면 있음(종전 의미).
+   */
+  recorded?: boolean;
   units: number | null;
   note: string;
   /** 수정 기간(7일)이 지나 상태·시수를 못 고치는 칸 — 이유를 담은 문장. null = 제한 없음. */
@@ -61,12 +73,33 @@ export function CellPopover({
   sharedDelete?: boolean;
   anchor: PopoverAnchor;
   onClose: () => void;
-  onSaved: (next: { status: AttendanceStatus | null; units: number | null; note: string }) => void;
+  /**
+   * 격자에 반영. 돌려준 값은 **표식**이다(칠한 쓰기 · 칠하기 전 자리 · 그때 칸의 주인) — 응답 보정 때 `opts.ifStill`로
+   * 되돌려 주면 받는 쪽은 그 칸이 아직 이 쓰기의 것일 때만 바꾼다(늦게 온 응답이 새 입력을 덮지 않게, store.correctLocal).
+   * `opts.revert` = 저장 실패 — 받는 쪽은 `next`로 값을 새로 만들지 말고 **칠하기 전 자리**로 되돌린다(store.revertLocal —
+   * 새로 만들면 파생 표식 `d`가 빠지고, 빈 칸 '지우기'는 값으로 못 가린다, 재리뷰 2026-09-11). 앞 쓰기가 아직 응답을
+   * 기다리던 자리면 그 결과를 따라간다(paint-chain.ts). `next.note`가 없으면(undefined) 이 저장은 메모를 안 보낸다 —
+   * 서버가 기존 메모를 두니 받는 쪽도 메모를 칠하지 않는다.
+   */
+  onSaved: (
+    next: { status: AttendanceStatus | null; units: number | null; note?: string; noteOnly?: true },
+    opts?: { ifStill: unknown; revert?: true },
+  ) => unknown;
 }) {
   const lang = useSheetLang();
   const t = useSheetT();
   const tf = useSheetTf();
   const [unitsDraft, setUnitsDraft] = useState(units !== null && units !== 1 ? String(units) : "");
+  /**
+   * 🔴 **빈 칸**에서 시수를 비운 채 저장하면 서버가 수학 자동 시수(수업 길이, auto-units.ts)를 넣는다 —
+   *    그 값을 기본값으로 보여 주고 격자에도 같은 숫자로 칠한다(보이는 기본값 = 저장될 값).
+   *    기록이 있는 칸의 빈 시수는 '1로 되돌리기'라(서버 update 규약 그대로) 여기서 자동값을 안 쓴다.
+   * 🔴 '빈 칸'은 상태가 아니라 **행**으로 가른다 — 수업보고서 파생 '출석' 칸은 상태가 있어도 행이 없다
+   *    (적대 리뷰 2026-09-11: 파생 칸에서 '기본 1'을 약속하고 서버는 1.5를 넣었다).
+   */
+  const recorded = recordedProp ?? status !== null;
+  const autoHere = useAutoUnits(classId, sessionDate);
+  const autoUnits = recorded ? null : autoHere;
   const [noteDraft, setNoteDraft] = useState(note);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -100,7 +133,8 @@ export function CellPopover({
         setErr(res.error);
         return;
       }
-      onSaved({ status, units, note: noteDraft.trim() });
+      // 메모만 — 값은 그대로라 칠하지 않는다(`noteOnly` — 칠하면 새로고침 전에 서버 값이 바뀔 때 덮개가 굳는다, attendance-cell 주석).
+      onSaved({ status, units, note: noteDraft.trim(), noteOnly: true });
       onClose();
     });
   };
@@ -114,9 +148,16 @@ export function CellPopover({
         return;
       }
       parsedUnits = parsed.value;
+      // 빈 칸 + 시수 비움 + 시수를 쓰는 상태 → 서버가 넣을 자동값을 격자에도 먼저 칠한다(아래 응답으로 다시 맞춘다).
+      if (autoUnits !== null && isDefaultUnitsRaw(unitsDraft) && COUNTABLE_STATUSES.has(next)) parsedUnits = autoUnits;
     }
     setErr(null);
-    onSaved({ status: next, units: parsedUnits, note: next === null ? "" : withNote ? noteDraft.trim() : note });
+    // 🔴 메모를 **안 보내는** 저장(상태 버튼)은 메모를 칠하지 않는다(undefined) — 서버는 기존 메모를 두는데 화면만 칠하면,
+    //    응답 대기 중인 앞 메모 저장이 실패했을 때 그 메모가 이 저장의 것으로 남아 되돌아오지 않았다(재리뷰 2026-09-11).
+    //    '지우기'는 행째 지우니 메모도 비운다("").
+    const nextNote = next === null ? "" : withNote ? noteDraft.trim() : undefined;
+    // 칠한 표식 — 아래 응답 보정·실패 되돌리기가 "칸이 아직 이 쓰기의 것일 때만" 움직이도록 되돌려 준다.
+    const token = onSaved({ status: next, units: parsedUnits, note: nextNote });
     onClose();
     startTransition(async () => {
       const res = await setAttendanceCell({
@@ -126,8 +167,13 @@ export function CellPopover({
         status: next,
         ...(next === null ? {} : { units: unitsDraft, ...(withNote ? { note: noteDraft } : {}) }),
       });
-      // 실패하면 격자를 원래 값으로 되돌린다(저장된 척 두지 않는다).
-      if (res && "error" in res) onSaved({ status, units, note });
+      // 실패하면 격자를 원래 값으로 되돌린다(저장된 척 두지 않는다) — 그 사이 같은 칸에 새 입력이 들어갔으면
+      // 그 입력을 지우지 않는다(칸의 주인, 성공 보정과 같은 규약). 돌아갈 자리는 표식에 들어 있다(`revert`).
+      if (res && "error" in res) onSaved({ status, units, note }, { ifStill: token, revert: true });
+      // 성공 — 서버가 실제로 넣은 값으로 맞추고(새 행 + 숫자 안 고른 저장이면 자동 시수, 조회 실패면 null=1) 이 쓰기가 끝났다는
+      // 결과를 남긴다(뒤 쓰기의 되돌리기·메모 따라잡기가 읽는다 — 끝났는지 모르면 응답 대기로 봐야 해서 옛 메모가 굳었다).
+      // 🔴 그 사이 같은 칸에 새 입력이 들어갔으면 덮지 않는다(칸의 주인이 바뀌었으면 받는 쪽이 거절 — store.correctLocal).
+      else onSaved({ status: next, units: res?.autoUnits !== undefined ? res.autoUnits : parsedUnits, note: nextNote }, { ifStill: token });
     });
   };
 
@@ -236,7 +282,11 @@ export function CellPopover({
                   setUnitsDraft(e.target.value);
                   setErr(null);
                 }}
-                placeholder={t("att.pop.unitsPh")}
+                placeholder={
+                  autoUnits !== null
+                    ? tf("att.pop.unitsPhAuto", { n: formatSessionUnits(autoUnits) })
+                    : t("att.pop.unitsPh")
+                }
                 aria-label={t("att.pop.unitsAria")}
                 title={t("att.pop.unitsTitle")}
                 className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-md border px-2 py-1 text-xs focus:outline-none ${

@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setAttendanceBulk } from "@/features/attendance/server/actions";
 import { requestDeskConfirm } from "@/features/attendance/live/server/actions";
-import { publishAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
+import { busCellsFromBulk, publishAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
 // 강사뷰 화면 언어(2026-09-03) — 반 이름·학생 이름·시각은 데이터라 번역 대상이 아니다.
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
@@ -74,7 +74,8 @@ export function StripSlot({
               status: "present",
               // 저장 축 그대로(영어=교시, 수학=null) — 시트가 이 값으로 칸을 정한다.
               slot: saveSlot,
-              cells: res.applied.map((a) => ({ studentId: a.studentId, classId: a.classId })),
+              // 새로 만든 칸엔 서버가 넣은 시수(수학 자동 시수)까지 — 원스크린 '타임'이 기록과 같게(2026-09-11).
+              cells: busCellsFromBulk(res.applied),
             });
           }
           router.refresh();

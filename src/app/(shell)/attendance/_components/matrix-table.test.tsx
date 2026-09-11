@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
+import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
 
@@ -85,6 +86,190 @@ function renderTable() {
     />,
   );
 }
+
+describe("격자 초기값 — 수업보고서 파생 칸", () => {
+  it("🔴 파생 칸은 d 표식 — 상태가 보여도 출결 행이 없다(저장하면 새 행 = 수학 자동 시수)", () => {
+    const m = matrix([
+      { id: S1, name: "이도윤", grade: "고1", school: "경명여중", enrolledAt: null, attendDows: [3, 4], spans: [], badges: [] },
+    ]);
+    m.marks = { [S1]: { "2026-07-01": "present", "2026-07-02": "present" } } as never;
+    m.derived = { [S1]: { "2026-07-01": true } };
+    const src = buildGridSource([{ ...GROUP, matrix: m }], DAYS, [{ classId: C, studentId: S1 }]);
+    expect(src.initial[cellKey(rowKey(C, S1), "2026-07-01")]).toEqual({ s: "present", u: null, d: true });
+    // 수기 기록 칸엔 표식이 없다(행이 있다 — 저장은 갱신이라 자동값을 안 받는다).
+    expect(src.initial[cellKey(rowKey(C, S1), "2026-07-02")]).toEqual({ s: "present", u: null });
+  });
+});
+
+/**
+ * 🔴 재리뷰 2026-09-11 — 팝오버 저장이 실패하면 **열 때의 값 그 객체**로 되칠해야 한다. 상태·시수로 새 객체를
+ *    만들면 파생 표식 `d`가 빠져 서버 값({…, d: true})과 영영 같아지지 않고, 덮개가 남아 그 뒤 서버가
+ *    바뀌어도 칸이 옛 값에 굳는다(격자 단건 저장은 원래 `prev` 그 객체로 되돌려서 멀쩡했다).
+ */
+describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
+  const DAY = "2026-07-01";
+  function build(status: string, derived: boolean, note?: string, lockBefore: string | null = null) {
+    const m = matrix([
+      { id: S1, name: "이도윤", grade: "고1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
+    ]);
+    m.marks = { [S1]: { [DAY]: status } } as never;
+    if (derived) m.derived = { [S1]: { [DAY]: true } };
+    if (note) m.notes = { [S1]: { [DAY]: note } };
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [{ classId: C, studentId: S1 }];
+    const src = buildGridSource(groups, DAYS, ordered);
+    return (
+      <GridProvider
+        rows={src.rows}
+        cols={src.cols}
+        initial={src.initial}
+        slotCounts={src.slotCounts}
+        notMine={src.notMine}
+        alsoWrites={src.alsoWrites}
+        lockBefore={lockBefore}
+      >
+        {/* 잠금은 GridProvider와 MatrixTable **둘 다에** 넘긴다(page.tsx와 같은 배선 — matrix-lock.test.tsx 주석). */}
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} lockBefore={lockBefore} />
+      </GridProvider>
+    );
+  }
+  const cellAt = (c: HTMLElement) => c.querySelector<HTMLElement>(`[data-cell-key$="${DAY}"]`)!;
+
+  it("🔴 실패하면 열 때의 값으로 돌아오고, 새로고침에서 덮개가 벗겨져 그 뒤 서버 값이 그대로 보인다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell).mockResolvedValueOnce({ error: "잠시 후 다시 시도하세요" } as never);
+    const { container, rerender } = render(build("present", true));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.click(screen.getByRole("button", { name: "결석" }));
+    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/)); // 실패 → 열 때의 값
+
+    rerender(build("present", true)); // 새로고침 — 서버는 여전히 같은 파생 값
+    rerender(build("absent", false)); // 그 뒤 서버가 결석으로 바뀜(다른 사람이 고침)
+    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^결석/));
+  });
+
+  it("🔴 '지우기'가 실패해도 되돌린다 — 빈칸으로 굳으면 사용자는 지운 줄 안다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell).mockResolvedValueOnce({ error: "잠시 후 다시 시도하세요" } as never);
+    const { container, rerender } = render(build("present", false));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.click(screen.getByRole("button", { name: "지우기" }));
+    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/));
+    rerender(build("present", false)); // 새로고침해도 그대로
+    expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/);
+  });
+
+  it("🔴 응답 전에 같은 칸 팝오버를 다시 열었다 닫아도, 실패하면 칠하기 전 값으로 돌아온다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    let settle: (v: unknown) => void = () => {};
+    vi.mocked(actions.setAttendanceCell).mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          settle = r;
+        }) as never,
+    );
+    const { container } = render(build("present", false));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.click(screen.getByRole("button", { name: "결석" }));
+    expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^결석/); // 낙관 반영
+    fireEvent.contextMenu(cellAt(container)); // 메모를 적으려고 다시 열었다가
+    fireEvent.click(document.querySelector<HTMLElement>("div.fixed.inset-0")!); // 저장 없이 닫음
+    settle({ error: "잠시 후 다시 시도하세요" });
+    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/));
+  });
+
+  it("🔴 메모만 고친 저장이 실패하면 메모도 돌아온다 — 응답 전 새로고침이 값 덮개를 벗겨도", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    let settle: (v: unknown) => void = () => {};
+    vi.mocked(actions.setAttendanceCell).mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          settle = r;
+        }) as never,
+    );
+    const { container, rerender } = render(build("present", false, "병결"));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.change(screen.getByRole("textbox", { name: "메모(사유)" }), { target: { value: "가족여행" } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(cellAt(container).getAttribute("title") ?? "").toContain("가족여행"); // 낙관 반영
+    rerender(build("present", false, "병결")); // 새로고침 — 값이 같아 덮개가 벗겨진다(서버 메모는 아직 옛 값)
+    settle({ error: "잠시 후 다시 시도하세요" });
+    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toContain("병결"));
+    expect(cellAt(container).getAttribute("title") ?? "").not.toContain("가족여행");
+  });
+
+  it("🔴 메모를 안 보내는 상태 버튼이 앞 메모 저장의 실패를 삼키지 않는다 — 상태는 남고 메모만 돌아온다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    let settleA: (v: unknown) => void = () => {};
+    vi.mocked(actions.setAttendanceCell)
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            settleA = r;
+          }) as never,
+      )
+      .mockResolvedValueOnce({ ok: true } as never);
+    const { container } = render(build("present", false, "병결"));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.change(screen.getByRole("textbox", { name: "메모(사유)" }), { target: { value: "가족여행" } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" })); // A — 메모 저장(응답 대기)
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.click(screen.getByRole("button", { name: "지각" })); // B — 메모를 안 보내는 상태 버튼(성공)
+    settleA({ error: "잠시 후 다시 시도하세요" });
+    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toContain("병결"));
+    expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^지각/);
+    expect(cellAt(container).getAttribute("title") ?? "").not.toContain("가족여행");
+  });
+
+  it("🔴 서버가 내 메모를 따라잡으면 덮개를 벗긴다 — 격자로 지우고 다시 찍어도 옛 메모가 되살아나지 않는다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell)
+      .mockResolvedValueOnce({ ok: true } as never) // 메모 저장
+      .mockResolvedValueOnce({ ok: true } as never) // 격자 Delete
+      .mockResolvedValueOnce({ ok: true } as never); // 상태 버튼
+    const title = (c: HTMLElement) => cellAt(c).getAttribute("title") ?? "";
+    const { container, rerender } = render(build("present", false));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.change(screen.getByRole("textbox", { name: "메모(사유)" }), { target: { value: "가족여행" } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(title(container)).toContain("가족여행"));
+    rerender(build("present", false, "가족여행")); // 저장 응답의 새로고침 — 서버가 메모를 따라잡았다
+    fireEvent.mouseDown(cellAt(container), { button: 0 });
+    fireEvent.keyDown(cellAt(container), { key: "Delete" }); // 격자 지우기 — 서버는 행과 메모를 함께 지운다
+    await waitFor(() => expect(title(container)).not.toContain("가족여행"));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.click(screen.getByRole("button", { name: "지각" })); // 빈 칸 → 메모 없는 새 행
+    rerender(build("late", false)); // 새로고침 — 새 행엔 메모가 없다
+    await waitFor(() => expect(title(container)).toMatch(/^지각/));
+    expect(title(container)).not.toContain("가족여행");
+  });
+
+  it("🔴 잠긴 칸의 '메모만 저장'은 끝난 쓰기다 — 같은 사유를 다시 저장한 뒤 다른 화면이 사유를 고치면 그 값을 따라간다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell).mockResolvedValueOnce({ ok: true } as never);
+    const title = (c: HTMLElement) => cellAt(c).getAttribute("title") ?? "";
+    const { container, rerender } = render(build("absent", false, "병결", "2026-07-08")); // 7일 지나 잠긴 칸
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.click(screen.getByRole("button", { name: "메모 저장" })); // 같은 사유 그대로 — 잠긴 칸은 메모만
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull()); // 서버 확인 뒤 닫힘
+    rerender(build("absent", false, "가족여행", "2026-07-08")); // 다른 화면이 사유를 고친 뒤 새로고침
+    await waitFor(() => expect(title(container)).toContain("가족여행"));
+    expect(title(container)).not.toContain("병결");
+  });
+
+  it("잠긴 칸의 '메모만 저장'은 값을 칠하지 않는다 — 새로고침 전에 서버 값이 바뀌면 그대로 따라간다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell).mockResolvedValueOnce({ ok: true } as never);
+    const aria = (c: HTMLElement) => cellAt(c).getAttribute("aria-label") ?? "";
+    const { container, rerender } = render(build("absent", false, "병결", "2026-07-08"));
+    fireEvent.contextMenu(cellAt(container));
+    fireEvent.click(screen.getByRole("button", { name: "메모 저장" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    rerender(build("present", false, "병결", "2026-07-08")); // 그 사이 관리자가 '출석'으로 고쳤다
+    await waitFor(() => expect(aria(container)).toContain("출석"));
+    expect(aria(container)).not.toContain("결석");
+  });
+});
 
 describe("출석부 표 골격", () => {
   // 🔴 열 폭이 내용에서 나오면 반을 접을 때마다(긴 학교 이름이 사라질 때마다) 표가 출렁인다.

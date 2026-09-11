@@ -11,16 +11,21 @@
  *     날짜·요일로 좁혀져 있어 서로 범위가 다르다.
  *  3. 행의 `attendanceRaw`는 `status`로 **채택한다**(서버가 방금 쓴 값이 진실). 새로고침 뒤 로스터가
  *     보여줄 값과 같다 — 로스터는 (학생×반)의 **가장 최근 기록**을 집는다.
- *     ⚠️ `attendanceNote`·`attendanceUnits`는 건드리지 않는다 — 스트립은 그 둘을 안 보내고,
- *        `fillEmptyOnly`라 새로 만들어진 칸의 실제 값도 null이라 화면과 갈리지 않는다.
- *  4. 학생 배지(`attendance`)는 [attendance-mark.ts](./attendance-mark.ts) 단일 소스로 갱신한다
+ *  4. 🔴 `attendanceUnits`는 칸에 **`units` 키가 있을 때만** 그 값으로 맞춘다 — 서버가 **새로 만든** 칸에
+ *     실제로 넣은 시수다(수학 자동 시수 1.5·2, 조회 실패·비수학이면 null = 1, 원장 2026-09-11).
+ *     종전엔 "새 칸의 실제 값도 null"이라 시수를 안 건드려도 됐지만, 자동 시수가 생긴 뒤로 그 전제가
+ *     거짓이 됐다 — 방송 뒤 '타임' 칸이 1로 보이고, 이어지는 보강 합침이 1 + 보강으로 **1.5 기록을 덮어**
+ *     정규 몫 0.5가 사라졌다(적대 리뷰 2026-09-11). 키가 없는 칸(갱신 — 기존 시수 보존)은 그대로 둔다.
+ *     ⚠️ `attendanceNote`는 여전히 건드리지 않는다 — 스트립은 메모를 안 보낸다.
+ *  5. 학생 배지(`attendance`)는 [attendance-mark.ts](./attendance-mark.ts) 단일 소스로 갱신한다
  *     — 로스터도 "그 학생의 가장 최근 기록"으로 배지를 만들고, 방금 쓴 행이 그 최신이다.
- *  5. 바뀐 게 없으면 **입력 배열을 그대로 반환**(참조 동일) — 불필요한 리렌더 0.
+ *  6. 바뀐 게 없으면 **입력 배열을 그대로 반환**(참조 동일) — 불필요한 리렌더 0.
  */
 import { attendanceMarkOf } from "./attendance-mark";
 import type { OneScreenStudent } from "./types";
 
-export type AppliedCell = { studentId: string; classId: string };
+/** 방송 칸(`AttendanceAppliedDetail.cells`)과 같은 모양 — `units`는 새로 만든 칸에만 온다(규칙 4). */
+export type AppliedCell = { studentId: string; classId: string; units?: number | null };
 
 export function applyAppliedAttendance(
   students: readonly OneScreenStudent[],
@@ -28,27 +33,34 @@ export function applyAppliedAttendance(
   status: string,
   pending: ReadonlySet<string>,
 ): OneScreenStudent[] {
-  // (학생 → 반 집합) — pending 칸은 여기서 이미 뺀다(아래 루프가 두 번 판단하지 않게).
-  const byStudent = new Map<string, Set<string>>();
+  // (학생 → 반 → 칸) — pending 칸은 여기서 이미 뺀다(아래 루프가 두 번 판단하지 않게).
+  const byStudent = new Map<string, Map<string, AppliedCell>>();
   for (const c of cells) {
     if (!c?.studentId || !c?.classId) continue;
     if (pending.has(`${c.studentId}::${c.classId}`)) continue;
-    const set = byStudent.get(c.studentId);
-    if (set) set.add(c.classId);
-    else byStudent.set(c.studentId, new Set([c.classId]));
+    const byClass = byStudent.get(c.studentId);
+    if (byClass) byClass.set(c.classId, c);
+    else byStudent.set(c.studentId, new Map([[c.classId, c]]));
   }
   if (byStudent.size === 0) return students as OneScreenStudent[];
 
   const mark = attendanceMarkOf(status);
   let touched = false;
   const next = students.map((s) => {
-    const classIds = byStudent.get(s.id);
-    if (!classIds) return s;
+    const byClass = byStudent.get(s.id);
+    if (!byClass) return s;
     let rowChanged = false;
     const subjects = s.subjects.map((su) => {
-      if (!su.classId || !classIds.has(su.classId) || su.attendanceRaw === status) return su;
+      const cell = su.classId ? byClass.get(su.classId) : undefined;
+      if (!cell) return su;
+      // 규칙 4 — 새로 만든 칸이면 서버가 실제로 넣은 시수(키가 없으면 모른다 = 그대로).
+      const unitsKnown = cell.units !== undefined;
+      const sameUnits = !unitsKnown || (su.attendanceUnits ?? null) === (cell.units ?? null);
+      if (su.attendanceRaw === status && sameUnits) return su;
       rowChanged = true;
-      return { ...su, attendanceRaw: status };
+      return unitsKnown
+        ? { ...su, attendanceRaw: status, attendanceUnits: cell.units ?? null }
+        : { ...su, attendanceRaw: status };
     });
     // 행이 하나도 안 바뀌었으면 배지도 손대지 않는다 — 이미 그 값이라 새로 알릴 것이 없다.
     if (!rowChanged) return s;

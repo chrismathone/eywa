@@ -90,7 +90,9 @@ export function MakeupAddFlow({
       sessionDate: date,
       status: "makeup",
       allowMakeup: true,
-      ...(choice.addUnits !== 1 ? { units: String(choice.addUnits) } : {}),
+      // 🔴 확인창이 **보여 준 숫자 그대로**(1 포함) 보낸다 — 안 보내면 '기본'이라 수학 반에선 서버가 수업 길이
+      //    자동 시수(auto-units.ts, 2026-09-11)를 넣어 "수업타임 1" 안내와 기록이 갈린다. "1"은 null로 저장된다.
+      units: String(choice.addUnits),
       // 교시를 골랐으면 **그 교시 칸**에 쓴다 — 안 넘기면 "그날 전체" 행이 되어 주간 시트가 그것을
       // 첫 교시에 붙인다(영어는 하루 한 교시인 반이 없어 늘 어긋난다).
       ...(choice.slotStart ? { slotStart: choice.slotStart } : {}),

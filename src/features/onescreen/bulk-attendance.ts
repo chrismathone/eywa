@@ -37,6 +37,11 @@ export type BulkAttRow = {
   isMakeup?: boolean;
   /** 현재 raw 상태(null=기록 없음). */
   raw?: string | null;
+  /**
+   * 이 행(반)의 대상 날짜 **수학 자동 시수**(수업 길이, attendance/auto-units.ts) — 새로 기록되는 칸에 시수를
+   * 비워 두면 서버가 넣는 값. 미지정·null = 1.
+   */
+  autoUnits?: number | null;
 };
 
 /** 실제로 서버에 쓸 셀 1건 — 출결 원장 키(학생·반). 날짜는 호출부가 하나로 고정한다. */
@@ -50,6 +55,12 @@ export type BulkAttPlan = {
   skippedSpecial: number; // 조퇴·공결·보강 — 출석부에서만 변경
   skippedSame: number; // 이미 그 상태(재클릭 no-op과 동일)
   skippedFilled: number; // '빈 칸만 채우기'인데 이미 기록이 있음
+  /**
+   * **새로 기록되는 칸**(기록 없음)에 시수를 비워 두면 들어갈 값들 — 중복 제거·오름차순.
+   * 🔴 팝오버 안내가 "빈칸 = 1"로 거짓 약속하지 않게 한다 — 수학 자동 시수가 섞이면 1.5·2가 들어간다
+   *    (원장 2026-09-11 · 적대 리뷰 2026-09-11). 덮어쓰는 칸은 기존 시수가 보존되므로 여기 없다.
+   */
+  newCellUnits: number[];
 };
 
 /**
@@ -89,7 +100,9 @@ export function planBulkAttendance(
     skippedSpecial: 0,
     skippedSame: 0,
     skippedFilled: 0,
+    newCellUnits: [],
   };
+  const blankUnits = new Set<number>();
   const seen = new Set<string>();
   for (const r of rows) {
     if (r.isMakeup || !r.classId) {
@@ -113,8 +126,10 @@ export function planBulkAttendance(
       continue;
     }
     if (raw) plan.overwrite++;
+    else blankUnits.add(r.autoUnits ?? 1); // 새 칸 — 시수를 비우면 서버가 넣을 값
     plan.cells.push({ studentId: r.studentId, classId: r.classId });
   }
+  plan.newCellUnits = [...blankUnits].sort((a, b) => a - b);
   return plan;
 }
 

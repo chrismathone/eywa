@@ -13,12 +13,12 @@ import {
 import { useRouter } from "next/navigation";
 import { setAttendanceCell, setAttendanceRange } from "@/features/attendance/server/actions";
 import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-actions";
-import { cellKey, classIdOfRow, parseCellKey } from "@/features/attendance/grid/model";
+import { cellKey, classIdOfRow, parseCellKey, rowKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { lockedMessage } from "@/features/attendance/lock-message";
-import { COUNTABLE_STATUSES } from "@/features/attendance/session-units";
+import { optimisticGridValue } from "@/features/attendance/grid/optimistic-value";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 import { useAttendanceSearch } from "./search-context";
 import { useSheetTf } from "@/features/teacher-view/lang-context";
@@ -39,6 +39,11 @@ type Ctx = {
   lockNoteOf: (date: string) => string | null;
   /** 팝오버가 저장한 값을 격자에도 즉시 반영(표기가 갈리지 않게). */
   setLocal: (key: string, v: GridValue) => void;
+  /**
+   * 이 반·날짜 **빈 칸**에 숫자를 안 고르고 찍으면 서버가 넣을 수학 자동 시수(수업 길이, auto-units.ts ·
+   * 원장 2026-09-11). null = 자동값 없음(=1). 격자 낙관값·팝오버 기본값이 이 값을 본다.
+   */
+  autoUnitsOf: (classId: string, date: string) => number | null;
   /** 인라인 input에서 Enter/Tab/화살표 — 버퍼를 확정하고 이동한다. */
   commitAndMove: (dx: number, dy: number) => void;
   /** 칸 선택 — 타이핑 중이던 버퍼를 **먼저 확정한다**(클릭 한 번에 입력이 사라지지 않게). */
@@ -84,6 +89,14 @@ export function useGridCollapse(): Pick<Ctx, "collapsed" | "toggleCollapsed" | "
   return useContext(GridCtx);
 }
 
+/**
+ * 이 반·날짜 빈 칸에 숫자 없이 찍으면 들어갈 **수학 자동 시수**(auto-units.ts) — 팝오버가 기본값으로 보여 준다.
+ * 격자 밖(테스트·단독 렌더)이면 null = 자동값 없음.
+ */
+export function useAutoUnits(classId: string, date: string): number | null {
+  return useContext(GridCtx)?.autoUnitsOf(classId, date) ?? null;
+}
+
 /** 여러 행의 합계 — 반 머리행·총합·상단 스탯. rows 생략 = 표 전체. 값이 바뀔 때마다 다시 센다. */
 export function useRowsCount(rows?: readonly string[]): Counted | null {
   const ctx = useContext(GridCtx);
@@ -110,8 +123,15 @@ export function GridProvider({
   alsoWrites,
   lockBefore,
   initialCollapsed,
+  autoUnits,
   children,
 }: {
+  /**
+   * 반 → 날짜 → **수학 자동 시수**(수업 길이, auto-units.ts · 원장 2026-09-11). 빈 칸에 숫자 없이 찍으면
+   * 서버가 이 값을 넣으므로 낙관값도 같은 숫자로 칠한다 — 안 그러면 새로고침 뒤 숫자가 바뀌고, 낙관 덮개는
+   * 서버 값과 같아질 때만 벗겨져(store.ts) 틀린 숫자가 그대로 굳는다. 없으면 자동값 없음(=1).
+   */
+  autoUnits?: Record<string, Record<string, number>>;
   /** 화면에 보이는 순서 그대로의 행 키(`classId|studentId`). 이동·범위가 이 순서를 따른다. */
   rows: string[];
   /** 실제 날짜 열만(placeholder 제외). */
@@ -257,18 +277,22 @@ export function GridProvider({
    * ⚠️ 빈칸·"1"(=기본 배수)은 여전히 "교시마다 정상"이라 그날 합이 교시 수다(원장 확정 — 클릭으로 찍는
    *    출석과 같은 값을 유지한다). 결석은 시수가 없어 곱할 것도 나눌 것도 없다.
    */
+  const autoUnitsOf = useCallback(
+    (classId: string, date: string): number | null => autoUnits?.[classId]?.[date] ?? null,
+    [autoUnits],
+  );
+  /**
+   * 🔴 `current` = 이 칸의 **지금** 값. 출결 행이 없는 칸(빈 칸 **또는 수업보고서 파생 칸** — 상태가 보여도
+   *    행이 없다)에 숫자를 안 고르고 찍는 소비 상태는 서버가 **수학 자동 시수**를 넣는다(새 행에만,
+   *    auto-units.ts) — 화면도 같은 숫자로 칠해야 새로고침 뒤 안 바뀐다. 규칙은 순수 함수 한 벌
+   *    ([`optimisticGridValue`](@/features/attendance/grid/optimistic-value)).
+   */
   const toValue = useCallback(
-    (key: string, v: TypedValue | null): GridValue => {
-      if (!v) return null;
-      const raw = v.units === "" ? null : Number(v.units);
-      const n = slotCounts?.[key] ?? 1;
-      if (n <= 1 || !COUNTABLE_STATUSES.has(v.status)) return { s: v.status, u: raw };
-      // 명시 숫자 = 그날 합계 → 그대로 보여 준다.
-      if (raw !== null) return { s: v.status, u: raw };
-      // 기본(빈칸·1) = 교시마다 1 → 그날 합은 교시 수.
-      return { s: v.status, u: n };
+    (key: string, v: TypedValue | null, current: GridValue): GridValue => {
+      const p = parseCellKey(key);
+      return optimisticGridValue(v, current, p ? autoUnitsOf(p.classId, p.date) : null, slotCounts?.[key] ?? 1);
     },
-    [slotCounts],
+    [slotCounts, autoUnitsOf],
   );
 
   /** 한 칸 저장(되돌리기 기록 없이) — 되돌리기 자체가 되쓸 때도 쓴다. */
@@ -276,7 +300,9 @@ export function GridProvider({
     (key: string, val: TypedValue | null, prev: GridValue) => {
       const p = parseCellKey(key);
       if (!p) return;
-      store.setLocal([[key, toValue(key, val)]]);
+      // 낙관값은 이 칸의 **지금** 값을 보고 만든다(빈 칸이면 수학 자동 시수 — toValue 주석).
+      const shown = toValue(key, val, store.valueOf(key));
+      store.setLocal([[key, shown]]);
       void setAttendanceCell({
         studentId: p.studentId,
         classId: p.classId,
@@ -288,7 +314,16 @@ export function GridProvider({
         if (res && "error" in res) {
           store.setLocal([[key, prev]]);
           setError(res.error);
-        } else scheduleRefresh();
+          return;
+        }
+        // 🔴 새 행 + 숫자 안 고른 저장이면 서버가 **실제로 넣은** 시수로 맞춘다(자동값, 조회 실패면 null=1) —
+        //    낙관 덮개는 서버 값과 같아질 때만 벗겨지므로(store.ts) 틀린 낙관값은 새로고침으로도 안 풀린다.
+        //    그 사이 같은 칸을 또 고쳤으면(덮개가 바뀌었으면) 건드리지 않는다(store.setLocalIf — 여긴 칠한 값이 빈 칸이
+        //    아니라 동일성으로 가려진다. 팝오버는 '지우기'까지 받아야 해서 표식 paintLocal/correctLocal을 쓴다).
+        if (val && res?.autoUnits !== undefined) {
+          store.setLocalIf(key, shown, { s: val.status, u: res.autoUnits });
+        }
+        scheduleRefresh();
       });
     },
     [store, scheduleRefresh, toValue],
@@ -382,7 +417,9 @@ export function GridProvider({
       // 한 번의 채우기 = 되돌리기 한 칸(Ctrl+Z 한 번이면 통째로 돌아온다).
       undoRef.current.push(prevs.map(([key, prev]) => ({ key, prev })));
       if (undoRef.current.length > 50) undoRef.current.shift();
-      store.setLocal(prevs.map(([k]) => [k, toValue(k, val)] as [string, GridValue]));
+      // 칸마다 **지금 값**을 보고 낙관값을 만든다 — 빈 칸만 수학 자동 시수를 받는다(toValue 주석).
+      const shownList = prevs.map(([k, p]) => [k, toValue(k, val, p)] as [string, GridValue]);
+      store.setLocal(shownList);
       void setAttendanceRange({
         cells: targets.map((t) => ({ studentId: t.studentId, classId: t.classId, sessionDate: t.date })),
         status: (val?.status ?? null) as never,
@@ -393,6 +430,17 @@ export function GridProvider({
           store.setLocal(prevs);
           setError(res.error);
           return;
+        }
+        // 🔴 새로 만든 칸은 서버가 **실제로 넣은** 시수로 맞춘다(자동값·조회 실패면 null) — pushCell과 같은 이유.
+        if (val && res.autoUnits?.length) {
+          const shownByKey = new Map(shownList);
+          const fixes: [string, GridValue][] = [];
+          for (const a of res.autoUnits) {
+            const k = cellKey(rowKey(a.classId, a.studentId), a.sessionDate);
+            const shown = shownByKey.get(k);
+            if (shown !== undefined && store.valueOf(k) === shown) fixes.push([k, { s: val.status, u: a.units }]);
+          }
+          if (fixes.length > 0) store.setLocal(fixes);
         }
         scheduleRefresh();
         const skipped = res.blocked + lockedCount + notMineCount;
@@ -490,7 +538,9 @@ export function GridProvider({
         if (!group?.length) return;
         // 한 그룹(= 한 번의 입력·채우기)을 통째로 되돌린다. 값이 칸마다 달라 범위 액션을 못 쓰므로 칸별로 되쓴다.
         for (const { key: k, prev } of group) {
-          pushCell(k, prev ? { status: prev.s as "present" | "absent", units: prev.u === null ? "" : String(prev.u) } : null, prev);
+          // 🔴 되돌리는 값은 **명시**로(null → "1") — ""(기본)로 보내면 지운 칸을 되살릴 때 서버가 수학 자동
+          //    시수를 넣어 원래 값(1)과 달라진다(auto-units.ts). "1"은 저장값 null이라 옛 기록 그대로다.
+          pushCell(k, prev ? { status: prev.s as "present" | "absent", units: prev.u === null ? "1" : String(prev.u) } : null, prev);
         }
         const first = parseCellKey(group[0]!.key);
         if (first) store.select({ row: first.row, col: first.date }, false);
@@ -601,8 +651,9 @@ export function GridProvider({
         store.select({ row, col }, extend);
       },
       startFill,
+      autoUnitsOf,
     }),
-    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, autoUnitsOf],
   );
 
   return (

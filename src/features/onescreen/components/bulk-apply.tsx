@@ -34,6 +34,7 @@ import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
+import { formatSessionUnits } from "@/features/attendance/session-units";
 import { ProgressSelector } from "./progress-selector";
 
 /** 대상 행에 있는 과목 — 진도를 넣을 과목 선택지(행 수는 "몇 행에 들어가는지" 표시용). */
@@ -101,6 +102,11 @@ export function BulkApplyPopover({
   const canCopy = !!copySource && copySource.belowCount > 0;
   // 고른 출결의 실제 대상 — 상태·'빈 칸만'을 바꿀 때마다 다시 센다(순수 계산이라 렌더 중 안전).
   const attPlan = attendance && att ? attendance.plan(att, onlyEmpty) : null;
+  // 🔴 시수를 비우면 새 칸에 들어갈 값 — 수학 자동 시수(수업 길이)가 섞이면 '1'이 아니다. 안내가 저장값과
+  //    같은 말을 하게 한다(보이는 기본값 = 저장될 값, 원장 2026-09-11). 전부 1이면 종전 문구 그대로.
+  const blankUnits = attPlan?.newCellUnits ?? [];
+  const blankIsOne = blankUnits.every((u) => u === 1);
+  const blankList = blankUnits.map(formatSessionUnits).join("·");
   const hasAny =
     mode === "copy"
       ? canCopy
@@ -327,11 +333,11 @@ export function BulkApplyPopover({
                       onChange={(e) => setAttUnits(e.target.value)}
                       placeholder={t("os.card.units")}
                       aria-label={t("os.bulk.unitsAria")}
-                      title={t("os.bulk.unitsTitle")}
+                      title={blankIsOne ? t("os.bulk.unitsTitle") : tf("os.bulk.unitsTitleAuto", { list: blankList })}
                       className="border-line bg-card focus:border-primary h-7 w-20 rounded-lg border px-2 text-xs outline-none"
                     />
                     <span className="text-text-faint text-xs">
-                      {t("os.bulk.unitsHint")}
+                      {blankIsOne ? t("os.bulk.unitsHint") : tf("os.bulk.unitsHintAuto", { list: blankList })}
                     </span>
                   </div>
                 ) : null}

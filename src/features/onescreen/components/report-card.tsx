@@ -388,6 +388,7 @@ export function ReportCard({
                   onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
                   studentName={student.name}
                   label={t("os.card.units")}
+                  autoUnits={subject.attendanceAutoUnits}
                 />
               )}
             </>

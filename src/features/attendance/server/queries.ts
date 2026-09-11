@@ -40,6 +40,7 @@ import {
 } from "@/features/attendance/derive-from-reports";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { teacherProcessing, type ProcessingRecord, type TeacherProcessing } from "../teacher-processing";
+import { autoUnitsByDate, isAutoUnitsSubject, toAutoUnitsSchedule } from "../auto-units";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -543,6 +544,12 @@ export type AttendanceMatrix = {
   derived: Record<string, Record<string, true>>;
   // 이 반이 파생 대상인지(수학=대상, 영어=미가동). 표에 안내 문구를 띄울지 결정.
   derivedActive: boolean;
+  /**
+   * date → 이 반 그날의 **수학 자동 시수**(수업 길이 → 시수, auto-units.ts · 원장 2026-09-11) — 빈 칸에
+   * 숫자를 안 고르고 찍으면 서버가 넣는 값. 격자 낙관값·팝오버 기본값이 이걸 보여 준다(보이는 기본값 = 저장값).
+   * 1·수학 아님·배치 없음은 키가 없다. ⚠️ 선택 필드 — 없으면(옛 픽스처·보강 반) 자동값 없음과 같다.
+   */
+  autoUnits?: Record<string, number>;
   stats: {
     totalStudents: number;
     presentRate: number;
@@ -796,9 +803,10 @@ export async function getMonthlyAttendanceMatrix(
       .lte("start_date", endIso),
     // 그 달과 유효기간이 겹치는 스케줄만(월 중 요일이 바뀐 반은 합집합 — 표시용 하이라이트라 넉넉히).
     // ⚠️ 자리(LAB·JJ) 판정에도 이 결과를 쓴다 — 그래서 시각·담당·유효구간까지 함께 받는다(추가 왕복 0, B4).
+    // end_time은 **수학 자동 시수**(수업 길이 → 시수, auto-units.ts)의 재료 — 같은 행이라 왕복 0.
     supabase
       .from("class_schedules")
-      .select("day_of_week, start_time, teacher_id, slot_teacher_label, valid_from, valid_to")
+      .select("day_of_week, start_time, end_time, teacher_id, slot_teacher_label, valid_from, valid_to")
       .eq("class_id", classId)
       .lte("valid_from", endIso)
       .or(`valid_to.is.null,valid_to.gte.${startIso}`),
@@ -1261,6 +1269,10 @@ export async function getMonthlyAttendanceMatrix(
     dayAxis,
     derived,
     derivedActive,
+    // 수학 자동 시수 — 빈 칸 기본값(보이는 기본값 = 저장될 값). 판정은 서버 쓰기와 같은 함수(auto-units.ts).
+    ...(isAutoUnitsSubject(selectedSubject)
+      ? { autoUnits: autoUnitsByDate(days.map((d) => d.date), (schedules ?? []).map(toAutoUnitsSchedule)) }
+      : {}),
     stats: {
       totalStudents: students.length,
       presentRate,

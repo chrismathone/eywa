@@ -51,8 +51,11 @@ export function commitBuffer(buf: string | null): TypedValue | null {
   if (n > MAX_SESSION_UNITS) return null;
   const parsed = parseSessionUnits(s);
   if (!parsed.ok) return null;
-  // 1은 기본값이라 빈 문자열로 넘겨 null 저장(노이즈 제거) — parseSessionUnits의 정규화와 같은 뜻.
-  return { status: "present", units: parsed.value === null ? "" : String(parsed.value) };
+  // 🔴 1은 **명시값 "1"**로 넘긴다(2026-09-11) — 저장값은 여전히 null(서버 parseSessionUnits가 1을 접는다)이지만,
+  //    ""(=기본)로 넘기면 서버가 **수학 자동 시수**(수업 길이, auto-units.ts)를 넣는다. 사람이 친 1은 1이다
+  //    (원장 2026-09-01 *"입력된 숫자가 입력되도록"*). ⚠️ 교시가 여럿인 날의 "교시마다 1" 의미도 불변 —
+  //    서버 분배는 명시 숫자가 1이 아닐 때만(unitsVal !== null) 돈다.
+  return { status: "present", units: parsed.value === null ? "1" : String(parsed.value) };
 }
 
 /** 칸의 현재 값(`s`=상태, `u`=시수) → 복사 버퍼에 담을 값(붙여넣기·Ctrl+Enter용). 빈 칸은 null. */

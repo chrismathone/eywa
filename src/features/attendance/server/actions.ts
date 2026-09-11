@@ -25,6 +25,9 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { parseSessionUnits, splitUnitsAcrossSlots, toStoredUnits } from "../session-units";
+// 수학 자동 시수(원장 2026-09-11) — **새 행**에만, 숫자를 안 고른 저장에만. 규칙·근거는 auto-units.ts.
+import { autoUnitsApply, autoUnitsKey, autoUnitsLogFields, newRowUnits } from "../auto-units";
+import { resolveAutoUnits } from "./auto-units";
 import { hasSaveTarget, pickSaveTargets, type SaveTargets } from "../save-targets";
 import {
   absenceMemo,
@@ -161,6 +164,8 @@ export async function saveAttendance(
     homeworkRequired: boolean;
     homeworkDone: boolean;
     sessionUnits: number | null;
+    /** 시수 칸 원문 — ""(빈 칸)이면 '기본'이라 새 행에 수학 자동 시수가 들어간다. "1"은 명시다. */
+    rawUnits: string;
   };
   const rows: Row[] = [];
 
@@ -181,7 +186,8 @@ export async function saveAttendance(
     const homeworkDone =
       String(formData.get(`homeworkDone:${studentId}`) ?? "") === "true";
     // 시수(배수, 0115a) — 빈 값·1 = 기본(null). 잘못된 입력은 행 단위로 즉시 반려.
-    const parsedUnits = parseSessionUnits(String(formData.get(`units:${studentId}`) ?? ""));
+    const rawUnits = String(formData.get(`units:${studentId}`) ?? "");
+    const parsedUnits = parseSessionUnits(rawUnits);
     if (!parsedUnits.ok) {
       const name = String(formData.get(`name:${studentId}`) ?? "").trim();
       return { error: `${name || "학생"} 시수 입력 오류 — ${parsedUnits.error}` };
@@ -194,6 +200,7 @@ export async function saveAttendance(
       homeworkRequired,
       homeworkDone,
       sessionUnits: parsedUnits.value,
+      rawUnits,
     });
   }
 
@@ -279,6 +286,13 @@ export async function saveAttendance(
     saved++;
   }
 
+  // 수학 자동 시수 — **새 행** + 시수 칸을 비운 학생만(auto-units.ts). 한 반·한 날짜라 조회는 1회.
+  const wantsAuto = (r: Row) => autoUnitsApply({ rawUnits: r.rawUnits, slotStart: null, status: r.status });
+  const formAuto = inserts.some(wantsAuto)
+    ? ((await resolveAutoUnits(supabase, [{ classId, date }])).get(autoUnitsKey(classId, date)) ?? null)
+    : null;
+  // 🔴 친 숫자가 먼저 — 원문을 `newRowUnits`가 다시 본다(auto-units.ts). 자동값은 판정을 탄 행에만 넘긴다.
+  const formUnitsOf = (r: Row) => newRowUnits(r.rawUnits, r.sessionUnits, wantsAuto(r) ? formAuto : undefined);
   if (inserts.length > 0) {
     const wrote = await insertManyWithVia(
       supabase,
@@ -293,7 +307,7 @@ export async function saveAttendance(
             note: r.note,
             homework_required: r.homeworkRequired,
             homework_done: r.homeworkDone,
-            session_units: r.sessionUnits,
+            session_units: formUnitsOf(r).units,
             recorded_by: user.id,
           },
           via,
@@ -347,6 +361,8 @@ export async function saveAttendance(
       updated: updates.length,
       statuses: countByStatus(rows),
       studentIds: rows.map((r) => r.studentId),
+      // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 없으면 키도 없다.
+      ...autoUnitsLogFields(inserts.map((r) => formUnitsOf(r).auto).filter((v): v is number => typeof v === "number")),
       // 🔴 "몇 건이 붙었나"를 빼서 만들지 않는다 — `unlinked`(결석 칸을 못 찾음)와 `linkError`(권한·DB 실패)는
       //    **서로 다른 실패**라 하나로 빼면 로그가 붙지도 않은 연결을 붙었다고 말한다. 있는 그대로 싣는다.
       ...(makeupLinks.length > 0
@@ -380,6 +396,11 @@ export type CellResult =
        * 호출부는 이걸로 화면을 서버 상태에 맞추고 사용자에게 알린다(덮어쓰기 사고 방지, 2026-08-17 감사 P0-1).
        */
       conflict?: { status: string; note: string | null; units: number | string | null };
+      /**
+       * 이 저장이 **새 행을 만들었고 숫자를 안 골랐다**(수학 자동 시수 대상 판정을 탔다) — 실제로 저장된 시수
+       * (null = 1). 키가 있을 때만 호출부가 화면 시수를 이 값으로 맞춘다(원장 2026-09-11, auto-units.ts).
+       */
+      autoUnits?: number | null;
     }
   | { error: string };
 
@@ -647,6 +668,8 @@ export async function setAttendanceCell(input: {
   const nowIso = new Date().toISOString();
   // 감사로그용 — 아래 분기가 id 목록을 소비하기 전에 **덮어쓰기였는지**를 굳혀 둔다.
   const overwrote = updateIds.length > 0 || promoteIds.length > 0;
+  /** 새 행 + 숫자 안 고른 저장이면 실제로 넣은 시수(null = 1), 아니면 undefined — 수학 자동 시수(auto-units.ts). */
+  let insertedAuto: number | null | undefined;
   if (updateIds.length > 0 || promoteIds.length > 0) {
     const patch: Record<string, unknown> = withVia(
       { status, recorded_by: user.id, recorded_at: nowIso },
@@ -693,6 +716,15 @@ export async function setAttendanceCell(input: {
       }
     }
   } else {
+    // 🔴 새 행 + 숫자를 안 고른 저장(원문 없음·공백)만 수학 수업 길이 자동 시수를 받는다(auto-units.ts).
+    //    있는 행을 고치는 위 분기는 종전 그대로라 강사가 고친 값·명시한 1을 덮지 않는다.
+    //    친 숫자는 `newRowUnits`가 원문을 **다시** 보고 먼저 쓴다(판정 인자 하나가 유일한 방어선이 아니게).
+    const lookedUp = autoUnitsApply({ rawUnits: input.units, slotStart: slot, status })
+      ? ((await resolveAutoUnits(supabase, [{ classId, date: sessionDate }])).get(autoUnitsKey(classId, sessionDate)) ??
+        null)
+      : undefined;
+    const ins = newRowUnits(input.units, unitsVal, lookedUp);
+    insertedAuto = ins.auto === undefined ? undefined : ins.units;
     const row = withVia(
       {
         tenant_id: user.tenantId,
@@ -702,7 +734,7 @@ export async function setAttendanceCell(input: {
         slot_start: slot,
         status,
         note: noteProvided ? noteVal : null,
-        session_units: unitsProvided ? unitsVal : null,
+        session_units: ins.units,
         recorded_by: user.id,
       },
       via,
@@ -727,6 +759,8 @@ export async function setAttendanceCell(input: {
       status,
       ...(overwrote ? { overwrote: true, prevStatus } : { created: true }),
       ...(unitsProvided ? { units: unitsVal } : {}),
+      // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 값이 들어갔을 때만.
+      ...(insertedAuto != null ? { autoUnits: insertedAuto } : {}),
       ...(input.source ? { source: input.source } : {}),
       ...backdatedFlag([sessionDate], kstToday()),
     },
@@ -763,7 +797,8 @@ export async function setAttendanceCell(input: {
     }
   }
   if (!input.quiet) revalidateAttendanceSurfaces();
-  return { ok: true };
+  // 새 행 + 숫자 안 고른 저장이면 실제 저장 시수를 돌려준다 — 화면이 낙관값을 기록에 맞춘다(auto-units.ts).
+  return insertedAuto !== undefined ? { ok: true, autoUnits: insertedAuto } : { ok: true };
 }
 
 export type MakeupLinkResult =
@@ -967,7 +1002,7 @@ export type BulkCellResult =
       ok: true;
       /** `created` = 이번에 **새로 만들어진** 행(시수 등 insert 전용 값이 실린 칸) — 클라 낙관 반영이
        *  화면과 DB가 갈리지 않게 구분한다(갱신된 칸은 기존 시수가 보존되므로 시수를 되그리면 안 된다). */
-      applied: { studentId: string; classId: string; created?: boolean }[];
+      applied: { studentId: string; classId: string; created?: boolean; autoUnits?: number }[];
       blocked: number;
     }
   | { error: string };
@@ -1199,6 +1234,18 @@ export async function setAttendanceBulk(input: {
       if (wrote.error) return { error: wrote.error };
     }
   }
+  // 수학 자동 시수 — 이번에 **새로 만드는** 칸 + 시수를 안 고른 일괄만(auto-units.ts). 갱신 대상은 위에서 끝났다.
+  const bulkWantsAuto = inserts.length > 0 && autoUnitsApply({ rawUnits: input.units, slotStart: slot, status });
+  const bulkAuto = bulkWantsAuto
+    ? await resolveAutoUnits(supabase, inserts.map((c) => ({ classId: c.classId, date: sessionDate })))
+    : new Map<string, number>();
+  // 🔴 친 숫자가 먼저 — `newRowUnits`가 원문을 다시 본다(auto-units.ts). 새 행·응답·감사로그가 이 한 값을 쓴다.
+  const bulkUnitsOf = (c: { classId: string }) =>
+    newRowUnits(
+      input.units,
+      bulkUnitsVal,
+      bulkWantsAuto ? (bulkAuto.get(autoUnitsKey(c.classId, sessionDate)) ?? null) : undefined,
+    );
   if (inserts.length > 0) {
     const rows = inserts.map((c) =>
       withVia(
@@ -1212,7 +1259,8 @@ export async function setAttendanceBulk(input: {
           // 교시 미지정이면 종전대로 null("그날 전체") — 기존 호출부의 저장 모양이 바뀌지 않는다.
           ...(slot ? { slot_start: slot } : {}),
           // 수업타임(시수) — **새 행에만**(update 패치엔 절대 안 넣는다 — 기존 시수 보존 계약).
-          ...(bulkUnitsProvided ? { session_units: bulkUnitsVal } : {}),
+          // 친 숫자 → 그대로 · 안 골랐으면 수학 자동 시수 · 그 외 null(= 1, 컬럼 기본값과 같다).
+          session_units: bulkUnitsOf(c).units,
         },
         viaByClass.get(c.classId) ?? "teacher",
       ),
@@ -1245,6 +1293,8 @@ export async function setAttendanceBulk(input: {
         ...(input.fillEmptyOnly ? { fillEmptyOnly: true } : {}),
         ...(input.source ? { source: input.source } : {}),
         ...(bulkUnitsProvided ? { units: bulkUnitsVal } : {}),
+        // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 없으면 키도 없다.
+        ...autoUnitsLogFields(inserts.map((c) => bulkUnitsOf(c).auto).filter((v): v is number => typeof v === "number")),
         ...backdatedFlag([sessionDate], kstToday()),
       },
     });
@@ -1304,13 +1354,29 @@ export async function setAttendanceBulk(input: {
   const createdKeys = new Set(inserts.map((c) => `${c.studentId}::${c.classId}`));
   return {
     ok: true,
-    applied: allowed.map((c) => ({ ...c, created: createdKeys.has(`${c.studentId}::${c.classId}`) })),
+    // 새 칸에 수학 자동 시수가 들어갔으면 그 값도 — 호출부가 화면 시수를 기록과 같게 맞춘다(갱신 칸엔 안 붙는다).
+    applied: allowed.map((c) => {
+      const created = createdKeys.has(`${c.studentId}::${c.classId}`);
+      const autoUnits = created ? bulkUnitsOf(c).auto : undefined;
+      return { ...c, created, ...(typeof autoUnits === "number" ? { autoUnits } : {}) };
+    }),
     blocked: cells.length - allowed.length,
   };
 }
 
 export type RangeCell = { studentId: string; classId: string; sessionDate: string };
-export type RangeResult = { ok: true; applied: number; blocked: number } | { error: string };
+export type RangeResult =
+  | {
+      ok: true;
+      applied: number;
+      blocked: number;
+      /**
+       * 숫자를 안 고른 채우기로 **새로 만든** 칸의 실제 저장 시수(null = 1) — 수학 자동 시수(auto-units.ts).
+       * 격자가 낙관값을 기록에 맞춘다(조회 실패로 자동값이 안 들어간 칸까지). 해당 칸이 없으면 키가 없다.
+       */
+      autoUnits?: { studentId: string; classId: string; sessionDate: string; units: number | null }[];
+    }
+  | { error: string };
 
 /** '전원 기록 완료' 전이 검사를 돌릴 (반×날짜) 조합 상한 — 넘으면 건너뛴다(아래 주석). */
 const NOTIFY_PAIR_LIMIT = 40;
@@ -1541,6 +1607,19 @@ export async function setAttendanceRange(input: {
       }
     }
   }
+  // 수학 자동 시수 — **새 칸** + 시수를 안 고른 채우기만(auto-units.ts). 날짜가 칸마다 달라 (반,날짜)로 찾는다.
+  // 범위 insert는 교시 없는 "그날 전체" 행이라 slot은 null이다.
+  const rangeWantsAuto = inserts.length > 0 && autoUnitsApply({ rawUnits: input.units, slotStart: null, status });
+  const rangeAuto = rangeWantsAuto
+    ? await resolveAutoUnits(supabase, inserts.map((c) => ({ classId: c.classId, date: c.sessionDate })))
+    : new Map<string, number>();
+  // 🔴 친 숫자가 먼저 — `newRowUnits`가 원문을 다시 본다(auto-units.ts). 새 행·응답·감사로그가 이 한 값을 쓴다.
+  const rangeUnitsOf = (c: RangeCell) =>
+    newRowUnits(
+      input.units,
+      unitsVal,
+      rangeWantsAuto ? (rangeAuto.get(autoUnitsKey(c.classId, c.sessionDate)) ?? null) : undefined,
+    );
   if (inserts.length > 0) {
     for (let i = 0; i < inserts.length; i += CHUNK) {
       const wrote = await insertManyWithVia(
@@ -1553,7 +1632,7 @@ export async function setAttendanceRange(input: {
               student_id: c.studentId,
               session_date: c.sessionDate,
               status,
-              session_units: unitsProvided ? unitsVal : null,
+              session_units: rangeUnitsOf(c).units,
               recorded_by: user.id,
             },
             rangeViaByClass.get(c.classId) ?? "teacher",
@@ -1582,6 +1661,8 @@ export async function setAttendanceRange(input: {
       blocked: cells.length - allowed.length,
       studentIds: [...new Set(allowed.map((c) => c.studentId))],
       ...(unitsProvided ? { units: unitsVal } : {}),
+      // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 없으면 키도 없다.
+      ...autoUnitsLogFields(inserts.map((c) => rangeUnitsOf(c).auto).filter((v): v is number => typeof v === "number")),
       ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
     },
   });
@@ -1601,7 +1682,23 @@ export async function setAttendanceRange(input: {
     });
   }
   if (!input.quiet) revalidateAttendanceSurfaces();
-  return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
+  return {
+    ok: true,
+    applied: allowed.length,
+    blocked: cells.length - allowed.length,
+    // 숫자 안 고른 채우기로 **새로 만든** 칸의 실제 시수 — 격자가 낙관값을 기록에 맞춘다(auto-units.ts).
+    ...(rangeWantsAuto
+      ? {
+          autoUnits: inserts.flatMap((c) => {
+            const ins = rangeUnitsOf(c);
+            // 저장값 그대로(자동 판정을 탄 칸만) — 화면이 이 값으로 낙관값을 맞춘다.
+            return ins.auto === undefined
+              ? []
+              : [{ studentId: c.studentId, classId: c.classId, sessionDate: c.sessionDate, units: ins.units }];
+          }),
+        }
+      : {}),
+  };
 }
 
 /**

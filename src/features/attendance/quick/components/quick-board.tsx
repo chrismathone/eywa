@@ -22,7 +22,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/eywa-icon-compat";
-import { publishAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
+import {
+  busCellFromCell,
+  busCellsFromBulk,
+  publishAttendanceApplied,
+} from "@/features/attendance/live/attendance-applied-bus";
 import { setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import {
   applyQuickMarks,
@@ -141,11 +145,12 @@ export function QuickBoard({
             return;
           }
           // 같은 문서에 열려 있는 화면(원스크린·ECS)이 새로고침 없이 따라오게 — 저장 축 그대로 싣는다.
+          // 새 행이면 서버가 넣은 시수(수학 자동 시수)까지 — 원스크린 '타임'이 기록과 같게(2026-09-11).
           publishAttendanceApplied({
             date,
             status: input.status,
             slot: student.writeSlot,
-            cells: [{ studentId, classId: klass.classId }],
+            cells: [busCellFromCell(studentId, klass.classId, res)],
           });
         })
         .catch(() => {
@@ -226,7 +231,7 @@ export function QuickBoard({
             date,
             status: "present",
             slot: plan.slot,
-            cells: res.applied.map((a) => ({ studentId: a.studentId, classId: a.classId })),
+            cells: busCellsFromBulk(res.applied),
           });
         }
         if (res.applied.length < plan.cells.length) {

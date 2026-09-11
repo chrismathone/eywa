@@ -965,7 +965,9 @@ export function OneScreenClient({
       status: "makeup",
       allowMakeup: true,
       // 확인창에서 고른 시수를 그 칸에 그대로 적는다(1이면 서버가 접는다) — 급여가 이 값을 읽는다.
-      ...(units && units !== 1 ? { units: String(units) } : {}),
+      // 🔴 1도 **명시로** 보낸다(2026-09-11) — 안 보내면 '기본'이라 수학 반에선 서버가 수업 길이 자동 시수를
+      //    넣는다(auto-units.ts). 이 칸은 보강이고 시수는 강사가 확인창에서 고른 값이다(종전 저장값 그대로 1=null).
+      units: String(units ?? 1),
     }).then((r) => {
       if ("error" in r) toast.error(tf("os.c.anchorFail", { error: r.error }));
     });
@@ -1549,6 +1551,12 @@ export function OneScreenClient({
     if (prev.raw === status && !changesExtra) return; // 상태 재클릭 no-op(삭제는 출석부에서)
     const myMark = markOf(status);
     setAttPending((p) => new Set(p).add(key));
+    /**
+     * 🔴 **첫 기록 + 숫자 안 고름** = 서버가 수학 수업 길이 자동 시수를 넣는다(auto-units.ts, 2026-09-11).
+     *    화면 '타임'도 같은 값으로 먼저 칠하고, 응답의 `autoUnits`(실제 저장값)로 다시 맞춘다 — 서버 조회가
+     *    실패하면 null(=1)이 들어가므로 낙관값만 믿으면 화면과 기록이 갈린다. 결석은 시수를 안 쓴다.
+     */
+    const autoOnInsert = prev.raw === null && !(extra && "units" in extra) && status !== "absent";
     // 낙관 표시용 시수 — 서버가 "1이면 null로 정규화"하므로 화면도 같은 규칙으로 미리 접는다.
     const optimisticUnits =
       extra && "units" in extra
@@ -1558,7 +1566,9 @@ export function OneScreenClient({
             const n = Number(String(extra.units ?? "").replace(",", "."));
             return !Number.isFinite(n) || n === 1 ? null : n;
           })()
-        : undefined;
+        : autoOnInsert
+          ? (row?.attendanceAutoUnits ?? null)
+          : undefined;
     applyAttendanceLocal(studentId, classId, status, {
       ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
       ...(optimisticUnits !== undefined ? { units: optimisticUnits } : {}),
@@ -1596,6 +1606,9 @@ export function OneScreenClient({
               : t("os.c.attRecorded"),
           }),
         );
+      } else if (autoOnInsert && res.autoUnits !== undefined) {
+        // 서버가 실제로 넣은 시수로 맞춘다(자동값 또는 조회 실패 시 null=1) — 낙관값이 기록과 갈리지 않게.
+        applyAttendanceLocal(studentId, classId, status, { units: res.autoUnits });
       }
     } catch {
       rollbackAttendance(studentId, classId, prev, myMark, prevMark);
@@ -1647,7 +1660,9 @@ export function OneScreenClient({
         toast.error(res.error);
         return;
       }
-      for (const c of res.applied) applyAttendanceLocal(c.studentId, c.classId, "present");
+      // 새로 만든 칸엔 서버가 넣은 시수(수학 자동 시수, 없으면 null=1)를 그대로 — 화면 '타임'이 기록과 같게.
+      for (const c of res.applied)
+        applyAttendanceLocal(c.studentId, c.classId, "present", c.created ? { units: c.autoUnits ?? null } : undefined);
       const missed = cells.length - res.applied.length;
       if (res.applied.length === 0) {
         // 조용한 0건 금지 — 왜 아무 일도 안 났는지 밝힌다.
@@ -2419,7 +2434,8 @@ export function OneScreenClient({
                 c.studentId,
                 c.classId,
                 attendance,
-                c.created && echoUnits !== undefined ? { units: echoUnits } : undefined,
+                // 시수를 안 고른 일괄의 새 칸 = 서버가 넣은 수학 자동 시수(없으면 null=1, auto-units.ts).
+                c.created ? { units: echoUnits !== undefined ? echoUnits : (c.autoUnits ?? null) } : undefined,
               );
             done.push(
               tf("os.c.doneAtt", { n: res.applied.length }) +
