@@ -9,6 +9,7 @@ import { validateSeatPeriodMove } from "../period-choice";
 import { gateSeatMoveWrite } from "./move-gate";
 import { getSeatDay } from "./queries";
 import { applySeatDayChoices, getSeatPeriodChoices, seatDowKey } from "./period-choice";
+import { getSeatStudentClasses } from "./next-destination";
 
 /**
  * 자리 **교시 선택** 쓰기 — 0255a `seat_period_moves`/`seat_period_pins`.
@@ -71,14 +72,18 @@ export async function moveSeatStudentPeriod(input: {
 
   const fromSlot = hhmm(input.fromSlot);
   const toSlot = hhmm(input.toSlot);
-  // 명단과 선택은 서로 독립이라 병렬(B4). 선택까지 얹어야 **화면이 그린 명단**과 같다 — 옮겨 온 학생은
+  // 명단·선택·학생 축은 서로 독립이라 병렬(B4). 선택까지 얹어야 **화면이 그린 명단**과 같다 — 옮겨 온 학생은
   // 목표 교시에 서 있고 원래 교시엔 없다(그 학생을 한 번 더 옮기는 경우가 여기서 갈린다).
-  const [day, choiceLoad] = await Promise.all([
+  const [day, choiceLoad, classesLoad] = await Promise.all([
     getSeatDay(input.seat, input.date),
     getSeatPeriodChoices(g.tenantId, input.seat, input.date),
+    // 학생 축 — 화면과 같은 조회·같은 규칙([[#77]]: 화면 값은 스냅샷). 로그인 경로라 세션 클라이언트(테넌트를 안 넘긴다).
+    getSeatStudentClasses([input.studentId], input.date, input.seat),
   ]);
   // 선택을 못 읽었으면 화면과 같은 명단을 만들 수 없다 — 추측으로 쓰지 않는다(화면도 이때 드래그를 잠근다).
   if (!choiceLoad.ready) return { error: choiceLoad.reason ?? "자리 교시 선택을 불러오지 못했습니다" };
+  // 🔴 서버는 게이트다 — 학생의 다른 수업을 확인 못 하면 옮기지 않는다(모른 채 쓰면 그 시각 두 곳에 선 학생이 생긴다).
+  if (!classesLoad.ok) return { error: classesLoad.error };
   const rosterByPeriod = applySeatDayChoices(day, choiceLoad, input.date);
 
   // 🔴 화면이 보낸 반을 믿지 않는다 — 그 교시 명단에서 이 학생이 실제로 그 반(원래 반)에 서 있어야 한다.
@@ -104,6 +109,9 @@ export async function moveSeatStudentPeriod(input: {
     periodStarts: day.periods.map((p) => p.start),
     busyStarts: day.busyStartsByClass[input.classId] ?? [],
     markedReason: student ? seatMoveBlockReason(student.status) : null,
+    // 🔴 학생 축 — 화면과 같은 함수·같은 문장. 조회가 돈 뒤 키가 없으면 그날 유효한 수강이 없는 학생(= 다른 수업도 없다).
+    studentClasses: classesLoad.byStudent[input.studentId] ?? [],
+    toEnds: day.periods.find((p) => p.start === toSlot)?.ends,
   });
   if ("error" in check) return check;
 

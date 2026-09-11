@@ -4,12 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { ambiguousClassIds, hhmm, type SeatKey } from "../seat";
-import {
-  applySeatPlacements,
-  seatResetTargets,
-  validateSeatMove,
-  type SeatPlacement,
-} from "../placement";
+import { applySeatPlacements, seatResetTargets, type SeatPlacement } from "../placement";
 import { gateSeatMoveWrite } from "./move-gate";
 import { getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
@@ -18,7 +13,8 @@ import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 export type SeatPlacementResult = { ok: true; changed: number } | { error: string };
 
 /**
- * 자리 **배치**(드래그로 옮긴 자리) 쓰기 — 0254a `seat_placements`.
+ * 자리 **배치**(드래그로 옮겨 둔 자리)의 **되돌리기** 쓰기 — 0254a `seat_placements`. 배치를 새로 만드는 드래그는
+ * 원장 2026-09-11로 없앴다(아래 ⚠️ — 드래그의 뜻은 다른 시간 하나). 이미 있는 줄은 초기화로만 바뀐다.
  *
  * 🔴🔴 **출결을 쓰지 않는다.** 이 파일은 `attendance_records`에 insert·update·delete를 한 번도 하지 않는다
  *    (자리 배치는 "카드가 어느 묶음에 놓였나"이고, 출결 귀속은 언제나 학생의 수강 반이다 —
@@ -70,101 +66,13 @@ function revalidateSeat(): void {
   revalidatePath("/seat");
 }
 
-/**
- * 학생 카드 한 장을 다른 반 묶음으로 옮긴다(드래그 한 번).
- *
- * 🔴 화면은 **자리·날짜·교시·학생·놓은 반**만 보낸다 — 원래 반은 서버가 그 교시 명단에서 다시 읽는다
- *    ([[#77]]: 화면이 보낸 값을 믿으면 그새 바뀐 수강을 덮는다).
- * 🔑 제 반으로 도로 끌면 **그 학생만 초기화**(줄 삭제)다 — 같은 동작의 자연스러운 반대라 버튼을 따로
- *    만들지 않는다.
+/*
+ * ⚠️ 배치를 **새로 만드는** 쓰기(옛 `moveSeatStudent` — 같은 교시 안 옆 반 묶음으로 끌기)는 없앴다. 원장 2026-09-11
+ *    *"LAB실에서 내가 드래그하고 싶은건, '다른 시간대'의 수업임. 같은 시간대의 수업으로 옮기고 싶은게 아니야."* —
+ *    드래그의 뜻은 다른 시간 하나다(`period-actions.ts` `moveSeatStudentPeriod`). 클라 호출자가 없는 쓰기 경로를
+ *    남겨 두지 않는다(열린 서버 액션은 그 자체로 문이다). 이미 있는 줄은 아래 초기화로 되돌린다 — 과거 감사로그
+ *    `seat_placement_move`는 레지스트리(`log.ts`)에 남아 한글로 읽힌다.
  */
-export async function moveSeatStudent(input: {
-  seat: SeatKey;
-  date: string;
-  slotStart: string;
-  studentId: string;
-  toClassId: string;
-}): Promise<SeatPlacementResult> {
-  const g = await gateSeatMoveWrite(input.seat, input.date);
-  if ("error" in g) return g;
-
-  const slot = hhmm(input.slotStart);
-  const rosters = await periodRosters(g.tenantId, input.seat, input.date, slot);
-  if (!rosters) return { error: "그 시각에는 이 자리 수업이 없습니다" };
-
-  const check = validateSeatMove(rosters, { studentId: input.studentId, toClassId: input.toClassId });
-  if ("error" in check) return check;
-
-  const supabase = createAdminClient();
-  const where = {
-    tenant_id: g.tenantId,
-    seat: input.seat,
-    session_date: input.date,
-    slot_start: slot,
-    student_id: input.studentId,
-  };
-
-  if (check.isReset) {
-    const { data: gone, error } = await supabase
-      .from("seat_placements")
-      .delete()
-      .match(where)
-      .select("from_class_id, to_class_id");
-    if (error) return { error: placementError(error) };
-    const removed = gone ?? [];
-    if (removed.length === 0) return { ok: true, changed: 0 }; // 원래 자리에 있던 학생 = 아무 일도 아니다
-    await logAction({
-      action: "seat_placement_reset",
-      targetType: "attendance",
-      metadata: {
-        scope: "student",
-        seat: input.seat,
-        date: input.date,
-        slotStart: slot,
-        count: removed.length,
-        moves: removed.map((r) => ({
-          studentId: input.studentId,
-          fromClassId: r.from_class_id as string,
-          toClassId: r.to_class_id as string,
-        })),
-        via: g.via,
-      },
-    });
-    revalidateSeat();
-    return { ok: true, changed: removed.length };
-  }
-
-  const { error } = await supabase.from("seat_placements").upsert(
-    {
-      ...where,
-      from_class_id: check.fromClassId,
-      to_class_id: input.toClassId,
-      moved_by: g.userId,
-      updated_at: new Date().toISOString(),
-    },
-    // 🔴 술어 없는 일반 유니크라 추론이 된다([[#113]]) — 부분 유니크였다면 여기서 전건 42P10이다.
-    { onConflict: "tenant_id,seat,session_date,slot_start,student_id" },
-  );
-  if (error) return { error: placementError(error) };
-
-  await logAction({
-    action: "seat_placement_move",
-    targetType: "attendance",
-    metadata: {
-      studentId: input.studentId,
-      // 감사로그의 축을 초기화(`moves`)와 **같은 모양**으로 맞춘다 — 나중에 짝지어 읽으려면 필요하다.
-      moves: [{ studentId: input.studentId, fromClassId: check.fromClassId, toClassId: input.toClassId }],
-      fromClassId: check.fromClassId,
-      toClassId: input.toClassId,
-      seat: input.seat,
-      date: input.date,
-      slotStart: slot,
-      via: g.via,
-    },
-  });
-  revalidateSeat();
-  return { ok: true, changed: 1 };
-}
 
 /**
  * 초기화 — 드래그로 옮긴 것을 **원래 반**(수강·시간표가 정한 반)으로 되돌린다.

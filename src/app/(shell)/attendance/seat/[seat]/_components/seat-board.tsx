@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
@@ -9,9 +9,9 @@ import { SeatPeriodChips } from "./seat-period-chips";
 import { SEAT_NAME, type SeatKey } from "@/features/attendance/seat/seat";
 import { ECS_PLAN_API } from "@/features/class-sheets/components/plan-api";
 import { seatPlanApi } from "@/features/attendance/seat/seat-plan-api";
-import type { SeatPeriodHintData } from "./seat-mark-extras";
+import type { SeatPeriodHintData } from "./seat-period-hints";
 import { useSeatBoardSaves } from "./seat-board-saves";
-import { useSeatPeriodClear, useSeatPlacementMoves } from "./seat-board-moves";
+import { useSeatPlacementMoves } from "./seat-board-moves";
 import { SeatJjTable } from "./seat-jj-table";
 import type { SeatClassPlan } from "@/features/attendance/seat/server/jj-plan";
 import { SeatLabGrid } from "./seat-lab-grid";
@@ -68,6 +68,7 @@ export function SeatBoard({
   prevAbsentByCell,
   nextStartByStudent,
   nextRoomByStudent,
+  lastByStudent,
   plans,
   placements,
   canMove = false,
@@ -78,8 +79,6 @@ export function SeatBoard({
   slotsByClass,
   markedSlotsByCell,
   onClearPeriodChoices,
-  externalDnd = false,
-  onRegisterMove,
   canChoosePeriod = false,
   choicesApplied = false,
 }: {
@@ -97,16 +96,21 @@ export function SeatBoard({
    */
   prevAbsentByCell?: Readonly<Record<string, string>>;
   /**
-   * 오늘 이 자리에서 다시 오는 다음 교시(학생 id → "HH:MM").
-   * 🔴 **로그인 화면에만 내려온다** — 비로그인 PIN 화면은 이 prop 자체를 안 받는다(그쪽엔 새 정보를
-   *    내려보내지 않는다는 규약. 사유 칸과 같은 결).
+   * 학생 id → 오늘 남은 **다음 수업** 시작시각("HH:MM") — 이 자리만이 아니라 오늘 전 과목에서 찾는다.
+   * 🔴 **로그인 화면과 공개 PIN 랩실**(`PIN_NOTE_SEATS`, 원장 2026-09-10 *"seat/lab에서도 자리 출석부와 동일해야해"*)에
+   *    내려온다 — JJ실 PIN 화면은 이 prop을 안 받는다(그 문엔 새 정보를 내려보내지 않는다는 규약. 사유 칸과 같은 결).
    */
   nextStartByStudent?: Readonly<Record<string, string>>;
   /**
    * 학생 id → 그 다음 수업의 **강의실 이름**(등록된 정본). 모르면 키가 없다 — 화면은 시각만 적는다.
-   * 🔴 `nextStartByStudent`와 같은 규약으로 **로그인 화면에만** 내려온다.
+   * 🔴 `nextStartByStudent`와 같은 규약으로 내려온다(로그인 화면 · 공개 PIN 랩실).
    */
   nextRoomByStudent?: Readonly<Record<string, string>>;
+  /**
+   * 학생 id → true — 이 교시가 오늘 **마지막 수업**이라고 **확인된** 학생(원장 2026-09-11). 같은 규약으로 내려온다.
+   * 🔴 `nextStartByStudent`에 없다고 마지막이 아니다(조회 안 함·실패·대상 밖 = 모름) — 이 값만 보고 적는다.
+   */
+  lastByStudent?: Readonly<Record<string, true>>;
   /**
    * 비로그인 PIN 화면인가 — 참이면 **사유 칸을 안 그린다**(그 경로는 사유를 조회하지 않는다).
    * ⚠️ `plans.viaPin`으로 대신 판정하지 말 것 — 계획이 없는 자리·교시엔 `plans` 자체가 안 넘어와서
@@ -120,7 +124,8 @@ export function SeatBoard({
    */
   placements?: readonly SeatPlacement[];
   /**
-   * 드래그·초기화를 열 것인가 — **로그인 + 쓰기 가능 + 0254a 적용됨**일 때만 참.
+   * 이미 옮겨 둔 자리(배치 0254a)의 [초기화]를 열 것인가 — **로그인 + 쓰기 가능 + 0254a 적용됨**일 때만 참.
+   * 배치를 새로 만드는 드래그는 없다(원장 2026-09-11) — 이 값은 되돌리기만 연다.
    * 🔴 비로그인 PIN 화면은 언제나 거짓이다(감사로그에 실행자를 못 남기는 동작은 열지 않는다).
    */
   canMove?: boolean;
@@ -144,16 +149,10 @@ export function SeatBoard({
   markedSlotsByCell?: Readonly<Record<string, readonly string[]>>;
   /** 그 반의 교시 지정(오늘 이동 + 이 요일 고정)을 지운다. 없으면 [해제] 버튼을 안 세운다. */
   onClearPeriodChoices?: (classId: string) => void;
-  /** 바깥에 이미 `DndContext`가 있다('전체' 보기) — 교시를 건너는 드래그를 그쪽이 받는다. */
-  externalDnd?: boolean;
   /**
-   * 바깥 컨텍스트에 **이 교시의 반 묶음 이동 처리기**를 등록한다('전체' 보기).
-   * 🔑 이동 구현을 두 벌로 만들지 않으려는 것이다 — 낙관 반영·원복·초기화가 전부 이 훅 안에 있다.
-   */
-  onRegisterMove?: (start: string, move: ((studentId: string, toClassId: string, homeClassId: string) => void) | null) => void;
-  /**
-   * 교시를 옮길 수 있나(0255a) — **배치(0254a)와 가용성이 따로**라 손잡이 판정에 함께 들어간다.
-   * 🔴 배치만 보고 잠그면 0254a 미적용일 때 교시 이동까지 조용히 죽는다.
+   * 카드를 집을 수 있나 — 교시 이동(0255a)의 가용성. 드롭·판정은 바깥 `SeatAllDay` 컨텍스트 한 벌이 받는다(원장
+   * 2026-09-11 *"LAB실에서 내가 드래그하고 싶은건, '다른 시간대'의 수업임"* — 교시 하나 보기에서도 교시 칩에 놓아 옮긴다).
+   * 🔴 배치(0254a) 가용성과 **따로**다 — 배치를 새로 만드는 드래그는 없어서 0254a가 안 돌아도 교시 이동은 산다.
    */
   canChoosePeriod?: boolean;
   /**
@@ -200,23 +199,12 @@ export function SeatBoard({
         : undefined,
     [plans, planApi, date, activeStart, applyCarried, flushFields],
   );
-  const { overlay, movePending, moveError, moveStudent, resetPlacements } = useSeatPlacementMoves(
-    seat,
-    date,
-    activeStart,
-  );
+  const { overlay, movePending, moveError, resetPlacements } = useSeatPlacementMoves(seat, date, activeStart);
   /**
-   * 교시 지정 해제 — '전체' 보기는 바깥이 낙관 오버레이째로 제 것을 넘겨주고, 교시 하나 보기는 이
-   * 훅을 쓴다. 🔴 **양쪽 다 없으면** 감춰진 학생을 되돌릴 길이 화면에서 사라진다.
+   * 교시 지정 해제 — 교시를 옮길 수 있는 화면(랩실 로그인)은 두 보기 모두 `SeatAllDay`가 낙관 오버레이째로 제 것을
+   * 넘겨준다(2026-09-11부터 교시 하나 보기도 그 한 벌이다). 🔴 없으면 [해제]를 안 세운다(공개 PIN·JJ실 — 옮길 수 없는 화면).
    */
-  const { clearPending, clearError, clearClass } = useSeatPeriodClear(seat, date);
-  const clearPeriod = onClearPeriodChoices ?? (canChoosePeriod ? clearClass : undefined);
-  // 바깥 `DndContext`('전체' 보기)가 이 교시의 반 묶음 이동을 부를 수 있게 처리기를 넘겨 둔다.
-  useEffect(() => {
-    if (!onRegisterMove) return;
-    onRegisterMove(activeStart, moveStudent);
-    return () => onRegisterMove(activeStart, null);
-  }, [activeStart, moveStudent, onRegisterMove]);
+  const clearPeriod = onClearPeriodChoices;
   /**
    * **교시 선택**(0255a)을 먼저 얹는다 — 다른 교시로 정해진 학생을 이 교시 명단에서 뺀다.
    * 🔴 배치(반 묶음)보다 **앞이다** — 감춰진 학생을 옮길 수는 없으니, 순서가 뒤집히면 없는 카드에
@@ -288,6 +276,7 @@ export function SeatBoard({
     prevAbsentByCell,
     nextStartByStudent,
     nextRoomByStudent,
+    lastByStudent,
     seatName: SEAT_NAME[seat],
   };
   const listenN = view.flatMap((r) => r.students).filter((s) => s.listeningLevel).length;
@@ -396,18 +385,13 @@ export function SeatBoard({
           {error}
         </p>
       ) : null}
-      {/* 🔵 배치(드래그) 실패는 출결 실패와 **다른 줄**로 알린다 — 두 축이 섞이면 무엇이 안 됐는지 모른다. */}
+      {/* 🔵 배치 [초기화] 실패는 출결 실패와 **다른 줄**로 알린다 — 두 축이 섞이면 무엇이 안 됐는지 모른다. */}
       {moveError ? (
         <p className="text-att-absent-ink bg-att-absent/30 border-att-absent rounded-xl border px-3 py-2 text-xs">
           {moveError}
         </p>
       ) : null}
-      {clearError ? (
-        <p className="text-att-absent-ink bg-att-absent/30 border-att-absent rounded-xl border px-3 py-2 text-xs">
-          {clearError}
-        </p>
-      ) : null}
-      {/* 0254a가 아직 안 돌았거나 조회가 실패했을 때 — 화면은 그대로 살고 드래그·초기화만 잠긴다([[#95]]). */}
+      {/* 0254a가 아직 안 돌았거나 조회가 실패했을 때 — 화면은 그대로 살고 배치 [초기화]만 잠긴다([[#95]]). */}
       {placementNotice ? (
         <p className="text-text-dim bg-bg-soft/60 border-line rounded-xl border px-3 py-2 text-xs">
           {placementNotice}
@@ -441,15 +425,8 @@ export function SeatBoard({
             hints={hints}
             onFillClass={(classId) => fill("present", classId)}
             readOnly={readOnly}
-            pending={pending || movePending || clearPending}
+            pending={pending || movePending}
             canMove={canMove}
-            onMove={(studentId, toClassId) => {
-              const home = view
-                .flatMap((r) => r.students)
-                .find((s) => s.id === studentId)?.homeClassId;
-              if (!home) return;
-              moveStudent(studentId, toClassId, home);
-            }}
             onResetClass={(classId) =>
               resetPlacements(
                 seatResetTargets(placed.applied, classId).map((t) => t.studentId),
@@ -458,8 +435,8 @@ export function SeatBoard({
             }
             resetCounts={resetCounts}
             periodStart={activeStart}
-            externalDnd={externalDnd}
-            canDrag={canMove || canChoosePeriod}
+            // 🔑 손잡이 = 교시 이동 가용성 하나 — 드롭·판정은 바깥 `SeatAllDay`가 받는다(원장 2026-09-11).
+            canDrag={canChoosePeriod}
             periodChoiceCounts={periodChoiceCounts}
             onClearPeriodChoices={clearPeriod}
           />

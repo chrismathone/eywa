@@ -16,12 +16,19 @@ const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*
 
 const DIR = ["src", "app", "(shell)", "attendance", "seat", "[seat]", "_components"];
 const extras = strip(read(...DIR, "seat-mark-extras.tsx"));
+/** 교시 사이 신호 줄(앞 교시 결석·다음 행선지·마지막 수업) — `seat-mark-extras.tsx`에서 떼어 낸 제 파일(2026-09-11). */
+const hintsSrc = strip(read(...DIR, "seat-period-hints.tsx"));
 const lab = strip(read(...DIR, "seat-lab-grid.tsx"));
 const jj = strip(read(...DIR, "seat-jj-table.tsx"));
 const shellPage = strip(read("src", "app", "(shell)", "attendance", "seat", "[seat]", "page.tsx"));
 const publicPage = strip(read("src", "app", "(seat)", "seat", "[seat]", "page.tsx"));
 const noteForm = strip(read("src", "features", "onescreen", "components", "attendance-pills.tsx"));
-const nextDest = strip(read("src", "features", "attendance", "seat", "server", "next-destination.ts"));
+/** 다음 행선지 **조회 층** — 문 두 개(`next-destination.ts`) + 하루치 조회(`next-destination-day.ts`)를 한 덩어리로 본다. */
+const nextDest =
+  strip(read("src", "features", "attendance", "seat", "server", "next-destination.ts")) +
+  strip(read("src", "features", "attendance", "seat", "server", "next-destination-day.ts"));
+const nextPure = strip(read("src", "features", "attendance", "seat", "next-destination.ts"));
+const destRoom = strip(read("src", "features", "attendance", "seat", "destination-room.ts"));
 const chips = strip(read(...DIR, "seat-period-chips.tsx"));
 const allDay = strip(read(...DIR, "seat-all-day.tsx"));
 
@@ -135,10 +142,21 @@ describe("⑤ 카드 위 겹치는 라벨을 없앴다", () => {
 
 describe("⑧ 다음 행선지 = 시각 + 강의실", () => {
   it("방을 모르면 시각만 적는다 — 지어내지 않는다", () => {
-    expect(extras).toContain('{nextStart} {nextRoom ? `${nextRoom} 이동` : "다음 수업"}');
+    expect(hintsSrc).toContain('{nextStart} {nextRoom ? `${nextRoom} 이동` : "다음 수업"}');
   });
-  it("강의실 이름은 등록된 정본으로 정규화한다([[#115]])", () => {
-    expect(nextDest).toContain("canonicalRoomName(");
+  it("강의실 이름은 등록된 정본으로 정규화한다([[#115]]) — 순수 규칙 한 곳(`destinationRoomOf`)에서", () => {
+    expect(destRoom).toContain("canonicalRoomName(");
+    expect(nextDest).toContain("destinationRoomOf(");
+  });
+  it("🔴 배치에 방이 없으면 반 기본 강의실 — 배치 조회의 컬럼 임베드로(원장 2026-09-11 '이도윤B … 강의실이 없고?')", () => {
+    expect(nextDest).toContain("class:class_id ( class_name, classroom:classroom_id ( name ) )");
+    expect(nextDest).toContain("classRoom: one(klass?.classroom)?.name ?? null");
+    // 자리 배치는 반 기본 강의실을 물려받지 않는다(반의 방 ≠ 자리의 방 — 지어낸 방).
+    expect(destRoom).toContain("if (src.seatLabel) return null;");
+  });
+  it("🔴 1,000행 침묵 절단 방지 — 수강·배치 조회는 청크 × 페이징(잘리면 '마지막 수업'이 거짓으로 선다)", () => {
+    expect(nextDest).not.toContain("fetchInChunks");
+    expect(nextDest.match(/\.order\("id"\)\.range\(from, to\)/g)).toHaveLength(2);
   });
   it("공개 PIN 화면에도 같은 조회로 내려간다 — 원장 2026-09-10 'seat/lab에서도 자리 출석부와 동일해야해'", () => {
     expect(shellPage).toContain("nextRoomByStudent={nextBySlot[");
@@ -154,7 +172,63 @@ describe("⑧ 다음 행선지 = 시각 + 강의실", () => {
   it("이 자리 교시만 보던 것을 오늘 전 과목으로 넓혔다(수강 축 조회)", () => {
     expect(nextDest).toContain('.from("enrollments")');
     // 🔵 '전체' 보기(⑨) 이후 조회는 하루치 한 벌이고, "이보다 늦게 시작" 판정만 교시마다 JS에서 돈다.
-    expect(nextDest).toContain("if (sl.start <= after) continue;");
+    //    2026-09-10(16): 그 판정(접기)은 순수 모듈로 옮겼다(Vitest) — 조회는 교시마다 그 함수를 부른다.
+    expect(nextPure).toContain("if (next.start <= after) return;");
+    expect(nextDest).toContain("foldNextDestination(loaded, after, opts.stays)");
+  });
+
+  it("🔴 이 자리 교시는 교시 선택을 얹은 명단으로 잰다 — 옮겨 나간 랩실을 안내하지 않는다(원장 2026-09-10 '다른 시간으로')", () => {
+    // 두 페이지가 **같은 함수·같은 명단**(`applySeatDayChoices`를 거친 `rosterByPeriod`)으로 재료를 만든다 —
+    // 원본(`day.rosterByPeriod`)을 넘기면 옮긴 학생이 원래 교시에 남아 옮겨 나간 랩실을 다시 안내한다.
+    for (const page of [shellPage, publicPage]) {
+      expect(page).toContain("const rosterByPeriod = applySeatDayChoices(day, periodChoiceLoad, date);");
+      expect(page).toContain("stays: seatStaysFor(seat, rosterByPeriod)");
+      expect(page).not.toContain("seatStaysFor(seat, day.rosterByPeriod)");
+    }
+    // 교시를 옮기는 자리(랩실)만 이 규칙을 탄다 — JJ실은 옛 동작(배치표 그대로).
+    expect(nextPure).toContain("if (!MOVABLE_SEATS.includes(seat)) return undefined;");
+    // 조회는 자리 라벨을 함께 받고(단일 소스로 판정), 접기는 이 자리 배치를 빼고 명단의 교시를 넣는다.
+    expect(nextDest).toContain("slot_teacher_label, classroom:classroom_id ( name )");
+    expect(nextDest).toContain("specialSlotLabel(sl.slot_teacher_label)");
+    expect(nextPure).toContain("if (seatLabel && sl.seatLabel === seatLabel) continue;");
+    expect(nextPure).toContain("stays.startsByStudent[studentId]");
+    // 옮겨 가는 교시의 강의실 — 이 자리 반들을 **같은 배치 조회**에 얹는다(새 왕복 없음, B4·B6).
+    expect(nextDest).toContain("const slotClassIds = [...new Set([...classIds, ...seatClassIds])];");
+    // 🔴 선언만 보면 안 된다 — 조회가 옛 `classIds`를 받아도 tsc·eslint(경고, 종료 0)·위 줄이 다 통과한다.
+    //    재료가 조회까지 가는지(호출부 → 로더 → 배치 조회)를 본다. 동작 잠금은 `server/next-destination.test.ts`.
+    expect(nextDest).toContain("loadDaySlots(studentIds, date, opts.tenantId, opts.stays?.classIds ?? [])");
+    expect(nextDest).toContain("fetchAllPagedInChunks<SlotRow>(slotClassIds, (chunk, from, to) => {");
+    expect(nextDest).not.toMatch(/fetchAllPagedInChunks<SlotRow>\(classIds,/);
+  });
+});
+
+describe("⑬ 마지막 수업 — 원장 2026-09-11 'LAB이나 JJ가 마지막 수업인 학생들은 마지막 수업이라고 표시하자'", () => {
+  const board = strip(read(...DIR, "seat-board.tsx"));
+
+  it("🔴 명시 필드로 — 행선지가 없다는 부재로 추측하지 않는다(모름 ≠ 없음)", () => {
+    // 접기가 **조회가 실제로 돈 학생** 중 후보가 하나도 안 남은 학생만 담는다.
+    expect(nextPure).toContain(
+      "for (const studentId of students) if (!(studentId in startByStudent)) lastByStudent[studentId] = true;",
+    );
+    // 화면은 그 필드만 본다 — 다음 수업이 있으면 그쪽이 이긴다.
+    expect(hintsSrc).toContain("const showLast = !nextStart && last === true;");
+    expect(hintsSrc).toContain("마지막 수업");
+    // 조회 실패는 모름으로 돌려준다 — 빈 결과를 '마지막 수업'으로 읽지 않는다(화면은 산다).
+    expect(nextDest).toMatch(/catch \(err\) \{[\s\S]{0,200}return unknownDay\(afterStarts\);/);
+  });
+
+  it("랩실 카드·JJ실 표가 같은 부품 한 벌로 그린다", () => {
+    for (const src of [lab, jj]) expect(src).toContain("last={hints.lastByStudent?.[s.id]}");
+    expect(board).toMatch(/const hints: SeatPeriodHintData = \{[\s\S]{0,200}lastByStudent,/);
+    expect(allDay).toContain("lastByStudent={p.lastByStudent}");
+  });
+
+  it("두 페이지가 같은 조회 결과를 넘긴다 — JJ실 PIN은 조회를 안 하니 비어 있다(= 모름)", () => {
+    for (const page of [shellPage, publicPage]) {
+      expect(page).toContain("lastByStudent={nextBySlot[period.start]?.lastByStudent}");
+      expect(page).toContain("lastByStudent: nextBySlot[p.start]?.lastByStudent");
+    }
+    expect(publicPage).toContain("Promise.resolve<SeatDayDestinations>({ bySlot: {}, classesByStudent: {} })");
   });
 });
 

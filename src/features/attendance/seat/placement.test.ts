@@ -9,7 +9,6 @@ import {
   seatResetTargets,
   SEAT_DRAG_THRESHOLD_PX,
   SEAT_MOVE_MARKED_ERROR,
-  validateSeatMove,
   type SeatPlacement,
 } from "./placement";
 
@@ -132,33 +131,6 @@ describe("초기화 대상 — 반별과 전체가 같은 목록을 본다", () 
   });
 });
 
-describe("드래그 한 번의 판정", () => {
-  it("명단 밖 학생은 거절 — 이유를 말한다", () => {
-    expect(validateSeatMove(RS, { studentId: "zzz", toClassId: "JP1" })).toEqual({
-      error: "이 교시 명단에 없는 학생입니다",
-    });
-  });
-  it("이 교시에 없는 반으로는 못 옮긴다", () => {
-    expect(validateSeatMove(RS, { studentId: "c", toClassId: "NOPE" })).toEqual({
-      error: "이 교시에 없는 반입니다",
-    });
-  });
-  it("정상 이동은 원래 반을 서버가 스스로 정한다(화면이 보낸 값을 안 믿는다)", () => {
-    expect(validateSeatMove(RS, { studentId: "c", toClassId: "JP1" })).toEqual({
-      ok: true,
-      fromClassId: "LT6",
-      isReset: false,
-    });
-  });
-  it("제 반으로 도로 끌면 그 학생만 초기화다", () => {
-    expect(validateSeatMove(RS, { studentId: "c", toClassId: "LT6" })).toEqual({
-      ok: true,
-      fromClassId: "LT6",
-      isReset: true,
-    });
-  });
-});
-
 describe("서버 줄 + 낙관 오버레이 합치기", () => {
   const server: SeatPlacement[] = [{ studentId: "c", fromClassId: "LT6", toClassId: "JP1" }];
 
@@ -182,11 +154,6 @@ describe("서버 줄 + 낙관 오버레이 합치기", () => {
 });
 
 describe("출결이 찍힌 학생은 드래그 절대 불가 (원장 2026-09-10)", () => {
-  const MARKED = [
-    { classId: "JP1", students: [{ id: "a", status: "present" }, { id: "b", status: null }] },
-    { classId: "LT6", students: [{ id: "c", status: null }] },
-  ];
-
   it("상태가 있으면 이유를 돌려주고, 없으면 null이다", () => {
     expect(seatMoveBlockReason("present")).toBe(SEAT_MOVE_MARKED_ERROR);
     expect(seatMoveBlockReason("absent")).toBe(SEAT_MOVE_MARKED_ERROR);
@@ -195,29 +162,7 @@ describe("출결이 찍힌 학생은 드래그 절대 불가 (원장 2026-09-10)
     expect(seatMoveBlockReason(undefined)).toBeNull();
   });
 
-  it("서버 판정도 막는다 — 화면이 잠갔더라도 다시 본다([[#77]])", () => {
-    expect(validateSeatMove(MARKED, { studentId: "a", toClassId: "LT6" })).toEqual({
-      error: SEAT_MOVE_MARKED_ERROR,
-    });
-  });
-
-  it("제 반으로 도로 끄는 것(그 학생만 초기화)도 막는다 — 지시가 \x22절대 불가\x22다", () => {
-    expect(validateSeatMove(MARKED, { studentId: "a", toClassId: "JP1" })).toEqual({
-      error: SEAT_MOVE_MARKED_ERROR,
-    });
-  });
-
-  it("미체크 학생은 그대로 옮겨진다", () => {
-    expect(validateSeatMove(MARKED, { studentId: "b", toClassId: "LT6" })).toEqual({
-      ok: true,
-      fromClassId: "JP1",
-      isReset: false,
-    });
-  });
-
-  it("명단 밖 판정이 먼저다 — 상태를 볼 학생 자체가 없다", () => {
-    expect(validateSeatMove(MARKED, { studentId: "zzz", toClassId: "LT6" })).toEqual({
-      error: "이 교시 명단에 없는 학생입니다",
-    });
-  });
+  // ⚠️ 옛 `validateSeatMove`(같은 교시 안 배치 드래그의 서버 판정)는 원장 2026-09-11 *"같은 시간대의 수업으로 옮기고
+  //    싶은게 아니야"*로 쓰기 경로째 없앴다 — 찍힌 카드 차단은 교시 이동 판정(`validateSeatPeriodMove`·`seatDropVerdict`)이
+  //    같은 `seatMoveBlockReason`으로 한다(`period-choice.test.ts`·`drop-verdict.test.ts`).
 });

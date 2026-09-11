@@ -22,6 +22,7 @@
  *    선택을 버리고 제 반 교시에 그대로 세운다. 명단에서 사람이 사라지는 것이 이 화면의 최악이다.
  * 🔴 **사실이 규칙을 이긴다** — 기록이 있는 교시가 그날의 자리다(함수별 주석).
  */
+import { seatStudentClash, seatStudentClashMessage, type SeatStudentClass } from "./student-classes";
 
 /** 하루짜리 선택(오늘만) — `slotStart`는 "HH:MM". */
 export type SeatPeriodMove = { classId: string; studentId: string; slotStart: string };
@@ -281,20 +282,22 @@ export function blankSeatCell<S extends SeatCellFields>(s: S): S {
   } as S;
 }
 
-/** 교시 이동이 막히는 이유들 — 화면(툴팁)과 서버(거절)가 같은 문장을 쓴다. */
+/** 교시 이동이 막히는 이유들 — 화면(놓을 곳 표식·끄는 카드 문장)과 서버(거절)가 같은 문장을 쓴다. */
 export const SEAT_PERIOD_NO_SLOT = "그 시각에는 이 자리 수업이 없습니다";
 export const SEAT_PERIOD_CLASS_BUSY =
   "그 시각에는 이 반의 다른 수업이 있습니다 — 겹치는 시간으로는 옮길 수 없습니다";
-export const SEAT_PERIOD_SAME = "이미 그 교시에 있습니다";
+/** 같은 교시(원장 2026-09-11) — 화면에선 막힘이 아니라 **취소**(`seatDropVerdict`의 `same`). 서버에 오면 같은 말로 거절. */
+export const SEAT_PERIOD_SAME = "같은 시간으로는 옮기지 않습니다 — 다른 시간 교시에 놓으세요";
 
 /**
- * 드래그 한 번(교시 이동)의 판정 — **서버가 다시 돌린다**([[#77]]).
+ * 드래그 한 번(교시 이동)의 판정 — 화면(`seatDropVerdict`)과 **서버가 같은 함수를 돌린다**([[#77]], 문장까지 같다).
  *
- * 🔑 **떨군 묶음의 반은 보지 않는다** — 원장이 원한 것은 "다른 시간"이다. 그 교시의 어느 묶음에 떨구든
- *    학생은 제 반 이름의 **옮겨 온 묶음**에 선다(출결이 원래 반으로 가므로 화면도 그 반 이름을 단다).
- *    옆 반 묶음에 앉히고 싶으면 그 교시 안에서 한 번 더 끈다(그쪽이 배치 `placement.ts`).
+ * 🔑 **떨군 묶음의 반은 보지 않는다** — 원장이 원한 것은 "다른 시간"이다(같은 교시 안 반 묶음 이동은 2026-09-11 없앴다).
+ *    그 교시의 어디에 떨구든 학생은 제 반 이름의 **옮겨 온 묶음**에 선다(출결이 원래 반으로 가므로 화면도 그 반 이름을 단다).
  * 🔴 출결이 찍힌 카드는 애초에 안 잡힌다(`seatMoveBlockReason`) — 여기서도 한 번 더 본다.
- * 🔴 그 시각에 제 반의 다른 수업이 있으면 거절한다(`seatChoiceTarget` ④와 같은 이유 — 기록이 서로를 덮는다).
+ * 🔴 **반 축** — 그 시각에 제 반의 다른 수업이 있으면 거절한다(`seatChoiceTarget` ④와 같은 이유 — 기록이 서로를 덮는다).
+ * 🔴 **학생 축** — 그 시각에 그 학생의 다른 수업이 있으면 거절한다(`seatStudentClash`, 반 축은 과목이 다른 반을 못 본다).
+ *    목표 교시의 **끝**(`toEnds`)까지 봐야 교시 안에서 시작하는 수업이 보인다. 재료가 없으면(undefined) 판정하지 않는다.
  */
 export function validateSeatPeriodMove(v: {
   fromSlot: string;
@@ -307,12 +310,18 @@ export function validateSeatPeriodMove(v: {
   busyStarts: readonly string[];
   /** 옮길 카드가 이미 찍혔나 — 찍혔으면 이유를 담아 온다(없으면 null). */
   markedReason: string | null;
+  /** 그 학생의 그날 **이 자리 밖** 수업(`seatStudentClassesOf`) — undefined면 모름(화면은 안 막고 서버가 채워 본다). */
+  studentClasses?: readonly SeatStudentClass[];
+  /** 목표 교시의 끝 시각들(`SeatPeriod.ends`) — 학생 축 겹침의 구간 끝(여럿이면 가장 늦은 끝). */
+  toEnds?: readonly string[];
 }): { ok: true; crossTime: boolean } | { error: string } {
   if (v.markedReason) return { error: v.markedReason };
   if (v.toSlot === v.fromSlot) return { error: SEAT_PERIOD_SAME };
   if (!v.periodStarts.includes(v.toSlot)) return { error: SEAT_PERIOD_NO_SLOT };
   const own = v.classSlots.includes(v.toSlot);
   if (!own && v.busyStarts.includes(v.toSlot)) return { error: SEAT_PERIOD_CLASS_BUSY };
+  const clash = seatStudentClash(v.studentClasses, { start: v.toSlot, ends: v.toEnds ?? [] });
+  if (clash) return { error: seatStudentClashMessage(clash) };
   return { ok: true, crossTime: !own };
 }
 

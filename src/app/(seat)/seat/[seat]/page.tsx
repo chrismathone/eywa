@@ -10,8 +10,9 @@ import { loadPublicSeatJjPlans } from "@/features/attendance/seat/server/jj-plan
 import { getSeatPlacements, getSeatPlacementsForDay } from "@/features/attendance/seat/server/placements";
 import {
   getSeatNextDestinationsBySlot,
-  type SeatNextDestination,
+  type SeatDayDestinations,
 } from "@/features/attendance/seat/server/next-destination";
+import { seatStaysFor } from "@/features/attendance/seat/next-destination";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
 import { readSeatPinSession, resolvePinSigningSecret } from "@/features/attendance/seat/server/pin-session";
@@ -27,10 +28,7 @@ import { mondayOf } from "@/features/timetable/lib/week";
 import { kstToday } from "@/lib/date-kst";
 import { SeatBoard } from "@/app/(shell)/attendance/seat/[seat]/_components/seat-board";
 import { SeatAllDay } from "@/app/(shell)/attendance/seat/[seat]/_components/seat-all-day";
-import {
-  SeatPeriodChips,
-  SEAT_ALL_PERIODS,
-} from "@/app/(shell)/attendance/seat/[seat]/_components/seat-period-chips";
+import { SEAT_ALL_PERIODS } from "@/app/(shell)/attendance/seat/[seat]/_components/seat-period-chips";
 import { SeatPinForm } from "./pin-form";
 
 /**
@@ -124,7 +122,7 @@ export default async function PublicSeatPage({
   // 명단(듣기·단어)과 계획(진도)·배치·다음 행선지는 서로 독립이라 병렬(B4).
   // 🔴 계획 재료는 **그날 그 자리 그 교시 명단**에 있는 반만 온다 — 로그인 화면이 ECS 게이트로 고르는
   //    자리에서, 여기는 PIN 쿠키 + 오늘 + 명단 화이트리스트가 고른다(서버가 정하고 저장 때 다시 본다).
-  const [rosters, plans, placements, nextBySlot, placementsDay] = await Promise.all([
+  const [rosters, plans, placements, nextDay, placementsDay] = await Promise.all([
     period && !viewAll && seatHasJjFields(seat)
       ? // JJ실은 듣기·단어 칸이 붙는다 — 이미 적힌 값을 안 보여주면 담당자가 빈 칸으로 보고 다시 적는다.
         attachJjMarks(rosterByPeriod[period.start] ?? [], session.tenantId, date, period.start)
@@ -145,6 +143,8 @@ export default async function PublicSeatPage({
      * 🔴 세션이 없어 테넌트를 넘긴다 → admin + 명시 `tenant_id` 필터(격리선)로 읽는다.
      * 🔵 교시 여러 개를 한 벌로 — '전체' 보기가 왕복을 교시 수만큼 늘리지 않게(B6).
      * 🔴 **랩실 PIN만**(`sameAsLogin`) — JJ실 PIN엔 종전대로 안 싣는다(왕복도 0).
+     * 🔴 이 자리 교시는 로그인 화면과 **같은 명단**(교시 선택을 얹은 `rosterByPeriod`)으로 잰다(`seatStaysFor`) —
+     *    배치표로 재면 옮겨 나간 랩실을 안내하고 옮겨 가는 교시는 못 적는다.
      */
     sameAsLogin
       ? getSeatNextDestinationsBySlot(
@@ -156,12 +156,14 @@ export default async function PublicSeatPage({
           ],
           date,
           shown.map((p) => p.start),
-          session.tenantId,
+          { tenantId: session.tenantId, stays: seatStaysFor(seat, rosterByPeriod) },
         )
-      : Promise.resolve<Record<string, SeatNextDestination>>({}),
+      : Promise.resolve<SeatDayDestinations>({ bySlot: {}, classesByStudent: {} }),
     // '전체' 보기의 배치는 하루치 한 번(교시는 화면에서 나눈다).
     viewAll ? getSeatPlacementsForDay(session.tenantId, seat, date) : Promise.resolve(null),
   ]);
+  /** 교시 → 다음 행선지·**마지막 수업**(원장 2026-09-11) — JJ실 PIN은 조회를 안 하므로 비어 있다(= 모름, 아무것도 안 적는다). */
+  const nextBySlot = nextDay.bySlot;
 
   /**
    * 앞 교시 결석 — **이미 이 화면에 있는 사실**을 접은 것뿐이다(교시 칩을 눌러 앞 교시를 열면 그 결석이
@@ -202,43 +204,41 @@ export default async function PublicSeatPage({
         <EmptyState image="students" title={`오늘은 ${SEAT_NAME[seat]} 수업이 없습니다`} />
       ) : viewAll ? (
         /**
-         * **'전체' 보기** — 로그인 화면과 같은 조각(`SeatAllDay`)이다. 🔴 **이동은 끈 채**다(드래그·교시 이동·
-         * 해제 없음 — 옮긴 사람을 감사로그에 남길 수 없다). 특이사항은 연다(랩실 = `PIN_NOTE_SEATS`).
+         * **'전체' 보기** — 로그인 화면과 같은 조각(`SeatAllDay`, 칩 줄까지 그 조각이 그린다)이다. 🔴 **이동은 끈 채**다
+         * (드래그·교시 이동·해제 없음 — 옮긴 사람을 감사로그에 남길 수 없다). 그래서 학생 축 재료도 싣지 않는다.
+         * 특이사항은 연다(랩실 = `PIN_NOTE_SEATS`).
          */
-        <>
-          <SeatPeriodChips
-            periods={day.periods.map((p) => ({ start: p.start, classIds: p.slots.map((s) => s.classId) }))}
-            activeStart={SEAT_ALL_PERIODS}
-            hrefFor={hrefFor}
-            showAll={allowAllView}
-          />
-          <SeatAllDay
-            seat={seat}
-            date={date}
-            moves={periodChoiceLoad.moves}
-            pins={periodChoiceLoad.pins}
-            // 하루치 재료를 통째로 — '전체' 보기는 클라가 같은 순수 함수로 다시 접는다(로그인 화면과 같다).
-            choiceDay={{
-              slotsByClass: day.slotsByClass,
-              markedSlotsByCell: day.markedSlotsByCell,
-              busyStartsByClass: day.busyStartsByClass,
-              offSlotByCell: day.offSlotByCell,
-            }}
-            canMove={false}
-            readOnly={false}
-            hrefFor={hrefFor}
-            canMovePlacement={false}
-            placementNotice={null}
-            periods={day.periods.map((p) => ({
-              start: p.start,
-              rosters: day.rosterByPeriod[p.start] ?? [],
-              prevAbsentByCell: prevPeriodAbsences(cells, p.start, ambiguousClassIds(p)),
-              nextStartByStudent: nextBySlot[p.start]?.startByStudent,
-              nextRoomByStudent: nextBySlot[p.start]?.roomByStudent,
-              placements: placementsDay?.bySlot[p.start] ?? [],
-            }))}
-          />
-        </>
+        <SeatAllDay
+          seat={seat}
+          date={date}
+          shownStart={null}
+          showAll={allowAllView}
+          // 하루치 재료를 통째로 — '전체' 보기는 클라가 같은 순수 함수로 다시 접는다(로그인 화면과 같다).
+          choiceDay={{
+            moves: periodChoiceLoad.moves,
+            pins: periodChoiceLoad.pins,
+            slotsByClass: day.slotsByClass,
+            markedSlotsByCell: day.markedSlotsByCell,
+            busyStartsByClass: day.busyStartsByClass,
+            offSlotByCell: day.offSlotByCell,
+          }}
+          canMove={false}
+          readOnly={false}
+          hrefFor={hrefFor}
+          canMovePlacement={false}
+          placementNotice={null}
+          periods={day.periods.map((p) => ({
+            start: p.start,
+            ends: p.ends,
+            classIds: p.slots.map((s) => s.classId),
+            rosters: day.rosterByPeriod[p.start] ?? [],
+            prevAbsentByCell: prevPeriodAbsences(cells, p.start, ambiguousClassIds(p)),
+            nextStartByStudent: nextBySlot[p.start]?.startByStudent,
+            nextRoomByStudent: nextBySlot[p.start]?.roomByStudent,
+            lastByStudent: nextBySlot[p.start]?.lastByStudent,
+            placements: placementsDay?.bySlot[p.start] ?? [],
+          }))}
+        />
       ) : (
         <SeatBoard
           key={`${seat}|${date}|${period.start}`}
@@ -260,6 +260,7 @@ export default async function PublicSeatPage({
           prevAbsentByCell={prevAbsentByCell}
           nextStartByStudent={nextBySlot[period.start]?.startByStudent}
           nextRoomByStudent={nextBySlot[period.start]?.roomByStudent}
+          lastByStudent={nextBySlot[period.start]?.lastByStudent}
           // 🔴 이동 prop은 넘기지 않는다(기본 false) — 이 화면은 배치를 **보기만** 한다.
           placements={placements.rows}
           // 교시 선택도 **보기만** — 로그인 화면과 같은 명단을 그리려는 것이다(위 조회 주석).

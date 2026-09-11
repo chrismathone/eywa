@@ -20,13 +20,8 @@ import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import type { SeatClassRoster } from "@/features/attendance/seat/server/queries";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 import { seatCellKey } from "@/features/attendance/seat/prev-period";
-import {
-  SeatMarkTriad,
-  SeatMemoMark,
-  SeatNotePopover,
-  SeatPeriodHints,
-  type SeatPeriodHintData,
-} from "./seat-mark-extras";
+import { SeatMarkTriad, SeatMemoMark, SeatNotePopover } from "./seat-mark-extras";
+import { SeatPeriodHints, type SeatPeriodHintData } from "./seat-period-hints";
 
 const INPUT =
   "border-line focus:border-primary h-8 w-full rounded-lg border bg-card px-2 text-sm font-semibold outline-none disabled:opacity-60";
@@ -375,6 +370,7 @@ function JjAttendanceCell({
           prevAbsentStart={hints.prevAbsentByCell?.[seatCellKey(classId, s.id)]}
           nextStart={hints.nextStartByStudent?.[s.id]}
           nextRoom={hints.nextRoomByStudent?.[s.id]}
+          last={hints.lastByStudent?.[s.id]}
           seatName={hints.seatName}
           cur={cur}
         />
