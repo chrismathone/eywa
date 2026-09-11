@@ -42,6 +42,7 @@ import { HideRetiredToggle } from "./_components/hide-retired-toggle";
 import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { GridProvider } from "./_components/grid-context";
+import { AttendanceScopeProvider } from "./_components/scope-context";
 import { AttendanceSearchProvider, AttendanceSearchToggle } from "./_components/search-context";
 import { HubStudentSearch } from "./_components/hub-student-search";
 import { readSearchSeed } from "./_components/att-search-seed";
@@ -644,6 +645,17 @@ export default async function AttendancePage({
   const gridSource = buildGridSource(allGroups, visibleDays, orderedRows);
 
   /**
+   * 강사 전체 보기의 주인 — 저장이 **그 강사 몫 교시에만** 시수를 나누게 서버에 알린다(원장 제보 2026-09-11:
+   * *"새로고침하면 강제로 어떤 숫자로 롤백"*). 칸 값이 `effectiveTeacher` 스코프로 계산된 반(`teacherMatrices`)만
+   * 싣는다 — 보강 묶음(`makeupPoolMatrix`)은 스코프 없이 그려지므로 넣지 않는다(화면과 저장이 같은 판정을 쓰게).
+   * ⚠️ 클라가 보내는 건 "어느 보기인가"뿐이다 — 몫은 서버가 DB로 다시 판정한다(#77).
+   */
+  const attendanceScope =
+    mode === "teacher" && effectiveTeacher
+      ? { teacherId: effectiveTeacher, classIds: teacherClasses.map((c) => c.id) }
+      : null;
+
+  /**
    * 학생 검색(원장 2026-08-19)이 볼 재료 — **화면에 이미 그려진 값만**(이름·학교·학년 + 붙여 쓴 압축 표기).
    * 🔴 조회를 새로 붙이지 않는다: 강사는 담당 반만 보는데 검색이 학원 전체를 뒤지면 그 범위가 뚫린다([[#77]]).
    */
@@ -766,6 +778,7 @@ export default async function AttendancePage({
     // 🔴 검색 공급자가 **격자보다 바깥**이다 — 격자가 "안 걸린 행"을 좌표에서 빼야 키보드 이동·범위 선택이
     // 안 보이는 칸으로 새지 않는다(search-context.tsx / grid-context.tsx `visibleRows`).
     <AttendanceSearchProvider rows={searchRows} initialQuery={searchSeed}>
+    <AttendanceScopeProvider scope={attendanceScope}>
     <GridProvider
       rows={gridSource.rows}
       cols={gridSource.cols}
@@ -1038,6 +1051,7 @@ export default async function AttendancePage({
       )}
       </div>
     </GridProvider>
+    </AttendanceScopeProvider>
     </AttendanceSearchProvider>
   );
 }

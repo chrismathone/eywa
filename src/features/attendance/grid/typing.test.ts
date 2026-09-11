@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendChar, backspace, commitBuffer, copyValueOf } from "./typing";
+import { appendChar, backspace, canonicalUnitsRaw, commitBuffer, copyValueOf } from "./typing";
 
 describe("appendChar", () => {
   it("숫자를 누적한다", () => {
@@ -67,6 +67,30 @@ describe("commitBuffer — 🔴 숫자 → (상태, 시수) 변환은 여기 한
 
   it("쉼표 소수점도 받는다", () => {
     expect(commitBuffer("1,5")).toEqual({ status: "present", units: "1.5" });
+  });
+});
+
+describe("canonicalUnitsRaw — 🔴 격자 타이핑과 팝오버가 같은 원문을 넘긴다(재리뷰 2026-09-11)", () => {
+  it('비움(공백 포함)은 기본("")', () => {
+    for (const raw of ["", " ", "   "]) expect(canonicalUnitsRaw(raw), JSON.stringify(raw)).toBe("");
+  });
+
+  it('쉼표 소수점 → 점 · 1은 명시 "1" · 그 밖은 표준 표기', () => {
+    expect(canonicalUnitsRaw("1,5")).toBe("1.5");
+    expect(canonicalUnitsRaw(" 1,5 ")).toBe("1.5");
+    expect(canonicalUnitsRaw("1")).toBe("1");
+    expect(canonicalUnitsRaw("1.0")).toBe("1");
+    expect(canonicalUnitsRaw("2")).toBe("2");
+  });
+
+  it("서버가 받지 않을 원문은 null", () => {
+    for (const raw of ["abc", "0", "21", "1.55"]) expect(canonicalUnitsRaw(raw), raw).toBeNull();
+  });
+
+  it("🔴 commitBuffer와 같은 답 — 격자에 친 숫자(0 = 결석은 따로)", () => {
+    for (const b of ["1", "1.0", "1.5", "1,5", "2", "12.5", "20"]) {
+      expect(commitBuffer(b)?.units, b).toBe(canonicalUnitsRaw(b));
+    }
   });
 });
 

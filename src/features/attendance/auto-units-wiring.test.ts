@@ -111,9 +111,10 @@ describe("① 출결 INSERT 경로는 전부 자동 시수 헬퍼를 지난다",
 
 describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 없다", () => {
   /**
-   * ⚠️ 갱신 분기 안에 교시 분배(`if (dayCellSplit) … } else {`)의 **안쪽 else**가 있다 — 처음 만나는 `} else {`로
-   *    자르면 가장 흔한 갱신(`updateWithVia(supabase, patch, updateIds)`)이 검사 밖으로 빠진다(적대 리뷰 2026-09-11).
-   *    그래서 새 행 INSERT 바로 앞의 `} else {`(바깥 else)를 경계로 삼는다.
+   * ⚠️ 갱신 분기 안에 분기가 더 있다(그날 칸 시수 배분 `if (slot === null) … } else if` — 2026-09-11 강사 보기 몫 분배로
+   *    옛 `if (dayCellSplit) … } else {`를 대체) — 처음 만나는 `} else {`로 자르면 갱신 문장이 검사 밖으로 빠질 수 있다
+   *    (적대 리뷰 2026-09-11). 그래서 새 행 INSERT 바로 앞의 `} else {`(바깥 else)를 경계로 삼고, 갱신 문장
+   *    (`planDayCellUnits`가 정한 묶음마다 쓰는 줄)이 그 구간 안에 있는지로 경계를 확인한다.
    */
   it("단건: 갱신 분기 전체(안쪽 else 포함)엔 없고 바깥 else(새 행)에만 — 조회는 단 한 번", () => {
     const body = fnBody(ACTIONS, "setAttendanceCell");
@@ -125,7 +126,7 @@ describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 �
     expect(outerElse).toBeGreaterThan(updateStart);
     const updateBranch = body.slice(updateStart, outerElse);
     // 경계가 맞는지부터 — 흔한 갱신 한 줄이 이 구간에 있어야 한다(구조가 바뀌면 여기서 멈춘다).
-    expect(updateBranch).toContain("updateWithVia(supabase, patch, updateIds)");
+    expect(updateBranch).toContain("g.units === undefined ? patch : { ...patch, session_units: g.units }");
     for (const bad of ["resolveAutoUnits", "autoUnitsApply", "newRowUnits", "lookedUp", "insertedAuto ="]) {
       expect(updateBranch, bad).not.toContain(bad);
     }
@@ -201,15 +202,28 @@ describe("⑤ 화면이 보여 주는 값 = 저장될 값", () => {
 
   it("🔴 팝오버 응답 보정·실패 되돌리기는 칠한 표식과 함께 — 그 사이 바뀐 칸은 받는 쪽이 거절한다(칸의 주인)", () => {
     const pop = code(read(`${CELL_DIR}/cell-popover.tsx`));
-    expect(pop).toContain("const token = onSaved({ status: next, units: parsedUnits, note: nextNote });");
-    expect(pop).toContain(
-      "onSaved({ status: next, units: res?.autoUnits !== undefined ? res.autoUnits : parsedUnits, note: nextNote }, { ifStill: token })",
+    // 시수 원문(`raw` = unitsRaw)을 함께 넘긴다 — 칠할 값은 칸이 격자 타이핑과 같은 함수로 만든다(리뷰 2026-09-11).
+    expect(pop).toContain("const token = onSaved({ status: next, units: parsedUnits, ...raw, note: nextNote });");
+    // 🔴 칠할 원문은 격자 타이핑과 같은 정규화(쉼표 소수점 → 점) — 원문 그대로면 NaN이 칠해져 화면이 무한 렌더로 떨어졌다.
+    expect(pop).toContain("{ unitsRaw: canonicalUnitsRaw(unitsDraft)");
+    // 성공 보정 — 서버가 새 행에 넣은 시수(serverUnits)와 칠한 표식(ifStill)을 함께 돌려준다.
+    expect(pop).toMatch(
+      /onSaved\(\s*\{\s*status: next,\s*units: res\?\.autoUnits !== undefined \? res\.autoUnits : parsedUnits,\s*\.\.\.raw,\s*\.\.\.\(res\?\.autoUnits !== undefined \? \{ serverUnits: res\.autoUnits \} : \{\}\),\s*note: nextNote,\s*\},\s*\{ ifStill: token \},?\s*\)/,
     );
     expect(pop).toContain("onSaved({ status, units, note }, { ifStill: token, revert: true })");
     const cell = code(read(`${CELL_DIR}/attendance-cell.tsx`));
     // 칠하는 **순간** 자리를 잡는다(팝오버를 열 때가 아니라) · 보정·되돌리기는 칸의 주인으로 — 값 동일성은 빈 칸을 못 가린다.
     expect(cell).toContain("value: next.noteOnly ? null : ctx?.store.paintLocal(key, v) ?? null");
-    expect(cell).toContain("ctx?.store.correctLocal(key, token.value, v)");
+    expect(cell).toContain("ctx?.store.correctLocal(key, token.value, settled)");
+    // 🔴 칠할 값은 격자 타이핑과 **같은 함수**(ctx.toValue) — 교시가 둘 이상인 칸의 합이 서버와 같다(popover-slot-units.test.tsx).
+    expect(cell).toContain("ctx.toValue(key, { status: next.status, units: next.unitsRaw }, ctx.store.valueOf(key))");
+    // 보정 값 = 서버가 새 행에 넣은 시수가 오면 그 값, 아니면 칠한 그 값(격자 pushCell의 setLocalIf와 같은 규약).
+    expect(cell).toContain("{ s: next.status, u: next.serverUnits }");
+    expect(cell).toContain("token?.shown");
+    // 🔴 낙관값은 원문을 서버와 같은 함수로 읽는다 — 어떤 호출부도 저장소에 NaN을 못 넣는다(재리뷰 2026-09-11).
+    const rule = code(read("features/attendance/grid/optimistic-value.ts"));
+    expect(rule).toContain("parseSessionUnits(v.units)");
+    expect(rule).not.toContain("Number(v.units)");
     expect(cell).toContain("ctx?.store.revertLocal(key, token.value)");
     // 메모는 값과 **따로** 되돌린다 — 격자 타이핑·서버 따라잡기가 값만 가져가도 메모는 제 쓰기의 결과를 따른다.
     expect(cell).toContain("revertNote(token.note)");

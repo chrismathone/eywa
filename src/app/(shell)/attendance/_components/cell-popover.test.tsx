@@ -126,7 +126,7 @@ describe("칸 상세 팝오버", () => {
       const { onSaved } = openInGrid({ status: "present", recorded: false });
       expect(screen.getByLabelText("시수")).toHaveAttribute("placeholder", "시수(기본 1.5 · 수업 길이)");
       fireEvent.click(screen.getByRole("button", { name: "출석" }));
-      expect(onSaved.mock.calls[0]![0]).toEqual({ status: "present", units: 1.5, note: undefined }); // 상태 버튼 = 메모 안 보냄
+      expect(onSaved.mock.calls[0]![0]).toEqual({ status: "present", units: 1.5, unitsRaw: "", note: undefined }); // 상태 버튼 = 메모 안 보냄
     });
 
     it("기록이 있는 칸(기본값)의 빈 시수는 '1로 되돌리기' — 자동값을 약속하지 않는다", () => {
@@ -143,8 +143,12 @@ describe("칸 상세 팝오버", () => {
       fireEvent.click(screen.getByRole("button", { name: "출석" }));
       await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
       // 상태 버튼은 메모를 안 보낸다 → 칠할 메모도 없다(undefined — 받는 쪽이 메모를 가져가지 않게).
-      expect(onSaved.mock.calls[0]).toEqual([{ status: "present", units: 1.5, note: undefined }]);
-      expect(onSaved.mock.calls[1]).toEqual([{ status: "present", units: null, note: undefined }, { ifStill: token }]);
+      expect(onSaved.mock.calls[0]).toEqual([{ status: "present", units: 1.5, unitsRaw: "", note: undefined }]);
+      // 서버가 새 행에 넣은 시수(조회 실패 = null)를 따로 싣는다 — 받는 쪽이 칠한 값 대신 이 값으로 맞춘다.
+      expect(onSaved.mock.calls[1]).toEqual([
+        { status: "present", units: null, unitsRaw: "", serverUnits: null, note: undefined },
+        { ifStill: token },
+      ]);
     });
 
     it("🔴 저장이 실패하면 처음 칠한 표식과 함께 '되돌리기'를 알린다 — 받는 쪽이 열 때의 칸 값 그 객체로 되칠한다", async () => {

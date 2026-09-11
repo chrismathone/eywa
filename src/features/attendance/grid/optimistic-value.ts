@@ -2,9 +2,14 @@
 // grid-context의 `toValue`가 이 함수 하나를 쓴다. 서버 저장 규칙과 **같은 답**이어야 한다 — 낙관 덮개는 서버 값과
 // 같아질 때만 벗겨져서(store.ts) 틀린 낙관값은 새로고침으로도 안 풀리고 시수 합계에 그대로 남는다.
 
-import { COUNTABLE_STATUSES, isDefaultUnitsRaw } from "../session-units";
+import { COUNTABLE_STATUSES, isDefaultUnitsRaw, parseSessionUnits } from "../session-units";
 import type { GridValue } from "./store";
-import type { TypedValue } from "./typing";
+
+/**
+ * 칠할 입력 — 상태 + 시수 **원문**("" = 기본). 격자 타이핑(`TypedValue`, 출석·결석)과 팝오버(지각·조퇴·보강까지)가
+ * 같은 모양으로 넘긴다 — 두 경로가 같은 함수로 칠해야 교시 합·자동 시수가 같은 숫자가 된다(리뷰 2026-09-11).
+ */
+export type OptimisticInput = { status: string; units: string };
 
 /**
  * 이 칸에 아직 **출결 행이 없는가** — 빈 칸, 또는 수업보고서에서 **파생만** 된 칸(`d`, 서버가 준 그대로).
@@ -28,7 +33,7 @@ export function isRecordless(v: GridValue): boolean {
  * ③ 기본(빈칸·1)인데 교시가 여럿이면 "교시마다 1" → 그날 합은 교시 수(원장 확정).
  */
 export function optimisticGridValue(
-  v: TypedValue | null,
+  v: OptimisticInput | null,
   current: GridValue,
   auto: number | null,
   slotCount: number,
@@ -37,8 +42,11 @@ export function optimisticGridValue(
   if (auto !== null && isRecordless(current) && isDefaultUnitsRaw(v.units) && COUNTABLE_STATUSES.has(v.status)) {
     return { s: v.status, u: auto };
   }
-  const parsed = isDefaultUnitsRaw(v.units) ? null : Number(v.units);
-  const raw = parsed === 1 ? null : parsed;
+  // 🔴 원문은 서버와 **같은 함수**(`parseSessionUnits`)로 읽는다 — `Number("1,5")`는 NaN이고, NaN을 칠하면 스냅샷 비교(===)가
+  //    영영 같아지지 않아 렌더가 무한히 돌았다(재리뷰 2026-09-11). 서버가 거절할 원문(형식 오류)은 시수를 안 칠한다(null = 1)
+  //    — 어떤 호출부도 저장소에 NaN을 못 넣는다. 빈칸은 null, 1도 null로 접힌다(`parseSessionUnits` 규약 그대로).
+  const parsed = parseSessionUnits(v.units);
+  const raw = parsed.ok ? parsed.value : null;
   if (slotCount <= 1 || !COUNTABLE_STATUSES.has(v.status)) return { s: v.status, u: raw };
   if (raw !== null) return { s: v.status, u: raw };
   return { s: v.status, u: slotCount };

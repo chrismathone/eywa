@@ -18,9 +18,10 @@ import { GridStore, type CellState, type GridValue } from "@/features/attendance
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { lockedMessage } from "@/features/attendance/lock-message";
-import { optimisticGridValue } from "@/features/attendance/grid/optimistic-value";
+import { optimisticGridValue, type OptimisticInput } from "@/features/attendance/grid/optimistic-value";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 import { useAttendanceSearch } from "./search-context";
+import { rangeScopeFields, scopeFieldsFor, useAttendanceScope } from "./scope-context";
 import { useSheetTf } from "@/features/teacher-view/lang-context";
 
 type Ctx = {
@@ -44,6 +45,12 @@ type Ctx = {
    * 원장 2026-09-11). null = 자동값 없음(=1). 격자 낙관값·팝오버 기본값이 이 값을 본다.
    */
   autoUnitsOf: (classId: string, date: string) => number | null;
+  /**
+   * 입력(상태 + 시수 원문) → 칸에 칠할 값 — 격자 타이핑과 팝오버가 **같은 함수**로 칠한다(optimisticGridValue +
+   * 그날 교시 수 + 수학 자동 시수). 팝오버가 따로 칠하면 교시가 둘 이상인 칸에서 '출석'이 1로 칠해지는데 서버 합은
+   * 2라 덮개가 영영 안 벗겨졌다(리뷰 2026-09-11).
+   */
+  toValue: (key: string, v: OptimisticInput | null, current: GridValue) => GridValue;
   /** 인라인 input에서 Enter/Tab/화살표 — 버퍼를 확정하고 이동한다. */
   commitAndMove: (dx: number, dy: number) => void;
   /** 칸 선택 — 타이핑 중이던 버퍼를 **먼저 확정한다**(클릭 한 번에 입력이 사라지지 않게). */
@@ -169,6 +176,8 @@ export function GridProvider({
   // ⚠️ 같은 문구가 연달아 나와도 타이머가 **다시** 돌게 id를 단다(문자열만 담으면 React가 bail-out
   //    해서 effect가 안 돌고, 연속 입력 중 마지막 알림이 곧바로 사라진다).
   const tf = useSheetTf();
+  // 강사 전체 보기의 주인 — 저장이 그 강사 몫 교시에만 시수를 나누게 서버에 알린다(scope-context.tsx).
+  const scope = useAttendanceScope();
   const [notice, setNotice] = useState<{ text: string; id: number } | null>(null);
   const noticeSeq = useRef(0);
   const showNotice = useCallback((text: string) => {
@@ -288,7 +297,7 @@ export function GridProvider({
    *    ([`optimisticGridValue`](@/features/attendance/grid/optimistic-value)).
    */
   const toValue = useCallback(
-    (key: string, v: TypedValue | null, current: GridValue): GridValue => {
+    (key: string, v: OptimisticInput | null, current: GridValue): GridValue => {
       const p = parseCellKey(key);
       return optimisticGridValue(v, current, p ? autoUnitsOf(p.classId, p.date) : null, slotCounts?.[key] ?? 1);
     },
@@ -309,6 +318,8 @@ export function GridProvider({
         sessionDate: p.date,
         status: (val?.status ?? null) as never,
         ...(val ? { units: val.units } : {}),
+        // 🔴 강사 전체 보기 칸은 그 강사 몫 교시의 합 — 서버가 친 숫자를 그 몫에만 나눠야 새로고침 뒤 같은 숫자다.
+        ...scopeFieldsFor(scope, p.classId),
         quiet: true,
       }).then((res) => {
         if (res && "error" in res) {
@@ -326,7 +337,7 @@ export function GridProvider({
         scheduleRefresh();
       });
     },
-    [store, scheduleRefresh, toValue],
+    [store, scheduleRefresh, toValue, scope],
   );
 
   /** 한 칸 저장. */
@@ -424,6 +435,8 @@ export function GridProvider({
         cells: targets.map((t) => ({ studentId: t.studentId, classId: t.classId, sessionDate: t.date })),
         status: (val?.status ?? null) as never,
         ...(val ? { units: val.units } : {}),
+        // 단건과 같은 이유 — 범위 안의 스코프 반만 알린다(보강 묶음 칸은 반별 규칙).
+        ...rangeScopeFields(scope, targets.map((t) => t.classId)),
         quiet: true,
       }).then((res) => {
         if ("error" in res) {
@@ -465,7 +478,7 @@ export function GridProvider({
         }
       });
     },
-    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice, tf],
+    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice, tf, scope],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */
@@ -652,8 +665,9 @@ export function GridProvider({
       },
       startFill,
       autoUnitsOf,
+      toValue,
     }),
-    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, autoUnitsOf],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, autoUnitsOf, toValue],
   );
 
   return (

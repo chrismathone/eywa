@@ -22,8 +22,12 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 
 /** 메모의 낙관 쓰기 표식 — 값과 따로 쥔다(아래 noteOwner). */
 type NotePaint = Paint<string | null>;
-/** 팝오버에 돌려주는 표식 — 값(격자 저장소)과 메모를 함께 싣는다. 메모를 안 보낸 저장이면 `note`는 null. */
-type CellPaint = { value: LocalPaint | null; note: NotePaint | null };
+/**
+ * 팝오버에 돌려주는 표식 — 값(격자 저장소)과 메모를 함께 싣는다. 메모를 안 보낸 저장이면 `note`는 null.
+ * `shown` = 이 쓰기가 칠한 값 — 성공 보정이 서버 시수를 안 받았으면 **칠한 그 값**을 결과로 남긴다(보정 때 다시
+ * 만들면 칸의 지금 값이 달라져 자동 시수·교시 합 판정이 어긋난다).
+ */
+type CellPaint = { value: LocalPaint | null; note: NotePaint | null; shown?: GridValue };
 /** 칸의 메모 덮개 — 고친 메모(`text` null = 서버 값 사용)와 그 메모를 칠한 쓰기. */
 type Memo = { text: string | null; owner: NotePaint | null };
 const NO_MEMO: Memo = { text: null, owner: null };
@@ -374,12 +378,17 @@ export function AttendanceCell({
               if (token?.note) revertNote(token.note);
               return token;
             }
-            const v: GridValue = next.status ? { s: next.status, u: next.units } : null;
             if (opts) {
               // 성공 응답 — 서버가 실제로 넣은 값으로 맞추고(그 사이 같은 칸을 또 고쳤으면, 즉 칸의 주인이 바뀌었으면 늦은 응답이
               // 새 입력을 덮지 않는다) 이 쓰기가 **끝났다**는 결과를 표식에 남긴다 — 뒤 쓰기의 되돌리기와 메모 따라잡기가 읽는다.
               // 메모는 서버가 고치지 않으니 칠한 그 글이 결과다.
-              if (token?.value) ctx?.store.correctLocal(key, token.value, v);
+              // 🔴 값은 격자 단건 저장(pushCell)과 같은 규약 — 서버가 새 행에 넣은 시수가 오면 그 값, 아니면 **칠한 그 값**.
+              const settled: GridValue = !next.status
+                ? null
+                : next.serverUnits !== undefined
+                  ? { s: next.status, u: next.serverUnits }
+                  : (token?.shown ?? { s: next.status, u: next.units });
+              if (token?.value) ctx?.store.correctLocal(key, token.value, settled);
               if (token?.note) token.note.fate = { value: next.note ?? "" };
               return token;
             }
@@ -391,9 +400,18 @@ export function AttendanceCell({
             // 🔴 잠긴 칸의 '메모만 저장'(`noteOnly`)은 값을 칠하지 않는다 — 서버는 값을 안 건드리는데 화면만 칠하면, 새로고침 전에
             //    서버 값이 바뀌었을 때 그 덮개가 서버와 달라져 영영 안 벗겨졌다. 서버가 이미 확정한 뒤 부르는 경로라 메모 표식도
             //    곧바로 '끝남'이다(안 그러면 따라잡기가 응답 대기로 보고 옛 사유를 붙든다 — 재리뷰 2026-09-11).
+            // 🔴 칠할 값은 **격자 타이핑과 같은 함수**(ctx.toValue = optimisticGridValue + 그날 교시 수 + 수학 자동 시수)로
+            //    만든다 — 따로 만들면 교시가 둘 이상인 칸(강사 보기의 내 교시 둘)에서 '출석'이 1로 칠해지는데 서버 합은 2라,
+            //    덮개가 서버와 같아지지 않아 새로 고쳐도 1에 굳었다(리뷰 2026-09-11, 원장 제보와 같은 증상).
+            const v: GridValue = !next.status
+              ? null
+              : ctx && next.unitsRaw !== undefined
+                ? ctx.toValue(key, { status: next.status, units: next.unitsRaw }, ctx.store.valueOf(key))
+                : { s: next.status, u: next.units };
             const painted: CellPaint = {
               value: next.noteOnly ? null : ctx?.store.paintLocal(key, v) ?? null,
               note: next.note === undefined ? null : paintNote(next.note),
+              shown: v,
             };
             if (next.noteOnly && painted.note) painted.note.fate = { value: next.note ?? "" };
             return painted;
