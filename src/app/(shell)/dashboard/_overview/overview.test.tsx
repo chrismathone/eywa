@@ -148,7 +148,7 @@ describe("overview display contracts", () => {
       error: false,
     };
     const html = renderToStaticMarkup(<Overview initial={mocks.data} />);
-    expect(html).toContain("다가오는 레벨테스트·첫 수업");
+    expect(html).toContain("레벨테스트 및 첫수업 일정");
     expect(html).toContain("레벨테스트");
     expect(html).not.toContain('href="/calendar"');
   });

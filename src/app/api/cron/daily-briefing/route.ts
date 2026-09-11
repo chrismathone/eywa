@@ -43,7 +43,7 @@ export async function GET(req: Request) {
   const sweeps: Record<string, string> = {}; // 발송 실패 알림 유실 보정 결과(테넌트별)
   for (const tenantId of tenantIds) {
     try {
-      const result = await generateDailyBriefing(tenantId, { notifyOnFirstGeneration: true });
+      const result = await generateDailyBriefing(tenantId);
       results[tenantId] = result.ok ? "ok" : `실패: ${result.error}`;
     } catch (e) {
       // generateDailyBriefing이 자체 실패 처리를 하지만, 그 밖의 예외도 다음 테넌트를 막지 않는다.

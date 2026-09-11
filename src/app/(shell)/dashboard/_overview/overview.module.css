@@ -168,6 +168,7 @@
   align-items: stretch;
 }
 .panel {
+  scroll-margin-top: 16px;
   min-width: 0;
   border: 1px solid #d6dfe9;
   border-radius: 7px;
@@ -301,6 +302,36 @@
   text-align: left;
   cursor: pointer;
   color: var(--foreground);
+}
+.schoolPanel {
+  grid-row: span 2;
+}
+.schoolGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.schoolGroups > section + section {
+  border-top: 1px solid #e4eaf0;
+  padding-top: 16px;
+}
+.schoolGroups .empty {
+  padding: 8px 0;
+  min-height: 0;
+}
+.consultationPanel {
+  grid-column: 1 / -1;
+}
+.consultationPanel > .panelBody {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 1fr;
+  align-items: center;
+  gap: 24px;
+}
+.consultationPanel .smallStats {
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 0;
 }
 .detailButton:hover {
   color: var(--primary);
@@ -590,6 +621,33 @@
   display: flex;
   flex-direction: column;
 }
+.currentClasses {
+  container-type: inline-size;
+  container-name: current-classes;
+}
+.scheduleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.scheduleGrid .subjectSchedule + .subjectSchedule {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.scheduleGrid .subjectHeading {
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.scheduleGrid .scheduleRow {
+  gap: 6px;
+}
+@container current-classes (max-width: 340px) {
+  .scheduleGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .subjectSchedule + .subjectSchedule {
   margin-top: 12px;
   padding-top: 12px;
@@ -844,9 +902,8 @@
   font-size: var(--text-xl);
 }
 .calendarEvent {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  gap: 5px;
   padding: 9px 0;
   border-bottom: 1px solid #e7ecf2;
   font-size: var(--text-xs);
@@ -855,8 +912,9 @@
   font-size: var(--text-xs);
   color: var(--primary);
   font-weight: 700;
-  width: 40px;
-  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 .calendarEvent small {
   display: block;
@@ -867,7 +925,18 @@
 .calendarEvent > span {
   overflow-wrap: anywhere;
 }
-.calendarEvent:hover > span {
+.calendarEventLink {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--primary);
+}
+.calendarEventLink > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.calendarEventLink:hover {
   text-decoration: underline;
 }
 @container (max-width:1280px) {
@@ -946,6 +1015,13 @@
   }
 }
 @container (max-width:560px) {
+  .schoolPanel {
+    grid-row: auto;
+  }
+  .consultationPanel > .panelBody {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
   .board {
     padding: 12px 10px;
   }

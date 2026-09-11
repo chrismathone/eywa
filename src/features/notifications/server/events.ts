@@ -36,6 +36,7 @@ import { UNSENT_FILTER } from "@/features/report-admin/report-filters";
 import { filterUnsentSendable, type UnsentRow } from "@/features/report-admin/unsent-sendable";
 import {
   absenceDigestBody,
+  absenceNotificationLink,
   buildAbsenceEvents,
   buildFollowupEvents,
   buildGradeDropEvents,
@@ -240,9 +241,9 @@ async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<n
       tenantId,
       recipientId,
       type: "absence_alert",
-      title: "반복 결석 위험 학생",
+      title: "반복 결석 학생",
       body: masterBody,
-      link: "/retention",
+      link: absenceNotificationLink(freshEvents),
       actorId: null,
     });
   }
@@ -260,9 +261,9 @@ async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<n
       tenantId,
       recipientId: teacherId,
       type: "absence_alert",
-      title: "담당 학생 반복 결석 위험",
+      title: "담당 학생 반복 결석",
       body,
-      link: "/retention",
+      link: absenceNotificationLink(teacherEvents),
       actorId: null,
     });
   }

@@ -225,7 +225,7 @@ export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: 
 
   revalidateDashboard();
   after(async () => {
-    await generateDailyBriefing(tenantId, { notifyOnFirstGeneration: false });
+    await generateDailyBriefing(tenantId);
   });
   return { ok: true };
 }

@@ -50,6 +50,9 @@ export type OverviewData = {
     grades: Distribution;
     levels: Distribution;
     schools: Distribution;
+    schoolGroups?: import("./student-composition").SchoolGroup[];
+    concurrent?: number;
+    subjectCombinations?: { subjects: string[]; value: number }[];
   };
   changes: MonthChange[];
   attendance: AttendanceSnapshot | null;
@@ -94,6 +97,7 @@ export type OverviewData = {
     endDate: string;
     startTime: string | null;
     source: string;
+    matchedClass?: { id: string; name: string } | null;
   }[];
   englishSheet: {
     period: string;

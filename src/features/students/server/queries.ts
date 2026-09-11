@@ -1,6 +1,7 @@
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
 import { resolveTeacherLabel, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import "server-only";
+import { subjectEnrollmentSummary } from "../subject-enrollment-summary";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
@@ -366,13 +367,15 @@ export async function getStudentsList(
 export async function getEnrolledStatCounts(): Promise<{
   enrolled: number;
   bySubject: Record<string, number>;
+  concurrent: number;
+  combinations: { subjects: string[]; value: number }[];
 }> {
   const supabase = await createClient();
   // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치). teacher 또는 겸직-강사뷰.
   const teacherScope = await effectiveTeacherScope();
   const teacherStudentIds = teacherScope?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0)
-    return { enrolled: 0, bySubject: {} };
+    return { enrolled: 0, bySubject: {}, concurrent: 0, combinations: [] };
   const scope = teacherStudentIds ? new Set(teacherStudentIds) : null;
   // 표시 축(원장 2026-08-20): 게이지는 **담당 과목만** — 동시수강으로 들어온 남의 과목(수학 전담인데
   // "영어 14명 36%")은 이 강사에게 오독을 만든다. 관리자·담당 반 0개는 축 없음(종전 동일).
@@ -418,6 +421,7 @@ export async function getEnrolledStatCounts(): Promise<{
   return {
     enrolled: count ?? 0,
     bySubject: Object.fromEntries([...bySubject].map(([k, v]) => [k, v.size])),
+    ...subjectEnrollmentSummary(bySubject),
   };
 }
 

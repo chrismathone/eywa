@@ -13,6 +13,8 @@ import {
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
+import { SchoolDistribution } from "./school-distribution";
+import { AdmissionsSchedule } from "./admissions-schedule";
 import {
   Bars,
   Columns,
@@ -60,6 +62,7 @@ function Jump({
 }
 
 function Panel({
+  id,
   title,
   note,
   href,
@@ -68,6 +71,7 @@ function Panel({
   wide = false,
   className = "",
 }: {
+  id?: string;
   title: string;
   note: string;
   href?: string;
@@ -83,6 +87,7 @@ function Panel({
   const available = times.length > 0;
   return (
     <section
+      id={id}
       className={`${s.panel} ${wide ? s.wide : ""} ${className}`}
       aria-label={title}
     >
@@ -338,7 +343,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   : "출결 정보 확인 필요"
               }
               icon={<MenuGlyph name="clipboardCheck" size={20} />}
-              href="/attendance"
+              href={`/attendance/${snapshot.today}`}
               error={v.processing.error}
             />
           )}
@@ -660,7 +665,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
         <div className={s.grid}>
           <Panel
             title="과목별 수강"
-            note="과목 안에서 학생 중복 제거"
+            note="재원생 · 과목별 수강과 동시 수강"
             href="/students"
             sections={[v.students]}
           >
@@ -675,6 +680,35 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   limit={6}
                   title="과목별 수강"
                 />
+                {student.concurrent !== undefined && (
+                  <div className={s.separated}>
+                    <InlineStat
+                      label="동시 수강"
+                      value={
+                        <>
+                          {number(student.concurrent)}
+                          <small>명</small>
+                        </>
+                      }
+                    />
+                    <Bars
+                      data={(student.subjectCombinations ?? []).map(
+                        (group) => ({
+                          label:
+                            group.subjects
+                              .map((key) => snapshot.subjects[key] ?? key)
+                              .join("·") +
+                            (group.subjects.length === 1 ? "만" : ""),
+                          value: group.value,
+                          color:
+                            group.subjects.length > 1 ? COLORS[2] : "#9aacc3",
+                        }),
+                      )}
+                      limit={4}
+                      title="과목 수강 조합"
+                    />
+                  </div>
+                )}
               </>
             )}
           </Panel>
@@ -695,13 +729,17 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           </Panel>
           <Panel
             title="학교별 학생"
-            note="재원생 · 상위 6개 학교"
+            note="재원생 · 초등·중등·고등"
+            className={s.schoolPanel}
             href="/students"
             sections={[v.students]}
           >
-            {student && (
-              <Bars data={student.schools} limit={6} title="학교별 재원생" />
-            )}
+            {student &&
+              (student.schoolGroups ? (
+                <SchoolDistribution groups={student.schoolGroups} />
+              ) : (
+                <Bars data={student.schools} limit={6} title="학교별 재원생" />
+              ))}
           </Panel>
           <Panel
             title="등록 상담 전환"
@@ -743,13 +781,13 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             )}
           </Panel>
           <Panel
+            id="repeated-absences"
             title="반복 결석 학생"
             note={
               v.absences?.data?.anchor
                 ? `${shortDate(v.absences.data.anchor)}까지 14일 · 사전 통보 제외 3회 이상`
                 : "최근 14일 · 사전 통보 제외"
             }
-            href="/attendance"
             sections={[v.absences]}
           >
             {v.absences?.data && (
@@ -818,7 +856,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                 ? `최근 ${homework.windowDays}일 숙제 · ${subjects(homework.subjects)}`
                 : "수업보고서 기준"
             }
-            href="/lesson-reports"
+            href="/lesson-reports?tab=list"
             sections={[v.homework, v.unread]}
           >
             {homework && (
@@ -852,7 +890,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             {unread && (
               <div className={s.separated}>
                 <InlineStat
-                  label={`수업보고서 발송 ${unread.graceHours}시간 후 미확인`}
+                  label={`수업보고서 미확인 건 (${unread.graceHours}시간 초과)`}
                   value={
                     <>
                       {number(unread.reports)}
@@ -868,6 +906,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           </Panel>
           <Panel
             title="학생 상담"
+            className={s.consultationPanel}
             note="전체 상담 기록 · 후속조치"
             href="/consultations"
             sections={[v.consultations]}
@@ -1094,21 +1133,11 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             )}
           </Panel>
           <Panel
-            title="다가오는 레벨테스트·첫 수업"
+            title="레벨테스트 및 첫수업 일정"
             note="오늘부터 7일"
             sections={[v.calendar]}
           >
-            <div className={s.notices}>
-              {v.calendar?.data?.slice(0, 6).map((event) => (
-                <div key={event.id} className={s.calendarEvent}>
-                  <time>
-                    {shortDate(event.startDate)}
-                    <small>{event.startTime?.slice(0, 5) ?? "종일"}</small>
-                  </time>
-                  <span>{event.title}</span>
-                </div>
-              ))}
-            </div>
+            <AdmissionsSchedule events={v.calendar?.data?.slice(0, 6) ?? []} />
             {v.calendar?.data?.length === 0 && (
               <p className={s.empty}>
                 다가오는 7일간 레벨테스트·첫 수업 일정이 없습니다.
@@ -1116,18 +1145,10 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             )}
             {(v.calendar?.data?.length ?? 0) > 6 && (
               <DetailPopup
-                title="다가오는 레벨테스트·첫 수업"
+                title="레벨테스트 및 첫수업 일정"
                 label={`전체 ${v.calendar!.data!.length}개 일정 보기`}
               >
-                {v.calendar!.data!.map((event) => (
-                  <div key={event.id} className={s.calendarEvent}>
-                    <time>
-                      {shortDate(event.startDate)}
-                      <small>{event.startTime?.slice(0, 5) ?? "종일"}</small>
-                    </time>
-                    <span>{event.title}</span>
-                  </div>
-                ))}
+                <AdmissionsSchedule events={v.calendar!.data!} />
               </DetailPopup>
             )}
           </Panel>
@@ -1160,7 +1181,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           <Panel
             title="행정 · 자산"
             note="열람 가능한 업무 기준"
-            href="/menu"
             sections={[v.operations]}
           >
             <div className={s.operations}>

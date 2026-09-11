@@ -8,7 +8,7 @@ export type NotificationType =
   | "teacher_handover" // 강사 인수인계로 내가 새 담임 지정
   | "classnote_parent_post" // 학부모가 ClassNote에 새 글 → 그 학생 담당 강사(연동 PC 워커가 insert)
   | "classnote_parent_comment" // 학부모가 ClassNote 알림장에 댓글 → 그 학생 담당 강사(위와 같은 워커)
-  | "daily_briefing" // 일일 운영 브리핑 준비됨 → master만(그날 최초 생성 시 1회, cron이 insert)
+  | "daily_briefing" // 과거 저장 데이터 호환용. 생성 중단, 벨 목록·미확인 수에서 제외.
   | "absence_alert" // 학생이 반복 결석 마일스톤(14일 3/5/10회) 도달 → master(Phase 3, cron)
   | "followup_due" // 상담 후속조치 기한 당일/지남 → 담당 상담사 폴백 master(Phase 3, cron)
   | "grade_drop" // 같은 과목 성적 15점+ 급락 → master + 담당 강사(Phase 3, cron)
