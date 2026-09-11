@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { FilterSelect } from "@/components/filter-select";
 import { PeriodNav } from "@/components/period-nav";
 import { SearchToggle } from "@/components/search-toggle";
+import { ToolbarChip } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { BOARD_STAGE_OPTIONS, type BoardStageKey } from "@/features/enrollment/board-stages";
 import { MonthPicker } from "./month-picker";
 import { enrollmentHref, formatMonthLabel, shiftMonth, type EnrollmentView } from "./enrollment-query";
@@ -32,6 +34,11 @@ type Props = {
   stats?: ReactNode;
   /** 통계뷰 연도 칩 — 이 바에 얹어 sticky로 따라오게 한다(연도를 눌러가며 아래 변화를 보려면 늘 보여야 한다). */
   yearChips?: ReactNode;
+  /**
+   * 접수일 필터(`received=YYYY-MM-DD`, 운영실 KPI '신규문의' ↗) — 걸려 있으면 칩 하나로 보이고 눌러 푼다.
+   * 이 필터는 월·기간보다 우선이라, 기간을 고르거나 월을 옮기면 함께 풀린다(clearParams·enrollmentHref).
+   */
+  receivedDay?: string | null;
 };
 
 /**
@@ -59,6 +66,7 @@ export function KanbanFilters({
   syncBadge,
   yearChips,
   stats,
+  receivedDay,
 }: Props) {
   const displayMonth = selectedMonth ?? todayMonth;
   const base = {
@@ -132,7 +140,7 @@ export function KanbanFilters({
         ariaLabel="기간 프리셋"
         className="w-auto"
         triggerClassName={TOOLBAR_SELECT}
-        clearParams={["month"]}
+        clearParams={["month", "received"]}
       />
 
       {/* 상담사 — 라벨 하나(드롭다운). 고른 값이 곧 라벨이다. */}
@@ -157,6 +165,13 @@ export function KanbanFilters({
         className="w-auto"
         triggerClassName={TOOLBAR_SELECT}
       />
+      {/* 접수일 칩 — 눌러 푼다(링크는 received만 뺀 지금 필터 그대로). */}
+      {receivedDay ? (
+        <ToolbarChip active href={enrollmentHref({ ...base, month: selectedMonth })}>
+          접수일: {Number(receivedDay.slice(5, 7))}월 {Number(receivedDay.slice(8, 10))}일
+          <EyIcon name="close" size={12} aria-hidden />
+        </ToolbarChip>
+      ) : null}
         </>
       ) : null}
 

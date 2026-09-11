@@ -1,39 +1,152 @@
-// '오늘' 초기 로드 스트리밍 — 지표·스케줄·카드 병렬 조회가 도는 동안
-// Next가 이 loading을 Suspense fallback으로 즉시 스트리밍(창=iframe 첫 페인트 체감, B7).
-// 필터 searchParam 거의 없음 → 스켈레톤 플래시 트레이드오프 작음(students/billing 등과 다름).
+import s from "./_overview/overview.module.css";
+
+// 운영실(학원 전체 현황) 초기 로드 스트리밍 — 여러 영역 병렬 조회가 도는 동안 Next가 이 loading을
+// Suspense fallback으로 즉시 흘린다(첫 페인트 체감, B7).
 //
-// ⚠️ **블록 수·순서를 실제 페이지와 맞춰 둘 것** — 스켈레톤이 더 많이(또는 적게) 그리면 로드가 끝나는
-// 순간 화면이 튀어 없느니만 못하다. 지금 구조는 두 지시가 합쳐진 결과다:
-//   · 원장 2026-09-03 — '대화형 비서'·'실시간 운영(오늘 일정)'·'빠른 작업'을 화면에서 뺐다.
-//   · 디자인 v5 §4 — 1차 앵커 셋(인사·지표 / 오늘 브리핑 / 후속조치) 외엔 **접힌 2차 줄**로 내렸다.
-// 그래서 카드는 셋뿐이고 나머지는 줄 하나 높이다(매니저 팀 보고 · 학원생 증감 · 운영 맥락).
-export default function TodayLoading() {
+// ⚠️ **실제 화면의 뼈대를 그대로 따른다** — 스켈레톤이 더 크거나 작으면 로드가 끝나는 순간 화면이 튄다.
+// 🔑 격자·줄 높이를 손으로 다시 짓지 않는다: 실제 CSS 모듈 클래스(.header·.identity·.kpis·.kpiBody·.grid·.panel…)에
+//    **같은 길이의 글자를 투명하게** 넣어 줄 높이를 그대로 얻는다(창 폭에 따른 열 수도 컨테이너 쿼리 한 벌로 같아진다).
+// 구조(원장 2026-09-11): 머리 → KPI 여섯 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘) → '학생 · 학습 · 상담'(여덟,
+// 셋째는 두 줄) → '수업과 학원 운영'(여덟) → 꼬리. 패널 속 높이는 그 패널의 흔한 내용 높이에 맞춘 근삿값이다.
+const T = "text-transparent bg-bg-soft animate-pulse rounded";
+
+const KPI = [
+  ["재원생", "000", "명", "EiE 000 · 인재원 영어 000 · 수학 000"],
+  ["퇴원생", "0", "명", "EiE 0 · 인재원 영어 0 · 수학 0"],
+  ["신규문의", "0", "건", "마지막 접수 00:00"],
+  ["금일입테", "0", "건", "첫 일정 00:00"],
+  ["오늘첫수업", "0", "명", "첫 등원 0 · 새 과목 0"],
+  ["결석학생", "0", "명", "연락 필요 0 · 사전 통보 0"],
+] as const;
+
+type PanelShape = { title: string; note: string; body: number; wide?: boolean; className?: string };
+
+const SECTIONS: { title: string; note: string; panels: PanelShape[] }[] = [
+  {
+    title: "학원 운영 한눈에",
+    note: "재원 · 출결 · 수납 · 신규생",
+    panels: [
+      { title: "재원생 구성", note: "급간별 · 재원 상태 학생", body: 150 },
+      { title: "출결 현황", note: "오늘 · 학생·반·교시별 출결 칸", body: 205 },
+      { title: "9월 수납 현황", note: "당월 청구서 · 취소 청구 제외", body: 225 },
+      { title: "신규생 단계별 관리", note: "등록 후 90일 · 재원·대기 학생", body: 180 },
+      { title: "등록 · 퇴원 추이", note: "최근 6개월 · 당월은 오늘까지", body: 245, wide: true },
+      { title: "월별 청구 · 수납", note: "최근 6개월 · 청구월 기준 누적 금액", body: 245, wide: true },
+    ],
+  },
+  {
+    title: "학생 · 학습 · 상담",
+    note: "학생 구성과 학습·상담 신호",
+    panels: [
+      { title: "과목별 수강", note: "재원생 · 과목별 수강과 동시 수강", body: 300 },
+      { title: "학년별 재원생", note: "학원설정 학년 순 · 영어·수학 수강 구성", body: 300 },
+      { title: "학교별 학생", note: "재원생 · 초등·중등·고등", body: 520, className: s.schoolPanel },
+      { title: "콜&상담 전환", note: "2026년 상담 접수 기준", body: 170 },
+      { title: "최근 14일 등원율", note: "(출석 + 지각) / 유효 출결 칸", body: 200 },
+      { title: "반복 결석 학생", note: "최근 14일 · 사전 통보 제외", body: 180 },
+      { title: "학습 · 학부모 보고", note: "수업보고서 기준", body: 200 },
+      { title: "학생 상담", note: "전체 상담 기록 · 후속조치", body: 180, className: s.consultationPanel },
+    ],
+  },
+  {
+    title: "수업과 학원 운영",
+    note: "신규생 체크 · 강사 시트 · 일정과 행정",
+    panels: [
+      { title: "신규생 체크 진행", note: "필수 6항목 · 2개월 콜은 선택", body: 230 },
+      { title: "강사 시트 작성 현황", note: "현재 시트의 기간·보기 필터 기준", body: 160 },
+      { title: "현재 수업 현황", note: "오늘 시간표", body: 250 },
+      { title: "레벨테스트 및 첫수업 일정", note: "오늘부터 7일", body: 250 },
+      { title: "직원 구성", note: "재직 중 · 운영 역할 기준", body: 180 },
+      { title: "행정 · 자산", note: "열람 가능한 업무 기준", body: 180 },
+      { title: "9월 지출 내역", note: "당월 지출결의서 기준", body: 200 },
+      { title: "학원 공지", note: "최근 공지 · 대상 권한 반영", body: 200 },
+    ],
+  },
+];
+
+function PanelSkeleton({ title, note, body, wide, className }: PanelShape) {
   return (
-    <div className="space-y-5 pb-4">
-      {/* ① 인사 + KPI 4장 */}
-      <div className="space-y-5">
-        <div className="bg-bg-soft h-12 w-72 animate-pulse rounded-lg" />
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
-          <div className="bg-card shadow-card h-28 animate-pulse rounded-2xl" />
-          <div className="bg-card shadow-card h-28 animate-pulse rounded-2xl" />
-          <div className="bg-card shadow-card h-28 animate-pulse rounded-2xl" />
-          <div className="bg-card shadow-card h-28 animate-pulse rounded-2xl" />
+    <section className={`${s.panel} ${wide ? s.wide : ""} ${className ?? ""}`}>
+      <header className={s.panelHeader}>
+        <div>
+          <h2>
+            <span className={T}>{title}</span>
+          </h2>
+          <p>
+            <span className={T}>{note}</span>
+          </p>
         </div>
+        <span className={`${s.jump} ${T}`}>상세</span>
+      </header>
+      <div className={s.panelBody}>
+        <div className="bg-bg-soft animate-pulse rounded" style={{ height: body }} />
       </div>
-      {/* ② 오늘 브리핑 */}
-      <div className="bg-card shadow-card h-56 animate-pulse rounded-2xl" />
-      {/* 접힌 2차 줄 — 매니저 팀 보고(AI) */}
-      <div className="border-line border-t py-3">
-        <div className="bg-bg-soft h-6 w-64 animate-pulse rounded-md" />
-      </div>
-      {/* ③ 상담 후속조치 — '실시간 운영' 묶음이 사라져 이제 홀로 한 줄을 다 쓴다 */}
-      <div className="bg-card shadow-card h-40 animate-pulse rounded-2xl" />
-      {/* 접힌 2차 줄 둘 — 학원생 증감 · 운영 맥락 */}
-      <div className="border-line border-t py-3">
-        <div className="bg-bg-soft h-6 w-40 animate-pulse rounded-md" />
-      </div>
-      <div className="border-line border-t py-3">
-        <div className="bg-bg-soft h-6 w-72 animate-pulse rounded-md" />
+    </section>
+  );
+}
+
+export default function DashboardLoading() {
+  return (
+    <div className={s.root} aria-busy="true" aria-label="학원 전체 현황을 불러오는 중">
+      <div className={s.board}>
+        <header className={s.header}>
+          <div className={s.identity}>
+            <span className={`${s.eyebrow} ${T}`}>EYWA · ACADEMY OVERVIEW</span>
+            <h1>
+              <i className={`not-italic ${T}`}>학원 전체 현황</i>
+              <span className={T}>2026.09.11</span>
+            </h1>
+          </div>
+          <div className={s.headerTools}>
+            <div className={s.freshness}>
+              <i className={s.dotLive} />
+              <span className={T}>
+                자동 갱신
+                <small>00:00 확인 · 30초 주기</small>
+              </span>
+            </div>
+            <span className={`${s.refresh} ${T}`} />
+          </div>
+        </header>
+        <div className={s.kpis}>
+          {KPI.map(([label, value, unit, detail]) => (
+            <div key={label} className={s.kpi}>
+              <div className={s.kpiBody}>
+                <span className={s.kpiLabel}>
+                  <span className={s.kpiIcon}>
+                    <i className="bg-bg-soft block size-5 animate-pulse rounded" />
+                  </span>
+                  <span className={T}>{label}</span>
+                </span>
+                <span className={`${s.kpiValue} text-transparent`}>
+                  <i className={`not-italic ${T}`}>{value}</i>
+                  <span>{unit}</span>
+                </span>
+                <span className={s.kpiDetail}>
+                  <i className={`not-italic ${T}`}>{detail}</i>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        {SECTIONS.map((section) => (
+          <div key={section.title}>
+            <div className={s.sectionLine}>
+              <span className={T}>{section.title}</span>
+              <p>
+                <span className={T}>{section.note}</span>
+              </p>
+            </div>
+            <div className={s.grid}>
+              {section.panels.map((panel) => (
+                <PanelSkeleton key={panel.title} {...panel} />
+              ))}
+            </div>
+          </div>
+        ))}
+        <footer className={s.footer}>
+          <span className={T}>EYWA / OVERVIEW</span>
+        </footer>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ const EMPTY_RAW: TodayActionsRaw = {
   absentToday: [],
   unrecordedYesterday: [],
   yesterday: "2026-07-15",
+  date: "2026-07-15",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
   requestedTextbooks: 0,

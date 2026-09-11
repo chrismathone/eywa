@@ -1,0 +1,178 @@
+"use client";
+
+import type { CSSProperties } from "react";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
+import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
+import { todayLevelTests } from "@/features/dashboard/overview/display";
+import {
+  absentDayHref,
+  intakeDayHref,
+  studentsEnrolledHref,
+  studentsFirstClassHref,
+  withdrawalsMonthHref,
+} from "@/features/dashboard/overview/kpi-links";
+import { countWithdrawalPrograms } from "@/features/withdrawals/window";
+import { PROGRAMS, programLabel, programSubjectsOf, type Program } from "@/features/students/program";
+import type { MenuKey } from "@/lib/permissions";
+import { number } from "./charts";
+import { KpiCard } from "./kpi-card";
+import { FirstClassPopup, StudentsPopup, WithdrawalsPopup } from "./kpi-popups";
+import { AbsentPopup, IntakePopup, LevelTestPopup } from "./kpi-popups-day";
+import s from "./overview.module.css";
+
+const count = (n: number | null | undefined) => (n == null ? "—" : number(n));
+
+/**
+ * 열 수는 **실제로 선 카드 수**에서 나온다(D2) — 역할에 따라 5칸이면 5열, 빈 칸을 만들지 않는다.
+ * 넓을 때 n열 · 중간 폭은 n≤3이면 n열, 4면 2열, 그 이상 3열(남는 자리는 마지막 카드가 채운다) ·
+ * 좁을 때 2열(홀수 번째 마지막 카드는 CSS가 두 칸으로).
+ */
+export function kpiGridVars(n: number): CSSProperties {
+  const mid = n === 4 ? 2 : Math.max(1, Math.min(n, 3));
+  const rest = n % mid;
+  return {
+    "--kpi-n": Math.max(1, n),
+    "--kpi-mid": mid,
+    "--kpi-last-mid": rest === 0 ? "auto" : `span ${mid - rest + 1}`,
+  } as CSSProperties;
+}
+
+/**
+ * KPI 여섯 칸(원장 2026-09-11 확정 순서): 재원생 · 퇴원생 · 신규문의 · 금일입테 · 오늘첫수업 · 결석학생.
+ * 볼 권한이 없는 칸은 영역이 오지 않아 숨는다(종전 규약). ↗는 목적지 메뉴를 열 수 있을 때만 선다.
+ * 🔴 금일입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
+ */
+export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
+  const v = snapshot.sections;
+  const shown = [v.students, v.withdrawals, v.intake, v.calendar, v.firstClass, v.absent].filter(Boolean).length;
+  if (shown === 0) return null;
+  const today = snapshot.today;
+  const can = (menu: MenuKey) => snapshot.allowed.includes(menu);
+  const subjects = programSubjectsOf(snapshot.subjects);
+  const programLine = (counts: Record<Program, number>) =>
+    PROGRAMS.map((program) => `${programLabel(program, subjects)} ${number(counts[program])}`).join(" · ");
+
+  const student = v.students?.data;
+  const withdrawals = v.withdrawals?.data;
+  const wd = withdrawals ? countWithdrawalPrograms(withdrawals.rows) : null;
+  const month = withdrawals?.month ?? today.slice(0, 7);
+  const intake = v.intake?.data;
+  const levelTests = v.calendar?.data ? todayLevelTests(v.calendar.data, today) : null;
+  const firsts = v.firstClass?.data;
+  const firstCount = firsts?.filter((row) => row.kind === "first").length ?? 0;
+  // 결석학생 = 한 교시도 안 온 학생만 센다 — 일부 교시 결석은 팝업·목적지에서 따로 보인다.
+  const absentDay = v.absent?.data;
+  const absent = absentDay?.absent;
+  const notified = absent?.filter((row) => row.preNotified).length ?? 0;
+  const partial = absentDay?.partial.length ?? 0;
+
+  return (
+    <div className={s.kpis} style={kpiGridVars(shown)}>
+      {v.students && (
+        <KpiCard
+          label="재원생"
+          value={count(student?.enrolled)}
+          unit="명"
+          detail={student ? programLine(student.programs) : "재원 상태 기준"}
+          icon={<MenuGlyph name="users" size={20} />}
+          error={v.students.error}
+          popupTitle="재원생 프로그램별 인원"
+          jump={can("students") ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : null}
+        >
+          <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} />
+        </KpiCard>
+      )}
+      {v.withdrawals && (
+        <KpiCard
+          label="퇴원생"
+          value={count(wd?.total)}
+          unit="명"
+          detail={wd ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}` : "이번 달 퇴원 기준"}
+          icon={<MenuGlyph name="userMinus" size={20} />}
+          error={v.withdrawals.error}
+          popupTitle={`${Number(month.slice(5))}월 퇴원생`}
+          jump={
+            can("withdrawals")
+              ? { href: withdrawalsMonthHref(month), label: "퇴원관리에서 이번 달 퇴원 보기" }
+              : null
+          }
+        >
+          <WithdrawalsPopup
+            data={withdrawals}
+            subjects={subjects}
+            canFilter={can("withdrawals")}
+            canOpenStudent={can("students")}
+          />
+        </KpiCard>
+      )}
+      {v.intake && (
+        <KpiCard
+          label="신규문의"
+          value={count(intake?.length)}
+          unit="건"
+          detail={intake ? (intake.length ? `마지막 접수 ${intake[0]?.time ?? "—"}` : "오늘 접수 없음") : "오늘 접수 기준"}
+          icon={<MenuGlyph name="messages" size={20} />}
+          error={v.intake.error}
+          popupTitle="오늘 신규문의"
+          jump={can("enrollment") ? { href: intakeDayHref(today), label: "콜&상담에서 오늘 접수 보기" } : null}
+        >
+          <IntakePopup rows={intake} canOpen={can("enrollment")} />
+        </KpiCard>
+      )}
+      {v.calendar && (
+        <KpiCard
+          label="금일입테"
+          value={count(levelTests?.length)}
+          unit="건"
+          detail={
+            levelTests
+              ? levelTests.length
+                ? `첫 일정 ${levelTests[0]?.startTime?.slice(0, 5) ?? "종일"}`
+                : "오늘 일정 없음"
+              : "학원 일정 기준"
+          }
+          icon={<MenuGlyph name="exam" size={20} />}
+          error={v.calendar.error}
+          popupTitle="오늘 레벨테스트"
+          jump={null}
+        >
+          <LevelTestPopup events={levelTests} />
+        </KpiCard>
+      )}
+      {v.firstClass && (
+        <KpiCard
+          label="오늘첫수업"
+          value={count(firsts?.length)}
+          unit="명"
+          detail={firsts ? `첫 등원 ${firstCount} · 새 과목 ${firsts.length - firstCount}` : "수강 시작일 기준"}
+          icon={<MenuGlyph name="userPlus" size={20} />}
+          error={v.firstClass.error}
+          popupTitle="오늘 첫 수업"
+          jump={
+            can("students") ? { href: studentsFirstClassHref(today), label: "원생목록에서 오늘 첫 수업 보기" } : null
+          }
+        >
+          <FirstClassPopup rows={firsts} subjectLabels={snapshot.subjects} canOpen={can("students")} />
+        </KpiCard>
+      )}
+      {v.absent && (
+        <KpiCard
+          label="결석학생"
+          value={count(absent?.length)}
+          unit="명"
+          detail={
+            absent
+              ? `연락 필요 ${absent.length - notified} · 사전 통보 ${notified}${partial > 0 ? ` · 일부 교시 ${partial}` : ""}`
+              : "오늘 출결 기준"
+          }
+          icon={<MenuGlyph name="userX" size={20} />}
+          error={v.absent.error}
+          popupTitle="오늘 결석 학생"
+          jump={can("attendance") ? { href: absentDayHref(today), label: "출석부에서 오늘 결석 학생 보기" } : null}
+        >
+          <AbsentPopup day={absentDay} subjectLabels={snapshot.subjects} canOpen={can("students")} />
+        </KpiCard>
+      )}
+    </div>
+  );
+}

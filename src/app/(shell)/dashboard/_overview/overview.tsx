@@ -2,19 +2,20 @@
 
 import { useSyncExternalStore, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { WindowLink } from "@/components/workspace/window-link";
-import { paymentRateDisplay } from "@/features/billing/calc";
 import {
   processingSummary,
   type OverviewSnapshot,
   type Section,
 } from "@/features/dashboard/overview/model";
+import { concurrentShare } from "@/features/students/enrolled-composition";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
 import { SchoolDistribution } from "./school-distribution";
 import { AdmissionsSchedule } from "./admissions-schedule";
+import { KpiStrip } from "./kpi-strip";
+import { GradeSplitChart } from "./grade-split";
 import {
   Bars,
   Columns,
@@ -124,49 +125,6 @@ function Panel({
   );
 }
 
-function Kpi({
-  label,
-  value,
-  unit,
-  detail,
-  icon,
-  href,
-  error,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  detail: string;
-  icon: ReactNode;
-  href: string;
-  error?: boolean;
-}) {
-  return (
-    <WindowLink
-      href={href}
-      className={s.kpi}
-      ariaLabel={`${label} ${value}${unit ?? ""}. ${detail}`}
-    >
-      <div className={s.kpiLabel}>
-        {icon}
-        <span>{label}</span>
-        <OpenIcon size={14} />
-      </div>
-      <div className={s.kpiValue}>
-        {value}
-        <span>{unit}</span>
-      </div>
-      <p className={error ? s.textDanger : undefined}>
-        {error
-          ? value === "—"
-            ? "조회 실패 · 다시 확인 필요"
-            : "갱신 실패 · 이전 확인값"
-          : detail}
-      </p>
-    </WindowLink>
-  );
-}
-
 function InlineStat({
   label,
   value,
@@ -215,12 +173,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
   const lastTime = Object.values(v).flatMap((section) =>
     section.at === null ? [] : [section.at],
   );
-  const careDue = care?.checksAvailable
-    ? care.items
-        .filter((i) => !i.optional)
-        .reduce((sum, i) => sum + i.overdue + i.due, 0)
-    : null;
-  const classData = v.classes?.data;
   const carePeople = care?.checksAvailable
     ? new Set(
         care.items
@@ -306,89 +258,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           </div>
         </header>
 
-        <div className={s.kpis}>
-          {v.students && (
-            <Kpi
-              label="전체 재원생"
-              value={student ? number(student.enrolled) : "—"}
-              unit="명"
-              detail={
-                delta === null
-                  ? "현재 재원 상태 기준"
-                  : `${thisMonth} 등록 ${currentChange!.enrolled} · 퇴원 ${currentChange!.withdrawn} · 순증 ${delta > 0 ? "+" : ""}${delta}`
-              }
-              icon={<MenuGlyph name="users" size={20} />}
-              href="/students"
-              error={v.students.error}
-            />
-          )}
-          {v.classes && (
-            <Kpi
-              label="운영 중 수업"
-              value={classData ? number(classData.active) : "—"}
-              unit="반"
-              detail={
-                schedule
-                  ? `오늘 ${schedule.length}개 시간대 · 진행 중 ${schedule.filter((r) => r.status === "ongoing").length}`
-                  : "수업목록 운영 상태 기준"
-              }
-              icon={<MenuGlyph name="book" size={20} />}
-              href="/classes"
-              error={v.classes.error}
-            />
-          )}
-          {v.processing && (
-            <Kpi
-              label="오늘 출결 입력"
-              value={processing ? number(processing.recorded) : "—"}
-              unit={processing ? `/ ${number(processing.expected)}` : ""}
-              detail={
-                processing
-                  ? `완료 ${processing.complete}반 · 입력 중 ${processing.partial}반 · 미기록 ${processing.unmarked}반`
-                  : "출결 정보 확인 필요"
-              }
-              icon={<MenuGlyph name="clipboardCheck" size={20} />}
-              href={`/attendance/${snapshot.today}`}
-              error={v.processing.error}
-            />
-          )}
-          {v.billing && (
-            <Kpi
-              label={`${thisMonth} 수납률`}
-              value={
-                bill?.totalCount
-                  ? paymentRateDisplay(bill.paymentRate, bill.outstanding)
-                  : "—"
-              }
-              unit={bill?.totalCount ? "%" : ""}
-              detail={
-                bill
-                  ? bill.totalCount
-                    ? `수납 ${money(bill.totalCollected)} · 미수 ${money(bill.outstanding)}`
-                    : "이번 달 청구서 없음"
-                  : "수납 정보 확인 필요"
-              }
-              icon={<MenuGlyph name="wallet" size={20} />}
-              href={`/billing?period=${snapshot.today.slice(0, 7)}`}
-              error={v.billing.error}
-            />
-          )}
-          {v.newcomers && (
-            <Kpi
-              label="신규생 90일 관리"
-              value={care ? number(care.total) : "—"}
-              unit="명"
-              detail={
-                careDue === null
-                  ? "체크리스트 연결 확인 필요"
-                  : `확인 필요 ${carePeople}명 · 필수 체크 ${careDue}건`
-              }
-              icon={<MenuGlyph name="userPlus" size={20} />}
-              href="/newcomers"
-              error={v.newcomers.error}
-            />
-          )}
-        </div>
+        {/* KPI 여섯 칸(원장 2026-09-11) — 카드 = 팝업, ↗ = 목적지 창. 카드·팝업·목적지가 같은 함수를 부른다. */}
+        <KpiStrip snapshot={snapshot} />
 
         <div id="academy-overview" className={s.sectionLine}>
           <span>학원 운영 한눈에</span>
@@ -685,52 +556,50 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   limit={6}
                   title="과목별 수강"
                 />
-                {student.concurrent !== undefined && (
-                  <div className={s.separated}>
-                    <InlineStat
-                      label="동시 수강"
-                      value={
-                        <>
-                          {number(student.concurrent)}
-                          <small>명</small>
-                        </>
-                      }
-                    />
-                    <Bars
-                      data={(student.subjectCombinations ?? []).map(
-                        (group) => ({
-                          label:
-                            group.subjects
-                              .map((key) => snapshot.subjects[key] ?? key)
-                              .join("·") +
-                            (group.subjects.length === 1 ? "만" : ""),
-                          value: group.value,
-                          color:
-                            group.subjects.length > 1 ? COLORS[2] : "#9aacc3",
-                        }),
-                      )}
-                      limit={4}
-                      title="과목 수강 조합"
-                    />
-                  </div>
-                )}
+                <div className={s.separated}>
+                  {/* 동시 수강 = 영어(EiE·인재원 영어) + 수학(수학(심화) 포함) — 원장 2026-09-11 재정의.
+                      학년별 재원생 막대의 보라 합계와 같은 판정(subjectMixOf)이라 두 수가 늘 같다. */}
+                  <InlineStat
+                    label="동시 수강(영어+수학)"
+                    value={
+                      <>
+                        {number(student.concurrent)}
+                        <small>
+                          명
+                          {concurrentShare(student.concurrent, student.enrolled) === null
+                            ? ""
+                            : ` (${concurrentShare(student.concurrent, student.enrolled)}%)`}
+                        </small>
+                      </>
+                    }
+                  />
+                  <Bars
+                    data={(student.subjectCombinations ?? []).map(
+                      (group) => ({
+                        label:
+                          group.subjects
+                            .map((key) => snapshot.subjects[key] ?? key)
+                            .join("·") +
+                          (group.subjects.length === 1 ? "만" : ""),
+                        value: group.value,
+                        color:
+                          group.subjects.length > 1 ? COLORS[2] : "#9aacc3",
+                      }),
+                    )}
+                    limit={4}
+                    title="과목 수강 조합"
+                  />
+                </div>
               </>
             )}
           </Panel>
           <Panel
-            title="학년별 학생"
-            note="재원생 전체 · 미입력 포함"
+            title="학년별 재원생"
+            note="학원설정 학년 순 · 영어·수학 수강 구성"
             href="/students"
             sections={[v.students]}
           >
-            {student && (
-              <Bars
-                data={student.grades}
-                limit={7}
-                color={COLORS[1]}
-                title="학년별 재원생"
-              />
-            )}
+            {student && <GradeSplitChart split={student.gradeSplit} />}
           </Panel>
           <Panel
             title="학교별 학생"
@@ -747,7 +616,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               ))}
           </Panel>
           <Panel
-            title="등록 상담 전환"
+            title="콜&상담 전환"
             note={`${snapshot.today.slice(0, 4)}년 상담 접수 기준`}
             href="/enrollment?view=stats"
             sections={[v.admissions]}

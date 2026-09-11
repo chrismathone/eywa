@@ -4,7 +4,7 @@ import { BackLink } from "@/components/back-link";
 import { getEnrollmentConsultationById } from "@/features/enrollment/server/queries";
 import { ConsultationFullForm } from "../../_components/consultation-full-form";
 
-export const metadata = { title: "등록상담 수정 — eywa" };
+export const metadata = { title: "콜&상담 수정 — eywa" };
 
 export default async function EditEnrollmentPage({
   params,
@@ -21,7 +21,7 @@ export default async function EditEnrollmentPage({
     <div className="mx-auto max-w-4xl space-y-6">
       <BackLink href={`/enrollment/${id}`} label="상세로" />
       <header className="border-border space-y-1 border-b pb-5">
-        <p className="eyebrow">등록상담 수정</p>
+        <p className="eyebrow">콜&상담 수정</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">{c.prospectName}</h1>
       </header>
 

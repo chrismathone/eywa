@@ -46,9 +46,11 @@ function initial(): OverviewSnapshot {
         data: {
           enrolled: 7,
           subjects: [],
-          grades: [],
           levels: [],
           schools: [],
+          concurrent: 0,
+          programs: { eie: 0, injaewon: 0, math: 0, both: 0, noEnrollment: 7, otherOnly: 0 },
+          gradeSplit: { rows: [], neither: 7 },
         },
         at: Date.now(),
         error: false,

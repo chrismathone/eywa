@@ -6,6 +6,7 @@
  */
 import type { MenuKey } from "@/lib/permissions";
 import { balancedTake } from "@/lib/collections/balanced-take";
+import { absentDayHref, intakeDayHref, studentsFirstClassHref } from "./overview/kpi-links";
 export {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
@@ -15,9 +16,14 @@ export type TodayActionAccess = "read" | "write" | "manage-staff";
 
 export type TodayActionsRaw = {
   /**
-   * 오늘 결석(status=absent) 학생 — 학생 단위 dedupe 후.
-   * ⚠️ "무단결석"이 아니다: 공결 상태는 폐지돼(2026-07-10) 사전 통보 결석도 전부 `absent`로 저장된다.
-   * 라벨을 다시 "무단결석"으로 되돌리지 말 것 — 연락 없이 빠진 학생 수로 읽혀 실제보다 과장된다.
+   * 신호의 **기준일**(YYYY-MM-DD) — 브리핑은 어제 기준으로 모으므로 '오늘'과 다르다. 항목 링크가 이 날짜를 쓴다
+   * (결석 → 그날 출석부 결석 학생, 첫 수업·접수 → 그날 목록).
+   */
+  date: string;
+  /**
+   * 기준일 결석 학생 — **한 교시도 안 온 학생**만(결석·공결, 운영실 KPI와 같은 `foldAbsentStudents`).
+   * 일부 교시만 결석한 학생은 여기 없다(운영실 팝업·출석부에서 '일부 교시 결석'으로 따로 보인다).
+   * ⚠️ "무단결석"이 아니다: 사전 통보 결석도 결석이다 — 라벨을 "무단결석"으로 되돌리지 말 것(연락 없이 빠진 수로 과장된다).
    */
   absentToday: { studentId: string; name: string; subject: string | null; preNotified: boolean }[];
   /**
@@ -51,12 +57,17 @@ export type TodayActionsRaw = {
   /** 오늘 휴가 중인 직원 */
   leavesToday: { name: string }[];
   /**
-   * 오늘 **처음 오는 학생 · 오늘이 마지막인 학생**(운영실 검토 2026-09-09, 3/3 합의).
+   * 오늘 **첫 수업 학생 · 오늘이 마지막인 학생**(운영실 검토 2026-09-09, 3/3 합의).
    * 🔴 판정은 수강 행이 아니라 **학생 단위**다([`day-arrivals.ts`](./day-arrivals.ts)) — 반을 하나 더 받은
    *    학생이 '첫 수업'으로, 반 하나만 뺀 학생이 '마지막 수업'으로 잡히던 실측 오류를 그 순수 함수가 막는다.
+   * 🔴 `starting` = 첫 등원(`first`) + 새 과목(`newSubject`) — 운영실 KPI '오늘첫수업'·원생목록 `first=`와
+   *    **같은 함수의 결과 전체**다(같은 이름의 숫자가 갈리면 안 된다 — 원장 규칙, 링크 포함).
    * ⚠️ 라벨은 '퇴원'이 아니라 **'오늘 마지막 수업'** — 휴원으로 들어가는 학생도 여기 잡힌다.
    */
-  dayArrivals: { starting: { studentId: string; name: string }[]; ending: { studentId: string; name: string }[] };
+  dayArrivals: {
+    starting: { studentId: string; name: string; kind: "first" | "newSubject" }[];
+    ending: { studentId: string; name: string }[];
+  };
   /** 오늘 접수된 등록상담(QR 공개접수·데스크 입력) — 칸반을 열기 전엔 아무도 모른다. */
   newIntakeToday: { count: number; names: string[] };
   /**
@@ -276,7 +287,8 @@ export function buildTodayActions(
     items.push({
       key: "absent",
       severity: "danger",
-      // 공결 폐지 이후 absent가 유일한 결석 상태다 — "무단결석"으로 부르지 말 것(raw 주석 참조).
+      // 결석·공결로 한 교시도 안 온 학생(공결은 2026-07-10 입력 폐지 — 옛 행·정정분만 걸린다).
+      // 사전 통보 결석도 결석이다 — "무단결석"으로 부르지 말 것(raw 주석 참조).
       label: "오늘 결석",
       count: raw.absentToday.length,
       unit: "명",
@@ -284,7 +296,8 @@ export function buildTodayActions(
       note: preNotifiedCount > 0 ? `연락 필요 ${unnotified.length} · 사전 통보 ${preNotifiedCount}` : null,
       // 학생은 이미 dedupe돼 있다 — 두 과목에서 결석한 학생은 두 과목 모두에 잡히지 않고 첫 기록 과목에만 든다.
       bySubject: groupBySubject(raw.absentToday, subjectLabel),
-      href: "/attendance",
+      // 그 기준일의 결석 학생 목록(브리핑이면 어제) — 운영실 KPI ↗와 같은 목적지.
+      href: absentDayHref(raw.date),
       menuKey: "attendance",
       requiredAccess: "read",
     });
@@ -293,7 +306,8 @@ export function buildTodayActions(
   // ── 오늘 사람 변동 — 맞이·환송·명단 수정으로 이어지는 신호(운영실 검토 2026-09-09, 3/3 합의).
   //    헤더 재원 증감은 '이번 달', 추세 카드는 '7일'이라 "오늘 맞이할 아이"를 아무 화면도 말해 주지 않았다.
   if (raw.dayArrivals.starting.length > 0) {
-    const only = raw.dayArrivals.starting.length === 1 ? raw.dayArrivals.starting[0] : null;
+    // 첫 수업 = 첫 등원 + 새 과목(운영실 KPI '오늘첫수업'과 같은 함수·같은 숫자). 새 과목이 있으면 카드와 같은 말로 갈라 적는다.
+    const newSubject = raw.dayArrivals.starting.filter((s) => s.kind === "newSubject").length;
     items.push({
       key: "arrivals-start",
       severity: "amber",
@@ -301,9 +315,10 @@ export function buildTodayActions(
       count: raw.dayArrivals.starting.length,
       unit: "명",
       detail: nameList(raw.dayArrivals.starting.map((s) => s.name)),
-      note: null,
+      note: newSubject > 0 ? `첫 등원 ${raw.dayArrivals.starting.length - newSubject} · 새 과목 ${newSubject}` : null,
       bySubject: [], // 학생 단위 판정이라 과목 축이 없다(한 학생이 여러 과목으로 시작할 수 있다).
-      href: only ? `/students/${only.studentId}` : "/students",
+      // 그날 첫 수업 목록(원생목록 first=) — 항목 숫자 = 카드 숫자 = 목록 인원(같은 함수).
+      href: studentsFirstClassHref(raw.date),
       menuKey: "students",
       requiredAccess: "read",
     });
@@ -336,7 +351,8 @@ export function buildTodayActions(
       detail: nameList(raw.newIntakeToday.names, 3, raw.newIntakeToday.count),
       note: null,
       bySubject: [],
-      href: "/enrollment",
+      // 그날 접수된 콜&상담 목록(created_at KST 하루) — 운영실 KPI '신규문의' ↗와 같은 목적지.
+      href: intakeDayHref(raw.date),
       menuKey: "enrollment",
       requiredAccess: "read",
     });
@@ -399,7 +415,7 @@ export function buildTodayActions(
     {
       key: "failed-analysis-enrollment",
       count: raw.failedAnalysis.enrollment,
-      label: "등록상담 녹음 분석 실패",
+      label: "콜&상담 녹음 분석 실패",
       href: "/enrollment",
       menuKey: "enrollment",
       requiredAccess: "write",

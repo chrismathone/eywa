@@ -11,6 +11,7 @@ const EMPTY_RAW: TodayActionsRaw = {
   absentToday: [],
   unrecordedYesterday: [],
   yesterday: "2026-07-15",
+  date: "2026-07-15",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
   requestedTextbooks: 0,
@@ -61,6 +62,10 @@ describe("buildDailyBriefingPayload", () => {
     expect(labels).toContain("어제 미작성 보고서");
     expect(labels).toContain("어제 출석 미기록");
     expect(labels.some((label) => label.includes("휴가"))).toBe(false);
+    // 결석 항목 링크는 **그 신호의 기준일**(어제) 출석부 결석 학생 — '오늘' 출석부로 가면 다른 날을 연다.
+    expect(payload.attention.find((item) => item.key === "absent")?.href).toBe(
+      "/attendance/2026-07-15?status=absent",
+    );
     expect(payload.today.leaves).toEqual(["박강사"]);
     expect(payload.today.pendingLeaveApprovals).toBe(1);
   });

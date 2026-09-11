@@ -20,7 +20,7 @@ export async function generatePrepBrief(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "enrollment"))) {
-    return { error: "등록상담 권한이 없습니다" };
+    return { error: "콜&상담 권한이 없습니다" };
   }
 
   // 사실 수집은 액션 안에서(쿠키 세션 = RLS 스코프 유지 — after() 안에선 요청 컨텍스트가 없다).

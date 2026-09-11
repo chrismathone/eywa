@@ -143,6 +143,23 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
 /**
+ * URL에서 온 `YYYY-MM-DD`가 **달력에 실제로 있는 날**인가 — 모양 + 왕복 검사(`2026-02-30`·`2026-13-01`은 거짓).
+ * 🔴 모양만 보고 통과시키면 없는 날짜가 PostgREST에 실려 400 → 화면 500이 된다. 거짓이면 호출부는 **필터 없음**으로.
+ */
+export function isValidYmd(raw: unknown): raw is string {
+  if (typeof raw !== "string" || !YMD.test(raw)) return false;
+  const [y, m, d] = raw.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!));
+  // 0~99년은 Date.UTC가 1900년대로 옮겨 버린다 — 왕복 비교가 그것까지 걸러낸다.
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m! - 1 && dt.getUTCDate() === d;
+}
+
+/** URL에서 온 `YYYY-MM`이 실제로 있는 달인가(01~12). 거짓이면 호출부는 필터 없음으로. */
+export function isValidYm(raw: unknown): raw is string {
+  return typeof raw === "string" && /^\d{4}-\d{2}$/.test(raw) && isValidYmd(`${raw}-01`);
+}
+
+/**
  * 작성·발송 대상 날짜 정규화 — 사용자가 고른 날짜(YYYY-MM-DD)를 안전 범위로 클램프.
  * 빈값·형식오류·미래(오늘 초과)는 KST 오늘로. **과거는 그대로**(저장 허용) — 발송 too_old 가드
  * (isClassnoteAllowed=전 달 1일 이후)가 별도로 실발송 범위를 강제한다. 순수 함수(Vitest).

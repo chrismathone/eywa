@@ -2,16 +2,14 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { inclusiveDateWindowStart, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import {
-  effectiveAttendanceRecords,
-  type EffectiveAttendanceRecord,
-} from "@/features/attendance/effective-records";
 import { HUMAN_RESOLVED_STATUSES, STUCK_MINUTES } from "@/features/report-admin/classnote-queue";
 import { getTenantSettings, getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { isHolidayOn } from "@/features/class-sheets/lib/holiday";
-import { isPreNotified } from "../absence-reasons";
-import { resolveDayArrivals, type DayEnrollmentRow } from "../day-arrivals";
+import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
+import type { AbsentDay } from "../absent-students";
+import { getAbsentStudents } from "./absent-students";
+import { getDayArrivals } from "./day-arrivals-query";
 import { classesWithFinishedPeriod } from "../day-recording";
 import { isReportTrackedSubject } from "../report-subjects";
 import { ONBOARDING_ITEMS, newcomerWindowStart, statusOf } from "@/features/newcomers/onboarding-items";
@@ -78,15 +76,6 @@ function scopeTenant<T>(query: T, db: TenantScope): T {
     db.tenantId,
   ) as unknown as T;
 }
-
-type TodayAttendanceRow = EffectiveAttendanceRecord & {
-  status: string;
-  /** 결석 사유 — `(데스크 접수)` 표식이 사전 통보 판정에 쓰인다(absence-reasons `isPreNotified`). */
-  note?: string | null;
-  student: { name?: string } | { name?: string }[] | null;
-  // 과목별 분해용 — 반이 곧 과목이다(lesson_reports.subject는 채움율이 낮아 못 쓴다).
-  class: { subject?: string | null } | { subject?: string | null }[] | null;
-};
 
 export type TodayActionSignalScope = {
   attendance?: boolean;
@@ -337,60 +326,15 @@ async function dayArrivalsSignal(
   date: string,
   db?: TenantScope,
 ): Promise<TodayActionsRaw["dayArrivals"]> {
-  // 🔴 상한을 걸지 않는다 — 시간표 컷오버 날(9/1 등)엔 반이동으로 하루에 수백 건이 함께 시작·종료해서
-  //    `.limit()`이면 **조용히 잘린다**([[#54]]). 평소엔 하루 수 건이라 왕복 1회로 끝난다.
-  const candidates = await fetchAllPaged<{ student_id: string }>((from, to) =>
-    scopeTenant(
-      supabase
-        .from("enrollments")
-        .select("student_id")
-        .or(`start_date.eq.${date},end_date.eq.${date}`)
-        // OFFSET 페이지 안정화 — unique tie-break order 필수(batch.ts 계약)
-        .order("id")
-        .range(from, to),
-      db,
-    ),
+  // 🔴 운영실 KPI '오늘첫수업'·원생목록 `first=`와 **같은 함수**(getDayArrivals — getFirstClassStudents는 그 `.starting`)다.
+  //    '첫 수업' = 첫 등원 + 새 과목 — 같은 이름의 두 숫자가 갈리면 안 된다(원장 규칙: 링크까지 숫자가 같아야 한다).
+  //    조회 규약(상한 없음·청크 × 페이징)도 거기 있다. 과목 묶음은 학원설정(cron은 테넌트 id로 읽는다).
+  const settings = db ? getTenantSettingsByTenantId(db.tenantId) : getTenantSettings();
+  return getDayArrivals(
+    date,
+    settings.then((s) => s.operations.subjects),
+    { supabase, tenantId: db?.tenantId },
   );
-  const studentIds = [...new Set(candidates.map((row) => row.student_id))];
-  if (studentIds.length === 0) return { starting: [], ending: [] };
-
-  // 🔴 `fetchInChunks`가 아니라 **`fetchAllPagedInChunks`** — 청크는 URL 414만 막고 **1000행 절단은 안 막는다**
-  //    (2026-09-07 실측: 수업목록 요일 칸이 그렇게 조용히 비었다). 학생 100명 청크가 각자 수강 10건이면 바로 닿는다.
-  const rows = await fetchAllPagedInChunks<{
-    student_id: string;
-    start_date: string;
-    end_date: string | null;
-    on_hold: boolean;
-    is_transferred: boolean;
-    is_transferred_in: boolean;
-    student: { name?: string } | { name?: string }[] | null;
-  }>(studentIds, (chunk, from, to) =>
-    scopeTenant(
-      supabase
-        .from("enrollments")
-        .select(
-          "student_id, start_date, end_date, on_hold, is_transferred, is_transferred_in, student:student_id ( name )",
-        )
-        .in("student_id", chunk),
-      db,
-    )
-      // OFFSET 페이지 안정화 — unique tie-break order 필수(batch.ts 계약)
-      .order("id")
-      .range(from, to),
-  );
-  const mapped: DayEnrollmentRow[] = rows.map((row) => {
-    const student = (Array.isArray(row.student) ? row.student[0] : row.student) ?? undefined;
-    return {
-      studentId: row.student_id,
-      studentName: student?.name ?? "",
-      startDate: row.start_date,
-      endDate: row.end_date,
-      isTransferred: !!row.is_transferred,
-      isTransferredIn: !!row.is_transferred_in,
-      onHold: !!row.on_hold,
-    };
-  });
-  return resolveDayArrivals(mapped, date);
 }
 
 /**
@@ -771,25 +715,11 @@ export async function getTodayActionSignals(
         menuKey: "attendance",
         requiredAccess: "read",
       },
-      [] as TodayAttendanceRow[],
-      async () => {
-        const rows = await fetchAllPaged<TodayAttendanceRow>((from, to) =>
-          scopeTenant(
-            supabase
-              .from("attendance_records")
-              .select(
-                // note는 **사전 통보 판정에만** 쓴다 — 사유 원문은 화면에 내보내지 않는다(건강·가정사가 그대로 적혀 있다).
-                "id, student_id, class_id, session_date, status, recorded_at, note, student:student_id ( name ), class:class_id ( subject )",
-              )
-              .eq("session_date", today)
-              .order("recorded_at", { ascending: true })
-              .order("id", { ascending: true })
-              .range(from, to),
-            db,
-          ),
-        );
-        return effectiveAttendanceRecords(rows).filter((row) => row.status === "absent");
-      },
+      { absent: [], partial: [] } as AbsentDay,
+      // 운영실 KPI '결석학생'·출석부 `?status=absent`와 **같은 함수** — 결석·공결, 칸(교시)별 최신 정정, 학생 단위 접기.
+      // ⚠️ 2026-09-11부터: 공결도 세고(입력은 2026-07-10 폐지 — 옛 행·정정분만), **한 교시도 안 온 학생만** 센다
+      //    (일부 교시 결석은 `partial`로 빠진다 — 아래 absentToday는 `absent` 무리만 싣는다).
+      () => getAbsentStudents(today, { supabase, tenantId: db?.tenantId }),
     ),
     collectSignal(
       enabled("attendance"),
@@ -822,7 +752,7 @@ export async function getTodayActionSignals(
       enabled("enrollment"),
       {
         key: "enrollment-analysis",
-        label: "등록상담 분석",
+        label: "콜&상담 분석",
         href: "/enrollment",
         menuKey: "enrollment",
         requiredAccess: "write",
@@ -1066,25 +996,10 @@ export async function getTodayActionSignals(
       },
       { count: 0, names: [] } as TodayActionsRaw["newIntakeToday"],
       async () => {
-        // 🔑 접수 시각은 `received_date`(사람이 적는 폼 값)가 아니라 **행이 생긴 시각**이다 —
-        //    QR 공개접수는 그 칸을 안 채운다. 창은 KST 하루(오프셋을 문자열에 박아 서버 UTC와 무관하게).
-        const result = await scopeTenant(
-          supabase
-            .from("enrollment_consultations")
-            .select("prospect_name", { count: "exact" })
-            .gte("created_at", `${today}T00:00:00+09:00`)
-            .lt("created_at", `${tomorrow}T00:00:00+09:00`)
-            .order("created_at", { ascending: false })
-            .limit(20),
-          db,
-        );
-        if (result.error) throw new Error(`today intake: ${result.error.message}`);
-        // ⚠️ 배열 길이를 건수로 쓰지 않는다 — 상한(20)에 닿으면 영원히 "20"이 된다([[#89]]).
-        const rows = (result.data ?? []) as { prospect_name: string | null }[];
-        return {
-          count: result.count ?? rows.length,
-          names: rows.map((row) => row.prospect_name?.trim() || "(이름 미상)"),
-        };
+        // 운영실 KPI '신규문의'·목록 `received=`와 **같은 함수·같은 KST 경계**(행이 생긴 시각 created_at 기준).
+        // 하루치 전건이라 배열 길이가 곧 건수다(상한 없음 — [[#89]]).
+        const rows = await getIntakeOnDay(today, { supabase, tenantId: db?.tenantId });
+        return { count: rows.length, names: rows.map((row) => row.name) };
       },
     ),
     collectSignal(
@@ -1112,29 +1027,6 @@ export async function getTodayActionSignals(
       () => scheduledTomorrowSignal(supabase, tomorrow, db),
     ),
   ]);
-
-  // 학생 단위로 접되, **사전 통보 여부는 AND**로 접는다 — 그 학생의 결석 중 하나라도 통보가 없으면
-  // 연락 대상이다(통보된 건 하나 때문에 무통보 결석이 조용히 묻히면 안 된다).
-  const seen = new Map<string, { name: string; subject: string | null; preNotified: boolean }>();
-  for (const row of absent.value) {
-    const student = (Array.isArray(row.student) ? row.student[0] : row.student) ?? undefined;
-    const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
-    const preNotified = isPreNotified({
-      note: row.note ?? null,
-      recorded_at: row.recorded_at,
-      session_date: row.session_date,
-    });
-    const prev = seen.get(row.student_id);
-    if (prev) {
-      prev.preNotified = prev.preNotified && preNotified;
-      continue;
-    }
-    seen.set(row.student_id, {
-      name: student?.name ?? "(학생)",
-      subject: klass?.subject ?? null,
-      preNotified,
-    });
-  }
 
   let makeeduIssue: TodayActionsRaw["makeeduIssue"] = null;
   if (makeedu.value.syncEnabled && makeedu.value.rows.length > 0) {
@@ -1181,7 +1073,14 @@ export async function getTodayActionSignals(
   ];
 
   return {
-    absentToday: [...seen].map(([studentId, info]) => ({ studentId, ...info })),
+    date: today,
+    // 학생 단위 접기·사전 통보 AND 규약은 foldAbsentStudents(absent-students.ts) 한 벌에 있다 — 한 교시도 안 온 학생만.
+    absentToday: absent.value.absent.map(({ studentId, name, subject, preNotified }) => ({
+      studentId,
+      name,
+      subject,
+      preNotified,
+    })),
     unrecordedYesterday: dailyProcessing.value,
     yesterday,
     unrecordedToday: unrecordedTodayClasses.value,

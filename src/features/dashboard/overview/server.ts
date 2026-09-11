@@ -1,16 +1,33 @@
 import "server-only";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
-import {
-  effectiveTeacherId,
-  effectiveTeacherScope,
-} from "@/lib/auth/view-mode";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
 import { canAccess, MENU_KEYS, type MenuKey } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
-import { getEnrolledStatCounts } from "@/features/students/server/queries";
-import { getClassesStats } from "@/features/classes/server/queries";
+import { kstTimeOf, kstToday } from "@/lib/date-kst";
+import {
+  countEnrolledStudents,
+  fetchActiveEnrolledEnrollments,
+  fetchEnrolledStudents,
+} from "@/features/students/server/enrolled-programs";
+import {
+  composeEnrolled,
+  enrolledSubjectCounts,
+  gradeSplit,
+  summarizePrograms,
+} from "@/features/students/enrolled-composition";
+import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
+import {
+  inWithdrawalWindow,
+  withdrawalMonthWindow,
+  withdrawalProgram,
+} from "@/features/withdrawals/window";
+import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
+import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
+import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getRecentAnnouncements } from "@/features/dashboard/server/queries";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
 import {
@@ -61,10 +78,13 @@ import {
   firstClassScheduleCandidates,
 } from "./admissions-links-server";
 import { reportError } from "@/lib/observability/report-error";
-import { staffDisplayRole, upcomingAdmissionsEvents } from "./display";
+import {
+  admissionsEventKind,
+  staffDisplayRole,
+  upcomingAdmissionsEvents,
+} from "./display";
 import {
   distribution,
-  datedWithdrawals,
   monthlyChanges,
   monthKeys,
   type Area,
@@ -76,29 +96,44 @@ import {
   type Sections,
 } from "./model";
 
-async function students(): Promise<OverviewData["students"]> {
+type Settings = Awaited<ReturnType<typeof getTenantSettings>>;
+
+/**
+ * 재원생 — KPI '재원생' 카드·팝업, 동시 수강, 학년별 재원생, 구성 패널.
+ * 🔑 카드 숫자는 원생목록과 **같은 count(head)**(`countEnrolledStudents`), 과목별·프로그램·학년 분해는 원생목록과
+ *    **같은 순수 집계**(`enrolledSubjectCounts`·`composeEnrolled` — 원생목록 `program=` 필터도 composeEnrolled를 지난다).
+ * 🔑 B1: 운영실 갱신(서버 액션)은 React cache가 조회를 묶지 않는다 — 활성 수강·재원생 명단·재원 수를 **여기서 한 번씩**
+ *    받아 두 집계에 넘기고, 강사 스코프·학원설정은 loadOverview가 한 번 푼 것을 받는다(다시 부르면 호출마다 users를 읽는다).
+ */
+async function students(
+  scope: TeacherScope | null,
+  settingsPromise: Promise<Settings>,
+): Promise<OverviewData["students"]> {
   const db = await createClient();
-  const [counts, scope, rows] = await Promise.all([
-    getEnrolledStatCounts(),
-    effectiveTeacherScope(),
-    fetchAllPaged<{ id: string; grade: string | null; school: string | null }>(
-      (from, to) =>
-        db
-          .from("students")
-          .select("id, grade, school")
-          .eq("status", "enrolled")
-          .order("id")
-          .range(from, to),
-    ),
+  const [enrolled, studentRows, rows, settings] = await Promise.all([
+    countEnrolledStudents(db, scope),
+    fetchEnrolledStudents(db),
+    fetchActiveEnrolledEnrollments(db),
+    settingsPromise,
   ]);
-  const ids = scope ? new Set(scope.studentIds) : null;
-  const visible = ids ? rows.filter((r) => ids.has(r.id)) : rows;
+  const composition = composeEnrolled({
+    students: studentRows,
+    rows,
+    scope,
+    subjects: settings.operations.subjects,
+  });
+  const counts = enrolledSubjectCounts(rows, scope);
+  const visible = composition.students;
+  const programs = summarizePrograms(
+    visible.map((r) => r.id),
+    composition.programs,
+    composition.active,
+  );
   return {
-    enrolled: visible.length,
+    enrolled,
     subjects: Object.entries(counts.bySubject)
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => b.value - a.value),
-    grades: distribution(visible.map((r) => r.grade)),
     levels: distribution(
       visible.map((r) =>
         isPreschoolGrade(r.grade)
@@ -109,16 +144,67 @@ async function students(): Promise<OverviewData["students"]> {
     ),
     schools: distribution(visible.map((r) => r.school)),
     schoolGroups: schoolsByLevel(visible),
-    concurrent: counts.concurrent,
+    // 동시 수강 = 영어 + 수학(원장 2026-09-11 재정의) — gradeSplit 보라 합계와 같은 subjectMixOf 판정.
+    concurrent: programs.both,
     subjectCombinations: counts.combinations,
+    programs,
+    gradeSplit: gradeSplit(visible, composition.programs, settings.operations.gradeLevels),
   };
 }
 
-async function changes(today: string) {
+/**
+ * KPI '퇴원생' — 이번 달 1일 ~ min(말일, 오늘)(KST). 추이 패널과 **같은 행**(loadOverview가 한 번 받은 getWithdrawalsInWindow)을
+ * 퇴원관리 `range=month`와 **같은 창 판정**(withdrawalMonthWindow + inWithdrawalWindow)으로 거른다 — 카드 = 패널 이번 달 칸 = 퇴원관리.
+ */
+async function monthWithdrawals(
+  rowsPromise: Promise<WindowWithdrawal[]>,
+  today: string,
+  settingsPromise: Promise<Settings>,
+): Promise<OverviewData["withdrawals"]> {
+  const month = today.slice(0, 7);
+  const win = withdrawalMonthWindow(month, today);
+  const [rows, settings] = await Promise.all([rowsPromise, settingsPromise]);
+  return {
+    month,
+    rows: rows
+      .filter((row) =>
+        inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to),
+      )
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        schoolGrade: schoolGradeLabel(row.school, row.grade) || null,
+        withdrawnAt: row.withdrawnAt,
+        program: withdrawalProgram(row, settings.operations.subjects),
+      })),
+  };
+}
+
+/** KPI '오늘첫수업' — 원생목록 `first=`와 같은 함수 + 같은 강사 스코프(원생목록은 스코프 화이트리스트를 건다). */
+async function firstClasses(
+  today: string,
+  scope: TeacherScope | null,
+  settingsPromise: Promise<Settings>,
+): Promise<OverviewData["firstClass"]> {
+  const settings = await settingsPromise;
+  const list = await getFirstClassStudents(today, settings.operations.subjects);
+  const ids = scope ? new Set(scope.studentIds) : null;
+  return ids ? list.filter((s) => ids.has(s.studentId)) : list;
+}
+
+/**
+ * 등록·퇴원 추이(최근 6개월).
+ * 🔴 퇴원 칸은 KPI '퇴원생'·퇴원관리와 **같은 모집단**(getWithdrawalsInWindow: status=withdrawn · 시스템 정리 제외 ·
+ *    마지막 종료 수강 규칙 · 강사 스코프 없음)이다 — 이번 달 칸(1일~오늘) = 카드. 등록 칸은 종전대로 강사 스코프를 건다.
+ */
+async function changes(
+  today: string,
+  scope: TeacherScope | null,
+  withdrawalRows: Promise<WindowWithdrawal[]>,
+) {
   const db = await createClient();
   const fromDate = `${monthKeys(today)[0]}-01`;
-  const [scope, enrolled, withdrawn] = await Promise.all([
-    effectiveTeacherScope(),
+  const [enrolled, withdrawn] = await Promise.all([
     fetchAllPaged<{ id: string; enrolled_at: string }>((from, to) =>
       db
         .from("students")
@@ -127,24 +213,13 @@ async function changes(today: string) {
         .order("id")
         .range(from, to),
     ),
-    fetchAllPaged<{
-      id: string;
-      withdrawn_at: string;
-      enrollments: { id: string }[];
-    }>((from, to) =>
-      db
-        .from("students")
-        .select("id,withdrawn_at,enrollments(id)")
-        .gte("withdrawn_at", fromDate)
-        .order("id")
-        .range(from, to),
-    ),
+    withdrawalRows,
   ]);
   const ids = scope ? new Set(scope.studentIds) : null;
   return monthlyChanges(
     today,
     enrolled.filter((r) => !ids || ids.has(r.id)).map((r) => r.enrolled_at),
-    datedWithdrawals(withdrawn.filter((r) => !ids || ids.has(r.id))),
+    withdrawn.map((r) => r.withdrawnAt),
   );
 }
 
@@ -414,6 +489,17 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   );
   const today = kstToday();
   const settingsPromise = getTenantSettings();
+  // 🔑 B1 — 강사 스코프를 **한 번만** 푼다. 서버 액션 갱신에선 React cache가 안 묶어서 영역마다 부르면
+  //    getCurrentUser가 그만큼 users를 다시 읽는다. 영역엔 푼 값을 넘긴다.
+  const teacherIdPromise = effectiveTeacherId();
+  const scopePromise = teacherIdPromise.then((id) => (id ? getTeacherScope(id) : null));
+  // 이번 달 퇴원(KPI)과 등록·퇴원 추이(6개월)가 **같은 행**을 쓴다 — 한 번만 받는다(카드 = 패널 이번 달 칸).
+  const withdrawalRows =
+    allowed.includes("withdrawals") || allowed.includes("students")
+      ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today)
+      : Promise.resolve([] as WindowWithdrawal[]);
+  // 공유 약속이 영역보다 먼저 거절돼도 '처리 안 된 거절'로 새지 않게 — 각 영역은 자기 try/catch에서 다시 받는다.
+  for (const shared of [teacherIdPromise, scopePromise, withdrawalRows]) void shared.catch(() => undefined);
   const history = allowed.includes("attendance")
     ? attendanceHistory(today)
     : null;
@@ -438,8 +524,20 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       })(),
     );
   }
-  add("students", ["students"], students);
-  add("changes", ["students"], () => changes(today));
+  add("students", ["students"], async () => students(await scopePromise, settingsPromise));
+  add("changes", ["students"], async () => changes(today, await scopePromise, withdrawalRows));
+  // ── KPI 여섯 칸(원장 2026-09-11) — 카드·팝업·목적지 화면이 같은 함수를 부른다.
+  add("withdrawals", ["withdrawals"], () => monthWithdrawals(withdrawalRows, today, settingsPromise));
+  add("intake", ["enrollment"], async () =>
+    (await getIntakeOnDay(today)).map((row) => ({
+      id: row.id,
+      name: row.name,
+      time: kstTimeOf(row.createdAt),
+    })),
+  );
+  add("firstClass", ["students"], async () => firstClasses(today, await scopePromise, settingsPromise));
+  // 출석부 `?status=absent`와 같은 함수·같은 강사 스코프(teacher-axis) — 겸직 강사뷰면 그 강사가 가르치는 반만.
+  add("absent", ["attendance"], async () => getScopedAbsentStudents(today, await teacherIdPromise));
   add("attendance", ["attendance"], async () => (await history)!.snapshot);
   add("processing", ["attendance"], () => getDailyProcessingStatus(today));
   add("attendanceTrend", ["attendance"], async () => (await history)!.trend);
@@ -507,7 +605,6 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       }),
     ),
   );
-  add("classes", ["classes"], getClassesStats);
   add("staff", ["staff"], staff);
   add("operations", [], () => operations(allowed, user.id));
   add("notices", [], () => getRecentAnnouncements(user.systemRole, 4));
@@ -549,6 +646,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       endDate: event.endDate,
       startTime: event.startTime,
       source: event.source,
+      kind: admissionsEventKind(event),
       matchedClass:
         matchFirstClass(
           event,
@@ -584,7 +682,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   });
   await Promise.all(jobs);
   const settings = await settingsPromise;
-  const teacherId = await effectiveTeacherId();
+  const teacherId = await teacherIdPromise;
   return {
     scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}`,
     tenantId: user.tenantId,

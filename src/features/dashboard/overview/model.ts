@@ -13,7 +13,11 @@ import type {
 import type { TodaySlot } from "@/features/timetable/server/queries";
 import type { MenuKey } from "@/lib/permissions";
 import type { ExpenseSummary } from "@/features/billing/server/expense-queries";
-import { isSystemBulkWithdrawal } from "@/features/withdrawals/system-bulk";
+import type { Program } from "@/features/students/program";
+import type { GradeSplit, ProgramSummary } from "@/features/students/enrolled-composition";
+import type { FirstClassStudent } from "@/features/dashboard/day-arrivals";
+import type { AbsentDay } from "@/features/dashboard/absent-students";
+import type { AdmissionsKind } from "./display";
 
 export type Distribution = { label: string; value: number }[];
 export type MonthChange = {
@@ -45,16 +49,37 @@ export type OperationCount = {
 };
 export type OverviewData = {
   students: {
+    /** 재원생 수 — 원생목록과 **같은** count(head · 강사 스코프). */
     enrolled: number;
     subjects: Distribution;
-    grades: Distribution;
     levels: Distribution;
     schools: Distribution;
     schoolGroups?: import("./student-composition").SchoolGroup[];
-    concurrent?: number;
+    /** 영어(EiE·인재원 영어) + 수학 동시 수강 — `gradeSplit`의 보라 합계와 같은 판정(subjectMixOf). */
+    concurrent: number;
     subjectCombinations?: { subjects: string[]; value: number }[];
+    /** 프로그램별 재원생(겹침 있음) + 수강 없음 — KPI '재원생' 팝업. */
+    programs: ProgramSummary;
+    gradeSplit: GradeSplit;
   };
   changes: MonthChange[];
+  /** KPI '퇴원생' — 이번 달 1일 ~ 오늘(KST) 퇴원, 시스템 정리 제외. 프로그램 = 마지막 수강 반. */
+  withdrawals: {
+    month: string;
+    rows: {
+      id: string;
+      name: string;
+      schoolGrade: string | null;
+      withdrawnAt: string;
+      program: Program | null;
+    }[];
+  };
+  /** KPI '신규문의' — 오늘(KST) 접수된 콜&상담. time = 접수 시각(KST HH:MM). */
+  intake: { id: string; name: string; time: string | null }[];
+  /** KPI '오늘첫수업' — 첫 등원 + 새 과목 첫 수업. */
+  firstClass: FirstClassStudent[];
+  /** KPI '결석학생' — 오늘 한 교시도 안 온 학생(결석·공결) + 따로 보이는 '일부 교시 결석'. */
+  absent: AbsentDay;
   attendance: AttendanceSnapshot | null;
   processing: ClassProcessing[];
   attendanceTrend: { date: string; rate: number | null; total: number }[];
@@ -86,7 +111,6 @@ export type OverviewData = {
     | "classroomName"
     | "status"
   >[];
-  classes: { total: number; active: number; totalSeats: number };
   staff: Distribution;
   operations: OperationCount[];
   notices: AnnouncementRow[];
@@ -97,6 +121,8 @@ export type OverviewData = {
     endDate: string;
     startTime: string | null;
     source: string;
+    /** 입학 일정 종류(단일 분류기 `admissionsEventKind`) — KPI '금일입테'는 levelTest만. */
+    kind: AdmissionsKind | null;
     matchedClass?: { id: string; name: string } | null;
   }[];
   englishSheet: {
@@ -167,21 +193,6 @@ export function monthKeys(today: string, count = 6): string[] {
       .toISOString()
       .slice(0, 7),
   );
-}
-
-/** Match the withdrawal page: unknown dates from system cleanup are not dated departures. */
-export function datedWithdrawals(
-  rows: { withdrawn_at: string; enrollments: { id: string }[] }[],
-): string[] {
-  return rows
-    .filter(
-      (row) =>
-        !isSystemBulkWithdrawal({
-          withdrawnAt: row.withdrawn_at,
-          hasEnrollmentHistory: row.enrollments.length > 0,
-        }),
-    )
-    .map((row) => row.withdrawn_at);
 }
 
 export function monthlyChanges(

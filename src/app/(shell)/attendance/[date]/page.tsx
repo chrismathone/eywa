@@ -17,7 +17,11 @@ import {
   type AttendanceStatusKey,
 } from "@/features/attendance/status-color";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps } from "@/features/owner/subjects";
+import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
+import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { isValidYmd } from "@/lib/date-kst";
+import { AbsentStudentsView } from "./_components/absent-students-view";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -47,11 +51,24 @@ export default async function AttendanceByDatePage({
   searchParams,
 }: {
   params: Promise<{ date: string }>;
-  searchParams: Promise<{ saved?: string; unlinked?: string; linkError?: string }>;
+  searchParams: Promise<{ saved?: string; unlinked?: string; linkError?: string; status?: string }>;
 }) {
   await requireAccess("attendance");
   const { date } = await params;
-  const { saved, unlinked, linkError } = await searchParams;
+  const { saved, unlinked, linkError, status } = await searchParams;
+  // 결석 학생 보기(운영실 KPI '결석학생' ↗) — 카드·팝업과 같은 함수(getScopedAbsentStudents)로 그 명단만 그린다.
+  // 🔴 강사(실 강사·겸직 강사뷰·'다른 강사 뷰')는 그날 **그 강사가 가르치는 반**(teacher-axis: 담임 ∪ 교시 담당)만 — 출석부 반 목록과 같은 규칙.
+  if (status === "absent" && isValidYmd(date)) {
+    const teacherId = await effectiveTeacherId();
+    const [day, settings] = await Promise.all([getScopedAbsentStudents(date, teacherId), getTenantSettings()]);
+    return (
+      <AbsentStudentsView
+        date={date}
+        day={day}
+        subjectLabel={subjectLabelRecord(settings.operations.subjects)}
+      />
+    );
+  }
   const [records, processing, { operations }] = await Promise.all([
     getAttendanceForDate(date),
     getDailyProcessingStatus(date),

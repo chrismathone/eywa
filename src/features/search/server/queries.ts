@@ -239,7 +239,7 @@ type EnrollmentRow = { id: string; prospect_name: string | null; prospect_school
 async function searchEnrollment(term: string): Promise<Axis> {
   const supabase = await createClient();
   const rows = rowsOf<EnrollmentRow>(
-    "등록상담",
+    "콜&상담",
     await supabase
       .from("enrollment_consultations")
       .select("id, prospect_name, prospect_school")
@@ -253,8 +253,8 @@ async function searchEnrollment(term: string): Promise<Axis> {
       (r): PaletteHit => ({
         kind: "enrollment",
         id: r.id,
-        title: r.prospect_name ?? "등록상담",
-        subtitle: r.prospect_school ?? "등록상담",
+        title: r.prospect_name ?? "콜&상담",
+        subtitle: r.prospect_school ?? "콜&상담",
       }),
     ),
   );
@@ -279,7 +279,7 @@ export async function searchPalette(q: string, role: SystemRole): Promise<Palett
     canStudents ? axisOf("원생", () => searchStudents(term)) : NO_HITS,
     canClasses ? axisOf("수업", () => searchClasses(term)) : NO_HITS,
     canConsultations ? axisOf("상담", () => searchConsultations(term)) : NO_HITS,
-    canEnrollment ? axisOf("등록상담", () => searchEnrollment(term)) : NO_HITS,
+    canEnrollment ? axisOf("콜&상담", () => searchEnrollment(term)) : NO_HITS,
   ]);
   const axes: [PaletteKind, Axis][] = [
     ["student", students],

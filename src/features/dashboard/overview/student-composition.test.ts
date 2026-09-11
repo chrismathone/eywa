@@ -36,11 +36,15 @@ describe("student composition", () => {
         ["science", new Set(["c"])],
       ]),
     );
-    expect(summary.concurrent).toBe(2);
+    expect(
+      summary.combinations
+        .filter((g) => g.subjects.length > 1)
+        .reduce((sum, g) => sum + g.value, 0),
+    ).toBe(2);
     expect(summary.combinations.reduce((sum, g) => sum + g.value, 0)).toBe(4);
     expect(
       summary.combinations.find((g) => g.subjects.length === 3)?.value,
     ).toBe(1);
-    expect(subjectEnrollmentSummary(new Map()).concurrent).toBe(0);
+    expect(subjectEnrollmentSummary(new Map()).combinations).toEqual([]);
   });
 });

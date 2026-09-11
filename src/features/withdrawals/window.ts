@@ -1,0 +1,94 @@
+/**
+ * 기간 안 퇴원생 + 퇴원생의 프로그램 — 순수 규칙(Vitest). 운영실 '퇴원생' 카드·팝업과 퇴원관리
+ * `range=month`·`program=` 필터가 같은 판정을 쓴다.
+ *
+ * 🔑 퇴원생의 프로그램 = **마지막으로 끝난 수강 반**의 프로그램 — 퇴원관리의 '마지막 반·과목'과 같은 근거.
+ *    그래서 한 학생은 프로그램 하나(또는 기타·미상)에만 들고, 프로그램별 인원의 합이 퇴원생 수와 같다.
+ * 🔴 '시스템 정리(날짜 미상)'는 기간 판정에서 뺀다 — 퇴원일이 실제 시점이 아니라 장부 날짜라 그 달에
+ *    세면 사실이 아니다([system-bulk.ts]와 월별 추이가 이미 쓰는 규칙).
+ */
+import { monthRange } from "@/lib/date-kst";
+import { programOf, type Program, type ProgramSubject } from "@/features/students/program";
+
+/**
+ * '이번 달' 퇴원 창 — 그 달 1일 ~ **min(말일, 오늘)**(KST, 양끝 포함).
+ * 🔴 오늘 이후로 적힌 퇴원(예정)은 아직 퇴원이 아니다 — 운영실 카드·추이 패널·퇴원관리 `range=month`가 이 한 함수를 쓴다.
+ * 지난 달이면 말일까지, 미래 달이면 빈 창(from > to)이다.
+ */
+export function withdrawalMonthWindow(month: string, today: string): { from: string; to: string } {
+  const { from, to } = monthRange(month);
+  return { from, to: to < today ? to : today };
+}
+
+export type EndedEnrollment = { id: string; end_date: string | null; start_date?: string | null };
+
+function compareEnded(a: EndedEnrollment, b: EndedEnrollment): number {
+  return (
+    (a.end_date ?? "").localeCompare(b.end_date ?? "") ||
+    (a.start_date ?? "").localeCompare(b.start_date ?? "") ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+/**
+ * 마지막으로 끝난 수강 한 줄 — 종료일 늦은 순 → 시작일 늦은 순 → id(결정적 tie-break).
+ * ⚠️ DB 정렬(`order end_date desc`)에 기대지 않는다 — 같은 종료일 두 줄의 순서가 조회마다 달라지면
+ *    퇴원관리와 운영실이 같은 학생을 다른 프로그램으로 센다.
+ */
+export function pickLastEnded<T extends EndedEnrollment>(rows: readonly T[]): T | null {
+  let best: T | null = null;
+  for (const row of rows) {
+    if (!row.end_date) continue;
+    if (!best || compareEnded(row, best) > 0) best = row;
+  }
+  return best;
+}
+
+/** 학생별 마지막 종료 수강. */
+export function lastEndedByStudent<T extends EndedEnrollment & { student_id: string }>(
+  rows: readonly T[],
+): Map<string, T> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.student_id) ?? [];
+    list.push(row);
+    grouped.set(row.student_id, list);
+  }
+  const out = new Map<string, T>();
+  for (const [studentId, list] of grouped) {
+    const last = pickLastEnded(list);
+    if (last) out.set(studentId, last);
+  }
+  return out;
+}
+
+/** 이 퇴원이 [from, to](양끝 포함, YYYY-MM-DD) 안인가 — 시스템 정리·날짜 없음은 제외. */
+export function inWithdrawalWindow(
+  row: { withdrawnAt: string | null; systemBulk: boolean },
+  from: string,
+  to: string,
+): boolean {
+  if (row.systemBulk || !row.withdrawnAt) return false;
+  const day = row.withdrawnAt.slice(0, 10);
+  return day >= from && day <= to;
+}
+
+/** 퇴원생의 프로그램 = 마지막 수강 반의 프로그램(programOf 단일 규칙). */
+export function withdrawalProgram(
+  row: { lastClassSubject: string | null; lastClassEnglishTrack?: string | null },
+  subjects: readonly ProgramSubject[],
+): Program | null {
+  return programOf({ subject: row.lastClassSubject, englishTrack: row.lastClassEnglishTrack ?? null }, subjects);
+}
+
+export type WithdrawalProgramCounts = Record<Program, number> & { other: number; total: number };
+
+/** 프로그램별 퇴원생 수 — 합(eie+injaewon+math+other) = total. */
+export function countWithdrawalPrograms(rows: readonly { program: Program | null }[]): WithdrawalProgramCounts {
+  const out: WithdrawalProgramCounts = { eie: 0, injaewon: 0, math: 0, other: 0, total: rows.length };
+  for (const row of rows) {
+    if (row.program) out[row.program] += 1;
+    else out.other += 1;
+  }
+  return out;
+}

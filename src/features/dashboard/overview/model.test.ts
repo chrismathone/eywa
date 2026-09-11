@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   distribution,
-  datedWithdrawals,
   mergeSnapshot,
   monthlyChanges,
   monthKeys,
@@ -9,6 +8,7 @@ import {
   type OverviewSnapshot,
 } from "./model";
 import { overviewTables, refreshDelay } from "./realtime";
+import { inWithdrawalWindow, withdrawalMonthWindow } from "@/features/withdrawals/window";
 
 const snapshot = (
   overrides: Partial<OverviewSnapshot> = {},
@@ -26,23 +26,25 @@ const snapshot = (
 const students = {
   enrolled: 8,
   subjects: [],
-  grades: [],
   levels: [],
   schools: [],
+  concurrent: 0,
+  programs: { eie: 0, injaewon: 0, math: 0, both: 0, noEnrollment: 8, otherOnly: 0 },
+  gradeSplit: { rows: [], neither: 8 },
 };
 
-it("excludes undated system cleanup from withdrawal trends, retaining known history", () => {
-  const dates = datedWithdrawals([
-    { withdrawn_at: "2026-07-10", enrollments: [] },
-    { withdrawn_at: "2026-07-03", enrollments: [] },
-    { withdrawn_at: "2026-07-10", enrollments: [{ id: "known" }] },
-    { withdrawn_at: "2026-07-20", enrollments: [] },
-  ]);
-  expect(dates).toEqual(["2026-07-10", "2026-07-20"]);
-  expect(
-    monthlyChanges("2026-09-10", [], dates).find((r) => r.month === "2026-07")
-      ?.withdrawn,
-  ).toBe(2);
+it("A1 — 이번 달 퇴원 = 1일~오늘: 카드(창 판정)와 추이 패널(월 칸)이 같은 행에서 같은 수, 오늘 이후 퇴원은 둘 다 제외", () => {
+  const today = "2026-09-11";
+  // getWithdrawalsInWindow가 돌려주는 행 모양(시스템 정리는 이미 빠져 있다) — 오늘 이후 날짜가 섞여 들어와도 막는지 본다.
+  const rows = ["2026-08-31", "2026-09-01", "2026-09-11", "2026-09-25"].map((withdrawnAt) => ({ withdrawnAt }));
+  const win = withdrawalMonthWindow(today.slice(0, 7), today);
+  const card = rows.filter((row) =>
+    inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to),
+  ).length;
+  const panel = monthlyChanges(today, [], rows.map((row) => row.withdrawnAt)).at(-1)!;
+  expect(panel.month).toBe("2026-09");
+  expect(card).toBe(2);
+  expect(panel.withdrawn).toBe(card);
 });
 
 describe("overview freshness and permissions", () => {

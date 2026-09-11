@@ -29,9 +29,10 @@ import {
 import { loadStudentListPrefs, saveStudentListPrefs } from "@/features/students/server/list-prefs";
 import {
   DEFAULT_STUDENT_LIST_PREFS,
+  dashboardExitParams,
   parseSearchField,
-  parseStudentListPrefs,
   parseStudentSort,
+  studentListPrefsFromUrl,
   type StudentListPrefs,
 } from "@/features/students/list-prefs";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -49,6 +50,11 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentsMoreMenu } from "./_components/students-more-menu";
 import { RememberPrefs } from "@/components/remember-prefs";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { isValidYmd } from "@/lib/date-kst";
+import { parseProgram, programLabel, type Program } from "@/features/students/program";
+// 운영실 KPI ↗ 집합 — 엑셀 파일 라우트와 **같은 함수**(파일 행 = 목록 행).
+import { restrictIdsFor } from "@/features/students/server/restrict-ids";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 
 export async function generateMetadata() {
@@ -90,6 +96,9 @@ export default async function StudentsPage({
     field?: string;
     sort?: string;
     noenr?: string;
+    program?: string;
+    first?: string;
+    from?: string;
   }>;
 }) {
   const user = await requireAccess("students");
@@ -116,6 +125,13 @@ export default async function StudentsPage({
   // URL은 명시적으로 `noenr=0`도 적는다(저장값을 이기려면 "없음"이 아니라 값이어야 한다).
   const excludeNoEnrollment = (sp.noenr ?? (prefs.noenr ? "1" : "0")) === "1";
   const page = Math.max(1, Number(sp.page) || 1);
+  // 운영실 KPI ↗ — 프로그램·첫 수업 집합. 모르는 값·달력에 없는 날짜는 무시(필터 없음, 칩도 없음).
+  const program = parseProgram(sp.program);
+  const firstDay = isValidYmd(sp.first) ? sp.first : null;
+  // from=dashboard = 운영실 링크가 모든 축을 명시값(전체)으로 적은 **들어온 그 화면** — 그 렌더는 보기 설정을 저장하지 않는다
+  // (저장하면 사용자가 골라 둔 학년·과목 필터가 운영실 링크 한 번에 지워진다). 필터를 바꾸면 from이 떨어진다(아래 exit·leave).
+  const fromDashboard = sp.from === "dashboard";
+  const restrictPromise = restrictIdsFor(program, firstDay);
 
   // 담임 필터 선택지 — 강사 스코프에선 **내 학생의 담당 과목 반 담당**만(고르면 결과가 0인 선택지 방지 +
   // 아래 '담당 강사' 열에 실제로 나오는 이름과 일치). 관리자면 종전 학원 전체 목록.
@@ -147,10 +163,12 @@ export default async function StudentsPage({
   }
 
   const [{ rows, total }, counts, [teachers, settings]] = await Promise.all([
-    getStudentsPage(
-      { status, subject, q, grade, teacherId, searchField: field, sort, excludeNoEnrollment },
-      page,
-      PAGE_SIZE,
+    restrictPromise.then((restrictIds) =>
+      getStudentsPage(
+        { status, subject, q, grade, teacherId, searchField: field, sort, excludeNoEnrollment, restrictIds },
+        page,
+        PAGE_SIZE,
+      ),
     ),
     statCountsPromise,
     optionsPromise,
@@ -180,14 +198,7 @@ export default async function StudentsPage({
   // 강사뷰·다른 강사 뷰를 열면 보정값이 관리자 본인의 저장 설정을 덮어썼다).
   // 🔑 저장값과 **같은 파서**를 지난다 — `?subject=`(빈 값)처럼 파서가 접는 값을 원문 그대로 두면 저장값과 영영 달라 렌더마다 저장한다.
   //    URL 값이 선택지 밖(옛 링크의 모르는 정렬·검색 범위)이면 보여 주기만 하고 저장값은 유지(리뷰 2026-09-04).
-  const current: StudentListPrefs = parseStudentListPrefs({
-    subject: sp.subject ?? prefs.subject,
-    grade: sp.grade ?? prefs.grade,
-    teacher: sp.teacher ?? prefs.teacher,
-    field: sp.field === undefined || parseSearchField(sp.field) === sp.field ? field : prefs.field,
-    sort: sp.sort === undefined || parseStudentSort(sp.sort) === sp.sort ? sort : prefs.sort,
-    noenr: excludeNoEnrollment,
-  });
+  const current: StudentListPrefs = studentListPrefsFromUrl(sp, prefs);
 
   /**
    * 목록 링크(쪽 넘김·미수강 토글)가 들고 갈 파라미터 — 기본값과 다르거나 **URL이 명시한** 축은 그대로 적는다.
@@ -196,19 +207,37 @@ export default async function StudentsPage({
    * 읽어 계정에 저장한다(재리뷰 2026-09-03). **정렬·검색 범위**도 파서가 보정하는 축이라 같이 원값으로 잇는다
    * (재리뷰 2026-09-04). 학년·담임은 URL 값이면 보정하지 않으니 그대로다.
    */
-  const listParams = (patch: { page?: number; noenr?: boolean } = {}) => {
+  // 운영실에서 온 화면(from=dashboard)에서 **필터를 바꿀 때** 함께 뗄 파라미터 — from과 바꾸지 않은 운영실 명시 축(D1).
+  // 떼인 축은 다음 렌더에서 저장값으로 돌아가 RememberPrefs가 바꾼 축만 저장한다. 운영실에서 온 화면이 아니면 빈 목록.
+  const exit = (param: string) => dashboardExitParams(fromDashboard, param);
+  const listParams = (
+    patch: { page?: number; noenr?: boolean; program?: Program | null; first?: string | null; leave?: boolean } = {},
+  ) => {
     const params = new URLSearchParams();
+    // 🔑 필터를 바꾸는 링크(leave)는 운영실 방문 표식과 운영실이 적은 축을 뗀다(위 exit와 같은 규칙).
+    //    쪽 넘김은 필터 변경이 아니라 그대로 운영실 방문으로 남는다(저장 안 함).
+    const leaving = fromDashboard && !!patch.leave;
+    // 운영실 KPI 집합(프로그램·첫 수업)은 쪽 넘김·토글에도 따라간다(칩으로만 푼다).
+    const programParam = patch.program === undefined ? program : patch.program;
+    if (programParam) params.set("program", programParam);
+    const firstParam = patch.first === undefined ? firstDay : patch.first;
+    if (firstParam) params.set("first", firstParam);
+    if (fromDashboard && !leaving) params.set("from", "dashboard");
     if (status !== "enrolled") params.set("status", status);
-    if (sp.subject !== undefined) params.set("subject", sp.subject);
-    else if (subject !== DEFAULT_STUDENT_LIST_PREFS.subject) params.set("subject", subject);
-    if (grade !== DEFAULT_STUDENT_LIST_PREFS.grade || sp.grade !== undefined) params.set("grade", grade);
-    if (teacherId !== DEFAULT_STUDENT_LIST_PREFS.teacher || sp.teacher !== undefined) params.set("teacher", teacherId);
+    if (!leaving) {
+      if (sp.subject !== undefined) params.set("subject", sp.subject);
+      else if (subject !== DEFAULT_STUDENT_LIST_PREFS.subject) params.set("subject", subject);
+      if (grade !== DEFAULT_STUDENT_LIST_PREFS.grade || sp.grade !== undefined) params.set("grade", grade);
+      if (teacherId !== DEFAULT_STUDENT_LIST_PREFS.teacher || sp.teacher !== undefined) params.set("teacher", teacherId);
+    }
     if (sp.field !== undefined) params.set("field", sp.field);
     else if (field !== DEFAULT_STUDENT_LIST_PREFS.field) params.set("field", field);
     if (sp.sort !== undefined) params.set("sort", sp.sort);
     else if (sort !== DEFAULT_STUDENT_LIST_PREFS.sort) params.set("sort", sort);
-    const noenr = patch.noenr ?? excludeNoEnrollment;
-    if (noenr || sp.noenr !== undefined || patch.noenr !== undefined) params.set("noenr", noenr ? "1" : "0");
+    if (patch.noenr !== undefined) params.set("noenr", patch.noenr ? "1" : "0");
+    else if (!leaving && (excludeNoEnrollment || sp.noenr !== undefined)) {
+      params.set("noenr", excludeNoEnrollment ? "1" : "0");
+    }
     if (q) params.set("q", q);
     if ((patch.page ?? 1) > 1) params.set("page", String(patch.page));
     const s = params.toString();
@@ -225,12 +254,17 @@ export default async function StudentsPage({
     ...(field !== "all" ? { field } : {}),
     ...(sort !== "grade" ? { sort } : {}),
     ...(excludeNoEnrollment ? { noenr: "1" } : {}),
+    // 운영실 KPI 집합도 넘긴다 — 라우트가 같은 restrictIdsFor로 좁혀 파일 행 = 목록 행.
+    ...(program ? { program } : {}),
+    ...(firstDay ? { first: firstDay } : {}),
   }).toString()}`;
 
   return (
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
-      {prefsLoaded ? <RememberPrefs current={current} saved={prefsLoaded} save={saveStudentListPrefs} /> : null}
+      {prefsLoaded && !fromDashboard ? (
+        <RememberPrefs current={current} saved={prefsLoaded} save={saveStudentListPrefs} />
+      ) : null}
       {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 학생') 하나 + 텍스트 Secondary('엑셀' 메뉴) 하나. 내보내기·가져오기는
           그 메뉴(2차)로 내렸다. 동기화 배지는 읽기 전용 표식이라 그대로. */}
       <PageHeader
@@ -278,10 +312,26 @@ export default async function StudentsPage({
           {q ? <span className="ml-1.5">· {sheetTf(lang, "stu.count.q", { q })}</span> : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          {/* 운영실 KPI ↗가 건 집합 — 칩을 누르면 그 조건만 푼다(나머지 필터는 그대로). */}
+          {program ? (
+            <ToolbarChip active href={listParams({ program: null, leave: true })}>
+              {sheetT(lang, "stu.filter.program")}: {programLabel(program, settings.operations.subjects)}
+              <EyIcon name="close" size={12} aria-hidden />
+            </ToolbarChip>
+          ) : null}
+          {firstDay ? (
+            <ToolbarChip active href={listParams({ first: null, leave: true })}>
+              {sheetTf(lang, "stu.filter.first", {
+                m: Number(firstDay.slice(5, 7)),
+                d: Number(firstDay.slice(8, 10)),
+              })}
+              <EyIcon name="close" size={12} aria-hidden />
+            </ToolbarChip>
+          ) : null}
           {/* 상태=퇴원에선 숨김 — 퇴원생은 활성 수강이 없어 이 토글이 켜져 있으면 전원이 걸러져
               "검색해도 항상 0명"이 된다(2026-08-18 실사고). 서버(getStudentsPage)도 같은 조건에서 무시. */}
           {status !== "withdrawn" ? (
-            <ToolbarChip active={excludeNoEnrollment} href={listParams({ noenr: !excludeNoEnrollment })}>
+            <ToolbarChip active={excludeNoEnrollment} href={listParams({ noenr: !excludeNoEnrollment, leave: true })}>
               {sheetT(lang, "stu.filter.noEnr")}
             </ToolbarChip>
           ) : null}
@@ -291,6 +341,7 @@ export default async function StudentsPage({
             extra={
               <FilterSelect
                 paramName="field"
+                clearParams={exit("field")}
                 value={field}
                 options={FIELD_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }))}
                 allValue="all"
@@ -336,6 +387,7 @@ export default async function StudentsPage({
                       {/* 저장값을 이기려면 "전체"도 URL에 적혀야 한다(explicitAll) — 학년·과목·담임·정렬 넷이 그렇다. */}
                       <HeaderFilter
                         paramName="grade"
+                        clearParams={exit("grade")}
                         value={grade}
                         options={gradeOptions}
                         axisLabel={sheetT(lang, "stu.filter.grade")}
@@ -344,6 +396,7 @@ export default async function StudentsPage({
                       />
                       <HeaderFilter
                         paramName="sort"
+                        clearParams={exit("sort")}
                         value={sort}
                         options={sortOptions}
                         axisLabel={sheetT(lang, "stu.filter.sort")}
@@ -358,6 +411,7 @@ export default async function StudentsPage({
                     {/* 기본값(재원)이 휴원·퇴원을 **숨기므로** 값을 항상 적는다(showAll). */}
                     <HeaderFilter
                       paramName="status"
+                      clearParams={exit("status")}
                       value={status}
                       options={statusOptions}
                       axisLabel={sheetT(lang, "stu.filter.status")}
@@ -372,6 +426,7 @@ export default async function StudentsPage({
                     ) : (
                       <HeaderFilter
                         paramName="subject"
+                        clearParams={exit("subject")}
                         value={subject}
                         options={subjectOptions}
                         axisLabel={sheetT(lang, "stu.col.subjects")}
@@ -386,6 +441,7 @@ export default async function StudentsPage({
                     ) : (
                       <HeaderFilter
                         paramName="teacher"
+                        clearParams={exit("teacher")}
                         value={teacherId}
                         options={teacherOptions}
                         axisLabel={sheetT(lang, "stu.col.teacher")}

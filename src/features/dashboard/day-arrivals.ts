@@ -15,6 +15,7 @@
  *    같은 학생이 학원 안에서 자리를 바꾼 것이라, 맞이·환송할 사람이 아니다. 반이동 종료는 반열림
  *    (`end_date <= 그날`)이라 그날 이미 새 반에서 수업한다([[#125]]와 같은 규약).
  */
+import { subjectGroupOf, type ProgramSubject } from "@/features/students/program";
 
 export type DayEnrollmentRow = {
   studentId: string;
@@ -28,13 +29,32 @@ export type DayEnrollmentRow = {
   isTransferredIn: boolean;
   /** 휴원 — "이어지는 수강"으로 치지 않는다(아래 주석). */
   onHold: boolean;
+  /** 반 과목 키 — '새 과목 첫 수업' 판정용. 모르면(null) 새 과목으로 치지 않는다(지어내지 않는다). */
+  subject?: string | null;
 };
 
 export type DayArrival = { studentId: string; name: string };
 
+/**
+ * 오늘 첫 수업의 종류(원장 2026-09-11, 운영실 KPI '오늘첫수업').
+ *   · `first` = 이 학원에서의 **첫 등원**(오늘 이전에 다닌 적이 없다).
+ *   · `newSubject` = 이미 다니던 학생이 **처음 듣는 과목 묶음**의 첫 수업.
+ * 🔴 과목 묶음은 재원생 프로그램과 **같은 판정**(`subjectGroupOf` = programOf) — 영어(EiE·인재원 영어)·수학(수학(심화) 포함).
+ *    그래서 인재원 영어 → EiE, 수학 → 수학(심화)는 새 과목이 아니다.
+ * 🔴 이미 듣던(또는 들었던) 묶음에 반만 하나 더 받은 것·반이동은 어느 쪽도 아니다.
+ */
+export type FirstClassKind = "first" | "newSubject";
+export type FirstClassStudent = {
+  studentId: string;
+  name: string;
+  kind: FirstClassKind;
+  /** first = 오늘 시작한 과목 전부 · newSubject = 새로 시작한 과목만. */
+  subjects: string[];
+};
+
 export type DayArrivals = {
-  /** 오늘이 이 학원에서의 첫 수업일인 학생. */
-  starting: DayArrival[];
+  /** 오늘 **첫 수업** 학생(첫 등원 + 새 과목) — `resolveFirstClasses` 결과 전체(운영실 KPI '오늘첫수업'과 같다). */
+  starting: FirstClassStudent[];
   /** 오늘이 마지막 수업일인 학생(퇴원·휴원 진입 포함 — 라벨은 '마지막 수업'이지 '퇴원'이 아니다). */
   ending: DayArrival[];
 };
@@ -66,31 +86,78 @@ function continuesAfterToday(row: DayEnrollmentRow, today: string): boolean {
   return row.endDate > today;
 }
 
-/**
- * @param rows 후보 학생들의 **수강 전건**(오늘 시작/종료 행만 넘기면 판정이 뒤집힌다 — 위 주석).
- * @param today `YYYY-MM-DD`(KST).
- */
-export function resolveDayArrivals(rows: readonly DayEnrollmentRow[], today: string): DayArrivals {
+function groupByStudent(rows: readonly DayEnrollmentRow[]): Map<string, DayEnrollmentRow[]> {
   const byStudent = new Map<string, DayEnrollmentRow[]>();
   for (const row of rows) {
     const list = byStudent.get(row.studentId) ?? [];
     list.push(row);
     byStudent.set(row.studentId, list);
   }
+  return byStudent;
+}
 
-  const starting: DayArrival[] = [];
-  const ending: DayArrival[] = [];
-  for (const [studentId, list] of byStudent) {
-    const name = list.find((row) => row.studentName)?.studentName ?? "(학생)";
-    const startsToday = list.some((row) => row.startDate === today && !row.isTransferredIn);
-    if (startsToday && !list.some((row) => attendedBeforeToday(row, today))) {
-      starting.push({ studentId, name });
+function nameOf(list: readonly DayEnrollmentRow[]): string {
+  return list.find((row) => row.studentName)?.studentName ?? "(학생)";
+}
+
+function uniqueSubjects(rows: readonly DayEnrollmentRow[]): string[] {
+  return [...new Set(rows.flatMap((row) => (row.subject?.trim() ? [row.subject.trim()] : [])))];
+}
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "ko");
+
+/**
+ * 오늘 **첫 수업** 학생 — 첫 등원 + 새 과목. 운영실 '오늘첫수업' 카드·팝업·원생목록 `first=` 필터와
+ * 일일 브리핑 '오늘 첫 수업'(`resolveDayArrivals`)이 **같은 결과 전체**를 쓴다 — 같은 이름의 숫자가 갈리면 안 된다(원장 규칙).
+ * @param rows 후보 학생들의 **수강 전건**.
+ * @param subjects 학원설정 `operations.subjects` — 과목 묶음 판정(없으면 과목 키만으로 묶는다: english·math 키만 묶음).
+ */
+export function resolveFirstClasses(
+  rows: readonly DayEnrollmentRow[],
+  today: string,
+  subjects: readonly ProgramSubject[] = [],
+): FirstClassStudent[] {
+  const groupOf = (subject: string | null | undefined) => subjectGroupOf(subject, subjects);
+  const out: FirstClassStudent[] = [];
+  for (const [studentId, list] of groupByStudent(rows)) {
+    // 반이동으로 들어온 수강은 첫 수업이 아니다(이미 다니던 학생이 자리만 바꿨다).
+    const startsToday = list.filter((row) => row.startDate === today && !row.isTransferredIn);
+    if (startsToday.length === 0) continue;
+    const before = list.filter((row) => attendedBeforeToday(row, today));
+    const todaySubjects = uniqueSubjects(startsToday);
+    if (before.length === 0) {
+      out.push({ studentId, name: nameOf(list), kind: "first", subjects: todaySubjects });
+      continue;
     }
+    // 🔑 '새 과목' = 오늘 이전에 **한 번도** 들은 적 없는 과목 **묶음** — 끝난 수강도 들은 것이다(돌아온 과목은 새 과목이 아니다).
+    const taken = new Set(uniqueSubjects(before).map(groupOf));
+    const fresh = todaySubjects.filter((subject) => {
+      const group = groupOf(subject);
+      return group !== null && !taken.has(group);
+    });
+    if (fresh.length > 0) out.push({ studentId, name: nameOf(list), kind: "newSubject", subjects: fresh });
+  }
+  return out.sort(byName);
+}
+
+/**
+ * @param rows 후보 학생들의 **수강 전건**(오늘 시작/종료 행만 넘기면 판정이 뒤집힌다 — 위 주석).
+ * @param today `YYYY-MM-DD`(KST).
+ * @param subjects 학원설정 `operations.subjects` — 새 과목 묶음 판정(`resolveFirstClasses`와 같다).
+ */
+export function resolveDayArrivals(
+  rows: readonly DayEnrollmentRow[],
+  today: string,
+  subjects: readonly ProgramSubject[] = [],
+): DayArrivals {
+  // '첫 수업' = 첫 등원 + 새 과목 — 위 `resolveFirstClasses` 결과 **전체**(카드·목록과 같은 숫자). 일부만 떼어 싣지 않는다.
+  const starting = resolveFirstClasses(rows, today, subjects);
+  const ending: DayArrival[] = [];
+  for (const [studentId, list] of groupByStudent(rows)) {
     const endsToday = list.some((row) => row.endDate === today && !row.isTransferred);
     if (endsToday && !list.some((row) => continuesAfterToday(row, today))) {
-      ending.push({ studentId, name });
+      ending.push({ studentId, name: nameOf(list) });
     }
   }
-  const byName = (a: DayArrival, b: DayArrival) => a.name.localeCompare(b.name, "ko");
-  return { starting: starting.sort(byName), ending: ending.sort(byName) };
+  return { starting, ending: ending.sort(byName) };
 }

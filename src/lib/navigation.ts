@@ -216,7 +216,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menuKey: "exams", aliases: ["시험"] },
       { href: "/consultations", label: "원생상담", icon: MENU_ICON.consultations, menuKey: "consultations", aliases: ["학생상담"] },
       // 등록상담은 별도 권한(menuKey=enrollment)을 가지므로 숨기지 않고 독립 진입점을 제공한다.
-      { href: "/enrollment", label: "등록상담", icon: MENU_ICON.enrollment, menuKey: "enrollment" },
+      { href: "/enrollment", label: "콜&상담", icon: MENU_ICON.enrollment, menuKey: "enrollment", aliases: ["등록상담"] },
       { href: "/retention", label: "이탈 방어", icon: MENU_ICON.retention, menuKey: "retention" },
       // 신규생 관리 — 신입 등록 후 7·30·60·90일 체크리스트(원장 2026-09-09). 이탈 방어와 축이 다르다:
       // 저쪽은 "지금 흔들리는 재원생", 이쪽은 "들어온 지 얼마 안 된 학생을 절차대로 챙겼나".

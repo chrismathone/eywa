@@ -94,7 +94,7 @@ export function StatsCharts({
                 <YAxis fontSize={11} allowDecimals={false} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="enrollment" name="등록상담" fill="var(--color-chart-1)" />
+                <Bar dataKey="enrollment" name="콜&상담" fill="var(--color-chart-1)" />
                 <Bar dataKey="student" name="원생상담" fill="var(--color-gold)" />
               </BarChart>
             </ResponsiveContainer>

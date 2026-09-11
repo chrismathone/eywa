@@ -193,7 +193,7 @@ export function ConsultationReportEditor({
 
   function downloadTxt() {
     const lines: string[] = [
-      "등록상담 AI 분석 보고서",
+      "콜&상담 AI 분석 보고서",
       "=".repeat(40),
       studentName ? `학생: ${studentName}` : "",
       consultationDate ? `상담일: ${consultationDate}` : "",
@@ -213,7 +213,8 @@ export function ConsultationReportEditor({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `등록상담분석_${studentName ?? "학생"}_${consultationDate ?? ""}.txt`;
+    // 파일 이름엔 `&`를 쓰지 않는다(일부 OS·메신저가 이름을 자르거나 바꾼다) — '콜앤상담'.
+    a.download = `콜앤상담분석_${studentName ?? "학생"}_${consultationDate ?? ""}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }

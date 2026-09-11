@@ -99,7 +99,7 @@ export function MergeDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-base">등록상담 병합</DialogTitle>
+          <DialogTitle className="text-base">콜&상담 병합</DialogTitle>
         </DialogHeader>
 
         {error ? <p className="text-chart-4 text-sm">{error}</p> : null}

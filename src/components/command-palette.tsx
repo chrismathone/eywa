@@ -41,7 +41,7 @@ const SECTION_LABEL: Record<string, string> = {
   student: "원생",
   class: "수업",
   consultation: "상담",
-  enrollment: "등록상담",
+  enrollment: "콜&상담",
 };
 const sectionOf = (item: Item): string => (item.kind === "menu" ? "menu" : item.hit.kind);
 

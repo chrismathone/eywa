@@ -68,7 +68,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
               학부모 공개 접수 QR
             </h2>
             <p className="text-text-dim mt-0.5 text-xs">
-              QR/링크를 공유하면 학부모가 직접 상담을 신청합니다. 접수건은 등록상담에 ‘대기·QR 접수’로 들어옵니다.
+              QR/링크를 공유하면 학부모가 직접 상담을 신청합니다. 접수건은 콜&상담에 ‘대기·QR 접수’로 들어옵니다.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="닫기" className="text-text-dim hover:text-foreground">

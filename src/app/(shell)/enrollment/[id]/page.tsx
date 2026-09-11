@@ -178,11 +178,11 @@ export default async function EnrollmentDetailPage({
         initialStatus={consult.processingStatus}
       />
 
-      <BackLink href="/enrollment" label="등록상담으로" />
+      <BackLink href="/enrollment" label="콜&상담으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
-          <p className="eyebrow">신입생 등록상담</p>
+          <p className="eyebrow">신입생 콜&상담</p>
           <div className="flex items-baseline gap-3">
             <h1 className="font-bold tracking-tight text-foreground text-3xl">{consult.prospectName}</h1>
             <span
@@ -276,7 +276,7 @@ export default async function EnrollmentDetailPage({
           <div className="flex items-center gap-2">
             <ClipboardList className="text-amber size-4" />
             <h2 className="text-foreground text-sm font-bold">
-              같은 학생의 다른 등록상담 <span className="num">{siblings.length}</span>건
+              같은 학생의 다른 콜&상담 <span className="num">{siblings.length}</span>건
             </h2>
           </div>
           <p className="text-text-dim mt-1 text-xs">

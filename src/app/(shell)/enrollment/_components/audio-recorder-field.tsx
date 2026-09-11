@@ -123,7 +123,8 @@ export function AudioRecorderField({
       };
       recorder.onstop = () => {
         const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
-        const recorded = new File([blob], `등록상담녹음_${kstTimestamp()}.webm`, { type: "audio/webm" });
+        // 파일 이름엔 `&`를 쓰지 않는다(다운로드 백스톱·업로드 경로에서 이름이 깨질 수 있다) — '콜앤상담'.
+        const recorded = new File([blob], `콜앤상담녹음_${kstTimestamp()}.webm`, { type: "audio/webm" });
         onChange(recorded);
         // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
         downloadFile(recorded);

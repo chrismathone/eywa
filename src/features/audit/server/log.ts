@@ -24,18 +24,18 @@ export const AUDIT_ACTIONS = {
   classroom_update: "강의실 수정",
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",
-  consultation_merge: "등록상담 병합",
+  consultation_merge: "콜&상담 병합",
   // 등록상담 전수(2026-09-10 원장 *"상담등록에 대해서는 감사로직이 안남나?"*) — QR 접수가 이름·학교·학년
   // 일치로 **다른 아이(동명이인)** 에 자동 연결됐는데, 접수·자동 연결·상태 변경·이름 수정 어느 것도 기록이
   // 없어 누가 무엇을 했는지 되짚을 수 없었다(김근우 건). 자동 연결은 DB 트리거가 직접 쓴다(0258a).
-  enrollment_consultation_create: "등록상담 작성",
-  enrollment_consultation_intake: "등록상담 QR 접수(학부모)",
-  enrollment_consultation_update: "등록상담 수정",
-  enrollment_consultation_outcome: "등록상담 상태 변경",
-  enrollment_consultation_delete: "등록상담 삭제",
-  consultation_autolink: "등록상담 학생 자동 연결",
-  consultation_link_existing: "등록상담 → 기존 학생 재사용",
-  consultation_unlink: "등록상담 학생 연결 해제",
+  enrollment_consultation_create: "콜&상담 작성",
+  enrollment_consultation_intake: "콜&상담 QR 접수(학부모)",
+  enrollment_consultation_update: "콜&상담 수정",
+  enrollment_consultation_outcome: "콜&상담 상태 변경",
+  enrollment_consultation_delete: "콜&상담 삭제",
+  consultation_autolink: "콜&상담 학생 자동 연결",
+  consultation_link_existing: "콜&상담 → 기존 학생 재사용",
+  consultation_unlink: "콜&상담 학생 연결 해제",
   // (ecs_plan_* 4종은 아래 '진도 줄 구조 변경' 블록 — 같은 날 자리 PIN 감사 세션이 먼저 등록했다.)
   // 세션 없는 경로가 audit_logs에 **직접 insert**하는 키 — 레지스트리 가드가 `log…(` 호출만 봐서 밖이었다.
   calendar_google_import: "구글 캘린더 가져오기",

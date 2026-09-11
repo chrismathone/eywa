@@ -23,7 +23,7 @@ import {
   getEnrollmentConsultationsPage,
 } from "@/features/enrollment/server/queries";
 import { Pagination } from "@/components/pagination";
-import { kstToday } from "@/lib/date-kst";
+import { isValidYm, isValidYmd, kstToday } from "@/lib/date-kst";
 import { parseRange, parseStatsPeriod, periodRange } from "@/features/enrollment/range";
 import {
   getEnrollmentStats,
@@ -40,7 +40,7 @@ import { parseBoardStage } from "@/features/enrollment/board-stages";
 import { EnrollmentTable } from "./_components/enrollment-table";
 import { IntakeQrSection } from "./_components/intake-qr-section";
 
-export const metadata = { title: "등록상담 — eywa" };
+export const metadata = { title: "콜&상담 — eywa" };
 
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;
@@ -61,6 +61,7 @@ export default async function EnrollmentPage({
     page?: string;
     range?: string;
     year?: string;
+    received?: string;
   }>;
 }) {
   const user = await requireAccess("enrollment");
@@ -73,8 +74,13 @@ export default async function EnrollmentPage({
     page: pageParam,
     range: rangeParam,
     year: yearParam,
+    received,
   } = await searchParams;
-  const selectedMonth = month ?? null;
+  // 달·접수일은 **달력에 있는 값만** 필터로 쓴다 — 없는 날짜(2026-02-30)를 그대로 실으면 경계 계산이 터지거나(500)
+  // PostgREST가 400을 낸다. 틀리면 필터 없음.
+  const selectedMonth = isValidYm(month) ? month : null;
+  // 접수일(운영실 KPI '신규문의' ↗) — 카드와 같은 KST 하루 경계로 created_at을 자른다.
+  const receivedDay = isValidYmd(received) ? received : null;
   const selectedConsultant = consultant ?? null;
   // 상태 필터 = 칸반과 **같은 4단계**(원장 2026-09-01). 파라미터 이름은 `outcome` 그대로이고 값만
   // 칸 키다 — 옛 링크(`?outcome=ai_done`)는 그 값이 속한 칸으로 넓혀 받는다(parseBoardStage).
@@ -97,6 +103,7 @@ export default async function EnrollmentPage({
     consultantId: selectedConsultant,
     stage: selectedStage,
     q: searchQuery,
+    received: receivedDay,
   };
 
   // 칸반 드래그(상태 변경) 가능 여부 — 권한 판정은 캐시된 매트릭스 재사용이라 추가 쿼리 0.
@@ -150,7 +157,8 @@ export default async function EnrollmentPage({
   // "배정 완료" = 상담 → 수업 배정으로 학생이 생기고 수업이 1개 이상 붙은 진짜 완료(outcome 라벨과 별개).
   const assigned = items.filter((i) => i.assignedClassCount >= 1);
 
-  const filterActive = !!selectedMonth || !!selectedConsultant || !!selectedStage || !!searchQuery;
+  const filterActive =
+    !!selectedMonth || !!selectedConsultant || !!selectedStage || !!searchQuery || !!receivedDay;
 
   // 필터는 보존하고 page만 갈아끼운다. p===1이면 page= 자체를 안 넣어야 필터 변경 href와 모양이 같아진다
   // (필터·검색·월이동 href는 page를 안 넣으므로 자동으로 1페이지로 리셋된다 — 페이지네이션 표준).
@@ -166,6 +174,7 @@ export default async function EnrollmentPage({
     // 기간은 검색어와 **독립**이다(else로 묶으면 검색 중에 기간이 사라져 3개월로 되돌아간다).
     // 특정 달을 보고 있을 때만 프리셋이 무의미해서 뺀다.
     if (!selectedMonth && selectedRange !== "3m") params.set("range", selectedRange);
+    if (receivedDay) params.set("received", receivedDay);
     params.set("view", "table");
     if (p > 1) params.set("page", String(p));
     return `/enrollment?${params.toString()}`;
@@ -185,8 +194,8 @@ export default async function EnrollmentPage({
       <NewConsultationWatcher initialCount={totalCount ?? 0} />
 
       <PageHeader
-        eyebrow="등록 상담"
-        title="등록상담"
+        eyebrow="콜&상담"
+        title="콜&상담"
         // 🔴 설명 문장은 뺐다(원장 2026-09-01 *"멘트 제거"*) — 매일 보는 화면에서 같은 문장이
         // 한 줄을 계속 먹는다. 숫자(전체·AI·배정)는 아래 툴바 검색창 왼쪽으로 옮겼다.
         actions={
@@ -280,6 +289,7 @@ export default async function EnrollmentPage({
         selectedRange={selectedRange}
         todayMonth={todayMonth}
         minYear={minYear}
+        receivedDay={view === "stats" ? null : receivedDay}
       />
 
       {/* 🔴 makeedu '보내기' 수동 카드는 **감췄다**(원장 2026-09-01) — 이제 매주 일요일 06:00(KST)에

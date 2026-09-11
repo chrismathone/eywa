@@ -5,6 +5,8 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { getEndedSubjects } from "../subject-ended";
 import { isSystemBulkWithdrawal } from "../system-bulk";
+import { lastEndedByStudent } from "../window";
+import { lastClassOf, loadEndedEnrollments } from "./window";
 
 // Re-export common types so existing callers don't need to switch import paths
 export type {
@@ -23,6 +25,8 @@ export type WithdrawalRow = {
   withdrawnAt: string | null;
   lastClassName: string | null;
   lastClassSubject: string | null;
+  /** 마지막 수강 반의 영어 프로그램 구분(0176a) — 퇴원생 프로그램 판정(`withdrawalProgram`) 재료. 상세 화면은 안 채운다. */
+  lastClassEnglishTrack?: string | null;
   withdrawalReason: string | null;
   metadata: WithdrawalMetadata | null;
   /** 수강(종료) 이력이 있는가 — '시스템 정리(날짜 미상)' 판정 입력([system-bulk.ts](../system-bulk.ts)). */
@@ -58,53 +62,24 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       )
       .eq("status", "withdrawn")
       .order("withdrawn_at", { ascending: false })
+      // OFFSET 페이지 안정화 — unique tie-break(id) 필수(batch.ts 계약)
+      .order("id")
       .range(from, to),
   );
 
   if (students.length === 0) return [];
 
-  const ids = students.map((s) => s.id);
-
-  // id를 청크로 .in()(414 + error삼킴 방지). 한 학생 enrollment는 같은 청크에 모여 end_date desc 보존.
-  const enrollments = await fetchInChunks<{
-    student_id: string;
-    withdrawal_reason: string | null;
-    end_date: string | null;
-    class: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[] | null;
-  }>(ids, (chunk) =>
-    supabase
-      .from("enrollments")
-      .select(
-        `student_id, withdrawal_reason, end_date,
-         class:class_id ( class_name, subject )`,
-      )
-      .in("student_id", chunk)
-      .not("end_date", "is", null)
-      .order("end_date", { ascending: false }),
-  );
-
-  const lastByStudent = new Map<
-    string,
-    { reason: string | null; className: string | null; subject: string | null }
-  >();
-  for (const e of enrollments) {
-    if (lastByStudent.has(e.student_id)) continue;
-    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
-      | { class_name?: string; subject?: string }
-      | undefined;
-    lastByStudent.set(e.student_id, {
-      reason: e.withdrawal_reason ?? null,
-      className: klass?.class_name ?? null,
-      subject: klass?.subject ?? null,
-    });
-  }
+  // 마지막 종료 수강 = 운영실 '퇴원생'과 **같은 조회·같은 선택**(window.ts) — 청크 × 페이징이라 청크 안 1000행
+  // 절단도 없고, 종료일이 같은 두 줄은 결정적 tie-break로 고른다(조회마다 다른 반이 뽑히지 않게).
+  const lastByStudent = lastEndedByStudent(await loadEndedEnrollments(supabase, students.map((s) => s.id)));
 
   return students.map((s) => {
-    const last = lastByStudent.get(s.id);
+    const lastRow = lastByStudent.get(s.id);
+    const last = lastClassOf(lastRow);
     const md = parseMetadata(s.withdrawal_metadata);
     // 수강(종료) 이력 유무 = '시스템 정리(날짜 미상)' 판정 입력. lastClassName은 반 조인 실패로도 null이 될 수
     // 있어 신뢰할 수 없으므로, **enrollment 행의 존재 자체**로 본다.
-    const hasEnrollmentHistory = lastByStudent.has(s.id);
+    const hasEnrollmentHistory = !!lastRow;
     return {
       id: s.id,
       name: s.name,
@@ -112,9 +87,10 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       grade: s.grade,
       enrolledAt: s.enrolled_at,
       withdrawnAt: s.withdrawn_at,
-      lastClassName: last?.className ?? null,
-      lastClassSubject: last?.subject ?? null,
-      withdrawalReason: md?.reason ? REASON_LABEL[md.reason] : last?.reason ?? null,
+      lastClassName: last.className,
+      lastClassSubject: last.subject,
+      lastClassEnglishTrack: last.englishTrack,
+      withdrawalReason: md?.reason ? REASON_LABEL[md.reason] : last.reason,
       metadata: md,
       hasEnrollmentHistory,
       systemBulk: isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory }),

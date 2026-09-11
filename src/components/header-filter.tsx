@@ -26,6 +26,7 @@ export function HeaderFilter({
   cap,
   explicitAll = false,
   showAll = false,
+  clearParams,
 }: {
   paramName: string;
   value: string | null | undefined;
@@ -44,6 +45,8 @@ export function HeaderFilter({
    * 값이 항상 뜻을 갖는 축(정렬)만 켠다.
    */
   showAll?: boolean;
+  /** 이 필터를 바꿀 때 함께 지울 파라미터(FilterSelect 주석) — 예: 운영실에서 온 원생목록의 `from`·운영실 명시 축. */
+  clearParams?: string[];
 }) {
   // 걸린 값이 선택지 밖이면(학원설정에서 지운 학년·퇴사한 담임·옛 링크) 그 값을 **보이는 항목**으로 세운다 — 안 그러면 트리거가 옅은
   // 축 이름(placeholder)이 되어 "안 걸림"으로 읽히는데 목록은 0건이다(적대적 리뷰 2026-09-04). 라벨이 값을 감추지 않으니 되돌릴 수 있다.
@@ -62,6 +65,7 @@ export function HeaderFilter({
       ariaLabel={ariaLabel ?? `${axisLabel} 필터`}
       cap={cap}
       explicitAll={explicitAll}
+      clearParams={clearParams}
       className="inline-block w-auto align-middle"
       triggerClassName={HEADER_FILTER_TRIGGER}
     />

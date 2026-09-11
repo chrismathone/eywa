@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { kstDateOf, kstMonth, shiftMonth } from "@/lib/date-kst";
+import { isValidYm, kstDateOf, kstMonth, kstToday, monthLabel, shiftMonth } from "@/lib/date-kst";
+import { inWithdrawalWindow, withdrawalMonthWindow, withdrawalProgram } from "@/features/withdrawals/window";
+import { PROGRAMS, parseProgram, programLabel, type Program } from "@/features/students/program";
 import {
   UserMinus,
   CalendarClock,
@@ -85,15 +87,19 @@ function subjectBreakdown(
     .slice(0, topN);
 }
 
-type RangeKey = "all" | "30d" | "90d" | "year";
+type RangeKey = "all" | "month" | "30d" | "90d" | "year";
 type ReasonKey = "all" | WithdrawalReason | "unspecified";
 type ConsultKey = "all" | "pending" | "done";
 
-/** 드롭다운 항목 — 해제 항목('전체')은 FilterSelect가 맨 위에 스스로 세운다(축 이름은 `axisLabel`, `allLabel`에 넣지 말 것). */
-const RANGE_OPTIONS: { value: Exclude<RangeKey, "all">; label: string }[] = [
+/**
+ * 드롭다운 항목 — 해제 항목('전체')은 FilterSelect가 맨 위에 스스로 세운다(축 이름은 `axisLabel`, `allLabel`에 넣지 말 것).
+ * '이번 달'(`month`)은 달 라벨이 URL `month=`에 따라 바뀌어 컴포넌트에서 앞에 붙인다.
+ * ⚠️ `year`는 달력 연도가 아니라 **최근 365일**이다 — 옛 라벨 '올해'가 거짓이라 '최근 1년'으로 고쳤다(2026-09-11, 값 불변).
+ */
+const RANGE_OPTIONS: { value: Exclude<RangeKey, "all" | "month">; label: string }[] = [
   { value: "30d", label: "최근 30일" },
   { value: "90d", label: "최근 90일" },
-  { value: "year", label: "올해" },
+  { value: "year", label: "최근 1년" },
 ];
 
 const CONSULT_OPTIONS: { value: Exclude<ConsultKey, "all">; label: string }[] = [
@@ -110,7 +116,7 @@ const SELECT_PROPS = { className: "w-auto", triggerClassName: TOOLBAR_SELECT } a
  * 🔴 유형을 바꾸면 퇴원 목록의 필터·검색어를 **지운다**(`clearParams`) — 수강종료 갈래엔 필터도 '초기화'도 없어, 실은 채 넘어가면
  *    URL에만 남은 필터가 되돌아올 때 되살아나는데 사용자는 그것을 볼 길이 없다(리뷰 2026-09-04).
  */
-const WITHDRAWN_FILTER_PARAMS = ["range", "reason", "subject", "consult", "q"];
+const WITHDRAWN_FILTER_PARAMS = ["range", "month", "reason", "subject", "program", "consult", "q"];
 function TypeSelect({ viewType }: { viewType: "withdrawn" | "subject-ended" }) {
   return (
     <FilterSelect
@@ -126,13 +132,23 @@ function TypeSelect({ viewType }: { viewType: "withdrawn" | "subject-ended" }) {
   );
 }
 
-type WdHrefParams = { range: RangeKey; reason: ReasonKey; q: string; subject: string; consult: ConsultKey };
+type WdHrefParams = {
+  range: RangeKey;
+  month: string;
+  reason: ReasonKey;
+  q: string;
+  subject: string;
+  program: Program | null;
+  consult: ConsultKey;
+};
 
 function buildWdHref(p: WdHrefParams): string {
   const sp = new URLSearchParams();
   if (p.range !== "all") sp.set("range", p.range);
+  if (p.range === "month") sp.set("month", p.month);
   if (p.reason !== "all") sp.set("reason", p.reason);
   if (p.subject !== "all") sp.set("subject", p.subject);
+  if (p.program) sp.set("program", p.program);
   if (p.consult !== "all") sp.set("consult", p.consult);
   if (p.q) sp.set("q", p.q);
   const s = sp.toString();
@@ -145,9 +161,11 @@ export default async function WithdrawalsPage({
   searchParams: Promise<{
     type?: string;
     range?: RangeKey;
+    month?: string;
     reason?: ReasonKey;
     q?: string;
     subject?: string;
+    program?: string;
     consult?: ConsultKey;
     page?: string;
     size?: string;
@@ -164,6 +182,12 @@ export default async function WithdrawalsPage({
   const consult: ConsultKey = (sp.consult as ConsultKey) ?? "all";
   const q = sp.q ?? "";
   const size = withdrawalPageSize(sp.size);
+  // '이번 달'(운영실 KPI '퇴원생' ↗) — 달은 URL `month=`(없거나 모양이 틀리면 KST 이번 달). 판정은 카드와 같은 inWithdrawalWindow.
+  const monthKey = isValidYm(sp.month) ? sp.month : kstMonth();
+  // 1일 ~ min(말일, 오늘) — 운영실 카드·등록·퇴원 추이 패널과 같은 창(오늘 이후로 적힌 퇴원 예정은 아직 퇴원이 아니다).
+  const monthWindow = withdrawalMonthWindow(monthKey, kstToday());
+  // 프로그램(EiE·인재원 영어·수학) — 마지막 수강 반 기준, 카드 팝업과 같은 withdrawalProgram.
+  const program = parseProgram(sp.program);
 
   const [all, settings] = await Promise.all([getWithdrawnStudents(), getTenantSettings()]);
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
@@ -186,20 +210,25 @@ export default async function WithdrawalsPage({
   const byName = (r: Wd) => !q || r.name.toLowerCase().includes(term);
   const byRange = (r: Wd) => {
     if (range === "all") return true;
+    // 🔴 이번 달 = 운영실 '퇴원생' 카드와 **같은 판정**(달 안 · 시스템 정리 제외) — 다른 기간과 달리 날짜 미상 정리분을 뺀다.
+    if (range === "month") return inWithdrawalWindow(r, monthWindow.from, monthWindow.to);
     const since = daysSince(r.withdrawnAt);
     return since !== null && since <= rangeDays;
   };
   const byReason = (r: Wd) => reason === "all" || (r.metadata?.reason ?? "unspecified") === reason;
   const bySubject = (r: Wd) => subject === "all" || r.lastClassSubject === subject;
   const byConsult = (r: Wd) => consult === "all" || (consult === "done" ? isConsulted(r) : !isConsulted(r));
+  const byProgram = (r: Wd) => !program || withdrawalProgram(r, settings.operations.subjects) === program;
+  // 프로그램은 어느 카드의 '자기 축'도 아니라 모든 모집단에 건다(이름 검색과 같은 자리).
+  const base = (r: Wd) => byName(r) && byProgram(r);
 
   // 목록·사유 카드 = **전 축** 적용(사용자가 고른 그대로).
-  const rows = all.filter((r) => byName(r) && byRange(r) && byReason(r) && bySubject(r) && byConsult(r));
+  const rows = all.filter((r) => base(r) && byRange(r) && byReason(r) && bySubject(r) && byConsult(r));
   // 카드별 모집단 — 자기 축 하나만 뺀다.
-  const trendRows = all.filter((r) => byName(r) && byReason(r) && bySubject(r) && byConsult(r)); // 기간 제외
-  const subjectRows = all.filter((r) => byName(r) && byRange(r) && byReason(r) && byConsult(r)); // 과목 제외
-  const consultRows = all.filter((r) => byName(r) && byRange(r) && byReason(r) && bySubject(r)); // 상담 제외
-  const reasonRows = all.filter((r) => byName(r) && byRange(r) && bySubject(r) && byConsult(r)); // 사유 제외
+  const trendRows = all.filter((r) => base(r) && byReason(r) && bySubject(r) && byConsult(r)); // 기간 제외
+  const subjectRows = all.filter((r) => base(r) && byRange(r) && byReason(r) && byConsult(r)); // 과목 제외
+  const consultRows = all.filter((r) => base(r) && byRange(r) && byReason(r) && bySubject(r)); // 상담 제외
+  const reasonRows = all.filter((r) => base(r) && byRange(r) && bySubject(r) && byConsult(r)); // 사유 제외
 
   // 상담 미완료 worklist 집계 — **상담 축만 뺀** 모집단(상담 필터를 걸면 0%/100%밖에 안 나온다).
   const consultPending = consultRows.filter((r) => !isConsulted(r)).length;
@@ -239,8 +268,13 @@ export default async function WithdrawalsPage({
     { value: "unspecified", label: "미기재" },
   ];
 
-  const current: WdHrefParams = { range, reason, q, subject, consult };
-  const filterActive = range !== "all" || reason !== "all" || subject !== "all" || consult !== "all" || !!q;
+  const current: WdHrefParams = { range, month: monthKey, reason, q, subject, program, consult };
+  const filterActive =
+    range !== "all" || reason !== "all" || subject !== "all" || consult !== "all" || !!program || !!q;
+  const rangeOptions = [
+    { value: "month" as const, label: monthKey === kstMonth() ? "이번 달" : monthLabel(monthKey) },
+    ...RANGE_OPTIONS,
+  ];
 
   // 통계는 전체 필터 결과를 유지하고, 명단만 오른쪽 카드 높이에 맞는 크기로 자른다.
   const total = rows.length;
@@ -299,12 +333,14 @@ export default async function WithdrawalsPage({
           드롭다운으로 오며 사라진다(의미색이 아니라 강조였다 — 값은 트리거 글자가 말한다). */}
       <div className="flex flex-wrap items-center gap-2 px-1">
         <TypeSelect viewType={viewType} />
+        {/* 기간을 바꾸면 `month=`는 지운다 — '이번 달'을 다시 고르면 KST 이번 달로 온다(옛 달이 붙어 남지 않게). */}
         <FilterSelect
           paramName="range"
           value={range === "all" ? "" : range}
-          options={RANGE_OPTIONS}
+          options={rangeOptions}
           axisLabel="기간"
           ariaLabel="기간 필터"
+          clearParams={["month"]}
           {...SELECT_PROPS}
         />
         <FilterSelect
@@ -322,6 +358,15 @@ export default async function WithdrawalsPage({
           options={subjectMaps.options}
           axisLabel="과목"
           ariaLabel="과목 필터"
+          {...SELECT_PROPS}
+        />
+        {/* 프로그램 — 마지막 수강 반 기준(운영실 퇴원생 팝업과 같은 withdrawalProgram). 이름은 학원설정·영어 구분 라벨. */}
+        <FilterSelect
+          paramName="program"
+          value={program ?? ""}
+          options={PROGRAMS.map((p) => ({ value: p, label: programLabel(p, settings.operations.subjects) }))}
+          axisLabel="프로그램"
+          ariaLabel="프로그램 필터"
           {...SELECT_PROPS}
         />
         <FilterSelect

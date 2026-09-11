@@ -13,6 +13,7 @@ const EMPTY: TodayActionsRaw = {
   absentToday: [],
   unrecordedYesterday: [],
   yesterday: "2026-07-01",
+  date: "2026-07-02",
   failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
   makeeduIssue: null,
   requestedTextbooks: 0,
@@ -69,7 +70,10 @@ describe("오늘 사람 변동·접수·내일 예약 (운영실 검토 2026-09-
     const items = buildTodayActions({
       ...EMPTY,
       dayArrivals: {
-        starting: [{ studentId: "s1", name: "김하늘" }],
+        starting: [
+          { studentId: "s1", name: "김하늘", kind: "first" },
+          { studentId: "s4", name: "최민준", kind: "newSubject" },
+        ],
         ending: [
           { studentId: "s2", name: "박서준" },
           { studentId: "s3", name: "이서연" },
@@ -79,12 +83,25 @@ describe("오늘 사람 변동·접수·내일 예약 (운영실 검토 2026-09-
     const start = items.find((item) => item.key === "arrivals-start");
     const end = items.find((item) => item.key === "arrivals-end");
     expect(start?.label).toBe("오늘 첫 수업");
-    expect(start?.count).toBe(1);
-    expect(start?.href).toBe("/students/s1"); // 한 명이면 그 학생으로
+    // 첫 수업 = 첫 등원 + 새 과목 — 운영실 KPI '오늘첫수업'·목록(first=)과 같은 숫자.
+    expect(start?.count).toBe(2);
+    expect(start?.note).toBe("첫 등원 1 · 새 과목 1");
+    // 기준일의 첫 수업 목록(운영실 KPI '오늘첫수업' ↗와 같은 목적지)
+    expect(start?.href).toBe(
+      "/students?first=2026-07-02&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
+    );
     expect(end?.label).toBe("오늘 마지막 수업");
     expect(end?.label).not.toContain("퇴원");
     expect(end?.count).toBe(2);
     expect(end?.href).toBe("/students"); // 여럿이면 목록으로
+  });
+
+  it("첫 수업이 전부 첫 등원이면 note를 달지 않는다(갈라 적을 것이 없다)", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      dayArrivals: { starting: [{ studentId: "s1", name: "김하늘", kind: "first" }], ending: [] },
+    });
+    expect(items.find((item) => item.key === "arrivals-start")?.note).toBeNull();
   });
 
   it("오늘 접수 건수는 미리보기 배열 길이가 아니라 총계를 쓴다", () => {
@@ -95,6 +112,7 @@ describe("오늘 사람 변동·접수·내일 예약 (운영실 검토 2026-09-
     const intake = items.find((item) => item.key === "intake-today");
     expect(intake?.count).toBe(7);
     expect(intake?.detail).toBe("가·나·다 외 4");
+    expect(intake?.href).toBe("/enrollment?view=table&received=2026-07-02");
   });
 
   it("내일 시간표 예약은 건수 없는 상태 신호이고 갈래를 note로 적는다", () => {
@@ -168,7 +186,8 @@ describe("buildTodayActions", () => {
       severity: "danger",
       count: 2,
       detail: "김민준·이서연",
-      href: "/attendance",
+      // 기준일의 결석 학생 목록 — 브리핑이면 어제 날짜가 실린다(raw.date).
+      href: "/attendance/2026-07-02?status=absent",
       menuKey: "attendance",
     });
   });

@@ -9,6 +9,7 @@ import type { IntakeChecklist } from "../intake-checklist";
 import type { PrepBriefRecord } from "../prep-brief";
 import { DEFAULT_RANGE, RANGE_MONTHS, type RangePreset } from "../range";
 import { outcomesOfStage, type BoardStageKey } from "../board-stages";
+import { kstDayBounds, kstMonthBounds } from "../kst-bounds";
 import { countAssignedClasses } from "./assigned-classes";
 
 /** prep_brief jsonb 방어 — 형태가 맞을 때만 통과(옛 스냅샷·수기 편집으로 깨진 값이 렌더를 죽이지 않게). */
@@ -150,16 +151,13 @@ export type ConsultationFilter = {
    *    못 거른다. 즉 '등록 완료'로 걸러도 outcome이 enrolled가 아닌 배정 카드는 안 담긴다(드묾).
    */
   stage?: BoardStageKey | null;
+  /**
+   * 접수일(`YYYY-MM-DD`, KST) — 그날 **행이 생긴** 상담만(`created_at`). 운영실 '신규문의' 카드의 목적지.
+   * 🔑 경계는 카드와 **같은 함수**(`kstDayBounds`)라 두 숫자가 같다. 있으면 월·기간(`consulted_at`)보다 우선한다 —
+   *    같이 걸면 상담 예정일이 3개월 밖인 오늘 접수 건이 목록에서만 빠진다.
+   */
+  received?: string | null;
 };
-
-function monthBounds(month: string): { startIso: string; endIso: string } {
-  const [yStr, mStr] = month.split("-");
-  const y = Number(yStr);
-  const m = Number(mStr) - 1;
-  const start = new Date(y, m, 1);
-  const end = new Date(y, m + 1, 1);
-  return { startIso: start.toISOString(), endIso: end.toISOString() };
-}
 
 // consultant_id(스칼라)는 목록뷰 인라인 수정(상담사 선택)의 현재값 — 임베드(display_name)와 별개로 함께 받는다.
 // 0002 마이그레이션부터 있는 컬럼이라 옛/새 스키마 분기(#95)가 필요 없다.
@@ -171,8 +169,12 @@ const LIST_COLS = `id, prospect_name, prospect_grade, prospect_school,
 /** 목록·칸반 공용 필터 적용. 두 경로가 갈라지면 "칸반엔 있는데 목록엔 없는 건"이 생긴다 — 한 함수로 묶는다. */
 function applyConsultationFilter<T extends { gte: unknown }>(q: T, filter?: ConsultationFilter): T {
   let out = q as unknown as PostgrestFilterLike;
-  if (filter?.month) {
-    const { startIso, endIso } = monthBounds(filter.month);
+  if (filter?.received) {
+    const { startIso, endIso } = kstDayBounds(filter.received);
+    out = out.gte("created_at", startIso).lt("created_at", endIso);
+  } else if (filter?.month) {
+    // 🔴 KST 달 경계(2026-09-11 수정) — 옛 `new Date(y, m, 1)`은 서버(UTC)에서 KST 오전 9시가 되어 1일 새벽 상담이 앞 달로 샜다.
+    const { startIso, endIso } = kstMonthBounds(filter.month);
     out = out.gte("consulted_at", startIso).lt("consulted_at", endIso);
   } else {
     // 🔴 기간 하한이 **항상** 걸린다 — 무필터로 전건을 여는 경로를 남기지 않는다(전체 = 2,197행).
@@ -851,15 +853,21 @@ export type OutcomeDistribution = { outcome: OutcomeKey; label: string; count: n
 
 export async function getMonthlyOutcomeDistribution(month: string): Promise<OutcomeDistribution> {
   const supabase = await createClient();
-  const { startIso, endIso } = monthBounds(month);
-  const { data } = await supabase
-    .from("enrollment_consultations")
-    .select("outcome")
-    .gte("consulted_at", startIso)
-    .lt("consulted_at", endIso);
+  // KST 달 경계(목록 월 필터와 같은 kstMonthBounds — 옛 monthBounds는 서버 로컬 자정이라 1일 새벽이 앞 달로 샜다).
+  const { startIso, endIso } = kstMonthBounds(month);
+  // 🔴 실패를 0건으로 위장하지 않는다(fetchAllPaged는 throw) · 한 달이 1000행을 넘어도 잘리지 않게 페이징(B2).
+  const data = await fetchAllPaged<{ outcome: string }>((from, to) =>
+    supabase
+      .from("enrollment_consultations")
+      .select("outcome")
+      .gte("consulted_at", startIso)
+      .lt("consulted_at", endIso)
+      .order("id")
+      .range(from, to),
+  );
 
   const counts = new Map<OutcomeKey, number>();
-  for (const r of data ?? []) {
+  for (const r of data) {
     counts.set(r.outcome as OutcomeKey, (counts.get(r.outcome as OutcomeKey) ?? 0) + 1);
   }
 

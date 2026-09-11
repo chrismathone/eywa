@@ -274,8 +274,8 @@ function ConsultationCard({
                         <span
                           role="button"
                           tabIndex={0}
-                          title={`이 학생의 등록상담 ${c.personConsultCount}건 — 눌러서 나머지 상담 보기`}
-                          aria-label={`이 학생의 등록상담 ${c.personConsultCount}건 보기`}
+                          title={`이 학생의 콜&상담 ${c.personConsultCount}건 — 눌러서 나머지 상담 보기`}
+                          aria-label={`이 학생의 콜&상담 ${c.personConsultCount}건 보기`}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -289,7 +289,7 @@ function ConsultationCard({
                     <DropdownMenuContent align="start" className="w-64 p-1.5">
                       <div className="flex items-center justify-between gap-2 px-1 pb-1">
                         <p className="text-text-faint text-xs font-medium">
-                          이 학생의 등록상담 {c.personConsultCount}건
+                          이 학생의 콜&상담 {c.personConsultCount}건
                         </p>
                         {/* 🔴 쓰기 권한이 있을 때만 — 병합은 되돌릴 수 없다(서버도 같은 게이트를 다시 본다). */}
                         {draggable ? (
@@ -301,7 +301,7 @@ function ConsultationCard({
                               setMergeOpen(true);
                             }}
                             className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold transition"
-                            title="이 학생의 등록상담을 한 건으로 합칩니다"
+                            title="이 학생의 콜&상담을 한 건으로 합칩니다"
                           >
                             병합
                           </button>

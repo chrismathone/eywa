@@ -111,7 +111,7 @@ export function EnrollmentTable({
           🔴 DragScrollArea 안쪽이 h-full이라 이 바깥이 높이를 가져야 표 안 스크롤·sticky 제목이 산다. */}
       <DragScrollArea scrollY className="bg-card border-line shadow-card min-h-[14rem] flex-1 rounded-2xl border">
         <table className="w-full min-w-[1080px] table-fixed border-separate border-spacing-0 [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
-          <caption className="sr-only">등록상담 목록</caption>
+          <caption className="sr-only">콜&상담 목록</caption>
           <colgroup>
             {COLS.map((c) => (
               <col key={c.key} style={c.w ? { width: c.w } : undefined} />

@@ -43,7 +43,7 @@ export default async function ConsultationStatsPage() {
           "전환율 0%"라는 거짓 사실이 된다(쿼리도 아예 조회하지 않는다 — 화면과 데이터 양쪽에서 차단). */}
       <section className={`grid gap-3 ${funnel.teacherScoped ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-4"}`}>
         {funnel.teacherScoped ? null : (
-          <Stat label="등록상담" value={funnel.enrollmentConsultations} unit="건" />
+          <Stat label="콜&상담" value={funnel.enrollmentConsultations} unit="건" />
         )}
         <Stat label={funnel.teacherScoped ? "내 원생상담" : "원생상담"} value={funnel.studentConsultations} unit="건" />
         {funnel.teacherScoped ? null : (

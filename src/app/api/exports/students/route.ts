@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { kstToday } from "@/lib/date-kst";
+import { isValidYmd, kstToday } from "@/lib/date-kst";
+import { parseProgram } from "@/features/students/program";
+import { restrictIdsFor } from "@/features/students/server/restrict-ids";
 import { requireAccess } from "@/lib/auth/require-access";
 import { attachmentFilename } from "@/lib/http/content-disposition";
 import {
@@ -32,8 +34,14 @@ export async function GET(request: Request) {
   const fieldParam = url.searchParams.get("field");
   const searchField = (fieldParam ?? undefined) as SearchField | undefined;
   const excludeNoEnrollment = url.searchParams.get("noenr") === "1";
+  // 운영실 KPI ↗ 집합(program=·first=) — 목록과 **같은 함수**로 좁혀 파일 행 = 목록 행. 없는 날짜는 필터 없음.
+  const firstParam = url.searchParams.get("first");
+  const restrictPromise = restrictIdsFor(
+    parseProgram(url.searchParams.get("program")),
+    isValidYmd(firstParam) ? firstParam : null,
+  );
 
-  const [students, settings] = await Promise.all([
+  const [rows, settings, restrict] = await Promise.all([
     getStudentsList(
       {
         status,
@@ -51,7 +59,9 @@ export async function GET(request: Request) {
       { applyTeacherScope: true },
     ),
     getTenantSettings(),
+    restrictPromise,
   ]);
+  const students = restrict ? rows.filter((row) => restrict.has(row.id)) : rows;
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const wb = await buildStudentsWorkbook(students, subjects.labelOf);
   const buf = await wb.xlsx.writeBuffer();

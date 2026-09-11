@@ -1511,6 +1511,9 @@ export const SHEET_DICT = {
   "stu.filter.sort.recent": { ko: "등록일순", en: "By date added" },
   "stu.filter.noEnrollment": { ko: "미수강 제외", en: "Hide unenrolled" },
   "stu.filter.searchPh": { ko: "이름·학교·연락처·메모", en: "Name, school, phone or memo" },
+  // 운영실 KPI ↗가 넘긴 학생 집합 칩(원장 2026-09-11) — 눌러 푼다. 프로그램 이름(EiE·인재원 영어)은 번역하지 않는다.
+  "stu.filter.program": { ko: "프로그램", en: "Program" },
+  "stu.filter.first": { ko: "첫 수업: {m}월 {d}일", en: "First class: {m}/{d}" },
 
   // ── 이력서 종이 서식(/me) — 🔴 화면만 언어를 타고 **인쇄물은 언제나 한국어**다 ────
   "res.title.roster": { ko: "직원 명부", en: "Staff register" },

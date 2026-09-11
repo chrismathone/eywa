@@ -1,6 +1,7 @@
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
 import "server-only";
-import { subjectEnrollmentSummary } from "../subject-enrollment-summary";
+import { enrolledSubjectCounts } from "../enrolled-composition";
+import { countEnrolledStudents, loadActiveEnrolledEnrollments } from "./enrolled-programs";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -98,7 +99,16 @@ export type StudentListFilters = {
   excludeNoEnrollment?: boolean; // 활성 수강 없는 학생 제외 (고급)
   sort?: StudentSort; // 정렬 (고급) — 기본 grade
   searchField?: SearchField; // 검색 범위 필드 (고급) — 기본 all
+  /**
+   * 이 학생들로만 좁힌다(운영실 KPI ↗ `program=`·`first=` — 카드·팝업과 같은 함수가 만든 집합). getStudentsPage 전용.
+   * ⚠️ 수백 명이라 `.in("id", …)`에 싣지 않는다 — getStudentsPage가 id 전건을 같은 필터·정렬로 받아 JS로 거른다.
+   */
+  restrictIds?: ReadonlySet<string> | null;
 };
+
+/** getStudentsPage가 students에서 직접 읽는 컬럼(아래 StudentPageRecord와 함께 고칠 것). */
+const STUDENT_PAGE_COLUMNS =
+  "id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect";
 
 // 검색 필드 → 컬럼 매핑. all은 데스크 응대 빈도 높은 이름·학교·전화·보호자명 묶음.
 const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
@@ -367,62 +377,19 @@ export async function getStudentsList(
 export async function getEnrolledStatCounts(): Promise<{
   enrolled: number;
   bySubject: Record<string, number>;
-  concurrent: number;
   combinations: { subjects: string[]; value: number }[];
 }> {
   const supabase = await createClient();
   // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치). teacher 또는 겸직-강사뷰.
   const teacherScope = await effectiveTeacherScope();
-  const teacherStudentIds = teacherScope?.studentIds ?? null;
-  if (teacherStudentIds && teacherStudentIds.length === 0)
-    return { enrolled: 0, bySubject: {}, concurrent: 0, combinations: [] };
-  const scope = teacherStudentIds ? new Set(teacherStudentIds) : null;
-  // 표시 축(원장 2026-08-20): 게이지는 **담당 과목만** — 동시수강으로 들어온 남의 과목(수학 전담인데
-  // "영어 14명 36%")은 이 강사에게 오독을 만든다. 관리자·담당 반 0개는 축 없음(종전 동일).
-  const axis = subjectAxisOf(teacherScope);
-
-  const enrolledCountQ = () => {
-    const q = supabase
-      .from("students")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "enrolled");
-    return teacherStudentIds ? q.in("id", teacherStudentIds) : q;
-  };
-  const [{ count, error: countError }, ens] = await Promise.all([
-    enrolledCountQ(),
-    fetchAllPaged<{
-      student_id: string;
-      class: { subject?: string } | { subject?: string }[] | null;
-    }>((from, to) =>
-      supabase
-        .from("enrollments")
-        .select("student_id, class:class_id!inner ( subject ), student:student_id!inner ( status )")
-        .is("end_date", null)
-        .eq("on_hold", false)
-        .eq("student.status", "enrolled")
-        .range(from, to),
-    ),
+  if (teacherScope && teacherScope.studentIds.length === 0) return { enrolled: 0, bySubject: {}, combinations: [] };
+  // 재원 수(count head)와 활성 수강 전건(요청 캐시 — 운영실 구성과 같은 행)을 병렬로. 과목별 집계는 순수 함수 한 벌 —
+  // 표시 축(원장 2026-08-20: 게이지는 **담당 과목만**)도 그 안에서 건다. 운영실은 같은 순수 함수에 직접 받은 행을 넘긴다.
+  const [enrolled, ens] = await Promise.all([
+    countEnrolledStudents(supabase, teacherScope),
+    loadActiveEnrolledEnrollments(),
   ]);
-
-  if (countError) throw new Error(`재원생 집계 실패: ${countError.message}`);
-  // 과목별 distinct 학생 — 강사 스코프는 JS로 교차(.in() 414 회피).
-  const bySubject = new Map<string, Set<string>>();
-  for (const e of ens) {
-    if (scope && !scope.has(e.student_id)) continue;
-    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
-      | { subject?: string }
-      | undefined;
-    if (!klass?.subject) continue;
-    if (!axisHasSubject(axis, klass.subject)) continue;
-    const set = bySubject.get(klass.subject) ?? new Set<string>();
-    set.add(e.student_id);
-    bySubject.set(klass.subject, set);
-  }
-  return {
-    enrolled: count ?? 0,
-    bySubject: Object.fromEntries([...bySubject].map(([k, v]) => [k, v.size])),
-    ...subjectEnrollmentSummary(bySubject),
-  };
+  return { enrolled, ...enrolledSubjectCounts(ens, teacherScope) };
 }
 
 /**
@@ -467,27 +434,6 @@ export async function getStudentsPage(
     ? await memoMatchStudentIds(supabase, searchTerm(options?.q))
     : [];
 
-  let qb = supabase
-    .from("students")
-    .select(
-      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect` +
-        (needEnrollmentJoin ? `, ${embed.select}` : ``),
-      { count: "exact" },
-    );
-  if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
-  if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
-  qb = applySearch(qb, options?.q, options?.searchField, memoIds);
-  if (needEnrollmentJoin) {
-    // 공통: 종료되지 않은 수강. (휴원은 '수강 중'으로 본다 — 과목 필터일 때만 아래에서 더 좁힌다.)
-    // 🔴 상태=퇴원에선 활성 조건을 떼고 **이력 포함** 매치 — 퇴원생은 활성 수강이 없어 그대로 걸면
-    //    과목/강사 필터가 항상 0명이 된다(적대 리뷰 F4 — noenr만 고치고 남았던 반쪽).
-    if (!isWithdrawn) qb = qb.is("enrollments.end_date", null);
-    if (embed.subjectFilter) {
-      if (!isWithdrawn) qb = qb.eq("enrollments.on_hold", false);
-      qb = qb.eq("enrollments.class.subject", options!.subject!);
-    }
-    if (embed.teacherFilter) qb = qb.eq("enrollments.class.teacher_id", options!.teacherId!);
-  }
   // 강사 스코프 ∩ 담당 강사 필터 → id 화이트리스트. 강사 1인의 담당 학생 수라 URL은 짧다.
   let idWhitelist: string[] | null = null;
   for (const list of [teacherStudentIds, teacherFilterIds]) {
@@ -496,21 +442,77 @@ export async function getStudentsPage(
     idWhitelist = idWhitelist ? idWhitelist.filter((id) => s.has(id)) : list;
     if (idWhitelist.length === 0) return { rows: [], total: 0 };
   }
-  if (idWhitelist) qb = qb.in("id", idWhitelist);
 
-  // 정렬 — 필터 적용(.eq/.or/.in/.not) 다음에 .order(이후엔 transform 빌더). 기본 grade.
-  const sorted =
-    options?.sort === "name"
+  /** 목록 필터·정렬을 건 students 조회 — 한 페이지(count) 경로와 `restrictIds` 경로(id 전건)가 **같은 것**을 쓴다. */
+  const buildQuery = (columns: string, withCount: boolean) => {
+    let qb = supabase
+      .from("students")
+      .select(
+        columns + (needEnrollmentJoin ? `, ${embed.select}` : ``),
+        withCount ? { count: "exact" } : undefined,
+      );
+    if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
+    if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
+    qb = applySearch(qb, options?.q, options?.searchField, memoIds);
+    if (needEnrollmentJoin) {
+      // 공통: 종료되지 않은 수강. (휴원은 '수강 중'으로 본다 — 과목 필터일 때만 아래에서 더 좁힌다.)
+      // 🔴 상태=퇴원에선 활성 조건을 떼고 **이력 포함** 매치 — 퇴원생은 활성 수강이 없어 그대로 걸면
+      //    과목/강사 필터가 항상 0명이 된다(적대 리뷰 F4 — noenr만 고치고 남았던 반쪽).
+      if (!isWithdrawn) qb = qb.is("enrollments.end_date", null);
+      if (embed.subjectFilter) {
+        if (!isWithdrawn) qb = qb.eq("enrollments.on_hold", false);
+        qb = qb.eq("enrollments.class.subject", options!.subject!);
+      }
+      if (embed.teacherFilter) qb = qb.eq("enrollments.class.teacher_id", options!.teacherId!);
+    }
+    if (idWhitelist) qb = qb.in("id", idWhitelist);
+    // 정렬 — 필터 적용(.eq/.or/.in/.not) 다음에 .order(이후엔 transform 빌더). 기본 grade.
+    return options?.sort === "name"
       ? qb.order("name", { ascending: true })
       : options?.sort === "recent"
         ? qb.order("enrolled_at", { ascending: false, nullsFirst: false })
         : qb.order("grade", { ascending: true }).order("name", { ascending: true });
+  };
 
-  const { data, count, error } = await sorted.range(from, to);
-  // 🔴 `data ?? []`로 삼키지 말 것 — 이 버그가 "8초 뒤 학생 0명"으로 보인 직접 원인이다.
-  //    빈 결과와 실패는 화면에서 구분돼야 한다(빈 목록은 사실, 실패는 사실이 아니다).
-  if (error) throw new Error(`학생 목록을 불러오지 못했습니다: ${error.message}`);
-  const pageData = (data ?? []) as unknown as StudentPageRecord[];
+  let pageData: StudentPageRecord[];
+  let total: number;
+  const restrict = options?.restrictIds ?? null;
+  if (restrict) {
+    // 🔑 운영실 KPI ↗(`program=`·`first=`)가 넘긴 학생 집합 — 수백 명이라 `.in("id", …)`에 싣지 않는다(URL 414·헤더
+    //    초과, 위 enrollmentEmbed 🔴 2026-07-29 사고). 같은 필터·정렬로 **id 전건**을 받아(학생 수 규모 — 한두 쪽,
+    //    unique tie-break `id`로 OFFSET 안정화) JS로 거른 뒤 자르고, 그 쪽(≤ pageSize명)만 다시 받는다.
+    const ordered =
+      restrict.size === 0
+        ? []
+        : await fetchAllPaged<{ id: string }>(
+            (f, t) =>
+              buildQuery("id", false).order("id").range(f, t) as unknown as PromiseLike<{
+                data: { id: string }[] | null;
+                error: { message: string } | null;
+              }>,
+          );
+    const matched = [...new Set(ordered.map((r) => r.id))].filter((id) => restrict.has(id));
+    total = matched.length;
+    const pageIds = matched.slice(from, to + 1);
+    if (pageIds.length === 0) {
+      pageData = [];
+    } else {
+      const { data, error } = await supabase.from("students").select(STUDENT_PAGE_COLUMNS).in("id", pageIds);
+      if (error) throw new Error(`학생 목록을 불러오지 못했습니다: ${error.message}`);
+      const byId = new Map(((data ?? []) as unknown as StudentPageRecord[]).map((r) => [r.id, r]));
+      pageData = pageIds.flatMap((id) => {
+        const row = byId.get(id);
+        return row ? [row] : [];
+      });
+    }
+  } else {
+    const { data, count, error } = await buildQuery(STUDENT_PAGE_COLUMNS, true).range(from, to);
+    // 🔴 `data ?? []`로 삼키지 말 것 — 이 버그가 "8초 뒤 학생 0명"으로 보인 직접 원인이다.
+    //    빈 결과와 실패는 화면에서 구분돼야 한다(빈 목록은 사실, 실패는 사실이 아니다).
+    if (error) throw new Error(`학생 목록을 불러오지 못했습니다: ${error.message}`);
+    pageData = (data ?? []) as unknown as StudentPageRecord[];
+    total = count ?? pageData.length;
+  }
 
   const ids = pageData.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
@@ -563,7 +565,7 @@ export async function getStudentsPage(
     } satisfies StudentListRow;
   });
 
-  return { rows, total: count ?? rows.length };
+  return { rows, total };
 }
 
 export type CareFocus = {
