@@ -25,7 +25,16 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: stri
   );
 }
 
-export async function GradesTab({ studentId }: { studentId: string }) {
+export async function GradesTab({
+  studentId,
+  jjFrom,
+  jjTo,
+}: {
+  studentId: string;
+  /** JJ실 학습 기간(학습일, 주소 `jjFrom`·`jjTo`) — 성적관리 JJ실이 같은 기간을 싣고 넘어온다. 없으면 최근 30일. */
+  jjFrom?: string;
+  jjTo?: string;
+}) {
   const [grades, levelTests, settings, goals, comments] = await Promise.all([
     getStudentGrades(studentId),
     getStudentLevelTests(studentId),
@@ -68,7 +77,7 @@ export async function GradesTab({ studentId }: { studentId: string }) {
 
       {/* JJ실 학습(인재원, 2026-09-10) — 짝이 걸린 학생만. 인재원 호출이 성적 탭 첫 페인트를 막지 않게 따로 흘린다(B7). */}
       <Suspense fallback={null}>
-        <StudentJjSection studentId={studentId} />
+        <StudentJjSection studentId={studentId} jjFrom={jjFrom} jjTo={jjTo} />
       </Suspense>
 
       <div className="border-border border-t pt-4">

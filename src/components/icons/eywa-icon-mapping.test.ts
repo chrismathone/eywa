@@ -49,6 +49,8 @@ const APPROVED_INLINE_SVG = [
   "src/app/(marketing)/_ui/mock-workspace.tsx",
   "src/app/(shell)/dashboard/_components/sparkline.tsx",
   "src/features/onescreen/components/report-trend-graph.tsx",
+  // 2026-09-11 인재원 학습분석지(wide)의 시험 점수 추이 선 — 차트(report-trend-graph와 같은 성격).
+  "src/features/ijw/components/jj-study-parts.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다
