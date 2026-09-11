@@ -15,7 +15,7 @@ export async function TextbooksFace({ sp }: { sp: Sp }) {
   const sub = sp.tsub === "catalog" ? "catalog" : "list";
   return (
     <div className="space-y-4">
-      <FaceTabs faces={SUB_FACES} active={sub} ariaLabel="교재 면 전환" />
+      <FaceTabs faces={SUB_FACES} active={sub} level="secondary" ariaLabel="교재 면 전환" />
       {sub === "catalog" ? (
         <CatalogPanel sp={sp} base={{ tab: "textbooks", tsub: "catalog" }} />
       ) : (

@@ -51,6 +51,17 @@ import {
 } from "@/features/dashboard/server/queries";
 import { unexplainedAbsences } from "@/features/dashboard/absence-reasons";
 import { careStatus } from "./care";
+import { schoolsByLevel } from "./student-composition";
+import {
+  matchFirstClass,
+  matchFirstClassSchedule,
+} from "./admissions-class-link";
+import {
+  firstClassCandidates,
+  firstClassScheduleCandidates,
+} from "./admissions-links-server";
+import { reportError } from "@/lib/observability/report-error";
+import { staffDisplayRole, upcomingAdmissionsEvents } from "./display";
 import {
   distribution,
   datedWithdrawals,
@@ -97,6 +108,9 @@ async function students(): Promise<OverviewData["students"]> {
       ),
     ),
     schools: distribution(visible.map((r) => r.school)),
+    schoolGroups: schoolsByLevel(visible),
+    concurrent: counts.concurrent,
+    subjectCombinations: counts.combinations,
   };
 }
 
@@ -268,14 +282,15 @@ async function newcomers(): Promise<CareSummary> {
 
 async function staff() {
   const db = await createClient();
-  const rows = await fetchAllPaged<{ system_role: string }>((from, to) =>
-    db
-      .from("users")
-      .select("system_role")
-      .eq("status", "active")
-      .neq("system_role", "student")
-      .order("id")
-      .range(from, to),
+  const rows = await fetchAllPaged<{ id: string; system_role: string }>(
+    (from, to) =>
+      db
+        .from("users")
+        .select("id,system_role")
+        .eq("status", "active")
+        .neq("system_role", "student")
+        .order("id")
+        .range(from, to),
   );
   const labels: Record<string, string> = {
     master: "원장",
@@ -286,7 +301,9 @@ async function staff() {
     accountant: "회계",
     viewer: "열람",
   };
-  return distribution(rows.map((r) => labels[r.system_role] ?? r.system_role));
+  return distribution(
+    rows.map((r) => labels[staffDisplayRole(r)] ?? r.system_role),
+  );
 }
 
 async function operations(
@@ -396,6 +413,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     canAccess(user.systemRole, key, matrix),
   );
   const today = kstToday();
+  const settingsPromise = getTenantSettings();
   const history = allowed.includes("attendance")
     ? attendanceHistory(today)
     : null;
@@ -504,25 +522,45 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
         results.flatMap((r) => r.events).map((e) => [e.id, e]),
       ).values(),
     ];
-    return events
-      .filter(
-        (e) =>
-          e.endDate >= today &&
-          e.startDate <= end &&
-          e.source === "manual" &&
-          !/^\s*\[취소\]/.test(e.title) &&
-          !e.title.includes("예약 금지") &&
-          !e.tag?.name.includes("운영팀 중요일정"),
-      )
-      .sort((a, b) => a.startDate.localeCompare(b.startDate))
-      .map(({ id, title, startDate, endDate, startTime, source }) => ({
-        id,
-        title,
-        startDate,
-        endDate,
-        startTime,
-        source,
-      }));
+    const upcoming = upcomingAdmissionsEvents(events, today, end);
+    let candidates: Awaited<ReturnType<typeof firstClassCandidates>> = [];
+    let classSlots: Awaited<ReturnType<typeof firstClassScheduleCandidates>> =
+      [];
+    if (
+      allowed.includes("students") &&
+      allowed.includes("classes") &&
+      upcoming.some((e) => /첫\s*수업/.test(`${e.title} ${e.tag?.name ?? ""}`))
+    ) {
+      try {
+        [candidates, classSlots] = await Promise.all([
+          firstClassCandidates(today, end),
+          firstClassScheduleCandidates(today, end),
+        ]);
+      } catch (error) {
+        // 반 연결 조회가 실패해도 일정 자체는 계속 보여준다.
+        reportError(error, { scope: "dashboard.first-class-links" });
+      }
+    }
+    const calendarSettings = await settingsPromise;
+    return upcoming.map((event) => ({
+      id: event.id,
+      title: event.title,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      startTime: event.startTime,
+      source: event.source,
+      matchedClass:
+        matchFirstClass(
+          event,
+          candidates,
+          subjectLabelRecord(calendarSettings.operations.subjects),
+        ) ??
+        matchFirstClassSchedule(
+          event,
+          classSlots,
+          subjectLabelRecord(calendarSettings.operations.subjects),
+        ),
+    }));
   });
   add("englishSheet", ["ecs"], async () => {
     const result = await getSheetLanding(null);
@@ -544,7 +582,6 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       total: result.data.cards.reduce((sum, c) => sum + c.shown, 0),
     };
   });
-  const settingsPromise = getTenantSettings();
   await Promise.all(jobs);
   const settings = await settingsPromise;
   const teacherId = await effectiveTeacherId();

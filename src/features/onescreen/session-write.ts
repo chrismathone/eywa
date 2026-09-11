@@ -26,6 +26,8 @@ export type SessionProgressEntry = {
   trendDraft?: string | null;
   textbook?: string | null;
   homeworkToday?: string | null;
+  /** 영어 템플릿의 '다음 시간 테스트'(2026-09-10) — 강사가 친 칸이라 내용으로 센다(영어 행만 실린다). */
+  nextTest?: string | null;
   attitude?: string | null;
   homework?: string | null;
   note?: string | null;
@@ -52,6 +54,7 @@ export function sessionContentBits(s: SessionContent | null | undefined): Set<st
     if (hasText(e.trendDraft)) out.add(`${key}:trendDraft`);
     if (hasText(e.textbook)) out.add(`${key}:textbook`);
     if (hasText(e.homeworkToday)) out.add(`${key}:homeworkToday`);
+    if (hasText(e.nextTest)) out.add(`${key}:nextTest`);
     if (hasText(e.attitude)) out.add(`${key}:attitude`);
     if (hasText(e.homework)) out.add(`${key}:homework`);
     if (hasText(e.note)) out.add(`${key}:note`);

@@ -14,7 +14,6 @@ import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { reportError, reportWarning } from "@/lib/observability/report-error";
-import { notifyUsers } from "@/features/notifications/server/notify";
 import { computeRetentionRoster } from "@/features/retention/server/queries";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -29,7 +28,6 @@ import {
   type DailyBriefingPayload,
 } from "../briefing-digest";
 import {
-  buildFallbackTeamReport,
   buildTeamPrompt,
   validateTeamReport,
   type TeamReport,
@@ -74,11 +72,10 @@ export async function getDailyBriefing(tenantId: string, date: string): Promise<
 
 /**
  * 테넌트 1건의 브리핑 생성 → upsert(tenant×date 멱등). 실패도 행으로 남겨 카드가 정직하게 표시.
- * notifyOnFirstGeneration: 그날 최초 생성시에만 master에게 벨 1회(notified_at 게이트 — 재생성은 미발송).
+ * AI 멘트 생성·저장은 유지하되 폐지된 일일 브리핑 화면의 준비 알림은 발송하지 않는다.
  */
 export async function generateDailyBriefing(
   tenantId: string,
-  opts: { notifyOnFirstGeneration?: boolean } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient();
   const supabase = admin as unknown as Supabase;
@@ -306,7 +303,6 @@ export async function generateDailyBriefing(
     );
     if (upsertError) throw new Error(`브리핑 저장 실패: ${upsertError.message}`);
 
-    if (opts.notifyOnFirstGeneration) await notifyMasterOnce(tenantId, date, payload);
     return { ok: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -325,38 +321,4 @@ export async function generateDailyBriefing(
     if (markError) reportError(markError, { scope: "briefing.generate.failmark", tenantId });
     return { ok: false, error: message };
   }
-}
-
-/**
- * 벨 알림 1회 게이트 — notifications엔 유니크 제약이 없어 재실행이 중복 벨을 쌓는다.
- * 수신자는 master만(원장 결정 2026-07-16 — 관리자 전원 아침 벨은 경보 피로).
- */
-async function notifyMasterOnce(tenantId: string, date: string, payload: DailyBriefingPayload): Promise<void> {
-  const admin = createAdminClient();
-  const { data: row } = await admin
-    .from("daily_briefings")
-    .select("id, notified_at")
-    .eq("tenant_id", tenantId)
-    .eq("briefing_date", date)
-    .maybeSingle();
-  if (!row || row.notified_at) return;
-  const { data: masters, error } = await admin
-    .from("users")
-    .select("id")
-    .eq("tenant_id", tenantId) // admin은 RLS 우회 — 이 필터가 유일한 격리선(notifyClassAssignment 선례)
-    .eq("system_role", "master")
-    .eq("status", "active");
-  if (error || !masters || masters.length === 0) return;
-  await notifyUsers(
-    masters.map((master) => ({
-      tenantId,
-      recipientId: master.id as string,
-      type: "daily_briefing" as const,
-      title: "오늘의 운영 브리핑이 준비됐습니다",
-      body: buildFallbackTeamReport(payload).headline.slice(0, 120),
-      // 보고는 운영실 2차 줄(접힌 <details id="daily-briefing">) 안에 있다 — 해시로 그 줄을 펼친 채 착지(DetailsHashOpen).
-      link: "/dashboard#daily-briefing",
-    })),
-  );
-  await admin.from("daily_briefings").update({ notified_at: new Date().toISOString() }).eq("id", row.id);
 }

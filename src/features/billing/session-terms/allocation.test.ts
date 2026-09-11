@@ -13,6 +13,15 @@ const row = (over: Partial<AllocationRowInput>): AllocationRowInput => ({
 });
 
 describe("aggregateTeacherAllocations", () => {
+  it("실측 0회라도 확정 회차의 금액 근거가 없으면 확정 금액은 미계산이다", () => {
+    const [a] = aggregateTeacherAllocations([row({ amount: null, unitPrice: null, actualConsumed: 0 })]);
+    expect(a).toMatchObject({ actualAmount: 0, missingPriceRows: 0, missingConfirmedRows: 1, confirmedPricedRows: 0 });
+  });
+
+  it("단가가 없어도 저장된 확정 금액 0원은 유효한 금액이다", () => {
+    const [a] = aggregateTeacherAllocations([row({ amount: 0, unitPrice: null, actualConsumed: 0 })]);
+    expect(a).toMatchObject({ confirmedAmount: 0, missingConfirmedRows: 0, confirmedPricedRows: 1 });
+  });
   it("확정 금액 = 저장 amount 우선, 실측 금액 = 실 시수 × 단가 — 일치 시 diff 0", () => {
     const [a] = aggregateTeacherAllocations([row({})]);
     expect(a).toMatchObject({

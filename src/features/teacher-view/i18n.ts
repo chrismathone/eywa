@@ -2182,6 +2182,155 @@ export const SHEET_DICT = {
     ko: "'자동작성'을 누르면 최근 시험·과제 점수 흐름을 요약해 줍니다. 기록이 적으면 비어 있을 수 있습니다.",
     en: "Press 'Auto-write' for a summary of the recent test and homework scores. It can stay empty when there is little record.",
   },
+  // ── 영어 템플릿 모드(2026-09-10) — 영어 행 보고서 카드의 템플릿 칸 · 템플릿 관리 창 ──
+  "os.card.templateBadge": { ko: "템플릿", en: "Template" },
+  "os.card.templateBadgeTitle": {
+    ko: "영어 보고서는 고른 템플릿에 진도·숙제·테스트와 AI 코멘트를 채워 만듭니다",
+    en: "English reports fill the chosen template with the progress, homework, tests and an AI comment",
+  },
+  "os.card.mentPhTemplate": {
+    ko: "'자동작성'을 누르면 고른 템플릿에 진도·숙제·테스트와 AI 코멘트를 채워 줍니다. 그대로 보내거나 수정하세요.",
+    en: "Press 'Auto-write' to fill the chosen template with the progress, homework, tests and an AI comment. Send it as it is or edit it.",
+  },
+  "os.tpl.label": { ko: "템플릿", en: "Template" },
+  "os.tpl.search": { ko: "템플릿 찾기", en: "Find a template" },
+  "os.tpl.manage": { ko: "템플릿 관리", en: "Manage templates" },
+  "os.tpl.nextTest": { ko: "다음 시간 테스트", en: "Next class test" },
+  "os.tpl.nextTestPh": { ko: "예: 단어 시험 71~80번", en: "e.g. vocabulary test, words 71-80" },
+  "os.tpl.refill": { ko: "템플릿으로 다시 채우기", en: "Refill from the template" },
+  "os.tpl.refillTitle": {
+    ko: "지금 진도·숙제·테스트 칸과 마지막 AI 코멘트로 글을 다시 만듭니다",
+    en: "Rebuilds the text from the current progress, homework and test fields and the last AI comment",
+  },
+  "os.tpl.copy": { ko: "글 복사", en: "Copy the text" },
+  "os.tpl.copied": { ko: "보고서 글을 복사했습니다", en: "Report text copied" },
+  "os.tpl.copyEmpty": {
+    ko: "복사할 글이 없습니다 — 먼저 자동작성을 눌러 주세요",
+    en: "There is no text to copy yet — press Auto-write first",
+  },
+  "os.tpl.nameMissing": {
+    ko: "AI 코멘트에 학생 이름이 없습니다 — 확인 후 넣어 주세요",
+    en: "The AI comment doesn't mention the student's name — please add it",
+  },
+  "os.tpl.overwriteConfirm": {
+    ko: "직접 고친 내용이 있습니다. 템플릿으로 다시 채우면 고친 내용이 사라집니다. 계속할까요?",
+    en: "You edited this text. Refilling from the template replaces your edits. Continue?",
+  },
+  "os.tpl.aiFailed": {
+    ko: "AI 코멘트를 만들지 못했습니다 — 글은 그대로 두었습니다. 잠시 후 다시 눌러 주세요",
+    en: "Couldn't write the AI comment — the text was left as it was. Try again shortly",
+  },
+  "os.tpl.builtinName": { ko: "ECS 자동 (기본)", en: "ECS auto (built-in)" },
+  "os.tpl.loading": {
+    ko: "템플릿 목록을 불러오는 중입니다 — 잠시 후 다시 눌러 주세요",
+    en: "Still loading your templates — try again in a moment",
+  },
+  "os.tpl.templateMissing": {
+    ko: "고른 템플릿을 찾지 못해 기본 템플릿으로 채웠습니다",
+    en: "The chosen template wasn't found, so the built-in one was used",
+  },
+  "os.tpl.editedDuringGen": {
+    ko: "만드는 동안 글을 고치셔서 글은 그대로 두었습니다 — 새 AI 코멘트는 받아 두었으니 '다시 채우기'로 넣을 수 있습니다",
+    en: "You edited the text while it was being written, so it was left as is — the new AI comment was kept; press Refill to use it",
+  },
+  "os.tpl.copyFailed": {
+    ko: "복사하지 못했습니다 — 글을 직접 선택해 복사해 주세요",
+    en: "Couldn't copy — please select the text and copy it yourself",
+  },
+  "os.tpl.listFailed": {
+    ko: "내 템플릿을 불러오지 못했습니다. 기본 템플릿으로 계속할 수 있습니다",
+    en: "Couldn't load your templates. You can keep going with the built-in one",
+  },
+  "os.tpl.stale": {
+    ko: "템플릿이나 진도·숙제·테스트 칸이 바뀌어 글과 다릅니다 — 다시 채우기를 눌러 주세요",
+    en: "The template or the progress, homework or test fields changed since the text was filled — press Refill",
+  },
+  "os.tpl.aiStale": {
+    ko: "AI 인사말·코멘트가 고치기 전 값으로 쓰였습니다 — 자동작성을 다시 눌러 주세요",
+    en: "The AI greeting or comment was written from the earlier values — press Auto-write again",
+  },
+  "os.tpl.listFailedRetry": {
+    ko: "내 템플릿 목록을 불러오지 못해 이 행의 템플릿을 확인할 수 없습니다 — 화면을 새로 고친 뒤 다시 눌러 주세요",
+    en: "Couldn't load your templates, so this row's template can't be checked — reload the screen and try again",
+  },
+  "os.tpl.needAiPending": {
+    ko: "AI 인사말·코멘트가 아직 없어 지금 글은 '{current}' 템플릿 그대로입니다 — 자동작성을 누르면 고른 템플릿으로 바뀝니다",
+    en: "No AI greeting or comment yet, so the text still uses '{current}' — press Auto-write to switch to the chosen template",
+  },
+  "os.tpl.templateGone": {
+    ko: "이 글의 템플릿을 찾지 못했습니다(삭제됨) — 템플릿을 다시 골라 주세요",
+    en: "This text's template can't be found (deleted) — please pick a template again",
+  },
+  "os.tpl.needAi": {
+    ko: "AI 인사말·코멘트가 아직 없습니다 — 자동작성을 눌러 주세요",
+    en: "No AI greeting or comment yet — press Auto-write",
+  },
+  "os.tpl.bulkSkipped": {
+    ko: "영어 {n}행은 건너뛰었습니다(템플릿 목록 로딩·목록 오류·AI 오류·작성 중 수정) — 그 행은 따로 눌러 주세요(목록 오류면 화면을 새로 고친 뒤)",
+    en: "{n} English rows were skipped (templates loading or unavailable, AI error or edited meanwhile) — do those rows one by one (reload first if the list failed)",
+  },
+  "os.tpl.autoOverwriteConfirm": {
+    ko: "직접 고친 내용이 있습니다. 자동작성하면 고친 내용이 사라집니다. 계속할까요?",
+    en: "You edited this text. Auto-write replaces your edits. Continue?",
+  },
+  "os.tpl.needAiFirst": {
+    ko: "먼저 '자동작성'을 눌러 AI 인사말·코멘트를 만들어 주세요 — 다시 채우기는 만들어 둔 코멘트로 글만 다시 짭니다",
+    en: "Press Auto-write first to create the AI greeting and comment — Refill only rebuilds the text around an existing comment",
+  },
+  "os.tpl.outdatedSend": {
+    ko: "이 글에 고치기 전 값(점수·진도, 또는 그 값으로 쓴 AI 인사말·코멘트)이 남아 있습니다. 그대로 보낼까요? (다시 채우기·자동작성으로 맞출 수 있습니다)",
+    en: "This text still carries earlier values (scores or progress, or an AI greeting or comment written from them). Send it as is? (Refill or Auto-write brings it up to date)",
+  },
+  "os.tpl.outdatedSave": {
+    ko: "이 글에 고치기 전 값(점수·진도, 또는 그 값으로 쓴 AI 인사말·코멘트)이 남아 있습니다. 그대로 저장할까요? (학부모 링크·인쇄에 그대로 보입니다 · 다시 채우기·자동작성으로 맞출 수 있습니다)",
+    en: "This text still carries earlier values (scores or progress, or an AI greeting or comment written from them). Save it as is? (parents see it as is via the link or print · Refill or Auto-write brings it up to date)",
+  },
+  "os.tpl.bulkSaveOutdated": {
+    ko: "영어 {n}명의 글에 고치기 전 값이 남아 있습니다 — {names}{more}\n그대로 저장할까요? (학부모 링크·인쇄에 그대로 보입니다 · 다시 채우기·자동작성으로 맞출 수 있습니다)",
+    en: "{n} English students' texts still carry earlier values — {names}{more}\nSave as is? (parents see it as is via the link or print · Refill or Auto-write brings it up to date)",
+  },
+  "os.tpl.outdatedLink": {
+    ko: "이 글에 고치기 전 값이 남아 있고, 저장된 글이 링크로 그대로 보입니다 — 그래도 링크를 복사할까요?",
+    en: "This text still carries earlier values, and the link shows the saved text as is. Copy the link anyway?",
+  },
+  "os.tpl.outdatedCopy": {
+    ko: "이 글에 고치기 전 값(점수·진도, 또는 그 값으로 쓴 AI 인사말·코멘트)이 남아 있습니다. 그대로 복사할까요? (다시 채우기·자동작성으로 맞출 수 있습니다)",
+    en: "This text still carries earlier values (scores or progress, or an AI greeting or comment written from them). Copy it as is? (Refill or Auto-write brings it up to date)",
+  },
+  "os.tpl.gridStale": { ko: "칸이 바뀜", en: "Fields changed since fill" },
+  "os.tpl.gridAiStale": { ko: "AI 글 옛 값", en: "AI text outdated" },
+  "os.tpl.gridNeedAi": { ko: "AI 글 없음", en: "No AI text yet" },
+  "os.tpl.gridName": { ko: "이름 없음", en: "Student name missing" },
+  "os.tpl.lineOutdated": {
+    ko: "\n영어 {n}명의 글에 고치기 전 값이 남아 있습니다 — {names}{more} (다시 채우기·자동작성으로 맞출 수 있습니다)",
+    en: "\n{n} English students' texts still carry earlier values — {names}{more} (Refill or Auto-write brings it up to date)",
+  },
+  "os.tpl.mgrTitle": { ko: "내 보고서 템플릿", en: "My report templates" },
+  "os.tpl.mgrDesc": {
+    ko: "아래 칸을 눌러 넣으면 학생마다 자동으로 채워집니다. 비어 있는 칸의 줄은 보낼 때 빠집니다.",
+    en: "Insert the fields below and they are filled in for each student. Lines whose fields are empty are left out when sending.",
+  },
+  "os.tpl.builtIn": { ko: "기본", en: "Built-in" },
+  "os.tpl.new": { ko: "새 템플릿", en: "New template" },
+  "os.tpl.copyBuiltIn": { ko: "기본 템플릿 복사해서 만들기", en: "Copy the built-in template" },
+  "os.tpl.copyName": { ko: "{name} 복사", en: "{name} (copy)" },
+  "os.tpl.name": { ko: "템플릿 이름", en: "Template name" },
+  "os.tpl.body": { ko: "템플릿 내용", en: "Template text" },
+  "os.tpl.tokens": { ko: "넣을 칸 — 누르면 커서 자리에 들어갑니다", en: "Fields — click to insert at the cursor" },
+  "os.tpl.preview": { ko: "미리보기 (예시 값)", en: "Preview (sample values)" },
+  "os.tpl.unknown": {
+    ko: "없는 칸이 있습니다: {tokens} — 이대로는 저장할 수 없습니다",
+    en: "Unknown fields: {tokens} — the template can't be saved like this",
+  },
+  "os.tpl.save": { ko: "템플릿 저장", en: "Save template" },
+  "os.tpl.saved": { ko: "템플릿을 저장했습니다", en: "Template saved" },
+  "os.tpl.delete": { ko: "템플릿 삭제", en: "Delete template" },
+  "os.tpl.deleteConfirm": { ko: "이 템플릿을 지울까요?", en: "Delete this template?" },
+  "os.tpl.deleted": { ko: "템플릿을 지웠습니다", en: "Template deleted" },
+  "os.tpl.builtInReadonly": {
+    ko: "기본 템플릿은 고칠 수 없습니다 — 복사해서 내 템플릿으로 만드세요",
+    en: "The built-in template can't be edited — copy it to make your own",
+  },
   "os.card.queue": { ko: "ClassNote 발송", en: "Send to ClassNote" },
   "os.card.queueTitle": {
     ko: "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다",
@@ -2776,7 +2925,10 @@ export const SHEET_DICT = {
   "os.c.attachDeleted": { ko: "첨부를 삭제했습니다", en: "The attachment was deleted" },
   "os.c.attachNoRow": { ko: "첨부된 행이 없습니다 — 진도를 입력한 행에만 첨부됩니다", en: "Nothing was attached — only rows with progress take attachments" },
   "os.c.attachBulk": { ko: "{rows}개 행에 {n}개 첨부", en: "Attached {n} across {rows} rows" },
-  "os.c.attachBulkSkip": { ko: " · {n}행 건너뜀(진도 미입력·상한)", en: " · {n} rows skipped (no progress, or at the limit)" },
+  "os.c.attachBulkSkip": {
+    ko: " · {n}행 건너뜀(진도 미입력·상한·고치기 전 값이 남은 영어 글)",
+    en: " · {n} rows skipped (no progress, at the limit, or English text still carrying earlier values)",
+  },
   "os.c.attachBulkTail": { ko: " — ClassNote는 다시 발송하세요", en: " — send it to ClassNote again" },
   "os.c.noClassTitle": { ko: "이 날짜에는 담당 수업이 없습니다", en: "You have no class on this date" },
   "os.c.noClassBody": { ko: "— 다른 날짜를 고르거나, 필요하면 담당 반 전체를 볼 수 있습니다.", en: "— pick another date, or view all of your classes if you need to." },
@@ -2980,7 +3132,7 @@ export const SHEET_DICT = {
   },
   "cls.stat.total": { ko: "전체 반", en: "In total" },
   "cls.stat.active": { ko: "운영 중", en: "Running now" },
-  "cls.stat.seats": { ko: "등록 학생", en: "Students enrolled" },
+  "cls.stat.seats": { ko: "수강 등록", en: "Class enrollments" },
   "cls.stat.avg": { ko: "반당 평균", en: "Average per class" },
   // 🔴 영어엔 단위가 없다 — `All classes 94`가 곧 문장이라 `개`에 해당하는 낱말을 지어내면
   //    `94 classes classes`가 된다. BigStat은 빈 문자열이면 그 자리를 아예 안 그린다.

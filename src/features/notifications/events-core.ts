@@ -10,6 +10,8 @@
  *   지남 전환 1회 = 후속조치당 최대 2건, 매일 nag 안 함(v1). soon/later는 알림 대상 아님.
  */
 
+import { REPEATED_ABSENCES_LINK } from "./presentation";
+
 /** 결석 마일스톤 tier(낮→높). 이 값 이상이면 그 tier 도달. */
 export const ABSENCE_TIERS = [3, 5, 10] as const;
 
@@ -113,16 +115,23 @@ export function summarizeNames(names: readonly string[], max = 3): string {
 export function absenceDigestBody(events: readonly AbsenceEvent[]): string | null {
   if (events.length === 0) return null;
   if (events.length === 1) {
-    return `${events[0].studentName} 학생이 최근 14일 ${events[0].absences}회 결석으로 반복 결석 위험입니다.`;
+    return `${events[0].studentName} 학생 · 최근 14일 결석 ${events[0].absences}회. 출결을 확인해 주세요.`;
   }
   const names = summarizeNames(events.map((event) => event.studentName));
   const tiers = events.map((event) => event.tier);
   const baseTier = Math.min(...tiers);
   const topTier = Math.max(...tiers);
-  const base = `${names} ${events.length}명이 반복 결석 위험 단계(최근 14일 ${baseTier}회 이상)에 도달했습니다.`;
+  const base = `${names} 학생 ${events.length}명 · 최근 14일 결석 ${baseTier}회 이상.`;
   if (topTier === baseTier) return base;
   const topCount = tiers.filter((tier) => tier === topTier).length;
   return `${base} (${topTier}회 이상 ${topCount}명)`;
+}
+
+/** 한 명은 학생 출결, 여러 명은 현재 반복 결석 명단으로 연결한다. */
+export function absenceNotificationLink(events: readonly AbsenceEvent[]): string {
+  return events.length === 1
+    ? `/students/${events[0].subjectKey}?tab=attendance`
+    : REPEATED_ABSENCES_LINK;
 }
 
 /**

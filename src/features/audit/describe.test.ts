@@ -17,6 +17,22 @@ const ctx = (names: Record<string, string> = {}) => ({
   subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key,
 });
 
+describe("auditDetail — 인재원 학습 계정 짝(2026-09-10)", () => {
+  it("연결·일괄·해제 모두 어느 계정인지 적는다(이름이 아이디 그대로면 한 번만)", () => {
+    expect(auditDetail("student_ijw_link", { studentId: SID, ijwId: "ijwgsy", ijwName: "공서연" }, ctx())).toBe(
+      "인재원 계정 ijwgsy(공서연)",
+    );
+    expect(auditDetail("student_ijw_link_bulk", { studentId: SID, ijwId: "ijwgsy", ijwName: "ijwgsy" }, ctx())).toBe(
+      "인재원 계정 ijwgsy",
+    );
+    expect(auditDetail("student_ijw_unlink", { studentId: SID, ijwId: "ijwgsy" }, ctx())).toBe("인재원 계정 ijwgsy");
+  });
+
+  it("아이디가 없는 기록은 빈 칸 — 영문 키가 새지 않는다", () => {
+    expect(auditDetail("student_ijw_unlink", { studentId: SID }, ctx())).toBeNull();
+  });
+});
+
 describe("auditDetail — 학원 설정 변경 내역(2026-08-27 감사 커버리지)", () => {
   it("무엇이 바뀌었는지가 섹션명과 함께 나온다", () => {
     const detail = auditDetail(
@@ -793,5 +809,107 @@ describe("auditActorName — '실행자' 열의 스크립트 식별자", () => {
     expect(systemActorMatches("수업 평가 권한").names).toEqual(["system:grant-class-review"]);
     expect(systemActorMatches("시스템").allSystem).toBe(true);
     expect(systemActorMatches("김승언")).toEqual({ names: [], allSystem: false });
+  });
+});
+
+describe("auditDetail — 등록상담·강사 시트·캘린더(2026-09-10 김근우 건)", () => {
+  it("자동 연결은 누구에게·어떤 규칙으로·언제 붙었는지를 말한다", () => {
+    expect(
+      auditDetail(
+        "consultation_autolink",
+        { studentId: SID, rule: "name_school_grade", via: "intake" },
+        ctx({ [SID]: "김근우" }),
+      ),
+    ).toBe("→ 김근우 · 이름·학교·학년 일치 · 학부모 QR 접수 때");
+    expect(
+      auditDetail(
+        "consultation_autolink",
+        { studentId: SID, rule: "phone_name", via: "student", userId: UID },
+        ctx({ [SID]: "홍길동", [UID]: "허은진" }),
+      ),
+    ).toBe("→ 홍길동 · 연락처·이름 일치 · 학생 등록·수정 때 · 허은진의 저장으로");
+  });
+
+  it("🔴 모르는 규칙·경로 값은 영문으로 흘리지 않는다", () => {
+    const d = auditDetail("consultation_autolink", { rule: "weird_rule", via: "cron" }, ctx());
+    expect(d ?? "").not.toMatch(/weird|cron/);
+  });
+
+  it("상담 수정은 이름 전후 값 + 나머지 바뀐 항목(연락처는 항목 이름만)", () => {
+    expect(
+      auditDetail(
+        "enrollment_consultation_update",
+        { changed: ["이름", "보호자 연락처"], changes: [{ field: "이름", from: "김근우", to: "김근우A" }] },
+        ctx(),
+      ),
+    ).toBe("이름 김근우 → 김근우A · 보호자 연락처");
+  });
+
+  it("목록 칸 수정·QR 상담완료 전환도 읽힌다", () => {
+    expect(
+      auditDetail(
+        "enrollment_consultation_update",
+        { changed: ["학년"], changes: [{ field: "학년", from: null, to: "중1" }], via: "list" },
+        ctx(),
+      ),
+    ).toBe("목록에서 · 학년 (빈 값) → 중1");
+    expect(
+      auditDetail("enrollment_consultation_update", { changed: [], changes: [], outcomeTo: "consulted" }, ctx()),
+    ).toBe("상태 → 상담완료");
+  });
+
+  it("상태 변경은 한글 라벨로, 모르는 값은 숨긴다", () => {
+    expect(auditDetail("enrollment_consultation_outcome", { from: "consulted", to: "enrolled" }, ctx())).toBe(
+      "상담완료 → 재원생 등록",
+    );
+    expect(auditDetail("enrollment_consultation_outcome", { from: "zzz", to: "declined" }, ctx())).toBe("→ 거절");
+  });
+
+  it("QR 접수·작성은 과목을 학원설정 라벨로", () => {
+    expect(auditDetail("enrollment_consultation_intake", { subject: "math" }, ctx())).toBe("학부모 QR 접수 · 수학");
+    expect(auditDetail("enrollment_consultation_create", { subject: "english", withAudio: true }, ctx())).toBe(
+      "영어 · 녹음 포함",
+    );
+  });
+
+  it("연결 해제·재사용·삭제는 대상 학생 이름", () => {
+    expect(
+      auditDetail("consultation_unlink", { studentId: SID, reason: "동명이인 오연결 정정" }, ctx({ [SID]: "김근우" })),
+    ).toBe("김근우에서 분리 · 동명이인 오연결 정정");
+    expect(auditDetail("consultation_link_existing", { studentId: SID }, ctx({ [SID]: "김근우" }))).toBe(
+      "→ 김근우 · 같은 이름·학교·학년 재원생 재사용",
+    );
+    expect(
+      auditDetail("enrollment_consultation_delete", { studentId: SID, hadRecording: true }, ctx({ [SID]: "김근우" })),
+    ).toBe("연결 학생 김근우 · 녹음 포함");
+  });
+
+  it("강사 시트 수업계획 복사 — 날짜·교시·원본 회차(영문 termMode는 안 흘린다)", () => {
+    const d = auditDetail(
+      "ecs_plan_copy",
+      { classId: "c", planDate: "2026-09-10", slotStart: "21:10", sourceDate: "2026-09-03", copied: 1, termMode: "regular" },
+      ctx(),
+    );
+    expect(d).toBe("2026-09-10 21:10 · 2026-09-03 회차에서 · 1줄 복사");
+    expect(auditDetail("ecs_plan_line_add", { planDate: "2026-09-08", slotStart: "17:20", termMode: "exam" }, ctx())).toBe(
+      "2026-09-08 17:20 · 시험 기간",
+    );
+  });
+
+  it("구글 캘린더 가져오기 — 건수, 아무것도 없으면 '변경 없음'", () => {
+    expect(
+      auditDetail(
+        "calendar_google_import",
+        { inserted: 1074, updated: 0, deleted: 0, skippedEdited: 0, failed: [] },
+        ctx(),
+      ),
+    ).toBe("추가 1,074건");
+    expect(auditDetail("calendar_google_import", { inserted: 0, updated: 0, deleted: 0, failed: [] }, ctx())).toBe(
+      "변경 없음",
+    );
+  });
+
+  it("대상 유형 calendar도 한글", () => {
+    expect(AUDIT_TYPE_LABEL.calendar).toBe("캘린더");
   });
 });

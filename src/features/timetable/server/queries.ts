@@ -29,6 +29,7 @@ import type { TeacherColorMap } from "../lib/class-grid";
 import {
   buildTeacherLabelMap,
   buildTeacherNicknameMap,
+  specialSlotLabel,
   resolveTeacherLabel,
   type TeacherLabelMap,
   type TeacherNicknameMap,
@@ -962,7 +963,9 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   const { data, error } = await supabase
     .from("class_schedules")
     .select(
-      `id, day_of_week, start_time, end_time, class_id, slot_teacher_label,
+      `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
+       slotTeacher:teacher_id ( display_name ),
+       slotRoom:classroom_id ( name ),
        class:class_id!inner (
          class_name, subject, is_active, closed_at,
          teacher:teacher_id ( display_name ),
@@ -1057,13 +1060,17 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         dayOfWeek: r.day_of_week,
         startTime: r.start_time,
         endTime: r.end_time,
-        teacherName: teacher?.display_name ?? null,
-        classroomName: room?.name ?? null,
+        // 현재 수업은 반 담임·기본 교실보다 해당 교시의 담당·교실을 우선한다.
+        teacherName: (Array.isArray(r.slotTeacher) ? r.slotTeacher[0] : r.slotTeacher)?.display_name
+          ?? specialSlotLabel(r.slot_teacher_label)
+          ?? teacher?.display_name ?? null,
+        classroomName: (Array.isArray(r.slotRoom) ? r.slotRoom[0] : r.slotRoom)?.name
+          ?? r.slot_room_label ?? room?.name ?? null,
         studentCount: counts.get(r.class_id) ?? 0,
         // 슬롯 강사 라벨 — 작성률(getWeeklyWritingRates)이 반 담당 없는 반의 귀속 폴백으로 사용.
         // 색·인수인계는 대시보드 오늘 일정 미사용 — 타입 충족용 null 유지.
         slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
-        slotRoomLabel: null,
+        slotRoomLabel: (r.slot_room_label as string | null) ?? null,
         slotRoomId: null,
         classRoomId: null,
         classBgColor: null,

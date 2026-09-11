@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { NotificationItem } from "../types";
+import { presentNotification } from "../presentation";
 
 const LIST_LIMIT = 20;
 
@@ -22,6 +23,7 @@ export async function getMyNotifications(
   const list = supabase
     .from("notifications")
     .select("id, type, title, body, link, read_at, created_at")
+    .neq("type", "daily_briefing") // 폐지된 브리핑 알림은 목록 상한을 적용하기 전에 제외한다.
     .order("created_at", { ascending: false })
     .limit(LIST_LIMIT);
 
@@ -31,6 +33,7 @@ export async function getMyNotifications(
     supabase
       .from("notifications")
       .select("*", { count: "exact", head: true })
+      .neq("type", "daily_briefing") // 보이지 않는 알림 때문에 배지가 남지 않도록 같은 기준 사용.
       .is("read_at", null)
       .is("archived_at", null),
   ]);
@@ -44,5 +47,5 @@ export async function getMyNotifications(
     read: n.read_at !== null,
     createdAt: n.created_at,
   }));
-  return { unread: count ?? 0, items };
+  return { unread: count ?? 0, items: items.map(presentNotification) };
 }

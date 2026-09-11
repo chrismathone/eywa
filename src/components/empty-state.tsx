@@ -15,6 +15,7 @@ export function EmptyState({
   title,
   description,
   action,
+  compact = false,
 }: {
   icon?: IconComponent;
   image?: EmptyStateImage;
@@ -22,12 +23,14 @@ export function EmptyState({
   title: string;
   description?: string;
   action?: ReactNode;
+  /** 업무 창에서 목록의 빈 상태가 화면 전체를 차지하지 않게 한다. */
+  compact?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "border-line/80 bg-card text-foreground flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-dashed text-center",
-        image ? "gap-2 px-5 py-10" : "gap-3 py-12",
+        "border-line/80 bg-card text-foreground flex flex-col items-center justify-center rounded-xl border border-dashed text-center",
+        compact ? "min-h-[160px] gap-2 px-4 py-4" : image ? "min-h-[280px] gap-2 px-5 py-10" : "min-h-[280px] gap-3 py-12",
       )}
     >
       {image ? (
@@ -36,9 +39,9 @@ export function EmptyState({
           alt=""
           width={640}
           height={640}
-          sizes="(min-width: 640px) 160px, 144px"
+          sizes={compact ? "72px" : "(min-width: 640px) 160px, 144px"}
           loading={imageLoading}
-          className="mb-1 size-36 object-contain drop-shadow-[0_8px_10px_rgba(29,29,31,0.14)] sm:size-40"
+          className={cn("mb-1 object-contain", compact ? "size-18" : "size-36 sm:size-40")}
         />
       ) : Icon ? (
         <div className="bg-bg-soft text-text-dim rounded-full p-3">

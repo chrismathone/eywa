@@ -13,6 +13,8 @@ import { GoalsSection } from "../_components/goals-section";
 import { GradeCommentsSection } from "../_components/grade-comments-section";
 import { LevelTests } from "../_components/level-tests";
 import { DeleteGradeButton } from "../_components/delete-grade-button";
+import { Suspense } from "react";
+import { StudentJjSection } from "../_components/jj-section";
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -63,6 +65,11 @@ export async function GradesTab({ studentId }: { studentId: string }) {
           ) : null}
         </>
       ) : null}
+
+      {/* JJ실 학습(인재원, 2026-09-10) — 짝이 걸린 학생만. 인재원 호출이 성적 탭 첫 페인트를 막지 않게 따로 흘린다(B7). */}
+      <Suspense fallback={null}>
+        <StudentJjSection studentId={studentId} />
+      </Suspense>
 
       <div className="border-border border-t pt-4">
         <GoalsSection studentId={studentId} goals={goals} />

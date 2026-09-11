@@ -214,7 +214,7 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
           <button
             type="submit"
             form={fid}
-            className="bg-primary text-primary-foreground rounded-lg px-2.5 py-1 text-xs font-bold"
+            className="border-line text-primary hover:bg-primary-soft inline-flex h-(--control-h) items-center rounded-md border px-2 text-sm font-bold"
           >
             확정
           </button>

@@ -26,6 +26,7 @@ export async function fetchMyNotifications(
  */
 export async function markNotificationsRead(
   ids?: string[],
+  view: NotificationView = "active",
 ): Promise<{ unread: number; items: NotificationItem[] }> {
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
@@ -36,7 +37,7 @@ export async function markNotificationsRead(
     .is("read_at", null);
   if (ids && ids.length > 0) q = q.in("id", ids.slice(0, 100)); // #53 방어(과대 배열 방지)
   await q;
-  return getMyNotifications();
+  return getMyNotifications(view);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { getSessionVerificationView, type VerificationStatus } from "@/features/billing/session-terms/server/verification-queries";
 import { getTeacherSplitsStatus } from "@/features/billing/session-terms/server/splits-queries";
 import { aggregateTeacherAllocations, hasAllocationSignal } from "@/features/billing/session-terms/allocation";
+import { AllocationMoney } from "./allocation-money";
 import { computeSplitRows, splitsFingerprint, totalSplits } from "@/features/billing/session-terms/splits";
 import { SplitsSnapshotPanel } from "./splits-snapshot-panel";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -18,7 +19,6 @@ const PAGE_SIZE = 50;
 
 // 시수(배수 합) 표시 — 정수는 그대로("12"), 소수는 한 자리("12.5").
 const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
-const fmtWon = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
 // diff 색: 일치=녹 / 부족=주황 / 초과=적 / 미확정=회색 (라이트 전용 Daylight).
 const STATUS_META: Record<VerificationStatus, { label: string; cell: string; chip: string }> = {
@@ -85,8 +85,12 @@ export async function SessionVerificationFace({
     (acc, t) => ({
       confirmedAmount: acc.confirmedAmount + t.confirmedAmount,
       actualAmount: acc.actualAmount + t.actualAmount,
+      missingPriceRows: acc.missingPriceRows + t.missingPriceRows,
+      pricedRows: acc.pricedRows + t.pricedRows,
+      missingConfirmedRows: acc.missingConfirmedRows + t.missingConfirmedRows,
+      confirmedPricedRows: acc.confirmedPricedRows + t.confirmedPricedRows,
     }),
-    { confirmedAmount: 0, actualAmount: 0 },
+    { confirmedAmount: 0, actualAmount: 0, missingPriceRows: 0, pricedRows: 0, missingConfirmedRows: 0, confirmedPricedRows: 0 },
   );
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
@@ -190,15 +194,11 @@ export async function SessionVerificationFace({
                       </td>
                       <td className="num text-text-dim px-3 py-2 text-right">{t.classCount}</td>
                       <td className="num px-3 py-2 text-right">{t.confirmedSessions}</td>
-                      <td className="num px-3 py-2 text-right">{fmtWon(t.confirmedAmount)}</td>
+                      <td className="num px-3 py-2 text-right"><AllocationMoney value={t.confirmedAmount} missingPriceRows={t.missingConfirmedRows} pricedRows={t.confirmedPricedRows} /></td>
                       <td className="num px-3 py-2 text-right">{fmtUnits(t.actualUnits)}</td>
-                      <td className="num px-3 py-2 text-right">{fmtWon(t.actualAmount)}</td>
-                      <td
-                        className={`num px-3 py-2 text-right font-bold ${
-                          t.diffAmount === 0 ? "text-green" : t.diffAmount > 0 ? "text-danger" : "text-amber"
-                        }`}
-                      >
-                        {t.diffAmount === 0 ? "0" : t.diffAmount > 0 ? `+${fmtWon(t.diffAmount)}` : `−${fmtWon(-t.diffAmount)}`}
+                      <td className="num px-3 py-2 text-right"><AllocationMoney value={t.actualAmount} {...t} /></td>
+                      <td className="num px-3 py-2 text-right font-bold">
+                        <AllocationMoney value={t.diffAmount} {...t} difference />
                       </td>
                     </tr>
                   ))}
@@ -208,15 +208,11 @@ export async function SessionVerificationFace({
                     <td className="text-text-dim px-3 py-2" colSpan={3}>
                       합계
                     </td>
-                    <td className="num px-3 py-2 text-right font-bold">{fmtWon(allocTotal.confirmedAmount)}</td>
+                    <td className="num px-3 py-2 text-right font-bold"><AllocationMoney value={allocTotal.confirmedAmount} missingPriceRows={allocTotal.missingConfirmedRows} pricedRows={allocTotal.confirmedPricedRows} /></td>
                     <td />
-                    <td className="num px-3 py-2 text-right font-bold">{fmtWon(allocTotal.actualAmount)}</td>
-                    <td
-                      className={`num px-3 py-2 text-right font-bold ${
-                        allocTotal.actualAmount - allocTotal.confirmedAmount === 0 ? "text-green" : "text-danger"
-                      }`}
-                    >
-                      {fmtWon(allocTotal.actualAmount - allocTotal.confirmedAmount)}
+                    <td className="num px-3 py-2 text-right font-bold"><AllocationMoney value={allocTotal.actualAmount} {...allocTotal} /></td>
+                    <td className="num px-3 py-2 text-right font-bold">
+                      <AllocationMoney value={allocTotal.actualAmount - allocTotal.confirmedAmount} {...allocTotal} difference />
                     </td>
                   </tr>
                 </tfoot>

@@ -1,5 +1,6 @@
 import { Wallet, PieChart, Tags } from "@/components/icons/eywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { FilterSelect } from "@/components/filter-select";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import {
@@ -94,7 +95,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
       ) : (
         <>
           {/* KPI — 공용 BigStat(옛 로컬 Kpi 카드는 링 위에 border를 겹쳐 선이 이중이었다, v5 ④). */}
-          <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
+          <StatStrip>
             <BigStat
               label="월 지출 합계"
               value={primaryTotal ? formatMoney(primaryTotal.total, primaryTotal.currency) : "—"}
@@ -115,10 +116,10 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
               sub={summary.byCategory[0] ? formatMoney(summary.byCategory[0].amount, primaryCurrency) : undefined}
             />
             <BigStat label="분류 수" value={summary.categoryCount} unit="개" tone="blue" icon={<Tags size={16} strokeWidth={1.8} />} />
-          </section>
+          </StatStrip>
 
           {/* 카테고리 분포 — primary 통화 기준(통화별 합계는 위 KPI 참조). 카드 = 링 하나(v5 ④). */}
-          <section className="bg-card shadow-card rounded-2xl p-5">
+          <section className="border-line rounded-lg border px-3 py-3">
             <div className="mb-3 flex items-baseline justify-between gap-2">
               <h2 className="text-foreground text-base font-bold">분류별 지출</h2>
               {/* 🔴 걸러 보는 중이면 **이 막대가 무엇의 합인지** 말한다 — 위 KPI·이 막대는 이 달 전체고
@@ -133,14 +134,14 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
                 </span>
               ) : null}
             </div>
-            <div className="space-y-2.5">
+            <div className="grid gap-x-6 gap-y-2 min-[960px]:grid-cols-2">
               {summary.byCategory.map((c) => (
                 <div key={c.category} className="flex items-center gap-3">
-                  <span className="text-text-dim w-14 shrink-0 text-sm whitespace-nowrap">{c.category}</span>
+                  <span className="text-text-dim w-20 shrink-0 text-sm whitespace-nowrap">{c.category}</span>
                   <div className="bg-bg-soft rounded-pill h-2.5 flex-1 overflow-hidden">
                     <span className="bg-primary block h-full" style={{ width: `${(c.amount / maxCat) * 100}%` }} />
                   </div>
-                  <span className="num text-foreground w-28 shrink-0 text-right text-sm font-medium">{formatMoney(c.amount, primaryCurrency)}</span>
+                  <span className="num text-foreground shrink-0 text-right text-sm font-medium whitespace-nowrap">{formatMoney(c.amount, primaryCurrency)}</span>
                 </div>
               ))}
             </div>
@@ -149,7 +150,8 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
           {/* 결과 줄 — 🔴 걸렀으면 **`전체 N건 중 M건`**으로 적는다. 예전엔 필터가 켜져도 `지출 9건`이라
               해서, 위 KPI가 말하는 55건과 같은 화면에 서면 어느 쪽이 이 달의 사실인지 알 수 없었다.
               두 숫자를 한 문장에 넣어 서로를 설명하게 한다(집계는 그대로 이 달 전체다). */}
-          <p className="text-text-dim px-1 text-sm">
+          <ExpensesTable
+            toolbar={<p className="text-text-dim px-1 text-sm">
             {monthLabel(period)} 지출{" "}
             {filterOn ? (
               <>
@@ -163,9 +165,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
             )}
             {cat !== "all" ? <span className="ml-1">· 분류 {cat}</span> : null}
             {q ? <span className="ml-1">· &ldquo;{q}&rdquo; 검색</span> : null}
-          </p>
-
-          <ExpensesTable
+          </p>}
             rows={rows}
             // 이 달엔 지출이 있는데 걸러서 0건이면 "이 달 지출 내역이 없습니다"는 **거짓말**이다.
             // ⚠️ 검색이 **분류를 안 본다**(옆에 전용 드롭다운이 있으니까) → `인건비`를 쳐서 0건이 나오면

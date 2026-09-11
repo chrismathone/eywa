@@ -6,6 +6,7 @@ import { EditingBadge } from "@/features/presence/editing-badge";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -256,7 +257,7 @@ export default async function ClassesPage({
         }
       />
       {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 정상 = 초록(의미색 캐논). */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+      <StatStrip>
         <BigStat label={sheetT(lang, "cls.stat.total")} value={stats.total} unit={sheetT(lang, "cls.unit.class")} tone="primary" icon={<BookOpen size={16} strokeWidth={1.8} />} />
         <BigStat label={sheetT(lang, "cls.stat.active")} value={active} unit={sheetT(lang, "cls.unit.class")} tone="green" icon={<MenuGlyph name="check" size={22} />} />
         <BigStat label={sheetT(lang, "cls.stat.seats")} value={totalSeats} unit={sheetT(lang, "cls.unit.people")} tone="blue" icon={<Users size={16} strokeWidth={1.8} />} />
@@ -267,7 +268,7 @@ export default async function ClassesPage({
           tone="gold"
           icon={<UserCheck size={16} strokeWidth={1.8} />}
         />
-      </section>
+      </StatStrip>
 
       {/* 결과 줄 — 숫자 + 보기(라벨 하나) + 검색(눌러야 나온다). 필터·정렬은 여기 없다 — 아래 **열 머리**가 필터다
           (§10 "필터·정렬은 목록 헤더 라벨을 눌러 호출"). 옛 필터바(드롭다운 6 + 상시 검색 + 세그먼트, localStorage 저장)는 삭제. */}

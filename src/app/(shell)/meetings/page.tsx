@@ -7,6 +7,7 @@ import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { toneColor } from "@/lib/design/semantic-color";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { PageHeader } from "@/components/page-header";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { FilterSelect } from "@/components/filter-select";
@@ -238,21 +239,16 @@ export default async function MeetingsPage({
   return (
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
-      {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 회의록') 하나. 설명 문장("녹음하면 전사와 AI 분석까지…")은 값으로
-          바꿨다(§4·§12 — 문장이 아니라 사실). 옛 자리(결과 줄 오른쪽)의 버튼은 여기로 올라왔다(같은 동작 두 곳 금지). */}
-      <PageHeader
-        eyebrow="운영"
-        title="회의록"
-        description={`전체 ${all.length}건${inProgress > 0 ? ` · 처리 중 ${inProgress}건` : ""}`}
-        actions={<NewMeetingTrigger />}
-      />
+      <div className="compact-chrome:hidden">
+        <PageHeader eyebrow="운영" title="회의록" />
+      </div>
 
       {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
+      <StatStrip>
         <BigStat label="전체 회의" value={all.length} unit="건" tone="primary" icon={<Mic size={16} strokeWidth={1.8} />} />
         <BigStat label="AI 분석 완료" value={completed} unit="건" tone="gold" icon={<MenuGlyph name="sparkle" size={22} />} />
         <BigStat label="처리 중" value={inProgress} unit="건" tone="rose" icon={<RefreshCw size={16} strokeWidth={1.8} />} />
-      </section>
+      </StatStrip>
 
       {/* 결과 줄 + 필터 — 지시서 §10: 필터는 축마다 라벨 하나(`기간: 최근 7일`처럼 축이 붙어 읽힌다) · 검색은 눌러야 나온다.
           옛 칩 두 묶음(기간 4·상태 5) + 상시 검색창은 걷었다. 최소 창(760)에서 결과 줄과 드롭다운 둘·검색이 한 줄에 선다
@@ -266,7 +262,7 @@ export default async function MeetingsPage({
             </span>
           ) : null}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <FilterSelect
             paramName="range"
             value={range === "all" ? "" : range}
@@ -286,6 +282,7 @@ export default async function MeetingsPage({
             triggerClassName={TOOLBAR_SELECT}
           />
           <SearchToggle placeholder="제목·참석자" defaultValue={q} />
+          <NewMeetingTrigger />
         </div>
       </div>
 

@@ -12,6 +12,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { SearchToggle } from "@/components/search-toggle";
 import { PageHeader } from "@/components/page-header";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -31,10 +32,10 @@ import { Pagination } from "@/components/pagination";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
+import { WithdrawalListLayout } from "./_components/list-layout";
+import { withdrawalPage, withdrawalPageSize } from "@/features/withdrawals/list-pagination";
 
 export const metadata = { title: "퇴원관리 — eywa" };
-
-const PAGE_SIZE = 50;
 
 /** 퇴원 후 경과 일수(필터용 수치 — 표시는 relativeDayKo). withdrawn_at는 date 컬럼. */
 function daysSince(iso: string | null): number | null {
@@ -149,6 +150,8 @@ export default async function WithdrawalsPage({
     subject?: string;
     consult?: ConsultKey;
     page?: string;
+    size?: string;
+    embed?: string;
   }>;
 }) {
   await requireAccess("withdrawals");
@@ -160,7 +163,7 @@ export default async function WithdrawalsPage({
   const subject = sp.subject ?? "all";
   const consult: ConsultKey = (sp.consult as ConsultKey) ?? "all";
   const q = sp.q ?? "";
-  const page = Math.max(1, Number(sp.page) || 1);
+  const size = withdrawalPageSize(sp.size);
 
   const [all, settings] = await Promise.all([getWithdrawnStudents(), getTenantSettings()]);
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
@@ -239,14 +242,17 @@ export default async function WithdrawalsPage({
   const current: WdHrefParams = { range, reason, q, subject, consult };
   const filterActive = range !== "all" || reason !== "all" || subject !== "all" || consult !== "all" || !!q;
 
-  // 사유 분석·통계는 전체 필터 결과(rows) 기준 — 목록만 50행으로 슬라이스(billing 메모리 페이지네이션).
+  // 통계는 전체 필터 결과를 유지하고, 명단만 오른쪽 카드 높이에 맞는 크기로 자른다.
   const total = rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { page, totalPages, start, end } = withdrawalPage(sp.page, total, size);
+  const pageRows = rows.slice(start, end);
   const pageHref = (p: number) => {
     const base = buildWdHref(current);
-    if (p <= 1) return base;
-    return base === "/withdrawals" ? `/withdrawals?page=${p}` : `${base}&page=${p}`;
+    const params = new URLSearchParams(base.split("?")[1]);
+    params.set("size", String(size));
+    if (p > 1) params.set("page", String(p));
+    if (sp.embed === "1") params.set("embed", "1");
+    return `/withdrawals?${params}`;
   };
 
   return (
@@ -273,7 +279,7 @@ export default async function WithdrawalsPage({
       ) : (
         <>
       {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+      <StatStrip>
         <BigStat label="전체 퇴원" value={all.length} unit="명" tone="rose" icon={<UserMinus size={16} strokeWidth={1.8} />} />
         <BigStat label="최근 30일" value={recent} unit="명" tone="danger" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
         <BigStat
@@ -285,7 +291,7 @@ export default async function WithdrawalsPage({
           icon={<ListChecks size={16} strokeWidth={1.8} />}
         />
         <BigStat label="필터 결과" value={rows.length} unit="명" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
-      </section>
+      </StatStrip>
 
       {/* 툴바 — 지시서 §10: 축마다 라벨 하나(`유형: 퇴원` · `기간: 최근 30일` · 사유 · 과목 · 상담), 검색은 눌러야 나온다.
           옛 칩 묶음 넷(유형 2 · 기간 4 · 과목 N · 상담 3) + `micro` 소라벨 + 상시 검색창 두 줄을 한 줄로 걷었다.
@@ -362,6 +368,7 @@ export default async function WithdrawalsPage({
               </span>
             </header>
             <div className="space-y-3">
+              {subjectRows.some((r) => !r.lastClassSubject) ? <p className="text-xs">과목 미상 {subjectRows.filter((r) => !r.lastClassSubject).length}명 포함 · 마지막 수강 과목이 기록되지 않은 학생입니다.</p> : null}
               {subjects.map((s) => (
                 <div key={s.label}>
                   <div className="mb-1 flex items-baseline justify-between">
@@ -388,21 +395,21 @@ export default async function WithdrawalsPage({
           description="퇴원 처리된 학생이 생기면 이곳에 표시됩니다."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <WithdrawalListLayout size={size} total={total}>
           {/* 최근 퇴원 리스트 */}
-          <section className="bg-card shadow-card overflow-hidden rounded-2xl">
-            <header className="border-line flex items-baseline justify-between border-b px-5 py-4">
+          <section data-withdrawal-list className="bg-card shadow-card overflow-hidden rounded-2xl">
+            <header data-withdrawal-header className="border-line flex items-baseline justify-between border-b px-5 py-4">
               <div>
                 <p className="micro">최근 퇴원</p>
                 <h2 className="text-foreground mt-1 text-base font-bold">학생 명단</h2>
               </div>
               <p className="text-text-faint num text-xs">
-                {total}명{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
+                {start + 1}–{end} / {total}명
               </p>
             </header>
             {/* 행 = 이름(학교학년) | 마지막 반 | 퇴원일 | 경과 — 한 줄(§11), 행 전체가 링크. 옛 두 줄 행(이름 / 반)을 접었다.
                 학교·학년은 앱 규약 `schoolGradeLabel`("경명여중1") — 공백 join 금지. 오른쪽 둘은 폭 고정 열이라 행마다 같은 자리. */}
-            <ul className="divide-line divide-y">
+            <ul data-withdrawal-rows className="divide-line divide-y">
               {pageRows.map((r) => {
                 const ago = relativeDayKo(r.withdrawnAt);
                 const where = schoolGradeLabel(r.school, r.grade);
@@ -432,7 +439,7 @@ export default async function WithdrawalsPage({
                           <span className="text-foreground num justify-self-end text-sm font-bold whitespace-nowrap">
                             {r.withdrawnAt ?? "—"}
                           </span>
-                          <span className="text-text-faint num justify-self-end text-sm whitespace-nowrap">{ago}</span>
+                          <span className="text-text-faint num justify-self-end text-sm whitespace-nowrap">{ago === r.withdrawnAt ? "" : ago}</span>
                         </>
                       )}
                     </WindowLink>
@@ -440,18 +447,17 @@ export default async function WithdrawalsPage({
                 );
               })}
             </ul>
-            {totalPages > 1 ? (
-              <div className="border-line border-t px-5 py-3">
-                <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
-              </div>
-            ) : null}
+            <div data-withdrawal-pager className="border-line border-t px-5 py-3">
+              {totalPages > 1 ? <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} scroll={false} /> : <p className="text-center text-xs">전체 {total}명</p>}
+            </div>
           </section>
 
           {/* 사유 분석 */}
-          <section className="bg-card shadow-card overflow-hidden rounded-2xl">
+          <section data-withdrawal-reasons className="bg-card shadow-card overflow-hidden rounded-2xl">
             <header className="border-line border-b px-5 py-4">
               <p className="micro text-amber">사유 분석</p>
               <h2 className="text-foreground mt-1 text-base font-bold">상위 퇴원 사유</h2>
+              <p className="mt-1 text-xs">{reasonRows.length}명 기준 · 사유 필터 제외{reasonCounts.has("미기재") ? ` · 사유 미기재 ${reasonCounts.get("미기재")}명 포함` : ""}</p>
             </header>
             <div className="space-y-3 p-5">
               {topReasons.map(([reason, count]) => {
@@ -462,7 +468,7 @@ export default async function WithdrawalsPage({
                       <span className="text-foreground text-xs font-bold">{reason}</span>
                       <span className="text-text-dim num text-xs">
                         <span className="text-foreground font-bold">{count}</span>명 ·{" "}
-                        {((count / rows.length) * 100).toFixed(0)}%
+                        {((count / Math.max(reasonRows.length, 1)) * 100).toFixed(0)}%
                       </span>
                     </div>
                     <div className="bg-bg-soft h-2 overflow-hidden rounded-full">
@@ -485,7 +491,7 @@ export default async function WithdrawalsPage({
                   {/* 구 font-mono uppercase 코딩틱 라벨 → 한글 12px semibold 승격 */}
                   <p className="text-amber text-xs font-bold">자동 요약</p>
                   <p className="text-foreground mt-0.5 text-xs leading-relaxed">
-                    {topReasons[0]
+                    {topReasons[0]?.[0] === "미기재" ? "사유 미기재가 가장 많습니다. 기록된 사유를 보완해야 퇴원 원인을 비교할 수 있습니다." : topReasons[0]
                       ? `현재 가장 빈번한 퇴원 사유는 "${topReasons[0][0]}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
                       : "퇴원 사유가 등록되면 인사이트가 표시됩니다."}
                   </p>
@@ -493,7 +499,7 @@ export default async function WithdrawalsPage({
               </div>
             </div>
           </section>
-        </div>
+        </WithdrawalListLayout>
       )}
         </>
       )}

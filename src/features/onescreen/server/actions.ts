@@ -704,6 +704,18 @@ export type SaveOnescreenSessionInput = {
       makeup?: boolean;
       homeworkToday?: string;
       /**
+       * 영어 템플릿 모드(2026-09-10) — 고른 템플릿 · 다음 시간 테스트 · 마지막 AI 인사말/코멘트.
+       * **영어 행만** 싣는다(수학 세션 모양 불변). 로스터 복원(roster.ts `OnescreenSessionRow`)이 같은 키를 읽는다.
+       */
+      templateId?: string;
+      nextTest?: string;
+      aiIntro?: string;
+      aiComment?: string;
+      /** 템플릿 글 지문 · AI 사실 지문(provenance.ts) — 영어 행만. */
+      templateHash?: string;
+      aiFactsHash?: string;
+      composedFactsHash?: string;
+      /**
        * 행(수업) 단위 평가값(2026-08-13) — 있는 행만 독립 값을 갖고, 없으면 아래 학생 단위 컬럼으로
        * 폴백한다(row-fields.ts). 보강은 정규와 따로 나가는 다른 보고서라 값이 겹치면 안 된다.
        * ⚠️ 이 객체는 검증 없이 `subject_progress` jsonb에 그대로 들어간다 — 새 키를 더할 땐

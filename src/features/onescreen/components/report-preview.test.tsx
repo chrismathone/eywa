@@ -89,6 +89,23 @@ describe("ReportPreview", () => {
     expect(screen.getByText("작성된 보고 내용이 없습니다.")).toBeTruthy();
   });
 
+  it("템플릿 모드(영어)면 강사가 조립한 글이 본문이고 항목 칸은 없다(발송본과 같은 판정)", () => {
+    renderPreview({
+      templateMode: true,
+      draft: "안녕하세요 학부모님, 부원장입니다!\n\n📍 오늘의 진도\nUnit 1~3 리뷰",
+    });
+    expect(screen.getByText(/부원장입니다!/)).toBeTruthy();
+    expect(screen.queryByText("오늘 수업")).toBeNull();
+    expect(screen.queryByText("평가")).toBeNull();
+    expect(screen.queryByText("학부모 전달 내용")).toBeNull();
+    expect(screen.queryByText("수학 1-1-1 백 알아보기")).toBeNull();
+  });
+
+  it("템플릿 모드에서 글이 비면 기존 빈 문구", () => {
+    renderPreview({ templateMode: true, draft: "   " });
+    expect(screen.getByText("작성된 보고 내용이 없습니다.")).toBeTruthy();
+  });
+
   it("추이 이력이 오면 학습 추이 그래프도 그린다(발송본에 크게 들어가는 블록)", () => {
     // 이력이 없으면 그래프 섹션 자체가 없다 — 실제 발송본과 같은 규약(유효점 2개 이상일 때만).
     expect(screen.queryByText("학습 추이")).toBeNull();

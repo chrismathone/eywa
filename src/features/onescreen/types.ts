@@ -105,6 +105,20 @@ export type Subject = {
   trendDraft?: string;
   // 자동작성이 멘트 칸에 마지막으로 넣은 텍스트(0214a 판정 스냅샷) — 세션에서만 복원(발송본엔 없음).
   autoDraft?: string;
+  /**
+   * 영어 템플릿 모드(2026-09-10) — 세션에서 복원한 값. **영어 행에서만** 쓰인다(수학 세션엔 키가 없다).
+   * templateId = 고른 템플릿(없으면 기본) · nextTest = 다음 시간 테스트 안내 ·
+   * aiIntro/aiComment = 마지막 AI 인사말·코멘트(템플릿을 바꾸거나 다시 채울 때 AI를 다시 부르지 않고 쓴다).
+   */
+  templateId?: string;
+  nextTest?: string;
+  aiIntro?: string;
+  aiComment?: string;
+  /** 템플릿이 마지막으로 만든 글의 지문 · AI에 넘긴 사실의 지문(provenance.ts) — 세션 복원값. */
+  templateHash?: string;
+  aiFactsHash?: string;
+  /** 지금 글을 짤 때 쓴 칸 값의 지문(templateFactsKey) — 세션 복원값. */
+  composedFactsHash?: string;
 
   // ── 출결 인라인 입력(2단계) — 행(반) 단위. 출결 원장은 (student, class, date)라 행의 반을 보존한다 ──
   // classId: 이 과목 행의 반. null=모호(같은 과목을 두 반에서 수강 — pill 숨김, 출석부에서만 기록).

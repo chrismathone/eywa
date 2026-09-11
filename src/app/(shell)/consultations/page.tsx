@@ -1,5 +1,7 @@
 import { MessagesSquare, CalendarClock, BellRing, AlarmClock, Mic, Sparkles } from "@/components/icons/eywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
+import { consultationPreview } from "@/features/consultations/summary-preview";
 import { WindowLink } from "@/components/workspace/window-link";
 import { FilterSelect } from "@/components/filter-select";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
@@ -185,7 +187,7 @@ export default async function ConsultationsPage({
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
       {/* 핵심 수치 — 지시서 §4 "1차 화면에 남길 것: 현재 상태 + 핵심 KPI". */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+      <StatStrip>
         <BigStat label="전체 상담" value={totalAll} unit="건" tone="primary" icon={<MessagesSquare size={16} strokeWidth={1.8} />} />
         <BigStat label="최근 7일" value={lastWeek} unit="건" tone="blue" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
         <BigStat label="진행 중 후속" value={pendingFollowUps} unit="건" tone="gold" icon={<BellRing size={16} strokeWidth={1.8} />} />
@@ -197,15 +199,13 @@ export default async function ConsultationsPage({
           valueClass={overdueFollowUps > 0 ? "text-danger" : undefined}
           icon={<AlarmClock size={16} strokeWidth={1.8} />}
         />
-      </section>
+      </StatStrip>
 
       {/* 목록 머리 — 지시서 §10: 상시 버튼은 Primary('상담 추가') 하나 + 텍스트 Secondary('통계') 하나.
           필터는 축마다 라벨 하나(드롭다운, `기간: 최근 7일`처럼 축이 붙어 읽힌다) · 검색은 눌러야 나온다.
           옛 칩 16개 툴바 두 줄은 걷었다.
-          ⚠️ 두 줄(숫자+동작 / 필터)로 **일부러** 나눈다 — 한 줄에 다 넣으면 이 메뉴의 최소 창(760px)에서
-          줄이 감기며 Primary가 둘째 줄 왼쪽에 매달린다(리뷰 확정 결함). */}
-      <div className="space-y-2 px-1">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          건수·필터·검색·주요 동작은 한 흐름으로 놓고 실제 폭이 부족할 때만 감싼다. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
           <p className="text-text-dim text-sm whitespace-nowrap">
             결과 <span className="text-foreground font-bold">{total}</span>건
             {totalPages > 1 ? (
@@ -214,20 +214,7 @@ export default async function ConsultationsPage({
               </span>
             ) : null}
           </p>
-          <div className="flex items-center gap-3">
-            <MakeeduSyncBadge domain="consultations" />
-            {/* 텍스트 Secondary — 치수는 옆 Primary와 같은 control-scale(한 줄에서 밑선이 맞아야 한다). */}
-            <WindowLink
-              href="/consultations/stats"
-              title="상담 통계"
-              className={`${CONTROL_H} ${CONTROL_LABEL} text-primary inline-flex items-center px-1 font-medium whitespace-nowrap hover:underline`}
-            >
-              통계
-            </WindowLink>
-            <NewConsultationTrigger />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <FilterSelect
             paramName="range"
             value={range === "all" ? "" : range}
@@ -279,6 +266,17 @@ export default async function ConsultationsPage({
             triggerClassName={TOOLBAR_SELECT}
           />
           <SearchToggle placeholder="학생명·요약" defaultValue={q} />
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          <MakeeduSyncBadge domain="consultations" />
+          <WindowLink
+            href="/consultations/stats"
+            title="상담 통계"
+            className={`${CONTROL_H} ${CONTROL_LABEL} text-primary inline-flex items-center px-1 font-medium whitespace-nowrap hover:underline`}
+          >
+            통계
+          </WindowLink>
+          <NewConsultationTrigger />
         </div>
       </div>
 
@@ -393,7 +391,7 @@ export default async function ConsultationsPage({
                         <EditingBadge scope={`student-consultation:${c.id}`} />
                       </p>
                       {/* 요약 한 줄 — 2차 정보라 말줄임 허용(§1). 전문은 마우스 오버·상세. */}
-                      <p className="text-text-faint hidden min-w-0 truncate text-sm @4xl/row:block">{c.summary}</p>
+                      <p className="text-text-faint hidden min-w-0 truncate text-sm @4xl/row:block" title={c.summary}>{consultationPreview(c.summary)}</p>
                       {/* 오른쪽은 **열**이다(원장 *"우측에 열정렬"*) — 카테고리 | 후속 | 녹음·AI | 시각, 칸 폭 고정이라 행마다
                           배지 수가 달라도 같은 자리에 선다. 빈 칸은 비워 둔다(자리를 당기지 않는다).
                           🔴 `col-start-4` — 요약 열이 숨는 폭(display:none = 그리드 아이템 없음)에서 이 블록이 3번째 트랙으로

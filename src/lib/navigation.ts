@@ -161,6 +161,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "대시보드",
         icon: MENU_ICON.dashboard,
         menuKey: "dashboard",
+        presentation: "desktop",
         // 2026-09-09 개칭 전 이름 — 이 문서·결정 로그가 아직 전부 "운영실"이라 직원도 그렇게 부른다.
         aliases: ["운영실"],
       },

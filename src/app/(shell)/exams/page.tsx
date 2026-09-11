@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { PageHeader } from "@/components/page-header";
@@ -15,11 +16,19 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { Pagination } from "@/components/pagination";
+import { kstToday } from "@/lib/date-kst";
+import { JJ_STUDY_MAX_DAYS, ijwStudyDay, resolveJjRange, type JjRange } from "@/features/ijw/range";
 import { getExamsPage, type ExamRow } from "@/features/exams/server/queries";
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
+import { ijwConfigFor } from "@/features/ijw/server/client";
+import { getJjViewer } from "@/features/ijw/server/queries";
 import { CreateExamTrigger, type ExamClassOption } from "./_components/exam-form-dialog";
+import { JjExamView } from "./_components/jj-exam-view";
+import { JjLinkSection } from "./_components/jj-link-section";
+import { JjSkeleton } from "./_components/jj-shared";
+import { JjStudyView } from "./_components/jj-study-view";
 
 export const metadata = { title: "성적관리 — eywa" };
 
@@ -33,35 +42,75 @@ const TYPE_FILTERS = [
   { value: "school", label: "학교" },
 ];
 
+/**
+ * 영어 전용 보기 2개(사용자 2026-09-10) — 인재원 학습 프로그램(MemoType)의 **JJ실 학습**과 **단어시험**.
+ * 기존 시험 표(exams·student_grades)와 데이터가 다르다: eywa에 저장하지 않고 매번 인재원에 묻는다(pull).
+ * 그래서 '유형' 칩에 나란히 두되 **영어일 때만** 보이고, 고르면 표 대신 JJ 화면을 그린다.
+ * ⚠️ 연동이 설정된 학원(IJW_TENANT_ID)에서만 칩이 뜬다 — 다른 학원엔 "설정 안 됨"만 뜨는 빈 칩이 생기지 않게.
+ * ⚠️ 강사는 담당(세 갈래 — 담임·교시 담당·위임) 반에 영어가 있을 때만(viewer.hasEnglish) — 수학만 맡은 강사에게
+ *    학원 전체 영어 시험 집계가 새지 않게(적대 리뷰 2026-09-10).
+ * ⚠️ `english`는 과목 **표준 키**(코드 특수동작 허용 범위) — 과목 라벨·색은 계속 학원설정에서 읽는다.
+ */
+const JJ_TYPES = [
+  { value: "jj", label: "JJ실" },
+  { value: "jj_exam", label: "JJ실(시험)" },
+] as const;
+const isJjType = (t: string) => t === "jj" || t === "jj_exam";
+
 export default async function ExamsPage({
   searchParams,
 }: {
   searchParams: Promise<{ subject?: string; page?: string; q?: string; type?: string; from?: string; to?: string }>;
 }) {
-  await requireAccess("exams");
+  const user = await requireAccess("exams");
   const sp = await searchParams;
   const subject = sp.subject ?? "all";
-  const examType = sp.type ?? "all";
+  const rawType = sp.type ?? "all";
+  const jjEnabled = !!ijwConfigFor(user.tenantId);
+  // JJ 보기는 영어·연동 학원일 때만 — 과목을 바꾸면 '전체'로 돌아간다(주소에 남은 type=jj가 빈 표를 만들지 않게).
+  const wantsJj = jjEnabled && subject === "english" && isJjType(rawType);
+  const examType = isJjType(rawType) ? "all" : rawType;
   const q = sp.q?.trim() || "";
   const from = sp.from || "";
   const to = sp.to || "";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, settings, classList] = await Promise.all([
-    getExamsPage(
-      {
-        subject: subject === "all" ? undefined : subject,
-        examType: examType === "all" ? undefined : examType,
-        q: q || undefined,
-        from: from || undefined,
-        to: to || undefined,
-      },
-      page,
-      PAGE_SIZE,
-    ),
+  const loadRegular = () =>
+    Promise.all([
+      getExamsPage(
+        {
+          subject: subject === "all" ? undefined : subject,
+          examType: examType === "all" ? undefined : examType,
+          q: q || undefined,
+          from: from || undefined,
+          to: to || undefined,
+        },
+        page,
+        PAGE_SIZE,
+      ),
+      getClassesList({ active: "active" }),
+    ] as const);
+  // JJ 칩을 세울지는 **보는 사람**이 정한다(viewer.hasEnglish) — 영어 과목을 볼 때만 계산한다.
+  const [viewer, settings, regularFirst] = await Promise.all([
+    jjEnabled && subject === "english" ? getJjViewer() : Promise.resolve(null),
     getTenantSettings(),
-    getClassesList({ active: "active" }),
+    wantsJj ? Promise.resolve(null) : loadRegular(),
   ]);
+  const jjAvailable = !!viewer?.hasEnglish;
+  const jjMode = wantsJj && jjAvailable ? (rawType as "jj" | "jj_exam") : null;
+  // 드묾: 주소는 JJ인데 이 사람에게 JJ가 없으면(수학만 맡은 강사) 그때 일반 목록을 읽는다.
+  const regular = jjMode ? null : (regularFirst ?? (await loadRegular()));
+  const rows = regular?.[0].rows ?? [];
+  const total = regular?.[0].total ?? 0;
+  const classList = regular?.[1] ?? [];
+  // JJ 기간 — 형식·순서·상한을 인재원이 받는 모양으로(range.ts). 학습 = 학습일(03:00 경계), 시험 = KST 달력 날짜.
+  // 기본은 학습 최근 7일(인재원 설명서: 반 묶음이 가장 가볍다), 시험 최근 30일.
+  const jjRange: JjRange | null =
+    jjMode === "jj"
+      ? resolveJjRange({ from, to }, { today: ijwStudyDay(), defaultDays: 7, maxDays: JJ_STUDY_MAX_DAYS })
+      : jjMode === "jj_exam"
+        ? resolveJjRange({ from, to }, { today: kstToday(), defaultDays: 30 })
+        : null;
   // 과목 라벨·색·필터 칩은 학원설정(operations.subjects) 단일 소스 — 미등록 과목은 칩에 안 뜸.
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -70,10 +119,20 @@ export default async function ExamsPage({
     className: c.className,
     subject: c.subject,
   }));
+  const activeType = jjMode ?? examType;
+  const typeFilters = jjAvailable ? [...TYPE_FILTERS, ...JJ_TYPES] : TYPE_FILTERS;
 
   // 필터/검색 href — 칩·검색은 page 리셋(page 미세팅).
   const buildHref = (patch: Partial<{ subject: string; type: string; q: string; from: string; to: string }>) => {
-    const cur = { subject, type: examType, q, from, to, ...patch };
+    const cur = { subject, type: activeType, q, from, to, ...patch };
+    // 영어가 아니면 JJ 보기가 없다 — 과목 칩을 누르면 유형을 '전체'로 되돌린다.
+    if (cur.subject !== "english" && isJjType(cur.type)) cur.type = "all";
+    // 🔴 JJ ↔ 일반 목록을 오갈 땐 기간을 버린다 — 날짜 기준이 다르고(학습일·제출일 ↔ 시험일), JJ에서 누른 '검색'의
+    //    기간이 일반 목록을 조용히 좁혀 "등록된 시험이 없습니다"가 떴다(적대 리뷰 2026-09-10). 반대 방향도 같다.
+    if (isJjType(activeType) !== isJjType(cur.type)) {
+      cur.from = "";
+      cur.to = "";
+    }
     const params = new URLSearchParams();
     if (cur.subject !== "all") params.set("subject", cur.subject);
     if (cur.type !== "all") params.set("type", cur.type);
@@ -119,11 +178,11 @@ export default async function ExamsPage({
           <div className="flex items-center gap-1.5">
             <span className="micro shrink-0">유형</span>
             <div className={TOOLBAR_SEG_BOX}>
-            {TYPE_FILTERS.map((f) => (
+            {typeFilters.map((f) => (
               <a
                 key={f.value}
                 href={buildHref({ type: f.value })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${examType === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
+                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${activeType === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
               >
                 {f.label}
               </a>
@@ -133,22 +192,36 @@ export default async function ExamsPage({
         </div>
         <form action="/exams" method="get" className="flex flex-wrap items-center gap-2">
           {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
-          {examType !== "all" ? <input type="hidden" name="type" value={examType} /> : null}
-          <div className={TOOLBAR_SEARCH_BOX}>
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="시험명"
-              className="text-foreground placeholder:text-text-faint h-full w-32 bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none"
-            />
-          </div>
+          {activeType !== "all" ? <input type="hidden" name="type" value={activeType} /> : null}
+          {/* JJ 보기는 시험명 검색이 없다(인재원 목록 전체를 기간으로만 자른다). */}
+          {jjMode ? null : (
+            <div className={TOOLBAR_SEARCH_BOX}>
+              <EyIcon name="search" size={13} />
+              <input
+                type="search"
+                name="q"
+                defaultValue={q}
+                placeholder="시험명"
+                className="text-foreground placeholder:text-text-faint h-full w-32 bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none"
+              />
+            </div>
+          )}
           <label className="text-text-dim flex items-center gap-1 text-xs">
             기간
-            <input type="date" name="from" defaultValue={from} className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs" />
+            {/* JJ 기본 기간은 값으로 채우지 않는다 — 채우면 '검색' 한 번에 주소로 굳어 버린다. 실제 기간은 표 위 기간 줄이 말한다. */}
+            <input
+              type="date"
+              name="from"
+              defaultValue={jjRange && !jjRange.isDefault ? jjRange.from : from}
+              className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs"
+            />
             <span>~</span>
-            <input type="date" name="to" defaultValue={to} className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs" />
+            <input
+              type="date"
+              name="to"
+              defaultValue={jjRange && !jjRange.isDefault ? jjRange.to : to}
+              className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs"
+            />
           </label>
           <Button type="submit" variant="outline">검색</Button>
           {q || from || to ? (
@@ -159,29 +232,56 @@ export default async function ExamsPage({
         </form>
       </div>
 
-      <div className="flex items-center justify-between">
-        <p className="micro">
-          결과 <span className="text-foreground font-bold">{total}</span>개
-          {totalPages > 1 ? (
-            <span className="text-text-faint ml-2 normal-case">
-              · {page}/{totalPages} 페이지
-            </span>
+      {jjMode && viewer && jjRange ? (
+        <div className="space-y-4">
+          {/* 인재원 호출(0.1~1초)이 첫 페인트를 막지 않게 스켈레톤을 먼저 흘린다(B7). */}
+          <Suspense key={`${jjMode}:${jjRange.from}:${jjRange.to}`} fallback={<JjSkeleton />}>
+            {jjMode === "jj" ? (
+              <JjStudyView viewer={viewer} range={jjRange} />
+            ) : (
+              <JjExamView viewer={viewer} range={jjRange} />
+            )}
+          </Suspense>
+          {/* 짝 잇기(관리자) — 표 **아래**에 둔다. 표보다 일이 많아(인재원 명단 + 학원 전체 이름 인원) 늦게 오는데,
+              위에 두면 도착하는 순간 보고 있던 표를 밀어 내렸다(적대 재리뷰 2026-09-10). */}
+          {jjMode === "jj" ? (
+            <Suspense fallback={null}>
+              <JjLinkSection viewer={viewer} />
+            </Suspense>
           ) : null}
-        </p>
-        <CreateExamTrigger classOptions={classOptions} />
-      </div>
-
-      {total === 0 ? (
-        <EmptyState
-          image="exams"
-          icon={() => <SearchX size={32} strokeWidth={1.8} />}
-          title="등록된 시험이 없습니다"
-          description="시험을 등록하고 반 전체 점수를 일괄 입력해 보세요."
-        />
+        </div>
       ) : (
         <>
-          <ExamTable rows={rows} subjects={subjects} />
-          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+          <div className="flex items-center justify-between">
+            <p className="micro">
+              결과 <span className="text-foreground font-bold">{total}</span>개
+              {totalPages > 1 ? (
+                <span className="text-text-faint ml-2 normal-case">
+                  · {page}/{totalPages} 페이지
+                </span>
+              ) : null}
+            </p>
+            <CreateExamTrigger classOptions={classOptions} />
+          </div>
+
+          {total === 0 ? (
+            <EmptyState
+              compact
+              image="exams"
+              icon={() => <SearchX size={32} strokeWidth={1.8} />}
+              title={
+                q || from || to || subject !== "all" || examType !== "all"
+                  ? "조건에 맞는 시험이 없습니다"
+                  : "등록된 시험이 없습니다"
+              }
+              description="위에서 검색 조건을 바꾸거나 시험을 등록할 수 있습니다."
+            />
+          ) : (
+            <>
+              <ExamTable rows={rows} subjects={subjects} />
+              <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+            </>
+          )}
         </>
       )}
     </div>

@@ -312,12 +312,8 @@ export function canWrite(role: SystemRole, menu: MenuKey, matrix: AccessMatrix =
 export function roleHome(role: SystemRole, matrix: AccessMatrix = MENU_ACCESS): string {
   if (role === "teacher") return "/onescreen";
   if (role === "student") return "/my-learning";
-  // 🔴 사무실 계열의 첫 화면은 **메뉴**다(원장 2026-09-07: *"기본 화면인 운영실도 없애야지 그래야
-  //    버튼식이 가동되지"*). 운영실은 이제 메뉴 중 하나이고, 첫 화면을 차지하지 않는다.
-  // ⚠️ `/menu`는 권한이 필요 없는 화면이라(자기가 볼 수 있는 메뉴만 그린다) matrix를 안 본다 —
-  //    권한 없는 페이지에서 되돌아오는 폴백 자리이기도 해서 **항상 열려야** 한다.
-  void matrix;
-  return "/menu";
+  // 대시보드 접근을 제한한 계정은 업무 선택 안내로 보낸다. 권한 거부 시 순환 이동을 막는다.
+  return canAccess(role, "dashboard", matrix) ? "/dashboard" : "/menu";
 }
 
 // (shell) 최상위 라우트 폴더 → 그 페이지가 게이트하는 MenuKey. 폴더명이 곧 키인 경우가 대부분이나

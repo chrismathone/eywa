@@ -149,11 +149,11 @@ export function ReviewTable({
                   <td className={`num px-4 py-3 text-right ${r.incomplete ? "text-text-dim" : ""}`}>
                     {r.submitted}
                   </td>
-                  <td className="num px-4 py-3 text-right font-bold">{r.percent ?? "—"}</td>
+                  <td className="num px-4 py-3 text-right font-bold">{r.percent ?? "—"}{r.incomplete && r.percent ? <span className="ml-1 text-xs font-medium text-amber">진행 중</span> : null}</td>
                   <td className="px-4 py-3 text-right">
                     {r.grade ? (
                       <Pill color={r.grade === "재참관" ? "danger" : "primary"} soft>
-                        {r.grade}
+                        {r.grade}{r.incomplete ? " · 잠정" : ""}
                       </Pill>
                     ) : (
                       "—"

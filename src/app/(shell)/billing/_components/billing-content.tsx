@@ -4,6 +4,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { kstMonth, kstToday } from "@/lib/date-kst";
 import { BigStat } from "@/components/atoms/big-stat";
+import { StatStrip } from "@/components/atoms/stat-strip";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -176,7 +177,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   }`;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Editorial 문법 ① — eyebrow→헤드라인→서브(청구·수납률 승격). 상시 버튼 = Primary '청구서 생성' + 텍스트 '엑셀 내보내기'
           (디자인 v5 §10 — 종전엔 툴바 오른쪽에 outline 둘이었다). */}
       <PageHeader
@@ -228,7 +229,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       {outsideSyncWindow && lastTouched ? (
         /* ⚠️ 이 달 숫자가 '최신'이 아님을 화면이 스스로 말한다 — 상단 동기화 배지는 도메인 시각만 보므로
            동결된 달 위에서도 "동기화 N시간 전"이라고 말한다(그게 이 경고가 필요한 이유). */
-        <section className="border-amber/40 bg-amber-soft flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+        <section className="border-amber/40 bg-amber-soft flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2">
           <span className="text-amber shrink-0">
             <EyIcon name="alert" size={16} />
           </span>
@@ -247,7 +248,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       {missingRows.length > 0 && syncState ? (
         /* 지금까지 이 신호는 makeedu_sync_state.error의 "재원생 청구 부재 N건" 한 줄로만 존재해
            **누구인지 알 수 없었다**(DB를 뒤져야 했다). 돈이 걸린 신호는 화면까지 와야 한다. */
-        <section className="border-amber/40 bg-amber-soft flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
+        <section className="border-amber/40 bg-amber-soft flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2">
           <span className="text-amber shrink-0">
             <EyIcon name="alert" size={16} />
           </span>
@@ -255,9 +256,8 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             <b>
               마지막 동기화에 없던 청구 <span className="num">{missingRows.length}</span>건
             </b>{" "}
-            (미수 <span className="num">{won(missingAmount)}</span>) — makeedu에서 삭제됐거나 다른
-            청구월로 옮겨졌을 수 있습니다. <b>퇴원이 확인된 건만 자동 무효 처리</b>되고 나머지는 그대로
-            둡니다. 기준 <span className="num">{kstDateTime(syncState.syncedAt)}</span>.
+            {" "}(미수 <span className="num">{won(missingAmount)}</span>) · 기준 <span className="num">{kstDateTime(syncState.syncedAt)}</span>.
+            <span className="block">삭제·청구월 이동 여부 확인이 필요합니다. 퇴원 확인 전까지 금액에 포함됩니다.</span>
           </p>
           <Button
             size="sm"
@@ -299,8 +299,8 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       ) : (
         <>
           {/* KPI 5종 — Editorial 문법 ②(BigStat). 금액은 num tabular + "원" 단위 분리, 미수금만 danger 강조. */}
-          {/* 다섯 칸 한 줄은 xl(1280)부터 — 최소 창(본문 1148)에서 5칸이면 "132,110,875원"이 두 줄로 꺾인다(실측). 그 아래는 3+2. */}
-          <section className="grid grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-5">
+
+          <StatStrip>
             <BigStat
               label="총 청구액"
               value={KRW.format(summary.totalBilled)}
@@ -340,7 +340,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               tone="gold"
               icon={<Percent size={16} strokeWidth={1.8} />}
             />
-          </section>
+          </StatStrip>
 
           {/* 수납 진행률 — 카드 껍데기 없이 스탯 줄 아래 한 줄(§4 카드 안의 카드 금지 · 시선 앵커 셋 = 머리·스탯·표).
               의미색 캐논 — 완납=positive(green) · 부분=caution(amber) · 미수=critical(danger). */}
@@ -348,7 +348,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             <div className="mb-1.5 flex items-baseline justify-between gap-3">
               <span className="text-foreground text-sm font-bold">수납 진행률</span>
               <span className="text-text-dim num text-sm">
-                완납 {paidPct.toFixed(1)}% · 부분 {partialPct.toFixed(1)}% · 미수 {unpaidPct.toFixed(1)}%
+                수납 {paidPct.toFixed(1)}% · 부분납부 잔액 {partialPct.toFixed(1)}% · 미납 {unpaidPct.toFixed(1)}%
               </span>
             </div>
             <div className="bg-bg-soft flex h-2.5 overflow-hidden rounded-pill">
@@ -360,14 +360,14 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
           {overdue.length > 0 ? (
             /* 기한 경과 배너 — 굵은 건수+금액 위계 + 우측 '목록 보기'(그 건들만 남기는 진짜 필터) */
-            <section className="bg-danger-soft flex flex-wrap items-center gap-4 rounded-2xl p-5">
-              <span className="bg-danger/15 text-danger flex size-10 shrink-0 items-center justify-center rounded-xl">
+            <section className="bg-danger-soft flex flex-wrap items-center gap-3 rounded-lg px-3 py-2">
+              <span className="text-danger flex shrink-0 items-center justify-center">
                 <CircleDollarSign size={18} strokeWidth={1.8} />
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
                 <p className="text-foreground text-sm font-bold">기한 경과 미수금</p>
-                <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="num text-danger text-2xl font-bold leading-none">
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="num text-danger text-base font-bold leading-none">
                     {overdue.length}
                   </span>
                   <span className="text-text-dim text-xs">건</span>
@@ -376,7 +376,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               </div>
               <Link
                 href={buildHref({ period, q, sort, desc, overdue: !overdueOnly })}
-                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+                className={`inline-flex h-(--control-h) shrink-0 items-center rounded-md border px-2 text-sm font-bold transition ${
                   overdueOnly
                     ? "border-danger bg-danger text-white hover:bg-danger/90"
                     : "border-danger/40 text-danger hover:bg-danger/10"

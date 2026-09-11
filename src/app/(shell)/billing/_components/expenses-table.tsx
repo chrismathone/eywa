@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { Check, Copy, Loader2, Paperclip, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ const TOGGLE_ROLES: { role: Exclude<ApprovalRole, "author">; label: string }[] =
  */
 type EmptyReason = { title: string; hint?: string; clearHref?: string };
 
-export function ExpensesTable({ rows, empty }: { rows: ExpenseRow[]; empty?: EmptyReason }) {
+export function ExpensesTable({ rows, empty, toolbar }: { rows: ExpenseRow[]; empty?: EmptyReason; toolbar?: ReactNode }) {
   const [dialog, setDialog] = useState<{ expense: ExpenseRow | null } | null>(null);
   const [receiptsFor, setReceiptsFor] = useState<ExpenseRow | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ExpenseRow | null>(null);
@@ -80,7 +80,8 @@ export function ExpensesTable({ rows, empty }: { rows: ExpenseRow[]; empty?: Emp
 
   return (
     <>
-      <div className="flex items-center justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {toolbar}
         <Button size="sm" onClick={() => setDialog({ expense: null })}>
           <Plus className="size-4" />
           지출 등록

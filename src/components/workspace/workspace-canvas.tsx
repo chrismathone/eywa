@@ -3,11 +3,10 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
-import { useWindowStore, instanceLabel } from "./window-store";
+import { useWindowStore } from "./window-store";
 import { usePrefs } from "./use-prefs";
 import { railWidth } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
-import Image from "next/image";
 import { FloatingWindow } from "./floating-window";
 import { iframeRegistry } from "./route-window";
 import { WindowSwitcher } from "./window-switcher";
@@ -15,6 +14,7 @@ import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
 import { SpotlightStrip } from "./spotlight-strip";
 import { WorkspaceOnboarding } from "./workspace-onboarding";
+import { useEmptyWorkspaceHome } from "./use-empty-workspace-home";
 import { useDeepLinkWindow } from "./deep-link-window";
 import { snapTarget, templateSlots } from "./window-geometry";
 
@@ -30,12 +30,11 @@ const HEADER = 0;
  * 데스크톱 전용. 자식은 absolute라 스테이지(레일/헤더 제외) 안에 갇힌다.
  * owner=`tenantId:userId` — 복원 레이아웃이 다른 계정 것이면 store가 초기화(메타 누수 방지).
  */
-export function WorkspaceCanvas({ owner }: { owner: string }) {
+export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: string; homeHref?: string }) {
   const isDesktop = useIsDesktop();
   const pathname = usePathname();
-  // 셸 main 자체가 화면인 라우트 = **메뉴**뿐이다(원장 2026-09-07: 운영실도 창으로).
-  // 창을 다 닫으면 이 화면이 배경으로 남는다 — 빈 바탕 대신 "다음에 뭘 열지"가 보인다.
-  const isDesktopSurface = pathname === "/menu";
+  // 대시보드가 작업 배경이다. /menu는 접근 제한 계정의 안내 화면만 남긴다.
+  const isDesktopSurface = pathname === "/dashboard" || pathname === "/menu";
   const order = useWindowStore((s) => s.order);
   const windows = useWindowStore((s) => s.windows);
   const focusedId = useWindowStore((s) => s.focusedId);
@@ -43,7 +42,6 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const dragLayout = useWindowStore((s) => s.dragLayout);
   const spotlight = useWindowStore((s) => s.spotlight);
   const exitSpotlight = useWindowStore((s) => s.exitSpotlight);
-  const restore = useWindowStore((s) => s.restore);
   const bounds = useWindowStore((s) => s.bounds);
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
@@ -101,6 +99,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   // ⚠️ adoptOwner(영속 복원·계정 채택) **뒤**에 두는 것이 중요하다 — 먼저 열면 다른 계정의 레이아웃을
   //    지우는 초기화가 방금 연 창까지 함께 쓸어간다(효과·하이드레이션 리스너 둘 다 선언 순서로 돈다).
   useDeepLinkWindow(isDesktop && !isDesktopSurface);
+  useEmptyWorkspaceHome(isDesktop && !isDesktopSurface, homeHref);
 
   // 창 안에서 녹음 등 끊기면 안 되는 작업이 진행 중이면 탭 전체 새로고침/이탈을 막는다(부모 탭은
   // iframe의 beforeunload가 못 막으므로 최상위 프레임에서 별도 가드). 마지막 busy 해제 시 제거.
@@ -199,12 +198,6 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const preview = !spotlight && !dragLayout && snapPreview ? snapTarget(snapPreview, bounds) : null;
   // DOM 순서는 삽입순(안정) 유지, 쌓임순서는 z-index로만 → 포커스/스냅 시 DOM 이동 0 → iframe 리로드 0.
   const wins = Object.values(windows);
-  // 열린(비최소화) 창이 하나도 없으면 빈 데스크톱 안내를 띄운다.
-  const hasOpenWindow = order.some((id) => !windows[id]?.minimized);
-  // 최소화해서 숨어 있는 창들 — 빈 데스크톱에서 "열린 창이 없어요"만 뜨면 **최소화한 창이 사라진 것처럼**
-  // 보인다(원장 제보 2026-07-31). ⚠️ 반드시 `order` 기준 — BL3 warm 풀(닫힌 라우트 창)은 windows엔
-  // minimized:true로 남지만 order에선 빠져 있어, windows를 훑으면 닫은 창까지 "최소화됨"으로 샌다.
-  const minimizedWins = order.map((id) => windows[id]).filter((w) => w?.minimized);
 
   return (
     <>
@@ -214,53 +207,9 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       className="pointer-events-none fixed z-40 print:hidden"
       style={{ left: rail, top: HEADER, right: 0, bottom: 0 }}
     >
-      {/* 일반 라우트의 빈 데스크톱 바탕 — 뒤 main을 불투명하게 덮어 "아무것도 없는 바탕화면"으로 만든다.
-          창들(z≥1) 뒤(z-0). pointer-events-auto로 덮인 라우트에 클릭이 새지 않게 흡수(빈 곳 클릭=무동작).
-          오늘은 main 자체를 데스크톱으로 노출하므로 이 막을 렌더하지 않는다. */}
+      {/* 직접 연 업무 페이지는 창에 표시한다. 마지막 창을 닫으면 대시보드로 이동한다. */}
       {!isDesktopSurface ? (
-        <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden={hasOpenWindow}>
-          {!hasOpenWindow && !spotlight ? (
-            <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 p-8">
-              <Image
-                src="/empty-states/empty-workspace-alpha.png"
-                alt=""
-                width={240}
-                height={240}
-                loading="eager"
-                className="mb-1 size-40 object-contain sm:size-44"
-              />
-              <div className="text-center">
-                {minimizedWins.length > 0 ? (
-                  <>
-                    <p className="text-foreground text-base font-bold">
-                      최소화한 창 {minimizedWins.length}개
-                    </p>
-                    <p className="text-text-dim mt-1 text-sm">
-                      눌러서 다시 열 수 있어요. 왼쪽 아래 독에도 있습니다.
-                    </p>
-                    <div className="pointer-events-auto mt-3 flex flex-wrap items-center justify-center gap-1.5">
-                      {minimizedWins.map((w) => (
-                        <button
-                          key={w.id}
-                          type="button"
-                          onClick={() => restore(w.id)}
-                          className="border-line bg-card text-foreground hover:border-primary/50 hover:bg-bg-soft rounded-full border px-3 py-1 text-xs transition"
-                        >
-                          {instanceLabel(w.id, w.params.title)}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-foreground text-base font-bold">열린 창이 없어요</p>
-                    <p className="text-text-dim mt-1 text-sm">왼쪽 메뉴를 눌러 창을 여세요.</p>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden="true" />
       ) : null}
       {/* 앨범(스포트라이트) 딤 — 뒤 바탕을 흐려 앨범에 집중되게. 창들(z>=1) 뒤(z-0).
           빈 딤 영역 클릭 = 앨범 나가기(클릭 아웃). 캔버스는 pointer-events-none이라 이 막만 클릭 흡수. */}

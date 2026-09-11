@@ -14,14 +14,12 @@ import {
 
 export const metadata: Metadata = { title: "수학 강사 시트 — eywa" };
 
-/** 단일 흐름일 때의 카드 격자. */
-const FULL_COLUMNS = "grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+/** 반 이름과 진행률을 같은 열에 정렬하는 목록. */
+const FULL_COLUMNS = "divide-line divide-y border-y border-line";
 /**
- * 좌우 분단일 때 **한 단 안**의 격자 — 단의 폭이 반이라 열 수도 한 칸씩 물러선다.
- * ⚠️ 좁은 폭(~768px)에선 두 단이 위아래로 쌓이고 단 안도 1열이다(ECS 분단과 같은 규약) —
- *    여기에 `sm:`/`md:` 다열을 다시 넣으면 반 이름이 통째로 잘린다.
+ * 정규·특강의 각 단에도 동일한 행 구성을 사용한다.
  */
-const PANEL_COLUMNS = "grid gap-2 xl:grid-cols-2";
+const PANEL_COLUMNS = FULL_COLUMNS;
 
 const EMPTY_TEXT: Record<string, string> = {
   "no-classes": "활성 수학 반이 없습니다.",
@@ -124,7 +122,7 @@ export default async function McsLandingPage({
                 {/* 단의 **간판** — 담임 묶음 머리(15px)와 형태로 갈라야 크기 경쟁 없이 위계가 선다.
                     🔴 채우기는 `-soft`(연한 틴트)까지 — 꽉 찬 네이비는 활성 필터 칩과 같은 모양이라
                     "눌러서 고르는 것"으로 읽힌다(이건 라벨이지 버튼이 아니다). */}
-                <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-base font-extrabold">
+                <h3 className="border-primary bg-primary-soft text-primary rounded-pill border px-2.5 py-0.5 text-base font-bold">
                   {panel.label}
                 </h3>
                 <span className="text-text-dim text-xs">
@@ -179,7 +177,7 @@ function TeacherGroups({
     <div className="flex flex-col gap-5">
       {groups.map((group) => (
         <section key={group.teacherName} className="flex flex-col gap-2">
-          <Heading className="text-base font-extrabold">
+          <Heading className="text-base font-bold">
             {group.teacherName}
           </Heading>
           <div className={columnsClass}>
@@ -187,16 +185,16 @@ function TeacherGroups({
               <Link
                 key={card.classId}
                 href={`/mcs/${card.classId}/month?month=${month}`}
-                className="border-line hover:border-primary flex flex-col gap-1 rounded-xl border bg-white p-3 transition"
+                className="grid grid-cols-[minmax(0,1fr)_minmax(120px,0.7fr)] items-center gap-x-3 gap-y-0.5 px-2 py-2 transition hover:bg-primary-soft/40 focus-visible:outline-2 focus-visible:outline-primary"
               >
-                <span className="truncate text-sm font-extrabold">
+                <span className="truncate text-base font-bold" title={card.className}>
                   {card.className}
                 </span>
                 {/* 🔴 "학생 N명" = **현재 재원**이다. 시트 줄 수(= N + 회색·예정)를 그대로 적으면
                         현재 재원 0명인 특강이 "학생 7명"이 된다(적대적 리뷰 2026-09-01). 남는 줄은
                         `+N`으로 따로 적어 둘을 더하면 시트 줄 수가 되게 한다. */}
                 <span
-                  className="text-text-faint num text-xs"
+                  className="text-text-faint num col-start-1 row-start-2 text-xs"
                   title={card.extraTitle ?? undefined}
                 >
                   수업 {card.dayCount}일 · 학생 {card.studentCount}명
@@ -208,7 +206,7 @@ function TeacherGroups({
                         🔴 분모는 **온 칸**(기록 + 왔는데 안 적힘)이라 시트 툴바와 같은 수를 말한다.
                         🔴 `shown === 0`이면 아직 아무도 안 온 달이라 **막대를 그리지 않는다** —
                            0을 100%로 그리면 다음 달 목록이 전부 꽉 찬 막대가 된다(ECS의 `—`와 같은 결). */}
-                <span className="mt-1 flex items-center gap-1.5">
+                <span className="col-start-2 row-span-2 row-start-1 flex items-center gap-1.5">
                   {card.elapsedDays === 0 ? (
                     <span
                       className="text-text-faint text-xs"

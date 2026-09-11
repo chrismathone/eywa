@@ -1,0 +1,20 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.layout > [data-withdrawal-list] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: var(--withdrawal-list-height, auto);
+}
+
+.layout [data-withdrawal-rows] { flex: 1; }
+.layout [data-withdrawal-pager] { min-height: 64px; }
+
+@media (min-width: 1024px) {
+  .layout { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+}

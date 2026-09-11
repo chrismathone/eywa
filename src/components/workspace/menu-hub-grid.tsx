@@ -15,8 +15,7 @@ import { useWindowStore } from "./window-store";
 import { openMenuWindow } from "./open-menu-window";
 
 /**
- * 메뉴 버튼 격자 + **메뉴를 여는 단 하나의 방법** — 첫 화면(menu-board)과 업무군 허브(menu-hub-panel)가
- * 같은 것을 쓴다. 🔴 두 벌로 만들면 한쪽만 고쳐진다(창으로 열지 라우트로 갈지, 방문 기록, 운영실 예외).
+ * 업무군 패널·검색에서 메뉴를 여는 공통 경로. 대시보드는 배경으로, 업무는 창으로 연다.
  */
 
 /**
@@ -29,15 +28,13 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
   const router = useRouter();
   const isDesktop = useIsDesktop();
   const showDesktop = useShowDesktop();
-  const sendHubToBack = useMenuHub((s) => s.sendToBack);
   const closeHub = useMenuHub((s) => s.close);
 
   return useCallback(
     (dest: HubDest, shift = false) => {
       void recordMenuVisit(dest.menuKey);
-      // 🔴 닫지 않고 **배경으로 내린다** — 닫으면 그 자리에 메뉴 판 전체가 펼쳐져 화면이 튄다
-      //    (원장 2026-09-09 *"배경이 '메뉴' 전체로 바뀌는데 어색한거 같은데"*). 창은 그 위에 뜬다.
-      sendHubToBack();
+      // 업무를 고르면 메뉴를 닫아 대시보드를 배경으로 유지한다.
+      closeHub();
       const item = navItemByKey(dest.menuKey);
       if (!isDesktop) {
         router.push(dest.href);
@@ -61,7 +58,7 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
       //    메뉴 판을 거치는 목적지(= 업무군 안 전부)가 같은 증상이었다. 판정은 `openMenuWindow` 한 곳.
       openMenuWindow(params);
     },
-    [sendHubToBack, closeHub, isDesktop, router, showDesktop],
+    [closeHub, isDesktop, router, showDesktop],
   );
 }
 

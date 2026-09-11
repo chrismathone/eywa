@@ -265,7 +265,7 @@ export function TuitionCalculator({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 print:block xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-5 print:block min-[960px]:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
       {/* 입력 (인쇄 시 숨김) */}
       <div className="space-y-4 print:hidden">
         <DraftBanner savedAt={draft.draftSavedAt} onRestore={restoreDraft} onDiscard={draft.discard} />

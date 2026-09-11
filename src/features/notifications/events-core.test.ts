@@ -242,7 +242,7 @@ describe("본문 문구", () => {
   it("결석 집계 — 1명/여러명", () => {
     expect(absenceDigestBody([])).toBe(null);
     expect(absenceDigestBody([{ subjectKey: "s1", bucket: "3", studentName: "김보민", absences: 3, tier: 3 }])).toContain(
-      "김보민 학생이 최근 14일 3회",
+      "김보민 학생 · 최근 14일 결석 3회",
     );
     const many = absenceDigestBody([
       { subjectKey: "s1", bucket: "3", studentName: "김보민", absences: 3, tier: 3 },
