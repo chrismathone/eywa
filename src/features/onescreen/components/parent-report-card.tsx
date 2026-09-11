@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
+import { JjExamSheet } from "@/features/ijw/components/jj-exam-sheet";
+import { JjStudySheet } from "@/features/ijw/components/jj-study-sheet";
+import { slotAvailability, type JjReportSnapshot } from "@/features/ijw/snapshot";
+import { splitImageSlots } from "@/features/report-templates/image-slots";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment } from "../attachment-utils";
@@ -45,12 +49,39 @@ const EMPTY_NOTES = "작성된 보고 내용이 없습니다.";
  * 스스로 시작한다).
  * 글씨는 수학 '학부모 전달 내용'(16px)보다 한 단계 크게 — 워커가 800px·2배로 `.report-capture`를 캡처하고
  * 학부모는 그 이미지를 폰으로 읽는다(글이 곧 보고서라 가장 크게 읽혀야 한다).
+ *
+ * 🔑 **그림 자리**(2026-09-11, image-slots.ts): 글 안의 `[시험결과지]`·`[학습분석지]` **한 줄**이 그 자리에 인재원 그림을
+ *    세운다 — 그 줄에서 글을 끊고 그림을 끼운다. 재료는 저장할 때 서버가 받아 둔 동결본(`jj`, 0261a)이라
+ *    /r·인쇄·ClassNote 캡처(이 카드의 스크린샷)가 같은 그림을 같은 자리에 싣는다.
+ * 🔴 그릴 자료가 없으면(동결본 없음·그날 시험 없음) **아무것도 안 그린다** — 대괄호 글자를 학부모에게 내보내지 않는다.
+ * 🔴 그림 자리가 없는 글은 예전과 **글자 하나 다르지 않다**(한 칸 그대로).
  */
-function TemplateBody({ text }: { text: string | null }) {
+function TemplateBody({ text, jj }: { text: string | null; jj?: JjReportSnapshot | null }) {
   const body = (text ?? "").replace(/\r\n?/g, "\n").trim();
+  const segments = splitImageSlots(body);
+  if (!segments.some((s) => s.kind === "slot")) return <TemplateText text={body || EMPTY_NOTES} />;
+  const avail = slotAvailability(jj);
+  // 같은 자리 줄이 두 번 있으면(강사가 글에서 복사해 둔 것 등) **처음 한 번만** 그린다 — 같은 그림이 두 장 나가지 않게.
+  const drawn = new Set<string>();
+  const blocks = segments.flatMap((seg, i): ReactNode[] => {
+    if (seg.kind === "text") return [<TemplateText key={`t${i}`} text={seg.text.trim()} />];
+    if (drawn.has(seg.key)) return [];
+    drawn.add(seg.key);
+    if (seg.key === "시험결과지") {
+      return avail.시험결과지 && jj
+        ? jj.exams.map((exam, j) => <JjExamSheet key={`e${i}-${j}`} exam={exam} layout="card" />)
+        : [];
+    }
+    return avail.학습분석지 && jj?.study ? [<JjStudySheet key={`s${i}`} study={jj.study} layout="card" />] : [];
+  });
+  return blocks.length ? <>{blocks}</> : <TemplateText text={EMPTY_NOTES} />;
+}
+
+/** 템플릿 글 한 칸(그림 자리 사이의 글 조각도 같은 칸) — 그림 칸이 생기기 전 본문과 같은 모양. */
+function TemplateText({ text }: { text: string }) {
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
-      <p className="text-foreground text-xl leading-relaxed break-keep whitespace-pre-wrap">{body || EMPTY_NOTES}</p>
+      <p className="text-foreground text-xl leading-relaxed break-keep whitespace-pre-wrap">{text}</p>
     </section>
   );
 }
@@ -96,6 +127,11 @@ export type ParentReportCardProps = {
    * 호스트가 `subject === "english"`로 켠다(/r·인쇄·원스크린 미리보기). 기본 false = 수학 카드 그대로.
    */
   templateMode?: boolean;
+  /**
+   * 영어 보고서의 인재원 동결본(0261a) — 템플릿 글의 그림 자리 줄에 그린다. 호스트가 따로 읽어 넘긴다
+   * (/r·인쇄 = 보고서에 묶인 저장본, 원스크린 미리보기 = 화면이 받아 둔 하루치). 없으면 그림 자리를 비운다.
+   */
+  jj?: JjReportSnapshot | null;
 };
 
 /** 학부모 보고서 카드(max-w-md 컬럼) — /r·/print 공용. 표시 항목은 전부 settings 토글 준수. */
@@ -108,6 +144,7 @@ export function ParentReportCard({
   attachments,
   trend,
   templateMode = false,
+  jj = null,
 }: ParentReportCardProps) {
   // "2026년 07월 10일" — 제목에 합쳐 쓰므로 0패딩 고정 포맷(원장 요청 표기). YYYY-MM-DD 문자열 분해라 TZ 무관.
   const [ry, rm, rd] = (report.reportDate ?? "").split("-");
@@ -162,7 +199,7 @@ export function ParentReportCard({
           학습 추세는 **전부 건너뛴다**: 같이 그리면 같은 진도·숙제가 글 안과 칸에 두 번 나간다.
           🔴 'showParentNote' 토글을 보지 않는다 — 수학에선 여러 칸 중 하나지만 여기선 글이 곧 보고서라,
              끄면 학생 정보만 남은 빈 카드가 학부모에게 나간다. 머리·학생 정보·첨부·바닥글은 수학과 같다. */}
-      {templateMode ? <TemplateBody text={report.notes} /> : null}
+      {templateMode ? <TemplateBody text={report.notes} jj={jj} /> : null}
 
       {!templateMode && showToday ? (
         <Section title="오늘 수업">

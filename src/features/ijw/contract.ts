@@ -116,7 +116,18 @@ export const IJW_SCHEMAS = {
   examSummary: v1({ exams: z.array(ExamSummary) }),
   deckResults: v1({ deck: Deck, results: z.array(DeckResult) }),
   studySummary: v1({ from: str, to: str, students: z.array(StudySummaryRow) }),
+  /**
+   * 5번 하루치 — 원스크린 일일 보고서용(2026-09-11). `exams`는 그 **KST 달력 날짜**에 낸 응시 **전부**(제출순, 3번 모양),
+   * `study`는 4번 모양이고 기본 기간은 그날까지 30학습일이다.
+   */
+  day: v1({ ijwId: z.string(), name: str, date: str, exams: z.array(ExamResult), study: Study }),
 } as const;
+
+/**
+ * `v`가 없는 알맹이 모양 — 보고서에 **저장해 둔** 자료(snapshot.ts)를 다시 읽을 때 쓴다(저장본엔 `v: 1` 머리가 없다).
+ * 받을 때와 같은 검사를 지나야 화면이 "0분"을 그럴듯하게 그리지 않는다(위 엄격 규칙).
+ */
+export const IJW_SHAPES = { study: Study, examResult: ExamResult } as const;
 
 export type IjwStudent = z.infer<typeof Student>;
 export type IjwExamListItem = z.infer<typeof ExamListItem>;
@@ -125,6 +136,7 @@ export type IjwStudy = z.infer<typeof Study>;
 export type IjwExamSummary = z.infer<typeof ExamSummary>;
 export type IjwDeckResult = z.infer<typeof DeckResult>;
 export type IjwStudySummaryRow = z.infer<typeof StudySummaryRow>;
+export type IjwDay = z.infer<typeof IJW_SCHEMAS.day>;
 
 /** 호출 실패의 종류 — 화면 문구가 원인을 단정하지 않도록 나눈다(eywa 설정 없음 ≠ 인재원 설정 없음 ≠ 서버 꺼짐 ≠ 키 틀림). */
 export type IjwFailKind =

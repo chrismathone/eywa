@@ -10,6 +10,7 @@ import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
+import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 
 export const metadata = { title: "수업 보고서 — eywa" };
@@ -52,7 +53,7 @@ export default async function LessonReportPrintPage({
     if (!report.student_id || !studentIds.includes(report.student_id)) notFound();
   }
 
-  const [{ data: student }, settings, trendRows, sendName] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName, jj] = await Promise.all([
     supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),
     getTenantSettings(),
     // 성적 추이 이력 — RLS 클라이언트라 테넌트 격리 자동(tenantId 불요). 실패해도 문서 안 깨짐.
@@ -70,6 +71,8 @@ export default async function LessonReportPrintPage({
       .catch(() => []),
     // 발송용 이름(0217a) — /r·ClassNote 이미지와 같은 표기(강사 미리보기 = 실제 발송물). fail-soft.
     resolveReportAuthorName(user.tenantId, report.teacher_name as string | null),
+    // 영어 보고서의 인재원 그림 재료(0261a) — /r과 같은 저장본을 **따로** 읽는다(SELECT 불변, #95). 실패 = 그림 자리만 빈다.
+    report.subject === "english" ? loadReportJjSnapshot(user.tenantId, report.id as string) : Promise.resolve(null),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
@@ -125,6 +128,7 @@ export default async function LessonReportPrintPage({
           trend={trend}
           // 영어 = 템플릿 모드 — /r과 같은 판정(강사 미리보기 = 실제 발송물). subject는 이미 SELECT에 있다(#95).
           templateMode={report.subject === "english"}
+          jj={jj}
         />
       </div>
     </div>

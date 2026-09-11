@@ -19,6 +19,18 @@ export type IjwResult<T> = { ok: true; data: T } | IjwFailure;
 
 /** 인재원 한 번 부르는 상한 — 화면 렌더 중에 부르므로 오래 매달리지 않는다(설명서 실측: 반 묶음 0.2~0.4초). */
 const TIMEOUT_MS = 8000;
+/**
+ * 연결 실패(시간 초과·네트워크)가 **연달아** `PAUSE_AFTER_FAILURES`번이면 이 시간 동안은 부르지 않고 바로 실패한다 —
+ * 인재원이 멈춘 동안 일괄 저장이 보고서마다 8초씩 매달리지 않게(적대 재리뷰 2026-09-11). 한 번의 일시 실패로
+ * 모든 JJ 화면을 막지 않으려고 연속 횟수를 본다. 응답을 한 번이라도 받으면(4xx·5xx 포함 — 서버는 살아 있다) 셈을 지운다.
+ * 서버 인스턴스 안에서만 공유된다(최선 노력).
+ */
+const PAUSE_AFTER_UNREACHABLE_MS = 30_000;
+const PAUSE_AFTER_FAILURES = 2;
+let pausedUntil = 0;
+let consecutiveFailures = 0;
+/** 마지막 연결 실패 시각 — 그보다 **먼저 시작한** 요청의 실패는 같은 한 번으로 친다(Promise.all로 함께 나간 요청들). */
+let lastFailAt = 0;
 
 function fail(kind: IjwFailKind, detail?: string): IjwFailure {
   return { ok: false, kind, message: IJW_FAIL_TEXT[kind], detail };
@@ -48,6 +60,8 @@ export const IJW_PATHS = {
   examSummary: (from?: string, to?: string) => `/ext/eywa/exams${qs({ from, to })}`,
   deckResults: (deckId: string) => `/ext/eywa/exams/deck/${enc(deckId)}`,
   studySummary: (from?: string, to?: string, className?: string) => `/ext/eywa/study${qs({ from, to, className })}`,
+  /** 5번 하루치 — `date`는 꼭 넣는다(시험 = 그 KST 달력 날짜 전부, 학습 = 그날까지 30학습일). */
+  day: (ijwId: string, date: string) => `/ext/eywa/students/${enc(ijwId)}/day${qs({ date })}`,
 } as const;
 
 export async function ijwGet<S extends z.ZodTypeAny>(
@@ -57,6 +71,8 @@ export async function ijwGet<S extends z.ZodTypeAny>(
 ): Promise<IjwResult<z.infer<S>>> {
   const conf = ijwConfigFor(tenantId);
   if (!conf) return fail("not_configured");
+  if (Date.now() < pausedUntil) return fail("unreachable", "최근 연결 실패 — 잠시 뒤 다시 부른다");
+  const startedAt = Date.now();
   let res: Response;
   try {
     res = await fetch(`${conf.url}${path}`, {
@@ -65,8 +81,19 @@ export async function ijwGet<S extends z.ZodTypeAny>(
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (e) {
+    // 함께 나간 요청들(학생 상세의 두 입구 등)이 한꺼번에 실패하면 한 번으로 센다 — 일시 실패 한 번에 멈추지 않게.
+    // 🔴 `lastFailAt`은 **센 실패에서만** 옮긴다 — 안 센 실패까지 옮기면 겹치는 요청이 계속 들어오는 동안 연속 실패가
+    //    영영 2가 안 돼 멈춤이 안 걸린다(적대 재리뷰).
+    if (startedAt > lastFailAt) {
+      consecutiveFailures += 1;
+      lastFailAt = Date.now();
+    }
+    if (consecutiveFailures >= PAUSE_AFTER_FAILURES) pausedUntil = Date.now() + PAUSE_AFTER_UNREACHABLE_MS;
     return fail("unreachable", e instanceof Error ? e.message : String(e));
   }
+  // 응답을 받았다 = 서버는 살아 있다 — 셈과 멈춤을 함께 푼다(멈춘 뒤 늦게 온 성공도 멈춤을 푼다).
+  consecutiveFailures = 0;
+  pausedUntil = 0;
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
     const said = typeof body?.error === "string" ? body.error : "";

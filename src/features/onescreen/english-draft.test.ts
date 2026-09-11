@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_ENGLISH_TEMPLATE, type ReportTemplate } from "@/features/report-templates/defaults";
+import {
+  BUILTIN_ENGLISH_JJ_TEMPLATE,
+  BUILTIN_ENGLISH_TEMPLATE,
+  type ReportTemplate,
+} from "@/features/report-templates/defaults";
 import { textHash } from "@/features/report-templates/provenance";
 import {
   aiFactsHashOf,
@@ -17,6 +21,8 @@ import {
   refreshFactsKey,
   templateFactsKey,
   isUntouchedTemplateDraft,
+  slotFactsFor,
+  templateImageSlots,
   templateNeedsAi,
   type EnglishRowFacts,
 } from "./english-draft";
@@ -188,5 +194,57 @@ describe("templateNeedsAi · findTemplateIn", () => {
     expect(findTemplateIn([NO_AI], "gone", BUILTIN_ENGLISH_TEMPLATE)).toBeNull();
     expect(findTemplateIn([NO_AI], undefined, BUILTIN_ENGLISH_TEMPLATE)).toBe(BUILTIN_ENGLISH_TEMPLATE);
     expect(findTemplateIn([NO_AI], "u1", BUILTIN_ENGLISH_TEMPLATE)).toBe(NO_AI);
+  });
+  it("🔑 기본 템플릿은 목록을 못 받아도 찾는다(코드가 주는 것 — 사라질 수 없다)", () => {
+    expect(findTemplateIn([], BUILTIN_ENGLISH_JJ_TEMPLATE.id, BUILTIN_ENGLISH_TEMPLATE)).toBe(BUILTIN_ENGLISH_JJ_TEMPLATE);
+  });
+});
+
+describe("그림 칸(인재원 시험 결과지·학습 분석지, 2026-09-11)", () => {
+  const JJ = BUILTIN_ENGLISH_JJ_TEMPLATE;
+  const withSlots = (slots: EnglishRowFacts["slots"]): EnglishRowFacts => ({ ...FACTS, slots });
+  const none = withSlots({ 시험결과지: false, 학습분석지: false });
+  const exam = withSlots({ 시험결과지: true, 학습분석지: false });
+
+  it("자료가 있으면 자리 줄이 글에 남고, 없으면 빠진다", () => {
+    expect(composeEnglishDraft(JJ, exam, AI)).toContain("[시험결과지]");
+    expect(composeEnglishDraft(JJ, exam, AI)).not.toContain("[학습분석지]");
+    expect(composeEnglishDraft(JJ, none, AI)).not.toContain("[");
+  });
+
+  it("🔑 자료가 생기면 템플릿 글은 stale — 손대지 않은 글은 저장이 다시 짜고, 고친 글은 확인을 묻는다", () => {
+    const rep = { ...filled(JJ, none), composedFactsHash: templateFactsKey(none, "", factTokensOf(JJ)) };
+    expect(factTokensOf(JJ)).toEqual(expect.arrayContaining(["시험결과지", "학습분석지"]));
+    expect(isTemplateStale(JJ, exam, rep)).toBe(true);
+    expect(canRecompose(JJ, rep)).toBe(true);
+    expect(isTextOutdated(JJ, exam, rep)).toBe(false); // 저장 직전 재조립이 맞춘다
+    expect(isTextOutdated(JJ, exam, { ...rep, draft: "고친 글" })).toBe(true); // 고친 글은 못 맞춘다 → 묻는다
+    expect(isTextOutdated(JJ, none, { ...rep, draft: "고친 글" })).toBe(false); // 자료 그대로면 묻지 않는다
+  });
+
+  it("그림 칸이 없는 템플릿은 그림 자료가 바뀌어도 흔들리지 않는다(지문 모양 그대로)", () => {
+    expect(factTokensOf(BUILTIN_ENGLISH_TEMPLATE)).not.toContain("시험결과지");
+    const rep = {
+      ...filled(BUILTIN_ENGLISH_TEMPLATE),
+      composedFactsHash: templateFactsKey(FACTS, "", factTokensOf(BUILTIN_ENGLISH_TEMPLATE)),
+    };
+    const all = withSlots({ 시험결과지: true, 학습분석지: true });
+    expect(isTemplateStale(BUILTIN_ENGLISH_TEMPLATE, all, rep)).toBe(false);
+    expect(isTextOutdated(BUILTIN_ENGLISH_TEMPLATE, all, { ...rep, draft: "고친 글" })).toBe(false);
+  });
+
+  it("🔴 slotFactsFor — 모르면 기준 글 그대로(중립): 자료가 오기 전의 재조립이 그림 줄을 지우지 않는다", () => {
+    const text = composeEnglishDraft(JJ, withSlots({ 시험결과지: true, 학습분석지: true }), AI);
+    const neutral = slotFactsFor(null, text);
+    expect(neutral).toEqual({ 시험결과지: true, 학습분석지: true });
+    expect(composeEnglishDraft(JJ, withSlots(neutral), AI)).toBe(text);
+    expect(slotFactsFor(null, "그림 없는 글")).toEqual({ 시험결과지: false, 학습분석지: false });
+    // 알면 아는 대로(기준 글과 달라도).
+    expect(slotFactsFor({ 시험결과지: false, 학습분석지: true }, text)).toEqual({ 시험결과지: false, 학습분석지: true });
+  });
+
+  it("templateImageSlots — 그림 칸 템플릿만 인재원 자료를 먼저 받는다", () => {
+    expect(templateImageSlots(JJ)).toEqual(["시험결과지", "학습분석지"]);
+    expect(templateImageSlots(BUILTIN_ENGLISH_TEMPLATE)).toEqual([]);
   });
 });

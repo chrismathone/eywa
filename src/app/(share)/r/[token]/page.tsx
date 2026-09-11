@@ -11,6 +11,7 @@ import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
+import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { ClosedReportScreen } from "./_closed";
 
 // 학생 PII 문서 — 검색엔진 색인 차단(링크 유출 시에도 인덱싱 방지).
@@ -67,7 +68,7 @@ export default async function PublicLessonReportPage({
   const specialClassIds = await fetchSpecialClassIds(admin, report.tenant_id as string).catch(
     () => [] as string[],
   );
-  const [{ data: student }, settings, trendRows, sendName] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName, jj] = await Promise.all([
     admin.from("students").select("name, school, grade").eq("id", report.student_id).maybeSingle(),
     getTenantSettingsByTenantId(report.tenant_id as string),
     // 성적 추이 이력 — admin(service_role)이라 tenantId 필터로 테넌트 격리 필수(#B6 규약). 실패해도 페이지 안 깨짐.
@@ -79,6 +80,11 @@ export default async function PublicLessonReportPage({
     // 발송용 이름(0217a) — 강사가 정했으면 '담임' 칸에 실명 대신 표시. fail-soft(실패=실명 그대로).
     // ClassNote 게시 이미지는 이 페이지의 워커 스크린샷이라 여기 한 곳으로 이미지 표기가 함께 바뀐다.
     resolveReportAuthorName(report.tenant_id as string, report.teacher_name as string | null),
+    // 영어 보고서의 인재원 그림 재료(0261a, 저장 때 묶인 동결본) — 위 SELECT에 섞지 않고 **따로** 읽는다(#95).
+    // 표가 없거나 실패하면 null = 그림 자리만 빈다(글은 그대로). 워커 캡처도 이 페이지라 ClassNote 이미지에 같이 실린다.
+    report.subject === "english"
+      ? loadReportJjSnapshot(report.tenant_id as string, report.id as string)
+      : Promise.resolve(null),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
@@ -136,6 +142,7 @@ export default async function PublicLessonReportPage({
         // 영어 = 템플릿 모드(사용자 2026-09-10) — notes가 템플릿으로 조립된 글 그 자체라 항목 칸 대신 본문으로.
         // subject는 이미 위 SELECT에 있다 — 새 컬럼을 넣지 않는다(없는 컬럼 하나가 /r 전체를 죽인다, #95).
         templateMode={report.subject === "english"}
+        jj={jj}
       />
     </div>
   );

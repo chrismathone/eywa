@@ -267,6 +267,11 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             </h1>
           </div>
           <div className={s.headerTools}>
+            {snapshot.allowed.includes("timetable") && snapshot.allowed.includes("classes") && (
+                <Jump href="/dashboard?view=rooms" className={s.classroomPreview}>
+                  강의실 2D/3D
+                </Jump>
+              )}
             <div
               className={s.freshness}
               title="표시 시각은 eywa DB 조회 시각입니다. 외부 서비스의 동기화 완료 시각과는 다릅니다."

@@ -38,4 +38,12 @@ describe("englishTemplateValues", () => {
     expect(r.text).toContain("안녕하세요 학부모님, 정유진 선생님입니다!");
     expect(r.text).toContain("테스트 : 일일 20문제 중 18개 맞음");
   });
+
+  it("그림 칸은 자료가 있을 때만 자리 표식 — 없거나 모르면 빈 값(그 줄이 빠진다)", () => {
+    expect(englishTemplateValues(BASE).시험결과지).toBe("");
+    expect(englishTemplateValues(BASE).학습분석지).toBe("");
+    const withExam = englishTemplateValues({ ...BASE, slots: { 시험결과지: true } });
+    expect(withExam.시험결과지).toBe("[시험결과지]");
+    expect(withExam.학습분석지).toBe("");
+  });
 });

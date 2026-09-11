@@ -205,6 +205,7 @@ describe("툴바 규약 — <Toolbar> 구역", () => {
  */
 const CANON_SURFACES = [
   "src/features/onescreen/components/top-bar.tsx",
+  "src/features/ijw/components/jj-range-bar.tsx",
   "src/app/(shell)/timetable/page.tsx",
   "src/app/(shell)/timetable-dev/page.tsx",
   "src/app/(shell)/timetable/_components/view-settings.tsx",

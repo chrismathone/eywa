@@ -1,97 +1,104 @@
 /**
- * 성적관리 › 영어 › **JJ실** — 학생별 기간 학습(인재원 학습 프로그램, 설명서 8번). 서버 컴포넌트.
+ * 성적관리 › 영어 › **JJ실** — 학생별 기간 학습(인재원 설명서 8번)을 **eywa 반으로 묶어** 보여 준다. 서버 컴포넌트.
  *
  * 숫자는 매번 인재원에 묻는다(eywa엔 짝만 있다). 강사는 짝이 걸린 자기 학생(세 갈래 스코프)만 본다(queries.ts).
- * 이름은 인재원 표시 이름이 기본이고, 짝이 있으면 eywa 이름으로 학생 상세(성적 탭)를 연다.
- * ⚠️ 강사는 인재원 반 이름(className)으로 좁혀 부르지 않는다 — 인재원 반은 eywa 반과 1:1이 아니라(테스터 그룹·A반 등)
- *    학원 전체를 받아 eywa 학생 id로 거른다.
+ * 🔑 반별(사용자 2026-09-11 *"학생별 반별 … 유기적으로"*): 반 줄 = 그 반 학생의 합계·평균, 학생 줄 = 학생 상세(같은
+ *    기간)로, 반 이름 = 반 상세로, '이 반만' = 반 칩과 같은 주소로.
+ * ⚠️ 강사는 인재원 반 이름(className)으로 좁혀 부르지 않는다 — 인재원 반은 eywa 반과 1:1이 아니라 학원 전체를 받아
+ *    eywa 학생 id로 거른다. 묶는 반도 eywa 반이다(class-groups.ts).
+ * ⚠️ 반 정보(eywa 수강)를 못 읽어도 표는 산다 — 묶지 않은 채 그 사실을 적는다.
  */
 import { SearchX } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
-import { WindowLink } from "@/components/workspace/window-link";
-import { formatStudyTime } from "@/features/ijw/contract";
+import { groupRowsByClass, hasMultiClassStudent } from "@/features/ijw/class-groups";
 import type { JjRange } from "@/features/ijw/range";
-import { getJjStudyList, type JjViewer } from "@/features/ijw/server/queries";
-import { JJ_SCOPE_FAILED, JjFailBanner, JjLinkColumnNotice, JjPeriodLine, rangeNote } from "./jj-shared";
+import { getJjClassOptions, getJjStudyList, loadJjMembership, type JjViewer } from "@/features/ijw/server/queries";
+import { JjClassFilter } from "./jj-class-filter";
+import { JJ_SCOPE_FAILED, JjFailBanner, JjLinkColumnNotice, JjNote, JjPeriodLine, rangeNote } from "./jj-shared";
+import { JjStudyTable } from "./jj-study-table";
 
-export async function JjStudyView({ viewer, range }: { viewer: JjViewer; range: JjRange }) {
+export async function JjStudyView({
+  viewer,
+  range,
+  classFilter,
+  classHref,
+}: {
+  viewer: JjViewer;
+  range: JjRange;
+  /** 주소의 `jjClass`(eywa 반 id). 선택지에 없으면 무시하고 그 사실을 적는다. */
+  classFilter: string | null;
+  classHref: (classId: string | null) => string;
+}) {
   // 스코프를 못 구했으면 좁게 떨어진 상태 — 빈 표 대신 그 사실을 말한다(인재원도 부르지 않는다).
   if (viewer.scopeFailed) return <JjFailBanner message={JJ_SCOPE_FAILED} />;
-  const res = await getJjStudyList(viewer, range.from, range.to);
+  const [res, member, options] = await Promise.all([
+    getJjStudyList(viewer, range.from, range.to),
+    loadJjMembership(viewer.tenantId),
+    getJjClassOptions(viewer),
+  ]);
   if (!res.ok) return <JjFailBanner message={res.message} detail={res.detail} />;
   if (res.scopeNotReady) return <JjLinkColumnNotice teacher />;
+  const membership = member.ok ? member.membership : null;
+  const filter = classFilter && options?.some((c) => c.id === classFilter) ? classFilter : null;
+  const groups = membership
+    ? groupRowsByClass(res.rows, membership, {
+        classFilter: filter,
+        includeUnlinked: !viewer.teacherStudentIds,
+        nameOf: (r) => r.eywa?.name ?? (r.name || r.ijwId),
+      })
+    : null;
+  const shown = groups ? new Set(groups.flatMap((g) => g.rows.map((r) => r.ijwId))).size : res.rows.length;
   const linked = res.rows.filter((r) => r.eywa).length;
+  const filterName = filter ? options?.find((c) => c.id === filter)?.name : null;
   return (
     <div className="space-y-3">
       {res.columnMissing ? <JjLinkColumnNotice /> : null}
-      <JjPeriodLine
-        from={res.from}
-        to={res.to}
-        basis="study"
-        note={rangeNote(range, "기본: 최근 7일")}
-        extra={`학생 ${res.rows.length}명 · eywa 연결 ${linked}명`}
-      />
-      {res.rows.length === 0 ? (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <JjPeriodLine
+          from={res.from}
+          to={res.to}
+          basis="study"
+          note={rangeNote(range, "기본: 최근 7일")}
+          extra={filterName ? `반 ${filterName} · 학생 ${shown}명` : `학생 ${res.rows.length}명 · eywa 연결 ${linked}명`}
+        />
+        {options ? <JjClassFilter classes={options} value={filter} hrefFor={classHref} /> : null}
+      </div>
+      {!member.ok ? <JjNote title={member.detail}>반 정보를 불러오지 못해 반으로 묶지 않았습니다.</JjNote> : null}
+      {/* 원인을 가른다 — 목록을 못 읽은 것과 '고른 반이 선택지에 없는 것'은 다른 사실이다(적대 리뷰 2026-09-11). */}
+      {classFilter && !filter && options ? (
+        <JjNote>고른 반을 찾을 수 없어(담당 반이 아니거나 운영이 끝난 반) 전체를 보여 줍니다.</JjNote>
+      ) : classFilter && !options && member.ok ? (
+        <JjNote>반 목록을 불러오지 못해 전체를 보여 줍니다.</JjNote>
+      ) : null}
+      {groups && groups.length ? (
+        <p className="text-text-faint text-xs">
+          반 줄 = 그 반 학생의 합계·평균(정답률은 푼 문제 수로 가중)
+          {viewer.teacherStudentIds ? " · 내 학생 기준(다른 선생님 학생은 세지 않습니다)" : ""}
+          {hasMultiClassStudent(groups) ? " · 영어 반 두 곳을 함께 다니는 학생은 두 반 모두에 셉니다" : ""}
+        </p>
+      ) : null}
+      {shown === 0 ? (
         <EmptyState
           image="exams"
           icon={() => <SearchX size={32} strokeWidth={1.8} />}
           title="보여 줄 학생이 없습니다"
           description={
-            viewer.teacherStudentIds
-              ? "담당 학생 중 인재원 학습 계정과 연결된 학생이 없습니다(연결은 관리자가 합니다)."
-              : "인재원에 영어 학생이 아직 없습니다."
+            filter
+              ? "이 반에서 인재원 학습 계정과 연결된 학생이 없습니다(연결은 관리자가 합니다)."
+              : viewer.teacherStudentIds
+                ? "담당 학생 중 인재원 학습 계정과 연결된 학생이 없습니다(연결은 관리자가 합니다)."
+                : "인재원에 영어 학생이 아직 없습니다."
           }
         />
       ) : (
-        <div className="bg-card shadow-card overflow-auto rounded-2xl">
-          <table className="w-full text-sm [&_td]:whitespace-nowrap">
-            <thead className="border-line border-b [&_th]:whitespace-nowrap">
-              <tr>
-                <th className="micro px-4 py-3 text-left">학생</th>
-                <th className="micro px-4 py-3 text-left">인재원 반</th>
-                <th className="micro px-4 py-3 text-right">학습한 날</th>
-                <th className="micro px-4 py-3 text-right">푼 문제</th>
-                <th className="micro px-4 py-3 text-right">정답률</th>
-                <th className="micro px-4 py-3 text-right">새 단어</th>
-                <th className="micro px-4 py-3 text-right">장기기억</th>
-                <th className="micro px-4 py-3 text-right">본 단어</th>
-                <th className="micro px-4 py-3 text-right">학습 시간</th>
-              </tr>
-            </thead>
-            <tbody className="divide-line divide-y">
-              {res.rows.map((r) => (
-                <tr key={r.ijwId} className="hover:bg-bg-soft/50">
-                  <td className="px-4 py-2.5">
-                    {r.eywa ? (
-                      <WindowLink
-                        href={`/students/${r.eywa.studentId}?tab=grades`}
-                        title={r.eywa.name}
-                        className="text-foreground text-sm font-bold hover:underline"
-                      >
-                        {r.eywa.name}
-                      </WindowLink>
-                    ) : (
-                      <span className="text-foreground text-sm font-bold">{r.name || r.ijwId}</span>
-                    )}
-                    {!r.eywa ? (
-                      <span className="border-amber/40 bg-amber-soft text-amber rounded-pill ml-1.5 border px-1.5 py-px text-xs font-bold">
-                        연결 필요
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="text-text-dim px-4 py-2.5 text-xs">{r.className ?? "—"}</td>
-                  <td className="num text-foreground px-4 py-2.5 text-right text-xs font-bold">{r.activeDays}일</td>
-                  <td className="num text-text-dim px-4 py-2.5 text-right text-xs">{r.answers.toLocaleString("ko-KR")}</td>
-                  <td className="num text-text-dim px-4 py-2.5 text-right text-xs">{r.answers ? `${r.accuracy}%` : "—"}</td>
-                  <td className="num text-text-dim px-4 py-2.5 text-right text-xs">{r.newWords.toLocaleString("ko-KR")}</td>
-                  <td className="num text-text-dim px-4 py-2.5 text-right text-xs">{r.longTermWords.toLocaleString("ko-KR")}</td>
-                  <td className="num text-text-dim px-4 py-2.5 text-right text-xs">{r.seenWords.toLocaleString("ko-KR")}</td>
-                  <td className="num text-text-dim px-4 py-2.5 text-right text-xs">{formatStudyTime(r.studyMs)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <JjStudyTable
+          groups={groups}
+          rows={res.rows}
+          from={res.from}
+          to={res.to}
+          classHref={filter ? null : classHref}
+          allowedClassIds={options ? new Set(options.map((c) => c.id)) : null}
+        />
       )}
     </div>
   );

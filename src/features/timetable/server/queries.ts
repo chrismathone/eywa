@@ -948,9 +948,9 @@ const DOW_INDEX: Record<string, number> = {
   sat: 6,
 };
 
-export type TodaySlot = ScheduleSlot & { status: "done" | "ongoing" | "upcoming" };
+export type TodaySlot = ScheduleSlot & { status: "done" | "ongoing" | "upcoming"; studentIds?: string[] };
 
-export async function getTodaySchedule(): Promise<TodaySlot[]> {
+export async function getTodaySchedule(options?: { includeStudentIds?: boolean }): Promise<TodaySlot[]> {
   const supabase = await createClient();
   const today = kstToday();
   // KST 날짜를 UTC 자정으로 파싱해 요일 도출 — 서버 UTC에서 now.getDay()는 새벽 시간대에 어제 요일이 된다.
@@ -963,11 +963,11 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   const { data, error } = await supabase
     .from("class_schedules")
     .select(
-      `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
+      `id, day_of_week, start_time, end_time, class_id, classroom_id, slot_teacher_label, slot_room_label,
        slotTeacher:teacher_id ( display_name ),
        slotRoom:classroom_id ( name ),
        class:class_id!inner (
-         class_name, subject, is_active, closed_at,
+         class_name, subject, is_active, closed_at, classroom_id,
          teacher:teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
@@ -1039,11 +1039,12 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   };
 
   return visible
-    .map((r): ScheduleSlot => {
+    .map((r): Omit<TodaySlot, "status"> => {
       const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
         | {
             class_name?: string;
             subject?: string;
+            classroom_id?: string | null;
             teacher?: { display_name?: string } | { display_name?: string }[];
             classroom?: { name?: string } | { name?: string }[];
           }
@@ -1067,12 +1068,13 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         classroomName: (Array.isArray(r.slotRoom) ? r.slotRoom[0] : r.slotRoom)?.name
           ?? r.slot_room_label ?? room?.name ?? null,
         studentCount: counts.get(r.class_id) ?? 0,
+        ...(options?.includeStudentIds ? { studentIds: [...(studentsByClass.get(r.class_id) ?? [])].sort() } : {}),
         // 슬롯 강사 라벨 — 작성률(getWeeklyWritingRates)이 반 담당 없는 반의 귀속 폴백으로 사용.
         // 색·인수인계는 대시보드 오늘 일정 미사용 — 타입 충족용 null 유지.
         slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
         slotRoomLabel: (r.slot_room_label as string | null) ?? null,
-        slotRoomId: null,
-        classRoomId: null,
+        slotRoomId: (r.classroom_id as string | null) ?? null,
+        classRoomId: klass?.classroom_id ?? null,
         classBgColor: null,
         classTextColor: null,
         pendingHandover: null,

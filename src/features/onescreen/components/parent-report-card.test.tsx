@@ -2,11 +2,20 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ParentReportCard, type ParentReportCardProps } from "./parent-report-card";
 import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
 import { buildTrendPoints } from "../report-trend";
 import type { ReportSettings } from "@/features/owner/settings-types";
+import type { JjReportSnapshot } from "@/features/ijw/snapshot";
+
+// 그림(인재원 결과지·학습 분석지)의 **자리**만 본다 — 그림 모양은 그 컴포넌트의 테스트 몫이라 글자 표식으로 바꿔 둔다.
+vi.mock("@/features/ijw/components/jj-exam-sheet", () => ({
+  JjExamSheet: ({ exam }: { exam: { deck: { name: string } } }) => `EXAM:${exam.deck.name}`,
+}));
+vi.mock("@/features/ijw/components/jj-study-sheet", () => ({
+  JjStudySheet: ({ study }: { study: { from: string } }) => `STUDY:${study.from}`,
+}));
 
 /**
  * 학부모 보고서 카드 — **수학 출력 불변 + 영어 템플릿 모드**.
@@ -183,6 +192,80 @@ describe("ParentReportCard — 템플릿 모드(영어)", () => {
     const html = english("가\r\n나");
     expect(html).toContain("가\n나");
     expect(html).not.toContain("\r");
+  });
+});
+
+describe("ParentReportCard — 그림 자리(인재원, 2026-09-11)", () => {
+  const exam = (name: string) => ({
+    student: { id: "jdw", name: "jdw", className: null },
+    deck: { id: name, name, examType: "regular" },
+    submittedAt: "2026-09-10T05:00:00.000Z",
+    elapsedMs: 1000,
+    total: 20,
+    correct: 18,
+    score: 90,
+    classAvg: null,
+    overallAvg: null,
+    byPos: [],
+    wrong: [],
+  });
+  const snap = (exams: string[], answers = 30): JjReportSnapshot => ({
+    v: 1,
+    date: "2026-09-10",
+    ijwId: "jdw",
+    fetchedAt: "2026-09-10T06:00:00.000Z",
+    study: {
+      student: { id: "jdw", name: "jdw", className: null },
+      from: "2026-08-12",
+      to: "2026-09-10",
+      totals: { answers, correct: 20, accuracy: 67, studyMs: 60000, newWords: 3, activeDays: 4 },
+      longTermWords: 10,
+      seenWords: 40,
+      daily: [],
+      byDeck: [],
+      byPos: [],
+      weak: [],
+      exams: [],
+    },
+    exams: exams.map(exam),
+  });
+  const BODY = "안녕하세요\n\n[시험결과지]\n\n💌 코멘트\n잘했어요\n\n[학습분석지]";
+  const html = (jj: JjReportSnapshot | null, notes = BODY) =>
+    markup({ ...FULL, report: { ...FULL.report, notes }, templateMode: true, jj });
+
+  it("자리 줄 자리에 그림을 끼우고 앞뒤 글은 제자리", () => {
+    const h = html(snap(["Unit 3"]));
+    expect(h).toContain("EXAM:Unit 3");
+    expect(h).toContain("STUDY:2026-08-12");
+    expect(h.indexOf("안녕하세요")).toBeLessThan(h.indexOf("EXAM:Unit 3"));
+    expect(h.indexOf("EXAM:Unit 3")).toBeLessThan(h.indexOf("잘했어요"));
+    expect(h.indexOf("잘했어요")).toBeLessThan(h.indexOf("STUDY:"));
+  });
+
+  it("🔴 자리 표식 글자는 학부모에게 나가지 않는다 — 자료가 없어도", () => {
+    for (const jj of [snap(["Unit 3"]), null]) {
+      const h = html(jj);
+      expect(h).not.toContain("[시험결과지]");
+      expect(h).not.toContain("[학습분석지]");
+      expect(h).toContain("잘했어요");
+    }
+    expect(html(null)).not.toContain("EXAM:");
+  });
+
+  it("그날 시험이 여럿이면 한 장씩 · 학습 기록이 없으면 학습 분석지를 안 그린다", () => {
+    const h = html(snap(["Unit 3", "Unit 4"], 0));
+    expect(h).toContain("EXAM:Unit 3");
+    expect(h).toContain("EXAM:Unit 4");
+    expect(h).not.toContain("STUDY:");
+  });
+
+  it("그림 자리만 있고 그릴 게 없으면 빈 문구", () => {
+    expect(html(null, "[시험결과지]")).toContain("작성된 보고 내용이 없습니다.");
+  });
+
+  it("그림 자리가 없는 글은 자료를 넘겨도 예전과 같다(한 칸 그대로)", () => {
+    const plain = { ...FULL, report: { ...FULL.report, notes: "가\n나" }, templateMode: true };
+    expect(markup({ ...plain, jj: snap(["Unit 3"]) })).toBe(markup(plain));
   });
 });
 

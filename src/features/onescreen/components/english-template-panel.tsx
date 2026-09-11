@@ -11,7 +11,17 @@ import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import type { ReportTemplate } from "@/features/report-templates/defaults";
+import { builtinTemplateLabelKey, type ReportTemplate } from "@/features/report-templates/defaults";
+
+/**
+ * 그 행의 인재원 하루치 — 패널 한 줄 요약(2026-09-11). 받는 중 · 미연결 · 실패(다시) · 오늘 시험 N건 · 30일 학습 N문제.
+ * 🔑 그림 칸 템플릿이 아니어도 보여 준다 — 템플릿을 고르기 전에 "넣을 게 있나"를 알 수 있게.
+ */
+export type EnglishJjStatus =
+  | { kind: "loading" }
+  | { kind: "unlinked" }
+  | { kind: "error"; detail: string }
+  | { kind: "ok"; exams: number; answers: number };
 
 export type EnglishTemplateState = {
   templateId: string;
@@ -28,6 +38,8 @@ export type EnglishTemplateState = {
   templateGone: boolean;
   /** 지금 글을 실제로 만든 템플릿 — 드롭다운(`templateId`)이 대기 중인 선택이면 둘이 다르다. */
   appliedTemplateId: string;
+  /** 그 행의 인재원 하루치(그림 칸 재료) 요약. */
+  jj: EnglishJjStatus;
 };
 
 export type EnglishTemplateHandlers = {
@@ -36,7 +48,47 @@ export type EnglishTemplateHandlers = {
   onRefill: () => void;
   onCopy: () => void;
   onManage: () => void;
+  /**
+   * 인재원 하루치 **새로** 받기 — 모든 상태에서 보인다(수업 중 본 시험·방금 이은 짝을 바로 반영하게, 적대 리뷰 2026-09-11).
+   */
+  onJjRetry: () => void;
 };
+
+/** 인재원 하루치 한 줄 — 요약(또는 미연결·실패 이유)과 '새로 고침'·'다시 불러오기'. */
+function JjStatusLine({ jj, onRetry }: { jj: EnglishJjStatus; onRetry: () => void }) {
+  const t = useSheetT();
+  const tf = useSheetTf();
+  if (jj.kind === "loading") return <p className="text-text-faint text-xs">{t("os.tpl.jjLoading")}</p>;
+  const reload = (
+    <button type="button" onClick={onRetry} className="text-primary underline underline-offset-2">
+      {t("os.tpl.jjReload")}
+    </button>
+  );
+  if (jj.kind === "unlinked") {
+    return (
+      <p className="text-text-faint flex flex-wrap items-center gap-1.5 text-xs" title={t("os.tpl.jjUnlinkedTitle")}>
+        {t("os.tpl.jjUnlinked")}
+        {reload}
+      </p>
+    );
+  }
+  if (jj.kind === "ok") {
+    return (
+      <p className="text-text-dim flex flex-wrap items-center gap-1.5 text-xs">
+        {tf("os.tpl.jjSummary", { exams: jj.exams, answers: jj.answers })}
+        {reload}
+      </p>
+    );
+  }
+  return (
+    <p className="text-amber flex flex-wrap items-center gap-1.5 text-xs font-bold" title={jj.detail}>
+      {t("os.tpl.jjFailed")}
+      <button type="button" onClick={onRetry} className="text-primary underline underline-offset-2">
+        {t("os.tpl.jjRetry")}
+      </button>
+    </p>
+  );
+}
 
 export function EnglishTemplatePanel({
   templates,
@@ -55,14 +107,14 @@ export function EnglishTemplatePanel({
   // 칩에 적을 템플릿 이름(기본 템플릿은 화면 언어를 따른다) — 목록에 없으면 이름을 지어내지 않는다.
   const templateName = (id: string) => {
     const tp = templates.find((x) => x.id === id);
-    return tp ? (tp.builtIn ? t("os.tpl.builtinName") : tp.name) : "—";
+    return tp ? (tp.builtIn ? t(builtinTemplateLabelKey(tp.id)) : tp.name) : "—";
   };
   const options = useMemo<ComboOption[]>(
     () =>
       templates.map((tp) => ({
         value: tp.id,
         // 기본 템플릿 이름은 화면 언어를 따른다(사용자 템플릿 이름은 사용자가 적은 그대로).
-        label: tp.builtIn ? t("os.tpl.builtinName") : tp.name,
+        label: tp.builtIn ? t(builtinTemplateLabelKey(tp.id)) : tp.name,
         hint: tp.builtIn ? t("os.tpl.builtIn") : undefined,
       })),
     [templates, t],
@@ -133,6 +185,7 @@ export function EnglishTemplatePanel({
           </span>
         ) : null}
       </div>
+      <JjStatusLine jj={state.jj} onRetry={handlers.onJjRetry} />
       {notice ? <p className="text-text-faint text-xs">{notice}</p> : null}
     </div>
   );
