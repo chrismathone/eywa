@@ -1,5 +1,45 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-11 (4) — 영어 보고서 **글 속 사진·PDF**(자르기) · 템플릿 미리보기에 **실제 결과지** · '인재원 미연결' → 짝 잇기 링크
+
+사용자 2026-09-11: *"미리보기 들어갑니다 말고 들어가야 할 것 같애 그래야 선생님이 뭔지 아닌지 볼 수 있지"* · *"이미지 pdf 같은 것도
+넣어서 바로 보낼 때 같이 쓸 수 있게 해 줘 사진 잘라서 쓰고 싶을 수도 있자나"* → 방식 선택 **"글 속 원하는 자리에"** · *"이거 연결 어디서 함"*.
+
+**A. 글 속 사진·PDF** ([`image-slots.ts`](../src/features/report-templates/image-slots.ts) · [`attachment-lines.ts`](../src/features/report-templates/attachment-lines.ts) · [`attachment-utils.ts`](../src/features/onescreen/attachment-utils.ts))
+- 영어 템플릿 칸에 **'사진·PDF 넣기'** — 글에서 커서를 둔 줄 아래에 `[첨부: 파일 이름]` 한 줄이 들어간다(줄 가운데면 그 줄 다음,
+  줄 맨 앞·빈 줄이면 그 줄 앞 — 문장을 가르지 않는다). 사진은 넣기 전에 **자르기 창**([`image-crop-dialog.tsx`](../src/features/onescreen/components/image-crop-dialog.tsx),
+  네모 = 비율 좌표 [`crop-math.ts`](../src/features/onescreen/crop-math.ts))을 거친다 — 그대로 두면 원본을 다시 인코딩하지 않는다.
+- 올리기·저장 보장·게이트는 기존 `addAttachmentsFor` 그대로(첨부 6개 상한·발송 완료 잠금·열람 전용 차단 불변). 🔴 못 올렸으면 줄을 넣지 않는다.
+  이름은 그 보고서 첨부와 겹치지 않게 정한다(폰 사진은 대개 `image.jpg`) — 자리 줄이 **이름으로** 첨부를 찾기 때문이다.
+- 학부모 카드(/r·PDF·ClassNote 캡처, [`report-template-body.tsx`](../src/features/onescreen/components/report-template-body.tsx))는 그 자리에
+  사진(카드 폭 가득)·PDF(받기 칸)를 세우고 **아래 '첨부' 칸에서 뺀다**(두 번 안 나간다). 워커 캡처엔 PDF가 원래 목록에 없어 저절로 빠진다
+  (게시글에 파일로 따로 붙는다). 학원설정 첨부 표시가 꺼지면 글 속 자리도 빈다. 못 찾은 이름·같은 자리 두 번째는 아무것도 안 그린다.
+- 🔴 **첨부 줄은 템플릿 글 밖이다** — '템플릿 글 그대로인가'(`isUntouchedTemplateDraft`)는 첨부 줄을 빼고 세고, 저장 직전 재조립·다시 채우기·
+  자동작성은 `carryAttachmentLines`로 강사가 둔 줄을 같은 문단 옆(윗줄·아랫줄 내용 → 없으면 같은 줄 번호)에 다시 심는다. 지문(`templateHash`)은
+  첨부 줄을 뺀 템플릿 글이다. (넣었다고 '고친 글'로 치면 점수를 고칠 때마다 다시 채우기가 필요했고, 다시 채우면 자리가 날아갔다.)
+- 글 복사는 첨부 줄도 지운다 · 자리 줄(그림·첨부)뿐인 영어 글은 발송 큐에 올리지 않는다 — 강사 화면의 '미작성' 필터·발송 현황·
+  발송 버튼·일괄 발송과 관리자 콘솔·미발송 알림이 **같은 함수**(`hasTextBesidesMarkers`)로 '멘트 없음'이라 판정한다 ·
+  빈 행에 먼저 넣은 사진은 나중에 짠 글의 **끝**으로 간다(인사말 위가 아니다) ·
+  첨부를 지우면 그 줄이 가리키던 첨부였을 때 그 이름의 줄도 지운다 · 멘트 작성 방식(0214a)은 첨부 줄을 문장으로 치지 않는다(사진만 = 멘트 없음).
+- 적대 리뷰 반영: 지문은 첨부 줄을 뺀 글로 **쓰고 비교하는 곳이 한 함수**(`templateHashOf`) · 템플릿엔 `[첨부: …]` 줄을 저장할 수 없다
+  (첨부는 보고서마다 올리는 파일) · 사진만 있는 행은 '글 없음'(자동작성·다시 채우기가 덮기를 묻지 않고 일괄 작성도 건너뛰지 않는다) ·
+  자리는 **윗줄·아랫줄 내용**으로 기억한다(올리는 동안 글이 다시 짜여도 같은 문단 옆 · 빈 줄 다음에 둔 자리는 저장해도 안 올라간다) ·
+  새 이름은 글 속 옛 자리 줄 이름도 피한다 · 자른 사진은 긴 변 1600px(아이폰 48MP 캔버스 상한) · 조립 글 줄바꿈 LF 통일.
+- ⚠️ 남은 것: 워커 최종 빈 멘트 검사(`scripts/_classnote/classnote-core.mjs`)는 아직 자리 줄을 글자로 센다 — **영어 발송을 켜기 전에** 맞출 것
+  (지금은 영어가 발송 과목이 아니고, 강사·관리자 큐잉 경로가 먼저 막는다).
+
+**B. 템플릿 미리보기 = 실제 결과지** ([`template-fields.tsx`](../src/features/report-templates/components/template-fields.tsx))
+- '여기에 … 들어갑니다' 상자 대신 학부모 카드와 **같은 부품**(`JjExamSheet`·`JjStudySheet`, 512px)을 **예시 자료**([`ijw/sample.ts`](../src/features/ijw/sample.ts))로
+  그린다. 위에 "예시 자료로 그린 모양"이라고 적는다. 예시 자료는 받을 때와 같은 엄격 검사(`IJW_SHAPES`)를 통과하고 숫자가 서로 맞는다(Vitest).
+  🔴 미리보기 전용 — 학부모 카드·/r·인쇄에는 쓰지 않는다.
+
+**C. '인재원 미연결' → 짝 잇기** ([`english-jj-status-line.tsx`](../src/features/onescreen/components/english-jj-status-line.tsx))
+- 짝을 이을 수 있는 사람(학생 기록 관리 — JJ실 짝 잇기 구역과 **같은 함수** `getJjAccess`)에겐 **'연결하러 가기'**(새 탭,
+  `/exams?subject=english&type=jj#jj-link`), 아니면 "관리자에게 연결을 요청하세요". 성적관리 JJ실 짝 잇기 구역에 `#jj-link` 표식.
+
+**롤백**: 태그 `rollback/pre-jj-media-20260911`(반영 전 main = `aa3b7c31`) · 되돌리기 = 코드 커밋 하나 `git revert <feat(english) 커밋>`
+(문서 커밋은 남겨도 무해 — main이 그사이 안 움직여 병합 커밋 없이 앞으로 감기). DB 변경 없음(마이그레이션 0).
+
 ## 2026-09-11 (3) — 영어 보고서에 **인재원 시험결과지·학습분석지 그림 자리** + eywa식 분석지 + 성적관리 JJ **반별** + ClassNote 영어 테스트 보드
 
 사용자 2026-09-11: *"anki에서 한장짜리 학습분석지 있음 그거 가져와서 재디자인 설계해서 eywa식 만들어줘 그리고 템플릿에도 시험 친
