@@ -227,10 +227,11 @@ function TeacherGroups({
                       <span className="num text-foreground w-12 shrink-0 text-xs font-bold">
                         {card.written}/{card.shown}
                       </span>
+                      {/* 원장 2026-09-11 "완료를 파란색(더 쨍하게) 미완을 초록색" — 의미색 캐논(완료=초록)의 명시 예외, 이 막대만. */}
                       <span className="bg-bg-soft h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
                         <span
                           className={`block h-full rounded-full ${
-                            card.pct === 100 ? "bg-green" : "bg-primary"
+                            card.pct === 100 ? "bg-blue" : "bg-green"
                           }`}
                           style={{ width: `${card.pct}%` }}
                         />

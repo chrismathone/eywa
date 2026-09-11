@@ -58,6 +58,30 @@ describe("window-store showDesktop() — 배경(메뉴 화면) 보이기", () =>
   });
 });
 
+describe("window-store observeIframe() — 첫 화면이 바뀐 뒤의 첫 로드(reset)", () => {
+  beforeEach(reset);
+
+  it("reset이면 스택을 그 주소 하나로 다시 시작한다(← 없음)", () => {
+    const s = useWindowStore.getState();
+    s.observeIframe(SID, { title: "원생", url: "/students/1?embed=1" });
+    s.observeIframe(SID, { title: "수정", url: "/students/1/edit?embed=1" });
+    expect(useWindowStore.getState().live[SID]?.canBack).toBe(true);
+
+    useWindowStore.getState().observeIframe(SID, { title: "다른 원생", url: "/students/2?embed=1", reset: true });
+    expect(useWindowStore.getState().nav[SID]).toEqual(["/students/2?embed=1"]);
+    expect(useWindowStore.getState().live[SID]?.canBack).toBe(false);
+  });
+
+  it("reset이 없으면 종전 그대로 — 경로가 바뀌면 쌓고 쿼리만 바뀌면 바꿔 끼운다", () => {
+    const s = useWindowStore.getState();
+    s.observeIframe(SID, { title: "수납", url: "/billing?embed=1" });
+    s.observeIframe(SID, { title: "수납", url: "/billing?tab=textbooks&embed=1" });
+    expect(useWindowStore.getState().nav[SID]).toEqual(["/billing?tab=textbooks&embed=1"]);
+    useWindowStore.getState().observeIframe(SID, { title: "상세", url: "/billing/x?embed=1" });
+    expect(useWindowStore.getState().nav[SID]).toHaveLength(2);
+  });
+});
+
 describe("window-store reloadWindow()", () => {
   beforeEach(reset);
 

@@ -12,10 +12,21 @@ import {
 } from "@/features/attendance/cell-display";
 import { NOT_MINE_MESSAGE, statusTextOf } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
+import type { GridValue, LocalPaint } from "@/features/attendance/grid/store";
+import { revertTarget, type Paint } from "@/features/attendance/grid/paint-chain";
+import { isRecordless } from "@/features/attendance/grid/optimistic-value";
 import { useCellState } from "./grid-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
 // 화면 언어 — 상태 표기는 `statusTextOf`(한글 맵 옆)가 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+
+/** 메모의 낙관 쓰기 표식 — 값과 따로 쥔다(아래 noteOwner). */
+type NotePaint = Paint<string | null>;
+/** 팝오버에 돌려주는 표식 — 값(격자 저장소)과 메모를 함께 싣는다. 메모를 안 보낸 저장이면 `note`는 null. */
+type CellPaint = { value: LocalPaint | null; note: NotePaint | null };
+/** 칸의 메모 덮개 — 고친 메모(`text` null = 서버 값 사용)와 그 메모를 칠한 쓰기. */
+type Memo = { text: string | null; owner: NotePaint | null };
+const NO_MEMO: Memo = { text: null, owner: null };
 
 /**
  * 출석부 시트의 한 칸.
@@ -106,8 +117,40 @@ export function AttendanceCell({
       : lockedReason === "notMine"
         ? NOT_MINE_MESSAGE
         : null;
-  // 팝오버가 고친 메모(null = 아직 안 고침 → 서버 값 사용). effect로 state를 되쓰지 않는다(#25).
-  const [noteEdit, setNoteEdit] = useState<string | null>(null);
+  // 팝오버가 고친 메모(`text` null = 아직 안 고침 → 서버 값 사용)와 그 메모를 칠한 쓰기(`owner`). effect로 state를 되쓰지 않는다(#25).
+  // 메모의 낙관 쓰기 표식은 값(격자 저장소)과 **따로** 쥔다 — 격자 타이핑·서버 따라잡기는 값만 가져가고 메모는 안 건드려서, 값의
+  // 표식에 묶으면 메모만 고친 저장이 실패해도 메모가 안 돌아왔다. 둘을 한 state로 묶는 건 따라잡기가 **함께** 비우게 하려고다
+  // (주인만 남으면 그 저장이 나중에 실패할 때 서버와 다른 메모를 되살렸다 — 재리뷰 2026-09-11).
+  const [memo, setMemo] = useState<Memo>(NO_MEMO);
+  const noteEdit = memo.text;
+  // 칠하기 직전 자리 = 이 렌더의 덮개(누르는 순간 부르므로 최신이다 — 늦게 오는 응답은 이 함수를 안 부른다).
+  const paintNote = (v: string): NotePaint => {
+    const p: NotePaint = { had: true, prev: memo.text, prevOwner: memo.owner };
+    setMemo({ text: v, owner: p });
+    return p;
+  };
+  // 저장 실패 — 그 사이 다른 저장이 메모를 가져갔으면 결과만 남긴다(그 저장이 실패하면 이 결과를 따라 거슬러 간다). 칸이 아직 이
+  // 쓰기의 것이면 사슬을 거슬러 가되, **이미 끝난 앞 쓰기**에 닿으면 덮개를 벗겨 서버 값을 보인다(끝난 뒤 서버가 또 바뀌었을 수
+  // 있다 — 기록해 둔 값보다 서버가 진실이다). 늦게 오는 응답이라 함수형 갱신으로 **지금** 상태를 본다.
+  const revertNote = (p: NotePaint) =>
+    setMemo((cur) => {
+      if (cur.owner !== p) {
+        p.fate = { revert: true };
+        return cur;
+      }
+      const t = revertTarget(p);
+      return t.drop || t.owner === null ? NO_MEMO : { text: t.value, owner: t.owner };
+    });
+  // 🔴 서버가 내 메모를 따라잡으면 덮개와 주인을 함께 벗긴다 — 값 덮개(store.setSource)와 같은 규약. 안 벗기면 격자로 행을 지운
+  //    뒤에도 옛 메모 덮개가 서버 값(빈 메모)을 이겨 되살아난다(재리뷰 2026-09-11). 서버 메모가 **바뀐 렌더에서만** 본다(렌더 중
+  //    조정 — effect로 state를 되쓰지 않는다, #25): 새 값이 덮개와 같으면(따라잡음) 벗기고, 직전 값이 덮개와 같았는데 서버가 다른
+  //    값으로 옮겨 갔으면 **그 쓰기가 끝났을 때만** 벗긴다(응답 대기 중인 최신 메모를 옛 값으로 바꾸지 않게).
+  const [seenNote, setSeenNote] = useState(note);
+  if (note !== seenNote) {
+    setSeenNote(note);
+    const settled = memo.owner === null || memo.owner.fate !== undefined;
+    if (memo.text !== null && (memo.text === (note ?? "") || (settled && memo.text === (seenNote ?? "")))) setMemo(NO_MEMO);
+  }
   const [popover, setPopover] = useState<PopoverAnchor | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const lang = useSheetLang();
@@ -311,6 +354,9 @@ export function AttendanceCell({
           classId={classId}
           sessionDate={sessionDate}
           status={status}
+          // 🔴 '행 없음'은 상태가 아니라 **기록**으로 판정한다 — 수업보고서 파생 칸은 상태가 보여도 행이 없어
+          //    저장하면 서버가 새 행(수학 자동 시수)을 만든다. 격자 낙관값과 같은 함수(isRecordless).
+          recorded={ctx ? !isRecordless(state.value) : initialStatus !== null && !derived}
           units={units}
           note={noteVal || ghostNote}
           locked={locked ?? null}
@@ -318,9 +364,39 @@ export function AttendanceCell({
           sharedDelete={initialStatus !== null && (otherSlots?.length ?? 0) > 0}
           anchor={popover}
           onClose={() => setPopover(null)}
-          onSaved={(next) => {
-            setNoteEdit(next.note);
-            ctx?.setLocal(key, next.status ? { s: next.status, u: next.units } : null);
+          onSaved={(next, opts) => {
+            const token = (opts?.ifStill ?? null) as CellPaint | null;
+            if (opts?.revert) {
+              // 저장 실패 — 칸이 아직 이 쓰기의 것이면 칠하기 전으로(덮개가 없었으면 벗겨 서버 값을 보인다 — 파생 칸의 `d`까지
+              // 그대로), 앞 쓰기가 응답을 기다리던 자리면 그 결과를 따라간다(paint-chain.ts). 값을 새로 만들어 칠하면 `d`가
+              // 빠져 덮개가 새로고침 전까지 남고, 빈 칸('지우기')은 값으로 못 가려 아예 안 돌아왔다(재리뷰 2026-09-11).
+              if (token?.value) ctx?.store.revertLocal(key, token.value);
+              if (token?.note) revertNote(token.note);
+              return token;
+            }
+            const v: GridValue = next.status ? { s: next.status, u: next.units } : null;
+            if (opts) {
+              // 성공 응답 — 서버가 실제로 넣은 값으로 맞추고(그 사이 같은 칸을 또 고쳤으면, 즉 칸의 주인이 바뀌었으면 늦은 응답이
+              // 새 입력을 덮지 않는다) 이 쓰기가 **끝났다**는 결과를 표식에 남긴다 — 뒤 쓰기의 되돌리기와 메모 따라잡기가 읽는다.
+              // 메모는 서버가 고치지 않으니 칠한 그 글이 결과다.
+              if (token?.value) ctx?.store.correctLocal(key, token.value, v);
+              if (token?.note) token.note.fate = { value: next.note ?? "" };
+              return token;
+            }
+            // 칠하기 **직전** 자리를 잡은 표식 — 팝오버가 응답 보정·실패 되돌리기 때 그대로 돌려준다
+            // (격자 단건 pushCell이 `prev`를 칠하는 순간 잡는 것과 같은 규약).
+            // 🔴 메모를 안 보낸 저장(상태 버튼)은 메모를 칠하지도 가져가지도 않는다 — 가져가면 응답 대기 중인 앞 메모 저장의
+            //    실패가 이 저장 몫으로 삼켜져 저장 안 된 메모가 남는다. 옛 메모 덮개는 서버 따라잡기(위 seenNote)가 벗긴다
+            //    (""를 미리 칠하면 남의 교시 메모를 가리거나 실패한 삭제 뒤에 굳었다 — 재리뷰 2026-09-11).
+            // 🔴 잠긴 칸의 '메모만 저장'(`noteOnly`)은 값을 칠하지 않는다 — 서버는 값을 안 건드리는데 화면만 칠하면, 새로고침 전에
+            //    서버 값이 바뀌었을 때 그 덮개가 서버와 달라져 영영 안 벗겨졌다. 서버가 이미 확정한 뒤 부르는 경로라 메모 표식도
+            //    곧바로 '끝남'이다(안 그러면 따라잡기가 응답 대기로 보고 옛 사유를 붙든다 — 재리뷰 2026-09-11).
+            const painted: CellPaint = {
+              value: next.noteOnly ? null : ctx?.store.paintLocal(key, v) ?? null,
+              note: next.note === undefined ? null : paintNote(next.note),
+            };
+            if (next.noteOnly && painted.note) painted.note.fate = { value: next.note ?? "" };
+            return painted;
           }}
         />
       ) : null}

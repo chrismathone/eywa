@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * 영어 행 보고서 카드의 **템플릿 칸**(2026-09-10) — 템플릿 고르기 · 다음 시간 테스트 · 다시 채우기 · 글 복사.
+ * 영어 행 보고서 카드의 **템플릿 칸**(2026-09-10) — 템플릿 고르기 · 다음 시간 테스트 · 다시 채우기 · 글 복사
+ * · 사진·PDF 넣기(2026-09-11, 글의 커서 줄에 첨부 자리를 넣는다) · 인재원 한 줄(english-jj-status-line.tsx).
  *
- * 수학 행에는 붙지 않는다(카드가 영어 행에서만 이 노드를 그린다). 배선(상태·저장·AI)은 onescreen-client에
+ * 수학 행에는 붙지 않는다(카드가 영어 행에서만 이 노드를 그린다). 배선(상태·저장·AI·업로드)은 onescreen-client에
  * 두고 이 조각은 자리만 차지한다 — report-card의 `todayInputs`와 같은 슬롯 규약(props 규칙).
  * ⚠️ 카드의 멘트 열 fieldset 안에 들어가므로 결석·발송 완료·열람 전용이면 칸이 함께 잠긴다(따로 잠그지 않는다).
  */
@@ -12,16 +13,10 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { builtinTemplateLabelKey, type ReportTemplate } from "@/features/report-templates/defaults";
+import { EnglishMediaButton } from "./english-media-button";
+import { JjStatusLine, type EnglishJjStatus } from "./english-jj-status-line";
 
-/**
- * 그 행의 인재원 하루치 — 패널 한 줄 요약(2026-09-11). 받는 중 · 미연결 · 실패(다시) · 오늘 시험 N건 · 30일 학습 N문제.
- * 🔑 그림 칸 템플릿이 아니어도 보여 준다 — 템플릿을 고르기 전에 "넣을 게 있나"를 알 수 있게.
- */
-export type EnglishJjStatus =
-  | { kind: "loading" }
-  | { kind: "unlinked" }
-  | { kind: "error"; detail: string }
-  | { kind: "ok"; exams: number; answers: number };
+export type { EnglishJjStatus } from "./english-jj-status-line";
 
 export type EnglishTemplateState = {
   templateId: string;
@@ -40,6 +35,10 @@ export type EnglishTemplateState = {
   appliedTemplateId: string;
   /** 그 행의 인재원 하루치(그림 칸 재료) 요약. */
   jj: EnglishJjStatus;
+  /** 짝을 이을 수 있는 사람인가 — 미연결 줄에 짝 잇기 링크를 달지(아니면 관리자에게 요청하라고 적는다). */
+  canLinkJj: boolean;
+  /** 글 속 사진·PDF — 올리는 중 · 첨부가 가득 참(서버 상한과 같은 수). */
+  media: { busy: boolean; full: boolean };
 };
 
 export type EnglishTemplateHandlers = {
@@ -52,41 +51,16 @@ export type EnglishTemplateHandlers = {
    * 인재원 하루치 **새로** 받기 — 모든 상태에서 보인다(수업 중 본 시험·방금 이은 짝을 바로 반영하게, 적대 리뷰 2026-09-11).
    */
   onJjRetry: () => void;
+  /** 고른(사진이면 자른) 파일 — 부모가 올리고 글의 커서 줄에 첨부 자리를 넣는다. */
+  onInsertFile: (file: File) => void;
 };
 
-/** 인재원 하루치 한 줄 — 요약(또는 미연결·실패 이유)과 '새로 고침'·'다시 불러오기'. */
-function JjStatusLine({ jj, onRetry }: { jj: EnglishJjStatus; onRetry: () => void }) {
-  const t = useSheetT();
-  const tf = useSheetTf();
-  if (jj.kind === "loading") return <p className="text-text-faint text-xs">{t("os.tpl.jjLoading")}</p>;
-  const reload = (
-    <button type="button" onClick={onRetry} className="text-primary underline underline-offset-2">
-      {t("os.tpl.jjReload")}
-    </button>
-  );
-  if (jj.kind === "unlinked") {
-    return (
-      <p className="text-text-faint flex flex-wrap items-center gap-1.5 text-xs" title={t("os.tpl.jjUnlinkedTitle")}>
-        {t("os.tpl.jjUnlinked")}
-        {reload}
-      </p>
-    );
-  }
-  if (jj.kind === "ok") {
-    return (
-      <p className="text-text-dim flex flex-wrap items-center gap-1.5 text-xs">
-        {tf("os.tpl.jjSummary", { exams: jj.exams, answers: jj.answers })}
-        {reload}
-      </p>
-    );
-  }
+/** 알림 칩 한 개 — 모양이 모두 같다(앰버 = 사람이 손쓸 일). */
+function Chip({ children }: { children: string }) {
   return (
-    <p className="text-amber flex flex-wrap items-center gap-1.5 text-xs font-bold" title={jj.detail}>
-      {t("os.tpl.jjFailed")}
-      <button type="button" onClick={onRetry} className="text-primary underline underline-offset-2">
-        {t("os.tpl.jjRetry")}
-      </button>
-    </p>
+    <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold">
+      {children}
+    </span>
   );
 }
 
@@ -155,37 +129,27 @@ export function EnglishTemplatePanel({
         <Button variant="ghost" size="sm" onClick={handlers.onCopy}>
           {t("os.tpl.copy")}
         </Button>
-        {state.templateGone ? (
-          <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold">
-            {t("os.tpl.templateGone")}
-          </span>
-        ) : null}
-        {state.stale ? (
-          <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold">
-            {t("os.tpl.stale")}
-          </span>
-        ) : null}
+        {state.templateGone ? <Chip>{t("os.tpl.templateGone")}</Chip> : null}
+        {state.stale ? <Chip>{t("os.tpl.stale")}</Chip> : null}
         {state.needsAi ? (
-          <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold">
+          <Chip>
             {/* 글의 템플릿이 목록에 없으면(삭제) 이름을 적지 않는다 — '템플릿 없음' 칩이 따로 선다. */}
-            {state.appliedTemplateId !== state.templateId &&
-            templates.some((x) => x.id === state.appliedTemplateId)
+            {state.appliedTemplateId !== state.templateId && templates.some((x) => x.id === state.appliedTemplateId)
               ? tf("os.tpl.needAiPending", { current: templateName(state.appliedTemplateId) })
               : t("os.tpl.needAi")}
-          </span>
+          </Chip>
         ) : null}
-        {state.aiStale ? (
-          <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold">
-            {t("os.tpl.aiStale")}
-          </span>
-        ) : null}
-        {state.nameMissing ? (
-          <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-2 py-0.5 text-xs font-bold">
-            {t("os.tpl.nameMissing")}
-          </span>
-        ) : null}
+        {state.aiStale ? <Chip>{t("os.tpl.aiStale")}</Chip> : null}
+        {state.nameMissing ? <Chip>{t("os.tpl.nameMissing")}</Chip> : null}
       </div>
-      <JjStatusLine jj={state.jj} onRetry={handlers.onJjRetry} />
+      {/* 글 속 사진·PDF — 커서가 있던 줄 아래에 들어간다(학부모 링크·PDF·ClassNote 이미지에 그 자리 그대로). */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <EnglishMediaButton disabled={state.media.full} busy={state.media.busy} onFile={handlers.onInsertFile} />
+        <span className="text-text-faint min-w-0 flex-1 text-xs break-keep">
+          {state.media.full ? t("os.media.full") : t("os.media.help")}
+        </span>
+      </div>
+      <JjStatusLine jj={state.jj} canLink={state.canLinkJj} onRetry={handlers.onJjRetry} />
       {notice ? <p className="text-text-faint text-xs">{notice}</p> : null}
     </div>
   );

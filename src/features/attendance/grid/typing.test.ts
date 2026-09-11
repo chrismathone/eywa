@@ -43,8 +43,9 @@ describe("commitBuffer — 🔴 숫자 → (상태, 시수) 변환은 여기 한
     expect(commitBuffer("0")).toEqual({ status: "absent", units: "" });
   });
 
-  it("1은 출석 + 기본 시수(빈 문자열 = null 저장)", () => {
-    expect(commitBuffer("1")).toEqual({ status: "present", units: "" });
+  it("🔴 1은 출석 + **명시** 1(\"1\" — 저장은 null이지만 수학 자동 시수가 덮지 않는다, 2026-09-11)", () => {
+    expect(commitBuffer("1")).toEqual({ status: "present", units: "1" });
+    expect(commitBuffer("1.0")).toEqual({ status: "present", units: "1" });
   });
 
   it("1.5·2는 출석 + 그 시수", () => {

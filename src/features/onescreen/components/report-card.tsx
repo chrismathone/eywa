@@ -29,7 +29,8 @@ import {
 } from "./attendance-pills";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
-import { isImageAttachment } from "../attachment-utils";
+import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
+import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
@@ -83,7 +84,7 @@ export type SubjectReport = {
   outputAck?: string;
 };
 
-const MAX_ATTACHMENTS = 6;
+const MAX_ATTACHMENTS = REPORT_ATTACHMENT_MAX;
 
 /**
  * classnote_status → 표시 라벨 + 색 — **정본은 [classnote-badge.ts](../classnote-badge.ts)** 로 옮겼다.
@@ -263,7 +264,8 @@ export function ReportCard({
     reportOptout: optoutRow, // 미발송 반(0174a) — 표뷰와 같은 단일 소스
     isAbsent,
     hasProgress: isReportEligible(subject),
-    hasDraft: !!rep.draft?.trim(),
+    // 멘트 = 학부모에게 나갈 글 — 영어 글의 그림·사진 자리 줄뿐이면 서버가 막으니 여기서도 '멘트 없음'(표뷰와 같은 판정).
+    hasDraft: hasTextBesidesMarkers(rep.draft),
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 표뷰(grid-row)와 동일 예외.
     attendanceUnchecked: !attendance?.readOnly && isAttendanceUnchecked(subject),
   });
@@ -388,6 +390,7 @@ export function ReportCard({
                   onSet={(s, extra) => attendance.onSet(subject.classId!, s, extra)}
                   studentName={student.name}
                   label={t("os.card.units")}
+                  autoUnits={subject.attendanceAutoUnits}
                 />
               )}
             </>
@@ -636,6 +639,8 @@ export function ReportCard({
             </div>
           ) : (
             <textarea
+              // 영어 글 칸 — '사진·PDF 넣기'가 이 칸의 커서 줄을 읽어 그 자리에 첨부 줄을 넣는다(카드는 한 학생만 그린다).
+              id={isEnglishRow ? ENGLISH_DRAFT_TEXTAREA_ID : undefined}
               value={rep.draft}
               onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
               placeholder={

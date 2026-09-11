@@ -7,19 +7,20 @@
  * ⚠️ 문장은 서버가 돌려주는 한국어다(서버 거절 문구와 같은 층) — 화면은 그대로 토스트한다.
  */
 import { TEMPLATE_SUBJECT } from "@/features/report-templates/defaults";
-import { stripImageSlots, usedImageSlots } from "@/features/report-templates/image-slots";
+import { hasBodyMarkers, stripImageSlots, usedImageSlots } from "@/features/report-templates/image-slots";
 
 export function shouldCaptureJj(subject: string | null | undefined, notes: string | null | undefined): boolean {
   return subject === TEMPLATE_SUBJECT && usedImageSlots(notes).length > 0;
 }
 
 /**
- * 영어 글이 **그림 자리 줄뿐**인가(글자 0) — 발송 큐에 올리지 않는다. 워커의 '빈 글' 검사는 자리 줄을 글자로 세서
- * 통과시키는데, 카드는 자리만 그리거나(자료 없으면) "작성된 보고 내용이 없습니다"를 학부모에게 보낸다(적대 리뷰 2026-09-11).
+ * 영어 글이 **자리 줄뿐**인가(그림·첨부 자리 줄 말고 글자 0) — 발송 큐에 올리지 않는다. 워커의 '빈 글' 검사는 자리 줄을
+ * 글자로 세서 통과시키는데, 카드는 자리만 그리거나(자료 없으면) "작성된 보고 내용이 없습니다"를 학부모에게 보낸다(적대 리뷰
+ * 2026-09-11). 사진·PDF 자리 줄뿐인 글도 같다(학원설정에서 첨부 표시를 끄면 카드가 비고, 글 없는 사진만의 보고서가 된다).
  * 자리 줄이 없는 빈 글은 이 판정 밖이다(종전 경로 그대로).
  */
 export function isSlotOnlyEnglishNotes(subject: string | null | undefined, notes: string | null | undefined): boolean {
-  return shouldCaptureJj(subject, notes) && !stripImageSlots(notes).trim();
+  return subject === TEMPLATE_SUBJECT && hasBodyMarkers(notes) && !stripImageSlots(notes).trim();
 }
 
 export type JjCaptureOutcome = "unlinked" | "fetch_failed" | "not_ready" | "save_failed";

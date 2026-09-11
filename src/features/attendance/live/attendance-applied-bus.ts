@@ -20,6 +20,19 @@
 
 export const ATTENDANCE_APPLIED_EVENT = "eywa:attendance-applied";
 
+/** 방송 칸 한 개 — 서버가 실제로 기록한 (학생·반). */
+export type AppliedBusCell = {
+  studentId: string;
+  classId: string;
+  /**
+   * 이번에 **새로 만든** 칸에 실제로 들어간 시수(null = 1) — 수학 자동 시수(수업 길이, auto-units.ts ·
+   * 원장 2026-09-11)가 새 칸에 1.5·2를 넣으므로, 이걸 안 실으면 구독 화면(원스크린 '타임')이 1로 남고
+   * 이어지는 보강 합침이 1을 기준으로 저장해 **정규 몫 0.5가 조용히 사라진다**(적대 리뷰 2026-09-11).
+   * 키가 없으면(갱신된 칸 — 기존 시수 보존) 시수는 모른다 → 구독자는 시수를 손대지 않는다.
+   */
+  units?: number | null;
+};
+
 export type AttendanceAppliedDetail = {
   /** 기록한 날짜 YYYY-MM-DD(KST) — 구독자는 자기 화면 날짜와 다르면 무시한다(과거 날짜 원스크린 보호). */
   date: string;
@@ -35,8 +48,35 @@ export type AttendanceAppliedDetail = {
    */
   slot: string | null;
   /** 서버가 **실제로 기록한** 칸만(액션 응답 `applied`). 요청했지만 걸러진 칸은 싣지 않는다. */
-  cells: { studentId: string; classId: string }[];
+  cells: AppliedBusCell[];
 };
+
+/**
+ * `setAttendanceBulk` 응답(`applied`) → 방송 칸. **새로 만든 칸(created)에만** 시수를 싣는다(서버가 넣은
+ * 수학 자동 시수 `autoUnits`, 없으면 null = 1). 갱신된 칸은 기존 시수가 보존돼 모르므로 싣지 않는다.
+ * ⚠️ 시수를 **안 보낸** 일괄 전용이다(스트립 '전원 출석'·출결 모드). 시수를 보낸 일괄에 쓰면 새 칸 값이 틀린다.
+ */
+export function busCellsFromBulk(
+  applied: readonly { studentId: string; classId: string; created?: boolean; autoUnits?: number }[],
+): AppliedBusCell[] {
+  return applied.map((a) => ({
+    studentId: a.studentId,
+    classId: a.classId,
+    ...(a.created ? { units: a.autoUnits ?? null } : {}),
+  }));
+}
+
+/**
+ * `setAttendanceCell` 응답 → 방송 칸 한 개. 응답에 `autoUnits` 키가 있으면 **새 행에 실제로 들어간 시수**다
+ * (자동 판정을 탄 새 행 — 조회 실패·비수학이면 null). 없으면(갱신·결석) 시수를 싣지 않는다.
+ */
+export function busCellFromCell(
+  studentId: string,
+  classId: string,
+  res: { autoUnits?: number | null },
+): AppliedBusCell {
+  return { studentId, classId, ...(res.autoUnits !== undefined ? { units: res.autoUnits } : {}) };
+}
 
 /** 방송 — window가 없으면(SSR) 아무 일도 하지 않는다. */
 export function publishAttendanceApplied(detail: AttendanceAppliedDetail): void {

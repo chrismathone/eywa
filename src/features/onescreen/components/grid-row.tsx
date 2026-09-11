@@ -18,6 +18,7 @@ import {
   type GridRow,
 } from "../grid";
 import { evaluateSendGate } from "../send-gate";
+import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
 import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
@@ -249,7 +250,8 @@ export function GridBodyRow({
   // 모드 B 편집용 분리값 — 라운드트립 불변식(split(join)===원본)은 comment-paragraphs가 보장.
   const draftParas = splitComment(rep?.draft ?? "");
   const bulkGen = gen.bulk;
-  const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
+  // 학부모 멘트(draft) 준비됨 — 발송 시 사용. 영어 글의 그림·사진 자리 줄뿐이면 멘트가 아니다(서버가 막는 것과 같은 판정).
+  const hasDraft = hasTextBesidesMarkers(rep?.draft);
   // ⚠️ 화면 state(rep)의 상태가 로스터 스냅샷을 이긴다 — 방금 보낸 행을 계속 '발송 가능'으로 두면 중복 게시.
   // ⚠️ `??` 금지 — 재발급·첨부변경이 명시적으로 지운(null) 상태를 스냅샷의 옛 "success"가 덮는다.
   const liveStatus = effectiveClassnoteStatus(rep?.classnoteStatus, subject.classnoteStatus);
@@ -264,7 +266,7 @@ export function GridBodyRow({
     reportOptout: isReportOptoutRow(subject), // 미발송 반(0174a) — 카드뷰와 같은 단일 소스
     isAbsent: subject.attendanceRaw === "absent",
     hasProgress: isReportEligible(subject),
-    hasDraft: !!rep?.draft?.trim(),
+    hasDraft,
     // 출결 쓰기 권한 없음 = 게이트 해당 없음(P0-3) — 알약도 없는데 "출결을 기록하라"는 거짓 안내 방지.
     attendanceUnchecked: !gen.attReadOnly && isAttendanceUnchecked(subject),
   });
@@ -494,6 +496,7 @@ export function GridBodyRow({
             onSet={(s, extra) => fields.onAttendance(student.id, subject.classId!, s, extra)}
             studentName={student.name}
             size="lg"
+            autoUnits={subject.attendanceAutoUnits}
           />
         ) : (
           <span

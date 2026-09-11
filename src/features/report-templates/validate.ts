@@ -7,7 +7,7 @@
  */
 import { ENGLISH_TEMPLATE_TOKENS, TEMPLATE_BODY_MAX, TEMPLATE_NAME_MAX } from "./defaults";
 import { normalizeTokenName, templateTokens } from "./fill";
-import { IMAGE_SLOT_KEYS } from "./image-slots";
+import { IMAGE_SLOT_KEYS, attachmentNameOfLine } from "./image-slots";
 
 export type TemplateInput = { name: string; body: string };
 export type TemplateCheck = { ok: true; name: string; body: string } | { ok: false; error: string };
@@ -32,6 +32,14 @@ export function checkTemplateInput(input: TemplateInput): TemplateCheck {
   }
   const slotError = imageSlotLineError(body);
   if (slotError) return { ok: false, error: slotError };
+  // 🔴 사진·PDF 자리 줄은 템플릿에 못 넣는다 — 첨부는 **보고서마다** 강사가 올리는 파일이라 템플릿에 적힌 이름은 가리킬 파일이
+  //    없다(카드는 아무것도 안 그린다). 보고서 글에서 '사진·PDF 넣기'로 넣는다(적대 리뷰 2026-09-11).
+  if (body.split("\n").some((line) => attachmentNameOfLine(line) !== null)) {
+    return {
+      ok: false,
+      error: "사진·PDF 자리 줄([첨부: …])은 템플릿에 넣을 수 없습니다 — 보고서 글에서 '사진·PDF 넣기'로 넣어 주세요.",
+    };
+  }
   return { ok: true, name, body };
 }
 

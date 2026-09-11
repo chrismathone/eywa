@@ -7,6 +7,8 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
 import { notifyIfClassAttendanceComplete } from "../../server/complete-notify";
 import { isMissingViaColumn } from "../../live/server/write-policy";
+import { autoUnitsApply, autoUnitsKey } from "../../auto-units";
+import { resolveAutoUnits } from "../../server/auto-units";
 import {
   classesInWindow,
   decideCheckinAction,
@@ -137,6 +139,12 @@ async function reflectPresent(
     .limit(1);
   if (existErr || (existingRows?.length ?? 0) > 0) return null;
 
+  // 수학 자동 시수(원장 2026-09-11) — 키오스크도 **새 행**을 만드는 경로라 같은 헬퍼를 지난다(auto-units.ts).
+  // admin 클라이언트라 tenantId를 넘겨 조회를 좁힌다. 조회 실패면 헬퍼가 빈 맵 → 종전처럼 null(=1).
+  const autoUnits = autoUnitsApply({ rawUnits: undefined, slotStart: null, status: "present" })
+    ? ((await resolveAutoUnits(admin, [{ classId, date }], { tenantId })).get(autoUnitsKey(classId, date)) ?? null)
+    : null;
+
   // 🔴 0212a(recorded_via)가 아직 안 걸린 DB에서도 출결은 남아야 한다(#95) —
   //    여기 실패는 `return null`로 삼켜지므로, 폴백이 없으면 **조용히** 출결이 안 찍힌다.
   const row: Record<string, unknown> = {
@@ -148,6 +156,7 @@ async function reflectPresent(
     access_method: "kiosk",
     recorded_by: null,
     recorded_via: "kiosk",
+    ...(autoUnits !== null ? { session_units: autoUnits } : {}),
   };
   const first = await admin.from("attendance_records").insert(row);
   let error = first.error;

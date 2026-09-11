@@ -457,7 +457,7 @@ export async function saveAndQueueClassnote(
       // 저장은 됐다 — id·공유 링크를 함께 돌려줘 화면이 '저장 안 됨'으로 보이지 않게(적대 재리뷰).
       id: saved.id,
       shareToken: saved.shareToken,
-      error: "글이 그림 자리뿐이라 보내지 않았습니다(저장은 됐습니다) — 글을 채운 뒤 다시 보내 주세요",
+      error: "글이 그림·첨부 자리뿐이라 보내지 않았습니다(저장은 됐습니다) — 글을 채운 뒤 다시 보내 주세요",
       ...warn,
     };
   }

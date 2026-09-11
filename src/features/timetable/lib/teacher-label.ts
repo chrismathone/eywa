@@ -72,6 +72,13 @@ const SPECIAL_BY_ALIAS = new Map<string, SpecialSlotLabel>([
 ]);
 
 /**
+ * 자리 별칭 키 전체(소문자) — **스크립트용 사본과의 패리티 테스트** 전용 노출
+ * (`scripts/_oneoff/math-auto-units-rules.mjs`는 TS를 못 읽어 같은 표를 따로 든다).
+ * 판정은 언제나 `specialSlotLabel`로 할 것 — 이 배열로 직접 비교하지 말 것.
+ */
+export const SPECIAL_SLOT_ALIAS_KEYS: readonly string[] = [...SPECIAL_BY_ALIAS.keys()];
+
+/**
  * **시트가 사람을 직책으로 적는 칸** → 그 사람의 닉네임 라벨.
  *
  * 원장 2026-08-29: *"시트를 바꾸라는게 아님. 우리로 가져올때 yoojin 처리하라는것."*

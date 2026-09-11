@@ -33,6 +33,16 @@ import { useTimetableEdit, type IncomingStudent, type PendingTarget } from "./ed
 import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
+// *LAB 임시 칸(원장 2026-09-11) — 판정은 서버가 끝냈고 여기선 **어디에 그릴지**와 서식만(단일 소스).
+import {
+  borrowFromRoster,
+  NO_VIRTUAL_LAB_PLACEMENT,
+  placeVirtualLabs,
+  VIRTUAL_LAB_CELL_CLASS,
+  VIRTUAL_LAB_LABEL,
+  type VirtualLabCell,
+  type VirtualLabsByClass,
+} from "@/features/timetable/lib/virtual-lab";
 // 🔴 학생 드래그 빗금은 **반 단위**라 카드가 자기 id를 DOM에 달아 둔다(기본뷰 셀과 같은 표식·같은 CSS).
 //    좌표(요일·시각)는 화면에 안 그려지는 숨은 표식이 들고 있다(rich-grid-view.tsx) — 카드 하나에
 //    요일·교시가 여럿이라 카드 자신은 한 좌표로 답할 수 없다.
@@ -151,6 +161,13 @@ export type ColumnCommon = {
   /** 명단 접힘 — 카드 머리에 **인원**을 대신 적는다(접었다고 몇 명인지까지 사라지면 그건 은폐다). */
   hideStudents?: boolean;
   /**
+   * 통합뷰 **\*LAB 임시 칸**(반 id → 칸, 원장 2026-09-11) — 자리 출석부에서 다른 시간 랩실로 옮겨 앉는 학생 때문에
+   * 서는 표시 전용 칸. 판정은 서버([`virtual-lab.ts`](../../../../features/timetable/lib/virtual-lab.ts))가 끝냈다 —
+   * 카드는 **어디에 그릴지**만 정한다(`placeVirtualLabs`).
+   * 🔴 카드 칸(`card.cells`)·교시축(`group.periodRows`)에 섞지 않는다 — 인원·드래그·엑셀이 이 칸을 모르게.
+   */
+  virtualLabs?: VirtualLabsByClass;
+  /**
    * **수업명 행만** 그린다(그룹 설정 = 배치 편집 모드). 담임·강의실·교시 격자·명단을 통째로 접어
    * 반 하나가 40px 한 칸이 된다 — 42반이면 원래 2만 칸 넘는 격자를 매 드롭마다 다시 그려야 해서
    * 끌 때 렉이 걸린다(원장 2026-08-06 *"수업명만 보여주던가"*). 서식은 통합뷰와 **같은 컴포넌트**라
@@ -182,12 +199,15 @@ export function RichCardGroupBoard({
   trailing,
   namesOnly,
   hideStudents = false,
+  virtualLabs,
 }: {
   group: RichCardGroup;
   subjectSoftClass: string;
   teacherColors: TeacherColorMap;
   /** 담임 줄 `한글이름(영어이름)` 표기용(영어 시간표). 미지정=이름만. */
   teacherNicknames?: TeacherNicknameMap;
+  /** *LAB 임시 칸(반 id → 칸) — ColumnCommon.virtualLabs 주석 참조. 미지정=없음. */
+  virtualLabs?: VirtualLabsByClass;
   /** 편집 모드 — 열을 dnd 훅 컴포넌트로 감싸 그린다(key도 호출부가 준다). 미지정=평소 렌더. */
   renderCard?: (card: RichClassCard, common: ColumnCommon) => ReactNode;
   /** 마지막 열 뒤에 붙는 칸(편집 모드의 '맨 뒤에 놓기' 자리). 미지정=없음. */
@@ -230,7 +250,7 @@ export function RichCardGroupBoard({
   const activeH = sectionH(rosterRows.active);
   const holdH = sectionH(rosterRows.hold);
   const wdH = sectionH(rosterRows.withdrawn);
-  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, teacherNicknames, activeH, holdH, wdH, rosterRows, hideStudents, namesOnly };
+  const common: ColumnCommon = { group, subjectSoftClass, teacherColors, teacherNicknames, activeH, holdH, wdH, rosterRows, hideStudents, namesOnly, virtualLabs };
   // 학생 검색 — 걸린 반만 남긴다. 섹션 높이(rosterRows)는 그룹 전체 기준 그대로라 남은 카드의 행이
   // 어긋나지 않는다.
   // 🔴 **배치 편집(renderCard)에선 절대 안 거른다** — 끌어 옮기는 화면에서 반이 사라지면 배치가
@@ -331,6 +351,7 @@ export function ClassColumn({
   rosterRows,
   hideStudents,
   namesOnly,
+  virtualLabs,
   edit,
 }: ColumnCommon & {
   card: RichClassCard;
@@ -347,6 +368,12 @@ export function ClassColumn({
   // 교시축 접기(40분·60분 혼재) — 그릴 행과, 그 행 위에 얹힐 접힌 칸. 카드마다 한 번만 만든다.
   const gridRows = visibleSpanRows(group.periodRows, group.rowPlan);
   const moved = movedByTarget(group.rowPlan);
+  // *LAB 임시 칸 — 격자 안(그 교시 행이 있고 칸이 비어 있을 때) / 격자에 자리가 없으면 **이 카드에만** 아래 행.
+  // 배치 편집(수업명만)엔 격자가 없어 그리지 않는다. 판정은 서버가 끝냈다 — 여기선 자리만 정한다.
+  const cardLabs = namesOnly ? undefined : virtualLabs?.[card.classId];
+  const labs = cardLabs?.length
+    ? placeVirtualLabs({ labs: cardLabs, cells: card.cells, rows: gridRows, plan: group.rowPlan })
+    : NO_VIRTUAL_LAB_PLACEMENT;
   // 카드 폭 = 요일 수 × 고정 칸 폭(DAY_COL_W). 배치 편집(namesOnly)은 격자를 안 그리므로 5칸 기준 폭 유지 —
   // 수업명만 남은 칩이 요일 수에 따라 들쭉날쭉하면 끌어 놓을 자리를 가늠하기 어렵다.
   // 🔴 카드 **최소 폭 = 3칸**(144px) — padCardDays가 못 채우는 주말 전용 반(토·일 하루)은 1칸(48px)이라 학생 이름이 통째로
@@ -374,6 +401,13 @@ export function ClassColumn({
   //    자리를 안 가르면 "오늘부터 이 반 학생"이라는 거짓 약속이 된다(원장 2026-09-09 지시의 핵심).
   const incomingNow = incomingAll.filter((s) => !s.landsInHold);
   const incomingLater = incomingAll.filter((s) => s.landsInHold);
+  // *LAB 추가 행의 높이는 **이 카드 재원 칸의 남는 자리**에서 빌린다 — 카드 전체 높이가 이웃·라벨열과 같게 남아
+  // 대기·퇴원 줄이 어긋나지 않는다. 명단이 가려질 만큼은 안 빌린다(모자라면 그 카드만 길어진다).
+  const labBorrow = borrowFromRoster({
+    extraH: labs.extraRows.length * PERIOD_H,
+    sectionH: activeH,
+    usedH: SECTION_PAD + Math.max(1, card.active.length + incomingNow.length) * STU_H,
+  });
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#121212" }
@@ -484,7 +518,12 @@ export function ClassColumn({
             // 칸 하나가 **한 칸보다 길 수 있다**(60분 수업 = 40분 눈금 1.5칸) → 요일마다 자리 상자를 두고
             // 접힌 칸을 그 안에 절대배치한다. 넘치는 부분은 아래 행 위로 그려진다(그 자리는 어차피 빈 칸이다).
             <div key={d} className="relative h-full">
-              <Cell card={card} order={p.order} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
+              {/* *LAB 임시 칸 — 그 칸이 비어 있을 때만 격자 안에 앉는다(자리는 placeVirtualLabs가 정했다). */}
+              {labs.inGrid[`${p.order}:${d}`] ? (
+                <VirtualLabCellView lab={labs.inGrid[`${p.order}:${d}`]!} last={di === days.length - 1} />
+              ) : (
+                <Cell card={card} order={p.order} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
+              )}
               {(moved.get(p.order) ?? []).map((m) => {
                 const mc = card.cells[`${m.from}:${d}`];
                 if (!mc) return null;
@@ -517,11 +556,31 @@ export function ClassColumn({
           ))}
         </div>
       ))}
+      {/* *LAB 임시 칸 중 격자에 자리가 없는 것 — **이 카드에만** 행을 더한다(섹션 교시축·다른 카드는 그대로).
+          라벨열엔 이 행이 없으므로 칸이 제 시각을 함께 적는다. 높이는 아래 재원 칸의 남는 자리에서 빌린다(labBorrow). */}
+      {labs.extraRows.map((r) => (
+        <div
+          key={`vlab:${r.start}`}
+          data-virtual-lab-row=""
+          className={`${GRID} grid border-b`}
+          style={{ ...gridCols, height: PERIOD_H }}
+        >
+          {days.map((d, di) => {
+            const lab = r.cells[d];
+            const last = di === days.length - 1;
+            return lab ? (
+              <VirtualLabCellView key={d} lab={lab} last={last} withTime />
+            ) : (
+              <div key={d} className={`${GRID} h-full ${last ? "" : "border-r"}`} />
+            );
+          })}
+        </div>
+      ))}
       {/* 재원생 — 섹션 최대 인원(상한 12행). 넘치면 카드 안에서 스크롤하되 스크롤바는 숨기고 하단 페이드.
           🔴 **다른 반에서 끌어온 학생을 받는 칸**이기도 하다(원장 2026-09-09 "드래그 이동") — 대기·퇴원과
              달리 이 칸은 *남의 반* 학생을 받는다. */}
       <RosterSection
-        h={activeH}
+        h={activeH - labBorrow}
         rows={rosterRows.active}
         count={card.active.length + incomingNow.length}
         className={`bg-card ${GRID} border-b`}
@@ -786,6 +845,27 @@ function DayHead({ day }: { day: DayOfWeek }) {
  */
 function cellPaintsBackground(c: GridCell | undefined): boolean {
   return !!c && (c.isLab || !!c.label);
+}
+
+/**
+ * **\*LAB 임시 칸** — 그 반 학생이 이 시각에 랩실로 옮겨 앉는다(자리 출석부 교시 이동·고정). 수업설정에 없는 표시 전용 칸.
+ * 서식·글자는 [`virtual-lab.ts`](../../../../features/timetable/lib/virtual-lab.ts) 단일 소스(LAB 칸 계열 + 점선·이탤릭
+ * = 임시, 바탕 없음). 누가·하루/상시는 툴팁(`lab.note`, 서버가 만든 한글 문장).
+ * `withTime` = 이 카드에만 더한 행 — 라벨열에 그 행이 없어 칸이 제 시각을 함께 적는다(두 줄, 행 높이 안).
+ */
+function VirtualLabCellView({ lab, last, withTime = false }: { lab: VirtualLabCell; last: boolean; withTime?: boolean }) {
+  return (
+    <div
+      data-virtual-lab=""
+      title={lab.note}
+      className={`${GRID} flex h-full flex-col items-center justify-center overflow-hidden text-xs leading-none font-bold whitespace-nowrap ${
+        last ? "" : "border-r"
+      } ${VIRTUAL_LAB_CELL_CLASS}`}
+    >
+      <span>{VIRTUAL_LAB_LABEL}</span>
+      {withTime ? <span className="num font-normal not-italic">{lab.start}</span> : null}
+    </div>
+  );
 }
 
 function Cell({

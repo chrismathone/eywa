@@ -153,6 +153,8 @@ export function buildEnglishMentPrompt(input: EnglishMentInput, opts: { remindNa
 function cleanField(v: unknown): string {
   if (typeof v !== "string") return "";
   return v
+    // 줄바꿈은 LF 하나로 — CR이 섞인 AI 글이 세션에 남으면 템플릿 지문 비교가 흔들린다(english-draft.ts, 적대 재리뷰 2026-09-11).
+    .replace(/\r\n?/g, "\n")
     .replace(/\*\*|__/g, "")
     .replace(/^[ \t]*(?:[-*•·]|\d+[.)])[ \t]+/gm, "")
     .replace(/\n{3,}/g, "\n\n")

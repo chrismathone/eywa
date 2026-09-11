@@ -1,6 +1,7 @@
 // 학생 사진 첨부(P2b) 업로드 전 클라 다운스케일 — 원본 고해상도는 /r 표시(≈512px)·ClassNote 스샷(≈900px)에
 // 불필요하고 헤드리스 이미지 로드·스토리지·전송을 낭비. 브라우저 canvas로 긴 변 maxEdge까지 축소(업스케일 없음).
 // ⚠️ 클라 전용(브라우저 API) — server-only 금지. 서버는 여전히 10MB 캡·verifyUploadedObject로 백스톱.
+import { cropPixels, type CropRect } from "./crop-math";
 
 /** 목표 크기 — 긴 변이 maxEdge 초과면 비율 유지 축소, 이하면 그대로(업스케일 없음). 순수(테스트 대상). */
 export function fitWithin(w: number, h: number, maxEdge: number): { w: number; h: number } {
@@ -76,6 +77,44 @@ export async function resizeImageForUpload(
     return new File([blob], file.name, { type: file.type });
   } catch {
     return file;
+  } finally {
+    decoded.cleanup();
+  }
+}
+
+/** 자른 그림의 형식 — 원래 형식(jpeg·png·webp)을 지킨다. 그 밖은 jpeg. */
+const CROP_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+/**
+ * 자른 그림의 긴 변 상한 — 올릴 때 줄이는 크기(resizeImageForUpload 1600)와 같다. 원본 해상도 그대로 그리면 아이폰 사파리의
+ * 캔버스 넓이 상한을 넘어(48MP 사진) `toBlob`이 빈손으로 돌아온다(적대 리뷰 2026-09-11).
+ */
+const CROP_MAX_EDGE = 1600;
+
+/**
+ * 사진 자르기(2026-09-11, 영어 글 속 사진) — 비율 네모(crop-math.ts)만큼 원본에서 잘라 **같은 형식** 파일로.
+ * EXIF 회전은 decode가 반영한다(화면에 보인 방향 그대로 자른다). 🔴 실패하면 null — 원본으로 몰래 대신하지 않는다
+ * (화면이 알린다. 말없이 원본을 넣으면 강사는 잘린 줄 알고 보낸다). 크기 줄이기는 올릴 때 resizeImageForUpload가 따로 한다.
+ */
+export async function cropImageFile(file: File, rect: CropRect): Promise<File | null> {
+  if (typeof document === "undefined") return null;
+  const decoded = await decode(file);
+  if (!decoded) return null;
+  try {
+    const { sx, sy, sw, sh } = cropPixels(rect, { w: decoded.width, h: decoded.height });
+    const { w: dw, h: dh } = fitWithin(sw, sh, CROP_MAX_EDGE);
+    const canvas = document.createElement("canvas");
+    canvas.width = dw;
+    canvas.height = dh;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(decoded.source, sx, sy, sw, sh, 0, 0, dw, dh);
+    const type = CROP_TYPES.has(file.type) ? file.type : "image/jpeg";
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.92));
+    if (!blob || blob.size === 0) return null;
+    const name = type === file.type ? file.name : `${file.name.replace(/\.[^.]+$/, "")}.jpg`;
+    return new File([blob], name, { type });
+  } catch {
+    return null;
   } finally {
     decoded.cleanup();
   }

@@ -70,11 +70,22 @@ export type SeatPinHit = { seat: SeatKey; dayOfWeek: string; slotStart: string }
  */
 export type SeatLiveStarts = ReadonlyMap<string, ReadonlySet<string>>;
 
-/** 시간표가 받는 표식 재료 한 벌 — `liveStarts`는 고정이 있을 때만 조회하고, 모르면 null. */
-export type SeatPinData = { pins: readonly SeatPinRow[]; liveStarts: SeatLiveStarts | null };
+/**
+ * 시간표가 받는 표식 재료 한 벌 — `liveStarts`는 고정이 있을 때만 조회하고, 모르면 null.
+ * `failed` = 고정 조회 **자체가 실패**했다(0255a 미적용·타임아웃·키 없음). 이름 표식에겐 "고정 0줄"과 같은 결말이지만
+ * (둘 다 안 붙는다), 통합뷰 *LAB 칸은 둘을 가른다 — 고정을 모르는 채로 하루 이동만 보면 거짓 칸이 선다
+ * (`knownLabSources`, virtual-lab.ts).
+ */
+export type SeatPinData = { pins: readonly SeatPinRow[]; liveStarts: SeatLiveStarts | null; failed?: boolean };
 
-/** 조회하지 않는 뷰(교실뷰)·고정 0줄·조회 실패의 빈 값. */
+/** 조회하지 않는 뷰(교실뷰)·고정 0줄의 빈 값. */
 export const NO_SEAT_PINS: SeatPinData = { pins: [], liveStarts: null };
+
+/**
+ * 고정 조회 **실패**의 빈 값 — 이름 표식은 `NO_SEAT_PINS`와 같은 결말(pins 0줄 = 안 붙는다),
+ * 통합뷰 *LAB은 "모름"이라 그 주엔 칸을 안 세운다. 🔴 `NO_SEAT_PINS`로 되돌리지 말 것(0줄과 모름이 구분 안 된다).
+ */
+export const SEAT_PINS_UNKNOWN: SeatPinData = { pins: [], liveStarts: null, failed: true };
 
 /**
  * 자리 라벨이 붙은 배치 행 → 그 주에 **실제로 도는** `자리|요일` 교시 집합.

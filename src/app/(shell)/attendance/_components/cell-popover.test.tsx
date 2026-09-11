@@ -1,13 +1,19 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CellPopover } from "./cell-popover";
+import { GridProvider } from "./grid-context";
 
 const { setCell } = vi.hoisted(() => ({
-  setCell: vi.fn<(input: Record<string, unknown>) => Promise<{ ok: true } | { error: string }>>(async () => ({
+  setCell: vi.fn<
+    (input: Record<string, unknown>) => Promise<{ ok: true; autoUnits?: number | null } | { error: string }>
+  >(async () => ({
     ok: true,
   })),
 }));
-vi.mock("@/features/attendance/server/actions", () => ({ setAttendanceCell: setCell }));
+vi.mock("@/features/attendance/server/actions", () => ({ setAttendanceCell: setCell, setAttendanceRange: vi.fn() }));
+// 격자(GridProvider) 안에서 렌더하는 테스트용 — 자동 시수(autoUnits)는 격자 컨텍스트가 준다.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/features/attendance/server/prefs-actions", () => ({ saveAttendanceCollapsed: vi.fn(async () => ({ ok: true })) }));
 
 const S = "11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const C = "aaaaaaaa-1111-1111-1111-111111111111";
@@ -64,7 +70,7 @@ describe("칸 상세 팝오버", () => {
       expect(arg.note).toBe("학부모 요청 결석");
       expect(arg).not.toHaveProperty("units");
       // 격자에도 상태·시수는 그대로 반영된다(메모만 바뀐다).
-      await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ status: "absent", units: null, note: "학부모 요청 결석" }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ status: "absent", units: null, note: "학부모 요청 결석", noteOnly: true }));
     });
 
     it("🔴 서버가 거절하면 닫지 않고 이유를 보여 준다 — 적은 메모가 조용히 사라지면 안 된다", async () => {
@@ -83,6 +89,76 @@ describe("칸 상세 팝오버", () => {
       open({ locked: LOCK, status: null });
       expect(screen.queryByLabelText("메모(사유)")).not.toBeInTheDocument();
       expect(screen.getByText(/기록이 없는 날/)).toBeInTheDocument();
+    });
+  });
+
+  /** 수학 자동 시수(원장 2026-09-11) — 이 반·날짜 빈 칸은 1.5가 들어간다(격자 컨텍스트가 준다). */
+  describe("수학 자동 시수 — 보이는 기본값 = 저장될 값", () => {
+    function openInGrid(props: Partial<React.ComponentProps<typeof CellPopover>> = {}) {
+      const onSaved = vi.fn<React.ComponentProps<typeof CellPopover>["onSaved"]>();
+      render(
+        <GridProvider rows={[]} cols={[]} initial={{}} lockBefore={null} autoUnits={{ [C]: { [D]: 1.5 } }}>
+          <CellPopover
+            studentId={S}
+            classId={C}
+            sessionDate={D}
+            status={null}
+            units={null}
+            note=""
+            anchor={{ x: 0, top: 0 }}
+            onClose={vi.fn()}
+            onSaved={onSaved}
+            {...props}
+          />
+        </GridProvider>,
+      );
+      return { onSaved };
+    }
+
+    it("빈 칸은 수업 길이 기본값을 약속한다", () => {
+      openInGrid();
+      expect(screen.getByLabelText("시수")).toHaveAttribute("placeholder", "시수(기본 1.5 · 수업 길이)");
+    });
+
+    it("🔴 수업보고서 파생 칸(recorded=false)은 상태가 보여도 새 행 — 같은 기본값을 약속하고 같은 값을 칠한다", async () => {
+      setCell.mockClear();
+      setCell.mockResolvedValueOnce({ ok: true, autoUnits: 1.5 });
+      const { onSaved } = openInGrid({ status: "present", recorded: false });
+      expect(screen.getByLabelText("시수")).toHaveAttribute("placeholder", "시수(기본 1.5 · 수업 길이)");
+      fireEvent.click(screen.getByRole("button", { name: "출석" }));
+      expect(onSaved.mock.calls[0]![0]).toEqual({ status: "present", units: 1.5, note: undefined }); // 상태 버튼 = 메모 안 보냄
+    });
+
+    it("기록이 있는 칸(기본값)의 빈 시수는 '1로 되돌리기' — 자동값을 약속하지 않는다", () => {
+      openInGrid({ status: "present" });
+      expect(screen.getByLabelText("시수")).toHaveAttribute("placeholder", "시수(기본 1)");
+    });
+
+    it("🔴 응답 보정은 처음 칠한 표식과 함께 — 그 사이 칸이 바뀌었으면 받는 쪽이 거절한다", async () => {
+      setCell.mockClear();
+      setCell.mockResolvedValueOnce({ ok: true, autoUnits: null }); // 서버 조회 실패 — 실제로는 null(=1)이 들어갔다
+      const token = { painted: true };
+      const { onSaved } = openInGrid();
+      onSaved.mockReturnValueOnce(token);
+      fireEvent.click(screen.getByRole("button", { name: "출석" }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
+      // 상태 버튼은 메모를 안 보낸다 → 칠할 메모도 없다(undefined — 받는 쪽이 메모를 가져가지 않게).
+      expect(onSaved.mock.calls[0]).toEqual([{ status: "present", units: 1.5, note: undefined }]);
+      expect(onSaved.mock.calls[1]).toEqual([{ status: "present", units: null, note: undefined }, { ifStill: token }]);
+    });
+
+    it("🔴 저장이 실패하면 처음 칠한 표식과 함께 '되돌리기'를 알린다 — 받는 쪽이 열 때의 칸 값 그 객체로 되칠한다", async () => {
+      setCell.mockClear();
+      setCell.mockResolvedValueOnce({ error: "권한이 없습니다" });
+      const token = { painted: true };
+      const { onSaved } = openInGrid({ status: "present", recorded: false });
+      onSaved.mockReturnValueOnce(token);
+      fireEvent.click(screen.getByRole("button", { name: "출석" }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
+      expect(onSaved.mock.calls[1]).toEqual([
+        { status: "present", units: null, note: "" },
+        { ifStill: token, revert: true },
+      ]);
     });
   });
 });

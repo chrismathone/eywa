@@ -1406,6 +1406,8 @@ export const SHEET_DICT = {
   "att.pop.saving": { ko: "저장 중…", en: "Saving…" },
   "att.pop.saveNote": { ko: "메모 저장", en: "Save note" },
   "att.pop.unitsPh": { ko: "시수(기본 1)", en: "Sessions (default 1)" },
+  // 수학 자동 시수(원장 2026-09-11) — 빈 칸으로 **처음** 찍으면 수업 길이 값이 들어간다(auto-units.ts).
+  "att.pop.unitsPhAuto": { ko: "시수(기본 {n} · 수업 길이)", en: "Sessions (default {n}, class length)" },
   "att.pop.unitsAria": { ko: "시수", en: "Sessions" },
   "att.pop.unitsTitle": {
     ko: "정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등",
@@ -1831,6 +1833,11 @@ export const SHEET_DICT = {
   "os.units.title": {
     ko: "{name} 수업타임 — 기본 1타임. 한 타임 더 했으면 2로 고치면 출석부에 그대로 들어갑니다.",
     en: "{name} class units — 1 by default. If you taught one more, change it to 2 and it goes straight into the attendance sheet.",
+  },
+  // 수학 자동 시수(원장 2026-09-11) — 출결이 비어 있는 칸에만 붙는다(처음 찍을 때 들어갈 값).
+  "os.units.titleAuto": {
+    ko: " (이 수업은 수업 길이로 기본 {n}타임이 들어갑니다)",
+    en: " (this class records {n} units by default, from its length)",
   },
   "os.units.titleNoStatus": {
     ko: " (지금 출결이 비어 있어 '출석'으로 함께 기록됩니다)",
@@ -2357,8 +2364,45 @@ export const SHEET_DICT = {
     ko: "그림 칸 — 그 줄 자리에 인재원 그림이 들어갑니다 · 자료가 없으면 줄이 빠집니다",
     en: "Image fields — an Injaewon sheet goes where the line is · the line is left out when there is no data",
   },
-  "os.tpl.slotExam": { ko: "여기에 인재원 시험 결과지가 들어갑니다", en: "The Injaewon test result sheet goes here" },
-  "os.tpl.slotStudy": { ko: "여기에 인재원 학습 분석지가 들어갑니다", en: "The Injaewon study analysis sheet goes here" },
+  // 템플릿 미리보기의 그림 칸 = 예시 자료로 그린 **실제** 결과지(2026-09-11 후속 — '들어갑니다' 상자 대신).
+  "os.tpl.sampleSheet": {
+    ko: "예시 자료로 그린 모양 — 보고서에는 그 학생의 인재원 자료가 들어갑니다",
+    en: "Drawn from sample data — the report uses the student's own Injaewon data",
+  },
+  "os.tpl.attachmentInTemplate": {
+    ko: "사진·PDF 자리 줄은 템플릿에 넣을 수 없습니다 — 보고서 글에서 '사진·PDF 넣기'로 넣습니다",
+    en: "Photo/PDF lines can't go in a template — add them in the report text with 'Insert a photo or PDF'",
+  },
+  "os.tpl.jjLinkGo": { ko: "연결하러 가기", en: "Link now" },
+  "os.tpl.jjAskAdmin": { ko: "관리자에게 연결을 요청하세요", en: "Ask an admin to link this student" },
+  // ── 영어 글 속 사진·PDF(2026-09-11) — 글의 커서 줄에 넣고, 사진은 넣기 전에 자른다 ──
+  "os.media.add": { ko: "사진·PDF 넣기", en: "Insert a photo or PDF" },
+  "os.media.help": {
+    ko: "글에서 넣을 줄을 먼저 누르세요 — 그 줄 아래에 들어갑니다 · 사진은 넣기 전에 자를 수 있습니다",
+    en: "Click the line in the text first — it goes below that line · photos can be cropped first",
+  },
+  "os.media.full": {
+    ko: "첨부가 가득 찼습니다 — 아래 첨부에서 하나를 지우면 넣을 수 있습니다",
+    en: "Attachments are full — delete one below to insert another",
+  },
+  "os.crop.title": { ko: "사진 자르기", en: "Crop the photo" },
+  "os.crop.desc": {
+    ko: "모서리를 끌어 남길 부분을 고르세요 · 가운데를 끌면 옮겨집니다 · 그대로 넣어도 됩니다",
+    en: "Drag a corner to choose what to keep · drag the middle to move it · or insert it as is",
+  },
+  "os.crop.loading": { ko: "사진을 여는 중…", en: "Opening the photo…" },
+  "os.crop.loadFail": {
+    ko: "이 사진은 여기서 미리 볼 수 없습니다 — 자르지 않고 넣을 수 있습니다",
+    en: "This photo can't be previewed here — you can insert it without cropping",
+  },
+  "os.crop.reset": { ko: "처음대로", en: "Reset" },
+  "os.crop.cancel": { ko: "취소", en: "Cancel" },
+  "os.crop.done": { ko: "이대로 넣기", en: "Insert" },
+  "os.crop.working": { ko: "자르는 중…", en: "Cropping…" },
+  "os.crop.fail": {
+    ko: "사진을 자르지 못했습니다 — 다시 해 보거나 자르지 않고 넣으세요",
+    en: "Couldn't crop the photo — try again or insert it without cropping",
+  },
   "os.tpl.jjWarnBulk": {
     ko: "\n그림 없이 저장된 영어 보고서 {n}건 — 인재원 자료를 받지 못했습니다(그 행을 열어 확인해 주세요)",
     en: "\n{n} English reports were saved without the Injaewon sheets — open those rows to check",
@@ -2546,6 +2590,15 @@ export const SHEET_DICT = {
   "os.bulk.unitsHint": {
     ko: "예: 3시간 반 = 1.5 · 빈칸 = 기본(1) · 기존 기록의 시수는 유지",
     en: "e.g. a three-and-a-half hour class = 1.5 · empty = 1 · units already recorded are kept",
+  },
+  // 수학 자동 시수(원장 2026-09-11) — 새 칸에 시수를 비우면 수업 길이 값이 들어갈 때만(1이 아닐 때).
+  "os.bulk.unitsTitleAuto": {
+    ko: "이번에 새로 기록되는 칸의 수업타임(시수) — 빈칸이면 수업 길이대로({list}) 들어갑니다. 이미 기록된 칸의 시수는 바꾸지 않습니다",
+    en: "The class units for the cells newly recorded this time — empty uses each class length ({list}). Cells already recorded keep their units",
+  },
+  "os.bulk.unitsHintAuto": {
+    ko: "예: 3시간 반 = 1.5 · 빈칸 = 수업 길이대로({list}) · 기존 기록의 시수는 유지",
+    en: "e.g. a three-and-a-half hour class = 1.5 · empty = by class length ({list}) · units already recorded are kept",
   },
   "os.bulk.planRecord": { ko: "건 기록", en: " to record" },
   "os.bulk.planOver": { ko: " · 기존 기록 {n}건 덮어씀", en: " · {n} overwrite an existing record" },

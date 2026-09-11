@@ -194,6 +194,9 @@ const FALLBACK_KEY_LABEL: Record<string, string> = {
   date: "날짜",
   from: "이전",
   to: "이후",
+  // 수학 자동 시수(원장 2026-09-11, attendance/auto-units.ts) — 출결 저장 로그에 붙는다(단건 = 값 · 여러 칸 = 칸 수).
+  autoUnits: "자동 시수",
+  autoUnitsCells: "자동 시수 칸",
 };
 
 /**
@@ -212,6 +215,7 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "qa-temp-account": "QA 임시 계정",
   "debug-contract-upload": "계약서 업로드 점검",
   "reset-staff-password": "직원 비밀번호 재설정",
+  "backfill-math-auto-units": "수학 출석 시수 자동값 보정",
 };
 const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
 
@@ -705,6 +709,25 @@ export function auditDetail(
       const names = Array.isArray(m.studentNames) ? m.studentNames.filter((x) => typeof x === "string") : [];
       const label = names.length ? `(${names.slice(0, 3).join(", ")}${names.length > 3 ? " 외" : ""})` : "";
       return join(c === null ? `수업보고서 회수 — ${who}` : `수업보고서 ${c}건 회수 — ${who}`, label || null);
+    }
+    case "attendance_units_backfill": {
+      // 9월 수학 출석 시수 소급 보정(scripts/_oneoff/backfill-math-auto-units.mjs, 원장 2026-09-11 "9월분만 보정").
+      const count = num(m.count);
+      const from = str(m.from);
+      const to = str(m.to);
+      const delta = num(m.deltaSum);
+      const by =
+        m.byUnits && typeof m.byUnits === "object" && !Array.isArray(m.byUnits)
+          ? Object.entries(m.byUnits as Record<string, unknown>)
+              .map(([u, n]) => `${u}×${typeof n === "number" ? n : "?"}`)
+              .join(" · ")
+          : null;
+      return join(
+        count === null ? "수학 출석 시수 보정" : `수학 출석 ${count}칸 시수 보정`,
+        from && to ? `${from}~${to}` : null,
+        delta !== null ? `합계 +${delta}회분` : null,
+        by || null,
+      );
     }
     case "ecs_attendance_clear": {
       const rows = num(m.rows);

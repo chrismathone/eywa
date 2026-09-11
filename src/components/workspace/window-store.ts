@@ -192,8 +192,11 @@ type Actions = {
   setDragging: (id: string | null) => void;
   setDragLayout: (v: { template: LayoutTemplate; slot: number } | null) => void;
   setDragNearTop: (v: boolean) => void;
-  /** RouteWindow가 iframe 제목·현재 URL 변화를 보고 → 타이틀바 제목 + 창별 nav 스택/canBack 갱신. */
-  observeIframe: (id: string, v: { title: string; url: string }) => void;
+  /**
+   * RouteWindow가 iframe 제목·현재 URL 변화를 보고 → 타이틀바 제목 + 창별 nav 스택/canBack 갱신.
+   * `reset` = 메뉴가 창의 첫 화면(`params.href`)을 바꾼 뒤 **새 문서의 첫 로드** — 스택을 그 주소 하나로 다시 시작한다.
+   */
+  observeIframe: (id: string, v: { title: string; url: string; reset?: boolean }) => void;
   /** 그 창의 nav 스택을 한 단계 pop하고 이동할 이전 URL을 반환(없으면 null). 뒤로(←) 버튼이 호출. */
   backNav: (id: string) => string | null;
   /** 이미 최상단(포커스)인 라우트 창을 다시 클릭했을 때 그 창을 "첫 화면"(메뉴 루트 href)으로 리셋 —
@@ -279,12 +282,17 @@ export const useWindowStore = create<State & Actions>()(
       setDragNearTop: (v) => set({ dragNearTop: v }),
       // iframe 관찰값(제목·URL)을 받아 제목 + 창별 URL 스택을 갱신. pathname이 바뀌면(드릴인) push,
       // query만 바뀌면(예: billing ?tab=) top을 replace해 뒤로 단계로 안 센다. canBack = 스택 깊이>1.
-      observeIframe: (id, { title, url }) =>
+      observeIframe: (id, { title, url, reset }) =>
         set((s) => {
           const stack = s.nav[id] ?? [];
           const top = stack[stack.length - 1];
           let nextStack = stack;
-          if (top !== url) {
+          // 🔴 메뉴가 창의 첫 화면을 바꿨으면(open-menu-window → `open()` hrefChanged — 면 전환·필터 주소)
+          //    새 문서의 첫 보고에서 스택을 새로 시작한다. 안 그러면 첫 화면에 ←가 서고(#56), 같은 면을 다시
+          //    누르면 `homeNav`가 스택 깊이를 보고 불필요하게 다시 불러오며, 오갈 때마다 스택이 쌓인다(리뷰 2026-09-11).
+          if (reset) {
+            if (!(stack.length === 1 && top === url)) nextStack = [url];
+          } else if (top !== url) {
             if (top === undefined) nextStack = [url];
             else if (top.split("?")[0] === url.split("?")[0]) nextStack = [...stack.slice(0, -1), url];
             else nextStack = [...stack, url];

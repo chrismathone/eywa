@@ -96,7 +96,8 @@ export function buildGridSource(
 ) {
   const rows = ordered.map((r) => rowKey(r.classId, r.studentId));
   const cols = days.filter((d) => !d.placeholder).map((d) => d.date);
-  const initial: Record<string, { s: string; u: number | null }> = {};
+  /** `d` = 수업보고서 파생 칸(출결 행 없음) — grid/store.ts `GridValue` 주석. */
+  const initial: Record<string, { s: string; u: number | null; d?: true }> = {};
   // 하루에 교시가 둘 이상인 칸만(0196a) — 한 칸에 친 숫자가 그날 **몇 건**을 고치는지.
   const slotCounts: Record<string, number> = {};
   /**
@@ -121,9 +122,12 @@ export function buildGridSource(
       const marks = g.matrix.marks[s.id] ?? {};
       const units = g.matrix.units[s.id] ?? {};
       const slots = g.matrix.slots[s.id] ?? {};
+      const derived = g.matrix.derived[s.id] ?? {};
       for (const [date, st] of Object.entries(marks)) {
         const key = cellKey(rowKey(g.classId, s.id), date);
-        initial[key] = { s: st, u: units[date] ?? null };
+        // 🔴 수업보고서 **파생** 칸은 상태가 보여도 출결 행이 없다(`d`) — 저장하면 서버가 새 행을 만들어 수학 자동
+        //    시수를 넣으므로, 격자·팝오버가 이 표식으로 '빈 칸'과 같이 다룬다(grid/optimistic-value `isRecordless`).
+        initial[key] = derived[date] ? { s: st, u: units[date] ?? null, d: true } : { s: st, u: units[date] ?? null };
         const n = slots[date]?.length ?? 1;
         if (n > 1) slotCounts[key] = n;
       }
@@ -135,7 +139,15 @@ export function buildGridSource(
       }
     }
   }
-  return { rows, cols, initial, slotCounts, notMine, alsoWrites };
+  /**
+   * 반 → 날짜 → 수학 자동 시수(빈 칸에 숫자 없이 찍으면 서버가 넣는 값, auto-units.ts). 반×날짜 크기라
+   * 칸마다 싣지 않는다(강사 전체 보기 수천 칸 × 페이로드 곱 방지).
+   */
+  const autoUnits: Record<string, Record<string, number>> = {};
+  for (const g of groups) {
+    if (g.matrix.autoUnits && Object.keys(g.matrix.autoUnits).length > 0) autoUnits[g.classId] = g.matrix.autoUnits;
+  }
+  return { rows, cols, initial, slotCounts, notMine, alsoWrites, autoUnits };
 }
 
 /**

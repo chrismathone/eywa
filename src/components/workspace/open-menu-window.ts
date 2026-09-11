@@ -23,6 +23,13 @@ import { iframeRegistry } from "./route-window";
  * ⚠️ **최소화된 창은 최상단이 아니다** — 되돌려 봤자 화면에 안 보이므로 먼저 복원·포커스한다(그다음 클릭이 리셋).
  * ⚠️ 이미 루트면 `homeNav`가 null을 돌려 **아무 일도 안 한다**(불필요한 리로드·깜빡임 방지).
  *
+ * 🔴 **되돌리기는 같은 주소를 다시 눌렀을 때만이다** (원장 2026-09-11 캡처: 수업 메뉴 판 '도구 > 오늘 출결'을
+ *    눌렀는데 월별 출석부가 떴다). 메뉴 판의 면(오늘 출결·설정 11면·수납 면·셔틀 면)은 창 id가 **부모 메뉴 키**라
+ *    부모와 같은 창을 쓴다 — 창이 같다고 목적지가 같은 게 아니다. 창만 보고 `homeNav`(창 **자신의** 첫 화면)로
+ *    되돌리면 부모 창이 맨 앞일 때 면 버튼이 무시되거나 부모 첫 화면으로 가고, 거꾸로 면을 한 번 연 창은 첫 화면이
+ *    면으로 바뀌어 부모 버튼으로 못 돌아간다(알림 링크의 필터 주소가 메뉴 창을 연 경우도 같은 모양).
+ *    주소가 다르면 `open()`이 그 주소로 보낸다(`hrefChanged` → RouteWindow가 iframe src를 바꾼다).
+ *
  * 🔴 데스크톱 + 창(window) 표현일 때만 부를 것 — 모바일 `router.push`와 배경(desktop) 표현은 호출부가
  *    먼저 가른다(그쪽은 창이 없어 되돌릴 대상 자체가 없다).
  */
@@ -30,7 +37,7 @@ export function openMenuWindow(params: { id: string; title: string; href: string
   const store = useWindowStore.getState();
   const winId = windowId("route", params.id);
   const win = store.windows[winId];
-  if (win && !win.minimized && store.focusedId === winId) {
+  if (win && !win.minimized && store.focusedId === winId && win.params.href === params.href) {
     const target = store.homeNav(winId);
     if (target) iframeRegistry.get(winId)?.contentWindow?.location.replace(withEmbed(target));
     return;

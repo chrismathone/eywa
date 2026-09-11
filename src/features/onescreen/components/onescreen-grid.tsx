@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildGridRows, buildRowRenderMeta, isRowActionable, rowInClass } from "../grid";
+import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
 import { planBulkAttendance } from "../bulk-attendance";
 import { moveInOrder } from "../student-order";
@@ -79,7 +80,8 @@ export function OneScreenGrid({
   // 🔴 실제로 **발송되는** 행 = 위 조건 + **멘트 있음**. 빈 멘트는 절대 가드가 거절하므로(2026-07-28 사고)
   //    `sendableRows`를 그대로 "발송가능"이라 쓰면 상단 숫자와 행 라벨("멘트 입력 필요")이 서로 다른 말을 한다.
   //    (자동작성 대상은 아래 `autoRows` — 출결 미체크 게이트로 send≠autowrite가 되면서 갈라졌다, 2026-08-17.)
-  const hasDraft = (r: (typeof rows)[number]) => !!reports[r.student.id]?.[r.subject.name]?.draft?.trim();
+  // 영어 글의 그림·사진 자리 줄뿐인 행은 멘트가 없다(행 발송 게이트·서버와 같은 판정 — hasTextBesidesMarkers).
+  const hasDraft = (r: (typeof rows)[number]) => hasTextBesidesMarkers(reports[r.student.id]?.[r.subject.name]?.draft);
   const sendReadyRows = sendableRows.filter(hasDraft);
   const saveableRows = rows.filter((r) => isRowActionable(r.subject, "save"));
   // 행 선택(체크) — 일괄 작업 대상. **표시된 모든 행**을 선택 가능(진도 유무 무관).
@@ -253,6 +255,8 @@ export function OneScreenGrid({
                             classId: r.subject.classId,
                             isMakeup: r.student.isMakeup,
                             raw: r.subject.attendanceRaw,
+                            // 새 칸에 시수를 비우면 서버가 넣을 값(수학 자동 시수) — 팝오버 안내가 이 값을 말한다.
+                            autoUnits: r.subject.attendanceAutoUnits,
                           })),
                           status,
                           { onlyEmpty },
