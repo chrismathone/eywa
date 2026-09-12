@@ -1,4 +1,4 @@
-import { addWeeks, thisMonday, weekLabel, weekRelation } from "@/features/timetable/lib/week";
+import { addWeeks, thisMonday, weekLabel, weekRelation, compactWeekLabel } from "@/features/timetable/lib/week";
 import { WeekPeriodNav } from "./week-period-nav";
 
 /**
@@ -11,7 +11,7 @@ import { WeekPeriodNav } from "./week-period-nav";
  * 🔴 **'이번주' 알약은 사라졌지만 그 두 가지 일은 남는다** — 이번 주로 돌아가기는 **가운데 라벨 클릭**,
  *    "지금 이번 주인가"는 **과거/미래 조회 배지**(PeriodNav 🔴). 배지를 지우지 말 것: 없으면 지난 주
  *    화면을 보면서 이번 주로 착각한다.
- * ⚠️ 라벨 문자열은 `weekLabel` 단일 소스 그대로 — 여기서 줄이면 같은 주가 화면마다 다르게 적힌다.
+ * 라벨은 `weekLabel` / `compactWeekLabel` 단일 소스 — 모바일은 짧은 날짜 범위로 양쪽 화살표를 남긴다.
  * ⚠️ 미저장 이탈 가드·무플래시 이동은 클라 절반([`week-period-nav`](./week-period-nav.tsx))이 맡는다.
  * ⚠️ **트레이드오프**: PeriodNav는 `<a href>`가 아니라 버튼이라 화살표를 Ctrl/가운데 클릭해도 새 탭이
  *    안 열린다(ParamLink는 열렸다). 이 앱에서 다른 주를 따로 띄우는 정식 경로는 사이드바 shift-클릭
@@ -32,6 +32,7 @@ export function WeekNav({
   return (
     <WeekPeriodNav
       label={weekLabel(currentWeek)}
+      mobileLabel={compactWeekLabel(currentWeek)}
       prevHref={hrefForWeek(addWeeks(currentWeek, -1))}
       nextHref={hrefForWeek(addWeeks(currentWeek, 1))}
       currentHref={hrefForWeek(thisMonday(today))}

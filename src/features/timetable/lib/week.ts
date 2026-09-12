@@ -127,6 +127,18 @@ export function weekRelation(monday: string, today: string): "past" | "current" 
   return monday > cur ? "future" : "past";
 }
 
+/** 모바일 주간 이동: 연도·월·시작일은 남기고 같은 달의 끝 날짜는 일만 적는다. */
+export function compactWeekLabel(monday: string): string {
+  const start = parse(monday);
+  const end = parse(shiftDays(monday, 6));
+  const two = (n: number) => String(n).padStart(2, "0");
+  const startLabel = `${two(start.getUTCFullYear() % 100)}.${two(start.getUTCMonth() + 1)}.${two(start.getUTCDate())}`;
+  const endLabel = start.getUTCMonth() === end.getUTCMonth()
+    ? two(end.getUTCDate())
+    : `${two(end.getUTCMonth() + 1)}.${two(end.getUTCDate())}`;
+  return `${startLabel}–${endLabel}`;
+}
+
 /** 요일 키 → 그 주 월요일로부터의 오프셋(0=월 … 6=일). 시간표 축과 같은 순서. */
 const DOW_OFFSET: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
 

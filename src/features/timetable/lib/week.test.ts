@@ -10,9 +10,19 @@ import {
   weekSundayOf,
   slotLiveOnDate,
   weekLabel,
+  compactWeekLabel,
   weekTitle,
   weekRelation,
 } from "./week";
+
+it.each([
+  ["2026-09-07", "26.09.07–13"],
+  ["2026-09-28", "26.09.28–10.04"],
+  ["2026-12-28", "26.12.28–01.03"],
+  ["2028-02-28", "28.02.28–03.05"],
+])("모바일 주간 라벨은 월·연도·윤년 경계에서도 같은 7일을 표시한다: %s", (monday, label) => {
+  expect(compactWeekLabel(monday)).toBe(label);
+});
 
 describe("week — 주(週) 경계 계산", () => {
   it("mondayOf: 금요일 → 그 주 월요일", () => {

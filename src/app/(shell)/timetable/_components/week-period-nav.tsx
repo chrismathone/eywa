@@ -22,12 +22,14 @@ import { confirmTimetableNav } from "./timetable-unsaved";
  */
 export function WeekPeriodNav({
   label,
+  mobileLabel,
   prevHref,
   nextHref,
   currentHref,
   relation,
 }: {
   label: string;
+  mobileLabel?: string;
   prevHref: string;
   nextHref: string;
   currentHref: string;
@@ -38,6 +40,7 @@ export function WeekPeriodNav({
   return (
     <PeriodNav
       label={label}
+      mobileLabel={mobileLabel}
       prevHref={prevHref}
       nextHref={nextHref}
       currentHref={currentHref}

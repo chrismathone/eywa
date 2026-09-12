@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { cn } from "@/lib/utils";
+import s from "./period-nav.module.css";
 
 /**
  * 기간 이동 네비 **단일 소스** — `‹ 2026년 8월 ›` 한 덩어리.
@@ -39,6 +40,7 @@ const RELATION_BADGE: Record<
 
 export function PeriodNav({
   label,
+  mobileLabel,
   labelControl,
   prevHref,
   nextHref,
@@ -55,6 +57,8 @@ export function PeriodNav({
 }: {
   /** 가운데에 적을 기간 — "2026년 8월" · "8월 3일~9일". 호출부의 포맷 함수를 그대로. */
   label: string;
+  /** 같은 기간을 짧게 적은 모바일 라벨. 긴 주간 범위도 양쪽 화살표가 화면 안에 남는다. */
+  mobileLabel?: string;
   /** 직접 기간을 선택하는 화면의 중앙 컨트롤. 없으면 기존 '이번 기간으로' 버튼. */
   labelControl?: ReactNode;
   prevHref: string;
@@ -144,10 +148,14 @@ export function PeriodNav({
 
   // 🔴 폭은 **고정**(원장 2026-09-01 "이동해도 크기 변동 안 되고 고정되게" — min이면 글자 수가 바뀔 때 화살표가 움찔한다).
   //    호출부의 labelWidth는 옛 13px 라벨에 맞춘 값이라 v5 라벨(18px)에 맞춰 1.4배로 도출한다(고정폭은 그대로).
-  const labelWidth = Math.ceil(labelWidthBase * 1.4);
+  const desktopLabelWidth = Math.ceil(labelWidthBase * 1.4);
+  const labelWidth = mobileLabel ? "var(--period-label-width)" : desktopLabelWidth;
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div
+      className={`flex shrink-0 items-center gap-1.5 ${mobileLabel ? s.responsive : ""}`}
+      style={mobileLabel ? { "--period-label-desktop": `${desktopLabelWidth}px` } as CSSProperties : undefined}
+    >
       <div
         className={`border-line-strong inline-flex h-(--control-h) items-center overflow-hidden rounded-lg border ${
           pending || handing || externalPending ? "opacity-70" : ""
@@ -180,12 +188,13 @@ export function PeriodNav({
                 : "text-foreground hover:bg-bg-soft cursor-pointer"
             }`}
             style={{ width: labelWidth }}
+            aria-label={mobileLabel ? label : undefined}
             title={
               isCurrent ? undefined : (currentTitle ?? "눌러서 이번 기간으로")
             }
             onClick={() => go(currentHref)}
           >
-            {label}
+            {mobileLabel ? <><span className={s.fullLabel}>{label}</span><span className={s.mobileLabel} data-period-label="mobile" aria-hidden>{mobileLabel}</span></> : label}
           </button>
         )}
         <button

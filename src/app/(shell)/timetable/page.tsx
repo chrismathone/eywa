@@ -2,7 +2,7 @@ import { ParamLink } from "./_components/param-link";
 import { ParamSelect } from "./_components/param-select";
 import { Layers } from "@/components/icons/eywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
-import { Toolbar } from "@/components/toolbar";
+import { Toolbar, ToolbarRow } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { cookies } from "next/headers";
@@ -640,12 +640,13 @@ export default async function TimetablePage({
       </div>
       {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
-      <Toolbar>
-        {/* 왼쪽 묶음(주 이동·필터·검색·설정·엑셀) / 오른쪽 묶음(집계·ECS·편집) — 창을 줄이면 **묶음 단위로** 줄이 바뀐다
+      <Toolbar rail={false} gap="gap-3 compact-chrome:gap-1">
+        <ToolbarRow>
+        {/* 모바일에서는 주간 이동을 필터와 별도의 짧은 레일에 둔다. */}
+        {/* 왼쪽 묶음(필터·검색·설정·엑셀) / 오른쪽 묶음(집계·ECS·편집) — 창을 줄이면 **묶음 단위로** 줄이 바뀐다
             (원장 2026-09-04 *"창 크기를 조절했을때도 헤더 정렬이 이루어질 수 있게"* — 종전엔 항목 하나(엑셀·시트)만 둘째 줄
             왼쪽에 떨어지고 집계·편집이 그 오른쪽에 붙어 어디가 왼쪽 묶음의 끝인지 안 읽혔다).
             ⚠️ 폰 레일(compact-chrome)에선 묶음 상자를 없앤다(display: contents) — 레일은 직계 항목을 한 줄로 흘린다. */}
-        <div className="toolbar-group flex min-w-0 flex-wrap items-center gap-3">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
@@ -663,7 +664,9 @@ export default async function TimetablePage({
             canCancel={canSync && canManageImport}
           />
         ))}
-        <span className="bg-line h-4 w-px" aria-hidden />
+        </ToolbarRow>
+        <ToolbarRow>
+        <div className="toolbar-group flex min-w-0 flex-wrap items-center gap-3">
 
         {/* 교실뷰는 과목·구분을 접는다 — 전 과목·전 구분이 한 지도에 그려져야 참이다(요일·과목
             하이라이트는 RoomMapView 안의 클라 칩이 담당). */}
@@ -980,6 +983,7 @@ export default async function TimetablePage({
           <TimetableEditControls rosterHidden={hideStudents} />
         ) : null}
         </div>
+        </ToolbarRow>
       </Toolbar>
 
       {/* 검색 결과 0건 — 빈 격자만 남기면 "시간표가 고장났다"로 읽힌다. 왜 비었는지(어느 주·어느 과목에
