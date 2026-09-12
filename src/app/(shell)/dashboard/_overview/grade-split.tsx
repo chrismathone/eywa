@@ -8,7 +8,8 @@ import s from "./overview.module.css";
 /**
  * 학년별 재원생 — 한 줄 = 한 학년, 막대 하나를 영어만 · 영어+수학 · 수학만 세 조각으로(원장 2026-09-11).
  * 색은 대시보드 전체의 과목 기준과 같다: 영어만 = 빨강 · 영어+수학 = 보라 · 수학만 = 파랑.
- * 막대 위엔 글자를 두지 않는다(색만) — 인원은 마우스를 올리면 `12명`, 스크린리더는 aria-label.
+ * 막대 **안**엔 글자를 두지 않는다(색만) — 조각별 인원은 마우스를 올리면 `12명`, 스크린리더는 aria-label.
+ * 줄 **오른쪽**엔 그 줄의 합계를 적는다(원장 2026-09-12 "학년별 재원생 우측에 인원수 표시") — 급별(level-split)과 같은 자리.
  * 보라 합계 = '동시 수강'. 마지막 회색 막대는 실제 미수강이며, 그 외 과목만 수강하는 학생과 구분한다.
  */
 export const STUDENT_SEGMENTS = [
@@ -45,6 +46,7 @@ export function GradeSplitChart({ split, noEnrollment = split.neither }: { split
                   )}
                 </span>
               </span>
+              <span className={s.gradeCount}>{number(rowTotal(row))}<small>명</small></span>
             </div>
           ))}
           {[...(otherOnly > 0 ? [{ label: "기타 과목", value: otherOnly, color: DASHBOARD_SUBJECT_COLORS.other }] : []), { label: "미수강", value: noEnrollment, color: DASHBOARD_SUBJECT_COLORS.unenrolled }].map((row) => <div className={s.gradeRow} key={row.label}>
@@ -52,6 +54,7 @@ export function GradeSplitChart({ split, noEnrollment = split.neither }: { split
             <span className={s.gradeTrack}>
               <i className={s.unenrolledBar} role="img" aria-label={`${row.label} 재원생 ${number(row.value)}명`} title={`${number(row.value)}명`} style={{ width: `${row.value / max * 100}%`, background: row.color }} />
             </span>
+            <span className={s.gradeCount}>{number(row.value)}<small>명</small></span>
           </div>)}
         </div>
       <Legend items={STUDENT_SEGMENTS.map(({ key, label, color }) => ({ label: key === "both" ? "동시수강" : label, color }))} />

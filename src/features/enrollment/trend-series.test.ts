@@ -24,19 +24,19 @@ describe("buildYearSeries — 기간 보기(12칸 × 연도)", () => {
 
   it("🔴 같은 달이 같은 칸에 선다 — 연도가 달라도", () => {
     const { rows } = buildYearSeries(months);
-    expect(rows[0]).toMatchObject({ label: "1월", "2025년": 10, "2026년": 20 });
-    expect(rows[2]).toMatchObject({ label: "3월", "2025년": 30, "2026년": 12 });
+    expect(rows[0]).toMatchObject({ label: "1월", "2025년 상담": 10, "2026년 상담": 20 });
+    expect(rows[2]).toMatchObject({ label: "3월", "2025년 상담": 30, "2026년 상담": 12 });
   });
 
   it("🔴 값 없는 달은 0이 아니라 **없음** — 0으로 채우면 '그달 0건이었다'는 거짓말이 된다", () => {
     const { rows } = buildYearSeries(months);
-    expect(rows[1]!["2025년"]).toBeUndefined(); // 2월은 조회에 아예 없었다
-    expect(rows[1]!["2026년"]).toBeUndefined();
+    expect(rows[1]!["2025년 상담"]).toBeUndefined(); // 2월은 조회에 아예 없었다
+    expect(rows[1]!["2026년 상담"]).toBeUndefined();
   });
 
   it("계열 = 연도(오름차순), 색은 최신이 가장 진하다", () => {
     const { series } = buildYearSeries(months);
-    expect(series.map((s) => s.key)).toEqual(["2025년", "2026년"]);
+    expect(series.map((s) => s.key)).toEqual(["2025년 상담", "2026년 상담"]);
     expect(series.at(-1)!.color).toBe("var(--color-primary)");
     expect(series[0]!.color).not.toBe(series[1]!.color);
   });

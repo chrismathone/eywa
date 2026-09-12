@@ -1120,10 +1120,23 @@ a.kpiCountRow:hover > span {
 }
 .gradeRow {
   display: grid;
-  grid-template-columns: minmax(40px, 24%) minmax(20px, 1fr);
+  grid-template-columns: minmax(40px, 24%) minmax(20px, 1fr) auto;
   align-items: center;
   gap: 9px;
   min-height: 18px;
+}
+/* 줄 합계 — 자리를 고정해(min-width) 자릿수가 달라도 막대 끝이 들쭉날쭉하지 않게(급별 .levelCount와 같은 규약). */
+.gradeCount {
+  min-width: 3.2em;
+  text-align: right;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--foreground);
+}
+.gradeCount small {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  margin-left: 3px;
 }
 .gradeTrack {
   display: block;

@@ -496,6 +496,9 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     const both = screen.getByRole("img", { name: "중1 영어+수학 3명" });
     expect(both.getAttribute("title")).toBe("3명");
     expect(both.textContent).toBe("");
+    // 줄 오른쪽에 그 줄 합계(원장 2026-09-12) — 중1 = 영어만 2 + 영어+수학 3 + 수학만 1.
+    expect(both.closest("div")?.textContent).toContain("6명");
+    expect(screen.getByRole("img", { name: "미수강 재원생 1명" }).closest("div")?.textContent).toContain("1명");
     expect(both).toHaveStyle({ background: DASHBOARD_SUBJECT_COLORS.both });
     expect(screen.getByRole("img", { name: "중1 영어만 2명" })).toHaveStyle({ background: DASHBOARD_SUBJECT_COLORS.english });
     expect(screen.getByRole("img", { name: "기타·미입력 수학만 2명" })).toHaveStyle({ background: DASHBOARD_SUBJECT_COLORS.math });

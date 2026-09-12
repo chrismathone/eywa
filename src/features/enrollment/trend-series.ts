@@ -32,7 +32,9 @@ export function yearColor(index: number, count: number): string {
 const monthIndex = (m: string) => Number(m.slice(5, 7)) - 1;
 
 /**
- * 기간(2·3개년) 보기 — 12칸 × 연도별 상담 막대.
+ * 기간(2·3개년) 보기 — 12칸 × 연도별 **상담 건수** 막대.
+ * 🔴 계열 이름에 '상담'을 박는다(원장 2026-09-12 *"막대그래프가 상담건수인지 등록건수인지 표시가 안되어있는데"*) —
+ *    범례·툴팁이 곧 계열 이름이라, 연도만 적으면 그 숫자가 무엇인지 화면 어디에도 없다(연도 보기는 이미 '…년 상담'이다).
  * 값이 없는 달은 **undefined로 남긴다**(0으로 채우면 "그달 0건이었다"는 거짓말이 된다 — 올해 9~12월처럼
  * 아직 오지 않은 달이 바닥에 붙은 막대로 보인다).
  */
@@ -45,10 +47,10 @@ export function buildYearSeries(months: MonthStat[]): { rows: TrendRow[]; series
     const y = m.month.slice(0, 4);
     const row = rows[i]!;
     // 그 달에 상담이 0건인 것과 "그 달 자체가 조회 범위 밖"인 것은 다르다 — 후자는 아예 키를 안 만든다.
-    row[`${y}년`] = m.total;
+    row[`${y}년 상담`] = m.total;
     row[`${y}년 전환율`] = m.rate;
   }
-  const series = years.map((y, i) => ({ key: `${y}년`, color: yearColor(i, years.length), kind: "count" as const }));
+  const series = years.map((y, i) => ({ key: `${y}년 상담`, color: yearColor(i, years.length), kind: "count" as const }));
   const rateSeries = years.map((y, i) => ({
     key: `${y}년 전환율`,
     color: yearColor(i, years.length),
