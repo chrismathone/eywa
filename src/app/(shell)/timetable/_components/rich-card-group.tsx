@@ -305,7 +305,8 @@ function LabelColumn({
       {/* 강의실 라벨은 없앴다 — 카드 쪽에서 수업명 아래 둘째 줄로 들어가 별도 행이 사라졌다(NAME_ROOM_H). */}
       <div className={cell} style={{ height: NAME_ROOM_H }}>수업명</div>
       <div className={cell} style={{ height: TEACHER_H }}>담임</div>
-      <div className={cell} style={{ height: DAYHEAD_H }}>교시</div>
+      {/* 축 이름도 '시간'이다(원장 2026-09-12) — 아래 칸이 교시 번호 없이 시각만 적으므로 머리만 '교시'면 어긋난다. */}
+      <div className={cell} style={{ height: DAYHEAD_H }}>시간</div>
       {visibleSpanRows(group.periodRows, group.rowPlan).map((p) => (
         <div
           key={p.order}
