@@ -39,6 +39,8 @@ import {
   captureProgressForReports,
 } from "@/features/progress/server/rollback-actions";
 import { ownsMakeupReport } from "../makeup-owner";
+import { makeupSessionEntries } from "../makeup-session";
+import { changeMakeupSession } from "./makeup-session-store";
 import { makeupRemoveBlockReason, makeupRemoveMessage, planMakeupRemoval } from "../makeup-remove-plan";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -186,7 +188,28 @@ export async function removeMakeupEntry(input: {
     attendanceRemoved = (goneAtt ?? []).length > 0;
   }
 
-  if (!attendanceRemoved && deleted === 0) {
+  // 보고서 저장 전의 보강 명단도 지운다. 다른 창의 늦은 자동저장은 tombstone을 넘지 못한다.
+  const { data: draftRows, error: draftError } = await supabase.from("onescreen_daily_sessions")
+    .select("student_id, updated_by, subject_progress")
+    .eq("tenant_id", tenantId).eq("student_id", input.studentId).eq("session_date", input.date);
+  if (draftError) return { ok: false, error: "보강 임시 명단을 조회하지 못했습니다" };
+  let rosterRemoved = false;
+  for (const row of draftRows ?? []) {
+    if (!row.updated_by || (!isAdmin && row.updated_by !== user.id)) continue;
+    const targets = makeupSessionEntries(row.subject_progress)
+      .filter(e => !targetSubject || e.subject === targetSubject);
+    if (!targets.length) continue;
+    const result = await changeMakeupSession(supabase, {
+      tenantId, teacherId: row.updated_by, studentId: input.studentId, date: input.date,
+    }, progress => {
+      const next = { ...progress };
+      for (const entry of targets) next[`makeup::${entry.subject}`] = { makeup: false };
+      return next;
+    });
+    if (!result.ok) return result;
+    rosterRemoved = true;
+  }
+  if (!attendanceRemoved && deleted === 0 && !rosterRemoved) {
     return { ok: false, error: "뺄 보강 기록을 찾지 못했습니다 — 다른 사람이 만든 보강일 수 있습니다" };
   }
 
@@ -207,6 +230,7 @@ export async function removeMakeupEntry(input: {
       subject: input.subject ?? null,
       attendanceRemoved,
       deletedReports: deleted,
+      rosterRemoved,
       rolledBackProgress: progressEntries,
     },
   });
@@ -221,6 +245,8 @@ export async function removeMakeupEntry(input: {
     attendanceRemoved,
     deleted,
     progressEntries,
-    message: makeupRemoveMessage({ attendanceRemoved, deleted, progressEntries, notMine }),
+    message: !attendanceRemoved && deleted === 0 && rosterRemoved
+      ? "보강 명단에서 뺐습니다"
+      : makeupRemoveMessage({ attendanceRemoved, deleted, progressEntries, notMine }),
   };
 }

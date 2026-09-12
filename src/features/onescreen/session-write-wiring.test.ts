@@ -5,18 +5,19 @@ import { describe, expect, it } from "vitest";
 const read = (rel: string) => readFileSync(join(process.cwd(), "src", rel), "utf8");
 
 describe("원스크린 빈 창 덮어쓰기 방지 배선", () => {
-  it("저장 액션이 판정 함수를 거치고, ignore면 upsert 전에 돌아온다", () => {
+  it("저장 액션이 판정을 거치고, ignore면 리비전 조건부 update 전에 돌아온다", () => {
     const src = read("features/onescreen/server/actions.ts");
     expect(src).toContain('from "../session-write"');
     const decide = src.indexOf("sessionSaveDecision(");
     const ignore = src.indexOf('=== "ignore"');
     const upsert = src.indexOf('.from("onescreen_daily_sessions")');
-    const upsertWrite = src.indexOf(".upsert(", upsert + 1);
+    const upsertWrite = src.indexOf(".update(payload)", upsert + 1);
     expect(decide).toBeGreaterThan(-1);
     expect(ignore).toBeGreaterThan(decide);
     expect(upsertWrite).toBeGreaterThan(ignore);
     expect(src).toContain(".insert(payload)");
     expect(src).toContain("sessionContentFromRow(raced)");
+    expect(src).toContain('.eq("updated_at", expectedRevision)');
   });
 
   it("로스터가 updated_at을 읽어 창 리비전을 내려준다", () => {

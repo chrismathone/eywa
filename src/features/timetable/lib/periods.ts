@@ -229,7 +229,17 @@ export function subjectWeekdayPeriods(
 ): PeriodListItem[] {
   const table = weekdayTableFor(subject, config);
   return Object.entries(table)
-    .map(([id, t]) => toListItem(id, t))
+    .map(([id, t]) => {
+      const item = toListItem(id, t);
+      // 수학 평일 한 교시는 두 칸이다. 저장 식별자·시각은 그대로 두고 기본 번호만 반교시로 표시한다.
+      // 직접 지은 이름과 의도적으로 비운 이름은 보존한다. 주말은 subjectWeekendPeriods의 시간 단위 번호다.
+      if ((subject === "math" || subject === "highmath") &&
+        (t.label == null || t.label.trim() === `${id}교시`)) {
+        const n = Number(id);
+        item.label = `${Math.ceil(n / 2)}-${n % 2 === 1 ? 1 : 2}`;
+      }
+      return item;
+    })
     .sort((a, b) => Number(a.id) - Number(b.id));
 }
 

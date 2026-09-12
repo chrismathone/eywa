@@ -5,6 +5,23 @@ import type { OneScreenStudent } from "../types";
 
 afterEach(cleanup);
 
+describe("정규와 분리한 보강 선택", () => {
+  it("같은 학생을 보강 그룹에도 표시하고 실제 학생 id와 보강 과목을 선택한다", () => {
+    const onSelect = vi.fn();
+    render(<StudentList students={[student({ id: "s1", name: "학원이", className: "테스트 반", subjects: [
+      subject({ classId: "c1" }), subject({ name: "수학 (보강)", makeup: true, classId: null }),
+    ] })]} selId="s1" selectedSubjectName="수학 (보강)" onSelect={onSelect} />);
+    expect(screen.getAllByText("학원이")).toHaveLength(2);
+    expect(screen.getByText("보강")).toBeTruthy();
+    const rows = screen.getAllByText("학원이").map(e => e.closest("button")!);
+    expect(rows.map(e => e.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    fireEvent.click(rows[1]);
+    expect(onSelect).toHaveBeenCalledWith("s1", "수학 (보강)");
+    fireEvent.click(rows[0]);
+    expect(onSelect).toHaveBeenLastCalledWith("s1", "수학");
+  });
+});
+
 const subject = (over: Partial<OneScreenStudent["subjects"][number]> = {}) => ({
   name: "수학",
   prev: "",

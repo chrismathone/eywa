@@ -1,6 +1,7 @@
 "use server";
 
 import { normalizeNoneMarker } from "../none-marker";
+import { preserveMakeupSessionEntries, type SessionProgress } from "../makeup-session";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -743,6 +744,7 @@ export async function reissueShareLink(
 
 export type SaveOnescreenSessionInput = {
   studentId: string;
+  outOfClass?: boolean;
   sessionDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 작업분을 그 날짜 세션에 저장(report_date와 동일 기준).
   classId?: string | null;
   studyGrade?: string | null;
@@ -835,17 +837,24 @@ export async function saveOnescreenSession(
     .or(`end_date.is.null,end_date.gte.${sessionDate}`)
     .in("class_id", myClassIds)
     .limit(1);
-  if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
+  if (!enr || enr.length === 0) {
+    if (!input.outOfClass) return { ok: false, error: "담당 학생이 아닙니다" };
+    // 보강 세션도 보고서와 같은 학원 학생 범위. 입력자는 위의 담당 반 게이트를 통과해야 한다.
+    const { data: student } = await supabase.from("students").select("id")
+      .eq("tenant_id", user.tenantId).eq("id", input.studentId).maybeSingle();
+    if (!student) return { ok: false, error: "학원 학생이 아닙니다" };
+  }
 
   // 같은 강사 창이 둘이면 나중 저장이 이겼다(0118a 유니크는 강사축일 뿐 창 축이 아니다).
   // 덜 쓴 창의 자동저장이 멘트·오늘 과제를 지우지 않게, 반영 전에 내용 칸을 견준다(session-write.ts).
-  const { data: prior } = await supabase
+  const { data: prior, error: priorError } = await supabase
     .from("onescreen_daily_sessions")
     .select("updated_at, subject_progress, attitude, homework, special_note, daily_score, check_score")
     .eq("student_id", input.studentId)
     .eq("session_date", sessionDate)
     .eq("updated_by", user.id)
     .maybeSingle();
+  if (priorError) return { ok: false, error: "임시저장을 확인하지 못했습니다" };
   const incoming: SessionContent = {
     subjectProgress: input.subjectProgress ?? {},
     attitude: input.attitude ?? null,
@@ -866,7 +875,9 @@ export async function saveOnescreenSession(
     session_date: sessionDate,
     class_id: input.classId ?? null,
     study_grade: input.studyGrade ?? null,
-    subject_progress: input.subjectProgress ?? {},
+    subject_progress: preserveMakeupSessionEntries(
+      (prior?.subject_progress ?? {}) as SessionProgress, (input.subjectProgress ?? {}) as SessionProgress,
+    ),
     daily_score: input.dailyScore ?? null,
     daily_max: input.dailyMax ?? null,
     check_score: input.checkScore ?? null,
@@ -879,6 +890,7 @@ export async function saveOnescreenSession(
     updated_at: new Date().toISOString(),
   };
 
+  let expectedRevision = prior?.updated_at as string | undefined;
   // 두 창이 동시에 '행 없음'을 보고 쓰면 나중 upsert가 이긴다 — 빈 창이 늦게 오면 잘 쓴 값이 사라진다.
   // insert가 유니크 충돌이면 다시 읽어 같은 판정을 한 번 더 한다.
   if (!prior) {
@@ -894,16 +906,25 @@ export async function saveOnescreenSession(
     if (sessionSaveDecision(sessionContentFromRow(raced), incoming, false) === "ignore") {
       return { ok: true, skipped: true, updatedAt: (raced?.updated_at as string | undefined) ?? undefined };
     }
+    if (!raced) return { ok: false, error: "임시저장을 저장하지 못했습니다" };
+    expectedRevision = raced.updated_at as string;
+    payload.subject_progress = preserveMakeupSessionEntries(
+      (raced.subject_progress ?? {}) as SessionProgress, (input.subjectProgress ?? {}) as SessionProgress,
+    );
   }
 
-  // ⚠️ 강사축(0118a): onConflict에 updated_by(=강사)를 포함 — 같은 학생을 다른 강사가 같은 날 가르쳐도
-  //    각자 1행이라 subject_progress·점수·태도가 서로 안 덮인다(WIP 유실 방지). roster는 updated_by=본인만 복원.
+  // 강사별 세션을 읽은 리비전에서만 갱신한다. 보강 등록·삭제와 자동저장이 서로 명단을 덮지 않게 한다.
   const { data, error } = await supabase
     .from("onescreen_daily_sessions")
-    .upsert(payload, { onConflict: "tenant_id,updated_by,student_id,session_date" })
+    .update(payload)
+    .eq("tenant_id", user.tenantId).eq("updated_by", user.id)
+    .eq("student_id", input.studentId).eq("session_date", sessionDate)
+    // 등록·삭제가 읽기와 쓰기 사이에 끼어도 오래된 명단으로 덮지 않는다.
+    .eq("updated_at", expectedRevision)
     .select("updated_at")
-    .single();
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: true, skipped: true };
   return { ok: true, updatedAt: (data?.updated_at as string | undefined) ?? undefined };
 }
 

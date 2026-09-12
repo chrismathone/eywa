@@ -1,5 +1,7 @@
 "use client";
 
+import { registerMakeupEntries } from "../server/makeup-register-actions";
+
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -409,6 +411,7 @@ export function OneScreenClient({
   // 날짜 이동 전 대기 저장 flush — 저장 로직이 아래에 정의되므로 ref로 노출(effect에서 갱신, render 중 ref 쓰기 금지 규칙).
   const flushSavesRef = useRef<() => void>(() => {});
   const goToDate = (ymd: string) => {
+    if (makeupSaving) return;
     if (!ymd || ymd > todayYmd || ymd === activeDate) return; // 미래·같은 날짜 무시
     flushSavesRef.current(); // 대기 중(디바운스 800ms) 자동저장을 이동 전 커밋 — 이동=클라 재마운트라 미커밋분 유실 방어
     // ⚠️ 현재 뷰를 쿼리로 들고 이동 — 날짜 이동은 searchParam 네비라 page의 `key={roster.date}`가 클라를 재마운트하고,
@@ -434,6 +437,7 @@ export function OneScreenClient({
    * 🔴 합침은 **여기서 확인해야만** 일어난다 — 자동 합치기는 강사가 결과를 예측 못 해 혼란을 낳았다(08-06).
    * `mk`는 '추가'를 누른 시점의 조립 결과(반 필터 앵커 포함)라 그대로 들고 있다가 '분리'에 쓴다.
    */
+  const [makeupSaving, setMakeupSaving] = useState(false);
   const [makeupAsk, setMakeupAsk] = useState<{
     studentId: string;
     studentName: string;
@@ -578,7 +582,7 @@ export function OneScreenClient({
       for (const [sid, timer] of saveTimers.current) {
         clearTimeout(timer);
         const s = studentsRef.current.find((x) => x.id === sid);
-        if (!s || s.isMakeup) continue;
+        if (!s) continue;
         void saveOnescreenSession(buildSessionInput(s, reportsRef.current[sid])).then((res) => {
           applySessionSaveResult(sid, res);
         });
@@ -612,6 +616,7 @@ export function OneScreenClient({
   function buildSessionInput(s: OneScreenStudent, r: Record<string, SubjectReport> | undefined) {
     return {
       studentId: s.id,
+      outOfClass: s.isMakeup === true,
       sessionDate: date || undefined, // 대상 날짜(빈값=서버 오늘) — 과거 날짜 작업분도 그 날짜 세션에 저장
       classId: s.classId ?? null,
       baseUpdatedAt: s.sessionUpdatedAt ?? null,
@@ -693,7 +698,7 @@ export function OneScreenClient({
       setTimeout(() => {
         saveTimers.current.delete(studentId);
         const s = studentsRef.current.find((x) => x.id === studentId);
-        if (!s || s.isMakeup) return; // 보강 학생은 반이 없어 세션(onescreen_daily_sessions) 저장 스킵
+        if (!s) return;
         void saveOnescreenSession(buildSessionInput(s, reportsRef.current[studentId])).then((res) => {
           applySessionSaveResult(studentId, res);
         });
@@ -1037,7 +1042,11 @@ export function OneScreenClient({
       makeupClassId: anchorId,
       makeupClassName: anchorName,
     });
-    const mk = { ...res.student, subjects: res.student.subjects.map(withAnchor) };
+    const anchorSubject = matchingClasses.length === 1 ? matchingClasses[0]!.subject : null;
+    const mk = {
+      ...res.student,
+      subjects: res.student.subjects.filter(su => !anchorSubject || su.subjectKey === anchorSubject).map(withAnchor),
+    };
     const existing = students.find((s) => s.id === studentId);
     if (!existing) {
       // 🔴 목록에 없던 학생도 **묻고 나서** 추가한다(원장 2026-08-19: *"이름 검색하고 누르면 그냥 추가되고
@@ -1191,10 +1200,36 @@ export function OneScreenClient({
    * 다이얼로그 응답 처리 — 고른 대로만 한다. 취소는 아무것도 하지 않는다(보강 행도 안 생긴다).
    * ⚠️ 학생은 **id로 다시 찾는다** — 다이얼로그가 열려 있는 동안 실시간 갱신이 카드를 바꿨을 수 있다.
    */
-  function resolveMakeupAsk(choice: MakeupConfirmChoice) {
+  async function resolveMakeupAsk(choice: MakeupConfirmChoice) {
     const ask = makeupAsk;
+    if (!ask || makeupSaving) return;
+    if (choice.mode === "separate") {
+      const existing = studentsRef.current.find(s => s.id === ask.studentId);
+      const attended = new Set(existing?.subjects.filter(su => !su.makeup).map(su => su.subjectKey));
+      const attendedRows = ask.mk.subjects.filter(su => attended.has(su.subjectKey));
+      const rows = choice.candidate
+        ? ask.mk.subjects.filter(su => su.subjectKey === choice.candidate!.subjectKey)
+        : attendedRows.length ? attendedRows : ask.mk.subjects;
+      setMakeupSaving(true);
+      try {
+        const result = await registerMakeupEntries({
+          studentId: ask.studentId, date: activeDate,
+          entries: rows.map(su => ({
+            subject: su.subjectKey || su.name, makeupClassId: su.makeupClassId,
+            absentDate: choice.absentDate, absentClassId: choice.absentClassId, units: choice.addUnits,
+          })),
+        });
+        if (!result.ok) { toast.error(result.error); return; }
+        // 내 리비전에 명단만 더한 경우에만 자동저장 기준도 전진시킨다. 다른 창의 내용에는 소유권을 얻지 않는다.
+        if (existing && (existing.sessionUpdatedAt ?? null) === result.previousUpdatedAt) {
+          applySessionSaveResult(existing.id, result);
+        }
+      } catch {
+        toast.error("보강 명단을 저장하지 못했습니다. 다시 시도해 주세요");
+        return;
+      } finally { setMakeupSaving(false); }
+    }
     setMakeupAsk(null);
-    if (!ask) return;
     const anchorIdNew = ask.mk.subjects.find((su) => su.makeupClassId)?.makeupClassId ?? null;
     if (ask.isNew) {
       // 목록에 없던 학생 — 확인을 받았으니 이제 카드를 만든다(취소했으면 여기 안 온다).
@@ -1462,6 +1497,7 @@ export function OneScreenClient({
     setReports((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? {}), ...slots } }));
     setSelId(studentId);
     // 결석분 연결이 뒤따르는 경로(다이얼로그 '분리')는 그쪽 토스트가 시수까지 밝히므로 여기선 조용히(silent).
+    setCardSubject({ id: studentId, idx: existing.subjects.length });
     if (!silent) toast.success(tf("os.c.makeupAdded", { name: existing.name }));
     return true;
   }
@@ -3976,7 +4012,24 @@ export function OneScreenClient({
           students={visible}
           bulkPresent={bulkPresentProps}
           selId={effectiveId}
-          onSelect={setSelId}
+          selectedSubjectName={previewSubject?.name}
+          onSelect={(id, subjectName) => {
+            setSelId(id);
+            const idx = students.find(s => s.id === id)?.subjects.findIndex(su => su.name === subjectName) ?? 0;
+            setCardSubject({ id, idx: Math.max(0, idx) });
+          }}
+          statusForStudent={(student) => {
+            const rows = student.subjects.filter(su => !isReportOptoutRow(su));
+            const rowReports = Object.fromEntries(rows.map(su => [su.name, reports[student.id]?.[su.name]]).filter(([, rep]) => !!rep));
+            const sendable = rows.filter(su => su.attendanceRaw !== "absent");
+            const sent = sendable.filter(su => classnoteSendEnabled
+              ? isAlreadySent(effectiveClassnoteStatus(reports[student.id]?.[su.name]?.classnoteStatus, su.classnoteStatus))
+              : reports[student.id]?.[su.name]?.sent === true).length;
+            return {
+              reportCell: reportCell(rowReports, rows.length),
+              sendMark: { sent, total: sendable.length, label: sendMarkLabel },
+            };
+          }}
           reportCellById={reportCellById}
           sendMarkById={sendMarkById}
           classOrder={classTags.filter((tag) => tag !== CLASS_TAG_ALL)}
@@ -4200,8 +4253,9 @@ export function OneScreenClient({
           absences={makeupAsk.absences}
           absenceLoading={makeupAsk.absencesLoading}
           makeupDate={activeDate}
+          pending={makeupSaving}
           onConfirm={resolveMakeupAsk}
-          onCancel={() => setMakeupAsk(null)}
+          onCancel={() => { if (!makeupSaving) setMakeupAsk(null); }}
         />
       ) : null}
     </div>
