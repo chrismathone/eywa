@@ -37,7 +37,7 @@ import {
   effectiveAttendanceRecords,
   type EffectiveAttendanceRecord,
 } from "@/features/attendance/effective-records";
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceOverview, attendanceWindowStart } from "./attendance-day";
 import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
 import { summarizeInvoices } from "@/features/billing/calc";
 import { getRecentEnrollmentStats } from "@/features/enrollment/server/stats-queries";
@@ -238,7 +238,6 @@ async function changes(
 
 async function attendanceHistory(today: string) {
   const db = await createClient();
-  const start = shiftDate(today, -13);
   const rows = await fetchAllPaged<
     EffectiveAttendanceRecord & { status: string }
   >((from, to) =>
@@ -247,48 +246,14 @@ async function attendanceHistory(today: string) {
       .select(
         "id,student_id,class_id,session_date,slot_start,status,recorded_at",
       )
-      .gte("session_date", start)
+      .gte("session_date", attendanceWindowStart(today))
       .lte("session_date", today)
       .order("id")
       .range(from, to),
   );
   // Attendance cells keep separate lesson periods; corrections replace only the same cell.
-  const effective = effectiveAttendanceRecords(rows);
-  const trend = Array.from({ length: 14 }, (_, i) => {
-    const date = shiftDate(start, i);
-    const day = effective.filter((r) => r.session_date === date);
-    return {
-      date,
-      total: day.length,
-      rate: day.length
-        ? attendanceRate(
-            day.filter((r) => r.status === "present" || r.status === "late")
-              .length,
-            day.length,
-          )
-        : null,
-    };
-  });
-  const latest = trend.filter((r) => r.total > 0).at(-1);
-  const day = latest
-    ? effective.filter((r) => r.session_date === latest.date)
-    : [];
-  const count = (status: string) =>
-    day.filter((r) => r.status === status).length;
-  return {
-    trend,
-    snapshot: latest
-      ? {
-          date: latest.date,
-          total: latest.total,
-          present: count("present"),
-          absent: count("absent"),
-          late: count("late"),
-          excused: count("excused"),
-          rate: latest.rate!,
-        }
-      : null,
-  };
+  // '출결 현황' 도넛은 오늘 칸만, 출석률 추이는 14일 — 판정은 attendance-day.ts 한 곳(원장 2026-09-13).
+  return attendanceOverview(effectiveAttendanceRecords(rows), today);
 }
 
 type InvoiceTrendRow = {
