@@ -14,8 +14,8 @@
 .dashboard :global([data-overview="kpi-label"]) img { width: 26px !important; height: 26px !important; }
 .dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-4xl); line-height: 1.1; margin-top: 14px; margin-bottom: 12px; letter-spacing: -.04em; color: #173e76; }
 .dashboard :global([data-overview="kpi-value"]) > span { margin-left: 5px; font-size: var(--text-sm); color: #121212; }
-.dashboard :global([data-kpi="결석학생"]) { border-color: #e6c8c3; background: #fff9f7; }
-.dashboard :global([data-kpi="결석학생"] [data-overview="kpi-value"]) { color: #ac3333; }
+.dashboard :global([data-kpi="전일 결석"]) { border-color: #e6c8c3; background: #fff9f7; }
+.dashboard :global([data-kpi="전일 결석"] [data-overview="kpi-value"]) { color: #ac3333; }
 .dashboard :global([data-overview="grid"]) { gap: 16px; }
 .dashboard :global([data-overview="panel"]) { padding: 20px 20px 17px; border: 1px solid #dce4ee; border-radius: 12px; box-shadow: 0 2px 2px #1a3f7210; }
 .dashboard :global([data-overview="panel-header"]) { padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #edf0f5; }

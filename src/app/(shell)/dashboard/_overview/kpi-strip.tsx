@@ -40,7 +40,7 @@ export function kpiGridVars(n: number): CSSProperties {
 }
 
 /**
- * KPI 여섯 칸(원장 2026-09-11 확정 순서): 재원생 · 퇴원생 · 신규문의 · 금일입테 · 오늘첫수업 · 결석학생.
+ * KPI 여섯 칸(원장 2026-09-11 확정 순서): 재원생 · 퇴원생 · 신규문의 · 금일입테 · 오늘첫수업 · 전일 결석.
  * 볼 권한이 없는 칸은 영역이 오지 않아 숨는다(종전 규약). ↗는 목적지 메뉴를 열 수 있을 때만 선다.
  * 🔴 금일입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
  */
@@ -62,7 +62,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const levelTests = v.calendar?.data ? todayLevelTests(v.calendar.data, today) : null;
   const firsts = v.firstClass?.data;
   const firstCount = firsts?.filter((row) => row.kind === "first").length ?? 0;
-  // 결석학생 = **어제**(원장 2026-09-12 — 오늘은 수업을 안 하면 볼 수가 없다) 한 교시도 안 온 학생만 센다.
+  // 전일 결석 = **어제**(원장 2026-09-12 — 오늘은 수업을 안 하면 볼 수가 없다) 한 교시도 안 온 학생만 센다.
   // 일부 교시 결석은 팝업·목적지에서 따로 보인다.
   const absentDay = v.absent?.data;
   const absent = absentDay?.absent;
@@ -163,8 +163,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       )}
       {v.absent && (
         <KpiCard
-          label="결석학생"
-          labelNote="어제"
+          label="전일 결석"
           value={count(absent?.length)}
           unit="명"
           detail={

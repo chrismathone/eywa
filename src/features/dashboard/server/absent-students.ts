@@ -12,7 +12,7 @@ import {
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * 그날 결석 판정(결석 학생 / 일부 교시 결석) — 운영실 '결석학생' 카드·팝업, 출석부 `?status=absent`,
+ * 그날 결석 판정(결석 학생 / 일부 교시 결석) — 운영실 '전일 결석' 카드·팝업, 출석부 `?status=absent`,
  * 일일 브리핑 '어제 결석'의 **단일 소스**. 규칙은 [absent-students.ts] `foldAbsentStudents` 한 벌.
  * ⚠️ 기준일은 호출부가 넘긴다 — 운영실 카드는 **어제**(`absentKpiDate`, 원장 2026-09-12), 브리핑도 어제(`asOf`).
  *

@@ -186,7 +186,7 @@ describe("⑤ 오늘첫수업 — 같은 조회·같은 판정·같은 과목 �
  * 원장 2026-09-12: *"대시보드 결석학생은 어제 결석으로 해야지. 오늘은 수업을 안하면 볼 수가 없잖아"*.
  * 기준일이 표면마다 갈리면 **카드 숫자와 ↗로 연 화면이 다른 날**을 보여준다 — 그래서 "어제 한 값"을 소스로 잠근다.
  */
-describe("⑥ 결석학생 — 어제 기준으로 카드·팝업·↗·브리핑이 같은 날", () => {
+describe("⑥ 전일 결석 — 어제 기준으로 카드·팝업·↗·브리핑이 같은 날", () => {
   const ATTEND = src("src/app/(shell)/attendance/[date]/page.tsx");
   const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
   const BRIEFING = src("src/features/dashboard/server/briefing.ts");
@@ -221,7 +221,18 @@ describe("⑥ 결석학생 — 어제 기준으로 카드·팝업·↗·브리�
     // '일부 교시'는 실측상 거의 매일 있다(09-09 11명 · 09-10 5명 · 09-11 1명) — 그 꼬리를 빼면
     // 흔한 날마다 보조 줄이 한 줄 늘어 로드 끝에 여섯 칸이 함께 내려앉는다.
     const LOADING = src("src/app/(shell)/dashboard/loading.tsx");
-    expect(LOADING).toMatch(/\["결석학생",[^\]]*"어제 [^"]*· 연락 필요 0 · 사전 통보 0 · 일부 교시 0"/);
+    expect(LOADING).toMatch(/\["전일 결석",[^\]]*"어제 [^"]*· 연락 필요 0 · 사전 통보 0 · 일부 교시 0"/);
+  });
+
+  it("카드 라벨 = '전일 결석' — 색을 칠하는 CSS 선택자도 같은 글자다", () => {
+    // 원장 2026-09-12: *"결석학생 어제 라고 되어있는 상단 메뉴를 전일 결석으로 교체"*.
+    // 🔴 `data-kpi`는 라벨 문자열 **그대로**라 라벨만 고치면 카드 틴트가 조용히 빠진다(에러 없음) — 두 자리를 함께 잠근다.
+    const CSS = read("src/app/(shell)/dashboard/_overview/appearance.module.css");
+    expect(STRIP).toContain('label="전일 결석"');
+    expect(CSS).toContain('[data-kpi="전일 결석"]');
+    expect(CSS).not.toContain('[data-kpi="결석학생"]');
+    // 라벨이 이미 '전일'을 말하니 같은 말을 꼬리표로 덧붙이지 않는다(다른 칸의 꼬리표는 막지 않는다).
+    expect(STRIP).not.toContain('labelNote="어제"');
   });
 
   it("🔴 실패 문구가 기준일을 지우지 않는다 — 기준일은 detail이 아니라 접두로 넘긴다", () => {

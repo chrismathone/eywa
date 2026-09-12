@@ -716,7 +716,7 @@ export async function getTodayActionSignals(
         requiredAccess: "read",
       },
       { absent: [], partial: [] } as AbsentDay,
-      // 운영실 KPI '결석학생'·출석부 `?status=absent`와 **같은 함수** — 결석·공결, 칸(교시)별 최신 정정, 학생 단위 접기.
+      // 운영실 KPI '전일 결석'·출석부 `?status=absent`와 **같은 함수** — 결석·공결, 칸(교시)별 최신 정정, 학생 단위 접기.
       // ⚠️ 2026-09-11부터: 공결도 세고(입력은 2026-07-10 폐지 — 옛 행·정정분만), **한 교시도 안 온 학생만** 센다
       //    (일부 교시 결석은 `partial`로 빠진다 — 아래 absentToday는 `absent` 무리만 싣는다).
       () => getAbsentStudents(today, { supabase, tenantId: db?.tenantId }),

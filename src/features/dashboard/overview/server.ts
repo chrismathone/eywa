@@ -479,7 +479,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     canAccess(user.systemRole, key, matrix),
   );
   const today = kstToday();
-  // 🔴 '결석학생'만 **어제**를 본다(원장 2026-09-12) — 오늘은 수업 전이면 결석을 알 수 없다. 갱신(서버 액션)마다
+  // 🔴 '전일 결석'만 **어제**를 본다(원장 2026-09-12) — 오늘은 수업 전이면 결석을 알 수 없다. 갱신(서버 액션)마다
   //    다시 계산되므로 자정이 지나면 기준일도 함께 넘어간다.
   const absentDate = absentKpiDate(today);
   const settingsPromise = getTenantSettings();

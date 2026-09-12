@@ -202,7 +202,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일입테", "오늘첫수업", "결석학생"];
+const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일입테", "오늘첫수업", "전일 결석"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -263,7 +263,7 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
       },
       absent: {
         data: {
-          // 결석학생 기준일 = **어제**(snapshot.today "2026-09-10" → "2026-09-09" 수요일).
+          // 전일 결석 기준일 = **어제**(snapshot.today "2026-09-10" → "2026-09-09" 수요일).
           date: "2026-09-09",
           absent: [
             {
@@ -308,7 +308,10 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
   it("정해진 순서로 여섯 칸이 선다", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
-    expect(kpiButtons().map((b) => b.getAttribute("aria-label")!.split(" ")[0])).toEqual(KPI_LABELS);
+    // 라벨에 공백이 있을 수 있다('전일 결석') — 첫 낱말로 자르지 말고 라벨 집합에서 되찾는다.
+    const labelOf = (b: Element) =>
+      KPI_LABELS.find((label) => (b.getAttribute("aria-label") ?? "").startsWith(`${label} `));
+    expect(kpiButtons().map(labelOf)).toEqual(KPI_LABELS);
     cleanup();
   });
 
@@ -342,7 +345,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(href("원생목록에서 오늘 첫 수업 보기")).toBe(
       "/students?first=2026-09-10&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
     );
-    // 결석학생만 어제 기준(원장 2026-09-12) — 나머지 다섯 칸은 오늘 그대로.
+    // 전일 결석만 어제 기준(원장 2026-09-12) — 나머지 다섯 칸은 오늘 그대로.
     expect(href("출석부에서 어제 9/9 (수) 결석 학생 보기")).toBe("/attendance/2026-09-09?status=absent");
     cleanup();
   });
@@ -353,7 +356,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(screen.queryByRole("link", { name: "퇴원관리에서 이번 달 퇴원 보기" })).toBeNull();
     expect(screen.queryByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" })).toBeNull();
     expect(screen.getByRole("button", { name: /^퇴원생 2명\./ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^결석학생 2명\./ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^전일 결석 2명\./ })).toBeTruthy();
     cleanup();
   });
 
@@ -386,11 +389,11 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     cleanup();
   });
 
-  it("결석학생 — 한 교시도 안 온 학생만 세고, 일부 교시 결석은 세지 않고 따로 보인다", () => {
+  it("전일 결석 — 한 교시도 안 온 학생만 세고, 일부 교시 결석은 세지 않고 따로 보인다", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
     // 카드 숫자 = 결석 무리(2) — 일부 교시 결석(1)은 안 센다.
-    fireEvent.click(screen.getByRole("button", { name: /^결석학생 2명\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^전일 결석 2명\./ }));
     const popup = screen.getByRole("dialog");
     // 날짜는 다이얼로그 머리가 말한다 — 합계 줄은 되풀이하지 않는다(한 화면에 '어제'를 두 번 적지 않게).
     expect(popup.textContent).toContain("결석 학생 2명");
@@ -408,14 +411,14 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
 
   /**
    * 원장 2026-09-12: *"대시보드 결석학생은 어제 결석으로 해야지. 오늘은 수업을 안하면 볼 수가 없잖아"* —
-   * 카드 보조 줄·자세히 보기 머리·↗가 **한 날짜**(어제)를 말한다. 사람이 오늘로 오해하지 않게 날짜·요일을 적는다.
+   * 카드 라벨('전일 결석')·자세히 보기 머리·↗가 **한 날짜**(어제)를 말한다. 사람이 오늘로 오해하지 않게 요일까지 적는다.
    */
-  it("결석학생은 어제 기준 — 카드 보조 줄·팝업 머리·↗가 같은 날(어제 9/9 (수))을 말한다", () => {
+  it("전일 결석 — 카드 라벨·팝업 머리·↗가 같은 날(어제 9/9 (수))을 말한다", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
-    const card = screen.getByRole("button", { name: /^결석학생 2명\./ });
+    const card = screen.getByRole("button", { name: /^전일 결석 2명\./ });
     expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수)");
-    expect(card.textContent).toContain("어제");
+    expect(card.textContent).toContain("전일 결석");
     expect(card.textContent).not.toContain("9/9 (수)");
     expect(screen.getByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" }).getAttribute("href")).toBe(
       "/attendance/2026-09-09?status=absent",
@@ -433,7 +436,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(screen.getByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" }).getAttribute("href")).toBe(
       "/attendance/2026-09-09?status=absent",
     );
-    const card = screen.getByRole("button", { name: /^결석학생 —\./ });
+    const card = screen.getByRole("button", { name: /^전일 결석 —\./ });
     expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수) · 조회 실패");
     fireEvent.click(card);
     expect(screen.getByRole("dialog").textContent).toContain("어제 9/9 (수) 결석 학생");
@@ -449,9 +452,9 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     snap.sections.absent = { ...snap.sections.absent!, error: true };
     mocks.data = snap;
     render(<Overview initial={mocks.data} />);
-    const card = screen.getByRole("button", { name: /^결석학생 2명\./ });
+    const card = screen.getByRole("button", { name: /^전일 결석 2명\./ });
     expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수) · 갱신 실패");
-    expect(card.textContent).toContain("어제");
+    expect(card.textContent).toContain("전일 결석");
     expect(card.textContent).not.toContain("9/9 (수)");
     cleanup();
   });
@@ -461,7 +464,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     snap.sections.absent = { data: { date: "2026-09-09", absent: [], partial: [] }, ...ok };
     mocks.data = snap;
     render(<Overview initial={mocks.data} />);
-    fireEvent.click(screen.getByRole("button", { name: /^결석학생 0명\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^전일 결석 0명\./ }));
     expect(screen.getByRole("dialog").textContent).toContain("9/9 (수)엔 한 교시도 안 온 학생이 없습니다.");
     cleanup();
   });
@@ -471,7 +474,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(kpiGridVars(5)).toMatchObject({ "--kpi-n": 5, "--kpi-mid": 3, "--kpi-last-mid": "span 2" });
     expect(kpiGridVars(4)).toMatchObject({ "--kpi-n": 4, "--kpi-mid": 2, "--kpi-last-mid": "auto" });
     expect(kpiGridVars(1)).toMatchObject({ "--kpi-n": 1, "--kpi-mid": 1, "--kpi-last-mid": "auto" });
-    // 운영실은 역할에 따라 칸 수가 다르다 — 결석학생(출석부 권한)이 없는 역할이면 5칸.
+    // 운영실은 역할에 따라 칸 수가 다르다 — 전일 결석(출석부 권한)이 없는 역할이면 5칸.
     const snap = kpiSnapshot(["dashboard", "students", "withdrawals", "enrollment", "calendar"]);
     delete snap.sections.absent;
     mocks.data = snap;
