@@ -28,6 +28,27 @@
 }
 
 /*
+ * phone — "**최상위 프레임**에서 768px 미만"(= 실제 폰·좁은 브라우저·미니셸) 변형(2026-09-13 모바일 전수검사).
+ * `max-md:`와 다른 점 하나: **플로팅 창(iframe, `.embed-main`) 안에서는 켜지지 않는다.** 창은 스냅·타일로 768 아래로
+ * 내려가고 원생상담 창은 기본 크기부터 760px이라, `max-md:`로 폰 배치를 걸면 데스크톱 창이 폰 카드로 바뀐다(적대 리뷰가
+ * 실측). 창 안은 v5 ④ "창이 좁아져도 열 유지" + `WindowMinSizeNotice`의 "가로 스크롤로" 안내가 결정이다.
+ * 아래 `.stack-rows`의 `main:not(.embed-main)` 스코프와 같은 축이고, 화면 파일에서 유틸로 쓰는 쪽이 이것이다.
+ * 🔴 폰 전용 배치(카드로 접기·세로 쌓기·감기)는 `max-md:`가 아니라 **`phone:`으로** 적을 것.
+ * ⚠️ `screen` 한정 — 인쇄(A4 세로 ≈717px)엔 안 걸린다(`max-md`는 print에도 걸린다 — 실측).
+ * ⚠️ **`main` 안의 콘텐츠용이다** — 포털로 `body`에 붙는 다이얼로그·드롭다운은 `.embed-main`의 DOM 자손이 아니라 창 안에서도
+ *    켜진다(재리뷰 2026-09-13). 포털 콘텐츠의 폰 배치엔 쓰지 말 것(지금 소비처 8곳은 전부 main 안).
+ * ⚠️ 경계 767.98px(px)은 root 16px 전제에서 `max-md`(48rem)와 같은 폭이다 — 브라우저 기본 글꼴을 키운 사람은 두 경계가 갈린다
+ *    (`.stack-rows`도 같은 px 경계).
+ */
+@custom-variant phone {
+  @media screen and (max-width: 767.98px) {
+    &:where(:not(.embed-main *)) {
+      @slot;
+    }
+  }
+}
+
+/*
  * eywa — Daylight palette v4 "White Contrast" (2026-08-18 원장 지시: 회색 캔버스 전면 제거)
  * 화이트 캔버스 + 헤어라인 테두리 승압 + 잉크 대비 강화. Deep navy primary(#153e75) 불변.
  * v3의 애매한 뉴트럴 표면(#f5f5f7 캔버스·#fafafc surface-hi)을 화이트로 통일하고, 표면 구분은
@@ -1501,6 +1522,115 @@ html[data-stage="on"] main {
     font-weight: 700;
     color: var(--text-dim);
     margin-bottom: 2px;
+  }
+}
+
+/* ───────────────────────────────────────────────
+ * 목록 표 **좁은 화면 행 카드** — `.stack-rows` (2026-09-13, 원생목록·수업목록 모바일 전수검사에서 신설·범용).
+ * 위 `.stack-table`은 열 머리를 숨기고 칸마다 열 이름을 얹는데, **열 머리가 곧 필터**인 표(HeaderFilter — 원생목록·
+ * 수업목록)는 머리를 숨기면 폰에서 필터가 통째로 사라진다. 그래서 여기서는 ① 열 머리를 **필터 칩 줄**(flex-wrap)로
+ * 남기고 ② 한 행을 **두 줄 카드**로 접는다: 첫 줄 = `data-cell="lead"`(앞 알약) · `primary`(이름, 남는 폭 전부) ·
+ * `status`(오른쪽 끝), 둘째 줄 = 나머지 칸이 원래 순서대로 흐름, `wide`(메모)는 셋째 줄에 혼자. 열 이름 글자만 있는
+ * 머리(`data-cell="label"`)와 빈 칸(`data-empty="true"`)은 카드에서 감춘다. 이 표들은 `overflow-x-auto`로 못 싸는
+ * 표라(열 머리 팝업이 absolute — header-filter.tsx) 종전엔 "폰은 본문이 가로로 스크롤한다"였는데, 실측 390px에서 표가
+ * 896px(수업목록)·736px(원생목록)로 화면의 2배라 이름 열 뒤가 전부 화면 밖이었다(원장 2026-09-13 *"형편없는걸"*).
+ * ⚠️ 경계는 767.98px(= 표의 옛 `max-md:min-w-*`가 걸리던 폭) — `.stack-table`의 639와 **다르다**. 768~1023(태블릿
+ *    세로)은 표가 그대로 들어가서 카드로 접을 이유가 없다. ⚠️ `@media screen` 한정·레이어 밖(unlayered) — 위 규약 그대로.
+ * 🔴 **최상위 프레임에서만**(`main:not(.embed-main)`) — 플로팅 창(iframe)은 스냅·타일로 768px 아래로 내려갈 수 있는데,
+ *    거기선 창 최소 크기 안내(`WindowMinSizeNotice`)가 "잘린 부분은 가로 스크롤로"라고 말하고 v5 ④ "창이 좁아져도 열을
+ *    유지"가 결정이다. 창 안에서 카드로 접히면 그 안내가 거짓이 된다(적대 리뷰 2026-09-13). 폰·미니셸은 마커가 없어 접힌다.
+ *    그래서 두 표는 `max-md:min-w-*`를 **남긴다** — 창 안(<768)에선 그 값이 종전대로 표를 지켜 가로로 스크롤하고, 폰에선
+ *    아래 `min-width: 0 !important`가 덮는다. 화면 파일에서 같은 축을 유틸로 쓰려면 위 `phone:` 변형.
+ * ─────────────────────────────────────────────── */
+@media screen and (max-width: 767.98px) {
+  main:not(.embed-main) .stack-rows table,
+  main:not(.embed-main) .stack-rows thead,
+  main:not(.embed-main) .stack-rows tbody {
+    display: block;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  main:not(.embed-main) .stack-rows colgroup {
+    display: none;
+  }
+  main:not(.embed-main) .stack-rows tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.625rem;
+    row-gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+  }
+  main:not(.embed-main) .stack-rows thead tr {
+    column-gap: 0.25rem;
+    padding: 0.375rem 0.5rem;
+  }
+  main:not(.embed-main) .stack-rows th,
+  main:not(.embed-main) .stack-rows td {
+    display: block;
+    width: auto !important;
+    min-width: 0;
+    border: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+  }
+  main:not(.embed-main) .stack-rows th > span {
+    justify-content: flex-start;
+  }
+  /* 열 머리 필터 팝업(SearchableSelect: 루트 `relative` + 팝업 `absolute w-full min-w-[12rem]`) — 폰에선 트리거가 줄 오른쪽 끝에
+     설 수 있어 트리거 기준 왼쪽 정렬로 열면 화면 밖으로 나가 본문이 가로로 밀린다(실측 담임 필터: right 401 > 390). 기준을 머리
+     줄(tr)로 올려 좌우를 줄 폭에 맞춘다 — 세로는 static 자리(트리거 바로 아래) 그대로. */
+  main:not(.embed-main) .stack-rows thead tr {
+    position: relative;
+  }
+  main:not(.embed-main) .stack-rows th > .relative,
+  main:not(.embed-main) .stack-rows th > span > .relative {
+    position: static;
+  }
+  main:not(.embed-main) .stack-rows th .absolute.z-50 {
+    left: 0;
+    right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  main:not(.embed-main) .stack-rows [data-cell="label"] {
+    display: none;
+  }
+  /* 첫 줄과 둘째 줄을 가르는 줄바꿈 — order 2가 줄바꿈이고 그 뒤(order 3+)가 둘째 줄이다. */
+  main:not(.embed-main) .stack-rows tbody tr::after {
+    content: "";
+    display: block;
+    flex-basis: 100%;
+    order: 2;
+    height: 0;
+  }
+  main:not(.embed-main) .stack-rows td {
+    order: 3;
+  }
+  main:not(.embed-main) .stack-rows td[data-cell="lead"] {
+    order: 0;
+  }
+  main:not(.embed-main) .stack-rows td[data-cell="primary"] {
+    order: 0;
+    /* basis 0 — auto(=max-content)면 긴 이름이 줄 나눔 판정에서 먼저 넘쳐 상태 알약이 제 줄로 떨어지고(잘림은 그다음),
+       basis 0이면 lead·status와 늘 같은 줄에 서고 남는 폭만큼 자라 안쪽 `truncate`가 의도대로 든다(적대 리뷰 2026-09-13). */
+    flex: 1 1 0%;
+  }
+  main:not(.embed-main) .stack-rows td[data-cell="status"] {
+    order: 1;
+    margin-left: auto;
+  }
+  main:not(.embed-main) .stack-rows td[data-cell="wide"] {
+    order: 4;
+    flex-basis: 100%;
+  }
+  main:not(.embed-main) .stack-rows td[data-empty="true"] {
+    display: none;
+  }
+  /* 빈 상태 행(colSpan 한 칸)은 카드가 아니라 한 덩어리 그대로. */
+  main:not(.embed-main) .stack-rows td[colspan] {
+    order: 0;
+    flex-basis: 100%;
   }
 }
 

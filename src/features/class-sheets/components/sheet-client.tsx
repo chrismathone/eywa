@@ -909,8 +909,11 @@ export function SheetClient({
       {/* 글씨 크기 — 계획 패널 + 주간 그리드만 감싼다(상단 바는 그대로: 크기를 고르는 컨트롤이 같이
           커지면 어지럽다). ⚠️ font-size가 아니라 zoom인 이유는 font-size.ts 주석 참조(열 폭이 px 고정인 표).
           기본('작음')은 배율 1이라 **스타일 자체를 안 붙인다** — 손대지 않은 사용자의 렌더는 완전 무변경. */}
+      {/* 폰(`phone:` = 최상위 프레임 <768px, 창 제외)은 계획 패널을 **시트 위에 쌓는다**(`phone:flex-col`) — 나란히 두면 패널
+          300px이 폭을 먹어 시트가 54px로 짜부라졌다(2026-09-13 모바일 전수검사, 390px 실측). 패널 높이는 plan-panel.tsx가
+          폰에서만 35vh로 캡. 🔴 `max-md:`가 아니다(창을 768 아래로 스냅하면 창 안까지 접힌다 — v5 ④ "창은 열 유지"). */}
       <div
-        className={variant === "today" ? "min-w-0" : "flex min-h-0 flex-1 items-stretch gap-3"}
+        className={variant === "today" ? "min-w-0" : "flex min-h-0 flex-1 items-stretch gap-3 phone:flex-col"}
         style={fontZoom === 1 ? undefined : { zoom: fontZoom }}
       >
         {variant === "today" ? (
@@ -991,7 +994,13 @@ export function SheetClient({
                 onMemo={(body) => saveWeekMemo("panel", body)}
               />
             ) : null}
-            <DragScrollArea barX className="min-w-0 flex-1">
+            {/* 폰은 위에 쌓인 계획 패널이 `h-full` 사슬의 남는 높이를 다 먹어 격자가 57px 띠로 남았다(실측 390px) — 격자를
+                flex-none + 안쪽 스크롤러 `h-auto`로 풀어 **내용 높이만큼** 서게 하고 세로는 본문(main)이 스크롤한다(가로만 격자
+                안에서). ⚠️ `min-h-[65vh]`로 두면 65vh 상자 안에서 또 세로 스크롤이 생겨 이중 스크롤이었다(적대 리뷰 실측: 안 799 >
+                549). `[&>div]`는 DragScrollArea의 안쪽 스크롤러(`h-full`). 데스크톱은 종전대로 남는 높이 전부 + 안쪽 스크롤.
+                `phone:pb-8` — 격자가 `h-full` 페이지 루트 밖으로 넘치므로 셸 main의 하단 여백(pb-8)이 격자 아래에 안 붙는다(재리뷰 실측:
+                마지막 교시 행이 화면 바닥에 붙음) → 같은 값을 격자 상자 안에 둔다(design-conventions "본문 하단 여백"). */}
+            <DragScrollArea barX className="min-w-0 flex-1 phone:flex-none phone:pb-8 phone:[&>div]:h-auto">
               {/* 같은 교시 블록이 요일 간 같은 행에 정렬(행 높이 통일) — 카드 크기 맞춤 */}
               <SheetGrid
                 days={visibleDays}

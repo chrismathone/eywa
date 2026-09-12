@@ -168,7 +168,9 @@ export function SheetToolbar({
           ]}
         />
 
-      <span className="ml-auto flex items-center gap-2">
+      {/* 폰(`phone:` = 최상위 프레임 <768px, 창 제외)에선 이 묶음도 감긴다 — 출석부·JJ·글씨·저장됨·계획 패널이 한 줄 470px이라
+          366px 본문을 가로로 밀었다(2026-09-13 모바일 전수검사). 데스크톱·창은 종전대로 한 줄. */}
+      <span className="ml-auto flex items-center gap-2 phone:flex-wrap">
         {dayFilter ? (
           <EcsMakeupAdder
             classId={data.classId}

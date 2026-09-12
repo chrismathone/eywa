@@ -417,8 +417,11 @@ function TableView({
   const colCount = showTeacher ? 8 : 7;
   return (
     // 이 메뉴의 최소 창(1100)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다. 🔴 폰에서도 `overflow-x-auto` 상자로 싸지
-    // 않는다(overflow-y까지 auto가 되어 열 머리 팝업이 잘린다 — 학생목록 주석). 폰은 표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다.
-    <div className="bg-card shadow-card rounded-2xl">
+    // 않는다(overflow-y까지 auto가 되어 열 머리 팝업이 잘린다 — 학생목록 주석). 폰(최상위 프레임 <768px)은 `.stack-rows`(globals.css)가
+    // 열 머리를 필터 칩 줄로, 행을 [과목 | 반 이름 | 상태] / [담임 · 강의실 · 요일 · 인원] / 메모 두세 줄 카드로 접는다(2026-09-13 모바일
+    // 전수검사 — 그전엔 표 896px가 본문을 가로로 밀어 담임 뒤 열이 전부 화면 밖이었다). 칸의 자리는 `data-cell`이 정한다.
+    // ⚠️ `max-md:min-w-[56rem]`은 **창(iframe) 안을 위해 남긴다**(학생목록 주석과 같은 이유 — 창을 768 아래로 스냅하면 종전대로 가로 스크롤).
+    <div className="stack-rows bg-card shadow-card rounded-2xl">
       <table className="w-full table-fixed text-sm max-md:min-w-[56rem]">
         {/* 열 폭 — 최소 창(1050 본문)에서 `상태: 종강 ⌄`(≈112px)가 들어가는 13% · 반 이름 22%(정렬 머리 + 18px 이름). */}
         <colgroup>
@@ -437,20 +440,21 @@ function TableView({
             <th scope="col">{head.subject}</th>
             <th scope="col">
               <span className="flex flex-wrap items-center justify-center gap-1">
-                <span className="px-1">{sheetT(lang, "cls.col.name")}</span>
+                <span className="px-1" data-cell="label">{sheetT(lang, "cls.col.name")}</span>
                 {head.sort}
               </span>
             </th>
             {showTeacher ? <th scope="col">{head.teacher}</th> : null}
-            <th scope="col">
+            {/* 라벨만 있는 머리는 th 자체에 표식 — 폰 카드에선 열이 없어 열 이름이 뜻을 잃고, span만 감추면 0×0 th가 칩 줄 간격을 먹는다. */}
+            <th scope="col" data-cell="label">
               <span className="px-1">{sheetT(lang, "cls.col.room")}</span>
             </th>
             <th scope="col">{head.days}</th>
-            <th scope="col">
+            <th scope="col" data-cell="label">
               <span className="px-1">{sheetT(lang, "cls.col.students")}</span>
             </th>
             <th scope="col">{head.status}</th>
-            <th scope="col">
+            <th scope="col" data-cell="label">
               <span className="px-1">{sheetT(lang, "cls.col.notes")}</span>
             </th>
           </tr>
@@ -468,10 +472,10 @@ function TableView({
             const st = classStatusMeta(c);
             return (
               <tr key={c.id} className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5">
-                <td>
+                <td data-cell="lead">
                   <Pill color={meta.color}>{meta.label}</Pill>
                 </td>
-                <td>
+                <td data-cell="primary">
                   <span className="flex min-w-0 items-center gap-1.5">
                     {/* 반 이름은 1차 식별자(18px 굵게) — 좁으면 잘리되 전문은 마우스 오버(title). */}
                     <WindowLink
@@ -489,20 +493,21 @@ function TableView({
                     <span className="block truncate">{c.teacherName ?? <span className="text-text-faint">{sheetT(lang, "cls.teacherNone")}</span>}</span>
                   </td>
                 ) : null}
-                <td className="text-text-dim">
+                {/* 빈 값(`—`)은 폰 카드에서 감춘다(data-empty) — 열 머리 글자가 없는 카드에선 대시가 무엇의 빈칸인지 알 수 없다. */}
+                <td className="text-text-dim" data-empty={c.classroomName ? undefined : "true"}>
                   <span className="block truncate">{c.classroomName ?? "—"}</span>
                 </td>
-                <td>
+                <td data-empty={c.days.length === 0 ? "true" : undefined}>
                   <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} lang={lang} />
                 </td>
                 <td className="text-foreground num text-right font-bold whitespace-nowrap">
                   {c.studentCount}
                   {sheetT(lang, "cls.unit.people")}
                 </td>
-                <td className="text-center">
+                <td className="text-center" data-cell="status">
                   <Pill color={st.color}>{sheetT(lang, st.key)}</Pill>
                 </td>
-                <td className="text-text-dim">
+                <td className="text-text-dim" data-cell="wide" data-empty={c.notes?.trim() ? undefined : "true"}>
                   {c.notes ? (
                     <span className="line-clamp-1" title={c.notes}>
                       {c.notes}

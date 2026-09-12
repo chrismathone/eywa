@@ -217,7 +217,9 @@ export default async function SeatAttendancePage({
         //    같은 날짜를 말하고 있었다. 기간 네비가 앱 전역 단일 소스라 남기는 쪽은 그쪽이다.
         embedLabel={SEAT_NAME[seat]}
         actions={
-          <div className="flex items-center gap-1.5">
+          // flex-wrap — 폰(390px)에선 [출석부로][월간][랩실|JJ실][‹ 날짜 ›][과거 조회]가 한 줄 599px이라 본문이 가로로 밀렸다
+          // (2026-09-13 모바일 전수검사). 감기면 두 줄, 데스크톱은 폭이 남아 종전대로 한 줄.
+          <div className="flex flex-wrap items-center gap-1.5">
             {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). */}
             <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}>
               출석부로

@@ -95,7 +95,8 @@ export default async function SeatMonthlyPage({
           embedLabel={`${SEAT_NAME[seat]} 월간 · ${formatMonth(month)}`}
           description={view.window.label}
           actions={
-            <div className="flex items-center gap-1.5">
+            // flex-wrap — 하루 면과 같은 이유(폰에서 칩+PeriodNav가 한 줄에 안 들어가 본문이 가로로 밀린다, 2026-09-13).
+            <div className="flex flex-wrap items-center gap-1.5">
               <Link href={`/attendance/seat/${seat}`} className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
                 하루
               </Link>

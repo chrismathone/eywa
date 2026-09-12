@@ -10,7 +10,8 @@ import { CONTROL_H_SM, CONTROL_LABEL_SM } from "./ui/control-scale";
  *
  * 🔴 이 트리거가 서는 표는 `overflow-x-auto`로 싸지 말 것 — 팝업이 잘린다(팝업은 트리거 아래 absolute). **폰에서도**: overflow-x가
  *    auto면 overflow-y도 auto가 되어 짧은 표 안에서 팝업이 잘린다(리뷰 2026-09-04). 표는 메뉴의 최소 창 폭에 맞춰 `table-fixed`로 세우고,
- *    폰은 표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다.
+ *    **폰(<768px)은 `.stack-rows`(globals.css)로 접는다** — 열 머리는 필터 칩 줄로 남고 행은 두 줄 카드가 된다(2026-09-13 모바일
+ *    전수검사). 그전의 "표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다"는 이름 열 뒤가 전부 화면 밖이라 폐기했다.
  * 🔴 서버/클라 양쪽이 쓴다 — `"use client"`도 `server-only`도 붙이지 말 것(안쪽 FilterSelect가 클라다).
  */
 export const HEADER_FILTER_TRIGGER = `${CONTROL_H_SM} ${CONTROL_LABEL_SM} text-foreground hover:bg-bg-soft rounded-md px-1 font-bold whitespace-nowrap`;

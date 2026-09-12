@@ -51,7 +51,9 @@ export function PlanPanel({
     );
 
   return (
-    <aside className="bg-card shadow-card w-[300px] shrink-0 self-start overflow-y-auto rounded-2xl p-2.5">
+    // 폰(`phone:` = 최상위 프레임 <768px)은 시트 위에 쌓이므로(sheet-client `phone:flex-col`) 폭은 전부, 높이는 35vh로 캡해 아래
+    // 시트 자리를 남긴다(안 캡하면 첫 섹션이 펼쳐진 패널 ~900px이 화면을 다 먹는다 — 안엔 overflow-y-auto라 패널 안에서 스크롤).
+    <aside className="bg-card shadow-card w-[300px] shrink-0 self-start overflow-y-auto rounded-2xl p-2.5 phone:max-h-[35vh] phone:w-full">
       <div className="space-y-1">
         {SECTIONS.map((sec, i) => (
           <details key={`${sec.role}-${sec.scope}`} className="group" open={i === 0}>

@@ -51,8 +51,11 @@ import type { NewcomerRow } from "@/features/newcomers/server/queries";
 const NAME_W = 9;
 const SCHOOL_W = 8;
 const SUBJECT_W = 6;
-const ENROLLED_W = 7;
-const FIRST_CLASS_W = 11;
+// 등록일 9 · 첫 수업 12 — 표 최소 폭 60rem(960px)에서 7%(67px − px-1 8 = 59px)는 `26.09.10`(num 16px ≈ 65px)이 안 들어가
+// 날짜가 옆 칸 위로 겹쳤다(2026-09-13 모바일 전수검사 실측 — 폰·좁은 창처럼 표가 최소 폭일 때). 9% = 86px, 첫 수업(날짜+`D+3`)
+// 12% = 115px. 항목 열은 그만큼(각 ≈0.4%p) 좁아진다 — 체크 + 짧은 글자라 여유가 있다.
+const ENROLLED_W = 9;
+const FIRST_CLASS_W = 12;
 const ITEM_W =
   (100 - NAME_W - SCHOOL_W - SUBJECT_W - ENROLLED_W - FIRST_CLASS_W) / ONBOARDING_ITEMS.length;
 

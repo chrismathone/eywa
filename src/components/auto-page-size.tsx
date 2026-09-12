@@ -82,7 +82,13 @@ export function AutoPageSize({
       const padBottom = Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
       const below = Math.max(0, root.getBoundingClientRect().bottom - elRect.bottom) + padBottom;
       const avail = scroller.clientHeight - topInScroller - below - 4; // 4px = 반올림 여유
-      const rows = Math.max(1, Math.floor(avail / rowPx));
+      // 행 높이는 **실제 첫 행**에서 잰다(없으면 rowPx) — 폰(<768)에선 원생상담 행이 두 줄 카드(≈71px)라 상수 45로 세면 한 쪽이
+      // 창 높이의 1.6배가 되고 그 값이 기기 쿠키에 남는다(2026-09-13 모바일 전수검사, 적대 리뷰). 데스크톱은 실측 ≤ rowPx(44.8 —
+      // Windows 125% 배율에서 1px 선이 0.8로 내림)라 `max()`로 rowPx 그대로 = 종전과 같고, 상수보다 작게 세는 일은 없다(반 그려진
+      // 행·0행이면 rowPx). `--list-h`도 같은 값으로 잰다.
+      const firstRow = list.firstElementChild as HTMLElement | null;
+      const rowH = Math.max(rowPx, firstRow ? firstRow.getBoundingClientRect().height : 0);
+      const rows = Math.max(1, Math.floor(avail / rowH));
       const cols = columnCountOf(list);
       const fit = Math.min(PAGE_SIZE_MAX, Math.max(PAGE_SIZE_MIN, rows * cols));
       writeCookie(pageSizeCookieName(storageKey), fit);
@@ -104,7 +110,7 @@ export function AutoPageSize({
       //    들고 있어서 **높이가 없는 모든 순간이 곧 1단**이었다(측정 전 한 프레임 + 위 갈래).
       const heightRows = Math.max(rows, Math.ceil(items / effCols));
       if (effCols > 1) {
-        el.style.setProperty("--list-h", `${heightRows * rowPx + 2}px`);
+        el.style.setProperty("--list-h", `${heightRows * rowH + 2}px`);
         el.style.setProperty("--col-fill", "auto");
       } else {
         el.style.removeProperty("--list-h");

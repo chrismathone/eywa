@@ -363,9 +363,13 @@ export default async function StudentsPage({
       <>
           {/* 표 — 이 메뉴의 최소 창(960)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다. 🔴 폰에서도 `overflow-x-auto`
               상자로 싸지 않는다 — overflow-x가 auto면 overflow-y도 auto가 되어 열 머리 팝업(absolute)이 짧은 표 안에서 잘린다(리뷰 2026-09-04;
-              폰에선 이 팝업이 유일한 필터다). 폰은 표(`min-w`)가 넘치면 셸 main이 가로로 스크롤한다.
+              폰에선 이 팝업이 유일한 필터다). 폰(최상위 프레임 <768px)은 `.stack-rows`(globals.css)가 열 머리를 필터 칩 줄로, 행을
+              [이름 학교·학년 | 상태] / [과목 · 담당 강사 · 연락처] 두 줄 카드로 접는다(2026-09-13 모바일 전수검사 — 그전엔 표 736px가
+              본문을 가로로 밀어 상태 뒤 열이 전부 화면 밖이었다). 칸의 자리는 `data-cell`이 정한다. ⚠️ `max-md:min-w-[46rem]`은
+              **창(iframe) 안을 위해 남긴다** — 창을 768 아래로 스냅하면 `.stack-rows`가 안 걸리고(창 제외 스코프) 이 min-w가 종전대로 표를
+              736px로 지켜 창이 가로로 스크롤한다(`WindowMinSizeNotice`의 "가로 스크롤로" 안내와 일치). 폰에선 `.stack-rows`가 이 값을 덮는다.
               행 = 이름(학교·학년) + 상태 + 과목 + 담당 강사 + 연락처 한 줄, 행 사이 헤어라인(§11). */}
-          <div className="bg-card shadow-card rounded-2xl">
+          <div className="stack-rows bg-card shadow-card rounded-2xl">
             <table className="w-full table-fixed text-sm max-md:min-w-[46rem] [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
               {/* 열 폭 — 2026-09-08 v5 글자 기준 실측(트리거 라벨 16px, 표 폭 935): 라벨 자리 = 열폭 − th px-3 24 − 크롬 32(px-1 8 + gap-2 8 + 쉐브론 16).
                   상태 18% → 112px ≥ `상태: 예비·상담`(110px) / 담당 강사 20% → 131px ≥ `담당 강사: 이수진`(125px).
@@ -382,8 +386,9 @@ export default async function StudentsPage({
                 <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap">
                   <th scope="col">
                     <span className="flex flex-wrap items-center justify-center gap-1">
-                      {/* 열 이름은 글자로 남긴다 — 필터 둘만 있으면 이 열의 접근성 이름이 "학년 필터 정렬 필터"가 된다(리뷰). */}
-                      <span className="px-1">{sheetT(lang, "stu.col.student")}</span>
+                      {/* 열 이름은 글자로 남긴다 — 필터 둘만 있으면 이 열의 접근성 이름이 "학년 필터 정렬 필터"가 된다(리뷰).
+                          ⚠️ 폰(<768px)에선 `.stack-rows`가 이 글자를 감춘다(data-cell="label") — 카드엔 열이 없어 열 이름이 뜻을 잃는다. */}
+                      <span className="px-1" data-cell="label">{sheetT(lang, "stu.col.student")}</span>
                       {/* 저장값을 이기려면 "전체"도 URL에 적혀야 한다(explicitAll) — 학년·과목·담임·정렬 넷이 그렇다. */}
                       <HeaderFilter
                         paramName="grade"
@@ -420,7 +425,8 @@ export default async function StudentsPage({
                       showAll
                     />
                   </th>
-                  <th scope="col">
+                  {/* 필터가 없는 갈래(강사 스코프)면 th 자체가 라벨 머리 — span만 감추면 0×0 th가 폰 칩 줄 간격을 먹는다. */}
+                  <th scope="col" data-cell={hideSubjectFilter ? "label" : undefined}>
                     {hideSubjectFilter ? (
                       <span className="px-1">{sheetT(lang, "stu.col.subjects")}</span>
                     ) : (
@@ -435,7 +441,7 @@ export default async function StudentsPage({
                       />
                     )}
                   </th>
-                  <th scope="col">
+                  <th scope="col" data-cell={hideTeacherFilter ? "label" : undefined}>
                     {hideTeacherFilter ? (
                       <span className="px-1">{sheetT(lang, "stu.col.teacher")}</span>
                     ) : (
@@ -451,7 +457,8 @@ export default async function StudentsPage({
                       />
                     )}
                   </th>
-                  <th scope="col">
+                  {/* 라벨만 있는 머리는 th 자체에 표식 — span만 감추면 0×0 th가 폰 칩 줄의 간격을 먹는다. */}
+                  <th scope="col" data-cell="label">
                     <span className="px-1">{sheetT(lang, "stu.col.parentPhone")}</span>
                   </th>
                 </tr>
@@ -478,7 +485,7 @@ export default async function StudentsPage({
                   const sg = schoolGradeLabel(s.school, s.grade);
                   return (
                     <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5">
-                      <td>
+                      <td data-cell="primary">
                         <span className="flex min-w-0 items-center gap-1.5">
                           {/* 이름은 1차 식별자라 줄지 않는다(§1 "1차 핵심값 ellipsis 금지") — 좁으면 학교·학년(2차)이 먼저 접힌다. */}
                           <WindowLink
@@ -495,10 +502,10 @@ export default async function StudentsPage({
                           <EditingBadge scope={`student:${s.id}`} />
                         </span>
                       </td>
-                      <td>
+                      <td data-cell="status">
                         <Pill color={meta.color}>{meta.label}</Pill>
                       </td>
-                      <td>
+                      <td data-empty={s.subjects.length === 0 ? "true" : undefined}>
                         {s.subjects.length === 0 ? (
                           <span className="text-text-faint">—</span>
                         ) : (
@@ -511,7 +518,7 @@ export default async function StudentsPage({
                           </span>
                         )}
                       </td>
-                      <td className="text-text-dim">
+                      <td className="text-text-dim" data-empty={s.teacherNames.length === 0 ? "true" : undefined}>
                         <span className="block truncate" title={s.teacherNames.join(" · ")}>
                           {s.teacherNames.length > 0 ? s.teacherNames.map(showTeacher).join("·") : "—"}
                         </span>
@@ -520,7 +527,9 @@ export default async function StudentsPage({
                           오른쪽에 붙여 두면 가운데 있는 열 제목과 이 열만 따로 놀고, 번호가 없는 행의 `—`가
                           표 오른쪽 끝에 홀로 매달린다. 본문 좌측(데이터 표 규약) 그대로 둔다.
                           ⚠️ `num`(고정폭 숫자)은 남긴다 — 자릿수가 같아야 번호가 위아래로 줄을 이룬다. */}
-                      <td className="text-text-dim num whitespace-nowrap">{s.parentPhone ?? "—"}</td>
+                      <td className="text-text-dim num whitespace-nowrap" data-empty={s.parentPhone ? undefined : "true"}>
+                        {s.parentPhone ?? "—"}
+                      </td>
                     </tr>
                   );
                 })}

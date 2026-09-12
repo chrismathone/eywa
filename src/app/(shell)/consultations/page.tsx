@@ -214,7 +214,9 @@ export default async function ConsultationsPage({
               </span>
             ) : null}
           </p>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        {/* phone:basis-full — 폰에선 `flex-1`(basis 0)이 건수 옆 남는 74px에 이 묶음을 세워 드롭다운 5개가 한 줄에 하나씩
+            세로로 쌓였다(2026-09-13 모바일 전수검사). 제 줄로 내려 전폭에서 감기게 한다(창 안은 종전 한 줄). */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 phone:basis-full">
           <FilterSelect
             paramName="range"
             value={range === "all" ? "" : range}
@@ -319,7 +321,8 @@ export default async function ConsultationsPage({
               저절로 준다(AutoPageSize는 목록 위치를 실제 DOM에서 잰다). 첫 벌만 접근성 트리에. */}
           <div
             // auto-rows-[100%] — 둘째 줄(남는 벌)이 상자 높이(36px)에서 시작해야 잘려 나간다. 행 높이가 내용(24px)이면 둘째 줄 위 12px이 비친다(실측).
-            className="relative grid h-9 auto-rows-[100%] gap-x-8 overflow-hidden"
+            // phone:hidden — 폰에선 행이 두 줄 카드라 열 제목이 설 자리가 없다(행 격자와 어긋난 제목 줄만 남는다). 창 안은 그대로.
+            className="relative grid h-9 auto-rows-[100%] gap-x-8 overflow-hidden phone:hidden"
             style={{ ...ROW_GRID_VARS, gridTemplateColumns: COL_GRID }}
             data-list-header=""
           >
@@ -369,10 +372,14 @@ export default async function ConsultationsPage({
                   // 그보다 좁으면 요약 칸이 몇 글자짜리 토막이 된다). 단이 좁으면 이름·과목·배지만.
                   <li key={c.id} title={hoverTextOf(c)} className="@container/row border-line border-t">
                     {/* aria-label을 달지 않는다 — 달면 보조기기엔 이름만 남고 배지·시각이 사라진다(리뷰 확정 결함). 링크 본문이 곧 이름이다. */}
+                    {/* 폰(`phone:` = 최상위 프레임 <768px)은 두 줄 — [이름 | 과목·상담사] / [카테고리 · 후속 · 녹음·AI · 시각]. 행 격자
+                        (--row-cols)의 최소 폭이 35.25rem(=564px)이라 390px에선 오른쪽 고정 열 324px가 행 밖으로 나가 본문이 가로로 밀렸다
+                        (2026-09-13 모바일 전수검사, 620px). 🔴 `max-md:`가 아니다 — 이 창은 기본 크기가 760px(<768)이라 `max-md:`면
+                        데스크톱 창이 폰 카드로 바뀐다(적대 리뷰 실측). 데스크톱·창은 종전 그대로(원장 2026-09-03 ⑩ 열 정렬). */}
                     <WindowLink
                       href={`/consultations/${c.id}`}
                       title={c.studentName}
-                      className={`hover:bg-bg-soft grid h-11 grid-cols-(--row-cols) items-center gap-3 rounded-lg px-2 transition ${
+                      className={`hover:bg-bg-soft grid h-11 grid-cols-(--row-cols) items-center gap-3 rounded-lg px-2 transition phone:h-auto phone:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] phone:gap-y-1 phone:py-1.5 ${
                         isUrgent ? "bg-danger-soft" : ""
                       }`}
                     >
@@ -396,7 +403,7 @@ export default async function ConsultationsPage({
                           배지 수가 달라도 같은 자리에 선다. 빈 칸은 비워 둔다(자리를 당기지 않는다).
                           🔴 `col-start-4` — 요약 열이 숨는 폭(display:none = 그리드 아이템 없음)에서 이 블록이 3번째 트랙으로
                           자동 배치돼 오른쪽 끝에서 떠다니던 것(리뷰 확정). 자리는 늘 4번째 트랙. */}
-                      <div className="col-start-4 grid grid-cols-(--right-cols) items-center justify-items-center gap-1">
+                      <div className="col-start-4 grid grid-cols-(--right-cols) items-center justify-items-center gap-1 phone:col-span-2 phone:col-start-1 phone:grid-cols-[auto_auto_auto_minmax(0,1fr)] phone:justify-items-start phone:gap-2">
                         <span>{catMeta ? <Pill color={catMeta.color}>{catMeta.label}</Pill> : null}</span>
                         <span>{urgency ? <Pill color={urgency.color}>{urgency.label}</Pill> : null}</span>
                         {/* 아이콘만으로 뜻을 전하지 않는다(§2) — 옆에 읽히는 글자를 둔다. */}
