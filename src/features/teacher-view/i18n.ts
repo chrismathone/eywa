@@ -1945,7 +1945,10 @@ export const SHEET_DICT = {
     ko: "{name} {subject} 학부모 문구 1문단 수업 내용",
     en: "{name} {subject} parent message, block 1 — what we covered",
   },
-  "os.row.ment2Ph": { ko: "2문단 · 태도 · 특이사항", en: "Block 2 · attitude and notes" },
+  "os.row.ment2Ph": {
+    ko: "2문단 · 태도 · 특이사항 · 직접 쓰거나 고친 멘트는 선생님 말투로 자동작성에 반영됩니다",
+    en: "Block 2 · attitude and notes · what you write or edit yourself teaches Auto-write your voice",
+  },
   "os.row.ment2Aria": {
     ko: "{name} {subject} 학부모 문구 2문단 태도 특이사항",
     en: "{name} {subject} parent message, block 2 — attitude and notes",
@@ -1953,6 +1956,12 @@ export const SHEET_DICT = {
   "os.row.mentPh": {
     ko: "'자동작성'으로 생성 · 직접 편집·확인 후 발송",
     en: "Use 'Auto-write', then edit and check before sending",
+  },
+  // 원장 2026-09-12: 직접 쓰거나 고친 멘트가 그 선생님 말투로 자동작성에 반영된다는 사실을 **이 칸에서** 알린다(0262a).
+  // 🔴 프로파일을 읽는 행(영어 밖)에만 — 영어 행(템플릿 모드)은 위 mentPh 그대로(거짓 약속 금지).
+  "os.row.mentPhVoice": {
+    ko: "'자동작성'으로 생성 · 직접 편집·확인 후 발송 · 직접 쓰거나 고친 멘트는 선생님 말투로 자동작성에 반영됩니다",
+    en: "Use 'Auto-write', then edit and check before sending · what you write or edit yourself teaches Auto-write your voice",
   },
   "os.row.mentAria": { ko: "{name} {subject} 학부모 문구", en: "{name} {subject} parent message" },
   "os.row.trendPh": {
@@ -2189,12 +2198,12 @@ export const SHEET_DICT = {
     en: "The first paragraph, with the book, progress and today's homework. 'Auto-write' fills it from the {subject} progress.",
   },
   "os.card.para2Ph": {
-    ko: "수업 태도·특이사항을 담은 둘째 문단. 태도·특이사항이 비어 있으면 자동작성에서도 생략됩니다.",
-    en: "The second paragraph, with the attitude and notes. If both are empty, auto-write leaves it out too.",
+    ko: "수업 태도·특이사항을 담은 둘째 문단. 태도·특이사항이 비어 있으면 자동작성에서도 생략됩니다. 직접 쓰거나 고친 멘트는 선생님 말투로 자동작성에 반영됩니다.",
+    en: "The second paragraph, with the attitude and notes. If both are empty, auto-write leaves it out too. What you write or edit yourself teaches Auto-write your voice.",
   },
   "os.card.mentPh": {
-    ko: "'자동작성'을 누르면 {subject} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.",
-    en: "Press 'Auto-write' and a draft is built from the {subject} progress, tests and attitude. Send it as it is or edit it.",
+    ko: "'자동작성'을 누르면 {subject} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요. 직접 쓰거나 고친 멘트는 선생님 말투로 자동작성에 반영됩니다.",
+    en: "Press 'Auto-write' and a draft is built from the {subject} progress, tests and attitude. Send it as it is or edit it. What you write or edit yourself teaches Auto-write your voice.",
   },
   "os.card.trend": { ko: "학습 추세 (종합분석)", en: "Learning trend (overall)" },
   "os.card.trendPh": {

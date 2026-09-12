@@ -35,6 +35,7 @@ const MUST_LOG: { file: string; fn: string }[] = [
   // AI 산출물의 내용을 바꾸는 설정.
   { file: "src/features/onescreen/server/prompt-actions.ts", fn: "savePrompt" },
   { file: "src/features/onescreen/server/prompt-actions.ts", fn: "resetPrompt" },
+  { file: "src/features/onescreen/server/ment-style-actions.ts", fn: "rebuildMentStylesNow" },
   // 전 직원·학부모가 보는 글.
   { file: "src/features/notices/server/actions.ts", fn: "createNoticePopup" },
   { file: "src/features/notices/server/actions.ts", fn: "updateNoticePopup" },

@@ -95,18 +95,23 @@ export function BulkComposeFace({
       return;
     }
     setAiBusy(true);
-    const res = await generateReportComment({
-      studentName: "학생",
-      subject: firstSubjectKey ? subjects.labelOf(firstSubjectKey) : "수업",
-      progress: progress.trim(),
-      dailyTest: "",
-      checkTest: "",
-      attitude: "",
-      homework: "",
-      homeworkToday: normalizeHomeworkPages(homeworkToday.trim()),
-      textbook: textbook.trim(),
-      specialNote: "",
-    });
+    const res = await generateReportComment(
+      {
+        studentName: "학생",
+        subject: firstSubjectKey ? subjects.labelOf(firstSubjectKey) : "수업",
+        progress: progress.trim(),
+        dailyTest: "",
+        checkTest: "",
+        attitude: "",
+        homework: "",
+        homeworkToday: normalizeHomeworkPages(homeworkToday.trim()),
+        textbook: textbook.trim(),
+        specialNote: "",
+      },
+      undefined,
+      // 공용 본문 — 여러 강사 이름으로 나가는 보고서라 호출자의 말투 프로파일(0262a)을 붙이지 않는다.
+      { teacherStyle: false },
+    );
     setAiBusy(false);
     if (res.ok && res.comment) {
       setBody(res.comment);

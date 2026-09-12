@@ -21,6 +21,8 @@ export const AUDIT_ACTIONS = {
   kakao_channel_save: "카카오 알림톡 채널 설정",
   ai_prompt_save: "AI 프롬프트 저장",
   ai_prompt_reset: "AI 프롬프트 기본값 복원",
+  // 강사 말투 프로파일(0262a) — AI 산출물의 내용을 바꾸는 갱신이라 cron(주 1회)·[지금 갱신] 둘 다 남긴다.
+  ment_style_rebuild: "강사 말투 프로파일 갱신",
   classroom_update: "강의실 수정",
   notice_popup_update: "팝업 공지 수정",
   notice_popup_toggle: "팝업 공지 노출 전환",

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
@@ -51,6 +51,8 @@ import {
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
+import { loadTeacherMentStyle } from "./ment-style-db";
+import { mentStyleDirective } from "../ment-style-prompt";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { captureReportJj } from "./jj-capture";
@@ -916,6 +918,9 @@ export async function generateReportComment(
   // classId = 이 행의 반. 정규/특강 분리(2026-07-23 원장 지시)에 쓴다 — 특강 보고서면 그 반 기록만,
   // 정규면 특강 기록을 제외한다. 미지정이면 기존 동작(안 가름).
   trendCtx?: { studentId?: string; subject?: string; classId?: string | null; todayExamInfo?: string; todayHomework?: string; date?: string },
+  // teacherStyle=false: 사무실 대리작성(보고서 관리 > 직접 작성)이 넘긴다 — 그 멘트는 **다른 강사 이름**으로 나가는 보고서라 호출자의
+  // 말투 프로파일(0262a)을 붙이면 안 된다. 스코프 판정(effectiveTeacherId)만으론 겸직 관리자가 강사뷰 쿠키를 켠 채 그 화면을 열면 새므로(재리뷰).
+  opts?: { teacherStyle?: boolean },
 ): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -944,13 +949,20 @@ export async function generateReportComment(
   };
   try {
     const supabase = await createClient();
-    const settings = await getTenantSettings();
+    // 말투 프로파일(0262a)의 주인 = **이 화면의 강사 스코프**(실 강사·겸직 강사뷰 = `effectiveTeacherId`). 관리자 뷰(사무실 대리작성)는
+    // 스코프가 없어(null) 프로파일을 **읽지 않는다** — 그 멘트는 다른 강사 이름으로 나가는 보고서라 사무실 계정 말투가 붙으면 안 된다.
+    // 프로파일이 없거나 표가 아직 없으면(미적용) 아무것도 안 붙는다([[#95]]).
     // 멘트 모드 — 강사 본인 오버라이드(users.report_notice_mode) > 학원 기본(report.noticeMode) > 'A'.
-    const { data: meRow } = await supabase
-      .from("users")
-      .select("report_notice_mode")
-      .eq("id", user.id)
-      .single();
+    // 설정·모드·말투 세 조회는 서로 독립 — 직렬 워터폴 금지(B4). 겸직 강사뷰의 스코프 판정(쿠키+담당 반)도 이 안에서 돈다.
+    const [settings, { data: meRow }, mentStyle] = await Promise.all([
+      getTenantSettings(),
+      supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
+      opts?.teacherStyle === false
+        ? null
+        : effectiveTeacherId().then((teacherId) => (teacherId ? loadTeacherMentStyle(createAdminClient(), user.tenantId, teacherId) : null)),
+    ]);
+    const styleBlock = mentStyle ? mentStyleDirective(mentStyle) : "";
+    const withTeacherStyle = (body: string) => (styleBlock ? `${body}\n\n${styleBlock}` : body);
     const mode = (meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? settings.report.noticeMode ?? "A";
 
     const sections: PromptSection[] = [];
@@ -962,8 +974,8 @@ export async function generateReportComment(
       ]);
       const p1 = commentP1Body(safeInput, p1tpl);
       const p2 = commentP2Body(safeInput, p2tpl);
-      if (p1) sections.push({ type: "comment_p1", field: "p1", body: p1 });
-      if (p2) sections.push({ type: "comment_p2", field: "p2", body: p2 });
+      if (p1) sections.push({ type: "comment_p1", field: "p1", body: withTeacherStyle(p1) });
+      if (p2) sections.push({ type: "comment_p2", field: "p2", body: withTeacherStyle(p2) });
     } else {
       const tpl = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
       // 문체 변형(2026-07-30) — 같은 반 학생들이 한 낱말만 다른 복사본을 받지 않게 **어디서부터 이야기를
@@ -972,9 +984,10 @@ export async function generateReportComment(
       const styleSeed = `${input.studentName}|${trendCtx?.date ?? ""}|${input.subject}`;
       const style = commentStyleDirective(styleSeed);
       const body = commentBody(safeInput, tpl);
-      sections.push({ type: "comment", field: "comment", body: style ? `${body}
+      // 순서가 뜻이다 — 말투 지침의 마지막 줄이 바로 위 '이번 알림장의 결'을 가리킨다(첫 문장 여는 자리는 결이 이긴다).
+      sections.push({ type: "comment", field: "comment", body: withTeacherStyle(style ? `${body}
 
-${style}` : body });
+${style}` : body) });
     }
 
     // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).

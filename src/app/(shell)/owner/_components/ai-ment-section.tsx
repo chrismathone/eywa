@@ -16,8 +16,10 @@ import {
   type PromptVersion,
   type TestReportOption,
 } from "@/features/onescreen/server/prompt-actions";
+import type { MentStyleView } from "@/features/onescreen/server/ment-style-actions";
+import { MentStyleCard } from "./ment-style-card";
 
-export function AiMentSection({ initial }: { initial: PromptRow[] }) {
+export function AiMentSection({ initial, styles }: { initial: PromptRow[]; styles?: MentStyleView }) {
   const [reports, setReports] = useState<TestReportOption[]>([]);
   useEffect(() => {
     void getRecentReportsForTest().then((r) => {
@@ -34,6 +36,8 @@ export function AiMentSection({ initial }: { initial: PromptRow[] }) {
         같은 자리표시자를 지우면 입력이 반영되지 않아 저장이 거부됩니다. 언제든 <b className="text-foreground">기본값 복원</b>
         으로 되돌릴 수 있어요.
       </div>
+      {/* 강사 말투(0262a) — 프롬프트보다 위: 원장이 "왜 선생님마다 결이 다른가"를 여기서 먼저 본다. */}
+      {styles ? <MentStyleCard initial={styles} /> : null}
       {initial.map((p) => (
         <PromptEditor key={p.type} row={p} reports={reports} />
       ))}

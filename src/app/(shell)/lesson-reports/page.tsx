@@ -11,6 +11,7 @@ import { getNoticeClassOptions, listClassNotices } from "@/features/report-admin
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getStudentsList } from "@/features/students/server/queries";
 import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
+import { getMentStyleRows } from "@/features/onescreen/server/ment-style-actions";
 import { ClassnoteQueueCard } from "./_components/classnote-queue-card";
 import { WritingRateCard } from "./_components/writing-rate-card";
 import { ReportList } from "./_components/report-list";
@@ -119,7 +120,11 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
             ? // 회수는 **검색해서 찾는** 화면이라 첫 페인트에 목록을 싣지 않는다(전건을 띄우면 오클릭 거리만 는다).
               getReportFilterOptions().then((filterOptions) => ({ recallOptions: filterOptions }))
           : tab === "ai_ment"
-            ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
+            ? // 프롬프트와 강사 말투 목록은 서로 독립 — 직렬 금지(B4).
+              Promise.all([getActivePrompts(), getMentStyleRows()]).then(([r, styles]) => ({
+                aiPrompts: r.prompts ?? [],
+                mentStyles: styles,
+              }))
             : // 첫 페인트도 클라 초기 state와 **같은 기본 범위**(이번 달)로 — 안 맞추면 열자마자 목록이 한 번 바뀐다.
               // `?status=` — 알림·발송 큐 카드가 "미발송 N건"에서 이 목록으로 곧장 보낸다(그 N건만 걸러서).
               Promise.all([
@@ -211,7 +216,9 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
         <ReportSection initial={tabData.reportSettings} teachers={tabData.teachers} staffNames={tabData.staffNames} />
       ) : null}
 
-      {tab === "ai_ment" && "aiPrompts" in tabData ? <AiMentSection initial={tabData.aiPrompts} /> : null}
+      {tab === "ai_ment" && "aiPrompts" in tabData ? (
+        <AiMentSection initial={tabData.aiPrompts} styles={tabData.mentStyles} />
+      ) : null}
     </div>
   );
 }

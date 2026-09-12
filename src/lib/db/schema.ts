@@ -962,6 +962,33 @@ export const aiPromptOverrides = pgTable(
   ],
 );
 
+// === teacher_ment_styles (강사별 멘트 말투 프로파일 — 0214a ment_source 코퍼스를 주 1회 접은 것, 0262a) ===
+// 강사당 1행. 자동작성(generateReportComment)이 프롬프트 끝에 붙인다. 서버 액션·cron(service_role) 전용 — 정책 0개(의도).
+export const teacherMentStyles = pgTable(
+  "teacher_ment_styles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    profile: jsonb("profile").notNull(), // { tone, sentence, length, phrases[], closing, caution } — ment-style.ts parseMentStyleProfile
+    sampleCount: integer("sample_count").notNull().default(0),
+    manualCount: integer("manual_count").notNull().default(0),
+    editedCount: integer("edited_count").notNull().default(0),
+    corpusHash: text("corpus_hash").notNull(), // 표본 id 지문 — 같으면 AI를 다시 부르지 않는다
+    corpusUntil: timestamp("corpus_until", { withTimezone: true }),
+    model: text("model"),
+    builtBy: text("built_by").notNull().default("cron"), // 'cron' | users.id
+    builtAt: timestamp("built_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("teacher_ment_styles_teacher_uniq").on(t.tenantId, t.teacherId)],
+);
+
 // === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
 export const consultationAiAnalysis = pgTable(
   "consultation_ai_analysis",

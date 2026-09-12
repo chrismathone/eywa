@@ -87,6 +87,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   // 연동·AI 프롬프트(2026-08-27 감사 커버리지 점검) — 없으면 '대상' 칸에 영문 키가 그대로 뜬다.
   integration: "외부 연동",
   ai_prompt: "AI 프롬프트",
+  ment_style: "강사 말투",
   kiosk_device: "키오스크 기기",
   // 시간표(개발중) 월별 계획(0232a) — 본 시간표가 아니라 **계획**임이 '대상' 칸에서 바로 읽혀야 한다.
   timetable_plan: "시간표 계획",
@@ -224,6 +225,8 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "debug-contract-upload": "계약서 업로드 점검",
   "reset-staff-password": "직원 비밀번호 재설정",
   "backfill-math-auto-units": "수학 출석 시수 자동값 보정",
+  // 주간 cron(/api/cron/ment-style-rebuild) — 세션이 없어 logActionAs로 남긴다.
+  "ment-style-rebuild": "강사 말투 주간 갱신",
 };
 const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
 
@@ -371,6 +374,21 @@ export function auditDetail(
       return "프롬프트 저장(새 버전)";
     case "ai_prompt_reset":
       return "기본 프롬프트로 복원";
+    case "ment_style_rebuild": {
+      const built = num(m.built);
+      const unchanged = num(m.unchanged);
+      const insufficient = num(m.insufficient);
+      const rejected = num(m.rejected);
+      const failed = num(m.failed);
+      return join(
+        m.trigger === "cron" ? "주간 자동 갱신" : "지금 갱신",
+        built === null ? null : `갱신 ${built}명`,
+        unchanged ? `변동 없음 ${unchanged}명` : null,
+        insufficient ? `표본 부족 ${insufficient}명` : null,
+        rejected ? `반려 ${rejected}명` : null,
+        failed ? `실패 ${failed}명` : null,
+      );
+    }
     case "classroom_update": {
       const from = str(m.from);
       const to = str(m.to);

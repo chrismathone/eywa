@@ -234,13 +234,18 @@ export function ComposeFace({
       textbook: textbook.trim(),
       specialNote: note.trim(),
     };
-    const res = await generateReportComment(input, {
-      studentId,
-      subject,
-      todayExamInfo: input.dailyTest,
-      todayHomework: homework,
-      date: reportDate, // 보고서 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
-    });
+    const res = await generateReportComment(
+      input,
+      {
+        studentId,
+        subject,
+        todayExamInfo: input.dailyTest,
+        todayHomework: homework,
+        date: reportDate, // 보고서 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
+      },
+      // 대리작성 — 다른 강사 이름으로 나가는 보고서라 호출자(사무실·겸직 관리자)의 말투 프로파일(0262a)을 붙이지 않는다.
+      { teacherStyle: false },
+    );
     setAiBusy(false);
     if (res.ok && res.comment) {
       setBody(res.comment);

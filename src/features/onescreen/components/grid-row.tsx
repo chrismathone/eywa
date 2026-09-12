@@ -696,7 +696,8 @@ export function GridBodyRow({
               value={rep?.draft ?? ""}
               onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
               readOnly={rowLocked}
-              placeholder={mentPlaceholder ?? (genRowBusy ? t("os.gen.busy") : t("os.row.mentPh"))}
+              // 말투 반영 안내(0262a)는 프로파일을 읽는 행(영어 밖)에만 — 영어 행은 템플릿 모드라 그 문장이 거짓이 된다.
+              placeholder={mentPlaceholder ?? (genRowBusy ? t("os.gen.busy") : isEnglishRow ? t("os.row.mentPh") : t("os.row.mentPhVoice"))}
               aria-label={tf("os.row.mentAria", { name: student.name, subject: subject.name })}
               className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-background"} min-h-[72px]`}
             />
