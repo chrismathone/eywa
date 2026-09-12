@@ -275,13 +275,10 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               ? <LevelSplitChart split={student.levelSplit} noEnrollment={student.programs.noEnrollment} />
               : <Donut data={student.levels} label="전체 재원" />)}
           </Panel>
+          {/* 원장 2026-09-13 "출결 현황은 오늘것만 카운팅" — 오늘 기록이 없어도 지난 기록일로 넘어가지 않는다(attendance-day.ts). */}
           <Panel
             title="출결 현황"
-            note={
-              attendance
-                ? `${attendance.date === snapshot.today ? "오늘" : `최근 기록 ${monthDayLabel(attendance.date)}`} · 학생·반·교시별 출결 칸`
-                : "출결 기록 기준"
-            }
+            note="오늘 · 학생·반·교시별 출결 칸"
             href="/attendance"
             sections={[v.attendance, v.processing]}
           >
@@ -320,7 +317,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               <p className={s.empty}>
                 {v.attendance?.error
                   ? "출결 조회 실패"
-                  : "등록된 출결 기록이 없습니다."}
+                  : "오늘 출결 기록이 아직 없습니다."}
               </p>
             )}
             {processing && (

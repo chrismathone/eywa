@@ -135,7 +135,22 @@ describe("first class matching", () => {
         ],
         subjects,
       ),
-    ).toEqual({ id: "c1", name: "초등M 초5 BS1J" });
+    ).toEqual({ id: "c1", name: "초등M 초5 BS1J", studentName: "김지우" });
+  });
+  it("학생으로 확정되면 그 원생의 정식 이름(접미사)을 함께 돌려주고, 반 이름으로만 확정되면 이름은 없다", () => {
+    expect(
+      matchFirstClass(event, [row({ studentName: "김지우A", school: "칠성" })], subjects)?.studentName,
+    ).toBe("김지우A");
+    const byClassName = matchFirstClass({ ...event, title: "초등M 초5 BS1J 첫 수업" }, [row()], subjects);
+    expect(byClassName?.id).toBe("c1");
+    expect(byClassName?.studentName).toBeUndefined();
+  });
+  it("접미사 뗀 이름으로 잡힌 반이 이미 다니던 반이면(일정일에 시작하지 않음) 반 링크는 그대로지만 이름은 바꾸지 않는다", () => {
+    const already = matchFirstClass(event, [row({ studentName: "김지우A", school: "칠성", startDate: "2026-09-01" })], subjects);
+    expect(already?.id).toBe("c1");
+    expect(already?.studentName).toBeUndefined();
+    const fullName = matchFirstClass({ ...event, title: "수학 첫 수업 김지우A 칠성초5" }, [row({ studentName: "김지우A", startDate: "2026-09-01" })], subjects);
+    expect(fullName?.studentName).toBe("김지우A");
   });
   it("명칭이 같아도 반이 여러 개거나 학교가 다르면 추측하지 않는다", () => {
     expect(

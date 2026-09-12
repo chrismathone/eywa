@@ -1,6 +1,7 @@
 "use client";
 
 import { formatShortKoreanDate } from "@/lib/date-kst";
+import { WindowLink } from "@/components/workspace/window-link";
 import type { OverviewData } from "@/features/dashboard/overview/model";
 import { ABSENT_STATUS_LABEL } from "@/features/dashboard/absent-students";
 import { NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
@@ -41,7 +42,14 @@ export function IntakePopup({
   );
 }
 
-/** 금일입테 팝업 — 오늘 레벨테스트(시각 · 제목). 캘린더 메뉴가 없어 링크는 두지 않는다. */
+/** 이름을 바로잡은 줄은 원래 제목을 툴팁으로 남긴다(카드와 같다). */
+const originalTitleNote = (event: OverviewData["calendar"][number]) =>
+  event.displayTitle && event.displayTitle !== event.title ? `원래 제목: ${event.title}` : undefined;
+
+/**
+ * 금일입테 팝업 — 오늘 레벨테스트(시각 · 제목). 캘린더 메뉴가 숨김이라 일정 자체로 가는 링크는 없고, 그 일정의 콜&상담이
+ * 한 건으로 확정된 줄만 상담 상세로 간다(서버가 콜&상담 권한이 있을 때만 싣는다). 제목은 운영실 일정 카드와 같은 표시용.
+ */
 export function LevelTestPopup({ events }: { events: OverviewData["calendar"] | null }) {
   if (!events) return <PopupEmpty>일정을 불러오지 못했습니다.</PopupEmpty>;
   return (
@@ -54,7 +62,21 @@ export function LevelTestPopup({ events }: { events: OverviewData["calendar"] | 
           {events.map((event) => (
             <li key={event.id} className={s.kpiListRow}>
               <time className={s.kpiTime}>{event.startTime?.slice(0, 5) ?? "종일"}</time>
-              <span className={s.kpiListMeta}>{event.title}</span>
+              {event.matchedConsultation ? (
+                // 🔴 WindowLink의 title = 창 제목(영속) — 일정 원문(전화번호)을 싣지 않고 상담 이름만.
+                <WindowLink
+                  href={`/enrollment/${event.matchedConsultation.id}`}
+                  title={`${event.matchedConsultation.name} 콜&상담`}
+                  ariaLabel={`${event.displayTitle ?? event.title} · ${event.matchedConsultation.name} 콜&상담 상세`}
+                  className={`${s.kpiListMeta} ${s.studentLink}`}
+                >
+                  <span title={originalTitleNote(event)}>{event.displayTitle ?? event.title}</span>
+                </WindowLink>
+              ) : (
+                <span className={s.kpiListMeta} title={originalTitleNote(event)}>
+                  {event.displayTitle ?? event.title}
+                </span>
+              )}
             </li>
           ))}
         </ul>
