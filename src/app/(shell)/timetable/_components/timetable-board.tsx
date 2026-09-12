@@ -50,6 +50,7 @@ import {
   swallowClickAfterDrag,
   swallowDoubleClickAfterDrag,
   type ClassDragInfo,
+  useSmallScreen,
 } from "./drag-flag";
 import { SAME_SPOT_TITLE, annotateDropCells, annotateStudentBlocks, clearDropCells, markHotCells, placementAt } from "./grid-drop-cell";
 import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
@@ -130,9 +131,12 @@ export function TimetableEditProvider({
   canEdit?: boolean;
 }) {
   const router = useRouter();
-  // 드래그 가능 = 권한 + 이번/미래 주. 옛 '편집 모드' state는 없앴다(모드 없이 바로 드래그) — 과거 주로
-  // 이동하면 이 값이 그대로 false라 Delete 핸들러·드롭·저장이 함께 잠긴다(#77: 게이트는 UI가 아니라 여기).
-  const canDrag = canEdit;
+  // 드래그 가능 = 권한 + 이번/미래 주 + **작은 화면이 아님**. 옛 '편집 모드' state는 없앴다(모드 없이 바로 드래그) —
+  // 과거 주로 이동하면 이 값이 그대로 false라 Delete 핸들러·드롭·저장이 함께 잠긴다(#77: 게이트는 UI가 아니라 여기).
+  // 🔴 폰(≤640px)에선 원천 봉쇄한다(원장 2026-09-12 *"작은 모바일화면에서는 시간표상의 드래그를 원천봉쇄시켜.
+  //    오히려 불편함."*) — 여기 한 곳을 끄면 학생 줄·반 블록·드롭존·Delete·큐잉이 함께 닫힌다.
+  const smallScreen = useSmallScreen();
+  const canDrag = canEdit && !smallScreen;
   const [queue, setQueue] = useState<Queued[]>([]);
   // 반 블록 이동 대기 — slotId당 한 건(같은 배치를 다시 놓으면 마지막 것만 남는다).
   const [classQueue, setClassQueue] = useState<QueuedClassMove[]>([]);

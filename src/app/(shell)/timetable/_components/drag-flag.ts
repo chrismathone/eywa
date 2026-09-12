@@ -254,3 +254,38 @@ export function useTouchCapable(): boolean {
     () => false,
   );
 }
+
+/**
+ * **작은 모바일 화면인가** — 그런 화면에선 시간표 드래그를 아예 걸지 않는다
+ * (원장 2026-09-12 *"작은 모바일화면에서는 시간표상의 드래그를 원천봉쇄시켜. 오히려 불편함."*).
+ * 손가락보다 작은 칸을 집으려다 화면 스크롤이 끊기고, 놓을 칸이 화면 밖이라 어디로 가는지 보이지도 않는다.
+ *
+ * 🔴 `useIsDesktop`(min-width 1024 + pointer:fine)을 쓰면 안 된다 — 그 훅은 **창(iframe) 안에서 항상 false**라
+ *    데스크톱에서 시간표를 창으로 열면 드래그가 통째로 죽는다. 여기선 **폭만** 본다.
+ * 🔴 첫 렌더는 false(작지 않다)로 서버와 같게 — 첫 클라 렌더가 서버와 다르면 하이드레이션이 깨진다
+ *    (이 리포엔 그것으로 화면 클릭이 통째로 죽은 전례가 둘: [[#75]]·[[#108]]). 폰에서도 첫 페인트 한 틱은
+ *    드래그가 살아 있지만, 그사이 손가락이 칸을 5px 넘게 끌 수는 없다.
+ * ⚠️ 회전·창 크기 변경을 따라가야 해서 한 번 재고 마는 `useTouchCapable`과 달리 `change`를 구독한다.
+ */
+const SMALL_SCREEN_QUERY = "(max-width: 640px)"; // 앱의 폰 기준(`max-sm:`)과 같은 경계
+let smallMql: MediaQueryList | null = null;
+function smallScreenMql(): MediaQueryList | null {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return null;
+  if (!smallMql) smallMql = window.matchMedia(SMALL_SCREEN_QUERY);
+  return smallMql;
+}
+
+function subscribeSmallScreen(cb: () => void): () => void {
+  const mq = smallScreenMql();
+  if (!mq) return () => {};
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+export function useSmallScreen(): boolean {
+  return useSyncExternalStore(
+    subscribeSmallScreen,
+    () => smallScreenMql()?.matches ?? false,
+    () => false,
+  );
+}

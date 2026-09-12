@@ -24,6 +24,7 @@ import {
   setTimetableDragging,
   swallowClickAfterDrag,
   swallowDoubleClickAfterDrag,
+  useSmallScreen,
 } from "./drag-flag";
 import { useTimetableEdit } from "./edit-context";
 import { annotateStudentBlocks, clearDropCells } from "./grid-drop-cell";
@@ -135,9 +136,13 @@ export function RosterMoveArea({
   const blockRef = useRef<Map<string, string>>(new Map());
   // 5px 넘게 끌어야 드래그 — 그래야 줄의 더블클릭(학생 정보)이 그대로 산다([[#97]]와 같은 규약).
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // 🔴 폰(≤640px)에선 **두 축 모두** 닫는다(원장 2026-09-12 *"작은 모바일화면에서는 시간표상의 드래그를
+  //    원천봉쇄시켜"*). `canDrag`는 이미 작은 화면에서 false지만, 대기·퇴원 축(`enabled`)은 학생 기록 권한이라
+  //    따로 열려 있어 명단 줄이 여전히 집혔다 — 한쪽만 막으면 봉쇄가 아니다.
+  const smallScreen = useSmallScreen();
   const value = useMemo(
-    () => ({ enabled: canEdit, canMoveClass: canDrag, today }),
-    [canEdit, canDrag, today],
+    () => ({ enabled: canEdit && !smallScreen, canMoveClass: canDrag, today }),
+    [canEdit, canDrag, smallScreen, today],
   );
 
   const onDragEnd = useCallback(
