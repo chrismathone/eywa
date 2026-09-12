@@ -231,7 +231,9 @@ describe("⑥ 화면과 서버가 같은 명단 — 옮겨 온 학생이 보이�
 describe("⑦ 강사 렌즈 — 자리 기록은 어느 강사 몫도 아니다", () => {
   it("🔴 자리 라벨 행은 누구 몫으로도 안 센다 — 교시 밖 자리 기록이 담임 폴백으로 담임 값에 섞이지 않게", () => {
     expect(AXIS).toContain("if (input.seatLabel?.trim()) return false;");
-    expect(ATT_QUERY).toContain("ownsSlot(r.session_date, slot, r.seat_label)");
+    // ⚠️ 인자가 하나 늘었다(`r.recorded_via` — JJ는 라벨이 없어 자리 문 표식이 필요하다, 리뷰 2026-09-12).
+    //    핀의 뜻은 "그 행의 자리 표식을 판정에 넘긴다"이므로 닫는 괄호는 빼고 잠근다.
+    expect(ATT_QUERY).toContain("ownsSlot(r.session_date, slot, r.seat_label");
   });
 });
 

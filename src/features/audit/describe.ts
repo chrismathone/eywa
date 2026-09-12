@@ -197,6 +197,8 @@ const FALLBACK_KEY_LABEL: Record<string, string> = {
   // 수학 자동 시수(원장 2026-09-11, attendance/auto-units.ts) — 출결 저장 로그에 붙는다(단건 = 값 · 여러 칸 = 칸 수).
   autoUnits: "자동 시수",
   autoUnitsCells: "자동 시수 칸",
+  // 강사 보기 저장이 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 출결 저장·지우기·메모 로그에 붙는다.
+  skippedSeatRows: "건너뛴 자리 기록",
 };
 
 /** 폴백에서 **사람 id**에 붙일 라벨 — 이름만 서면 누구인지(학생? 강사?) 모른다. `라벨: 이름`으로 적는다. */

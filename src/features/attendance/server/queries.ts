@@ -30,7 +30,7 @@ import type { PeriodWindow } from "@/features/periods/resolve";
 // 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
 // 교시 귀속(누구 몫인가)은 같은 축 모듈이 단일 소스다 — 여기서 규칙을 다시 적지 말 것.
-import { classTeacherIdsInRange, ownsAttendanceSlot } from "@/features/attendance/teacher-axis";
+import { attendanceSlotShare, classTeacherIdsInRange, ownsAttendanceSlot } from "@/features/attendance/teacher-axis";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
 import {
   deriveMarksFromReports,
@@ -866,18 +866,42 @@ export async function getMonthlyAttendanceMatrix(
    * 이 교시가 **이 표의 주인 몫인가** — 규칙·근거는 축 단일 소스 `ownsAttendanceSlot` 주석.
    * (반별 보기는 scope가 없어 항상 true = 종전과 완전히 동일한 숫자.)
    */
-  const ownsSlot = (date: string, slotStart: string | null, seatLabel: string | null = null): boolean =>
-    ownsAttendanceSlot({
-      scopeTeacherId,
-      homeroomTeacherId,
-      slots: axisSlots,
-      date,
-      slotStart,
-      homeroomSince: scopeSince,
-      // 🔴 자리 시수 행(랩실)은 어느 강사 몫도 아니다 — 그 반 자리 교시 밖에 찍힌 행(교시 이동)이
-      //    담임 폴백으로 담임 값에 섞이지 않게(정산 tier-rows가 같은 행을 `seat_label`로 뺀다).
-      seatLabel,
-    });
+  const slotInput = (
+    date: string,
+    slotStart: string | null,
+    seatLabel: string | null,
+    recordedVia: string | null,
+  ) => ({
+    scopeTeacherId,
+    homeroomTeacherId,
+    slots: axisSlots,
+    date,
+    slotStart,
+    homeroomSince: scopeSince,
+    // 🔴 자리 기록은 어느 강사 몫도 아니다 — 그 반 자리 교시 **밖**에 찍힌 행(교시 이동)이 담임 폴백으로
+    //    담임 값에 섞이지 않게. 표식이 둘인 건 자리마다 쓰는 값이 달라서다(비대칭, 리뷰 2026-09-12):
+    //    · 랩실 = `seat_label`(0208a, 정산 tier-rows도 같은 값으로 뺀다)
+    //    · JJ실 = 라벨을 안 박으므로 **자리 문 표식**(`recorded_via="seat"`)이 유일한 근거일 수 있다
+    seatLabel,
+    recordedVia,
+  });
+  const ownsSlot = (
+    date: string,
+    slotStart: string | null,
+    seatLabel: string | null = null,
+    recordedVia: string | null = null,
+  ): boolean => ownsAttendanceSlot(slotInput(date, slotStart, seatLabel, recordedVia));
+  /**
+   * 몫이 아닌 교시가 **자리(JJ·랩실)** 인가 — 저장(`buildScopeShare`)과 같은 함수(`attendanceSlotShare`)·같은 재료.
+   * 🔴 강사 보기 저장은 자리 행을 안 건드린다(원장 2026-09-12) — 격자가 그 행을 "함께 바뀝니다"·지우기 막힘에 세면
+   *    거짓말이 되므로, 세지 않는 교시(`ghosts`)에 자리 표식(`seat`)을 단다.
+   */
+  const seatSlot = (
+    date: string,
+    slotStart: string | null,
+    seatLabel: string | null = null,
+    recordedVia: string | null = null,
+  ): boolean => attendanceSlotShare(slotInput(date, slotStart, seatLabel, recordedVia)) === "seat";
 
   /**
    * 이 반을 그 기간에 맡은 강사가 **둘 이상인가** — 아래 `dayAxis` 안내를 붙일지 정한다.
@@ -1006,11 +1030,15 @@ export async function getMonthlyAttendanceMatrix(
       session_units: number | string | null;
       /** 자리 시수 행 표식(0208a) — 강사 렌즈에서 이 행을 어느 강사 몫으로도 안 세는 근거(`ownsAttendanceSlot`). */
       seat_label: string | null;
+      /** 그 행을 쓴 문(0212a) — JJ는 라벨이 없어 `"seat"`가 유일한 자리 표식일 수 있다(리뷰 2026-09-12). */
+      recorded_via: string | null;
       recorded_at: string;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_at")
+        .select(
+          "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via, recorded_at",
+        )
         .eq("class_id", classId)
         .in("student_id", chunk)
         .gte("session_date", startIso)
@@ -1056,11 +1084,15 @@ export async function getMonthlyAttendanceMatrix(
       const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
       // 주인 몫이면 칸 값(marks/units/slots)으로, 아니면 표시 전용(ghosts)으로 — 값과 표시를 갈라야
       // 합계·출석률·격자가 한 숫자를 말한다(AttendanceMatrix.ghosts 주석).
-      const mine = ownsSlot(r.session_date, slot, r.seat_label);
+      const mine = ownsSlot(r.session_date, slot, r.seat_label, r.recorded_via);
+      // 세지 않는 교시 중 **자리(JJ·랩실)** 는 표식을 단다 — 강사 보기 저장이 그 행을 안 건드리므로(원장 2026-09-12)
+      // 격자·칸·팝오버가 "함께 바뀝니다"·지우기 막힘의 셈에서 뺀다(`sharedOtherSlots`).
+      const seat = !mine && seatSlot(r.session_date, slot, r.seat_label, r.recorded_via);
       (mine ? cell.slots : cell.others).push({
         slot,
         status: r.status as AttendanceStatus,
         units: raw !== null && Number.isFinite(raw) ? raw : null,
+        ...(seat ? { seat: true as const } : {}),
       });
       // 메모는 **가장 최근에 찍힌 것** 하나(순회가 recorded_at 내림차순이라 처음 만난 것).
       // ⚠️ 교시마다 메모가 다를 수 있지만 칸이 하나라 다 못 적는다 — 교시별 메모는 영어 수업 시트에서 본다.

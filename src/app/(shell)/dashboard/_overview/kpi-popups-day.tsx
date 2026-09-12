@@ -1,5 +1,6 @@
 "use client";
 
+import { formatShortKoreanDate } from "@/lib/date-kst";
 import type { OverviewData } from "@/features/dashboard/overview/model";
 import { ABSENT_STATUS_LABEL } from "@/features/dashboard/absent-students";
 import { NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
@@ -102,8 +103,12 @@ function AbsentLine({
 }
 
 /**
- * 결석학생 팝업 — **한 교시도 안 온 학생**(결석·공결)만 센다. 사전 통보는 숫자에서 빼지 않고 표식으로,
- * 일부 교시만 결석한 학생은 세지 않고 아래 '일부 교시 결석' 무리로 따로 보인다(원장 2026-09-11 기본값).
+ * 결석학생 팝업 — **어제**(원장 2026-09-12) **한 교시도 안 온 학생**(결석·공결)만 센다. 사전 통보는 숫자에서
+ * 빼지 않고 표식으로, 일부 교시만 결석한 학생은 세지 않고 아래 '일부 교시 결석' 무리로 따로 보인다
+ * (원장 2026-09-11 기본값).
+ *
+ * 🔑 며칠인지는 **`day.date`**(서버가 조회한 그날)에서 만든다 — '어제'를 글자로 박으면 카드와 갈릴 수 있다.
+ *    다이얼로그 머리(`어제 9/11 (금) 결석 학생`)가 이미 그 말을 하므로 아래 합계 줄은 날짜를 되풀이하지 않는다.
  */
 export function AbsentPopup({
   day,
@@ -124,12 +129,12 @@ export function AbsentPopup({
   const partial = [...day.partial].sort((a, b) => a.name.localeCompare(b.name, "ko"));
   return (
     <>
-      <PopupTotal label="오늘 결석 학생" value={rows.length} unit="명" />
+      <PopupTotal label="결석 학생" value={rows.length} unit="명" />
       <p className={s.popupSummary}>
         연락 필요 {rows.length - notified}명 · 사전 통보 {notified}명
       </p>
       {rows.length === 0 ? (
-        <PopupEmpty>오늘 한 교시도 안 온 학생은 없습니다.</PopupEmpty>
+        <PopupEmpty>{formatShortKoreanDate(day.date)}엔 한 교시도 안 온 학생이 없습니다.</PopupEmpty>
       ) : (
         <ul className={s.kpiList}>
           {sorted.map((row) => (

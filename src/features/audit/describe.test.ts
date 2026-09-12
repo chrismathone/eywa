@@ -244,6 +244,16 @@ describe("collectAuditNameIds / auditTargetName", () => {
     expect(auditDetail("attendance_cell", { scopeTeacherId: UID }, ctx())).toBeNull();
   });
 
+  it("건너뛴 자리 기록(skippedSeatRows)은 한글 라벨로 — 영문 키를 흘리지 않는다(원장 2026-09-12)", () => {
+    const d = auditDetail(
+      "attendance_cell",
+      { studentId: SID, date: "2026-09-10", scopeTeacherId: UID, skippedSeatRows: 1 },
+      ctx({ [SID]: "이윤건", [UID]: "Charlie" }),
+    );
+    expect(d).toContain("건너뛴 자리 기록 1");
+    expect(d).not.toContain("skippedSeatRows");
+  });
+
   it("계정 조작(비밀번호·이메일): 영문 mode/키를 노출하지 않는다", () => {
     expect(auditDetail("staff_password_reset", { mode: "temp" }, ctx())).toBe("임시 비밀번호 발급");
     expect(auditDetail("staff_password_reset", { mode: "custom" }, ctx())).toBe("비밀번호 직접 설정");

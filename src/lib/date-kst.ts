@@ -203,6 +203,33 @@ export function formatKoreanDate(ymd: string): string {
 }
 
 /**
+ * YYYY-MM-DD → "9/11" — 월/일만, **앞자리 0 없이**(`09/01`이 아니라 `9/1`).
+ * 🔑 같은 날짜가 화면마다 다른 모양으로 적히지 않게 **앞자리 0 제거 규칙은 여기 한 곳**에 둔다 —
+ *    `features/timetable/scheduled-import.ts`의 `monthDay`(예약 배지·배너)와 캘린더 목록의 `shortDate`가
+ *    이 함수에 위임한다. 형식이 아니면 원문 그대로(없는 날짜를 지어내지 않는다).
+ */
+export function monthDayLabel(ymd: string): string {
+  const [, m, d] = ymd.split("-");
+  if (!m || !d) return ymd;
+  return `${Number(m)}/${Number(d)}`;
+}
+
+/**
+ * YYYY-MM-DD → "9/11 (금)" — 연도 없이 월/일 + 요일. 카드 보조 줄처럼 **좁은 자리**에서 "그게 며칠인가"를
+ * 한 번에 말할 때(운영실 KPI '결석학생'의 기준일). 요일을 함께 적는 이유: 주말·휴일이면 0명이 당연하다는 것을
+ * 사람이 바로 읽는다. 월/일은 `monthDayLabel` 한 곳에서 만든다.
+ *
+ * 🔴 `Intl.DateTimeFormat`을 쓰지 않는다 — `timeZone`을 빠뜨리면 **런타임의 시간대**로 포맷된다
+ *    (`formatKoreanDate`·`formatKoreanDateLong`과 같은 이유. 여기는 이미 확정된 날짜 문자열이다).
+ */
+export function formatShortKoreanDate(ymd: string): string {
+  // 🔴 모양(`YMD.test`)만 보면 `2026-13-99`가 통과해 `Date.UTC`가 굴러가 **없는 날의 요일**을 지어낸다
+  //    (실측 "13/99 (금)"). 달력에 있는 날만 요일을 붙이고, 아니면 원문 그대로 돌려준다.
+  if (!isValidYmd(ymd)) return ymd;
+  return `${monthDayLabel(ymd)} (${DOW_KO[weekdayIndexOf(ymd)]})`;
+}
+
+/**
  * YYYY-MM-DD → "2026년 7월 14일 월요일"(요일 **긴 이름**). 출석부 날짜 머리처럼 요일을 풀어 쓰는 자리용.
  *
  * 🔴 `Intl.DateTimeFormat`을 쓰지 않는다 — `timeZone`을 빠뜨리면 **런타임의 시간대**로 포맷돼서 서버(UTC)와

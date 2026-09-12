@@ -6,13 +6,17 @@
  *    날짜 · 교시 · 자리 라벨)을 넘겨 칸 값을 만든다. 저장이 다른 재료로 판정하면 친 숫자와 새로고침 뒤 숫자가
  *    또 갈린다(원장 제보 2026-09-11). 클라이언트가 보낸 "내 몫" 목록은 믿지 않는다(#77) — 클라는 **어느 강사의
  *    보기인지**(id)만 보내고, 몫은 여기서 다시 푼다.
+ * 🔴 저장은 몫 말고도 **자리(JJ·랩실) 행인가**를 알아야 한다(원장 2026-09-12 — 강사 보기 저장은 자리 행을 안 쓴다).
+ *    그래서 판정기가 둘이다: 몫(`buildScopeOwner`)과 셋 가르기(`buildScopeShare`) — 같은 재료(`slotInputOf`)를 쓴다.
  * ⚠️ 단 하나 뺀 재료가 **담임 시작일**(`homeroomSince`)이다 — 이유는 `buildScopeOwner` 주석.
  */
 import { monthRange } from "@/lib/date-kst";
 import {
+  attendanceSlotShare,
   classTeacherIdsInRange,
   classTeacherRole,
   ownsAttendanceSlot,
+  type AttendanceSlotShare,
   type AxisSlot,
   type ClassTeacherRole,
 } from "./teacher-axis";
@@ -62,6 +66,23 @@ export function scopeTeaches(facts: ScopeClassFacts | undefined, teacherId: stri
 }
 
 export type ScopeOwner = (classId: string, date: string, row: DayTargetRow) => boolean;
+/** 행 하나의 몫 — 자기 몫(`mine`)·자리(`seat`)·그 밖(`other`). `attendanceSlotShare`와 같은 답. */
+export type ScopeShare = (classId: string, date: string, row: DayTargetRow) => AttendanceSlotShare;
+
+/** 판정 함수에 넘길 재료 — 몫(`buildScopeOwner`)과 셋 가르기(`buildScopeShare`)가 **같은 재료**를 쓴다. */
+function slotInputOf(teacherId: string, f: ScopeClassFacts, date: string, row: DayTargetRow) {
+  return {
+    scopeTeacherId: teacherId,
+    homeroomTeacherId: f.homeroomTeacherId,
+    slots: f.slots,
+    date,
+    slotStart: row.slot_start ?? null,
+    homeroomSince: null,
+    seatLabel: row.seat_label ?? null,
+    // 자리 문이 쓴 기록(JJ는 라벨이 없다) — 슬롯 매칭이 빠져도 자리로 잡히게(리뷰 2026-09-12).
+    recordedVia: row.recorded_via ?? null,
+  };
+}
 
 /**
  * 행 하나가 스코프 강사 몫인가 — 월간 매트릭스 `ownsSlot`과 같은 함수(`ownsAttendanceSlot`)·같은 재료로 판정한다.
@@ -82,14 +103,24 @@ export function buildScopeOwner(input: {
     const f = input.facts.get(classId);
     // 재료가 없는 반은 판정할 수 없다 — 몫이 아닌 것으로 본다(호출부가 `scopeTeaches`로 먼저 거른다).
     if (!f) return false;
-    return ownsAttendanceSlot({
-      scopeTeacherId: input.teacherId,
-      homeroomTeacherId: f.homeroomTeacherId,
-      slots: f.slots,
-      date,
-      slotStart: row.slot_start ?? null,
-      homeroomSince: null,
-      seatLabel: row.seat_label ?? null,
-    });
+    return ownsAttendanceSlot(slotInputOf(input.teacherId, f, date, row));
+  };
+}
+
+/**
+ * 행 하나가 스코프 강사 몫(`mine`)인가 · **자리(JJ·랩실)**(`seat`)인가 · 그 밖(다른 선생님 교시, `other`)인가 — 저장 액션의 판정기.
+ * 🔴 원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."* — 강사 보기 저장은 `seat` 행을 아예 안 쓴다(상태·메모·입력자·
+ *    시수·지우기 전부, `splitOutSeatRows`). 다른 선생님 교시(`other`)는 종전대로 상태를 함께 받는다.
+ * ⚠️ `mine`은 `buildScopeOwner`와 **같은 답**이다(같은 재료·같은 함수 — 테스트가 잠근다). 담임 시작일도 똑같이 안 쓴다.
+ * ⚠️ 재료가 없는 반은 `other`(몫 아님) — 호출부가 `scopeTeaches`로 먼저 거르므로 실제로는 오지 않는다.
+ */
+export function buildScopeShare(input: {
+  teacherId: string;
+  facts: ReadonlyMap<string, ScopeClassFacts>;
+}): ScopeShare {
+  return (classId, date, row) => {
+    const f = input.facts.get(classId);
+    if (!f) return "other";
+    return attendanceSlotShare(slotInputOf(input.teacherId, f, date, row));
   };
 }

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   absentDayHref,
+  absentKpiDate,
   intakeDayHref,
   studentsEnrolledHref,
   studentsFirstClassHref,
@@ -181,16 +182,71 @@ describe("⑤ 오늘첫수업 — 같은 조회·같은 판정·같은 과목 �
   });
 });
 
-describe("⑥ 결석학생 — 카드·출석부·브리핑이 같은 함수", () => {
+/**
+ * 원장 2026-09-12: *"대시보드 결석학생은 어제 결석으로 해야지. 오늘은 수업을 안하면 볼 수가 없잖아"*.
+ * 기준일이 표면마다 갈리면 **카드 숫자와 ↗로 연 화면이 다른 날**을 보여준다 — 그래서 "어제 한 값"을 소스로 잠근다.
+ */
+describe("⑥ 결석학생 — 어제 기준으로 카드·팝업·↗·브리핑이 같은 날", () => {
   const ATTEND = src("src/app/(shell)/attendance/[date]/page.tsx");
+  const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
+  const BRIEFING = src("src/features/dashboard/server/briefing.ts");
+
+  it("기준일 = 어제(KST) — 월·연 경계에서도", () => {
+    expect(absentKpiDate("2026-09-12")).toBe("2026-09-11");
+    expect(absentKpiDate("2026-10-01")).toBe("2026-09-30"); // 월 경계
+    expect(absentKpiDate("2026-01-01")).toBe("2025-12-31"); // 연 경계
+  });
+
+  it("서버는 그 날짜로 조회하고, 조회한 날을 데이터에 실어 보낸다(오늘로 조회하지 않는다)", () => {
+    expect(SERVER).toContain("const absentDate = absentKpiDate(today);");
+    expect(SERVER).toContain("getScopedAbsentStudents(absentDate, await teacherIdPromise)");
+    expect(SERVER).toContain("date: absentDate,");
+    expect(SERVER).not.toContain("getScopedAbsentStudents(today");
+  });
+
+  it("카드 보조 줄·팝업 머리·↗ aria·팝업 본문이 모두 그 한 값에서 나온다", () => {
+    expect(STRIP).toContain("const absentDate = absentDay?.date ?? absentKpiDate(today);");
+    expect(STRIP).toContain("const absentWhen = `어제 ${formatShortKoreanDate(absentDate)}`;");
+    expect(STRIP).toContain("popupTitle={`${absentWhen} 결석 학생`}");
+    expect(STRIP).toContain("label: `출석부에서 ${absentWhen} 결석 학생 보기`");
+    expect(STRIP).toContain("absentDayHref(absentDate)");
+    expect(STRIP).not.toContain("absentDayHref(today)");
+    // 팝업 본문도 기준일에서 만든다 — 날짜 말("오늘"·"어제")을 글자로 박으면 카드와 갈릴 수 있다.
+    // (신규문의·금일입테 팝업의 '오늘'은 그대로 맞다 — 결석 문구만 본다.)
+    expect(POPUPS_DAY).toContain("formatShortKoreanDate(day.date)");
+    expect(POPUPS_DAY).not.toMatch(/(오늘|어제)\s*(결석|한 교시도)/);
+  });
+
+  it("로드 스켈레톤은 **흔한 경우**와 같은 모양이다(기준일 + 항목 셋)", () => {
+    // '일부 교시'는 실측상 거의 매일 있다(09-09 11명 · 09-10 5명 · 09-11 1명) — 그 꼬리를 빼면
+    // 흔한 날마다 보조 줄이 한 줄 늘어 로드 끝에 여섯 칸이 함께 내려앉는다.
+    const LOADING = src("src/app/(shell)/dashboard/loading.tsx");
+    expect(LOADING).toMatch(/\["결석학생",[^\]]*"어제 [^"]*· 연락 필요 0 · 사전 통보 0 · 일부 교시 0"/);
+  });
+
+  it("🔴 실패 문구가 기준일을 지우지 않는다 — 기준일은 detail이 아니라 접두로 넘긴다", () => {
+    const CARD = src("src/app/(shell)/dashboard/_overview/kpi-card.tsx");
+    // 갱신 한 번 실패하면 detail이 통째로 대체된다 — 그때 '어제'가 사라지면 형제 다섯 칸(오늘) 사이에서
+    // 어제 숫자가 오늘 결석으로 읽힌다.
+    expect(CARD).toContain("const text = detailPrefix ? `${detailPrefix} · ${body}` : body;");
+    expect(STRIP).toContain("detailPrefix={absentWhen}");
+    expect(STRIP).not.toContain("`${absentWhen} · 연락 필요");
+  });
 
   it("카드·출석부는 강사 스코프를 건 같은 함수, 브리핑은 같은 판정(학원 전체)의 결석 무리만", () => {
-    expect(SERVER).toContain("getScopedAbsentStudents(today, await teacherIdPromise)");
     expect(ATTEND).toContain("getScopedAbsentStudents(date, teacherId)");
     expect(ATTEND).toContain("effectiveTeacherId()");
     expect(SIGNALS).toContain("getAbsentStudents(today, { supabase, tenantId: db?.tenantId })");
     expect(SIGNALS).toContain("absent.value.absent.map(");
     expect(absentDayHref("2026-09-11")).toBe("/attendance/2026-09-11?status=absent");
+  });
+
+  it("브리핑 '어제 결석'도 같은 날 — asOf=어제 수집분이 같은 판정 함수로 흐른다", () => {
+    // 🔑 남의 파일 문장을 글자 그대로 잠그지 않는다(필드가 하나 늘거나 줄바꿈만 바뀌어도 이 가드가 깨진다) —
+    //    "브리핑이 **어제를 기준일로** 넘긴다"는 사실만 본다.
+    expect(BRIEFING).toMatch(/yesterday\s*=\s*daysBefore\(\s*\w+\s*,\s*1\s*\)/);
+    expect(BRIEFING).toMatch(/asOf:\s*\{[\s\S]{0,160}?date:\s*yesterday\b/);
+    expect(SIGNALS).toMatch(/today\s*=\s*opts\?\.asOf\?\.date\s*\?\?\s*kstToday\(\)/);
   });
 });
 

@@ -78,8 +78,11 @@ export type OverviewData = {
   intake: { id: string; name: string; time: string | null }[];
   /** KPI '오늘첫수업' — 첫 등원 + 새 과목 첫 수업. */
   firstClass: FirstClassStudent[];
-  /** KPI '결석학생' — 오늘 한 교시도 안 온 학생(결석·공결) + 따로 보이는 '일부 교시 결석'. */
-  absent: AbsentDay;
+  /**
+   * KPI '결석학생' — **어제**(KST, `absentKpiDate`) 한 교시도 안 온 학생(결석·공결) + 따로 보이는 '일부 교시 결석'.
+   * `date` = 서버가 실제로 조회한 그날 — 카드 보조 줄·팝업 머리·↗가 이 값을 읽어, 화면이 다른 날을 말하는 일이 없게 한다.
+   */
+  absent: AbsentDay & { date: string };
   attendance: AttendanceSnapshot | null;
   processing: ClassProcessing[];
   attendanceTrend: { date: string; rate: number | null; total: number }[];

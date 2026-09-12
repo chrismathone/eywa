@@ -9,6 +9,7 @@ import {
   type Section,
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrolled-composition";
+import { monthDayLabel } from "@/lib/date-kst";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
@@ -37,7 +38,6 @@ const clock = (at: number) =>
     minute: "2-digit",
     hour12: false,
   });
-const shortDate = (date: string) => date.slice(5).replace("-", "/");
 const monthLabel = (month: string) => `${Number(month.slice(5))}월`;
 const subscribeHydration = () => () => {};
 
@@ -278,7 +278,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             title="출결 현황"
             note={
               attendance
-                ? `${attendance.date === snapshot.today ? "오늘" : `최근 기록 ${shortDate(attendance.date)}`} · 학생·반·교시별 출결 칸`
+                ? `${attendance.date === snapshot.today ? "오늘" : `최근 기록 ${monthDayLabel(attendance.date)}`} · 학생·반·교시별 출결 칸`
                 : "출결 기록 기준"
             }
             href="/attendance"
@@ -659,7 +659,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             title="반복 결석 학생"
             note={
               v.absences?.data?.anchor
-                ? `${shortDate(v.absences.data.anchor)}까지 14일 · 사전 통보 제외 3회 이상`
+                ? `${monthDayLabel(v.absences.data.anchor)}까지 14일 · 사전 통보 제외 3회 이상`
                 : "최근 14일 · 사전 통보 제외"
             }
             sections={[v.absences]}
@@ -1146,7 +1146,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                         {notice.pinned && <em>고정</em>}
                         {notice.title}
                       </span>
-                      <time>{shortDate(notice.createdAt.slice(0, 10))}</time>
+                      <time>{monthDayLabel(notice.createdAt.slice(0, 10))}</time>
                     </>
                   }
                 >

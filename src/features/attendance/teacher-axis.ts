@@ -19,6 +19,13 @@
  * 이 파일은 **순수**하다(DB·서버 의존 0). 조회는 `server/teacher-axis-queries.ts`가 맡는다.
  */
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import type { RecordedVia } from "./live/recorded-via";
+
+/**
+ * 자리 문(자리 출석부·공개 PIN)이 쓰기 때 굳히는 값 — `attendance_records.recorded_via`(0212a).
+ * 🔴 JJ실은 `seat_label`을 안 박아서 **이 값이 유일한 표식**일 수 있다(아래 `recordedVia` 주석).
+ */
+const SEAT_VIA: RecordedVia = "seat";
 
 /** 요일 enum(`day_of_week`) — DB 순서와 같다. 0=일요일인 JS Date 인덱스와 혼동 금지. */
 export const AXIS_DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -217,9 +224,22 @@ export function ownsAttendanceSlot(input: {
    * ⚠️ JJ실은 `seat_label`을 안 박는다(담임 시수와 같은 사실, `PAYROLL_SEAT_KEYS`) — 그래서 여기 안 걸린다.
    */
   seatLabel?: string | null;
+  /**
+   * 그 기록을 **어느 문이 썼나**(`attendance_records.recorded_via`, 0212a) — 자리 문이면 `"seat"`.
+   *
+   * 🔴 JJ실은 `seat_label`을 안 박으므로(위) 자리 판정이 **슬롯 매칭**에만 걸리는데, 그 매칭은 빠질 수 있다:
+   *    자리판 '다른 시간으로 옮기기'로 그 반에 자리 슬롯이 없는 교시에 찍힌 기록 · 자리 슬롯이 `valid_to`로
+   *    마감된 뒤 날짜의 기록 · 교시 시각 정정으로 `slot_start`가 슬롯과 어긋난 기록([[#106]]·[[#126]] 계열).
+   *    그러면 담임 폴백을 타 **몫**이 되어 강사 보기 저장이 자리 기록을 덮었다(리뷰 2026-09-12).
+   *    쓰기 시점에 굳는 이 값이 가장 튼튼한 신호라 **세 번째 자리 신호**로 합집합한다.
+   * ⚠️ **null = 자리 아님** — 옛 스키마 폴백 insert(컬럼 부재, [[#95]])·이 컬럼 이전 기록은 비어 있다.
+   *    비었다고 자리로 보면 반대 방향으로 틀린다(반 출석부 기록이 통째로 누구 몫도 아니게 된다).
+   */
+  recordedVia?: string | null;
 }): boolean {
   if (!input.scopeTeacherId) return true;
   if (input.seatLabel?.trim()) return false;
+  if (input.recordedVia === SEAT_VIA) return false;
   if (input.homeroomSince && input.date < input.homeroomSince) return false;
   if (!input.slotStart) return true;
   return (
@@ -230,6 +250,42 @@ export function ownsAttendanceSlot(input: {
       slotStart: input.slotStart,
     }).teacherId === input.scopeTeacherId
   );
+}
+
+/** 강사 렌즈에서 교시 한 칸의 몫 — 이 표의 주인 · 자리(JJ·랩실) · 그 밖(다른 선생님 교시 등). */
+export type AttendanceSlotShare = "mine" | "seat" | "other";
+
+/**
+ * 강사 렌즈에서 이 교시가 **누구 몫인가**를 셋으로 가른다 — 몫(`mine`)은 위 `ownsAttendanceSlot`의 답 그대로이고,
+ * 몫이 아닌 것만 **자리**와 **그 밖**으로 나눈다.
+ *   · `mine`  = 이 표의 주인 몫(반별 보기는 전부 이것 — 위 함수와 같은 답)
+ *   · `seat`  = 자리(JJ·랩실) — 자리 라벨이 박힌 행(랩실) 또는 그 교시가 자리 슬롯인 행(`resolveTaughtBy`의 `seat`)
+ *   · `other` = 다른 선생님 교시 · 담당이 모호한 교시 · 담임이 되기 전 기록
+ *
+ * 🔴 원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."* — 강사 보기 저장은 자리 행을 **아예 안 쓴다**(상태·메모·
+ *    입력자·시수·지우기 전부). 다른 선생님 교시 행은 종전대로 상태를 함께 받으므로 저장·화면이 둘을 **갈라야** 한다.
+ * ⚠️ JJ실은 `seat_label`을 안 박는다(위 `seatLabel` 주석) — 라벨만 보면 JJ 행을 놓친다. 그래서 **교시로도** 본다.
+ * ⚠️ 몫 판정을 여기서 새로 짓지 않는다 — `mine`이면 자리 여부를 묻지 않는다(위 함수가 이긴다).
+ */
+export function attendanceSlotShare(input: Parameters<typeof ownsAttendanceSlot>[0]): AttendanceSlotShare {
+  if (ownsAttendanceSlot(input)) return "mine";
+  // 자리 표식 둘 — 랩실은 라벨(`seat_label`), JJ는 문(`recorded_via`). 슬롯 매칭보다 **먼저** 본다(위 주석의 세 경우).
+  if (input.seatLabel?.trim() || input.recordedVia === SEAT_VIA) return "seat";
+  // ⚠️ 한계: 같은 (반·요일·시각)에 자리 슬롯과 **사람 슬롯이 함께** 있으면 `resolveTaughtBy`가 사람 쪽을 택해
+  //    여기서 자리로 안 잡힌다(현 데이터 0건, 리뷰 2026-09-12). 그 기록도 자리 문이 썼다면 위 `recordedVia`가
+  //    먼저 걸러 주고, 둘 다 아니면 사람이 반 출석부에서 찍은 기록이라 실제로 그 사람 몫이 맞다.
+  if (
+    input.slotStart &&
+    resolveTaughtBy({
+      homeroomTeacherId: input.homeroomTeacherId,
+      slots: input.slots,
+      date: input.date,
+      slotStart: input.slotStart,
+    }).source === "seat"
+  ) {
+    return "seat";
+  }
+  return "other";
 }
 
 /** 이 반에서 그 사람의 역할 — 반 머리행 표식용. `null` = 이 기간에 안 가르친다. */

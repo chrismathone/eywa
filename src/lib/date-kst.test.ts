@@ -9,6 +9,8 @@ import {
   addDays,
   inclusiveDateWindowStart,
   formatKoreanDate,
+  formatShortKoreanDate,
+  monthDayLabel,
   kstDateOf,
   kstLocalToIso,
   kstTimeOf,
@@ -95,6 +97,20 @@ describe("weekdayIndexOf / addDays / formatKoreanDate — UTC 결정적 날짜 �
   it("formatKoreanDate: 한글 표시", () => {
     expect(formatKoreanDate("2026-07-14")).toBe("2026년 7월 14일 (화)");
     expect(formatKoreanDate("2026-07-13")).toBe("2026년 7월 13일 (월)");
+  });
+  it("monthDayLabel: 앞자리 0 제거 규칙의 정본(형식이 아니면 원문)", () => {
+    expect(monthDayLabel("2026-09-01")).toBe("9/1");
+    expect(monthDayLabel("2026-12-31")).toBe("12/31");
+    // 예약 라벨(scheduled-import의 monthDay)이 기대하던 폴백 — 모양이 아니면 손대지 않는다.
+    expect(monthDayLabel("미정")).toBe("미정");
+  });
+  it("formatShortKoreanDate: 좁은 자리용 월/일 + 요일(앞자리 0 없음)", () => {
+    expect(formatShortKoreanDate("2026-09-09")).toBe("9/9 (수)");
+    expect(formatShortKoreanDate("2026-09-11")).toBe("9/11 (금)");
+    expect(formatShortKoreanDate("2026-12-31")).toBe("12/31 (목)");
+    // 요일을 붙일 수 없는 입력은 `(undefined)` 대신 원문 그대로.
+    expect(formatShortKoreanDate("2026-13-99")).toBe("2026-13-99");
+    expect(formatShortKoreanDate("")).toBe("");
   });
 });
 

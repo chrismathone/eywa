@@ -1303,9 +1303,14 @@ export const SHEET_DICT = {
   "att.row.noTier": { ko: "단가", en: "No rate" },
   "att.row.tierTitle": { ko: "단가 티어 {tier}", en: "Rate tier {tier}" },
   "att.cell.nPeriods": { ko: "{n}교시 · {breakdown}", en: "{n} periods · {breakdown}" },
+  // 🔴 함께 바뀌는 건 **다른 선생님 교시**뿐 — 자리(JJ·랩실) 행은 강사 보기 저장이 안 건드린다(원장 2026-09-12).
   "att.cell.alsoWrites": {
-    ko: " · 이 칸을 고치면 이 교시들도 함께 바뀝니다",
-    en: " · changing this cell changes those periods too",
+    ko: " · 이 칸을 고치면 다른 선생님 교시 기록 {n}건도 함께 바뀝니다",
+    en: " · changing this cell also changes {n} records in other teachers' periods",
+  },
+  "att.cell.seatKept": {
+    ko: " · 자리(JJ·랩실) 기록은 이 칸을 고쳐도 그대로입니다",
+    en: " · the JJ and Lab seat records stay as they are when you change this cell",
   },
   "att.cell.outsideRecord": {
     ko: "재원 기간 밖 기록(보강 등)",
@@ -1416,18 +1421,19 @@ export const SHEET_DICT = {
   "att.pop.pickFirst": { ko: "상태를 먼저 선택하세요", en: "Pick a status first" },
   "att.pop.save": { ko: "저장", en: "Save" },
   "att.pop.clear": { ko: "지우기", en: "Clear" },
+  // 🔴 {n} = 다른 선생님 교시 기록만 — 자리(JJ·랩실)는 강사 보기 저장이 안 건드려서 세지도 적지도 않는다(원장 2026-09-12).
   "att.pop.sharedWarn.a": {
-    ko: "고치면 같은 날 다른 교시 기록 {n}건(다른 선생님·자리 JJ·랩실)도 함께 바뀝니다. 지우기는 여기서 못 합니다 — ",
-    en: "Changing this also changes {n} records in other periods that day (other teachers, the JJ and Lab seats). Clearing is not possible here — use ",
+    ko: "고치면 같은 날 다른 선생님 교시 기록 {n}건도 함께 바뀝니다. 지우기는 여기서 못 합니다 — ",
+    en: "Changing this also changes {n} records in other teachers' periods that day. Clearing is not possible here — use ",
   },
   "att.pop.sharedWarn.b": { ko: "반별 보기에서 지우세요", en: "the class view to clear it" },
   "att.grid.sharedBlock": {
-    ko: "이 칸엔 다른 교시 기록 {n}건(다른 선생님·자리 JJ·랩실)이 함께 있어 여기서 지우면 그것까지 지워집니다 — 반별 보기에서 지우세요",
-    en: "This cell also holds {n} records from other periods (other teachers, the JJ and Lab seats), so clearing here would clear those too — clear it in the class view",
+    ko: "이 칸엔 다른 선생님 교시 기록 {n}건이 함께 있어 여기서 지우면 그것까지 지워집니다 — 반별 보기에서 지우세요",
+    en: "This cell also holds {n} records from other teachers' periods, so clearing here would clear those too — clear it in the class view",
   },
   "att.grid.sharedNotice": {
-    ko: "같은 날 다른 교시 기록 {n}건(다른 선생님·자리)도 함께 바뀝니다",
-    en: "{n} records in other periods that day (other teachers, the seats) change too",
+    ko: "같은 날 다른 선생님 교시 기록 {n}건도 함께 바뀝니다",
+    en: "{n} records in other teachers' periods that day change too",
   },
   "att.grid.skip.locked": { ko: "{n}칸은 수정 기간(7일)이 지나", en: "{n} cells are past the 7-day edit window" },
   "att.grid.skip.notMine": { ko: "{n}칸은 선생님 교시가 없어", en: "{n} cells have no period for this teacher" },
@@ -1445,12 +1451,12 @@ export const SHEET_DICT = {
     en: "{n} cells also hold other periods' records and were left alone — clear them in the class view",
   },
   "att.grid.clear.shared": {
-    ko: "{n}칸은 같은 날 다른 교시 기록(다른 선생님·자리)도 함께 바뀌었습니다",
-    en: "{n} cells also changed other periods' records that day (other teachers, the seats)",
+    ko: "{n}칸은 같은 날 다른 선생님 교시 기록도 함께 바뀌었습니다",
+    en: "{n} cells also changed records in other teachers' periods that day",
   },
   "att.grid.clear.sharedMaybe": {
-    ko: "{n}칸은 같은 날 다른 교시 기록(다른 선생님·자리)도 함께 바뀌었을 수 있습니다",
-    en: "{n} cells may also have changed other periods' records that day (other teachers, the seats)",
+    ko: "{n}칸은 같은 날 다른 선생님 교시 기록도 함께 바뀌었을 수 있습니다",
+    en: "{n} cells may also have changed records in other teachers' periods that day",
   },
   "att.search.totalsNote": { ko: "숫자도 검색 기준", en: "totals follow the search" },
   "att.search.count": { ko: "검색 {n}명", en: "{n} found" },

@@ -7,6 +7,8 @@
 //    취소도 한 번이어야 하므로, 여기서 **날짜로 묶는다**. 하나만 되돌리면 배치와 명단이 어긋난다.
 // ⚠️ server-only 금지 — 배지(클라)와 서버 액션이 같은 규칙을 쓴다([[#61]]).
 
+import { monthDayLabel } from "@/lib/date-kst";
+
 /** 스냅샷 한 건(서버가 DB에서 읽어 넘긴다). */
 export type ScheduledSnapshot = {
   id: string;
@@ -37,12 +39,11 @@ export function shortDate(date: string, today: string): string {
 /**
  * "9/1" — 월/일만(연도 판단 없음). 예약 배지·배너처럼 **가까운 미래**를 가리키는 짧은 라벨용.
  * 🔴 `${d.slice(5).replace("-","/")}`로 직접 만들지 말 것 — 그러면 `09/01`이 되어 툴바 배지(`9/1`)와
- *    같은 화면에서 형식이 갈린다. 앞자리 0 제거 규칙은 여기 한 곳에만 있다.
+ *    같은 화면에서 형식이 갈린다. 앞자리 0 제거 규칙의 정본은 [`monthDayLabel`](@/lib/date-kst) 한 곳이고
+ *    이 함수는 그 이름(예약 라벨 문맥)으로 위임만 한다.
  */
 export function monthDay(date: string): string {
-  const [, m, d] = date.split("-");
-  if (!m || !d) return date;
-  return `${Number(m)}/${Number(d)}`;
+  return monthDayLabel(date);
 }
 
 /** 툴바에 그대로 찍히는 문구. */

@@ -4,8 +4,10 @@ import type { CSSProperties } from "react";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { todayLevelTests } from "@/features/dashboard/overview/display";
+import { formatShortKoreanDate } from "@/lib/date-kst";
 import {
   absentDayHref,
+  absentKpiDate,
   intakeDayHref,
   studentsEnrolledHref,
   studentsFirstClassHref,
@@ -60,11 +62,15 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const levelTests = v.calendar?.data ? todayLevelTests(v.calendar.data, today) : null;
   const firsts = v.firstClass?.data;
   const firstCount = firsts?.filter((row) => row.kind === "first").length ?? 0;
-  // 결석학생 = 한 교시도 안 온 학생만 센다 — 일부 교시 결석은 팝업·목적지에서 따로 보인다.
+  // 결석학생 = **어제**(원장 2026-09-12 — 오늘은 수업을 안 하면 볼 수가 없다) 한 교시도 안 온 학생만 센다.
+  // 일부 교시 결석은 팝업·목적지에서 따로 보인다.
   const absentDay = v.absent?.data;
   const absent = absentDay?.absent;
   const notified = absent?.filter((row) => row.preNotified).length ?? 0;
   const partial = absentDay?.partial.length ?? 0;
+  // 기준일은 **서버가 조회한 그날**. 영역이 실패해 값이 없을 때만 같은 규칙으로 계산한다(머리·↗가 오늘로 새지 않게).
+  const absentDate = absentDay?.date ?? absentKpiDate(today);
+  const absentWhen = `어제 ${formatShortKoreanDate(absentDate)}`;
 
   return (
     <div className={s.kpis} style={kpiGridVars(shown)}>
@@ -163,12 +169,18 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
           detail={
             absent
               ? `연락 필요 ${absent.length - notified} · 사전 통보 ${notified}${partial > 0 ? ` · 일부 교시 ${partial}` : ""}`
-              : "오늘 출결 기준"
+              : "출결 기준"
           }
+          // 기준일은 `detail`이 아니라 접두로 — 갱신 실패 문구가 detail을 대체해도 '어제'가 남는다(kpi-card 주석).
+          detailPrefix={absentWhen}
           icon={<MenuGlyph name="userX" size={20} />}
           error={v.absent.error}
-          popupTitle="오늘 결석 학생"
-          jump={can("attendance") ? { href: absentDayHref(today), label: "출석부에서 오늘 결석 학생 보기" } : null}
+          popupTitle={`${absentWhen} 결석 학생`}
+          jump={
+            can("attendance")
+              ? { href: absentDayHref(absentDate), label: `출석부에서 ${absentWhen} 결석 학생 보기` }
+              : null
+          }
         >
           <AbsentPopup day={absentDay} subjectLabels={snapshot.subjects} canOpen={can("students")} />
         </KpiCard>

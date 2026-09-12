@@ -7,7 +7,8 @@
  *    **그날 모든 교시**(자리 JJ·다른 선생님 교시 포함)에 나눠 담아서, 다시 읽으면 제 몫만 남아 숫자가 줄었다
  *    (실측: 중등E_중2 정규 A 9/10 = 16:20 JJ · 17:20 Charlie · 18:20 Charlie — 4를 치면 1.3·1.3·1.4로 저장돼
  *    Charlie 화면엔 2.7). → 스코프가 있으면 **그 강사 몫 행에만** 나누고, 나머지 행의 시수는 그대로 둔다.
- * ⚠️ 상태는 여기서 다루지 않는다 — 그날 칸의 상태는 종전대로 그날 모든 교시에 간다(칸이 "함께 바뀝니다"로 알린다).
+ * ⚠️ **상태를 받는 행**은 여기가 아니라 `splitOutSeatRows`가 정한다 — 강사 보기에선 자리(JJ·랩실) 행을 뺀 그날 교시
+ *    전부(다른 선생님 교시 포함 — 칸이 "함께 바뀝니다"로 알린다, 원장 2026-09-12).
  * ⚠️ 반별 보기(`owns === null`)는 종전과 **같은 답**이다(전 행이 받는다).
  */
 import { splitUnitsAcrossSlots, toStoredUnits } from "./session-units";
@@ -19,12 +20,21 @@ export type DayTargetRow = {
   slot_start?: string | null;
   /** 자리 시수 행 표식(0208a) — 있으면 어느 강사 몫도 아니다(`ownsAttendanceSlot`). */
   seat_label?: string | null;
+  /**
+   * 그 행을 **쓴 문**(`recorded_via`, 0212a) — `"seat"`면 자리 문이 남긴 기록이다.
+   * 🔴 JJ는 `seat_label`을 안 박아 이 값이 **유일한 자리 표식**일 수 있다(리뷰 2026-09-12 — 슬롯 매칭이
+   *    빠지는 세 경우는 `ownsAttendanceSlot`의 `recordedVia` 주석). 비었으면(옛 기록) 자리 아님.
+   */
+  recorded_via?: string | null;
 };
 
 export type DayUnitsPlan =
   | {
       ok: true;
-      /** id → 저장할 `session_units`(null = 기본 1). **맵에 없는 id는 시수를 건드리지 않는다**(상태만 받는다). */
+      /**
+       * id → 저장할 `session_units`(null = 기본 1). **맵에 없는 id는 시수를 건드리지 않는다**(상태만 받는다 —
+       * 단 자리 행은 상태도 안 받는다, `splitOutSeatRows`).
+       */
       units: ReadonlyMap<string, number | null>;
     }
   /** 스코프가 있는데 그 강사 몫 행이 하나도 없다 — 강사 보기에선 빗금 칸이라 저장하지 않는다. */
@@ -72,6 +82,28 @@ export function groupByPlannedUnits(
     (out.get(k) ?? out.set(k, { units: u, ids: [] }).get(k)!).ids.push(id);
   }
   return [...out.values()];
+}
+
+/**
+ * 강사 보기 저장이 **쓰는 행**과 **손대지 않는 자리 행** — 셀·범위 저장(쓰기·지우기·메모만)이 이 한 함수를 지난다.
+ *
+ * 🔴 원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."* — 자리(JJ·랩실) 교시는 어느 강사의 몫도 아니고, 그 행은
+ *    자리 출석부(자리 담당이 JJ실에서 찍는 기록)의 진실이다. 2026-09-11 수리는 시수만 제 몫 행으로 좁혀서 **상태·메모·
+ *    입력자**가 여전히 자리 행을 덮었다(실측 9/10 박서연D의 JJ 행 메모·입력자). → 자리 행은 쓰기·지우기 대상에서 **뺀다**.
+ * ⚠️ 다른 선생님 교시 행은 여기서 빼지 않는다(종전대로 상태를 함께 받는다 — 원장이 짚은 건 자리뿐).
+ * ⚠️ 빗금 칸(제 몫 0) 거절은 여기가 아니라 `planDayCellUnits`(noneOwned)다 — 순서는 **거절 판정 먼저, 빼기는 그다음**.
+ *    먼저 빼 버리면 자리 행만 있는 칸이 "행 없음"이 되어 **새 행을 만든다**(빗금 칸에 강사 보기 기록이 생긴다).
+ * @param isSeat 이 행이 자리 행인가(`buildScopeShare`의 `seat`). null = 반별 보기 — 전부 쓴다(종전과 같은 답).
+ */
+export function splitOutSeatRows<T extends DayTargetRow>(
+  rows: readonly T[],
+  isSeat: ((row: T) => boolean) | null,
+): { write: T[]; seat: T[] } {
+  if (!isSeat) return { write: [...rows], seat: [] };
+  const write: T[] = [];
+  const seat: T[] = [];
+  for (const r of rows) (isSeat(r) ? seat : write).push(r);
+  return { write, seat };
 }
 
 /** 스코프 강사가 그 달에 이 반을 안 맡는다 — 화면이 오래돼 반 배치가 바뀐 경우가 거의 전부다. */

@@ -1,4 +1,4 @@
-import { weekdayIndexOf } from "@/lib/date-kst";
+import { formatShortKoreanDate } from "@/lib/date-kst";
 import { chipProps } from "@/features/calendar/color";
 import { eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
 
@@ -10,11 +10,13 @@ import { eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
  * ⚠️ 서버·클라 양쪽에서 import한다 — 이 파일에 server-only·"use client"를 붙이지 말 것([[#61]]·[[#81]]).
  */
 
-const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
-
-/** "2026-08-20" → "8/20 (목)" — 연도는 블록 제목·모달 제목이 이미 말한다. */
+/**
+ * "2026-08-20" → "8/20 (목)" — 연도는 블록 제목·모달 제목이 이미 말한다.
+ * 🔑 서식은 [`formatShortKoreanDate`](@/lib/date-kst) **한 곳**에서 만든다(앞자리 0·요일 표기가 화면마다
+ *    갈리지 않게). 이 이름은 캘린더 목록·연대기의 호출부가 쓰는 지역 이름일 뿐이다.
+ */
 export function shortDate(ymd: string): string {
-  return `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))} (${DOW_KO[weekdayIndexOf(ymd)]})`;
+  return formatShortKoreanDate(ymd);
 }
 
 /**

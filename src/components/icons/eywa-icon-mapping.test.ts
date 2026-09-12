@@ -51,6 +51,10 @@ const APPROVED_INLINE_SVG = [
   "src/features/onescreen/components/report-trend-graph.tsx",
   // 2026-09-11 인재원 학습분석지(wide)의 시험 점수 추이 선 — 차트(report-trend-graph와 같은 성격).
   "src/features/ijw/components/jj-study-parts.tsx",
+  // 2026-09-11 운영실 강의실 보기의 2D 평면도(층·복도·강의실 사각형, aria-hidden) — 도면이지 아이콘이 아니다.
+  "src/app/(shell)/dashboard/_classrooms/classroom-map.tsx",
+  // 2026-09-10~11 운영실 현황 차트(도넛·막대·등원율 선, role="img"+aria-label) — 차트(sparkline과 같은 성격).
+  "src/app/(shell)/dashboard/_overview/charts.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다

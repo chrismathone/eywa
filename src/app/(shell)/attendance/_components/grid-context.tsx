@@ -158,7 +158,8 @@ export function GridProvider({
    */
   notMine?: Record<string, true>;
   /**
-   * 값이 있으면서 그 날 **남의 교시도 함께 있는** 칸 → 함께 바뀌는 교시 수(matrix-table `alsoWrites`).
+   * 값이 있으면서 그 날 **다른 선생님 교시도 함께 있는** 칸 → 함께 바뀌는 교시 수(matrix-table `alsoWrites`).
+   * 자리(JJ·랩실) 행은 세지 않는다 — 강사 보기 저장이 그 행을 안 건드린다(원장 2026-09-12).
    * 막지는 않는다 — 범위 작업 뒤 몇 칸이 그런지 알려 주기만 한다(칸 숫자가 사정거리를 안 보여주므로).
    */
   alsoWrites?: Record<string, number>;
@@ -362,10 +363,10 @@ export function GridProvider({
         return;
       }
       const shared = alsoWrites?.[key] ?? 0;
-      // 🔴 **섞인 칸의 단건 삭제는 막는다.** 삭제는 교시를 모른 채 그날 행을 **전부 지우므로**
-      //    (`slot === null`이면 (반·학생·날짜)로 DELETE) 정유진 화면에서 한 칸을 지우면 이다교 교시와
-      //    JJ 기록까지 함께 사라지는데, 이 화면의 숫자는 1이라 무엇을 지웠는지 흔적조차 없다.
-      //    범위 Delete는 빗금 칸만 걸러서 이 경로가 남아 있었다(인계 문서 2026-08-19).
+      // 🔴 **섞인 칸의 단건 삭제는 막는다.** 강사 보기의 삭제는 그날 **다른 선생님 교시 행까지** 지우므로
+      //    정유진 화면에서 한 칸을 지우면 이다교 교시가 함께 사라지는데, 이 화면의 숫자는 1이라 무엇을 지웠는지
+      //    흔적조차 없다. 범위 Delete는 빗금 칸만 걸러서 이 경로가 남아 있었다(인계 문서 2026-08-19).
+      //    ⚠️ 자리(JJ·랩실) 행은 `shared`에 안 든다 — 서버가 그 행을 남기고 제 몫 행만 지운다(원장 2026-09-12).
       //    ⚠️ 문을 닫는 게 아니다 — 반별 보기에선 그 칸이 3으로 보이고 그대로 지울 수 있다(#103).
       if (val === null && shared > 0) {
         setError(
@@ -392,12 +393,13 @@ export function GridProvider({
       const all = [...keys].map(parseCellKey).filter((p): p is NonNullable<typeof p> => !!p);
       const unlocked = all.filter((p) => !isLocked(p.date));
       // 🔴 남의 교시만 있는 칸은 범위 채우기·붙여넣기·**Delete에서도** 뺀다 — 안 빼면 화면에 값이
-      //    없는 채로 남의 기록·자리(JJ)가 통째로 지워지고(그날 모든 교시 DELETE) 화면은 그대로라
-      //    무엇을 지웠는지 아무도 모른다(적대적 리뷰 2026-08-18).
+      //    없는 채로 남의 기록이 지워지고 화면은 그대로라 무엇을 지웠는지 아무도 모른다
+      //    (적대적 리뷰 2026-08-18). ⚠️ 서버도 그 칸을 거절한다(noneOwned) — 여기서 먼저 사유를 말한다.
       const mine = unlocked.filter((p) => !isNotMine(cellKey(p.row, p.date)));
-      // 🔴 **삭제만은 섞인 칸도 뺀다** — 단건 경로와 같은 이유다(지우기엔 교시 축이 없어 그날 행이
-      //    통째로 사라진다). 안 빼면 "1칸 선택하면 거절, 2칸 선택하면 실행"이라는 모순이 남고,
-      //    그 사이 남의 교시·자리(JJ) 기록이 흔적 없이 지워진다(적대적 리뷰 2026-08-19).
+      // 🔴 **삭제만은 섞인 칸도 뺀다** — 단건 경로와 같은 이유다(지우기는 그날 다른 선생님 교시 행까지
+      //    지운다). 안 빼면 "1칸 선택하면 거절, 2칸 선택하면 실행"이라는 모순이 남고, 그 사이 남의 교시
+      //    기록이 흔적 없이 지워진다(적대적 리뷰 2026-08-19).
+      //    ⚠️ 자리(JJ·랩실) 행만 섞인 칸은 여기서 안 걸린다 — 서버가 그 행을 남기고 제 몫 행만 지운다(원장 2026-09-12).
       //    ⚠️ 값을 **쓰는** 범위 작업은 그대로 통과한다(고칠 권리가 있는 칸이다) — 아래에서 사정거리만 알린다.
       const targets = val === null ? mine.filter((p) => !alsoWrites?.[cellKey(p.row, p.date)]) : mine;
       // 건너뛴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
@@ -410,15 +412,15 @@ export function GridProvider({
         mixedCount > 0 ? tf("att.grid.skip.mixed", { n: mixedCount }) : null,
       ].filter(Boolean);
       if (targets.length === 0) {
-        if (skipNote.length > 0) {
-          setError(tf("att.grid.skip.tail", { list: skipNote.join(" · ") }));
+        if (skipNote.length > 0) {
+          setError(tf("att.grid.skip.tail", { list: skipNote.join(" · ") }));
         }
         return;
       }
       if (targets.length === 1) {
         writeOne(cellKey(targets[0]!.row, targets[0]!.date), val);
-        if (skipNote.length > 0) {
-          setError(tf("att.grid.skip.tail", { list: skipNote.join(" · ") }));
+        if (skipNote.length > 0) {
+          setError(tf("att.grid.skip.tail", { list: skipNote.join(" · ") }));
         }
         return;
       }
@@ -457,8 +459,8 @@ export function GridProvider({
         }
         scheduleRefresh();
         const skipped = res.blocked + lockedCount + notMineCount;
-        // 🔴 함께 바뀐 남의 교시를 **말해 준다** — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
-        //    지웠다"고 믿는다. 저장은 그날 모든 교시에 간다(save-targets ①).
+        // 🔴 함께 바뀐 **다른 선생님 교시**를 말해 준다 — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
+        //    지웠다"고 믿는다. 저장은 그날 다른 선생님 교시에도 간다(자리 JJ·랩실 행은 제외 — 원장 2026-09-12).
         const shared = targets.filter((t) => alsoWrites?.[cellKey(t.row, t.date)]).length;
         // 🔴 `mixedCount`도 여기서 말한다 — skipNote는 targets가 0·1일 때만 뜨므로, 2칸 이상 남으면
         //    섞인 칸이 **조용히** 빠졌다(5칸 잡아 지우면 3칸만 지워지는데 화면은 무음).

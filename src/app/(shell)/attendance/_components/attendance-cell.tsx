@@ -7,6 +7,7 @@ import {
   cellDisplay,
   ghostBreakdown,
   rollupDay,
+  sharedOtherSlots,
   slotBreakdown,
   type SlotMark,
 } from "@/features/attendance/cell-display";
@@ -101,7 +102,8 @@ export function AttendanceCell({
    *    (save-targets ①) 여기서 받으면 남의 기록·자리(JJ)를 화면에 흔적도 없이 덮거나 지운다. 게다가
    *    낙관값은 서버 값과 같아질 때만 벗겨지는데 서버는 이 칸을 영원히 비워 두므로 친 숫자가
    *    새로고침 전까지 시수·출석률에 남는다. 고칠 길은 막지 않는다 — **반별 보기에선 그대로 열려 있다**.
-   * ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시)은 잠그지 않는다. 대신 툴팁이 "함께 바뀐다"를 말한다.
+   * ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시)은 잠그지 않는다. 대신 툴팁이 다른 선생님 교시는 "함께 바뀐다",
+   *    자리(JJ·랩실, `seat`)는 "그대로"라고 말한다 — 강사 보기 저장은 자리 행을 안 건드린다(원장 2026-09-12).
    */
   otherSlots?: SlotMark[];
   /**
@@ -189,10 +191,19 @@ export function AttendanceCell({
   const day = pristine ? dayRollup : null;
   // 세지 않는 교시는 **값이 비어 있을 때만** 빗금으로 드러낸다 — 값이 있으면 그 값이 칸의 주인이고,
   // 세지 않는 교시는 아래 툴팁에서 계속 밝힌다.
-  // 🔴 **서버가 값을 안 준 칸일 때만** 빗금이다(initialStatus === null). 값이 있던 칸을 범위 Delete로
-  //    지우면 서버는 그날 **모든 교시**를 지우므로 남의 교시도 이미 없다 — 그때 빗금·유령 메모를 켜면
-  //    새로고침(900ms) 전까지 없는 기록을 있다고 그린다(적대적 리뷰 2026-08-19).
+  // 🔴 **서버가 값을 안 준 칸일 때만** 빗금이다(initialStatus === null). 값이 있던 칸을 지우면 남는 건
+  //    자리(JJ·랩실) 행뿐이다 — 강사 보기의 지우기는 다른 선생님 교시가 섞인 칸을 막고 자리 행은 남긴다
+  //    (원장 2026-09-12). 그런데 그 행의 상태·메모는 이 칸이 모르므로, 여기서 빗금·유령 메모를 켜면
+  //    **방금 지운 내 메모**를 남의 기록으로 그린다. 새로고침(900ms) 뒤 서버가 빗금으로 다시 그린다
+  //    (적대적 리뷰 2026-08-19와 같은 결).
   const ghost = initialStatus === null && !status && !!otherSlots?.length;
+  /**
+   * 이 칸을 고치면 **함께 바뀌는** 세지 않는 교시(= 다른 선생님 교시)와, 그러지 않는 자리(JJ·랩실) 수.
+   * 🔴 격자의 `alsoWrites`·팝오버 지우기 막힘과 **같은 함수**(`sharedOtherSlots`)로 센다 — 따로 세면 같은 칸이
+   *    표면마다 다른 건수를 말한다(원장 2026-09-12: 강사 보기 저장은 자리 행을 안 건드린다).
+   */
+  const sharedOthers = sharedOtherSlots(otherSlots);
+  const seatOthers = (otherSlots?.length ?? 0) - sharedOthers.length;
   // 🔴 빗금 칸엔 값이 없어도 **메모는 있다** — 실측 78칸이 결석 사유였다("병결"·"가족여행").
   //    noteVal은 값이 없으면 비우는 규약(지워진 칸의 유령 메모 방지)이라, 이 칸만 따로 살린다.
   const ghostNote = ghost ? noteEdit ?? note ?? "" : "";
@@ -206,10 +217,14 @@ export function AttendanceCell({
       ? tf("att.cell.nPeriods", { n: day.count, breakdown: slotBreakdown(day.slots, lang) })
       : null,
     // 이 표가 안 세는 교시(자리·남의 교시) — 숫자엔 없지만 기록은 있다는 사실을 여기서 밝힌다.
-    // ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시가 같은 날)은 고치면 남의 교시까지 함께 바뀐다
-    //    (저장은 그날 모든 교시에 간다, save-targets ①). 숫자가 1이라 사정거리가 안 보이므로 여기서 말한다.
+    // ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시가 같은 날)은 고치면 **다른 선생님 교시**까지 함께 바뀐다
+    //    (저장은 그날 교시에 간다, save-targets ①). 숫자가 1이라 사정거리가 안 보이므로 여기서 말한다.
+    // 🔴 자리(JJ·랩실) 행은 함께 **안** 바뀌므로(원장 2026-09-12) 한 문장에 뭉치지 않고 "그대로"라고 따로 적는다 —
+    //    뭉치면 목록에 든 자리 기록까지 바뀐다는 거짓말이 된다.
     otherSlots?.length
-      ? `${ghostBreakdown(otherSlots, lang)}${status ? t("att.cell.alsoWrites") : ""}`
+      ? `${ghostBreakdown(otherSlots, lang)}${
+          status && sharedOthers.length > 0 ? tf("att.cell.alsoWrites", { n: sharedOthers.length }) : ""
+        }${status && seatOthers > 0 ? t("att.cell.seatKept") : ""}`
       : null,
     // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
     outside ? t(status ? "att.cell.outsideRecord" : "att.cell.outside") : null,
@@ -364,8 +379,10 @@ export function AttendanceCell({
           units={units}
           note={noteVal || ghostNote}
           locked={locked ?? null}
+          /* 🔴 두 수는 뜻이 다르다 — `otherCount`는 "이 날 기록이 있나"(자리 포함: 빗금 칸 안내가 읽는다),
+             `sharedCount`는 "고치면 함께 바뀌나"(자리 제외 — 강사 보기 저장은 자리 행을 안 건드린다, 원장 2026-09-12). */
           otherCount={otherSlots?.length ?? 0}
-          sharedDelete={initialStatus !== null && (otherSlots?.length ?? 0) > 0}
+          sharedCount={initialStatus !== null ? sharedOthers.length : 0}
           anchor={popover}
           onClose={() => setPopover(null)}
           onSaved={(next, opts) => {

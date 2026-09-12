@@ -9,7 +9,9 @@ const m = vi.hoisted(() => ({
   inFrame: true,
   updateEnrollmentConsultation: vi.fn(),
   saveDraftOnHide: vi.fn(),
-  clearDraft: vi.fn(async () => {}),
+  // 🔴 인자 타입은 **제네릭**으로 적는다 — `vi.fn(async () => {})`는 타입이 0인자로 굳어 아래 `m.clearDraft(scope)`가
+  //    tsc에서 걸리고(TS2554), 쓰지 않는 인자를 구현에 적으면 lint가 경고한다(저장소 관례 = enrollment-table.test).
+  clearDraft: vi.fn<(scope: string) => Promise<void>>(async () => {}),
 }));
 vi.mock("@/features/enrollment/server/actions", () => ({
   createEnrollmentConsultation: vi.fn(),

@@ -5,7 +5,7 @@ import { formatDows } from "@/features/attendance/calendar";
 // 🔴 서버 컴포넌트라 훅을 못 쓴다 — 언어는 `MatrixTable`이 prop으로 내려준다.
 import { badgeLabelOf, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
-import { BADGE_BASE, BADGE_TONE } from "@/features/attendance/cell-display";
+import { BADGE_BASE, BADGE_TONE, notMineCell } from "@/features/attendance/cell-display";
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
@@ -139,7 +139,13 @@ export function MatrixRow({
         // 이 표의 몫이 아닌 칸(값 없음 + 남의 교시만) — 잠금과 **같은 통로**로 사유를 알린다.
         // 그래야 팝오버·커서·툴팁이 격자(writeOne/writeMany)와 같은 말을 한다(#77: 표면마다 딴말 금지).
         const otherSlots = matrix.ghosts[student.id]?.[d.date];
-        const notMine = !marks[d.date] && !!otherSlots?.length;
+        // 🔴 값이 **파생(수업보고서)뿐**인 칸도 몫이 아니다 — 실제 행이 자리·남의 교시뿐이라 서버가 거절한다
+        //    (리뷰 2026-09-12). 판정은 격자(`buildGridSource`)와 **같은 함수** 한 곳.
+        const notMine = notMineCell({
+          hasValue: !!marks[d.date],
+          derivedValue: !!matrix.derived[student.id]?.[d.date],
+          others: otherSlots,
+        });
         // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외.
         const attend = attendDows.has(d.dow) && !holiday && !outside;
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만

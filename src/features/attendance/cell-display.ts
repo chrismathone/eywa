@@ -16,7 +16,17 @@ export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup
  * 한 날짜에 남은 **교시별 유효 기록** 하나(0196a).
  * `slot`이 null이면 교시가 없던 옛 기록(= 그날 전체) — 섞여 있어도 그대로 한 건으로 센다.
  */
-export type SlotMark = { slot: string | null; status: AttendanceMark; units: number | null };
+export type SlotMark = {
+  slot: string | null;
+  status: AttendanceMark;
+  units: number | null;
+  /**
+   * 강사 보기의 세지 않는 교시(`ghosts`) 중 **자리(JJ·랩실)** 행 — 강사 보기 저장은 이 행을 안 건드린다(원장 2026-09-12).
+   * 그래서 "함께 바뀝니다"·지우기 막힘의 셈(`sharedOtherSlots`)에서 빠진다. 표시(빗금·툴팁)엔 그대로 나온다.
+   * 자리일 때만 붙는다(나머지는 키 없음 — 강사 보기 칸 수천 개의 페이로드).
+   */
+  seat?: true;
+};
 
 /**
  * 상태별 배경(+글자색) = **쨍한 파스텔 원색**(`--att-*`, globals.css).
@@ -264,6 +274,36 @@ export const NOT_MINE_MESSAGE =
  */
 export function ghostBreakdown(others: readonly SlotMark[], lang: "ko" | "en" = "ko"): string {
   return `${sheetT(lang, "att.cell.ghostPrefix")}${slotBreakdown(others, lang)}`;
+}
+
+/**
+ * 세지 않는 교시 중 **이 칸을 고치면 함께 바뀌는** 것 — 자리(JJ·랩실, `seat`)는 뺀다.
+ * 🔴 원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."* — 강사 보기 저장은 자리 행을 안 건드린다(`splitOutSeatRows`).
+ *    격자의 "함께 바뀝니다"·지우기 막힘(`alsoWrites`)과 칸 툴팁·팝오버가 **이 한 함수로** 센다 — 따로 세면 같은 칸이
+ *    표면마다 다른 건수를 말한다(#77).
+ */
+export function sharedOtherSlots(others: readonly SlotMark[] | undefined): SlotMark[] {
+  return others ? others.filter((o) => !o.seat) : [];
+}
+
+/**
+ * 이 칸이 **이 표의 몫이 아닌가**(격자 잠금·빗금 사유) — 격자(`buildGridSource`)와 행(`matrix-row`)이 같은 답을 쓴다.
+ *
+ * 🔴 본래는 "값이 없고 세지 않는 교시만 있는 칸"(빗금)이다. 여기에 **값이 파생뿐인 칸**을 더한다(리뷰 2026-09-12):
+ *    수업보고서 파생은 "내 몫 수기 기록이 없는 등원일"을 메우므로 **실제 행이 자리·남의 교시뿐인 칸도 '출석'으로
+ *    채운다**. 그 칸은 값이 보여 격자가 통과시키는데 서버엔 제 몫 행이 0이라 `NOT_MINE_MESSAGE`로 거절된다 —
+ *    누르고 나서 실패 토스트를 보느니 **누르기 전에** 같은 사유로 막는 게 정직하다.
+ * ⚠️ 반별 보기는 `others`가 항상 비어 있어 **항상 false**다(종전과 완전히 같다).
+ */
+export function notMineCell(input: {
+  /** 서버가 준 값이 있나(`marks`). */
+  hasValue: boolean;
+  /** 그 값이 수업보고서 **파생**인가(실제 출결 행이 아니다). */
+  derivedValue: boolean;
+  others?: readonly SlotMark[];
+}): boolean {
+  if (!input.others?.length) return false;
+  return !input.hasValue || input.derivedValue;
 }
 
 /**

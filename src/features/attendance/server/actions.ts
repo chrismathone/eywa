@@ -26,16 +26,18 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { parseSessionUnits } from "../session-units";
 // 그날 칸 시수 배분(셀·범위 공용) + 강사 전체 보기의 몫 판정(원장 제보 2026-09-11) — 규칙은 순수 모듈, 조회는 server/.
+// 강사 보기 저장은 자리(JJ·랩실) 행을 안 쓴다(원장 2026-09-12) — 빼는 곳은 `splitOutSeatRows` 한 곳.
 import {
   groupByPlannedUnits,
   planDayCellUnits,
+  splitOutSeatRows,
   SCOPE_INVALID_MESSAGE,
   SCOPE_LOAD_FAILED_MESSAGE,
   SCOPE_NOT_TAUGHT_MESSAGE,
   type DayTargetRow,
   type DayUnitsPlan,
 } from "../scoped-split";
-import { buildScopeOwner, isScopeClassIds, isScopeTeacherId, scopeTeaches, type ScopeOwner } from "../scope-ownership";
+import { buildScopeShare, isScopeClassIds, isScopeTeacherId, scopeTeaches, type ScopeShare } from "../scope-ownership";
 import { loadScopeFacts } from "./scope-ownership";
 import { NOT_MINE_MESSAGE } from "../cell-display";
 // 수학 자동 시수(원장 2026-09-11) — **새 행**에만, 숫자를 안 고른 저장에만. 규칙·근거는 auto-units.ts.
@@ -481,7 +483,8 @@ export async function setAttendanceCell(input: {
    * 그 강사 몫 교시의 합만 보여 준다. 넘기면 그날 칸(교시 미지정)에 친 시수를 **그 강사 몫 행에만** 나눈다
    * (자리 JJ·다른 선생님 교시의 시수는 그대로).
    * 🔴 몫은 서버가 DB(반 담임·교시)로 다시 판정한다(`loadScopeFacts`·`ownsAttendanceSlot`) — 클라는 어느 보기인지만 보낸다(#77).
-   * ⚠️ 상태는 종전대로 그날 모든 교시에 간다. 교시를 지정한 저장(`slotStart`)·지우기·메모만 저장엔 쓰지 않는다.
+   * ⚠️ 상태·메모·입력자는 **다른 선생님 교시 행엔 종전대로** 가고, **자리(JJ·랩실) 행엔 안 간다**(원장 2026-09-12).
+   *    지우기·메모만 저장도 이 값을 쓴다(자리 행을 남긴다). 교시를 지정한 저장(`slotStart`)엔 쓰지 않는다.
    * ⚠️ 그 강사 몫 행이 하나도 없으면(자리 JJ·남의 교시뿐인 칸) · 그 달에 그 반을 안 맡은 강사면 거절한다.
    *    담임 인계일 이전 칸은 판정에 넣지 않는다 — 그 칸은 격자가 막는다(`buildScopeOwner` 주석, 반응속도 1순위).
    */
@@ -563,21 +566,91 @@ export async function setAttendanceCell(input: {
   const slot = input.slotStart ?? null;
   const periodStart = input.periodStart ?? slot;
   const via = await resolveWriteVia(supabase, user.id, classId, sessionDate);
+  /**
+   * 강사 전체 보기에서 온 **그날 칸** 저장이면 그 강사 id — 시수를 그 강사 몫 행에만 나누고(원장 제보 2026-09-11),
+   * **자리(JJ·랩실) 행은 아예 안 쓴다**(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."* — 메모만·지우기·쓰기 전부).
+   * ⚠️ 교시를 지정한 저장(ECS)엔 뜻이 없다 — 대상이 그 한 교시라 나눌 것도 뺄 것도 없다. 그래서 받지 않는다(종전 그대로).
+   */
+  const scopeTeacherId = slot === null ? (input.scopeTeacherId ?? null) : null;
+  // 판정 재료(반 담임·교시) — 못 읽으면 null(아래 `scopeShareOf`가 저장을 거절한다: 모르는 채로 쓰거나 지우지 않는다).
+  const loadCellScopeFacts = () =>
+    loadScopeFacts(supabase, [{ classId, date: sessionDate }]).catch((e: unknown) => {
+      console.error("[attendance] 강사 보기 판정 재료 조회 실패 — 저장하지 않습니다:", e);
+      return null;
+    });
+  /** 재료 → 판정기(자기 몫·자리·그 밖), 또는 거절 문장 — 세 갈래(메모만·지우기·쓰기)가 같은 문장으로 거절한다. */
+  const scopeShareOf = (
+    teacherId: string,
+    facts: Awaited<ReturnType<typeof loadCellScopeFacts>>,
+  ): { share: ScopeShare } | { error: string } => {
+    // 🔴 몫을 못 가리면 저장하지 않는다 — 모르는 채로 쓰면 남의 교시로 시수가 새고 자리 행을 덮는 바로 그 버그가 난다.
+    if (!facts) return { error: SCOPE_LOAD_FAILED_MESSAGE };
+    // 그 달에 이 반을 안 맡은 강사의 보기에서 온 저장 — 화면이 오래됐다(반 배치가 바뀌었다).
+    if (!scopeTeaches(facts.get(classId), teacherId, sessionDate)) return { error: SCOPE_NOT_TAUGHT_MESSAGE };
+    return { share: buildScopeShare({ teacherId, facts }) };
+  };
+  /** 강사 보기 칸의 그날 행(정정 이력 포함, 최근 입력 먼저) + 판정기 — 메모만·지우기 갈래가 쓴다(두 조회 병렬, B4). */
+  const loadScopedDay = async (
+    teacherId: string,
+  ): Promise<{ error: string } | { rows: DayTargetRow[]; share: ScopeShare }> => {
+    const [{ data, error }, facts] = await Promise.all([
+      supabase
+        .from("attendance_records")
+        // recorded_via = 자리 문 표식(0212a) — JJ는 `seat_label`이 없어 이게 유일한 자리 근거일 수 있다.
+        .select("id, slot_start, seat_label, recorded_via")
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .eq("session_date", sessionDate)
+        .order("recorded_at", { ascending: false })
+        .order("id", { ascending: false }),
+      loadCellScopeFacts(),
+    ]);
+    // 확인 실패 = 안 쓴다 — 어느 행이 자리인지 모르는 채로 지우거나 메모를 달지 않는다.
+    // 🔴 DB 오류 **원문(영문)을 화면에 내보내지 않는다**(CLAUDE.md raw 노출 금지) — 재료 조회 실패와 같은 한글 문장으로.
+    //    원문은 서버 로그에만 남긴다.
+    if (error) {
+      console.error("[attendance] 강사 보기 그날 행 조회 실패 — 저장하지 않습니다:", error.message);
+      return { error: SCOPE_LOAD_FAILED_MESSAGE };
+    }
+    const gate = scopeShareOf(teacherId, facts);
+    if ("error" in gate) return gate;
+    return { rows: (data ?? []) as DayTargetRow[], share: gate.share };
+  };
+  /** 판정기 → "이 행이 자리(JJ·랩실)인가" — `splitOutSeatRows`에 넘긴다. */
+  const seatOf = (share: ScopeShare) => (r: DayTargetRow) => share(classId, sessionDate, r) === "seat";
 
   if (noteOnly) {
-    let q = supabase
-      .from("attendance_records")
-      .select("id")
-      .eq("class_id", classId)
-      .eq("student_id", studentId)
-      .eq("session_date", sessionDate);
-    if (slot !== null) q = q.eq("slot_start", slot);
-    const { data: row } = await q
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!row?.id) return { error: "그날 출결 기록이 없어 메모만 남길 수 없습니다 — 먼저 출결을 입력하세요" };
-    const { error } = await supabase.from("attendance_records").update({ note: noteVal }).eq("id", row.id);
+    let rowId: string | null = null;
+    // 강사 보기가 손대지 않고 둔 자리 행 수 — 감사로그(역검수)용.
+    let skippedSeatRows = 0;
+    if (scopeTeacherId) {
+      /**
+       * 🔴 강사 보기의 메모(잠긴 칸) — 자리(JJ·랩실) 행에 달지 않는다(원장 2026-09-12). 종전 규약("그날 가장 최근 행")
+       *    그대로 고르되 자리 행만 건너뛴다 — 다른 선생님 교시 행은 종전대로 후보다.
+       */
+      const day = await loadScopedDay(scopeTeacherId);
+      if ("error" in day) return day;
+      const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share));
+      // 그날 행이 자리 행뿐 = 강사 보기의 빗금 칸 — 격자와 같은 문장으로 거절한다.
+      if (write.length === 0 && seat.length > 0) return { error: NOT_MINE_MESSAGE };
+      rowId = write[0]?.id ?? null;
+      skippedSeatRows = seat.length;
+    } else {
+      let q = supabase
+        .from("attendance_records")
+        .select("id")
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .eq("session_date", sessionDate);
+      if (slot !== null) q = q.eq("slot_start", slot);
+      const { data: row } = await q
+        .order("recorded_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      rowId = (row?.id as string | undefined) ?? null;
+    }
+    if (!rowId) return { error: "그날 출결 기록이 없어 메모만 남길 수 없습니다 — 먼저 출결을 입력하세요" };
+    const { error } = await supabase.from("attendance_records").update({ note: noteVal }).eq("id", rowId);
     if (error) return { error: error.message };
     /**
      * 감사로그 — 이 경로만 **7일 편집창을 면제**받는다(원장 2026-08-06). 면제된 문은 언제 열렸는지가
@@ -593,6 +666,9 @@ export async function setAttendanceCell(input: {
         date: sessionDate,
         ...(slot ? { slotStart: slot } : {}),
         cleared: noteVal === null,
+        // 강사 전체 보기에서 온 메모 — 자리(JJ·랩실) 행은 후보에서 뺐다(원장 2026-09-12).
+        ...(scopeTeacherId ? { scopeTeacherId } : {}),
+        ...(skippedSeatRows > 0 ? { skippedSeatRows } : {}),
         ...backdatedFlag([sessionDate], kstToday()),
       },
     });
@@ -614,15 +690,48 @@ export async function setAttendanceCell(input: {
       source: input.source,
     });
     if ("error" in deskGate) return deskGate;
-    let del = supabase
-      .from("attendance_records")
-      .delete()
-      .eq("class_id", classId)
-      .eq("student_id", studentId)
-      .eq("session_date", sessionDate);
-    if (slot !== null) del = del.eq("slot_start", slot);
-    const { error } = await del;
-    if (error) return { error: error.message };
+    // 강사 보기가 손대지 않고 남긴 자리(JJ·랩실) 행 수 — 감사로그(역검수)용.
+    let skippedSeatRows = 0;
+    if (scopeTeacherId) {
+      /**
+       * 🔴 강사 보기의 지우기 — **자리(JJ·랩실) 행은 남긴다**(원장 2026-09-12). (반·학생·날짜)로 칸을 통째로 지우면
+       *    자리 담당이 JJ실에서 찍은 기록까지 사라진다. 그래서 그날 행(정정 이력 포함)을 받아 **자리 아닌 행만** id로 지운다.
+       * ⚠️ 다른 선생님 교시 행은 종전대로 함께 지운다 — 섞인 칸의 지우기를 막는 문은 화면(`sharedBlock`)이다.
+       * ⚠️ 제 몫 행이 하나도 없는 칸(빗금 칸)은 쓰기와 **같은 판정**(`planDayCellUnits` noneOwned)·같은 문장으로 거절한다.
+       */
+      const day = await loadScopedDay(scopeTeacherId);
+      if ("error" in day) return day;
+      const byId = new Map(day.rows.map((r) => [r.id, r]));
+      const plan = planDayCellUnits({
+        // 그날 교시별 최신 행 = 화면이 값으로 세는 행(쓰기 갈래와 같은 대상 선정).
+        targets: pickSaveTargets(day.rows, null).updateIds.map((id) => byId.get(id)!),
+        owns: (r) => day.share(classId, sessionDate, r) === "mine",
+        unitsVal: undefined,
+      });
+      if (!plan.ok) return { error: NOT_MINE_MESSAGE };
+      const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share));
+      skippedSeatRows = seat.length;
+      if (write.length > 0) {
+        const { error } = await supabase
+          .from("attendance_records")
+          .delete()
+          .in(
+            "id",
+            write.map((r) => r.id),
+          );
+        if (error) return { error: error.message };
+      }
+    } else {
+      let del = supabase
+        .from("attendance_records")
+        .delete()
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .eq("session_date", sessionDate);
+      if (slot !== null) del = del.eq("slot_start", slot);
+      const { error } = await del;
+      if (error) return { error: error.message };
+    }
     /**
      * 감사로그 — **지우기가 이 파일에서 가장 값진 줄**이다. 출결 행은 스스로 `recorded_by`·`recorded_at`을
      * 담고 있어 "누가 찍었나"는 행만 봐도 되지만, 지우면 그 증거가 행과 **함께** 사라진다(2026-08-18
@@ -636,6 +745,9 @@ export async function setAttendanceCell(input: {
         classId,
         date: sessionDate,
         ...(slot ? { slotStart: slot } : {}),
+        // 강사 전체 보기에서 온 지우기 — 자리(JJ·랩실) 행은 남겼다(원장 2026-09-12).
+        ...(scopeTeacherId ? { scopeTeacherId } : {}),
+        ...(skippedSeatRows > 0 ? { skippedSeatRows } : {}),
         ...(input.source ? { source: input.source } : {}),
         ...backdatedFlag([sessionDate], kstToday()),
       },
@@ -650,17 +762,13 @@ export async function setAttendanceCell(input: {
   //    (실측 2026-08-14: 영어도 day-level 20행이 남아 있다). 그 교시만 조회하면 옛 day-level 행을
   //    못 보고 새 행을 INSERT해 **같은 (학생·반·날짜)에 두 행이 살아남는다** — 화면은 교시 우선이라
   //    멀쩡해 보이지만 급여·시수는 두 행을 다 합산해서, 정정이 돈에 반영되지 않거나 이중 계상된다.
-  /**
-   * 강사 전체 보기에서 온 **그날 칸** 저장이면 그 강사 id(원장 제보 2026-09-11) — 시수를 그 강사 몫 행에만 나눈다.
-   * ⚠️ 교시를 지정한 저장(ECS)엔 뜻이 없다 — 대상이 같은 한 수업이라 나눌 게 없다. 그래서 받지 않는다(종전 그대로).
-   */
-  const scopeTeacherId = slot === null ? (input.scopeTeacherId ?? null) : null;
   // 그날 기록과 스코프 판정 재료(반 담임·교시)는 서로 독립이라 병렬(B4).
   const [{ data: rows }, scopeFacts] = await Promise.all([
     supabase
       .from("attendance_records")
-      // seat_label = 자리 시수 행(0208a) — 강사 보기의 몫 판정(`ownsAttendanceSlot`)이 이 표식을 본다.
-      .select("id, slot_start, seat_label, recorded_at, status, note, session_units")
+      // seat_label = 자리 시수 행(0208a) · recorded_via = 자리 문 표식(0212a, JJ는 라벨이 없다) —
+      // 강사 보기의 몫 판정(`ownsAttendanceSlot`)이 두 표식을 함께 본다.
+      .select("id, slot_start, seat_label, recorded_via, recorded_at, status, note, session_units")
       .eq("class_id", classId)
       .eq("student_id", studentId)
       .eq("session_date", sessionDate)
@@ -668,26 +776,33 @@ export async function setAttendanceCell(input: {
       // id desc = recorded_at 동률 tie-break — 로스터·발송 게이트·effective-records와 같은 규약.
       // 없으면 동시각 중복 행에서 pickSaveTargets의 "처음 만난 행이 최신" 전제가 다른 행을 고른다.
       .order("id", { ascending: false }),
-    scopeTeacherId
-      ? loadScopeFacts(supabase, [{ classId, date: sessionDate }]).catch((e: unknown) => {
-          console.error("[attendance] 강사 보기 판정 재료 조회 실패 — 저장하지 않습니다:", e);
-          return null;
-        })
-      : null,
+    scopeTeacherId ? loadCellScopeFacts() : null,
   ]);
-  if (scopeTeacherId) {
-    // 🔴 몫을 못 가리면 저장하지 않는다 — 스코프 없이 나누면 남의 교시로 시수가 새는 바로 그 버그가 난다.
-    if (!scopeFacts) return { error: SCOPE_LOAD_FAILED_MESSAGE };
-    // 그 달에 이 반을 안 맡은 강사의 보기에서 온 저장 — 화면이 오래됐다(반 배치가 바뀌었다).
-    if (!scopeTeaches(scopeFacts.get(classId), scopeTeacherId, sessionDate)) {
-      return { error: SCOPE_NOT_TAUGHT_MESSAGE };
-    }
-  }
+  // 강사 보기 — 판정기(자기 몫·자리·그 밖)를 세운다. 재료를 못 읽었거나 그 달에 이 반을 안 맡으면 거절한다.
+  const gate = scopeTeacherId ? scopeShareOf(scopeTeacherId, scopeFacts) : null;
+  if (gate && "error" in gate) return gate;
+  const share = gate ? gate.share : null;
 
   // 대상 선정은 순수 규칙 **한 곳**(pickSaveTargets)이 정한다 — 일괄 저장도 같은 함수를 쓴다.
   // 이미 recorded_at 내림차순이라 "교시마다 처음 만난 행이 최신"이라는 그 함수의 전제를 만족한다.
   const { updateIds, promoteIds } = pickSaveTargets(rows ?? [], slot);
-  const targetIdSet = new Set([...updateIds, ...promoteIds]);
+  const rowById = new Map((rows ?? []).map((r) => [r.id as string, r]));
+  /** 저장 대상 행의 판정 재료(교시·자리 표식) — 시수 배분과 자리 빼기가 **같은 모양**을 쓴다. */
+  const dayTargets: DayTargetRow[] = updateIds.map((id) => ({
+    id,
+    slot_start: (rowById.get(id)?.slot_start as string | null | undefined) ?? null,
+    seat_label: (rowById.get(id)?.seat_label as string | null | undefined) ?? null,
+    recorded_via: (rowById.get(id)?.recorded_via as string | null | undefined) ?? null,
+  }));
+  /**
+   * 🔴 강사 보기 저장은 자리(JJ·랩실) 행을 **안 쓴다** — 상태·메모·입력자·시수 전부(원장 2026-09-12).
+   * ⚠️ 빗금 칸 거절(noneOwned)은 아래에서 **원래 대상**(`updateIds`)으로 판정한다 — 여기서 먼저 빼 버리면
+   *    자리 행만 있는 칸이 "행 없음"이 되어 새 행을 만든다(`splitOutSeatRows` 주석).
+   */
+  const { write: writeTargets, seat: seatTargets } = splitOutSeatRows(dayTargets, share ? seatOf(share) : null);
+  const writeIds = writeTargets.map((r) => r.id);
+  // 상태·입력자를 실제로 받는 행 = 자리를 뺀 그날 교시 + 승격 대상. 이전 상태(감사로그·교차 알림)도 이 행에서 읽는다.
+  const targetIdSet = new Set([...writeIds, ...promoteIds]);
   const prevRow = (rows ?? []).find((r) => targetIdSet.has(r.id as string));
   const prevStatus = prevRow?.status ?? null;
 
@@ -733,7 +848,8 @@ export async function setAttendanceCell(input: {
      *    → 교시별로 **나눠 담아** 합이 정확히 친 숫자가 되게 한다(배분 규칙 = `planDayCellUnits` 한 곳, 범위 저장도 같은 함수).
      * 🔴 **강사 전체 보기에서 온 저장은 그 강사 몫 행에만 나눈다**(원장 제보 2026-09-11 *"새로고침하면 강제로
      *    어떤 숫자로 롤백"*) — 그 보기의 칸은 제 몫 교시의 합만 보여 주는데, 그날 모든 교시(자리 JJ·다른
-     *    선생님)에 나누면 다시 읽을 때 숫자가 준다(4 → 2.7). 남의 행은 **시수를 그대로 두고 상태만** 받는다.
+     *    선생님)에 나누면 다시 읽을 때 숫자가 준다(4 → 2.7). **다른 선생님 교시 행**은 시수를 그대로 두고
+     *    상태만 받고, **자리(JJ·랩실) 행은 아예 안 쓴다**(원장 2026-09-12 — 위 `writeIds`).
      * ⚠️ 나누는 건 **그날 칸(slot === null)일 때뿐**이다. 교시를 지정한 저장(ECS)의 대상 2건은
      *    "그 교시 + 옛 day-level 행"이라 **같은 한 수업**이다 — 거기서 나누면 진짜로 반이 된다.
      * ⚠️ 빈칸·"1"(unitsVal === null)은 "교시마다 기본"이라는 뜻이라 종전 그대로 둔다(원장 확정).
@@ -741,16 +857,9 @@ export async function setAttendanceCell(input: {
     let dayPlan: DayUnitsPlan | null = null;
     if (slot === null) {
       // 판정기는 받아 둔 재료로만 만든다 — 추가 조회 없음(담임 시작일은 안 읽는다, `buildScopeOwner` 주석).
-      const owner =
-        scopeTeacherId && scopeFacts ? buildScopeOwner({ teacherId: scopeTeacherId, facts: scopeFacts }) : null;
-      const rowById = new Map((rows ?? []).map((r) => [r.id as string, r]));
       dayPlan = planDayCellUnits({
-        targets: updateIds.map((id) => ({
-          id,
-          slot_start: (rowById.get(id)?.slot_start as string | null | undefined) ?? null,
-          seat_label: (rowById.get(id)?.seat_label as string | null | undefined) ?? null,
-        })),
-        owns: owner ? (r) => owner(classId, sessionDate, r) : null,
+        targets: dayTargets,
+        owns: share ? (r) => share(classId, sessionDate, r) === "mine" : null,
         unitsVal: unitsProvided ? unitsVal : undefined,
       });
       if (!dayPlan.ok) {
@@ -770,12 +879,13 @@ export async function setAttendanceCell(input: {
       const wrote = await updateWithVia(supabase, { ...patch, slot_start: slot }, promoteIds);
       if (wrote.error) return { error: wrote.error };
     }
-    if (updateIds.length > 0) {
+    if (writeIds.length > 0) {
       // 같은 시수끼리 한 문장씩(대상이 그날 교시 수라 많아야 서너 건) — 시수를 안 받는 행(남의 교시·시수 안 보냄)은 상태만.
+      // ⚠️ 대상은 `writeIds`다(자리 행을 뺀 뒤) — `updateIds`로 쓰면 자리 행이 상태·입력자를 받는다(원장 2026-09-12).
       const groups =
         dayPlan && dayPlan.ok
-          ? groupByPlannedUnits(updateIds, dayPlan.units)
-          : [{ units: undefined as number | null | undefined, ids: updateIds }];
+          ? groupByPlannedUnits(writeIds, dayPlan.units)
+          : [{ units: undefined as number | null | undefined, ids: writeIds }];
       for (const g of groups) {
         const wrote = await updateWithVia(
           supabase,
@@ -833,6 +943,8 @@ export async function setAttendanceCell(input: {
       ...(insertedAuto != null ? { autoUnits: insertedAuto } : {}),
       // 강사 전체 보기에서 온 그날 칸 저장 — 시수를 그 강사 몫 교시에만 나눴다(원장 제보 2026-09-11).
       ...(scopeTeacherId ? { scopeTeacherId } : {}),
+      // 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 역검수용.
+      ...(seatTargets.length > 0 ? { skippedSeatRows: seatTargets.length } : {}),
       ...(input.source ? { source: input.source } : {}),
       ...backdatedFlag([sessionDate], kstToday()),
     },
@@ -1477,6 +1589,7 @@ export async function setAttendanceRange(input: {
   /**
    * **강사 전체 보기의 주인**(원장 제보 2026-09-11) — `setAttendanceCell`의 같은 필드와 같은 뜻: 시수를 그 강사 몫
    * 행에만 나눈다(자리 JJ·다른 선생님 교시의 시수는 그대로). 몫은 서버가 DB로 다시 판정한다(#77).
+   * ⚠️ **자리(JJ·랩실) 행은 상태·입력자·지우기까지 아예 안 건드린다**(원장 2026-09-12) — 채우기와 지우기 둘 다.
    */
   scopeTeacherId?: string | null;
   /**
@@ -1572,11 +1685,12 @@ export async function setAttendanceRange(input: {
    * ⚠️ 그 달에 그 반을 안 맡은 강사의 칸 · 그 강사 몫 행이 하나도 없는 칸(강사 보기의 빗금 칸)은 **그 칸만**
    *    건너뛴다(범위 규약 — 한 칸 때문에 전부 거절하지 않는다). 전부 걸리면 사유를 말한다.
    * ⚠️ 판정 재료는 **걸러진 칸**(`allowed`)에서 뽑아 아래 기존 기록 조회와 같은 `Promise.all`로 받는다(B4 — 직렬 왕복
-   *    금지). 지우기(status=null)엔 나눌 시수가 없어 받지 않는다.
+   *    금지). 🔴 **지우기(status=null)에도 받는다**(원장 2026-09-12) — 자리(JJ·랩실) 행을 남기려면 어느 행이 자리인지
+   *    알아야 한다. 종전엔 "나눌 시수가 없다"는 이유로 안 받아서 범위 지우기가 자리 기록까지 지웠다.
    */
   const scopedClassSet = scopeTeacherId ? new Set(input.scopeClassIds ?? classIds) : null;
   const isScoped = (c: RangeCell) => !!scopedClassSet?.has(c.classId);
-  const scopedForFacts = status !== null ? allowed.filter(isScoped) : [];
+  const scopedForFacts = allowed.filter(isScoped);
 
   const wanted = new Set(allowed.map((c) => `${c.studentId}::${c.classId}::${c.sessionDate}`));
   // 기존 기록 — (학생×반×날짜) 교차곱으로 받아 **정확한 칸만** JS로 골라낸다(칸마다 쿼리 금지).
@@ -1593,11 +1707,13 @@ export async function setAttendanceRange(input: {
       slot_start: string | null;
       /** 자리 시수 행 표식(0208a) — 강사 보기의 몫 판정(`ownsAttendanceSlot`)이 본다. */
       seat_label: string | null;
+      /** 자리 문 표식(0212a) — JJ는 `seat_label`이 없어 이게 유일한 자리 근거일 수 있다(리뷰 2026-09-12). */
+      recorded_via: string | null;
       recorded_at: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("id, class_id, student_id, session_date, slot_start, seat_label, recorded_at")
+        .select("id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at")
         .in("session_date", dates)
         .in("class_id", classIds)
         .in("student_id", chunk)
@@ -1618,9 +1734,90 @@ export async function setAttendanceRange(input: {
   const mine = existingRows.filter((r) => wanted.has(`${r.student_id}::${r.class_id}::${r.session_date}`));
   const CHUNK = 100;
 
+  /**
+   * 칸(학생·반·날짜)마다 **교시별 최신 1행**. 청크별 desc 정렬이라 각 (칸,교시)의 첫 행이 최신이다
+   * (`pickSaveTargets`의 교시 미지정 가지와 **같은 규칙** — 출석부 한 칸 = 그날 하나의 사실).
+   * 🔴 종전엔 칸당 **한 행**만 고쳐서, 교시가 여럿인 날은 나머지 교시가 옛 상태·옛 시수로 남았다
+   *    (범위로 결석을 되돌려도 한 교시만 돌아오는 꼴). 단건 저장·반별 폼과 규칙을 맞춘다.
+   * ⚠️ 지우기 갈래도 이 대상 선정을 쓴다(빗금 칸 판정) — 그래서 두 갈래보다 **앞**에 온다.
+   */
+  const cellKeyOf = (c: RangeCell) => `${c.studentId}::${c.classId}::${c.sessionDate}`;
+  const cellSlotRows = new Map<string, DayTargetRow[]>();
+  const seenSlot = new Set<string>();
+  for (const r of mine) {
+    const k = `${r.student_id}::${r.class_id}::${r.session_date}`;
+    const slotKey = `${k}::${r.slot_start ? String(r.slot_start).slice(0, 5) : "DAY"}`;
+    if (seenSlot.has(slotKey)) continue;
+    seenSlot.add(slotKey);
+    (cellSlotRows.get(k) ?? cellSlotRows.set(k, []).get(k)!).push({
+      id: r.id,
+      slot_start: r.slot_start,
+      seat_label: r.seat_label,
+      recorded_via: r.recorded_via,
+    });
+  }
+
+  // 강사 전체 보기에서 온 범위 — 판정 재료(`scopeFacts`)는 위 기존 기록 조회와 함께 받아 두었다(B4).
+  let scopeShare: ScopeShare | null = null;
+  let notTaught = 0;
+  let noneOwned = 0;
+  if (scopeTeacherId && scopedForFacts.length > 0) {
+    // 🔴 몫을 못 가리면 저장하지 않는다 — 스코프 없이 나누면 남의 교시로 시수가 새는 바로 그 버그가 난다.
+    if (!scopeFacts) return { error: SCOPE_LOAD_FAILED_MESSAGE };
+    const facts = scopeFacts;
+    const before = allowed.length;
+    allowed = allowed.filter(
+      (c) => !isScoped(c) || scopeTeaches(facts.get(c.classId), scopeTeacherId, c.sessionDate),
+    );
+    notTaught = before - allowed.length;
+    // 판정기는 받아 둔 재료로만 만든다 — 추가 조회 없음(담임 시작일은 안 읽는다, `buildScopeOwner` 주석).
+    scopeShare = buildScopeShare({ teacherId: scopeTeacherId, facts });
+  }
+  /** 칸마다 몫 판정 — 스코프 밖 칸(반별 보기·보강 묶음)은 null이라 종전과 같은 답이다. */
+  const ownerOf = (c: RangeCell): ((row: DayTargetRow) => boolean) | null => {
+    const s = isScoped(c) ? scopeShare : null;
+    return s ? (r) => s(c.classId, c.sessionDate, r) === "mine" : null;
+  };
+  /** 칸마다 자리(JJ·랩실) 판정 — 강사 보기의 채우기·지우기는 그 행을 안 건드린다(원장 2026-09-12). */
+  const seatOf = (c: RangeCell): ((row: DayTargetRow) => boolean) | null => {
+    const s = isScoped(c) ? scopeShare : null;
+    return s ? (r) => s(c.classId, c.sessionDate, r) === "seat" : null;
+  };
+  /** 빗금 칸(제 몫 행 0)인가 — 채우기·지우기가 **같은 판정**(`planDayCellUnits` noneOwned)을 쓴다. */
+  const noneOwnedCell = (c: RangeCell): boolean => {
+    const owns = ownerOf(c);
+    if (!owns) return false;
+    return !planDayCellUnits({ targets: cellSlotRows.get(cellKeyOf(c)) ?? [], owns, unitsVal: undefined }).ok;
+  };
+
   // 지우기 — 그 칸의 기록을 전부(정정 이력 포함) 삭제. 셀 액션의 '지우기'와 같은 계약.
   if (status === null) {
-    const ids = mine.map((r) => r.id);
+    /**
+     * 🔴 강사 보기의 지우기는 **자리(JJ·랩실) 행을 남긴다**(원장 2026-09-12) — 그 행은 자리 출석부(JJ실)의 진실이다.
+     *    다른 선생님 교시 행은 종전대로 함께 지운다(막는 문은 화면 `sharedBlock`). 빗금 칸은 채우기와 같은 문장으로 건너뛴다.
+     * ⚠️ 이력 행까지 지우므로 대상은 `cellSlotRows`(교시별 최신)가 아니라 **그 칸의 모든 행**이다.
+     */
+    const rowsByCell = new Map<string, typeof mine>();
+    for (const r of mine) {
+      const k = `${r.student_id}::${r.class_id}::${r.session_date}`;
+      (rowsByCell.get(k) ?? rowsByCell.set(k, []).get(k)!).push(r);
+    }
+    const ids: string[] = [];
+    let skippedSeatRows = 0;
+    allowed = allowed.filter((c) => {
+      if (noneOwnedCell(c)) {
+        noneOwned += 1;
+        return false;
+      }
+      const { write, seat } = splitOutSeatRows(rowsByCell.get(cellKeyOf(c)) ?? [], seatOf(c));
+      for (const r of write) ids.push(r.id);
+      skippedSeatRows += seat.length;
+      return true;
+    });
+    if (allowed.length === 0 && notTaught + noneOwned > 0) {
+      // 조용한 0건 금지 — 격자가 그 칸에 하는 말과 같은 문장으로 알린다(채우기 갈래와 같은 규약).
+      return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : NOT_MINE_MESSAGE };
+    }
     for (let i = 0; i < ids.length; i += CHUNK) {
       const { error } = await supabase.from("attendance_records").delete().in("id", ids.slice(i, i + CHUNK));
       if (error) return { error: error.message };
@@ -1644,6 +1841,9 @@ export async function setAttendanceRange(input: {
           rows: ids.length,
           blocked: cells.length - allowed.length,
           studentIds: [...new Set(allowed.map((c) => c.studentId))],
+          // 강사 전체 보기에서 온 지우기 — 자리(JJ·랩실) 행은 남겼다(원장 2026-09-12).
+          ...(scopeTeacherId ? { scopeTeacherId } : {}),
+          ...(skippedSeatRows > 0 ? { skippedSeatRows } : {}),
           ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
         },
       });
@@ -1652,53 +1852,15 @@ export async function setAttendanceRange(input: {
     return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
   }
 
-  /**
-   * 칸(학생·반·날짜)마다 **교시별 최신 1행**. 청크별 desc 정렬이라 각 (칸,교시)의 첫 행이 최신이다
-   * (`pickSaveTargets`의 교시 미지정 가지와 **같은 규칙** — 출석부 한 칸 = 그날 하나의 사실).
-   * 🔴 종전엔 칸당 **한 행**만 고쳐서, 교시가 여럿인 날은 나머지 교시가 옛 상태·옛 시수로 남았다
-   *    (범위로 결석을 되돌려도 한 교시만 돌아오는 꼴). 단건 저장·반별 폼과 규칙을 맞춘다.
-   */
-  const cellKeyOf = (c: RangeCell) => `${c.studentId}::${c.classId}::${c.sessionDate}`;
-  const cellSlotRows = new Map<string, DayTargetRow[]>();
-  const seenSlot = new Set<string>();
-  for (const r of mine) {
-    const k = `${r.student_id}::${r.class_id}::${r.session_date}`;
-    const slotKey = `${k}::${r.slot_start ? String(r.slot_start).slice(0, 5) : "DAY"}`;
-    if (seenSlot.has(slotKey)) continue;
-    seenSlot.add(slotKey);
-    (cellSlotRows.get(k) ?? cellSlotRows.set(k, []).get(k)!).push({
-      id: r.id,
-      slot_start: r.slot_start,
-      seat_label: r.seat_label,
-    });
-  }
-
-  // 강사 전체 보기에서 온 범위 — 판정 재료(`scopeFacts`)는 위 기존 기록 조회와 함께 받아 두었다(B4).
-  let scopeOwner: ScopeOwner | null = null;
-  let notTaught = 0;
-  let noneOwned = 0;
-  if (scopeTeacherId && scopedForFacts.length > 0) {
-    // 🔴 몫을 못 가리면 저장하지 않는다 — 스코프 없이 나누면 남의 교시로 시수가 새는 바로 그 버그가 난다.
-    if (!scopeFacts) return { error: SCOPE_LOAD_FAILED_MESSAGE };
-    const facts = scopeFacts;
-    const before = allowed.length;
-    allowed = allowed.filter(
-      (c) => !isScoped(c) || scopeTeaches(facts.get(c.classId), scopeTeacherId, c.sessionDate),
-    );
-    notTaught = before - allowed.length;
-    // 판정기는 받아 둔 재료로만 만든다 — 추가 조회 없음(담임 시작일은 안 읽는다, `buildScopeOwner` 주석).
-    scopeOwner = buildScopeOwner({ teacherId: scopeTeacherId, facts });
-  }
   // 칸마다 시수 배분 계획 — 스코프 밖 칸(반별 보기·보강 묶음)은 owns=null이라 종전과 같은 답이다.
   const plans = new Map<string, DayUnitsPlan>();
   allowed = allowed.filter((c) => {
     const k = cellKeyOf(c);
     const targets = cellSlotRows.get(k);
     if (!targets) return true; // 새 칸 — 아래 insert(나눌 행이 없다)
-    const owner = isScoped(c) ? scopeOwner : null;
     const plan = planDayCellUnits({
       targets,
-      owns: owner ? (r) => owner(c.classId, c.sessionDate, r) : null,
+      owns: ownerOf(c),
       unitsVal: unitsProvided ? unitsVal : undefined,
     });
     if (!plan.ok && plan.reason === "noneOwned") {
@@ -1714,7 +1876,24 @@ export async function setAttendanceRange(input: {
   }
 
   const nowIso = new Date().toISOString();
-  const updateIds = allowed.flatMap((c) => (cellSlotRows.get(cellKeyOf(c)) ?? []).map((r) => r.id));
+  /**
+   * 칸마다 **쓰는 행** — 자리(JJ·랩실) 행은 뺀다(원장 2026-09-12, `splitOutSeatRows`). 스코프 밖 칸은 전부(종전).
+   * ⚠️ 빗금 칸 거절은 위 `plans`가 이미 했다 — 여기서 빼는 건 "쓰지 않을 행"뿐이다.
+   */
+  const writeIdsOf = new Map<string, string[]>();
+  let skippedSeatRows = 0;
+  for (const c of allowed) {
+    const k = cellKeyOf(c);
+    const targets = cellSlotRows.get(k);
+    if (!targets) continue;
+    const { write, seat } = splitOutSeatRows(targets, seatOf(c));
+    writeIdsOf.set(
+      k,
+      write.map((r) => r.id),
+    );
+    skippedSeatRows += seat.length;
+  }
+  const updateIds = allowed.flatMap((c) => writeIdsOf.get(cellKeyOf(c)) ?? []);
   const inserts = allowed.filter((c) => !cellSlotRows.has(cellKeyOf(c)));
 
   const rangeViaByClass = new Map<string, RecordedVia>();
@@ -1735,7 +1914,8 @@ export async function setAttendanceRange(input: {
     const byKey = new Map<string, { via: RecordedVia; units: number | null | undefined; ids: string[] }>();
     for (const c of allowed) {
       const k = cellKeyOf(c);
-      const ids = (cellSlotRows.get(k) ?? []).map((r) => r.id);
+      // 자리(JJ·랩실) 행을 뺀 대상 — `cellSlotRows`를 그대로 쓰면 자리 행이 상태·입력자를 받는다(원장 2026-09-12).
+      const ids = writeIdsOf.get(k) ?? [];
       if (ids.length === 0) continue;
       // 범위 채우기는 월간 격자 전용 — 데스크 게이트를 걸지 않는다(오클릭 결석을 여기서 되돌린다).
       const via = rangeViaByClass.get(c.classId) ?? "teacher";
@@ -1815,6 +1995,8 @@ export async function setAttendanceRange(input: {
       ...(unitsProvided ? { units: unitsVal } : {}),
       // 강사 전체 보기에서 온 채우기 — 시수를 그 강사 몫 교시에만 나눴다(원장 제보 2026-09-11).
       ...(scopeTeacherId ? { scopeTeacherId } : {}),
+      // 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 역검수용.
+      ...(skippedSeatRows > 0 ? { skippedSeatRows } : {}),
       // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 없으면 키도 없다.
       ...autoUnitsLogFields(inserts.map((c) => rangeUnitsOf(c).auto).filter((v): v is number => typeof v === "number")),
       ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),

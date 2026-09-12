@@ -13,8 +13,10 @@ const m = vi.hoisted(() => ({
   issueAudioUploadTicket: vi.fn(),
   uploadToTicket: vi.fn(),
   checkRecovery: vi.fn(),
-  clearRecovery: vi.fn(async () => {}),
-  clearDraft: vi.fn(async () => {}),
+  // 🔴 인자 타입은 **제네릭**으로 적는다 — `vi.fn(async () => {})`는 타입이 0인자로 굳어 아래 `m.clearRecovery(kind)`·
+  //    `m.clearDraft(scope)`가 tsc에서 걸리고(TS2554), 쓰지 않는 인자를 구현에 적으면 lint가 경고한다.
+  clearRecovery: vi.fn<(kind: string) => Promise<void>>(async () => {}),
+  clearDraft: vi.fn<(scope: string) => Promise<void>>(async () => {}),
   push: vi.fn(),
 }));
 vi.mock("@/features/meetings/server/actions", () => ({

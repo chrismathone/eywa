@@ -262,6 +262,8 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
       },
       absent: {
         data: {
+          // 결석학생 기준일 = **어제**(snapshot.today "2026-09-10" → "2026-09-09" 수요일).
+          date: "2026-09-09",
           absent: [
             {
               studentId: "a1",
@@ -339,7 +341,8 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(href("원생목록에서 오늘 첫 수업 보기")).toBe(
       "/students?first=2026-09-10&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
     );
-    expect(href("출석부에서 오늘 결석 학생 보기")).toBe("/attendance/2026-09-10?status=absent");
+    // 결석학생만 어제 기준(원장 2026-09-12) — 나머지 다섯 칸은 오늘 그대로.
+    expect(href("출석부에서 어제 9/9 (수) 결석 학생 보기")).toBe("/attendance/2026-09-09?status=absent");
     cleanup();
   });
 
@@ -347,7 +350,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     mocks.data = kpiSnapshot(["dashboard", "students", "enrollment", "calendar"]);
     render(<Overview initial={mocks.data} />);
     expect(screen.queryByRole("link", { name: "퇴원관리에서 이번 달 퇴원 보기" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "출석부에서 오늘 결석 학생 보기" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" })).toBeNull();
     expect(screen.getByRole("button", { name: /^퇴원생 2명\./ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^결석학생 2명\./ })).toBeTruthy();
     cleanup();
@@ -388,7 +391,8 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     // 카드 숫자 = 결석 무리(2) — 일부 교시 결석(1)은 안 센다.
     fireEvent.click(screen.getByRole("button", { name: /^결석학생 2명\./ }));
     const popup = screen.getByRole("dialog");
-    expect(popup.textContent).toContain("오늘 결석 학생 2명");
+    // 날짜는 다이얼로그 머리가 말한다 — 합계 줄은 되풀이하지 않는다(한 화면에 '어제'를 두 번 적지 않게).
+    expect(popup.textContent).toContain("결석 학생 2명");
     expect(popup.textContent).toContain("연락 필요 1명 · 사전 통보 1명");
     expect(popup.textContent).toContain("공결");
     expect(
@@ -398,6 +402,64 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(popup.textContent).toContain("일부 교시 결석 1명");
     expect(within(popup).getByRole("link", { name: "부분가 출결 상세" })).toBeTruthy();
     expect(within(popup).getAllByText("연락 필요")).toHaveLength(1);
+    cleanup();
+  });
+
+  /**
+   * 원장 2026-09-12: *"대시보드 결석학생은 어제 결석으로 해야지. 오늘은 수업을 안하면 볼 수가 없잖아"* —
+   * 카드 보조 줄·자세히 보기 머리·↗가 **한 날짜**(어제)를 말한다. 사람이 오늘로 오해하지 않게 날짜·요일을 적는다.
+   */
+  it("결석학생은 어제 기준 — 카드 보조 줄·팝업 머리·↗가 같은 날(어제 9/9 (수))을 말한다", () => {
+    mocks.data = kpiSnapshot();
+    render(<Overview initial={mocks.data} />);
+    const card = screen.getByRole("button", { name: /^결석학생 2명\./ });
+    expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수)");
+    expect(card.textContent).toContain("어제 9/9 (수)");
+    expect(screen.getByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" }).getAttribute("href")).toBe(
+      "/attendance/2026-09-09?status=absent",
+    );
+    fireEvent.click(card);
+    expect(screen.getByRole("dialog").textContent).toContain("어제 9/9 (수) 결석 학생");
+    cleanup();
+  });
+
+  it("결석 조회가 실패해도 ↗·머리·보조 줄은 어제를 가리킨다(오늘로 새지 않는다)", () => {
+    const snap = kpiSnapshot();
+    snap.sections.absent = { data: null, at: null, error: true };
+    mocks.data = snap;
+    render(<Overview initial={mocks.data} />);
+    expect(screen.getByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" }).getAttribute("href")).toBe(
+      "/attendance/2026-09-09?status=absent",
+    );
+    const card = screen.getByRole("button", { name: /^결석학생 —\./ });
+    expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수) · 조회 실패");
+    fireEvent.click(card);
+    expect(screen.getByRole("dialog").textContent).toContain("어제 9/9 (수) 결석 학생");
+    cleanup();
+  });
+
+  /**
+   * 🔴 30초 갱신이 **한 번** 실패하면 `mergeSnapshot`이 이전 숫자를 남기고 error만 세운다. 그때 보조 줄이
+   *    실패 문구로 통째로 바뀌면서 기준일이 사라지면, 형제 다섯 칸이 모두 오늘이라 어제 숫자가 오늘 결석으로 읽힌다.
+   */
+  it("갱신이 한 번 실패해도 카드에 기준일이 남는다(어제 숫자를 오늘로 읽지 않게)", () => {
+    const snap = kpiSnapshot();
+    snap.sections.absent = { ...snap.sections.absent!, error: true };
+    mocks.data = snap;
+    render(<Overview initial={mocks.data} />);
+    const card = screen.getByRole("button", { name: /^결석학생 2명\./ });
+    expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수) · 갱신 실패");
+    expect(card.textContent).toContain("어제 9/9 (수)");
+    cleanup();
+  });
+
+  it("어제 결석이 0명이면 그 날짜로 사실만 적는다(주말·휴일이면 0이 맞다)", () => {
+    const snap = kpiSnapshot();
+    snap.sections.absent = { data: { date: "2026-09-09", absent: [], partial: [] }, ...ok };
+    mocks.data = snap;
+    render(<Overview initial={mocks.data} />);
+    fireEvent.click(screen.getByRole("button", { name: /^결석학생 0명\./ }));
+    expect(screen.getByRole("dialog").textContent).toContain("9/9 (수)엔 한 교시도 안 온 학생이 없습니다.");
     cleanup();
   });
 

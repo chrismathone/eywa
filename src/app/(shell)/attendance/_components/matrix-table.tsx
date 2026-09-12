@@ -1,6 +1,13 @@
 import type { AttendanceMatrix, AttendanceStatus } from "@/features/attendance/server/queries";
 import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
-import { DAY_TONE, HEAD_ROW_H, cellDisplay, statusTextOf } from "@/features/attendance/cell-display";
+import {
+  DAY_TONE,
+  HEAD_ROW_H,
+  cellDisplay,
+  notMineCell,
+  sharedOtherSlots,
+  statusTextOf,
+} from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
@@ -103,18 +110,21 @@ export function buildGridSource(
   /**
    * **이 표에 값이 없고 남의 교시만 있는 칸**(강사 전체 보기의 빗금 칸) — 여기선 입력을 받지 않는다.
    *
-   * 🔴 받으면 두 가지가 동시에 터진다: ① 저장은 그날 **모든 교시**에 가서 남의 기록·자리(JJ)를 조용히
-   *    덮거나 지우는데(save-targets ①) 화면은 그대로라 **무증상**이고, ② 낙관값은 서버 값과 같아질 때만
+   * 🔴 받으면 두 가지가 동시에 터진다: ① 저장은 그날 교시에 가서 남의 기록을 조용히 덮거나 지우는데
+   *    (save-targets ①) 화면은 그대로라 **무증상**이고(지금은 서버도 제 몫 행이 없는 이 칸을 거절한다 —
+   *    noneOwned. 자리 JJ·랩실 행은 아예 안 건드린다, 원장 2026-09-12), ② 낙관값은 서버 값과 같아질 때만
    *    벗겨지는데(grid/store.ts) 서버는 이 칸을 영원히 비워 두므로 **친 숫자가 새로고침 전까지 시수·
    *    출석률에 남는다**(적대적 리뷰 2026-08-18). 잠그는 대신 사유를 말하고 반별 보기로 보낸다 —
    *    같은 칸이 반별 보기에선 그대로 입력 가능하다(#103: 되돌릴 문을 아예 막지는 않는다).
    */
   const notMine: Record<string, true> = {};
   /**
-   * 값은 **있지만** 그 날 남의 교시도 함께 있는 칸 → 키 → 함께 바뀌는 교시 수.
+   * 값은 **있지만** 그 날 **다른 선생님 교시**도 함께 있는 칸 → 키 → 함께 바뀌는 교시 수.
    * 잠그지는 않는다(내 교시가 있으니 고칠 권리가 있다). 대신 범위 작업에서 **사정거리를 말해 준다** —
    * 종전엔 칸에 `3`이 떠서 "3건이 접혀 있다"가 보였는데, 지금은 `1`만 보이고 툴바 칩이
    * "칸 = 이 선생님 교시"라고 단언해 **"내 것만 지워진다"는 오해를 화면이 심는다**(적대 리뷰 2026-08-18).
+   * 🔴 **자리(JJ·랩실)는 세지 않는다**(원장 2026-09-12) — 강사 보기 저장은 그 행을 안 건드리므로, 세면
+   *    "함께 바뀝니다"·지우기 막힘이 거짓말이 된다(`sharedOtherSlots` 단일 소스).
    */
   const alsoWrites: Record<string, number> = {};
   for (const g of groups) {
@@ -134,8 +144,14 @@ export function buildGridSource(
       for (const [date, others] of Object.entries(g.matrix.ghosts[s.id] ?? {})) {
         if (others.length === 0) continue;
         const key = cellKey(rowKey(g.classId, s.id), date);
-        if (marks[date]) alsoWrites[key] = others.length;
-        else notMine[key] = true;
+        // 몫이 아닌 칸(값 없음 · 값이 파생뿐) — 판정은 `notMineCell` 한 곳(행·격자가 같은 답, 리뷰 2026-09-12).
+        if (notMineCell({ hasValue: !!marks[date], derivedValue: !!derived[date], others })) {
+          notMine[key] = true;
+          continue;
+        }
+        // 값이 있는 칸 — 함께 바뀌는 건 다른 선생님 교시뿐(자리 JJ·랩실 행은 저장이 안 건드린다, 원장 2026-09-12).
+        const shared = sharedOtherSlots(others).length;
+        if (shared > 0) alsoWrites[key] = shared;
       }
     }
   }

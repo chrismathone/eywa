@@ -27,6 +27,7 @@ import {
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
+import { absentKpiDate } from "./kpi-links";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getRecentAnnouncements } from "@/features/dashboard/server/queries";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
@@ -488,6 +489,9 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     canAccess(user.systemRole, key, matrix),
   );
   const today = kstToday();
+  // 🔴 '결석학생'만 **어제**를 본다(원장 2026-09-12) — 오늘은 수업 전이면 결석을 알 수 없다. 갱신(서버 액션)마다
+  //    다시 계산되므로 자정이 지나면 기준일도 함께 넘어간다.
+  const absentDate = absentKpiDate(today);
   const settingsPromise = getTenantSettings();
   // 🔑 B1 — 강사 스코프를 **한 번만** 푼다. 서버 액션 갱신에선 React cache가 안 묶어서 영역마다 부르면
   //    getCurrentUser가 그만큼 users를 다시 읽는다. 영역엔 푼 값을 넘긴다.
@@ -537,7 +541,11 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   );
   add("firstClass", ["students"], async () => firstClasses(today, await scopePromise, settingsPromise));
   // 출석부 `?status=absent`와 같은 함수·같은 강사 스코프(teacher-axis) — 겸직 강사뷰면 그 강사가 가르치는 반만.
-  add("absent", ["attendance"], async () => getScopedAbsentStudents(today, await teacherIdPromise));
+  // 조회한 날을 `date`로 함께 실어 보낸다 — 카드·팝업·↗가 그 값을 읽어 셋이 같은 날을 말한다.
+  add("absent", ["attendance"], async () => ({
+    date: absentDate,
+    ...(await getScopedAbsentStudents(absentDate, await teacherIdPromise)),
+  }));
   add("attendance", ["attendance"], async () => (await history)!.snapshot);
   add("processing", ["attendance"], () => getDailyProcessingStatus(today));
   add("attendanceTrend", ["attendance"], async () => (await history)!.trend);

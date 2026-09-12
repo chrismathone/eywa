@@ -19,6 +19,7 @@ export function KpiCard({
   value,
   unit,
   detail,
+  detailPrefix,
   icon,
   error,
   popupTitle,
@@ -29,6 +30,13 @@ export function KpiCard({
   value: string;
   unit: string;
   detail: string;
+  /**
+   * 보조 줄 앞에 **항상** 붙는 말(기준일 등).
+   * 🔴 실패 문구는 `detail`을 통째로 대체한다 — 숫자의 뜻을 정하는 값(어느 날 숫자인가)을 `detail`에 넣으면
+   *    30초 갱신이 한 번 실패한 순간 사라져, 형제 칸이 다 오늘인 줄에서 **어제 숫자가 오늘로 읽힌다**.
+   *    그런 값은 이 prop으로 넘긴다(실패 상태에서도 남는다).
+   */
+  detailPrefix?: string;
   icon: ReactNode;
   error?: boolean;
   popupTitle: string;
@@ -36,7 +44,8 @@ export function KpiCard({
   children: ReactNode;
 }) {
   const missing = value === "—";
-  const text = error ? (missing ? "조회 실패 · 다시 확인 필요" : "갱신 실패 · 이전 확인값") : detail;
+  const body = error ? (missing ? "조회 실패 · 다시 확인 필요" : "갱신 실패 · 이전 확인값") : detail;
+  const text = detailPrefix ? `${detailPrefix} · ${body}` : body;
   return (
     <div className={s.kpi}>
       <DetailPopup

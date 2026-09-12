@@ -89,16 +89,46 @@ describe("🔴 이미 지나간 개명엔 표식을 남기지 않는다", () => 
 describe("날짜 라벨은 한 곳에서만 만든다", () => {
   it("예약 배지·배너가 monthDay를 쓴다(09/01이 아니라 9/1)", () => {
     // 🔴 `slice(5).replace("-","/")`로 직접 만들면 `09/01`이 되어 툴바 배지(`9/1`)와 같은 화면에서
-    //    형식이 갈린다. 앞자리 0 규칙은 scheduled-import.ts의 monthDay 한 곳에만 있다.
+    //    형식이 갈린다. 앞자리 0 규칙의 정본은 date-kst.ts의 monthDayLabel 한 곳이고,
+    //    scheduled-import.ts의 monthDay는 그 이름으로 위임만 한다.
     for (const f of [
       ["src", "app", "(shell)", "ecs", "_components", "landing-list.tsx"],
       ["src", "app", "(shell)", "ecs", "[classId]", "page.tsx"],
       ["src", "app", "(shell)", "classes", "[id]", "page.tsx"],
       ["src", "app", "(shell)", "timetable", "_components", "class-cell.tsx"],
       ["src", "features", "timetable", "server", "scheduled-class-change.ts"],
+      // 운영실도 같은 화면에 `9/11 (금)`(KPI)과 `09/11`(패널 주석)을 나란히 띄우고 있었다.
+      ["src", "app", "(shell)", "dashboard", "_overview", "overview.tsx"],
     ]) {
       const src = strip(read(...f));
       expect(src, f.join("/")).not.toContain('slice(5).replace("-", "/")');
+    }
+  });
+
+  /**
+   * 🔴 위임을 되돌리면 **에러 없이** 형식이 갈린다 — `monthDay`·`shortDate`는 이름만 지역이고 서식은
+   *    `date-kst` 한 곳에서 만든다. 자릿수를 다시 조립하면(`Number(…)/…`·`slice(5)`) 그 순간 사본이 된다.
+   */
+  it("지역 이름(monthDay·shortDate)은 date-kst에 위임만 한다", () => {
+    for (const [f, call] of [
+      [["src", "features", "timetable", "scheduled-import.ts"], "return monthDayLabel(date);"],
+      [
+        ["src", "app", "(shell)", "calendar", "_components", "event-row.tsx"],
+        "return formatShortKoreanDate(ymd);",
+      ],
+    ] as const) {
+      const src = strip(read(...f));
+      const where = f.join("/");
+      // ① 정본을 부른다(본문이 한 줄 위임이라는 양성 증거).
+      expect(src, where).toContain('from "@/lib/date-kst"');
+      expect(src, where).toContain(call);
+      // ② 자릿수를 다시 조립하지 않는다. 🔴 `}`가 끼는 템플릿(`${Number(m)}/`)까지 잡아야 한다 —
+      //    옛 본문이 정확히 그 모양이라, `\)\s*\/`만 보면 되돌려도 이 가드가 통과한다.
+      expect(src, where).not.toMatch(/Number\([^)]*\)\}?\s*\//);
+      // 🔴 옛 shortDate는 `slice(5, 7)`이라 `slice(5)`로는 안 걸린다.
+      for (const inline of ["slice(5)", "slice(5, 7)", "slice(8, 10)"]) {
+        expect(src, `${where} — ${inline}`).not.toContain(inline);
+      }
     }
   });
 });

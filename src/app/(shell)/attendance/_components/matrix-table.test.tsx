@@ -662,4 +662,88 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const { container } = renderScoped([{ slot: "17:20:00", status: "present", units: null }], []);
     expect(cellOf(container).style.backgroundImage).toBe("");
   });
+
+  /**
+   * 🔴 원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."* — 자리(JJ·랩실) 기록은 강사 보기 저장이 안 건드린다
+   * (서버 규칙 = `splitOutSeatRows`). 그래서 화면도 "함께 바뀝니다"·지우기 막힘의 셈에서 자리를 **빼야** 한다 —
+   * 안 빼면 화면이 "자리 기록도 함께 바뀐다"는 거짓말을 하고, 지울 수 있는 칸을 막는다.
+   */
+  const seatGhost = (slot: string): SlotMark => ({ slot, status: "present", units: null, seat: true });
+
+  it("🔴 자리(JJ)만 섞인 칸은 단건 Delete가 열린다 — 서버가 자리 행을 남기고 제 몫만 지운다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const { container } = renderInGrid([{ slot: "17:20:00", status: "present", units: null }], [seatGhost("16:20:00")]);
+    const cell = cellOf(container);
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "Delete" });
+    expect(setAttendanceCell).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("반별 보기에서 지우세요");
+  });
+
+  it("🔴 자리만 섞인 칸의 툴팁 — '함께 바뀝니다'가 아니라 '그대로'라고 말한다", () => {
+    const { container } = renderScoped([{ slot: "17:20:00", status: "present", units: null }], [seatGhost("16:20:00")]);
+    const title = cellOf(container).getAttribute("title") ?? "";
+    // 기록이 있다는 사실은 그대로 밝힌다(값에서만 뺀다).
+    expect(title).toContain("이 선생님 몫으로 세지 않는 기록");
+    expect(title).toContain("자리(JJ·랩실) 기록은 이 칸을 고쳐도 그대로입니다");
+    expect(title).not.toContain("함께 바뀝니다");
+  });
+
+  it("🔴 섞인 칸의 건수는 자리를 뺀 수 — 다른 선생님 교시 1건 + 자리 1건이면 '1건'", () => {
+    const { container } = renderInGrid(
+      [{ slot: "17:20:00", status: "present", units: null }],
+      [{ slot: "18:20:00", status: "present", units: null }, seatGhost("16:20:00")],
+    );
+    const cell = cellOf(container);
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "Delete" });
+    expect(container.textContent).toContain("다른 선생님 교시 기록 1건");
+  });
+
+  /**
+   * 🔴 리뷰 2026-09-12: 값이 **수업보고서 파생**인데 그 날 실제 행은 자리(또는 남의 교시)뿐인 칸 — 파생은
+   *    `manualDates`(내 몫 수기 마크)만 건너뛰므로 이런 칸을 '출석'으로 채운다. 그러면 `alsoWrites`는 0이라
+   *    격자가 통과시키고 서버는 제 몫 행이 없어 `NOT_MINE_MESSAGE`로 거절한다 — **누르기 전에** 같은 사유로 막는다.
+   */
+  it("🔴 값이 파생뿐이고 실제 행은 자리뿐인 칸 — 빗금 칸과 같은 사유로 입력을 막는다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const m = matrix([
+      { id: S1, name: "김근호", grade: "중1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
+    ]);
+    m.marks = { [S1]: { [D1]: "present" } } as never; // 보고서에서 파생된 '출석'
+    m.derived = { [S1]: { [D1]: true } };
+    m.ghosts = { [S1]: { [D1]: [seatGhost("16:20:00")] } };
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [{ classId: C, studentId: S1 }];
+    const src = buildGridSource(groups, DAYS, ordered);
+    const { container } = render(
+      <GridProvider
+        rows={src.rows}
+        cols={src.cols}
+        initial={src.initial}
+        slotCounts={src.slotCounts}
+        notMine={src.notMine}
+        alsoWrites={src.alsoWrites}
+        lockBefore={null}
+      >
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
+      </GridProvider>,
+    );
+    const cell = container.querySelector<HTMLElement>(`[data-cell-key$="${D1}"]`)!;
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "1" });
+    expect(container.querySelector("input")).toBeNull(); // 버퍼가 안 열린다
+    expect(setAttendanceCell).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("이 화면의 몫이 아니라");
+  });
+
+  it("🔴 자리만 섞인 칸의 팝오버 — '지우기'가 열려 있고 사정거리 안내가 없다", () => {
+    const { container } = renderInGrid([{ slot: "17:20:00", status: "present", units: null }], [seatGhost("16:20:00")]);
+    fireEvent.contextMenu(cellOf(container));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.queryByText("지우기")).not.toBeNull();
+    expect(container.textContent).not.toContain("반별 보기에서 지우세요");
+  });
 });

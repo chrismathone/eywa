@@ -13,7 +13,8 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * 그날 결석 판정(결석 학생 / 일부 교시 결석) — 운영실 '결석학생' 카드·팝업, 출석부 `?status=absent`,
- * 일일 브리핑 '오늘 결석'의 **단일 소스**. 규칙은 [absent-students.ts] `foldAbsentStudents` 한 벌.
+ * 일일 브리핑 '어제 결석'의 **단일 소스**. 규칙은 [absent-students.ts] `foldAbsentStudents` 한 벌.
+ * ⚠️ 기준일은 호출부가 넘긴다 — 운영실 카드는 **어제**(`absentKpiDate`, 원장 2026-09-12), 브리핑도 어제(`asOf`).
  *
  * 🔴 상태로 좁혀 조회하지 않는다 — 결석을 출석으로 고친 칸은 최신 행만 봐야 결석이 아니게 되고, '한 교시라도 왔는가'도
  *    다른 상태의 칸을 봐야 안다. 그날 전 칸을 받아(하루치 · 페이징) 최신 정정을 가린 뒤 접는다.

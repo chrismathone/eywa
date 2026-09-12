@@ -41,7 +41,7 @@ export function CellPopover({
   note,
   locked,
   otherCount = 0,
-  sharedDelete = false,
+  sharedCount = 0,
   anchor,
   onClose,
   onSaved,
@@ -65,14 +65,15 @@ export function CellPopover({
    */
   otherCount?: number;
   /**
-   * 이 칸을 **지우면 남의 교시·자리 기록까지 사라지나** — 격자의 `alsoWrites`와 같은 정의
-   * (서버가 준 값이 있고 + 이 표가 안 세는 교시도 있는 칸).
+   * 이 칸을 고치면 **함께 바뀌는 다른 선생님 교시 기록 수**(0 = 없음) — 격자의 `alsoWrites`와 같은 정의
+   * (서버가 준 값이 있고 + 이 표가 안 세는 교시 중 자리가 아닌 것, `sharedOtherSlots`). 0보다 크면 지우기를 닫는다
+   * — 지우면 그 기록까지 사라진다. 자리(JJ·랩실) 행은 세지 않는다: 강사 보기 저장은 그 행을 안 건드린다(원장 2026-09-12).
    *
    * 🔴 격자에만 가드를 걸면 이 팝오버가 그 가드를 통째로 우회한다 — 여긴 서버 액션을 **직접** 부른다.
    *    한 레코드의 모든 표면이 같은 게이트를 통과해야 한다(#77). 잠금(7일)과 달리 이 규칙은
    *    `locked`로 표현되지 않아(값이 있는 칸이라 편집은 열려 있다) 따로 받는다.
    */
-  sharedDelete?: boolean;
+  sharedCount?: number;
   anchor: PopoverAnchor;
   onClose: () => void;
   /**
@@ -140,6 +141,8 @@ export function CellPopover({
         status,
         note: noteDraft,
         noteOnly: true,
+        // 🔴 강사 보기의 메모도 자리(JJ·랩실) 행에 달지 않는다(원장 2026-09-12) — 서버가 그 행을 후보에서 뺀다.
+        ...scopeFieldsFor(scope, classId),
       });
       setSaving(false);
       if (res && "error" in res) {
@@ -342,7 +345,7 @@ export function CellPopover({
                 {t("att.pop.save")}
               </button>
             </div>
-            {status && !sharedDelete ? (
+            {status && sharedCount === 0 ? (
               <button
                 type="button"
                 onClick={() => apply(null, false)}
@@ -351,11 +354,12 @@ export function CellPopover({
                 {t("att.pop.clear")}
               </button>
             ) : null}
-            {/* 🔴 사정거리도 격자와 **같은 말**로 알린다 — 저장은 교시를 못 가려 그날 모든 교시에 가고,
-                지우기는 그날 행을 통째로 없앤다(그래서 저장은 열고 지우기만 닫는다). */}
-            {status && sharedDelete ? (
+            {/* 🔴 사정거리도 격자와 **같은 말**로 알린다 — 저장은 교시를 못 가려 그날 **다른 선생님 교시**에도 가고,
+                지우기는 그 행까지 없앤다(그래서 저장은 열고 지우기만 닫는다). 자리(JJ·랩실) 행은 서버가 남기므로
+                이 셈에 안 든다(원장 2026-09-12) — 자리만 섞인 칸에선 지우기가 그대로 열려 있다. */}
+            {status && sharedCount > 0 ? (
               <p className="text-text-dim border-t px-2 py-1 text-xs leading-tight break-keep">
-                {tf("att.pop.sharedWarn.a", { n: otherCount })}
+                {tf("att.pop.sharedWarn.a", { n: sharedCount })}
                 {t("att.pop.sharedWarn.b")}
               </p>
             ) : null}
