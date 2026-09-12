@@ -1,5 +1,7 @@
 "use client";
 
+import { isDirectEditClick } from "@/lib/direct-edit";
+
 import { useEffect, useRef, useState } from "react";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
 import {
@@ -283,6 +285,11 @@ export function AttendanceCell({
           }
         }}
         onDoubleClick={openPopover}
+        onClick={(event) => {
+          if (!editing && event.target instanceof Element && !event.target.closest("button,input,a") && isDirectEditClick(event)) {
+            openPopover(event);
+          }
+        }}
         onContextMenu={openPopover}
         // `scroll-mt` — 방향키 이동 시 활성 칸이 고정 헤더 뒤로 숨지 않게(cell-display.ts 주석 참조).
         className={`absolute inset-0 flex items-center justify-center text-xs font-bold select-none ${CELL_SCROLL_MARGIN} ${display.className} ${

@@ -1,5 +1,7 @@
 "use client";
 
+import { isDirectEditClick } from "@/lib/direct-edit";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, X } from "@/components/icons/eywa-icon-compat";
@@ -45,6 +47,12 @@ export function EditableAttendanceCell({
     return (
       <button
         type="button"
+        onClick={(event) => {
+          if (!isDirectEditClick(event)) return;
+          setSel(new Set(attendanceDays.length ? attendanceDays : opts));
+          setErr(null);
+          setEditing(true);
+        }}
         onDoubleClick={() => {
           setSel(new Set(attendanceDays.length ? attendanceDays : opts)); // []=전체 → 전 요일 체크
           setErr(null);

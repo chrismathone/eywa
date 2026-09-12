@@ -1,6 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { isDirectEditClick } from "@/lib/direct-edit";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { sortRows, type SortState, type SortValue } from "@/features/inventory/sort";
@@ -58,14 +60,25 @@ export function SortableTable<T>({
   /** 행 배경 등 행 단위 클래스(예: 조치필요 자산 = 붉은 틴트). 판정은 호출부의 단일 소스 함수가 한다. */
   rowClassName?: (row: T) => string;
 }) {
+  const mobile = useIsMobile();
+  const [page, setPage] = useState(1);
+  const pageAnchor = useRef<HTMLDivElement>(null);
+  const movePage = (next: number) => {
+    setPage(next);
+    pageAnchor.current?.scrollIntoView?.({ block: "start" });
+  };
   const sorted = sortRows(rows, sort, (row, key) => {
     const col = columns.find((c) => c.key === key);
     return col?.sortValue ? col.sortValue(row) : ((row as Record<string, SortValue>)[key] ?? null);
   });
+  const pageCount = Math.max(1, Math.ceil(sorted.length / 10));
+  const currentPage = Math.min(page, pageCount);
+  const visible = mobile ? sorted.slice((currentPage - 1) * 10, currentPage * 10) : sorted;
   // 표의 하한 폭 = 고정 칸 합 + 가변 칸 하한 합 (+ 동작 칸). 컨테이너가 이보다 좁으면 가로 스크롤.
   const minTableWidth = columns.reduce((sum, c) => sum + (c.width ?? c.minWidth ?? DEFAULT_MIN), 0) + (actions ? 96 : 0);
 
   return (
+    <div ref={pageAnchor} className="min-w-0 scroll-mt-3">
     <DragScrollArea className="stack-table">
       <table
         style={{ minWidth: minTableWidth }}
@@ -116,16 +129,25 @@ export function SortableTable<T>({
               </td>
             </tr>
           ) : (
-            sorted.map((row) => (
+            visible.map((row) => (
               <tr
                 key={rowKey(row)}
                 onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
+                onClick={onRowDoubleClick ? (event) => {
+                  if (event.target instanceof Element && !event.target.closest("button,a,input,select,textarea") && isDirectEditClick(event)) onRowDoubleClick(row);
+                } : undefined}
                 className={`border-line-faint border-b ${rowClassName?.(row) || "hover:bg-bg-soft/60"}`}
               >
                 {columns.map((c) => (
                   <td
                     key={c.key}
                     data-label={c.label}
+                    onClick={c.onDoubleClick ? (event) => {
+                      if (event.target instanceof Element && !event.target.closest("button,a,input,select,textarea") && isDirectEditClick(event)) {
+                        event.stopPropagation();
+                        c.onDoubleClick?.(row);
+                      }
+                    } : undefined}
                     onDoubleClick={
                       c.onDoubleClick
                         ? (e) => {
@@ -149,5 +171,13 @@ export function SortableTable<T>({
         </tbody>
       </table>
     </DragScrollArea>
+    {mobile && pageCount > 1 ? (
+      <nav aria-label="재고 목록 페이지" className="flex items-center justify-between gap-3 px-2 py-3 text-sm">
+        <button type="button" className="min-h-11 rounded-md border px-3 disabled:opacity-40" disabled={currentPage === 1} onClick={() => movePage(currentPage - 1)}>이전</button>
+        <span aria-live="polite">{currentPage} / {pageCount} · 전체 {sorted.length}건</span>
+        <button type="button" className="min-h-11 rounded-md border px-3 disabled:opacity-40" disabled={currentPage === pageCount} onClick={() => movePage(currentPage + 1)}>다음</button>
+      </nav>
+    ) : null}
+    </div>
   );
 }

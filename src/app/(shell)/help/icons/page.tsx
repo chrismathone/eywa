@@ -38,7 +38,7 @@ export default async function IconSystemPage() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-10 pb-12">
       <section className="border-line bg-card shadow-card overflow-hidden rounded-2xl border">
-        <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <div className="grid min-w-0 grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="flex flex-col justify-between gap-12 p-6 sm:p-9 lg:p-12">
             <div>
               <Link
@@ -191,7 +191,7 @@ export default async function IconSystemPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] [&>div]:min-w-0">
         <div className="bg-ink text-white rounded-2xl p-6 sm:p-8">
           <p className="text-xs font-bold text-[var(--gold-bright)]">사용 규칙</p>
           <h2 className="mt-2 text-xl font-bold">하나의 의미에는 하나의 모양</h2>

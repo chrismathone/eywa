@@ -26,7 +26,7 @@ import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-group
 import { STATE_RESERVED_COLORS } from "@/lib/design/semantic-color";
 
 const cellCls =
-  "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary";
+  "border-line text-foreground min-w-0 rounded-md border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary";
 
 function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (

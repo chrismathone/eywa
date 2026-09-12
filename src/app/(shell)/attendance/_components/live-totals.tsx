@@ -30,11 +30,11 @@ export function RowTotalCells({ row, fallback }: { row: string; fallback: Counte
   const rate = ratePercent(c);
   return (
     <>
-      <td className="border-line text-foreground num sticky right-[64px] z-10 w-[40px] min-w-[40px] border-b border-l bg-card px-1.5 py-2 text-right text-xs whitespace-nowrap">
+      <td className="border-line text-foreground num sm:sticky sm:right-[64px] z-10 w-[40px] min-w-[40px] border-b border-l bg-card px-1.5 py-2 text-right text-xs whitespace-nowrap">
         {c.units > 0 ? formatSessionUnits(c.units) : "—"}
       </td>
       <td
-        className={`border-line num sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-xs font-bold whitespace-nowrap ${rateColorOf(rate)}`}
+        className={`border-line num sm:sticky sm:right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-xs font-bold whitespace-nowrap ${rateColorOf(rate)}`}
       >
         {rate === null ? "—" : `${rate}%`}
       </td>
@@ -195,14 +195,14 @@ export function LiveStats({
   const allRate = rateDecimal(all);
 
   return (
-    <div className="flex items-center gap-x-3">
+    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1">
       <CompactMetric
         label={t("att.stat.enrolled")}
         value={searching ? (search?.matchedStudents ?? 0) : totalStudents}
         ofTotal={searching ? totalStudents : null}
         unit={t("att.stat.people")}
       />
-      <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+      <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
       {/* ⚠️ 기록 0건에 "0%"를 쓰지 않는다 — 출석률이 0인 게 아니라 아직 아무도 안 찍은 것이다.
           압축 바에서도 "—"만 두면 고장으로 읽히므로 단위 자리에 사유를 적는다. */}
       {/* ⚠️ 단위(%)는 **한 번만** 붙는다 — 병기 값에도 %를 달면 "91.2 / 88% %"가 된다.
@@ -214,7 +214,7 @@ export function LiveStats({
         unit={c.recorded > 0 || (searching && all.recorded > 0) ? "%" : t("att.stat.noRecord")}
         valueClass={rateColorOf(c.recorded > 0 ? rate : null)}
       />
-      <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+      <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
       <CompactMetric
         label={t("att.stat.absent")}
         value={c.absent}
@@ -222,7 +222,7 @@ export function LiveStats({
         unit={t("att.stat.times")}
         valueClass="text-danger"
       />
-      <span className="bg-line h-4 w-px shrink-0" aria-hidden />
+      <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
       <CompactMetric
         label={t("att.stat.late")}
         value={c.late}

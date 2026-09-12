@@ -71,7 +71,7 @@ export function MobileTopNav({
 
   return (
     <nav
-      className={`bg-sidebar border-line sticky top-0 z-20 border-b print:hidden ${className ?? ""}`}
+      className={`bg-sidebar border-line sticky top-0 z-20 shrink-0 border-b print:hidden ${className ?? ""}`}
       aria-label="메뉴"
     >
       {/* 단일 바 — 브랜드 · 현재 메뉴명 … 알림 · 햄버거 · 계정 (옛 AppHeader 흡수) */}
@@ -98,7 +98,7 @@ export function MobileTopNav({
             </>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1 [&_button]:min-h-11 [&_button]:min-w-11">
           {/* 데스크톱에선 사이드바 하단이 벨을 갖는다 — 여기(숨겨진 바)까지 마운트하면 폴링·팝업 중복. */}
           {!isDesktop ? <NotificationBell /> : null}
           {/* 햄버거 토글 — 기본 접힘, 탭하면 메뉴 그리드 펼침(선택 시 자동 닫힘). */}
@@ -121,7 +121,7 @@ export function MobileTopNav({
           140px이면 375·412px 폰 모두 2열(라벨 예산 141~160px ≥ 102px) — 대가는 격자가 5행→7행으로 길어지는 것뿐. */}
       {open ? (
       <ul
-        className="grid gap-1 px-2 py-1.5"
+        className="grid max-h-[60dvh] gap-1 overflow-y-auto overscroll-contain px-2 py-1.5"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}
       >
         {items.map((item) => {
@@ -132,7 +132,7 @@ export function MobileTopNav({
                 href={item.href}
                 onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
-                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold transition ${
+                className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-bold transition ${
                   active
                     ? "bg-primary text-primary-foreground shadow-primary-glow"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"

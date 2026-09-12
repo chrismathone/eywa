@@ -1472,6 +1472,7 @@ html[data-stage="on"] main {
   .stack-table td {
     display: block;
     width: auto !important;
+    min-width: 0 !important;
     text-align: left !important;
   }
   .stack-table thead {

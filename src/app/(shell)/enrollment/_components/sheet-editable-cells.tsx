@@ -1,5 +1,7 @@
 "use client";
 
+import { isDirectEditClick } from "@/lib/direct-edit";
+
 import { useRef, useState, useTransition, type KeyboardEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -103,7 +105,8 @@ function CellFace({
   return (
     <button
       type="button"
-      title="더블클릭하여 수정"
+      title="터치 또는 더블클릭하여 수정"
+      onClick={(event) => { if (isDirectEditClick(event)) onOpen(); }}
       onDoubleClick={() => {
         // 더블클릭은 브라우저가 낱말을 선택한다 — 편집 칸이 열리면서 파란 선택이 남지 않게 지운다.
         window.getSelection()?.removeAllRanges();

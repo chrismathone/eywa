@@ -1,5 +1,7 @@
 "use client";
 
+import { isDirectEditClick } from "@/lib/direct-edit";
+
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, TriangleAlert, X } from "@/components/icons/eywa-icon-compat";
@@ -68,7 +70,8 @@ export function EditableDateCell({
       <button
         type="button"
         onDoubleClick={() => setEditing(true)}
-        title="더블클릭하여 수정"
+        onClick={(event) => { if (isDirectEditClick(event)) setEditing(true); }}
+        title="터치 또는 더블클릭하여 수정"
         className="hover:bg-bg-soft -mx-1 cursor-text rounded px-1 py-0.5 text-left transition"
       >
         {field === "start" ? (

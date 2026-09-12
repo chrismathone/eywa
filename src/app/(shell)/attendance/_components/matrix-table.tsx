@@ -334,14 +334,15 @@ export function MatrixTable({
                 </th>
               </>
             ) : null}
+            {/* 폰에서는 합계 열의 가로 고정을 푼다 — 이름·우측 합계가 날짜 칸 전체를 덮어 터치할 수 없었다. */}
             {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
             <th
-              className={`bg-bg-soft sticky top-0 right-[64px] ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[40px] min-w-[40px] px-1.5 py-2 text-center whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 sm:right-[64px] ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[40px] min-w-[40px] px-1.5 py-2 text-center whitespace-nowrap`}
             >
               <span className="micro">{t("att.col.units")}</span>
             </th>
             <th
-              className={`bg-bg-soft sticky top-0 right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} w-[64px] min-w-[64px] px-2 py-2 text-center whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 sm:right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} w-[64px] min-w-[64px] px-2 py-2 text-center whitespace-nowrap`}
             >
               <span className="micro">{t("att.col.rate")}</span>
             </th>

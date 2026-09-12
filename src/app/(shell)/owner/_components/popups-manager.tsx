@@ -24,7 +24,7 @@ import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import type { AdminPopup } from "@/features/notices/server/queries";
 
-const INPUT = "border-border bg-card text-foreground w-full rounded-md border px-2.5 py-1.5 text-sm";
+const INPUT = "border-border bg-card text-foreground min-w-0 w-full rounded-md border px-2.5 py-1.5 text-sm";
 const LABEL = "text-text-dim text-xs font-medium";
 
 /** ISO → datetime-local 입력값("YYYY-MM-DDTHH:mm", 로컬 시각). 빈 값은 "". */
@@ -240,7 +240,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
   const e = editing;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start [&>section]:min-w-0">
       {/* 작성/수정 폼 */}
       <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -308,12 +308,12 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <span className={LABEL}>노출 시작 (선택)</span>
               <input name="startsAt" type="datetime-local" defaultValue={toLocalInput(e?.startsAt ?? null)} className={INPUT} />
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <span className={LABEL}>노출 종료 (선택)</span>
               <input name="endsAt" type="datetime-local" defaultValue={toLocalInput(e?.endsAt ?? null)} className={INPUT} />
             </div>
@@ -339,8 +339,8 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
         ) : (
           <ul className="divide-line divide-y">
             {items.map((p) => (
-              <li key={p.id} className="flex items-start justify-between gap-3 py-3">
-                <div className="flex min-w-0 items-start gap-2.5">
+              <li key={p.id} className="flex flex-col items-start justify-between gap-3 py-3 sm:flex-row">
+                <div className="flex min-w-0 max-w-full items-start gap-2.5">
                   {p.imageSrc ? (
                     // eslint-disable-next-line @next/next/no-img-element -- signed/외부 썸네일
                     <img src={p.imageSrc} alt="" className="border-line h-10 w-14 shrink-0 rounded border object-cover" />
@@ -352,7 +352,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2.5 pt-0.5">
+                <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2.5 pt-0.5">
                   <EnglishForm id={p.id} status={p.enStatus} skipReason={p.enSkipReason} />
                   <ToggleForm id={p.id} isActive={p.isActive} />
                   <button type="button" onClick={() => startEdit(p)} aria-label="수정" className="text-text-dim hover:text-foreground inline-flex items-center transition">

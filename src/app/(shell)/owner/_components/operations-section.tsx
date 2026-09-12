@@ -35,7 +35,7 @@ export function OperationsSection({
     <SectionForm section="operations" payload={o} footer={<ClassroomManager rooms={classrooms} />}>
       {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장.
           카드 배치는 키가 비슷한 것끼리 짝(평일|주말 = 교시 목록, 학년|직급 = 칩 목록) — 2열 그리드 빈 구멍 방지. */}
-      <div className="grid items-start gap-4 min-[860px]:grid-cols-2 [&>section[data-span-all]]:col-span-full">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-4 min-[860px]:grid-cols-2 [&>section]:min-w-0 [&>section[data-span-all]]:col-span-full">
       <SettingsCard
         title="평일 교시 (기본값)"
         description={

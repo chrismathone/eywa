@@ -3472,7 +3472,7 @@ export const SHEET_DICT = {
   "cls.hist.src.report": { ko: "보고서", en: "Report" },
 
   // ── 분리등원 요일 인라인 수정 ────────────────────────────────────
-  "cls.ad.editTitle": { ko: "더블클릭하여 등원 요일 수정", en: "Double-click to change the days this student comes" },
+  "cls.ad.editTitle": { ko: "터치 또는 더블클릭하여 등원 요일 수정", en: "Tap or double-click to change attendance days" },
   "cls.ad.needOne": { ko: "최소 한 요일", en: "Pick at least one day" },
   "cls.ad.save": { ko: "저장", en: "Save" },
   "cls.ad.cancel": { ko: "취소", en: "Cancel" },

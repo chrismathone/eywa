@@ -934,7 +934,7 @@ export default async function AttendancePage({
         ) : null}
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex max-w-full flex-wrap items-center gap-3 [&>button]:shrink-0">
           {/* 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼. */}
           {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
           {/* 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
@@ -948,7 +948,7 @@ export default async function AttendancePage({
               기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
           {mode === "teacher" && allGroups.length > 0 ? (
             <span
-              className="border-line text-text-dim rounded-full border px-2.5 py-0.5 text-xs"
+              className="border-line text-text-dim shrink-0 rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap"
               title={sheetT(lang, "att.scopeChip.title")}
             >
               {sheetT(lang, "att.scopeChip")}

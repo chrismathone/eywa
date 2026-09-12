@@ -87,6 +87,14 @@ function renderTable() {
   );
 }
 
+it("touch opens the attendance editor without changing a recorded status", () => {
+  renderTable();
+  const cell = screen.getAllByRole("gridcell")[0];
+  fireEvent(cell, Object.assign(new MouseEvent("click", { bubbles: true, detail: 1 }), { pointerType: "touch" }));
+  expect(screen.getByLabelText("메모(사유)")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /저장/ })).toBeInTheDocument();
+});
+
 describe("격자 초기값 — 수업보고서 파생 칸", () => {
   it("🔴 파생 칸은 d 표식 — 상태가 보여도 출결 행이 없다(저장하면 새 행 = 수학 자동 시수)", () => {
     const m = matrix([
@@ -291,7 +299,7 @@ describe("출석부 표 골격", () => {
     const { container } = renderTable();
     const cols = container.querySelectorAll("colgroup col");
     expect((cols[cols.length - 1] as HTMLElement).style.width).toBe("64px"); // 출석률
-    expect(container.querySelector("th.right-\\[64px\\]")).toBeTruthy(); // 시수 헤더가 그 폭만큼 띄워 붙는다
+    expect(container.querySelector("th.sm\\:right-\\[64px\\]")).toBeTruthy(); // 넓은 화면에서 그 폭만큼 띄워 붙는다
   });
 
   it("등원요일은 이름 **아래 줄**에 온다 — 한 줄에 이으면 이름 열이 그만큼 넓어져야 한다", () => {

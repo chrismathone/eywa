@@ -11,13 +11,17 @@
 .times {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-column: 2;
+  grid-column: 1 / -1;
   grid-row: 2;
   align-items: center;
   gap: 6px;
 }
 .times > input { width: 100%; min-width: 0; }
-@container (min-width: 400px) {
+@container (max-width: 300px) {
+  .times { grid-template-columns: minmax(0, 1fr); }
+  .times > span { text-align: center; }
+}
+@container (min-width: 460px) {
   .row { grid-template-columns: 20px 72px minmax(0, 1fr) 24px; }
   .times { grid-column: 3; grid-row: 1; }
   .row > button:last-child { grid-column: 4; }

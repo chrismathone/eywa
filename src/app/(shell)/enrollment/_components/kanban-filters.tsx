@@ -105,7 +105,7 @@ export function KanbanFilters({
              중이면 **과거/미래 조회 배지**가 그 사실을 말한다(PeriodNav 규약).
           ⚠️ 연·월 **직접 선택**(달력 아이콘)은 PeriodNav 밖에 그대로 남는다 — 화살표만으론 2023년까지
              40번 넘게 눌러야 한다(ECS 오늘 면의 날짜 선택과 같은 배치). */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex max-w-full flex-wrap items-center gap-1.5">
         <PeriodNav
           label={formatMonthLabel(displayMonth)}
           prevHref={enrollmentHref({ ...base, month: prevMonth })}
@@ -195,7 +195,7 @@ export function KanbanFilters({
           🔴 '대시보드 보기' 링크는 **뺐다**(원장 2026-09-01 *"대시보드 보기는 일단 제거해. 통계뷰가
           있으니까"*) — 바로 옆 뷰 토글의 '통계'와 같은 일을 하는 두 번째 입구였다. 라우트
           (`/enrollment/dashboard`)는 살아 있으니 되살릴 땐 이 자리에 링크만 다시 놓으면 된다. */}
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-3">
         {/* 동기화 시각 표시만 남는다 — '지금 동기화' 버튼은 없앴다(주간 자동, 손으로 돌릴 일은 연동 면). */}
         {syncBadge}
         {stats}
