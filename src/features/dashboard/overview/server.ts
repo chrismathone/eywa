@@ -310,7 +310,7 @@ function summarizeInvoiceMonths(rows: InvoiceTrendRow[], months: string[]) {
 const invoiceTrendSelect = "period,amount_total,amount_paid,amount_discount,status";
 
 /**
- * 지난 달들의 청구 요약 — tenantId별 `unstable_cache`(5분). 12개월 청구서(실측 2026-09: ~3,500행)를 30초 갱신마다 전건
+ * 지난 달들의 청구 요약 — tenantId별 `unstable_cache`(5분). 여러 달 청구서(실측 2026-09: 월 340~430행)를 30초 갱신마다 전건
  * 다시 받으면 B2 위반이라, 바뀌지 않는 지난 달은 캐시하고 **이번 달만** 요청마다 새로 읽는다(수납 현황 카드가 같은 값을 쓴다).
  * 캐시 안엔 쿠키가 없어 admin client + 신뢰된 tenantId 키(`loadTenantSettingsRaw`와 같은 패턴, `.eq(tenant_id)` 격리).
  * ⚠️ 지난 달 미수가 5분 뒤에 반영되는 것은 감수(추이 차트) — 이번 달 숫자는 즉시.
@@ -337,8 +337,8 @@ const loadPastInvoiceMonths = (tenantId: string, months: string[]) =>
 
 async function billing(today: string, tenantId: string) {
   const db = await createClient();
-  // 최근 12개월(원장 2026-09-12 "12개월 청구 수납") — 등록·퇴원 추이는 종전대로 6개월이라 monthKeys 기본값을 바꾸지 않는다.
-  const months = monthKeys(today, 12);
+  // 최근 6개월(원장 2026-09-13 "청구 6개월로 바꾸자. 다시 돌려" — 12개월로 넓혔더니 청구서가 2026-01부터라 앞 석 달이 빈 칸이었다).
+  const months = monthKeys(today);
   const current = months[months.length - 1];
   const [past, currentRows] = await Promise.all([
     loadPastInvoiceMonths(tenantId, months.slice(0, -1)),

@@ -495,8 +495,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             )}
           </Panel>
           <Panel
-            title="12개월 청구 · 수납"
-            note="최근 12개월 · 청구월 기준 실청구액(청구 − 할인)"
+            title="6개월 청구 · 수납"
+            note="최근 6개월 · 청구월 기준 실청구액(청구 − 할인)"
             href="/billing"
             sections={[v.billing]}
             wide
@@ -533,7 +533,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   ]}
                   unit="원"
                   format={chartMoney}
-                  valueLabels="end"
+                  valueLabels="all"
                 />
               </>
             )}

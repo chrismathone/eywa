@@ -37,7 +37,7 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[] }[] = [
       { title: "9월 수납 현황", note: "당월 청구서 · 취소 청구 제외", body: 225 },
       { title: "신규생 단계별 관리", note: "등록 후 90일 · 재원·대기 학생", body: 180 },
       { title: "등록 · 퇴원 추이", note: "최근 6개월 · 당월은 오늘까지", body: 245, wide: true },
-      { title: "12개월 청구 · 수납", note: "최근 12개월 · 청구월 기준 실청구액(청구 − 할인)", body: 245, wide: true },
+      { title: "6개월 청구 · 수납", note: "최근 6개월 · 청구월 기준 실청구액(청구 − 할인)", body: 245, wide: true },
     ],
   },
   {
