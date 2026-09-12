@@ -68,6 +68,7 @@ export function MakeupConfirmDialog({
   absenceLoading,
   slotOptions,
   defaultUnits,
+  pending = false,
   onConfirm,
   onCancel,
 }: {
@@ -92,6 +93,7 @@ export function MakeupConfirmDialog({
   slotOptions?: readonly MakeupSlotOption[];
   /** 정규 수업이 없을 때의 시수 기본값(보통 1). */
   defaultUnits?: number;
+  pending?: boolean;
   onConfirm: (choice: MakeupConfirmChoice) => void;
   onCancel: () => void;
 }) {
@@ -350,13 +352,13 @@ export function MakeupConfirmDialog({
         ) : null}
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          <Button type="button" variant="outline" size="sm" onClick={onCancel} disabled={pending}>
             취소
           </Button>
           <Button
             type="button"
             size="sm"
-            disabled={blocked}
+            disabled={blocked || pending}
             onClick={() =>
               addUnits !== null &&
               onConfirm({
@@ -369,7 +371,7 @@ export function MakeupConfirmDialog({
               })
             }
           >
-            {mode === "merge" ? "합쳐서 발송" : canMerge ? "분리해서 발송" : "보강 추가"}
+            {pending ? "보강 저장 중…" : mode === "merge" ? "합쳐서 발송" : canMerge ? "분리해서 발송" : "보강 추가"}
           </Button>
         </div>
       </div>

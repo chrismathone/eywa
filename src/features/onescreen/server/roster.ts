@@ -27,6 +27,7 @@ import { rosterIncludesEnrollment } from "../roster-filter";
 import { CLASS_TAG_ALL } from "../class-tags";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
+import { makeupSessionEntries } from "../makeup-session";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
 import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
@@ -207,14 +208,15 @@ type MakeupReportRow = {
   makeup_class_id: string | null;
   created_by: string | null; // 작성 계정(0172a) — 소유 판정의 1차 키
   teacher_name: string | null; // 0172a 이전 행의 폴백 키(표시 이름 문자열)
+  makeup_class_name?: string | null;
 };
 
 /**
  * 🔴 보강 행은 반이 없어 수강생 로스터엔 **절대** 안 잡힌다. 예전엔 화면에서 '+ 보강 학생 추가'로 만든
  *    임시 클라 행이 전부라, 저장·발송까지 끝낸 보강이 **새로고침 한 번에 사라졌다**
  *    (원장 제보 2026-08-03: "하은결 보강 보고서를 발송했는데 화면에서 찾을 수 없다" — DB엔 멀쩡히 있었다).
- *    그날 보강 보고서를 읽어 행을 되살린다 = 보강 기록의 유일한 원천이 DB가 된다.
- * 범위: (그 날짜, makeup=true, **class_id IS NULL**, teacher_name=나). 날짜+본인으로 좁혀 수십 행(B2 안전).
+ *    그날 보강 보고서와 명단 세션을 읽어 행을 되살린다 = 보강 기록의 원천이 DB가 된다.
+ * 범위: (그 학원, 그 날짜, 본인). 날짜+본인으로 좁혀 수십 행(B2 안전).
  *
  * 🔴 **`class_id IS NULL`이 빠지면 안 된다**(2026-08-05 적대 리뷰에서 잡음). 같은 날 정규+보강을 합치면
  *    **정규 보고서**가 `makeup=true`인데 반이 붙은 행이 된다 — 그것까지 여기서 집으면 아래 5-b가 그 과목의
@@ -225,26 +227,38 @@ type MakeupReportRow = {
  */
 async function fetchMyMakeupReports(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
   date: string,
   userId: string,
   teacherName: string,
 ): Promise<MakeupReportRow[]> {
-  const { data, error } = await supabase
+  const [{ data, error }, sessions] = await Promise.all([supabase
     .from("lesson_reports")
     .select("student_id, subject, makeup_class_id, created_by, teacher_name")
     .eq("report_date", date)
     .eq("makeup", true)
-    .is("class_id", null); // 순수 보강만 — 합쳐진 정규 보고서(반 있음)를 집으면 유령 보강 행이 생긴다(위 🔴)
+    .is("class_id", null), // 순수 보강만 — 합쳐진 정규 보고서는 제외
+    supabase.from("onescreen_daily_sessions")
+      .select("student_id, subject_progress").eq("tenant_id", tenantId)
+      .eq("session_date", date).eq("updated_by", userId),
+  ]);
   if (error) throw new Error(`보강 보고서 조회 실패: ${error.message}`);
+  if (sessions.error) throw new Error(`보강 명단 조회 실패: ${sessions.error.message}`);
   // 소유 판정은 순수 함수 [`ownsMakeupReport`](../makeup-owner.ts) 하나로 — 계정 id 우선, 옛 행만 이름 폴백.
   // 하루치 보강은 학원 전체로도 수십 건(실측 9개월 171건)이라 서버에서 걸러도 비용이 없다 —
   // PostgREST `.or()`에 이름 문자열을 끼워 넣는 것보다 이 편이 안전하다(따옴표·특수문자 이스케이프 위험 0).
   // ⚠️ 회수된 보강도 **그대로 되살린다** — 회수는 "게시글만 지우고 다시 보낼 수 있다"는 흐름이라
   //    (원장 2026-08-06) 행을 숨기면 수정 후 재발송 경로가 끊긴다. 보강 빼기는 발송분을 아예 막고
   //    (취소 불가) 지울 수 있는 행만 **진짜 삭제**하므로, 여기서 상태로 거를 이유가 없다.
-  return ((data ?? []) as MakeupReportRow[]).filter((r) =>
+  const reports = ((data ?? []) as MakeupReportRow[]).filter((r) =>
     ownsMakeupReport({ createdBy: r.created_by, teacherName: r.teacher_name }, userId, teacherName),
   );
+  // 보고서가 없는 '추가만 한 보강'도 같은 복원 경로에 넣는다. 본인·날짜가 다른 세션은 읽지 않는다.
+  return [...reports, ...(sessions.data ?? []).flatMap(row => makeupSessionEntries(row.subject_progress).map(entry => ({
+    student_id: row.student_id as string, subject: entry.subject,
+    makeup_class_id: entry.makeupClassId ?? null, makeup_class_name: entry.makeupClassName,
+    created_by: userId, teacher_name: teacherName,
+  })))];
 }
 
 function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {
@@ -404,7 +418,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .or(`valid_from.is.null,valid_from.lte.${targetDate}`)
         .or(`valid_to.is.null,valid_to.gte.${targetDate}`),
     ),
-    fetchMyMakeupReports(supabase, targetDate, teacherId, teacherName),
+    fetchMyMakeupReports(supabase, user.tenantId, targetDate, teacherId, teacherName),
     // 🔴 그날 **내 반에 찍힌 보강 출결** — 보고서가 아직 없어도 화면에 남아야 한다(원장 제보 2026-09-05
     //    *"오늘자 주준호를 추가하려고 하니까 새로고침할 때마다 사라짐"*).
     //    실측: 허주연 담당 반은 월~금만 도는데 토요일에 `중등M 개별 BS3Q`로 보강 2건(주준호·최하림)을
@@ -623,7 +637,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       if (!stu) continue; // 학생 조회 실패(삭제 등) — 행을 만들 수 없다
       const key = (mr.subject ?? "").trim() || LEGACY_REPORT_SUBJECT;
       const label = subjects.labelOf(key);
-      const anchorName = mr.makeup_class_id ? (classNameById.get(mr.makeup_class_id) ?? null) : null;
+      const anchorName = mr.makeup_class_id ? (classNameById.get(mr.makeup_class_id) ?? mr.makeup_class_name ?? null) : null;
       let os = byStudent.get(stu.id);
       if (!os) {
         const tmax = subjectTestMax.get(key) ?? 5;

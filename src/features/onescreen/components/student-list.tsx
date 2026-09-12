@@ -152,10 +152,14 @@ export function StudentList({
   testConfig,
   bulkPresent,
   emptyLabel,
+  selectedSubjectName,
+  statusForStudent,
 }: {
   students: OneScreenStudent[];
   selId: string;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, subjectName?: string) => void;
+  selectedSubjectName?: string;
+  statusForStudent?: (student: OneScreenStudent) => { reportCell: CellState; sendMark: SendMark };
   reportCellById?: Record<string, CellState>;
   /** 이름 옆 발송 표시 — 학생 id → {나간 행 수, 나갈 수 있는 행 수, 기준 라벨}. */
   sendMarkById?: Record<string, SendMark>;
@@ -179,10 +183,12 @@ export function StudentList({
   const tf = useSheetTf();
   const groups = new Map<string, OneScreenStudent[]>();
   for (const st of students) {
-    const key = st.className ?? CLASS_GROUP_OTHER;
-    const arr = groups.get(key);
-    if (arr) arr.push(st);
-    else groups.set(key, [st]);
+    const makeup = st.subjects.filter(su => su.makeup && !su.classId);
+    const regular = st.subjects.filter(su => !su.makeup || !!su.classId);
+    const add = (key: string, row: OneScreenStudent) => groups.set(key, [...(groups.get(key) ?? []), row]);
+    if (regular.length || !makeup.length) add(st.className ?? CLASS_GROUP_OTHER, { ...st, subjects: regular });
+    // 실제 학생 id는 그대로 유지한다. 보강을 선택하면 같은 카드의 해당 과목 행을 연다.
+    for (const su of makeup) add("보강", { ...st, subjects: [su], attendance: MARK_PRESENT });
   }
   const orderedKeys = [
     ...(classOrder ?? []).filter((k) => groups.has(k)),
@@ -259,17 +265,20 @@ export function StudentList({
                   </span>
                 </button>
                 {!isCollapsed
-                  ? rows.map((st) => (
-                      <StudentRow
-                        key={st.id}
-                        st={st}
-                        active={st.id === selId}
-                        reportCell={reportCellById?.[st.id]}
-                        sendMark={sendMarkById?.[st.id]}
-                        onClick={() => onSelect(st.id)}
-                        testConfig={testConfig}
-                      />
-                    ))
+                  ? rows.map((st) => {
+                      const rowStatus = statusForStudent?.(st);
+                      return (
+                        <StudentRow
+                          key={`${st.id}:${st.subjects[0]?.name ?? ""}`}
+                          st={st}
+                          active={st.id === selId && (!selectedSubjectName || st.subjects.some(su => su.name === selectedSubjectName))}
+                          reportCell={rowStatus?.reportCell ?? reportCellById?.[st.id]}
+                          sendMark={rowStatus?.sendMark ?? sendMarkById?.[st.id]}
+                          onClick={() => onSelect(st.id, st.subjects[0]?.name)}
+                          testConfig={testConfig}
+                        />
+                      );
+                    })
                   : null}
               </div>
             );
