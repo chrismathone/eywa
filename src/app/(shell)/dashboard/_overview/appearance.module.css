@@ -1,6 +1,6 @@
 /* Selected dashboard presentation; panel order and grid breakpoints remain in overview.module.css. */
 .dashboard { color: #121212; container: dashboard / inline-size; }
-.dashboard :global([data-overview="root"]) { background: #f1f5fa; font-size: var(--text-sm); }
+.dashboard :global([data-overview="root"]) { background: var(--background); font-size: var(--text-sm); }
 .dashboard :global([data-overview="board"]) { padding: 26px 28px 22px; max-width: 2100px; }
 .dashboard :global([data-overview="header"]) { margin-bottom: 22px; }
 .headerArtwork { width: 96px; height: 64px; object-fit: contain; margin-right: auto; }
