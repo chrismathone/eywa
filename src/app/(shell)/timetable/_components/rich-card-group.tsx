@@ -312,13 +312,14 @@ function LabelColumn({
           className={`${GRID} text-text-faint flex flex-col items-center justify-center border-b num leading-none`}
           style={{ height: PERIOD_H }}
         >
-          {/* 학원장이 교시 이름을 비우면 시간대가 이름 자리로 올라온다(2026-08-13, periodListLabel).
-              ⚠️ `nowrap` — 시간대(`14:20~15:00`)가 줄바꿈되면 교시 한 칸이 두 줄로 부풀어 축이 어긋난다.
-                 폭은 LABEL_W가 책임진다(둘을 같이 볼 것). */}
-          <span className="text-foreground text-xs font-bold whitespace-nowrap">{p.label || p.time}</span>
-          {/* 주말 섹션은 시각이 비어 온다(카드마다 시각이 달라 행에 못 적는다 — class-grid `weekendSelfShift`).
-              교시표에 없는 시각의 행은 라벨 자체가 시각이라 같은 값을 두 번 적지 않는다(`slotPeriodRow` 폴백). */}
-          {p.label && p.time && p.time !== p.label ? <span className="text-xs">{p.time}</span> : null}
+          {/* 🔴 교시 **이름은 적지 않는다 — 시각만**(원장 2026-09-12 *"수학 통합뷰에 교시표시 없애고 시간만"*).
+              통합뷰는 과목이 한 표에 섞이는데 교시 번호 체계가 과목마다 달라(영어 6교시 14:00 · 수학 3교시 18:20)
+              시각 순으로 세우면 번호가 거꾸로 보인다 — 번호가 거짓 신호였다.
+              🔴 시각은 **한 줄**이다(원장 2026-08-14 *"시간 표시하는 열너비 조금만 넓혀서 두줄 안되도록"* — LABEL_W 104와
+                 `nowrap`이 짝이다). 기본뷰 교시 열은 두 줄이지만 그쪽은 칸이 좁아서고, 여기선 쪼개면 옛 지시를 되돌리는 꼴이다.
+              ⚠️ 주말 섹션·비표준 시각 행은 `time`이 비거나 라벨 자체가 시각이다(class-grid `weekendSelfShift`·`slotPeriodRow` 폴백)
+                 — 그때는 가진 값을 그대로 적는다(빈 칸을 만들지 않는다). */}
+          <span className="text-foreground text-xs font-bold whitespace-nowrap">{p.time || p.label}</span>
         </div>
       ))}
       {/* 명단을 접으면(activeH 0) 라벨도 없다 — 카드 쪽과 높이가 같아야 줄이 어긋나지 않는다. */}
