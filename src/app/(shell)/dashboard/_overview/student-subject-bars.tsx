@@ -4,6 +4,7 @@ import type { SubjectDistributionRow } from "@/features/dashboard/overview/stude
 import { DASHBOARD_SUBJECT_COLORS as COLORS } from "@/features/dashboard/overview/subject-colors";
 import { Legend, number } from "./charts";
 import { STUDENT_SEGMENTS } from "./grade-split";
+import { SubjectBarPopover } from "./subject-bar-popover";
 import s from "./overview.module.css";
 
 const SEGMENTS = [
@@ -25,6 +26,9 @@ export function StudentSubjectBars({ rows, max = Math.max(1, ...rows.map((row) =
     {rows.map((row) => (
       <div className={s.barRow} key={row.label}>
         <span className={s.barLabel}>{row.label}</span>
+        <SubjectBarPopover label={row.label} items={row.subjects && SEGMENTS
+          .filter((segment, index) => index < 3 || row.subjects![segment.key] > 0)
+          .map((segment) => ({ ...segment, value: row.subjects![segment.key] }))}>
         <span className={`${s.barTrack} ${s.subjectTrack}`}>
           <span className={s.gradeBar} style={{ width: `${row.value / Math.max(1, max) * 100}%` }}>
             {row.subjects ? SEGMENTS.map((segment) => {
@@ -37,6 +41,7 @@ export function StudentSubjectBars({ rows, max = Math.max(1, ...rows.map((row) =
               title="수강 구성 갱신 대기" style={{ flexGrow: 1, background: COLORS.other }} />}
           </span>
         </span>
+        </SubjectBarPopover>
         <b>{number(row.value)}<small>명</small></b>
       </div>
     ))}
