@@ -20,6 +20,7 @@ export function KpiCard({
   unit,
   detail,
   detailPrefix,
+  labelNote,
   icon,
   error,
   popupTitle,
@@ -30,8 +31,9 @@ export function KpiCard({
   value: string;
   unit: string;
   detail: string;
+  labelNote?: string;
   /**
-   * 보조 줄 앞에 **항상** 붙는 말(기준일 등).
+   * 접근성 설명과 오류 팝업 앞에 **항상** 붙는 말(기준일 등).
    * 🔴 실패 문구는 `detail`을 통째로 대체한다 — 숫자의 뜻을 정하는 값(어느 날 숫자인가)을 `detail`에 넣으면
    *    30초 갱신이 한 번 실패한 순간 사라져, 형제 칸이 다 오늘인 줄에서 **어제 숫자가 오늘로 읽힌다**.
    *    그런 값은 이 prop으로 넘긴다(실패 상태에서도 남는다).
@@ -47,25 +49,27 @@ export function KpiCard({
   const body = error ? (missing ? "조회 실패 · 다시 확인 필요" : "갱신 실패 · 이전 확인값") : detail;
   const text = detailPrefix ? `${detailPrefix} · ${body}` : body;
   return (
-    <div className={s.kpi}>
+    <div className={s.kpi} data-overview="kpi" data-kpi={label}>
       <DetailPopup
         title={popupTitle}
         ariaLabel={`${label} ${value}${missing ? "" : unit}. ${text}. 자세히 보기`}
         trigger={<button type="button" className={s.kpiBody} />}
         label={
           <>
-            <span className={s.kpiLabel}>
+            <span className={s.kpiLabel} data-overview="kpi-label">
               <span className={s.kpiIcon}>{icon}</span>
               <span>{label}</span>
+              {labelNote && <small className={s.kpiPeriod}>{labelNote}</small>}
+              {error && <span className={s.textDanger} title={body} aria-hidden>!</span>}
             </span>
-            <span className={s.kpiValue}>
+            <span className={s.kpiValue} data-overview="kpi-value">
               {value}
               <span>{missing ? "" : unit}</span>
             </span>
-            <span className={`${s.kpiDetail} ${error ? s.textDanger : ""}`}>{text}</span>
           </>
         }
       >
+        {error && <p className={s.textDanger} role="status">{text}</p>}
         {children}
       </DetailPopup>
       {jump ? (

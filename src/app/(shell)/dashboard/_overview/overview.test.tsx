@@ -18,6 +18,7 @@ import type {
 } from "@/features/dashboard/overview/model";
 import { Overview } from "./overview";
 import { kpiGridVars } from "./kpi-strip";
+import { DASHBOARD_SUBJECT_COLORS } from "@/features/dashboard/overview/subject-colors";
 
 const mocks = vi.hoisted(() => ({
   data: null as unknown as OverviewSnapshot,
@@ -414,7 +415,8 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     render(<Overview initial={mocks.data} />);
     const card = screen.getByRole("button", { name: /^결석학생 2명\./ });
     expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수)");
-    expect(card.textContent).toContain("어제 9/9 (수)");
+    expect(card.textContent).toContain("어제");
+    expect(card.textContent).not.toContain("9/9 (수)");
     expect(screen.getByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" }).getAttribute("href")).toBe(
       "/attendance/2026-09-09?status=absent",
     );
@@ -449,7 +451,8 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     render(<Overview initial={mocks.data} />);
     const card = screen.getByRole("button", { name: /^결석학생 2명\./ });
     expect(card.getAttribute("aria-label")).toContain("어제 9/9 (수) · 갱신 실패");
-    expect(card.textContent).toContain("어제 9/9 (수)");
+    expect(card.textContent).toContain("어제");
+    expect(card.textContent).not.toContain("9/9 (수)");
     cleanup();
   });
 
@@ -484,17 +487,18 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     cleanup();
   });
 
-  it("학년별 재원생 — 세 조각 막대(글자 없음), 호버는 N명, 빈 학년 줄 없음, 각주로 재원생과 맞춘다", () => {
+  it("학년별 재원생 — 세 조각 막대와 마지막 미수강 막대, 호버는 N명", () => {
     mocks.data = kpiSnapshot();
     const view = render(<Overview initial={mocks.data} />);
     const both = screen.getByRole("img", { name: "중1 영어+수학 3명" });
     expect(both.getAttribute("title")).toBe("3명");
     expect(both.textContent).toBe("");
-    expect(both.getAttribute("style")).toContain("--purple");
-    expect(screen.getByRole("img", { name: "중1 영어만 2명" }).getAttribute("style")).toContain("--danger");
-    expect(screen.getByRole("img", { name: "기타·미입력 수학만 2명" }).getAttribute("style")).toContain("--blue");
+    expect(both).toHaveStyle({ background: DASHBOARD_SUBJECT_COLORS.both });
+    expect(screen.getByRole("img", { name: "중1 영어만 2명" })).toHaveStyle({ background: DASHBOARD_SUBJECT_COLORS.english });
+    expect(screen.getByRole("img", { name: "기타·미입력 수학만 2명" })).toHaveStyle({ background: DASHBOARD_SUBJECT_COLORS.math });
     expect(screen.queryByRole("img", { name: /^중2 / })).toBeNull();
-    expect(view.container.textContent).toContain("영어·수학 모두 없는 재원생 1명 · 합계 10명");
+    expect(screen.getByRole("img", { name: "미수강 재원생 1명" })).toHaveStyle({ background: DASHBOARD_SUBJECT_COLORS.unenrolled });
+    expect(view.container.textContent).not.toContain("영어·수학 모두 없는 재원생");
     cleanup();
   });
 });

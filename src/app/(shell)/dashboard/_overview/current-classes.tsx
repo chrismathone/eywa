@@ -1,6 +1,7 @@
 "use client";
 
 import type { OverviewData } from "@/features/dashboard/overview/model";
+import { dashboardSubjectColor } from "@/features/dashboard/overview/subject-colors";
 import { WindowLink } from "@/components/workspace/window-link";
 import { DetailPopup } from "./detail-popup";
 import s from "./overview.module.css";
@@ -68,7 +69,7 @@ export function CurrentClasses({
               aria-label={`${label} 수업`}
             >
               <div className={s.subjectHeading}>
-                <b>{label}</b>
+                <b style={{ color: dashboardSubjectColor(key, subjects) }}>{label}</b>
                 <span className={ongoing.length ? s.textGreen : undefined}>
                   {ongoing.length
                     ? `진행 중 ${ongoing.length}개`
@@ -101,7 +102,7 @@ export function CurrentClasses({
         {keys.map((key) => (
           <section key={key} className={s.subjectSchedule}>
             <div className={s.subjectHeading}>
-              <b>{subjects[key] ?? key}</b>
+              <b style={{ color: dashboardSubjectColor(key, subjects) }}>{subjects[key] ?? key}</b>
             </div>
             {schedule
               .filter((slot) => slot.subject === key)

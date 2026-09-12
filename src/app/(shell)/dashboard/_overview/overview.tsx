@@ -9,6 +9,7 @@ import {
   type Section,
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrolled-composition";
+import { DASHBOARD_SUBJECT_COLORS, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { monthDayLabel } from "@/lib/date-kst";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
@@ -17,6 +18,9 @@ import { SchoolDistribution } from "./school-distribution";
 import { AdmissionsSchedule } from "./admissions-schedule";
 import { KpiStrip } from "./kpi-strip";
 import { GradeSplitChart } from "./grade-split";
+import { LevelSplitChart } from "./level-split";
+import { AdmissionsComparison } from "./admissions-comparison";
+import { StudentSubjectBars, StudentSubjectLegend } from "./student-subject-bars";
 import {
   Bars,
   Columns,
@@ -30,6 +34,7 @@ import {
   chartMoney,
 } from "./charts";
 import s from "./overview.module.css";
+import appearance from "./appearance.module.css";
 
 const clock = (at: number) =>
   new Date(at).toLocaleTimeString("ko-KR", {
@@ -89,10 +94,13 @@ function Panel({
   return (
     <section
       id={id}
+      data-overview="panel"
+      data-panel-title={title}
+      data-wide={wide || undefined}
       className={`${s.panel} ${wide ? s.wide : ""} ${className}`}
       aria-label={title}
     >
-      <header className={s.panelHeader}>
+      <header className={s.panelHeader} data-overview="panel-header">
         <div>
           <h2>{title}</h2>
           <p>{note}</p>
@@ -129,15 +137,17 @@ function InlineStat({
   label,
   value,
   danger = false,
+  color,
 }: {
   label: string;
   value: ReactNode;
   danger?: boolean;
+  color?: string;
 }) {
   return (
     <div className={s.inlineStat}>
       <span>{label}</span>
-      <strong className={danger ? s.textDanger : undefined}>{value}</strong>
+      <strong className={danger ? s.textDanger : undefined} style={color ? { color } : undefined}>{value}</strong>
     </div>
   );
 }
@@ -185,31 +195,12 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
   const delta = currentChange
     ? currentChange.enrolled - currentChange.withdrawn
     : null;
-  const entrySeries = admissions
-    ? [
-        { label: "등록", value: admissions.enrolled, color: COLORS[2] },
-        {
-          label: "진행",
-          value: admissions.months.reduce((sum, m) => sum + m.open, 0),
-          color: COLORS[0],
-        },
-        {
-          label: "미등록",
-          value: admissions.months.reduce((sum, m) => sum + m.declined, 0),
-          color: COLORS[3],
-        },
-        {
-          label: "미방문",
-          value: admissions.months.reduce((sum, m) => sum + m.noShow, 0),
-          color: COLORS[5],
-        },
-      ]
-    : [];
 
   return (
-    <div className={s.root}>
-      <div className={s.board}>
-        <header className={s.header}>
+    <div className={appearance.dashboard}>
+    <div className={s.root} data-overview="root">
+      <div className={s.board} data-overview="board">
+        <header className={s.header} data-overview="header">
           <div className={s.identity}>
             <span className={s.eyebrow}>
               {snapshot.academy || "EYWA"} · ACADEMY OVERVIEW
@@ -218,6 +209,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               학원 전체 현황<span>{snapshot.today.replaceAll("-", ".")}</span>
             </h1>
           </div>
+          {/* eslint-disable-next-line @next/next/no-img-element -- static 19KB pre-rendered artwork */}
+          <img className={appearance.headerArtwork} src="/previews/dashboard/study.webp" width="96" height="64" alt="" aria-hidden />
           <div className={s.headerTools}>
             {snapshot.allowed.includes("timetable") && snapshot.allowed.includes("classes") && (
                 <Jump href="/dashboard?view=rooms" className={s.classroomPreview}>
@@ -265,14 +258,16 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           <span>학원 운영 한눈에</span>
           <p>재원 · 출결 · 수납 · 신규생</p>
         </div>
-        <div className={s.grid}>
+        <div className={s.grid} data-overview="grid">
           <Panel
             title="재원생 구성"
-            note="급간별 · 재원 상태 학생"
+            note="초·중·고 · 영어·동시수강·수학"
             href="/students"
             sections={[v.students]}
           >
-            {student && <Donut data={student.levels} label="전체 재원" />}
+            {student && (student.levelSplit
+              ? <LevelSplitChart split={student.levelSplit} noEnrollment={student.programs.noEnrollment} />
+              : <Donut data={student.levels} label="전체 재원" />)}
           </Panel>
           <Panel
             title="출결 현황"
@@ -411,18 +406,18 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           </Panel>
           <Panel
             title="신규생 단계별 관리"
-            note="등록 후 90일 · 재원·대기 학생"
+            note="등록 후 90일 · 재원·휴원 학생"
             href="/newcomers"
             sections={[v.newcomers]}
           >
             {care && (
               <>
-                <Bars
-                  data={care.stages.filter(
+                <StudentSubjectBars
+                  rows={care.stages.filter(
                     (r) => r.value > 0 || r.label !== "90일 초과",
                   )}
-                  color={COLORS[2]}
                 />
+                <StudentSubjectLegend rows={care.stages} />
                 {care.checksAvailable ? (
                   <div className={s.smallStats}>
                     <span>
@@ -538,7 +533,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           <span>학생 · 학습 · 상담</span>
           <p>학생 구성과 학습·상담 신호</p>
         </div>
-        <div className={s.grid}>
+        <div className={s.grid} data-overview="grid">
           <Panel
             title="과목별 수강"
             note="재원생 · 과목별 수강과 동시 수강"
@@ -548,10 +543,10 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             {student && (
               <>
                 <Bars
-                  data={student.subjects.map((r, i) => ({
+                  data={student.subjects.map((r) => ({
                     ...r,
                     label: snapshot.subjects[r.label] ?? r.label,
-                    color: COLORS[i % COLORS.length],
+                    color: dashboardSubjectColor(r.label, snapshot.subjects),
                   }))}
                   limit={6}
                   title="과목별 수강"
@@ -561,6 +556,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                       학년별 재원생 막대의 보라 합계와 같은 판정(subjectMixOf)이라 두 수가 늘 같다. */}
                   <InlineStat
                     label="동시 수강(영어+수학)"
+                    color={DASHBOARD_SUBJECT_COLORS.both}
                     value={
                       <>
                         {number(student.concurrent)}
@@ -582,8 +578,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                             .join("·") +
                           (group.subjects.length === 1 ? "만" : ""),
                         value: group.value,
-                        color:
-                          group.subjects.length > 1 ? COLORS[2] : "#9aacc3",
+                        color: dashboardCombinationColor(group.subjects, snapshot.subjects),
                       }),
                     )}
                     limit={4}
@@ -599,7 +594,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             href="/students"
             sections={[v.students]}
           >
-            {student && <GradeSplitChart split={student.gradeSplit} />}
+            {student && <GradeSplitChart split={student.gradeSplit} noEnrollment={student.programs.noEnrollment} />}
           </Panel>
           <Panel
             title="학교별 학생"
@@ -617,30 +612,10 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           </Panel>
           <Panel
             title="콜&상담 전환"
-            note={`${snapshot.today.slice(0, 4)}년 상담 접수 기준`}
-            href="/enrollment?view=stats"
+            note="지난달 · 이번 달 접수 기준"
             sections={[v.admissions]}
           >
-            {admissions && (
-              <>
-                <div className={s.chartHeadline}>
-                  <b>
-                    등록 전환율{" "}
-                    <strong>
-                      {admissions.rate === null
-                        ? "—"
-                        : `${admissions.rate.toFixed(1)}%`}
-                    </strong>
-                  </b>
-                  <span>접수 {number(admissions.total)}건</span>
-                </div>
-                <Bars data={entrySeries} unit="건" />
-                <p className={s.footnote}>
-                  등록 {number(admissions.enrolled)}건 / 전체 접수{" "}
-                  {number(admissions.total)}건
-                </p>
-              </>
-            )}
+            {admissions && <AdmissionsComparison stats={admissions} today={snapshot.today} />}
           </Panel>
           <Panel
             title="최근 14일 등원율"
@@ -828,7 +803,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           <span>수업과 학원 운영</span>
           <p>신규생 체크 · 강사 시트 · 일정과 행정</p>
         </div>
-        <div className={s.grid}>
+        <div className={s.grid} data-overview="grid">
           <Panel
             title="신규생 체크 진행"
             note="필수 6항목 · 2개월 콜은 선택"
@@ -931,22 +906,24 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                 {
                   section: v.englishSheet,
                   label: "영어",
+                  subject: "english",
                   href: "/ecs",
                   unit: "교시",
                 },
                 {
                   section: v.mathSheet,
                   label: "수학",
+                  subject: "math",
                   href: "/mcs",
                   unit: "학생·수업일",
                 },
               ] as const
             )
               .filter((row) => row.section)
-              .map(({ section, label, href, unit }) => (
+              .map(({ section, label, subject, href, unit }) => (
                 <div className={s.sheetSummary} key={label}>
                   <div>
-                    <Jump href={href}>{label} 시트</Jump>
+                    <Jump href={href}><span style={{ color: DASHBOARD_SUBJECT_COLORS[subject] }}>{label} 시트</span></Jump>
                     <span>{section?.data?.period}</span>
                   </div>
                   {section?.data ? (
@@ -965,7 +942,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                           {
                             label: "작성",
                             value: section.data.filled,
-                            color: COLORS[0],
+                            color: DASHBOARD_SUBJECT_COLORS[subject],
                           },
                           {
                             label: "미작성",
@@ -1165,6 +1142,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           <span>EYWA / OVERVIEW</span>
         </footer>
       </div>
+    </div>
     </div>
   );
 }

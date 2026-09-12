@@ -27,7 +27,7 @@ export type MonthChange = {
 };
 export type CareSummary = {
   total: number;
-  stages: Distribution;
+  stages: import("./student-composition").SubjectDistributionRow[];
   checksAvailable: boolean;
   items: {
     label: string;
@@ -61,6 +61,7 @@ export type OverviewData = {
     /** 프로그램별 재원생(겹침 있음) + 수강 없음 — KPI '재원생' 팝업. */
     programs: ProgramSummary;
     gradeSplit: GradeSplit;
+    levelSplit?: import("./student-composition").LevelSubjectSplit;
   };
   changes: MonthChange[];
   /** KPI '퇴원생' — 이번 달 1일 ~ 오늘(KST) 퇴원, 시스템 정리 제외. 프로그램 = 마지막 수강 반. */

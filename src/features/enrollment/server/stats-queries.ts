@@ -1,5 +1,5 @@
 import "server-only";
-import { kstYear } from "@/lib/date-kst";
+import { kstYear, shiftMonth, kstMonthStartIso as monthStartIso } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { normalizeSchoolName } from "@/features/schools/school-name";
@@ -162,6 +162,26 @@ export async function getEnrollmentStats(
     enrolled,
     rate: total > 0 ? Math.round((enrolled / total) * 100) : null,
     paidSum: curMonths.reduce((a, m) => a + m.paidSum, 0),
+  };
+}
+
+/** Dashboard: previous and current month only, including December across a year boundary. */
+export async function getRecentEnrollmentStats(today: string): Promise<EnrollmentStats> {
+  const current = today.slice(0, 7);
+  const previous = shiftMonth(current, -1);
+  const db = await createClient();
+  const { data, error } = await db.rpc("consultation_monthly_stats", {
+    p_start: monthStartIso(previous),
+    p_end: monthStartIso(shiftMonth(current, 1)),
+  });
+  if (error) throw error;
+  const months = fillMonths((data ?? []).map(toMonthStat), Number(previous.slice(0, 4)), Number(previous.slice(5)) - 1, 2);
+  const total = months.reduce((sum, row) => sum + row.total, 0);
+  const enrolled = months.reduce((sum, row) => sum + row.enrolled, 0);
+  return {
+    months, prevYearMonths: [], paths: [], total, enrolled,
+    rate: total > 0 ? Math.round(enrolled / total * 100) : null,
+    paidSum: months.reduce((sum, row) => sum + row.paidSum, 0),
   };
 }
 

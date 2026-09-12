@@ -38,12 +38,11 @@ import {
 import { attendanceRate } from "@/lib/calc/attendance";
 import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
 import { summarizeInvoices } from "@/features/billing/calc";
-import { getEnrollmentStats } from "@/features/enrollment/server/stats-queries";
+import { getRecentEnrollmentStats } from "@/features/enrollment/server/stats-queries";
 import { getStudentConsultationCounts } from "@/features/consultations/server/queries";
 import { getNewcomers } from "@/features/newcomers/server/queries";
 import {
   ONBOARDING_ITEMS,
-  BUCKET_LABEL,
   shiftDate,
 } from "@/features/newcomers/onboarding-items";
 import {
@@ -69,7 +68,8 @@ import {
 } from "@/features/dashboard/server/queries";
 import { unexplainedAbsences } from "@/features/dashboard/absence-reasons";
 import { careStatus } from "./care";
-import { schoolsByLevel } from "./student-composition";
+import { schoolsByLevel, levelSubjectSplit } from "./student-composition";
+import { newcomerStages } from "./newcomer-composition";
 import {
   matchFirstClass,
   matchFirstClassSchedule,
@@ -144,12 +144,13 @@ async function students(
       ),
     ),
     schools: distribution(visible.map((r) => r.school)),
-    schoolGroups: schoolsByLevel(visible),
+    schoolGroups: schoolsByLevel(visible, composition.programs, composition.active),
     // 동시 수강 = 영어 + 수학(원장 2026-09-11 재정의) — gradeSplit 보라 합계와 같은 subjectMixOf 판정.
     concurrent: programs.both,
     subjectCombinations: counts.combinations,
     programs,
     gradeSplit: gradeSplit(visible, composition.programs, settings.operations.gradeLevels),
+    levelSplit: levelSubjectSplit(visible, composition.programs),
   };
 }
 
@@ -312,24 +313,13 @@ async function billing(today: string) {
   );
 }
 
-async function newcomers(): Promise<CareSummary> {
-  const view = await getNewcomers();
+async function newcomers(settingsPromise: Promise<Settings>): Promise<CareSummary> {
+  const [view, settings] = await Promise.all([getNewcomers(), settingsPromise]);
   // The source page remains usable when the check table is unavailable. Do not manufacture overdue counts.
   const available = view.checksAvailable && !view.checksError;
   return {
     total: view.rows.length,
-    stages: Object.entries(BUCKET_LABEL).map(([key, label]) => ({
-      label:
-        (
-          {
-            d7: "0–7일",
-            d30: "8–30일",
-            d60: "31–60일",
-            d90: "61–90일",
-          } as Record<string, string>
-        )[key] ?? label,
-      value: view.rows.filter((r) => r.bucket === key).length,
-    })),
+    stages: newcomerStages(view.rows, settings.operations.subjects),
     checksAvailable: available,
     items: available
       ? ONBOARDING_ITEMS.map((item) => {
@@ -582,10 +572,10 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     };
   });
   add("admissions", ["enrollment"], () =>
-    getEnrollmentStats(Number(today.slice(0, 4))),
+    getRecentEnrollmentStats(today),
   );
   add("consultations", ["consultations"], getStudentConsultationCounts);
-  add("newcomers", ["newcomers"], newcomers);
+  add("newcomers", ["newcomers"], () => newcomers(settingsPromise));
   add("homework", ["lesson_reports"], getHomeworkRisk);
   add("unread", ["lesson_reports"], getUnreadReports);
   add("schedule", ["timetable"], async () =>

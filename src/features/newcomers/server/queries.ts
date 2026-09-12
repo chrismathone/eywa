@@ -50,6 +50,8 @@ export type NewcomerRow = {
    *    (첫 수업일을 앞 과목에서 빌려 쓰므로) — 그래서 판정은 언제나 과목 행으로 한다.
    */
   subjects?: NewcomerRow[];
+  /** 종료되지 않은 수강 여부. 과목 미지정 수강도 포함한다. */
+  hasCurrentEnrollment?: boolean;
   name: string;
   school: string | null;
   grade: string | null;
@@ -133,6 +135,9 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
   ]);
   // 🔴 `today`를 넘긴다 — 끝난 과목(그만둔 과목)은 줄을 세우지 않는다(아래 순수 함수 주석).
   const { bySubject, earliest } = buildSubjectAnchors(enrollments, today);
+  const activeStudents = new Set(enrollments
+    .filter((enrollment) => !ymd(enrollment.endDate) || ymd(enrollment.endDate)! > today)
+    .map((enrollment) => enrollment.studentId));
 
   let checksAvailable = true;
   let checksError: NewcomersView["checksError"] = null;
@@ -159,6 +164,7 @@ export const getNewcomers = cache(async (): Promise<NewcomersView> => {
     if (!enrolledOn) continue; // 등록일이 없으면 창을 셀 수 없다 — 대상이 아니다.
     const base = {
       studentId: s.id,
+      hasCurrentEnrollment: activeStudents.has(s.id),
       name: s.name,
       school: s.school,
       grade: s.grade,

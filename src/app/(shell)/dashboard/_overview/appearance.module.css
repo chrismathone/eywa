@@ -1,0 +1,50 @@
+/* Selected dashboard presentation; panel order and grid breakpoints remain in overview.module.css. */
+.dashboard { color: #121212; container: dashboard / inline-size; }
+.dashboard :global([data-overview="root"]) { background: #f1f5fa; font-size: var(--text-sm); }
+.dashboard :global([data-overview="board"]) { padding: 26px 28px 22px; max-width: 2100px; }
+.dashboard :global([data-overview="header"]) { margin-bottom: 22px; }
+.headerArtwork { width: 96px; height: 64px; object-fit: contain; margin-right: auto; }
+.dashboard :global([data-overview="header"]) h1 { font-size: var(--text-3xl); letter-spacing: -.04em; }
+.dashboard :global([data-overview="header"]) > div:first-child > span { display: none; }
+.dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-n, 6), minmax(0, 1fr)); border: 0; border-radius: 0; gap: 10px; background: none; overflow: visible; }
+.dashboard :global([data-overview="kpi"]) { background: white; border: 1px solid #dce4ee; border-radius: 12px; box-shadow: 0 3px 0 #e7edf5; overflow: hidden; }
+.dashboard :global([data-overview="kpi"]) > button { padding: 16px 16px 14px; }
+.dashboard :global([data-overview="kpi-label"]) { font-size: var(--text-sm); gap: 8px; font-weight: 700; }
+.dashboard :global([data-overview="kpi-label"]) > span:first-child { display: inline-flex; }
+.dashboard :global([data-overview="kpi-label"]) img { width: 26px !important; height: 26px !important; }
+.dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-4xl); line-height: 1.1; margin-top: 14px; margin-bottom: 12px; letter-spacing: -.04em; color: #173e76; }
+.dashboard :global([data-overview="kpi-value"]) > span { margin-left: 5px; font-size: var(--text-sm); color: #121212; }
+.dashboard :global([data-kpi="결석학생"]) { border-color: #e6c8c3; background: #fff9f7; }
+.dashboard :global([data-kpi="결석학생"] [data-overview="kpi-value"]) { color: #ac3333; }
+.dashboard :global([data-overview="grid"]) { gap: 16px; }
+.dashboard :global([data-overview="panel"]) { padding: 20px 20px 17px; border: 1px solid #dce4ee; border-radius: 12px; box-shadow: 0 2px 2px #1a3f7210; }
+.dashboard :global([data-overview="panel-header"]) { padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #edf0f5; }
+.dashboard :global([data-overview="panel-header"]) h2 { font-size: var(--text-base); letter-spacing: -.025em; }
+.dashboard :global([data-overview="panel-header"]) p { margin-top: 4px; }
+.dashboard :global([data-wide="true"]) { border-top: 3px solid #173e76; }
+.dashboard :global([data-wide="true"]) svg[role="img"] { height: 210px; max-height: 210px; }
+.dashboard :global([data-overview="board"] > [id]) { margin-top: 30px; margin-bottom: 14px; }
+.dashboard :global([data-overview="board"] > [id] > span) { font-size: var(--text-lg); }
+.dashboard :global([data-overview="panel"]) [role="img"] { max-width: 100%; }
+.dashboard :global([data-overview="panel"]) a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.dashboard :is(button, a, input):focus-visible { outline: 2px solid #327fa8; outline-offset: 3px; }
+@container dashboard (max-width: 1100px) {
+  .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-mid, 3), minmax(0, 1fr)); }
+  .dashboard :global([data-overview="kpi"]:last-child) { grid-column: var(--kpi-last-mid, auto); }
+  .dashboard :global([data-overview="kpi"]) > button { padding: 12px 16px; }
+  .dashboard :global([data-overview="kpi-value"]) { margin: 9px 0; }
+}
+@container dashboard (max-width: 850px) {
+  .dashboard :global([data-overview="board"]) { padding: 20px 16px; }
+  .dashboard :global([data-overview="header"]) h1 { font-size: var(--text-2xl); }
+}
+@container dashboard (max-width: 580px) {
+  .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dashboard :global([data-overview="kpi"]:last-child) { grid-column: auto; }
+  .dashboard :global([data-overview="kpi"]:last-child:nth-child(odd)) { grid-column: 1 / -1; }
+  .dashboard :global([data-overview="panel"]) { padding: 16px; }
+  .dashboard :global([data-overview="header"]) h1 { flex-wrap: wrap; gap: 5px 12px; }
+  .dashboard :global([data-overview="kpi-label"]) { font-size: var(--text-xs); }
+  .dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-3xl); }
+  .dashboard :global([data-overview="board"] > [id]) { flex-wrap: wrap; gap: 5px; }
+}

@@ -73,7 +73,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const absentWhen = `어제 ${formatShortKoreanDate(absentDate)}`;
 
   return (
-    <div className={s.kpis} style={kpiGridVars(shown)}>
+    <div className={s.kpis} style={kpiGridVars(shown)} data-overview="kpis">
       {v.students && (
         <KpiCard
           label="재원생"
@@ -164,6 +164,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       {v.absent && (
         <KpiCard
           label="결석학생"
+          labelNote="어제"
           value={count(absent?.length)}
           unit="명"
           detail={

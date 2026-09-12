@@ -7,6 +7,7 @@ import {
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
 import { PROGRAMS, programLabel, type ProgramSubject } from "@/features/students/program";
+import { dashboardProgramColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { CountList, NameCell, PopupEmpty, PopupTotal, Tag, monthDay } from "./kpi-popup-parts";
 import s from "./overview.module.css";
 
@@ -31,6 +32,7 @@ export function StudentsPopup({
             key: program,
             label: programLabel(program, subjects),
             value: programs[program],
+            color: dashboardProgramColor(program),
             href: canOpen && programs[program] > 0 ? studentsEnrolledHref(program) : null,
           })),
           ...(programs.otherOnly > 0
@@ -69,6 +71,7 @@ export function WithdrawalsPopup({
             key: program,
             label: programLabel(program, subjects),
             value: counts[program],
+            color: dashboardProgramColor(program),
             href: canFilter && counts[program] > 0 ? withdrawalsMonthHref(data.month, program) : null,
           })),
           ...(counts.other > 0 ? [{ key: "other", label: "기타·미상", value: counts.other }] : []),
@@ -87,7 +90,7 @@ export function WithdrawalsPopup({
               >
                 {row.name}
               </NameCell>
-              <span className={s.kpiListMeta}>
+              <span className={s.kpiListMeta} style={row.program ? { color: dashboardProgramColor(row.program) } : undefined}>
                 {[row.schoolGrade, row.program ? programLabel(row.program, subjects) : null]
                   .filter(Boolean)
                   .join(" · ")}
@@ -133,7 +136,7 @@ export function FirstClassPopup({
               >
                 {row.name}
               </NameCell>
-              <span className={s.kpiListMeta}>
+              <span className={s.kpiListMeta} style={{ color: dashboardCombinationColor(row.subjects, subjectLabels) }}>
                 {row.subjects.map((key) => subjectLabels[key] ?? "기타 과목").join(" · ")}
               </span>
               <Tag tone={row.kind === "first" ? "info" : "muted"}>

@@ -25,6 +25,7 @@ export type CountRow = {
   value: number;
   href?: string | null;
   note?: string;
+  color?: string;
 };
 
 /** 분류별 인원 — 링크가 있으면 그 목록 창을 연다(팝업은 링크 클릭 때 닫힌다). */
@@ -34,7 +35,7 @@ export function CountList({ rows, unit = "명" }: { rows: CountRow[]; unit?: str
       {rows.map((row) => {
         const body = (
           <>
-            <span>
+            <span style={row.color ? { color: row.color } : undefined}>
               {row.label}
               {row.note ? <small>{row.note}</small> : null}
             </span>
