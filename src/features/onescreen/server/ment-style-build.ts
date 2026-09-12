@@ -18,7 +18,7 @@ import {
   styleCorpusHash,
   type StyleSampleRow,
 } from "../ment-style";
-import { MENT_STYLE_PROMPT_VERSION, buildMentStylePrompt } from "../ment-style-prompt";
+import { MENT_STYLE_PROMPT_VERSION, buildMentStylePrompt, dropTemplatePhrases } from "../ment-style-prompt";
 
 /**
  * 강사별 말투 프로파일(0262a) — **빌드**. cron(주 1회)과 학원설정 [지금 갱신]이 같은 함수를 부른다.
@@ -54,8 +54,9 @@ async function fetchTeacherCorpus(admin: SupabaseClient, tenantId: string, teach
     if (error) throw new Error(`코퍼스 조회 실패(${source}): ${error.message}`);
     return ((data ?? []) as CorpusRow[]).map<StyleSampleRow>((r) => ({ id: r.id, notes: r.notes, source, createdAt: r.created_at, studentId: r.student_id }));
   };
-  // 두 출처는 서로 독립 — 직렬 금지(B4). 중복·짧은 조각이 걸러진 뒤에도 상한이 차게 여유를 둔다.
-  const [manual, edited] = await Promise.all([pull("manual", MENT_STYLE_MAX_SAMPLES + 20), pull("auto_edited", MENT_STYLE_MAX_EDITED * 2)]);
+  // 두 출처는 서로 독립 — 직렬 금지(B4). 🔴 상한은 **중복 제거 앞**의 행 수라 넉넉해야 한다 — 첫 빌드(2026-09-12)에서 정형 문장 21개를
+  //    돌려쓰는 강사(226행 → 서로 다른 글 21개)가 최신 80행만 받아 12건 미만으로 떨어져 '표본 부족'이 됐다. notes는 짧아 페이로드가 작다.
+  const [manual, edited] = await Promise.all([pull("manual", MENT_STYLE_MAX_SAMPLES * 4), pull("auto_edited", MENT_STYLE_MAX_EDITED * 4)]);
   return [...manual, ...edited];
 }
 
@@ -125,7 +126,9 @@ export async function rebuildTenantMentStyles(
       });
       const parsed = parseMentStyleProfile(data);
       if (!parsed) return teachers.push({ teacherId, teacherName, outcome: "rejected", samples: samples.length, reason: "응답 모양이 맞지 않음" });
-      const profile = keepRecurringPhrases(parsed, samples);
+      // 표현은 표본 2개 이상에 실제로 되풀이되는 것만(한 번 나온 어구는 그날의 내용) — 그리고 **AI 템플릿 획일성 문구를 품은 어구는 뺀다**(수정본 위주
+      // 강사의 표본엔 AI 템플릿 문구가 되풀이되니 '되풀이' 검사를 통과한다 — 첫 빌드에서 "오늘은"·"오늘 과제는"이 선생님 표현으로 섰다).
+      const profile = dropTemplatePhrases(keepRecurringPhrases(parsed, samples));
       const leaked = profileMentionsAny(profile, names);
       if (leaked.length) {
         reportWarning("강사 말투 프로파일에 학생 이름이 새어 저장하지 않음", { scope: "rebuildTenantMentStyles", teacherId, leaked });

@@ -11,7 +11,7 @@ import {
   styleCorpusHash,
   type StyleSampleRow,
 } from "./ment-style";
-import { MENT_STYLE_DIRECTIVE_HEAD, MENT_STYLE_PROMPT_VERSION, buildMentStylePrompt, mentStyleDirective } from "./ment-style-prompt";
+import { MENT_STYLE_DIRECTIVE_HEAD, MENT_STYLE_PROMPT_VERSION, buildMentStylePrompt, dropTemplatePhrases, mentStyleDirective } from "./ment-style-prompt";
 
 const row = (id: string, notes: string, source: StyleSampleRow["source"] = "manual", day = 10): StyleSampleRow => ({
   id,
@@ -129,6 +129,25 @@ describe("keepRecurringPhrases — 표본에 되풀이되는 표현만", () => {
   });
   it("문턱을 1로 낮추면 한 번 나온 것도 남지만 없는 어구는 여전히 빠진다", () => {
     expect(keepRecurringPhrases(base, samples, 1).phrases).toEqual(["다음 시간에 마무리하겠습니다", "학습 설명회가 있었습니다", "풀어오기"]);
+  });
+});
+
+describe("dropTemplatePhrases — 기본 프롬프트의 문구는 선생님 표현이 아니다", () => {
+  it("획일성 문구를 품은 어구는 빠지고 선생님 고유 어구는 남는다(공백 차이 무시)", () => {
+    const p = parseMentStyleProfile({
+      tone: "a",
+      sentence: "b",
+      phrases: ["오늘은", "오늘과제는", "오늘은 ~을 배웠습니다", "아주 좋았습니다", "풀어오기", "보완해 나가겠습니다"],
+    })!;
+    expect(dropTemplatePhrases(p).phrases).toEqual(["풀어오기", "보완해 나가겠습니다"]);
+  });
+  it("기본 프롬프트 예시 문장의 부분 문자열이라는 이유로는 지우지 않는다(리뷰: 전문을 재료로 썼더니 26개 중 23개가 사라졌다)", () => {
+    const p = parseMentStyleProfile({
+      tone: "a",
+      sentence: "b",
+      phrases: ["다음시간에", "성실히 참여했습니다", "다 해왔습니다", "제출하지 않았습니다", "마무리했습니다", "확인", "과제"],
+    })!;
+    expect(dropTemplatePhrases(p).phrases).toEqual(p.phrases);
   });
 });
 

@@ -9,7 +9,8 @@ import type { MentStyleProfile, StyleSample } from "./ment-style";
  *  ③ 선생님의 오탈자가 표현으로 남았다 → 맞춤법은 표준으로
  */
 // v3(재리뷰 2026-09-12): closing에 인사말을 적지 못하게 — 알림장 규칙(끝인사 금지)과 말투 지침이 같은 프롬프트에서 충돌하지 않게 원천에서 막는다.
-export const MENT_STYLE_PROMPT_VERSION = 3;
+// v4(첫 빌드 2026-09-12): AI 템플릿의 획일성 문구("오늘은"·"오늘 과제는")를 품은 표현을 뺀다(dropTemplatePhrases) — 코드 변경이라 버전을 올려 다시 접는다.
+export const MENT_STYLE_PROMPT_VERSION = 4;
 
 /**
  * 표본을 번호 매겨 싣고 JSON 한 덩어리를 받는다.
@@ -42,6 +43,25 @@ export function buildMentStylePrompt(samples: readonly StyleSample[]): string {
     "- phrases: 자주 쓰는 표현 · closing: 끝맺는 방식(과제 안내·다음 수업 예고 등) · caution: 이 선생님이 쓰지 않는 표현(없으면 빈 문자열)",
     "마크다운 코드블록 금지.",
   ].join("\n");
+}
+
+const squash = (s: string) => s.replace(/\s+/g, "");
+
+/**
+ * AI 템플릿의 획일성 문구 — 2026-07-30 발송 감사 실측(AI 멘트 144건 중 94%가 '오늘은'으로 시작, 87%가 '아주 좋았', 83%가
+ * '오늘 과제는 ~입니다'로 끝남 — prompt-defaults.ts). 🔴 기본 프롬프트 **전문**을 재료로 쓰면 안 된다 — 예시 문장이 강사 어투라
+ * 선생님 고유 어구("다음시간에"·"성실히 참여했습니다")까지 우연히 부분 문자열로 걸려 사라진다(리뷰 2026-09-12 실측 26개 중 23개).
+ */
+export const AI_TEMPLATE_PHRASES: readonly string[] = ["오늘은", "아주 좋았", "오늘 과제는"];
+
+/**
+ * '자주 쓰는 표현' 중 **AI 템플릿의 획일성 문구를 품은 어구**를 뺀다 — 자동작성 후 수정 표본이 많은 강사는 그 문구가 표본마다
+ * 되풀이되어 `keepRecurringPhrases`를 통과한다(첫 빌드 2026-09-12: 남정화·유형숙의 "오늘은"·"오늘 과제는"). 그건 선생님 말투가
+ * 아니라 우리 프롬프트의 말투이고, '결' 변형이 금지하는 첫마디("오늘은")와 정면으로 부딪힌다. 공백 차이는 같은 문구로 본다.
+ */
+export function dropTemplatePhrases(profile: MentStyleProfile): MentStyleProfile {
+  const stops = AI_TEMPLATE_PHRASES.map(squash);
+  return { ...profile, phrases: profile.phrases.filter((p) => !stops.some((stop) => squash(p).includes(stop))) };
 }
 
 /** 프롬프트에 붙는 지침 블록의 머리 — 배선 가드가 이 글자를 찾는다. */
