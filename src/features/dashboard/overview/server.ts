@@ -77,9 +77,17 @@ import {
   matchFirstClassSchedule,
 } from "./admissions-class-link";
 import {
+  admissionsConsultationCandidates,
   firstClassCandidates,
   firstClassScheduleCandidates,
+  homonymFamilies,
 } from "./admissions-links-server";
+import {
+  CONSULTATION_LINK_WINDOW_DAYS,
+  canonicalEventTitle,
+  consultationBasesInTitles,
+  matchAdmissionsConsultation,
+} from "./admissions-consultation-link";
 import { reportError } from "@/lib/observability/report-error";
 import {
   admissionsEventKind,
@@ -651,6 +659,16 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   add("calendar", ["calendar"], async () => {
     const end = shiftDate(today, 6);
     const months = [...new Set([today.slice(0, 7), end.slice(0, 7)])];
+    // 콜&상담 연결 후보(원장 2026-09-13)는 일정 조회와 독립이라 먼저 띄운다(B4) — 저장하지 않고 갱신마다 다시 맞추므로 일정이 먼저
+    // 있고 상담이 나중에 생겨도 다음 갱신에 붙는다. 실패해도 빈 목록(링크만 없다) · 최근 60일 수십 건이라 일정이 없는 날도 부담이 없다.
+    const consultationSince = shiftDate(today, -CONSULTATION_LINK_WINDOW_DAYS);
+    const consultationsPromise: Promise<Awaited<ReturnType<typeof admissionsConsultationCandidates>>> =
+      allowed.includes("enrollment")
+        ? admissionsConsultationCandidates(consultationSince).catch((error) => {
+            reportError(error, { scope: "dashboard.admissions-consultation-links" });
+            return [];
+          })
+        : Promise.resolve([]);
     const results = await Promise.all(months.map(getMonthEvents));
     if (results.some((r) => !r.ready))
       throw new Error("학원 일정 연결 확인 필요");
@@ -663,42 +681,69 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     let candidates: Awaited<ReturnType<typeof firstClassCandidates>> = [];
     let classSlots: Awaited<ReturnType<typeof firstClassScheduleCandidates>> =
       [];
-    if (
-      allowed.includes("students") &&
-      allowed.includes("classes") &&
-      upcoming.some((e) => /첫\s*수업/.test(`${e.title} ${e.tag?.name ?? ""}`))
-    ) {
+    // 반 연결(첫 수업)과 상담 연결(콜&상담)은 서로 독립이라 함께 기다린다(B4). 어느 쪽이 실패해도 일정 자체는 계속 보여준다.
+    const [, consultations] = await Promise.all([
+      (async () => {
+        if (
+          !allowed.includes("students") ||
+          !allowed.includes("classes") ||
+          !upcoming.some((e) => /첫\s*수업/.test(`${e.title} ${e.tag?.name ?? ""}`))
+        )
+          return;
+        try {
+          [candidates, classSlots] = await Promise.all([
+            firstClassCandidates(today, end),
+            firstClassScheduleCandidates(today, end),
+          ]);
+        } catch (error) {
+          reportError(error, { scope: "dashboard.first-class-links" });
+        }
+      })(),
+      consultationsPromise,
+    ]);
+    const calendarSettings = await settingsPromise;
+    const subjectLabels = subjectLabelRecord(calendarSettings.operations.subjects);
+    const notNames = Object.values(subjectLabels);
+    // 동명이인 가족(같은 이름의 재원·대기 원생들) — 창 안 상담이 한 명뿐이어도 원생 표엔 같은 이름이 더 있을 수 있다(김근우/김근우A).
+    // 제목에 걸린 이름만 좁혀 조회하고, 조회가 실패하면 상담 연결을 통째로 끈다(모르는 채 붙이면 다른 아이 이름으로 바뀐다).
+    const bases = consultationBasesInTitles(upcoming, consultations, notNames);
+    let families: Awaited<ReturnType<typeof homonymFamilies>> | null = new Map();
+    if (bases.length) {
       try {
-        [candidates, classSlots] = await Promise.all([
-          firstClassCandidates(today, end),
-          firstClassScheduleCandidates(today, end),
-        ]);
+        families = await homonymFamilies(bases);
       } catch (error) {
-        // 반 연결 조회가 실패해도 일정 자체는 계속 보여준다.
-        reportError(error, { scope: "dashboard.first-class-links" });
+        reportError(error, { scope: "dashboard.admissions-homonyms" });
+        families = null;
       }
     }
-    const calendarSettings = await settingsPromise;
-    return upcoming.map((event) => ({
-      id: event.id,
-      title: event.title,
-      startDate: event.startDate,
-      endDate: event.endDate,
-      startTime: event.startTime,
-      source: event.source,
-      kind: admissionsEventKind(event),
-      matchedClass:
-        matchFirstClass(
-          event,
-          candidates,
-          subjectLabelRecord(calendarSettings.operations.subjects),
-        ) ??
-        matchFirstClassSchedule(
-          event,
-          classSlots,
-          subjectLabelRecord(calendarSettings.operations.subjects),
+    return upcoming.map((event) => {
+      // 학생으로 확정된 반 연결만 원생 이름을 준다(시간표 슬롯으로 찾은 반은 학생이 없다).
+      const byStudent = matchFirstClass(event, candidates, subjectLabels);
+      const matchedClass =
+        byStudent ?? matchFirstClassSchedule(event, classSlots, subjectLabels);
+      const matchedConsultation = families
+        ? matchAdmissionsConsultation(event, consultations, notNames, {
+            since: consultationSince,
+            families,
+          })
+        : null;
+      return {
+        id: event.id,
+        title: event.title,
+        // 제목의 '김근우' → 연결된 원생의 정식 이름 '김근우A'(반 연결이 먼저, 없으면 상담의 원생). 원문은 title에 남는다.
+        displayTitle: canonicalEventTitle(
+          event.title,
+          byStudent?.studentName ?? matchedConsultation?.name,
         ),
-    }));
+        startDate: event.startDate,
+        endDate: event.endDate,
+        startTime: event.startTime,
+        source: event.source,
+        kind: admissionsEventKind(event),
+        matchedClass,
+        matchedConsultation,
+      };
+    });
   });
   add("englishSheet", ["ecs"], async () => {
     const result = await getSheetLanding(null);

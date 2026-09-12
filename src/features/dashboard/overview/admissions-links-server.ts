@@ -2,10 +2,95 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
-import type {
-  FirstClassCandidate,
-  FirstClassSchedule,
+import { kstDateOf } from "@/lib/date-kst";
+import { kstDayBounds } from "@/features/enrollment/kst-bounds";
+import { baseNameOf } from "@/features/students/name-suffix";
+import {
+  schoolGradeKey,
+  type FirstClassCandidate,
+  type FirstClassSchedule,
 } from "./admissions-class-link";
+import type { AdmissionsConsultationCandidate } from "./admissions-consultation-link";
+
+/**
+ * 동명이인 가족 — 접미사 뗀 이름마다 그 이름을 쓰는 **재원·대기(퇴원 아님)** 원생들의 학교·학년 키. 일정 제목에 걸린 이름만 넘어온다(보통 몇 개).
+ * 60일 창 안 상담이 한 명뿐이어도 원생 표엔 같은 이름이 더 있을 수 있다 — 매처가 그때 직접 증거를 요구한다(규칙 6).
+ */
+export async function homonymFamilies(
+  bases: readonly string[],
+): Promise<Map<string, { studentId: string; key: string }[]>> {
+  const safe = [...new Set(bases)].filter((base) => /^[가-힣]{2,4}$/.test(base));
+  if (!safe.length) return new Map();
+  const db = await createClient();
+  const rows = await fetchAllPaged<{ id: string; name: string; school: string | null; grade: string | null }>((from, to) =>
+    db
+      .from("students")
+      .select("id,name,school,grade")
+      .neq("status", "withdrawn")
+      .or(safe.map((base) => `name.like.${base}*`).join(","))
+      .order("id")
+      .range(from, to),
+  );
+  const families = new Map<string, { studentId: string; key: string }[]>();
+  for (const row of rows) {
+    const base = baseNameOf(row.name.trim());
+    if (!safe.includes(base)) continue; // like 'X*'는 'X현' 같은 다른 이름도 잡는다 — 접미사 뗀 이름이 정확히 같을 때만
+    families.set(base, [...(families.get(base) ?? []), { studentId: row.id, key: schoolGradeKey(row.school, row.grade) }]);
+  }
+  return families;
+}
+
+/**
+ * 일정 ↔ 콜&상담 연결 후보 — 상담 날짜가 `sinceDate`(KST) 이후인 건. 콜&상담 열람 권한을 확인한 호출부에서만 부른다(RLS도 걸린다).
+ * 보호자 번호는 서버 판정에만 쓰고 클라이언트엔 **일치한 상담 id·이름만** 간다.
+ * 🔑 날짜는 `consulted_at`(NOT NULL — 이관된 옛 상담도 원래 날짜가 들어 있다; created_at은 이관 시각이라 그걸로 거르면 2024년 상담이 창에 든다).
+ */
+export async function admissionsConsultationCandidates(
+  sinceDate: string,
+): Promise<AdmissionsConsultationCandidate[]> {
+  const db = await createClient();
+  const { startIso } = kstDayBounds(sinceDate);
+  type Student = { name: string };
+  type Row = {
+    id: string;
+    prospect_name: string | null;
+    prospect_school: string | null;
+    prospect_grade: string | null;
+    parent_phone: string | null;
+    student_id: string | null;
+    consulted_at: string;
+    student: Student | Student[] | null;
+  };
+  const rows = await fetchAllPaged<Row>((from, to) =>
+    db
+      .from("enrollment_consultations")
+      .select(
+        "id,prospect_name,prospect_school,prospect_grade,parent_phone,student_id,consulted_at,student:students!enrollment_consultations_student_id_students_id_fk(name)",
+      )
+      .gte("consulted_at", startIso)
+      .order("id")
+      .range(from, to),
+  );
+  return rows.flatMap((row) => {
+    const name = row.prospect_name?.trim();
+    const consultedOn = kstDateOf(row.consulted_at);
+    if (!name || !consultedOn) return [];
+    const student = Array.isArray(row.student) ? row.student[0] : row.student;
+    const digits = (row.parent_phone ?? "").replace(/\D/g, "");
+    return [
+      {
+        id: row.id,
+        name,
+        school: row.prospect_school,
+        grade: row.prospect_grade,
+        phoneDigits: digits.length >= 9 ? digits : null,
+        studentId: row.student_id,
+        studentName: student?.name ?? null,
+        consultedOn,
+      },
+    ];
+  });
+}
 
 /** 캘린더와 학생·수업 열람 권한을 모두 확인한 호출부에서만 사용한다. 클라이언트에는 일치한 반만 보낸다. */
 export async function firstClassCandidates(

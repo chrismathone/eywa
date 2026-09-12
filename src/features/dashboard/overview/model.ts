@@ -122,14 +122,19 @@ export type OverviewData = {
   notices: AnnouncementRow[];
   calendar: {
     id: string;
+    /** 일정 원문 제목(구글에서 가져온 그대로). */
     title: string;
+    /** 표시용 제목 — 연결된 원생의 정식 이름(동명이인 접미사)으로 바로잡은 것. 없으면 `title`. */
+    displayTitle?: string;
     startDate: string;
     endDate: string;
     startTime: string | null;
     source: string;
     /** 입학 일정 종류(단일 분류기 `admissionsEventKind`) — KPI '금일입테'는 levelTest만. */
     kind: AdmissionsKind | null;
-    matchedClass?: { id: string; name: string } | null;
+    matchedClass?: { id: string; name: string; studentName?: string } | null;
+    /** 이 일정의 콜&상담(이름·날짜·번호·학교로 한 건 확정될 때만) — 콜&상담 열람 권한이 있을 때만 싣는다. */
+    matchedConsultation?: { id: string; name: string } | null;
   }[];
   englishSheet: {
     period: string;
