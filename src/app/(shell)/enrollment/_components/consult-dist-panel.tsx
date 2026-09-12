@@ -24,6 +24,14 @@ const chip = (on: boolean) =>
   }`;
 
 /**
+ * 이름이 이미 학교급을 말하는가(`인지초`·`봉무초등학교`·`계성중학교`) — 그러면 급 배지를 겹쳐 적지 않는다
+ * (원장 2026-09-12 *"초 중 고 가 이중으로 표시됨"*). `국제학교`처럼 이름만으론 급을 알 수 없는 학교는 배지를 남긴다.
+ */
+function nameSaysKind(label: string, kind: string): boolean {
+  return label.replace(/\s*(등)?학교\s*$/, "").trimEnd().endsWith(kind);
+}
+
+/**
  * 학교별 **상담** 분포 — 건수·등록 전환율, 그리고 공시 연도일 때만 전교생 대비 비율.
  *
  * 🔴 재원생/퇴원생 축은 여기 없다(원장 2026-08-05: 그건 학생목록에서 할 일). 이 화면의 대분류는
@@ -156,7 +164,9 @@ export function ConsultDistPanel({
                   {/* 라벨은 짧은 표기 하나로 통일(병행표기 금지) — 공시 정식명은 툴팁으로만 남긴다. */}
                   <span className="text-foreground font-medium break-keep" title={s.officialName ?? undefined}>
                     {s.label}
-                    {s.kind ? <span className="text-text-faint ml-1.5 text-xs">{s.kind}</span> : null}
+                    {s.kind && !nameSaysKind(s.label, s.kind) ? (
+                      <span className="text-text-faint ml-1.5 text-xs">{s.kind}</span>
+                    ) : null}
                   </span>
                   <span className="text-text-dim num shrink-0 text-xs">
                     {s.n}건 · 등록 {s.enrolled}
