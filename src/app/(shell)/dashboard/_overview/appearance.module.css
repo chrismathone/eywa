@@ -21,7 +21,6 @@
 .dashboard :global([data-overview="panel-header"]) { padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #edf0f5; }
 .dashboard :global([data-overview="panel-header"]) h2 { font-size: var(--text-base); letter-spacing: -.025em; }
 .dashboard :global([data-overview="panel-header"]) p { margin-top: 4px; }
-.dashboard :global([data-wide="true"]) { border-top: 3px solid #173e76; }
 .dashboard :global([data-wide="true"]) svg[role="img"] { height: 210px; max-height: 210px; }
 .dashboard :global([data-overview="board"] > [id]) { margin-top: 30px; margin-bottom: 14px; }
 .dashboard :global([data-overview="board"] > [id] > span) { font-size: var(--text-lg); }

@@ -4,7 +4,9 @@ import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope, type TeacherScope } from "@/lib/auth/teacher-scope";
 import { canAccess, MENU_KEYS, type MenuKey } from "@/lib/permissions";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstTimeOf, kstToday } from "@/lib/date-kst";
 import {
@@ -84,6 +86,7 @@ import {
   staffDisplayRole,
   upcomingAdmissionsEvents,
 } from "./display";
+import { staffComposition } from "./staff-subjects";
 import {
   distribution,
   monthlyChanges,
@@ -280,24 +283,15 @@ async function attendanceHistory(today: string) {
   };
 }
 
-async function billing(today: string) {
-  const db = await createClient();
-  const months = monthKeys(today);
-  const rows = await fetchAllPaged<{
-    period: string;
-    amount_total: number;
-    amount_paid: number;
-    amount_discount: number | null;
-    status: string;
-  }>((from, to) =>
-    db
-      .from("invoices")
-      .select("period,amount_total,amount_paid,amount_discount,status")
-      .in("period", months)
-      .neq("status", "void")
-      .order("id")
-      .range(from, to),
-  );
+type InvoiceTrendRow = {
+  period: string;
+  amount_total: number;
+  amount_paid: number;
+  amount_discount: number | null;
+  status: string;
+};
+
+function summarizeInvoiceMonths(rows: InvoiceTrendRow[], months: string[]) {
   return months.map((month) =>
     summarizeInvoices(
       rows
@@ -311,6 +305,54 @@ async function billing(today: string) {
       month,
     ),
   );
+}
+
+const invoiceTrendSelect = "period,amount_total,amount_paid,amount_discount,status";
+
+/**
+ * 지난 달들의 청구 요약 — tenantId별 `unstable_cache`(5분). 12개월 청구서(실측 2026-09: ~3,500행)를 30초 갱신마다 전건
+ * 다시 받으면 B2 위반이라, 바뀌지 않는 지난 달은 캐시하고 **이번 달만** 요청마다 새로 읽는다(수납 현황 카드가 같은 값을 쓴다).
+ * 캐시 안엔 쿠키가 없어 admin client + 신뢰된 tenantId 키(`loadTenantSettingsRaw`와 같은 패턴, `.eq(tenant_id)` 격리).
+ * ⚠️ 지난 달 미수가 5분 뒤에 반영되는 것은 감수(추이 차트) — 이번 달 숫자는 즉시.
+ */
+const loadPastInvoiceMonths = (tenantId: string, months: string[]) =>
+  unstable_cache(
+    async () => {
+      const admin = createAdminClient();
+      const rows = await fetchAllPaged<InvoiceTrendRow>((from, to) =>
+        admin
+          .from("invoices")
+          .select(invoiceTrendSelect)
+          .eq("tenant_id", tenantId)
+          .in("period", months)
+          .neq("status", "void")
+          .order("id")
+          .range(from, to),
+      );
+      return summarizeInvoiceMonths(rows, months);
+    },
+    ["dashboard-invoice-trend", tenantId, months.join(",")],
+    { revalidate: 300 },
+  )();
+
+async function billing(today: string, tenantId: string) {
+  const db = await createClient();
+  // 최근 12개월(원장 2026-09-12 "12개월 청구 수납") — 등록·퇴원 추이는 종전대로 6개월이라 monthKeys 기본값을 바꾸지 않는다.
+  const months = monthKeys(today, 12);
+  const current = months[months.length - 1];
+  const [past, currentRows] = await Promise.all([
+    loadPastInvoiceMonths(tenantId, months.slice(0, -1)),
+    fetchAllPaged<InvoiceTrendRow>((from, to) =>
+      db
+        .from("invoices")
+        .select(invoiceTrendSelect)
+        .eq("period", current)
+        .neq("status", "void")
+        .order("id")
+        .range(from, to),
+    ),
+  ]);
+  return [...past, ...summarizeInvoiceMonths(currentRows, [current])];
 }
 
 async function newcomers(settingsPromise: Promise<Settings>): Promise<CareSummary> {
@@ -346,29 +388,29 @@ async function newcomers(settingsPromise: Promise<Settings>): Promise<CareSummar
   };
 }
 
-async function staff() {
+/**
+ * 직원 구성 — 역할별 인원에 **과목 묶음**(영어·수학·둘 다·그 외·없음)을 함께 센다(원장 2026-09-12 *"수학강사 영어강사 색깔
+ * 구분 · 과목 없는 강사는 진한 회색 · 관리자도 마찬가지"*). 판정·라벨은 순수 함수(staff-subjects.ts)이고 과목 묶음은
+ * 학년별 재원생 막대와 같은 `subjectGroupOf`라 학원설정 과목을 읽는다(하드코딩 금지).
+ */
+async function staff(settingsPromise: Promise<Settings>) {
   const db = await createClient();
-  const rows = await fetchAllPaged<{ id: string; system_role: string }>(
-    (from, to) =>
-      db
-        .from("users")
-        .select("id,system_role")
-        .eq("status", "active")
-        .neq("system_role", "student")
-        .order("id")
-        .range(from, to),
-  );
-  const labels: Record<string, string> = {
-    master: "원장",
-    admin: "관리자",
-    manager: "매니저",
-    teacher: "강사",
-    counselor: "상담",
-    accountant: "회계",
-    viewer: "열람",
-  };
-  return distribution(
-    rows.map((r) => labels[staffDisplayRole(r)] ?? r.system_role),
+  const [rows, settings] = await Promise.all([
+    fetchAllPaged<{ id: string; system_role: string; subjects: string[] | null }>(
+      (from, to) =>
+        db
+          .from("users")
+          .select("id,system_role,subjects")
+          .eq("status", "active")
+          .neq("system_role", "student")
+          .order("id")
+          .range(from, to),
+    ),
+    settingsPromise,
+  ]);
+  return staffComposition(
+    rows.map((r) => ({ role: staffDisplayRole(r), subjects: r.subjects })),
+    settings.operations.subjects,
   );
 }
 
@@ -539,7 +581,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   add("attendance", ["attendance"], async () => (await history)!.snapshot);
   add("processing", ["attendance"], () => getDailyProcessingStatus(today));
   add("attendanceTrend", ["attendance"], async () => (await history)!.trend);
-  add("billing", ["billing"], () => billing(today));
+  add("billing", ["billing"], () => billing(today, user.tenantId));
   add("expenses", ["billing"], async () =>
     summarizeExpenses(
       await getExpensesForMonth(today.slice(0, 7)),
@@ -603,7 +645,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       }),
     ),
   );
-  add("staff", ["staff"], staff);
+  add("staff", ["staff"], () => staff(settingsPromise));
   add("operations", [], () => operations(allowed, user.id));
   add("notices", [], () => getRecentAnnouncements(user.systemRole, 4));
   add("calendar", ["calendar"], async () => {

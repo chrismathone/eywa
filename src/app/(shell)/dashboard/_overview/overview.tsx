@@ -9,7 +9,9 @@ import {
   type Section,
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrolled-composition";
-import { DASHBOARD_SUBJECT_COLORS, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
+import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
+import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
+import { paymentRateDisplay } from "@/features/billing/calc";
 import { monthDayLabel } from "@/lib/date-kst";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
@@ -44,6 +46,8 @@ const clock = (at: number) =>
     hour12: false,
   });
 const monthLabel = (month: string) => `${Number(month.slice(5))}월`;
+/** 차트 가로축 — 원장 2026-09-12 "하단 라벨 yy.mm": 2026-09 → 26.09(12칸이 좁은 폭에서도 한 줄). 머리 줄의 '9월'은 monthLabel 그대로. */
+const axisMonth = (month: string) => `${month.slice(2, 4)}.${month.slice(5, 7)}`;
 const subscribeHydration = () => () => {};
 
 function OpenIcon({ size = 14 }: { size?: number }) {
@@ -191,6 +195,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
       ).size
     : null;
   const staff = v.staff?.data;
+  // 원장 2026-09-12: "USD 지출 합계는 빼고 대충 환율 1,500원으로 지출 합계에 합쳐" — 환산은 순수 함수(expense-total.ts).
+  const expenseTotal = v.expenses?.data ? foldExpenseTotals(v.expenses.data.byCurrency) : null;
   const thisMonth = monthLabel(snapshot.today.slice(0, 7));
   const delta = currentChange
     ? currentChange.enrolled - currentChange.withdrawn
@@ -470,7 +476,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   </b>
                 </div>
                 <Columns
-                  labels={change.map((r) => monthLabel(r.month))}
+                  labels={change.map((r) => axisMonth(r.month))}
+                  axisFormat={(n) => (Number.isInteger(n) ? `${number(n)}명` : "")}
                   series={[
                     {
                       name: "등록",
@@ -488,41 +495,45 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             )}
           </Panel>
           <Panel
-            title="월별 청구 · 수납"
-            note="최근 6개월 · 청구월 기준 누적 금액"
+            title="12개월 청구 · 수납"
+            note="최근 12개월 · 청구월 기준 실청구액(청구 − 할인)"
             href="/billing"
             sections={[v.billing]}
             wide
           >
             {billing && (
               <>
+                {/* 막대는 실청구(청구 − 할인) 하나(원장 2026-09-12 "청구액과 수납액이 그렇게 차이가 안 나는데 두 개 다 있을 필요가 없다") —
+                    수납은 이번 달 값만 머리 줄에 적는다(제목의 '수납'이 거짓이 되지 않게). 🔴 `.chartHeadline > span`은 좁은 폭에서
+                    숨는 규칙이 있어 이 글은 `<i>`로 — 수납 숫자가 노트북에서 사라지면 안 된다. 수납률 글자는 정본 `paymentRateDisplay`
+                    (미수가 남아 있으면 100%로 반올림하지 않는다 — 원장 2026-09-10). */}
                 <div className={s.chartHeadline}>
                   <b>
-                    {thisMonth} 수납{" "}
+                    {thisMonth} 실청구{" "}
                     <strong>
-                      {bill ? chartMoney(bill.totalCollected) : "—"}
+                      {bill ? chartMoney(bill.totalBilled - bill.totalDiscount) : "—"}
                     </strong>
                   </b>
+                  {bill && (
+                    <i className={s.chartHeadlineNote}>
+                      수납 {chartMoney(bill.totalCollected)} · 수납률 {paymentRateDisplay(bill.paymentRate, bill.outstanding)}%
+                    </i>
+                  )}
                 </div>
                 <Columns
-                  labels={billing.map((r) => monthLabel(r.period))}
+                  labels={billing.map((r) => axisMonth(r.period))}
                   series={[
                     {
                       name: "실청구",
-                      color: "#b3c3d7",
+                      color: COLORS[0],
                       values: billing.map(
                         (r) => r.totalBilled - r.totalDiscount,
                       ),
                     },
-                    {
-                      name: "수납",
-                      color: COLORS[0],
-                      values: billing.map((r) => r.totalCollected),
-                    },
                   ]}
                   unit="원"
                   format={chartMoney}
-                  valueLabels="last"
+                  valueLabels="end"
                 />
               </>
             )}
@@ -1020,11 +1031,28 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                     </>
                   }
                 />
+                {/* 원장 2026-09-12: "수학강사 영어강사 색깔 구분 · 과목 없는 강사는 그냥 진한 회색 · 관리자도 마찬가지" —
+                    역할 막대 하나를 과목 묶음 조각으로 갈라 칠한다. 색은 학년별 재원생 막대와 같은 값(STAFF_SUBJECT_LEGEND). */}
                 <Bars
-                  data={staff}
+                  data={staff.map((row) => ({
+                    label: row.label,
+                    value: row.value,
+                    segments: STAFF_SUBJECT_LEGEND.filter((g) => row.bySubject[g.key] > 0).map((g) => ({
+                      label: g.label,
+                      value: row.bySubject[g.key],
+                      color: g.color,
+                    })),
+                  }))}
                   limit={5}
-                  color={COLORS[1]}
+                  color={DASHBOARD_SUBJECT_COLORS.unenrolled}
                   title="직원 구성"
+                  footer={
+                    staff.length > 0 ? (
+                      <Legend
+                        items={STAFF_SUBJECT_LEGEND.filter((g) => staff.some((row) => row.bySubject[g.key] > 0))}
+                      />
+                    ) : null
+                  }
                 />
               </>
             )}
@@ -1083,19 +1111,23 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   title="분류별 지출"
                 />
                 <div className={s.separated}>
-                  {v.expenses.data.byCurrency.map((c) => (
+                  {/* 합계 한 줄 — 환율이 있는 외화(USD 1,500원)는 원화에 합치고 라벨에 그 사실을 적는다(정산이 아니라 눈대중).
+                      환율이 없는 통화만 종전처럼 따로 선다. */}
+                  {expenseTotal && v.expenses.data.count > 0 && (
+                    <InlineStat
+                      label={
+                        expenseTotal.converted.length
+                          ? `지출 합계 · ${expenseTotal.converted.map((c) => `${c.currency} ${number(c.rate)}원 환산 포함`).join(" · ")}`
+                          : "지출 합계"
+                      }
+                      value={money(expenseTotal.krwTotal)}
+                    />
+                  )}
+                  {expenseTotal?.unconverted.map((c) => (
                     <InlineStat
                       key={c.currency}
-                      label={
-                        c.currency === "KRW"
-                          ? "지출 합계"
-                          : `${c.currency} 지출 합계`
-                      }
-                      value={
-                        c.currency === "KRW"
-                          ? money(c.total)
-                          : `${number(c.total)} ${c.currency}`
-                      }
+                      label={`${c.currency} 지출 합계`}
+                      value={`${number(c.total)} ${c.currency}`}
                     />
                   ))}
                 </div>

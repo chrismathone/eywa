@@ -37,7 +37,7 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[] }[] = [
       { title: "9월 수납 현황", note: "당월 청구서 · 취소 청구 제외", body: 225 },
       { title: "신규생 단계별 관리", note: "등록 후 90일 · 재원·대기 학생", body: 180 },
       { title: "등록 · 퇴원 추이", note: "최근 6개월 · 당월은 오늘까지", body: 245, wide: true },
-      { title: "월별 청구 · 수납", note: "최근 6개월 · 청구월 기준 누적 금액", body: 245, wide: true },
+      { title: "12개월 청구 · 수납", note: "최근 12개월 · 청구월 기준 실청구액(청구 − 할인)", body: 245, wide: true },
     ],
   },
   {
@@ -62,7 +62,7 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[] }[] = [
       { title: "강사 시트 작성 현황", note: "현재 시트의 기간·보기 필터 기준", body: 160 },
       { title: "현재 수업 현황", note: "오늘 시간표", body: 250 },
       { title: "레벨테스트 및 첫수업 일정", note: "오늘부터 7일", body: 250 },
-      { title: "직원 구성", note: "재직 중 · 운영 역할 기준", body: 180 },
+      { title: "직원 구성", note: "재직 중 · 운영 역할 기준", body: 205 },
       { title: "행정 · 자산", note: "열람 가능한 업무 기준", body: 180 },
       { title: "9월 지출 내역", note: "당월 지출결의서 기준", body: 200 },
       { title: "학원 공지", note: "최근 공지 · 대상 권한 반영", body: 200 },

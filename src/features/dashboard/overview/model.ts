@@ -13,6 +13,7 @@ import type {
 import type { TodaySlot } from "@/features/timetable/server/queries";
 import type { MenuKey } from "@/lib/permissions";
 import type { ExpenseSummary } from "@/features/billing/server/expense-queries";
+import type { StaffRow } from "./staff-subjects";
 import type { Program } from "@/features/students/program";
 import type { GradeSplit, ProgramSummary } from "@/features/students/enrolled-composition";
 import type { FirstClassStudent } from "@/features/dashboard/day-arrivals";
@@ -115,7 +116,8 @@ export type OverviewData = {
     | "classroomName"
     | "status"
   >[];
-  staff: Distribution;
+  /** 역할별 인원 + 과목 묶음(영어·수학·둘 다·그 외·없음) — staff-subjects.ts. */
+  staff: StaffRow[];
   operations: OperationCount[];
   notices: AnnouncementRow[];
   calendar: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Distribution } from "@/features/dashboard/overview/model";
 import { dashboardDate } from "@/features/dashboard/overview/display";
 import { DetailPopup } from "./detail-popup";
@@ -27,7 +27,13 @@ export function chartMoney(n: number) {
         : ([1, "원"] as const);
   return `${(n / scale).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit}`;
 }
-type Datum = { label: string; value: number; color?: string };
+type Datum = {
+  label: string;
+  value: number;
+  color?: string;
+  /** 한 막대를 이어 붙인 조각으로 칠할 때(직원 구성의 과목 묶음) — 조각 값의 합이 곧 `value`여야 막대 길이가 맞는다. */
+  segments?: { label: string; value: number; color: string }[];
+};
 
 function useChartWidth(initial: number) {
   const ref = useRef<SVGSVGElement>(null);
@@ -72,12 +78,15 @@ export function Bars({
   color = COLORS[0],
   limit,
   title = "전체 분포",
+  footer,
 }: {
   data: Datum[];
   unit?: string;
   color?: string;
   limit?: number;
   title?: string;
+  /** 막대 바로 아래(그리고 '전체 보기' 팝업 안)에도 서는 범례 등 — 조각 색의 열쇠가 팝업에서 빠지지 않게. */
+  footer?: ReactNode;
 }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   const shown = limit ? data.slice(0, limit) : data;
@@ -88,16 +97,27 @@ export function Bars({
           <div
             className={s.barRow}
             key={d.label}
-            title={`${d.label} ${number(d.value)}${unit}`}
+            title={
+              d.segments?.length
+                ? `${d.label} ${number(d.value)}${unit} — ${d.segments.map((g) => `${g.label} ${number(g.value)}${unit}`).join(" · ")}`
+                : `${d.label} ${number(d.value)}${unit}`
+            }
           >
             <span className={s.barLabel}>{d.label}</span>
-            <span className={s.barTrack}>
-              <i
-                style={{
-                  width: `${(d.value / max) * 100}%`,
-                  background: d.color ?? color,
-                }}
-              />
+            {/* 조각(segments)이 있으면 같은 max 기준으로 이어 칠한다 — 합이 곧 막대 길이. */}
+            <span className={s.barTrack} data-segmented={d.segments?.length ? "" : undefined}>
+              {d.segments?.length ? (
+                d.segments.map((g) => (
+                  <i key={g.label} style={{ width: `${(g.value / max) * 100}%`, background: g.color }} />
+                ))
+              ) : (
+                <i
+                  style={{
+                    width: `${(d.value / max) * 100}%`,
+                    background: d.color ?? color,
+                  }}
+                />
+              )}
             </span>
             <b>
               {number(d.value)}
@@ -106,9 +126,10 @@ export function Bars({
           </div>
         ))}
       </div>
+      {footer}
       {limit && data.length > limit && (
         <DetailPopup title={title} label={`전체 ${data.length}개 보기`}>
-          <Bars data={data} unit={unit} color={color} />
+          <Bars data={data} unit={unit} color={color} footer={footer} />
         </DetailPopup>
       )}
     </>
@@ -197,21 +218,30 @@ export function Columns({
   series,
   unit = "명",
   format = number,
+  axisFormat = format,
   valueLabels = "all",
 }: {
   labels: string[];
   series: { name: string; color: string; values: number[] }[];
   unit?: string;
   format?: (n: number) => string;
-  valueLabels?: "all" | "last";
+  /** 세로축 눈금만 다르게 적을 때(예: `60명`) — 막대 위 값 라벨은 `format` 그대로라 12칸에서도 안 겹친다. */
+  axisFormat?: (n: number) => string;
+  /** `last` = 마지막 **시리즈**의 모든 칸 · `end` = 마지막 시리즈의 **마지막 칸**만(단일 시리즈 12칸처럼 칸이 좁을 때). */
+  valueLabels?: "all" | "last" | "end";
 }) {
   const id = useId();
   const { ref, width } = useChartWidth(480);
   const max = axisCeiling(Math.max(1, ...series.flatMap((v) => v.values)));
   const rawMin = Math.min(0, ...series.flatMap((v) => v.values));
   const min = rawMin < 0 ? -axisCeiling(-rawMin) : 0;
+  const ticks = [min, (min + max) / 2, max];
+  // 세로축 폭은 눈금 글자에서 — '100명'·'1,000만'처럼 길어지면 45px에서 잘린다(한글 ≈14px · 그 외 ≈8px, 14px 글꼴 기준).
+  const axisWidth = Math.max(
+    ...ticks.map((v) => [...axisFormat(v)].reduce((w, ch) => w + (/[가-힣]/.test(ch) ? 14 : 8), 0)),
+  );
   const height = 170,
-    left = 45,
+    left = Math.max(45, axisWidth + 12),
     right = 8,
     top = 26,
     bottom = 29;
@@ -219,6 +249,9 @@ export function Columns({
   const y = (value: number) => top + ((max - value) / (max - min)) * plot;
   const group = (width - left - right) / Math.max(1, labels.length);
   const bar = Math.min(27, (group * 0.64) / series.length);
+  // 가로축 라벨은 칸이 좁으면 솎는다(12칸 `26.09`가 노트북 폭에서 겹친다) — 마지막 칸(이번 달)은 항상 적는다.
+  const labelStep = Math.max(1, Math.ceil(42 / group));
+  const showLabel = (i: number) => (labels.length - 1 - i) % labelStep === 0;
   return (
     <>
       <svg
@@ -230,8 +263,8 @@ export function Columns({
       >
         <title
           id={id}
-        >{`${series.map((v) => v.name).join("·")} 비교 (${unit})`}</title>
-        {[min, (min + max) / 2, max].map((v) => (
+        >{series.length === 1 ? `${series[0].name} (${unit})` : `${series.map((v) => v.name).join("·")} 비교 (${unit})`}</title>
+        {ticks.map((v) => (
           <g key={v}>
             <line
               x1={left}
@@ -242,7 +275,7 @@ export function Columns({
               strokeDasharray={v ? "3 4" : undefined}
             />
             <text x={left - 8} y={y(v) + 4} textAnchor="end" className={s.axis}>
-              {format(v)}
+              {axisFormat(v)}
             </text>
           </g>
         ))}
@@ -265,7 +298,8 @@ export function Columns({
                   >
                     <title>{`${label} ${v.name}: ${number(value)}${unit}`}</title>
                   </rect>
-                  {(valueLabels === "all" || j === series.length - 1) && (
+                  {(valueLabels === "all" ||
+                    (j === series.length - 1 && (valueLabels === "last" || i === labels.length - 1))) && (
                     <text
                       x={x + bar / 2}
                       y={y(value) + (value < 0 ? 13 : -5)}
@@ -284,7 +318,7 @@ export function Columns({
               textAnchor="middle"
               className={s.axis}
             >
-              {label}
+              {showLabel(i) ? label : ""}
             </text>
           </g>
         ))}

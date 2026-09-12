@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  Bars,
   Columns,
   Donut,
   AttendanceHistory,
@@ -144,5 +145,56 @@ describe("overview chart integrity", () => {
     expect(within(popup).getByText("기록 없음")).toBeTruthy();
     expect(within(popup).getByText("0.0%")).toBeTruthy();
     cleanup();
+  });
+});
+
+describe("2026-09-12 원장 지시 — 세로축 '명'·값 라벨 'end'·직원 구성 조각 막대", () => {
+  it("axisFormat은 눈금(axis)에만 붙고 막대 위 값 라벨(columnValue)은 format 그대로다", () => {
+    const html = renderToStaticMarkup(
+      <Columns
+        labels={["26.08", "26.09"]}
+        series={[{ name: "등록", color: COLORS[0], values: [30, 60] }]}
+        axisFormat={(n) => `${n}명`}
+      />,
+    );
+    // 눈금 셋(0·30·60)이 전부 '명' — 값 라벨(columnValue)엔 '명'이 없어야 한다(뒤바뀌면 둘 다 실패). svg <title>·툴팁의 '명'은 unit이라 세지 않는다.
+    for (const tick of ["0명", "30명", "60명"]) expect(html).toMatch(new RegExp(`class="[^"]*axis[^"]*"[^>]*>${tick}<`));
+    expect(html).not.toMatch(/columnValue[^>]*>[^<]*명</);
+    expect(html).toMatch(/class="[^"]*columnValue[^"]*"[^>]*>60</);
+    expect(html).toMatch(/class="[^"]*columnValue[^"]*"[^>]*>30</);
+    expect(html).toContain(">26.09<");
+  });
+  it("valueLabels='end'는 마지막 칸 하나만 적는다('last'는 마지막 시리즈의 모든 칸)", () => {
+    const end = renderToStaticMarkup(
+      <Columns labels={["26.08", "26.09"]} series={[{ name: "실청구", color: COLORS[0], values: [1_000, 2_000] }]} valueLabels="end" />,
+    );
+    expect(end.match(/columnValue/g)?.length).toBe(1);
+    expect(end).toMatch(/columnValue[^>]*>2,000</);
+    expect(end).toContain("<title");
+    expect(end).toContain("실청구 (명)</title>"); // 단일 시리즈면 '비교'가 아니다
+    const last = renderToStaticMarkup(
+      <Columns labels={["26.08", "26.09"]} series={[{ name: "실청구", color: COLORS[0], values: [1_000, 2_000] }]} valueLabels="last" />,
+    );
+    expect(last.match(/columnValue/g)?.length).toBe(2);
+  });
+  it("segments가 있으면 한 막대를 조각으로 이어 칠하고(폭은 행이 아니라 전체 max 기준) 툴팁에 구성을 적는다", () => {
+    const html = renderToStaticMarkup(
+      <Bars
+        data={[
+          { label: "원장", value: 4 },
+          { label: "강사", value: 2, segments: [{ label: "영어", value: 1, color: "#d23c48" }, { label: "수학", value: 1, color: "#1267d5" }] },
+        ]}
+        title="직원 구성"
+        footer={<i data-legend="" />}
+      />,
+    );
+    expect(html).toContain("data-segmented");
+    // max=4 — 조각 1명은 25%(행 합 2명 기준이면 50%가 되어 막대가 늘 꽉 찬다)
+    expect(html).toContain("width:25%;background:#d23c48");
+    expect(html).toContain("width:25%;background:#1267d5");
+    expect(html).toContain("width:100%;background:");
+    expect(html).toContain("강사 2명 — 영어 1명 · 수학 1명");
+    expect(html.match(/data-segmented/g)?.length).toBe(1);
+    expect(html).toContain('data-legend=""');
   });
 });
