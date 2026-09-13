@@ -391,19 +391,21 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
                   label="청구서"
                   unit="건"
                 />
+                {/* 원장 2026-09-13 *"미수랑 미수잔액이 두가진데 중복아닌가"* — 같은 값(`bill.outstanding`)을 라벨 줄과 각주가 두 번
+                    적고 있었다. 라벨 있는 줄만 남기고, `money`가 만원 단위로 반올림하며 지우는 원 단위는 마우스 오버로 남긴다.
+                    🔴 1만 원 미만은 원 단위로 적는다 — `money`면 3,000원이 빨간 "0만원"이 되는데, 그걸 풀어 주던 각주가 없고
+                    툴팁은 폰에서 없는 것과 같다(적대 리뷰 2026-09-13). */}
                 <div className={s.separated}>
                   <InlineStat
                     label="미수 잔액"
-                    value={money(bill.outstanding)}
+                    value={
+                      <span title={`${number(bill.outstanding)}원`}>
+                        {bill.outstanding < 10_000 ? `${number(bill.outstanding)}원` : money(bill.outstanding)}
+                      </span>
+                    }
                     danger={bill.outstanding > 0}
                   />
                 </div>
-                <p
-                  className={s.footnote}
-                  title={`${number(bill.outstanding)}원`}
-                >
-                  미수 {number(bill.outstanding)}원
-                </p>
               </>
             )}
           </Panel>
