@@ -104,6 +104,7 @@ export type OverviewData = {
   newcomers: CareSummary;
   homework: HomeworkRiskView;
   unread: UnreadReportsView;
+  /** 오늘 수업 — 교시 단위가 아니라 **이어지는 교시를 묶은 한 줄**이다(`continuous-classes.ts`). `id`는 첫 교시 것. */
   schedule: Pick<
     TodaySlot,
     | "id"

@@ -52,6 +52,7 @@ import {
   getUnreadReports,
 } from "@/features/dashboard/onescreen/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
+import { mergeContinuousClasses } from "./continuous-classes";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { getApprovalBoxes } from "@/features/approvals/server/queries";
@@ -593,29 +594,32 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   add("newcomers", ["newcomers"], () => newcomers(settingsPromise));
   add("homework", ["lesson_reports"], getHomeworkRisk);
   add("unread", ["lesson_reports"], getUnreadReports);
+  // 이어지는 교시(같은 반·강사·교실)는 한 줄로 — 원장 2026-09-13, 규칙은 continuous-classes.ts.
   add("schedule", ["timetable"], async () =>
-    (await getTodaySchedule()).map(
-      ({
-        id,
-        classId,
-        className,
-        subject,
-        startTime,
-        endTime,
-        teacherName,
-        classroomName,
-        status,
-      }) => ({
-        id,
-        classId,
-        className,
-        subject,
-        startTime,
-        endTime,
-        teacherName,
-        classroomName,
-        status,
-      }),
+    mergeContinuousClasses(
+      (await getTodaySchedule()).map(
+        ({
+          id,
+          classId,
+          className,
+          subject,
+          startTime,
+          endTime,
+          teacherName,
+          classroomName,
+          status,
+        }) => ({
+          id,
+          classId,
+          className,
+          subject,
+          startTime,
+          endTime,
+          teacherName,
+          classroomName,
+          status,
+        }),
+      ),
     ),
   );
   add("staff", ["staff"], () => staff(settingsPromise));
