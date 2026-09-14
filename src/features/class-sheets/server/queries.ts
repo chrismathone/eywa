@@ -20,6 +20,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { shoutingKey, shoutingMapOf } from "../shouting";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import type { OtherSpan } from "@/features/attendance/enrollment-span";
 // 출결 쓰기의 담당 반 축 — **출결 서버 액션과 같은 함수**(담임 ∪ 위임 ∪ 교시 담당, write-gate-axis).
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
@@ -395,50 +396,73 @@ export async function getClassSheetWeek(
   // JJ 표시 여부 — **그리드 조립 전에** 정해야 한다(작성률 분모까지 이 값이 정한다). LAB은 항상 제외.
   const showSelfStudy = readEcsShowSelfStudy(myPrefsRes.data?.ui_prefs);
 
-  // 플래그 없는 반 이동 전출자 — 학원 퇴원이 아닌데 이 반 수강이 끝난 학생이 **같은 과목 다른 반**에
-  // 열린 수강을 가지면 전출(반 이동)이지 퇴원이 아니다(원장 2026-08-18 "이런 건 퇴원처리 안 되어 있게").
-  // is_transferred 플래그는 이동 도구를 안 거친 이동(시트 동기·종료+배정 수작업)엔 없어서 백업 판정이 필요.
+  // 이 반 수강이 끝난 학생의 **같은 과목 다른 반** 수강 — 판정 두 가지의 재료다.
+  //  ① 종강(원장 2026-09-14 *"1과목이 완전히 종료되면 그 과목에 대해서는 퇴원"*): 같은 과목 다른 반을 계속 다니면
+  //     '퇴원'이 아니라 '종강' 섹션. 판정은 grid가 월별 출석부 뱃지와 같은 `continuesIn`으로 한다(`elsewhereSpans`).
+  //  ② 플래그 없는 반 이동 전출자 — 학원 퇴원이 아닌데 이 반 수강이 끝난 학생이 **같은 과목 다른 반**에
+  //     열린 수강을 가지면 전출(반 이동)이지 퇴원이 아니다(원장 2026-08-18 "이런 건 퇴원처리 안 되어 있게").
+  //     is_transferred 플래그는 이동 도구를 안 거친 이동(시트 동기·종료+배정 수작업)엔 없어서 백업 판정이 필요.
   // best-effort: 이 감지가 실패해도 시트는 열려야 한다(실패 시 옛 동작 = 퇴원 줄에 표시).
   let activeElsewhereSameSubject: string[] = [];
+  const elsewhereSpans: Record<string, OtherSpan[]> = {};
   try {
-    const endedNotWithdrawn = [
-      ...new Set(
-        enrollments
-          .filter((e) => e.end_date && !e.students?.withdrawn_at)
-          .map((e) => e.student_id),
-      ),
-    ];
-    if (endedNotWithdrawn.length > 0) {
-      const open = await fetchInChunks<{ student_id: string; class_id: string }>(
-        endedNotWithdrawn,
-        (chunk) =>
-          admin
-            .from("enrollments")
-            .select("student_id, class_id")
-            .eq("tenant_id", tenantId)
-            .neq("class_id", classId)
-            .in("student_id", chunk)
-            .is("end_date", null)
-            // 🔴 새 반 수강이 **이 주에 이미 시작**한 것만 전출로 친다 — 미래 시작(다음 주 예약 배정)까지
-            //    세면 이번 주엔 새 반 로스터에도 없어서 학생이 ECS 어디에도 안 보인다(적대 리뷰 M1).
-            .lte("start_date", weekSunday),
+    const endedStudentIds = [...new Set(enrollments.filter((e) => e.end_date).map((e) => e.student_id))];
+    if (endedStudentIds.length > 0) {
+      // 🔴 학생 id × 수강 이력(끝난 반 포함)이라 한 청크가 1,000행을 넘을 수 있다 → 청크 × 페이징(B2 🔴).
+      const others = await fetchAllPagedInChunks<{
+        student_id: string;
+        class_id: string;
+        start_date: string;
+        end_date: string | null;
+        is_transferred: boolean | null;
+      }>(endedStudentIds, (chunk, from, to) =>
+        admin
+          .from("enrollments")
+          .select("id, student_id, class_id, start_date, end_date, is_transferred")
+          .eq("tenant_id", tenantId)
+          .neq("class_id", classId)
+          .in("student_id", chunk)
+          // 🔴 새 반 수강이 **이 주에 이미 시작**한 것만 — 미래 시작(다음 주 예약 배정)까지 전출로 세면 이번 주엔
+          //    새 반 로스터에도 없어서 학생이 ECS 어디에도 안 보인다(적대 리뷰 M1). 종강은 나간 날 이전 시작이라 이 창 안이다.
+          .lte("start_date", weekSunday)
+          // 유예 하한 전에 끝난 수강은 어느 판정에도 안 걸린다(종강은 나간 날 +14일에도 재원이어야 한다).
+          .or(`end_date.is.null,end_date.gte.${enrollmentFloor}`)
+          .order("id")
+          .range(from, to),
       );
-      const otherClassIds = [...new Set(open.map((o) => o.class_id))];
+      const otherClassIds = [...new Set(others.map((o) => o.class_id))];
       if (otherClassIds.length > 0) {
-        const otherClasses = await fetchInChunks<{ id: string; subject: string }>(
+        const otherClasses = await fetchInChunks<{ id: string; class_name: string; subject: string | null }>(
           otherClassIds,
-          (chunk) => admin.from("classes").select("id, subject").eq("tenant_id", tenantId).in("id", chunk),
+          (chunk) =>
+            admin.from("classes").select("id, class_name, subject").eq("tenant_id", tenantId).in("id", chunk),
         );
-        const sameSubject = new Set(
-          otherClasses.filter((c) => c.subject === access.subject).map((c) => c.id),
+        const sameSubject = new Map(
+          otherClasses.filter((c) => c.subject === access.subject).map((c) => [c.id, c]),
         );
-        activeElsewhereSameSubject = [
-          ...new Set(open.filter((o) => sameSubject.has(o.class_id)).map((o) => o.student_id)),
-        ];
+        const notWithdrawn = new Set(
+          enrollments.filter((e) => !e.students?.withdrawn_at).map((e) => e.student_id),
+        );
+        const moved = new Set<string>();
+        for (const o of others) {
+          const c = sameSubject.get(o.class_id);
+          if (!c) continue;
+          (elsewhereSpans[o.student_id] ??= []).push({
+            start: o.start_date,
+            end: o.end_date,
+            isTransferred: o.is_transferred ?? undefined,
+            classId: c.id,
+            className: c.class_name,
+            subject: c.subject,
+          });
+          // ② 전출 백업 판정은 종전 조건 그대로 — 열린 수강 + 학원 퇴원 아님.
+          if (o.end_date == null && notWithdrawn.has(o.student_id)) moved.add(o.student_id);
+        }
+        activeElsewhereSameSubject = [...moved];
       }
     }
   } catch (e) {
-    console.error("[class-sheets] 전출자 감지 실패 — 퇴원 줄 표시로 폴백", e);
+    console.error("[class-sheets] 종강·전출자 감지 실패 — 퇴원 줄 표시로 폴백", e);
   }
 
   // 등록 강의실 표 — id→이름(FK 우선), 이름 목록(라벨 정정 근거).
@@ -490,6 +514,8 @@ export async function getClassSheetWeek(
     slotMemoKeys: memoRows.map((m) => m.memoKey).filter((k) => k.startsWith("slot:")),
     includeSelfStudy: showSelfStudy,
     activeElsewhereSameSubject,
+    subject: access.subject,
+    elsewhereSpans,
     // 휴일 — **표시와 작성률 분모에만** 닿는다(칸·입력·출결은 평일과 똑같다, [[holiday.ts]] 규약).
     holidays: buildHolidayMap(settings.operations.holidays),
   });

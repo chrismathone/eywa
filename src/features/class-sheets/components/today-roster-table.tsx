@@ -210,7 +210,8 @@ export const TodayRosterTable = memo(function TodayRosterTable({
             const meta = data.students[row.entry.studentId];
             // 퇴원 섹션 = **한 줄 요약**(주간 시트와 같은 문장 — 두 화면이 갈리지 않게 같은 컴포넌트).
             // 교시가 여럿이라 남은 기록도 교시별로 모아 넘긴다(값이 있는 교시만 문장에 남는다).
-            if (row.group === "withdrawn") {
+            // 종강 섹션도 같은 요약(섹션 이름만 다르다 — roster-table과 같은 규약).
+            if (row.group === "withdrawn" || row.group === "classEnded") {
               return (
                 <tr key={row.entry.studentId} className="bg-bg-soft/40">
                   <WithdrawnSummaryRow

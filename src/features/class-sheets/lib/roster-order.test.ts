@@ -71,6 +71,23 @@ describe("groupRosterRows — 재원 → 퇴원 → 기록", () => {
     expect(groups[0].rows.map((r) => r.studentId)).toEqual(["aa1", "zz9"]);
   });
 
+  // 원장 2026-09-14 — 한 반만 끝나고 같은 과목 다른 반을 계속 다니면 퇴원이 아니라 종강.
+  it("같은 과목 다른 반을 계속 다니면 '종강' 섹션(퇴원 아님) — 퇴원보다 위", () => {
+    const groups = groupRosterRows(
+      [
+        row("s2", { eligible: false, endedOn: "2026-07-10" }), // 퇴원
+        { ...row("s4", { eligible: false, endedOn: "2026-07-12" }), endedContinuesIn: "정규 A" }, // 종강
+        row("s1"),
+      ],
+      nameOf,
+    );
+    expect(groups.map((g) => [g.key, g.label, g.rows.map((r) => r.studentId)])).toEqual([
+      ["active", null, ["s1"]],
+      ["classEnded", "종강", ["s4"]],
+      ["withdrawn", "퇴원", ["s2"]],
+    ]);
+  });
+
   it("eligible이면 endedOn이 있어도 재원 섹션(모순 입력 방어)", () => {
     const groups = groupRosterRows([row("s1", { eligible: true, endedOn: "2026-07-10" })], nameOf);
     expect(groups[0].key).toBe("active");

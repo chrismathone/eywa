@@ -192,6 +192,37 @@ export function continuesIn(
 }
 
 /**
+ * 수강 한 건을 끝내면 그게 **무엇이 되는지** — 시간표 '수강 종료' 확인 문구의 판정.
+ *
+ * 원장 2026-09-14 *"1과목이 완전히 종료되면 그 과목에 대해서는 퇴원생 처리하는게 맞음 … 두과목 모두다 퇴원하면
+ * 완전한 퇴원"*. 판정은 뱃지와 **같은 두 함수**(`transferTo` → `continuesIn`)를 과목마다 부른다 — 규칙을 새로 적지 않는다.
+ *  · `class`   = 같은 과목 다른 반이 이어받거나(`transfer: true` = 반이동) 계속된다(`false` = 이 반만 종강) → 퇴원 아님
+ *  · `subject` = 이 과목은 끝나지만 다른 과목 반이 계속된다 → 그 과목 수강종료
+ *  · `student` = 계속되는 반이 하나도 없다 → 퇴원
+ * 🔴 순서는 뱃지와 같다 — **반이동 → 종강 → 퇴원**(같은 학생을 뱃지는 '반이동'이라 부르는데 팝업이 '종강'이라 하면 안 된다).
+ * @param others **이 반**의 수강을 뺀 학생의 다른 수강 전부(과목 불문, 퇴원일로 자른 것 — `clipToWithdrawal`)
+ * @returns `other` = 이어받거나 계속 다니는 반(`class`면 같은 과목 반, `subject`면 다른 과목 반)
+ */
+export type EndScope = "class" | "subject" | "student";
+
+export function endScopeOf(
+  leftOn: string,
+  subject: string | null,
+  others: readonly OtherSpan[],
+): { scope: EndScope; other: OtherSpan | null; transfer: boolean } {
+  const moved = transferTo(leftOn, subject, others);
+  if (moved) return { scope: "class", other: moved, transfer: true };
+  const stay = continuesIn(leftOn, subject, others);
+  if (stay) return { scope: "class", other: stay, transfer: false };
+  for (const s of new Set(others.map((o) => o.subject))) {
+    if (s === subject) continue;
+    const hit = transferTo(leftOn, s, others) ?? continuesIn(leftOn, s, others);
+    if (hit) return { scope: "subject", other: hit, transfer: false };
+  }
+  return { scope: "student", other: null, transfer: false };
+}
+
+/**
  * 학원 퇴원일(`students.withdrawn_at`)로 **다른 반** 구간의 끝을 자른다 — 실효 종료일 = 수강 종료와 퇴원일 중 이른 것
  * (MCS `mathSpansOf`의 `effectiveEndDate`와 같은 규약). 잘렸으면 일반 종료(퇴원일 당일까지 재원)다.
  * 퇴원일이 없거나 수강이 먼저 끝났으면 그대로 돌려준다.

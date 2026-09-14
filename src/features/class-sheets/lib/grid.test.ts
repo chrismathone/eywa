@@ -197,6 +197,80 @@ describe("buildWeekGrid — activeElsewhereSameSubject(플래그 없는 반 이�
   });
 });
 
+// 종강(원장 2026-09-14) — 이 반만 끝나고 같은 과목 다른 반을 계속 다니면 '퇴원'이 아니다. 판정 = continuesIn.
+describe("buildWeekGrid — 종강(같은 과목 다른 반 계속)", () => {
+  const rosterOf = (grid: ReturnType<typeof buildWeekGrid>, date: string) =>
+    grid.days.find((d) => d.date === date)!.slots[0].roster;
+  const regular = (over?: object) => ({
+    start: "2026-03-02",
+    end: null as string | null,
+    classId: "c-regular",
+    className: "정규 A",
+    subject: "english",
+    ...over,
+  });
+  const base = {
+    weekMonday: MON,
+    schedules: [sched("fri", "15:00")],
+    planLines: [],
+    marks: [],
+    attendance: [],
+    slotMemoKeys: [],
+    subject: "english",
+  };
+
+  it("특강만 끝나고 정규반 계속 → 퇴원 아님(종강 반 이름을 단다)", () => {
+    const grid = buildWeekGrid({
+      ...base,
+      enrollments: [enr("s1", { endDate: "2026-07-22" })],
+      elsewhereSpans: { s1: [regular()] },
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({
+      studentId: "s1",
+      endedOn: "2026-07-22",
+      endedContinuesIn: "정규 A",
+    });
+  });
+
+  it("같은 과목 반도 14일 안에 끝남 = 과목의 모든 반 끝남 → 퇴원", () => {
+    const grid = buildWeekGrid({
+      ...base,
+      enrollments: [enr("s1", { endDate: "2026-07-22" })],
+      elsewhereSpans: { s1: [regular({ end: "2026-07-25" })] },
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({ endedOn: "2026-07-22", endedContinuesIn: null });
+  });
+
+  it("학원 퇴원(withdrawnAt)은 계속 반이 있어도 퇴원 — 진짜 그만둔 학생은 예외 없음", () => {
+    const grid = buildWeekGrid({
+      ...base,
+      enrollments: [enr("s1", { endDate: "2026-07-22", withdrawnAt: "2026-07-22" })],
+      elsewhereSpans: { s1: [regular()] },
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({ endedOn: "2026-07-22", endedContinuesIn: null });
+  });
+
+  it("다른 과목 반만 계속이면 이 과목에선 퇴원", () => {
+    const grid = buildWeekGrid({
+      ...base,
+      enrollments: [enr("s1", { endDate: "2026-07-22" })],
+      elsewhereSpans: { s1: [regular({ subject: "math" })] },
+    });
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({ endedContinuesIn: null });
+  });
+
+  it("전출 백업 목록에 있어도 나간 날 이전부터 다니던 반이면 숨기지 않고 종강으로 세운다", () => {
+    const grid = buildWeekGrid({
+      ...base,
+      enrollments: [enr("s1", { endDate: "2026-07-22" })],
+      activeElsewhereSameSubject: ["s1"],
+      elsewhereSpans: { s1: [regular()] },
+    });
+    expect(rosterOf(grid, "2026-07-24")).toHaveLength(1);
+    expect(rosterOf(grid, "2026-07-24")[0]).toMatchObject({ endedContinuesIn: "정규 A" });
+  });
+});
+
 // 퇴원 유예 = 그 주 월요일 −30일. MON=2026-07-20 → 하한 2026-06-20.
 describe("buildWeekGrid — 퇴원 유예(하단 '퇴원' 섹션, 시간표와 같은 30일 창)", () => {
   const rosterOf = (grid: ReturnType<typeof buildWeekGrid>, date: string) =>
