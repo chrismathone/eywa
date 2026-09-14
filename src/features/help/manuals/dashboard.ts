@@ -1,0 +1,75 @@
+import type { HelpManual } from "../types";
+
+export const dashboard: HelpManual = {
+  slug: "dashboard",
+  title: "대시보드",
+  href: "/dashboard",
+  menuKey: "dashboard",
+  group: "홈",
+  layout: "dashboard",
+  summary:
+    "학원 운영의 배경 화면입니다. 창이 아니라 뒤에 깔려 있고, 위 카드 숫자·자세히 보기·바로가기(↗)가 **같은 집계**를 씁니다. 카드를 누르면 명단이, ↗를 누르면 그 일을 하는 화면이 열립니다.",
+  related: ["students", "withdrawals", "enrollment", "attendance", "timetable"],
+  callouts: [
+    {
+      n: 1,
+      label: "재원생",
+      zone: "header",
+      body: "지금 재원 상태인 원생 수입니다. 카드를 누르면 EiE / 인재원 영어 / 수학(심화 포함)으로 나뉜 명단이 열립니다. ↗는 [[students|원생목록]]의 재원 필터입니다.",
+    },
+    {
+      n: 2,
+      label: "퇴원생",
+      zone: "header",
+      body: "이번 달 1일부터 오늘까지 퇴원한 원생입니다. 퇴원일이 미래인 원생은 아직 다니는 중이라 빼 둡니다. ↗는 [[withdrawals|퇴원관리]]의 이번 달 보기입니다.",
+    },
+    {
+      n: 3,
+      label: "신규문의",
+      zone: "header",
+      body: "오늘 [[enrollment|콜&상담]]에 접수된 건수입니다(만든 시각 기준). ↗는 콜&상담의 오늘 접수 필터입니다.",
+    },
+    {
+      n: 4,
+      label: "금일입테",
+      zone: "header",
+      body: "오늘 잡혀 있는 레벨테스트 일정입니다. 캘린더 메뉴는 숨겨 두어 ↗가 없습니다. 카드를 눌러 오늘 일정만 봅니다.",
+    },
+    {
+      n: 5,
+      label: "오늘첫수업",
+      zone: "header",
+      body: "학원 첫 등원이거나, 영어·수학 묶음에서 오늘 처음 수업을 하는 원생입니다. 같은 묶음 안 반 이동은 세지 않습니다. ↗는 [[students|원생목록]]의 오늘 첫 수업 필터입니다.",
+    },
+    {
+      n: 6,
+      label: "결석학생",
+      zone: "header",
+      body: "**어제** 한 교시도 안 온 원생입니다. 오늘은 수업 전이라 결석을 알 수 없어 어제만 셉니다. 카드에 날짜가 적혀 있습니다. ↗는 [[attendance|출석부]]의 결석 보기입니다.",
+    },
+    {
+      n: 7,
+      label: "보강예정",
+      zone: "header",
+      body: "이번 주(월~일)에 잡혀 있는 [[attendance|보강 예약]]입니다. 맨 끝 카드입니다. 카드를 누르면 요일별 명단이, ↗를 누르면 [[timetable|시간표]]의 보강 탭이 열립니다.",
+    },
+    {
+      n: 8,
+      label: "오늘 브리핑",
+      zone: "board",
+      body: "AI가 하루 한 번 수업·원생·상담·수납을 문장으로 정리합니다. 숫자와 이름은 실제 데이터이고, 화면을 연다고 다시 만들지 않습니다.",
+    },
+    {
+      n: 9,
+      label: "현재 수업 현황",
+      zone: "board",
+      body: "지금 진행 중인 수업을 한 줄로 묶습니다(같은 반·같은 강사·같은 교실, 쉬는 시간 10분 이내). ‘오늘 전체 N개 시간대 보기’를 누르면 지금 수업으로 스크롤됩니다.",
+    },
+    {
+      n: 10,
+      label: "접힌 2차 줄",
+      zone: "footer",
+      body: "매니저 팀 보고, 최근 추세, 운영 맥락은 접혀 있습니다. 줄을 열면 차트와 보고가 나옵니다.",
+    },
+  ],
+};

@@ -26,7 +26,7 @@ export function HelpSearchToggle() {
     <StudentSearchToggle
       value={ctx.query}
       onChange={ctx.setQuery}
-      placeholder="출석, 학생 등록, 엑셀 가져오기"
+      placeholder="시간표, 출석부, 보강 예약"
       inputWidth="w-56"
       ariaLabel="도움말 검색"
     />

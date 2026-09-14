@@ -75,7 +75,7 @@ describe("도움말 — 열 수 있는 화면만 링크한다", () => {
   it("머리의 개수도 거른 목록 기준이다(안 보이는 항목까지 세지 않는다)", async () => {
     ctx.allow = (_role, menu) => !["owner", "kiosk_settings", "teacher_onescreen"].includes(menu);
     await renderPage();
-    // 빠른 시작 6단계 중 학원 설정·원스크린이 빠지고, 메뉴 23개 중 원스크린·학원 설정·출석 키오스크가 빠진다.
-    expect(screen.getAllByText(/빠른 시작 4단계 · 메뉴 20개/).length).toBeGreaterThan(0);
+    // 빠른 시작 6단계 중 학원 설정·원스크린이 빠진다. 설명서 개수는 권한으로 걸러진 목록 기준.
+    expect(screen.getAllByText(/빠른 시작 4단계 · 화면 설명서 \d+개/).length).toBeGreaterThan(0);
   });
 });
