@@ -30,6 +30,7 @@ import { TodayCopySlot } from "./today-copy-slot";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { roomNameFor } from "@/features/teacher-view/room-name";
 import { useSheetDoc } from "./use-sheet-doc";
+import { useSheetEditAudit } from "./use-sheet-edit-audit";
 import {
   useCellState,
   useFlushOnUnmount,
@@ -194,12 +195,16 @@ export function TodayPlanEditor({
   // ② CAS 저장 큐(디바운스 + 충돌 감지).
   const store = useSheetSaveStore(send, doc.journal, canEdit);
   useFlushOnUnmount(store);
+  // 계획 칸 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14). 기록 전에 이 저장 큐를 비운다.
+  const audit = useSheetEditAudit({ enabled: canEdit, flush: () => store.flush() });
   useEffect(() => {
     store.setCallbacks({
       onError: (m) => toast.error(m),
       onGone: () => toast.info("다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요"),
+      // 칸 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다.
+      onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [store]);
+  }, [store, audit, classId]);
   // canonical 시드 — 서버가 준 값이 CAS의 expected가 된다(이게 없으면 첫 저장이 무조건 충돌).
   useEffect(() => {
     for (const slot of slots) {
@@ -219,7 +224,8 @@ export function TodayPlanEditor({
   const others = dedupeEditors(useEditingOthers(scope));
 
   return (
-    <div className="min-w-0">
+    // onBlur = 계획 칸 감사로그의 "칸을 떠났다" 신호(자손에서 올라온다 — use-sheet-edit-audit.ts).
+    <div className="min-w-0" onBlur={audit.onBlur}>
       <p className="editorial-eyebrow mb-1.5">{t("plan.editor.title")}</p>
 
       {others.length > 0 ? (

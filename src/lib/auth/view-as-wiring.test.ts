@@ -49,6 +49,11 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "class-sheets", "server", "edit-audit-actions.ts"],
     what: "강사 시트 칸 편집 감사로그(열람 중엔 기록도 없다)",
   },
+  {
+    // 수학 시트 목표 칸 감사로그(범위 확대 2026-09-14) — 같은 이유로 명시 가드를 먼저 둔다.
+    file: ["src", "features", "math-sheets", "server", "goal-audit-actions.ts"],
+    what: "수학 시트 목표 칸 편집 감사로그(열람 중엔 기록도 없다)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {

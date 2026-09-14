@@ -61,7 +61,8 @@ type JjTableProps = {
   /** 같은 날 교시 사이 신호(앞 교시 결석 · 다음 교시) — 표시 전용. */
   hints: SeatPeriodHintData;
   onSave: (classId: string, studentId: string, next: SeatStatus | null, prev: SeatStatus | null) => void;
-  onSaveField: (classId: string, studentId: string, field: JjMarkField, value: string) => void;
+  /** `before` = 이 입력 직전에 화면이 보던 값(감사로그의 이전 값). */
+  onSaveField: (classId: string, studentId: string, field: JjMarkField, value: string, before: string | null) => void;
   onFillClass: (classId: string) => void;
   readOnly: boolean;
   pending: boolean;
@@ -255,7 +256,7 @@ function SeatJjClass({
                     value={s.attitude ?? null}
                     studentName={s.name}
                     canEdit={!readOnly}
-                    onSet={(next) => onSaveField(r.classId, s.id, "attitude", next ?? "")}
+                    onSet={(next) => onSaveField(r.classId, s.id, "attitude", next ?? "", s.attitude ?? null)}
                   />
                 </td>
                 {cols.map((c) => {
@@ -270,7 +271,7 @@ function SeatJjClass({
                         maxLength={JJ_MARK_MAXLEN[field]}
                         aria-label={`${s.name} ${c.label}`}
                         title={c.title}
-                        onChange={(e) => onSaveField(r.classId, s.id, field, e.target.value)}
+                        onChange={(e) => onSaveField(r.classId, s.id, field, e.target.value, s[field] ?? null)}
                       />
                     </td>
                   );
@@ -283,7 +284,9 @@ function SeatJjClass({
                     maxLength={JJ_MARK_MAXLEN.progressNote}
                     aria-label={`${s.name} ${ROSTER_FIXED_LABEL.progressNote}`}
                     title="이 교시의 특이사항 — 영어 시트 JJ 칸과 같은 기록입니다"
-                    onChange={(e) => onSaveField(r.classId, s.id, "progressNote", e.target.value)}
+                    onChange={(e) =>
+                      onSaveField(r.classId, s.id, "progressNote", e.target.value, s.progressNote ?? null)
+                    }
                   />
                 </td>
               </tr>

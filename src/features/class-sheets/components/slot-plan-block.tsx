@@ -35,6 +35,7 @@ import { PlanTable } from "./plan-table";
 import { seedPlanLines, usePlanHandlers } from "./use-plan-handlers";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
+import { useSheetEditAudit } from "./use-sheet-edit-audit";
 
 /**
  * ⚠️ `memo` — 자리 출석부는 학생 칸(듣기·단어)을 칠 때마다 보드가 다시 그려진다. 안 감싸면 그 한 글자에
@@ -102,6 +103,15 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   // ② CAS 저장 큐(디바운스 + 충돌 감지).
   const store = useSheetSaveStore(send, doc.journal, canEdit);
   useFlushOnUnmount(store);
+  // 계획 칸 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14). 기록은 **저장과 같은 문**(`api.commitEdits`)으로
+  // 나간다(로그인 = ECS 게이트, 공개 PIN = 자리 게이트). 문이 기록을 모르면 모으지 않는다.
+  const commitEdits = api.commitEdits;
+  const audit = useSheetEditAudit({
+    enabled: canEdit && !!commitEdits,
+    flush: () => store.flush(),
+    send: (_group, edits) =>
+      commitEdits ? commitEdits({ classId, planDate, slotStart }, edits) : Promise.resolve(),
+  });
   useEffect(() => {
     if (!registerFlush) return;
     registerFlush(() => store.flush());
@@ -111,8 +121,10 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
     store.setCallbacks({
       onError: (m) => toast.error(m),
       onGone: () => toast.info("다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요"),
+      // 칸 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다.
+      onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [store]);
+  }, [store, audit, classId]);
 
   const [lines, setLines] = useState(initialLines);
   // canonical 시드 — 서버가 준 값이 CAS의 expected가 된다(이게 없으면 첫 저장이 무조건 충돌).
@@ -145,7 +157,8 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   const saveIndicator = useSaveIndicator(store);
 
   return (
-    <section className="border-line-faint min-w-0 border-b px-2 pt-1.5 pb-2">
+    // onBlur = 계획 칸 감사로그의 "칸을 떠났다" 신호(자손에서 올라온다 — use-sheet-edit-audit.ts).
+    <section className="border-line-faint min-w-0 border-b px-2 pt-1.5 pb-2" onBlur={audit.onBlur}>
       <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
         <p className="editorial-eyebrow">수업계획</p>
         <EditingBadge scope={scope} />

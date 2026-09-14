@@ -176,6 +176,7 @@ export function SeatBoard({
     saveField,
     flushFields,
     applyCarried,
+    onBlur: auditBlur,
   } = useSeatBoardSaves(seat, date, activeStart);
   const showJj = seatHasJjFields(seat);
   // 문 선택은 여기 한 줄 — 참조 고정(계획 블록이 `memo`라 매 렌더 새 객체면 표가 통째로 다시 그려진다).
@@ -283,7 +284,8 @@ export function SeatBoard({
   const wordsN = view.flatMap((r) => r.students).filter((s) => s.memorizedWords).length;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    // onBlur = JJ 칸 감사로그의 "칸을 떠났다" 신호(자손에서 올라온다 — use-sheet-edit-audit.ts).
+    <div className="flex min-h-0 flex-1 flex-col gap-3" onBlur={auditBlur}>
       {/* '전체' 보기에선 칩 줄을 **페이지가 위에 한 번만** 그린다 — 교시마다 반복되면 화면이 칩으로 덮인다. */}
       {showChips ? (
         <SeatPeriodChips periods={periods} activeStart={activeStart} hrefFor={hrefFor} showAll={showAllChip} />

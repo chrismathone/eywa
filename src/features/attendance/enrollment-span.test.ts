@@ -3,6 +3,7 @@ import {
   badgeLabelOf,
   badgeTitle,
   clipToWithdrawal,
+  endScopeOf,
   isEnrolledOn,
   joinedInMonth,
   leftInMonth,
@@ -22,6 +23,58 @@ const other = (o: Partial<OtherSpan>): OtherSpan => ({
   start: "2026-08-11",
   end: null,
   ...o,
+});
+
+// 원장 2026-09-14 — 한 반만 끝남 = 종강 / 과목의 모든 반 끝남 = 그 과목 수강종료 / 모든 과목 끝남 = 퇴원.
+describe("endScopeOf — 수강 한 건을 끝내면 무엇이 되나", () => {
+  const LEFT = "2026-09-10";
+
+  it("특강만 끝나고 같은 과목 정규반 계속 → 이 반만 종강(퇴원 아님)", () => {
+    const r = endScopeOf(LEFT, "math", [other({ className: "정규 A", start: "2026-03-02", end: null })]);
+    expect(r.scope).toBe("class");
+    expect(r.other?.className).toBe("정규 A");
+    expect(r.transfer).toBe(false);
+  });
+
+  it("같은 과목 반이 나간 뒤 14일 안에 시작 → 반이동(종강 아님·퇴원 아님)", () => {
+    const r = endScopeOf(LEFT, "math", [other({ className: "중등M 중2 B", start: "2026-09-11" })]);
+    expect(r).toMatchObject({ scope: "class", transfer: true });
+    expect(r.other?.className).toBe("중등M 중2 B");
+  });
+
+  it("판정 순서는 뱃지와 같다 — 계속 다니는 반과 이어받는 반이 함께 있으면 반이동", () => {
+    const r = endScopeOf(LEFT, "math", [
+      other({ classId: "c-reg", className: "정규 A", start: "2026-03-02", end: null }),
+      other({ classId: "c-new", className: "중등M 중2 B", start: "2026-09-15" }),
+    ]);
+    expect(r).toMatchObject({ scope: "class", transfer: true });
+    expect(r.other?.className).toBe("중등M 중2 B");
+  });
+
+  it("과목의 모든 반이 끝나고 다른 과목은 계속 → 그 과목 수강종료", () => {
+    const r = endScopeOf(LEFT, "math", [
+      other({ start: "2026-03-02", end: "2026-09-12" }), // 같은 과목 반도 14일 안에 끝남
+      other({ classId: "e1", className: "PL1b", subject: "english", start: "2026-03-02", end: null }),
+    ]);
+    expect(r.scope).toBe("subject");
+    expect(r.other?.className).toBe("PL1b");
+  });
+
+  it("계속되는 반이 하나도 없으면 퇴원", () => {
+    expect(endScopeOf(LEFT, "math", []).scope).toBe("student");
+    expect(
+      endScopeOf(LEFT, "math", [other({ subject: "english", start: "2026-03-02", end: "2026-09-10" })]).scope,
+    ).toBe("student");
+  });
+
+  it("다른 반 종료 예정일이 미래(14일 뒤에도 재원)면 계속으로 본다", () => {
+    expect(endScopeOf(LEFT, "math", [other({ start: "2026-03-02", end: "2026-10-31" })]).scope).toBe("class");
+  });
+
+  it("퇴원일로 자른 구간(clipToWithdrawal)이면 계속이 아니다", () => {
+    const clipped = clipToWithdrawal(other({ start: "2026-03-02", end: null }), "2026-09-10");
+    expect(endScopeOf(LEFT, "math", [clipped]).scope).toBe("student");
+  });
 });
 
 describe("monthBounds", () => {

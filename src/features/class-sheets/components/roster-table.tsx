@@ -55,6 +55,7 @@ import type { SheetHandlers } from "./sheet-client";
 export const GROUP_HINT_KEY: Record<RosterGroupKey, SheetDictKey | null> = {
   active: null,
   makeup: "roster.group.makeup.hint",
+  classEnded: "roster.group.classEnded.hint",
   withdrawn: "roster.group.withdrawn.hint",
   record: "roster.group.record.hint",
 };
@@ -114,6 +115,7 @@ export function GroupToggle({
 const GROUP_LABEL_KEY: Record<RosterGroupKey, SheetDictKey> = {
   active: "roster.group.active",
   makeup: "roster.group.makeup",
+  classEnded: "roster.group.classEnded",
   withdrawn: "roster.group.withdrawn",
   record: "roster.group.record",
 };
@@ -296,7 +298,8 @@ export const RosterTable = memo(function RosterTable({
             const markKey = `${entry.studentId}|${date}|${slotStart}`;
             // 퇴원 섹션 = **한 줄 요약**(이름 · 학교학년 · (퇴원일, 사유)). 남은 기록은 요약 뒤에 읽기
             // 전용 텍스트로 붙어 사라지지 않는다 — 접는 건 빈 입력칸이지 값이 아니다.
-            if (row.group === "withdrawn") {
+            // 종강 섹션도 같은 요약이다(이 반 수강이 끝난 것은 같고, 섹션 이름만 '퇴원'이 아니다).
+            if (row.group === "withdrawn" || row.group === "classEnded") {
               return (
                 <tr key={entry.studentId} className="bg-bg-soft/40">
                   <WithdrawnSummaryRow

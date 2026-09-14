@@ -18,6 +18,7 @@ import {
   isEnrollmentEndedOn,
   enrollmentAttendsOnDay,
 } from "@/features/enrollments/eligibility";
+import { clipToWithdrawal, continuesIn, type OtherSpan } from "@/features/attendance/enrollment-span";
 import { shiftDays } from "@/features/timetable/lib/week";
 import {
   LAB_ROOM_LABEL,
@@ -118,6 +119,11 @@ export type RosterEntry = {
    * null이면 괄호에서 사유를 통째로 뺀다(빈 괄호 금지 — 원장 2026-08-18).
    */
   endedReason?: string | null;
+  /**
+   * 종강 — 이 반만 끝나고 **같은 과목 다른 반을 계속 다니면** 그 반 이름(원장 2026-09-14). 값이 있으면
+   * '퇴원'이 아니라 **'종강' 섹션** 행이다. 판정은 월별 출석부 뱃지와 같은 `continuesIn`.
+   */
+  endedContinuesIn?: string | null;
 };
 
 export type GridSlot = {
@@ -438,6 +444,14 @@ export function buildWeekGrid(input: {
    * 집합 산출은 서버(queries.ts) — 같은 과목 한정(다른 과목만 남은 학생은 이 과목에선 진짜 그만둔 것).
    */
   activeElsewhereSameSubject?: readonly string[];
+  /** 이 반의 과목 키(`classes.subject`) — 종강 판정(`continuesIn`)의 과목 축. */
+  subject?: string | null;
+  /**
+   * 학생 id → **같은 과목 다른 반**의 수강 구간(퇴원일로 자르기 전 원본 — 자르기는 여기서 한다).
+   * 이 반 수강이 끝났는데 여기 있는 반을 계속 다니면 '퇴원'이 아니라 '종강'이다(원장 2026-09-14).
+   * 산출은 서버(queries.ts). 없으면(조회 실패 포함) 종전대로 '퇴원'.
+   */
+  elsewhereSpans?: Readonly<Record<string, readonly OtherSpan[]>>;
   /**
    * 학원 지정 휴일(`YYYY-MM-DD` → 이름) — **표시에만 쓴다**. 슬롯·로스터·마크는 평일과 똑같이 만들어지고
    * (원장 2026-09-01 *"입력은 가능하도록"*), 달라지는 건 `GridDay.holiday`와 `sheetFillStats` 분모뿐이다.
@@ -516,12 +530,15 @@ export function buildWeekGrid(input: {
     eligible: Set<string>;
     endedOn: Map<string, string>;
     endedReason: Map<string, string | null>;
+    endedContinuesIn: Map<string, string | null>;
   } {
     const dow = dowKeyOf(date);
     const eligible = new Set<string>();
     const endedOn = new Map<string, string>();
     // 사유는 **그 종료일을 만든 enrollment의 것**이다(반마다 사유가 달라 endedOn과 반드시 같은 행에서 온다).
     const endedReason = new Map<string, string | null>();
+    // 종강(계속 다니는 반 이름)도 같은 행에서 — 퇴원일과 섹션이 서로 다른 수강에서 오면 안 된다.
+    const endedContinuesIn = new Map<string, string | null>();
     for (const e of input.enrollments) {
       const attendsToday = enrollmentAttendsOnDay(e.attendanceDays, dow);
       const withdrawn = !!e.withdrawnAt && e.withdrawnAt < date;
@@ -542,9 +559,22 @@ export function buildWeekGrid(input: {
       if (!(withdrawn || isEnrollmentEndedOn(e.endDate, date, e.isTransferred))) continue;
       // 반이동 전출은 새 반 로스터에서 보인다 — 옛 반에 퇴원으로 남기면 같은 학생이 두 번 보인다.
       if (e.isTransferred) continue;
+      // 같은 과목 다른 반을 **계속** 다니면 퇴원이 아니라 이 반만 종강(원장 2026-09-14 *"1과목이 완전히 종료되면
+      // 그 과목에 대해서는 퇴원"*) — 월별 출석부 뱃지와 **같은 판정**(`continuesIn`)이다. 규칙을 여기 다시 적지 않는다.
+      // 🔴 학원 퇴원(withdrawn)은 판정하지 않는다 — 진짜 그만둔 학생은 예외 없이 '퇴원'.
+      // 다른 반 구간은 퇴원일로 먼저 자른다(`clipToWithdrawal` — 뒤에 그만둔 학생이 "계속 수강"으로 읽히지 않게).
+      const stay =
+        !withdrawn && e.endDate
+          ? continuesIn(
+              e.endDate,
+              input.subject ?? null,
+              (input.elsewhereSpans?.[e.studentId] ?? []).map((o) => clipToWithdrawal(o, e.withdrawnAt)),
+            )
+          : null;
       // 플래그 없는 전출(같은 과목 다른 반에 열린 수강) — 위와 같은 결. 단 학원 퇴원(withdrawn_at)은
       // 데이터가 어긋나도 예외 없이 표시한다(진짜 그만둔 학생을 숨기면 그게 더 큰 거짓이다).
-      if (!withdrawn && movedElsewhere.has(e.studentId)) continue;
+      // ⚠️ 계속 다니는 반이 **나간 날 이전부터** 있었으면(종강) 전출이 아니다 — 숨기지 않고 '종강' 섹션에 세운다.
+      if (!withdrawn && !stay && movedElsewhere.has(e.studentId)) continue;
       // 실효 종료일 = 반 이탈(end_date)과 학생 퇴원(withdrawn_at) 중 **이른** 것(시간표와 같은 산식).
       const effectiveEnd = [e.endDate, e.withdrawnAt].filter((x): x is string => !!x).sort()[0];
       if (!effectiveEnd) continue;
@@ -553,13 +583,15 @@ export function buildWeekGrid(input: {
       if (!prev || prev < effectiveEnd) {
         endedOn.set(e.studentId, effectiveEnd);
         endedReason.set(e.studentId, e.withdrawalReason ?? null);
+        endedContinuesIn.set(e.studentId, stay?.className ?? null);
       }
     }
     for (const id of eligible) {
       endedOn.delete(id); // 재등록: 열린 수강이 있으면 퇴원이 아니다
       endedReason.delete(id);
+      endedContinuesIn.delete(id);
     }
-    return { eligible, endedOn, endedReason };
+    return { eligible, endedOn, endedReason, endedContinuesIn };
   }
 
   const days: GridDay[] = [];
@@ -579,7 +611,7 @@ export function buildWeekGrid(input: {
       continue;
     }
 
-    const { eligible, endedOn, endedReason } = rosterStateOn(date);
+    const { eligible, endedOn, endedReason, endedContinuesIn } = rosterStateOn(date);
     const attToday = attendanceByDate.get(date) ?? new Set<string>();
 
     // 안 그릴 자리(LAB 항상 · JJ는 설정) — 판정은 hiddenSeatOf 단일 소스.
@@ -633,6 +665,7 @@ export function buildWeekGrid(input: {
           historical: !isEnrolled && !isMakeup,
           endedOn: endedOn.get(studentId) ?? null,
           endedReason: endedReason.get(studentId) ?? null,
+          endedContinuesIn: endedContinuesIn.get(studentId) ?? null,
         };
       });
       return {

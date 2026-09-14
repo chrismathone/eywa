@@ -27,6 +27,7 @@ import {
   useSmallScreen,
 } from "./drag-flag";
 import { useTimetableEdit } from "./edit-context";
+import { EndScopeNote } from "./end-scope-note";
 import { annotateStudentBlocks, clearDropCells } from "./grid-drop-cell";
 import { refuse } from "./move-toast";
 
@@ -347,6 +348,8 @@ function RosterMoveDialog({
             className={`border-line bg-card text-foreground rounded-lg border px-2 ${CONTROL_H} ${CONTROL_LABEL}`}
           />
         </label>
+        {/* '퇴원 칸'에 놓았어도 실제로는 이 반 수강만 끝난다 — 무엇이 되는지(종강·과목 수강종료·퇴원)를 사실대로. */}
+        {isWithdraw ? <EndScopeNote enrollmentId={target.enrollmentId} date={date} /> : null}
         {futureHold ? (
           <p className="text-amber mt-2 text-xs">
             대기는 시작일을 담는 칸이 없어 <b>저장하면 바로</b> 대기로 바뀝니다(고른 날짜는 기록으로 남습니다).

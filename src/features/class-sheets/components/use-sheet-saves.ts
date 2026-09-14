@@ -37,6 +37,8 @@ export type SendPatches = (
 
 const DEBOUNCE_MS = 800;
 const RETRY_MS = 5000;
+/** flush가 "보낸 뒤 새로 친 초안"을 따라 보내는 최대 회수 — 계속 치는 사람 앞에서 flush가 끝나지 않는 일은 막는다. */
+const FLUSH_MAX_ROUNDS = 3;
 
 export class SheetSaveStore {
   private keys = new Map<string, KeyState>();
@@ -47,9 +49,13 @@ export class SheetSaveStore {
   private lwwTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private lwwRuns = new Map<string, () => Promise<void>>();
   private lwwInFlight = new Set<Promise<void>>();
+  /** 키마다 마지막으로 전송에 실은 rev — flush가 "보낸 뒤 새로 친 초안"을 가를 때만 쓴다(저장 동작엔 영향 없음). */
+  private lastSentRev = new Map<string, number>();
   private globalVersion = 0;
   onGone: ((lineId: string) => void) | null = null;
   onError: ((message: string) => void) | null = null;
+  /** 칸 입력 직전 값 알림 — 칸 편집 감사로그(`useSheetEditAudit`)가 칸마다 첫 값만 잡는다. */
+  onEdit: ((lineId: string, field: PlanPatchField, before: string | null) => void) | null = null;
 
   constructor(
     private readonly send: SendPatches,
@@ -61,9 +67,14 @@ export class SheetSaveStore {
     this.canEdit = v;
   }
 
-  setCallbacks(cb: { onGone?: (lineId: string) => void; onError?: (message: string) => void }): void {
+  setCallbacks(cb: {
+    onGone?: (lineId: string) => void;
+    onError?: (message: string) => void;
+    onEdit?: (lineId: string, field: PlanPatchField, before: string | null) => void;
+  }): void {
     if (cb.onGone) this.onGone = cb.onGone;
     if (cb.onError) this.onError = cb.onError;
+    if (cb.onEdit) this.onEdit = cb.onEdit;
   }
 
   // ── 구독(셀 selector — 렌더 격리) ──────────────────────────────────────────
@@ -166,6 +177,8 @@ export class SheetSaveStore {
     const saveKey = buildSaveKey(lineId, field);
     if (!this.keys.has(saveKey)) this.seed(lineId, field, null);
     const k = this.keys.get(saveKey)!;
+    // 칸 편집 감사로그 — 이 입력 **직전에 화면이 보던 값**(아직 안 나간 초안이 있으면 그것)을 알린다.
+    this.onEdit?.(lineId, field, k.hasDraft ? k.draft : k.canonical);
     k.draft = rawValue;
     k.hasDraft = true;
     k.latestRev += 1;
@@ -207,6 +220,9 @@ export class SheetSaveStore {
       if (k.mutationId) void this.journal?.ack(k.mutationId, k.latestRev);
       k.mutationId = null;
     } else {
+      // 칸 편집 감사로그 — '내 값으로 덮기'도 변동이다. 이전 값은 **지금 서버에 있는 값**(남이 쓴 값)이라 그것을 알린다
+      // (칸을 먼저 떠났다면 그때의 기록은 작성자가 남이라 건너뛰어졌다 — 다음 떠남에 이 덮기가 한 줄로 남는다).
+      this.onEdit?.(k.lineId, k.field, serverValue);
       k.latestRev += 1;
       if (!k.mutationId) k.mutationId = crypto.randomUUID();
       void this.journal?.enqueue({
@@ -241,6 +257,7 @@ export class SheetSaveStore {
       if (!k.hasDraft || k.paused || k.inFlightRev !== null) continue;
       batch.push({ saveKey, patch: this.patchOf(k, saveKey), mutationId: k.mutationId! });
       k.inFlightRev = k.latestRev;
+      this.lastSentRev.set(saveKey, k.latestRev);
     }
     if (batch.length === 0) return;
     this.notifyGlobal();
@@ -335,6 +352,18 @@ export class SheetSaveStore {
     this.notifyGlobal();
   }
 
+  /**
+   * 보낼 수 있는데(초안 있음 · 멈춤 아님 · 전송 중 아님) **마지막으로 보낸 뒤 새로 친** 칸이 남았나.
+   * 실패로 되돌아온 초안(rev 그대로)은 여기 안 걸린다 — 그건 종전 재시도 타이머의 몫이다.
+   */
+  private hasUnsentNewDraft(): boolean {
+    for (const [saveKey, k] of this.keys) {
+      if (!k.hasDraft || k.paused || k.inFlightRev !== null) continue;
+      if (k.latestRev > (this.lastSentRev.get(saveKey) ?? 0)) return true;
+    }
+    return false;
+  }
+
   /** 예약분+in-flight 전부 drain + 저널 IDB persist 대기 — 주/반 이동은 이 결과를 await(실패 시 이동 중단). */
   async flush(): Promise<{ ok: boolean }> {
     if (this.timer) {
@@ -353,8 +382,15 @@ export class SheetSaveStore {
         void p.finally(() => this.lwwInFlight.delete(p));
       }
     }
-    await this.runFlush();
-    if (this.inFlight) await this.inFlight;
+    // 🔴 전송 중 묶음이 끝난 뒤 **그 사이 이어 친 초안**이 남으면 그것까지 보낸다(상한 FLUSH_MAX_ROUNDS회).
+    //    안 그러면 성공 처리가 그 초안을 `RETRY_MS` 뒤로 미뤄 두고 flush가 먼저 돌아와, 칸 편집 감사로그가 **중간 값**을
+    //    읽어 한 줄 남기고 최종 값은 영영 기록되지 않는다(리뷰 2026-09-14). 저장 순서·디바운스·CAS는 그대로다 —
+    //    다시 보낼 대상은 "보낸 뒤 새로 쳤다"(latestRev > 마지막으로 보낸 rev)뿐이고, 실패 재시도는 종전대로 RETRY_MS를 기다린다.
+    for (let round = 0; round < FLUSH_MAX_ROUNDS; round++) {
+      await this.runFlush();
+      if (this.inFlight) await this.inFlight;
+      if (!this.hasUnsentNewDraft()) break;
+    }
     await Promise.allSettled([...this.lwwInFlight]);
     const journalOk = this.journal ? (await this.journal.flushPersist()).ok : true;
     // 미확정(dirty·충돌) 존재 여부 — 이동 차단 판정은 호출부(충돌은 사용자 선택 대기라 이동 확인 필요)

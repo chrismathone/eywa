@@ -39,6 +39,11 @@ export function useMonthGoals(input: {
   /** 저장 실패 시 되돌릴 값 — 낙관적 반영 직전의 스냅샷. */
   const lastSaved = useRef(initial);
   /**
+   * 키(역할·영역)별 **입력 세대** — 칠 때마다 1씩 오른다. 저장이 실패했을 때 그 저장이 떠난 뒤 세대가 바뀌었으면
+   * (새로 친 값이 있으면) 되돌리지 않는다. 타이머 대기 중인 입력과 이미 떠난 다음 저장을 한 번에 가른다.
+   */
+  const editGen = useRef(new Map<string, number>());
+  /**
    * 지금 화면의 값 — `setGoals` **updater 안에서 저장을 예약하지 않으려고** 따로 든다.
    * (updater는 StrictMode에서 두 번 불릴 수 있어 그 안에 부수효과를 두면 저장이 두 번 나간다.)
    */
@@ -51,6 +56,7 @@ export function useMonthGoals(input: {
   const flushKey = useCallback(
     (key: string, role: GoalRole, skillArea: string, next: MonthGoalMap): Promise<void> => {
       const cell = next[skillArea] ?? { textbook: null, targetProgress: null };
+      const sentGen = editGen.current.get(key) ?? 0;
       const job: Promise<void> = upsertGoal({
         classId,
         scope: "month",
@@ -71,6 +77,10 @@ export function useMonthGoals(input: {
           // ⚠️ 입력칸은 `defaultValue`(비컨트롤드)라 글자는 그대로 남는다 — 되돌아가는 건 **판정에 쓰는 값**이다.
           //    (컨트롤드로 바꾸면 저장 왕복마다 커서가 튄다.)
           setError(res.error);
+          // 🔴 이 저장이 떠난 뒤 같은 키에 새로 친 값이 있으면(세대가 바뀜) **되돌리지 않는다** — 되돌리면 그 새 값까지
+          //    지워지고, 뒤따르는 타이머·flush가 **옛 값**을 보내 화면엔 '저장됨'이 뜬다(재리뷰 2026-09-14).
+          //    새 값의 저장이 곧 나가고, 그것도 실패하면 그때 되돌린다.
+          if ((editGen.current.get(key) ?? 0) !== sentGen) return;
           const reverted = lastSaved.current[role][skillArea] ?? { textbook: null, targetProgress: null };
           goalsRef.current = {
             ...goalsRef.current,
@@ -99,6 +109,7 @@ export function useMonthGoals(input: {
   const setField = useCallback(
     (role: GoalRole, skillArea: string, field: GoalField, value: string) => {
       const key = `${role}|${skillArea}`;
+      editGen.current.set(key, (editGen.current.get(key) ?? 0) + 1);
       const cur = goalsRef.current;
       const cell = cur[role][skillArea] ?? { textbook: null, targetProgress: null };
       const trimmed = value.trim() === "" ? null : value;

@@ -24,6 +24,8 @@ import { RAIL_STATUS_LABEL } from "../lib/goal-rail";
 import { RAIL_TONE } from "./goal-rail-bar";
 import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { useStudentGoals } from "./use-student-goals";
+import { useSheetEditAudit } from "@/features/class-sheets/components/use-sheet-edit-audit";
+import { commitMathGoalEdits } from "../server/goal-audit-actions";
 import { useState } from "react";
 
 /**
@@ -52,6 +54,23 @@ export function MonthClient({
     month: data.month,
     initial: data.goals,
   });
+  /**
+   * 목표 칸 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14). 칸을 처음 건드릴 때 그 칸의 지금 값을 잡고,
+   * 떠나면(루트 onBlur) 밀린 저장을 끝낸 뒤(`flushAll` — 진행 중 저장까지) 서버가 DB 값으로 바뀐 칸만 한 줄 남긴다.
+   */
+  const audit = useSheetEditAudit({
+    enabled: data.canEdit && data.goalsStatus === "ok",
+    flush: flushAll,
+    send: (classId, edits) => commitMathGoalEdits({ classId, edits }),
+  });
+  const onGoalChange: typeof setField = (studentId, field, value) => {
+    audit.touch(
+      data.classId,
+      { kind: "mathGoal", studentId, month: data.month, field },
+      goals[studentId]?.[field] ?? null,
+    );
+    setField(studentId, field, value);
+  };
 
   const hrefFor = (month: string) => `/mcs/${data.classId}/month?month=${month}`;
   /**
@@ -115,7 +134,8 @@ export function MonthClient({
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    // onBlur = 목표 칸 감사로그의 "칸을 떠났다" 신호(자손에서 올라온다 — use-sheet-edit-audit.ts).
+    <div className="flex flex-col gap-3" onBlur={audit.onBlur}>
       {/* 🔴 `.toolbar-rail`이 아니라 ECS와 같은 SHEET_BAR — 이 줄엔 반 선택 드롭다운(인라인 absolute)이 있어
           레일(좁은 화면·터치에서 overflow-x:auto)이면 목록이 통째로 잘린다(chrome.ts 주석, 적대적 리뷰 2026-09-02). */}
       <div className={SHEET_BAR}>
@@ -249,7 +269,7 @@ export function MonthClient({
         <MonthGrid
           data={data}
           goals={goals}
-          onGoalChange={setField}
+          onGoalChange={onGoalChange}
           canEdit={data.canEdit && data.goalsStatus === "ok"}
         />
       </div>
