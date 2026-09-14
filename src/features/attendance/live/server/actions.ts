@@ -15,12 +15,19 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { reportError } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { loadLiveSlots } from "./load";
 import { loadDeskOptin } from "./cross-notify";
 import { collectStudentNames, formatAttendanceNotifyNames } from "../notify-names";
 import { hhmmToMin, slotPhase } from "../signals";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import {
+  attendanceNoticeRecipients,
+  axisDowOf,
+  axisSlotFromRow,
+  type AxisSlotRow,
+} from "@/features/attendance/teacher-axis";
 
 const STATES = ["open", "resolved", "dismissed"] as const;
 const OUTCOMES = ["coming", "absent_today", "sick", "already_here", "no_answer", "other"] as const;
@@ -174,10 +181,22 @@ export async function requestAttendanceInput(input: {
   if (!classId || !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "필수 값이 누락되었습니다" };
   if (sessionDate > kstToday()) return { error: "아직 지나지 않은 날짜입니다" };
   const slot = input.slotStart?.trim() || null;
+  // 교시가 곧 **받는 사람을 고르는 입력**이다 — 형식이 어긋나면 맞는 교시가 없어 담임에게만 조용히 가고
+  // dedup bucket도 큐의 '요청함' 키와 어긋난다(큐의 saveSlot은 "HH:MM", requestDeskConfirm과 같은 검사).
+  if (slot && !/^\d{2}:\d{2}$/.test(slot)) return { error: "잘못된 교시입니다" };
+  const dow = axisDowOf(sessionDate);
+  if (!dow) return { error: "필수 값이 누락되었습니다" };
 
   const admin = createAdminClient();
-  // 받을 사람 = 그 슬롯 담당(부담임 포함) ∪ 반 담임. admin 경로라 tenant 필터 필수.
-  const [{ data: klass }, { data: slotRows }] = await Promise.all([
+  /**
+   * 받을 사람 = **그날 그 교시 담당 ∪ 반 담임**(원장 결정 2026-09-14) — 판정은 `attendanceNoticeRecipients`
+   * 한 벌이고 교차 알림(cross-notify)도 같은 함수를 부른다.
+   * 🔴 반의 슬롯 담당을 요일·기간 없이 모으면 끝난 배치 이력·다른 요일·다른 교시 강사에게까지 벨이 간다
+   *    (실측 2026-09-14: 활성 반 120개 중 31개 반·연인원 75명). 가시성 합집합(`classTeacherIdsInRange`)과는
+   *    일부러 다른 규칙이다 — 되돌리지 말 것.
+   * ⚠️ SQL은 그날로 좁히기만 하고 최종 판정은 순수 함수가 한다. admin 경로라 tenant 필터 필수.
+   */
+  const [classRes, slotRes] = await Promise.all([
     admin
       .from("classes")
       .select("id, class_name, teacher_id")
@@ -186,18 +205,26 @@ export async function requestAttendanceInput(input: {
       .maybeSingle(),
     admin
       .from("class_schedules")
-      .select("teacher_id")
+      .select("day_of_week, start_time, teacher_id, slot_teacher_label, valid_from, valid_to")
       .eq("tenant_id", user.tenantId)
       .eq("class_id", classId)
-      .not("teacher_id", "is", null),
+      .eq("day_of_week", dow)
+      .lte("valid_from", sessionDate)
+      .or(`valid_to.is.null,valid_to.gte.${sessionDate}`),
   ]);
-  const recipients = [
-    ...new Set(
-      [klass?.teacher_id as string | null, ...(slotRows ?? []).map((r) => r.teacher_id as string)].filter(
-        (id): id is string => !!id && id !== user.id,
-      ),
-    ),
-  ];
+  // ⚠️ 조회 실패를 `data ?? []`로 삼키면 "연결된 강사가 없습니다"로 위장하거나 담임에게만 조용히 간다(B3).
+  if (classRes.error || slotRes.error) {
+    reportError(classRes.error ?? slotRes.error, { scope: "attendance.requestInput", classId });
+    return { error: "받을 강사를 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
+  }
+  const klass = classRes.data;
+  const recipients = attendanceNoticeRecipients({
+    homeroomTeacherId: (klass?.teacher_id as string | null | undefined) ?? null,
+    slots: ((slotRes.data ?? []) as AxisSlotRow[]).map(axisSlotFromRow),
+    date: sessionDate,
+    slotStart: slot,
+    excludeId: user.id,
+  });
   if (recipients.length === 0) return { error: "이 반에 연결된 강사가 없습니다 — 직접 확인해 주세요" };
 
   const { data: fresh, error: dedupError } = await admin
@@ -233,6 +260,8 @@ export async function requestAttendanceInput(input: {
   /**
    * 감사로그 — **밖으로 나가는 요청**(강사 여럿의 벨이 울린다)이라 누가 보냈는지가 남아야 한다.
    * dedup을 통과한 신규분만 여기 온다(이미 보낸 건은 위에서 `sent:false`로 빠진다) = 벨 1회 : 로그 1줄.
+   * `recipientIds` = **누구에게 갔나**(원장 결정 2026-09-14로 수신자를 좁히면서 추가) — 수만 남기면
+   * "왜 그 선생님은 못 받았나 / 왜 받았나"를 되짚을 수 없다.
    */
   await logAction({
     action: "attendance_input_request",
@@ -242,6 +271,7 @@ export async function requestAttendanceInput(input: {
       date: sessionDate,
       ...(slot ? { slotStart: slot } : {}),
       recipients: recipients.length,
+      recipientIds: recipients,
     },
   });
   revalidatePath("/attendance/live");

@@ -337,13 +337,15 @@ export function EnglishImportDialog({
                   )}
                 </section>
 
-                {/* 적용 후 배치의 물리적 충돌 — 확인 체크리스트 + 합반 경고 + 원래 있던 충돌 */}
+                {/* 적용 후 배치의 물리적 충돌 — 확인 체크리스트 + 합반 경고 + 원래 있던 충돌.
+                    🔴 조용히 접는 축은 **배치 변경 수**다(`totalChanges` 아님 — 충돌은 배치에서만 나온다). */}
                 {struct ? (
                   <ConflictChecklist
                     conflicts={struct.conflicts}
                     checked={checked}
                     onToggle={toggleAck}
                     disabled={applying || applied}
+                    changed={structChanges > 0}
                   />
                 ) : null}
 

@@ -2,6 +2,7 @@ import "server-only";
 import { kstDateOf } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { isMergedStudent } from "@/features/students/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { getEndedSubjects } from "../subject-ended";
 import { isSystemBulkWithdrawal } from "../system-bulk";
@@ -54,11 +55,11 @@ function parseMetadata(raw: unknown): WithdrawalMetadata | null {
 export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
   const supabase = await createClient();
   // 퇴원생은 누적 집합 — .range() 페이지네이션으로 1000행 절단 방지.
-  const students = await fetchAllPaged((from, to) =>
+  const withdrawnRows = await fetchAllPaged((from, to) =>
     supabase
       .from("students")
       .select(
-        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata`,
+        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata, notes`,
       )
       .eq("status", "withdrawn")
       .order("withdrawn_at", { ascending: false })
@@ -66,6 +67,10 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       .order("id")
       .range(from, to),
   );
+
+  // 🔴 중복 병합으로 흡수된 쪽은 퇴원이 아니다 — 운영실 '퇴원생'(window.ts)과 **같은 모집단**이어야
+  //    두 화면의 숫자가 같다(원장 2026-09-13, `students/merged.ts`).
+  const students = withdrawnRows.filter((s) => !isMergedStudent(s.notes));
 
   if (students.length === 0) return [];
 

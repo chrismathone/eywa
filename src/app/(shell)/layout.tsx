@@ -17,7 +17,7 @@ import { NoticePopupLayer } from "@/features/notices/components/notice-popup-lay
 import { OperationsProvider } from "@/features/owner/operations-context";
 // 강사뷰 화면 언어(2026-09-03) — **미니셸(강사)에만** 주입한다. 관리자 풀셸은 한국어 고정(원장 지시).
 import { SheetLangProvider } from "@/features/teacher-view/lang-context";
-import { DEFAULT_SHEET_LANG, sheetMenuLabel } from "@/features/teacher-view/i18n";
+import { DEFAULT_SHEET_LANG, sheetMenuLabel, sheetT } from "@/features/teacher-view/i18n";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
 import { TeacherNamesProvider } from "@/features/teacher-view/teacher-names-context";
@@ -236,15 +236,31 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             )}
             <div className="min-w-0 leading-none">
               <div className="text-foreground truncate text-lg leading-tight font-bold tracking-tight">{brand}</div>
-              {/* 강사 미니셸의 유일한 제목 줄이라 16px(디자인 v5 18단계 — 옛 14). 머리는 `h-12`(48) 고정이라 두 줄의
+              {/* (아래 둘째 줄 기준) **학생** 미니셸의 제목 줄은 16px(디자인 v5 18단계 — 옛 14) — 강사 미니셸은 2026-09-14부터
+                  그 자리에 '강사뷰'를 18px로 적는다(아래 분기 주석). 머리는 `h-12`(48) 고정이라 두 줄의
                   줄상자를 `leading-tight`로 잡는다(20×1.25 + 3 + 16×1.25 = 48 — 기본 줄높이면 54로 넘친다; 부모의
                   `leading-none`은 자식 `text-*`가 제 줄높이를 다시 정해 상속되지 않는다). */}
-              <div className="text-text-dim mt-[3px] truncate text-sm leading-tight">
-                {/* ⚠️ 현재 메뉴명을 여기 넣는 이유: 본문 PageHeader가 좁은 화면에선 `compact-chrome`으로
-                    제목을 접는다(= "제목은 크롬이 이미 보여준다"는 전제). 풀셸은 MobileTopNav가 그 역할을
-                    하는데 이 미니셸엔 그런 줄이 없어, 안 넣으면 강사 화면에서 제목이 어디에도 안 남는다. */}
-                {miniShellLabel ? `${academyLine} · ${miniShellLabel}` : academyLine}
-              </div>
+              {/* 🔴 강사 미니셸의 이 줄은 **어느 뷰인지**를 말한다(원장 2026-09-14: *"강사뷰 라고 큼직하게.
+                  강사뷰라는걸 한눈에 알 수 있게"*) — 관리자 풀셸 사이드바의 '관리자' 배지와 짝이고, 겸직이
+                  두 뷰를 오갈 때 지금 어느 쪽인지 상단에서 바로 읽히게 하는 것이 목적이다. 종전엔 학원명 ·
+                  지점 · 현재 메뉴명(`인재원 · 침산 · 수업 마감 (원스크린)`)이 있었다.
+                  ⚠️ 그래서 **강사 화면에선 현재 메뉴명이 크롬에서 사라진다** — 본문 PageHeader는 좁은 화면에서
+                     `compact-chrome`으로 제목을 접고(= "제목은 크롬이 이미 보여준다"는 전제) 이 미니셸엔
+                     MobileTopNav가 없다. 제목이 아쉽다는 제보가 오면 이 줄이 아니라 본문 쪽에서 되살릴 것.
+                  🔴 **학생 미니셸은 이 분기를 타지 않는다**(같은 셸을 쓰지만 학생에게 '강사뷰'는 거짓이다).
+                  🔴 글자는 **사전**(`chrome.teacherView`)으로 — 강사 화면을 영어로 바꾸면 이 줄도 따라가야 한다(코드에
+                     한글을 박았다가 영어 화면에서 헤더만 한글로 남았다 — 적대적 리뷰 2026-09-14).
+                  높이: 머리가 `h-12`(48, 아래 테두리 1px 포함) 고정이고 두 줄 줄상자는 20×1.25 + 3 + 18 = 46이라
+                  안에 든다 — `leading-none`이 필수다(`leading-tight`면 50.5로 넘쳐 헤더가 잘린다). */}
+              {view === "teacher" ? (
+                <div className="text-primary mt-[3px] truncate text-base leading-none font-bold">
+                  {sheetT(teacherLang, "chrome.teacherView")}
+                </div>
+              ) : (
+                <div className="text-text-dim mt-[3px] truncate text-sm leading-tight">
+                  {miniShellLabel ? `${academyLine} · ${miniShellLabel}` : academyLine}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1.5">

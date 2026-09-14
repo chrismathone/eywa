@@ -426,13 +426,10 @@ function StudentRowView({
             }
           : undefined
       }
-      // 🔴 예약 이동이면 **그 사실**이 툴팁이다(기존 반 이름 포함, 원장 명시) — 조작법 안내보다 그게 먼저다.
-      title={
-        moveTitle ||
-        (canEditDays
-          ? "끌어서 이동 · 클릭 = 학생 정보 · 우클릭 = 등원 요일"
-          : "끌어서 이동 · 클릭 = 학생 정보")
-      }
+      // 🔴 툴팁은 **예약 이동 같은 사실만** 싣는다(기존 반 이름 포함, 원장 명시).
+      // 🔴 조작법 안내("끌어서 이동 · 클릭 = 학생 정보 …")는 뺐다(원장 2026-09-14) — 모든 학생 줄에 붙어
+      //    hover 카드와 겹쳐 뜨기만 하고 정보 가치가 0이었다. 되살리지 말 것.
+      title={moveTitle || undefined}
       className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${searchTone} ${isDragging ? "opacity-40" : ""} ${moving && !scheduledMove ? "opacity-60" : ""}`}
     >
       {body}
