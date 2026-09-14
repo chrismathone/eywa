@@ -33,6 +33,7 @@ import {
 } from "../view-prefs";
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 import { normalizePlanText, SKILL_AREA_SLUG_RE } from "../lib/plan-codec";
+import { isGoalAreaAllowed } from "../lib/goal-areas";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
 // 계획 줄 쓰기의 밑바닥 — 공개 자리 PIN 경로도 **같은 함수**를 부른다(문만 다르고 규칙은 한 벌).
@@ -191,6 +192,11 @@ export async function upsertGoal(input: {
   if (input.role !== "homeroom" && input.role !== "assistant") return { ok: false, error: "잘못된 요청입니다(역할)" };
   if (!YMD_RE.test(input.periodStart)) return { ok: false, error: "잘못된 요청입니다(기간 시작일)" };
   if (!SKILL_AREA_SLUG_RE.test(input.skillArea)) return { ok: false, error: "잘못된 요청입니다(영역)" };
+  // 🔴 모양만이 아니라 **이 반의 목표 행**인가(#77) — 화면이 그리는 목록과 같은 함수(EiE = 달력 칸,
+  //    그 외 = 학원설정 영역). 모양만 보면 EiE 반에 `vocab`이, 인재원 반에 `in_class`가 주소만으로 들어간다.
+  if (!isGoalAreaAllowed(gate.access.englishTrack, gate.access.skillAreas, input.skillArea)) {
+    return { ok: false, error: "이 반의 목표 항목이 아닙니다(반 구분이 바뀌었으면 새로고침하세요)" };
+  }
   const periodStart = normalizePeriodStart(input.scope, input.periodStart);
   const textbook = normalizePlanText(input.textbook);
   const targetProgress = normalizePlanText(input.targetProgress);
