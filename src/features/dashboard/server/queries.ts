@@ -21,6 +21,7 @@ import { attendanceRate } from "@/lib/calc/attendance";
 import type { SystemRole } from "@/lib/permissions";
 import { summarizeInvoices } from "@/features/billing/calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { isMergedStudent } from "@/features/students/merged";
 import {
   buildDashboardTrendPoints,
   invoicePeriodsForRange,
@@ -99,49 +100,71 @@ export type EnrollmentChanges = {
 
 const MONTHLY_CHANGE_PREVIEW_LIMIT = 40;
 
-/** 이번 달 신규 등록 + 퇴원 학생. 정확한 count와 최근 명단 preview만 보내 RSC payload를 유한하게 유지한다. */
+/** 이번 달 증감 조회가 받는 행 — 병합 판정(`notes`)까지 함께 받는다. */
+type MonthlyChangeRecord = {
+  id: string;
+  name: string;
+  grade: string | null;
+  school: string | null;
+  enrolled_at?: string | null;
+  withdrawn_at?: string | null;
+  notes: string | null;
+};
+
+/**
+ * 이번 달 신규 등록 + 퇴원 학생. 명단 preview만 보내 RSC payload를 유한하게 유지한다.
+ *
+ * 🔴 중복 병합으로 흡수된 쪽은 등록에도 퇴원에도 세지 않는다(원장 2026-09-13, `students/merged.ts`).
+ *    판정 재료가 `notes` 접두 문자열이라 **행을 받아 JS에서 거른다** — PostgREST의 negative 문자열 필터는
+ *    `notes`가 null인 행을 통째로 떨구는 NULL 함정이 있어 조용히 틀리기 쉽다. 이번 달 창이라 행은 수십 건이다.
+ * ⚠️ 그래서 `count(exact)`를 버리고 **거른 행의 수**를 센다 — 덤으로 종전의 모집단 불일치도 사라진다
+ *    (count는 전체인데 명단은 40건 상한이라 "N명" 옆 명단이 다른 집합이었다, [[#89]] 계열).
+ */
 export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> {
   const supabase = await createClient();
   const startIso = kstMonthStart();
-  const [nwRes, wdRes] = await Promise.all([
-    supabase
-      .from("students")
-      .select("id, name, grade, school, enrolled_at", { count: "exact" })
-      .eq("status", "enrolled")
-      .gte("enrolled_at", startIso)
-      .order("enrolled_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(MONTHLY_CHANGE_PREVIEW_LIMIT),
-    supabase
-      .from("students")
-      .select("id, name, grade, school, withdrawn_at", { count: "exact" })
-      .eq("status", "withdrawn")
-      .gte("withdrawn_at", startIso)
-      .order("withdrawn_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(MONTHLY_CHANGE_PREVIEW_LIMIT),
+  // 조회 실패를 '이번 달 ±0'으로 위장하지 않는다 — fetchAllPaged가 throw하고, 호출부(dashboardQuery)가 실패 허용을 담당.
+  const [nw, wd] = await Promise.all([
+    fetchAllPaged<MonthlyChangeRecord>((from, to) =>
+      supabase
+        .from("students")
+        .select("id, name, grade, school, enrolled_at, notes")
+        .eq("status", "enrolled")
+        .gte("enrolled_at", startIso)
+        .order("enrolled_at", { ascending: false })
+        // OFFSET 페이지 안정화 — unique tie-break(id) 필수(batch.ts 계약)
+        .order("id", { ascending: false })
+        .range(from, to),
+    ),
+    fetchAllPaged<MonthlyChangeRecord>((from, to) =>
+      supabase
+        .from("students")
+        .select("id, name, grade, school, withdrawn_at, notes")
+        .eq("status", "withdrawn")
+        .gte("withdrawn_at", startIso)
+        .order("withdrawn_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    ),
   ]);
-  // 조회 실패를 '이번 달 ±0'으로 위장하지 않는다 — 호출부(dashboardQuery)가 실패 허용을 담당.
-  if (nwRes.error) throw new Error(`신규 등록 조회 실패: ${nwRes.error.message}`);
-  if (wdRes.error) throw new Error(`퇴원 조회 실패: ${wdRes.error.message}`);
-  const { data: nw, count: newCount } = nwRes;
-  const { data: wd, count: withdrawnCount } = wdRes;
+  const newStudents = nw.filter((s) => !isMergedStudent(s.notes));
+  const withdrawn = wd.filter((s) => !isMergedStudent(s.notes));
   return {
-    newCount: newCount ?? nw?.length ?? 0,
-    withdrawnCount: withdrawnCount ?? wd?.length ?? 0,
-    newStudents: (nw ?? []).map((s) => ({
+    newCount: newStudents.length,
+    withdrawnCount: withdrawn.length,
+    newStudents: newStudents.slice(0, MONTHLY_CHANGE_PREVIEW_LIMIT).map((s) => ({
       id: s.id,
       name: s.name,
       grade: s.grade,
       school: s.school,
-      date: s.enrolled_at,
+      date: s.enrolled_at ?? null,
     })),
-    withdrawn: (wd ?? []).map((s) => ({
+    withdrawn: withdrawn.slice(0, MONTHLY_CHANGE_PREVIEW_LIMIT).map((s) => ({
       id: s.id,
       name: s.name,
       grade: s.grade,
       school: s.school,
-      date: s.withdrawn_at,
+      date: s.withdrawn_at ?? null,
     })),
   };
 }
@@ -165,18 +188,33 @@ export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentCha
   const supabase = await createClient();
   const since = inclusiveDateWindowStart(kstToday(), days);
 
-  const [newCntRes, wdCntRes, newIdRes, wdIdRes] = await Promise.all([
-    supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "enrolled").gte("enrolled_at", since),
-    supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "withdrawn").gte("withdrawn_at", since),
-    // 과목별용 id — 7일 창이라 소량. limit로 이상 급증 시 상한(전체 카운트는 위 count가 정확).
-    supabase.from("students").select("id").eq("status", "enrolled").gte("enrolled_at", since).limit(2000),
-    supabase.from("students").select("id").eq("status", "withdrawn").gte("withdrawn_at", since).limit(2000),
+  // 🔴 중복 병합으로 흡수된 쪽은 등록에도 퇴원에도 세지 않는다 — 판정 재료가 `notes`라 행을 받아 JS에서
+  //    거르고(위 월간 함수와 같은 이유·같은 규약) **그 수를 센다**. 7일 창이라 행이 소량이다.
+  //    조회 실패를 '최근 7일 변동 없음'이라는 거짓 문장으로 바꾸지 않는다(fetchAllPaged가 throw).
+  const [newRows, wdRows] = await Promise.all([
+    fetchAllPaged<{ id: string; notes: string | null }>((from, to) =>
+      supabase
+        .from("students")
+        .select("id, notes")
+        .eq("status", "enrolled")
+        .gte("enrolled_at", since)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{ id: string; notes: string | null }>((from, to) =>
+      supabase
+        .from("students")
+        .select("id, notes")
+        .eq("status", "withdrawn")
+        .gte("withdrawn_at", since)
+        .order("id")
+        .range(from, to),
+    ),
   ]);
-  // 조회 실패를 **'최근 7일 변동 없음'**이라는 거짓 문장으로 바꾸지 않는다(위 월간 함수와 같은 규약).
-  if (newCntRes.error) throw new Error(`신규 등록 수 조회 실패: ${newCntRes.error.message}`);
-  if (wdCntRes.error) throw new Error(`퇴원 수 조회 실패: ${wdCntRes.error.message}`);
-  const newCount = newCntRes.count ?? 0;
-  const withdrawnCount = wdCntRes.count ?? 0;
+  const newIds = newRows.filter((r) => !isMergedStudent(r.notes)).map((r) => r.id);
+  const withdrawnIds = wdRows.filter((r) => !isMergedStudent(r.notes)).map((r) => r.id);
+  const newCount = newIds.length;
+  const withdrawnCount = withdrawnIds.length;
 
   const subjOf = (row: { class: unknown }): string | null => {
     const c = (Array.isArray(row.class) ? row.class[0] : row.class) as { subject?: string | null } | undefined;
@@ -198,8 +236,8 @@ export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentCha
     return bySubj;
   };
   const [newBySubj, wdBySubj] = await Promise.all([
-    aggregate((newIdRes.data ?? []).map((r) => r.id as string), true),
-    aggregate((wdIdRes.data ?? []).map((r) => r.id as string), false),
+    aggregate(newIds, true),
+    aggregate(withdrawnIds, false),
   ]);
 
   const subjects = new Set([...newBySubj.keys(), ...wdBySubj.keys()]);

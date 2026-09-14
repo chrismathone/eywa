@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
+import { mergeNoteFor } from "@/features/students/merged";
 import type { WithdrawalMetadata } from "@/features/withdrawals/types";
 
 export type MergeStudentsState =
@@ -38,11 +39,17 @@ export async function mergeStudents(
   let mergedRows = 0;
 
   // 감사 기록용 이름 선조회 — mergee는 곧 퇴원 마킹되므로 병합 시점 이름을 보존한다.
-  const { data: pairNames } = await supabase
+  // ⚠️ `notes`도 함께 받는다 — 진 쪽 메모를 **덮어쓰지 않고 앞에 표식만 덧붙이기** 위해서다(아래).
+  const { data: pairNames, error: pairError } = await supabase
     .from("students")
-    .select("id, name")
+    .select("id, name, notes")
     .in("id", [keeperId, mergeeId]);
-  const mergeeName = (pairNames ?? []).find((s) => s.id === mergeeId)?.name ?? null;
+  // 🔴 이 조회를 삼키면 안 된다 — 실패해도 아래가 그대로 진행돼 **보존하려던 바로 그 메모를 표식만으로
+  //    덮어쓰고**(mergeeRow가 undefined) 감사로그 '대상' 칸도 빈다. 아직 한 줄도 안 썼으니 여기서 멈춘다.
+  if (pairError) return { error: `학생 조회 실패: ${pairError.message}` };
+  const mergeeRow = (pairNames ?? []).find((s) => s.id === mergeeId);
+  const mergeeName = mergeeRow?.name ?? null;
+  const keeperName = (pairNames ?? []).find((s) => s.id === keeperId)?.name ?? null;
 
   const tables = [
     "enrollments",
@@ -74,7 +81,9 @@ export async function mergeStudents(
     .update({
       status: "withdrawn",
       withdrawn_at: today,
-      notes: `중복 병합: ${keeperId}와 통합됨 (${today})`,
+      // 🔴 기존 메모를 **보존**한다 — 종전엔 통째로 갈아끼워서 셔틀 안내 같은 실제 메모가 사라졌다.
+      //    표식은 맨 앞에 붙는다(`isMergedStudent`가 접두로 판정 — 뒤에 붙이면 집계에서 안 걸러진다).
+      notes: mergeNoteFor(keeperId, today, mergeeRow?.notes ?? null),
       dup_suspect: false,
     })
     .eq("id", mergeeId);
@@ -87,6 +96,9 @@ export async function mergeStudents(
   await logAction({
     action: "student_merge",
     targetType: "student",
+    // ⚠️ `audit_logs`엔 target_id 컬럼이 없다 — 되짚을 이름은 **targetLabel**이 나른다(비워 두면 감사로그
+    //    목록의 '대상' 칸이 빈칸이라 어느 학생 건인지 목록에서 알 수 없다). id 두 개는 metadata에 그대로 있다.
+    targetLabel: keeperName,
     metadata: { studentId: keeperId, mergedStudentId: mergeeId, mergedName: mergeeName, mergedRows },
   });
 

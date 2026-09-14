@@ -22,6 +22,7 @@ import {
 import { currentPeriod, isCommentCategory } from "../grades-meta";
 // 생성 = 공용 진입점(전 경로 공유) / 수정 = 자기 자신을 taken에서 빼야 해서 순수 함수 직접 호출.
 import { resolveUniqueStudentName } from "../name-suffix";
+import { preserveMergeNote } from "../merged";
 import { resolveUniqueStudentNameFor } from "./unique-name";
 
 export type StudentFormState =
@@ -266,7 +267,8 @@ export async function updateStudent(
   // 다시 재원으로 돌리면 null로 비움. 이미 퇴원 상태였으면 손대지 않음.
   const { data: cur } = await supabase
     .from("students")
-    .select("status, withdrawal_metadata, withdrawn_at, name")
+    // `notes`는 병합 표식(`중복 병합: …`)을 지켜내려고 함께 읽는다 — 아래 preserveMergeNote 주석 참조.
+    .select("status, withdrawal_metadata, withdrawn_at, name, notes")
     .eq("id", id)
     .single();
   const prevStatus = cur?.status as string | undefined;
@@ -323,7 +325,15 @@ export async function updateStudent(
       enrolled_at: input.enrolledAt,
       withdrawn_at: input.status === "withdrawn" ? input.withdrawnAt : null,
       withdrawal_metadata: withdrawalMetadata,
-      notes: input.notes,
+      // 🔴 병합 표식은 사람이 지울 수 없다 — 이 칸('메모 / 특이사항')이 곧 `students.notes`라, 표식이
+      //    사람 메모와 **같은 칸**에 들어 있다. 그냥 저장하면 표식이 날아가고 그 학생이 집계에서
+      //    **퇴원으로 조용히 되살아난다**(에러도 경고도 없다). 병합된 학생이 아니면 입력값 그대로다.
+      //    ⚠️ 단 **퇴원에서 되돌리는 저장이면 놓아 준다** — 잘못 병합한 건을 푸는 유일한 손잡이다.
+      notes: preserveMergeNote(
+        cur?.notes as string | null,
+        input.notes,
+        input.status === "withdrawn",
+      ),
     })
     .eq("id", id);
 
