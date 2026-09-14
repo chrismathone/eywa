@@ -1,0 +1,181 @@
+/**
+ * 진도맵 **뷰 트리** — 하루 기록 하나의 배열을 일 → 주 → 월 → 분기 → 연으로 접는다(순수, Vitest).
+ *
+ * 🔑 모든 단위가 **같은 쪽수**를 센다. 주의 계획 쪽 = 그 주 날들의 계획 쪽 합, 달 = 주들의 합, 분기·연 = 달들의 합.
+ *    그래서 보기 단위를 바꿔도 같은 숫자가 확대/축소될 뿐이다(단위마다 다른 것을 세면 "월간 46%·주간 75%"가 서로
+ *    무관한 숫자가 된다).
+ * ⚠️ 기록이 한 건도 없는 달은 연간 계획(`MonthPlan`)의 쪽 범위를 계획 쪽으로 쓴다(그래야 미래 달의 칸이 비지 않는다).
+ * 초점(고른 달·주·날) 위의 조회는 [`focus.ts`](./focus.ts).
+ */
+import { monthsOfQuarter, quarterOf, weeksOfMonth } from "./calendar";
+import type { DailyProgress, MonthPlan, StudentProgress } from "./model";
+import { displayStatusOf, type DisplayStatus } from "./palette";
+
+export type DayView = {
+  date: string;
+  record: DailyProgress | null;
+  status: DisplayStatus;
+  plannedPages: number;
+  donePages: number;
+  isToday: boolean;
+};
+
+export type WeekView = {
+  index: number;
+  start: string;
+  end: string;
+  days: DayView[];
+  plannedPages: number;
+  donePages: number;
+  pct: number;
+  status: DisplayStatus;
+  /** 그 주의 대표 소단원(계획 쪽이 있는 기록 중 가장 많이 나온 것). */
+  topic: string | null;
+  /** 계획 쪽 범위(첫 기록 시작 ~ 마지막 기록 끝). 없으면 null. */
+  pageFrom: number | null;
+  pageTo: number | null;
+  isCurrent: boolean;
+};
+
+export type MonthView = {
+  month: number;
+  quarter: 1 | 2 | 3 | 4;
+  plan: MonthPlan | null;
+  weeks: WeekView[];
+  plannedPages: number;
+  donePages: number;
+  pct: number;
+  status: DisplayStatus;
+  isCurrent: boolean;
+  isPast: boolean;
+  /** 기록의 계획 쪽 범위(첫 기록 시작 ~ 마지막 기록 끝). 기록이 없으면 연간 계획 범위. 둘 다 없으면 null. */
+  pageFrom: number | null;
+  pageTo: number | null;
+};
+
+export type QuarterView = { q: 1 | 2 | 3 | 4; months: MonthView[]; plannedPages: number; donePages: number; pct: number };
+
+export type YearView = {
+  year: number;
+  asOf: string;
+  months: MonthView[];
+  quarters: QuarterView[];
+  plannedPages: number;
+  donePages: number;
+  pct: number;
+};
+
+export function pctOf(done: number, planned: number): number {
+  if (planned <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((done / planned) * 100)));
+}
+
+export function plannedPagesOf(r: Pick<DailyProgress, "startPage" | "endPage">): number {
+  return r.startPage > 0 && r.endPage >= r.startPage ? r.endPage - r.startPage + 1 : 0;
+}
+
+export function donePagesOf(r: Pick<DailyProgress, "startPage" | "endPage" | "completedPage">): number {
+  const planned = plannedPagesOf(r);
+  if (planned === 0) return 0;
+  return Math.max(0, Math.min(planned, r.completedPage - r.startPage + 1));
+}
+
+/** 묶음(주·달) 상태 — 지난 묶음은 완료/부분/미학습, 지금 묶음은 완료/진행 중, 앞 묶음은 예정. */
+function groupStatus(planned: number, done: number, isPast: boolean, isCurrent: boolean): DisplayStatus {
+  if (planned === 0) return "no-plan";
+  if (done >= planned) return "completed";
+  if (isCurrent) return "in-progress";
+  if (isPast) return done > 0 ? "in-progress" : "missed";
+  return "planned";
+}
+
+function topicOf(days: DayView[]): string | null {
+  const count = new Map<string, number>();
+  for (const d of days) {
+    if (!d.record || d.plannedPages === 0) continue;
+    count.set(d.record.subChapter, (count.get(d.record.subChapter) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let bestN = 0;
+  for (const [k, n] of count) if (n > bestN) [best, bestN] = [k, n];
+  return best;
+}
+
+function buildWeek(w: { index: number; start: string; end: string; days: string[] }, byDate: Map<string, DailyProgress>, asOf: string): WeekView {
+  const days: DayView[] = w.days.map((date) => {
+    const record = byDate.get(date) ?? null;
+    return {
+      date,
+      record,
+      status: displayStatusOf(record?.status ?? null, date, asOf),
+      plannedPages: record ? plannedPagesOf(record) : 0,
+      donePages: record ? donePagesOf(record) : 0,
+      isToday: date === asOf,
+    };
+  });
+  const plannedPages = days.reduce((s, d) => s + d.plannedPages, 0);
+  const donePages = days.reduce((s, d) => s + d.donePages, 0);
+  const isCurrent = w.start <= asOf && asOf <= w.end;
+  const paged = days.filter((d) => d.plannedPages > 0);
+  return {
+    index: w.index,
+    start: w.start,
+    end: w.end,
+    days,
+    plannedPages,
+    donePages,
+    pct: pctOf(donePages, plannedPages),
+    status: groupStatus(plannedPages, donePages, w.end < asOf, isCurrent),
+    topic: topicOf(days),
+    pageFrom: paged[0]?.record?.startPage ?? null,
+    pageTo: paged[paged.length - 1]?.record?.endPage ?? null,
+    isCurrent,
+  };
+}
+
+export function buildYearView(p: StudentProgress): YearView {
+  const byDate = new Map(p.dailyProgress.map((r) => [r.date, r] as const));
+  const planByMonth = new Map(p.yearPlan.map((m) => [m.month, m] as const));
+  const asOfMonth = Number(p.asOf.slice(5, 7));
+  const asOfYear = Number(p.asOf.slice(0, 4));
+
+  const months: MonthView[] = [];
+  for (let m = 1; m <= 12; m++) {
+    const weeks = weeksOfMonth(p.year, m).map((w) => buildWeek(w, byDate, p.asOf));
+    const plan = planByMonth.get(m) ?? null;
+    const recorded = weeks.reduce((s, w) => s + w.plannedPages, 0);
+    // 🔴 "기록이 있다" = **계획 쪽이 있는 기록** — 휴강 행(0쪽)만 있는 달이 연간 계획을 버리고 0%로 떨어지지 않게.
+    const hasPaged = recorded > 0;
+    const plannedPages = hasPaged || !plan ? recorded : plan.endPage - plan.startPage + 1;
+    const donePages = weeks.reduce((s, w) => s + w.donePages, 0);
+    const paged = weeks.filter((w) => w.pageFrom != null);
+    const pageFrom = hasPaged ? (paged[0]?.pageFrom ?? null) : (plan?.startPage ?? null);
+    const pageTo = hasPaged ? (paged[paged.length - 1]?.pageTo ?? null) : (plan?.endPage ?? null);
+    const isCurrent = p.year === asOfYear && m === asOfMonth;
+    const isPast = p.year < asOfYear || (p.year === asOfYear && m < asOfMonth);
+    months.push({
+      month: m,
+      quarter: quarterOf(m),
+      plan,
+      weeks,
+      plannedPages,
+      donePages,
+      pct: pctOf(donePages, plannedPages),
+      status: groupStatus(plannedPages, donePages, isPast, isCurrent),
+      isCurrent,
+      isPast,
+      pageFrom,
+      pageTo,
+    });
+  }
+
+  const quarters: QuarterView[] = ([1, 2, 3, 4] as const).map((q) => {
+    const qm = monthsOfQuarter(q).map((m) => months[m - 1]!);
+    const plannedPages = qm.reduce((s, x) => s + x.plannedPages, 0);
+    const donePages = qm.reduce((s, x) => s + x.donePages, 0);
+    return { q, months: qm, plannedPages, donePages, pct: pctOf(donePages, plannedPages) };
+  });
+  const plannedPages = months.reduce((s, x) => s + x.plannedPages, 0);
+  const donePages = months.reduce((s, x) => s + x.donePages, 0);
+  return { year: p.year, asOf: p.asOf, months, quarters, plannedPages, donePages, pct: pctOf(donePages, plannedPages) };
+}

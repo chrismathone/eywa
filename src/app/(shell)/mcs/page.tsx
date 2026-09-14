@@ -13,6 +13,7 @@ import {
   groupMathCardsByTeacher,
   splitLandingByTrack,
 } from "@/features/math-sheets/landing-tracks";
+import { canPreviewProgressMap } from "@/features/math-progress-map/server/access";
 
 export const metadata: Metadata = { title: "수학 강사 시트 — eywa" };
 
@@ -43,7 +44,8 @@ export default async function McsLandingPage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const { month } = await searchParams;
-  const res = await getMathSheetLanding(month ?? null);
+  // 진도맵(시안) 미리보기 명단 — 랜딩 조회와 독립이라 함께 기다린다(B4).
+  const [res, previewProgressMap] = await Promise.all([getMathSheetLanding(month ?? null), canPreviewProgressMap()]);
 
   if (!res.ok) {
     return (
@@ -99,6 +101,12 @@ export default async function McsLandingPage({
           cards={data.cards}
           className="text-text-dim num text-xs font-bold"
         />
+        {/* 숨은 기능(원장 2026-09-14) — 미리보기 명단·super_admin에게만 보이는 유일한 입구. 명단 밖은 페이지도 404. */}
+        {previewProgressMap ? (
+          <EmbedLink href="/mcs/progress-map" className="text-primary ml-auto text-xs font-bold underline-offset-2 hover:underline">
+            진도맵(시안) ›
+          </EmbedLink>
+        ) : null}
       </div>
 
       {data.emptyReason ? (
