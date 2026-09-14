@@ -373,7 +373,7 @@ export async function setSessionTermCarryover(
   const studentId = inv?.student_id;
   if (!period || !studentId) return { error: "청구서 정보를 확인할 수 없습니다" };
 
-  // 실측 시수(확정 대비) — 검증 화면과 같은 RPC를 써서 판정이 갈리지 않게 한다.
+  // 실측 회차(출석 일수, 0263a) — 검증 화면과 같은 RPC를 써서 판정이 갈리지 않게 한다.
   const { data: att, error: attErr } = await supabase.rpc("session_term_attendance", { p_period: period });
   if (attErr) return { error: attErr.message };
   const actual =

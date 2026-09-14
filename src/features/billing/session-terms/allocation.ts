@@ -1,11 +1,18 @@
 // 강사별 분배 집계(read-only 참고) — 순수 함수(Vitest).
-// 시수 검증 행(확정 회차·단가·실 소비 시수)을 반 담당 강사 단위로 묶어
-// "확정 금액(청구 기준) vs 실측 금액(실 시수×단가)"을 나란히 보여준다.
+// 회차 검증 행(확정 회차·단가·실 소비 회차)을 반 담당 강사 단위로 묶어
+// "확정 금액(청구 기준) vs 실측 금액(실 회차×단가)"을 나란히 보여준다.
+//
+// 🔴 **여기 오는 숫자는 '회차'(출석 일수)이지 시수가 아니다**(0263a, 원장 2026-09-14 *"하루하루를 1일로
+//    세어야지"*). 단가는 회차당 값이라 곱해야 할 것도 회차다 — 종전엔 RPC가 시수 합을 줘서 하루 2~4교시인
+//    영어의 실측 금액이 2~4배로 잡혔다.
+// ⚠️ 필드 이름 `actualUnits`는 그 시절에 붙은 **옛 이름**이고 뜻은 회차 합이다 — DB 컬럼
+//    `invoice_teacher_splits.actual_units`이자 골든 픽스처의 키라 이름만 따로 바꾸지 않는다(splits.ts와 같은 설명).
+//    `session_units`(시수)와 헷갈리지 말 것 — CLAUDE.md "이름 셋을 구분할 것".
 //
 // ⚠️ 이것은 표시 전용 집계다 — 어디에도 저장하지 않는다(쓰기 0).
 //    강사 분배를 DB에 쓰는 기능(invoice_teacher_splits)은 골든마스터(N6) 통과 전 착수 금지(불변).
 // 금액 규칙: 확정 금액 = 저장된 amount(확정 시점 회차×단가) 우선, 없으면 confirmed×unitPrice.
-//            실측 금액 = round(실 시수 × unitPrice) — 행 단위 반올림(0.5 시수 × 홀수 단가 방어).
+//            실측 금액 = round(실 회차 × unitPrice) — 행 단위 반올림(소수 값 × 홀수 단가 방어).
 //            단가 없는 행은 금액 집계에서 제외하고 개수로 정직하게 표시(지어내지 않음).
 
 export type AllocationRowInput = {
@@ -16,7 +23,7 @@ export type AllocationRowInput = {
   confirmedSessions: number | null;
   unitPrice: number | null;
   amount: number | null; // 확정 시점 저장 금액(회차×단가)
-  actualConsumed: number; // 실 소비 시수 합(배수 합)
+  actualConsumed: number; // 실 소비 **회차** 합 = 출석 일수(0263a). 시수가 아니다.
 };
 
 export type TeacherAllocation = {
@@ -25,7 +32,7 @@ export type TeacherAllocation = {
   rowCount: number;
   confirmedSessions: number; // 확정 회차 합(확정 행만)
   confirmedAmount: number; // 확정 금액 합(원)
-  actualUnits: number; // 실 시수 합
+  actualUnits: number; // 실 소비 회차 합(옛 이름 — 뜻은 회차다, 파일 머리 주석)
   actualAmount: number; // 실측 금액 합(원) — 단가 있는 행만
   diffAmount: number; // 실측 − 확정
   missingPriceRows: number; // 단가 없어 금액 집계 제외된 행 수

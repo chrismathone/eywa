@@ -38,7 +38,7 @@ describe("computeSplitRows", () => {
     expect(computeSplitRows([row({ amount: null })])[0]!.confirmedAmount).toBe(100000);
   });
 
-  it("실측 금액 = round(실 시수 × 단가) — 소수 시수·부동소수 방어", () => {
+  it("실측 금액 = round(실 회차 × 단가) — 옛 스냅샷의 소수 값·부동소수 방어", () => {
     const [s] = computeSplitRows([row({ actualConsumed: 1.5, confirmedSessions: 2, amount: 50000 })]);
     expect(s!.actualUnits).toBe(1.5);
     expect(s!.actualAmount).toBe(37500);

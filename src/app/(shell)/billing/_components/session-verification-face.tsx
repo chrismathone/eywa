@@ -17,7 +17,9 @@ import { FaceNote } from "./face-note";
 
 const PAGE_SIZE = 50;
 
-// 시수(배수 합) 표시 — 정수는 그대로("12"), 소수는 한 자리("12.5").
+// 회차(출석 일수) 표시 — 정수는 그대로("12"). 소수 한 자리는 **0263a 미적용·롤백 시** RPC가 옛 시수 합
+// (0.5 단위)을 돌려줄 때의 방어다. ⚠️ "저장된 스냅샷 폴백"이 아니다 — 이 화면의 소비처 셋은 전부 live 값이고
+// (actualUnits·actualConsumed·diff), 스냅샷을 읽는 getTeacherSplitsStatus는 actual_units를 select하지 않는다.
 const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 // diff 색: 일치=녹 / 부족=주황 / 초과=적 / 미확정=회색 (라이트 전용 Daylight).
@@ -173,7 +175,8 @@ export async function SessionVerificationFace({
                     <th className="px-3 py-2 text-right">반</th>
                     <th className="px-3 py-2 text-right">확정 회차</th>
                     <th className="px-3 py-2 text-right">확정 금액</th>
-                    <th className="px-3 py-2 text-right">실 시수</th>
+                    {/* 🔴 이 열은 0263a부터 **회차(출석 일수)** 다 — 시수가 아니다(원장 2026-09-14). */}
+                    <th className="px-3 py-2 text-right">실 회차</th>
                     <th className="px-3 py-2 text-right">실측 금액</th>
                     <th className="px-3 py-2 text-right">차액</th>
                   </tr>

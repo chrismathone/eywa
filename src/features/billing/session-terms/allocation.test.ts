@@ -22,7 +22,7 @@ describe("aggregateTeacherAllocations", () => {
     const [a] = aggregateTeacherAllocations([row({ amount: 0, unitPrice: null, actualConsumed: 0 })]);
     expect(a).toMatchObject({ confirmedAmount: 0, missingConfirmedRows: 0, confirmedPricedRows: 1 });
   });
-  it("확정 금액 = 저장 amount 우선, 실측 금액 = 실 시수 × 단가 — 일치 시 diff 0", () => {
+  it("확정 금액 = 저장 amount 우선, 실측 금액 = 실 회차 × 단가 — 일치 시 diff 0", () => {
     const [a] = aggregateTeacherAllocations([row({})]);
     expect(a).toMatchObject({
       teacherName: "김강사",

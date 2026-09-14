@@ -35,7 +35,7 @@ export async function saveTeacherSplits(
   const period = String(formData.get("period") ?? "").trim();
   if (!/^\d{4}-\d{2}$/.test(period)) return { error: "잘못된 청구월입니다" };
 
-  // 현재 시수 검증 뷰(확정·단가·실 시수·담당 강사)에서 분배 행 산출 — 확정 행만(N1).
+  // 현재 회차 검증 뷰(확정·단가·실 회차·담당 강사)에서 분배 행 산출 — 확정 행만(N1).
   const view = await getSessionVerificationView(period);
   const rows = computeSplitRows(view.rows);
   const skipped = view.rows.length - rows.length;

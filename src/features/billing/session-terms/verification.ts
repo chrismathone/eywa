@@ -17,8 +17,11 @@ export type VerificationVerdict = {
  * - short:       실측 < 확정 (청구보다 실제 덜 나옴 → 과청구 점검).
  * - over:        실측 > 확정 (실제 더 나옴 → 미청구 점검).
  *
- * 실측은 시수 합(배수 합, 0115a)이라 소수(0.5 단위)일 수 있다 — diff는 0.1 단위 반올림
- * (0.5+0.5+0.5 같은 부동소수 잔차가 가짜 불일치를 만들지 않게).
+ * 실측은 **출석 일수**(0263a)라 정수다. 0.1 단위 반올림은 그대로 둔다 — 옛 시수 합(0115a) 시절의
+ * 부동소수 잔차 방어이고, **골든 픽스처의 소수 값**(rpcConsumed 1.5·4.5)과 0263a 미적용·롤백 시의
+ * RPC 출력이 여전히 이 함수를 지난다.
+ * ⚠️ '저장된 스냅샷'은 소비처가 없다 — 호출부는 셋뿐이고(verification-queries·actions는 live RPC,
+ *    golden.test는 픽스처) 어느 쪽도 저장된 splits 행을 읽지 않는다.
  */
 export function classifyVerification(
   confirmedSessions: number | null,

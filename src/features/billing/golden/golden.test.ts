@@ -7,7 +7,7 @@
 // attendance R2의 3케이스(김도윤·조아영·김지호 — 수동 live 검증)를 eywa에선 자동화로 승격:
 //   [A] 반 라인 매칭(수납명 문자열 지대 — attendance 사고 8건의 근원)
 //   [B] 계획 N(스케줄×기간∩청구월−공휴일, 반 단위 비합산)
-//   [C] 시수 검증·강사 분배(실E2E 삼중 일치 검증값 동결 — 부족·초과 양방향)
+//   [C] 회차 검증·강사 분배(**하류 산식 동결** — RPC 축은 0263a로 갈라졌다, 부족·초과 양방향)
 //   [D] 수납 지표(실 401행 월 스냅샷 — 유령 미수 등 실데이터 특이 케이스 포함)
 import { describe, expect, it } from "vitest";
 import invoicesFixture from "./fixtures/invoices-2026-07.json";
@@ -123,11 +123,14 @@ describe("골든 [B] 계획 N — 실 스케줄·수강·공휴일 동결(서버
   });
 });
 
-// ─────────────────── [C] 시수 검증·강사 분배·splits — 실E2E 검증값 동결 ───────────────────
+// ─────────────── [C] 회차 검증·강사 분배·splits — 하류 산식 동결(RPC 축은 0263a로 갈라짐) ───────────────
 
 type AuditCase = (typeof auditFixture)["cases"][number];
 
-describe("골든 [C] 시수 검증·분배·splits — 2026-07-16 실E2E(수학 JJ2B·영어 특별S) 삼중 일치값", () => {
+// 🔴 제목을 "삼중 일치"로 되돌리지 말 것 — 0263a 이후 RPC 축은 갈라졌고, 이 픽스처가 잠그는 것은
+//    "소비 숫자가 주어졌을 때의 하류 계산"이다(픽스처 note와 같은 말). 제목을 믿고 rpcConsumed를
+//    지금 RPC에 맞춰 갱신하면 돈 계산 회귀 게이트가 조용히 풀린다.
+describe("골든 [C] 회차 검증·분배·splits — 하류 산식 동결(입력은 2026-07-16 실E2E 수학 JJ2B·영어 특별S)", () => {
   for (const c of auditFixture.cases as AuditCase[]) {
     it(c.name, () => {
       // RPC 출력(numeric 문자열) → Number 변환은 소비처(verification-queries)와 동일 규칙

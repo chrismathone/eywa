@@ -1,5 +1,5 @@
 // 강사 분배(splits) 산출 — 순수 함수(Vitest + 골든마스터 N6).
-// 로드맵 2단계 (b): 확정 회차(청구 기준)와 실 소비 시수(실측 기준)의 강사 귀속 금액을 행 단위로 산출해
+// 로드맵 2단계 (b): 확정 회차(청구 기준)와 실 소비 회차(실측 기준 = 출석 일수, 0263a)의 강사 귀속 금액을 행 단위로 산출해
 // invoice_teacher_splits(0117a)에 스냅샷 저장한다. attendance 사고 이식 규칙:
 // - 돈은 **확정 행만**(N1): confirmed_sessions·unit_price 둘 다 있어야 분배 행이 된다(미확정=돈 아님).
 // - 청구 기준(confirmedAmount)과 실측 기준(actualAmount)은 **같은 청구의 두 표현** — 절대 합산 금지(R3, +60.5M 사고).
@@ -15,7 +15,7 @@ export type SplitRowInput = {
   confirmedSessions: number | null;
   unitPrice: number | null;
   amount: number | null; // 확정 시점 저장 금액(회차×단가) — 있으면 우선
-  actualConsumed: number; // 실 소비 시수 합(배수 합)
+  actualConsumed: number; // 실 소비 **회차** = 출석 일수(0263a). 시수가 아니다.
 };
 
 export type ComputedSplit = {
@@ -27,7 +27,7 @@ export type ComputedSplit = {
   confirmedSessions: number;
   unitPrice: number;
   confirmedAmount: number; // 청구 기준 분배액 = amount ?? confirmed × unitPrice
-  actualUnits: number; // 실 소비 시수(0.1 단위)
+  actualUnits: number; // 실 소비 **회차**(옛 이름 — DB 컬럼 actual_units이자 골든 픽스처 키라 이름만 그대로 둔다)
   actualAmount: number; // 실측 기준 분배액 = round(actual × unitPrice)
   diffAmount: number; // 실측 − 청구 (음수 = 덜 소비 = 과청구 신호)
 };
