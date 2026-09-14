@@ -185,7 +185,7 @@ async function unrecordedClassesSignal(
   const classIds = [...classNames.keys()];
   if (classIds.length === 0) return [];
 
-  const [enrollmentRows, attendanceRows] = await Promise.all([
+  const [enrollmentRows, attendanceRows, testStudentIds] = await Promise.all([
     fetchAllPagedInChunks<{
       id: string;
       student_id: string;
@@ -219,6 +219,10 @@ async function unrecordedClassesSignal(
         db,
       ),
     ),
+    // 🔴 테스트 학생(`students.is_test`)은 예정 명단에서 뺀다(원장 2026-09-14 — 오늘 출결·처리현황과 같은 축).
+    //    목적지(`/attendance/{어제}` 처리 현황·어제 출결)에서 그 반이 빠졌으니 여기서도 세면 숫자가 갈린다.
+    //    admin(cron) 경로는 tenantId가 유일한 격리선이라 반드시 넘긴다. 조회 실패 = 빈 집합(fail-open) = 지금 동작.
+    getTestStudentIds(supabase, db?.tenantId),
   ]);
   const expectedByClass = new Map<string, Set<string>>();
   for (const row of enrollmentRows) {
@@ -235,6 +239,9 @@ async function unrecordedClassesSignal(
     ) {
       continue;
     }
+    // 판정(그날 유효·등원 요일) 뒤에 뺀다 — 처리현황과 같은 순서. 테스트 학생뿐인 반은 명단이 비어
+    // 아래 `hasUnrecordedStudent`가 거짓이 되므로 행째 빠진다(수강 없는 반과 같은 결과 — 이 신호는 원래 0명 반을 안 낸다).
+    if (testStudentIds.has(row.student_id)) continue;
     const students = expectedByClass.get(row.class_id) ?? new Set<string>();
     students.add(row.student_id);
     expectedByClass.set(row.class_id, students);

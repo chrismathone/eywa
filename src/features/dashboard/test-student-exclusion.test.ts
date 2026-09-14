@@ -11,8 +11,11 @@
  *    묶음이라(`구한결 외 10명 …`) 항목째 버리면 **실학생 10명의 알림이 함께 사라진다**. 그래서 거르는
  *    자리는 언제나 **경로별 후보 선정 단계**이고, 판정 재료는 공용 헬퍼 한 벌이다.
  *
- * ⚠️ 이건 **집계·알림**에서만 빼는 것이다. 선생님 화면의 명단(원스크린·ECS·출석부)과 학생목록에는
- *    그대로 보여야 테스트가 된다 — 거기까지 빼면 배정한 의미가 없어진다.
+ * 2026-09-14 원장: *"학원이 반 및 학원이 (테스트 학생)이 오늘 출결에 올라와있는데 예외로 빼."* — **데스크 표면**도
+ *    같은 축으로 뺀다: 오늘 출결(좌석표·확인 필요·어제 출결)과 처리현황(운영실 'N반'·브리핑 '오늘 출석 미기록').
+ *
+ * ⚠️ 빼는 곳은 **집계·알림 + 데스크 오늘 출결·처리현황**이다. 선생님 **자기 화면**(원스크린·ECS·월별 출석부·
+ *    강사 스트립·출결 모드)과 학생목록에는 그대로 보여야 테스트가 된다 — 거기까지 빼면 배정한 의미가 없어진다.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -108,4 +111,96 @@ describe("이미 같은 축을 쓰던 곳들이 그대로다", () => {
       expect(strip(read(...path))).toContain("is_test");
     });
   }
+});
+
+/**
+ * 원장 2026-09-14: *"학원이 반 및 학원이 (테스트 학생)이 오늘 출결에 올라와있는데 예외로 빼."*
+ * 데스크 오늘 출결(좌석표·확인 필요·어제 출결)과 강사 스트립 '데스크 확인 요청'은 한 적재(`loadLiveSlots`)를,
+ * 처리현황(운영실 'N반'·브리핑 '오늘 출석 미기록')은 `getDailyProcessingStatus`를, 브리핑 '어제 출석 미기록'은
+ * `unrecordedClassesSignal`을 지난다 — 모두 같은 헬퍼로 명단에서 뺀다.
+ * 🔴 이름으로 반을 거르지 않는다(반 이름을 바꾸면 조용히 끊긴다) — 명단이 비면 반은 저절로 빠진다.
+ */
+/** 한 파일 안에서 **그 함수 몸통만** 자른다 — 같은 파일에 같은 판정 함수 호출이 여럿이라 순서 비교가 섞이지 않게. */
+const bodyOf = (src: string, start: string, end?: string) => {
+  const from = src.indexOf(start);
+  expect(from).toBeGreaterThan(-1);
+  const to = end ? src.indexOf(end, from + start.length) : -1;
+  return src.slice(from, to === -1 ? undefined : to);
+};
+
+describe("데스크 오늘 출결·처리현황은 테스트 학생을 명단에서 뺀다", () => {
+  const LOAD = strip(read("src", "features", "attendance", "live", "server", "load.ts"));
+  const BOARD = strip(read("src", "features", "attendance", "live", "server", "queries.ts"));
+  const PROCESSING = strip(read("src", "features", "attendance", "server", "queries.ts"));
+
+  it("보드 적재는 옵션이 켜졌을 때만 공용 헬퍼를 부르고, 수강·출결 조회와 함께 돈다(B4)", () => {
+    expect(LOAD).toContain(
+      "opts.excludeTestStudents ? getTestStudentIds(supabase) : Promise.resolve(new Set<string>())",
+    );
+    expect(LOAD).toMatch(/const \[classRows, enrollRows, recordRows, reservedRaw, testStudentIds\] = await Promise\.all\(/);
+  });
+
+  it("명단에 넣기 전에 빼고, 보강 예약도 같은 집합을 지난다(예약 한 줄이 반을 되살리지 않게)", () => {
+    const skip = LOAD.indexOf("if (testStudentIds.has(e.student_id)) continue;");
+    expect(skip).toBeGreaterThan(-1);
+    expect(skip).toBeLessThan(LOAD.indexOf("expectedByClass.set(e.class_id, set)"));
+    expect(LOAD).toContain(".filter((r) => !testStudentIds.has(r.studentId))");
+  });
+
+  it("🔴 데스크 경로(selfOnly=false)에서만 켠다 — 강사 스트립·출결 모드는 담임이 테스트하는 자리라 남긴다", () => {
+    expect(BOARD).toContain("loadLiveSlots(date, classIds, { excludeTestStudents: !selfOnly })");
+  });
+
+  /**
+   * 🔴 이 호출은 데스크→강사 '입력요청'이 아니라 **강사 스트립의 '데스크 확인 요청'**(strip-slot.tsx)이다.
+   *    원일 스트립엔 테스트 반이 보이므로 여기서 누르면 실직원에게 벨이 가는데 데스크 큐엔 그 반이 없다
+   *    (09-13 '테스트 계정 알림 off'와도 어긋난다) — 그래서 명단에서 빼고, 테스트뿐이면 벨 없이 거절한다.
+   */
+  it("🔴 강사 스트립 '데스크 확인 요청'은 테스트 학생을 빼고, 테스트뿐인 교시면 벨 없이 거절한다", () => {
+    const ACTIONS = strip(read("src", "features", "attendance", "live", "server", "actions.ts"));
+    const fn = bodyOf(ACTIONS, "export async function requestDeskConfirm");
+    expect(fn).toContain("loadLiveSlots(sessionDate, [classId], { excludeTestStudents: true })");
+    expect(fn).toContain("테스트 학생만 있는 수업이라 데스크에 요청하지 않았습니다");
+    // 거절이 dedup·벨보다 앞이어야 한다 — 뒤로 밀면 bucket만 태우고 "요청했다는데 없다"가 된다.
+    expect(fn.indexOf("테스트 학생만 있는 수업이라")).toBeLessThan(fn.indexOf("notification_events"));
+    // 제외 없는 재조회는 **거절 경로에서 이유를 가르는 용도**뿐이다(명단은 제외본에서 만든다).
+    expect(fn.indexOf("{ excludeTestStudents: true }")).toBeLessThan(
+      fn.indexOf("inSlot(await loadLiveSlots(sessionDate, [classId]))"),
+    );
+  });
+
+  it("처리현황은 같은 헬퍼로 명단에서 빼고, 테스트 학생뿐이던 반은 행째 뺀다(수강 없는 반은 그대로)", () => {
+    expect(PROCESSING).toMatch(/const \[enrollments, records, testStudentIds\] = await Promise\.all\(/);
+    expect(PROCESSING).toContain("getTestStudentIds(supabase),");
+    expect(PROCESSING).toContain("classesWithTestStudent.add(e.class_id);");
+    expect(PROCESSING).toContain("!(classesWithTestStudent.has(c.id) && !expectedByClass.has(c.id))");
+    expect(PROCESSING).toContain("const rows: ClassProcessing[] = visibleClasses.map(");
+  });
+
+  it("🔴 처리현황은 **그날 유효·등원 요일 판정 뒤에** 뺀다 — 앞에서 빼면 그날 안 오는 테스트 학생 때문에 반이 사라진다", () => {
+    const fn = bodyOf(PROCESSING, "export const getDailyProcessingStatus", "export type AttendanceStatus");
+    expect(fn.indexOf("isEnrollmentActiveOn(")).toBeGreaterThan(-1);
+    expect(fn.indexOf("isEnrollmentActiveOn(")).toBeLessThan(fn.indexOf("classesWithTestStudent.add("));
+  });
+
+  /**
+   * 원장 브리핑 '어제 출석 미기록'(`unrecordedClassesSignal`)은 cron(admin db)에서도 돈다 — 목적지
+   * `/attendance/{어제}`의 처리 현황에선 테스트 반이 빠졌으니 여기서 세면 두 숫자가 갈린다.
+   */
+  describe("브리핑 '어제 출석 미기록'도 같은 축으로 뺀다", () => {
+    const fn = bodyOf(signals, "async function unrecordedClassesSignal", "async function unrecordedTodaySignal");
+
+    it("수강·출결 조회와 같은 Promise.all에서 받고, admin 경로엔 tenantId를 넘긴다", () => {
+      expect(fn).toMatch(/const \[enrollmentRows, attendanceRows, testStudentIds\] = await Promise\.all\(/);
+      expect(fn).toContain("getTestStudentIds(supabase, db?.tenantId)");
+    });
+
+    it("🔴 판정 뒤에 뺀다(처리현황과 같은 순서) — 명단이 비면 그 반은 미기록 목록에 안 선다", () => {
+      const skip = fn.indexOf("if (testStudentIds.has(row.student_id)) continue;");
+      expect(skip).toBeGreaterThan(-1);
+      expect(fn.indexOf("isEnrollmentActiveOn(")).toBeLessThan(skip);
+      expect(skip).toBeLessThan(fn.indexOf("students.add(row.student_id)"));
+      expect(fn).toContain("hasUnrecordedStudent");
+    });
+  });
 });
