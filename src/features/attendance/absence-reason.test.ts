@@ -95,6 +95,9 @@ describe("classifyAbsenceReason", () => {
     expect(classifyAbsenceReason(undefined)).toBe("unknown");
     expect(classifyAbsenceReason("")).toBe("unknown");
     expect(classifyAbsenceReason("   ")).toBe("unknown");
+    // 빗금 칸 입력의 `대신 입력` 줄은 사유가 아니다(원장 2026-09-14) — 줄을 걸러낸 나머지로 분류한다.
+    expect(classifyAbsenceReason("대신 입력: 박소선")).toBe("unknown");
+    expect(classifyAbsenceReason("가족여행\n대신 입력: 박소선")).toBe("planned");
   });
 
   it("흔한 오타도 흡수한다(실데이터 `가족일장`·`가족알정`·`캡프`)", () => {

@@ -35,6 +35,14 @@ const h = vi.hoisted(() => {
     deletes: [] as { ids: string[] | null }[],
     sinceCalls: 0,
     logs: [] as { action: string; metadata?: Record<string, unknown> }[],
+    /**
+     * 메모 비교 조건 쓰기(빗금 칸 입력) 흉내 — 행 id → 남은 "그 사이 메모가 바뀐" 횟수. 그 횟수만큼 그 행 쓰기를 0행으로
+     * 처리하고 행 메모를 `casNewNote`로 바꾼다(담당 선생님이 사유를 저장한 상황).
+     */
+    casMiss: new Map<string, number>(),
+    casNewNote: null as string | null,
+    /** true면 어긋난 행을 메모를 바꾸는 대신 **지운다**(그 사이 반별 보기에서 기록을 지운 상황). */
+    casDelete: false,
   };
   /** PostgREST 빌더 흉내 — 표마다 다른 행을 돌려주고, update는 대상 id와 함께 적어 둔다. */
   const client = {
@@ -43,7 +51,7 @@ const h = vi.hoisted(() => {
       const ctx: { patch?: Record<string, unknown>; ids?: string[]; write?: boolean; del?: boolean; single?: boolean } =
         {};
       const b: Record<string, unknown> = {};
-      for (const m of ["select", "or", "order", "range", "lte", "gte", "limit", "not"]) {
+      for (const m of ["select", "or", "order", "range", "lte", "gte", "limit", "not", "is"]) {
         b[m] = () => b;
       }
       b.in = (col: string, vals: string[]) => {
@@ -76,8 +84,18 @@ const h = vi.hoisted(() => {
       };
       b.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => {
         if (ctx.patch) {
-          state.updates.push({ patch: ctx.patch, ids: ctx.ids ?? [] });
-          return Promise.resolve({ data: null, error: null }).then(resolve, reject);
+          const ids = ctx.ids ?? [];
+          const missed = ids.filter((id) => (state.casMiss.get(id) ?? 0) > 0);
+          for (const id of missed) {
+            state.casMiss.set(id, state.casMiss.get(id)! - 1);
+            const row = state.records.find((r) => r.id === id);
+            if (row && state.casDelete) state.records = state.records.filter((r) => r.id !== id);
+            else if (row) row.note = state.casNewNote;
+          }
+          const wrote = ids.filter((id) => !missed.includes(id));
+          state.updates.push({ patch: ctx.patch, ids: wrote });
+          // 쓴 행 id를 돌려준다(`.select("id")`) — 메모 비교 조건 쓰기가 어긋난 행을 이것으로 안다.
+          return Promise.resolve({ data: wrote.map((id) => ({ id })), error: null }).then(resolve, reject);
         }
         if (ctx.del) {
           state.deletes.push({ ids: ctx.ids ?? null });
@@ -118,7 +136,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => h.client) }));
 vi.mock("@/lib/auth/current-user", () => ({
-  getCurrentUser: vi.fn(async () => ({ id: "user-1", tenantId: "tenant-1", systemRole: "master" })),
+  getCurrentUser: vi.fn(async () => ({ id: "user-1", tenantId: "tenant-1", systemRole: "master", displayName: "박소선" })),
 }));
 vi.mock("@/lib/auth/perm-matrix", () => ({
   canWriteTenant: vi.fn(async () => true),
@@ -151,7 +169,8 @@ vi.mock("@/features/classes/server/teacher-as-of-queries", () => ({
   }),
 }));
 
-import { NOT_MINE_MESSAGE } from "../cell-display";
+// 자리뿐인 칸의 거절은 2026-09-14부터 자리 사유 문장이다(종전 NOT_MINE_MESSAGE "반별 보기에서 고치세요"는 자리 기록엔 거짓 안내).
+import { SCOPED_REJECT_MESSAGE } from "../ghost-transfer";
 import { SCOPE_INVALID_MESSAGE, SCOPE_LOAD_FAILED_MESSAGE, SCOPE_NOT_TAUGHT_MESSAGE } from "../scoped-split";
 import { setAttendanceCell, setAttendanceRange } from "./actions";
 
@@ -215,6 +234,9 @@ beforeEach(() => {
   h.state.logs.length = 0;
   h.state.sinceCalls = 0;
   h.state.failTable = null;
+  h.state.casMiss.clear();
+  h.state.casNewNote = null;
+  h.state.casDelete = false;
 });
 
 // 🔴 어떤 저장도 인계일 인덱스(감사로그 12개월·반 전체·직원 이름)를 읽지 않는다 — 반응속도 1순위(2026-09-11).
@@ -263,7 +285,7 @@ describe("setAttendanceCell — 강사 전체 보기의 그날 칸", () => {
   it("🔴 제 몫 행이 없는 칸(자리 JJ만) — 격자와 같은 문장으로 거절, 아무것도 안 쓴다", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T09:00:00Z")];
-    expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE })).toEqual({ error: NOT_MINE_MESSAGE });
+    expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
     expect(h.state.updates).toHaveLength(0);
     expect(h.state.inserts).toHaveLength(0);
   });
@@ -351,7 +373,7 @@ describe("setAttendanceRange — 강사 전체 보기의 범위 채우기", () =
   it("제 몫 행이 없는 칸만 있으면 거절 — 아무것도 안 쓴다", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T09:00:00Z")];
-    expect(await range({ scopeTeacherId: h.CHARLIE })).toEqual({ error: NOT_MINE_MESSAGE });
+    expect(await range({ scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
     expect(h.state.updates).toHaveLength(0);
   });
 
@@ -490,7 +512,7 @@ describe("🔴 강사 보기 저장은 자리(JJ·랩실) 행을 안 건드린�
   it("메모만 저장 — 그날 행이 자리 행뿐이면 빗금 칸과 같은 문장으로 거절", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T12:00:00Z")];
-    expect(await cell({ note: "사유", noteOnly: true, scopeTeacherId: h.CHARLIE })).toEqual({ error: NOT_MINE_MESSAGE });
+    expect(await cell({ note: "사유", noteOnly: true, scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
     expect(h.state.updates).toHaveLength(0);
   });
 
@@ -562,7 +584,7 @@ describe("🔴 강사 보기 저장은 자리(JJ·랩실) 행을 안 건드린�
   it("제 몫 행이 없는 칸(자리 JJ만)의 지우기 — 격자와 같은 문장으로 거절, 아무것도 안 지운다", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T09:00:00Z")];
-    expect(await cell({ status: null, scopeTeacherId: h.CHARLIE })).toEqual({ error: NOT_MINE_MESSAGE });
+    expect(await cell({ status: null, scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
     expect(h.state.deletes).toHaveLength(0);
   });
 
@@ -588,5 +610,233 @@ describe("🔴 강사 보기 저장은 자리(JJ·랩실) 행을 안 건드린�
     h.state.logs.length = 0;
     await cell({ units: "4" });
     expect(logOf("attendance_cell")?.metadata).not.toHaveProperty("skippedSeatRows");
+  });
+});
+
+/**
+ * 🔴 원장 2026-09-14 *"그냥 그 날의 해당 담당 출석으로 전부 이전시켜. 다른 사람이 대신 찍었어도."* + *"대신 다른 사람이
+ * 출결하면 메모에 남겨."* — 강사 보기의 **빗금 칸**(제 몫 행 0 · 다른 선생님 교시 기록)에 친 값은 그 행들에 **상태만** 쓴다.
+ *   ① 시수 불변 ② 자리 행 불가침(자리뿐이면 거절) ③ 행마다 `대신 입력: 이름` 한 줄(기존 메모 보존·중복 안 붙임)
+ *   기본값: 빗금 칸의 지우기는 막는다.
+ */
+describe("🔴 빗금 칸 입력 — 다른 선생님 교시 행에 상태만 옮긴다(원장 2026-09-14)", () => {
+  const OTHER = "77777777-7777-7777-7777-777777777777";
+  const cell = (over: Partial<Parameters<typeof setAttendanceCell>[0]> = {}) =>
+    setAttendanceCell({ studentId: h.S1, classId: h.CLASS, sessionDate: D, status: "present", quiet: true, ...over });
+  /** 기본 칸은 **화면이 빗금 칸으로 알고 보낸** 칸(`ghost: true`) — 격자가 실제로 싣는 모양. */
+  const range = (
+    over: Partial<Parameters<typeof setAttendanceRange>[0]> = {},
+    cells: Parameters<typeof setAttendanceRange>[0]["cells"] = [
+      { studentId: h.S1, classId: h.CLASS, sessionDate: D, ghost: true },
+    ],
+  ) => setAttendanceRange({ cells, status: "present", units: "4", quiet: true, ...over });
+  /** 행 id → 이번 저장이 쓴 메모. */
+  const noteWritten = () =>
+    Object.fromEntries(
+      h.state.updates.filter((u) => "note" in u.patch).flatMap((u) => u.ids.map((id) => [id, u.patch.note])),
+    );
+
+  /** Charlie 보기의 빗금 칸 — 그날 기록이 다른 선생님 교시(15:20 결석 1.5)와 자리 JJ(16:20)뿐. */
+  function ghostDay(note: string | null = null) {
+    mixedDay();
+    h.state.schedules = [...h.state.schedules, slot("15:20:00", OTHER)];
+    h.state.records = [
+      { ...rec("r-1520", "15:20:00", 1.5, "2026-09-10T08:00:00Z"), status: "absent", note },
+      rec("r-jj", "16:20:00", 1, "2026-09-10T07:00:00Z"),
+    ];
+  }
+
+  it("🔴 셀 — 상태만 쓰고 시수는 안 쓴다(친 4는 버린다) · 자리 JJ 행은 손대지 않는다 · 응답에 옮긴 행 수", async () => {
+    ghostDay();
+    expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE, ghostTransfer: true })).toEqual({
+      ok: true,
+      ghostTransfer: 1,
+    });
+    expect(statusWritten()).toEqual(["r-1520"]);
+    expect(unitsWritten()).toEqual({});
+    for (const u of h.state.updates) expect(u.patch).not.toHaveProperty("session_units");
+    expect(h.state.inserts).toHaveLength(0);
+    expect(readTables()).toEqual(["attendance_records", "class_schedules", "classes"]); // 추가 조회 없음
+  });
+
+  it("🔴 메모 — 기존 메모(결석 사유) 끝에 '대신 입력: 이름' 한 줄", async () => {
+    ghostDay("병결");
+    await cell({ scopeTeacherId: h.CHARLIE, ghostTransfer: true });
+    expect(noteWritten()).toEqual({ "r-1520": "병결\n대신 입력: 박소선" });
+  });
+
+  it("🔴 두 번 옮겨도 메모는 한 줄 · 사람이 친 메모가 와도 남의 교시 메모를 덮지 않는다", async () => {
+    ghostDay("병결\n대신 입력: 박소선");
+    await cell({ note: "덮어쓰기", scopeTeacherId: h.CHARLIE, ghostTransfer: true });
+    expect(noteWritten()).toEqual({ "r-1520": "병결\n대신 입력: 박소선" });
+  });
+
+  /**
+   * 🔴 적대 리뷰 2026-09-14 — 메모를 읽고 쓰는 사이 담당 선생님이 사유를 저장하면 그 사유를 덮었다. 메모 비교 조건으로 쓰고,
+   *    어긋나면 지금 메모를 다시 읽어 한 번 더 붙인다. 두 번 모두 어긋나면 쓰지 않고 알린다.
+   */
+  it("🔴 읽고 쓰는 사이 메모가 바뀌면 덮지 않고 새 메모 끝에 붙인다", async () => {
+    ghostDay("병결");
+    h.state.casMiss.set("r-1520", 1);
+    h.state.casNewNote = "병결(입원)";
+    expect(await cell({ scopeTeacherId: h.CHARLIE, ghostTransfer: true })).toEqual({ ok: true, ghostTransfer: 1 });
+    expect(noteWritten()).toEqual({ "r-1520": "병결(입원)\n대신 입력: 박소선" });
+    expect(statusWritten()).toEqual(["r-1520"]);
+  });
+
+  it("두 번 모두 어긋나면 쓰지 않고 다시 입력하라고 알린다 — 남의 메모를 덮는 것보다 낫다", async () => {
+    ghostDay("병결");
+    h.state.casMiss.set("r-1520", 2);
+    h.state.casNewNote = "병결(입원)";
+    expect(await cell({ scopeTeacherId: h.CHARLIE, ghostTransfer: true })).toEqual({
+      error: SCOPED_REJECT_MESSAGE.stale,
+    });
+    expect(statusWritten()).toEqual([]);
+  });
+
+  it("🔴 그 사이 기록이 전부 지워져 한 행도 못 옮겼으면 성공이라 말하지 않는다(stale) — 거짓 '옮겼습니다' 금지", async () => {
+    ghostDay();
+    h.state.casMiss.set("r-1520", 1);
+    h.state.casDelete = true;
+    expect(await cell({ scopeTeacherId: h.CHARLIE, ghostTransfer: true })).toEqual({
+      error: SCOPED_REJECT_MESSAGE.stale,
+    });
+    expect(logOf("attendance_cell")).toBeUndefined(); // 쓴 행이 없으니 부분 저장 로그도 없다
+  });
+
+  it("🔴 메모만 저장 — 같은 시각 여러 행이면 **화면이 보여 준 사유 메모의 행**을 고친다(대신 입력 줄뿐인 행 아님)", async () => {
+    mixedDay();
+    h.state.records = [
+      { ...rec("r-1820", "18:20:00", 1, "2026-09-10T11:00:00Z"), note: "대신 입력: 박소선" },
+      { ...rec("r-1720", "17:20:00", 1, "2026-09-10T11:00:00Z"), note: "병결\n대신 입력: 박소선" },
+      rec("r-jj", "16:20:00", 1, "2026-09-10T07:00:00Z"),
+    ];
+    expect(await cell({ note: "병결(확인)", noteOnly: true, scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(h.state.updates).toEqual([{ patch: { note: "병결(확인)" }, ids: ["r-1720"] }]);
+    h.state.updates.length = 0;
+    // 반별 보기(스코프 없음)도 같은 규칙.
+    expect(await cell({ note: "병결(확인)", noteOnly: true })).toEqual({ ok: true });
+    expect(h.state.updates).toEqual([{ patch: { note: "병결(확인)" }, ids: ["r-1720"] }]);
+  });
+
+  it("🔴 범위 — 빗금 칸으로 알고 보낸 칸의 기록이 그 사이 사라졌으면 새 행을 만들지 않는다(stale)", async () => {
+    ghostDay();
+    h.state.records = [];
+    expect(await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] })).toEqual({
+      error: SCOPED_REJECT_MESSAGE.stale,
+    });
+    expect(h.state.inserts).toHaveLength(0);
+  });
+
+  it("🔴 화면이 빈칸으로 알던 칸(표식 없음)에 남의 교시 기록이 있으면 저장하지 않는다 — 친 시수를 버리고 남의 기록을 덮지 않게", async () => {
+    ghostDay();
+    expect(await cell({ units: "2", scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.stale });
+    expect(h.state.updates).toHaveLength(0);
+    expect(h.state.inserts).toHaveLength(0);
+  });
+
+  it("🔴 빗금으로 알고 보낸 칸에 제 몫 행이 생겼으면 저장하지 않는다 — 제 기록을 덮지 않게", async () => {
+    mixedDay();
+    expect(await cell({ scopeTeacherId: h.CHARLIE, ghostTransfer: true })).toEqual({
+      error: SCOPED_REJECT_MESSAGE.stale,
+    });
+    expect(h.state.updates).toHaveLength(0);
+  });
+
+  it("🔴 지우기는 막는다 — 남의 기록 삭제는 되돌리기 어렵다(기본값)", async () => {
+    ghostDay();
+    expect(await cell({ status: null, scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.clearGhost });
+    expect(h.state.deletes).toHaveLength(0);
+  });
+
+  it("🔴 감사로그 — ghostTransfer(행 수)·이전 상태가 남고, 친 시수·전후 시수는 안 싣는다", async () => {
+    ghostDay();
+    await cell({ units: "4", scopeTeacherId: h.CHARLIE, ghostTransfer: true });
+    const m = logOf("attendance_cell")?.metadata;
+    expect(m).toMatchObject({
+      scopeTeacherId: h.CHARLIE,
+      ghostTransfer: 1,
+      skippedSeatRows: 1,
+      status: "present",
+      prevStatus: "absent",
+    });
+    expect(m).not.toHaveProperty("units");
+    expect(m).not.toHaveProperty("prevUnits");
+  });
+
+  it("🔴 제 몫 행이 있는 칸은 종전 경로 — 옮기기도 메모도 없다(메모는 빗금 칸에서만)", async () => {
+    mixedDay();
+    h.state.schedules = [...h.state.schedules, slot("15:20:00", OTHER)];
+    h.state.records = [...h.state.records, rec("r-1520", "15:20:00", 1, "2026-09-10T08:00:00Z")];
+    expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(unitsWritten()).toEqual({ "r-1820": 2, "r-1720": 2 });
+    expect(noteWritten()).toEqual({});
+    expect(logOf("attendance_cell")?.metadata).not.toHaveProperty("ghostTransfer");
+  });
+
+  it("🔴 반별 보기(스코프 없음)는 종전 그대로 — 전 행이 받고 메모를 안 붙인다", async () => {
+    ghostDay();
+    expect(await cell({ units: "4" })).toEqual({ ok: true });
+    expect(statusWritten()).toEqual(["r-1520", "r-jj"]);
+    expect(noteWritten()).toEqual({});
+  });
+
+  it("🔴 범위 — 같은 규칙: 상태만 · 메모 · 자리 불가침 · 옮긴 칸을 돌려준다", async () => {
+    ghostDay("병결");
+    const res = await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] });
+    expect(res).toMatchObject({
+      ok: true,
+      applied: 1,
+      blocked: 0,
+      ghostCells: [{ studentId: h.S1, classId: h.CLASS, sessionDate: D }],
+    });
+    expect(statusWritten()).toEqual(["r-1520"]);
+    expect(unitsWritten()).toEqual({});
+    expect(noteWritten()).toEqual({ "r-1520": "병결\n대신 입력: 박소선" });
+    expect(logOf("attendance_range")?.metadata).toMatchObject({ ghostTransfer: 1, skippedSeatRows: 1 });
+  });
+
+  it("범위 — 빗금 칸과 제 몫 칸이 섞여도 칸마다 제 규칙(시수는 제 몫 칸에만)", async () => {
+    ghostDay();
+    h.state.records = [...h.state.records, rec("s2-1720", "17:20:00", 1, "2026-09-10T09:00:00Z", h.S2)];
+    const res = await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] }, [
+      { studentId: h.S1, classId: h.CLASS, sessionDate: D, ghost: true },
+      { studentId: h.S2, classId: h.CLASS, sessionDate: D },
+    ]);
+    expect(res).toMatchObject({ ok: true, applied: 2, blocked: 0 });
+    expect((res as { ghostCells?: unknown[] }).ghostCells).toEqual([{ studentId: h.S1, classId: h.CLASS, sessionDate: D }]);
+    expect(unitsWritten()).toEqual({ "s2-1720": 4 });
+    expect(statusWritten()).toEqual(["r-1520", "s2-1720"]);
+    expect(noteWritten()).toEqual({ "r-1520": "대신 입력: 박소선" });
+  });
+
+  it("범위 지우기 — 빗금 칸은 건너뛰고, 전부 걸리면 지우기 사유로 거절", async () => {
+    ghostDay();
+    expect(await range({ status: null, scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] })).toEqual({
+      error: SCOPED_REJECT_MESSAGE.clearGhost,
+    });
+    expect(h.state.deletes).toHaveLength(0);
+  });
+
+  it("🔴 범위 — 표식 없이 온 빗금 칸(화면이 오래됨)은 그 칸만 건너뛰고, 전부면 stale 문장 · 로그에 친 시수를 안 싣는다", async () => {
+    ghostDay();
+    h.state.records = [...h.state.records, rec("s2-1720", "17:20:00", 1, "2026-09-10T09:00:00Z", h.S2)];
+    const mixed = await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] }, [
+      { studentId: h.S1, classId: h.CLASS, sessionDate: D },
+      { studentId: h.S2, classId: h.CLASS, sessionDate: D },
+    ]);
+    expect(mixed).toMatchObject({ ok: true, applied: 1, blocked: 1 });
+    expect(statusWritten()).toEqual(["s2-1720"]);
+    h.state.updates.length = 0;
+    expect(
+      await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] }, [
+        { studentId: h.S1, classId: h.CLASS, sessionDate: D },
+      ]),
+    ).toEqual({ error: SCOPED_REJECT_MESSAGE.stale });
+    expect(h.state.updates).toHaveLength(0);
+    // 빗금 칸만 옮긴 범위 — 시수를 받은 칸이 없으니 친 4를 로그에 안 싣는다.
+    h.state.logs.length = 0;
+    await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] });
+    expect(logOf("attendance_range")?.metadata).not.toHaveProperty("units");
   });
 });

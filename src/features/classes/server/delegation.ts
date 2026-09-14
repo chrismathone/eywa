@@ -1,10 +1,12 @@
 import "server-only";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import type { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { delegationOverlapsRange, isDelegationActiveOn } from "../delegation-window";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
+type AdminClient = ReturnType<typeof createAdminClient>;
 
 /**
  * **"내가 이 날짜에 가르치는 반" 단일 소스** (0173a 반 임시 위임, 2026-08-03).
@@ -83,6 +85,58 @@ async function fetchActiveDelegations(supabase: ServerClient, date: string): Pro
   return ((data ?? []) as DelegationRow[]).filter((r) =>
     isDelegationActiveOn({ fromDate: r.from_date, toDate: r.to_date, revokedAt: r.revoked_at }, date),
   );
+}
+
+/** 알림 수신자용 위임 한 건 — 반 id·대체 강사·기간. 날짜 판정은 `isDelegationActiveOn`(delegation-window.ts). */
+export type ClassDelegationWindow = {
+  classId: string;
+  delegateUserId: string;
+  fromDate: string; // 포함
+  toDate: string; // 포함
+  revokedAt: string | null;
+};
+
+/**
+ * 그 날짜에 **이 반들**에 살아 있는 위임 — admin 경로(출결 알림 벨 수신자, 원장 결정 2026-09-14).
+ *
+ * 위 `fetchActiveDelegations`와 같은 규약(해제분 제외 · 양끝 포함 · SQL로 좁히고 순수함수로 다시 확인)이고
+ * 다른 점은 셋이다:
+ *  · admin(RLS 우회) 호출부용이라 **tenant 필터를 명시**한다.
+ *  · 반 id로 좁힌다 — 반이 수십~수백 개일 수 있어 청크(B3) × 페이징(B2)으로 받는다.
+ *  · 조회 실패를 **삼키지 않고 throw**한다 — `data ?? []`로 받으면 "대신 맡은 강사 없음"으로 위장해 그날 실제로
+ *    수업하는 사람에게 벨이 조용히 안 간다. 호출부가 reportError로 남긴다.
+ * ⚠️ 판정(누가 받나)은 여기서 하지 않는다 — `attendanceNoticeRecipients`(teacher-axis.ts)가 같은 날짜 판정을
+ *    한 번 더 거쳐 담임·교시 담당과 합친다.
+ */
+export async function getActiveDelegationsForClasses(
+  admin: AdminClient,
+  tenantId: string,
+  classIds: readonly string[],
+  date: string,
+): Promise<ClassDelegationWindow[]> {
+  const ids = [...new Set(classIds)].filter(Boolean);
+  if (ids.length === 0) return [];
+  const rows = await fetchAllPagedInChunks<DelegationRow>(ids, (chunk, from, to) =>
+    admin
+      .from("class_delegations")
+      .select("class_id, delegate_user_id, from_date, to_date, revoked_at")
+      .eq("tenant_id", tenantId)
+      .in("class_id", chunk)
+      .is("revoked_at", null)
+      .lte("from_date", date)
+      .gte("to_date", date)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  return rows
+    .map((r) => ({
+      classId: r.class_id,
+      delegateUserId: r.delegate_user_id,
+      fromDate: r.from_date,
+      toDate: r.to_date,
+      revokedAt: r.revoked_at,
+    }))
+    .filter((d) => isDelegationActiveOn(d, date));
 }
 
 /**

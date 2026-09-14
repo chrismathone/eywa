@@ -19,6 +19,8 @@
  *    규약) — 테스트는 내가 상상한 문장만 통과시키고, 오분류는 실제 메모에서만 드러난다.
  */
 
+import { stripProxyMemo } from "./proxy-memo";
+
 export type AbsenceReasonKind = "planned" | "sick" | "school" | "unknown";
 
 /** 화면·프롬프트가 쓰는 한글 라벨 — raw 키를 UI에 내보내지 않는다. */
@@ -186,8 +188,10 @@ const PLANNED_WORDS = [
  * 걸리지 않게 하기 위한 순서이므로 뒤집지 말 것.
  */
 export function classifyAbsenceReason(note: string | null | undefined): AbsenceReasonKind {
-  if (!note) return "unknown";
-  const n = normalize(note);
+  // `대신 입력: 이름` 줄은 사유가 아니다(빗금 칸 입력 메모, 원장 2026-09-14 — proxy-memo.ts). 그 줄뿐이면 사유 모름.
+  const reason = stripProxyMemo(note);
+  if (!reason) return "unknown";
+  const n = normalize(reason);
   if (!n) return "unknown";
   if (SCHOOL_WORDS.some((w) => n.includes(w))) return "school";
   if (SICK_WORDS.some((w) => n.includes(w))) return "sick";

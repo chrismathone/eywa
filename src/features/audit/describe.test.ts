@@ -254,6 +254,20 @@ describe("collectAuditNameIds / auditTargetName", () => {
     expect(d).not.toContain("skippedSeatRows");
   });
 
+  it("빗금 칸 입력(ghostTransfer)은 한글로 — 영문 키를 흘리지 않는다(원장 2026-09-14)", () => {
+    const d = auditDetail(
+      "attendance_cell",
+      { studentId: SID, date: "2026-09-14", status: "present", prevStatus: "absent", overwrote: true, ghostTransfer: 2 },
+      ctx({ [SID]: "이윤건" }),
+    );
+    expect(d).toContain("결석 → 출석");
+    expect(d).toContain("다른 선생님 교시에 상태만 옮김 2건");
+    expect(d).not.toContain("ghostTransfer");
+    expect(auditDetail("attendance_cell", { date: "2026-09-14", ghostTransfer: 1, partial: true }, ctx())).toContain(
+      "일부만 저장(오류로 멈춤)",
+    );
+  });
+
   it("시수는 '얼마에서 얼마로' — 칸에 보이는 값(nextUnits)이 친 값(units)보다 먼저다(원장 2026-09-14)", () => {
     const cell = (m: Record<string, unknown>) =>
       auditDetail("attendance_cell", { studentId: SID, date: "2026-09-14", status: "present", ...m }, ctx());

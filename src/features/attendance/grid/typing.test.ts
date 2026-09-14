@@ -105,6 +105,11 @@ describe("copyValueOf", () => {
     expect(copyValueOf({ s: "absent", u: null })).toEqual({ status: "absent", units: "" });
   });
 
+  it("🔴 빗금 칸의 표시 값(g)은 복사하지 않는다 — 남의 교시 값이 내 칸에 붙는다(원장 2026-09-14)", () => {
+    expect(copyValueOf({ s: "present", u: 2, g: true })).toBeNull();
+    expect(copyValueOf({ s: "absent", u: null, g: true })).toBeNull();
+  });
+
   it("🔴 지각·조퇴·보강은 숫자로 복사하지 않는다 — 붙여넣으면 상태가 조용히 '출석'으로 바뀐다", () => {
     for (const st of ["late", "early_leave", "makeup"]) {
       expect(copyValueOf({ s: st, u: null }), st).toBeNull();

@@ -18,7 +18,11 @@ import { GridStore, type CellState, type GridValue } from "@/features/attendance
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
 import { lockedMessage } from "@/features/attendance/lock-message";
-import { optimisticGridValue, type OptimisticInput } from "@/features/attendance/grid/optimistic-value";
+import {
+  ghostOptimisticValue,
+  optimisticGridValue,
+  type OptimisticInput,
+} from "@/features/attendance/grid/optimistic-value";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
 import { useAttendanceSearch } from "./search-context";
 import { rangeScopeFields, scopeFieldsFor, useAttendanceScope } from "./scope-context";
@@ -56,7 +60,19 @@ type Ctx = {
   /** 칸 선택 — 타이핑 중이던 버퍼를 **먼저 확정한다**(클릭 한 번에 입력이 사라지지 않게). */
   selectCell: (row: string, col: string, extend: boolean) => void;
   startFill: () => void;
+  /**
+   * 빗금 칸에 상태를 옮긴다(원장 2026-09-14 *"그 날의 해당 담당 출석으로 전부 이전"*) — 빗금 칸 팝오버가 격자 타이핑과
+   * **같은 문**(writeOne: 잠금·막는 칸·낙관값·알림)을 지나게 한다.
+   */
+  transferGhost: (key: string, status: string) => void;
 };
+
+/**
+ * 되돌리기 한 번 = 한 작업. `ghost` = 그 작업에서 다른 선생님 교시에 **상태를 옮긴** 칸 수 — 그 칸은 되돌리지 않는다
+ * (옛 상태가 교시마다 달랐을 수 있어 한 상태로 되쓰면 남의 기록을 틀리게 만든다, 원장 2026-09-14 빗금 칸 입력).
+ * 🔴 칸이 0개인 묶음도 스택에 올린다 — 안 올리면 Ctrl+Z가 그 앞의 엉뚱한 작업을 되돌린다(적대 리뷰 2026-09-14).
+ */
+type UndoGroup = { cells: { key: string; prev: GridValue }[]; ghost?: number };
 
 const GridCtx = createContext<Ctx | null>(null);
 
@@ -143,8 +159,8 @@ export function GridProvider({
   rows: string[];
   /** 실제 날짜 열만(placeholder 제외). */
   cols: string[];
-  /** 서버가 그린 초기값 — 셀 키 → {상태, 시수}. 빈 칸은 없음. */
-  initial: Record<string, { s: string; u: number | null }>;
+  /** 서버가 그린 초기값 — 셀 키 → {상태, 시수}. 빈 칸은 없음. `g` = 빗금 칸의 표시 전용 값(합계 밖, store.ts). */
+  initial: Record<string, NonNullable<GridValue>>;
   /**
    * 하루에 교시가 **둘 이상**인 칸만(셀 키 → 교시 수, 0196a). 없으면 전부 1로 본다.
    * 🔴 이 칸에 숫자를 치면 서버는 그날 **모든 교시**를 같은 값으로 고친다 → 다시 읽은 합계는 교시 수만큼
@@ -153,10 +169,11 @@ export function GridProvider({
    */
   slotCounts?: Record<string, number>;
   /**
-   * 이 표에 값이 없고 **남의 교시만** 있는 칸(강사 전체 보기의 빗금 칸) — 입력을 받지 않는다.
+   * 입력을 받지 않는 빗금 칸 — 자리(JJ·랩실) 기록뿐(`"seat"`) · 담임 이전 기록 · 값이 파생뿐(true).
    * 이유·근거는 matrix-table `notMine` 주석. 잠금(7일)과 달리 **날짜가 아니라 칸 단위**다.
+   * ⚠️ 다른 선생님 교시 기록이 있는 빗금 칸은 여기 없다 — 입력하면 상태만 옮긴다(`initial`의 `g`, 원장 2026-09-14).
    */
-  notMine?: Record<string, true>;
+  notMine?: Record<string, true | "seat">;
   /**
    * 값이 있으면서 그 날 **다른 선생님 교시도 함께 있는** 칸 → 함께 바뀌는 교시 수(matrix-table `alsoWrites`).
    * 자리(JJ·랩실) 행은 세지 않는다 — 강사 보기 저장이 그 행을 안 건드린다(원장 2026-09-12).
@@ -193,7 +210,7 @@ export function GridProvider({
   }, [notice]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(initialCollapsed ?? []));
   // 되돌리기는 **작업 단위**(칸 하나가 아니라 한 번의 채우기 전체) — 30칸을 채우고 Ctrl+Z를 30번 누르게 하지 않는다.
-  const undoRef = useRef<{ key: string; prev: GridValue }[][]>([]);
+  const undoRef = useRef<UndoGroup[]>([]);
   const router = useRouter();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clipRef = useRef<TypedValue | null>(null);
@@ -264,8 +281,22 @@ export function GridProvider({
     (date: string) => (lockBefore && isLocked(date) ? lockedMessage(date, lockBefore) : null),
     [isLocked, lockBefore],
   );
-  /** 이 칸이 이 표의 몫이 아닌가(빗금 칸) — 잠금과 사유가 달라 메시지도 따로 낸다. */
+  /** 이 칸이 입력을 받지 않는 빗금 칸인가 — 잠금과 사유가 달라 메시지도 따로 낸다. */
   const isNotMine = useCallback((key: string) => !!notMine?.[key], [notMine]);
+  /**
+   * 막는 칸의 사유 문장 — 자리(JJ·랩실) 기록뿐인 칸은 따로 말한다(원장 2026-09-12). "반별 보기에서 고치세요"는 자리
+   * 기록엔 거짓 안내다. 막는 칸이 아니면 null.
+   */
+  const notMineNote = useCallback(
+    (key: string): string | null =>
+      notMine?.[key] === "seat" ? tf("att.lock.seatOnly", {}) : notMine?.[key] ? NOT_MINE_MESSAGE : null,
+    [notMine, tf],
+  );
+  /**
+   * 입력하면 **다른 선생님 교시에 상태만 옮기는** 빗금 칸인가(원장 2026-09-14) — 칸의 지금 값이 빗금 표시 값(`g`)이면.
+   * 서버가 칸의 성격을 바꿔 싣고 오면(새로고침) 그대로 따라간다.
+   */
+  const isGhost = useCallback((key: string) => !!store.valueOf(key)?.g, [store]);
 
   /**
    * 입력이 멎은 뒤 **한 번만** 서버 데이터를 다시 읽는다.
@@ -307,18 +338,24 @@ export function GridProvider({
 
   /** 한 칸 저장(되돌리기 기록 없이) — 되돌리기 자체가 되쓸 때도 쓴다. */
   const pushCell = useCallback(
-    (key: string, val: TypedValue | null, prev: GridValue) => {
+    (key: string, val: OptimisticInput | null, prev: GridValue) => {
       const p = parseCellKey(key);
       if (!p) return;
+      const current = store.valueOf(key);
+      // 🔴 빗금 칸(`g`) — 다른 선생님 교시 기록에 **상태만** 옮긴다(원장 2026-09-14). 칠하는 값도 표시 전용(합계 밖)이고
+      //    친 시수는 보내지도 칠하지도 않는다(서버가 안 쓴다). 지우기는 여기 오기 전에 막았다(writeOne·writeMany).
+      const ghost = !!current?.g && val !== null;
       // 낙관값은 이 칸의 **지금** 값을 보고 만든다(빈 칸이면 수학 자동 시수 — toValue 주석).
-      const shown = toValue(key, val, store.valueOf(key));
+      const shown = ghost && val ? ghostOptimisticValue(current, val.status) : toValue(key, val, current);
       store.setLocal([[key, shown]]);
       void setAttendanceCell({
         studentId: p.studentId,
         classId: p.classId,
         sessionDate: p.date,
         status: (val?.status ?? null) as never,
-        ...(val ? { units: val.units } : {}),
+        ...(val && !ghost ? { units: val.units } : {}),
+        // 화면이 이 칸을 빗금 칸 입력으로 알고 보낸다 — 서버 판정과 갈리면 서버가 저장하지 않는다(stale, 원장 2026-09-14).
+        ...(ghost ? { ghostTransfer: true } : {}),
         // 🔴 강사 전체 보기 칸은 그 강사 몫 교시의 합 — 서버가 친 숫자를 그 몫에만 나눠야 새로고침 뒤 같은 숫자다.
         ...scopeFieldsFor(scope, p.classId),
         quiet: true,
@@ -326,13 +363,18 @@ export function GridProvider({
         if (res && "error" in res) {
           store.setLocal([[key, prev]]);
           setError(res.error);
+          // 빗금 칸 입력은 여러 행을 차례로 쓴다 — 중간에 멈췄으면 일부가 저장됐을 수 있어 새로 읽는다.
+          if (ghost) scheduleRefresh();
           return;
         }
         // 🔴 새 행 + 숫자 안 고른 저장이면 서버가 **실제로 넣은** 시수로 맞춘다(자동값, 조회 실패면 null=1) —
         //    낙관 덮개는 서버 값과 같아질 때만 벗겨지므로(store.ts) 틀린 낙관값은 새로고침으로도 안 풀린다.
         //    그 사이 같은 칸을 또 고쳤으면(덮개가 바뀌었으면) 건드리지 않는다(store.setLocalIf — 여긴 칠한 값이 빈 칸이
         //    아니라 동일성으로 가려진다. 팝오버는 '지우기'까지 받아야 해서 표식 paintLocal/correctLocal을 쓴다).
-        if (val && res?.autoUnits !== undefined) {
+        // 🔴 칸의 성격이 서버와 갈렸으면(빗금으로 칠했는데 서버는 제 몫 경로로 썼다 · 그 반대 — 그 사이 기록이 바뀌었다)
+        //    칠한 값은 서버와 영영 안 같아진다(`g`가 안 맞는다) — 벗겨 서버 값을 보이고 새로고침을 기다린다.
+        if (ghost !== !!res?.ghostTransfer) store.dropLocalIf(key, shown);
+        else if (val && res?.autoUnits !== undefined) {
           store.setLocalIf(key, shown, { s: val.status, u: res.autoUnits });
         }
         scheduleRefresh();
@@ -343,7 +385,7 @@ export function GridProvider({
 
   /** 한 칸 저장. */
   const writeOne = useCallback(
-    (key: string, val: TypedValue | null) => {
+    (key: string, val: OptimisticInput | null) => {
       const p = parseCellKey(key);
       if (!p) return;
       // 새 작업이 시작되면 **지난 실패는 걷는다** — 실패 토스트는 클릭해야 사라져서, 30초 전 경고가
@@ -357,9 +399,25 @@ export function GridProvider({
         setError(lockNote);
         return;
       }
-      // 남의 교시만 있는 칸 — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
-      if (isNotMine(key)) {
-        setError(NOT_MINE_MESSAGE);
+      // 막는 칸(자리뿐 · 담임 이전 기록 등) — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
+      const blockedNote = notMineNote(key);
+      if (blockedNote) {
+        setError(blockedNote);
+        return;
+      }
+      // 🔴 빗금 칸(다른 선생님 교시 기록) — 입력은 그 교시에 **상태만** 옮기고(원장 2026-09-14), 지우기는 막는다(남의 기록
+      //    삭제는 되돌리기 어렵다 — 기본값). 되돌리기(Ctrl+Z)엔 싣지 않는다: 옛 상태가 교시마다 달랐을 수 있어 한 상태로
+      //    되쓰면 남의 기록을 틀리게 만든다.
+      if (isGhost(key)) {
+        if (val === null) {
+          setError(tf("att.grid.ghostClearBlock", {}));
+          return;
+        }
+        // 칸 없는 묶음을 올린다 — Ctrl+Z가 앞의 엉뚱한 작업을 되돌리지 않고 이 자리에서 사유를 말한다(UndoGroup 주석).
+        undoRef.current.push({ cells: [], ghost: 1 });
+        if (undoRef.current.length > 50) undoRef.current.shift();
+        pushCell(key, val, store.valueOf(key));
+        showNotice(tf("att.grid.ghostNotice", {}));
         return;
       }
       const shared = alsoWrites?.[key] ?? 0;
@@ -375,7 +433,7 @@ export function GridProvider({
         return;
       }
       const prev = store.valueOf(key);
-      undoRef.current.push([{ key, prev }]);
+      undoRef.current.push({ cells: [{ key, prev }] });
       if (undoRef.current.length > 50) undoRef.current.shift();
       pushCell(key, val, prev);
       // 값을 **쓰는** 경우엔 막지 않는다(내 교시가 있으니 고칠 권리가 있다) — 대신 사정거리를 말한다.
@@ -383,7 +441,7 @@ export function GridProvider({
       // ⚠️ 이 문장은 **성공 알림**이다 — 실패 채널(빨강)에 실으면 잘 저장된 순간마다 경고가 뜬다.
       if (shared > 0) showNotice(tf("att.grid.sharedNotice", { n: shared }));
     },
-    [store, lockNoteOf, isNotMine, alsoWrites, pushCell, showNotice, tf],
+    [store, lockNoteOf, notMineNote, isGhost, alsoWrites, pushCell, showNotice, tf],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
@@ -401,14 +459,18 @@ export function GridProvider({
       //    기록이 흔적 없이 지워진다(적대적 리뷰 2026-08-19).
       //    ⚠️ 자리(JJ·랩실) 행만 섞인 칸은 여기서 안 걸린다 — 서버가 그 행을 남기고 제 몫 행만 지운다(원장 2026-09-12).
       //    ⚠️ 값을 **쓰는** 범위 작업은 그대로 통과한다(고칠 권리가 있는 칸이다) — 아래에서 사정거리만 알린다.
-      const targets = val === null ? mine.filter((p) => !alsoWrites?.[cellKey(p.row, p.date)]) : mine;
+      //    🔴 빗금 칸(다른 선생님 교시 기록)도 **지우기에서만** 뺀다 — writeOne과 같은 이유(원장 2026-09-14 기본값).
+      const clearable = val === null ? mine.filter((p) => !isGhost(cellKey(p.row, p.date))) : mine;
+      const targets = val === null ? clearable.filter((p) => !alsoWrites?.[cellKey(p.row, p.date)]) : clearable;
       // 건너뛴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
       const lockedCount = all.length - unlocked.length;
       const notMineCount = unlocked.length - mine.length;
-      const mixedCount = mine.length - targets.length;
+      const ghostClearCount = mine.length - clearable.length;
+      const mixedCount = clearable.length - targets.length;
       const skipNote = [
         lockedCount > 0 ? tf("att.grid.skip.locked", { n: lockedCount }) : null,
         notMineCount > 0 ? tf("att.grid.skip.notMine", { n: notMineCount }) : null,
+        ghostClearCount > 0 ? tf("att.grid.skip.ghostClear", { n: ghostClearCount }) : null,
         mixedCount > 0 ? tf("att.grid.skip.mixed", { n: mixedCount }) : null,
       ].filter(Boolean);
       if (targets.length === 0) {
@@ -428,13 +490,29 @@ export function GridProvider({
         (t) => [cellKey(t.row, t.date), store.valueOf(cellKey(t.row, t.date))] as [string, GridValue],
       );
       // 한 번의 채우기 = 되돌리기 한 칸(Ctrl+Z 한 번이면 통째로 돌아온다).
-      undoRef.current.push(prevs.map(([key, prev]) => ({ key, prev })));
+      // ⚠️ 빗금 칸(`g`)은 싣지 않는다 — writeOne 주석(옛 상태를 한 상태로 되쓰면 남의 기록을 틀리게 만든다).
+      const undoable = prevs.filter(([, prev]) => !prev?.g);
+      const ghostKeys = new Set(prevs.filter(([, prev]) => prev?.g).map(([k]) => k));
+      // 빗금 칸뿐인 작업도 묶음을 올린다 — 안 올리면 Ctrl+Z가 그 앞의 엉뚱한 작업을 되돌린다(UndoGroup 주석).
+      undoRef.current.push({
+        cells: undoable.map(([key, prev]) => ({ key, prev })),
+        ...(ghostKeys.size > 0 ? { ghost: ghostKeys.size } : {}),
+      });
       if (undoRef.current.length > 50) undoRef.current.shift();
       // 칸마다 **지금 값**을 보고 낙관값을 만든다 — 빈 칸만 수학 자동 시수를 받는다(toValue 주석).
-      const shownList = prevs.map(([k, p]) => [k, toValue(k, val, p)] as [string, GridValue]);
+      // 빗금 칸은 상태만 옮긴 표시 전용 값이다(pushCell 주석).
+      const shownList = prevs.map(
+        ([k, p]) => [k, p?.g && val ? ghostOptimisticValue(p, val.status) : toValue(k, val, p)] as [string, GridValue],
+      );
       store.setLocal(shownList);
       void setAttendanceRange({
-        cells: targets.map((t) => ({ studentId: t.studentId, classId: t.classId, sessionDate: t.date })),
+        // 빗금 칸 입력으로 알고 보낸 칸엔 표식 — 서버 판정과 갈리면 그 칸만 건너뛴다(stale, 원장 2026-09-14).
+        cells: targets.map((t) => ({
+          studentId: t.studentId,
+          classId: t.classId,
+          sessionDate: t.date,
+          ...(ghostKeys.has(cellKey(t.row, t.date)) ? { ghost: true } : {}),
+        })),
         status: (val?.status ?? null) as never,
         ...(val ? { units: val.units } : {}),
         // 단건과 같은 이유 — 범위 안의 스코프 반만 알린다(보강 묶음 칸은 반별 규칙).
@@ -444,6 +522,8 @@ export function GridProvider({
         if ("error" in res) {
           store.setLocal(prevs);
           setError(res.error);
+          // 빗금 칸 입력이 섞였으면 중간에 멈춘 일부 저장이 있을 수 있다 — 새로 읽어 진실을 보인다(pushCell과 같은 이유).
+          if (ghostKeys.size > 0) scheduleRefresh();
           return;
         }
         // 🔴 새로 만든 칸은 서버가 **실제로 넣은** 시수로 맞춘다(자동값·조회 실패면 null) — pushCell과 같은 이유.
@@ -457,6 +537,13 @@ export function GridProvider({
           }
           if (fixes.length > 0) store.setLocal(fixes);
         }
+        // 🔴 칸의 성격이 서버와 갈린 칸(빗금으로 칠했는데 서버는 옮기지 않았다 · 그 반대)은 덮개를 벗긴다 — pushCell과 같은 이유.
+        const ghostByServer = new Set(
+          (res.ghostCells ?? []).map((c) => cellKey(rowKey(c.classId, c.studentId), c.sessionDate)),
+        );
+        for (const [k, shown] of shownList) {
+          if (!!shown?.g !== ghostByServer.has(k)) store.dropLocalIf(k, shown);
+        }
         scheduleRefresh();
         const skipped = res.blocked + lockedCount + notMineCount;
         // 🔴 함께 바뀐 **다른 선생님 교시**를 말해 준다 — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
@@ -467,20 +554,21 @@ export function GridProvider({
         const failNotes = [
           skipped > 0 ? tf("att.grid.clear.skipped", { n: skipped }) : null,
           mixedCount > 0 ? tf("att.grid.clear.mixed", { n: mixedCount }) : null,
+          ghostClearCount > 0
+            ? tf("att.grid.skip.tail", { list: tf("att.grid.skip.ghostClear", { n: ghostClearCount }) })
+            : null,
         ].filter(Boolean);
         if (failNotes.length > 0) setError(failNotes.join(" · "));
         // ⚠️ `shared`는 서버가 반려한 칸(res.blocked)까지 세므로, 반려가 섞였으면 단정하지 않는다.
-        if (shared > 0) {
-          showNotice(
-            tf(
-              res.blocked > 0 ? "att.grid.clear.sharedMaybe" : "att.grid.clear.shared",
-              { n: shared },
-            ),
-          );
-        }
+        // 빗금 칸 입력은 **서버가 옮긴 칸**만 센다 — 칸 숫자가 이 표 몫이 아니라는 사실을 함께 말한다(원장 2026-09-14).
+        const notices = [
+          shared > 0 ? tf(res.blocked > 0 ? "att.grid.clear.sharedMaybe" : "att.grid.clear.shared", { n: shared }) : null,
+          ghostByServer.size > 0 ? tf("att.grid.ghostNoticeMany", { n: ghostByServer.size }) : null,
+        ].filter(Boolean);
+        if (notices.length > 0) showNotice(notices.join(" · "));
       });
     },
-    [store, isLocked, isNotMine, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice, tf, scope],
+    [store, isLocked, isNotMine, isGhost, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice, tf, scope],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */
@@ -498,10 +586,15 @@ export function GridProvider({
   const startFill = useCallback(() => {
     const a = store.active;
     if (!a) return;
+    // 빗금 칸의 흐린 값은 채우기 원본이 아니다 — 씨앗이 비어 끌면 '지우기'가 된다(칸도 손잡이를 안 띄운다).
+    if (store.valueOf(cellKey(a.row, a.col))?.g) {
+      setError(tf("att.grid.ghostCopyBlock", {}));
+      return;
+    }
     fillSeedRef.current = copyValueOf(store.valueOf(cellKey(a.row, a.col)));
     store.setFocus(null);
     setFilling(true);
-  }, [store]);
+  }, [store, tf]);
 
   // 드래그 채우기 — 커서 아래 칸을 data-cell-key로 읽어 범위를 넓히고, 놓을 때 시작값을 채운다.
   useEffect(() => {
@@ -550,20 +643,35 @@ export function GridProvider({
         e.preventDefault();
         store.setBuffer(null);
         const group = undoRef.current.pop();
-        if (!group?.length) return;
+        if (!group) return;
+        // 🔴 그 사이 빗금 칸이 된 칸(남의 교시 기록이 생겼다)도 되돌리지 않는다 — 되쓰면 제 기록 복구가 아니라 남의 교시로
+        //    상태 옮기기가 나간다(적대 재리뷰 2026-09-14). 빗금 칸 입력뿐인 작업은 그 자리에서 말하고 멈춘다.
+        const restorable = group.cells.filter(({ key: k }) => !store.valueOf(k)?.g);
+        const notRestored = (group.ghost ?? 0) + group.cells.length - restorable.length;
+        if (restorable.length === 0) {
+          if (notRestored > 0) setError(tf("att.grid.ghostUndoBlock", {}));
+          return;
+        }
         // 한 그룹(= 한 번의 입력·채우기)을 통째로 되돌린다. 값이 칸마다 달라 범위 액션을 못 쓰므로 칸별로 되쓴다.
-        for (const { key: k, prev } of group) {
+        for (const { key: k, prev } of restorable) {
           // 🔴 되돌리는 값은 **명시**로(null → "1") — ""(기본)로 보내면 지운 칸을 되살릴 때 서버가 수학 자동
           //    시수를 넣어 원래 값(1)과 달라진다(auto-units.ts). "1"은 저장값 null이라 옛 기록 그대로다.
           pushCell(k, prev ? { status: prev.s as "present" | "absent", units: prev.u === null ? "1" : String(prev.u) } : null, prev);
         }
-        const first = parseCellKey(group[0]!.key);
+        // 섞인 작업은 제 칸만 돌아온다 — 빗금 칸이 그대로라는 사실을 말한다(조용히 반쪽만 되돌리지 않는다).
+        if (notRestored > 0) showNotice(tf("att.grid.ghostUndoPartial", { n: notRestored }));
+        const first = parseCellKey(restorable[0]!.key);
         if (first) store.select({ row: first.row, col: first.date }, false);
         return;
       }
       if (mod && e.key.toLowerCase() === "c") {
         e.preventDefault();
         if (store.buffer !== null) return;
+        // 🔴 빗금 칸의 흐린 값은 복사 원본이 아니다 — 비어 있는 버퍼로 붙여넣으면 '지우기'가 된다(적대 리뷰 2026-09-14).
+        if (store.valueOf(key)?.g) {
+          setError(tf("att.grid.ghostCopyBlock", {}));
+          return;
+        }
         clipRef.current = copyValueOf(store.valueOf(key));
         store.setCopied(key);
         return;
@@ -589,7 +697,7 @@ export function GridProvider({
           return;
         }
         if (sel.size <= 1 && isNotMine(key)) {
-          setError(NOT_MINE_MESSAGE);
+          setError(notMineNote(key) ?? NOT_MINE_MESSAGE);
           return;
         }
         store.setBuffer(appendChar(store.buffer, e.key));
@@ -628,6 +736,11 @@ export function GridProvider({
         e.preventDefault();
         // Ctrl+Enter — 범위 전체에 활성 칸 값 복사(시트 관행).
         if (mod && sel.size > 1 && store.buffer === null) {
+          // 활성 칸이 빗금 칸이면 원본이 없다 — 채우면 범위 전체가 '지우기'가 된다(Ctrl+C와 같은 이유).
+          if (store.valueOf(key)?.g) {
+            setError(tf("att.grid.ghostCopyBlock", {}));
+            return;
+          }
           writeMany(sel, copyValueOf(store.valueOf(key)));
           return;
         }
@@ -645,7 +758,7 @@ export function GridProvider({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [store, commit, writeMany, writeOne, pushCell, isNotMine, lockNoteOf]);
+  }, [store, commit, writeMany, writeOne, pushCell, isNotMine, notMineNote, lockNoteOf, showNotice, tf]);
 
   const ctx = useMemo<Ctx>(
     () => ({
@@ -668,8 +781,9 @@ export function GridProvider({
       startFill,
       autoUnitsOf,
       toValue,
+      transferGhost: (key: string, status: string) => writeOne(key, { status, units: "" }),
     }),
-    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, autoUnitsOf, toValue],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, autoUnitsOf, toValue, writeOne],
   );
 
   return (

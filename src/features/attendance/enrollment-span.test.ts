@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  badgeLabelOf,
   badgeTitle,
+  clipToWithdrawal,
   isEnrolledOn,
   joinedInMonth,
   leftInMonth,
@@ -183,6 +185,144 @@ describe("lifecycleBadges", () => {
     expect(
       badgeTitle({ kind: "transferIn", date: "2026-08-13", otherClassName: "나반" }, "가반"),
     ).toBe("반이동: 나반 → 가반 (2026-08-13부터)");
+  });
+});
+
+// ── 종강(원장 2026-09-14) ─────────────────────────────────────────────────
+// "과목 퇴원이 아니고 과목에서 여러개 수업을 듣다가 특강 종료 등으로 종료한것인데. 과목을 완전 수강 종료하면 퇴원이지."
+describe("종강 — 이 반만 끝나고 같은 과목 다른 반은 계속 다닌다", () => {
+  const SEP = { first: "2026-09-01", last: "2026-09-30" };
+  // [특강]중3-2 개념 완성반 실측 모양: 8/17~9/10 특강 + 2/19부터 계속 다니는 정규반
+  const special = [{ start: "2026-08-17", end: "2026-09-10" }];
+  const regular = other({ classId: "ms2a", className: "중등M 초6 MS2A", start: "2026-02-19", end: null });
+  const kinds = (b: { kind: string }[]) => b.map((x) => x.kind);
+
+  it("🔴 특강 종료 + 같은 과목 정규반 계속 → 종강(계속 다니는 반 이름을 싣는다)", () => {
+    expect(lifecycleBadgesInRange(SEP, special, "math", [regular])).toEqual([
+      { kind: "classEnded", date: "2026-09-10", otherClassName: "중등M 초6 MS2A" },
+    ]);
+  });
+
+  it("같은 과목 다른 반이 **같은 날** 끝나면 계속 다닌 게 아니다 → 퇴원", () => {
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [other({ start: "2026-02-19", end: "2026-09-10" })]))).toEqual(["left"]);
+  });
+
+  it("계속 반이 다음날 **반이동으로** 닫혀도 계속 다닌 게 아니다 — 재원 판정은 isEnrolledOn 규약 그대로", () => {
+    const moved = other({ start: "2026-02-19", end: "2026-09-11", isTransferred: true });
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [moved]))).toEqual(["left"]);
+  });
+
+  it("🔴 과목을 며칠 사이에 전부 끝냈으면 먼저 닫힌 반도 퇴원 — 계속 반은 14일 뒤에도 재원이어야 한다", () => {
+    // 리뷰 실측(박한별): 중등M 중3 BS2O 7/5 종료 · 개별 JJ2L 7/6 종료 · 7/6 퇴원 → '다음날 하루'로 보면 BS2O가 종강이었다.
+    const JUL = { first: "2026-07-01", last: "2026-07-31" };
+    const jj = clipToWithdrawal(other({ className: "개별 JJ2L", start: "2026-02-01", end: "2026-07-06" }), "2026-07-06");
+    expect(kinds(lifecycleBadgesInRange(JUL, [{ start: "2026-03-02", end: "2026-07-05" }], "math", [jj]))).toEqual([
+      "left",
+    ]);
+  });
+
+  it("경계 — 계속 반이 마지막 재원일 + 14일 전에 끝나면 퇴원, 그날까지 다니면 종강", () => {
+    const endsOn = (end: string) => other({ start: "2026-02-19", end });
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [endsOn("2026-09-23")]))).toEqual(["left"]);
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [endsOn("2026-09-24")]))).toEqual(["classEnded"]);
+  });
+
+  it("다른 과목 반만 계속 → 퇴원(그 과목을 완전히 끝냈다)", () => {
+    const english = other({ subject: "english", start: "2026-02-19", end: null });
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [english]))).toEqual(["left"]);
+  });
+
+  it("나간 다음날~14일 안에 같은 과목 반이 시작 → 반이동 그대로(종강보다 먼저 본다)", () => {
+    expect(lifecycleBadgesInRange(SEP, special, "math", [other({ className: "새반", start: "2026-09-11" })])).toEqual([
+      { kind: "transferOut", date: "2026-09-10", otherClassName: "새반" },
+    ]);
+    // 계속 다니는 반이 함께 있어도 반이동이 이긴다(판정 순서: 반이동 → 종강 → 퇴원).
+    expect(
+      lifecycleBadgesInRange(SEP, special, "math", [regular, other({ className: "새반", start: "2026-09-24" })]),
+    ).toEqual([{ kind: "transferOut", date: "2026-09-10", otherClassName: "새반" }]);
+  });
+
+  it("반이동으로 닫힌 구간은 기존 결과 그대로 — 같은 날 시작한 이동 반이 이긴다", () => {
+    const spans = [{ start: "2026-08-17", end: "2026-09-10", isTransferred: true }];
+    expect(
+      lifecycleBadgesInRange(SEP, spans, "math", [regular, other({ className: "이동반", start: "2026-09-10" })]),
+    ).toEqual([{ kind: "transferOut", date: "2026-09-10", otherClassName: "이동반" }]);
+  });
+
+  it("과목을 모르면(null) 판정하지 않는다 → 퇴원", () => {
+    expect(kinds(lifecycleBadgesInRange(SEP, special, null, [other({ subject: null, start: "2026-02-19" })]))).toEqual([
+      "left",
+    ]);
+  });
+
+  it("같은 달에 들어와 종강 → 신입 + 종강", () => {
+    expect(lifecycleBadgesInRange(SEP, [{ start: "2026-09-02", end: "2026-09-20" }], "math", [regular])).toEqual([
+      { kind: "new", date: "2026-09-02" },
+      { kind: "classEnded", date: "2026-09-20", otherClassName: "중등M 초6 MS2A" },
+    ]);
+  });
+
+  it("계속 다니는 반이 여럿이면 가장 먼저 시작한 반", () => {
+    const late = other({ classId: "c9", className: "늦게 시작", start: "2026-06-01" });
+    expect(lifecycleBadgesInRange(SEP, special, "math", [late, regular])[0]!.otherClassName).toBe("중등M 초6 MS2A");
+  });
+
+  it("🔴 학원을 그만둔 날이 종료일 이전·당일이면 퇴원 — 다른 반을 퇴원일로 잘라 넘긴다", () => {
+    // 퇴원일 뒤로 end_date가 남은 수강(실측 48건)이 "계속 수강"으로 읽히면 그만둔 학생이 종강으로 뜬다.
+    const leftOpen = other({ start: "2026-02-19", end: "2026-09-30" });
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [clipToWithdrawal(leftOpen, "2026-09-10")]))).toEqual([
+      "left",
+    ]);
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [clipToWithdrawal(leftOpen, "2026-09-03")]))).toEqual([
+      "left",
+    ]);
+  });
+
+  it("그만둔 날이 종료일 **뒤**면 그 사이 계속 다닌 것이라 종강(실측 7건 모양: 계속 반이 퇴원일에 닫힘)", () => {
+    const closedAtWithdrawal = other({ className: "고등M 개별 BS4F", start: "2026-07-04", end: "2026-09-07" });
+    expect(
+      lifecycleBadgesInRange(
+        { first: "2026-08-01", last: "2026-08-31" },
+        [{ start: "2026-03-02", end: "2026-08-03" }],
+        "math",
+        [clipToWithdrawal(closedAtWithdrawal, "2026-09-07")],
+      ),
+    ).toEqual([{ kind: "classEnded", date: "2026-08-03", otherClassName: "고등M 개별 BS4F" }]);
+  });
+
+  it("라벨·툴팁 — 퇴원과 다른 말, 계속 다니는 반까지 말한다", () => {
+    expect(badgeLabelOf("classEnded")).toBe("종강");
+    expect(badgeLabelOf("classEnded", "en")).toBe("Finished");
+    expect(badgeLabelOf("classEnded")).not.toBe(badgeLabelOf("left"));
+    expect(badgeTitle({ kind: "classEnded", date: "2026-09-10", otherClassName: "나반" }, "가반")).toBe(
+      "2026-09-10 종강 · 나반 계속 수강",
+    );
+    expect(badgeTitle({ kind: "classEnded", date: "2026-09-10", otherClassName: "MS2A" }, "PL1", "en")).toBe(
+      "Finished 2026-09-10 · continues in MS2A",
+    );
+  });
+});
+
+describe("clipToWithdrawal", () => {
+  it("퇴원일이 없거나 수강이 먼저(같은 날 포함) 끝났으면 그대로", () => {
+    const s = { start: "2026-03-01", end: "2026-08-10" };
+    expect(clipToWithdrawal(s, null)).toBe(s);
+    expect(clipToWithdrawal(s, undefined)).toBe(s);
+    expect(clipToWithdrawal(s, "2026-08-20")).toBe(s);
+    expect(clipToWithdrawal(s, "2026-08-10")).toBe(s);
+  });
+
+  it("퇴원일이 더 이르면 그날까지 — 일반 종료로 본다(반이동 표식이 남아 하루를 또 당기지 않게)", () => {
+    expect(clipToWithdrawal({ start: "2026-03-01", end: null }, "2026-08-10")).toEqual({
+      start: "2026-03-01",
+      end: "2026-08-10",
+      isTransferred: false,
+    });
+    expect(clipToWithdrawal({ start: "2026-03-01", end: "2026-09-01", isTransferred: true }, "2026-08-10")).toEqual({
+      start: "2026-03-01",
+      end: "2026-08-10",
+      isTransferred: false,
+    });
   });
 });
 

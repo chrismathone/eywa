@@ -148,6 +148,22 @@ describe("이름 옆 표식", () => {
     ]);
   });
 
+  /** 같은 과목 다른 반을 이미 다니고 있고 계속 다니면 이 반만 끝난 것 — 퇴원이 아니라 종강(원장 2026-09-14). */
+  it("같은 과목 다른 반을 계속 다니면 종강", () => {
+    const v = build({
+      enrollments: [enroll({ endDate: "2026-08-12" })],
+      otherSpans: new Map([
+        [
+          "s1",
+          [{ classId: "le1", className: "LE1", subject: "english", start: "2026-03-01", end: null }],
+        ],
+      ]),
+    });
+    expect(v.groups[0]!.students[0]!.badges).toEqual([
+      { kind: "classEnded", date: "2026-08-12", otherClassName: "LE1" },
+    ]);
+  });
+
   it("경계가 없으면 표식도 없다(대부분의 학생)", () => {
     expect(build({}).groups[0]!.students[0]!.badges).toEqual([]);
   });

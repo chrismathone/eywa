@@ -5,7 +5,10 @@ import {
   GHOST_HATCH,
   cellDisplay,
   ghostBreakdown,
+  ghostCellKind,
+  ghostGridValue,
   markNumber,
+  notMineCell,
   rollupDay,
   slotBreakdown,
   type SlotMark,
@@ -160,6 +163,78 @@ describe("cellDisplay — 이 표가 세지 않는 교시(빗금)", () => {
   it("툴팁은 무엇이 빠졌는지 한글로 펼친다 — raw 코드 금지", () => {
     expect(ghostBreakdown([s("16:20:00", "present"), s("18:20:00", "present")])).toBe(
       "이 선생님 몫으로 세지 않는 기록 · 16:20 출석 1 · 18:20 출석 1",
+    );
+  });
+});
+
+/**
+ * 🔴 원장 2026-09-14 *"그냥 그 날의 해당 담당 출석으로 전부 이전시켜. 다른 사람이 대신 찍었어도."* — 빗금 칸의 성격을
+ *    격자·행·칸·조회가 **이 한 함수**로 가른다(서버 `planScopedDay`와 짝).
+ */
+describe("ghostCellKind — 빗금 칸의 성격", () => {
+  const other = s("18:20:00", "present");
+  const seat: SlotMark = { ...s("16:20:00", "present"), seat: true };
+  const pre: SlotMark = { ...s("17:20:00", "present"), pre: true };
+
+  it("세지 않는 교시가 없거나 제 몫 수기 값이 있으면 빗금 칸이 아니다(null — 종전 경로)", () => {
+    expect(ghostCellKind({ hasValue: false, derivedValue: false, others: [] })).toBeNull();
+    expect(ghostCellKind({ hasValue: true, derivedValue: false, others: [other, seat] })).toBeNull();
+  });
+  it("🔴 다른 선생님 교시 기록이 있으면 transfer — 자리가 섞여도", () => {
+    expect(ghostCellKind({ hasValue: false, derivedValue: false, others: [other] })).toBe("transfer");
+    expect(ghostCellKind({ hasValue: false, derivedValue: false, others: [seat, other] })).toBe("transfer");
+  });
+  it("🔴 자리뿐이면 seatOnly — 값이 파생이어도(원장 2026-09-12)", () => {
+    expect(ghostCellKind({ hasValue: false, derivedValue: false, others: [seat] })).toBe("seatOnly");
+    expect(ghostCellKind({ hasValue: true, derivedValue: true, others: [seat] })).toBe("seatOnly");
+  });
+  it("🔴 담임 이전 기록(pre)이 섞이면 locked — 저장은 그 행을 제 몫으로 시수까지 쓴다", () => {
+    expect(ghostCellKind({ hasValue: false, derivedValue: false, others: [pre, other] })).toBe("locked");
+  });
+  it("값이 파생뿐인데 다른 선생님 교시가 있으면 locked — 보이는 값과 옮겨질 기록이 다른 사실이다", () => {
+    expect(ghostCellKind({ hasValue: true, derivedValue: true, others: [other] })).toBe("locked");
+  });
+  it("notMineCell은 막는 사유만 — transfer·null은 null", () => {
+    expect(notMineCell({ hasValue: false, derivedValue: false, others: [other] })).toBeNull();
+    expect(notMineCell({ hasValue: false, derivedValue: false, others: [seat] })).toBe("seatOnly");
+    expect(notMineCell({ hasValue: false, derivedValue: false, others: [pre] })).toBe("locked");
+    expect(notMineCell({ hasValue: false, derivedValue: false })).toBeNull();
+  });
+});
+
+describe("ghostGridValue — 빗금 칸 표시 값(합계 밖)", () => {
+  it("🔴 다른 선생님 교시(자리 제외)의 롤업 + 전부 들었을 때의 합(p)", () => {
+    const seat: SlotMark = { ...s("16:20:00", "present", 2), seat: true };
+    expect(ghostGridValue([s("17:20:00", "present"), s("18:20:00", "absent", 1.5), seat])).toEqual({
+      s: "present",
+      u: null, // 들은 건 17:20 한 교시(1) — 1은 null(칸 값 규약)
+      p: 2.5, // 둘 다 들었다면 1 + 1.5
+    });
+  });
+  it("전부 결석이면 u는 null(표기 0) · p는 들었을 때 합", () => {
+    expect(ghostGridValue([s("17:20", "absent"), s("18:20", "absent")])).toEqual({ s: "absent", u: null, p: 2 });
+  });
+  it("자리뿐이면 값이 없다", () => {
+    expect(ghostGridValue([{ ...s("16:20", "present"), seat: true }])).toBeNull();
+  });
+});
+
+describe("cellDisplay — 빗금 위 흐린 값(원장 2026-09-14 '빗금 위에 값을 보여주고 합계엔 안 넣는다')", () => {
+  it("🔴 빗금은 그대로 · 숫자는 흐리게 · 출석색 배경은 안 칠한다(요일 배경은 산다)", () => {
+    const d = cellDisplay(null, null, { attendDay: true, ghost: true, ghostMark: { s: "present", u: 2 } });
+    expect(d.text).toBe("2");
+    expect(d.faded).toBe(true);
+    expect(d.style?.backgroundImage).toBe(GHOST_HATCH);
+    expect(d.className).toContain(DAY_TONE.classDay);
+    expect(d.className).not.toContain("bg-att-present");
+    expect(d.className).toContain("text-att-present-ink");
+  });
+  it("결석은 0", () => {
+    expect(cellDisplay(null, null, { ghost: true, ghostMark: { s: "absent", u: null } }).text).toBe("0");
+  });
+  it("제 몫 값이 있으면 종전 그대로 — 빗금 값은 무시", () => {
+    expect(cellDisplay("present", null, { ghost: true, ghostMark: { s: "absent", u: null } })).toEqual(
+      cellDisplay("present", null),
     );
   });
 });
