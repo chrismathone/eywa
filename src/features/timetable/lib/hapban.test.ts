@@ -257,7 +257,7 @@ describe("shouldOpenClassPick (합반 드롭 → 반+요일 선택 팝업 판정
 });
 
 describe("compareStudentLines (서버 정렬과 동치)", () => {
-  it("재원(신입→전입→기존 가나다) → 대기(가나다) → 퇴원(endDate desc)", () => {
+  it("재원(신입→준신입→전입→기존 가나다) → 대기(가나다) → 퇴원(endDate desc)", () => {
     const rows = [
       { name: "하퇴원1", status: "withdrawn" as const, endDate: "2026-05-01" },
       { name: "가기존", status: "active" as const },
@@ -265,9 +265,20 @@ describe("compareStudentLines (서버 정렬과 동치)", () => {
       { name: "다대기", status: "hold" as const },
       { name: "라전입", status: "active" as const, isTransferredIn: true },
       { name: "마퇴원2", status: "withdrawn" as const, endDate: "2026-06-01" },
+      // 🔴 준신입(31~60일)을 빼면 이 계약 테스트는 **옛 3단 코드에서도 통과**해 가드 가치가 0이 된다.
+      //    합반은 행을 스프레드로 재조립한 뒤 다시 정렬하는 경로라 회귀가 숨기 가장 좋은 자리다.
+      { name: "바준신입", status: "active" as const, isRecent: true },
     ];
     rows.sort(compareStudentLines);
-    expect(rows.map((r) => r.name)).toEqual(["나신입", "라전입", "가기존", "다대기", "마퇴원2", "하퇴원1"]);
+    expect(rows.map((r) => r.name)).toEqual([
+      "나신입",
+      "바준신입",
+      "라전입",
+      "가기존",
+      "다대기",
+      "마퇴원2",
+      "하퇴원1",
+    ]);
   });
 
   it("status 미지정 = 재원 취급", () => {

@@ -708,7 +708,8 @@ function RosterRowShell({
       onPointerOver={() => onArm?.()}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      title="끌어서 다른 반·대기·퇴원으로 · 클릭 = 학생 정보"
+      // 🔴 조작법 안내 툴팁은 뺐다(원장 2026-09-14, 기본뷰 학생 줄과 같은 규약) — 되살리지 말 것.
+      //    예약 이동 같은 **사실**은 안쪽 이름 노드(`nameNode`의 `moveTitle`)가 계속 말한다.
       className={`cursor-grab touch-none select-none active:cursor-grabbing ${dnd?.isDragging ? "opacity-40" : ""}`}
     >
       {children}
