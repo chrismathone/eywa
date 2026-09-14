@@ -184,6 +184,75 @@ describe("getMonthlyAttendanceMatrix — 세지 않는 교시의 자리 표식",
     expect(ghosts[0]?.seat).toBeUndefined();
   });
 
+  /**
+   * 🔴 원장 2026-09-14 빗금 칸 입력 — 격자가 입력을 여는 근거(`ghostValues`)와 막는 근거(`pre`)를 조회가 **실제로** 싣는가.
+   *    격자 테스트는 픽스처에 손으로 넣으므로 여기서만 배선이 잡힌다(위 자리 표식 테스트와 같은 이유).
+   */
+  it("🔴 다른 선생님 교시 기록만 있는 칸 → ghostValues(대표 상태·들은 시수 합·전부 들었을 때 합)", async () => {
+    h.state.schedules = [
+      ...SCHEDULES,
+      {
+        day_of_week: "thu",
+        start_time: "15:20:00",
+        end_time: "16:10:00",
+        teacher_id: h.HOMEROOM,
+        slot_teacher_label: null,
+        valid_from: "2026-09-01",
+        valid_to: null,
+      },
+    ];
+    h.state.records = [rec("r-1520", "15:20:00", { status: "absent", session_units: 1.5 }), rec("r-jj", "16:20:00")];
+    const m = await matrixForCharlie();
+    expect(m.marks[h.S1]?.[D]).toBeUndefined();
+    expect(m.ghostValues?.[h.S1]?.[D]).toEqual({ s: "absent", u: null, p: 1.5 });
+  });
+
+  it("🔴 옮긴 뒤 칸 메모 — `대신 입력` 줄뿐인 메모는 사유가 적힌 메모에 자리를 내준다(같은 시각 여러 행, 적대 리뷰 2026-09-14)", async () => {
+    const slot = (start: string) => ({
+      day_of_week: "thu",
+      start_time: start,
+      end_time: null,
+      teacher_id: h.HOMEROOM,
+      slot_teacher_label: null,
+      valid_from: "2026-09-01",
+      valid_to: null,
+    });
+    h.state.schedules = [...SCHEDULES, slot("14:20:00"), slot("15:20:00")];
+    // 조회 순서상 대신 입력 줄뿐인 행이 먼저 온다 — 종전엔 이 줄이 칸 메모가 되어 "병결"이 사라졌다.
+    h.state.records = [
+      rec("r-1520", "15:20:00", { note: "대신 입력: 박소선" }),
+      rec("r-1420", "14:20:00", { note: "병결\n대신 입력: 박소선" }),
+    ];
+    const m = await matrixForCharlie();
+    expect(m.notes[h.S1]?.[D]).toBe("병결\n대신 입력: 박소선");
+  });
+
+  it("자리뿐인 칸·제 몫 값이 있는 칸엔 ghostValues가 없다(막는 칸 · 종전 경로)", async () => {
+    h.state.records = [rec("r-jj", "16:20:00")];
+    expect((await matrixForCharlie()).ghostValues?.[h.S1]?.[D]).toBeUndefined();
+    h.state.records = [rec("r-1720", "17:20:00"), rec("r-jj", "16:20:00")];
+    expect((await matrixForCharlie()).ghostValues?.[h.S1]?.[D]).toBeUndefined();
+  });
+
+  it("🔴 담임 이전 기록은 pre 표식 — 저장은 그 행을 제 몫으로 보므로(시수까지) 옮기기를 열지 않는다", async () => {
+    // 담당 미지정 교시 = 담임 폴백. 담임 시작일(9/11) 이전이라 화면은 빗금으로 뺀다.
+    h.state.schedules = [
+      {
+        day_of_week: "thu",
+        start_time: "15:20:00",
+        end_time: "16:10:00",
+        teacher_id: null,
+        slot_teacher_label: null,
+        valid_from: "2026-09-01",
+        valid_to: null,
+      },
+    ];
+    h.state.records = [rec("r-1520", "15:20:00")];
+    const m = await getMonthlyAttendanceMatrix("2026-09", h.CLASS, "month", h.HOMEROOM, "2026-09-11");
+    expect(m.ghosts[h.S1]?.[D]?.[0]?.pre).toBe(true);
+    expect(m.ghostValues?.[h.S1]?.[D]).toBeUndefined();
+  });
+
   it("반별 보기(스코프 없음)는 ghosts가 비어 있다 — 자리 기록도 그 반의 값이다", async () => {
     h.state.records = [rec("r-1720", "17:20:00"), rec("r-jj", "16:20:00", { recorded_via: "seat" })];
     const m = await getMonthlyAttendanceMatrix("2026-09", h.CLASS, "month", null);

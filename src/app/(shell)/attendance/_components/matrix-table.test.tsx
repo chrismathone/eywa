@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
-import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
+import { ghostCellKind, ghostGridValue, rollupDay, type SlotMark } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
@@ -494,11 +494,26 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(cell.textContent).not.toContain("0");
   });
 
-  it("🔴 빗금 칸은 **입력을 안 받는다** — 저장은 그날 모든 교시에 가는데 화면엔 흔적이 안 남는다", () => {
-    const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }]);
+  // ⚠️ 2026-09-14(원장 *"그 날의 해당 담당 출석으로 전부 이전"*)부터 막는 빗금 칸은 **자리뿐 · 담임 이전 기록 · 값이 파생뿐**이다 —
+  //    다른 선생님 교시 기록만 있는 칸은 입력을 받아 상태만 옮긴다(아래 "빗금 칸 입력" 테스트들).
+  it("🔴 자리(JJ)뿐인 빗금 칸은 입력을 안 받는다 — 사유도 자리로 말한다(반별 보기로 보내지 않는다)", () => {
+    const { container } = renderScoped([], [seatGhost("18:20:00")]);
     const cell = cellOf(container);
     expect(cell.className).toContain("cursor-not-allowed");
-    expect(cell.getAttribute("title")).toContain("반별 보기에서 고치세요");
+    expect(cell.getAttribute("title")).toContain("자리(JJ·랩실) 기록뿐");
+    expect(cell.getAttribute("title")).not.toContain("반별 보기에서 고치세요");
+  });
+
+  it("🔴 담임 이전 기록(pre)이 있는 빗금 칸은 종전대로 막는다 — 저장은 그 행을 제 몫으로 시수까지 쓴다", () => {
+    const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null, pre: true }]);
+    expect(cellOf(container).className).toContain("cursor-not-allowed");
+    expect(cellOf(container).getAttribute("title")).toContain("반별 보기에서 고치세요");
+  });
+
+  it("🔴 다른 선생님 교시 기록뿐인 빗금 칸은 막지 않는다 — 입력하면 상태만 옮긴다고 툴팁이 말한다", () => {
+    const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }]);
+    expect(cellOf(container).className).not.toContain("cursor-not-allowed");
+    expect(cellOf(container).getAttribute("title")).toContain("상태만 옮깁니다");
   });
 
   it("🔴 빗금 칸의 **메모는 남는다** — 사라지는 게 결석 사유였다(실측 78칸)", () => {
@@ -515,7 +530,8 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
    *    없어서 "액션이 안 불렸다"가 저절로 참이 된다(그렇게 짰다가 헛통과했다).
    */
   /** @param bothDays 이틀 다 같은 모양으로 — 범위(2칸) 조작을 재현할 때 쓴다. */
-  function renderInGrid(owned: SlotMark[], others: SlotMark[], bothDays = false) {
+  /** @param withGhostValues 조회(queries)처럼 빗금 칸 입력 칸에 표시 값(`ghostValues`)을 싣는다. */
+  function renderInGrid(owned: SlotMark[], others: SlotMark[], bothDays = false, withGhostValues = false) {
     const m = matrix([
       { id: S1, name: "김근호", grade: "중1", school: "경명여중", enrolledAt: null, attendDows: [3], spans: [], badges: [] },
     ]);
@@ -527,6 +543,11 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
       if (day.count > 1) m.slots = { [S1]: Object.fromEntries(dates.map((d) => [d, day.slots])) };
     }
     m.ghosts = { [S1]: Object.fromEntries(dates.map((d) => [d, others])) };
+    // 조회와 같은 판정 — 제 몫 값이 없고 빗금 칸 입력(transfer)인 칸에만 표시 값(원장 2026-09-14).
+    const gv = ghostGridValue(others);
+    if (withGhostValues && !day && gv && ghostCellKind({ hasValue: false, derivedValue: false, others }) === "transfer") {
+      m.ghostValues = { [S1]: Object.fromEntries(dates.map((d) => [d, gv])) };
+    }
     const groups = [{ ...GROUP, matrix: m }];
     const ordered = [{ classId: C, studentId: S1 }];
     const src = buildGridSource(groups, DAYS, ordered);
@@ -563,16 +584,16 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(container.textContent).toContain("반별 보기에서 지우세요");
   });
 
-  it("🔴 빗금 칸은 숫자를 쳐도 **버퍼가 안 열린다** — 열면 값이 보였다가 확정에서 거절돼 '쳤는데 사라졌다'가 된다", async () => {
+  it("🔴 막는 빗금 칸(자리뿐)은 숫자를 쳐도 **버퍼가 안 열린다** — 열면 값이 보였다가 확정에서 거절돼 '쳤는데 사라졌다'가 된다", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
-    const { container } = renderInGrid([], [{ slot: "18:20:00", status: "present", units: null }]);
+    const { container } = renderInGrid([], [seatGhost("18:20:00")]);
     const cell = cellOf(container);
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "1" });
     expect(container.querySelector("input")).toBeNull();
     expect(setAttendanceCell).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("이 화면의 몫이 아니라");
+    expect(container.textContent).toContain("자리(JJ·랩실) 기록뿐");
   });
 
   it("섞인 칸에 값을 쓰는 건 막지 않는다 — 대신 사정거리를 알린다", async () => {
@@ -611,7 +632,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
   it("🔴 앵커가 빗금이어도 **범위 입력은 죽지 않는다** — 함께 잡은 정상 칸엔 들어가야 한다", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
-    const { container } = renderInGrid([], [{ slot: "18:20:00", status: "present", units: null }]);
+    const { container } = renderInGrid([], [seatGhost("18:20:00")]);
     const cell = cellOf(container);
     fireEvent.mouseDown(cell, { button: 0 });
     // 한 행을 왼쪽부터 끄는 흔한 조작 — 앵커(7/1)는 빗금, 옆 칸(7/2)은 내 칸이다.
@@ -758,7 +779,8 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.keyDown(cell, { key: "1" });
     expect(container.querySelector("input")).toBeNull(); // 버퍼가 안 열린다
     expect(setAttendanceCell).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("이 화면의 몫이 아니라");
+    // 실제 행이 자리뿐이라 사유도 자리로(2026-09-14 — 반별 보기로 보내면 자리 기록을 고치라는 거짓 안내).
+    expect(container.textContent).toContain("자리(JJ·랩실) 기록뿐");
   });
 
   it("🔴 자리만 섞인 칸의 팝오버 — '지우기'가 열려 있고 사정거리 안내가 없다", () => {
@@ -767,5 +789,148 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.queryByText("지우기")).not.toBeNull();
     expect(container.textContent).not.toContain("반별 보기에서 지우세요");
+  });
+
+  /**
+   * 🔴 원장 2026-09-14 *"그냥 그 날의 해당 담당 출석으로 전부 이전시켜. 다른 사람이 대신 찍었어도."* — 다른 선생님 교시
+   *    기록만 있는 빗금 칸은 입력을 받아 그 교시에 **상태만** 옮긴다. 이 표 칸엔 빗금 위 흐린 값 · 합계 밖 · 지우기는 막는다.
+   */
+  const otherAbsent: SlotMark = { slot: "18:20:00", status: "absent", units: 1.5 };
+
+  it("🔴 빗금 칸에 1 — 상태만 보낸다(시수 없음) · 빗금 위에 그 교시 시수가 흐리게 · 행 시수엔 안 든다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValueOnce({ ok: true, ghostTransfer: 1 } as never);
+    const { container } = renderInGrid([], [otherAbsent], false, true);
+    expect(cellOf(container).textContent).toBe("0"); // 그 교시는 결석 = 0(흐리게)
+    expect(unitsOf(container)).toBe("—");
+    fireEvent.mouseDown(cellOf(container), { button: 0 });
+    fireEvent.keyDown(cellOf(container), { key: "1" });
+    fireEvent.keyDown(cellOf(container), { key: "Enter" });
+    expect(setAttendanceCell).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(setAttendanceCell).mock.calls[0]![0];
+    // 화면이 빗금 칸으로 알고 보낸다는 표식 — 서버 판정과 갈리면 서버가 저장하지 않는다(stale).
+    expect(arg).toMatchObject({ status: "present", ghostTransfer: true });
+    expect(arg).not.toHaveProperty("units");
+    // 낙관값 = 그 교시 시수(1.5) — 서버가 시수를 안 바꾸니 새로고침 뒤 같은 숫자다.
+    await waitFor(() => expect(cellOf(container).textContent).toBe("1.5"));
+    expect(cellOf(container).style.backgroundImage).toContain("repeating-linear-gradient");
+    expect(cellOf(container).querySelector("span.opacity-50")?.textContent).toBe("1.5");
+    expect(unitsOf(container)).toBe("—"); // 이 표 합계엔 안 든다(담당 선생님 표와 이중 집계 금지)
+    expect(container.textContent).toContain("상태만 옮겼습니다");
+  });
+
+  it("🔴 서버가 옮기지 않았다고 답하면(칸의 성격이 바뀜) 덮개를 벗긴다 — 칠한 값이 굳지 않게", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValueOnce({ ok: true } as never);
+    const { container } = renderInGrid([], [otherAbsent], false, true);
+    fireEvent.mouseDown(cellOf(container), { button: 0 });
+    fireEvent.keyDown(cellOf(container), { key: "1" });
+    fireEvent.keyDown(cellOf(container), { key: "Enter" });
+    await waitFor(() => expect(setAttendanceCell).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(cellOf(container).textContent).toBe("0"));
+  });
+
+  it("🔴 빗금 칸 Delete는 막는다 — 남의 기록 삭제(기본값)", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const { container } = renderInGrid([], [otherAbsent], false, true);
+    fireEvent.mouseDown(cellOf(container), { button: 0 });
+    fireEvent.keyDown(cellOf(container), { key: "Delete" });
+    expect(setAttendanceCell).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("여기서는 지울 수 없습니다");
+  });
+
+  it("🔴 범위 Delete도 빗금 칸을 빼고 사유를 말한다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell).mockClear();
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    const { container } = renderInGrid([], [otherAbsent], true, true);
+    fireEvent.mouseDown(cellOf(container), { button: 0 });
+    fireEvent.keyDown(cellOf(container), { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(cellOf(container), { key: "Delete" });
+    expect(actions.setAttendanceRange).not.toHaveBeenCalled();
+    expect(actions.setAttendanceCell).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("다른 선생님 교시 기록뿐이라");
+  });
+
+  it("🔴 빗금 칸 우클릭 = 상태만 고르는 팝오버(시수·메모·지우기 없음) · 고르면 격자와 같은 문으로 저장", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValueOnce({ ok: true, ghostTransfer: 1 } as never);
+    const { container } = renderInGrid([], [otherAbsent], false, true);
+    fireEvent.contextMenu(cellOf(container));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.queryByLabelText("시수")).toBeNull();
+    expect(screen.queryByLabelText("메모(사유)")).toBeNull();
+    expect(screen.queryByText("지우기")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "지각" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(setAttendanceCell).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(setAttendanceCell).mock.calls[0]![0]).toMatchObject({ status: "late" });
+    await waitFor(() => expect(cellOf(container).textContent).toBe("1.5"));
+  });
+
+  it("범위 채우기 — 서버가 옮긴 칸 수를 알리고, 그 칸은 빗금 위 흐린 값", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    vi.mocked(actions.setAttendanceRange).mockResolvedValueOnce({
+      ok: true,
+      applied: 2,
+      blocked: 0,
+      ghostCells: [
+        { studentId: S1, classId: C, sessionDate: D1 },
+        { studentId: S1, classId: C, sessionDate: "2026-07-02" },
+      ],
+    } as never);
+    const { container } = renderInGrid([], [otherAbsent], true, true);
+    fireEvent.mouseDown(cellOf(container), { button: 0 });
+    fireEvent.keyDown(cellOf(container), { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(cellOf(container), { key: "1" });
+    fireEvent.keyDown(cellOf(container), { key: "Enter" });
+    expect(actions.setAttendanceRange).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]!.cells.every((c) => c.ghost === true)).toBe(true);
+    await waitFor(() => expect(container.textContent).toContain("2칸은 다른 선생님 교시 기록에 상태만 옮겼습니다"));
+    expect(cellOf(container).textContent).toBe("1.5");
+    expect(unitsOf(container)).toBe("—");
+  });
+
+  /**
+   * 🔴 적대 리뷰 2026-09-14 — 흐린 값이 보이는 빗금 칸을 복사·채우기 원본으로 쓰면 버퍼가 비어 붙여넣기가 '지우기'가 됐다
+   *    (제 몫 기록이 지워진다). 원본으로 못 쓰게 막고 사유를 말한다 · 채우기 손잡이도 안 띄운다.
+   */
+  it("🔴 빗금 칸은 Ctrl+C·채우기 원본이 아니다 — 손잡이 없음 · 복사하면 사유를 말한다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceCell).mockClear();
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    const { container } = renderInGrid([], [otherAbsent], false, true);
+    fireEvent.mouseDown(cellOf(container), { button: 0 });
+    expect(cellOf(container).querySelector('[role="button"]')).toBeNull(); // 채우기 손잡이
+    fireEvent.keyDown(cellOf(container), { key: "c", ctrlKey: true });
+    expect(container.textContent).toContain("복사·채우기의 원본으로 쓸 수 없습니다");
+    expect(actions.setAttendanceCell).not.toHaveBeenCalled();
+    expect(actions.setAttendanceRange).not.toHaveBeenCalled();
+  });
+
+  it("🔴 빗금 칸 입력 뒤 Ctrl+Z는 앞의 엉뚱한 작업을 되돌리지 않는다 — 그 자리에서 사유를 말하고 멈춘다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell)
+      .mockResolvedValueOnce({ ok: true } as never)
+      .mockResolvedValueOnce({ ok: true, ghostTransfer: 1 } as never);
+    const { container } = renderInGrid([], [otherAbsent], false, true);
+    const own = container.querySelector<HTMLElement>('[data-cell-key$="2026-07-02"]')!;
+    fireEvent.mouseDown(own, { button: 0 });
+    fireEvent.keyDown(own, { key: "1" });
+    fireEvent.keyDown(own, { key: "Enter" }); // ① 제 몫 칸에 출석
+    fireEvent.mouseDown(cellOf(container), { button: 0 });
+    fireEvent.keyDown(cellOf(container), { key: "0" });
+    fireEvent.keyDown(cellOf(container), { key: "Enter" }); // ② 빗금 칸에 결석(옮기기)
+    await waitFor(() => expect(setAttendanceCell).toHaveBeenCalledTimes(2));
+    fireEvent.keyDown(cellOf(container), { key: "z", ctrlKey: true });
+    expect(setAttendanceCell).toHaveBeenCalledTimes(2); // ①을 되돌리는 저장이 나가지 않는다
+    expect(container.textContent).toContain("되돌리기로 돌리지 않습니다");
+    expect(own.textContent).toBe("1");
   });
 });

@@ -38,6 +38,10 @@ describe("normalizeReason", () => {
   });
 
   it("빈 값·공백은 빈 문자열", () => {
+    // 🔴 빗금 칸 입력의 `대신 입력` 줄은 사유가 아니다(원장 2026-09-14) — 첫 줄이어도 사유로 뜨면 안 된다.
+    expect(normalizeReason("대신 입력: 박소선")).toBe("");
+    expect(normalizeReason("대신 입력: 박소선\n병결")).toBe("병결");
+    expect(normalizeReason("병결\n대신 입력: 박소선")).toBe("병결");
     expect(normalizeReason(null)).toBe("");
     expect(normalizeReason("   ")).toBe("");
     expect(normalizeReason("(데스크 접수)")).toBe("");

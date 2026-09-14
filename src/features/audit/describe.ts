@@ -201,6 +201,8 @@ const FALLBACK_KEY_LABEL: Record<string, string> = {
   autoUnitsCells: "자동 시수 칸",
   // 강사 보기 저장이 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 출결 저장·지우기·메모 로그에 붙는다.
   skippedSeatRows: "건너뛴 자리 기록",
+  // 강사 보기 빗금 칸 입력으로 다른 선생님 교시 행에 상태만 옮긴 행 수(원장 2026-09-14).
+  ghostTransfer: "다른 선생님 교시로 옮긴 기록",
 };
 
 /** 폴백에서 **사람 id**에 붙일 라벨 — 이름만 서면 누구인지(학생? 강사?) 모른다. `라벨: 이름`으로 적는다. */
@@ -793,6 +795,8 @@ export function auditDetail(
       const scope = str(m.scopeTeacherId);
       const scopeName = scope && UUID_RE.test(scope) ? ctx.nameOf(scope) : null;
       const skipped = num(m.skippedSeatRows);
+      // 빗금 칸 입력(원장 2026-09-14) — 다른 선생님 교시 행에 상태만 옮겼다. 그 행 메모의 `대신 입력` 줄과 짝이다.
+      const ghostMoved = num(m.ghostTransfer);
       /**
        * 🔴 **날짜는 여기서 적는다** — 안 적으면 "어느 날 수업인지"가 화면 어디에도 없다. 시각 열은 로그를 쓴 때다.
        * 🔴 **반 이름은 단건 셀에서만** — `auditTargetName`은 `studentId ?? userId ?? newTeacherId ?? classId`라
@@ -824,6 +828,9 @@ export function auditDetail(
               : null,
         scopeName ? `강사 보기: ${scopeName}` : null,
         skipped !== null ? `건너뛴 자리 기록 ${skipped}` : null,
+        ghostMoved !== null ? `다른 선생님 교시에 상태만 옮김 ${ghostMoved}건` : null,
+        // 여러 행을 차례로 쓰다 오류로 멈춘 저장 — 위 건수만 반영됐다(적대 재리뷰 2026-09-14).
+        m.partial === true ? "일부만 저장(오류로 멈춤)" : null,
       );
     }
     case "attendance_units_backfill": {
