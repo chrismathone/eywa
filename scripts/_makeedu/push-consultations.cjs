@@ -51,6 +51,33 @@ const SUBJECT_LABEL = { math: "수학", english: "영어", korean: "국어", sci
 // 형식 모르면 원문 보존). makeedu 폼 JS는 공백만 제거하므로 하이픈은 그대로 저장된다.
 const phone = (s) => L.normPhone(s) || "";
 
+/**
+ * makeedu '상담일'(counselYmd) — 항상 **KST 'YYYY-MM-DD' 문자열**로 넘긴다.
+ *
+ * 🔴 문자열로 못박는 이유: 종전엔 `c.consultation_date || c.received_date`를 그대로 `el.value =`에 넣었는데,
+ *    postgres.js가 date/timestamptz를 **Date 객체**로 주기 때문에 브라우저가 로케일 문자열
+ *    (`Mon Sep 29 2026 …`)로 바꿔 담았고 makeedu가 거기서 숫자만 뽑아 앞 8자리를 취해 상담일이
+ *    **`2920-26-09`** 로 찍혔다(원장 제보 2026-09-14, 화면 캡처 4건).
+ * 🔴 `toISOString()`을 쓰지 않는 이유: UTC라 **KST 자정~오전 9시 접수분이 전날로** 나간다.
+ * 🔴 무엇을 보내나(원장 결정 2026-09-14 *"접수 시각을 쓴다"*): **`consulted_at` → 없으면 `created_at`**(KST 날짜).
+ *    `received_date`·`consultation_date`는 **보지 않는다** — 2026-08-04 일괄 이관 행 21개가 `received_date`에
+ *    **2023-02-17~23**을 담고 있고 그중 12행은 `consultation_date`도 2023이다(이관 잔재, 실제 상담한 날이 아니다).
+ *    지금 큐에 들어올 수 있는 건 QR 접수분뿐이라(주간·수동 모두 `from_public_intake`로 거른다) 그 행들은 못
+ *    들어오지만, `--ids=` 검증 경로엔 그 필터가 없어 두 칸을 읽으면 2023이 그대로 나간다(적대적 리뷰 2026-09-14).
+ *    QR 접수분은 `consulted_at`과 `created_at`이 같은 값이다(실측: 아직 안 나간 5건 전부).
+ * ⚠️ postgres.js는 date 컬럼을 **UTC 자정** Date로, timestamptz는 그 순간으로 준다 — KST로 포맷해도 연동 PC
+ *    타임존과 무관하게 같은 날짜가 나온다.
+ */
+const KST_YMD = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+});
+function kstYmd(v) {
+  if (!v) return "";
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : KST_YMD.format(v);
+  return L.parseDate(v) || ""; // 'YYYYMMDD' · 'YYYY.MM.DD(요일)' 등 어떤 꼴로 와도 한 꼴로
+}
+const counselYmd = (c) => kstYmd(c.consulted_at) || kstYmd(c.created_at) || KST_YMD.format(new Date());
+
 // makeedu 상담 노트(HTML) — parent_request + 메타데이터를 사람이 읽기 좋게.
 function buildNoteHtml(c) {
   // 제목이 "[eywa 온라인 접수]" 고정 라벨이라 본문엔 중복 헤더 없이 메타부터.
@@ -131,8 +158,7 @@ async function fillForm(page, c) {
   await setVal("prePHpNo", phone(c.parent_phone));
   await setSelect("prePKind", relationCode(c.parent_relation));
   await setVal("preHpNo", phone(c.student_phone));
-  const ymd = (c.consultation_date || c.received_date || (c.created_at && c.created_at.toISOString().slice(0, 10))) || new Date().toISOString().slice(0, 10);
-  await setVal("counselYmd", ymd);
+  await setVal("counselYmd", counselYmd(c));
   // 제목 = 고정 라벨(사용자 지정) — 학생명은 목록의 원생명 컬럼에 이미 뜬다.
   await setVal("title", "[eywa 온라인 접수]");
   await setVal("contents", buildNoteHtml(c));

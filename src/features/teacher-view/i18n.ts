@@ -1092,8 +1092,6 @@ export const SHEET_DICT = {
     ko: "이 달 출결을 기록한 사람입니다(수업보고서가 없는 반). 대신 찍어 준 경우가 있어 실제 수업자와 다를 수 있습니다.",
     en: "Recorded this month's attendance (this class has no lesson reports). Someone may have marked it on another teacher's behalf.",
   },
-  // 그 달 학원 휴일 — 날짜 칸이 좁아 이름을 못 적으니 표 위에 한 줄로 적는다(원장 2026-09-07).
-  "att.holidayLine": { ko: "학원 휴일", en: "Academy holidays" },
   "att.role.slot": { ko: "교시 담당", en: "Period teacher" },
   "att.since": { ko: "{date}부터 담임", en: "Homeroom since {date}" },
   "att.notice.lock.a": { ko: "출결 수정은 ", en: "Attendance can be edited only for the " },
@@ -1278,22 +1276,37 @@ export const SHEET_DICT = {
   "att.group.students": { ko: "{n}명", en: "{n} students" },
   "att.group.units": { ko: "시수 ", en: "Sessions " },
   "att.searchEmpty.where": { ko: "이 달 출석부", en: "this month's sheet" },
-  "att.help.a": { ko: "총 ", en: "Recorded " },
-  "att.help.b": { ko: "회 기록 · 칸을 고르고 ", en: " in total · pick a cell and type a " },
-  "att.help.number": { ko: "숫자", en: "number" },
-  "att.help.c": {
-    ko: "를 치세요(0=결석, 1·1.5·2=출석 시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 · ",
-    en: " (0 = absent, 1·1.5·2 = sessions present) · arrows·Tab·Enter to move · Shift for a range · Ctrl+C/V · Ctrl+Z · drag the bottom-right handle to fill · ",
-  },
-  "att.help.d": { ko: "지각·조퇴·보강·메모는 ", en: "for late, early leave, makeup and notes, " },
-  "att.help.rightClick": { ko: "우클릭", en: "right-click" },
-  "att.help.e": {
-    ko: "(7일 지난 칸도 메모는 고칠 수 있습니다)",
-    en: "(notes stay editable even on cells older than 7 days)",
-  },
+  // 강사 미니셸 머리 둘째 줄 — 지금 보는 것이 강사뷰라는 표시(원장 2026-09-14 *"강사뷰 라고 큼직하게"*).
+  // 관리자 풀셸 사이드바의 '관리자'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
+  "chrome.teacherView": { ko: "강사뷰", en: "Teacher view" },
   "att.legend": { ko: "범례", en: "Legend" },
   "att.legend.classDay": { ko: "등원요일", en: "Class day" },
-  "att.legend.off": { ko: "주말·휴일", en: "Weekend · holiday" },
+  /* 🔴 2026-09-14: 범례가 **격자에 실제로 나오는 칠을 전부** 세운다(원장 *"이런 미등원도 범례 추가"* →
+     캡처를 더 보내며 *"이런것들"*). 그전엔 등원요일·주말 둘뿐이라 회색(미등원)·빗금(남의 교시)·
+     붉은 칸(휴일)은 무슨 뜻인지 화면 어디에도 없었다.
+     🔴 `off`에서 '휴일'을 뗀 이유: 같은 날 표 위 '학원 휴일 9/24 …' 안내 줄을 걷어냈고(원장 지시),
+        휴일은 주말과 **다른 색**(붉은 계열)이라 한 낱말에 묶으면 둘 중 하나가 거짓이 된다. */
+  "att.legend.off": { ko: "주말", en: "Weekend" },
+  "att.legend.holiday": { ko: "학원 휴일", en: "Academy holiday" },
+  "att.legend.outside": { ko: "미등원", en: "Not enrolled" },
+  /* 강사 전체 보기에서만 나오는 빗금 — 값은 없지만 기록은 있다.
+     🔴 "다른 선생님 교시"라고 쓰지 말 것 — 빗금은 자리(JJ·랩실) 기록·교시를 안 남긴 옛 기록·담임이 되기 전
+        기록에도 나온다. 참인 것은 "이 화면의 몫이 아니다"뿐이다(cell-display.ts `NOT_MINE_MESSAGE` 주석, 적대적 리뷰 2026-09-14). */
+  "att.legend.ghost": { ko: "이 화면 몫 아님", en: "Not this sheet's record" },
+  /* 합계 줄 오른쪽 끝의 **짧은 조작 안내**(원장 2026-09-14 *"2행은 1행 우측 끝으로 간략하게"*).
+     전문은 `att.help.full`이 툴팁으로 나른다. 조각 사이 공백은 사전 값 안에(JSX 줄바꿈은 공백을 지운다).
+     ⚠️ 영어 앞 조각을 빈 문자열로 두지 말 것 — `lang-wiring` 가드가 영어값으로 뜻을 묶어서, 빈 문자열끼리
+        (`cls.unit.people` 등) '다른 뜻이 영어에서 뭉쳤다'로 걸린다. 그래서 영어는 어순을 바꿔 앞 조각에 낱말을 둔다.
+     ⚠️ 한국어 `지각·조퇴·보강·메모는 우클릭`은 `matrix-table.test.tsx`가 잠근 문구다 — 어순을 바꾸지 말 것. */
+  "att.help.briefPre": { ko: "총 ", en: "Recorded " },
+  "att.help.brief": {
+    ko: "회 기록 · 숫자로 입력 · 지각·조퇴·보강·메모는 우클릭",
+    en: " in total · type a number · right-click for late·leave·makeup·note",
+  },
+  "att.help.full": {
+    ko: "칸을 고르고 숫자를 치세요(0=결석, 1·1.5·2=출석 시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 · 지각·조퇴·보강·메모는 우클릭 (7일 지난 칸도 메모는 고칠 수 있습니다)",
+    en: "Select a cell and type a number (0 = absent, 1·1.5·2 = attended units) · Arrows·Tab·Enter to move · Shift for a range · Ctrl+C/V · Ctrl+Z · drag the corner handle to fill · right-click for late·leave·makeup·note (notes stay editable after 7 days)",
+  },
   "att.row.thisClass": { ko: "이 반", en: "this class" },
   "att.row.attendDows": { ko: "등원 {dows}", en: "Class days {dows}" },
   "att.row.noTierTitle": {
