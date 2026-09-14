@@ -101,6 +101,9 @@ export async function notifyTeachersOfIntake(input: {
  *
  * ⚠️ 일부러 **합집합**이다(요일로 좁히지 않는다): 알림은 가시성 쪽 판정이라, 한 사람이라도 그 반을
  *    가르치면 알리는 게 맞다(teacher-axis의 `classTeacherIdsInRange`와 같은 결).
+ * ⚠️ 출결 입력 요청·미출결→출석 교차 알림은 **반대로 좁혔다**(원장 결정 2026-09-14 — "그날 그 교시 담당 + 담임",
+ *    `attendanceNoticeRecipients`). 그 둘은 "지금 이 교시를 찍어 달라"라 그 수업을 한 사람에게만 가야 하고,
+ *    이 접수 벨은 미래·여러 날에 걸친 통보라 가시성 쪽이다 — 한쪽에 맞춰 다른 쪽을 바꾸지 말 것.
  * ⚠️ admin은 RLS를 우회하므로 **tenant 필터가 불변식**이다.
  */
 async function loadTeacherClassMap(

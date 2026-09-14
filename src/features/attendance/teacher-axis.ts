@@ -161,6 +161,9 @@ export function taughtByForSlot(input: {
  * → 출석부가 통째로 비어 있었다).
  *
  * ⚠️ 자리(LAB·JJ)는 사람이 아니므로 들어가지 않는다(teacher_id가 null이라 구조적으로 제외된다).
+ * ⚠️ **알림 수신자는 이 합집합을 쓰지 않는다** — 출결 입력 요청·교차 알림 벨은 원장 결정(2026-09-14)으로
+ *    "그날 그 교시 담당 + 담임"(`attendanceNoticeRecipients`)으로 좁혔다. 가시성은 넓게, 벨은 좁게 — 여기를
+ *    좁히거나 저 두 알림을 이 합집합으로 되돌리지 말 것.
  */
 export function classTeacherIdsInRange(input: {
   homeroomTeacherId: string | null;
@@ -174,6 +177,83 @@ export function classTeacherIdsInRange(input: {
     if (!s.teacherId || isSeatSlot(s)) continue;
     if (slotOverlapsRange(s, input.from, input.to)) out.add(s.teacherId);
   }
+  return [...out];
+}
+
+/** `class_schedules` 행(PostgREST 컬럼 이름) → 축 슬롯. 조회가 여러 곳이라 모양 변환만 한 벌로 둔다. */
+export type AxisSlotRow = {
+  day_of_week: string;
+  start_time: string | null;
+  teacher_id: string | null;
+  slot_teacher_label: string | null;
+  valid_from: string;
+  valid_to: string | null;
+};
+
+export function axisSlotFromRow(row: AxisSlotRow): AxisSlot {
+  return {
+    dayOfWeek: row.day_of_week,
+    startTime: row.start_time,
+    teacherId: row.teacher_id,
+    slotTeacherLabel: row.slot_teacher_label,
+    validFrom: row.valid_from,
+    validTo: row.valid_to,
+  };
+}
+
+/**
+ * **출결 알림 벨을 받을 사람** — 그날 그 교시 담당 ∪ 반 담임(원장 결정 2026-09-14).
+ *
+ * 소비처 둘이 이 함수 하나를 부른다: 데스크 → 강사 '출결 입력 요청'(`live/server/actions.ts`)과
+ * 미출결 → 출석 교차 알림의 강사 방향(`live/server/cross-notify.ts`).
+ *
+ * 🔴 왜 좁히나: 두 경로가 반의 `class_schedules.teacher_id`를 **요일·교시·유효기간 없이** 전부 모았다 —
+ *    끝난 배치 이력·다른 요일·다른 교시 강사에게까지 벨이 갔다(실측 2026-09-14: 활성 반 120개 중 31개 반·
+ *    연인원 75명, 그중 26개 반은 끝난 이력 탓. LT4 오늘 담당은 육소희인데 이다교·송지혜·Kristine도 받았다).
+ * 🔴 **가시성 합집합(`classTeacherIdsInRange`)과 다른 규칙이다 — 일부러.** "누구 화면에 이 반이 보이나"는
+ *    한 사람이라도 가르치면 보여야 하지만, "지금 찍어 달라"는 벨은 그 수업을 한 사람에게만 가야 한다.
+ *    결석 통보 접수 벨(`intake/server/notify.ts`)은 가시성 쪽이라 합집합 그대로다.
+ *
+ * @param slotStart 교시("HH:MM"). null이면 **그날의 모든 유효 교시**(수학은 하루 한 행이 저장 축이다).
+ *                  주어졌는데 맞는 교시가 없으면(시간표에 없는 보강 칸 등) 담임만 남는다 — `resolveTaughtBy`의
+ *                  "후보 없음 → 담임"과 같은 결.
+ * @param periodStart 저장 교시와 **다를 수 있는 '지금 교시'** — 있으면 그 교시 담당도 함께 받는다.
+ *                  좌석표·출결 모드 카드는 기록 없는 학생을 그날 **첫 교시**에 저장하지만(slot-axis — 시수가 걸린
+ *                  저장 축) 데스크가 누르는 순간 교실에 있는 사람은 대표 교시(지금 교시) 담당이다. 저장 교시만 보면
+ *                  18:20에 늦게 온 학생의 벨이 16:20 담당에게만 간다(적대 리뷰 2026-09-14).
+ *                  slotStart가 null(그날 전체)이면 이미 모든 교시라 따로 볼 것이 없다.
+ * @param excludeId 보낸 사람 본인(자기에게 벨을 보내지 않는다).
+ *
+ * ⚠️ 모호(한 교시에 담당이 둘)여도 **둘 다** 받는다 — 귀속은 지어내지 않으려 비우지만, 벨은 둘 중 누가 찍어도 된다.
+ * ⚠️ 자리(LAB·JJ) 슬롯은 사람이 아니라 방이라 아무도 더하지 않는다(담임은 그대로 받는다).
+ * ⚠️ 임시 위임(`class_delegations`)은 이 규칙에 없다 — 원장 결정 범위가 "교시 담당 + 담임"이다.
+ */
+export function attendanceNoticeRecipients(input: {
+  homeroomTeacherId: string | null;
+  slots: readonly AxisSlot[];
+  date: string;
+  slotStart?: string | null;
+  periodStart?: string | null;
+  excludeId?: string | null;
+}): string[] {
+  const out = new Set<string>();
+  if (input.homeroomTeacherId) out.add(input.homeroomTeacherId);
+  const dow = axisDowOf(input.date);
+  if (dow) {
+    const saveStart = normalizeAxisTime(input.slotStart ?? null);
+    // null = 그날의 모든 교시. 아니면 저장 교시 ∪ 지금 교시.
+    const wanted =
+      saveStart == null
+        ? null
+        : new Set([saveStart, normalizeAxisTime(input.periodStart ?? null)].filter((v): v is string => !!v));
+    for (const s of input.slots) {
+      if (!s.teacherId || isSeatSlot(s)) continue;
+      if (s.dayOfWeek !== dow || !slotLiveOn(s, input.date)) continue;
+      if (wanted && !wanted.has(normalizeAxisTime(s.startTime) ?? "")) continue;
+      out.add(s.teacherId);
+    }
+  }
+  if (input.excludeId) out.delete(input.excludeId);
   return [...out];
 }
 
