@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
+import { getTestStudentIds } from "@/features/students/server/test-students";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { crossNotifyDirection } from "../mark-state";
 import { collectStudentNames, formatAttendanceNotifyNames } from "../notify-names";
@@ -36,7 +37,13 @@ export async function notifyUnmarkedToPresent(input: {
     if (date > today || date < addDays(today, -1)) return;
 
     const admin = createAdminClient();
-    const classIds = [...new Set(cells.map((c) => c.classId))];
+    // 🔴 테스트 학생(`students.is_test` — 발송 시험용 '학원이')은 알리지 않는다(원장 2026-09-13).
+    //    **dedup 앞에서** 뺀다 — 뒤에서 빼면 그 칸의 dedup만 소모돼 나중에 진짜 알림이 막힌다.
+    //    묶음 본문이라 그 학생만 빠지고 같은 저장의 실학생 알림은 그대로 나간다.
+    const testStudentIds = await getTestStudentIds(admin, tenantId);
+    const liveCells = cells.filter((c) => !testStudentIds.has(c.studentId));
+    if (liveCells.length === 0) return;
+    const classIds = [...new Set(liveCells.map((c) => c.classId))];
 
     const targets =
       direction === "to_teacher"
@@ -47,7 +54,7 @@ export async function notifyUnmarkedToPresent(input: {
     const { data: fresh, error: dedupError } = await admin
       .from("notification_events")
       .upsert(
-        cells.map((c) => ({
+        liveCells.map((c) => ({
           tenant_id: tenantId,
           event_type: EVENT_TYPE,
           subject_key: c.studentId,
@@ -61,7 +68,7 @@ export async function notifyUnmarkedToPresent(input: {
     if (!fresh?.length) return;
 
     const freshKeys = new Set(fresh.map((f) => `${f.subject_key}|${f.bucket}`));
-    const freshCells = cells.filter((c) => freshKeys.has(`${c.studentId}|${date}|${c.slotStart ?? ""}`));
+    const freshCells = liveCells.filter((c) => freshKeys.has(`${c.studentId}|${date}|${c.slotStart ?? ""}`));
     if (freshCells.length === 0) return;
     const freshIds = [...new Set(freshCells.map((c) => c.studentId))];
     // 100에서 자르면 뒤 이름이 벨에서 사라진다(B3). 청크로 전건.

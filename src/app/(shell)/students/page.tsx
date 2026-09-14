@@ -5,6 +5,7 @@ import { Pagination } from "@/components/pagination";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
+import { MergedTag } from "@/components/merged-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { FilterSelect } from "@/components/filter-select";
 import { HeaderFilter } from "@/components/header-filter";
@@ -499,6 +500,9 @@ export default async function StudentsPage({
                           {sg ? <span className="text-text-dim min-w-0 truncate text-sm">{sg}</span> : null}
                           {s.syncNew ? <MakeeduOriginTag /> : null}
                           {s.dupSuspect ? <DupSuspectTag /> : null}
+                          {/* 병합된 학생은 집계(퇴원 수·등록 추이)에서만 빠지고 목록에는 남는다 —
+                              감추면 데스크가 병합을 확인하거나 되짚을 길이 사라진다(원장 2026-09-13). */}
+                          {s.merged ? <MergedTag /> : null}
                           <EditingBadge scope={`student:${s.id}`} />
                         </span>
                       </td>
