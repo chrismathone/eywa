@@ -123,7 +123,12 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
   // "그 강사의 화면"이 아니다. 관리자뷰(viewTeacherId=null)는 본인 축 그대로. 편집 버튼은 canEdit이 별도 차단.
   const ownerAxisId = viewTeacherId ?? user.id;
   const [slots, taught] = await Promise.all([
-    loadLiveSlots(date, classIds),
+    // 🔴 테스트 학생(`is_test`)은 **데스크 경로(selfOnly=false)에서만** 뺀다(원장 2026-09-14 *"학원이 반 및 학원이
+    //    (테스트 학생)이 오늘 출결에 올라와있는데 예외로 빼"*). 좌석표·확인 필요 큐·어제 출결이 이 경로를 함께 탄다.
+    //    ⚠️ **오늘 출결 화면은 누가 열어도 빠진다** — 강사뷰(겸직·다른 강사 뷰)·scoped 강사가 연 `/attendance/live`도
+    //    selfOnly=false라 같다(원장 요청이 '오늘 출결에서 빼'). 테스트 반이 보이는 강사 화면은 스트립·출결 모드
+    //    (selfOnly)뿐이다 — 담임이 테스트하는 자리라 그대로 둔다. 캐시 키 (date, selfOnly)도 그대로.
+    loadLiveSlots(date, classIds, { excludeTestStudents: !selfOnly }),
     userTaughtClassSet(supabase, ownerAxisId, date),
   ]);
   const isToday = date === kstToday();

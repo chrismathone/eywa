@@ -24,6 +24,7 @@ vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => false 
 vi.mock("@/components/workspace/use-is-desktop", () => ({ useIsDesktop: () => true }));
 
 import HelpPage from "./page";
+import { MANUALS } from "@/features/help/manuals";
 
 const renderPage = async () => render(await HelpPage());
 /** 빠른 시작과 메뉴 안내에 같은 이름의 링크가 함께 설 수 있어 전부 센다. */
@@ -75,7 +76,11 @@ describe("도움말 — 열 수 있는 화면만 링크한다", () => {
   it("머리의 개수도 거른 목록 기준이다(안 보이는 항목까지 세지 않는다)", async () => {
     ctx.allow = (_role, menu) => !["owner", "kiosk_settings", "teacher_onescreen"].includes(menu);
     await renderPage();
-    // 빠른 시작 6단계 중 학원 설정·원스크린이 빠지고, 메뉴 23개 중 원스크린·학원 설정·출석 키오스크가 빠진다.
-    expect(screen.getAllByText(/빠른 시작 4단계 · 메뉴 20개/).length).toBeGreaterThan(0);
+    // 빠른 시작 6단계 중 학원 설정·원스크린이 빠진다. 설명서 개수는 권한으로 걸러진 목록 기준.
+    // 🔴 여기를 `\d+`로 두면 **거르지 않은 전체(MANUALS.length)도 통과**해 이 테스트가 아무것도 안 잠근다.
+    // 막은 메뉴 셋(owner·kiosk_settings·teacher_onescreen)을 쓰는 설명서가 정확히 하나씩이라 셋이 빠진다.
+    const shown = MANUALS.length - 3;
+    expect(shown).toBeLessThan(MANUALS.length);
+    expect(screen.getAllByText(new RegExp(`빠른 시작 4단계 · 화면 설명서 ${shown}개`)).length).toBeGreaterThan(0);
   });
 });

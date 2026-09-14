@@ -342,10 +342,21 @@ export async function requestDeskConfirm(input: {
 
   // 그 (반·저장축)의 미입력 학생을 서버가 직접 센다 — 0명이면 벨을 만들지 않는다(빈 요청 = 소음).
   // 자리 반(LAB·JJ)은 제외 — 스트립·큐 둘 다 거르는 슬롯이라 요청해도 큐에 안 뜬다(빈 요청과 같다).
-  const matched = (await loadLiveSlots(sessionDate, [classId])).filter(
-    (s) => (s.saveSlot ?? null) === slot && !isSpecialSlotLabel(s.slotTeacherLabel),
-  );
-  if (matched.length === 0) return { error: "요청할 교시를 찾지 못했습니다 — 화면을 새로고침해 주세요" };
+  // 🔴 테스트 학생(`students.is_test`)도 뺀다(원장 2026-09-13 *"테스트 계정 알림 전부 off"* · 2026-09-14 오늘 출결 제외).
+  //    강사 스트립(selfOnly)엔 테스트 반이 보여 이 버튼이 서지만, 벨은 **실직원(데스크)**에게 가고 데스크 큐엔 그 반이 없다.
+  const inSlot = (list: Awaited<ReturnType<typeof loadLiveSlots>>) =>
+    list.filter((s) => (s.saveSlot ?? null) === slot && !isSpecialSlotLabel(s.slotTeacherLabel));
+  const matched = inSlot(await loadLiveSlots(sessionDate, [classId], { excludeTestStudents: true }));
+  if (matched.length === 0) {
+    // 교시가 통째로 빠진 이유가 '테스트 학생뿐'인지 한 번 더 본다 — 거절 경로에서만 도는 확인이라 평소 왕복은 늘지 않는다.
+    const withTest = inSlot(await loadLiveSlots(sessionDate, [classId]));
+    return {
+      error:
+        withTest.length > 0
+          ? "테스트 학생만 있는 수업이라 데스크에 요청하지 않았습니다"
+          : "요청할 교시를 찾지 못했습니다 — 화면을 새로고침해 주세요",
+    };
+  }
   // 시작 전 교시는 거절 — 스트립은 안 보여주지만 서버 기준으론 올 수 있는 조합이다(#77). 시작 전에
   // bucket을 태우면 큐는 before로 비어 있고("요청했다는데 없다") 정작 수업 때 누르면 벨이 안 나간다.
   const nowMin = kstMinutesOfDay();

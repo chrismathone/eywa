@@ -128,6 +128,23 @@ describe("overview display contracts", () => {
     expect(html).toContain("보강·조퇴 1칸");
     expect(html).not.toContain("청구서 1칸");
   });
+  it("출결 현황 ↗는 오늘 출결로, 최근 14일 등원율 ↗는 월별 출석부로 간다", () => {
+    // 원장 2026-09-14: "출결 현황 바로가기를 오늘의 출결과 연결시키는게 자연스러울듯." — 카드가 오늘 칸만 세므로(09-13)
+    // 목적지도 오늘 화면이다. 14일 추이는 날짜를 가로지르는 기록이라 월별 그대로 둔다.
+    mocks.data = snapshot();
+    mocks.data.sections = {
+      attendance: {
+        data: { date: "2026-09-10", total: 3, present: 1, absent: 1, late: 0, excused: 0, rate: 33.3 },
+        at: 100,
+        error: false,
+      },
+      attendanceTrend: { data: null, at: 100, error: false },
+    };
+    render(<Overview initial={mocks.data} />);
+    expect(screen.getByRole("link", { name: "출결 현황 상세" }).getAttribute("href")).toBe("/attendance/live");
+    expect(screen.getByRole("link", { name: "최근 14일 등원율 상세" }).getAttribute("href")).toBe("/attendance");
+    cleanup();
+  });
   it("does not claim there was an earlier successful value on an initial load failure", () => {
     mocks.data = snapshot();
     mocks.data.sections.students = { data: null, at: null, error: true };

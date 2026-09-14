@@ -21,8 +21,14 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
  * ⚠️ **admin(RLS 우회) 클라이언트로 부를 땐 `tenantId`를 반드시 넘긴다** — 유일한 격리선이다.
  *    쿠키 클라이언트(RLS 경로)면 생략한다(중복 필터 불필요).
  * ⚠️ B2 — 세는 데 쓰는 전건 조회라 `fetchAllPaged` + unique tie-break `id` 정렬(무페이징 select 금지).
- * ⚠️ 이건 **집계·알림에서만** 빼는 축이다. 선생님 화면의 명단(원스크린·ECS·출석부)과 학생목록에는 그대로
- *    보여야 테스트가 된다 — 거기까지 빼면 배정한 의미가 없어진다.
+ * ⚠️ 빼는 곳 = **집계·알림 + 데스크 표면**이다. 데스크 표면 = 오늘 출결(좌석표·확인 필요·어제 출결 —
+ *    `loadLiveSlots`의 `excludeTestStudents`)과 처리현황(`getDailyProcessingStatus` — 운영실 'N반'·브리핑
+ *    '오늘 출석 미기록'·일별 출석부 처리 현황) · 브리핑 '어제 출석 미기록'(`unrecordedClassesSignal`) · 강사 스트립
+ *    '데스크 확인 요청' 벨(`requestDeskConfirm` — 테스트 학생뿐이면 벨 없이 거절). 원장 2026-09-14 *"학원이 반 및
+ *    학원이 (테스트 학생)이 오늘 출결에 올라와있는데 예외로 빼."* 데스크 표면에선 빈 집합(조회 실패)이면 지금처럼
+ *    보일 뿐이라 fail-open이 안전하다.
+ *    선생님 **자기 화면**(원스크린·ECS·월별 출석부·강사 스트립·출결 모드)과 학생목록에는 그대로 보여야 테스트가
+ *    된다 — 거기까지 빼면 배정한 의미가 없어진다.
  */
 export async function getTestStudentIds(
   // 서버 클라이언트와 admin 클라이언트를 둘 다 받는다(제네릭이 달라 최소 구조로 — report-optout-ids 선례).
