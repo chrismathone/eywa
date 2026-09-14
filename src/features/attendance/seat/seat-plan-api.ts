@@ -12,6 +12,7 @@
  */
 import type { PlanWriteApi } from "@/features/class-sheets/components/plan-api";
 import {
+  commitSeatPlanEdits,
   copySeatPlanSlot,
   createSeatPlanLine,
   deleteSeatPlanLine,
@@ -27,5 +28,7 @@ export function seatPlanApi(seat: SeatKey): PlanWriteApi {
     moveLine: (ref, input) => moveSeatPlanLine({ seat, ...ref, ...input }),
     deleteLine: (ref, input) => deleteSeatPlanLine({ seat, ...ref, ...input }),
     copySlot: (ref, input) => copySeatPlanSlot({ seat, ...ref, ...input }),
+    // 계획 칸 값 감사로그 — 저장과 같은 PIN 문을 지난다(칸을 떠날 때 한 줄, 원장 결정 2026-09-14).
+    commitEdits: (ref, edits) => commitSeatPlanEdits({ seat, ...ref, edits }),
   };
 }

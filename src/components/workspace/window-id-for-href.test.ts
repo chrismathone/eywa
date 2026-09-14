@@ -23,6 +23,13 @@ describe("windowIdForHref", () => {
     expect(windowIdForHref("https://example.com/x")).toBeNull();
   });
 
+  it("🔴 화면 설명서는 도움말 창 하나 — 슬러그마다 창이 늘지 않는다", () => {
+    expect(windowIdForHref("/help")).toEqual({ id: "help", navLabel: "도움말" });
+    expect(windowIdForHref("/help/timetable")?.id).toBe("help");
+    expect(windowIdForHref("/help/icons")?.id).toBe("help");
+    expect(windowIdForHref("/help/students?embed=1")?.id).toBe("help");
+  });
+
   it("🔴 알림 벨에 운영실 특례가 남아 있지 않다 — 다른 링크와 같은 경로로 창을 연다", () => {
     const bell = readFileSync(
       join(__dirname, "..", "..", "features", "notifications", "components", "notification-bell.tsx"),

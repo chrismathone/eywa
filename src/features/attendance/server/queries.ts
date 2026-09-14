@@ -55,6 +55,8 @@ import {
   getReservationCreatorNames,
   getReservationsOn,
 } from "./makeup-reservation-queries";
+// 테스트 학생(`students.is_test`) — 처리현황 명단에서 뺀다(원장 2026-09-14, 오늘 출결과 같은 축). 공용 한 벌.
+import { getTestStudentIds } from "@/features/students/server/test-students";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -115,8 +117,8 @@ export const getDailyProcessingStatus = cache(async function getDailyProcessingS
   const activeClassIds = activeClasses.map((c) => c.id);
   if (activeClassIds.length === 0) return [];
 
-  // 활성 enrollment(예정) + 그 날짜 기록(처리) — 둘 다 id 청크
-  const [enrollments, records] = await Promise.all([
+  // 활성 enrollment(예정) + 그 날짜 기록(처리) — 둘 다 id 청크. 테스트 학생 id도 독립 조회라 함께(B4).
+  const [enrollments, records, testStudentIds] = await Promise.all([
     fetchAllPagedInChunks<{
       id: string;
       class_id: string;
@@ -146,9 +148,15 @@ export const getDailyProcessingStatus = cache(async function getDailyProcessingS
         .order("id", { ascending: true })
         .range(from, to),
     ),
+    getTestStudentIds(supabase),
   ]);
 
   const expectedByClass = new Map<string, Set<string>>();
+  // 🔴 테스트 학생(`is_test`)은 예정 명단에서 뺀다(원장 2026-09-14 — 오늘 출결 데스크 보드와 같은 축). 뺀 뒤 명단이
+  //    비는 반은 **행째** 뺀다(아래 visibleClasses): 오늘 출결은 명단 0명 교시를 안 그리는데 여기만 '0명 반'으로
+  //    남으면 일별 출석부 처리 현황·운영실 '빈 반' 수가 바로가기 목적지와 갈린다. 수강이 원래 없던 반(expected 0)은
+  //    종전대로 남긴다 — 둘을 가르는 게 이 집합이다. 조회 실패 = 빈 집합(fail-open) = 지금 동작.
+  const classesWithTestStudent = new Set<string>();
   for (const e of enrollments) {
     if (
       !isEnrollmentActiveOn(
@@ -164,15 +172,22 @@ export const getDailyProcessingStatus = cache(async function getDailyProcessingS
     ) {
       continue;
     }
+    if (testStudentIds.has(e.student_id)) {
+      classesWithTestStudent.add(e.class_id);
+      continue;
+    }
     (expectedByClass.get(e.class_id) ?? expectedByClass.set(e.class_id, new Set()).get(e.class_id)!).add(e.student_id);
   }
+  const visibleClasses = activeClasses.filter(
+    (c) => !(classesWithTestStudent.has(c.id) && !expectedByClass.has(c.id)),
+  );
   const recordedByClass = new Map<string, Set<string>>();
   for (const r of records) {
     if (!expectedByClass.get(r.class_id)?.has(r.student_id)) continue;
     (recordedByClass.get(r.class_id) ?? recordedByClass.set(r.class_id, new Set()).get(r.class_id)!).add(r.student_id);
   }
 
-  const rows: ClassProcessing[] = activeClasses.map((c) => {
+  const rows: ClassProcessing[] = visibleClasses.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as { display_name?: string } | undefined;
     const expected = expectedByClass.get(c.id)?.size ?? 0;
     const recorded = recordedByClass.get(c.id)?.size ?? 0;

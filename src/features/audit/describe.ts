@@ -1412,6 +1412,33 @@ export function auditDetail(
         m.checked === true ? "Shouting 체크" : "Shouting 체크 해제",
       );
     }
+    // ── 범위 확대(2026-09-14) — 계획 줄 칸 · 수학 시트 월간 목표 · 자리 JJ 칸(칸을 떠날 때 한 줄) ───────────
+    // 칸 이름은 기록 때 한글 스냅샷(fieldLabel)으로 실려 오고, 구분(영역)도 라벨로 바뀌어 온다(raw 키 없음).
+    case "ecs_plan_cell_edit":
+    case "mcs_goal_edit":
+    case "seat_jj_mark_edit": {
+      const shown = (v: unknown) => {
+        const s = str(v);
+        return s ? `「${s}」` : "(빈칸)";
+      };
+      const date = str(m.planDate) ?? str(m.date);
+      const slot = str(m.slotStart);
+      const month = str(m.month);
+      const at = date ? (slot ? `${date} ${slot}` : date) : slot;
+      const where =
+        action === "mcs_goal_edit"
+          ? join(ctx.nameOf(m.studentId), month ? `${month} 목표` : null)
+          : action === "seat_jj_mark_edit"
+            ? // 자리 JJ 칸은 학생 칸이라 이름을 앞에 둔다(`ecs_mark_edit`와 같은 모양 — 대상 열만으론 줄마다 안 보인다).
+              join(ctx.nameOf(m.studentId), at)
+            : at;
+      const label = str(m.fieldLabel);
+      return join(
+        where,
+        `${label ? `${label} ` : ""}${shown(m.before)} → ${shown(m.after)}`,
+        m.viaPin === true ? "공개 PIN 화면" : null,
+      );
+    }
 
     // ── 구글 캘린더 가져오기(시스템) ────────────────────────────────────────────────────
     case "calendar_google_import": {

@@ -76,8 +76,9 @@ describe("자리 JJ 진도 배선", () => {
   it("🔴 공개 PIN 쓰기 액션은 **하나도 빠짐없이** 자리 게이트를 지난다(#77)", () => {
     const actions = code(read("features/attendance/seat/server/jj-plan-actions.ts"));
     const exported = [...actions.matchAll(/export async function (\w+)\(/g)].map((m) => m[1]!);
-    // 셀·줄 추가·이동·삭제·복사 다섯 문 — 새 문을 더하면 이 수도 함께 올린다.
-    expect(exported).toHaveLength(5);
+    // 셀·줄 추가·이동·삭제·복사 다섯 문 + 칸 편집 감사로그(`commitSeatPlanEdits`, 2026-09-14) — 새 문을 더하면
+    // 이 수도 함께 올린다(아래 줄이 그 문도 자리 게이트를 지나는지 함께 잠근다).
+    expect(exported).toHaveLength(6);
     expect(actions.match(/await gateSeatPlanWrite\(/g) ?? []).toHaveLength(exported.length);
     // 게이트가 본 (날짜, 교시)와 쓰는 (날짜, 교시)가 갈리면 "오늘로 통과시키고 어제에 쓰기"가 열린다.
     expect(actions).not.toContain("date: string");

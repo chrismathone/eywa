@@ -1,7 +1,7 @@
 import "server-only";
-import { kstDateOf } from "@/lib/date-kst";
+import { kstDateOf, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { isMergedStudent } from "@/features/students/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { getEndedSubjects } from "../subject-ended";
@@ -221,31 +221,37 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
 
   const ids = students.map((s) => s.id);
   // 학생 enrollment + 반 과목 — id 청크로 .in()(414/error삼킴 방지, #53).
-  const enrollments = await fetchInChunks<{
+  // 🔴 학생 100명 × 수강 이력이라 한 청크가 1,000행을 넘을 수 있다 → 청크 × 페이징(B2 🔴, `.order("id")`).
+  const enrollments = await fetchAllPagedInChunks<{
     student_id: string;
     end_date: string | null;
+    is_transferred: boolean | null;
     class: { subject?: string } | { subject?: string }[] | null;
-  }>(ids, (chunk) =>
+  }>(ids, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("student_id, end_date, class:class_id ( subject )")
-      .in("student_id", chunk),
+      .select("id, student_id, end_date, is_transferred, class:class_id ( subject )")
+      .in("student_id", chunk)
+      .order("id")
+      .range(from, to),
   );
 
-  const bySt = new Map<string, { subject: string; endDate: string | null }[]>();
+  const bySt = new Map<string, { subject: string; endDate: string | null; isTransferred?: boolean }[]>();
   for (const e of enrollments) {
     const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as { subject?: string } | undefined;
     const subject = klass?.subject;
     if (!subject) continue;
     const arr = bySt.get(e.student_id) ?? [];
-    arr.push({ subject, endDate: e.end_date });
+    arr.push({ subject, endDate: e.end_date, isTransferred: e.is_transferred ?? undefined });
     bySt.set(e.student_id, arr);
   }
 
+  // 끝남 판정의 기준일 — 종료 예정일이 미래인 반은 아직 다니는 중이다(subject-ended.ts 주석).
+  const today = kstToday();
   const rows: SubjectEndedRow[] = [];
   for (const s of students) {
     const enr = bySt.get(s.id) ?? [];
-    const { ended, active } = getEndedSubjects(enr);
+    const { ended, active } = getEndedSubjects(enr, today);
     if (ended.length === 0) continue; // 수강종료 과목이 없으면 제외
     let lastEndedAt: string | null = null;
     for (const e of enr) {

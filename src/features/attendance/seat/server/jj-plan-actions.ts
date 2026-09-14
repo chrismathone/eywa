@@ -35,8 +35,11 @@ import {
   type PlanLinesResult,
   type PlanPatchesResult,
 } from "@/features/class-sheets/server/plan-write";
+import { after } from "next/server";
+import { logPlanCellEdits } from "@/features/class-sheets/server/plan-edit-audit";
+import { parseSheetEdits, SEAT_PLAN_EDIT_KINDS } from "@/features/class-sheets/lib/edit-audit";
 import type { SeatKey } from "../seat";
-import { gateSeatPlanWrite } from "./jj-plan-public";
+import { gateSeatPlanWrite, resolvePublicPlanClasses } from "./jj-plan-public";
 
 /** 모든 액션이 공유하는 최소 문맥 — 자리·그 교시 한 칸을 특정한다. */
 type SeatSlotRef = {
@@ -128,4 +131,33 @@ export async function copySeatPlanSlot(
   });
   if (!gate.ok) return { ok: false, error: gate.error };
   return copyPlanSlotFromPrevious(gate.grant, { ...gate.scope, termMode: input.termMode });
+}
+
+/**
+ * 공개 PIN 화면의 **계획 칸 값 감사로그** — 칸을 떠날 때 한 줄(원장 결정 2026-09-14, 범위 확대).
+ *
+ * 🔴 게이트는 쓰기와 **같은 문**(`gateSeatPlanWrite` — PIN·오늘·그 교시 명단·ECS 대상 반)이고, 기록은 게이트가
+ *    돌려준 **범위(scope)** 안의 줄만 적는다. 규칙은 로그인 문과 한 벌(`logPlanCellEdits` — 이 문이 마지막으로 쓴
+ *    줄만 · 구분은 라벨로 · 문 이름으로 `logActionAtDoor`).
+ * 반환은 "받았다"뿐 — 읽기·기록은 응답 뒤(`after`)라 다음 자동저장을 붙잡지 않는다.
+ */
+export async function commitSeatPlanEdits(
+  input: SeatSlotRef & { edits: unknown },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const gate = await gateSeatPlanWrite({
+    seat: input.seat,
+    date: input.planDate,
+    slotStart: input.slotStart,
+    classId: input.classId,
+  });
+  if (!gate.ok) return { ok: false, error: gate.error };
+  const edits = parseSheetEdits(input.edits, SEAT_PLAN_EDIT_KINDS);
+  if (!edits) return { ok: false, error: "잘못된 요청입니다(편집 기록)" };
+  const { grant, scope } = gate;
+  after(async () => {
+    // 구분(영역) 라벨 — 게이트와 같은 판정(학원설정 영역)으로 읽는다. 실패면 빈 목록이라 키가 그대로 남는다(드묾).
+    const metas = await resolvePublicPlanClasses(grant.tenantId, [grant.classId]);
+    await logPlanCellEdits({ grant, scope, skillAreas: metas.get(grant.classId)?.skillAreas ?? [], edits });
+  });
+  return { ok: true };
 }
