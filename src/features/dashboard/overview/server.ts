@@ -26,6 +26,7 @@ import {
   withdrawalMonthWindow,
   withdrawalProgram,
 } from "@/features/withdrawals/window";
+import { isMergedStudent } from "@/features/students/merged";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
@@ -220,10 +221,10 @@ async function changes(
   const db = await createClient();
   const fromDate = `${monthKeys(today)[0]}-01`;
   const [enrolled, withdrawn] = await Promise.all([
-    fetchAllPaged<{ id: string; enrolled_at: string }>((from, to) =>
+    fetchAllPaged<{ id: string; enrolled_at: string; notes: string | null }>((from, to) =>
       db
         .from("students")
-        .select("id,enrolled_at")
+        .select("id,enrolled_at,notes")
         .gte("enrolled_at", fromDate)
         .order("id")
         .range(from, to),
@@ -231,9 +232,13 @@ async function changes(
     withdrawalRows,
   ]);
   const ids = scope ? new Set(scope.studentIds) : null;
+  // 🔴 이 조회는 **status를 보지 않는다**(퇴원했다 복구된 학생의 그 달 등록을 살리려고) — 그래서 중복 병합된
+  //    학생도 그대로 등록으로 세고 있었다(원장 2026-09-13). 퇴원 칸은 `withdrawalRows`가 이미 걸러 온다.
   return monthlyChanges(
     today,
-    enrolled.filter((r) => !ids || ids.has(r.id)).map((r) => r.enrolled_at),
+    enrolled
+      .filter((r) => (!ids || ids.has(r.id)) && !isMergedStudent(r.notes))
+      .map((r) => r.enrolled_at),
     withdrawn.map((r) => r.withdrawnAt),
   );
 }

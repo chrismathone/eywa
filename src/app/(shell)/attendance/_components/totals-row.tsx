@@ -21,6 +21,8 @@
  */
 import type { Counted } from "@/features/attendance/grid/totals";
 import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
+import type { ReactNode } from "react";
+import { StickyFitRow } from "./sticky-fit-row";
 import { formatMoney } from "@/features/attendance/money-format";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import {
@@ -39,6 +41,7 @@ export function MatrixTotalsSummary({
   countByRow,
   money,
   moneyNote,
+  trailing,
 }: {
   /** 표에 담긴 반 수(전체). */
   classCount: number;
@@ -49,6 +52,15 @@ export function MatrixTotalsSummary({
   /** 원장 전용 금액. null이면 금액 부분을 통째로 안 그린다. */
   money?: TeacherMoney | null;
   moneyNote?: string | null;
+  /**
+   * 합계 **뒤에 이어 붙이는** 한 조각(조작 안내, 원장 2026-09-14 *"2행은 1행 우측 끝으로 간략하게"*).
+   * 🔴 이 덩어리(`sticky left-0 flex-wrap`) **안에** 둬야 한다 — 밖에서 `sticky right-0`로 따로 세웠더니
+   *    표가 화면보다 넓을 때 두 sticky가 제 폭을 지키며 **안내가 합계·정산액을 덮었다**(적대적 리뷰 2026-09-14).
+   *    안에 두면 자리가 모자랄 때 다음 줄로 접힐 뿐 숫자를 가리지 않는다 — 단 덩어리 폭을 `StickyFitRow`가
+   *    **보이는 폭**으로 묶어야 실제로 접힌다(안 묶으면 표 전체 폭까지 늘어나 접히지 않고, 폰에서 끝까지 밀면
+   *    합계가 화면 밖으로 나갔다 — 재리뷰 2026-09-14).
+   */
+  trailing?: ReactNode;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -68,7 +80,7 @@ export function MatrixTotalsSummary({
   const excludedUnits = scopedMissing?.excludedUnits ?? (tier?.status === "ready" ? tier.excludedUnits : 0);
 
   return (
-    <div className="sticky left-0 flex w-fit flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+    <StickyFitRow className="gap-x-3 gap-y-1 px-3 py-2">
       <span className="text-foreground text-xs font-bold">
         {t(searching ? "att.totals.search" : "att.totals.all")}
       </span>
@@ -187,6 +199,7 @@ export function MatrixTotalsSummary({
           )}
         </>
       ) : null}
-    </div>
+      {trailing}
+    </StickyFitRow>
   );
 }

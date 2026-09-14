@@ -14,3 +14,9 @@ export const CLASS_TAG_ALL = "전체";
  */
 export const CLASS_GROUP_OTHER = "기타";
 export const CLASS_GROUP_NONE = "반 미배정";
+
+/**
+ * 반이 없는 **보강 행**을 모으는 묶음 키(학생 목록) — 위와 같은 규약: 값은 Map 키, 화면 글자는 사전
+ * (`os.list.makeup`)이 따로 정한다. 🔴 값을 영어로 바꾸지 말 것 — 반 순서(`classOrder`)와 같은 축의 키다.
+ */
+export const CLASS_GROUP_MAKEUP = "보강";

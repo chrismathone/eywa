@@ -7,7 +7,7 @@
 import { COUNTABLE_STATUSES } from "../session-units";
 
 /** 한 칸의 값 — 격자 저장소의 `GridValue`와 같은 모양. 순수 모듈이라 **구조로만** 받는다(순환 import 방지). */
-export type CountedCell = { s: string; u: number | null } | null;
+export type CountedCell = { s: string; u: number | null; g?: true } | null;
 
 export type Counted = {
   /** 기록이 있는 칸 수 = 출석률의 분모. */
@@ -35,7 +35,9 @@ export function countCells(values: Iterable<CountedCell>): Counted {
   let makeup = 0;
   let units = 0;
   for (const v of values) {
-    if (!v) continue;
+    // 🔴 빗금 칸의 표시 값(`g` — 다른 선생님 교시 기록)은 **이 표의 값이 아니다**(원장 2026-09-14 "합계엔 안 넣는다").
+    //    세면 그 교시를 맡은 선생님 표와 시수·출석률·기록 수가 이중으로 잡힌다. 서버 폴백(`countMarks`)도 marks만 센다.
+    if (!v || v.g) continue;
     recorded++;
     if (v.s === "present") present++;
     else if (v.s === "absent") absent++;

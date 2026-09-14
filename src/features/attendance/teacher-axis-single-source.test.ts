@@ -30,6 +30,18 @@ const CONSUMERS = [
   // 결석 통보 접수 미리보기(2026-08-19) — 칸마다 "누가 가르치나"를 적는 화면이라 같은 축을 거쳐야 한다.
   // (담임을 직접 적었다가 교시마다 담당이 다른 영어 반에서 둘 다 담임 이름으로 표시된 회귀가 있었다.)
   join("src", "features", "attendance", "intake", "server", "queries.ts"),
+  // 출결 알림 벨 수신자(원장 결정 2026-09-14) — "그날 그 교시 담당 + 담임"을 같은 모듈에서 판정한다.
+  join("src", "features", "attendance", "live", "server", "actions.ts"),
+  join("src", "features", "attendance", "live", "server", "cross-notify.ts"),
+];
+
+/**
+ * 알림 수신자 두 경로 — 반의 슬롯 담당을 **요일·교시·유효기간 없이** 긁어 모으던 모양으로 되돌아가지 않게.
+ * 실측(2026-09-14): 그 모양이 활성 반 120개 중 31개 반에서 무관한 강사 연인원 75명에게 벨을 보냈다.
+ */
+const NOTICE_RECIPIENT_FILES = [
+  join("src", "features", "attendance", "live", "server", "actions.ts"),
+  join("src", "features", "attendance", "live", "server", "cross-notify.ts"),
 ];
 
 describe("출결 강사 귀속 축 단일 소스", () => {
@@ -112,5 +124,96 @@ describe("출결 강사 귀속 축 단일 소스", () => {
       const src = readFileSync(join(process.cwd(), rel), "utf8");
       expect(src.includes(AXIS_MODULE), `${rel}: 돈 축을 옮기려면 골든마스터부터 설명할 것`).toBe(false);
     }
+  });
+
+  describe("출결 알림 벨 수신자 — 그날 그 교시 담당 + 담임(원장 결정 2026-09-14)", () => {
+    /**
+     * `class_schedules`에서 **담당(teacher_id)을 읽는** 조회 중 요일·유효기간을 안 싣는 것.
+     * (담당을 안 읽는 조회 — 예: 요청자가 그 반 교시 담당인지 보는 게이트 — 는 대상이 아니다.)
+     */
+    function unscopedSlotTeacherQueries(src: string): string[] {
+      const code = stripComments(src).replace(/\s+/g, " ");
+      return code
+        .split(/from\(\s*["']class_schedules["']\s*\)/)
+        .slice(1)
+        .map((rest) => rest.slice(0, 700).split(";")[0]!)
+        .filter((chain) => {
+          const select = /\.select\(\s*["'`]([^"'`]*)["'`]/.exec(chain)?.[1] ?? "";
+          if (!/\bteacher_id\b/.test(select)) return false;
+          const scoped =
+            /\bday_of_week\b/.test(select) &&
+            /\bvalid_from\b/.test(select) &&
+            /\bvalid_to\b/.test(select) &&
+            /\.lte\(\s*["']valid_from["']/.test(chain) &&
+            /valid_to\.is\.null/.test(chain);
+          return !scoped;
+        });
+    }
+
+    it("검사기가 옛 모양(반의 슬롯 담당 전부)을 실제로 잡는다 — 헛도는 가드 방지", () => {
+      const old = `admin.from("class_schedules").select("teacher_id").eq("tenant_id", t).eq("class_id", id).not("teacher_id", "is", null);`;
+      expect(unscopedSlotTeacherQueries(old)).toHaveLength(1);
+    });
+
+    it.each(NOTICE_RECIPIENT_FILES)("%s — 수신자는 attendanceNoticeRecipients가 정한다", (rel) => {
+      const src = readFileSync(join(process.cwd(), rel), "utf8");
+      const code = stripComments(src);
+      expect(
+        /attendanceNoticeRecipients\(/.test(code),
+        `${rel}: 벨 수신자는 teacher-axis의 attendanceNoticeRecipients 한 벌로 판정한다`,
+      ).toBe(true);
+      expect(
+        unscopedSlotTeacherQueries(src),
+        `${rel}: 슬롯 담당을 요일·유효기간 없이 모으면 끝난 배치 이력·다른 요일·다른 교시 강사에게까지 벨이 간다`,
+      ).toEqual([]);
+      expect(
+        /\.map\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*\1\.teacher_id\b/.test(code.replace(/\s+/g, " ")),
+        `${rel}: 슬롯 행의 teacher_id를 그대로 수신자로 펼치지 말 것 — 교시·날짜 판정을 건너뛴다`,
+      ).toBe(false);
+    });
+
+    /**
+     * 임시 위임 대체 강사(원장 결정 2026-09-14) — 로더가 위임을 안 넘기면 순수 함수가 맞아도 대체 강사가
+     * **조용히** 빠진다(에러가 안 난다). 위임 표를 호출부에서 직접 읽으면 해제·기간 규약이 두 벌이 된다.
+     */
+    it.each(NOTICE_RECIPIENT_FILES)("%s — 그날 위임 대체 강사를 같은 헬퍼로 읽어 함께 넘긴다", (rel) => {
+      const code = stripComments(readFileSync(join(process.cwd(), rel), "utf8")).replace(/\s+/g, " ");
+      expect(
+        /getActiveDelegationsForClasses\(/.test(code),
+        `${rel}: 위임은 classes/server/delegation의 getActiveDelegationsForClasses 한 벌로 읽는다`,
+      ).toBe(true);
+      expect(
+        /from\(\s*["']class_delegations["']\s*\)/.test(code),
+        `${rel}: 위임 표를 직접 조회하지 말 것 — 해제(revoked_at)·양끝 포함 규약이 두 벌이 된다`,
+      ).toBe(false);
+      const calls = code
+        .split("attendanceNoticeRecipients({")
+        .slice(1)
+        .map((rest) => rest.split(";")[0]!);
+      expect(calls.length, `${rel}: attendanceNoticeRecipients 호출을 찾지 못했습니다`).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(/\bdelegations:/.test(call), `${rel}: 수신자 판정에 delegations가 빠졌습니다: ${call}`).toBe(true);
+      }
+    });
+
+    it("좌석표의 '지금 교시'(periodStart)가 교차 알림 수신자까지 흘러간다 — 저장 교시만 보면 늦게 온 학생 벨이 첫 교시 담당에게만 간다", () => {
+      const notify = stripComments(
+        readFileSync(join(process.cwd(), "src", "features", "attendance", "live", "server", "cross-notify.ts"), "utf8"),
+      ).replace(/\s+/g, " ");
+      expect(/periodStart:\s*cell\.periodStart/.test(notify), "cross-notify가 칸의 periodStart를 순수 함수에 안 넘깁니다").toBe(
+        true,
+      );
+      const save = stripComments(
+        readFileSync(join(process.cwd(), "src", "features", "attendance", "server", "actions.ts"), "utf8"),
+      ).replace(/\s+/g, " ");
+      const calls = save
+        .split("notifyUnmarkedToPresent(")
+        .slice(1)
+        .map((rest) => rest.slice(0, 300));
+      expect(calls.length, "셀 저장·일괄 저장 두 호출부가 있어야 한다").toBeGreaterThanOrEqual(2);
+      for (const call of calls) {
+        expect(/cells:[^}]*periodStart/.test(call), `교차 알림 칸에 periodStart가 빠졌습니다: ${call}`).toBe(true);
+      }
+    });
   });
 });

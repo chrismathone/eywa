@@ -21,10 +21,22 @@ import { NOT_MINE_MESSAGE, STATUS_TONE, statusTextOf } from "@/features/attendan
 // 화면 언어 — 상태 이름은 `statusTextOf`(한글 맵 옆) 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
-/** 🔴 이름을 여기 적지 않는다 — 표·범례와 **같은 표**를 읽어야 같은 낱말이 된다. */
-const OPTIONS: AttendanceStatus[] = ["present", "absent", "late", "early_leave", "makeup"];
+/**
+ * 🔴 이름을 여기 적지 않는다 — 표·범례와 **같은 표**를 읽어야 같은 낱말이 된다.
+ * 빗금 칸 팝오버(`ghost-popover.tsx`)도 이 목록을 쓴다 — 두 팝오버가 고를 수 있는 상태가 갈리지 않게.
+ */
+export const STATUS_OPTIONS: AttendanceStatus[] = ["present", "absent", "late", "early_leave", "makeup"];
 
 export type PopoverAnchor = { x: number; top?: number; bottom?: number };
+
+/** 칸 옆 자리 — 오른쪽 끝에서 잘리지 않게 창 폭 안으로 당긴다(두 팝오버 공용). */
+export function popoverPosition(anchor: PopoverAnchor): { left: number; top?: number; bottom?: number } {
+  return {
+    left: Math.min(anchor.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 190),
+    top: anchor.top,
+    bottom: anchor.bottom,
+  };
+}
 
 /**
  * 칸 상세 입력 — **숫자로 표현할 수 없는 것**(지각·조퇴·보강·메모)을 담당한다.
@@ -251,11 +263,7 @@ export function CellPopover({
         aria-label={t("att.pop.aria")}
         // ⚠️ role="dialog" 는 접근성 표시이자 **격자 키 가로채기 방지 신호**다(grid-context의 가드가 이걸 본다).
         className="bg-card border-line fixed z-50 flex w-44 flex-col gap-0.5 rounded-lg border p-1 shadow-lg"
-        style={{
-          left: Math.min(anchor.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 190),
-          top: anchor.top,
-          bottom: anchor.bottom,
-        }}
+        style={popoverPosition(anchor)}
       >
         {/* 예약된 칸(0264a) — 무엇의 보강인지·언제인지·누가 잡았는지 + 취소. 값을 찍는 항목들은 그 아래 그대로. */}
         {reservation ? (
@@ -306,7 +314,7 @@ export function CellPopover({
               <div className="flex flex-col gap-1">
                 {/* ⚠️ 잠금 사유가 이미 같은 말을 했으면 **반복하지 않는다**(빗금 칸의 기본 경로).
                     7일 잠금과 겹칠 때만 두 문장이 서로 다른 정보를 담는다. */}
-                {hasOtherRecords && locked === NOT_MINE_MESSAGE ? null : (
+                {hasOtherRecords && (locked === NOT_MINE_MESSAGE || locked === t("att.lock.seatOnly")) ? null : (
                   <p className="text-text-dim text-xs leading-tight">
                     {/* ⚠️ 사유 문장은 NOT_MINE_MESSAGE 단일 소스 — 여기 사본을 두면 사유가 늘 때
                         (2026-08-19 '담임 이전 기록') 한쪽만 고쳐져 같은 칸이 화면마다 다른 말을 한다. */}
@@ -363,7 +371,7 @@ export function CellPopover({
         ) : null}
         {noteOnly ? null : (
           <>
-            {OPTIONS.map((o) => (
+            {STATUS_OPTIONS.map((o) => (
               <button
                 key={o}
                 type="button"

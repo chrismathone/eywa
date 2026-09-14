@@ -185,12 +185,14 @@ function DayCell({
       }`}
     >
       <div className="flex items-center gap-1.5">
-        <span className={`num text-sm font-bold ${holiday ? "text-danger" : ""}`}>
+        {/* 휴일 글자 = 출석부 휴일 잉크(`text-att-holiday-ink`) — 공용 `text-danger`는 휴일 회색
+            (`--att-weekend`) 위에서 대비 3.75로 WCAG 4.5를 깼다(2026-09-14). */}
+        <span className={`num text-sm font-bold ${holiday ? "text-att-holiday-ink" : ""}`}>
           {date.slice(5).replace("-", "/")}
         </span>
         {/* 공휴일명 — 이름이 곧 사유다. 좁은 칸이라 넘치면 줄인다(전문은 칸 title). */}
         {holiday ? (
-          <span className="text-danger min-w-0 shrink truncate text-xs font-bold">{holiday}</span>
+          <span className="text-att-holiday-ink min-w-0 shrink truncate text-xs font-bold">{holiday}</span>
         ) : null}
         <span className="ml-auto flex shrink-0 gap-1">
           {isToday ? (

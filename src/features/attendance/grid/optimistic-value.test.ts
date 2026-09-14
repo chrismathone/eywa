@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRecordless, optimisticGridValue } from "./optimistic-value";
+import { ghostOptimisticValue, isRecordless, optimisticGridValue } from "./optimistic-value";
 import type { GridValue } from "./store";
 
 const P = (units: string) => ({ status: "present" as const, units });
@@ -46,6 +46,22 @@ describe("optimisticGridValue — 저장 전에 칸에 칠할 값(서버 저장 
 
   it("지우기(null)는 빈 칸", () => {
     expect(optimisticGridValue(null, { s: "present", u: 2 }, 1.5, 1)).toBeNull();
+  });
+});
+
+describe("ghostOptimisticValue — 빗금 칸에 상태만 옮길 때(원장 2026-09-14)", () => {
+  const g = { s: "absent", u: null, g: true as const, p: 2 };
+
+  it("🔴 들은 상태면 그 교시들의 시수 합(p) · 결석이면 0(null) — 서버가 시수를 안 바꾸니 새로고침 뒤 같은 숫자", () => {
+    expect(ghostOptimisticValue(g, "present")).toEqual({ s: "present", u: 2, g: true, p: 2 });
+    expect(ghostOptimisticValue(g, "late")).toEqual({ s: "late", u: 2, g: true, p: 2 });
+    expect(ghostOptimisticValue({ ...g, s: "present", u: 2 }, "absent")).toEqual({ s: "absent", u: null, g: true, p: 2 });
+    expect(ghostOptimisticValue({ ...g, p: null }, "present")).toEqual({ s: "present", u: null, g: true, p: null });
+  });
+
+  it("빗금 값이 아닌 칸엔 뜻이 없다(null)", () => {
+    expect(ghostOptimisticValue(null, "present")).toBeNull();
+    expect(ghostOptimisticValue({ s: "absent", u: null }, "present")).toBeNull();
   });
 });
 

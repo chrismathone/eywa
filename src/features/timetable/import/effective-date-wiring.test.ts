@@ -113,6 +113,16 @@ describe("화면 배선 — 날짜 칸과 체크리스트가 붙어 있다", () 
     expect(s).toMatch(/applyStructureImport\(struct\.hash, subject, effective, \[\.\.\.checked\]\)/);
   });
 
+  it("영어 다이얼로그 — 충돌 표시가 조용해지는 축은 '배치 변경 수'다", () => {
+    // 🔴 `totalChanges`로 판정하면 "배치 0건 + 반이동 3건"일 때 무관한 경고가 그대로 선다
+    //    (충돌은 오직 배치에서 나온다). 원장 2026-09-14 *"변경이 없는데 마치 오류인것처럼 호도되어보임"*.
+    expect(read(ENG_DIALOG)).toMatch(/changed=\{structChanges > 0\}/);
+    // 접기는 표시 층에서만 — 체크리스트(①)와 게이트는 그대로 남는다.
+    const c = read("src/app/(shell)/timetable/_components/conflict-checklist.tsx");
+    expect(c).toMatch(/conflictChecklist\(conflicts\)/);
+    expect(c).toMatch(/const quiet = !changed;/);
+  });
+
   it("영어 다이얼로그 — 적용일을 바꾸면 미리보기를 버린다(그 날짜로 다시 계산해야 한다)", () => {
     const s = read(ENG_DIALOG);
     expect(s).toMatch(/function changeEffective\(next: string\) \{[\s\S]{0,220}clearPreview\(\)/);

@@ -5,9 +5,11 @@ import { toast } from "sonner";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import { parseSessionUnits } from "@/features/attendance/session-units";
 import { clearPresentAttendance, upsertStudentMark } from "../server/actions";
+import { markEditTouches } from "../lib/edit-audit";
 import { seatAttKey } from "../lib/seat-day";
 import type { SheetMark } from "../lib/roster-form";
 import type { SheetHandlers } from "./sheet-client";
+import type { SheetEditAudit } from "./use-sheet-edit-audit";
 
 export type SeatAtt = { status: string; note: string | null; units: number | null; slot: string | null };
 
@@ -18,6 +20,11 @@ export function useSeatDaySaves(
   setAttendance: Dispatch<SetStateAction<Record<string, SeatAtt | null>>>,
   marks: Record<string, SheetMark>,
   setMarks: Dispatch<SetStateAction<Record<string, SheetMark>>>,
+  /**
+   * 칸 편집 감사로그(원장 결정 2026-09-14 "칸 입력을 마칠 때 한 줄") — 주간 시트와 같은 규약.
+   * 없으면 기록하지 않는다(저장은 그대로).
+   */
+  audit?: SheetEditAudit,
 ): (
   classId: string,
 ) => Pick<SheetHandlers, "setAttendance" | "clearAttendance" | "setAttendanceNote" | "saveMark"> {
@@ -29,6 +36,24 @@ export function useSeatDaySaves(
   }, [attendance, marks]);
   const lwwTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const lwwRuns = useRef(new Map<string, () => Promise<void>>());
+  /**
+   * 감사로그가 기다릴 **완료 신호**(칸 행별) — 예약이 생길 때 만들어 `audit.track`에 넘기고, 그 저장이 끝나면
+   * 푼다. 🔑 **실행을 시작할 때 떼어 낸다** — 실행 중에 새로 친 글자는 새 신호를 받는다(앞 저장이 끝났다고
+   * 뒤 글자까지 DB에 닿은 것으로 치면, 서버가 도착 전 값을 읽고 "안 바뀜"으로 한 줄을 흘린다).
+   */
+  const lwwDone = useRef(new Map<string, () => void>());
+
+  const runLww = useCallback((key: string) => {
+    const fn = lwwRuns.current.get(key);
+    lwwRuns.current.delete(key);
+    const release = lwwDone.current.get(key);
+    lwwDone.current.delete(key);
+    if (!fn) {
+      release?.();
+      return;
+    }
+    void fn().finally(() => release?.());
+  }, []);
 
   useEffect(() => {
     const timers = lwwTimers.current;
@@ -36,26 +61,34 @@ export function useSeatDaySaves(
     return () => {
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
-      const pending = [...runs.values()];
-      runs.clear();
-      for (const fn of pending) void fn();
+      for (const key of [...runs.keys()]) runLww(key);
     };
-  }, []);
+  }, [runLww]);
 
-  const scheduleLww = useCallback((key: string, run: () => Promise<void>) => {
-    const prev = lwwTimers.current.get(key);
-    if (prev) clearTimeout(prev);
-    lwwRuns.current.set(key, run);
-    lwwTimers.current.set(
-      key,
-      setTimeout(() => {
-        lwwTimers.current.delete(key);
-        const fn = lwwRuns.current.get(key);
-        lwwRuns.current.delete(key);
-        if (fn) void fn();
-      }, DEBOUNCE_MS),
-    );
-  }, []);
+  const scheduleLww = useCallback(
+    (key: string, run: () => Promise<void>) => {
+      const prev = lwwTimers.current.get(key);
+      if (prev) clearTimeout(prev);
+      lwwRuns.current.set(key, run);
+      if (audit && !lwwDone.current.has(key)) {
+        let release = () => {};
+        audit.track(
+          new Promise<void>((resolve) => {
+            release = () => resolve();
+          }),
+        );
+        lwwDone.current.set(key, release);
+      }
+      lwwTimers.current.set(
+        key,
+        setTimeout(() => {
+          lwwTimers.current.delete(key);
+          runLww(key);
+        }, DEBOUNCE_MS),
+      );
+    },
+    [audit, runLww],
+  );
 
   return useCallback(
     (classId: string) => ({
@@ -139,6 +172,10 @@ export function useSeatDaySaves(
       saveMark: (studentId, date, slotStart, status, note, patch) => {
         const key = seatAttKey(classId, studentId, slotStart);
         const before = marksRef.current[key] ?? null;
+        // 감사로그 — 이 저장이 **바꾸는** 칸만, 편집을 시작한 순간의 값으로(칸을 떠날 때 한 줄).
+        for (const edit of markEditTouches(before, { status, progressNote: note, ...patch })) {
+          audit?.touch(classId, { kind: "mark", studentId, date, slotStart, field: edit.field }, edit.before);
+        }
         setMarks((prev) => ({
           ...prev,
           [key]: {
@@ -172,6 +209,6 @@ export function useSeatDaySaves(
         });
       },
     }),
-    [scheduleLww, setAttendance, setMarks],
+    [audit, scheduleLww, setAttendance, setMarks],
   );
 }

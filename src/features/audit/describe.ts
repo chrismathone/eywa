@@ -45,6 +45,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   invoice_session_term: "청구 회차",
   payslip: "급여명세서",
   class_sheet_plan: "수업계획",
+  // 강사 시트 칸 편집·Shouting·MP 토글(2026-09-14) — '대상' 이름은 반 이름 스냅샷.
+  class_sheet: "강사 시트",
   announcement: "직원 공지",
   briefing: "일일 브리핑",
   document_category: "서식 분류",
@@ -201,6 +203,8 @@ const FALLBACK_KEY_LABEL: Record<string, string> = {
   autoUnitsCells: "자동 시수 칸",
   // 강사 보기 저장이 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 출결 저장·지우기·메모 로그에 붙는다.
   skippedSeatRows: "건너뛴 자리 기록",
+  // 강사 보기 빗금 칸 입력으로 다른 선생님 교시 행에 상태만 옮긴 행 수(원장 2026-09-14).
+  ghostTransfer: "다른 선생님 교시로 옮긴 기록",
 };
 
 /** 폴백에서 **사람 id**에 붙일 라벨 — 이름만 서면 누구인지(학생? 강사?) 모른다. `라벨: 이름`으로 적는다. */
@@ -831,6 +835,8 @@ export function auditDetail(
       const scope = str(m.scopeTeacherId);
       const scopeName = scope && UUID_RE.test(scope) ? ctx.nameOf(scope) : null;
       const skipped = num(m.skippedSeatRows);
+      // 빗금 칸 입력(원장 2026-09-14) — 다른 선생님 교시 행에 상태만 옮겼다. 그 행 메모의 `대신 입력` 줄과 짝이다.
+      const ghostMoved = num(m.ghostTransfer);
       /**
        * 🔴 **날짜는 여기서 적는다** — 안 적으면 "어느 날 수업인지"가 화면 어디에도 없다. 시각 열은 로그를 쓴 때다.
        * 🔴 **반 이름은 단건 셀에서만** — `auditTargetName`은 `studentId ?? userId ?? newTeacherId ?? classId`라
@@ -862,6 +868,9 @@ export function auditDetail(
               : null,
         scopeName ? `강사 보기: ${scopeName}` : null,
         skipped !== null ? `건너뛴 자리 기록 ${skipped}` : null,
+        ghostMoved !== null ? `다른 선생님 교시에 상태만 옮김 ${ghostMoved}건` : null,
+        // 여러 행을 차례로 쓰다 오류로 멈춘 저장 — 위 건수만 반영됐다(적대 재리뷰 2026-09-14).
+        m.partial === true ? "일부만 저장(오류로 멈춤)" : null,
       );
     }
     case "attendance_units_backfill": {
@@ -1342,6 +1351,65 @@ export function auditDetail(
         copied !== null ? `${copied}줄 복사` : null,
         m.termMode === "exam" ? "시험 기간" : null,
         m.viaPin === true ? "공개 PIN 화면" : null,
+      );
+    }
+
+    // ── 강사 시트 칸 편집(edit-audit-actions.ts) — 칸을 떠날 때 한 줄(원장 결정 2026-09-14) ─────────────
+    // '대상' 열이 반 이름을 보여 준다(targetLabel 스냅샷). 칸 이름은 기록 때 한글 스냅샷(fieldLabel·areaLabel)으로
+    // 실려 오므로 여기서 영문 키(kind·scope·role·field)를 그대로 흘리지 않는다.
+    case "ecs_goal_edit":
+    case "ecs_mark_edit":
+    case "ecs_memo_edit":
+    case "ecs_month_plan_edit": {
+      // MP 토글(누름이 곧 결심) — 저장 액션(`saveMonthPlanCells`)이 직접 남긴 줄.
+      if (m.change === "ebookColumn") {
+        const days = num(m.days);
+        const from = str(m.from);
+        const to = str(m.to);
+        return join(
+          m.show === true ? "e-book 열 세움" : "e-book 열 내림",
+          from && to ? (from === to ? from : `${from}~${to}`) : null,
+          days ? `${days}일` : null,
+        );
+      }
+      if (m.change === "dayOff") return join(str(m.date), m.off === true ? "휴강으로 표시" : "휴강 표시 해제");
+      const shown = (v: unknown) => {
+        const s = str(v);
+        return s ? `「${s}」` : "(빈칸)";
+      };
+      const date = str(m.date);
+      const slot = str(m.slotStart);
+      const periodStart = str(m.periodStart);
+      const weekStart = str(m.weekStart);
+      const where =
+        m.kind === "goal"
+          ? join(
+              periodStart
+                ? m.scope === "week"
+                  ? `${periodStart} 주 목표`
+                  : `${periodStart.slice(0, 7)} 월간 목표`
+                : null,
+              m.role === "assistant" ? "부담임" : m.role === "homeroom" ? "담임" : null,
+              str(m.areaLabel),
+            )
+          : m.kind === "mark"
+            ? join(ctx.nameOf(m.studentId), date ? (slot ? `${date} ${slot}` : date) : null)
+            : m.kind === "memo"
+              ? weekStart
+                ? `${weekStart} 주`
+                : null
+              : m.kind === "monthMemo"
+                ? str(m.month)
+                : date;
+      const label = str(m.fieldLabel);
+      return join(where, `${label ? `${label} ` : ""}${shown(m.before)} → ${shown(m.after)}`);
+    }
+    case "ecs_shouting_toggle": {
+      const date = str(m.date);
+      const slot = str(m.slotStart);
+      return join(
+        date ? (slot ? `${date} ${slot}` : date) : slot,
+        m.checked === true ? "Shouting 체크" : "Shouting 체크 해제",
       );
     }
 

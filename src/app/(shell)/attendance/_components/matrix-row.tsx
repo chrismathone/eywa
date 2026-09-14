@@ -140,8 +140,9 @@ export function MatrixRow({
         // 그래야 팝오버·커서·툴팁이 격자(writeOne/writeMany)와 같은 말을 한다(#77: 표면마다 딴말 금지).
         const otherSlots = matrix.ghosts[student.id]?.[d.date];
         // 🔴 값이 **파생(수업보고서)뿐**인 칸도 몫이 아니다 — 실제 행이 자리·남의 교시뿐이라 서버가 거절한다
-        //    (리뷰 2026-09-12). 판정은 격자(`buildGridSource`)와 **같은 함수** 한 곳.
-        const notMine = notMineCell({
+        //    (리뷰 2026-09-12). 판정은 격자(`buildGridSource`)와 **같은 함수** 한 곳. 반환은 막는 사유다 — 자리뿐인
+        //    칸은 사유가 다르고, 다른 선생님 교시 기록이 있는 빗금 칸은 막지 않는다(상태만 옮긴다, 원장 2026-09-14).
+        const locked = notMineCell({
           hasValue: !!marks[d.date],
           derivedValue: !!matrix.derived[student.id]?.[d.date],
           others: otherSlots,
@@ -168,7 +169,13 @@ export function MatrixRow({
                  내려보내면 그게 그대로 RSC 페이로드 곱이 된다(강사 전체 보기는 잠긴 칸이 수천 개).
                  문장은 칸이 grid-context의 `lockNoteOf`로 편다(판정·문구는 그대로 한 곳). */
               lockedReason={
-                lockBefore && d.date < lockBefore ? "past" : notMine ? "notMine" : null
+                lockBefore && d.date < lockBefore
+                  ? "past"
+                  : locked === "seatOnly"
+                    ? "seatOnly"
+                    : locked
+                      ? "notMine"
+                      : null
               }
               derived={!!matrix.derived[student.id]?.[d.date]}
               daySlots={matrix.slots[student.id]?.[d.date]}

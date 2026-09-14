@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isMergedStudent } from "@/features/students/merged";
 import {
   SENT_STATUS_SUCCESS,
   UNREAD_GRACE_HOURS,
@@ -32,18 +33,25 @@ export async function getWeeklyChange(weeks = 4): Promise<WeeklyChangeBucket[]> 
   const from = weeklyChangeStart(today, weeks);
   const supabase = await createClient();
   const [enrolledRes, withdrawnRes] = await Promise.all([
-    supabase.from("students").select("enrolled_at").gte("enrolled_at", from),
-    supabase.from("students").select("withdrawn_at").gte("withdrawn_at", from),
+    supabase.from("students").select("enrolled_at, notes").gte("enrolled_at", from),
+    supabase.from("students").select("withdrawn_at, notes").gte("withdrawn_at", from),
   ]);
   // 🔴 조회 실패를 빈 배열로 삼키지 않는다 — 그러면 "이번 달 아무도 안 들어왔다"는 **사실 주장**이 된다.
   //    호출부(페이지)가 실패 허용 래퍼로 감싸 카드만 비운다.
   if (enrolledRes.error) throw new Error(`주별 등록 조회 실패: ${enrolledRes.error.message}`);
   if (withdrawnRes.error) throw new Error(`주별 퇴원 조회 실패: ${withdrawnRes.error.message}`);
   const ymd = (v: unknown): string => (typeof v === "string" ? v.slice(0, 10) : "");
+  // 🔴 중복 병합으로 흡수된 쪽은 **양쪽 모두에서** 뺀다(원장 2026-09-13) — 그 학생은 등록한 적도 그만둔
+  //    적도 없다. 한쪽만 빼면 같은 사람이 등록 막대에만 남아 증감이 어긋난다(김지유B가 그랬다).
+  const notMerged = (r: unknown): boolean => !isMergedStudent((r as { notes: unknown }).notes as string | null);
   return buildWeeklyChange(
     {
-      enrolledOn: (enrolledRes.data ?? []).map((r) => ymd((r as { enrolled_at: unknown }).enrolled_at)),
-      withdrawnOn: (withdrawnRes.data ?? []).map((r) => ymd((r as { withdrawn_at: unknown }).withdrawn_at)),
+      enrolledOn: (enrolledRes.data ?? [])
+        .filter(notMerged)
+        .map((r) => ymd((r as { enrolled_at: unknown }).enrolled_at)),
+      withdrawnOn: (withdrawnRes.data ?? [])
+        .filter(notMerged)
+        .map((r) => ymd((r as { withdrawn_at: unknown }).withdrawn_at)),
     },
     today,
     weeks,

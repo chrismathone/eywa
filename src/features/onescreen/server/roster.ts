@@ -57,7 +57,14 @@ const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const; // D
 export type TodayClass = {
   id: string;
   name: string;
+  /** 과목 **표시 라벨**(학원설정 `labelOf`, 예 "수학") — 화면에 적는 값. 🔴 과목 비교에 쓰지 말 것(아래 `subjectKey`). */
   subject: string;
+  /**
+   * 과목 **키**(`classes.subject`, 예 "math") — 보강 줄 거르기처럼 과목을 **비교**할 때는 이 값이다. 모르면 "".
+   * 🔴 원장 제보 2026-09-14(권영준·이수진): 보강 추가가 라벨("수학")을 키("math")와 비교해, 반 칩을 고른 채
+   *    보강 학생을 추가하면 보강 줄이 0개가 되어 "보강 날짜와 과목을 확인해 주세요"로 막혔다.
+   */
+  subjectKey: string;
   startTime: string | null; // "16:20"
   studentCount: number;
   /**
@@ -1492,6 +1499,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       id: c.id,
       name: c.class_name,
       subject: subjects.labelOf(c.subject),
+      subjectKey: c.subject ?? "",
       startTime: startByClass.get(c.id) ?? null,
       studentCount: countByClass.get(c.id) ?? 0,
       reportOptout: !!c.report_optout,

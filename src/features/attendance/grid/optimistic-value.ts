@@ -32,6 +32,19 @@ export function isRecordless(v: GridValue): boolean {
  *    (`parseSessionUnits`와 같은 정규화).
  * ③ 기본(빈칸·1)인데 교시가 여럿이면 "교시마다 1" → 그날 합은 교시 수(원장 확정).
  */
+/**
+ * 빗금 칸(`g`)에 상태를 옮길 때 칠할 **표시 전용** 값(원장 2026-09-14 *"그 날의 해당 담당 출석으로 전부 이전"*) — 서버는
+ * 다른 선생님 교시 행에 **상태만** 쓰고 시수는 그대로라, 옮긴 뒤 칸 숫자는 들은 상태면 `p`(그 행들 시수 합) · 결석
+ * 계열이면 0이다(`ghostGridValue`와 같은 정규화 — 1·0은 null).
+ * 🔴 친 숫자(시수)는 칠하지 않는다 — 서버가 안 쓰는 값을 칠하면 새로고침 뒤 숫자가 바뀐다.
+ * ⚠️ 빗금 값이 아닌 칸엔 뜻이 없다(null).
+ */
+export function ghostOptimisticValue(current: GridValue, status: string): GridValue {
+  if (!current?.g) return null;
+  const p = current.p ?? null;
+  return { s: status, u: COUNTABLE_STATUSES.has(status) ? p : null, g: true, p };
+}
+
 export function optimisticGridValue(
   v: OptimisticInput | null,
   current: GridValue,

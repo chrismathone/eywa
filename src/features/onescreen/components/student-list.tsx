@@ -8,7 +8,7 @@ import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
 import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
-import { CLASS_GROUP_OTHER } from "../class-tags";
+import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
@@ -188,7 +188,7 @@ export function StudentList({
     const add = (key: string, row: OneScreenStudent) => groups.set(key, [...(groups.get(key) ?? []), row]);
     if (regular.length || !makeup.length) add(st.className ?? CLASS_GROUP_OTHER, { ...st, subjects: regular });
     // 실제 학생 id는 그대로 유지한다. 보강을 선택하면 같은 카드의 해당 과목 행을 연다.
-    for (const su of makeup) add("보강", { ...st, subjects: [su], attendance: MARK_PRESENT });
+    for (const su of makeup) add(CLASS_GROUP_MAKEUP, { ...st, subjects: [su], attendance: MARK_PRESENT });
   }
   const orderedKeys = [
     ...(classOrder ?? []).filter((k) => groups.has(k)),
@@ -257,7 +257,11 @@ export function StudentList({
                     />
                     <span className="text-text-dim truncate text-xs font-bold">
                       {/* 🔴 반 이름은 한국어 그대로 — 원스크린은 학부모 보고서를 짓는 표면이다. */}
-                      {key === CLASS_GROUP_OTHER ? t("os.list.noClass") : key}
+                      {key === CLASS_GROUP_OTHER
+                        ? t("os.list.noClass")
+                        : key === CLASS_GROUP_MAKEUP
+                          ? t("os.list.makeup")
+                          : key}
                     </span>
                   </span>
                   <span className="text-text-faint shrink-0 font-mono text-xs">

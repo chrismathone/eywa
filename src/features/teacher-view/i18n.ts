@@ -1092,8 +1092,6 @@ export const SHEET_DICT = {
     ko: "이 달 출결을 기록한 사람입니다(수업보고서가 없는 반). 대신 찍어 준 경우가 있어 실제 수업자와 다를 수 있습니다.",
     en: "Recorded this month's attendance (this class has no lesson reports). Someone may have marked it on another teacher's behalf.",
   },
-  // 그 달 학원 휴일 — 날짜 칸이 좁아 이름을 못 적으니 표 위에 한 줄로 적는다(원장 2026-09-07).
-  "att.holidayLine": { ko: "학원 휴일", en: "Academy holidays" },
   "att.role.slot": { ko: "교시 담당", en: "Period teacher" },
   "att.since": { ko: "{date}부터 담임", en: "Homeroom since {date}" },
   "att.notice.lock.a": { ko: "출결 수정은 ", en: "Attendance can be edited only for the " },
@@ -1278,22 +1276,42 @@ export const SHEET_DICT = {
   "att.group.students": { ko: "{n}명", en: "{n} students" },
   "att.group.units": { ko: "시수 ", en: "Sessions " },
   "att.searchEmpty.where": { ko: "이 달 출석부", en: "this month's sheet" },
-  "att.help.a": { ko: "총 ", en: "Recorded " },
-  "att.help.b": { ko: "회 기록 · 칸을 고르고 ", en: " in total · pick a cell and type a " },
-  "att.help.number": { ko: "숫자", en: "number" },
-  "att.help.c": {
-    ko: "를 치세요(0=결석, 1·1.5·2=출석 시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 · ",
-    en: " (0 = absent, 1·1.5·2 = sessions present) · arrows·Tab·Enter to move · Shift for a range · Ctrl+C/V · Ctrl+Z · drag the bottom-right handle to fill · ",
-  },
-  "att.help.d": { ko: "지각·조퇴·보강·메모는 ", en: "for late, early leave, makeup and notes, " },
-  "att.help.rightClick": { ko: "우클릭", en: "right-click" },
-  "att.help.e": {
-    ko: "(7일 지난 칸도 메모는 고칠 수 있습니다)",
-    en: "(notes stay editable even on cells older than 7 days)",
-  },
+  // 강사 미니셸 머리 둘째 줄 — 지금 보는 것이 강사뷰라는 표시(원장 2026-09-14 *"강사뷰 라고 큼직하게"*).
+  // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
+  "chrome.teacherView": { ko: "강사뷰", en: "Teacher view" },
   "att.legend": { ko: "범례", en: "Legend" },
   "att.legend.classDay": { ko: "등원요일", en: "Class day" },
-  "att.legend.off": { ko: "주말·휴일", en: "Weekend · holiday" },
+  /* 🔴 2026-09-14: 범례가 **격자에 실제로 나오는 칠을 전부** 세운다(원장 *"이런 미등원도 범례 추가"* →
+     캡처를 더 보내며 *"이런것들"*). 그전엔 등원요일·주말 둘뿐이라 회색(미등원)·빗금(남의 교시)·
+     붉은 칸(휴일)은 무슨 뜻인지 화면 어디에도 없었다.
+     🔴 `off`에서 '휴일'을 뗀 이유: 같은 날 표 위 '학원 휴일 9/24 …' 안내 줄을 걷어냈고(원장 지시),
+        휴일은 주말과 **다른 색**(붉은 계열)이라 한 낱말에 묶으면 둘 중 하나가 거짓이 된다. */
+  "att.legend.off": { ko: "주말", en: "Weekend" },
+  "att.legend.holiday": { ko: "학원 휴일", en: "Academy holiday" },
+  "att.legend.outside": { ko: "미등원", en: "Not enrolled" },
+  /* 한 날에 교시가 둘 이상 찍혔고 교시마다 출결 색이 다른 칸(`rollupDay().mixed`) — 교시 순서대로 색을 나눠 칠한다.
+     🔴 '출석+결석'처럼 특정 조합으로 쓰지 말 것 — 지각·조퇴·보강이 섞여도 같은 줄무늬다. */
+  "att.legend.mixed": { ko: "교시마다 다름", en: "Varies by period" },
+  /* 강사 전체 보기에서만 나오는 빗금 — 값은 없지만 기록은 있다.
+     🔴 "다른 선생님 교시"라고 쓰지 말 것 — 빗금은 자리(JJ·랩실) 기록·교시를 안 남긴 옛 기록·담임이 되기 전
+        기록에도 나온다. 참인 것은 "이 화면의 몫이 아니다"뿐이다(cell-display.ts `NOT_MINE_MESSAGE` 주석, 적대적 리뷰 2026-09-14). */
+  "att.legend.ghost": { ko: "이 화면 몫 아님", en: "Not this sheet's record" },
+  // 오늘 열 머리(남색) — 보고 있는 달에 오늘이 있을 때만 범례에 선다(attendance-legend.tsx `showToday`).
+  "att.legend.today": { ko: "오늘", en: "Today" },
+  /* 합계 줄 오른쪽 끝의 **짧은 조작 안내**(원장 2026-09-14 *"2행은 1행 우측 끝으로 간략하게"*).
+     전문은 `att.help.full`이 툴팁으로 나른다. 조각 사이 공백은 사전 값 안에(JSX 줄바꿈은 공백을 지운다).
+     ⚠️ 영어 앞 조각을 빈 문자열로 두지 말 것 — `lang-wiring` 가드가 영어값으로 뜻을 묶어서, 빈 문자열끼리
+        (`cls.unit.people` 등) '다른 뜻이 영어에서 뭉쳤다'로 걸린다. 그래서 영어는 어순을 바꿔 앞 조각에 낱말을 둔다.
+     ⚠️ 한국어 `지각·조퇴·보강·메모는 우클릭`은 `matrix-table.test.tsx`가 잠근 문구다 — 어순을 바꾸지 말 것. */
+  "att.help.briefPre": { ko: "총 ", en: "Recorded " },
+  "att.help.brief": {
+    ko: "회 기록 · 숫자로 입력 · 지각·조퇴·보강·메모는 우클릭",
+    en: " in total · type a number · right-click for late·leave·makeup·note",
+  },
+  "att.help.full": {
+    ko: "칸을 고르고 숫자를 치세요(0=결석, 1·1.5·2=출석 시수) · 방향키·Tab·Enter 이동 · Shift로 범위 · Ctrl+C/V · Ctrl+Z · 우하단 손잡이를 끌면 채우기 · 지각·조퇴·보강·메모는 우클릭 (7일 지난 칸도 메모는 고칠 수 있습니다)",
+    en: "Select a cell and type a number (0 = absent, 1·1.5·2 = attended units) · Arrows·Tab·Enter to move · Shift for a range · Ctrl+C/V · Ctrl+Z · drag the corner handle to fill · right-click for late·leave·makeup·note (notes stay editable after 7 days)",
+  },
   "att.row.thisClass": { ko: "이 반", en: "this class" },
   "att.row.attendDows": { ko: "등원 {dows}", en: "Class days {dows}" },
   "att.row.noTierTitle": {
@@ -1328,6 +1346,16 @@ export const SHEET_DICT = {
   "att.cell.unitsAria": { ko: "시수 입력", en: "Enter sessions" },
   "att.cell.fillHandle": { ko: "드래그하여 옆 칸에 같은 값 채우기", en: "Drag to fill the same value across" },
   "att.cell.ghostPrefix": { ko: "이 선생님 몫으로 세지 않는 기록 · ", en: "Records not counted for this teacher · " },
+  // 🔴 빗금 칸 입력 = 다른 선생님 교시 기록에 **상태만** 옮긴다(원장 2026-09-14 *"그 날의 해당 담당 출석으로 전부 이전"*).
+  "att.cell.ghostTransfer": {
+    ko: " · 여기에 입력하면 그 교시 기록에 상태만 옮깁니다(시수는 그대로 · 이 표 합계엔 안 들어갑니다)",
+    en: " · entering here moves only the status onto that period's record (sessions unchanged, not counted in this table)",
+  },
+  // 🔴 자리(JJ·랩실) 기록뿐인 칸 — 강사 보기는 그 행을 안 쓴다(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지"*).
+  "att.lock.seatOnly": {
+    ko: "이 날은 자리(JJ·랩실) 기록뿐이라 선생님 출석부에서는 고치지 않습니다",
+    en: "This day only has JJ or Lab seat records, so it is not edited in a teacher's register",
+  },
   "att.totals.search": { ko: "검색 합계", en: "Search total" },
   "att.totals.all": { ko: "합계", en: "Total" },
   "att.totals.searching": { ko: "검색 중 — 전체 아님", en: "Searching — not the full set" },
@@ -1397,6 +1425,11 @@ export const SHEET_DICT = {
   "att.badge.transferOut": {
     ko: "반이동: {from} → {to} ({date}까지)",
     en: "Moved class: {from} → {to} (through {date})",
+  },
+  // 종강 — 이 반만 끝나고 같은 과목 다른 반은 계속 다닌다(원장 2026-09-14 "과목을 완전 수강 종료하면 퇴원이지").
+  "att.badge.classEnded": {
+    ko: "{date} 종강 · {other} 계속 수강",
+    en: "Finished {date} · continues in {other}",
   },
 
   // ── 출석부 칸 팝오버(우클릭)·격자 안내·검색 칩 ─────────────────
@@ -1475,6 +1508,46 @@ export const SHEET_DICT = {
   "att.grid.clear.sharedMaybe": {
     ko: "{n}칸은 같은 날 다른 선생님 교시 기록도 함께 바뀌었을 수 있습니다",
     en: "{n} cells may also have changed records in other teachers' periods that day",
+  },
+  // 빗금 칸 입력(원장 2026-09-14) — 성공 알림(칸 숫자가 이 표 몫이 아니라는 사실을 함께 말한다).
+  "att.grid.ghostNotice": {
+    ko: "다른 선생님 교시 기록에 상태만 옮겼습니다 — 시수는 그대로이고 이 표 합계엔 안 들어갑니다",
+    en: "Moved only the status onto another teacher's period record — sessions are unchanged and it is not counted in this table",
+  },
+  "att.grid.ghostNoticeMany": {
+    ko: "{n}칸은 다른 선생님 교시 기록에 상태만 옮겼습니다(시수 그대로 · 이 표 합계 제외)",
+    en: "{n} cells moved only the status onto other teachers' period records (sessions unchanged, not counted here)",
+  },
+  // 빗금 칸의 지우기는 막는다 — 남의 기록 삭제는 되돌리기 어렵다(원장 결정 기본값 2026-09-14).
+  "att.grid.ghostClearBlock": {
+    ko: "다른 선생님 교시 기록이라 여기서는 지울 수 없습니다 — 반별 보기에서 지우세요",
+    en: "These are another teacher's period records, so they cannot be cleared here — clear them in the class view",
+  },
+  // 화면이 본 칸과 서버 판정이 갈렸다(그 사이 기록이 바뀜) — 사람이 본 것과 다른 기록을 쓰지 않는다(적대 리뷰 2026-09-14).
+  "att.grid.ghostStale": {
+    ko: "그 사이 이 칸의 기록이 바뀌어 저장하지 않았습니다 — 새로고침한 뒤 다시 입력해 주세요",
+    en: "The records in this cell changed in the meantime, so nothing was saved — refresh and enter it again",
+  },
+  // 흐린 값(남의 교시)을 복사·채우기 원본으로 쓰면 붙여넣기가 '지우기'가 된다 — 막고 사유를 말한다.
+  "att.grid.ghostCopyBlock": {
+    ko: "다른 선생님 교시 기록은 복사·채우기의 원본으로 쓸 수 없습니다",
+    en: "Another teacher's period record cannot be the source for copy or fill",
+  },
+  "att.grid.ghostUndoBlock": {
+    ko: "다른 선생님 교시에 옮긴 상태는 되돌리기로 돌리지 않습니다 — 필요하면 그 칸에 다시 입력하세요",
+    en: "A status moved onto another teacher's period is not undone — enter that cell again if needed",
+  },
+  "att.grid.ghostUndoPartial": {
+    ko: "{n}칸(다른 선생님 교시에 옮긴 상태)은 되돌리지 않았습니다",
+    en: "{n} cells (statuses moved onto other teachers' periods) were not undone",
+  },
+  "att.grid.skip.ghostClear": {
+    ko: "{n}칸은 다른 선생님 교시 기록뿐이라(반별 보기에서 지우세요)",
+    en: "{n} cells hold only other teachers' period records (clear them in the class view)",
+  },
+  "att.ghostPop.hint": {
+    ko: "다른 선생님 교시 기록에 상태만 옮깁니다 · 시수는 그대로 · 메모에 '대신 입력'이 남습니다",
+    en: "Moves only the status onto another teacher's period record · sessions unchanged · an 'entered on behalf' note is added",
   },
   "att.search.totalsNote": { ko: "숫자도 검색 기준", en: "totals follow the search" },
   "att.search.count": { ko: "검색 {n}명", en: "{n} found" },
@@ -1822,6 +1895,8 @@ export const SHEET_DICT = {
   "os.list.expandAll": { ko: "모두 펼치기", en: "Open all" },
   "os.list.collapseAll": { ko: "모두 접기", en: "Close all" },
   "os.list.count": { ko: "{n}명", en: "{n} students" },
+  // 반이 없는 보강 행 묶음 머리 — 묶음 키는 `CLASS_GROUP_MAKEUP`(값), 글자는 여기.
+  "os.list.makeup": { ko: "보강", en: "Makeup" },
   "os.att.noPerm": {
     ko: "출결 입력 권한이 없습니다 — 학원설정(역할·권한)에서 원장님이 열어줄 수 있습니다",
     en: "You do not have permission to record attendance — the director can open it in the academy settings (roles and permissions)",
@@ -2829,6 +2904,11 @@ export const SHEET_DICT = {
   },
   "os.c.makeupRowExists": { ko: "이미 보강 행이 추가되어 있습니다", en: "A makeup row has already been added" },
   "os.c.makeupAdded": { ko: "{name} 보강 추가됨", en: "Makeup added for {name}" },
+  // 보강 명단 영속화(분리 보강) 저장 요청 자체가 실패했을 때 — 서버가 준 사유는 그대로 띄운다.
+  "os.c.makeupSaveFail": {
+    ko: "보강 명단을 저장하지 못했습니다. 다시 시도해 주세요",
+    en: "The makeup list could not be saved. Please try again",
+  },
   "os.c.prevFail": { ko: "이전 진도를 불러오지 못했습니다", en: "The last progress could not be loaded" },
   "os.c.prevLoaded": { ko: "이전 진도를 불러왔습니다", en: "The last progress was loaded" },
   "os.c.prevNone": { ko: "이전 보고서가 없습니다", en: "There is no earlier report" },

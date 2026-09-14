@@ -152,14 +152,65 @@ export function transferFrom(
 }
 
 /**
+ * 나간 날 **같은 과목의 다른 반을 이미 다니고 있고 그 뒤로도 계속 다니면** 퇴원이 아니라 **종강**이다.
+ *
+ * 원장 2026-09-14 *"이건 퇴원이 아니라 '종강' 처리해줘야지 과목 퇴원이 아니고 과목에서 여러개 수업을 듣다가
+ * 특강 종료 등으로 종료한것인데. 과목을 완전 수강 종료하면 퇴원이지."* — `[특강]중3-2 개념 완성반` 9명이
+ * 특강을 마치고 같은 수학 정규반을 계속 다니는데 전원 '퇴원'으로 떴다(최근 120일 일반 종료 378건 중 75건이 이 모양).
+ *
+ * 🔴 판정 순서는 **반이동(`transferTo`) → 종강 → 퇴원**이다. 여기서는 반이동이 아닌 경우만 본다.
+ *   ① 같은 과목 키(`transferTo`와 같은 비교). 과목을 모르면(null) 판정하지 않는다 — 퇴원 그대로
+ *   ② 나간 날 **이전이나 당일에** 시작(나간 뒤에 시작한 반은 반이동 쪽 몫이다)
+ *   ③ 그 반의 **마지막 재원일 + 14일에도 재원**(`TRANSFER_GAP_DAYS` — 반이동과 같은 창). 재원 판정은 `isEnrolledOn`
+ *      그대로(반이동 반열림 규약 포함). 🔴 "다음날 하루"로 보지 말 것 — 퇴원하면서 반마다 닫는 날이 하루~며칠 어긋난
+ *      학생이 먼저 닫힌 반에서 전부 '종강'이 된다(리뷰 2026-09-14 실측 최근 120일 9건·전원 퇴원생: 박한별 BS2O 7/5 ·
+ *      JJ2L 7/6 · 7/6 퇴원). 14일 안에 같은 과목이 전부 끝났으면 과목을 끝낸 것 = 퇴원이다.
+ *      ⚠️ 의도한 절충: 특강이 끝난 뒤 정규반을 14일이 안 되게 더 다니다 그만둔 학생도 그 특강에선 '퇴원'이다
+ *      (실측 어긋남은 하루~며칠이었지만 반이동 창과 한 값으로 맞췄다). 계속 반의 종료일이 비어 있다가 나중에
+ *      14일 안쪽으로 입력되면 지난 달 뱃지가 '종강' → '퇴원'으로 바뀐다 — 그게 데이터가 말하는 사실이다.
+ *   🔴 마지막 재원일은 **반이동으로 닫힌 구간이면 종료일 하루 전**(`endedByTransfer`)이다. 출석부는 원본 종료일을,
+ *      MCS는 미리 하루 당긴 구간(`mathSpansOf`, 표식 없음)을 넘기므로 이걸 맞춰야 두 화면이 같은 날을 본다
+ *      (안 맞추면 같은 학생이 출석부는 퇴원·MCS는 종강 — 리뷰 실측 2건: 노현우·임은진).
+ * ⚠️ 학원을 그만둔 학생은 다른 반 구간을 **퇴원일로 먼저 자른 뒤** 넘길 것(`clipToWithdrawal`) — 퇴원일 뒤로
+ *    end_date가 남은 수강이 실제로 있어(실측 48건) 안 자르면 그만둔 학생이 "계속 수강"으로 읽힌다.
+ * 여러 반이면 가장 먼저 시작한 반.
+ */
+export function continuesIn(
+  leftOn: string,
+  subject: string | null,
+  others: readonly OtherSpan[],
+  /** 이 구간이 반이동으로 닫혔나(`transferTo`에 넘기는 값과 같다) — 닫혔으면 종료일 당일은 이미 새 반이다. */
+  endedByTransfer = false,
+): OtherSpan | null {
+  if (subject == null) return null;
+  const lastDay = endedByTransfer ? addDays(leftOn, -1) : leftOn;
+  const probe = addDays(lastDay, TRANSFER_GAP_DAYS);
+  const hit = others
+    .filter((o) => o.subject === subject && o.start <= leftOn && isEnrolledOn(probe, [o]))
+    .sort((a, b) => a.start.localeCompare(b.start));
+  return hit[0] ?? null;
+}
+
+/**
+ * 학원 퇴원일(`students.withdrawn_at`)로 **다른 반** 구간의 끝을 자른다 — 실효 종료일 = 수강 종료와 퇴원일 중 이른 것
+ * (MCS `mathSpansOf`의 `effectiveEndDate`와 같은 규약). 잘렸으면 일반 종료(퇴원일 당일까지 재원)다.
+ * 퇴원일이 없거나 수강이 먼저 끝났으면 그대로 돌려준다.
+ */
+export function clipToWithdrawal<T extends EnrollSpan>(span: T, withdrawnAt: string | null | undefined): T {
+  const cut = withdrawnAt ? withdrawnAt.slice(0, 10) : null;
+  if (!cut || (span.end != null && span.end <= cut)) return span;
+  return { ...span, end: cut, isTransferred: false };
+}
+
+/**
  * 이름 옆에 다는 표식. 보통 빈 배열이고, 그 달에 경계가 있는 학생만 1~2개를 갖는다.
  * (들어왔다 나간 달이면 둘 다 — 드물지만 감추지 않는다.)
  */
 export type LifecycleBadge = {
-  kind: "new" | "left" | "transferIn" | "transferOut";
+  kind: "new" | "left" | "transferIn" | "transferOut" | "classEnded";
   /** 기준 날짜(시작일 또는 종료일). */
   date: string;
-  /** 반이동 상대 반 이름 — 툴팁에 "A반 → B반"으로 쓴다. */
+  /** 반이동 상대 반 이름 — 툴팁에 "A반 → B반"으로 쓴다. 종강이면 **계속 다니는 반** 이름. */
   otherClassName?: string;
 };
 
@@ -198,8 +249,14 @@ export function lifecycleBadgesInRange(
     // 그 종료가 **반이동으로 닫힌 것**이면 같은 날 시작한 반도 이동으로 본다(위 transferTo 주석).
     const endedByTransfer = spans.some((s) => s.end === left && s.isTransferred === true);
     const to = transferTo(left, subject, others, endedByTransfer);
+    // 반이동이 아니면 같은 과목 다른 반을 계속 다니는지 본다 — 그러면 과목 퇴원이 아니라 이 반만 종강(continuesIn 주석).
+    const stay = to ? null : continuesIn(left, subject, others, endedByTransfer);
     out.push(
-      to ? { kind: "transferOut", date: left, otherClassName: to.className } : { kind: "left", date: left },
+      to
+        ? { kind: "transferOut", date: left, otherClassName: to.className }
+        : stay
+          ? { kind: "classEnded", date: left, otherClassName: stay.className }
+          : { kind: "left", date: left },
     );
   }
   return out;
@@ -211,6 +268,7 @@ export const BADGE_LABEL: Record<LifecycleBadge["kind"], string> = {
   left: "퇴원",
   transferIn: "반이동",
   transferOut: "반이동",
+  classEnded: "종강",
 };
 
 /**
@@ -222,6 +280,8 @@ export const BADGE_LABEL_EN: Record<LifecycleBadge["kind"], string> = {
   left: "Left",
   transferIn: "Moved",
   transferOut: "Moved",
+  // 수업목록 반 상태 '종강'(`cls.status.ended`)과 같은 영어 — 같은 한국어가 화면마다 다른 영어가 되지 않게.
+  classEnded: "Finished",
 };
 
 /** 화면에 적을 뱃지 두 글자. 인자를 안 주면 한국어. */
@@ -242,6 +302,7 @@ export function badgeTitle(
   if (b.kind === "new") return sheetTf(lang, "att.badge.new", { date: b.date });
   if (b.kind === "left") return sheetTf(lang, "att.badge.left", { date: b.date });
   const other = classNameFor(b.otherClassName ?? "", lang);
+  if (b.kind === "classEnded") return sheetTf(lang, "att.badge.classEnded", { date: b.date, other });
   if (b.kind === "transferIn") {
     return sheetTf(lang, "att.badge.transferIn", { from: other, to: className, date: b.date });
   }

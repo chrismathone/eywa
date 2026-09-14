@@ -34,6 +34,8 @@ export function useMonthGoals(input: {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const pending = useRef(new Map<string, { role: GoalRole; skillArea: string }>());
+  /** 이미 떠난 저장 — `flushAll`이 이것까지 기다린다(디바운스가 먼저 발화한 저장도 도착한 뒤에 움직이게). */
+  const inflight = useRef(new Set<Promise<void>>());
   /** 저장 실패 시 되돌릴 값 — 낙관적 반영 직전의 스냅샷. */
   const lastSaved = useRef(initial);
   /**
@@ -49,7 +51,7 @@ export function useMonthGoals(input: {
   const flushKey = useCallback(
     (key: string, role: GoalRole, skillArea: string, next: MonthGoalMap): Promise<void> => {
       const cell = next[skillArea] ?? { textbook: null, targetProgress: null };
-      return upsertGoal({
+      const job: Promise<void> = upsertGoal({
         classId,
         scope: "month",
         periodStart,
@@ -82,8 +84,14 @@ export function useMonthGoals(input: {
           setError(e instanceof Error ? e.message : "네트워크 오류로 저장하지 못했습니다");
         })
         .finally(() => {
-          pending.current.delete(key);
+          // 🔴 저장 중에 같은 키(역할·영역)에 새 입력이 들어와 **타이머가 다시 섰으면** 그 대기분은 지우지 않는다 —
+          //    지우면 flushAll이 타이머만 끄고 대상이 없어 건너뛰어, 뒤에 친 칸(예: 교재명 뒤 목표 진도)이
+          //    화면엔 '저장됨'인 채 서버에 영영 안 간다(리뷰 2026-09-14).
+          if (!timers.current.has(key)) pending.current.delete(key);
+          inflight.current.delete(job);
         });
+      inflight.current.add(job);
+      return job;
     },
     [classId, periodStart],
   );
@@ -117,17 +125,19 @@ export function useMonthGoals(input: {
    * 창을 닫거나 달·반을 옮길 때 — 예약된 저장을 지금 보낸다(마지막 글자 유실 방지).
    * 🔴 **Promise를 돌려준다** — 호출부가 `await` 한 뒤 이동해야 한다. 안 기다리고 이동하면
    *    컴포넌트가 언마운트되며 방금 친 글자가 서버에 닿지 못한 채 사라진다.
+   * 🔑 **이미 떠난 저장까지** 기다린다 — 디바운스가 먼저 발화해 왕복 중인 저장을 두고 움직이면, 화면을 다시
+   *    읽거나 칸 편집 감사로그가 DB를 읽을 때 아직 도착 전 값을 본다.
    */
   const flushAll = useCallback((): Promise<void> => {
-    const jobs: Promise<void>[] = [];
     for (const [key, timer] of [...timers.current]) {
       clearTimeout(timer);
+      // 끈 타이머는 대상이 없어도 지운다 — 남겨 두면 위 finally가 "대기 중"으로 읽어 대기분을 영영 못 지운다.
+      timers.current.delete(key);
       const target = pending.current.get(key);
       if (!target) continue;
-      timers.current.delete(key);
-      jobs.push(flushKey(key, target.role, target.skillArea, goalsRef.current[target.role]));
+      flushKey(key, target.role, target.skillArea, goalsRef.current[target.role]);
     }
-    return Promise.all(jobs).then(() => undefined);
+    return Promise.all([...inflight.current]).then(() => undefined);
   }, [flushKey]);
 
   // 언마운트 시에도 한 번 — 사람이 이동 버튼을 안 누르고 창을 닫는 길이 있다(여기선 기다릴 수 없다).

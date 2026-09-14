@@ -111,6 +111,40 @@ describe("② 퇴원생 — 1일~오늘, 카드 = 추이 패널 = 퇴원관리",
     expect(PAGE).not.toContain('"올해"');
     expect(withdrawalsMonthHref("2026-09")).toBe("/withdrawals?range=month&month=2026-09");
   });
+
+  /**
+   * 원장 2026-09-13: 중복 병합된 학생(김지유B·권민서B)이 퇴원으로 잡혀 있었다. 병합은 *"원래 한 사람이었다"*를
+   * 정리한 것이지 퇴원이 아니다 — 카드·퇴원관리가 **같은 모집단**에서 빼야 두 숫자가 같이 맞는다.
+   * 🔴 판정은 이름 접미사가 아니라 `students/merged.ts` 한 벌이다(접미사로 거르면 진짜 동명이인 퇴원이 사라진다).
+   */
+  it("🔴 중복 병합된 학생은 퇴원 모집단에서 빠진다 — 두 조회가 같은 판정을 쓴다", () => {
+    for (const s of [QUERIES, WINDOW]) {
+      // 🔴 `toContain("isMergedStudent")`로 끝내지 말 것 — **import 줄만으로 통과**한다(필터를 지워도
+      //    unused import는 이 리포에서 error가 아니라 warning이라 게이트가 안 잡는다). 호출 꼴을 본다.
+      expect(s).toMatch(/filter\(\([\w]+\) => !isMergedStudent\(/);
+      // 판정 재료(`notes`)를 실제로 받아야 판정이 돈다 — select에서 빠지면 조용히 전원 통과한다.
+      expect(s).toMatch(/select\([\s\S]{0,200}?notes/);
+    }
+  });
+
+  /**
+   * 🔴 증감을 세는 표면이 여섯이고 **하나만 빠져도 두 화면이 다른 학원이 된다** — 그게 이 수정의 이유다.
+   *    그래서 필터가 붙은 자리를 전부 잠근다(가드가 없던 세 곳에서 조용히 되돌아갈 수 있었다).
+   */
+  it("등록·증감을 세는 다른 표면도 같은 축으로 뺀다", () => {
+    const DASH = src("src/features/dashboard/server/queries.ts");
+    const WEEKLY = src("src/features/dashboard/onescreen/server/queries.ts");
+    // 이 조회는 status를 안 본다(복구된 학생의 그 달 등록을 살리려고) → 병합 학생이 그대로 세졌다.
+    expect(SERVER).toMatch(/filter\(\([\w]+\) => \(!ids \|\| ids\.has\([\w.]+\)\) && !isMergedStudent\(/);
+    expect(SERVER).toContain('select("id,enrolled_at,notes")');
+    // 이번 달 증감(등록·퇴원 양쪽) · 최근 7일 증감(등록·퇴원 양쪽) = 최소 4곳.
+    // ⚠️ **하한**으로 잠근다 — 딱 맞는 수로 박으면 나중에 같은 파일에서 **다섯 번째 누수를 고치는 사람이**
+    //    빨간 가드를 만나고, 그걸 푸는 가장 쉬운 길이 '숫자 올리기'라 가드를 편집하는 습관이 든다.
+    expect((DASH.match(/!isMergedStudent\(/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    // 4주 증감 — 등록·퇴원 한 판정 함수(`notMerged`)를 양쪽 배열에 건다.
+    expect(WEEKLY).toMatch(/!isMergedStudent\(/);
+    expect((WEEKLY.match(/\.filter\(notMerged\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe("③ 신규문의 — 같은 KST 하루 경계", () => {

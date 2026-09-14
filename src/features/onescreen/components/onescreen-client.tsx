@@ -1042,7 +1042,10 @@ export function OneScreenClient({
       makeupClassId: anchorId,
       makeupClassName: anchorName,
     });
-    const anchorSubject = matchingClasses.length === 1 ? matchingClasses[0]!.subject : null;
+    // 🔴 과목 **키**로 거른다 — `TodayClass.subject`는 표시 라벨("수학")이라 키("math")와 비교하면 늘 거짓이고,
+    //    반 칩을 고른 채 보강을 추가하면 보강 줄이 0개가 되어 저장이 "보강 날짜와 과목을 확인해 주세요"로 막혔다
+    //    (원장 제보 2026-09-14 권영준·이수진). 키를 모르면("") 거르지 않는다(종전 '전체'와 같은 동작).
+    const anchorSubject = matchingClasses.length === 1 ? matchingClasses[0]!.subjectKey || null : null;
     const mk = {
       ...res.student,
       subjects: res.student.subjects.filter(su => !anchorSubject || su.subjectKey === anchorSubject).map(withAnchor),
@@ -1225,7 +1228,7 @@ export function OneScreenClient({
           applySessionSaveResult(existing.id, result);
         }
       } catch {
-        toast.error("보강 명단을 저장하지 못했습니다. 다시 시도해 주세요");
+        toast.error(t("os.c.makeupSaveFail"));
         return;
       } finally { setMakeupSaving(false); }
     }

@@ -43,6 +43,12 @@ const GUARDED_ACTION_FILES: { file: string[]; what: string }[] = [
     file: ["src", "features", "report-admin", "server", "recall-actions.ts"],
     what: "학부모 게시글 회수(겸직 본인 축 우회 — canWriteTenant 캡 후 소유 판정이 본인 id로 열린다)",
   },
+  {
+    // ECS 쓰기 게이트(accessLevelTenant)가 캡으로 이미 거절하지만, 열람자의 편집 기록이 남을 여지를 두지 않게
+    // 명시 가드를 먼저 둔다(원장 결정 2026-09-14 칸 편집 감사로그).
+    file: ["src", "features", "class-sheets", "server", "edit-audit-actions.ts"],
+    what: "강사 시트 칸 편집 감사로그(열람 중엔 기록도 없다)",
+  },
 ];
 
 describe("'다른 강사 뷰'(열람 전용) 배선 가드", () => {

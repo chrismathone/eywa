@@ -126,14 +126,16 @@ export function MonthRail({
                     }
                     className="hover:text-primary w-full cursor-pointer px-2 py-1.5 font-bold"
                   >
-                    <span className={`num ${holiday && !offDays.has(date) ? "text-danger" : ""}`}>
+                    {/* 휴일 글자 = 출석부 휴일 잉크(`text-att-holiday-ink`) — 공용 `text-danger`는 휴일 회색
+                        (`--att-weekend`) 위에서 대비 3.75로 WCAG 4.5를 깼다(2026-09-14). */}
+                    <span className={`num ${holiday && !offDays.has(date) ? "text-att-holiday-ink" : ""}`}>
                       {date.slice(5).replace("-", "/")}
                     </span>
                     <br />
                     {/* 휴일이면 요일 자리에 **공휴일명**을 적는다 — 열이 좁아 두 줄을 더 쓸 수 없고,
                         "이 날이 왜 회색인가"의 답이 요일보다 훨씬 유용하다. */}
                     <span
-                      className={`font-semibold ${holiday && !offDays.has(date) ? "text-danger" : "text-text-faint"}`}
+                      className={`font-semibold ${holiday && !offDays.has(date) ? "text-att-holiday-ink" : "text-text-faint"}`}
                     >
                       {holiday ?? dowOf(date, lang)}
                     </span>

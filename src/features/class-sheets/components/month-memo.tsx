@@ -14,11 +14,14 @@
  *    마지막 글자를 잃지 않는다. 값은 `defaultValue`(비컨트롤드)라 왕복마다 커서가 튀지 않는다.
  * ⚠️ 0246a 미적용이면 **편집을 잠그고 사실을 그대로 적는다** — 적을 수 있는 것처럼 두면 다 쓴 뒤에
  *    저장 실패를 만난다([[#95]]·[[#103]] 거짓 어포던스).
+ * 🔑 감사로그(원장 결정 2026-09-14 "칸 입력을 마칠 때 한 줄") — 칸을 건드릴 때 편집 전 값을 `audit`에 알리고,
+ *    보낸 저장을 `track`한다. 칸을 떠나면 화면 루트(`month-client`)가 그 저장이 끝난 뒤 한 줄 남긴다.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { saveMonthMemo } from "../server/month-memo-actions";
 import type { MonthMemoStatus } from "../server/month-queries";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import type { SheetEditAudit } from "./use-sheet-edit-audit";
 
 const SAVE_DELAY_MS = 600;
 const MAX_BODY = 2000;
@@ -30,6 +33,7 @@ export function MonthMemo({
   initialBody,
   status,
   canEdit,
+  audit,
 }: {
   classId: string;
   /** "YYYY-MM" */
@@ -38,6 +42,8 @@ export function MonthMemo({
   initialBody: string;
   status: MonthMemoStatus;
   canEdit: boolean;
+  /** 칸 편집 감사로그 — 없으면 기록하지 않는다(저장은 그대로). */
+  audit?: SheetEditAudit;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -46,14 +52,17 @@ export function MonthMemo({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 아직 안 보낸 값 — 언마운트 flush가 **마지막으로 친 글자**를 보낸다. */
   const pending = useRef<string | null>(null);
+  /** 감사로그의 '이전 값' — 마지막으로 **저장에 성공한** 값(첫 값은 서버가 준 값). */
+  const lastSaved = useRef(initialBody);
   const ready = status === "ok" && canEdit;
 
   const send = useCallback(
     (body: string) => {
       pending.current = null;
-      return saveMonthMemo({ classId, month, body })
+      const job = saveMonthMemo({ classId, month, body })
         .then((res) => {
           if (res.ok) {
+            lastSaved.current = body;
             setSavedAt(Date.now());
             setError(null);
             return;
@@ -65,9 +74,12 @@ export function MonthMemo({
           // 처리 안 된 rejection만 남고 사람은 저장된 줄 안다.
           setError(t("month.memo.saveFailed"));
         });
+      // 칸을 떠난 기록은 이 저장이 끝난 뒤에 나간다(서버가 도착 전 DB를 읽지 않게).
+      audit?.track(job);
+      return job;
     },
     // 🔴 `t`도 의존성이다 — 언어가 바뀌면 이 함수도 새로 만들어야 실패 문구가 옛 언어로 굳지 않는다.
-    [classId, month, t],
+    [classId, month, t, audit],
   );
 
   useEffect(() => {
@@ -79,6 +91,7 @@ export function MonthMemo({
   }, [send]);
 
   const onChange = (body: string) => {
+    audit?.touch(classId, { kind: "monthMemo", month }, lastSaved.current);
     pending.current = body;
     setSavedAt(null);
     if (timer.current) clearTimeout(timer.current);
