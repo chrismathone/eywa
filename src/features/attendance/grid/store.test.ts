@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cellKey, rowKey } from "./model";
 import { GridStore } from "./store";
+import { countCells } from "./totals";
 
 const C = "11111111-1111-1111-1111-111111111111";
 const S1 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -203,6 +204,72 @@ describe("파생 칸(d) — 상태·시수가 같아도 기록 칸과 다른 사
     store.setSource([R1, R2], [D1, D2], { [k]: { s: "present", u: null } }); // 기록이 실려 왔다
     store.setSource([R1, R2], [D1, D2], { [k]: { s: "absent", u: null } }); // 벗겨졌으니 이후 서버 값을 따라간다
     expect(store.valueOf(k)).toEqual({ s: "absent", u: null });
+  });
+});
+
+/**
+ * 🔴 원장 2026-09-14 — 빗금 칸에 친 값은 다른 선생님 교시에 상태만 옮기고, 이 표 칸엔 **빗금 위 흐린 값**으로만 보인다
+ *    (합계 밖). 낙관값은 서버와 같아지면 벗겨져야 한다 — 안 벗겨지면 2026-09-11 '새로고침 롤백'이 이 칸에서 재발한다.
+ */
+describe("빗금 표시 값(g) — 합계 밖 · 상태가 따라잡으면 벗긴다", () => {
+  const G = (s: string, u: number | null = null, p: number | null = null) => ({ s, u, g: true as const, p });
+
+  it("🔴 합계에 안 든다 — 그 교시를 맡은 선생님 표와 이중 집계 금지", () => {
+    store.setSource([R1, R2], [D1, D2], { [K(R1, D1)]: G("present", 2, 2), [K(R1, D2)]: { s: "present", u: null } });
+    expect(countCells(store.valuesOfRow(R1))).toMatchObject({ recorded: 1, present: 1, units: 1 });
+  });
+
+  it("🔴 서버 상태가 따라잡으면 벗긴다 — 시수는 서버 값이 진실(그 사이 남이 고쳤어도)", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: G("absent", null, 2) });
+    store.setLocal([[k, G("present", 2, 2)]]);
+    store.setSource([R1, R2], [D1, D2], { [k]: G("present", 1.5, 1.5) });
+    expect(store.valueOf(k)).toEqual(G("present", 1.5, 1.5));
+    store.setSource([R1, R2], [D1, D2], { [k]: G("absent", null, 1.5) }); // 벗겨졌으니 그대로 따라간다
+    expect(store.valueOf(k)).toEqual(G("absent", null, 1.5));
+  });
+
+  it("내 저장 전에 시작한 조회(옛 상태)가 오면 덮개를 유지한다 — 깜빡임 금지", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: G("absent", null, 2) });
+    store.setLocal([[k, G("present", 2, 2)]]);
+    store.setSource([R1, R2], [D1, D2], { [k]: G("absent", null, 2) });
+    expect(store.valueOf(k)).toEqual(G("present", 2, 2));
+  });
+
+  it("🔴 칸의 성격이 바뀌면(한쪽만 g) 벗긴다 — 빗금으로 칠했는데 서버가 제 몫 값을 싣고 왔다 · 그 반대", () => {
+    const k1 = K(R1, D1);
+    store.setLocal([[k1, G("present")]]);
+    store.setSource([R1, R2], [D1, D2], { [k1]: { s: "present", u: null } });
+    store.setSource([R1, R2], [D1, D2], { [k1]: { s: "absent", u: null } });
+    expect(store.valueOf(k1)).toEqual({ s: "absent", u: null });
+    const k2 = K(R2, D1);
+    store.setLocal([[k2, { s: "present", u: null }]]);
+    store.setSource([R1, R2], [D1, D2], { [k2]: G("absent") });
+    expect(store.valueOf(k2)).toEqual(G("absent"));
+  });
+
+  it("dropLocalIf — 칠한 **그 값 그 객체**일 때만 벗긴다(늦은 응답이 새 입력을 지우지 않게)", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: G("absent") });
+    const shown = G("present");
+    store.setLocal([[k, shown]]);
+    store.setLocal([[k, G("late")]]); // 그 사이 새 입력
+    expect(store.dropLocalIf(k, shown)).toBe(false);
+    expect(store.valueOf(k)).toEqual(G("late"));
+    const latest = store.valueOf(k);
+    expect(store.dropLocalIf(k, latest)).toBe(true);
+    expect(store.valueOf(k)).toEqual(G("absent"));
+    expect(store.dropLocalIf(k, null)).toBe(false);
+  });
+
+  it("스냅샷은 g를 사실로 본다 — 같은 숫자여도 제 몫 값과 빗금 값은 칸이 다르게 그린다", () => {
+    const k = K(R1, D1);
+    store.setSource([R1, R2], [D1, D2], { [k]: G("present") });
+    store.subscribe(k)(() => {});
+    expect(store.snapshot(k).value).toEqual(G("present"));
+    store.setLocal([[k, { s: "present", u: null }]]);
+    expect(store.snapshot(k).value).toEqual({ s: "present", u: null });
   });
 });
 

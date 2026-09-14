@@ -20,6 +20,7 @@ import {
   isUrgentAbsence,
   type AbsenceReasonKind,
 } from "@/features/attendance/absence-reason";
+import { stripProxyMemo } from "@/features/attendance/proxy-memo";
 
 /** 요약이 명단으로 뽑는 상태(출석은 명단이 아니라 수치로만 — 관리자가 볼 것은 예외다). */
 export const RECAP_STATUSES = ["absent", "excused", "late", "early_leave", "makeup"] as const;
@@ -356,7 +357,10 @@ export function buildDayRecap(input: {
         pushUnique(hit.slots, slot.slotStart);
         pushUnique(hit.teacherNames, handlerOf(slot));
         // 메모는 먼저 적힌 것을 유지하되, 비어 있으면 뒤 교시 메모로 채운다(사유가 한 교시에만 있다).
-        if (!hit.note && s.note) hit.note = s.note;
+        // `대신 입력` 줄뿐인 메모는 뒤 교시의 사유 메모에 자리를 내준다(빗금 칸 입력 메모, 원장 2026-09-14 — proxy-memo.ts).
+        if (s.note && (!hit.note || (stripProxyMemo(hit.note) === "" && stripProxyMemo(s.note) !== ""))) {
+          hit.note = s.note;
+        }
         // 🔴 조치는 **접힌 교시 중 아무 곳에나** 남아 있을 수 있다 — 첫 교시로만 찾으면 데스크가
         //    2교시 건을 처리했는데 요약은 "조치 미완료"라고 말한다([[#112]]와 같은 실수의 사촌).
         //    이미 처리된 것을 우선한다(멱등).

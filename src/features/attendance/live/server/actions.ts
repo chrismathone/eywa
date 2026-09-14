@@ -12,7 +12,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { getTeachingClassIds } from "@/features/classes/server/delegation";
+import {
+  getActiveDelegationsForClasses,
+  getTeachingClassIds,
+} from "@/features/classes/server/delegation";
 import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
@@ -189,14 +192,15 @@ export async function requestAttendanceInput(input: {
 
   const admin = createAdminClient();
   /**
-   * 받을 사람 = **그날 그 교시 담당 ∪ 반 담임**(원장 결정 2026-09-14) — 판정은 `attendanceNoticeRecipients`
-   * 한 벌이고 교차 알림(cross-notify)도 같은 함수를 부른다.
+   * 받을 사람 = **그날 그 교시 담당 ∪ 반 담임 ∪ 그날 위임 대체 강사**(원장 결정 2026-09-14) — 판정은
+   * `attendanceNoticeRecipients` 한 벌이고 교차 알림(cross-notify)도 같은 함수를 부른다. 위임 조회도 같은 헬퍼
+   * (`getActiveDelegationsForClasses`)라 두 벨의 대체 강사 판정이 갈라지지 않는다.
    * 🔴 반의 슬롯 담당을 요일·기간 없이 모으면 끝난 배치 이력·다른 요일·다른 교시 강사에게까지 벨이 간다
    *    (실측 2026-09-14: 활성 반 120개 중 31개 반·연인원 75명). 가시성 합집합(`classTeacherIdsInRange`)과는
    *    일부러 다른 규칙이다 — 되돌리지 말 것.
    * ⚠️ SQL은 그날로 좁히기만 하고 최종 판정은 순수 함수가 한다. admin 경로라 tenant 필터 필수.
    */
-  const [classRes, slotRes] = await Promise.all([
+  const [classRes, slotRes, delegationRes] = await Promise.all([
     admin
       .from("classes")
       .select("id, class_name, teacher_id")
@@ -211,10 +215,16 @@ export async function requestAttendanceInput(input: {
       .eq("day_of_week", dow)
       .lte("valid_from", sessionDate)
       .or(`valid_to.is.null,valid_to.gte.${sessionDate}`),
+    // 헬퍼는 실패를 throw한다 — 여기서 결과로 접어 아래 한 곳에서 다른 두 조회와 같은 방식으로 알린다.
+    getActiveDelegationsForClasses(admin, user.tenantId, [classId], sessionDate).then(
+      (rows) => ({ rows, error: null }),
+      (error: unknown) => ({ rows: [], error }),
+    ),
   ]);
   // ⚠️ 조회 실패를 `data ?? []`로 삼키면 "연결된 강사가 없습니다"로 위장하거나 담임에게만 조용히 간다(B3).
-  if (classRes.error || slotRes.error) {
-    reportError(classRes.error ?? slotRes.error, { scope: "attendance.requestInput", classId });
+  //    위임 조회 실패도 같다 — 그날 대신 수업하는 강사만 조용히 빠진다.
+  if (classRes.error || slotRes.error || delegationRes.error) {
+    reportError(classRes.error ?? slotRes.error ?? delegationRes.error, { scope: "attendance.requestInput", classId });
     return { error: "받을 강사를 확인하지 못했습니다 — 잠시 후 다시 시도해 주세요" };
   }
   const klass = classRes.data;
@@ -223,6 +233,7 @@ export async function requestAttendanceInput(input: {
     slots: ((slotRes.data ?? []) as AxisSlotRow[]).map(axisSlotFromRow),
     date: sessionDate,
     slotStart: slot,
+    delegations: delegationRes.rows,
     excludeId: user.id,
   });
   if (recipients.length === 0) return { error: "이 반에 연결된 강사가 없습니다 — 직접 확인해 주세요" };

@@ -50,6 +50,13 @@ describe("countCells — 화면의 모든 합계가 쓰는 한 식", () => {
   });
 });
 
+describe("빗금 칸의 표시 값(g)", () => {
+  it("🔴 세지 않는다 — 그 교시를 맡은 선생님 표와 시수·출석률·기록 수 이중 집계 금지(원장 2026-09-14)", () => {
+    const withGhost = countCells([cell("present"), { s: "present", u: 2, g: true }, { s: "absent", u: null, g: true }]);
+    expect(withGhost).toEqual(countCells([cell("present")]));
+  });
+});
+
 describe("countMarks — 서버 첫 렌더(marks/units)와 클라(격자 값)가 같은 숫자", () => {
   it("두 입력 경로가 같은 결과를 낸다", () => {
     const marks = { "2026-07-01": "present", "2026-07-02": "absent", "2026-07-03": "makeup" };

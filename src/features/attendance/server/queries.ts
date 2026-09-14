@@ -15,7 +15,14 @@ import {
   recordedOnlyMatrixRow,
   recordedOnlyStudentIds,
 } from "@/features/attendance/monthly-makeup-roster";
-import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
+import {
+  ghostCellKind,
+  ghostGridValue,
+  rollupDay,
+  type GhostValue,
+  type SlotMark,
+} from "@/features/attendance/cell-display";
+import { stripProxyMemo } from "@/features/attendance/proxy-memo";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
   clipToWithdrawal,
@@ -302,7 +309,9 @@ export async function getAttendanceInputRows(
       )
       .eq("class_id", classId)
       .eq("session_date", date)
-      .order("recorded_at", { ascending: false }),
+      .order("recorded_at", { ascending: false })
+      // id desc = 동률 tie-break(저장 `pickSaveTargets`·월간 조회와 같은 규약) — 빗금 칸 입력은 여러 행에 같은 시각을 찍는다.
+      .order("id", { ascending: false }),
   ]);
 
   // 유효 기록 = (학생·**교시**)별 최신 1건(0196a, records는 recorded_at 내림차순). 이 화면은 학생당
@@ -330,7 +339,11 @@ export async function getAttendanceInputRows(
     if (cur) {
       cur.ids.push(r.id);
       cur.slots.push({ slot, status: r.status as AttendanceStatus, units: raw });
-      if (cur.note === null && r.note) cur.note = r.note;
+      // 🔴 `대신 입력` 줄뿐인 메모는 사유가 적힌 메모에 자리를 내준다 — 이 폼은 저장 때 이 메모를 그날 **모든 행**에 되쓰므로,
+      //    그 줄이 뽑히면 다른 행의 "병결"이 지워진다(빗금 칸 입력 뒤, 적대 재리뷰 2026-09-14). 규칙은 월간 조회와 같다.
+      if (r.note && (cur.note === null || (stripProxyMemo(cur.note) === "" && stripProxyMemo(r.note) !== ""))) {
+        cur.note = r.note;
+      }
     } else {
       // 메모·숙제는 **가장 최근 기록**의 것(칸이 하나뿐이라 교시별로 다 못 싣는다).
       recordMap.set(r.student_id, {
@@ -530,6 +543,12 @@ export type AttendanceMatrix = {
    *    단정하지 않는 이유다(cell-display `ghostBreakdown`).
    */
   ghosts: Record<string, Record<string, SlotMark[]>>;
+  /**
+   * studentId → date → **빗금 칸의 표시 값**(다른 선생님 교시 기록의 롤업) — 제 몫 값이 없고 입력하면 그 교시에 상태만
+   * 옮기는 칸(`ghostCellKind` `transfer`)에만 있다(원장 2026-09-14). 격자가 **합계 밖**(`g`)으로 싣고 빗금 위에 흐리게 그린다.
+   * ⚠️ 선택 필드 — 없으면(옛 픽스처·반별 보기) 빗금 위 값이 안 보일 뿐 저장은 서버가 같은 판정으로 한다.
+   */
+  ghostValues?: Record<string, Record<string, GhostValue>>;
   /**
    * studentId → date → true. **교시를 안 남긴 기록(day-level)이 값에 섞인 칸**(강사 전체 보기 전용).
    *
@@ -916,6 +935,19 @@ export async function getMonthlyAttendanceMatrix(
     seatLabel: string | null = null,
     recordedVia: string | null = null,
   ): boolean => attendanceSlotShare(slotInput(date, slotStart, seatLabel, recordedVia)) === "seat";
+  /**
+   * 담임 시작일만 빼면 **몫**이 되는 교시인가 — 저장은 담임 시작일을 안 읽어 이 행을 제 몫으로 쓴다(`buildScopeOwner`).
+   * 🔴 그 칸에 빗금 칸 입력(상태만 옮기기, 원장 2026-09-14)을 열면 저장은 시수까지 나눠 쓰므로 표식(`pre`)을 달아
+   *    격자가 종전대로 막게 한다(`ghostCellKind` `locked`). 담임 시작일이 없는 표는 늘 false(추가 계산 없음).
+   */
+  const preSlot = (
+    date: string,
+    slotStart: string | null,
+    seatLabel: string | null = null,
+    recordedVia: string | null = null,
+  ): boolean =>
+    !!scopeSince &&
+    ownsAttendanceSlot({ ...slotInput(date, slotStart, seatLabel, recordedVia), homeroomSince: null });
 
   /**
    * 이 반을 그 기간에 맡은 강사가 **둘 이상인가** — 아래 `dayAxis` 안내를 붙일지 정한다.
@@ -1058,6 +1090,9 @@ export async function getMonthlyAttendanceMatrix(
         .gte("session_date", startIso)
         .lte("session_date", endIso)
         .order("recorded_at", { ascending: false })
+        // id desc = recorded_at 동률 tie-break — 저장(actions `pickSaveTargets`)과 같은 규약. 빗금 칸 입력은 여러 행에
+        // 같은 시각을 찍어 동률이 흔해진다(적대 리뷰 2026-09-14). OFFSET 페이지도 흔들리지 않는다(B2).
+        .order("id", { ascending: false })
         .range(from, to),
     );
 
@@ -1102,19 +1137,27 @@ export async function getMonthlyAttendanceMatrix(
       // 세지 않는 교시 중 **자리(JJ·랩실)** 는 표식을 단다 — 강사 보기 저장이 그 행을 안 건드리므로(원장 2026-09-12)
       // 격자·칸·팝오버가 "함께 바뀝니다"·지우기 막힘의 셈에서 뺀다(`sharedOtherSlots`).
       const seat = !mine && seatSlot(r.session_date, slot, r.seat_label, r.recorded_via);
+      const pre = !mine && !seat && preSlot(r.session_date, slot, r.seat_label, r.recorded_via);
       (mine ? cell.slots : cell.others).push({
         slot,
         status: r.status as AttendanceStatus,
         units: raw !== null && Number.isFinite(raw) ? raw : null,
         ...(seat ? { seat: true as const } : {}),
+        ...(pre ? { pre: true as const } : {}),
       });
       // 메모는 **가장 최근에 찍힌 것** 하나(순회가 recorded_at 내림차순이라 처음 만난 것).
       // ⚠️ 교시마다 메모가 다를 수 있지만 칸이 하나라 다 못 적는다 — 교시별 메모는 영어 수업 시트에서 본다.
       // ⚠️ **내 교시 메모가 우선**이다(강사 전체 보기) — 칸의 값은 내 교시인데 메모만 남의 교시 것이면
       //    그 칸이 서로 다른 두 사실을 한 번에 말한다. 내 교시에 메모가 없을 때만 남의 것을 보여 준다.
+      // 🔴 `대신 입력` 줄뿐인 메모는 **사유가 적힌 메모에 자리를 내준다**(원장 2026-09-14 빗금 칸 입력) — 옮기기는 그날
+      //    여러 교시 행에 같은 시각으로 그 줄을 붙여서, 먼저 오는 행이 사유("병결")를 가렸다(적대 리뷰 2026-09-14).
       if (r.note) {
-        if (mine) { if (cell.note === null) cell.note = r.note as string; }
-        else if (cell.otherNote === null) cell.otherNote = r.note as string;
+        const hasReason = stripProxyMemo(r.note as string) !== "";
+        if (mine) {
+          if (cell.note === null || (hasReason && stripProxyMemo(cell.note) === "")) cell.note = r.note as string;
+        } else if (cell.otherNote === null || (hasReason && stripProxyMemo(cell.otherNote) === "")) {
+          cell.otherNote = r.note as string;
+        }
       }
       byCell.set(cellKey, cell);
     }
@@ -1299,6 +1342,20 @@ export async function getMonthlyAttendanceMatrix(
   const presentRate =
     totalRecords > 0 ? Math.round(attendanceRate(presentCount, totalRecords) * 10) / 10 : 0;
 
+  /**
+   * 빗금 칸 중 **입력하면 다른 선생님 교시에 상태만 옮기는 칸**의 표시 값(원장 2026-09-14) — 격자·칸이 같은 판정
+   * (`ghostCellKind`)으로 입력을 연다. ⚠️ 파생을 합친 **뒤**에 가른다 — 파생 값 칸은 옮기지 않는다(판정 함수 주석).
+   * 반별 보기는 ghosts가 비어 늘 빈 객체다(추가 조회 0 — 받아 둔 행으로만 계산).
+   */
+  const ghostValues: Record<string, Record<string, GhostValue>> = {};
+  for (const [sid, byDate] of Object.entries(ghosts)) {
+    for (const [date, others] of Object.entries(byDate)) {
+      const kind = ghostCellKind({ hasValue: !!marks[sid]?.[date], derivedValue: !!derived[sid]?.[date], others });
+      const value = kind === "transfer" ? ghostGridValue(others) : null;
+      if (value) (ghostValues[sid] ??= {})[date] = value;
+    }
+  }
+
   return {
     classes,
     selectedClassId: classId,
@@ -1312,6 +1369,7 @@ export async function getMonthlyAttendanceMatrix(
     units,
     slots,
     ghosts,
+    ghostValues,
     dayAxis,
     derived,
     derivedActive,

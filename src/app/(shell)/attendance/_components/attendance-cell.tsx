@@ -8,9 +8,11 @@ import {
   CELL_SCROLL_MARGIN,
   cellDisplay,
   ghostBreakdown,
+  ghostCellKind,
   rollupDay,
   sharedOtherSlots,
   slotBreakdown,
+  type AttendanceMark,
   type SlotMark,
 } from "@/features/attendance/cell-display";
 import { NOT_MINE_MESSAGE, statusTextOf } from "@/features/attendance/cell-display";
@@ -20,6 +22,7 @@ import { revertTarget, type Paint } from "@/features/attendance/grid/paint-chain
 import { isRecordless } from "@/features/attendance/grid/optimistic-value";
 import { useCellState } from "./grid-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
+import { GhostTransferPopover } from "./ghost-popover";
 // 화면 언어 — 상태 표기는 `statusTextOf`(한글 맵 옆)가 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
@@ -88,7 +91,7 @@ export function AttendanceCell({
    * 🔴 **문장이 아니라 사유 코드**다. 문장(157B)을 서버가 칸마다 만들어 내려보내면 잠긴 칸 수천 개가
    *    그대로 RSC 페이로드 곱이 된다(강사 전체 보기 실측 1MB대) — 표시는 클라에서 편다.
    */
-  lockedReason?: "past" | "notMine" | null;
+  lockedReason?: "past" | "notMine" | "seatOnly" | null;
   /**
    * 그날 교시가 **둘 이상**일 때만 오는 교시별 기록(0196a) — 숫자(합)·줄무늬·툴팁의 근거.
    * 대부분의 칸은 undefined라 종전과 완전히 같이 그려진다.
@@ -118,13 +121,6 @@ export function AttendanceCell({
   const row = rowKey(classId, studentId);
   const key = cellKey(row, sessionDate);
   const { state, ctx } = useCellState(key);
-  // 잠금 사유 문장은 여기서 편다 — 판정·문장 생산은 여전히 grid-context 한 곳이다.
-  const locked =
-    lockedReason === "past"
-      ? (ctx?.lockNoteOf(sessionDate) ?? null)
-      : lockedReason === "notMine"
-        ? NOT_MINE_MESSAGE
-        : null;
   // 팝오버가 고친 메모(`text` null = 아직 안 고침 → 서버 값 사용)와 그 메모를 칠한 쓰기(`owner`). effect로 state를 되쓰지 않는다(#25).
   // 메모의 낙관 쓰기 표식은 값(격자 저장소)과 **따로** 쥔다 — 격자 타이핑·서버 따라잡기는 값만 가져가고 메모는 안 건드려서, 값의
   // 표식에 묶으면 메모만 고친 저장이 실패해도 메모가 안 돌아왔다. 둘을 한 state로 묶는 건 따라잡기가 **함께** 비우게 하려고다
@@ -164,13 +160,27 @@ export function AttendanceCell({
   const lang = useSheetLang();
   const t = useSheetT();
   const tf = useSheetTf();
+  // 잠금 사유 문장은 여기서 편다 — 판정은 grid-context·`notMineCell` 한 곳, 문장은 사전.
+  // 자리뿐인 칸은 사유가 다르다 — "반별 보기에서 고치세요"는 자리 기록엔 거짓 안내다(원장 2026-09-12).
+  const locked =
+    lockedReason === "past"
+      ? (ctx?.lockNoteOf(sessionDate) ?? null)
+      : lockedReason === "seatOnly"
+        ? t("att.lock.seatOnly")
+        : lockedReason === "notMine"
+          ? NOT_MINE_MESSAGE
+          : null;
   // 격자에 키보드로 들어올 수 있는 **단 하나의 탭 정거장**(첫 칸). 그 뒤로는 방향키가 받는다 —
   // 칸마다 탭 정거장을 두면 31×N번을 눌러야 표를 지나칠 수 있다.
   const isFirst = ctx?.store.rows[0] === row && ctx?.store.cols[0] === sessionDate;
 
   // 값은 격자(낙관적 반영)가 진실 — 격자가 없으면 서버가 그린 초기값.
-  const status = (ctx ? ((state.value?.s ?? null) as AttendanceStatus | null) : initialStatus) ?? null;
-  const units = ctx ? state.value?.u ?? null : initialUnits ?? null;
+  // 🔴 빗금 칸의 표시 값(`g` — 다른 선생님 교시 기록, 원장 2026-09-14)은 **이 칸의 값이 아니다** — 상태·시수·메모 판정은
+  //    제 몫 값만 본다. 표시만 `ghostValue`로 빗금 위에 흐리게 얹는다(합계는 격자가 이미 뺀다).
+  const own = state.value?.g ? null : state.value;
+  const ghostValue = state.value?.g ? state.value : null;
+  const status = (ctx ? ((own?.s ?? null) as AttendanceStatus | null) : initialStatus) ?? null;
+  const units = ctx ? own?.u ?? null : initialUnits ?? null;
   const editing = state.active && state.buffer !== null;
 
   // 활성 칸이 화면 밖이면 따라 스크롤(가로 31칸이라 방향키 이동에 필수) + 포커스도 함께 옮긴다
@@ -183,7 +193,7 @@ export function AttendanceCell({
 
   // 기록이 지워진 칸엔 메모도 없다(행 자체가 삭제된다) — 접힌 모서리가 남으면 화면이 거짓말을 한다.
   // 파생이라 effect가 필요 없다.
-  const noteVal = ctx && state.value === null ? "" : noteEdit ?? note ?? "";
+  const noteVal = ctx && own === null ? "" : noteEdit ?? note ?? "";
 
   // 하루에 교시가 둘 이상인 칸 — 합계·줄무늬는 **서버가 준 값 그대로일 때만** 사실이다.
   // 값을 고치는 순간(status·시수가 초기값과 달라짐) 접었던 근거가 무너지므로 평범한 한 칸으로 돌아간다.
@@ -206,10 +216,24 @@ export function AttendanceCell({
    */
   const sharedOthers = sharedOtherSlots(otherSlots);
   const seatOthers = (otherSlots?.length ?? 0) - sharedOthers.length;
+  /**
+   * 입력하면 **다른 선생님 교시에 상태만 옮기는** 빗금 칸인가(원장 2026-09-14) — 격자·조회와 같은 판정(`ghostCellKind`).
+   * 서버가 준 값(`initialStatus`·`derived`)으로만 가른다 — 칠한 낙관값에 흔들리면 같은 칸의 팝오버가 순간마다 바뀐다.
+   */
+  const transfer =
+    ghostCellKind({ hasValue: initialStatus !== null, derivedValue: !!derived, others: otherSlots }) === "transfer";
   // 🔴 빗금 칸엔 값이 없어도 **메모는 있다** — 실측 78칸이 결석 사유였다("병결"·"가족여행").
   //    noteVal은 값이 없으면 비우는 규약(지워진 칸의 유령 메모 방지)이라, 이 칸만 따로 살린다.
   const ghostNote = ghost ? noteEdit ?? note ?? "" : "";
-  const display = cellDisplay(status, units, { attendDay, muted, holiday, outside, day, ghost });
+  const display = cellDisplay(status, units, {
+    attendDay,
+    muted,
+    holiday,
+    outside,
+    day,
+    ghost,
+    ghostMark: ghostValue ? { s: ghostValue.s as AttendanceMark, u: ghostValue.u } : null,
+  });
   const fromReport = derived && status === initialStatus;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
   const title = [
@@ -226,7 +250,7 @@ export function AttendanceCell({
     otherSlots?.length
       ? `${ghostBreakdown(otherSlots, lang)}${
           status && sharedOthers.length > 0 ? tf("att.cell.alsoWrites", { n: sharedOthers.length }) : ""
-        }${status && seatOthers > 0 ? t("att.cell.seatKept") : ""}`
+        }${status && seatOthers > 0 ? t("att.cell.seatKept") : ""}${transfer && !locked ? t("att.cell.ghostTransfer") : ""}`
       : null,
     // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
     outside ? t(status ? "att.cell.outsideRecord" : "att.cell.outside") : null,
@@ -326,6 +350,9 @@ export function AttendanceCell({
             }}
             className="text-primary absolute inset-0 h-full w-full border-0 bg-white/90 p-0 text-center text-xs font-bold outline-none"
           />
+        ) : display.faded ? (
+          // 빗금 칸의 남의 교시 값 — 이 표 몫이 아니라 흐리게(원장 2026-09-14 "빗금 위에 값을 보여주고 합계엔 안 넣는다").
+          <span className="opacity-50">{display.text}</span>
         ) : (
           display.text
         )}
@@ -349,7 +376,8 @@ export function AttendanceCell({
           />
         ) : null}
         {/* 드래그 채우기 손잡이 — 활성 칸 우하단 */}
-        {state.active && !editing && !locked ? (
+        {/* 빗금 칸의 흐린 값은 채우기 원본이 아니다 — 손잡이를 안 띄운다(씨앗이 비어 끌면 '지우기'가 된다, 적대 리뷰 2026-09-14). */}
+        {state.active && !editing && !locked && !ghostValue ? (
           <span
             role="button"
             aria-label={t("att.cell.fillHandle")}
@@ -374,7 +402,16 @@ export function AttendanceCell({
         ) : null}
       </div>
 
-      {popover ? (
+      {popover && transfer && !locked && ctx ? (
+        // 빗금 칸 — 상태만 고른다(시수·메모·지우기 없음). 저장은 격자와 같은 문(`transferGhost` → writeOne).
+        <GhostTransferPopover
+          status={ghostValue?.s ?? null}
+          note={noteVal || ghostNote}
+          anchor={popover}
+          onClose={() => setPopover(null)}
+          onPick={(s) => ctx.transferGhost(key, s)}
+        />
+      ) : popover ? (
         <CellPopover
           studentId={studentId}
           classId={classId}

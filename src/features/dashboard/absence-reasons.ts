@@ -18,6 +18,7 @@
  *    필요한 건 "양해된 결석인가"이지 "왜"가 아니므로 **건수만** 넘긴다.
  */
 import { effectiveAbsences, type AbsenceSubjectRow } from "./absence-subjects";
+import { stripProxyMemo } from "@/features/attendance/proxy-memo";
 
 /** 데스크가 사전 접수했다는 표식 — 실측상 항상 이 형태로 붙는다. */
 const DESK_MARK = "(데스크 접수)";
@@ -41,7 +42,9 @@ export type AbsenceReasonSummary = {
  * 여러 줄이면 첫 줄만(실측: `가족여행 (데스크 접수)\n개인 사정 (데스크 접수)` 같은 행이 있다).
  */
 export function normalizeReason(raw: string | null | undefined): string {
-  const firstLine = String(raw ?? "").split(/[\r\n]+/)[0] ?? "";
+  // 🔴 `대신 입력: 이름` 줄은 사유가 아니다(빗금 칸 입력 메모, 원장 2026-09-14) — 첫 줄이 그 줄이면 결석 사유로 뜨고
+  //    '사유 없음' 건수가 줄었다(적대 리뷰 2026-09-14). 규칙은 proxy-memo.ts 한 곳.
+  const firstLine = stripProxyMemo(raw).split(/[\r\n]+/)[0] ?? "";
   const withoutMark = firstLine.split(DESK_MARK).join(" ");
   const tidy = withoutMark.replace(/\s+/g, " ").trim();
   if (tidy === "") return "";

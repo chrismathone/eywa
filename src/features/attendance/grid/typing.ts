@@ -75,10 +75,11 @@ export function canonicalUnitsRaw(raw: string): string | null {
 }
 
 /** 칸의 현재 값(`s`=상태, `u`=시수) → 복사 버퍼에 담을 값(붙여넣기·Ctrl+Enter용). 빈 칸은 null. */
-export type CellValue = { s: string; u: number | null } | null;
+export type CellValue = { s: string; u: number | null; g?: true } | null;
 
 export function copyValueOf(v: CellValue): TypedValue | null {
-  if (!v) return null;
+  // 빗금 칸의 표시 값(`g`)은 이 표의 값이 아니다 — 복사·채우기 씨앗으로 쓰면 남의 교시 값이 내 칸에 붙는다(빈 칸과 같다).
+  if (!v || v.g) return null;
   if (v.s === "absent" || v.s === "excused") return { status: "absent", units: "" };
   if (v.s !== "present") return null; // 지각·조퇴·보강은 숫자로 복사되지 않는다(상태가 사라진다)
   return { status: "present", units: v.u === null || v.u === 1 ? "" : String(v.u) };

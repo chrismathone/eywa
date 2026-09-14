@@ -523,6 +523,7 @@ describe("🔴 월별 출석부는 사전만 본다 — 화면 파일에 한글 
     "matrix-row.tsx",
     "attendance-cell.tsx",
     "cell-popover.tsx",
+    "ghost-popover.tsx",
     "totals-row.tsx",
     "live-totals.tsx",
     "hub-student-search.tsx",
