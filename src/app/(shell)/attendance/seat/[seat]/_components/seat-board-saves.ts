@@ -8,7 +8,9 @@ import {
   setSeatCell,
   type SeatStatus,
 } from "@/features/attendance/seat/server/actions";
-import { setSeatJjField } from "@/features/attendance/seat/server/mark-actions";
+import { commitSeatJjEdits, setSeatJjField } from "@/features/attendance/seat/server/mark-actions";
+import { useSheetEditAudit } from "@/features/class-sheets/components/use-sheet-edit-audit";
+import { seatJjEditFieldOf } from "@/features/class-sheets/lib/edit-audit";
 import { seatOverlayKey, type JjMarkField } from "@/features/attendance/seat/jj-fields";
 // 사유 메모를 언제 비우는지는 **출결 모드와 같은 규약**을 그대로 쓴다(원장 2026-09-08 "다른 출결과 동일하게").
 import { noteOnStatusChange } from "@/features/attendance/quick/board";
@@ -38,18 +40,52 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
   const beforeField = useRef(new Map<string, string | null | undefined>());
 
   /**
+   * 이미 떠난 칸 저장(진행 중) — `flushFields`가 이것까지 기다린다.
+   * 🔴 언마운트 정리 코드가 대기 저장을 먼저 실행해 버리면, 감사로그의 flush는 할 일 없이 끝나 서버가 **저장 도착
+   *    전** DB를 읽는다(Safari·iPad는 blur가 안 와 언마운트가 유일한 기록 기회다 — 리뷰 2026-09-14). 그래서 이 훅이
+   *    실행하는 저장은 경로(타이머·flush)와 무관하게 전부 여기 담는다.
+   */
+  const inflightRuns = useRef(new Set<Promise<unknown>>());
+  const startRun = useCallback((fn: () => Promise<void>): Promise<void> => {
+    const p = fn();
+    inflightRuns.current.add(p);
+    const done = () => {
+      inflightRuns.current.delete(p);
+    };
+    p.then(done, done);
+    return p;
+  }, []);
+
+  /**
    * 대기 중인 칸 저장을 즉시 실행 — 언마운트·일괄 출석·진도 '내용 복사' 전에 부른다.
    * ⚠️ `allSettled` — 한 칸이 던지면(네트워크 단절 등) 이 프라미스가 거절되고, `void flushFields()`
    *    자리에선 **처리 안 된 거부**로, `await` 자리(일괄 출석·복사)에선 **그 동작이 통째로 취소**된다.
    *    한 칸의 실패가 나머지를 막지 않게 한다(칸별 실패는 각 run이 이미 에러 배너로 알린다).
+   * 🔑 방금 실행한 것만이 아니라 **이미 떠나 있던 저장까지** 기다린다(`inflightRuns`).
    */
   const flushFields = useCallback(() => {
     for (const id of timers.current.values()) clearTimeout(id);
     timers.current.clear();
     const pendingRuns = [...runs.current.values()];
     runs.current.clear();
-    return Promise.allSettled(pendingRuns.map((fn) => fn()));
-  }, []);
+    for (const fn of pendingRuns) startRun(fn);
+    return Promise.allSettled([...inflightRuns.current]);
+  }, [startRun]);
+
+  /**
+   * JJ 칸 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14, 범위 확대). 저장(`setSeatJjField`)은 타이핑
+   * 디바운스라 기록하지 않고, 칸을 떠나면 남은 저장을 비운 뒤(`flushFields` + 진행 중 저장) **저장과 같은 문**을
+   * 지나 한 줄 남긴다(PIN이면 문 이름). 묶음 키 = 날짜|교시 — 한 요청이 한 게이트(그날 그 교시)만 지나게.
+   * ⚠️ 사유 메모(`saveNote`)는 출결 기록이라 이 범위 밖이다(출결 쓰기 감사로그 쪽).
+   */
+  const audit = useSheetEditAudit({
+    enabled: true,
+    flush: flushFields,
+    send: (groupKey, edits) => {
+      const [d, s] = groupKey.split("|");
+      return commitSeatJjEdits({ seat, date: d ?? "", slotStart: s ?? "", edits });
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -151,11 +187,11 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
         setTimeout(() => {
           timers.current.delete(snapKey);
           runs.current.delete(snapKey);
-          void run();
+          void startRun(run);
         }, DEBOUNCE_MS),
       );
     },
-    [activeStart, date, keyOf, seat],
+    [activeStart, date, keyOf, seat, startRun],
   );
 
   const fill = useCallback(
@@ -201,9 +237,21 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
   }, [activeStart, date, flushFields, router, seat]);
 
   const saveField = useCallback(
-    (classId: string, studentId: string, field: JjMarkField, value: string) => {
+    (
+      classId: string,
+      studentId: string,
+      field: JjMarkField,
+      value: string,
+      /** 이 입력 **직전에 화면이 보던 값** — 감사로그의 이전 값(칸마다 첫 값만 쓰인다). */
+      before: string | null,
+    ) => {
       const key = keyOf(classId, studentId);
       const snapKey = `${key}|${field}`;
+      audit.touch(
+        `${date}|${activeStart}`,
+        { kind: "seatJj", classId, studentId, date, slotStart: activeStart, field: seatJjEditFieldOf(field) },
+        before,
+      );
       setFields((m) => {
         if (!beforeField.current.has(snapKey)) beforeField.current.set(snapKey, m[key]?.[field]);
         return { ...m, [key]: { ...m[key], [field]: value } };
@@ -241,11 +289,12 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
         setTimeout(() => {
           timers.current.delete(snapKey);
           runs.current.delete(snapKey);
-          void run();
+          // 이미 떠난 저장 — 칸을 떠난 기록은 이것이 끝난 뒤에 나간다(서버가 도착 전 DB를 읽지 않게).
+          audit.track(startRun(run));
         }, DEBOUNCE_MS),
       );
     },
-    [activeStart, date, keyOf, seat],
+    [activeStart, audit, date, keyOf, seat, startRun],
   );
 
   /**
@@ -289,5 +338,7 @@ export function useSeatBoardSaves(seat: SeatKey, date: string, activeStart: stri
     saveField,
     flushFields,
     applyCarried,
+    /** 화면 루트에 거는 "칸을 떠났다" 신호(JJ 칸 감사로그). */
+    onBlur: audit.onBlur,
   };
 }

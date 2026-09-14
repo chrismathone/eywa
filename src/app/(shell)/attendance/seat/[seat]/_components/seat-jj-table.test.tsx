@@ -85,7 +85,10 @@ describe("JJ실 출석부 표", () => {
       />,
     );
     fireEvent.change(screen.getByLabelText("이다윤A 누적 암기 단어수"), { target: { value: "1200" } });
-    expect(onSaveField).toHaveBeenCalledWith("c1", "s1", "memorizedWords", "1200");
+    // 마지막 인자 = 이 입력 직전에 화면이 보던 값(칸 편집 감사로그의 이전 값, 2026-09-14).
+    expect(onSaveField).toHaveBeenCalledWith("c1", "s1", "memorizedWords", "1200", null);
+    fireEvent.change(screen.getByLabelText("이다윤A 듣기 레벨"), { target: { value: "L4" } });
+    expect(onSaveField).toHaveBeenLastCalledWith("c1", "s1", "listeningLevel", "L4", "L3");
   });
 
   it("반은 가로 칸에 나란히 놓고 학생은 반 안에서 세로로 둔다", () => {

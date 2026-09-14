@@ -1068,6 +1068,56 @@ describe("auditDetail — 등록상담·강사 시트·캘린더(2026-09-10 김�
     expect(AUDIT_TYPE_LABEL.class_sheet).toBe("강사 시트");
   });
 
+  it("범위 확대 — 계획 줄 칸 · 수학 시트 목표 · 자리 JJ 칸도 위치·칸 이름·이전 값 → 새 값 한 줄", () => {
+    expect(
+      auditDetail(
+        "ecs_plan_cell_edit",
+        {
+          classId: "c",
+          kind: "plan",
+          lineId: "l1",
+          planDate: "2026-09-14",
+          slotStart: "17:20",
+          field: "progress",
+          fieldLabel: "진도",
+          before: "U3",
+          after: "U4",
+        },
+        ctx(),
+      ),
+    ).toBe("2026-09-14 17:20 · 진도 「U3」 → 「U4」");
+    expect(
+      auditDetail(
+        "ecs_plan_cell_edit",
+        { planDate: "2026-09-14", slotStart: "17:20", fieldLabel: "과제", before: null, after: "WB p.3", viaPin: true },
+        ctx(),
+      ),
+    ).toBe("2026-09-14 17:20 · 과제 (빈칸) → 「WB p.3」 · 공개 PIN 화면");
+    expect(
+      auditDetail(
+        "mcs_goal_edit",
+        { studentId: SID, month: "2026-09", field: "targetProgress", fieldLabel: "목표 진도", before: "3단원", after: "4단원" },
+        ctx({ [SID]: "김학생" }),
+      ),
+    ).toBe("김학생 · 2026-09 목표 · 목표 진도 「3단원」 → 「4단원」");
+    expect(
+      auditDetail(
+        "seat_jj_mark_edit",
+        {
+          studentId: SID,
+          date: "2026-09-14",
+          slotStart: "17:20",
+          field: "listeningLevel",
+          fieldLabel: "듣기 레벨",
+          before: "3",
+          after: "4",
+          viaPin: true,
+        },
+        ctx({ [SID]: "김학생" }),
+      ),
+    ).toBe("김학생 · 2026-09-14 17:20 · 듣기 레벨 「3」 → 「4」 · 공개 PIN 화면");
+  });
+
   it("구글 캘린더 가져오기 — 건수, 아무것도 없으면 '변경 없음'", () => {
     expect(
       auditDetail(

@@ -21,6 +21,8 @@ import {
   flushSheetPatches,
   movePlanLine,
 } from "../server/actions";
+import { commitSheetEdits } from "../server/edit-audit-actions";
+import type { SheetEdit } from "../lib/edit-audit";
 import type { PlanCopyResult, PlanLinesResult, PlanPatchesResult } from "../server/plan-write";
 
 /** 계획 줄 한 칸을 특정하는 문맥 — 모든 호출이 **같은 (날짜, 교시)** 한 벌만 싣는다. */
@@ -35,6 +37,11 @@ export type PlanWriteApi = {
   ) => Promise<PlanLinesResult>;
   deleteLine: (ref: PlanSlotRef, input: { lineId: string }) => Promise<PlanLinesResult>;
   copySlot: (ref: PlanSlotRef, input: { termMode: "regular" | "exam" }) => Promise<PlanCopyResult>;
+  /**
+   * 계획 **칸 값** 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14). 저장과 **같은 문**을 지난다.
+   * ⚠️ 없으면 그 문의 계획 칸은 기록되지 않는다(가드 `edit-audit-wiring.test.ts`가 두 문 모두 구현했는지 본다).
+   */
+  commitEdits?: (ref: PlanSlotRef, edits: SheetEdit[]) => Promise<unknown>;
 };
 
 /** 로그인 경로(영어 시트·로그인 자리 출석부) 기본 문 — 게이트는 `requireEcsClassAccess(write)`. */
@@ -58,4 +65,5 @@ export const ECS_PLAN_API: PlanWriteApi = {
       slotStart: ref.slotStart,
       termMode: input.termMode,
     }),
+  commitEdits: (ref, edits) => commitSheetEdits({ classId: ref.classId, edits }),
 };

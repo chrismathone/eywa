@@ -4,10 +4,11 @@
  * 강사 시트(ECS) **칸 편집 감사로그** — "칸 입력을 마칠 때 한 줄"(원장 결정 2026-09-14).
  * 규약(모양 검증·변동 판정·자르기·라벨)은 [`lib/edit-audit.ts`](../lib/edit-audit.ts) 한 벌이고, 여기는
  * **문(게이트)과 DB 다시 읽기**뿐이다. 클라 쪽은 [`useSheetEditAudit`](../components/use-sheet-edit-audit.ts).
+ * 계획 줄 칸 값은 공개 PIN 문과 규칙을 나누므로 [`plan-edit-audit.ts`](./plan-edit-audit.ts)가 적는다.
  *
  * 🔴 게이트 = 저장 액션과 **같은 문**: `requireEcsClassAccess(classId, { write: true })`. 저장이 거절했을 칸은
  *    기록도 안 한다(목표 = 이 반의 목표 항목 허용 목록 · MP = EiE 반만 — `upsertGoal`·`saveMonthPlanCells`와
- *    같은 판정).
+ *    같은 판정). 받는 칸 종류는 `ECS_EDIT_KINDS`뿐(수학·자리 칸을 실어 보내 이 문을 우회하지 못하게).
  * 🔴 '다른 강사 뷰'(열람 전용)면 기록도 없다 — perm-matrix 쓰기 캡이 위 게이트에서 이미 거절하지만,
  *    열람자의 기록이 남는 일이 없게 `readonlyTeacherViewError`를 **먼저** 본다(view-as-wiring 가드).
  * 🔑 새 값(`after`)은 **DB에서 다시 읽는다** — 클라가 보낸 새 값을 믿지 않는다(로그의 새 값이 DB와 달라지지
@@ -27,6 +28,7 @@ import { normalizePeriodStart } from "../lib/week";
 import {
   auditValueChanged,
   clipAuditValue,
+  ECS_EDIT_KINDS,
   GOAL_FIELD_LABEL,
   markFieldLabel,
   memoKeyLabel,
@@ -37,6 +39,7 @@ import {
   type SheetEditCell,
 } from "../lib/edit-audit";
 import { requireEcsClassAccess, type EcsClassAccess } from "./access";
+import { logPlanCellEdits } from "./plan-edit-audit";
 
 type Admin = ReturnType<typeof createAdminClient>;
 /** DB의 지금 값 — 모르면(조회 실패·표 없음) `ok:false`로 **기록하지 않는다**(지어낸 새 값을 남기지 않는다). */
@@ -121,6 +124,9 @@ async function readCurrent(admin: Admin, access: EcsClassAccess, cell: SheetEdit
       if (error) return { ok: false };
       return { ok: true, value: textOf((data as { body: unknown } | null)?.body) };
     }
+    // 계획 칸은 `logPlanCellEdits`가, 수학·자리 칸은 이 문에 오지 않는다(`ECS_EDIT_KINDS`).
+    default:
+      return { ok: false };
   }
 }
 
@@ -157,45 +163,59 @@ function cellMetadata(cell: SheetEditCell, areaLabel: string | null): Record<str
       return { kind: "monthMemo", month: cell.month, fieldLabel: MONTH_MEMO_LABEL };
     case "mpCell":
       return { kind: "mpCell", date: cell.date, colKind: cell.colKind, fieldLabel: mpCellLabel(cell.colKind) };
+    default:
+      return {};
   }
 }
 
 async function logSheetEdits(access: EcsClassAccess, edits: SheetEdit[]): Promise<void> {
   const areas = goalAreasFor(access.englishTrack, access.skillAreas);
   const admin = createAdminClient();
-  await Promise.all(
-    edits.map(async (edit) => {
-      try {
-        const { cell } = edit;
-        // 🔴 저장 액션과 같은 허용 목록 — 저장이 거절했을 칸을 "바뀌었다"고 적지 않는다.
-        if (cell.kind === "goal" && !areas.some((a) => a.key === cell.skillArea)) return;
-        if (cell.kind === "mpCell" && access.englishTrack !== "eie") return;
-        const cur = await readCurrent(admin, access, cell);
-        if (!cur.ok || !auditValueChanged(edit.before, cur.value)) return;
-        const areaLabel = cell.kind === "goal" ? (areas.find((a) => a.key === cell.skillArea)?.label ?? null) : null;
-        await logAction({
-          action:
-            cell.kind === "goal"
-              ? "ecs_goal_edit"
-              : cell.kind === "mark"
-                ? "ecs_mark_edit"
-                : cell.kind === "mpCell"
-                  ? "ecs_month_plan_edit"
-                  : "ecs_memo_edit",
-          targetType: "class_sheet",
-          targetLabel: access.className,
-          metadata: {
-            classId: access.classId,
-            ...cellMetadata(cell, areaLabel),
-            before: clipAuditValue(edit.before),
-            after: clipAuditValue(cur.value),
-          },
-        });
-      } catch {
-        // 감사 기록 실패는 편집을 막지 않는다(best-effort — logAction과 같은 규약).
-      }
-    }),
-  );
+  const planEdits = edits.filter((e) => e.cell.kind === "plan");
+  await Promise.all([
+    // 계획 칸 — 공개 PIN 문과 같은 규칙(이 사람이 마지막으로 쓴 줄만 · 구분은 라벨로).
+    planEdits.length > 0
+      ? logPlanCellEdits({
+          grant: { tenantId: access.tenantId, classId: access.classId, actorId: access.user.id },
+          skillAreas: access.skillAreas,
+          edits: planEdits,
+        })
+      : Promise.resolve(),
+    ...edits
+      .filter((e) => e.cell.kind !== "plan")
+      .map(async (edit) => {
+        try {
+          const { cell } = edit;
+          // 🔴 저장 액션과 같은 허용 목록 — 저장이 거절했을 칸을 "바뀌었다"고 적지 않는다.
+          if (cell.kind === "goal" && !areas.some((a) => a.key === cell.skillArea)) return;
+          if (cell.kind === "mpCell" && access.englishTrack !== "eie") return;
+          const cur = await readCurrent(admin, access, cell);
+          if (!cur.ok || !auditValueChanged(edit.before, cur.value)) return;
+          const areaLabel =
+            cell.kind === "goal" ? (areas.find((a) => a.key === cell.skillArea)?.label ?? null) : null;
+          await logAction({
+            action:
+              cell.kind === "goal"
+                ? "ecs_goal_edit"
+                : cell.kind === "mark"
+                  ? "ecs_mark_edit"
+                  : cell.kind === "mpCell"
+                    ? "ecs_month_plan_edit"
+                    : "ecs_memo_edit",
+            targetType: "class_sheet",
+            targetLabel: access.className,
+            metadata: {
+              classId: access.classId,
+              ...cellMetadata(cell, areaLabel),
+              before: clipAuditValue(edit.before),
+              after: clipAuditValue(cur.value),
+            },
+          });
+        } catch {
+          // 감사 기록 실패는 편집을 막지 않는다(best-effort — logAction과 같은 규약).
+        }
+      }),
+  ]);
 }
 
 /**
@@ -210,7 +230,7 @@ export async function commitSheetEdits(input: {
   if (readonlyErr) return { ok: false, error: readonlyErr };
   const gate = await requireEcsClassAccess(String(input?.classId ?? ""), { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  const edits = parseSheetEdits(input?.edits);
+  const edits = parseSheetEdits(input?.edits, ECS_EDIT_KINDS);
   if (!edits) return { ok: false, error: "잘못된 요청입니다(편집 기록)" };
   const access = gate.access;
   after(() => logSheetEdits(access, edits));

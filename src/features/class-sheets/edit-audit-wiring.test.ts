@@ -94,3 +94,92 @@ describe("🔴 강사 시트 칸 편집 감사로그 배선", () => {
     expect(src).not.toContain("onCell={plan.setCell}");
   });
 });
+
+const readSrc = (...p: string[]) => readFileSync(join(process.cwd(), "src", ...p), "utf8");
+
+describe("🔴 범위 확대(원장 결정 2026-09-14) — 계획 줄 칸 · 수학 시트 월간 목표 · 자리 JJ 칸", () => {
+  it("계획 칸: 저장 큐가 입력마다 편집 전 값을 알리고, 칸을 가진 세 화면이 받아 떠날 때 기록한다", () => {
+    expect(read("components", "use-sheet-saves.ts")).toContain(
+      "this.onEdit?.(lineId, field, k.hasDraft ? k.draft : k.canonical)",
+    );
+    for (const f of ["sheet-client.tsx", "today-plan-editor.tsx", "slot-plan-block.tsx"]) {
+      expect(read("components", f), f).toContain('audit.touch(classId, { kind: "plan", lineId, field }, before)');
+    }
+    for (const f of ["today-plan-editor.tsx", "slot-plan-block.tsx"]) {
+      const src = read("components", f);
+      expect(src, f).toContain("useSheetEditAudit(");
+      expect(src, f).toContain("onBlur={audit.onBlur}");
+    }
+  });
+
+  it("🔴 계획 칸 저장(CAS 배치)은 기록하지 않고, 두 문의 칸 기록은 한 벌(`logPlanCellEdits`)", () => {
+    expect(bodyOf(read("server", "plan-write.ts"), "applyPlanPatches")).not.toMatch(
+      /log(Action|PlanChange|ActionAtDoor)\(/,
+    );
+    expect(read("server", "edit-audit-actions.ts")).toContain("logPlanCellEdits(");
+    const body = bodyOf(readSrc("features", "attendance", "seat", "server", "jj-plan-actions.ts"), "commitSeatPlanEdits");
+    const gate = body.indexOf("gateSeatPlanWrite(");
+    expect(gate).toBeGreaterThan(-1);
+    expect(body.indexOf("after(")).toBeGreaterThan(gate);
+    expect(body).toContain("logPlanCellEdits({ grant, scope,");
+    // 이 사람(문)이 마지막으로 쓴 줄만 — 충돌에서 '서버값 사용'을 누른 칸이 남의 변경을 내 이름으로 남기지 않게.
+    expect(read("server", "plan-edit-audit.ts")).toContain("(row.updated_by ?? null) !== (grant.actorId ?? null)");
+  });
+
+  it("계획 저장 문 두 벌 모두 기록 문을 가진다(없으면 그 문의 계획 칸은 조용히 무기록)", () => {
+    expect(read("components", "plan-api.ts")).toContain("commitEdits: (ref, edits) => commitSheetEdits(");
+    expect(readSrc("features", "attendance", "seat", "seat-plan-api.ts")).toContain(
+      "commitEdits: (ref, edits) => commitSeatPlanEdits(",
+    );
+  });
+
+  it("수학 목표: 저장은 기록하지 않고, 칸을 떠날 때 저장과 같은 문으로 전후 값 한 줄", () => {
+    expect(bodyOf(readSrc("features", "math-sheets", "server", "actions.ts"), "upsertStudentGoal")).not.toContain(
+      "logAction(",
+    );
+    const body = bodyOf(readSrc("features", "math-sheets", "server", "goal-audit-actions.ts"), "commitMathGoalEdits");
+    const readonly = body.indexOf("readonlyTeacherViewError()");
+    const gate = body.indexOf("requireMcsClassAccess(");
+    expect(readonly).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(readonly);
+    expect(body).toMatch(/requireMcsClassAccess\(.*\{ write: true \}\)/);
+    expect(body.indexOf("after(")).toBeGreaterThan(gate);
+    expect(body).toContain('.eq("tenant_id", access.tenantId)');
+    // 🔴 저장과 같은 명단 확인이 **목표 조회보다 먼저** — 남의 반 학생 id로 거짓 줄을 만들지 못하게(리뷰 2026-09-14).
+    const roster = body.indexOf('.from("enrollments")');
+    expect(roster).toBeGreaterThan(-1);
+    expect(roster).toBeLessThan(body.indexOf('.from("math_month_goals")'));
+    expect(body).toContain("if (!inClass.has(cell.studentId)) return;");
+    const client = readSrc("features", "math-sheets", "components", "month-client.tsx");
+    for (const n of ["useSheetEditAudit(", "onBlur={audit.onBlur}", 'kind: "mathGoal"', "onGoalChange={onGoalChange}"]) {
+      expect(client, n).toContain(n);
+    }
+  });
+
+  it("자리 JJ 칸: 저장은 기록하지 않고, 떠날 때 저장과 같은 문(PIN이면 문 이름)으로 한 줄", () => {
+    const src = readSrc("features", "attendance", "seat", "server", "mark-actions.ts");
+    expect(bodyOf(src, "setSeatJjField")).not.toMatch(/log(Action|SeatAction|ActionAtDoor)\(/);
+    const body = bodyOf(src, "commitSeatJjEdits");
+    const gate = body.indexOf("gateSeatWrite(");
+    expect(gate).toBeGreaterThan(-1);
+    expect(body.indexOf("after(")).toBeGreaterThan(gate);
+    expect(body).toContain("rosterKeys(");
+    expect(body).toContain("logSeatAction(");
+    // 이 문이 마지막으로 쓴 행만(저장이 쓰는 작성자 값 — PIN이면 null)과 비교(계획 칸과 같은 규칙).
+    expect(body).toContain("if (writer !== (g.userId ?? null)) return;");
+    const saves = readSrc("app", "(shell)", "attendance", "seat", "[seat]", "_components", "seat-board-saves.ts");
+    // 🔑 실행한 저장은 경로 불문 `startRun`으로 추적하고 flushFields가 그 집합까지 기다린다(언마운트 기록 유실 방지).
+    for (const n of [
+      "useSheetEditAudit(",
+      'kind: "seatJj"',
+      "commitSeatJjEdits(",
+      "audit.track(startRun(run))",
+      "return Promise.allSettled([...inflightRuns.current]);",
+    ]) {
+      expect(saves, n).toContain(n);
+    }
+    expect(readSrc("app", "(shell)", "attendance", "seat", "[seat]", "_components", "seat-board.tsx")).toContain(
+      "onBlur={auditBlur}",
+    );
+  });
+});

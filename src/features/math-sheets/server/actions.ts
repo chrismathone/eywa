@@ -88,13 +88,8 @@ export async function upsertStudentGoal(input: {
     if (error) return { ok: false, error: error.message };
   }
 
-  await logAction({
-    action: "mcs_goal_update",
-    targetType: "class",
-    targetLabel: access.className,
-    // ⚠️ 목표 **값**(교재명)은 남기지 않는다 — 감사로그는 "누가 언제 무엇을 건드렸나"지 내용 사본이 아니다.
-    metadata: { studentId: input.studentId, month: input.month, cleared: !textbook && !targetProgress },
-  });
+  // 🔑 감사로그는 여기서 남기지 않는다 — 이 저장은 타이핑 디바운스마다 불린다(종전엔 칸 하나에 여러 줄·전후 값
+  //    없음). 칸을 떠날 때 **전후 값 한 줄**은 `commitMathGoalEdits`(goal-audit-actions.ts)의 몫이다(원장 결정 2026-09-14).
 
   revalidatePath(`/mcs/${access.classId}/month`);
   return { ok: true };

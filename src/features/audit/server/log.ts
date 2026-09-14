@@ -236,6 +236,9 @@ export const AUDIT_ACTIONS = {
 
   // 수학 강사 시트(MCS) — 학생별 월간 목표. 실제 진도는 원스크린이 쓰므로 여기 안 온다(읽기 전용 화면).
   mcs_goal_update: "수학 시트 학생 월간 목표 저장",
+  // 칸을 떠날 때 전후 값 한 줄(원장 결정 2026-09-14, `math-sheets/server/goal-audit-actions.ts`). 위 키는 옛 행과
+  // '지난 달 목표 가져오기'(한 번 누름) 표시용으로 남는다 — 저장 액션은 더 이상 디바운스마다 남기지 않는다.
+  mcs_goal_edit: "수학 시트 학생 월간 목표 수정",
 
   // 재고관리(0242a) — 자산 등록/수정/상태 · 대여 시작/반납 · 실사 기록 · 소모품 수량. 상세는 describe.ts.
   inventory_asset_create: "자산 등록",
@@ -320,6 +323,10 @@ export const AUDIT_ACTIONS = {
   ecs_memo_edit: "강사 시트 메모 수정",
   ecs_month_plan_edit: "월간 계획서(MP) 수정",
   ecs_shouting_toggle: "Shouting 체크 변경",
+  // 범위 확대(같은 날) — 계획 줄 칸(교재·진도·과제…, 로그인·공개 PIN 두 문 `plan-edit-audit.ts`) ·
+  // 자리 출석부 JJ 칸(`mark-actions.ts` `commitSeatJjEdits`, PIN이면 문 이름).
+  ecs_plan_cell_edit: "수업계획 칸 수정",
+  seat_jj_mark_edit: "자리 출석부 JJ 칸 수정",
 
   // 돈 — 🔴 **금액은 담지 않는다**(아래 '금액' 주석 참조).
   expense_create: "지출결의서 작성",
