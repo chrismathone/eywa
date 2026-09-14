@@ -159,7 +159,7 @@ describe("구조 — 도움말 안의 앱 화면 링크는 창 규약(WindowLink
   const read = (p: string) => readFileSync(join(process.cwd(), "src/app/(shell)/help", p), "utf8");
 
   it("🔴 맨 <a href>·next/link로 앱 화면을 걸지 않는다 — 창 안에서 embed가 빠져 전체 셸이 뜬다", () => {
-    for (const f of ["_help-browser.tsx", "page.tsx", "[slug]/page.tsx", "_components/help-text.tsx", "_components/open-screen.tsx", "_components/manual-article.tsx"]) {
+    for (const f of ["_help-browser.tsx", "page.tsx", "[slug]/page.tsx", "_components/help-text.tsx", "_components/open-screen.tsx", "_components/manual-article.tsx", "_components/guide-block.tsx"]) {
       const src = read(f);
       expect(src, f).not.toMatch(/<a\s[^>]*href=(\{|"\/)/);
       expect(src, f).not.toContain('from "next/link"');
