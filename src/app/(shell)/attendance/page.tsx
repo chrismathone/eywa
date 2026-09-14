@@ -41,6 +41,7 @@ import { AttendanceSortSelect } from "./_components/sort-select";
 import { HideRetiredToggle } from "./_components/hide-retired-toggle";
 import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
+import { AttendanceLegend } from "./_components/attendance-legend";
 import { GridProvider } from "./_components/grid-context";
 import { AttendanceScopeProvider } from "./_components/scope-context";
 import { AttendanceSearchProvider, AttendanceSearchToggle } from "./_components/search-context";
@@ -448,12 +449,6 @@ export default async function AttendancePage({
    * 사실상 확정이고, 영어는 보고서를 eywa에 안 써서 출결 기록자로 떨어진다(반마다 2~4명 → `외 N명`).
    * ⚠️ 근거가 없는 반(그 달 보고서·출결이 둘 다 없음)은 **안 적는다** — 실측 9월 수학 활성 반 22개.
    */
-  /** 그 달 학원 휴일(날짜 오름차순) — 표 위 한 줄과 셀 색이 **같은 자료**를 본다. */
-  const monthHolidays = Object.entries(buildHolidayMap(operations.holidays))
-    .filter(([date]) => date.slice(0, 7) === month)
-    .map(([date, name]) => ({ date, name }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
   const workerClassIds = (
     mode === "teacher" ? teacherClasses.map((c) => c.id) : effectiveClassId ? [effectiveClassId] : []
   ).filter(Boolean);
@@ -1023,17 +1018,13 @@ export default async function AttendancePage({
         // `isolate` — 표 헤더의 높은 z(50/60)를 격자 안에 가둔다. 안 그러면 그 z가 페이지 전역과 겨뤄
         // 툴바 드롭다운·셀 팝오버를 헤더가 덮는다(스택 컨텍스트만 만들 뿐 fixed 탈출은 막지 않는다).
         <div className="isolate flex min-h-0 flex-1 flex-col">
-          {/* 🔴 그 달 **학원 휴일을 이름까지** 적는다(원장 2026-09-07 *"공휴일도 달력에 표시해주고"*).
-              날짜 칸은 30px이라 이름이 안 들어가 종전엔 **툴팁뿐**이었다 — 열어 보지 않으면 왜 쉬는지
-              알 수 없었다. 표 위 한 줄이면 한 번만 적고도 그 달 전체가 설명된다.
-              ⚠️ 자료는 학원설정 `operations.holidays` 하나(법정공휴일 ≠ 학원 휴원일) — 셀 색과 같은 소스다.
-              ⚠️ 휴일이 없는 달엔 줄 자체가 없다(빈 줄로 자리를 먹지 않는다). */}
-          {monthHolidays.length > 0 ? (
-            <p className="text-text-dim shrink-0 px-1 pb-1.5 text-xs">
-              <span className="text-danger font-bold">{sheetT(lang, "att.holidayLine")}</span>{" "}
-              {monthHolidays.map((h) => `${Number(h.date.slice(5, 7))}/${Number(h.date.slice(8, 10))} ${h.name}`).join(" · ")}
-            </p>
-          ) : null}
+          {/* 🔴 표 위 한 줄 = **범례**(원장 2026-09-14 *"범례 가장 위로"* · *"이 사이 빈공간"*).
+              여기엔 원래 '학원 휴일 9/24 추석 연휴 · …' 이름 줄이 있었는데(2026-09-07) 원장이 같은 날
+              *"휴일 표시 제거"*로 걷어냈다. 휴일은 이제 **셀 색(붉은 계열) + 헤더 빨간 날짜 + 날짜 툴팁**으로
+              읽히고, 그 색의 뜻은 이 범례가 말한다(`att.legend.holiday`).
+              🔴 휴일 이름 줄을 되살리지 말 것 — 되살리려면 원장 확인이 먼저다.
+              빗금 칩은 강사 전체 보기(`mode === "teacher"`)에서만 — 반별 보기 격자엔 빗금이 안 나온다. */}
+          <AttendanceLegend lang={lang} showGhost={mode === "teacher"} />
           <MatrixTable
             groups={allGroups}
             days={visibleDays}

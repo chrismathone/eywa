@@ -34,6 +34,7 @@ import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import { UNSENT_FILTER } from "@/features/report-admin/report-filters";
 import { filterUnsentSendable, type UnsentRow } from "@/features/report-admin/unsent-sendable";
+import { getTestStudentIds } from "@/features/students/server/test-students";
 import {
   absenceDigestBody,
   absenceNotificationLink,
@@ -483,14 +484,23 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
  */
 async function detectOutstanding(admin: SupabaseClient, tenantId: string): Promise<number> {
   // p_tenant 변형(0121a) — 세션용 RPC는 service_role에서 auth_tenant_id() null → silent 0행.
-  const { data, error } = await admin.rpc("dashboard_top_outstanding_admin", { p_limit: 500, p_tenant: tenantId });
+  // 🔴 테스트 학생(`students.is_test` — 발송 시험용 '학원이')은 경보 대상이 아니다(원장 2026-09-13).
+  //    **RPC 결과를 JS에서** 거른다 — 이 RPC는 운영실 미수 카드·브리핑·retention이 **함께 읽으므로**
+  //    RPC 자체를 고치면 알림만 막으려다 화면 숫자가 같이 바뀐다(그건 별개의 결정이다).
+  // ⚠️ 두 조회는 서로 독립이라 병렬(B4).
+  const [{ data, error }, testStudentIds] = await Promise.all([
+    admin.rpc("dashboard_top_outstanding_admin", { p_limit: 500, p_tenant: tenantId }),
+    getTestStudentIds(admin, tenantId),
+  ]);
   if (error) throw new Error(`detectOutstanding rpc: ${error.message}`);
   const candidates = buildOutstandingEvents(
-    ((data ?? []) as Array<{ student_id: string; student_name: string; amount: number | string }>).map((row) => ({
-      studentId: row.student_id,
-      studentName: row.student_name,
-      amount: Number(row.amount),
-    })),
+    ((data ?? []) as Array<{ student_id: string; student_name: string; amount: number | string }>)
+      .filter((row) => !testStudentIds.has(row.student_id))
+      .map((row) => ({
+        studentId: row.student_id,
+        studentName: row.student_name,
+        amount: Number(row.amount),
+      })),
   );
   const cold = await isColdStart(admin, tenantId, "outstanding_alert");
   const fresh = (await recordNew(admin, tenantId, "outstanding_alert", candidates, cold)) as OutstandingEvent[];
@@ -573,7 +583,16 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
       studentName: student?.name ?? "(학생)",
     };
   });
-  const optoutClassIds = await fetchReportOptoutClassIds(admin, tenantId);
+  // 🔴 테스트 학생은 재촉하지 않는다(원장 2026-09-13) — **후보 선정 단계**에서 뺀다. 알림 본문이 묶음이라
+  //    (`구한결 외 10명 …`) 나중에 항목째 버리면 같은 본문의 실학생 건까지 함께 사라진다.
+  //    ⚠️ 게이트 함수(`unsent-sendable.ts`)가 아니라 **여기서** 뺀다 — 그 함수는 발송 큐 카드와 공유라,
+  //       거기 넣으면 원장이 "빼지 않기로 한" 큐 카드 수까지 같이 바뀐다.
+  // ⚠️ 두 조회는 서로 독립이라 병렬(B4).
+  const [testStudentIds, optoutClassIds] = await Promise.all([
+    getTestStudentIds(admin, tenantId),
+    fetchReportOptoutClassIds(admin, tenantId),
+  ]);
+  const sendableRows = rows.filter((row) => !testStudentIds.has(row.studentId));
   // 결석 게이트(#77): 원스크린 save는 결석도 저장하는 게 정책이라, 결석이라 **보낼 수 없는** 저장분을
   // '미발송'으로 재촉하면 거짓 알림이 된다. 보강 보고서(makeup)는 게이트 제외(발송 콘솔과 동일).
   // 반 단위 판정(0134a). 조회 실패는 throw → 외곽 try/catch가 기록(그날 재촉 생략 = fail-closed).
@@ -586,10 +605,10 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   const absenceBlockedKeys = await getAbsenceBlockedKeys(
     admin,
     tenantId,
-    rows.filter((row) => !row.makeup).map(keyOf),
+    sendableRows.filter((row) => !row.makeup).map(keyOf),
   );
   const candidates = buildUnsentReportEvents(
-    filterUnsentSendable(rows, {
+    filterUnsentSendable(sendableRows, {
       today,
       classnoteSubjects: settings.report.classnoteSubjects,
       optoutClassIds,
@@ -667,21 +686,30 @@ async function detectSendDeadline(admin: SupabaseClient, tenantId: string): Prom
   // ⑦ 발송이 꺼진 테넌트는 시드도 남기지 않는다(켜는 날 콜드스타트로 시작).
   if (!settings.report.classnoteSendEnabled) return 0;
 
-  const { data, error } = await admin
-    .from("lesson_reports")
-    .select("id, student_id, report_date, subject, class_id, makeup, notes, student:student_id ( name )")
-    .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
-    .eq("classnote_status", "failed")
-    .is("revoked_at", null)
-    .or("source.is.null,source.neq.edutrix_import")
-    .gte("report_date", classnoteMinDate(today)) // ⑤ 아직 손 쓸 수 있는 것만
-    .order("report_date", { ascending: true })
-    .limit(200);
+  // ⚠️ 두 조회는 서로 독립이라 병렬(B4).
+  const [{ data, error }, testStudentIds] = await Promise.all([
+    admin
+      .from("lesson_reports")
+      .select("id, student_id, report_date, subject, class_id, makeup, notes, student:student_id ( name )")
+      .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
+      .eq("classnote_status", "failed")
+      .is("revoked_at", null)
+      .or("source.is.null,source.neq.edutrix_import")
+      .gte("report_date", classnoteMinDate(today)) // ⑤ 아직 손 쓸 수 있는 것만
+      .order("report_date", { ascending: true })
+      .limit(200),
+    getTestStudentIds(admin, tenantId),
+  ]);
   if (error) throw new Error(`detectSendDeadline query: ${error.message}`);
 
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const gated = (data ?? []).filter(
     (row) =>
+      // 🔴 ⑨ 테스트 학생은 재촉하지 않는다(원장 2026-09-13 *"테스트 계정 알림 전부 off"*).
+      //    이 경로는 원장이 지목한 '실제로 울린 4경로' **밖**이었지만, 테스트 학생('학원이')은 학부모
+      //    연결이 없어 발송이 **항상 실패**한다 = `failed` 행이 상시 존재한다. 그래서 이 재발송 기한
+      //    알림은 그 학생으로 반드시 울린다(적대 리뷰가 확인) — 지시의 취지대로 여기서도 뺀다.
+      !testStudentIds.has(row.student_id as string) &&
       !!((row.notes as string | null) ?? "").trim() && // ④ 빈 멘트 절대 가드(retryClassnote와 동일)
       isClassnoteAllowed(row.report_date as string, today) &&
       isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects),

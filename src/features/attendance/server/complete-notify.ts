@@ -21,6 +21,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers } from "@/features/notifications/server/notify";
+import { getTestStudentIds } from "@/features/students/server/test-students";
 import { addDays, kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { isClassAttendanceComplete } from "../attendance-complete";
 
@@ -56,7 +57,7 @@ export async function notifyIfClassAttendanceComplete(input: {
     if (!klass?.is_active || !klass.teacher_id) return;
 
     // 활성 수강생 + 그 (반,날짜) 기록 + 담당 강사 활성 — 서로 독립이라 병렬(B4). 반 정원 수준(수십)이라 절단 없음.
-    const [enrRes, recRes, teacherRes] = await Promise.all([
+    const [enrRes, recRes, teacherRes, testStudentIds] = await Promise.all([
       admin
         .from("enrollments")
         .select("student_id, start_date, end_date, on_hold, is_transferred, attendance_days")
@@ -75,6 +76,8 @@ export async function notifyIfClassAttendanceComplete(input: {
         .eq("id", klass.teacher_id)
         .eq("status", "active")
         .maybeSingle(),
+      // 테스트 학생(`students.is_test`) 제외 축 — 아래 명단에서 뺀다(원장 2026-09-13). 독립 조회라 함께(B4).
+      getTestStudentIds(admin, tenantId),
     ]);
     if (enrRes.error) throw enrRes.error;
     if (recRes.error) throw recRes.error;
@@ -97,7 +100,11 @@ export async function notifyIfClassAttendanceComplete(input: {
             date,
           ) && enrollmentAttendsOnDay(row.attendance_days, dayKey),
       )
-      .map((row) => row.student_id);
+      .map((row) => row.student_id)
+      // 🔴 테스트 학생은 예정 명단에서 뺀다(원장 2026-09-13) — 안 빼면 그 학생 한 칸 때문에 실제로 다 찍은
+      //    반이 영원히 '미완료'로 남아 벨이 안 울린다. 그 학생만 있는 반은 명단이 비어
+      //    `isClassAttendanceComplete`가 false를 돌려주므로 가짜 벨도 안 울린다(무의미 벨 방지 규약 그대로).
+      .filter((studentId) => !testStudentIds.has(studentId));
     const recorded = new Set((recRes.data ?? []).map((row) => row.student_id));
 
     if (!isClassAttendanceComplete(activeIds, recorded)) return;

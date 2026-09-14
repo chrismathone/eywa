@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { isMergedStudent } from "@/features/students/merged";
 import { isSystemBulkWithdrawal } from "../system-bulk";
 import { inWithdrawalWindow, lastEndedByStudent } from "../window";
 
@@ -67,16 +68,17 @@ export type WindowWithdrawal = {
  */
 export async function getWithdrawalsInWindow(from: string, to: string): Promise<WindowWithdrawal[]> {
   const supabase = await createClient();
-  const students = await fetchAllPaged<{
+  const withdrawnRows = await fetchAllPaged<{
     id: string;
     name: string;
     school: string | null;
     grade: string | null;
     withdrawn_at: string | null;
+    notes: string | null;
   }>((f, t) =>
     supabase
       .from("students")
-      .select("id, name, school, grade, withdrawn_at")
+      .select("id, name, school, grade, withdrawn_at, notes")
       .eq("status", "withdrawn")
       .gte("withdrawn_at", from)
       .lte("withdrawn_at", to)
@@ -84,6 +86,11 @@ export async function getWithdrawalsInWindow(from: string, to: string): Promise<
       .order("id")
       .range(f, t),
   );
+  // 🔴 중복 병합으로 흡수된 쪽은 **모집단 단계에서** 뺀다(집계 뒤 빼기가 아니라) — 병합은 퇴원이 아니다
+  //    (원장 2026-09-13, [`students/merged.ts`](../../students/merged.ts)). 여기서 빼면 퇴원 수·프로그램
+  //    분포·추이가 **한 번에** 맞는다. 병합된 학생은 수강이 0건이라 과목이 null이어서, 안 빼면 '기타·미상'
+  //    칸만 근거 없이 부푼다(김지유B·권민서B 실측).
+  const students = withdrawnRows.filter((s) => !isMergedStudent(s.notes));
   if (students.length === 0) return [];
   const last = lastEndedByStudent(await loadEndedEnrollments(supabase, students.map((s) => s.id)));
   return students.flatMap((s) => {

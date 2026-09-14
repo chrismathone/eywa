@@ -985,7 +985,8 @@ export function SheetClient({
             {panelOpen ? (
               <PlanPanel
                 goals={goals}
-                skillAreas={data.skillAreas}
+                // 🔴 왼쪽 표 행만 트랙별 목록(EiE = 달력 칸) — 교시 계획 줄은 `data.skillAreas` 그대로다.
+                skillAreas={data.goalAreas}
                 canEdit={canEdit}
                 monthStart={data.monthStart}
                 weekMonday={weekMonday}

@@ -1,12 +1,10 @@
-import type { AttendanceMatrix, AttendanceStatus } from "@/features/attendance/server/queries";
+import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
 import {
   DAY_TONE,
   HEAD_ROW_H,
-  cellDisplay,
   notMineCell,
   sharedOtherSlots,
-  statusTextOf,
 } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
@@ -16,6 +14,7 @@ import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context"
 import { LiveRecords, LiveUnits } from "./live-totals";
 import { MatrixRow } from "./matrix-row";
 import { MatrixTotalsSummary } from "./totals-row";
+import { StickyFitRow } from "./sticky-fit-row";
 // 🔴 이 파일은 **서버 컴포넌트**다(GridProvider의 children으로 렌더된다) — 훅을 쓸 수 없어
 //    화면 언어를 페이지가 정해 prop으로 내려보낸다. 라벨은 사전, 상태·뱃지 표기는 각각의 단일 소스.
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
@@ -317,7 +316,9 @@ export function MatrixTable({
               const fg = d.isToday
                 ? "text-primary-foreground"
                 : holiday || d.dow === 0
-                  ? "text-danger"
+                  ? // 빨간 날짜 — 공용 `text-danger`는 톤업한 휴일·주말 배경 위에서 3.88·3.75로 WCAG 4.5를 깼다
+                    //   (적대적 리뷰 2026-09-14). 출석부 전용 휴일 잉크로 칠한다(휴일 7.62 · 주말 7.37).
+                    "text-att-holiday-ink"
                   : isClassDay
                     ? "text-foreground"
                     : d.isWeekend
@@ -472,66 +473,61 @@ export function MatrixTable({
         <tfoot>
           {/* ⚠️ 합계는 **반이 여럿이면 항상** 그린다 — `showGroups`(반 머리행 여부)에 묶으면 가나다·학년·
               담임순으로 바꾸는 순간 시수 총합·정산 안내가 통째로 사라진다(적대 리뷰 2026-08-06). */}
-          {groups.length > 1 ? (
-            <tr className="bg-bg-soft">
-              <td colSpan={colSpan} className="border-line border-t p-0">
-                {/* 검색이 걸리면 이 줄의 숫자가 **전부 검색 기준**이 된다(클라 — totals-row.tsx). */}
+          {/* 🔴 합계와 조작 안내를 **한 줄**로 둔다(원장 2026-09-14 *"한행으로. 2행은 1행 우측 끝으로 간략하게"*).
+              그전엔 합계 줄 + (조작법·범례) 줄 두 줄이었다. 범례는 같은 날 **표 위로** 올렸고
+              (`attendance-legend.tsx` — *"범례 가장 위로"*), 조작법은 짧게 줄여 합계 **뒤에 이어 붙이고** 전문은
+              툴팁에 남긴다(입력 격자의 키보드 조작법이라 폰에선 쓰지 않는다).
+              🔴 안내를 합계 **밖에 `sticky right-0`로 따로 세우지 말 것** — 표가 화면보다 넓으면(금액 열이 있으면
+                 1,406px~) 두 sticky가 제 폭을 지키며 안내가 **합계·정산액을 덮는다**(폰 375px에선 합계가 0% 보였다 —
+                 적대적 리뷰 2026-09-14). 합계 덩어리 안에 두고, 그 덩어리 폭을 `StickyFitRow`가 **보이는 폭**으로
+                 묶는다 — 안 묶으면 `w-fit`이 표 전체 폭까지 늘어 접히지 않고, 폰에서 끝까지 밀면 합계가 화면 밖으로
+                 나간다(재리뷰 2026-09-14). */}
+          <tr className="bg-bg-soft">
+            <td colSpan={colSpan} className="border-line border-t p-0">
+              {/* 검색이 걸리면 이 줄의 숫자가 **전부 검색 기준**이 된다(클라 — totals-row.tsx). */}
+              {groups.length > 1 ? (
                 <MatrixTotalsSummary
                   classCount={groups.length}
                   fallback={totalCount}
                   countByRow={countByRow}
                   money={money}
                   moneyNote={moneyNote}
+                  trailing={<ControlGuide countByRow={countByRow} fallback={totalCount} lang={lang} />}
                 />
-              </td>
-            </tr>
-          ) : null}
-          <tr>
-            {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
-            <td colSpan={colSpan} className="bg-bg-soft border-line border-t px-3 py-2">
-              <div className="flex items-center gap-2 overflow-x-auto text-xs [&>*]:shrink-0 [&_*]:whitespace-nowrap">
-                {/* 조작법을 여기 한 줄로 — 시트처럼 쓰는 화면이라 "클릭해서 고르는 곳"으로 오해하면 느려진다. */}
-                {/* ⚠️ 조각 사이 공백은 **사전 값 안에** 담았다 — JSX 줄바꿈은 공백을 지우고,
-                    `{" "}`로 넣으면 한국어에 없어야 할 공백이 생긴다(언어마다 붙임이 다르다). */}
-                <span className="text-text-faint text-xs">
-                  {t("att.help.a")}
-                  <LiveRecords countByRow={countByRow} fallback={totalCount} />
-                  {t("att.help.b")}
-                  <b className="text-text-dim">{t("att.help.number")}</b>
-                  {t("att.help.c")}
-                  {t("att.help.d")}
-                  <b className="text-text-dim">{t("att.help.rightClick")}</b>
-                  {" "}
-                  {t("att.help.e")}
-                </span>
-                <span className="micro ml-auto">{t("att.legend")}</span>
-                {/* 범례 칩은 셀과 **같은 함수**로 그린다 — 색·숫자가 실제 셀과 어긋날 수 없게. */}
-                {(["present", "late", "early_leave", "makeup", "absent"] as AttendanceStatus[]).map((s) => {
-                  const chip = cellDisplay(s, null);
-                  return (
-                    <span key={s} className="text-text-dim inline-flex items-center gap-1">
-                      <span
-                        className={`inline-flex size-5 items-center justify-center rounded-sm text-xs font-bold ${chip.className}`}
-                      >
-                        {chip.text}
-                      </span>
-                      {statusTextOf(s, lang)}
-                    </span>
-                  );
-                })}
-                <span className="text-text-dim inline-flex items-center gap-1">
-                  <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.classDay}`} />
-                  {t("att.legend.classDay")}
-                </span>
-                <span className="text-text-dim inline-flex items-center gap-1">
-                  <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.weekend}`} />
-                  {t("att.legend.off")}
-                </span>
-              </div>
+              ) : (
+                <StickyFitRow className="px-3 py-2">
+                  <ControlGuide countByRow={countByRow} fallback={totalCount} lang={lang} />
+                </StickyFitRow>
+              )}
             </td>
           </tr>
         </tfoot>
       </table>
     </DragScrollArea>
+  );
+}
+
+/**
+ * 합계 줄 끝의 **짧은 조작 안내** — 전문(방향키·범위·복사·채우기…)은 툴팁(`att.help.full`).
+ * ⚠️ 조각 사이 공백은 **사전 값 안에** 담았다 — JSX 줄바꿈은 공백을 지우고, `{" "}`로 넣으면 한국어에 없어야 할
+ *    공백이 생긴다(언어마다 붙임이 다르다). 기록 수는 격자와 함께 움직이는 `LiveRecords`.
+ * ⚠️ 줄바꿈을 막지 않는다(`whitespace-nowrap`·`shrink-0` 없음) — 자리가 모자라면 flex가 먼저 이 조각을 둘째 줄로
+ *    내리고, 폰처럼 그 줄도 좁으면 문장이 보이는 폭 안에서 접힌다(재리뷰 2026-09-14).
+ */
+function ControlGuide({
+  countByRow,
+  fallback,
+  lang,
+}: {
+  countByRow: Record<string, Counted>;
+  fallback: Counted;
+  lang: SheetLang;
+}) {
+  return (
+    <span className="text-text-dim text-xs" title={sheetT(lang, "att.help.full")}>
+      {sheetT(lang, "att.help.briefPre")}
+      <LiveRecords countByRow={countByRow} fallback={fallback} />
+      {sheetT(lang, "att.help.brief")}
+    </span>
   );
 }

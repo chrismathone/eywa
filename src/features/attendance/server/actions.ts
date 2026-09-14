@@ -1162,7 +1162,8 @@ export async function setAttendanceCell(input: {
           actorId: user.id,
           date: sessionDate,
           via,
-          cells: [{ studentId, classId, slotStart: slot }],
+          // periodStart = 좌석표 카드의 '지금 교시' — 저장 교시(첫 교시)와 다르면 그 교시 담당도 벨을 받는다.
+          cells: [{ studentId, classId, slotStart: slot, periodStart }],
         }),
       );
     }
@@ -1717,7 +1718,7 @@ export async function setAttendanceBulk(input: {
             actorId: user.id,
             date: sessionDate,
             via,
-            cells: group.map((c) => ({ ...c, slotStart: slot })),
+            cells: group.map((c) => ({ ...c, slotStart: slot, periodStart })),
           });
         }
       });
