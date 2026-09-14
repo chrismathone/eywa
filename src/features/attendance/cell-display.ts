@@ -96,13 +96,16 @@ export const CELL_SCROLL_MARGIN = "scroll-mt-[38px]";
 
    종강(2026-09-14) = 캐논 `inert`(TONE_SOFT.inert와 같은 값). 위 되돌림과 **축이 다르다** — 종강생은 같은 과목
    다른 반을 계속 다니므로 주의를 끌 사건이 아니라 "이 반만 끝났다"는 사실 표시다. 그래서 퇴원(rose)보다 **조용해야**
-   맞고, 글자는 진한 잉크라 회색 칸 옆에서도 읽힌다. ⚠️ 퇴원 쪽을 이 회색으로 맞추지 말 것(위 ①② 그대로). */
+   맞고, 글자는 진한 잉크라 회색 칸 옆에서도 읽힌다. ⚠️ 퇴원 쪽을 이 회색으로 맞추지 말 것(위 ①② 그대로).
+   🔴 안쪽 테두리(`ring-inset ring-line`)를 빼지 말 것 — MCS 고정열은 그 달에 나간 학생 칸 바탕이 `bg-bg-soft`라(종강생 =
+   그 달에 나간 학생이라 늘 겹친다) 테두리가 없으면 뱃지 틀이 사라지고 맨 글자만 남는다(리뷰 2026-09-14, 대비 1.00).
+   `ring-inset`이라 크기는 그대로다. */
 export const BADGE_TONE: Record<"new" | "left" | "transferIn" | "transferOut" | "classEnded", string> = {
   new: "bg-green-soft text-green",
   left: "bg-rose-soft text-rose",
   transferIn: "bg-purple-soft text-purple",
   transferOut: "bg-purple-soft text-purple",
-  classEnded: "bg-bg-soft text-text-dim",
+  classEnded: "bg-bg-soft text-text-dim ring-1 ring-inset ring-line",
 };
 
 /** 표식 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나(크기 제각각 금지, 원장 2026-08-10). */

@@ -212,6 +212,21 @@ describe("종강 — 이 반만 끝나고 같은 과목 다른 반은 계속 다
     expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [moved]))).toEqual(["left"]);
   });
 
+  it("🔴 과목을 며칠 사이에 전부 끝냈으면 먼저 닫힌 반도 퇴원 — 계속 반은 14일 뒤에도 재원이어야 한다", () => {
+    // 리뷰 실측(박한별): 중등M 중3 BS2O 7/5 종료 · 개별 JJ2L 7/6 종료 · 7/6 퇴원 → '다음날 하루'로 보면 BS2O가 종강이었다.
+    const JUL = { first: "2026-07-01", last: "2026-07-31" };
+    const jj = clipToWithdrawal(other({ className: "개별 JJ2L", start: "2026-02-01", end: "2026-07-06" }), "2026-07-06");
+    expect(kinds(lifecycleBadgesInRange(JUL, [{ start: "2026-03-02", end: "2026-07-05" }], "math", [jj]))).toEqual([
+      "left",
+    ]);
+  });
+
+  it("경계 — 계속 반이 마지막 재원일 + 14일 전에 끝나면 퇴원, 그날까지 다니면 종강", () => {
+    const endsOn = (end: string) => other({ start: "2026-02-19", end });
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [endsOn("2026-09-23")]))).toEqual(["left"]);
+    expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [endsOn("2026-09-24")]))).toEqual(["classEnded"]);
+  });
+
   it("다른 과목 반만 계속 → 퇴원(그 과목을 완전히 끝냈다)", () => {
     const english = other({ subject: "english", start: "2026-02-19", end: null });
     expect(kinds(lifecycleBadgesInRange(SEP, special, "math", [english]))).toEqual(["left"]);
@@ -277,13 +292,13 @@ describe("종강 — 이 반만 끝나고 같은 과목 다른 반은 계속 다
 
   it("라벨·툴팁 — 퇴원과 다른 말, 계속 다니는 반까지 말한다", () => {
     expect(badgeLabelOf("classEnded")).toBe("종강");
-    expect(badgeLabelOf("classEnded", "en")).toBe("Ended");
+    expect(badgeLabelOf("classEnded", "en")).toBe("Finished");
     expect(badgeLabelOf("classEnded")).not.toBe(badgeLabelOf("left"));
     expect(badgeTitle({ kind: "classEnded", date: "2026-09-10", otherClassName: "나반" }, "가반")).toBe(
       "2026-09-10 종강 · 나반 계속 수강",
     );
     expect(badgeTitle({ kind: "classEnded", date: "2026-09-10", otherClassName: "MS2A" }, "PL1", "en")).toBe(
-      "Class ended 2026-09-10 · continues in MS2A",
+      "Finished 2026-09-10 · continues in MS2A",
     );
   });
 });

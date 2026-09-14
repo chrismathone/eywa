@@ -1414,7 +1414,7 @@ export const SHEET_DICT = {
   // 종강 — 이 반만 끝나고 같은 과목 다른 반은 계속 다닌다(원장 2026-09-14 "과목을 완전 수강 종료하면 퇴원이지").
   "att.badge.classEnded": {
     ko: "{date} 종강 · {other} 계속 수강",
-    en: "Class ended {date} · continues in {other}",
+    en: "Finished {date} · continues in {other}",
   },
 
   // ── 출석부 칸 팝오버(우클릭)·격자 안내·검색 칩 ─────────────────

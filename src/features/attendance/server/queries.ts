@@ -603,8 +603,10 @@ function buildPeriodDays(startIso: string, endIso: string): MatrixDay[] {
  * 🔴 **경계가 있는 학생이 있을 때만** 다른 반을 조회한다 — 평범한 달엔 쿼리가 0이다.
  *    반이동 판정만을 위해 매달 전 학생의 타 반 수강을 긁으면 강사 전체 보기(반 10개)에서
  *    쿼리가 반 수만큼 늘어난다(B4·반응속도 1순위).
- * ⚠️ 다른 반 조회는 임베드를 쓰지 않는다 — enrollments→classes FK가 늘어나는 순간
+ * ⚠️ 다른 반 조회는 **classes 임베드를 쓰지 않는다** — enrollments→classes FK가 늘어나는 순간
  *    손도 안 댄 이 화면이 PGRST201로 죽는다(#94). 두 번 나눠 받고 코드에서 잇는다.
+ *    단 `student:student_id ( withdrawn_at )`는 **컬럼 힌트**라 허용한다(퇴원일 자르기의 재료 — 걷어내면 그만둔
+ *    학생이 '종강'으로 뜬다).
  */
 async function attachLifecycleBadges(
   supabase: Awaited<ReturnType<typeof createClient>>,
