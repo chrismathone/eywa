@@ -260,6 +260,9 @@ async function attendanceHistory(today: string) {
   );
   // Attendance cells keep separate lesson periods; corrections replace only the same cell.
   // '출결 현황' 도넛은 오늘 칸만, 출석률 추이는 14일 — 판정은 attendance-day.ts 한 곳(원장 2026-09-13).
+  // ⚠️ 도넛은 **찍힌 기록 전건**(명단·반 필터 없음 — 자리 칸·테스트 학생 기록 포함)이라 같은 카드의
+  //    '예정학생 미처리·입력 중 N반'(`getDailyProcessingStatus` = 예정 명단 기준, 테스트 학생 제외 — 2026-09-14)과
+  //    기준이 다르다. 기록은 사실이라 여기선 거르지 않는다(원장 요청 범위 = 오늘 출결·처리현황).
   return attendanceOverview(effectiveAttendanceRecords(rows), today);
 }
 

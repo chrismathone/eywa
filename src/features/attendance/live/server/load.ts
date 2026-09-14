@@ -26,6 +26,8 @@ import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { taughtByForSlot } from "@/features/attendance/teacher-axis";
 // 보강 예약(0264a) — 그 교시 칸에 예약된 학생을 미리 세운다(fail-soft, 표 없음 = 없음).
 import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
+// 테스트 학생(`students.is_test`) 판정 재료 — 알림·집계와 같은 공용 한 벌(데스크 표면에서만 쓴다, 아래 opts).
+import { getTestStudentIds } from "@/features/students/server/test-students";
 import type { LiveSlot, LiveStudent } from "../types";
 
 export type { LiveSlot, LiveStudent };
@@ -65,8 +67,18 @@ type SlotRow = {
 
 /**
  * @param classIds 이 반들로 좁힌다(강사 화면). 넘기지 않으면 그날 열리는 **전 활성 반**(데스크).
+ * @param opts.excludeTestStudents 테스트 학생(`students.is_test`)을 명단에서 뺀다 — **데스크 표면 전용**(원장 2026-09-14
+ *   *"학원이 반 및 학원이 (테스트 학생)이 오늘 출결에 올라와있는데 예외로 빼"*). 기본은 끔: 강사 자기 화면(스트립·출결
+ *   모드)은 테스트가 되려면 보여야 한다. 켜는 곳 = 데스크 보드(`getLiveBoard` selfOnly=false — 좌석표·확인 필요·어제
+ *   출결)와 강사 스트립의 '데스크 확인 요청'(`requestDeskConfirm`) — 후자는 스트립에 테스트 반이 보여도 벨이
+ *   실직원(데스크)에게 가고 데스크 큐엔 그 반이 없기 때문이다.
+ *   명단이 테스트 학생뿐인 교시는 아래 "명단 0명 = 건너뜀"이 그대로 치운다 — 🔴 반 이름으로 판정하지 않는다.
  */
-export async function loadLiveSlots(date: string, classIds?: readonly string[]): Promise<LiveSlot[]> {
+export async function loadLiveSlots(
+  date: string,
+  classIds?: readonly string[],
+  opts: { excludeTestStudents?: boolean } = {},
+): Promise<LiveSlot[]> {
   // ⚠️ 아래 `.or()`에 date를 보간하므로 **함수 안에서** 형식을 확정한다(방어선이 호출부에만 있으면
   //    다음 호출부에서 깨진다 — 같은 리포의 setAttendanceCell도 `.or()` 앞에 같은 가드를 둔다).
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
@@ -108,7 +120,7 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const slotClassIds = [...new Set(slots.map((s) => s.class_id))];
 
   // 2) 반 메타(활성만) + 그 반들의 수강행 + 그날 출결 — 서로 독립이라 병렬(B4).
-  const [classRows, enrollRows, recordRows, reservedRaw] = await Promise.all([
+  const [classRows, enrollRows, recordRows, reservedRaw, testStudentIds] = await Promise.all([
     fetchInChunks<{
       id: string;
       class_name: string;
@@ -166,6 +178,8 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
     ),
     // 그날 보강 예약(0264a, fail-soft) — 독립 조회라 함께 달린다(B4). 반 집합은 아래 activeClasses로 다시 거른다.
     getReservationsOn(date, slotClassIds),
+    // 테스트 학생 id(데스크 표면에서만 — 위 opts) — 독립 조회라 함께(B4). 조회 실패 = 빈 집합 = 지금 동작(fail-open).
+    opts.excludeTestStudents ? getTestStudentIds(supabase) : Promise.resolve(new Set<string>()),
   ]);
 
   const activeClasses = new Map(
@@ -179,8 +193,9 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
    * 서고 처리현황 분모까지 는다. 이 반이 그날 도는 교시 중 예약 시각과 같은 칸이 없으면(토요일 보강 등) 이 보드엔
    * 자리가 없다(일별 출석부·원스크린이 그 학생을 세운다 — 알려진 한계).
    * 조회는 fail-soft(표 없음 = 예약 없음). 예약된 학생의 이름도 아래 학생 메타 조회에 함께 넣는다.
+   * 🔴 테스트 학생의 예약도 뺀다 — 안 빼면 예약 한 줄이 명단 0명 교시를 되살려 테스트 반이 다시 선다.
    */
-  const reservedToday = reservedRaw.filter((r) => activeClasses.has(r.classId));
+  const reservedToday = reservedRaw.filter((r) => activeClasses.has(r.classId)).filter((r) => !testStudentIds.has(r.studentId));
   const reservedBySlot = new Map<string, Map<string, { absenceDate: string; periodLabel: string | null }>>();
   for (const r of reservedToday) {
     const key = `${r.classId}|${r.slotStart}`;
@@ -193,6 +208,9 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const expectedByClass = new Map<string, Set<string>>();
   for (const e of enrollRows) {
     if (!activeClasses.has(e.class_id)) continue;
+    // 테스트 학생은 명단에 넣지 않는다(opts.excludeTestStudents일 때만 집합이 찬다). 명단이 비면 교시째 빠지고,
+    // 그 학생의 출결 기록도 아래 `expectedInClass` 필터로 함께 빠진다.
+    if (testStudentIds.has(e.student_id)) continue;
     // 시작일이 비어 있는 레거시 행은 "언제부터인지 모른다" — 조회에서 이미 `start_date <= date`로 좁혔고,
     // 판정 함수는 문자열 비교를 하므로 빈 값이면 항상 참이 되게 둔다(옛 행을 명단에서 떨구지 않는다).
     if (

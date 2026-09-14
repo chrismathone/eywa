@@ -275,11 +275,13 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               ? <LevelSplitChart split={student.levelSplit} noEnrollment={student.programs.noEnrollment} />
               : <Donut data={student.levels} label="전체 재원" />)}
           </Panel>
-          {/* 원장 2026-09-13 "출결 현황은 오늘것만 카운팅" — 오늘 기록이 없어도 지난 기록일로 넘어가지 않는다(attendance-day.ts). */}
+          {/* 원장 2026-09-13 "출결 현황은 오늘것만 카운팅" — 오늘 기록이 없어도 지난 기록일로 넘어가지 않는다(attendance-day.ts).
+              ↗ = 오늘 출결(원장 2026-09-14 "출결 현황 바로가기를 오늘의 출결과 연결") — 카드가 오늘만 세니 목적지도 오늘 화면.
+              게이트는 월별과 같은 `attendance` 키라 숨김 조건이 따로 없다. 14일 추이(아래 '최근 14일 등원율')는 월별 그대로. */}
           <Panel
             title="출결 현황"
             note="오늘 · 학생·반·교시별 출결 칸"
-            href="/attendance"
+            href="/attendance/live"
             sections={[v.attendance, v.processing]}
           >
             {attendance ? (
