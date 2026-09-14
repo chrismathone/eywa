@@ -26,6 +26,11 @@ export type SlotMark = {
    * 자리일 때만 붙는다(나머지는 키 없음 — 강사 보기 칸 수천 개의 페이로드).
    */
   seat?: true;
+  /**
+   * 세지 않는 교시 중 **담임이 되기 전 기록**(화면만 `homeroomSince`로 빼고, 저장은 몫으로 본다 — `buildScopeOwner`).
+   * 🔴 이 칸은 저장이 제 몫 경로(시수까지)를 타므로 빗금 칸 입력(상태만 옮기기)을 열면 안 된다 — 격자가 막는다.
+   */
+  pre?: true;
 };
 
 /**
@@ -241,6 +246,8 @@ export type CellDisplay = {
   text: string;
   className: string;
   style?: { background?: string; backgroundImage?: string };
+  /** 글자를 흐리게 — 빗금 칸의 남의 교시 값(이 표 몫이 아니다). */
+  faded?: true;
 };
 
 /**
@@ -296,17 +303,63 @@ export function sharedOtherSlots(others: readonly SlotMark[] | undefined): SlotM
  *    수업보고서 파생은 "내 몫 수기 기록이 없는 등원일"을 메우므로 **실제 행이 자리·남의 교시뿐인 칸도 '출석'으로
  *    채운다**. 그 칸은 값이 보여 격자가 통과시키는데 서버엔 제 몫 행이 0이라 `NOT_MINE_MESSAGE`로 거절된다 —
  *    누르고 나서 실패 토스트를 보느니 **누르기 전에** 같은 사유로 막는 게 정직하다.
- * ⚠️ 반별 보기는 `others`가 항상 비어 있어 **항상 false**다(종전과 완전히 같다).
+ * ⚠️ 반별 보기는 `others`가 항상 비어 있어 **항상 null**이다(종전과 완전히 같다).
+ * 🔴 2026-09-14부터 반환은 **막는 사유**다(`seatOnly`·`locked`, 입력 가능 = null) — 다른 선생님 교시 기록이 있는 빗금 칸은
+ *    막지 않고 상태를 옮긴다(`ghostCellKind` `transfer`). 사유를 가르는 건 자리뿐인 칸에 "반별 보기에서 고치세요"라고
+ *    하면 자리 기록을 반별 보기에서 고치라는 거짓 안내가 되기 때문이다.
  */
-export function notMineCell(input: {
+export function notMineCell(input: GhostCellInput): "seatOnly" | "locked" | null {
+  const kind = ghostCellKind(input);
+  return kind === "transfer" ? null : kind;
+}
+
+type GhostCellInput = {
   /** 서버가 준 값이 있나(`marks`). */
   hasValue: boolean;
   /** 그 값이 수업보고서 **파생**인가(실제 출결 행이 아니다). */
   derivedValue: boolean;
   others?: readonly SlotMark[];
-}): boolean {
-  if (!input.others?.length) return false;
-  return !input.hasValue || input.derivedValue;
+};
+
+/**
+ * 제 몫 수기 값이 없는 칸의 성격 — 격자(`buildGridSource`)·행(`matrix-row`)·칸·조회(`queries`)가 **이 한 함수**로 가른다.
+ *   · `transfer` = 다른 선생님 교시 기록이 있다 → 입력하면 그 행들에 **상태만** 옮긴다(원장 2026-09-14 *"그냥 그 날의
+ *     해당 담당 출석으로 전부 이전시켜. 다른 사람이 대신 찍었어도."*). 서버 `planScopedDay`의 `transfer`와 짝.
+ *   · `seatOnly` = 자리(JJ·랩실) 기록뿐 → 막는다(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지."*).
+ *   · `locked` = 담임 이전 기록(`pre`)이 섞였거나 값이 파생뿐 → 종전대로 막는다(`NOT_MINE_MESSAGE`).
+ * 🔴 `pre`를 먼저 본다 — 그 행은 저장이 제 몫으로 보아 **시수까지** 나눠 쓰므로 "상태만"이라는 약속이 거짓이 된다.
+ * 🔴 파생 값 칸은 옮기지 않는다 — 칸이 보여 주는 값(보고서 파생)과 옮겨지는 기록(남의 교시)이 다른 사실이다.
+ * ⚠️ null = 빗금 칸이 아니다(세지 않는 교시가 없거나 제 몫 수기 값이 있다 — 종전 경로).
+ */
+export function ghostCellKind(input: GhostCellInput): "transfer" | "seatOnly" | "locked" | null {
+  const others = input.others ?? [];
+  if (others.length === 0) return null;
+  if (input.hasValue && !input.derivedValue) return null;
+  if (others.some((o) => o.pre)) return "locked";
+  if (others.every((o) => o.seat)) return "seatOnly";
+  return input.derivedValue ? "locked" : "transfer";
+}
+
+/** 빗금 칸의 **표시 전용** 값 — `s` 대표 상태 · `u` 소비 시수 합 · `p` 전부 들었을 때의 합(null = 1, 칸 값 규약). */
+export type GhostValue = { s: AttendanceMark; u: number | null; p: number | null };
+
+/**
+ * `transfer` 칸에 보일 값 — 다른 선생님 교시 기록(자리 제외)의 롤업. 격자가 이 값을 **합계 밖**(`g`)으로 싣는다.
+ * 🔴 `p`가 있는 이유: 상태를 옮기면 서버는 그 행들의 시수를 그대로 두므로 옮긴 뒤 합은 `p`(들은 상태) 또는 0이다 —
+ *    낙관값이 이 숫자와 같아야 새로고침에서 덮개가 벗겨진다(`grid/store.ts`).
+ */
+export function ghostGridValue(others: readonly SlotMark[]): GhostValue | null {
+  const shared = sharedOtherSlots(others);
+  const day = rollupDay(shared);
+  if (!day) return null;
+  const potential = round1(shared.reduce((sum, o) => sum + consumedUnits("present", o.units), 0));
+  const norm = (n: number) => (n > 0 && n !== 1 ? n : null);
+  return { s: day.status, u: norm(day.units), p: norm(potential) };
+}
+
+/** 빗금 위 흐린 숫자의 글자색 — 격자 원색 표(`ATT_VIVID`)의 글자색만 쓴다(색 맵을 새로 만들지 않는다). */
+function statusInk(mark: AttendanceMark): string {
+  return STATUS_TONE[mark].split(" ").find((c) => c.startsWith("text-")) ?? "";
 }
 
 /**
@@ -330,6 +383,11 @@ export function cellDisplay(
      * 🔴 값이 있으면 값이 먼저다(위 규칙 그대로) — 휴일에 실제로 수업했으면 그 기록이 보여야 한다.
      */
     holiday?: boolean;
+    /**
+     * 빗금 칸(`ghost`)에 보일 **다른 선생님 교시 값**(원장 2026-09-14 — 옮긴 뒤 "빗금 위에 값을 보여주고 합계엔 안 넣는다").
+     * 빗금은 그대로 두고 숫자만 흐리게 얹는다. 없으면 종전 가운뎃점.
+     */
+    ghostMark?: { s: AttendanceMark; u: number | null } | null;
   } = {},
 ): CellDisplay {
   // 하루에 교시가 둘 이상 찍힌 칸(0196a) — 숫자는 **합**, 색이 갈리면 교시 순서대로 줄무늬.
@@ -348,6 +406,20 @@ export function cellDisplay(
   // 값이 없는 칸 — 요일 성격만 그린다. 이 표가 세지 않는 교시가 남아 있으면 그 위에 빗금을 얹어
   // "빈칸이 아니라 남의 몫"임을 드러낸다(배경색은 그대로 두고 backgroundImage만 겹친다).
   const hatch = opts.ghost ? { style: { backgroundImage: GHOST_HATCH } } : {};
+  if (opts.ghost && opts.ghostMark) {
+    // 요일 배경색은 아래 갈래와 **같은 우선순위**로 고른다(빗금 위 숫자만 다르다).
+    const tone = opts.outside
+      ? DAY_TONE.outside
+      : opts.holiday
+        ? DAY_TONE.holiday
+        : opts.muted
+          ? DAY_TONE.weekend
+          : opts.attendDay
+            ? DAY_TONE.classDay
+            : "";
+    const text = markNumber(opts.ghostMark.s, opts.ghostMark.u);
+    return { text, className: `${statusInk(opts.ghostMark.s)} ${tone}`.trim(), faded: true, ...hatch };
+  }
   if (opts.outside) return { text: "", className: `text-text-faint ${DAY_TONE.outside}`, ...hatch };
   if (opts.holiday) return { text: "·", className: `text-text-faint ${DAY_TONE.holiday}`, ...hatch };
   if (opts.muted) return { text: "·", className: `text-text-faint ${DAY_TONE.weekend}`, ...hatch };

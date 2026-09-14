@@ -40,6 +40,9 @@ import {
 import { buildScopeShare, isScopeClassIds, isScopeTeacherId, scopeTeaches, type ScopeShare } from "../scope-ownership";
 import { loadScopeFacts } from "./scope-ownership";
 import { NOT_MINE_MESSAGE } from "../cell-display";
+// 빗금 칸 입력(원장 2026-09-14) — 제 몫 0 · 다른 선생님 교시 행에 상태만 옮긴다. 판정·메모 규칙은 순수 모듈 한 곳.
+import { planScopedDay, SCOPED_REJECT_MESSAGE, type ScopedRejectReason } from "../ghost-transfer";
+import { noteTargetRow, proxyNote } from "../proxy-memo";
 import { unitsAuditFields, type UnitsAudit } from "../units-audit";
 // 수학 자동 시수(원장 2026-09-11) — **새 행**에만, 숫자를 안 고른 저장에만. 규칙·근거는 auto-units.ts.
 import { autoUnitsApply, autoUnitsKey, autoUnitsLogFields, newRowUnits } from "../auto-units";
@@ -146,6 +149,59 @@ async function insertManyWithVia(
     }),
   );
   return { error: retry.error?.message ?? null };
+}
+
+/**
+ * 강사 보기 **빗금 칸 입력**의 쓰기(원장 2026-09-14 *"대신 다른 사람이 출결하면 메모에 남겨."*) — 상태·입력자(`patch`) +
+ * 행마다 기존 메모 끝에 `대신 입력: 이름` 한 줄. 시수 키는 없다(호출부 patch에도 없다).
+ * 🔴 메모는 **읽은 그 값일 때만** 쓴다(메모 비교 조건 + 쓴 행 id 확인) — 읽고 쓰는 사이 담당 선생님이 사유를 저장하면 그
+ *    사유를 덮지 않고, 지금 메모를 다시 읽어 한 번 더 붙인다(적대 리뷰 2026-09-14: 범위 저장은 반마다 기다리는 조회가 있어
+ *    틈이 넓다). 두 번 모두 어긋난 행은 쓰지 않고 오류로 알린다 — 남의 기록을 덮는 것보다 다시 치게 하는 것이 낫다.
+ * ⚠️ 그 사이 지워진 행(다시 읽어 없음)은 조용히 넘어간다 — 옮길 기록이 없다.
+ */
+async function writeProxyRows(
+  supabase: Sb,
+  patch: Record<string, unknown>,
+  rows: readonly { id: string; note: string | null }[],
+  actorName: string | null | undefined,
+): Promise<{ error: string | null; written: number }> {
+  let pending = [...rows];
+  /** 실제로 쓴 행 수 — 중간에 멈춰도 호출부가 감사로그에 남긴다(적대 재리뷰 2026-09-14). */
+  let written = 0;
+  for (let attempt = 0; attempt < 2 && pending.length > 0; attempt++) {
+    const byOld = new Map<string | null, string[]>();
+    for (const r of pending) (byOld.get(r.note) ?? byOld.set(r.note, []).get(r.note)!).push(r.id);
+    const missed: string[] = [];
+    for (const [old, ids] of byOld) {
+      const run = (p: Record<string, unknown>) => {
+        const q = supabase.from("attendance_records").update(p).in("id", ids);
+        return (old === null ? q.is("note", null) : q.eq("note", old)).select("id");
+      };
+      const next = { ...patch, note: proxyNote(old, actorName) };
+      let res = await run(next);
+      if (res.error && isMissingViaColumn(res.error.message)) {
+        const rest: Record<string, unknown> = { ...next };
+        delete rest.recorded_via;
+        res = await run(rest);
+      }
+      if (res.error) return { error: res.error.message, written };
+      const done = new Set(((res.data ?? []) as { id: string }[]).map((d) => d.id));
+      written += done.size;
+      for (const id of ids) if (!done.has(id)) missed.push(id);
+    }
+    if (missed.length === 0) return { error: null, written };
+    const missedSet = new Set(missed);
+    const { data, error } = await supabase.from("attendance_records").select("id, note").in("id", missed);
+    if (error) return { error: error.message, written };
+    pending = ((data ?? []) as { id: string; note: string | null }[])
+      .filter((d) => missedSet.has(d.id))
+      .map((d) => ({ id: d.id, note: d.note ?? null }));
+  }
+  // 두 번 어긋난 행이 남았거나 **한 행도 못 썼으면**(그 사이 전부 지워짐) 성공으로 말하지 않는다 — 옮긴 게 없는데
+  // "옮겼습니다"가 뜨면 거짓 안내다.
+  return pending.length > 0 || written === 0
+    ? { error: SCOPED_REJECT_MESSAGE.stale, written }
+    : { error: null, written };
 }
 
 export type SaveAttendanceState = { error?: string; saved?: number } | undefined;
@@ -417,6 +473,11 @@ export type CellResult =
        * (null = 1). 키가 있을 때만 호출부가 화면 시수를 이 값으로 맞춘다(원장 2026-09-11, auto-units.ts).
        */
       autoUnits?: number | null;
+      /**
+       * 강사 보기 **빗금 칸 입력**으로 다른 선생님 교시 행에 **상태만** 옮긴 행 수(원장 2026-09-14) — 키가 있을 때만.
+       * 격자는 이 값으로 칠한 값의 성격(빗금 표시 값인가)을 서버와 맞춘다(갈리면 덮개를 벗긴다).
+       */
+      ghostTransfer?: number;
     }
   | { error: string };
 
@@ -490,6 +551,12 @@ export async function setAttendanceCell(input: {
    *    담임 인계일 이전 칸은 판정에 넣지 않는다 — 그 칸은 격자가 막는다(`buildScopeOwner` 주석, 반응속도 1순위).
    */
   scopeTeacherId?: string | null;
+  /**
+   * 화면이 이 칸을 **빗금 칸 입력**(다른 선생님 교시에 상태만 옮기기, 원장 2026-09-14)으로 알고 보냈다 — 격자 값 `g`.
+   * 🔴 표식은 권한이 아니다: 옮길지는 서버가 DB로 판정하고, 판정과 표식이 갈리면 **저장하지 않는다**(`planScopedDay` stale) —
+   *    화면이 오래돼 사람이 본 칸과 지금 기록이 다르면 남의 기록(또는 제 기록)을 조용히 덮는다(적대 리뷰 2026-09-14).
+   */
+  ghostTransfer?: boolean;
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -593,12 +660,13 @@ export async function setAttendanceCell(input: {
   /** 강사 보기 칸의 그날 행(정정 이력 포함, 최근 입력 먼저) + 판정기 — 메모만·지우기 갈래가 쓴다(두 조회 병렬, B4). */
   const loadScopedDay = async (
     teacherId: string,
-  ): Promise<{ error: string } | { rows: DayTargetRow[]; share: ScopeShare }> => {
+  ): Promise<{ error: string } | { rows: (DayTargetRow & { note?: string | null })[]; share: ScopeShare }> => {
     const [{ data, error }, facts] = await Promise.all([
       supabase
         .from("attendance_records")
         // recorded_via = 자리 문 표식(0212a) — JJ는 `seat_label`이 없어 이게 유일한 자리 근거일 수 있다.
-        .select("id, slot_start, seat_label, recorded_via")
+        // note = 메모만 저장이 **화면이 보여 준 메모의 행**을 고르는 재료(`noteTargetRow`, 적대 재리뷰 2026-09-14).
+        .select("id, slot_start, seat_label, recorded_via, note")
         .eq("class_id", classId)
         .eq("student_id", studentId)
         .eq("session_date", sessionDate)
@@ -615,7 +683,7 @@ export async function setAttendanceCell(input: {
     }
     const gate = scopeShareOf(teacherId, facts);
     if ("error" in gate) return gate;
-    return { rows: (data ?? []) as DayTargetRow[], share: gate.share };
+    return { rows: (data ?? []) as (DayTargetRow & { note?: string | null })[], share: gate.share };
   };
   /** 판정기 → "이 행이 자리(JJ·랩실)인가" — `splitOutSeatRows`에 넘긴다. */
   const seatOf = (share: ScopeShare) => (r: DayTargetRow) => share(classId, sessionDate, r) === "seat";
@@ -632,10 +700,31 @@ export async function setAttendanceCell(input: {
       const day = await loadScopedDay(scopeTeacherId);
       if ("error" in day) return day;
       const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share));
-      // 그날 행이 자리 행뿐 = 강사 보기의 빗금 칸 — 격자와 같은 문장으로 거절한다.
-      if (write.length === 0 && seat.length > 0) return { error: NOT_MINE_MESSAGE };
-      rowId = write[0]?.id ?? null;
+      // 그날 행이 자리 행뿐 = 강사 보기의 자리뿐인 빗금 칸 — 격자와 같은 문장(자리 사유)으로 거절한다.
+      if (write.length === 0 && seat.length > 0) return { error: SCOPED_REJECT_MESSAGE.seatOnly };
+      // 🔴 고칠 행 = 화면이 그 메모를 보여 준 행(교시별 최신 중 제 몫 → 남의 교시, 사유 있는 메모 우선 — 조회와 같은 규칙).
+      //    빗금 칸 입력 뒤엔 같은 시각 여러 행이 `대신 입력` 줄을 가져, 가장 최근 1행에 쓰면 보이는 사유는 그대로이고 그 줄만
+      //    지워졌다(적대 재리뷰 2026-09-14). 메모가 하나도 없으면 종전대로 가장 최근 행이다.
+      const latest = new Set(pickSaveTargets(write, null).updateIds);
+      rowId =
+        noteTargetRow(
+          write.filter((r) => latest.has(r.id)),
+          (r) => day.share(classId, sessionDate, r) === "mine",
+        )?.id ?? null;
       skippedSeatRows = seat.length;
+    } else if (slot === null) {
+      // 반별 보기의 그날 칸 — 위와 같은 규칙(전 행이 그 반 몫). 교시가 여럿이라 행을 받아 고른다(하루 서너 행).
+      const { data: dayRows } = await supabase
+        .from("attendance_records")
+        .select("id, slot_start, note")
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .eq("session_date", sessionDate)
+        .order("recorded_at", { ascending: false })
+        .order("id", { ascending: false });
+      const list = (dayRows ?? []) as { id: string; slot_start: string | null; note: string | null }[];
+      const latest = new Set(pickSaveTargets(list, null).updateIds);
+      rowId = noteTargetRow(list.filter((r) => latest.has(r.id)))?.id ?? null;
     } else {
       let q = supabase
         .from("attendance_records")
@@ -643,7 +732,8 @@ export async function setAttendanceCell(input: {
         .eq("class_id", classId)
         .eq("student_id", studentId)
         .eq("session_date", sessionDate);
-      if (slot !== null) q = q.eq("slot_start", slot);
+      // 교시 지정 메모(ECS) — 그 교시의 최신 1행(종전 그대로).
+      q = q.eq("slot_start", slot);
       const { data: row } = await q
         .order("recorded_at", { ascending: false })
         .limit(1)
@@ -698,18 +788,19 @@ export async function setAttendanceCell(input: {
        * 🔴 강사 보기의 지우기 — **자리(JJ·랩실) 행은 남긴다**(원장 2026-09-12). (반·학생·날짜)로 칸을 통째로 지우면
        *    자리 담당이 JJ실에서 찍은 기록까지 사라진다. 그래서 그날 행(정정 이력 포함)을 받아 **자리 아닌 행만** id로 지운다.
        * ⚠️ 다른 선생님 교시 행은 종전대로 함께 지운다 — 섞인 칸의 지우기를 막는 문은 화면(`sharedBlock`)이다.
-       * ⚠️ 제 몫 행이 하나도 없는 칸(빗금 칸)은 쓰기와 **같은 판정**(`planDayCellUnits` noneOwned)·같은 문장으로 거절한다.
+       * ⚠️ 제 몫 행이 하나도 없는 칸(빗금 칸)의 지우기는 쓰기와 **같은 판정**(`planScopedDay`)으로 거절한다 — 자리뿐이면
+       *    자리 사유, 다른 선생님 교시 기록이면 남의 기록 삭제라서(원장 2026-09-14 기본값 — 입력만 열고 지우기는 막는다).
        */
       const day = await loadScopedDay(scopeTeacherId);
       if ("error" in day) return day;
       const byId = new Map(day.rows.map((r) => [r.id, r]));
-      const plan = planDayCellUnits({
+      const plan = planScopedDay({
         // 그날 교시별 최신 행 = 화면이 값으로 세는 행(쓰기 갈래와 같은 대상 선정).
         targets: pickSaveTargets(day.rows, null).updateIds.map((id) => byId.get(id)!),
-        owns: (r) => day.share(classId, sessionDate, r) === "mine",
-        unitsVal: undefined,
+        share: (r) => day.share(classId, sessionDate, r),
+        clearing: true,
       });
-      if (!plan.ok) return { error: NOT_MINE_MESSAGE };
+      if (plan.kind === "reject") return { error: SCOPED_REJECT_MESSAGE[plan.reason] };
       const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share));
       skippedSeatRows = seat.length;
       if (write.length > 0) {
@@ -801,6 +892,23 @@ export async function setAttendanceCell(input: {
    *    자리 행만 있는 칸이 "행 없음"이 되어 새 행을 만든다(`splitOutSeatRows` 주석).
    */
   const { write: writeTargets, seat: seatTargets } = splitOutSeatRows(dayTargets, share ? seatOf(share) : null);
+  /**
+   * 🔴 빗금 칸 입력(원장 2026-09-14 *"그냥 그 날의 해당 담당 출석으로 전부 이전시켜. 다른 사람이 대신 찍었어도."*) — 제 몫
+   *    행이 없고 다른 선생님 교시 행이 있으면 그 행들에 **상태만** 쓴다(시수 불변 · 메모 끝에 `대신 입력` 한 줄). 자리뿐이면 거절.
+   * ⚠️ 판정 대상은 `dayTargets`(교시별 최신 = 화면이 값으로 세는 행). 쓰는 행은 위 `writeTargets`와 **같은 집합**이다
+   *    (제 몫이 0이니 자리를 빼고 남는 건 다른 선생님 교시뿐) — 그래서 대상 선정은 종전 그대로 두고 patch만 갈린다.
+   * ⚠️ 몫은 서버가 DB로 다시 판정한다(#77) — 화면(`ghostCellKind`)과 갈리면 격자가 응답의 `ghostTransfer`로 덮개를 맞춘다.
+   */
+  const scopedPlan = share
+    ? planScopedDay({
+        targets: dayTargets,
+        share: (r) => share(classId, sessionDate, r),
+        clearing: false,
+        ghostIntent: input.ghostTransfer === true,
+      })
+    : null;
+  if (scopedPlan?.kind === "reject") return { error: SCOPED_REJECT_MESSAGE[scopedPlan.reason] };
+  const transfer = scopedPlan?.kind === "transfer";
   const writeIds = writeTargets.map((r) => r.id);
   // 상태·입력자를 실제로 받는 행 = 자리를 뺀 그날 교시 + 승격 대상. 이전 상태(감사로그·교차 알림)도 이 행에서 읽는다.
   const targetIdSet = new Set([...writeIds, ...promoteIds]);
@@ -844,6 +952,8 @@ export async function setAttendanceCell(input: {
   const overwrote = updateIds.length > 0 || promoteIds.length > 0;
   /** 새 행 + 숫자 안 고른 저장이면 실제로 넣은 시수(null = 1), 아니면 undefined — 수학 자동 시수(auto-units.ts). */
   let insertedAuto: number | null | undefined;
+  /** 빗금 칸 입력으로 실제로 상태를 옮긴 행 수 — 응답·감사로그가 계획이 아니라 이 숫자를 쓴다. */
+  let ghostWritten = 0;
   if (updateIds.length > 0 || promoteIds.length > 0) {
     const patch: Record<string, unknown> = withVia(
       { status, recorded_by: user.id, recorded_at: nowIso },
@@ -864,7 +974,8 @@ export async function setAttendanceCell(input: {
      * ⚠️ 빈칸·"1"(unitsVal === null)은 "교시마다 기본"이라는 뜻이라 종전 그대로 둔다(원장 확정).
      */
     let dayPlan: DayUnitsPlan | null = null;
-    if (slot === null) {
+    // 빗금 칸 입력은 시수 계획이 없다(상태만 — 원장 결정 ①). 나누면 남의 교시 시수를 이 표 몫처럼 덮어쓴다.
+    if (slot === null && !transfer) {
       // 판정기는 받아 둔 재료로만 만든다 — 추가 조회 없음(담임 시작일은 안 읽는다, `buildScopeOwner` 주석).
       dayPlan = planDayCellUnits({
         targets: dayTargets,
@@ -879,8 +990,9 @@ export async function setAttendanceCell(input: {
           error: `이 날은 교시가 ${dayPlan.slots}개라 시수 ${unitsVal}을(를) 교시별로 나눌 수 없습니다 — 더 큰 값을 넣거나 교시별로 입력해 주세요.`,
         };
       }
-    } else if (unitsProvided) {
+    } else if (slot !== null && unitsProvided) {
       // 교시 지정 저장(ECS) — 대상이 같은 한 수업이라 친 값 그대로(종전과 같다).
+      // 🔴 `slot !== null`을 명시한다 — 빗금 칸 입력(그날 칸 · 위 갈래를 건너뜀)이 여기로 떨어지면 남의 교시 시수를 덮는다.
       patch.session_units = unitsVal;
     }
     /**
@@ -888,7 +1000,7 @@ export async function setAttendanceCell(input: {
      * 🔴 그날 칸 = 배분 계획의 **수신 행**(강사 보기면 그 강사 몫만 — 화면이 세는 집합과 같다).
      * 🔴 교시 지정 저장 = **대표 1행**(대상 둘은 같은 한 수업이라 더하면 2가 된다).
      */
-    if (unitsProvided) {
+    if (unitsProvided && !transfer) {
       const governed =
         slot === null
           ? dayPlan && dayPlan.ok
@@ -912,7 +1024,42 @@ export async function setAttendanceCell(input: {
       const wrote = await updateWithVia(supabase, { ...patch, slot_start: slot }, promoteIds);
       if (wrote.error) return { error: wrote.error };
     }
-    if (writeIds.length > 0) {
+    if (writeIds.length > 0 && transfer) {
+      /**
+       * 🔴 빗금 칸 입력 — 상태·입력자만 쓰고 `session_units`는 patch에 없다(원장 결정 ①). 메모는 행마다 **기존 메모 끝에**
+       *    `대신 입력: 이름` 한 줄(③ — `appendMemo`, 두 번 옮겨도 한 줄). 사람이 친 메모가 와도 남의 교시 메모를 덮지 않는다
+       *    (빗금 칸 팝오버엔 메모 칸이 없다). 읽고 쓰는 사이 메모가 바뀌면 덮지 않는다(`writeProxyRows` 주석).
+       */
+      const wrote = await writeProxyRows(
+        supabase,
+        patch,
+        writeIds.map((id) => ({ id, note: (rowById.get(id)?.note as string | null | undefined) ?? null })),
+        user.displayName,
+      );
+      if (wrote.error) {
+        // 일부라도 썼으면 감사로그를 남긴다 — 여러 행을 차례로 쓰다 멈춘 흔적은 여기 말고 되짚을 자리가 없다.
+        if (wrote.written > 0) {
+          await logAction({
+            action: "attendance_cell",
+            targetType: "attendance",
+            metadata: {
+              studentId,
+              classId,
+              date: sessionDate,
+              status,
+              overwrote: true,
+              prevStatus,
+              ...(scopeTeacherId ? { scopeTeacherId } : {}),
+              ghostTransfer: wrote.written,
+              partial: true,
+              ...backdatedFlag([sessionDate], kstToday()),
+            },
+          });
+        }
+        return { error: wrote.error };
+      }
+      ghostWritten = wrote.written;
+    } else if (writeIds.length > 0) {
       // 같은 시수끼리 한 문장씩(대상이 그날 교시 수라 많아야 서너 건) — 시수를 안 받는 행(남의 교시·시수 안 보냄)은 상태만.
       // ⚠️ 대상은 `writeIds`다(자리 행을 뺀 뒤) — `updateIds`로 쓰면 자리 행이 상태·입력자를 받는다(원장 2026-09-12).
       const groups =
@@ -971,7 +1118,8 @@ export async function setAttendanceCell(input: {
       ...(slot ? { slotStart: slot } : {}),
       status,
       ...(overwrote ? { overwrote: true, prevStatus } : { created: true }),
-      ...(unitsProvided ? { units: unitsVal } : {}),
+      // 빗금 칸 입력은 친 시수를 쓰지 않으므로 싣지 않는다(실리면 그 값이 저장된 것처럼 읽힌다).
+      ...(unitsProvided && !transfer ? { units: unitsVal } : {}),
       // 🔴 **바뀌기 전·후 시수**(원장 2026-09-14) — 값이 실제로 달라졌을 때만(`unitsAuditFields`가 판단).
       //    덮어쓴 칸에만 값이 생긴다(새 칸은 이전 값이 없어 위 분기를 안 탄다).
       //    ⚠️ `nextUnits`는 **칸에 보이는 값**이라 위 `units`(사람이 친 값)와 다를 수 있다(교시마다 기본 = 교시 수).
@@ -982,6 +1130,8 @@ export async function setAttendanceCell(input: {
       ...(scopeTeacherId ? { scopeTeacherId } : {}),
       // 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 역검수용.
       ...(seatTargets.length > 0 ? { skippedSeatRows: seatTargets.length } : {}),
+      // 빗금 칸 입력 — 다른 선생님 교시 행에 상태만 옮긴 행 수(원장 2026-09-14). 그 행 메모의 `대신 입력` 줄과 짝(역검수).
+      ...(transfer ? { ghostTransfer: ghostWritten } : {}),
       ...(input.source ? { source: input.source } : {}),
       ...backdatedFlag([sessionDate], kstToday()),
     },
@@ -1019,6 +1169,8 @@ export async function setAttendanceCell(input: {
   }
   if (!input.quiet) revalidateAttendanceSurfaces();
   // 새 행 + 숫자 안 고른 저장이면 실제 저장 시수를 돌려준다 — 화면이 낙관값을 기록에 맞춘다(auto-units.ts).
+  // 빗금 칸 입력이면 옮긴 행 수를 돌려준다 — 격자가 칠한 값의 성격을 서버와 맞춘다(grid-context pushCell).
+  if (transfer) return { ok: true, ghostTransfer: ghostWritten };
   return insertedAuto !== undefined ? { ok: true, autoUnits: insertedAuto } : { ok: true };
 }
 
@@ -1596,6 +1748,11 @@ export type RangeResult =
        * 격자가 낙관값을 기록에 맞춘다(조회 실패로 자동값이 안 들어간 칸까지). 해당 칸이 없으면 키가 없다.
        */
       autoUnits?: { studentId: string; classId: string; sessionDate: string; units: number | null }[];
+      /**
+       * 강사 보기 **빗금 칸 입력**으로 다른 선생님 교시 행에 상태만 옮긴 칸(원장 2026-09-14) — 격자가 칠한 값의 성격을
+       * 서버와 맞춘다(갈린 칸은 덮개를 벗긴다). 해당 칸이 없으면 키가 없다.
+       */
+      ghostCells?: RangeCell[];
     }
   | { error: string };
 
@@ -1614,7 +1771,11 @@ const NOTIFY_PAIR_LIMIT = 40;
  * ⚠️ 지우기(status=null)는 그 칸의 기록을 **전부** 지운다 — 셀 액션의 '지우기'와 같은 계약.
  */
 export async function setAttendanceRange(input: {
-  cells: RangeCell[];
+  /**
+   * 칸 목록. `ghost` = 화면이 그 칸을 **빗금 칸 입력**으로 알고 보냈다(`setAttendanceCell`의 `ghostTransfer`와 같은 뜻 —
+   * 서버 판정과 갈리면 그 칸만 건너뛴다).
+   */
+  cells: (RangeCell & { ghost?: boolean })[];
   status: Status | null;
   /** 전달 시 시수도 갱신(raw — ""=기본 1). status=null이면 무시. */
   units?: string;
@@ -1657,6 +1818,8 @@ export async function setAttendanceRange(input: {
 
   // 같은 (학생·반·날짜)가 두 번 오면 한 번만 — 출결 원장은 그 조합에 한 칸이다.
   const seen = new Set<string>();
+  /** 화면이 빗금 칸 입력으로 알고 보낸 칸(키 = 학생::반::날짜) — `planScopedDay` ghostIntent. */
+  const ghostIntentKeys = new Set<string>();
   const cells: RangeCell[] = [];
   for (const c of input.cells ?? []) {
     if (!c?.studentId || !c?.classId || !/^\d{4}-\d{2}-\d{2}$/.test(c.sessionDate ?? "")) continue;
@@ -1664,6 +1827,7 @@ export async function setAttendanceRange(input: {
     if (seen.has(k)) continue;
     seen.add(k);
     cells.push({ studentId: c.studentId, classId: c.classId, sessionDate: c.sessionDate });
+    if (c.ghost === true) ghostIntentKeys.add(k);
   }
   if (cells.length === 0) return { error: "기록할 대상이 없습니다" };
   if (cells.length > BULK_CELL_LIMIT)
@@ -1750,11 +1914,13 @@ export async function setAttendanceRange(input: {
       /** 감사로그 "시수 … → …"용 — 이 저장이 덮어쓰는 칸의 **이전 값**은 여기 말고 되짚을 자리가 없다. */
       status: string;
       session_units: number | null;
+      /** 빗금 칸 입력(원장 2026-09-14)이 기존 메모 끝에 `대신 입력` 한 줄을 붙인다 — 덮지 않으려면 지금 메모가 필요하다. */
+      note: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
         // ⚠️ **한 줄로 둘 것** — 구조 가드(`scoped-split-wiring.test.ts`)가 이 줄에서 자리 표식(seat_label)을 확인한다.
-        .select("id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at, status, session_units")
+        .select("id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at, status, session_units, note")
         .in("session_date", dates)
         .in("class_id", classIds)
         .in("student_id", chunk)
@@ -1828,12 +1994,26 @@ export async function setAttendanceRange(input: {
     const s = isScoped(c) ? scopeShare : null;
     return s ? (r) => s(c.classId, c.sessionDate, r) === "seat" : null;
   };
-  /** 빗금 칸(제 몫 행 0)인가 — 채우기·지우기가 **같은 판정**(`planDayCellUnits` noneOwned)을 쓴다. */
-  const noneOwnedCell = (c: RangeCell): boolean => {
-    const owns = ownerOf(c);
-    if (!owns) return false;
-    return !planDayCellUnits({ targets: cellSlotRows.get(cellKeyOf(c)) ?? [], owns, unitsVal: undefined }).ok;
+  /**
+   * 빗금 칸(제 몫 행 0) 판정 — 셀 저장과 **같은 함수**(`planScopedDay`, 원장 2026-09-14). 스코프 밖 칸은 null(종전 경로).
+   * 자리뿐 = 거절 · 다른 선생님 교시 기록 = 채우기는 상태만 옮기기, 지우기는 거절.
+   */
+  const scopedPlanOf = (c: RangeCell, clearing: boolean) => {
+    const s = isScoped(c) ? scopeShare : null;
+    if (!s) return null;
+    return planScopedDay({
+      targets: cellSlotRows.get(cellKeyOf(c)) ?? [],
+      share: (r) => s(c.classId, c.sessionDate, r),
+      clearing,
+      ghostIntent: ghostIntentKeys.has(cellKeyOf(c)),
+    });
   };
+  /** 거절 사유별 칸 수 — 전부 걸렸을 때 격자가 그 칸에 하는 말과 같은 문장을 고른다. */
+  const rejected: Record<ScopedRejectReason, number> = { seatOnly: 0, clearGhost: 0, stale: 0 };
+  const rejectMessage = () =>
+    SCOPED_REJECT_MESSAGE[rejected.stale > 0 ? "stale" : rejected.clearGhost > 0 ? "clearGhost" : "seatOnly"];
+  /** 행 id → 저장 전 메모 — 빗금 칸 입력이 기존 메모 끝에 `대신 입력` 한 줄을 붙인다(추가 왕복 없음). */
+  const noteById = new Map(mine.map((r) => [r.id, r.note]));
 
   // 지우기 — 그 칸의 기록을 전부(정정 이력 포함) 삭제. 셀 액션의 '지우기'와 같은 계약.
   if (status === null) {
@@ -1850,8 +2030,10 @@ export async function setAttendanceRange(input: {
     const ids: string[] = [];
     let skippedSeatRows = 0;
     allowed = allowed.filter((c) => {
-      if (noneOwnedCell(c)) {
+      const plan = scopedPlanOf(c, true);
+      if (plan?.kind === "reject") {
         noneOwned += 1;
+        rejected[plan.reason] += 1;
         return false;
       }
       const { write, seat } = splitOutSeatRows(rowsByCell.get(cellKeyOf(c)) ?? [], seatOf(c));
@@ -1861,7 +2043,7 @@ export async function setAttendanceRange(input: {
     });
     if (allowed.length === 0 && notTaught + noneOwned > 0) {
       // 조용한 0건 금지 — 격자가 그 칸에 하는 말과 같은 문장으로 알린다(채우기 갈래와 같은 규약).
-      return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : NOT_MINE_MESSAGE };
+      return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : rejectMessage() };
     }
     for (let i = 0; i < ids.length; i += CHUNK) {
       const { error } = await supabase.from("attendance_records").delete().in("id", ids.slice(i, i + CHUNK));
@@ -1899,10 +2081,24 @@ export async function setAttendanceRange(input: {
 
   // 칸마다 시수 배분 계획 — 스코프 밖 칸(반별 보기·보강 묶음)은 owns=null이라 종전과 같은 답이다.
   const plans = new Map<string, DayUnitsPlan>();
+  /** 빗금 칸 입력 — 다른 선생님 교시 행에 **상태만** 옮길 칸(원장 2026-09-14). 시수 계획이 없다(결정 ①). */
+  const transferCells = new Set<string>();
   allowed = allowed.filter((c) => {
     const k = cellKeyOf(c);
     const targets = cellSlotRows.get(k);
+    // 판정이 새 칸보다 **먼저** — 빗금 칸으로 알고 보낸 칸의 기록이 그 사이 사라졌으면 새 행(제 몫·시수)을 만들지 않는다
+    // (stale, 셀 저장과 같은 규칙 — 적대 재리뷰 2026-09-14). 스코프 밖 칸은 null이라 종전대로 새 칸이다.
+    const scoped = scopedPlanOf(c, false);
+    if (scoped?.kind === "reject") {
+      noneOwned += 1;
+      rejected[scoped.reason] += 1;
+      return false;
+    }
     if (!targets) return true; // 새 칸 — 아래 insert(나눌 행이 없다)
+    if (scoped?.kind === "transfer") {
+      transferCells.add(k);
+      return true;
+    }
     const plan = planDayCellUnits({
       targets,
       owns: ownerOf(c),
@@ -1917,7 +2113,7 @@ export async function setAttendanceRange(input: {
   });
   if (allowed.length === 0 && notTaught + noneOwned > 0) {
     // 조용한 0건 금지 — 격자가 그 칸에 하는 말과 같은 문장으로 알린다.
-    return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : NOT_MINE_MESSAGE };
+    return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : rejectMessage() };
   }
 
   const nowIso = new Date().toISOString();
@@ -1946,6 +2142,8 @@ export async function setAttendanceRange(input: {
     rangeViaByClass.set(classId, await resolveWriteVia(supabase, user.id, classId, dates[0] ?? kstToday()));
   }
 
+  /** 빗금 칸 입력으로 실제로 상태를 옮긴 행 수 — 감사로그가 계획이 아니라 이 숫자를 쓴다(중간에 멈춰도). */
+  let proxyWritten = 0;
   if (updateIds.length > 0) {
     /**
      * 🔴 명시한 시수는 **그날 합계**다(원장 2026-09-01 확정) — 교시가 여럿인 칸은 나눠 담는다.
@@ -1957,6 +2155,8 @@ export async function setAttendanceRange(input: {
      * 기준이 행마다 달라 (via, 시수)로 묶어 배치한다 — 칸이 많아도 문장 수는 몇 개다.
      */
     const byKey = new Map<string, { via: RecordedVia; units: number | null | undefined; ids: string[] }>();
+    /** 빗금 칸 입력 행 — 반의 쓰기 문(via)마다 모아 메모 비교 조건으로 쓴다(`writeProxyRows`, 원장 2026-09-14). */
+    const proxyByVia = new Map<RecordedVia, { id: string; note: string | null }[]>();
     for (const c of allowed) {
       const k = cellKeyOf(c);
       // 자리(JJ·랩실) 행을 뺀 대상 — `cellSlotRows`를 그대로 쓰면 자리 행이 상태·입력자를 받는다(원장 2026-09-12).
@@ -1965,7 +2165,13 @@ export async function setAttendanceRange(input: {
       // 범위 채우기는 월간 격자 전용 — 데스크 게이트를 걸지 않는다(오클릭 결석을 여기서 되돌린다).
       const via = rangeViaByClass.get(c.classId) ?? "teacher";
       const plan = plans.get(k);
+      const moving = transferCells.has(k);
       ids.forEach((id) => {
+        if (moving) {
+          // 🔴 빗금 칸 입력 — 시수 묶음에 넣지 않는다(상태만). 메모는 아래 `writeProxyRows`가 붙인다.
+          (proxyByVia.get(via) ?? proxyByVia.set(via, []).get(via)!).push({ id, note: noteById.get(id) ?? null });
+          return;
+        }
         // 계획에 없는 행 = 시수 그대로(시수를 안 보낸 채우기 · 못 나눈 칸 · 남의 교시 행).
         const units = plan?.ok && plan.units.has(id) ? (plan.units.get(id) as number | null) : undefined;
         const key = `${via}::${units === undefined ? "keep" : String(units)}`;
@@ -1981,6 +2187,33 @@ export async function setAttendanceRange(input: {
       for (let i = 0; i < ids.length; i += CHUNK) {
         const wrote = await updateWithVia(supabase, patch, ids.slice(i, i + CHUNK));
         if (wrote.error) return { error: wrote.error };
+      }
+    }
+    for (const [via, rows] of proxyByVia) {
+      // 🔴 빗금 칸 입력 — 상태·입력자만(시수 키 없음) + 기존 메모 끝에 `대신 입력` 한 줄(셀 저장과 같은 함수, 원장 2026-09-14).
+      const patch: Record<string, unknown> = withVia({ status, recorded_by: user.id, recorded_at: nowIso }, via);
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const wrote = await writeProxyRows(supabase, patch, rows.slice(i, i + CHUNK), user.displayName);
+        proxyWritten += wrote.written;
+        if (wrote.error) {
+          // 앞 청크까지 옮긴 행이 있으면 감사로그를 남기고 멈춘다(셀 저장과 같은 이유).
+          if (proxyWritten > 0) {
+            await logAction({
+              action: "attendance_range",
+              targetType: "attendance",
+              metadata: {
+                classIds: [...new Set(allowed.map((c) => c.classId))],
+                dates: [...new Set(allowed.map((c) => c.sessionDate))].sort(),
+                status,
+                ...(scopeTeacherId ? { scopeTeacherId } : {}),
+                ghostTransfer: proxyWritten,
+                partial: true,
+                ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
+              },
+            });
+          }
+          return { error: wrote.error };
+        }
       }
     }
   }
@@ -2065,7 +2298,8 @@ export async function setAttendanceRange(input: {
       created: inserts.length,
       blocked: cells.length - allowed.length,
       studentIds: [...new Set(allowed.map((c) => c.studentId))],
-      ...(unitsProvided ? { units: unitsVal } : {}),
+      // 친 시수는 **시수를 받는 칸이 있었을 때만** — 빗금 칸 입력뿐이면 저장 안 된 숫자가 로그에 남는다(적대 리뷰 2026-09-14).
+      ...(unitsProvided && allowed.some((c) => !transferCells.has(cellKeyOf(c))) ? { units: unitsVal } : {}),
       // 🔴 **바뀌기 전·후 시수**(원장 2026-09-14) — 바뀐 칸이 있을 때만. 칸이 여럿이라 칸 수를 함께 적는다.
       ...(unitsChangedCells > 0
         ? { prevUnits: prevUnitsSum, nextUnits: nextUnitsSum, unitsChangedCells }
@@ -2074,6 +2308,8 @@ export async function setAttendanceRange(input: {
       ...(scopeTeacherId ? { scopeTeacherId } : {}),
       // 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 역검수용.
       ...(skippedSeatRows > 0 ? { skippedSeatRows } : {}),
+      // 빗금 칸 입력 — 다른 선생님 교시 행에 상태만 옮긴 **행** 수(원장 2026-09-14). 셀 저장 로그와 같은 키·같은 단위.
+      ...(proxyWritten > 0 ? { ghostTransfer: proxyWritten } : {}),
       // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 없으면 키도 없다.
       ...autoUnitsLogFields(inserts.map((c) => rangeUnitsOf(c).auto).filter((v): v is number => typeof v === "number")),
       ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
@@ -2099,6 +2335,8 @@ export async function setAttendanceRange(input: {
     ok: true,
     applied: allowed.length,
     blocked: cells.length - allowed.length,
+    // 빗금 칸 입력으로 상태만 옮긴 칸 — 격자가 칠한 값의 성격을 서버와 맞춘다(grid-context writeMany).
+    ...(transferCells.size > 0 ? { ghostCells: allowed.filter((c) => transferCells.has(cellKeyOf(c))) } : {}),
     // 숫자 안 고른 채우기로 **새로 만든** 칸의 실제 시수 — 격자가 낙관값을 기록에 맞춘다(auto-units.ts).
     ...(rangeWantsAuto
       ? {

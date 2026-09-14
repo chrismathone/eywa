@@ -60,7 +60,8 @@ describe("배선 — 부풀림이 다시 생기지 않게", () => {
     const src = read("features/attendance/server/actions.ts");
     const rule = read("features/attendance/scoped-split.ts");
     expect(rule).toContain("splitUnitsAcrossSlots(input.unitsVal, receivers.length)");
-    expect(src).toMatch(/if \(slot === null\) \{[\s\S]{0,800}planDayCellUnits\(/);
+    // 빗금 칸 입력(원장 2026-09-14)은 그날 칸이어도 나누지 않는다(상태만) — 그래서 조건에 `&& !transfer`가 붙을 수 있다.
+    expect(src).toMatch(/if \(slot === null(?: && !transfer)?\) \{[\s\S]{0,800}planDayCellUnits\(/);
     // 액션이 직접 나누면 강사 보기의 몫 규칙을 건너뛴다 — 나누는 곳은 한 곳뿐이어야 한다.
     expect(src).not.toContain("splitUnitsAcrossSlots(");
   });

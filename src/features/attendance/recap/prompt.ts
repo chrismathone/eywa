@@ -14,6 +14,7 @@
 
 import { formatKoreanDate } from "@/lib/date-kst";
 import { ABSENCE_REASON_LABEL } from "@/features/attendance/absence-reason";
+import { stripProxyMemo } from "@/features/attendance/proxy-memo";
 import {
   handlersLabel,
   RECAP_STATUS_LABEL,
@@ -51,7 +52,9 @@ function eventLine(e: RecapEvent, subjectLabel: LabelOf): string {
         : `최근 14일 결석 ${e.recentAbsences}회`,
     );
   }
-  if (e.note) bits.push(`사유메모 "${e.note}"`);
+  // `대신 입력` 줄은 사유가 아니다(빗금 칸 입력 메모, 원장 2026-09-14) — AI가 결석 사유로 읽지 않게 뺀다.
+  const memo = stripProxyMemo(e.note);
+  if (memo) bits.push(`사유메모 "${memo}"`);
   // 사유 분류 — 미리 알려진 결석과 연락이 안 된 결석을 문장에서 갈라 쓰게 하는 근거(2026-08-20).
   if (e.reasonKind !== "unknown") bits.push(`사유 분류 ${ABSENCE_REASON_LABEL[e.reasonKind]}`);
   bits.push(e.settled ? "데스크 조치 완료" : e.urgent ? "조치 미완료(긴급)" : "조치 미완료(사유 확인됨)");
