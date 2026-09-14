@@ -106,8 +106,8 @@ export function buildGridSource(
 ) {
   const rows = ordered.map((r) => rowKey(r.classId, r.studentId));
   const cols = days.filter((d) => !d.placeholder).map((d) => d.date);
-  /** `d` = 수업보고서 파생 칸(출결 행 없음) — grid/store.ts `GridValue` 주석. */
-  const initial: Record<string, { s: string; u: number | null; d?: true }> = {};
+  /** `d` = 수업보고서 파생 칸(출결 행 없음) · `g` = 빗금 칸의 표시 전용 값(합계 밖) — grid/store.ts `GridValue` 주석. */
+  const initial: Record<string, { s: string; u: number | null; d?: true; g?: true; p?: number | null }> = {};
   // 하루에 교시가 둘 이상인 칸만(0196a) — 한 칸에 친 숫자가 그날 **몇 건**을 고치는지.
   const slotCounts: Record<string, number> = {};
   /**
@@ -120,7 +120,8 @@ export function buildGridSource(
    *    출석률에 남는다**(적대적 리뷰 2026-08-18). 잠그는 대신 사유를 말하고 반별 보기로 보낸다 —
    *    같은 칸이 반별 보기에선 그대로 입력 가능하다(#103: 되돌릴 문을 아예 막지는 않는다).
    */
-  const notMine: Record<string, true> = {};
+  // 값 = 막는 사유 — `"seat"`는 자리(JJ·랩실) 기록뿐인 칸(사유 문장이 다르다, 원장 2026-09-12), true는 그 밖.
+  const notMine: Record<string, true | "seat"> = {};
   /**
    * 값은 **있지만** 그 날 **다른 선생님 교시**도 함께 있는 칸 → 키 → 함께 바뀌는 교시 수.
    * 잠그지는 않는다(내 교시가 있으니 고칠 권리가 있다). 대신 범위 작업에서 **사정거리를 말해 준다** —
@@ -147,9 +148,18 @@ export function buildGridSource(
       for (const [date, others] of Object.entries(g.matrix.ghosts[s.id] ?? {})) {
         if (others.length === 0) continue;
         const key = cellKey(rowKey(g.classId, s.id), date);
-        // 몫이 아닌 칸(값 없음 · 값이 파생뿐) — 판정은 `notMineCell` 한 곳(행·격자가 같은 답, 리뷰 2026-09-12).
-        if (notMineCell({ hasValue: !!marks[date], derivedValue: !!derived[date], others })) {
-          notMine[key] = true;
+        // 막는 칸(자리뿐 · 담임 이전 기록 · 값이 파생뿐) — 판정은 `notMineCell` 한 곳(행·격자가 같은 답, 리뷰 2026-09-12).
+        const locked = notMineCell({ hasValue: !!marks[date], derivedValue: !!derived[date], others });
+        if (locked) {
+          notMine[key] = locked === "seatOnly" ? "seat" : true;
+          continue;
+        }
+        // 🔴 빗금 칸(값 없음 + 다른 선생님 교시) — 입력은 그 교시에 **상태만** 옮긴다(원장 2026-09-14 *"그 날의 해당 담당
+        //    출석으로 전부 이전"*). 칸 값은 **표시 전용**(`g` — 합계·복사 밖)이라 담당 선생님 표와 이중으로 안 센다.
+        //    값은 조회가 같은 판정(`ghostCellKind`)으로 만든다. 값이 없는 칸엔 '함께 바뀜'도 없다.
+        if (!marks[date]) {
+          const gv = g.matrix.ghostValues?.[s.id]?.[date];
+          if (gv) initial[key] = { ...gv, g: true };
           continue;
         }
         // 값이 있는 칸 — 함께 바뀌는 건 다른 선생님 교시뿐(자리 JJ·랩실 행은 저장이 안 건드린다, 원장 2026-09-12).

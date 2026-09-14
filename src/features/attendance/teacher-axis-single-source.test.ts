@@ -172,6 +172,30 @@ describe("출결 강사 귀속 축 단일 소스", () => {
       ).toBe(false);
     });
 
+    /**
+     * 임시 위임 대체 강사(원장 결정 2026-09-14) — 로더가 위임을 안 넘기면 순수 함수가 맞아도 대체 강사가
+     * **조용히** 빠진다(에러가 안 난다). 위임 표를 호출부에서 직접 읽으면 해제·기간 규약이 두 벌이 된다.
+     */
+    it.each(NOTICE_RECIPIENT_FILES)("%s — 그날 위임 대체 강사를 같은 헬퍼로 읽어 함께 넘긴다", (rel) => {
+      const code = stripComments(readFileSync(join(process.cwd(), rel), "utf8")).replace(/\s+/g, " ");
+      expect(
+        /getActiveDelegationsForClasses\(/.test(code),
+        `${rel}: 위임은 classes/server/delegation의 getActiveDelegationsForClasses 한 벌로 읽는다`,
+      ).toBe(true);
+      expect(
+        /from\(\s*["']class_delegations["']\s*\)/.test(code),
+        `${rel}: 위임 표를 직접 조회하지 말 것 — 해제(revoked_at)·양끝 포함 규약이 두 벌이 된다`,
+      ).toBe(false);
+      const calls = code
+        .split("attendanceNoticeRecipients({")
+        .slice(1)
+        .map((rest) => rest.split(";")[0]!);
+      expect(calls.length, `${rel}: attendanceNoticeRecipients 호출을 찾지 못했습니다`).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(/\bdelegations:/.test(call), `${rel}: 수신자 판정에 delegations가 빠졌습니다: ${call}`).toBe(true);
+      }
+    });
+
     it("좌석표의 '지금 교시'(periodStart)가 교차 알림 수신자까지 흘러간다 — 저장 교시만 보면 늦게 온 학생 벨이 첫 교시 담당에게만 간다", () => {
       const notify = stripComments(
         readFileSync(join(process.cwd(), "src", "features", "attendance", "live", "server", "cross-notify.ts"), "utf8"),

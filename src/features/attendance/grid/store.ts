@@ -14,7 +14,18 @@ import { revertTarget, type Paint } from "./paint-chain";
  * 🔴 상태가 보여도 행이 없는 칸이라, 여기 저장하면 서버가 **새 행**을 만든다(수학 자동 시수를 받는다 —
  *    `optimistic-value.ts` `isRecordless`). 이걸 모르면 격자·팝오버가 1을 약속하고 서버는 1.5를 넣는다.
  */
-export type GridValue = { s: string; u: number | null; d?: true } | null;
+export type GridValue = {
+  s: string;
+  u: number | null;
+  d?: true;
+  /**
+   * 강사 보기 **빗금 칸의 표시 전용 값**(다른 선생님 교시 기록, 원장 2026-09-14 *"빗금 위에 값을 보여주고 합계엔 안 넣는다"*).
+   * 🔴 합계(`countCells`)·복사(`copyValueOf`)는 이 값을 **없는 값**으로 본다 — 세면 담당 선생님 표와 이중 집계다.
+   */
+  g?: true;
+  /** `g` 칸 교시들이 **전부 들었을 때**의 시수 합(null = 1) — 상태를 옮긴 뒤 낙관값을 서버와 같게 만든다. */
+  p?: number | null;
+} | null;
 
 /** 낙관 쓰기 표식 — `paintLocal`이 돌려주고 `correctLocal`·`revertLocal`이 받는다(칠하기 전 자리 · 그때 칸의 주인). */
 export type LocalPaint = Paint<GridValue>;
@@ -39,6 +50,8 @@ function sameState(a: CellState, b: CellState): boolean {
     // `d`(파생 = 행 없음)도 사실이다 — 상태·시수가 같아도 파생 칸과 기록 칸은 다르다(팝오버가 이걸로 자동 시수를 가른다).
     // 빼면 파생 칸에 같은 값을 기록한 뒤에도 스냅샷이 옛 `d`를 들고 있어 '행 없음'으로 오판한다.
     !!a.value?.d === !!b.value?.d &&
+    // `g`(빗금 표시 값)도 사실이다 — 같은 숫자여도 제 몫 값과 남의 교시 값은 칸이 다르게 그린다.
+    !!a.value?.g === !!b.value?.g &&
     !a.value === !b.value &&
     a.active === b.active &&
     a.selected === b.selected &&
@@ -106,13 +119,19 @@ export class GridStore {
     // ⚠️ 트레이드오프: 다른 사람이 같은 칸을 고쳤다면 새로고침 전까지 내 값이 보인다(동시 편집은 드물다).
     for (const [key, v] of [...this.overrides]) {
       const server = initial[key] ?? null;
-      if (
-        (server?.s ?? null) === (v?.s ?? null) &&
-        (server?.u ?? null) === (v?.u ?? null) &&
-        // 🔴 파생 값(`d` — 행 없음)은 내가 쓴 기록과 같은 사실이 아니다 — 서버가 **기록**을 싣고 올 때까지 덮개를 둔다
-        //    (내 저장보다 먼저 시작한 조회가 옛 파생 값을 싣고 와도 칸이 '행 없음'으로 되돌아가지 않게).
-        !!server?.d === !!v?.d
-      ) {
+      const caughtUp =
+        server?.g || v?.g
+          ? /* 🔴 빗금 표시 값(`g`, 원장 2026-09-14) — 합계 밖이라 **상태만** 따라잡으면 벗긴다(시수는 남의 교시 값이
+                진실이다). 한쪽만 `g`면 칸의 성격이 바뀐 것(제 몫 행이 생겼거나 남의 기록이 사라졌다) — 서버가
+                진실이라 벗긴다. 안 벗기면 서버와 영영 안 같아져 2026-09-11 '새로고침 롤백'이 이 칸에서 재발한다.
+                ⚠️ 둘 다 `g`인데 상태가 다르면 둔다 — 내 저장보다 먼저 시작한 조회가 옛 상태를 싣고 온 것이다. */
+            !!server?.g !== !!v?.g || (server?.s ?? null) === (v?.s ?? null)
+          : (server?.s ?? null) === (v?.s ?? null) &&
+            (server?.u ?? null) === (v?.u ?? null) &&
+            // 🔴 파생 값(`d` — 행 없음)은 내가 쓴 기록과 같은 사실이 아니다 — 서버가 **기록**을 싣고 올 때까지 덮개를 둔다
+            //    (내 저장보다 먼저 시작한 조회가 옛 파생 값을 싣고 와도 칸이 '행 없음'으로 되돌아가지 않게).
+            !!server?.d === !!v?.d;
+      if (caughtUp) {
         this.overrides.delete(key);
         this.owner.delete(key);
         this.pending.push(key);
@@ -180,7 +199,14 @@ export class GridStore {
     const v = this.initial[key] ?? null;
     if (!v) return EMPTY;
     const cached = this.snaps.get(`ssr:${key}`);
-    if (cached && cached.value?.s === v.s && cached.value?.u === v.u && !!cached.value?.d === !!v.d) return cached;
+    if (
+      cached &&
+      cached.value?.s === v.s &&
+      cached.value?.u === v.u &&
+      !!cached.value?.d === !!v.d &&
+      !!cached.value?.g === !!v.g
+    )
+      return cached;
     const next: CellState = { ...EMPTY, value: v };
     this.snaps.set(`ssr:${key}`, next);
     return next;
@@ -221,6 +247,20 @@ export class GridStore {
   setLocalIf(key: string, expected: GridValue, next: GridValue): boolean {
     if (expected === null || this.valueOf(key) !== expected) return false;
     this.setLocal([[key, next]]);
+    return true;
+  }
+
+  /**
+   * 응답이 **칸의 성격**을 뒤집었을 때 — 빗금 칸으로 칠했는데(`g`) 서버는 제 몫 경로로 썼거나 그 반대(원장 2026-09-14 빗금 칸
+   * 입력). 덮개가 **아직 그 값 그 객체일 때만** 벗겨 서버 값을 보인다(늦은 응답이 그 사이 새 입력을 지우지 않게, `setLocalIf`와
+   * 같은 동일성 규약). 🔴 안 벗기면 칠한 값과 서버 값의 `g`가 영영 안 맞아 덮개가 굳는다. 곧 오는 새로고침이 진실을 싣고 온다.
+   */
+  dropLocalIf(key: string, expected: GridValue): boolean {
+    if (expected === null || this.overrides.get(key) !== expected) return false;
+    this.overrides.delete(key);
+    this.owner.delete(key);
+    this.notify([key]);
+    this.bumpValues([key]);
     return true;
   }
 

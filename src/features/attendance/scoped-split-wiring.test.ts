@@ -49,6 +49,75 @@ describe("강사 보기 시수 배분 — 배선", () => {
     },
   );
 
+  /**
+   * 🔴 원장 2026-09-14 빗금 칸 입력(*"그 날의 해당 담당 출석으로 전부 이전"* + *"대신 다른 사람이 출결하면 메모에 남겨"*) —
+   *    셀·범위 저장이 **같은 판정**(planScopedDay)·**같은 메모 규칙**(proxyNote)·**같은 거절 문장**을 지나는가.
+   *    한 문만 고치면 타이핑은 옮기는데 붙여넣기는 거절(또는 시수까지 덮음)이 된다.
+   */
+  it.each(["setAttendanceCell", "setAttendanceRange"])(
+    "🔴 %s — 빗금 칸 판정은 planScopedDay(화면 표식 포함), 쓰기는 writeProxyRows, 거절 문장은 SCOPED_REJECT_MESSAGE",
+    (name) => {
+      const body = bodyOf(actions, name);
+      expect(body).toContain("planScopedDay(");
+      expect(body).toContain("ghostIntent:");
+      expect(body).toContain("writeProxyRows(");
+      expect(body).toContain("SCOPED_REJECT_MESSAGE[");
+    },
+  );
+
+  it("🔴 메모 붙이기는 proxyNote 한 함수 + 메모 비교 조건(읽은 값일 때만 쓴다)", () => {
+    const helper = actions.slice(actions.indexOf("async function writeProxyRows("), actions.indexOf("export type SaveAttendanceState"));
+    expect(helper).toContain("proxyNote(old, actorName)");
+    expect(helper).toContain('q.is("note", null)');
+    expect(helper).toContain('q.eq("note", old)');
+    expect(helper).not.toContain("session_units");
+  });
+
+  it("🔴 메모를 고르는 곳(월간 조회·반별 입력 폼·메모만 저장)은 사유 있는 메모를 대신 입력 줄보다 먼저 본다", () => {
+    const queries = stripComments(read("features", "attendance", "server", "queries.ts"));
+    expect(queries).toContain("stripProxyMemo(cell.note)");
+    expect(queries).toContain("stripProxyMemo(cell.otherNote)");
+    expect(queries).toContain("stripProxyMemo(cur.note)");
+    expect(bodyOf(actions, "setAttendanceCell").match(/noteTargetRow\(/g)?.length).toBe(2);
+  });
+
+  it("🔴 사유를 읽는 곳은 대신 입력 줄을 걸러낸다 — 운영실 사유 요약·결석 사유 분류·복기 AI", () => {
+    for (const rel of [
+      ["features", "dashboard", "absence-reasons.ts"],
+      ["features", "attendance", "absence-reason.ts"],
+      ["features", "attendance", "recap", "prompt.ts"],
+    ]) {
+      expect(stripComments(read(...rel)), rel.join("/")).toContain("stripProxyMemo(");
+    }
+  });
+
+  it("🔴 빗금 칸 입력 갈래엔 시수 쓰기가 없다 — 셀 저장(원장 결정 ① '상태만')", () => {
+    const body = bodyOf(actions, "setAttendanceCell");
+    const start = body.indexOf("if (writeIds.length > 0 && transfer) {");
+    const end = body.indexOf("} else if (writeIds.length > 0) {");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(body.slice(start, end)).toContain("writeProxyRows(");
+    expect(body.slice(start, end)).not.toContain("session_units");
+    // 교시 지정 저장의 시수 쓰기에 빗금 칸 입력이 떨어지지 않는다(그날 칸이면 그 갈래를 못 탄다).
+    expect(body).toContain("} else if (slot !== null && unitsProvided) {");
+  });
+
+  it("🔴 화면 쪽 판정도 한 함수(ghostCellKind) — 칸·조회가 같은 답, 격자·행은 그 함수를 감싼 notMineCell", () => {
+    expect(stripComments(read("features", "attendance", "cell-display.ts"))).toMatch(
+      /export function notMineCell[\s\S]{0,120}ghostCellKind\(input\)/,
+    );
+    expect(stripComments(read("app", "(shell)", "attendance", "_components", "attendance-cell.tsx"))).toContain(
+      "ghostCellKind(",
+    );
+    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("ghostCellKind(");
+  });
+
+  it("🔴 빗금 표시 값(g)은 합계·복사 밖 — countCells·copyValueOf가 건너뛴다", () => {
+    expect(stripComments(read("features", "attendance", "grid", "totals.ts"))).toContain("if (!v || v.g) continue;");
+    expect(stripComments(read("features", "attendance", "grid", "typing.ts"))).toContain("if (!v || v.g) return null;");
+  });
+
   it("🔴 자리 판정은 축 단일 소스(attendanceSlotShare) — 저장(scope-ownership)과 화면(queries)이 같은 함수", () => {
     expect(stripComments(read("features", "attendance", "scope-ownership.ts"))).toContain("attendanceSlotShare(");
     expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("attendanceSlotShare(");

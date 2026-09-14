@@ -19,6 +19,7 @@
  * 이 파일은 **순수**하다(DB·서버 의존 0). 조회는 `server/teacher-axis-queries.ts`가 맡는다.
  */
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { isDelegationActiveOn, type DelegationWindow } from "@/features/classes/delegation-window";
 import type { RecordedVia } from "./live/recorded-via";
 
 /**
@@ -162,7 +163,7 @@ export function taughtByForSlot(input: {
  *
  * ⚠️ 자리(LAB·JJ)는 사람이 아니므로 들어가지 않는다(teacher_id가 null이라 구조적으로 제외된다).
  * ⚠️ **알림 수신자는 이 합집합을 쓰지 않는다** — 출결 입력 요청·교차 알림 벨은 원장 결정(2026-09-14)으로
- *    "그날 그 교시 담당 + 담임"(`attendanceNoticeRecipients`)으로 좁혔다. 가시성은 넓게, 벨은 좁게 — 여기를
+ *    "그날 그 교시 담당 + 담임 + 그날 위임 대체 강사"(`attendanceNoticeRecipients`)로 좁혔다. 가시성은 넓게, 벨은 좁게 — 여기를
  *    좁히거나 저 두 알림을 이 합집합으로 되돌리지 말 것.
  */
 export function classTeacherIdsInRange(input: {
@@ -201,8 +202,12 @@ export function axisSlotFromRow(row: AxisSlotRow): AxisSlot {
   };
 }
 
+/** 반 임시 위임 한 건 — 알림 수신자 판정에 필요한 최소 모양(`class_delegations`, 0173a). 반 id는 호출부가 가른다. */
+export type AxisDelegation = DelegationWindow & { delegateUserId: string };
+
 /**
- * **출결 알림 벨을 받을 사람** — 그날 그 교시 담당 ∪ 반 담임(원장 결정 2026-09-14).
+ * **출결 알림 벨을 받을 사람** — 그날 그 교시 담당 ∪ 반 담임 ∪ 그날 그 반을 임시 위임받은 대체 강사
+ * (원장 결정 2026-09-14).
  *
  * 소비처 둘이 이 함수 하나를 부른다: 데스크 → 강사 '출결 입력 요청'(`live/server/actions.ts`)과
  * 미출결 → 출석 교차 알림의 강사 방향(`live/server/cross-notify.ts`).
@@ -222,11 +227,18 @@ export function axisSlotFromRow(row: AxisSlotRow): AxisSlot {
  *                  저장 축) 데스크가 누르는 순간 교실에 있는 사람은 대표 교시(지금 교시) 담당이다. 저장 교시만 보면
  *                  18:20에 늦게 온 학생의 벨이 16:20 담당에게만 간다(적대 리뷰 2026-09-14).
  *                  slotStart가 null(그날 전체)이면 이미 모든 교시라 따로 볼 것이 없다.
- * @param excludeId 보낸 사람 본인(자기에게 벨을 보내지 않는다).
+ * @param delegations 이 반에 걸린 임시 위임(`class_delegations`, 0173a). 원장 결정(2026-09-14): *"결근 대체로 반을
+ *                  임시 위임받은 강사도 그날 [요청]·교차 알림 벨을 받는다. 교시 담당·담임은 지금처럼 받는다."*
+ *                  **그날 유효한 것만** 받고, 판정은 `isDelegationActiveOn`(delegation-window.ts) 한 벌이다
+ *                  (해제분 제외 · 양끝 포함 · 깨진 값은 false). 로더가 SQL로 좁혀 넘겨도 여기서 다시 본다 —
+ *                  슬롯 유효기간을 이 함수가 보는 것과 같은 결이고, 작성률 귀속(`writing-rate-delegation.ts`)도 같은 방식이다.
+ *                  위임은 **반 전체**를 맡기는 것이라 교시(slotStart·periodStart)로 거르지 않는다.
+ * @param excludeId 보낸 사람 본인(자기에게 벨을 보내지 않는다) — 담임·교시 담당·대체 강사 어느 자리든 뺀다.
  *
  * ⚠️ 모호(한 교시에 담당이 둘)여도 **둘 다** 받는다 — 귀속은 지어내지 않으려 비우지만, 벨은 둘 중 누가 찍어도 된다.
- * ⚠️ 자리(LAB·JJ) 슬롯은 사람이 아니라 방이라 아무도 더하지 않는다(담임은 그대로 받는다).
- * ⚠️ 임시 위임(`class_delegations`)은 이 규칙에 없다 — 원장 결정 범위가 "교시 담당 + 담임"이다.
+ * ⚠️ 자리(LAB·JJ) 슬롯은 사람이 아니라 방이라 아무도 더하지 않는다(담임·대체 강사는 그대로 받는다).
+ * ⚠️ 위임은 담임을 바꾸지 않는다(0173a) — 그래서 결근한 담임도 여전히 받는다. 벨은 누가 찍어도 되는 요청이라
+ *    빼지 않는다(빼려면 "위임 중인 담임은 제외"라는 새 결정이 필요하다).
  */
 export function attendanceNoticeRecipients(input: {
   homeroomTeacherId: string | null;
@@ -234,6 +246,7 @@ export function attendanceNoticeRecipients(input: {
   date: string;
   slotStart?: string | null;
   periodStart?: string | null;
+  delegations?: readonly AxisDelegation[];
   excludeId?: string | null;
 }): string[] {
   const out = new Set<string>();
@@ -252,6 +265,9 @@ export function attendanceNoticeRecipients(input: {
       if (wanted && !wanted.has(normalizeAxisTime(s.startTime) ?? "")) continue;
       out.add(s.teacherId);
     }
+  }
+  for (const d of input.delegations ?? []) {
+    if (d.delegateUserId && isDelegationActiveOn(d, input.date)) out.add(d.delegateUserId);
   }
   if (input.excludeId) out.delete(input.excludeId);
   return [...out];
