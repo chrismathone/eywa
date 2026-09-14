@@ -56,13 +56,21 @@ export function DayHeadCells({ data }: { data: MathSheetMonthData }) {
           <th
             key={day.date}
             title={holiday ? `${day.date} · ${holiday} — 학원 휴일` : undefined}
+            // 휴일 글자 = 출석부 휴일 잉크(`text-att-holiday-ink`) — 공용 `text-danger`는 휴일 회색(`--att-weekend`)
+            // 위에서 대비 3.75로 WCAG 4.5를 깼다(2026-09-14, 월별 출석부 머리와 같은 잉크).
             className={`border-line-faint num border p-2 text-center text-xs font-extrabold whitespace-nowrap ${
-              warn ? "bg-amber-soft text-amber" : holiday ? "bg-att-weekend text-danger" : "bg-bg-soft text-text-dim"
+              warn
+                ? "bg-amber-soft text-amber"
+                : holiday
+                  ? "bg-att-weekend text-att-holiday-ink"
+                  : "bg-bg-soft text-text-dim"
             }`}
           >
             {Number(day.date.slice(5, 7))}/{Number(day.date.slice(8, 10))}
-            {/* 휴일이면 요일 자리에 공휴일명 — "이 열이 왜 회색인가"의 답이 요일보다 유용하다. */}
-            <span className="ml-1 font-semibold opacity-70">
+            {/* 휴일이면 요일 자리에 공휴일명 — "이 열이 왜 회색인가"의 답이 요일보다 유용하다.
+                🔴 회색 휴일 머리에선 흐리게(opacity-70) 하지 않는다 — 휴일 잉크를 70%로 섞으면 대비가 4.16으로
+                   다시 4.5 아래다(2026-09-14 실측). 경고(앰버)·평일 머리는 종전 그대로. */}
+            <span className={`ml-1 font-semibold ${holiday && !warn ? "" : "opacity-70"}`}>
               {holiday ?? "일월화수목금토"[new Date(`${day.date}T00:00:00Z`).getUTCDay()]}
             </span>
           </th>

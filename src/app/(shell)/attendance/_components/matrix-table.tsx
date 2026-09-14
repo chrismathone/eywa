@@ -3,6 +3,7 @@ import type { TeacherMoney } from "@/features/attendance/server/teacher-money";
 import {
   DAY_TONE,
   HEAD_ROW_H,
+  TODAY_HEAD,
   notMineCell,
   sharedOtherSlots,
 } from "@/features/attendance/cell-display";
@@ -305,7 +306,7 @@ export function MatrixTable({
               // 🔴 휴일은 주말보다 **먼저** 본다(2026-09-07 "셀을 구분") — 뒤에 두면 토요일 휴일이
               //    회색으로 덮여 왜 쉬는지가 사라진다. 본문 셀(cellDisplay)과 **같은 순서**여야 열이 안 어긋난다.
               const bg = d.isToday
-                ? "bg-primary"
+                ? TODAY_HEAD.bg
                 : isClassDay
                   ? DAY_TONE.classDay
                   : holiday
@@ -314,7 +315,7 @@ export function MatrixTable({
                       ? DAY_TONE.weekend
                       : "bg-card";
               const fg = d.isToday
-                ? "text-primary-foreground"
+                ? TODAY_HEAD.fg
                 : holiday || d.dow === 0
                   ? // 빨간 날짜 — 공용 `text-danger`는 톤업한 휴일·주말 배경 위에서 3.88·3.75로 WCAG 4.5를 깼다
                     //   (적대적 리뷰 2026-09-14). 출석부 전용 휴일 잉크로 칠한다(휴일 7.62 · 주말 7.37).
