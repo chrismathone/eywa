@@ -21,6 +21,9 @@ import {
   reservationSpanLabel,
   reservationTitle,
   sameReservationSlot,
+  scheduledMakeupLabel,
+  scheduledMakeupTitle,
+  toTimetableReservedLine,
   validateReservationDates,
 } from "./makeup-reservation";
 
@@ -206,9 +209,87 @@ describe("보강 예약 — 이행 판정·표기", () => {
     expect(title).toBe("보강 예약 · 중2A · 9/30 결석분 · 10/5(월) 1-1 · 16:20~17:15 · 예약: 김예원 · 학부모 요청");
     expect(title).not.toMatch(/reserved|mon/);
   });
+  it("남의 반 줄엔 원반이 **꼬리표와 툴팁 둘 다**에 들어간다 — 툴팁만으론 모바일에서 못 본다", () => {
+    const r = {
+      id: "r1",
+      studentId: "s1",
+      classId: "c1",
+      absenceDate: "2026-09-15",
+      makeupDate: "2026-09-17",
+      slotStart: "14:20",
+      slotEnd: "16:20",
+      periodLabel: "1-1~1-2",
+      note: null,
+      status: "reserved" as const,
+      createdBy: null,
+    };
+    const stu = { name: "안은지", grade: "중1", school: "경명여중" };
+    const stray = toTimetableReservedLine(r, stu, { className: "고등M 개별 TP4E" });
+    expect(stray.fromClassName).toBe("고등M 개별 TP4E");
+    expect(stray.title).toContain("고등M 개별 TP4E");
+    // 이 반 칸에 선 줄은 꼬리표가 없다(그 칸이 곧 그 반이다).
+    const own = toTimetableReservedLine(r, stu);
+    expect(own.fromClassName).toBeUndefined();
+    expect(own.title).not.toContain("고등M");
+    // 빈 값·공백은 없는 것으로(지어내지 않는다).
+    expect(toTimetableReservedLine(r, stu, { className: "  " }).fromClassName).toBeUndefined();
+    expect(toTimetableReservedLine(r, stu, { className: null }).fromClassName).toBeUndefined();
+  });
+
   it("같은 축(학생·반·보강일·교시) 판정은 HH:MM 앞 5자로", () => {
     const a = { studentId: "s", classId: "c", makeupDate: "2026-10-05", slotStart: "16:20" };
     expect(sameReservationSlot(a, { ...a, slotStart: "16:20:00" })).toBe(true);
     expect(sameReservationSlot(a, { ...a, slotStart: "17:20" })).toBe(false);
+  });
+});
+
+describe("보강 예약 — 학생 상세 '예정된 변경' 배너 한 줄", () => {
+  // 실제 제보 건(원장 2026-09-14): 안은지 9/15 결석 → 9/17(목) 14:20~16:20 보강, 원반 고등M 개별 TP4E.
+  const line = {
+    id: "r1",
+    absenceDate: "2026-09-15",
+    makeupDate: "2026-09-17",
+    slotStart: "14:20",
+    slotEnd: "16:20",
+    periodLabel: "1-1~1-2",
+    note: null,
+    className: "고등M 개별 TP4E",
+  };
+
+  it("언제·몇 시·무슨 결석분·어느 반인지가 한 줄에 있다", () => {
+    expect(scheduledMakeupLabel(line, "2026-09-14")).toBe(
+      "9/17 (목) 14:20~16:20 보강 예약 · 9/15 결석분 · 고등M 개별 TP4E",
+    );
+  });
+
+  it("🔴 반 이름을 모르면 그 조각만 빠진다 — 지어내지 않는다", () => {
+    expect(scheduledMakeupLabel({ ...line, className: null }, "2026-09-14")).toBe(
+      "9/17 (목) 14:20~16:20 보강 예약 · 9/15 결석분",
+    );
+    expect(scheduledMakeupLabel({ ...line, className: "  " }, "2026-09-14")).toBe(
+      "9/17 (목) 14:20~16:20 보강 예약 · 9/15 결석분",
+    );
+  });
+
+  it("해가 다른 날짜에만 두 자리 연도를 붙인다(예약 상한 180일이라 해를 넘긴다)", () => {
+    const s = scheduledMakeupLabel(
+      { ...line, absenceDate: "2026-12-28", makeupDate: "2027-01-05" },
+      "2026-12-30",
+    );
+    expect(s).toContain("27. 1/5");
+    expect(s).toContain("· 12/28 결석분"); // 올해라 연도 없음
+  });
+
+  it("영어 화면이면 요일도 영어 — 한 줄이 반쪽만 한국어가 되지 않는다(반 이름은 사람이 지은 이름이라 그대로)", () => {
+    const s = scheduledMakeupLabel(line, "2026-09-14", "en");
+    expect(s).toContain("9/17 (Thu)");
+    expect(s).not.toContain("(목)");
+    expect(s).toContain("고등M 개별 TP4E");
+  });
+
+  it("툴팁은 칸·시간표와 **같은 함수** — 교시·원반·메모까지 담는다", () => {
+    expect(scheduledMakeupTitle(line)).toBe(reservationTitle(line, { className: line.className }));
+    expect(scheduledMakeupTitle(line)).toContain("고등M 개별 TP4E");
+    expect(scheduledMakeupTitle(line)).not.toMatch(/reserved|thu/);
   });
 });

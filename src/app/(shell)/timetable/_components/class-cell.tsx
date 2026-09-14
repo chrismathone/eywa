@@ -124,6 +124,7 @@ export function ClassCell({
   coveringDays,
   moveParts,
   reserved = [],
+  strayReserved = [],
 }: {
   slot: ClassDetailQuick;
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
@@ -143,6 +144,15 @@ export function ClassCell({
   moveParts?: MovePart[];
   /** 이 블록(요일 전부)의 보강 예약 줄 — 대기·퇴원 아래 '보강' 박스(원장 2026-09-14). 격자가 병합 슬롯에서 모아 넘긴다. */
   reserved?: TimetableReservedLine[];
+  /**
+   * **다른 반**의 보강 예약 — 원반이 그 요일에 안 도는 예약이라 원반 담임 열(=이 칸)에 선다(원장 2026-09-14).
+   * 🔴 **표시 전용이지 귀속이 아니다** — 데이터(class_id·출결·시수)는 그대로 그 반의 것이고, 이 칸의 명단·인원·
+   *    드래그·엑셀 어디에도 안 섞인다.
+   * 🔴 이 줄들은 `이름/학교학년 · **원반 이름**` 꼴이다(`fromClassName`) — 한 박스에 이 반 예약과 남의 반 예약이
+   *    같은 모양으로 서면 어느 반 보강인지 알 수 없고, `title` 툴팁은 **모바일에서 없는 것과 같다**(디자인 규약).
+   *    툴팁으로 대신하지 말 것(서식·이유는 [reserved-section.tsx](./reserved-section.tsx) 머리 주석과 한 몸이다).
+   */
+  strayReserved?: TimetableReservedLine[];
 }) {
   const { canDrag, incoming, classMoves } = useTimetableEdit();
   const subjects = useSubjectMaps();
@@ -185,7 +195,12 @@ export function ClassCell({
   const SECTION_CAP = 40;
   // 이 셀로 전입 예정인 학생(편집 모드에서 다른 반에서 끌어온 학생) — 도착 셀에 초록 미리보기로 표시.
   const incomingHere = incoming.get(slot.id) ?? [];
-  const showRoster = roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0 || reserved.length > 0);
+  // 🔴 '보강' 박스는 **하나**다 — 이 반 예약과 남의 반 예약을 두 박스로 세우면 같은 머리('보강')가 두 번 뜬다.
+  //    귀속은 **줄에 글자로** 남는다: 남의 반에서 온 줄만 `이름/학교학년 · 원반` 꼴이고, 이 반에서 온 줄은
+  //    꼬리표 없이 퇴원 블록과 같은 모양이다(교시·결석일만 줄 툴팁 몫).
+  const reservedAll = strayReserved.length === 0 ? reserved : [...reserved, ...strayReserved];
+  const showRoster =
+    roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0 || reservedAll.length > 0);
   // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
   // 🔴 요일 칸(분리등원 존)은 **드래그 시작에 새로 만들지 않는다** — dnd-kit은 드롭존 집합이 바뀌면 전부
   //    다시 잰다(`droppableRects` lazy memo). 픽업 순간 200개 존이 한꺼번에 생기면 그 재측정이 통째로
@@ -506,8 +521,9 @@ export function ClassCell({
                 />
               </div>
             ) : null}
-            {/* 보강 — 그 요일 칸 날짜에 이 반으로 예약된 학생(0264a). 대기·퇴원과 같은 고정 박스, 옅은 보라. */}
-            <ReservedSection lines={reserved} />
+            {/* 보강 — 그 요일 칸 날짜의 예약(0264a). 대기·퇴원과 같은 고정 박스. 이 반 예약 + 원반 칸이 없어
+                이 담임 열에 선 남의 반 예약을 **한 박스**로(남의 반 줄엔 원반 이름이 글자로 붙는다). */}
+            <ReservedSection lines={reservedAll} />
           </div>
         ) : null}
       </div>

@@ -17,6 +17,7 @@ import { StudentTabsNav, isStudentTabKey } from "./_components/tabs-nav";
 import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
 import { ScheduledChangeActions } from "@/components/scheduled-change-actions";
 import { getScheduledForStudent } from "@/features/enrollments/server/scheduled-queries";
+import { getStudentUpcomingReservations } from "@/features/attendance/server/makeup-reservation-queries";
 import { kstToday } from "@/lib/date-kst";
 import { isInternalPath } from "@/lib/navigation";
 import { StatusAction } from "./_components/status-action";
@@ -127,9 +128,13 @@ export default async function StudentDetailPage({
   // 🔴 그 게이트는 **서버 액션과 같은 축**이어야 한다 — `canManageTenant("classes")`(반 이동을 *만드는*
   //    것과 같은 게이트). 학생 권한(students full)으로 버튼을 열면 상담사에게 버튼은 보이는데 서버가
   //    거절한다(#77의 반대 꼴 — 화면과 게이트가 갈리면 어느 쪽이든 거짓말이 된다).
-  const [scheduled, canManageScheduled] = await Promise.all([
+  // 앞으로 잡힌 **보강 예약**(0264a)도 같은 배너에 선다(원장 2026-09-14: *"여기서도 보강 정보 알 수 있으면
+  // 더 좋을듯? 바로가기로 오는것이니까"*). 🔴 읽기 전용 — 수정·취소 버튼은 붙이지 않는다(고치는 자리는
+  // 출석부 칸이다). 조회는 fail-soft라 0264a 미적용·실패면 줄이 없을 뿐 화면은 그대로다([[#95]]).
+  const [scheduled, canManageScheduled, upcomingMakeups] = await Promise.all([
     getScheduledForStudent(student.id),
     canManageTenant(user.systemRole, "classes"),
+    getStudentUpcomingReservations(student.id, kstToday()),
   ]);
 
   return (
@@ -194,6 +199,7 @@ export default async function StudentDetailPage({
           미래 예약은 오늘 화면에 흔적이 없어 잊힌다(실측: 미래 시작 수강 28건이 어디에도 안 보였다). */}
       <ScheduledChangeBanner
         changes={scheduled}
+        makeups={upcomingMakeups}
         today={kstToday()}
         subject="student"
         actions={

@@ -15,6 +15,15 @@
  *    보강 칸 `makeupMemo()`("9/30 결석분 보강"). 새 문장을 만들면 결석 후보 목록(`MADE_UP_RE`)이 못 알아본다.
  */
 import { makeupMemo, shortDate } from "@/features/onescreen/makeup-absence-link";
+// 날짜 표기는 앱 단일 소스 — 화면마다 같은 날이 다른 모양으로 적히지 않게(monthDayLabel 주석).
+import { formatShortKoreanDate, isValidYmd, monthDayLabel, weekdayIndexOf } from "@/lib/date-kst";
+// 배너 문장은 사전에서 — 이웃 줄(`scheduledChangeLabel`)과 같은 규약이고 기본값은 한국어다.
+import {
+  DEFAULT_SHEET_LANG,
+  sheetDowLabelByIndex,
+  sheetTf,
+  type SheetLang,
+} from "@/features/teacher-view/i18n";
 import {
   periodListLabel,
   subjectWeekdayPeriods,
@@ -373,6 +382,12 @@ export type TimetableReservedLine = {
   periodLabel: string | null;
   slotStart: string;
   slotEnd: string;
+  /**
+   * **남의 반에서 온 줄에만** 채워지는 원반 이름 — 그 칸이 이 반 칸이 아닐 때(담임 열 '보강' 박스) 줄에 꼬리표로
+   * 붙는다(`안은지/경명여중1 · TP4E`). 이 칸의 반에서 온 줄엔 없다(그 칸이 곧 그 반이라 군더더기).
+   * 🔴 툴팁으로 대신하지 않는다 — `title`은 모바일에서 **없는 것과 같다**(디자인 규약). 모르면 undefined(꼬리만 빠진다).
+   */
+  fromClassName?: string;
   /** 툴팁 한 줄(`reservationTitle`) — raw 코드 없이. */
   title: string;
 };
@@ -380,6 +395,11 @@ export type TimetableReservedLine = {
 export function toTimetableReservedLine(
   r: MakeupReservation,
   stu: { name: string; grade: string | null; school: string | null },
+  /**
+   * 원반 이름 — **그 반 칸이 아닌 자리**(담임 열 '보강' 박스)에 설 때만 넘긴다. 그 칸은 다른 반의 칸이라
+   * 어느 반 보강인지가 줄에 없으면 알 길이 없다(줄은 `이름/학교학년`뿐이라 툴팁이 그 몫을 진다).
+   */
+  opts: { className?: string | null } = {},
 ): TimetableReservedLine {
   return {
     id: r.id,
@@ -391,8 +411,81 @@ export function toTimetableReservedLine(
     periodLabel: r.periodLabel,
     slotStart: r.slotStart,
     slotEnd: r.slotEnd,
-    title: reservationTitle(r),
+    // 🔴 `opts`를 툴팁에도 **실제로** 넘긴다 — 종전엔 인자만 받고 쓰지 않아 남의 반 줄의 툴팁에 원반이 빠져 있었다
+    //    (호출부만 검사하던 가드가 못 잡았다, 적대 리뷰 2026-09-14).
+    title: reservationTitle(r, opts),
+    // 꼬리표는 **값이 있을 때만** — 빈 문자열·공백은 없는 것으로 본다(지어내지 않는다).
+    ...(opts.className?.trim() ? { fromClassName: opts.className.trim() } : {}),
   };
+}
+
+/**
+ * 학생 상세 **'예정된 변경'** 배너에 서는 보강 예약 한 줄(원장 2026-09-14 *"여기서도 보강 정보 알 수 있으면
+ * 더 좋을듯? 바로가기로 오는것이니까"*).
+ *
+ * 🔴 `ScheduledChange`(합류·이동·종료)와 **한 타입으로 합치지 않는다** — 저쪽은 `enrollmentId`가 곧 쓰기
+ *    대상이고 수정·취소 버튼이 붙는다. 예약은 읽기 전용이고, 고치는 자리는 출석부 칸이다.
+ */
+export type ScheduledMakeupLine = Pick<
+  MakeupReservation,
+  "id" | "absenceDate" | "makeupDate" | "slotStart" | "slotEnd" | "periodLabel" | "note"
+> & {
+  /** 원반 이름. 모르면 null — 문장에서 그 조각이 빠진다(지어내지 않는다). */
+  className: string | null;
+};
+
+/**
+ * 배너 한 줄의 날짜 표기 — 월/일은 앱 단일 소스([`monthDayLabel`](@/lib/date-kst))에서 온다.
+ * ⚠️ 해가 다르면 두 자리 연도를 앞에 붙인다(예약 상한이 180일이라 12월 결석 → 1월 보강처럼 해를 넘길 수 있다).
+ *    규칙은 이웃 줄(`scheduled-changes.ts`의 `shortDate`)과 같은 모양으로 맞춘다.
+ */
+function sameYear(ymd: string, today: string): boolean {
+  return ymd.slice(0, 4) === today.slice(0, 4);
+}
+
+/**
+ * "9/17 (목)" · 해가 다르면 "26. 9/17 (목)".
+ * ⚠️ 요일은 **화면 언어를 따른다** — 영어 문장에 `(목)`이 섞이면 그 줄만 반쪽이 한국어가 된다.
+ *    월/일 숫자는 두 언어가 같은 표기라 `monthDayLabel` 한 곳에서 온다.
+ * ⚠️ 달력에 없는 날짜면 요일을 지어내지 않고 숫자만 돌려준다(`formatShortKoreanDate`와 같은 규약).
+ */
+function makeupDayLabel(ymd: string, today: string, lang: SheetLang): string {
+  if (!isValidYmd(ymd)) return monthDayLabel(ymd);
+  const label =
+    lang === "en"
+      ? `${monthDayLabel(ymd)} (${sheetDowLabelByIndex(weekdayIndexOf(ymd), lang)})`
+      : formatShortKoreanDate(ymd);
+  return sameYear(ymd, today) ? label : `${ymd.slice(2, 4)}. ${label}`;
+}
+
+/** "9/15" · 해가 다르면 "26. 9/15"(결석일은 요일까지 적지 않는다 — 한 줄이 길어진다). */
+function absenceDayLabel(ymd: string, today: string): string {
+  const label = monthDayLabel(ymd);
+  return sameYear(ymd, today) ? label : `${ymd.slice(2, 4)}. ${label}`;
+}
+
+/**
+ * 배너에 그대로 찍히는 한 줄 — `9/17 (목) 14:20~16:20 보강 예약 · 9/15 결석분 · 고등M 개별 TP4E`.
+ * ⚠️ 문장은 사전에서 온다(`sched.makeup*`) — 배너 파일엔 한글 리터럴을 두지 않는다(가드 name-wiring).
+ * ⚠️ 인자를 안 주면 한국어(이웃 `scheduledChangeLabel`과 같은 규약).
+ */
+export function scheduledMakeupLabel(
+  r: ScheduledMakeupLine,
+  today: string,
+  lang: SheetLang = DEFAULT_SHEET_LANG,
+): string {
+  const when = makeupDayLabel(r.makeupDate, today, lang);
+  const time = `${r.slotStart}~${r.slotEnd}`;
+  const absence = absenceDayLabel(r.absenceDate, today);
+  const name = r.className?.trim();
+  return name
+    ? sheetTf(lang, "sched.makeup", { when, time, absence, name })
+    : sheetTf(lang, "sched.makeupNoClass", { when, time, absence });
+}
+
+/** 그 줄의 툴팁 — 교시·메모까지(칸·시간표 줄과 **같은 함수**라 표면마다 문장이 갈리지 않는다). */
+export function scheduledMakeupTitle(r: ScheduledMakeupLine): string {
+  return reservationTitle(r, { className: r.className });
 }
 
 /** 같은 (학생·반·보강일·교시) — 유니크 축(0264a)과 같은 판정. */

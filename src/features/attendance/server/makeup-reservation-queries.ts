@@ -45,6 +45,11 @@ type Row = {
   created_by: string | null;
 };
 
+type ClassRef = { class_name?: string | null };
+
+/** 학생 상세 '예정된 변경' 배너가 읽는 한 줄 — 예약 + **원반 이름**(모르면 null, 지어내지 않는다). */
+export type StudentUpcomingReservation = MakeupReservation & { className: string | null };
+
 const hhmm = (t: string | null | undefined) => String(t ?? "").slice(0, 5);
 
 export function toReservation(r: Row): MakeupReservation {
@@ -147,23 +152,34 @@ export async function getReservationsInWeek(
   }
 }
 
-/** 한 학생의 **앞으로의** 예약(학생 상세). 오늘 포함 이후, 예약 상태만. */
+/**
+ * 한 학생의 **앞으로의** 예약(학생 상세 '예정된 변경' 배너). 오늘 포함 이후, 예약 상태만.
+ * ⚠️ 원반 이름을 함께 받는다 — 배너 한 줄이 "어느 반의 보강인지"를 말해야 한다. 임베드는 **컬럼 이름**으로
+ *    건다(`class:class_id`) — 관계 이름으로 걸면 남이 FK를 하나 더 추가하는 날 PGRST201로 죽는다([[#94]]).
+ */
 export async function getStudentUpcomingReservations(
   studentId: string,
   today: string,
-): Promise<MakeupReservation[]> {
+): Promise<StudentUpcomingReservation[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("makeup_reservations")
-    .select(SELECT)
+    .select(`${SELECT}, class:class_id ( class_name )`)
     .eq("student_id", studentId)
     .eq("status", "reserved")
     .gte("makeup_date", today)
     .order("makeup_date")
     .order("slot_start")
     .limit(50);
-  if (error) return soft("학생", error);
-  return ((data ?? []) as Row[]).map(toReservation);
+  // ⚠️ `soft`는 예약 배열(이름 없음)을 돌려주므로 여기선 **로그만** 빌리고 빈 목록으로 떨어진다.
+  if (error) {
+    soft("학생", error);
+    return [];
+  }
+  return ((data ?? []) as (Row & { class?: ClassRef | ClassRef[] | null })[]).map((r) => ({
+    ...toReservation(r),
+    className: (Array.isArray(r.class) ? r.class[0] : r.class)?.class_name ?? null,
+  }));
 }
 
 /**

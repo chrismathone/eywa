@@ -571,7 +571,11 @@ export default async function TimetablePage({
    * 날짜에 잡힌 예약(0264a). 🔴 **기본뷰 격자(`WeekdayGroupTables`)로만** 간다 — 통합·강사·교실뷰·엑셀·시트·이동 판정은
    * `slots`(예약 없음)를 그대로 본다(가드 makeup-reservation-wiring ③). 보강 탭은 제 격자를 따로 세운다.
    */
-  const basicSlots = makeupTab || effView !== "basic" ? slots : await attachReservedLines(slots, referenceDate);
+  // 🔴 예약이 **두 갈래**로 나온다(reserved-lines.ts): 원반 칸이 있는 날은 그 반 칸 아래 줄(`slots[].reserved`),
+  //    없는 날은 원반 담임 열에 세울 '보강' 박스(`strays`). 둘 다 기본뷰 격자 한 곳으로만 간다.
+  const basicReserved = makeupTab || effView !== "basic" ? null : await attachReservedLines(slots, referenceDate);
+  const basicSlots = basicReserved?.slots ?? slots;
+  const strayReserved = basicReserved?.strays ?? [];
   // 통합뷰 **\*LAB 임시 칸**(원장 2026-09-11 *"이동된 학생때문에 추가되는거니까 *LAB 같은식으로 임시 추가"*) —
   // 자리 출석부에서 다른 시간 랩실로 옮겨 앉는(하루 이동·상시 고정) 학생의 요일·교시 칸. 판정은 자리 출석부와 같은 함수.
   // 🔴 `slots`·카드 칸·교시축엔 **안 넣는다** — 이 값은 RichGridView 한 곳으로만 간다(인원·반 드래그·충돌·엑셀·
@@ -1221,6 +1225,7 @@ export default async function TimetablePage({
               <EmptyPeriodScope collapsed={collapseEmptyPeriods} hideStudents={hideStudents}>
                 <WeekdayGroupTables
                   slots={basicSlots}
+                  strays={strayReserved}
                   config={periodsConfig}
                   weekMonday={week}
                   weekdayGrouping={weekdayGrouping}

@@ -125,7 +125,8 @@ describe("③ 명단 표면이 예약 조회 한 벌을 읽는다", () => {
     expect(count(page, "basicSlots")).toBe(2);
     const tables = strip(read("app/(shell)/timetable/_components/weekday-group-tables.tsx"));
     expect(tables).toContain("reserved={uniqueReserved(merged)}");
-    expect(strip(read("app/(shell)/timetable/_components/class-cell.tsx"))).toContain("<ReservedSection lines={reserved} />");
+    // 반 칸의 '보강' 박스는 **하나** — 이 반 예약 + 담임 열에 선 남의 반 예약(stray)을 합쳐 그린다.
+    expect(strip(read("app/(shell)/timetable/_components/class-cell.tsx"))).toContain("<ReservedSection lines={reservedAll} />");
     expect(strip(read("app/(shell)/timetable/_components/hapban-cell.tsx"))).toContain("<ReservedSection lines={reserved} />");
     for (const rel of ["features/timetable/lib/class-move.ts", "features/timetable/lib/hapban.ts", "features/exports/timetable-excel.ts"]) {
       if (!fs.existsSync(path.join(SRC, rel))) continue;
@@ -149,6 +150,137 @@ describe("④ 예약 조회는 fail-soft — 표가 없어도 던지지 않는�
     }
     // 게이트 판정은 문을 넓히는 쪽으로 실패하지 않는다.
     expect(q.slice(q.indexOf("export async function hasReservedMakeup"))).toContain("return false;");
+  });
+});
+
+describe("⑦ 기본뷰 '보강' 박스 — 원반 칸이 없는 날은 **원반 담임 열**에(원장 2026-09-14)", () => {
+  const server = strip(read("features/timetable/server/reserved-lines.ts"));
+  const tables = strip(read("app/(shell)/timetable/_components/weekday-group-tables.tsx"));
+  const cellSrc = strip(read("app/(shell)/timetable/_components/class-cell.tsx"));
+  const box = strip(read("app/(shell)/timetable/_components/reserved-section.tsx"));
+
+  it("① 원반 칸이 있으면 그 반 칸 줄, 없으면 담임 열 박스 — 한 예약이 **둘 다는 아니다**", () => {
+    expect(server).toContain("if (cellDates.has(cellKey)) {");
+    expect(server).toMatch(/cellDates\.has\(cellKey\)\)[\s\S]{0,400}continue;/);
+    // 담임을 모르면 세우지 않는다(그 열이 화면에 없다) — '보강' 탭 몫.
+    expect(server).toContain("if (!teacherName) continue;");
+    // 남의 반 칸에 서므로 원반 이름은 **툴팁**에 실린다(줄엔 이름/학교학년만).
+    expect(server).toContain("{ className: nameOf.get(r.classId) ?? null }");
+  });
+
+  it("② 다른 반이 있는 칸에서도 **명단과 섞이지 않는다** — 퇴원·대기와 같은 부품의 별도 박스", () => {
+    expect(box).toContain("SectionLabelRow");
+    expect(box).toContain("NameMeta");
+    expect(box).toContain('label="보강"');
+    // 🔴 머리 tone은 대기·퇴원과 **같다**(이 격자의 규약 = 머리는 공통, 줄만 섹션 색).
+    expect(box).toContain('tone="bg-bg-soft text-text-faint"');
+    // 줄 색만 예약 단일 소스 — 화면 파일에 보라를 손으로 적으면 칸·범례와 갈린다.
+    expect(box).toContain("${RESERVED_BADGE_CLASS}");
+    expect(box).not.toMatch(/bg-purple-soft|text-purple\b/);
+    // 줄에 교시·결석일·원반을 적지 않는다(원장 지시 — 길어지면 퇴원 블록과 모양이 어긋난다).
+    expect(box).not.toContain("periodLabel");
+    expect(box).not.toContain("absenceDate");
+    // 줄의 내용은 이름/학교학년 한 조각(퇴원 줄과 같은 모양) + **남의 반이면 원반 꼬리표**.
+    expect(box).toContain("<NameMeta name={r.name} meta={metaLabel(r.school, r.grade)} />");
+    expect(box).toContain("title={r.title}");
+    // 🔴 한 박스에 두 반 예약이 서므로 **귀속을 글자로** 단다 — title 툴팁은 모바일에서 없는 것과 같다.
+    expect(box).toContain("r.fromClassName");
+    // 🔴 그 값은 **함수 본문**이 opts를 실제로 써야 생긴다 — 호출부만 검사하면 종전처럼 툴팁에서도 빠진다.
+    const pure = strip(read("features/attendance/makeup-reservation.ts"));
+    expect(pure).toContain("title: reservationTitle(r, opts),");
+    expect(pure).toContain("fromClassName: opts.className.trim()");
+    // 명단(StudentSection)에 섞어 넣지 않는다 — 인원·드래그가 그 배열을 센다.
+    expect(cellSrc).toContain("const reservedAll = strayReserved.length === 0 ? reserved : [...reserved, ...strayReserved];");
+    expect(cellSrc).not.toMatch(/students=\{[^}]*stray/i);
+  });
+
+  it("③ 병합된 요일(월목) 중 **예약 있는 날만** 쪼갠다 — 빈 칸엔 표식을 안 붙인다", () => {
+    // 🔴 판정은 순수 규칙 한 벌(stray-reserved.ts) — 격자가 병합 키를 손으로 짜지 않는다.
+    expect(tables).toContain("cellKeyWithStrayMark(");
+    // 🔴 표식 축에 **반 키**가 들어간다 — 빠지면 그 열의 모든 반이 가로 병합을 잃는다(적대 리뷰 [중]).
+    expect(tables).toContain("strayMarks.add(strayMarkKey(b.teacherName, b.dayOfWeek, owner));");
+    // 앵커 칸이 비면 짝 교시의 반이 주인(반교시 확장이 그 칸을 덮는다) — 단 **짝 행 블록이 1행일 때만**.
+    expect(tables).toContain("const pair = groupPairs.find(([top, bottom]) => top === at || bottom === at);");
+    expect(tables).toContain("if (k !== \"\" && k !== above && k !== below) {");
+    // 🔴 박스를 못 그릴 칸(합반)이면 표식도 안 붙인다 — 쪼개지기만 하고 박스는 없는 칸을 만들지 않는다.
+    expect(tables).toContain("const owner = strayOwnerClassKey(ownerIds);");
+    // 빈 칸 박스는 배경을 칠하지 않는다(td 회색 위에 흰 카드가 서지 않게).
+    expect(tables).not.toContain('className="bg-card flex flex-col rounded-[2px] text-sm"');
+    // 옛 (강사, 요일) 축은 남아 있지 않다.
+    expect(tables).not.toContain("strayDays");
+    // 앵커 행 판정은 순수 규칙 한 벌(stray-reserved.ts) — 격자가 자기 규칙을 새로 적지 않는다.
+    expect(tables).toContain("strayAnchorRowIndex(rows, b.startTime, b.endTime)");
+  });
+
+  // 🔴 제목을 **소스 범위로** 좁혀 둔다: 이 모듈들은 stray를 *직접* 모른다는 뜻이지, 격자 결과가 예약에
+  //    영향을 안 받는다는 뜻이 아니다(병합은 호출부가 주입하는 `keyAt`을 통해 실제로 달라진다 = [중]1 수리의 의도).
+  it("④ 표시 전용 — 인원·드래그·충돌·빈 교시 판정·엑셀/시트 **모듈이 이 값을 직접 import·참조하지 않는다**", () => {
+    for (const rel of [
+      "features/timetable/lib/class-move.ts",
+      "features/timetable/lib/class-grid.ts",
+      "features/timetable/lib/used-rows.ts",
+      "features/timetable/lib/hapban.ts",
+      "features/exports/timetable-excel.ts",
+      // 🔴 **기본뷰의 축**(적대 리뷰 [하]): 병합 엔진과 빈 교시 접기 높이 — 이번 변경이 실제로 건드린 곳이다.
+      //    (위 class-grid·used-rows는 통합뷰 것이라 이 축을 안 잠갔다.)
+      // ⚠️ 이 두 모듈은 stray를 **직접 알지 않는다**는 뜻이다 — 병합 결과가 예약 때문에 달라지는 것은 호출부가
+      //    주입하는 `keyAt` 클로저를 통해서이고(그게 [중]1 수리가 의도한 동작이다), 그 축은
+      //    `stray-reserved.test.ts`가 잠근다. 같은 것을 두 곳에서 검사하지 않는다(한쪽만 고쳐진다).
+      "features/timetable/lib/grid.ts",
+      "features/timetable/lib/empty-period-rows.ts",
+    ]) {
+      expect(strip(read(rel)), rel).not.toMatch(/stray/i);
+    }
+    // 빈 교시 접기 판정은 **슬롯만** 본다 — 예약이 접기를 흔들지 않는다.
+    expect(tables).toContain("const occupiedKeys = new Set(slots.map(rowKeyOf));");
+    // 🔴 '학생 명단 접기'는 반 칸 박스와 빈 칸 박스에 **같이** 걸린다(한쪽만 남으면 토글이 거짓말이 된다).
+    expect(tables).toContain("cellStrays.length > 0 && !hideStudents ?");
+    // 빈 칸에 선 박스도 아래 갈래와 **같은 높이 규약**(접힌 행 변수 · hideStudents 최소 높이 안 씀).
+    expect(tables).toContain("minHeight: isCollapsed(row.key)");
+    expect(count(tables, "`calc(${EMPTY_PERIOD_H} - 12px)`")).toBe(2);
+    // 값은 셀 박스 두 자리로만 간다(반 칸 안 · 빈 칸 단독).
+    expect(tables).toContain("strayLines={cellStrays}");
+    expect(tables).toContain("<ReservedSection lines={cellStrays} />");
+  });
+});
+
+describe("⑥ 학생 상세 '예정된 변경' 배너 — 앞으로의 보강 예약(원장 2026-09-14)", () => {
+  const page = strip(read("app/(shell)/students/[id]/page.tsx"));
+  const banner = strip(read("components/scheduled-change-banner.tsx"));
+
+  it("페이지가 예약을 **같은 Promise.all에서** 조회해 배너에 넘긴다(직렬 워터폴 금지, B4)", () => {
+    expect(page).toContain("getStudentUpcomingReservations(student.id, kstToday())");
+    expect(page).toContain("makeups={upcomingMakeups}");
+    const all = page.indexOf("await Promise.all([");
+    const call = page.indexOf("getStudentUpcomingReservations(student.id");
+    expect(all).toBeGreaterThan(-1);
+    expect(call).toBeGreaterThan(all);
+    expect(call).toBeLessThan(page.indexOf("]);", all));
+  });
+
+  it("문장·툴팁은 순수 함수 한 벌에서 온다 — 배너가 날짜·문구를 새로 짜지 않는다", () => {
+    expect(banner).toContain("scheduledMakeupLabel(r.makeup, today, lang)");
+    expect(banner).toContain("scheduledMakeupTitle(r.makeup)");
+  });
+
+  it("🔴 읽기 전용 — 예약 줄엔 수정·취소가 붙지 않는다(고치는 자리는 출석부 칸이다)", () => {
+    expect(banner).toContain("actions(r.change)");
+    expect(banner).not.toMatch(/actions\(r\.makeup/);
+  });
+
+  it("예약만 있어도 배너가 서고, 두 종류를 **날짜순 한 줄기**로 세운다", () => {
+    expect(banner).toContain("if (changes.length === 0 && makeups.length === 0) return null;");
+    expect(banner).toMatch(/rows[\s\S]*\.sort\(\(a, b\) => a\.date\.localeCompare\(b\.date\)\)/);
+  });
+
+  it("조회는 예약 상태 · 오늘 이후만 — 지난 날짜·이행된 예약은 안 보인다", () => {
+    const q = strip(read("features/attendance/server/makeup-reservation-queries.ts"));
+    const body = q.slice(q.indexOf("export async function getStudentUpcomingReservations"));
+    expect(body).toContain('.eq("student_id", studentId)');
+    expect(body).toContain('.eq("status", "reserved")');
+    expect(body).toContain('.gte("makeup_date", today)');
+    // 원반 이름 임베드는 **컬럼 이름**으로(관계 이름이면 FK가 늘어난 날 PGRST201, [[#94]]).
+    expect(body).toContain("class:class_id ( class_name )");
   });
 });
 

@@ -38,7 +38,16 @@ import {
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
+import { ReservedSection } from "./reserved-section";
+import {
+  cellKeyWithStrayMark,
+  strayAnchorRowIndex,
+  strayMarkKey,
+  strayOwnerClassKey,
+} from "@/features/timetable/lib/stray-reserved";
 import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
+// ⚠️ **타입만** 가져온다 — 저 모듈은 `server-only`라 값을 import하면 클라 번들에서 터진다([[#61]]).
+import type { StrayReservedBlock } from "@/features/timetable/server/reserved-lines";
 
 /** 병합 블록(같은 반 · 여러 요일·교시)이 덮는 칸들의 '보강' 줄 합집합 — 예약 id로 중복 제거. */
 function uniqueReserved(slots: readonly { reserved?: TimetableReservedLine[] }[]): TimetableReservedLine[] {
@@ -251,6 +260,7 @@ function SubSlotContent({
   subSlot = "full",
   hideStudents = false,
   parts,
+  strayLines = [],
 }: {
   slots: ScheduleSlotWithStudents[];
   coveringDays: DayOfWeek[];
@@ -263,6 +273,11 @@ function SubSlotContent({
    * (연속 교시 세로 병합·월목 가로 병합). 없으면(합반·읽기 전용) 반 드래그가 없다.
    */
   parts?: MovePart[];
+  /**
+   * 원반 칸이 없는 날의 보강 예약 줄(이 칸이 원반 담임 열이다) — 이 반 명단과 **분리된 박스**로 선다.
+   * ⚠️ 합반 칸엔 붙이지 않는다 — 구성 반이 여럿이라 칸의 주인이 모호하다(그 건은 '보강' 탭이 세운다).
+   */
+  strayLines?: TimetableReservedLine[];
 }) {
   const merged = mergeSlotsByClass(slots);
   const isHapban = merged.length >= 2;
@@ -291,6 +306,7 @@ function SubSlotContent({
           coveringDays={coveringDays}
           moveParts={parts}
           reserved={uniqueReserved(merged)}
+          strayReserved={strayLines}
         />
       )}
     </div>
@@ -315,7 +331,10 @@ function GroupTable({
   wideDays,
   collapseEmpty = false,
   hideStudents = false,
+  strays = [],
 }: {
+  /** 원반 칸이 없는 날의 보강 예약 — 원반 담임 열 · 그 요일 · 그 시각 칸에 '보강' 박스로 선다(표시 전용). */
+  strays?: readonly StrayReservedBlock[];
   slots: ScheduleSlotWithStudents[];
   subject: TimetableSubject;
   groups: GroupCols[];
@@ -402,6 +421,55 @@ function GroupTable({
     }
   }
 
+  /**
+   * 원반 칸이 없는 날의 '보강' 박스를 **어느 칸에 세울지** — `담임 열::요일::교시 행`(행 = 겹치는 첫 행).
+   * 함께 **병합 표식**(`strayMarks`)도 만든다 — 축은 `강사::요일::그 칸의 반 키`([`strayMarkKey`](@/features/timetable/lib/stray-reserved)).
+   *
+   * 🔴 축에서 **반 키가 빠지면** 그 (강사, 요일) 열의 **모든 반**이 가로 병합을 잃는다(적대 리뷰 2026-09-14 [중]):
+   *    예약과 무관한 반의 이름·명단이 두 번 그려지고 칸이 반으로 갈린다.
+   * 🔴 앵커 칸이 비어 있으면 **짝 교시의 반**을 주인으로 본다 — 수학 반교시 셀은 반대쪽이 비면
+   *    `expandHalfPeriodBlocks`가 그 칸을 덮어 박스가 **그 반 칸 안에** 서기 때문이다(표식이 없으면 월목 병합
+   *    칸에 서서 월요일에도 보인다). 짝도 비면 그 칸은 빈 칸 1×1이라 병합이 없어 표식이 필요 없다.
+   * 🔴 교시표 밖 시각이면 세우지도, 표식을 붙이지도 않는다(괜한 병합 쪼갬 방지) — 그 건은 '보강' 탭 몫.
+   * ⚠️ `cell`·`groupPairs` **뒤**에 와야 한다(둘을 읽는다).
+   */
+  const strayAt = new Map<string, TimetableReservedLine[]>();
+  const strayMarks = new Set<string>();
+  const classIdsAt = (teacher: string, day: string, ri: number) =>
+    (cell.get(`${teacher}::${day}::${rows[ri]!.key}`) ?? []).map((s) => s.classId);
+  const classKeyAt = (teacher: string, day: string, ri: number) =>
+    cellClassKey(classIdsAt(teacher, day, ri));
+  for (const b of strays) {
+    const at = strayAnchorRowIndex(rows, b.startTime, b.endTime);
+    if (at < 0) continue;
+    const key = `${b.teacherName}::${b.dayOfWeek}::${at}`;
+    const cur = strayAt.get(key);
+    if (cur) cur.push(...b.lines);
+    else strayAt.set(key, [...b.lines]);
+    let ownerIds = classIdsAt(b.teacherName, b.dayOfWeek, at);
+    if (ownerIds.length === 0) {
+      const pair = groupPairs.find(([top, bottom]) => top === at || bottom === at);
+      const other = pair ? (pair[0] === at ? pair[1] : pair[0]) : -1;
+      if (other >= 0) {
+        // 🔴 반교시 확장은 짝 행 블록이 **1행일 때만** 일어난다(`grid.ts`의 `block.rowSpan !== 1` → 건너뜀).
+        //    짝 행의 반이 위·아래로 이어지면(세로 병합) 확장이 없으므로 박스는 **이 빈 칸**에 선다 — 그런데도
+        //    표식을 붙이면 그 반의 월+목 병합이 **헛되이** 쪼개진다(적대 재리뷰 2026-09-14 [하]).
+        const k = classKeyAt(b.teacherName, b.dayOfWeek, other);
+        const above = other > 0 ? classKeyAt(b.teacherName, b.dayOfWeek, other - 1) : "";
+        const below = other + 1 < rows.length ? classKeyAt(b.teacherName, b.dayOfWeek, other + 1) : "";
+        if (k !== "" && k !== above && k !== below) {
+          ownerIds = classIdsAt(b.teacherName, b.dayOfWeek, other);
+        }
+      }
+    }
+    // 🔴 **박스를 못 그릴 칸이면 표식도 붙이지 않는다** — 합반 칸은 `HapbanCell`이 예약 줄을 안 받아 박스가
+    //    사라지는데, 표식만 남으면 "쪼개지기는 하는데 박스는 없는 칸"이 된다(`strayOwnerClassKey` 주석).
+    const owner = strayOwnerClassKey(ownerIds);
+    if (owner) strayMarks.add(strayMarkKey(b.teacherName, b.dayOfWeek, owner));
+    // ⚠️ 남은 좁은 경우: 짝 행 블록이 **가로로** 병합돼 있고 다른 요일의 앵커 행이 점유면 확장이 건너뛰어진다 —
+    //    그때도 박스는 이 빈 칸에 제대로 서고 표식만 한 번 여분으로 남는다(거짓 표시가 아니라 쪼갬 1회).
+  }
+
   // 그룹×강사별 2D 병합 사전계산. cellAt(행,열)=그 교시·요일 슬롯, blocks=병합 블록(anchor만).
   const prepared = groups.map((g) => ({
     ...g,
@@ -411,7 +479,18 @@ function GroupTable({
       const raw = computeBlocks(
         rows.length,
         t.days.length,
-        (ri, ci) => cellClassKey(cellAt(ri, ci).map((s) => s.classId)),
+        // 🔴 예약이 걸린 (강사, 요일, **그 반**)만 쪼갠다 — 규약은 `stray-reserved.ts` 한 벌이다(세로 병합은
+        //    그대로, 월·목은 서로 다른 키라 도로 붙지 않는다, 빈 칸은 표식 없음).
+        // ⚠️ 쪼개진 **그 반**은 월+목 한 칸이 요일마다 하나씩 두 칸이 된다 — 열 폭은 `colgroup` 고정이라 다른
+        //    반·다른 열의 격자는 그대로지만, 그 반에 한해 **반 드래그가 그 요일 블록만** 옮기고 반교시 확장도
+        //    요일마다 따로 판정된다(예약이 걸린 반에서만 생기는 값이다).
+        (ri, ci) =>
+          cellKeyWithStrayMark(
+            cellClassKey(cellAt(ri, ci).map((s) => s.classId)),
+            t.name,
+            t.days[ci]!,
+            strayMarks,
+          ),
         g.merge,
       );
       // 반교시(그룹 한쪽 교시만) 수업은 셀을 그룹 전체 높이로 — 학생 명단 영역을 어느 셀이나 같게.
@@ -618,6 +697,15 @@ function GroupTable({
                     const isHapbanCell = blockClassIds.size >= 2;
                     const minCellH = hideStudents ? HEADER_H + (isHapbanCell ? HAPBAN_BADGE_H : 0) : 0;
                     const cellH = Math.max(minCellH, block.rowSpan * rowHeight - 16);
+                    // 이 블록이 덮는 (교시 행 × 요일)에 걸린 '보강' 박스 줄 — **앵커 행이 이 블록 안일 때만**
+                    // 모으므로 한 예약이 두 칸에 서지 않는다(블록들이 행×열을 빈틈없이 나눠 갖는다).
+                    const cellStrays: TimetableReservedLine[] = [];
+                    for (let rr = ri; rr < ri + block.rowSpan; rr++) {
+                      for (let cc = ci; cc < ci + block.colSpan; cc++) {
+                        const got = strayAt.get(`${t.name}::${t.days[cc]}::${rr}`);
+                        if (got) cellStrays.push(...got);
+                      }
+                    }
                     return (
                       <td
                         key={`${g.title}-${t.name}-${d}-${row.key}`}
@@ -638,6 +726,30 @@ function GroupTable({
                           col={`${g.title}:${t.name}`}
                         >
                           {acc.length === 0 ? (
+                            // 🔴 '학생 명단 접기'를 **반 칸 박스와 같이** 따른다(적대 리뷰 2026-09-14 [중]):
+                            //    반 칸 쪽은 `roster="none"`이라 박스가 접히는데 여기만 남으면 같은 화면에서 어떤
+                            //    보강은 보이고 어떤 보강은 안 보인다. 박스는 학생 이름 목록이라 '명단 접기'의 뜻에
+                            //    들어간다 — 접었는데 이름이 남아 있으면 그 토글이 거짓말이 된다(폴백은 '보강' 탭).
+                            cellStrays.length > 0 && !hideStudents ? (
+                              // 빈 칸에 선 '보강' 박스 — 수업이 없는 시간이라 반 칸 없이 박스만 선다.
+                              // 🔴 높이 규약은 **아래 빈 칸 갈래와 같다**(적대 리뷰 2026-09-14 [중]): 접힌 교시 행이면
+                              //    그 행과 같은 변수를 따르고(고정 px를 주면 행이 통째로 펴져 '빈 교시 접기'가 죽는다),
+                              //    `hideStudents` 최소 높이는 쓰지 않는다(지킬 반 이름이 없다 — 38px 행이 도로 늘어난다).
+                              // ⚠️ 단 `height`가 아니라 `minHeight`다 — 박스는 내용이라 잘리면 안 된다. 접힌 행에 박스가
+                              //    서면 **그 행만** 박스 높이만큼 늘고 다른 접힌 행은 그대로다(사람이 오는 칸을 감추지 않는다).
+                              // ⚠️ 배경을 칠하지 않는다 — 빈 칸 회색은 `td`가 이미 칠하는데 `bg-card`(흰색)를 주면
+                              //    박스(최대 63px) 아래 남는 자리가 **반 이름 없는 흰 카드**처럼 보인다(재리뷰 [하]).
+                              <div
+                                className="flex flex-col rounded-[2px] text-sm"
+                                style={{
+                                  minHeight: isCollapsed(row.key)
+                                    ? `calc(${EMPTY_PERIOD_H} - 12px)`
+                                    : block.rowSpan * rowHeight - 16,
+                                }}
+                              >
+                                <ReservedSection lines={cellStrays} />
+                              </div>
+                            ) : (
                             // 빈 칸도 높이를 잡아 둬야 하이라이트가 칸 전체로 보인다(내용은 없다).
                             // 🔴 **접힌 빈 교시 행은 예외** — 고정 px를 주면 행이 통째로 펴져 '빈 교시 접기'가 죽는다
                             //    (표 행 높이는 최솟값이라 내용이 이긴다). 접힌 행은 행과 **같은 변수**를 따라간다
@@ -652,6 +764,7 @@ function GroupTable({
                               }}
                               aria-hidden
                             />
+                            )
                           ) : (
                             <div className="flex flex-col" style={{ height: cellH }}>
                               <SubSlotContent
@@ -660,6 +773,7 @@ function GroupTable({
                                 subSlot={t.subSlots.get(`${ri}:${ci}`) ?? "full"}
                                 hideStudents={hideStudents}
                                 parts={moveParts}
+                                strayLines={cellStrays}
                               />
                             </div>
                           )}
@@ -683,6 +797,7 @@ function GroupTable({
  */
 export function WeekdayGroupTables({
   slots,
+  strays = [],
   config = DEFAULT_PERIODS_CONFIG,
   weekMonday,
   weekdayGrouping = "mon-thu",
@@ -691,6 +806,11 @@ export function WeekdayGroupTables({
   teacherOrder,
 }: {
   slots: ScheduleSlotWithStudents[];
+  /**
+   * 원반 칸이 없는 날의 보강 예약(0264a) — **원반 담임 열**의 그 요일·그 시각 칸에 '보강' 박스로 선다
+   * (원장 2026-09-14 *"퇴원블록처럼 보강블록이 있으면 됨"*). 표시 전용이라 명단·인원·드래그·엑셀엔 안 실린다.
+   */
+  strays?: readonly StrayReservedBlock[];
   config?: PeriodsConfig;
   /** 조회 중인 주의 월요일("YYYY-MM-DD") — 요일 헤더에 날짜(M/D) 표시(스프레드시트 패리티). */
   weekMonday?: string;
@@ -716,6 +836,9 @@ export function WeekdayGroupTables({
   const weekdayRowH = rowH;
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
+  // '보강' 박스도 판마다 나눈다 — 두 판은 교시 축이 다르다(평일 14:20~ / 주말 09:00~).
+  const weekdayStrays = strays.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
+  const weekendStrays = strays.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
   // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide). 주말은 토/일 항상 풀너비.
   const weekdayDefs = buildWeekdayGroupDefs(weekdayGrouping);
@@ -740,6 +863,7 @@ export function WeekdayGroupTables({
           <SearchedCell classIds={weekdaySlots.map((s) => s.classId ?? s.id)}>
             <GroupTable
               slots={weekdaySlots}
+              strays={weekdayStrays}
               subject={subject}
               groups={weekdayGroups}
               weekend={false}
@@ -756,6 +880,7 @@ export function WeekdayGroupTables({
           <SearchedCell classIds={weekendSlots.map((s) => s.classId ?? s.id)}>
             <GroupTable
               slots={weekendSlots}
+              strays={weekendStrays}
               subject={subject}
               groups={weekendGroups}
               weekend

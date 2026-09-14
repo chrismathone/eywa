@@ -22,6 +22,31 @@ export type SectionStudent = StudentQuick & {
 };
 
 /**
+ * 섹션 머리 줄(재원·대기·퇴원·**보강** 공용) — 왼쪽 라벨 + 오른쪽 인원 수.
+ * 🔴 화면 파일에 이 마크업을 다시 적지 말 것 — 한 벌이라야 박스들이 같은 모양으로 선다
+ *    (원장 2026-09-14 *"퇴원블록처럼 보강블록이 있으면 됨"*).
+ */
+export function SectionLabelRow({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: number;
+  /** 머리 줄 배경·글자 tone. 대기·퇴원은 `bg-bg-soft text-text-faint`. */
+  tone?: string;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide ${tone ?? "text-text-faint"}`}
+    >
+      <span>{label}</span>
+      <span className="num">{count}</span>
+    </div>
+  );
+}
+
+/**
  * 학생 섹션(재원/대기/퇴원) — label 있으면 구분 헤더 + 행들. cap 초과는 '외 N명'.
  * 재원만 편집 모드에서 드래그(반이동), 대기·퇴원은 평범한 행.
  */
@@ -61,14 +86,7 @@ export function StudentSection({
   const hidden = students.length - visible.length;
   return (
     <>
-      {label ? (
-        <div
-          className={`flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
-        >
-          <span>{label}</span>
-          <span className="num">{count ?? students.length}</span>
-        </div>
-      ) : null}
+      {label ? <SectionLabelRow label={label} count={count ?? students.length} tone={labelTone} /> : null}
       {visible.map((s, i) =>
         draggable && canDrag && s.enrollmentId ? (
           <DraggableStudentRow

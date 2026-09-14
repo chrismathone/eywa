@@ -3418,6 +3418,13 @@ export const SHEET_DICT = {
 
   "sched.leave": { ko: "{when}에 {name} 수강 종료", en: "Enrolment in {name} ends on {when}" },
 
+  // 보강 예약(0264a) — 같은 배너에 함께 선다(원장 2026-09-14). 수강 변경이 아니라 **읽기 전용**이라
+  // 수정·취소 버튼이 붙지 않는다. 반 이름을 모르면 그 조각이 통째로 빠진 문장을 쓴다(지어내지 않는다).
+
+  "sched.makeup": { ko: "{when} {time} 보강 예약 · {absence} 결석분 · {name}", en: "Makeup {when} {time} · for {absence} absence · {name}" },
+
+  "sched.makeupNoClass": { ko: "{when} {time} 보강 예약 · {absence} 결석분", en: "Makeup {when} {time} · for {absence} absence" },
+
   "sched.classChange": { ko: "{md}부터 {what} {from} → {to}", en: "From {md}, {what}: {from} → {to}" },
 
   // ── 수업 상세(/classes/[id]) ─────────────────────────────────────
