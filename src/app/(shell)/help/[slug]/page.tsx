@@ -6,9 +6,9 @@ import { MANUALS, manualBySlug } from "@/features/help/manuals";
 import { HelpAllowProvider } from "../_components/help-text";
 import { ManualArticle } from "../_components/manual-article";
 
-export async function generateStaticParams() {
-  return MANUALS.map((m) => ({ slug: m.slug }));
-}
+// 🔴 `generateStaticParams`를 두지 않는다(2026-09-14 리뷰) — 이 페이지는 아래에서 `requireAccess("help")`로
+// 쿠키를 읽으므로 **정적 페이지가 될 수 없다**. 34개 슬러그를 프리렌더하겠다고 선언해도 동적 폴백으로
+// 떨어질 뿐 얻는 것이 없고, 리포에서 유일한 사용처라 "여긴 정적"이라는 거짓 신호만 남았다.
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

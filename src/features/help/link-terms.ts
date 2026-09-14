@@ -48,10 +48,15 @@ function autoLink(
   let i = 0;
   while (i < text.length) {
     let hit: (typeof HELP_TERMS)[number] | null = null;
-    for (const term of HELP_TERMS) {
-      if (text.startsWith(term.pattern, i)) {
-        hit = term;
-        break;
+    // 🔴 낱말 중간은 잇지 않는다 — 한국어엔 이 자리에 띄어쓰기가 없어 '재원생'이 재 + [원생]으로,
+    // '퇴원생'이 퇴 + [원생]으로 갈렸다(뒤 두 글자만 알약이 붙고 누르면 원생목록으로 튀었다).
+    // 앞 경계만 본다 — 뒤는 조사가 붙으므로('원생을'·'원생은') 막으면 정상 연결이 죽는다.
+    if (!isHangul(text[i - 1])) {
+      for (const term of HELP_TERMS) {
+        if (text.startsWith(term.pattern, i)) {
+          hit = term;
+          break;
+        }
       }
     }
     if (hit) {
@@ -65,6 +70,11 @@ function autoLink(
     }
   }
   return out;
+}
+
+/** 한글 음절·자모. 낱말 경계 판정에만 쓴다(영문·숫자는 경계로 본다 — 'EiE원생'은 이어도 된다). */
+function isHangul(ch: string | undefined): boolean {
+  return ch !== undefined && /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(ch);
 }
 
 function mergeText(tokens: HelpToken[]): HelpToken[] {

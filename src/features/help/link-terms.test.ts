@@ -38,6 +38,27 @@ describe("도움말 용어 연결", () => {
       "학원 설정에서 과목을 정합니다.",
     );
   });
+
+  it("🔴 낱말 중간은 잇지 않는다 — '재원생'이 재 + [원생]으로 갈리던 것", () => {
+    for (const s of ["기존 재원생이면 그대로 씁니다.", "퇴원생은 그 달에 셉니다."]) {
+      const tokens = tokenizeHelp(s);
+      expect(
+        tokens.every((t) => t.type === "text"),
+        s,
+      ).toBe(true);
+      expect(tokens.map((t) => (t.type === "text" ? t.value : "")).join(""), s).toBe(s);
+    }
+  });
+
+  it("낱말이 제대로 서면 그대로 잇는다 — 앞 경계만 본다(조사는 막지 않는다)", () => {
+    for (const s of ["원생 명단을 봅니다.", "원생을 찾습니다.", "그 원생은 재원입니다."]) {
+      const tokens = tokenizeHelp(s);
+      expect(
+        tokens.some((t) => t.type === "term" && t.slug === "students"),
+        s,
+      ).toBe(true);
+    }
+  });
 });
 
 describe("설명서 카탈로그", () => {

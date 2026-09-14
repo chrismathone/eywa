@@ -43,7 +43,7 @@ export const dashboard: HelpManual = {
     },
     {
       n: 6,
-      label: "결석학생",
+      label: "전일 결석",
       zone: "header",
       body: "**어제** 한 교시도 안 온 원생입니다. 오늘은 수업 전이라 결석을 알 수 없어 어제만 셉니다. 카드에 날짜가 적혀 있습니다. ↗는 [[attendance|출석부]]의 결석 보기입니다.",
     },
