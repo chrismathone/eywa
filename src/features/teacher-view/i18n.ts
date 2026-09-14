@@ -1277,7 +1277,7 @@ export const SHEET_DICT = {
   "att.group.units": { ko: "시수 ", en: "Sessions " },
   "att.searchEmpty.where": { ko: "이 달 출석부", en: "this month's sheet" },
   // 강사 미니셸 머리 둘째 줄 — 지금 보는 것이 강사뷰라는 표시(원장 2026-09-14 *"강사뷰 라고 큼직하게"*).
-  // 관리자 풀셸 사이드바의 '관리자'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
+  // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
   "chrome.teacherView": { ko: "강사뷰", en: "Teacher view" },
   "att.legend": { ko: "범례", en: "Legend" },
   "att.legend.classDay": { ko: "등원요일", en: "Class day" },
@@ -1289,10 +1289,15 @@ export const SHEET_DICT = {
   "att.legend.off": { ko: "주말", en: "Weekend" },
   "att.legend.holiday": { ko: "학원 휴일", en: "Academy holiday" },
   "att.legend.outside": { ko: "미등원", en: "Not enrolled" },
+  /* 한 날에 교시가 둘 이상 찍혔고 교시마다 출결 색이 다른 칸(`rollupDay().mixed`) — 교시 순서대로 색을 나눠 칠한다.
+     🔴 '출석+결석'처럼 특정 조합으로 쓰지 말 것 — 지각·조퇴·보강이 섞여도 같은 줄무늬다. */
+  "att.legend.mixed": { ko: "교시마다 다름", en: "Varies by period" },
   /* 강사 전체 보기에서만 나오는 빗금 — 값은 없지만 기록은 있다.
      🔴 "다른 선생님 교시"라고 쓰지 말 것 — 빗금은 자리(JJ·랩실) 기록·교시를 안 남긴 옛 기록·담임이 되기 전
         기록에도 나온다. 참인 것은 "이 화면의 몫이 아니다"뿐이다(cell-display.ts `NOT_MINE_MESSAGE` 주석, 적대적 리뷰 2026-09-14). */
   "att.legend.ghost": { ko: "이 화면 몫 아님", en: "Not this sheet's record" },
+  // 오늘 열 머리(남색) — 보고 있는 달에 오늘이 있을 때만 범례에 선다(attendance-legend.tsx `showToday`).
+  "att.legend.today": { ko: "오늘", en: "Today" },
   /* 합계 줄 오른쪽 끝의 **짧은 조작 안내**(원장 2026-09-14 *"2행은 1행 우측 끝으로 간략하게"*).
      전문은 `att.help.full`이 툴팁으로 나른다. 조각 사이 공백은 사전 값 안에(JSX 줄바꿈은 공백을 지운다).
      ⚠️ 영어 앞 조각을 빈 문자열로 두지 말 것 — `lang-wiring` 가드가 영어값으로 뜻을 묶어서, 빈 문자열끼리

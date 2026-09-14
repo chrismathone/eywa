@@ -70,6 +70,13 @@ export const DAY_TONE = {
 } as const;
 
 /**
+ * 오늘 열 **머리** 칠 — 본문 칸엔 없고 날짜 머리에만 선다(지금 위치 표시).
+ * 🔴 격자 머리(`matrix-table.tsx`)와 범례(`attendance-legend.tsx`)가 **이 상수 하나**를 읽는다 — 범례에 색을
+ *    다시 적으면 머리 색을 바꾸는 날 범례만 옛 색으로 남는다(DAY_TONE과 같은 이유).
+ */
+export const TODAY_HEAD = { bg: "bg-primary", fg: "text-primary-foreground" } as const;
+
+/**
  * 고정 표 헤더의 높이 — **이 두 값은 반드시 같아야 한다.**
  *
  * 🔴 방향키로 위로 이동하면 `scrollIntoView({block:"nearest"})`가 활성 칸을 스크롤포트 **맨 위**에 붙이는데,
