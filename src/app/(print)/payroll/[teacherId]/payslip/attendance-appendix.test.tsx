@@ -126,6 +126,33 @@ describe("급여명세서 별지 — 그 달 출석부", () => {
     expect(screen.queryByText(/퇴원 \d+명/)).toBeNull();
   });
 
+  it("🔑 종강은 '퇴원'이 아니다 — 이름 옆 표식은 '종강', 반 머리 퇴원 명단엔 안 섞인다(원장 2026-09-14)", () => {
+    const ended = [
+      {
+        classId: "c4",
+        className: "[특강]중3-2 개념 완성반",
+        matrix: matrix({
+          students: [
+            {
+              id: "s4", name: "박종강", grade: "중3", school: "경명여중", enrolledAt: null,
+              attendDows: [1], spans: [{ start: "2026-08-03", end: "2026-08-20" }],
+              badges: [{ kind: "classEnded", date: "2026-08-20", otherClassName: "중등M 초6 MS2A" }],
+            },
+            {
+              id: "s2", name: "이퇴원", grade: "중1", school: "침산중", enrolledAt: null,
+              attendDows: [1], spans: [{ start: "2026-01-01", end: "2026-08-20" }],
+              badges: [{ kind: "left", date: "2026-08-20" }],
+            },
+          ] as AttendanceMatrix["students"],
+        }),
+      },
+    ];
+    render1({ groups: ended });
+    expect(screen.getByText("종강")).toBeTruthy();
+    expect(screen.getByText(/퇴원 1명 · 이퇴원/)).toBeTruthy();
+    expect(screen.queryByText(/박종강,|, 박종강/)).toBeNull();
+  });
+
   it("학교·학년은 압축 표기를 쓴다(공백 join 금지 규약)", () => {
     render1();
     expect(screen.getByText("경명여중2")).toBeTruthy();

@@ -126,14 +126,32 @@ describe("mathSpansOf — 출석부와 같은 모양(끝 포함)으로 편다", 
     expect(badges).toEqual([
       { kind: "transferOut", date: "2026-08-18", otherClassName: "중등M 중1 BS3E" },
     ]);
-    // 당기지 않은 구간(출석부 규약)으로는 같은 이동이 '퇴원'이 된다.
+    // 당기지 않은 구간(출석부 규약)으로는 같은 이동이 반이동으로 안 읽힌다 — 같은 날 시작한 새 반을
+    // '이미 다니던 반'으로 보아 종강이 된다(2026-09-14 종강 판정 이전엔 '퇴원'이었다).
     const raw = lifecycleBadgesInRange(
       { first: "2026-08-01", last: "2026-08-31" },
       [{ start: "2026-05-04", end: "2026-08-19" }],
       "math",
       others,
     );
-    expect(raw[0]!.kind).toBe("left");
+    expect(raw[0]!.kind).not.toBe("transferOut");
+  });
+
+  it("🔴 그만둔 학생 — 다른 반도 퇴원일로 잘리므로(mathSpansOf) 특강 종료가 '종강'으로 읽히지 않는다", () => {
+    // lifecycle.ts는 다른 반 구간도 같은 함수(+ withdrawn_at)로 편다. 퇴원일 뒤로 열린 정규반이 있어도 계속 수강이 아니다.
+    const wd = "2026-09-10";
+    const spans = mathSpansOf([E("2026-08-17", "2026-09-10")], wd);
+    const [o] = mathSpansOf([E("2026-02-19", null)], wd);
+    const others = [{ classId: "ms2a", className: "중등M 초6 MS2A", subject: "math", start: o!.start, end: o!.end }];
+    const sep = { first: "2026-09-01", last: "2026-09-30" };
+    expect(lifecycleBadgesInRange(sep, spans, "math", others).map((b) => b.kind)).toEqual(["left"]);
+    // 그만두지 않았으면 같은 모양이 종강이다.
+    const [open] = mathSpansOf([E("2026-02-19", null)], null);
+    expect(
+      lifecycleBadgesInRange(sep, mathSpansOf([E("2026-08-17", "2026-09-10")], null), "math", [
+        { ...others[0]!, start: open!.start, end: open!.end },
+      ]).map((b) => b.kind),
+    ).toEqual(["classEnded"]);
   });
 });
 

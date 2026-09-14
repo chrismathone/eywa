@@ -18,6 +18,7 @@ import {
 import { rollupDay, type SlotMark } from "@/features/attendance/cell-display";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
+  clipToWithdrawal,
   lifecycleBadgesInRange,
   TRANSFER_GAP_DAYS,
   type EnrollSpan,
@@ -631,7 +632,9 @@ async function attachLifecycleBadges(
       .from("enrollments")
       // 🔴 `is_transferred`를 함께 싣는다 — 없으면 **새 반 쪽이 여전히 '신입'**으로 뜬다(같은 사건이
       //    두 화면에서 다른 이름. 적대 리뷰 2026-09-14 실측 9월 23건). 같은 날 이어받은 반이동 판정의 유일한 근거다.
-      .select("student_id, class_id, start_date, end_date, is_transferred")
+      // `withdrawn_at` — 그만둔 학생의 다른 반을 퇴원일로 잘라 '종강'(계속 수강)으로 안 읽히게(clipToWithdrawal).
+      //    students FK는 컬럼 힌트(`student:student_id`)라 classes FK가 늘어도 안 흔들린다(#94). 같은 행이라 왕복 0.
+      .select("student_id, class_id, start_date, end_date, is_transferred, student:student_id ( withdrawn_at )")
       .in("student_id", chunk)
       .neq("class_id", classId)
       .lte("start_date", to)
@@ -652,14 +655,20 @@ async function attachLifecycleBadges(
     const m = meta.get(r.class_id as string);
     if (!m) continue;
     const list = othersById.get(r.student_id as string) ?? [];
-    list.push({
-      classId: r.class_id as string,
-      className: m.name,
-      subject: m.subject,
-      start: r.start_date as string,
-      end: (r.end_date as string | null) ?? null,
-      isTransferred: r.is_transferred === true,
-    });
+    const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as { withdrawn_at: string | null } | null;
+    list.push(
+      clipToWithdrawal(
+        {
+          classId: r.class_id as string,
+          className: m.name,
+          subject: m.subject,
+          start: r.start_date as string,
+          end: (r.end_date as string | null) ?? null,
+          isTransferred: r.is_transferred === true,
+        },
+        stu?.withdrawn_at,
+      ),
+    );
     othersById.set(r.student_id as string, list);
   }
 

@@ -92,12 +92,17 @@ export const CELL_SCROLL_MARGIN = "scroll-mt-[38px]";
      ② 같은 표에 주말 회색(`--att-weekend` #dfdfe6)이 깔려 있어 대비가 **1.13**이었다(실측) —
         회색 배지가 회색 칸 옆에 서서 "표식이 있다"는 사실 자체가 안 보인다.
    🔑 `inert`는 **목록에서 지나간 행을 죽일 때** 쓰는 톤이지, **주의를 끌려고 붙인 배지**에 쓸 톤이 아니다.
-   (rose가 캐논상 '상담·학부모'이긴 하나 이 칸엔 상담 배지가 없어 뜻이 겹치지 않는다.) */
-export const BADGE_TONE: Record<"new" | "left" | "transferIn" | "transferOut", string> = {
+   (rose가 캐논상 '상담·학부모'이긴 하나 이 칸엔 상담 배지가 없어 뜻이 겹치지 않는다.)
+
+   종강(2026-09-14) = 캐논 `inert`(TONE_SOFT.inert와 같은 값). 위 되돌림과 **축이 다르다** — 종강생은 같은 과목
+   다른 반을 계속 다니므로 주의를 끌 사건이 아니라 "이 반만 끝났다"는 사실 표시다. 그래서 퇴원(rose)보다 **조용해야**
+   맞고, 글자는 진한 잉크라 회색 칸 옆에서도 읽힌다. ⚠️ 퇴원 쪽을 이 회색으로 맞추지 말 것(위 ①② 그대로). */
+export const BADGE_TONE: Record<"new" | "left" | "transferIn" | "transferOut" | "classEnded", string> = {
   new: "bg-green-soft text-green",
   left: "bg-rose-soft text-rose",
   transferIn: "bg-purple-soft text-purple",
   transferOut: "bg-purple-soft text-purple",
+  classEnded: "bg-bg-soft text-text-dim",
 };
 
 /** 표식 공통 크기 — 신입·퇴원·반이동·「단가」 전부 이 하나(크기 제각각 금지, 원장 2026-08-10). */

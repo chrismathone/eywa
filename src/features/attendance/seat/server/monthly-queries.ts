@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
-import { TRANSFER_GAP_DAYS } from "@/features/attendance/enrollment-span";
+import { TRANSFER_GAP_DAYS, clipToWithdrawal } from "@/features/attendance/enrollment-span";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getPeriodWindow } from "@/features/periods/server/queries";
@@ -195,11 +195,15 @@ async function fetchOtherSpans(
     end_date: string | null;
     is_transferred: boolean | null;
     class: { class_name: string; subject: string | null }[] | { class_name: string; subject: string | null } | null;
+    student: { withdrawn_at: string | null }[] | { withdrawn_at: string | null } | null;
   }>(studentIds, (chunk, from, to) =>
     supabase
       .from("enrollments")
       // 🔴 `is_transferred` — 같은 날 이어받은 반이동을 새 반에서도 알아보려면 이 표식이 필요하다(적대 리뷰 2026-09-14).
-      .select("student_id, class_id, start_date, end_date, is_transferred, class:class_id ( class_name, subject )")
+      // `withdrawn_at` — 그만둔 학생의 다른 반을 퇴원일로 잘라 '종강'(계속 수강)으로 안 읽히게(clipToWithdrawal). 같은 행이라 왕복 0.
+      .select(
+        "student_id, class_id, start_date, end_date, is_transferred, class:class_id ( class_name, subject ), student:student_id ( withdrawn_at )",
+      )
       .in("student_id", chunk)
       .lte("start_date", end)
       .or(`end_date.is.null,end_date.gte.${start}`)
@@ -208,15 +212,21 @@ async function fetchOtherSpans(
   );
   for (const r of rows) {
     const c = (Array.isArray(r.class) ? r.class[0] : r.class) ?? null;
+    const stu = (Array.isArray(r.student) ? r.student[0] : r.student) ?? null;
     const list = out.get(r.student_id) ?? [];
-    list.push({
-      classId: r.class_id,
-      className: c?.class_name ?? "다른 반",
-      subject: c?.subject ?? null,
-      start: r.start_date,
-      end: r.end_date,
-      isTransferred: r.is_transferred === true,
-    });
+    list.push(
+      clipToWithdrawal(
+        {
+          classId: r.class_id,
+          className: c?.class_name ?? "다른 반",
+          subject: c?.subject ?? null,
+          start: r.start_date,
+          end: r.end_date,
+          isTransferred: r.is_transferred === true,
+        },
+        stu?.withdrawn_at,
+      ),
+    );
     out.set(r.student_id, list);
   }
   return out;
