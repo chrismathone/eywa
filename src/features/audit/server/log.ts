@@ -273,6 +273,11 @@ export const AUDIT_ACTIONS = {
   attendance_bulk: "출결 일괄 입력",
   attendance_range: "출결 범위 채우기",
   attendance_range_clear: "출결 범위 지우기",
+  // 보강 예약(0264a, 원장 2026-09-14) — 예약·취소는 사람이, 이행은 보강일 출결 저장이 남긴다.
+  makeup_reserve: "보강 예약",
+  makeup_reserve_cancel: "보강 예약 취소",
+  makeup_reserve_done: "보강 예약 이행",
+  makeup_reserve_revert: "보강 예약 되돌림",
   attendance_makeup_link: "보강–결석분 연결",
   // 수학 자동 시수(원장 2026-09-11 "9월분만 보정") — scripts/_oneoff/backfill-math-auto-units.mjs가 --apply 때 한 줄 남긴다.
   attendance_units_backfill: "수학 출석 시수 자동값 소급 보정",

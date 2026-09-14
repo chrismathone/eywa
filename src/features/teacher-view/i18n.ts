@@ -533,6 +533,8 @@ export const SHEET_DICT = {
   },
   "roster.group.active": { ko: "학생", en: "Students" },
   "roster.group.makeup": { ko: "보강", en: "Makeup" },
+  // 종강 — 이 반만 끝나고 같은 과목 다른 반은 계속(원장 2026-09-14). 영어는 뱃지·수업목록 '종강'과 같은 낱말.
+  "roster.group.classEnded": { ko: "종강", en: "Finished" },
   "roster.group.withdrawn": { ko: "퇴원", en: "Withdrawn" },
   "roster.group.record": { ko: "기록", en: "Records" },
   // 접기 버튼의 접근성 이름·설명(마우스 오버로도 보인다).
@@ -540,6 +542,10 @@ export const SHEET_DICT = {
   "roster.group.makeup.hint": {
     ko: "이 반 수강생은 아니지만 그날 보강으로 온 학생 — 출석부·원스크린과 같은 명단입니다",
     en: "Not enrolled in this class, but came that day for a makeup lesson — the same list as the attendance book and One Screen",
+  },
+  "roster.group.classEnded.hint": {
+    ko: "이 반 수업만 끝나고 같은 과목 다른 반은 계속 다니는 학생 — 퇴원이 아닙니다. 종료일부터 한 달간 표시됩니다(읽기 전용)",
+    en: "This class ended, but the student continues in another class of the same subject — not withdrawn. Shown for one month from the end date (read-only)",
   },
   "roster.group.withdrawn.hint": {
     ko: "수강이 끝난 학생 — 종료일부터 한 달간 표시되고 그 뒤 주부터는 명단에서 빠집니다(읽기 전용)",
@@ -1452,6 +1458,24 @@ export const SHEET_DICT = {
     en: "One regular class = 1. Use 1.5 or 2 for extended makeups, 0.5 for a partial attendance, and so on",
   },
   "att.pop.pickFirst": { ko: "상태를 먼저 선택하세요", en: "Pick a status first" },
+  // 보강 예약(0264a, 원장 2026-09-14) — 우클릭 메뉴의 '보강' 아래 항목 + 예약된 칸의 안내·취소.
+  "att.pop.reserve": { ko: "보강 예약", en: "Reserve makeup" },
+  "att.pop.reserveHint": {
+    ko: "이 날 결석분의 보강 시간을 미리 잡습니다",
+    en: "Book a makeup slot for this absence in advance",
+  },
+  "att.pop.reserved": { ko: "보강 예약", en: "Makeup reserved" },
+  "att.pop.reservedFor": { ko: "{date} 결석분", en: "for the absence on {date}" },
+  "att.pop.reservedBy": { ko: "예약: {name}", en: "Reserved by {name}" },
+  "att.pop.reservedTip": {
+    ko: "보강을 하면 이 칸을 평소처럼 찍으세요 — 예약은 자동으로 이행 처리됩니다",
+    en: "When the makeup happens, mark this cell as usual — the reservation completes itself",
+  },
+  "att.pop.cancelReserve": { ko: "예약 취소", en: "Cancel reservation" },
+  "att.pop.cancelling": { ko: "취소 중…", en: "Cancelling…" },
+  "att.pop.cancelReserveDone": { ko: "보강 예약 취소 — {span}", en: "Makeup reservation cancelled — {span}" },
+  "att.cell.reserved": { ko: "보강 예약", en: "Makeup reserved" },
+  "att.cell.reservedShort": { ko: "보강 예약", en: "Resv." },
   "att.pop.save": { ko: "저장", en: "Save" },
   "att.pop.clear": { ko: "지우기", en: "Clear" },
   // 🔴 {n} = 다른 선생님 교시 기록만 — 자리(JJ·랩실)는 강사 보기 저장이 안 건드려서 세지도 적지도 않는다(원장 2026-09-12).

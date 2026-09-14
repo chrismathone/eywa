@@ -7,6 +7,7 @@ import {
   rollupDay,
   statusTextOf,
 } from "@/features/attendance/cell-display";
+import { RESERVED_CELL_CLASS } from "@/features/attendance/makeup-reservation";
 import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 
 const STATUSES: AttendanceStatus[] = ["present", "late", "early_leave", "makeup", "absent"];
@@ -36,7 +37,7 @@ const MIXED_SAMPLE = cellDisplay("present", 1, {
  *    빈 공간**(*"이 사이 빈공간"*)을 이 줄이 채운다.
  * 🔴 **격자의 칠을 세운다**(원장 *"이런 미등원도 범례 추가"* → *"이런것들"*) —
  *    출결 다섯 + 교시가 섞인 날의 줄무늬 + 날짜 성격 넷(등원요일·주말·학원 휴일·미등원) + 오늘 열 머리(남색)
- *    + 강사 전체 보기의 빗금.
+ *    + 강사 전체 보기의 빗금 + 보강 예약(0264a — 어느 보기·어느 달에나 칸이 설 수 있어 늘 세운다).
  *    ⚠️ 일부러 뺀 것: 흰 칸(수업 없는 평일 — 기본 배경이라 설명이 소음). 격자에 새 칠을 더하면 여기도 함께 볼 것.
  * 🔴 칩을 세우는 기준은 **이 화면에 그 칠이 나올 수 있는가**(구조)다 — 이 달에 실제로 나왔는가(데이터)가 아니다.
  *    · 줄무늬·학원 휴일·미등원은 어느 보기·어느 달에나 나올 수 있어 늘 세운다(데이터로 가리면 칩이 달마다 들락거린다).
@@ -84,6 +85,11 @@ export function AttendanceLegend({
           {MIXED_SAMPLE.text}
         </span>
         {t("att.legend.mixed")}
+      </span>
+      {/* 보강 예약(0264a) — 칸과 **같은 서식 상수**(makeup-reservation.ts 단일 소스). 어느 보기·어느 달에나 칸이 설 수 있어 늘 세운다. */}
+      <span className={ITEM}>
+        <span className={`inline-block size-5 shrink-0 rounded-sm ${RESERVED_CELL_CLASS}`} aria-hidden />
+        {t("att.cell.reserved")}
       </span>
       <span className={ITEM}>
         <span className={`${SWATCH} ${DAY_TONE.classDay}`} />

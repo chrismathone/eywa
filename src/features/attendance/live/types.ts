@@ -49,6 +49,11 @@ export type LiveStudent = {
   note: string | null;
   /** null = 강사가 이미 답한 칸(확인할 게 없다). */
   signal: LiveSignal | null;
+  /**
+   * 이 칸이 **보강 예약**(0264a)으로 선 학생 — 그 반 수강생이 아닐 수 있다(예약이 명단에 세웠다).
+   * 좌석표가 이름 알약에 보라 점선 링을 두르고 hover에 결석분을 적는다. 출결을 찍으면 예약은 서버가 이행 처리한다.
+   */
+  reservedMakeup?: { absenceDate: string; periodLabel: string | null };
 };
 
 export type LiveSlot = {

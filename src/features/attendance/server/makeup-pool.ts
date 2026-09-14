@@ -16,6 +16,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { makeupPoolName, pickMakeupOwner } from "@/features/classes/makeup-pool";
+import { completeMakeupReservations } from "./makeup-reservation-complete";
 
 /**
  * 보강 보고서 한 건의 **귀속 강사**(누구의 보강 반에 앉는가) — 규칙은 순수부 `pickMakeupOwner` 주석.
@@ -218,6 +219,49 @@ export async function ensureMakeupAttendanceForReport(input: {
   });
   if (alreadyByThisTeacher) return { ok: true }; // 그 강사가 이미 찍었다 — 그대로 둔다.
 
+  /**
+   * 🔴 그날 **보강 예약**(0264a)이 있으면 풀 반이 아니라 **예약의 반(원반)** 칸에 앉힌다 — 예약된 학생은 그 반에 오기로 한
+   *    사람이라, 풀 반에 앉히면 예약이 영영 `reserved`로 남고 나중에 누가 원반 칸을 찍으면(예약이 문을 연다) 시수가 두 번
+   *    생긴다(적대 리뷰 2026-09-14). 같은 과목의 예약만 본다(영어 예약에 수학 보고서를 붙이지 않는다). 시수는 이행 훅이
+   *    예약 규칙(교시 하나 0.5 · 정규 수업일이면 합)으로 맞춘다 — 확인창 숫자가 있으면 그 값이 명시다.
+   * ⚠️ 조회 실패·미적용은 종전 경로(풀 반)로 — 보고서 저장을 막지 않는다.
+   */
+  const reserved = await findReservedForReport(admin, input);
+  if (reserved) {
+    const { data: inClass, error: inErr } = await admin
+      .from("attendance_records")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .eq("class_id", reserved.classId)
+      .eq("student_id", input.studentId)
+      .eq("session_date", input.date)
+      .limit(1);
+    if (inErr) {
+      console.error("[makeup-pool] 예약 반 출결 조회 실패", inErr.message);
+      return { ok: false };
+    }
+    const created = (inClass ?? []).length === 0;
+    if (created) {
+      const { error: insErr } = await admin.from("attendance_records").insert({
+        tenant_id: input.tenantId,
+        class_id: reserved.classId,
+        student_id: input.studentId,
+        session_date: input.date,
+        status: "makeup",
+        recorded_by: input.teacherId,
+        ...(input.units && input.units !== 1 ? { session_units: input.units } : {}),
+      });
+      if (insErr) {
+        console.error("[makeup-pool] 예약 반 보강 출결 저장 실패", insErr.message);
+        return { ok: false };
+      }
+    }
+    await completeMakeupReservations({ tenantId: input.tenantId }, [
+      { studentId: input.studentId, classId: reserved.classId, date: input.date, status: "makeup", unitsExplicit: input.units != null, created },
+    ]);
+    return { ok: true, classId: reserved.classId };
+  }
+
   const classId = await ensureMakeupPoolClass({
     tenantId: input.tenantId,
     teacherId: input.teacherId,
@@ -255,6 +299,28 @@ export async function ensureMakeupAttendanceForReport(input: {
     return { ok: false };
   }
   return { ok: true, classId };
+}
+
+/** 그날 이 학생의 **같은 과목** 보강 예약(reserved) 하나 — 이른 교시 우선. 없거나 실패면 null(풀 반 경로로). */
+async function findReservedForReport(
+  admin: ReturnType<typeof createAdminClient>,
+  input: { tenantId: string; studentId: string; date: string; subject: string },
+): Promise<{ classId: string } | null> {
+  const { data, error } = await admin
+    .from("makeup_reservations")
+    .select("class_id, slot_start")
+    .eq("tenant_id", input.tenantId)
+    .eq("student_id", input.studentId)
+    .eq("makeup_date", input.date)
+    .eq("status", "reserved")
+    .order("slot_start");
+  if (error || !data || data.length === 0) return null;
+  const classIds = [...new Set(data.map((r) => r.class_id as string))];
+  const { data: cls, error: clsErr } = await admin.from("classes").select("id, subject").eq("tenant_id", input.tenantId).in("id", classIds);
+  if (clsErr) return null;
+  const subjectOf = new Map((cls ?? []).map((c) => [c.id as string, (c.subject as string | null) ?? null]));
+  const hit = data.find((r) => subjectOf.get(r.class_id as string) === input.subject);
+  return hit ? { classId: hit.class_id as string } : null;
 }
 
 /**

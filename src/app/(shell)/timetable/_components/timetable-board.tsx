@@ -22,6 +22,7 @@ import {
   updateEnrollmentsAttendanceBatch,
 } from "@/features/enrollments/server/actions";
 import { endSingleEnrollment } from "@/features/students/server/actions";
+import { EndScopeNote } from "./end-scope-note";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
 import {
   freezeMoveDate,
@@ -1008,9 +1009,8 @@ function EndEnrollmentConfirm({
           <b className="text-foreground">{target.className}</b> 반에서{" "}
           <b className="text-foreground">오늘({today})</b> 수강 종료할까요?
         </p>
-        <p className="text-text-faint mt-1 text-xs">
-          이 반의 퇴원 목록으로 이동합니다. 다른 반 수강은 유지됩니다.
-        </p>
+        {/* 종전 "이 반의 퇴원 목록으로 이동합니다"는 한 반만 끝나는 학생에게도 '퇴원'이라 말했다(원장 2026-09-14). */}
+        <EndScopeNote enrollmentId={target.enrollmentId} date={today} />
         {error ? <p className="text-chart-4 mt-2 text-xs">{error}</p> : null}
         <div className="mt-4 flex justify-end gap-2">
           <button

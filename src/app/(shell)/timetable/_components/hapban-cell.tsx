@@ -20,6 +20,8 @@ import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, IndexBadge, metaLabel, ROW_CLASS } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
+import { ReservedSection } from "./reserved-section";
+import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
 import { holdTone, useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
@@ -134,6 +136,19 @@ export function HapbanCell({
   const subjects = useSubjectMaps();
   const colorMode = useTimetableColorMode();
   const hapbanRoster = buildHapbanRoster(slots);
+  // 구성 반 전부의 '보강' 줄(예약 id로 중복 제거) — 합반 칸도 반 칸과 같은 자리에 같은 박스.
+  const reserved: TimetableReservedLine[] = (() => {
+    const seen = new Set<string>();
+    const out: TimetableReservedLine[] = [];
+    for (const s of slots) {
+      for (const r of s.reserved ?? []) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        out.push(r);
+      }
+    }
+    return out;
+  })();
   // 합반 구성 반 목록(드롭존 data 공용) — 멤버 재해석(resolveDropTarget)·반+요일 팝업 후보(shouldOpenClassPick) 양쪽에 사용.
   const memberClasses: HapbanMemberClass[] = hapbanRoster.segments.map((s) => ({
     classId: s.classId,
@@ -172,7 +187,7 @@ export function HapbanCell({
   const anyHandover = slots.some((s) => s.pendingHandover);
   const totalStudents = slots.reduce((n, s) => n + s.students.length, 0);
   // 'none' = '학생 명단 접기'(뷰 설정) — 명단 구획을 통째로 안 그린다(ClassCell과 같은 계약).
-  const showRoster = roster !== "none" && (totalStudents > 0 || incomingAll.length > 0);
+  const showRoster = roster !== "none" && (totalStudents > 0 || incomingAll.length > 0 || reserved.length > 0);
 
   // 본문(통합 명단) 드롭존 — id는 `hapban:`(콜론 2조각: `class:${rep.id}`는 세그먼트1과 중복, 3조각은
   // preferDayZone이 요일존으로 오인). onDragEnd는 data만 읽으므로 계약 무변경.
@@ -383,6 +398,8 @@ export function HapbanCell({
                 />
               </div>
             ) : null}
+            {/* 보강 — 구성 반들의 그 요일 예약(0264a). 반 칸과 같은 박스. */}
+            <ReservedSection lines={reserved} />
           </div>
         ) : null}
     </div>

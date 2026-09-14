@@ -25,7 +25,8 @@ const code = codeOnly(src);
 
 describe("보강 출결 되살리기", () => {
   it("🔴 그날 내 반의 보강 출결을 읽는다 — 스케줄·보고서와 같은 병렬 왕복에서", () => {
-    expect(code).toContain("const [scheds, makeupReports, makeupAttRows] = await Promise.all([");
+    // 보강 예약(0264a)이 같은 병렬 왕복 뒤에 조회를 더한다(`reservedToday`) — 앞 셋이 한 왕복에 있는지만 본다.
+    expect(code).toMatch(/const \[scheds, makeupReports, makeupAttRows(?:, \w+)*\] = await Promise\.all\(\[/);
     expect(code).toMatch(/\.eq\("status", "makeup"\)/);
     // 반 축이다 — 내 담당 반 전체(allIds)를 본다(오늘의 반만 보면 이번 사고가 그대로 재발한다).
     const at = code.indexOf('.eq("status", "makeup")');
@@ -34,9 +35,12 @@ describe("보강 출결 되살리기", () => {
 
   it("🔴 빈 화면 판정이 보고서와 출결을 **둘 다** 센다", () => {
     // 보고서만 세면 "출결은 찍었지만 보고서는 아직"인 정상 상태에서 화면이 비어 버린다.
-    expect(code).toContain("makeupReports.length === 0 && makeupAttRows.length === 0");
-    expect(code).toContain(
-      "if (noClassesToday && !showAll && makeupReports.length === 0 && makeupAttRows.length === 0)",
+    // 보강 예약(0264a)이 조건을 하나 더해 여러 줄이 됐다 — 공백을 접어 **두 개수를 다 세는지**만 본다(뒤에 붙는 조건은 허용).
+    const flat = code.replace(/\s+/g, " ");
+    expect(flat).toContain("makeupReports.length === 0 && makeupAttRows.length === 0");
+    // 뒤에는 `&& X === 0` 조건만 붙고 괄호로 닫혀야 한다 — `|| …`가 붙으면 예약 없는 날 보강 출결이 있어도 화면이 빈다(9/5 회귀).
+    expect(flat).toMatch(
+      /if \( ?noClassesToday && !showAll && makeupReports\.length === 0 && makeupAttRows\.length === 0(?: && [\w.]+ === 0)* ?\)/,
     );
   });
 

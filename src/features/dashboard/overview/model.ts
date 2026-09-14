@@ -81,6 +81,11 @@ export type OverviewData = {
   /** KPI '오늘첫수업' — 첫 등원 + 새 과목 첫 수업. */
   firstClass: FirstClassStudent[];
   /**
+   * KPI '보강예정'(원장 2026-09-14) — **이번 주**(월~일) 예약 상태의 보강(0264a). 카드 = 팝업 = 시간표 '보강' 탭(이번 주).
+   * `later` = 이번 주 뒤로 잡힌 예약 수(보조 줄).
+   */
+  makeup: import("@/features/dashboard/server/makeup-week").WeekMakeupOverview;
+  /**
    * KPI '전일 결석' — **어제**(KST, `absentKpiDate`) 한 교시도 안 온 학생(결석·공결) + 따로 보이는 '일부 교시 결석'.
    * `date` = 서버가 실제로 조회한 그날 — 카드 보조 줄·팝업 머리·↗가 이 값을 읽어, 화면이 다른 날을 말하는 일이 없게 한다.
    */

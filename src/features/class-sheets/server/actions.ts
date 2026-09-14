@@ -39,6 +39,7 @@ import { MEMO_KEY_RE } from "../lib/edit-audit";
 import { isGoalAreaAllowed } from "../lib/goal-areas";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
+import { hasReservedMakeup } from "@/features/attendance/server/makeup-reservation-queries";
 // 계획 줄 쓰기의 밑바닥 — 공개 자리 PIN 경로도 **같은 함수**를 부른다(문만 다르고 규칙은 한 벌).
 import {
   applyPlanPatches,
@@ -594,6 +595,8 @@ async function checkStudentEligibleOn(
     .eq("session_date", date);
   if (attErr) return { ok: false, error: `수강 확인에 실패했습니다: ${attErr.message}` };
   if ((count ?? 0) > 0) return { ok: true };
+  // 보강 **예약**(0264a)된 학생 — 출결이 아직 없어도 그날 이 반에 오기로 한 사람(오늘 보드가 미리 세운다). 출결 게이트와 같은 문.
+  if (await hasReservedMakeup(tenantId, { studentId, classId, date })) return { ok: true };
   return { ok: false, error: "그 날짜에 이 반을 수강하지 않는 학생입니다(기록 행은 읽기 전용)" };
 }
 

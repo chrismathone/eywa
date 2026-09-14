@@ -24,6 +24,8 @@ import { canonicalRoomName, resolveRoomName } from "../seating-floors";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 // 출결 강사 귀속 축 단일 소스(자리는 담임 폴백 금지 · 담당 없으면 담임) — 월간 출석부와 같은 규칙.
 import { taughtByForSlot } from "@/features/attendance/teacher-axis";
+// 보강 예약(0264a) — 그 교시 칸에 예약된 학생을 미리 세운다(fail-soft, 표 없음 = 없음).
+import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
 import type { LiveSlot, LiveStudent } from "../types";
 
 export type { LiveSlot, LiveStudent };
@@ -106,7 +108,7 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
   const slotClassIds = [...new Set(slots.map((s) => s.class_id))];
 
   // 2) 반 메타(활성만) + 그 반들의 수강행 + 그날 출결 — 서로 독립이라 병렬(B4).
-  const [classRows, enrollRows, recordRows] = await Promise.all([
+  const [classRows, enrollRows, recordRows, reservedRaw] = await Promise.all([
     fetchInChunks<{
       id: string;
       class_name: string;
@@ -162,12 +164,30 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
         .order("id", { ascending: true })
         .range(from, to),
     ),
+    // 그날 보강 예약(0264a, fail-soft) — 독립 조회라 함께 달린다(B4). 반 집합은 아래 activeClasses로 다시 거른다.
+    getReservationsOn(date, slotClassIds),
   ]);
 
   const activeClasses = new Map(
     classRows.filter((c) => !c.closed_at || c.closed_at >= date).map((c) => [c.id, c]),
   );
   if (activeClasses.size === 0) return [];
+
+  /**
+   * 그날 **보강 예약**(0264a) — 예약된 학생을 **그 교시 칸**에만 미리 세운다(원장 2026-09-14 *"보강 추가 할 필요없이
+   * 미리 학생이 추가되어있어야"*). 반 전체 명단(`expectedByClass`)엔 넣지 않는다 — 그러면 그 반의 다른 교시에도
+   * 서고 처리현황 분모까지 는다. 이 반이 그날 도는 교시 중 예약 시각과 같은 칸이 없으면(토요일 보강 등) 이 보드엔
+   * 자리가 없다(일별 출석부·원스크린이 그 학생을 세운다 — 알려진 한계).
+   * 조회는 fail-soft(표 없음 = 예약 없음). 예약된 학생의 이름도 아래 학생 메타 조회에 함께 넣는다.
+   */
+  const reservedToday = reservedRaw.filter((r) => activeClasses.has(r.classId));
+  const reservedBySlot = new Map<string, Map<string, { absenceDate: string; periodLabel: string | null }>>();
+  for (const r of reservedToday) {
+    const key = `${r.classId}|${r.slotStart}`;
+    const m = reservedBySlot.get(key) ?? new Map<string, { absenceDate: string; periodLabel: string | null }>();
+    if (!m.has(r.studentId)) m.set(r.studentId, { absenceDate: r.absenceDate, periodLabel: r.periodLabel });
+    reservedBySlot.set(key, m);
+  }
 
   // 3) 그 날짜 예정 명단(반별) — 처리현황·완료 벨과 **같은 규약**.
   const expectedByClass = new Map<string, Set<string>>();
@@ -234,8 +254,13 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
     }
   }
 
-  // 5) 학생 메타 + 강의실 이름 — 서로 독립이라 병렬(B4).
-  const studentIds = [...new Set([...expectedByClass.values()].flatMap((s) => [...s]))];
+  // 5) 학생 메타 + 강의실 이름 — 서로 독립이라 병렬(B4). 보강 예약된 학생(수강생이 아닐 수 있다)의 이름도 함께.
+  const studentIds = [
+    ...new Set([
+      ...[...expectedByClass.values()].flatMap((s) => [...s]),
+      ...reservedToday.map((r) => r.studentId),
+    ]),
+  ];
   const [students, rooms] = await Promise.all([
     fetchInChunks<{
       id: string;
@@ -276,8 +301,10 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
     // 「전원 출석」이 자리 수업에 행을 만든다 — teacher_id는 슬롯 담당만(없으면 담당 미지정).
     const special = specialSlotLabel(slot.slot_teacher_label);
     const start = hhmm(slot.start_time);
-    const expected = expectedByClass.get(slot.class_id);
-    if (!expected || expected.size === 0) continue; // 명단 0명 = 보여줄 것이 없다
+    // 그 교시에 예약된 보강 학생(0264a) — 정규 명단 뒤에 붙인다(수강생이면 정규 명단에 이미 있어 표식만 붙는다).
+    const reservedHere = reservedBySlot.get(`${slot.class_id}|${start}`);
+    const expected = new Set<string>([...(expectedByClass.get(slot.class_id) ?? []), ...(reservedHere?.keys() ?? [])]);
+    if (expected.size === 0) continue; // 명단 0명 = 보여줄 것이 없다
     // "이 교시에 기록이 있나" — 교시별 기록이 있거나, 그날 전체 기록이 있으면 강사가 손을 댄 것이다.
     const hasAnyRecord = slotHasRecord.has(`${slot.class_id}|${start}`) || dayHasRecord.has(slot.class_id);
 
@@ -304,6 +331,8 @@ export async function loadLiveSlots(date: string, classIds?: readonly string[]):
         recordedBy: hit?.recordedBy ?? null,
         recordedByName: null,
         signal: classifySignal(status, hasAnyRecord),
+        // 보강 예약(0264a) 표식 — 좌석표가 이름 옆에 '보강 예약'을 붙이고, 그 근거를 hover에 적는다.
+        ...(reservedHere?.has(sid) ? { reservedMakeup: reservedHere.get(sid)! } : {}),
       });
     }
     rows.sort((a, b) => a.studentName.localeCompare(b.studentName, "ko"));

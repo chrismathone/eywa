@@ -20,8 +20,16 @@ import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import type { GridValue, LocalPaint } from "@/features/attendance/grid/store";
 import { revertTarget, type Paint } from "@/features/attendance/grid/paint-chain";
 import { isRecordless } from "@/features/attendance/grid/optimistic-value";
+import type { MatrixReservation } from "@/features/attendance/server/queries";
+import {
+  RESERVED_CELL_CHARS,
+  RESERVED_CELL_CLASS,
+  reservationTitle,
+} from "@/features/attendance/makeup-reservation";
 import { useCellState } from "./grid-context";
+import { scopeFieldsFor, useAttendanceScope } from "./scope-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
+import { MakeupReserveDialog } from "./makeup-reserve-dialog";
 import { GhostTransferPopover } from "./ghost-popover";
 // 화면 언어 — 상태 표기는 `statusTextOf`(한글 맵 옆)가 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -66,10 +74,21 @@ export function AttendanceCell({
   daySlots,
   otherSlots,
   sharedDay,
+  reservation = null,
+  studentName,
+  className,
 }: {
   studentId: string;
   classId: string;
   sessionDate: string;
+  /**
+   * 이 칸에 걸린 **보강 예약**(0264a) — 값이 없는 칸에 '보강 예약' 네 글자(2×2)로 선다. 값이 찍히면(예약 이행) 서버가
+   * 예약을 `done`으로 넘겨 다음 렌더엔 오지 않는다. 팝오버는 예약 정보와 '예약 취소'를 보여 준다.
+   */
+  reservation?: MatrixReservation | null;
+  /** 예약 창 머리에 적을 이름·반 — 행(MatrixRow)이 넘긴다. 없으면 id 없이 날짜만 적는다. */
+  studentName?: string;
+  className?: string;
   initialStatus: AttendanceStatus | null;
   note?: string | null;
   initialUnits?: number | null;
@@ -156,6 +175,9 @@ export function AttendanceCell({
     if (memo.text !== null && (memo.text === (note ?? "") || (settled && memo.text === (seenNote ?? "")))) setMemo(NO_MEMO);
   }
   const [popover, setPopover] = useState<PopoverAnchor | null>(null);
+  // 보강 예약 창 — 팝오버가 닫히면서 여니 상태는 칸이 쥔다(팝오버는 닫히면 언마운트된다).
+  const [reserveOpen, setReserveOpen] = useState(false);
+  const scope = useAttendanceScope();
   const ref = useRef<HTMLDivElement>(null);
   const lang = useSheetLang();
   const t = useSheetT();
@@ -235,6 +257,11 @@ export function AttendanceCell({
     ghostMark: ghostValue ? { s: ghostValue.s as AttendanceMark, u: ghostValue.u } : null,
   });
   const fromReport = derived && status === initialStatus;
+  /**
+   * 보강 예약 칸 — **값이 없을 때만** 네 글자로 선다(값이 찍히면 그 값이 칸의 주인이고, 서버가 예약을 이행 처리한다).
+   * 🔴 값이 아니라 표시다 — 격자 저장소엔 안 들어가므로 시수·출석률·복사·범위 채우기가 이 칸을 빈 칸으로 다룬다.
+   */
+  const reservedShown = !!reservation && !status && !editing && !ghost;
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
   const title = [
     locked || (status ? statusTextOf(status, lang) : null),
@@ -257,6 +284,10 @@ export function AttendanceCell({
     // 칩의 예외 — 교시가 안 찍힌 기록이라 이 반 담당 전원에게 같은 값이 잡힌다(위 sharedDay 주석).
     sharedDay ? t("att.cell.sharedDay") : null,
     fromReport ? t("att.cell.fromReport") : null,
+    // 보강 예약 — 결석분·시각·예약자·메모(한글 단일 소스 `reservationTitle`). 값이 찍힌 칸엔 서버가 이미 뺐다.
+    reservation && !status
+      ? reservationTitle({ ...reservation, makeupDate: sessionDate }, { createdByName: reservation.createdByName })
+      : null,
     noteVal || ghostNote || null,
   ]
     .filter(Boolean)
@@ -286,7 +317,7 @@ export function AttendanceCell({
         role="gridcell"
         tabIndex={state.active || isFirst ? 0 : -1}
         aria-label={`${sessionDate} ${
-          status ? statusTextOf(status, lang) : t("att.cell.unmarked")
+          status ? statusTextOf(status, lang) : reservedShown ? t("att.cell.reserved") : t("att.cell.unmarked")
         }${day ? tf("att.cell.andNPeriods", { n: day.count - 1 }) : ""}${
           otherSlots?.length ? tf("att.cell.ghostCount", { n: otherSlots.length }) : ""
         }`}
@@ -316,11 +347,25 @@ export function AttendanceCell({
         }}
         onContextMenu={openPopover}
         // `scroll-mt` — 방향키 이동 시 활성 칸이 고정 헤더 뒤로 숨지 않게(cell-display.ts 주석 참조).
-        className={`absolute inset-0 flex items-center justify-center text-xs font-bold select-none ${CELL_SCROLL_MARGIN} ${display.className} ${
-          locked ? "cursor-not-allowed" : "cursor-cell"
-        }`}
+        className={`absolute inset-0 flex items-center justify-center text-xs font-bold select-none ${CELL_SCROLL_MARGIN} ${
+          reservedShown ? RESERVED_CELL_CLASS : display.className
+        } ${locked ? "cursor-not-allowed" : "cursor-cell"}`}
       >
-        {editing ? (
+        {reservedShown && lang === "en" ? (
+          /* 영어 화면 — 사분면 한글은 뜻이 없어 짧은 영문 하나(사전). */
+          <span aria-hidden className="text-xs leading-none font-bold">
+            {t("att.cell.reservedShort")}
+          </span>
+        ) : reservedShown ? (
+          /* '보강 예약' — 사분면마다 한 글자(원장 2026-09-14). 칸이 30px라 한 줄엔 못 들어간다. */
+          <span aria-hidden className="grid h-full w-full grid-cols-2 grid-rows-2 place-items-center leading-none">
+            {RESERVED_CELL_CHARS.map((ch, i) => (
+              <span key={i} className="text-xs font-bold">
+                {ch}
+              </span>
+            ))}
+          </span>
+        ) : editing ? (
           <input
             autoFocus
             type="text"
@@ -428,6 +473,12 @@ export function AttendanceCell({
           otherCount={otherSlots?.length ?? 0}
           sharedCount={initialStatus !== null ? sharedOthers.length : 0}
           anchor={popover}
+          // 값이 찍힌 칸(결석 등)에서도 예약 정보·취소가 보여야 한다(서버는 `reserved`만 내려준다 — 이행되면 사라진다).
+          reservation={reservation}
+          onReserve={() => {
+            setPopover(null);
+            setReserveOpen(true);
+          }}
           onClose={() => setPopover(null)}
           onSaved={(next, opts) => {
             const token = (opts?.ifStill ?? null) as CellPaint | null;
@@ -477,6 +528,18 @@ export function AttendanceCell({
             if (next.noteOnly && painted.note) painted.note.fate = { value: next.note ?? "" };
             return painted;
           }}
+        />
+      ) : null}
+      {reserveOpen ? (
+        /* 포털이라 DOM은 body지만 React 이벤트는 이 칸으로 버블한다 — 칸 선택·팝오버 열기에 안 닿게 창이 스스로 막는다. */
+        <MakeupReserveDialog
+          studentId={studentId}
+          studentName={studentName ?? ""}
+          classId={classId}
+          className={className ?? ""}
+          absenceDate={sessionDate}
+          scopeTeacherId={scopeFieldsFor(scope, classId).scopeTeacherId ?? null}
+          onClose={() => setReserveOpen(false)}
         />
       ) : null}
     </>

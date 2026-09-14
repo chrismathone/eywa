@@ -36,6 +36,11 @@ import {
 import { fetchMakeupAbsences } from "@/features/attendance/server/makeup-actions";
 import type { MakeupAbsenceList } from "@/features/attendance/makeup-options";
 import { AttendanceMakeupAdder, type MakeupPick } from "./makeup-adder";
+import {
+  RESERVED_BADGE_CLASS,
+  RESERVED_CELL_LABEL,
+  reservationTitle,
+} from "@/features/attendance/makeup-reservation";
 
 const STATUS_DEFS: {
   value: AttendanceStatus;
@@ -384,6 +389,19 @@ export function AttendanceInputForm({
                         title="이 반 수강생이 아닌 보강(수업외) 참석 — 처리현황 '예정' 인원에는 포함되지 않습니다"
                       >
                         보강
+                      </span>
+                    ) : null}
+                    {/* 보강 예약(0264a) — 미리 잡아 둔 보강. 출결을 찍으면 예약은 서버가 이행 처리한다(따로 누를 것 없음). */}
+                    {r.reserved ? (
+                      <span
+                        className={`rounded-full border border-dashed border-purple/40 px-1.5 py-0.5 text-xs font-medium ${RESERVED_BADGE_CLASS}`}
+                        title={reservationTitle({ ...r.reserved, makeupDate: date })}
+                      >
+                        {RESERVED_CELL_LABEL}
+                        <span className="num ml-1 font-normal">
+                          {r.reserved.periodLabel ? `${r.reserved.periodLabel} ` : ""}
+                          {r.reserved.slotStart}
+                        </span>
                       </span>
                     ) : null}
                     {r.existingRecordId ? (

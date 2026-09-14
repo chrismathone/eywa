@@ -11,6 +11,7 @@ import {
   absentDayHref,
   absentKpiDate,
   intakeDayHref,
+  makeupWeekHref,
   studentsEnrolledHref,
   studentsFirstClassHref,
   withdrawalsMonthHref,
@@ -315,8 +316,39 @@ describe("카드 구조 — ↗는 버튼 안에 들어가지 않는다", () => 
     expect(CARD.indexOf("<WindowLink")).toBeGreaterThan(CARD.indexOf("</DetailPopup>"));
   });
 
-  it("여섯 칸이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
-    expect(count(STRIP, "<KpiCard")).toBe(6);
+  it("일곱 칸이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
+    expect(count(STRIP, "<KpiCard")).toBe(7);
     expect(STRIP).toContain("style={kpiGridVars(shown)}");
+  });
+});
+
+/**
+ * 원장 2026-09-14: *"대시보드에도 '보강예정' 카드 추가 최상단"*. 카드 = 팝업 = 시간표 '보강' 탭(이번 주) —
+ * 반 집합(`listMakeupScopeClasses`)과 주 조회(`getReservationsInWeek`)를 **같은 두 함수**로 잠근다.
+ */
+describe("⑦ 보강예정 — 이번 주 예약, 카드·팝업·시간표 보강 탭이 같은 반 집합·같은 조회", () => {
+  const WEEK = src("src/features/dashboard/server/makeup-week.ts");
+  const TIMETABLE = src("src/app/(shell)/timetable/page.tsx");
+  const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
+
+  it("서버는 강사 스코프를 넘겨 같은 함수로 이번 주를 센다", () => {
+    expect(SERVER).toContain("getWeekMakeupOverview(today, await teacherIdPromise)");
+    expect(WEEK).toContain("listMakeupScopeClasses(teacherId, week)");
+    expect(WEEK).toContain("getReservationsInWeek(today, classIds)");
+    expect(WEEK).toContain("weekBoundsOf(today)");
+  });
+
+  it("시간표 보강 탭도 같은 반 집합 함수 + 같은 주 조회(거기에 과목 축만)", () => {
+    expect(TIMETABLE).toContain("listMakeupScopeClasses(teacherId ?? null, weekBoundsOf(referenceDate))");
+    expect(TIMETABLE).toContain("getReservationsInWeek(referenceDate, [...classMeta.keys()])");
+    expect(TIMETABLE).toContain("const makeupTab = isMakeupKind(kind);");
+  });
+
+  it("카드는 맨 뒤(원장 '가장 끝으로'), 팝업은 같은 배열(rows), ↗는 보강 탭", () => {
+    expect(STRIP.indexOf('label="보강예정"')).toBeGreaterThan(STRIP.indexOf('label="전일 결석"'));
+    expect(STRIP).toContain('data-kpi-n={shown}');
+    expect(STRIP).toContain("value={count(makeup?.rows.length)}");
+    expect(POPUPS_DAY).toContain('<PopupTotal label="이번 주 보강 예약" value={rows.length} unit="건" />');
+    expect(makeupWeekHref()).toBe("/timetable?kind=makeup");
   });
 });

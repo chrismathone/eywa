@@ -742,6 +742,44 @@ export function auditDetail(
       const label = names.length ? `(${names.slice(0, 3).join(", ")}${names.length > 3 ? " 외" : ""})` : "";
       return join(c === null ? `수업보고서 회수 — ${who}` : `수업보고서 ${c}건 회수 — ${who}`, label || null);
     }
+    case "makeup_reserve":
+    case "makeup_reserve_cancel":
+    case "makeup_reserve_done":
+    case "makeup_reserve_revert": {
+      /**
+       * 보강 예약(0264a) — **결석일 → 보강일·교시**를 한 줄로. '대상' 열이 학생 이름이라 여기선 날짜·시각만.
+       * `absence`(created = 결석일 칸을 새로 결석으로 찍음 · noted = 이미 결석이라 메모만)는 예약에서만 뜻이 있다.
+       */
+      const absence = str(m.absenceDate);
+      const makeup = str(m.makeupDate);
+      const slot = str(m.slotStart);
+      const period = str(m.periodLabel);
+      const when = makeup ? `${makeup}${period ? ` ${period}` : ""}${slot ? ` ${slot}` : ""}` : null;
+      const core = absence && when ? `${absence} 결석분 → ${when} 보강` : when ?? absence;
+      if (action === "makeup_reserve") {
+        const how = str(m.absence);
+        const tail = how === "created" ? "결석일 칸을 결석(0)으로 찍음" : how === "noted" ? "결석일 칸에 메모만" : null;
+        return join(core, tail);
+      }
+      if (action === "makeup_reserve_cancel") {
+        return join(
+          core,
+          m.absenceCleared === true
+            ? "예약이 찍은 결석 칸(0)도 지움"
+            : m.memoCleared === false
+              ? "결석 칸 메모는 못 지움"
+              : m.memoKept === true
+                ? "같은 날 다른 예약이 남아 메모는 그대로"
+                : null,
+        );
+      }
+      if (action === "makeup_reserve_revert") {
+        return join(core, "보강일 출결이 지워져 예약으로 되돌림");
+      }
+      const status = str(m.status);
+      const label = status && status in STATUS_TEXT ? STATUS_TEXT[status as keyof typeof STATUS_TEXT] : null;
+      return join(core, label ? `보강일 출결 ${label}` : null);
+    }
     case "attendance_cell":
     case "attendance_bulk":
     case "attendance_range": {

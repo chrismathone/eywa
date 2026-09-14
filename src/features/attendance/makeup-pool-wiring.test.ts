@@ -33,7 +33,21 @@ describe("보이지 않는 '보강' 반", () => {
     const insertAt = fn.indexOf(".insert({");
     expect(readAt).toBeGreaterThan(-1);
     expect(insertAt).toBeGreaterThan(readAt); // 조회가 먼저다(빈 칸 판정 없이 쓰지 않는다)
-    expect(fn.slice(readAt, insertAt)).toMatch(/exists[\s\S]{0,120}return \{ ok: true/);
+    // 보강 예약(0264a)이 **예약의 반** 칸을 채우는 갈래를 앞에 더해 쓰기 지점이 둘이다 — **둘 다** 먼저 읽는지 본다.
+    //  · 예약 갈래: 그 반 칸을 읽고, 비었을 때만(`created`) 쓴다.
+    const resAt = fn.indexOf("findReservedForReport(");
+    expect(resAt).toBeGreaterThan(-1);
+    const resInsertAt = fn.indexOf(".insert({", resAt);
+    const resBetween = fn.slice(resAt, resInsertAt);
+    expect(resBetween).toContain('.from("attendance_records")');
+    // insert가 `if (created) {` 블록의 **첫 문장**이어야 한다 — `if (created)` 뒤에 무조건 쓰는 모양이면 이미 있는 칸에 한 줄이 더 들어가 시수가 두 번 생긴다.
+    expect(fn.slice(resAt, resInsertAt + ".insert({".length)).toMatch(
+      /\.length === 0;?\s*if \(created\) \{\s*const \{ error: \w+ \} = await admin\.from\("attendance_records"\)\.insert\(\{$/,
+    );
+    //  · 풀 반 갈래: 칸이 있으면 일찍 돌아간다.
+    const poolAt = fn.indexOf("ensureMakeupPoolClass(");
+    expect(poolAt).toBeGreaterThan(resInsertAt);
+    expect(fn.slice(poolAt, fn.indexOf(".insert({", poolAt))).toMatch(/exists[\s\S]{0,120}return \{ ok: true/);
     expect(server).toContain('status: "makeup"');
     /**
      * ③ 그리고 **그 강사가 그날 그 학생을 이미 찍었으면** 안 만든다(2026-09-02 갱신) — 같은 수업을
