@@ -8,6 +8,8 @@ import s from "./_overview/overview.module.css";
 //    **같은 길이의 글자를 투명하게** 넣어 줄 높이를 그대로 얻는다(창 폭에 따른 열 수도 컨테이너 쿼리 한 벌로 같아진다).
 // 구조(원장 2026-09-11): 머리 → KPI 여섯 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘) → '학생 · 학습 · 상담'(여덟,
 // 셋째는 두 줄) → '수업과 학원 운영'(여덟) → 꼬리. 패널 속 높이는 그 패널의 흔한 내용 높이에 맞춘 근삿값이다.
+import type { CSSProperties } from "react";
+
 const T = "text-transparent bg-bg-soft animate-pulse rounded";
 
 const KPI = [
@@ -23,6 +25,8 @@ const KPI = [
   //    (`.kpiDetail`에 두 줄 하한을 주는 방법도 있으나, 전일 결석 칸이 없는 다섯 칸 역할에서 여섯 칸이 모두
   //     한 줄만큼 커지고 세 줄 구간은 여전히 못 막아 채택하지 않았다.)
   ["전일 결석", "0", "명", "어제 9/11 (금) · 연락 필요 0 · 사전 통보 0 · 일부 교시 0"],
+  // 보강예정(원장 2026-09-14 "가장 끝으로") — 실제 마지막 칸과 순서·수가 같아야 로드 끝에 화면이 안 튄다.
+  ["보강예정", "0", "건", "이번 주 · 오늘 0"],
 ] as const;
 
 type PanelShape = { title: string; note: string; body: number; wide?: boolean; className?: string };
@@ -114,7 +118,8 @@ export default function DashboardLoading() {
             <span className={`${s.refresh} ${T}`} />
           </div>
         </header>
-        <div className={s.kpis}>
+        {/* 열 수 = 칸 수(실제 띠의 `kpiGridVars`와 같은 변수) — 없으면 기본 6열이라 일곱째 칸이 줄을 바꿔 로드 끝에 화면이 튄다. */}
+        <div className={s.kpis} style={{ "--kpi-n": KPI.length } as CSSProperties} data-kpi-n={KPI.length}>
           {KPI.map(([label, value, unit, detail]) => (
             <div key={label} className={s.kpi}>
               <div className={s.kpiBody}>

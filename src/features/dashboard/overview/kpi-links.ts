@@ -36,6 +36,14 @@ export function absentDayHref(date: string): string {
 }
 
 /**
+ * 이번 주 보강 예약 — 시간표 **'보강' 탭**(구분=보강, 이번 주). 카드와 같은 두 함수(반 집합·주 범위)로 그린다 —
+ * 탭은 과목별이라 드롭다운으로 한 과목씩 본다(전 과목 합이 카드 숫자).
+ */
+export function makeupWeekHref(): string {
+  return "/timetable?kind=makeup";
+}
+
+/**
  * KPI '결석학생'의 기준일 = **어제**(KST). 원장 2026-09-12: *"대시보드 결석학생은 어제 결석으로 해야지.
  * 오늘은 수업을 안하면 볼 수가 없잖아"* — 오늘 수업이 아직 없으면 오늘 결석은 알 수 없다.
  *

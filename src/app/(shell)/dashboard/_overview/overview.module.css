@@ -1294,6 +1294,8 @@ a.kpiCountRow:hover > span {
     display: none;
   }
 }
+/* 일곱 칸(보강예정)의 4칸 × 2줄 규칙은 appearance.module.css에 있다 — 격자 규칙끼리 특이도가 같으면 승자가 CSS 순서라
+   (dev/prod에서 갈린다) 그쪽에서 속성 둘로 올려 잠근다(적대 리뷰 2026-09-14). */
 /* 여섯 칸이 한 줄에 안 들어가는 폭 — 3칸 × 2줄의 떨어진 카드로(한 줄 테두리 상자에 두 줄을 넣으면 가운데 선이 끊긴다). */
 @container (max-width:1100px) {
   .kpis {

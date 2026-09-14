@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
-import type { AttendanceStatus } from "@/features/attendance/server/queries";
+import type { AttendanceStatus, MatrixReservation } from "@/features/attendance/server/queries";
+import { cancelMakeupReservation } from "@/features/attendance/server/makeup-reservation-actions";
+import { RESERVED_BADGE_CLASS, reservationSpanLabel } from "@/features/attendance/makeup-reservation";
+import { shortDate } from "@/features/onescreen/makeup-absence-link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   COUNTABLE_STATUSES,
   formatSessionUnits,
@@ -43,6 +48,8 @@ export function CellPopover({
   otherCount = 0,
   sharedCount = 0,
   anchor,
+  reservation = null,
+  onReserve,
   onClose,
   onSaved,
 }: {
@@ -50,6 +57,10 @@ export function CellPopover({
   classId: string;
   sessionDate: string;
   status: AttendanceStatus | null;
+  /** 이 칸에 걸린 보강 예약(0264a, 값이 없는 칸일 때만) — 정보 블록 + '예약 취소'. */
+  reservation?: MatrixReservation | null;
+  /** '보강 예약' 항목 — 칸이 팝오버를 닫고 예약 창을 연다. 없으면 항목이 안 선다(테스트·단독 렌더). */
+  onReserve?: () => void;
   /**
    * 이 칸에 **출결 행**이 있는가 — 상태가 보여도 수업보고서 파생 칸은 행이 없다(저장하면 서버가 **새 행**을
    * 만들어 수학 자동 시수를 넣는다, auto-units.ts). 생략하면 `status`가 있으면 있음(종전 의미).
@@ -117,7 +128,29 @@ export function CellPopover({
   const [noteDraft, setNoteDraft] = useState(note);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [, startTransition] = useTransition();
+  const router = useRouter();
+  /**
+   * '보강 예약' 항목 — 잠긴 칸(7일 지난 결석)에서도 선다: 지난 결석에 보강을 잡는 게 보통이고, 그때 결석 칸엔
+   * **메모만** 붙어 잠금(돈)과 무관하다. 기록이 없는 잠긴 칸은 결석을 새로 찍어야 해서 서버가 거절한다(사유를 돌려준다).
+   */
+  const canReserve = !!onReserve && !reservation;
+  const cancelReservation = () => {
+    if (!reservation) return;
+    setCancelling(true);
+    startTransition(async () => {
+      const res = await cancelMakeupReservation({ id: reservation.id });
+      setCancelling(false);
+      if ("error" in res) {
+        setErr(res.error);
+        return;
+      }
+      toast.success(tf("att.pop.cancelReserveDone", { span: reservationSpanLabel({ ...reservation, makeupDate: sessionDate }) }));
+      onClose();
+      router.refresh();
+    });
+  };
   // 잠겼는데 기록도 없으면 손댈 게 없다 — 사유만 알리고 입력은 안 연다.
   const noteOnly = !!locked;
   const nothingToEdit = noteOnly && !status;
@@ -224,9 +257,49 @@ export function CellPopover({
           bottom: anchor.bottom,
         }}
       >
+        {/* 예약된 칸(0264a) — 무엇의 보강인지·언제인지·누가 잡았는지 + 취소. 값을 찍는 항목들은 그 아래 그대로. */}
+        {reservation ? (
+          <div className={`mb-0.5 flex flex-col gap-1 rounded-md px-2 py-1.5 ${RESERVED_BADGE_CLASS}`}>
+            <p className="text-xs font-bold leading-tight">
+              {t("att.pop.reserved")}
+              <span className="num ml-1 font-medium">
+                {reservation.periodLabel ? `${reservation.periodLabel} · ` : ""}
+                {reservation.slotStart}~{reservation.slotEnd}
+              </span>
+            </p>
+            <p className="text-xs leading-tight">
+              {tf("att.pop.reservedFor", { date: shortDate(reservation.absenceDate) })}
+              {reservation.createdByName ? ` · ${tf("att.pop.reservedBy", { name: reservation.createdByName })}` : ""}
+            </p>
+            {reservation.note ? <p className="text-xs leading-tight break-keep">{reservation.note}</p> : null}
+            <p className="text-xs leading-tight break-keep opacity-80">{t("att.pop.reservedTip")}</p>
+            {noteOnly ? null : (
+              <button
+                type="button"
+                onClick={cancelReservation}
+                disabled={cancelling}
+                className="border-purple/40 hover:bg-purple/10 self-start rounded-md border px-2 py-0.5 text-xs font-medium disabled:opacity-40"
+              >
+                {cancelling ? t("att.pop.cancelling") : t("att.pop.cancelReserve")}
+              </button>
+            )}
+          </div>
+        ) : null}
         {noteOnly ? (
           <div className="flex flex-col gap-1 p-0.5">
             <p className="text-amber text-xs leading-tight">{locked}</p>
+            {/* 지난 결석에도 보강은 잡는다 — 결석 칸엔 메모만 붙어 잠금(시수·출석률)과 무관하다. */}
+            {canReserve && status ? (
+              <button
+                type="button"
+                onClick={onReserve}
+                title={t("att.pop.reserveHint")}
+                className={`flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs transition hover:bg-bg-soft`}
+              >
+                {t("att.pop.reserve")}
+                <span className={`size-4 shrink-0 rounded-sm ${RESERVED_BADGE_CLASS}`} aria-hidden />
+              </button>
+            ) : null}
             {nothingToEdit ? (
               // 붙일 행이 없다 — 없는 출결을 지어내지 않는다(#메모는 기록에 딸린 것).
               // ⚠️ 다만 **빗금 칸은 기록이 있다**(남의 교시). 그 경우엔 사유가 다르므로 문장도 다르다.
@@ -306,6 +379,21 @@ export function CellPopover({
                 />
               </button>
             ))}
+            {/* '보강' 바로 아래 — 이 날 결석분의 보강 시간을 미리 잡는다(원장 2026-09-14). 이미 예약된 칸엔 위 블록이 대신 선다. */}
+            {canReserve ? (
+              <button
+                type="button"
+                onClick={onReserve}
+                title={t("att.pop.reserveHint")}
+                className="hover:bg-bg-soft flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs transition"
+              >
+                {t("att.pop.reserve")}
+                <span
+                  className={`border-line size-4 shrink-0 rounded-sm border border-dashed ${RESERVED_BADGE_CLASS}`}
+                  aria-hidden
+                />
+              </button>
+            ) : null}
             <div className="border-line mt-0.5 flex flex-col gap-1 border-t pt-1">
               <input
                 type="text"

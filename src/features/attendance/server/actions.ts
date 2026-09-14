@@ -24,7 +24,7 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
-import { parseSessionUnits, round1 } from "../session-units";
+import { isDefaultUnitsRaw, parseSessionUnits, round1 } from "../session-units";
 // 그날 칸 시수 배분(셀·범위 공용) + 강사 전체 보기의 몫 판정(원장 제보 2026-09-11) — 규칙은 순수 모듈, 조회는 server/.
 // 강사 보기 저장은 자리(JJ·랩실) 행을 안 쓴다(원장 2026-09-12) — 빼는 곳은 `splitOutSeatRows` 한 곳.
 import {
@@ -54,6 +54,10 @@ import {
 } from "@/features/onescreen/makeup-absence-link";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { canWriteAttendanceStudent } from "../makeup-write";
+// 보강 예약(0264a) — 예약된 학생의 그날 칸은 수강행이 없어도 연다(`hasReservedMakeup`), 시수를 쓰는 출결이 찍히면
+// 예약을 이행 처리한다(`completeMakeupReservations`). 둘 다 fail-soft — 표가 없어도 출결 저장은 종전 그대로.
+import { hasReservedMakeup, reservedCellKey, reservedCellKeys } from "./makeup-reservation-queries";
+import { completeMakeupReservations, completionKey } from "./makeup-reservation-complete";
 import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
@@ -392,6 +396,21 @@ export async function saveAttendance(
     },
   });
 
+  // 보강 예약 이행(0264a) — 이 폼이 쓴 칸 중 예약이 걸린 것(반 × 날짜 한 번 조회).
+  // `created` = 이번에 새로 만든 행(예약으로만 온 학생의 새 칸은 반 자동 시수가 아니라 예약 시수를 받아야 한다).
+  const formCreated = new Set(inserts.map((r) => completionKey({ studentId: r.studentId, classId, date })));
+  await completeMakeupReservations(
+    { tenantId: user.tenantId },
+    rows.map((r) => ({
+      studentId: r.studentId,
+      classId,
+      date,
+      status: r.status,
+      unitsExplicit: !isDefaultUnitsRaw(r.rawUnits),
+      created: formCreated.has(completionKey({ studentId: r.studentId, classId, date })),
+    })),
+  );
+
   // G4: 전원 기록 완료 전이 감지 → 담당 강사 벨(백그라운드, 응답 안 막음 — 실패해도 저장 무사).
   after(() =>
     notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date, actorId: user.id }),
@@ -553,7 +572,14 @@ export async function setAttendanceCell(input: {
       !canWriteAttendanceStudent({
         enrolled: (enrolled ?? 0) > 0,
         hasRecord: (existing ?? 0) > 0,
-        allowMakeup: input.allowMakeup === true,
+        // 🔴 **보강 예약된 학생은 그날 그 반에 오기로 한 사람이다**(0264a) — 수강행도 기록도 없지만 `allowMakeup`과
+        //    같은 뜻으로 문을 연다. 판정은 서버가 표를 직접 본다(클라 플래그가 아니라, #77). 수강생·기록이 있으면
+        //    묻지 않는다(왕복 0).
+        allowMakeup:
+          input.allowMakeup === true ||
+          ((enrolled ?? 0) === 0 &&
+            (existing ?? 0) === 0 &&
+            (await hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate }))),
       })
     ) {
       return { error: "이 반 수강생이 아닙니다" };
@@ -753,6 +779,8 @@ export async function setAttendanceCell(input: {
         ...backdatedFlag([sessionDate], kstToday()),
       },
     });
+    // 보강 예약 되돌림(0264a) — 이행된 예약의 보강일 칸을 지웠으면 예약을 `reserved`로 되돌린다(fail-soft).
+    await completeMakeupReservations({ tenantId: user.tenantId }, [{ studentId, classId, date: sessionDate, status: null }]);
     if (!input.quiet) revalidateAttendanceSurfaces();
     return { ok: true };
   }
@@ -986,6 +1014,22 @@ export async function setAttendanceCell(input: {
       ...backdatedFlag([sessionDate], kstToday()),
     },
   });
+
+  // 보강 예약 이행(0264a) — 이 칸에 걸린 예약이 있고 시수를 쓰는 상태가 찍혔으면 `done` + 메모. 예약 없는 칸은
+  // 인덱스 조회 한 번뿐이고, 실패는 출결 저장을 되돌리지 않는다(그 모듈이 삼킨다).
+  const completed = await completeMakeupReservations({ tenantId: user.tenantId }, [
+    {
+      studentId,
+      classId,
+      date: sessionDate,
+      status,
+      unitsExplicit: unitsProvided && !isDefaultUnitsRaw(input.units),
+      created: !overwrote,
+    },
+  ]);
+  // 이행이 시수를 바꿨으면(예약 구간 = 교시당 0.5) 화면 낙관값도 그 값으로 — 낙관 덮개는 서버와 같아져야 벗겨진다(grid/store.ts).
+  const completedUnits = completed.get(completionKey({ studentId, classId, date: sessionDate }));
+  if (completedUnits !== undefined) insertedAuto = completedUnits;
 
   // G4: 셀 저장(삽입/갱신)마다 완료 전이 검사 — 삭제 경로는 위에서 조기 반환이라 미발화(기록 제거는 완료가 아님).
   after(() =>
@@ -1334,8 +1378,20 @@ export async function setAttendanceBulk(input: {
     ]);
     const ownSet = teaching;
     const enrolledSet = new Set(enrolled.map((e) => `${e.student_id}::${e.class_id}`));
+    // 🔴 보강 예약된 학생(0264a)은 수강행이 없어도 그날 그 반에 오기로 한 사람 — 단건 게이트(`hasReservedMakeup`)와 같은
+    //    문으로 연다(적대 리뷰 2026-09-14: 오늘 출결 보드의 '전원 출석'이 예약 학생만 조용히 버리고 예약이 영영 남았다).
+    //    수강생은 묻지 않는다(왕복은 비수강 칸이 있을 때 한 번).
+    const reservedKeys = await reservedCellKeys(
+      user.tenantId,
+      cells
+        .filter((c) => !enrolledSet.has(`${c.studentId}::${c.classId}`))
+        .map((c) => ({ studentId: c.studentId, classId: c.classId, date: sessionDate })),
+    );
     allowed = cells.filter(
-      (c) => ownSet.has(c.classId) && enrolledSet.has(`${c.studentId}::${c.classId}`),
+      (c) =>
+        ownSet.has(c.classId) &&
+        (enrolledSet.has(`${c.studentId}::${c.classId}`) ||
+          reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: sessionDate }))),
     );
     if (allowed.length === 0) return { error: "담당 반 수강생이 아니어서 기록할 수 없습니다" };
   }
@@ -1521,6 +1577,20 @@ export async function setAttendanceBulk(input: {
     });
   }
 
+  // 보강 예약 이행(0264a) — 일괄로 쓴 칸 중 예약이 걸린 것((반·날짜)마다 한 번 조회). `created` = 이번에 새로 만든 행.
+  const bulkCreated = new Set(inserts.map((c) => completionKey({ studentId: c.studentId, classId: c.classId, date: sessionDate })));
+  await completeMakeupReservations(
+    { tenantId: user.tenantId },
+    allowed.map((c) => ({
+      studentId: c.studentId,
+      classId: c.classId,
+      date: sessionDate,
+      status,
+      unitsExplicit: bulkUnitsProvided,
+      created: bulkCreated.has(completionKey({ studentId: c.studentId, classId: c.classId, date: sessionDate })),
+    })),
+  );
+
   // G4: 반마다 '전원 기록 완료' 전이 검사(셀 액션과 동일) — 백그라운드라 응답을 막지 않는다.
   after(async () => {
     for (const classId of classIds) {
@@ -1701,13 +1771,20 @@ export async function setAttendanceRange(input: {
       list.push({ start: e.start_date, end: e.end_date });
       spans.set(k, list);
     }
+    // 수강 판정은 **그 칸의 날짜 기준** — 반이동·종강 학생의 그날 기록을 막지 않는다(셀 액션과 동일 의미).
+    const enrolledOn = (c: RangeCell) =>
+      (spans.get(`${c.studentId}::${c.classId}`) ?? []).some(
+        (s) => (!s.start || s.start <= c.sessionDate) && (!s.end || s.end >= c.sessionDate),
+      );
+    // 🔴 보강 예약된 학생(0264a)은 수강행이 없어도 그날 그 반의 칸 — 단건·일괄 게이트와 같은 문(적대 리뷰 2026-09-14).
+    const reservedKeys = await reservedCellKeys(
+      user.tenantId,
+      cells.filter((c) => !enrolledOn(c)).map((c) => ({ studentId: c.studentId, classId: c.classId, date: c.sessionDate })),
+    );
     allowed = cells.filter((c) => {
       if (!isWithinAttendanceEditWindow(c.sessionDate, today)) return false;
       if (!teaching.get(c.sessionDate)?.has(c.classId)) return false;
-      // 수강 판정은 **그 칸의 날짜 기준** — 반이동·종강 학생의 그날 기록을 막지 않는다(셀 액션과 동일 의미).
-      return (spans.get(`${c.studentId}::${c.classId}`) ?? []).some(
-        (s) => (!s.start || s.start <= c.sessionDate) && (!s.end || s.end >= c.sessionDate),
-      );
+      return enrolledOn(c) || reservedKeys.has(reservedCellKey({ studentId: c.studentId, classId: c.classId, date: c.sessionDate }));
     });
     if (allowed.length === 0) {
       // 조용한 0건 금지 — 가장 흔한 사유(기간)를 그대로 말해 준다.
@@ -1893,6 +1970,11 @@ export async function setAttendanceRange(input: {
         },
       });
     }
+    // 보강 예약 되돌림(0264a) — 범위로 지운 칸 중 이행된 예약이 있으면 `reserved`로 되돌린다(fail-soft).
+    await completeMakeupReservations(
+      { tenantId: user.tenantId },
+      allowed.map((c) => ({ studentId: c.studentId, classId: c.classId, date: c.sessionDate, status: null })),
+    );
     revalidateAttendanceSurfaces();
     return { ok: true, applied: allowed.length, blocked: cells.length - allowed.length };
   }
@@ -2079,6 +2161,20 @@ export async function setAttendanceRange(input: {
       ...backdatedFlag(allowed.map((c) => c.sessionDate), kstToday()),
     },
   });
+
+  // 보강 예약 이행(0264a) — 범위로 쓴 칸 중 예약이 걸린 것((반·날짜)마다 한 번 조회). `created` = 이번에 새로 만든 행.
+  const rangeCreated = new Set(inserts.map((c) => completionKey({ studentId: c.studentId, classId: c.classId, date: c.sessionDate })));
+  await completeMakeupReservations(
+    { tenantId: user.tenantId },
+    allowed.map((c) => ({
+      studentId: c.studentId,
+      classId: c.classId,
+      date: c.sessionDate,
+      status,
+      unitsExplicit: unitsProvided && !isDefaultUnitsRaw(input.units),
+      created: rangeCreated.has(completionKey({ studentId: c.studentId, classId: c.classId, date: c.sessionDate })),
+    })),
+  );
 
   // G4: (반·날짜) 조합마다 '전원 기록 완료' 전이 검사 — 셀·일괄 액션과 동일. 백그라운드라 응답을 안 막는다.
   // ⚠️ 조합 수 상한: 한 달치를 통째로 끌면 (반×날짜)가 수백이 되어 백그라운드가 그만큼 쿼리를 돈다.

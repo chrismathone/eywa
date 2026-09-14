@@ -174,6 +174,10 @@ export function MatrixRow({
               daySlots={matrix.slots[student.id]?.[d.date]}
               otherSlots={otherSlots}
               sharedDay={!!matrix.dayAxis[student.id]?.[d.date]}
+              // 보강 예약(0264a) — 값이 없는 칸에 '보강 예약' 네 글자로 선다. 이름·반은 예약 창 머리에 쓴다.
+              reservation={matrix.reservations?.[student.id]?.[d.date] ?? null}
+              studentName={student.name}
+              className={classLabel}
             />
           </td>
         );

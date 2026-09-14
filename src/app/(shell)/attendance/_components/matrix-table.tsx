@@ -9,6 +9,7 @@ import {
   statusTextOf,
 } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { RESERVED_CELL_CLASS } from "@/features/attendance/makeup-reservation";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
@@ -509,6 +510,11 @@ export function MatrixTable({
                     </span>
                   );
                 })}
+                {/* 보강 예약(0264a) — 칸과 **같은 네 글자·같은 서식**(makeup-reservation.ts 단일 소스). */}
+                <span className="text-text-dim inline-flex items-center gap-1">
+                  <span className={`inline-block size-5 rounded-sm ${RESERVED_CELL_CLASS}`} aria-hidden />
+                  {t("att.cell.reserved")}
+                </span>
                 <span className="text-text-dim inline-flex items-center gap-1">
                   <span className={`border-line inline-block size-5 rounded-sm border ${DAY_TONE.classDay}`} />
                   {t("att.legend.classDay")}

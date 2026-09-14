@@ -431,6 +431,8 @@ export async function getWeeklySchedule(): Promise<ScheduleSlot[]> {
   return fetchSlots(todayStr());
 }
 
+import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
+
 export type StudentLine = {
   name: string;
   grade: string | null;
@@ -484,7 +486,14 @@ export type StudentLine = {
    */
   seatPinNote?: string;
 };
-export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
+export type ScheduleSlotWithStudents = ScheduleSlot & {
+  students: StudentLine[];
+  /**
+   * 그 요일 칸 날짜의 **보강 예약**(0264a, 표시 전용 — `attachReservedLines`가 기본뷰 직전에만 얹는다).
+   * 🔴 `students`에 섞지 않는다(인원·드래그·엑셀·이동 판정이 그 배열을 센다).
+   */
+  reserved?: TimetableReservedLine[];
+};
 
 /**
  * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는

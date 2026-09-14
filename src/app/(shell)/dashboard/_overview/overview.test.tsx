@@ -202,7 +202,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일입테", "오늘첫수업", "전일 결석"];
+const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일입테", "오늘첫수업", "전일 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -234,6 +234,44 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
     allowed,
     subjects: { math: "수학", english: "영어" },
     sections: {
+      // 보강예정(0264a) — 이번 주 예약 두 건(오늘 하나·지난 요일 하나).
+      makeup: {
+        data: {
+          week: { start: "2026-09-07", end: "2026-09-13" },
+          rows: [
+            {
+              id: "m1",
+              studentId: "s1",
+              name: "보강가",
+              schoolGrade: "침산중1",
+              classId: "c1",
+              className: "M1",
+              makeupDate: "2026-09-10",
+              slotStart: "16:20",
+              slotEnd: "17:15",
+              periodLabel: "1-1",
+              absenceDate: "2026-09-03",
+              overdue: false,
+            },
+            {
+              id: "m2",
+              studentId: "s2",
+              name: "보강나",
+              schoolGrade: null,
+              classId: "c2",
+              className: "E1",
+              makeupDate: "2026-09-08",
+              slotStart: "17:20",
+              slotEnd: "18:00",
+              periodLabel: null,
+              absenceDate: "2026-09-01",
+              overdue: true,
+            },
+          ],
+          later: 1,
+        },
+        ...ok,
+      },
       students: { data: studentsData(), ...ok },
       withdrawals: {
         data: {
@@ -474,9 +512,10 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(kpiGridVars(5)).toMatchObject({ "--kpi-n": 5, "--kpi-mid": 3, "--kpi-last-mid": "span 2" });
     expect(kpiGridVars(4)).toMatchObject({ "--kpi-n": 4, "--kpi-mid": 2, "--kpi-last-mid": "auto" });
     expect(kpiGridVars(1)).toMatchObject({ "--kpi-n": 1, "--kpi-mid": 1, "--kpi-last-mid": "auto" });
-    // 운영실은 역할에 따라 칸 수가 다르다 — 전일 결석(출석부 권한)이 없는 역할이면 5칸.
+    // 운영실은 역할에 따라 칸 수가 다르다 — 출석부 권한이 없는 역할이면 전일 결석·보강예정(둘 다 출석부 영역)이 빠져 5칸.
     const snap = kpiSnapshot(["dashboard", "students", "withdrawals", "enrollment", "calendar"]);
     delete snap.sections.absent;
+    delete snap.sections.makeup;
     mocks.data = snap;
     const html = renderToStaticMarkup(<Overview initial={mocks.data} />);
     expect(html).toContain("--kpi-n:5");

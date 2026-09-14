@@ -15,9 +15,13 @@ describe("parseTimetableKind", () => {
     expect(DEFAULT_TIMETABLE_KIND).toBe("regular");
   });
 
-  it("special/all만 인정하고 모르는 값은 정규로 떨어진다(URL 직입력 방어)", () => {
+  it("special/all/makeup만 인정하고 모르는 값은 정규로 떨어진다(URL 직입력 방어)", () => {
     expect(parseTimetableKind("special")).toBe("special");
     expect(parseTimetableKind("all")).toBe("all");
+    expect(parseTimetableKind("makeup")).toBe("makeup");
+    // 보강 탭은 슬롯을 거르지 않는다(과목 목록의 재료) — 전체와 같다.
+    expect(matchesTimetableKind("makeup", true)).toBe(true);
+    expect(matchesTimetableKind("makeup", false)).toBe(true);
     expect(parseTimetableKind("regular")).toBe("regular");
     expect(parseTimetableKind("특강")).toBe("regular");
     expect(parseTimetableKind("SPECIAL")).toBe("regular");
@@ -52,8 +56,8 @@ describe("matchesTimetableKind", () => {
 });
 
 describe("칩 메타", () => {
-  it("칩 순서는 정규 → 특강 → 전체, 라벨은 전부 한글(raw 영문 키 노출 금지)", () => {
-    expect(TIMETABLE_KINDS).toEqual(["regular", "special", "all"]);
+  it("칩 순서는 정규 → 특강 → 전체 → 보강, 라벨은 전부 한글(raw 영문 키 노출 금지)", () => {
+    expect(TIMETABLE_KINDS).toEqual(["regular", "special", "all", "makeup"]);
     for (const k of TIMETABLE_KINDS) {
       expect(TIMETABLE_KIND_LABEL[k]).toMatch(/^[가-힣]+$/);
     }

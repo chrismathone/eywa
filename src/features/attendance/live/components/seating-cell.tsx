@@ -283,14 +283,21 @@ export function SeatingCell({
         aria-haspopup={canMark ? "menu" : undefined}
         aria-expanded={canMark ? open : undefined}
         onClick={() => canMark && setOpen((v) => !v)}
-        title={seatHoverTitle({
+        title={`${seatHoverTitle({
           studentName: student.studentName,
           schoolGrade: student.schoolGrade,
           mark,
           note: student.note,
           checkedAt: check?.full,
           recordedByName: recorder,
-        })}
+        })}${
+          // 보강 예약(0264a) — 왜 이 칸에 섰는지(결석분)를 hover에 적는다. 찍으면 예약은 서버가 이행 처리한다.
+          student.reservedMakeup
+            ? ` · 보강 예약(${student.reservedMakeup.absenceDate.slice(5).replace("-", "/")} 결석분${
+                student.reservedMakeup.periodLabel ? ` · ${student.reservedMakeup.periodLabel}` : ""
+              })`
+            : ""
+        }`}
         /* 🔴 링(검색 강조·hover)은 **칸 전체**에 두른다 — 시각 줄까지가 한 칸이라, 이름 알약에만 두르면
            찾은 칸의 아래 절반이 테두리 밖으로 새어 나간 것처럼 보인다. */
         className={`flex h-full w-full flex-col items-center rounded-lg ${
@@ -304,6 +311,9 @@ export function SeatingCell({
              안 변한다(테두리를 주면 1px씩 커져 3열 격자가 밀린다). 색은 상태 배경을 덮지 않는 회색. */
           className={`@container flex min-h-9 w-full items-center justify-center rounded-lg px-1 py-1 ${SEAT_MARK_TONE[mark]} ${
             check?.afterClass ? "ring-2 ring-inset ring-neutral-fill" : ""
+          } ${
+            // 보강 예약으로 선 학생 — 기록 전엔 보라 점선(출석부 '보강 예약' 칸과 같은 문법), 찍히면 상태 색이 주인이다.
+            student.reservedMakeup && !check ? "outline-1 outline-dashed -outline-offset-2 outline-purple/60" : ""
           }`}
         >
           <span className="max-w-full truncate leading-none font-bold" style={{ fontSize: nameSize }}>
