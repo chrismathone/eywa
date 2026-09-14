@@ -7,6 +7,7 @@ import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import { LAB_ROOM_LABEL, type TeacherNicknameMap } from "@/features/timetable/lib/teacher-label";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { readableTextColor } from "@/lib/color-utils";
 import {
   padCardDays,
   teacherColor,
@@ -370,6 +371,12 @@ export function ClassColumn({
   // 교시축 접기(40분·60분 혼재) — 그릴 행과, 그 행 위에 얹힐 접힌 칸. 카드마다 한 번만 만든다.
   const gridRows = visibleSpanRows(group.periodRows, group.rowPlan);
   const moved = movedByTarget(group.rowPlan);
+  /**
+   * 교시 order → **그 행이 적는 시각**('다른 시각' 표식의 판정 기준).
+   * 🔴 `gridRows`가 아니라 **섹션 축 전체**(`group.periodRows`)에서 만든다 — 접힌 칸은 감춰진 행(`m.from`)에
+   *    속하는데 그 행은 `gridRows`에 없어서, 여기서 찾으면 접힌 칸의 판정이 통째로 빠진다.
+   */
+  const rowTimeByOrder = new Map(group.periodRows.map((r) => [r.order, r.time] as const));
   // *LAB 임시 칸 — 격자 안(그 교시 행이 있고 칸이 비어 있을 때) / 격자에 자리가 없으면 **이 카드에만** 아래 행.
   // 배치 편집(수업명만)엔 격자가 없어 그리지 않는다. 판정은 서버가 끝냈다 — 여기선 자리만 정한다.
   const cardLabs = namesOnly ? undefined : virtualLabs?.[card.classId];
@@ -524,7 +531,15 @@ export function ClassColumn({
               {labs.inGrid[`${p.order}:${d}`] ? (
                 <VirtualLabCellView lab={labs.inGrid[`${p.order}:${d}`]!} last={di === days.length - 1} />
               ) : (
-                <Cell card={card} order={p.order} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
+                <Cell
+                  card={card}
+                  order={p.order}
+                  day={d}
+                  teacherColors={teacherColors}
+                  last={di === days.length - 1}
+                  // 이 행이 **화면에 적는** 시각 — 라벨열(`p.time || p.label`)과 같은 값이라야 표식이 거짓이 안 된다.
+                  rowTime={p.time}
+                />
               )}
               {(moved.get(p.order) ?? []).map((m) => {
                 const mc = card.cells[`${m.from}:${d}`];
@@ -550,7 +565,17 @@ export function ClassColumn({
                     // 비워 준다(안 비우면 겹쳐 그린 칸이 선을 덮어 그 줄만 가로선이 사라진다).
                     style={movedCellBox(m, PERIOD_H)}
                   >
-                    <Cell card={card} order={m.from} day={d} teacherColors={teacherColors} last={di === days.length - 1} />
+                    {/* 접힌 칸도 **자기 행(`m.from`)의 시각 자리**에 앉으므로(`movedCellBox`) 판정 기준은 그 행의
+                        시각이다. 평일 칸은 그 값이 곧 제 시각이라 표식이 안 뜨고, lift된 주말 칸은 어긋난 채로
+                        접힌 행에 앉으니 **떠야 한다** — 안 넘기면 정당한 표식이 조용히 빠진다(재리뷰 2026-09-14). */}
+                    <Cell
+                      card={card}
+                      order={m.from}
+                      day={d}
+                      teacherColors={teacherColors}
+                      last={di === days.length - 1}
+                      rowTime={rowTimeByOrder.get(m.from)}
+                    />
                   </div>
                 );
               })}
@@ -871,17 +896,59 @@ function VirtualLabCellView({ lab, last, withTime = false }: { lab: VirtualLabCe
   );
 }
 
+/**
+ * 🔺 **다른 시각 표식** — 이 칸은 **그려진 행의 시각이 아니다**(주말 수업을 그 반의 평일 교시 행으로
+ * 끌어올린 것, [class-grid.ts](../../../../features/timetable/lib/class-grid.ts) `liftToWeekday`·
+ * `weekendSelfShift`). 토 10:00 수업이 "19:20~20:10" 행에 앉는 식인데, 그건 버그가 아니라 원장 지시로
+ * 일부러 만든 동작이라(*"행을 6개가 아닌 3개만"*) **동작은 그대로 두고 사실만 화면에 남긴다.**
+ *
+ * 🔴 **언제 뜨는지는 `Cell`이 정한다** — 여기는 그리기만 한다. 판정 근거는 그쪽 `offAxisTime` 주석에.
+ * 🔴 **칸 안에 시각을 적지 않는다**(원장 2026-09-14: *"마우스오버했을때 시간이 나오면 충분함 … 좌상단에
+ *    삼각형같은 메모있음 표시 있으면 된다"*) — 실제 시각은 칸이 이미 가진 툴팁(`tip`)이 말한다.
+ * 🔴 색은 **강사뷰의 같은 표식과 같은 빨강**이다([teacher-chip.tsx](./teacher-chip.tsx) `offAxisNote`) —
+ *    같은 뜻이면 어느 화면에서든 같은 색이 캐논의 대원칙이다(semantic-color.ts). 한 사실을 두 뷰가
+ *    다른 색으로 말하면 그 순간 색이 어휘이기를 멈춘다.
+ * 🔴 바탕이 **강사 저장색(임의 hex)**이라 빨강 하나면 짙은 붉은 칸에서 사라진다 → 그쪽과 **같은 장치**로
+ *    바탕에서 읽히는 색(`readableTextColor`)을 한 겹 깔고 그 위에 빨강을 얹는다(치수도 9/7px 동일).
+ * 🔴 `absolute` + `size-0` — 행 높이(`PERIOD_H`)를 한 픽셀도 건드리면 안 된다(격자가 통째로 어긋난다).
+ * ⚠️ `sr-only`는 absolute라 **positioned 부모 안**에 있어야 한다([[#79]]) — 호출부가 칸에 `relative`를 준다.
+ */
+function OffAxisMark({ time, edge }: { time: string; edge: string }) {
+  return (
+    <>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-0 left-0 size-0 border-t-[9px] border-r-[9px] border-r-transparent"
+        style={{ borderTopColor: edge }}
+      />
+      <span
+        aria-hidden
+        className="border-t-danger pointer-events-none absolute top-0 left-0 size-0 border-t-[7px] border-r-[7px] border-r-transparent"
+      />
+      {/* 표식은 눈에만 보인다 — 같은 사실을 글자로도 남긴다(칸의 기존 툴팁 문구는 그대로 둔다). */}
+      <span className="sr-only">실제 수업 시각 {time}</span>
+    </>
+  );
+}
+
 function Cell({
   card,
   order,
   day,
   teacherColors,
+  rowTime,
   last = false,
 }: {
   card: RichClassCard;
   order: number;
   day: DayOfWeek;
   teacherColors: TeacherColorMap;
+  /**
+   * **이 칸이 앉은 행이 화면에 적는 시각** — 격자 칸은 그 행(`p.time`, 라벨열과 같은 값), 접힌 칸은
+   * 제가 속한 감춰진 행(`m.from`)의 시각이다(`movedCellBox`가 그 행의 시각 자리에 앉힌다).
+   * 비면(주말 전용 섹션처럼 행이 시각을 아예 안 적으면) 어긋날 것도 없다는 뜻이라 표식이 뜨지 않는다.
+   */
+  rowTime?: string;
   /**
    * 이 요일이 카드의 마지막 열인가 — 오른쪽 격자선을 뺀다.
    * ⚠️ 예전엔 `last:border-r-0`(CSS)로 됐는데, 칸이 **자리 상자 안**으로 들어가면서 더는 마지막 형제가
@@ -894,12 +961,28 @@ function Cell({
   if (!c) return <div className={base} />;
   // 주말 셀은 행 라벨이 그 반의 시각이 아니다(class-grid `weekendSelfShift`) → 툴팁에 실제 시각을 붙인다.
   const tip = c.time ? `${c.label} · ${c.time}` : c.label;
+  /**
+   * 🔺 **'다른 시각' 표식을 띄울까** — `c.time`만 보면 안 된다(적대 리뷰 2026-09-14에서 잡혔다).
+   * `class-grid.ts`는 **주말 셀이면 무조건** `time`을 싣는다("이 칸은 주말 슬롯"이라는 뜻이지
+   * "행과 어긋났다"가 아니다). 그대로 쓰면 거짓 표식이 두 갈래로 난다:
+   *  ① **주말 전용 섹션** — 행에서 시각을 떼고 "1교시"만 적는데(`groupRichCards`) 전 칸에 삼각형이
+   *     깔린다. 행이 시각을 주장하지도 않으니 오독할 것이 없는데 신호만 희석된다.
+   *  ② **평일과 같은 시각에 토요일 수업을 하는 반** — `liftToWeekday`가 제자리에 떨어뜨리는데도 붙는다.
+   * 🔑 그래서 기준은 **그 행이 화면에 적는 시각**(`rowTime`)이고, 비교는 **시작 시각만** 본다 —
+   *    끝만 다른 교시([[#106]] 영어 17건)는 원장이 이번 범위에서 뺐고, 폴백 행은 `time`이 시작 시각
+   *    한 토막(`periods.ts` `x-HH:MM`)이라 전체 문자열로 비교하면 그 행이 통째로 거짓 표식이 된다.
+   */
+  const startOf = (t: string) => t.split("~")[0] ?? "";
+  const offAxisTime =
+    c.time && rowTime && startOf(rowTime) && startOf(rowTime) !== startOf(c.time) ? c.time : null;
   // 특수 자리(사람 아님) — LAB(603호)=파랑, JJ(305호)=보라. 서로 다른 방이라 색까지 갈라 둔다.
   if (c.isLab) {
     const tone = c.label === LAB_ROOM_LABEL ? "bg-blue-soft text-blue" : "bg-purple-soft text-purple";
     return (
-      <div className={`${base} ${tone} ${cellFont(c.label)}`} title={tip}>
+      <div className={`${base} ${tone} ${cellFont(c.label)} ${offAxisTime ? "relative" : ""}`} title={tip}>
         {c.label}
+        {/* 자리 칸은 연한 틴트 바탕이라 테두리는 경계만 만들면 된다(빨강이 이미 또렷하다). */}
+        {offAxisTime ? <OffAxisMark time={offAxisTime} edge="#ffffff" /> : null}
       </div>
     );
   }
@@ -911,13 +994,24 @@ function Cell({
   const cls = `${base} ${cellFont(text)}`;
   if (tc)
     return (
-      <div className={cls} style={{ background: tc.bg, color: tc.text }} title={tip}>
+      <div
+        className={`${cls} ${offAxisTime ? "relative" : ""}`}
+        style={{ background: tc.bg, color: tc.text }}
+        title={tip}
+      >
         {text}
+        {/* 강사 저장색은 임의 hex다 — 테두리 색을 그 바탕에서 뽑아야 어떤 색을 새로 넣어도 표식이 안 사라진다. */}
+        {offAxisTime ? <OffAxisMark time={offAxisTime} edge={readableTextColor(tc.bg)} /> : null}
       </div>
     );
   return (
-    <div className={`${cls} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`} title={tip}>
+    <div
+      className={`${cls} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white ${offAxisTime ? "relative" : ""}`}
+      title={tip}
+    >
       {text}
+      {/* 해시색은 전부 솔리드 채움 + 흰 글자라 테두리도 흰색(글자와 같은 근거). */}
+      {offAxisTime ? <OffAxisMark time={offAxisTime} edge="#ffffff" /> : null}
     </div>
   );
 }
