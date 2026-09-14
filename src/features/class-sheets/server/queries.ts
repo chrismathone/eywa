@@ -64,6 +64,7 @@ import {
 // 휴일 판정은 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
+import { goalAreasFor } from "../lib/goal-areas";
 import { normalizeSlotTime, weekDatesOf, YMD_RE, type DowKey } from "../lib/week";
 import { ecsDelegatedClassIds, ecsVisibleClassFilter, requireEcsClassAccess } from "./access";
 
@@ -109,7 +110,14 @@ export type ClassSheetWeekData = {
    * 화면도 같은 폭으로 열어야 "서버는 되는데 화면이 막는" 문이 생기지 않는다(원장 2026-08-06).
    */
   canNoteAttendance: boolean;
+  /** 교시 계획 줄의 '구분' 영역 — EiE도 학원설정 영역 그대로다(왼쪽 표 행과 다른 목록). */
   skillAreas: SkillAreaSetting[];
+  /**
+   * **왼쪽 계획 표**의 행 — EiE = 달력 칸(`In-class · Homework · Test`), 그 외 = `skillAreas`
+   * (원장 2026-09-14 *"EiE 왼쪽 월간 계획은 달력입력란에 맞게 메뉴 변경. 인재원영어와 구분."*).
+   * 🔴 `PlanPanel`에만 넘긴다 — 판정은 [`goalAreasFor`](../lib/goal-areas) 하나(저장 검증도 같은 함수).
+   */
+  goalAreas: SkillAreaSetting[];
   grid: WeekGrid;
   /** teacherId → 표시 이름(users.display_name). 슬롯 라벨(slot_teacher_label)이 없을 때 폴백. */
   teacherNames: Record<string, string>;
@@ -661,6 +669,8 @@ export async function getClassSheetWeek(
       canMarkAttendanceByDate,
       canNoteAttendance,
       skillAreas: access.skillAreas,
+      // 게이트가 이미 읽어 온 트랙으로 파생(추가 조회 0) — 저장 검증(`upsertGoal`)과 같은 함수.
+      goalAreas: goalAreasFor(access.englishTrack, access.skillAreas),
       grid,
       teacherNames,
       classTeacherName: access.teacherId ? (teacherNames[access.teacherId] ?? null) : null,
