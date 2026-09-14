@@ -45,6 +45,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   invoice_session_term: "청구 회차",
   payslip: "급여명세서",
   class_sheet_plan: "수업계획",
+  // 강사 시트 칸 편집·Shouting·MP 토글(2026-09-14) — '대상' 이름은 반 이름 스냅샷.
+  class_sheet: "강사 시트",
   announcement: "직원 공지",
   briefing: "일일 브리핑",
   document_category: "서식 분류",
@@ -740,6 +742,44 @@ export function auditDetail(
       const label = names.length ? `(${names.slice(0, 3).join(", ")}${names.length > 3 ? " 외" : ""})` : "";
       return join(c === null ? `수업보고서 회수 — ${who}` : `수업보고서 ${c}건 회수 — ${who}`, label || null);
     }
+    case "makeup_reserve":
+    case "makeup_reserve_cancel":
+    case "makeup_reserve_done":
+    case "makeup_reserve_revert": {
+      /**
+       * 보강 예약(0264a) — **결석일 → 보강일·교시**를 한 줄로. '대상' 열이 학생 이름이라 여기선 날짜·시각만.
+       * `absence`(created = 결석일 칸을 새로 결석으로 찍음 · noted = 이미 결석이라 메모만)는 예약에서만 뜻이 있다.
+       */
+      const absence = str(m.absenceDate);
+      const makeup = str(m.makeupDate);
+      const slot = str(m.slotStart);
+      const period = str(m.periodLabel);
+      const when = makeup ? `${makeup}${period ? ` ${period}` : ""}${slot ? ` ${slot}` : ""}` : null;
+      const core = absence && when ? `${absence} 결석분 → ${when} 보강` : when ?? absence;
+      if (action === "makeup_reserve") {
+        const how = str(m.absence);
+        const tail = how === "created" ? "결석일 칸을 결석(0)으로 찍음" : how === "noted" ? "결석일 칸에 메모만" : null;
+        return join(core, tail);
+      }
+      if (action === "makeup_reserve_cancel") {
+        return join(
+          core,
+          m.absenceCleared === true
+            ? "예약이 찍은 결석 칸(0)도 지움"
+            : m.memoCleared === false
+              ? "결석 칸 메모는 못 지움"
+              : m.memoKept === true
+                ? "같은 날 다른 예약이 남아 메모는 그대로"
+                : null,
+        );
+      }
+      if (action === "makeup_reserve_revert") {
+        return join(core, "보강일 출결이 지워져 예약으로 되돌림");
+      }
+      const status = str(m.status);
+      const label = status && status in STATUS_TEXT ? STATUS_TEXT[status as keyof typeof STATUS_TEXT] : null;
+      return join(core, label ? `보강일 출결 ${label}` : null);
+    }
     case "attendance_cell":
     case "attendance_bulk":
     case "attendance_range": {
@@ -1311,6 +1351,65 @@ export function auditDetail(
         copied !== null ? `${copied}줄 복사` : null,
         m.termMode === "exam" ? "시험 기간" : null,
         m.viaPin === true ? "공개 PIN 화면" : null,
+      );
+    }
+
+    // ── 강사 시트 칸 편집(edit-audit-actions.ts) — 칸을 떠날 때 한 줄(원장 결정 2026-09-14) ─────────────
+    // '대상' 열이 반 이름을 보여 준다(targetLabel 스냅샷). 칸 이름은 기록 때 한글 스냅샷(fieldLabel·areaLabel)으로
+    // 실려 오므로 여기서 영문 키(kind·scope·role·field)를 그대로 흘리지 않는다.
+    case "ecs_goal_edit":
+    case "ecs_mark_edit":
+    case "ecs_memo_edit":
+    case "ecs_month_plan_edit": {
+      // MP 토글(누름이 곧 결심) — 저장 액션(`saveMonthPlanCells`)이 직접 남긴 줄.
+      if (m.change === "ebookColumn") {
+        const days = num(m.days);
+        const from = str(m.from);
+        const to = str(m.to);
+        return join(
+          m.show === true ? "e-book 열 세움" : "e-book 열 내림",
+          from && to ? (from === to ? from : `${from}~${to}`) : null,
+          days ? `${days}일` : null,
+        );
+      }
+      if (m.change === "dayOff") return join(str(m.date), m.off === true ? "휴강으로 표시" : "휴강 표시 해제");
+      const shown = (v: unknown) => {
+        const s = str(v);
+        return s ? `「${s}」` : "(빈칸)";
+      };
+      const date = str(m.date);
+      const slot = str(m.slotStart);
+      const periodStart = str(m.periodStart);
+      const weekStart = str(m.weekStart);
+      const where =
+        m.kind === "goal"
+          ? join(
+              periodStart
+                ? m.scope === "week"
+                  ? `${periodStart} 주 목표`
+                  : `${periodStart.slice(0, 7)} 월간 목표`
+                : null,
+              m.role === "assistant" ? "부담임" : m.role === "homeroom" ? "담임" : null,
+              str(m.areaLabel),
+            )
+          : m.kind === "mark"
+            ? join(ctx.nameOf(m.studentId), date ? (slot ? `${date} ${slot}` : date) : null)
+            : m.kind === "memo"
+              ? weekStart
+                ? `${weekStart} 주`
+                : null
+              : m.kind === "monthMemo"
+                ? str(m.month)
+                : date;
+      const label = str(m.fieldLabel);
+      return join(where, `${label ? `${label} ` : ""}${shown(m.before)} → ${shown(m.after)}`);
+    }
+    case "ecs_shouting_toggle": {
+      const date = str(m.date);
+      const slot = str(m.slotStart);
+      return join(
+        date ? (slot ? `${date} ${slot}` : date) : slot,
+        m.checked === true ? "Shouting 체크" : "Shouting 체크 해제",
       );
     }
 

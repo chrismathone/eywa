@@ -19,7 +19,10 @@
  * ⚠️ 이 파일은 `"use server"`라 **async 함수만 export**할 수 있다([[#119]]) — 상수·순수 헬퍼는
  *    [`lib/month-plan.ts`](../lib/month-plan.ts)에 둔다.
  */
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAction } from "@/features/audit/server/log";
+import { mpStructuralChange, type MpSaveIntent } from "../lib/edit-audit";
 import { MP_ALL_COLUMNS, type MpColKind } from "../lib/month-plan";
 import { YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
@@ -42,6 +45,12 @@ const OFF_VALUES = new Set(["off", "open"]);
 export async function saveMonthPlanCells(input: {
   classId: string;
   patches: MpCellPatch[];
+  /**
+   * 이 저장이 **토글**인가(e-book 열 세우기/내리기 · 휴강 표시) — 있으면 감사로그를 이 저장에서 한 줄 남긴다.
+   * 칸 글쓰기는 안 넘긴다(그쪽은 칸을 떠날 때 `commitSheetEdits`가 한 줄, 원장 결정 2026-09-14).
+   * 🔴 쓰기에는 아무 영향이 없다 — 기록의 이름표일 뿐이고, 패치 모양과 안 맞으면 버린다(`mpStructuralChange`).
+   */
+  intent?: MpSaveIntent;
 }): Promise<MpSaveResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -114,6 +123,18 @@ export async function saveMonthPlanCells(input: {
       onConflict: "tenant_id,class_id,plan_date,col_kind",
     });
     if (error) return { ok: false, error: saveError(error) };
+  }
+  // 감사로그 — 열/휴강 토글은 누름이 곧 결심이라 **이 저장에서** 한 줄(응답을 붙잡지 않게 after).
+  const structural = mpStructuralChange(input.intent, patches);
+  if (structural) {
+    after(() =>
+      logAction({
+        action: "ecs_month_plan_edit",
+        targetType: "class_sheet",
+        targetLabel: gate.access.className,
+        metadata: { classId: input.classId, ...structural },
+      }),
+    );
   }
   return { ok: true };
 }

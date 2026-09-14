@@ -1458,6 +1458,24 @@ export const SHEET_DICT = {
     en: "One regular class = 1. Use 1.5 or 2 for extended makeups, 0.5 for a partial attendance, and so on",
   },
   "att.pop.pickFirst": { ko: "상태를 먼저 선택하세요", en: "Pick a status first" },
+  // 보강 예약(0264a, 원장 2026-09-14) — 우클릭 메뉴의 '보강' 아래 항목 + 예약된 칸의 안내·취소.
+  "att.pop.reserve": { ko: "보강 예약", en: "Reserve makeup" },
+  "att.pop.reserveHint": {
+    ko: "이 날 결석분의 보강 시간을 미리 잡습니다",
+    en: "Book a makeup slot for this absence in advance",
+  },
+  "att.pop.reserved": { ko: "보강 예약", en: "Makeup reserved" },
+  "att.pop.reservedFor": { ko: "{date} 결석분", en: "for the absence on {date}" },
+  "att.pop.reservedBy": { ko: "예약: {name}", en: "Reserved by {name}" },
+  "att.pop.reservedTip": {
+    ko: "보강을 하면 이 칸을 평소처럼 찍으세요 — 예약은 자동으로 이행 처리됩니다",
+    en: "When the makeup happens, mark this cell as usual — the reservation completes itself",
+  },
+  "att.pop.cancelReserve": { ko: "예약 취소", en: "Cancel reservation" },
+  "att.pop.cancelling": { ko: "취소 중…", en: "Cancelling…" },
+  "att.pop.cancelReserveDone": { ko: "보강 예약 취소 — {span}", en: "Makeup reservation cancelled — {span}" },
+  "att.cell.reserved": { ko: "보강 예약", en: "Makeup reserved" },
+  "att.cell.reservedShort": { ko: "보강 예약", en: "Resv." },
   "att.pop.save": { ko: "저장", en: "Save" },
   "att.pop.clear": { ko: "지우기", en: "Clear" },
   // 🔴 {n} = 다른 선생님 교시 기록만 — 자리(JJ·랩실)는 강사 보기 저장이 안 건드려서 세지도 적지도 않는다(원장 2026-09-12).
@@ -1883,6 +1901,8 @@ export const SHEET_DICT = {
   "os.list.expandAll": { ko: "모두 펼치기", en: "Open all" },
   "os.list.collapseAll": { ko: "모두 접기", en: "Close all" },
   "os.list.count": { ko: "{n}명", en: "{n} students" },
+  // 반이 없는 보강 행 묶음 머리 — 묶음 키는 `CLASS_GROUP_MAKEUP`(값), 글자는 여기.
+  "os.list.makeup": { ko: "보강", en: "Makeup" },
   "os.att.noPerm": {
     ko: "출결 입력 권한이 없습니다 — 학원설정(역할·권한)에서 원장님이 열어줄 수 있습니다",
     en: "You do not have permission to record attendance — the director can open it in the academy settings (roles and permissions)",
@@ -2890,6 +2910,11 @@ export const SHEET_DICT = {
   },
   "os.c.makeupRowExists": { ko: "이미 보강 행이 추가되어 있습니다", en: "A makeup row has already been added" },
   "os.c.makeupAdded": { ko: "{name} 보강 추가됨", en: "Makeup added for {name}" },
+  // 보강 명단 영속화(분리 보강) 저장 요청 자체가 실패했을 때 — 서버가 준 사유는 그대로 띄운다.
+  "os.c.makeupSaveFail": {
+    ko: "보강 명단을 저장하지 못했습니다. 다시 시도해 주세요",
+    en: "The makeup list could not be saved. Please try again",
+  },
   "os.c.prevFail": { ko: "이전 진도를 불러오지 못했습니다", en: "The last progress could not be loaded" },
   "os.c.prevLoaded": { ko: "이전 진도를 불러왔습니다", en: "The last progress was loaded" },
   "os.c.prevNone": { ko: "이전 보고서가 없습니다", en: "There is no earlier report" },

@@ -21,7 +21,20 @@ import { applySeatPinMarks, NO_SEAT_PINS } from "@/features/timetable/lib/seat-p
 import { getSeatLiveSlots, getSeatPins } from "@/features/timetable/server/seat-pins";
 import { buildVirtualLabs, knownLabSources, NO_VIRTUAL_LABS } from "@/features/timetable/lib/virtual-lab";
 import { getSeatWeekMoves } from "@/features/timetable/server/seat-moves";
-import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
+import {
+  settingsToPeriodsConfig,
+  slotPeriodRow,
+  subjectPeriodRows,
+  weekdayTableFor,
+} from "@/features/timetable/lib/periods";
+// 보강 탭(원장 2026-09-14) — 슬롯이 아니라 보강 예약(0264a)을 요일 × 교시 칸에 그린다. 표시 전용(가드 makeup-tab-wiring).
+import { getReservationsInWeek } from "@/features/attendance/server/makeup-reservation-queries";
+import { attachReservedLines } from "@/features/timetable/server/reserved-lines";
+import { listMakeupScopeClasses } from "@/features/attendance/server/makeup-reservation-scope";
+import { MakeupWeekView, type MakeupWeekEntry, type MakeupWeekRow } from "./_components/makeup-week-view";
+import { fetchInChunks } from "@/lib/supabase/batch";
+import { createClient } from "@/lib/supabase/server";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { buildRichClassCards, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
@@ -33,6 +46,7 @@ import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-group
 import {
   DEFAULT_TIMETABLE_KIND,
   TIMETABLE_KINDS,
+  isMakeupKind,
   TIMETABLE_KIND_LABEL,
   matchesTimetableKind,
   parseTimetableKind,
@@ -51,7 +65,7 @@ import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
 import { shouldSerializeView, subjectDefaultView, viewForSubjectSwitch } from "@/features/timetable/lib/view-default";
-import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation, weekSundayOf, weekTitle } from "@/features/timetable/lib/week";
+import { dateOfDowInWeek, getWeekReferenceDate, mondayOf, thisMonday, weekBoundsOf, weekRelation, weekSundayOf, weekTitle } from "@/features/timetable/lib/week";
 import { pickScheduledGroupsForWeek } from "@/features/timetable/scheduled-groups";
 import { getScheduledGroupPlans } from "@/features/timetable/server/scheduled-groups-queries";
 import { buildTimetableSearchIndex, timetableSearchScope } from "@/features/timetable/lib/student-search";
@@ -243,9 +257,11 @@ export default async function TimetablePage({
   // 판정은 서버가 확정한 boolean만 사용(화면에서 이름 매칭 재구현 금지).
   const kindSlots = allSlots.filter((s) => matchesTimetableKind(kind, s.isSpecialLecture));
   // 과목 칩 = 학원설정 과목 순서 ∩ 데이터에 실제 존재하는 과목(빈 과목칩 방지). 무조건 한 과목.
-  const available = subjectMaps.options
-    .map((o) => o.value)
-    .filter((k) => kindSlots.some((s) => s.subject === k));
+  // 🔴 보강 탭은 그 주 배치와 무관하게 **설정 과목 전부**가 선택지다 — 예약은 배치가 없는 주(휴가 주·강사 스코프 밖)에도 있다
+  //    (적대 리뷰 2026-09-14: 카드는 N건인데 탭은 "예약 없음"이 되던 것).
+  const available = isMakeupKind(kind)
+    ? subjectMaps.options.map((o) => o.value)
+    : subjectMaps.options.map((o) => o.value).filter((k) => kindSlots.some((s) => s.subject === k));
   const defaultSubject = available[0] ?? "";
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
@@ -340,6 +356,84 @@ export default async function TimetablePage({
     { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
   );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
+
+  /**
+   * **보강 탭**(구분 = 보강, 원장 2026-09-14) — 이 과목 반들의 그 주 보강 예약(0264a)을 요일 × 교시 칸에 세운다.
+   * 🔴 반 집합은 **이 화면이 보는 반**(`allSlots`, 강사 스코프 뒤)뿐이다 — 예약 표를 따로 스코핑하지 않고 화면의
+   *    범위를 그대로 쓴다(남의 반 예약이 새지 않게, #77). 이번 주에 배치가 없는 반의 예약은 여기 안 뜬다(알려진 한계).
+   * 🔴 슬롯·명단·집계·드래그엔 안 들어간다 — 이 값은 `MakeupWeekView` 한 곳으로만 간다(가드 makeup-tab-wiring).
+   * 교시 행은 학원설정 표(`subjectPeriodRows`), 시각 → 행은 슬롯과 **같은 함수**(`slotPeriodRow`)로 잰다.
+   */
+  const makeupTab = isMakeupKind(kind);
+  let makeupEntries: MakeupWeekEntry[] = [];
+  const makeupRows: MakeupWeekRow[] = makeupTab
+    ? subjectPeriodRows(subject, false, periodsConfig).map((r) => ({ key: r.key, label: r.label, time: r.time }))
+    : [];
+  const makeupWeekendRows: MakeupWeekRow[] = makeupTab
+    ? subjectPeriodRows(subject, true, periodsConfig).map((r) => ({ key: r.key, label: r.label, time: r.time }))
+    : [];
+  if (makeupTab && subject) {
+    // 🔴 반 집합은 운영실 '보강예정' 카드와 **같은 함수**(`listMakeupScopeClasses` — 관리자 = 활성 반 전부 · 강사 = 담임∪위임∪
+    //    교시 담당) + 이 탭의 과목 축. 그래서 이번 주 배치가 없는 반의 예약(토요일 보강 등)도 여기 선다.
+    const scopeClasses = await listMakeupScopeClasses(teacherId ?? null, weekBoundsOf(referenceDate));
+    const classMeta = new Map<string, { className: string; teacherName: string | null }>();
+    for (const c of scopeClasses) {
+      if (c.subject !== subject) continue;
+      classMeta.set(c.id, { className: c.className, teacherName: c.teacherName });
+    }
+    const reservations = await getReservationsInWeek(referenceDate, [...classMeta.keys()]);
+    if (reservations.length > 0) {
+      const sb = await createClient();
+      const [students, creators] = await Promise.all([
+        fetchInChunks<{ id: string; name: string; grade: string | null; school: string | null }>(
+          [...new Set(reservations.map((r) => r.studentId))],
+          (chunk) => sb.from("students").select("id, name, grade, school").in("id", chunk),
+        ).catch(() => [] as { id: string; name: string; grade: string | null; school: string | null }[]),
+        fetchInChunks<{ id: string; display_name: string | null }>(
+          [...new Set(reservations.map((r) => r.createdBy).filter((v): v is string => !!v))],
+          (chunk) => sb.from("users").select("id, display_name").in("id", chunk),
+        ).catch(() => [] as { id: string; display_name: string | null }[]),
+      ]);
+      const studentById = new Map(students.map((s) => [s.id, s]));
+      const creatorById = new Map(creators.map((u) => [u.id, u.display_name ?? null]));
+      const dowOf = (ymd: string): DayOfWeek =>
+        (["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const)[weekdayIndexOf(ymd)]!;
+      const rowKeys = new Set([...makeupRows, ...makeupWeekendRows].map((r) => r.key));
+      makeupEntries = reservations.flatMap((r): MakeupWeekEntry[] => {
+        const stu = studentById.get(r.studentId);
+        const cls = classMeta.get(r.classId);
+        if (!stu || !cls) return [];
+        const dow = dowOf(r.makeupDate);
+        const row = slotPeriodRow(subject, r.slotStart, dow, periodsConfig, r.slotEnd);
+        return [
+          {
+            id: r.id,
+            dayOfWeek: dow,
+            date: r.makeupDate,
+            slotStart: r.slotStart,
+            slotEnd: r.slotEnd,
+            periodLabel: r.periodLabel,
+            rowKey: rowKeys.has(row.key) ? row.key : null,
+            studentName: stu.name,
+            studentLabel: schoolGradeLabel(stu.school, stu.grade) || null,
+            className: cls.className,
+            teacherName: cls.teacherName,
+            absenceDate: r.absenceDate,
+            note: r.note,
+            createdByName: r.createdBy ? creatorById.get(r.createdBy) ?? null : null,
+          },
+        ];
+      });
+    }
+  }
+  /** 요일 → 그 주 날짜 "M/D"(보강 탭 머리) — 요일 칸의 실제 날짜(`dateOfDowInWeek`)와 같은 축. */
+  const makeupDateOf: Record<string, string> = {};
+  if (makeupTab) {
+    for (const d of ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]) {
+      const ymd = dateOfDowInWeek(referenceDate, d);
+      if (ymd) makeupDateOf[d] = `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
+    }
+  }
   // English Class Sheet 바로가기 — 지금 보는 과목이 ECS 대상일 때만. 조건은 ECS의 정식 게이트
   // (requireEcsClassAccess: english + skillAreas 비어있지 않음)와 **같은 식**이라야 "눌렀는데 빈 목록"이
   // 안 생긴다. 권한(ecs=none인 상담사·회계)까지 봐야 눌러도 튕기는 죽은 버튼이 안 된다(#77).
@@ -472,6 +566,12 @@ export default async function TimetablePage({
 
   const isIntegrated = effView === "integrated";
   const isRooms = effView === "rooms";
+  /**
+   * 기본뷰 반 칸의 **'보강' 줄**(원장 2026-09-14 *"하단에 '대기'나 '퇴원'처럼 '보강' 리스트"*) — 화면에 선 반의 그 요일 칸
+   * 날짜에 잡힌 예약(0264a). 🔴 **기본뷰 격자(`WeekdayGroupTables`)로만** 간다 — 통합·강사·교실뷰·엑셀·시트·이동 판정은
+   * `slots`(예약 없음)를 그대로 본다(가드 makeup-reservation-wiring ③). 보강 탭은 제 격자를 따로 세운다.
+   */
+  const basicSlots = makeupTab || effView !== "basic" ? slots : await attachReservedLines(slots, referenceDate);
   // 통합뷰 **\*LAB 임시 칸**(원장 2026-09-11 *"이동된 학생때문에 추가되는거니까 *LAB 같은식으로 임시 추가"*) —
   // 자리 출석부에서 다른 시간 랩실로 옮겨 앉는(하루 이동·상시 고정) 학생의 요일·교시 칸. 판정은 자리 출석부와 같은 함수.
   // 🔴 `slots`·카드 칸·교시축엔 **안 넣는다** — 이 값은 RichGridView 한 곳으로만 간다(인원·반 드래그·충돌·엑셀·
@@ -774,7 +874,9 @@ export default async function TimetablePage({
         )}
 
         {/* 뷰 — 기본뷰/통합뷰/(강사뷰: 허용 과목에서만)/(교실뷰: 관리자 전용, roomsViewAllowed 주석 참조).
-            아이콘은 뺐다(§10 툴바 아이콘 열 제거 — 글자가 곧 뜻이다). */}
+            아이콘은 뺐다(§10 툴바 아이콘 열 제거 — 글자가 곧 뜻이다).
+            보강 탭은 뷰가 하나(예약 격자)라 드롭다운을 접는다 — 눌러도 아무 일도 안 일어나는 항목을 세우지 않는다. */}
+        {makeupTab ? null : (
         <ParamSelect
           axisLabel="뷰"
           ariaLabel="시간표 보기 방식"
@@ -792,11 +894,13 @@ export default async function TimetablePage({
             href: buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView }),
           }))}
         />
+        )}
 
         {/* 학생 검색 — 이름을 치면 **그 학생이 든 수업(칸)만** 남는다(원장 2026-08-20). 눌러야 나온다(§10 "검색은
             필요할 때만") · 검색어가 걸려 있으면 펼친 채. 서버 왕복 0(이미 내려온 명단으로 클라 판정)이라 글자마다 표가
             다시 그려지지 않는다. 교실뷰·배치 편집·편집 모드에선 스스로 물러난다. */}
-        <TimetableSearchToggle />
+        {/* 보강 탭엔 검색이 없다 — 색인이 슬롯 명단이라 예약 격자엔 안 걸린다("있는데 안 먹는 것"이 제일 나쁘다). */}
+        {makeupTab ? null : <TimetableSearchToggle />}
 
         {/* 강사뷰 '미사용 요일'·기본뷰 '빈 교시 접기'·'색 강도'는 **뷰 설정 팝오버 안으로** 옮겼다
             (2026-07-24 원장 "시간표도 깔끔하게"). 셋 다 "무엇이 어떻게 보이나"라 학년 필터와 같은 성격이고,
@@ -841,7 +945,8 @@ export default async function TimetablePage({
             전 뷰 공통(필터는 명단에 걸리므로 기본·강사·통합 어디서나 같은 뜻)이고, 표시 3종은 해당 뷰에서만
             항목이 뜬다(색·빈 교시=기본뷰 / 미사용 요일=강사뷰). 링크는 그대로 URL 파라미터라 공유 링크도 보존.
             교실뷰는 명단 필터가 지도를 왜곡하므로(학년 필터=교실이 비어 보임) 통째로 접는다. */}
-        {isRooms ? null : (
+        {/* 보강 탭엔 뷰 설정·엑셀도 없다 — 예약 격자엔 학년 필터·명단 접기·내보내기가 걸릴 자리가 없다. */}
+        {isRooms || makeupTab ? null : (
         <>
         <span className="bg-line h-4 w-px" aria-hidden />
         <TimetableViewSettings
@@ -979,7 +1084,7 @@ export default async function TimetablePage({
                되살리지 말 것. */}
         {/* ⚠️ 구분선은 **컨트롤 안쪽**에 있다 — 옮긴 게 없으면 이 컴포넌트가 아무것도 안 그리므로(2026-09-09
             멘트 제거), 여기 밖에 두면 툴바 끝에 세로줄만 덩그러니 남는다. */}
-        {(effView === "basic" || effView === "integrated") && slots.length > 0 && canEdit ? (
+        {!makeupTab && (effView === "basic" || effView === "integrated") && slots.length > 0 && canEdit ? (
           <TimetableEditControls rosterHidden={hideStudents} />
         ) : null}
         </div>
@@ -990,7 +1095,16 @@ export default async function TimetablePage({
           없는지)를 한 줄로 말하고, 그 자리에서 지울 수 있게 한다. */}
       <TimetableSearchEmptyNote />
 
-      {isRooms && roomWindows ? (
+      {makeupTab ? (
+        // 보강 탭 — 슬롯 격자 대신 예약 격자(표시 전용). 빈 주도 이 컴포넌트가 스스로 말한다.
+        <MakeupWeekView
+          rows={makeupRows}
+          weekendRows={makeupWeekendRows}
+          entries={makeupEntries}
+          dateOf={makeupDateOf}
+          today={today}
+        />
+      ) : isRooms && roomWindows ? (
         <RoomMapView
           slots={roomSlots}
           rooms={classroomsForMap}
@@ -1106,7 +1220,7 @@ export default async function TimetablePage({
                      슬롯만 실어 payload를 줄인다(class-move.ts 주석). 반 드래그가 없는 화면(권한 없음)엔 null. */}
               <EmptyPeriodScope collapsed={collapseEmptyPeriods} hideStudents={hideStudents}>
                 <WeekdayGroupTables
-                  slots={slots}
+                  slots={basicSlots}
                   config={periodsConfig}
                   weekMonday={week}
                   weekdayGrouping={weekdayGrouping}

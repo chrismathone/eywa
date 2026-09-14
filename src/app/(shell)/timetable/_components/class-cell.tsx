@@ -13,6 +13,8 @@ import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuick } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
+import { ReservedSection } from "./reserved-section";
+import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
 import type { MovePart } from "@/features/timetable/lib/class-move";
 import {
   CLASS_CELL_DAY_ATTR,
@@ -62,6 +64,8 @@ export type ClassDetailQuick = {
   /** 그 이름이 되는 날(`YYYY-MM-DD`). `classNameBefore`와 짝. */
   classNameChangeDate?: string;
   students: StudentQuick[];
+  /** 그 요일 칸 날짜의 보강 예약(표시 전용, 기본뷰만 — `attachReservedLines`). 합반 칸은 구성 반 것을 합친다. */
+  reserved?: TimetableReservedLine[];
 };
 
 export type { StudentQuick };
@@ -119,6 +123,7 @@ export function ClassCell({
   subSlot = "full",
   coveringDays,
   moveParts,
+  reserved = [],
 }: {
   slot: ClassDetailQuick;
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
@@ -136,6 +141,8 @@ export function ClassCell({
    *    기준 줄만 가고 나머지가 제자리에 남는다(적대 리뷰 2026-09-04).
    */
   moveParts?: MovePart[];
+  /** 이 블록(요일 전부)의 보강 예약 줄 — 대기·퇴원 아래 '보강' 박스(원장 2026-09-14). 격자가 병합 슬롯에서 모아 넘긴다. */
+  reserved?: TimetableReservedLine[];
 }) {
   const { canDrag, incoming, classMoves } = useTimetableEdit();
   const subjects = useSubjectMaps();
@@ -178,7 +185,7 @@ export function ClassCell({
   const SECTION_CAP = 40;
   // 이 셀로 전입 예정인 학생(편집 모드에서 다른 반에서 끌어온 학생) — 도착 셀에 초록 미리보기로 표시.
   const incomingHere = incoming.get(slot.id) ?? [];
-  const showRoster = roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0);
+  const showRoster = roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0 || reserved.length > 0);
   // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
   // 🔴 요일 칸(분리등원 존)은 **드래그 시작에 새로 만들지 않는다** — dnd-kit은 드롭존 집합이 바뀌면 전부
   //    다시 잰다(`droppableRects` lazy memo). 픽업 순간 200개 존이 한꺼번에 생기면 그 재측정이 통째로
@@ -499,6 +506,8 @@ export function ClassCell({
                 />
               </div>
             ) : null}
+            {/* 보강 — 그 요일 칸 날짜에 이 반으로 예약된 학생(0264a). 대기·퇴원과 같은 고정 박스, 옅은 보라. */}
+            <ReservedSection lines={reserved} />
           </div>
         ) : null}
       </div>

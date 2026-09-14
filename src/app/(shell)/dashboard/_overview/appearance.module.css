@@ -8,6 +8,12 @@
 .dashboard :global([data-overview="header"]) > div:first-child > span { display: none; }
 .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-n, 6), minmax(0, 1fr)); border: 0; border-radius: 0; gap: 10px; background: none; overflow: visible; }
 .dashboard :global([data-overview="kpi"]) { background: white; border: 1px solid #dce4ee; border-radius: 12px; box-shadow: 0 3px 0 #e7edf5; overflow: hidden; }
+/* 🔴 맨 오른쪽 카드의 오른쪽 테두리 — 기본 모듈의 `.kpi:last-child { border-right: 0 }`(한 상자에 이어 붙이던 시절 규칙)이
+   이 떨어진 카드 모양에도 남아 마지막 카드만 오른쪽 선이 없었다(원장 2026-09-14 "보강 예정 카드가 우측 테두리 잘리잖아").
+   떨어진 카드는 네 변이 다 있어야 한다. ⚠️ 폭만 되살리면 안 된다 — 그 규칙의 `border-right: 0`이 선 종류(none)·색까지
+   지우므로 셋을 함께 적는다(폭만 1px로 두면 계산값이 그대로 0px였다, 실측). 결석 카드가 맨 끝에 설 때(보강 조회 실패)는 그 카드의 붉은 테두리색. */
+.dashboard :global([data-overview="kpi"]:last-child) { border-right: 1px solid #dce4ee; }
+.dashboard :global([data-kpi="전일 결석"]:last-child) { border-right-color: #e6c8c3; }
 .dashboard :global([data-overview="kpi"]) > button { padding: 16px 16px 14px; }
 .dashboard :global([data-overview="kpi-label"]) { font-size: var(--text-sm); gap: 8px; font-weight: 700; }
 .dashboard :global([data-overview="kpi-label"]) > span:first-child { display: inline-flex; }
@@ -27,6 +33,13 @@
 .dashboard :global([data-overview="panel"]) [role="img"] { max-width: 100%; }
 .dashboard :global([data-overview="panel"]) a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .dashboard :is(button, a, input):focus-visible { outline: 2px solid #327fa8; outline-offset: 3px; }
+/* 일곱 칸(보강예정 포함) — 581~1300px에서 4칸 × 2줄(마지막 칸이 두 칸: 7칸 × 157px는 여섯 칸의 1100px 폭보다 좁다).
+   🔴 특이도: 이 파일의 격자 규칙(.dashboard + 속성 하나 = 0,2,0)과 같은 층에 두면 승자가 CSS 순서라 dev/prod에서 다른 구간이
+   깨진다(적대 리뷰 2026-09-14) — 속성 둘을 겹쳐 0,3,0(마지막 칸은 0,5,0)으로 올린다. 580 이하는 아래 2열 규칙(홀수면 마지막이 한 줄). */
+@container dashboard (min-width: 581px) and (max-width: 1300px) {
+  .dashboard :global([data-overview="kpis"][data-kpi-n="7"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="7"] > [data-overview="kpi"]:last-child) { grid-column: span 2; }
+}
 @container dashboard (max-width: 1100px) {
   .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-mid, 3), minmax(0, 1fr)); }
   .dashboard :global([data-overview="kpi"]:last-child) { grid-column: var(--kpi-last-mid, auto); }

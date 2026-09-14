@@ -29,6 +29,8 @@ import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
 import { makeupSessionEntries } from "../makeup-session";
 import { makeupStudentIds } from "@/features/attendance/input-roster";
+// 보강 예약(0264a) — 그날 내 반에 예약된 학생을 보강 행으로 미리 세운다. 별도 함수·fail-soft(hot path 보호, #95).
+import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
 import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
@@ -55,7 +57,14 @@ const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const; // D
 export type TodayClass = {
   id: string;
   name: string;
+  /** 과목 **표시 라벨**(학원설정 `labelOf`, 예 "수학") — 화면에 적는 값. 🔴 과목 비교에 쓰지 말 것(아래 `subjectKey`). */
   subject: string;
+  /**
+   * 과목 **키**(`classes.subject`, 예 "math") — 보강 줄 거르기처럼 과목을 **비교**할 때는 이 값이다. 모르면 "".
+   * 🔴 원장 제보 2026-09-14(권영준·이수진): 보강 추가가 라벨("수학")을 키("math")와 비교해, 반 칩을 고른 채
+   *    보강 학생을 추가하면 보강 줄이 0개가 되어 "보강 날짜와 과목을 확인해 주세요"로 막혔다.
+   */
+  subjectKey: string;
   startTime: string | null; // "16:20"
   studentCount: number;
   /**
@@ -399,7 +408,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    종료일 뒤에도 로스터에 영원히 남는다. 시간표(fetchSlots)와 같은 규약으로 맞춘다.
   // ⚠️ 보강 보고서 조회는 반과 무관하다 — 스케줄과 **병렬**로(B4: 독립 await는 Promise.all).
   //    그날 내가 쓴 보강(수업외) 보고서 = 아래 수강생 로스터엔 절대 안 잡히는 행들의 유일한 원천.
-  const [scheds, makeupReports, makeupAttRows] = await Promise.all([
+  const [scheds, makeupReports, makeupAttRows, reservedToday] = await Promise.all([
     // end_time·자리 라벨·유효구간·요일은 **수학 자동 시수**(수업 길이, auto-units.ts) 재료 — 같은 행이라 왕복 0.
     fetchInChunks<{
       class_id: string;
@@ -433,8 +442,12 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
         .eq("status", "makeup")
         .in("class_id", chunk),
     ),
+    // 🔴 그날 **내 반에 예약된 보강**(0264a) — 아직 출결도 보고서도 없지만 오기로 한 학생이라 미리 선다(원장 2026-09-14
+    //    *"보강 추가 할 필요없이 미리 학생이 추가되어있어야"*). 조회는 **별도 함수 + fail-soft**(표가 없어도 빈 목록) —
+    //    이 로스터는 강사 전원의 hot path라 새 컬럼·표를 본문 select에 섞지 않는다([[#95]]).
+    getReservationsOn(targetDate, allIds),
   ]);
-  if (allClasses.length === 0 && makeupReports.length === 0 && makeupAttRows.length === 0)
+  if (allClasses.length === 0 && makeupReports.length === 0 && makeupAttRows.length === 0 && reservedToday.length === 0)
     return emptyRoster(today, targetDate, teacherName, config);
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
@@ -471,7 +484,14 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    여전히 금지**(2026-07-22 회귀 방지) — 반 목록은 비우고 보강 행만 싣는다.
   // ⚠️ 보강 **출결**도 보고서와 같이 센다 — 출결만 찍고 보고서는 아직 안 쓴 상태가 정상 순서다
   //    (강사는 학생이 오면 먼저 출결을 찍는다). 보고서만 세면 그 사이 화면이 비어 방금 넣은 학생이 사라진다.
-  if (noClassesToday && !showAll && makeupReports.length === 0 && makeupAttRows.length === 0) {
+  // 보강 예약(0264a)도 같이 센다 — 토요일에 잡힌 보강처럼 "수업 없는 날의 예약"이 이 화면의 유일한 할 일일 수 있다.
+  if (
+    noClassesToday &&
+    !showAll &&
+    makeupReports.length === 0 &&
+    makeupAttRows.length === 0 &&
+    reservedToday.length === 0
+  ) {
     return emptyRoster(today, targetDate, teacherName, { ...config, noClassesToday: true });
   }
   const activeClasses = noClassesToday
@@ -545,6 +565,23 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     rescueSeen.add(key);
     attMakeup.push({ studentId: r.student_id, classId: r.class_id });
     const cls = allClasses.find((c) => c.id === r.class_id);
+    if (cls && !classById.has(cls.id)) classById.set(cls.id, cls);
+  }
+  /**
+   * **보강 예약된 학생**(0264a) — 출결 행과 같은 자리(보강 행)로 미리 세운다.
+   * · 오늘 도는 반의 예약: 그 반 수강생이면 정규 명단에 이미 있다(안 더한다) / 아니면 보강 행.
+   * · 오늘 안 도는 반의 예약(토요일 보강 등): 위 되살리기와 같은 규칙 — **학생만** 더하고 반은 `activeIds`에 안 넣는다.
+   * 이미 출결·보고서로 선 학생은 중복해 세우지 않는다(`attMakeup`·`makeupReports`가 먼저다).
+   */
+  const alreadyMakeup = new Set(attMakeup.map((m) => `${m.studentId}|${m.classId}`));
+  const enrolledKey = new Set(enrollments.map((e) => `${e.student_id}|${e.class_id}`));
+  for (const r of reservedToday) {
+    const key = `${r.studentId}|${r.classId}`;
+    if (alreadyMakeup.has(key) || enrolledKey.has(key)) continue;
+    if (makeupReports.some((m) => m.student_id === r.studentId)) continue;
+    alreadyMakeup.add(key);
+    attMakeup.push({ studentId: r.studentId, classId: r.classId });
+    const cls = allClasses.find((c) => c.id === r.classId);
     if (cls && !classById.has(cls.id)) classById.set(cls.id, cls);
   }
 
@@ -1462,6 +1499,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       id: c.id,
       name: c.class_name,
       subject: subjects.labelOf(c.subject),
+      subjectKey: c.subject ?? "",
       startTime: startByClass.get(c.id) ?? null,
       studentCount: countByClass.get(c.id) ?? 0,
       reportOptout: !!c.report_optout,

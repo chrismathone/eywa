@@ -38,6 +38,21 @@ import {
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
+import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
+
+/** 병합 블록(같은 반 · 여러 요일·교시)이 덮는 칸들의 '보강' 줄 합집합 — 예약 id로 중복 제거. */
+function uniqueReserved(slots: readonly { reserved?: TimetableReservedLine[] }[]): TimetableReservedLine[] {
+  const seen = new Set<string>();
+  const out: TimetableReservedLine[] = [];
+  for (const s of slots) {
+    for (const r of s.reserved ?? []) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push(r);
+    }
+  }
+  return out;
+}
 import { GridDropCell } from "./grid-drop-cell";
 // 🔴 속성 이름은 **일반 모듈**에서 — 이 파일은 서버 컴포넌트라 "use client" 모듈의 상수는 런타임 undefined다([[#81]]).
 import { GRID_ID_ATTR, GRID_ROWS_ATTR } from "@/features/timetable/lib/grid-attrs";
@@ -275,6 +290,7 @@ function SubSlotContent({
           subSlot={subSlot}
           coveringDays={coveringDays}
           moveParts={parts}
+          reserved={uniqueReserved(merged)}
         />
       )}
     </div>

@@ -9,6 +9,7 @@ import { notifyIfClassAttendanceComplete } from "../../server/complete-notify";
 import { isMissingViaColumn } from "../../live/server/write-policy";
 import { autoUnitsApply, autoUnitsKey } from "../../auto-units";
 import { resolveAutoUnits } from "../../server/auto-units";
+import { completeMakeupReservations } from "../../server/makeup-reservation-complete";
 import {
   classesInWindow,
   decideCheckinAction,
@@ -166,6 +167,8 @@ async function reflectPresent(
     error = (await admin.from("attendance_records").insert(rest)).error;
   }
   if (error) return null; // best-effort — 실패해도 등하원/발송은 그대로
+  // 보강 예약 이행(0264a) — 예약된 학생이 키오스크로 찍어도 예약이 `reserved`로 남지 않게(fail-soft · 세션이 없어 감사로그는 생략).
+  await completeMakeupReservations({ tenantId }, [{ studentId, classId, date, status: "present", created: true }]);
   // G4: 이 삽입이 (반,날짜) 완료 전이일 수 있음 — 키오스크 완결도 벨(적대 리뷰: 미훅 갭). actorId=null(시스템 이벤트).
   after(() => notifyIfClassAttendanceComplete({ tenantId, classId, date, actorId: null }));
   return nameByClass.get(classId) ?? "수업";

@@ -9,6 +9,7 @@ import {
   absentDayHref,
   absentKpiDate,
   intakeDayHref,
+  makeupWeekHref,
   studentsEnrolledHref,
   studentsFirstClassHref,
   withdrawalsMonthHref,
@@ -19,7 +20,7 @@ import type { MenuKey } from "@/lib/permissions";
 import { number } from "./charts";
 import { KpiCard } from "./kpi-card";
 import { FirstClassPopup, StudentsPopup, WithdrawalsPopup } from "./kpi-popups";
-import { AbsentPopup, IntakePopup, LevelTestPopup } from "./kpi-popups-day";
+import { AbsentPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
 import s from "./overview.module.css";
 
 const count = (n: number | null | undefined) => (n == null ? "—" : number(n));
@@ -46,7 +47,8 @@ export function kpiGridVars(n: number): CSSProperties {
  */
 export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const v = snapshot.sections;
-  const shown = [v.students, v.withdrawals, v.intake, v.calendar, v.firstClass, v.absent].filter(Boolean).length;
+  // '보강예정'(원장 2026-09-14 *"보강 예정은 가장 끝으로"*)이 맨 뒤 — 앞 여섯은 2026-09-11 확정 순서 그대로.
+  const shown = [v.students, v.withdrawals, v.intake, v.calendar, v.firstClass, v.absent, v.makeup].filter(Boolean).length;
   if (shown === 0) return null;
   const today = snapshot.today;
   const can = (menu: MenuKey) => snapshot.allowed.includes(menu);
@@ -71,9 +73,13 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   // 기준일은 **서버가 조회한 그날**. 영역이 실패해 값이 없을 때만 같은 규칙으로 계산한다(머리·↗가 오늘로 새지 않게).
   const absentDate = absentDay?.date ?? absentKpiDate(today);
   const absentWhen = `어제 ${formatShortKoreanDate(absentDate)}`;
+  // 보강예정 = **이번 주** 예약 상태의 보강(0264a). 오늘·지난 요일(미이행)은 보조 줄에서 가른다.
+  const makeup = v.makeup?.data;
+  const makeupToday = makeup?.rows.filter((r) => r.makeupDate === today).length ?? 0;
+  const makeupOverdue = makeup?.rows.filter((r) => r.overdue).length ?? 0;
 
   return (
-    <div className={s.kpis} style={kpiGridVars(shown)} data-overview="kpis">
+    <div className={s.kpis} style={kpiGridVars(shown)} data-overview="kpis" data-kpi-n={shown}>
       {v.students && (
         <KpiCard
           label="재원생"
@@ -183,6 +189,27 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
           }
         >
           <AbsentPopup day={absentDay} subjectLabels={snapshot.subjects} canOpen={can("students")} />
+        </KpiCard>
+      )}
+      {v.makeup && (
+        <KpiCard
+          label="보강예정"
+          value={count(makeup?.rows.length)}
+          unit="건"
+          detail={
+            makeup
+              ? `오늘 ${number(makeupToday)}${makeupOverdue > 0 ? ` · 지남 ${number(makeupOverdue)}` : ""}${
+                  makeup.later > 0 ? ` · 다음 주 이후 ${number(makeup.later)}` : ""
+                }`
+              : "집계 없음"
+          }
+          detailPrefix="이번 주"
+          icon={<MenuGlyph name="undo" size={20} />}
+          error={v.makeup.error}
+          popupTitle="이번 주 보강 예약"
+          jump={can("timetable") ? { href: makeupWeekHref(), label: "시간표 보강 탭에서 이번 주 보기" } : null}
+        >
+          <MakeupPopup data={makeup} today={today} canOpen={can("students")} />
         </KpiCard>
       )}
     </div>

@@ -49,6 +49,12 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { teacherProcessing, type ProcessingRecord, type TeacherProcessing } from "../teacher-processing";
 import { autoUnitsByDate, isAutoUnitsSubject, toAutoUnitsSchedule } from "../auto-units";
+// 보강 예약(0264a) — 그 달 이 반에 예약된 보강 칸 + 예약된 학생을 명단에 합친다. 조회는 fail-soft(표 없음 = 예약 없음).
+import {
+  getClassReservationsInRange,
+  getReservationCreatorNames,
+  getReservationsOn,
+} from "./makeup-reservation-queries";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -247,6 +253,11 @@ export type AttendanceInputRow = {
   slotCount: number;
   /** 교시가 둘 이상일 때의 교시별 내역 — 화면 툴팁용. */
   slots: SlotMark[];
+  /**
+   * 이 학생의 **그날 보강 예약**(0264a) — 예약된 학생은 '보강 추가' 없이 명단에 미리 선다(수강생이 아니면 `isMakeup`
+   * 행으로). 출결을 찍으면 서버가 예약을 이행 처리한다. 없으면 키 없음(대부분의 행).
+   */
+  reserved?: { id: string; absenceDate: string; slotStart: string; slotEnd: string; periodLabel: string | null; note: string | null };
 };
 
 export async function getClassMeta(classId: string): Promise<ClassMeta | null> {
@@ -293,7 +304,8 @@ export async function getAttendanceInputRows(
 
   // 반·날짜 단위 조회라 학생 필터 없이 받는다(한 반 명단 규모라 절단 위험 없음) — 등원요일 밖에
   // 이미 찍힌 기록을 알아야 그 행을 남길지 판단할 수 있어, 명단보다 **먼저** 읽는다.
-  const [{ data: enrollments }, { data: records }] = await Promise.all([
+  // 보강 예약(0264a)도 함께 — 그날 이 반에 예약된 학생은 '보강 추가' 없이 미리 선다(fail-soft, 표 없음 = 없음).
+  const [{ data: enrollments }, { data: records }, reserved] = await Promise.all([
     supabase
       .from("enrollments")
       .select(
@@ -312,7 +324,21 @@ export async function getAttendanceInputRows(
       .order("recorded_at", { ascending: false })
       // id desc = 동률 tie-break(저장 `pickSaveTargets`·월간 조회와 같은 규약) — 빗금 칸 입력은 여러 행에 같은 시각을 찍는다.
       .order("id", { ascending: false }),
+    getReservationsOn(date, [classId]),
   ]);
+  /** 학생 → 그날 예약(교시 둘이면 이른 것) — 행에 얹는다. */
+  const reservedOf = new Map<string, AttendanceInputRow["reserved"]>();
+  for (const r of reserved) {
+    if (reservedOf.has(r.studentId)) continue;
+    reservedOf.set(r.studentId, {
+      id: r.id,
+      absenceDate: r.absenceDate,
+      slotStart: r.slotStart,
+      slotEnd: r.slotEnd,
+      periodLabel: r.periodLabel,
+      note: r.note,
+    });
+  }
 
   // 유효 기록 = (학생·**교시**)별 최신 1건(0196a, records는 recorded_at 내림차순). 이 화면은 학생당
   // 한 줄이라 교시가 여럿이면 **한 줄로 접는다**(출석부 칸과 같은 규칙 — rollupDay 단일 소스).
@@ -376,7 +402,9 @@ export async function getAttendanceInputRows(
   const recordFieldsOf = (studentId: string) => {
     const existing = recordMap.get(studentId);
     const day = existing ? rollupDay(existing.slots) : null;
+    const reservedHere = reservedOf.get(studentId);
     return {
+      ...(reservedHere ? { reserved: reservedHere } : {}),
       recordIds: existing?.ids ?? [],
       existingRecordId: existing?.ids[0] ?? null,
       status: (day?.status as AttendanceStatus | undefined) ?? null,
@@ -425,7 +453,9 @@ export async function getAttendanceInputRows(
       .filter((s): s is { id: string } => !!s)
       .map((s) => s.id),
   );
-  const makeupIds = makeupStudentIds([...recordMap.keys()], [...enrolledIds]);
+  // 🔴 그날 **보강 예약된** 학생도 같은 규약으로 합친다 — 기록이 아직 없어도 오기로 한 사람이라 미리 선다
+  //    (원장 2026-09-14 *"보강 추가 할 필요없이 미리 학생이 추가되어있어야"*). 수강생이면 정규 행에 예약 표식만 붙는다.
+  const makeupIds = makeupStudentIds([...recordMap.keys(), ...reservedOf.keys()], [...enrolledIds]);
   let makeupRows: AttendanceInputRow[] = [];
   if (makeupIds.length > 0) {
     const students = await fetchInChunks<{ id: string; name: string; grade: string | null }>(
@@ -490,6 +520,18 @@ export type MatrixStudent = {
   spans: EnrollSpan[];
   /** 그 달의 신입·퇴원·반이동 표식 — 대부분의 학생은 빈 배열. */
   badges: LifecycleBadge[];
+};
+
+/** 월별 출석부 칸에 실리는 예약 한 건(0264a) — 칸·팝오버·툴팁이 읽는 것만(예약자 이름은 서버가 붙인다). */
+export type MatrixReservation = {
+  id: string;
+  absenceDate: string;
+  /** "HH:MM" */
+  slotStart: string;
+  slotEnd: string;
+  periodLabel: string | null;
+  note: string | null;
+  createdByName: string | null;
 };
 
 export type AttendanceMatrix = {
@@ -570,6 +612,13 @@ export type AttendanceMatrix = {
    * 1·수학 아님·배치 없음은 키가 없다. ⚠️ 선택 필드 — 없으면(옛 픽스처·보강 반) 자동값 없음과 같다.
    */
   autoUnits?: Record<string, number>;
+  /**
+   * studentId → date → **보강 예약**(0264a, 아직 안 한 보강). 칸에 출결 값이 없을 때 '보강 예약' 네 글자로 서고,
+   * 예약된 학생이 그 달 수강생이 아니면 명단에도 합쳐진다(수강행 없는 기록자와 같은 규약, 빈 spans).
+   * 🔴 값(marks/units)이 아니다 — 시수·출석률·합계 어디에도 안 들어간다. 출결이 찍히는 순간 예약은 `done`으로
+   *    넘어가 여기서 사라지고 그 칸은 평범한 출결 칸이 된다. ⚠️ 선택 필드 — 없으면(옛 픽스처) 예약 없음과 같다.
+   */
+  reservations?: Record<string, Record<string, MatrixReservation>>;
   stats: {
     totalStudents: number;
     presentRate: number;
@@ -822,8 +871,8 @@ export async function getMonthlyAttendanceMatrix(
   const startIso = days[0]!.date;
   const endIso = days[days.length - 1]!.date;
 
-  // 해당 반의 활성 학생 + 그 반의 수업요일 + 이 기간에 기록을 남긴 학생 — 서로 독립이라 병렬로(B4).
-  const [enrollRes, scheduleRes, recordedRows] = await Promise.all([
+  // 해당 반의 활성 학생 + 그 반의 수업요일 + 이 기간에 기록을 남긴 학생 + 보강 예약 — 서로 독립이라 병렬로(B4).
+  const [enrollRes, scheduleRes, recordedRows, reservedRows] = await Promise.all([
     supabase
       .from("enrollments")
       .select(
@@ -861,6 +910,12 @@ export async function getMonthlyAttendanceMatrix(
         .order("id", { ascending: true })
         .range(from, to),
     ),
+    /**
+     * 이 반·이 기간의 **보강 예약**(0264a, 아직 안 한 보강) — 칸에 '보강 예약'으로 서고, 예약된 학생이 수강생이
+     * 아니면 명단에도 합친다(원장 2026-09-14 *"보강 날짜에 보강 추가 할 필요없이 미리 학생이 추가되어있어야"*).
+     * 조회는 fail-soft(표 없음·실패 = 빈 목록) — 부가 표시 하나 때문에 출석부가 죽지 않는다.
+     */
+    getClassReservationsInRange(classId, startIso, endIso),
   ]);
 
   /**
@@ -1026,9 +1081,16 @@ export async function getMonthlyAttendanceMatrix(
     .map((e) => (Array.isArray(e.student) ? e.student[0] : e.student) as { id: string } | undefined)
     .filter((s): s is { id: string } => !!s)
     .map((s) => s.id);
+  // 🔴 보강 **예약된** 학생도 같은 규약으로 합친다 — 기록이 아직 없어도 그날 이 반에 오기로 한 사람이라 명단에
+  //    서야 강사가 '보강 추가' 없이 그 칸을 찍는다(예약 행이 있어 `hasReservedMakeup`이 저장 문을 연다).
   const extraIds = recordedOnlyStudentIds(
-    recordedRows.map((r) => r.student_id),
+    [...recordedRows.map((r) => r.student_id), ...reservedRows.map((r) => r.studentId)],
     enrolledStudentIds,
+  );
+  // 예약만 있는 학생(기록 없음·수강 없음) — 명단엔 서되 **총원엔 안 센다**(아직 안 온 사람, 적대 리뷰 2026-09-14).
+  const recordedIdSet = new Set(recordedRows.map((r) => r.student_id));
+  const reservedOnlyIds = new Set(
+    reservedRows.map((r) => r.studentId).filter((id) => !enrolledStudentIds.includes(id) && !recordedIdSet.has(id)),
   );
   if (extraIds.length > 0) {
     const extras = await fetchInChunks<{
@@ -1051,6 +1113,30 @@ export async function getMonthlyAttendanceMatrix(
     if (ga !== gb) return ga.localeCompare(gb, "ko");
     return a.name.localeCompare(b.name, "ko");
   });
+
+  // 보강 예약 칸(0264a) — studentId → date → 예약. 명단에 없는 학생(조회 실패 등)의 예약은 싣지 않는다.
+  const reservations: Record<string, Record<string, MatrixReservation>> = {};
+  if (reservedRows.length > 0) {
+    const creatorNames = await getReservationCreatorNames(
+      supabase,
+      reservedRows.map((r) => r.createdBy).filter((v): v is string => !!v),
+    );
+    for (const r of reservedRows) {
+      if (!studentMap.has(r.studentId)) continue;
+      // 같은 날 예약이 둘(교시 둘)이면 이른 교시가 칸을 대표한다(조회가 slot_start 오름차순).
+      if (reservations[r.studentId]?.[r.makeupDate]) continue;
+      reservations[r.studentId] ??= {};
+      reservations[r.studentId]![r.makeupDate] = {
+        id: r.id,
+        absenceDate: r.absenceDate,
+        slotStart: r.slotStart,
+        slotEnd: r.slotEnd,
+        periodLabel: r.periodLabel,
+        note: r.note,
+        createdByName: r.createdBy ? (creatorNames.get(r.createdBy) || null) : null,
+      };
+    }
+  }
 
   // 해당 월의 모든 출결 기록 (반 + 학생 + 기간)
   const studentIds = students.map((s) => s.id);
@@ -1377,8 +1463,10 @@ export async function getMonthlyAttendanceMatrix(
     ...(isAutoUnitsSubject(selectedSubject)
       ? { autoUnits: autoUnitsByDate(days.map((d) => d.date), (schedules ?? []).map(toAutoUnitsSchedule)) }
       : {}),
+    // 보강 예약 칸(0264a) — 있을 때만 싣는다(강사 전체 보기는 반마다 매트릭스라 빈 객체도 곱이 된다).
+    ...(Object.keys(reservations).length > 0 ? { reservations } : {}),
     stats: {
-      totalStudents: students.length,
+      totalStudents: students.filter((st) => !reservedOnlyIds.has(st.id)).length,
       presentRate,
       presentCount,
       absentCount,

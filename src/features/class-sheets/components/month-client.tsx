@@ -26,6 +26,8 @@ import { MonthPlanView, type MonthPlanChromeProps } from "./month-plan-view";
 import { MonthRail } from "./month-rail";
 import { useMonthGoals, type GoalRole } from "./use-month-goals";
 import { useMonthPlan } from "./use-month-plan";
+import { useSheetEditAudit } from "./use-sheet-edit-audit";
+import { mpCellKey } from "../lib/month-plan";
 
 /**
  * ECS 월간 뷰 껍데기 — **달력 ↔ 진도표 ↔ 계획(MP) 전환**과 표시 토글, 목표·계획 편집 상태를 소유한다.
@@ -119,6 +121,27 @@ export function MonthClient({
   const flushEdits = () => Promise.all([flushAll(), plan.flushAll()]).then(() => undefined);
   const openDayEditor = (date: string) => void flushEdits().then(() => setOpenDay(date));
 
+  /**
+   * 칸 편집 감사로그(원장 결정 2026-09-14 "칸 입력을 마칠 때 한 줄") — 칸을 처음 건드릴 때 그 칸의 지금 값을
+   * 잡고(touch), 칸을 떠나면(루트 onBlur) 목표·계획 큐를 **비운 뒤**(`flushEdits` — 진행 중 저장까지) 서버가
+   * DB 값으로 바뀐 칸만 한 줄 남긴다. 규약은 lib/edit-audit.ts 한 벌.
+   * ⚠️ 여기서 감싸는 이유: 편집 전 값(`goals`·`plan.cells`)과 큐 두 벌을 함께 가진 곳이 이 화면이다.
+   *    특이사항 메모는 제 저장을 스스로 들고 있어 `audit`을 넘긴다. MP 열/휴강 토글은 저장 액션이 직접 한 줄.
+   */
+  const audit = useSheetEditAudit({ enabled: data.canEdit, flush: flushEdits });
+  const onGoalField: typeof setField = (goalRole, skillArea, field, value) => {
+    audit.touch(
+      data.classId,
+      { kind: "goal", scope: "month", periodStart: `${data.month}-01`, role: goalRole, skillArea, field },
+      goals[goalRole][skillArea]?.[field] ?? null,
+    );
+    setField(goalRole, skillArea, field, value);
+  };
+  const onPlanCell: typeof plan.setCell = (date, colKind, body) => {
+    audit.touch(data.classId, { kind: "mpCell", date, colKind }, plan.cells[mpCellKey(date, colKind)] ?? null);
+    plan.setCell(date, colKind, body);
+  };
+
   const t = useSheetT();
   const tf = useSheetTf();
   const lang = useSheetLang();
@@ -180,7 +203,8 @@ export function MonthClient({
   );
 
   return (
-    <div className="flex min-h-0 flex-col gap-2.5">
+    // onBlur = 칸 편집 감사로그의 "칸을 떠났다" 신호(자손·포털에서 올라온다 — use-sheet-edit-audit.ts).
+    <div className="flex min-h-0 flex-col gap-2.5" onBlur={audit.onBlur}>
       <div className={SHEET_BAR}>
         {/* 목록 · 반 선택(노란 표기) · 반 정보 보기 — 주간 시트와 **같은 조각**(sheet-chrome.tsx). */}
         <SheetClassPicker
@@ -315,7 +339,7 @@ export function MonthClient({
           cells={plan.cells}
           showActual={cur.actual}
           canEdit={data.canEdit && data.mp.status === "ok"}
-          onCell={plan.setCell}
+          onCell={onPlanCell}
           onEbookColumn={(dates, show) => void plan.setEbookColumn(dates, show)}
           onDayOff={(date, off) => void plan.setDayOff(date, off)}
         />
@@ -330,7 +354,7 @@ export function MonthClient({
             lines={data.lines}
             canEdit={data.canEdit}
             savedAt={savedAt}
-            onField={setField}
+            onField={onGoalField}
           />
           {/* 특이사항 메모(0246a) — 원장 2026-09-03 *"메모를 월간계획과 달력 바로 사이에"*.
               🔴 달력 보기에만 선다(진도표·계획은 축이 다르다) — `month-memo.tsx` 머리 각주 참조. */}
@@ -341,6 +365,7 @@ export function MonthClient({
             initialBody={data.memo.body}
             status={data.memo.status}
             canEdit={data.canEdit}
+            audit={audit}
           />
           <MonthCalendar data={data} goals={warnGoals} display={cur} onOpenDay={openDayEditor} />
         </>
@@ -351,7 +376,7 @@ export function MonthClient({
           display={cur}
           canEdit={data.canEdit}
           savedAt={savedAt}
-          onField={setField}
+          onField={onGoalField}
           onOpenDay={openDayEditor}
         />
       )}

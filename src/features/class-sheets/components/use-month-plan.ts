@@ -8,6 +8,7 @@ import {
   type MpCell,
   type MpColKind,
 } from "../lib/month-plan";
+import type { MpSaveIntent } from "../lib/edit-audit";
 import { saveMonthPlanCells, type MpCellPatch } from "../server/month-plan-actions";
 
 /**
@@ -19,6 +20,8 @@ import { saveMonthPlanCells, type MpCellPatch } from "../server/month-plan-actio
  *    한 번의 결심이라 **즉시** 보낸다(디바운스에 매달면 눌러 놓고 창을 닫았을 때 사라진다).
  * ⚠️ 같은 칸을 연달아 고치면 **마지막 값만** 보낸다(LWW) — 큐에 쌓아 순서대로 보내면 느린 왕복이
  *    앞 값으로 덮어쓴다.
+ * 🔑 감사로그: 칸 글쓰기는 화면(`month-client`)이 칸을 떠날 때 한 줄 · 열/휴강 토글은 그 저장이 **의도**
+ *    (`MpSaveIntent`)를 함께 보내 서버가 한 줄(원장 결정 2026-09-14).
  */
 const SAVE_DELAY_MS = 600;
 
@@ -36,10 +39,12 @@ export function useMonthPlan(input: {
   const lastSaved = useRef(cells);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const pending = useRef(new Map<string, MpCellPatch>());
+  /** 이미 떠난 저장 — `flushAll`이 이것까지 기다린다(`useMonthGoals`와 같은 이유). */
+  const inflight = useRef(new Set<Promise<void>>());
 
   const send = useCallback(
-    (patches: MpCellPatch[], revertKeys: string[]): Promise<void> =>
-      saveMonthPlanCells({ classId, patches })
+    (patches: MpCellPatch[], revertKeys: string[], intent?: MpSaveIntent): Promise<void> => {
+      const job: Promise<void> = saveMonthPlanCells({ classId, patches, ...(intent ? { intent } : {}) })
         .then((res) => {
           if (res.ok) {
             for (const p of patches) {
@@ -67,13 +72,19 @@ export function useMonthPlan(input: {
           // 액션은 {ok:false}로 실패를 알리지만 **네트워크가 끊기면 reject**된다 — 안 잡으면
           // unhandled rejection이 되고, 이 Promise에 이동을 매단 화면이 영영 안 움직인다.
           setError(e instanceof Error ? e.message : "네트워크 오류로 저장하지 못했습니다");
-        }),
+        })
+        .finally(() => {
+          inflight.current.delete(job);
+        });
+      inflight.current.add(job);
+      return job;
+    },
     [classId],
   );
 
   /** 여러 칸을 한 번에 — 열 추가/숨기기·휴강 토글이 쓴다(디바운스 없음). */
   const applyNow = useCallback(
-    (patches: MpCellPatch[]): Promise<void> => {
+    (patches: MpCellPatch[], intent?: MpSaveIntent): Promise<void> => {
       if (patches.length === 0) return Promise.resolve();
       const next = { ...cellsRef.current };
       const keys: string[] = [];
@@ -91,7 +102,7 @@ export function useMonthPlan(input: {
       }
       cellsRef.current = next;
       setCells(next);
-      return send(patches, keys);
+      return send(patches, keys, intent);
     },
     [send],
   );
@@ -136,6 +147,7 @@ export function useMonthPlan(input: {
           colKind: "ebook" as const,
           body: show ? "" : null,
         })),
+        { kind: "ebookColumn", show },
       ),
     [applyNow],
   );
@@ -143,25 +155,25 @@ export function useMonthPlan(input: {
   /** 휴강 토글 — 자동 판정(학원설정 휴일)과 같아지면 행을 지운다(명시 예외를 남기지 않는다). */
   const setDayOff = useCallback(
     (date: string, off: boolean): Promise<void> =>
-      applyNow([{ date, colKind: "off", body: mpOffToggleValue(date, holidays, off) }]),
+      applyNow([{ date, colKind: "off", body: mpOffToggleValue(date, holidays, off) }], { kind: "dayOff", off }),
     [applyNow, holidays],
   );
 
   /**
    * 예약된 저장을 지금 보낸다(달 이동·반 전환·인쇄 직전).
    * 🔴 **Promise를 돌려준다** — 호출부가 `await` 한 뒤 이동해야 마지막 글자가 서버에 닿는다.
+   * 🔑 **이미 떠난 저장까지** 기다린다(`useMonthGoals.flushAll`과 같은 이유).
    */
   const flushAll = useCallback((): Promise<void> => {
-    const jobs: Promise<void>[] = [];
     for (const [key, timer] of [...timers.current]) {
       clearTimeout(timer);
       timers.current.delete(key);
       const patch = pending.current.get(key);
       pending.current.delete(key);
       if (!patch) continue;
-      jobs.push(send([{ ...patch, body: cellsRef.current[key] ?? "" }], [key]));
+      void send([{ ...patch, body: cellsRef.current[key] ?? "" }], [key]);
     }
-    return Promise.all(jobs).then(() => undefined);
+    return Promise.all([...inflight.current]).then(() => undefined);
   }, [send]);
 
   // 언마운트 시에도 한 번 — 사람이 이동 버튼을 안 누르고 창을 닫는 길이 있다(여기선 기다릴 수 없다).

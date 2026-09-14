@@ -40,6 +40,8 @@ import { DEFAULT_ECS_FONT_SIZE, readEcsFontSize, type EcsFontSize } from "../fon
 import { boardKey, classKey } from "@/features/report-admin/english-writing";
 import { ecsDelegatedClassIds, ecsVisibleClassFilter } from "./access";
 import { appendMakeupStudents, makeupStudentIds } from "../lib/makeup-roster";
+// 보강 예약(0264a) — 그날 이 반에 예약된 학생을 보강 행으로 미리 세운다(fail-soft).
+import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
 
 /**
  * **오늘 ECS** — 영어 강사의 원스크린(원장 지시 2026-08-07 "영어 강사는 ECS를 기반으로 한 원스크린").
@@ -318,6 +320,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
     return { ok: true, date, today, weekMonday: mondayOf(date), cards: [], hasAnyClass: true, canWrite, skillAreas, userId: user.id, tenantId: user.tenantId, fontSize, todayOrder, holidayName };
   }
 
+  // 그날 보강 예약(0264a, fail-soft) — 독립 조회라 아래 큰 Promise.all과 함께 달리게 프라미스만 만들어 둔다(B4).
+  const reservedTodayPromise = getReservationsOn(date, todayIds);
   // 오늘 Shouting 체크(0230a) — EiE 카드의 교시 줄에 그린다.
   // 🔴 **여기가 강사 전원의 홈**이라 실패해도 죽으면 안 된다([[#95]]) — 표가 없으면 빈 맵으로 떨어진다.
   //    그래서 fetchInChunks(throw 규약)가 아니라 직접 청크를 돌며 error를 삼킨다.
@@ -484,10 +488,16 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   ]);
 
   // 보강(수업외) = 그 반 수강행은 없는데 그날 출결이 있는 학생. 반마다 가른다(A반 수강생이 B반 보강일 수 있다).
+  // 🔴 **보강 예약**(0264a)된 학생도 같은 자리에 미리 선다(원장 2026-09-14 *"보강 추가 할 필요없이 미리 학생이 추가되어
+  //    있어야"*) — 출결이 아직 없어도 오기로 한 사람이다. 조회는 fail-soft(표 없음 = 예약 없음).
+  const reservedToday = await reservedTodayPromise;
   const attMakeupIds = new Set<string>();
   for (const classId of todayIds) {
     const enrolled = enrollments.filter((e) => e.class_id === classId).map((e) => e.student_id);
-    const recorded = attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id);
+    const recorded = [
+      ...attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id),
+      ...reservedToday.filter((r) => r.classId === classId).map((r) => r.studentId),
+    ];
     for (const id of makeupStudentIds(recorded, enrolled)) attMakeupIds.add(id);
   }
 
@@ -765,7 +775,11 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
       const enrolledIds = roster.map((s) => s.studentId);
-      const recordedIds = attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id);
+      // 출결이 있는 학생 + 그날 이 반에 **보강 예약된** 학생(0264a) — 같은 규약(`makeupStudentIds`)으로 보강 행이 된다.
+      const recordedIds = [
+        ...attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id),
+        ...reservedToday.filter((r) => r.classId === classId).map((r) => r.studentId),
+      ];
       const reportMakeupIds = anchoredMakeupReports
         .filter((r) => r.makeup_class_id === classId)
         .map((r) => r.student_id);

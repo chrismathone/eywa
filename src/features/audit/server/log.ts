@@ -270,6 +270,11 @@ export const AUDIT_ACTIONS = {
   attendance_bulk: "출결 일괄 입력",
   attendance_range: "출결 범위 채우기",
   attendance_range_clear: "출결 범위 지우기",
+  // 보강 예약(0264a, 원장 2026-09-14) — 예약·취소는 사람이, 이행은 보강일 출결 저장이 남긴다.
+  makeup_reserve: "보강 예약",
+  makeup_reserve_cancel: "보강 예약 취소",
+  makeup_reserve_done: "보강 예약 이행",
+  makeup_reserve_revert: "보강 예약 되돌림",
   attendance_makeup_link: "보강–결석분 연결",
   // 수학 자동 시수(원장 2026-09-11 "9월분만 보정") — scripts/_oneoff/backfill-math-auto-units.mjs가 --apply 때 한 줄 남긴다.
   attendance_units_backfill: "수학 출석 시수 자동값 소급 보정",
@@ -313,6 +318,13 @@ export const AUDIT_ACTIONS = {
   ecs_plan_line_move: "수업계획 줄 이동",
   ecs_plan_line_delete: "수업계획 줄 삭제",
   ecs_plan_copy: "수업계획 지난 회차 복사",
+  // 강사 시트 칸 편집 — **칸을 떠날 때 한 줄**(원장 결정 2026-09-14, `class-sheets/server/edit-audit-actions.ts`).
+  // 타이핑 중 자동저장은 안 남긴다. Shouting 체크·MP 열/휴강 토글은 누름이 곧 결심이라 그 저장 액션이 직접 한 줄.
+  ecs_goal_edit: "강사 시트 목표 수정",
+  ecs_mark_edit: "강사 시트 학생 기록 수정",
+  ecs_memo_edit: "강사 시트 메모 수정",
+  ecs_month_plan_edit: "월간 계획서(MP) 수정",
+  ecs_shouting_toggle: "Shouting 체크 변경",
 
   // 돈 — 🔴 **금액은 담지 않는다**(아래 '금액' 주석 참조).
   expense_create: "지출결의서 작성",

@@ -31,6 +31,7 @@ import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
 import { absentKpiDate } from "./kpi-links";
+import { getWeekMakeupOverview } from "@/features/dashboard/server/makeup-week";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getRecentAnnouncements } from "@/features/dashboard/server/queries";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
@@ -551,6 +552,8 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     })),
   );
   add("firstClass", ["students"], async () => firstClasses(today, await scopePromise, settingsPromise));
+  // '보강예정'(원장 2026-09-14) — 이번 주 보강 예약. 반 집합·주 범위가 시간표 '보강' 탭과 같은 함수(카드 = 탭).
+  add("makeup", ["attendance"], async () => getWeekMakeupOverview(today, await teacherIdPromise));
   // 출석부 `?status=absent`와 같은 함수·같은 강사 스코프(teacher-axis) — 겸직 강사뷰면 그 강사가 가르치는 반만.
   // 조회한 날을 `date`로 함께 실어 보낸다 — 카드·팝업·↗가 그 값을 읽어 셋이 같은 날을 말한다.
   add("absent", ["attendance"], async () => ({
