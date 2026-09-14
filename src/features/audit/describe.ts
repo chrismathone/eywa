@@ -768,7 +768,15 @@ export function auditDetail(
           : typedUnits;
       const status = str(m.status);
       // 상태 한글은 출결 화면·인쇄물과 **같은 표**(cell-display.STATUS_TEXT) — 여기서 새로 적지 않는다.
-      const label = status && status in STATUS_TEXT ? STATUS_TEXT[status as keyof typeof STATUS_TEXT] : null;
+      const textOf = (s: string | null) => (s && s in STATUS_TEXT ? STATUS_TEXT[s as keyof typeof STATUS_TEXT] : null);
+      const label = textOf(status);
+      /**
+       * 상태도 **얼마에서 얼마로** 적는다(원장 2026-09-14의 같은 요구 — 숫자에만 전·후를 주고 상태엔 안 주면
+       * `결석 · 정정`처럼 *무엇이* 결석이 됐는지를 못 되짚는다. `prevStatus`는 이미 저장돼 있다).
+       * ⚠️ 공결·결석은 같은 '결석'으로 접히므로(STATUS_TEXT) 표기가 같으면 화살표를 안 쓴다 — `결석 → 결석` 금지.
+       */
+      const prevLabel = textOf(str(m.prevStatus));
+      const statusText = label && prevLabel && prevLabel !== label ? `${prevLabel} → ${label}` : label;
       const count = num(m.count);
       // 범위 채우기는 칸이 여럿이라 **합**이다 — 몇 칸이 바뀐 합인지 함께 적는다(안 적으면 한 칸 값으로 읽힌다).
       const unitsCells = num(m.unitsChangedCells);
@@ -785,15 +793,21 @@ export function auditDetail(
       const scope = str(m.scopeTeacherId);
       const scopeName = scope && UUID_RE.test(scope) ? ctx.nameOf(scope) : null;
       const skipped = num(m.skippedSeatRows);
-      // 🔴 **날짜·반은 여기서 적는다** — '대상' 열은 학생 이름만 돌려주므로(auditTargetName) 전용 분기가
-      //    이걸 빼면 "어느 날 어느 반 수업인지"가 화면 어디에도 없다(적대 리뷰 2026-09-14). 시각 열은 로그를 쓴 때다.
+      /**
+       * 🔴 **날짜는 여기서 적는다** — 안 적으면 "어느 날 수업인지"가 화면 어디에도 없다. 시각 열은 로그를 쓴 때다.
+       * 🔴 **반 이름은 단건 셀에서만** — `auditTargetName`은 `studentId ?? userId ?? newTeacherId ?? classId`라
+       *    (셀은 `studentId`가 있어 '대상' 열이 학생 이름이지만) **일괄·범위는 `studentId`가 없어**
+       *    반이 하나면 '대상' 열이 **이미 반 이름**이다 — 여기서 또 적으면 같은 이름이 두 번 뜬다
+       *    (적대 재리뷰 2026-09-14. 반이 여럿이면 `classId` 자체가 없어 자동으로 빠진다).
+       */
       const dates = arr(m.dates).map(str).filter((v): v is string => !!v);
       const when = str(m.date) ?? (dates.length ? `${dates[0]}${dates.length > 1 ? ` 외 ${dates.length - 1}일` : ""}` : null);
-      const className = str(m.classId) && UUID_RE.test(str(m.classId)!) ? ctx.nameOf(str(m.classId)!) : null;
+      const classId = str(m.classId);
+      const className = has("studentId") && classId && UUID_RE.test(classId) ? ctx.nameOf(classId) : null;
       return join(
         when,
         className,
-        label,
+        statusText,
         count === null ? null : `${count}칸`,
         units,
         // 자동으로 들어간 값은 사람이 친 값과 구분해 적는다(수학 수업 길이 자동 시수).

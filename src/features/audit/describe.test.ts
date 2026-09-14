@@ -283,6 +283,40 @@ describe("collectAuditNameIds / auditTargetName", () => {
     );
   });
 
+  it("반 이름을 '대상' 열과 겹쳐 적지 않는다 — 일괄·범위는 대상이 이미 반 이름이다", () => {
+    const names = ctx({ [SID]: "이윤건", [CID]: "중등M TP2A" });
+    // 단건 셀은 대상 열이 **학생 이름**이라(studentId) 어느 반 수업인지를 상세가 적어야 한다.
+    expect(
+      auditDetail("attendance_cell", { studentId: SID, classId: CID, date: "2026-09-14", status: "present" }, names),
+    ).toContain("중등M TP2A");
+    // 범위는 studentId가 없어 대상 열이 반 이름이다 — 또 적으면 같은 이름이 두 번 뜬다.
+    expect(
+      auditDetail(
+        "attendance_range",
+        { classId: CID, studentIds: [SID], dates: ["2026-09-14"], status: "present", count: 3 },
+        names,
+      ),
+    ).not.toContain("중등M TP2A");
+  });
+
+  it("상태도 '얼마에서 얼마로' 적는다 — 정정은 무엇이 무엇으로 바뀌었는지가 값이다", () => {
+    expect(
+      auditDetail(
+        "attendance_cell",
+        { studentId: SID, date: "2026-09-14", status: "absent", prevStatus: "present", overwrote: true },
+        ctx(),
+      ),
+    ).toContain("출석 → 결석");
+    // 공결·결석은 같은 '결석'으로 접힌다 — `결석 → 결석`이라 적지 않는다.
+    expect(
+      auditDetail(
+        "attendance_cell",
+        { studentId: SID, date: "2026-09-14", status: "absent", prevStatus: "excused", overwrote: true },
+        ctx(),
+      ),
+    ).not.toContain("→");
+  });
+
   it("범위 채우기는 '몇 칸의 합'인지 적는다 — 안 적으면 한 칸 값으로 읽힌다", () => {
     const d = auditDetail(
       "attendance_range",
