@@ -576,6 +576,104 @@ describe("출결 알림 수신자(attendanceNoticeRecipients)", () => {
     ).toEqual([HOMEROOM]);
   });
 
+  /**
+   * 임시 위임 대체 강사 — 원장 결정 2026-09-14: *"결근 대체로 반을 임시 위임받은 강사도 그날 [요청]·교차 알림
+   * 벨을 받는다. 교시 담당·담임은 지금처럼 받는다."*
+   */
+  describe("임시 위임 대체 강사(class_delegations)", () => {
+    const DELEGATE = "t-delegate";
+    const today = { delegateUserId: DELEGATE, fromDate: MON, toDate: MON };
+
+    it("그날 위임받은 대체 강사도 받는다 — 교시 담당·담임은 그대로 받는다", () => {
+      expect(
+        attendanceNoticeRecipients({
+          homeroomTeacherId: HOMEROOM,
+          slots: lt4,
+          date: MON,
+          slotStart: "16:20",
+          delegations: [today],
+        }).sort(),
+      ).toEqual([HOMEROOM, TODAY_1620, DELEGATE].sort());
+    });
+
+    it("위임은 반 전체라 교시로 거르지 않는다 — 자리 교시·그날 전체·시간표에 없는 교시에도 받는다", () => {
+      for (const slotStart of ["18:20", null, "20:00"]) {
+        expect(
+          attendanceNoticeRecipients({
+            homeroomTeacherId: HOMEROOM,
+            slots: lt4,
+            date: MON,
+            slotStart,
+            delegations: [today],
+          }),
+          `slotStart=${slotStart}`,
+        ).toContain(DELEGATE);
+      }
+    });
+
+    it("보낸 사람이 대체 강사면 뺀다", () => {
+      expect(
+        attendanceNoticeRecipients({
+          homeroomTeacherId: HOMEROOM,
+          slots: lt4,
+          date: MON,
+          slotStart: "16:20",
+          delegations: [today],
+          excludeId: DELEGATE,
+        }).sort(),
+      ).toEqual([HOMEROOM, TODAY_1620].sort());
+    });
+
+    it("대체 강사가 담임·교시 담당과 같은 사람이면 한 번만(같은 반에 위임이 둘 걸려도)", () => {
+      expect(
+        attendanceNoticeRecipients({
+          homeroomTeacherId: HOMEROOM,
+          slots: lt4,
+          date: MON,
+          slotStart: "16:20",
+          delegations: [
+            { delegateUserId: HOMEROOM, fromDate: MON, toDate: MON },
+            { delegateUserId: TODAY_1620, fromDate: "2026-09-10", toDate: "2026-09-20" },
+            today,
+            { ...today },
+          ],
+        }).sort(),
+      ).toEqual([HOMEROOM, TODAY_1620, DELEGATE].sort());
+    });
+
+    it("기간 밖·해제된·깨진 위임은 받지 않는다 — 양끝(시작일·종료일 당일)은 포함", () => {
+      const ended = "t-ended-delegate";
+      const upcoming = "t-upcoming-delegate";
+      const revoked = "t-revoked-delegate";
+      const broken = "t-broken-delegate";
+      const startsToday = "t-starts-today";
+      const endsToday = "t-ends-today";
+      expect(
+        attendanceNoticeRecipients({
+          homeroomTeacherId: HOMEROOM,
+          slots: [],
+          date: MON,
+          slotStart: null,
+          delegations: [
+            { delegateUserId: ended, fromDate: "2026-09-07", toDate: "2026-09-13" },
+            { delegateUserId: upcoming, fromDate: "2026-09-15", toDate: "2026-09-18" },
+            { delegateUserId: revoked, fromDate: MON, toDate: MON, revokedAt: "2026-09-13T09:00:00+09:00" },
+            { delegateUserId: broken, fromDate: "망가진 값", toDate: MON },
+            { delegateUserId: startsToday, fromDate: MON, toDate: "2026-09-20" },
+            { delegateUserId: endsToday, fromDate: "2026-09-10", toDate: MON },
+          ],
+        }).sort(),
+      ).toEqual([HOMEROOM, startsToday, endsToday].sort());
+    });
+
+    it("위임을 안 넘기거나 빈 목록이면 종전과 같다", () => {
+      const base = { homeroomTeacherId: HOMEROOM, slots: lt4, date: MON, slotStart: "16:20" } as const;
+      const before = attendanceNoticeRecipients(base).sort();
+      expect(attendanceNoticeRecipients({ ...base, delegations: [] }).sort()).toEqual(before);
+      expect(before).toEqual([HOMEROOM, TODAY_1620].sort());
+    });
+  });
+
   it("행 모양 변환은 컬럼을 그대로 옮긴다", () => {
     expect(
       axisSlotFromRow({

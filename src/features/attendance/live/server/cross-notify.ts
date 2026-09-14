@@ -2,7 +2,7 @@ import "server-only";
 /**
  * 미출결 → 출결 교차 알림. 쓰기 시점에만 발화(배치 불필요).
  *
- * · 데스크가 바꿨으면 → **그 칸의 그날 그 교시 담당 + 반 담임**(원장 결정 2026-09-14, `attendanceNoticeRecipients`)
+ * · 데스크가 바꿨으면 → **그 칸의 그날 그 교시 담당 + 반 담임 + 그날 위임 대체 강사**(원장 결정 2026-09-14, `attendanceNoticeRecipients`)
  * · 강사가 바꿨으면 → `users.desk_attendance_optin` 켠 계정
  *
  * 규약: dedup bucket = 상태 전이(`날짜|교시`), 신규분만 발송, admin 조회에 tenant 필터.
@@ -14,11 +14,13 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { getTestStudentIds } from "@/features/students/server/test-students";
+import { getActiveDelegationsForClasses } from "@/features/classes/server/delegation";
 import { addDays, kstToday } from "@/lib/date-kst";
 import {
   attendanceNoticeRecipients,
   axisDowOf,
   axisSlotFromRow,
+  type AxisDelegation,
   type AxisSlot,
   type AxisSlotRow,
 } from "@/features/attendance/teacher-axis";
@@ -153,7 +155,7 @@ export async function notifyUnmarkedToPresent(input: {
 }
 
 /**
- * 데스크 → 강사 방향 수신자 — **칸마다** 그날 그 교시 담당 ∪ 반 담임(원장 결정 2026-09-14).
+ * 데스크 → 강사 방향 수신자 — **칸마다** 그날 그 교시 담당 ∪ 반 담임 ∪ 그날 위임 대체 강사(원장 결정 2026-09-14).
  *
  * 🔴 반의 슬롯 담당을 요일·교시·유효기간 없이 모으지 말 것 — 끝난 배치 이력·다른 요일·다른 교시 강사에게까지
  *    벨이 갔다(실측 2026-09-14: 활성 반 120개 중 31개 반·연인원 75명). 판정은 `attendanceNoticeRecipients`
@@ -161,6 +163,8 @@ export async function notifyUnmarkedToPresent(input: {
  *    일부러 다른 규칙이다.
  * ⚠️ SQL은 그날·그 요일로 좁히기만 하고 최종 판정은 순수 함수가 한다(조건이 두 벌이면 갈라진다).
  * ⚠️ `class_schedules`는 이력을 함께 담는 표라 청크 안에서도 1000행에 잘릴 수 있다 → 청크 × 페이징(B2).
+ * ⚠️ 위임은 `getActiveDelegationsForClasses`(classes/server/delegation) 한 벌로 읽는다 — 위임 표를 여기서 직접
+ *    조회하면 해제·기간 규약이 두 벌이 된다. 세 조회는 서로 독립이라 병렬(B4).
  * ⚠️ 조회 실패는 throw — 호출부 catch가 reportError로 남긴다(삼키면 "받을 사람 없음"으로 위장한다).
  */
 async function loadClassTeachersByCell(
@@ -173,7 +177,7 @@ async function loadClassTeachersByCell(
   const dow = axisDowOf(date);
   if (!dow) return new Map();
   const classIds = [...new Set(cells.map((c) => c.classId))];
-  const [klasses, slotRows] = await Promise.all([
+  const [klasses, slotRows, delegations] = await Promise.all([
     fetchInChunks<{ id: string; teacher_id: string | null }>(classIds, (chunk) =>
       admin.from("classes").select("id, teacher_id").eq("tenant_id", tenantId).in("id", chunk),
     ),
@@ -189,11 +193,16 @@ async function loadClassTeachersByCell(
         .order("id", { ascending: true })
         .range(from, to),
     ),
+    getActiveDelegationsForClasses(admin, tenantId, classIds, date),
   ]);
   const homeroomByClass = new Map(klasses.map((k) => [k.id, k.teacher_id]));
   const slotsByClass = new Map<string, AxisSlot[]>();
   for (const r of slotRows) {
     (slotsByClass.get(r.class_id) ?? slotsByClass.set(r.class_id, []).get(r.class_id)!).push(axisSlotFromRow(r));
+  }
+  const delegationsByClass = new Map<string, AxisDelegation[]>();
+  for (const d of delegations) {
+    (delegationsByClass.get(d.classId) ?? delegationsByClass.set(d.classId, []).get(d.classId)!).push(d);
   }
   const out = new Map<string, NotifyCell[]>();
   for (const cell of cells) {
@@ -205,6 +214,7 @@ async function loadClassTeachersByCell(
       date,
       slotStart: cell.slotStart ?? null,
       periodStart: cell.periodStart ?? null,
+      delegations: delegationsByClass.get(cell.classId) ?? [],
       excludeId: actorId,
     });
     for (const id of recipients) (out.get(id) ?? out.set(id, []).get(id)!).push(cell);
