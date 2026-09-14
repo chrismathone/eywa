@@ -10,6 +10,7 @@ import { DEFAULT_ECS_COLLAPSED_ROSTER_GROUPS } from "../view-prefs";
 import { rosterTextCols, type SheetMark } from "../lib/roster-form";
 import { SeatDayTable } from "./seat-day-table";
 import { useSeatDaySaves, type SeatAtt } from "./seat-day-saves";
+import { useSheetEditAudit } from "./use-sheet-edit-audit";
 import type { SeatDayData, SeatDayStudent } from "../server/seat-day-types";
 
 export function SeatDayClient({ data }: { data: SeatDayData }) {
@@ -32,7 +33,10 @@ export function SeatDayClient({ data }: { data: SeatDayData }) {
     return out;
   });
   const [collapsed, setCollapsed] = useState<RosterGroupKey[]>(DEFAULT_ECS_COLLAPSED_ROSTER_GROUPS);
-  const handlersOf = useSeatDaySaves(attendance, setAttendance, marks, setMarks);
+  // 칸 편집 감사로그(원장 결정 2026-09-14) — 칸을 떠날 때 한 줄. 편집 가능 여부는 칸이 이미 가른다
+  // (읽기 전용 행엔 입력이 없다), 반마다 쓰기 게이트는 서버가 다시 본다.
+  const audit = useSheetEditAudit({ enabled: true });
+  const handlersOf = useSeatDaySaves(attendance, setAttendance, marks, setMarks, audit);
 
   const zoom = ECS_FONT_SIZE_ZOOM[data.fontSize];
   // 타임(교시)마다 입력 폼이 다르면 자유 입력 열 구성이 갈리고, 그 뒤 열들의 x가 블록마다 달라진다.
@@ -40,7 +44,7 @@ export function SeatDayClient({ data }: { data: SeatDayData }) {
   // (열이 안 맞는 이유를 화면이 스스로 답하게 — 폼이 하나뿐이면 칩은 아예 안 그린다).
   const mixedForms = new Set(data.periods.map((p) => p.form)).size > 1;
   return (
-    <div className="space-y-5" style={zoom === 1 ? undefined : { zoom }}>
+    <div className="space-y-5" style={zoom === 1 ? undefined : { zoom }} onBlur={audit.onBlur}>
       {data.periods.map((p) => {
         const students: SeatDayStudent[] = p.students.map((s) => {
           const key = seatAttKey(s.classId, s.studentId, p.slotStart);

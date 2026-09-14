@@ -1225,7 +1225,7 @@ export function OneScreenClient({
           applySessionSaveResult(existing.id, result);
         }
       } catch {
-        toast.error("보강 명단을 저장하지 못했습니다. 다시 시도해 주세요");
+        toast.error(t("os.c.makeupSaveFail"));
         return;
       } finally { setMakeupSaving(false); }
     }

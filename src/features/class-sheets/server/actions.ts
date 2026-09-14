@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 // ECS 서버 액션 — 전부 requireEcsClassAccess(write) 공용 게이트(#77) 뒤. class_sheet_*는 deny-RLS라
 // admin client(service_role)로만 접근하되, **모든 select/update가 tenant_id + class_id + id 3중 조건**
 // (게이트한 반과 변경 행의 결속 — 계획 v2.2 §A). 구조 변경(create/move/delete/copy)은 0157a RPC 위임
@@ -33,6 +34,8 @@ import {
 } from "../view-prefs";
 import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features/classes/english-track";
 import { normalizePlanText, SKILL_AREA_SLUG_RE } from "../lib/plan-codec";
+// 메모 위치키 규약은 칸 편집 감사로그와 **한 벌**(lib/edit-audit.ts) — 저장이 받는 키와 기록이 받는 키가 갈리지 않게.
+import { MEMO_KEY_RE } from "../lib/edit-audit";
 import { isGoalAreaAllowed } from "../lib/goal-areas";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
@@ -393,8 +396,11 @@ export async function upsertStudentMark(input: {
   return { ok: true };
 }
 
-const MEMO_KEY_RE = /^(week|panel|day:\d{4}-\d{2}-\d{2}|slot:\d{4}-\d{2}-\d{2}:\d{2}:\d{2})$/;
-
+/**
+ * 주간 메모 저장(LWW) — 타이핑 디바운스마다 불린다.
+ * 🔴 여기서 감사로그를 남기지 않는다(목표·학생 기록도 같다) — 칸을 떠날 때 한 줄은 `commitSheetEdits`의 몫이다
+ *    (원장 결정 2026-09-14). 여기서 남기면 한 번 적는 메모가 수십 줄이 된다.
+ */
 export async function saveMemo(input: {
   classId: string;
   weekStart: string;
@@ -478,16 +484,29 @@ export async function setSlotShouting(input: {
       ? "Shouting 체크 기능이 아직 준비되지 않았습니다(DB 갱신 필요) — 관리자에게 알려주세요"
       : `저장에 실패했습니다: ${e.message}`;
   if (!input.value) {
-    const { error } = await admin
+    const { data: removed, error } = await admin
       .from("class_sheet_slot_flags")
       .delete()
       .eq("tenant_id", tenantId)
       .eq("class_id", input.classId)
       .eq("flag_date", input.date)
-      .eq("slot_start", input.slotStart);
+      .eq("slot_start", input.slotStart)
+      .select("id");
     if (error) return { ok: false, error: saveError(error) };
+    // 감사로그 — 실제로 지운 행이 있을 때만(이미 해제된 칸을 다시 보낸 것은 변동이 아니다).
+    if ((removed ?? []).length > 0) logShoutingToggle(gate.access, input, false);
     return { ok: true };
   }
+  // 이미 체크된 칸인가 — 감사로그의 "변동" 판정용(쓰기는 종전 그대로 upsert). 조회가 실패하면 **남기는 쪽**으로
+  // 기운다(변동을 놓치는 것보다 한 줄 더 남는 게 낫다).
+  const { data: existed } = await admin
+    .from("class_sheet_slot_flags")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", input.classId)
+    .eq("flag_date", input.date)
+    .eq("slot_start", input.slotStart)
+    .maybeSingle();
   const { error } = await admin.from("class_sheet_slot_flags").upsert(
     {
       tenant_id: tenantId,
@@ -502,7 +521,28 @@ export async function setSlotShouting(input: {
     { onConflict: "tenant_id,class_id,flag_date,slot_start" },
   );
   if (error) return { ok: false, error: saveError(error) };
+  if (!existed) logShoutingToggle(gate.access, input, true);
   return { ok: true };
+}
+
+/**
+ * Shouting 체크 감사로그 — 누름 한 번이 곧 결심이라 **저장 액션이 직접** 한 줄 남긴다(칸 글쓰기처럼 칸을
+ * 떠날 때 모으지 않는다). 주간 시트에선 LWW 디바운스가 연타를 마지막 값으로 접는다.
+ * 응답을 붙잡지 않게 `after`로 미룬다(클라의 서버 액션 호출은 순차라 기록이 다음 저장을 밀면 안 된다).
+ */
+function logShoutingToggle(
+  access: { classId: string; className: string },
+  input: { date: string; slotStart: string },
+  checked: boolean,
+): void {
+  after(() =>
+    logAction({
+      action: "ecs_shouting_toggle",
+      targetType: "class_sheet",
+      targetLabel: access.className,
+      metadata: { classId: access.classId, date: input.date, slotStart: input.slotStart.slice(0, 5), checked },
+    }),
+  );
 }
 
 /**

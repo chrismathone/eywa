@@ -1817,6 +1817,8 @@ export const SHEET_DICT = {
   "os.list.expandAll": { ko: "모두 펼치기", en: "Open all" },
   "os.list.collapseAll": { ko: "모두 접기", en: "Close all" },
   "os.list.count": { ko: "{n}명", en: "{n} students" },
+  // 반이 없는 보강 행 묶음 머리 — 묶음 키는 `CLASS_GROUP_MAKEUP`(값), 글자는 여기.
+  "os.list.makeup": { ko: "보강", en: "Makeup" },
   "os.att.noPerm": {
     ko: "출결 입력 권한이 없습니다 — 학원설정(역할·권한)에서 원장님이 열어줄 수 있습니다",
     en: "You do not have permission to record attendance — the director can open it in the academy settings (roles and permissions)",
@@ -2824,6 +2826,11 @@ export const SHEET_DICT = {
   },
   "os.c.makeupRowExists": { ko: "이미 보강 행이 추가되어 있습니다", en: "A makeup row has already been added" },
   "os.c.makeupAdded": { ko: "{name} 보강 추가됨", en: "Makeup added for {name}" },
+  // 보강 명단 영속화(분리 보강) 저장 요청 자체가 실패했을 때 — 서버가 준 사유는 그대로 띄운다.
+  "os.c.makeupSaveFail": {
+    ko: "보강 명단을 저장하지 못했습니다. 다시 시도해 주세요",
+    en: "The makeup list could not be saved. Please try again",
+  },
   "os.c.prevFail": { ko: "이전 진도를 불러오지 못했습니다", en: "The last progress could not be loaded" },
   "os.c.prevLoaded": { ko: "이전 진도를 불러왔습니다", en: "The last progress was loaded" },
   "os.c.prevNone": { ko: "이전 보고서가 없습니다", en: "There is no earlier report" },

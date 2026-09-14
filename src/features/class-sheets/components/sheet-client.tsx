@@ -54,6 +54,9 @@ import { ECS_PLAN_API } from "./plan-api";
 import { seedPlanLines, usePlanHandlers, type PlanHandlers } from "./use-plan-handlers";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
+// 칸 편집 감사로그(원장 결정 2026-09-14 "칸 입력을 마칠 때 한 줄") — 규약은 lib/edit-audit.ts 한 벌.
+import { useSheetEditAudit } from "./use-sheet-edit-audit";
+import { markEditTouches } from "../lib/edit-audit";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { SheetToolbar } from "./sheet-toolbar";
 import { PlanPanel } from "./plan-panel";
@@ -238,6 +241,9 @@ export function SheetClient({
   );
   const store = useSheetSaveStore(send, doc.journal, canEdit);
   useFlushOnUnmount(store);
+  // 칸 편집 감사로그 — 목표·학생 기록·메모 칸을 떠날 때 한 줄. 기록 전에 **이 저장 큐를 비운다**(store.flush는
+  // 진행 중 LWW까지 기다린다) — 안 비우면 서버가 도착 전 DB를 읽어 바뀐 칸을 "안 바뀜"으로 흘린다.
+  const audit = useSheetEditAudit({ enabled: canEdit, flush: () => store.flush() });
   useEffect(() => {
     store.setCallbacks({
       onError: (m) => toast.error(m),
@@ -297,6 +303,11 @@ export function SheetClient({
   useEffect(() => {
     marksRef.current = marks;
   }, [marks]);
+  // 메모의 편집 전 값(감사로그) — 핸들러가 useCallback으로 고정돼 클로저의 memos는 낡는다.
+  const memosRef = useRef(memos);
+  useEffect(() => {
+    memosRef.current = memos;
+  }, [memos]);
   // 출결도 같은 이유로 미러 — 핸들러가 useMemo로 고정돼 있어 클로저의 attendance는 낡는다(롤백이 옛 값을
   // 되살리면 "실패했는데 화면은 그대로"가 된다).
   const attendanceRef = useRef(attendance);
@@ -695,6 +706,11 @@ export function SheetClient({
         // 실패 시 되돌릴 직전 값 — 낙관 반영만 하고 롤백이 없으면 화면엔 남고 서버엔 없는 상태가 되어
         // 툴바가 "저장됨"이라 말하는 동안 강사는 입력을 잃는다(적대검증 2026-07-29). 출석과 같은 처방.
         const before = marksRef.current[key] ?? null;
+        // 감사로그 — 이 저장이 **바꾸는** 칸만, 편집을 시작한 순간의 값으로(칸을 떠날 때 한 줄).
+        // 태도 순환처럼 여러 번 눌러도 칸마다 첫 값 하나만 잡힌다.
+        for (const edit of markEditTouches(before, { status, progressNote: note, ...patch })) {
+          audit.touch(classId, { kind: "mark", studentId, date, slotStart, field: edit.field }, edit.before);
+        }
         // 화면 상태는 **머지**(안 건드린 칸은 지금 값 유지) — 서버도 같은 규약이라 둘이 어긋나지 않는다.
         setMarks((prev) => ({
           ...prev,
@@ -732,6 +748,7 @@ export function SheetClient({
     }),
     // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 유닛**이 박힌다(시수=급여라 조용한 오기록).
     [
+      audit,
       classId,
       data.canMarkAttendanceByDate,
       data.unitsByDate,
@@ -752,6 +769,16 @@ export function SheetClient({
       value: string,
     ) => {
       const periodStart = scope === "week" ? weekMonday : data.monthStart;
+      // 감사로그 — 편집 전 값(칸을 떠날 때 한 줄). 칸마다 첫 값만 잡힌다.
+      const prevGoal = goalsRef.current.find(
+        (g) =>
+          g.scope === scope && g.role === role && g.skillArea === skillArea && g.periodStart === periodStart,
+      );
+      audit.touch(
+        classId,
+        { kind: "goal", scope, periodStart, role, skillArea, field },
+        prevGoal?.[field] ?? null,
+      );
       setGoals((prev) => {
         const idx = prev.findIndex(
           (g) =>
@@ -803,11 +830,13 @@ export function SheetClient({
           );
       });
     },
-    [classId, data.monthStart, store, weekMonday],
+    [audit, classId, data.monthStart, store, weekMonday],
   );
 
   const saveWeekMemo = useCallback(
     (memoKey: string, body: string) => {
+      // 감사로그 — 편집 전 값(칸을 떠날 때 한 줄).
+      audit.touch(classId, { kind: "memo", weekStart: weekMonday, memoKey }, memosRef.current[memoKey] ?? null);
       setMemos((prev) => ({ ...prev, [memoKey]: body }));
       store.scheduleLww(`memo:${memoKey}`, async () => {
         const r = await saveMemo({
@@ -819,7 +848,7 @@ export function SheetClient({
         if (!r.ok) toast.error(`${r.error} — 저장되지 않았습니다`);
       });
     },
-    [classId, store, weekMonday],
+    [audit, classId, store, weekMonday],
   );
 
   // 요일 필터 + **오늘 면의 강사 축 필터**를 한 곳에서(today-own-slots) — 주간(full)은 종전 그대로다.
@@ -856,7 +885,11 @@ export function SheetClient({
 
   return (
     // today 임베드는 h-full을 안 쓴다 — 자연 높이로 쌓여 페이지가 스크롤한다(부모에 높이가 없다).
-    <div className={variant === "today" ? "flex flex-col gap-3" : "flex h-full min-h-0 flex-col gap-3"}>
+    // onBlur = 칸 편집 감사로그의 "칸을 떠났다" 신호(자손·포털에서 올라온다 — use-sheet-edit-audit.ts).
+    <div
+      className={variant === "today" ? "flex flex-col gap-3" : "flex h-full min-h-0 flex-col gap-3"}
+      onBlur={audit.onBlur}
+    >
       {variant === "full" ? (
         <SheetToolbar
           data={data}

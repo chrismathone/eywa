@@ -998,6 +998,62 @@ describe("auditDetail — 등록상담·강사 시트·캘린더(2026-09-10 김�
     );
   });
 
+  it("강사 시트 칸 편집 — 칸을 떠날 때 한 줄: 위치·칸 이름·이전 값 → 새 값(영문 kind·role은 안 흘린다)", () => {
+    expect(
+      auditDetail(
+        "ecs_mark_edit",
+        {
+          classId: "c",
+          kind: "mark",
+          studentId: SID,
+          date: "2026-09-14",
+          slotStart: "17:20",
+          field: "progressNote",
+          fieldLabel: "특이사항",
+          before: "PL 6",
+          after: "PL 7",
+        },
+        ctx({ [SID]: "김학생" }),
+      ),
+    ).toBe("김학생 · 2026-09-14 17:20 · 특이사항 「PL 6」 → 「PL 7」");
+    expect(
+      auditDetail(
+        "ecs_goal_edit",
+        {
+          kind: "goal",
+          scope: "week",
+          periodStart: "2026-09-14",
+          role: "assistant",
+          skillArea: "reading",
+          areaLabel: "Reading",
+          fieldLabel: "교재명",
+          before: null,
+          after: "Wonders 3",
+        },
+        ctx(),
+      ),
+    ).toBe("2026-09-14 주 목표 · 부담임 · Reading · 교재명 (빈칸) → 「Wonders 3」");
+    expect(
+      auditDetail("ecs_memo_edit", { kind: "monthMemo", month: "2026-09", fieldLabel: "특이사항 메모", before: "a", after: null }, ctx()),
+    ).toBe("2026-09 · 특이사항 메모 「a」 → (빈칸)");
+    expect(
+      auditDetail("ecs_memo_edit", { kind: "memo", weekStart: "2026-09-14", memoKey: "panel", fieldLabel: "주간 메모", before: null, after: "b" }, ctx()),
+    ).toBe("2026-09-14 주 · 주간 메모 (빈칸) → 「b」");
+    expect(
+      auditDetail("ecs_month_plan_edit", { kind: "mpCell", date: "2026-09-15", colKind: "in_class", fieldLabel: "In-class", before: "", after: "U3" }, ctx()),
+    ).toBe("2026-09-15 · In-class (빈칸) → 「U3」");
+    expect(
+      auditDetail("ecs_month_plan_edit", { change: "ebookColumn", show: true, days: 4, from: "2026-09-01", to: "2026-09-22" }, ctx()),
+    ).toBe("e-book 열 세움 · 2026-09-01~2026-09-22 · 4일");
+    expect(auditDetail("ecs_month_plan_edit", { change: "dayOff", date: "2026-09-25", off: true }, ctx())).toBe(
+      "2026-09-25 · 휴강으로 표시",
+    );
+    expect(auditDetail("ecs_shouting_toggle", { date: "2026-09-14", slotStart: "16:20", checked: false }, ctx())).toBe(
+      "2026-09-14 16:20 · Shouting 체크 해제",
+    );
+    expect(AUDIT_TYPE_LABEL.class_sheet).toBe("강사 시트");
+  });
+
   it("구글 캘린더 가져오기 — 건수, 아무것도 없으면 '변경 없음'", () => {
     expect(
       auditDetail(

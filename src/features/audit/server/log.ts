@@ -313,6 +313,13 @@ export const AUDIT_ACTIONS = {
   ecs_plan_line_move: "수업계획 줄 이동",
   ecs_plan_line_delete: "수업계획 줄 삭제",
   ecs_plan_copy: "수업계획 지난 회차 복사",
+  // 강사 시트 칸 편집 — **칸을 떠날 때 한 줄**(원장 결정 2026-09-14, `class-sheets/server/edit-audit-actions.ts`).
+  // 타이핑 중 자동저장은 안 남긴다. Shouting 체크·MP 열/휴강 토글은 누름이 곧 결심이라 그 저장 액션이 직접 한 줄.
+  ecs_goal_edit: "강사 시트 목표 수정",
+  ecs_mark_edit: "강사 시트 학생 기록 수정",
+  ecs_memo_edit: "강사 시트 메모 수정",
+  ecs_month_plan_edit: "월간 계획서(MP) 수정",
+  ecs_shouting_toggle: "Shouting 체크 변경",
 
   // 돈 — 🔴 **금액은 담지 않는다**(아래 '금액' 주석 참조).
   expense_create: "지출결의서 작성",
