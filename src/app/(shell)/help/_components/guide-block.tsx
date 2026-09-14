@@ -36,9 +36,12 @@ function ScreenGuide({
     <figure className="bg-card shadow-card overflow-hidden rounded-2xl">
       <div className="border-line-faint flex items-center gap-2 border-b px-3 py-2">
         <span className="bg-line inline-flex gap-1 rounded-full px-1.5 py-1">
+          {/* 🔴 `bg-caution`·`bg-positive`는 **정의되지 않은 토큰**이라 점 셋 중 둘이 아무 색도 안 칠해지고
+              있었다(팔레트 v4 함정 — 빌드·타입체크를 통과하고 흰 바탕에선 투명해도 정상처럼 보인다).
+              의미색 캐논의 **뜻 이름**(caution·positive)과 **실제 토큰 이름**(`--amber`·`--green`)은 다르다. */}
           <i className="bg-danger/70 size-2 rounded-full" />
-          <i className="bg-caution/80 size-2 rounded-full" />
-          <i className="bg-positive/70 size-2 rounded-full" />
+          <i className="bg-amber/80 size-2 rounded-full" />
+          <i className="bg-green/70 size-2 rounded-full" />
         </span>
         <figcaption className="text-foreground min-w-0 truncate text-sm font-bold">{title}</figcaption>
       </div>

@@ -41,6 +41,7 @@
   - ③ 머리 개수 단언이 `화면 설명서 \d+개`라 **권한 필터가 통째로 빠져도 초록**이었다(거르지 않은 34개도 통과) → `MANUALS.length - 3`으로 못박았다.
   - ④ 구조 가드(맨 `<a href>`·`next/link` 금지) 파일 목록에 `_components/guide-block.tsx` 추가.
   - ⑤ `[slug]`의 `generateStaticParams` 제거 — 그 페이지는 `requireAccess("help")`로 쿠키를 읽어 **정적이 될 수 없다**. 34개 슬러그 프리렌더 선언은 동적 폴백으로 떨어질 뿐이고 "여긴 정적"이라는 거짓 신호만 남았다(리포 유일한 사용처였다).
+  - ⑥ 🔴 안내도 머리의 **창 신호등 점 셋 중 둘이 색이 없었다** — `bg-caution`·`bg-positive`가 **정의되지 않은 토큰**이라 아무것도 안 칠해졌다(팔레트 v4가 경고한 함정: 오타는 빌드·타입체크를 통과하고, 흰 캔버스에선 투명해도 "정상처럼" 보인다). 고침 = `bg-amber`·`bg-green`. 🔑 **의미색 캐논의 뜻 이름(caution·positive)과 실제 토큰 이름(`--amber`·`--green`)이 다르다.** 잡은 것은 [`dead-color-class.test.ts`](src/lib/design/dead-color-class.test.ts)이고, 도움말 리뷰가 놓친 이유는 그 가드를 안 돌렸기 때문이다(⚠️ 가드는 한 번에 한 건씩 보고해서 `bg-positive`를 고치자 `bg-caution`이 드러났다).
 
 ## 2026-09-14 (11) — 수학 강사 시트 목표진도 막대를 더 붉게 — 전용 토큰 두 개로 분리
 
