@@ -41,12 +41,17 @@ const FILL: Record<SemanticTone, string> = {
  * 그대로"* — 그전엔 옅은 파랑 고정이었다). 의미색 캐논의 **원장 지정 예외**다: 빨강이 '위험'이라서가 아니라 이 달에
  * 목표까지 얼마나 와 있어야 하는지를 농도로 읽게 한다. 🔴 현재진도(판정 색)를 이 색으로 맞추지 말 것 — 원장이 명시로
  * 제외했다(같은 날 "현재진도도 마찬가지"를 곧바로 취소).
- * 색 값은 **토큰에서만** 섞는다 — 옅은 끝 = `--danger`를 카드 바탕에 35%, 진한 끝 = `--att-holiday-ink`(#7a1111).
+ * 색 값은 **토큰에서만** 섞는다 — 옅은 끝 `--goal-fill-soft`, 진한 끝 `--goal-fill-strong`(globals.css, 이 막대 전용).
+ * 🔴 원장 같은 날 *"목표 진도 붉은색이 지금 자홍색 느낌인데 더 붉게"* — 옛 옅은 끝은 `--danger`를 **흰 바탕에 35%**로
+ *    섞은 값이라 채도가 빠져(C 0.054) 탁한 분홍으로 읽혔다. 원인은 섞는 공간(oklab)이 아니라 **채도 부족**이니
+ *    흰색을 섞어 옅게 만드는 방식으로 되돌리지 말 것. 지금은 채도를 살린 두 끝을 srgb로 섞는다(C 0.136~0.142).
+ * 🔴 출석부 `--att-*`를 빌려 쓰지 말 것 — 톤업 지시 한 번에 이 막대가 딸려 간다(2026-09-14에 실제로 값이 바뀌었다).
+ * 🔴 두 끝의 **명도 차**가 "얼마나 와 있어야 하나"를 읽게 하는 정보다 — 폭을 좁히지 말 것.
  * @param x 채움 끝(0~100). 범위를 벗어나면 자른다.
  */
 export function goalFillColor(x: number): string {
   const t = Number.isFinite(x) ? Math.round(Math.min(100, Math.max(0, x))) : 0;
-  return `color-mix(in oklab, var(--att-holiday-ink) ${t}%, color-mix(in srgb, var(--danger) 35%, var(--card)))`;
+  return `color-mix(in srgb, var(--goal-fill-strong) ${t}%, var(--goal-fill-soft))`;
 }
 
 /** 두 줄의 이름 — 화면·툴팁이 같은 말을 쓴다(원장 지정 어휘). */
