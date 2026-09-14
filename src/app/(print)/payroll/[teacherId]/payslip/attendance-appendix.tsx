@@ -6,7 +6,7 @@ import {
   cellDisplay,
   type AttendanceMark,
 } from "@/features/attendance/cell-display";
-import { BADGE_LABEL, isEnrolledOn, lifecycleBadgesInRange } from "@/features/attendance/enrollment-span";
+import { BADGE_LABEL, isEnrolledOn } from "@/features/attendance/enrollment-span";
 import { countMarks, ratePercent } from "@/features/attendance/grid/totals";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
@@ -95,13 +95,19 @@ function ClassSheet({
   // 인쇄엔 31칸 패딩이 필요 없다(화면은 열 위치 고정 때문에 채운다) — 실제 날짜만.
   const days = matrix.days.filter((d) => !d.placeholder);
   const classDows = new Set(matrix.classDows);
-  const range = { first: matrix.window.start, last: matrix.window.end };
 
   const leftNames: string[] = [];
   const rows = matrix.students.map((s) => {
-    // 반이동 판정(transferIn/Out)은 **다른 반 수강**을 알아야 성립한다 — 별지는 반 단위로만 그리므로
-    // 그 정보를 넘기지 않고, 근거가 없는 이동을 지어내지 않는다(신입/퇴원만 확실히 표시).
-    const badges = lifecycleBadgesInRange(range, s.spans, null, []);
+    /**
+     * 🔴 **표식은 매트릭스가 준 것을 그대로 쓴다**(원장 2026-09-14 *"급여명세서도 '반이동'과 '퇴원'을
+     *    구분해서 퇴원처리해야지"*). 종전엔 여기서 `others: []`로 **다시 계산**해서, 같은 날 이어받은
+     *    반이동이 전부 '퇴원'으로 찍혔다 — 화면(월별 출석부)은 다른 반을 보고 '반이동'이라 적는데
+     *    원장이 받는 종이만 '퇴원'이라 갈렸다.
+     *    `getMonthlyAttendanceMatrix`가 `attachLifecycleBadges`로 다른 반 수강(+`is_transferred`)을 보고
+     *    이미 판정해 둔다 — 버리고 다시 셀 이유가 없다.
+     * ⚠️ 덕분에 아래 반 머리 '퇴원 N명'에도 반이동생이 안 섞인다(원장이 짚은 바로 그 지점).
+     */
+    const badges = s.badges;
     if (badges.some((b) => b.kind === "left")) leftNames.push(s.name);
     const marks = matrix.marks[s.id] ?? {};
     const units = matrix.units[s.id] ?? {};

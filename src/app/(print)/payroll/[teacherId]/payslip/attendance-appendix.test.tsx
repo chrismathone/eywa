@@ -26,12 +26,13 @@ function matrix(over: Partial<AttendanceMatrix> = {}): AttendanceMatrix {
     students: [
       {
         id: "s1", name: "김학생", grade: "중2", school: "경명여중", enrolledAt: null,
-        attendDows: [1, 2], spans: [{ start: "2026-01-01", end: null }],
+        attendDows: [1, 2], spans: [{ start: "2026-01-01", end: null }], badges: [],
       },
-      // 그 달 안에 끝난 수강 = 퇴원
+      // 그 달 안에 끝난 수강 = 퇴원. 🔴 표식은 **매트릭스가 준 값**이다(별지가 다시 계산하지 않는다).
       {
         id: "s2", name: "이퇴원", grade: "중1", school: "침산중", enrolledAt: null,
         attendDows: [1], spans: [{ start: "2026-01-01", end: "2026-08-20" }],
+        badges: [{ kind: "left", date: "2026-08-20" }],
       },
     ],
     marks: {
@@ -88,13 +89,40 @@ describe("급여명세서 별지 — 그 달 출석부", () => {
           students: [
             {
               id: "s1", name: "김학생", grade: "중2", school: "경명여중", enrolledAt: null,
-              attendDows: [1], spans: [{ start: "2026-01-01", end: null }],
+              attendDows: [1], spans: [{ start: "2026-01-01", end: null }], badges: [],
             },
           ] as AttendanceMatrix["students"],
         }),
       },
     ];
     render1({ groups: noLeave });
+    expect(screen.queryByText(/퇴원 \d+명/)).toBeNull();
+  });
+
+  /**
+   * 🔑 원장 2026-09-14 *"급여명세서도 '반이동'과 '퇴원'을 구분해서 퇴원처리해야지"*.
+   * 종전엔 별지가 `others: []`로 표식을 **다시 계산**해 같은 날 이어받은 반이동을 전부 '퇴원'으로 찍었다
+   * — 화면은 '반이동'인데 종이만 '퇴원'이라 갈렸다. 이제 매트릭스가 준 표식을 그대로 쓴다.
+   */
+  it("🔑 반이동은 '퇴원'이 아니다 — 이름 옆 표식도, 반 머리 요약도(원장 2026-09-14)", () => {
+    const moved = [
+      {
+        classId: "c3",
+        className: "반이동반",
+        matrix: matrix({
+          students: [
+            {
+              id: "s3", name: "김이동", grade: "중2", school: "경명여중", enrolledAt: null,
+              attendDows: [1], spans: [{ start: "2026-01-01", end: "2026-08-20" }],
+              badges: [{ kind: "transferOut", date: "2026-08-20", otherClassName: "중등M TP2B" }],
+            },
+          ] as AttendanceMatrix["students"],
+        }),
+      },
+    ];
+    render1({ groups: moved });
+    expect(screen.getByText("반이동")).toBeTruthy();
+    expect(screen.queryByText("퇴원")).toBeNull();
     expect(screen.queryByText(/퇴원 \d+명/)).toBeNull();
   });
 

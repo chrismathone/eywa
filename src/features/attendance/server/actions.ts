@@ -24,7 +24,7 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
-import { parseSessionUnits } from "../session-units";
+import { parseSessionUnits, round1 } from "../session-units";
 // 그날 칸 시수 배분(셀·범위 공용) + 강사 전체 보기의 몫 판정(원장 제보 2026-09-11) — 규칙은 순수 모듈, 조회는 server/.
 // 강사 보기 저장은 자리(JJ·랩실) 행을 안 쓴다(원장 2026-09-12) — 빼는 곳은 `splitOutSeatRows` 한 곳.
 import {
@@ -40,6 +40,7 @@ import {
 import { buildScopeShare, isScopeClassIds, isScopeTeacherId, scopeTeaches, type ScopeShare } from "../scope-ownership";
 import { loadScopeFacts } from "./scope-ownership";
 import { NOT_MINE_MESSAGE } from "../cell-display";
+import { unitsAuditFields, type UnitsAudit } from "../units-audit";
 // 수학 자동 시수(원장 2026-09-11) — **새 행**에만, 숫자를 안 고른 저장에만. 규칙·근거는 auto-units.ts.
 import { autoUnitsApply, autoUnitsKey, autoUnitsLogFields, newRowUnits } from "../auto-units";
 import { resolveAutoUnits } from "./auto-units";
@@ -831,6 +832,14 @@ export async function setAttendanceCell(input: {
   if ("error" in deskGate) return deskGate;
 
   const nowIso = new Date().toISOString();
+  /**
+   * 감사로그 "시수 3 → 1.5"(원장 2026-09-14 *"값을 얼마에서 얼마로 바꿨는지"*) — 값은 아래 저장 분기가
+   * **실제로 시수를 정한 행**에서 잰다([`unitsAuditFields`](../units-audit.ts)). 규칙이 셋이라 인라인으로 두지 않았다:
+   *   ① 결석 행은 **0**으로 센다(화면 `rollupDay`가 보여 주는 값) ② 합은 0.1로 반올림한다(부동소수 꼬리)
+   *   ③ 교시 지정 저장(ECS)의 대상 둘은 "그 교시 + 옛 그날 전체 행" = **같은 한 수업**이라 더하지 않는다.
+   * 셋 다 적대 리뷰 2026-09-14가 잡은 것 — 초안은 행 값을 그대로 더해 화면에 없는 숫자를 로그에 남겼다.
+   */
+  let unitsAudit: UnitsAudit = null;
   // 감사로그용 — 아래 분기가 id 목록을 소비하기 전에 **덮어쓰기였는지**를 굳혀 둔다.
   const overwrote = updateIds.length > 0 || promoteIds.length > 0;
   /** 새 행 + 숫자 안 고른 저장이면 실제로 넣은 시수(null = 1), 아니면 undefined — 수학 자동 시수(auto-units.ts). */
@@ -873,6 +882,30 @@ export async function setAttendanceCell(input: {
     } else if (unitsProvided) {
       // 교시 지정 저장(ECS) — 대상이 같은 한 수업이라 친 값 그대로(종전과 같다).
       patch.session_units = unitsVal;
+    }
+    /**
+     * 감사로그용 전·후 — **이 저장이 시수를 정한 행**에서만 잰다(위 `unitsAudit` 주석).
+     * 🔴 그날 칸 = 배분 계획의 **수신 행**(강사 보기면 그 강사 몫만 — 화면이 세는 집합과 같다).
+     * 🔴 교시 지정 저장 = **대표 1행**(대상 둘은 같은 한 수업이라 더하면 2가 된다).
+     */
+    if (unitsProvided) {
+      const governed =
+        slot === null
+          ? dayPlan && dayPlan.ok
+            ? [...dayPlan.units.keys()]
+            : []
+          : // 🔴 교시 지정 저장은 **대상 행 전부**가 같은 값을 받는다(`patch.session_units`) — 대표 1행만 세면
+            //    "그 교시 + 옛 그날 전체 행"이 함께 있는 칸에서 격자의 **절반**을 적는다(적대 재리뷰 2026-09-14).
+            [...writeIds, ...promoteIds];
+      unitsAudit = unitsAuditFields({
+        rows: governed.map((id) => ({
+          status: String(rowById.get(id)?.status ?? ""),
+          units: (rowById.get(id)?.session_units as number | null | undefined) ?? null,
+        })),
+        status,
+        unitsVal,
+        spread: slot === null ? "split" : "each",
+      });
     }
     if (promoteIds.length > 0) {
       // 승격(옛 "그날 전체" 행 → 그 교시). 승격 대상만 있을 때만 발생하므로 한 문장으로 끝난다.
@@ -939,6 +972,10 @@ export async function setAttendanceCell(input: {
       status,
       ...(overwrote ? { overwrote: true, prevStatus } : { created: true }),
       ...(unitsProvided ? { units: unitsVal } : {}),
+      // 🔴 **바뀌기 전·후 시수**(원장 2026-09-14) — 값이 실제로 달라졌을 때만(`unitsAuditFields`가 판단).
+      //    덮어쓴 칸에만 값이 생긴다(새 칸은 이전 값이 없어 위 분기를 안 탄다).
+      //    ⚠️ `nextUnits`는 **칸에 보이는 값**이라 위 `units`(사람이 친 값)와 다를 수 있다(교시마다 기본 = 교시 수).
+      ...(unitsAudit ? { prevUnits: unitsAudit.prevUnits, nextUnits: unitsAudit.nextUnits } : {}),
       // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 값이 들어갔을 때만.
       ...(insertedAuto != null ? { autoUnits: insertedAuto } : {}),
       // 강사 전체 보기에서 온 그날 칸 저장 — 시수를 그 강사 몫 교시에만 나눴다(원장 제보 2026-09-11).
@@ -1710,10 +1747,14 @@ export async function setAttendanceRange(input: {
       /** 자리 문 표식(0212a) — JJ는 `seat_label`이 없어 이게 유일한 자리 근거일 수 있다(리뷰 2026-09-12). */
       recorded_via: string | null;
       recorded_at: string | null;
+      /** 감사로그 "시수 … → …"용 — 이 저장이 덮어쓰는 칸의 **이전 값**은 여기 말고 되짚을 자리가 없다. */
+      status: string;
+      session_units: number | null;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at")
+        // ⚠️ **한 줄로 둘 것** — 구조 가드(`scoped-split-wiring.test.ts`)가 이 줄에서 자리 표식(seat_label)을 확인한다.
+        .select("id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at, status, session_units")
         .in("session_date", dates)
         .in("class_id", classIds)
         .in("student_id", chunk)
@@ -1742,6 +1783,10 @@ export async function setAttendanceRange(input: {
    * ⚠️ 지우기 갈래도 이 대상 선정을 쓴다(빗금 칸 판정) — 그래서 두 갈래보다 **앞**에 온다.
    */
   const cellKeyOf = (c: RangeCell) => `${c.studentId}::${c.classId}::${c.sessionDate}`;
+  /** 행 id → 저장 전 상태·시수(감사로그 "시수 … → …"). 위 조회가 이미 실어 온 값이라 추가 왕복이 없다. */
+  const rowFactsById = new Map<string, { status: string; units: number | null }>(
+    mine.map((r) => [r.id, { status: r.status, units: r.session_units }]),
+  );
   const cellSlotRows = new Map<string, DayTargetRow[]>();
   const seenSlot = new Set<string>();
   for (const r of mine) {
@@ -1980,6 +2025,34 @@ export async function setAttendanceRange(input: {
    * `dates`를 함께 싣는다. 범위는 가로로도 끌리므로 **지난 날짜가 섞이기 쉬운 경로**다(소급 표식이 특히 유효).
    */
   const rangeClassIds = [...new Set(allowed.map((c) => c.classId))];
+  /**
+   * 감사로그 "시수 3칸 6 → 4.5" — 범위는 칸이 여럿이라 **시수가 실제로 바뀐 칸**만 세고 그 칸들의 합을 적는다.
+   * 🔴 새로 만든 칸은 빠진다(이전 값이 없어 '정정'이 아니다 — 건수는 `created`가 이미 말한다).
+   * 🔴 칸마다 재는 집합은 셀 저장과 **같은 규칙**(배분 계획의 수신 행)이다 — 갈리면 같은 일이 경로마다
+   *    다른 숫자를 남긴다. ⚠️ 재료가 빠진 칸은 건너뛴다(값을 지어내지 않는다).
+   */
+  let unitsChangedCells = 0;
+  let prevUnitsSum = 0;
+  let nextUnitsSum = 0;
+  if (unitsProvided) {
+    for (const c of allowed) {
+      const plan = plans.get(cellKeyOf(c));
+      if (!plan?.ok) continue;
+      const cellRows = [...plan.units.keys()].map((id) => rowFactsById.get(id));
+      if (cellRows.some((r) => !r)) continue;
+      const changed = unitsAuditFields({
+        rows: cellRows as { status: string; units: number | null }[],
+        status,
+        unitsVal,
+        // 범위는 그날 칸만 다룬다(교시 지정이 없다) — 셀 저장의 그날 칸 갈래와 같은 규약.
+        spread: "split",
+      });
+      if (!changed) continue;
+      unitsChangedCells += 1;
+      prevUnitsSum = round1(prevUnitsSum + changed.prevUnits);
+      nextUnitsSum = round1(nextUnitsSum + changed.nextUnits);
+    }
+  }
   await logAction({
     action: "attendance_range",
     targetType: "attendance",
@@ -1993,6 +2066,10 @@ export async function setAttendanceRange(input: {
       blocked: cells.length - allowed.length,
       studentIds: [...new Set(allowed.map((c) => c.studentId))],
       ...(unitsProvided ? { units: unitsVal } : {}),
+      // 🔴 **바뀌기 전·후 시수**(원장 2026-09-14) — 바뀐 칸이 있을 때만. 칸이 여럿이라 칸 수를 함께 적는다.
+      ...(unitsChangedCells > 0
+        ? { prevUnits: prevUnitsSum, nextUnits: nextUnitsSum, unitsChangedCells }
+        : {}),
       // 강사 전체 보기에서 온 채우기 — 시수를 그 강사 몫 교시에만 나눴다(원장 제보 2026-09-11).
       ...(scopeTeacherId ? { scopeTeacherId } : {}),
       // 손대지 않고 둔 자리(JJ·랩실) 행 수(원장 2026-09-12) — 역검수용.

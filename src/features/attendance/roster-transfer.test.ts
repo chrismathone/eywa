@@ -111,6 +111,26 @@ describe("명단 쿼리 배선 — is_transferred를 실제로 싣는다", () =>
   }
 });
 
+/**
+ * 🔴 **반이동 판정용 '다른 반' 조회**도 표식을 실어야 한다 — 위 가드는 파일 안에 `is_transferred`라는
+ * 글자만 있으면 통과하므로, **같은 파일의 다른 쿼리**가 빠져도 안 걸린다(적대 리뷰 2026-09-14 실측:
+ * 옛 반은 '반이동'인데 새 반은 '신입'으로 떠서 같은 사건이 두 이름을 가졌다 — 9월 23건).
+ * 여기서는 `others`(다른 반 수강)를 만드는 자리에 `isTransferred:`가 실제로 붙는지 센다.
+ */
+describe("반이동 판정 재료 — '다른 반' 조회도 is_transferred를 싣는다", () => {
+  const targets = [
+    { what: "반별 월별 출석부(매트릭스)", src: code(read("attendance", "server", "queries.ts")) },
+    { what: "자리 월별 출석부", src: code(read("attendance", "seat", "server", "monthly-queries.ts")) },
+  ];
+  for (const t of targets) {
+    it(`${t.what}의 다른 반 조회가 표식을 넘긴다`, () => {
+      // `isTransferred:` 대입이 **둘 이상**(명단 + 다른 반) 있어야 한다 — 하나면 다른 반 쪽이 빠진 것이다.
+      const hits = t.src.match(/isTransferred:/g) ?? [];
+      expect(hits.length, `${t.what}: 다른 반 수강에 표식이 없으면 새 반이 '신입'으로 뜬다`).toBeGreaterThanOrEqual(2);
+    });
+  }
+});
+
 describe("자리 일별 출석부 — 넓은 필터로 끝내지 않는다", () => {
   const src = code(read("attendance", "seat", "server", "queries.ts"));
 

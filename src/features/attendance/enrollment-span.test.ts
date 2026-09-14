@@ -108,6 +108,24 @@ describe("반이동 판정", () => {
     expect(transferTo("2026-08-10", "math", [other({ start: "2026-08-01" })])).toBeNull();
   });
 
+  it("🔴 반이동으로 닫힌 구간은 **같은 날** 시작도 이동이다(원장 2026-09-14 '반이동생이 퇴원생 처리되지 않게')", () => {
+    // 반이동 RPC가 옛 반을 `end_date = 새 반 start_date`로 닫는다 — 같은 날을 빼면 진짜 이동이 퇴원이 된다.
+    expect(transferTo("2026-09-12", "math", [other({ start: "2026-09-12" })], true)?.className).toBe("중등M 중2 B");
+    // 표식이 없으면 종전 그대로 — 같은 날 시작은 '함께 다니기 시작한 날'이다.
+    expect(transferTo("2026-09-12", "math", [other({ start: "2026-09-12" })])).toBeNull();
+  });
+
+  it("🔴 같은 날 이어받은 반이동은 퇴원 뱃지가 아니라 반이동 뱃지다(김지우 9/12 실측)", () => {
+    const badges = lifecycleBadgesInRange(
+      { first: "2026-09-01", last: "2026-09-30" },
+      [{ start: "2026-09-01", end: "2026-09-12", isTransferred: true }],
+      "math",
+      [other({ className: "고등M 개별 토일", start: "2026-09-12" })],
+    );
+    expect(badges.map((b) => b.kind)).toContain("transferOut");
+    expect(badges.map((b) => b.kind)).not.toContain("left");
+  });
+
   it("🔴 공백이 14일을 넘으면 반이동이 아니다 — 쉬었다 재등록", () => {
     expect(transferTo("2026-08-10", "math", [other({ start: "2026-08-24" })])?.className).toBe("중등M 중2 B");
     expect(transferTo("2026-08-10", "math", [other({ start: "2026-08-25" })])).toBeNull();

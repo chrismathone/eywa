@@ -7,6 +7,7 @@ import { STEP_DECISION_LABEL, STEP_DECISIONS, type StepDecision } from "@/featur
 import { formatSignedDays } from "@/features/leave/balance";
 import { formatLeaveDays } from "@/features/leave/request-days";
 import { STUDENT_STATUS_LABEL } from "@/features/students/status-labels";
+import { STATUS_TEXT } from "@/features/attendance/cell-display";
 import { ONBOARDING_ITEMS } from "@/features/newcomers/onboarding-items";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import {
@@ -736,6 +737,80 @@ export function auditDetail(
       const names = Array.isArray(m.studentNames) ? m.studentNames.filter((x) => typeof x === "string") : [];
       const label = names.length ? `(${names.slice(0, 3).join(", ")}${names.length > 3 ? " 외" : ""})` : "";
       return join(c === null ? `수업보고서 회수 — ${who}` : `수업보고서 ${c}건 회수 — ${who}`, label || null);
+    }
+    case "attendance_cell":
+    case "attendance_bulk":
+    case "attendance_range": {
+      /**
+       * 출결 저장 — **숫자가 얼마에서 얼마로 바뀌었는지**를 적는다(원장 2026-09-14 *"출결 감사로그에서
+       * 값을 얼마에서 얼마로 바꿨는지, 예) 3 -> 1.5 이렇게 추가"* · *"수치가 필요한 감사로그는 그에 걸맞게 값도 추가"*).
+       * 🔴 종전엔 전용 분기가 없어 **이전 값이 화면에 없었다** — 폴백은 `units`를 아예 안 그렸다
+       *    (`FALLBACK_KEY_LABEL`에 없는 숫자 키라 숨김 대상. `autoUnits`·`skippedSeatRows`만 라벨이 있었다).
+       * ⚠️ 날짜·학생·반은 '대상' 열과 다른 키가 이미 보여 주므로 여기선 **상태와 숫자만** 적는다(줄이 길어지면 안 읽힌다).
+       */
+      const has = (k: string) => Object.prototype.hasOwnProperty.call(m, k);
+      const prev = has("prevUnits") ? num(m.prevUnits) : null;
+      /**
+       * '바뀐 뒤' 값 — 셋을 갈라야 거짓 숫자가 안 나온다(적대 재리뷰 2026-09-14).
+       *   ① **`nextUnits`가 언제나 우선** — 저장 쪽이 *실제로 쓴 행*에서 잰 "칸에 보이는 값"이다.
+       *   ② **옛 정정 로그**(`prevUnits`는 있고 `nextUnits`는 없다) = 종전대로 `units`(친 값).
+       *      저장 규약상 **1은 null**이라(`parseSessionUnits`) 키가 있는데 값이 null이면 "없음"이 아니라 1이다
+       *      — 원장이 지금 하는 작업(1.5 → 1)이 숫자 없이 남지 않게.
+       *   ③ 🔴 **새 칸은 `units`로 채우지 않는다.** 빈칸(null)을 1로 읽으면 수학 자동 시수 1.5가 들어간 칸이
+       *      `시수 1`이라는 **거짓**으로 남고, 참인 `자동 시수 1.5` 줄까지 밀려난다(아래 `units === null` 게이트).
+       *      새 칸은 **사람이 친 숫자가 있을 때만** 적고, 빈칸이면 자동 시수 줄이 사실을 말한다.
+       */
+      const typedUnits = has("units") ? num(m.units) : null;
+      const next = has("nextUnits")
+        ? num(m.nextUnits)
+        : prev !== null && has("units")
+          ? (typedUnits ?? 1)
+          : typedUnits;
+      const status = str(m.status);
+      // 상태 한글은 출결 화면·인쇄물과 **같은 표**(cell-display.STATUS_TEXT) — 여기서 새로 적지 않는다.
+      const label = status && status in STATUS_TEXT ? STATUS_TEXT[status as keyof typeof STATUS_TEXT] : null;
+      const count = num(m.count);
+      // 범위 채우기는 칸이 여럿이라 **합**이다 — 몇 칸이 바뀐 합인지 함께 적는다(안 적으면 한 칸 값으로 읽힌다).
+      const unitsCells = num(m.unitsChangedCells);
+      const units =
+        prev !== null && next !== null
+          ? `시수 ${unitsCells === null ? "" : `${unitsCells}칸 `}${prev} → ${next}`
+          : next !== null
+            ? `시수 ${next}`
+            : null;
+      const auto = num(m.autoUnits);
+      const autoCells = num(m.autoUnitsCells);
+      // 🔴 종전 폴백이 보여 주던 둘을 여기서도 계속 적는다 — 전용 분기가 생겼다고 정보가 줄면 안 된다:
+      //    강사 보기 주인(원장 2026-09-11)과 손대지 않고 둔 자리 기록 수(원장 2026-09-12).
+      const scope = str(m.scopeTeacherId);
+      const scopeName = scope && UUID_RE.test(scope) ? ctx.nameOf(scope) : null;
+      const skipped = num(m.skippedSeatRows);
+      // 🔴 **날짜·반은 여기서 적는다** — '대상' 열은 학생 이름만 돌려주므로(auditTargetName) 전용 분기가
+      //    이걸 빼면 "어느 날 어느 반 수업인지"가 화면 어디에도 없다(적대 리뷰 2026-09-14). 시각 열은 로그를 쓴 때다.
+      const dates = arr(m.dates).map(str).filter((v): v is string => !!v);
+      const when = str(m.date) ?? (dates.length ? `${dates[0]}${dates.length > 1 ? ` 외 ${dates.length - 1}일` : ""}` : null);
+      const className = str(m.classId) && UUID_RE.test(str(m.classId)!) ? ctx.nameOf(str(m.classId)!) : null;
+      return join(
+        when,
+        className,
+        label,
+        count === null ? null : `${count}칸`,
+        units,
+        // 자동으로 들어간 값은 사람이 친 값과 구분해 적는다(수학 수업 길이 자동 시수).
+        units === null && auto !== null ? `자동 시수 ${auto}` : null,
+        autoCells !== null ? `자동 시수 칸 ${autoCells}` : null,
+        // ⚠️ 일괄·범위의 `created`는 **새로 만든 칸 수**(숫자)다 — `=== true`로만 보면 두 액션엔
+        //    '정정'도 '새 기록'도 영영 안 붙는다(적대 재리뷰 2026-09-14).
+        m.overwrote === true
+          ? "정정"
+          : m.created === true
+            ? "새 기록"
+            : (num(m.created) ?? 0) > 0
+              ? `새 기록 ${num(m.created)}칸`
+              : null,
+        scopeName ? `강사 보기: ${scopeName}` : null,
+        skipped !== null ? `건너뛴 자리 기록 ${skipped}` : null,
+      );
     }
     case "attendance_units_backfill": {
       // 9월 수학 출석 시수 소급 보정(scripts/_oneoff/backfill-math-auto-units.mjs, 원장 2026-09-11 "9월분만 보정").

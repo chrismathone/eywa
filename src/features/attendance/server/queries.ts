@@ -629,7 +629,9 @@ async function attachLifecycleBadges(
   const rows = await fetchInChunks(ids, (chunk) =>
     supabase
       .from("enrollments")
-      .select("student_id, class_id, start_date, end_date")
+      // 🔴 `is_transferred`를 함께 싣는다 — 없으면 **새 반 쪽이 여전히 '신입'**으로 뜬다(같은 사건이
+      //    두 화면에서 다른 이름. 적대 리뷰 2026-09-14 실측 9월 23건). 같은 날 이어받은 반이동 판정의 유일한 근거다.
+      .select("student_id, class_id, start_date, end_date, is_transferred")
       .in("student_id", chunk)
       .neq("class_id", classId)
       .lte("start_date", to)
@@ -656,6 +658,7 @@ async function attachLifecycleBadges(
       subject: m.subject,
       start: r.start_date as string,
       end: (r.end_date as string | null) ?? null,
+      isTransferred: r.is_transferred === true,
     });
     othersById.set(r.student_id as string, list);
   }

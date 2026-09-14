@@ -66,27 +66,13 @@ export function MatrixRow({
           <span className="min-w-0 truncate text-xs leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
-          {/* 신입·퇴원·반이동 — 그 달에 경계가 있는 학생만. 대부분의 행엔 아무것도 안 붙는다.
-              🔴 모든 라벨은 **우측 정렬**(원장 2026-08-10 "모든 라벨들 우정렬. 자리 부족하면 왼쪽으로")
-                 — 셀 오른쪽 끝에 붙어 왼쪽으로 자라고(ml-auto + shrink-0), 자리가 부족하면
-                 이름(`min-w-0 truncate`)이 줄임표로 양보한다. 아랫줄 「단가」 라벨과 같은 문법. */}
-          {student.badges.length > 0 ? (
-            <span className="ml-auto flex shrink-0 items-center gap-1">
-              {student.badges.map((b) => (
-                <span
-                  key={`${b.kind}-${b.date}`}
-                  title={badgeTitle(b, classLabel ?? sheetT(lang, "att.row.thisClass"), lang)}
-                  className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
-                >
-                  {badgeLabelOf(b.kind, lang)}
-                </span>
-              ))}
-            </span>
-          ) : null}
         </span>
-        {/* 「단가 미지정」 뱃지는 **아랫줄**(등원요일 옆) — 첫 줄에 붙이면 신입 뱃지와 겹칠 때
-            이름이 "김.."으로 잘린다(실측 2026-08-10). 아랫줄은 요일 두 글자뿐이라 자리가 남는다. */}
-        {attendLabel || tierMissing ? (
+        {/* 🔴 **모든 라벨이 아랫줄**(등원요일 옆) — 신입·퇴원·반이동까지 내렸다(원장 2026-09-14
+            *"반이동 퇴원 라벨을 위치이동시켜서 이름 더 잘보이게. 이름이 짤리는건 최악"*). 첫 줄에 두면
+            뱃지 둘("반이동"+"퇴원" ≈ 80px)이 132px 열의 절반을 먹어 이름이 "김…"으로 잘렸다(실측).
+            이제 첫 줄은 이름뿐이라 열 폭(148px)을 통째로 쓴다. 아랫줄은 요일 두 글자뿐이라 자리가 남고,
+            모자라면 요일(`min-w-0 truncate`)이 줄임표로 양보한다 — 「단가」가 쓰던 문법 그대로. */}
+        {attendLabel || tierMissing || student.badges.length > 0 ? (
           <span className="flex items-center gap-1">
             {attendLabel ? (
               <span
@@ -96,13 +82,27 @@ export function MatrixRow({
                 {attendLabel}
               </span>
             ) : null}
-            {tierMissing ? (
-              // 라벨은 짧게 「단가」 + 우측 정렬(ml-auto) — 셀 오른쪽 끝. 크기는 신입·퇴원과 동일(BADGE_BASE).
-              <span
-                className={`${BADGE_BASE} ml-auto bg-amber-300 text-amber-950`}
-                title={sheetTf(lang, "att.row.noTierTitle", { name: student.name })}
-              >
-                {sheetT(lang, "att.row.noTier")}
+            {/* 라벨 묶음은 **한 번만** 우측 정렬한다(ml-auto가 둘이면 뒤엣것이 자리를 또 밀어 사이가 벌어진다).
+                크기·색은 화면과 인쇄물 단일 소스(BADGE_BASE·BADGE_TONE). */}
+            {student.badges.length > 0 || tierMissing ? (
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                {student.badges.map((b) => (
+                  <span
+                    key={`${b.kind}-${b.date}`}
+                    title={badgeTitle(b, classLabel ?? sheetT(lang, "att.row.thisClass"), lang)}
+                    className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
+                  >
+                    {badgeLabelOf(b.kind, lang)}
+                  </span>
+                ))}
+                {tierMissing ? (
+                  <span
+                    className={`${BADGE_BASE} bg-amber-300 text-amber-950`}
+                    title={sheetTf(lang, "att.row.noTierTitle", { name: student.name })}
+                  >
+                    {sheetT(lang, "att.row.noTier")}
+                  </span>
+                ) : null}
               </span>
             ) : null}
           </span>

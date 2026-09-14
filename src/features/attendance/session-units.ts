@@ -47,8 +47,12 @@ export function effectiveUnits(sessionUnits: number | null | undefined): number 
   return sessionUnits ?? 1;
 }
 
-/** 0.1 단위 반올림 — 1.5를 여러 번 더할 때 생기는 부동소수 꼬리를 자른다(cell-display와 같은 규약). */
-function round1(n: number): number {
+/**
+ * 0.1 단위 반올림 — 1.5를 여러 번 더할 때 생기는 부동소수 꼬리를 자른다(cell-display와 같은 규약).
+ * ⚠️ 합을 **화면·감사로그에 적는 쪽**은 반드시 이걸 통과시킬 것 — `1.1+1.1+1.1`은 3.3000000000000003이라
+ *    비교가 어긋나고(안 바뀐 저장에도 로그가 남는다) 그 숫자가 그대로 화면에 찍힌다(적대 리뷰 2026-09-14).
+ */
+export function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 

@@ -110,10 +110,22 @@ export function transferTo(
   leftOn: string,
   subject: string | null,
   others: readonly OtherSpan[],
+  /**
+   * 그 구간이 **반이동으로 닫혔나**(`enrollments.is_transferred`). 반이동 RPC는 옛 반을
+   * `end_date = 새 반 start_date`로 닫으므로 **같은 날 시작**이 정상이다 — 이 표식이 있으면
+   * 같은 날도 이동으로 본다(원장 2026-09-14 *"반이동생이 퇴원생 처리되지 않게 주의"*).
+   * 🔴 표식이 없을 때 같은 날을 허용하면 두 반을 **같이 다니기 시작한 날**이 이동으로 둔갑한다.
+   */
+  endedByTransfer = false,
 ): OtherSpan | null {
   const limit = addDays(leftOn, TRANSFER_GAP_DAYS);
   const hit = others
-    .filter((o) => o.subject === subject && o.start > leftOn && o.start <= limit)
+    .filter(
+      (o) =>
+        o.subject === subject &&
+        (endedByTransfer ? o.start >= leftOn : o.start > leftOn) &&
+        o.start <= limit,
+    )
     .sort((a, b) => a.start.localeCompare(b.start));
   return hit[0] ?? null;
 }
@@ -126,7 +138,15 @@ export function transferFrom(
 ): OtherSpan | null {
   const floor = addDays(joinedOn, -TRANSFER_GAP_DAYS);
   const hit = others
-    .filter((o) => o.subject === subject && !!o.end && o.end < joinedOn && o.end >= floor)
+    // 🔴 **같은 날 닫힌 반이동**(`isTransferred`)도 들어온 쪽에서 인정한다 — RPC가 옛 반을 새 반
+    //    시작일로 닫기 때문이다(원장 2026-09-14). 표식 없는 같은 날 종료는 종전대로 제외.
+    .filter(
+      (o) =>
+        o.subject === subject &&
+        !!o.end &&
+        (o.isTransferred === true ? o.end <= joinedOn : o.end < joinedOn) &&
+        o.end >= floor,
+    )
     .sort((a, b) => (b.end ?? "").localeCompare(a.end ?? ""));
   return hit[0] ?? null;
 }
@@ -175,7 +195,9 @@ export function lifecycleBadgesInRange(
   }
   const left = leftInRange(range, spans);
   if (left) {
-    const to = transferTo(left, subject, others);
+    // 그 종료가 **반이동으로 닫힌 것**이면 같은 날 시작한 반도 이동으로 본다(위 transferTo 주석).
+    const endedByTransfer = spans.some((s) => s.end === left && s.isTransferred === true);
+    const to = transferTo(left, subject, others, endedByTransfer);
     out.push(
       to ? { kind: "transferOut", date: left, otherClassName: to.className } : { kind: "left", date: left },
     );

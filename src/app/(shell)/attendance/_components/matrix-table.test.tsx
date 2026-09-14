@@ -18,6 +18,7 @@ vi.mock("@/features/attendance/server/prefs-actions", () => ({
 const C = "aaaaaaaa-1111-1111-1111-111111111111";
 const S1 = "11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const S2 = "22222222-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+const S3 = "33333333-3333-3333-3333-333333333333";
 const DAYS: AttendanceMatrix["days"] = [
   { date: "2026-07-01", day: 1, dow: 3, label: "수", isWeekend: false, isToday: false },
   { date: "2026-07-02", day: 2, dow: 4, label: "목", isWeekend: false, isToday: false },
@@ -69,6 +70,8 @@ const GROUP: MatrixGroup = {
       spans: [],
       badges: [{ kind: "left" as const, date: "2026-07-15" }],
     },
+    // 표식도 등원요일도 없는 학생 — 이름 한 줄만 서야 한다(아랫줄을 빈 채로 만들지 않는다).
+    { id: S3, name: "한가온", grade: "중1", school: "대구중", enrolledAt: null, attendDows: [], spans: [], badges: [] },
   ]),
 };
 
@@ -307,27 +310,38 @@ describe("출석부 표 골격", () => {
     const nameCell = screen.getByText("이도윤").closest("td")!;
     const lines = [...nameCell.children];
     expect(lines).toHaveLength(2);
-    expect(lines[0]!.textContent).toBe("이도윤"); // 이름 줄(+표식이 있으면 같은 줄)
+    expect(lines[0]!.textContent).toBe("이도윤"); // 이름 줄 — 표식은 아랫줄이라 이름만 선다(원장 2026-09-14)
     expect(lines[1]!.textContent).toBe("수·금"); // 등원요일
     // 고정 폭이라 넘치는 글자는 잘려야 한다(안 자르면 옆 칸을 덮는다).
     expect(screen.getByText("이도윤").className).toContain("truncate");
   });
 
-  it("등원요일이 없으면 이름 한 줄만 — 빈 줄을 만들지 않는다", () => {
+  it("등원요일도 표식도 없으면 이름 한 줄만 — 빈 줄을 만들지 않는다", () => {
     renderTable();
-    expect(screen.getByText("박서준").closest("td")!.children).toHaveLength(1);
+    expect(screen.getByText("한가온").closest("td")!.children).toHaveLength(1);
   });
 
-  it("그 달에 나간 학생은 이름 옆에 '퇴원' 표식이 붙는다", () => {
+  it("🔴 표식만 있고 등원요일이 없어도 아랫줄에 선다 — 첫 줄은 언제나 이름뿐(원장 2026-09-14)", () => {
+    renderTable();
+    const cell = screen.getByText("박서준").closest("td")!;
+    const lines = [...cell.children];
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.textContent).toBe("박서준");
+    expect(lines[1]!.textContent).toBe("퇴원");
+  });
+
+  it("그 달에 나간 학생은 이름 칸에 '퇴원' 표식이 붙는다(아랫줄)", () => {
     renderTable();
     const badge = screen.getByText("퇴원");
     expect(badge.closest("td")).toBe(screen.getByText("박서준").closest("td"));
     expect(badge).toHaveAttribute("title", "2026-07-15 퇴원");
   });
 
-  it("🔴 표식이 이름을 밀어내지 않는다 — 열 폭이 고정이라 이름이 먼저 잘린다", () => {
+  it("🔴 표식이 이름을 밀어내지 않는다 — 표식은 아랫줄이라 첫 줄은 이름이 열을 다 쓴다", () => {
     renderTable();
-    expect(screen.getByText("퇴원").className).toContain("shrink-0");
+    // 뱃지가 첫 줄에 있던 동안 이름이 "김…"으로 잘렸다(원장 2026-09-14 "이름이 짤리는건 최악").
+    expect(screen.getByText("퇴원").closest("span")!.className).toContain("shrink-0");
+    expect(screen.getByText("박서준").parentElement!.textContent).toBe("박서준");
     expect(screen.getByText("박서준").className).toContain("min-w-0");
   });
 

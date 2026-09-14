@@ -47,8 +47,13 @@ describe("unitsFromMinutes — max(1, round(분÷60)÷2) (원장 2026-09-11 '그
     expect(unitsFromMinutes(240)).toBe(2); // 4시간
   });
 
-  it("2시간 이하는 1 = 자동 안 함(null — 저장 규약상 1은 null)", () => {
-    for (const m of [55, 110, 115, 120]) expect(unitsFromMinutes(m), String(m)).toBeNull();
+  it("2교시(110·115·120분)는 1 = 자동 안 함(null — 저장 규약상 1은 null)", () => {
+    for (const m of [110, 115, 120]) expect(unitsFromMinutes(m), String(m)).toBeNull();
+  });
+
+  it("🔴 1교시(55분)는 0.5 — 교시 하나당 0.5다(원장 2026-09-14 '1-1부터 4-2까지 … 하나당 0.5')", () => {
+    expect(unitsFromMinutes(55)).toBe(0.5);
+    expect(unitsFromMinutes(60)).toBe(0.5); // 60분 한 교시도 같다
   });
 
   it("수업이 없거나 값이 이상하면 null — 돈 값을 지어내지 않는다", () => {
@@ -204,7 +209,8 @@ describe("planAutoUnits — 과목·배치로 칸별 값", () => {
 describe("보조 함수", () => {
   it("autoUnitsByDate — 날짜별(1·배치 없음은 키 없음)", () => {
     const rows = [...threeBy55("mon"), ...threeBy55("thu"), s("wed", "16:00", "17:00")];
-    expect(autoUnitsByDate([MON, "2026-09-08", WED, THU], rows)).toEqual({ [MON]: 1.5, [THU]: 1.5 });
+    // 수요일은 60분 한 교시 = 0.5(교시 하나당 0.5 — 원장 2026-09-14). 9/8은 배치가 없어 키가 없다.
+    expect(autoUnitsByDate([MON, "2026-09-08", WED, THU], rows)).toEqual({ [MON]: 1.5, [WED]: 0.5, [THU]: 1.5 });
   });
 
   it("toAutoUnitsSchedule — DB 행(snake) → 판정 모양", () => {

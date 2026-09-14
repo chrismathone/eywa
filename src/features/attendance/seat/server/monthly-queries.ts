@@ -193,11 +193,13 @@ async function fetchOtherSpans(
     class_id: string;
     start_date: string;
     end_date: string | null;
+    is_transferred: boolean | null;
     class: { class_name: string; subject: string | null }[] | { class_name: string; subject: string | null } | null;
   }>(studentIds, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("student_id, class_id, start_date, end_date, class:class_id ( class_name, subject )")
+      // 🔴 `is_transferred` — 같은 날 이어받은 반이동을 새 반에서도 알아보려면 이 표식이 필요하다(적대 리뷰 2026-09-14).
+      .select("student_id, class_id, start_date, end_date, is_transferred, class:class_id ( class_name, subject )")
       .in("student_id", chunk)
       .lte("start_date", end)
       .or(`end_date.is.null,end_date.gte.${start}`)
@@ -213,6 +215,7 @@ async function fetchOtherSpans(
       subject: c?.subject ?? null,
       start: r.start_date,
       end: r.end_date,
+      isTransferred: r.is_transferred === true,
     });
     out.set(r.student_id, list);
   }

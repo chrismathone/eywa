@@ -6,7 +6,8 @@
  * 스크립트(`backfill-math-auto-units.mjs`)가 TS를 못 읽어서 둔 **사본**이고, Vitest
  * (`src/features/attendance/auto-units-parity.test.ts`)가 두 벌이 같은 답을 내는지 잠근다 — 규칙을 고칠 땐 **둘 다**.
  *
- * 원장 2026-09-11 *"그날 수업 길이로 자동"*: 시수 = max(1, round(분 ÷ 60) ÷ 2) — 1이면 자동 안 함(null).
+ * 원장 2026-09-11 *"그날 수업 길이로 자동"* + 2026-09-14 정정: 시수 = **ceil(분 ÷ 60) ÷ 2**(교시 하나당 0.5,
+ * 55분도 한 시간으로 올림) — 1이면 자동 안 함(null). 앱 `auto-units.ts`와 같은 식이어야 한다(패리티 테스트).
  */
 
 export const AUTO_UNITS_SUBJECTS = new Set(["math"]);
@@ -63,7 +64,7 @@ export function scheduledMinutesOn(date, rows) {
 
 export function unitsFromMinutes(minutes) {
   if (!Number.isFinite(minutes) || minutes <= 0) return null;
-  const units = Math.min(MAX_SESSION_UNITS, Math.max(1, Math.round(minutes / 60) / 2));
+  const units = Math.min(MAX_SESSION_UNITS, Math.ceil(minutes / 60) / 2);
   return units === 1 ? null : units;
 }
 

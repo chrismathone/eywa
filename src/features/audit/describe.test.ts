@@ -254,6 +254,45 @@ describe("collectAuditNameIds / auditTargetName", () => {
     expect(d).not.toContain("skippedSeatRows");
   });
 
+  it("시수는 '얼마에서 얼마로' — 칸에 보이는 값(nextUnits)이 친 값(units)보다 먼저다(원장 2026-09-14)", () => {
+    const cell = (m: Record<string, unknown>) =>
+      auditDetail("attendance_cell", { studentId: SID, date: "2026-09-14", status: "present", ...m }, ctx());
+    // 원장 사례 — 영어 3교시 칸을 1.5로 정정.
+    expect(cell({ units: 1.5, prevUnits: 3, nextUnits: 1.5, overwrote: true })).toContain("시수 3 → 1.5");
+    /**
+     * 🔴 교시가 여럿인 칸에 '1'(교시마다 기본)을 치면 칸은 **2**가 된다 — `units`(친 값)를 적으면 "3 → 1"이라는
+     *    거짓이 남는다. `nextUnits`가 이겨야 한다(적대 리뷰 2026-09-14).
+     */
+    const basic = cell({ units: null, prevUnits: 3, nextUnits: 2, overwrote: true });
+    expect(basic).toContain("시수 3 → 2");
+    expect(basic).not.toContain("→ 1");
+  });
+
+  it("nextUnits가 없는 옛 로그는 종전대로 — 저장 규약상 1은 null이라 '1'로 읽는다", () => {
+    // 원장이 지금 하는 작업(1.5 → 1). `num()`만 쓰면 이 칸이 숫자 없이 남는다.
+    expect(
+      auditDetail(
+        "attendance_cell",
+        { studentId: SID, date: "2026-09-14", status: "present", units: null, prevUnits: 1.5, overwrote: true },
+        ctx(),
+      ),
+    ).toContain("시수 1.5 → 1");
+    // 시수를 아예 안 건드린 저장엔 시수 문구가 없다.
+    expect(auditDetail("attendance_cell", { studentId: SID, date: "2026-09-14", status: "absent" }, ctx())).not.toContain(
+      "시수",
+    );
+  });
+
+  it("범위 채우기는 '몇 칸의 합'인지 적는다 — 안 적으면 한 칸 값으로 읽힌다", () => {
+    const d = auditDetail(
+      "attendance_range",
+      { studentIds: [SID], dates: ["2026-09-14"], status: "present", count: 20, units: 1.5, prevUnits: 6, nextUnits: 4.5, unitsChangedCells: 3 },
+      ctx(),
+    );
+    expect(d).toContain("시수 3칸 6 → 4.5");
+    expect(d).not.toContain("unitsChangedCells");
+  });
+
   it("계정 조작(비밀번호·이메일): 영문 mode/키를 노출하지 않는다", () => {
     expect(auditDetail("staff_password_reset", { mode: "temp" }, ctx())).toBe("임시 비밀번호 발급");
     expect(auditDetail("staff_password_reset", { mode: "custom" }, ctx())).toBe("비밀번호 직접 설정");
