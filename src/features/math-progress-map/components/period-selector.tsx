@@ -8,6 +8,8 @@ import { focusOfDate, resolveDay, resolveWeek } from "../focus";
 import { VIEW_MODES, VIEW_MODE_LABEL } from "../model";
 import { useProgressMap } from "./map-state";
 import styles from "./year-transition.module.css";
+import mapStyles from "./progress-map.module.css";
+import { MapPeriodPicker } from "./map-period-picker";
 
 /**
  * 보기 단위 선택 — [일간][주간][월간][분기][연간]. 화면을 바꾸는 게 아니라 **같은 진도를 시간 단위만 바꿔** 본다
@@ -49,14 +51,15 @@ export function PeriodSelector() {
       <ToolbarRow>
       <ToolbarSegment label="보기" title="같은 진도를 시간 단위만 바꿔 봅니다">
         {VIEW_MODES.map((m) => (
-          <ToolbarSegmentItem key={m} active={mode === m} onClick={() => setMode(m)}>
+          <ToolbarSegmentItem key={m} className={mapStyles.selectionItem} active={mode === m} onClick={() => setMode(m)}>
             {VIEW_MODE_LABEL[m]}
           </ToolbarSegmentItem>
         ))}
       </ToolbarSegment>
       </ToolbarRow>
       <ToolbarRow>
-      <span className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold" role="status" aria-live="polite" aria-atomic="true">
+      <MapPeriodPicker />
+      <span className={`${mapStyles.selectionStatus} inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold`} role="status" aria-live="polite" aria-atomic="true">
         <EyIcon name="check" size={12} />
         선택 중 <span aria-hidden>·</span> <span className="num">{selectionLabel}</span>
       </span>

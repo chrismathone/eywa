@@ -17,7 +17,7 @@ import { SELECTION_STROKE_WIDTH } from "./svg-consts";
  * 오늘 = 호박색 테두리. 초점 주는 띠 바깥에 학원색 테두리를 두르고, 그 주가 안쪽 일간 링으로 펼쳐진다.
  */
 export const WeekRing = memo(function WeekRing() {
-  const { view, mode, focus, selectDay } = useProgressMap();
+  const { view, mode, focus, selectDay, years } = useProgressMap();
   const active = ringActive("week", mode);
   const week = resolveWeek(view, focus);
   const span = weekAngles(view.year, focus.month, week.index);
@@ -40,7 +40,7 @@ export const WeekRing = memo(function WeekRing() {
                 strokeWidth={d.isToday ? 2.5 : noPlan ? 1 : 0}
                 label={`${formatMdW(d.date)} · ${dayDescription(d)}`}
                 target={{ kind: "day", date: d.date }}
-                onSelect={() => selectDay(d.date)}
+                onSelect={years.includes(Number(d.date.slice(0, 4))) ? () => selectDay(d.date) : undefined}
                 focusable={false}
               />
             );

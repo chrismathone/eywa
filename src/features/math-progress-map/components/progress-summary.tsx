@@ -4,6 +4,7 @@ import { formatDotDate } from "../calendar";
 import { focusOfDate, resolveWeek, summaryRows } from "../focus";
 import { paceLabel } from "../pace";
 import { useProgressMap } from "./map-state";
+import styles from "./progress-map.module.css";
 
 /**
  * 진도 요약 — 일·주·월·분기·연 다섯 줄(가로 막대). 초점을 따라가고(2월을 누르면 2월 숫자), 지금 보기 단위의
@@ -30,9 +31,7 @@ export function ProgressSummary() {
                 type="button"
                 onClick={() => setMode(r.mode)}
                 aria-pressed={on}
-                className={`grid w-full grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 text-left transition ${
-                  on ? "bg-primary-softer" : "hover:bg-bg-soft"
-                }`}
+                className={`${styles.selectionItem} grid w-full grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 text-left transition hover:bg-bg-soft`}
               >
                 <span className="min-w-0">
                   <span className="text-foreground block text-sm leading-tight font-bold">{r.label}</span>

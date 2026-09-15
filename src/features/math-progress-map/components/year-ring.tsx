@@ -8,6 +8,7 @@ import { useProgressMap } from "./map-state";
 import { RingOutline } from "./ring-outline";
 import { Segment } from "./segment";
 import { CURRENT_STROKE_WIDTH, FONT, SEGMENT_TEXT } from "./svg-consts";
+import { ClockLabel } from "./clock-label";
 
 /**
  * 달 이름·진도율 알약은 칸의 **중심점 하나**(r 428)에서 위·아래로 쌓는다(반지름을 달리해 방사형으로 놓으면 9시·3시
@@ -28,8 +29,8 @@ function pctPill(status: "completed" | "in-progress" | "other"): { fill: string;
  * 연간 링 — 열두 달. 칸 색은 **분기 틴트**(지난·이번 달 = 진하게, 앞 달 = 옅게)이고 완료 여부는 알약 색이 말한다.
  * 이번 달 = 호박색 점선, 고른 달(초점) = 학원색 바탕과 실선. 진도율 알약은 상태색을 유지한다.
  */
-export const YearRing = memo(function YearRing() {
-  const { view, mode, focus, selectMonth } = useProgressMap();
+export const YearRing = memo(function YearRing({ showYear = false }: { showYear?: boolean }) {
+  const { view, mode, focus, selectMonth, years } = useProgressMap();
   const active = ringActive("year", mode);
   return (
     <g>
@@ -38,7 +39,8 @@ export const YearRing = memo(function YearRing() {
         const [a0, a1] = withGap(angles, GAP.month);
         const mid = midAngle(angles);
         const tint = QUARTER_TINT[m.quarter];
-        const focused = focus.month === m.month;
+        const year = Number(m.weeks[0]!.start.slice(0, 4));
+        const focused = focus.month === m.month && year === view.year;
         const c = polar(LABEL_R, mid);
         const lp = { x: c.x, y: c.y - STACK_DY };
         const pp = { x: c.x, y: c.y + STACK_DY + 1 };
@@ -52,18 +54,21 @@ export const YearRing = memo(function YearRing() {
               strokeWidth={m.isCurrent ? CURRENT_STROKE_WIDTH : 0}
               dashed={m.isCurrent}
               selected={focused}
-              label={`${m.month}월 · ${m.plan?.chapter ?? "계획 없음"} · 진도율 ${m.pct}%`}
+              label={`${showYear ? `${year}년 ` : ""}${m.month}월 · ${m.plan?.chapter ?? "계획 없음"} · 진도율 ${m.pct}%`}
               target={{ kind: "month", month: m.month }}
-              onSelect={() => selectMonth(m.month)}
+              onSelect={years.includes(year) ? () => selectMonth(m.month) : undefined}
             />
             <g className={SEGMENT_TEXT} aria-hidden>
-              <text x={lp.x} y={lp.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.month} fontWeight={700} fill={focused ? FOCUS_INK : "var(--foreground)"}>
+              <ClockLabel x={c.x} y={c.y}>
+              {showYear ? <text y={-29} textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={700} fill={focused ? FOCUS_INK : "var(--foreground)"}>{year}</text> : null}
+              <text x={0} y={showYear ? -7 : lp.y - c.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.month} fontWeight={700} fill={focused ? FOCUS_INK : "var(--foreground)"}>
                 {m.month}월
               </text>
-              <rect x={pp.x - 33} y={pp.y - 14} width={66} height={28} rx={6} fill={pill.fill} stroke={HAIRLINE} strokeWidth={0.75} />
-              <text x={pp.x} y={pp.y + 1} textAnchor="middle" dominantBaseline="central" fontSize={FONT.monthPct} fontWeight={700} fill={pill.ink} className="num">
+              <rect x={-33} y={pp.y - c.y - 14} width={66} height={28} rx={6} fill={pill.fill} stroke={HAIRLINE} strokeWidth={0.75} />
+              <text x={0} y={pp.y - c.y + 1} textAnchor="middle" dominantBaseline="central" fontSize={FONT.monthPct} fontWeight={700} fill={pill.ink} className="num">
                 {m.plannedPages > 0 ? `${m.pct}%` : "—"}
               </text>
+              </ClockLabel>
             </g>
           </g>
         );

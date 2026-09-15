@@ -7,7 +7,10 @@ import { drillLevel } from "../drilldown";
 import { resolveWeek } from "../focus";
 import { useProgressMap } from "./map-state";
 
-export function DrillNavigation({ explore, onExplore, onBack, controls }: { explore: boolean; onExplore: (value: boolean) => void; onBack: () => void; controls?: ReactNode }) {
+export type MapDisplay = "drill" | "full" | "continuous";
+
+export function DrillNavigation({ display, onDisplay, onBack, controls }: { display: MapDisplay; onDisplay: (value: MapDisplay) => void; onBack: () => void; controls?: ReactNode }) {
+  const explore = display === "drill";
   const { mode, setMode, view, focus, selectQuarter, selectMonth } = useProgressMap();
   const level = drillLevel(mode);
   const quarter = (Math.floor((focus.month - 1) / 3) + 1) as 1 | 2 | 3 | 4;
@@ -37,8 +40,9 @@ export function DrillNavigation({ explore, onExplore, onBack, controls }: { expl
           </ol>
         </nav> : null}
         <ToolbarSegment title="지도 표시 방식">
-          <ToolbarSegmentItem active={explore} onClick={() => onExplore(true)}>단계별 확대</ToolbarSegmentItem>
-          <ToolbarSegmentItem active={!explore} onClick={() => onExplore(false)}>전체 지도</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={explore} onClick={() => onDisplay("drill")}>단계별 확대</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={display === "full"} onClick={() => onDisplay("full")}>전체 지도</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={display === "continuous"} onClick={() => onDisplay("continuous")}>연속 회전</ToolbarSegmentItem>
         </ToolbarSegment>
       </div>
       {controls}

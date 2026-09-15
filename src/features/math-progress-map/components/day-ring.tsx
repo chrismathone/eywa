@@ -10,6 +10,7 @@ import { ringActive } from "../view-mode";
 import { useProgressMap } from "./map-state";
 import { Segment } from "./segment";
 import { CURRENT_STROKE_WIDTH, FONT, FOCUS_STROKE_WIDTH, SEGMENT_TEXT } from "./svg-consts";
+import { ClockLabel } from "./clock-label";
 
 const WEEKDAY_R = 209;
 const DAYNUM_R = 182;
@@ -42,9 +43,9 @@ export const DayRing = memo(function DayRing() {
           return (
             <g key={`empty-${i}`} className={SEGMENT_TEXT} aria-hidden>
               <path d={path} fill={STATUS_FILL.none} />
-              <text x={wp.x} y={wp.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.weekday} fontWeight={500} fill="var(--neutral-fill)">
+              <ClockLabel x={wp.x} y={wp.y}><text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={FONT.weekday} fontWeight={500} fill="var(--neutral-fill)">
                 {dow}
-              </text>
+              </text></ClockLabel>
             </g>
           );
         }
@@ -68,12 +69,12 @@ export const DayRing = memo(function DayRing() {
               onSelect={() => selectDay(d.date)}
             />
             <g className={SEGMENT_TEXT} aria-hidden>
-              <text x={wp.x} y={wp.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.weekday} fontWeight={700} fill={ink}>
+              <ClockLabel x={wp.x} y={wp.y}><text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={FONT.weekday} fontWeight={700} fill={ink}>
                 {dow}
-              </text>
-              <text x={np.x} y={np.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.dayNum} fontWeight={d.holidayName ? 700 : 500} fill={ink} className="num">
+              </text></ClockLabel>
+              <ClockLabel x={np.x} y={np.y}><text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={FONT.dayNum} fontWeight={focused || d.holidayName ? 700 : 500} fill={ink} className="num">
                 {Number(d.date.slice(8, 10))}
-              </text>
+              </text></ClockLabel>
             </g>
           </g>
         );

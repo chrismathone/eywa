@@ -6,6 +6,7 @@ import { QUARTER_TINT } from "../palette";
 import { useProgressMap } from "./map-state";
 import { Segment } from "./segment";
 import { FONT, SEGMENT_TEXT } from "./svg-consts";
+import { ClockLabel } from "./clock-label";
 
 /**
  * 분기 링 — 맨 바깥 가는 띠 넷 + 바깥 라벨. 색은 분기 정체(파스텔 잉크)이고, 초점 분기는 학원색 테두리.
@@ -33,9 +34,9 @@ export const QuarterRing = memo(function QuarterRing() {
               onSelect={() => selectQuarter(q.q)}
               className={focused ? "" : "opacity-75"}
             />
-            <text
-              x={lp.x}
-              y={lp.y}
+            <ClockLabel x={lp.x} y={lp.y}><text
+              x={0}
+              y={0}
               textAnchor="middle"
               dominantBaseline="central"
               fontSize={FONT.quarter}
@@ -44,7 +45,7 @@ export const QuarterRing = memo(function QuarterRing() {
               className={SEGMENT_TEXT}
             >
               {tint.label}
-            </text>
+            </text></ClockLabel>
           </g>
         );
       })}

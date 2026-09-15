@@ -5,6 +5,7 @@ import { formatRange } from "../calendar";
 import type { MonthView } from "../derive";
 import { STATUS_LABEL, STATUS_PILL } from "../palette";
 import { useProgressMap } from "./map-state";
+import styles from "./progress-map.module.css";
 
 /** 목록 한 줄의 공통 껍데기 — 누르면 초점이 옮겨 간다. 켜진 줄(초점)은 옅은 학원색. */
 export function DetailRow({ on, onClick, children, label }: { on: boolean; onClick: () => void; children: React.ReactNode; label: string }) {
@@ -15,9 +16,7 @@ export function DetailRow({ on, onClick, children, label }: { on: boolean; onCli
         onClick={onClick}
         aria-label={label}
         aria-current={on ? "true" : undefined}
-        className={`grid w-full grid-cols-[5.5rem_minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 text-left transition ${
-          on ? "bg-primary-softer" : "hover:bg-bg-soft"
-        }`}
+        className={`${styles.selectionItem} grid w-full grid-cols-[5.5rem_minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 text-left transition hover:bg-bg-soft`}
       >
         {children}
       </button>
