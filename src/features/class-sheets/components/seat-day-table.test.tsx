@@ -71,6 +71,34 @@ describe("305 합명단 표", () => {
     expect(screen.getByText("초등 브릿지 A")).toBeInTheDocument();
   });
 
+  // 원장 2026-09-10: "영어강사시트 → JJ 뷰에서 반별로 정렬".
+  // 🔴 순수 함수(seat-day-order)가 있는 것만으로는 부족하다 — **표가 실제로 그 순서로 그려지는지**를 잠근다.
+  it("줄은 반별로 묶이고, 반 안에서는 가나다 — 반을 모르는 줄은 맨 뒤", () => {
+    const at = (name: string, classId: string, className: string): SeatDayStudent => ({
+      ...student,
+      studentId: `s-${name}`,
+      name,
+      classId,
+      className,
+    });
+    const { container } = renderTable("selfStudy", [
+      // 서버가 넘기는 순서 = 가나다(반이 뒤섞인 상태) 그대로.
+      at("김근호", "c-med", "중등E_중1 MED"),
+      at("류지훈", "c-sky", "초등E_초6 SKY"),
+      at("류혜정", "c-med", "중등E_중1 MED"),
+      at("박서연D", "c-reg", "중등E_중2 정규 A"),
+      at("반없음", "c-none", ""),
+    ]);
+    const names = [...container.querySelectorAll("tbody tr td:first-child a")].map((a) => a.textContent);
+    expect(names).toEqual(["김근호", "류혜정", "박서연D", "류지훈", "반없음"]);
+    // navRow는 정렬 **뒤에** 매긴다 — Enter 세로 이동이 눈에 보이는 순서를 따라가야 한다.
+    const navRows = [...container.querySelectorAll("tbody tr [data-nav-row]")].map((el) =>
+      el.getAttribute("data-nav-row"),
+    );
+    expect(navRows.length).toBeGreaterThan(0);
+    expect([...new Set(navRows)]).toEqual(["0", "1", "2", "3", "4"]);
+  });
+
   // ── 열 구성 불변식(2026-08-19) ───────────────────────────────────────────────
   // 교시 블록이 여러 개 쌓이는 면이라, 열 폭이 블록마다 갈리면 같은 열이 다른 x에 온다.
   it("colgroup = seat-day-columns 단일 소스 · 특이사항만 잔여(폭 무지정)", () => {
