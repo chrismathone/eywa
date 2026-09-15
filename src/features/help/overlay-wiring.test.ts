@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { MANUALS } from "./manuals";
 
@@ -53,8 +54,6 @@ describe("F1 겹침 배선", () => {
       { file: "app/(shell)/students/page.tsx", slug: "students" },
       { file: "app/(shell)/dashboard/_overview/kpi-strip.tsx", slug: "dashboard" },
       { file: "features/onescreen/components/top-bar.tsx", slug: "onescreen" },
-      // 🔴 도움말 허브 자신도 본다 — 2026-09-15에 설명서 목록을 되살리며 `helpAttr("help-guides")`를 붙였는데
-      // manuals 에 그 키가 없어 **그 구역만 F1 번호가 조용히 안 섰다**(알약이 하나 빠졌을 뿐이라 눈에 안 띈다).
       { file: "app/(shell)/help/page.tsx", slug: "help" },
       { file: "app/(shell)/help/_help-browser.tsx", slug: "help" },
     ];
@@ -88,4 +87,89 @@ describe("F1 겹침 배선", () => {
     expect(used.length).toBeGreaterThan(5);
     for (const k of used) expect(keys.has(k), k).toBe(true);
   });
+
+  it("모델 A: 캡션 껍데기·모달·알약은 measure 를 다시 안 부른다", () => {
+    const overlay = read("components/help/screen-help-overlay.tsx");
+    const caption = read("components/help/help-caption.tsx");
+    const pills = read("components/help/help-pills.tsx");
+    expect(overlay).toContain("aria-modal");
+    expect(caption).toContain("HOVER_CARD_SHELL");
+    expect(caption).toContain("pointer-events-auto");
+    expect(caption).toContain("overflow-y-auto");
+    expect(caption).not.toMatch(/line-clamp/);
+    expect(caption).not.toMatch(/overflow-hidden/);
+    expect(pills).toContain("onMouseEnter");
+    expect(pills).not.toContain("measure");
+    expect(read("components/help/help-overlay.module.css")).toContain("prefers-reduced-motion");
+    expect(existsSync(join(root, "src/features/help/overlay-balloon.ts"))).toBe(false);
+  });
+
+  it("구 balloon export·p.balloon 접근이 help 소스에 없다", () => {
+    expect(forbiddenBalloonHits()).toEqual([]);
+  });
 });
+
+const FORBIDDEN_FN = new Set(["placeOverlay", "balloonHeight", "noBalloonOverlap"]);
+
+function forbiddenBalloonHits(): string[] {
+  const hits: string[] = [];
+  for (const file of helpSrcFiles()) {
+    const kind = file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, kind);
+    const visit = (node: ts.Node) => {
+      if (ts.isFunctionDeclaration(node) && node.name && hasExportMod(node) && FORBIDDEN_FN.has(node.name.text)) {
+        hits.push(`${rel(file)} export function ${node.name.text}`);
+      }
+      if (ts.isTypeAliasDeclaration(node) && hasExportMod(node) && node.name.text === "PlacedCallout") {
+        hits.push(`${rel(file)} export type PlacedCallout`);
+      }
+      if (ts.isVariableStatement(node) && hasExportMod(node)) {
+        for (const d of node.declarationList.declarations) {
+          if (ts.isIdentifier(d.name) && d.name.text === "BALLOON_W") {
+            hits.push(`${rel(file)} export const BALLOON_W`);
+          }
+        }
+      }
+      if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
+        for (const el of node.exportClause.elements) {
+          if ((el.propertyName ?? el.name).text === "placeOverlay") {
+            hits.push(`${rel(file)} export { placeOverlay`);
+          }
+        }
+      }
+      if (ts.isPropertyAccessExpression(node) && node.name.text === "balloon") {
+        const expr = node.expression.getText(source);
+        if (expr === "p" || expr === "PlacedCallout") hits.push(`${rel(file)} ${expr}.balloon`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return hits;
+}
+
+function hasExportMod(node: ts.Node): boolean {
+  return ((node as ts.FunctionDeclaration).modifiers ?? []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+}
+
+function helpSrcFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === "manuals" || e.name === "board") continue;
+        walk(p);
+      } else if (/\.[cm]?[jt]sx?$/.test(e.name) && !/\.test\./.test(e.name)) {
+        out.push(p);
+      }
+    }
+  };
+  walk(join(root, "src/features/help"));
+  walk(join(root, "src/components/help"));
+  return out;
+}
+
+function rel(file: string): string {
+  return file.slice(root.length + 1).replaceAll("\\", "/");
+}

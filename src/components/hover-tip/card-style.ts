@@ -1,6 +1,8 @@
 /**
  * **hover 카드 껍데기** — 시간표 학생/수업 카드([hover-cards.tsx](<../../app/(shell)/timetable/_components/hover-cards.tsx>))와
  * 앱 전역 메모 툴팁([hover-tip-layer.tsx](./hover-tip-layer.tsx))이 **같은 값**을 쓴다.
+ * F1 화면 도움말 캡션도 **껍데기만** 공유한다. 히트 테스트는 `pointer-events-auto`(hover의
+ * `pointer-events-none`을 베끼지 말 것 — 카드 안에서 스크롤한다).
  *
  * 🔴 원장 2026-09-15 *"왠만하면 모든 곳의 메모는 시간표에서 사진올린것처럼 생기면 좋겠네. 그냥 메모처럼하니까
  *    너무 보기가 불편하다랄까?"* — 브라우저 기본 툴팁(`title`)의 그 회색 메모 상자를 앱 카드로 바꾼 결정이다.
