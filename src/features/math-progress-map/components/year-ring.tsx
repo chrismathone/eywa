@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { GAP, RINGS, arcPath, midAngle, monthAngles, polar, withGap } from "../geometry";
-import { FOCUS_INK, HAIRLINE, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
+import { HAIRLINE, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
 import { ringActive } from "../view-mode";
 import { useProgressMap } from "./map-state";
 import { RingOutline } from "./ring-outline";
@@ -60,8 +60,8 @@ export const YearRing = memo(function YearRing({ showYear = false }: { showYear?
             />
             <g className={SEGMENT_TEXT} aria-hidden>
               <ClockLabel x={c.x} y={c.y}>
-              {showYear ? <text y={-29} textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={700} fill={focused ? FOCUS_INK : "var(--foreground)"}>{year}</text> : null}
-              <text x={0} y={showYear ? -7 : lp.y - c.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.month} fontWeight={700} fill={focused ? FOCUS_INK : "var(--foreground)"}>
+              {showYear ? <text y={-29} textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={700} fill="var(--foreground)">{year}</text> : null}
+              <text x={0} y={showYear ? -7 : lp.y - c.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.month} fontWeight={700} fill="var(--foreground)">
                 {m.month}월
               </text>
               <rect x={-33} y={pp.y - c.y - 14} width={66} height={28} rx={6} fill={pill.fill} stroke={HAIRLINE} strokeWidth={0.75} />

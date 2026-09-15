@@ -11,7 +11,7 @@
  */
 import { daysInMonth, parseYmd, weeksOfMonth } from "./calendar";
 
-export const VIEWBOX = 1040;
+export const VIEWBOX = 1100;
 export const CX = VIEWBOX / 2;
 export const CY = VIEWBOX / 2;
 
@@ -35,7 +35,8 @@ export const RINGS = {
   year: [386, 470] as Band,
   /** 분기 — 바깥 가는 띠 */
   quarter: [478, 486] as Band,
-  quarterLabel: 504,
+  /** 가로로 읽는 분기 글자의 폭까지 원 밖 여백에 포함한다. */
+  quarterLabel: 524,
 } as const;
 
 /** 단계별 확대 지도 — 현재 단계의 칸을 원 전체에 펼친다. */
