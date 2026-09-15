@@ -14,7 +14,7 @@ export function cycleHelpKey(keys: string[], current: string, dir: 1 | -1): stri
   return keys[(i + dir + keys.length) % keys.length]!;
 }
 
-export function helpKeyForDigit(pills: { key: string; n: number }[], digit: number): string | null {
+export function helpKeyForDigit(pills: readonly { key: string; n: number }[], digit: number): string | null {
   if (!Number.isInteger(digit) || digit < 1 || digit > 9) return null;
   return pills.find((p) => p.n === digit)?.key ?? null;
 }
