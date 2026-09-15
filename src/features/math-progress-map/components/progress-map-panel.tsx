@@ -8,7 +8,7 @@ import styles from "./progress-map.module.css";
 export function ProgressMapPanel() {
   return (
     <div
-      className={`${styles.surface} order-2 min-w-0 md:order-1`}
+      className={`${styles.surface} min-w-0`}
       data-map-design="original"
       data-map-background="off"
     >

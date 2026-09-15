@@ -72,6 +72,13 @@
 .mobileToday { display: none; }
 
 .timelineColumn { min-width: 0; padding: 8px 4px 45vh; background: white; }
+.timelineCard { min-width: 0; height: min(907px, calc(100dvh - 141px)); min-height: 0; align-self: start; overflow: hidden; display: flex; flex-direction: column; border: 1px solid #e9eff6; border-radius: 16px; background: white; }
+.timelineCardHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid #edf1f5; }
+.timelineCardHeader h2 { font-size: 18px; font-weight: 800; letter-spacing: -.035em; }
+.timelineCardHeader p { margin-top: 3px; color: var(--timeline-muted); font-size: 11px; }
+.timelineCardHeader > span { flex: none; border-radius: 999px; background: #f1f5fa; padding: 5px 9px; color: var(--timeline-blue); font-size: 11px; font-weight: 700; }
+.timelineCardScroll { flex: 1; height: 0; min-height: 0; overflow-y: auto; padding: 0 14px 28px 8px; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.timelineCardScroll > div { min-height: 100%; }
 .curriculumHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 4px 12px; }
 .curriculumHeader h2 { font-size: 16px; font-weight: 800; letter-spacing: -.035em; }
 .curriculumHeader p { margin-top: 4px; font-size: 12px; color: var(--timeline-muted); }
@@ -165,6 +172,8 @@
   .centerStatus { font-size: 9px; }
   .legend { font-size: 10px; gap: 10px; }
   .timelineColumn { padding: 12px 8px 50vh 2px; }
+  .timelineCard { height: auto; min-height: 0; }
+  .timelineCardScroll { height: min(620px, 68dvh); flex: none; }
   .curriculumHeader { padding: 2px 6px 16px; }
   .curriculumHeader h2 { font-size: 17px; }
   .curriculumHeader p { font-size: 11px; }

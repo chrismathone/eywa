@@ -5,6 +5,7 @@ import { monthPosition, periodAt } from "../../continuous-timeline";
 import { monthNearestCenter } from "../../timeline-navigation";
 
 function scrollHost(element: HTMLElement): HTMLElement {
+  if (/(auto|scroll)/.test(getComputedStyle(element).overflowY)) return element;
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
     if (/(auto|scroll)/.test(getComputedStyle(parent).overflowY)) return parent;
   }
