@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import type { StudentProgress } from "../model";
 import { CurriculumPosition } from "./curriculum-position";
 import { ProgressDetailPanel } from "./detail-panel";
@@ -10,18 +12,25 @@ import { ProgressMapPanel } from "./progress-map-panel";
 import { ProgressSummary } from "./progress-summary";
 import { StudentHeader } from "./student-header";
 import styles from "./progress-map.module.css";
+import { MathProgressTimeline } from "./timeline/math-progress-timeline";
 
 /**
  * 수학 학습 진도맵 — 한 학생의 연간 커리큘럼 위치.
  *
- * 데스크톱 = [학생 줄] / [원형 지도 | 요약·계획 대비] / [커리큘럼 가로 행] / [상세].
- * 태블릿은 지도 위, 요약 아래. 폰은 요약 → 지도 → 커리큘럼 → 상세.
+ * 기본 화면은 고정 시계와 세로 커리큘럼을 같은 탐색 위치로 연결한다.
+ * 기존 지도 화면도 동일한 학생 데이터와 선택 상태를 공유한다.
  */
 export function MathProgressDashboard({ progress }: { progress: StudentProgress }) {
+  const [layout, setLayout] = useState<"timeline" | "map">("timeline");
   return (
     <ProgressMapProvider progress={progress}>
       <div className={`${styles.selectionTheme} flex flex-col gap-4`}>
         <StudentHeader />
+        <div className="flex justify-end"><ToolbarSegment title="진도 탐색 화면">
+          <ToolbarSegmentItem active={layout === "timeline"} onClick={() => setLayout("timeline")}>세로 타임라인</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={layout === "map"} onClick={() => setLayout("map")}>기존 지도</ToolbarSegmentItem>
+        </ToolbarSegment></div>
+        {layout === "timeline" ? <MathProgressTimeline /> : <>
         <PeriodSelector />
         {/* 폰(<768)은 요약이 먼저, 태블릿(768~1023)은 지도가 먼저 한 열로, 데스크톱은 [지도 | 요약] 두 열(지시 16).
             DOM은 요약(글자)이 먼저다 — 지도 칸이 수백 개라 키보드·스크린리더가 요약에 닿기 전에 칸을 다 지나지 않게(시각 순서만 `order`). */}
@@ -34,6 +43,7 @@ export function MathProgressDashboard({ progress }: { progress: StudentProgress 
         </div>
         <CurriculumPosition />
         <ProgressDetailPanel />
+        </>}
       </div>
     </ProgressMapProvider>
   );

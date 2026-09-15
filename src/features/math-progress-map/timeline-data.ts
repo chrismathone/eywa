@@ -1,0 +1,78 @@
+import { daysInMonth, ymd } from "./calendar";
+import { monthPosition } from "./continuous-timeline";
+import type { DayView, MonthView, YearView } from "./derive";
+import type { StudentProgress } from "./model";
+
+export type TimelineStatus = "completed" | "current" | "future" | "no-plan";
+export type CurriculumPeriod = {
+  id: string;
+  year: number;
+  quarter: number;
+  month: number;
+  bookName: string;
+  semester: string;
+  chapter: string;
+  subChapter: string;
+  startDate: string;
+  targetEndDate: string;
+  progress: number;
+  completedUnits: number;
+  totalUnits: number;
+  status: TimelineStatus;
+  isActual: boolean;
+  isPast: boolean;
+  source: MonthView;
+};
+
+export const QUARTER_GOALS = [
+  "기초를 탄탄히 다지는 시기",
+  "중등 수학의 기본을 완성하는 시기",
+  "응용과 심화로 나아가는 시기",
+  "다음 과정으로 도약하는 시기",
+] as const;
+
+export const TIMELINE_STATUS = {
+  completed: { label: "완료", symbol: "✓" },
+  current: { label: "진행 중", symbol: "●" },
+  future: { label: "예정", symbol: "○" },
+  "no-plan": { label: "계획 없음", symbol: "—" },
+} as const;
+
+/** 기존 월별 계획과 일별 보고서를 접는다. UI용 진도율·단원 수를 별도로 만들어 넣지 않는다. */
+export function curriculumPeriods(view: YearView, progress: StudentProgress): CurriculumPeriod[] {
+  const actualYear = Number(progress.asOf.slice(0, 4));
+  const actualMonth = Number(progress.asOf.slice(5, 7));
+  return view.months.map((month) => {
+    const days = month.weeks.flatMap((week) => week.days).filter((day) => day.record && day.plannedPages > 0);
+    const units = new Map<string, { done: number; planned: number }>();
+    for (const day of days) {
+      const topic = day.record!.subChapter || day.record!.chapter;
+      if (!topic) continue;
+      const count = units.get(topic) ?? { done: 0, planned: 0 };
+      units.set(topic, { done: count.done + day.donePages, planned: count.planned + day.plannedPages });
+    }
+    const first = days[0]?.record;
+    const isActual = view.year === actualYear && month.month === actualMonth;
+    const isPast = monthPosition(view.year, month.month) < monthPosition(actualYear, actualMonth);
+    const status: TimelineStatus = month.plannedPages === 0 ? "no-plan" : isActual ? "current"
+      : month.pct === 100 ? "completed" : isPast ? "current" : "future";
+    return {
+      id: `${view.year}-${String(month.month).padStart(2, "0")}`,
+      year: view.year, quarter: month.quarter, month: month.month,
+      bookName: month.plan?.bookName ?? first?.bookName ?? "교재 계획 없음",
+      semester: month.plan?.semester ?? "",
+      chapter: month.plan?.chapter ?? first?.chapter ?? "학습 계획이 없습니다",
+      subChapter: [...units.keys()].join(" · "),
+      startDate: ymd(view.year, month.month, 1), targetEndDate: ymd(view.year, month.month, daysInMonth(view.year, month.month)),
+      progress: month.pct, completedUnits: [...units.values()].filter((unit) => unit.done >= unit.planned).length,
+      totalUnits: units.size, status, isActual, isPast, source: month,
+    };
+  });
+}
+
+/** 실제 이번 주는 기준일로 찾는다. 과거를 탐색해도 실제 날짜가 바뀌지 않는다. */
+export function detailDays(period: CurriculumPeriod, asOf: string): DayView[] {
+  const weeks = period.source.weeks;
+  const week = period.isActual ? weeks.find((item) => item.start <= asOf && item.end >= asOf) : weeks.find((item) => item.days.some((day) => day.record));
+  return (week?.days ?? []).filter((day) => day.record || day.isToday);
+}

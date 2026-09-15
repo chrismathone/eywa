@@ -6,6 +6,7 @@ import { focusOfDate, type Focus } from "../focus";
 import type { PlanVsActual, StudentProgress, ViewMode } from "../model";
 import { planVsActual } from "../pace";
 import { availableYears, progressForYear } from "../years";
+import { monthPosition, periodAt } from "../continuous-timeline";
 
 /**
  * 진도맵 상태 — 학생 데이터 위의 선택 연도·보기 단위·초점. 실제 현재 위치는 연도 이동과 무관하게 유지한다.
@@ -23,6 +24,9 @@ export type ProgressMapState = {
   pace: PlanVsActual;
   mode: ViewMode;
   focus: Focus;
+  /** 시계와 세로 타임라인이 함께 사용하는 탐색 월. 실제 기준일과 분리한다. */
+  currentProgressPosition: number;
+  setViewedPosition: (position: number) => void;
   setMode: (mode: ViewMode) => void;
   selectYear: (year: number) => void;
   selectPeriod: (year: number, month: number) => void;
@@ -49,6 +53,13 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
   const pace = useMemo(() => planVsActual(sourceProgress), [sourceProgress]);
   const [mode, setMode] = useState<ViewMode>("year");
   const [focus, setFocus] = useState<Focus>(() => focusOfDate(progress.asOf, progress.year));
+  const currentProgressPosition = monthPosition(year, focus.month);
+  const setViewedPosition = useCallback((position: number) => {
+    const next = periodAt(position);
+    if (!years.includes(next.year)) return;
+    setYear(next.year);
+    setFocus({ month: next.month, week: 1, day: null });
+  }, [years]);
 
   const selectYear = useCallback((nextYear: number) => {
     if (!years.includes(nextYear)) return;
@@ -97,8 +108,8 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
   }, [sourceProgress.asOf, sourceProgress.year]);
 
   const value = useMemo<ProgressMapState>(
-    () => ({ progress, sourceProgress, view, currentView, years, pace, mode, focus, setMode, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus }),
-    [progress, sourceProgress, view, currentView, years, pace, mode, focus, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus],
+    () => ({ progress, sourceProgress, view, currentView, years, pace, mode, focus, currentProgressPosition, setViewedPosition, setMode, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus }),
+    [progress, sourceProgress, view, currentView, years, pace, mode, focus, currentProgressPosition, setViewedPosition, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

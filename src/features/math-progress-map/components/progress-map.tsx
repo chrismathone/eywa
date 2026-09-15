@@ -93,7 +93,7 @@ export function ProgressMap({ navy = false, controls }: { navy?: boolean; contro
   );
 }
 
-const MapDrawing = memo(function MapDrawing() {
+export const MapDrawing = memo(function MapDrawing({ center }: { center?: ReactNode }) {
   const { progress, view } = useProgressMap();
   return (
     <div
@@ -107,7 +107,7 @@ const MapDrawing = memo(function MapDrawing() {
       <DialLayer name="weeks"><MonthRing /></DialLayer>
       <DialLayer name="days"><WeekRing /></DialLayer>
       <DialLayer name="focus"><DayRing /></DialLayer>
-      <DialLayer name="center"><CurrentPosition /></DialLayer>
+      <DialLayer name="center">{center ?? <CurrentPosition />}</DialLayer>
       <DialLayer name="labels"><RingLabels /></DialLayer>
       <div className={styles.sweep} aria-hidden />
     </div>
