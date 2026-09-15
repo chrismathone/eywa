@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 // 수납 표 — 청구서 한 건(학생x청구월)이 **라인마다 한 줄**이라 4항목짜리 하나가 화면 넉 줄을 먹었다.
 // 기본은 **접어서 합계 한 줄**, 줄을 누르거나 '전체 펼치기'로 세부 항목을 편다(원장 2026-08-31:
@@ -312,7 +313,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                   </td>
                   <td className="text-text-dim px-3 py-2.5 text-xs">
                     {r.notes ? (
-                      <span className="line-clamp-1" title={r.notes}>
+                      <span className="line-clamp-1" {...tipProps(r.notes)}>
                         {r.notes}
                       </span>
                     ) : (
@@ -377,11 +378,11 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                     {li.description || "—"}
                   </td>
                   <td className="text-foreground num px-3 py-2.5 text-right">{won(li.amount)}</td>
-                  {/* 할인 사유(discount_reason)는 저장만 되고 어디에도 안 뜨던 orphan — 금액 셀 툴팁으로 노출.
-                      (별도 열을 늘리면 좁은 창에서 표가 깨져 title 툴팁을 택했다.) */}
+                  {/* 할인 사유(discount_reason)는 저장만 되고 어디에도 안 뜨던 orphan — 금액 셀 **카드**로 노출.
+                      (별도 열을 늘리면 좁은 창에서 표가 깨진다 · 카드 규약은 원장 2026-09-15.) */}
                   <td
                     className="num px-3 py-2.5 text-right text-xs"
-                    title={first && r.discountReason ? `할인 사유: ${r.discountReason}` : undefined}
+                    {...tipProps(first && r.discountReason ? { rows: [["할인 사유", r.discountReason]] } : null)}
                   >
                     {(li.discount ?? 0) > 0 ? (
                       <span className={`text-amber${first && r.discountReason ? " underline decoration-dotted underline-offset-2" : ""}`}>
@@ -412,7 +413,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                   <td className="text-text-dim num px-3 py-2.5 text-center text-xs">{shortDate(li.paidDate)}</td>
                   <td className="text-text-dim px-3 py-2.5 text-xs">
                     {first && r.notes ? (
-                      <span className="line-clamp-1" title={r.notes}>{r.notes}</span>
+                      <span className="line-clamp-1" {...tipProps(r.notes)}>{r.notes}</span>
                     ) : (
                       <span className="text-text-faint">—</span>
                     )}

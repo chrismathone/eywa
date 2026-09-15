@@ -128,7 +128,8 @@ describe("④ 우클릭 = 특이사항 · 이름 아래 한 줄", () => {
   });
 
   it("특이사항은 이름 아래에서 **잘리고**, 마우스 오버로 전문이 보인다([[#111]] 블록으로)", () => {
-    expect(lab).toMatch(/className="block w-full truncate[^"]*" title=\{note\}/);
+    // 🔴 전문은 이제 **카드**가 띄운다(원장 2026-09-15 *"메모같이 생기지 않고"*) — `title`로 되돌리지 말 것.
+    expect(lab).toMatch(/className="block w-full truncate[^"]*" \{\.\.\.tipProps\(note\)\}/);
   });
 });
 

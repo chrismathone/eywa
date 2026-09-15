@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { tipText } from "@/components/hover-tip/tip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AttendanceCheck } from "./attendance-check";
 
@@ -100,7 +101,8 @@ describe("ECS 출결 체크 — 지각·결석 사유 창", () => {
   it("권한이 아예 없으면(canNote=false) 잠긴 칸은 버튼조차 아니다", () => {
     render(<AttendanceCheck {...base} status="late" note="버스" canMark={false} canNote={false} />);
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByTitle(/지각 · 버스/)).toBeTruthy();
+    // 🔴 툴팁은 **카드**다(원장 2026-09-15) — 상태는 카드 머리, 사유는 '사유' 줄이다.
+    expect(tipText(screen.getByText("지각").getAttribute("data-tip"))).toMatch(/지각 · 사유 버스/);
   });
 
   it("사유가 있으면 칸에 점(●) 표식 — 열어보지 않아도 보인다", () => {

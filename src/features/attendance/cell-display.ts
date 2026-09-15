@@ -7,7 +7,7 @@
 
 import { COUNTABLE_STATUSES, formatSessionUnits } from "./session-units";
 // 화면 문구는 사전 단일 소스 — 인자를 안 주면 한국어라 기존 호출부는 그대로다.
-import { sheetT } from "@/features/teacher-view/i18n";
+import { sheetTf } from "@/features/teacher-view/i18n";
 import { ATT_VIVID } from "./status-color";
 
 export type AttendanceMark = "present" | "absent" | "late" | "excused" | "makeup" | "early_leave";
@@ -26,6 +26,14 @@ export type SlotMark = {
    * 자리일 때만 붙는다(나머지는 키 없음 — 강사 보기 칸 수천 개의 페이로드).
    */
   seat?: true;
+  /**
+   * 세지 않는 교시(`ghosts`)를 **누가 찍었나** — 입력자 표시 이름(원장 2026-09-15 *"이 화면 몫 아닌 출석부 체크를
+   * 누가 했는지 마우스 올리면 알아볼 수 있게"*). 🔴 **귀속이 아니라 입력자**다(`recorded_by` — 데스크가 대신
+   * 찍으면 데스크 이름이다, `teacher-axis.ts`). 모르면 키 없음(옛 기록엔 비어 있다 · 칸 수천 개의 페이로드).
+   */
+  by?: string;
+  /** 그 입력의 시각(KST `9/8 16:25`) — `by`와 같은 자리에서만 붙는다. */
+  at?: string;
   /**
    * 세지 않는 교시 중 **담임이 되기 전 기록**(화면만 `homeroomSince`로 빼고, 저장은 몫으로 본다 — `buildScopeOwner`).
    * 🔴 이 칸은 저장이 제 몫 경로(시수까지)를 타므로 빗금 칸 입력(상태만 옮기기)을 열면 안 된다 — 격자가 막는다.
@@ -257,6 +265,24 @@ export function slotBreakdown(slots: readonly SlotMark[], lang: "ko" | "en" = "k
     .join(" · ");
 }
 
+/**
+ * 빗금 칸 카드의 **교시별 줄** — `16:20 출석 1 · 김동후 입력 9/8 16:25`(원장 2026-09-15).
+ *
+ * 🔴 입력자·시각은 **모르면 그 조각만 빠진다**(지어내지 않는다) — 옛 기록엔 `recorded_by`가 없다.
+ * ⚠️ **사유를 단정하지 않는다** — 자리(JJ·랩)일 수도, 다른 선생님 교시일 수도, 교시를 안 남긴 옛 기록이라
+ *    담당을 못 가르는 경우일 수도, 담임이 되기 전 기록일 수도 있다. 카드의 라벨(`att.legend.ghost`)이 그 넷에
+ *    모두 참인 말이고, 여기서는 **무엇이 찍혔는지**만 편다.
+ */
+export function ghostSlotLines(others: readonly SlotMark[], lang: "ko" | "en" = "ko"): string[] {
+  return others.map((s) => {
+    const time = s.slot ? `${s.slot.slice(0, 5)} ` : "";
+    const head = `${time}${statusTextOf(s.status, lang)} ${markNumber(s.status, s.units)}`;
+    const by = s.by?.trim() ? sheetTf(lang, "att.cell.ghostBy", { name: s.by.trim() }) : "";
+    const tail = [by, s.at?.trim() ?? ""].filter((x) => x !== "").join(" ");
+    return tail === "" ? head : `${head} · ${tail}`;
+  });
+}
+
 export type CellDisplay = {
   text: string;
   className: string;
@@ -290,16 +316,6 @@ export const GHOST_HATCH =
  */
 export const NOT_MINE_MESSAGE =
   "이 날 찍힌 기록이 이 화면의 몫이 아니라 여기서는 못 고칩니다 — 반별 보기에서 고치세요";
-
-/**
- * 세지 않는 기록 툴팁 — "이 선생님 몫으로 세지 않는 기록 · 16:20 출석 1 · 18:20 출석 1".
- * ⚠️ **사유를 단정하지 않는다** — 자리(JJ·랩)일 수도, 다른 선생님 교시일 수도, 교시를 안 남긴 옛
- *    기록이라 담당을 못 가르는 경우일 수도, **담임이 되기 전 기록**(2026-08-19)일 수도 있다.
- *    넷 다 참인 문장만 쓴다 — 그래서 "교시"라고도 못 박지 않는다(담임 이전 기록은 교시 문제가 아니다).
- */
-export function ghostBreakdown(others: readonly SlotMark[], lang: "ko" | "en" = "ko"): string {
-  return `${sheetT(lang, "att.cell.ghostPrefix")}${slotBreakdown(others, lang)}`;
-}
 
 /**
  * 세지 않는 교시 중 **이 칸을 고치면 함께 바뀌는** 것 — 자리(JJ·랩실, `seat`)는 뺀다.

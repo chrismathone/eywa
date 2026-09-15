@@ -1329,12 +1329,12 @@ export const SHEET_DICT = {
   "att.cell.nPeriods": { ko: "{n}교시 · {breakdown}", en: "{n} periods · {breakdown}" },
   // 🔴 함께 바뀌는 건 **다른 선생님 교시**뿐 — 자리(JJ·랩실) 행은 강사 보기 저장이 안 건드린다(원장 2026-09-12).
   "att.cell.alsoWrites": {
-    ko: " · 이 칸을 고치면 다른 선생님 교시 기록 {n}건도 함께 바뀝니다",
-    en: " · changing this cell also changes {n} records in other teachers' periods",
+    ko: "이 칸을 고치면 다른 선생님 교시 기록 {n}건도 함께 바뀝니다",
+    en: "Changing this cell also changes {n} records in other teachers' periods",
   },
   "att.cell.seatKept": {
-    ko: " · 자리(JJ·랩실) 기록은 이 칸을 고쳐도 그대로입니다",
-    en: " · the JJ and Lab seat records stay as they are when you change this cell",
+    ko: "자리(JJ·랩실) 기록은 이 칸을 고쳐도 그대로입니다",
+    en: "The JJ and Lab seat records stay as they are when you change this cell",
   },
   "att.cell.outsideRecord": {
     ko: "재원 기간 밖 기록(보강 등)",
@@ -1351,11 +1351,17 @@ export const SHEET_DICT = {
   "att.cell.ghostCount": { ko: " · 세지 않는 기록 {n}건", en: " · {n} records not counted" },
   "att.cell.unitsAria": { ko: "시수 입력", en: "Enter sessions" },
   "att.cell.fillHandle": { ko: "드래그하여 옆 칸에 같은 값 채우기", en: "Drag to fill the same value across" },
-  "att.cell.ghostPrefix": { ko: "이 선생님 몫으로 세지 않는 기록 · ", en: "Records not counted for this teacher · " },
+  // 🔴 빗금 칸 카드의 교시 줄 꼬리 — **누가 찍었나**(원장 2026-09-15 *"이 화면 몫 아닌 출석부 체크를 누가 했는지"*).
+  "att.cell.ghostBy": { ko: "{name} 입력", en: "entered by {name}" },
+  // 메모 툴팁 카드(`data-tip`)의 줄 라벨 — 브라우저 기본 툴팁을 카드로 바꾸면서 생긴 자리(원장 2026-09-15).
+  "att.tip.status": { ko: "상태", en: "Status" },
+  "att.tip.lock": { ko: "잠김", en: "Locked" },
+  "att.tip.periods": { ko: "교시", en: "Periods" },
+  "att.tip.memo": { ko: "메모", en: "Note" },
   // 🔴 빗금 칸 입력 = 다른 선생님 교시 기록에 **상태만** 옮긴다(원장 2026-09-14 *"그 날의 해당 담당 출석으로 전부 이전"*).
   "att.cell.ghostTransfer": {
-    ko: " · 여기에 입력하면 그 교시 기록에 상태만 옮깁니다(시수는 그대로 · 이 표 합계엔 안 들어갑니다)",
-    en: " · entering here moves only the status onto that period's record (sessions unchanged, not counted in this table)",
+    ko: "여기에 입력하면 그 교시 기록에 상태만 옮깁니다(시수는 그대로 · 이 표 합계엔 안 들어갑니다)",
+    en: "Entering here moves only the status onto that period's record (sessions unchanged, not counted in this table)",
   },
   // 🔴 자리(JJ·랩실) 기록뿐인 칸 — 강사 보기는 그 행을 안 쓴다(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지"*).
   "att.lock.seatOnly": {

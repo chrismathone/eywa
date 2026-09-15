@@ -124,10 +124,21 @@ describe("③ 명단 표면이 예약 조회 한 벌을 읽는다", () => {
     expect(page).toContain("slots={basicSlots}");
     expect(count(page, "basicSlots")).toBe(2);
     const tables = strip(read("app/(shell)/timetable/_components/weekday-group-tables.tsx"));
-    expect(tables).toContain("reserved={uniqueReserved(merged)}");
+    // 🔴 '보강' 줄은 **합친 뒤가 아니라 원래 슬롯에서** 모은다 — `mergeSlotsByClass`는 같은 반을 첫 슬롯으로
+    //    접어서, 월+목 병합 칸이면 목요일에 걸린 그 반의 예약이 통째로 사라진다(2026-09-15).
+    expect(tables).toContain("const reservedLines = uniqueReserved(slots);");
+    expect(tables).toContain("reserved={reservedLines}");
+    expect(tables).not.toContain("uniqueReserved(merged)");
+    // 합반 칸도 격자가 모아 넘긴 값을 그대로 쓴다(스스로 다시 모으면 같은 함정에 빠진다).
+    expect(strip(read("app/(shell)/timetable/_components/hapban-cell.tsx"))).not.toContain("s.reserved ?? []");
     // 반 칸의 '보강' 박스는 **하나** — 이 반 예약 + 담임 열에 선 남의 반 예약(stray)을 합쳐 그린다.
-    expect(strip(read("app/(shell)/timetable/_components/class-cell.tsx"))).toContain("<ReservedSection lines={reservedAll} />");
-    expect(strip(read("app/(shell)/timetable/_components/hapban-cell.tsx"))).toContain("<ReservedSection lines={reserved} />");
+    // 🔴 칸이 덮는 요일을 함께 넘긴다 — 월+목 병합 칸은 쪼개지 않으므로 줄이 **어느 요일 보강인지**를 적는다(원장 2026-09-15).
+    expect(strip(read("app/(shell)/timetable/_components/class-cell.tsx"))).toContain(
+      "<ReservedSection lines={reservedAll} coveringDays={covers} />",
+    );
+    expect(strip(read("app/(shell)/timetable/_components/hapban-cell.tsx"))).toContain(
+      "<ReservedSection lines={reserved} coveringDays={covers} />",
+    );
     for (const rel of ["features/timetable/lib/class-move.ts", "features/timetable/lib/hapban.ts", "features/exports/timetable-excel.ts"]) {
       if (!fs.existsSync(path.join(SRC, rel))) continue;
       expect(strip(read(rel)), rel).not.toMatch(/\breserved\b/);
@@ -182,7 +193,10 @@ describe("⑦ 기본뷰 '보강' 박스 — 원반 칸이 없는 날은 **원반
     expect(box).not.toContain("absenceDate");
     // 줄의 내용은 이름/학교학년 한 조각(퇴원 줄과 같은 모양) + **남의 반이면 원반 꼬리표**.
     expect(box).toContain("<NameMeta name={r.name} meta={metaLabel(r.school, r.grade)} />");
-    expect(box).toContain("title={r.title}");
+    // 🔴 툴팁은 **카드**다(원장 2026-09-15 *"툴팁이 이렇게 생겼으면 좋겠어 메모같이 생기지 않고"*) — 줄엔
+    //    `data-tip`만 달고 문서마다 한 장인 HoverTipLayer가 그린다. `title`로 되돌리면 회색 메모 상자가 겹친다.
+    expect(box).toContain("tipProps({ title: r.name, meta: metaLabel(r.school, r.grade), rows: reservationTipRows(r) })");
+    expect(box).not.toMatch(/title=\{r\.title\}/);
     // 🔴 한 박스에 두 반 예약이 서므로 **귀속을 글자로** 단다 — title 툴팁은 모바일에서 없는 것과 같다.
     expect(box).toContain("r.fromClassName");
     // 🔴 그 값은 **함수 본문**이 opts를 실제로 써야 생긴다 — 호출부만 검사하면 종전처럼 툴팁에서도 빠진다.
@@ -194,20 +208,17 @@ describe("⑦ 기본뷰 '보강' 박스 — 원반 칸이 없는 날은 **원반
     expect(cellSrc).not.toMatch(/students=\{[^}]*stray/i);
   });
 
-  it("③ 병합된 요일(월목) 중 **예약 있는 날만** 쪼갠다 — 빈 칸엔 표식을 안 붙인다", () => {
-    // 🔴 판정은 순수 규칙 한 벌(stray-reserved.ts) — 격자가 병합 키를 손으로 짜지 않는다.
-    expect(tables).toContain("cellKeyWithStrayMark(");
-    // 🔴 표식 축에 **반 키**가 들어간다 — 빠지면 그 열의 모든 반이 가로 병합을 잃는다(적대 리뷰 [중]).
-    expect(tables).toContain("strayMarks.add(strayMarkKey(b.teacherName, b.dayOfWeek, owner));");
-    // 앵커 칸이 비면 짝 교시의 반이 주인(반교시 확장이 그 칸을 덮는다) — 단 **짝 행 블록이 1행일 때만**.
-    expect(tables).toContain("const pair = groupPairs.find(([top, bottom]) => top === at || bottom === at);");
-    expect(tables).toContain("if (k !== \"\" && k !== above && k !== below) {");
-    // 🔴 박스를 못 그릴 칸(합반)이면 표식도 안 붙인다 — 쪼개지기만 하고 박스는 없는 칸을 만들지 않는다.
-    expect(tables).toContain("const owner = strayOwnerClassKey(ownerIds);");
-    // 빈 칸 박스는 배경을 칠하지 않는다(td 회색 위에 흰 카드가 서지 않게).
-    expect(tables).not.toContain('className="bg-card flex flex-col rounded-[2px] text-sm"');
-    // 옛 (강사, 요일) 축은 남아 있지 않다.
-    expect(tables).not.toContain("strayDays");
+  it("③ 병합된 요일(월목)을 **쪼개지 않는다** — 어느 요일 보강인지는 줄 표식이 말한다(원장 2026-09-15)", () => {
+    // 🔴 원장 2026-09-15 *"이렇게 붙어있는 수업은 그냥 붙어있게 표시해줘 다른 퇴원이나 대기처럼"* —
+    //    병합 키에 예약을 섞던 표식(`strayMarkKey`·`cellKeyWithStrayMark`·`strayOwnerClassKey`)을 걷어냈다.
+    expect(tables).toContain("(ri, ci) => cellClassKey(cellAt(ri, ci).map((s) => s.classId)),");
+    expect(tables).not.toMatch(/strayMark|cellKeyWithStrayMark|strayOwnerClassKey/);
+    expect(strip(read("features/timetable/lib/stray-reserved.ts"))).not.toMatch(
+      /strayMarkKey|cellKeyWithStrayMark|strayOwnerClassKey/,
+    );
+    // 요일 표식은 **칸이 여러 요일을 덮을 때만** 붙는다(한 요일 칸엔 군더더기).
+    expect(box).toContain("const showDay = (coveringDays?.length ?? 0) >= 2;");
+    expect(box).toContain("dowKoOf(r.makeupDate)");
     // 앵커 행 판정은 순수 규칙 한 벌(stray-reserved.ts) — 격자가 자기 규칙을 새로 적지 않는다.
     expect(tables).toContain("strayAnchorRowIndex(rows, b.startTime, b.endTime)");
   });

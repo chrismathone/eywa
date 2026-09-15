@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Pill } from "@/components/atoms/pill";
+import { HOVER_CARD_MAX_H, HOVER_CARD_SHELL } from "@/components/hover-tip/card-style";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { splitNumberedItems } from "@/lib/text/split-numbered";
@@ -20,7 +21,9 @@ import { isTimetableDragging, useTimetableDragging } from "./drag-flag";
  * hover 카드 최대 높이 — 위치 클램프와 카드 max-height가 **같은 값**을 써야 화면 밖으로 안 나간다.
  * (옛 코드는 높이를 210px로 추정해 클램프만 했고, 진도·교재·상태가 다 붙은 카드는 300px를 넘어 잘렸다.)
  */
-const HOVER_MAX_H = 320;
+// 🔴 값·껍데기는 [card-style.ts](@/components/hover-tip/card-style) 한 곳 — 앱 전역 메모 툴팁
+// ([HoverTipLayer](@/components/hover-tip/hover-tip-layer))가 **같은 모양**이어야 한다(원장 2026-09-15).
+const HOVER_MAX_H = HOVER_CARD_MAX_H;
 
 /**
  * **지금 열려 있는 카드들의 닫기 함수** — 새 카드가 열리면 나머지를 전부 닫는다.
@@ -155,7 +158,7 @@ export function HoverCard({
       {pos && !dragging
         ? createPortal(
             <div
-              className="border-line bg-card shadow-modal pointer-events-none fixed z-[9999] overflow-y-auto rounded-lg border p-3"
+              className={`${HOVER_CARD_SHELL} pointer-events-none fixed z-[9999] overflow-y-auto`}
               style={{ left: pos.x, top: pos.y, width, maxHeight: HOVER_MAX_H }}
             >
               {card}
@@ -241,6 +244,7 @@ export function StudentInfoCard({
   report,
   pendingClassName,
   pendingTransferDate,
+  pinNote,
 }: {
   name: string;
   englishName?: string | null;
@@ -263,13 +267,18 @@ export function StudentInfoCard({
   } | null;
   pendingClassName?: string | null;
   pendingTransferDate?: string | null;
+  /**
+   * 자리(랩실) **교시 고정** 문구(0255a) — 학생 줄의 파란 밑줄 표식이 뜻하는 바를 카드가 글자로 말한다.
+   * 🔴 줄의 표식에 툴팁을 따로 달지 말 것 — 줄은 이미 이 카드를 띄우므로 카드와 툴팁이 겹친다(원장 2026-09-15).
+   */
+  pinNote?: string | null;
 }) {
   const partial =
     attendanceDays && attendanceDays.length > 0
       ? attendanceDays.map((d) => DAY_LABEL[d] ?? d).join("·") + "만 등원"
       : null;
   const hasDetail =
-    isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName;
+    isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName || pinNote;
   return (
     <div className="space-y-2 break-keep text-xs">
       {/* 헤더 한 줄: 이름(좌) + 학년·학교(우상단). 별도 줄을 없애 세로 공간 절약. */}
@@ -312,6 +321,7 @@ export function StudentInfoCard({
             </div>
           ) : null}
           {partial ? <Row label="등원" value={partial} /> : null}
+          {pinNote ? <Row label="자리" value={pinNote} /> : null}
           {pendingClassName ? (
             <Row
               label="이동 예정"

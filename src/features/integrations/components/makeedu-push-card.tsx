@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 import { useState, useTransition } from "react";
 import { Loader2, Send } from "@/components/icons/eywa-icon-compat";
@@ -120,7 +121,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
                     {/* 등록됐는데 makeedu에 학생이 없는 건 — 왜 목록에 있는지 밝히지 않으면
                         "이미 다니는 학생이 왜 신규 문의에?"로 읽힌다(push-eligibility.ts). */}
                     {c.note ? (
-                      <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-xs font-bold" title={c.note}>
+                      <span className="bg-amber/15 text-amber rounded-pill ml-1.5 px-2 py-0.5 text-xs font-bold" {...tipProps(c.note)}>
                         makeedu 미등록
                       </span>
                     ) : null}

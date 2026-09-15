@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { GripVertical } from "@/components/icons/eywa-icon-compat";
@@ -885,7 +886,7 @@ function VirtualLabCellView({ lab, last, withTime = false }: { lab: VirtualLabCe
   return (
     <div
       data-virtual-lab=""
-      title={lab.note}
+      {...tipProps(lab.note)}
       className={`${GRID} flex h-full flex-col items-center justify-center overflow-hidden text-xs leading-none font-bold whitespace-nowrap ${
         last ? "" : "border-r"
       } ${VIRTUAL_LAB_CELL_CLASS}`}
@@ -1103,7 +1104,6 @@ function RosterRow({
       {/* 자리(랩실) 교시 고정 — 기본뷰 학생 줄과 **같은 서식 상수·같은 문구**(뷰마다 다르게 보이면 안 된다). */}
       <span
         className={`${moving && !scheduledMove ? "line-through" : ""}${s.seatPinNote ? ` ${SEAT_PIN_MARK_CLASS}` : ""}`}
-        title={s.seatPinNote || undefined}
       >
         {s.name}
       </span>
@@ -1183,6 +1183,7 @@ function RosterRow({
           endDate={s.endDate}
           textbook={s.latestTextbook}
           report={s.latestReport}
+          pinNote={s.seatPinNote}
         />
       }
     >

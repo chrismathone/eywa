@@ -523,7 +523,7 @@ export function ClassCell({
             ) : null}
             {/* 보강 — 그 요일 칸 날짜의 예약(0264a). 대기·퇴원과 같은 고정 박스. 이 반 예약 + 원반 칸이 없어
                 이 담임 열에 선 남의 반 예약을 **한 박스**로(남의 반 줄엔 원반 이름이 글자로 붙는다). */}
-            <ReservedSection lines={reservedAll} />
+            <ReservedSection lines={reservedAll} coveringDays={covers} />
           </div>
         ) : null}
       </div>

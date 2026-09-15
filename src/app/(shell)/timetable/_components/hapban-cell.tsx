@@ -124,11 +124,17 @@ export function HapbanCell({
   subSlot = "full",
   coveringDays,
   roster = "names",
+  reserved = [],
 }: {
   /** mergeSlotsByClass 결과(반별 1개, startTime순) — 순서가 곧 세그먼트 인덱스(1부터). */
   slots: ClassDetailQuick[];
   subSlot?: "top" | "bottom" | "full";
   coveringDays?: string[];
+  /**
+   * 이 칸의 '보강' 줄 — 🔴 **격자가 원래 슬롯에서 모아** 넘긴다. 여기서 `slots`로 다시 모으면 안 된다:
+   * 그 배열은 반별로 접힌 뒤라(`mergeSlotsByClass`) 월+목 칸이면 **월요일 슬롯만** 남아 목요일 예약이 사라진다.
+   */
+  reserved?: TimetableReservedLine[];
   /** ClassCell과 같은 계약 — `none`이면 명단 구획을 통째로 안 그린다('학생 명단 접기'). */
   roster?: "full" | "names" | "none";
 }) {
@@ -136,19 +142,6 @@ export function HapbanCell({
   const subjects = useSubjectMaps();
   const colorMode = useTimetableColorMode();
   const hapbanRoster = buildHapbanRoster(slots);
-  // 구성 반 전부의 '보강' 줄(예약 id로 중복 제거) — 합반 칸도 반 칸과 같은 자리에 같은 박스.
-  const reserved: TimetableReservedLine[] = (() => {
-    const seen = new Set<string>();
-    const out: TimetableReservedLine[] = [];
-    for (const s of slots) {
-      for (const r of s.reserved ?? []) {
-        if (seen.has(r.id)) continue;
-        seen.add(r.id);
-        out.push(r);
-      }
-    }
-    return out;
-  })();
   // 합반 구성 반 목록(드롭존 data 공용) — 멤버 재해석(resolveDropTarget)·반+요일 팝업 후보(shouldOpenClassPick) 양쪽에 사용.
   const memberClasses: HapbanMemberClass[] = hapbanRoster.segments.map((s) => ({
     classId: s.classId,
@@ -399,7 +392,7 @@ export function HapbanCell({
               </div>
             ) : null}
             {/* 보강 — 구성 반들의 그 요일 예약(0264a). 반 칸과 같은 박스. */}
-            <ReservedSection lines={reserved} />
+            <ReservedSection lines={reserved} coveringDays={covers} />
           </div>
         ) : null}
     </div>

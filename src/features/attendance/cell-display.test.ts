@@ -4,11 +4,11 @@ import {
   DAY_TONE,
   GHOST_HATCH,
   cellDisplay,
-  ghostBreakdown,
   ghostCellKind,
   ghostGridValue,
   markNumber,
   notMineCell,
+  ghostSlotLines,
   rollupDay,
   slotBreakdown,
   type SlotMark,
@@ -160,10 +160,28 @@ describe("cellDisplay — 이 표가 세지 않는 교시(빗금)", () => {
   it("ghost가 없으면 종전 그대로(스타일 없음)", () => {
     expect(cellDisplay(null, null, { attendDay: true }).style).toBeUndefined();
   });
-  it("툴팁은 무엇이 빠졌는지 한글로 펼친다 — raw 코드 금지", () => {
-    expect(ghostBreakdown([s("16:20:00", "present"), s("18:20:00", "present")])).toBe(
-      "이 선생님 몫으로 세지 않는 기록 · 16:20 출석 1 · 18:20 출석 1",
-    );
+  it("카드 줄은 무엇이 빠졌는지 한글로 펼친다 — raw 코드 금지", () => {
+    expect(ghostSlotLines([s("16:20:00", "present"), s("18:20:00", "present")])).toEqual([
+      "16:20 출석 1",
+      "18:20 출석 1",
+    ]);
+  });
+
+  /**
+   * 🔴 원장 2026-09-15 *"이 화면 몫 아닌 출석부 체크를 누가 했는지 마우스 올리면 알아볼 수 있게"* —
+   *    입력자(`recorded_by`)와 시각을 줄 꼬리에 단다. **모르면 그 조각만 빠진다**(옛 기록엔 없다).
+   */
+  it("입력자·시각이 있으면 줄 꼬리에 붙는다", () => {
+    expect(ghostSlotLines([{ ...s("16:20:00", "present"), by: "김동후", at: "9/8 16:25" }])).toEqual([
+      "16:20 출석 1 · 김동후 입력 9/8 16:25",
+    ]);
+  });
+
+  it("입력자를 모르면 종전과 같은 줄(지어내지 않는다)", () => {
+    expect(ghostSlotLines([{ ...s("16:20:00", "absent"), at: "9/8 16:25" }])).toEqual([
+      "16:20 결석 0 · 9/8 16:25",
+    ]);
+    expect(ghostSlotLines([s("16:20:00", "absent")])).toEqual(["16:20 결석 0"]);
   });
 });
 

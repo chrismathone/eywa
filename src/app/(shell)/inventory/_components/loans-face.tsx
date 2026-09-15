@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 import { useMemo, useState } from "react";
 import { ToolbarButton } from "@/components/toolbar";
@@ -43,7 +44,7 @@ export function LoansFace({ loans, assets, canWrite, today }: { loans: Inventory
     },
     { key: "returnedOn", label: "반납일", width: 100, render: (l) => <DashCell v={l.returnedOn} num />, className: "whitespace-nowrap" },
     { key: "status", label: "상태", width: 92, render: (l) => <LoanStatusPill status={l.status} />, sortValue: (l) => loanStatusLabel(l.status), className: "whitespace-nowrap" },
-    { key: "note", label: "비고", minWidth: 160, render: (l) => <span className="text-text-dim" title={l.note ?? undefined}>{l.note ?? ""}</span>, className: "whitespace-nowrap" },
+    { key: "note", label: "비고", minWidth: 160, render: (l) => <span className="text-text-dim" {...tipProps(l.note)}>{l.note ?? ""}</span>, className: "whitespace-nowrap" },
   ], []);
 
   return (

@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, kstMonth, kstToday, monthRange } from "@/lib/date-kst";
+import { addDays, kstDateOf, kstMonth, kstTimeOf, kstToday, monthDayLabel, monthRange } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
@@ -597,7 +597,7 @@ export type AttendanceMatrix = {
    *    다시 찍어 숨은 기록을 덮는다(#103). 그래서 **값에서는 빼고, 표시(빗금·툴팁)로만 남긴다**.
    * ⚠️ 여기 담기는 사유는 셋이다 — 자리(JJ·랩) · 다른 선생님 교시 · **교시를 안 남긴 옛 기록**(그날
    *    담당이 둘 이상이면 담당을 가를 수 없어 `resolveTaughtBy`가 모호로 비운다). 툴팁이 사유를
-   *    단정하지 않는 이유다(cell-display `ghostBreakdown`).
+   *    단정하지 않는 이유다(카드 라벨은 `att.legend.ghost` = "이 화면 몫 아님" 한 마디).
    */
   ghosts: Record<string, Record<string, SlotMark[]>>;
   /**
@@ -1131,25 +1131,34 @@ export async function getMonthlyAttendanceMatrix(
 
   // 보강 예약 칸(0264a) — studentId → date → 예약. 명단에 없는 학생(조회 실패 등)의 예약은 싣지 않는다.
   const reservations: Record<string, Record<string, MatrixReservation>> = {};
+  /**
+   * 이름을 나중에 채울 자리 — [예약 칸, 예약자 id]. 🔴 여기서 바로 조회하지 않는다: 아래 빗금 칸 입력자 이름과
+   * **같은 표(users)**를 보므로 한 번에 묻는다(B4 — 독립인 왕복을 줄줄이 세우지 않는다).
+   */
+  const reservationCreators: [MatrixReservation, string][] = [];
+  /**
+   * 빗금(세지 않는) 교시 → **그 행을 찍은 사람의 id**(원장 2026-09-15 *"이 화면 몫 아닌 출석부 체크를 누가
+   * 했는지 마우스 올리면 알아볼 수 있게"*). 🔴 **세지 않는 교시에만** 담는다 — 제 몫 칸은 이름을 안 쓰는데
+   * 담으면 칸 수천 개의 페이로드만 늘어난다.
+   */
+  const recorderOf = new Map<SlotMark, string>();
   if (reservedRows.length > 0) {
-    const creatorNames = await getReservationCreatorNames(
-      supabase,
-      reservedRows.map((r) => r.createdBy).filter((v): v is string => !!v),
-    );
     for (const r of reservedRows) {
       if (!studentMap.has(r.studentId)) continue;
       // 같은 날 예약이 둘(교시 둘)이면 이른 교시가 칸을 대표한다(조회가 slot_start 오름차순).
       if (reservations[r.studentId]?.[r.makeupDate]) continue;
       reservations[r.studentId] ??= {};
-      reservations[r.studentId]![r.makeupDate] = {
+      const entry: MatrixReservation = {
         id: r.id,
         absenceDate: r.absenceDate,
         slotStart: r.slotStart,
         slotEnd: r.slotEnd,
         periodLabel: r.periodLabel,
         note: r.note,
-        createdByName: r.createdBy ? (creatorNames.get(r.createdBy) || null) : null,
+        createdByName: null,
       };
+      reservations[r.studentId]![r.makeupDate] = entry;
+      if (r.createdBy) reservationCreators.push([entry, r.createdBy]);
     }
   }
 
@@ -1180,11 +1189,13 @@ export async function getMonthlyAttendanceMatrix(
       /** 그 행을 쓴 문(0212a) — JJ는 라벨이 없어 `"seat"`가 유일한 자리 표식일 수 있다(리뷰 2026-09-12). */
       recorded_via: string | null;
       recorded_at: string;
+      /** 그 행을 **찍은 사람**(귀속이 아니라 입력자 — `teacher-axis.ts`). 빗금 칸 카드가 이름으로 편다. */
+      recorded_by: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
         .select(
-          "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via, recorded_at",
+          "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via, recorded_at, recorded_by",
         )
         .eq("class_id", classId)
         .in("student_id", chunk)
@@ -1239,13 +1250,23 @@ export async function getMonthlyAttendanceMatrix(
       // 격자·칸·팝오버가 "함께 바뀝니다"·지우기 막힘의 셈에서 뺀다(`sharedOtherSlots`).
       const seat = !mine && seatSlot(r.session_date, slot, r.seat_label, r.recorded_via);
       const pre = !mine && !seat && preSlot(r.session_date, slot, r.seat_label, r.recorded_via);
-      (mine ? cell.slots : cell.others).push({
+      const mark: SlotMark = {
         slot,
         status: r.status as AttendanceStatus,
         units: raw !== null && Number.isFinite(raw) ? raw : null,
         ...(seat ? { seat: true as const } : {}),
         ...(pre ? { pre: true as const } : {}),
-      });
+      };
+      (mine ? cell.slots : cell.others).push(mark);
+      // 입력 시각은 **KST**로 편다(`recorded_at`은 UTC 타임스탬프 — 그대로 자르면 9시간 이르다, date-kst 규약).
+      // 🔴 시각은 **입력자를 몰라도** 싣는다 — 키오스크 체크인은 일부러 `recorded_by`를 안 남기는데(익명 문),
+      //    이름에 묶어 두면 "언제 찍혔나"까지 함께 사라진다(적대 리뷰 2026-09-15).
+      if (!mine) {
+        if (r.recorded_by) recorderOf.set(mark, r.recorded_by);
+        const day = kstDateOf(r.recorded_at);
+        const time = kstTimeOf(r.recorded_at);
+        if (day && time) mark.at = `${monthDayLabel(day)} ${time}`;
+      }
       // 메모는 **가장 최근에 찍힌 것** 하나(순회가 recorded_at 내림차순이라 처음 만난 것).
       // ⚠️ 교시마다 메모가 다를 수 있지만 칸이 하나라 다 못 적는다 — 교시별 메모는 영어 수업 시트에서 본다.
       // ⚠️ **내 교시 메모가 우선**이다(강사 전체 보기) — 칸의 값은 내 교시인데 메모만 남의 교시 것이면
@@ -1302,6 +1323,24 @@ export async function getMonthlyAttendanceMatrix(
         slots[cell.studentId] ??= {};
         slots[cell.studentId]![cell.date] = day.slots;
       }
+    }
+  }
+
+  /**
+   * 🔴 **기록 블록 밖**에 둔다(재리뷰 2026-09-15) — 예약자 이름은 출결 기록과 무관한 일이라, 안에 두면
+   *    '학생이 하나도 없는 달'처럼 그 블록을 안 타는 경로가 생기는 순간 예약자 이름이 **조용히** 빈 채로 나간다.
+   */
+  // 예약자·빗금 교시 입력자 이름 — **한 번에** 묻는다(같은 users 표. 조회 실패·권한이면 이름만 빠진다, fail-soft).
+  const nameIds = [...new Set([...reservationCreators.map(([, id]) => id), ...recorderOf.values()])];
+  if (nameIds.length > 0) {
+    const names = await getReservationCreatorNames(supabase, nameIds);
+    for (const [entry, id] of reservationCreators) {
+      const name = names.get(id)?.trim();
+      if (name) entry.createdByName = name;
+    }
+    for (const [mark, id] of recorderOf) {
+      const name = names.get(id)?.trim();
+      if (name) mark.by = name;
     }
   }
 

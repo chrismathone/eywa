@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { tipRow, tipText } from "@/components/hover-tip/tip";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import { ghostCellKind, ghostGridValue, rollupDay, type SlotMark } from "@/features/attendance/cell-display";
@@ -98,6 +99,13 @@ it("touch opens the attendance editor without changing a recorded status", () =>
   expect(screen.getByRole("button", { name: /저장/ })).toBeInTheDocument();
 });
 
+/**
+ * 칸의 툴팁은 **카드**다(원장 2026-09-15) — 옛 `title` 검사 자리를 그대로 잇는다.
+ * `tipOf` = 카드를 한 줄로 편 글 · `statusOf` = 카드의 '상태' 줄(칸이 무슨 상태로 보이는가).
+ */
+const tipOf = (el: HTMLElement) => tipText(el.getAttribute("data-tip"));
+const statusOf = (el: HTMLElement) => tipRow(el.getAttribute("data-tip"), "상태");
+
 describe("격자 초기값 — 수업보고서 파생 칸", () => {
   it("🔴 파생 칸은 d 표식 — 상태가 보여도 출결 행이 없다(저장하면 새 행 = 수학 자동 시수)", () => {
     const m = matrix([
@@ -152,11 +160,11 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
     const { container, rerender } = render(build("present", true));
     fireEvent.contextMenu(cellAt(container));
     fireEvent.click(screen.getByRole("button", { name: "결석" }));
-    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/)); // 실패 → 열 때의 값
+    await waitFor(() => expect(statusOf(cellAt(container))).toBe("출석")); // 실패 → 열 때의 값
 
     rerender(build("present", true)); // 새로고침 — 서버는 여전히 같은 파생 값
     rerender(build("absent", false)); // 그 뒤 서버가 결석으로 바뀜(다른 사람이 고침)
-    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^결석/));
+    await waitFor(() => expect(statusOf(cellAt(container))).toBe("결석"));
   });
 
   it("🔴 '지우기'가 실패해도 되돌린다 — 빈칸으로 굳으면 사용자는 지운 줄 안다", async () => {
@@ -165,9 +173,9 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
     const { container, rerender } = render(build("present", false));
     fireEvent.contextMenu(cellAt(container));
     fireEvent.click(screen.getByRole("button", { name: "지우기" }));
-    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/));
+    await waitFor(() => expect(statusOf(cellAt(container))).toBe("출석"));
     rerender(build("present", false)); // 새로고침해도 그대로
-    expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/);
+    expect(statusOf(cellAt(container))).toBe("출석");
   });
 
   it("🔴 응답 전에 같은 칸 팝오버를 다시 열었다 닫아도, 실패하면 칠하기 전 값으로 돌아온다", async () => {
@@ -182,11 +190,11 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
     const { container } = render(build("present", false));
     fireEvent.contextMenu(cellAt(container));
     fireEvent.click(screen.getByRole("button", { name: "결석" }));
-    expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^결석/); // 낙관 반영
+    expect(statusOf(cellAt(container))).toBe("결석"); // 낙관 반영
     fireEvent.contextMenu(cellAt(container)); // 메모를 적으려고 다시 열었다가
     fireEvent.click(document.querySelector<HTMLElement>("div.fixed.inset-0")!); // 저장 없이 닫음
     settle({ error: "잠시 후 다시 시도하세요" });
-    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^출석/));
+    await waitFor(() => expect(statusOf(cellAt(container))).toBe("출석"));
   });
 
   it("🔴 메모만 고친 저장이 실패하면 메모도 돌아온다 — 응답 전 새로고침이 값 덮개를 벗겨도", async () => {
@@ -202,11 +210,11 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
     fireEvent.contextMenu(cellAt(container));
     fireEvent.change(screen.getByRole("textbox", { name: "메모(사유)" }), { target: { value: "가족여행" } });
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
-    expect(cellAt(container).getAttribute("title") ?? "").toContain("가족여행"); // 낙관 반영
+    expect(tipOf(cellAt(container))).toContain("가족여행"); // 낙관 반영
     rerender(build("present", false, "병결")); // 새로고침 — 값이 같아 덮개가 벗겨진다(서버 메모는 아직 옛 값)
     settle({ error: "잠시 후 다시 시도하세요" });
-    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toContain("병결"));
-    expect(cellAt(container).getAttribute("title") ?? "").not.toContain("가족여행");
+    await waitFor(() => expect(tipOf(cellAt(container))).toContain("병결"));
+    expect(tipOf(cellAt(container))).not.toContain("가족여행");
   });
 
   it("🔴 메모를 안 보내는 상태 버튼이 앞 메모 저장의 실패를 삼키지 않는다 — 상태는 남고 메모만 돌아온다", async () => {
@@ -227,9 +235,9 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
     fireEvent.contextMenu(cellAt(container));
     fireEvent.click(screen.getByRole("button", { name: "지각" })); // B — 메모를 안 보내는 상태 버튼(성공)
     settleA({ error: "잠시 후 다시 시도하세요" });
-    await waitFor(() => expect(cellAt(container).getAttribute("title") ?? "").toContain("병결"));
-    expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^지각/);
-    expect(cellAt(container).getAttribute("title") ?? "").not.toContain("가족여행");
+    await waitFor(() => expect(tipOf(cellAt(container))).toContain("병결"));
+    expect(statusOf(cellAt(container))).toBe("지각");
+    expect(tipOf(cellAt(container))).not.toContain("가족여행");
   });
 
   it("🔴 서버가 내 메모를 따라잡으면 덮개를 벗긴다 — 격자로 지우고 다시 찍어도 옛 메모가 되살아나지 않는다", async () => {
@@ -238,7 +246,7 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
       .mockResolvedValueOnce({ ok: true } as never) // 메모 저장
       .mockResolvedValueOnce({ ok: true } as never) // 격자 Delete
       .mockResolvedValueOnce({ ok: true } as never); // 상태 버튼
-    const title = (c: HTMLElement) => cellAt(c).getAttribute("title") ?? "";
+    const title = (c: HTMLElement) => tipOf(cellAt(c));
     const { container, rerender } = render(build("present", false));
     fireEvent.contextMenu(cellAt(container));
     fireEvent.change(screen.getByRole("textbox", { name: "메모(사유)" }), { target: { value: "가족여행" } });
@@ -251,14 +259,14 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
     fireEvent.contextMenu(cellAt(container));
     fireEvent.click(screen.getByRole("button", { name: "지각" })); // 빈 칸 → 메모 없는 새 행
     rerender(build("late", false)); // 새로고침 — 새 행엔 메모가 없다
-    await waitFor(() => expect(title(container)).toMatch(/^지각/));
+    await waitFor(() => expect(statusOf(cellAt(container))).toBe("지각"));
     expect(title(container)).not.toContain("가족여행");
   });
 
   it("🔴 잠긴 칸의 '메모만 저장'은 끝난 쓰기다 — 같은 사유를 다시 저장한 뒤 다른 화면이 사유를 고치면 그 값을 따라간다", async () => {
     const actions = await import("@/features/attendance/server/actions");
     vi.mocked(actions.setAttendanceCell).mockResolvedValueOnce({ ok: true } as never);
-    const title = (c: HTMLElement) => cellAt(c).getAttribute("title") ?? "";
+    const title = (c: HTMLElement) => tipOf(cellAt(c));
     const { container, rerender } = render(build("absent", false, "병결", "2026-07-08")); // 7일 지나 잠긴 칸
     fireEvent.contextMenu(cellAt(container));
     fireEvent.click(screen.getByRole("button", { name: "메모 저장" })); // 같은 사유 그대로 — 잠긴 칸은 메모만
@@ -399,8 +407,8 @@ describe("교시 롤업 칸", () => {
     const cell = cellOf(container);
     expect(cell.textContent).toContain("2");
     expect(cell.className).toContain("bg-att-present");
-    expect(cell.getAttribute("title")).toContain("2교시");
-    expect(cell.getAttribute("title")).toContain("12:30 출석 1 · 14:10 출석 1");
+    expect(tipOf(cell)).toContain("2교시");
+    expect(tipOf(cell)).toContain("12:30 출석 1 · 14:10 출석 1");
   });
 
   it("🔴 출석+결석이 섞인 날은 줄무늬 — 빠진 교시가 칸에서 사라지지 않는다", () => {
@@ -412,7 +420,7 @@ describe("교시 롤업 칸", () => {
     expect(cell.textContent).toContain("1"); // 들은 1시수만
     expect(cell.style.background).toContain("var(--att-present)");
     expect(cell.style.background).toContain("var(--att-absent)");
-    expect(cell.getAttribute("title")).toContain("14:10 결석 0");
+    expect(tipOf(cell)).toContain("14:10 결석 0");
   });
 
   it("행 시수 합은 칸 숫자와 같다 — 화면 두 곳이 다른 말을 하면 안 된다", () => {
@@ -430,7 +438,7 @@ describe("교시 롤업 칸", () => {
     const cell = cellOf(container);
     expect(cell.textContent).toContain("1");
     expect(cell.style.background).toBe("");
-    expect(cell.getAttribute("title") ?? "").not.toContain("교시");
+    expect(tipOf(cell) ?? "").not.toContain("교시");
   });
 });
 
@@ -476,7 +484,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     );
     expect(cellOf(container).textContent).toContain("1");
     expect(unitsOf(container)).toContain("1");
-    expect(cellOf(container).getAttribute("title")).toContain("이 선생님 몫으로 세지 않는 기록");
+    expect(tipOf(cellOf(container))).toContain("이 화면 몫 아님");
   });
 
   it("🔴 자리(JJ)만 있는 날은 시수에 안 든다 — 예전엔 '값 없음'이 합계에서 1로 되살아났다", () => {
@@ -488,7 +496,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }]);
     const cell = cellOf(container);
     expect(cell.style.backgroundImage).toContain("repeating-linear-gradient");
-    expect(cell.getAttribute("title")).toContain("18:20 출석 1");
+    expect(tipOf(cell)).toContain("18:20 출석 1");
     // 출석색으로 칠하지 않는다 — 내 출석이 아니다(범례의 0=결석과도 헷갈리지 않게 숫자를 안 쓴다).
     expect(cell.className).not.toContain("bg-att-present");
     expect(cell.textContent).not.toContain("0");
@@ -500,26 +508,26 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const { container } = renderScoped([], [seatGhost("18:20:00")]);
     const cell = cellOf(container);
     expect(cell.className).toContain("cursor-not-allowed");
-    expect(cell.getAttribute("title")).toContain("자리(JJ·랩실) 기록뿐");
-    expect(cell.getAttribute("title")).not.toContain("반별 보기에서 고치세요");
+    expect(tipOf(cell)).toContain("자리(JJ·랩실) 기록뿐");
+    expect(tipOf(cell)).not.toContain("반별 보기에서 고치세요");
   });
 
   it("🔴 담임 이전 기록(pre)이 있는 빗금 칸은 종전대로 막는다 — 저장은 그 행을 제 몫으로 시수까지 쓴다", () => {
     const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null, pre: true }]);
     expect(cellOf(container).className).toContain("cursor-not-allowed");
-    expect(cellOf(container).getAttribute("title")).toContain("반별 보기에서 고치세요");
+    expect(tipOf(cellOf(container))).toContain("반별 보기에서 고치세요");
   });
 
   it("🔴 다른 선생님 교시 기록뿐인 빗금 칸은 막지 않는다 — 입력하면 상태만 옮긴다고 툴팁이 말한다", () => {
     const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }]);
     expect(cellOf(container).className).not.toContain("cursor-not-allowed");
-    expect(cellOf(container).getAttribute("title")).toContain("상태만 옮깁니다");
+    expect(tipOf(cellOf(container))).toContain("상태만 옮깁니다");
   });
 
   it("🔴 빗금 칸의 **메모는 남는다** — 사라지는 게 결석 사유였다(실측 78칸)", () => {
     const { container } = renderScoped([], [{ slot: "18:20:00", status: "present", units: null }], "병결");
     const cell = cellOf(container);
-    expect(cell.getAttribute("title")).toContain("병결");
+    expect(tipOf(cell)).toContain("병결");
     // 접힌 모서리(메모 표식)도 남아야 호버하기 전에 "메모가 있다"를 안다.
     // ⚠️ `span[aria-hidden]`만으로는 선택·활성 덮개도 통과한다 — 모서리 스팬을 그 위치로 집는다.
     expect(cell.querySelector('span[aria-hidden][class*="top-0"][class*="right-0"]')).toBeTruthy();
@@ -726,9 +734,9 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
 
   it("🔴 자리만 섞인 칸의 툴팁 — '함께 바뀝니다'가 아니라 '그대로'라고 말한다", () => {
     const { container } = renderScoped([{ slot: "17:20:00", status: "present", units: null }], [seatGhost("16:20:00")]);
-    const title = cellOf(container).getAttribute("title") ?? "";
+    const title = tipOf(cellOf(container));
     // 기록이 있다는 사실은 그대로 밝힌다(값에서만 뺀다).
-    expect(title).toContain("이 선생님 몫으로 세지 않는 기록");
+    expect(title).toContain("이 화면 몫 아님");
     expect(title).toContain("자리(JJ·랩실) 기록은 이 칸을 고쳐도 그대로입니다");
     expect(title).not.toContain("함께 바뀝니다");
   });

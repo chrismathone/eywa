@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
@@ -47,7 +48,7 @@ export function LeavesAdminClient({
               </td>
               <td className="text-text-dim px-4 py-2.5">{l.leaveType}</td>
               <td className="text-text-dim num px-4 py-2.5 text-xs">{dur(l.startsOn, l.endsOn)}</td>
-              <td className="text-text-dim max-w-[200px] truncate px-4 py-2.5 text-xs" title={l.reason ?? ""}>
+              <td className="text-text-dim max-w-[200px] truncate px-4 py-2.5 text-xs" {...tipProps(l.reason)}>
                 {l.reason ?? "—"}
               </td>
               <td className="px-4 py-2.5">

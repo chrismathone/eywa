@@ -1,4 +1,5 @@
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { tipText } from "@/components/hover-tip/tip";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import { setAttendanceCell, setAttendanceRange } from "@/features/attendance/server/actions";
@@ -103,6 +104,12 @@ const LOCK_TEXT = "수정 기간(7일)이 지나 고칠 수 없습니다";
  * 강사(scoped)만 걸리는 7일 잠금 — 잠긴 칸에 값을 치면 **아무 말 없이 사라지던** 결함의 회귀 가드
  * (원장 제보 2026-08-20). 범위(writeMany)는 예전부터 "N칸은 … 건너뛰었습니다"로 알렸고 단건만 침묵이었다.
  */
+/**
+ * 칸의 툴팁은 **카드**다(원장 2026-09-15) — 옛 `title` 검사 자리를 그대로 잇는다.
+ * `tipOf` = 카드를 한 줄로 편 글.
+ */
+const tipOf = (el: HTMLElement) => tipText(el.getAttribute("data-tip"));
+
 describe("잠긴 칸(7일 경과) — 조용히 사라지지 않는다", () => {
   beforeEach(() => {
     vi.mocked(setAttendanceCell).mockClear();
@@ -145,7 +152,7 @@ describe("잠긴 칸(7일 경과) — 조용히 사라지지 않는다", () => {
   it("🔴 툴팁과 격자 안내가 **같은 문장**이다 — 단일 소스(lock-message.ts)라 갈릴 수 없다", () => {
     const { container } = renderGrid();
     const cell = cellAt(container, LOCKED);
-    expect(cell.getAttribute("title")).toContain(lockedMessage(LOCKED, LOCK_BEFORE));
+    expect(tipOf(cell)).toContain(lockedMessage(LOCKED, LOCK_BEFORE));
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "5" });
     expect(container.querySelector('[role="alert"]')!.textContent).toBe(lockedMessage(LOCKED, LOCK_BEFORE));

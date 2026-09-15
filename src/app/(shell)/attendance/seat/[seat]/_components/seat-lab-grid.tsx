@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 import { memo, useMemo, useRef, useState } from "react";
 import { useDraggable, type DraggableAttributes, type DraggableSyntheticListeners } from "@dnd-kit/core";
@@ -415,7 +416,7 @@ const SeatCardBody = memo(function SeatCardBody({
     <li
       ref={anchorRef}
       className={`relative flex flex-col gap-1 ${isDragging ? "opacity-40" : ""}`}
-      title={noteTitle ?? undefined}
+      {...tipProps(noteTitle)}
     >
       <SeatNotePopover
         open={noteOpen}
@@ -465,7 +466,8 @@ const SeatCardBody = memo(function SeatCardBody({
               }),
             }}
             // 이름이 잘린 칩에서는 이름 툴팁이 <li>의 사유를 가린다 → 둘을 이어 붙인다.
-            title={fit.clipped ? (noteTitle ? `${s.name} · ${noteTitle}` : s.name) : (noteTitle ?? undefined)}
+            {...tipProps(noteTitle ? { title: s.name, lines: [noteTitle] } : null)}
+            title={!noteTitle && fit.clipped ? s.name : undefined}
           >
             {s.name}
           </span>
@@ -473,7 +475,7 @@ const SeatCardBody = memo(function SeatCardBody({
           {/* 특이사항 한 줄 — 이름 아래(원장 2026-09-10 ④ *"길면 잘라버리고 마우스 올리면 전체"*).
               🔴 인라인 요소엔 자르기가 안 먹는다([[#111]]) — 블록으로 세운다. */}
           {showReason && note ? (
-            <span className="block w-full truncate text-xs font-semibold opacity-80" title={note}>
+            <span className="block w-full truncate text-xs font-semibold opacity-80" {...tipProps(note)}>
               {note}
             </span>
           ) : null}
@@ -489,7 +491,7 @@ const SeatCardBody = memo(function SeatCardBody({
         </div>
       </SeatNotePopover>
       {/* 메모가 있으면 모서리 삼각형(스프레드시트식) — 무채색이라 출결 의미색과 다투지 않는다. */}
-      {showReason ? <SeatMemoMark note={note} status={cur} /> : null}
+      {showReason ? <SeatMemoMark note={note} /> : null}
       {/* 옮겨 온 카드는 **어디서 왔는지 적는다** — 출결은 원래 반으로 가므로, 안 적으면 화면이
           "이 반 학생"이라는 거짓말을 한다. */}
       {s.movedFromClassId ? (

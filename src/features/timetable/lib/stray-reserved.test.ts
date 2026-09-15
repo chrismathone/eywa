@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  cellKeyWithStrayMark,
-  strayAnchorRowIndex,
-  strayMarkKey,
-  strayOwnerClassKey,
-} from "./stray-reserved";
+import { strayAnchorRowIndex } from "./stray-reserved";
 
 /**
  * 원반 칸이 없는 보강 예약이 **어느 교시 행에 앉는가** — 실제 제보 건(안은지 9/17 14:20~16:20)이 기준이다.
@@ -53,75 +48,10 @@ describe("보강 박스 — 앉을 교시 행", () => {
  * 병합 표식 — 실제 화면(이수진 선생님 월+목): MS1A에 9/17(목) 예약이 있고, 같은 열의 MS2A에는 예약이 없다.
  * 🔴 여기서 지켜야 하는 것은 "예약이 걸린 **그 반만** 쪼개진다"이다(적대 리뷰 2026-09-14 [중]).
  */
-describe("보강 박스 — 병합 표식", () => {
-  const MS1A = "ms1a-id";
-  const MS2A = "ms2a-id";
-  const TEACHER = "이수진";
-  const marks = new Set([strayMarkKey(TEACHER, "thu", MS1A)]);
-  const keyOf = (classKey: string, day: string, set: ReadonlySet<string> = marks) =>
-    cellKeyWithStrayMark(classKey, TEACHER, day, set);
-
-  it("예약이 걸린 반은 그 요일만 키가 갈린다 — 월+목 한 칸이 두 칸으로", () => {
-    expect(keyOf(MS1A, "thu")).not.toBe(keyOf(MS1A, "mon"));
-    expect(keyOf(MS1A, "mon")).toBe(MS1A); // 월요일은 손대지 않는다
-  });
-
-  it("🔴 예약이 **없는 다른 반**의 월+목 병합은 그대로다 — 축에 반 키가 빠지면 여기서 깨진다", () => {
-    expect(keyOf(MS2A, "thu")).toBe(keyOf(MS2A, "mon"));
-    expect(keyOf(MS2A, "thu")).toBe(MS2A);
-  });
-
-  it("🔴 같은 (강사·요일·반)은 **교시 행이 달라도** 같은 키 — 세로 병합이 안 깨진다", () => {
-    // 격자가 부르는 모양 그대로 미니 격자를 만든다: MS1A가 1-1·1-2 두 행, MS2A가 2-1·2-2 두 행.
-    // (행마다 **그 칸의 반 키**를 넘긴다 — 표식 축에 행이 들어가면 앵커 행만 표식을 받아 아래 단언이 깨진다.)
-    const GRID: Record<number, string> = { 0: MS1A, 1: MS1A, 2: MS2A, 3: MS2A };
-    const keyAt = (row: number, day: string) => cellKeyWithStrayMark(GRID[row]!, TEACHER, day, marks);
-    // 세로: 예약이 걸린 MS1A도 두 행의 키가 같다(한 반이 1-1/1-2 두 칸으로 쪼개지지 않는다).
-    expect(keyAt(0, "thu")).toBe(keyAt(1, "thu"));
-    // 가로: 그 반만 요일이 갈린다.
-    expect(keyAt(0, "thu")).not.toBe(keyAt(0, "mon"));
-    // 예약 없는 반은 세로·가로 모두 그대로.
-    expect(keyAt(2, "thu")).toBe(keyAt(3, "thu"));
-    expect(keyAt(2, "thu")).toBe(keyAt(2, "mon"));
-  });
-
-  it("월·목 양쪽에 예약이면 서로 다른 키 — 도로 붙지 않는다(붙으면 월요일 칸에 목요일 예약이 보인다)", () => {
-    const both = new Set([strayMarkKey(TEACHER, "thu", MS1A), strayMarkKey(TEACHER, "mon", MS1A)]);
-    expect(keyOf(MS1A, "thu", both)).not.toBe(keyOf(MS1A, "mon", both));
-  });
-
-  it("빈 칸은 표식 없이 그대로 — 없던 병합이 생기지 않는다", () => {
-    expect(keyOf("", "thu")).toBe("");
-  });
-
-  it("다른 강사 열은 영향 없음", () => {
-    expect(cellKeyWithStrayMark(MS1A, "김은정", "thu", marks)).toBe(MS1A);
-  });
-});
 
 /**
- * 표식을 **붙일 수 있는 칸인가** — 박스를 그리지 못하는 칸이면 쪼개기만 하고 이익이 없다(재리뷰 [중]).
+ * 🔴 **병합 표식은 없다**(원장 2026-09-15 *"이렇게 붙어있는 수업은 그냥 붙어있게 표시해줘 다른 퇴원이나 대기처럼"*) —
+ *    월+목 한 칸인 반에 목요일 예약이 걸려도 칸은 붙어 있고, 요일은 박스 줄 끝 표식이 말한다. 옛
+ *    `strayMarkKey`·`cellKeyWithStrayMark`·`strayOwnerClassKey`와 그 테스트는 지웠다 — 되살리지 말 것.
+ *    격자가 예약을 병합 키에 안 섞는지는 `makeup-reservation-wiring.test.ts`가 잠근다.
  */
-describe("보강 박스 — 표식을 붙일 반", () => {
-  it("반이 하나인 칸만 주인이 있다(같은 반이 두 줄이어도 하나)", () => {
-    expect(strayOwnerClassKey(["ms1a-id"])).toBe("ms1a-id");
-    expect(strayOwnerClassKey(["ms1a-id", "ms1a-id"])).toBe("ms1a-id");
-  });
-
-  it("🔴 합반 칸(2반 이상)은 주인이 없다 — 박스를 못 그리는 칸이라 표식도 안 붙는다", () => {
-    expect(strayOwnerClassKey(["a-id", "b-id"])).toBeNull();
-  });
-
-  it("빈 칸도 주인이 없다(1×1이라 병합이 없다)", () => {
-    expect(strayOwnerClassKey([])).toBeNull();
-    expect(strayOwnerClassKey([""])).toBeNull();
-  });
-
-  it("🔴 합반 칸 키엔 접미사가 안 붙는다 — 월+목 병합이 그대로다", () => {
-    const noMarks = new Set<string>(); // 합반이라 표식이 안 들어갔다
-    expect(cellKeyWithStrayMark("a-id|b-id", "이수진", "thu", noMarks)).toBe("a-id|b-id");
-    expect(cellKeyWithStrayMark("a-id|b-id", "이수진", "thu", noMarks)).toBe(
-      cellKeyWithStrayMark("a-id|b-id", "이수진", "mon", noMarks),
-    );
-  });
-});

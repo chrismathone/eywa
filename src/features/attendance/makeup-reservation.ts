@@ -356,8 +356,19 @@ export function reservationTitle(
   r: Pick<MakeupReservation, "absenceDate" | "makeupDate" | "slotStart" | "slotEnd" | "periodLabel" | "note">,
   opts: { createdByName?: string | null; className?: string | null } = {},
 ): string {
+  return `${RESERVED_CELL_LABEL} · ${reservationDetail(r, opts)}`;
+}
+
+/**
+ * 위 문장에서 **머리말(`보강 예약`)만 뺀 것** — 메모 툴팁 카드처럼 라벨이 이미 옆에 있는 자리가 쓴다
+ * (원장 2026-09-15: 툴팁이 카드가 되면서 `보강 예약` 라벨 + 이 값 꼴이 됐다. 한 줄 문장이 필요한 자리는
+ * `reservationTitle` 그대로).
+ */
+export function reservationDetail(
+  r: Pick<MakeupReservation, "absenceDate" | "makeupDate" | "slotStart" | "slotEnd" | "periodLabel" | "note">,
+  opts: { createdByName?: string | null; className?: string | null } = {},
+): string {
   return [
-    RESERVED_CELL_LABEL,
     opts.className ? opts.className : null,
     `${shortDate(r.absenceDate)} 결석분`,
     reservationSpanLabel(r),
@@ -379,6 +390,10 @@ export type TimetableReservedLine = {
   grade: string | null;
   school: string | null;
   makeupDate: string;
+  /** 무슨 결석의 보강인가 — hover 카드 줄(`결석일`). 줄 글자엔 안 적는다(퇴원 블록과 모양이 어긋난다). */
+  absenceDate: string;
+  /** 예약 메모 — hover 카드 줄(`메모`). 없으면 그 줄이 빠진다. */
+  note: string | null;
   periodLabel: string | null;
   slotStart: string;
   slotEnd: string;
@@ -408,6 +423,8 @@ export function toTimetableReservedLine(
     grade: stu.grade,
     school: stu.school,
     makeupDate: r.makeupDate,
+    absenceDate: r.absenceDate,
+    note: r.note,
     periodLabel: r.periodLabel,
     slotStart: r.slotStart,
     slotEnd: r.slotEnd,
@@ -417,6 +434,24 @@ export function toTimetableReservedLine(
     // 꼬리표는 **값이 있을 때만** — 빈 문자열·공백은 없는 것으로 본다(지어내지 않는다).
     ...(opts.className?.trim() ? { fromClassName: opts.className.trim() } : {}),
   };
+}
+
+/**
+ * 시간표 '보강' 줄의 **hover 카드 줄**(`라벨 값`) — 원장 2026-09-15 *"툴팁이 이렇게 생겼으면 좋겠어 메모같이
+ * 생기지 않고"*(시간표 학생 카드 모양). 카드 머리(이름·학교학년)는 화면이 붙이고, 여기선 **사실만** 만든다.
+ *
+ * 🔴 줄 **글자**엔 여전히 교시·결석일을 안 적는다(원장 2026-09-14) — 그 정보가 사는 자리가 이 카드다.
+ * ⚠️ 값이 없는 줄은 스스로 빠진다(`encodeTip`이 빈 값을 버린다) — 여기서 "—"를 지어내지 말 것.
+ */
+export function reservationTipRows(
+  r: Pick<TimetableReservedLine, "makeupDate" | "slotStart" | "slotEnd" | "periodLabel" | "absenceDate" | "note" | "fromClassName">,
+): [string, string][] {
+  const rows: [string, string][] = [["보강", reservationSpanLabel(r)]];
+  if (r.absenceDate) rows.push(["결석일", shortDate(r.absenceDate)]);
+  if (r.fromClassName) rows.push(["원반", r.fromClassName]);
+  const note = r.note?.trim();
+  if (note) rows.push(["메모", note]);
+  return rows;
 }
 
 /**

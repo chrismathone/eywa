@@ -1,3 +1,4 @@
+import { tipProps } from "@/components/hover-tip/tip";
 import { WindowLink } from "@/components/workspace/window-link";
 import { PanelEmpty, StatChip } from "./tiles";
 import type { TodayActionItem } from "@/features/dashboard/today-actions";
@@ -27,12 +28,19 @@ function Row({
   tone,
   href,
   title,
+  tip,
   left,
   right,
 }: {
   tone: string;
   href?: string;
   title?: string;
+  /**
+   * 메모 카드 속성(`tipProps(...)`) — 🔴 **명시 prop으로 받는다.** 호출부에서 `{...tipProps(...)}`로 펴면
+   * 이 컴포넌트가 rest를 안 받아 `data-tip`이 **조용히 버려진다**(JSX 스프레드는 여분 속성을 타입으로 못 잡는다 —
+   * 적대 리뷰 2026-09-15에서 실제로 툴팁이 통째로 사라진 채 통과했다).
+   */
+  tip?: { "data-tip"?: string };
   left: React.ReactNode;
   right?: React.ReactNode;
 }) {
@@ -43,9 +51,11 @@ function Row({
       {right ? <span className="num text-text-dim shrink-0 text-xs font-bold">{right}</span> : null}
     </span>
   );
-  if (!href) return <li title={title}>{body}</li>;
+  // 🔴 카드는 **`<li>`에** 단다 — `WindowLink`의 `title`은 창 제목 파라미터라 DOM 속성으로 안 나간다.
+  if (!href) return <li title={title} {...tip}>{body}</li>;
+  // 🔴 `title`은 **여기(li)** 에도 단다 — `WindowLink`의 `title`은 창 제목 파라미터라 DOM 툴팁이 되지 않는다.
   return (
-    <li>
+    <li title={title} {...tip}>
       <WindowLink href={href} title={title} className="hover:bg-bg-soft/60 -mx-1 block rounded px-1">
         {body}
       </WindowLink>
@@ -70,7 +80,8 @@ export function TodoList({ items, max = 10 }: { items: TodayActionItem[]; max?: 
             tone={item.severity}
             href={item.href}
             // 🔴 숫자를 해석할 범위(`note`)는 툴팁에 남긴다 — 한 줄에 다 적으면 목록이 못 읽는 물건이 된다.
-            title={[item.label, item.note].filter(Boolean).join(" · ")}
+            tip={tipProps(item.note ? { title: item.label, lines: [item.note] } : null)}
+            title={item.note ? undefined : item.label}
             left={item.label}
             right={item.count === null ? null : `${item.count}${item.unit ?? ""}`}
           />
@@ -95,6 +106,7 @@ export function Watchlist({ items, overflow }: { items: WatchItem[]; overflow: n
             key={item.key}
             tone={item.tone}
             href={`/students/${item.studentId}`}
+            // tip-guard:allow — 메모가 아니라 **화면에 이미 보이는 글자**(이름 + 사유 라벨)의 전문이다(잘린 줄 펼치기).
             title={`${item.studentName} — ${item.reason}`}
             left={
               <>

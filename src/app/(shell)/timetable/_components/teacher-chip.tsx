@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 import { useState } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -58,7 +59,7 @@ export function TeacherChip({ slot, offAxisNote }: { slot: ClassDetailQuick; off
         //    학원 브랜드색·반 색이 이미 쓰는 그 함수)으로 한 겹 깔고 그 위에 빨강을 얹는다 —
         //    어떤 반 색을 새로 넣어도 테두리가 알아서 흰색/검정으로 갈려 표식이 사라지지 않는다.
         // ⚠️ 뜻(경고)은 빨강이 그대로 들고 있다 — 테두리는 **보이게 하는 장치**지 다른 상태가 아니다.
-        <span title={offAxisNote} aria-label={offAxisNote} className="absolute top-0 left-0 z-10">
+        <span {...tipProps(offAxisNote)} aria-label={offAxisNote} className="absolute top-0 left-0 z-10">
           <span
             aria-hidden
             className="absolute top-0 left-0 size-0 border-r-[9px] border-t-[9px] border-r-transparent"
@@ -138,7 +139,7 @@ function ChipStudentRow({ student }: { student: ClassDetailQuick["students"][num
     <>
       {/* 자리(랩실) 교시 고정 — 기본뷰·통합뷰와 **같은 서식 상수**. 강사뷰 칩은 재원만 세우므로 퇴원 갈래가 없다. */}
       {student.seatPinNote ? (
-        <span className={SEAT_PIN_MARK_CLASS} title={student.seatPinNote}>
+        <span className={SEAT_PIN_MARK_CLASS} {...tipProps(student.seatPinNote)}>
           {student.name}
         </span>
       ) : (

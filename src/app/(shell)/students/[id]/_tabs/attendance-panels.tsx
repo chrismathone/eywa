@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 import { useMemo } from "react";
 import type { StudentAttendanceFull } from "@/features/students/server/queries";
@@ -83,7 +84,7 @@ export function AttendanceList({ records }: { records: StudentAttendanceFull[] }
             {rows.map((r) => (
               <span
                 key={`${r.classId}-${r.slotStart ?? "all"}`}
-                title={r.note ?? undefined}
+                {...tipProps(r.note)}
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${attendanceStatusColor(r.status)}`}
               >
                 <span>{attendanceStatusLabel(r.status)}</span>

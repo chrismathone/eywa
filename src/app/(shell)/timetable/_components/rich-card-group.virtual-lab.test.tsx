@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { tipText } from "@/components/hover-tip/tip";
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { RichCardGroupBoard } from "./rich-card-group";
@@ -155,7 +156,7 @@ describe("통합뷰 카드 — *LAB 임시 칸 그리기", () => {
     const marks = container.querySelectorAll<HTMLElement>("[data-virtual-lab]");
     expect(marks).toHaveLength(1);
     expect(marks[0]!.textContent).toBe("*LAB");
-    expect(marks[0]!.getAttribute("title")).toBe("임시 LAB · 목 17:00 — 교시 이동: 이현이(9/1부터 매주 목 고정)");
+    expect(tipText(marks[0]!.getAttribute("data-tip"))).toBe("임시 LAB · 목 17:00 — 교시 이동: 이현이(9/1부터 매주 목 고정)");
     expect(marks[0]!.className).toContain("outline-dashed");
     expect(marks[0]!.className).toContain("italic");
     expect(container.querySelector("[data-virtual-lab-row]")).toBeNull();

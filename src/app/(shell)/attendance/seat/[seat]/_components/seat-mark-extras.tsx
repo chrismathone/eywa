@@ -4,7 +4,6 @@ import type { ReactNode, RefObject } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
 import { SEAT_LABEL } from "./seat-status";
-import { seatNoteTitle } from "@/features/attendance/seat/note-title";
 import { SEAT_NOTE_MAXLEN } from "@/features/attendance/seat/seat";
 import type { SeatStatus } from "@/features/attendance/seat/server/actions";
 
@@ -87,12 +86,13 @@ const SEAT_MARK_ON: Record<SeatStatus, string> = {
  *    (`--neutral-fill`)이다. 뜻은 "적힌 게 있다" 하나뿐이고 상태는 버튼이 말한다.
  * ⚠️ `pointer-events-none` — 카드 클릭·드래그를 가로채지 않는다(툴팁은 부모 칸이 이미 갖고 있다).
  */
-export function SeatMemoMark({ note, status }: { note: string | null; status: SeatStatus | null }) {
+// 🔴 상태는 안 받는다 — 표식의 뜻은 "적힌 게 있다" 하나뿐이고, 사유 문장(상태에 따라 라벨이 갈리는 그것)은
+//    이제 **부모 칸의 카드**가 띄운다(원장 2026-09-15). 여기서 다시 문장을 만들면 두 곳이 갈린다.
+export function SeatMemoMark({ note }: { note: string | null }) {
   if (!note || !note.trim()) return null;
   return (
     <span
       aria-hidden
-      title={seatNoteTitle(status, note) ?? note}
       className="pointer-events-none absolute top-0 right-0 h-0 w-0 border-t-[10px] border-l-[10px] border-t-[var(--neutral-fill)] border-l-transparent"
     />
   );

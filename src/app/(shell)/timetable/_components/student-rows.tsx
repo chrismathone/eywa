@@ -120,9 +120,8 @@ function NameInner({
       {/* 🔴 표식은 **이름 span에만** 얹는다 — 줄에는 이미 tone(신입 빨강·전입 초록·검색 표식)이 붙어 있어
           같은 축 유틸을 이어 붙이면 승자를 CSS 순서가 정한다([[#116]]). 자식이면 상속을 확실히 이긴다. */}
       {pinNote ? (
-        <span className={SEAT_PIN_MARK_CLASS} title={pinNote}>
-          {name}
-        </span>
+        // 🔴 툴팁을 달지 않는다 — 이 줄은 이미 hover 카드를 띄운다(카드의 '자리' 줄이 같은 문구를 말한다).
+        <span className={SEAT_PIN_MARK_CLASS}>{name}</span>
       ) : (
         name
       )}
@@ -461,6 +460,7 @@ function StudentCard({ student }: { student: StudentQuick }) {
       endDate={student.endDate}
       textbook={student.latestTextbook}
       report={student.latestReport}
+      pinNote={student.seatPinNote}
     />
   );
 }

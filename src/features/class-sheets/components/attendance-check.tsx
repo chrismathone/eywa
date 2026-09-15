@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 /**
  * 출결 **체크 칸** — 누를 때마다 출석 → 결석 → 지각 → 선택 안 함 (원장 2026-08-11).
@@ -133,11 +134,16 @@ export function AttendanceCheck({
       return (
         <span
           className={SHEET_BOX_READONLY}
-          title={
-            note
-              ? `${label ?? "출결 없음"} · ${note} — 출결 입력 권한이 없거나 수정 기간이 지났습니다`
-              : "출결 입력 권한이 없거나 수정 기간이 지났습니다"
-          }
+          {...tipProps({
+            title: label ?? "출결 없음",
+            rows: [note ? ["사유", note] : null],
+            lines: ["출결 입력 권한이 없거나 수정 기간이 지났습니다"],
+          })}
+          // 카드는 `data-*`라 화면 낭독이 못 읽는다 — 왜 못 고치는지·사유는 라벨로도 남긴다.
+          // 🔴 역할이 없으면(generic) 이름이 무시된다. `note`는 **잎이 아니라** 내용을 그대로 읽는 역할이라
+          //    표 안에서 라벨이 무시되거나 "지각"이 두 번 읽힌다(3차 재리뷰) → 잎 역할 `img`로 이름이 내용을 대신한다.
+          role="img"
+          aria-label={`${studentName} ${label ?? "출결 없음"}${note ? ` · 사유 ${note}` : ""} — 출결 입력 권한이 없거나 수정 기간이 지났습니다`}
         >
           {label ?? "—"}
         </span>
@@ -154,7 +160,10 @@ export function AttendanceCheck({
               setNoteOpen(true);
             }}
             aria-label={`${studentName} ${label} 사유`}
-            title={`${note ? `사유: ${note}\n` : ""}수정 기간이 지나 상태는 못 바꿉니다 — 사유는 언제든 고칠 수 있습니다`}
+            {...tipProps({
+              rows: [note ? ["사유", note] : null],
+              lines: ["수정 기간이 지나 상태는 못 바꿉니다 — 사유는 언제든 고칠 수 있습니다"],
+            })}
             // 가운데 정렬은 이제 `SHEET_BOX_READONLY`가 들고 있다(같은 열의 다른 읽기 전용 갈래도 함께
             // 맞았다) — 여기서 또 적으면 같은 축 유틸이 겹쳐 승자를 CSS 생성 순서가 정한다([[#116]]).
             className={`${SHEET_BOX_READONLY} cursor-pointer`}
@@ -232,7 +241,14 @@ export function AttendanceCheck({
             else toast.info("사유는 지각·결석에만 적을 수 있습니다");
           }}
           aria-label={`${studentName} 출결 — ${label ?? "선택 안 함"}`}
-          title={`${note ? `사유: ${note}\n` : ""}클릭: 출석 → 결석 → 지각 → 선택 안 함\n지각·결석을 고르면 시간·사유 칸이 열립니다(안 적어도 됩니다)\n우클릭: 상태는 그대로 두고 사유만`}
+          {...tipProps({
+            rows: [note ? ["사유", note] : null],
+            lines: [
+              "클릭: 출석 → 결석 → 지각 → 선택 안 함",
+              "지각·결석을 고르면 시간·사유 칸이 열립니다(안 적어도 됩니다)",
+              "우클릭: 상태는 그대로 두고 사유만",
+            ],
+          })}
           className={`${SHEET_BOX} inline-flex w-full cursor-pointer items-center justify-center gap-0.5 px-0.5 transition ${
             tone ? tone.cls : "text-text-faint hover:bg-bg-soft"
           }`}

@@ -7,6 +7,7 @@
  * 같아질 때만 벗긴다), 강력 새로고침 전까지 칸이 1에 굳었다.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { tipRow } from "@/components/hover-tip/tip";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import type { SlotMark } from "@/features/attendance/cell-display";
@@ -94,6 +95,12 @@ function build(
 }
 const cellAt = (c: HTMLElement) => c.querySelector<HTMLElement>(`[data-cell-key$="${DAY}"]`)!;
 
+/**
+ * 칸의 툴팁은 **카드**다(원장 2026-09-15) — 옛 `title` 검사 자리를 그대로 잇는다.
+ * `statusOf` = 카드의 '상태' 줄(칸이 무슨 상태로 보이는가).
+ */
+const statusOf = (el: HTMLElement) => tipRow(el.getAttribute("data-tip"), "상태");
+
 describe("🔴 팝오버 '출석' — 교시가 둘인 칸도 격자 타이핑과 같은 값으로 칠한다(리뷰 2026-09-11)", () => {
   it("칠한 값 = 2 = 서버 합 · 저장엔 강사 보기가 실린다 · 서버 값 2로 새로고침되면 덮개가 벗겨진다", async () => {
     const actions = await import("@/features/attendance/server/actions");
@@ -119,7 +126,7 @@ describe("🔴 팝오버 '출석' — 교시가 둘인 칸도 격자 타이핑�
     // 덮개가 벗겨졌는지 — 그 뒤 다른 화면이 결석으로 되돌리면 칸이 그대로 따라간다(덮개가 남았으면 2에 굳는다).
     rerender(build("absent", null));
     await waitFor(() => expect(cellAt(container).textContent).toBe("0"));
-    expect(cellAt(container).getAttribute("title") ?? "").toMatch(/^결석/);
+    expect(statusOf(cellAt(container))).toBe("결석");
   });
 
   it('🔴 쉼표 소수점 "1,5"도 격자 타이핑과 같은 정규화 — 1.5로 칠하고(NaN·무한 렌더 없음) 서버 1.5에 덮개가 벗겨진다', async () => {

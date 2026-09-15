@@ -1,4 +1,5 @@
 "use client";
+import { tipProps } from "@/components/hover-tip/tip";
 
 import { useCallback, useRef, useState } from "react";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -222,13 +223,17 @@ function SeatJjClass({
             // 자기 title이 없는 칸은 이걸 물려받는다. 자기 title을 가진 칸(이름)은 여기서 이어 붙인다.
             const noteTitle = seatNoteTitle(cur, s.note);
             return (
-              <tr key={s.id} title={noteTitle ?? undefined}>
+              <tr key={s.id} {...tipProps(noteTitle)}>
                 {/* 이름 칸 — **가운데 정렬 + 좌우 여백 최소**(원장 2026-09-10: *"이름도 가운데정렬시켜주고
                     여백 최소화"*). 두 줄(이름 / 학교학년) 모두 가운데다.
                     ⚠️ 세로 여백은 그대로 둔다 — 줄 높이는 옆 칸의 출결 버튼이 정하고, 그 탭 타겟을 줄이면
                        폰에서 못 누른다(지시도 '좌우 여백'이었다). */}
                 <td className="px-1 py-1.5 text-center">
-                  <p className="truncate font-bold" title={noteTitle ? `${s.name} · ${noteTitle}` : s.name}>
+                  <p
+                    className="truncate font-bold"
+                    {...tipProps(noteTitle ? { title: s.name, lines: [noteTitle] } : null)}
+                    title={noteTitle ? undefined : s.name}
+                  >
                     {s.name}
                   </p>
                   <p className="text-text-dim truncate text-xs">
@@ -336,7 +341,7 @@ function JjAttendanceCell({
   const canNote = showReason && !readOnly;
 
   return (
-    <td ref={anchorRef} className="relative px-1 py-1.5" title={noteTitle ?? undefined}>
+    <td ref={anchorRef} className="relative px-1 py-1.5" {...tipProps(noteTitle)}>
       <SeatNotePopover
         open={noteOpen}
         onOpenChange={setNoteOpen}
@@ -366,7 +371,7 @@ function JjAttendanceCell({
           />
         </div>
       </SeatNotePopover>
-      {showReason ? <SeatMemoMark note={note} status={cur} /> : null}
+      {showReason ? <SeatMemoMark note={note} /> : null}
       <div className="mt-1">
         {/* 같은 날 교시 사이 신호 — 앞 교시 결석 · 다음 행선지(표시 전용, 랩실과 같은 부품). */}
         <SeatPeriodHints

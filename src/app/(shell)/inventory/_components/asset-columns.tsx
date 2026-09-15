@@ -1,3 +1,4 @@
+import { tipProps } from "@/components/hover-tip/tip";
 import type { CategoryMaps } from "@/features/inventory/category";
 import { assetStatusLabel } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
@@ -46,7 +47,11 @@ export function assetColumns(
             {m ? (
               <span
                 className="text-amber text-xs font-bold"
-                title={`${m.reason} — 상태 칸을 더블클릭해 맞출 수 있습니다`}
+                {...tipProps({ rows: [["어긋남", m.reason]], lines: ["상태 칸을 더블클릭해 맞출 수 있습니다"] })}
+                // 보이는 글자가 `!` 하나뿐이라 라벨이 없으면 화면 낭독이 "느낌표"로 끝난다(카드는 `data-*`라 안 읽힌다).
+                // 🔴 `role="img"`가 함께 있어야 한다 — 역할 없는 span(generic)엔 이름을 못 붙여 낭독이 무시한다(재리뷰 2026-09-15).
+                role="img"
+                aria-label={m.reason}
               >
                 !
               </span>
@@ -68,7 +73,7 @@ export function assetColumns(
     },
     { key: "lastAuditedOn", label: "최종실사", width: 100, render: (a) => <DashCell v={a.lastAuditedOn} num />, className: "whitespace-nowrap" },
     { key: "disposedOn", label: "폐기일", width: 100, render: (a) => <DashCell v={a.disposedOn} num />, className: "whitespace-nowrap" },
-    { key: "note", label: "비고", minWidth: 160, render: (a) => <span className="text-text-dim" title={a.note ?? undefined}>{a.note ?? ""}</span>, className: "whitespace-nowrap" },
+    { key: "note", label: "비고", minWidth: 160, render: (a) => <span className="text-text-dim" {...tipProps(a.note)}>{a.note ?? ""}</span>, className: "whitespace-nowrap" },
     {
       key: "qr", label: "QR", width: 64,
       // QR은 자산ID에서 파생하므로 새 자산도 자동으로 있다 — 정렬 값은 없음(전부 같다).

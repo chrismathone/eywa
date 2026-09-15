@@ -1,14 +1,16 @@
 "use client";
 
 import { isDirectEditClick } from "@/lib/direct-edit";
+import { tipProps } from "@/components/hover-tip/tip";
+import { monthDayLabel } from "@/lib/date-kst";
 
 import { useEffect, useRef, useState } from "react";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
 import {
   CELL_SCROLL_MARGIN,
   cellDisplay,
-  ghostBreakdown,
   ghostCellKind,
+  ghostSlotLines,
   rollupDay,
   sharedOtherSlots,
   slotBreakdown,
@@ -24,7 +26,7 @@ import type { MatrixReservation } from "@/features/attendance/server/queries";
 import {
   RESERVED_CELL_CHARS,
   RESERVED_CELL_CLASS,
-  reservationTitle,
+  reservationDetail,
 } from "@/features/attendance/makeup-reservation";
 import { useCellState } from "./grid-context";
 import { scopeFieldsFor, useAttendanceScope } from "./scope-context";
@@ -33,6 +35,9 @@ import { MakeupReserveDialog } from "./makeup-reserve-dialog";
 import { GhostTransferPopover } from "./ghost-popover";
 // 화면 언어 — 상태 표기는 `statusTextOf`(한글 맵 옆)가 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+
+/** 카드 한 줄 안에서 줄을 나눈다(교시별 기록) — 카드가 `whitespace-pre-line`으로 살려 그린다. */
+const NEWLINE = "\n";
 
 /** 메모의 낙관 쓰기 표식 — 값과 따로 쥔다(아래 noteOwner). */
 type NotePaint = Paint<string | null>;
@@ -262,36 +267,44 @@ export function AttendanceCell({
    * 🔴 값이 아니라 표시다 — 격자 저장소엔 안 들어가므로 시수·출석률·복사·범위 채우기가 이 칸을 빈 칸으로 다룬다.
    */
   const reservedShown = !!reservation && !status && !editing && !ghost;
+  // 🔴 툴팁은 **카드**다(원장 2026-09-15 *"툴팁이 이렇게 생겼으면 좋겠어 메모같이 생기지 않고"*) — 칸은
+  //    `data-tip` 한 줄만 달고, 문서마다 한 장인 [HoverTipLayer](@/components/hover-tip/hover-tip-layer)가 그린다.
+  //    🔴 `title`로 되돌리지 말 것(카드 옆에 회색 메모 상자가 겹친다) · 칸이 수천 개라 칸마다 카드 컴포넌트를
+  //    다는 것도 금지다(그게 곧 반응속도다).
   // 잠긴 칸이라도 **메모는 보여 준다** — 잠금 사유만 남기고 메모를 감추면 왜 잠겼는지만 알고 뭐라 적혔는지는 못 본다.
-  const title = [
-    locked || (status ? statusTextOf(status, lang) : null),
-    // 교시가 여럿인 날 — 칸엔 합계 하나뿐이라, 무엇을 접었는지 여기서 펼쳐 준다.
-    day
-      ? tf("att.cell.nPeriods", { n: day.count, breakdown: slotBreakdown(day.slots, lang) })
-      : null,
-    // 이 표가 안 세는 교시(자리·남의 교시) — 숫자엔 없지만 기록은 있다는 사실을 여기서 밝힌다.
-    // ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시가 같은 날)은 고치면 **다른 선생님 교시**까지 함께 바뀐다
-    //    (저장은 그날 교시에 간다, save-targets ①). 숫자가 1이라 사정거리가 안 보이므로 여기서 말한다.
-    // 🔴 자리(JJ·랩실) 행은 함께 **안** 바뀌므로(원장 2026-09-12) 한 문장에 뭉치지 않고 "그대로"라고 따로 적는다 —
-    //    뭉치면 목록에 든 자리 기록까지 바뀐다는 거짓말이 된다.
-    otherSlots?.length
-      ? `${ghostBreakdown(otherSlots, lang)}${
-          status && sharedOthers.length > 0 ? tf("att.cell.alsoWrites", { n: sharedOthers.length }) : ""
-        }${status && seatOthers > 0 ? t("att.cell.seatKept") : ""}${transfer && !locked ? t("att.cell.ghostTransfer") : ""}`
-      : null,
-    // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
-    outside ? t(status ? "att.cell.outsideRecord" : "att.cell.outside") : null,
-    // 칩의 예외 — 교시가 안 찍힌 기록이라 이 반 담당 전원에게 같은 값이 잡힌다(위 sharedDay 주석).
-    sharedDay ? t("att.cell.sharedDay") : null,
-    fromReport ? t("att.cell.fromReport") : null,
-    // 보강 예약 — 결석분·시각·예약자·메모(한글 단일 소스 `reservationTitle`). 값이 찍힌 칸엔 서버가 이미 뺐다.
-    reservation && !status
-      ? reservationTitle({ ...reservation, makeupDate: sessionDate }, { createdByName: reservation.createdByName })
-      : null,
-    noteVal || ghostNote || null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const tip = tipProps({
+    title: studentName ?? null,
+    meta: monthDayLabel(sessionDate),
+    rows: [
+      locked ? [t("att.tip.lock"), locked] : null,
+      status ? [t("att.tip.status"), statusTextOf(status, lang)] : null,
+      // 교시가 여럿인 날 — 칸엔 합계 하나뿐이라, 무엇을 접었는지 여기서 펼쳐 준다.
+      day ? [t("att.tip.periods"), tf("att.cell.nPeriods", { n: day.count, breakdown: slotBreakdown(day.slots, lang) })] : null,
+      // 이 표가 안 세는 교시(자리·남의 교시) — 숫자엔 없지만 기록은 있다는 사실 + **누가 찍었는지**(원장 2026-09-15).
+      otherSlots?.length ? [t("att.legend.ghost"), ghostSlotLines(otherSlots, lang).join(NEWLINE)] : null,
+      // 보강 예약 — 결석분·시각·예약자·메모(한글 단일 소스). 값이 찍힌 칸엔 서버가 이미 뺐다.
+      reservation && !status
+        ? [
+            t("att.cell.reserved"),
+            reservationDetail({ ...reservation, makeupDate: sessionDate }, { createdByName: reservation.createdByName }),
+          ]
+        : null,
+      noteVal || ghostNote ? [t("att.tip.memo"), noteVal || ghostNote] : null,
+    ],
+    lines: [
+      // ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시가 같은 날)은 고치면 **다른 선생님 교시**까지 함께 바뀐다
+      //    (저장은 그날 교시에 간다, save-targets ①). 숫자가 1이라 사정거리가 안 보이므로 여기서 말한다.
+      // 🔴 자리(JJ·랩실) 행은 함께 **안** 바뀌므로(원장 2026-09-12) 한 문장에 뭉치지 않고 "그대로"라고 따로 적는다.
+      status && sharedOthers.length > 0 ? tf("att.cell.alsoWrites", { n: sharedOthers.length }) : null,
+      status && seatOthers > 0 ? t("att.cell.seatKept") : null,
+      transfer && !locked ? t("att.cell.ghostTransfer") : null,
+      // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
+      outside ? t(status ? "att.cell.outsideRecord" : "att.cell.outside") : null,
+      // 칩의 예외 — 교시가 안 찍힌 기록이라 이 반 담당 전원에게 같은 값이 잡힌다(위 sharedDay 주석).
+      sharedDay ? t("att.cell.sharedDay") : null,
+      fromReport ? t("att.cell.fromReport") : null,
+    ],
+  });
 
   const openPopoverAt = (el: HTMLElement | null) => {
     if (!el) return;
@@ -321,7 +334,7 @@ export function AttendanceCell({
         }${day ? tf("att.cell.andNPeriods", { n: day.count - 1 }) : ""}${
           otherSlots?.length ? tf("att.cell.ghostCount", { n: otherSlots.length }) : ""
         }`}
-        title={title || undefined}
+        {...tip}
         // 색이 갈린 교시가 섞인 날만 — 인라인 배경이 클래스 배경을 이긴다(글자색은 클래스 그대로).
         style={display.style}
         onMouseDown={(e) => {

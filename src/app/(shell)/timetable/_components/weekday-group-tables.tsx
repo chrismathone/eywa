@@ -39,12 +39,7 @@ import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
 import { ReservedSection } from "./reserved-section";
-import {
-  cellKeyWithStrayMark,
-  strayAnchorRowIndex,
-  strayMarkKey,
-  strayOwnerClassKey,
-} from "@/features/timetable/lib/stray-reserved";
+import { strayAnchorRowIndex } from "@/features/timetable/lib/stray-reserved";
 import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
 // ⚠️ **타입만** 가져온다 — 저 모듈은 `server-only`라 값을 import하면 클라 번들에서 터진다([[#61]]).
 import type { StrayReservedBlock } from "@/features/timetable/server/reserved-lines";
@@ -281,6 +276,12 @@ function SubSlotContent({
 }) {
   const merged = mergeSlotsByClass(slots);
   const isHapban = merged.length >= 2;
+  /**
+   * 이 블록(여러 요일·교시)의 '보강' 줄 — 🔴 **합친 뒤(`merged`)가 아니라 원래 슬롯에서** 모은다.
+   * `mergeSlotsByClass`는 같은 반을 `{...first}`로 접어서, 월+목 병합 칸이면 **월요일 슬롯만** 남는다 —
+   * 거기서 뽑으면 목요일에 걸린 그 반의 예약이 통째로 사라진다(원장 2026-09-15 병합 유지 결정으로 드러난 결함).
+   */
+  const reservedLines = uniqueReserved(slots);
   return (
     // 학생 검색 — 걸린 반이 하나도 없는 칸은 **아예 안 그린다**(격자 축은 그대로).
     // 🔑 판정 단위가 '칸'이 아니라 '칸이 담은 반들'이라 합반 칸은 **한 반만 걸려도 통째로** 남는다 —
@@ -297,7 +298,13 @@ function SubSlotContent({
         </span>
       ) : null}
       {isHapban ? (
-        <HapbanCell slots={merged} subSlot={subSlot} coveringDays={coveringDays} roster={hideStudents ? "none" : "names"} />
+        <HapbanCell
+          slots={merged}
+          subSlot={subSlot}
+          coveringDays={coveringDays}
+          roster={hideStudents ? "none" : "names"}
+          reserved={reservedLines}
+        />
       ) : (
         <ClassCell
           slot={merged[0]!}
@@ -305,7 +312,7 @@ function SubSlotContent({
           subSlot={subSlot}
           coveringDays={coveringDays}
           moveParts={parts}
-          reserved={uniqueReserved(merged)}
+          reserved={reservedLines}
           strayReserved={strayLines}
         />
       )}
@@ -423,22 +430,15 @@ function GroupTable({
 
   /**
    * 원반 칸이 없는 날의 '보강' 박스를 **어느 칸에 세울지** — `담임 열::요일::교시 행`(행 = 겹치는 첫 행).
-   * 함께 **병합 표식**(`strayMarks`)도 만든다 — 축은 `강사::요일::그 칸의 반 키`([`strayMarkKey`](@/features/timetable/lib/stray-reserved)).
    *
-   * 🔴 축에서 **반 키가 빠지면** 그 (강사, 요일) 열의 **모든 반**이 가로 병합을 잃는다(적대 리뷰 2026-09-14 [중]):
-   *    예약과 무관한 반의 이름·명단이 두 번 그려지고 칸이 반으로 갈린다.
-   * 🔴 앵커 칸이 비어 있으면 **짝 교시의 반**을 주인으로 본다 — 수학 반교시 셀은 반대쪽이 비면
-   *    `expandHalfPeriodBlocks`가 그 칸을 덮어 박스가 **그 반 칸 안에** 서기 때문이다(표식이 없으면 월목 병합
-   *    칸에 서서 월요일에도 보인다). 짝도 비면 그 칸은 빈 칸 1×1이라 병합이 없어 표식이 필요 없다.
-   * 🔴 교시표 밖 시각이면 세우지도, 표식을 붙이지도 않는다(괜한 병합 쪼갬 방지) — 그 건은 '보강' 탭 몫.
-   * ⚠️ `cell`·`groupPairs` **뒤**에 와야 한다(둘을 읽는다).
+   * 🔴 **가로 병합을 쪼개지 않는다**(원장 2026-09-15 *"이렇게 붙어있는 수업은 그냥 붙어있게 표시해줘 다른
+   *    퇴원이나 대기처럼"*): 월+목 한 칸인 반에 목요일 예약이 걸려도 칸은 붙어 있고, 어느 요일 보강인지는
+   *    박스 줄 끝의 **요일 표식**(`ReservedSection`)이 말한다. 종전 병합 표식(`strayMarkKey` ·
+   *    `cellKeyWithStrayMark` · `strayOwnerClassKey`)은 제거했다 — 되살리지 말 것.
+   * 🔴 교시표 밖 시각이면 세우지 않는다(`strayAnchorRowIndex`가 -1) — 그 건은 '보강' 탭 몫.
+   * ⚠️ `rows`(교시 행 목록) **뒤**에 와야 한다.
    */
   const strayAt = new Map<string, TimetableReservedLine[]>();
-  const strayMarks = new Set<string>();
-  const classIdsAt = (teacher: string, day: string, ri: number) =>
-    (cell.get(`${teacher}::${day}::${rows[ri]!.key}`) ?? []).map((s) => s.classId);
-  const classKeyAt = (teacher: string, day: string, ri: number) =>
-    cellClassKey(classIdsAt(teacher, day, ri));
   for (const b of strays) {
     const at = strayAnchorRowIndex(rows, b.startTime, b.endTime);
     if (at < 0) continue;
@@ -446,28 +446,6 @@ function GroupTable({
     const cur = strayAt.get(key);
     if (cur) cur.push(...b.lines);
     else strayAt.set(key, [...b.lines]);
-    let ownerIds = classIdsAt(b.teacherName, b.dayOfWeek, at);
-    if (ownerIds.length === 0) {
-      const pair = groupPairs.find(([top, bottom]) => top === at || bottom === at);
-      const other = pair ? (pair[0] === at ? pair[1] : pair[0]) : -1;
-      if (other >= 0) {
-        // 🔴 반교시 확장은 짝 행 블록이 **1행일 때만** 일어난다(`grid.ts`의 `block.rowSpan !== 1` → 건너뜀).
-        //    짝 행의 반이 위·아래로 이어지면(세로 병합) 확장이 없으므로 박스는 **이 빈 칸**에 선다 — 그런데도
-        //    표식을 붙이면 그 반의 월+목 병합이 **헛되이** 쪼개진다(적대 재리뷰 2026-09-14 [하]).
-        const k = classKeyAt(b.teacherName, b.dayOfWeek, other);
-        const above = other > 0 ? classKeyAt(b.teacherName, b.dayOfWeek, other - 1) : "";
-        const below = other + 1 < rows.length ? classKeyAt(b.teacherName, b.dayOfWeek, other + 1) : "";
-        if (k !== "" && k !== above && k !== below) {
-          ownerIds = classIdsAt(b.teacherName, b.dayOfWeek, other);
-        }
-      }
-    }
-    // 🔴 **박스를 못 그릴 칸이면 표식도 붙이지 않는다** — 합반 칸은 `HapbanCell`이 예약 줄을 안 받아 박스가
-    //    사라지는데, 표식만 남으면 "쪼개지기는 하는데 박스는 없는 칸"이 된다(`strayOwnerClassKey` 주석).
-    const owner = strayOwnerClassKey(ownerIds);
-    if (owner) strayMarks.add(strayMarkKey(b.teacherName, b.dayOfWeek, owner));
-    // ⚠️ 남은 좁은 경우: 짝 행 블록이 **가로로** 병합돼 있고 다른 요일의 앵커 행이 점유면 확장이 건너뛰어진다 —
-    //    그때도 박스는 이 빈 칸에 제대로 서고 표식만 한 번 여분으로 남는다(거짓 표시가 아니라 쪼갬 1회).
   }
 
   // 그룹×강사별 2D 병합 사전계산. cellAt(행,열)=그 교시·요일 슬롯, blocks=병합 블록(anchor만).
@@ -479,18 +457,9 @@ function GroupTable({
       const raw = computeBlocks(
         rows.length,
         t.days.length,
-        // 🔴 예약이 걸린 (강사, 요일, **그 반**)만 쪼갠다 — 규약은 `stray-reserved.ts` 한 벌이다(세로 병합은
-        //    그대로, 월·목은 서로 다른 키라 도로 붙지 않는다, 빈 칸은 표식 없음).
-        // ⚠️ 쪼개진 **그 반**은 월+목 한 칸이 요일마다 하나씩 두 칸이 된다 — 열 폭은 `colgroup` 고정이라 다른
-        //    반·다른 열의 격자는 그대로지만, 그 반에 한해 **반 드래그가 그 요일 블록만** 옮기고 반교시 확장도
-        //    요일마다 따로 판정된다(예약이 걸린 반에서만 생기는 값이다).
-        (ri, ci) =>
-          cellKeyWithStrayMark(
-            cellClassKey(cellAt(ri, ci).map((s) => s.classId)),
-            t.name,
-            t.days[ci]!,
-            strayMarks,
-          ),
+        // 🔴 병합 키는 **그 칸의 반**뿐이다 — 보강 예약은 키에 섞지 않는다(원장 2026-09-15: 월+목 한 칸은
+        //    보강이 걸려도 붙어 있고, 요일은 박스 줄 표식이 말한다).
+        (ri, ci) => cellClassKey(cellAt(ri, ci).map((s) => s.classId)),
         g.merge,
       );
       // 반교시(그룹 한쪽 교시만) 수업은 셀을 그룹 전체 높이로 — 학생 명단 영역을 어느 셀이나 같게.

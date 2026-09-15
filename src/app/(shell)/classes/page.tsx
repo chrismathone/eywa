@@ -1,3 +1,4 @@
+import { tipProps } from "@/components/hover-tip/tip";
 import Link from "next/link";
 import { BookOpen, Users, UserCheck, SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -509,7 +510,7 @@ function TableView({
                 </td>
                 <td className="text-text-dim" data-cell="wide" data-empty={c.notes?.trim() ? undefined : "true"}>
                   {c.notes ? (
-                    <span className="line-clamp-1" title={c.notes}>
+                    <span className="line-clamp-1" {...tipProps(c.notes)}>
                       {c.notes}
                     </span>
                   ) : (
