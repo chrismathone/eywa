@@ -1,0 +1,71 @@
+.surface {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 16px 16px;
+}
+
+.dialTheme {
+  /* 원형 차트와 범례 표식에만 남색을 적용한다. 캔버스·버튼·범례 문구는 흰 배경을 따른다. */
+  --background: var(--map-canvas, #ffffff);
+  --card: #10223c;
+  --foreground: #edf4ff;
+  --text-dim: #a7bad4;
+  --neutral-fill: #8196b4;
+  --bg-soft: #1a2e49;
+  --primary: #a2c8ff;
+  --primary-foreground: #0b192d;
+  --primary-soft: #223e61;
+  --line: #344b69;
+  --line-strong: #607a9b;
+  --green: #91c9e5;
+  --amber: #f1c381;
+  --danger: #f0a4ad;
+  --map-tint-base: #0b192d;
+  --map-quarter-1: #92bafa;
+  --map-quarter-2: #7faacb;
+  --map-quarter-3: #a4c6e8;
+  --map-quarter-4: #849cbf;
+  --map-focus-fill: #315e96;
+  --map-focus-ink: #ffffff;
+  --map-focus-stroke: #b3d7ff;
+  --map-completed-ink: #c1e6fa;
+  --map-progress-ink: #ffe0b2;
+  --map-progress-fill: #514333;
+  --map-grid: #243952;
+  --map-ring-stroke: #6b89ae;
+  --map-exterior-ink: var(--map-label-ink, #315783);
+  color: var(--foreground);
+}
+
+.backgroundOn {
+  --map-canvas: #0b192d;
+  --map-label-ink: #a9c7ed;
+  background: var(--map-canvas);
+  color-scheme: dark;
+}
+
+.original [data-dial-layer="guides"] {
+  display: none;
+}
+
+.original svg rect {
+  rx: 14px;
+}
+
+.surface svg {
+  font-variant-numeric: tabular-nums;
+}
+
+.legend {
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 767px) {
+  .surface {
+    padding: 16px 8px 12px;
+    border-radius: 12px;
+  }
+}

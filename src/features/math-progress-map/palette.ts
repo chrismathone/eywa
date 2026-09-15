@@ -1,10 +1,7 @@
 /**
- * 진도맵 색 — **앱 토큰만** 쓴다(`globals.css`의 CSS 변수). 화면 파일에 hex를 적지 않는다.
- *
- * 분기는 옅은 배경, 학습 상태는 민트·호박색·회색으로 읽는다. 선택은 학원색 채움과 흰 글자,
- * 현재 날짜는 호박색 점선으로 구분한다. 진행 중의 호박색은 이 지도 안에서 현재 위치를 뜻한다.
- * 글자가 있는 완료 칸은 민트 바탕 + 진한 잉크, 가는 날짜 눈금은 같은 초록을 더 진하게 쓴다.
- * 색은 칸에만 적용하고 글자나 다른 링 전체의 투명도를 낮추지 않는다.
+ * 진도맵 색 — CSS 토큰으로만 정의한다. 남색 지도는 progress-map.module.css의 지역 토큰,
+ * 바깥의 목록·상세는 기존 앱 토큰을 쓴다. 상태 판정은 두 표면에서 같다.
+ * 현재 날짜는 호박색 점선, 선택은 채움과 밝은 테두리로 구분한다.
  */
 import type { PillColor } from "@/components/atoms/pill";
 import type { ProgressStatus } from "./model";
@@ -22,14 +19,18 @@ export type QuarterTint = {
 
 /** color-mix로 옅기를 단계 짓는다 — 토큰 값이 바뀌어도(브랜드 색 주입 등) 따라온다. */
 function tint(token: string, pct: number): string {
-  return `color-mix(in srgb, var(${token}) ${pct}%, white)`;
+  return `color-mix(in srgb, var(${token}) ${pct}%, var(--map-tint-base, white))`;
+}
+
+function quarterTint(q: number, token: string, pct: number): string {
+  return `color-mix(in srgb, var(--map-quarter-${q}, var(${token})) ${pct}%, var(--map-tint-base, white))`;
 }
 
 export const QUARTER_TINT: Record<1 | 2 | 3 | 4, QuarterTint> = {
-  1: { soft: tint("--blue", 5), mid: tint("--blue", 13), ink: "var(--blue)", pill: "blue", label: "1분기" },
-  2: { soft: tint("--green", 5), mid: tint("--green", 13), ink: "var(--green)", pill: "green", label: "2분기" },
-  3: { soft: tint("--chart-3", 6), mid: tint("--chart-3", 15), ink: "var(--amber)", pill: "amber", label: "3분기" },
-  4: { soft: tint("--purple", 5), mid: tint("--purple", 13), ink: "var(--purple)", pill: "purple", label: "4분기" },
+  1: { soft: quarterTint(1, "--blue", 5), mid: quarterTint(1, "--blue", 13), ink: "var(--map-quarter-1, var(--blue))", pill: "blue", label: "1분기" },
+  2: { soft: quarterTint(2, "--green", 5), mid: quarterTint(2, "--green", 13), ink: "var(--map-quarter-2, var(--green))", pill: "green", label: "2분기" },
+  3: { soft: quarterTint(3, "--chart-3", 6), mid: quarterTint(3, "--chart-3", 15), ink: "var(--map-quarter-3, var(--amber))", pill: "amber", label: "3분기" },
+  4: { soft: quarterTint(4, "--purple", 5), mid: quarterTint(4, "--purple", 13), ink: "var(--map-quarter-4, var(--purple))", pill: "purple", label: "4분기" },
 };
 
 /**
@@ -46,11 +47,11 @@ export function displayStatusOf(status: ProgressStatus | null, date: string, asO
 
 export const STATUS_FILL: Record<DisplayStatus, string> = {
   completed: tint("--green", 20),
-  "in-progress": tint("--chart-3", 30),
+  "in-progress": `var(--map-progress-fill, ${tint("--chart-3", 30)})`,
   missed: tint("--neutral-fill", 42),
   planned: "var(--bg-soft)",
-  "no-plan": "white",
-  none: "white",
+  "no-plan": "var(--map-tint-base, white)",
+  none: "var(--map-tint-base, white)",
 };
 
 /** 좁은 날짜 눈금은 글자가 없어 더 진한 색으로 학습 리듬을 드러낸다. */
@@ -62,8 +63,8 @@ export const TICK_FILL: Record<DisplayStatus, string> = {
 
 /** 작은 글자는 옅은 칸 위에 진한 잉크로 — 앱 토큰을 따라가면서 명도 대비를 확보한다. */
 export const STATUS_INK: Record<DisplayStatus, string> = {
-  completed: "color-mix(in srgb, var(--green) 80%, var(--foreground))",
-  "in-progress": "color-mix(in srgb, var(--amber) 80%, var(--foreground))",
+  completed: "var(--map-completed-ink, color-mix(in srgb, var(--green) 80%, var(--foreground)))",
+  "in-progress": "var(--map-progress-ink, color-mix(in srgb, var(--amber) 80%, var(--foreground)))",
   missed: "var(--foreground)",
   planned: "var(--foreground)",
   "no-plan": "var(--foreground)",
@@ -93,16 +94,16 @@ export const STATUS_PILL: Record<DisplayStatus, PillColor> = {
 };
 
 /** 선택은 진한 채움 + 흰 글자·여백, 현재 위치는 호박색 점선. 보기 단위의 원 테두리는 더 옅게. */
-export const FOCUS_FILL = "var(--primary)";
-export const FOCUS_INK = "var(--primary-foreground)";
-export const FOCUS_STROKE = "var(--primary)";
+export const FOCUS_FILL = "var(--map-focus-fill, var(--primary))";
+export const FOCUS_INK = "var(--map-focus-ink, var(--primary-foreground))";
+export const FOCUS_STROKE = "var(--map-focus-stroke, var(--primary))";
 export const TODAY_STROKE = "var(--amber)";
-export const RING_STROKE = tint("--primary", 35);
+export const RING_STROKE = `var(--map-ring-stroke, ${tint("--primary", 35)})`;
 export const HAIRLINE = "var(--line)";
 
 /** 날짜 표식은 학습 상태와 별개다. 선택된 공휴일은 남색 위에서도 읽히는 밝은 붉은 잉크. */
 export const HOLIDAY_INK = "var(--danger)";
-export const HOLIDAY_SELECTED_INK = tint("--danger", 28);
+export const HOLIDAY_SELECTED_INK = "color-mix(in srgb, var(--danger) 28%, white)";
 export const HOLIDAY_FILL = tint("--danger", 7);
 export const HOLIDAY_TICK_FILL = tint("--danger", 42);
 export const NO_CLASS_FILL = "var(--bg-soft)";

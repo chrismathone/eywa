@@ -17,11 +17,11 @@ import { CURRENT_STROKE_WIDTH, FONT, SEGMENT_TEXT } from "./svg-consts";
 const LABEL_R = (RINGS.year[0] + RINGS.year[1]) / 2;
 const STACK_DY = 16;
 
-/** 달 진도율 알약 — 완료는 민트, 이번 달은 호박색, 그 외는 흰 바탕. */
+/** 달 진도율 배지 — 완료·진행 중은 상태 색, 그 외는 중립 표면. */
 function pctPill(status: "completed" | "in-progress" | "other"): { fill: string; ink: string } {
   if (status === "completed") return { fill: STATUS_FILL.completed, ink: STATUS_INK.completed };
   if (status === "in-progress") return { fill: STATUS_FILL["in-progress"], ink: STATUS_INK["in-progress"] };
-  return { fill: "white", ink: "var(--foreground)" };
+  return { fill: "var(--card)", ink: "var(--text-dim)" };
 }
 
 /**
@@ -47,7 +47,7 @@ export const YearRing = memo(function YearRing() {
           <g key={m.month}>
             <Segment
               d={arcPath(RINGS.year[0], RINGS.year[1], a0, a1)}
-              fill={m.plannedPages === 0 ? "white" : m.isPast || m.isCurrent ? tint.mid : tint.soft}
+              fill={m.plannedPages === 0 ? STATUS_FILL["no-plan"] : m.isPast || m.isCurrent ? tint.mid : tint.soft}
               stroke={m.isCurrent ? TODAY_STROKE : undefined}
               strokeWidth={m.isCurrent ? CURRENT_STROKE_WIDTH : 0}
               dashed={m.isCurrent}
@@ -60,7 +60,7 @@ export const YearRing = memo(function YearRing() {
               <text x={lp.x} y={lp.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.month} fontWeight={700} fill={focused ? FOCUS_INK : "var(--foreground)"}>
                 {m.month}월
               </text>
-              <rect x={pp.x - 33} y={pp.y - 14} width={66} height={28} rx={14} fill={pill.fill} stroke={pill.fill === "white" ? HAIRLINE : "none"} />
+              <rect x={pp.x - 33} y={pp.y - 14} width={66} height={28} rx={6} fill={pill.fill} stroke={HAIRLINE} strokeWidth={0.75} />
               <text x={pp.x} y={pp.y + 1} textAnchor="middle" dominantBaseline="central" fontSize={FONT.monthPct} fontWeight={700} fill={pill.ink} className="num">
                 {m.plannedPages > 0 ? `${m.pct}%` : "—"}
               </text>

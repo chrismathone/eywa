@@ -9,6 +9,7 @@ import { monthOf, resolveDay, resolveWeek, weekdaySlots } from "../focus";
 import { CX, CY, DRILL_RINGS, arcPath, midAngle, polar, strokeArcPath, withGap } from "../geometry";
 import { FOCUS_INK, HAIRLINE, HOLIDAY_FILL, HOLIDAY_INK, HOLIDAY_SELECTED_INK, NO_CLASS_FILL, NO_CLASS_INK, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
 import type { HoverTarget } from "../tooltip-content";
+import { DialGuides } from "./dial-guides";
 import { DialLayer } from "./dial-layer";
 import { useProgressMap } from "./map-state";
 import { Segment } from "./segment";
@@ -61,7 +62,7 @@ export const DrilldownDial = memo(function DrilldownDial() {
   } else {
     periods = weekdaySlots(week).map((d, index) => {
       if (!d) return { key: `empty-${index}`, title: `${WEEKDAY_KO[(index + 1) % 7]}요일`, subtitle: "이 달 밖", metric: "", label: "이 달 밖",
-        fill: "white", ink: NO_CLASS_INK, accent: HAIRLINE, pct: 0 };
+        fill: STATUS_FILL.none, ink: NO_CLASS_INK, accent: HAIRLINE, pct: 0 };
       const selected = focus.day === d.date;
       return {
         key: d.date, title: `${WEEKDAY_KO[(index + 1) % 7]}요일`, subtitle: formatMd(d.date),
@@ -89,6 +90,7 @@ export const DrilldownDial = memo(function DrilldownDial() {
   return (
     <div className={styles.dial} role="group" data-drill-level={level}
       aria-label={`${progress.studentName} 학습 진도맵 — ${scopeLabel} · ${progress.estimated ? "예상 진도" : `진도율 ${aggregate.pct}%`}`}>
+      <DialLayer name="guides"><DialGuides periods={periods.length} /></DialLayer>
       <DialLayer name={LAYER_NAMES[level]}>
         {periods.map((period, index) => {
           const [a0, a1] = withGap([index * 360 / periods.length, (index + 1) * 360 / periods.length], 1.4);
@@ -113,12 +115,12 @@ export const DrilldownDial = memo(function DrilldownDial() {
       </DialLayer>
       <DialLayer name="center">
         <g className="pointer-events-none select-none" textAnchor="middle" dominantBaseline="central">
-          <circle cx={CX} cy={CY} r={DRILL_RINGS.center} fill="white" stroke={HAIRLINE} />
+          <circle cx={CX} cy={CY} r={DRILL_RINGS.center} fill="var(--card)" stroke={HAIRLINE} />
           <circle cx={CX} cy={CY} r={PROGRESS_RADIUS} fill="none" stroke="var(--bg-soft)" strokeWidth={PROGRESS_WIDTH} />
           {aggregate.pct > 0 ? <path d={strokeArcPath(PROGRESS_RADIUS, 0, aggregate.pct * 3.6)} fill="none" stroke="var(--green)" strokeWidth={PROGRESS_WIDTH} strokeLinecap="round" /> : null}
           <text x={CX} y={CY - 95} fontSize={27} fontWeight={700} fill="var(--foreground)">{scopeLabel}</text>
           <text x={CX} y={CY - 15} fontSize={centerValue === "수업 없음" ? 54 : 84} fontWeight={700} fill={mode === "day" && day.holidayName ? HOLIDAY_INK : "var(--foreground)"}>{centerValue}</text>
-          <text x={CX} y={CY + 53} fontSize={25} fill="var(--foreground)">{progress.estimated ? `계획 ${aggregate.plannedPages}쪽` : `${aggregate.donePages} / ${aggregate.plannedPages}쪽`}</text>
+          <text x={CX} y={CY + 53} fontSize={25} fill="var(--text-dim)">{progress.estimated ? `계획 ${aggregate.plannedPages}쪽` : `${aggregate.donePages} / ${aggregate.plannedPages}쪽`}</text>
           <text x={CX} y={CY + 107} fontSize={24} fontWeight={600} fill={mode === "day" && day.holidayName ? HOLIDAY_INK : "var(--text-dim)"}>{caption}</text>
           <text x={CX} y={CY + 160} fontSize={20} fill="var(--text-dim)">{HINTS[level]}</text>
         </g>
