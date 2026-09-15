@@ -56,8 +56,9 @@ export const DrilldownDial = memo(function DrilldownDial() {
     periods = month.weeks.map((w) => ({
       key: `w${w.index}`, title: `${w.index}주`, subtitle: formatRange(w.start, w.end),
       metric: metric(w.pct, w.plannedPages), label: `${month.month}월 ${w.index}주차 · ${metric(w.pct, w.plannedPages)} · 날짜별로 확대`,
-      fill: STATUS_FILL[w.status], ink: STATUS_INK[w.status], accent: "var(--green)",
-      pct: w.pct, current: w.isCurrent, target: { kind: "week", month: month.month, week: w.index }, onSelect: () => selectWeek(month.month, w.index),
+      fill: STATUS_FILL[w.status], ink: focus.week === w.index ? FOCUS_INK : STATUS_INK[w.status], accent: "var(--green)",
+      pct: w.pct, current: w.isCurrent, selected: focus.week === w.index,
+      target: { kind: "week", month: month.month, week: w.index }, onSelect: () => selectWeek(month.month, w.index),
     }));
   } else {
     periods = weekdaySlots(week).map((d, index) => {
