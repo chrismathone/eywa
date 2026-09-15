@@ -1,5 +1,16 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-15 (2) — AI 키를 **기능별 8그룹**으로 · 안 쓰는 환경변수 정리
+
+원장 *"claude나 gemini 등과 같이 중복해서 사용하는것들 … 기능별로 키를 발급받아서 사용량 체크를 하려고"* · *"환경변수를 싹 정리하고 싶은데"* · *"env.local에서도 사용하지 않는 키 싹 정리"*.
+
+- **키 이름 = `<회사>_API_KEY_<그룹>`** — 그룹 8개(`MENT`·`MEETING`·`ENROLLMENT`·`CONSULTATIONS`·`BRIEFING`·`ATTENDANCE`·`NOTICE`·`STAFF`)는 호출부 식별자(`meta.feature`)에서 [`FEATURE_KEY_GROUP`](src/lib/ai/models.ts)이 도출한다. 🔴 새 AI 호출부는 그 표에 한 줄 — 가드 [`key-groups.test.ts`](src/lib/ai/key-groups.test.ts)가 빠진 것·죽은 것을 잡는다.
+- **고르는 순서 = 그룹 키 → 옛 버킷 키 → 기본 키**(`resolveKeyEnv`). 그룹 키를 아직 안 넣었어도 기본 키로 돌아 **멈추는 기능이 없다** — 키를 하나씩 발급해 넣는 동안의 안전장치다. 오늘 프로덕션(그룹 키 0개) 기준으로는 **모든 호출이 지금과 글자 그대로 같은 키**를 쓴다.
+- 🔴 **Anthropic도 기본 키로 넘어간다**(규칙 변경) — 예전엔 `ANTHROPIC_API_KEY_CONSULTATIONS`가 없으면 Claude를 통째로 건너뛰었는데(빌링 분리), 그 규칙을 그룹에 그대로 쓰면 키가 아직 없는 기능이 **조용히 DeepSeek으로 바뀐다**(멘트 품질이 달라진다).
+- **`ai_usage_logs.key_name`에 실제로 쓴 키 이름**(`ment`·`consultations`·`default`)을 남긴다 — 기본 키로 넘어간 호출이 `default`로 찍혀 **빠진 키가 표에서 드러난다**. 클라이언트 캐시도 버킷이 아니라 **고른 env 이름** 단위.
+- **환경변수 정리**: Vercel에서 아무도 안 읽는 3개(`DATA_GO_KR_API_KEY`·`NEIS_API_KEY`·`SCHOOLINFO_API_KEY`)와 7/29에 없앤 `MEDIA_STORAGE_BACKEND`, 그리고 따로 등록돼 있던 Preview·Development 사본 23개를 지웠다(Production 29종은 그대로 — 지우기 전 값 백업 후 대조). 로컬 `.env.local`은 28 → 18개(안 쓰는 10개: `GEMINI_API_KEY`(소비처 0곳 — SDK도 안 깔려 있다)·`EDUTRIX_*`·`VERCEL_OIDC_TOKEN` 등). ⚠️ `FIREBASE_SERVICE_ACCOUNT_KEY`는 **앱에선 죽었지만 로컬 일회성 스크립트 6개**(`scripts/_english_sync/*`·`scripts/staff-roster-import/*`)가 아직 2순위 폴백으로 읽는다 — 지금은 1순위 `GOOGLE_SERVICE_ACCOUNT_KEY`가 있어 안 터진다(둘 다 없으면 그 스크립트들이 TypeError로 죽는다). ⚠️ Preview·Production이 **한 항목으로 묶인 변수**(VAPID 셋·`CONSULT_EXPORT_TOKEN`·`HR_ROSTER_SPREADSHEET_ID`·`DEEPSEEK_API_KEY`·`NOTION_TOKEN`)는 건드리지 않았다 — `vercel env rm`은 항목째 지워서 Production 값까지 날아간다.
+- 캘린더 가져오기의 죽은 `FIREBASE_SERVICE_ACCOUNT_KEY` 예비 경로 제거(그 GCP 프로젝트는 삭제됐다).
+
 ## 2026-09-15 (1) — 시간표 보강 박스가 월+목 병합을 쪼개지 않는다 · **메모 툴팁 = 카드** · 빗금 칸에 "누가 찍었나"
 
 원장 지시 셋: ① 캡처와 함께 *"반을 2개로 쪼개서 목요일만 보강처리되어있는데 … 이렇게 붙어있는 수업은 그냥 붙어있게 표시해줘 다른 퇴원이나 대기처럼"* ② 캡처와 함께 *"툴팁이 이렇게 생겼으면 좋겠어 메모같이 생기지 않고"* → *"왠만하면 모든 곳의 메모는 시간표에서 사진올린것처럼 생기면 좋겠네. 그냥 메모처럼하니까 너무 보기가 불편하다랄까?"* ③ 캡처와 함께 *"이 화면 몫 아닌 출석부 체크를 누가 했는지 마우스 올리면 알아볼 수 있게"*.

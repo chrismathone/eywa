@@ -25,24 +25,93 @@ export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
   reasoning: { anthropic: "claude-opus-4-7", upstage: null, deepseek: null },
 };
 
-// provider+keyName → env 변수명. 사용량 추적용 키 분리
-// (default = 등록상담+회의록, consultations = 학생 케어 인사이트).
-const KEY_ENV: Record<AiProvider, Record<AiKeyName, string>> = {
-  anthropic: { default: "ANTHROPIC_API_KEY", consultations: "ANTHROPIC_API_KEY_CONSULTATIONS" },
-  upstage: { default: "UPSTAGE_API_KEY", consultations: "UPSTAGE_API_KEY_CONSULTATIONS" },
-  deepseek: { default: "DEEPSEEK_API_KEY", consultations: "DEEPSEEK_API_KEY_CONSULTATIONS" },
+/**
+ * 기능별 키 그룹 — 원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*(8그룹 선택).
+ * env 이름 = `<회사>_API_KEY_<그룹 대문자>`(예 `ANTHROPIC_API_KEY_MENT` · `DEEPSEEK_API_KEY_MEETING`).
+ * 옛 `consultations` 버킷과 env 이름이 같게 두어(`ANTHROPIC_API_KEY_CONSULTATIONS`) 이미 있는 키를 그대로 쓴다.
+ */
+export type AiKeyGroup =
+  | "ment"
+  | "meeting"
+  | "enrollment"
+  | "consultations"
+  | "briefing"
+  | "attendance"
+  | "notice"
+  | "staff";
+
+/**
+ * 호출부 식별자(generateJSON `meta.feature`) → 키 그룹. 🔴 **새 AI 기능을 만들면 여기 한 줄**을 더한다 —
+ * 빠지면 기본 키로 불려 그 기능 사용량이 따로 안 잡힌다(가드 `key-groups.test.ts`가 잡는다).
+ */
+export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
+  // 수업보고서 멘트 — 원스크린 학부모 멘트 · 영어 AI 코멘트 · 프롬프트 미리보기 · 강사별 말투 프로파일
+  classnote_ment: "ment",
+  english_ment: "ment",
+  ment_prompt_preview: "ment",
+  ment_style_profile: "ment",
+  // 회의록 녹음 분석
+  meeting_analysis: "meeting",
+  // 콜&상담 — 녹음 분석 · 폼 자동입력 · 상담 준비 브리프
+  enrollment_analysis: "enrollment",
+  enrollment_form_extract: "enrollment",
+  enrollment_prep_brief: "enrollment",
+  // 원생상담 녹음 분석 · 원생 AI 케어
+  consultation_analysis: "consultations",
+  student_care: "consultations",
+  // 운영실 일일 브리핑
+  daily_briefing: "briefing",
+  // 출결 — 요약 · 학부모 결석 문자 판별
+  attendance_recap: "attendance",
+  parent_attendance_intent: "attendance",
+  // 공지 번역
+  notice_translate: "notice",
+  // 직원 계약서 — 글자 PDF 추출 · 스캔 OCR(Claude 전용)
+  staff_contract_pdf: "staff",
+  staff_contract_pdf_ocr: "staff",
+};
+
+/** 기능 이름 → 키 그룹(표에 없으면 null — 옛 버킷·기본 키로). 원형 속성 이름(`constructor` 등)은 거른다. */
+export function keyGroupOf(feature?: string | null): AiKeyGroup | null {
+  if (!feature || !Object.prototype.hasOwnProperty.call(FEATURE_KEY_GROUP, feature)) return null;
+  return FEATURE_KEY_GROUP[feature] ?? null;
+}
+
+const PROVIDER_KEY_ENV: Record<AiProvider, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  upstage: "UPSTAGE_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
 };
 
 /**
- * 실제 사용할 API 키 문자열(없으면 undefined). Upstage·DeepSeek은 consultations 전용 키가 없으면 default
- * 키로 폴백(키 1개만 넣어도 동작 — 스무스). Anthropic은 빌링 분리 위해 폴백 없음(기존 동작 보존).
+ * 실제로 쓸 키의 **env 이름**(없으면 null). 순서 = 기능 그룹 키 → 옛 버킷 키(`consultations`) → 기본 키.
+ * 🔴 2026-09-15부터 **Anthropic도 기본 키로 넘어간다.** 예전엔 consultations 키가 없으면 Claude를 통째로
+ * 건너뛰었는데(빌링 분리), 그 규칙을 기능 그룹에 그대로 쓰면 원장이 키를 하나씩 넣는 동안 키가 아직 없는
+ * 기능이 **조용히 DeepSeek으로 바뀐다**(멘트 품질이 달라진다). 넘어간 호출은 ai_usage_logs.key_name이
+ * 'default'로 남아 빠진 키가 드러난다.
  */
-export function resolveKey(provider: AiProvider, keyName: AiKeyName): string | undefined {
-  const specific = process.env[KEY_ENV[provider][keyName]];
-  if (specific) return specific;
-  if (provider === "upstage") return process.env[KEY_ENV.upstage.default];
-  if (provider === "deepseek") return process.env[KEY_ENV.deepseek.default];
-  return undefined;
+export function resolveKeyEnv(provider: AiProvider, keyName: AiKeyName, group?: AiKeyGroup | null): string | null {
+  const base = PROVIDER_KEY_ENV[provider];
+  const names = [
+    group ? `${base}_${group.toUpperCase()}` : null,
+    keyName !== "default" ? `${base}_${keyName.toUpperCase()}` : null,
+    base,
+  ];
+  for (const name of names) if (name && process.env[name]) return name;
+  return null;
+}
+
+/** 실제 사용할 API 키 문자열(없으면 undefined) — `resolveKeyEnv`가 고른 env의 값. */
+export function resolveKey(provider: AiProvider, keyName: AiKeyName, group?: AiKeyGroup | null): string | undefined {
+  const name = resolveKeyEnv(provider, keyName, group);
+  return name ? process.env[name] : undefined;
+}
+
+/** 사용량 표(ai_usage_logs.key_name)에 남길 짧은 이름 — 'ment' · 'consultations' · 'default'(키 없음 'none'). */
+export function keyLabelOf(provider: AiProvider, envName: string | null): string {
+  if (!envName) return "none";
+  const base = PROVIDER_KEY_ENV[provider];
+  return envName === base ? "default" : envName.slice(base.length + 1).toLowerCase();
 }
 
 /** env AI_PROVIDER로 기본 provider 선택(미설정 시 upstage = Solar Pro 3 기본). */
@@ -84,9 +153,10 @@ export function resolveModelChain(
   tier: AiTier,
   keyName: AiKeyName = "default",
   prefer?: AiProvider,
+  group?: AiKeyGroup | null,
 ): ResolvedModel[] {
   return providerOrder(tier, prefer)
-    .filter((provider) => AI_MODELS[tier][provider] && resolveKey(provider, keyName))
+    .filter((provider) => AI_MODELS[tier][provider] && resolveKey(provider, keyName, group))
     .map((provider) => ({ provider, model: AI_MODELS[tier][provider] as string, keyName }));
 }
 
@@ -96,8 +166,13 @@ export function resolveModelChain(
  *
  * `prefer`: 호출부가 특정 provider를 **선호**(강제 아님)하도록 지정. 키가 있으면 그걸, 없으면 평소 폴백 순서로(무중단).
  */
-export function resolveModel(tier: AiTier, keyName: AiKeyName = "default", prefer?: AiProvider): ResolvedModel {
-  const chain = resolveModelChain(tier, keyName, prefer);
+export function resolveModel(
+  tier: AiTier,
+  keyName: AiKeyName = "default",
+  prefer?: AiProvider,
+  group?: AiKeyGroup | null,
+): ResolvedModel {
+  const chain = resolveModelChain(tier, keyName, prefer, group);
   if (chain.length > 0) return chain[0];
   // 키 없음 — 모델 있는 첫 candidate(이후 클라 생성에서 throw → 호출부 stub). 기존 동작 보존.
   const order = providerOrder(tier, prefer);

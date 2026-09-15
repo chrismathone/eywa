@@ -33,12 +33,13 @@ const FUTURE_DAYS = 400;
  *    "Vercel에 넣었는데?"와 "그건 로컬 파일입니다"를 두 번 주고받았다. 어느 이름이 있고 없는지를 적는다.
  */
 function loadServiceAccount(): { ok: true; email: string; key: string } | { ok: false; reason: string } {
-  // 🔴 있는 키를 순서대로 쓴다 — 환경마다 무엇이 들어 있는지가 다르다(로컬엔 FIREBASE, 프로덕션엔 시트 키).
+  // 🔴 있는 키를 순서대로 쓴다 — 환경마다 무엇이 들어 있는지가 다르다(프로덕션엔 캘린더 전용 키).
   //    ⚠️ 어느 키든 **그 키가 속한 GCP 프로젝트에서 Calendar API가 켜져 있어야** 한다. 안 켜져 있으면
   //       인증은 되고 조회에서 "has not been used in project …"로 막힌다(권한 문제로 오인하기 쉽다).
+  //    옛 `FIREBASE_SERVICE_ACCOUNT_KEY` 후보는 걷어냈다(2026-09-15) — 그 GCP 프로젝트(ijw-calander)를 삭제해
+  //    죽은 키였고, 환경변수 정리 때 로컬에서도 지웠다.
   const candidates: [string, string | undefined][] = [
     ["GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY", process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY],
-    ["FIREBASE_SERVICE_ACCOUNT_KEY", process.env.FIREBASE_SERVICE_ACCOUNT_KEY],
     ["GOOGLE_SERVICE_ACCOUNT_KEY", process.env.GOOGLE_SERVICE_ACCOUNT_KEY],
   ];
   const found = candidates.find(([, v]) => v && v.trim().length > 0);
@@ -48,7 +49,7 @@ function loadServiceAccount(): { ok: true; email: string; key: string } | { ok: 
     return {
       ok: false,
       reason:
-        "서비스 계정 키가 이 환경에 없습니다 — GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY · FIREBASE_SERVICE_ACCOUNT_KEY · GOOGLE_SERVICE_ACCOUNT_KEY 중 하나를 Vercel(Production)에 넣고 재배포하세요.",
+        "서비스 계정 키가 이 환경에 없습니다 — GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY · GOOGLE_SERVICE_ACCOUNT_KEY 중 하나를 Vercel(Production)에 넣고 재배포하세요.",
     };
   }
   let parsed: { client_email?: string; private_key?: string };

@@ -2083,7 +2083,9 @@ export const aiUsageLogs = pgTable(
     feature: text("feature").notNull(), // 'meeting_analysis' | 'enrollment_analysis' | 'classnote_ment' | 'daily_briefing' …
     provider: text("provider").notNull(), // 'anthropic' | 'upstage'
     model: text("model").notNull(), // 실사용 모델 id (UI 미노출 — 계측 전용)
-    keyName: text("key_name").notNull(), // 빌링 버킷: 'default' | 'consultations'
+    // 실제로 쓴 키 이름 — 2026-09-15부터 **기능 그룹**('ment'·'meeting'·'briefing'…)이 들어온다.
+    // 'default'로 찍히면 그 기능의 그룹 키가 아직 없어 기본 키로 넘어갔다는 뜻이다(빠진 키가 표에서 드러난다).
+    keyName: text("key_name").notNull(),
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
     ok: boolean("ok").notNull().default(true),

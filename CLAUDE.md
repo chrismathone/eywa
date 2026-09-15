@@ -191,13 +191,35 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
   (`response_format: json_object`) 사용 — 프롬프트에 "JSON" 단어 필수(현 프롬프트 충족).
 - **자동 폴백**: 기본 provider 키가 없으면 다른 provider(키 있는 쪽)로 1회 폴백 → 둘 다 없으면
   호출부의 기존 stub/error로 떨어짐(무중단). `model_version`엔 실제 사용 모델 id 저장(UI 미노출).
-- 대안: **Gemini 2.5 Flash**(`GEMINI_API_KEY` 등록됨) — fast-tier 후보, 코드 통합 미구현.
+- 대안: **Gemini 2.5 Flash** — fast-tier 후보, 코드 통합 미구현(⚠️ `GEMINI_API_KEY`는 아무도 안 읽어 2026-09-15 환경변수 정리에서 뺐다. 붙일 때 다시 넣는다).
 
-키 분리 (사용량 추적):
-- `UPSTAGE_API_KEY` / `ANTHROPIC_API_KEY` → 등록상담(/enrollment) + 회의록(/meetings)
-- `UPSTAGE_API_KEY_CONSULTATIONS` / `ANTHROPIC_API_KEY_CONSULTATIONS` → 학생 케어 인사이트(/students/[id])
-  (Upstage는 consultations 전용 키 없으면 `UPSTAGE_API_KEY`로 폴백)
-- `GEMINI_API_KEY` → 향후 fast-tier 작업용 (현재 미사용)
+### 키 분리 = 기능별 8그룹 (원장 2026-09-15 *"기능별로 키를 발급받아서 사용량 체크를 하려고"*)
+**env 이름 = `<회사>_API_KEY_<그룹>`**(회사 = `ANTHROPIC`·`DEEPSEEK`·`UPSTAGE`). 그룹은 호출부 식별자(`meta.feature`)에서
+[`FEATURE_KEY_GROUP`](src/lib/ai/models.ts)이 도출한다 — 🔴 **새 AI 호출부를 만들면 그 표에 한 줄**을 더할 것(가드
+[`key-groups.test.ts`](src/lib/ai/key-groups.test.ts)가 빠진 것·죽은 것을 잡는다).
+
+| 그룹 | 호출부(meta.feature) | 지금 1순위 |
+|---|---|---|
+| `MENT` | classnote_ment · english_ment · ment_prompt_preview · ment_style_profile | Claude(Haiku·Sonnet) |
+| `MEETING` | meeting_analysis | DeepSeek |
+| `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | DeepSeek(분석·브리프) · Claude(폼) |
+| `CONSULTATIONS` | consultation_analysis · student_care | DeepSeek(분석) · Claude(케어) |
+| `BRIEFING` | daily_briefing | Claude |
+| `ATTENDANCE` | attendance_recap · parent_attendance_intent | DeepSeek |
+| `NOTICE` | notice_translate | DeepSeek |
+| `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
+
+- **키 고르는 순서 = 그룹 키 → 옛 버킷 키(`_CONSULTATIONS`) → 기본 키**(`resolveKeyEnv`). 그룹 키가 아직 없어도
+  기본 키로 돌아 **멈추는 기능이 없다**(키를 하나씩 넣는 동안의 안전장치).
+- 🔴🔴 **기본 키 셋(`ANTHROPIC_API_KEY`·`DEEPSEEK_API_KEY`·`UPSTAGE_API_KEY`)은 절대 지우지 말 것** — 그룹 키를
+  다 넣었어도 **표에 없는 기능·`meta`를 안 넘긴 새 호출부의 유일한 안전망**이다. 지우면 그 호출이 에러가 아니라
+  **조용히 다음 회사로** 넘어가 모델과 품질이 바뀐다(환경변수를 정리할 때 "이제 그룹 키가 있으니 기본 키는 중복"으로
+  읽히기 쉬운 자리라 못박는다).
+- 🔴 **2026-09-15부터 Anthropic도 기본 키로 넘어간다** — 예전엔 `ANTHROPIC_API_KEY_CONSULTATIONS`가 없으면 Claude를
+  통째로 건너뛰었는데(빌링 분리), 그 규칙이면 키가 아직 없는 기능이 **조용히 DeepSeek으로 바뀐다**(멘트 품질이 달라진다).
+- **어느 키로 불렸는지는 `ai_usage_logs.key_name`**에 남는다(`ment`·`consultations`·`default`). 기본 키로 넘어간 호출은
+  `default`로 찍히니 **빠진 키가 표에서 드러난다**. 기능별 토큰·비용은 이 표가 이미 기능 단위로 쌓고 있고, 키를 나누는 것은
+  각 회사 콘솔에서도 기능별 청구액을 보기 위해서다.
 
 ---
 

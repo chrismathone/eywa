@@ -3,7 +3,17 @@ import { withFactGuard } from "./fact-guard";
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
 import { getDeepseek } from "./deepseek";
-import { resolveModel, resolveModelChain, type AiKeyName, type AiProvider, type AiTier } from "./models";
+import {
+  keyGroupOf,
+  keyLabelOf,
+  resolveKeyEnv,
+  resolveModel,
+  resolveModelChain,
+  type AiKeyGroup,
+  type AiKeyName,
+  type AiProvider,
+  type AiTier,
+} from "./models";
 import { reportWarning } from "@/lib/observability/report-error";
 
 /**
@@ -82,7 +92,10 @@ export type GenerateJSONOptions = {
   maxTokens: number;
   /** 기본 balanced(현 모든 호출). reasoning은 Anthropic 고정. */
   tier?: AiTier;
-  /** 빌링 버킷. 기본 default(등록상담+회의록), 학생 케어는 "consultations". */
+  /**
+   * 옛 빌링 버킷(기본 default, 학생 케어는 "consultations"). 🔑 2026-09-15부터 키는 **기능 그룹이 먼저**다 —
+   * `meta.feature` → `FEATURE_KEY_GROUP`(./models) → `<회사>_API_KEY_<그룹>`, 없으면 이 버킷 → 기본 키.
+   */
   keyName?: AiKeyName;
   /**
    * provider 선호(강제 아님 — 키 없으면 평소 폴백). 녹음 분석은 구조화 추출 품질을 위해
@@ -129,7 +142,8 @@ export async function recordUsage(entry: {
   meta?: GenerateJSONOptions["meta"];
   provider: AiProvider;
   model: string;
-  keyName: AiKeyName;
+  /** 실제로 불린 키의 짧은 이름('ment' · 'consultations' · 'default') — 기본 키로 넘어간 호출이 드러난다. */
+  keyName: string;
   usage?: ProviderUsage;
   ok: boolean;
   error?: string;
@@ -269,10 +283,11 @@ async function callProvider(
   provider: AiProvider,
   model: string,
   keyName: AiKeyName,
+  group: AiKeyGroup | null,
   opts: GenerateJSONOptions,
 ): Promise<ProviderCall> {
   if (provider === "upstage") {
-    const client = getUpstage(keyName);
+    const client = getUpstage(keyName, group);
     // 변수(리터럴 아님)로 만들어 reasoning_effort(Upstage 확장 파라미터, 표준 타입 밖)를 부착 —
     // 리터럴 직접 전달 시 excess-property 검사에 걸리므로 base 변수로 우회. non-stream 오버로드(res.choices) 유지.
     const base = {
@@ -297,7 +312,7 @@ async function callProvider(
     };
   }
   if (provider === "deepseek") {
-    const client = getDeepseek(keyName);
+    const client = getDeepseek(keyName, group);
     // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
     // DeepSeek 파라미터가 아니라 미부착. v4-pro(추론형)는 답을 content에, 사고과정을 reasoning_content에
     // 분리하므로 content 우선 + 비면 reasoning_content 폴백(빈 문자열이면 parseJsonLoose가 표면화).
@@ -326,7 +341,7 @@ async function callProvider(
       truncated: res.choices[0]?.finish_reason === "length",
     };
   }
-  const client = getAnthropic(keyName);
+  const client = getAnthropic(keyName, group);
   // document(PDF)가 있으면 content를 블록 배열로 — 문서 블록 + 텍스트 지시(비전 OCR 경로).
   const userContent = opts.document
     ? ([
@@ -376,15 +391,20 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
   const opts: GenerateJSONOptions = { ...rawOpts, prompt: withFactGuard(rawOpts.prompt) };
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
-  const chain = resolveModelChain(tier, keyName, opts.provider);
+  // 기능별 키 그룹(원장 2026-09-15) — 호출부 식별자에서 도출. 표에 없는 기능이면 null(옛 버킷·기본 키로).
+  const group = keyGroupOf(opts.meta?.feature);
+  const keyLabel = (p: AiProvider) => keyLabelOf(p, resolveKeyEnv(p, keyName, group));
+  const chain = resolveModelChain(tier, keyName, opts.provider, group);
   // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
-  let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider)];
+  let candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider, group)];
   if (opts.document) {
     // 문서(PDF) 입력은 Anthropic만 받는다 — 다른 provider로 폴백하면 첨부가 조용히 사라진 채
     // "본문 없음" 응답이 나와 원인을 못 찾는다. 후보를 한정하고, 없으면 키 문제를 그대로 말한다.
     candidates = candidates.filter((c) => c.provider === "anthropic");
     if (candidates.length === 0) {
-      throw new Error("스캔 문서 인식은 Anthropic(Claude) API 키가 필요합니다 — 관리자가 ANTHROPIC_API_KEY를 확인하세요.");
+      throw new Error(
+        `스캔 문서 인식은 Anthropic(Claude) API 키가 필요합니다 — 관리자가 ${group ? `ANTHROPIC_API_KEY_${group.toUpperCase()}(없으면 ANTHROPIC_API_KEY)` : "ANTHROPIC_API_KEY"}를 확인하세요.`,
+      );
     }
   }
 
@@ -393,14 +413,14 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
     const { provider, model } = candidates[i];
     let call: ProviderCall | null = null;
     try {
-      call = await callProvider(provider, model, keyName, opts);
+      call = await callProvider(provider, model, keyName, group, opts);
     } catch (e) {
       lastErr = e;
       await recordUsage({
         meta: opts.meta,
         provider,
         model,
-        keyName,
+        keyName: keyLabel(provider),
         ok: false,
         error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
       });
@@ -421,7 +441,7 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
     }
     if (!call) continue; // 도달 불가(위 catch는 continue 또는 throw) — 타입 안전용
     // provider 호출 성공 = 토큰은 이미 소비됨 — 파싱 실패 여부와 무관하게 usage를 기록.
-    await recordUsage({ meta: opts.meta, provider, model, keyName, usage: call.usage, ok: true });
+    await recordUsage({ meta: opts.meta, provider, model, keyName: keyLabel(provider), usage: call.usage, ok: true });
     try {
       return { data: parseJsonLoose<T>(call.text), model };
     } catch (e) {
