@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { curriculumPeriods } from "../../timeline-data";
 import { VIEW_MODE_LABEL, type ViewMode } from "../../model";
 import { useProgressMap } from "../map-state";
@@ -16,9 +16,27 @@ export function CurriculumTimelineCard() {
   const visible = mode === "quarter" ? periods.filter((period) => period.quarter === Math.ceil(focus.month / 3))
     : ["month", "week", "day"].includes(mode) ? periods.filter((period) => period.month === focus.month) : periods;
   const [expandedMonth, setExpandedMonth] = useState<number | null>(actualMonth);
+  const [desktopHeight, setDesktopHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const map = document.querySelector<HTMLElement>('[data-map-design="original"]');
+    if (!map) return;
+    const sync = () => {
+      if (window.matchMedia("(min-width: 1024px)").matches) {
+        const next = Math.round(map.getBoundingClientRect().height * 100) / 100;
+        setDesktopHeight(next > 0 ? next : null);
+      } else {
+        setDesktopHeight(null);
+      }
+    };
+    const observer = new ResizeObserver(sync);
+    observer.observe(map);
+    window.addEventListener("resize", sync);
+    sync();
+    return () => { observer.disconnect(); window.removeEventListener("resize", sync); };
+  }, []);
   const scopeKey = `card:${view.year}:${mode}:${visible.map((period) => period.month).join(",")}`;
   const { layoutRef, navigateMonth, registerMonth, programmaticScroll } = useTimelineScrollSpy(currentProgressPosition, setViewedPosition, scopeKey);
-  return <section className={styles.timelineCard} aria-label={`${view.year}년 진도 요약`}>
+  return <section className={styles.timelineCard} style={desktopHeight ? { height: desktopHeight } : undefined} aria-label={`${view.year}년 진도 요약`}>
     <header className={styles.timelineCardHeader}>
       <div><h2>{view.year}년 진도 요약</h2><p>오른쪽 영역만 스크롤해 월별 진도를 확인하세요.</p></div>
       <span>{VIEW_MODE_LABEL[mode as ViewMode]}</span>
