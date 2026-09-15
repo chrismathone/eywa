@@ -1,4 +1,9 @@
 .surface {
+  --map-completed-tick: #174481;
+  --map-focus-fill: #ffd25b;
+  --map-focus-ink: #174481;
+  --map-focus-stroke: #ffd25b;
+  --map-holiday-selected-ink: #9f2637;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -26,9 +31,6 @@
   --map-quarter-2: #7faacb;
   --map-quarter-3: #a4c6e8;
   --map-quarter-4: #849cbf;
-  --map-focus-fill: #315e96;
-  --map-focus-ink: #ffffff;
-  --map-focus-stroke: #b3d7ff;
   --map-completed-ink: #c1e6fa;
   --map-progress-ink: #ffe0b2;
   --map-progress-fill: #514333;

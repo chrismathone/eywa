@@ -11,7 +11,7 @@ export function Legend({ navy = false }: { navy?: boolean }) {
         <li key={s} className="text-text-dim flex items-center gap-1.5 text-xs font-medium">
           <span
             className={`${swatchTheme} inline-block size-3 rounded-full`}
-            style={{ background: navy ? TICK_FILL[s] : STATUS_FILL[s], boxShadow: s === "no-plan" || s === "planned" ? "inset 0 0 0 1px var(--line-strong)" : undefined }}
+            style={{ background: navy || s === "completed" ? TICK_FILL[s] : STATUS_FILL[s], boxShadow: s === "no-plan" || s === "planned" ? "inset 0 0 0 1px var(--line-strong)" : undefined }}
             aria-hidden
           />
           {STATUS_LABEL[s]}
