@@ -22,7 +22,7 @@ const ignoreHover: HoverHandler = () => {};
 
 export function ContinuousDial() {
   const state = useProgressMap();
-  const { sourceProgress, years, view, focus, selectPeriod } = state;
+  const { sourceProgress, years, view, focus, setViewedPosition } = state;
   const sliderId = useId();
   const selected = monthPosition(view.year, focus.month);
   const [origin] = useState(selected);
@@ -31,8 +31,8 @@ export function ContinuousDial() {
   useEffect(() => {
     if (selected >= min && selected <= max) return;
     const target = periodAt(Math.max(min, Math.min(max, selected)));
-    selectPeriod(target.year, target.month);
-  }, [selected, min, max, selectPeriod]);
+    setViewedPosition(monthPosition(target.year, target.month));
+  }, [selected, min, max, setViewedPosition]);
   const yearViews = useMemo(() => new Map(years.map((year) => [year, buildYearView(progressForYear(sourceProgress, year))])), [sourceProgress, years]);
   const positions = useMemo(() => years.flatMap((year) => Array.from({ length: 12 }, (_, i) => monthPosition(year, i + 1))).filter((position) => position >= min && position <= max), [years, min, max]);
   const months = useMemo(() => {
@@ -60,16 +60,16 @@ export function ContinuousDial() {
     },
     selectMonth: (month: number) => {
       const year = Number(months[month - 1]!.weeks[0]!.start.slice(0, 4));
-      selectPeriod(year, month);
+      setViewedPosition(monthPosition(year, month));
     },
     selectQuarter: (quarter: 1 | 2 | 3 | 4) => {
       const month = months[(quarter - 1) * 3]!;
       const year = Number(month.weeks[0]!.start.slice(0, 4));
       if (!years.includes(year)) return;
-      selectPeriod(year, month.month);
+      setViewedPosition(monthPosition(year, month.month));
       state.setMode("quarter");
     },
-  }), [state, view, months, selectPeriod, years]);
+  }), [state, view, months, setViewedPosition, years]);
   const [preview, setPreview] = useState<number | null>(null);
   const drag = useRef<Drag | null>(null);
   const suppressClick = useRef(false);
@@ -77,8 +77,7 @@ export function ContinuousDial() {
   const clamp = (value: number) => Math.max(min, Math.min(max, value));
   const goTo = (value: number) => {
     const nearest = positions.reduce((best, candidate) => Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best, positions[0]!);
-    const target = periodAt(nearest);
-    selectPeriod(target.year, target.month);
+    setViewedPosition(nearest);
   };
   const angleOf = (event: PointerEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();

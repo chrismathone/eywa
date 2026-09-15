@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import type { StudentProgress } from "../model";
 import { CurriculumPosition } from "./curriculum-position";
 import { ProgressMapProvider } from "./map-state";
@@ -10,7 +8,6 @@ import { PlanVsActual } from "./plan-vs-actual";
 import { ProgressMapPanel } from "./progress-map-panel";
 import { StudentHeader } from "./student-header";
 import styles from "./progress-map.module.css";
-import { MathProgressTimeline } from "./timeline/math-progress-timeline";
 import { CurriculumTimelineCard } from "./timeline/curriculum-timeline-card";
 
 /**
@@ -20,16 +17,10 @@ import { CurriculumTimelineCard } from "./timeline/curriculum-timeline-card";
  * 기존 지도 화면도 동일한 학생 데이터와 선택 상태를 공유한다.
  */
 export function MathProgressDashboard({ progress }: { progress: StudentProgress }) {
-  const [layout, setLayout] = useState<"timeline" | "map">("map");
   return (
     <ProgressMapProvider progress={progress}>
       <div className={`${styles.selectionTheme} flex flex-col gap-4`}>
         <StudentHeader />
-        <div className="flex justify-end"><ToolbarSegment title="진도 탐색 화면">
-          <ToolbarSegmentItem active={layout === "timeline"} onClick={() => setLayout("timeline")}>세로 타임라인</ToolbarSegmentItem>
-          <ToolbarSegmentItem active={layout === "map"} onClick={() => setLayout("map")}>기존 지도</ToolbarSegmentItem>
-        </ToolbarSegment></div>
-        {layout === "timeline" ? <MathProgressTimeline /> : <>
         <PeriodSelector />
         {/* 폰(<768)은 요약이 먼저, 태블릿(768~1023)은 지도가 먼저 한 열로, 데스크톱은 [지도 | 요약] 두 열(지시 16).
             DOM은 요약(글자)이 먼저다 — 지도 칸이 수백 개라 키보드·스크린리더가 요약에 닿기 전에 칸을 다 지나지 않게(시각 순서만 `order`). */}
@@ -37,11 +28,10 @@ export function MathProgressDashboard({ progress }: { progress: StudentProgress 
           <ProgressMapPanel />
           <CurriculumTimelineCard />
         </div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
           <PlanVsActual />
           <CurriculumPosition />
         </div>
-        </>}
       </div>
     </ProgressMapProvider>
   );
