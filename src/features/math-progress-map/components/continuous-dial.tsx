@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { buildYearView, pctOf } from "../derive";
 import { monthPosition, periodAt, rollingPeriods, timelineRange, timelineStops, turnDelta } from "../continuous-timeline";
 import { VIEWBOX } from "../geometry";
@@ -23,7 +23,6 @@ const ignoreHover: HoverHandler = () => {};
 export function ContinuousDial() {
   const state = useProgressMap();
   const { sourceProgress, years, view, focus, setViewedPosition } = state;
-  const sliderId = useId();
   const selected = monthPosition(view.year, focus.month);
   const [origin] = useState(selected);
   const { min, max } = useMemo(() => timelineRange(sourceProgress), [sourceProgress]);
@@ -100,7 +99,7 @@ export function ContinuousDial() {
         style={{ "--clock-turn": `${(position - origin) * 30}deg` } as CSSProperties}
         data-dragging={preview !== null ? "true" : undefined}
         role="group"
-        aria-label={`${sourceProgress.studentName} 연속 회전 진도맵`}
+        aria-label={`${sourceProgress.studentName} 연속 지도`}
         onPointerDown={(event) => {
           if (!event.isPrimary || event.button !== 0) return;
           const box = event.currentTarget.getBoundingClientRect();
@@ -137,10 +136,9 @@ export function ContinuousDial() {
         </HoverCtx.Provider>
       </div>
       <div className={styles.scrubber}>
-        <label htmlFor={sliderId}>시간 이동</label>
         <div className={styles.rail} style={{ "--timeline-progress": `${max === min ? 0 : (selected - min) / (max - min) * 100}%` } as CSSProperties}>
-          <input id={sliderId} type="range" min={min} max={max} step={1} value={selected} disabled={min === max}
-            aria-label="연속 회전 월 선택" aria-valuetext={`${view.year}년 ${focus.month}월`} onChange={(event) => goTo(Number(event.target.value))} />
+          <input type="range" min={min} max={max} step={1} value={selected} disabled={min === max}
+            aria-label="연속 지도 월 선택" aria-valuetext={`${view.year}년 ${focus.month}월`} onChange={(event) => goTo(Number(event.target.value))} />
           <div className={styles.stops} role="group" aria-label="연도 바로가기">
             {stops.map((stop, index) => (
               <button key={stop.position} type="button" className={styles.stop}
@@ -154,7 +152,6 @@ export function ContinuousDial() {
           </div>
         </div>
       </div>
-      <p className={styles.hint}>왼쪽으로 감으면 과거 · 오른쪽으로 감으면 미래</p>
     </div>
   );
 }
@@ -171,7 +168,7 @@ const ClockDrawing = memo(function ClockDrawing() {
         <DialLayer name="focus"><DayRing /></DialLayer>
       </div>
       <DialLayer name="center"><CurrentPosition /></DialLayer>
-      <DialLayer name="labels"><RingLabels /></DialLayer>
+      <RingLabels />
     </>
   );
 });

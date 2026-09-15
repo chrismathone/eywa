@@ -1,29 +1,37 @@
 "use client";
 
-import { memo } from "react";
-import { RINGS, polar } from "../geometry";
+import { memo, useState, type CSSProperties } from "react";
+import { RINGS, VIEWBOX } from "../geometry";
+import { ringLabelAngle } from "../ring-label-position";
 import { ringActive } from "../view-mode";
 import { useProgressMap } from "./map-state";
-import { RingPill } from "./ring-outline";
+import styles from "./ring-labels.module.css";
 
 const mid = (b: readonly [number, number]) => (b[0] + b[1]) / 2;
 
-/**
- * 맨 위(12시)에 한 줄로 서는 링 이름 알약 넷 — 연간·월간·주간·일간(레퍼런스 이미지와 같은 자리). 일간 알약은 가운데 원과
- * 일간 링 사이(r 147)에 앉아, 일간 링이 어느 각도에 펼쳐져도 겹치지 않는다.
- */
+const LABELS = [
+  { mode: "year", label: "연간", radius: mid(RINGS.year) },
+  { mode: "month", label: "월간", radius: mid(RINGS.month) },
+  { mode: "week", label: "주간", radius: mid(RINGS.week) },
+  { mode: "day", label: "일간", radius: mid(RINGS.day) },
+] as const;
+
+/** 월에 따라 위·아래로 옮기는 공통 이름표. HTML 궤도와 역회전을 함께 움직여 글자는 수평을 유지한다. */
 export const RingLabels = memo(function RingLabels() {
-  const { mode } = useProgressMap();
-  const year = polar(mid(RINGS.year), 0);
-  const month = polar(mid(RINGS.month), 0);
-  const week = polar(mid(RINGS.week), 0);
-  const day = polar(RINGS.dayLabel, 0);
+  const { mode, focus, display, currentProgressPosition } = useProgressMap();
+  const [motion, setMotion] = useState(() => ({ angle: ringLabelAngle(0, focus.month), position: currentProgressPosition }));
+  if (motion.position !== currentProgressPosition) {
+    const direction = display === "continuous" && currentProgressPosition < motion.position ? "counterclockwise" : "clockwise";
+    setMotion({ angle: ringLabelAngle(motion.angle, focus.month, direction), position: currentProgressPosition });
+  }
+  const { angle } = motion;
   return (
-    <g>
-      <RingPill x={year.x} y={year.y} label="연간" active={ringActive("year", mode)} />
-      <RingPill x={month.x} y={month.y} label="월간" active={ringActive("month", mode)} />
-      <RingPill x={week.x} y={week.y} label="주간" active={ringActive("week", mode)} />
-      <RingPill x={day.x} y={day.y} label="일간" active={ringActive("day", mode)} />
-    </g>
+    <div className={styles.labels} data-dial-layer="labels" data-label-angle={angle} style={{ "--label-angle": `${angle}deg` } as CSSProperties} aria-hidden>
+      {LABELS.map((item) => <div key={item.mode} className={styles.orbit}>
+        <div className={styles.anchor} style={{ top: `${50 - item.radius / VIEWBOX * 100}%` }}>
+          <div className={styles.upright}><span className={styles.pill} data-active={ringActive(item.mode, mode) ? "true" : undefined}>{item.label}</span></div>
+        </div>
+      </div>)}
+    </div>
   );
 });

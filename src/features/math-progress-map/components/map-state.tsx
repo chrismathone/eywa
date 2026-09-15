@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { buildYearView, type YearView } from "../derive";
 import { focusOfDate, type Focus } from "../focus";
-import type { PlanVsActual, StudentProgress, ViewMode } from "../model";
+import type { MapDisplay, PlanVsActual, StudentProgress, ViewMode } from "../model";
 import { planVsActual } from "../pace";
 import { availableYears, progressForYear } from "../years";
 import { monthPosition, periodAt } from "../continuous-timeline";
@@ -23,10 +23,14 @@ export type ProgressMapState = {
   years: number[];
   pace: PlanVsActual;
   mode: ViewMode;
+  display: MapDisplay;
+  setDisplay: (display: MapDisplay) => void;
   focus: Focus;
   /** 시계와 세로 타임라인이 함께 사용하는 탐색 월. 실제 기준일과 분리한다. */
   currentProgressPosition: number;
   setViewedPosition: (position: number) => void;
+  syncScrolledPosition: (position: number) => void;
+  selectionRevision: number;
   setMode: (mode: ViewMode) => void;
   selectYear: (year: number) => void;
   selectPeriod: (year: number, month: number) => void;
@@ -51,7 +55,16 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
   const currentView = useMemo(() => buildYearView(sourceProgress), [sourceProgress]);
   const view = useMemo(() => year === sourceProgress.year ? currentView : buildYearView(progress), [year, sourceProgress.year, currentView, progress]);
   const pace = useMemo(() => planVsActual(sourceProgress), [sourceProgress]);
-  const [mode, setMode] = useState<ViewMode>("year");
+  const [mode, setModeState] = useState<ViewMode>("year");
+  const [selectionRevision, setSelectionRevision] = useState(0);
+  const markSelection = useCallback(() => {
+    setSelectionRevision((revision) => revision + 1);
+  }, []);
+  const setMode = useCallback((next: ViewMode) => {
+    setModeState(next);
+    markSelection();
+  }, [markSelection]);
+  const [display, setDisplay] = useState<MapDisplay>("drill");
   const [focus, setFocus] = useState<Focus>(() => focusOfDate(progress.asOf, progress.year));
   const currentProgressPosition = monthPosition(year, focus.month);
   const setViewedPosition = useCallback((position: number) => {
@@ -59,6 +72,15 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
     if (!years.includes(next.year)) return;
     setYear(next.year);
     setFocus({ month: next.month, week: 1, day: null });
+    setMode("month");
+  }, [years, setMode]);
+  // 스크롤은 시계의 위치만 따라가게 한다. 목록의 펼침과 자동 이동은 직접 선택 때만 실행한다.
+  const syncScrolledPosition = useCallback((position: number) => {
+    const next = periodAt(position);
+    if (!years.includes(next.year)) return;
+    setYear(next.year);
+    setFocus({ month: next.month, week: 1, day: null });
+    setModeState((previous) => previous === "year" || previous === "quarter" ? previous : "month");
   }, [years]);
 
   const selectYear = useCallback((nextYear: number) => {
@@ -67,25 +89,26 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
     setYear(nextYear);
     setFocus(nextYear === sourceProgress.year ? focusOfDate(sourceProgress.asOf, nextYear)
       : { month: target.yearPlan[0]?.month ?? 1, week: null, day: null });
-  }, [sourceProgress, years]);
+    setMode("year");
+  }, [sourceProgress, years, setMode]);
   const selectPeriod = useCallback((nextYear: number, month: number) => {
     if (!years.includes(nextYear) || month < 1 || month > 12) return;
     setYear(nextYear);
     setFocus({ month, week: 1, day: null });
     setMode("month");
-  }, [years]);
+  }, [years, setMode]);
 
   const selectMonth = useCallback((month: number) => {
     // 월을 고르면 첫 주를 실제 초점으로 둔다. 링·주간 요약·일간 내용이 같은 주를 가리켜야 한다.
     setFocus({ month, week: 1, day: null });
     setMode("month");
-  }, []);
+  }, [setMode]);
   const selectQuarter = useCallback(
     (q: 1 | 2 | 3 | 4) => {
       setFocus((f) => (Math.floor((f.month - 1) / 3) + 1 === q ? f : { month: (q - 1) * 3 + 1, week: null, day: null }));
       setMode("quarter");
     },
-    [],
+    [setMode],
   );
   const selectWeek = useCallback((month: number, week: number, nextYear?: number) => {
     if (nextYear !== undefined) {
@@ -94,22 +117,23 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
     }
     setFocus({ month, week, day: null });
     setMode("week");
-  }, [years]);
+  }, [years, setMode]);
   const selectDay = useCallback((date: string) => {
     const nextYear = Number(date.slice(0, 4));
     if (!years.includes(nextYear)) return;
     setYear(nextYear);
     setFocus(focusOfDate(date));
     setMode("day");
-  }, [years]);
+  }, [years, setMode]);
   const resetFocus = useCallback(() => {
     setYear(sourceProgress.year);
     setFocus(focusOfDate(sourceProgress.asOf, sourceProgress.year));
-  }, [sourceProgress.asOf, sourceProgress.year]);
+    markSelection();
+  }, [sourceProgress.asOf, sourceProgress.year, markSelection]);
 
   const value = useMemo<ProgressMapState>(
-    () => ({ progress, sourceProgress, view, currentView, years, pace, mode, focus, currentProgressPosition, setViewedPosition, setMode, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus }),
-    [progress, sourceProgress, view, currentView, years, pace, mode, focus, currentProgressPosition, setViewedPosition, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus],
+    () => ({ progress, sourceProgress, view, currentView, years, pace, mode, display, setDisplay, focus, currentProgressPosition, setViewedPosition, syncScrolledPosition, selectionRevision, setMode, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus }),
+    [progress, sourceProgress, view, currentView, years, pace, mode, display, focus, currentProgressPosition, setViewedPosition, syncScrolledPosition, selectionRevision, setMode, selectYear, selectPeriod, selectMonth, selectQuarter, selectWeek, selectDay, resetFocus],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -12,8 +12,7 @@ export function ProgressMapPanel() {
       data-map-design="original"
       data-map-background="off"
     >
-      <ProgressMap />
-      <div className={styles.legend}><Legend /></div>
+      <ProgressMap controls={<Legend compact />} />
     </div>
   );
 }

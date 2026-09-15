@@ -19,8 +19,7 @@ const DAYNUM_R = 182;
  * 일간 링 — 초점 주(기본 이번 주)의 7일을 **넓혀** 그린다(하루 11°).
  * 요일 자리는 늘 월~일 순서(달 첫·마지막 주는 빈 칸으로 채운다).
  * 선택한 날(미선택 시 해당 주의 기준일)의 칸 중심은 바깥의 같은 날짜 눈금과 나란히 맞춘다.
- * '일간' 이름 알약은 다른 셋과 함께 12시에 선다(`ring-labels.tsx`) — 호를 따라다니게 두면 9시·3시 방향에서 가로 알약이
- * 일간 칸 위로 삐져나왔다(실측 2026-09-14).
+ * 링 이름표는 이 요일 부채꼴을 피해서 배치한다(`ring-labels.tsx`).
  */
 export const DayRing = memo(function DayRing() {
   const { view, mode, focus, selectDay } = useProgressMap();

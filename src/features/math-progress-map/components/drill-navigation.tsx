@@ -4,10 +4,9 @@ import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { drillLevel } from "../drilldown";
+import type { MapDisplay } from "../model";
 import { resolveWeek } from "../focus";
 import { useProgressMap } from "./map-state";
-
-export type MapDisplay = "drill" | "full" | "continuous";
 
 export function DrillNavigation({ display, onDisplay, onBack, controls }: { display: MapDisplay; onDisplay: (value: MapDisplay) => void; onBack: () => void; controls?: ReactNode }) {
   const explore = display === "drill";
@@ -24,7 +23,7 @@ export function DrillNavigation({ display, onDisplay, onBack, controls }: { disp
   const parentCrumb = crumbs[level - 1];
   return (
     <div className="mb-3 flex flex-wrap items-start gap-x-4 gap-y-2">
-      <div className="flex flex-[1_1_20rem] flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      <div className="flex flex-[1_1_15rem] flex-wrap items-center justify-center gap-x-4 gap-y-2">
         {explore ? <nav aria-label="진도 확대 경로" className="flex items-center gap-1 text-xs">
           {parentCrumb ? <button type="button" onClick={onBack} className="text-primary rounded-md p-1 hover:bg-primary-soft" aria-label="한 단계 위로"><EyIcon name="chevronLeft" size={16} /></button> : null}
           <ol className="flex flex-wrap items-center gap-1">
@@ -40,9 +39,9 @@ export function DrillNavigation({ display, onDisplay, onBack, controls }: { disp
           </ol>
         </nav> : null}
         <ToolbarSegment title="지도 표시 방식">
-          <ToolbarSegmentItem active={explore} onClick={() => onDisplay("drill")}>단계별 확대</ToolbarSegmentItem>
-          <ToolbarSegmentItem active={display === "full"} onClick={() => onDisplay("full")}>전체 지도</ToolbarSegmentItem>
-          <ToolbarSegmentItem active={display === "continuous"} onClick={() => onDisplay("continuous")}>연속 회전</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={explore} onClick={() => onDisplay("drill")}>단계별 지도</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={display === "full"} onClick={() => onDisplay("full")}>연간 지도</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={display === "continuous"} onClick={() => onDisplay("continuous")}>연속 지도</ToolbarSegmentItem>
         </ToolbarSegment>
       </div>
       {controls}

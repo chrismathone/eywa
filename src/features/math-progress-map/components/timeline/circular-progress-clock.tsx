@@ -71,6 +71,6 @@ const ClockDrawing = memo(function ClockDrawing({ turn }: { turn: number }) {
       <DialLayer name="focus"><DayRing /></DialLayer>
     </div>
     <DialLayer name="center"><CurrentPosition viewed /></DialLayer>
-    <DialLayer name="labels"><RingLabels /></DialLayer>
+    <RingLabels />
   </>;
 });

@@ -41,7 +41,7 @@
 
 .scrubber {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 12px;
   padding: 8px 12px;
@@ -51,7 +51,6 @@
   font-size: 12px;
 }
 
-.scrubber > label { padding-top: 14px; }
 .rail { min-width: 0; }
 
 .scrubber input {
@@ -68,13 +67,13 @@
 .scrubber input::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
-  background: linear-gradient(to right, var(--map-focus-fill) var(--timeline-progress), var(--line-strong) var(--timeline-progress));
+  background: linear-gradient(to right, #8da8c8 var(--timeline-progress), var(--line-strong) var(--timeline-progress));
 }
 
 .scrubber input::-moz-range-track {
   height: 6px;
   border-radius: 3px;
-  background: linear-gradient(to right, var(--map-focus-fill) var(--timeline-progress), var(--line-strong) var(--timeline-progress));
+  background: linear-gradient(to right, #8da8c8 var(--timeline-progress), var(--line-strong) var(--timeline-progress));
 }
 
 .scrubber input::-webkit-slider-thumb {
@@ -83,7 +82,7 @@
   margin-top: -5px;
   border-radius: 50%;
   appearance: none;
-  background: var(--map-focus-fill);
+  background: #174481;
 }
 
 .scrubber input::-moz-range-thumb {
@@ -91,7 +90,7 @@
   height: 16px;
   border: 0;
   border-radius: 50%;
-  background: var(--map-focus-fill);
+  background: #174481;
 }
 
 .stops { position: relative; height: 36px; margin-inline: 8px; }
@@ -127,19 +126,11 @@
 .stop[data-edge="end"] { transform: translateX(-100%); text-align: right; }
 .stop[data-edge="end"]::before { left: 100%; }
 .stop[data-current="true"] { font-weight: 800; }
-.stop[data-current="true"]::before { background: var(--map-focus-fill); }
+.stop[data-current="true"]::before { background: #174481; }
 .stop:hover { background: var(--bg-soft); }
-
-.hint {
-  margin-top: 10px;
-  color: var(--map-exterior-ink, var(--text-dim));
-  text-align: center;
-  font-size: 12px;
-}
 
 @media (max-width: 600px) {
   .scrubber { grid-template-columns: minmax(0, 1fr); gap: 2px; }
-  .scrubber > label { padding-top: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

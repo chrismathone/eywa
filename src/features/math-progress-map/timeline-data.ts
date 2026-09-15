@@ -24,12 +24,12 @@ export type CurriculumPeriod = {
   source: MonthView;
 };
 
-export const QUARTER_GOALS = [
-  "기초를 탄탄히 다지는 시기",
-  "중등 수학의 기본을 완성하는 시기",
-  "응용과 심화로 나아가는 시기",
-  "다음 과정으로 도약하는 시기",
-] as const;
+/** 달력상의 분기 대신 실제 등록된 과정으로 안내한다. */
+export function quarterCurriculumLabel(periods: readonly CurriculumPeriod[]): string {
+  const courses = [...new Set(periods.filter((period) => period.source.plan || period.source.plannedPages > 0)
+    .map((period) => period.semester || period.bookName))];
+  return courses.length ? `${courses.join(" → ")} 학습` : "학습 계획 미등록";
+}
 
 export const TIMELINE_STATUS = {
   completed: { label: "완료", symbol: "✓" },

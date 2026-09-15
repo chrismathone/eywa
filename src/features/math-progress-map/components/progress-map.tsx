@@ -8,7 +8,7 @@ import { ContinuousDial } from "./continuous-dial";
 import { DayRing } from "./day-ring";
 import { DialGuides } from "./dial-guides";
 import { DialLayer } from "./dial-layer";
-import { DrillNavigation, type MapDisplay } from "./drill-navigation";
+import { DrillNavigation } from "./drill-navigation";
 import { DrilldownDial } from "./drilldown-dial";
 import { useProgressMap } from "./map-state";
 import { MapYearTransition } from "./map-year-transition";
@@ -35,8 +35,7 @@ const NARROW_PX = 560;
  * (링은 `memo` + 컨텍스트 읽기).
  */
 export function ProgressMap({ navy = false, controls }: { navy?: boolean; controls?: ReactNode }) {
-  const { view, progress, pace, mode, focus, setMode } = useProgressMap();
-  const [display, setDisplay] = useState<MapDisplay>("drill");
+  const { view, progress, pace, mode, focus, setMode, display, setDisplay } = useProgressMap();
   const explore = display === "drill";
   const continuous = display === "continuous";
   const sceneKey = explore ? drillSceneKey(view, mode, focus) : display;
@@ -71,8 +70,8 @@ export function ProgressMap({ navy = false, controls }: { navy?: boolean; contro
         if (next === "drill") setMode("year");
       }} />
       <div className="overflow-x-auto px-1 py-1">
-        {/* 학생 줄·툴바·확대 경로·범례를 뺀 높이에 맞춘다. 폰에서는 360px 아래로 줄이지 않는다. */}
-        <div className={`${navy ? mapStyles.dialTheme : mapStyles.original} mx-auto w-full ${continuous ? "min-w-0" : "min-w-[360px]"}`} style={{ maxWidth: "min(760px, calc(100dvh - 18rem))" }}
+        {/* 데스크톱은 최대 너비에서 20% 줄이고, 폰에서는 전체 너비를 사용한다. */}
+        <div className={`${navy ? mapStyles.dialTheme : mapStyles.original} ${mapStyles.mapFrame} mx-auto ${continuous ? "min-w-0" : "min-w-[360px]"}`}
           onContextMenu={(event) => {
             if (!explore) return;
             event.preventDefault();
@@ -108,7 +107,7 @@ export const MapDrawing = memo(function MapDrawing({ center }: { center?: ReactN
       <DialLayer name="days"><WeekRing /></DialLayer>
       <DialLayer name="focus"><DayRing /></DialLayer>
       <DialLayer name="center">{center ?? <CurrentPosition />}</DialLayer>
-      <DialLayer name="labels"><RingLabels /></DialLayer>
+      <RingLabels />
       <div className={styles.sweep} aria-hidden />
     </div>
   );

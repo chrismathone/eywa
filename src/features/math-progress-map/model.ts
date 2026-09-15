@@ -12,6 +12,7 @@
  */
 
 export type ProgressStatus = "completed" | "in-progress" | "not-started" | "no-plan";
+export type MapDisplay = "drill" | "full" | "continuous";
 
 /** 하루치 학습 기록(또는 계획). */
 export interface DailyProgress {

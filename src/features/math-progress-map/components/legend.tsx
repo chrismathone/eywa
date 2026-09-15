@@ -3,10 +3,10 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import styles from "./progress-map.module.css";
 
 /** 상태 범례 — 완료 · 진행 중 · 미학습 · 예정 · 휴강/계획 없음. 분기 색은 범례에 없다(자리 표시일 뿐 상태가 아니다). */
-export function Legend({ navy = false }: { navy?: boolean }) {
+export function Legend({ navy = false, compact = false }: { navy?: boolean; compact?: boolean }) {
   const swatchTheme = navy ? styles.dialTheme : "";
   return (
-    <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1" aria-label="상태 범례">
+    <ul className={compact ? styles.compactLegend : "flex flex-wrap items-center justify-center gap-x-4 gap-y-1"} aria-label="상태 범례">
       {LEGEND_ORDER.map((s) => (
         <li key={s} className="text-text-dim flex items-center gap-1.5 text-xs font-medium">
           <span

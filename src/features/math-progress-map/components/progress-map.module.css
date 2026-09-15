@@ -8,8 +8,7 @@
 }
 
 .selectionItem[aria-pressed="true"],
-.selectionItem[aria-current="true"],
-.selectionStatus {
+.selectionItem[aria-current="true"] {
   --foreground: var(--map-focus-ink);
   --text-dim: var(--map-focus-ink);
   --primary-foreground: var(--map-focus-ink);
@@ -76,11 +75,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-.legend {
-  margin-top: 12px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-}
+.compactLegend { display: grid; grid-template-columns: repeat(3, max-content); gap: 5px 12px; margin-left: auto; padding: 2px 0; }
+.compactLegend > li { white-space: nowrap; font-size: 11px; }
+.mapFrame { width: 80%; }
+@media (max-width: 1023px) { .mapFrame { width: 100%; } }
 
 .pickerSelect {
   max-width: 100%;

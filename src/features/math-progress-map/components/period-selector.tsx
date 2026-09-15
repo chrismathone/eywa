@@ -2,8 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { Toolbar, ToolbarChip, ToolbarRow, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { formatDotDate, formatMdW } from "../calendar";
+import { formatDotDate } from "../calendar";
 import { focusOfDate, resolveDay, resolveWeek } from "../focus";
 import { VIEW_MODES, VIEW_MODE_LABEL } from "../model";
 import { useProgressMap } from "./map-state";
@@ -14,7 +13,7 @@ import { MapPeriodPicker } from "./map-period-picker";
 /**
  * 보기 단위 선택 — [일간][주간][월간][분기][연간]. 화면을 바꾸는 게 아니라 **같은 진도를 시간 단위만 바꿔** 본다
  * (지도는 그 링을 켜고, 요약은 그 줄을 켜고, 상세 패널은 그 단위의 목록을 보인다).
- * 옆에 지도와 같은 색의 "선택 중" 표시와, 초점이 기준일에서 벗어났을 때만 '기준일로' 칩.
+ * 주차·날짜 선택과 오늘·종강 날짜로 이동하는 버튼을 함께 둔다.
  */
 export function PeriodSelector() {
   const { mode, setMode, focus, view, currentView, progress, sourceProgress, years, selectYear, selectPeriod, resetFocus } = useProgressMap();
@@ -28,11 +27,6 @@ export function PeriodSelector() {
   const homeDay = resolveDay(currentView, home);
   const atHome = view.year === sourceProgress.year && focus.month === home.month && week.index === homeWeek.index && day.date === homeDay.date;
   const finalStep = progress.roadmap?.steps.at(-1);
-  const selectionLabel = mode === "year" ? `${view.year}년`
-    : mode === "quarter" ? `${view.year}년 ${Math.floor((focus.month - 1) / 3) + 1}분기`
-    : mode === "month" ? `${view.year}년 ${focus.month}월`
-    : mode === "week" ? `${view.year}년 ${focus.month}월 ${week.index}주`
-    : `${view.year}년 ${focus.month}월 ${week.index}주 · ${formatMdW(day.date)}`;
   return (
     <Toolbar rail={false}>
       {years.length > 1 ? (
@@ -59,20 +53,18 @@ export function PeriodSelector() {
       </ToolbarRow>
       <ToolbarRow>
       <MapPeriodPicker />
-      <span className={`${mapStyles.selectionStatus} inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold`} role="status" aria-live="polite" aria-atomic="true">
-        <EyIcon name="check" size={12} />
-        선택 중 <span aria-hidden>·</span> <span className="num">{selectionLabel}</span>
-      </span>
-      {progress.estimated ? <span className="text-amber text-xs font-bold">예상 진도</span> : null}
       {finalStep ? (
-        <ToolbarChip active={false} onClick={() => selectPeriod(Number(finalStep.endMonth.slice(0, 4)), Number(finalStep.endMonth.slice(5, 7)))} title={`${finalStep.endMonth} ${finalStep.label} 종강 예정`}>종강 보기</ToolbarChip>
+        <ToolbarChip active={false} onClick={() => selectPeriod(Number(finalStep.endMonth.slice(0, 4)), Number(finalStep.endMonth.slice(5, 7)))} title={`${finalStep.endMonth} ${finalStep.label} 종강 예정`}>종강 날짜로</ToolbarChip>
       ) : null}
       {atHome ? null : (
-        <ToolbarChip active={false} onClick={resetFocus} title="초점을 기준일로 되돌립니다">
-          기준일로
+        <ToolbarChip active={false} onClick={resetFocus} title={`${formatDotDate(sourceProgress.asOf)} 진도로 돌아갑니다`}>
+          오늘 날짜로
         </ToolbarChip>
       )}
-      <span className="text-text-dim num ml-auto text-xs">{formatDotDate(progress.asOf)} 기준</span>
+      <span className="ml-auto inline-flex items-center gap-2 whitespace-nowrap text-xs">
+        <span className="text-text-dim num">{formatDotDate(progress.asOf)} 기준</span>
+        {progress.estimated ? <span className="text-amber font-bold">예상 진도</span> : null}
+      </span>
       </ToolbarRow>
     </Toolbar>
   );
