@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { formatMdW } from "../../calendar";
 import { nextChapterAfter, resolveDay, resolveWeek } from "../../focus";
 import { QUARTER_GOALS, TIMELINE_STATUS, detailDays, type CurriculumPeriod } from "../../timeline-data";
@@ -36,7 +37,7 @@ export function CurriculumTimeline({ periods, activeMonth, expandedMonth, onExpa
       const current = months.some((period) => period.isActual);
       return <section key={quarter} className={styles.quarter} data-current={current ? "true" : undefined} data-status={done === months.length ? "completed" : current ? "current" : months.every((month) => !month.isPast) ? "future" : "current"} aria-labelledby={`quarter-${view.year}-${quarter}`}>
         <header className={styles.quarterHeader}>
-          <span className={styles.quarterNode} aria-hidden>{done === months.length ? "✓" : current ? "●" : "○"}</span>
+          <span className={styles.quarterNode} aria-hidden>{done === months.length ? <EyIcon name="check" size={12} strokeWidth={3} className="inline-block align-middle" /> : current ? "●" : "○"}</span>
           <div className={styles.quarterLabel}><h3 id={`quarter-${view.year}-${quarter}`}>{quarter}분기</h3><span>{(quarter - 1) * 3 + 1}~{quarter * 3}월</span></div>
           <div className={styles.quarterGoal}><strong>{QUARTER_GOALS[quarter - 1]}</strong><span>{done} / {months.length}개월 완료</span></div>
         </header>
@@ -58,7 +59,7 @@ const MonthProgressItem = memo(function MonthProgressItem({ period, active, expa
     <span className={styles.monthNode} data-month-node aria-hidden />
     <div className={styles.monthMeta}>
       <button type="button" onClick={() => onMonth(period.month)} aria-current={active ? "date" : undefined}>{period.month}월</button>
-      {period.isActual ? <span className={styles.todayBadge}>TODAY</span> : <span className={styles.statusSymbol} aria-label={status.label}>{status.symbol}</span>}
+      {period.isActual ? <span className={styles.todayBadge}>TODAY</span> : <span className={styles.statusSymbol} aria-label={status.label}>{period.status === "completed" ? <EyIcon name="check" size={12} strokeWidth={3} className="inline-block align-middle" /> : status.symbol}</span>}
     </div>
     <div className={styles.monthBody}>
       <button type="button" className={styles.monthSummary} onClick={() => onExpand(period.month)} aria-expanded={expanded} aria-controls={`detail-${period.id}`}>
@@ -90,7 +91,7 @@ function MonthDetail({ period }: { period: CurriculumPeriod }) {
         const label = day.isToday ? "현재" : day.status === "completed" ? "완료" : day.status === "planned" ? "예정" : day.noClassReason ? "수업 없음" : "진행 중";
         return <li key={day.date} data-today={day.isToday ? "true" : undefined}>
           <button type="button" onClick={() => selectDay(day.date)} aria-label={`${formatMdW(day.date)} ${day.record?.subChapter || day.record?.chapter || "기록 없음"} ${label}`}>
-            <span className={styles.dayState} data-status={day.isToday ? "current" : day.status}>{day.isToday ? "●" : day.status === "completed" ? "✓" : "○"}</span>
+            <span className={styles.dayState} data-status={day.isToday ? "current" : day.status}>{day.isToday ? "●" : day.status === "completed" ? <EyIcon name="check" size={12} strokeWidth={3} className="inline-block align-middle" /> : "○"}</span>
             <time>{formatMdW(day.date)}</time><span className={styles.dayTopic}>{day.record?.subChapter || day.record?.chapter || "기록 없음"}</span>
             <span className={styles.dayPages}>{day.plannedPages ? `p.${day.record!.startPage}–${day.record!.endPage}` : day.noClassReason || "—"}</span>
           </button>

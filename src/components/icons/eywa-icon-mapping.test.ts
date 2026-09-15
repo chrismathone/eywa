@@ -60,6 +60,9 @@ const APPROVED_INLINE_SVG = [
   // 2026-09-14 수학 학습 진도맵의 동심원 지도(분기·연·월·주·일 링 + 가운데) — 차트이지 아이콘이 아니다.
   // 2026-09-15 드릴다운이 들어오며 <svg>가 progress-map.tsx → 겹침 레이어 dial-layer.tsx로 옮겨갔다(role="presentation").
   "src/features/math-progress-map/components/dial-layer.tsx",
+  // 2026-09-15 진도맵 세로 타임라인 옆 **시계**(회전 표시 삼각형 aria-hidden · '실제 오늘' 점 aria-label) —
+  // 차트 부품이지 아이콘이 아니다(dial-layer와 같은 성격).
+  "src/features/math-progress-map/components/timeline/circular-progress-clock.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다
