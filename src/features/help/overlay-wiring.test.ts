@@ -45,6 +45,10 @@ describe("F1 겹침 배선", () => {
       { file: "app/(shell)/students/page.tsx", slug: "students" },
       { file: "app/(shell)/dashboard/_overview/kpi-strip.tsx", slug: "dashboard" },
       { file: "features/onescreen/components/top-bar.tsx", slug: "onescreen" },
+      // 🔴 도움말 허브 자신도 본다 — 2026-09-15에 설명서 목록을 되살리며 `helpAttr("help-guides")`를 붙였는데
+      // manuals 에 그 키가 없어 **그 구역만 F1 번호가 조용히 안 섰다**(알약이 하나 빠졌을 뿐이라 눈에 안 띈다).
+      { file: "app/(shell)/help/page.tsx", slug: "help" },
+      { file: "app/(shell)/help/_help-browser.tsx", slug: "help" },
     ];
     for (const { file, slug } of files) {
       const keys = new Set(

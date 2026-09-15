@@ -28,6 +28,17 @@ export function overlaySlugForPath(pathname: string): string | null {
   return best?.slug ?? null;
 }
 
+/**
+ * 지금 주소가 **설명서 본문 페이지**(`/help/<slug>`)인가 — 그 페이지 자체가 번호 설명서라 F1으로 겹칠 것이 없다.
+ * 🔴 "아직 번호 도움말이 없습니다"는 여기서 거짓이다(온통 번호 설명인 페이지다) — 문구를 가르는 데만 쓴다.
+ */
+export function isManualArticlePath(pathname: string): boolean {
+  const path = stripPath(pathname);
+  if (!path.startsWith("/help/")) return false;
+  const slug = path.slice("/help/".length);
+  return MANUALS.some((m) => m.slug === slug);
+}
+
 function stripPath(pathname: string): string {
   const noQuery = pathname.split("?")[0] ?? pathname;
   const trimmed = noQuery.replace(/\/+$/, "");

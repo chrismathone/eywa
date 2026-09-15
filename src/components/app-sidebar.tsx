@@ -264,13 +264,29 @@ export function AppSidebar({
                 <EyIcon name="building" size={16} strokeWidth={1.8} className="text-white" />
               </span>
             )}
-            <span
-              className={`text-foreground min-w-0 overflow-hidden text-base font-bold tracking-tight text-ellipsis whitespace-nowrap ${
-                expanded ? "max-w-[120px] opacity-100" : "max-w-0 opacity-0"
+            {/* 🔴 학원명과 '관리자뷰'는 **두 줄로 쌓는다**(원장 2026-09-15, 캡처와 함께 *"관리자뷰 저것도 강사뷰처럼
+                보이게. 글자가 짤려"*) — 한 줄로 나란히 두던 종전엔 둘이 같은 155px을 나눠 가져 학원명이
+                `INJ…`로 잘렸다(로고 28 + 간격 10×2 + '관리자뷰' 60 ⇒ 학원명 자리 47px).
+                쌓으면 두 줄이 **각자** 남는 폭을 통째로 쓴다 — 117px(216 − 테두리 1 − 좌우 여백 24 − 접기 버튼 자리 36
+                − 로고 28 − 간격 10)이라 `INJAEWON`(20px 굵게 ≈ 100px)이 다 들어간다. 사이드바 폭은 216 고정이라
+                (`use-sidebar-resize.ts`) 이 계산이 흔들리지 않는다.
+                구조·치수는 강사 미니셸 머리(`(shell)/layout.tsx`)와 **같은 클래스**다 — 둘은 짝이라
+                한쪽만 바꾸면 겸직이 뷰를 오갈 때 머리 모양이 달라진다(한쪽을 고치면 저쪽도).
+                📏 🔴 **여유가 1px밖에 없다.** 머리는 `h-12`(48)에 `border-b` 1px이라 콘텐츠 47이고, 두 줄 줄상자는
+                   `text-lg`(globals.css `--text-lg: 20px`) × 1.25 + 3 + `text-base`(18) = **46**이다. 이 줄은
+                   `overflow-hidden`이라 넘치면 **소리 없이 잘린다** — 글자를 한 단계라도 올리려면 `h-12`부터 봐야 한다.
+                   ⚠️ Tailwind 기본 스케일(lg=18·base=16)로 세면 41.5가 나오는데 이 앱은 그 값이 아니다
+                      (v5 타입 스케일 한 단계 승격). 짝인 `layout.tsx`가 같은 계산을 적어 뒀다.
+                ⚠️ 높이를 정하는 건 **자식**의 `leading-tight`/`leading-none`이다 — 부모의 `leading-none`은
+                   자식 `text-*`가 제 줄높이를 다시 정하므로 상속되지 않는다(지워도 46 그대로). */}
+            <div
+              className={`min-w-0 overflow-hidden leading-none ${
+                expanded ? "max-w-[130px] opacity-100" : "max-w-0 opacity-0"
               } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
             >
-              {logoText}
-            </span>
+              <div className="text-foreground truncate text-lg leading-tight font-bold tracking-tight">
+                {logoText}
+              </div>
             {/* 🔴 '관리자뷰' — 지금 보고 있는 것이 **관리자뷰**임을 상단에서 바로 읽히게 한다(원장 2026-09-14:
                 *"관리자 라고 추가해줘 큼직하게. 관리자뷰라는걸 한눈에 알 수 있게"* → 같은 날 표기를 **'관리자뷰'**로 확정).
                 강사 미니셸 헤더의 '강사뷰'(`(shell)/layout.tsx`)와 **짝이다** — 겸직이 두 뷰를 오갈 때 지금 어느 쪽인지
@@ -278,23 +294,15 @@ export function AppSidebar({
                 역할 이름 '관리자(admin)'로 읽혀 매니저·회계가 "나는 관리자가 아닌데"가 된다.
                 ⚠️ 접힘(52px 레일)에선 부모 `<Link>`가 통째로 `opacity-0`이라 로고·워드마크와 함께 사라진다 —
                    레일 폭이 아이콘 하나라 글자가 설 자리가 없다(별도 분기를 만들지 말 것).
-                🔴 `shrink-0`인 이유: 펼친 사이드바는 폭이 216px 고정이라 링크 안 여유가 약 155px이고, 로고(28)·간격(10×2)·
-                   이 라벨(약 60px)을 빼면 학원명 자리는 47px 남짓(한글 세 글자)이다. 이 라벨이 밀려 잘리면 '관리자뷰'가
-                   '관리'로 남아 오독되므로 **학원명(워드마크) 쪽이 말줄임(…)으로** 줄어든다(말줄임이 없어 글자 중간에서
-                   잘렸다 — 적대적 리뷰 2026-09-14).
-                📏 `max-w-[72px]`: Pretendard 한글 한 글자 = 0.864em(1770/2048) → 18px 굵게 + `tracking-tight`(−0.025em)로
-                   네 글자 60.4px. 72px인 이유는 폰트가 늦게 뜰 때의 대체 글꼴(맑은 고딕 = 1em → 70.2px)에서도 '뷰'가 안 잘리게다.
-                   max-width는 상한일 뿐이라 실제 폭은 글자 폭 그대로다(상한을 올려도 학원명 자리를 더 뺏지 않는다).
+                🔴 **한 줄로 되돌리지 말 것**(2026-09-15) — 나란히 두면 이 라벨과 학원명이 같은 폭을 다퉈 학원명이
+                   `INJ…`로 잘린다. 둘째 줄이라 폭 상한이 필요 없고, 길면 제 줄에서 말줄임된다.
                 ⚠️ 이 사이드바는 상담·회계·셔틀/자리 아르바이트(viewer)에게도 뜬다 — 여기 '관리자뷰'는 **역할 이름이 아니라
                    풀셸이라는 화면 이름**이다(원장 지시 원문이 "관리자뷰라는걸 한눈에"). 폰 풀셸엔 사이드바가 없어
                    이 표시도 없다. */}
-            <span
-              className={`text-primary shrink-0 overflow-hidden text-base font-bold tracking-tight whitespace-nowrap ${
-                expanded ? "max-w-[72px] opacity-100" : "max-w-0 opacity-0"
-              } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
-            >
-              관리자뷰
-            </span>
+              <div className="text-primary mt-[3px] truncate text-base leading-none font-bold">
+                관리자뷰
+              </div>
+            </div>
           </Link>
           <button
             type="button"

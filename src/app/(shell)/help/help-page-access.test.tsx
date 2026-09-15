@@ -47,11 +47,13 @@ describe("도움말 — 열 수 있는 화면만 링크한다", () => {
     expect(links(/시간표/).length).toBeGreaterThan(0);
   });
 
-  it("머리 글은 F1 안내와 거른 FAQ 개수다", async () => {
+  it("머리 글은 설명서·FAQ 개수와 F1 안내다", async () => {
     ctx.allow = (_role, menu) => !["owner", "kiosk_settings", "teacher_onescreen"].includes(menu);
     await renderPage();
-    expect(screen.getAllByText(/F1 = 이 화면 도움말/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/자주 묻는 질문/).length).toBeGreaterThan(0);
+    // 세 축(설명서 목록 · Q&A · F1)이 머리 한 줄에 함께 적힌다 — 하나만 적으면 나머지가 있는 줄 모른다.
+    expect(screen.getAllByText(/화면 설명서 \d+개/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/자주 묻는 질문 \d+개/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/F1/).length).toBeGreaterThan(0);
   });
 
   it("표가 없어도 Q&A 는 남고 게시판은 안내만", async () => {

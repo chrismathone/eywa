@@ -176,6 +176,11 @@ function visibleLegacyIconGlyphs(): string[] {
 function inlineSvgFiles(): string[] {
   return sourceFiles(path.join(process.cwd(), "src"))
     .filter((file) => file.endsWith(".tsx"))
+    // 🔴 테스트·스토리 픽스처는 뺀다 — 이 가드가 지키는 것은 **사용자에게 그려지는 화면**이지 픽스처가 아니다.
+    // 픽스처가 `<svg>`를 하나 그렸다고 허용 목록에 올리면, 그 목록이 "검토한 차트"라는 뜻을 잃는다
+    // (2026-09-15: 진도맵 `map-state.test.tsx`가 걸려 main이 빨갰다).
+    // 이름 규칙 셋을 다 본다 — `.test.`만 빼면 다음에 `.spec.`이나 `__tests__/`로 들어온 픽스처에 또 빨개진다.
+    .filter((file) => !/(\.(test|spec|stories)\.|[\\/]__tests__[\\/])/.test(file))
     .filter((file) => path.basename(file) !== "eywa-icons.tsx")
     .filter((file) => fs.readFileSync(file, "utf8").includes("<svg"))
     .map((file) => path.relative(process.cwd(), file).replaceAll("\\", "/"))

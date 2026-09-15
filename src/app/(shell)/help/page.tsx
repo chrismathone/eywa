@@ -12,7 +12,7 @@ import { helpAttr } from "@/features/help/help-attr";
 import { FAQ } from "@/features/help/hub";
 import { MANUALS } from "@/features/help/manuals";
 import { HelpAllowProvider } from "./_components/help-text";
-import { HelpBoard, HelpFaq } from "./_help-browser";
+import { HelpBoard, HelpFaq, HelpManuals } from "./_help-browser";
 
 export const metadata = { title: "도움말 — eywa" };
 
@@ -32,10 +32,32 @@ export default async function HelpPage({
     canAskHelpBoard(user.systemRole),
     getHelpPostsPage({ q: q || undefined, page, pageSize: PAGE_SIZE }),
   ]);
-  const allowed = MANUALS.filter((_, i) => manualOpens[i]).map((m) => m.slug);
-  const faq = q
-    ? FAQ.filter((f) => `${f.q} ${f.a}`.toLowerCase().includes(q.toLowerCase()))
-    : FAQ;
+  const visibleManuals = MANUALS.filter((_, i) => manualOpens[i]);
+  const allowed = visibleManuals.map((m) => m.slug);
+  // 🔴 검색 한 칸이 셋을 함께 거른다 — 설명서·Q&A는 여기(서버)서, 게시판은 위 조회가 이미 q로 걸렀다.
+  // 칸을 따로 두면 어느 쪽에 치는 건지 사람이 매번 헷갈린다(원장 2026-09-15 "합치기").
+  const lower = q.toLowerCase();
+  const hit = (s: string) => s.toLowerCase().includes(lower);
+  const faq = q ? FAQ.filter((f) => hit(`${f.q} ${f.a}`)) : FAQ;
+  const manuals = q
+    ? visibleManuals.filter((m) =>
+        hit(
+          // 면(faces)까지 잇는다 — 수납 '계좌'·출석부 '좌석표'처럼 **그 화면 안 탭에만 있는 말**로 찾는 사람이 있다.
+          [
+            m.title,
+            m.summary,
+            ...m.callouts.map((c) => `${c.label} ${c.body}`),
+            ...(m.faces ?? []).map(
+              (f) => `${f.title} ${f.summary} ${f.callouts.map((c) => `${c.label} ${c.body}`).join(" ")}`,
+            ),
+          ].join(" "),
+        ),
+      )
+    : visibleManuals;
+  // 🔴 게시판은 **총 건수**로 본다(그 페이지의 행이 아니라) — 마지막 페이지를 넘은 주소에서 행만 비면
+  // 매칭이 40건이어도 "결과 없음"이 된다. 표가 아직 없거나 조회가 실패하면(`ready=false`) 게시판은
+  // 판단에서 빼고, 아래 안내도 "게시판에 물어보라"고 하지 않는다(없는 곳을 가리키게 된다).
+  const nothing = q.length > 0 && manuals.length === 0 && faq.length === 0 && (!board.ready || board.total === 0);
   const totalPages = Math.max(1, Math.ceil(board.total / PAGE_SIZE));
   const pageHref = (p: number) => {
     const params = new URLSearchParams();
@@ -52,16 +74,28 @@ export default async function HelpPage({
         <PageHeader
           eyebrow="안내"
           title="도움말"
-          description={`F1 = 이 화면 도움말 · 자주 묻는 질문 ${faq.length}개`}
+          description={`화면 설명서 ${manuals.length}개 · 자주 묻는 질문 ${faq.length}개 · F1 = 보고 있는 화면 도움말`}
           actions={
             <span {...helpAttr("help-search")}>
-              <SearchToggle placeholder="질문 검색" defaultValue={q} />
+              <SearchToggle placeholder="설명서 · 질문 검색" defaultValue={q} />
             </span>
           }
         />
 
+        {nothing ? (
+          <section className="bg-card shadow-card rounded-2xl p-10 text-center">
+            <p className="text-foreground text-sm font-bold">&lsquo;{q}&rsquo; 검색 결과가 없습니다</p>
+            <p className="text-text-dim mt-1 text-xs">
+              {board.ready && canAsk
+                ? "다른 검색어를 넣어 보시거나, 아래 질문 게시판에 직접 물어보세요."
+                : "다른 검색어를 넣어 보세요."}
+            </p>
+          </section>
+        ) : null}
+
+        <HelpManuals manuals={manuals} />
         <HelpFaq items={faq} />
-        <HelpBoard board={board} canAsk={canAsk} />
+        <HelpBoard board={board} canAsk={canAsk} query={q} />
         {board.ready && totalPages > 1 ? (
           <Pagination page={page} totalPages={totalPages} total={board.total} hrefForPage={pageHref} />
         ) : null}

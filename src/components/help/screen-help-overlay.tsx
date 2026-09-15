@@ -12,7 +12,7 @@ import {
   type OverlayAnchor,
   type PlacedCallout,
 } from "@/features/help/overlay-layout";
-import { overlaySlugForPath } from "@/features/help/overlay-path";
+import { isManualArticlePath, overlaySlugForPath } from "@/features/help/overlay-path";
 
 const subscribeNever = () => () => {};
 function useClient(): boolean {
@@ -95,7 +95,9 @@ export function ScreenHelpOverlay() {
       <div className="bg-ink/45 absolute inset-0" />
       {placed.length === 0 ? (
         <p className="bg-card text-foreground shadow-card pointer-events-none absolute top-1/2 left-1/2 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl px-4 py-3 text-center text-sm break-keep">
-          이 화면에는 아직 번호 도움말이 없습니다. F1 또는 Esc 로 닫습니다.
+          {isManualArticlePath(pathname)
+            ? "이 페이지가 그 화면의 번호 설명서입니다. F1 또는 Esc 로 닫습니다."
+            : "이 화면에는 아직 번호 도움말이 없습니다. F1 또는 Esc 로 닫습니다."}
         </p>
       ) : null}
       {placed.map((p) => (
