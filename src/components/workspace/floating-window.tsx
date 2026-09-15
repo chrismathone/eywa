@@ -113,6 +113,7 @@ export function FloatingWindow({
     <div
       ref={outerRef}
       className={`pointer-events-auto absolute top-0 left-0 ${dragging ? "will-change-transform" : ""} ${win.minimized ? "hidden" : ""}`}
+      data-window-id={win.id}
       style={{
         transform: `translate(${rect.x}px, ${rect.y}px)`,
         width: rect.w,

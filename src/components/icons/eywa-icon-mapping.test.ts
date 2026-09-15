@@ -55,6 +55,8 @@ const APPROVED_INLINE_SVG = [
   "src/app/(shell)/dashboard/_classrooms/classroom-map.tsx",
   // 2026-09-10~11 운영실 현황 차트(도넛·막대·등원율 선, role="img"+aria-label) — 차트(sparkline과 같은 성격).
   "src/app/(shell)/dashboard/_overview/charts.tsx",
+  // 2026-09-15 F1 겹침 도움말의 **잇는 선**(번호 알약 ↔ 말풍선, `<line>` 하나 · aria-hidden) — 장식이지 아이콘이 아니다.
+  "src/components/help/screen-help-overlay.tsx",
   // 2026-09-14 수학 학습 진도맵의 동심원 지도(분기·연·월·주·일 링 + 가운데) — 차트이지 아이콘이 아니다.
   // 2026-09-15 드릴다운이 들어오며 <svg>가 progress-map.tsx → 겹침 레이어 dial-layer.tsx로 옮겨갔다(role="presentation").
   "src/features/math-progress-map/components/dial-layer.tsx",
