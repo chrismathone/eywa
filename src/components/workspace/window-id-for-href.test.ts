@@ -23,10 +23,11 @@ describe("windowIdForHref", () => {
     expect(windowIdForHref("https://example.com/x")).toBeNull();
   });
 
-  it("🔴 화면 설명서는 도움말 창 하나 — 슬러그마다 창이 늘지 않는다", () => {
+  it("🔴 도움말 하위 경로는 창 하나 — 게시글·아이콘·옛 슬러그 북마크도 같은 창", () => {
     expect(windowIdForHref("/help")).toEqual({ id: "help", navLabel: "도움말" });
-    expect(windowIdForHref("/help/timetable")?.id).toBe("help");
+    expect(windowIdForHref("/help/posts/abc")?.id).toBe("help");
     expect(windowIdForHref("/help/icons")?.id).toBe("help");
+    expect(windowIdForHref("/help/timetable")?.id).toBe("help");
     expect(windowIdForHref("/help/students?embed=1")?.id).toBe("help");
   });
 

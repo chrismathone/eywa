@@ -392,6 +392,12 @@ export const AUDIT_ACTIONS = {
   student_ijw_link: "인재원 학습 계정 연결",
   student_ijw_unlink: "인재원 학습 계정 연결 해제",
   student_ijw_link_bulk: "인재원 학습 계정 일괄 연결",
+  // 도움말 질문 게시판(0265a)
+  help_post_create: "도움말 질문 작성",
+  help_post_update: "도움말 질문 수정",
+  help_post_delete: "도움말 질문 삭제",
+  help_post_close: "도움말 질문 닫기",
+  help_answer_create: "도움말 답변 작성",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

@@ -72,8 +72,7 @@ export function windowIdForHref(href: string): { id: string; navLabel?: string }
   const path = routePath(href);
   const extra = EXTRA_WINDOW_ROUTES[path];
   if (extra) return { id: path.replace(/^\//, ""), navLabel: extra };
-  // 화면 설명서(`/help/timetable` 등)는 아이콘 시스템과 같이 **도움말 창 하나**에서 오간다.
-  // 경로마다 창 id를 쪼개면 하이라이트 단어마다 창이 늘고, 사이드바에 면을 30개 올릴 수도 없다.
+  // 도움말 하위(`/help/posts/…` · `/help/icons` · 옛 `/help/<slug>` 북마크)는 **도움말 창 하나**.
   if (path === "/help" || path.startsWith("/help/")) {
     return { id: "help", navLabel: MENU_LABEL.help };
   }

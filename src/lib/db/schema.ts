@@ -1074,6 +1074,47 @@ export const notifications = pgTable(
   (t) => [index("notifications_recipient_idx").on(t.recipientId, t.createdAt)],
 );
 
+// === help_posts / help_answers (도움말 질문 게시판, 0265a) ===
+// 손수 SQL 이 정본. 쓰기는 서버 액션(service_role). Drizzle 은 타입·문서용.
+export const helpPosts = pgTable(
+  "help_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("help_posts_tenant_created_idx").on(t.tenantId, t.createdAt)],
+);
+
+export const helpAnswers = pgTable(
+  "help_answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => helpPosts.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("help_answers_post_idx").on(t.tenantId, t.postId, t.createdAt)],
+);
+
 // === student_consultations (재원생 상담 기록) ===
 // 카테고리: 일반(general), 학습/성적(academic), 정서/심리(emotional), 진로(career), 교우관계(social), 기타(other)
 // 대상: 학부모(parent) / 학생(student) / 학부모+학생(both)

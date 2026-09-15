@@ -3,6 +3,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { tokenizeHelp } from "@/features/help/link-terms";
+import { manualBySlug } from "@/features/help/manuals";
 
 const AllowCtx = createContext<ReadonlySet<string> | undefined>(undefined);
 
@@ -17,8 +18,8 @@ export function HelpAllowProvider({
 }
 
 /**
- * 설명 글 속의 화면 이름에 하이라이트를 걸어 그 설명서로 이동한다.
- * 지금 보고 있는 화면 이름은 색만 남기고 누르지 않는다.
+ * 설명 글 속의 화면 이름에 하이라이트를 걸어 **실제 화면 창**으로 연다.
+ * 화면별 설명서는 F1 겹침이 맡고, 도움말 허브의 `/help/<slug>` 는 걷었다.
  * 이 사람이 열 수 없는 화면은 하이라이트하지 않는다.
  */
 export function HelpText({
@@ -46,10 +47,13 @@ export function HelpText({
             </mark>
           );
         }
+        const href = manualBySlug(t.slug)?.href;
+        if (!href) return <span key={i}>{t.label}</span>;
         return (
           <WindowLink
             key={i}
-            href={`/help/${t.slug}`}
+            href={href}
+            frameTarget="window"
             className="bg-primary-soft text-primary rounded-sm px-0.5 font-medium break-keep hover:underline"
           >
             {t.label}
