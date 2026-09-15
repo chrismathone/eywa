@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { monthPosition, periodAt, rollingPeriods, turnDelta } from "./continuous-timeline";
+import { monthPosition, periodAt, rollingPeriods, timelineRange, timelineStops, turnDelta } from "./continuous-timeline";
+import { buildSampleProgress } from "./sample";
 
 describe("연도를 잇는 시계 좌표", () => {
   it("12월에서 양방향으로 연도를 넘나든다", () => {
@@ -22,5 +23,30 @@ describe("연도를 잇는 시계 좌표", () => {
     expect(turnDelta(170, -170)).toBe(20);
     expect(turnDelta(-170, 170)).toBe(-20);
     expect(turnDelta(10, 40)).toBe(30);
+  });
+
+  it("실제 입학부터 마지막 계획 월까지만 시간 막대를 표시한다", () => {
+    const { min, max } = timelineRange(buildSampleProgress());
+    expect(periodAt(min)).toEqual({ year: 2026, month: 1 });
+    expect(periodAt(max)).toEqual({ year: 2029, month: 2 });
+  });
+
+  it("연도 눈금은 시작·종료 월 사이의 실제 월 간격에 비례한다", () => {
+    const stops = timelineStops(monthPosition(2023, 5), monthPosition(2026, 8), [2023, 2024, 2025, 2026]);
+    expect(stops.map(({ year, month }) => [year, month])).toEqual([[2023, 5], [2024, 1], [2025, 1], [2026, 8]]);
+    expect(stops[0]!.offset).toBe(0);
+    expect(stops[1]!.offset).toBeCloseTo(8 / 39 * 100);
+    expect(stops[2]!.offset).toBeCloseTo(20 / 39 * 100);
+    expect(stops[3]!.offset).toBe(100);
+  });
+
+  it("자료가 있는 기간과 연도만 사용하고 한 달 범위도 처리한다", () => {
+    const sample = buildSampleProgress();
+    const progress = { ...sample, year: 2031, years: [], roadmap: undefined, dailyProgress: [], yearPlan: [{ ...sample.yearPlan[0]!, month: 4 }] };
+    const { min, max } = timelineRange(progress);
+    expect(min).toBe(monthPosition(2031, 4));
+    expect(max).toBe(min);
+    expect(timelineStops(min, max, [2031])).toEqual([{ year: 2031, month: 4, position: min, offset: 0 }]);
+    expect(timelineStops(monthPosition(2023, 5), monthPosition(2026, 8), [2023, 2026])).toHaveLength(2);
   });
 });

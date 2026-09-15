@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { buildYearView, pctOf } from "../derive";
-import { monthPosition, periodAt, rollingPeriods, turnDelta } from "../continuous-timeline";
+import { monthPosition, periodAt, rollingPeriods, timelineRange, timelineStops, turnDelta } from "../continuous-timeline";
 import { VIEWBOX } from "../geometry";
 import { progressForYear } from "../years";
 import { CurrentPosition } from "./current-position";
@@ -26,10 +26,15 @@ export function ContinuousDial() {
   const sliderId = useId();
   const selected = monthPosition(view.year, focus.month);
   const [origin] = useState(selected);
-  const min = monthPosition(years[0]!, 1);
-  const max = monthPosition(years[years.length - 1]!, 12);
+  const { min, max } = useMemo(() => timelineRange(sourceProgress), [sourceProgress]);
+  const stops = useMemo(() => timelineStops(min, max, years), [min, max, years]);
+  useEffect(() => {
+    if (selected >= min && selected <= max) return;
+    const target = periodAt(Math.max(min, Math.min(max, selected)));
+    selectPeriod(target.year, target.month);
+  }, [selected, min, max, selectPeriod]);
   const yearViews = useMemo(() => new Map(years.map((year) => [year, buildYearView(progressForYear(sourceProgress, year))])), [sourceProgress, years]);
-  const positions = useMemo(() => years.flatMap((year) => Array.from({ length: 12 }, (_, i) => monthPosition(year, i + 1))), [years]);
+  const positions = useMemo(() => years.flatMap((year) => Array.from({ length: 12 }, (_, i) => monthPosition(year, i + 1))).filter((position) => position >= min && position <= max), [years, min, max]);
   const months = useMemo(() => {
     const emptyYears = new Map<number, ReturnType<typeof buildYearView>>();
     return rollingPeriods(selected).map(({ year, month }) => {
@@ -134,9 +139,21 @@ export function ContinuousDial() {
       </div>
       <div className={styles.scrubber}>
         <label htmlFor={sliderId}>시간 이동</label>
-        <input id={sliderId} type="range" min={min} max={max} step={1} value={selected}
-          aria-label="연속 회전 월 선택" aria-valuetext={`${view.year}년 ${focus.month}월`} onChange={(event) => goTo(Number(event.target.value))} />
-        <span>{years[0]}–{years.at(-1)}</span>
+        <div className={styles.rail} style={{ "--timeline-progress": `${max === min ? 0 : (selected - min) / (max - min) * 100}%` } as CSSProperties}>
+          <input id={sliderId} type="range" min={min} max={max} step={1} value={selected} disabled={min === max}
+            aria-label="연속 회전 월 선택" aria-valuetext={`${view.year}년 ${focus.month}월`} onChange={(event) => goTo(Number(event.target.value))} />
+          <div className={styles.stops} role="group" aria-label="연도 바로가기">
+            {stops.map((stop, index) => (
+              <button key={stop.position} type="button" className={styles.stop}
+                style={{ left: `${stop.offset}%` }} data-edge={index === 0 ? "start" : index === stops.length - 1 ? "end" : undefined}
+                data-current={stop.year === view.year ? "true" : undefined}
+                aria-label={`${stop.year}년 ${stop.month}월로 이동`} title={`${stop.year}년 ${stop.month}월로 이동`}
+                onClick={() => goTo(stop.position)}>
+                <span>{stop.year}년{periodAt(min).year === periodAt(max).year ? ` ${stop.month}월` : ""}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <p className={styles.hint}>왼쪽으로 감으면 과거 · 오른쪽으로 감으면 미래</p>
     </div>
