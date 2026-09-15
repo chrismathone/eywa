@@ -45,13 +45,15 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("*LAB 임시 칸 — 새지 않는다", () => {
+  // ⚠️ `src` 전수를 읽는 가드라 기본 한도(5초)로는 **전 스위트를 함께 돌릴 때만** 타임아웃난다
+  //    (단독 2초 · 병렬 부하에서 초과). 아이콘 가드와 같은 처방 = 60초(2026-09-15).
   it("🔴 `virtual-lab`을 import하는 파일은 정해진 몇 곳뿐 — 인원·드래그·충돌·엑셀/시트·강사뷰·기본뷰로 새지 않는다", () => {
     const importers = walk("src")
       .filter((f) => /from\s+["'][^"']*\/virtual-lab["']/.test(read(f)))
       .map((f) => relative(ROOT, join(ROOT, f)).split("\\").join("/"));
     const stray = importers.filter((f) => !ALLOWED_IMPORTERS.has(f));
     expect(stray, "허용 목록 밖에서 *LAB 재료를 쓴다").toEqual([]);
-  });
+  }, 60_000);
 
   it("🔴 섹션 교시축·반 드래그·학생 빗금·강사뷰·기본뷰·교실뷰·배치 편집·엑셀/시트는 이 칸을 **모른다**", () => {
     const blind = [

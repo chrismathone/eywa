@@ -16,8 +16,13 @@ const vp = { w: 1000, h: 700 };
 describe("말풍선은 설명을 통째로 담는다", () => {
   // 🔴 원장 제보 2026-09-15 *"창 크기에 따라 잘 맞춰야겠는데? 너무 안맞네 일부가"* — 3줄에서 잘라
   // 대부분의 설명이 *"…전체를 못"* 처럼 문장 중간에서 끊겼다. 실제 설명서 문장으로 잠근다.
-  const bodies = MANUALS.flatMap((m) => m.callouts.map((c) => overlayPlainText(c.body)));
+  // 🔴 **key 있는 것만** 센다 — key 없는 설명은 겹침에 안 뜨는 목록 설명서 전용이라, 같이 세면
+  //    검사 대상이 화면과 어긋난다(적대 리뷰 2026-09-15).
+  const shown = MANUALS.flatMap((m) => m.callouts.filter((c) => c.key));
+  const bodies = shown.map((c) => overlayPlainText(c.body));
   const longest = [...bodies].sort((a, b) => b.length - a.length)[0] ?? "";
+  // 실측(2026-09-15, 프로젝트 글꼴로 크로미움·엣지 렌더)으로 **180px에서 두 줄 · 220px 이상에선 한 줄**인 실제 제목.
+  const TWO_LINES_AT_180 = "그룹 설정 · 강사 순서 · 뷰 설정";
 
   it("실제로 3줄을 넘는 설명이 있다(이 전제가 무너지면 아래 검사가 공허해진다)", () => {
     const perLine = Math.floor((BALLOON_W - 20) / 15);
@@ -27,8 +32,26 @@ describe("말풍선은 설명을 통째로 담는다", () => {
   it("가장 긴 설명도 잘리지 않을 높이를 준다", () => {
     const perLine = Math.floor((BALLOON_W - 20) / 15);
     const lines = Math.ceil(longest.length / perLine);
-    // 안쪽 여백(6×2) + 제목 줄(20) + 사이(2) + 본문 줄(20씩)
-    expect(balloonHeight(longest)).toBeGreaterThanOrEqual(12 + 20 + 2 + lines * 20);
+    // 안쪽 여백(6×2) + 제목 줄(14×1.45=20.3) + 사이(2) + 본문 줄(14×1.375=19.25씩)
+    expect(balloonHeight(longest)).toBeGreaterThanOrEqual(12 + 20.3 + 2 + lines * 19.25);
+  });
+
+  // 🔴 말풍선이 칸 폭에 맞춰 **200px 미만으로 좁아지면** 긴 제목이 번호와 함께 두 줄로 꺾인다 — 한 줄로
+  //    못박으면 그만큼 본문 끝이 잘린다. 그래서 실제로 두 줄이 되는 폭(180px)에서 잰다.
+  it("좁은 말풍선에서 긴 제목이 두 줄로 꺾이는 만큼 상자가 높아진다", () => {
+    const body = "설명 한 줄입니다";
+    expect(balloonHeight(body, 180, Infinity, TWO_LINES_AT_180)).toBeGreaterThan(
+      balloonHeight(body, 180, Infinity, "짧다"),
+    );
+  });
+
+  // 배선 — 배치가 제목을 높이 계산에 **실제로 넘기는지**. `balloonHeight`만 부르면 이 배선이 빠져도 통과한다.
+  it("배치도 제목 줄 수를 반영한다(칸 폭 180px 말풍선)", () => {
+    const box = { x: 40, y: 40, w: 180, h: 60 };
+    const place = (label: string) =>
+      placeOverlay([{ key: "k", n: 7, label, body: "설명 한 줄입니다", box }], vp)[0]!.balloon;
+    expect(place(TWO_LINES_AT_180).w).toBe(180);
+    expect(place(TWO_LINES_AT_180).h).toBeGreaterThan(place("짧다").h);
   });
 
   it("넓은 창에선 같은 글이 더 적은 줄로 든다", () => {

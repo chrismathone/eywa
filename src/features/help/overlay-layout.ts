@@ -33,10 +33,23 @@ const PAD = 8;
  */
 const PAD_X = 10;
 const PAD_Y = 6;
-const LABEL_H = 20;
+/**
+ * 제목 줄 높이 — `text-xs` 줄높이 14 × 1.45 = 20.3px라 21로 센다(본문 줄 20 = 19.25 + 여유와 같은 결).
+ * 🔴 **제목을 한 줄로 못박지 말 것** — 말풍선이 칸 폭에 맞춰 **200px 미만으로 좁아지면** 긴 제목이 번호와 함께
+ * 두 줄로 꺾인다(실측 2026-09-15, 프로젝트 글꼴로 크로미움·엣지 렌더: `시간표#7 "그룹 설정 · 강사 순서 · 뷰 설정"`·
+ * `원스크린#2`·`출석부#1`이 160~196px에서 두 줄, 220px 이상에선 한 줄).
+ * ⚠️ 제목 줄 수도 본문과 같은 넉넉한 글자 폭으로 세므로 220~292px에선 그 셋을 두 줄로 쳐 상자가 21px 크다 —
+ *    겹침이 조금 늘지만(합성 배치에서 소음 수준) 모자라게 세서 잘리는 것보다 낫다.
+ */
+const LABEL_LINE_H = 21;
+/** 제목 앞 번호(`text-xs tabular-nums` + `mr-1`)가 첫 줄에서 먹는 폭. 두 자리를 기준으로 넉넉히. */
+const LABEL_NUM_W = 18;
 const LABEL_GAP = 2;
 const BODY_LINE_H = 20;
-/** 한 글자 폭 — 한글 14px는 거의 전각이고 `break-keep`이라 줄 끝이 일찍 꺾인다. 넉넉하게 잡는다(모자라면 잘린다). */
+/**
+ * 한 글자 폭 — **일부러 넉넉하게** 15px로 센다. 실측(2026-09-15) Pretendard 14px는 한글 12.1px · 공백 3.5px ·
+ * `·` 3.55px라 약 24%가 남고, 그 여유가 `break-keep`(어절 단위로 일찍 꺾임)의 낭비를 덮는다. 🔴 줄이면 잘린다.
+ */
 const BODY_CHAR_W = 15;
 /** 말풍선이 화면을 통째로 덮지 않게 — 여기 걸리면 그 글만 줄여 적어야 한다는 신호다. */
 const MAX_BALLOON_H_RATIO = 0.5;
@@ -66,11 +79,19 @@ export function overlayPlainText(body: string): string {
  * 대부분이 *"…전체를 못"* 처럼 **문장 중간에서 끊겼다**(원장 제보 2026-09-15). 도움말이 말을 하다 마는 건
  * 도움말이 아니다. 화면이 넘치는 게 걱정이면 상한을 올릴 게 아니라 **그 설명을 짧게** 써야 한다.
  */
-export function balloonHeight(body: string, width = BALLOON_W, viewportH = Infinity): number {
+export function balloonHeight(
+  body: string,
+  width = BALLOON_W,
+  viewportH = Infinity,
+  label = "",
+): number {
   const plain = overlayPlainText(body);
-  const charsPerLine = Math.max(6, Math.floor((width - 2 * PAD_X) / BODY_CHAR_W));
+  const content = width - 2 * PAD_X;
+  const charsPerLine = Math.max(6, Math.floor(content / BODY_CHAR_W));
   const lines = Math.max(1, Math.ceil(plain.length / charsPerLine));
-  const h = 2 * PAD_Y + LABEL_H + LABEL_GAP + lines * BODY_LINE_H;
+  // 제목 줄 수 — 번호가 첫 줄 폭을 먹으므로 그만큼을 글자 폭에 얹어 센다.
+  const labelLines = Math.max(1, Math.ceil((label.length * BODY_CHAR_W + LABEL_NUM_W) / Math.max(1, content)));
+  const h = 2 * PAD_Y + labelLines * LABEL_LINE_H + LABEL_GAP + lines * BODY_LINE_H;
   const cap = Number.isFinite(viewportH) ? Math.max(80, viewportH * MAX_BALLOON_H_RATIO) : Infinity;
   return Math.min(h, cap);
 }
@@ -92,7 +113,7 @@ export function placeOverlay(anchors: OverlayAnchor[], vp: Viewport): PlacedCall
       const w = balloonWidth(a.box, vp);
       // 🔴 높이는 **그 폭으로** 센다 — 넓은 창에서 폭만 넓히고 높이를 기본 폭으로 세면 상자가 과하게 높아지고,
       //    반대로 좁은 창에서 기본 폭으로 세면 글이 넘쳐 잘린다.
-      const h = balloonHeight(a.body, w, vp.h);
+      const h = balloonHeight(a.body, w, vp.h, a.label);
       const pill = placePill(a.box, vp, pills);
       pills.push({ ...pill, w: PILL_SIZE, h: PILL_SIZE });
       const balloon = placeBalloon(a.box, w, h, vp, occupied);

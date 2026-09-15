@@ -183,8 +183,13 @@ describe("⑦ 기본뷰 '보강' 박스 — 원반 칸이 없는 날은 **원반
     expect(box).toContain("SectionLabelRow");
     expect(box).toContain("NameMeta");
     expect(box).toContain('label="보강"');
-    // 🔴 머리 tone은 대기·퇴원과 **같다**(이 격자의 규약 = 머리는 공통, 줄만 섹션 색).
-    expect(box).toContain('tone="bg-bg-soft text-text-faint"');
+    // 🔴 머리 tone은 **보강만 쨍한 노랑**이다(원장 2026-09-15 *"보강은 다른것과 다르게 배경색을 쨍한
+    //    노란계열로"*). ⚠️ 09-14의 *"머리는 대기·퇴원과 공통"*을 원장이 화면을 보고 **뒤집은 것**이라
+    //    되돌리지 말 것. 색은 전용 토큰 `--makeup-band` — 형광펜(`--marker`)은 "한 화면에 하나" 가드가
+    //    붙어 있어 빌려 쓸 수 없다.
+    expect(box).toContain('tone="bg-makeup-band text-foreground"');
+    // 리터럴 유틸뿐 아니라 형광펜을 들여오는 정석 경로(`MARKER_TRIGGER`·`bg-(--marker)`)까지.
+    expect(box).not.toMatch(/bg-marker\b|MARKER_TRIGGER|--marker\)/);
     // 줄 색만 예약 단일 소스 — 화면 파일에 보라를 손으로 적으면 칸·범례와 갈린다.
     expect(box).toContain("${RESERVED_BADGE_CLASS}");
     expect(box).not.toMatch(/bg-purple-soft|text-purple\b/);

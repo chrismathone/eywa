@@ -52,6 +52,8 @@ export function ReservedSection({
           ⚠️ 09-14의 *"머리 tone은 대기·퇴원과 같다"*를 원장이 **뒤집은 것**이다 — 그때는 "퇴원블록처럼"이 근거였는데,
           화면을 보고 나니 보강은 오히려 **눈에 띄어야 하는 줄**이라고 정했다. 되돌리지 말 것.
           🔴 색은 전용 토큰 `--makeup-band`다 — 형광펜(`--marker`)은 "한 화면에 하나" 가드가 붙어 있어 못 빌린다.
+          ⚠️ **이 칸에 서는 다른 노랑은 `--search-hit`**(#fff200, 검색에 걸린 원생 줄)이고 둘 다 굵다 — 서로 대비가
+             1.11:1이라 **더 가까이 가면 한 덩어리로 읽힌다**. 띠 색을 더 쨍하게 올리자는 말이 나오면 이걸 볼 것.
           줄 색은 그대로 예약 단일 소스(`RESERVED_BADGE_CLASS`). */}
       <SectionLabelRow label="보강" count={lines.length} tone="bg-makeup-band text-foreground" />
       {lines.map((r) => {
