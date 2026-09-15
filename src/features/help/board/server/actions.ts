@@ -1,0 +1,190 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { logAction } from "@/features/audit/server/log";
+import { canAnswerHelpBoard, canAskHelpBoard } from "../access";
+import { HELP_BOARD_NOT_READY, isMissingHelpBoard } from "../missing";
+import { notifyHelpAnswer, notifyHelpQuestion } from "./notify";
+
+type Result = { ok: true; id: string } | { error: string };
+
+function clip(s: string, max: number): string {
+  return s.trim().slice(0, max);
+}
+
+export async function createHelpPost(form: { title: string; body: string }): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAskHelpBoard(user.systemRole))) return { error: "질문을 작성할 권한이 없습니다" };
+  const title = clip(form.title ?? "", 80);
+  const body = clip(form.body ?? "", 4000);
+  if (!title || !body) return { error: "제목과 내용을 적어 주세요" };
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("help_posts")
+    .insert({ tenant_id: user.tenantId, author_id: user.id, title, body, status: "open" })
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (isMissingHelpBoard(error)) return { error: HELP_BOARD_NOT_READY };
+    return { error: "질문을 저장하지 못했습니다" };
+  }
+  const id = data?.id as string;
+  await logAction({
+    action: "help_post_create",
+    targetType: "help_post",
+    targetLabel: title,
+    metadata: { postId: id, title },
+  });
+  await notifyHelpQuestion({ tenantId: user.tenantId, actorId: user.id, postId: id, title });
+  revalidatePath("/help");
+  return { ok: true, id };
+}
+
+export async function updateHelpPost(postId: string, form: { title: string; body: string }): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAskHelpBoard(user.systemRole))) return { error: "질문을 수정할 권한이 없습니다" };
+  const title = clip(form.title ?? "", 80);
+  const body = clip(form.body ?? "", 4000);
+  if (!title || !body) return { error: "제목과 내용을 적어 주세요" };
+  const admin = createAdminClient();
+  const { data: row, error: loadErr } = await admin
+    .from("help_posts")
+    .select("id, author_id, tenant_id")
+    .eq("id", postId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (loadErr) {
+    if (isMissingHelpBoard(loadErr)) return { error: HELP_BOARD_NOT_READY };
+    return { error: "글을 찾지 못했습니다" };
+  }
+  if (!row) return { error: "글을 찾지 못했습니다" };
+  if (row.author_id !== user.id) return { error: "자기 글만 고칠 수 있습니다" };
+  const { error } = await admin.from("help_posts").update({ title, body }).eq("id", postId).eq("tenant_id", user.tenantId);
+  if (error) return { error: "수정하지 못했습니다" };
+  await logAction({
+    action: "help_post_update",
+    targetType: "help_post",
+    targetLabel: title,
+    metadata: { postId, title },
+  });
+  revalidatePath("/help");
+  revalidatePath(`/help/posts/${postId}`);
+  return { ok: true, id: postId };
+}
+
+export async function deleteHelpPost(postId: string): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAskHelpBoard(user.systemRole))) return { error: "질문을 지울 권한이 없습니다" };
+  const admin = createAdminClient();
+  const { data: row, error: loadErr } = await admin
+    .from("help_posts")
+    .select("id, author_id, title, tenant_id")
+    .eq("id", postId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (loadErr) {
+    if (isMissingHelpBoard(loadErr)) return { error: HELP_BOARD_NOT_READY };
+    return { error: "글을 찾지 못했습니다" };
+  }
+  if (!row) return { error: "글을 찾지 못했습니다" };
+  if (row.author_id !== user.id) return { error: "자기 글만 지울 수 있습니다" };
+  const { error } = await admin.from("help_posts").delete().eq("id", postId).eq("tenant_id", user.tenantId);
+  if (error) return { error: "삭제하지 못했습니다" };
+  await logAction({
+    action: "help_post_delete",
+    targetType: "help_post",
+    targetLabel: row.title as string,
+    metadata: { postId, title: row.title as string },
+  });
+  revalidatePath("/help");
+  return { ok: true, id: postId };
+}
+
+export async function createHelpAnswer(postId: string, bodyRaw: string): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAnswerHelpBoard(user.systemRole))) return { error: "답변할 권한이 없습니다" };
+  const body = clip(bodyRaw ?? "", 4000);
+  if (!body) return { error: "답변을 적어 주세요" };
+  const admin = createAdminClient();
+  const { data: post, error: loadErr } = await admin
+    .from("help_posts")
+    .select("id, author_id, title, status, tenant_id")
+    .eq("id", postId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (loadErr) {
+    if (isMissingHelpBoard(loadErr)) return { error: HELP_BOARD_NOT_READY };
+    return { error: "글을 찾지 못했습니다" };
+  }
+  if (!post) return { error: "글을 찾지 못했습니다" };
+  if (post.status === "closed") return { error: "닫힌 글에는 답할 수 없습니다" };
+  const { data, error } = await admin
+    .from("help_answers")
+    .insert({ tenant_id: user.tenantId, post_id: postId, author_id: user.id, body })
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (isMissingHelpBoard(error)) return { error: HELP_BOARD_NOT_READY };
+    return { error: "답변을 저장하지 못했습니다" };
+  }
+  if (post.status === "open") {
+    await admin.from("help_posts").update({ status: "answered" }).eq("id", postId).eq("tenant_id", user.tenantId);
+  }
+  const id = data?.id as string;
+  await logAction({
+    action: "help_answer_create",
+    targetType: "help_answer",
+    targetLabel: post.title as string,
+    metadata: { postId, answerId: id, title: post.title as string },
+  });
+  await notifyHelpAnswer({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    postId,
+    authorId: post.author_id as string,
+    title: post.title as string,
+  });
+  revalidatePath("/help");
+  revalidatePath(`/help/posts/${postId}`);
+  return { ok: true, id };
+}
+
+export async function closeHelpPost(postId: string): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const admin = createAdminClient();
+  const { data: post, error: loadErr } = await admin
+    .from("help_posts")
+    .select("id, author_id, title, tenant_id")
+    .eq("id", postId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (loadErr) {
+    if (isMissingHelpBoard(loadErr)) return { error: HELP_BOARD_NOT_READY };
+    return { error: "글을 찾지 못했습니다" };
+  }
+  if (!post) return { error: "글을 찾지 못했습니다" };
+  const canClose = post.author_id === user.id || (await canAnswerHelpBoard(user.systemRole));
+  if (!canClose) return { error: "이 글을 닫을 권한이 없습니다" };
+  const { error } = await admin
+    .from("help_posts")
+    .update({ status: "closed" })
+    .eq("id", postId)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { error: "닫지 못했습니다" };
+  await logAction({
+    action: "help_post_close",
+    targetType: "help_post",
+    targetLabel: post.title as string,
+    metadata: { postId, title: post.title as string },
+  });
+  revalidatePath("/help");
+  revalidatePath(`/help/posts/${postId}`);
+  return { ok: true, id: postId };
+}

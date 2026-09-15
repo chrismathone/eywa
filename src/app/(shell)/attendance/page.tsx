@@ -794,6 +794,7 @@ export default async function AttendancePage({
       <div className="relative flex shrink-0 flex-wrap items-center gap-2.5 px-1 py-1">
         {/* 과목 → 강사 → 반 계층 필터(넓→좁). 위를 고르면 아래 선택지가 좁혀지고, 반을 골라야 출석부가 뜬다.
             반 선택 시 과목·강사는 그 반의 값으로 자동 표시(누구 선생님인지 바로 보이게). 전체(=미선택)면 축 이름만 선다. */}
+        <span data-help="att-filters" className="inline-flex flex-wrap items-center gap-2.5">
         {showSubjectFilter ? (
           <FilterSelect
             paramName="subject"
@@ -848,10 +849,12 @@ export default async function AttendancePage({
           triggerClassName={TOOLBAR_SELECT}
           marker
         />
+        </span>
 
         {/* 월 이동 — 앱 전역 단일 소스 PeriodNav(원장 2026-09-01 "출결 날짜 이동도 바꿔줘").
             🔑 종전엔 라벨이 그냥 글자라 **이번 달로 돌아갈 길이 없었다**(◀를 누른 만큼 ▶를 눌러야 했다).
                이제 라벨을 누르면 이번 달로 오고, 다른 달을 보는 중이면 과거/미래 조회 배지가 선다. */}
+        <span data-help="att-month">
         <PeriodNav
           label={formatMonth(month, lang)}
           prevHref={attHref({ classId: effectiveClassId, month: prevMonth, teacherId: effectiveTeacher, subjectId: effectiveSubject, mode })}
@@ -862,8 +865,10 @@ export default async function AttendancePage({
           nextAriaLabel={sheetT(lang, "att.nav.next")}
           currentTitle={sheetT(lang, "att.nav.current")}
         />
+        </span>
 
         {/* 날짜축(세션/월) — 같은 줄에 붙인다. ⚠️ 새 줄을 얹지 말 것(그 높이는 학생 행에서 빼 온다). */}
+        <span data-help="att-filters">
         <PeriodModeToggle
           mode={viewPrefs.periodMode}
           windowLabel={periodWindowLabel(matrix.window, lang)}
@@ -875,11 +880,13 @@ export default async function AttendancePage({
                 : undefined
           }
         />
+        </span>
 
         {/* 보기 — **관리자 전용**. '강사 전체'는 그 강사의 모든 반을 반별로 묶어 한 표에(급여 계산용).
             강사 본인에겐 반 드롭다운과 뜻이 겹쳐(그리고 '반별'이 사진 허브로 보내서) 감춘다. 주소는 attHref가 만든다. */}
         {showViewToggle ? (
           effectiveTeacher ? (
+            <span data-help="att-view">
             <HrefSelect
               axisLabel={sheetT(lang, "att.view")}
               ariaLabel={sheetT(lang, "att.view")}
@@ -897,6 +904,7 @@ export default async function AttendancePage({
                 },
               ]}
             />
+            </span>
           ) : (
             <span className="text-text-faint text-xs">{sheetT(lang, "att.view.pickTeacher")}</span>
           )
@@ -912,7 +920,9 @@ export default async function AttendancePage({
             {/* 학생 검색(원장 2026-08-19) — **클라 필터**라 서버 왕복 0, 친 즉시 표가 좁아진다. 토글(§10) — 검색어(허브 씨앗 포함)가
                 걸려 있으면 펼친 채. 안 걸린 행은 감추는 게 아니라 안 그린다(격자 좌표도 함께 좁아져 방향키가 새지 않는다).
                 검색어는 저장하지 않는다 — 다음 방문에 필터가 걸린 채 열리면 "출석부가 비었다"로 읽힌다. */}
-            <AttendanceSearchToggle />
+            <span data-help="att-search">
+              <AttendanceSearchToggle />
+            </span>
           </>
         ) : (
           <>

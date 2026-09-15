@@ -371,7 +371,7 @@ export function AttendanceCell({
           </span>
         ) : reservedShown ? (
           /* '보강 예약' — 사분면마다 한 글자(원장 2026-09-14). 칸이 30px라 한 줄엔 못 들어간다. */
-          <span aria-hidden className="grid h-full w-full grid-cols-2 grid-rows-2 place-items-center leading-none">
+          <span aria-hidden data-help="att-reserve" className="grid h-full w-full grid-cols-2 grid-rows-2 place-items-center leading-none">
             {RESERVED_CELL_CHARS.map((ch, i) => (
               <span key={i} className="text-xs font-bold">
                 {ch}

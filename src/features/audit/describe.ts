@@ -101,6 +101,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   inventory_audit: "자산 실사",
   inventory_supply: "소모품",
   inventory_category: "자산 분류",
+  help_post: "도움말 질문",
+  help_answer: "도움말 답변",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -1619,6 +1621,13 @@ export function auditDetail(
     case "shuttle_rider_remove":
     case "shuttle_boarding_clear":
       return null;
+
+    case "help_post_create":
+    case "help_post_update":
+    case "help_post_delete":
+    case "help_post_close":
+    case "help_answer_create":
+      return str(m.title) ?? null;
 
     default: {
       /**

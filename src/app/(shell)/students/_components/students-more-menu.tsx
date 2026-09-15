@@ -28,6 +28,7 @@ export function StudentsMoreMenu({ exportHref, canImport }: { exportHref: string
           render={
             <button
               type="button"
+              data-help="st-excel"
               className={`${CONTROL_H} ${CONTROL_LABEL} text-primary hover:bg-bg-soft inline-flex items-center gap-0.5 rounded-md px-1.5 font-medium whitespace-nowrap transition`}
             />
           }

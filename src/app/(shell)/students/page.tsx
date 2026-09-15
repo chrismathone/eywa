@@ -332,10 +332,13 @@ export default async function StudentsPage({
           {/* 상태=퇴원에선 숨김 — 퇴원생은 활성 수강이 없어 이 토글이 켜져 있으면 전원이 걸러져
               "검색해도 항상 0명"이 된다(2026-08-18 실사고). 서버(getStudentsPage)도 같은 조건에서 무시. */}
           {status !== "withdrawn" ? (
+            <span data-help="st-unenrolled">
             <ToolbarChip active={excludeNoEnrollment} href={listParams({ noenr: !excludeNoEnrollment, leave: true })}>
               {sheetT(lang, "stu.filter.noEnr")}
             </ToolbarChip>
+            </span>
           ) : null}
+          <span data-help="st-search">
           <SearchToggle
             placeholder={sheetT(lang, "stu.filter.searchPh")}
             defaultValue={q}
@@ -355,6 +358,7 @@ export default async function StudentsPage({
               />
             }
           />
+          </span>
         </div>
       </div>
 
@@ -391,6 +395,7 @@ export default async function StudentsPage({
                           ⚠️ 폰(<768px)에선 `.stack-rows`가 이 글자를 감춘다(data-cell="label") — 카드엔 열이 없어 열 이름이 뜻을 잃는다. */}
                       <span className="px-1" data-cell="label">{sheetT(lang, "stu.col.student")}</span>
                       {/* 저장값을 이기려면 "전체"도 URL에 적혀야 한다(explicitAll) — 학년·과목·담임·정렬 넷이 그렇다. */}
+                      <span data-help="st-grade" className="inline-flex flex-wrap items-center justify-center gap-1">
                       <HeaderFilter
                         paramName="grade"
                         clearParams={exit("grade")}
@@ -411,9 +416,10 @@ export default async function StudentsPage({
                         explicitAll
                         showAll
                       />
+                      </span>
                     </span>
                   </th>
-                  <th scope="col">
+                  <th scope="col" data-help="st-status">
                     {/* 기본값(재원)이 휴원·퇴원을 **숨기므로** 값을 항상 적는다(showAll). */}
                     <HeaderFilter
                       paramName="status"
@@ -431,6 +437,7 @@ export default async function StudentsPage({
                     {hideSubjectFilter ? (
                       <span className="px-1">{sheetT(lang, "stu.col.subjects")}</span>
                     ) : (
+                      <span data-help="st-subject">
                       <HeaderFilter
                         paramName="subject"
                         clearParams={exit("subject")}
@@ -440,12 +447,14 @@ export default async function StudentsPage({
                         allValue="all"
                         explicitAll
                       />
+                      </span>
                     )}
                   </th>
                   <th scope="col" data-cell={hideTeacherFilter ? "label" : undefined}>
                     {hideTeacherFilter ? (
                       <span className="px-1">{sheetT(lang, "stu.col.teacher")}</span>
                     ) : (
+                      <span data-help="st-teacher">
                       <HeaderFilter
                         paramName="teacher"
                         clearParams={exit("teacher")}
@@ -456,6 +465,7 @@ export default async function StudentsPage({
                         explicitAll
                         cap={200}
                       />
+                      </span>
                     )}
                   </th>
                   {/* 라벨만 있는 머리는 th 자체에 표식 — span만 감추면 0×0 th가 폰 칩 줄의 간격을 먹는다. */}
@@ -485,7 +495,7 @@ export default async function StudentsPage({
                   // 이름 + 학교·학년 압축 라벨("경명여중1")을 **한 줄**에(§11 "한 행 = 이름 + 값") — 두 줄 셀은 행을 키운다.
                   const sg = schoolGradeLabel(s.school, s.grade);
                   return (
-                    <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5">
+                    <tr key={s.id} data-help="st-row" className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5">
                       <td data-cell="primary">
                         <span className="flex min-w-0 items-center gap-1.5">
                           {/* 이름은 1차 식별자라 줄지 않는다(§1 "1차 핵심값 ellipsis 금지") — 좁으면 학교·학년(2차)이 먼저 접힌다. */}

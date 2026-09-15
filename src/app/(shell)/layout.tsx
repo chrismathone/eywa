@@ -43,6 +43,7 @@ import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
 import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
+import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -109,6 +110,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             <PaletteHotkeyForward />
             {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
             <WindowMinSizeNotice />
+            <ScreenHelpOverlay />
             {children}
           </main>
         </OperationsProvider></EditPresenceProvider>
@@ -292,6 +294,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         {/* 강사 미니셸 — 원장이 "빠듯하다"고 짚은 화면(영어 강사 ECS 시트)이 여기다. */}
         <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+            <ScreenHelpOverlay />
             {children}
           </OperationsProvider></EditPresenceProvider>
         </main>
@@ -363,6 +366,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />
           <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
+            <ScreenHelpOverlay />
             {children}
           </EditPresenceProvider>
         </main>

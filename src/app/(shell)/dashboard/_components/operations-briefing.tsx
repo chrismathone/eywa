@@ -115,6 +115,7 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
 
   return (
     <section
+      data-help="dash-briefing"
       className="bg-card shadow-card overflow-hidden rounded-2xl"
       aria-labelledby="operations-briefing-title"
     >

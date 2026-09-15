@@ -535,6 +535,7 @@ function GroupTable({
                 return (
                   <th
                     key={`${g.title}-${t.name}-${d}`}
+                    data-help="tt-day-head"
                     style={{ top: TEACHER_HEAD_H }}
                     className={`bg-card ${GRID} ${ROW_DIVIDER} sticky z-10 border-r ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                   >
@@ -597,7 +598,7 @@ function GroupTable({
             // 444를 두 행에 **내용량 비례로 분배** → 학생 많은 4-1이 커지고 4-2가 얇아짐(2026-07-07 사용자 지적).
             <tr key={row.key} style={{ height: rowH }}>
               {isGroupSecond ? null : (
-                <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: labelH }}>
+                <td rowSpan={paired ? 2 : 1} data-help="tt-period" className={labelCls} style={{ height: labelH }}>
                   {timeOnly ? (
                     // 이름이 없어도 시각은 **두 줄**(`14:30` / `~ 16:20`) — 한 줄 `14:30~16:20`은 교시 열 폭을 넘어
                     // 옆 칸으로 샌다(원장 캡처 2026-09-04. 이름 있는 갈래는 아래에서 이미 두 줄이었다).

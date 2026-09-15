@@ -80,6 +80,7 @@ function Panel({
   children,
   wide = false,
   className = "",
+  helpKey,
 }: {
   id?: string;
   title: string;
@@ -89,6 +90,7 @@ function Panel({
   children: ReactNode;
   wide?: boolean;
   className?: string;
+  helpKey?: string;
 }) {
   const visible = sections.filter((v) => !!v);
   if (!visible.length) return null;
@@ -101,6 +103,7 @@ function Panel({
       data-overview="panel"
       data-panel-title={title}
       data-wide={wide || undefined}
+      data-help={helpKey}
       className={`${s.panel} ${wide ? s.wide : ""} ${className}`}
       aria-label={title}
     >
@@ -980,6 +983,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           </Panel>
           <Panel
             title="현재 수업 현황"
+            helpKey="dash-now"
             note={
               v.schedule?.at
                 ? `${clock(v.schedule.at)} 기준 · 과목별`

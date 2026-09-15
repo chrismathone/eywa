@@ -43,7 +43,9 @@ export type NotificationType =
   | "approval_requested"
   | "approval_decided"
   // 결재 문서에 댓글(0227a) — 기안자·결재선에게(작성자 제외). 전결 사유 등 공유가 목적이라 참조는 제외.
-  | "approval_comment";
+  | "approval_comment"
+  | "help_question"
+  | "help_answer";
 
 export type NotificationItem = {
   id: string;
@@ -82,4 +84,6 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   approval_requested: "scrollText",
   approval_decided: "clipboardCheck",
   approval_comment: "message",
+  help_question: "help",
+  help_answer: "help",
 };

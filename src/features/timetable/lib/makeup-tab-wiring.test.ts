@@ -31,10 +31,10 @@ describe("보강 탭 — 구분 축", () => {
   });
 
   it("보강 탭에선 뷰·뷰 설정·엑셀·편집·검색이 접힌다(눌러도 아무 일도 안 일어나는 항목을 세우지 않는다)", () => {
-    expect(PAGE).toMatch(/makeupTab \? null : \(\s*<ParamSelect\s*axisLabel="뷰"/);
+    expect(PAGE).toMatch(/makeupTab \? null : \(\s*<span data-help="tt-view">\s*<ParamSelect\s*axisLabel="뷰"/);
     expect(PAGE).toContain("{isRooms || makeupTab ? null : (");
     expect(PAGE).toContain("{!makeupTab && (effView === \"basic\" || effView === \"integrated\") && slots.length > 0 && canEdit ? (");
-    expect(PAGE).toContain("{makeupTab ? null : <TimetableSearchToggle />}");
+    expect(PAGE).toMatch(/makeupTab \? null : \(\s*<span data-help="tt-search">\s*<TimetableSearchToggle \/>/);
   });
 
   it("교시 행·시각 → 행 판정은 슬롯과 같은 함수(subjectPeriodRows · slotPeriodRow), 라이브러리는 출석부 예약 조회", () => {

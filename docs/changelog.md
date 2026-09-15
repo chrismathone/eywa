@@ -1,5 +1,13 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-15 (3) — 도움말 재개편: **F1 화면 겹침** + `/help` = Q&A·질문 게시판
+
+원장: *"도움말에는 간단한 qna 정도만 넣어놓고 아니면 게시물 작성해서 답변 받아볼 수 있게 게시판 형태 정도만 … 이 화면 자체에서 F1을 눌러 도움말 호출하면 오버랩식으로"*.
+
+- **A. F1 겹침**: 포커스된 문서에서 F1 → 번호 알약 + 말풍선. 다시 F1 · Esc · 빈 곳 클릭으로 닫는다. 앵커는 `[data-help]` + `getBoundingClientRect`(화면에 보이는 것만 — display:none·크기 0·뷰포트 밖 제외). 문구는 `manuals/*.ts` callouts `key`. 리스너는 `(shell)/layout` 세 경로(창 iframe · 미니셸 · 풀셸)에 같은 `ScreenHelpOverlay` 한 부품. 시범 = 시간표 기본뷰 + 월별 출석부 · 원생목록 · 운영실 · 원스크린. 위치·충돌 회피는 순수 함수(`overlay-layout.ts`) + Vitest. 사이드바 도움말 옆에 **F1 = 이 화면 도움말**. 강사뷰 영어 화면(`teacher_view_lang`)은 이번엔 한국어 그대로(주석).
+- **B. `/help`**: 화면별 설명서 목록과 `/help/[slug]` 를 걷었다(데이터 `manuals` 는 F1 원천이라 유지). 허브는 FAQ + 질문 게시판. FAQ 본문의 화면 이름은 `WindowLink` 로 **실제 화면**을 연다. 게시판 = `0265a_help_board.sql`(`help_posts`/`help_answers`, tenant_id + RLS select, 쓰기는 서버 액션 service_role). 질문 = 도움말 메뉴 접근 · 자기 글만 수정·삭제 · 답변 = master·admin·super_admin. 같은 게이트를 서버 액션이 다시 본다. 알림(새 질문 → 다른 master·admin, 답변 → 작성자) · 감사로그 5키. 표 부재(42P01/PGRST205)면 Q&A 는 남고 게시판 자리에 한글 안내만(#95).
+- 🔴 A 는 DB 0. 0265a 는 원장이 손으로 적용. 폰(키보드 없음)은 이번 범위 밖.
+
 ## 2026-09-15 (2) — AI 키를 **기능별 8그룹**으로 · 안 쓰는 환경변수 정리
 
 원장 *"claude나 gemini 등과 같이 중복해서 사용하는것들 … 기능별로 키를 발급받아서 사용량 체크를 하려고"* · *"환경변수를 싹 정리하고 싶은데"* · *"env.local에서도 사용하지 않는 키 싹 정리"*.
@@ -10,6 +18,7 @@
 - **`ai_usage_logs.key_name`에 실제로 쓴 키 이름**(`ment`·`consultations`·`default`)을 남긴다 — 기본 키로 넘어간 호출이 `default`로 찍혀 **빠진 키가 표에서 드러난다**. 클라이언트 캐시도 버킷이 아니라 **고른 env 이름** 단위.
 - **환경변수 정리**: Vercel에서 아무도 안 읽는 3개(`DATA_GO_KR_API_KEY`·`NEIS_API_KEY`·`SCHOOLINFO_API_KEY`)와 7/29에 없앤 `MEDIA_STORAGE_BACKEND`, 그리고 따로 등록돼 있던 Preview·Development 사본 23개를 지웠다(Production 29종은 그대로 — 지우기 전 값 백업 후 대조). 로컬 `.env.local`은 28 → 18개(안 쓰는 10개: `GEMINI_API_KEY`(소비처 0곳 — SDK도 안 깔려 있다)·`EDUTRIX_*`·`VERCEL_OIDC_TOKEN` 등). ⚠️ `FIREBASE_SERVICE_ACCOUNT_KEY`는 **앱에선 죽었지만 로컬 일회성 스크립트 6개**(`scripts/_english_sync/*`·`scripts/staff-roster-import/*`)가 아직 2순위 폴백으로 읽는다 — 지금은 1순위 `GOOGLE_SERVICE_ACCOUNT_KEY`가 있어 안 터진다(둘 다 없으면 그 스크립트들이 TypeError로 죽는다). ⚠️ Preview·Production이 **한 항목으로 묶인 변수**(VAPID 셋·`CONSULT_EXPORT_TOKEN`·`HR_ROSTER_SPREADSHEET_ID`·`DEEPSEEK_API_KEY`·`NOTION_TOKEN`)는 건드리지 않았다 — `vercel env rm`은 항목째 지워서 Production 값까지 날아간다.
 - 캘린더 가져오기의 죽은 `FIREBASE_SERVICE_ACCOUNT_KEY` 예비 경로 제거(그 GCP 프로젝트는 삭제됐다).
+
 
 ## 2026-09-15 (1) — 시간표 보강 박스가 월+목 병합을 쪼개지 않는다 · **메모 툴팁 = 카드** · 빗금 칸에 "누가 찍었나"
 

@@ -128,9 +128,9 @@ export function OneScreenTopBar({
         {/* 날짜 — 이전/다음 이동 + 날짜 선택(과거 날짜 마감·재발송). report_date=카드 표시일=ClassNote 게시일.
             PeriodNav는 href 대신 **날짜 문자열**을 받고 `onNavigate`가 가로채 `onDateChange`로 넘긴다(searchParam 네비는 호출부 몫).
             오늘 이후로는 못 간다(`nextDisabled`) — 옛 규칙 그대로. */}
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5" data-help="os-date">
+          {/* 라벨은 호출부가 만든 문자열(`today` = "2026년 9월 4일 (금)") — PeriodNav 규약(포맷은 호출부 단일 소스). */}
           <PeriodNav
-            // 라벨은 호출부가 만든 문자열(`today` = "2026년 9월 4일 (금)") — PeriodNav 규약(포맷은 호출부 단일 소스).
             label={today}
             prevHref={addDays(date, -1)}
             nextHref={addDays(date, 1)}
@@ -155,7 +155,7 @@ export function OneScreenTopBar({
             서버가 `classTags = ["전체", ...todayClasses 이름]`으로 **같은 원본에서** 만들기 때문에 두 줄은
             항상 같은 목록이었다(roster.ts). → 정보가 많은 쪽(시각·인원)을 남기고 그걸 클릭 가능한 필터로.
             ⚠️ todayClasses 없이 classTags만 오는 호출부(데모 등)를 위해 남는 태그는 이름 칩으로 계속 렌더한다. */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5" data-help="os-class">
           <button
             type="button"
             onClick={() => onFilter(CLASS_TAG_ALL)}
@@ -205,6 +205,7 @@ export function OneScreenTopBar({
         {/* 작성 상태 필터 — "아직 안 쓴 학생만" 추려 마저 쓰기 위한 것(반 필터 바로 옆 = 둘 다 '무엇을 보여줄지').
             판정은 학부모 문구 기준(write-filter.ts). `축: 값` 드롭다운(§10, 옛 세그먼트). 같은 값을 다시 고르면
             목록을 새로 계산한다(`reselect` — 필터를 켠 뒤 입력해도 카드·행이 사라지지 않게 고정된 목록을 정리). */}
+        <span data-help="os-filters" className="inline-flex flex-wrap items-center gap-2">
         <HrefSelect
           axisLabel={t("os.write.axis")}
           ariaLabel={t("os.write.title")}
@@ -217,6 +218,7 @@ export function OneScreenTopBar({
             label: o.count != null ? `${o.label} ${o.count}` : o.label,
           }))}
         />
+        </span>
 
         {/* 우측: 마감 통계 + 카드/표 토글 */}
         <div className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
@@ -242,6 +244,7 @@ export function OneScreenTopBar({
             </span>
           </div>
           {makeupAdder}
+          <span data-help="os-filters" className="inline-flex items-center gap-2">
           {/* AI 멘트 모드(내 계정) — 학원 기본 / 단일 A / 2문단 B. 강사별 저장(users.report_notice_mode).
               바꾸면 아래 보고서 입력이 1칸(A) ↔ 2칸(B, 수업 내용 / 태도·특이사항)으로 함께 바뀐다. `축: 값` 드롭다운(§10). */}
           <HrefSelect
@@ -266,6 +269,7 @@ export function OneScreenTopBar({
             onSelect={(v) => onFontSize(v as OnescreenFontSize)}
             options={ONESCREEN_FONT_SIZES.map((s) => ({ value: s, label: onescreenFontSizeLabel(s, lang) }))}
           />
+          </span>
         </div>
       </div>
 
@@ -282,14 +286,17 @@ export function OneScreenTopBar({
             ⚠️ 열람 전용('다른 강사 뷰')에선 숨긴다 — 그 화면은 저장이 전부 거절되므로 데려가 봐야
                누를 수 없는 버튼만 보여 준다(공지 탭을 숨기는 것과 같은 결). */}
         {readonlyView ? null : (
+          <span data-help="os-quick">
           <Button
             render={<Link href="/attendance/quick" title={t("os.quick.title")} />}
             className="shrink-0"
           >
             {t("os.quick")}
           </Button>
+          </span>
         )}
         {/* 카드 ↔ 표(스프레드시트) ↔ 오늘 발송 현황 ↔ 월간 발송(달력) ↔ 공지 = `보기: 카드` 드롭다운(§10, 옛 세그먼트 탭). */}
+        <span data-help="os-filters">
         <HrefSelect
           axisLabel={t("os.face.axis")}
           ariaLabel={t("os.face.axis")}
@@ -300,6 +307,7 @@ export function OneScreenTopBar({
             : (["card", "grid", "status", "history", "notice"] as const)
           ).map((v) => ({ value: v, label: t(VIEW_LABEL_KEY[v]) }))}
         />
+        </span>
       </div>
     </Toolbar>
   );

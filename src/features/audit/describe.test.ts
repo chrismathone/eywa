@@ -17,6 +17,13 @@ const ctx = (names: Record<string, string> = {}) => ({
   subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key,
 });
 
+describe("auditDetail — 도움말 게시판(0265a)", () => {
+  it("질문·답변은 제목만 한글로", () => {
+    expect(auditDetail("help_post_create", { title: "출석부가 안 열려요" }, ctx())).toBe("출석부가 안 열려요");
+    expect(auditDetail("help_answer_create", { title: "출석부가 안 열려요" }, ctx())).toBe("출석부가 안 열려요");
+  });
+});
+
 describe("auditDetail — 인재원 학습 계정 짝(2026-09-10)", () => {
   it("연결·일괄·해제 모두 어느 계정인지 적는다(이름이 아이디 그대로면 한 번만)", () => {
     expect(auditDetail("student_ijw_link", { studentId: SID, ijwId: "ijwgsy", ijwName: "공서연" }, ctx())).toBe(
