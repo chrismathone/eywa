@@ -26,7 +26,7 @@ const PRIORITY = "src/features/dashboard/onescreen/priority-lines.ts";
 const SERVER_QUERIES = "src/features/dashboard/onescreen/server/queries.ts";
 const REPORT_ACTIONS = "src/features/report-admin/server/actions.ts";
 const ONE_SCREEN = "src/app/(shell)/dashboard/_onescreen/one-screen.tsx";
-const NEWCOMERS_PAGE = "src/app/(shell)/newcomers/page.tsx";
+const NEWCOMERS_FILTERS = "src/features/newcomers/board-model.ts";
 
 describe("한 화면 대시보드 배선", () => {
   it("케어 칸의 기한 판정은 신규생 단일 소스(`statusOf`)를 그대로 부른다", () => {
@@ -38,7 +38,7 @@ describe("한 화면 대시보드 배선", () => {
   });
 
   it("칸을 센 조건과 목록 필터가 같은 함수다 — 목록이 `careCellMatches`를 실제로 부른다", () => {
-    expect(read(NEWCOMERS_PAGE)).toContain("careCellMatches(");
+    expect(read(NEWCOMERS_FILTERS)).toContain("careCellMatches(");
     expect(read(CARE_CELLS)).toContain("export function careCellMatches");
   });
 

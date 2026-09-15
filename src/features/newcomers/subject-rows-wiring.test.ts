@@ -19,7 +19,7 @@ const QUERIES = strip(read("src", "features", "newcomers", "server", "queries.ts
 const SIGNALS = strip(read("src", "features", "dashboard", "server", "action-signals.ts"));
 const CARE = strip(read("src", "features", "newcomers", "care-cells.ts"));
 const TABLE = strip(read("src", "app", "(shell)", "newcomers", "_components", "newcomer-table.tsx"));
-const PAGE = strip(read("src", "app", "(shell)", "newcomers", "page.tsx"));
+const BOARD = strip(read("src", "app", "(shell)", "newcomers", "_components", "newcomer-board.tsx"));
 
 describe("① 표 모양 — 과목이 유니크 축에 들어가고, 부분 유니크가 없다([[#113]])", () => {
   it("유니크 = (테넌트, 학생, 과목, 항목) · 과목은 NOT NULL 기본 ''", () => {
@@ -78,8 +78,8 @@ describe("③ 읽기 — 탭과 운영실이 같은 조회·같은 규칙", () =
 
 describe("④ 화면 — 원장 지시 그대로", () => {
   it("표는 과목 행을 그리고, '명'은 학생 수로 센다", () => {
-    expect(PAGE).toContain("view.subjectRows");
-    expect(PAGE).toContain("studentsIn(");
+    expect(BOARD).toContain("view.subjectRows");
+    expect(BOARD).toContain("studentsIn(");
   });
 
   it("🔴 과목 라벨은 학원설정 단일 소스 — raw 키를 그대로 내보내지 않는다", () => {
@@ -104,6 +104,6 @@ describe("④ 화면 — 원장 지시 그대로", () => {
   });
 
   it("창·모바일에선 머리를 접는다 — 창 제목줄과 이중 제목 금지", () => {
-    expect(PAGE).toContain('<div className="compact-chrome:hidden">');
+    expect(BOARD).toContain('<div className="compact-chrome:hidden">');
   });
 });

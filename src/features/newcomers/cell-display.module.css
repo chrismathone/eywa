@@ -1,0 +1,10 @@
+.badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 52px; min-height: 25px; padding: 2px 8px; border: 1px solid transparent; border-radius: 6px; font-size: 12px; line-height: 18px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.done { color: #047857; background: #ecfdf5; }
+.overdue { color: #c92525; background: #fef0f0; }
+.due { color: #92400e; background: #fffbeb; }
+.today { color: #85410d; background: #ffedbf; border-color: #f6d788; }
+.neutral { color: #64748b; background: #f3f6fa; font-weight: 500; }
+.waived { color: #7b8798; background: transparent; font-weight: 400; }
+button.badge:not(:disabled):hover { filter: brightness(.96); border-color: currentColor; }
+button.badge:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+button.badge:disabled { cursor: default; }

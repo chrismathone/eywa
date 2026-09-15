@@ -39,7 +39,7 @@ export async function setOnboardingCheck(input: {
   done: boolean;
   /** 완료일(YYYY-MM-DD). 없으면 오늘 — 뒤늦게 기록할 때 실제 날짜를 넣을 수 있다. */
   doneOn?: string;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; doneOn?: string | null }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "newcomers")))
@@ -125,5 +125,6 @@ export async function setOnboardingCheck(input: {
     metadata: { studentId: input.studentId, itemKey: input.itemKey, doneOn, subject, subjectStored: storedSubject },
   });
   revalidatePath("/newcomers");
-  return { ok: true };
+  // 화면을 연 뒤 KST 날짜가 바뀌어도 실제 저장한 완료일을 표시한다.
+  return { ok: true, doneOn };
 }

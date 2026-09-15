@@ -1,26 +1,10 @@
-/**
- * 신규생 관리 스켈레톤 — 실제 구조(머리 / 지표 4 / 툴바 / 표)와 **같은 순서·같은 개수**여야 한다.
- * 어긋나면 로드가 끝나는 순간 화면이 위로 튄다(운영실에서 겪은 그 증상).
- */
+import styles from "./_components/newcomer-board.module.css";
+
 export default function Loading() {
-  return (
-    <div className="animate-pulse space-y-5 compact-chrome:space-y-3">
-      <div className="space-y-2">
-        <div className="bg-bg-soft h-3 w-16 rounded" />
-        <div className="bg-bg-soft h-7 w-40 rounded" />
-      </div>
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="bg-bg-soft h-24 rounded-2xl" />
-        ))}
-      </div>
-      {/* 툴바(구간 칩 묶음) — 실표면과 같은 높이를 **변수**로 가리킨다(치수를 손으로 적으면 실표면이 바뀔 때 안 따라온다). */}
-      <div className="bg-bg-soft h-(--control-h) w-72 rounded-lg" />
-      <div className="space-y-1.5">
-        {Array.from({ length: 8 }, (_, i) => (
-          <div key={i} className="bg-bg-soft h-9 rounded" />
-        ))}
-      </div>
-    </div>
-  );
+  return <div className={`${styles.board} edge-to-edge`} aria-busy="true" aria-label="신규생 관리 불러오는 중">
+    <p className={styles.muted} role="status">신규생 관리 기록을 불러오고 있습니다…</p>
+    <div className={styles.metrics}>{Array.from({ length: 5 }, (_, i) => <div key={i} className={`${styles.metric} animate-pulse`} style={{ height: 86 }}><div className="h-8 w-3/4 rounded bg-slate-100" /></div>)}</div>
+    <div className={`${styles.priority} animate-pulse`}><div className="h-4 w-1/2 rounded bg-slate-100" /></div>
+    <div className={styles.panel}><div className="h-20 shrink-0 bg-slate-50" />{Array.from({ length: 14 }, (_, i) => <div key={i} className="h-9 shrink-0 animate-pulse border-b border-slate-100 px-4 py-2"><div className="h-3 w-3/4 rounded bg-slate-100" /></div>)}</div>
+  </div>;
 }
