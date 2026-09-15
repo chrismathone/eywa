@@ -366,7 +366,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />
           <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
-            <ScreenHelpOverlay />
+            {/* 배경(운영실) F1 은 창(z-40) 아래 — 창을 보고 있는데 대시보드 설명이 덮이지 않게. */}
+            <ScreenHelpOverlay beneathWindows />
             {children}
           </EditPresenceProvider>
         </main>

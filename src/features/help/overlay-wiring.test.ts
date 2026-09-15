@@ -11,6 +11,14 @@ describe("F1 겹침 배선", () => {
     const layout = read("app/(shell)/layout.tsx");
     const n = layout.split("<ScreenHelpOverlay").length - 1;
     expect(n).toBe(3);
+    expect(layout).toContain("<ScreenHelpOverlay beneathWindows");
+  });
+
+  it("창 크롬에서 F1 이면 그 창 iframe 으로 넘긴다", () => {
+    const overlay = read("components/help/screen-help-overlay.tsx");
+    expect(overlay).toContain("eywa-help-toggle");
+    expect(overlay).toContain("iframeRegistry");
+    expect(read("components/workspace/floating-window.tsx")).toContain("data-window-id");
   });
 
   it("브라우저 기본 F1 을 preventDefault 한다", () => {

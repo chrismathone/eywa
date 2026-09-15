@@ -13,6 +13,9 @@ import {
   type PlacedCallout,
 } from "@/features/help/overlay-layout";
 import { overlaySlugForPath } from "@/features/help/overlay-path";
+import { iframeRegistry } from "@/components/workspace/route-window";
+
+const HELP_TOGGLE = "eywa-help-toggle";
 
 const subscribeNever = () => () => {};
 function useClient(): boolean {
@@ -26,7 +29,7 @@ function useClient(): boolean {
  * 강사뷰 영어 화면(`teacher_view_lang`)은 이번엔 한국어 그대로다 —
  * 설명 문구는 manuals 한국어 원문이고, 이번 범위에서 사전을 타지 않는다.
  */
-export function ScreenHelpOverlay() {
+export function ScreenHelpOverlay({ beneathWindows = false }: { beneathWindows?: boolean }) {
   const pathname = usePathname() ?? "";
   const client = useClient();
   const [open, setOpen] = useState(false);
@@ -61,13 +64,27 @@ export function ScreenHelpOverlay() {
       if (isHelpHotkey(e)) {
         e.preventDefault();
         if (e.repeat) return;
+        const winId = windowElId(e.target);
+        if (winId && forwardHelp(winId)) {
+          setOpen(false);
+          return;
+        }
         setOpen((v) => !v);
         return;
       }
       if (e.key === "Escape") setOpen(false);
     };
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if ((e.data as { type?: string } | null)?.type !== HELP_TOGGLE) return;
+      setOpen((v) => !v);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("message", onMsg);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("message", onMsg);
+    };
   }, []);
 
   useEffect(() => {
@@ -89,7 +106,7 @@ export function ScreenHelpOverlay() {
     <div
       role="dialog"
       aria-label="이 화면 도움말"
-      className="fixed inset-0 z-[10000]"
+      className={`fixed inset-0 ${beneathWindows ? "z-30" : "z-[10000]"}`}
       onClick={() => setOpen(false)}
     >
       <div className="bg-ink/30 absolute inset-0" />
@@ -146,4 +163,16 @@ export function ScreenHelpOverlay() {
     </div>,
     document.body,
   );
+}
+
+function windowElId(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) return null;
+  return target.closest("[data-window-id]")?.getAttribute("data-window-id") ?? null;
+}
+
+function forwardHelp(winId: string): boolean {
+  const frame = iframeRegistry.get(winId)?.contentWindow;
+  if (!frame) return false;
+  frame.postMessage({ type: HELP_TOGGLE }, window.location.origin);
+  return true;
 }

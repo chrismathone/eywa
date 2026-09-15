@@ -76,6 +76,21 @@ describe("placeOverlay", () => {
     );
     noBalloonOverlap(placed);
   });
+  it("운영실 카드처럼 가로로 나란히 있으면 말풍선이 자기 칸에 붙는다", () => {
+    const cards = [0, 1, 2, 3].map((i) =>
+      a({ key: `c${i}`, n: i + 1, box: { x: 24 + i * 200, y: 80, w: 188, h: 110 } }),
+    );
+    const placed = placeOverlay(cards, { w: 900, h: 700 });
+    noBalloonOverlap(placed);
+    for (let i = 0; i < cards.length; i++) {
+      const box = cards[i]!.box;
+      const b = placed[i]!.balloon;
+      const cx = b.x + b.w / 2;
+      expect(cx, `card ${i}`).toBeGreaterThan(box.x - 24);
+      expect(cx, `card ${i}`).toBeLessThan(box.x + box.w + 24);
+    }
+  });
+
   it("툴바 8개 + 격자 왼쪽 8개여도 말풍선이 안 겹친다", () => {
     const top = [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
       a({ key: `t${i}`, n: i + 1, box: { x: 16 + i * 72, y: 8, w: 64, h: 32 } }),
@@ -88,7 +103,7 @@ describe("placeOverlay", () => {
         box: { x: 24, y: 120 + i * 48, w: 90, h: 40 },
       }),
     );
-    const placed = placeOverlay([...top, ...grid], vp);
+    const placed = placeOverlay([...top, ...grid], { w: 1100, h: 900 });
     expect(placed).toHaveLength(16);
     noBalloonOverlap(placed);
   });
@@ -102,8 +117,12 @@ describe("placeOverlay", () => {
     );
     expect(placed).toHaveLength(8);
     noBalloonOverlap(placed);
-    const xs = new Set(placed.map((p) => Math.round(p.balloon.x)));
-    expect(xs.size).toBeGreaterThan(3);
+    for (let i = 0; i < 8; i++) {
+      const box = { x: 16 + i * 72, y: 8, w: 64, h: 32 };
+      const b = placed[i]!.balloon;
+      const dist = Math.hypot(b.x + b.w / 2 - (box.x + box.w / 2), b.y + b.h / 2 - (box.y + box.h / 2));
+      expect(dist, `item ${i}`).toBeLessThan(320);
+    }
   });
   it("짧은 글의 말풍선이 긴 글보다 낮다", () => {
     expect(balloonHeight("짧다")).toBeLessThan(balloonHeight("가".repeat(80)));
