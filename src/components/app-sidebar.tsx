@@ -114,6 +114,7 @@ function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
  */
 export function AppSidebar({
   systemRole,
+  isSuperAdmin,
   email,
   displayName,
   jobTitle,
@@ -127,6 +128,8 @@ export function AppSidebar({
   menuLayout,
 }: {
   systemRole: SystemRole;
+  /** 총괄(super_admin) — master 전용 목적지를 함께 연다. */
+  isSuperAdmin?: boolean;
   email: string;
   displayName: string;
   jobTitle?: string | null;
@@ -212,7 +215,9 @@ export function AppSidebar({
     systemRole,
     permMatrix,
     canTeacherView,
-    isMaster: systemRole === "master",
+    // 🔴 총괄(super_admin)도 통과 — 총괄은 역할이 아니라 별도 표라 users.system_role이 'admin'인
+    //    사람이 실제로 있다(결정 로그 2026-08-13 *"super_admin은 … 어떤 제한 명단·게이트도 자동 통과"*).
+    isMaster: systemRole === "master" || isSuperAdmin,
     menuLayout,
   };
   // 자주 방문한 메뉴 — 서버가 계정 기록에서 뽑아 순서대로 내려준다(없으면 기본값).

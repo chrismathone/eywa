@@ -10,6 +10,7 @@ import { NotificationBell } from "@/features/notifications/components/notificati
 import { NotifyPermissionBanner } from "@/features/notifications/components/notify-permission-banner";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getActivePopups } from "@/features/notices/server/queries";
@@ -311,6 +312,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   // '다른 강사 뷰'(열람 전용) 진입 자격 — master는 쿼리 0, 그 외 요청 캐시된 PK 조회 1회(0224a 토글).
   const canOtherTeacherView = await canUseOtherTeacherView();
+  // 총괄(super_admin) — 결정 로그 *"super_admin은 새로 만드는 어떤 제한 명단·게이트도 자동 통과한다"*
+  // (원장 2026-08-13). 🔴 `systemRole === "master"`만으로 판정하면 총괄이 자기 시스템에서 잠긴다
+  // (총괄은 역할이 아니라 별도 표라 users.system_role이 'admin'인 사람이 실제로 있다).
+  // 요청 캐시라 master가 아닐 때만 PK 조회 1회.
+  const isSuperAdmin = await isCurrentUserSuperAdmin();
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
   // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
   const frequentKeys = topVisitedMenus(
@@ -344,6 +350,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           permMatrix={permMatrix}
           canTeacherView={canTeacherView}
           canOtherTeacherView={canOtherTeacherView}
+          isSuperAdmin={isSuperAdmin}
           frequentKeys={frequentKeys}
           menuLayout={settings.navigation.menus}
           className="hidden lg:pointer-fine:flex"
@@ -387,6 +394,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           systemRole={user.systemRole}
           permMatrix={permMatrix}
           canTeacherView={canTeacherView}
+          isSuperAdmin={isSuperAdmin}
           menuLayout={settings.navigation.menus}
         />
       </HideInFrame>

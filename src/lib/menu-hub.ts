@@ -260,7 +260,11 @@ type Gate = {
   permMatrix?: AccessMatrix;
   /** 겸직(담당 반 보유) — `teacherOnly` 목적지의 쓸모 판정(사이드바와 같은 규약). */
   canTeacherView?: boolean;
-  /** master 전용 목적지 노출. */
+  /**
+   * master 전용 목적지 노출 — 🔴 **'master 이상'이라는 뜻이다**(총괄 포함). 총괄(super_admin)은 역할이
+   * 아니라 별도 표라 `users.system_role`이 'admin'인 사람이 실제로 있고, 여기에 `systemRole === "master"`만
+   * 넣으면 총괄이 자기 시스템에서 잠긴다(결정 로그 2026-08-13). 호출부는 `|| isSuperAdmin`을 함께 준다.
+   */
   isMaster?: boolean;
   /**
    * 학원 설정 '왼쪽 탭'(`navigation.menus`) — **보기만** 정한다. 권한이 아니다:

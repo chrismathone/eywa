@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { kstToday } from "@/lib/date-kst";
 import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames } from "@/features/owner/server/queries";
@@ -29,7 +30,20 @@ type Sp = Record<string, string | undefined>;
 // 면 목록은 **단일 소스**(src/features/owner/tabs.ts) — 상단 FaceTabs와 왼쪽 사이드바 하부탭이
 // 같은 배열에서 파생된다. 여기에 목록을 다시 적지 말 것(원장 2026-08-07: 한쪽만 고쳐 사이드바가 stale).
 const TAB_LABEL = Object.fromEntries(OWNER_TABS.map((t) => [t.key, t.label])) as Record<OwnerTab, string>;
-const FACES: Face[] = OWNER_TABS.map((t) => ({ key: t.key, label: t.label, href: t.href, group: t.group }));
+/**
+ * 🔴 감사로그 면은 **원장(master)·총괄(super_admin) 전용**(원장 2026-09-09 *"감사로그는 마스터 이상급으러만"*).
+ *    같은 날 DB 정책도 그렇게 좁혔다(0253a·0253b) — 그래서 위임받은 admin·manager에게 이 면을 세워 두면
+ *    **에러 없이 늘 빈 목록**이 뜬다(조용한 거짓말). 자물쇠는 RLS고([[#77]]) 여기서 감추는 건 그 사실을
+ *    화면에 반영하는 것이다. ⚠️ 이 학원은 `owner` 메뉴를 admin·manager에게 위임해 뒀다(실측 활성 11명).
+ */
+function facesFor(canReadAudit: boolean): Face[] {
+  return OWNER_TABS.filter((t) => t.key !== "audit" || canReadAudit).map((t) => ({
+    key: t.key,
+    label: t.label,
+    href: t.href,
+    group: t.group,
+  }));
+}
 
 function resolveTab(sp: Sp): OwnerTab {
   // 중복 학생(dup)은 데이터 정리(data) 면으로 통합 — 옛 ?tab=dup 북마크는 data로 흡수.
@@ -60,6 +74,10 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 역할·권한(permissions) 편집은 항상 master 전용(self-escalation 차단 — saveOwnerSection·0080a 트리거와 동일).
   // 위임받은 admin/manager는 다른 설정 면은 편집 가능하되 이 면만 안내로 대체(저장이 실패할 폼을 보여주지 않음).
   const isMaster = viewer.systemRole === "master";
+  // 감사로그는 원장 위(총괄 포함)만 — 결정 로그 *"super_admin은 새로 만드는 어떤 제한 명단·게이트도
+  // 자동 통과한다"*(원장 2026-08-13). 🔴 `systemRole === "master"`만 보면 총괄이 자기 시스템에서 잠긴다
+  // (실측: 총괄 2명 중 1명의 users.system_role은 'admin'이다).
+  const canReadAudit = isMaster || (await isCurrentUserSuperAdmin());
   const sp = await searchParams;
   // 옛 "보고서 관리" 면(?tab=report_mgmt)은 좌측 독립 메뉴 /lesson-reports로 승격 — 기존 북마크 리다이렉트.
   if (sp.tab === "report_mgmt") redirect("/lesson-reports");
@@ -103,7 +121,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         actions={<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
       />
 
-      <FaceTabs faces={FACES} active={tab} ariaLabel="학원 설정·관리 면 전환" />
+      <FaceTabs faces={facesFor(canReadAudit)} active={tab} ariaLabel="학원 설정·관리 면 전환" />
 
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {tab === "operations" ? (
@@ -145,8 +163,20 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           <SameNameFace />
         </div>
       ) : null}
+      {/* 🔴 주소를 직접 쳐도 열리지 않는다 — 면을 감추기만 하면 그건 게이트가 아니다([[#77]]).
+          권한이 없으면 조회 자체를 안 한다(빈 표를 보여 주고 "기록 없음"이라 적으면 거짓말이 된다). */}
       {tab === "audit" ? (
-        <AuditFace action={sp.action} q={sp.q} from={sp.from} to={sp.to} page={page} isEmbed={isEmbed} />
+        canReadAudit ? (
+          <AuditFace action={sp.action} q={sp.q} from={sp.from} to={sp.to} page={page} isEmbed={isEmbed} />
+        ) : (
+          <div className="bg-card border-line rounded-2xl border p-6">
+            <p className="text-foreground text-sm font-bold">감사로그는 원장(master)만 볼 수 있습니다</p>
+            <p className="text-text-dim mt-1 text-sm">
+              누가 무엇을 바꿨는지에는 급여·지출·환불처럼 민감한 기록이 함께 담겨 있어, 학원 설정을 위임받은
+              계정으로도 열 수 없습니다. 나머지 관리 면(팝업 공지·데이터 정리·연동)은 그대로 쓸 수 있어요.
+            </p>
+          </div>
+        )
       ) : null}
       {tab === "sheets" ? (
         <SheetsFace subjects={settings.operations.subjects} page={page} isEmbed={isEmbed} />
