@@ -25,7 +25,7 @@ export function StudentTally({
     { n: withdrawnCount, label: "퇴원", cls: "text-text-faint", always: false },
   ];
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
+    <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap" data-help="tt-tally">
       {items
         .filter((it) => it.always || it.n > 0)
         .map((it) => (

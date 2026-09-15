@@ -25,7 +25,7 @@ export function SecondarySection({
   children: ReactNode;
 }) {
   return (
-    <details id={id} className="group border-line border-t">
+    <details id={id} data-help="dash-secondary" className="group border-line border-t">
       {/* 주소 해시(`#<id>`)로 들어오면 펼친다 — 알림 링크의 착지. */}
       <DetailsHashOpen id={id} />
       <summary className="flex cursor-pointer list-none items-center gap-2.5 px-1 py-3 select-none [&::-webkit-details-marker]:hidden">

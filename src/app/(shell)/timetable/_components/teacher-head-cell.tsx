@@ -57,6 +57,7 @@ export function TeacherHeadCell({
       colSpan={colSpan}
       style={style}
       draggable
+      data-help="tt-teacher-head"
       data-no-drag-scroll
       title="끌어서 순서 바꾸기 — 같은 요일 묶음 안에서만"
       aria-roledescription="draggable"

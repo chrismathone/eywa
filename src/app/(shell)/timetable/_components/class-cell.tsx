@@ -267,6 +267,7 @@ export function ClassCell({
         [CLASS_CELL_START_ATTR]: String(slot.startTime).slice(0, 5),
         [CLASS_CELL_END_ATTR]: String(slot.endTime).slice(0, 5),
       }}
+      data-help="tt-class-block"
       className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2px] transition ${
         isOver ? "ring-primary ring-2" : ""
       }`}
@@ -355,7 +356,7 @@ export function ClassCell({
                 재원 공통 + 분리등원 요일 칸 + 전입예정(편집)을 포함. flex-1이라 대기/퇴원이 있으면
                 그만큼 줄어 재원≈10칸, 없으면 재원이 더 넓게 채운다(짧으면 페이드 없음). */}
             <div className="tt-cell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
-              <div className="divide-line/40 shrink-0 divide-y">
+              <div className="divide-line/40 shrink-0 divide-y" data-help="tt-student-row">
                 <StudentSection
                   students={commonActive}
                   classId={realClassId}
@@ -486,6 +487,7 @@ export function ClassCell({
             {hold.length > 0 ? (
               <div
                 // 대기 면 색은 모든 뷰 공통(timetable-color 단일 소스) — 원장 2026-09-07 색 견본.
+                data-help="tt-wait-withdraw"
                 className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
                 style={{ maxHeight: HOLD_MAX_H }}
               >
@@ -505,6 +507,7 @@ export function ClassCell({
             {/* 퇴원 — 고정 박스(최대 3칸), 넘으면 스크롤(스크롤바 숨김). 있을 때만 렌더. */}
             {withdrawn.length > 0 ? (
               <div
+                data-help="tt-wait-withdraw"
                 className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
                 style={{ maxHeight: WD_MAX_H }}
               >

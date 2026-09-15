@@ -75,7 +75,7 @@ export function GridToolbar({
   const t = useSheetT();
   const tf = useSheetTf();
   return (
-    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
+    <div data-help="os-save" className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
       <span className="text-text-dim text-xs">
         {t("os.bar.shown")} <span className="text-foreground font-bold">{total}</span> ·{" "}
         {t("os.bar.sendable")} <span className="text-foreground font-bold">{sendReady}</span>

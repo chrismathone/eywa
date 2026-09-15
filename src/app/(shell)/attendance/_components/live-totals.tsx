@@ -195,7 +195,7 @@ export function LiveStats({
   const allRate = rateDecimal(all);
 
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1">
+    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1" data-help="att-totals">
       <CompactMetric
         label={t("att.stat.enrolled")}
         value={searching ? (search?.matchedStudents ?? 0) : totalStudents}

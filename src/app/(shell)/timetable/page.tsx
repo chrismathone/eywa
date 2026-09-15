@@ -782,6 +782,7 @@ export default async function TimetablePage({
             {/* 이 구분에 과목이 하나도 없으면(특강 0개 등) 고를 게 없다 — "과목: —"에 빈 목록을 여는 것보다 안 그리는 게 낫다.
                 되돌아갈 길은 옆 구분 드롭다운(TIMETABLE_KINDS는 데이터로 거르지 않는다). */}
             {available.length === 0 ? null : (
+            <span data-help="tt-subject">
             <ParamSelect
               axisLabel="과목"
               ariaLabel="과목 선택"
@@ -818,10 +819,12 @@ export default async function TimetablePage({
                 }),
               }))}
             />
+            </span>
             )}
 
             {/* 정규 / 특강 / 전체 — 특강(방학 단기강좌)을 정규 주간표와 분리해 본다(원장 요구 2026-07-22).
                 기본은 정규라 파라미터 없는 URL = 지금까지의 화면. 과목 목록은 이 구분에 실제 있는 과목만 뜬다. */}
+            <span data-help="tt-kind">
             <ParamSelect
               axisLabel="구분"
               ariaLabel="정규·특강 구분"
@@ -845,11 +848,13 @@ export default async function TimetablePage({
                 }),
               }))}
             />
+            </span>
 
             {/* 프로그램(전체/EiE/인재원 영어) — 영어 과목에서만. ECS 랜딩의 같은 칩과 **같은 어휘**다
                 (원장 2026-08-04 "상단 헤더에 토글버튼", 2026-08-11 통합뷰에도 요청).
                 ⚠️ 라벨·비대칭 계약은 english-track.ts 단일 소스에서 온다 — 여기서 문자열을 새로 적지 말 것. */}
             {trackApplies ? (
+              <span data-help="tt-program">
               <ParamSelect
                 axisLabel="프로그램"
                 ariaLabel="영어 프로그램 필터"
@@ -873,6 +878,7 @@ export default async function TimetablePage({
                   }),
                 }))}
               />
+              </span>
             ) : null}
           </>
         )}
@@ -881,6 +887,7 @@ export default async function TimetablePage({
             아이콘은 뺐다(§10 툴바 아이콘 열 제거 — 글자가 곧 뜻이다).
             보강 탭은 뷰가 하나(예약 격자)라 드롭다운을 접는다 — 눌러도 아무 일도 안 일어나는 항목을 세우지 않는다. */}
         {makeupTab ? null : (
+        <span data-help="tt-view">
         <ParamSelect
           axisLabel="뷰"
           ariaLabel="시간표 보기 방식"
@@ -898,13 +905,18 @@ export default async function TimetablePage({
             href: buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView }),
           }))}
         />
+        </span>
         )}
 
         {/* 학생 검색 — 이름을 치면 **그 학생이 든 수업(칸)만** 남는다(원장 2026-08-20). 눌러야 나온다(§10 "검색은
             필요할 때만") · 검색어가 걸려 있으면 펼친 채. 서버 왕복 0(이미 내려온 명단으로 클라 판정)이라 글자마다 표가
             다시 그려지지 않는다. 교실뷰·배치 편집·편집 모드에선 스스로 물러난다. */}
         {/* 보강 탭엔 검색이 없다 — 색인이 슬롯 명단이라 예약 격자엔 안 걸린다("있는데 안 먹는 것"이 제일 나쁘다). */}
-        {makeupTab ? null : <TimetableSearchToggle />}
+        {makeupTab ? null : (
+          <span data-help="tt-search">
+            <TimetableSearchToggle />
+          </span>
+        )}
 
         {/* 강사뷰 '미사용 요일'·기본뷰 '빈 교시 접기'·'색 강도'는 **뷰 설정 팝오버 안으로** 옮겼다
             (2026-07-24 원장 "시간표도 깔끔하게"). 셋 다 "무엇이 어떻게 보이나"라 학년 필터와 같은 성격이고,
@@ -953,6 +965,7 @@ export default async function TimetablePage({
         {isRooms || makeupTab ? null : (
         <>
         <span className="bg-line h-4 w-px" aria-hidden />
+        <span data-help="tt-settings" className="inline-flex items-center gap-3">
         <TimetableViewSettings
           allGrades={settings.operations.gradeLevels ?? []}
           savedGrades={viewPrefs.grades}
@@ -1017,6 +1030,7 @@ export default async function TimetablePage({
           }
           hideStudentsOn={hideStudents}
         />
+        </span>
 
         {/* 학년 필터가 걸린 채로 이 과목·이 주에 보이는 학생이 0명이면, 화면이 그냥 비어 있어 고장으로
             보인다. 배지만으론 부족해 한 줄로 명시한다(필터 때문임을 알아야 되돌릴 수 있다). */}
@@ -1041,6 +1055,7 @@ export default async function TimetablePage({
         {/* 엑셀·시트 액션 — ⚠️ ml-auto 스페이서 **앞**에 둔다: 스페이서 뒤(우측 정렬 편집 옆)에 두면
             넓은 창에서도 항상 둘째 줄로 강제 줄바꿈돼 툴바가 상시 2줄이었다(2026-07-20 세로 회수). */}
         <span className="bg-line h-4 w-px" aria-hidden />
+        <span data-help="tt-excel">
         <TimetableToolbarActions
           subject={subject}
           today={today}
@@ -1050,6 +1065,7 @@ export default async function TimetablePage({
           sheetUrl={sheetUrl}
           compact1h={compactList}
         />
+        </span>
         </>
         )}
 
@@ -1089,7 +1105,9 @@ export default async function TimetablePage({
         {/* ⚠️ 구분선은 **컨트롤 안쪽**에 있다 — 옮긴 게 없으면 이 컴포넌트가 아무것도 안 그리므로(2026-09-09
             멘트 제거), 여기 밖에 두면 툴바 끝에 세로줄만 덩그러니 남는다. */}
         {!makeupTab && (effView === "basic" || effView === "integrated") && slots.length > 0 && canEdit ? (
-          <TimetableEditControls rosterHidden={hideStudents} />
+          <span data-help="tt-save">
+            <TimetableEditControls rosterHidden={hideStudents} />
+          </span>
         ) : null}
         </div>
         </ToolbarRow>

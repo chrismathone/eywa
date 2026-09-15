@@ -810,6 +810,9 @@ function RailItem({
         } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
       >
         {item.label}
+        {item.menuKey === "help" && expanded ? (
+          <span className="ml-1 text-xs font-normal opacity-70">F1</span>
+        ) : null}
       </span>
     </Link>
   );
@@ -819,7 +822,9 @@ function RailItem({
   return (
     <Tooltip>
       <TooltipTrigger render={link} />
-      <TooltipContent side="right">{item.label}</TooltipContent>
+      <TooltipContent side="right">
+        {item.menuKey === "help" ? `${item.label} · F1 = 이 화면 도움말` : item.label}
+      </TooltipContent>
     </Tooltip>
   );
 }

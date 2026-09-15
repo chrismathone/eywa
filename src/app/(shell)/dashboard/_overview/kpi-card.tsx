@@ -25,6 +25,7 @@ export function KpiCard({
   error,
   popupTitle,
   jump,
+  helpKey,
   children,
 }: {
   label: string;
@@ -43,13 +44,15 @@ export function KpiCard({
   error?: boolean;
   popupTitle: string;
   jump: KpiJump;
+  /** F1 겹침 키 — manuals/dashboard.ts callouts[].key */
+  helpKey?: string;
   children: ReactNode;
 }) {
   const missing = value === "—";
   const body = error ? (missing ? "조회 실패 · 다시 확인 필요" : "갱신 실패 · 이전 확인값") : detail;
   const text = detailPrefix ? `${detailPrefix} · ${body}` : body;
   return (
-    <div className={s.kpi} data-overview="kpi" data-kpi={label}>
+    <div className={s.kpi} data-overview="kpi" data-kpi={label} data-help={helpKey}>
       <DetailPopup
         title={popupTitle}
         ariaLabel={`${label} ${value}${missing ? "" : unit}. ${text}. 자세히 보기`}

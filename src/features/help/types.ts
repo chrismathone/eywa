@@ -10,6 +10,11 @@ export type HelpLayout = "list" | "grid" | "kanban" | "sheet" | "dashboard" | "w
 
 export type HelpCallout = {
   n: number;
+  /**
+   * F1 겹침이 `[data-help]` 와 맞추는 키. 없으면 그 설명은 겹침에 안 뜬다(목록 설명서 전용).
+   * 화면 파일에 설명 문장을 흩어 쓰지 말 것 — 문구는 여기 body 가 원천이다.
+   */
+  key?: string;
   label: string;
   zone: HelpZone;
   /** 본문. `[[slug]]` 또는 `[[slug|표시]]` + 화면 이름은 자동으로 다른 설명서로 연결된다. */

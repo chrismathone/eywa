@@ -254,6 +254,7 @@ export function MatrixTable({
   return (
     // 격자가 **화면의 유일한 세로 스크롤**이다(scrollY) — 그래야 `thead sticky top-0`이 실제로 붙고
     // 스크롤바도 하나만 생긴다. 높이는 부모(page.tsx의 `min-h-0 flex-1`)가 정해 준다 — 상수·vh 계산 없음.
+    <div data-help="att-cell" className="h-full min-h-0">
     <DragScrollArea scrollY className="bg-card shadow-card h-full rounded-2xl">
       <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: tableMinWidth }}>
         {/* 열 폭의 단일 소스 — 셀의 `w-*`가 아니라 여기가 정한다(table-fixed). 접기와 무관하게 불변. */}
@@ -505,6 +506,7 @@ export function MatrixTable({
         </tfoot>
       </table>
     </DragScrollArea>
+    </div>
   );
 }
 

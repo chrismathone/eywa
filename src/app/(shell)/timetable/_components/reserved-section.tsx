@@ -44,6 +44,7 @@ export function ReservedSection({
   const showDay = (coveringDays?.length ?? 0) >= 2;
   return (
     <div
+      data-help="tt-makeup"
       className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
       style={{ maxHeight: HOLD_MAX_H }}
     >

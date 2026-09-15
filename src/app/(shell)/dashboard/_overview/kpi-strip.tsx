@@ -82,6 +82,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
     <div className={s.kpis} style={kpiGridVars(shown)} data-overview="kpis" data-kpi-n={shown}>
       {v.students && (
         <KpiCard
+          helpKey="dash-enrolled"
           label="재원생"
           value={count(student?.enrolled)}
           unit="명"
@@ -96,6 +97,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       )}
       {v.withdrawals && (
         <KpiCard
+          helpKey="dash-withdrawn"
           label="퇴원생"
           value={count(wd?.total)}
           unit="명"
@@ -119,6 +121,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       )}
       {v.intake && (
         <KpiCard
+          helpKey="dash-intake"
           label="신규문의"
           value={count(intake?.length)}
           unit="건"
@@ -133,6 +136,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       )}
       {v.calendar && (
         <KpiCard
+          helpKey="dash-leveltest"
           label="금일입테"
           value={count(levelTests?.length)}
           unit="건"
@@ -153,6 +157,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       )}
       {v.firstClass && (
         <KpiCard
+          helpKey="dash-first"
           label="오늘첫수업"
           value={count(firsts?.length)}
           unit="명"
@@ -169,6 +174,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       )}
       {v.absent && (
         <KpiCard
+          helpKey="dash-absent"
           label="전일 결석"
           value={count(absent?.length)}
           unit="명"
@@ -193,6 +199,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       )}
       {v.makeup && (
         <KpiCard
+          helpKey="dash-makeup"
           label="보강예정"
           value={count(makeup?.rows.length)}
           unit="건"

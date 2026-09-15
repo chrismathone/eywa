@@ -337,6 +337,7 @@ export function GridBodyRow({
   return (
     <tr
       {...drop.handlers}
+      data-help={student.isMakeup ? "os-makeup" : "os-row"}
       className={
         drop.over
           ? "outline-primary bg-primary-soft/40 outline-2 -outline-offset-2" // 드롭 대상 강조
