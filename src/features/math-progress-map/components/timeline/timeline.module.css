@@ -8,17 +8,17 @@
   color: var(--timeline-ink);
   font-variant-numeric: tabular-nums;
   width: 100%;
-  max-width: 1180px;
+  max-width: none;
   margin-inline: auto;
   --map-week-completed-fill: #174481;
   --map-week-completed-ink: #ffffff;
 }
 
-.progressLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 480px); gap: 24px; align-items: start; margin-top: 12px; }
+.progressLayout { display: grid; grid-template-columns: minmax(520px, 560px) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 12px; }
 .sidebar { position: sticky; top: 12px; align-self: start; min-width: 0; display: flex; flex-direction: column; gap: 8px; background: #fff; border-radius: 12px; padding: 4px; }
 .clockControl { outline: none; border-radius: 14px; }
 .clockControl:focus-within { outline: 2px solid #90afcf; outline-offset: 2px; }
-.clock { position: relative; width: min(100%, 560px); margin-inline: auto; aspect-ratio: 1; }
+.clock { position: relative; width: min(100%, 560px); margin-inline: 0; aspect-ratio: 1; }
 .clockMarkers { position: absolute; inset: 0; pointer-events: none; }
 .clockRotor { position: absolute; inset: 0; transform: rotate(var(--clock-turn, 0deg)); transform-origin: center; transition: transform 440ms cubic-bezier(.22, 1, .36, 1); will-change: transform; }
 .clock > svg, .clockIndicator > svg { display: block; width: 100%; height: 100%; }
@@ -139,7 +139,7 @@
 .timelineTheme button:focus-visible { outline: 2px solid var(--timeline-blue); outline-offset: 3px; }
 
 @media (max-width: 1100px) and (min-width: 901px) {
-  .progressLayout { gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .progressLayout { gap: 14px; grid-template-columns: minmax(420px, 1fr) minmax(0, 1.35fr); }
   .sidebarFacts { grid-template-columns: minmax(0, 1fr); }
   .clock { width: min(100%, 560px); }
   .quarterHeader, .monthItem { grid-template-columns: 68px minmax(0, 1fr); }

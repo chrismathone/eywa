@@ -6,6 +6,7 @@ import { monthPosition } from "../../continuous-timeline";
 import { curriculumPeriods } from "../../timeline-data";
 import { VIEW_MODE_LABEL, type ViewMode } from "../../model";
 import { useProgressMap } from "../map-state";
+import { CurriculumPosition } from "../curriculum-position";
 import { CurriculumTimeline } from "./curriculum-timeline";
 import { StickyProgressSidebar } from "./timeline-sidebar";
 import { useTimelineScrollSpy } from "./use-timeline-scroll-spy";
@@ -52,5 +53,6 @@ export function MathProgressTimeline() {
         <CurriculumTimeline periods={visiblePeriods} activeMonth={focus.month} expandedMonth={expandedMonth} onExpand={onExpand} onMonth={navigateMonth} registerMonth={registerMonth} />
       </div>
     </div>
+    <div className="mt-4"><CurriculumPosition /></div>
   </div>;
 }
