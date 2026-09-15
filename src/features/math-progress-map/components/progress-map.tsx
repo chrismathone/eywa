@@ -1,10 +1,11 @@
 "use client";
 
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useRef, useState, type ReactNode } from "react";
 import { drillLevel, drillSceneKey, parentDrillMode } from "../drilldown";
 import { tooltipContent, type HoverTarget } from "../tooltip-content";
 import { CurrentPosition } from "./current-position";
 import { DayRing } from "./day-ring";
+import { DialGuides } from "./dial-guides";
 import { DialLayer } from "./dial-layer";
 import { DrillNavigation } from "./drill-navigation";
 import { DrilldownDial } from "./drilldown-dial";
@@ -17,6 +18,7 @@ import { RingLabels } from "./ring-labels";
 import { HoverCtx, type HoverHandler } from "./segment";
 import { WeekRing } from "./week-ring";
 import { YearRing } from "./year-ring";
+import mapStyles from "./progress-map.module.css";
 import styles from "./year-transition.module.css";
 
 type Hover = { scope: string; target: HoverTarget; x: number; y: number; flip: boolean; flipY: boolean; narrow: boolean };
@@ -31,7 +33,7 @@ const NARROW_PX = 560;
  * 툴팁 좌표는 **이 컨테이너 기준**이다 — 마우스 오버 상태는 여기 지역 상태라 링(칸 400개)은 다시 그리지 않는다
  * (링은 `memo` + 컨텍스트 읽기).
  */
-export function ProgressMap() {
+export function ProgressMap({ navy = false, controls }: { navy?: boolean; controls?: ReactNode }) {
   const { view, progress, pace, mode, focus, setMode } = useProgressMap();
   const [explore, setExplore] = useState(true);
   const sceneKey = explore ? drillSceneKey(view, mode, focus) : "full";
@@ -59,7 +61,7 @@ export function ProgressMap() {
   return (
     // 툴팁은 스크롤 상자 **밖**(이 루트)에 둔다 — `overflow-x-auto` 안에 두면 좁은 화면에서 잘리고 가로 스크롤바가 생긴다.
     <div ref={ref} className="relative w-full" onPointerLeave={() => setHover(null)}>
-      <DrillNavigation explore={explore} onBack={goBack} onExplore={(next) => {
+      <DrillNavigation controls={controls} explore={explore} onBack={goBack} onExplore={(next) => {
         if (next === explore) return;
         setExplore(next);
         setHover(null);
@@ -67,7 +69,7 @@ export function ProgressMap() {
       }} />
       <div className="overflow-x-auto px-1 py-1">
         {/* 학생 줄·툴바·확대 경로·범례를 뺀 높이에 맞춘다. 폰에서는 360px 아래로 줄이지 않는다. */}
-        <div className="mx-auto w-full min-w-[360px]" style={{ maxWidth: "min(760px, calc(100dvh - 18rem))" }}
+        <div className={`${navy ? mapStyles.dialTheme : mapStyles.original} mx-auto w-full min-w-[360px]`} style={{ maxWidth: "min(760px, calc(100dvh - 18rem))" }}
           onContextMenu={(event) => {
             if (!explore) return;
             event.preventDefault();
@@ -96,6 +98,7 @@ const MapDrawing = memo(function MapDrawing() {
       role="group"
       aria-label={`${progress.studentName} 학습 진도맵 — ${view.year}년 ${progress.estimated ? "예상 진도" : `진도율 ${view.pct}%`}`}
     >
+      <DialLayer name="guides"><DialGuides full /></DialLayer>
       <DialLayer name="quarters"><QuarterRing /></DialLayer>
       <DialLayer name="months"><YearRing /></DialLayer>
       <DialLayer name="weeks"><MonthRing /></DialLayer>

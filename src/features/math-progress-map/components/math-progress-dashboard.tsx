@@ -3,11 +3,10 @@
 import type { StudentProgress } from "../model";
 import { CurriculumPosition } from "./curriculum-position";
 import { ProgressDetailPanel } from "./detail-panel";
-import { Legend } from "./legend";
 import { ProgressMapProvider } from "./map-state";
 import { PeriodSelector } from "./period-selector";
 import { PlanVsActual } from "./plan-vs-actual";
-import { ProgressMap } from "./progress-map";
+import { ProgressMapPanel } from "./progress-map-panel";
 import { ProgressSummary } from "./progress-summary";
 import { StudentHeader } from "./student-header";
 
@@ -30,10 +29,7 @@ export function MathProgressDashboard({ progress }: { progress: StudentProgress 
             <ProgressSummary />
             <PlanVsActual />
           </aside>
-          <div className="order-2 flex min-w-0 flex-col gap-3 md:order-1">
-            <ProgressMap />
-            <Legend />
-          </div>
+          <ProgressMapPanel />
         </div>
         <CurriculumPosition />
         <ProgressDetailPanel />

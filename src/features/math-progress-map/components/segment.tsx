@@ -55,7 +55,7 @@ export function Segment({
   return (
     <>
       {selected ? (
-        <path d={d} fill="none" stroke="white" strokeWidth={SELECTION_STROKE_WIDTH + 4} strokeLinejoin="round" className="pointer-events-none" aria-hidden />
+        <path d={d} fill="none" stroke="var(--background)" strokeWidth={SELECTION_STROKE_WIDTH + 4} strokeLinejoin="round" className="pointer-events-none" aria-hidden />
       ) : null}
       <path
         d={d}
@@ -68,7 +68,7 @@ export function Segment({
         tabIndex={onSelect ? (focusable ? 0 : -1) : undefined}
         aria-label={label}
         aria-pressed={onSelect ? selected : undefined}
-        className={`outline-none transition-[fill,opacity] duration-200 hover:brightness-95 focus-visible:stroke-primary focus-visible:[stroke-width:3] ${
+        className={`outline-none transition-[fill,opacity] duration-200 motion-reduce:transition-none hover:brightness-110 focus-visible:stroke-primary focus-visible:[stroke-width:3] ${
           onSelect ? "pointer-events-auto cursor-pointer" : ""
         } ${className}`}
         onClick={onSelect}

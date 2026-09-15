@@ -52,7 +52,7 @@ export const WeekRing = memo(function WeekRing() {
           <path
             d={arcPath(RINGS.week[0] - 2, RINGS.week[1] + 2, span[0] - 0.2, span[1] + 0.2)}
             fill="none"
-            stroke="white"
+            stroke="var(--background)"
             strokeWidth={SELECTION_STROKE_WIDTH + 4}
           />
           <path

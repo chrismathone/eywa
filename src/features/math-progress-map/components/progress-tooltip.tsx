@@ -32,7 +32,7 @@ export function ProgressTooltip({
   return (
     <div
       role="tooltip"
-      className="bg-card shadow-card pointer-events-none absolute z-20 w-max max-w-[min(280px,calc(100%-16px))] rounded-xl px-3 py-2.5"
+      className="bg-card border-line pointer-events-none absolute z-20 w-max max-w-[min(280px,calc(100%-16px))] rounded-lg border px-3 py-2.5 shadow-lg"
       style={style}
     >
       <p className="text-foreground text-sm font-bold">{content.title}</p>

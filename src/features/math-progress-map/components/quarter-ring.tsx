@@ -40,7 +40,7 @@ export const QuarterRing = memo(function QuarterRing() {
               dominantBaseline="central"
               fontSize={FONT.quarter}
               fontWeight={700}
-              fill={tint.ink}
+              fill={`var(--map-exterior-ink, ${tint.ink})`}
               className={SEGMENT_TEXT}
             >
               {tint.label}

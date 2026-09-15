@@ -41,8 +41,8 @@ export const DayRing = memo(function DayRing() {
         if (!d) {
           return (
             <g key={`empty-${i}`} className={SEGMENT_TEXT} aria-hidden>
-              <path d={path} fill="white" />
-              <text x={wp.x} y={wp.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.weekday} fontWeight={500} fill="var(--foreground)" opacity={0.45}>
+              <path d={path} fill={STATUS_FILL.none} />
+              <text x={wp.x} y={wp.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.weekday} fontWeight={500} fill="var(--neutral-fill)">
                 {dow}
               </text>
             </g>
