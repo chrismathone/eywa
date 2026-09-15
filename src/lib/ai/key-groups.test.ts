@@ -223,8 +223,10 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /**
- * `keyName`을 **변수로** 넘기는 호출부 — 리터럴이 아니라 코드에서 값을 읽을 수 없으니 여기 적고,
- * 그 선언 기본값을 함께 못박는다(적으면 이 표가 빨개지므로 조용히 늘지 않는다).
+ * `keyName`을 **변수로** 넘기는 호출부 — 리터럴이 아니라 코드에서 값을 읽을 수 없으니 **사람이 여기 적는다**.
+ * ⚠️ 이 표는 그 선언 기본값을 **읽지 않는다** — `form-extract.ts`의 기본값을 바꾸거나 호출부가 다른 값을
+ * 넘기면 여기 적힌 값이 사실과 어긋난 채 초록이다(적대적 리뷰 2026-09-15). 새 항목을 더할 땐 선언을 직접 볼 것.
+ * 표에 없는 변수 호출부는 `missing`으로 빨개지므로 **조용히 늘지는 않는다**.
  */
 const KEYNAME_BY_VARIABLE: Readonly<Record<string, "default" | "consultations">> = {
   // form-extract.ts: `keyName: AiKeyName = "default"` 파라미터를 그대로 넘긴다(호출부는 전부 기본값).
@@ -261,7 +263,8 @@ function aiCallSites(): { sites: CallSite[]; missing: string[] } {
     const source = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
     const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node) && node.expression.getText(source) === "generateJSON") {
+      // endsWith — 별칭(`gen(...)`은 못 잡지만)·네임스페이스 호출(`ai.generateJSON(...)`)까지 본다.
+      if (ts.isCallExpression(node) && node.expression.getText(source).endsWith("generateJSON")) {
         const arg = node.arguments[0];
         const at = `${rel}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}`;
         if (!arg || !ts.isObjectLiteralExpression(arg)) {
@@ -307,7 +310,16 @@ describe("가드 — 모든 AI 호출부는 키 그룹이 있다", () => {
 
 describe("가드 — CLAUDE.md의 8그룹 표가 코드와 같다", () => {
   // 이 리포의 다른 배선 가드와 같은 결 — 문서만 조용히 뒤처지는 것을 막는다(적대적 리뷰 2026-09-15).
-  const doc = readFileSync(join(process.cwd(), "CLAUDE.md"), "utf8");
+  // 🔴 **그 절만** 본다 — 문서 전체에서 찾으면 다른 절에 한 번 더 나오는 이름(`classnote_ment`는 fast 티어
+  // 표에도 있다)이 8그룹 표에서 빠져도 초록이 된다.
+  const whole = readFileSync(join(process.cwd(), "CLAUDE.md"), "utf8");
+  const from = whole.indexOf("### 키 분리 = 기능별 8그룹");
+  const doc = from < 0 ? "" : whole.slice(from, whole.indexOf("\n## ", from) + 1 || undefined);
+
+  it("그 절을 찾았다(제목이 바뀌면 빈 문자열로 통과하지 않게)", () => {
+    expect(from).toBeGreaterThan(0);
+    expect(doc.length).toBeGreaterThan(500);
+  });
 
   it("그룹 8개가 전부 문서에 있다", () => {
     // 표가 그룹 이름을 홑따옴표 코드로 적는다(`MENT`) — 그대로 찾는다. 맨 대문자로 찾으면

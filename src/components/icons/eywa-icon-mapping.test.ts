@@ -241,6 +241,8 @@ describe("Eywa icon compatibility mapping", () => {
       expect(filesImporting("lucide-react")).toEqual([]);
       expect(packageJson.dependencies?.["lucide-react"]).toBeUndefined();
     },
-    15_000,
+    // 형제 둘과 같은 60초 — 여기만 15초로 남아 있어 전 스위트 병렬에서 이 파일이 빨갰다(2026-09-15).
+    // src 파일이 3,000개가 넘어 단독 실행에서도 12초를 쓴다. 🔴 CLI `--testTimeout`은 이 인자를 못 이긴다.
+    60_000,
   );
 });
