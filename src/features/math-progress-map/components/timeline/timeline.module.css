@@ -20,6 +20,7 @@
 .clockControl:focus-within { outline: 2px solid #90afcf; outline-offset: 2px; }
 .clock { position: relative; width: min(100%, max(260px, calc(var(--timeline-sidebar-height, 100dvh) - 240px))); margin-inline: auto; aspect-ratio: 1; }
 .clockMarkers { position: absolute; inset: 0; pointer-events: none; }
+.clockRotor { position: absolute; inset: 0; transform: rotate(var(--clock-turn, 0deg)); transform-origin: center; transition: transform 440ms cubic-bezier(.22, 1, .36, 1); will-change: transform; }
 .clock > svg, .clockIndicator > svg { display: block; width: 100%; height: 100%; }
 .monthSegment { fill: #f1f4f8; stroke: white; stroke-width: 3px; cursor: pointer; transition: fill 320ms ease, stroke 320ms ease; outline: none; }
 .monthSegment[data-status="completed"] { fill: #d3eadf; }
@@ -190,5 +191,5 @@
   .dayPages { grid-column: 3; grid-row: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .clockIndicator, .monthSegment, .monthBody, .progressTrack i, .timelineRail > span, .quarterHeader { transition: none; }
+  .clockRotor, .clockIndicator, .monthSegment, .monthBody, .progressTrack i, .timelineRail > span, .quarterHeader { transition: none; }
 }
