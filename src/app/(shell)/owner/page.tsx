@@ -170,7 +170,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           <AuditFace action={sp.action} q={sp.q} from={sp.from} to={sp.to} page={page} isEmbed={isEmbed} />
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
-            <p className="text-foreground text-sm font-bold">감사로그는 원장(master)만 볼 수 있습니다</p>
+            <p className="text-foreground text-sm font-bold">감사로그는 원장만 볼 수 있습니다</p>
             <p className="text-text-dim mt-1 text-sm">
               누가 무엇을 바꿨는지에는 급여·지출·환불처럼 민감한 기록이 함께 담겨 있어, 학원 설정을 위임받은
               계정으로도 열 수 없습니다. 나머지 관리 면(팝업 공지·데이터 정리·연동)은 그대로 쓸 수 있어요.

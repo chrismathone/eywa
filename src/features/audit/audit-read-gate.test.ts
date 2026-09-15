@@ -68,12 +68,22 @@ describe("감사로그 게이트 배선 — 한쪽만 고치면 화면과 정책
     expect(src, "canReadAudit이 총괄을 안 본다").toMatch(/canReadAudit\s*=\s*isMaster\s*\|\|\s*\(await isCurrentUserSuperAdmin\(\)\)/);
   });
 
-  it("🔴 사이드바·허브의 master 전용 판정에 총괄이 함께 들어간다", () => {
-    for (const rel of ["src/components/app-sidebar.tsx", "src/components/workspace/menu-hub-panel.tsx"]) {
+  it("🔴 사이드바·허브·검색 팰릿의 master 전용 판정에 총괄이 함께 들어간다", () => {
+    // 검색 팰릿이 셋째 입구다 — 09-10 브랜치 뒤에 main이 붙인 입구라 처음엔 빠져 있었다(적대 리뷰 2026-09-15).
+    for (const rel of [
+      "src/components/app-sidebar.tsx",
+      "src/components/workspace/menu-hub-panel.tsx",
+      "src/components/command-palette.tsx",
+    ]) {
       expect(read(rel), `${rel}: 총괄이 master 전용 목적지에서 빠진다`).toMatch(
         /isMaster:\s*systemRole === "master" \|\| isSuperAdmin/,
       );
     }
+    // 🔴 판정만 있고 값을 안 넘기면 기본값 false로 조용히 빠진다 — 셸이 팰릿에 실제로 넘기는지.
+    expect(
+      read("src/app/(shell)/layout.tsx").replace(/\s+/g, " "),
+      "셸이 검색 팰릿에 isSuperAdmin을 안 넘긴다",
+    ).toMatch(/<CommandPalette [^>]*isSuperAdmin=\{isSuperAdmin\}/);
   });
 
   it("🔴 가장 최근 audit_logs SELECT 정책이 총괄을 `is_super_admin()`으로 알아본다(enum 값이 아니라)", () => {

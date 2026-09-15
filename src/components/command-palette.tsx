@@ -60,11 +60,17 @@ export function CommandPalette({
   systemRole,
   permMatrix,
   canTeacherView = false,
+  isSuperAdmin = false,
 }: {
   systemRole: SystemRole;
   permMatrix?: AccessMatrix;
   /** 겸직(담당 반 보유) — 담당 반을 전제로 만든 메뉴(원스크린·출결 모드)의 쓸모 판정. 사이드바와 같은 규약. */
   canTeacherView?: boolean;
+  /**
+   * 총괄(super_admin) — master 전용 목적지(감사로그 등)를 사이드바·메뉴 허브와 **같은 판정**으로 연다.
+   * 🔴 빠지면 사이드바엔 뜨는 '감사로그'가 검색에선 안 나온다(입구가 갈린다 — 가드 `audit-read-gate.test.ts`).
+   */
+  isSuperAdmin?: boolean;
 }) {
   const router = useRouter();
   const isDesktop = useIsDesktop();
@@ -83,7 +89,7 @@ export function CommandPalette({
         systemRole,
         permMatrix,
         canTeacherView,
-        isMaster: systemRole === "master",
+        isMaster: systemRole === "master" || isSuperAdmin,
       }).flatMap((group) =>
         group.items.map((dest) => ({
           dest,
@@ -94,7 +100,7 @@ export function CommandPalette({
           keywords: hubSearchKeywords(dest, group.label),
         })),
       ),
-    [systemRole, permMatrix, canTeacherView],
+    [systemRole, permMatrix, canTeacherView, isSuperAdmin],
   );
 
   const q = query.trim().toLowerCase();

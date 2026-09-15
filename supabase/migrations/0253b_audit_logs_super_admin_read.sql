@@ -37,3 +37,6 @@ create policy audit_logs_select_master on public.audit_logs
 --   원장(master) 계정   → select count(*) from public.audit_logs;  -- 숫자
 --   총괄(super_admin)   → 같은 쿼리가 **0이 아니어야** 한다(0253a에서는 0이었다)
 --   강사·뷰어·일반 admin → 0
+--   정책이 정확히 두 줄인지(대시보드에서 손으로 만든 정책이 남아 OR로 합쳐지지 않았는지):
+--     select policyname, cmd, permissive from pg_policies where schemaname = 'public' and tablename = 'audit_logs';
+--     → audit_logs_select_master(SELECT) · audit_logs_insert_own(INSERT) 두 줄
