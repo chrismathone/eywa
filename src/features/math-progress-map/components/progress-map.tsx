@@ -4,10 +4,11 @@ import { memo, useCallback, useRef, useState, type ReactNode } from "react";
 import { drillLevel, drillSceneKey, parentDrillMode } from "../drilldown";
 import { tooltipContent, type HoverTarget } from "../tooltip-content";
 import { CurrentPosition } from "./current-position";
+import { ContinuousDial } from "./continuous-dial";
 import { DayRing } from "./day-ring";
 import { DialGuides } from "./dial-guides";
 import { DialLayer } from "./dial-layer";
-import { DrillNavigation } from "./drill-navigation";
+import { DrillNavigation, type MapDisplay } from "./drill-navigation";
 import { DrilldownDial } from "./drilldown-dial";
 import { useProgressMap } from "./map-state";
 import { MapYearTransition } from "./map-year-transition";
@@ -35,8 +36,10 @@ const NARROW_PX = 560;
  */
 export function ProgressMap({ navy = false, controls }: { navy?: boolean; controls?: ReactNode }) {
   const { view, progress, pace, mode, focus, setMode } = useProgressMap();
-  const [explore, setExplore] = useState(true);
-  const sceneKey = explore ? drillSceneKey(view, mode, focus) : "full";
+  const [display, setDisplay] = useState<MapDisplay>("drill");
+  const explore = display === "drill";
+  const continuous = display === "continuous";
+  const sceneKey = explore ? drillSceneKey(view, mode, focus) : display;
   const hoverScope = `${view.year}:${sceneKey}:${mode}:${focus.month}:${focus.week}:${focus.day}`;
   const ref = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<Hover | null>(null);
@@ -61,24 +64,24 @@ export function ProgressMap({ navy = false, controls }: { navy?: boolean; contro
   return (
     // 툴팁은 스크롤 상자 **밖**(이 루트)에 둔다 — `overflow-x-auto` 안에 두면 좁은 화면에서 잘리고 가로 스크롤바가 생긴다.
     <div ref={ref} className="relative w-full" onPointerLeave={() => setHover(null)}>
-      <DrillNavigation controls={controls} explore={explore} onBack={goBack} onExplore={(next) => {
-        if (next === explore) return;
-        setExplore(next);
+      <DrillNavigation controls={controls} display={display} onBack={goBack} onDisplay={(next) => {
+        if (next === display) return;
+        setDisplay(next);
         setHover(null);
-        if (next) setMode("year");
+        if (next === "drill") setMode("year");
       }} />
       <div className="overflow-x-auto px-1 py-1">
         {/* 학생 줄·툴바·확대 경로·범례를 뺀 높이에 맞춘다. 폰에서는 360px 아래로 줄이지 않는다. */}
-        <div className={`${navy ? mapStyles.dialTheme : mapStyles.original} mx-auto w-full min-w-[360px]`} style={{ maxWidth: "min(760px, calc(100dvh - 18rem))" }}
+        <div className={`${navy ? mapStyles.dialTheme : mapStyles.original} mx-auto w-full ${continuous ? "min-w-0" : "min-w-[360px]"}`} style={{ maxWidth: "min(760px, calc(100dvh - 18rem))" }}
           onContextMenu={(event) => {
             if (!explore) return;
             event.preventDefault();
             goBack();
           }}>
           <HoverCtx.Provider value={onHover}>
-            <MapYearTransition sceneKey={sceneKey} level={explore ? drillLevel(mode) : 0}>
+            {continuous ? <ContinuousDial /> : <MapYearTransition sceneKey={sceneKey} level={explore ? drillLevel(mode) : 0}>
               {explore ? <DrilldownDial /> : <MapDrawing />}
-            </MapYearTransition>
+            </MapYearTransition>}
           </HoverCtx.Provider>
         </div>
       </div>

@@ -9,6 +9,7 @@ import { PlanVsActual } from "./plan-vs-actual";
 import { ProgressMapPanel } from "./progress-map-panel";
 import { ProgressSummary } from "./progress-summary";
 import { StudentHeader } from "./student-header";
+import styles from "./progress-map.module.css";
 
 /**
  * 수학 학습 진도맵 — 한 학생의 연간 커리큘럼 위치.
@@ -19,7 +20,7 @@ import { StudentHeader } from "./student-header";
 export function MathProgressDashboard({ progress }: { progress: StudentProgress }) {
   return (
     <ProgressMapProvider progress={progress}>
-      <div className="flex flex-col gap-4">
+      <div className={`${styles.selectionTheme} flex flex-col gap-4`}>
         <StudentHeader />
         <PeriodSelector />
         {/* 폰(<768)은 요약이 먼저, 태블릿(768~1023)은 지도가 먼저 한 열로, 데스크톱은 [지도 | 요약] 두 열(지시 16).

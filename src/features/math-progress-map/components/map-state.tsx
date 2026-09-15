@@ -28,7 +28,7 @@ export type ProgressMapState = {
   selectPeriod: (year: number, month: number) => void;
   selectMonth: (month: number) => void;
   selectQuarter: (q: 1 | 2 | 3 | 4) => void;
-  selectWeek: (month: number, week: number) => void;
+  selectWeek: (month: number, week: number, year?: number) => void;
   selectDay: (date: string) => void;
   resetFocus: () => void;
 };
@@ -76,10 +76,14 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
     },
     [],
   );
-  const selectWeek = useCallback((month: number, week: number) => {
+  const selectWeek = useCallback((month: number, week: number, nextYear?: number) => {
+    if (nextYear !== undefined) {
+      if (!years.includes(nextYear)) return;
+      setYear(nextYear);
+    }
     setFocus({ month, week, day: null });
     setMode("week");
-  }, []);
+  }, [years]);
   const selectDay = useCallback((date: string) => {
     const nextYear = Number(date.slice(0, 4));
     if (!years.includes(nextYear)) return;

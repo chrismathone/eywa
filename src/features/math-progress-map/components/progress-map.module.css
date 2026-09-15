@@ -1,9 +1,26 @@
+.selectionTheme,
 .surface {
   --map-completed-tick: #174481;
   --map-focus-fill: #ffd25b;
   --map-focus-ink: #174481;
   --map-focus-stroke: #ffd25b;
   --map-holiday-selected-ink: #9f2637;
+}
+
+.selectionItem[aria-pressed="true"],
+.selectionItem[aria-current="true"],
+.selectionStatus {
+  --foreground: var(--map-focus-ink);
+  --text-dim: var(--map-focus-ink);
+  --primary-foreground: var(--map-focus-ink);
+  background: var(--map-focus-fill);
+  color: var(--map-focus-ink);
+  opacity: 1;
+}
+
+.surface {
+  --map-week-completed-fill: #174481;
+  --map-week-completed-ink: #ffffff;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -63,6 +80,33 @@
   margin-top: 12px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+
+.pickerSelect {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding-inline: 8px;
+  background: var(--card);
+  color: var(--foreground);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pickerSelect[data-selected="true"] {
+  background: var(--map-focus-fill);
+  color: var(--map-focus-ink);
+  font-weight: 700;
+}
+
+.pickerSelect option {
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.pickerSelect:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 @media (max-width: 767px) {

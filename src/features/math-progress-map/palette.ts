@@ -71,6 +71,17 @@ export const STATUS_INK: Record<DisplayStatus, string> = {
   none: "var(--foreground)",
 };
 
+/** 1주·2주 칸은 같은 상태의 요일·날짜 칸보다 한 단계 진하게 구분한다. */
+export const WEEK_FILL: Record<DisplayStatus, string> = {
+  ...STATUS_FILL,
+  completed: `var(--map-week-completed-fill, ${STATUS_FILL.completed})`,
+};
+
+export const WEEK_INK: Record<DisplayStatus, string> = {
+  ...STATUS_INK,
+  completed: `var(--map-week-completed-ink, ${STATUS_INK.completed})`,
+};
+
 export const STATUS_LABEL: Record<DisplayStatus, string> = {
   completed: "완료",
   "in-progress": "진행 중",

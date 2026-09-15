@@ -7,7 +7,7 @@ import { pctOf } from "../derive";
 import { drillLevel } from "../drilldown";
 import { monthOf, resolveDay, resolveWeek, weekdaySlots } from "../focus";
 import { CX, CY, DRILL_RINGS, arcPath, midAngle, polar, strokeArcPath, withGap } from "../geometry";
-import { FOCUS_INK, HAIRLINE, HOLIDAY_FILL, HOLIDAY_INK, HOLIDAY_SELECTED_INK, NO_CLASS_FILL, NO_CLASS_INK, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
+import { FOCUS_INK, HAIRLINE, HOLIDAY_FILL, HOLIDAY_INK, HOLIDAY_SELECTED_INK, NO_CLASS_FILL, NO_CLASS_INK, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE, WEEK_FILL, WEEK_INK } from "../palette";
 import type { HoverTarget } from "../tooltip-content";
 import { DialGuides } from "./dial-guides";
 import { DialLayer } from "./dial-layer";
@@ -56,7 +56,7 @@ export const DrilldownDial = memo(function DrilldownDial() {
     periods = month.weeks.map((w) => ({
       key: `w${w.index}`, title: `${w.index}주`, subtitle: formatRange(w.start, w.end),
       metric: metric(w.pct, w.plannedPages), label: `${month.month}월 ${w.index}주차 · ${metric(w.pct, w.plannedPages)} · 날짜별로 확대`,
-      fill: STATUS_FILL[w.status], ink: focus.week === w.index ? FOCUS_INK : STATUS_INK[w.status], accent: "var(--green)",
+      fill: WEEK_FILL[w.status], ink: focus.week === w.index ? FOCUS_INK : WEEK_INK[w.status], accent: "var(--green)",
       pct: w.pct, current: w.isCurrent, selected: focus.week === w.index,
       target: { kind: "week", month: month.month, week: w.index }, onSelect: () => selectWeek(month.month, w.index),
     }));
