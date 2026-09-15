@@ -79,6 +79,12 @@ function useCellEdit(scope: string, propValue: string, commit: (next: string) =>
   return { editing, open, close, save, shown, pending };
 }
 
+/**
+ * 값 칸 툴팁 — 가드가 이 상수로 칸을 찾는다. 🔴 문구를 바꿀 땐 여기만 고친다(한때 화면은
+ * "터치 또는 더블클릭하여 수정"인데 테스트는 옛 문구를 찾아 9건이 빨갰다 — 2026-09-15).
+ */
+export const EDIT_CELL_TITLE = "터치 또는 더블클릭하여 수정";
+
 /** 값 칸의 표시면 — 더블클릭 대상. canEdit이 아니면 그냥 값(버튼 없음). */
 function CellFace({
   canEdit,
@@ -105,7 +111,7 @@ function CellFace({
   return (
     <button
       type="button"
-      title="터치 또는 더블클릭하여 수정"
+      title={EDIT_CELL_TITLE}
       onClick={(event) => { if (isDirectEditClick(event)) onOpen(); }}
       onDoubleClick={() => {
         // 더블클릭은 브라우저가 낱말을 선택한다 — 편집 칸이 열리면서 파란 선택이 남지 않게 지운다.

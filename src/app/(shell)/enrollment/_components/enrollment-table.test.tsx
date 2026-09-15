@@ -8,6 +8,7 @@ import {
 } from "@/features/enrollment/board-stages";
 import type { ConsultationTableRow } from "@/features/enrollment/server/queries";
 import { EnrollmentTable } from "./enrollment-table";
+import { EDIT_CELL_TITLE } from "./sheet-editable-cells";
 
 /**
  * 시트형 목록뷰 가드(원장 2026-09-02 *"칸반뷰를 목록뷰로"* · *"상태를 칸반뷰처럼 4단계로 통합"* · *"수업 -> 과목으로"* ·
@@ -213,7 +214,7 @@ describe("시트형 목록뷰 — 값", () => {
     );
     for (const label of ["상담 내용", "상담사", "학교·학년", "연락처", "과목"]) {
       expect(cellOf(label).getAttribute("data-empty"), label).toBe("true");
-      expect(within(cellOf(label)).getByTitle("더블클릭하여 수정")).toBeTruthy();
+      expect(within(cellOf(label)).getByTitle(EDIT_CELL_TITLE)).toBeTruthy();
     }
     for (const label of ["상태", "학생이름", "접수", "자세히"]) expect(cellOf(label).getAttribute("data-empty")).toBeNull();
     cleanup();
@@ -246,12 +247,12 @@ describe("시트형 목록뷰 — 값", () => {
 describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () => {
   it("쓰기 권한이 없으면 더블클릭 대상 자체가 없다(값만 보인다)", () => {
     render(<EnrollmentTable rows={[row()]} nowMs={0} canWrite={false} />);
-    expect(screen.queryAllByTitle("더블클릭하여 수정")).toHaveLength(0);
+    expect(screen.queryAllByTitle(EDIT_CELL_TITLE)).toHaveLength(0);
   });
 
   it("연락처 더블클릭 → 입력칸 → Enter = patchConsultationCells(id, { parentPhone })", async () => {
     render(<EnrollmentTable rows={[row()]} nowMs={0} canWrite={true} />);
-    fireEvent.doubleClick(within(cellOf("연락처")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("연락처")).getByTitle(EDIT_CELL_TITLE));
     const input = within(cellOf("연락처")).getByDisplayValue("010-2848-6420");
     fireEvent.change(input, { target: { value: "010-1111-2222" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -262,11 +263,11 @@ describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () 
 
   it("Esc = 취소(저장 호출 없음) · 값을 안 바꾸고 떠나도 저장하지 않는다", () => {
     render(<EnrollmentTable rows={[row()]} nowMs={0} canWrite={true} />);
-    fireEvent.doubleClick(within(cellOf("학생이름")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("학생이름")).getByTitle(EDIT_CELL_TITLE));
     const input = within(cellOf("학생이름")).getByDisplayValue("선혜주");
     fireEvent.keyDown(input, { key: "Escape" });
     expect(patch).not.toHaveBeenCalled();
-    fireEvent.doubleClick(within(cellOf("학생이름")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("학생이름")).getByTitle(EDIT_CELL_TITLE));
     fireEvent.blur(within(cellOf("학생이름")).getByDisplayValue("선혜주"));
     expect(patch).not.toHaveBeenCalled();
     expect(cellOf("학생이름").textContent).toContain("선혜주");
@@ -274,7 +275,7 @@ describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () 
 
   it("상담 내용은 여러 줄 — Shift+Enter는 줄바꿈, Enter가 저장", async () => {
     render(<EnrollmentTable rows={[row({ parentRequest: "첫 줄" })]} nowMs={0} canWrite={true} />);
-    fireEvent.doubleClick(within(cellOf("상담 내용")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("상담 내용")).getByTitle(EDIT_CELL_TITLE));
     const ta = within(cellOf("상담 내용")).getByDisplayValue("첫 줄");
     fireEvent.keyDown(ta, { key: "Enter", shiftKey: true });
     expect(patch).not.toHaveBeenCalled();
@@ -285,7 +286,7 @@ describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () 
 
   it("학교·학년은 한 편집기에서 둘 다 — 저장은 { prospectSchool, prospectGrade }", async () => {
     render(<EnrollmentTable rows={[row()]} nowMs={0} canWrite={true} />);
-    fireEvent.doubleClick(within(cellOf("학교·학년")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("학교·학년")).getByTitle(EDIT_CELL_TITLE));
     const school = within(cellOf("학교·학년")).getByPlaceholderText("학교");
     fireEvent.change(school, { target: { value: "경명여중" } });
     fireEvent.keyDown(school, { key: "Enter" });
@@ -294,7 +295,7 @@ describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () 
 
   it("과목 더블클릭 → 학원설정 과목 목록이 열린 채로 → 고르면 바로 저장 { subject }", async () => {
     render(<EnrollmentTable rows={[row({ subject: "math" })]} nowMs={0} canWrite={true} />);
-    fireEvent.doubleClick(within(cellOf("과목")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("과목")).getByTitle(EDIT_CELL_TITLE));
     fireEvent.click(within(cellOf("과목")).getByRole("button", { name: /^영어$/ }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith("c1", { subject: "english" }));
   });
@@ -303,14 +304,14 @@ describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () 
     render(
       <EnrollmentTable rows={[row()]} nowMs={0} canWrite={true} consultants={[{ id: "u1", name: "김초롱" }, { id: "u2", name: "오은진" }]} />,
     );
-    fireEvent.doubleClick(within(cellOf("상담사")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("상담사")).getByTitle(EDIT_CELL_TITLE));
     fireEvent.click(within(cellOf("상담사")).getByRole("button", { name: /^없음$/ }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith("c1", { consultantId: null }));
   });
 
   it("상태 더블클릭 → 4단계 목록 → 고르면 칸반 드롭과 같은 setEnrollmentOutcome(대표값 outcomeForDrop)", async () => {
     render(<EnrollmentTable rows={[row({ outcome: "scheduled" })]} nowMs={0} canWrite={true} />);
-    fireEvent.doubleClick(within(cellOf("상태")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("상태")).getByTitle(EDIT_CELL_TITLE));
     const list = within(cellOf("상태")).getAllByRole("listitem").map((li) => li.textContent);
     expect(list).toEqual(BOARD_STAGES.map((s) => s.label));
     fireEvent.click(within(cellOf("상태")).getByRole("button", { name: /^미등록$/ }));
@@ -324,7 +325,7 @@ describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () 
 
   it("반 배정된 행의 상태는 못 옮긴다 — 이유를 띄우고 저장 호출 없음(칸반 드롭 거절과 같은 문장)", () => {
     render(<EnrollmentTable rows={[row({ outcome: "consulted", assignedClassCount: 2 })]} nowMs={0} canWrite={true} />);
-    fireEvent.doubleClick(within(cellOf("상태")).getByTitle("더블클릭하여 수정"));
+    fireEvent.doubleClick(within(cellOf("상태")).getByTitle(EDIT_CELL_TITLE));
     fireEvent.click(within(cellOf("상태")).getByRole("button", { name: /^상담 전$/ }));
     expect(toastError).toHaveBeenCalledWith(ASSIGNED_DRAG_BLOCKED);
     expect(setOutcome).not.toHaveBeenCalled();
