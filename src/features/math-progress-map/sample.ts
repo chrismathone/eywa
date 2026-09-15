@@ -11,6 +11,7 @@
  */
 import { daysInMonth, weekdayOf, ymd } from "./calendar";
 import type { BookChapter, DailyProgress, MonthPlan, StudentProgress } from "./model";
+import { buildSampleRoadmap } from "./sample-roadmap";
 
 export const SAMPLE_YEAR = 2026;
 export const SAMPLE_AS_OF = "2026-09-16";
@@ -132,11 +133,13 @@ export function buildSampleProgress(): StudentProgress {
   const dailyProgress = YEAR_PLAN.flatMap((m) => (m.month === 9 ? septemberRecords() : generatedRecords(m))).sort((a, b) => (a.date < b.date ? -1 : 1));
   const latest = [...dailyProgress].reverse().find((r) => r.date <= SAMPLE_AS_OF && r.startPage > 0)!;
   return {
+    ...buildSampleRoadmap(SAMPLE_AS_OF),
     studentId: "sample-kim-minjun",
     studentName: "김민준",
     grade: "중1",
     asOf: SAMPLE_AS_OF,
     year: SAMPLE_YEAR,
+    calendar: { classWeekdays: [1, 2, 3, 4, 5], daysOff: HOLIDAYS },
     curriculum: {
       bookId: "ga-m1-2",
       bookName: "GA 중1-2",

@@ -11,14 +11,14 @@ import { useProgressMap } from "./map-state";
  * 막대는 한 색(학원색)이다 — 다섯 줄은 같은 것을 다른 배율로 본 것이라 색으로 가를 이유가 없다.
  */
 export function ProgressSummary() {
-  const { view, focus, mode, setMode, progress, pace } = useProgressMap();
+  const { view, currentView, sourceProgress, focus, mode, setMode, progress, pace } = useProgressMap();
   const rows = summaryRows(view, focus);
-  const thisWeek = resolveWeek(view, focusOfDate(progress.asOf, progress.year));
+  const thisWeek = resolveWeek(currentView, focusOfDate(sourceProgress.asOf, sourceProgress.year));
   const c = progress.curriculum;
   return (
     <section className="bg-card shadow-card rounded-2xl p-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-foreground text-base font-bold">진도 요약</h3>
+        <h3 className="text-foreground text-base font-bold">{view.year}년 {progress.estimated ? "예상 진도" : "진도 요약"}</h3>
         <span className="text-text-dim num text-xs">{formatDotDate(progress.asOf)} 기준</span>
       </div>
       <ul className="mt-2 flex flex-col gap-1">

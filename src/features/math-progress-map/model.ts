@@ -61,6 +61,40 @@ export interface CurriculumStep {
   months: number[];
 }
 
+/** 입학~종강 장기 계획. YYYY-MM을 써서 다른 연도의 같은 달이 섞이지 않게 한다. */
+export interface RoadmapStep {
+  id: string;
+  label: string;
+  group: string;
+  startMonth: string;
+  endMonth: string;
+  estimated: boolean;
+  description: string;
+}
+
+export interface ProgressYear {
+  year: number;
+  yearPlan: MonthPlan[];
+  dailyProgress: DailyProgress[];
+  estimated?: boolean;
+  calendar?: ProgressCalendar;
+}
+
+/** 학생의 수업 일정. 공휴일 색 표시와 실제 수업 유무는 별개다. */
+export interface ProgressCalendar {
+  /** 0=일 ~ 6=토. 미설정이면 기록 없는 날을 비수업일로 추정하지 않는다. */
+  classWeekdays?: number[];
+  /** 날짜 → 휴강 사유. 실데이터는 학원설정 휴원일과 학생별 휴강 일정을 접어 전달한다. */
+  daysOff?: Record<string, string>;
+}
+
+export interface LearningRoadmap {
+  enrolledOn: string;
+  targetLabel: string;
+  estimateNote: string;
+  steps: RoadmapStep[];
+}
+
 export interface StudentProgress {
   studentId: string;
   studentName: string;
@@ -94,6 +128,11 @@ export interface StudentProgress {
   curriculumPath: CurriculumStep[];
   currentStepId: string;
   dailyProgress: DailyProgress[];
+  /** 다른 연도의 기록·계획. 현재 year의 데이터는 위 필드를 사용한다. */
+  years?: ProgressYear[];
+  roadmap?: LearningRoadmap;
+  estimated?: boolean;
+  calendar?: ProgressCalendar;
 }
 
 /** 화면 보기 단위 — 하나의 데이터셋을 이 단위로 확대/축소한다. */

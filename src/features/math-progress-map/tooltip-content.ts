@@ -3,6 +3,7 @@
  * 숫자는 전부 `derive.ts`의 뷰에서 오고 여기서 새로 세지 않는다.
  */
 import { formatMdW, formatRange, monthsOfQuarter } from "./calendar";
+import { dayStatusLabel } from "./day-schedule";
 import type { YearView } from "./derive";
 import { monthOf } from "./focus";
 import type { PlanVsActual, StudentProgress } from "./model";
@@ -66,7 +67,11 @@ export function tooltipContent(
   const month = Number(target.date.slice(5, 7));
   const day = monthOf(view, month).weeks.flatMap((w) => w.days).find((d) => d.date === target.date);
   const r = day?.record ?? null;
-  if (!day || !r) return { title: formatMdW(target.date), rows: [["상태", "기록 없음"]] };
+  if (!day) return { title: formatMdW(target.date), rows: [["상태", "기록 없음"]] };
+  const calendarRows: TooltipContent["rows"] = [];
+  if (day.holidayName) calendarRows.push(["공휴일", day.holidayName]);
+  if (day.noClassReason) calendarRows.push(["수업", `수업 없음 · ${day.noClassReason}`]);
+  if (!r) return { title: formatMdW(target.date), rows: calendarRows.length ? calendarRows : [["상태", "기록 없음"]] };
   const rows: TooltipContent["rows"] = [
     ["교재", r.bookName],
     ["단원", r.subChapter ? `${r.chapter} › ${r.subChapter}` : r.chapter],
@@ -75,7 +80,7 @@ export function tooltipContent(
     rows.push(["계획", `p.${r.startPage}~${r.endPage} (${day.plannedPages}쪽)`]);
     rows.push(["완료", day.donePages > 0 ? `p.${r.completedPage} (${day.donePages} / ${day.plannedPages}쪽)` : "아직 없음"]);
   }
-  rows.push(["상태", STATUS_LABEL[day.status]]);
+  rows.push(...calendarRows, ["상태", dayStatusLabel(day)]);
   if (r.note) rows.push(["메모", r.note]);
   return { title: formatMdW(target.date), rows };
 }

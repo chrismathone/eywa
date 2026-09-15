@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { VIEWBOX } from "../geometry";
+import { memo, useCallback, useRef, useState } from "react";
+import { drillLevel, drillSceneKey, parentDrillMode } from "../drilldown";
 import { tooltipContent, type HoverTarget } from "../tooltip-content";
 import { CurrentPosition } from "./current-position";
 import { DayRing } from "./day-ring";
+import { DialLayer } from "./dial-layer";
+import { DrillNavigation } from "./drill-navigation";
+import { DrilldownDial } from "./drilldown-dial";
 import { useProgressMap } from "./map-state";
+import { MapYearTransition } from "./map-year-transition";
 import { MonthRing } from "./month-ring";
 import { ProgressTooltip } from "./progress-tooltip";
 import { QuarterRing } from "./quarter-ring";
@@ -13,8 +17,9 @@ import { RingLabels } from "./ring-labels";
 import { HoverCtx, type HoverHandler } from "./segment";
 import { WeekRing } from "./week-ring";
 import { YearRing } from "./year-ring";
+import styles from "./year-transition.module.css";
 
-type Hover = { target: HoverTarget; x: number; y: number; flip: boolean; flipY: boolean; narrow: boolean };
+type Hover = { scope: string; target: HoverTarget; x: number; y: number; flip: boolean; flipY: boolean; narrow: boolean };
 
 /** 이 폭 아래(폰)에선 툴팁이 포인터를 따라가지 않고 지도 아래 가운데에 선다 — 좁은 화면에서 잘리지 않게. */
 const NARROW_PX = 560;
@@ -27,9 +32,13 @@ const NARROW_PX = 560;
  * (링은 `memo` + 컨텍스트 읽기).
  */
 export function ProgressMap() {
-  const { view, progress, pace } = useProgressMap();
+  const { view, progress, pace, mode, focus, setMode } = useProgressMap();
+  const [explore, setExplore] = useState(true);
+  const sceneKey = explore ? drillSceneKey(view, mode, focus) : "full";
+  const hoverScope = `${view.year}:${sceneKey}:${mode}:${focus.month}:${focus.week}:${focus.day}`;
   const ref = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<Hover | null>(null);
+  if (hover && hover.scope !== hoverScope) setHover(null);
   const onHover = useCallback<HoverHandler>((target, e) => {
     if (!target || !e) {
       setHover(null);
@@ -39,37 +48,62 @@ export function ProgressMap() {
     if (!rect) return;
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    setHover({ target, x, y, flip: x > rect.width / 2, flipY: y > rect.height / 2, narrow: rect.width < NARROW_PX });
-  }, []);
+    setHover({ scope: hoverScope, target, x, y, flip: x > rect.width / 2, flipY: y > rect.height / 2, narrow: rect.width < NARROW_PX });
+  }, [hoverScope]);
+  const goBack = () => {
+    const parent = parentDrillMode(mode);
+    setHover(null);
+    if (parent) setMode(parent);
+  };
   const content = hover ? tooltipContent(view, progress, pace, hover.target) : null;
   return (
     // 툴팁은 스크롤 상자 **밖**(이 루트)에 둔다 — `overflow-x-auto` 안에 두면 좁은 화면에서 잘리고 가로 스크롤바가 생긴다.
-    <div ref={ref} className="relative w-full">
+    <div ref={ref} className="relative w-full" onPointerLeave={() => setHover(null)}>
+      <DrillNavigation explore={explore} onBack={goBack} onExplore={(next) => {
+        if (next === explore) return;
+        setExplore(next);
+        setHover(null);
+        if (next) setMode("year");
+      }} />
       <div className="overflow-x-auto px-1 py-1">
-        {/* 지도 한 변 = 창 높이에서 학생 줄·툴바·범례 몫(≈15rem)을 뺀 값과 760px 중 작은 쪽 — 창(iframe) 첫 화면에서 원이
-            통째로 보이게(mcs 창 760에선 ≈520px). 폰은 360px 아래로 안 줄인다(가로 스크롤). */}
-        <div className="mx-auto w-full min-w-[360px]" style={{ maxWidth: "min(760px, calc(100dvh - 15rem))" }}>
+        {/* 학생 줄·툴바·확대 경로·범례를 뺀 높이에 맞춘다. 폰에서는 360px 아래로 줄이지 않는다. */}
+        <div className="mx-auto w-full min-w-[360px]" style={{ maxWidth: "min(760px, calc(100dvh - 18rem))" }}
+          onContextMenu={(event) => {
+            if (!explore) return;
+            event.preventDefault();
+            goBack();
+          }}>
           <HoverCtx.Provider value={onHover}>
-            <svg
-              viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
-              className="block h-auto w-full"
-              role="group"
-              aria-label={`${progress.studentName} 학습 진도맵 — ${view.year}년 진도율 ${view.pct}%`}
-            >
-              <QuarterRing />
-              <YearRing />
-              <MonthRing />
-              <WeekRing />
-              <DayRing />
-              <CurrentPosition />
-              <RingLabels />
-            </svg>
+            <MapYearTransition sceneKey={sceneKey} level={explore ? drillLevel(mode) : 0}>
+              {explore ? <DrilldownDial /> : <MapDrawing />}
+            </MapYearTransition>
           </HoverCtx.Provider>
         </div>
       </div>
+      {explore ? <p className="mt-1 text-center text-xs text-neutral-fill">우클릭하면 이전 링으로 돌아갑니다</p> : null}
       {hover && content ? (
         <ProgressTooltip content={content} x={hover.x} y={hover.y} flip={hover.flip} flipY={hover.flipY} narrow={hover.narrow} />
       ) : null}
     </div>
   );
 }
+
+const MapDrawing = memo(function MapDrawing() {
+  const { progress, view } = useProgressMap();
+  return (
+    <div
+      className={styles.dial}
+      role="group"
+      aria-label={`${progress.studentName} 학습 진도맵 — ${view.year}년 ${progress.estimated ? "예상 진도" : `진도율 ${view.pct}%`}`}
+    >
+      <DialLayer name="quarters"><QuarterRing /></DialLayer>
+      <DialLayer name="months"><YearRing /></DialLayer>
+      <DialLayer name="weeks"><MonthRing /></DialLayer>
+      <DialLayer name="days"><WeekRing /></DialLayer>
+      <DialLayer name="focus"><DayRing /></DialLayer>
+      <DialLayer name="center"><CurrentPosition /></DialLayer>
+      <DialLayer name="labels"><RingLabels /></DialLayer>
+      <div className={styles.sweep} aria-hidden />
+    </div>
+  );
+});

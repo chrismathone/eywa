@@ -5,7 +5,7 @@ import { GAP, RINGS, arcPath, midAngle, polar, quarterAngles, withGap } from "..
 import { QUARTER_TINT } from "../palette";
 import { useProgressMap } from "./map-state";
 import { Segment } from "./segment";
-import { CURRENT_STROKE_WIDTH, FONT, SEGMENT_TEXT } from "./svg-consts";
+import { FONT, SEGMENT_TEXT } from "./svg-consts";
 
 /**
  * 분기 링 — 맨 바깥 가는 띠 넷 + 바깥 라벨. 색은 분기 정체(파스텔 잉크)이고, 초점 분기는 학원색 테두리.
@@ -27,12 +27,11 @@ export const QuarterRing = memo(function QuarterRing() {
             <Segment
               d={arcPath(RINGS.quarter[0], RINGS.quarter[1], a0, a1)}
               fill={tint.ink}
-              stroke={focused ? "var(--primary)" : undefined}
-              strokeWidth={focused ? CURRENT_STROKE_WIDTH : 0}
+              selected={focused}
               label={`${tint.label} · 진도율 ${q.pct}%`}
               target={{ kind: "quarter", q: q.q }}
               onSelect={() => selectQuarter(q.q)}
-              className="opacity-75"
+              className={focused ? "" : "opacity-75"}
             />
             <text
               x={lp.x}

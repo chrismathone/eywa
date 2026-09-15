@@ -8,7 +8,8 @@
  * 초점(고른 달·주·날) 위의 조회는 [`focus.ts`](./focus.ts).
  */
 import { monthsOfQuarter, quarterOf, weeksOfMonth } from "./calendar";
-import type { DailyProgress, MonthPlan, StudentProgress } from "./model";
+import type { DailyProgress, MonthPlan, ProgressCalendar, StudentProgress } from "./model";
+import { daySchedule } from "./day-schedule";
 import { displayStatusOf, type DisplayStatus } from "./palette";
 
 export type DayView = {
@@ -18,6 +19,10 @@ export type DayView = {
   plannedPages: number;
   donePages: number;
   isToday: boolean;
+  /** 날짜의 공휴일명. 실제 수업·완료 기록은 그대로 유지한다. */
+  holidayName: string | null;
+  /** 정기 비수업일 또는 휴강 사유. 기록이 없다는 이유만으로 채우지 않는다. */
+  noClassReason: string | null;
 };
 
 export type WeekView = {
@@ -101,7 +106,7 @@ function topicOf(days: DayView[]): string | null {
   return best;
 }
 
-function buildWeek(w: { index: number; start: string; end: string; days: string[] }, byDate: Map<string, DailyProgress>, asOf: string): WeekView {
+function buildWeek(w: { index: number; start: string; end: string; days: string[] }, byDate: Map<string, DailyProgress>, asOf: string, calendar?: ProgressCalendar): WeekView {
   const days: DayView[] = w.days.map((date) => {
     const record = byDate.get(date) ?? null;
     return {
@@ -111,6 +116,7 @@ function buildWeek(w: { index: number; start: string; end: string; days: string[
       plannedPages: record ? plannedPagesOf(record) : 0,
       donePages: record ? donePagesOf(record) : 0,
       isToday: date === asOf,
+      ...daySchedule(date, record, calendar),
     };
   });
   const plannedPages = days.reduce((s, d) => s + d.plannedPages, 0);
@@ -141,7 +147,7 @@ export function buildYearView(p: StudentProgress): YearView {
 
   const months: MonthView[] = [];
   for (let m = 1; m <= 12; m++) {
-    const weeks = weeksOfMonth(p.year, m).map((w) => buildWeek(w, byDate, p.asOf));
+    const weeks = weeksOfMonth(p.year, m).map((w) => buildWeek(w, byDate, p.asOf, p.calendar));
     const plan = planByMonth.get(m) ?? null;
     const recorded = weeks.reduce((s, w) => s + w.plannedPages, 0);
     // 🔴 "기록이 있다" = **계획 쪽이 있는 기록** — 휴강 행(0쪽)만 있는 달이 연간 계획을 버리고 0%로 떨어지지 않게.

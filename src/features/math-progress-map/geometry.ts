@@ -38,6 +38,15 @@ export const RINGS = {
   quarterLabel: 504,
 } as const;
 
+/** 단계별 확대 지도 — 현재 단계의 칸을 원 전체에 펼친다. */
+export const DRILL_RINGS = {
+  period: [310, 470] as Band,
+  rim: [478, 486] as Band,
+  center: 256,
+  progress: [272, 278] as Band,
+  label: 390,
+} as const;
+
 /** 달 칸 사이 틈(도). 주·일 칸은 더 좁다. */
 export const GAP = { month: 0.6, week: 0.5, dayTick: 0.28, dayRing: 1.2, quarter: 1.5 } as const;
 
@@ -117,12 +126,12 @@ export function midAngle([a0, a1]: readonly [number, number]): number {
 }
 
 /**
- * 일간 링의 칸 각도 — 초점 주의 가운데 각도를 중심으로 하루 `DAY_RING_STEP`°씩 펼친다.
- * 주가 7일 미만(달 첫·마지막 주)이어도 칸 폭은 같다(요일 자리가 흔들리지 않게 — 월요일이 늘 같은 상대 위치).
+ * 일간 링의 칸 각도 — 기준 칸의 중심을 anchorAngle에 맞추고 하루 `DAY_RING_STEP`°씩 펼친다.
+ * anchorIndex는 월=0 ~ 일=6. 달 첫·마지막 주의 빈 요일도 포함해 선택한 날짜가 원래 눈금과 같은 방향에 선다.
+ * 기준 칸을 생략하면 전체 묶음의 가운데를 맞춘다.
  */
-export function dayRingAngles(weekMid: number, dayCount: number): [number, number][] {
-  const total = DAY_RING_STEP * dayCount;
-  const start = weekMid - total / 2;
+export function dayRingAngles(anchorAngle: number, dayCount: number, anchorIndex = (dayCount - 1) / 2): [number, number][] {
+  const start = anchorAngle - (anchorIndex + 0.5) * DAY_RING_STEP;
   return Array.from({ length: dayCount }, (_, i) => [start + i * DAY_RING_STEP, start + (i + 1) * DAY_RING_STEP]);
 }
 

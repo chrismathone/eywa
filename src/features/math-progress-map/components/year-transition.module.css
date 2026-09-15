@@ -1,0 +1,163 @@
+.stage {
+  --year-direction: 1;
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+}
+
+.stage[data-direction="backward"] {
+  --year-direction: -1;
+}
+
+.dial {
+  position: relative;
+  aspect-ratio: 1;
+}
+
+/* HTML 레이어만 회전해 수백 개의 SVG 눈금을 매 프레임 다시 계산하지 않는다. */
+.layer {
+  --ring-turn: 0deg;
+  --ring-duration: 800ms;
+  --ring-delay: 0ms;
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.layer[data-dial-layer="quarters"] { --ring-turn: -12deg; }
+.layer[data-dial-layer="months"] { --ring-turn: -45deg; --ring-duration: 820ms; --ring-delay: 40ms; }
+.layer[data-dial-layer="weeks"] { --ring-turn: 70deg; --ring-duration: 940ms; --ring-delay: 70ms; }
+.layer[data-dial-layer="days"] { --ring-turn: -150deg; --ring-duration: 1060ms; --ring-delay: 100ms; }
+.layer[data-dial-layer="focus"] { --ring-turn: 90deg; --ring-duration: 880ms; --ring-delay: 100ms; }
+
+/* 마지막 링이 멈춘 뒤 이전 장면을 해제한다. 부모 자체는 이동하거나 회전하지 않는다. */
+.arrival {
+  animation: reveal 1180ms linear;
+}
+
+.arrival .layer {
+  animation: assemble var(--ring-duration) cubic-bezier(0.16, 1, 0.3, 1) var(--ring-delay) both;
+}
+
+.arrival .layer[data-dial-layer="center"] {
+  animation: centerReveal 420ms ease-out 80ms both;
+}
+
+.arrival .layer[data-dial-layer="labels"] {
+  animation: centerReveal 320ms ease-out 160ms both;
+}
+
+.departure {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: depart 180ms ease-out both;
+}
+
+.departure .layer {
+  animation: release 180ms ease-in both;
+}
+
+@keyframes assemble {
+  from { opacity: 0; transform: rotate(calc(var(--ring-turn) * var(--year-direction))) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes depart {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes release {
+  to { transform: rotate(calc(var(--ring-turn) * var(--year-direction) * -0.12)); }
+}
+
+@keyframes centerReveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 연도가 바뀌는 순간만 바깥 테두리를 따라 한 바퀴 도는 가는 빛. */
+.sweep {
+  position: absolute;
+  inset: 2%;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(transparent 270deg, color-mix(in srgb, var(--primary) 15%, transparent) 320deg, var(--primary) 354deg, transparent 360deg);
+  mask-image: radial-gradient(closest-side, transparent calc(100% - 3px), black calc(100% - 2px));
+}
+
+.arrival .sweep {
+  animation: sweep 1080ms cubic-bezier(0.22, 0.65, 0.35, 1) 40ms both;
+}
+
+@keyframes sweep {
+  0% { opacity: 0; transform: rotate(calc(-80deg * var(--year-direction))); }
+  18% { opacity: 0.65; }
+  75% { opacity: 0.3; }
+  100% { opacity: 0; transform: rotate(calc(280deg * var(--year-direction))); }
+}
+
+/* 분기 → 월 → 주 → 날짜: 고른 구간이 원 전체로 확대되며 다음 단계가 들어온다. */
+.stage[data-motion="zoom"] { --zoom-enter: 0.78; --zoom-exit: 1.18; }
+.stage[data-motion="zoom"][data-direction="backward"] { --zoom-enter: 1.18; --zoom-exit: 0.78; }
+.stage[data-motion="zoom"] .arrival {
+  animation: zoomIn 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stage[data-motion="zoom"] .departure {
+  animation: zoomOut 220ms ease-out both;
+}
+.stage[data-motion="zoom"] .layer, .stage[data-motion="zoom"] .sweep { animation: none; }
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(var(--zoom-enter)); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes zoomOut {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: scale(var(--zoom-exit)); }
+}
+
+.yearOptions {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border-radius: 6px;
+}
+
+.yearOptions::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: calc(100% / var(--year-count));
+  border-radius: inherit;
+  background: var(--primary);
+  transform: translateX(calc(var(--year-index) * 100%));
+  transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.yearOption {
+  position: relative;
+  background: transparent;
+  white-space: nowrap;
+  transition: color 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrival, .stage[data-motion="zoom"] .arrival {
+    /* 완료 이벤트는 유지해서 보관한 이전 장면도 바로 해제한다. */
+    animation: reveal 1ms;
+  }
+  .departure, .stage[data-motion="zoom"] .departure { display: none; animation: none; }
+  .arrival .layer, .arrival .sweep { animation: none; }
+  .yearOptions::before, .yearOption { transition: none; }
+}
+
+@keyframes reveal {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}

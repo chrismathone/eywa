@@ -90,3 +90,35 @@ describe("progress-map derive — 샘플(김민준, 2026-09-16)", () => {
     expect(slots[3]?.date).toBe("2026-01-01");
   });
 });
+
+describe("진도맵 날짜 — 공휴일과 수업 일정", () => {
+  it("추석 연휴와 정기 비수업요일을 구분하고 0쪽 수업은 보존한다", () => {
+    const day = (date: string) => dayOf(view, focusOfDate(date))!;
+    expect(day("2026-09-24")).toMatchObject({ holidayName: "추석 연휴", noClassReason: "추석", plannedPages: 0 });
+    expect(day("2026-09-26")).toMatchObject({ holidayName: "추석 연휴", noClassReason: "정기 수업 없는 요일" });
+    expect(day("2026-09-27")).toMatchObject({ holidayName: null, noClassReason: "정기 수업 없는 요일" });
+    expect(day("2026-09-10")).toMatchObject({ plannedPages: 0, status: "completed", noClassReason: null });
+  });
+
+  it("학생의 등원요일에 따라 평일도 비수업일이 되며, 일정 미설정은 수업 없음으로 추정하지 않는다", () => {
+    const mwf = buildYearView({ ...sample, dailyProgress: [], calendar: { classWeekdays: [1, 3, 5] } });
+    expect(dayOf(mwf, focusOfDate("2026-09-22"))?.noClassReason).toBe("정기 수업 없는 요일");
+    expect(dayOf(mwf, focusOfDate("2026-09-23"))?.noClassReason).toBeNull();
+    const unknown = buildYearView({ ...sample, dailyProgress: [], calendar: undefined });
+    expect(dayOf(unknown, focusOfDate("2026-09-26"))).toMatchObject({ holidayName: "추석 연휴", noClassReason: null });
+  });
+
+  it("공휴일·비수업요일에 실제 보강하면 완료 쪽수를 유지하고 수업 없음으로 표시하지 않는다", () => {
+    const makeup = { ...sample.dailyProgress.find((r) => r.date === SAMPLE_AS_OF)!, date: "2026-09-26",
+      startPage: 1, endPage: 2, completedPage: 2, status: "completed" as const };
+    const withMakeup = buildYearView({ ...sample, dailyProgress: [...sample.dailyProgress, makeup] });
+    expect(dayOf(withMakeup, focusOfDate(makeup.date))).toMatchObject({ holidayName: "추석 연휴", noClassReason: null, donePages: 2 });
+    expect(withMakeup.donePages).toBe(view.donePages + 2);
+    expect(withMakeup.plannedPages).toBe(view.plannedPages + 2);
+  });
+
+  it("학생별 휴강은 공휴일로 바꾸지 않는다", () => {
+    const closed = buildYearView({ ...sample, dailyProgress: [], calendar: { daysOff: { "2026-09-23": "개별 휴강" } } });
+    expect(dayOf(closed, focusOfDate("2026-09-23"))).toMatchObject({ holidayName: null, noClassReason: "개별 휴강" });
+  });
+});

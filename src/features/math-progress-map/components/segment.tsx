@@ -2,6 +2,8 @@
 
 import { createContext, useContext, type KeyboardEvent, type PointerEvent } from "react";
 import type { HoverTarget } from "../tooltip-content";
+import { FOCUS_FILL, FOCUS_STROKE } from "../palette";
+import { SELECTION_STROKE_WIDTH } from "./svg-consts";
 
 /**
  * 링 **칸 하나** — `<path>`에 클릭·키보드·마우스 오버를 붙인 것. 모든 링이 이 부품으로 칸을 그린다.
@@ -19,6 +21,7 @@ export function Segment({
   stroke,
   strokeWidth = 0,
   dashed = false,
+  selected,
   label,
   target,
   onSelect,
@@ -30,6 +33,8 @@ export function Segment({
   stroke?: string;
   strokeWidth?: number;
   dashed?: boolean;
+  /** 선택한 칸은 진한 채움 + 흰 여백과 실선으로 구분한다. 글자는 링에서 FOCUS_INK를 쓴다. */
+  selected?: boolean;
   /** 접근성 이름 — "9월 3주차 · 진행 중 · 59%" */
   label: string;
   target: HoverTarget;
@@ -48,24 +53,30 @@ export function Segment({
     }
   };
   return (
-    <path
-      d={d}
-      fill={fill}
-      stroke={stroke ?? "none"}
-      strokeWidth={strokeWidth}
-      strokeDasharray={dashed ? "6 4" : undefined}
-      strokeLinejoin="round"
-      role={onSelect ? "button" : undefined}
-      tabIndex={onSelect ? (focusable ? 0 : -1) : undefined}
-      aria-label={label}
-      className={`outline-none transition-[fill,opacity] duration-200 hover:brightness-95 focus-visible:stroke-primary focus-visible:[stroke-width:3] ${
-        onSelect ? "cursor-pointer" : ""
-      } ${className}`}
-      onClick={onSelect}
-      onKeyDown={onKey}
-      onPointerEnter={(e) => hover(target, e)}
-      onPointerMove={(e) => hover(target, e)}
-      onPointerLeave={() => hover(null)}
-    />
+    <>
+      {selected ? (
+        <path d={d} fill="none" stroke="white" strokeWidth={SELECTION_STROKE_WIDTH + 4} strokeLinejoin="round" className="pointer-events-none" aria-hidden />
+      ) : null}
+      <path
+        d={d}
+        fill={selected ? FOCUS_FILL : fill}
+        stroke={selected ? FOCUS_STROKE : stroke ?? "none"}
+        strokeWidth={selected ? SELECTION_STROKE_WIDTH : strokeWidth}
+        strokeDasharray={!selected && dashed ? "6 4" : undefined}
+        strokeLinejoin="round"
+        role={onSelect ? "button" : undefined}
+        tabIndex={onSelect ? (focusable ? 0 : -1) : undefined}
+        aria-label={label}
+        aria-pressed={onSelect ? selected : undefined}
+        className={`outline-none transition-[fill,opacity] duration-200 hover:brightness-95 focus-visible:stroke-primary focus-visible:[stroke-width:3] ${
+          onSelect ? "pointer-events-auto cursor-pointer" : ""
+        } ${className}`}
+        onClick={onSelect}
+        onKeyDown={onKey}
+        onPointerEnter={(e) => hover(target, e)}
+        onPointerMove={(e) => hover(target, e)}
+        onPointerLeave={() => hover(null)}
+      />
+    </>
   );
 }

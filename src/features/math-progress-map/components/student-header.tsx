@@ -12,7 +12,7 @@ import { useProgressMap } from "./map-state";
  * (지시 18의 다섯 질문 중 "지금 어디"·"다음이 무엇"·"빠른가 느린가"가 이 줄에 다 있다 — 아래 카드로 내려가기 전에).
  */
 export function StudentHeader() {
-  const { progress, pace } = useProgressMap();
+  const { sourceProgress: progress, pace } = useProgressMap();
   // 과목 이름은 학원설정이 단일 소스(운영 enum 하드코딩 금지) — 이 화면은 수학 전용이라 키만 고정.
   const subjectLabel = useSubjectMaps().labelOf("math");
   const c = progress.curriculum;

@@ -21,4 +21,5 @@ export const FONT = {
 
 export const FOCUS_STROKE_WIDTH = 1.5;
 export const CURRENT_STROKE_WIDTH = 3;
+export const SELECTION_STROKE_WIDTH = 4;
 export const SEGMENT_TEXT = "pointer-events-none select-none";

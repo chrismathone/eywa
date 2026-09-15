@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CX, CY, RINGS, arcPath, dayAngles, dayRingAngles, monthAngles, polar, weekAngles, withGap } from "./geometry";
+import { CX, CY, RINGS, arcPath, dayAngles, dayRingAngles, midAngle, monthAngles, normAngle, polar, weekAngles, withGap } from "./geometry";
+import { weekdayOf } from "./calendar";
 
 describe("progress-map geometry", () => {
   it("0° = 12시 방향, 시계 방향", () => {
@@ -40,6 +41,19 @@ describe("progress-map geometry", () => {
     expect(cells[0]![0]).toBeCloseTo(255 - 38.5);
     expect(cells[6]![1]).toBeCloseTo(255 + 38.5);
   });
+
+  it.each(["2026-09-14", "2026-09-16", "2026-09-20", "2026-02-01", "2027-01-01", "2028-02-29", "2028-12-31"])(
+    "%s의 요일 칸은 같은 날짜 눈금과 한 직선에 놓인다 — 월·일요일, 짧은 주, 윤일, 연말 포함",
+    (date) => {
+      const slot = (weekdayOf(date) + 6) % 7;
+      const tickAngle = midAngle(dayAngles(date));
+      const cells = dayRingAngles(tickAngle, 7, slot);
+      expect(normAngle(midAngle(cells[slot]!))).toBeCloseTo(normAngle(tickAngle));
+      expect(cells[6]![1] - cells[0]![0]).toBeCloseTo(77);
+      // 12시를 지나 펼쳐져도 각도를 순서대로 유지해 SVG 칸이 뒤집히지 않는다.
+      expect(cells.every(([start, end]) => end > start)).toBe(true);
+    },
+  );
 
   it("틈은 폭이 충분할 때만 뺀다", () => {
     expect(withGap([0, 30], 0.6)).toEqual([0.3, 29.7]);

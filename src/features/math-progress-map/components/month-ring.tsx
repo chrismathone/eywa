@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { GAP, RINGS, arcPath, midAngle, polar, weekAngles, withGap } from "../geometry";
-import { HAIRLINE, STATUS_FILL, STATUS_INK, STATUS_LABEL } from "../palette";
+import { FOCUS_INK, HAIRLINE, STATUS_FILL, STATUS_INK, STATUS_LABEL, TODAY_STROKE } from "../palette";
 import { ringActive } from "../view-mode";
 import { useProgressMap } from "./map-state";
 import { RingOutline } from "./ring-outline";
@@ -14,8 +14,8 @@ const LABEL_R = (RINGS.month[0] + RINGS.month[1]) / 2;
 const MIN_LABEL_SPAN = 4.2;
 
 /**
- * 월간 링 — 달마다 주 칸. 색은 **상태**(완료 초록 · 진행 중 학원색 · 미학습 회색 · 예정 옅은 회색 · 계획 없음 흰 칸).
- * 이번 주 = 학원색 실선, 고른 주 = 학원색 점선. 주 칸을 누르면 주간 보기로.
+ * 월간 링 — 완료 민트 · 진행 중 호박색 · 미학습 회색 · 예정 옅은 회색 · 계획 없음 흰 칸.
+ * 이번 주 = 호박색 점선, 고른 주 = 학원색 채움과 흰 글자. 주 칸을 누르면 주간 보기로.
  */
 export const MonthRing = memo(function MonthRing() {
   const { view, mode, focus, selectWeek } = useProgressMap();
@@ -27,9 +27,9 @@ export const MonthRing = memo(function MonthRing() {
           const angles = weekAngles(view.year, m.month, w.index);
           if (!angles) return null;
           const [a0, a1] = withGap(angles, GAP.week);
-          const focused = focus.month === m.month && focus.week === w.index && !w.isCurrent;
+          const focused = focus.month === m.month && focus.week === w.index;
           const light = w.status === "no-plan" || w.status === "planned" || w.status === "none";
-          const stroke = w.isCurrent || focused ? "var(--primary)" : light ? HAIRLINE : undefined;
+          const stroke = w.isCurrent ? TODAY_STROKE : light ? HAIRLINE : undefined;
           const lp = polar(LABEL_R, midAngle(angles));
           return (
             <g key={`${m.month}-${w.index}`}>
@@ -37,8 +37,9 @@ export const MonthRing = memo(function MonthRing() {
                 d={arcPath(RINGS.month[0], RINGS.month[1], a0, a1)}
                 fill={STATUS_FILL[w.status]}
                 stroke={stroke}
-                strokeWidth={w.isCurrent || focused ? CURRENT_STROKE_WIDTH : light ? 1 : 0}
-                dashed={focused}
+                strokeWidth={w.isCurrent ? CURRENT_STROKE_WIDTH : light ? 1 : 0}
+                dashed={w.isCurrent}
+                selected={focused}
                 label={`${m.month}월 ${w.index}주차 · ${STATUS_LABEL[w.status]} · ${w.pct}%`}
                 target={{ kind: "week", month: m.month, week: w.index }}
                 onSelect={() => selectWeek(m.month, w.index)}
@@ -51,7 +52,7 @@ export const MonthRing = memo(function MonthRing() {
                   dominantBaseline="central"
                   fontSize={FONT.week}
                   fontWeight={700}
-                  fill={STATUS_INK[w.status]}
+                  fill={focused ? FOCUS_INK : STATUS_INK[w.status]}
                   className={SEGMENT_TEXT}
                   aria-hidden
                 >

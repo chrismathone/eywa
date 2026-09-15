@@ -40,12 +40,14 @@ export function ProgressDetailPanel() {
         <h3 className="text-foreground text-base font-bold">{title}</h3>
         <span className="text-text-dim text-xs font-medium">{HINT[mode]}</span>
       </div>
-      <div className="mt-3">
-        {mode === "year" ? <YearList months={view.months} grouped /> : null}
-        {mode === "quarter" ? <YearList months={view.quarters[month.quarter - 1]!.months} /> : null}
-        {mode === "month" ? <MonthList month={month} /> : null}
-        {mode === "week" ? <WeekList week={week} /> : null}
-        {mode === "day" ? <DayCard day={day} week={week} /> : null}
+      <div className="mt-3 overflow-x-auto">
+        <div className={mode === "day" ? "" : "min-w-[34rem] md:min-w-0"}>
+          {mode === "year" ? <YearList months={view.months} grouped /> : null}
+          {mode === "quarter" ? <YearList months={view.quarters[month.quarter - 1]!.months} /> : null}
+          {mode === "month" ? <MonthList month={month} /> : null}
+          {mode === "week" ? <WeekList week={week} /> : null}
+          {mode === "day" ? <DayCard day={day} week={week} /> : null}
+        </div>
       </div>
     </section>
   );

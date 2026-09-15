@@ -20,9 +20,11 @@ const TONE_VAR: Record<string, string> = { green: "var(--green)", primary: "var(
  * 바깥 가는 초록 호가 연간 진도율을 다시 한 번 그린다(숫자와 그림이 같은 값).
  */
 export const CurrentPosition = memo(function CurrentPosition() {
-  const { view, progress, pace } = useProgressMap();
+  const { view, progress, sourceProgress, focus, pace } = useProgressMap();
   const subjectLabel = useSubjectMaps().labelOf("math");
   const c = progress.curriculum;
+  const otherYear = view.year !== sourceProgress.year;
+  const selectedPlan = view.months[focus.month - 1]?.plan;
   const t = (dy: number) => CY + dy;
   const paceFill = TONE_VAR[TONE_COLOR[PACE_META[pace.status].tone]] ?? "var(--foreground)";
   return (
@@ -33,26 +35,26 @@ export const CurrentPosition = memo(function CurrentPosition() {
         <path d={strokeArcPath(ARC_R, 0, (360 * view.pct) / 100)} fill="none" stroke="var(--green)" strokeWidth={ARC_W} strokeLinecap="round" />
       ) : null}
       <text x={CX} y={t(-88)} textAnchor="middle" dominantBaseline="central" fontSize={18} fontWeight={500} fill="var(--foreground)">
-        {view.year}년 {subjectLabel} 진도율
+        {view.year}년 {subjectLabel} {progress.estimated ? "예상 진도" : "진도율"}
       </text>
-      <text x={CX} y={t(-36)} textAnchor="middle" dominantBaseline="central" fontSize={80} fontWeight={700} fill="var(--foreground)" className="num">
-        {view.pct}%
+      <text x={CX} y={t(-36)} textAnchor="middle" dominantBaseline="central" fontSize={progress.estimated ? 60 : 80} fontWeight={700} fill="var(--foreground)" className="num">
+        {progress.estimated ? "예정" : `${view.pct}%`}
       </text>
       <text x={CX} y={t(12)} textAnchor="middle" dominantBaseline="central" fontSize={18} fontWeight={500} fill="var(--foreground)" className="num">
-        {view.donePages} / {view.plannedPages}쪽
+        {progress.estimated ? `계획 ${view.plannedPages}쪽` : `${view.donePages} / ${view.plannedPages}쪽`}
       </text>
       <line x1={CX - 64} x2={CX + 64} y1={t(30)} y2={t(30)} stroke={HAIRLINE} strokeWidth={1} />
       <text x={CX} y={t(50)} textAnchor="middle" dominantBaseline="central" fontSize={22} fontWeight={700} fill="var(--foreground)">
-        {c.bookName}
+        {otherYear ? selectedPlan?.semester ?? "계획 없음" : c.bookName}
       </text>
       <text x={CX} y={t(76)} textAnchor="middle" dominantBaseline="central" fontSize={21} fontWeight={500} fill="var(--foreground)">
-        {c.chapter}
+        {otherYear ? selectedPlan?.chapter ?? "" : c.chapter}
       </text>
       <text x={CX} y={t(100)} textAnchor="middle" dominantBaseline="central" fontSize={17} fontWeight={500} fill="var(--foreground)" className="num">
-        p.{c.currentPage} / {c.totalPages}
+        {otherYear ? selectedPlan ? `p.${selectedPlan.startPage}~${selectedPlan.endPage}` : "" : `p.${c.currentPage} / ${c.totalPages}`}
       </text>
-      <text x={CX} y={t(120)} textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={700} fill={paceFill}>
-        {paceLabel(pace)}
+      <text x={CX} y={t(120)} textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={700} fill={otherYear ? "var(--amber)" : paceFill}>
+        {otherYear ? progress.estimated ? "예상 학습 계획" : `${focus.month}월 학습 계획` : paceLabel(pace)}
       </text>
     </g>
   );

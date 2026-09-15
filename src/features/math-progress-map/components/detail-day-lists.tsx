@@ -2,6 +2,7 @@
 
 import { Pill } from "@/components/atoms/pill";
 import { WEEKDAY_KO, formatMdW, weekdayOf } from "../calendar";
+import { dayDescription, dayStatusLabel } from "../day-schedule";
 import type { DayView, WeekView } from "../derive";
 import { weekdaySlots } from "../focus";
 import { STATUS_LABEL, STATUS_PILL } from "../palette";
@@ -24,14 +25,15 @@ export function WeekList({ week }: { week: WeekView }) {
         }
         const r = d.record;
         return (
-          <DetailRow key={d.date} on={focus.day === d.date} onClick={() => selectDay(d.date)} label={`${formatMdW(d.date)} ${STATUS_LABEL[d.status]}`}>
-            <span className="text-foreground num text-sm font-bold">
+          <DetailRow key={d.date} on={focus.day === d.date} onClick={() => selectDay(d.date)} label={`${formatMdW(d.date)} ${dayDescription(d)}`}>
+            <span className={`${d.holidayName ? "text-danger" : d.noClassReason ? "text-neutral-fill" : "text-foreground"} num text-sm font-bold`}>
               {formatMdW(d.date)}
               {d.isToday ? <span className="text-primary ml-1 text-xs font-bold">오늘</span> : null}
             </span>
             <span className="text-foreground min-w-0 truncate text-sm font-medium">
-              {r ? r.subChapter || r.chapter : "기록 없음"}
-              {r?.note ? <span className="text-text-dim ml-1.5 text-xs">{r.note}</span> : null}
+              {d.noClassReason ? d.holidayName ?? d.noClassReason : r ? r.subChapter || r.chapter : "기록 없음"}
+              {!d.noClassReason && d.holidayName ? <span className="text-danger ml-1.5 text-xs">{d.holidayName}</span> : null}
+              {!d.noClassReason && r?.note ? <span className="text-text-dim ml-1.5 text-xs">{r.note}</span> : null}
             </span>
             <span className="num text-sm whitespace-nowrap">
               {r && d.plannedPages > 0 ? (
@@ -45,7 +47,7 @@ export function WeekList({ week }: { week: WeekView }) {
                 <span className="text-text-dim">—</span>
               )}
             </span>
-            <Pill color={STATUS_PILL[d.status]}>{STATUS_LABEL[d.status]}</Pill>
+            <Pill color={d.noClassReason ? d.holidayName ? "danger" : "neutral" : STATUS_PILL[d.status]}>{dayStatusLabel(d)}</Pill>
           </DetailRow>
         );
       })}
@@ -72,11 +74,12 @@ export function DayCard({ day, week }: { day: DayView; week: WeekView }) {
       </button>
     </div>
   );
-  if (!r) {
+  if (!r || day.noClassReason) {
     return (
       <div className="flex flex-col gap-2">
+        {day.holidayName ? <div><Pill color="danger">{day.holidayName}</Pill></div> : null}
         <p className="text-text-dim text-sm">
-          {WEEKDAY_KO[weekdayOf(day.date)]}요일 · 기록도 계획도 없는 날입니다. ({week.index}주)
+          {WEEKDAY_KO[weekdayOf(day.date)]}요일 · {day.noClassReason ? `수업이 없는 날입니다. (${day.noClassReason})` : `기록도 계획도 없는 날입니다. (${week.index}주)`}
         </p>
         {nav}
       </div>
@@ -88,6 +91,7 @@ export function DayCard({ day, week }: { day: DayView; week: WeekView }) {
         <Pill color={STATUS_PILL[day.status]} size="md">
           {STATUS_LABEL[day.status]}
         </Pill>
+        {day.holidayName ? <Pill color="danger" size="md">{day.holidayName}</Pill> : null}
         {day.isToday ? <span className="text-primary text-xs font-bold">오늘</span> : null}
         <span className="ml-auto">{nav}</span>
       </div>
