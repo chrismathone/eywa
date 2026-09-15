@@ -1,7 +1,7 @@
 /**
  * 진도맵 색 — CSS 토큰으로만 정의한다. 남색 지도는 progress-map.module.css의 지역 토큰,
  * 바깥의 목록·상세는 기존 앱 토큰을 쓴다. 상태 판정은 두 표면에서 같다.
- * 현재 날짜는 호박색 점선, 선택은 채움과 밝은 테두리로 구분한다.
+ * 현재 날짜는 호박색 점선, 선택은 노란 채움과 남색 글자로 구분한다.
  */
 import type { PillColor } from "@/components/atoms/pill";
 import type { ProgressStatus } from "./model";
@@ -57,7 +57,7 @@ export const STATUS_FILL: Record<DisplayStatus, string> = {
 /** 좁은 날짜 눈금은 글자가 없어 더 진한 색으로 학습 리듬을 드러낸다. */
 export const TICK_FILL: Record<DisplayStatus, string> = {
   ...STATUS_FILL,
-  completed: tint("--green", 74),
+  completed: `var(--map-completed-tick, ${tint("--green", 74)})`,
   "in-progress": "var(--amber)",
 };
 
@@ -93,7 +93,7 @@ export const STATUS_PILL: Record<DisplayStatus, PillColor> = {
   none: "neutral",
 };
 
-/** 선택은 진한 채움 + 흰 글자·여백, 현재 위치는 호박색 점선. 보기 단위의 원 테두리는 더 옅게. */
+/** 지도 선택은 노란 채움 + 남색 글자, 현재 위치는 호박색 점선. 보기 단위의 원 테두리는 더 옅게. */
 export const FOCUS_FILL = "var(--map-focus-fill, var(--primary))";
 export const FOCUS_INK = "var(--map-focus-ink, var(--primary-foreground))";
 export const FOCUS_STROKE = "var(--map-focus-stroke, var(--primary))";
@@ -101,9 +101,9 @@ export const TODAY_STROKE = "var(--amber)";
 export const RING_STROKE = `var(--map-ring-stroke, ${tint("--primary", 35)})`;
 export const HAIRLINE = "var(--line)";
 
-/** 날짜 표식은 학습 상태와 별개다. 선택된 공휴일은 남색 위에서도 읽히는 밝은 붉은 잉크. */
+/** 날짜 표식은 학습 상태와 별개다. 선택된 공휴일은 선택 배경에 맞춰 붉은 글자의 대비를 확보한다. */
 export const HOLIDAY_INK = "var(--danger)";
-export const HOLIDAY_SELECTED_INK = "color-mix(in srgb, var(--danger) 28%, white)";
+export const HOLIDAY_SELECTED_INK = "var(--map-holiday-selected-ink, color-mix(in srgb, var(--danger) 28%, white))";
 export const HOLIDAY_FILL = tint("--danger", 7);
 export const HOLIDAY_TICK_FILL = tint("--danger", 42);
 export const NO_CLASS_FILL = "var(--bg-soft)";
