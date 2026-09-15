@@ -60,12 +60,13 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
   const selectPeriod = useCallback((nextYear: number, month: number) => {
     if (!years.includes(nextYear) || month < 1 || month > 12) return;
     setYear(nextYear);
-    setFocus({ month, week: null, day: null });
+    setFocus({ month, week: 1, day: null });
     setMode("month");
   }, [years]);
 
   const selectMonth = useCallback((month: number) => {
-    setFocus({ month, week: null, day: null });
+    // 월을 고르면 첫 주를 실제 초점으로 둔다. 링·주간 요약·일간 내용이 같은 주를 가리켜야 한다.
+    setFocus({ month, week: 1, day: null });
     setMode("month");
   }, []);
   const selectQuarter = useCallback(

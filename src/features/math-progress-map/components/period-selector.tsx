@@ -18,8 +18,8 @@ export function PeriodSelector() {
   const { mode, setMode, focus, view, currentView, progress, sourceProgress, years, selectYear, selectPeriod, resetFocus } = useProgressMap();
   const week = resolveWeek(view, focus);
   const day = resolveDay(view, focus);
-  // "기준일에 있는가"는 **풀린 주·날**로 비교한다 — 지도에서 이번 달을 누르면 초점은 `{week:null}`이지만 풀리면 기준일 그대로라
-  // '기준일로' 칩이 설 이유가 없다.
+  // "기준일에 있는가"는 **풀린 주·날**로 비교한다. 월 선택은 1주차에서 시작하므로,
+  // 이번 달이어도 기준일의 주·날과 다르면 '기준일로' 칩이 보여야 한다.
   // 기준일 쪽도 **풀어서** 비교한다 — 기준일이 해 밖이면 초점이 `{week:null, day:null}`로 clamp되어 맨 값 비교로는 영영 다르다.
   const home = focusOfDate(sourceProgress.asOf, sourceProgress.year);
   const homeWeek = resolveWeek(currentView, home);
