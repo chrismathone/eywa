@@ -152,7 +152,9 @@ export function ScreenHelpOverlay({ beneathWindows = false }: { beneathWindows?:
               <span className="text-primary mr-1 tabular-nums">{p.n}</span>
               {p.label}
             </p>
-            <p className="text-text-dim mt-0.5 line-clamp-3 text-xs leading-snug break-keep">{p.body}</p>
+            {/* 🔴 `line-clamp`을 다시 걸지 말 것 — 설명이 문장 중간에서 끊긴다(원장 제보 2026-09-15).
+                상자 높이는 `balloonHeight`가 이 글자 크기·줄높이로 세므로 글이 통째로 든다. */}
+            <p className="text-text-dim mt-0.5 text-xs leading-snug break-keep">{p.body}</p>
           </div>
           <span
             className="bg-primary text-white absolute z-10 inline-flex items-center justify-center rounded-full text-xs font-bold tabular-nums"

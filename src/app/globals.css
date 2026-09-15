@@ -163,6 +163,7 @@
   --color-amber: var(--amber);
   --color-amber-soft: var(--amber-soft);
   --color-marker: var(--marker);
+  --color-makeup-band: var(--makeup-band);
   --color-search-hit: var(--search-hit);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
@@ -362,6 +363,11 @@
   --rose-soft: rgba(194, 58, 110, 0.12);
   --amber: #995709;
   --amber-soft: rgba(163, 93, 10, 0.13);
+  /* 시간표 반 칸의 **'보강' 머리 띠** — 원장 2026-09-15 *"보강은 다른것과 다르게 배경색을 쨍한 노란계열로"*.
+     대기·퇴원 머리(`bg-bg-soft`)와 **일부러 다르다** — 09-14의 "머리 셋은 같은 tone" 규약을 원장이 뒤집은 것이다.
+     🔴 `--marker`(형광펜)를 빌려 쓰지 말 것 — 저건 "한 화면에 하나"라는 가드(`marker-trigger.test.ts`)가 붙은
+        색이라 여기서 쓰면 그 규칙이 깨지고, 둘을 따로 조일 수도 없어진다. 글자는 --foreground(#121212) 고정. */
+  --makeup-band: #ffe14a;
   /* 형광펜 노랑 — **한 화면에서 절대 놓치면 안 되는 식별자 하나**를 칠하는 자리(원장 2026-08-18:
      영어 강사 시트 반 전환 드롭다운 = *"배경을 쌩노란색으로 … 수업명을 확실하게 보기 위함"*).
      ⚠️ 앱 톤은 -soft(8~11% 틴트)가 기준이라 이건 의도적 예외다 — 출석부 형광 팔레트와 같은 성격이고,

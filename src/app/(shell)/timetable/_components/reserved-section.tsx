@@ -48,10 +48,12 @@ export function ReservedSection({
       className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
       style={{ maxHeight: HOLD_MAX_H }}
     >
-      {/* 🔴 머리 tone은 **대기·퇴원과 같다**(`bg-bg-soft text-text-faint`) — 이 격자의 규약은 "머리는 공통,
-          줄만 섹션 색"이다(대기=파랑 · 퇴원=검정). 머리까지 보라로 칠하면 세 섹션 중 보강만 튀어서 원장이
-          캡처로 가리킨 *"퇴원블록처럼"*에서 오히려 멀어진다. 줄 색만 예약 단일 소스(`RESERVED_BADGE_CLASS`). */}
-      <SectionLabelRow label="보강" count={lines.length} tone="bg-bg-soft text-text-faint" />
+      {/* 🔴 머리 띠는 **보강만 쨍한 노랑**이다(원장 2026-09-15 *"보강은 다른것과 다르게 배경색을 쨍한 노란계열로"*).
+          ⚠️ 09-14의 *"머리 tone은 대기·퇴원과 같다"*를 원장이 **뒤집은 것**이다 — 그때는 "퇴원블록처럼"이 근거였는데,
+          화면을 보고 나니 보강은 오히려 **눈에 띄어야 하는 줄**이라고 정했다. 되돌리지 말 것.
+          🔴 색은 전용 토큰 `--makeup-band`다 — 형광펜(`--marker`)은 "한 화면에 하나" 가드가 붙어 있어 못 빌린다.
+          줄 색은 그대로 예약 단일 소스(`RESERVED_BADGE_CLASS`). */}
+      <SectionLabelRow label="보강" count={lines.length} tone="bg-makeup-band text-foreground" />
       {lines.map((r) => {
         // 요일 한 글자는 **보강일에서** 뽑는다(요일 키를 따로 싣지 않는다 — 날짜가 진실이다).
         const day = showDay ? dowKoOf(r.makeupDate) : "";
@@ -61,10 +63,12 @@ export function ReservedSection({
             {...tipProps({ title: r.name, meta: metaLabel(r.school, r.grade), rows: reservationTipRows(r) })}
             className={`flex items-baseline justify-between gap-1.5 px-2 py-[3px] text-sm leading-tight select-none ${RESERVED_BADGE_CLASS}`}
           >
+            {/* 🔴 보강 줄만 **굵게**(원장 2026-09-15 *"보강 학생도 글자 볼드 처리해주고"*) — 대기·퇴원 줄은 그대로다.
+                조각(`NameMeta`)은 셋이 공유하므로 굵기는 **이 줄 껍데기에서만** 얹는다(조각을 건드리면 셋 다 굵어진다). */}
             <WindowLink
               href={`/students/${r.studentId}`}
               title={r.name}
-              className="block min-w-0 overflow-hidden whitespace-nowrap text-clip hover:underline"
+              className="block min-w-0 overflow-hidden font-bold whitespace-nowrap text-clip hover:underline"
             >
               <NameMeta name={r.name} meta={metaLabel(r.school, r.grade)} />
               {/* 남의 반 줄의 꼬리표 — 좁으면 줄 껍데기(`overflow-hidden … text-clip`)가 옆 조각들과 같은 규약으로 자른다. */}

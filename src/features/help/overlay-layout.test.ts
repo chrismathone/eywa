@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MANUALS } from "./manuals";
 import {
   BALLOON_W,
   balloonHeight,
@@ -11,6 +12,36 @@ import {
 } from "./overlay-layout";
 
 const vp = { w: 1000, h: 700 };
+
+describe("말풍선은 설명을 통째로 담는다", () => {
+  // 🔴 원장 제보 2026-09-15 *"창 크기에 따라 잘 맞춰야겠는데? 너무 안맞네 일부가"* — 3줄에서 잘라
+  // 대부분의 설명이 *"…전체를 못"* 처럼 문장 중간에서 끊겼다. 실제 설명서 문장으로 잠근다.
+  const bodies = MANUALS.flatMap((m) => m.callouts.map((c) => overlayPlainText(c.body)));
+  const longest = [...bodies].sort((a, b) => b.length - a.length)[0] ?? "";
+
+  it("실제로 3줄을 넘는 설명이 있다(이 전제가 무너지면 아래 검사가 공허해진다)", () => {
+    const perLine = Math.floor((BALLOON_W - 20) / 15);
+    expect(Math.ceil(longest.length / perLine)).toBeGreaterThan(3);
+  });
+
+  it("가장 긴 설명도 잘리지 않을 높이를 준다", () => {
+    const perLine = Math.floor((BALLOON_W - 20) / 15);
+    const lines = Math.ceil(longest.length / perLine);
+    // 안쪽 여백(6×2) + 제목 줄(20) + 사이(2) + 본문 줄(20씩)
+    expect(balloonHeight(longest)).toBeGreaterThanOrEqual(12 + 20 + 2 + lines * 20);
+  });
+
+  it("넓은 창에선 같은 글이 더 적은 줄로 든다", () => {
+    const narrow = placeOverlay([anchorWith(longest)], { w: 900, h: 900 })[0]!.balloon;
+    const wide = placeOverlay([anchorWith(longest)], { w: 2000, h: 900 })[0]!.balloon;
+    expect(wide.w).toBeGreaterThan(narrow.w);
+    expect(wide.h).toBeLessThanOrEqual(narrow.h);
+  });
+});
+
+function anchorWith(body: string): OverlayAnchor {
+  return { key: "k", n: 1, label: "라벨", body, box: { x: 40, y: 40, w: 100, h: 30 } };
+}
 
 function a(partial: Partial<OverlayAnchor> & Pick<OverlayAnchor, "key" | "box">): OverlayAnchor {
   return { n: 1, label: "라벨", body: "설명 한 줄입니다", ...partial };

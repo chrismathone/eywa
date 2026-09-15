@@ -23,7 +23,23 @@ export const PILL_SIZE = 22;
 export const BALLOON_W = 220;
 const GAP = 8;
 const PAD = 8;
-const MAX_BODY_LINES = 3;
+
+/**
+ * 말풍선 치수 — 🔴 **화면(`screen-help-overlay.tsx`)의 실제 클래스에서 온 값**이다. 한쪽만 고치면
+ * 글이 상자 밖으로 넘치거나(`overflow-hidden`이라 **소리 없이 잘린다**) 빈 자리가 남는다.
+ * `px-2.5`(10) · `py-1.5`(6) · 제목 한 줄 · `mt-0.5`(2) · 본문 `text-xs leading-snug`.
+ * ⚠️ `--text-xs`는 이 앱에서 **14px**이다(globals.css — v5 타입 스케일). Tailwind 기본값 12px로 세면
+ *    줄이 모자라 문장이 중간에서 끊긴다(원장 제보 2026-09-15 *"너무 안맞네 일부가"*).
+ */
+const PAD_X = 10;
+const PAD_Y = 6;
+const LABEL_H = 20;
+const LABEL_GAP = 2;
+const BODY_LINE_H = 20;
+/** 한 글자 폭 — 한글 14px는 거의 전각이고 `break-keep`이라 줄 끝이 일찍 꺾인다. 넉넉하게 잡는다(모자라면 잘린다). */
+const BODY_CHAR_W = 15;
+/** 말풍선이 화면을 통째로 덮지 않게 — 여기 걸리면 그 글만 줄여 적어야 한다는 신호다. */
+const MAX_BALLOON_H_RATIO = 0.5;
 
 /** display:none · 크기 0 · 뷰포트 밖은 겹침 대상이 아니다(권한으로 숨긴 버튼도 여기로 빠진다). */
 export function isOnScreen(box: Box, viewport: Viewport): boolean {
@@ -43,12 +59,20 @@ export function overlayPlainText(body: string): string {
     .trim();
 }
 
-/** 말풍선 높이 — 짧은 글은 낮게. 화면에서 line-clamp 와 같은 줄 수. */
-export function balloonHeight(body: string, width = BALLOON_W): number {
+/**
+ * 말풍선 높이 — **글 전체가 들어가는** 높이다. 짧은 글은 낮게.
+ *
+ * 🔴 줄 수에 상한을 두지 말 것 — 예전엔 3줄로 잘랐는데(`line-clamp-3`) 설명이 두세 문장이라
+ * 대부분이 *"…전체를 못"* 처럼 **문장 중간에서 끊겼다**(원장 제보 2026-09-15). 도움말이 말을 하다 마는 건
+ * 도움말이 아니다. 화면이 넘치는 게 걱정이면 상한을 올릴 게 아니라 **그 설명을 짧게** 써야 한다.
+ */
+export function balloonHeight(body: string, width = BALLOON_W, viewportH = Infinity): number {
   const plain = overlayPlainText(body);
-  const charsPerLine = Math.max(6, Math.floor((width - 24) / 12));
-  const lines = Math.min(MAX_BODY_LINES, Math.max(1, Math.ceil(plain.length / charsPerLine)));
-  return 12 + 18 + 4 + lines * 16;
+  const charsPerLine = Math.max(6, Math.floor((width - 2 * PAD_X) / BODY_CHAR_W));
+  const lines = Math.max(1, Math.ceil(plain.length / charsPerLine));
+  const h = 2 * PAD_Y + LABEL_H + LABEL_GAP + lines * BODY_LINE_H;
+  const cap = Number.isFinite(viewportH) ? Math.max(80, viewportH * MAX_BALLOON_H_RATIO) : Infinity;
+  return Math.min(h, cap);
 }
 
 export function overlapArea(a: Box, b: Box): number {
@@ -65,8 +89,10 @@ export function placeOverlay(anchors: OverlayAnchor[], vp: Viewport): PlacedCall
     .sort((a, b) => a.n - b.n)
     .map((a) => {
       const body = overlayPlainText(a.body);
-      const h = balloonHeight(a.body);
       const w = balloonWidth(a.box, vp);
+      // 🔴 높이는 **그 폭으로** 센다 — 넓은 창에서 폭만 넓히고 높이를 기본 폭으로 세면 상자가 과하게 높아지고,
+      //    반대로 좁은 창에서 기본 폭으로 세면 글이 넘쳐 잘린다.
+      const h = balloonHeight(a.body, w, vp.h);
       const pill = placePill(a.box, vp, pills);
       pills.push({ ...pill, w: PILL_SIZE, h: PILL_SIZE });
       const balloon = placeBalloon(a.box, w, h, vp, occupied);
@@ -75,11 +101,16 @@ export function placeOverlay(anchors: OverlayAnchor[], vp: Viewport): PlacedCall
     });
 }
 
-/** 넓은 칸(운영실 카드)은 칸 너비에 맞춰 옆 칸을 안 덮는다. */
+/**
+ * 넓은 칸(운영실 카드)은 칸 너비에 맞춰 옆 칸을 안 덮는다.
+ * ⚠️ **창이 넓으면 말풍선도 조금 넓힌다**(원장 2026-09-15 *"창 크기에 따라 잘 맞춰야겠는데"*) — 폭이 넓으면
+ * 같은 글이 적은 줄로 들어가 세로로 덜 퍼지고, 그만큼 서로 덜 겹친다. 좁은 창에선 기본 220 그대로다.
+ */
 function balloonWidth(box: Box, vp: Viewport): number {
   const cap = Math.max(1, vp.w - 2 * PAD);
-  if (box.w >= 160) return Math.min(BALLOON_W, Math.max(160, box.w), cap);
-  return Math.min(BALLOON_W, cap);
+  const base = clamp(Math.round(vp.w * 0.15), BALLOON_W, 300);
+  if (box.w >= 160) return Math.min(base, Math.max(160, box.w), cap);
+  return Math.min(base, cap);
 }
 
 function placeBalloon(box: Box, w: number, h: number, vp: Viewport, occupied: Box[]): Box {
@@ -99,23 +130,28 @@ function placeBalloon(box: Box, w: number, h: number, vp: Viewport, occupied: Bo
   }
   const seed = best ?? clampBox({ x: box.x, y: box.y + box.h + GAP, w, h }, vp);
   if (overlapScore(seed, occupied) <= 0) return seed;
-  const step = h + GAP;
-  for (let i = 1; i <= 14; i++) {
-    const down = clampBox({ ...seed, y: seed.y + i * step }, vp);
-    if (overlapScore(down, occupied) <= 0) return down;
+
+  // 씨앗 자리가 막혔다 — 화면 전체를 성기게 훑어 **빈 자리 중 원래 칸에 가장 가까운 곳**을 고른다.
+  // 🔴 예전엔 씨앗에서 한 상자씩(`h + GAP`) 아래·위·옆으로만 뛰었는데, 말풍선 높이가 제각각이라
+  //    그 격자에 안 맞는 틈이 통째로 버려졌다(글을 다 담느라 상자가 높아지자 16개가 안 눕혀졌다).
+  const SCAN_Y = 24;
+  const SCAN_X = Math.max(40, Math.round(w / 3));
+  let free: Box | null = null;
+  let freeDist = Infinity;
+  const bx = box.x + box.w / 2;
+  const by = box.y + box.h / 2;
+  for (let y = PAD; y <= Math.max(PAD, vp.h - h - PAD); y += SCAN_Y) {
+    for (let x = PAD; x <= Math.max(PAD, vp.w - w - PAD); x += SCAN_X) {
+      const c = { x, y, w, h };
+      if (overlapScore(c, occupied) > 0) continue;
+      const d = Math.hypot(c.x + c.w / 2 - bx, c.y + c.h / 2 - by);
+      if (d < freeDist) {
+        free = c;
+        freeDist = d;
+      }
+    }
   }
-  for (let i = 1; i <= 14; i++) {
-    const up = clampBox({ ...seed, y: seed.y - i * step }, vp);
-    if (overlapScore(up, occupied) <= 0) return up;
-  }
-  const xStep = w + GAP;
-  for (let i = 1; i <= 6; i++) {
-    const right = clampBox({ ...seed, x: seed.x + i * xStep }, vp);
-    if (overlapScore(right, occupied) <= 0) return right;
-    const left = clampBox({ ...seed, x: seed.x - i * xStep }, vp);
-    if (overlapScore(left, occupied) <= 0) return left;
-  }
-  return seed;
+  return free ?? seed;
 }
 
 function scoreBalloon(c: Box, box: Box, occupied: Box[]): number {
