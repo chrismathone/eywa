@@ -1,8 +1,12 @@
 /**
- * 학생 집계 인라인 스탯(재원/신입/전입/대기/퇴원) — 문법 ② 미니판(시간표는 세로 공간이 귀해
+ * 학생 집계 인라인 스탯(재원/신입/반이동/대기/퇴원) — 문법 ② 미니판(시간표는 세로 공간이 귀해
  * BigStat 카드 대신 인라인). 최상위 프레임에선 PageHeader 우측, 창(임베드)에선 헤더 줄을 통째로
  * 접고 툴바 우측에 이걸 넣는다(두 표면이 이 컴포넌트 하나를 공유 — 마크업 중복 금지).
  * 서버 컴포넌트(순수 마크업) — 이중 마운트돼도 상호작용이 없어 안전(#67 무관).
+ *
+ * 원장 2026-09-16(캡처 `194 재원 17 신입 13 전입 10 퇴원`): *"전입 -> 반이동으로 수정"* · *"한글 숫자 형식으로 바꿔줘
+ * 현재 숫자 한글인걸"* · *"사이사이 구분선 약하게 세로줄"* — 라벨이 먼저, 숫자가 뒤(`재원 194`), 항목 사이는 표 열 구분선과
+ * 같은 농도(`--line-faint`)의 세로줄. 🔴 **라벨만** 바꿨다 — 세는 값(`isTransferredIn`, 다른 반에서 옮겨 온 학생)은 그대로다.
  */
 export function StudentTally({
   enrolled,
@@ -20,20 +24,26 @@ export function StudentTally({
   const items = [
     { n: enrolled, label: "재원", cls: "text-primary", always: true },
     { n: newCount, label: "신입", cls: "text-danger", always: false },
-    { n: transferCount, label: "전입", cls: "text-blue", always: false },
+    { n: transferCount, label: "반이동", cls: "text-blue", always: false },
     { n: holdCount, label: "대기", cls: "text-amber", always: false },
     { n: withdrawnCount, label: "퇴원", cls: "text-text-faint", always: false },
   ];
+  // 세로줄은 **항목마다 왼쪽 1px**로 긋고, 안쪽 줄을 (여백 12px + 선 1px)만큼 왼쪽으로 당겨 바깥이 잘라낸다 — 그래야
+  // 좁은 창(툴바 안, 폰 폭)에서 두 줄로 접혀도 **줄마다 첫 항목**의 선이 가려지고 글자가 왼쪽에 붙는다.
+  // (`divide-x`는 DOM 순서로만 선을 빼서, 접히면 윗줄 끝에 선이 매달리고 아랫줄 첫 항목이 들여써진다 — 리뷰 2026-09-16.)
+  // `min-w-min` — `overflow-hidden`이 flex 자식의 최소 폭을 0으로 만들어 좁은 줄에서 글자가 잘리지 않게.
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap" data-help="tt-tally">
-      {items
-        .filter((it) => it.always || it.n > 0)
-        .map((it) => (
-          <span key={it.label} className="text-sm">
-            <b className={`num ${it.cls} text-lg font-bold`}>{it.n}</b>{" "}
-            <span className="text-text-dim">{it.label}</span>
-          </span>
-        ))}
+    <div className="min-w-min overflow-hidden" data-help="tt-tally">
+      <div className="-mr-3 -ml-[13px] flex flex-wrap items-baseline gap-y-1 whitespace-nowrap">
+        {items
+          .filter((it) => it.always || it.n > 0)
+          .map((it) => (
+            <span key={it.label} className="border-line-faint mr-3 border-l pl-3 text-sm">
+              <span className="text-text-dim">{it.label}</span>{" "}
+              <b className={`num ${it.cls} text-lg font-bold`}>{it.n}</b>
+            </span>
+          ))}
+      </div>
     </div>
   );
 }

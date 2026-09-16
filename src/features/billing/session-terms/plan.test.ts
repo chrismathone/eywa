@@ -32,9 +32,18 @@ describe("출석부 기준 계획 시수", () => {
     const e = enr({ schedules: [slot({ endTime: "16:55" })] });
     expect(planTermsForMonth("2026-07", [e, e], [])[0].plannedSessions).toBe(2);
   });
-  it("시간표 유효기간의 변경과 LAB 제외를 출석부와 동일하게 적용", () => {
+  it("시간표 유효기간의 변경을 반영하고 수납 계획에는 LAB도 포함", () => {
     const schedules = [slot({ validTo: "2026-07-10" }), slot({ validFrom: "2026-07-11", endTime: "18:00" }), slot({ startTime: "19:00", endTime: "21:00", slotTeacherLabel: "LAB" })];
-    expect(planTermsForMonth("2026-07", [enr({ schedules })], [])[0].plannedSessions).toBe(4.5);
+    expect(planTermsForMonth("2026-07", [enr({ schedules })], [])[0].plannedSessions).toBe(8.5);
+  });
+  it("영어 JJ·LAB를 모두 포함하되 개인 요일·휴일·종료일과 중복 교시를 반영한다", () => {
+    const first = slot({ startTime: "16:00", endTime: "16:55" });
+    const jj = slot({ startTime: "17:00", endTime: "17:55", slotTeacherLabel: "JJ" });
+    const lab = slot({ startTime: "18:00", endTime: "18:55", slotTeacherLabel: "LAB" });
+    const thu = { ...lab, dayOfWeek: "thu" as const };
+    const e = enr({ subject: "english", attendanceDays: [1], endDate: "2026-07-20", schedules: [first, jj, jj, lab, thu] });
+    expect(planTermsForMonth("2026-07", [e], ["2026-07-06"])[0].plannedSessions).toBe(6);
+    expect(planTermsForMonth("2026-07", [enr({ subject: "english", schedules: [jj, lab] })], [])[0].plannedSessions).toBe(8);
   });
   it("일반 영어는 하루의 여러 교시를 합산하며 같은 시작시간은 중복 제외", () => {
     const first = slot({ endTime: "16:55" });

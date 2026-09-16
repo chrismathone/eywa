@@ -36,8 +36,9 @@ export function absentDayHref(date: string): string {
 }
 
 /**
- * 이번 주 보강 예약 — 시간표 **'보강' 탭**(구분=보강, 이번 주). 카드와 같은 두 함수(반 집합·주 범위)로 그린다 —
- * 탭은 과목별이라 드롭다운으로 한 과목씩 본다(전 과목 합이 카드 숫자).
+ * 보강예정 카드의 ↗ — 시간표 **'보강' 탭**(구분=보강, 이번 주부터). 카드와 **같은 두 함수**(반 집합 `listMakeupScopeClasses` ·
+ * 기간 조회 `getReservationsInRange`)로 그린다. 탭은 **주 × 과목** 격자라 카드(오늘부터 한 달 · 전 과목 · 지난 미이행 포함)의
+ * 숫자는 탭을 주마다 넘기며 과목마다 본 합이다 — 그래서 ↗ 문구는 "주별로 보기"다(원장 2026-09-16 창 확대).
  */
 export function makeupWeekHref(): string {
   return "/timetable?kind=makeup";

@@ -155,10 +155,16 @@ describe("④ 예약 조회는 fail-soft — 표가 없어도 던지지 않는�
   it("모든 조회가 isMissingReservationTable / catch로 빈 목록으로 접는다", () => {
     const q = strip(read("features/attendance/server/makeup-reservation-queries.ts"));
     expect(q).toContain("export function isMissingReservationTable");
-    for (const fn of ["getClassReservationsInRange", "getReservationsOn", "getReservationsInWeek", "getStudentUpcomingReservations"]) {
-      const body = q.slice(q.indexOf(fn), q.indexOf("\nexport", q.indexOf(fn) + 1));
+    for (const fn of ["getClassReservationsInRange", "getReservationsOn", "getReservationsInRange", "getStudentUpcomingReservations"]) {
+      const at = q.indexOf(`function ${fn}(`);
+      expect(at, fn).toBeGreaterThan(-1);
+      const body = q.slice(at, q.indexOf("\nexport", at + 1));
       expect(body, fn).toMatch(/soft\(|catch/);
     }
+    // 주 조회는 기간 조회(fail-soft)에 넘기기만 한다 — 자기 조회를 따로 두면 이 검사를 빠져나간다.
+    const week = q.slice(q.indexOf("function getReservationsInWeek("), q.indexOf("\nexport", q.indexOf("function getReservationsInWeek(") + 1));
+    expect(week).toContain("return getReservationsInRange(start, end, classIds);");
+    expect(week).not.toContain(".from(");
     // 게이트 판정은 문을 넓히는 쪽으로 실패하지 않는다.
     expect(q.slice(q.indexOf("export async function hasReservedMakeup"))).toContain("return false;");
   });

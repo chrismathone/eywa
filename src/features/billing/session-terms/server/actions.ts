@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { mergeHolidays } from "@/features/billing/tuition-calc";
 import { planTermsForMonth, monthRange, type PlanEnrollment } from "../plan";
@@ -62,30 +62,31 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   const studentIds = [...new Set(invoices.map((i) => i.student_id))];
 
   // 그 달과 겹치는 수강 + 반(과목·활성) — 홀드 제외. 이어서 반들의 요일 스케줄.
-  const enrollments = await fetchInChunks<{
+  const enrollments = await fetchAllPagedInChunks<{
     student_id: string;
     class_id: string;
     start_date: string;
     end_date: string | null;
+    attendance_days: string[] | null;
     class: { subject?: string; is_active?: boolean } | { subject?: string }[] | null;
-  }>(studentIds, (chunk) =>
+  }>(studentIds, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("student_id, class_id, start_date, end_date, class:class_id!inner ( subject, is_active )")
+      .select("student_id, class_id, start_date, end_date, attendance_days, class:class_id!inner ( subject, is_active )")
       .in("student_id", chunk)
       .eq("on_hold", false)
       .eq("class.is_active", true)
       .lte("start_date", end)
-      .or(`end_date.is.null,end_date.gte.${start}`),
+      .or(`end_date.is.null,end_date.gte.${start}`).order("id").range(from, to),
   );
   const classIds = [...new Set(enrollments.map((e) => e.class_id))];
-  const schedules = await fetchInChunks<{ class_id: string; day_of_week: string; start_time: string; end_time: string; valid_from: string; valid_to: string | null; slot_teacher_label: string | null }>(classIds, (chunk) =>
+  const schedules = await fetchAllPagedInChunks<{ class_id: string; day_of_week: string; start_time: string; end_time: string; valid_from: string; valid_to: string | null; slot_teacher_label: string | null }>(classIds, (chunk, from, to) =>
     supabase
       .from("class_schedules")
       .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label")
       .in("class_id", chunk)
       .lte("valid_from", end)
-      .or(`valid_to.is.null,valid_to.gte.${start}`),
+      .or(`valid_to.is.null,valid_to.gte.${start}`).order("id").range(from, to),
   );
   const daysByClass = new Map<string, Set<number>>();
   const schedulesByClass = new Map<string, AutoUnitsSchedule[]>();
@@ -108,16 +109,17 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
       startDate: e.start_date,
       endDate: e.end_date,
       weekdays: [...(daysByClass.get(e.class_id) ?? [])],
+      attendanceDays: (e.attendance_days ?? []).map((day) => DOW[day]).filter((day) => day !== undefined),
       schedules: schedulesByClass.get(e.class_id) ?? [],
     });
   }
 
   // 기존 term 로드(확정 보존·stale 판단)
   const invoiceIds = invoices.map((i) => i.id);
-  const existing = await fetchInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null }>(
+  const existing = await fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null }>(
     invoiceIds,
-    (chunk) =>
-      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index").in("invoice_id", chunk),
+    (chunk, from, to) =>
+      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index").in("invoice_id", chunk).order("id").range(from, to),
   );
 
   let refreshed = 0;

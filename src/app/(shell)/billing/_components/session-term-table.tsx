@@ -15,6 +15,7 @@ import type { SessionTermRow } from "@/features/billing/session-terms/server/que
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { validSessionQuantity, sessionPricingAmount, type SessionPrice } from "@/features/billing/session-pricing";
 import { useBillingSettingsRefresh } from "@/features/billing/use-billing-settings-refresh";
+import { tipProps } from "@/components/hover-tip/tip";
 import { useSessionTermsState } from "./session-terms-state";
 import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
 
@@ -149,6 +150,32 @@ function ClassBatch({ period, group, listId, onPrice }: { period: string; group:
 const NUM_INPUT = "border-input bg-background num rounded-md border px-2 py-1 text-xs";
 
 /**
+ * 일수 기준 확정값 — 숫자를 붉게 칠하고 사유는 마우스 오버 카드로(원장 2026-09-16 *"일수 기준, 재확정 필요의 경우 색상을
+ * 붉은색으로 바꾸고 마우스 오버시 툴팁으로"*). 칸 안에 문장을 두 줄로 세우면 행이 두 배로 부푼다.
+ */
+const DAYS_BASIS_TIP = tipProps({
+  title: "일수 기준 확정",
+  lines: ["출석 일수로 확정한 값입니다(시수 기준 도입 전).", "해제한 뒤 시수를 확인해 다시 확정하세요."],
+});
+
+/**
+ * 배분 재확인 — 이 학생의 수납 배분이 있는데 이 반 몫이 빠져 있다(`allocationStale`). 꼬리표('청구액 배분'·'이름 매칭 참고')
+ * 자리에 앰버로 서고 사유는 마우스 오버 카드로 — 옛 모양은 셋째 줄이었다.
+ */
+const staleTip = (hasReferenceAmount: boolean) =>
+  tipProps({
+    title: "배분 재확인 필요",
+    lines: [
+      "이 학생의 수납 배분에서 이 반 몫이 빠져 있습니다.",
+      // 금액이 `—`인 행엔 이 문장을 싣지 않는다(없는 금액을 가리키게 된다 — 재리뷰 2026-09-16).
+      hasReferenceAmount ? "옆의 금액은 배분액이 아니라 이름 매칭 참고값입니다." : null,
+      "수납 연결·배분에서 다시 배분하세요.",
+    ],
+  });
+const ALLOCATION_STALE_TIP = staleTip(true);
+const ALLOCATION_STALE_TIP_NO_AMOUNT = staleTip(false);
+
+/**
  * 학생 1명 행 — 개인 보정(반 일괄과 다른 회차/단가). 확정 여부와 무관하게 **같은 8열** 구조로 렌더해
  * 헤더와 정렬을 맞춘다(colSpan 금지 — 미확정 입력칸이 헤더 밖으로 밀리던 정렬버그). 미확정 행의 회차·단가
  * 입력과 확정 버튼은 서로 다른 `<td>`에 있지만 `form` 속성으로 한 폼에 묶인다(HTML5 폼 연결).
@@ -189,9 +216,12 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
   const preview = monthly ? r.monthlyPrice : validSessionQuantity(n) && Number.isFinite(price) && price >= 0 ? sessionPricingAmount("per_session", n, Math.round(price)) : null;
 
   return (
-    <tr aria-busy={pending} className="border-border hover:bg-accent/30 border-t transition-colors">
+    // 🔴 한 행 = 한 줄(원장 2026-09-16 *"행이 너무 폭 넓어졌거든? 하나의 행이 줄바꿈 되지 않게 남은 여백들 잘 활용해서"*) —
+    //    칸마다 값·꼬리표·버튼을 가로로 늘어놓고 줄바꿈을 막는다. 들어갈 폭은 표의 최소 폭(colgroup 위)이 보장하고, 창이 그보다
+    //    좁으면 끌어서 가로로 민다(넘치는 표 규약). 오류 문구만 예외로 아래에 선다(잠깐 뜨는 알림).
+    <tr aria-busy={pending} className="border-border hover:bg-accent/30 border-t transition-colors [&>td]:whitespace-nowrap">
       <td className="text-muted-foreground px-3 py-2 text-xs">{r.studentGrade ?? "—"}</td>
-      <td className="text-foreground px-3 py-2 font-medium">
+      <td className="text-foreground truncate px-3 py-2 font-medium" title={r.studentName}>
         {r.studentName}
         {/* 미확정 행의 확정 폼(빈 폼) — 회차/단가 입력·확정 버튼이 form 속성으로 여기에 묶인다. */}
         {!confirmed ? (
@@ -208,9 +238,16 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
         <span className="text-text-dim">{r.plannedSessions ?? "—"}</span>
       </td>
       {/* 확정 회차 */}
-      <td className="num px-3 py-2 text-center">
+      <td className="num relative px-3 py-2 text-center">
         {confirmed ? (
-          <span className="text-foreground font-bold">{monthly ? "월 고정" : r.confirmedSessions}{!monthly && r.quantityBasis === "days" ? <span className="text-amber block text-xs font-normal">일수 기준 · 재확정 필요</span> : null}</span>
+          !monthly && r.quantityBasis === "days" ? (
+            <span className="text-danger cursor-help font-bold underline decoration-dotted underline-offset-4" {...DAYS_BASIS_TIP}>
+              {r.confirmedSessions}
+              <span className="sr-only"> · 일수 기준 · 재확정 필요</span>
+            </span>
+          ) : (
+            <span className="text-foreground font-bold">{monthly ? "월 고정" : r.confirmedSessions}</span>
+          )
         ) : monthly ? (
           <span className="text-text-dim text-xs">월 고정</span>
         ) : (
@@ -260,17 +297,26 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
       {/* 확정 금액 */}
       <td className="num text-foreground px-3 py-2 text-right font-bold">
         {confirmed && r.amount !== null ? won(r.amount) : preview !== null ? (
-          <div aria-label={`${r.studentName} 예상금액`}>
+          <div aria-label={`${r.studentName} 예상금액`} className="inline-flex items-baseline gap-1.5">
             <span className="text-primary">{won(preview)}</span>
-            <div className="text-text-dim text-xs font-normal">예상 · {monthly ? "월 정액" : `${n}시수 × ${won(Math.round(price))}`}</div>
+            <span className="text-text-dim text-xs font-normal">예상 · {monthly ? "월 정액" : `${n}시수 × ${won(Math.round(price))}`}</span>
           </div>
         ) : "—"}
       </td>
-      {/* 이 반 청구액(참고) */}
+      {/* 이 반 청구액(참고) — `금액 꼬리표 · 수납 연결·배분`을 한 줄로. 배분 재확인은 꼬리표 자리에 앰버로(사유는 마우스 오버 카드). */}
       <td className="num text-muted-foreground px-3 py-2 text-right text-xs">
-        {r.allocatedAmount != null ? <><b>{won(r.allocatedAmount)}</b><div>청구액 배분</div></> : r.classAmount !== null ? <>{won(r.classAmount)}<div>이름 매칭 참고</div></> : "—"}
-        {r.allocationStale ? <div className="text-amber">배분 재확인 필요</div> : null}
-        <div><ReceiptAllocationButton invoiceId={r.invoiceId} studentName={r.studentName} /></div>
+        {/* 오류 문구(수납 연결 불러오기 실패)만 아래로 꺾인다 — `flex-wrap` + 버튼 쪽 `basis-full`. 평소엔 한 줄. */}
+        <div className="inline-flex flex-wrap items-baseline justify-end gap-x-2">
+          {r.allocatedAmount != null ? <b>{won(r.allocatedAmount)}</b> : <span>{r.classAmount !== null ? won(r.classAmount) : "—"}</span>}
+          {r.allocationStale ? (
+            <span className="text-amber cursor-help" {...(r.classAmount !== null ? ALLOCATION_STALE_TIP : ALLOCATION_STALE_TIP_NO_AMOUNT)}>배분 재확인 필요</span>
+          ) : r.allocatedAmount != null ? (
+            <span className="text-green bg-green-soft rounded-sm px-1.5 py-0.5 text-xs font-medium">배분 완료</span>
+          ) : r.classAmount !== null ? (
+            <span>이름 매칭 참고</span>
+          ) : null}
+          <ReceiptAllocationButton invoiceId={r.invoiceId} studentName={r.studentName} />
+        </div>
       </td>
       {/* 개별 액션 */}
       <td className="px-3 py-2 text-right">
@@ -291,7 +337,7 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
             {confirming ? "확정 중…" : monthly ? "월 금액 확정" : "확정"}
           </button>
         )}
-        {err ? <p className="text-danger mt-1 text-xs">{err}</p> : null}
+        {err ? <p className="text-danger mt-1 text-xs whitespace-normal">{err}</p> : null}
       </td>
     </tr>
   );
@@ -332,19 +378,23 @@ export function SessionTermGroups({
           <option key={c.price} value={c.price} label={`${won(c.price)}${c.label ? ` · ${c.label}` : ""}`} />
         ))}
       </datalist>
-      <table className="w-full min-w-[860px] table-fixed text-sm">
+      {/* 한 행 = 한 줄(원장 2026-09-16) — 비율은 칸에 실제로 서는 내용 폭에서 잡았다(예상 금액·이 반 청구액이 가장 길다:
+          `148,750원 예상 · 7시수 × 21,250원` · `148,750원 이름 매칭 참고 수납 연결·배분`). 최소 폭 1,130px에서 각 칸이 제
+          한 줄을 담는다(실제 글꼴로 잰 칸별 필요 폭 합 약 1,110px — 적대적 리뷰 2026-09-16). 🔴 수납 창 기본·최소 크기(1,160)에서
+          가로 스크롤이 생기지 않게 이 폭을 넘기지 말 것(넘기면 '개별' 열 확정 버튼이 화면 밖으로 밀린다). 그보다 좁으면 끌어서 민다. */}
+      <table className="w-full min-w-[1130px] table-fixed text-sm">
         <colgroup>
-          <col className="w-[7%]" />
-          <col className="w-[15%]" />
-          <col className="w-[8%]" />
-          <col className="w-[12%]" />
-          <col className="w-[16%]" />
-          <col className="w-[14%]" />
-          <col className="w-[16%]" />
-          <col className="w-[12%]" />
+          <col className="w-[4%]" />
+          <col className="w-[8.5%]" />
+          <col className="w-[7.5%]" />
+          <col className="w-[7.5%]" />
+          <col className="w-[11%]" />
+          <col className="w-[24.5%]" />
+          <col className="w-[26%]" />
+          <col className="w-[11%]" />
         </colgroup>
         <thead>
-          <tr className="bg-bg-soft text-text-dim text-sm">
+          <tr className="bg-bg-soft text-text-dim text-sm [&>th]:whitespace-nowrap">
             <th className="px-3 py-2 text-left font-bold">학년</th>
             <th className="px-3 py-2 text-left font-bold">이름</th>
             <th className="px-3 py-2 text-center font-bold">계획 시수</th>

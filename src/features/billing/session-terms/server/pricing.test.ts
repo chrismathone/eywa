@@ -66,6 +66,18 @@ beforeEach(() => {
 });
 
 describe("설정 → 회차 화면 조회·확정", () => {
+  it("계획 갱신은 개인 등원 요일을 지키고 JJ·LAB 교시를 포함한다", async () => {
+    h.state.tables.enrollments = [{ student_id: "student", class_id: "class", start_date: "2026-01-01", end_date: null, attendance_days: ["mon"], class: { subject: "english", is_active: true } }];
+    h.state.tables.class_schedules = [
+      { class_id: "class", day_of_week: "mon", start_time: "16:00", end_time: "16:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: null },
+      { class_id: "class", day_of_week: "mon", start_time: "17:00", end_time: "17:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: "JJ" },
+      { class_id: "class", day_of_week: "mon", start_time: "18:00", end_time: "18:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: "LAB" },
+      { class_id: "class", day_of_week: "thu", start_time: "18:00", end_time: "18:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: "LAB" },
+    ];
+    expect(await refreshPlannedTerms("2026-09")).toMatchObject({ ok: true, refreshed: 1 });
+    expect(h.state.writes.find((w) => w.table === "invoice_session_terms")?.patch).toMatchObject({ planned_sessions: 12 });
+    expect(h.state.writes[0].patch).not.toHaveProperty("confirmed_sessions");
+  });
   it("미확정 반의 배분도 재조회에서 유지하고 시수·단가는 확정하지 않는다", async () => {
     const source = { kind: "수업", description: "수업료", amount: 300000, discount: 20000 };
     h.state.tables.invoices[0].line_items = [source];
