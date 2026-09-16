@@ -62,6 +62,7 @@ export const MENU_KEYS = [
   "calendar",
   "shuttle",
   "inventory",
+  "textbooks",
   "integrations",
   "sheet_sync",
   "help",
@@ -104,6 +105,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   calendar: "캘린더",
   shuttle: "셔틀",
   inventory: "재고관리",
+  textbooks: "교재목록",
   integrations: "makeedu 연동",
   sheet_sync: "구글 시트 연동",
   help: "도움말",
@@ -220,6 +222,14 @@ export const MENU_ACCESS: AccessMatrix = {
   // 늘고 쓸 일이 없다. 쓰기 게이트는 canWriteTenant("inventory")(회계 readonly는 자산을 못 고친다).
   // ⚠️ 기본값이 full인 셀이 있으므로 super_admin은 mergeMostPermissive로 자동 통과한다(별도 처리 불요).
   inventory: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "readonly", viewer: "none", student: "none" },
+  // 교재목록(수업 교재 마스터, 0266a). 원장 2026-09-16: *"사무실만 편집 · 강사는 고르기만"*.
+  // 🔴 강사가 **readonly**인 건 의도다 — 시트에서 교재를 고르려면 목록을 볼 수 있어야 하지만, 마스터를
+  //    고치게 하면 372종으로 갈렸던 이름이 다시 갈린다(이 기능의 존재 이유가 그 통일이다).
+  // ⚠️ **반 배정·차수 기입은 이 키가 아니다** — 그건 그 반의 ECS 계획 줄을 쓰는 행위라
+  //    `requireEcsClassAccess(classId,{write:true})`가 연다(0266a 헤더). 여기 readonly인 담임 강사도
+  //    자기 반에는 교재를 태울 수 있다.
+  // ⚠️ 기본값이 full인 셀이 있으므로 super_admin은 mergeMostPermissive로 자동 통과한다.
+  textbooks: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 전자결재(기안·결재함, 원장 지시 2026-08-14 — 첫 양식 = 휴가신청서) — **테스트 단계라 기본 전원 차단**.
   // 개방은 코드 명단([`access.ts`](../features/approvals/access.ts) = 이승엽·김예원)이 개인 예외로
   // 얹는다(class_review와 같은 결이되, 그쪽은 tenant_settings 데이터·이쪽은 코드 상수 — 이 PC에서
@@ -348,6 +358,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   calendar: "calendar",
   shuttle: "shuttle",
   inventory: "inventory",
+  textbooks: "textbooks",
   help: "help",
   admin: "admin",
   owner: "owner",

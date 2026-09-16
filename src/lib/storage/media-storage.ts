@@ -8,6 +8,7 @@ import {
   isTenantDocumentPath,
   isTenantReceiptPath,
   isTenantReportAttachmentPath,
+  isTenantTextbookCoverPath,
   SUPABASE_BUCKET_BY_KIND,
   type AudioKind,
 } from "./legacy-audio-path";
@@ -21,6 +22,7 @@ import type { MediaKind, UploadTicket } from "./types";
 const AUDIO_MAX = 100 * 1024 * 1024; // 100MB (원장 2026-09-10) — 🔴 클라 MAX_AUDIO_SIZE와 **같은 값**이어야 한다
 const RECEIPT_MAX = 10 * 1024 * 1024; // 10MB
 const BRANDING_MAX = 5 * 1024 * 1024; // 5MB
+const TEXTBOOK_COVER_MAX = 5 * 1024 * 1024; // 5MB — 표지 사진 한 장(브랜딩과 같은 급)
 const DOCUMENT_MAX = 20 * 1024 * 1024; // 20MB — 스캔 PDF 등 큰 서식 고려
 const REPORT_ATTACHMENT_MAX = 20 * 1024 * 1024; // 20MB — 학생 풀이 사진 + 문서/오디오 첨부(pdf·hwp·office·mp3)
 const READ_TTL_MS = 2 * 60 * 60 * 1000; // 2h — AssemblyAI 큐+다운로드 여유
@@ -70,6 +72,8 @@ export const MEDIA_KIND: Record<MediaKind, KindMeta> = {
   branding: { supabaseBucket: "branding", maxBytes: BRANDING_MAX, allowCT: isImageCT, validate: isTenantBrandingPath},
   document: { supabaseBucket: "academy-documents", maxBytes: DOCUMENT_MAX, allowCT: isDocumentCT, validate: isTenantDocumentPath},
   report_attachment: { supabaseBucket: "report-attachments", maxBytes: REPORT_ATTACHMENT_MAX, allowCT: isReportAttachmentCT, validate: isTenantReportAttachmentPath},
+  // 교재 표지(0266a) — 사진만(jpeg/png/webp). svg/heic/gif 제외(보고서 첨부와 같은 기준).
+  textbook_cover: { supabaseBucket: "textbook-covers", maxBytes: TEXTBOOK_COVER_MAX, allowCT: isReportImageCT, validate: isTenantTextbookCoverPath},
 };
 
 // ── 업로드 티켓 ──────────────────────────────────────────────
@@ -176,7 +180,7 @@ export async function resolveAudioReadUrl(
 /** 이미지·문서(영수증/브랜딩/서식/보고서첨부) signed GET URL — legacy 없음, tenant 전용. downloadName=attachment 저장. */
 export async function resolveTenantReadUrl(
   path: string,
-  kind: "receipt" | "branding" | "document" | "report_attachment",
+  kind: "receipt" | "branding" | "document" | "report_attachment" | "textbook_cover",
   tenantId: string,
   ttlMs: number = READ_TTL_MS,
   downloadName?: string,
@@ -209,7 +213,7 @@ export async function resolveBrandingSrc(
 /** 복수 영수증·첨부 등 — path→signed URL 맵(실패 path는 생략). */
 export async function resolveTenantReadUrls(
   paths: string[],
-  kind: "receipt" | "branding" | "document" | "report_attachment",
+  kind: "receipt" | "branding" | "document" | "report_attachment" | "textbook_cover",
   tenantId: string,
   ttlMs: number = READ_TTL_MS,
 ): Promise<Record<string, string>> {

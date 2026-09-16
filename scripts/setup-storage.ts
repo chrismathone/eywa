@@ -54,6 +54,11 @@ const REPORT_ATTACHMENT_MIME_TYPES = [
 ];
 const REPORT_ATTACHMENT_SIZE_LIMIT = 20 * 1024 * 1024; // 20 MB — 스캔 PDF 등
 
+// 교재 표지 사진(0266a) — 사진만. 앱 isReportImageCT(media-storage.ts MEDIA_KIND.textbook_cover)와 **일치 필수**.
+// 학생 PII는 아니지만 학원 자산이라 다른 버킷과 같이 비공개 + signed URL.
+const TEXTBOOK_COVER_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const TEXTBOOK_COVER_SIZE_LIMIT = 5 * 1024 * 1024; // 5 MB — 표지 한 장
+
 const BUCKETS = [
   {
     id: "meeting-recordings",
@@ -78,6 +83,12 @@ const BUCKETS = [
     public: false,
     file_size_limit: REPORT_ATTACHMENT_SIZE_LIMIT,
     allowed_mime_types: REPORT_ATTACHMENT_MIME_TYPES,
+  },
+  {
+    id: "textbook-covers",
+    public: false,
+    file_size_limit: TEXTBOOK_COVER_SIZE_LIMIT,
+    allowed_mime_types: TEXTBOOK_COVER_MIME_TYPES,
   },
 ];
 

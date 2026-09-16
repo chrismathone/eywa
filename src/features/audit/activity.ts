@@ -28,7 +28,9 @@ export const ACTIVITY_TABLE_LABEL: Record<string, string> = {
   lesson_reports: "수업리포트",
   student_memos: "학생메모",
   classrooms: "강의실",
-  textbook_catalog: "교재목록",
+  // ⚠️ 화면 라벨과 맞춘 이름이다 — 수납관리 안에서 이 표는 내내 "교재 단가표"였고,
+  //    2026-09-16부터 "교재목록"은 **다른 표**(textbooks, 0266a)의 이름이다. 되돌리지 말 것.
+  textbook_catalog: "교재 단가표",
   tuition_catalog: "수강료항목",
   tuition_quotes: "수강료견적",
   notice_popups: "공지팝업",

@@ -28,6 +28,7 @@ import { ecsPresenceScope } from "../lib/presence-scope";
 import type { PlanPatchField } from "../lib/plan-codec";
 import { TodayCopySlot } from "./today-copy-slot";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { useTextbookOptions } from "@/features/textbooks/textbook-options-context";
 import { roomNameFor } from "@/features/teacher-view/room-name";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useSheetEditAudit } from "./use-sheet-edit-audit";
@@ -53,6 +54,8 @@ function CasInput({
   canEdit,
   ariaLabel,
   placeholder,
+  listId,
+  onCommit,
 }: {
   store: SheetSaveStore;
   lineId: string;
@@ -61,6 +64,10 @@ function CasInput({
   canEdit: boolean;
   ariaLabel: string;
   placeholder?: string;
+  /** `<datalist>` id — 교재 칸만 준다(없으면 속성을 아예 안 단다). */
+  listId?: string | null;
+  /** 칸을 떠날 때 그 시점 값으로 한 번 불린다 — 교재 칸이 페이지/시간을 채우는 자리. */
+  onCommit?: (value: string) => void;
 }) {
   const saveKey = buildSaveKey(lineId, field);
   const t = useSheetT();
@@ -101,7 +108,65 @@ function CasInput({
       disabled={!canEdit}
       aria-label={ariaLabel}
       placeholder={placeholder}
+      list={listId ?? undefined}
       onChange={(e) => store.edit(lineId, field, e.target.value)}
+      onBlur={onCommit ? (e) => onCommit(e.target.value) : undefined}
+    />
+  );
+}
+
+/**
+ * 교재 칸 — 제안 목록(교재목록 마스터, 0266a) + 고르면 **빈** 페이지/시간 칸만 채운다.
+ *
+ * 🔴 주간 시트 `PlanRow`와 **같은 규약**이다(그쪽 주석이 정본): 이미 적힌 값은 안 덮고, 구분은 자동으로
+ *    바꾸지 않는다. 오늘 면이 계획 표를 따로 구현하고 있어 같은 동작을 여기 한 번 더 붙인다 —
+ *    한쪽만 고치면 같은 칸이 화면마다 다르게 군다.
+ * ⚠️ 줄마다 훅을 쓰므로 **컴포넌트로 떼어 낸다**(map 안에서 훅을 부를 수 없다).
+ */
+function BookCasInput({
+  store,
+  lineId,
+  fallback,
+  pageRangeFallback,
+  canEdit,
+  ariaLabel,
+  placeholder,
+}: {
+  store: SheetSaveStore;
+  lineId: string;
+  fallback: string | null;
+  pageRangeFallback: string | null;
+  canEdit: boolean;
+  ariaLabel: string;
+  placeholder?: string;
+}) {
+  const { options, listId } = useTextbookOptions();
+  const pageCell = useCellState(store, buildSaveKey(lineId, "page_range"));
+  const pageValue = pageCell ? (pageCell.value ?? "") : (pageRangeFallback ?? "");
+  const onCommit = useCallback(
+    (raw: string) => {
+      if (!canEdit) return;
+      if (pageValue.trim() !== "") return; // 이미 적힌 칸은 그대로
+      const typed = raw.trim().toLowerCase();
+      if (!typed) return;
+      const hit = options.find((o) => o.title.trim().toLowerCase() === typed);
+      const pageTime = hit?.pageTime?.trim();
+      if (!pageTime) return;
+      store.edit(lineId, "page_range", pageTime);
+    },
+    [canEdit, pageValue, options, store, lineId],
+  );
+  return (
+    <CasInput
+      store={store}
+      lineId={lineId}
+      field="textbook"
+      fallback={fallback}
+      canEdit={canEdit}
+      ariaLabel={ariaLabel}
+      placeholder={placeholder}
+      listId={listId}
+      onCommit={onCommit}
     />
   );
 }
@@ -306,7 +371,7 @@ export function TodayPlanEditor({
               <div key={l.id} className="mb-1 flex flex-wrap items-start gap-1.5 last:mb-0">
                 <AreaChip store={store} lineId={l.id} fallback={l.skillArea} skillAreas={skillAreas} />
                 <span className="min-w-[7rem] flex-1">
-                  <CasInput store={store} lineId={l.id} field="textbook" fallback={l.textbook} canEdit={canEdit} ariaLabel={tf("plan.editor.cellAria", { class: className, field: t("plan.col.book") })} placeholder={t("plan.col.book")} />
+                  <BookCasInput store={store} lineId={l.id} fallback={l.textbook} pageRangeFallback={l.pageRange} canEdit={canEdit} ariaLabel={tf("plan.editor.cellAria", { class: className, field: t("plan.col.book") })} placeholder={t("plan.col.book")} />
                 </span>
                 <span className="min-w-[5rem] flex-1">
                   <CasInput store={store} lineId={l.id} field="page_range" fallback={l.pageRange} canEdit={canEdit} ariaLabel={tf("plan.editor.cellAria", { class: className, field: t("plan.col.pageTime") })} placeholder={t("plan.col.pageTime")} />

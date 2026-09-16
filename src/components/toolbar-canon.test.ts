@@ -234,6 +234,9 @@ const CANON_SURFACES = [
   "src/app/(shell)/documents/_components/document-toolbar.tsx",
   // 수학 학습 진도맵(2026-09-14, 새 화면·시안) — 보기 단위 선택이 부품으로.
   "src/features/math-progress-map/components/period-selector.tsx",
+  // 교재목록(2026-09-16, 새 화면) — 만들 때부터 부품으로.
+  "src/app/(shell)/textbooks/_components/books-face.tsx",
+  "src/app/(shell)/textbooks/_components/plans-face.tsx",
   // 재고관리(2026-09-02, 새 화면) — 만들 때부터 부품으로.
   "src/app/(shell)/inventory/_components/assets-face.tsx",
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",

@@ -8,6 +8,8 @@ import { MonthClient } from "@/features/class-sheets/components/month-client";
 import { readFromWeek } from "@/features/class-sheets/face-nav";
 import { clampEcsMonthView } from "@/features/class-sheets/view-prefs";
 import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-gate";
+import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
+import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
 
 export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — eywa" };
 
@@ -29,9 +31,11 @@ export default async function EcsMonthPage({
 }) {
   const { classId } = await params;
   const { month, view, week } = await searchParams;
-  const [res, landing] = await Promise.all([
+  const [res, landing, textbookOptions] = await Promise.all([
     getClassSheetMonth(classId, month ?? null),
     getSheetLanding(null), // 반 전환 드롭다운(주간 시트와 같은 스코프)
+    // '그 날 고치기' 창이 주간 시트와 같은 계획 표를 쓴다 — 제안 목록도 같이 내려준다(B4: 같은 묶음).
+    loadEcsTextbookOptions(),
   ]);
 
   if (!res.ok) {
@@ -94,22 +98,25 @@ export default async function EcsMonthPage({
       </div>
       {/* 주간 시트와 **같은 폭 게이트** — 두 화면이 같은 폭에서 같은 말을 해야 한다. */}
       <SheetWidthGate>
-        <MonthClient
-          // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
-          // 새 달 화면에 남의 값이 잠깐 비친다.
-          // 🔴 보기(`view`)는 key에 **넣지 않는다** — 화면 안에서 보기를 바꾸면 주소만 조용히 따라
-          //    고치는데(month-client `chooseView`), key에 넣으면 그 다음 `router.refresh()`가 이 껍데기를
-          //    통째로 다시 마운트해 **열려 있던 '그 날 고치기' 창이 사라진다**.
-          key={`${classId}:${res.data.month}`}
-          data={res.data}
-          mpChrome={mpChrome}
-          classOptions={classOptions}
-          initialView={initialView}
-          initialDisplay={res.data.display}
-          // 주간 시트에서 넘어왔으면 **왔던 주**를 들고 온다 — '주간'을 누르면 그 주로 정확히
-          // 돌아간다(왕복이 제자리로). 모양이 아니면 버린다(face-nav `readFromWeek`).
-          fromWeek={readFromWeek(week)}
-        />
+        {/* '그 날 고치기' 창(SlotPlanBlock → PlanTable → PlanRow)이 이 제안을 읽는다. */}
+        <TextbookOptionsProvider options={textbookOptions}>
+          <MonthClient
+            // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
+            // 새 달 화면에 남의 값이 잠깐 비친다.
+            // 🔴 보기(`view`)는 key에 **넣지 않는다** — 화면 안에서 보기를 바꾸면 주소만 조용히 따라
+            //    고치는데(month-client `chooseView`), key에 넣으면 그 다음 `router.refresh()`가 이 껍데기를
+            //    통째로 다시 마운트해 **열려 있던 '그 날 고치기' 창이 사라진다**.
+            key={`${classId}:${res.data.month}`}
+            data={res.data}
+            mpChrome={mpChrome}
+            classOptions={classOptions}
+            initialView={initialView}
+            initialDisplay={res.data.display}
+            // 주간 시트에서 넘어왔으면 **왔던 주**를 들고 온다 — '주간'을 누르면 그 주로 정확히
+            // 돌아간다(왕복이 제자리로). 모양이 아니면 버린다(face-nav `readFromWeek`).
+            fromWeek={readFromWeek(week)}
+          />
+        </TextbookOptionsProvider>
       </SheetWidthGate>
     </div>
   );

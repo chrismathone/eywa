@@ -26,6 +26,19 @@ describe("탭 아이콘 그림 파일", () => {
     expect(orphan).toEqual([]);
   });
 
+/**
+ * **스티커가 아직 안 그려진 아이콘** — 이름을 여기 적어 두는 동안만 선화(`EyIcon`)로 돈다.
+ *
+ * 🔴 이건 가드를 무르는 게 아니라 **"아직 없음"을 기록**하는 자리다. 비워 두는 것이 정상이고, 여기 적힌
+ *    이름은 메뉴 보드에서 혼자 선화로 서서 눈에 띈다(그게 목적이다 — 잊히지 않게).
+ * 🔴 **같은 그림을 다른 이름으로 복사해 때우지 말 것** — 보드에 똑같은 그림 두 장이 서는 건 원장이
+ *    2026-09-08에 이미 반려한 모양이다. 선화 한 칸이 거짓 스티커보다 낫다.
+ *
+ * · `bookText` — 교재목록(2026-09-16 신설). `book`(수업목록)·`bookMarked`(교재 요청)과 뜻이 달라
+ *   같은 그림을 쓸 수 없고, `public/icons`에 남는 그림 중 책 계열이 없다. 스티커가 생기면 이 줄을 지운다.
+ */
+const PENDING_GLYPH = new Set<string>(["bookText"]);
+
   it("메뉴가 쓰는 아이콘 이름은 전부 그림이 있다 — MENU_ICON + 허브 면 override", () => {
     const icons = readFileSync(join(SRC, "components", "icons", "eywa-icons.tsx"), "utf8");
     const menuBlock = icons.slice(
@@ -36,7 +49,7 @@ describe("탭 아이콘 그림 파일", () => {
     const hub = readFileSync(join(SRC, "lib", "menu-hub.ts"), "utf8");
     for (const m of hub.matchAll(/icon:\s*"(\w+)"/g)) used.add(m[1]!);
 
-    const missing = [...used].filter((n) => !MENU_GLYPH_NAMES.has(n)).sort();
+    const missing = [...used].filter((n) => !MENU_GLYPH_NAMES.has(n) && !PENDING_GLYPH.has(n)).sort();
     expect(missing).toEqual([]);
   });
 
@@ -45,6 +58,11 @@ describe("탭 아이콘 그림 파일", () => {
    * 출석부와 수업 평가가 같은 클립보드였다). 선화 시절엔 공유해도 티가 덜 났지만, 색이 박힌 그림은
    * 나란히 선 타일에서 곧바로 같은 것으로 읽힌다.
    */
+  it("스티커 미제작 목록에 **이미 그림이 있는 이름**을 남겨 두지 않는다", () => {
+    const stale = [...PENDING_GLYPH].filter((n) => MENU_GLYPH_NAMES.has(n));
+    expect(stale).toEqual([]);
+  });
+
   it("서로 다른 메뉴가 같은 그림을 쓰지 않는다", () => {
     const icons = readFileSync(join(SRC, "components", "icons", "eywa-icons.tsx"), "utf8");
     const menuBlock = icons.slice(

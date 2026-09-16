@@ -2,7 +2,7 @@
 
 // 계획 1행 — 영역 셀렉트(CAS patch) + 텍스트 4칸(디바운스 CAS) + 시기 이동 + 삭제.
 // 충돌 시 그 셀만 pause + "서버값/내 값" 인라인 선택(계획 v2.2 §C — 자동 덮어쓰기 금지).
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import { X } from "@/components/icons/eywa-icon-compat";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
@@ -16,6 +16,7 @@ import { useCellState, type SheetSaveStore } from "./use-sheet-saves";
 // 충돌 문구는 오늘 면 계획(`today-plan-editor.tsx`)과 **같은 사전 키**를 쓴다 — 같은 UI가 두 벌이라
 // 한쪽만 옮기면 같은 다이얼로그가 화면마다 다른 언어로 뜬다.
 import { useSheetT } from "@/features/teacher-view/lang-context";
+import { useTextbookOptions } from "@/features/textbooks/textbook-options-context";
 
 function CasInput({
   lineId,
@@ -25,6 +26,8 @@ function CasInput({
   handlers,
   canEdit,
   ariaLabel,
+  listId,
+  onCommit,
 }: {
   lineId: string;
   field: PlanPatchField;
@@ -33,6 +36,10 @@ function CasInput({
   handlers: PlanHandlers;
   canEdit: boolean;
   ariaLabel: string;
+  /** `<datalist>` id — 교재 칸만 준다(없으면 속성을 아예 안 단다). */
+  listId?: string | null;
+  /** 칸을 떠날 때 그 시점 값으로 한 번 불린다 — 교재 칸이 페이지/시간을 채우는 자리. */
+  onCommit?: (value: string) => void;
 }) {
   const t = useSheetT();
   const saveKey = buildSaveKey(lineId, field);
@@ -72,7 +79,68 @@ function CasInput({
       value={value}
       disabled={!canEdit}
       aria-label={ariaLabel}
+      list={listId ?? undefined}
       onChange={(e) => handlers.editCell(lineId, field, e.target.value)}
+      onBlur={onCommit ? (e) => onCommit(e.target.value) : undefined}
+    />
+  );
+}
+
+/**
+ * 교재 칸 — 제안 목록(교재목록 마스터, 0266a) + 고르면 **빈** 페이지/시간 칸만 채운다.
+ *
+ * 🔴 **컴포넌트로 떼어 낸 이유**: 페이지/시간 셀 상태를 `PlanRow` 본체에서 구독하면 그 칸에 한 글자
+ *    칠 때마다 `memo`된 **행 전체**가 다시 그려진다(원래는 그 `CasInput`만 그렸다). 오늘 면
+ *    (`today-plan-editor.tsx`)이 같은 이유로 같은 모양을 쓴다.
+ * 🔴 **이미 적힌 값은 절대 안 덮는다**(ECS 전역 규약 — `ecs_copy_slot`의 "빈 칸만 채우기"와 같다).
+ *    실측(2026-09-16, 채워진 1,368칸 중 816칸)에서 이 칸은 `35분`·`15분`처럼 교재마다 사실상 고정값이라
+ *    매번 손으로 치던 자리다.
+ * 🔴 **구분(skill_area)은 자동으로 안 바꾼다** — 실측상 교재 372종 중 28종이 둘 이상의 구분에서 쓰인다
+ *    (`인재원 SRS` = vocab·writing·listening). 자동으로 바꾸면 사람이 골라 둔 구분을 되돌린다.
+ * ⚠️ 프로바이더 밖(공개 PIN 자리 화면)이면 목록이 비어 `<datalist>`도, 자동 채움도 없다(그대로 자유 입력).
+ */
+function BookCasInput({
+  lineId,
+  fallback,
+  pageRangeFallback,
+  store,
+  handlers,
+  canEdit,
+}: {
+  lineId: string;
+  fallback: string | null;
+  pageRangeFallback: string | null;
+  store: SheetSaveStore;
+  handlers: PlanHandlers;
+  canEdit: boolean;
+}) {
+  const { options, listId } = useTextbookOptions();
+  const pageCell = useCellState(store, buildSaveKey(lineId, "page_range"));
+  const pageValue = pageCell ? (pageCell.value ?? "") : (pageRangeFallback ?? "");
+  const onCommit = useCallback(
+    (raw: string) => {
+      if (!canEdit) return;
+      if (pageValue.trim() !== "") return; // 이미 적힌 칸은 그대로
+      const typed = raw.trim().toLowerCase();
+      if (!typed) return;
+      const hit = options.find((o) => o.title.trim().toLowerCase() === typed);
+      const pageTime = hit?.pageTime?.trim();
+      if (!pageTime) return;
+      handlers.editCell(lineId, "page_range", pageTime);
+    },
+    [canEdit, pageValue, options, handlers, lineId],
+  );
+  return (
+    <CasInput
+      lineId={lineId}
+      field="textbook"
+      fallback={fallback}
+      store={store}
+      handlers={handlers}
+      canEdit={canEdit}
+      ariaLabel="교재"
+      listId={listId}
+      onCommit={onCommit}
     />
   );
 }
@@ -97,6 +165,7 @@ export const PlanRow = memo(function PlanRow({
   const areaKey = buildSaveKey(line.id, "skill_area");
   const areaCell = useCellState(store, areaKey);
   const areaValue = areaCell?.value ?? line.skillArea;
+
   const { label: areaLabel, known } = skillAreaLabelOf(skillAreas, areaValue ?? "");
   // 영역 고유색 — 계획 표에서도 패널과 **같은 색**이라 "보카 줄"을 색으로 찾는다(단일 소스: 학원설정).
   const areaTone = skillAreaColorOf(skillAreas, areaValue ?? "");
@@ -133,7 +202,14 @@ export const PlanRow = memo(function PlanRow({
         )}
       </td>
       <td className="py-0.5 pr-1">
-        <CasInput lineId={line.id} field="textbook" fallback={line.textbook} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="교재" />
+        <BookCasInput
+          lineId={line.id}
+          fallback={line.textbook}
+          pageRangeFallback={line.pageRange}
+          store={store}
+          handlers={handlers}
+          canEdit={canEdit}
+        />
       </td>
       <td className="py-0.5 pr-1">
         <CasInput lineId={line.id} field="page_range" fallback={line.pageRange} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="페이지/시간" />

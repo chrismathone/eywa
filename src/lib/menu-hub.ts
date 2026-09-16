@@ -107,6 +107,7 @@ export const HUB_GROUPS: HubGroup[] = [
       { menuKey: "mcs", href: "/mcs", label: "수학 강사 시트", icon: MENU_ICON.mcs, desc: "수학 반별 월간 진도" },
       fromMenu("attendance", "월별 출석부·오늘 출결"),
       fromMenu("classes", "반 목록·반 정보 관리"),
+      fromMenu("textbooks", "교재·차수별 진도·과제"),
       fromMenu("lesson_reports", "수업보고서 작성·발송"),
       fromMenu("class_review", "수업 참관·평가 기록"),
       fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true }),

@@ -1,0 +1,468 @@
+import "server-only";
+import { unstable_cache } from "next/cache";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { isMissingTextbookTable } from "./access";
+import type {
+  ClassTextbookPlanRow,
+  TextbookDetail,
+  TextbookListItem,
+  TextbookLessonRow,
+  TextbookRow,
+  TextbookTableStatus,
+} from "../types";
+import type { LessonPace, SlotAxis } from "../lesson-schedule";
+
+/**
+ * 교재목록 조회 — **admin 클라이언트 + `tenant_id` 명시 필터**.
+ * 표는 select 정책이 있어 세션 클라이언트로도 읽히지만, 쓰기 액션과 같은 경로를 쓰면 "읽을 땐 되는데
+ * 쓸 땐 0행"류의 비대칭이 안 생긴다(ECS `class_sheet_*`와 같은 결). 🔴 admin은 RLS 우회라 tenant 필터 필수.
+ */
+
+const PAGE_SIZE = 50;
+
+export type TextbookListResult = {
+  status: TextbookTableStatus;
+  rows: TextbookListItem[];
+  /** 전체 건수(필터 적용). 조회 실패면 null — **0을 쓰지 않는다**(0은 "없다"는 거짓말). */
+  total: number | null;
+  page: number;
+  pageSize: number;
+};
+
+function classify(error: { code?: string; message?: string } | null): TextbookTableStatus {
+  if (!error) return "ok";
+  return isMissingTextbookTable(error) ? "missing-table" : "failed";
+}
+
+type TextbookDbRow = {
+  id: string;
+  subject: string;
+  skill_area: string | null;
+  title: string;
+  page_time: string | null;
+  session_count: number;
+  cover_path: string | null;
+  is_active: boolean;
+  updated_at: string;
+};
+
+function toRow(r: TextbookDbRow): TextbookRow {
+  return {
+    id: r.id,
+    subject: r.subject,
+    skillArea: r.skill_area,
+    title: r.title,
+    pageTime: r.page_time,
+    sessionCount: Number(r.session_count ?? 0),
+    coverPath: r.cover_path,
+    isActive: r.is_active,
+    updatedAt: r.updated_at,
+  };
+}
+
+const LIST_COLS = "id, subject, skill_area, title, page_time, session_count, cover_path, is_active, updated_at";
+
+export async function getTextbooks(opts: {
+  subject?: string | null;
+  skillArea?: string | null;
+  q?: string | null;
+  includeInactive?: boolean;
+  page?: number;
+}): Promise<TextbookListResult> {
+  const user = await getCurrentUser();
+  const page = Math.max(1, opts.page ?? 1);
+  const empty: TextbookListResult = { status: "ok", rows: [], total: 0, page, pageSize: PAGE_SIZE };
+  if (!user) return empty;
+
+  const admin = createAdminClient();
+  let query = admin
+    .from("textbooks")
+    .select(LIST_COLS, { count: "exact" })
+    .eq("tenant_id", user.tenantId);
+  if (opts.subject) query = query.eq("subject", opts.subject);
+  if (opts.skillArea) query = query.eq("skill_area", opts.skillArea);
+  if (!opts.includeInactive) query = query.eq("is_active", true);
+  const term = (opts.q ?? "").trim();
+  // ⚠️ 콤마·괄호는 PostgREST 필터 문법에서 구분자라 떼어낸다(`PL (NTA)` 같은 실제 교재명 대응).
+  //    `%`·`_`는 LIKE 와일드카드라 그대로 두면 `100%`가 아무거나 잡는다 — 문자로 escape한다.
+  if (term) {
+    const safe = term
+      .replace(/[,()]/g, " ")
+      .replace(/[%_\\]/g, (c) => `\\${c}`)
+      .trim();
+    if (safe) query = query.ilike("title", `%${safe}%`);
+  }
+
+  const from = (page - 1) * PAGE_SIZE;
+  const { data, error, count } = await query
+    .order("skill_area", { ascending: true, nullsFirst: false })
+    .order("title", { ascending: true })
+    .range(from, from + PAGE_SIZE - 1);
+
+  // ⚠️ 오래된 즐겨찾기(`?page=3`)로 범위 밖을 요청하면 PostgREST가 `PGRST103`을 준다 — 그건 **실패가
+  //    아니라 빈 페이지**다. 실패로 보면 붉은 배너가 뜨고 등록·배정 버튼까지 잠긴다.
+  if (error?.code === "PGRST103") {
+    return { status: "ok", rows: [], total: count ?? null, page, pageSize: PAGE_SIZE };
+  }
+  const status = classify(error);
+  if (status !== "ok" || !data) return { status, rows: [], total: null, page, pageSize: PAGE_SIZE };
+
+  const rows = (data as unknown as TextbookDbRow[]).map(toRow);
+  const ids = rows.map((r) => r.id);
+
+  // 이 **페이지의 교재만** 센다 — 전건 lessons를 끌어오면 (교재 250 × 차수 20)에서 1000행 절단(B2).
+  // 🔴 건수 조회가 실패하면 **0이 아니라 null**을 준다([[#89]]·이 파일 `total` 주석과 같은 규약) —
+  //    `0/20`·`—`는 "하나도 안 적었다"는 거짓말이고, 그걸 보고 사람이 다시 적는다.
+  const [lessonRows, planRows, coverUrls] = await Promise.all([
+    ids.length === 0
+      ? Promise.resolve([] as { textbook_id: string; progress: string | null; homework: string | null }[])
+      : fetchAllPagedInChunks<{ textbook_id: string; progress: string | null; homework: string | null }>(
+          ids,
+          (chunk, f, t) =>
+            admin
+              .from("textbook_lessons")
+              .select("textbook_id, progress, homework")
+              .eq("tenant_id", user.tenantId)
+              .in("textbook_id", chunk)
+              .order("textbook_id", { ascending: true })
+              .order("lesson_no", { ascending: true })
+              .range(f, t),
+        ).catch(() => null),
+    ids.length === 0
+      ? Promise.resolve([] as { textbook_id: string }[])
+      : fetchAllPagedInChunks<{ textbook_id: string }>(ids, (chunk, f, t) =>
+          admin
+            .from("class_textbook_plans")
+            .select("textbook_id, id")
+            .eq("tenant_id", user.tenantId)
+            .eq("is_active", true)
+            .in("textbook_id", chunk)
+            .order("id", { ascending: true })
+            .range(f, t),
+        ).catch(() => null),
+    resolveTenantReadUrls(
+      rows.map((r) => r.coverPath).filter((p): p is string => !!p),
+      "textbook_cover",
+      user.tenantId,
+    ).catch(() => ({}) as Record<string, string>),
+  ]);
+
+  const filled = new Map<string, number>();
+  for (const l of lessonRows ?? []) {
+    if (!(l.progress ?? "").trim() && !(l.homework ?? "").trim()) continue;
+    filled.set(l.textbook_id, (filled.get(l.textbook_id) ?? 0) + 1);
+  }
+  const plans = new Map<string, number>();
+  for (const p of planRows ?? []) plans.set(p.textbook_id, (plans.get(p.textbook_id) ?? 0) + 1);
+
+  return {
+    status: "ok",
+    total: count ?? null,
+    page,
+    pageSize: PAGE_SIZE,
+    rows: rows.map((r) => ({
+      ...r,
+      coverUrl: r.coverPath ? (coverUrls[r.coverPath] ?? null) : null,
+      filledLessons: lessonRows === null ? null : (filled.get(r.id) ?? 0),
+      planCount: planRows === null ? null : (plans.get(r.id) ?? 0),
+    })),
+  };
+}
+
+export async function getTextbookDetail(
+  id: string,
+): Promise<{ status: TextbookTableStatus; detail: TextbookDetail | null }> {
+  const user = await getCurrentUser();
+  if (!user) return { status: "ok", detail: null };
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from("textbooks")
+    .select(LIST_COLS)
+    .eq("tenant_id", user.tenantId)
+    .eq("id", id)
+    .maybeSingle();
+  const status = classify(error);
+  if (status !== "ok") return { status, detail: null };
+  if (!data) return { status: "ok", detail: null };
+
+  const textbook = toRow(data as unknown as TextbookDbRow);
+  const [lessonsRes, coverUrls] = await Promise.all([
+    admin
+      .from("textbook_lessons")
+      .select("lesson_no, progress, homework")
+      .eq("tenant_id", user.tenantId)
+      .eq("textbook_id", id)
+      .order("lesson_no", { ascending: true })
+      // 차수 상한이 200이라 한 번에 들어온다(1000행 한도 밖).
+      .range(0, 199),
+    textbook.coverPath
+      ? resolveTenantReadUrls([textbook.coverPath], "textbook_cover", user.tenantId).catch(
+          () => ({}) as Record<string, string>,
+        )
+      : Promise.resolve({} as Record<string, string>),
+  ]);
+
+  const stored = new Map<number, TextbookLessonRow>();
+  for (const l of (lessonsRes.data ?? []) as { lesson_no: number; progress: string | null; homework: string | null }[]) {
+    stored.set(Number(l.lesson_no), {
+      lessonNo: Number(l.lesson_no),
+      progress: l.progress,
+      homework: l.homework,
+    });
+  }
+  // 🔑 차수 표는 **1..sessionCount 전부**를 세운다 — 저장된 행이 없어도 빈 칸으로 보여야
+  //    "10차수 모두 작성"이 가능하다(행이 있어야만 보이면 아무것도 못 적는다).
+  const lessons: TextbookLessonRow[] = [];
+  for (let n = 1; n <= textbook.sessionCount; n += 1) {
+    lessons.push(stored.get(n) ?? { lessonNo: n, progress: null, homework: null });
+  }
+  // 차수 수를 줄인 뒤에도 남아 있는 옛 행은 **감추지 않고** 뒤에 붙인다(쓴 게 조용히 사라지지 않게).
+  for (const [n, row] of [...stored].sort((a, b) => a[0] - b[0])) {
+    if (n > textbook.sessionCount) lessons.push(row);
+  }
+
+  return {
+    status: "ok",
+    detail: {
+      textbook,
+      coverUrl: textbook.coverPath ? (coverUrls[textbook.coverPath] ?? null) : null,
+      lessons,
+    },
+  };
+}
+
+/**
+ * ECS 계획 줄의 교재 칸이 쓰는 제안 목록 한 줄.
+ * ⚠️ **구분은 싣지 않는다** — 교재를 골라도 줄의 구분을 자동으로 안 바꾸기 때문에(그 결정은 `plan-row.tsx`
+ *    주석 참조) 아무도 안 읽는 값이고, 이 배열은 ECS 화면마다 RSC payload로 실려 나간다.
+ */
+export type TextbookOption = { title: string; pageTime: string | null };
+
+/**
+ * 제안 목록 상한 — 지금 실데이터는 교재명 372종이고 가져오기가 174권을 넣는다.
+ * ⚠️ 여기에 닿으면 **조용히 잘린다** — 넘을 만큼 늘면 상한을 올리거나 검색형 picker로 바꿀 것.
+ */
+const TEXTBOOK_OPTION_CAP = 800;
+
+/**
+ * ECS 시트가 쓰는 **경량 제안 목록**.
+ *
+ * 🔴 창(iframe)마다 셸이 다시 도는 구조라(B6) 테넌트 단위 read-mostly 데이터는 `unstable_cache`로
+ *    cross-request 공유한다 — 캐시 안엔 쿠키 없이 admin 클라이언트 + 신뢰 tenantId 키.
+ * 🔴 **절대 throw하지 않는다** — 0266a 미적용이어도 ECS 시트는 그대로 떠야 한다([[#95]]).
+ *    영어 강사 전원이 매일 여는 화면이라 여기서 죽으면 시트가 통째로 먹통이 된다.
+ */
+export async function getTextbookOptions(tenantId: string, subject: string): Promise<TextbookOption[]> {
+  return unstable_cache(
+    async () => {
+      const { data, error } = await createAdminClient()
+        .from("textbooks")
+        .select("title, page_time")
+        .eq("tenant_id", tenantId)
+        .eq("subject", subject)
+        .eq("is_active", true)
+        .order("title", { ascending: true })
+        .range(0, TEXTBOOK_OPTION_CAP - 1);
+      // 🔴 **실패는 throw한다 — 절대 빈 배열로 캐시하지 말 것.** `unstable_cache`는 반환값만 저장하고
+      //    던진 오류는 저장하지 않는다. 빈 배열을 돌려주면 0266a 적용 **전에** 한 번 열린 화면 때문에
+      //    "제안 없음"이 5분간 굳고, 원장이 SQL을 적용해도 그동안 아무 일도 안 일어난 것처럼 보인다.
+      //    삼키는 자리는 여기가 아니라 호출부(`loadEcsTextbookOptions`)다.
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({ title: r.title as string, pageTime: (r.page_time as string | null) ?? null }));
+    },
+    ["textbook-options", tenantId, subject],
+    { tags: [textbookOptionsTag(tenantId)], revalidate: 300 },
+  )();
+}
+
+/** 교재 마스터가 바뀌면 서버 액션이 `updateTag(...)`로 이 태그를 깬다(read-your-writes). */
+export function textbookOptionsTag(tenantId: string): string {
+  return `textbook-options:${tenantId}`;
+}
+
+const PLAN_COLS =
+  "id, class_id, textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no, is_active, last_applied_at";
+
+type PlanDbRow = {
+  id: string;
+  class_id: string;
+  textbook_id: string;
+  slot_axis: string;
+  pace: string;
+  term_mode: string;
+  start_date: string;
+  start_lesson_no: number;
+  is_active: boolean;
+  last_applied_at: string | null;
+};
+
+/** 반 배정 목록. `classId`를 주면 그 반만. */
+export async function getClassTextbookPlans(opts: {
+  classId?: string | null;
+  includeInactive?: boolean;
+}): Promise<{ status: TextbookTableStatus; rows: ClassTextbookPlanRow[] }> {
+  const user = await getCurrentUser();
+  if (!user) return { status: "ok", rows: [] };
+  const admin = createAdminClient();
+
+  // 🔴 목록도 **ECS 스코프**로 좁힌다 — 안 좁히면 강사가 담당하지도 않는 반의 배정을 통째로 본다
+  //    (열어도 서버가 거절하지만, 보이면 안 되는 건 애초에 안 보내는 게 맞다). 저장·기입 게이트와
+  //    같은 세 갈래(`ecsVisibleClassFilter`)라 "목록엔 뜨는데 열면 거절"도 안 생긴다.
+  const { ecsVisibleClassFilter } = await import("@/features/class-sheets/server/access");
+  const scope = await ecsVisibleClassFilter();
+  if (scope.classIds !== null && scope.classIds.length === 0) return { status: "ok", rows: [] };
+
+  /** 한 배정 줄의 재료. 청크·단건 두 경로가 **같은 컬럼**을 받도록 한 곳에 둔다. */
+  const base = () => {
+    let q = admin.from("class_textbook_plans").select(PLAN_COLS).eq("tenant_id", user.tenantId);
+    if (!opts.includeInactive) q = q.eq("is_active", true);
+    return q;
+  };
+
+  let plans: PlanDbRow[];
+  if (opts.classId) {
+    const { data, error } = await base()
+      .eq("class_id", opts.classId)
+      .order("start_date", { ascending: false })
+      .order("id")
+      .range(0, 499);
+    const status = classify(error);
+    if (status !== "ok" || !data) return { status, rows: [] };
+    plans = data as unknown as PlanDbRow[];
+  } else if (scope.classIds === null) {
+    // 사무실 — 스코프가 없다(전 반).
+    const { data, error } = await base().order("start_date", { ascending: false }).order("id").range(0, 499);
+    const status = classify(error);
+    if (status !== "ok" || !data) return { status, rows: [] };
+    plans = data as unknown as PlanDbRow[];
+  } else {
+    // ⚠️ 스코프는 담당 ∪ 부담임 ∪ 위임 합집합이라 수십 개까지 간다 — 거대 `.in()`은 URL 414로 실패한다(B3).
+    try {
+      plans = await fetchAllPagedInChunks<PlanDbRow>(scope.classIds, (chunk, f, t) =>
+        base().in("class_id", chunk).order("start_date", { ascending: false }).order("id").range(f, t),
+      );
+    } catch (e) {
+      // 표가 없는 것과 그냥 실패를 여기서도 가른다(`fetchInChunks`는 메시지를 감싸 던진다).
+      return { status: classify({ message: e instanceof Error ? e.message : "" }), rows: [] };
+    }
+  }
+  if (plans.length === 0) return { status: "ok", rows: [] };
+
+  const classIds = [...new Set(plans.map((p) => p.class_id))];
+  const bookIds = [...new Set(plans.map((p) => p.textbook_id))];
+  // 🔴 이름 조회가 **실패**하면 목록을 실패로 돌린다 — 빈 배열로 삼키면 잠깐의 네트워크 문제가
+  //    `(삭제된 반)`·`(삭제된 교재)`라는 **데이터 소실 문구**로 보인다(사람이 실제로 지운 줄 안다).
+  let classes: { id: string; class_name: string }[];
+  let books: { id: string; title: string; skill_area: string | null; session_count: number }[];
+  try {
+    [classes, books] = await Promise.all([
+      fetchAllPagedInChunks<{ id: string; class_name: string }>(classIds, (chunk, f, t) =>
+        admin.from("classes").select("id, class_name").eq("tenant_id", user.tenantId).in("id", chunk).order("id").range(f, t),
+      ),
+      fetchAllPagedInChunks<{ id: string; title: string; skill_area: string | null; session_count: number }>(
+        bookIds,
+        (chunk, f, t) =>
+          admin
+            .from("textbooks")
+            .select("id, title, skill_area, session_count")
+            .eq("tenant_id", user.tenantId)
+            .in("id", chunk)
+            .order("id")
+            .range(f, t),
+      ),
+    ]);
+  } catch {
+    return { status: "failed", rows: [] };
+  }
+  const classNameById = new Map(classes.map((c) => [c.id, c.class_name]));
+  const bookById = new Map(books.map((b) => [b.id, b]));
+
+  return {
+    status: "ok",
+    rows: plans.map((p) => {
+      const book = bookById.get(p.textbook_id);
+      return {
+        id: p.id,
+        classId: p.class_id,
+        className: classNameById.get(p.class_id) ?? "(삭제된 반)",
+        textbookId: p.textbook_id,
+        textbookTitle: book?.title ?? "(삭제된 교재)",
+        skillArea: book?.skill_area ?? null,
+        sessionCount: Number(book?.session_count ?? 0),
+        slotAxis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
+        pace: (p.pace === "day" ? "day" : "period") as LessonPace,
+        termMode: p.term_mode === "exam" ? "exam" : "regular",
+        startDate: p.start_date,
+        startLessonNo: Number(p.start_lesson_no ?? 1),
+        isActive: p.is_active,
+        lastAppliedAt: p.last_applied_at,
+      };
+    }),
+  };
+}
+
+/** 배정 다이얼로그의 반 선택지. */
+export type AssignableClass = { id: string; name: string };
+
+/**
+ * 교재를 태울 수 있는 반 — **ECS 랜딩과 같은 스코프**(`ecsVisibleClassFilter`)로 좁힌다.
+ * 🔴 여기서 넓게 주면 "목록엔 뜨는데 저장하면 거절"이 된다(저장은 `requireEcsClassAccess`가 막는다).
+ *    좁은 쪽으로 틀리는 건 무해하다 — 그 반은 애초에 이 사람이 다룰 반이 아니다.
+ */
+export async function getAssignableClasses(): Promise<{ status: TextbookTableStatus; rows: AssignableClass[] }> {
+  const user = await getCurrentUser();
+  if (!user) return { status: "ok", rows: [] };
+  const { ecsVisibleClassFilter } = await import("@/features/class-sheets/server/access");
+  const scope = await ecsVisibleClassFilter();
+  if (scope.classIds !== null && scope.classIds.length === 0) return { status: "ok", rows: [] };
+
+  const admin = createAdminClient();
+  let q = admin
+    .from("classes")
+    .select("id, class_name")
+    .eq("tenant_id", user.tenantId)
+    .eq("subject", "english")
+    .eq("is_active", true);
+  if (scope.classIds !== null) q = q.in("id", scope.classIds);
+
+  const { data, error } = await q.order("class_name", { ascending: true }).range(0, 299);
+  if (error) return { status: "failed", rows: [] };
+  return {
+    status: "ok",
+    rows: (data ?? []).map((c) => ({ id: String(c.id), name: String(c.class_name) })),
+  };
+}
+
+/** 배정 다이얼로그의 교재 선택지(활성·구분 있음·차수 ≥ 1인 것만 — 나머지는 어차피 배정이 거절된다). */
+export async function getAssignableTextbooks(): Promise<{
+  status: TextbookTableStatus;
+  rows: { id: string; title: string; skillArea: string | null; sessionCount: number }[];
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { status: "ok", rows: [] };
+  const { data, error } = await createAdminClient()
+    .from("textbooks")
+    .select("id, title, skill_area, session_count")
+    .eq("tenant_id", user.tenantId)
+    .eq("subject", "english")
+    .eq("is_active", true)
+    .gte("session_count", 1)
+    .not("skill_area", "is", null)
+    .order("title", { ascending: true })
+    .range(0, 499);
+  const status = classify(error);
+  if (status !== "ok" || !data) return { status, rows: [] };
+  return {
+    status: "ok",
+    rows: data.map((r) => ({
+      id: String(r.id),
+      title: String(r.title),
+      skillArea: (r.skill_area as string | null) ?? null,
+      sessionCount: Number(r.session_count ?? 0),
+    })),
+  };
+}

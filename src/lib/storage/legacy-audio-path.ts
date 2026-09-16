@@ -100,6 +100,13 @@ export function isTenantDocumentPath(path: string, tenantId: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(path.slice(prefix.length));
 }
 
+/** 교재 표지 사진 경로 `{tenantId}/textbooks/{파일명}`(0266a) — 서버가 uuid.ext로 빌드. */
+export function isTenantTextbookCoverPath(path: string, tenantId: string): boolean {
+  const prefix = `${tenantId}/textbooks/`;
+  if (!path.startsWith(prefix)) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(path.slice(prefix.length));
+}
+
 /** 수업 보고서 학생 사진 첨부 경로 `{tenantId}/report-attachments/{파일명}`(P2b) — 서버가 uuid.ext로 빌드. */
 export function isTenantReportAttachmentPath(path: string, tenantId: string): boolean {
   const prefix = `${tenantId}/report-attachments/`;

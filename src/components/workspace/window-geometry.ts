@@ -109,6 +109,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 재고관리 — 자산 표가 11열(자산ID·분류·제조사·모델명·입고일·상태·현위치·사용자·최종실사·폐기일·비고) +
   // 툴바(검색·필터 칩 11개). 기본 480이면 표가 통째로 접힌다.
   inventory: { w: 1180, h: 760 },
+  // 교재목록 — 표지 썸네일 + 차수 표(진도·과제 2열)를 함께 보려면 폭이 넉넉해야 한다.
+  textbooks: { w: 1140, h: 780 },
 
 
   "billing/refunds": { w: 840, h: 720 }, // 환불 요청서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속

@@ -33,6 +33,8 @@ import {
 import { ENGLISH_TRACK_FILTER_LABEL } from "@/features/classes/english-track";
 import { sheetDateLabelEn, sheetT, sheetTf, sheetWeekLabel, type SheetLang } from "@/features/teacher-view/i18n";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
+import { TextbookOptionsProvider, type TextbookOptionItem } from "@/features/textbooks/textbook-options-context";
+import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
 
 /** 오늘 면 시트 모드의 반 1개분 — 시트 조회가 실패해도 나머지 반은 그려야 하므로 결과를 통째로 나른다. */
 type TodaySheet = {
@@ -101,7 +103,12 @@ export default async function EcsLandingPage({
     const mode: EcsTodayMode = modeParam === "cards" ? "cards" : "sheet";
     // 오늘 시트는 **본인 교시만** 그린다(원장 2026-08-19) — 판정 주체는 `effectiveTeacherId`
     // (겸직 강사뷰까지 커버하는 단일 소스. 요청당 캐시라 위 스코프 조회와 왕복을 공유한다).
-    const [todayRes, myTeacherId] = await Promise.all([getEcsToday(date ?? null), effectiveTeacherId()]);
+    // 교재 제안 목록도 같은 Promise.all에(B4) — fail-soft라 무엇이 잘못돼도 빈 목록이다([[#95]]).
+    const [todayRes, myTeacherId, textbookOptions] = await Promise.all([
+      getEcsToday(date ?? null),
+      effectiveTeacherId(),
+      loadEcsTextbookOptions(),
+    ]);
     let sheets: TodaySheet[] | null = null;
     if (mode === "sheet" && todayRes.ok && todayRes.cards.length > 0) {
       // 반별 주간 시트를 병렬로(B4) — 강사 스코프라 그 날 수업 반 몇 개뿐이다(사무실은 오늘 면 차단).
@@ -145,6 +152,7 @@ export default async function EcsLandingPage({
         myTeacherId={myTeacherId}
         lang={lang}
         canReorder={canReorder}
+        textbookOptions={textbookOptions}
       />
     );
   }
@@ -278,6 +286,7 @@ function EcsTodayFace({
   myTeacherId,
   lang,
   canReorder,
+  textbookOptions,
 }: {
   res: EcsTodayResult;
   scoped: boolean;
@@ -292,6 +301,8 @@ function EcsTodayFace({
   myTeacherId: string | null;
   /** 반 순서를 끌어 바꿀 수 있나 — '다른 강사 뷰'(열람 전용)는 false. */
   canReorder: boolean;
+  /** 계획 칸 교재 제안(교재목록 마스터) — 빈 배열이면 `<datalist>`를 아예 안 만든다. */
+  textbookOptions: TextbookOptionItem[];
 }) {
   if (!res.ok) {
     return (
@@ -377,6 +388,8 @@ function EcsTodayFace({
         </Suspense>
       )}
 
+      {/* 계획 칸의 교재 제안 — `<datalist>`는 프로바이더가 한 번만 그린다(주간·월간과 같은 부품). */}
+      <TextbookOptionsProvider options={textbookOptions}>
       {res.cards.length === 0 ? (
         <p className="bg-card shadow-card text-text-dim rounded-2xl px-4 py-6 text-sm">
           {!res.hasAnyClass
@@ -438,6 +451,7 @@ function EcsTodayFace({
           isHoliday={res.holidayName !== null}
         />
       )}
+      </TextbookOptionsProvider>
     </div>
   );
 }

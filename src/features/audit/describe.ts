@@ -101,6 +101,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   inventory_audit: "자산 실사",
   inventory_supply: "소모품",
   inventory_category: "자산 분류",
+  // 교재목록(0266a) — 없으면 '대상' 칸에 영문 "textbook"이 그대로 뜬다.
+  textbook: "교재",
   help_post: "도움말 질문",
   help_answer: "도움말 답변",
 };

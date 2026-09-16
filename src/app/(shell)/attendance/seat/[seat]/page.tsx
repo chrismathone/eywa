@@ -31,6 +31,8 @@ import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
 import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
 import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
+import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
+import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
 import { getSeatPlacementsForDay } from "@/features/attendance/seat/server/placements";
 import { getSeatNextDestinationsBySlot } from "@/features/attendance/seat/server/next-destination";
 import { seatStaysFor } from "@/features/attendance/seat/next-destination";
@@ -208,8 +210,14 @@ export default async function SeatAttendancePage({
     return `/attendance/seat/${seat}?${sp.toString()}`;
   };
 
+  // 계획(진도) 구획이 서는 화면에서만 의미가 있다 — 교재 제안은 ECS와 **같은 목록**이고 fail-soft다.
+  // 🔴 공개 PIN 자리 화면(`(seat)/seat/[seat]`)은 같은 `SeatBoard`를 그리지만 세션이 없어 여기 없다.
+  const textbookOptions = Object.keys(plans).length > 0 ? await loadEcsTextbookOptions() : [];
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* 계획 줄 교재 칸 제안 — 영어 시트와 같은 부품(CLAUDE.md: JJ 진도는 "같은 기록·같은 기계"). */}
+      <TextbookOptionsProvider options={textbookOptions}>
       <PageHeader
         eyebrow="출석부"
         title={`${SEAT_NAME[seat]} ${SEAT_ROOM[seat]}`}
@@ -356,6 +364,7 @@ export default async function SeatAttendancePage({
           }
         />
       )}
+      </TextbookOptionsProvider>
     </div>
   );
 }

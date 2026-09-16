@@ -259,6 +259,21 @@ export const AUDIT_ACTIONS = {
   // 분류(0247a) — 엑셀에 없는 분류를 적으면 확인 뒤 자동으로 만들어진다(삭제·이름변경 경로는 아직 없다).
   inventory_category_create: "자산 분류 추가",
 
+  // 교재목록(0266a) — 교재 마스터·차수 표·표지 · 반 배정과 차수 기입. 상세는 describe.ts.
+  // 🔴 기입(`textbook_plan_apply`)은 **그 반의 ECS 계획 줄을 바꾸는 행위**라 반드시 남긴다 —
+  //    "누가 이 반 시트에 이 교재를 통째로 넣었는지"를 역검수할 수 있어야 한다.
+  textbook_create: "교재 등록",
+  textbook_update: "교재 수정",
+  textbook_retire: "교재 폐지",
+  textbook_restore: "교재 되살리기",
+  textbook_lessons_save: "교재 차수 저장",
+  textbook_cover_set: "교재 표지 등록",
+  textbook_cover_clear: "교재 표지 삭제",
+  textbook_plan_create: "반 교재 배정",
+  textbook_plan_update: "반 교재 배정 수정",
+  textbook_plan_delete: "반 교재 배정 삭제",
+  textbook_plan_apply: "교재 차수 기입",
+
   // ── 2026-09-09 전수 보강 ────────────────────────────────────────────────────
   // 원장 지시: *"기능이 추가되거나 변동되는건 모두 감사로그에 남도록 해야함."* 2026-08-18 소급 퇴원
   // 사고 뒤 붙인 감사로그가 **학생 레코드 경로에만** 걸려 있어서, 그 뒤 만들어진 기능 20여 개는 흔적이

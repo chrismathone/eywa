@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { getClassSheetWeek, getSheetLanding } from "@/features/class-sheets/server/queries";
 import { SheetClient } from "@/features/class-sheets/components/sheet-client";
 import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-gate";
+import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
+import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
 
 export const metadata: Metadata = { title: "영어 강사 시트 — eywa" };
 
@@ -24,9 +26,11 @@ export default async function EcsSheetPage({
   const { classId } = await params;
   const { week } = await searchParams;
   const user = await getCurrentUser();
-  const [res, landing] = await Promise.all([
+  const [res, landing, textbookOptions] = await Promise.all([
     getClassSheetWeek(classId, week ?? null),
     getSheetLanding(week ?? null), // 반 전환 드롭다운 옵션(스코프 동일)
+    // 독립 조회라 같은 Promise.all에 둔다(직렬 워터폴 금지 — B4).
+    loadEcsTextbookOptions(),
   ]);
 
   if (!user || !res.ok) {
@@ -76,16 +80,19 @@ export default async function EcsSheetPage({
       </div>
       {/* 못 쓰는 폭(≈하루 한 칸도 안 들어감)에선 시트 대신 "넓혀 주세요" 안내 — 판정은 CSS 한 곳. */}
       <SheetWidthGate>
-        <SheetClient
-          // JJ 표시도 key에 넣는다 — 토글은 서버 재조회라, 재마운트하지 않으면 클라가 들고 있는
-          // 계획 행 state가 옛 슬롯 구성 그대로 남아 새로 열린 교시가 빈 칸으로 보인다.
-          // ⚠️ 로스터 접힘은 여기 안 넣는다(클라 state가 진실 — key에 넣으면 접을 때마다 시트가 재마운트된다).
-          key={`${classId}:${res.data.weekMonday}:${res.data.showSelfStudy ? "jj" : "nojj"}`}
-          data={res.data}
-          classOptions={classOptions}
-          userId={user.id}
-          tenantId={user.tenantId}
-        />
+        {/* 계획 표의 교재 칸이 쓰는 제안 목록 — `<datalist>`는 프로바이더가 한 번만 그린다. */}
+        <TextbookOptionsProvider options={textbookOptions}>
+          <SheetClient
+            // JJ 표시도 key에 넣는다 — 토글은 서버 재조회라, 재마운트하지 않으면 클라가 들고 있는
+            // 계획 행 state가 옛 슬롯 구성 그대로 남아 새로 열린 교시가 빈 칸으로 보인다.
+            // ⚠️ 로스터 접힘은 여기 안 넣는다(클라 state가 진실 — key에 넣으면 접을 때마다 시트가 재마운트된다).
+            key={`${classId}:${res.data.weekMonday}:${res.data.showSelfStudy ? "jj" : "nojj"}`}
+            data={res.data}
+            classOptions={classOptions}
+            userId={user.id}
+            tenantId={user.tenantId}
+          />
+        </TextbookOptionsProvider>
       </SheetWidthGate>
     </div>
   );

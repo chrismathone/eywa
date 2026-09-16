@@ -1277,6 +1277,9 @@ export const MENU_ICON = {
   calendar: "calendar", // 캘린더 — 학원 공용 일정
   shuttle: "bus", // 셔틀(노랑버스) — 노선 편성·등하원 기록
   inventory: "archive", // 재고관리 — 보관·대장 정체성(자산관리대장)
+  // 교재목록 — `book`(수업목록)·`bookMarked`(교재 요청)과 **다른 글리프**여야 나란히 섰을 때 갈린다.
+  // 차수별 진도가 든 책이라 "내용이 있는 책"(bookText).
+  textbooks: "bookText",
   integrations: "sync",
   sheet_sync: "spreadsheet",
   help: "help",
