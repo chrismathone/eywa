@@ -4,6 +4,31 @@ export type AllocationTerm = {
   id: string; amount: number | null; confirmedSessions: number | null;
   lineIndex: number | null; allocatedAmount: number | null; source: unknown; baseAmount: number | null;
 };
+export type ReceiptAllocationDraft = Record<string, { line: string; amount: string }>;
+
+/** 해당 반에 넣을 수 있는 잔액. 이미 입력한 다른 반의 금액은 그대로 둔다. */
+export function receiptRemainder(line: ReceiptLine, termId: string, draft: ReceiptAllocationDraft): number {
+  const others = Object.entries(draft).reduce((sum, [id, value]) => sum + (id !== termId && value.line === String(line.index) ? Number(value.amount) || 0 : 0), 0);
+  return Math.max(0, line.amount - others);
+}
+
+/** 확정 반은 확정금액을 기본으로, 미확정 반은 선택한 항목의 남은 금액을 채운다. */
+export function connectReceiptTerm(draft: ReceiptAllocationDraft, term: { id: string; amount: number | null }, line: ReceiptLine | undefined): ReceiptAllocationDraft {
+  if (!line) return { ...draft, [term.id]: { line: "", amount: "" } };
+  if (draft[term.id]?.line === String(line.index)) return draft;
+  const remaining = receiptRemainder(line, term.id, draft);
+  return { ...draft, [term.id]: { line: String(line.index), amount: String(term.amount === null ? remaining : Math.min(term.amount, remaining)) } };
+}
+
+/** 미확정 반이 있으면 확정 반의 입력액을 보존하고 잔액만 균등 배분한다. */
+export function distributeLinkedReceipt(line: ReceiptLine, terms: { id: string; amount: number | null; confirmedSessions: number | null }[], draft: ReceiptAllocationDraft): Record<string, number> {
+  const unconfirmed = terms.filter((term) => term.confirmedSessions === null);
+  if (unconfirmed.length > 0) {
+    const fixed = terms.filter((term) => term.confirmedSessions !== null).reduce((sum, term) => sum + (Number(draft[term.id]?.amount) || 0), 0);
+    return distributeReceipt(Math.max(0, line.amount - fixed), unconfirmed.map((term) => ({ id: term.id, amount: 1 })));
+  }
+  return distributeReceipt(line.amount, terms.map((term) => ({ id: term.id, amount: term.amount ?? 0 })));
+}
 
 export function receiptLines(raw: unknown): ReceiptLine[] {
   if (!Array.isArray(raw)) return [];
@@ -49,7 +74,7 @@ export function effectiveAllocations(lines: ReceiptLine[], terms: AllocationTerm
   for (const [index, group] of groups) {
     const line = lines.find((row) => row.index === index);
     if (!line || line.amount < 0) continue;
-    if (group.some((term) => term.confirmedSessions === null || term.allocatedAmount === null || !Number.isSafeInteger(term.allocatedAmount) || term.allocatedAmount < 0 || term.baseAmount !== term.amount || !sameBill(term.source, line.source))) continue;
+    if (group.some((term) => (term.confirmedSessions === null && term.amount !== null) || term.allocatedAmount === null || !Number.isSafeInteger(term.allocatedAmount) || term.allocatedAmount < 0 || term.baseAmount !== term.amount || !sameBill(term.source, line.source))) continue;
     if (group.reduce((sum, term) => sum + term.allocatedAmount!, 0) !== line.amount) continue;
     for (const term of group) out.set(term.id, term.allocatedAmount!);
   }

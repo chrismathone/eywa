@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { distributeReceipt, effectiveAllocations, receiptLines, type AllocationTerm } from "./receipt-allocation";
+import { connectReceiptTerm, distributeLinkedReceipt, distributeReceipt, effectiveAllocations, receiptLines, receiptRemainder, type AllocationTerm } from "./receipt-allocation";
 import { computeSplitRows } from "./splits";
 import { aggregateTeacherAllocations } from "./allocation";
 
@@ -11,6 +11,27 @@ const terms: AllocationTerm[] = [
 ];
 
 describe("할인 전 수납 청구액 배분", () => {
+  it("미확정 반 연결 시 다른 반의 입력액을 유지하고 선택한 항목의 잔액을 채운다", () => {
+    const line = receiptLines([{ ...source, amount: 328125 }])[0];
+    const draft = { a: { line: "0", amount: "140625" }, b: { line: "", amount: "" } };
+    const next = connectReceiptTerm(draft, { id: "b", amount: null }, line);
+    expect(next).toEqual({ a: draft.a, b: { line: "0", amount: "187500" } });
+    expect(receiptRemainder(line, "b", next)).toBe(187500);
+    expect(connectReceiptTerm(next, { id: "b", amount: null }, undefined).b).toEqual({ line: "", amount: "" });
+    expect(receiptRemainder(line, "b", { ...draft, a: { line: "0", amount: "400000" } })).toBe(0);
+  });
+  it("확정 반의 수동 입력은 보존하고 미확정 반들에게만 잔액을 나눈다", () => {
+    const line = receiptLines([{ ...source, amount: 328125 }])[0];
+    expect(distributeLinkedReceipt(line, [{ id: "a", amount: 140625, confirmedSessions: 4.5 }, { id: "b", amount: null, confirmedSessions: null }, { id: "c", amount: null, confirmedSessions: null }], { a: { line: "0", amount: "140624" } })).toEqual({ b: 93751, c: 93750 });
+  });
+  it("미확정 배분도 재조회에 보존되며 급여 분배 행은 시수 확정 전까지 만들지 않는다", () => {
+    const pending = { ...terms[0], confirmedSessions: null, amount: null, baseAmount: null };
+    const allocations = effectiveAllocations(receiptLines([source]), [pending, ...terms.slice(1)]);
+    expect(allocations.get(pending.id)).toBe(pending.allocatedAmount);
+    expect(computeSplitRows([{ invoiceId: "i", classId: "c", subject: "math", teacherId: "t", teacherName: "강사", confirmedSessions: null, unitPrice: null, amount: null, allocatedAmount: pending.allocatedAmount, actualConsumed: 5 }])).toEqual([]);
+    // 실제 확정 해제는 amount가 null이고 이전 baseAmount가 남아 있어 재확인을 요구한다.
+    expect(effectiveAllocations(receiptLines([source]), [{ ...terms[0], confirmedSessions: null, amount: null }, ...terms.slice(1)]).size).toBe(0);
+  });
   it("차액을 확정금액 비율로 배분하고 원 단위 잔액까지 합계가 맞는다", () => {
     const values = distributeReceipt(source.amount, terms.map((t) => ({ id: t.id, amount: t.amount! })));
     expect(Object.values(values).reduce((a, b) => a + b, 0)).toBe(421875);

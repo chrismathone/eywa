@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveSettings } from "@/features/owner/resolve";
 import { getSessionTermsView } from "./queries";
-import { confirmClassTerms, confirmSessionTerm, unconfirmSessionTerm } from "./actions";
+import { confirmClassTerms, confirmSessionTerm, unconfirmSessionTerm, refreshPlannedTerms } from "./actions";
 import { revalidatePath } from "next/cache";
 import { logAction } from "@/features/audit/server/log";
 import { getSessionVerificationView } from "./verification-queries";
@@ -66,6 +66,17 @@ beforeEach(() => {
 });
 
 describe("설정 → 회차 화면 조회·확정", () => {
+  it("미확정 반의 배분도 재조회에서 유지하고 시수·단가는 확정하지 않는다", async () => {
+    const source = { kind: "수업", description: "수업료", amount: 300000, discount: 20000 };
+    h.state.tables.invoices[0].line_items = [source];
+    Object.assign(h.state.tables.invoice_session_terms[0], { confirmed_sessions: null, unit_price: null, amount: null, confirmed_at: null, allocation_line_index: 0, allocation_amount: 300000, allocation_source: source, allocation_base_amount: null });
+    expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ confirmedSessions: null, unitPrice: null, allocatedAmount: 300000, allocationStale: false });
+    expect(h.state.writes).toEqual([]);
+    // 시간표에서 사라져도 계획 갱신이 저장한 배분을 삭제하지 않는다.
+    expect(await refreshPlannedTerms("2026-09")).toMatchObject({ ok: true, refreshed: 0 });
+    expect(h.state.tables.invoice_session_terms[0].allocation_amount).toBe(300000);
+    expect(h.state.writes).toEqual([]);
+  });
   it("소수 시수 확정은 출석부 기준을 저장하고 원 단위 금액으로 응답한다", async () => {
     const fd = new FormData(); fd.set("id", "term"); fd.set("sessions", "4.5"); fd.set("unitPrice", "31250");
     expect(await confirmSessionTerm(undefined, fd)).toMatchObject({ terms: [{ confirmedSessions: 4.5, amount: 140625, quantityBasis: "attendance_units" }] });

@@ -45,14 +45,53 @@ describe("수납 연결·배분", () => {
     ]));
     expect(h.refresh).toHaveBeenCalledOnce();
   });
-  it("미확정 반은 배분할 수 없고 변경된 연결은 다시 선택하게 한다", async () => {
+  it("미확정 반도 선택할 수 있고 변경된 연결은 다시 선택하게 한다", async () => {
     const data = view();
     Object.assign(data.terms[0], { allocationLineIndex: 0, allocationStale: true });
     Object.assign(data.terms[1], { confirmedSessions: null, amount: null });
     await open(data);
     expect(screen.getByLabelText("수학1반 수납 항목")).toHaveValue("");
-    expect(screen.getByLabelText("수학2반 수납 항목")).toBeDisabled();
+    expect(screen.getByLabelText("수학2반 수납 항목")).toBeEnabled();
     expect(screen.getByText(/청구액이나 반 확정값이 바뀌었습니다/)).toBeInTheDocument();
+  });
+  it("화면 사례: 미확정 반을 연결하면 187,500원·93,750원 잔액을 자동 입력하고 시수 확정 없이 저장", async () => {
+    const data = view();
+    const bill = [{ kind: "수업", description: "개별 토일", amount: 328125, discount: 10000 }, { kind: "수업", description: "주말보강", amount: 93750 }];
+    data.source = bill;
+    data.lines = bill.map((source, index) => ({ ...source, index, source }));
+    Object.assign(data.terms[0], { amount: 140625, confirmedSessions: 4.5 });
+    Object.assign(data.terms[1], { amount: null, unitPrice: null, confirmedSessions: null, confirmedAt: null });
+    data.terms.push({ ...data.terms[1], id: "term3", className: "수학3반" });
+    await open(data);
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(140625);
+    fireEvent.change(screen.getByLabelText("수학2반 수납 항목"), { target: { value: "0" } });
+    expect(screen.getByLabelText("수학2반 배분금액")).toBeEnabled();
+    expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(187500);
+    fireEvent.change(screen.getByLabelText("수학3반 수납 항목"), { target: { value: "1" } });
+    expect(screen.getByLabelText("수학3반 배분금액")).toHaveValue(93750);
+    expect(screen.getAllByText("미확정")).toHaveLength(2);
+    vi.mocked(saveReceiptAllocation).mockResolvedValueOnce({ ok: true });
+    fireEvent.click(screen.getByRole("button", { name: "배분 저장" }));
+    await waitFor(() => expect(saveReceiptAllocation).toHaveBeenCalledWith("invoice", bill, [
+      { termId: "term1", lineIndex: 0, amount: 140625, baseAmount: 140625, confirmedAt: "2026-09-16" },
+      { termId: "term2", lineIndex: 0, amount: 187500, baseAmount: null, confirmedAt: null },
+      { termId: "term3", lineIndex: 1, amount: 93750, baseAmount: null, confirmedAt: null },
+    ]));
+  });
+  it("모두 미확정이어도 잔액을 나누거나 입력을 바꾼 뒤 잔액을 다시 채울 수 있다", async () => {
+    const data = view();
+    for (const term of data.terms) Object.assign(term, { amount: null, confirmedSessions: null, confirmedAt: null, unitPrice: null });
+    await open(data);
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("수학2반 수납 항목"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "남은 금액 나누기" }));
+    expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(150000);
+    expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(150000);
+    fireEvent.change(screen.getByLabelText("수학1반 배분금액"), { target: { value: "100000" } });
+    fireEvent.click(screen.getByRole("button", { name: "수학2반 남은 금액 적용" }));
+    expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(200000);
+    expect(screen.getByRole("button", { name: "배분 저장" })).toBeEnabled();
   });
   it("저장 충돌 오류를 표시하고 입력을 유지한다", async () => {
     await open();

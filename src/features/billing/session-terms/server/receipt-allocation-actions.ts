@@ -10,7 +10,7 @@ import { getSessionTermsView, type SessionTermRow } from "./queries";
 import { receiptLines, type ReceiptLine } from "../receipt-allocation";
 
 export type ReceiptAllocationView = { lines: ReceiptLine[]; source: unknown; terms: SessionTermRow[] };
-export type ReceiptAllocationInput = { termId: string; lineIndex: number; amount: number; baseAmount: number; confirmedAt: string };
+export type ReceiptAllocationInput = { termId: string; lineIndex: number; amount: number; baseAmount: number | null; confirmedAt: string | null };
 
 export async function getReceiptAllocation(invoiceId: string): Promise<{ data?: ReceiptAllocationView; error?: string }> {
   const user = await getCurrentUser();

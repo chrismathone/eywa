@@ -114,10 +114,10 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
 
   // 기존 term 로드(확정 보존·stale 판단)
   const invoiceIds = invoices.map((i) => i.id);
-  const existing = await fetchInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null }>(
+  const existing = await fetchInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null }>(
     invoiceIds,
     (chunk) =>
-      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions").in("invoice_id", chunk),
+      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index").in("invoice_id", chunk),
   );
 
   let refreshed = 0;
@@ -140,7 +140,8 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     }
   }
   for (const t of existing) {
-    if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && t.confirmed_sessions === null) staleUnconfirmed.push(t.id);
+    // 시수 미확정이어도 사용자가 저장한 수납 배분은 계획 갱신으로 지우지 않는다.
+    if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && t.confirmed_sessions === null && t.allocation_line_index == null) staleUnconfirmed.push(t.id);
   }
 
   // upsert는 계획 필드만 — onConflict 대상 컬럼 목록에 confirmed_*를 넣지 않아 기존 확정이 보존된다.
@@ -151,7 +152,7 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     if (error) return { error: `계획 저장 실패: ${error.message}` };
   }
   for (let i = 0; i < staleUnconfirmed.length; i += 200) {
-    const { error } = await supabase.from("invoice_session_terms").delete().in("id", staleUnconfirmed.slice(i, i + 200));
+    const { error } = await supabase.from("invoice_session_terms").delete().in("id", staleUnconfirmed.slice(i, i + 200)).is("confirmed_sessions", null).is("allocation_line_index", null);
     if (error) return { error: `정리 실패: ${error.message}` };
   }
 
