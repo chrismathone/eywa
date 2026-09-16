@@ -489,7 +489,11 @@ export async function changeStudentStatus(
               //    전체 퇴원(student_withdraw)이 로그에서 구분되고, 전체 퇴원은 닫힌 반까지 보인다.
               ...(closing ?? {}),
             }
-          : { studentId: id },
+          : // 🔴 휴원 메모는 담을 컬럼이 없어 종전엔 폼에서 받고 **버려졌다**(거짓 약속).
+            //    students엔 휴원용 칸이 없으니 감사로그가 유일한 자리다 — 적었으면 남는다.
+            target === "on_hold"
+            ? { studentId: id, memo }
+            : { studentId: id },
     });
 
   if (target === "withdrawn") {
@@ -658,6 +662,86 @@ export async function endStudentEnrollments(
   revalidatePath("/students");
   revalidatePath("/withdrawals");
   revalidatePath("/timetable");
+  return { ok: true };
+}
+
+/**
+ * 휴원 다이얼로그의 **부분 휴원** — 고른 수강만 대기로 돌리고 **학생은 재원으로 남긴다.**
+ *
+ * 원장 2026-09-16: *"퇴원이든 휴원이든 … 누르면 수강중인 수업 전부 보여주고 그중에서 선택한 과목만
+ * 휴원 및 퇴원처리할 수 있게."* — 퇴원엔 2026-08-20부터 있던 길이 휴원엔 없어서, 영어만 쉬려 해도
+ * 수학까지 함께 멈췄다(`changeStudentStatus`의 on_hold 갈래는 활성 수강 전건을 대기로 돌린다).
+ *
+ * 🔴 **선택이 곧 "휴원 중인 수업" 전체다** — 체크한 것은 대기로, **체크가 풀렸는데 지금 대기인 것은
+ *    다시 수강으로** 돌린다. 되돌릴 문을 같은 화면에 두지 않으면 부분 휴원을 풀 방법이 없다(학생 상태가
+ *    '재원'이라 메뉴에 '재원 복구'가 안 뜬다). 규칙은 [`hold-selection.ts`](../hold-selection.ts) 단일 소스.
+ * 🔴 **바뀐 행만 쓴다** — 이미 대기인 행을 또 쓰면 감사로그가 같은 사실로 부풀고, 아무것도 안 바뀐
+ *    저장이 "처리했다"는 기록을 남긴다.
+ * 🔴 학생 상태(students.status)는 **건드리지 않는다** — 휴원이 아니므로 퇴원관리·재원생 집계가 움직이지 않는다.
+ *    전부 선택은 화면이 종전 `changeStudentStatus(target=on_hold)`로 보낸다(행선지가 갈린다).
+ */
+export async function setStudentEnrollmentHolds(
+  _prev: ChangeStatusState,
+  formData: FormData,
+): Promise<ChangeStatusState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  // 🔴 퇴원·부분 종료와 **같은 게이트** — 강사(scoped)는 학생 기록 열람 전용(원장 2026-08-18).
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const date = String(formData.get("date") ?? "").trim() || kstToday();
+  const picked = new Set(
+    formData
+      .getAll("enrollmentIds")
+      .map((v) => String(v).trim())
+      .filter(Boolean),
+  );
+  if (!studentId) return { error: "학생 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+
+  // 🔴 고른 id를 그대로 믿지 않는다 — **이 학생의 활성 수강**과 교집합만 쓴다(낡은 화면·남의 행 차단, #77).
+  const { error: listErr, rows: open } = await listOpenEnrollments(supabase, studentId);
+  if (listErr) return { error: "수강 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." };
+
+  const toHold = open.filter((r) => picked.has(r.id) && !r.onHold);
+  const toResume = open.filter((r) => !picked.has(r.id) && r.onHold);
+  // 🔴 `picked.size`가 아니라 **이 학생의 활성 수강과의 교집합**으로 센다 — 낡은 화면이 남의 id를
+  //    섞어 보내면 picked.size가 부풀어 "전부 휴원"으로 기록된다(숫자만 거짓이 되는 자리).
+  const heldAfter = open.filter((r) => picked.has(r.id)).length;
+  if (toHold.length === 0 && toResume.length === 0) {
+    // 바뀐 게 없다 — 에러가 아니라 성공으로 통과(멱등). 화면은 그대로 닫힌다.
+    return { ok: true };
+  }
+
+  for (const r of toHold) {
+    const { error } = await supabase.from("enrollments").update({ on_hold: true }).eq("id", r.id);
+    if (error) return { error: "수강을 대기로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    // 수강을 바꾸는 모든 경로는 감사로그 필수(원장 2026-08-18). 시간표 드래그(holdSingleEnrollment)와 같은 키.
+    await logAction({
+      action: "enrollment_hold",
+      targetType: "student",
+      metadata: { studentId, classId: r.classId, date, source: "status_dialog", partial: heldAfter < open.length },
+    });
+  }
+  for (const r of toResume) {
+    const { error } = await supabase.from("enrollments").update({ on_hold: false }).eq("id", r.id);
+    if (error) return { error: "수강을 되돌리지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    await logAction({
+      action: "enrollment_resume",
+      targetType: "student",
+      metadata: { studentId, classId: r.classId, date, source: "status_dialog" },
+    });
+  }
+
+  revalidatePath(`/students/${studentId}`);
+  revalidatePath("/students");
+  revalidatePath("/timetable");
+  // 반 상세 명단이 대기 표시를 그린다 — holdSingleEnrollment와 같은 갱신 범위.
+  for (const id of new Set([...toHold, ...toResume].map((r) => r.classId).filter(Boolean))) {
+    revalidatePath(`/classes/${id}`);
+  }
   return { ok: true };
 }
 

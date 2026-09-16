@@ -537,7 +537,8 @@ export function auditDetail(
     }
     case "student_hold":
     case "student_restore": {
-      return ctx.nameOf(m.studentId);
+      // 휴원 메모는 여기 말고 남는 자리가 없다(enrollments·students에 칸이 없다) — 적혔으면 보여 준다.
+      return join(ctx.nameOf(m.studentId), str(m.memo));
     }
     case "student_update": {
       const from = str(m.statusFrom);
@@ -564,6 +565,16 @@ export function auditDetail(
       if (!id) return null;
       const name = str(m.ijwName);
       return name && name !== id ? `인재원 계정 ${id}(${name})` : `인재원 계정 ${id}`;
+    }
+    // 수강 단위 대기/해제(2026-09-07 시간표 드래그 · 2026-09-16 휴원 다이얼로그 부분 휴원) —
+    // "어느 반이 언제 멈췄고 언제 다시 돌았나"가 이 로그의 목적이다(enrollments엔 담을 칸이 없다).
+    case "enrollment_hold":
+    case "enrollment_resume": {
+      return join(
+        ctx.nameOf(m.studentId),
+        ctx.nameOf(m.classId),
+        str(m.date) ? `기준일 ${str(m.date)}` : null,
+      );
     }
     case "enrollment_end": {
       const reason = reasonDisplay(str(m.reason));

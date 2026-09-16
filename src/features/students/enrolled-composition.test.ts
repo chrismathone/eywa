@@ -6,6 +6,7 @@ import {
   concurrentShare,
   enrolledSubjectCounts,
   gradeSplit,
+  notYetStartedStudentIds,
   subjectMixOf,
   summarizePrograms,
   type ActiveEnrollmentRow,
@@ -159,5 +160,82 @@ describe("gradeSplit — 학년별 재원생", () => {
     );
     expect(purple).toBe(summary.both);
     expect(purple).toBe(2);
+  });
+});
+
+/**
+ * '실시간 재원생'(원장 2026-09-16) — 대시보드 '수학 195'와 시간표 '194'가 갈렸던 원인.
+ * 실측 우지윤(달성초 6): 활성 수강 2건이 10/1·10/6 시작이라 아직 교실에 앉지 않는데 재원생으로 세어졌다.
+ */
+describe("notYetStartedStudentIds — 아직 하나도 시작 안 한 학생", () => {
+  const TODAY = "2026-09-16";
+  const at = (studentId: string, start: string): ActiveEnrollmentRow => ({
+    id: `x-${studentId}-${start}`,
+    student_id: studentId,
+    start_date: start,
+    class: { subject: "math", english_track: null },
+  });
+
+  it("전부 미래 시작이면 잡는다(우지윤 실측 — 10/1 · 10/6)", () => {
+    expect([...notYetStartedStudentIds([at("u", "2026-10-01"), at("u", "2026-10-06")], TODAY)]).toEqual([
+      "u",
+    ]);
+  });
+
+  it("하나라도 시작했으면 안 잡는다 — 10월 수강이 함께 있어도 지금 다니는 중이다", () => {
+    // 실측 윤정인·이후성·정채민·허다빈이 이 모양(10월 시작 수강 + 이미 다니는 수학).
+    expect(notYetStartedStudentIds([at("y", "2026-03-02"), at("y", "2026-10-03")], TODAY).size).toBe(0);
+  });
+
+  it("오늘 시작은 '다니는 중'(경계 포함)", () => {
+    expect(notYetStartedStudentIds([at("t", TODAY)], TODAY).size).toBe(0);
+  });
+
+  it("🔴 start_date를 모르면 시작한 것으로 본다 — 모름을 미시작으로 읽으면 재원생이 사라진다", () => {
+    const unknown: ActiveEnrollmentRow = {
+      id: "n1",
+      student_id: "n",
+      class: { subject: "math", english_track: null },
+    };
+    expect(notYetStartedStudentIds([unknown], TODAY).size).toBe(0);
+  });
+
+  it("수강이 아예 없는 학생은 대상이 아니다 — 행이 없으면 집합에도 없다(반 배정 전 신입은 재원 유지)", () => {
+    expect(notYetStartedStudentIds([], TODAY).size).toBe(0);
+  });
+});
+
+describe("today를 주면 과목 집계·명단이 함께 '실시간'이 된다", () => {
+  const TODAY = "2026-09-16";
+  const row = (studentId: string, subject: string, start: string): ActiveEnrollmentRow => ({
+    id: `r-${studentId}-${subject}-${start}`,
+    student_id: studentId,
+    start_date: start,
+    class: { subject, english_track: null },
+  });
+  const rows = [
+    row("now", "math", "2026-03-02"),
+    row("later", "math", "2026-10-01"), // 아직 안 다닌다
+  ];
+  const students = [
+    { id: "now", grade: "중1", school: null },
+    { id: "later", grade: "초6", school: null },
+    { id: "noclass", grade: "초5", school: null }, // 반 배정 전 — 남는다
+  ];
+
+  it("today 없으면 종전 그대로(시작일 무시) — 옛 호출부의 숫자가 조용히 바뀌지 않는다", () => {
+    expect(enrolledSubjectCounts(rows, null).bySubject.math).toBe(2);
+    expect(composeEnrolled({ students, rows, scope: null, subjects: SUBJECTS }).students).toHaveLength(3);
+  });
+
+  it("today를 주면 과목은 시작한 수강만 센다(수학 2 → 1)", () => {
+    expect(enrolledSubjectCounts(rows, null, TODAY).bySubject.math).toBe(1);
+  });
+
+  it("명단에서는 **미래 시작만 가진 학생만** 빠진다(반 배정 전 학생은 남는다 — 339→338의 근거)", () => {
+    const out = composeEnrolled({ students, rows, scope: null, subjects: SUBJECTS, today: TODAY });
+    expect(out.students.map((s) => s.id)).toEqual(["now", "noclass"]);
+    expect(out.programs.has("later")).toBe(false);
+    expect(out.active.has("later")).toBe(false);
   });
 });

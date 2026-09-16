@@ -115,7 +115,8 @@ export function groupSeatingFloors(classes: readonly SeatingClass[]): SeatingFlo
     if (a.group.order !== b.group.order) return a.group.order - b.group.order;
     const rn = a.roomLabel.localeCompare(b.roomLabel, "ko");
     if (rn !== 0) return rn;
-    if (a.klass.firstStart !== b.klass.firstStart) return a.klass.firstStart < b.klass.firstStart ? -1 : 1;
+    // 블록 시작 기준 — foldSeating의 카드 정렬과 같은 축(대표 교시로 정렬하면 같은 수업이 시각마다 자리를 옮긴다).
+    if (a.klass.blockStart !== b.klass.blockStart) return a.klass.blockStart < b.klass.blockStart ? -1 : 1;
     return a.klass.className.localeCompare(b.klass.className, "ko");
   });
 

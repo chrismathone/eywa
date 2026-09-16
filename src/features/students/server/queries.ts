@@ -1,7 +1,11 @@
 import { getTeacherLabelMap } from "@/features/timetable/server/queries";
 import "server-only";
 import { enrolledSubjectCounts } from "../enrolled-composition";
-import { countEnrolledStudents, loadActiveEnrolledEnrollments } from "./enrolled-programs";
+import {
+  countEnrolledStudents,
+  getNotStartedStudentIds,
+  loadActiveEnrolledEnrollments,
+} from "./enrolled-programs";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -298,6 +302,9 @@ export async function getStudentsList(
   // 🔴 상태=퇴원이면 이력 포함(활성 조건 없이) — 안 그러면 과목·담당 강사 필터가 퇴원생을 전원 걸러
   //    항상 0명(적대 리뷰 F4, getStudentsPage와 같은 규칙).
   const isWithdrawn = options?.status === "withdrawn";
+  // ⚠️ 여기엔 '실시간 재원생' 제외를 걸지 않는다(원장 2026-09-16) — 이 함수는 엑셀 내보내기·반 상세
+  //    '학생 배정' 후보·발송 콘솔 선택기가 쓴다. 10월 시작 신입을 감추면 **그 학생을 반에 못 넣는다.**
+  //    화면 목록(getStudentsPage)만 카드 숫자와 같은 집합을 본다.
   const studentIds = data.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
   const teachersByStudent = new Map<string, Map<string, string>>(); // student → teacher_id → 이름 (필터용)
@@ -396,11 +403,13 @@ export async function getEnrolledStatCounts(): Promise<{
   if (teacherScope && teacherScope.studentIds.length === 0) return { enrolled: 0, bySubject: {}, combinations: [] };
   // 재원 수(count head)와 활성 수강 전건(요청 캐시 — 운영실 구성과 같은 행)을 병렬로. 과목별 집계는 순수 함수 한 벌 —
   // 표시 축(원장 2026-08-20: 게이지는 **담당 과목만**)도 그 안에서 건다. 운영실은 같은 순수 함수에 직접 받은 행을 넘긴다.
-  const [enrolled, ens] = await Promise.all([
-    countEnrolledStudents(supabase, teacherScope),
+  // '실시간 재원생'(원장 2026-09-16) — 아직 한 과목도 시작 안 한 학생은 총원·과목 모두에서 뺀다.
+  const [notStarted, ens] = await Promise.all([
+    getNotStartedStudentIds(),
     loadActiveEnrolledEnrollments(),
   ]);
-  return { enrolled, ...enrolledSubjectCounts(ens, teacherScope) };
+  const enrolled = await countEnrolledStudents(supabase, teacherScope, notStarted);
+  return { enrolled, ...enrolledSubjectCounts(ens, teacherScope, kstToday()) };
 }
 
 /**
@@ -412,7 +421,7 @@ export async function getStudentsPage(
   options: StudentListFilters,
   page = 1,
   pageSize = 50,
-): Promise<{ rows: StudentListRow[]; total: number }> {
+): Promise<{ rows: StudentListRow[]; total: number; hiddenNotStarted: number }> {
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -420,17 +429,27 @@ export async function getStudentsPage(
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
   const teacherScope = await effectiveTeacherScope();
   const teacherStudentIds = teacherScope?.studentIds ?? null;
-  if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
+  if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0, hiddenNotStarted: 0 };
   // 표시 축(원장 2026-08-20) — 행(누가 보이는지)은 그대로 두고 그 위에 그리는 과목·담당 강사만 좁힌다.
   const axis = subjectAxisOf(teacherScope);
 
   const isWithdrawn = options?.status === "withdrawn";
+  /**
+   * 상태=재원 목록에서 **아직 한 과목도 시작 안 한 학생**을 뺀다 — 상단 카드('재원 N명')와 같은 집합이다
+   * (원장 2026-09-16 '실시간 재원생'). 🔴 카드만 빼고 목록을 안 빼면 "338명"이라 적어 놓고 339줄이 뜬다
+   * (원장이 지적한 바로 그 종류의 불일치).
+   * ⚠️ 상태=전체에선 그대로 보인다 — 등록은 확정된 학생이라 데스크가 찾을 수 있어야 한다. 몇 명을
+   *    감췄는지는 `hiddenNotStarted`로 돌려주고 화면이 결과 줄에 밝힌다(조용히 빼지 않는다, [[#105]]).
+   * 🔴 `getStudentsList`(엑셀·반 배정 후보)엔 걸지 않는다 — 거기서 감추면 그 학생을 반에 못 넣는다.
+   */
+  const hideNotStarted = options?.status === "enrolled" ? await getNotStartedStudentIds() : null;
+  const hiddenCount = hideNotStarted?.size ?? 0;
   // 담당 강사 필터 → 그 강사 반에 수강 중인 학생 id(getTeacherScope 재사용, primary_teacher_id 대체).
   // 퇴원 상태는 id 화이트리스트 대신 embed 조인(teacherFilter)으로 — enrollmentEmbed 주석의 F4 참조.
   let teacherFilterIds: string[] | null = null;
   if (options?.teacherId && options.teacherId !== "all" && !isWithdrawn) {
     teacherFilterIds = (await getTeacherScope(options.teacherId)).studentIds;
-    if (teacherFilterIds.length === 0) return { rows: [], total: 0 };
+    if (teacherFilterIds.length === 0) return { rows: [], total: 0, hiddenNotStarted: 0 };
   }
 
   // 과목·'미수강 제외'는 **id 목록이 아니라 embed 조인**으로 건다(위 enrollmentEmbed 주석의 🔴 참조).
@@ -451,7 +470,7 @@ export async function getStudentsPage(
     if (!list) continue;
     const s = new Set(list);
     idWhitelist = idWhitelist ? idWhitelist.filter((id) => s.has(id)) : list;
-    if (idWhitelist.length === 0) return { rows: [], total: 0 };
+    if (idWhitelist.length === 0) return { rows: [], total: 0, hiddenNotStarted: 0 };
   }
 
   /** 목록 필터·정렬을 건 students 조회 — 한 페이지(count) 경로와 `restrictIds` 경로(id 전건)가 **같은 것**을 쓴다. */
@@ -463,6 +482,9 @@ export async function getStudentsPage(
         withCount ? { count: "exact" } : undefined,
       );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
+    if (hideNotStarted && hideNotStarted.size > 0) {
+      qb = qb.not("id", "in", `(${[...hideNotStarted].join(",")})`);
+    }
     if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
     qb = applySearch(qb, options?.q, options?.searchField, memoIds);
     if (needEnrollmentJoin) {
@@ -577,7 +599,9 @@ export async function getStudentsPage(
     } satisfies StudentListRow;
   });
 
-  return { rows, total };
+  // 🔴 **몇 명을 감췄는지 함께 돌려준다** — 조용히 빠지면 "그 학생이 사라졌다"가 된다([[#105]] ·
+  //    2026-08-18 엄채율 실사고와 같은 모양). 화면이 결과 줄에 한 마디로 밝힌다.
+  return { rows, total, hiddenNotStarted: hiddenCount };
 }
 
 export type CareFocus = {

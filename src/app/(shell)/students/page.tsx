@@ -163,7 +163,7 @@ export default async function StudentsPage({
     if (fromPrefs("subject") && !settingsEarly.operations.subjects.some((s) => s.key === subjectRaw)) subject = "all";
   }
 
-  const [{ rows, total }, counts, [teachers, settings]] = await Promise.all([
+  const [{ rows, total, hiddenNotStarted }, counts, [teachers, settings]] = await Promise.all([
     restrictPromise.then((restrictIds) =>
       getStudentsPage(
         { status, subject, q, grade, teacherId, searchField: field, sort, excludeNoEnrollment, restrictIds },
@@ -311,6 +311,14 @@ export default async function StudentsPage({
             </span>
           ) : null}
           {q ? <span className="ml-1.5">· {sheetTf(lang, "stu.count.q", { q })}</span> : null}
+          {/* '실시간 재원생'(원장 2026-09-16) — 아직 한 과목도 시작 안 한 학생은 재원 목록·총원에서 빠진다.
+              🔴 **조용히 빼지 않는다**: 왜 빠졌고 어디서 볼 수 있는지 한 마디로 밝힌다
+              (검색해도 안 나오는데 이유가 없으면 "학생이 사라졌다"가 된다 — [[#105]]).
+              ⚠️ **인원수는 안 적는다** — `hiddenNotStarted`는 이 학생 전체 수라, 과목·학년·검색이 함께
+                 걸려 있으면 "N명 제외"가 실제로 빠진 수와 달라진다(숫자가 거짓말하는 자리). */}
+          {hiddenNotStarted > 0 ? (
+            <span className="text-amber ml-1.5">· {sheetT(lang, "stu.count.notStarted")}</span>
+          ) : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {/* 운영실 KPI ↗가 건 집합 — 칩을 누르면 그 조건만 푼다(나머지 필터는 그대로). */}

@@ -33,20 +33,37 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
   const COMPOSITION = src("src/features/students/server/enrolled-programs.ts");
 
   it("운영실은 행을 한 번 받아 원생목록과 같은 순수 집계에 넘긴다(B1 — 서버 액션엔 요청 캐시가 없다)", () => {
-    expect(SERVER).toContain("countEnrolledStudents(db, scope)");
+    expect(SERVER).toContain("countEnrolledStudents(db, scope, notStarted)");
     expect(SERVER).toContain("fetchActiveEnrolledEnrollments(db)");
-    expect(SERVER).toContain("enrolledSubjectCounts(rows, scope)");
+    expect(SERVER).toContain("enrolledSubjectCounts(rows, scope, today)");
     expect(SERVER).toMatch(/composeEnrolled\(\{/);
     expect(SERVER).toContain("gradeSplit(visible, composition.programs, settings.operations.gradeLevels)");
     expect(SERVER).toContain("concurrent: programs.both");
   });
 
   it("원생목록 상단 카드·program= 필터도 같은 순수 집계를 지난다", () => {
-    expect(QUERIES).toContain("countEnrolledStudents(supabase, teacherScope)");
-    expect(QUERIES).toContain("enrolledSubjectCounts(ens, teacherScope)");
-    expect(COMPOSITION).toMatch(/composeEnrolled\(\{ students, rows, scope, subjects: settings\.operations\.subjects \}\)/);
+    expect(QUERIES).toContain("countEnrolledStudents(supabase, teacherScope, notStarted)");
+    expect(QUERIES).toContain("enrolledSubjectCounts(ens, teacherScope, kstToday())");
+    expect(COMPOSITION).toMatch(/composeEnrolled\(\{[\s\S]*?today: kstToday\(\)/);
     expect(STUDENTS_PAGE).toContain("restrictIdsFor(program, firstDay)");
     expect(STUDENTS_PAGE).toContain("restrictIds");
+  });
+
+  /**
+   * '실시간 재원생'(원장 2026-09-16) — 아직 한 과목도 시작 안 한 학생을 **카드·목록·과목이 함께** 뺀다.
+   * 🔴 한 곳만 빼면 "338명"이라 적어 놓고 339줄이 뜬다(원장이 지적한 종류의 불일치).
+   */
+  it("④ 아직 시작 안 한 수강만 가진 학생은 총원·목록·과목에서 함께 빠진다", () => {
+    // 집합을 만드는 곳은 순수 함수 한 벌
+    expect(src("src/features/students/enrolled-composition.ts")).toContain(
+      "export function notYetStartedStudentIds(",
+    );
+    // 총원(count head)과 목록(students 조회)이 같은 집합을 뺀다
+    expect(COMPOSITION).toContain("export const getNotStartedStudentIds");
+    expect(QUERIES).toContain("getNotStartedStudentIds()");
+    expect(QUERIES).toMatch(/hideNotStarted[\s\S]*?\.not\("id", "in"/);
+    // 운영실도 같은 순수 함수로 만든 집합을 넘긴다(서버 액션이라 요청 캐시가 없다)
+    expect(SERVER).toContain("notYetStartedStudentIds(rows, today)");
   });
 
   it("A6 — 옛 '동시 수강'(과목 둘 이상) 값은 남기지 않는다", () => {
