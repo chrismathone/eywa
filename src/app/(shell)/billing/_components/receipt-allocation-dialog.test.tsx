@@ -1,12 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
-import { getReceiptAllocation, saveReceiptAllocation, type ReceiptAllocationView } from "@/features/billing/session-terms/server/receipt-allocation-actions";
+import { getReceiptAllocation, mergeReceiptItems, saveReceiptAllocation, type ReceiptAllocationView } from "@/features/billing/session-terms/server/receipt-allocation-actions";
 
 const h = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
 vi.mock("@/lib/realtime/record-channel", () => ({ publishRecordSaved: vi.fn() }));
-vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn() }));
+vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn(), mergeReceiptItems: vi.fn() }));
 
 const source = [{ kind: "수업", description: "통합 수강료", amount: 300000, discount: 20000, paid: 280000 }];
 function view(): ReceiptAllocationView {
@@ -26,6 +26,32 @@ beforeEach(() => {
 });
 
 describe("수납 연결·배분", () => {
+  it("이동 수납을 선택 합산하고 입력한 배분금액·종료일 표시를 유지한다", async () => {
+    const data = view();
+    const originals = [{ kind: "수업", description: "이전 반", amount: 100000, paid: 100000, unpaid: 0 }, { kind: "수업", description: "현재 반", amount: 200000, paid: 200000, unpaid: 0 }];
+    data.source = originals; data.lines = originals.map((source, index) => ({ ...source, index, source }));
+    data.terms[0].enrollmentLabel = "9/1~9/7 · 종료";
+    await open(data);
+    expect(screen.getByText("9/1~9/7 · 종료")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("수학2반 수납 항목"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("수학1반 배분금액"), { target: { value: "120000" } });
+    fireEvent.change(screen.getByLabelText("수학2반 배분금액"), { target: { value: "180000" } });
+    fireEvent.click(screen.getByRole("button", { name: "수납 항목 합산" }));
+    fireEvent.click(screen.getByLabelText("이전 반 합산 선택")); fireEvent.click(screen.getByLabelText("현재 반 합산 선택"));
+    const merged = { kind: "수업", description: "이전 반 + 현재 반", amount: 300000, paid: 300000, unpaid: 0, receiptGroupId: "group", sourceItems: originals };
+    vi.mocked(mergeReceiptItems).mockResolvedValueOnce({ data: { ...data, source: [merged], lines: [{ ...merged, index: 0, source: merged }] }, committed: true });
+    fireEvent.click(screen.getByRole("button", { name: "선택 항목 합산" }));
+    await screen.findByRole("status");
+    expect(mergeReceiptItems).toHaveBeenCalledWith("invoice", originals, [0, 1], "이전 반 + 현재 반", undefined);
+    expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(120000);
+    expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(180000);
+    expect(screen.getByLabelText("수학2반 수납 항목")).toHaveValue("0");
+    expect(screen.getByRole("button", { name: "배분 저장" })).toBeEnabled();
+    vi.mocked(saveReceiptAllocation).mockResolvedValueOnce({ ok: true });
+    fireEvent.click(screen.getByRole("button", { name: "배분 저장" }));
+    await waitFor(() => expect(saveReceiptAllocation).toHaveBeenCalledWith("invoice", [merged], expect.arrayContaining([expect.objectContaining({ termId: "term2", lineIndex: 0, amount: 180000 })])));
+  });
   it("모든 반을 연결하고 할인 전 청구액을 비례 배분한 뒤 직접 조정해 저장한다", async () => {
     await open();
     fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });

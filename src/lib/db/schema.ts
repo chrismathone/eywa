@@ -1263,6 +1263,7 @@ export const invoices = pgTable(
     amountDiscount: numeric("amount_discount", { precision: 12, scale: 0 }).notNull().default("0"),
     status: invoiceStatusEnum("status").notNull().default("unpaid"),
     lineItems: jsonb("line_items").notNull(),
+    receiptMergeGroups: jsonb("receipt_merge_groups").notNull().default([]), // 반 이동 수납 합산 설정(동기화 원본과 별도)
     notes: text("notes"),
     dueDate: date("due_date"),
     paidAt: timestamp("paid_at", { withTimezone: true }),

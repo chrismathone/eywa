@@ -311,7 +311,7 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
           {r.allocationStale ? (
             <span className="text-amber cursor-help" {...(r.classAmount !== null ? ALLOCATION_STALE_TIP : ALLOCATION_STALE_TIP_NO_AMOUNT)}>배분 재확인 필요</span>
           ) : r.allocatedAmount != null ? (
-            <span>청구액 배분</span>
+            <span className="text-green bg-green-soft rounded-sm px-1.5 py-0.5 text-xs font-medium">배분 완료</span>
           ) : r.classAmount !== null ? (
             <span>이름 매칭 참고</span>
           ) : null}

@@ -42,7 +42,8 @@ export function receiptLines(raw: unknown): ReceiptLine[] {
 function sameBill(a: unknown, b: unknown): boolean {
   const shape = (value: unknown) => {
     const row = receiptLines([value])[0];
-    return `${row.kind}\n${row.description}\n${row.amount}`;
+    const source = value && typeof value === "object" ? value as { receiptGroupId?: unknown; classId?: unknown } : {};
+    return JSON.stringify([row.kind, row.description, row.amount, source.classId ?? "", source.receiptGroupId ?? ""]);
   };
   return a != null && b != null && shape(a) === shape(b);
 }

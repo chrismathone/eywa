@@ -11,6 +11,7 @@ export function MergedReceiptDetails({ line }: { line: InvoiceLineItem }) {
       <ul className="border-line mt-2 space-y-2 border-l pl-2">
         {line.sourceItems.map((item, index) => (
           <li key={index}>
+            <div>{item.description}</div>
             <div>{item.paidDate || "수납일 없음"} · {item.method ? (methods[item.method] ?? item.method) : "결제수단 없음"}</div>
             <div>청구 {won(item.amount)} · 할인 {won(item.discount ?? 0)}</div>
             <div>납부 {won(item.paid)} · 미납 {won(item.unpaid)} · 적립금 {won(item.points ?? 0)}</div>

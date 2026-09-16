@@ -196,7 +196,7 @@ describe("한 행 = 한 줄 (원장 2026-09-16)", () => {
   it("이 반 청구액은 금액 · 꼬리표 · 수납 연결을 한 줄에 — 배분 재확인은 꼬리표 자리에 앰버 + 카드", () => {
     const { container, rerender } = render(<SessionTermGroups groups={[confirmedGroup({ allocatedAmount: 148750 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     const cell = () => screen.getByRole("button", { name: "수납 연결·배분" }).closest("td")!;
-    expect(cell().textContent).toBe("148,750원청구액 배분수납 연결·배분");
+    expect(cell().textContent).toBe("148,750원배분 완료수납 연결·배분");
     expect(cell().querySelector("div")!.className).toContain("inline-flex");
     rerender(<SessionTermGroups groups={[confirmedGroup({ classAmount: 148750 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     expect(cell().textContent).toBe("148,750원이름 매칭 참고수납 연결·배분");
