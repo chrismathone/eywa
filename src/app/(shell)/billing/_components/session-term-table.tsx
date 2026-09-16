@@ -14,10 +14,10 @@ import {
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { validSessionQuantity, sessionPricingAmount, type SessionPrice } from "@/features/billing/session-pricing";
-import { useBillingSettingsRefresh } from "@/features/billing/use-billing-settings-refresh";
 import { tipProps } from "@/components/hover-tip/tip";
 import { useSessionTermsState } from "./session-terms-state";
 import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
+import { MonthlySessionEditor } from "./monthly-session-editor";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -51,8 +51,7 @@ export function RefreshPlanButton({ period }: { period: string }) {
 }
 
 /** 회차 없이 단가만 입력하면 미확정 학생의 입력칸만 채운다. */
-function ClassBatch({ period, group, listId, onPrice }: { period: string; group: ClassGroup; listId: string; onPrice: (price: string) => void }) {
-  const router = useRouter();
+function ClassBatch({ period, group, listId, onPrice, onlyUnallocated }: { period: string; group: ClassGroup; listId: string; onPrice: (price: string) => void; onlyUnallocated?: boolean }) {
   const monthlyPrice = group.students[0]?.monthlyPrice ?? null;
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -88,11 +87,10 @@ function ClassBatch({ period, group, listId, onPrice }: { period: string; group:
     setNotice(null);
     start(async () => {
       try {
-        const res = await confirmClassTerms(period, group.classId, price, sessions);
+        const res = onlyUnallocated ? await confirmClassTerms(period, group.classId, price, sessions, group.students.map((r) => r.id)) : await confirmClassTerms(period, group.classId, price, sessions);
         if (res.error) setErr(res.error);
         else if (res.terms) {
           apply(res.terms);
-          if (group.students.some((row) => row.invoiceHasAllocations)) router.refresh();
         }
       } catch { setErr("확정하지 못했습니다. 다시 시도해 주세요"); }
     });
@@ -131,6 +129,8 @@ function ClassBatch({ period, group, listId, onPrice }: { period: string; group:
       ) : (
         <>
           <input type="hidden" name="unitPrice" value={monthlyPrice} />
+          <input name="sessions" type="number" min={0} max={99} step="0.1" disabled={pending} value={sessionsInput} onChange={(e) => setSessionsInput(e.target.value)} placeholder="계획" aria-label={`${group.className} 반 회차`} title="비우면 학생별 최신 계획 시수로 확정하며 월 금액은 유지합니다" className="border-input bg-background num w-14 rounded-md border px-2 py-1 text-center text-xs" />
+          <span className="text-text-faint text-xs">시수 ·</span>
           <span className="text-primary text-sm font-bold">EiE 월 {won(monthlyPrice)}</span>
         </>
       )}
@@ -182,14 +182,12 @@ const ALLOCATION_STALE_TIP_NO_AMOUNT = staleTip(false);
  */
 type Draft = { sessions: string; price: string };
 function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft: Draft; onDraft: (draft: Draft) => void }) {
-  const router = useRouter();
   const { apply } = useSessionTermsState();
   const [state, confirmAction, confirming] = useActionState<SessionTermActionState, FormData>(async (prev, data) => {
     try {
       const result = await confirmSessionTerm(prev, data);
       if (result?.terms) {
         apply(result.terms);
-        if (r.invoiceHasAllocations) router.refresh();
       }
       return result;
     } catch { return { error: "확정하지 못했습니다. 다시 시도해 주세요" }; }
@@ -200,7 +198,6 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
       if (result?.terms) {
         onDraft({ sessions: String(r.confirmedSessions ?? r.plannedSessions ?? ""), price: String(r.unitPrice ?? "") });
         apply(result.terms);
-        if (r.invoiceHasAllocations) router.refresh();
       }
       return result;
     } catch { return { error: "해제하지 못했습니다. 다시 시도해 주세요" }; }
@@ -228,7 +225,6 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
           <form id={fid} action={confirmAction} className="hidden">
             <input type="hidden" name="id" value={r.id} />
             {monthly ? <>
-              <input type="hidden" name="sessions" value={r.plannedSessions ?? 0} />
               <input type="hidden" name="unitPrice" value={r.monthlyPrice!} />
             </> : null}
           </form>
@@ -246,10 +242,8 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
               <span className="sr-only"> · 일수 기준 · 재확정 필요</span>
             </span>
           ) : (
-            <span className="text-foreground font-bold">{monthly ? "월 고정" : r.confirmedSessions}</span>
+            monthly ? <MonthlySessionEditor id={r.id} sessions={r.confirmedSessions!} confirmedAt={r.confirmedAt} studentName={r.studentName} /> : <span className="text-foreground font-bold">{r.confirmedSessions}</span>
           )
-        ) : monthly ? (
-          <span className="text-text-dim text-xs">월 고정</span>
         ) : (
           <input
             form={fid}
@@ -311,7 +305,7 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
           {r.allocationStale ? (
             <span className="text-amber cursor-help" {...(r.classAmount !== null ? ALLOCATION_STALE_TIP : ALLOCATION_STALE_TIP_NO_AMOUNT)}>배분 재확인 필요</span>
           ) : r.allocatedAmount != null ? (
-            <span className="text-green bg-green-soft rounded-sm px-1.5 py-0.5 text-xs font-medium">배분 완료</span>
+            <span className="text-green bg-green-soft rounded-sm px-1.5 py-0.5 text-xs font-medium">{r.refundState === "full" ? "전액 환불" : "배분 완료"}</span>
           ) : r.classAmount !== null ? (
             <span>이름 매칭 참고</span>
           ) : null}
@@ -361,16 +355,17 @@ export function SessionTermGroups({
   groups,
   catalog,
   period,
+  onlyUnallocated = false,
 }: {
   groups: ClassGroup[];
   catalog: Catalog;
   period: string;
+  onlyUnallocated?: boolean;
 }) {
   const listId = useId();
   const { patches } = useSessionTermsState();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const draftOf = (row: Row): Draft => drafts[row.id] ?? { sessions: String(row.plannedSessions ?? ""), price: "" };
-  useBillingSettingsRefresh();
   return (
     <DragScrollArea className="border-border rounded-2xl border">
       <datalist id={listId}>
@@ -424,7 +419,7 @@ export function SessionTermGroups({
                           {monthlyPrice !== null ? " · 월 수강료" : ""} · 확정{" "}<span className={allDone ? "text-chart-2" : "text-amber"}>{confirmed}/{g.students.length}</span>
                         </span>
                       </div>
-                      <ClassBatch period={period} group={g} listId={listId} onPrice={(price) => setDrafts((current) => {
+                      <ClassBatch period={period} group={g} listId={listId} onlyUnallocated={onlyUnallocated} onPrice={(price) => setDrafts((current) => {
                         const next = { ...current };
                         for (const row of g.students) if (row.confirmedSessions === null) next[row.id] = { ...(current[row.id] ?? { sessions: String(row.plannedSessions ?? "") }), price };
                         return next;

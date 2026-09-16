@@ -3,6 +3,7 @@
 // makeedu 수납명은 구조화 키가 없어 문자열 매칭이 불가피 — attendance가 사고 8번 낸 지대라, **못 맞추면 절대
 // 지어내지 말고 null(미상)**을 돌린다. 부풀린 오답보다 "—"가 낫다.
 
+import { receiptSalaryAmount } from "./receipt-refund";
 export type LineItemLike = { description?: string | null; name?: string | null; amount?: number | null };
 
 /** 반 코드 = 반명의 마지막 영숫자 토큰(예: "개별(초등M) 초5 BS2C"→"BS2C", "중등M 중2 PS2S-1"→"PS2S"). 없으면 null. */
@@ -39,7 +40,9 @@ export function classInvoiceAmount(className: string, lineItems: LineItemLike[])
       hit = norm(desc).includes(nClass);
     }
     if (hit) {
-      sum += Number(li.amount) || 0;
+      const value = receiptSalaryAmount(li);
+      if (value === null) return null;
+      sum += value;
       matched++;
     }
   }

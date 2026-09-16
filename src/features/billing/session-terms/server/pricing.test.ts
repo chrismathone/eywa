@@ -7,6 +7,7 @@ import { logAction } from "@/features/audit/server/log";
 import { getSessionVerificationView } from "./verification-queries";
 import { saveTeacherSplits } from "./splits-actions";
 import { getTeacherSettlementView } from "@/features/payroll/server/settlement-queries";
+import { updateMonthlyTermSessions } from "./monthly-sessions";
 
 const h = vi.hoisted(() => {
   const state = {
@@ -22,7 +23,7 @@ const h = vi.hoisted(() => {
       let patch: Record<string, unknown> | undefined;
       let upserts: Record<string, unknown>[] | undefined;
       const builder: Record<string, unknown> = {};
-      for (const method of ["select", "eq", "neq", "in", "order", "range", "gte", "lte", "or"]) builder[method] = () => builder;
+      for (const method of ["select", "eq", "neq", "in", "order", "range", "gte", "lte", "or", "not"]) builder[method] = () => builder;
       builder.maybeSingle = () => { single = true; return builder; };
       builder.update = (value: Record<string, unknown>) => { patch = value; return builder; };
       builder.upsert = (values: Record<string, unknown>[]) => { upserts = values; return builder; };
@@ -66,6 +67,30 @@ beforeEach(() => {
 });
 
 describe("설정 → 회차 화면 조회·확정", () => {
+  it("전체환불은 기존 확정값을 보존하면서 배분·분배의 기준액을 0으로 읽는다", async () => {
+    const source = { kind: "수업", description: "영어반", amount: 312000, discount: 10000, paid: 302000 };
+    h.state.tables.invoices[0].line_items = [{ ...source, refunds: [{ type: "full", amount: 302000, status: "active" }] }];
+    Object.assign(h.state.tables.invoice_session_terms[0], { amount: 312000, allocation_line_index: 0, allocation_amount: 312000, allocation_source: source, allocation_base_amount: 312000 });
+    expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ amount: 312000, allocatedAmount: 0, classAmount: 0, allocationStale: false, refundState: "full" });
+    expect((await getSessionVerificationView("2026-09")).rows[0]).toMatchObject({ allocatedAmount: 0 });
+    expect(h.state.writes).toEqual([]);
+  });
+  it("EiE 확정 시수만 바꿀 때 월 단가·금액·배분 필드를 쓰지 않는다", async () => {
+    Object.assign(h.state.tables.invoice_session_terms[0], { pricing_mode: "monthly", unit_price: 270000, amount: 270000, allocation_amount: 260000 });
+    h.state.billing = { eieMonthlyPrice: 290000 };
+    expect(await updateMonthlyTermSessions("term", 15.5, "2026-09-01")).toMatchObject({ terms: [{ confirmedSessions: 15.5, unitPrice: 270000, amount: 270000 }] });
+    expect(h.state.writes[0].patch).not.toHaveProperty("amount");
+    expect(h.state.writes[0].patch).not.toHaveProperty("unit_price");
+    expect(h.state.tables.invoice_session_terms[0].allocation_amount).toBe(260000);
+  });
+  it("날짜 정정 뒤 조회는 최신 계획을 사용하고 0이 되어도 확정값·배분을 보존한다", async () => {
+    h.state.tables.enrollments = [{ student_id: "student", class_id: "class", start_date: "2026-01-01", end_date: "2026-09-01", attendance_days: [], on_hold: false, is_transferred: false, class: { subject: "english", is_active: true } }];
+    h.state.tables.class_schedules = [{ class_id: "class", day_of_week: "tue", start_time: "16:00", end_time: "16:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: null }];
+    expect((await getSessionTermsView("2026-09")).rows[0].plannedSessions).toBe(1);
+    h.state.tables.enrollments[0].end_date = "2026-08-31";
+    expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ plannedSessions: 0, confirmedSessions: 8, amount: 327000 });
+    expect(h.state.writes).toEqual([]);
+  });
   it("계획 갱신은 개인 등원 요일을 지키고 JJ·LAB 교시를 포함한다", async () => {
     h.state.tables.enrollments = [{ student_id: "student", class_id: "class", start_date: "2026-01-01", end_date: null, attendance_days: ["mon"], class: { subject: "english", is_active: true } }];
     h.state.tables.class_schedules = [
@@ -87,7 +112,7 @@ describe("설정 → 회차 화면 조회·확정", () => {
     // 시간표에서 사라져도 계획 갱신이 저장한 배분을 삭제하지 않는다.
     expect(await refreshPlannedTerms("2026-09")).toMatchObject({ ok: true, refreshed: 0 });
     expect(h.state.tables.invoice_session_terms[0].allocation_amount).toBe(300000);
-    expect(h.state.writes).toEqual([]);
+    expect(h.state.writes).toEqual([{ table: "invoice_session_terms", patch: { planned_sessions: 0 } }]);
   });
   it("소수 시수 확정은 출석부 기준을 저장하고 원 단위 금액으로 응답한다", async () => {
     const fd = new FormData(); fd.set("id", "term"); fd.set("sessions", "4.5"); fd.set("unitPrice", "31250");

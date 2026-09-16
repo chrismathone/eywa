@@ -1,4 +1,5 @@
 import type { ReceiptAllocationDraft, ReceiptLine } from "./receipt-allocation";
+import { isTuitionReceipt } from "./tuition-receipt";
 
 type RawLine = Record<string, unknown>;
 const raw = (value: unknown): RawLine => value && typeof value === "object" ? value as RawLine : {};
@@ -12,7 +13,7 @@ export function receiptGroupId(line: ReceiptLine): string | null {
 }
 export function canMergeReceipt(line: ReceiptLine): boolean {
   const source = raw(line.source);
-  return ["", "수업", "tuition", "수강료"].includes(line.kind)
+  return isTuitionReceipt(line.source)
     && ["amount", "discount", "points", "paid", "unpaid"].every((key) => {
       const value = source[key];
       return !(key in source) && !["amount", "paid", "unpaid"].includes(key)
@@ -35,7 +36,8 @@ export function remapReceiptDraft(before: ReceiptLine[], after: ReceiptLine[], d
 }
 
 export function enrollmentPeriodLabel(period: string, records: { start_date: string; end_date: string | null }[], today: string): string {
-  if (!records.length) return "등록 이력 확인 필요";
+  records = records.filter((r) => r.start_date.slice(0, 7) <= period && (!r.end_date || r.end_date >= `${period}-01`));
+  if (!records.length) return `${Number(period.slice(5, 7))}월 수강 없음`;
   const short = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
   return [...records].sort((a, b) => a.start_date.localeCompare(b.start_date)).map((r) => {
     const from = r.start_date < `${period}-01` ? `${period}-01` : r.start_date;

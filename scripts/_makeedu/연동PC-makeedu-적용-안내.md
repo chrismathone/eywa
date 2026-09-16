@@ -3,6 +3,23 @@
 > ClassNote 워커 zip 이관과 **같은 방식**입니다. 연동 PC(`C:\eywa-sync-pc`)는 git이 아니라 **파일 사본**이라,
 > 아래 파일들을 덮어써야 새 기능이 돕니다.
 
+## 2026-09-16 — 수납 환불 상세 수집
+
+이번 ZIP도 `scripts/_makeedu` 전체를 포함합니다. 기존 `C:\eywa-sync-pc`에 압축을 풀어 덮어쓰고, `.env.local`은 그대로 둡니다. 다음 수납 동기화부터 새 스크립트를 사용합니다.
+
+- `extract-table.cjs`(신규)와 `scrape.cjs`: 원 수납 바로 아래의 `환불1` 등 상세 행을 해당 수납에 연결합니다. 전체/부분 환불·금액·일자·방법을 `invoices.json`의 `invoiceRefunds`에 기록합니다. 원 청구 행수에는 환불 상세 행을 중복 합산하지 않습니다.
+- `import-invoices.cjs`: 항목별 `refunds`를 보존합니다. 원 청구·할인·실납부 합계는 그대로 두며, 웹앱의 배분·급여 기준은 전체환불 시 0원입니다. 부분환불은 기준액 확인 전 자동 배분을 보류합니다.
+- 환불 상세를 해석하지 못하면 해당 수납 수집을 중단하고 오류를 남깁니다. 0행으로 반영하거나 환불이 없다고 덮어쓰지 않습니다.
+- 개발 PC에서는 합성 DOM·DB 롤백 검증을 통과했습니다. 실제 사이트 확인은 로그인 설정이 있는 연동 PC에서 아래처럼 실행합니다. `--apply`가 없으므로 마지막 명령은 DB를 수정하지 않습니다.
+
+```powershell
+cd C:\eywa-sync-pc
+node --env-file=.env.local scripts/_makeedu/scrape.cjs --list=invoices
+node --env-file=.env.local scripts/_makeedu/import-invoices.cjs
+```
+
+스크랩/대조가 정상임을 확인한 뒤 웹앱의 `지금 동기화`를 실행합니다. DB에 이미 확인된 환불은 구 워커의 환불 없는 payload만으로 지워지지 않도록 보호됩니다.
+
 ## 무엇이 바뀌나
 
 | 파일 | 변화 |

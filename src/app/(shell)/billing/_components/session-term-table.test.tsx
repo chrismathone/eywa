@@ -7,6 +7,7 @@ import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-s
 import { confirmSessionTerm, unconfirmSessionTerm, confirmClassTerms } from "@/features/billing/session-terms/server/actions";
 import type { SessionTermActionState } from "@/features/billing/session-terms/server/actions";
 import { DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
+import { updateMonthlyTermSessions } from "@/features/billing/session-terms/server/monthly-sessions";
 
 const h = vi.hoisted(() => ({ refresh: vi.fn(), saved: null as null | ((message: RecordSavedMessage) => void) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
@@ -17,6 +18,7 @@ vi.mock("@/lib/realtime/record-channel", () => ({
 vi.mock("@/features/billing/session-terms/server/actions", () => ({
   confirmSessionTerm: vi.fn(), unconfirmSessionTerm: vi.fn(), confirmClassTerms: vi.fn(), refreshPlannedTerms: vi.fn(),
 }));
+vi.mock("@/features/billing/session-terms/server/monthly-sessions", () => ({ updateMonthlyTermSessions: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn() }));
 vi.mock("@/components/ui/drag-scroll-area", () => ({ DragScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
@@ -37,6 +39,41 @@ function SessionTermGroups(props: React.ComponentProps<typeof Table>) {
 beforeEach(() => vi.clearAllMocks());
 
 describe("회차 단가 선택", () => {
+  it("배분된 행도 해제 응답 직후 입력할 수 있고 재조회는 별도 작업으로 진행한다", async () => {
+    vi.useFakeTimers();
+    try {
+      const g = group("수학");
+      Object.assign(g.students[0], { confirmedSessions: 7, unitPrice: 21250, amount: 148750, allocatedAmount: 148750, invoiceHasAllocations: true });
+      vi.mocked(unconfirmSessionTerm).mockResolvedValueOnce({ ok: true, terms: [{ id: "수학", confirmedSessions: null, unitPrice: null, amount: null, pricingMode: "per_session", confirmedAt: null }] });
+      render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "해제" })));
+      expect(screen.getByRole("button", { name: "확정" })).toBeEnabled();
+      expect(screen.queryByText("배분 완료")).not.toBeInTheDocument();
+      expect(h.refresh).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(200));
+      expect(h.refresh).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+  it("미배분 필터에서 일괄 확정은 화면에 표시된 학생 ID만 보낸다", async () => {
+    vi.mocked(confirmClassTerms).mockResolvedValueOnce({ confirmed: 1, terms: [] });
+    render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" onlyUnallocated />);
+    fireEvent.change(screen.getByLabelText("수학반 반 회차"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByRole("button", { name: "이 반 일괄 확정" }));
+    await waitFor(() => expect(confirmClassTerms).toHaveBeenCalledWith("2026-09", "수학", 24000, 8, ["수학"]));
+  });
+  it("EiE 확정 시수만 수정해도 이전 월 금액을 유지한다", async () => {
+    const g = group("EiE", 290000);
+    Object.assign(g.students[0], { confirmedSessions: 39, unitPrice: 270000, amount: 270000, pricingMode: "monthly", confirmedAt: "2026-09-16" });
+    vi.mocked(updateMonthlyTermSessions).mockResolvedValueOnce({ terms: [{ id: "EiE", confirmedSessions: 15.5, unitPrice: 270000, amount: 270000, pricingMode: "monthly", confirmedAt: "2026-09-17" }] });
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByLabelText("EiE학생 월 정액 시수 수정"));
+    fireEvent.change(screen.getByLabelText("EiE학생 월 정액 확정 시수"), { target: { value: "15.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(screen.getByLabelText("EiE학생 월 정액 시수 수정")).toHaveTextContent("15.5"));
+    expect(updateMonthlyTermSessions).toHaveBeenCalledWith("EiE", 15.5, "2026-09-16");
+    expect(screen.getAllByText("270,000원").length).toBeGreaterThan(0);
+  });
   it("4.5시수 × 31,250원의 예상금액을 확정 전에 보여준다", () => {
     const g = group("수학"); g.students[0].plannedSessions = 4.5;
     render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);

@@ -83,6 +83,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       point: L.parseAmount(r[ci.point]), paid: L.parseAmount(r[ci.paid]), unpaid: L.parseAmount(r[ci.unpaid]),
       method: L.paymentMethod(r[ci.method]), card: L.txt(r[ci.card]), receipt: L.txt(r[ci.receipt]),
       discReason: L.txt(r[ci.discReason]), pdate: L.parseDate(r[ci.pdate]),
+      ...(data.invoiceRefunds && Object.hasOwn(data.invoiceRefunds, r.join("\u0001")) ? { refunds: data.invoiceRefunds[r.join("\u0001")] } : {}),
     });
   }
   console.log("file: invoices.json  lines:", lines.length, "| periods:", [...new Set(lines.map((l) => l.period))].sort().slice(-6));
@@ -186,6 +187,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       a.items.push({
         kind: l.gubun, description: l.item, amount: l.total, discount: l.discount, points: l.point,
         paid: l.paid, unpaid: l.unpaid, method: l.method, paidDate: l.pdate, receipt: l.receipt, dueDay: l.dueDay,
+        ...(l.refunds !== undefined ? { refunds: l.refunds } : {}),
       });
       a.kindAmt[l.gubun] = (a.kindAmt[l.gubun] || 0) + l.total;
       if (l.paid > 0 || l.method) {

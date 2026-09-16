@@ -25,6 +25,18 @@ describe("monthRange", () => {
 });
 
 describe("출석부 기준 계획 시수", () => {
+  it("설정이 비어 있어도 추석·대체공휴일과 추가 학원 휴무일을 제외한다", () => {
+    const e = enr({ subject: "english", schedules: [slot({ dayOfWeek: "thu" }), slot({ dayOfWeek: "fri" }), slot({ dayOfWeek: "sat" })] });
+    expect(planTermsForMonth("2026-09", [e], [])[0].plannedSessions).toBe(9);
+    expect(planTermsForMonth("2026-09", [e], ["2026-09-03"])[0].plannedSessions).toBe(8);
+    expect(planTermsForMonth("2026-08", [enr({ subject: "english", schedules: [slot()] })], [])[0].plannedSessions).toBe(4);
+  });
+  it("종강일 정정은 0시수이며 반 이동 당일은 이전 반에서 제외한다", () => {
+    const e = enr({ subject: "english", endDate: "2026-09-01", schedules: [slot({ dayOfWeek: "tue" })] });
+    expect(planTermsForMonth("2026-09", [e], [])[0].plannedSessions).toBe(1);
+    expect(planTermsForMonth("2026-09", [{ ...e, isTransferred: true }], [])).toEqual([]);
+    expect(planTermsForMonth("2026-09", [{ ...e, endDate: "2026-08-31" }], [])).toEqual([]);
+  });
   it("3시간 수업은 하루 1.5, 휴일 제외 3일이면 4.5", () => {
     expect(planTermsForMonth("2026-07", [enr({ schedules: [slot()] })], ["2026-07-06"])[0].plannedSessions).toBe(4.5);
   });

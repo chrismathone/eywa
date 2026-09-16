@@ -11,6 +11,7 @@ import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
 import Link from "next/link";
 import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
+import { needsReceiptAllocation } from "@/features/billing/session-terms/tuition-receipt";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -24,11 +25,13 @@ export async function SessionTermsFace({
   subject,
   q,
   page,
+  allocation,
 }: {
   period?: string;
   subject?: string;
   q?: string;
   page?: string;
+  allocation?: string;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
   const [view, settings] = await Promise.all([getSessionTermsView(p), getTenantSettings()]);
@@ -42,11 +45,14 @@ export async function SessionTermsFace({
 
   // 검색 = 학생명·반명(부분 일치). 페이저는 검색 결과 기준.
   const query = (q ?? "").trim();
-  const filtered = query
+  const searched = query
     ? bySubject.filter(
         (r) => r.studentName.includes(query) || (r.className ?? "").includes(query),
       )
     : bySubject;
+  const pendingOnly = allocation === "pending";
+  const pendingCount = searched.filter(needsReceiptAllocation).length;
+  const filtered = pendingOnly ? searched.filter(needsReceiptAllocation) : searched;
 
   // 반 단위 그룹핑 — 반별 일괄 확정(원장 지시). 학생명 정렬 유지된 채 반으로 묶고, 반 안은 학년·이름 순.
   const groupMap = new Map<string, ClassGroup>();
@@ -78,13 +84,14 @@ export async function SessionTermsFace({
     const qs = new URLSearchParams({ tab: "sessions", period: per });
     if (activeSubject) qs.set("subject", activeSubject);
     if (query) qs.set("q", query);
+    if (pendingOnly) qs.set("allocation", "pending");
     if (n > 1) qs.set("page", String(n));
     return `/billing?${qs.toString()}`;
   };
   const pageHref = (n: number) => hrefFor(p, n);
 
   return (
-    <SessionTermsState rows={filtered.map(({ id, confirmedSessions }) => ({ id, confirmedSessions }))}>
+    <SessionTermsState rows={filtered.map(({ id, confirmedSessions, invoiceId, invoiceHasAllocations }) => ({ id, confirmedSessions, invoiceId, invoiceHasAllocations }))}>
     <section className="space-y-4">
       {/* 툴바(지시서 §10) — 월 이동은 공용 BillingMonthNav(옛 h-8 text-xs 화살표 링크 대체) · 과목 칩 줄 → `과목: 전체` 라벨 ·
           상시 검색창 → 검색 토글 · Primary = '계획 갱신'(이 면의 본 동작) 하나. 🔴 툴바 카드 껍데기 없음. */}
@@ -102,6 +109,7 @@ export async function SessionTermsFace({
           />
         ) : null}
         <SearchToggle placeholder="학생명·반" defaultValue={query} />
+        <FilterSelect paramName="allocation" value={pendingOnly ? "pending" : ""} options={[{ value: "pending", label: `미배분만 보기 (${pendingCount})` }]} axisLabel="배분" ariaLabel="배분 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
         <span className="text-text-dim text-sm whitespace-nowrap">
           반 <span className="num">{allGroups.length}</span>개 · 확정{" "}
           <SessionTermsConfirmedCount />/<span className="num">{filtered.length}</span>건
@@ -137,7 +145,7 @@ export async function SessionTermsFace({
 
       {filtered.length === 0 ? (
         <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
-          {query ? (
+          {pendingOnly ? "배분이 필요한 항목이 없습니다." : query ? (
             <>“{query}” 검색 결과가 없습니다. 검색어를 조정해 보세요.</>
           ) : (
             <>
@@ -148,7 +156,7 @@ export async function SessionTermsFace({
         </div>
       ) : (
         <>
-          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} />
+          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} onlyUnallocated={pendingOnly} />
           <Pagination page={curPage} totalPages={totalPages} total={allGroups.length} hrefForPage={pageHref} />
         </>
       )}

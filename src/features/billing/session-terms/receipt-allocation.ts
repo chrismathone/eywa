@@ -1,4 +1,6 @@
 // 할인은 학부모 혜택이다. 반별 급여 기준의 배분 총액은 할인 전 청구액이다.
+import { isTuitionReceipt } from "./tuition-receipt";
+import { receiptRefundState, receiptSalaryAmount } from "./receipt-refund";
 export type ReceiptLine = { index: number; description: string; kind: string; amount: number; source: unknown };
 export type AllocationTerm = {
   id: string; amount: number | null; confirmedSessions: number | null;
@@ -34,7 +36,7 @@ export function receiptLines(raw: unknown): ReceiptLine[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((source, index) => {
     const line = (source ?? {}) as Record<string, unknown>;
-    return { index, description: String(line.description ?? line.name ?? ""), kind: String(line.kind ?? ""), amount: Math.round(Number(line.amount) || 0), source };
+    return { index, description: String(line.description ?? line.name ?? ""), kind: String(line.kind ?? ""), amount: receiptSalaryAmount(source) ?? 0, source };
   });
 }
 
@@ -74,7 +76,16 @@ export function effectiveAllocations(lines: ReceiptLine[], terms: AllocationTerm
   const out = new Map<string, number>();
   for (const [index, group] of groups) {
     const line = lines.find((row) => row.index === index);
-    if (!line || line.amount < 0) continue;
+    if (!line || line.amount < 0 || !isTuitionReceipt(line.source)) continue;
+    // 실제 전체환불은 이전에 저장한 양수 배분보다 우선한다. 다른 항목으로 바뀐 인덱스는 제외한다.
+    const identity = (value: unknown) => {
+      const s = (value ?? {}) as Record<string, unknown>;
+      return JSON.stringify([s.kind ?? "", s.description ?? s.name ?? "", s.classId ?? "", s.receiptGroupId ?? "", Number(s.amount)]);
+    };
+    if (receiptRefundState(line.source) === "full" && group.every((t) => identity(t.source) === identity(line.source))) {
+      for (const term of group) out.set(term.id, 0);
+      continue;
+    }
     if (group.some((term) => (term.confirmedSessions === null && term.amount !== null) || term.allocatedAmount === null || !Number.isSafeInteger(term.allocatedAmount) || term.allocatedAmount < 0 || term.baseAmount !== term.amount || !sameBill(term.source, line.source))) continue;
     if (group.reduce((sum, term) => sum + term.allocatedAmount!, 0) !== line.amount) continue;
     for (const term of group) out.set(term.id, term.allocatedAmount!);

@@ -5,6 +5,10 @@ import { classInvoiceAmount, type LineItemLike } from "../class-amount";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isEieMonthlyClass, sessionPriceOptions, type SessionPrice, type SessionPricingMode } from "@/features/billing/session-pricing";
 import { effectiveAllocations, receiptLines } from "../receipt-allocation";
+import { loadLivePlans, type PlanHistory } from "./live-plans";
+import { mergeHolidays } from "@/features/billing/tuition-calc";
+import { receiptRefundState, type ReceiptRefundState } from "../receipt-refund";
+import { receiptMatchesClass } from "../receipt-suggestion";
 
 /** 회차 확정 면 한 행 — 청구서×반(반마다 단가가 달라 합산 금지). subject는 raw key(라벨은 소비처가 buildSubjectMaps로). */
 export type SessionTermRow = {
@@ -28,6 +32,7 @@ export type SessionTermRow = {
   allocationStale?: boolean;
   allocationLineIndex?: number | null;
   invoiceHasAllocations?: boolean;
+  refundState?: ReceiptRefundState;
   note: string | null;
   // 참고 표시용 — 그 **반**의 청구액(line_items에서 반 매칭, 학생 전체 아님). 매칭 실패 시 null("—").
   // N2: 자동 일치화 금지 — 확정값(회차×단가)이 진실, 이 값은 makeedu 대조 힌트일 뿐.
@@ -35,6 +40,7 @@ export type SessionTermRow = {
 };
 
 export type SessionTermsView = {
+  enrollmentHistory?: PlanHistory[];
   rows: SessionTermRow[];
   invoiceCount: number; // 그 달 청구서 수(계획 갱신 대상 규모)
   confirmedCount: number;
@@ -47,9 +53,9 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
 
   const [invoices, settings] = await Promise.all([
     // ⚠️ 페이징에는 안정 정렬 필수 — 무순서 offset 페이징은 1000행 초과 시 중복/누락 위험(적대 리뷰 픽스).
-    fetchAllPaged<{ id: string; student_id: string; line_items: unknown }>((from, to) => {
+    fetchAllPaged<{ id: string; student_id: string; line_items: unknown; status: string }>((from, to) => {
       // void(makeedu 삭제분) 제외 — 회차 계획·검증의 대상 청구서는 수납 화면과 같은 집합이어야 한다.
-      const query = supabase.from("invoices").select("id, student_id, line_items").eq("period", period).neq("status", "void").order("id").range(from, to);
+      const query = supabase.from("invoices").select("id, student_id, line_items, status").eq("period", period).neq("status", "void").order("id").range(from, to);
       return invoiceId ? query.eq("id", invoiceId) : query;
     }),
     getTenantSettings(),
@@ -89,9 +95,9 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
   );
 
   const studentIds = [...new Set(invoices.map((i) => i.student_id))];
-  const students = await fetchInChunks<{ id: string; name: string; grade: string | null }>(studentIds, (chunk) =>
+  const [students, live] = await Promise.all([fetchInChunks<{ id: string; name: string; grade: string | null }>(studentIds, (chunk) =>
     supabase.from("students").select("id, name, grade").in("id", chunk),
-  );
+  ), loadLivePlans(supabase, period, studentIds, mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true))]);
   const studentById = new Map(students.map((s) => [s.id, s]));
   const allocated = new Map<string, number>();
   const invoicesWithAllocations = new Set(terms.filter((term) => term.allocation_line_index != null).map((term) => term.invoice_id));
@@ -112,6 +118,10 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
       const cls = Array.isArray(t.class) ? t.class[0] : t.class;
       const className = cls?.class_name ?? null;
       const lineItems = (Array.isArray(inv.line_items) ? inv.line_items : []) as LineItemLike[];
+      const matching = lineItems.filter((line) => receiptMatchesClass(line, { classId: t.class_id, className }));
+      const states = matching.map(receiptRefundState);
+      const fullyRefunded = inv.status === "refunded" || (states.length > 0 && states.every((s) => s === "full"));
+      const refundState: ReceiptRefundState = fullyRefunded ? "full" : lineItems.some((line) => receiptRefundState(line) === "partial") ? "partial" : states.some((s) => s !== "none") ? "mixed" : "none";
       return {
         id: t.id,
         invoiceId: t.invoice_id,
@@ -123,18 +133,19 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
         className,
         monthlyPrice: isEieMonthlyClass(t.subject, cls?.english_track) ? settings.billing.eieMonthlyPrice : null,
         pricingMode: t.pricing_mode ?? "per_session",
-        plannedSessions: t.planned_sessions === null ? null : Number(t.planned_sessions),
+        plannedSessions: t.class_id ? live.plans.get(inv.student_id)?.get(t.class_id) ?? 0 : t.planned_sessions === null ? null : Number(t.planned_sessions),
         confirmedSessions: t.confirmed_sessions === null ? null : Number(t.confirmed_sessions),
         unitPrice: t.unit_price === null ? null : Number(t.unit_price),
         amount: t.amount === null ? null : Number(t.amount),
         confirmedAt: t.confirmed_at,
         quantityBasis: t.quantity_basis ?? "days",
-        allocatedAmount: allocated.get(t.id) ?? null,
-        allocationStale: (t.allocation_line_index != null || (invoicesWithAllocations.has(t.invoice_id) && t.confirmed_sessions !== null)) && !allocated.has(t.id),
+        refundState,
+        allocatedAmount: fullyRefunded ? 0 : allocated.get(t.id) ?? null,
+        allocationStale: !fullyRefunded && (refundState === "partial" || ((t.allocation_line_index != null || (invoicesWithAllocations.has(t.invoice_id) && t.confirmed_sessions !== null)) && !allocated.has(t.id))),
         allocationLineIndex: t.allocation_line_index ?? null,
         invoiceHasAllocations: invoicesWithAllocations.has(t.invoice_id),
         note: t.note,
-        classAmount: className ? classInvoiceAmount(className, lineItems) : null,
+        classAmount: fullyRefunded ? 0 : className ? classInvoiceAmount(className, lineItems) : null,
       } satisfies SessionTermRow;
     })
     .filter((r): r is SessionTermRow => r !== null)
@@ -146,6 +157,7 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
     );
 
   return {
+    enrollmentHistory: live.history,
     rows,
     invoiceCount: invoices.length,
     confirmedCount: rows.filter((r) => r.confirmedSessions !== null).length,

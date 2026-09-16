@@ -104,7 +104,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       ) : effectiveTab === "refunds" ? (
         <RefundsFace sp={sp} />
       ) : effectiveTab === "sessions" ? (
-        <SessionTermsFace period={sp.period} subject={sp.subject} q={sp.q} page={sp.page} />
+        <SessionTermsFace period={sp.period} subject={sp.subject} q={sp.q} page={sp.page} allocation={sp.allocation} />
       ) : effectiveTab === "verify" ? (
         <SessionVerificationFace period={sp.period} subject={sp.subject} page={sp.page} />
       ) : effectiveTab === "payroll" ? (

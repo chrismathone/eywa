@@ -47,37 +47,7 @@ const LISTS = {
 
 // 페이지 내 실행: 가장 큰 테이블을 헤더+행배열로. 셀값 = select 선택값 > innerText > input.value.
 // (No 셀은 hidden input 토큰이 있어도 innerText='1013'이 우선 → 안전. 금액 input은 innerText 비어 input.value.)
-function EXTRACT() {
-  const tables = Array.from(document.querySelectorAll("table"));
-  let best = null,
-    br = 0;
-  for (const t of tables) {
-    const r = t.querySelectorAll("tbody tr").length;
-    if (r > br) {
-      br = r;
-      best = t;
-    }
-  }
-  if (!best) return { headers: [], rows: [] };
-  const headers = Array.from(best.querySelectorAll("thead th, thead td")).map((h) =>
-    (h.textContent || "").replace(/\s+/g, " ").trim(),
-  );
-  const rows = [];
-  for (const tr of best.querySelectorAll("tbody tr")) {
-    const cells = Array.from(tr.children).map((td) => {
-      const sel = td.querySelector("select");
-      if (sel) return (sel.options[sel.selectedIndex]?.text || "").trim();
-      let v = (td.innerText || "").replace(/\s+/g, " ").trim();
-      if (!v) {
-        const inp = td.querySelector("input");
-        if (inp) v = (inp.value || "").trim();
-      }
-      return v;
-    });
-    rows.push(cells);
-  }
-  return { headers, rows };
-}
+const { extractTable: EXTRACT } = require("./extract-table.cjs");
 
 /**
  * 상세수납 목록의 **화면 표시 설정을 우리 브라우저에 심는다**(makeedu 서버 상태는 건드리지 않는다).
@@ -316,9 +286,11 @@ async function scrapeList(page, key, cfg) {
 
   let headers = [];
   const all = [];
+  const invoiceRefunds = {};
   const seen = new Set();
   for (let p = 1; p <= 30; p++) {
-    const { headers: h, rows } = await safeEvaluate(page, EXTRACT);
+    const { headers: h, rows, invoiceRefunds: pageRefunds } = await safeEvaluate(page, EXTRACT);
+    Object.assign(invoiceRefunds, pageRefunds);
     if (h.length) headers = h;
     let added = 0;
     for (const r of rows) {
@@ -337,8 +309,9 @@ async function scrapeList(page, key, cfg) {
     if (added === 0 && (await next.count()) > 0) {
       await waitForStableTable(page);
       const retry = await safeEvaluate(page, EXTRACT);
+      Object.assign(invoiceRefunds, retry.invoiceRefunds);
       for (const r of retry.rows) {
-        const k = r.join("");
+        const k = r.join("\u0001");
         if (seen.has(k)) continue;
         seen.add(k);
         all.push(r);
@@ -350,7 +323,7 @@ async function scrapeList(page, key, cfg) {
     await page.waitForLoadState("networkidle").catch(() => {});
     await waitForStableTable(page); // 다음 페이지 정착 대기
   }
-  return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported, reportedSummary };
+  return { key, scrapedAt: new Date().toISOString(), headers, rows: all, totalReported, reportedSummary, ...(key === "invoices" ? { invoiceRefunds } : {}) };
 }
 
 /**
