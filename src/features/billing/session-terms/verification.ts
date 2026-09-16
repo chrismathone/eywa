@@ -2,7 +2,7 @@
 // 자동 수정 없음(N2): diff는 점검 신호일 뿐, 어느 쪽도 자동으로 맞추지 않는다.
 // docs/per-session-billing-plan.md "시수 검증(a)".
 
-export type VerificationStatus = "unconfirmed" | "matched" | "short" | "over";
+export type VerificationStatus = "unconfirmed" | "matched" | "short" | "over" | "monthly";
 
 export type VerificationVerdict = {
   status: VerificationStatus;
@@ -26,8 +26,10 @@ export type VerificationVerdict = {
 export function classifyVerification(
   confirmedSessions: number | null,
   actualConsumed: number,
+  pricingMode?: "per_session" | "monthly",
 ): VerificationVerdict {
   if (confirmedSessions === null) return { status: "unconfirmed", diff: null };
+  if (pricingMode === "monthly") return { status: "monthly", diff: null };
   const diff = Math.round((actualConsumed - confirmedSessions) * 10) / 10;
   if (diff === 0) return { status: "matched", diff: 0 };
   return { status: diff > 0 ? "over" : "short", diff };

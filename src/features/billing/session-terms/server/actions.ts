@@ -11,6 +11,7 @@ import { mergeHolidays } from "@/features/billing/tuition-calc";
 import { planTermsForMonth, monthRange, type PlanEnrollment } from "../plan";
 import { classifyVerification } from "../verification";
 import { maxCarryoverOut, maxCarryoverIn, validateCarryover } from "../carryover";
+import { isEieMonthlyClass, sessionPricingAmount, type SessionPricingMode } from "@/features/billing/session-pricing";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -160,7 +161,7 @@ export async function confirmClassTerms(
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (!monthRange(period)) return { error: "청구월 형식이 올바르지 않습니다" };
   if (!classId) return { error: "반이 지정되지 않았습니다" };
-  const unitPrice = Math.round(unitPriceRaw);
+  let unitPrice = Math.round(unitPriceRaw);
   if (!Number.isFinite(unitPrice) || unitPrice < 0) return { error: "회당 단가를 확인해 주세요" };
   const override =
     sessionsOverride != null && Number.isFinite(sessionsOverride) ? Math.round(sessionsOverride) : null;
@@ -168,6 +169,12 @@ export async function confirmClassTerms(
 
   const supabase = await createClient();
   // 이 반의 그 청구월 term만 — invoices inner join으로 period 필터(RLS가 테넌트 격리).
+  const { data: cls, error: classError } = await supabase.from("classes")
+    .select("subject, english_track").eq("id", classId).maybeSingle();
+  if (classError) return { error: classError.message };
+  if (!cls) return { error: "반을 찾을 수 없습니다" };
+  const pricingMode: SessionPricingMode = isEieMonthlyClass(cls.subject, cls.english_track) ? "monthly" : "per_session";
+  if (pricingMode === "monthly") unitPrice = (await getTenantSettings()).billing.eieMonthlyPrice;
   const { data, error } = await supabase
     .from("invoice_session_terms")
     .select("id, planned_sessions, invoice:invoice_id!inner ( period )")
@@ -175,14 +182,14 @@ export async function confirmClassTerms(
     .eq("invoice.period", period);
   if (error) return { error: error.message };
   // 회차 지정 시엔 계획 없어도 적용, 미지정 시엔 계획값 필요.
-  const targets = (data ?? []).filter((r) => override != null || r.planned_sessions !== null);
+  const targets = (data ?? []).filter((r) => pricingMode === "monthly" || override != null || r.planned_sessions !== null);
   if (targets.length === 0) return { error: "확정할 대상이 없습니다 — 계획 갱신을 먼저 눌러주세요" };
 
   const now = new Date().toISOString();
   // amount = 회차 × 단가라 회차값마다 다름 → 회차별로 묶어 batch update(반 학생은 소수라 청크 불필요).
   const byN = new Map<number, string[]>();
   for (const r of targets) {
-    const n = override != null ? override : (r.planned_sessions as number);
+    const n = override != null ? override : (r.planned_sessions as number | null) ?? 0;
     (byN.get(n) ?? byN.set(n, []).get(n)!).push(r.id as string);
   }
   let confirmed = 0;
@@ -192,7 +199,8 @@ export async function confirmClassTerms(
       .update({
         confirmed_sessions: n,
         unit_price: unitPrice,
-        amount: n * unitPrice,
+        pricing_mode: pricingMode,
+        amount: sessionPricingAmount(pricingMode, n, unitPrice),
         confirmed_by: user.id,
         confirmed_at: now,
       })
@@ -212,6 +220,7 @@ export async function confirmClassTerms(
       period,
       classId,
       unitPrice,
+      pricingMode,
       // 회차를 지정하면 전원 같은 값, 아니면 각자 계획 N(월중 등록·퇴원으로 반 안에서도 다르다).
       sessions: override,
       confirmedCount: confirmed,
@@ -221,7 +230,7 @@ export async function confirmClassTerms(
   return { confirmed };
 }
 
-/** 회차 확정 — 확정 N × 회당 단가를 스냅샷. 확정값만 청구값(N1). */
+/** 회차/월 금액 확정 — 회당은 N×단가, EiE는 설정의 월 금액과 단위를 스냅샷. */
 export async function confirmSessionTerm(
   _prev: SessionTermActionState,
   formData: FormData,
@@ -232,7 +241,7 @@ export async function confirmSessionTerm(
 
   const id = String(formData.get("id") ?? "").trim();
   const sessions = Number(String(formData.get("sessions") ?? "").trim());
-  const unitPrice = Number(String(formData.get("unitPrice") ?? "").replace(/[,\s]/g, ""));
+  let unitPrice = Number(String(formData.get("unitPrice") ?? "").replace(/[,\s]/g, ""));
   if (!id) return { error: "대상이 없습니다" };
   if (!Number.isInteger(sessions) || sessions < 0 || sessions > 99)
     return { error: "확정 회차는 0~99 사이 정수여야 합니다" };
@@ -241,17 +250,24 @@ export async function confirmSessionTerm(
   const supabase = await createClient();
   // 반·이전 확정값을 함께 읽는다 — classId는 뷰어가 반 이름으로 풀어 주고(감사로그 '대상'), 이전 확정값은
   // "얼마에서 얼마로 고쳤나"의 답이다(행에는 마지막 값만 남는다).
-  const { data: before } = await supabase
+  const { data: before, error: readError } = await supabase
     .from("invoice_session_terms")
-    .select("class_id, confirmed_sessions, unit_price")
+    .select("class_id, subject, confirmed_sessions, unit_price, pricing_mode, class:class_id ( english_track )")
     .eq("id", id)
     .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!before) return { error: "대상을 찾을 수 없습니다" };
+  const cls = Array.isArray(before.class) ? before.class[0] : before.class;
+  const pricingMode: SessionPricingMode = isEieMonthlyClass(before.subject, cls?.english_track) ? "monthly" : "per_session";
+  if (pricingMode === "monthly") unitPrice = (await getTenantSettings()).billing.eieMonthlyPrice;
+  const amount = sessionPricingAmount(pricingMode, sessions, unitPrice);
   const { error } = await supabase
     .from("invoice_session_terms")
     .update({
       confirmed_sessions: sessions,
       unit_price: unitPrice,
-      amount: sessions * unitPrice,
+      pricing_mode: pricingMode,
+      amount,
       confirmed_by: user.id,
       confirmed_at: new Date().toISOString(),
     })
@@ -267,10 +283,11 @@ export async function confirmSessionTerm(
       classId: before?.class_id ?? null,
       sessions,
       unitPrice,
-      amount: sessions * unitPrice,
+      amount,
+      pricingMode,
       // 재확정(이미 확정돼 있던 행을 고침)일 때만 이전값 — 최초 확정엔 실을 이전값이 없다.
       ...(hadPrev
-        ? { sessionsBefore: before!.confirmed_sessions, unitPriceBefore: Number(before!.unit_price ?? 0) }
+        ? { sessionsBefore: before!.confirmed_sessions, unitPriceBefore: Number(before!.unit_price ?? 0), pricingModeBefore: before!.pricing_mode }
         : {}),
     },
   });
@@ -358,12 +375,13 @@ export async function setSessionTermCarryover(
   const { data: term, error: termErr } = await supabase
     .from("invoice_session_terms")
     .select(
-      "id, invoice_id, class_id, confirmed_sessions, carryover_out, carryover_in, invoice:invoice_id ( student_id, period )",
+      "id, invoice_id, class_id, pricing_mode, confirmed_sessions, carryover_out, carryover_in, invoice:invoice_id ( student_id, period )",
     )
     .eq("id", id)
     .maybeSingle();
   if (termErr) return { error: termErr.message };
   if (!term) return { error: "대상을 찾을 수 없습니다" };
+  if (term.pricing_mode === "monthly") return { error: "월 고정 수강료는 회차를 이월하지 않습니다" };
   const out = rawOut === null ? (Number(term.carryover_out) || 0) : Number(String(rawOut).trim());
   const inn = rawIn === null ? (Number(term.carryover_in) || 0) : Number(String(rawIn).trim());
   const inv = (Array.isArray(term.invoice) ? term.invoice[0] : term.invoice) as

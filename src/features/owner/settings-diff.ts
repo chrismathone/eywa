@@ -63,6 +63,8 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
     latePolicy: "연체 안내",
     taxMode: "세금 처리",
     defaultMethod: "기본 결제수단",
+    sessionPrices: "공통 회당 단가",
+    eieMonthlyPrice: "EiE 월 수강료",
   },
   notifications: {
     alimtalkSenderKey: "알림톡 발신키",
@@ -221,6 +223,14 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
       continue;
     }
     if (Array.isArray(a) && Array.isArray(b)) {
+      if (section === "billing" && key === "sessionPrices") {
+        const prices = (rows: unknown[]) => rows
+          .filter(isObj)
+          .map((row) => `${showValue(row.price)}원${row.label ? ` (${showValue(row.label)})` : ""}`)
+          .join(" · ");
+        changes.push({ label, from: prices(b), to: prices(a) });
+        continue;
+      }
       changes.push(diffArray(label, b, a));
       continue;
     }

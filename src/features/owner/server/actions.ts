@@ -131,6 +131,7 @@ export async function saveOwnerSection(
   // 브랜드·과목·직급 등은 셸 전역에 쓰이므로 루트 레이아웃까지 갱신.
   revalidatePath("/", "layout");
   revalidatePath("/owner");
+  if (section === "billing") revalidatePath("/billing");
   // 보고서·AI 멘트 설정 면은 /lesson-reports로 이관됨 — 그 라우트도 명시 갱신해야 저장 직후 값이 반영된다
   // (안 하면 report 섹션 저장 후 화면이 stale하게 옛 값으로 되돌아 보임 — 예: '강사 문항수 변경 허용' 체크 풀림).
   revalidatePath("/lesson-reports");

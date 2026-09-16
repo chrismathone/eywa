@@ -34,10 +34,11 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
     class_id: string;
     confirmed_amount: number | string;
     actual_amount: number | string;
+    pricing_mode: string;
   }>((from, to) =>
     supabase
       .from("invoice_teacher_splits")
-      .select("teacher_id, teacher_name, class_id, confirmed_amount, actual_amount")
+      .select("teacher_id, teacher_name, class_id, confirmed_amount, actual_amount, pricing_mode")
       .eq("period", period)
       .order("id")
       .range(from, to),
@@ -143,7 +144,7 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
       className: classNameById.get(s.class_id) ?? null,
       manualGroup: setting?.salary_group ?? null,
       dowRatio:
-        (setting?.applies_dows?.length ?? 0) > 0
+        s.pricing_mode !== "monthly" && (setting?.applies_dows?.length ?? 0) > 0
           ? dowApportionRatio(sessionsByClass.get(s.class_id) ?? [], setting!.applies_dows, {
               scheduledDows: scheduledDowsByClass.get(s.class_id) ?? null,
             })

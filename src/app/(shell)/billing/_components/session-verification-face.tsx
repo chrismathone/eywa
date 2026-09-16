@@ -28,10 +28,11 @@ const STATUS_META: Record<VerificationStatus, { label: string; cell: string; chi
   short: { label: "부족", cell: "text-amber", chip: "bg-amber-soft text-amber border-amber/30" },
   over: { label: "초과", cell: "text-danger", chip: "bg-danger-soft text-danger border-danger/30" },
   unconfirmed: { label: "미확정", cell: "text-text-dim", chip: "bg-card text-text-dim border-line" },
+  monthly: { label: "월 고정", cell: "text-primary", chip: "bg-primary-soft text-primary border-primary/30" },
 };
 
 // 검증 우선 정렬 — 불일치(초과·부족)를 맨 위로, 그다음 미확정, 마지막 일치.
-const RANK: Record<VerificationStatus, number> = { over: 0, short: 0, unconfirmed: 1, matched: 2 };
+const RANK: Record<VerificationStatus, number> = { over: 0, short: 0, unconfirmed: 1, matched: 2, monthly: 2 };
 
 /**
  * 시수 검증 면 — 청구=N회 키스톤의 직접 소비자(로드맵 2단계). **쓰기 0**(조회 전용).
@@ -81,6 +82,7 @@ export async function SessionVerificationFace({
       unitPrice: r.unitPrice,
       amount: r.amount,
       actualConsumed: r.actualConsumed,
+      pricingMode: r.pricingMode,
     })),
   ).filter(hasAllocationSignal);
   const allocTotal = allocations.reduce(
@@ -125,7 +127,7 @@ export async function SessionVerificationFace({
           />
         ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
-          {(["over", "short", "matched", "unconfirmed"] as VerificationStatus[]).map((s) => (
+          {(["over", "short", "matched", "monthly", "unconfirmed"] as VerificationStatus[]).map((s) => (
             <span key={s} className={`rounded-full border px-2 py-0.5 ${STATUS_META[s].chip}`}>
               {STATUS_META[s].label} <span className="num font-bold">{c[s]}</span>
             </span>
@@ -136,6 +138,7 @@ export async function SessionVerificationFace({
       {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
       <FaceNote>
         <b>확정한 회차</b>(청구 기준)와 그 반의 <b>실제 소비 출석</b>(출석·지각·조퇴·보강)을 나란히 대조합니다.
+        {" "}EiE 월 고정은 확정한 월 금액을 정산 기준으로 쓰며 출석 회차로 금액을 바꾸지 않습니다.
         차이는 <span className="text-amber">부족</span>(청구보다 적게 나옴)·<span className="text-danger">초과</span>(더
         나옴) 신호일 뿐, 어느 값도 자동으로 맞추지 않습니다. 회차를 고치려면{" "}
         <Link href={`/billing?tab=sessions&period=${p}`} className="text-primary underline-offset-2 hover:underline">
