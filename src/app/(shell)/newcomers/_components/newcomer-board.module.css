@@ -70,8 +70,8 @@ button.metric:hover:not(:disabled) { background: #f8faff; }
 .table th.stickyName, .table th.stickySchool, .table th.stickySubject { z-index: 4; }
 .table .divider { border-right: 1px solid #dfe7f2; }
 .nameCell { display: flex; align-items: center; gap: 4px; }
-.studentName { color: #183c69; font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.studentName:hover { color: var(--nc-blue); text-decoration: underline; }
+.studentName { color: var(--foreground); font-size: var(--text-sm); font-weight: var(--font-weight-bold); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studentName:hover { text-decoration: underline; }
 .ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subject { display: block; color: #526580; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .date { font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; text-align: center; }
