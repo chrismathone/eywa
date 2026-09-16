@@ -334,6 +334,11 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    case "session_term_monthly_units": {
+      const sessions = num(m.sessions);
+      const amount = won(m.amountPreserved);
+      return join(sessions === null ? null : `확정 ${sessions}시수`, amount ? `월 금액 ${amount} 유지` : null);
+    }
     case "owner_settings_update": {
       const s = str(m.section);
       const label = s ? ((SECTION_LABELS as Record<string, string>)[s] ?? s) : null;

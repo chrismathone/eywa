@@ -365,6 +365,7 @@ export const AUDIT_ACTIONS = {
   session_terms_refresh: "청구 회차 계획 갱신",
   session_term_confirm_class: "청구 회차 반 일괄 확정",
   session_term_confirm: "청구 회차 확정",
+  session_term_monthly_units: "월 정액 수업 시수 수정",
   session_term_receipt_allocate: "수납 청구액 반별 배분",
   session_term_unconfirm: "청구 회차 확정 해제",
   session_term_carryover: "청구 회차 이월",
