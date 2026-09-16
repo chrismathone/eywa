@@ -66,6 +66,24 @@ beforeEach(() => {
 });
 
 describe("설정 → 회차 화면 조회·확정", () => {
+  it("소수 시수 확정은 출석부 기준을 저장하고 원 단위 금액으로 응답한다", async () => {
+    const fd = new FormData(); fd.set("id", "term"); fd.set("sessions", "4.5"); fd.set("unitPrice", "31250");
+    expect(await confirmSessionTerm(undefined, fd)).toMatchObject({ terms: [{ confirmedSessions: 4.5, amount: 140625, quantityBasis: "attendance_units" }] });
+    expect(h.state.tables.invoice_session_terms[0]).toMatchObject({ confirmed_sessions: 4.5, amount: 140625, quantity_basis: "attendance_units" });
+    expect(await confirmClassTerms("2026-09", "class", 31250, 1.5)).toMatchObject({ terms: [{ confirmedSessions: 1.5, amount: 46875 }] });
+    expect(await confirmClassTerms("2026-09", "class", 31250, 1.55)).toHaveProperty("error");
+  });
+  it("청구액 배분을 한 학생에게 새 확정 반이 생기면 미연결 반을 안내하고 분배 저장을 막는다", async () => {
+    const source = { kind: "수업", description: "수업료", amount: 300000, discount: 20000 };
+    h.state.tables.invoices[0].line_items = [source];
+    Object.assign(h.state.tables.invoice_session_terms[0], { allocation_line_index: 0, allocation_amount: 300000, allocation_source: source, allocation_base_amount: 327000 });
+    expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ allocatedAmount: 300000, allocationStale: false });
+    h.state.tables.invoice_session_terms.push({ ...h.state.tables.invoice_session_terms[0], id: "term2", class_id: "class2", allocation_line_index: null });
+    expect((await getSessionTermsView("2026-09")).rows.find((r) => r.id === "term2")).toMatchObject({ allocationStale: true });
+    const fd = new FormData(); fd.set("period", "2026-09");
+    expect(await saveTeacherSplits(undefined, fd)).toHaveProperty("error");
+    expect(h.state.writes).toEqual([]);
+  });
   it("설정 수정 뒤 다음 조회는 새 후보를 쓰고 이미 확정한 단가·금액은 보존한다", async () => {
     expect((await getSessionTermsView("2026-09")).catalog).toHaveLength(13);
     h.state.billing = { sessionPrices: [{ price: 26000, label: "공통" }] };

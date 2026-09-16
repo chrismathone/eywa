@@ -22,9 +22,14 @@ export const DEFAULT_SESSION_PRICES: SessionPrice[] = [
 
 export const DEFAULT_EIE_MONTHLY_PRICE = 270000;
 export type SessionPricingMode = "per_session" | "monthly";
+export type SessionQuantityBasis = "days" | "attendance_units";
+
+export function validSessionQuantity(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 99 && Math.abs(value * 10 - Math.round(value * 10)) < 1e-8;
+}
 
 export function sessionPricingAmount(mode: SessionPricingMode | undefined, sessions: number, price: number): number {
-  return mode === "monthly" ? price : sessions * price;
+  return mode === "monthly" ? price : Math.round(sessions * price);
 }
 
 /** 이름 추정 없이 반에 저장된 영어 프로그램 구분을 따른다. */

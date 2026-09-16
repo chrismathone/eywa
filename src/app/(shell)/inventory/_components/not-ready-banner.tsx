@@ -10,7 +10,7 @@ import type { TableStatus } from "@/features/inventory/server/queries";
 export function NotReadyBanner({ status, categoryStatus }: { status: TableStatus; categoryStatus?: TableStatus }) {
   if (status === "missing-table") {
     return (
-      <p className="border-amber bg-amber-soft/40 text-amber rounded-lg border-l-[3px] px-3 py-2 text-xs">
+      <p className="bg-amber-soft/40 text-amber rounded-lg px-3 py-2 text-xs">
         재고관리 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">0242a</span>를 적용해 주세요.
         적용 전엔 목록이 비어 있고 편집이 잠깁니다.
       </p>
@@ -18,14 +18,14 @@ export function NotReadyBanner({ status, categoryStatus }: { status: TableStatus
   }
   if (status === "failed") {
     return (
-      <p className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-2 text-xs">
+      <p className="bg-danger-soft/40 text-danger rounded-lg px-3 py-2 text-xs">
         재고 목록을 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요 — 그동안 편집은 잠깁니다.
       </p>
     );
   }
   if (categoryStatus === "missing-table") {
     return (
-      <p className="border-amber bg-amber-soft/40 text-amber rounded-lg border-l-[3px] px-3 py-2 text-xs">
+      <p className="bg-amber-soft/40 text-amber rounded-lg px-3 py-2 text-xs">
         자산 분류 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">0247a</span>를 적용해 주세요.
         그동안 분류는 기본 7종으로 보이고, 엑셀에 없는 분류를 적어도 <b>새 분류가 만들어지지 않습니다</b>(나머지 기능은 그대로).
       </p>
@@ -33,7 +33,7 @@ export function NotReadyBanner({ status, categoryStatus }: { status: TableStatus
   }
   if (categoryStatus === "failed") {
     return (
-      <p className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-2 text-xs">
+      <p className="bg-danger-soft/40 text-danger rounded-lg px-3 py-2 text-xs">
         자산 분류를 불러오지 못했습니다 — 기본 7종으로 보이고 있고, 엑셀의 새 분류 추가는 잠깁니다.
       </p>
     );

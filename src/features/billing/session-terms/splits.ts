@@ -1,5 +1,5 @@
 // 강사 분배(splits) 산출 — 순수 함수(Vitest + 골든마스터 N6).
-// 로드맵 2단계 (b): 확정 회차(청구 기준)와 실 소비 회차(실측 기준 = 출석 일수, 0263a)의 강사 귀속 금액을 행 단위로 산출해
+// 확정 시점의 단위로 청구·실측을 비교하고, 연결한 할인 전 청구액을 강사 귀속 금액으로 산출해
 // invoice_teacher_splits(0117a)에 스냅샷 저장한다. attendance 사고 이식 규칙:
 // - 돈은 **확정 행만**(N1): confirmed_sessions·unit_price 둘 다 있어야 분배 행이 된다(미확정=돈 아님).
 // - pricingMode=monthly(EiE)는 확정한 월 금액에 배분율을 적용한다. 출석 회차는 금액에 곱하지 않는다.
@@ -19,7 +19,8 @@ export type SplitRowInput = {
   confirmedSessions: number | null;
   unitPrice: number | null;
   amount: number | null; // 확정 시점 저장 금액(회차×단가) — 있으면 우선
-  actualConsumed: number; // 실 소비 **회차** = 출석 일수(0263a). 시수가 아니다.
+  actualConsumed: number; // 새 확정은 출석부 시수, 기존 확정은 일수 스냅샷 단위
+  allocatedAmount?: number | null; // 할인 전 수납 청구액을 연결한 반별 배분금액
 };
 
 export type ComputedSplit = {
@@ -31,9 +32,9 @@ export type ComputedSplit = {
   teacherName: string | null;
   confirmedSessions: number;
   unitPrice: number;
-  confirmedAmount: number; // 청구 기준 분배액 = amount ?? confirmed × unitPrice
-  actualUnits: number; // 실 소비 **회차**(옛 이름 — DB 컬럼 actual_units이자 골든 픽스처 키라 이름만 그대로 둔다)
-  actualAmount: number; // 실측 기준 분배액 = round(actual × unitPrice)
+  confirmedAmount: number; // 연결한 할인 전 배분금액 우선, 미연결은 확정금액
+  actualUnits: number; // 확정 시점 단위의 실 출석 소비량
+  actualAmount: number; // 배분금액 × 소비 비율, 미연결은 소비량 × 단가
   diffAmount: number; // 실측 − 청구 (음수 = 덜 소비 = 과청구 신호)
 };
 
@@ -46,9 +47,11 @@ export function computeSplitRows(rows: SplitRowInput[]): ComputedSplit[] {
   for (const r of rows) {
     if (r.confirmedSessions === null || r.unitPrice === null || !r.classId) continue;
     const actualUnits = Math.round(r.actualConsumed * 10) / 10;
-    const confirmedAmount = r.amount ?? sessionPricingAmount(r.pricingMode, r.confirmedSessions, r.unitPrice);
+    const confirmedAmount = r.allocatedAmount ?? r.amount ?? sessionPricingAmount(r.pricingMode, r.confirmedSessions, r.unitPrice);
     // EiE 월 정액은 출석 회차와 무관한 월 기준액에 배분율을 적용한다(원장 2026-09-16).
-    const actualAmount = r.pricingMode === "monthly" ? confirmedAmount : Math.round(actualUnits * r.unitPrice);
+    const actualAmount = r.pricingMode === "monthly" ? confirmedAmount : r.allocatedAmount != null
+      ? (r.confirmedSessions > 0 ? Math.round(confirmedAmount * actualUnits / r.confirmedSessions) : 0)
+      : Math.round(actualUnits * r.unitPrice);
     out.push({
       pricingMode: r.pricingMode ?? "per_session",
       invoiceId: r.invoiceId,

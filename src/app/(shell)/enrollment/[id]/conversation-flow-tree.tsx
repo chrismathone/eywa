@@ -7,17 +7,10 @@ import type { ConversationFlowNode } from "@/features/enrollment/server/queries"
 /** 상담 흐름 수형도 — 주제 트리(재귀). ijw ConversationFlowTree 이식(eywa 토큰). */
 
 // 깊이별 좌측 색밴드(semantic 톤) — 중첩 레벨 구분.
-const DEPTH_ACCENT = [
-  "border-primary/50",
-  "border-gold/50",
-  "border-rose/50",
-  "border-line-strong",
-];
 
 function TreeNode({ node, depth }: { node: ConversationFlowNode; depth: number }) {
   const hasChildren = !!node.children && node.children.length > 0;
   const [expanded, setExpanded] = useState(depth < 2);
-  const accent = DEPTH_ACCENT[depth % DEPTH_ACCENT.length];
 
   return (
     <div className={depth > 0 ? "relative ml-4" : ""}>
@@ -28,7 +21,7 @@ function TreeNode({ node, depth }: { node: ConversationFlowNode; depth: number }
         </>
       ) : null}
 
-      <div className={`bg-bg-soft/60 my-1.5 rounded-md border-l-2 px-3 py-2 ${accent}`}>
+      <div className="bg-bg-soft/60 my-1.5 rounded-md px-3 py-2">
         <div className="flex items-start gap-2">
           {hasChildren ? (
             <button

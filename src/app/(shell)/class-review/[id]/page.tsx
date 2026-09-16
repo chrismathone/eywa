@@ -323,7 +323,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
             {cols
               .filter((c) => c.sheet?.comment)
               .map((c) => (
-                <li key={c.slot} className="border-line border-l-2 pl-3">
+                <li key={c.slot}>
                   <p className="text-foreground text-xs font-bold">{c.label}</p>
                   <p className="mt-0.5 text-sm leading-relaxed whitespace-pre-wrap">{c.sheet!.comment}</p>
                 </li>

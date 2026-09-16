@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { monthRange, planTermsForMonth, type PlanEnrollment } from "./plan";
+import type { AutoUnitsSchedule } from "@/features/attendance/auto-units";
+
+const slot = (over: Partial<AutoUnitsSchedule> = {}): AutoUnitsSchedule => ({ dayOfWeek: "mon", startTime: "16:00", endTime: "19:00", validFrom: "2026-01-01", validTo: null, slotTeacherLabel: null, ...over });
 
 const enr = (over: Partial<PlanEnrollment>): PlanEnrollment => ({
   classId: "c1",
@@ -18,6 +21,25 @@ describe("monthRange", () => {
   it("잘못된 입력은 null", () => {
     expect(monthRange("2026-13")).toBeNull();
     expect(monthRange("불량")).toBeNull();
+  });
+});
+
+describe("출석부 기준 계획 시수", () => {
+  it("3시간 수업은 하루 1.5, 휴일 제외 3일이면 4.5", () => {
+    expect(planTermsForMonth("2026-07", [enr({ schedules: [slot()] })], ["2026-07-06"])[0].plannedSessions).toBe(4.5);
+  });
+  it("55분은 0.5이고 중복 등록 기간을 두 번 세지 않는다", () => {
+    const e = enr({ schedules: [slot({ endTime: "16:55" })] });
+    expect(planTermsForMonth("2026-07", [e, e], [])[0].plannedSessions).toBe(2);
+  });
+  it("시간표 유효기간의 변경과 LAB 제외를 출석부와 동일하게 적용", () => {
+    const schedules = [slot({ validTo: "2026-07-10" }), slot({ validFrom: "2026-07-11", endTime: "18:00" }), slot({ startTime: "19:00", endTime: "21:00", slotTeacherLabel: "LAB" })];
+    expect(planTermsForMonth("2026-07", [enr({ schedules })], [])[0].plannedSessions).toBe(4.5);
+  });
+  it("일반 영어는 하루의 여러 교시를 합산하며 같은 시작시간은 중복 제외", () => {
+    const first = slot({ endTime: "16:55" });
+    const second = slot({ startTime: "17:00", endTime: "17:55" });
+    expect(planTermsForMonth("2026-07", [enr({ subject: "english", schedules: [first, first, second] })], [])[0].plannedSessions).toBe(8);
   });
 });
 

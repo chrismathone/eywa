@@ -1,7 +1,8 @@
 // 계획 N(planned_sessions) 산출 — 순수 함수(Vitest 강제). 청구=N회 키스톤(docs/per-session-billing-plan.md).
 // ⚠️ 불변규칙 N1: 여기서 나온 값은 "계획"이지 "청구값"이 아니다 — 프리필·참고 전용, 확정은 사람이 한다.
 
-import { countSessions } from "../tuition-calc";
+import { autoUnitsOn, isAutoUnitsSubject, type AutoUnitsSchedule } from "@/features/attendance/auto-units";
+import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 
 export type PlanEnrollment = {
   classId: string;
@@ -9,6 +10,7 @@ export type PlanEnrollment = {
   startDate: string; // enrollment 시작 "YYYY-MM-DD"
   endDate: string | null; // 종료(null=계속)
   weekdays: number[]; // class_schedules 요일(0=일~6=토, 중복 제거)
+  schedules?: AutoUnitsSchedule[]; // 실제 시간·유효기간. 옛 동결 픽스처는 weekdays만 사용한다.
 };
 
 export type PlannedTerm = {
@@ -43,19 +45,31 @@ export function planTermsForMonth(
   const range = monthRange(period);
   if (!range) return [];
 
-  const byClass = new Map<string, { subject: string; sessions: number }>();
+  const holidaysSet = new Set(holidays);
+  const byClass = new Map<string, { subject: string; dates: Map<string, number> }>();
   for (const e of enrollments) {
-    if (e.weekdays.length === 0) continue;
+    if (e.weekdays.length === 0 && !e.schedules?.length) continue;
     const start = later(e.startDate, range.start);
     const end = e.endDate ? earlier(e.endDate, range.end) : range.end;
     if (start > end) continue; // 이 달과 안 겹침
-    const sessions = countSessions(start, end, e.weekdays, holidays);
-    if (sessions <= 0) continue;
-    const cur = byClass.get(e.classId) ?? byClass.set(e.classId, { subject: e.subject, sessions: 0 }).get(e.classId)!;
-    cur.sessions += sessions;
+    const dates = byClass.get(e.classId)?.dates ?? new Map<string, number>();
+    for (let day = new Date(`${start}T00:00:00Z`); day.toISOString().slice(0, 10) <= end; day.setUTCDate(day.getUTCDate() + 1)) {
+      const date = day.toISOString().slice(0, 10);
+      if (holidaysSet.has(date)) continue;
+      if (e.schedules) {
+        // 유효한 수업이 없는 날과 LAB·JJ 자리 배치는 수업량으로 만들지 않는다.
+        const slots = [...liveSlotMinutesOn(date, e.schedules).values()].filter((minutes) => minutes > 0);
+        if (slots.length === 0) continue;
+        // 수학은 출석부 시간 환산, 영어는 출석부와 같이 교시마다 기본 1시수.
+        dates.set(date, isAutoUnitsSubject(e.subject) ? autoUnitsOn(date, e.schedules) ?? 1 : e.subject === "english" ? slots.length : 1);
+      } else if (e.weekdays.includes(day.getUTCDay())) {
+        dates.set(date, 1);
+      }
+    }
+    if (dates.size > 0) byClass.set(e.classId, { subject: e.subject, dates });
   }
 
   return [...byClass.entries()]
-    .map(([classId, v]) => ({ subject: v.subject, classId, plannedSessions: v.sessions }))
+    .map(([classId, v]) => ({ subject: v.subject, classId, plannedSessions: Math.round([...v.dates.values()].reduce((sum, n) => sum + n, 0) * 10) / 10 }))
     .sort((a, b) => a.subject.localeCompare(b.subject) || a.classId.localeCompare(b.classId));
 }

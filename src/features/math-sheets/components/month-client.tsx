@@ -233,12 +233,12 @@ export function MonthClient({
       </div>
 
       {data.goalsStatus === "missing-table" ? (
-        <p className="border-amber bg-amber-soft/40 text-amber rounded-lg border-l-[3px] px-3 py-2 text-sm">
+        <p className="bg-amber-soft/40 text-amber rounded-lg px-3 py-2 text-sm">
           이 달 목표를 아직 저장할 수 없습니다 — 목표 표(0237a)가 적용되기 전입니다. 진도 · 미작성 · 정체는
           그대로 보입니다.
         </p>
       ) : data.goalsStatus === "failed" ? (
-        <p className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-2 text-sm">
+        <p className="bg-danger-soft/40 text-danger rounded-lg px-3 py-2 text-sm">
           이 달 목표를 불러오지 못했습니다. 목표와 어긋난 교재 경고가 이 화면에선 뜨지 않습니다 — 잠시 뒤
           새로고침해 주세요.
         </p>
@@ -248,7 +248,7 @@ export function MonthClient({
         <button
           type="button"
           onClick={() => setCopyMsg(null)}
-          className="border-line-strong bg-bg-soft text-text-dim cursor-pointer rounded-lg border-l-[3px] px-3 py-2 text-left text-sm"
+          className="bg-bg-soft text-text-dim cursor-pointer rounded-lg px-3 py-2 text-left text-sm"
         >
           {copyMsg} (눌러서 닫기)
         </button>
@@ -258,7 +258,7 @@ export function MonthClient({
         <button
           type="button"
           onClick={dismissError}
-          className="border-danger bg-danger-soft/50 text-danger cursor-pointer rounded-lg border-l-[3px] px-3 py-2 text-left text-sm"
+          className="bg-danger-soft/50 text-danger cursor-pointer rounded-lg px-3 py-2 text-left text-sm"
         >
           <EyIcon name="alert" size={12} className="mr-1 inline" />
           목표 저장 실패: {error} — 새로고침하면 마지막으로 저장된 값이 보입니다. (눌러서 닫기)

@@ -36,12 +36,12 @@ export function seatingToneNote(tone: SeatingTone, pending: number): string {
 }
 
 /**
- * 카드 바깥 — 지나간 **미입력**만 앰버 좌측 굵은 띠로 눈에 걸리게 한다.
- * 다 찍은 지난 수업은 그림자를 빼고 **테두리만** 남겨 조용히 물러난다.
+ * 카드 바깥 — 다 찍은 지난 수업만 그림자를 빼고 **테두리만** 남겨 조용히 물러난다.
+ * 🔴 **왼쪽 색 띠를 두르지 않는다**(원장 2026-09-16 *"왼쪽에 이렇게 테두리 같은거 표시하는거 싹다 제거해"*) —
+ *    지나간 미입력은 머리 줄이 이미 앰버 바탕 + `미입력 N`으로 말한다(같은 말을 띠로 한 번 더 했었다).
  * 🔴 흐리게(opacity) 만들지 않는다: 지나간 수업이야말로 조치 대상이다([[#105]]).
  */
 export function seatingCardClass(tone: SeatingTone): string {
-  if (tone === "past_pending") return "border-amber shadow-card border-l-4";
   if (tone === "past_done") return "border-line border";
   return "shadow-card";
 }

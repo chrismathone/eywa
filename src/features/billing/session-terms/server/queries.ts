@@ -4,6 +4,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { classInvoiceAmount, type LineItemLike } from "../class-amount";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isEieMonthlyClass, sessionPriceOptions, type SessionPrice, type SessionPricingMode } from "@/features/billing/session-pricing";
+import { effectiveAllocations, receiptLines } from "../receipt-allocation";
 
 /** 회차 확정 면 한 행 — 청구서×반(반마다 단가가 달라 합산 금지). subject는 raw key(라벨은 소비처가 buildSubjectMaps로). */
 export type SessionTermRow = {
@@ -22,6 +23,11 @@ export type SessionTermRow = {
   unitPrice: number | null;
   amount: number | null;
   confirmedAt: string | null;
+  quantityBasis?: "days" | "attendance_units";
+  allocatedAmount?: number | null;
+  allocationStale?: boolean;
+  allocationLineIndex?: number | null;
+  invoiceHasAllocations?: boolean;
   note: string | null;
   // 참고 표시용 — 그 **반**의 청구액(line_items에서 반 매칭, 학생 전체 아님). 매칭 실패 시 null("—").
   // N2: 자동 일치화 금지 — 확정값(회차×단가)이 진실, 이 값은 makeedu 대조 힌트일 뿐.
@@ -36,15 +42,16 @@ export type SessionTermsView = {
 };
 
 /** 청구월의 회차 확정 목록 + 회당 단가 프리셋. (B2: 전건은 fetchAllPaged / B3: .in은 청크 / B4: 병렬) */
-export async function getSessionTermsView(period: string): Promise<SessionTermsView> {
+export async function getSessionTermsView(period: string, invoiceId?: string): Promise<SessionTermsView> {
   const supabase = await createClient();
 
   const [invoices, settings] = await Promise.all([
     // ⚠️ 페이징에는 안정 정렬 필수 — 무순서 offset 페이징은 1000행 초과 시 중복/누락 위험(적대 리뷰 픽스).
-    fetchAllPaged<{ id: string; student_id: string; line_items: unknown }>((from, to) =>
+    fetchAllPaged<{ id: string; student_id: string; line_items: unknown }>((from, to) => {
       // void(makeedu 삭제분) 제외 — 회차 계획·검증의 대상 청구서는 수납 화면과 같은 집합이어야 한다.
-      supabase.from("invoices").select("id, student_id, line_items").eq("period", period).neq("status", "void").order("id").range(from, to),
-    ),
+      const query = supabase.from("invoices").select("id, student_id, line_items").eq("period", period).neq("status", "void").order("id").range(from, to);
+      return invoiceId ? query.eq("id", invoiceId) : query;
+    }),
     getTenantSettings(),
   ]);
   const catalog = sessionPriceOptions(settings.billing.sessionPrices);
@@ -65,13 +72,18 @@ export async function getSessionTermsView(period: string): Promise<SessionTermsV
     pricing_mode: SessionPricingMode;
     amount: number | null;
     confirmed_at: string | null;
+    quantity_basis: "days" | "attendance_units";
+    allocation_line_index: number | null;
+    allocation_amount: number | null;
+    allocation_source: unknown;
+    allocation_base_amount: number | null;
     note: string | null;
     class: { class_name?: string; english_track?: string | null } | { class_name?: string; english_track?: string | null }[] | null;
   }>(invoiceIds, (chunk) =>
     supabase
       .from("invoice_session_terms")
       .select(
-        "id, invoice_id, subject, class_id, planned_sessions, confirmed_sessions, unit_price, pricing_mode, amount, confirmed_at, note, class:class_id ( class_name, english_track )",
+        "id, invoice_id, subject, class_id, planned_sessions, confirmed_sessions, unit_price, pricing_mode, amount, confirmed_at, quantity_basis, allocation_line_index, allocation_amount, allocation_source, allocation_base_amount, note, class:class_id ( class_name, english_track )",
       )
       .in("invoice_id", chunk),
   );
@@ -81,9 +93,19 @@ export async function getSessionTermsView(period: string): Promise<SessionTermsV
     supabase.from("students").select("id, name, grade").in("id", chunk),
   );
   const studentById = new Map(students.map((s) => [s.id, s]));
+  const allocated = new Map<string, number>();
+  const invoicesWithAllocations = new Set(terms.filter((term) => term.allocation_line_index != null).map((term) => term.invoice_id));
+  for (const invoice of invoices) {
+    const values = effectiveAllocations(receiptLines(invoice.line_items), terms.filter((term) => term.invoice_id === invoice.id).map((term) => ({
+      id: term.id, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions,
+      lineIndex: term.allocation_line_index ?? null, allocatedAmount: term.allocation_amount == null ? null : Number(term.allocation_amount),
+      source: term.allocation_source, baseAmount: term.allocation_base_amount == null ? null : Number(term.allocation_base_amount),
+    })));
+    for (const [id, amount] of values) allocated.set(id, amount);
+  }
 
   const rows: SessionTermRow[] = terms
-    .map((t) => {
+    .map<SessionTermRow | null>((t) => {
       const inv = invoiceById.get(t.invoice_id);
       if (!inv) return null;
       const stu = studentById.get(inv.student_id);
@@ -101,11 +123,16 @@ export async function getSessionTermsView(period: string): Promise<SessionTermsV
         className,
         monthlyPrice: isEieMonthlyClass(t.subject, cls?.english_track) ? settings.billing.eieMonthlyPrice : null,
         pricingMode: t.pricing_mode ?? "per_session",
-        plannedSessions: t.planned_sessions,
-        confirmedSessions: t.confirmed_sessions,
+        plannedSessions: t.planned_sessions === null ? null : Number(t.planned_sessions),
+        confirmedSessions: t.confirmed_sessions === null ? null : Number(t.confirmed_sessions),
         unitPrice: t.unit_price === null ? null : Number(t.unit_price),
         amount: t.amount === null ? null : Number(t.amount),
         confirmedAt: t.confirmed_at,
+        quantityBasis: t.quantity_basis ?? "days",
+        allocatedAmount: allocated.get(t.id) ?? null,
+        allocationStale: (t.allocation_line_index != null || (invoicesWithAllocations.has(t.invoice_id) && t.confirmed_sessions !== null)) && !allocated.has(t.id),
+        allocationLineIndex: t.allocation_line_index ?? null,
+        invoiceHasAllocations: invoicesWithAllocations.has(t.invoice_id),
         note: t.note,
         classAmount: className ? classInvoiceAmount(className, lineItems) : null,
       } satisfies SessionTermRow;

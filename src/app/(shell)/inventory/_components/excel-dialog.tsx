@@ -154,7 +154,7 @@ function ConfirmCategories({
   onConfirm: () => void;
 }) {
   return (
-    <section role="alertdialog" aria-label="새 분류 확인" className="border-amber bg-amber-soft/40 rounded-lg border-l-[3px] px-3 py-2.5 text-xs">
+    <section role="alertdialog" aria-label="새 분류 확인" className="bg-amber-soft rounded-lg px-3 py-2.5 text-xs">
       <p className="font-bold">이 파일에 없던 분류 {plan.length}개가 새로 만들어집니다. 계속할까요?</p>
       <ul className="mt-1.5 flex flex-col gap-1">
         {plan.map((c) => (
@@ -215,9 +215,9 @@ function PreviewList({ title, rows }: { title: string; rows: ExcelPreviewRow[] }
 
 function ResultPanel({ result }: { result: NonNullable<ExcelImportResult> }) {
   const errors = result.errors ?? [];
-  const tone = errors.length > 0 ? "border-danger bg-danger-soft/40" : result.applied ? "border-green bg-green-soft/40" : "border-blue bg-blue-soft/40";
+  const tone = errors.length > 0 ? "bg-danger-soft text-danger" : result.applied ? "bg-green-soft" : "bg-blue-soft";
   return (
-    <section className={`rounded-lg border-l-[3px] px-3 py-2 text-xs ${tone}`}>
+    <section className={`rounded-lg px-3 py-2 text-xs ${tone}`}>
       <p className="font-bold">
         {errors.length > 0 ? `오류 ${errors.length}건 — 반영할 수 없습니다(고친 뒤 다시 올려 주세요)` : result.applied ? "반영했습니다" : "미리보기 — 아직 아무것도 바꾸지 않았습니다"}
         {result.mode ? ` · ${EXCEL_MODE_LABEL[result.mode]}` : ""}

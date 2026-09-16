@@ -23,9 +23,11 @@ describe("maxCarryoverOut — 넘길 수 있는 재원은 '그 달 부족분'뿐
   it("미확정이면 0", () => {
     expect(maxCarryoverOut(v(null, 7))).toBe(0);
   });
-  it("소수 시수는 내림 — 0.5 부족은 이월 불가", () => {
-    expect(maxCarryoverOut(v(8, 7.5))).toBe(0);
-    expect(maxCarryoverOut(v(8, 6.5))).toBe(1);
+  it("출석부의 0.5시수 부족분도 보존한다", () => {
+    expect(maxCarryoverOut(v(8, 7.5))).toBe(0.5);
+    expect(maxCarryoverOut(v(8, 6.5))).toBe(1.5);
+    expect(maxCarryoverIn(v(8, 8.5), 1.5)).toBe(0.5);
+    expect(payableSessions(9, 8, 0.5)).toBe(8.5);
   });
 });
 
@@ -109,8 +111,9 @@ describe("validateCarryover — 서버 재검증(마지막 방어선)", () => {
     const r = validateCarryover({ out: 3 }, { maxOut: 1, maxIn: 0 });
     expect(r.ok).toBe(false);
   });
-  it("음수·소수는 거절", () => {
+  it("음수·소수 두 자리부터 거절하고 소수 한 자리는 허용", () => {
     expect(validateCarryover({ out: -1 }, { maxOut: 5, maxIn: 5 }).ok).toBe(false);
-    expect(validateCarryover({ in: 1.5 }, { maxOut: 5, maxIn: 5 }).ok).toBe(false);
+    expect(validateCarryover({ in: 1.55 }, { maxOut: 5, maxIn: 5 }).ok).toBe(false);
+    expect(validateCarryover({ in: 1.5 }, { maxOut: 5, maxIn: 5 }).ok).toBe(true);
   });
 });

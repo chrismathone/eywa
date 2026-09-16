@@ -147,7 +147,7 @@
 .weekHeader > svg:last-child { margin-left: auto; flex: none; }
 .weekHeader > strong + svg { margin-left: 0; }
 .weekHeader:hover { background: #e1ecf9; }
-.dailySection li[data-selected-day="true"] { background: #fff0bc; color: #174481; box-shadow: inset 3px 0 #174481; font-weight: 700; }
+.dailySection li[data-selected-day="true"] { background: #fff0bc; color: #174481; font-weight: 700; }
 .weekSection ul { padding-inline: 6px; }
 .weekSection .emptyDetail { padding: 10px; }
 .dailySection li { border-top: 1px solid #eef2f7; }

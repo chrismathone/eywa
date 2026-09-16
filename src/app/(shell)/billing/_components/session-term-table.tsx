@@ -13,9 +13,10 @@ import {
 } from "@/features/billing/session-terms/server/actions";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import type { SessionPrice } from "@/features/billing/session-pricing";
+import { validSessionQuantity, sessionPricingAmount, type SessionPrice } from "@/features/billing/session-pricing";
 import { useBillingSettingsRefresh } from "@/features/billing/use-billing-settings-refresh";
 import { useSessionTermsState } from "./session-terms-state";
+import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -50,6 +51,7 @@ export function RefreshPlanButton({ period }: { period: string }) {
 
 /** 회차 없이 단가만 입력하면 미확정 학생의 입력칸만 채운다. */
 function ClassBatch({ period, group, listId, onPrice }: { period: string; group: ClassGroup; listId: string; onPrice: (price: string) => void }) {
+  const router = useRouter();
   const monthlyPrice = group.students[0]?.monthlyPrice ?? null;
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -68,8 +70,8 @@ function ClassBatch({ period, group, listId, onPrice }: { period: string; group:
     }
     const sRaw = String(fd.get("sessions") ?? "").trim();
     const sessions = sRaw === "" ? null : Number(sRaw);
-    if (sessions != null && (!Number.isInteger(sessions) || sessions < 0 || sessions > 99)) {
-      setErr("회차는 0~99 정수");
+    if (sessions != null && !validSessionQuantity(sessions)) {
+      setErr("시수는 0~99, 소수 한 자리까지");
       return;
     }
     setErr(null);
@@ -87,7 +89,10 @@ function ClassBatch({ period, group, listId, onPrice }: { period: string; group:
       try {
         const res = await confirmClassTerms(period, group.classId, price, sessions);
         if (res.error) setErr(res.error);
-        else if (res.terms) apply(res.terms);
+        else if (res.terms) {
+          apply(res.terms);
+          if (group.students.some((row) => row.invoiceHasAllocations)) router.refresh();
+        }
       } catch { setErr("확정하지 못했습니다. 다시 시도해 주세요"); }
     });
   }
@@ -99,17 +104,18 @@ function ClassBatch({ period, group, listId, onPrice }: { period: string; group:
           <input
             name="sessions"
             type="number"
+            step="any"
             min={0}
             max={99}
             disabled={pending}
-            placeholder="회차"
+            placeholder="시수"
             value={sessionsInput}
             onChange={(e) => { setSessionsInput(e.target.value); setNotice(null); }}
             aria-label={`${group.className} 반 회차`}
             title="비우면 단가만 입력하고 미확정 상태로 유지"
             className="border-input bg-background num w-14 rounded-md border px-2 py-1 text-center text-xs"
           />
-          <span className="text-text-faint text-xs">회 ×</span>
+          <span className="text-text-faint text-xs">시수 ×</span>
           <input
             name="unitPrice"
             type="text"
@@ -149,11 +155,15 @@ const NUM_INPUT = "border-input bg-background num rounded-md border px-2 py-1 te
  */
 type Draft = { sessions: string; price: string };
 function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft: Draft; onDraft: (draft: Draft) => void }) {
+  const router = useRouter();
   const { apply } = useSessionTermsState();
   const [state, confirmAction, confirming] = useActionState<SessionTermActionState, FormData>(async (prev, data) => {
     try {
       const result = await confirmSessionTerm(prev, data);
-      if (result?.terms) apply(result.terms);
+      if (result?.terms) {
+        apply(result.terms);
+        if (r.invoiceHasAllocations) router.refresh();
+      }
       return result;
     } catch { return { error: "확정하지 못했습니다. 다시 시도해 주세요" }; }
   }, undefined);
@@ -163,6 +173,7 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
       if (result?.terms) {
         onDraft({ sessions: String(r.confirmedSessions ?? r.plannedSessions ?? ""), price: String(r.unitPrice ?? "") });
         apply(result.terms);
+        if (r.invoiceHasAllocations) router.refresh();
       }
       return result;
     } catch { return { error: "해제하지 못했습니다. 다시 시도해 주세요" }; }
@@ -175,7 +186,7 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
   const n = draft.sessions.trim() === "" ? NaN : Number(draft.sessions);
   const priceText = draft.price.replace(/[,\s]/g, "");
   const price = priceText === "" ? NaN : Number(priceText);
-  const preview = monthly ? r.monthlyPrice : Number.isInteger(n) && n >= 0 && n <= 99 && Number.isFinite(price) && price >= 0 ? n * Math.round(price) : null;
+  const preview = monthly ? r.monthlyPrice : validSessionQuantity(n) && Number.isFinite(price) && price >= 0 ? sessionPricingAmount("per_session", n, Math.round(price)) : null;
 
   return (
     <tr aria-busy={pending} className="border-border hover:bg-accent/30 border-t transition-colors">
@@ -199,7 +210,7 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
       {/* 확정 회차 */}
       <td className="num px-3 py-2 text-center">
         {confirmed ? (
-          <span className="text-foreground font-bold">{monthly ? "월 고정" : r.confirmedSessions}</span>
+          <span className="text-foreground font-bold">{monthly ? "월 고정" : r.confirmedSessions}{!monthly && r.quantityBasis === "days" ? <span className="text-amber block text-xs font-normal">일수 기준 · 재확정 필요</span> : null}</span>
         ) : monthly ? (
           <span className="text-text-dim text-xs">월 고정</span>
         ) : (
@@ -207,6 +218,7 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
             form={fid}
             name="sessions"
             type="number"
+            step="any"
             min={0}
             max={99}
             value={draft.sessions}
@@ -250,13 +262,15 @@ function TermRow({ r, listId, draft, onDraft }: { r: Row; listId: string; draft:
         {confirmed && r.amount !== null ? won(r.amount) : preview !== null ? (
           <div aria-label={`${r.studentName} 예상금액`}>
             <span className="text-primary">{won(preview)}</span>
-            <div className="text-text-dim text-xs font-normal">예상 · {monthly ? "월 정액" : `${n}회 × ${won(Math.round(price))}`}</div>
+            <div className="text-text-dim text-xs font-normal">예상 · {monthly ? "월 정액" : `${n}시수 × ${won(Math.round(price))}`}</div>
           </div>
         ) : "—"}
       </td>
       {/* 이 반 청구액(참고) */}
       <td className="num text-muted-foreground px-3 py-2 text-right text-xs">
-        {r.classAmount !== null ? won(r.classAmount) : "—"}
+        {r.allocatedAmount != null ? <><b>{won(r.allocatedAmount)}</b><div>청구액 배분</div></> : r.classAmount !== null ? <>{won(r.classAmount)}<div>이름 매칭 참고</div></> : "—"}
+        {r.allocationStale ? <div className="text-amber">배분 재확인 필요</div> : null}
+        <div><ReceiptAllocationButton invoiceId={r.invoiceId} studentName={r.studentName} /></div>
       </td>
       {/* 개별 액션 */}
       <td className="px-3 py-2 text-right">
@@ -289,7 +303,7 @@ function plannedSummary(students: Row[]): string {
   if (vals.length === 0) return "—";
   const min = Math.min(...vals);
   const max = Math.max(...vals);
-  return min === max ? `${min}회` : `${min}~${max}회`;
+  return min === max ? `${min}시수` : `${min}~${max}시수`;
 }
 
 /**
@@ -333,8 +347,8 @@ export function SessionTermGroups({
           <tr className="bg-bg-soft text-text-dim text-sm">
             <th className="px-3 py-2 text-left font-bold">학년</th>
             <th className="px-3 py-2 text-left font-bold">이름</th>
-            <th className="px-3 py-2 text-center font-bold">계획</th>
-            <th className="px-3 py-2 text-center font-bold">확정</th>
+            <th className="px-3 py-2 text-center font-bold">계획 시수</th>
+            <th className="px-3 py-2 text-center font-bold">확정 시수</th>
             <th className="px-3 py-2 text-right font-bold">단가 / 월 금액</th>
             <th className="px-3 py-2 text-right font-bold">예상 / 확정 금액</th>
             <th className="px-3 py-2 text-right font-bold">이 반 청구액</th>

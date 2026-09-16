@@ -17,6 +17,7 @@ vi.mock("@/lib/realtime/record-channel", () => ({
 vi.mock("@/features/billing/session-terms/server/actions", () => ({
   confirmSessionTerm: vi.fn(), unconfirmSessionTerm: vi.fn(), confirmClassTerms: vi.fn(), refreshPlannedTerms: vi.fn(),
 }));
+vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn() }));
 vi.mock("@/components/ui/drag-scroll-area", () => ({ DragScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
 const group = (subjectLabel: string, monthlyPrice: number | null = null): ClassGroup => ({
@@ -36,6 +37,15 @@ function SessionTermGroups(props: React.ComponentProps<typeof Table>) {
 beforeEach(() => vi.clearAllMocks());
 
 describe("회차 단가 선택", () => {
+  it("4.5시수 × 31,250원의 예상금액을 확정 전에 보여준다", () => {
+    const g = group("수학"); g.students[0].plannedSessions = 4.5;
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("수학학생 회당 단가"), { target: { value: "31250" } });
+    expect(screen.getByLabelText("수학학생 예상금액")).toHaveTextContent("140,625원");
+    expect(screen.getByLabelText("수학학생 예상금액")).toHaveTextContent("4.5시수 × 31,250원");
+    expect(screen.getByLabelText("수학학생 확정 회차")).toBeValid();
+    expect(confirmSessionTerm).not.toHaveBeenCalled();
+  });
   it("수학·영어의 반 일괄·개별 입력이 모두 13개짜리 한 목록을 쓴다", () => {
     const { container } = render(<SessionTermGroups groups={[group("수학"), group("영어")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     const list = container.querySelector("datalist")!;
@@ -79,7 +89,7 @@ describe("회차 단가 선택", () => {
     expect(screen.getByLabelText("수학학생 회당 단가")).toHaveValue("21250");
     expect(screen.getByLabelText("수학학생 확정 회차")).toHaveValue(7);
     expect(screen.getByLabelText("수학학생 예상금액")).toHaveTextContent("148,750원");
-    expect(screen.getByLabelText("수학학생 예상금액")).toHaveTextContent("7회 × 21,250원");
+    expect(screen.getByLabelText("수학학생 예상금액")).toHaveTextContent("7시수 × 21,250원");
     expect(screen.getByTestId("confirmed-count")).toHaveTextContent("0");
     expect(confirmClassTerms).not.toHaveBeenCalled();
     expect(confirmSessionTerm).not.toHaveBeenCalled();
