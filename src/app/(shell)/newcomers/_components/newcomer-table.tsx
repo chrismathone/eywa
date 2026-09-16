@@ -17,10 +17,10 @@ export function TaskBadge({ row, item, today }: { row: NewcomerRow; item: Onboar
   return <span className={cellBoxClass(status, !!item.optional, left)}>{mark.kind === "check" ? <><EyIcon name="check" size={12} />완료</> : mark.text}</span>;
 }
 
-export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, selected, onToggle, onDetails, compact }: {
+export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, selected, onToggle, compact }: {
   rows: NewcomerRow[]; today: string; canWrite: boolean; checksKnown: boolean; busy: ReadonlySet<string>;
   selected: string | null; onToggle: (row: NewcomerRow, item: OnboardingItemDef) => void;
-  onDetails: (row: NewcomerRow, item?: OnboardingItemDef) => void; compact: boolean;
+  compact: boolean;
 }) {
   const { labelOf } = useSubjectMaps();
   return <table className={`${styles.table} ${compact ? styles.compact : ""}`}>
@@ -39,14 +39,13 @@ export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, select
       <td className={styles.stickyName}>
         <div className={styles.nameCell}>
           <WindowLink href={`/students/${row.studentId}?back=/newcomers`} className={styles.studentName} title={row.name}>{row.name}</WindowLink>
-          <button className={styles.detailButton} type="button" onClick={() => onDetails(row)} aria-label={`${row.name} ${row.subject ? labelOf(row.subject) : "과목 미정"} 업무 상세`} title="업무 상세"><EyIcon name="info" size={14} /></button>
         </div>
       </td>
       <td className={styles.stickySchool} title={schoolGradeLabel(row.school, row.grade)}><span className={styles.ellipsis}>{schoolGradeLabel(row.school, row.grade)}</span></td>
       <td className={styles.stickySubject}><span className={styles.subject} title={row.subject ? labelOf(row.subject) : "과목 미정"}>{row.subject ? labelOf(row.subject) : "미정"}</span></td>
       <td className={styles.date}>{shortDate(row.enrolledOn)}</td>
       <td className={`${styles.date} ${styles.divider}`}>{row.firstClassOn ? <span className={styles.firstClass} title={`첫 수업일 ${row.firstClassOn}`}>
-        {shortDate(row.firstClassOn)}<FirstClassDay date={row.firstClassOn} today={today} />
+        <time dateTime={row.firstClassOn}>{shortDate(row.firstClassOn)}</time><FirstClassDay date={row.firstClassOn} today={today} />
       </span> : <span className={styles.muted}>날짜 미정</span>}</td>
       {ONBOARDING_ITEMS.map(item => {
         const key = `${row.rowKey}|${item.key}`;

@@ -98,25 +98,45 @@ describe("badge / title", () => {
 describe("과목·반 필터 조합", () => {
   const classes = buildAttendanceClassOptions(
     [
-      { classId: "c-math", className: "중등수학A", subject: "math" },
-      { classId: "c-eng", className: "영DP", subject: "english" },
+      { classId: "c-math", className: "중등수학A", subject: "math", startDate: "2026-07-01", endDate: null },
+      { classId: "c-eng", className: "영DP", subject: "english", startDate: "2026-08-01", endDate: null },
+      { classId: "c-lab", className: "랩보충", subject: "math", startDate: "2026-07-01", endDate: "2026-08-01" },
     ],
-    [rec({ classId: "c-lab", className: "랩보충", subject: "math" })],
+    "2026-08-10",
   );
 
-  it("출결만 있는 반도 옵션에 남긴다", () => {
-    expect(classes.map((c) => c.value)).toEqual(["c-math", "c-eng", "c-lab"]);
+  it("지난 수업은 선택 목록에서 제외한다", () => {
+    expect(classes.map((c) => c.value)).toEqual(["c-math", "c-eng"]);
   });
 
   it("과목을 고르면 반 목록이 좁아진다", () => {
-    expect(classesForSubject(classes, "math").map((c) => c.value)).toEqual(["c-math", "c-lab"]);
+    expect(classesForSubject(classes, "math").map((c) => c.value)).toEqual(["c-math"]);
     expect(classesForSubject(classes, "english").map((c) => c.value)).toEqual(["c-eng"]);
-    expect(classesForSubject(classes, "all")).toHaveLength(3);
+    expect(classesForSubject(classes, "all")).toHaveLength(2);
   });
 
   it("좁아진 목록에 없는 반은 전체로 되돌린다", () => {
+    expect(effectiveClassFilter("c-lab", classes)).toBe("all");
     expect(effectiveClassFilter("c-eng", classesForSubject(classes, "math"))).toBe("all");
     expect(effectiveClassFilter("c-math", classesForSubject(classes, "math"))).toBe("c-math");
+  });
+
+  it("수강 종료·이동·시작일 경계는 기존 명단 규칙을 따른다", () => {
+    const base = { className: "수업", subject: "math", startDate: "2026-08-01", endDate: "2026-08-10" };
+    const options = buildAttendanceClassOptions([
+      { ...base, classId: "ends-today" },
+      { ...base, classId: "transferred-today", isTransferred: true },
+      { ...base, classId: "ends-later", endDate: "2026-08-20" },
+      { ...base, classId: "not-started", startDate: "2026-08-11", endDate: null },
+      { ...base, classId: "re-enrolled", endDate: "2026-08-05" },
+      { ...base, classId: "re-enrolled", startDate: "2026-08-10", endDate: null },
+    ], "2026-08-10");
+    expect(options.map(option => option.value)).toEqual(["ends-today", "ends-later", "re-enrolled"]);
+  });
+
+  it("목록에서 제외한 지난 수업의 출결은 전체 수업에서 계속 볼 수 있다", () => {
+    const old = rec({ classId: "c-lab", className: "랩보충" });
+    expect(filterAttendanceRecords([old], { subject: "all", classId: "all", ym: "2026-08" })).toEqual([old]);
   });
 
   it("과목 필터 옵션은 학원설정 라벨을 쓴다(키 노출 없음)", () => {

@@ -41,8 +41,8 @@ export function AttendanceView({
   const [view, setView] = useState<"calendar" | "list">("calendar");
 
   const subjectOptions = useMemo(
-    () => subjectFilterOptions(classes.map((c) => c.subject), subjects.labelOf),
-    [classes, subjects],
+    () => subjectFilterOptions([...classes.map((c) => c.subject), ...records.map((r) => r.subject)], subjects.labelOf),
+    [classes, records, subjects],
   );
   const classOptions = useMemo(() => classesForSubject(classes, subject), [classes, subject]);
   const activeClassId = effectiveClassFilter(classId, classOptions);

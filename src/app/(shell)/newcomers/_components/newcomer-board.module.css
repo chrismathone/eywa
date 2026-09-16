@@ -43,8 +43,8 @@ button.metric:hover:not(:disabled) { background: #f8faff; }
 .toolbar { padding: 5px 8px; flex: none; }
 .toolbarInner { width: 100%; gap: 10px; }
 .tabs { display: flex; align-items: center; gap: 4px; flex: none; }
-.tabs button { display: flex; align-items: center; gap: 5px; padding: 6px 10px; border: 1px solid transparent; border-radius: 6px; color: #526580; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.tabs button span { font-size: 10px; opacity: .8; font-variant-numeric: tabular-nums; }
+.tabs button { display: flex; align-items: center; justify-content: center; gap: 5px; height: 31px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; color: #526580; font-size: 12px; line-height: 1; font-weight: 600; white-space: nowrap; }
+.tabs button span { font-size: inherit; line-height: inherit; opacity: .8; font-variant-numeric: tabular-nums; }
 .tabs button:hover { background: #f1f5fc; }
 .tabs button[aria-pressed=true] { color: #fff; background: var(--nc-blue); box-shadow: 0 2px 4px #2563eb1a; }
 .tools { display: flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; }
@@ -72,12 +72,10 @@ button.metric:hover:not(:disabled) { background: #f8faff; }
 .nameCell { display: flex; align-items: center; gap: 4px; }
 .studentName { color: #183c69; font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studentName:hover { color: var(--nc-blue); text-decoration: underline; }
-.detailButton { color: #8395ac; padding: 3px; flex: none; margin-left: auto; border-radius: 4px; }
-.detailButton:hover { color: var(--nc-blue); background: #e8effb; }
 .ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subject { display: block; color: #526580; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .date { font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; text-align: center; }
-.firstClass { display: flex; align-items: baseline; justify-content: center; gap: 5px; }
+.firstClass { display: grid; grid-template-columns: 8ch minmax(0, 1fr); align-items: baseline; column-gap: 6px; text-align: left; }
 .firstDay { color: #627a99; font-size: 10px; font-weight: 600; }
 .optional { color: #6b7e97; background: #e5ebf3; border-radius: 3px; font-size: 9px; font-weight: 500; margin-left: 3px; padding: 1px 3px; }
 .table .taskCell { text-align: center; padding: 4px; }

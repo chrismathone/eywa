@@ -54,7 +54,7 @@ export function MonthCalendar({
                   {(byDay.get(d) ?? []).map((r) => (
                     <span
                       key={`${r.classId}-${r.slotStart ?? "all"}`}
-                      title={attendanceRecordTitle(r)}
+                      {...attendanceHoverProps(r)}
                       className={`truncate rounded-sm border px-1 py-0.5 text-xs font-medium ${attendanceStatusColor(r.status)}`}
                     >
                       {attendanceBadgeText(r)}
@@ -84,7 +84,7 @@ export function AttendanceList({ records }: { records: StudentAttendanceFull[] }
             {rows.map((r) => (
               <span
                 key={`${r.classId}-${r.slotStart ?? "all"}`}
-                {...tipProps(r.note)}
+                {...attendanceHoverProps(r)}
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${attendanceStatusColor(r.status)}`}
               >
                 <span>{attendanceStatusLabel(r.status)}</span>
@@ -111,4 +111,16 @@ function listExtra(r: StudentAttendanceFull) {
       <span className="opacity-80">{bits.join(" · ")}</span>
     </>
   );
+}
+
+/** 사유가 있는 기록은 달력·리스트 모두 공통 카드에서 원문을 확인한다. */
+function attendanceHoverProps(record: StudentAttendanceFull) {
+  if (!record.note?.trim()) return { title: attendanceRecordTitle(record) };
+  return {
+    ...tipProps({
+      title: attendanceBadgeText(record),
+      meta: record.date,
+      rows: [["출결 사유", record.note]],
+    }),
+  };
 }

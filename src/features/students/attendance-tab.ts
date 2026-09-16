@@ -1,5 +1,6 @@
 // 학생 상세 출결 탭 — 라벨·필터·달력 배치(순수). 과목 라벨은 학원설정 labelOf.
 import { seatKeyOf, SEAT_NAME } from "@/features/attendance/seat/seat";
+import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import {
   ATT_SOFT,
   ATT_SOFT_BORDER,
@@ -117,17 +118,14 @@ export function attendanceRecordTitle(r: AttendanceRecordLike): string {
 }
 
 export function buildAttendanceClassOptions(
-  enrollments: { classId: string; className: string; subject: string }[],
-  records: { classId: string; className: string; subject: string }[],
+  enrollments: readonly { classId: string; className: string; subject: string; startDate: string; endDate: string | null; isTransferred?: boolean }[],
+  today: string,
 ): AttendanceClassOption[] {
   const map = new Map<string, AttendanceClassOption>();
   for (const e of enrollments) {
+    // 현재 수강 명단만 선택지에 둔다. 과거 출결 기록은 별도로 모두 조회·표시한다.
+    if (!isEnrollmentOnRosterOn(e, today)) continue;
     if (e.classId) map.set(e.classId, { value: e.classId, label: e.className, subject: e.subject });
-  }
-  for (const r of records) {
-    if (r.classId && !map.has(r.classId)) {
-      map.set(r.classId, { value: r.classId, label: r.className, subject: r.subject });
-    }
   }
   return [...map.values()];
 }

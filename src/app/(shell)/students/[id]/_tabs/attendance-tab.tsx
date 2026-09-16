@@ -13,13 +13,14 @@ import { AttendanceView } from "./attendance-view";
 
 /** 출결 탭 — 전건을 받아 클라에서 월 달력/리스트·월 네비·과목/반 필터·통계. 위에 **앞으로의 보강 예약**(0264a)을 한 줄씩. */
 export async function AttendanceTab({ studentId }: { studentId: string }) {
+  const today = kstToday();
   const [records, enrollments, upcoming] = await Promise.all([
     getStudentAttendanceFull(studentId),
     getStudentEnrollments(studentId),
     // fail-soft — 표가 없거나 실패하면 빈 목록(출결 탭은 종전 그대로).
-    getStudentUpcomingReservations(studentId, kstToday()),
+    getStudentUpcomingReservations(studentId, today),
   ]);
-  const classes = buildAttendanceClassOptions(enrollments, records);
+  const classes = buildAttendanceClassOptions(enrollments, today);
   // 예약의 반 이름 — 수강 목록에 없는 반(옛 반·수강 종료 뒤 보강)일 수 있어 따로 읽는다.
   let classNameById = new Map<string, string>();
   if (upcoming.length > 0) {
