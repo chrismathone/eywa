@@ -101,7 +101,7 @@ export default async function McsLandingPage({
           cards={data.cards}
           className="text-text-dim num text-xs font-bold"
         />
-        {/* 숨은 기능(원장 2026-09-14) — 미리보기 명단·super_admin에게만 보이는 유일한 입구. 명단 밖은 페이지도 404. */}
+        {/* 숨은 기능 — 관리자 이상·super_admin에게만 보이는 유일한 입구(원장 2026-09-16 공개 범위 확대). 밖은 페이지도 404. */}
         {previewProgressMap ? (
           <EmbedLink href="/mcs/progress-map" className="text-primary ml-auto text-xs font-bold underline-offset-2 hover:underline">
             진도맵(시안) ›
