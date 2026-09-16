@@ -1,7 +1,7 @@
 "use client";
 import { Button } from "@/components/ui/button";
 
-import { Fragment, useActionState, useState, useTransition } from "react";
+import { Fragment, useActionState, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, RefreshCw } from "@/components/icons/eywa-icon-compat";
 import {
@@ -13,12 +13,14 @@ import {
 } from "@/features/billing/session-terms/server/actions";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import type { SessionPrice } from "@/features/billing/session-pricing";
+import { useBillingSettingsRefresh } from "@/features/billing/use-billing-settings-refresh";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 
 type Row = SessionTermRow & { subjectLabel: string };
-type Catalog = { id: string; name: string; price: number }[];
+type Catalog = SessionPrice[];
 export type ClassGroup = { classId: string; className: string; subjectLabel: string; students: Row[] };
 
 /** 계획 갱신 — 확정값은 보존하고 계획 N만 재산출(서버 액션이 보장). */
@@ -46,11 +48,11 @@ export function RefreshPlanButton({ period }: { period: string }) {
 }
 
 /** 반 일괄 확정 — 이 반 전원을 (회차 · 회당 단가)로 한 번에 확정. 회차 비우면 각자 계획 회차 적용. */
-function ClassBatch({ period, group, catalog }: { period: string; group: ClassGroup; catalog: Catalog }) {
+function ClassBatch({ period, group, listId }: { period: string; group: ClassGroup; listId: string }) {
+  const monthlyPrice = group.students[0]?.monthlyPrice ?? null;
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
-  const listId = `class-price-${group.classId}`;
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -77,39 +79,41 @@ function ClassBatch({ period, group, catalog }: { period: string; group: ClassGr
 
   return (
     <form onSubmit={submit} className="flex items-center gap-1.5">
-      <input
-        name="sessions"
-        type="number"
-        min={0}
-        max={99}
-        placeholder="계획"
-        aria-label={`${group.className} 반 회차`}
-        title="비우면 학생별 계획 회차를 그대로 적용"
-        className="border-input bg-background num w-14 rounded-md border px-2 py-1 text-center text-xs"
-      />
-      <span className="text-text-faint text-xs">회 ×</span>
-      <input
-        name="unitPrice"
-        type="text"
-        inputMode="numeric"
-        list={listId}
-        placeholder="단가"
-        aria-label={`${group.className} 회당 단가`}
-        className="border-input bg-background num w-24 rounded-md border px-2 py-1 text-right text-xs"
-      />
-      <datalist id={listId}>
-        {catalog.map((c) => (
-          <option key={c.id} value={c.price}>
-            {c.name}
-          </option>
-        ))}
-      </datalist>
+      {monthlyPrice === null ? (
+        <>
+          <input
+            name="sessions"
+            type="number"
+            min={0}
+            max={99}
+            placeholder="계획"
+            aria-label={`${group.className} 반 회차`}
+            title="비우면 학생별 계획 회차를 그대로 적용"
+            className="border-input bg-background num w-14 rounded-md border px-2 py-1 text-center text-xs"
+          />
+          <span className="text-text-faint text-xs">회 ×</span>
+          <input
+            name="unitPrice"
+            type="text"
+            inputMode="numeric"
+            list={listId}
+            placeholder="단가"
+            aria-label={`${group.className} 회당 단가`}
+            className="border-input bg-background num w-24 rounded-md border px-2 py-1 text-right text-xs"
+          />
+        </>
+      ) : (
+        <>
+          <input type="hidden" name="unitPrice" value={monthlyPrice} />
+          <span className="text-primary text-sm font-bold">EiE 월 {won(monthlyPrice)}</span>
+        </>
+      )}
       <button
         type="submit"
         disabled={pending}
         className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition disabled:opacity-50"
       >
-        {pending ? <Loader2 className="size-3 animate-spin" /> : null}이 반 일괄 확정
+        {pending ? <Loader2 className="size-3 animate-spin" /> : null}{monthlyPrice === null ? "이 반 일괄 확정" : "월 금액 일괄 확정"}
       </button>
       {err ? <span className="text-danger text-xs">{err}</span> : null}
     </form>
@@ -123,13 +127,13 @@ const NUM_INPUT = "border-input bg-background num rounded-md border px-2 py-1 te
  * 헤더와 정렬을 맞춘다(colSpan 금지 — 미확정 입력칸이 헤더 밖으로 밀리던 정렬버그). 미확정 행의 회차·단가
  * 입력과 확정 버튼은 서로 다른 `<td>`에 있지만 `form` 속성으로 한 폼에 묶인다(HTML5 폼 연결).
  */
-function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
+function TermRow({ r, listId }: { r: Row; listId: string }) {
   const [state, confirmAction] = useActionState<SessionTermActionState, FormData>(confirmSessionTerm, undefined);
   const [unState, unconfirmAction] = useActionState<SessionTermActionState, FormData>(unconfirmSessionTerm, undefined);
   const confirmed = r.confirmedSessions !== null;
+  const monthly = confirmed ? r.pricingMode === "monthly" : r.monthlyPrice !== null;
   const err = state?.error ?? unState?.error;
   const fid = `stf-${r.id}`;
-  const listId = `price-presets-${r.id}`;
 
   return (
     <tr className="border-border hover:bg-accent/30 border-t transition-colors">
@@ -140,6 +144,10 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
         {!confirmed ? (
           <form id={fid} action={confirmAction} className="hidden">
             <input type="hidden" name="id" value={r.id} />
+            {monthly ? <>
+              <input type="hidden" name="sessions" value={r.plannedSessions ?? 0} />
+              <input type="hidden" name="unitPrice" value={r.monthlyPrice!} />
+            </> : null}
           </form>
         ) : null}
       </td>
@@ -149,7 +157,9 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
       {/* 확정 회차 */}
       <td className="num px-3 py-2 text-center">
         {confirmed ? (
-          <span className="text-foreground font-bold">{r.confirmedSessions}</span>
+          <span className="text-foreground font-bold">{monthly ? "월 고정" : r.confirmedSessions}</span>
+        ) : monthly ? (
+          <span className="text-text-dim text-xs">월 고정</span>
         ) : (
           <input
             form={fid}
@@ -167,10 +177,12 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
       <td className="num px-3 py-2 text-right">
         {confirmed ? (
           r.unitPrice !== null ? (
-            won(r.unitPrice)
+            `${monthly ? "월 " : ""}${won(r.unitPrice)}`
           ) : (
             "—"
           )
+        ) : monthly ? (
+          <span title="회차를 곱하지 않는 월 수강료">월 {won(r.monthlyPrice!)}</span>
         ) : (
           <>
             <input
@@ -183,13 +195,6 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
               aria-label={`${r.studentName} 회당 단가`}
               className={`${NUM_INPUT} w-24 text-right`}
             />
-            <datalist id={listId}>
-              {catalog.map((c) => (
-                <option key={c.id} value={c.price}>
-                  {c.name}
-                </option>
-              ))}
-            </datalist>
           </>
         )}
       </td>
@@ -216,7 +221,7 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
             form={fid}
             className="border-line text-primary hover:bg-primary-soft inline-flex h-(--control-h) items-center rounded-md border px-2 text-sm font-bold"
           >
-            확정
+            {monthly ? "월 금액 확정" : "확정"}
           </button>
         )}
         {err ? <p className="text-danger mt-1 text-xs">{err}</p> : null}
@@ -248,8 +253,15 @@ export function SessionTermGroups({
   catalog: Catalog;
   period: string;
 }) {
+  const listId = useId();
+  useBillingSettingsRefresh();
   return (
     <DragScrollArea className="border-border rounded-2xl border">
+      <datalist id={listId}>
+        {catalog.map((c) => (
+          <option key={c.price} value={c.price} label={`${won(c.price)}${c.label ? ` · ${c.label}` : ""}`} />
+        ))}
+      </datalist>
       <table className="w-full min-w-[860px] table-fixed text-sm">
         <colgroup>
           <col className="w-[7%]" />
@@ -267,7 +279,7 @@ export function SessionTermGroups({
             <th className="px-3 py-2 text-left font-bold">이름</th>
             <th className="px-3 py-2 text-center font-bold">계획</th>
             <th className="px-3 py-2 text-center font-bold">확정</th>
-            <th className="px-3 py-2 text-right font-bold">회당 단가</th>
+            <th className="px-3 py-2 text-right font-bold">단가 / 월 금액</th>
             <th className="px-3 py-2 text-right font-bold">확정 금액</th>
             <th className="px-3 py-2 text-right font-bold">이 반 청구액</th>
             <th className="px-3 py-2 text-right font-bold">개별</th>
@@ -275,6 +287,7 @@ export function SessionTermGroups({
         </thead>
         <tbody>
           {groups.map((g) => {
+            const monthlyPrice = g.students[0]?.monthlyPrice ?? null;
             const confirmed = g.students.filter((s) => s.confirmedSessions !== null).length;
             const allDone = confirmed === g.students.length;
             return (
@@ -286,18 +299,16 @@ export function SessionTermGroups({
                         <span className="text-foreground text-sm font-bold">{g.className}</span>
                         <span className="text-text-dim text-xs">{g.subjectLabel}</span>
                         <span className="text-text-faint text-xs">
-                          · {g.students.length}명 · 계획 {plannedSummary(g.students)} · 확정{" "}
-                          <span className={allDone ? "text-chart-2" : "text-amber"}>
-                            {confirmed}/{g.students.length}
-                          </span>
+                          · {g.students.length}명 · 계획 {plannedSummary(g.students)}
+                          {monthlyPrice !== null ? " · 월 수강료" : ""} · 확정{" "}<span className={allDone ? "text-chart-2" : "text-amber"}>{confirmed}/{g.students.length}</span>
                         </span>
                       </div>
-                      <ClassBatch period={period} group={g} catalog={catalog} />
+                      <ClassBatch period={period} group={g} listId={listId} />
                     </div>
                   </td>
                 </tr>
                 {g.students.map((r) => (
-                  <TermRow key={r.id} r={r} catalog={catalog} />
+                  <TermRow key={r.id} r={r} listId={listId} />
                 ))}
               </Fragment>
             );

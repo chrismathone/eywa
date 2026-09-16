@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { GAP, RINGS, arcPath, midAngle, polar, weekAngles, withGap } from "../geometry";
-import { FOCUS_INK, HAIRLINE, STATUS_LABEL, TODAY_STROKE, WEEK_FILL, WEEK_INK } from "../palette";
+import { AFTER_END_FILL, AFTER_END_OPACITY, FOCUS_INK, HAIRLINE, STATUS_LABEL, TODAY_STROKE, WEEK_FILL, WEEK_INK } from "../palette";
 import { ringActive } from "../view-mode";
 import { useProgressMap } from "./map-state";
 import { RingOutline } from "./ring-outline";
@@ -29,24 +29,26 @@ export const MonthRing = memo(function MonthRing({ showYear = false }: { showYea
           const angles = weekAngles(year, m.month, w.index);
           if (!angles) return null;
           const [a0, a1] = withGap(angles, GAP.week);
+          // 종강 뒤 달의 주차 — 칸만 남기고 글자·클릭을 뺀다(연간 링과 같은 판정 한 곳: `m.afterEnd`).
+          const dead = m.afterEnd;
           const focused = year === view.year && focus.month === m.month && focus.week === w.index;
           const light = w.status === "no-plan" || w.status === "planned" || w.status === "none";
           const stroke = w.isCurrent ? TODAY_STROKE : light ? HAIRLINE : undefined;
           const lp = polar(LABEL_R, midAngle(angles));
           return (
-            <g key={`${m.month}-${w.index}`}>
+            <g key={`${m.month}-${w.index}`} opacity={dead ? AFTER_END_OPACITY : undefined}>
               <Segment
                 d={arcPath(RINGS.month[0], RINGS.month[1], a0, a1)}
-                fill={WEEK_FILL[w.status]}
+                fill={dead ? AFTER_END_FILL : WEEK_FILL[w.status]}
                 stroke={stroke}
                 strokeWidth={w.isCurrent ? CURRENT_STROKE_WIDTH : light ? 1 : 0}
                 dashed={w.isCurrent}
                 selected={focused}
-                label={`${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · ${STATUS_LABEL[w.status]} · ${w.pct}%`}
+                label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · 종강 이후` : `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · ${STATUS_LABEL[w.status]} · ${w.pct}%`}
                 target={{ kind: "week", month: m.month, week: w.index }}
-                onSelect={years.includes(year) ? () => selectWeek(m.month, w.index, year) : undefined}
+                onSelect={dead || !years.includes(year) ? undefined : () => selectWeek(m.month, w.index, year)}
               />
-              {angles[1] - angles[0] >= MIN_LABEL_SPAN ? (
+              {!dead && angles[1] - angles[0] >= MIN_LABEL_SPAN ? (
                 <ClockLabel x={lp.x} y={lp.y}><text
                   x={0}
                   y={0}

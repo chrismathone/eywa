@@ -7,6 +7,7 @@ import type { MapDisplay, PlanVsActual, StudentProgress, ViewMode } from "../mod
 import { planVsActual } from "../pace";
 import { availableYears, progressForYear } from "../years";
 import { monthPosition, periodAt } from "../continuous-timeline";
+import { courseEndMonth, isAfterCourseEnd } from "../course-end";
 
 /**
  * 진도맵 상태 — 학생 데이터 위의 선택 연도·보기 단위·초점. 실제 현재 위치는 연도 이동과 무관하게 유지한다.
@@ -50,6 +51,9 @@ export function ProgressMapSnapshot({ value, children }: { value: ProgressMapSta
 
 export function ProgressMapProvider({ progress: sourceProgress, children }: { progress: StudentProgress; children: ReactNode }) {
   const years = useMemo(() => availableYears(sourceProgress), [sourceProgress]);
+  // 🔴 종강 뒤 달은 **어느 경로로도** 고를 수 없다 — 링에서 감추는 것만으론 드릴다운·상세 목록·주차 드롭다운·
+  //    키보드가 그대로 들어간다(#77). 판정은 `course-end.ts` 한 곳이고, 로드맵이 없으면 아무것도 막지 않는다.
+  const endMonth = useMemo(() => courseEndMonth(sourceProgress), [sourceProgress]);
   const [year, setYear] = useState(sourceProgress.year);
   const progress = useMemo(() => progressForYear(sourceProgress, year), [sourceProgress, year]);
   const currentView = useMemo(() => buildYearView(sourceProgress), [sourceProgress]);
@@ -93,38 +97,44 @@ export function ProgressMapProvider({ progress: sourceProgress, children }: { pr
   }, [sourceProgress, years, setMode]);
   const selectPeriod = useCallback((nextYear: number, month: number) => {
     if (!years.includes(nextYear) || month < 1 || month > 12) return;
+    if (isAfterCourseEnd(endMonth, nextYear, month)) return;
     setYear(nextYear);
     setFocus({ month, week: 1, day: null });
     setMode("month");
-  }, [years, setMode]);
+  }, [years, endMonth, setMode]);
 
   const selectMonth = useCallback((month: number) => {
+    if (isAfterCourseEnd(endMonth, year, month)) return;
     // 월을 고르면 첫 주를 실제 초점으로 둔다. 링·주간 요약·일간 내용이 같은 주를 가리켜야 한다.
     setFocus({ month, week: 1, day: null });
     setMode("month");
-  }, [setMode]);
+  }, [endMonth, year, setMode]);
   const selectQuarter = useCallback(
     (q: 1 | 2 | 3 | 4) => {
+      // 석 달이 **모두** 종강 뒤인 분기만 막는다 — 종강이 낀 분기엔 아직 수업이 있다.
+      if ([0, 1, 2].every((i) => isAfterCourseEnd(endMonth, year, (q - 1) * 3 + 1 + i))) return;
       setFocus((f) => (Math.floor((f.month - 1) / 3) + 1 === q ? f : { month: (q - 1) * 3 + 1, week: null, day: null }));
       setMode("quarter");
     },
-    [setMode],
+    [endMonth, year, setMode],
   );
   const selectWeek = useCallback((month: number, week: number, nextYear?: number) => {
+    if (isAfterCourseEnd(endMonth, nextYear ?? year, month)) return;
     if (nextYear !== undefined) {
       if (!years.includes(nextYear)) return;
       setYear(nextYear);
     }
     setFocus({ month, week, day: null });
     setMode("week");
-  }, [years, setMode]);
+  }, [years, endMonth, year, setMode]);
   const selectDay = useCallback((date: string) => {
     const nextYear = Number(date.slice(0, 4));
     if (!years.includes(nextYear)) return;
+    if (isAfterCourseEnd(endMonth, nextYear, Number(date.slice(5, 7)))) return;
     setYear(nextYear);
     setFocus(focusOfDate(date));
     setMode("day");
-  }, [years, setMode]);
+  }, [years, endMonth, setMode]);
   const resetFocus = useCallback(() => {
     setYear(sourceProgress.year);
     setFocus(focusOfDate(sourceProgress.asOf, sourceProgress.year));

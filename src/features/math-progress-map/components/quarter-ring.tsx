@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { GAP, RINGS, arcPath, midAngle, polar, quarterAngles, withGap } from "../geometry";
-import { QUARTER_TINT } from "../palette";
+import { AFTER_END_OPACITY, QUARTER_TINT } from "../palette";
 import { useProgressMap } from "./map-state";
 import { Segment } from "./segment";
 import { FONT, SEGMENT_TEXT } from "./svg-consts";
@@ -23,15 +23,17 @@ export const QuarterRing = memo(function QuarterRing() {
         const tint = QUARTER_TINT[q.q];
         const lp = polar(RINGS.quarterLabel, midAngle(angles));
         const focused = mode === "quarter" && focusQ === q.q;
+        // 석 달이 **모두** 종강 뒤일 때만 — 종강이 낀 분기는 살아 있다.
+        const dead = q.afterEnd;
         return (
-          <g key={q.q}>
+          <g key={q.q} opacity={dead ? AFTER_END_OPACITY : undefined}>
             <Segment
               d={arcPath(RINGS.quarter[0], RINGS.quarter[1], a0, a1)}
               fill={tint.ink}
               selected={focused}
-              label={`${tint.label} · 진도율 ${q.pct}%`}
+              label={dead ? `${tint.label} · 종강 이후` : `${tint.label} · 진도율 ${q.pct}%`}
               target={{ kind: "quarter", q: q.q }}
-              onSelect={() => selectQuarter(q.q)}
+              onSelect={dead ? undefined : () => selectQuarter(q.q)}
               className={focused ? "" : "opacity-75"}
             />
             <ClockLabel x={lp.x} y={lp.y}><text

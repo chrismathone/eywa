@@ -2,11 +2,15 @@
 // 로드맵 2단계 (b): 확정 회차(청구 기준)와 실 소비 회차(실측 기준 = 출석 일수, 0263a)의 강사 귀속 금액을 행 단위로 산출해
 // invoice_teacher_splits(0117a)에 스냅샷 저장한다. attendance 사고 이식 규칙:
 // - 돈은 **확정 행만**(N1): confirmed_sessions·unit_price 둘 다 있어야 분배 행이 된다(미확정=돈 아님).
+// - pricingMode=monthly(EiE)는 확정한 월 금액에 배분율을 적용한다. 출석 회차는 금액에 곱하지 않는다.
 // - 청구 기준(confirmedAmount)과 실측 기준(actualAmount)은 **같은 청구의 두 표현** — 절대 합산 금지(R3, +60.5M 사고).
 //   diff는 점검 신호일 뿐 어느 쪽도 자동 수정하지 않는다(N2).
 // - 반 단위 유지: (invoice × class) 1행 — 같은 강사의 두 반을 한 행으로 합치지 않는다(attendance R2 hasAny 사고).
 
+import { sessionPricingAmount, type SessionPricingMode } from "../session-pricing";
+
 export type SplitRowInput = {
+  pricingMode?: SessionPricingMode;
   invoiceId: string;
   classId: string | null;
   subject: string;
@@ -19,6 +23,7 @@ export type SplitRowInput = {
 };
 
 export type ComputedSplit = {
+  pricingMode: SessionPricingMode;
   invoiceId: string;
   classId: string;
   subject: string;
@@ -41,9 +46,11 @@ export function computeSplitRows(rows: SplitRowInput[]): ComputedSplit[] {
   for (const r of rows) {
     if (r.confirmedSessions === null || r.unitPrice === null || !r.classId) continue;
     const actualUnits = Math.round(r.actualConsumed * 10) / 10;
-    const confirmedAmount = r.amount ?? r.confirmedSessions * r.unitPrice;
-    const actualAmount = Math.round(actualUnits * r.unitPrice);
+    const confirmedAmount = r.amount ?? sessionPricingAmount(r.pricingMode, r.confirmedSessions, r.unitPrice);
+    // EiE 월 정액은 출석 회차와 무관한 월 기준액에 배분율을 적용한다(원장 2026-09-16).
+    const actualAmount = r.pricingMode === "monthly" ? confirmedAmount : Math.round(actualUnits * r.unitPrice);
     out.push({
+      pricingMode: r.pricingMode ?? "per_session",
       invoiceId: r.invoiceId,
       classId: r.classId,
       subject: r.subject,
@@ -75,10 +82,10 @@ export type SplitTotals = {
  * 같은 함수로 산출해 비교한다.
  */
 export function splitsFingerprint(
-  rows: Pick<ComputedSplit, "invoiceId" | "classId" | "teacherId" | "confirmedAmount" | "actualAmount">[],
+  rows: (Pick<ComputedSplit, "invoiceId" | "classId" | "teacherId" | "confirmedAmount" | "actualAmount"> & { pricingMode?: SessionPricingMode })[],
 ): string {
   return rows
-    .map((r) => `${r.invoiceId}/${r.classId}/${r.teacherId ?? "-"}/${r.confirmedAmount}/${r.actualAmount}`)
+    .map((r) => `${r.invoiceId}/${r.classId}/${r.teacherId ?? "-"}/${r.confirmedAmount}/${r.actualAmount}/${r.pricingMode ?? "per_session"}`)
     .sort()
     .join("|");
 }

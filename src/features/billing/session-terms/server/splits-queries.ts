@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { splitsFingerprint } from "../splits";
+import type { SessionPricingMode } from "../../session-pricing";
 
 /** 저장된 분배 스냅샷 요약 — 시수 검증 면의 드리프트 표시용. null = 저장 이력 없음. */
 export type SplitsSnapshotStatus = {
@@ -23,11 +24,12 @@ export async function getTeacherSplitsStatus(period: string): Promise<SplitsSnap
     teacher_id: string | null;
     confirmed_amount: number | string;
     actual_amount: number | string;
+    pricing_mode: SessionPricingMode;
     created_at: string;
   }>((from, to) =>
     supabase
       .from("invoice_teacher_splits")
-      .select("invoice_id, class_id, teacher_id, confirmed_amount, actual_amount, created_at")
+      .select("invoice_id, class_id, teacher_id, confirmed_amount, actual_amount, pricing_mode, created_at")
       .eq("period", period)
       .order("id")
       .range(from, to),
@@ -40,6 +42,7 @@ export async function getTeacherSplitsStatus(period: string): Promise<SplitsSnap
     teacherId: r.teacher_id,
     confirmedAmount: Number(r.confirmed_amount) || 0,
     actualAmount: Number(r.actual_amount) || 0,
+    pricingMode: r.pricing_mode,
   }));
   const confirmedAmount = normalized.reduce((s, r) => s + r.confirmedAmount, 0);
   const actualAmount = normalized.reduce((s, r) => s + r.actualAmount, 0);

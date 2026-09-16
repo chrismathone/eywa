@@ -9,9 +9,9 @@ import { requireAccess } from "@/lib/auth/require-access";
 export const metadata: Metadata = { title: "수학 학습 진도맵 — eywa" };
 
 /**
- * 수학 학습 진도맵(시안) — **숨은 기능**(원장 2026-09-14: *"본서버에 적용하더라도 숨겨진 기능으로 st2000423@gmail.com
- * 계정에게만 바로가기"*). 사이드바·메뉴에 없고, MCS 랜딩 머리의 링크와 직접 주소로만 열린다.
- * 게이트 둘: ① 수학 강사 시트 권한(`mcs`) ② 미리보기 명단(`canPreviewProgressMap`, super_admin 통과) — 명단 밖은 404.
+ * 수학 학습 진도맵(시안) — **숨은 기능**(원장 2026-09-14). 공개 범위는 2026-09-16에 **관리자 이상**으로 넓혔다
+ * (*"진도맵 시안을 모든 관리자이상에게 공개"* — 그전엔 계정 하나). 사이드바·메뉴·팰릿에 없고, MCS 랜딩 머리의 링크와 직접 주소로만 열린다.
+ * 게이트 둘: ① 수학 강사 시트 권한(`mcs`) ② 공개 범위(`canPreviewProgressMap`, super_admin 통과) — 밖은 404.
  * 데이터는 아직 **샘플**(김민준, 2026-09-16 기준)이다 — 실데이터 어댑터는 후속.
  */
 export default async function ProgressMapPage() {
