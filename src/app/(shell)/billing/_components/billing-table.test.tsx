@@ -57,6 +57,20 @@ const single = (): InvoiceRow =>
   });
 
 describe("BillingTable — 접힘이 기본", () => {
+  it("병합 금액은 한 번만 합산하고 원본 수납일·금액을 펼쳐 볼 수 있다", () => {
+    const sources = [
+      { kind: "수업", description: "심화", amount: 68000, paid: 68000, unpaid: 0, paidDate: "2026-08-25", method: "card" },
+      { kind: "수업", description: "심화", amount: 107000, paid: 107000, unpaid: 0, paidDate: "2026-08-02" },
+    ];
+    render(<BillingTable rows={[row({ amountTotal: 175000, amountPaid: 175000, amountDiscount: 0,
+      lineItems: [{ kind: "수업", description: "심화", amount: 175000, paid: 175000, unpaid: 0, sourceItems: sources }] })]} />);
+    const summary = screen.getByText("원본 수납 2건");
+    expect(summary.closest("details")).toBeTruthy();
+    expect(screen.getByText(/2026-08-25 · 카드/)).toBeTruthy();
+    expect(screen.getByText(/2026-08-02 · 결제수단 없음/)).toBeTruthy();
+    expect(screen.queryByText("350,000원")).toBeNull();
+    expect(screen.getAllByText("175,000원").length).toBeGreaterThan(0);
+  });
   it("기본은 접힘 — 세부 항목명은 안 보이고 합계만 보인다", () => {
     render(<BillingTable rows={[row()]} />);
     expect(screen.queryByText("중등M 개별 BS3R")).toBeNull();

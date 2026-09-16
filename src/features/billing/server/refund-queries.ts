@@ -1,4 +1,5 @@
 import "server-only";
+import { receiptHistoryLines } from "../invoice-line-items";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -100,7 +101,7 @@ type RawInvoice = {
 
 function toPrefillLines(raw: unknown): RefundPrefillInvoice["lineItems"] {
   if (!Array.isArray(raw)) return [];
-  return raw.map((v) => {
+  return receiptHistoryLines(raw).map((v) => {
     const li = (v ?? {}) as Record<string, unknown>;
     const num = (x: unknown) => (x === undefined || x === null ? undefined : Number(x));
     return {
