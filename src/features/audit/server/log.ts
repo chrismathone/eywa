@@ -14,6 +14,7 @@ export const AUDIT_ACTIONS = {
   integration_sheets_toggle: "구글 시트 내보내기 토글",
   integration_sheet_target: "구글 시트 대상 지정",
   integration_sync_now: "makeedu 지금 동기화",
+  makeedu_paid_recovery: "수납 동기화 오류 복구",
   sheets_sync_now: "구글 시트 내보내기 실행",
   intake_push_enqueue: "makeedu 상담 역동기화",
   kiosk_device_register: "키오스크 기기 등록",

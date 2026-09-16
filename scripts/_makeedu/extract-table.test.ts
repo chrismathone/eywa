@@ -74,3 +74,11 @@ it("서로 모순된 환불 유형은 전체환불로 단정하지 않는다", (
   table(parent("학생", 1) + refund().replace("환불일자:", '<select><option>부분환불</option></select>환불일자:'));
   expect(() => extractTable()).toThrow("확인 불가: 전체/부분 환불 구분");
 });
+it("화면에 숨겨진 텍스트는 수납 금액 입력값보다 우선하지 않는다", () => {
+  table(parent("학생", 1).replace('<input value="312,000">', '<span style="display:none">0</span><input value="312,000">'));
+  const cell = document.querySelector("tbody td:last-child")!;
+  // Chromium innerText excludes the hidden helper; textContent contains "0".
+  Object.defineProperty(cell, "innerText", { value: "", configurable: true });
+  expect(cell.textContent).toBe("0");
+  expect(extractTable().rows[0].at(-1)).toBe("312,000");
+});

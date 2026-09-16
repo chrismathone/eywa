@@ -38,7 +38,8 @@ function extractTable() {
     const cells = Array.from(tr.children, (td) => {
       const sel = td.querySelector("select");
       if (sel) return clean(sel.options[sel.selectedIndex]?.text);
-      return clean(td.innerText || td.textContent) || clean(td.querySelector("input")?.value);
+      // Hidden display helpers must never override the actual money input.
+      return clean(td.innerText) || clean(td.querySelector("input")?.value);
     });
     const prefix = clean(Array.from(tr.children).slice(0, 3).map((td) => td.textContent).join(" "));
     if (invoiceTable && /^[└ㄴ↳\s]*환\s*불\s*\d+/.test(prefix)) {

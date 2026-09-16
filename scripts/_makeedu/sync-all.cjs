@@ -167,6 +167,9 @@ async function finishRun(status, { failed = [], error = null, reasons = {} } = {
   const failed = [];
   for (const [domain, file] of IMPORTERS) {
     try {
+      if (domain === "textbook_checks" && failed.some((f) => f.domain === "invoices")) {
+        throw new Error("수납 수집·검증 실패로 교재 자동 체크도 중단합니다");
+      }
       run(domain, file, flags);
     } catch (e) {
       const reason = ((e && e.message) || String(e)).slice(0, 300);

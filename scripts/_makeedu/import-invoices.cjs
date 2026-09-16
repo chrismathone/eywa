@@ -237,6 +237,13 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       scrapedLines: lines.length,
     });
     console.log(`외부 대조: ${S.externalSummary(external)}`);
+    if (external.available && !external.ok) {
+      const msg = `${S.externalSummary(external)} — 수납 저장을 중단합니다. 기존 청구·납부 기록은 변경하지 않았습니다.`;
+      console.error(`✖ ${msg}`);
+      if (APPLY && !ONLY_PAIRS) await L.recordSync(sql, tenantId, "invoices", null, "error", msg);
+      process.exitCode = 1;
+      return;
+    }
     // 매칭이 나쁘면 합계가 맞아도 개별 '부재'는 못 믿는다 — 두 조건이 함께 서야 검증이다.
     const unmatchedRatio = lines.length ? unmatchedLines.length / lines.length : 0;
     const scrapeVerified = external.ok && unmatchedRatio <= S.STALE_MAX_UNMATCHED_RATIO && !truncation;

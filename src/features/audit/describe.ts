@@ -376,6 +376,10 @@ export function auditDetail(
     }
     case "integration_sync_now":
       return "지금 동기화 실행";
+    case "makeedu_paid_recovery": {
+      const count = num(m.count);
+      return count === null ? "수납 입력값 복구" : `수납 ${count}건 복구 · 환불·확정·배분값 보존`;
+    }
     case "sheets_sync_now": {
       const rows = num(m.rows);
       return rows === null ? "시트 내보내기 실행" : `시트 내보내기 실행 (${rows.toLocaleString("ko-KR")}행)`;
