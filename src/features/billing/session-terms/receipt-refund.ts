@@ -1,6 +1,11 @@
 export type ReceiptRefundState = "none" | "full" | "partial" | "mixed";
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" ? value as Record<string, unknown> : {};
 
+export function receiptOriginalItems(value: unknown): unknown[] {
+  const row = record(value);
+  return Array.isArray(row.sourceItems) && row.sourceItems.length ? row.sourceItems.flatMap(receiptOriginalItems) : [value];
+}
+
 /** 전체환불은 할인 전 급여 기준도 0. 부분환불은 할인 귀속을 추정하지 않고 재확인한다. */
 export function receiptRefundState(value: unknown): ReceiptRefundState {
   const row = record(value);

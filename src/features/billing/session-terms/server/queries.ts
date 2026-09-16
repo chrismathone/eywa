@@ -7,7 +7,7 @@ import { isEieMonthlyClass, sessionPriceOptions, type SessionPrice, type Session
 import { effectiveAllocations, receiptLines } from "../receipt-allocation";
 import { loadLivePlans, type PlanHistory } from "./live-plans";
 import { mergeHolidays } from "@/features/billing/tuition-calc";
-import { receiptRefundState, type ReceiptRefundState } from "../receipt-refund";
+import { receiptOriginalItems, receiptRefundState, type ReceiptRefundState } from "../receipt-refund";
 import { receiptMatchesClass } from "../receipt-suggestion";
 
 /** 회차 확정 면 한 행 — 청구서×반(반마다 단가가 달라 합산 금지). subject는 raw key(라벨은 소비처가 buildSubjectMaps로). */
@@ -118,10 +118,11 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
       const cls = Array.isArray(t.class) ? t.class[0] : t.class;
       const className = cls?.class_name ?? null;
       const lineItems = (Array.isArray(inv.line_items) ? inv.line_items : []) as LineItemLike[];
-      const matching = lineItems.filter((line) => receiptMatchesClass(line, { classId: t.class_id, className }));
+      const matching = lineItems.flatMap(receiptOriginalItems).filter((line) => receiptMatchesClass(line, { classId: t.class_id, className }));
       const states = matching.map(receiptRefundState);
       const fullyRefunded = inv.status === "refunded" || (states.length > 0 && states.every((s) => s === "full"));
-      const refundState: ReceiptRefundState = fullyRefunded ? "full" : lineItems.some((line) => receiptRefundState(line) === "partial") ? "partial" : states.some((s) => s !== "none") ? "mixed" : "none";
+      const refundReview = lineItems.some((line) => receiptRefundState(line) === "partial" || (receiptRefundState(line) === "mixed" && "receiptGroupId" in line));
+      const refundState: ReceiptRefundState = fullyRefunded ? "full" : refundReview ? "partial" : states.some((s) => s !== "none") ? "mixed" : "none";
       return {
         id: t.id,
         invoiceId: t.invoice_id,

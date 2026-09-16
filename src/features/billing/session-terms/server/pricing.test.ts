@@ -67,6 +67,17 @@ beforeEach(() => {
 });
 
 describe("설정 → 회차 화면 조회·확정", () => {
+  it("수동 합산의 한 반만 전액환불이면 그 반은 0원, 나머지는 합산 해제 전 분배 저장을 막는다", async () => {
+    const full = { kind: "수업", description: "영어반", amount: 312000, refunds: [{ type: "full", amount: 302000, status: "active" }] };
+    h.state.tables.invoices[0].line_items = [{ kind: "수업", description: "합산", receiptGroupId: "group", amount: 612000, sourceItems: [full, { kind: "수업", description: "수학반", amount: 300000 }] }];
+    h.state.tables.invoice_session_terms.push({ ...h.state.tables.invoice_session_terms[0], id: "math", class_id: "math", class: { class_name: "수학반" } });
+    const view = await getSessionTermsView("2026-09");
+    expect(view.rows.find((r) => r.id === "term")).toMatchObject({ allocatedAmount: 0, refundState: "full" });
+    expect(view.rows.find((r) => r.id === "math")).toMatchObject({ allocationStale: true });
+    const fd = new FormData(); fd.set("period", "2026-09");
+    expect(await saveTeacherSplits(undefined, fd)).toHaveProperty("error");
+    expect(h.state.writes).toEqual([]);
+  });
   it("전체환불은 기존 확정값을 보존하면서 배분·분배의 기준액을 0으로 읽는다", async () => {
     const source = { kind: "수업", description: "영어반", amount: 312000, discount: 10000, paid: 302000 };
     h.state.tables.invoices[0].line_items = [{ ...source, refunds: [{ type: "full", amount: 302000, status: "active" }] }];
