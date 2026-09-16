@@ -6,6 +6,7 @@ import { tipProps } from "@/components/hover-tip/tip";
 // *"기본적으로 접어진상태로 합계금액이 보이도록, 클릭하거나 펼쳤을때 세부내역"*).
 // 🔴 접힌 줄의 값은 순수 함수 [`summarizeLines`](src/features/billing/line-summary.ts) **한 곳**에서만
 //    만든다 - 표 안에서 또 더하면 아래 '이 페이지 합계'와 조용히 갈린다.
+import { MergedReceiptDetails } from "./merged-receipt-details";
 import { useState } from "react";
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -374,8 +375,9 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                       {kindLabel(li.kind) || "수업"}
                     </span>
                   </td>
-                  <td className="text-foreground max-w-[280px] truncate px-3 py-2.5" title={li.description}>
-                    {li.description || "—"}
+                  <td className="text-foreground max-w-[280px] px-3 py-2.5">
+                    <span className="block truncate" title={li.description}>{li.description || "—"}</span>
+                    <MergedReceiptDetails line={li} />
                   </td>
                   <td className="text-foreground num px-3 py-2.5 text-right">{won(li.amount)}</td>
                   {/* 할인 사유(discount_reason)는 저장만 되고 어디에도 안 뜨던 orphan — 금액 셀 **카드**로 노출.
