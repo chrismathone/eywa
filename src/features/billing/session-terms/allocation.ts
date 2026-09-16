@@ -15,7 +15,10 @@
 //            실측 금액 = round(실 회차 × unitPrice) — 행 단위 반올림(소수 값 × 홀수 단가 방어).
 //            단가 없는 행은 금액 집계에서 제외하고 개수로 정직하게 표시(지어내지 않음).
 
+import { sessionPricingAmount, type SessionPricingMode } from "../session-pricing";
+
 export type AllocationRowInput = {
+  pricingMode?: SessionPricingMode;
   className: string | null;
   // 그룹 키 = teacherId(동명이인 강사 병합 방지 — 이름 문자열 그룹핑 금지). name은 표시 라벨.
   teacherId: string | null; // null = 담당 강사 없음(미배정 반·반 미매칭)
@@ -79,13 +82,15 @@ export function aggregateTeacherAllocations(rows: AllocationRowInput[]): Teacher
       if (r.amount !== null || r.unitPrice !== null) agg.confirmedPricedRows++;
       else if (r.confirmedSessions > 0) agg.missingConfirmedRows++;
       const confirmedAmount =
-        r.amount ?? (r.unitPrice !== null ? r.confirmedSessions * r.unitPrice : 0);
+        r.amount ?? (r.unitPrice !== null ? sessionPricingAmount(r.pricingMode, r.confirmedSessions, r.unitPrice) : 0);
       agg.confirmedAmount += confirmedAmount;
     }
 
     agg.actualUnits = Math.round((agg.actualUnits + r.actualConsumed) * 10) / 10;
     if (r.unitPrice !== null) {
-      agg.actualAmount += Math.round(r.actualConsumed * r.unitPrice);
+      agg.actualAmount += r.pricingMode === "monthly"
+        ? (r.confirmedSessions !== null ? r.amount ?? r.unitPrice : 0)
+        : Math.round(r.actualConsumed * r.unitPrice);
     } else if (r.actualConsumed > 0) {
       agg.missingPriceRows++;
     }

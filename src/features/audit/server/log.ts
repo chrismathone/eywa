@@ -152,6 +152,7 @@ export const AUDIT_ACTIONS = {
   student_restore: "학생 재원 복구",
   enrollment_end: "수강 종료",
   enrollment_hold: "수강 대기 전환",
+  enrollment_resume: "수강 대기 해제",
   enrollment_delete: "수업 이력 삭제",
   student_bulk_withdraw: "학생 일괄 퇴원(데이터 정리)",
   student_bulk_delete: "학생 일괄 삭제(데이터 정리)",

@@ -7,6 +7,7 @@ import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/pe
 import { isLayoutHideLocked } from "./menu-layout";
 // 보관 가능한 배치 수는 **화면도 읽는 값**이라 zod 없는 순수 모듈에 산다(클라 번들에 zod 유입 방지).
 import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
+import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -311,6 +312,20 @@ export const billingSchema = z.object({
   account: accountSchema,
   // 입금 계좌 목록(여러 개). 각 계좌의 targets로 소비처에 배선.
   accounts: z.array(accountSchema).max(12),
+  sessionPrices: z.array(z.object({
+    price: z.number().int("단가는 원 단위 정수로 입력해 주세요").positive("단가는 0원보다 커야 합니다").max(1_000_000_000),
+    label: z.string().trim().max(80),
+  })).max(100).superRefine((rows, ctx) => {
+    const seen = new Set<number>();
+    rows.forEach((row, index) => {
+      if (seen.has(row.price)) ctx.addIssue({
+        code: "custom", path: [index, "price"], message: "같은 금액은 하나만 등록해 주세요",
+      });
+      seen.add(row.price);
+    });
+  }).default(() => DEFAULT_SESSION_PRICES.map((row) => ({ ...row }))),
+  eieMonthlyPrice: z.number().int().positive("EiE 월 수강료는 0원보다 커야 합니다").max(1_000_000_000)
+    .default(DEFAULT_EIE_MONTHLY_PRICE),
 });
 export type BillingSettings = z.infer<typeof billingSchema>;
 

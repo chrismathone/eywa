@@ -36,7 +36,7 @@ const CARD_SURFACES: [string, string][] = [
   ["app/(shell)/classes/page.tsx", "tipProps(c.notes)"],
   ["app/(shell)/inventory/_components/asset-columns.tsx", "tipProps(a.note)"],
   ["app/(shell)/inventory/_components/loans-face.tsx", "tipProps(l.note)"],
-  ["app/(shell)/students/[id]/_tabs/attendance-panels.tsx", "tipProps(r.note)"],
+  ["app/(shell)/students/[id]/_tabs/attendance-panels.tsx", "record.note]"],
   ["app/(shell)/staff/leaves/_client.tsx", "tipProps(l.reason)"],
   ["features/integrations/components/makeedu-push-card.tsx", "tipProps(c.note)"],
   ["app/(shell)/dashboard/_onescreen/panels.tsx", "tip={tipProps("],

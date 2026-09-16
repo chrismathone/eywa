@@ -24,10 +24,12 @@ export function SeatingRoom({
   klass: SeatingClass;
   highlight?: ReadonlySet<string>;
 }) {
+  // 🔴 **블록 전체**를 적는다(대표 교시가 아니라) — 2교시를 붙여 하는 수업이 뒤 교시만 적혀
+  //    `17:15~18:10`으로 보이던 것(원장 2026-09-16). 판정 축은 여전히 `firstStart`다(`seating.ts` 주석).
   const time =
-    klass.firstEnd && klass.firstEnd !== klass.firstStart
-      ? `${klass.firstStart}~${klass.firstEnd}`
-      : klass.firstStart;
+    klass.blockEnd && klass.blockEnd !== klass.blockStart
+      ? `${klass.blockStart}~${klass.blockEnd}`
+      : klass.blockStart;
   const pending = pendingCountOf(klass);
   const tone = seatingToneOf(klass.band, pending);
   const note = seatingToneNote(tone, pending);

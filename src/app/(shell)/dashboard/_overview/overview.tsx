@@ -95,6 +95,8 @@ function Panel({
   const visible = sections.filter((v) => !!v);
   if (!visible.length) return null;
   const failed = visible.some((v) => v.error);
+  // 느린 것과 깨진 것은 다른 사실이다 — 같은 말로 적으면 어디를 봐야 할지 알 수 없다.
+  const slow = visible.some((v) => v.timedOut);
   const times = visible.flatMap((v) => (v.at === null ? [] : [v.at]));
   const available = times.length > 0;
   return (
@@ -131,9 +133,13 @@ function Panel({
       </div>
       {failed && (
         <p className={s.errorNote}>
-          {available
-            ? `일부 갱신 실패 · ${clock(Math.min(...times))} 확인값 포함`
-            : "조회 실패 · 0건을 의미하지 않습니다"}
+          {slow
+            ? available
+              ? `시간이 오래 걸려 일부를 못 갱신했습니다 · ${clock(Math.min(...times))} 확인값 표시 중`
+              : "시간이 오래 걸려 못 불러왔습니다 · 0건을 의미하지 않습니다"
+            : available
+              ? `일부 갱신 실패 · ${clock(Math.min(...times))} 확인값 포함`
+              : "조회 실패 · 0건을 의미하지 않습니다"}
         </p>
       )}
     </section>

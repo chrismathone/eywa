@@ -5,6 +5,7 @@ import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
 import { DEFAULT_TEACHER_VIEW_LINES } from "@/features/timetable/lib/ten-minute-grid";
 import { DEFAULT_MONTH_PLAN_TEXTS } from "./month-plan-texts";
 import type { TenantSettings } from "./settings-types";
+import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 
 // 평일 표준 교시(8교시·55분) — periods.ts MATH_PERIODS 이식.
 const WEEKDAY_PERIODS = [
@@ -184,6 +185,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     latePolicy: "",
     account: { label: "", bank: "", holder: "", number: "", targets: [] }, // 하위호환 미러(resolve가 첫 계좌로 채움)
     accounts: [],
+    sessionPrices: DEFAULT_SESSION_PRICES,
+    eieMonthlyPrice: DEFAULT_EIE_MONTHLY_PRICE,
   },
   notifications: {
     alimtalkSenderKey: "",

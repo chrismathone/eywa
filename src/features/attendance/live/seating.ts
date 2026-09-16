@@ -54,6 +54,21 @@ export type SeatingClass = {
   firstStart: string;
   /** 대표 교시부터 **같은 방으로 이어지는 동안**의 종료시각(`spanAdjacentEnd`). */
   firstEnd: string | null;
+  /**
+   * 카드에 **적히는** 수업 시각 — 대표 교시가 속한 **연속 블록**의 시작(`blockSpanAround`).
+   *
+   * 원장 2026-09-16(오늘 출결 캡처): *"왜 수업을 따로 생각하냐? 하나의 수업인데. 2-1, 2-2 수업하면
+   * 하나로 봐야지."* — 수학 반은 대부분 두 교시를 붙여 한 수업으로 한다(실측 화요일: 화면의 7개 반이
+   * 전부 2교시 블록). 그런데 카드는 **대표 교시 하나**만 적어서, 16:20~18:10짜리 수업이 `17:15~18:10`으로
+   * 보였다(수업이 끝나면 대표가 마지막 교시로 내려가고, 진행 중엔 앞뒤로 튄다).
+   *
+   * 🔴 **`firstStart`와 갈라 둔 이유** — `firstStart`는 그대로 **대표 교시**(방을 고르는 근거이자
+   *    `setAttendanceCell({ periodStart })`로 나가 "그 교시 담당에게 벨"을 정한다). 표시만 블록으로
+   *    넓히고 판정 축은 건드리지 않는다([`seating-anchor.ts`](./seating-anchor.ts)의 경고 그대로).
+   */
+  blockStart: string;
+  /** 같은 블록의 종료시각. 한 교시짜리면 `firstEnd`와 같다. */
+  blockEnd: string | null;
   periodLabel: string | null;
   /** LAB·JJ — 같은 시각에 여러 반이 한 방을 쓴다. 일반 4열과 다른 묶음의 근거. */
   seatLabel: SpecialSlotLabel | null;
@@ -119,6 +134,8 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
     const anchor = ordered[anchorIdx] ?? first;
     /** 대표 교시부터 하루 끝까지 — 종료시각(`spanAdjacentEnd`)이 대표 교시에서 시작하게. */
     const fromAnchor = ordered.slice(anchorIdx < 0 ? 0 : anchorIdx);
+    /** 카드에 적히는 시각 — 대표 교시가 속한 연속 블록(앞뒤 모두, 쉬는 시간 허용). */
+    const block = blockSpanAround(ordered, anchorIdx);
     const roster = new Map<string, LiveStudent>();
     for (const slot of ordered) {
       for (const s of slot.students) roster.set(s.studentId, s);
@@ -171,6 +188,9 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
         fromAnchor.find((s) => s.roomName)?.roomName ?? ordered.find((s) => s.roomName)?.roomName ?? null,
       firstStart: anchor.slotStart,
       firstEnd: spanAdjacentEnd(fromAnchor),
+      // 카드에 적히는 시각 — 대표 교시가 **속한** 블록 전체(앞 교시까지 거슬러 올라간다).
+      blockStart: block.start,
+      blockEnd: block.end,
       // 🔑 묶음(band)만은 **전 교시 fold** — 하나라도 열려 있으면 '지금'이다(랩실로 옮긴 반이 '지난'으로
       //    내려가지 않게). 대표 교시는 "어디에 그릴지", band는 "어느 띠에 놓일지"라 질문이 다르다.
       band: foldNowBands(ordered.map((s) => s.band)),
@@ -182,10 +202,12 @@ export function foldSeating(slots: readonly LiveBoardSlot[]): SeatingClass[] {
       students,
     });
   }
+  // 🔑 정렬도 **블록 시작**이다 — 16:20에 시작한 수업이 대표 교시(17:15) 자리에 끼면
+  //    "이 수업이 언제 시작했나"와 화면 순서가 어긋난다.
   out.sort((a, b) =>
-    a.firstStart === b.firstStart
+    a.blockStart === b.blockStart
       ? a.className.localeCompare(b.className, "ko")
-      : a.firstStart < b.firstStart
+      : a.blockStart < b.blockStart
         ? -1
         : 1,
   );
@@ -225,6 +247,68 @@ export function spanAdjacentEnd(
     end = next.slotEnd;
   }
   return end;
+}
+
+/**
+ * 이어진 교시로 보는 **최대 쉬는 시간(분)**. 학원설정 평일 교시표 실측(2026-09-16):
+ * 붙어 있거나(16:20→16:20 · 17:15→17:15 · 19:15→19:15) 5분(15:20→15:25) · 10분(18:10→18:20)뿐이다.
+ * ⚠️ 운영실 '현재 수업 현황'의 [`BREAK_MAX_MIN`](../../dashboard/overview/continuous-classes.ts)과 같은 값이다 —
+ *    같은 사실(쉬는 시간)을 재는 두 자리라 한쪽만 늘리면 두 화면이 다른 수업을 말한다.
+ */
+export const SEAT_BREAK_MAX_MIN = 10;
+
+const hhmmToMin = (hm: string): number => {
+  const [h, m] = hm.split(":");
+  return Number(h) * 60 + Number(m);
+};
+
+/**
+ * 대표 교시가 **속한 연속 블록**의 시작·끝 — 순수(Vitest).
+ *
+ * `spanAdjacentEnd`와 둘 다 필요한 이유: 저쪽은 대표 교시에서 **앞으로만** 이어 붙이고 끝이 정확히
+ * 맞닿을 때만 잇는다. 그래서 ① 수업이 끝나 대표가 마지막 교시로 내려가면 앞 교시가 통째로 빠지고
+ * (16:20~18:10 수업이 `17:15~18:10`), ② 5분·10분 쉬는 시간이 낀 교시표에선 아예 안 붙는다
+ * (14:20~15:20 + 15:25~16:20 → `15:25~16:20`). 카드에 적히는 시각은 **수업 전체**여야 한다
+ * (원장 2026-09-16 *"2-1, 2-2 수업하면 하나로 봐야지"*).
+ *
+ * 🔴 **방(그리고 자리 표기)이 바뀌면 끊는다** — `spanAdjacentEnd`가 지키던 불변식 그대로다. 영어는
+ *    40분마다 랩실↔강의실을 도는 편성이 표준이라, 방을 무시하고 이어 붙이면 그 방에 있지도 않은
+ *    시간을 그 방의 수업인 양 적어 같은 방 다른 반과 **겹쳐 보인다**(실측 DP6 14:20~15:40).
+ * ⚠️ `ordered`는 `slotStart` 오름차순이어야 한다(foldSeating이 그렇게 넘긴다).
+ */
+export function blockSpanAround(
+  ordered: readonly {
+    slotStart: string;
+    slotEnd: string | null;
+    roomName?: string | null;
+    slotTeacherLabel?: string | null;
+  }[],
+  anchorIdx: number,
+): { start: string; end: string | null } {
+  const i = anchorIdx < 0 ? 0 : anchorIdx;
+  const anchor = ordered[i];
+  if (!anchor) return { start: "", end: null };
+  const joins = (prev: (typeof ordered)[number], next: (typeof ordered)[number]): boolean => {
+    if (prev.slotEnd == null) return false;
+    // 겹치는 행(음수 간격)도 이어진 것으로 본다 — 끊어야 할 것은 '띄어진' 수업뿐이다.
+    if (hhmmToMin(next.slotStart) - hhmmToMin(prev.slotEnd) > SEAT_BREAK_MAX_MIN) return false;
+    return (
+      (prev.roomName ?? null) === (next.roomName ?? null) &&
+      specialSlotLabel(prev.slotTeacherLabel ?? null) === specialSlotLabel(next.slotTeacherLabel ?? null)
+    );
+  };
+  let start = anchor.slotStart;
+  let end = anchor.slotEnd;
+  for (let k = i + 1; k < ordered.length; k++) {
+    if (!joins(ordered[k - 1]!, ordered[k]!)) break;
+    const next = ordered[k]!.slotEnd;
+    if (next != null && (end == null || hhmmToMin(next) > hhmmToMin(end))) end = next;
+  }
+  for (let k = i - 1; k >= 0; k--) {
+    if (!joins(ordered[k]!, ordered[k + 1]!)) break;
+    start = ordered[k]!.slotStart;
+  }
+  return { start, end };
 }
 
 /**

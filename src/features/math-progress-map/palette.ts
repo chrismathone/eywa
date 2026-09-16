@@ -45,6 +45,14 @@ export function displayStatusOf(status: ProgressStatus | null, date: string, asO
   return status;
 }
 
+/**
+ * **종강 뒤 칸** — 학습 상태가 아니라 "여기부터는 수업이 없다"는 뜻이라 상태색 어느 것도 쓰지 않는다
+ * (`no-plan`(흰 칸)과도 다르다 — 그건 수업 기간 안의 빈 달이다). 원장 2026-09-16.
+ */
+export const AFTER_END_FILL = tint("--neutral-fill", 8);
+/** 비활성 느낌은 색이 아니라 **옅기**로 낸다 — 글자색은 앱 전역이 한 값(#121212)이라 연한 회색 글자가 없다. */
+export const AFTER_END_OPACITY = 0.4;
+
 export const STATUS_FILL: Record<DisplayStatus, string> = {
   completed: tint("--green", 20),
   "in-progress": `var(--map-progress-fill, ${tint("--chart-3", 30)})`,

@@ -10,6 +10,7 @@ import { SessionTermGroups, RefreshPlanButton, type ClassGroup } from "./session
 import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
 import Link from "next/link";
+import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -34,7 +35,7 @@ export async function SessionTermsFace({
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
-  // 과목별 분리(2026-07-13 원장 지시) — 과목마다 단가 체계가 달라 섞어 보면 확정 실수 여지.
+  // 과목별 조회는 유지하되 수학·영어의 단가 목록은 같은 학원 설정을 쓴다.
   const presentSubjects = [...new Set(allRows.map((r) => r.subject))].sort();
   const activeSubject = subject && presentSubjects.includes(subject) ? subject : null;
   const bySubject = activeSubject ? allRows.filter((r) => r.subject === activeSubject) : allRows;
@@ -70,7 +71,7 @@ export async function SessionTermsFace({
   const totalPages = Math.max(1, Math.ceil(allGroups.length / PAGE_SIZE));
   const curPage = Math.min(Math.max(1, Number(page) || 1), totalPages);
   const groups = allGroups.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
-  const confirmedShown = filtered.filter((r) => r.confirmedSessions !== null).length;
+  const monthlyCount = filtered.filter((r) => r.monthlyPrice !== null).length;
 
   // 필터(과목·검색)를 보존한 채 월·page만 바꾸는 href.
   const hrefFor = (per: string, n = 1) => {
@@ -83,6 +84,7 @@ export async function SessionTermsFace({
   const pageHref = (n: number) => hrefFor(p, n);
 
   return (
+    <SessionTermsState rows={filtered.map(({ id, confirmedSessions }) => ({ id, confirmedSessions }))}>
     <section className="space-y-4">
       {/* 툴바(지시서 §10) — 월 이동은 공용 BillingMonthNav(옛 h-8 text-xs 화살표 링크 대체) · 과목 칩 줄 → `과목: 전체` 라벨 ·
           상시 검색창 → 검색 토글 · Primary = '계획 갱신'(이 면의 본 동작) 하나. 🔴 툴바 카드 껍데기 없음. */}
@@ -102,25 +104,32 @@ export async function SessionTermsFace({
         <SearchToggle placeholder="학생명·반" defaultValue={query} />
         <span className="text-text-dim text-sm whitespace-nowrap">
           반 <span className="num">{allGroups.length}</span>개 · 확정{" "}
-          <span className="num">{confirmedShown}</span>/<span className="num">{filtered.length}</span>건
+          <SessionTermsConfirmedCount />/<span className="num">{filtered.length}</span>건
+          {monthlyCount > 0 ? ` · 월 정액 ${monthlyCount}건` : null}
         </span>
         <div className="ml-auto">
           <RefreshPlanButton period={p} />
         </div>
+        <Link href="/owner?tab=billing" className="text-primary text-sm underline-offset-2 hover:underline">
+          단가 설정
+        </Link>
       </div>
 
       {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
       <FaceNote>
-        각 <b>반</b>의 회당 단가를 입력하고 <b>이 반 일괄 확정</b>을 누르면 그 반 학생 전원이 각자 계획 회차 ×
-        단가로 확정됩니다. 학생마다 회차·단가가 다르면 <b>개별</b> 행에서 보정하세요. 확정한 값만 청구
+        회차를 비우고 <b>단가 일괄 입력</b>을 누르면 미확정 학생의 단가 입력칸만 채웁니다(저장 전).
+        회차와 단가를 모두 입력한 뒤 <b>이 반 일괄 확정</b>을 누르면 입력한 회차 × 단가로 확정됩니다.
+        개별 행에서는 예상금액을 확인한 뒤 <b>확정</b>하세요. 확정한 값만 청구
         기준으로 인정되며, 청구액과의 차이는 자동으로 맞추지 않습니다(차이가 곧 점검 신호). 단가 후보는{" "}
         <Link
-          href="/billing?tab=calculator&csub=prices&cpmode=per_session"
+          href="/owner?tab=billing"
           className="text-primary underline-offset-2 hover:underline"
         >
-          수강료 단가
+          학원 설정 → 수납·청구
         </Link>
-        에서 <b>회당 단가</b>로 등록·수정할 수 있습니다.
+        에서 등록·수정할 수 있습니다. 수학·영어는 같은 목록을 쓰며, 같은 금액은 한 번만 표시됩니다.
+        {" "}EiE는 <b>월 금액 확정</b> 후 월 수강료에 배분율을 적용합니다(기존 공통 수수료 차감 적용).
+        출석 회차가 달라도 월 기준액은 같으며, 설정 변경 전 확정 내역은 해제·재확정 전까지 유지됩니다.
       </FaceNote>
 
       {filtered.length === 0 ? (
@@ -136,10 +145,11 @@ export async function SessionTermsFace({
         </div>
       ) : (
         <>
-          <SessionTermGroups groups={groups} catalog={view.catalog} period={p} />
+          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} />
           <Pagination page={curPage} totalPages={totalPages} total={allGroups.length} hrefForPage={pageHref} />
         </>
       )}
     </section>
+    </SessionTermsState>
   );
 }

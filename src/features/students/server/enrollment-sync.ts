@@ -102,17 +102,23 @@ export async function endEnrollmentById(
 export async function listOpenEnrollments(
   supabase: Supabase,
   studentId: string,
-): Promise<{ error: string | null; rows: { id: string; classId: string | null }[] }> {
+): Promise<{ error: string | null; rows: { id: string; classId: string | null; onHold: boolean }[] }> {
   // 한 학생의 열린 수강이라 수십 행 미만이지만, 결과를 whitelist로 쓰므로 명시 상한을 둔다(B2 취지).
+  // `on_hold`는 부분 휴원(setStudentEnrollmentHolds)이 **지금 상태와의 차이만** 쓰기 위한 재료다 —
+  // 이미 대기인 행을 또 쓰면 감사로그가 같은 사실로 부풀고, 되돌릴 행을 못 찾는다.
   const { data, error } = await supabase
     .from("enrollments")
-    .select("id, class_id")
+    .select("id, class_id, on_hold")
     .eq("student_id", studentId)
     .is("end_date", null)
     .limit(200);
   if (error) return { error: error.message, rows: [] };
   return {
     error: null,
-    rows: (data ?? []).map((r) => ({ id: r.id as string, classId: (r.class_id as string | null) ?? null })),
+    rows: (data ?? []).map((r) => ({
+      id: r.id as string,
+      classId: (r.class_id as string | null) ?? null,
+      onHold: (r.on_hold as boolean | null) === true,
+    })),
   };
 }

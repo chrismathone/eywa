@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getSessionTermsView } from "./queries";
 import { classifyVerification, type VerificationStatus } from "../verification";
+import type { SessionPricingMode } from "../../session-pricing";
 export type { VerificationStatus } from "../verification";
 
 /**
@@ -12,6 +13,7 @@ export type { VerificationStatus } from "../verification";
  *    CLAUDE.md "이름 셋을 구분할 것": `session_units`(시수) · `*_sessions`(회차) · 세션 기간.
  */
 export type VerificationRow = {
+  pricingMode: SessionPricingMode;
   id: string;
   invoiceId: string;
   studentName: string;
@@ -79,9 +81,10 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
 
   const rows: VerificationRow[] = view.rows.map((r) => {
     const actual = r.classId ? (consumedByKey.get(`${r.invoiceId}:${r.classId}`) ?? 0) : 0;
-    const { status, diff } = classifyVerification(r.confirmedSessions, actual);
+    const { status, diff } = classifyVerification(r.confirmedSessions, actual, r.pricingMode);
     const teacher = r.classId ? (teacherByClassId.get(r.classId) ?? null) : null;
     return {
+      pricingMode: r.pricingMode,
       id: r.id,
       invoiceId: r.invoiceId,
       studentName: r.studentName,
@@ -107,6 +110,7 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
     short: rows.filter((r) => r.status === "short").length,
     over: rows.filter((r) => r.status === "over").length,
     unconfirmed: rows.filter((r) => r.status === "unconfirmed").length,
+    monthly: rows.filter((r) => r.status === "monthly").length,
     total: rows.length,
   };
 

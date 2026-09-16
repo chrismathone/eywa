@@ -1,22 +1,25 @@
 /**
- * 진도맵 **미리보기 명단** — 숨은 기능(원장 2026-09-14: *"본서버에 적용하더라도 숨겨진 기능으로 st2000423@gmail.com
- * 계정에게만 바로가기 열어둘 것"*).
+ * 진도맵 **공개 범위** — 원장 2026-09-16 *"진도맵 시안을 모든 관리자이상에게 공개"*.
  *
- * 🔑 급여명세서 명단([`payslip-access.ts`](../payroll/payslip-access.ts))과 같은 꼴 — 이름·이메일이 아니라 **user id**로
- *    잠근다(이력서 E-mail을 바꾸면 로그인 아이디가 바뀌므로 이메일은 매칭 키로 흔들린다). 이메일은 주석으로만.
- * 🔑 메뉴키·사이드바·권한 매트릭스를 건드리지 않는다 — 숨은 기능이라 메뉴에 없고, 진입로는 MCS 랜딩 머리의
- *    '진도맵(시안)' 링크 하나뿐이다(명단 밖 계정에겐 링크도 페이지도 없다 — 페이지는 404).
- * ⚠️ super_admin은 명단에 없어도 통과한다(원장 2026-08-13 *"superadmin은 앞으로 뭘 안해도 그냥 넣고봐"* — 새 게이트 상시 규약).
- *    판정은 `server/access.ts`의 `canPreviewProgressMap()`이 얹는다.
- * ⚠️ 시안이 끝나 전 직원에게 열 땐 이 명단이 아니라 **메뉴키(`mcs`) 권한 그대로**로 넘긴다(명단을 늘리지 말 것).
+ * 종전(2026-09-14)엔 user id 명단(박소선) 한 줄이었다. 원장이 축을 바꿔서, 이제 판정은 **역할 위계**다 —
+ * 관리자(`admin`) **이상**, 즉 원장·관리자. 매니저 이하는 아직 아니다.
+ *
+ * 🔑 **명단을 다시 만들지 말 것** — 사람이 바뀔 때마다 uuid를 줍는 자리가 되면 "지금 누가 보는가"를 아무도
+ *    모르게 된다. 더 열 땐 이 상수 한 줄(`PROGRESS_MAP_MIN_ROLE`)을 내리고, 시안이 끝나 전 직원에게 열 땐
+ *    이 게이트가 아니라 **메뉴키(`mcs`) 권한 그대로**로 넘긴다(2026-09-14 결정 그대로).
+ * ⚠️ **아직 숨은 기능이다** — 사이드바·메뉴키·검색 팰릿에 올리지 않는다(가드 `access.test.ts`). 진입로는
+ *    MCS 랜딩 머리의 '진도맵(시안)' 링크 하나 + 직접 주소이고, 범위 밖 계정엔 링크도 없고 페이지는 404다.
+ * ⚠️ super_admin은 이 판정 밖에서도 통과한다(원장 2026-08-13 상시 규약) — `server/access.ts`가 얹는다.
+ * ⚠️ 페이지는 이 게이트 **앞에** `requireAccess("mcs")`도 지난다 — `mcs` 기본값이 master·admin 모두 full이라
+ *    두 축이 어긋나지 않는다. 그 기본값을 낮추는 날엔 여기도 함께 볼 것(화면은 조용히 닫힌다).
  */
+import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
+import type { SystemRole } from "@/lib/permissions";
 
-/** 미리보기 계정. 주석의 이름·역할은 2026-09-14 실측(판정에 쓰지 않는다). */
-export const PROGRESS_MAP_PREVIEW_USER_IDS: readonly string[] = [
-  "fcf735fa-edf7-4095-8fa6-724285a018ed", // 박소선 (master · st2000423@gmail.com)
-];
+/** 여기까지 열려 있다 — 관리자(`admin`) 이상 = 원장·관리자. */
+export const PROGRESS_MAP_MIN_ROLE: SystemRole = "admin";
 
-/** 명단에 있는가 — 순수 판정(super_admin 통과는 서버 게이트가 얹는다). */
-export function isProgressMapPreviewUser(userId: string): boolean {
-  return PROGRESS_MAP_PREVIEW_USER_IDS.includes(userId);
+/** 역할이 공개 범위 안인가 — 순수 판정(super_admin 통과는 서버 게이트가 얹는다). */
+export function canSeeProgressMapPreview(role: SystemRole): boolean {
+  return ROLE_HIERARCHY[role] <= ROLE_HIERARCHY[PROGRESS_MAP_MIN_ROLE];
 }

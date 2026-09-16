@@ -113,7 +113,7 @@ export function SeatingChart({
   const laterCount = laterItems.length;
   // 🔴 "2시간 뒤"라고 적지 않는다 — 그건 접는 기준(앞창)의 이름이지 그 수업이 언제인지가 아니다.
   //    새벽 2시에 오후 2시 수업을 "2시간 뒤"라고 말했다(원장 2026-08-30). 문구는 now-band 단일 소스.
-  const laterPrefix = laterStartPrefix(laterItems.map((c) => c.firstStart));
+  const laterPrefix = laterStartPrefix(laterItems.map((c) => c.blockStart));
   // 처음 열릴 띠 = 지금 → (없으면) 예정 → (없으면) 지난. 밤늦게 열어도 빈 화면이 되지 않는다.
   const firstBand = groups[0]?.band;
   /**

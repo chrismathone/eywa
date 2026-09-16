@@ -101,6 +101,8 @@ export default async function StudentDetailPage({
           className: e.className,
           subject: e.subject,
           teacherName: e.teacherName,
+          // 휴원 탭이 **지금 대기인 수업**을 체크된 채로 열기 위한 값(2026-09-16 부분 휴원).
+          onHold: e.onHold === true,
         }))
     : [];
   // 학생 영구 삭제 = 관리 도구(admin) 쓰기 권한(기본 master) — 파괴적이라 조임. 잘못 추가 정정용.

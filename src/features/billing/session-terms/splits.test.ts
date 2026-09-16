@@ -88,6 +88,12 @@ describe("totalSplits", () => {
 });
 
 describe("splitsFingerprint", () => {
+  it("합계가 같아도 회당/월 정액 구분 변경은 재저장 대상으로 잡힌다", () => {
+    const base = computeSplitRows([row({ confirmedSessions: 1, actualConsumed: 1, unitPrice: 100000 })]);
+    const monthly = computeSplitRows([row({ pricingMode: "monthly", confirmedSessions: 1, actualConsumed: 1, unitPrice: 100000 })]);
+    expect(totalSplits(base)).toEqual(totalSplits(monthly));
+    expect(splitsFingerprint(base)).not.toBe(splitsFingerprint(monthly));
+  });
   it("강사 재배정은 합계가 같아도 지문이 달라진다(드리프트 맹점 방어)", () => {
     const base = computeSplitRows([row({})]);
     const reassigned = computeSplitRows([row({ teacherId: "t-kim" })]);

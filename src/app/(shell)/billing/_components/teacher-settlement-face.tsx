@@ -67,6 +67,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
         저장된 <b>분배 스냅샷</b>(시수 검증)을 담당 강사별로 묶어 급여 방식(비율제/급여제/혼합)을 적용합니다.
         산식은 <b>지급 기준액 × {NET_MULTIPLIER}(결제 수수료 {(PLATFORM_FEE_RATE * 100).toFixed(1)}% 차감) × 배분율</b>이며,
         <b>지급 기준액 = 실제 수업분과 청구액 중 작은 값</b>입니다(덜 수업했으면 한 만큼, 더 수업했어도 청구액이 상한).
+        {" "}<b>EiE 월 고정은 확정한 월 수강료 × {NET_MULTIPLIER} × 배분율</b>이며, 출석 회차로 금액을 바꾸지 않습니다.
         이 화면은 <b>참고용</b>으로, 급여로 자동 기록되지 않습니다.
       </FaceNote>
       {/* ⚠️ 배분율은 users에 **현재 값 한 벌**만 있다. 구 급여 시트 실측(김윤하 18개월)에서 비율이 달마다

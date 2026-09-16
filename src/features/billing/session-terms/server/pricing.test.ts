@@ -1,0 +1,147 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveSettings } from "@/features/owner/resolve";
+import { getSessionTermsView } from "./queries";
+import { confirmClassTerms, confirmSessionTerm, unconfirmSessionTerm } from "./actions";
+import { revalidatePath } from "next/cache";
+import { logAction } from "@/features/audit/server/log";
+import { getSessionVerificationView } from "./verification-queries";
+import { saveTeacherSplits } from "./splits-actions";
+import { getTeacherSettlementView } from "@/features/payroll/server/settlement-queries";
+
+const h = vi.hoisted(() => {
+  const state = {
+    tables: {} as Record<string, Record<string, unknown>[]>,
+    billing: {} as Record<string, unknown>,
+    writes: [] as { table: string; patch: Record<string, unknown> }[],
+    after: [] as (() => Promise<void>)[],
+  };
+  const client = {
+    rpc: () => ({ range: () => Promise.resolve({ data: [], error: null }) }),
+    from(table: string) {
+      let single = false;
+      let patch: Record<string, unknown> | undefined;
+      let upserts: Record<string, unknown>[] | undefined;
+      const builder: Record<string, unknown> = {};
+      for (const method of ["select", "eq", "neq", "in", "order", "range", "gte", "lte", "or"]) builder[method] = () => builder;
+      builder.maybeSingle = () => { single = true; return builder; };
+      builder.update = (value: Record<string, unknown>) => { patch = value; return builder; };
+      builder.upsert = (values: Record<string, unknown>[]) => { upserts = values; return builder; };
+      builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+        if (patch) {
+          state.writes.push({ table, patch });
+          state.tables[table] = (state.tables[table] ?? []).map((row) => ({ ...row, ...patch }));
+        }
+        if (upserts) {
+          state.tables[table] = upserts;
+          state.writes.push(...upserts.map((row) => ({ table, patch: row })));
+        }
+        const rows = state.tables[table] ?? [];
+        return Promise.resolve({ data: single ? rows[0] ?? null : rows, error: null }).then(resolve, reject);
+      };
+      return builder;
+    },
+  };
+  return { state, client };
+});
+
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => h.client }));
+vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => resolveSettings({ billing: h.state.billing }, { name: "학원" }) }));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "owner", tenantId: "tenant", systemRole: "master" }) }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true }));
+vi.mock("@/features/audit/server/log", () => ({ logAction: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/server", () => ({ after: (fn: () => Promise<void>) => h.state.after.push(fn) }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  h.state.after = [];
+  h.state.billing = {};
+  h.state.writes = [];
+  h.state.tables = {
+    invoices: [{ id: "invoice", student_id: "student", line_items: [] }],
+    students: [{ id: "student", name: "학생", grade: "중1" }],
+    classes: [{ id: "class", subject: "english", english_track: "injaewon" }],
+    invoice_session_terms: [{ id: "term", invoice_id: "invoice", class_id: "class", subject: "english", planned_sessions: 9, confirmed_sessions: 8, unit_price: 40875, amount: 327000, confirmed_at: "2026-09-01", note: null, class: { class_name: "영어반", english_track: "injaewon" } }],
+  };
+});
+
+describe("설정 → 회차 화면 조회·확정", () => {
+  it("설정 수정 뒤 다음 조회는 새 후보를 쓰고 이미 확정한 단가·금액은 보존한다", async () => {
+    expect((await getSessionTermsView("2026-09")).catalog).toHaveLength(13);
+    h.state.billing = { sessionPrices: [{ price: 26000, label: "공통" }] };
+    const view = await getSessionTermsView("2026-09");
+    expect(view.catalog).toEqual([{ price: 26000, label: "공통" }]);
+    expect(view.rows[0]).toMatchObject({ unitPrice: 40875, amount: 327000, confirmedSessions: 8, monthlyPrice: null });
+    expect(h.state.writes).toEqual([]);
+  });
+
+  it("EiE 행은 설정의 월 금액을 읽으며 기존 확정값은 유지한다", async () => {
+    h.state.tables.invoice_session_terms[0].class = { class_name: "JP1", english_track: "eie" };
+    h.state.billing = { eieMonthlyPrice: 280000 };
+    expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ monthlyPrice: 280000, amount: 327000 });
+  });
+
+  it("EiE는 개별·반 일괄 모두 서버 설정의 월 금액으로 확정한다(클라이언트 단가·구분 위조 무시)", async () => {
+    h.state.tables.classes[0].english_track = "eie";
+    h.state.tables.invoice_session_terms[0].class = { english_track: "eie" };
+    const fd = new FormData();
+    fd.set("id", "term"); fd.set("sessions", "12"); fd.set("unitPrice", "999999"); fd.set("pricingMode", "per_session");
+    expect(await confirmSessionTerm(undefined, fd)).toMatchObject({ ok: true });
+    expect(h.state.writes[0].patch).toMatchObject({ pricing_mode: "monthly", unit_price: 270000, amount: 270000 });
+    h.state.billing = { eieMonthlyPrice: 280000 };
+    expect(await confirmClassTerms("2026-09", "class", 999999, 18)).toMatchObject({ confirmed: 1 });
+    expect(h.state.writes[1].patch).toMatchObject({ pricing_mode: "monthly", unit_price: 280000, amount: 280000 });
+  });
+
+  it("월 고정 상태는 출석 회차와 비교하지 않으며, 확정 전에는 미확정이다", async () => {
+    h.state.tables.invoice_session_terms[0].class = { english_track: "eie" };
+    h.state.tables.invoice_session_terms[0].pricing_mode = "monthly";
+    expect((await getSessionVerificationView("2026-09")).rows[0]).toMatchObject({ amount: 327000, status: "monthly", diff: null });
+    h.state.tables.invoice_session_terms[0].confirmed_sessions = null;
+    expect((await getSessionVerificationView("2026-09")).rows[0].status).toBe("unconfirmed");
+    expect(h.state.writes).toEqual([]);
+  });
+
+  it("일반 영어의 선택 단가는 그대로 회차에 곱해 확정한다", async () => {
+    const fd = new FormData();
+    fd.set("id", "term"); fd.set("sessions", "8"); fd.set("unitPrice", "24,000");
+    expect(await confirmSessionTerm(undefined, fd)).toMatchObject({ ok: true });
+    expect(h.state.writes[0].patch).toMatchObject({ confirmed_sessions: 8, unit_price: 24000, amount: 192000 });
+    expect(await confirmClassTerms("2026-09", "class", 25000, 9)).toMatchObject({ confirmed: 1 });
+    expect(h.state.writes[1].patch).toMatchObject({ confirmed_sessions: 9, unit_price: 25000, amount: 225000 });
+  });
+
+  it("EiE 월 확정 → 분배 스냅샷 저장 → 강사 정산까지 같은 월 금액을 사용한다", async () => {
+    h.state.tables.classes[0] = { id: "class", subject: "english", english_track: "eie", class_name: "JP1", teacher: { id: "teacher", display_name: "강사" } };
+    h.state.tables.invoice_session_terms[0].class = { class_name: "JP1", english_track: "eie" };
+    h.state.tables.users = [{ id: "teacher", salary_type: "commission", commission_rate: 50, monthly_base: 0 }];
+    // 월 정액은 출석 비례 요일 안분도 하지 않는다.
+    h.state.tables.class_salary_settings = [{ class_id: "class", applies_dows: ["sat"] }];
+    expect(await confirmClassTerms("2026-09", "class", 270000)).toMatchObject({ confirmed: 1 });
+    const fd = new FormData(); fd.set("period", "2026-09");
+    expect(await saveTeacherSplits(undefined, fd)).toEqual({ saved: 1, skipped: 0 });
+    expect(h.state.tables.invoice_teacher_splits[0]).toMatchObject({ pricing_mode: "monthly", confirmed_amount: 270000, actual_amount: 270000 });
+    h.state.billing = { eieMonthlyPrice: 280000 }; // 이미 확정·저장한 달은 바뀌지 않는다.
+    expect((await getTeacherSettlementView("2026-09")).rows[0]).toMatchObject({ payableTotal: 270000, settlement: 122985, status: "computed" });
+  });
+
+  it("일반 수업의 빈 회차를 계획 회차나 0회로 확정하지 않는다", async () => {
+    expect(await confirmClassTerms("2026-09", "class", 21250)).toHaveProperty("error");
+    const fd = new FormData(); fd.set("id", "term"); fd.set("unitPrice", "21250"); fd.set("sessions", "");
+    expect(await confirmSessionTerm(undefined, fd)).toHaveProperty("error");
+    expect(h.state.writes).toEqual([]);
+  });
+
+  it("해제는 확정값만 지우며 응답 뒤 감사로그·캐시 무효화를 처리한다", async () => {
+    const fd = new FormData(); fd.set("id", "term");
+    expect(await unconfirmSessionTerm(undefined, fd)).toMatchObject({ ok: true, terms: [{ id: "term", confirmedSessions: null, unitPrice: null, amount: null }] });
+    expect(h.state.tables.invoice_session_terms[0]).toMatchObject({ planned_sessions: 9, confirmed_sessions: null, unit_price: null, amount: null });
+    expect(h.state.writes.map((w) => w.table)).toEqual(["invoice_session_terms"]);
+    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(logAction).not.toHaveBeenCalled();
+    expect(h.state.after).toHaveLength(1);
+    await h.state.after[0]();
+    expect(revalidatePath).toHaveBeenCalledWith("/billing");
+    expect(logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "session_term_unconfirm", metadata: expect.objectContaining({ sessionsBefore: 8, unitPriceBefore: 40875, amountBefore: 327000 }) }));
+  });
+});

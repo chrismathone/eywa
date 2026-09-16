@@ -24,6 +24,7 @@ import type { AccountSetting } from "@/features/owner/settings-types";
 import { CatalogPicker, CourseEditor, ExtraEditor, DiscountEditor } from "./quote-editors";
 import { QuoteDocument } from "./quote-document";
 import { submitAction } from "@/components/forms/submit-action";
+import { useBillingSettingsRefresh } from "@/features/billing/use-billing-settings-refresh";
 
 const won = (n: number) => `${new Intl.NumberFormat("ko-KR").format(Math.round(n))}원`;
 const inputCls =
@@ -85,6 +86,7 @@ export function TuitionCalculator({
   textbooks?: CatalogOption[]; // 교재 단가표(146권) — 교재/기타 picker에 합침
   initial?: QuoteDetail;
 }) {
+  useBillingSettingsRefresh();
   /**
    * 행 uid — 🔴 **절대 겹치면 안 된다.** patchCourse/patchExtra 등이 uid로 대상을 고르므로
    * 두 행이 같은 uid를 가지면 한 칸을 고칠 때 **두 행이 함께 바뀐다**(원장 제보 2026-08-07:

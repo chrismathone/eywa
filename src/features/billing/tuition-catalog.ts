@@ -9,7 +9,8 @@ export const DISCOUNT_CATEGORY = "할인";
 
 /**
  * 단가 종류(pricing_mode, 0102a) — price가 "회당/월/할인"으로 미구분이라 곱셈 사고 방지용 판별.
- * `per_session`만 회차 확정('회차 확정' 면) 단가 프리셋으로 소비된다(datalist). null=미지정(곱셈·프리셋 제외).
+ * 계산기에서 `per_session`만 시수를 곱한다. null=미지정(곱셈 금지).
+ * 회차 확정의 공통 드롭다운은 학원 설정 billing.sessionPrices를 쓴다(2026-09-16).
  */
 export const PRICING_MODES = [
   { value: "per_session", label: "회당 단가" },

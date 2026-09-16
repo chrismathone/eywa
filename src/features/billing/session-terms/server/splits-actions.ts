@@ -54,6 +54,7 @@ export async function saveTeacherSplits(
       teacher_name: r.teacherName,
       confirmed_sessions: r.confirmedSessions,
       unit_price: r.unitPrice,
+      pricing_mode: r.pricingMode,
       confirmed_amount: r.confirmedAmount,
       actual_units: r.actualUnits,
       actual_amount: r.actualAmount,

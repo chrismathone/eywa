@@ -6,6 +6,7 @@ import { PeriodNav } from "@/components/period-nav";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { getTuitionCatalogActive } from "@/features/billing/server/tuition-catalog-queries";
+import { withEieMonthlyTuition } from "@/features/billing/session-pricing";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
 import { currentPeriod } from "@/features/billing/calc";
@@ -84,7 +85,7 @@ async function CalculatorTab({ qid }: { qid?: string }) {
       defaultPeriod={currentPeriod()}
       defaultAccount={accountForTarget(settings.billing, "quote")}
       holidays={settings.operations.holidays.map((h) => h.date)}
-      catalog={catalog}
+      catalog={withEieMonthlyTuition(catalog, settings.billing.eieMonthlyPrice)}
       textbooks={textbooks}
       initial={initial ?? undefined}
     />

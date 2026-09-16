@@ -40,6 +40,58 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
 
   return (
     <SectionForm section="billing" payload={b}>
+      <SettingsCard
+        title="공통 회당 단가"
+        description="수학·영어가 함께 쓰는 회차 확정 드롭다운입니다. 같은 금액은 한 번만 등록하며, 저장하면 반 일괄·학생별 단가 선택에 반영됩니다. 이미 확정한 금액은 유지됩니다."
+      >
+        <div className="space-y-3">
+          {b.sessionPrices.map((row, i) => (
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
+              <NumberField
+                label={`회당 단가 ${i + 1}`}
+                hint="원"
+                value={row.price}
+                min={1}
+                max={1_000_000_000}
+                onChange={(price) => set({ sessionPrices: b.sessionPrices.map((r, j) => j === i ? { ...r, price } : r) })}
+              />
+              <div className="col-start-1 row-start-2 sm:col-start-auto sm:row-start-auto">
+                <TextField
+                  label={`단가 설명 ${i + 1}`}
+                  hint="선택"
+                  value={row.label}
+                  placeholder="예: 초등 3T · 초등특강"
+                  onChange={(label) => set({ sessionPrices: b.sessionPrices.map((r, j) => j === i ? { ...r, label } : r) })}
+                />
+              </div>
+              <button
+                type="button"
+                aria-label={`단가 ${i + 1} 삭제`}
+                onClick={() => set({ sessionPrices: b.sessionPrices.filter((_, j) => j !== i) })}
+                className="text-text-dim hover:text-danger col-start-2 row-start-1 flex h-10 items-center gap-1 text-xs sm:col-start-auto sm:row-start-auto"
+              >
+                <Trash2 className="size-3.5" />삭제
+              </button>
+            </div>
+          ))}
+          {b.sessionPrices.length === 0 ? <p className="text-text-dim text-sm">등록된 단가가 없습니다. 회차 화면에서 직접 입력할 수도 있습니다.</p> : null}
+          <button
+            type="button"
+            disabled={b.sessionPrices.length >= 100}
+            onClick={() => set({ sessionPrices: [...b.sessionPrices, { price: 0, label: "" }] })}
+            className="border-line text-text-dim hover:bg-bg-soft flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-2 text-xs disabled:opacity-50"
+          >
+            <Plus className="size-3.5" />단가 추가
+          </button>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="EiE 월 수강료" description="회차를 곱하지 않는 월 고정 금액입니다. 월 금액 확정 후 기존 공통 수수료와 배분율로 강사 정산에 반영되며, 수강료 계산기의 EiE 항목에도 적용됩니다.">
+        <div className="max-w-xs">
+          <NumberField label="EiE 월 고정 금액" hint="원" value={b.eieMonthlyPrice} min={1} max={1_000_000_000} onChange={(eieMonthlyPrice) => set({ eieMonthlyPrice })} />
+        </div>
+      </SettingsCard>
+
       <SettingsCard title="청구 기본값" description="청구서 생성·수강료 계산기의 기본값으로 쓰입니다.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <NumberField

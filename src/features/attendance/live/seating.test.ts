@@ -6,6 +6,7 @@ import {
   pickClassDayHit,
   SEATING_PERIOD_COLS,
   seatingSummary,
+  blockSpanAround,
   spanAdjacentEnd,
 } from "./seating";
 import type { LiveBoardSlot } from "./types";
@@ -243,6 +244,76 @@ describe("foldSeating band", () => {
       slot({ key: "p1", classId: "c9", slotStart: "11:00", slotEnd: "14:00", band: "past" }),
     ]);
     expect(klass?.band).toBe("past");
+  });
+});
+
+describe("blockSpanAround — 카드에 적히는 '수업 전체' 시각", () => {
+  const P = (start: string, end: string, room = "본원601", label: string | null = null) => ({
+    slotStart: start,
+    slotEnd: end,
+    roomName: room,
+    slotTeacherLabel: label,
+  });
+
+  it("대표 교시가 **뒤** 교시여도 앞 교시까지 거슬러 올라간다 (원장 2026-09-16: 2-1+2-2는 한 수업)", () => {
+    // 실측 초등M 초5 EL2T — 16:20~17:15 + 17:15~18:10. 수업이 끝나면 대표가 마지막 교시로 내려간다.
+    expect(blockSpanAround([P("16:20", "17:15"), P("17:15", "18:10")], 1)).toEqual({
+      start: "16:20",
+      end: "18:10",
+    });
+  });
+
+  it("5분 쉬는 시간이 껴 있어도 한 블록 — 실측 초등M 초4 BS1J(14:20~15:20 + 15:25~16:20)", () => {
+    // `spanAdjacentEnd`는 끝이 정확히 맞닿을 때만 이어서 이 쌍을 못 붙인다(그래서 함수가 둘이다).
+    expect(spanAdjacentEnd([P("14:20", "15:20"), P("15:25", "16:20")])).toBe("15:20");
+    expect(blockSpanAround([P("14:20", "15:20"), P("15:25", "16:20")], 1)).toEqual({
+      start: "14:20",
+      end: "16:20",
+    });
+  });
+
+  it("10분 쉬는 시간(4교시 18:10 → 5교시 18:20)까지 잇는다", () => {
+    expect(blockSpanAround([P("17:15", "18:10"), P("18:20", "19:15")], 0)).toEqual({
+      start: "17:15",
+      end: "19:15",
+    });
+  });
+
+  it("점심처럼 크게 벌어지면 끊는다 — 오전 블록과 저녁 블록은 다른 수업", () => {
+    expect(blockSpanAround([P("10:00", "10:50"), P("16:20", "17:10")], 1)).toEqual({
+      start: "16:20",
+      end: "17:10",
+    });
+  });
+
+  it("🔴 방이 바뀌면 끊는다 — 카드는 한 강의실 아래에 놓인다(spanAdjacentEnd와 같은 불변식)", () => {
+    // 실측 DP6: 본원602 14:20~15:00 → 랩실 15:00~15:40. 이어 붙이면 같은 방 다른 반과 겹쳐 보인다.
+    expect(
+      blockSpanAround(
+        [P("14:20", "15:00", "본원602", "Kristine"), P("15:00", "15:40", "본원603", "LAB")],
+        1,
+      ),
+    ).toEqual({ start: "15:00", end: "15:40" });
+  });
+
+  it("같은 호수라도 자리(LAB) 표기가 붙으면 별개 블록", () => {
+    expect(
+      blockSpanAround(
+        [P("16:20", "17:00", "본원603", null), P("17:00", "17:40", "본원603", "LAB")],
+        0,
+      ),
+    ).toEqual({ start: "16:20", end: "17:00" });
+  });
+
+  it("세 교시 블록은 대표가 가운데여도 양쪽 끝까지 — 실측 고등M 고2 BS4F 토(19:15~22:00)", () => {
+    expect(
+      blockSpanAround([P("19:15", "20:10"), P("20:10", "21:05"), P("21:05", "22:00")], 1),
+    ).toEqual({ start: "19:15", end: "22:00" });
+  });
+
+  it("빈 목록·범위 밖 인덱스에도 터지지 않는다", () => {
+    expect(blockSpanAround([], 0)).toEqual({ start: "", end: null });
+    expect(blockSpanAround([P("16:20", "17:15")], -1)).toEqual({ start: "16:20", end: "17:15" });
   });
 });
 
