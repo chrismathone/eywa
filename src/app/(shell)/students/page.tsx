@@ -317,9 +317,7 @@ export default async function StudentsPage({
               ⚠️ **인원수는 안 적는다** — `hiddenNotStarted`는 이 학생 전체 수라, 과목·학년·검색이 함께
                  걸려 있으면 "N명 제외"가 실제로 빠진 수와 달라진다(숫자가 거짓말하는 자리). */}
           {hiddenNotStarted > 0 ? (
-            <span className="text-amber ml-1.5">
-              · 수업 시작 전 학생은 제외(상태 &lsquo;전체&rsquo;에서 보입니다)
-            </span>
+            <span className="text-amber ml-1.5">· {sheetT(lang, "stu.count.notStarted")}</span>
           ) : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">

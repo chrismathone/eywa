@@ -1584,6 +1584,12 @@ export const SHEET_DICT = {
   "stu.count.post": { ko: "명", en: " students" },
   "stu.count.pages": { ko: "{page}/{total} 페이지", en: "page {page} of {total}" },
   "stu.count.q": { ko: "“{q}” 검색", en: "search “{q}”" },
+  // '실시간 재원생'(원장 2026-09-16) — 아직 한 과목도 시작 안 한 학생이 재원 목록에서 빠졌음을 밝히는 줄.
+  // 🔴 인원수는 안 적는다(과목·학년·검색이 함께 걸리면 실제로 빠진 수와 달라진다).
+  "stu.count.notStarted": {
+    ko: "수업 시작 전 학생은 제외(상태 ‘전체’에서 보입니다)",
+    en: "Not-yet-started students excluded (see status ‘All’)",
+  },
   "stu.empty.title": { ko: "결과 없음", en: "No results" },
   "stu.empty.desc": { ko: "검색어/필터를 조정해보세요.", en: "Try adjusting the search or the filters." },
   "stu.col.student": { ko: "학생", en: "Student" },
