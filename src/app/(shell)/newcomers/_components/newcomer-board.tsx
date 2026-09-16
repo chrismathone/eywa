@@ -224,6 +224,6 @@ function Metric({ icon, label, value, unit, note, tone = "blue", help, onClick, 
   icon: EywaIconName; label: string; value: string; unit: string; note: string; tone?: string; help?: string;
   onClick?: () => void; active?: boolean; disabled?: boolean;
 }) {
-  const content = <><span className={styles.metricIcon}><EyIcon name={icon} size={21} /></span><div><span className={styles.metricLabel}>{label}</span><div className={styles.metricValue}>{value}<small>{unit}</small></div><span className={styles.metricNote}>{note}</span></div></>;
+  const content = <><span className={styles.metricIcon}><EyIcon name={icon} size={21} /></span><div><span className={styles.metricLabel}>{label}</span><div className={styles.metricValue}>{value}<small>{unit}</small></div></div><span className={styles.metricNote}>{note}</span></>;
   return onClick ? <button type="button" className={styles.metric} data-tone={tone} data-metric={label} title={help} aria-pressed={!!active} disabled={disabled} onClick={onClick}>{content}</button> : <div className={styles.metric} data-tone={tone} data-metric={label} title={help}>{content}</div>;
 }

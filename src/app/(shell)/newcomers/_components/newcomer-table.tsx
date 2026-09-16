@@ -25,7 +25,7 @@ export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, select
   const { labelOf } = useSubjectMaps();
   return <table className={`${styles.table} ${compact ? styles.compact : ""}`}>
     <caption className="sr-only">학생·과목별 신규생 90일 관리. 업무 칸을 누르면 완료 또는 완료 취소합니다.</caption>
-    <colgroup><col style={{ width: 148 }} /><col style={{ width: 114 }} /><col style={{ width: 64 }} /><col style={{ width: 92 }} /><col style={{ width: 138 }} />{ONBOARDING_ITEMS.map(item => <col key={item.key} />)}</colgroup>
+    <colgroup><col style={{ width: 148 }} /><col style={{ width: 114 }} /><col style={{ width: 64 }} /><col style={{ width: 104 }} /><col style={{ width: 170 }} />{ONBOARDING_ITEMS.map(item => <col key={item.key} style={item.optional ? { width: 124 } : undefined} />)}</colgroup>
     <thead><tr>
       <th scope="col" className={styles.stickyName}>이름</th>
       <th scope="col" className={styles.stickySchool}>학교·학년</th>
