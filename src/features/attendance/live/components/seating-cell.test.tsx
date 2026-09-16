@@ -38,6 +38,8 @@ const KLASS: SeatingClass = {
   roomName: "601호",
   firstStart: "16:20",
   firstEnd: "18:10",
+  blockStart: "16:20",
+  blockEnd: "18:10",
   periodLabel: null,
   seatLabel: null,
   phase: "due",

@@ -67,9 +67,11 @@ export function QuickClassCard({
               ) : null}
             </span>
             <span className="text-text-dim block truncate text-xs">
+              {/* 🔴 좌석표 카드와 **같은 값**을 적는다 — 블록 전체(`blockStart~blockEnd`)이지
+                  대표 교시가 아니다(원장 2026-09-16). 저장 축은 아래 `periodStart: klass.firstStart` 그대로. */}
               <span className="num">
-                {klass.firstStart}
-                {klass.firstEnd ? `~${klass.firstEnd}` : ""}
+                {klass.blockStart}
+                {klass.blockEnd && klass.blockEnd !== klass.blockStart ? `~${klass.blockEnd}` : ""}
               </span>
               {roomName ? ` · ${roomName}` : ""}
               {` · ${t("quick.card.recorded")} `}
