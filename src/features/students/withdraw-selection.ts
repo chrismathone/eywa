@@ -12,6 +12,9 @@
  *  · 0개 선택 = 진행 불가(무엇을 하겠다는 건지 알 수 없다).
  *
  * 🔴 라벨·안내는 **누르기 전에** 결과를 말해야 한다 — 누른 뒤에 알게 되면 지금과 같은 말싸움이 난다.
+ * 🔑 **단위는 과목이다**(원장 2026-09-16 *"과목 선택 가능하게 해달라한것 같은데, 수업 선택이 아니라"*) —
+ *    `total`은 수강 **과목** 수, `selectedLabels`는 고른 **과목 라벨**이다([`subject-selection.ts`](./subject-selection.ts)).
+ *    반 단위로 세웠더니 수학만 세 반 다니는 학생이 한 과목인데 세 줄로 보였다.
  */
 
 export type EndSelectionMode =
@@ -31,8 +34,8 @@ export type EndSelectionPlan = {
 };
 
 /**
- * @param total   이 학생의 활성(end_date null) 수강 수.
- * @param selectedLabels 선택된 수강의 표시명(반 이름). 안내문에 그대로 실린다 —
+ * @param total   이 학생이 수강 중인 **과목** 수(활성 수강을 과목으로 묶은 수).
+ * @param selectedLabels 고른 **과목의 라벨**(학원설정 `labelOf`). 안내문에 그대로 실린다 —
  *                       호출부에서 이미 한글 라벨로 만든 값을 넘길 것(raw enum 금지).
  */
 export function describeEndSelection(total: number, selectedLabels: string[]): EndSelectionPlan {
@@ -51,7 +54,7 @@ export function describeEndSelection(total: number, selectedLabels: string[]): E
     return {
       mode: "none",
       buttonLabel: "퇴원 처리",
-      notice: "종료할 수업을 1개 이상 선택해 주세요.",
+      notice: "종료할 과목을 1개 이상 선택해 주세요.",
     };
   }
 
@@ -59,13 +62,13 @@ export function describeEndSelection(total: number, selectedLabels: string[]): E
     return {
       mode: "full",
       buttonLabel: "퇴원 처리",
-      notice: `활성 수강 ${total}개가 모두 종료되고, 퇴원관리 페이지에 노출됩니다.`,
+      notice: `수강 중인 ${total}과목이 모두 종료되고, 퇴원관리 페이지에 노출됩니다.`,
     };
   }
 
   return {
     mode: "partial",
-    buttonLabel: `수업 종료(${selected}개)`,
+    buttonLabel: `과목 종료(${selected}과목)`,
     // 🔴 "학생은 재원으로 남습니다"가 이 문장의 핵심 — 데스크가 퇴원으로 오해하면 사고가 반복된다.
     notice: `${selectedLabels.join(", ")}만 종료합니다 — 학생은 재원으로 남습니다(퇴원관리 '수강종료'에서 확인).`,
   };

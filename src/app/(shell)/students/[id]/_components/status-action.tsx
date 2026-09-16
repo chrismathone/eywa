@@ -81,6 +81,7 @@ export function StatusAction({
           studentId={studentId}
           studentName={studentName}
           currentStatus={STATUS_LABEL[currentStatus] ?? currentStatus}
+          statusKey={currentStatus}
           initialTarget={target}
           openEnrollments={openEnrollments}
           onClose={(changed) => {

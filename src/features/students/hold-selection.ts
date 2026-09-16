@@ -16,6 +16,9 @@
  *
  * 🔴 라벨·안내는 **누르기 전에** 결과를 말해야 한다(퇴원 다이얼로그와 같은 이유 — 누른 뒤에 알게 되면
  *    "한 과목만 쉰다고 했는데 둘 다 멈췄다"가 된다).
+ * 🔑 **단위는 과목이다**(원장 2026-09-16 *"어차피 한과목만 그만둔다고 휴원이나 퇴원이 아님"* ·
+ *    *"내 말은 한 과목의 '한 수업'"*) — 그래서 일부만 고른 버튼은 '휴원'이 아니라 **'과목 대기'**라 부른다.
+ *    `total`·라벨은 과목 단위다([`subject-selection.ts`](./subject-selection.ts)).
  */
 
 export type HoldSelectionMode =
@@ -37,9 +40,9 @@ export type HoldSelectionPlan = {
 };
 
 /**
- * @param total          이 학생의 활성(end_date null) 수강 수.
- * @param selectedLabels 선택된(=휴원할) 수강의 표시명(반 이름). 호출부가 이미 한글 라벨로 만든 값.
- * @param resumeLabels   **지금 대기인데 선택이 풀린** 수강의 표시명 — 저장하면 다시 수강으로 돌아간다.
+ * @param total          이 학생이 수강 중인 **과목** 수.
+ * @param selectedLabels 고른(=쉴) **과목 라벨**. 호출부가 이미 한글 라벨로 만든 값.
+ * @param resumeLabels   **대기인 수강이 있는데 선택이 풀린 과목** 라벨 — 저장하면 다시 수강으로 돌아간다.
  */
 export function describeHoldSelection(
   total: number,
@@ -62,14 +65,14 @@ export function describeHoldSelection(
     if (resume > 0) {
       return {
         mode: "resume",
-        buttonLabel: `휴원 해제(${resume}개)`,
+        buttonLabel: `대기 해제(${resume}과목)`,
         notice: `${resumeLabels.join(", ")}을(를) 다시 수강으로 되돌립니다 — 학생은 재원 그대로입니다.`,
       };
     }
     return {
       mode: "none",
       buttonLabel: "휴원 처리",
-      notice: "휴원할 수업을 1개 이상 선택해 주세요.",
+      notice: "쉬는 과목을 1개 이상 선택해 주세요.",
     };
   }
 
@@ -77,7 +80,7 @@ export function describeHoldSelection(
     return {
       mode: "full",
       buttonLabel: "휴원 처리",
-      notice: `활성 수강 ${total}개가 모두 대기로 바뀌고, 학생 상태가 '휴원'이 됩니다.`,
+      notice: `수강 중인 ${total}과목이 모두 대기로 바뀌고, 학생 상태가 '휴원'이 됩니다.`,
     };
   }
 
@@ -85,7 +88,8 @@ export function describeHoldSelection(
   const resumeNote = resume > 0 ? ` (${resumeLabels.join(", ")}은(는) 수강으로 되돌립니다)` : "";
   return {
     mode: "partial",
-    buttonLabel: `휴원(${selected}개)`,
+    // 🔴 '휴원'이라 부르지 않는다 — 한 과목만 쉬는 건 학생 휴원이 아니다(원장 2026-09-16).
+    buttonLabel: `과목 대기(${selected}과목)`,
     notice: `${selectedLabels.join(", ")}만 대기로 바꿉니다 — 학생은 재원으로 남습니다${resumeNote}.`,
   };
 }
