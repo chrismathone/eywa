@@ -25,7 +25,6 @@ const COVERS = [
   "bg-purple/12 text-purple",
   "bg-gold/15 text-gold",
 ];
-const SPINE = ["bg-primary", "bg-blue", "bg-rose", "bg-amber", "bg-purple", "bg-gold"];
 
 const OVERLAP = 86; // 카드 겹침(px) — 페이지 엣지처럼 일부만 보이게(책 fore-edge)
 const STEP = 7; // 부채 갈래각(deg) — 가운데 기준 좌우로 펼쳐짐
@@ -82,11 +81,7 @@ function FanCard({
         item.isBackground ? "bg-bg-soft" : "bg-card"
       }`}
     >
-      {/* 책등(spine) — 왼쪽 색 띠 */}
-      <span
-        className={`absolute inset-y-0 left-0 w-[5px] rounded-l-md ${SPINE[index % SPINE.length]} opacity-80`}
-        aria-hidden
-      />
+      {/* 🔴 책등(왼쪽 색 띠)은 없앴다 — 원장 2026-09-16 *"왼쪽에 이렇게 테두리 같은거 표시하는거 싹다 제거해"*. */}
       {/* 페이지 엣지(오른쪽 fore-edge) — 종이 결 음영 */}
       <span
         className="pointer-events-none absolute inset-y-1.5 right-0 w-3.5 rounded-r-xl"

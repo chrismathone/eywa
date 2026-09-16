@@ -116,7 +116,7 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
             );
           case "quote":
             return (
-              <p key={i} className="border-line text-text-dim border-l-2 pl-2 italic">
+              <p key={i} className="text-text-dim pl-2 italic">
                 <Spans spans={l.spans} />
               </p>
             );

@@ -1,5 +1,4 @@
 import { Pill } from "@/components/atoms/pill";
-import { TONE_ACCENT_BAR } from "@/lib/design/semantic-color";
 import { buildCategoryMaps, type InventoryCategory } from "@/features/inventory/category";
 import { assetStatusLabel } from "@/features/inventory/status";
 import type { InventoryAsset } from "@/features/inventory/types";
@@ -19,7 +18,7 @@ export function ActionNeeded({ assets, categories }: { assets: InventoryAsset[];
   return (
     <details
       id={ACTION_NEEDED_ID}
-      className={`bg-card shadow-card scroll-mt-3 rounded-2xl border-l-[3px] ${TONE_ACCENT_BAR.critical} [&_summary::-webkit-details-marker]:hidden`}
+      className="bg-card shadow-card scroll-mt-3 rounded-2xl [&_summary::-webkit-details-marker]:hidden"
     >
       <summary className="flex cursor-pointer list-none items-baseline gap-2 px-4 py-3">
         <h3 className="text-foreground text-sm font-bold">지금 조치가 필요한 자산</h3>

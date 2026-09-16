@@ -44,12 +44,15 @@ export type SkinClasses = {
   shortLabels: boolean;
 };
 
-/** 왼쪽 3px — 기본안. */
+/**
+ * 기본안의 의미색 = **옅은 바탕**. 🔴 왼쪽 색 띠는 금지다(원장 2026-09-16) — 띠만 빼면 타일에 tone을 따라 칠해지는 것이
+ * 하나도 없어 경고 타일이 평범한 타일과 똑같아진다(적대 리뷰), 그래서 뜻을 바탕으로 옮겼다. 이름은 소비처가 많아 그대로 둔다.
+ */
 const ACCENT_LEFT: Record<TileTone, string> = {
-  positive: "border-l-[3px] border-l-green",
-  caution: "border-l-[3px] border-l-amber",
-  critical: "border-l-[3px] border-l-danger",
-  inert: "border-l-[3px] border-l-line-strong",
+  positive: "bg-green-soft",
+  caution: "bg-amber-soft",
+  critical: "bg-danger-soft",
+  inert: "",
 };
 
 /** 머리 띠 위 3px — 밀도안. 색의 **뜻**은 그대로고 자리만 옮긴다. */

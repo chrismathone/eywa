@@ -251,7 +251,7 @@ function DayCell({
                     <div
                       key={line.id}
                       className={`grid min-w-0 grid-cols-[74px_minmax(0,1fr)] items-baseline gap-1.5 ${
-                        off ? "border-amber -ml-2 border-l-[3px] pl-1.5" : ""
+                        off ? "bg-amber-soft -mx-1 rounded px-1" : ""
                       }`}
                     >
                       <span

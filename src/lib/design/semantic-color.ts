@@ -97,8 +97,9 @@ export const TONE_SOFT: Record<SemanticTone, string> = {
 };
 
 /**
- * tone → 왼쪽 색 띠(카드·행의 상태 표시). 화이트 캔버스에서 "면"을 칠하지 않고도 색을 얹는 방법 —
- * v4의 기본 어법이다(면=화이트, 구분=테두리, 의미=가는 색 띠).
+ * 🔴 **사용 금지** — 왼쪽 색 띠는 앱에서 걷어냈다(원장 2026-09-16 *"왼쪽에 이렇게 테두리 같은거 표시하는거 싹다
+ * 제거해"* · AI가 만든 화면에 흔한 장식이라는 지적). 뜻은 배경색·글자색·문구가 말한다. 남은 소비처는 손대지 않는
+ * 개발 사본 `timetable-dev`뿐이라 상수만 남겨 둔다 — 새 코드에서 쓰지 말 것(가드 `no-left-accent-bar.test.ts`).
  */
 export const TONE_ACCENT_BAR: Record<SemanticTone, string> = {
   positive: "border-l-green",

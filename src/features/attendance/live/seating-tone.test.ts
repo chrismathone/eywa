@@ -61,8 +61,10 @@ describe("seatingHeaderClass", () => {
 
 describe("seatingCardClass", () => {
   it("지남·미입력만 좌측 굵은 띠 — 흐리게(opacity) 만들지 않는다", () => {
-    expect(seatingCardClass("past_pending")).toContain("border-l-4");
-    expect(seatingCardClass("past_pending")).toContain("border-amber");
+    // 🔴 왼쪽 띠는 없다(원장 2026-09-16) — 미입력은 머리 줄(앰버 바탕 + `미입력 N`)이 말한다.
+    expect(seatingCardClass("past_pending")).not.toMatch(/border-l-/);
+    expect(seatingHeaderClass("past_pending")).toContain("bg-amber-soft");
+    expect(seatingToneNote("past_pending", 5)).toBe("미입력 5");
     const all = (["now", "upcoming", "past_pending", "past_done"] as const).map(seatingCardClass).join(" ");
     expect(all).not.toMatch(/opacity/);
   });

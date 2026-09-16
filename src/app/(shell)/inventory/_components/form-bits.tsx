@@ -44,7 +44,7 @@ export function Field({
 export function FormError({ error }: { error: string | null }) {
   if (!error) return null;
   return (
-    <p role="alert" className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-1.5 text-xs">
+    <p role="alert" className="bg-danger-soft/40 text-danger rounded-lg px-3 py-1.5 text-xs">
       {error}
     </p>
   );

@@ -165,7 +165,7 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
       </header>
       <p className="text-foreground text-sm leading-relaxed">{c.summary}</p>
       {c.followUpAction ? (
-        <div className="border-border bg-bg-soft/40 rounded-sm border-l-2 border-l-chart-3 px-3 py-2 text-xs">
+        <div className="bg-bg-soft/40 rounded-sm px-3 py-2 text-xs">
           <div className="flex items-center justify-between gap-2">
             <p className="text-muted-foreground">후속 조치</p>
             <FollowUpToggle id={c.id} done={!!c.followUpDone} />
