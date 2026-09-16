@@ -89,7 +89,9 @@ export function seatDisplayName(seatLabel: string | null | undefined): string | 
  *    `출석 17:00`이 섞여 보이던 게 이 한 줄 때문이다 — 교시(slot_start)를 쓰는 반(영어·자리)만 이름을
  *    잃었다. 칸이 좁아 하나만 적으려던 것으로 보이는데, **사라져야 할 쪽은 이름이 아니다**:
  *    "몇 시에 왔나"보다 "어느 수업이었나"가 먼저다(시각은 반이 이미 요일·교시로 정해 준다).
- * ⚠️ 칸은 여전히 좁다 → 넘치면 `truncate`가 자르고, 전문은 `attendanceRecordTitle` 툴팁에 이미 있다.
+ * ⚠️ 칸은 여전히 좁다 → 넘치면 `truncate`가 자르고, 전문은 호버가 갚는다 — **사유가 있으면 메모 카드**
+ *    (`attendanceHoverProps`), 없을 때만 `attendanceRecordTitle` 기본 툴팁이다(2026-09-15 메모 툴팁 = 카드).
+ *    🔴 사유를 `title`로 되돌리지 말 것 — 가드 `tip-wiring.test.ts`가 잡는다.
  */
 export function attendanceBadgeText(r: AttendanceRecordLike): string {
   return [
