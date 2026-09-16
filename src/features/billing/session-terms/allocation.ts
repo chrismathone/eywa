@@ -2,12 +2,8 @@
 // 회차 검증 행(확정 회차·단가·실 소비 회차)을 반 담당 강사 단위로 묶어
 // "확정 금액(청구 기준) vs 실측 금액(실 회차×단가)"을 나란히 보여준다.
 //
-// 🔴 **여기 오는 숫자는 '회차'(출석 일수)이지 시수가 아니다**(0263a, 원장 2026-09-14 *"하루하루를 1일로
-//    세어야지"*). 단가는 회차당 값이라 곱해야 할 것도 회차다 — 종전엔 RPC가 시수 합을 줘서 하루 2~4교시인
-//    영어의 실측 금액이 2~4배로 잡혔다.
-// ⚠️ 필드 이름 `actualUnits`는 그 시절에 붙은 **옛 이름**이고 뜻은 회차 합이다 — DB 컬럼
-//    `invoice_teacher_splits.actual_units`이자 골든 픽스처의 키라 이름만 따로 바꾸지 않는다(splits.ts와 같은 설명).
-//    `session_units`(시수)와 헷갈리지 말 것 — CLAUDE.md "이름 셋을 구분할 것".
+// 0267a부터 새 확정은 출석부 시수 합, 기존 확정은 저장한 일수 기준으로 대조한다.
+// 수납을 연결하면 할인 전 배분금액이 급여 기준이며, 학부모 할인은 차감하지 않는다.
 //
 // ⚠️ 이것은 표시 전용 집계다 — 어디에도 저장하지 않는다(쓰기 0).
 //    강사 분배를 DB에 쓰는 기능(invoice_teacher_splits)은 골든마스터(N6) 통과 전 착수 금지(불변).
@@ -26,7 +22,8 @@ export type AllocationRowInput = {
   confirmedSessions: number | null;
   unitPrice: number | null;
   amount: number | null; // 확정 시점 저장 금액(회차×단가)
-  actualConsumed: number; // 실 소비 **회차** 합 = 출석 일수(0263a). 시수가 아니다.
+  actualConsumed: number; // 확정 시점 quantity_basis에 맞춘 소비량
+  allocatedAmount?: number | null;
 };
 
 export type TeacherAllocation = {
@@ -35,7 +32,7 @@ export type TeacherAllocation = {
   rowCount: number;
   confirmedSessions: number; // 확정 회차 합(확정 행만)
   confirmedAmount: number; // 확정 금액 합(원)
-  actualUnits: number; // 실 소비 회차 합(옛 이름 — 뜻은 회차다, 파일 머리 주석)
+  actualUnits: number; // 실 소비량 합
   actualAmount: number; // 실측 금액 합(원) — 단가 있는 행만
   diffAmount: number; // 실측 − 확정
   missingPriceRows: number; // 단가 없어 금액 집계 제외된 행 수
@@ -82,14 +79,15 @@ export function aggregateTeacherAllocations(rows: AllocationRowInput[]): Teacher
       if (r.amount !== null || r.unitPrice !== null) agg.confirmedPricedRows++;
       else if (r.confirmedSessions > 0) agg.missingConfirmedRows++;
       const confirmedAmount =
-        r.amount ?? (r.unitPrice !== null ? sessionPricingAmount(r.pricingMode, r.confirmedSessions, r.unitPrice) : 0);
+        r.allocatedAmount ?? r.amount ?? (r.unitPrice !== null ? sessionPricingAmount(r.pricingMode, r.confirmedSessions, r.unitPrice) : 0);
       agg.confirmedAmount += confirmedAmount;
     }
 
     agg.actualUnits = Math.round((agg.actualUnits + r.actualConsumed) * 10) / 10;
     if (r.unitPrice !== null) {
       agg.actualAmount += r.pricingMode === "monthly"
-        ? (r.confirmedSessions !== null ? r.amount ?? r.unitPrice : 0)
+        ? (r.confirmedSessions !== null ? r.allocatedAmount ?? r.amount ?? r.unitPrice : 0)
+        : r.allocatedAmount != null ? (r.confirmedSessions && r.confirmedSessions > 0 ? Math.round(r.allocatedAmount * r.actualConsumed / r.confirmedSessions) : 0)
         : Math.round(r.actualConsumed * r.unitPrice);
     } else if (r.actualConsumed > 0) {
       agg.missingPriceRows++;

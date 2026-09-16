@@ -1,5 +1,5 @@
 /**
- * 회차 소비 = **출석 일수**(원장 2026-09-14) — *배선* 가드.
+ * 2026-09-16: 새 확정은 출석부 시수, 기존 확정은 일수 스냅샷을 보존한다.
  *
  * 🔴 이 가드가 없으면 규칙이 **조용히** 되돌아간다. 골든마스터(`billing/golden`)는 RPC를 호출하지 않고
  *    동결된 `rpcConsumed` 숫자를 *입력*으로 쓰기 때문에, 세는 법을 바꾸든 되돌리든 **테스트는 그대로 통과**하고
@@ -82,13 +82,14 @@ describe("회차 소비 — 배선", () => {
     expect(offConvention).toEqual([]);
   });
 
-  it("🔴 소비는 **출석 일수**로 센다 — 시수 합으로 되돌아가지 않는다", () => {
+  it("새 확정은 시수 합, 기존 확정은 저장한 일수 기준으로 검증한다", () => {
     expect(body).toContain("count(distinct e.session_date)");
-    // 되돌림 방지: 시수를 더하는 옛 식이 본문에 남아 있으면 안 된다.
-    expect(body).not.toContain("sum(coalesce(e.session_units");
+    expect(body).toContain("sum(coalesce(e.session_units, 1))");
+    expect(body).toContain("case when t.quantity_basis = 'attendance_units'");
+    expect(body).toContain("when st.confirmed_sessions is null then 'attendance_units' else st.quantity_basis");
   });
 
-  it("🔴 세는 단위는 (청구서 × 반) = 학생×반 — 다른 반은 반마다 1회, 한 반의 여러 교시는 하루 1회", () => {
+  it("집계 키는 청구서 × 반으로 유지한다", () => {
     expect(body).toContain("group by t.invoice_id, t.class_id");
     expect(body).toContain("left join eff e on e.student_id = t.student_id and e.class_id = t.class_id");
   });

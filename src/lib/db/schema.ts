@@ -1414,8 +1414,13 @@ export const invoiceSessionTerms = pgTable(
     classId: uuid("class_id")
       .notNull()
       .references(() => classes.id, { onDelete: "cascade" }), // 반 단위(합산 금지 — 반마다 단가 상이)
-    plannedSessions: integer("planned_sessions"),
-    confirmedSessions: integer("confirmed_sessions"),
+    plannedSessions: numeric("planned_sessions", { precision: 6, scale: 1 }),
+    confirmedSessions: numeric("confirmed_sessions", { precision: 6, scale: 1 }),
+    quantityBasis: text("quantity_basis").notNull().default("days"),
+    allocationLineIndex: integer("allocation_line_index"),
+    allocationAmount: numeric("allocation_amount", { precision: 12, scale: 0 }),
+    allocationSource: jsonb("allocation_source"),
+    allocationBaseAmount: numeric("allocation_base_amount", { precision: 12, scale: 0 }),
     pricingMode: text("pricing_mode").notNull().default("per_session"),
     unitPrice: numeric("unit_price", { precision: 12, scale: 0 }),
     amount: numeric("amount", { precision: 12, scale: 0 }),
@@ -1451,7 +1456,7 @@ export const invoiceTeacherSplits = pgTable(
     subject: text("subject").notNull(),
     teacherId: uuid("teacher_id").references(() => users.id, { onDelete: "set null" }), // null=미배정
     teacherName: text("teacher_name"), // 표시 스냅샷(개명·삭제 후에도 기록 보존)
-    confirmedSessions: integer("confirmed_sessions").notNull(),
+    confirmedSessions: numeric("confirmed_sessions", { precision: 6, scale: 1 }).notNull(),
     pricingMode: text("pricing_mode").notNull().default("per_session"),
     unitPrice: numeric("unit_price", { precision: 12, scale: 0 }).notNull(),
     confirmedAmount: numeric("confirmed_amount", { precision: 12, scale: 0 }).notNull(),

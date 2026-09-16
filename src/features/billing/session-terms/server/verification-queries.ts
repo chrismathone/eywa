@@ -9,8 +9,7 @@ export type { VerificationStatus } from "../verification";
 /**
  * 회차 검증 한 행 — 회차 확정(청구값) × **실 소비 회차** 대조(read-only). subject는 raw key(라벨은 소비처가 buildSubjectMaps로).
  *
- * 🔴 실측은 **출석 일수**다(0263a, 원장 2026-09-14) — 시수(`session_units`)가 아니다.
- *    CLAUDE.md "이름 셋을 구분할 것": `session_units`(시수) · `*_sessions`(회차) · 세션 기간.
+ * 0267a부터 새 확정은 출석부 시수 합. 기존 확정은 저장한 quantity_basis의 일수 기준을 유지한다.
  */
 export type VerificationRow = {
   pricingMode: SessionPricingMode;
@@ -28,10 +27,13 @@ export type VerificationRow = {
   plannedSessions: number | null; // 미확정 행에 참고로 회색 표시
   unitPrice: number | null;
   amount: number | null; // 확정 시점 저장 금액(회차×단가)
-  actualConsumed: number; // 실 소비 **회차** = 출석 일수(유효 present/late/early_leave/makeup, 하루 몇 교시든 1)
+  actualConsumed: number; // 확정 시점 quantity_basis에 맞춘 출석 소비량
+  quantityBasis?: "days" | "attendance_units";
   status: VerificationStatus;
   diff: number | null;
   note: string | null;
+  allocatedAmount?: number | null;
+  allocationStale?: boolean;
 };
 
 export type VerificationView = {
@@ -40,7 +42,7 @@ export type VerificationView = {
 };
 
 /**
- * 청구월의 회차 확정 × 실 출석(**일수**) 대조. 확정값(청구값)만 검증 분자(N1), diff는 신호일 뿐 자동수정 없음(N2).
+ * 청구월의 확정량 × 같은 단위의 실 출석 대조. diff는 신호일 뿐 자동수정 없음(N2).
  * (B2: RPC 결과는 fetchAllPaged 페이징 / B3: 반→강사 조회는 청크 / B4: 강사 조회는 view에만 의존하므로
  *  view 체인 안에서 이어 붙여 출석 RPC와 병렬로 겹친다 — 직렬 왕복 추가 없음.)
  */
@@ -74,7 +76,7 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
   ]);
 
   // 회차 확정 행은 (invoice_id, class_id) 유니크 → 실출석도 같은 키로 조인.
-  // consumed는 numeric(출석 일수, 0263a) — 문자열로 올 수 있어 Number 변환.
+  // consumed는 numeric — 문자열로 올 수 있어 Number 변환.
   const consumedByKey = new Map(
     attendance.map((a) => [`${a.invoice_id}:${a.class_id}`, Number(a.consumed) || 0]),
   );
@@ -98,7 +100,10 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
       plannedSessions: r.plannedSessions,
       unitPrice: r.unitPrice,
       amount: r.amount,
+      allocatedAmount: r.allocatedAmount,
+      allocationStale: r.allocationStale,
       actualConsumed: actual,
+      quantityBasis: r.quantityBasis,
       status,
       diff,
       note: r.note,

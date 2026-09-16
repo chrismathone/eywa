@@ -14,9 +14,9 @@
 
 import type { VerificationVerdict } from "./verification";
 
-/** 이월은 **정수 회차**로만 다룬다(DB도 integer). 시수가 0.5 단위로 갈릴 수 있어 항상 **내림** — 학원에 불리한 쪽으로 반올림하지 않는다. */
+/** 출석부와 같은 소수 한 자리 시수. 부족분 0.5도 이월 근거로 보존한다. */
 function wholeSessions(v: number): number {
-  return Math.max(0, Math.floor(Math.round(v * 10) / 10));
+  return Math.max(0, Math.round(v * 10) / 10);
 }
 
 /**
@@ -72,8 +72,8 @@ export function validateCarryover(
 ): { ok: true; out: number; in: number } | { ok: false; error: string } {
   const out = decision.out ?? 0;
   const inn = decision.in ?? 0;
-  if (!Number.isInteger(out) || out < 0) return { ok: false, error: "이월 회차는 0 이상 정수여야 합니다" };
-  if (!Number.isInteger(inn) || inn < 0) return { ok: false, error: "이월 회차는 0 이상 정수여야 합니다" };
+  const valid = (n: number) => Number.isFinite(n) && n >= 0 && Math.abs(n * 10 - Math.round(n * 10)) < 1e-8;
+  if (!valid(out) || !valid(inn)) return { ok: false, error: "이월 시수는 0 이상, 소수 한 자리까지 입력하세요" };
   if (out > limits.maxOut) return { ok: false, error: `넘길 수 있는 회차는 최대 ${limits.maxOut}회입니다(그 달 부족분)` };
   // ⚠️ 여기가 원장 제약의 마지막 방어선 — 크레딧 없이 상한을 올리려는 시도를 거절한다.
   if (inn > limits.maxIn) return { ok: false, error: `받아올 수 있는 회차는 최대 ${limits.maxIn}회입니다(이전 달 이월분)` };

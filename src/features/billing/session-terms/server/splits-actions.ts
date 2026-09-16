@@ -37,6 +37,7 @@ export async function saveTeacherSplits(
 
   // 현재 회차 검증 뷰(확정·단가·실 회차·담당 강사)에서 분배 행 산출 — 확정 행만(N1).
   const view = await getSessionVerificationView(period);
+  if (view.rows.some((row) => row.allocationStale)) return { error: "수납 연결 후 청구액 또는 반 확정금액이 바뀐 학생이 있습니다. 수납 연결·배분을 다시 확인해 주세요" };
   const rows = computeSplitRows(view.rows);
   const skipped = view.rows.length - rows.length;
 

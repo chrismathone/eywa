@@ -12,7 +12,8 @@ import { mergeHolidays } from "@/features/billing/tuition-calc";
 import { planTermsForMonth, monthRange, type PlanEnrollment } from "../plan";
 import { classifyVerification } from "../verification";
 import { maxCarryoverOut, maxCarryoverIn, validateCarryover } from "../carryover";
-import { isEieMonthlyClass, sessionPricingAmount, type SessionPricingMode } from "@/features/billing/session-pricing";
+import { isEieMonthlyClass, sessionPricingAmount, validSessionQuantity, type SessionPricingMode, type SessionQuantityBasis } from "@/features/billing/session-pricing";
+import { toAutoUnitsSchedule, type AutoUnitsSchedule } from "@/features/attendance/auto-units";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -23,6 +24,7 @@ export type SessionTermPatch = {
   amount: number | null;
   pricingMode: SessionPricingMode;
   confirmedAt: string | null;
+  quantityBasis?: SessionQuantityBasis;
 };
 export type SessionTermActionState = { error?: string; ok?: boolean; refreshed?: number; terms?: SessionTermPatch[] } | undefined;
 
@@ -77,19 +79,21 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
       .or(`end_date.is.null,end_date.gte.${start}`),
   );
   const classIds = [...new Set(enrollments.map((e) => e.class_id))];
-  const schedules = await fetchInChunks<{ class_id: string; day_of_week: string }>(classIds, (chunk) =>
+  const schedules = await fetchInChunks<{ class_id: string; day_of_week: string; start_time: string; end_time: string; valid_from: string; valid_to: string | null; slot_teacher_label: string | null }>(classIds, (chunk) =>
     supabase
       .from("class_schedules")
-      .select("class_id, day_of_week")
+      .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label")
       .in("class_id", chunk)
       .lte("valid_from", end)
       .or(`valid_to.is.null,valid_to.gte.${start}`),
   );
   const daysByClass = new Map<string, Set<number>>();
+  const schedulesByClass = new Map<string, AutoUnitsSchedule[]>();
   for (const s of schedules) {
     const d = DOW[s.day_of_week];
     if (d === undefined) continue;
     (daysByClass.get(s.class_id) ?? daysByClass.set(s.class_id, new Set()).get(s.class_id)!).add(d);
+    (schedulesByClass.get(s.class_id) ?? schedulesByClass.set(s.class_id, []).get(s.class_id)!).push(toAutoUnitsSchedule(s));
   }
 
   const holidays = mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true);
@@ -104,6 +108,7 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
       startDate: e.start_date,
       endDate: e.end_date,
       weekdays: [...(daysByClass.get(e.class_id) ?? [])],
+      schedules: schedulesByClass.get(e.class_id) ?? [],
     });
   }
 
@@ -181,7 +186,7 @@ export async function confirmClassTerms(
   let unitPrice = Math.round(unitPriceRaw);
   if (!Number.isFinite(unitPrice) || unitPrice < 0) return { error: "회당 단가를 확인해 주세요" };
   const override = sessionsOverride ?? null;
-  if (override != null && (!Number.isInteger(override) || override < 0 || override > 99)) return { error: "회차는 0~99 사이 정수여야 합니다" };
+  if (override != null && !validSessionQuantity(override)) return { error: "시수는 0~99 사이, 소수 한 자리까지 입력하세요" };
 
   const supabase = await createClient();
   // 이 반의 그 청구월 term만 — invoices inner join으로 period 필터(RLS가 테넌트 격리).
@@ -206,7 +211,7 @@ export async function confirmClassTerms(
   // amount = 회차 × 단가라 회차값마다 다름 → 회차별로 묶어 batch update(반 학생은 소수라 청크 불필요).
   const byN = new Map<number, string[]>();
   for (const r of targets) {
-    const n = override != null ? override : (r.planned_sessions as number | null) ?? 0;
+    const n = override != null ? override : Number(r.planned_sessions ?? 0);
     (byN.get(n) ?? byN.set(n, []).get(n)!).push(r.id as string);
   }
   let confirmed = 0;
@@ -218,6 +223,7 @@ export async function confirmClassTerms(
         confirmed_sessions: n,
         unit_price: unitPrice,
         pricing_mode: pricingMode,
+        quantity_basis: "attendance_units",
         amount: sessionPricingAmount(pricingMode, n, unitPrice),
         confirmed_by: user.id,
         confirmed_at: now,
@@ -225,7 +231,7 @@ export async function confirmClassTerms(
       .in("id", ids)
       .select("id");
     if (uerr) return { error: uerr.message };
-    for (const row of saved ?? []) terms.push({ id: row.id, confirmedSessions: n, unitPrice, pricingMode, amount: sessionPricingAmount(pricingMode, n, unitPrice), confirmedAt: now });
+    for (const row of saved ?? []) terms.push({ id: row.id, confirmedSessions: n, unitPrice, pricingMode, amount: sessionPricingAmount(pricingMode, n, unitPrice), confirmedAt: now, quantityBasis: "attendance_units" });
     confirmed += saved?.length ?? 0;
   }
   if (confirmed === 0) return { error: "확정할 대상을 찾을 수 없습니다" };
@@ -265,8 +271,7 @@ export async function confirmSessionTerm(
   const priceRaw = String(formData.get("unitPrice") ?? "").replace(/[,\s]/g, "");
   let unitPrice = priceRaw === "" ? NaN : Number(priceRaw);
   if (!id) return { error: "대상이 없습니다" };
-  if (!Number.isInteger(sessions) || sessions < 0 || sessions > 99)
-    return { error: "확정 회차는 0~99 사이 정수여야 합니다" };
+  if (!validSessionQuantity(sessions)) return { error: "확정 시수는 0~99 사이, 소수 한 자리까지 입력하세요" };
   if (!Number.isFinite(unitPrice) || unitPrice < 0) return { error: "회당 단가를 확인해 주세요" };
   unitPrice = Math.round(unitPrice);
 
@@ -291,6 +296,7 @@ export async function confirmSessionTerm(
       confirmed_sessions: sessions,
       unit_price: unitPrice,
       pricing_mode: pricingMode,
+      quantity_basis: "attendance_units",
       amount,
       confirmed_by: user.id,
       confirmed_at: confirmedAt,
@@ -316,7 +322,7 @@ export async function confirmSessionTerm(
         : {}),
     },
   });
-  return { ok: true, terms: [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt }] };
+  return { ok: true, terms: [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt, quantityBasis: "attendance_units" }] };
 }
 
 /** 확정 해제 — 계획 N은 유지. */
@@ -401,7 +407,7 @@ export async function setSessionTermCarryover(
   const { data: term, error: termErr } = await supabase
     .from("invoice_session_terms")
     .select(
-      "id, invoice_id, class_id, pricing_mode, confirmed_sessions, carryover_out, carryover_in, invoice:invoice_id ( student_id, period )",
+      "id, invoice_id, class_id, pricing_mode, quantity_basis, confirmed_sessions, carryover_out, carryover_in, invoice:invoice_id ( student_id, period )",
     )
     .eq("id", id)
     .maybeSingle();
@@ -424,7 +430,7 @@ export async function setSessionTermCarryover(
     (att as { invoice_id: string; class_id: string; consumed: number | string }[] | null)?.find(
       (a) => a.invoice_id === term.invoice_id && a.class_id === term.class_id,
     )?.consumed ?? 0;
-  const verdict = classifyVerification(term.confirmed_sessions, Number(actual) || 0);
+  const verdict = classifyVerification(term.confirmed_sessions == null ? null : Number(term.confirmed_sessions), Number(actual) || 0);
 
   // 전 달 이월분(같은 학생·같은 반). 컷오버(전 달 term 행 없음)면 크레딧 조회 불가.
   const prev = prevPeriodOf(period);
@@ -440,13 +446,14 @@ export async function setSessionTermCarryover(
   if (prevInv?.id && term.class_id) {
     const { data: prevTerm } = await supabase
       .from("invoice_session_terms")
-      .select("carryover_out")
+      .select("carryover_out, quantity_basis")
       .eq("invoice_id", prevInv.id)
       .eq("class_id", term.class_id)
       .maybeSingle();
     if (prevTerm) {
       cutover = false;
       priorCredit = Number(prevTerm.carryover_out) || 0;
+      if (inn > 0 && priorCredit > 0 && prevTerm.quantity_basis !== term.quantity_basis) return { error: "전 달과 시수 기준이 다릅니다. 이전 확정값을 시수 기준으로 확인해 주세요" };
     }
   }
 

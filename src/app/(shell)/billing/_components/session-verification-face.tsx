@@ -17,9 +17,7 @@ import { FaceNote } from "./face-note";
 
 const PAGE_SIZE = 50;
 
-// 회차(출석 일수) 표시 — 정수는 그대로("12"). 소수 한 자리는 **0263a 미적용·롤백 시** RPC가 옛 시수 합
-// (0.5 단위)을 돌려줄 때의 방어다. ⚠️ "저장된 스냅샷 폴백"이 아니다 — 이 화면의 소비처 셋은 전부 live 값이고
-// (actualUnits·actualConsumed·diff), 스냅샷을 읽는 getTeacherSplitsStatus는 actual_units를 select하지 않는다.
+// 출석부와 같은 소수 한 자리 시수. 기존 일수 확정은 행별 안내와 함께 보존한다.
 const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 // diff 색: 일치=녹 / 부족=주황 / 초과=적 / 미확정=회색 (라이트 전용 Daylight).
@@ -81,6 +79,7 @@ export async function SessionVerificationFace({
       confirmedSessions: r.confirmedSessions,
       unitPrice: r.unitPrice,
       amount: r.amount,
+      allocatedAmount: r.allocatedAmount,
       actualConsumed: r.actualConsumed,
       pricingMode: r.pricingMode,
     })),
@@ -137,7 +136,7 @@ export async function SessionVerificationFace({
 
       {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
       <FaceNote>
-        <b>확정한 회차</b>(청구 기준)와 그 반의 <b>실제 소비 출석</b>(출석·지각·조퇴·보강)을 나란히 대조합니다.
+        <b>확정한 시수</b>(청구 기준)와 그 반의 <b>출석부 시수 합계</b>(출석·지각·조퇴·보강)를 대조합니다. 기존 일수 기준 확정은 재확정 전까지 같은 일수 기준으로 비교합니다.
         {" "}EiE 월 고정은 확정한 월 금액을 정산 기준으로 쓰며 출석 회차로 금액을 바꾸지 않습니다.
         차이는 <span className="text-amber">부족</span>(청구보다 적게 나옴)·<span className="text-danger">초과</span>(더
         나옴) 신호일 뿐, 어느 값도 자동으로 맞추지 않습니다. 회차를 고치려면{" "}
@@ -146,6 +145,8 @@ export async function SessionVerificationFace({
         </Link>
         에서 조정하세요. (청구월은 달력월 기준으로 근사합니다.)
       </FaceNote>
+
+      {view.rows.some((row) => row.allocationStale) ? <p role="alert" className="text-amber rounded-lg border border-amber/30 p-3 text-sm">수납 배분을 다시 확인할 학생이 있습니다. 회차 확정의 ‘수납 연결·배분’에서 확인한 후 분배를 저장하세요. { [...new Set(view.rows.filter((row) => row.allocationStale).map((row) => row.studentName))].join(", ") }</p> : null}
 
       {noAttendanceYet ? (
         <div className="rounded-2xl border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
@@ -176,10 +177,9 @@ export async function SessionVerificationFace({
                   <tr className="border-line text-text-dim border-b text-sm [&_th]:font-bold">
                     <th className="px-3 py-2 text-left">강사</th>
                     <th className="px-3 py-2 text-right">반</th>
-                    <th className="px-3 py-2 text-right">확정 회차</th>
+                    <th className="px-3 py-2 text-right">확정 시수</th>
                     <th className="px-3 py-2 text-right">확정 금액</th>
-                    {/* 🔴 이 열은 0263a부터 **회차(출석 일수)** 다 — 시수가 아니다(원장 2026-09-14). */}
-                    <th className="px-3 py-2 text-right">실 회차</th>
+                    <th className="px-3 py-2 text-right">실 시수</th>
                     <th className="px-3 py-2 text-right">실측 금액</th>
                     <th className="px-3 py-2 text-right">차액</th>
                   </tr>
@@ -243,7 +243,7 @@ export async function SessionVerificationFace({
                   <th className="px-3 py-2 text-left">학생</th>
                   <th className="px-3 py-2 text-left">반</th>
                   <th className="px-3 py-2 text-left">과목</th>
-                  <th className="px-3 py-2 text-right">확정 회차</th>
+                  <th className="px-3 py-2 text-right">확정 시수</th>
                   <th className="px-3 py-2 text-right">실 출석</th>
                   <th className="px-3 py-2 text-right">차이</th>
                   <th className="px-3 py-2 text-left">판정</th>
@@ -262,7 +262,7 @@ export async function SessionVerificationFace({
                       <td className="text-text-dim px-3 py-2">{r.subjectLabel}</td>
                       <td className="num px-3 py-2 text-right">
                         {r.confirmedSessions !== null ? (
-                          r.confirmedSessions
+                          <>{r.confirmedSessions}{r.pricingMode !== "monthly" && r.quantityBasis === "days" ? <span className="text-amber block text-xs">기존 일수 기준</span> : null}</>
                         ) : (
                           <span className="text-text-dim" title="회차 확정 전 — 계획 회차는 참고">
                             {r.plannedSessions ?? "—"}
