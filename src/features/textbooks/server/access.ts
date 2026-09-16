@@ -40,6 +40,14 @@ export function isMissingTextbookTable(error: { code?: string; message?: string 
   );
 }
 
+/**
+ * 0268a(고른 교시 칸)가 없을 때 — 🔴 **조용히 옛 축으로 떨어뜨리지 않는다**(적대적 리뷰 P0):
+ * 16:20만 골랐는데 16:20·17:20·18:20 전부에 3배 속도로 깔리고, 되돌리는 길은 줄을 하나씩 지우는 것뿐이다.
+ * ⚠️ 이 상수가 여기 있는 이유 = `plan-actions.ts`는 `"use server"`라 **async 함수만** export할 수 있다([[#119]]).
+ */
+export const SLOTS_NOT_READY =
+  "교시를 골라 배정하려면 마이그레이션 0268a가 필요합니다 — 적용한 뒤 다시 시도해 주세요";
+
 export const TEXTBOOKS_NOT_READY = "교재목록 표가 아직 만들어지지 않았습니다 — 마이그레이션 0266a를 적용해 주세요";
 
 /**

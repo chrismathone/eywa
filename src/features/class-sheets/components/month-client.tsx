@@ -22,6 +22,7 @@ import { MonthDayEditor } from "./month-day-editor";
 import { MonthGoalStrip } from "./month-goal-strip";
 import { MonthMemo } from "./month-memo";
 import { MonthPlanBar } from "./month-plan-bar";
+import { TextbookFillDialog } from "./textbook-fill-dialog";
 import { MonthPlanView, type MonthPlanChromeProps } from "./month-plan-view";
 import { MonthRail } from "./month-rail";
 import { useMonthGoals, type GoalRole } from "./use-month-goals";
@@ -65,6 +66,8 @@ export function MonthClient({
 }) {
   const router = useRouter();
   const embed = useEmbed();
+  // 교재 깔기 창 — 월간 화면에서 교시를 고르고 교재를 고르면 차수가 쭈루룩 깔린다(원장 2026-09-16).
+  const [fillOpen, setFillOpen] = useState(false);
   const [view, setView] = useState<EcsMonthView>(initialView);
   const [display, setDisplay] = useState(initialDisplay);
   const [role, setRole] = useState<GoalRole>("homeroom");
@@ -270,6 +273,18 @@ export function MonthClient({
         )}
 
         <span className="ml-auto flex flex-wrap items-center gap-2">
+          {/* 🔴 배정은 **여기서** 한다(원장 2026-09-16) — 교재목록의 '반 배정' 탭은 읽기 전용이다.
+              쓰기 게이트는 서버(`requireEcsClassAccess`)라 이 조건은 게이트가 아니다([[#77]]). */}
+          {data.canEdit ? (
+            <button
+              type="button"
+              onClick={() => setFillOpen(true)}
+              className={`${sheetPill(false)} inline-flex items-center gap-1`}
+              title={t("fill.open.title")}
+            >
+              {t("fill.open")}
+            </button>
+          ) : null}
           {view === "mp" ? (
             <>
               {toggleChip(
@@ -392,6 +407,17 @@ export function MonthClient({
           periodLabelBySlot={data.periodLabelBySlot}
           onClose={() => setOpenDay(null)}
           onSaved={() => router.refresh()}
+        />
+      ) : null}
+      {fillOpen ? (
+        <TextbookFillDialog
+          classId={data.classId}
+          className={shownClassName}
+          today={data.today}
+          onClose={() => setFillOpen(false)}
+          // ⚠️ 창이 이미 `router.refresh()`를 부른다 — 여기서 또 부르면 기입 한 번에 월간이 두 번 돈다.
+          //    이 훅은 "끝났다"는 신호로만 쓴다(닫힘은 창이 스스로 한다).
+          onApplied={() => undefined}
         />
       ) : null}
     </div>
