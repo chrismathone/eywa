@@ -126,8 +126,10 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     // 가드가 없으면 lines=[] → scrapedPeriods=[] → 아무것도 upsert 안 하고, 그런데도 아래 recordSync가
     // status='ok' · error=NULL · synced_at=now로 덮어써 **"방금 정상 동기화됨"으로 위장**된다
     // (직전에 남아 있던 '삭제 보류 N건' 경고까지 지워진다). 수납은 돈이라 침묵 실패를 허용하지 않는다.
-    if (lines.length === 0) {
-      const msg = "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
+    if (data.error || lines.length === 0) {
+      const msg = data.error
+        ? `수납 수집 실패 — ${String(data.error).slice(0, 500)}. 이번 실행은 반영하지 않음.`
+        : "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
       console.error(`✖ ${msg}`);
       if (APPLY) await L.recordSync(sql, tenantId, "invoices", null, "error", msg);
       process.exitCode = 1;

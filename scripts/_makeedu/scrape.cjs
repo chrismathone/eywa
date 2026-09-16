@@ -393,7 +393,7 @@ async function harvestList(page, key, cfg) {
         data = await harvestList(page, key, cfg);
       } catch (e) {
         console.warn(`  ⚠️ ${key} 스크래핑 실패: ${e.message} — 건너뜀(0행)`);
-        data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [], totalReported: null, reportedSummary: null };
+        data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [], totalReported: null, reportedSummary: null, error: String(e.message || e).slice(0, 500) };
       }
       fs.writeFileSync(path.join(OUT, `${key}.json`), JSON.stringify(data));
       console.log(`  ✓ ${key}: ${data.rows.length} rows, ${data.headers.length} cols → ${key}.json`);

@@ -66,6 +66,7 @@ const LAG_MONTHS = 1; // 청구는 신청월 당월~익월이 정상 — 그 밖
   const jsonPath = path.join(OUT, "invoices.json");
   if (!fs.existsSync(jsonPath)) throw new Error(`invoices.json 없음: ${jsonPath} — scrape 먼저(또는 sync-all 경유)`);
   const data = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+  if (data.error) throw new Error(`수납 수집 실패 — ${String(data.error).slice(0, 500)}. 교재 자동 체크를 중단합니다.`);
   const H = (s) => data.headers.findIndex((h) => (h || "").includes(s));
   const REQUIRED = ["이름", "학년", "청구월", "구분", "수납명", "청구액", "할인액", "적립금", "실제낸금액", "미납"];
   const missingH = REQUIRED.filter((h) => H(h) < 0);
