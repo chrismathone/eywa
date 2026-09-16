@@ -777,7 +777,7 @@ function IncomingRow({ s, toClassName }: { s: IncomingStudent; toClassName: stri
       }`}
     >
       <span className="min-w-0 overflow-hidden text-clip">← {s.name}</span>
-      <span className="shrink-0 text-xs font-bold">{s.scheduled ? shortMoveDate(s.applyOn) : "전입"}</span>
+      <span className="shrink-0 text-xs font-bold">{s.scheduled ? shortMoveDate(s.applyOn) : "반이동"}</span>
     </div>
   );
 }

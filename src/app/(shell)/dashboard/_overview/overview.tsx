@@ -13,6 +13,7 @@ import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, 
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
 import { monthDayLabel } from "@/lib/date-kst";
+import { monthAheadNote, monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
@@ -207,6 +208,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
   // 원장 2026-09-12: "USD 지출 합계는 빼고 대충 환율 1,500원으로 지출 합계에 합쳐" — 환산은 순수 함수(expense-total.ts).
   const expenseTotal = v.expenses?.data ? foldExpenseTotals(v.expenses.data.byCurrency) : null;
   const thisMonth = monthLabel(snapshot.today.slice(0, 7));
+  // '레벨테스트 및 첫수업 일정' 창 — 서버 조회(`add("calendar")`)와 **같은 함수·같은 오늘**(원장 2026-09-16 "오늘 기준으로 1달 이내").
+  const admissionsRange = monthAheadWindow(snapshot.today);
   const delta = currentChange
     ? currentChange.enrolled - currentChange.withdrawn
     : null;
@@ -1007,13 +1010,13 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           </Panel>
           <Panel
             title="레벨테스트 및 첫수업 일정"
-            note="오늘부터 7일"
+            note={monthAheadNote(admissionsRange)}
             sections={[v.calendar]}
           >
             <AdmissionsSchedule events={v.calendar?.data?.slice(0, 6) ?? []} />
             {v.calendar?.data?.length === 0 && (
               <p className={s.empty}>
-                다가오는 7일간 레벨테스트·첫 수업 일정이 없습니다.
+                오늘부터 {windowUntilLabel(admissionsRange)} 레벨테스트·첫 수업 일정이 없습니다.
               </p>
             )}
             {(v.calendar?.data?.length ?? 0) > 6 && (

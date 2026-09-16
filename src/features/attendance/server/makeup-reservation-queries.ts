@@ -13,7 +13,7 @@ import "server-only";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { weekBoundsOf } from "@/features/timetable/lib/week";
 import type { MakeupReservation } from "../makeup-reservation";
 
@@ -124,32 +124,45 @@ export const getReservationsOn = cache(async function getReservationsOn(
 });
 
 /**
- * 시간표 '보강' 탭 — 기준일이 든 주(월~일)의 예약. `classIds`는 **그 화면이 보는 반**(강사 스코프 뒤)만 넘긴다 —
- * 예약 표를 따로 스코핑하지 않고 화면의 반 집합을 그대로 쓴다(남의 반 예약이 새지 않게, #77).
+ * 여러 반의 **기간** 예약 — 시간표 '보강' 탭(주)과 운영실 '보강예정' 카드(오늘부터 한 달 + 지난 미이행)가 **같은 조회**를 쓴다
+ * (원장 2026-09-16 *"배선 오류 없이 아주 모든 곳에서 일치하도록"* — 기간만 다르고 세는 법은 한 벌).
+ * `classIds`는 **그 화면이 보는 반**(강사 스코프 뒤)만 넘긴다 — 예약 표를 따로 스코핑하지 않고 화면의 반 집합을 그대로 쓴다
+ * (남의 반 예약이 새지 않게, #77). 반 id 청크 × 페이지(B2·B3) — 기간이 석 달이면 한 청크가 1,000행을 넘을 수 있다.
  */
-export async function getReservationsInWeek(
-  referenceDate: string,
+export async function getReservationsInRange(
+  from: string,
+  to: string,
   classIds: readonly string[],
 ): Promise<MakeupReservation[]> {
   if (classIds.length === 0) return [];
-  const { start, end } = weekBoundsOf(referenceDate);
   const supabase = await createClient();
   try {
-    const rows = await fetchInChunks<Row>([...classIds], (chunk) =>
+    const rows = await fetchAllPagedInChunks<Row>([...classIds], (chunk, pageFrom, pageTo) =>
       supabase
         .from("makeup_reservations")
         .select(SELECT)
         .eq("status", "reserved")
-        .gte("makeup_date", start)
-        .lte("makeup_date", end)
+        .gte("makeup_date", from)
+        .lte("makeup_date", to)
         .in("class_id", chunk)
         .order("makeup_date")
-        .order("slot_start"),
+        .order("slot_start")
+        .order("id")
+        .range(pageFrom, pageTo),
     );
     return rows.map(toReservation);
   } catch (e) {
-    return soft("주", e as { code?: string; message?: string });
+    return soft("기간", e as { code?: string; message?: string });
   }
+}
+
+/** 시간표 '보강' 탭 — 기준일이 든 주(월~일)의 예약. 조회는 `getReservationsInRange` 한 벌(운영실 카드와 같다). */
+export async function getReservationsInWeek(
+  referenceDate: string,
+  classIds: readonly string[],
+): Promise<MakeupReservation[]> {
+  const { start, end } = weekBoundsOf(referenceDate);
+  return getReservationsInRange(start, end, classIds);
 }
 
 /**

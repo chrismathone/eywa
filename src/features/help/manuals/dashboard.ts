@@ -58,7 +58,7 @@ export const dashboard: HelpManual = {
       key: "dash-makeup",
       label: "보강예정",
       zone: "header",
-      body: "이번 주(월~일)에 잡혀 있는 [[attendance|보강 예약]]입니다. 맨 끝 카드입니다. 카드를 누르면 요일별 명단이, ↗를 누르면 [[timetable|시간표]]의 보강 탭이 열립니다.",
+      body: "오늘부터 한 달 안에 잡혀 있는 [[attendance|보강 예약]]과, 날이 지났는데 아직 이행 안 된 예약(지남)입니다. 카드를 누르면 끝 날짜와 날짜별 명단이, ↗를 누르면 [[timetable|시간표]]의 보강 탭(주별)이 열립니다.",
     },
     {
       n: 8,

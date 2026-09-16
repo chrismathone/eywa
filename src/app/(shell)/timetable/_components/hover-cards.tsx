@@ -307,7 +307,7 @@ export function StudentInfoCard({
               신입/전입 창(30일)이 지나 라벨이 사라지면 날짜도 함께 사라진다. */}
           {isTransferredIn ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <Pill color="primary">전입</Pill>
+              <Pill color="primary">반이동</Pill>
               {enrollmentDate ? (
                 <span className="text-text-dim num text-xs">{enrollmentDate}</span>
               ) : null}

@@ -444,7 +444,7 @@ export function ClassCell({
               {incomingHere.length > 0 ? (
                 <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
                   <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-xs font-bold tracking-wide">
-                    <span>전입 예정</span>
+                    <span>반이동 예정</span>
                     <span className="num">{incomingHere.length}</span>
                   </div>
                   {incomingHere.map((s) => {
@@ -462,7 +462,7 @@ export function ClassCell({
                                 on: s.applyOn,
                                 saved: false,
                               })
-                            : `${s.fromClassName} 반에서 전입 예정 — '저장'을 눌러야 반영됩니다`
+                            : `${s.fromClassName} 반에서 반이동 예정 — '저장'을 눌러야 반영됩니다`
                         }
                         className={`${ROW_CLASS} ${s.scheduled ? "bg-purple-soft text-purple" : "bg-primary-soft/30 text-primary"}`}
                       >

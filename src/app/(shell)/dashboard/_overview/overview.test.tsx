@@ -251,10 +251,10 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
     allowed,
     subjects: { math: "수학", english: "영어" },
     sections: {
-      // 보강예정(0264a) — 이번 주 예약 두 건(오늘 하나·지난 요일 하나).
+      // 보강예정(0264a) — 오늘부터 한 달(원장 2026-09-16) 예약 두 건(오늘 하나·지난 미이행 하나) + 창 뒤 하나.
       makeup: {
         data: {
-          week: { start: "2026-09-07", end: "2026-09-13" },
+          range: { start: "2026-09-10", end: "2026-10-09" },
           rows: [
             {
               id: "m1",
@@ -402,6 +402,32 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     );
     // 전일 결석만 어제 기준(원장 2026-09-12) — 나머지 다섯 칸은 오늘 그대로.
     expect(href("출석부에서 어제 9/9 (수) 결석 학생 보기")).toBe("/attendance/2026-09-09?status=absent");
+    cleanup();
+  });
+
+  it("보강예정 카드·팝업과 일정 패널이 같은 '오늘부터 한 달' 끝 날짜를 말한다(원장 2026-09-16)", () => {
+    mocks.data = kpiSnapshot([...ALL_MENUS, "timetable"]);
+    render(<Overview initial={mocks.data} />);
+    // 오늘 2026-09-10 → 창 끝 10/9 (금). 카드 보조 줄 · 팝업 머리 · 일정 패널 머리가 한 날짜다.
+    const card = screen.getByRole("button", { name: "보강예정 2건. 10/9 (금)까지 · 오늘 1 · 지남 1 · 그 뒤 1. 자세히 보기" });
+    expect(screen.getByRole("link", { name: "시간표 보강 탭에서 주별로 보기" }).getAttribute("href")).toBe(
+      "/timetable?kind=makeup",
+    );
+    expect(document.body.textContent).toContain("오늘부터 한 달 · 10/9 (금)까지");
+    expect(document.body.textContent).not.toMatch(/오늘부터 7일|이번 주 보강/);
+    fireEvent.click(card);
+    const popup = screen.getByRole("dialog");
+    expect(popup.textContent).toContain("10/9 (금)까지 보강 예약 2건");
+    expect(popup.textContent).toContain("그 뒤로 잡힌 1건은 시간표 보강 탭에서 주를 옮겨 보세요");
+    expect(within(popup).getByText("지남")).toBeTruthy();
+    cleanup();
+  });
+
+  it("일정이 없으면 빈 문구도 같은 끝 날짜를 말한다", () => {
+    mocks.data = kpiSnapshot();
+    mocks.data.sections.calendar = { data: [], at: 100, error: false };
+    render(<Overview initial={mocks.data} />);
+    expect(document.body.textContent).toContain("오늘부터 10/9 (금)까지 레벨테스트·첫 수업 일정이 없습니다.");
     cleanup();
   });
 

@@ -212,6 +212,19 @@ export async function getYearRangeEvents(
   return fetchManualEvents(`${fromYear}-01-01`, `${toYear}-12-31`);
 }
 
+const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * 날짜 구간 조회 — **수기 일정만**, [first, last]와 겹치는 전부(연 단위 조회와 같은 규약). 운영실 '레벨테스트 및
+ * 첫수업 일정'(오늘부터 한 달, 원장 2026-09-16)이 쓴다 — 달 단위(`getMonthEvents`)로 받으면 창이 두 달에 걸치는 날마다
+ * 수기 일정·휴가 오버레이를 두 번씩 읽는데, 휴가는 입학 일정 분류에서 어차피 전부 버려진다(30초 갱신마다 도는 자리).
+ * ⚠️ 날짜가 아니거나 거꾸로면 빈 결과.
+ */
+export async function getDateRangeEvents(first: string, last: string): Promise<CalendarMonth> {
+  if (!DATE_RE.test(first) || !DATE_RE.test(last) || first > last) return { ready: true, events: [] };
+  return fetchManualEvents(first, last);
+}
+
 /**
  * 연 단위 조회(연간/목록 뷰, 0224a) — **수기 일정만**. 휴가 오버레이는 일정 분석의 축이
  * 아니라 의도적으로 뺀다(월 그리드에서만 겹쳐 보인다). 그 해와 겹치는 일정 전부, 날짜순.

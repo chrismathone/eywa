@@ -26,7 +26,8 @@ const KPI = [
   //     한 줄만큼 커지고 세 줄 구간은 여전히 못 막아 채택하지 않았다.)
   ["전일 결석", "0", "명", "어제 9/11 (금) · 연락 필요 0 · 사전 통보 0 · 일부 교시 0"],
   // 보강예정(원장 2026-09-14 "가장 끝으로") — 실제 마지막 칸과 순서·수가 같아야 로드 끝에 화면이 안 튄다.
-  ["보강예정", "0", "건", "이번 주 · 오늘 0"],
+  // 보조 줄은 창 끝 날짜로 시작한다(원장 2026-09-16 "오늘 기준으로 1달 이내" — `windowUntilLabel`) · 날짜는 보통 폭.
+  ["보강예정", "0", "건", "10/15 (목)까지 · 오늘 0"],
 ] as const;
 
 type PanelShape = { title: string; note: string; body: number; wide?: boolean; className?: string };
@@ -65,7 +66,7 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[] }[] = [
       { title: "신규생 체크 진행", note: "필수 6항목 · 2개월 콜은 선택", body: 230 },
       { title: "강사 시트 작성 현황", note: "현재 시트의 기간·보기 필터 기준", body: 160 },
       { title: "현재 수업 현황", note: "오늘 시간표", body: 250 },
-      { title: "레벨테스트 및 첫수업 일정", note: "오늘부터 7일", body: 250 },
+      { title: "레벨테스트 및 첫수업 일정", note: "오늘부터 한 달 · 10/15 (목)까지", body: 250 },
       { title: "직원 구성", note: "재직 중 · 운영 역할 기준", body: 205 },
       { title: "행정 · 자산", note: "열람 가능한 업무 기준", body: 180 },
       { title: "9월 지출 내역", note: "당월 지출결의서 기준", body: 200 },
