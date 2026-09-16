@@ -11,39 +11,79 @@ vi.mock("next/navigation", () => ({
 
 const fixture = <><section data-withdrawal-list><header data-withdrawal-header /><ul data-withdrawal-rows><li><a>원생</a></li></ul><footer data-withdrawal-pager /></section><aside data-withdrawal-reasons /></>;
 
-describe("우측 카드에 맞춘 명단 높이", () => {
+/**
+ * 자는 **창(스크롤러)**이다 — 옆 카드(사유 분석) 높이가 아니다(원장 2026-09-16).
+ * 그래서 이 픽스처는 `<main>` 안에 그리고 창 높이(1000)와 목록의 문서상 위치(300)를 준다.
+ */
+const VIEWPORT = 1000;
+const ROWS_TOP = 300;
+const PAD_BOTTOM = 40;
+let main: HTMLElement;
+
+describe("창 높이에 맞춘 명단 행 수", () => {
   beforeEach(() => {
     navigation.replace.mockReset();
-    vi.spyOn(window, "getComputedStyle").mockReturnValue({ gridTemplateColumns: "600px 400px" } as CSSStyleDeclaration);
+    main = document.createElement("main");
+    Object.defineProperty(main, "clientHeight", { value: VIEWPORT, configurable: true });
+    document.body.appendChild(main);
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      gridTemplateColumns: "600px 400px",
+      paddingBottom: `${PAD_BOTTOM}px`,
+    } as CSSStyleDeclaration);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.tagName === "MAIN") return { top: 0, bottom: VIEWPORT, height: VIEWPORT } as DOMRect;
+      if (this.hasAttribute("data-withdrawal-rows"))
+        return { top: ROWS_TOP, bottom: ROWS_TOP + 44, height: 44 } as DOMRect;
       const height = this.hasAttribute("data-withdrawal-reasons") ? 400
         : this.hasAttribute("data-withdrawal-header") ? 80
         : this.hasAttribute("data-withdrawal-pager") ? 65 : 44;
-      return { height } as DOMRect;
+      return { top: 0, bottom: height, height } as DOMRect;
     });
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    main.remove();
+  });
 
-  it("필터와 embed를 유지하면서 페이지 크기를 5로 맞추고 첫 페이지로 돌아간다", () => {
-    const { container } = render(<WithdrawalListLayout size={8} total={19}>{fixture}</WithdrawalListLayout>);
+  // 창 1000 − 목록 위 300 − (쪽 넘김 65 + 바닥 40) − 4 = 591 → 행 45px → 13행.
+  // 🔴 옛 자(오른쪽 카드 400px)로는 같은 창에서 5행이었다 — 아래 절반이 비는 이유가 이것이었다.
+  it("필터와 embed를 유지하면서 창에 맞춘 크기로 맞추고 첫 페이지로 돌아간다", () => {
+    const { container } = render(<WithdrawalListLayout size={8} total={99}>{fixture}</WithdrawalListLayout>, {
+      container: main,
+    });
     const [href, options] = navigation.replace.mock.calls[0];
     const params = new URL(href, "https://eywa.test").searchParams;
-    expect(params.get("size")).toBe("5");
+    expect(params.get("size")).toBe("13");
     expect(params.has("page")).toBe(false);
     expect(params.get("reason")).toBe("move");
     expect(params.get("q")).toBe("Kim");
     expect(params.get("embed")).toBe("1");
     expect(options).toEqual({ scroll: false });
+    // 카드는 옆 카드보다 짧아 보이지 않게 최소 높이를 유지한다(행이 더 많으면 자연히 더 길어진다).
     expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("400px");
   });
-  it("마지막 페이지의 행이 적어도 카드 높이는 유지하고 같은 크기를 재요청하지 않는다", () => {
-    const { container } = render(<WithdrawalListLayout size={5} total={19}>{fixture}</WithdrawalListLayout>);
+
+  it("이미 맞는 크기면 같은 크기를 재요청하지 않는다(왕복 진동 방지)", () => {
+    const { container } = render(<WithdrawalListLayout size={13} total={99}>{fixture}</WithdrawalListLayout>, {
+      container: main,
+    });
     expect(navigation.replace).not.toHaveBeenCalled();
     expect((container.firstChild as HTMLElement).style.getPropertyValue("--withdrawal-list-height")).toBe("400px");
   });
-  it("좁은 화면에서는 우측 카드와 별도로 기본 8행을 사용한다", () => {
-    vi.mocked(window.getComputedStyle).mockReturnValue({ gridTemplateColumns: "700px" } as CSSStyleDeclaration);
-    render(<WithdrawalListLayout size={5} total={19}>{fixture}</WithdrawalListLayout>);
+
+  it("좁은 화면에서는 창과 별도로 기본 8행을 사용한다 — 목록 아래에 '사유 분석'이 오기 때문", () => {
+    vi.mocked(window.getComputedStyle).mockReturnValue({
+      gridTemplateColumns: "700px",
+      paddingBottom: `${PAD_BOTTOM}px`,
+    } as CSSStyleDeclaration);
+    render(<WithdrawalListLayout size={5} total={19}>{fixture}</WithdrawalListLayout>, { container: main });
     expect(new URL(navigation.replace.mock.calls[0][0], "https://eywa.test").searchParams.get("size")).toBe("8");
+  });
+
+  it("🔴 최소 창에서도 하한(5행) 아래로 떨어지지 않는다 — 1행 목록은 쪽 넘김을 무의미하게 만든다", () => {
+    // 창이 목록 위 높이(300)보다 조금 큰 정도 = 남는 자리가 한 행도 안 된다.
+    Object.defineProperty(main, "clientHeight", { value: 420, configurable: true });
+    render(<WithdrawalListLayout size={8} total={99}>{fixture}</WithdrawalListLayout>, { container: main });
+    expect(new URL(navigation.replace.mock.calls[0][0], "https://eywa.test").searchParams.get("size")).toBe("5");
   });
 });
