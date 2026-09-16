@@ -5,12 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { resolveTextbookTab, textbookFaces, type TextbookTab } from "@/features/textbooks/faces";
-import {
-  getAssignableClasses,
-  getAssignableTextbooks,
-  getClassTextbookPlans,
-  getTextbooks,
-} from "@/features/textbooks/server/queries";
+import { getClassTextbookPlans, getTextbooks } from "@/features/textbooks/server/queries";
 import type { TextbookTableStatus } from "@/features/textbooks/types";
 import { BooksFace } from "./_components/books-face";
 import { NotReadyBanner } from "./_components/not-ready-banner";
@@ -36,8 +31,9 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
  *
  * 접근 = `textbooks` 메뉴(사무실 full / 강사 readonly = 고르기만). 쓰기 판정은 화면·액션이 **같은 함수**
  * (`canWriteTenant`)를 쓴다([[#77]]). 표가 아직 없으면(0266a 미적용) 화면은 살고 편집만 잠긴다([[#95]]).
- * ⚠️ **반 배정·기입의 게이트는 `ecs`다** — 교재 마스터를 못 고치는 담임 강사도 자기 반엔 교재를 태운다.
- *    여기 `canAssign`은 그 테넌트 단계 근사일 뿐이고, 반 단위 판정은 서버 액션이 다시 한다.
+ * ⚠️ **반 배정 면은 읽기 전용이다**(원장 2026-09-16) — 배정을 만드는 곳은 영어 강사 시트의 월간 화면이고,
+ *    거기서 교시를 골라 건다. 그 게이트는 `textbooks`가 아니라 `ecs`(그 반의 쓰기 권한)라 교재 마스터를
+ *    못 고치는 담임 강사도 자기 반엔 교재를 태운다 — 판정은 서버 액션이 반 단위로 다시 한다.
  */
 export default async function TextbooksPage({ searchParams }: { searchParams: Promise<Sp> }) {
   const user = await requireAccess("textbooks");
@@ -45,9 +41,10 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
   const tab = resolveTextbookTab(sp.tab);
 
   // 서로 독립 — 함께 받는다(B4).
-  const [canWrite, canAssign, settings, list, plans, classes, books] = await Promise.all([
+  // ⚠️ 배정 면이 읽기 전용이 되면서(원장 2026-09-16) 반·교재 **선택지** 조회는 여기서 사라졌다 —
+  //    고르는 화면이 영어 강사 시트로 옮겨갔고, 소비처 없는 조회를 남기면 면을 열 때마다 헛돈다.
+  const [canWrite, settings, list, plans] = await Promise.all([
     canWriteTenant(user.systemRole, "textbooks"),
-    canWriteTenant(user.systemRole, "ecs"),
     getTenantSettings(),
     getTextbooks({
       subject: "english",
@@ -57,8 +54,6 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
       page: Number(sp.page ?? 1) || 1,
     }),
     tab === "plans" ? getClassTextbookPlans({}) : Promise.resolve({ status: "ok" as TextbookTableStatus, rows: [] }),
-    tab === "plans" ? getAssignableClasses() : Promise.resolve({ status: "ok" as TextbookTableStatus, rows: [] }),
-    tab === "plans" ? getAssignableTextbooks() : Promise.resolve({ status: "ok" as TextbookTableStatus, rows: [] }),
   ]);
 
   // 표 없음(missing-table)이 그냥 실패보다 먼저 — 원인을 말하는 문구가 뜬다.
@@ -68,10 +63,9 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
       : list.status === "failed" || plans.status === "failed"
         ? "failed"
         : "ok";
-  // 🔴 잠금은 **면마다 제 조회 상태**로 판단한다 — 교재 목록 조회가 한 번 실패했다고 배정까지 잠그면
+  // 🔴 잠금은 **면마다 제 조회 상태**로 판단한다 — 교재 목록 조회가 한 번 실패했다고 다른 면까지 잠그면
   //    고칠 수 있는 일을 못 하게 막는 셈이다(그 반대도 마찬가지).
   const editable = canWrite && list.status === "ok";
-  const assignable = canAssign && plans.status === "ok";
 
   // ECS 계획 줄의 '구분'과 **같은 목록**을 쓴다(학원설정 단일 소스) — 여기서 따로 적으면 시트와 갈린다.
   const skillAreas = resolveSkillAreas(settings.operations.subjects.find((s) => s.key === "english"));
@@ -95,13 +89,7 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
         ariaLabel="교재목록 면 전환"
       />
       {tab === "plans" ? (
-        <PlansFace
-          rows={plans.rows}
-          classes={classes.rows}
-          books={books.rows}
-          skillAreas={skillAreas}
-          canAssign={assignable}
-        />
+        <PlansFace rows={plans.rows} skillAreas={skillAreas} />
       ) : (
         <BooksFace
           rows={list.rows}

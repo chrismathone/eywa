@@ -21,7 +21,7 @@
 import { slotsByDateOf, type MonthScheduleRow, type MonthSlot } from "@/features/class-sheets/lib/month-assemble";
 import { holidayNameOn, type HolidayMap } from "@/features/class-sheets/lib/holiday";
 import { shiftDays } from "@/features/timetable/lib/week";
-import { SELF_STUDY_ROOM_LABEL } from "@/features/timetable/lib/teacher-label";
+import { LAB_ROOM_LABEL, SELF_STUDY_ROOM_LABEL } from "@/features/timetable/lib/teacher-label";
 
 /** 차수를 태울 교시 축. LAB은 축이 아니다(위 ②). */
 export type SlotAxis = "class" | "jj";
@@ -55,6 +55,18 @@ export function slotsOfAxis(slots: readonly MonthSlot[], axis: SlotAxis): MonthS
   return slots.filter((s) => (axis === "jj" ? s.seat === SELF_STUDY_ROOM_LABEL : s.seat === null));
 }
 
+/**
+ * **고른 시각의 교시만** 남긴다(원장 2026-09-16: *"16시 수업 클릭 17시 수업 클릭"*).
+ *
+ * 🔑 사람이 고르는 건 축이 아니라 **시각**이다 — 같은 반의 같은 시각이라도 어떤 칸은 자리(JJ), 어떤 칸은
+ *    강사 수업이라 축으로는 "이 두 칸만"을 표현할 수 없었다. 시각으로 고르면 자리든 수업이든 그대로 따라온다.
+ * 🔴 **LAB만은 여전히 뺀다** — ECS가 표시·집계에서 언제나 빼는 자리라, 여기서만 넣으면 아무도 안 보는
+ *    칸에 기록이 쌓인다. 고를 수 있는 목록 자체에 LAB을 안 올리지만, 여기서도 한 번 더 막는다.
+ */
+export function slotsOfStarts(slots: readonly MonthSlot[], starts: ReadonlySet<string>): MonthSlot[] {
+  return slots.filter((s) => s.seat !== LAB_ROOM_LABEL && starts.has(s.slotStart));
+}
+
 /** 시작일부터 `days`일치 날짜 문자열(오름차순). `slotsByDateOf`에 그대로 넘긴다. */
 export function lookaheadDates(startDate: string, days: number): string[] {
   const n = Math.max(0, Math.min(days, MAX_LOOKAHEAD_DAYS));
@@ -73,12 +85,19 @@ export function buildLessonSchedule(input: {
   lessonNos: readonly number[];
   schedules: readonly MonthScheduleRow[];
   holidays: HolidayMap | null | undefined;
+  /**
+   * 옛 방식 — 축으로 고른다. `slotStarts`가 있으면 **안 쓴다**(0268a 이후 새 배정은 전부 시각 선택).
+   * 값이 없는 옛 배정을 계속 읽기 위해 남겨 둔다([[#95]] expand/contract).
+   */
   axis: SlotAxis;
+  /** 고른 교시 시작시각(`"HH:MM"`). 있으면 축 대신 이걸로 거른다. */
+  slotStarts?: readonly string[] | null;
   pace: LessonPace;
   /** 훑을 날 수(기본 = 상한). 테스트·짧은 미리보기에서 줄여 쓴다. */
   lookaheadDays?: number;
 }): LessonSchedule {
   const { startDate, lessonNos, schedules, holidays, axis, pace } = input;
+  const picked = input.slotStarts && input.slotStarts.length > 0 ? new Set(input.slotStarts) : null;
   const dates = lookaheadDates(startDate, input.lookaheadDays ?? MAX_LOOKAHEAD_DAYS);
   const slotsByDate = slotsByDateOf(dates, schedules);
 
@@ -89,7 +108,8 @@ export function buildLessonSchedule(input: {
 
   for (const date of dates) {
     if (cursor >= lessonNos.length) break;
-    const daySlots = slotsOfAxis(slotsByDate[date] ?? [], axis);
+    const all = slotsByDate[date] ?? [];
+    const daySlots = picked ? slotsOfStarts(all, picked) : slotsOfAxis(all, axis);
     // 수업이 없는 날은 휴일이어도 알리지 않는다 — 어차피 앉을 칸이 없어 "건너뛴 수업일"이 아니다.
     if (daySlots.length === 0) continue;
 

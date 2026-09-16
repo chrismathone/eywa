@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
-import { buildLessonSchedule, lookaheadDates, slotsOfAxis, MAX_LOOKAHEAD_DAYS } from "./lesson-schedule";
+import {
+  buildLessonSchedule,
+  lookaheadDates,
+  slotsOfAxis,
+  slotsOfStarts,
+  MAX_LOOKAHEAD_DAYS,
+} from "./lesson-schedule";
 
 // 2026-09-14(월) 주. 실제 영어 반 모양에 맞춰 월·수 2교시 + 같은 날 JJ 1교시를 둔다.
 function row(
@@ -248,5 +254,92 @@ describe("buildLessonSchedule — 배치 이력(valid_from/valid_to)", () => {
     });
     expect(s.targets.map((t) => t.date)).toEqual(["2026-09-14"]);
     expect(s.unplaced).toEqual([2, 3]);
+  });
+});
+
+describe("slotsOfStarts — 고른 시각만", () => {
+  const slots = [
+    { slotStart: "16:20", slotEnd: "17:20", teacherLabel: "JJ", roomLabel: "305", seat: "JJ" as const },
+    { slotStart: "17:20", slotEnd: "18:10", teacherLabel: "JJ", roomLabel: "305", seat: "JJ" as const },
+    { slotStart: "18:20", slotEnd: "19:20", teacherLabel: "송지혜", roomLabel: "304", seat: null },
+    { slotStart: "15:20", slotEnd: "16:10", teacherLabel: "LAB", roomLabel: "603", seat: "LAB" as const },
+  ];
+
+  it("고른 시각만 남는다 — 자리든 강사 수업이든 그대로", () => {
+    expect(slotsOfStarts(slots, new Set(["16:20", "18:20"])).map((s) => s.slotStart)).toEqual(["16:20", "18:20"]);
+  });
+
+  it("🔴 LAB은 골라도 안 들어간다 — ECS가 언제나 빼는 자리다", () => {
+    expect(slotsOfStarts(slots, new Set(["15:20", "16:20"])).map((s) => s.slotStart)).toEqual(["16:20"]);
+  });
+
+  it("아무것도 안 고르면 빈 목록", () => {
+    expect(slotsOfStarts(slots, new Set())).toEqual([]);
+  });
+});
+
+describe("buildLessonSchedule — 시각 선택(slotStarts)", () => {
+  it("🔑 고른 시각이 축을 이긴다 — JJ와 강사 수업을 함께 고를 수 있다", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1, 2, 3, 4],
+      schedules: WITH_SEATS,
+      holidays: {},
+      axis: "class", // 있어도 안 쓴다
+      slotStarts: ["18:20", "20:20"], // 18:20=강사 수업 · 20:20=JJ
+      pace: "period",
+      lookaheadDays: 14,
+    });
+    expect(s.targets).toEqual([
+      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 2, date: "2026-09-14", slotStart: "20:20" },
+      { lessonNo: 3, date: "2026-09-16", slotStart: "18:20" },
+      { lessonNo: 4, date: "2026-09-16", slotStart: "20:20" },
+    ]);
+  });
+
+  it("고른 시각이 그 날 없으면 그 날은 건너뛴다(차수를 안 쓴다)", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1],
+      schedules: [row("mon", "18:20:00", "19:20:00"), row("wed", "19:20:00", "20:10:00")],
+      holidays: {},
+      axis: "class",
+      slotStarts: ["19:20"],
+      pace: "period",
+      lookaheadDays: 14,
+    });
+    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-16", slotStart: "19:20" }]);
+  });
+
+  it("day 단위면 그 날 고른 교시 전부에 같은 차수", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1],
+      schedules: WITH_SEATS,
+      holidays: {},
+      axis: "class",
+      slotStarts: ["18:20", "19:20"],
+      pace: "day",
+      lookaheadDays: 14,
+    });
+    expect(s.targets).toEqual([
+      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 1, date: "2026-09-14", slotStart: "19:20" },
+    ]);
+  });
+
+  it("빈 배열이면 옛 축 방식으로 돈다(0268a 적용 전 배정)", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1],
+      schedules: WITH_SEATS,
+      holidays: {},
+      axis: "jj",
+      slotStarts: [],
+      pace: "period",
+      lookaheadDays: 14,
+    });
+    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-14", slotStart: "20:20" }]);
   });
 });

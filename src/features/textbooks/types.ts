@@ -57,6 +57,10 @@ export type ClassTextbookPlanRow = {
   skillArea: string | null;
   sessionCount: number;
   slotAxis: SlotAxis;
+  /**
+   * 고른 교시 시작시각(`"HH:MM"`, 0268a). null = 옛 배정(축으로 읽는다) 또는 0268a 미적용.
+   */
+  slotStarts: string[] | null;
   pace: LessonPace;
   termMode: "regular" | "exam";
   startDate: string;
@@ -102,4 +106,18 @@ export type ApplyResult = {
   added: number;
   skipped: number;
   truncated: number;
+};
+
+/** 배정 다이얼로그가 고르는 교시 한 칸 — 그 반이 실제로 도는 시각. */
+export type ClassSlotChoice = {
+  /** `"HH:MM"` — 계획 줄 `slot_start`와 같은 표기. */
+  start: string;
+  /** 교시 라벨(`8교시`). 없으면 null — 지어내지 않는다. */
+  periodLabel: string | null;
+  /** 자리면 그 이름(JJ), 강사 수업이면 null. */
+  seat: "JJ" | null;
+  /** 표시용 담당 문자열(시간표와 같은 값). 권한 근거로 쓰지 말 것. */
+  teacherLabel: string | null;
+  /** 이 시각이 도는 요일(mon…sun) — "월·목" 처럼 보여 준다. */
+  dows: string[];
 };
