@@ -339,33 +339,85 @@ describe("카드 구조 — ↗는 버튼 안에 들어가지 않는다", () => 
   });
 });
 
+const LOADING = src("src/app/(shell)/dashboard/loading.tsx");
+const OVERVIEW = src("src/app/(shell)/dashboard/_overview/overview.tsx");
+
 /**
- * 원장 2026-09-14: *"대시보드에도 '보강예정' 카드 추가 최상단"*. 카드 = 팝업 = 시간표 '보강' 탭(이번 주) —
- * 반 집합(`listMakeupScopeClasses`)과 주 조회(`getReservationsInWeek`)를 **같은 두 함수**로 잠근다.
+ * 원장 2026-09-14: *"대시보드에도 '보강예정' 카드 추가"* → 2026-09-16 *"오늘 기준으로 1달 이내로 바꿔줘"* ·
+ * *"배선 오류 없이 아주 모든 곳에서 일치하도록"*. 창 = `monthAheadWindow` 한 함수(⑧ 일정 패널과 같은 끝 날짜) ·
+ * 카드 = 팝업(같은 `rows`, 같은 `range`) · 반 집합(`listMakeupScopeClasses`)과 기간 조회(`getReservationsInRange`)는
+ * 시간표 '보강' 탭과 **같은 두 함수**. 탭은 주 × 과목 격자라 ↗ 문구는 "주별로 보기"다.
  */
-describe("⑦ 보강예정 — 이번 주 예약, 카드·팝업·시간표 보강 탭이 같은 반 집합·같은 조회", () => {
-  const WEEK = src("src/features/dashboard/server/makeup-week.ts");
+describe("⑦ 보강예정 — 오늘부터 한 달, 카드·팝업·시간표 보강 탭이 같은 반 집합·같은 조회", () => {
+  const UPCOMING = src("src/features/dashboard/server/makeup-upcoming.ts");
+  const QUERIES = src("src/features/attendance/server/makeup-reservation-queries.ts");
   const TIMETABLE = src("src/app/(shell)/timetable/page.tsx");
   const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
 
-  it("서버는 강사 스코프를 넘겨 같은 함수로 이번 주를 센다", () => {
-    expect(SERVER).toContain("getWeekMakeupOverview(today, await teacherIdPromise)");
-    expect(WEEK).toContain("listMakeupScopeClasses(teacherId, week)");
-    expect(WEEK).toContain("getReservationsInWeek(today, classIds)");
-    expect(WEEK).toContain("weekBoundsOf(today)");
+  it("서버는 강사 스코프를 넘겨 한 달 창(같은 함수)으로 센다 — 지난 미이행 ~ 창 끝을 한 조회로", () => {
+    expect(SERVER).toContain("getUpcomingMakeupOverview(today, await teacherIdPromise)");
+    expect(UPCOMING).toContain("const range = monthAheadWindow(today);");
+    // 반 집합(누구의 반인가)은 이번 주 — 시간표 탭이 이번 주에 고르는 반과 같다(한 달로 넓히면 남의 반이 섞인다).
+    expect(UPCOMING).toContain("listMakeupScopeClasses(teacherId, weekBoundsOf(today))");
+    expect(UPCOMING).toContain("getReservationsInRange(shiftDays(today, -OVERDUE_LOOKBACK_DAYS), range.end, classIds)");
+    expect(UPCOMING).toContain("countLater(supabase, range.end, classIds)");
+    expect(UPCOMING).toContain("overdue: r.makeupDate < today,");
+    expect(UPCOMING).toContain("return { range, rows, later };");
+    // 옛 주 조회가 남아 있으면 카드와 팝업이 다른 기간을 말한다.
+    expect(UPCOMING).not.toContain("getReservationsInWeek");
+    // 이름 조회 실패를 빈 배열로 삼키면 카드가 "0건"이라는 거짓을 말한다 — 던져서 칸이 '조회 실패'로 서야 한다.
+    expect(UPCOMING).not.toMatch(/from\("students"\)[\s\S]{0,120}\.catch\(/);
   });
 
-  it("시간표 보강 탭도 같은 반 집합 함수 + 같은 주 조회(거기에 과목 축만)", () => {
+  it("시간표 보강 탭도 같은 반 집합 함수 + 같은 기간 조회(주 범위로 좁히고 과목 축만 더한다)", () => {
     expect(TIMETABLE).toContain("listMakeupScopeClasses(teacherId ?? null, weekBoundsOf(referenceDate))");
     expect(TIMETABLE).toContain("getReservationsInWeek(referenceDate, [...classMeta.keys()])");
     expect(TIMETABLE).toContain("const makeupTab = isMakeupKind(kind);");
+    // 주 조회는 기간 조회 한 벌을 부를 뿐이다 — 세는 법(상태·정렬·페이지)이 둘로 갈리지 않게.
+    const week = QUERIES.slice(QUERIES.indexOf("export async function getReservationsInWeek"));
+    expect(week.slice(0, week.indexOf("\n}"))).toContain("return getReservationsInRange(start, end, classIds);");
   });
 
-  it("카드는 맨 뒤(원장 '가장 끝으로'), 팝업은 같은 배열(rows), ↗는 보강 탭", () => {
+  it("카드는 맨 뒤(원장 '가장 끝으로'), 보조 줄·팝업이 서버가 센 창을 읽고, ↗는 보강 탭(주별)", () => {
     expect(STRIP.indexOf('label="보강예정"')).toBeGreaterThan(STRIP.indexOf('label="전일 결석"'));
     expect(STRIP).toContain('data-kpi-n={shown}');
     expect(STRIP).toContain("value={count(makeup?.rows.length)}");
-    expect(POPUPS_DAY).toContain('<PopupTotal label="이번 주 보강 예약" value={rows.length} unit="건" />');
+    expect(STRIP).toContain("windowUntilLabel(makeup?.range ?? monthAheadWindow(today))");
+    expect(STRIP).toContain("detailPrefix={makeupUntil}");
+    expect(STRIP).toContain('label: "시간표 보강 탭에서 주별로 보기"');
+    expect(POPUPS_DAY).toContain("const until = windowUntilLabel(data.range);");
+    expect(POPUPS_DAY).toContain('<PopupTotal label={`${until} 보강 예약`} value={rows.length} unit="건" />');
     expect(makeupWeekHref()).toBe("/timetable?kind=makeup");
+    // 옛 '이번 주' 문구가 한 곳이라도 남으면 카드와 팝업이 다른 창을 말한다.
+    for (const [name, text] of [["kpi-strip", STRIP], ["kpi-popups-day", POPUPS_DAY], ["loading", LOADING]] as const) {
+      expect(text, name).not.toMatch(/이번 주 보강|이번 주\(월~일\) 예약|다음 주 이후|"이번 주 · /);
+    }
+  });
+});
+
+/**
+ * 원장 2026-09-16: '레벨테스트 및 첫수업 일정'도 *"오늘 기준으로 1달 이내"*(그전엔 7일). 서버 조회 창·첫 수업 연결 후보 창·
+ * 패널 머리·빈 문구가 **같은 함수**(`monthAheadWindow`)를 지나야 한다 — 하나라도 7일이면 "일정 없음"이 거짓말이 된다.
+ */
+describe("⑧ 레벨테스트 및 첫수업 일정 — 오늘부터 한 달, 서버·패널·빈 문구가 같은 창", () => {
+  it("서버: 일정 조회 구간·필터·첫 수업 후보가 모두 한 달 창의 끝을 쓴다", () => {
+    expect(SERVER).toContain("const { end } = monthAheadWindow(today);");
+    // 구간 한 번 — 달 단위(getMonthEvents)로 받으면 창이 두 달에 걸치는 날마다 조회가 두 벌이다.
+    expect(SERVER).toContain("const result = await getDateRangeEvents(today, end);");
+    expect(SERVER).not.toContain("getMonthEvents");
+    expect(SERVER).toContain("upcomingAdmissionsEvents(result.events, today, end)");
+    expect(SERVER).toContain("firstClassCandidates(today, end)");
+    expect(SERVER).toContain("firstClassScheduleCandidates(today, end)");
+    expect(SERVER).not.toContain("shiftDate(today, 6)");
+  });
+
+  it("화면: 머리·빈 문구가 같은 오늘로 같은 함수를 부르고, 7일 문구가 어디에도 없다", () => {
+    expect(OVERVIEW).toContain("const admissionsRange = monthAheadWindow(snapshot.today);");
+    expect(OVERVIEW).toContain("note={monthAheadNote(admissionsRange)}");
+    expect(OVERVIEW).toContain("오늘부터 {windowUntilLabel(admissionsRange)} 레벨테스트·첫 수업 일정이 없습니다.");
+    for (const [name, text] of [["overview", OVERVIEW], ["loading", LOADING]] as const) {
+      expect(text, name).not.toMatch(/오늘부터 7일|다가오는 7일/);
+    }
+    expect(LOADING).toContain('note: "오늘부터 한 달 · 10/15 (목)까지"');
   });
 });

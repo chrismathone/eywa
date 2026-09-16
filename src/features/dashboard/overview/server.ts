@@ -32,7 +32,7 @@ import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
 import { absentKpiDate } from "./kpi-links";
-import { getWeekMakeupOverview } from "@/features/dashboard/server/makeup-week";
+import { getUpcomingMakeupOverview } from "@/features/dashboard/server/makeup-upcoming";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getRecentAnnouncements } from "@/features/dashboard/server/queries";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
@@ -60,7 +60,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { getApprovalBoxes } from "@/features/approvals/server/queries";
 import { getInventoryCounts } from "@/features/inventory/server/queries";
-import { getMonthEvents } from "@/features/calendar/server/queries";
+import { getDateRangeEvents } from "@/features/calendar/server/queries";
 import { getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getMathSheetLanding } from "@/features/math-sheets/server/landing";
 import { OVERVIEW_BUDGET_MS, remainingMs, settleWithin } from "./deadline";
@@ -99,6 +99,7 @@ import {
   staffDisplayRole,
   upcomingAdmissionsEvents,
 } from "./display";
+import { monthAheadWindow } from "./upcoming-window";
 import { staffComposition } from "./staff-subjects";
 import {
   distribution,
@@ -571,8 +572,9 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     })),
   );
   add("firstClass", ["students"], async () => firstClasses(today, await scopePromise, settingsPromise));
-  // '보강예정'(원장 2026-09-14) — 이번 주 보강 예약. 반 집합·주 범위가 시간표 '보강' 탭과 같은 함수(카드 = 탭).
-  add("makeup", ["attendance"], async () => getWeekMakeupOverview(today, await teacherIdPromise));
+  // '보강예정'(원장 2026-09-14) — **오늘부터 한 달**(원장 2026-09-16) 보강 예약 + 지난 미이행. 창은 `monthAheadWindow` 한 함수
+  // (아래 '레벨테스트 및 첫수업 일정'과 같은 끝 날짜) · 반 집합·기간 조회는 시간표 '보강' 탭과 같은 두 함수.
+  add("makeup", ["attendance"], async () => getUpcomingMakeupOverview(today, await teacherIdPromise));
   // 출석부 `?status=absent`와 같은 함수·같은 강사 스코프(teacher-axis) — 겸직 강사뷰면 그 강사가 가르치는 반만.
   // 조회한 날을 `date`로 함께 실어 보낸다 — 카드·팝업·↗가 그 값을 읽어 셋이 같은 날을 말한다.
   add("absent", ["attendance"], async () => ({
@@ -653,8 +655,9 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   add("operations", [], () => operations(allowed, user.id));
   add("notices", [], () => getRecentAnnouncements(user.systemRole, 4));
   add("calendar", ["calendar"], async () => {
-    const end = shiftDate(today, 6);
-    const months = [...new Set([today.slice(0, 7), end.slice(0, 7)])];
+    // 창 = **오늘부터 한 달**(원장 2026-09-16 *"오늘 기준으로 1달 이내로"*, 그전엔 7일) — `monthAheadWindow` 한 함수를
+    // 패널 머리·빈 문구(화면)와 '보강예정' 카드가 함께 쓴다. 일정 조회·첫 수업 연결 후보가 모두 이 `end`를 쓴다.
+    const { end } = monthAheadWindow(today);
     // 콜&상담 연결 후보(원장 2026-09-13)는 일정 조회와 독립이라 먼저 띄운다(B4) — 저장하지 않고 갱신마다 다시 맞추므로 일정이 먼저
     // 있고 상담이 나중에 생겨도 다음 갱신에 붙는다. 실패해도 빈 목록(링크만 없다) · 최근 60일 수십 건이라 일정이 없는 날도 부담이 없다.
     const consultationSince = shiftDate(today, -CONSULTATION_LINK_WINDOW_DAYS);
@@ -665,15 +668,11 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
             return [];
           })
         : Promise.resolve([]);
-    const results = await Promise.all(months.map(getMonthEvents));
-    if (results.some((r) => !r.ready))
-      throw new Error("학원 일정 연결 확인 필요");
-    const events = [
-      ...new Map(
-        results.flatMap((r) => r.events).map((e) => [e.id, e]),
-      ).values(),
-    ];
-    const upcoming = upcomingAdmissionsEvents(events, today, end);
+    // 창 구간을 **한 번에**(수기 일정만) — 달 단위로 받으면 창이 두 달에 걸치는 거의 모든 날 조회가 두 벌이 된다.
+    // 휴가 오버레이는 안 받는다: 분류기(`admissionsEventKind`)가 `source !== "manual"`을 전부 버린다.
+    const result = await getDateRangeEvents(today, end);
+    if (!result.ready) throw new Error("학원 일정 연결 확인 필요");
+    const upcoming = upcomingAdmissionsEvents(result.events, today, end);
     let candidates: Awaited<ReturnType<typeof firstClassCandidates>> = [];
     let classSlots: Awaited<ReturnType<typeof firstClassScheduleCandidates>> =
       [];

@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { todayLevelTests } from "@/features/dashboard/overview/display";
+import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { formatShortKoreanDate } from "@/lib/date-kst";
 import {
   absentDayHref,
@@ -73,8 +74,10 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   // 기준일은 **서버가 조회한 그날**. 영역이 실패해 값이 없을 때만 같은 규칙으로 계산한다(머리·↗가 오늘로 새지 않게).
   const absentDate = absentDay?.date ?? absentKpiDate(today);
   const absentWhen = `어제 ${formatShortKoreanDate(absentDate)}`;
-  // 보강예정 = **이번 주** 예약 상태의 보강(0264a). 오늘·지난 요일(미이행)은 보조 줄에서 가른다.
+  // 보강예정 = **오늘부터 한 달**(원장 2026-09-16) 예약 상태의 보강(0264a) + 지난 미이행. 오늘·지남·창 뒤는 보조 줄에서 가른다.
+  // 창은 **서버가 센 그 창**(`range`) — 영역이 실패해 값이 없을 때만 같은 함수로 계산한다(머리가 다른 날짜를 말하지 않게).
   const makeup = v.makeup?.data;
+  const makeupUntil = windowUntilLabel(makeup?.range ?? monthAheadWindow(today));
   const makeupToday = makeup?.rows.filter((r) => r.makeupDate === today).length ?? 0;
   const makeupOverdue = makeup?.rows.filter((r) => r.overdue).length ?? 0;
 
@@ -206,15 +209,15 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
           detail={
             makeup
               ? `오늘 ${number(makeupToday)}${makeupOverdue > 0 ? ` · 지남 ${number(makeupOverdue)}` : ""}${
-                  makeup.later > 0 ? ` · 다음 주 이후 ${number(makeup.later)}` : ""
+                  makeup.later > 0 ? ` · 그 뒤 ${number(makeup.later)}` : ""
                 }`
               : "집계 없음"
           }
-          detailPrefix="이번 주"
+          detailPrefix={makeupUntil}
           icon={<MenuGlyph name="undo" size={20} />}
           error={v.makeup.error}
-          popupTitle="이번 주 보강 예약"
-          jump={can("timetable") ? { href: makeupWeekHref(), label: "시간표 보강 탭에서 이번 주 보기" } : null}
+          popupTitle="오늘부터 한 달 보강 예약"
+          jump={can("timetable") ? { href: makeupWeekHref(), label: "시간표 보강 탭에서 주별로 보기" } : null}
         >
           <MakeupPopup data={makeup} today={today} canOpen={can("students")} />
         </KpiCard>

@@ -3,6 +3,7 @@
 import { formatShortKoreanDate } from "@/lib/date-kst";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { OverviewData } from "@/features/dashboard/overview/model";
+import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { ABSENT_STATUS_LABEL } from "@/features/dashboard/absent-students";
 import { NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
 import s from "./overview.module.css";
@@ -43,8 +44,9 @@ export function IntakePopup({
 }
 
 /**
- * 보강예정 팝업(원장 2026-09-14) — 이번 주 보강 예약을 날짜·시각 순으로. 카드와 **같은 배열**(`rows`)이라 숫자가 같다.
- * 지난 요일인데 아직 이행 안 된 줄은 '지남' 표식 — 숨기지 않는다(안 한 보강이 사라지면 안 된다).
+ * 보강예정 팝업(원장 2026-09-14) — **오늘부터 한 달**(원장 2026-09-16) 보강 예약을 날짜·시각 순으로. 카드와 **같은 배열**
+ * (`rows`)이라 숫자가 같고, 끝 날짜도 카드와 같은 값(`data.range`)을 읽는다.
+ * 지난 날짜인데 아직 이행 안 된 줄은 '지남' 표식 — 숨기지 않는다(안 한 보강이 사라지면 안 된다).
  */
 export function MakeupPopup({
   data,
@@ -57,11 +59,12 @@ export function MakeupPopup({
 }) {
   if (!data) return <PopupEmpty>보강 예약을 불러오지 못했습니다.</PopupEmpty>;
   const rows = data.rows;
+  const until = windowUntilLabel(data.range);
   return (
     <>
-      <PopupTotal label="이번 주 보강 예약" value={rows.length} unit="건" />
+      <PopupTotal label={`${until} 보강 예약`} value={rows.length} unit="건" />
       {rows.length === 0 ? (
-        <PopupEmpty>이번 주에 잡힌 보강 예약이 없습니다.</PopupEmpty>
+        <PopupEmpty>오늘부터 {until} 잡힌 보강 예약이 없습니다.</PopupEmpty>
       ) : (
         <ul className={s.kpiList}>
           {rows.map((row) => (
@@ -86,7 +89,8 @@ export function MakeupPopup({
         </ul>
       )}
       <p className={s.footnote}>
-        이번 주(월~일) 예약만 셉니다{data.later > 0 ? ` · 다음 주 이후 ${data.later}건은 시간표 보강 탭에서 주를 옮겨 보세요` : ""}.
+        오늘부터 {until} 잡힌 예약과, 지난 60일 안에 아직 이행 안 된 예약(지남)을 셉니다
+        {data.later > 0 ? ` · 그 뒤로 잡힌 ${data.later}건은 시간표 보강 탭에서 주를 옮겨 보세요` : ""}.
         보강일에 출결을 찍으면 예약은 자동으로 이행 처리됩니다.
       </p>
     </>
