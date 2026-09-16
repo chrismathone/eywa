@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { RecordSavedMessage } from "@/lib/realtime/record-channel";
@@ -166,5 +166,51 @@ describe("회차 단가 선택", () => {
     render(<SessionTermGroups groups={[group("EiE", 270000)]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     expect(screen.getByLabelText("EiE학생 예상금액")).toHaveTextContent("270,000원");
     expect(screen.getByLabelText("EiE학생 예상금액")).toHaveTextContent("예상 · 월 정액");
+  });
+});
+
+describe("한 행 = 한 줄 (원장 2026-09-16)", () => {
+  const confirmedGroup = (patch: Partial<ClassGroup["students"][number]>) => {
+    const g = group("수학");
+    Object.assign(g.students[0], { confirmedSessions: 7, unitPrice: 21250, amount: 148750 }, patch);
+    return g;
+  };
+
+  it("일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 칸 안에 문장 줄을 세우지 않는다", () => {
+    const { container } = render(<SessionTermGroups groups={[confirmedGroup({ quantityBasis: "days" })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const mark = container.querySelector("span.text-danger[data-tip]");
+    expect(mark).not.toBeNull();
+    expect(mark!.textContent).toContain("7");
+    expect(mark!.getAttribute("data-tip")).toContain("해제한 뒤 시수를 확인해 다시 확정하세요");
+    // 화면 낭독용 문구만 남고, 보이는 블록 줄(옛 `block text-xs`)은 없다.
+    expect(mark!.querySelector(".sr-only")!.textContent).toContain("일수 기준 · 재확정 필요");
+    expect(mark!.closest("td")!.querySelector(".block")).toBeNull();
+  });
+
+  it("시수 기준 확정값은 표시 없이 그대로", () => {
+    const { container } = render(<SessionTermGroups groups={[confirmedGroup({ quantityBasis: "attendance_units" })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(container.querySelector("[data-tip]")).toBeNull();
+    expect(container.textContent).not.toContain("재확정 필요");
+  });
+
+  it("이 반 청구액은 금액 · 꼬리표 · 수납 연결을 한 줄에 — 배분 재확인은 꼬리표 자리에 앰버 + 카드", () => {
+    const { container, rerender } = render(<SessionTermGroups groups={[confirmedGroup({ allocatedAmount: 148750 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const cell = () => screen.getByRole("button", { name: "수납 연결·배분" }).closest("td")!;
+    expect(cell().textContent).toBe("148,750원청구액 배분수납 연결·배분");
+    expect(cell().querySelector("div")!.className).toContain("inline-flex");
+    rerender(<SessionTermGroups groups={[confirmedGroup({ classAmount: 148750 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(cell().textContent).toBe("148,750원이름 매칭 참고수납 연결·배분");
+    rerender(<SessionTermGroups groups={[confirmedGroup({ classAmount: 148750, allocationStale: true })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const stale = within(cell()).getByText("배분 재확인 필요");
+    expect(stale.className).toContain("text-amber");
+    expect(stale.getAttribute("data-tip")).toContain("수납 연결·배분에서 다시 배분하세요");
+    expect(cell().textContent).not.toContain("이름 매칭 참고");
+    expect(stale.getAttribute("data-tip")).toContain("이름 매칭 참고값");
+    rerender(<SessionTermGroups groups={[confirmedGroup({ classAmount: null, allocationStale: true })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(within(cell()).getByText("배분 재확인 필요").getAttribute("data-tip")).not.toContain("이름 매칭 참고값");
+    // 학생 행의 칸은 줄바꿈하지 않는다 — 폭은 표의 최소 폭이 보장한다.
+    const row = cell().closest("tr")!;
+    expect(row.className).toContain("[&>td]:whitespace-nowrap");
+    expect(container.querySelector("table")!.className).toContain("min-w-[1130px]");
   });
 });

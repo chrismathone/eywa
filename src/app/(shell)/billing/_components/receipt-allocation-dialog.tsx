@@ -38,7 +38,7 @@ function AllocationDialog({ invoiceId, studentName, data, onClose }: { invoiceId
       } catch { setError("배분을 저장하지 못했습니다. 다시 시도해 주세요"); }
     });
   }
-  return <dialog ref={ref} aria-label={`${studentName} 수납 연결·배분`} onCancel={(e) => { e.preventDefault(); if (!pending) onClose(); }} className="bg-card text-foreground fixed inset-0 m-auto max-h-[90vh] w-[min(960px,95vw)] overflow-auto rounded-xl border border-line p-5 shadow-xl backdrop:bg-black/40">
+  return <dialog ref={ref} data-no-drag-scroll aria-label={`${studentName} 수납 연결·배분`} onCancel={(e) => { e.preventDefault(); if (!pending) onClose(); }} className="bg-card text-foreground fixed inset-0 m-auto max-h-[90vh] w-[min(960px,95vw)] overflow-auto rounded-xl border border-line p-5 whitespace-normal shadow-xl backdrop:bg-black/40">
     <header className="mb-4 flex items-start justify-between gap-4">
       <div><h2 className="text-lg font-bold">{studentName} · 수납 연결·배분</h2><p className="text-text-dim mt-1 text-sm">할인 전 청구액을 반별로 배분합니다. 학부모 할인은 급여 기준에서 차감하지 않습니다.</p><p className="text-text-dim mt-1 text-sm">미확정 반도 연결할 수 있으며, 항목을 선택하면 그 반에 남은 금액이 자동 입력됩니다.</p></div>
       <button type="button" disabled={pending} onClick={onClose} className="text-sm">닫기</button>
@@ -88,9 +88,9 @@ export function ReceiptAllocationButton({ invoiceId, studentName }: { invoiceId:
   const [data, setData] = useState<ReceiptAllocationView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  return <><button type="button" disabled={pending} className="text-primary mt-1 text-xs underline-offset-2 hover:underline disabled:opacity-50" onClick={() => start(async () => {
+  return <><button type="button" disabled={pending} className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50" onClick={() => start(async () => {
     setError(null);
     try { const result = await getReceiptAllocation(invoiceId); if (result.error) setError(result.error); else if (result.data) setData(result.data); }
     catch { setError("수납 연결 정보를 불러오지 못했습니다"); }
-  })}>{pending ? "불러오는 중…" : "수납 연결·배분"}</button>{error ? <p role="alert" className="text-danger text-xs">{error}</p> : null}{data ? <AllocationDialog invoiceId={invoiceId} studentName={studentName} data={data} onClose={() => setData(null)} /> : null}</>;
+  })}>{pending ? "불러오는 중…" : "수납 연결·배분"}</button>{error ? <p role="alert" className="text-danger basis-full text-xs whitespace-normal">{error}</p> : null}{data ? <AllocationDialog invoiceId={invoiceId} studentName={studentName} data={data} onClose={() => setData(null)} /> : null}</>;
 }
