@@ -9,7 +9,7 @@ import type { TextbookTableStatus } from "@/features/textbooks/types";
 export function NotReadyBanner({ status }: { status: TextbookTableStatus }) {
   if (status === "missing-table") {
     return (
-      <p className="border-amber bg-amber-soft/40 text-amber rounded-lg border-l-[3px] px-3 py-2 text-xs">
+      <p className="bg-amber-soft/40 text-amber rounded-lg px-3 py-2 text-xs">
         교재목록 표가 아직 만들어지지 않았습니다 — 마이그레이션 <span className="num">0266a</span>를 적용해 주세요.
         적용 전엔 목록이 비어 있고 편집이 잠깁니다. <b>영어 강사 시트는 그대로 동작합니다</b>(교재 제안만 비어 있습니다).
       </p>
@@ -17,7 +17,7 @@ export function NotReadyBanner({ status }: { status: TextbookTableStatus }) {
   }
   if (status === "failed") {
     return (
-      <p className="border-danger bg-danger-soft/40 text-danger rounded-lg border-l-[3px] px-3 py-2 text-xs">
+      <p className="bg-danger-soft/40 text-danger rounded-lg px-3 py-2 text-xs">
         교재목록을 불러오지 못했습니다. 잠시 뒤 새로고침해 주세요 — 그동안 편집은 잠깁니다.
       </p>
     );
