@@ -17,6 +17,11 @@ type One<T> = T | T[] | null;
 export type ActiveEnrollmentRow = {
   id: string;
   student_id: string;
+  /**
+   * 수강 시작일 — **아직 안 온 수강을 빼기 위한 재료**(원장 2026-09-16 '실시간 재원생').
+   * 없으면(null) 시작한 것으로 본다: 모르는 것을 "아직 안 다닌다"로 읽으면 멀쩡한 재원생이 사라진다.
+   */
+  start_date?: string | null;
   class: One<{ subject?: string | null; english_track?: string | null }>;
 };
 
@@ -30,17 +35,57 @@ export type StudentPrograms = ReadonlyMap<string, ReadonlySet<Program>>;
 const classOf = (row: ActiveEnrollmentRow) => (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
 
 /**
+ * 이 수강이 **오늘 기준 이미 시작했나**. `today`를 안 주면(옛 호출부) 전부 시작한 것으로 본다.
+ * 🔴 `start_date`가 비면 시작한 것으로 본다 — 모름을 '미시작'으로 읽으면 재원생이 조용히 사라진다.
+ */
+function hasStarted(row: ActiveEnrollmentRow, today?: string): boolean {
+  if (!today) return true;
+  const start = row.start_date ?? null;
+  return !start || start.slice(0, 10) <= today;
+}
+
+/**
+ * **아직 하나도 시작 안 한** 학생 — 활성 수강은 있는데 전부 미래 시작이다.
+ *
+ * 원장 2026-09-16: *"우지윤학생처럼 이상이 나지 않으려면 실시간 재원생으로 바꿔야겠어"* → *"총원도 과목과
+ * 동일하게 338"*. 실측(2026-09-16): 대시보드 '수학 195'와 시간표 '194'가 달랐던 원인이 정확히 이 한 명이었다
+ * (수강 2건이 10/1·10/6 시작 — 등록은 확정됐지만 아직 교실에 앉지 않는다). 대시보드는 시작일을 안 보고,
+ * 시간표는 그 주에 실제로 앉는 사람만 세서 갈렸다.
+ *
+ * 🔴 **수강이 아예 없는 재원생은 여기 안 들어간다**(반 배정 전 신입 — 실측 3명). 그들까지 빼면 335가 되는데,
+ *    원장이 고른 값은 338이다: "아직 안 다니는 게 **확정된** 사람"만 뺀다.
+ * ⚠️ 이 집합은 날짜가 지나면 저절로 빈다(10/1이 되면 우지윤은 재원생으로 합류) — 저장하지 않는다.
+ */
+export function notYetStartedStudentIds(
+  rows: readonly ActiveEnrollmentRow[],
+  today: string,
+): Set<string> {
+  const any = new Set<string>();
+  const started = new Set<string>();
+  for (const row of rows) {
+    any.add(row.student_id);
+    if (hasStarted(row, today)) started.add(row.student_id);
+  }
+  const out = new Set<string>();
+  for (const id of any) if (!started.has(id)) out.add(id);
+  return out;
+}
+
+/**
  * 과목별 재원생(distinct) + 수강 조합 — 원생목록 상단 카드·운영실 과목별 수강.
  * 강사 스코프면 담당 학생 · 담당 과목 축으로 좁힌다(원장 2026-08-20 표시 축).
  */
 export function enrolledSubjectCounts(
   rows: readonly ActiveEnrollmentRow[],
   scope: StudentScope,
+  /** 오늘(KST) — 주면 **아직 시작 안 한 수강은 세지 않는다**('실시간 재원생', notYetStartedStudentIds 주석). */
+  today?: string,
 ): { bySubject: Record<string, number>; combinations: { subjects: string[]; value: number }[] } {
   const inScope = scope ? new Set(scope.studentIds) : null;
   const axis = subjectAxisOf(scope);
   const bySubject = new Map<string, Set<string>>();
   for (const row of rows) {
+    if (!hasStarted(row, today)) continue;
     if (inScope && !inScope.has(row.student_id)) continue;
     const subject = classOf(row)?.subject;
     if (!subject || !axisHasSubject(axis, subject)) continue;
@@ -69,12 +114,21 @@ export function composeEnrolled(input: {
   rows: readonly ActiveEnrollmentRow[];
   scope: StudentScope;
   subjects: readonly ProgramSubject[];
+  /**
+   * 오늘(KST) — 주면 **'실시간 재원생'**: 아직 시작 안 한 수강은 프로그램 판정에서 빼고,
+   * 그런 수강만 가진 학생은 `students`(=재원생 명단)에서도 뺀다(원장 2026-09-16).
+   * 안 주면 종전 그대로(시작일 무시) — 옛 호출부가 조용히 숫자를 바꾸지 않게 옵션이다.
+   */
+  today?: string;
 }): EnrolledComposition {
   const inScope = input.scope ? new Set(input.scope.studentIds) : null;
   const axis = subjectAxisOf(input.scope);
   const programs = new Map<string, Set<Program>>();
   const active = new Set<string>();
+  // 🔴 명단에서 뺄 학생 — 카드 숫자(총원)와 학년별·학교별 분해가 **같은 집합**을 보게 여기서 한 번 만든다.
+  const pending = input.today ? notYetStartedStudentIds(input.rows, input.today) : null;
   for (const row of input.rows) {
+    if (!hasStarted(row, input.today)) continue;
     if (inScope && !inScope.has(row.student_id)) continue;
     const klass = classOf(row);
     if (!klass || !axisHasSubject(axis, klass.subject)) continue;
@@ -85,11 +139,10 @@ export function composeEnrolled(input: {
     set.add(program);
     programs.set(row.student_id, set);
   }
-  return {
-    students: inScope ? input.students.filter((s) => inScope.has(s.id)) : [...input.students],
-    programs,
-    active,
-  };
+  const visible = input.students.filter(
+    (s) => (!inScope || inScope.has(s.id)) && !(pending && pending.has(s.id)),
+  );
+  return { students: visible, programs, active };
 }
 
 export type SubjectMix = "englishOnly" | "both" | "mathOnly" | "neither";

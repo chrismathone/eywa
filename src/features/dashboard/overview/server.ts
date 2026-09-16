@@ -16,6 +16,7 @@ import {
 } from "@/features/students/server/enrolled-programs";
 import {
   composeEnrolled,
+  notYetStartedStudentIds,
   enrolledSubjectCounts,
   gradeSplit,
   summarizePrograms,
@@ -125,19 +126,25 @@ async function students(
   settingsPromise: Promise<Settings>,
 ): Promise<OverviewData["students"]> {
   const db = await createClient();
-  const [enrolled, studentRows, rows, settings] = await Promise.all([
-    countEnrolledStudents(db, scope),
+  const today = kstToday();
+  const [studentRows, rows, settings] = await Promise.all([
     fetchEnrolledStudents(db),
     fetchActiveEnrolledEnrollments(db),
     settingsPromise,
   ]);
+  // '실시간 재원생'(원장 2026-09-16) — 아직 한 과목도 시작 안 한 학생은 총원·과목·학년 분해에서 함께 빠진다.
+  // 🔴 `countEnrolledStudents`가 이 행들을 다시 받지 않게 **같은 rows에서** 집합을 만든다(운영실 30초 갱신은
+  //    서버 액션이라 React cache가 조회를 묶지 않는다 — 여기서 한 번 받은 것을 넘긴다는 이 함수의 규약 그대로).
+  const notStarted = notYetStartedStudentIds(rows, today);
+  const enrolled = await countEnrolledStudents(db, scope, notStarted);
   const composition = composeEnrolled({
     students: studentRows,
     rows,
     scope,
     subjects: settings.operations.subjects,
+    today,
   });
-  const counts = enrolledSubjectCounts(rows, scope);
+  const counts = enrolledSubjectCounts(rows, scope, today);
   const visible = composition.students;
   const programs = summarizePrograms(
     visible.map((r) => r.id),
