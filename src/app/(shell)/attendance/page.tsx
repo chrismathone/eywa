@@ -920,7 +920,7 @@ export default async function AttendancePage({
             {/* 학생 검색(원장 2026-08-19) — **클라 필터**라 서버 왕복 0, 친 즉시 표가 좁아진다. 토글(§10) — 검색어(허브 씨앗 포함)가
                 걸려 있으면 펼친 채. 안 걸린 행은 감추는 게 아니라 안 그린다(격자 좌표도 함께 좁아져 방향키가 새지 않는다).
                 검색어는 저장하지 않는다 — 다음 방문에 필터가 걸린 채 열리면 "출석부가 비었다"로 읽힌다. */}
-            <span data-help="att-search">
+            <span data-help="att-search" className="inline-flex flex-wrap items-center gap-2.5">
               <AttendanceSearchToggle />
             </span>
           </>

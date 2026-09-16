@@ -913,7 +913,7 @@ export default async function TimetablePage({
             다시 그려지지 않는다. 교실뷰·배치 편집·편집 모드에선 스스로 물러난다. */}
         {/* 보강 탭엔 검색이 없다 — 색인이 슬롯 명단이라 예약 격자엔 안 걸린다("있는데 안 먹는 것"이 제일 나쁘다). */}
         {makeupTab ? null : (
-          <span data-help="tt-search">
+          <span data-help="tt-search" className="inline-flex items-center gap-3">
             <TimetableSearchToggle />
           </span>
         )}
