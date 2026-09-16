@@ -1,8 +1,15 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fitWithdrawalRows, withdrawalPage, withdrawalPageSize } from "./list-pagination";
+import {
+  fitWithdrawalRows,
+  WITHDRAWAL_PAGE_MIN,
+  withdrawalPage,
+  withdrawalPageSize,
+} from "./list-pagination";
 
 describe("퇴원 목록 페이지", () => {
-  it("우측 카드 높이에서 제목과 페이지 바를 뺀 만큼만 행을 배치한다", () => {
+  it("남는 높이에서 제목·페이지 바를 뺀 만큼만 행을 배치한다", () => {
     expect(fitWithdrawalRows(540, 145, 45)).toBe(8);
     expect(fitWithdrawalRows(400, 145, 45)).toBe(5);
     expect(fitWithdrawalRows(100, 145, 45)).toBe(1);
@@ -16,5 +23,54 @@ describe("퇴원 목록 페이지", () => {
     expect(withdrawalPage("999", 19, 8)).toEqual({ page: 3, totalPages: 3, start: 16, end: 19 });
     expect(withdrawalPage("-1", 19, 8)).toEqual({ page: 1, totalPages: 3, start: 0, end: 8 });
     expect(withdrawalPage("2", 0, 8)).toEqual({ page: 1, totalPages: 1, start: 0, end: 0 });
+  });
+
+  /**
+   * 🔴 자는 **창**이지 옆 카드가 아니다(원장 2026-09-16: *"하단 여백이 너무 많이 남으니까 …
+   * 자동으로 확장되는건가?"*). 종전엔 오른쪽 '사유 분석' 카드 높이를 넘겨서, 그 카드가 짧으면
+   * 창을 아무리 키워도 4행에서 멎고 화면 아래 절반이 비었다.
+   */
+  it("실측 재현 — 창에 남는 높이로 재면 4행이 아니라 열 행 남짓이 선다", () => {
+    // 2026-09-16 캡처(최대화 창): 행 영역 위로 KPI·툴바·차트가 ~520px, 아래로 쪽 넘김 64 + 바닥 여백 40.
+    const avail = 1030 - 520 - (64 + 40) - 4;
+    expect(fitWithdrawalRows(avail, 0, 39)).toBe(10);
+    // 옛 자(오른쪽 카드 ~280px)로는 같은 창에서 4행이 한계였다.
+    expect(fitWithdrawalRows(280, 145 - 64, 39)).toBe(5);
+  });
+
+  it("최소 창에서도 1행으로 떨어지지 않는다 — 하한이 쪽 넘김을 무의미하게 만들지 않는다", () => {
+    // 1040×720 창: 목록 위 ~520px + 아래 ~104px → 남는 자리는 한 행도 안 된다.
+    expect(fitWithdrawalRows(660 - 520 - 104, 0, 39)).toBe(1);
+    expect(Math.max(WITHDRAWAL_PAGE_MIN, fitWithdrawalRows(36, 0, 39))).toBe(5);
+  });
+});
+
+describe("🔴 명단 행 수의 자 = 창(스크롤러)", () => {
+  const src = readFileSync(
+    join(process.cwd(), "src/app/(shell)/withdrawals/_components/list-layout.tsx"),
+    "utf8",
+  );
+
+  it("스크롤러(main)에서 남는 높이를 재고, scrollHeight로 재지 않는다", () => {
+    expect(src).toContain('closest("main")');
+    expect(src).toContain("clientHeight");
+    // scrollHeight는 내용이 짧을 때 빈 공간까지 '아래'로 잡아 행이 최소로 떨어진다(AutoPageSize 주석).
+    // ⚠️ 문자열이 아니라 **읽는 코드**를 막는다(같은 주의를 적은 주석까지 걸리면 안 된다).
+    expect(src).not.toMatch(/\w\.scrollHeight/);
+  });
+
+  it("옆 카드(사유 분석) 높이를 행 수의 자로 되돌리지 않는다 — 최소 높이로만 쓴다", () => {
+    const fit = src.slice(src.indexOf("const fit ="), src.indexOf("const asideHeight"));
+    expect(fit).not.toContain("aside");
+    expect(src).toContain("const asideHeight = aside.getBoundingClientRect().height");
+  });
+
+  it("하한을 적용한다 — 최소 창에서 1행 목록이 되지 않게", () => {
+    expect(src).toContain("Math.max(WITHDRAWAL_PAGE_MIN, fitWithdrawalRows(avail, 0, rowHeight))");
+  });
+
+  it("창(iframe) 크기 변화도 듣는다 — 내용 높이가 그대로면 ResizeObserver가 안 깨어난다", () => {
+    expect(src).toContain('window.addEventListener("resize"');
+    expect(src).toContain('window.removeEventListener("resize"');
   });
 });

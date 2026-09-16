@@ -10,6 +10,12 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { describeEndSelection } from "@/features/students/withdraw-selection";
 import { describeHoldSelection } from "@/features/students/hold-selection";
 import {
+  groupEnrollmentsBySubject,
+  idsOf,
+  initialHoldSubjects,
+  type SubjectGroup,
+} from "@/features/students/subject-selection";
+import {
   changeStudentStatus,
   endStudentEnrollments,
   setStudentEnrollmentHolds,
@@ -55,15 +61,23 @@ export function StatusDialog({
   studentId,
   studentName,
   currentStatus,
+  statusKey,
   initialTarget,
   openEnrollments,
   onClose,
 }: {
   studentId: string;
   studentName: string;
+  /** 화면 표시용 한글 라벨(예 "재원"). */
   currentStatus: string;
+  /**
+   * 학생 상태 **원값**(enrolled·on_hold·withdrawn…) — 지금 상태와 같은 칩을 잠그는 근거.
+   * ⚠️ `currentStatus`(한글 라벨)로 비교하지 말 것 — 라벨로 분기했다가 메뉴가 늘 '재원으로 전환'만 뜨던
+   *    사고가 있었다([[#42]]).
+   */
+  statusKey: string;
   initialTarget: Target;
-  /** 활성 수강(퇴원 탭의 '종료할 수업' 목록). 비면 종전처럼 목록 없이 단순 퇴원. */
+  /** 활성 수강 — 다이얼로그가 **과목으로 묶어** 보여 준다. 비면 종전처럼 목록 없이 학생 단위로 처리. */
   openEnrollments: OpenEnrollment[];
   onClose: (changed: boolean) => void;
 }) {
@@ -84,50 +98,56 @@ export function StatusDialog({
   );
   const [target, setTarget] = useState<Target>(initialTarget);
 
-  const allIds = useMemo(() => openEnrollments.map((e) => e.id), [openEnrollments]);
+  /**
+   * 🔑 **선택 단위 = 과목**(원장 2026-09-16 *"과목 선택 가능하게 해달라한것 같은데, 수업 선택이 아니라"*).
+   * 수강 한 줄씩 세웠더니 수학만 세 반 다니는 학생이 한 과목인데 세 줄로 보였다. 과목 하나를 고르면 그 과목의
+   * **모든** 활성 수강이 함께 간다 — 서버엔 여전히 수강 id로 펼쳐 보낸다(`idsOf`, 서버 계약 불변).
+   * 순서는 학원설정 과목 순서(`subjects.options`).
+   */
+  const subjectOrder = useMemo(() => subjects.options.map((o) => o.value), [subjects]);
+  const groups = useMemo(
+    () => groupEnrollmentsBySubject(openEnrollments, subjectOrder),
+    [openEnrollments, subjectOrder],
+  );
+  const allSubjects = useMemo(() => groups.map((g) => g.subject), [groups]);
 
-  // 🔴 퇴원과 휴원은 **선택을 공유하지 않는다** — 뜻이 다르다(닫을 수업 / 쉬게 할 수업).
+  // 🔴 퇴원과 휴원은 **선택을 공유하지 않는다** — 뜻이 다르다(그만두는 과목 / 쉬는 과목).
   //    한 벌로 묶으면 탭을 바꾸는 것만으로 다른 쪽 결과가 바뀐다.
   // 기본은 **전부 선택** = 지금 동작 보존(과목이 하나뿐이면 추가 클릭 없이 그대로 퇴원).
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(allIds));
-  /**
-   * 휴원 탭 기본값 — **지금 대기인 수업이 있으면 그 상태 그대로**, 하나도 없으면 전부 선택.
-   * 🔑 선택 = "휴원 중인 수업 전체"라, 이미 걸어 둔 부분 휴원을 열었을 때 화면이 사실을 보여 주고
-   *    체크를 푸는 것만으로 되돌릴 수 있다(되돌릴 문이 여기밖에 없다 — hold-selection.ts 주석).
-   */
-  const [holdSelected, setHoldSelected] = useState<Set<string>>(() => {
-    const held = openEnrollments.filter((e) => e.onHold).map((e) => e.id);
-    return new Set(held.length > 0 ? held : allIds);
-  });
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(allSubjects));
+  /** 휴원 탭 기본값 — 대기인 수강이 있는 과목(없으면 전 과목). 규칙은 `initialHoldSubjects` 주석. */
+  const [holdSelected, setHoldSelected] = useState<Set<string>>(() => initialHoldSubjects(groups));
 
   const toggleIn = (
     set: (fn: (prev: Set<string>) => Set<string>) => void,
-    id: string,
+    key: string,
   ) =>
     set((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
   const plan = useMemo(
     () =>
       describeEndSelection(
-        openEnrollments.length,
-        openEnrollments.filter((e) => selected.has(e.id)).map((e) => e.className),
+        groups.length,
+        groups.filter((g) => selected.has(g.subject)).map((g) => subjects.labelOf(g.subject)),
       ),
-    [openEnrollments, selected],
+    [groups, selected, subjects],
   );
   const holdPlan = useMemo(
     () =>
       describeHoldSelection(
-        openEnrollments.length,
-        openEnrollments.filter((e) => holdSelected.has(e.id)).map((e) => e.className),
-        // 체크가 풀렸는데 지금 대기인 것 = 저장하면 다시 수강으로 돌아간다.
-        openEnrollments.filter((e) => e.onHold && !holdSelected.has(e.id)).map((e) => e.className),
+        groups.length,
+        groups.filter((g) => holdSelected.has(g.subject)).map((g) => subjects.labelOf(g.subject)),
+        // 체크가 풀렸는데 그 과목에 대기인 수강이 있는 것 = 저장하면 다시 수강으로 돌아간다.
+        groups
+          .filter((g) => g.heldCount > 0 && !holdSelected.has(g.subject))
+          .map((g) => subjects.labelOf(g.subject)),
       ),
-    [openEnrollments, holdSelected],
+    [groups, holdSelected, subjects],
   );
 
   const isWithdraw = target === "withdrawn";
@@ -177,11 +197,13 @@ export function StatusDialog({
           </button>
         </header>
 
-        {/* target switcher chips */}
+        {/* 전환 칩 — 🔴 **지금 상태와 같은 칩은 잠근다**(원장 2026-09-16 *"이미 재원 중인데, 재원 복구가 왜
+            활성화 되어있지? 알아서 비활성화"*). 재원인 학생을 '재원 복구'로 보내면 할 일이 없는 저장이 되고,
+            휴원인 학생을 '휴원'으로, 퇴원인 학생을 '퇴원'으로 보내는 것도 같다. 판정은 원값(statusKey)으로. */}
         <div className="border-border mb-4 flex gap-1 rounded-full border p-1">
-          <ChipButton current={target} value="withdrawn" onClick={setTarget} label="퇴원" />
-          <ChipButton current={target} value="on_hold" onClick={setTarget} label="휴원" />
-          <ChipButton current={target} value="enrolled" onClick={setTarget} label="재원 복구" />
+          <ChipButton current={target} value="withdrawn" onClick={setTarget} label="퇴원" disabled={statusKey === "withdrawn"} />
+          <ChipButton current={target} value="on_hold" onClick={setTarget} label="휴원" disabled={statusKey === "on_hold"} />
+          <ChipButton current={target} value="enrolled" onClick={setTarget} label="재원 복구" disabled={statusKey === "enrolled"} />
         </div>
 
         {/* 🔴 부분 종료는 학생 상태를 안 바꾸므로 **다른 액션**으로 보낸다 — 선택이 바뀌면 행선지도 바뀐다. */}
@@ -195,12 +217,12 @@ export function StatusDialog({
 
           {isWithdraw ? (
             <>
-              <EnrollmentPicker
-                label="종료할 수업"
-                rows={openEnrollments}
+              <SubjectPicker
+                label="종료할 과목"
+                groups={groups}
                 selected={selected}
-                onToggle={(id) => toggleIn(setSelected, id)}
-                onToggleAll={(all) => setSelected(all ? new Set(allIds) : new Set())}
+                onToggle={(key) => toggleIn(setSelected, key)}
+                onToggleAll={(all) => setSelected(all ? new Set(allSubjects) : new Set())}
                 subjects={subjects}
               />
 
@@ -256,19 +278,19 @@ export function StatusDialog({
             </>
           ) : isHold ? (
             <>
-              {/* 🔴 퇴원과 **같은 규약**(원장 2026-09-16 *"퇴원이든 휴원이든 … 선택한 과목만"*):
-                  체크한 수업만 대기로 간다. 전부 체크면 종전대로 학생 상태까지 '휴원'이 된다. */}
-              <EnrollmentPicker
-                label="휴원할 수업"
-                rows={openEnrollments}
+              {/* 🔴 퇴원과 **같은 규약 · 단위는 과목**(원장 2026-09-16): 체크한 과목의 수업이 전부 대기로 간다.
+                  전 과목을 체크하면 종전대로 학생 상태까지 '휴원'이 된다. */}
+              <SubjectPicker
+                label="쉬는 과목"
+                groups={groups}
                 selected={holdSelected}
-                onToggle={(id) => toggleIn(setHoldSelected, id)}
-                onToggleAll={(all) => setHoldSelected(all ? new Set(allIds) : new Set())}
+                onToggle={(key) => toggleIn(setHoldSelected, key)}
+                onToggleAll={(all) => setHoldSelected(all ? new Set(allSubjects) : new Set())}
                 subjects={subjects}
                 markHeld
               />
               <p className="text-muted-foreground text-sm">
-                대기(휴원)로 바뀐 수업은 수강 등록이 유지된 채 시간표·출석부에서 &lsquo;대기&rsquo;로 표시되고,
+                대기로 바뀐 수업은 수강 등록이 유지된 채 시간표·출석부에서 &lsquo;대기&rsquo;로 표시되고,
                 자동 결석으로 잡히지 않습니다.
               </p>
               {/* 부분 휴원엔 메모를 담을 자리가 없다(수강 행엔 메모 칸이 없다) — 전체 휴원일 때만 받는다.
@@ -324,32 +346,34 @@ export function StatusDialog({
 }
 
 /**
- * 활성 수강 고르기 — **퇴원 탭과 휴원 탭이 같은 부품을 쓴다**(원장 2026-09-16 *"퇴원이든 휴원이든"*).
- * 두 벌로 두면 한쪽만 고쳐진다(#77과 같은 결) — 체크박스 name도 `enrollmentIds` 하나로 맞춰
- * 두 서버 액션이 같은 모양(`getAll("enrollmentIds")`)으로 받는다.
+ * **과목** 고르기 — 퇴원 탭과 휴원 탭이 같은 부품을 쓴다(두 벌이면 한쪽만 고쳐진다, #77과 같은 결).
  *
+ * 🔑 한 줄 = 한 과목(원장 2026-09-16 *"내 말은 한 과목의 '한 수업'"*). 그 과목의 반은 줄 안에 작게 적는다
+ *    (몇 반이 함께 가는지 누르기 전에 보여야 한다).
+ * 🔑 **제출 값은 수강 id 그대로** — 보이는 체크박스엔 name을 달지 않고, 고른 과목의 수강 id마다 hidden input을
+ *    하나씩 싣는다(`idsOf`). 두 서버 액션이 종전 모양(`getAll("enrollmentIds")`)으로 받으므로 서버 계약이 안 바뀐다.
  * ⚠️ 활성 수강이 0개면 아무것도 안 그린다 — 고를 것이 없다(안내는 호출부의 plan 문구가 한다).
  */
-function EnrollmentPicker({
+function SubjectPicker({
   label,
-  rows,
+  groups,
   selected,
   onToggle,
   onToggleAll,
   subjects,
-  /** 휴원 탭 — 지금 대기인 줄에 표식을 단다(체크를 풀면 되돌아간다는 사실이 보여야 한다). */
+  /** 휴원 탭 — 대기인 수강이 있는 과목에 표식을 단다(체크를 풀면 되돌아간다는 사실이 보여야 한다). */
   markHeld = false,
 }: {
   label: string;
-  rows: OpenEnrollment[];
+  groups: SubjectGroup[];
   selected: Set<string>;
-  onToggle: (id: string) => void;
+  onToggle: (subject: string) => void;
   onToggleAll: (all: boolean) => void;
   subjects: ReturnType<typeof useSubjectMaps>;
   markHeld?: boolean;
 }) {
-  if (rows.length === 0) return null;
-  const allSelected = selected.size === rows.length;
+  if (groups.length === 0) return null;
+  const allSelected = selected.size === groups.length;
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
@@ -364,28 +388,37 @@ function EnrollmentPicker({
           전체 선택
         </label>
       </div>
+      {/* 제출 값 — 고른 과목의 수강 id 전부(보이는 체크박스는 과목 단위라 name이 없다). */}
+      {idsOf(groups, selected).map((id) => (
+        <input key={id} type="hidden" name="enrollmentIds" value={id} />
+      ))}
       <ul className="border-border max-h-44 space-y-1 overflow-auto rounded-lg border px-2 py-1.5">
-        {rows.map((e) => (
-          <li key={e.id}>
-            <label className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded-md px-1 py-1">
-              {/* 체크된 항목이 곧 제출 값 — 서버 액션이 getAll("enrollmentIds")로 받는다. */}
-              <input
-                type="checkbox"
-                name="enrollmentIds"
-                value={e.id}
-                checked={selected.has(e.id)}
-                onChange={() => onToggle(e.id)}
-                className="size-3.5 shrink-0"
-              />
-              <Pill color={subjects.colorOf(e.subject)}>{subjects.labelOf(e.subject)}</Pill>
-              <span className="text-foreground min-w-0 flex-1 truncate text-sm">{e.className}</span>
-              {markHeld && e.onHold ? (
-                <span className="text-amber shrink-0 text-xs font-medium">휴원 중</span>
-              ) : null}
-              <span className="text-text-dim shrink-0 text-xs">{e.teacherName ?? "—"}</span>
-            </label>
-          </li>
-        ))}
+        {groups.map((g) => {
+          const classes = g.classNames.join(" · ");
+          const held =
+            g.heldCount === 0 ? null : g.heldCount === g.enrollmentIds.length ? "휴원 중" : "일부 대기";
+          return (
+            <li key={g.subject}>
+              <label className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded-md px-1 py-1">
+                <input
+                  type="checkbox"
+                  checked={selected.has(g.subject)}
+                  onChange={() => onToggle(g.subject)}
+                  className="size-3.5 shrink-0"
+                />
+                <Pill color={subjects.colorOf(g.subject)}>{subjects.labelOf(g.subject)}</Pill>
+                {/* 반 이름은 작게 한 줄 — 길면 잘리고 전체는 마우스 오버로. */}
+                <span className="text-text-dim min-w-0 flex-1 truncate text-xs" title={classes}>
+                  {g.enrollmentIds.length > 1 ? `${g.enrollmentIds.length}개 수업 · ` : ""}
+                  {classes}
+                </span>
+                {markHeld && held ? (
+                  <span className="text-amber shrink-0 text-xs font-medium">{held}</span>
+                ) : null}
+              </label>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -396,21 +429,28 @@ function ChipButton({
   value,
   onClick,
   label,
+  disabled = false,
 }: {
   current: Target;
   value: Target;
   onClick: (v: Target) => void;
   label: string;
+  /** 지금 상태와 같은 전환 — 누를 일이 없다(원장 2026-09-16). */
+  disabled?: boolean;
 }) {
   const active = current === value;
   return (
     <button
       type="button"
       onClick={() => onClick(value)}
+      disabled={disabled}
+      aria-disabled={disabled}
       className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition ${
         active
           ? "bg-primary text-primary-foreground"
-          : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+          : disabled
+            ? "text-text-faint cursor-not-allowed opacity-40"
+            : "text-text-dim hover:text-foreground hover:bg-bg-soft"
       }`}
     >
       {label}
