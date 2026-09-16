@@ -11,6 +11,7 @@ import { monthsOfQuarter, quarterOf, weeksOfMonth } from "./calendar";
 import type { DailyProgress, MonthPlan, ProgressCalendar, StudentProgress } from "./model";
 import { daySchedule } from "./day-schedule";
 import { displayStatusOf, type DisplayStatus } from "./palette";
+import { courseEndMonth, isAfterCourseEnd } from "./course-end";
 
 export type DayView = {
   date: string;
@@ -53,12 +54,15 @@ export type MonthView = {
   status: DisplayStatus;
   isCurrent: boolean;
   isPast: boolean;
+  /** 종강(로드맵 마지막 끝 달) **뒤**인가 — 시계가 칸은 그리되 누르지 못하게 한다(원장 2026-09-16). */
+  afterEnd: boolean;
   /** 기록의 계획 쪽 범위(첫 기록 시작 ~ 마지막 기록 끝). 기록이 없으면 연간 계획 범위. 둘 다 없으면 null. */
   pageFrom: number | null;
   pageTo: number | null;
 };
 
-export type QuarterView = { q: 1 | 2 | 3 | 4; months: MonthView[]; plannedPages: number; donePages: number; pct: number };
+/** `afterEnd`는 **석 달이 모두** 종강 뒤일 때만 true — 종강이 낀 분기는 살아 있다. */
+export type QuarterView = { q: 1 | 2 | 3 | 4; months: MonthView[]; plannedPages: number; donePages: number; pct: number; afterEnd: boolean };
 
 export type YearView = {
   year: number;
@@ -142,6 +146,7 @@ function buildWeek(w: { index: number; start: string; end: string; days: string[
 export function buildYearView(p: StudentProgress): YearView {
   const byDate = new Map(p.dailyProgress.map((r) => [r.date, r] as const));
   const planByMonth = new Map(p.yearPlan.map((m) => [m.month, m] as const));
+  const endMonth = courseEndMonth(p);
   const asOfMonth = Number(p.asOf.slice(5, 7));
   const asOfYear = Number(p.asOf.slice(0, 4));
 
@@ -170,6 +175,10 @@ export function buildYearView(p: StudentProgress): YearView {
       status: groupStatus(plannedPages, donePages, isPast, isCurrent),
       isCurrent,
       isPast,
+      // 🔴 **로드맵 한 축으로 막지 않는다** — 로드맵이 낡아 종강 뒤에도 기록이 쌓이면(실데이터에선 흔하다)
+      //    그 달이 옅어지고 클릭까지 막혀 **기록이 있는데 못 여는** 달이 된다(적대 리뷰 2026-09-16).
+      //    원장이 가리킨 화면(진도율 자리에 `—`만 남은 달)과 정확히 같은 집합으로 좁힌다.
+      afterEnd: isAfterCourseEnd(endMonth, p.year, m) && plannedPages === 0 && donePages === 0,
       pageFrom,
       pageTo,
     });
@@ -179,7 +188,7 @@ export function buildYearView(p: StudentProgress): YearView {
     const qm = monthsOfQuarter(q).map((m) => months[m - 1]!);
     const plannedPages = qm.reduce((s, x) => s + x.plannedPages, 0);
     const donePages = qm.reduce((s, x) => s + x.donePages, 0);
-    return { q, months: qm, plannedPages, donePages, pct: pctOf(donePages, plannedPages) };
+    return { q, months: qm, plannedPages, donePages, pct: pctOf(donePages, plannedPages), afterEnd: qm.every((x) => x.afterEnd) };
   });
   const plannedPages = months.reduce((s, x) => s + x.plannedPages, 0);
   const donePages = months.reduce((s, x) => s + x.donePages, 0);

@@ -38,15 +38,19 @@ export const DrilldownDial = memo(function DrilldownDial() {
   const metric = (pct: number, planned: number) => planned === 0 ? "계획 없음" : progress.estimated ? "예정" : `${pct}%`;
   let periods: Period[];
 
+  // 종강 뒤 칸은 세우지 않는다 — 이 다이얼은 **칸 수로 각을 나눠서** 빼도 원이 채워진다(열두 달 시계와 다르다).
+  // 비는 일은 없지만(고를 수 없는 분기로는 못 들어간다) 비면 원래 목록으로 돌아가 0으로 나누지 않는다.
+  const liveQuarters = view.quarters.filter((q) => !q.afterEnd);
+  const liveMonths = quarter.months.filter((m) => !m.afterEnd);
   if (level === 0) {
-    periods = view.quarters.map((q) => ({
+    periods = (liveQuarters.length > 0 ? liveQuarters : view.quarters).map((q) => ({
       key: `q${q.q}`, title: `${q.q}분기`, subtitle: `${q.months[0]!.month}~${q.months.at(-1)!.month}월`,
       metric: metric(q.pct, q.plannedPages), label: `${q.q}분기 · ${metric(q.pct, q.plannedPages)} · 월별로 확대`,
       fill: QUARTER_TINT[q.q].soft, ink: QUARTER_TINT[q.q].ink, accent: QUARTER_TINT[q.q].ink,
       pct: q.pct, current: q.months.some((m) => m.isCurrent), target: { kind: "quarter", q: q.q }, onSelect: () => selectQuarter(q.q),
     }));
   } else if (level === 1) {
-    periods = quarter.months.map((m) => ({
+    periods = (liveMonths.length > 0 ? liveMonths : quarter.months).map((m) => ({
       key: `m${m.month}`, title: `${m.month}월`, subtitle: m.plan?.semester ?? "계획 없음",
       metric: metric(m.pct, m.plannedPages), label: `${m.month}월 · ${metric(m.pct, m.plannedPages)} · 주별로 확대`,
       fill: STATUS_FILL[m.status], ink: STATUS_INK[m.status], accent: QUARTER_TINT[m.quarter].ink,

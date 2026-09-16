@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { GAP, RINGS, arcPath, midAngle, monthAngles, polar, withGap } from "../geometry";
-import { HAIRLINE, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
+import { AFTER_END_FILL, AFTER_END_OPACITY, HAIRLINE, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
 import { ringActive } from "../view-mode";
 import { useProgressMap } from "./map-state";
 import { RingOutline } from "./ring-outline";
@@ -45,18 +45,20 @@ export const YearRing = memo(function YearRing({ showYear = false }: { showYear?
         const lp = { x: c.x, y: c.y - STACK_DY };
         const pp = { x: c.x, y: c.y + STACK_DY + 1 };
         const pill = pctPill(m.status === "completed" ? "completed" : m.isCurrent ? "in-progress" : "other");
+        // 종강 뒤 달 — 칸은 남기되(원이라 빼면 이가 빠진다) 누르지 못하고, 뜻 없는 `—` 알약은 아예 안 그린다.
+        const dead = m.afterEnd;
         return (
-          <g key={m.month}>
+          <g key={m.month} opacity={dead ? AFTER_END_OPACITY : undefined}>
             <Segment
               d={arcPath(RINGS.year[0], RINGS.year[1], a0, a1)}
-              fill={m.plannedPages === 0 ? STATUS_FILL["no-plan"] : m.isPast || m.isCurrent ? tint.mid : tint.soft}
+              fill={dead ? AFTER_END_FILL : m.plannedPages === 0 ? STATUS_FILL["no-plan"] : m.isPast || m.isCurrent ? tint.mid : tint.soft}
               stroke={m.isCurrent ? TODAY_STROKE : undefined}
               strokeWidth={m.isCurrent ? CURRENT_STROKE_WIDTH : 0}
               dashed={m.isCurrent}
               selected={focused}
-              label={`${showYear ? `${year}년 ` : ""}${m.month}월 · ${m.plan?.chapter ?? "계획 없음"} · 진도율 ${m.pct}%`}
+              label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 · 종강 이후` : `${showYear ? `${year}년 ` : ""}${m.month}월 · ${m.plan?.chapter ?? "계획 없음"} · 진도율 ${m.pct}%`}
               target={{ kind: "month", month: m.month }}
-              onSelect={years.includes(year) ? () => selectMonth(m.month) : undefined}
+              onSelect={dead || !years.includes(year) ? undefined : () => selectMonth(m.month)}
             />
             <g className={SEGMENT_TEXT} aria-hidden>
               <ClockLabel x={c.x} y={c.y}>
@@ -64,10 +66,12 @@ export const YearRing = memo(function YearRing({ showYear = false }: { showYear?
               <text x={0} y={showYear ? -7 : lp.y - c.y} textAnchor="middle" dominantBaseline="central" fontSize={FONT.month} fontWeight={700} fill="var(--foreground)">
                 {m.month}월
               </text>
-              <rect x={-33} y={pp.y - c.y - 14} width={66} height={28} rx={6} fill={pill.fill} stroke={HAIRLINE} strokeWidth={0.75} />
-              <text x={0} y={pp.y - c.y + 1} textAnchor="middle" dominantBaseline="central" fontSize={FONT.monthPct} fontWeight={700} fill={pill.ink} className="num">
-                {m.plannedPages > 0 ? `${m.pct}%` : "—"}
-              </text>
+              {dead ? null : <>
+                <rect x={-33} y={pp.y - c.y - 14} width={66} height={28} rx={6} fill={pill.fill} stroke={HAIRLINE} strokeWidth={0.75} />
+                <text x={0} y={pp.y - c.y + 1} textAnchor="middle" dominantBaseline="central" fontSize={FONT.monthPct} fontWeight={700} fill={pill.ink} className="num">
+                  {m.plannedPages > 0 ? `${m.pct}%` : "—"}
+                </text>
+              </>}
               </ClockLabel>
             </g>
           </g>
