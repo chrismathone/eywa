@@ -37,19 +37,21 @@ export function StatusAction({
     setOpen(true);
   }
 
-  // 메뉴 아이템 동적: 현재 상태에 따라 사용 가능한 전환
+  // 메뉴 아이템 동적: 현재 상태에 따라 사용 가능한 전환.
+  // 🔴 라벨에 말줄임(…)을 붙이지 않는다(원장 2026-09-16 *"…은 지우고"*) — 어차피 전부 다이얼로그를
+  //    여는 항목이라 …가 구분을 만들지 못하고, 좁은 메뉴에서 글자만 길어진다.
   const actions: { target: Target; label: string }[] = [];
   if (currentStatus === "enrolled") {
-    actions.push({ target: "withdrawn", label: "퇴원 처리…" });
-    actions.push({ target: "on_hold", label: "휴원 처리…" });
+    actions.push({ target: "withdrawn", label: "퇴원 처리" });
+    actions.push({ target: "on_hold", label: "휴원 처리" });
   } else if (currentStatus === "on_hold") {
-    actions.push({ target: "enrolled", label: "재원으로 복구…" });
-    actions.push({ target: "withdrawn", label: "퇴원 처리…" });
+    actions.push({ target: "enrolled", label: "재원으로 복구" });
+    actions.push({ target: "withdrawn", label: "퇴원 처리" });
   } else if (currentStatus === "withdrawn") {
-    actions.push({ target: "enrolled", label: "재원으로 복구…" });
+    actions.push({ target: "enrolled", label: "재원으로 복구" });
   } else {
     // prospect, consulted
-    actions.push({ target: "enrolled", label: "재원으로 전환…" });
+    actions.push({ target: "enrolled", label: "재원으로 전환" });
   }
 
   if (actions.length === 0) return null;
