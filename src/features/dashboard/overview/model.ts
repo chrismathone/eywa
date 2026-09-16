@@ -151,7 +151,11 @@ export type OverviewData = {
   mathSheet: { period: string; classes: number; filled: number; total: number };
 };
 export type Area = keyof OverviewData;
-export type Section<T> = { data: T | null; at: number | null; error: boolean };
+/**
+ * 카드 한 칸의 조회 결과. `timedOut`은 **렌더 마감에 걸린 것**이라 실패와 뜻이 다르다 — 쿼리가 깨진 게 아니라
+ * 느린 것이고, 화면은 그 차이를 문구로 말한다(`deadline.ts`).
+ */
+export type Section<T> = { data: T | null; at: number | null; error: boolean; timedOut?: boolean };
 export type Sections = { [K in Area]?: Section<OverviewData[K]> };
 export type OverviewSnapshot = {
   scope: string;
@@ -182,7 +186,8 @@ export function mergeSnapshot(
     const old = previous.sections[key];
     if (current?.error && old && old.at !== null) {
       // Both values belong to the same mapped key; preserve its exact payload, including a successful null.
-      Object.assign(sections, { [key]: { ...old, error: true } });
+      // 실패 사유(시간 초과)는 **현재 것**을 싣는다 — 옛 값의 사유를 물려받으면 문구가 거짓이 된다.
+      Object.assign(sections, { [key]: { ...old, error: true, timedOut: current.timedOut } });
     }
   }
   return { ...next, sections };

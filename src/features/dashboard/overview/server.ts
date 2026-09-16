@@ -63,6 +63,7 @@ import { getInventoryCounts } from "@/features/inventory/server/queries";
 import { getMonthEvents } from "@/features/calendar/server/queries";
 import { getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getMathSheetLanding } from "@/features/math-sheets/server/landing";
+import { OVERVIEW_BUDGET_MS, remainingMs, settleWithin } from "./deadline";
 import {
   getExpensesForMonth,
   summarizeExpenses,
@@ -529,14 +530,21 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   const history = allowed.includes("attendance")
     ? attendanceHistory(today)
     : null;
+  // 🔴 **예산은 여기서부터** 잰다 — `requestedAt`(함수 진입)으로 재면 인증·권한 조회가 느린 날 남은 예산이
+  //    0이 되어 **카드 25개가 통째로** 빈다(적대 리뷰 2026-09-16). `requestedAt`은 스냅샷 순서를 가리는 값이라
+  //    그대로 둔다(`mergeSnapshot`).
+  const budgetFrom = Date.now();
   const sections: Sections = {};
   const jobs: Promise<void>[] = [];
+  // 마감에 걸렸을 때 "무엇이 안 끝났나"를 알아야 그 칸만 비운다(끝난 칸은 건드리지 않는다).
+  const pending = new Set<Area>();
   function add<K extends Area>(
     area: K,
     menus: MenuKey[],
     load: () => Promise<OverviewData[K]>,
   ) {
     if (!menus.every((key) => allowed.includes(key))) return;
+    pending.add(area);
     jobs.push(
       (async () => {
         let result: Section<OverviewData[K]>;
@@ -547,6 +555,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
           result = { data: null, at: null, error: true };
         }
         Object.assign(sections, { [area]: result });
+        pending.delete(area);
       })(),
     );
   }
@@ -752,7 +761,18 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       total: result.data.cards.reduce((sum, c) => sum + c.shown, 0),
     };
   });
-  await Promise.all(jobs);
+  // 🔴 전부 기다리지 않는다 — 하나가 늘어지면 세그먼트 상한(60초)을 넘겨 **운영실이 통째로 504**가 됐다
+  //    (원장 콘솔 2026-09-16). 마감이 지나면 못 끝낸 칸만 '시간 초과'로 비우고 화면을 낸다.
+  await settleWithin(jobs, remainingMs(budgetFrom, OVERVIEW_BUDGET_MS, Date.now()));
+  if (pending.size > 0) {
+    // 한 줄로 모은다 — 느린 날 렌더마다 25줄이 쌓이면 진짜 신호가 묻힌다.
+    console.error(`[dashboard/overview] 렌더 마감 ${OVERVIEW_BUDGET_MS}ms 초과 — 비운 칸: ${[...pending].join(", ")}`);
+    for (const area of pending) {
+      Object.assign(sections, { [area]: { data: null, at: null, error: true, timedOut: true } });
+    }
+  }
+  // ⚠️ 이 둘은 마감 **밖**이다 — 학원 이름·과목 라벨이 없으면 화면을 만들 수 없어 '비우기'가 성립하지 않는다
+  //    (`getTenantSettings`는 테넌트별 `unstable_cache`, 강사 스코프는 요청당 캐시라 대개 이미 끝나 있다).
   const settings = await settingsPromise;
   const teacherId = await teacherIdPromise;
   return {
@@ -763,6 +783,8 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     requestedAt,
     allowed,
     subjects: subjectLabelRecord(settings.operations.subjects),
-    sections,
+    // 🔑 **복사해서** 돌려준다 — 마감 뒤 늦게 끝난 조회가 직렬화 도중 같은 객체를 고치면 한 렌더 안에서
+    //    카드가 실패 → 성공으로 뒤집힌다(그 결과는 이미 화면에 못 실린다).
+    sections: { ...sections },
   };
 }

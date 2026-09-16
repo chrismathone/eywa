@@ -64,5 +64,5 @@ describe("역할 배열 복제 금지", () => {
       }
     }
     expect(offenders, `ASSIGNABLE_TEACHER_ROLES를 import할 것:\n${offenders.join("\n")}`).toEqual([]);
-  });
+  }, 60_000); // 전수 스캔 — 혼자 1초대지만 전체 스위트 병렬에선 기본 5초를 넘겨 헛실패한다(2026-09-16 두 번 실측).
 });

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -15,7 +16,24 @@ import { isEieMonthlyClass, sessionPricingAmount, type SessionPricingMode } from
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
-export type SessionTermActionState = { error?: string; ok?: boolean; refreshed?: number } | undefined;
+export type SessionTermPatch = {
+  id: string;
+  confirmedSessions: number | null;
+  unitPrice: number | null;
+  amount: number | null;
+  pricingMode: SessionPricingMode;
+  confirmedAt: string | null;
+};
+export type SessionTermActionState = { error?: string; ok?: boolean; refreshed?: number; terms?: SessionTermPatch[] } | undefined;
+
+// 한 행 저장 때마다 월 전체 목록을 다시 그리지 않는다. 응답은 저장한 행만 보내고,
+// 감사로그·다음 방문의 캐시 무효화는 응답 뒤 실행한다(Next after의 수명 보장).
+function finishTermMutation(log: Parameters<typeof logAction>[0]) {
+  after(async () => {
+    revalidatePath("/billing");
+    await logAction(log);
+  });
+}
 
 /**
  * 계획 N 갱신 — 청구월의 모든 청구서에 대해 (청구서×반) 계획 회차를 재산출해 upsert.
@@ -147,15 +165,14 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
 /**
  * 반 일괄 확정 — 한 반의 그 청구월 학생 전원을 **회차 × 같은 회당 단가**로 한 번에 확정.
  * 400+행을 하나씩 확정하는 대신 반 단위로 배정하고, 개인별로 다른 건 confirmSessionTerm으로 보정(2026-07-13 원장).
- * `sessionsOverride`가 있으면 그 회차를 전원에 적용(반 디폴트 회차), 없으면 **각자 계획 N**(월중 등록/퇴원으로
- * 반 안에서도 다를 수 있음 — 그 차이를 존중). 개인은 이후 행별로 회차·단가 모두 바꿀 수 있다.
+ * 일반 수업은 회차를 명시해야 확정한다. 단가만 일괄 입력하는 동작은 클라이언트 초안이다.
  */
 export async function confirmClassTerms(
   period: string,
   classId: string,
   unitPriceRaw: number,
   sessionsOverride?: number | null,
-): Promise<{ error?: string; confirmed?: number }> {
+): Promise<{ error?: string; confirmed?: number; terms?: SessionTermPatch[] }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
@@ -163,9 +180,8 @@ export async function confirmClassTerms(
   if (!classId) return { error: "반이 지정되지 않았습니다" };
   let unitPrice = Math.round(unitPriceRaw);
   if (!Number.isFinite(unitPrice) || unitPrice < 0) return { error: "회당 단가를 확인해 주세요" };
-  const override =
-    sessionsOverride != null && Number.isFinite(sessionsOverride) ? Math.round(sessionsOverride) : null;
-  if (override != null && (override < 0 || override > 99)) return { error: "회차는 0~99 사이여야 합니다" };
+  const override = sessionsOverride ?? null;
+  if (override != null && (!Number.isInteger(override) || override < 0 || override > 99)) return { error: "회차는 0~99 사이 정수여야 합니다" };
 
   const supabase = await createClient();
   // 이 반의 그 청구월 term만 — invoices inner join으로 period 필터(RLS가 테넌트 격리).
@@ -174,6 +190,7 @@ export async function confirmClassTerms(
   if (classError) return { error: classError.message };
   if (!cls) return { error: "반을 찾을 수 없습니다" };
   const pricingMode: SessionPricingMode = isEieMonthlyClass(cls.subject, cls.english_track) ? "monthly" : "per_session";
+  if (pricingMode === "per_session" && override === null) return { error: "일괄 확정할 회차를 입력해 주세요. 단가만 입력하면 미확정 상태로 유지됩니다" };
   if (pricingMode === "monthly") unitPrice = (await getTenantSettings()).billing.eieMonthlyPrice;
   const { data, error } = await supabase
     .from("invoice_session_terms")
@@ -193,8 +210,9 @@ export async function confirmClassTerms(
     (byN.get(n) ?? byN.set(n, []).get(n)!).push(r.id as string);
   }
   let confirmed = 0;
+  const terms: SessionTermPatch[] = [];
   for (const [n, ids] of byN) {
-    const { error: uerr } = await supabase
+    const { data: saved, error: uerr } = await supabase
       .from("invoice_session_terms")
       .update({
         confirmed_sessions: n,
@@ -204,15 +222,18 @@ export async function confirmClassTerms(
         confirmed_by: user.id,
         confirmed_at: now,
       })
-      .in("id", ids);
+      .in("id", ids)
+      .select("id");
     if (uerr) return { error: uerr.message };
-    confirmed += ids.length;
+    for (const row of saved ?? []) terms.push({ id: row.id, confirmedSessions: n, unitPrice, pricingMode, amount: sessionPricingAmount(pricingMode, n, unitPrice), confirmedAt: now });
+    confirmed += saved?.length ?? 0;
   }
+  if (confirmed === 0) return { error: "확정할 대상을 찾을 수 없습니다" };
 
   // 🔴 한 번에 반 전체 청구 회차·단가를 못박는 자리 = 돈이 실제로 결정되는 지점. 단가·회차를 남긴다
   //    (`invoice_create`가 amountTotal을 남기는 것과 같은 결 — 금액 없이 "누가 눌렀다"만 남기면
   //     "왜 이 학생 청구가 다른가"에 답할 수 없다). classId는 뷰어가 반 이름으로 풀어 준다.
-  await logAction({
+  finishTermMutation({
     action: "session_term_confirm_class",
     targetType: "invoice_session_term",
     targetLabel: `${period} 반 일괄 확정`,
@@ -226,8 +247,7 @@ export async function confirmClassTerms(
       confirmedCount: confirmed,
     },
   });
-  revalidatePath("/billing");
-  return { confirmed };
+  return { confirmed, terms };
 }
 
 /** 회차/월 금액 확정 — 회당은 N×단가, EiE는 설정의 월 금액과 단위를 스냅샷. */
@@ -240,12 +260,15 @@ export async function confirmSessionTerm(
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
-  const sessions = Number(String(formData.get("sessions") ?? "").trim());
-  let unitPrice = Number(String(formData.get("unitPrice") ?? "").replace(/[,\s]/g, ""));
+  const sessionsRaw = String(formData.get("sessions") ?? "").trim();
+  const sessions = sessionsRaw === "" ? NaN : Number(sessionsRaw);
+  const priceRaw = String(formData.get("unitPrice") ?? "").replace(/[,\s]/g, "");
+  let unitPrice = priceRaw === "" ? NaN : Number(priceRaw);
   if (!id) return { error: "대상이 없습니다" };
   if (!Number.isInteger(sessions) || sessions < 0 || sessions > 99)
     return { error: "확정 회차는 0~99 사이 정수여야 합니다" };
   if (!Number.isFinite(unitPrice) || unitPrice < 0) return { error: "회당 단가를 확인해 주세요" };
+  unitPrice = Math.round(unitPrice);
 
   const supabase = await createClient();
   // 반·이전 확정값을 함께 읽는다 — classId는 뷰어가 반 이름으로 풀어 주고(감사로그 '대상'), 이전 확정값은
@@ -261,7 +284,8 @@ export async function confirmSessionTerm(
   const pricingMode: SessionPricingMode = isEieMonthlyClass(before.subject, cls?.english_track) ? "monthly" : "per_session";
   if (pricingMode === "monthly") unitPrice = (await getTenantSettings()).billing.eieMonthlyPrice;
   const amount = sessionPricingAmount(pricingMode, sessions, unitPrice);
-  const { error } = await supabase
+  const confirmedAt = new Date().toISOString();
+  const { data: saved, error } = await supabase
     .from("invoice_session_terms")
     .update({
       confirmed_sessions: sessions,
@@ -269,13 +293,14 @@ export async function confirmSessionTerm(
       pricing_mode: pricingMode,
       amount,
       confirmed_by: user.id,
-      confirmed_at: new Date().toISOString(),
+      confirmed_at: confirmedAt,
     })
-    .eq("id", id);
+    .eq("id", id).select("id").maybeSingle();
   if (error) return { error: error.message };
+  if (!saved) return { error: "확정할 대상을 찾을 수 없습니다" };
 
   const hadPrev = before?.confirmed_sessions !== null && before?.confirmed_sessions !== undefined;
-  await logAction({
+  finishTermMutation({
     action: "session_term_confirm",
     targetType: "invoice_session_term",
     metadata: {
@@ -291,8 +316,7 @@ export async function confirmSessionTerm(
         : {}),
     },
   });
-  revalidatePath("/billing");
-  return { ok: true };
+  return { ok: true, terms: [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt }] };
 }
 
 /** 확정 해제 — 계획 N은 유지. */
@@ -309,18 +333,21 @@ export async function unconfirmSessionTerm(
 
   const supabase = await createClient();
   // 🔴 확정 해제는 확정값을 **null로 지운다** — 지우기 전에 읽지 않으면 "얼마였는지"가 영영 사라진다.
-  const { data: before } = await supabase
+  const { data: before, error: readError } = await supabase
     .from("invoice_session_terms")
-    .select("class_id, confirmed_sessions, unit_price, amount")
+    .select("class_id, confirmed_sessions, unit_price, amount, pricing_mode")
     .eq("id", id)
     .maybeSingle();
-  const { error } = await supabase
+  if (readError) return { error: readError.message };
+  if (!before) return { error: "대상을 찾을 수 없습니다" };
+  const { data: saved, error } = await supabase
     .from("invoice_session_terms")
     .update({ confirmed_sessions: null, unit_price: null, amount: null, confirmed_by: null, confirmed_at: null })
-    .eq("id", id);
+    .eq("id", id).select("id").maybeSingle();
   if (error) return { error: error.message };
+  if (!saved) return { error: "해제할 대상을 찾을 수 없습니다" };
 
-  await logAction({
+  finishTermMutation({
     action: "session_term_unconfirm",
     targetType: "invoice_session_term",
     metadata: {
@@ -331,8 +358,7 @@ export async function unconfirmSessionTerm(
       amountBefore: before?.amount === null || before?.amount === undefined ? null : Number(before.amount),
     },
   });
-  revalidatePath("/billing");
-  return { ok: true };
+  return { ok: true, terms: [{ id, confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null, pricingMode: before.pricing_mode ?? "per_session" }] };
 }
 
 /** "YYYY-MM" 한 달 전. */

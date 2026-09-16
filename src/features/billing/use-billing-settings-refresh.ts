@@ -4,10 +4,10 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { subscribeRecordSaved } from "@/lib/realtime/record-channel";
 
-/** 설정 창에서 저장하면 열려 있는 수납 창도 새 후보 목록을 읽는다. 입력 중인 폼 상태는 유지된다. */
+/** 다른 창의 설정·회차 저장을 반영한다. 저장한 창은 행 응답으로 갱신해 중복 조회하지 않는다. */
 export function useBillingSettingsRefresh() {
   const router = useRouter();
   useEffect(() => subscribeRecordSaved((message) => {
-    if (message.scope === "tenant-settings:billing") router.refresh();
+    if (message.scope === "tenant-settings:billing" || message.scope === "billing:session-terms") router.refresh();
   }), [router]);
 }

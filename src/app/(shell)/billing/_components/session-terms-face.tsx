@@ -10,6 +10,7 @@ import { SessionTermGroups, RefreshPlanButton, type ClassGroup } from "./session
 import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
 import Link from "next/link";
+import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -71,7 +72,6 @@ export async function SessionTermsFace({
   const curPage = Math.min(Math.max(1, Number(page) || 1), totalPages);
   const groups = allGroups.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
   const monthlyCount = filtered.filter((r) => r.monthlyPrice !== null).length;
-  const confirmedShown = filtered.filter((r) => r.confirmedSessions !== null).length;
 
   // 필터(과목·검색)를 보존한 채 월·page만 바꾸는 href.
   const hrefFor = (per: string, n = 1) => {
@@ -84,6 +84,7 @@ export async function SessionTermsFace({
   const pageHref = (n: number) => hrefFor(p, n);
 
   return (
+    <SessionTermsState rows={filtered.map(({ id, confirmedSessions }) => ({ id, confirmedSessions }))}>
     <section className="space-y-4">
       {/* 툴바(지시서 §10) — 월 이동은 공용 BillingMonthNav(옛 h-8 text-xs 화살표 링크 대체) · 과목 칩 줄 → `과목: 전체` 라벨 ·
           상시 검색창 → 검색 토글 · Primary = '계획 갱신'(이 면의 본 동작) 하나. 🔴 툴바 카드 껍데기 없음. */}
@@ -103,7 +104,7 @@ export async function SessionTermsFace({
         <SearchToggle placeholder="학생명·반" defaultValue={query} />
         <span className="text-text-dim text-sm whitespace-nowrap">
           반 <span className="num">{allGroups.length}</span>개 · 확정{" "}
-          <span className="num">{confirmedShown}</span>/<span className="num">{filtered.length}</span>건
+          <SessionTermsConfirmedCount />/<span className="num">{filtered.length}</span>건
           {monthlyCount > 0 ? ` · 월 정액 ${monthlyCount}건` : null}
         </span>
         <div className="ml-auto">
@@ -116,8 +117,9 @@ export async function SessionTermsFace({
 
       {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
       <FaceNote>
-        각 <b>반</b>의 회당 단가를 입력하고 <b>이 반 일괄 확정</b>을 누르면 그 반 학생 전원이 각자 계획 회차 ×
-        단가로 확정됩니다. 학생마다 회차·단가가 다르면 <b>개별</b> 행에서 보정하세요. 확정한 값만 청구
+        회차를 비우고 <b>단가 일괄 입력</b>을 누르면 미확정 학생의 단가 입력칸만 채웁니다(저장 전).
+        회차와 단가를 모두 입력한 뒤 <b>이 반 일괄 확정</b>을 누르면 입력한 회차 × 단가로 확정됩니다.
+        개별 행에서는 예상금액을 확인한 뒤 <b>확정</b>하세요. 확정한 값만 청구
         기준으로 인정되며, 청구액과의 차이는 자동으로 맞추지 않습니다(차이가 곧 점검 신호). 단가 후보는{" "}
         <Link
           href="/owner?tab=billing"
@@ -143,10 +145,11 @@ export async function SessionTermsFace({
         </div>
       ) : (
         <>
-          <SessionTermGroups groups={groups} catalog={view.catalog} period={p} />
+          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} />
           <Pagination page={curPage} totalPages={totalPages} total={allGroups.length} hrefForPage={pageHref} />
         </>
       )}
     </section>
+    </SessionTermsState>
   );
 }
