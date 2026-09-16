@@ -33,6 +33,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
   const scroller = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState(initialFilters);
   const [compact, setCompact] = useState(false);
+  const [previousFonts, setPreviousFonts] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(true);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -139,8 +140,13 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
     if (row && item && failure) void saveCheck(row, item, failure.done);
   };
 
-  return <div ref={root} className={`${styles.board} edge-to-edge`}>
+  return <div ref={root} className={`${styles.board} ${previousFonts ? styles.previousFonts : ""} edge-to-edge`}>
     <header className={styles.header}>
+      <div className={styles.fontToggle} role="group" aria-label="폰트 서식 비교">
+        <span>폰트</span>
+        <button type="button" aria-pressed={previousFonts} onClick={() => setPreviousFonts(true)} title="이름 13px · 항목별 크기를 사용하던 서식">변경 전</button>
+        <button type="button" aria-pressed={!previousFonts} onClick={() => setPreviousFonts(false)} title="이름과 본문을 16px로 통일한 서식">변경 후</button>
+      </div>
       <div className="compact-chrome:hidden"><h1><EyIcon name="graduationCap" size={28} />신규생 90일 관리</h1><p>첫 수업부터 90일까지, 놓치지 않는 학생 관리.</p></div>
       <div className={styles.headerMeta}><EyIcon name="calendar" size={17} /><span>기준 날짜 <strong>{view.today.replaceAll("-", ". ")}</strong></span></div>
     </header>
@@ -199,7 +205,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
     </section>
 
     <Sheet open={detailOpen && !!selectedRow} onOpenChange={setDetailOpen}>
-      <SheetContent className={styles.detail}>
+      <SheetContent className={`${styles.detail} ${previousFonts ? styles.previousFonts : ""}`}>
         {selectedRow && <>
           <SheetHeader><SheetTitle className={styles.detailTitle}>{selectedRow.name} <span>{selectedRow.subject ? labelOf(selectedRow.subject) : "과목 미정"}</span></SheetTitle><SheetDescription>{schoolGradeLabel(selectedRow.school, selectedRow.grade)} · 등록일 {selectedRow.enrolledOn}</SheetDescription></SheetHeader>
           <div className={styles.detailBody}>

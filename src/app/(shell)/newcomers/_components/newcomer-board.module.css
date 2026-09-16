@@ -8,7 +8,12 @@
 .board button, .board select, .detail button { cursor: pointer; }
 .board button:disabled, .detail button:disabled { cursor: default; }
 .board button:focus-visible, .board select:focus-visible, .board input:focus-visible, .board a:focus-visible, .detail button:focus-visible, .detail select:focus-visible, .detail a:focus-visible, .tableScroll:focus-visible { outline: 2px solid var(--nc-blue); outline-offset: 2px; }
-.header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; min-height: 24px; }
+.header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; flex: none; min-height: 24px; }
+.fontToggle { display: inline-flex; align-items: center; gap: 2px; flex: none; padding: 2px; border: 1px solid var(--nc-line); border-radius: 7px; background: var(--nc-surface); color: var(--nc-ink); font-size: var(--text-sm); line-height: 1; }
+.fontToggle > span { padding: 0 6px; color: var(--nc-muted); }
+.fontToggle button { padding: 5px 8px; border-radius: 4px; font-size: inherit; line-height: inherit; white-space: nowrap; }
+.fontToggle button:hover { background: #edf4ff; }
+.fontToggle button[aria-pressed=true] { color: #fff; background: #193b69; font-weight: 700; }
 .header h1 { display: flex; align-items: center; gap: 10px; color: var(--nc-ink); font-weight: 780; font-size: 24px; letter-spacing: -.8px; margin: 0; }
 .header h1 svg { color: var(--nc-blue); }
 .header p { color: var(--nc-muted); margin: 3px 0 0 38px; font-size: var(--nc-font-size); }
@@ -112,6 +117,16 @@ button.metric:hover:not(:disabled) { background: #f8faff; }
 .progressDetail progress::-webkit-progress-value { background: #047857; border-radius: 5px; }
 .progressDetail small { grid-column: 1 / -1; color: var(--nc-muted); font-size: var(--nc-font-size); }
 .studentDetailLink { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid var(--nc-line); color: var(--nc-blue); font-size: var(--nc-font-size); }
+/* 이름 확대·본문 16px 통일 이전(a9b2b955)의 글꼴 서식만 비교한다. */
+.previousFonts { --nc-font-size: 13px; --nc-badge-font-size: 12px; --nc-badge-line-height: 18px; line-height: 1.4; }
+.previousFonts :is(.header p, .headerMeta, .metricLabel, .priorityHeading, .tabs button, .search input, .tools select, .density, .table, .date, .warning, .failure, .empty p, .detailTitle span, .detailLabel, .taskDetail dl, .studentDetailLink) { font-size: 12px; }
+.previousFonts :is(.priorityHeading > span, .priorityTask, .textButton, .table th, .subject, .footer, .muted, .progressDetail small) { font-size: 11px; }
+.previousFonts :is(.metricNote, .tableMeta, .firstDay, .notice) { font-size: 10px; }
+.previousFonts .optional { font-size: 9px; }
+.previousFonts .empty strong { font-size: 14px; }
+.previousFonts .taskDetail h2 { font-size: 15px; }
+.previousFonts .studentName { color: #183c69; font-weight: 650; line-height: 1.4; }
+.previousFonts .studentName:hover { color: var(--nc-blue); }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1250px) { .metric { grid-template-columns: 1fr; } .metricIcon { display: none; } .priorityTask:nth-child(3) { display: none; } .tools { margin-left: 0; } .toolbar { gap: 6px; } }
