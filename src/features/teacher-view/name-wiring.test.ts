@@ -265,6 +265,34 @@ describe("🔴 오늘 면(카드·요약·학생 줄)도 사전을 탄다", () =
     // 같은 값을 넣는 두 조립 지점(정규 수강 · 보강 방문자)에 **둘 다** 실려야 한다.
     expect((src.match(/englishName: meta\?\.english_name \?\? null/g) ?? []).length).toBe(2);
   });
+
+  it("출결·태도 빈 칸 '선택'은 사전(select.choose) — 영어 화면에 한글이 안 남는다", () => {
+    expect(sheetT("ko", "select.choose")).toBe("선택");
+    expect(sheetT("en", "select.choose")).toBe("Choose");
+    const att = codeOnly(read("features", "class-sheets", "components", "attendance-check.tsx"));
+    expect(att).toContain('t("select.choose")');
+    expect(att).toContain("att.cycle.tipClick");
+    expect(att).toContain("att.makeup.removeConfirm");
+    expect(att).not.toContain("선택 안 함");
+    expect(att).not.toContain("출결 없음");
+    expect(codeOnly(read("features", "class-sheets", "components", "attitude-check.tsx"))).toContain(
+      'sheetT(lang, "select.choose")',
+    );
+  });
+
+  it("오늘·주간 카드의 샤우팅·시간변경도 사전", () => {
+    const period = read("features", "class-sheets", "components", "period-block.tsx");
+    expect(period).toContain("landing.col.shouting");
+    expect(period).toContain("slot.orphan");
+    expect(codeOnly(period)).not.toContain(">Shouting<");
+    expect(codeOnly(period)).not.toContain(">시간 변경됨<");
+    const editor = read("features", "class-sheets", "components", "today-plan-editor.tsx");
+    expect(editor).toContain("plan.editor.noLines");
+    expect(codeOnly(editor)).not.toContain(">Shouting<");
+    const list = read("app", "(shell)", "ecs", "_components", "landing-list.tsx");
+    expect(list).toContain("landing.rename.note");
+    expect(codeOnly(list)).not.toContain("부터");
+  });
 });
 
 describe("🔴 이름 표기는 단일 소스를 지난다 — 화면마다 삼항을 적지 않는다", () => {

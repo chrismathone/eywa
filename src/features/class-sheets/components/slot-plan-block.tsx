@@ -36,6 +36,7 @@ import { seedPlanLines, usePlanHandlers } from "./use-plan-handlers";
 import { useSheetDoc } from "./use-sheet-doc";
 import { useFlushOnUnmount, useSaveIndicator, useSheetSaveStore } from "./use-sheet-saves";
 import { useSheetEditAudit } from "./use-sheet-edit-audit";
+import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
  * ⚠️ `memo` — 자리 출석부는 학생 칸(듣기·단어)을 칠 때마다 보드가 다시 그려진다. 안 감싸면 그 한 글자에
@@ -91,6 +92,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
    */
   registerFlush?: (flush: (() => Promise<unknown>) | null) => void;
 }) {
+  const t = useSheetT();
   // ① 저널 — 시트와 같은 문서 키(반+주차).
   const doc = useSheetDoc({ tenantId, userId, classId, week: weekMonday });
   // ⚠️ 저장 큐는 이 함수를 **마운트 때 한 번** 잡는다(useSheetSaveStore는 lazy init) — 그래서 여기 실린
@@ -120,11 +122,11 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   useEffect(() => {
     store.setCallbacks({
       onError: (m) => toast.error(m),
-      onGone: () => toast.info("다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요"),
+      onGone: () => toast.info(t("plan.editor.gone")),
       // 칸 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다.
       onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [store, audit, classId]);
+  }, [store, audit, classId, t]);
 
   const [lines, setLines] = useState(initialLines);
   // canonical 시드 — 서버가 준 값이 CAS의 expected가 된다(이게 없으면 첫 저장이 무조건 충돌).

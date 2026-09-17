@@ -195,8 +195,9 @@ export type ClassSheetWeekData = {
 export async function getClassSheetWeek(
   classId: string,
   weekParam?: string | null,
+  opts: { readOnly?: boolean } = {},
 ): Promise<{ ok: true; data: ClassSheetWeekData } | { ok: false; error: string }> {
-  const gate = await requireEcsClassAccess(classId);
+  const gate = await requireEcsClassAccess(classId, opts);
   if (!gate.ok) return { ok: false, error: gate.error };
   const { access } = gate;
   const tenantId = access.tenantId;

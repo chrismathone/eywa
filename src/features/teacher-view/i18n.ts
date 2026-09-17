@@ -279,6 +279,31 @@ export const SHEET_DICT = {
   //    `whitespace-nowrap` 제목이 왼쪽으로 흘러 옆 제목과 겹친다.
   "landing.col.shouting": { ko: "샤우팅", en: "Shouting" },
   "landing.col.rate": { ko: "주간 작성률", en: "Weekly fill" },
+  "landing.shouting.title": {
+    ko: "샤우팅 {n}/{total}교시 (이번 주)",
+    en: "Shouting {n}/{total} this week",
+  },
+  "landing.shouting.sr": { ko: "샤우팅 {n}/{total}교시", en: "Shouting {n}/{total}" },
+  "landing.group.nClasses": { ko: "{n}반", en: "{n} cls" },
+  "landing.idle.holiday": {
+    ko: "이 주 수업일이 모두 휴일입니다 — 쓸 교시가 없습니다(수업했다면 계획을 그대로 쓰실 수 있습니다)",
+    en: "Every class day this week is a holiday — nothing to fill (you can still write if you taught)",
+  },
+  "landing.idle.none": {
+    ko: "이 주에 배정된 교시가 없습니다",
+    en: "No periods assigned this week",
+  },
+  "landing.sr.delegated": { ko: "위임 받은 반", en: "Delegated class" },
+  "landing.sr.homeroom": { ko: "담임 {name}", en: "Homeroom {name}" },
+  "landing.sr.unassigned": { ko: "미지정", en: "No homeroom" },
+  "landing.sr.fill": { ko: "작성 교시 {done}/{total}", en: "Filled {done}/{total}" },
+  "landing.orphan.chip": { ko: "시간변경", en: "Moved" },
+  "landing.orphan.title": {
+    ko: "시간표가 바뀌어 지금 시간표에 없는 기록 {n}건",
+    en: "{n} records no longer on the timetable",
+  },
+  "landing.holidayMark": { ko: "휴", en: "Hol" },
+  "landing.rename.note": { ko: "{date}부터 {from} → {to}", en: "From {date}: {from} → {to}" },
   // 행 끝 '달력' 진입로의 접근성 이름 — 🔴 **문장 전체**를 사전에 둔다(조각 `이름 + "달력 열기"`로
   //    이으면 영어 어순이 무너진다). 여는 면이 EiE(월간 계획서)든 인재원 영어(달력)든 사람에게는 '이 반의
   //    달력'이라 이름은 하나다.
@@ -1016,6 +1041,37 @@ export const SHEET_DICT = {
     en: "Click to remove from the makeup list (the attendance record is deleted)",
   },
   "att.makeup.removeAria": { ko: "{name} 보강 취소", en: "Cancel makeup for {name}" },
+  "att.makeup.removeConfirm": {
+    ko: "{name} 보강을 명단에서 뺄까요? 출석 기록이 삭제됩니다.",
+    en: "Remove {name} from the makeup list? The attendance record will be deleted.",
+  },
+  "att.tip.reason": { ko: "사유", en: "Reason" },
+  "att.lock.statusFrozen": {
+    ko: "수정 기간이 지나 상태는 못 바꿉니다 — 사유는 언제든 고칠 수 있습니다",
+    en: "The status is locked after the edit window — the reason can still be changed anytime",
+  },
+  "att.clear.hasNote": {
+    ko: "사유가 적힌 기록은 출석부에서 지워 주세요(사유·시수가 함께 지워집니다)",
+    en: "Clear records that have a reason in the attendance book (reason and units are cleared together)",
+  },
+  "att.note.lateAbsentOnly": {
+    ko: "사유는 지각·결석에만 적을 수 있습니다",
+    en: "A reason can only be added for late or absent",
+  },
+  "att.cycle.aria": { ko: "{name} 출결 — {value}", en: "{name} attendance — {value}" },
+  "att.cycle.none": { ko: "선택 안 함", en: "Not set" },
+  "att.cycle.tipClick": {
+    ko: "클릭: 출석 → 결석 → 지각 → 선택 안 함",
+    en: "Click: Present → Absent → Late → Not set",
+  },
+  "att.cycle.tipNote": {
+    ko: "지각·결석을 고르면 시간·사유 칸이 열립니다(안 적어도 됩니다)",
+    en: "Choosing late or absent opens a time/reason box (optional)",
+  },
+  "att.cycle.tipContext": {
+    ko: "우클릭: 상태는 그대로 두고 사유만",
+    en: "Right-click: keep the status, edit the reason only",
+  },
   "att.pill.editNote": {
     ko: "{label} — 사유 메모 수정(기록 지우기는 출석부에서)",
     en: "{label} — edit the reason note (clear the record in the attendance book)",
@@ -1064,8 +1120,18 @@ export const SHEET_DICT = {
     en: "or add a row in the weekly sheet",
   },
   "plan.shouting.title": {
-    ko: "이 교시에 Shouting을 했으면 체크하세요",
+    ko: "이 교시에 샤우팅을 했으면 체크하세요",
     en: "Tick this if you did Shouting in this period",
+  },
+  "plan.editor.noLines": { ko: "계획 줄이 아직 없습니다", en: "No plan rows yet" },
+  "plan.editor.gone": {
+    ko: "다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요",
+    en: "Someone else deleted this row — refresh to see the latest",
+  },
+  "slot.orphan": { ko: "시간 변경됨", en: "Schedule changed" },
+  "slot.orphan.title": {
+    ko: "시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시",
+    en: "This time is no longer on the timetable — shown so the record is not lost",
   },
   /** 입력칸 접근성 이름 — `{class} {field}`(반 이름 + 칸 이름). */
   "plan.editor.cellAria": { ko: "{class} {field}", en: "{class} {field}" },

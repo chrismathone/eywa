@@ -14,7 +14,7 @@ import type { RosterGroupKey } from "../lib/roster-order";
 import { rosterFormOf, type SheetMark } from "../lib/roster-form";
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
-import { useSheetLang } from "@/features/teacher-view/lang-context";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 // 강의실 이름도 표기만 영문으로(원장 2026-09-04) — 건물 이름만 로마자, 호수는 그대로.
 import { roomNameFor } from "@/features/teacher-view/room-name";
 
@@ -82,6 +82,7 @@ export const PeriodBlock = memo(function PeriodBlock({
   //    ⚠️ 라벨엔 자리(LAB·JJ)도 들어오는데 표에 없으니 저절로 안 바뀐다.
   const teacherNames = useTeacherNames();
   const lang = useSheetLang();
+  const t = useSheetT();
   const teacher = teacherNameFor(
     slot.teacherLabel ??
       (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??
@@ -138,9 +139,9 @@ export const PeriodBlock = memo(function PeriodBlock({
         {!slot.scheduled ? (
           <span
             className="border-amber/50 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-xs font-bold whitespace-nowrap"
-            title="시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시"
+            title={t("slot.orphan.title")}
           >
-            시간 변경됨
+            {t("slot.orphan")}
           </span>
         ) : null}
         {/* Shouting 체크 — **EiE 반만**(부모가 onShouting을 줄 때만 그린다). 머리 줄 오른쪽 끝, 구분선 위
@@ -150,7 +151,7 @@ export const PeriodBlock = memo(function PeriodBlock({
             className={`ml-auto flex shrink-0 items-center gap-1 text-xs font-bold whitespace-nowrap ${
               canEdit && slot.scheduled ? "cursor-pointer" : "cursor-default opacity-60"
             }`}
-            title="이 교시에 Shouting을 했으면 체크하세요"
+            title={t("plan.shouting.title")}
           >
             <input
               type="checkbox"
@@ -159,7 +160,7 @@ export const PeriodBlock = memo(function PeriodBlock({
               disabled={!canEdit || !slot.scheduled}
               onChange={(e) => onShouting(date, slot.slotStart, e.target.checked)}
             />
-            <span className={shouting ? "text-primary" : "text-text-dim"}>Shouting</span>
+            <span className={shouting ? "text-primary" : "text-text-dim"}>{t("landing.col.shouting")}</span>
           </label>
         ) : null}
       </header>
