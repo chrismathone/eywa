@@ -76,7 +76,9 @@ describe("강사 보기 시수 배분 — 배선", () => {
   it("🔴 메모를 고르는 곳(월간 조회·반별 입력 폼·메모만 저장)은 사유 있는 메모를 대신 입력 줄보다 먼저 본다", () => {
     const queries = stripComments(read("features", "attendance", "server", "queries.ts"));
     expect(queries).toContain("stripProxyMemo(cell.note)");
+    // 남의 교시 메모는 **제 교시 값이 있는 칸에서만** 대체로 보인다(원장 2026-09-17 · 적대 리뷰) — 값 없는 칸엔 안 싣는다.
     expect(queries).toContain("stripProxyMemo(cell.otherNote)");
+    expect(queries).toContain("cell.note ?? (cell.slots.length > 0 ? cell.otherNote : null)");
     expect(queries).toContain("stripProxyMemo(cur.note)");
     expect(bodyOf(actions, "setAttendanceCell").match(/noteTargetRow\(/g)?.length).toBe(2);
   });
@@ -110,7 +112,8 @@ describe("강사 보기 시수 배분 — 배선", () => {
     expect(stripComments(read("app", "(shell)", "attendance", "_components", "attendance-cell.tsx"))).toContain(
       "ghostCellKind(",
     );
-    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("ghostCellKind(");
+    // 강사 보기는 빗금 칸을 더는 안 만든다(원장 2026-09-17 *"담당하는 날만 표시"*) — 조회가 빗금 표시 값을 다시 짓지 않게.
+    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).not.toContain("ghostCellKind(");
   });
 
   it("🔴 빗금 표시 값(g)은 합계·복사 밖 — countCells·copyValueOf가 건너뛴다", () => {
@@ -120,11 +123,20 @@ describe("강사 보기 시수 배분 — 배선", () => {
 
   it("🔴 자리 판정은 축 단일 소스(attendanceSlotShare) — 저장(scope-ownership)과 화면(queries)이 같은 함수", () => {
     expect(stripComments(read("features", "attendance", "scope-ownership.ts"))).toContain("attendanceSlotShare(");
-    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("attendanceSlotShare(");
     // 축은 몫 판정을 새로 짓지 않는다 — `mine`은 `ownsAttendanceSlot`의 답 그대로다.
     expect(stripComments(read("features", "attendance", "teacher-axis.ts"))).toMatch(
       /attendanceSlotShare[\s\S]{0,400}ownsAttendanceSlot\(input\)/,
     );
+  });
+
+  it("🔴 그리는 날 판정은 한 함수(teachesClassOn) — 화면(queries)·저장(scope-ownership → 셀·범위 액션)이 같은 답(원장 2026-09-17)", () => {
+    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("teachesClassOn(");
+    expect(stripComments(read("features", "attendance", "scope-ownership.ts"))).toMatch(
+      /export function scopeTeachesOn[\s\S]{0,200}teachesClassOn\(/,
+    );
+    // 셀 저장(세 갈래 공통 문 scopeShareOf)과 범위 저장이 둘 다 거른다 — 화면만 막으면 만든 요청이 남의 날에 쓴다(#77).
+    expect(bodyOf(actions, "setAttendanceCell")).toContain("scopeTeachesOn(");
+    expect(bodyOf(actions, "setAttendanceRange")).toContain("scopeTeachesOn(");
   });
 
   it("🔴 메모만 저장도 강사 보기를 보낸다 — 자리 행에 사유가 달리지 않게(팝오버가 그 유일한 문)", () => {

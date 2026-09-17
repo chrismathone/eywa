@@ -84,6 +84,7 @@ describe("배선 — getMonthlyAttendanceMatrix가 순서를 지킨다", () => {
 
   it("⚠️ 명단을 만드는 조회는 무페이징 select가 아니다(B2) — fetchAllPaged", () => {
     const head = fn.slice(0, fn.indexOf("const studentIds = "));
-    expect(head).toMatch(/fetchAllPaged<\{ student_id: string \}>/);
+    // session_date = 강사 보기가 그 강사가 수업하는 날의 기록으로만 명단을 합치는 재료(2026-09-17).
+    expect(head).toMatch(/fetchAllPaged<\{ student_id: string; session_date: string \}>/);
   });
 });

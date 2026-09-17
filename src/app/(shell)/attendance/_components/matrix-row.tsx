@@ -50,6 +50,8 @@ export function MatrixRow({
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
   const attendDows = new Set(student.attendDows);
+  // 강사 전체 보기 — 그 강사가 이 반을 수업하는 날(원장 2026-09-17 *"담당하는 날만 표시"*). 반별 보기는 null(전부).
+  const ownDates = matrix.ownDates ? new Set(matrix.ownDates) : null;
   const attendLabel = formatDows(student.attendDows);
 
   return (
@@ -153,8 +155,12 @@ export function MatrixRow({
           derivedValue: !!matrix.derived[student.id]?.[d.date],
           others: otherSlots,
         });
-        // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외.
-        const attend = attendDows.has(d.dow) && !holiday && !outside;
+        // 강사 전체 보기에서 그 강사가 수업하지 않는 날 — 값·메모·예약이 서지 않고(조회가 안 싣는다) 입력도 막는다.
+        const notOwnDay = !!ownDates && !ownDates.has(d.date);
+        // 수업하는 날인데 제 교시 기록 없이 남의 기록만 있는 칸 — 빈칸으로 그리되 입력은 막는다(`noOwnRecord` 주석).
+        const noOwnRecord = !notOwnDay && !!matrix.noOwnRecord?.[student.id]?.[d.date];
+        // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외. 강사 보기는 그 강사가 수업하는 날만.
+        const attend = attendDows.has(d.dow) && !holiday && !outside && !notOwnDay;
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
         // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
         return (
@@ -174,14 +180,21 @@ export function MatrixRow({
               /* 🔴 문장이 아니라 **사유 코드**만 넘긴다 — 잠긴 칸마다 157B 문장을 서버가 만들어
                  내려보내면 그게 그대로 RSC 페이로드 곱이 된다(강사 전체 보기는 잠긴 칸이 수천 개).
                  문장은 칸이 grid-context의 `lockNoteOf`로 편다(판정·문구는 그대로 한 곳). */
+              /* 🔴 강사 보기의 '수업하지 않는 날'·'제 교시 기록 없음'이 7일 잠금보다 **먼저**다 — 7일이 지난 그 칸에 "기록이 없는
+                 날이라…"(7일 잠금 팝오버 문장)가 뜨면 사실이 아니다(남의 기록이 이 보기에 안 실렸을 뿐, 적대 재리뷰 2026-09-17).
+                 격자 입력 안내(grid-context `blockNoteOf`)도 같은 순서다. */
               lockedReason={
-                lockBefore && d.date < lockBefore
-                  ? "past"
-                  : locked === "seatOnly"
-                    ? "seatOnly"
-                    : locked
-                      ? "notMine"
-                      : null
+                notOwnDay
+                  ? "notOwnDay"
+                  : noOwnRecord
+                    ? "noOwnRecord"
+                    : lockBefore && d.date < lockBefore
+                      ? "past"
+                      : locked === "seatOnly"
+                        ? "seatOnly"
+                        : locked
+                          ? "notMine"
+                          : null
               }
               derived={!!matrix.derived[student.id]?.[d.date]}
               daySlots={matrix.slots[student.id]?.[d.date]}
