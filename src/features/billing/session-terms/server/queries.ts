@@ -19,6 +19,10 @@ export type SessionTermRow = {
   studentGrade: string | null;
   /** 학교 원문 — 화면은 `schoolGradeLabel(studentSchool, studentGrade)`로 "칠성초6"처럼 붙여 쓴다. */
   studentSchool?: string | null;
+  /** 이 반의 그 달 배치 요일(0=일) — 반 이름 옆 표시. */
+  classDays?: number[];
+  /** 반 요일과 다른 이 학생의 개별 등원 요일 — 학생 이름 옆 표시(같으면 없음). */
+  attendDays?: number[] | null;
   subject: string;
   classId: string | null;
   className: string | null;
@@ -116,7 +120,8 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
   ), loadLivePlans(supabase, period, studentIds, mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true))]);
   const studentById = new Map(students.map((s) => [s.id, s]));
   const allocated = new Map<string, number>();
-  const invoicesWithAllocations = new Set(terms.filter((term) => term.allocation_line_index != null).map((term) => term.invoice_id));
+  // 연결 없이 0원으로 저장한 반(0269a — 항목 null · 금액 0)도 배분을 저장한 청구서다.
+  const invoicesWithAllocations = new Set(terms.filter((term) => term.allocation_line_index != null || term.allocation_amount != null).map((term) => term.invoice_id));
   for (const invoice of invoices) {
     const values = effectiveAllocations(receiptLines(invoice.line_items), terms.filter((term) => term.invoice_id === invoice.id).map((term) => ({
       id: term.id, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions,
@@ -155,6 +160,8 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
         pricingMode: t.pricing_mode ?? "per_session",
         plannedSessions: t.class_id ? live.plans.get(inv.student_id)?.get(t.class_id) ?? 0 : t.planned_sessions === null ? null : Number(t.planned_sessions),
         planUncertain: t.class_id ? live.uncertain.has(`${inv.student_id}|${t.class_id}`) : false,
+        classDays: t.class_id ? live.classDays.get(t.class_id) ?? [] : [],
+        attendDays: t.class_id ? live.attendDays.get(`${inv.student_id}|${t.class_id}`) ?? null : null,
         confirmedSessions: t.confirmed_sessions === null ? null : Number(t.confirmed_sessions),
         unitPrice: t.unit_price === null ? null : Number(t.unit_price),
         amount: t.amount === null ? null : Number(t.amount),
@@ -162,7 +169,7 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
         quantityBasis: t.quantity_basis ?? "days",
         refundState,
         allocatedAmount: fullyRefunded ? 0 : allocated.get(t.id) ?? null,
-        allocationStale: !fullyRefunded && (refundState === "partial" || ((t.allocation_line_index != null || (invoicesWithAllocations.has(t.invoice_id) && t.confirmed_sessions !== null)) && !allocated.has(t.id))),
+        allocationStale: !fullyRefunded && (refundState === "partial" || ((t.allocation_line_index != null || t.allocation_amount != null || (invoicesWithAllocations.has(t.invoice_id) && t.confirmed_sessions !== null)) && !allocated.has(t.id))),
         allocationLineIndex: t.allocation_line_index ?? null,
         invoiceHasAllocations: invoicesWithAllocations.has(t.invoice_id),
         note: t.note,

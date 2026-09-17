@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectReceiptTerm, distributeLinkedReceipt, distributeReceipt, effectiveAllocations, receiptLines, receiptRemainder, type AllocationTerm } from "./receipt-allocation";
+import { connectReceiptTerm, distributeLinkedReceipt, distributeReceipt, effectiveAllocations, receiptAllocationSaveRows, receiptLines, receiptRemainder, type AllocationTerm } from "./receipt-allocation";
 import { computeSplitRows } from "./splits";
 import { aggregateTeacherAllocations } from "./allocation";
 
@@ -62,5 +62,43 @@ describe("할인 전 수납 청구액 배분", () => {
     expect(computeSplitRows([input])[0]).toMatchObject({ confirmedAmount: 150000, actualAmount: 100000, confirmedSessions: 4.5 });
     expect(aggregateTeacherAllocations([input])[0]).toMatchObject({ confirmedAmount: 150000, actualAmount: 100000 });
     expect(computeSplitRows([{ ...input, pricingMode: "monthly", allocatedAmount: 270000, actualConsumed: 0 }])[0]).toMatchObject({ confirmedAmount: 270000, actualAmount: 270000 });
+  });
+});
+
+describe("연결할 수납 항목이 없는 확정 반 = 0원 (원장 2026-09-17)", () => {
+  const bill = [{ kind: "수업", description: "초5 BS2C", amount: 148750, discount: 0, paid: 148750 }];
+  const zero: AllocationTerm = { id: "ls4b", confirmedSessions: 1, amount: 270000, lineIndex: null, allocatedAmount: 0, baseAmount: 270000, source: bill };
+
+  it("저장 때의 청구 항목·확정금액이 그대로면 0원으로 인정한다(할인·납부 갱신은 무관)", () => {
+    expect(effectiveAllocations(receiptLines(bill), [zero]).get("ls4b")).toBe(0);
+    const paidLater = [{ ...bill[0], paid: 0, discount: 5000 }];
+    expect(effectiveAllocations(receiptLines(paidLater), [zero]).get("ls4b")).toBe(0);
+  });
+
+  it("청구 항목이 바뀌거나(새 수납) 확정금액이 바뀌거나 미확정이면 인정하지 않는다 — 재확인 대상", () => {
+    const added = [...bill, { kind: "수업", description: "LS4b", amount: 270000 }];
+    expect(effectiveAllocations(receiptLines(added), [zero]).has("ls4b")).toBe(false);
+    // 교재 같은 수업 아닌 항목이 붙거나 순서가 바뀌는 것만으로는 재확인으로 떨어지지 않는다.
+    const withBook = [{ kind: "교재", description: "교재비", amount: 15000 }, ...bill];
+    expect(effectiveAllocations(receiptLines(withBook), [zero]).get("ls4b")).toBe(0);
+    expect(effectiveAllocations(receiptLines(bill), [{ ...zero, amount: 300000 }]).has("ls4b")).toBe(false);
+    expect(effectiveAllocations(receiptLines(bill), [{ ...zero, confirmedSessions: null, amount: null }]).has("ls4b")).toBe(false);
+    // 배분을 지운 행(금액 null)·양수는 이 갈래가 아니다.
+    expect(effectiveAllocations(receiptLines(bill), [{ ...zero, allocatedAmount: null }]).has("ls4b")).toBe(false);
+    expect(effectiveAllocations(receiptLines(bill), [{ ...zero, allocatedAmount: 5 }]).has("ls4b")).toBe(false);
+  });
+
+  it("저장 행: 하나라도 연결했을 때만 연결 안 한 확정 반을 0원으로 보낸다 · 미확정은 보내지 않는다", () => {
+    const terms = [
+      { id: "a", amount: 148750, confirmedSessions: 7, confirmedAt: "t1" },
+      { id: "b", amount: 270000, confirmedSessions: 1, confirmedAt: "t2" },
+      { id: "c", amount: null, confirmedSessions: null, confirmedAt: null },
+    ];
+    expect(receiptAllocationSaveRows(terms, { a: { line: "0", amount: "148750" }, b: { line: "", amount: "270000" }, c: { line: "", amount: "" } })).toEqual([
+      { termId: "a", lineIndex: 0, amount: 148750, baseAmount: 148750, confirmedAt: "t1" },
+      { termId: "b", lineIndex: null, amount: 0, baseAmount: 270000, confirmedAt: "t2" },
+    ]);
+    // 아무것도 연결하지 않으면 종전대로 빈 저장(= 기존 배분 해제).
+    expect(receiptAllocationSaveRows(terms, { a: { line: "", amount: "" }, b: { line: "", amount: "" }, c: { line: "", amount: "" } })).toEqual([]);
   });
 });

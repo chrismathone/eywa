@@ -102,11 +102,13 @@ export function applyReceiptSuggestion(draft: ReceiptAllocationDraft, suggestion
   if (!canApplyReceiptSuggestion(draft, suggestion)) return draft;
   return { ...draft, ...Object.fromEntries(suggestion.rows.map((r) => [r.termId, { line: String(suggestion.lineIndex), amount: String(r.amount) }])) };
 }
-type SavedTerm = { id: string; amount: number | null; allocatedAmount?: number | null; allocationStale?: boolean; allocationLineIndex?: number | null };
+type SavedTerm = { id: string; amount: number | null; allocatedAmount?: number | null; allocationStale?: boolean; allocationLineIndex?: number | null; refundState?: string };
+/** 연결 없이 0원으로 저장해 둔 반 — 다시 열 때 제안이 그 반을 다른 항목에 붙이지 않는다(사람이 고른 "연결 안 함"). */
+const savedUnlinkedZero = (t: SavedTerm) => t.allocationLineIndex == null && t.allocatedAmount === 0 && !t.allocationStale && t.refundState !== "full";
 export function initialReceiptDraft(terms: SavedTerm[], suggestions: ReceiptSuggestion[] = []): ReceiptAllocationDraft {
   let draft = Object.fromEntries(terms.map((t) => [t.id, { line: t.allocationStale || t.allocationLineIndex == null ? "" : String(t.allocationLineIndex), amount: String(t.allocatedAmount ?? t.amount ?? "") }]));
   for (const suggestion of suggestions) {
-    if (suggestion.rows.some((r) => terms.some((t) => t.id === r.termId && t.allocationLineIndex != null))) continue;
+    if (suggestion.rows.some((r) => terms.some((t) => t.id === r.termId && (t.allocationLineIndex != null || savedUnlinkedZero(t))))) continue;
     draft = applyReceiptSuggestion(draft, suggestion);
   }
   return draft;

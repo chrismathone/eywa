@@ -10,6 +10,7 @@ import { DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { updateMonthlyTermSessions } from "@/features/billing/session-terms/server/monthly-sessions";
 import { updateSessionTermNote } from "@/features/billing/session-terms/server/note-actions";
 import { confirmSelectedTerms } from "@/features/billing/session-terms/server/selected-confirm-actions";
+import { unconfirmClassTerms } from "@/features/billing/session-terms/server/class-unconfirm-actions";
 
 const h = vi.hoisted(() => ({ refresh: vi.fn(), saved: null as null | ((message: RecordSavedMessage) => void) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
@@ -23,6 +24,7 @@ vi.mock("@/features/billing/session-terms/server/actions", () => ({
 vi.mock("@/features/billing/session-terms/server/monthly-sessions", () => ({ updateMonthlyTermSessions: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/note-actions", () => ({ updateSessionTermNote: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/selected-confirm-actions", () => ({ confirmSelectedTerms: vi.fn() }));
+vi.mock("@/features/billing/session-terms/server/class-unconfirm-actions", () => ({ unconfirmClassTerms: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn() }));
 vi.mock("@/components/ui/drag-scroll-area", () => ({ DragScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
@@ -60,7 +62,7 @@ describe("회차 단가 선택", () => {
   });
   it("미배분 필터에서 일괄 확정은 화면에 표시된 학생 ID만 보낸다", async () => {
     vi.mocked(confirmClassTerms).mockResolvedValueOnce({ confirmed: 1, terms: [] });
-    render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" onlyUnallocated />);
+    render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" visibleOnly />);
     fireEvent.change(screen.getByLabelText("수학반 반 회차"), { target: { value: "8" } });
     fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
     fireEvent.click(screen.getByRole("button", { name: "이 반 일괄 확정" }));
@@ -252,7 +254,7 @@ describe("한 행 = 한 줄 (원장 2026-09-16)", () => {
     // 학생 행의 칸은 줄바꿈하지 않는다 — 폭은 표의 최소 폭이 보장한다.
     const row = cell().closest("tr")!;
     expect(row.className).toContain("[&>td]:whitespace-nowrap");
-    expect(container.querySelector("table")!.className).toContain("min-w-[1520px]");
+    expect(container.querySelector("table")!.className).toContain("min-w-[1580px]");
   });
 });
 
@@ -417,9 +419,133 @@ describe("선택 일괄 확정 · 확정≠예정 · 새 창 링크 (원장 2026
     expect(container.querySelector("span.text-amber[data-tip]")).toBeNull();
   });
 
+  it("반 이름 옆에 수업 요일, 학생 이름 옆에는 반 요일과 다를 때만 개별 등원 요일", () => {
+    const g = two();
+    Object.assign(g.students[0], { classDays: [1, 4], attendDays: [4] });
+    Object.assign(g.students[1], { classDays: [1, 4], attendDays: null });
+    const { container } = render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const band = screen.getByRole("link", { name: "수학반" }).parentElement!;
+    expect(band).toHaveTextContent("수학반월·목");
+    const first = screen.getByRole("link", { name: "수학학생" }).parentElement!;
+    expect(first).toHaveTextContent("수학학생목");
+    expect(first.querySelector("[data-tip]")!.getAttribute("data-tip")).toContain("수업 요일 월·목");
+    expect(screen.getByRole("link", { name: "둘째학생" }).parentElement!).toHaveTextContent(/^둘째학생$/);
+    expect(screen.getByTitle("수학학생")).toHaveTextContent("수학학생");
+    expect(container.querySelectorAll("span.text-amber[data-tip]")).toHaveLength(1);
+  });
+
   it("학생 이름·반 이름은 원생·반 상세로 가는 링크다", () => {
     render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     expect(screen.getByRole("link", { name: "수학학생" })).toHaveAttribute("href", "/students/수학");
     expect(screen.getByRole("link", { name: "수학반" })).toHaveAttribute("href", "/classes/수학");
+  });
+});
+
+describe("반 전원 확정 → '전체 확정 해제' (원장 2026-09-17)", () => {
+  const allConfirmed = () => {
+    const g = group("수학");
+    Object.assign(g.students[0], { confirmedSessions: 7, unitPrice: 21250, amount: 148750, confirmedAt: "2026-09-17" });
+    g.students.push({ ...g.students[0], id: "수학2", studentId: "수학2", studentName: "둘째학생" });
+    return g;
+  };
+  const released = (id: string) => ({ id, confirmedSessions: null, unitPrice: null, amount: null, pricingMode: "per_session" as const, confirmedAt: null });
+
+  it("보이는 학생이 전부 확정이면 입력칸·단가 일괄 입력·선택 일괄 확정 대신 버튼 하나 — 누르면 묻고 보이는 학생 id로 해제한 뒤 입력칸이 돌아온다", async () => {
+    const ask = vi.fn(() => true);
+    vi.stubGlobal("confirm", ask);
+    vi.mocked(unconfirmClassTerms).mockResolvedValueOnce({ unconfirmed: 2, skipped: 0, failedIds: [], terms: [released("수학"), released("수학2")] });
+    render(<SessionTermGroups groups={[allConfirmed()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.queryByRole("button", { name: "단가 일괄 입력" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^선택 일괄 확정/ })).toBeNull();
+    expect(screen.queryByLabelText("수학반 회당 단가")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "전체 확정 해제" }));
+    expect(ask).toHaveBeenCalledWith(expect.stringContaining("수학반 2명의 확정을 모두 해제할까요?"));
+    await waitFor(() => expect(unconfirmClassTerms).toHaveBeenCalledWith("2026-09", "수학", ["수학", "수학2"]));
+    expect(await screen.findByRole("button", { name: "단가 일괄 입력" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "전체 확정 해제" })).toBeNull();
+    expect(screen.getByTestId("confirmed-count")).toHaveTextContent("0");
+    // 개별 해제와 같게 입력칸은 해제 전 시수·단가로 되채운다(예상금액이 바로 보인다).
+    expect(screen.getByLabelText("수학학생 예상금액")).toHaveTextContent("148,750원");
+    expect(screen.getByLabelText("둘째학생 예상금액")).toHaveTextContent("148,750원");
+    vi.unstubAllGlobals();
+  });
+
+  it("묻는 창에서 취소하면 아무것도 보내지 않는다", () => {
+    const ask = vi.fn(() => false);
+    vi.stubGlobal("confirm", ask);
+    render(<SessionTermGroups groups={[allConfirmed()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByRole("button", { name: "전체 확정 해제" }));
+    expect(unconfirmClassTerms).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("한 명만 개별 해제해도 곧바로 입력칸과 일괄 버튼으로 돌아간다 · 한 명이라도 미확정이면 처음부터 입력칸", async () => {
+    const mixed = allConfirmed();
+    Object.assign(mixed.students[1], { confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null });
+    const { unmount } = render(<SessionTermGroups groups={[mixed]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByRole("button", { name: "단가 일괄 입력" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "전체 확정 해제" })).toBeNull();
+    unmount();
+    vi.mocked(unconfirmSessionTerm).mockResolvedValueOnce({ ok: true, terms: [released("수학2")] });
+    render(<SessionTermGroups groups={[allConfirmed()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getAllByRole("button", { name: "해제" })[1]!);
+    expect(await screen.findByRole("button", { name: "단가 일괄 입력" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^선택 일괄 확정/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "전체 확정 해제" })).toBeNull();
+  });
+
+  it("확정 전에 걸어 둔 체크는 해제와 함께 되살아나지 않는다 · EiE 반은 월 금액 표시를 남긴다", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const g = allConfirmed();
+    Object.assign(g.students[1], { confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null });
+    vi.mocked(unconfirmClassTerms).mockResolvedValueOnce({ unconfirmed: 2, skipped: 0, failedIds: [], terms: [released("수학"), released("수학2")] });
+    const { rerender } = render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByLabelText("둘째학생 선택"));
+    // 다른 창에서 둘째가 확정된 뒤 새 데이터로 다시 그려진다(선택은 화면 메모리에 남아 있다).
+    rerender(<SessionTermGroups groups={[allConfirmed()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(await screen.findByRole("button", { name: "전체 확정 해제" }));
+    expect(await screen.findByRole("button", { name: "단가 일괄 입력" })).toBeInTheDocument();
+    expect(screen.getByLabelText("둘째학생 선택")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /^선택 일괄 확정/ })).toHaveTextContent(/^선택 일괄 확정$/);
+    vi.unstubAllGlobals();
+    const eie = group("EiE", 290000);
+    Object.assign(eie.students[0], { confirmedSessions: 12, unitPrice: 270000, amount: 270000, pricingMode: "monthly", confirmedAt: "2026-09-16" });
+    rerender(<SessionTermGroups groups={[eie]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByRole("button", { name: "전체 확정 해제" })).toBeInTheDocument();
+    expect(screen.getByText("EiE 월 290,000원")).toBeInTheDocument();
+  });
+
+  it("개별 확정·반 일괄 확정으로 확정된 행의 체크도 버린다 — 다른 창에서 해제돼 새 데이터가 와도 되살아나지 않는다", async () => {
+    const g = group("수학");
+    g.students.push({ ...g.students[0], id: "수학2", studentId: "수학2", studentName: "둘째학생" });
+    vi.mocked(confirmSessionTerm).mockResolvedValueOnce({ ok: true, terms: [{ id: "수학", confirmedSessions: 9, unitPrice: 24000, amount: 216000, pricingMode: "per_session", confirmedAt: "2026-09-17" }] });
+    vi.mocked(confirmClassTerms).mockResolvedValueOnce({ confirmed: 1, terms: [{ id: "수학2", confirmedSessions: 9, unitPrice: 24000, amount: 216000, pricingMode: "per_session", confirmedAt: "2026-09-17" }] });
+    const { rerender } = render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByLabelText("수학학생 선택"));
+    fireEvent.click(screen.getByLabelText("둘째학생 선택"));
+    fireEvent.change(screen.getByLabelText("수학학생 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "확정" })[0]!);
+    await screen.findByRole("button", { name: "해제" });
+    fireEvent.change(screen.getByLabelText("수학반 반 회차"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByRole("button", { name: "이 반 일괄 확정" }));
+    await screen.findByRole("button", { name: "전체 확정 해제" });
+    // 다른 창에서 둘 다 해제 → 새 데이터(미확정)로 다시 그려진다.
+    const fresh = group("수학");
+    fresh.students.push({ ...fresh.students[0], id: "수학2", studentId: "수학2", studentName: "둘째학생" });
+    rerender(<SessionTermGroups groups={[fresh]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByLabelText("수학학생 선택")).not.toBeChecked();
+    expect(screen.getByLabelText("둘째학생 선택")).not.toBeChecked();
+  });
+
+  it("해제가 일부만 되면 버튼이 사라지므로 실패한 학생 이름을 창으로 알린다", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const alertSpy = vi.fn();
+    vi.stubGlobal("alert", alertSpy);
+    vi.mocked(unconfirmClassTerms).mockResolvedValueOnce({ unconfirmed: 1, skipped: 0, failedIds: ["수학2"], error: "1명은 해제하지 못했습니다 — 해제하지 못했습니다. 다시 시도해 주세요", terms: [released("수학")] });
+    render(<SessionTermGroups groups={[allConfirmed()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByRole("button", { name: "전체 확정 해제" }));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining("(둘째학생)")));
+    vi.unstubAllGlobals();
   });
 });

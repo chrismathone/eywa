@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { getReceiptAllocation, mergeReceiptItems, saveReceiptAllocation, type ReceiptAllocationView } from "@/features/billing/session-terms/server/receipt-allocation-actions";
-import { connectReceiptTerm, distributeLinkedReceipt, receiptRemainder, type ReceiptAllocationDraft } from "@/features/billing/session-terms/receipt-allocation";
+import { connectReceiptTerm, distributeLinkedReceipt, receiptAllocationSaveRows, receiptRemainder, type ReceiptAllocationDraft } from "@/features/billing/session-terms/receipt-allocation";
 import { publishRecordSaved } from "@/lib/realtime/record-channel";
 import { receiptGroupId, remapReceiptDraft } from "@/features/billing/session-terms/receipt-merge";
 import { ReceiptMergeControls } from "./receipt-merge-controls";
@@ -12,6 +12,7 @@ import { MergedReceiptDetails } from "./merged-receipt-details";
 import { initialReceiptDraft } from "@/features/billing/session-terms/receipt-suggestion";
 import { ReceiptSuggestions } from "./receipt-suggestions";
 import { receiptRefundState } from "@/features/billing/session-terms/receipt-refund";
+import { unlinkedZeroBlockers } from "@/features/billing/session-terms/unlinked-zero";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -32,8 +33,15 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
     return { line, terms, base, total };
   });
   const hasLinks = data.terms.some((term) => draft[term.id].line !== "");
-  const complete = !hasLinks || data.terms.every((term) => term.confirmedSessions === null || data.lines.some((line) => String(line.index) === draft[term.id].line));
-  const valid = !reloadRequired && complete && groups.every((group) => group.terms.length === 0 || (group.total === group.line.amount && group.terms.every((term) => draft[term.id].amount.trim() !== "" && Number.isSafeInteger(Number(draft[term.id].amount)) && Number(draft[term.id].amount) >= 0 && (term.confirmedSessions === null || term.pricingMode === "monthly" || term.confirmedSessions > 0 || Number(draft[term.id].amount) === 0))));
+  // 확정 반을 '연결 안 함'으로 두면 0원으로 저장한다(원장 2026-09-17 *"연결 안함 처리시 자동으로 0"*) — 막는 건 사라진 항목을 가리키는 연결뿐.
+  const complete = !hasLinks || data.terms.every((term) => term.confirmedSessions === null || draft[term.id].line === "" || data.lines.some((line) => String(line.index) === draft[term.id].line));
+  const zeroCount = hasLinks ? data.terms.filter((term) => term.confirmedSessions !== null && draft[term.id].line === "").length : 0;
+  // 0원이 빠뜨린 연결을 덮지 않게 — 0원 반에 이름이 맞는 항목이 있으면 저장하지 않고, 어느 반에도 안 붙은 수업 항목이 남으면
+  // 저장할 때 한 번 확인받는다(받을 반이 없는 특강 항목 등 — 서버·DB도 같은 조건).
+  const zeroBlock = unlinkedZeroBlockers(data.lines, data.terms, draft);
+  const zeroBlocked = zeroBlock.matchedTerms.length > 0;
+  const leftoverText = zeroBlock.unlinkedLines.map((l) => `${l.description || `항목 ${l.index + 1}`} ${won(l.amount)}`).join(", ");
+  const valid = !reloadRequired && complete && !zeroBlocked && groups.every((group) => group.terms.length === 0 || (group.total === group.line.amount && group.terms.every((term) => draft[term.id].amount.trim() !== "" && Number.isSafeInteger(Number(draft[term.id].amount)) && Number(draft[term.id].amount) >= 0 && (term.confirmedSessions === null || term.pricingMode === "monthly" || term.confirmedSessions > 0 || Number(draft[term.id].amount) === 0))));
   function merge(indices: number[], label: string, removeId?: string) {
     if (pending || reloadRequired) return;
     setError(null); setNotice(null);
@@ -53,10 +61,13 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
   }
   function save() {
     if (!valid || pending) return;
+    const ackUnlinked = zeroBlock.unlinkedLines.length > 0;
+    if (ackUnlinked && !confirm(`어느 반에도 연결하지 않은 수업 항목이 남습니다: ${leftoverText}
+연결하지 않은 확정 반 ${zeroCount}개를 0원으로 저장할까요?`)) return;
     setError(null);
     start(async () => {
       try {
-        const rows = data.terms.filter((term) => draft[term.id].line !== "").map((term) => ({ termId: term.id, lineIndex: Number(draft[term.id].line), amount: Number(draft[term.id].amount), baseAmount: term.amount, confirmedAt: term.confirmedAt }));
+        const rows = receiptAllocationSaveRows(data.terms, draft, ackUnlinked);
         const result = await saveReceiptAllocation(invoiceId, data.source, rows);
         if (result.error) { setError(result.error); return; }
         publishRecordSaved("billing:session-terms");
@@ -81,12 +92,16 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
     <div className="space-y-2">
       {groups.map(({ line, terms, base, total }) => <div key={line.index} className="border-line flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
         <div className="text-sm"><b>{line.description || `수납 항목 ${line.index + 1}`}</b>{receiptGroupId(line) ? <button type="button" disabled={pending || reloadRequired} className="text-primary ml-2 text-xs hover:underline" onClick={() => merge([], "", receiptGroupId(line)!)}>합산 해제</button> : null}<div className="text-text-dim mt-1">청구 {won(line.amount)} · 반 확정 합계 {won(base)} · 차액 {won(line.amount - base)}</div><div className={terms.length > 0 && total !== line.amount ? "text-amber" : "text-text-dim"}>연결 {terms.length}개 반 · 배분 합계 {won(total)} · 남은 금액 {won(line.amount - total)}</div><MergedReceiptDetails line={normalizeInvoiceLineItems([line.source])[0]} /></div>
-        <button type="button" disabled={pending || terms.length === 0 || (base <= 0 && !terms.some((term) => term.confirmedSessions === null))} className="border-line rounded-md border px-3 py-1.5 text-sm disabled:opacity-40" title={terms.some((term) => term.confirmedSessions === null) ? "확정 반의 입력액은 유지하고 남은 금액을 미확정 반에 똑같이 나눕니다" : "확정금액 비율로 청구액을 나눕니다"} onClick={() => {
-          setDraft((current) => {
-            const amounts = distributeLinkedReceipt(line, terms, current);
-            return { ...current, ...Object.fromEntries(Object.entries(amounts).map(([id, amount]) => [id, { ...current[id], amount: String(amount) }])) };
-          });
-        }}>{terms.some((term) => term.confirmedSessions === null) ? "남은 금액 나누기" : "차액 비례 배분"}</button>
+        {(() => {
+          // 눌러도 입력값이 그대로면(차액 0·이미 그 비율) 잠근다 — 활성처럼 보이는데 아무 일도 안 일어나면 고장으로 읽힌다(원장 2026-09-17).
+          const splitting = terms.some((term) => term.confirmedSessions === null);
+          const amounts = distributeLinkedReceipt(line, terms, draft);
+          const nothing = Object.keys(amounts).length === 0;
+          const noChange = nothing || Object.entries(amounts).every(([id, amount]) => draft[id]?.amount === String(amount));
+          return <button type="button" disabled={pending || terms.length === 0 || (base <= 0 && !splitting) || noChange} className="border-line hover:bg-bg-soft rounded-md border px-3 py-1.5 text-sm disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent" title={noChange && terms.length > 0 ? (base <= 0 && !splitting ? "확정금액이 없어 비율로 나눌 수 없습니다" : nothing ? "나눌 금액이 없습니다" : "입력한 금액이 이미 나눈 결과와 같습니다") : splitting ? "확정 반의 입력액은 유지하고 남은 금액을 미확정 반에 똑같이 나눕니다" : "확정금액 비율로 청구액을 나눕니다"} onClick={() => {
+            setDraft((current) => ({ ...current, ...Object.fromEntries(Object.entries(distributeLinkedReceipt(line, terms, current)).map(([id, amount]) => [id, { ...current[id], amount: String(amount) }])) }));
+          }}>{splitting ? "남은 금액 나누기" : "차액 비례 배분"}</button>;
+        })()}
       </div>)}
       {data.lines.length === 0 ? <p className="text-text-dim text-sm">연결할 수업 청구 항목이 없습니다.</p> : null}
     </div>
@@ -107,14 +122,14 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
             </select>
           </td>
           <td className="py-2">
-            <input aria-label={`${term.className} 배분금액`} type="number" min="0" step="1" disabled={pending || !line} value={draft[term.id].amount} onChange={(e) => setDraft((current) => ({ ...current, [term.id]: { ...current[term.id], amount: e.target.value } }))} className="border-input bg-background num w-28 rounded-md border px-2 py-1.5 text-right" />
+            <input aria-label={`${term.className} 배분금액`} type="number" min="0" step="1" disabled={pending || !line} value={line ? draft[term.id].amount : hasLinks && term.confirmedSessions !== null ? "0" : ""} onChange={(e) => setDraft((current) => ({ ...current, [term.id]: { ...current[term.id], amount: e.target.value } }))} className="border-input bg-background num w-28 rounded-md border px-2 py-1.5 text-right" />
             {remaining !== null ? <button type="button" disabled={pending} aria-label={`${term.className} 남은 금액 적용`} className="text-primary mt-1 block text-xs hover:underline disabled:opacity-40" onClick={() => setDraft((current) => ({ ...current, [term.id]: { ...current[term.id], amount: String(receiptRemainder(line!, term.id, current)) } }))}>잔액 {won(remaining)} 적용</button> : null}
           </td>
         </tr>;
       })}
     </tbody></table></div>
     <p className="text-text-dim mb-3 text-sm">배분만 저장하면 시수는 미확정으로 유지됩니다. 시수 확정 후 ‘시수 검증 → 분배 저장’을 하면 강사 정산에 반영됩니다.</p>
-    <footer className="flex items-center justify-between gap-4"><div className="text-text-dim text-sm">{error ? <p role="alert" className="text-danger">{error}</p> : !complete ? "확정한 모든 반을 수납 항목에 연결해 주세요." : !valid ? "각 수납 항목의 배분 합계를 청구액과 맞춰 주세요." : hasLinks ? "저장한 배분금액에 강사 배분율을 적용합니다." : "연결 없이 저장하면 기존 배분을 해제합니다."}</div><button type="button" disabled={pending || !valid} onClick={save} className="bg-primary text-primary-foreground shrink-0 rounded-md px-4 py-2 text-sm font-bold disabled:opacity-40">{pending ? "저장 중…" : "배분 저장"}</button></footer>
+    <footer className="flex items-center justify-between gap-4"><div className="text-text-dim text-sm">{error ? <p role="alert" className="text-danger">{error}</p> : !complete ? "연결한 수납 항목을 다시 선택해 주세요." : zeroBlock.matchedTerms.length ? `${zeroBlock.matchedTerms.map((t) => t.className ?? "반").join(", ")}에 맞는 수납 항목이 있습니다. 0원으로 두지 말고 연결해 주세요.` : !valid ? "각 수납 항목의 배분 합계를 청구액과 맞춰 주세요." : hasLinks ? `${zeroCount ? `연결하지 않은 확정 반 ${zeroCount}개는 0원으로 저장합니다. ${zeroBlock.unlinkedLines.length ? `어느 반에도 연결하지 않은 수업 항목이 남습니다(${leftoverText}). ` : ""}` : ""}저장한 배분금액에 강사 배분율을 적용합니다.` : "연결 없이 저장하면 기존 배분을 해제합니다."}</div><button type="button" disabled={pending || !valid} onClick={save} className="bg-primary text-primary-foreground shrink-0 rounded-md px-4 py-2 text-sm font-bold disabled:opacity-40">{pending ? "저장 중…" : "배분 저장"}</button></footer>
   </dialog>;
 }
 
