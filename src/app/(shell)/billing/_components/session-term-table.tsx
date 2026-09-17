@@ -19,10 +19,11 @@ import { useSessionTermsState } from "./session-terms-state";
 import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
 import { MonthlySessionEditor } from "./monthly-session-editor";
 import { TermNoteCell } from "./term-note-cell";
-import { SelectedConfirmButton, type TermDraft } from "./selected-confirm-button";
+import { SelectedConfirmButton, scaledConfirmText, type TermDraft } from "./selected-confirm-button";
 import { ClassUnconfirmButton } from "./class-unconfirm-button";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatTermDays } from "@/features/billing/session-terms/term-days";
+import { isUntouchedScaledSessions } from "@/features/billing/session-terms/last-month-suggestion";
 import { WindowLink } from "@/components/workspace/window-link";
 
 const KRW = new Intl.NumberFormat("ko-KR");
@@ -171,7 +172,8 @@ function ClassBatch({ period, group, listId, onPrice, visibleOnly, selection }: 
   );
 }
 
-const NUM_INPUT = "border-input bg-background num rounded-md border px-2 py-1 text-xs";
+/** 🔴 배경색은 여기 두지 않는다 — 제안 칸이 `bg-blue-soft`·`bg-amber-soft`를 덧붙이면 승자를 CSS 생성 순서가 정한다([[#116]]). */
+const NUM_INPUT = "border-input num rounded-md border px-2 py-1 text-xs";
 
 /**
  * 일수 기준 확정값 — 숫자를 붉게 칠하고 사유는 마우스 오버 카드로(원장 2026-09-16 *"일수 기준, 재확정 필요의 경우 색상을
@@ -263,6 +265,10 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
   const monthly = confirmed ? r.pricingMode === "monthly" : r.monthlyPrice !== null;
   const err = confirmed ? unState?.error : state?.error;
   const fid = `stf-${r.id}`;
+  // 칸이 지난 달 기준 제안 그대로일 때만 칠한다(사람이 고치거나 단가 일괄 입력으로 바뀌면 사라진다).
+  // 시수 칸은 **주황**(예정과 다르게 채웠다 — 확정 행의 '확정 ≠ 예정' 주황과 같은 뜻), 단가 칸은 파랑(지난 달 값을 옮겼다).
+  const suggestedPrice = !confirmed && r.lastMonth != null && draft.price === String(r.lastMonth.price);
+  const suggestedSessions = isUntouchedScaledSessions(r, draft.sessions);
   const n = draft.sessions.trim() === "" ? NaN : Number(draft.sessions);
   const priceText = draft.price.replace(/[,\s]/g, "");
   const price = priceText === "" ? NaN : Number(priceText);
@@ -305,7 +311,15 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
         </div>
         {/* 미확정 행의 확정 폼(빈 폼) — 회차/단가 입력·확정 버튼이 form 속성으로 여기에 묶인다. */}
         {!confirmed ? (
-          <form id={fid} action={confirmAction} className="hidden">
+          <form
+            id={fid}
+            action={confirmAction}
+            // 개별 확정(버튼·Enter)도 선택 일괄 확정과 같은 확인을 거친다 — 한쪽만 물으면 한 명씩 확정하는 흐름으로 샌다(리뷰 2026-09-17).
+            onSubmit={(e) => {
+              if (isUntouchedScaledSessions(r, draft.sessions) && !window.confirm(scaledConfirmText([r]))) e.preventDefault();
+            }}
+            className="hidden"
+          >
             <input type="hidden" name="id" value={r.id} />
             {monthly ? <>
               <input type="hidden" name="unitPrice" value={r.monthlyPrice!} />
@@ -358,7 +372,8 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
             onChange={(e) => onDraft({ ...draft, sessions: e.target.value })}
             disabled={pending}
             aria-label={`${r.studentName} 확정 회차`}
-            className={`${NUM_INPUT} w-14 text-center`}
+            className={`${NUM_INPUT} w-14 text-center ${suggestedSessions ? "bg-amber-soft" : "bg-background"}`}
+            {...(suggestedSessions ? lastMonthTip(r) : {})}
           />
         )}
       </td>
@@ -385,7 +400,8 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
               onChange={(e) => onDraft({ ...draft, price: e.target.value })}
               disabled={pending}
               aria-label={`${r.studentName} 회당 단가`}
-              className={`${NUM_INPUT} w-24 text-right`}
+              className={`${NUM_INPUT} w-24 text-right ${suggestedPrice ? "bg-blue-soft" : "bg-background"}`}
+              {...(suggestedPrice ? lastMonthTip(r) : {})}
             />
           </>
         )}
@@ -443,6 +459,26 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
   );
 }
 
+/** 미확정 행 입력칸의 처음 값 — 지난 달 확정 기준 제안이 있으면 그 값, 없으면 예정 시수 · 빈 단가. */
+function defaultDraft(row: SessionTermRow): TermDraft {
+  const s = row.lastMonth;
+  return { sessions: String(s?.sessions ?? row.plannedSessions ?? ""), price: s ? String(s.price) : "" };
+}
+
+/** 입력칸이 아직 지난 달 기준 제안 그대로인가 — 칸을 옅게 칠하고 근거 카드를 단다(고치면 사라진다). */
+function lastMonthTip(r: Row): ReturnType<typeof tipProps> {
+  const s = r.lastMonth!;
+  return tipProps({
+    title: "지난 달 확정 기준",
+    lines: [
+      `지난 달 ${s.last.sessions}시수 × ${won(s.last.price)}`,
+      s.sessions !== null && s.last.planned !== null ? `지난 달 예정 ${s.last.planned}시수 대비 비율로 이번 달 예정 ${r.plannedSessions}시수 → ${s.sessions}시수` : null,
+      s.sessions !== null ? "지난 달만 휴원·결석으로 줄였거나 이번 달 등원 요일을 늘린 학생이면 예정 시수로 고치세요." : null,
+      "확인한 뒤 확정하세요(자동 저장되지 않습니다).",
+    ],
+  });
+}
+
 /** 반 머리 줄의 수업 요일 — 같은 반이라 행마다 같다(첫 값). */
 const classDaysText = (students: Row[]) => formatTermDays(students.find((s) => s.classDays?.length)?.classDays);
 
@@ -475,7 +511,8 @@ export function SessionTermGroups({
   const listId = useId();
   const { patches } = useSessionTermsState();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const draftOf = (row: SessionTermRow): Draft => drafts[row.id] ?? { sessions: String(row.plannedSessions ?? ""), price: "" };
+  // 손대지 않은 칸의 기본값 = 지난 달 확정 기준(있으면) → 없으면 예정 시수·빈 단가(원장 2026-09-17 "입력칸만 미리 채움").
+  const draftOf = (row: SessionTermRow): Draft => drafts[row.id] ?? defaultDraft(row);
   // 체크박스 선택(원장 2026-09-17) — 화면 메모리. 확정되면 대상에서 빠진다(체크박스가 잠긴다).
   // 새 데이터(다른 창의 확정·새로고침)가 오면 그사이 확정된 행의 선택은 버린다 — 남겨 두면 나중에 해제될 때 체크가 옛 입력값과 함께
   // 되살아난다(재리뷰 2026-09-17). 렌더 중 파생(SessionTermsState와 같은 방식 — effect로 setState 금지).
@@ -622,7 +659,8 @@ export function SessionTermGroups({
                           onPrice={(price) =>
                             setDrafts((current) => {
                               const next = { ...current };
-                              for (const row of g.students) if (row.confirmedSessions === null) next[row.id] = { ...(current[row.id] ?? { sessions: String(row.plannedSessions ?? "") }), price };
+                              // 시수는 손대지 않은 칸의 기본값(지난 달 기준 → 예정)을 그대로 둔다 — 예정으로 되돌리면 2시간만 듣는 학생의 비율이 사라진다.
+                              for (const row of g.students) if (row.confirmedSessions === null) next[row.id] = { ...(current[row.id] ?? defaultDraft(row)), price };
                               return next;
                             })
                           }

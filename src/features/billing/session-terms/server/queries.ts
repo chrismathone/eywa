@@ -9,6 +9,8 @@ import { loadLivePlans, type PlanHistory } from "./live-plans";
 import { mergeHolidays } from "@/features/billing/tuition-calc";
 import { receiptOriginalItems, receiptRefundState, type ReceiptRefundState } from "../receipt-refund";
 import { receiptMatchesClass } from "../receipt-suggestion";
+import { suggestFromLastMonth, type TermSuggestion } from "../last-month-suggestion";
+import { loadLastMonthBasis, type LastMonthBasis } from "./last-month";
 
 /** 회차 확정 면 한 행 — 청구서×반(반마다 단가가 달라 합산 금지). subject는 raw key(라벨은 소비처가 buildSubjectMaps로). */
 export type SessionTermRow = {
@@ -23,6 +25,8 @@ export type SessionTermRow = {
   classDays?: number[];
   /** 반 요일과 다른 이 학생의 개별 등원 요일 — 학생 이름 옆 표시(같으면 없음). */
   attendDays?: number[] | null;
+  /** 미확정 행에 미리 채울 지난 달 확정 기준 단가·시수(`getSessionTermsView(…, { lastMonth: true })`일 때만). */
+  lastMonth?: TermSuggestion | null;
   subject: string;
   classId: string | null;
   className: string | null;
@@ -68,7 +72,7 @@ export type SessionTermsView = {
 };
 
 /** 청구월의 회차 확정 목록 + 회당 단가 프리셋. (B2: 전건은 fetchAllPaged / B3: .in은 청크 / B4: 병렬) */
-export async function getSessionTermsView(period: string, invoiceId?: string): Promise<SessionTermsView> {
+export async function getSessionTermsView(period: string, invoiceId?: string, options: { lastMonth?: boolean } = {}): Promise<SessionTermsView> {
   const supabase = await createClient();
 
   const [invoices, settings] = await Promise.all([
@@ -86,8 +90,12 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
 
   const invoiceIds = invoices.map((i) => i.id);
   const invoiceById = new Map(invoices.map((i) => [i.id, i]));
+  const studentIds = [...new Set(invoices.map((i) => i.student_id))];
+  const holidaysOf = (year: number) => mergeHolidays(year, settings.operations.holidays.map((h) => h.date), true);
 
-  const terms = await fetchInChunks<{
+  // 회차 행·학생·예정·지난 달 기준은 서로 기다릴 이유가 없다(B4) — 청구서 목록만 있으면 넷 다 시작한다.
+  // 지난 달 기준 미리 채우기는 회차 확정 면만 쓴다(검증·배분 창은 안 읽는다 — 왕복 절약).
+  const [terms, students, live, lastMonthBasis] = await Promise.all([fetchInChunks<{
     id: string;
     invoice_id: string;
     subject: string;
@@ -112,13 +120,18 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
         "id, invoice_id, subject, class_id, planned_sessions, confirmed_sessions, unit_price, pricing_mode, amount, confirmed_at, quantity_basis, allocation_line_index, allocation_amount, allocation_source, allocation_base_amount, note, class:class_id ( class_name, english_track, teacher:teacher_id ( display_name ) )",
       )
       .in("invoice_id", chunk),
-  );
-
-  const studentIds = [...new Set(invoices.map((i) => i.student_id))];
-  const [students, live] = await Promise.all([fetchInChunks<{ id: string; name: string; grade: string | null; school: string | null }>(studentIds, (chunk) =>
+  ), fetchInChunks<{ id: string; name: string; grade: string | null; school: string | null }>(studentIds, (chunk) =>
     supabase.from("students").select("id, name, grade, school").in("id", chunk),
-  ), loadLivePlans(supabase, period, studentIds, mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true))]);
+  ), loadLivePlans(supabase, period, studentIds, holidaysOf(Number(period.slice(0, 4)))),
+  options.lastMonth && !invoiceId ? loadLastMonthBasis(supabase, period, studentIds, holidaysOf) : Promise.resolve<LastMonthBasis>(new Map())]);
   const studentById = new Map(students.map((s) => [s.id, s]));
+  // 같은 학생·반의 회차 행이 이 달에 둘 이상이면(청구서 중복 — 한쪽이 이미 확정이어도) 미리 채우지 않는다.
+  // 채우면 반 전체 선택 한 번에 같은 반이 두 번 확정된다(리뷰 2026-09-17 — 종전엔 빈 단가가 막았다).
+  const termsPerKey = new Map<string, number>();
+  for (const t of terms) {
+    const inv = invoiceById.get(t.invoice_id);
+    if (inv && t.class_id) termsPerKey.set(`${inv.student_id}|${t.class_id}`, (termsPerKey.get(`${inv.student_id}|${t.class_id}`) ?? 0) + 1);
+  }
   const allocated = new Map<string, number>();
   // 연결 없이 0원으로 저장한 반(0269a — 항목 null · 금액 0)도 배분을 저장한 청구서다.
   const invoicesWithAllocations = new Set(terms.filter((term) => term.allocation_line_index != null || term.allocation_amount != null).map((term) => term.invoice_id));
@@ -162,6 +175,14 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
         planUncertain: t.class_id ? live.uncertain.has(`${inv.student_id}|${t.class_id}`) : false,
         classDays: t.class_id ? live.classDays.get(t.class_id) ?? [] : [],
         attendDays: t.class_id ? live.attendDays.get(`${inv.student_id}|${t.class_id}`) ?? null : null,
+        lastMonth: (() => {
+          if (!t.class_id || t.confirmed_sessions !== null) return null;
+          const key = `${inv.student_id}|${t.class_id}`;
+          const basis = lastMonthBasis.get(key);
+          // 예정을 믿을 수 없는 행(휴원·비활성 반) · 이번 달 EiE 월 정액 행은 채우지 않는다 — 사람이 직접 적게 둔다(리뷰 2026-09-17).
+          if (!basis || live.uncertain.has(key) || (termsPerKey.get(key) ?? 0) > 1 || isEieMonthlyClass(t.subject, cls?.english_track)) return null;
+          return suggestFromLastMonth(live.plans.get(inv.student_id)?.get(t.class_id) ?? 0, basis.last, basis.lastPlan);
+        })(),
         confirmedSessions: t.confirmed_sessions === null ? null : Number(t.confirmed_sessions),
         unitPrice: t.unit_price === null ? null : Number(t.unit_price),
         amount: t.amount === null ? null : Number(t.amount),
