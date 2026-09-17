@@ -21,11 +21,25 @@ import { sheetDowLabel, sheetT, sheetTf, type SheetLang } from "@/features/teach
 export function ScheduleSummaryView({
   schedule,
   lang,
+  labSeparateSessions = 0,
+  labSeparateSlots = 0,
 }: {
   schedule: ScheduleSummary;
   lang: SheetLang;
+  /** 산정에서 뺀 '따로 수업(*LAB)' 주 회차(오늘 유효한 것). 시작 전 교시뿐이면 0이다. */
+  labSeparateSessions?: number;
+  /** 산정에서 뺀 표식 교시 수(지난 배치 제외) — 회차가 0이어도 이 수가 있으면 뺀 사실을 밝힌다. */
+  labSeparateSlots?: number;
 }) {
   const { byDay, upcomingByDay, upcomingFrom, pastCount } = schedule;
+  const labNote =
+    labSeparateSlots > 0 || labSeparateSessions > 0 ? (
+      <span className="text-muted-foreground block text-xs" title={sheetT(lang, "cls.sch.labSeparateTitle")}>
+        {labSeparateSessions > 0
+          ? sheetTf(lang, "cls.sch.labSeparateHidden", { n: labSeparateSessions })
+          : sheetTf(lang, "cls.sch.labSeparateHiddenSlots", { n: labSeparateSlots })}
+      </span>
+    ) : null;
   const weekly = formatMinutes(schedule.minutes, lang);
 
   if (byDay.length === 0 && upcomingByDay.length === 0) {
@@ -33,6 +47,7 @@ export function ScheduleSummaryView({
       <p className="text-muted-foreground py-2 text-sm">
         {sheetT(lang, "cls.sch.none")}
         {pastCount > 0 ? <PastNote count={pastCount} lang={lang} inline /> : null}
+        {labNote}
       </p>
     );
   }
@@ -74,6 +89,7 @@ export function ScheduleSummaryView({
       ) : null}
 
       {pastCount > 0 ? <PastNote count={pastCount} lang={lang} /> : null}
+      {labNote}
     </div>
   );
 }

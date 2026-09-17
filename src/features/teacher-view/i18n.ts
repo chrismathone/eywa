@@ -3650,6 +3650,14 @@ export const SHEET_DICT = {
   "cls.sch.startsFrom": { ko: "{md}부터", en: "From {md}" },
   "cls.sch.startsSoon": { ko: "시작 예정", en: "Starting soon" },
   "cls.sch.pastHidden": { ko: "지난 배치 {n}개는 숨김", en: "{n} past slots are hidden" },
+  // '따로 수업(*LAB)' 교시는 반 시간표 산정에서 뺀다(원장 2026-09-17) — 뺀 사실은 밝힌다.
+  "cls.sch.labSeparateHidden": { ko: "따로 수업(*LAB) 주 {n}회는 산정에서 뺌", en: "Separate LAB (*LAB): {n} a week left out" },
+  // 아직 시작 전인 교시만 있으면 주 회차가 0이라 "교시 N개"로 적는다 — 뺀 사실은 어느 쪽이든 밝힌다.
+  "cls.sch.labSeparateHiddenSlots": { ko: "따로 수업(*LAB) 교시 {n}개는 산정에서 뺌", en: "Separate LAB (*LAB): {n} slots left out" },
+  "cls.sch.labSeparateTitle": {
+    ko: "반 수정에서 '따로 수업'으로 켠 LAB 교시입니다. 반 전체가 앉는 시간이 아니라 요일·회차·주 시간에 넣지 않습니다.",
+    en: "LAB periods switched to 'separate' in class edit. They are not the whole class's time, so they are left out of days, sessions and weekly hours.",
+  },
   "cls.sch.pastTitle": {
     ko: "운영 종료일이 지난 시간표 행입니다. 기록으로 남아 있고 화면·편집에서는 빠집니다.",
     en: "These slots ran out before today. They stay on record but are left out of this screen and of editing.",
