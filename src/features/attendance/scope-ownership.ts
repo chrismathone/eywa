@@ -15,6 +15,7 @@ import {
   attendanceSlotShare,
   classTeacherIdsInRange,
   classTeacherRole,
+  ownInsertSlotStarts,
   ownsAttendanceSlot,
   teachesClassOn,
   type AttendanceSlotShare,
@@ -79,6 +80,24 @@ export function scopeTeachesOn(facts: ScopeClassFacts | undefined, teacherId: st
     slots: facts.slots,
     date,
     homeroomSince: null,
+  });
+}
+
+/**
+ * 강사 출석부 칸에 제 몫 기록이 없을 때 **새로 만들 교시** — 화면·저장이 같은 재료로(`ownInsertSlotStarts`).
+ * null = 종전대로 교시 없는 "그날 전체" 한 행. 재료가 없으면 null(호출부가 `scopeShareOf`로 먼저 거른다).
+ */
+export function scopeInsertSlots(
+  facts: ScopeClassFacts | undefined,
+  teacherId: string,
+  date: string,
+): string[] | null {
+  if (!facts) return null;
+  return ownInsertSlotStarts({
+    scopeTeacherId: teacherId,
+    homeroomTeacherId: facts.homeroomTeacherId,
+    slots: facts.slots,
+    date,
   });
 }
 

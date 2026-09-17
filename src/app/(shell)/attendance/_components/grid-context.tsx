@@ -287,21 +287,19 @@ export function GridProvider({
         ? tf("att.lock.seatOnly", {})
         : notMine?.[key] === "day"
           ? tf("att.lock.notOwnDay", {})
-          : notMine?.[key] === "none"
-            ? tf("att.lock.noOwnRecord", {})
-            : notMine?.[key]
-              ? NOT_MINE_MESSAGE
-              : null,
+          : notMine?.[key]
+            ? NOT_MINE_MESSAGE
+            : null,
     [notMine, tf],
   );
   /**
    * 한 칸 입력을 막는 **첫 사유 문장**(없으면 null) — 칸 툴팁(matrix-row `lockedReason`)과 **같은 순서**:
-   * 강사 보기의 '수업하지 않는 날'·'제 교시 기록 없음'(원장 2026-09-17) → 7일 잠금 → 그 밖의 막는 칸(자리뿐 등).
+   * 강사 보기의 '수업하지 않는 날'(원장 2026-09-17) → 7일 잠금 → 그 밖의 막는 칸(자리뿐 등).
    */
   const blockNoteOf = useCallback(
     (key: string, date: string): string | null => {
       const reason = notMine?.[key];
-      if (reason === "day" || reason === "none") return notMineNote(key);
+      if (reason === "day") return notMineNote(key);
       return lockNoteOf(date) ?? notMineNote(key);
     },
     [notMine, notMineNote, lockNoteOf],

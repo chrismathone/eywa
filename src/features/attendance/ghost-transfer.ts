@@ -11,6 +11,12 @@
  *   ④ 이 표의 칸엔 빗금 위 흐린 값으로만 보이고 합계엔 안 든다(`cell-display` `ghostGridValue` · `grid/store` `g`).
  * 기본값(원장에게 안 물음): 빗금 칸의 **지우기는 막는다** — 남의 기록 삭제는 되돌리기 어렵다.
  * ⚠️ 제 몫 행이 하나라도 있으면 여기 오지 않는다(`own` — 종전 `planDayCellUnits`·`splitOutSeatRows` 경로 그대로).
+ *
+ * 🔴 2026-09-17 원장 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건 아니지. 그냥 내 출석부 상에서 자유롭게 숫자 설정만
+ *    하는거야."* — 빗금 칸이 걷힌 뒤(강사 보기는 제 교시만 그린다) 제 몫 행이 없는 칸은 **빈칸**이다. 그래서:
+ *    · 입력(표식 없음) = `create` — 남의 교시·자리 행은 그대로 두고 **제 교시 행을 새로 만든다**(자리뿐·남의 기록뿐 거절 폐기).
+ *    · 지우기 = `skip` — 지울 제 기록이 없다(남의 기록은 지우지 않는다 · 거절 문장도 없다: 빈칸을 지운 것뿐이다).
+ *    · 표식(`ghostIntent`)이 온 입력만 옛 옮기기 경로(`transfer`)다 — 지금 격자는 표식을 안 보낸다(오래 열린 화면용으로 남김).
  * ⚠️ 화면이 같은 칸을 `transfer`로 보는 판정은 `cell-display` `ghostCellKind`다 — 둘이 갈리면 격자는 응답의
  *    `ghostTransfer`로 덮개를 벗긴다(`grid/store` `dropLocalIf`).
  */
@@ -21,11 +27,15 @@ import type { DayTargetRow } from "./scoped-split";
 export type ScopedDayPlan<T extends DayTargetRow> =
   /** 반별 보기 · 새 칸(행 없음) · 제 몫 행이 있다 — 종전 경로. */
   | { kind: "own" }
-  /** 제 몫 0 · 다른 선생님 교시 행 ≥ 1 — 그 행들에 상태만(+ 메모). `rows`는 `targets` 순서 그대로. */
+  /** 제 몫 0 · 남의 교시·자리 행만 있다 — 그 행들은 두고 **제 교시 행을 새로 만든다**(2026-09-17). */
+  | { kind: "create" }
+  /** 지우기인데 제 몫 0 — 지울 제 기록이 없다. 아무것도 안 하고 성공이다(2026-09-17). */
+  | { kind: "skip" }
+  /** (옛 빗금 칸 표식이 온 입력) 제 몫 0 · 다른 선생님 교시 행 ≥ 1 — 그 행들에 상태만(+ 메모). `rows`는 `targets` 순서 그대로. */
   | { kind: "transfer"; rows: T[] }
   | { kind: "reject"; reason: ScopedRejectReason };
 
-export type ScopedRejectReason = "seatOnly" | "clearGhost" | "stale";
+export type ScopedRejectReason = "seatOnly" | "stale";
 
 /**
  * @param targets 그날 교시별 최신 행(`pickSaveTargets(rows, null).updateIds` 순서) — 화면이 값으로 세는 행과 같은 대상.
@@ -46,26 +56,16 @@ export function planScopedDay<T extends DayTargetRow>(input: {
   const { share } = input;
   // 반별 보기엔 빗금 칸이 없다 — 표식이 와도 뜻이 없다(종전 경로).
   if (!share) return { kind: "own" };
-  const plan = classify(input.targets, share, input.clearing);
-  if (input.clearing) return plan;
+  const { targets } = input;
+  const owned = targets.length === 0 || targets.some((r) => share(r) === "mine");
+  if (input.clearing) return owned ? { kind: "own" } : { kind: "skip" };
   const intent = input.ghostIntent === true;
-  if ((plan.kind === "transfer" && !intent) || (plan.kind === "own" && intent)) {
-    return { kind: "reject", reason: "stale" };
-  }
-  return plan;
-}
-
-function classify<T extends DayTargetRow>(
-  targets: readonly T[],
-  share: (row: T) => AttendanceSlotShare,
-  clearing: boolean,
-): ScopedDayPlan<T> {
-  if (targets.length === 0 || targets.some((r) => share(r) === "mine")) return { kind: "own" };
-  // 자리 행은 받을 행에서 뺀다 — 자리뿐이면 막는다(②). 순서: 자리뿐 판정이 지우기 판정보다 먼저(사유가 더 정확하다).
+  // 빗금 칸으로 알고 보냈는데 제 몫 행이 생겼거나 기록이 사라졌다 — 사람이 본 것과 다른 것을 쓰지 않는다.
+  if (owned) return intent ? { kind: "reject", reason: "stale" } : { kind: "own" };
+  if (!intent) return { kind: "create" };
+  // 옛 옮기기 경로 — 자리 행은 받을 행에서 뺀다, 자리뿐이면 막는다(②).
   const others = targets.filter((r) => share(r) === "other");
-  if (others.length === 0) return { kind: "reject", reason: "seatOnly" };
-  if (clearing) return { kind: "reject", reason: "clearGhost" };
-  return { kind: "transfer", rows: others };
+  return others.length === 0 ? { kind: "reject", reason: "seatOnly" } : { kind: "transfer", rows: others };
 }
 
 /**
@@ -74,6 +74,5 @@ function classify<T extends DayTargetRow>(
  */
 export const SCOPED_REJECT_MESSAGE: Record<ScopedRejectReason, string> = {
   seatOnly: sheetT("ko", "att.lock.seatOnly"),
-  clearGhost: sheetT("ko", "att.grid.ghostClearBlock"),
   stale: sheetT("ko", "att.grid.ghostStale"),
 };

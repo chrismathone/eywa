@@ -591,7 +591,7 @@ export type AttendanceMatrix = {
    * studentId → date → **이 표가 세지 않는 교시**(강사 전체 보기에서 남의 교시·자리 JJ·LAB).
    * `scopeTeacherId`를 안 넘긴 반별 보기에선 항상 비어 있다.
    * 🔴 **2026-09-17부터 강사 전체 보기에서도 늘 비어 있다**(원장 *"내가 수업한 학생의 출석만 보고 싶은것"*) — 남의 교시를
-   *    빗금으로 보이던 표시를 걷었다. 그 사실은 `noOwnRecord`(입력 막기)만 남긴다. 아래 설명은 걷기 전의 규약이다
+   *    빗금으로 보이던 표시를 걷었다. 그 칸은 빈칸이고 입력하면 제 교시 행이 새로 생긴다. 아래 설명은 걷기 전의 규약이다
    *    (격자·칸의 빗금 코드는 이 값이 비면 그리지 않는다).
    *
    * 🔴 왜 따로 싣나: 칸 값(marks/units)은 **주인의 교시만** 담아야 합계·출석률·격자가 한 숫자를 말한다.
@@ -617,12 +617,8 @@ export type AttendanceMatrix = {
    * ⚠️ 명단(학생 줄)은 줄이지 않는다 — 원장 전용 금액 합계가 이 명단으로 학생을 고르기 때문이다(page.tsx `money`).
    */
   ownDates?: string[];
-  /**
-   * studentId → date → true. 그 강사가 수업하는 날인데 **그 강사 교시 기록은 없고 다른 기록(다른 선생님 교시·자리
-   * JJ·랩실)만 있는 칸**(강사 전체 보기 전용). 그 기록은 보여 주지 않고(원장 2026-09-17) 입력만 막는다 — 여기서 받으면
-   * 서버가 제 교시 행을 만들지 않는다(그날 칸 저장은 남의 교시 행을 고르거나 거절한다). 교시별 출결은 영어 강사 시트에서 찍는다.
-   */
-  noOwnRecord?: Record<string, Record<string, true>>;
+  // ⚠️ `noOwnRecord`(제 교시 기록 없이 남의 기록만 있는 칸의 입력 막기)는 같은 날 걷었다 — 원장 2026-09-17 *"내 출석부 상에서
+  //    자유롭게 숫자 설정만 하는거야"*. 그 칸은 빈칸이고, 저장이 남의 행은 두고 제 교시 행을 새로 만든다(`planScopedDay` create).
   /**
    * studentId → date → true. **교시를 안 남긴 기록(day-level)이 값에 섞인 칸**(강사 전체 보기 전용).
    *
@@ -1201,7 +1197,6 @@ export async function getMonthlyAttendanceMatrix(
   const slots: Record<string, Record<string, SlotMark[]>> = {};
   // 2026-09-17부터 늘 비어 있다 — 남의 교시는 보여 주지 않는다(`AttendanceMatrix.ghosts` 주석).
   const ghosts: Record<string, Record<string, SlotMark[]>> = {};
-  const noOwnRecord: Record<string, Record<string, true>> = {};
   const dayAxis: Record<string, Record<string, true>> = {};
   const derived: Record<string, Record<string, true>> = {};
 
@@ -1255,8 +1250,6 @@ export async function getMonthlyAttendanceMatrix(
          */
         otherNote: string | null;
         slots: SlotMark[];
-        /** 이 표의 몫이 아닌 교시 기록이 있나 — 값은 싣지 않고 입력 막기(`noOwnRecord`)에만 쓴다. */
-        hasOthers: boolean;
       }
     >();
     for (const r of records) {
@@ -1276,7 +1269,6 @@ export async function getMonthlyAttendanceMatrix(
           note: null,
           otherNote: null,
           slots: [] as SlotMark[],
-          hasOthers: false,
         };
       // 시수(배수) — null=기본 1. numeric은 문자열로 올 수 있어 Number 변환.
       const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
@@ -1285,8 +1277,7 @@ export async function getMonthlyAttendanceMatrix(
       if (!mine) {
         // 🔴 이 표의 몫이 아닌 교시(다른 선생님 교시·자리 JJ·랩실·담임이 되기 전 기록)는 **보여 주지 않는다**
         //    (원장 2026-09-17 *"말그대로 내가 수업한 학생의 출석만 보고 싶은것"*). 그전엔 빗금 + 흐린 값 + 입력자·메모로
-        //    섰다(2026-08-19 · 09-14 · 09-15). 기록이 있다는 사실만 남겨 제 교시 기록이 없는 칸의 입력을 막는다.
-        cell.hasOthers = true;
+        //    섰다(2026-08-19 · 09-14 · 09-15). 제 교시 기록이 없는 칸은 빈칸이고, 입력하면 제 교시 행이 새로 생긴다.
         // 남의 교시 메모는 **후보로만** 쥔다 — 같은 날 결석 사유("병결")가 다른 교시 행에만 적히는 일이 흔하다(오늘 출결이
         // 첫 교시에 사유를 적고 ECS가 제 교시에 결석만 찍는다). 제 값이 있는 칸에서 제 메모가 없을 때만 보인다.
         // 🔴 자리(JJ·랩실) 행의 메모는 후보가 아니다 — 자리 담당이 적은 메모가 강사 칸에 서면 "jj는 개인강사 출석부에 넣음
@@ -1328,11 +1319,7 @@ export async function getMonthlyAttendanceMatrix(
       const day = rollupDay(cell.slots);
       // 🔴 주인 몫이 하나도 없는 칸은 **값을 만들지 않는다** — 여기서 0을 실으면 격자·합계·복사
       //    어느 쪽도 0을 제대로 못 읽는다(units 레코드는 0을 안 담는 규약이라 합계가 1로 되살아난다).
-      if (!day) {
-        // 수업하는 날인데 제 교시 기록은 없고 남의 기록만 있다 — 빈칸으로 그리되 입력은 막는다(`noOwnRecord` 주석).
-        if (cell.hasOthers) (noOwnRecord[cell.studentId] ??= {})[cell.date] = true;
-        continue;
-      }
+      if (!day) continue;
       marks[cell.studentId] ??= {};
       marks[cell.studentId]![cell.date] = day.status as AttendanceStatus;
       // 교시를 안 남긴 기록이 값에 섞였나 — 강사 전체 보기 + **담당이 둘 이상인 반**에서만 뜻이 있다
@@ -1523,8 +1510,8 @@ export async function getMonthlyAttendanceMatrix(
     units,
     slots,
     ghosts,
-    // 강사 보기 — 그리는 날(그 강사가 수업하는 날)과, 그 날 중 제 교시 기록 없이 남의 기록만 있는 칸(입력 막기).
-    ...(ownDateSet ? { ownDates: [...ownDateSet], noOwnRecord } : {}),
+    // 강사 보기 — 그리는 날(그 강사가 수업하는 날). 그 밖의 날은 격자가 입력을 막는다.
+    ...(ownDateSet ? { ownDates: [...ownDateSet] } : {}),
     dayAxis,
     derived,
     derivedActive,
