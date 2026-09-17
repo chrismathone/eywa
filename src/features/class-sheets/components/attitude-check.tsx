@@ -14,7 +14,6 @@ import { useSheetLang, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetT } from "@/features/teacher-view/i18n";
 import { attitudeLabelFor, attitudeScaleText } from "@/features/teacher-view/attitude-label";
 import { nextCycleValue } from "../lib/mark-cycle";
-import { EMPTY_CLICK_LABEL } from "../click-hint";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
 
 export function AttitudeCheck({
@@ -62,7 +61,7 @@ export function AttitudeCheck({
     >
       {/* 빈 칸도 **누를 수 있다는 걸 모양으로** 말한다(원장 2026-08-13). 읽기 전용 칸은 위에서 이미
           값/`—`로 갈라져 있어 여기 라벨이 새지 않는다. */}
-      <span className="truncate">{shown ?? EMPTY_CLICK_LABEL}</span>
+      <span className="truncate">{shown ?? sheetT(lang, "select.choose")}</span>
     </button>
   );
 }

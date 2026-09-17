@@ -35,8 +35,7 @@ import { NoteForm } from "@/features/onescreen/components/attendance-pills";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { nextAttendance, type BasicAttendance } from "../lib/mark-cycle";
 import { attendanceLabelOf } from "../lib/attendance-label";
-import { useSheetLang } from "@/features/teacher-view/lang-context";
-import { EMPTY_CLICK_LABEL } from "../click-hint";
+import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
 import { ATT_SOFT } from "@/features/attendance/status-color";
 
@@ -94,6 +93,8 @@ export function AttendanceCheck({
   const [noteOpen, setNoteOpen] = useState(false);
   const anchorRef = useRef<HTMLSpanElement | null>(null);
   const lang = useSheetLang();
+  const t = useSheetT();
+  const tf = useSheetTf();
   const label = attendanceLabelOf(status, lang);
 
   /** 사유 창 — 세 갈래(순환 뒤 자동 · 우클릭 · 잠긴 칸)가 **같은 폼**을 쓴다(수학과 같은 낱말). */
@@ -105,7 +106,7 @@ export function AttendanceCheck({
           <NoteForm
             key={note ?? ""}
             initial={note ?? ""}
-            label={`${studentName} · ${label ?? ""} 사유`}
+            label={tf("os.att.noteLabel", { name: studentName, label: label ?? "" })}
             onCancel={() => setNoteOpen(false)}
             onSave={(text) => {
               onSave(text);
@@ -135,15 +136,15 @@ export function AttendanceCheck({
         <span
           className={SHEET_BOX_READONLY}
           {...tipProps({
-            title: label ?? "출결 없음",
-            rows: [note ? ["사유", note] : null],
-            lines: ["출결 입력 권한이 없거나 수정 기간이 지났습니다"],
+            title: label ?? t("att.pill.noRecord"),
+            rows: [note ? [t("att.tip.reason"), note] : null],
+            lines: [t("bulk.noPerm")],
           })}
           // 카드는 `data-*`라 화면 낭독이 못 읽는다 — 왜 못 고치는지·사유는 라벨로도 남긴다.
           // 🔴 역할이 없으면(generic) 이름이 무시된다. `note`는 **잎이 아니라** 내용을 그대로 읽는 역할이라
           //    표 안에서 라벨이 무시되거나 "지각"이 두 번 읽힌다(3차 재리뷰) → 잎 역할 `img`로 이름이 내용을 대신한다.
           role="img"
-          aria-label={`${studentName} ${label ?? "출결 없음"}${note ? ` · 사유 ${note}` : ""} — 출결 입력 권한이 없거나 수정 기간이 지났습니다`}
+          aria-label={`${studentName} ${label ?? t("att.pill.noRecord")}${note ? ` · ${t("att.tip.reason")} ${note}` : ""} — ${t("bulk.noPerm")}`}
         >
           {label ?? "—"}
         </span>
@@ -159,10 +160,10 @@ export function AttendanceCheck({
               e.preventDefault();
               setNoteOpen(true);
             }}
-            aria-label={`${studentName} ${label} 사유`}
+            aria-label={tf("att.note.label", { name: studentName, label: label ?? "" })}
             {...tipProps({
-              rows: [note ? ["사유", note] : null],
-              lines: ["수정 기간이 지나 상태는 못 바꿉니다 — 사유는 언제든 고칠 수 있습니다"],
+              rows: [note ? [t("att.tip.reason"), note] : null],
+              lines: [t("att.lock.statusFrozen")],
             })}
             // 가운데 정렬은 이제 `SHEET_BOX_READONLY`가 들고 있다(같은 열의 다른 읽기 전용 갈래도 함께
             // 맞았다) — 여기서 또 적으면 같은 축 유틸이 겹쳐 승자를 CSS 생성 순서가 정한다([[#116]]).
@@ -183,10 +184,10 @@ export function AttendanceCheck({
         <button
           type="button"
           className={`${SHEET_BOX} text-purple hover:bg-purple/10 w-full cursor-pointer font-bold`}
-          title="클릭하면 보강 명단에서 뺍니다(출석 기록이 삭제됩니다)"
-          aria-label={`${studentName} 보강 취소`}
+          title={t("att.makeup.removeTitle")}
+          aria-label={tf("att.makeup.removeAria", { name: studentName })}
           onClick={() => {
-            if (!window.confirm(`${studentName} 보강을 명단에서 뺄까요? 출석 기록이 삭제됩니다.`)) return;
+            if (!window.confirm(tf("att.makeup.removeConfirm", { name: studentName }))) return;
             onRemoveMakeup();
           }}
         >
@@ -197,7 +198,7 @@ export function AttendanceCheck({
     return (
       <span
         className={SHEET_BOX_READONLY}
-        title="조퇴·공결·보강은 출석부에서 변경하세요(여기서 바꾸면 그 상태가 사라집니다)"
+        title={t("att.readonlyOther")}
       >
         {label}
       </span>
@@ -214,7 +215,7 @@ export function AttendanceCheck({
       //    오클릭한 결석에 갇히는 것이 정확히 gotcha #103이 말하는 잠긴 문이다. 이유를 말하고
       //    **순환은 다음 칸(출석)으로 이어 준다**.
       if (note && note.trim()) {
-        toast.info("사유가 적힌 기록은 출석부에서 지워 주세요(사유·시수가 함께 지워집니다)");
+        toast.info(t("att.clear.hasNote"));
         return onSet("present");
       }
       // 사유 없는 기록은 서버가 지운다(0203a로 지각·결석까지 넓힘 — 그 전엔 present만 지워지고
@@ -238,16 +239,15 @@ export function AttendanceCheck({
           onContextMenu={(e) => {
             e.preventDefault();
             if (asksNote(status)) setNoteOpen(true);
-            else toast.info("사유는 지각·결석에만 적을 수 있습니다");
+            else toast.info(t("att.note.lateAbsentOnly"));
           }}
-          aria-label={`${studentName} 출결 — ${label ?? "선택 안 함"}`}
+          aria-label={tf("att.cycle.aria", {
+            name: studentName,
+            value: label ?? t("att.cycle.none"),
+          })}
           {...tipProps({
-            rows: [note ? ["사유", note] : null],
-            lines: [
-              "클릭: 출석 → 결석 → 지각 → 선택 안 함",
-              "지각·결석을 고르면 시간·사유 칸이 열립니다(안 적어도 됩니다)",
-              "우클릭: 상태는 그대로 두고 사유만",
-            ],
+            rows: [note ? [t("att.tip.reason"), note] : null],
+            lines: [t("att.cycle.tipClick"), t("att.cycle.tipNote"), t("att.cycle.tipContext")],
           })}
           className={`${SHEET_BOX} inline-flex w-full cursor-pointer items-center justify-center gap-0.5 px-0.5 transition ${
             tone ? tone.cls : "text-text-faint hover:bg-bg-soft"
@@ -262,7 +262,7 @@ export function AttendanceCheck({
             // 빈 칸이라도 **누를 수 있다는 걸 모양으로** 말한다(원장 2026-08-13 "클릭할 수 있는 곳은
             // 클릭할 수 있음을 암시하는 라벨"). '—'는 "값 없음"이지 "눌러라"가 아니었다.
             // ⚠️ 읽기 전용 칸(권한 없음·조퇴 등)은 그대로 '—'/값이다 — 못 누르는 칸이 눌러 보이면 안 된다.
-            <span aria-hidden>{EMPTY_CLICK_LABEL}</span>
+            <span aria-hidden>{t("select.choose")}</span>
           )}
         </button>
         {/* 사유가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다(원스크린 알약과 같은 신호). */}

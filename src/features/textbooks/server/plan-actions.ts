@@ -304,8 +304,10 @@ type Computed = {
 
 /**
  * 배정 → 어디에 무엇을 넣을지. 미리보기와 기입이 **같은 함수**를 탄다.
- * 🔑 진도·과제가 **둘 다 빈 차수는 대상에서 뺀다** — 교재명만 적힌 줄이 서면 ECS 작성률이 "계획 있음"으로
- *    올라가 거짓 신호가 된다(빈 칸을 채우는 게 아니라 없는 계획을 있는 것처럼 만든다).
+ * 🔑 대상 차수는 `startLessonNo..sessionCount`이고 **`textbook_lessons` 행 유무와 무관하다** — 진도·과제를
+ *    아직 안 적은 교재도 교재명·페이지/시간은 들어간다(원장 2026-09-17 *"진도 과제가 비어있어도 들어는
+ *    가져야함 교재넣고 추가하거나 새로쓸수도있자나"*). 실측으로도 이 학원 계획 줄 2,550개 중 290개(11%)가
+ *    이미 교재명만 적힌 줄이다.
  */
 async function computeTargets(loaded: LoadedPlan): Promise<Computed | { error: string }> {
   const { gate, plan } = loaded;
@@ -517,7 +519,6 @@ async function previewLoaded(loaded: LoadedPlan, planId: string): Promise<PlanPr
     //    그 달 작성률이 뒤늦게 움직인다. 차수 번호는 그대로 두고(밀지 않고) 그 칸만 건너뛴다 —
     //    이미 지난 수업은 "계획"이 아니라 **실제로 무엇을 했는지**를 사람이 적을 자리다.
     if (t.date < today) return { ...base, outcome: "skip-past" as const };
-    if (!t.progress && !t.homework) return { ...base, outcome: "skip-empty-lesson" as const };
 
     // 🔴 RPC(`ecs_apply_textbook_lessons`)와 **같은 순서·같은 조건**이어야 미리보기가 실제 기입을 맞힌다:
     //    ① 같은 교재명 + **같은 구분** → ② 같은 구분의 완전히 빈 줄 → ③ 새 줄.
@@ -571,15 +572,15 @@ async function applyLoaded(loaded: LoadedPlan, planId?: string): Promise<PlanApp
   if ("error" in computed) return { ok: false, error: computed.error };
   const { gate, plan } = loaded;
 
-  // 진도·과제가 둘 다 빈 차수는 보내지 않는다(위 🔑). 🔴 **지난 날짜도 빼고** 보낸다 — 미리보기가
-  //    `skip-past`로 보여 준 것과 같은 집합이어야 화면과 결과가 갈리지 않는다.
+  // 🔴 **지난 날짜만 뺀다** — 미리보기가 `skip-past`로 보여 준 것과 같은 집합이어야 화면과 결과가 안 갈린다.
+  // ⚠️ **진도가 비어도 기입한다**(원장 제보 2026-09-17 "기입이 안 됨"). 처음엔 "둘 다 빈 차수는 안 넣는다"로
+  //    막았는데 — ECS 작성률이 교재명만으로 오르는 걸 걱정해서였다 — 실측하니 이 학원 계획 줄 2,550개 중
+  //    **290개(11%)가 이미 교재명만 적힌 줄**이다. 즉 "교재는 정했고 진도는 그날 적는다"가 정상 운영이고,
+  //    막아 두면 새 교재를 등록한 직후엔 아무것도 안 들어가 기능이 죽은 것처럼 보인다.
   const today = kstToday();
-  const targets = computed.targets.filter((t) => t.date >= today && (t.progress || t.homework));
+  const targets = computed.targets.filter((t) => t.date >= today);
   if (targets.length === 0) {
-    return {
-      ok: false,
-      error: "기입할 칸이 없습니다 — 차수에 진도·과제가 비어 있거나, 남은 수업일이 모두 지난 날짜입니다",
-    };
+    return { ok: false, error: "기입할 칸이 없습니다 — 고른 교시에 남은 수업일이 없습니다" };
   }
 
   const admin = createAdminClient();
@@ -638,7 +639,7 @@ async function applyLoaded(loaded: LoadedPlan, planId?: string): Promise<PlanApp
 }
 
 /**
- * 교재 깔기 창이 쓰는 **읽기 진입점 둘** — 클라 컴포넌트가 `server/queries.ts`를 직접 import하면
+ * 교재 배정 창이 쓰는 **읽기 진입점 둘** — 클라 컴포넌트가 `server/queries.ts`를 직접 import하면
  * 그 파일의 `import "server-only"`가 클라 번들로 끌려와 **빌드가 깨진다**([[#61]]). 그래서 서버 액션으로 감싼다.
  *
  * 🔴 게이트를 여기서 다시 건다 — 서버 액션은 **공개 엔드포인트**라 화면 조건은 게이트가 아니다([[#77]]).
@@ -665,7 +666,7 @@ export async function loadAssignableTextbooks(): Promise<
   return { ok: true, rows: res.rows };
 }
 
-// ── 시트에서 바로 깔기 — **저장 없이** 미리보기, 반영할 때만 기록을 남긴다 ─────────────────
+// ── 시트에서 바로 배정 — **저장 없이** 미리보기, 반영할 때만 기록을 남긴다 ─────────────────
 
 export type TextbookFillInput = {
   classId: string;

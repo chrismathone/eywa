@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { tipProps } from "@/components/hover-tip/tip";
 
 import { useCallback, useRef, useState } from "react";
@@ -131,6 +132,7 @@ function SeatJjClass({
   const cols = jjSeatTextCols();
   const left = r.students.filter((s) => statusOf(r.classId, s) === null).length;
   const slotPlan = plan?.plans[r.classId];
+  const canEditEcs = !!slotPlan?.canEdit;
   // 참조 고정 — 계획 블록이 `memo`라 인라인 화살표를 넘기면 memo가 매 렌더 깨진다.
   const onCarried = plan?.onCarried;
   const classId = r.classId;
@@ -146,12 +148,21 @@ function SeatJjClass({
         </span>
         <span className="text-text-faint text-xs tabular-nums">{r.students.length}명</span>
         <span className="text-text-faint text-xs tabular-nums">~{r.end}</span>
+        <Link
+          href={`/ecs/${r.classId}${canEditEcs ? "" : "?readonly=1"}`}
+          target="_blank"
+          rel="noreferrer"
+          className="border-line bg-card text-primary ml-auto rounded-full border px-2 py-0.5 text-xs font-semibold hover:bg-bg-soft"
+          title={canEditEcs ? "내 담당 반 ECS" : "읽기 전용 ECS"}
+        >
+          ECS{canEditEcs ? "" : " (읽기 전용)"}
+        </Link>
         {!readOnly && left > 0 ? (
           <button
             type="button"
             disabled={pending}
             onClick={() => onFillClass(r.classId)}
-            className="border-line bg-card text-primary ml-auto rounded-full border px-2.5 py-0.5 text-xs font-semibold disabled:opacity-50"
+            className="border-line bg-card text-primary rounded-full border px-2 py-0.5 text-xs font-semibold disabled:opacity-50"
           >
             이 반 출석
           </button>
@@ -187,16 +198,14 @@ function SeatJjClass({
             ⚠️ 폭은 %다(시트는 px). 이 표는 반 수만큼 열이 갈리는 격자 안에 들어가 폭이 고정이 아니다.
             특이사항은 width 없는 마지막 <col>이라 **잔여를 받는다**(시트와 같은 규약). */}
         <colgroup>
-          <col style={{ width: "22%" }} />
-          {/* 출결 — 2026-09-10: **세 버튼(출석·결석·지각)이 같은 폭으로 한 줄에** 서야 해서 20%→27%.
-              두 글자 라벨 3개 + 간격이 들어갈 최소치다(실측: 440px 열 기준 칸당 ≈32px, 두 글자 28px +
-              좌우 2px. 더 좁히면 글자가 칸을 넘는다, [[#116]]).
-              🔑 늘린 몫은 **잔여를 받는 마지막 특이사항 칸**에서만 나온다(다른 칸은 안 줄어든다).
+          <col style={{ width: "20%" }} />
+          {/* 출결 버튼을 한 줄에 배치하면서도 ECS 링크를 함께 보여주도록 폭을 압축한다.
+              두 글자 라벨 3개 + 간격이 들어갈 최소치를 유지한다.
               ⚠️ 사유 입력칸이 팝업으로 내려가 이 칸의 세로 높이는 오히려 줄었다. */}
-          <col style={{ width: "25%" }} />
-          <col style={{ width: "14%" }} />
+          <col style={{ width: "20%" }} />
+          <col style={{ width: "10%" }} />
           {cols.map((c) => (
-            <col key={c.field} style={{ width: c.field === "memorizedWords" ? "14%" : "12%" }} />
+            <col key={c.field} style={{ width: c.field === "memorizedWords" ? "11%" : "10%" }} />
           ))}
           <col />
         </colgroup>

@@ -259,8 +259,8 @@ function TeacherGroupFlow({
             >
               {g.label}
             </Heading>
-            <span className="text-text-dim shrink-0 text-xs">
-              <span className="num">{g.summary.classes}</span>반
+            <span className="text-text-dim num shrink-0 text-xs">
+              {sheetTf(lang, "landing.group.nClasses", { n: String(g.summary.classes) })}
             </span>
             {/* 열 제목은 **담임 줄 위**(원장 2026-09-09 시안 비교) — 제목과 숫자가 한 눈에 붙어 있어야
                 `0/6`이 무엇인지 바로 읽힌다. 흐름 안 모든 묶음이 같은 폭을 쓰므로 줄이 어긋나지 않는다. */}
@@ -286,8 +286,8 @@ function TeacherGroupFlow({
                */
               const holidayOnly = idle && card.holidaySlots > 0;
               const idleTitle = holidayOnly
-                ? "이 주 수업일이 모두 휴일입니다 — 쓸 교시가 없습니다(수업했다면 계획을 그대로 쓰실 수 있습니다)"
-                : "이 주에 배정된 교시가 없습니다";
+                ? sheetT(lang, "landing.idle.holiday")
+                : sheetT(lang, "landing.idle.none");
               // EiE만 숫자가 있다(그 외 null = 칸을 비운다). 분모를 넘지 않게 자르는 것도 여기 한 곳.
               const shoutCount = shoutingCountOf(card);
               // 🔴 이 카드에서 반 이름이 나오는 자리 넷(제목·예고 문구·접근성 이름·MP 링크)이
@@ -299,21 +299,36 @@ function TeacherGroupFlow({
               //    '개명'이라고 남는데 필요없어 그냥 날짜 지나면 반이름 변경되었으면 됨"*). 그 주 이름을
               //    그대로 부르는 것이 곧 답이라, 표식은 앞으로 올 변경(upcoming)에만 남긴다.
               const renameNote = card.classNameUpcoming
-                ? `${monthDay(card.classNameUpcoming.date)}부터 ${shownName} → ${classNameFor(card.classNameUpcoming.name, lang)}`
+                ? sheetTf(lang, "landing.rename.note", {
+                    date: monthDay(card.classNameUpcoming.date),
+                    from: shownName,
+                    to: classNameFor(card.classNameUpcoming.name, lang),
+                  })
                 : null;
               // 🔴 압축의 대가 — "교시 작성"이라는 **단위**가 행에서 사라졌다. 눈으로는 열 머리가
               // 설명하지만 스크린리더는 행만 읽어 "0/5"가 무엇의 5인지 알 수 없다. 접근성 이름에 되돌린다.
               const srLabel = [
                 shownName,
                 renameNote,
-                card.delegated ? "위임 받은 반" : null,
+                card.delegated ? sheetT(lang, "landing.sr.delegated") : null,
                 card.orphanSlots > 0
-                  ? `시간표가 바뀌어 지금 시간표에 없는 기록 ${card.orphanSlots}건`
+                  ? sheetTf(lang, "landing.orphan.title", { n: String(card.orphanSlots) })
                   : null,
-                `담임 ${card.teacherName ?? "미지정"}`,
-                idle ? idleTitle : `작성 교시 ${card.filledSlots}/${card.totalSlots}`,
-                // 화면에서 알약이 말하는 것을 스크린리더에도 되돌린다(행에는 열 머리가 없다).
-                shoutCount !== null && !idle ? `Shouting 체크 ${shoutCount}/${card.totalSlots}교시` : null,
+                sheetTf(lang, "landing.sr.homeroom", {
+                  name: card.teacherName ?? sheetT(lang, "landing.sr.unassigned"),
+                }),
+                idle
+                  ? idleTitle
+                  : sheetTf(lang, "landing.sr.fill", {
+                      done: String(card.filledSlots),
+                      total: String(card.totalSlots),
+                    }),
+                shoutCount !== null && !idle
+                  ? sheetTf(lang, "landing.shouting.sr", {
+                      n: String(shoutCount),
+                      total: String(card.totalSlots),
+                    })
+                  : null,
               ]
                 .filter(Boolean)
                 .join(", ");
@@ -352,15 +367,15 @@ function TeacherGroupFlow({
                         고치는 일이 없게, 목록에서부터 갈라 보인다(원장 지시 2026-08-03). */}
                     {card.delegated ? (
                       <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-xs font-bold">
-                        위임
+                        {sheetT(lang, "today.chip.delegated")}
                       </span>
                     ) : null}
                     {card.orphanSlots > 0 ? (
                       <span
                         className="text-amber shrink-0 text-xs font-bold"
-                        title={`시간표가 바뀌어 지금 시간표에 없는 기록 ${card.orphanSlots}건`}
+                        title={sheetTf(lang, "landing.orphan.title", { n: String(card.orphanSlots) })}
                       >
-                        시간변경 <span className="num">{card.orphanSlots}</span>
+                        {sheetT(lang, "landing.orphan.chip")} <span className="num">{card.orphanSlots}</span>
                       </span>
                     ) : null}
                     {/* Shouting 구역(0230a) — **폭을 항상 잡는다**(원장 2026-08-28 *"영역 구분해서 열 정렬되서
@@ -381,7 +396,10 @@ function TeacherGroupFlow({
                                   ? "border-line-strong text-foreground"
                                   : "border-line text-text-faint"
                             }`}
-                            title={`Shouting 체크 ${shoutCount}/${card.totalSlots}교시 (이번 주)`}
+                            title={sheetTf(lang, "landing.shouting.title", {
+                              n: String(shoutCount),
+                              total: String(card.totalSlots),
+                            })}
                           >
                             {shoutCount}/{card.totalSlots}
                           </span>
@@ -390,7 +408,7 @@ function TeacherGroupFlow({
                     ) : null}
                     {idle ? (
                       <span className="text-text-dim w-11 shrink-0 text-right text-xs" title={idleTitle}>
-                        {holidayOnly ? "휴" : "—"}
+                        {holidayOnly ? sheetT(lang, "landing.holidayMark") : "—"}
                       </span>
                     ) : (
                       <span className="num text-foreground w-11 shrink-0 text-right text-xs font-bold">

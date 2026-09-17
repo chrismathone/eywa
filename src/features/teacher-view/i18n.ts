@@ -279,6 +279,31 @@ export const SHEET_DICT = {
   //    `whitespace-nowrap` 제목이 왼쪽으로 흘러 옆 제목과 겹친다.
   "landing.col.shouting": { ko: "샤우팅", en: "Shouting" },
   "landing.col.rate": { ko: "주간 작성률", en: "Weekly fill" },
+  "landing.shouting.title": {
+    ko: "샤우팅 {n}/{total}교시 (이번 주)",
+    en: "Shouting {n}/{total} this week",
+  },
+  "landing.shouting.sr": { ko: "샤우팅 {n}/{total}교시", en: "Shouting {n}/{total}" },
+  "landing.group.nClasses": { ko: "{n}반", en: "{n} cls" },
+  "landing.idle.holiday": {
+    ko: "이 주 수업일이 모두 휴일입니다 — 쓸 교시가 없습니다(수업했다면 계획을 그대로 쓰실 수 있습니다)",
+    en: "Every class day this week is a holiday — nothing to fill (you can still write if you taught)",
+  },
+  "landing.idle.none": {
+    ko: "이 주에 배정된 교시가 없습니다",
+    en: "No periods assigned this week",
+  },
+  "landing.sr.delegated": { ko: "위임 받은 반", en: "Delegated class" },
+  "landing.sr.homeroom": { ko: "담임 {name}", en: "Homeroom {name}" },
+  "landing.sr.unassigned": { ko: "미지정", en: "No homeroom" },
+  "landing.sr.fill": { ko: "작성 교시 {done}/{total}", en: "Filled {done}/{total}" },
+  "landing.orphan.chip": { ko: "시간변경", en: "Moved" },
+  "landing.orphan.title": {
+    ko: "시간표가 바뀌어 지금 시간표에 없는 기록 {n}건",
+    en: "{n} records no longer on the timetable",
+  },
+  "landing.holidayMark": { ko: "휴", en: "Hol" },
+  "landing.rename.note": { ko: "{date}부터 {from} → {to}", en: "From {date}: {from} → {to}" },
   // 행 끝 '달력' 진입로의 접근성 이름 — 🔴 **문장 전체**를 사전에 둔다(조각 `이름 + "달력 열기"`로
   //    이으면 영어 어순이 무너진다). 여는 면이 EiE(월간 계획서)든 인재원 영어(달력)든 사람에게는 '이 반의
   //    달력'이라 이름은 하나다.
@@ -712,19 +737,19 @@ export const SHEET_DICT = {
   },
   "month.print": { ko: "인쇄", en: "Print" },
 
-  // ── 교재 깔기(0266a·0268a) — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 쭈루룩 깔린다.
+  // ── 교재 배정(0266a·0268a) — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 순서대로 들어간다.
   //    🔴 이 화면은 원어민 강사도 연다(담당 슬롯이 있으면 canEdit) — 한국어 리터럴을 파일에 적지 말 것.
-  "fill.open": { ko: "교재 깔기", en: "Fill from book" },
+  "fill.open": { ko: "교재 배정", en: "Assign a textbook" },
   "fill.open.title": {
     ko: "교시를 고르고 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 들어갑니다(빈 칸만 채웁니다)",
     en: "Pick periods and a book — each lesson lands on that time slot, class day by class day (empty cells only)",
   },
-  "fill.title": { ko: "교재 깔기 — {class}", en: "Fill from book — {class}" },
+  "fill.title": { ko: "교재 배정 — {class}", en: "Assign a textbook — {class}" },
   "fill.desc": {
     ko: "교시를 고르고 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 들어갑니다. 연휴는 건너뛰고, 이미 적혀 있는 칸은 그대로 둡니다.",
     en: "Pick periods and a book; each lesson lands on that time slot, class day by class day. Holidays are skipped and cells that already have text are left alone.",
   },
-  "fill.slots": { ko: "교시 — 고른 시각에 쭈루룩 깔립니다", en: "Periods — lessons fill the times you pick" },
+  "fill.slots": { ko: "교시 — 고른 시각에 차수가 들어갑니다", en: "Periods — lessons go into the times you pick" },
   "fill.slots.none": { ko: "이 반에 도는 교시가 없습니다.", en: "This class has no periods running." },
   // ⚠️ `Book`은 `month.goal.book`(교재명)이 이미 쓴다 — 같은 영어로 뭉치면 두 칸이 구분이 안 된다.
   "fill.book": { ko: "교재", en: "Textbook" },
@@ -754,6 +779,11 @@ export const SHEET_DICT = {
   "fill.applyN": { ko: "{n}칸 기입", en: "Fill {n} cells" },
   "fill.loading": { ko: "불러오는 중…", en: "Loading…" },
   "fill.count": { ko: "기입", en: "To fill" },
+  "fill.noProgress": { ko: "진도 아직 없음", en: "Progress not set yet" },
+  "fill.noProgress.title": {
+    ko: "그 차수엔 교재·페이지/시간만 들어갑니다 — 진도·과제는 나중에 시트에서 적으면 됩니다.",
+    en: "Those lessons get the book and page/time only — progress and homework can be written later in the sheet.",
+  },
   "fill.holidaySkipped": { ko: "휴일 건너뜀", en: "Holidays skipped" },
   "fill.unplaced": { ko: "자리 없음", en: "No slot left" },
   "fill.unit.cells": { ko: "{n}칸", en: "{n} cells" },
@@ -771,11 +801,6 @@ export const SHEET_DICT = {
   "fill.out.fill.title": { ko: "이미 있는 줄의 비어 있는 칸만 채웁니다", en: "Only the empty cells of an existing row" },
   "fill.out.filled": { ko: "그대로 둠", en: "Left as is" },
   "fill.out.filled.title": { ko: "이미 적혀 있어 손대지 않습니다", en: "Already written — untouched" },
-  "fill.out.empty": { ko: "차수 비어 있음", en: "Lesson is empty" },
-  "fill.out.empty.title": {
-    ko: "그 차수에 진도·과제가 없어 기입하지 않습니다 — 교재목록에서 먼저 적어 주세요",
-    en: "That lesson has no progress or homework yet — fill it in the book first",
-  },
   "fill.out.full": { ko: "줄이 가득 참", en: "Rows are full" },
   "fill.out.full.title": { ko: "그 교시에 계획 줄이 이미 20개입니다", en: "That period already has 20 plan rows" },
   "fill.out.past": { ko: "지난 날짜", en: "Past date" },
@@ -1015,6 +1040,37 @@ export const SHEET_DICT = {
     en: "Click to remove from the makeup list (the attendance record is deleted)",
   },
   "att.makeup.removeAria": { ko: "{name} 보강 취소", en: "Cancel makeup for {name}" },
+  "att.makeup.removeConfirm": {
+    ko: "{name} 보강을 명단에서 뺄까요? 출석 기록이 삭제됩니다.",
+    en: "Remove {name} from the makeup list? The attendance record will be deleted.",
+  },
+  "att.tip.reason": { ko: "사유", en: "Reason" },
+  "att.lock.statusFrozen": {
+    ko: "수정 기간이 지나 상태는 못 바꿉니다 — 사유는 언제든 고칠 수 있습니다",
+    en: "The status is locked after the edit window — the reason can still be changed anytime",
+  },
+  "att.clear.hasNote": {
+    ko: "사유가 적힌 기록은 출석부에서 지워 주세요(사유·시수가 함께 지워집니다)",
+    en: "Clear records that have a reason in the attendance book (reason and units are cleared together)",
+  },
+  "att.note.lateAbsentOnly": {
+    ko: "사유는 지각·결석에만 적을 수 있습니다",
+    en: "A reason can only be added for late or absent",
+  },
+  "att.cycle.aria": { ko: "{name} 출결 — {value}", en: "{name} attendance — {value}" },
+  "att.cycle.none": { ko: "선택 안 함", en: "Not set" },
+  "att.cycle.tipClick": {
+    ko: "클릭: 출석 → 결석 → 지각 → 선택 안 함",
+    en: "Click: Present → Absent → Late → Not set",
+  },
+  "att.cycle.tipNote": {
+    ko: "지각·결석을 고르면 시간·사유 칸이 열립니다(안 적어도 됩니다)",
+    en: "Choosing late or absent opens a time/reason box (optional)",
+  },
+  "att.cycle.tipContext": {
+    ko: "우클릭: 상태는 그대로 두고 사유만",
+    en: "Right-click: keep the status, edit the reason only",
+  },
   "att.pill.editNote": {
     ko: "{label} — 사유 메모 수정(기록 지우기는 출석부에서)",
     en: "{label} — edit the reason note (clear the record in the attendance book)",
@@ -1063,8 +1119,18 @@ export const SHEET_DICT = {
     en: "or add a row in the weekly sheet",
   },
   "plan.shouting.title": {
-    ko: "이 교시에 Shouting을 했으면 체크하세요",
+    ko: "이 교시에 샤우팅을 했으면 체크하세요",
     en: "Tick this if you did Shouting in this period",
+  },
+  "plan.editor.noLines": { ko: "계획 줄이 아직 없습니다", en: "No plan rows yet" },
+  "plan.editor.gone": {
+    ko: "다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요",
+    en: "Someone else deleted this row — refresh to see the latest",
+  },
+  "slot.orphan": { ko: "시간 변경됨", en: "Schedule changed" },
+  "slot.orphan.title": {
+    ko: "시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시",
+    en: "This time is no longer on the timetable — shown so the record is not lost",
   },
   /** 입력칸 접근성 이름 — `{class} {field}`(반 이름 + 칸 이름). */
   "plan.editor.cellAria": { ko: "{class} {field}", en: "{class} {field}" },
@@ -1337,6 +1403,8 @@ export const SHEET_DICT = {
   // ── 월별 출석부 격자(열 머리·도움말·범례·합계) ──────────────────
   "att.col.name": { ko: "이름", en: "Name" },
   "att.col.schoolGrade": { ko: "학교·학년", en: "School · grade" },
+  // ⚠️ `Billed`는 `att.col.billed`(그 학생의 이 달 청구서 총액)가 이미 쓴다 — 이쪽은 **이 반 몫**이라
+  //    같은 영어로 뭉치면 눌러 보기 전엔 두 열을 구분할 수 없다(`lang-wiring.test.ts` 가드).
   "att.col.classBilled": { ko: "청구액", en: "Class billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",

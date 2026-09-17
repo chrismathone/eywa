@@ -84,7 +84,7 @@ export function TodayAttendancePills({
           title={t("att.makeup.removeTitle")}
           aria-label={tf("att.makeup.removeAria", { name: studentName })}
           onClick={() => {
-            if (!window.confirm(`${studentName} 보강을 명단에서 뺄까요? 출석 기록이 삭제됩니다.`)) return;
+            if (!window.confirm(tf("att.makeup.removeConfirm", { name: studentName }))) return;
             onRemoveMakeup();
           }}
         >

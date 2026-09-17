@@ -19,7 +19,6 @@ export type TextbookRow = {
   pageTime: string | null;
   sessionCount: number;
   coverPath: string | null;
-  isActive: boolean;
   updatedAt: string;
 };
 
@@ -82,11 +81,10 @@ export type ApplyPreviewRow = {
    * 이 칸이 어떻게 처리될지.
    * · `add` = 새 줄이 선다 · `fill` = 이미 있는 줄의 빈 칸을 채운다
    * · `skip-filled` = 이미 다 적혀 있어 손대지 않는다(덮어쓰기 없음)
-   * · `skip-empty-lesson` = 그 차수에 진도·과제가 없어 기입하지 않는다
    * · `skip-full` = 그 교시가 이미 20줄이라 새 줄을 못 세운다
    * · `skip-past` = 이미 지난 날짜라 기입하지 않는다(차수 번호는 밀지 않는다)
    */
-  outcome: "add" | "fill" | "skip-filled" | "skip-empty-lesson" | "skip-full" | "skip-past";
+  outcome: "add" | "fill" | "skip-filled" | "skip-full" | "skip-past";
 };
 
 export type ApplyPreview = {

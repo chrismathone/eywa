@@ -247,14 +247,11 @@ export function SheetClient({
   useEffect(() => {
     store.setCallbacks({
       onError: (m) => toast.error(m),
-      onGone: () =>
-        toast.info(
-          "다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요",
-        ),
+      onGone: () => toast.info(t("plan.editor.gone")),
       // 계획 칸(교재·진도·과제…) 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다(원장 결정 2026-09-14 범위 확대).
       onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [audit, classId, store]);
+  }, [audit, classId, store, t]);
 
   // presence — 팀티칭 동시편집은 정상(중립 톤). 충돌 방지는 CAS가 담당.
   useEditPresence(ecsPresenceScope(classId, weekMonday), canEdit);
