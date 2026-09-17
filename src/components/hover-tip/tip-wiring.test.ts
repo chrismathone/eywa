@@ -31,7 +31,7 @@ const CARD_SURFACES: [string, string][] = [
   ["app/(shell)/timetable/_components/reserved-section.tsx", "reservationTipRows(r)"],
   ["app/(shell)/timetable/_components/rich-card-group.tsx", "tipProps(lab.note)"],
   ["app/(shell)/timetable/_components/teacher-chip.tsx", "tipProps(offAxisNote)"],
-  ["features/class-sheets/components/attendance-check.tsx", '"사유", note'],
+  ["features/class-sheets/components/attendance-check.tsx", 'att.tip.reason"), note'],
   ["app/(shell)/billing/_components/billing-table.tsx", "tipProps(r.notes)"],
   ["app/(shell)/classes/page.tsx", "tipProps(c.notes)"],
   ["app/(shell)/inventory/_components/asset-columns.tsx", "tipProps(a.note)"],
