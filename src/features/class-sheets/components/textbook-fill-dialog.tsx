@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -135,8 +135,9 @@ export function TextbookFillDialog({
     setPreview(null);
   }
 
-  async function onPreview() {
-    if (busy) return;
+  const canPreview = picked.size > 0 && !!bookId && !!startDate;
+
+  const runPreview = useCallback(async () => {
     const token = ++gen.current;
     setBusy(true);
     setError(null);
@@ -161,9 +162,25 @@ export function TextbookFillDialog({
     } catch (e) {
       if (token === gen.current) setError(e instanceof Error ? e.message : t("fill.err.generic"));
     } finally {
+      // ⚠️ **조건 없이 푼다** — `token === gen.current`일 때만 풀면, 입력을 바꿔 계산이 취소된 뒤
+      //    (교시를 모두 해제해) 새 계산이 안 도는 경우 busy가 영영 true로 남아 **닫기 버튼까지 잠긴다**.
+      //    겹친 요청 사이의 '계산 중…' 표시는 아래 `calculating`이 파생값으로 메운다.
       setBusy(false);
     }
-  }
+  }, [classId, bookId, picked, pace, termMode, startDate, startLessonNo, t]);
+
+  /**
+   * 🔴 **미리보기는 스스로 돈다** — 원장 제보 2026-09-17(*"기입자체가안됌"*, 교시·교재를 바꿔 가며 세 번).
+   *    그전엔 [미리보기]를 눌러야 [기입]이 열려서, 다 골라 놓고도 버튼이 회색이라 **고장난 것으로 읽혔다**
+   *    (실제로 기입 감사로그가 0건이었다). 버튼 하나를 더 누르게 하는 설계가 곧 "안 된다"였다.
+   * 🔑 입력이 갖춰지면(교시 ≥1 · 교재 · 시작일) 220ms 뒤에 계산한다 — 타자·드롭다운 연타 중에는 마지막 것만
+   *    나간다. 늦게 도착한 응답은 위 요청 토큰이 버린다.
+   */
+  useEffect(() => {
+    if (!canPreview) return;
+    const timer = setTimeout(() => void runPreview(), 220);
+    return () => clearTimeout(timer);
+  }, [canPreview, runPreview]);
 
   async function onApply() {
     if (busy || !preview) return;
@@ -209,7 +226,13 @@ export function TextbookFillDialog({
   const noProgress = rows.filter(
     (r) => (r.outcome === "add" || r.outcome === "fill") && !r.progress && !r.homework,
   ).length;
-  const canPreview = picked.size > 0 && !!bookId && !!startDate;
+  /**
+   * 지금 계산 중인가 — **파생값**이다. `busy`만 보면 디바운스(220ms)와 요청 사이의 빈틈에 '계산 중…'이
+   * 깜빡인다. "고를 건 다 골랐는데 아직 결과도 오류도 없다" = 계산이 돌고 있거나 곧 돈다.
+   */
+  const calculating = busy || (canPreview && !preview && !error);
+  /** 계산은 끝났는데 쓸 칸이 하나도 없다 — 회색 버튼만 두면 또 "안 된다"가 된다. 이유를 적는다. */
+  const nothingToWrite = Boolean(preview) && willWrite === 0;
 
   return (
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
@@ -413,13 +436,19 @@ export function TextbookFillDialog({
                 </>
               ) : null}
 
+              {/* 🔴 [미리보기] 버튼은 없앴다 — 미리보기는 스스로 돈다(위 effect). 남은 버튼은 [기입] 하나다. */}
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="outline" disabled={busy || !canPreview} onClick={() => void onPreview()}>
-                  {busy && !preview ? t("fill.preview.busy") : t("fill.preview")}
-                </Button>
                 <Button type="button" disabled={busy || !preview || willWrite === 0} onClick={() => void onApply()}>
                   {preview ? tf("fill.applyN", { n: willWrite }) : t("fill.apply")}
                 </Button>
+                {/* 버튼이 회색인 **이유**를 옆에 적는다 — 이유 없는 회색 버튼이 곧 "기입이 안 된다"였다. */}
+                {calculating ? (
+                  <span className="text-text-dim text-xs">{t("fill.preview.busy")}</span>
+                ) : !canPreview ? (
+                  <span className="text-text-dim text-xs">{t("fill.need")}</span>
+                ) : nothingToWrite ? (
+                  <span className="text-text-dim text-xs">{t("fill.none")}</span>
+                ) : null}
                 <Button type="button" variant="ghost" className="ml-auto" disabled={busy} onClick={onClose}>
                   {t("popup.close")}
                 </Button>
