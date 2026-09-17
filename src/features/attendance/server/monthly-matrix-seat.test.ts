@@ -173,10 +173,10 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     expect(m.slots[h.S1]?.[D], "자리 교시가 칸 값에 섞였다").toBeUndefined();
     expect(m.ghosts[h.S1]?.[D]).toBeUndefined();
     expect(m.notes[h.S1]?.[D], "제 메모보다 남의 교시 메모가 앞섰다").toBe("내 메모");
-    expect(m.noOwnRecord?.[h.S1]?.[D]).toBeUndefined();
   });
 
-  it("🔴 수업하는 날인데 제 교시 기록이 없고 남의 기록만 → 값·메모 없이 noOwnRecord(입력 막기)만", async () => {
+  // ⚠️ 2026-09-17 같은 날 원장 *"내 출석부 상에서 자유롭게 숫자 설정만 하는거야"* — 이 칸은 막지 않는다(입력 막기 표식 폐기).
+  it("🔴 수업하는 날인데 제 교시 기록이 없고 남의 기록만 → 값·메모 없는 빈칸(입력 막기 표식도 없다)", async () => {
     h.state.schedules = [...SCHEDULES, THU_HOMEROOM];
     h.state.records = [
       rec("r-1520", "15:20:00", { status: "absent", note: "병결" }),
@@ -185,7 +185,7 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     const m = await matrixForCharlie();
     expect(m.marks[h.S1]?.[D]).toBeUndefined();
     expect(m.notes[h.S1]?.[D]).toBeUndefined();
-    expect(m.noOwnRecord?.[h.S1]?.[D]).toBe(true);
+    expect(m).not.toHaveProperty("noOwnRecord");
     expect(m.ghostValues?.[h.S1]?.[D]).toBeUndefined();
   });
 
@@ -196,7 +196,6 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     expect(charlie.ownDates).not.toContain(WED);
     expect(charlie.marks[h.S1]?.[WED]).toBeUndefined();
     expect(charlie.notes[h.S1]?.[WED]).toBeUndefined();
-    expect(charlie.noOwnRecord?.[h.S1]?.[WED]).toBeUndefined();
     const homeroom = await matrixForHomeroom();
     expect(homeroom.ownDates).toContain(WED);
     expect(homeroom.marks[h.S1]?.[WED]).toBe("present");
@@ -231,13 +230,12 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     expect((await matrixForHomeroom()).reservations?.[h.S1]?.[WED]).toBeDefined();
   });
 
-  it("담임이 되기 전 날은 그리지 않는다(값도 입력 막기 표식도 없다)", async () => {
+  it("담임이 되기 전 날은 그리지 않는다(값도 없다)", async () => {
     h.state.schedules = [{ ...THU_HOMEROOM, teacher_id: null }];
     h.state.records = [rec("r-1520", "15:20:00")];
     const m = await matrixForHomeroom("2026-09-11");
     expect(m.ownDates).not.toContain(D);
     expect(m.marks[h.S1]?.[D]).toBeUndefined();
-    expect(m.noOwnRecord?.[h.S1]?.[D]).toBeUndefined();
   });
 
   it("🔴 칸 메모 — `대신 입력` 줄뿐인 메모는 사유가 적힌 메모에 자리를 내준다(같은 시각 여러 행, 적대 리뷰 2026-09-14)", async () => {
@@ -295,7 +293,6 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     h.state.records = [rec("r-1720", "17:20:00"), rec("r-jj", "16:20:00", { recorded_via: "seat" })];
     const m = await getMonthlyAttendanceMatrix("2026-09", h.CLASS, "month", null);
     expect(m.ownDates).toBeUndefined();
-    expect(m.noOwnRecord).toBeUndefined();
     expect(m.marks[h.S1]?.[D]).toBe("present");
     expect(m.slots[h.S1]?.[D]?.length).toBe(2);
   });

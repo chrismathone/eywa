@@ -398,6 +398,53 @@ export function teachesClassOn(input: {
   return false;
 }
 
+/**
+ * 강사 출석부 칸에 **제 몫 기록이 하나도 없을 때 새로 만들 교시** — 그날 교시를 다른 선생님·자리(JJ·랩실)와 **함께 도는 날**이면
+ * 그 강사가 맡은 교시 시각들(오름차순), 아니면 null(= 종전대로 교시 없는 "그날 전체" 한 행).
+ *
+ * 🔴 원장 2026-09-17 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건 아니지. 그냥 내 출석부 상에서 자유롭게 숫자 설정만
+ *    하는거야."* — 나눠 맡는 날에 "그날 전체" 행을 만들면, 교시 없는 행은 그날 수업하는 **모든** 강사의 몫으로 읽혀
+ *    (`ownsAttendanceSlot`의 `!slotStart → true`) 다른 선생님 출석부에도 같은 숫자가 선다. 그래서 그날만 제 교시 행으로 만든다.
+ * 🔴 **자리(JJ·랩실) 교시와 함께 도는 날도 제 교시 행**이다(적대 리뷰 2026-09-17) — JJ 문 저장은 그날 전체 행을 JJ 교시와 **함께
+ *    갱신**하는 규약이라(`pickSaveTargets` ② · 자리 출석부 비급여 갈래) 그 행의 상태·입력자가 자리 문(`recorded_via='seat'`)으로
+ *    덮여 강사 출석부에서 사라진다. 실측(2026-09 유효 교시): 자리 교시가 있는 반-요일 105개는 **전부 영어**, 수학 0.
+ * ⚠️ 혼자 맡는 날(수학 담임 전부)은 null — 종전 그대로다(수학 자동 시수는 그 행에만 붙는다).
+ * ⚠️ 담당이 **모호한** 교시(한 교시에 담당 둘)도 남의 교시로 센다 — 그날 전체 행이면 그 둘에게도 읽힌다.
+ *    담당도 담임도 없는 교시(`none`)는 아무의 출석부에도 안 서므로 나눠 맡는 것으로 치지 않는다.
+ */
+export function ownInsertSlotStarts(input: {
+  scopeTeacherId: string;
+  homeroomTeacherId: string | null;
+  slots: readonly AxisSlot[];
+  date: string;
+}): string[] | null {
+  const dow = axisDowOf(input.date);
+  if (!dow) return null;
+  const starts = new Set<string>();
+  let shared = false;
+  for (const s of input.slots) {
+    if (s.dayOfWeek !== dow || !slotLiveOn(s, input.date)) continue;
+    if (isSeatSlot(s)) {
+      shared = true;
+      continue;
+    }
+    const start = normalizeAxisTime(s.startTime);
+    if (start) starts.add(start);
+  }
+  const own: string[] = [];
+  for (const start of [...starts].sort()) {
+    const who = resolveTaughtBy({
+      homeroomTeacherId: input.homeroomTeacherId,
+      slots: input.slots,
+      date: input.date,
+      slotStart: start,
+    });
+    if (who.teacherId === input.scopeTeacherId) own.push(start);
+    else if (who.teacherId !== null || who.source === "ambiguous") shared = true;
+  }
+  return shared && own.length > 0 ? own : null;
+}
+
 /** 강사 렌즈에서 교시 한 칸의 몫 — 이 표의 주인 · 자리(JJ·랩실) · 그 밖(다른 선생님 교시 등). */
 export type AttendanceSlotShare = "mine" | "seat" | "other";
 

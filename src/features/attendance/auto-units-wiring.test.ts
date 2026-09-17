@@ -120,7 +120,8 @@ describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 �
     const body = fnBody(ACTIONS, "setAttendanceCell");
     const insertAt = body.indexOf("insertWithVia(supabase, row)");
     expect(insertAt).toBeGreaterThan(-1);
-    const updateStart = body.indexOf("if (updateIds.length > 0 || promoteIds.length > 0) {");
+    // 갱신 분기 머리 — 2026-09-17부터 `overwrote`(제 행을 새로 만드는 강사 보기 칸 `createOwn`은 갱신이 아니다).
+    const updateStart = body.indexOf("if (overwrote) {");
     expect(updateStart).toBeGreaterThan(-1);
     const outerElse = body.lastIndexOf("} else {", insertAt);
     expect(outerElse).toBeGreaterThan(updateStart);
@@ -152,7 +153,8 @@ describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 �
     const updates = between(body, "if (updateIds.length > 0) {", "const rangeWantsAuto =");
     expect(updates).not.toContain("rangeAuto");
     expect(updates).not.toContain("rangeUnitsOf");
-    expect(body).toContain("session_units: rangeUnitsOf(c).units,");
+    // 새 칸의 그날 전체 행 — 강사 보기가 나눠 맡는 날 제 교시로 만드는 행(2026-09-17)은 자동값을 안 받는다(영어).
+    expect(body).toContain("insertRows.push(withVia({ ...base, session_units: rangeUnitsOf(c).units }, via));");
   });
 
   it("일별 폼: 갱신(updates) 루프엔 없고 새 행(inserts)에만", () => {

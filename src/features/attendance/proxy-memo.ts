@@ -38,6 +38,18 @@ export function noteTargetRow<T extends { note?: string | null }>(
   return pick(rows.filter(mine)) ?? pick(rows.filter((r) => !mine(r))) ?? rows[0];
 }
 
+/**
+ * 메모만 저장이 **함께 고칠 행** — 고른 행(`noteTargetRow`)과 **같은 메모 글자**를 가진 행 전부(고른 행 포함, 받은 순서).
+ * 🔴 칸 저장은 메모를 그날 대상 행 전부에 단다(제 교시 행을 새로 만들 때도 — 원장 2026-09-17). 메모만 저장이 한 행만 고치면
+ *    나머지 행의 옛 메모가 남아 새로고침 뒤 칸에 되살아나고(조회는 메모 있는 행을 집는다) 교시별 화면(ECS)엔 옛 사유가 뜬다
+ *    (적대 재리뷰 2026-09-17). 메모가 비어 있는 행끼리는 묶지 않는다 — 그건 "같은 사유"가 아니다(종전대로 고른 한 행).
+ */
+export function sameNoteRows<T extends { id: string; note?: string | null }>(rows: readonly T[], chosen: T | undefined): T[] {
+  if (!chosen) return [];
+  if (!chosen.note) return [chosen];
+  return rows.filter((r) => r.note === chosen.note);
+}
+
 /** 메모에서 `대신 입력` 줄을 뺀 나머지(= 사유) — 남는 게 없으면 "". 줄 순서·나머지 줄은 그대로. */
 export function stripProxyMemo(note: string | null | undefined): string {
   return (note ?? "")

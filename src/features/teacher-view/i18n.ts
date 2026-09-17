@@ -1253,6 +1253,11 @@ export const SHEET_DICT = {
     ko: "만 셉니다. 같은 반이라도 이 선생님이 수업하지 않는 날·다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체 숫자는 ",
     en: ". Even in the same class, days this teacher doesn't teach, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use ",
   },
+  // 강사 계정용 — 그 계정은 반별 보기도 같은 렌즈라(원장 2026-09-17) "반 전체는 반별 보기에서"를 말하지 않는다.
+  "att.notice.scope.cOwn": {
+    ko: "만 셉니다. 같은 반이라도 이 선생님이 수업하지 않는 날·다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 여기서 고쳐도 다른 선생님 기록은 바뀌지 않습니다.",
+    en: ". Even in the same class, days this teacher doesn't teach, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records.",
+  },
   "att.notice.scope.d": { ko: "반별 보기", en: "the class view" },
   "att.notice.scope.e": { ko: "에서 봅니다.", en: " instead." },
   "att.notice.empty.teacherPre": { ko: "담당 반에 아직 ", en: "Among your classes, " },
@@ -1314,6 +1319,10 @@ export const SHEET_DICT = {
   "att.scopeChip.title": {
     ko: "이 선생님이 수업하는 날과 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체는 반별 보기에서 봅니다.",
     en: "Only the days this teacher teaches and the periods they take are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use the class view.",
+  },
+  "att.scopeChip.titleOwn": {
+    ko: "이 선생님이 수업하는 날과 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고, 여기서 고쳐도 바뀌지 않습니다.",
+    en: "Only the days this teacher teaches and the periods they take are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden, and editing here never changes them.",
   },
   "att.scopeChip": { ko: "칸 = 이 선생님 교시", en: "Cells = this teacher's periods" },
   "att.notices": { ko: "안내 {n}", en: "Notes {n}" },
@@ -1509,12 +1518,6 @@ export const SHEET_DICT = {
   "att.lock.notOwnDay": {
     ko: "이 선생님이 이 반을 수업하지 않는 날이라 선생님 출석부에서는 비워 둡니다 — 반 전체는 반별 보기에서 봅니다",
     en: "This teacher doesn't teach this class on this day, so it stays empty in the teacher's register — see the class view for the whole class",
-  },
-  // 🔴 수업하는 날인데 선생님 교시 기록은 없고 다른 기록(다른 선생님 교시·JJ·랩실)만 있는 칸(원장 2026-09-17 *"내가 수업한
-  //    학생의 출석만"* — 그 기록은 안 보여 준다). 여기서 입력하면 선생님 교시에 기록이 생기지 않아 막는다.
-  "att.lock.noOwnRecord": {
-    ko: "이 날 선생님 교시에 찍힌 출결이 없어 여기서는 입력하지 않습니다 — 교시별 출결 화면(영어는 영어 강사 시트)에서 입력해 주세요",
-    en: "Nothing is recorded for your period on this day, so it can't be entered here — enter it on the per-period screen (the English teacher sheet for English)",
   },
   // 🔴 자리(JJ·랩실) 기록뿐인 칸 — 강사 보기는 그 행을 안 쓴다(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지"*).
   "att.lock.seatOnly": {

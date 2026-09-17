@@ -375,6 +375,15 @@ export default async function AttendancePage({
   );
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
   /**
+   * 강사 계정의 **반별 보기**도 그 강사 출석부다(원장 2026-09-17 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건
+   * 아니지. 그냥 내 출석부 상에서 자유롭게 숫자 설정만 하는거야."*) — 반 하나를 골라도 강사 전체 보기와 **같은 렌즈**
+   * (그 강사가 수업하는 날·맡은 교시만)로 그리고, 저장도 같은 판정을 지난다(`attendanceScope`). 그전엔 반별 보기로 바꾸면
+   * 날짜·교시 잠금이 없어 남의 교시 기록(ECS 입력 포함)을 그날 칸 저장으로 덮을 수 있었다.
+   * ⚠️ 관리자가 강사 드롭다운으로 고른 반별 보기는 해당 없다(`myTeacherId`는 로그인한 강사 본인뿐 — 관리자는 반 전체).
+   */
+  const classScopeTeacher =
+    mode === "class" && myTeacherId && selectedClass && classTaughtBy(selectedClass, myTeacherId) ? myTeacherId : null;
+  /**
    * **담임이 되기 전 기록**을 그 강사 표에서 뺀다(원장 제보 2026-08-19: *"김주현 선생님이 출결한것도
    * 아닌데 보이는것도 같이 수정해야겠네."*). `classes.teacher_id`는 현재 담임이라 시간 축이 없어서,
    * 인계(8/10·8/14) 이전에 **전임이 넣은** 기록까지 새 담임 출석부에 잡혔다.
@@ -384,7 +393,8 @@ export default async function AttendancePage({
    * 🔴 근거(인수인계·담임 변경 감사로그)가 없으면 `null` → **아무것도 숨기지 않는다**(폴백이 안전벨트).
    * ⚠️ 반별 보기·급여 별지에는 넘기지 않는다 — 반 관점에선 그 기록이 맞고, 돈 축은 담임 그대로다.
    */
-  const homeroomSinceIdx = mode === "teacher" && effectiveTeacher ? await getHomeroomSinceIndex() : null;
+  const homeroomSinceIdx =
+    (mode === "teacher" && effectiveTeacher) || classScopeTeacher ? await getHomeroomSinceIndex() : null;
   const sinceByClass = new Map<string, string | null>(
     teacherClasses.map((c) => [
       c.id,
@@ -441,7 +451,16 @@ export default async function AttendancePage({
     mode === "teacher"
       ? teacherMatrices[0] ?? base
       : effectiveClassId
-        ? await getMonthlyAttendanceMatrix(month, effectiveClassId, viewPrefs.periodMode)
+        ? await getMonthlyAttendanceMatrix(
+            month,
+            effectiveClassId,
+            viewPrefs.periodMode,
+            // 강사 계정이면 그 강사 렌즈(`classScopeTeacher`) — 담임 폴백 반은 담임이 되기 전 날을 뺀다(강사 전체 보기와 같은 규칙).
+            classScopeTeacher,
+            classScopeTeacher && homeroomSinceIdx && teacherRoles.get(effectiveClassId) === "homeroom"
+              ? homeroomSinceOf(homeroomSinceIdx, effectiveClassId, classScopeTeacher)
+              : null,
+          )
         : base;
 
   /**
@@ -659,7 +678,9 @@ export default async function AttendancePage({
   const attendanceScope =
     mode === "teacher" && effectiveTeacher
       ? { teacherId: effectiveTeacher, classIds: teacherClasses.map((c) => c.id) }
-      : null;
+      : classScopeTeacher && effectiveClassId
+        ? { teacherId: classScopeTeacher, classIds: [effectiveClassId] }
+        : null;
 
   /**
    * 학생 검색(원장 2026-08-19)이 볼 재료 — **화면에 이미 그려진 값만**(이름·학교·학년 + 붙여 쓴 압축 표기).
@@ -707,13 +728,20 @@ export default async function AttendancePage({
           ) : null,
           // 🔴 같은 반이 반별 보기와 강사 전체 보기에서 **다른 숫자**를 낸다 — 그 사실을 화면이 먼저
           //    말해야 한다(조용히 다르면 "출결이 사라졌다"로 읽힌다). 근거는 교시 귀속(resolveTaughtBy).
-          mode === "teacher" ? (
+          mode === "teacher" || classScopeTeacher ? (
             <p key="scope" className={noticeClass}>
               {sheetT(lang, "att.notice.scope.a")}
               <strong className="text-foreground">{sheetT(lang, "att.notice.scope.b")}</strong>
-              {sheetT(lang, "att.notice.scope.c")}
-              <strong className="text-foreground">{sheetT(lang, "att.notice.scope.d")}</strong>
-              {sheetT(lang, "att.notice.scope.e")}
+              {/* 강사 계정엔 "반 전체는 반별 보기에서"가 거짓이다 — 그 계정의 반별 보기도 같은 렌즈다(`classScopeTeacher`). */}
+              {isTeacherView ? (
+                sheetT(lang, "att.notice.scope.cOwn")
+              ) : (
+                <>
+                  {sheetT(lang, "att.notice.scope.c")}
+                  <strong className="text-foreground">{sheetT(lang, "att.notice.scope.d")}</strong>
+                  {sheetT(lang, "att.notice.scope.e")}
+                </>
+              )}
             </p>
           ) : null,
           // 기록이 하나도 없는 화면은 **왜 비어 있는지**를 말해야 한다 — 빈 표 + "—"만 두면 고장으로 읽힌다.
@@ -961,10 +989,10 @@ export default async function AttendancePage({
               (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
               ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. 아래 '안내'는 `<details>`라
               기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
-          {mode === "teacher" && allGroups.length > 0 ? (
+          {(mode === "teacher" || classScopeTeacher) && allGroups.length > 0 ? (
             <span
               className="border-line text-text-dim shrink-0 rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap"
-              title={sheetT(lang, "att.scopeChip.title")}
+              title={sheetT(lang, isTeacherView ? "att.scopeChip.titleOwn" : "att.scopeChip.title")}
             >
               {sheetT(lang, "att.scopeChip")}
             </span>

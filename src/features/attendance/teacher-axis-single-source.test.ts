@@ -88,11 +88,24 @@ describe("출결 강사 귀속 축 단일 소스", () => {
       ).toBe(true);
     });
 
-    it("🔴 반별 보기·급여 별지에는 안 넘긴다 — 반 관점에선 그 기록이 맞고 돈 축은 담임 그대로다", () => {
-      // 반별 보기 호출(3인자)에 since가 붙지 않았는지.
+    /**
+     * ⚠️ 2026-09-17 원장 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건 아니지"* — **강사 계정**의 반별 보기는 그 강사
+     *    렌즈다(`classScopeTeacher`, 스코프·담임 시작일을 강사 전체 보기와 같은 규칙으로). 관리자의 반별 보기는 여전히 반 전체다:
+     *    그 렌즈는 로그인한 강사 본인(`myTeacherId`)에게서만 나온다 — 관리자가 강사 드롭다운으로 고른 `effectiveTeacher`가 아니다.
+     */
+    it("🔴 관리자의 반별 보기·급여 별지에는 안 넘긴다 — 반 관점에선 그 기록이 맞고 돈 축은 담임 그대로다", () => {
+      const flat = page.replace(/\s+/g, " ");
       expect(
-        /getMonthlyAttendanceMatrix\(month,\s*effectiveClassId,\s*viewPrefs\.periodMode\)/.test(page),
-        "반별 보기 호출에 담임 시작일이 붙었습니다 — 반의 책은 그 반 전체를 세는 게 맞습니다.",
+        /getMonthlyAttendanceMatrix\( month, effectiveClassId, viewPrefs\.periodMode, (?:\/\/[^\n]*? )?classScopeTeacher, classScopeTeacher && homeroomSinceIdx && teacherRoles\.get\(effectiveClassId\) === "homeroom"/.test(
+          flat,
+        ),
+        "반별 보기 호출의 스코프·담임 시작일이 강사 계정 렌즈(classScopeTeacher)에서만 나와야 합니다 — 관리자의 반별 보기는 반 전체입니다.",
+      ).toBe(true);
+      expect(
+        /const classScopeTeacher = mode === "class" && myTeacherId && selectedClass && classTaughtBy\(selectedClass, myTeacherId\) \? myTeacherId : null;/.test(
+          flat,
+        ),
+        "반별 보기 렌즈가 로그인한 강사 본인이 아닌 값(effectiveTeacher 등)에서 나오면 관리자 반별 보기가 좁아집니다.",
       ).toBe(true);
       const payslip = readFileSync(
         join(process.cwd(), "src", "app", "(print)", "payroll", "[teacherId]", "payslip", "page.tsx"),
