@@ -1337,7 +1337,9 @@ export const SHEET_DICT = {
   // ── 월별 출석부 격자(열 머리·도움말·범례·합계) ──────────────────
   "att.col.name": { ko: "이름", en: "Name" },
   "att.col.schoolGrade": { ko: "학교·학년", en: "School · grade" },
-  "att.col.classBilled": { ko: "청구액", en: "Billed" },
+  // ⚠️ `Billed`는 `att.col.billed`(그 학생의 이 달 청구서 총액)가 이미 쓴다 — 이쪽은 **이 반 몫**이라
+  //    같은 영어로 뭉치면 눌러 보기 전엔 두 열을 구분할 수 없다(`lang-wiring.test.ts` 가드).
+  "att.col.classBilled": { ko: "청구액", en: "Class billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
