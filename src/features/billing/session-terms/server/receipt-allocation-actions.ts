@@ -8,11 +8,12 @@ import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { getSessionTermsView, type SessionTermRow } from "./queries";
 import { receiptLines, type ReceiptLine } from "../receipt-allocation";
-import { fetchAllPaged } from "@/lib/supabase/batch";
 import { enrollmentPeriodLabel } from "../receipt-merge";
 import { monthRange } from "../plan";
+import { suggestReceiptAllocations, type ReceiptSuggestion } from "../receipt-suggestion";
+import { isTuitionReceipt } from "../tuition-receipt";
 
-export type ReceiptAllocationView = { period?: string; lines: ReceiptLine[]; source: unknown; terms: (SessionTermRow & { enrollmentLabel?: string })[] };
+export type ReceiptAllocationView = { period?: string; lines: ReceiptLine[]; source: unknown; suggestions?: ReceiptSuggestion[]; terms: (SessionTermRow & { enrollmentLabel?: string })[] };
 export type ReceiptAllocationInput = { termId: string; lineIndex: number; amount: number; baseAmount: number | null; confirmedAt: string | null };
 
 export async function getReceiptAllocation(invoiceId: string): Promise<{ data?: ReceiptAllocationView; error?: string }> {
@@ -24,14 +25,11 @@ export async function getReceiptAllocation(invoiceId: string): Promise<{ data?: 
   if (!invoice) return { error: "청구서를 찾을 수 없습니다" };
   const range = monthRange(invoice.period);
   if (!range) return { error: "청구월을 확인해 주세요" };
-  const [view, enrollments] = await Promise.all([
-    getSessionTermsView(invoice.period, invoiceId),
-    fetchAllPaged<{ class_id: string; start_date: string; end_date: string | null }>((from, to) => db.from("enrollments")
-      .select("class_id, start_date, end_date").eq("student_id", invoice.student_id).lte("start_date", range.end)
-      .or(`end_date.is.null,end_date.gte.${range.start}`).order("id").range(from, to)),
-  ]);
+  const view = await getSessionTermsView(invoice.period, invoiceId);
+  const enrollments = (view.enrollmentHistory ?? []).filter((e) => e.student_id === invoice.student_id);
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
-  return { data: { period: invoice.period, lines: receiptLines(invoice.line_items).filter((line) => ["", "수업", "tuition", "수강료"].includes(line.kind)), source: invoice.line_items,
+  const lines = receiptLines(invoice.line_items).filter((line) => isTuitionReceipt(line.source));
+  return { data: { period: invoice.period, lines, source: invoice.line_items, suggestions: suggestReceiptAllocations(invoice.period, lines, view.rows, enrollments.filter((e) => !e.on_hold)),
     terms: view.rows.map((term) => ({ ...term, enrollmentLabel: enrollmentPeriodLabel(invoice.period, enrollments.filter((e) => e.class_id === term.classId), today) })) } };
 }
 
@@ -55,6 +53,8 @@ export async function saveReceiptAllocation(invoiceId: string, source: unknown, 
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (!Array.isArray(rows) || rows.length > 500 || rows.some((row) => !Number.isSafeInteger(row.amount) || row.amount < 0 || !Number.isInteger(row.lineIndex) || row.lineIndex < 0)) return { error: "배분금액과 연결 항목을 확인해 주세요" };
+  const eligible = new Set(receiptLines(source).filter((line) => isTuitionReceipt(line.source)).map((line) => line.index));
+  if (rows.some((row) => !eligible.has(row.lineIndex))) return { error: "수업 청구액에만 배분할 수 있습니다" };
   const db = await createClient();
   const { error } = await db.rpc("save_session_receipt_allocations", { p_invoice_id: invoiceId, p_expected_lines: source, p_rows: rows });
   if (error) return { error: error.message };

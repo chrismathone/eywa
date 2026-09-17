@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CalendarClock, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import { scheduledImportLabel } from "@/features/timetable/scheduled-import";
 import { cancelScheduledImport } from "@/features/timetable/server/scheduled-import-actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * 툴바의 **"9/1 시간표 적용 예정"** 배지 (원장 2026-08-28).
@@ -39,6 +40,8 @@ export function ScheduledImportBadge({
     setError(null);
     start(async () => {
       const res = await cancelScheduledImport(effectiveDate);
+      // 일부만 되돌리고 남긴 경우(`reverted` + 안내 문구)도 이미 바뀐 것이 있다 — 회차 확정 창에 알린다.
+      if (res.reverted || !res.error) notifyTermPlansChanged();
       if (res.error) setError(res.error);
       else router.refresh();
     });

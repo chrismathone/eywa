@@ -83,6 +83,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       point: L.parseAmount(r[ci.point]), paid: L.parseAmount(r[ci.paid]), unpaid: L.parseAmount(r[ci.unpaid]),
       method: L.paymentMethod(r[ci.method]), card: L.txt(r[ci.card]), receipt: L.txt(r[ci.receipt]),
       discReason: L.txt(r[ci.discReason]), pdate: L.parseDate(r[ci.pdate]),
+      ...(data.invoiceRefunds && Object.hasOwn(data.invoiceRefunds, r.join("\u0001")) ? { refunds: data.invoiceRefunds[r.join("\u0001")] } : {}),
     });
   }
   console.log("file: invoices.json  lines:", lines.length, "| periods:", [...new Set(lines.map((l) => l.period))].sort().slice(-6));
@@ -125,8 +126,10 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     // 가드가 없으면 lines=[] → scrapedPeriods=[] → 아무것도 upsert 안 하고, 그런데도 아래 recordSync가
     // status='ok' · error=NULL · synced_at=now로 덮어써 **"방금 정상 동기화됨"으로 위장**된다
     // (직전에 남아 있던 '삭제 보류 N건' 경고까지 지워진다). 수납은 돈이라 침묵 실패를 허용하지 않는다.
-    if (lines.length === 0) {
-      const msg = "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
+    if (data.error || lines.length === 0) {
+      const msg = data.error
+        ? `수납 수집 실패 — ${String(data.error).slice(0, 500)}. 이번 실행은 반영하지 않음.`
+        : "스크랩 0행 — makeedu 상세수납 목록을 못 읽었다(세션 만료·URL/셀렉터 변경 의심). 이번 실행은 반영하지 않음.";
       console.error(`✖ ${msg}`);
       if (APPLY) await L.recordSync(sql, tenantId, "invoices", null, "error", msg);
       process.exitCode = 1;
@@ -186,6 +189,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       a.items.push({
         kind: l.gubun, description: l.item, amount: l.total, discount: l.discount, points: l.point,
         paid: l.paid, unpaid: l.unpaid, method: l.method, paidDate: l.pdate, receipt: l.receipt, dueDay: l.dueDay,
+        ...(l.refunds !== undefined ? { refunds: l.refunds } : {}),
       });
       a.kindAmt[l.gubun] = (a.kindAmt[l.gubun] || 0) + l.total;
       if (l.paid > 0 || l.method) {
@@ -233,6 +237,13 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       scrapedLines: lines.length,
     });
     console.log(`외부 대조: ${S.externalSummary(external)}`);
+    if (external.available && !external.ok) {
+      const msg = `${S.externalSummary(external)} — 수납 저장을 중단합니다. 기존 청구·납부 기록은 변경하지 않았습니다.`;
+      console.error(`✖ ${msg}`);
+      if (APPLY && !ONLY_PAIRS) await L.recordSync(sql, tenantId, "invoices", null, "error", msg);
+      process.exitCode = 1;
+      return;
+    }
     // 매칭이 나쁘면 합계가 맞아도 개별 '부재'는 못 믿는다 — 두 조건이 함께 서야 검증이다.
     const unmatchedRatio = lines.length ? unmatchedLines.length / lines.length : 0;
     const scrapeVerified = external.ok && unmatchedRatio <= S.STALE_MAX_UNMATCHED_RATIO && !truncation;

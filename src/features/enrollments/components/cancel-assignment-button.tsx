@@ -5,6 +5,7 @@ import { XCircle } from "@/components/icons/eywa-icon-compat";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { deleteEnrollment } from "../server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * **배정 취소** — 아직 시작도 안 한 배정(예정)을 없던 일로 되돌린다.
@@ -42,6 +43,7 @@ export function CancelAssignmentButton({
     if (state === notified.current) return;
     notified.current = state;
     if (state?.error) conflictToast(state.error);
+    else if (state?.ok) notifyTermPlansChanged();
   }, [state]);
 
   return (

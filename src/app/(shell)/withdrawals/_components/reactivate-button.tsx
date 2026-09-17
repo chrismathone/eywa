@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { Loader2, UserPlus } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { reactivateStudent } from "@/features/withdrawals/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 export function ReactivateButton({ studentId }: { studentId: string }) {
   const [isPending, startTransition] = useTransition();
@@ -13,7 +14,9 @@ export function ReactivateButton({ studentId }: { studentId: string }) {
     const fd = new FormData();
     fd.append("studentId", studentId);
     startTransition(async () => {
-      await reactivateStudent(undefined, fd);
+      const res = await reactivateStudent(undefined, fd);
+      // 재원 복구는 퇴원으로 닫힌 수강을 다시 연다 — 회차 확정의 예정 시수가 바뀐다.
+      if (!res?.error) notifyTermPlansChanged();
     });
   }
 

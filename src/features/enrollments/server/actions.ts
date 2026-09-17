@@ -576,6 +576,7 @@ export async function updateEnrollmentDates(
   revalidatePath("/timetable");
   revalidatePath(`/students/${current.student_id}`);
   revalidatePath(`/classes/${current.class_id}`);
+  revalidatePath("/billing");
   return { ok: true };
 }
 

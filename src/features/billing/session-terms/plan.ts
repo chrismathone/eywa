@@ -3,6 +3,8 @@
 
 import { unitsFromMinutes, isAutoUnitsSubject, type AutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
+import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
+import { fixedHolidaysForYear } from "@/features/billing/tuition-calc";
 
 export type PlanEnrollment = {
   classId: string;
@@ -11,6 +13,7 @@ export type PlanEnrollment = {
   endDate: string | null; // 종료(null=계속)
   weekdays: number[]; // class_schedules 요일(0=일~6=토, 중복 제거)
   attendanceDays?: number[]; // 학생별 선택 요일. 비어 있으면 반 전체 요일.
+  isTransferred?: boolean; // 반 이동 종료일은 출석부와 동일하게 제외한다.
   schedules?: AutoUnitsSchedule[]; // 실제 시간·유효기간. 옛 동결 픽스처는 weekdays만 사용한다.
 };
 
@@ -46,12 +49,14 @@ export function planTermsForMonth(
   const range = monthRange(period);
   if (!range) return [];
 
-  const holidaysSet = new Set(holidays);
+  const year = Number(period.slice(0, 4));
+  const holidaysSet = new Set([...fixedHolidaysForYear(year), ...koreanHolidaysForYear(year).map((h) => h.date), ...holidays]);
   const byClass = new Map<string, { subject: string; dates: Map<string, number> }>();
   for (const e of enrollments) {
     if (e.weekdays.length === 0 && !e.schedules?.length) continue;
     const start = later(e.startDate, range.start);
-    const end = e.endDate ? earlier(e.endDate, range.end) : range.end;
+    const enrollmentEnd = e.endDate && e.isTransferred ? new Date(Date.parse(e.endDate) - 86400000).toISOString().slice(0, 10) : e.endDate;
+    const end = enrollmentEnd ? earlier(enrollmentEnd, range.end) : range.end;
     if (start > end) continue; // 이 달과 안 겹침
     const dates = byClass.get(e.classId)?.dates ?? new Map<string, number>();
     // 수납 계획은 JJ/LAB도 수강 시간이다. 강사 출석 자동값의 자리 제외 규칙과 구분한다.

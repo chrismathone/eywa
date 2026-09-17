@@ -489,6 +489,7 @@ export function TeacherGridView({
                                 <TeacherChip
                                   key={s.id}
                                   slot={{ ...s, classroomName: s.slotRoomLabel }}
+                                  teacherColor={s.slotTeacherLabel === "LAB" || s.slotTeacherLabel === "JJ" ? null : t.color}
                                   offAxisNote={offAxisNotes.get(s.id) ?? null}
                                 />
                               );

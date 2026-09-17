@@ -133,6 +133,7 @@ export function ScheduleGrid({
   const [slotTeacher, setSlotTeacher] = useState<Record<string, string>>(initState.st);
   const [slotClassroom, setSlotClassroom] = useState<Record<string, string>>(initState.sc);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSeatOptions, setShowSeatOptions] = useState(true);
 
   // 자리(LAB·JJ)면 그 이름 그대로 — users에 없으니 이름 조회는 실패한다(셀이 빈 채로 보임).
   const teacherNameOf = (id: string | null | undefined) =>
@@ -208,7 +209,7 @@ export function ScheduleGrid({
   const teacherSelectOptions = [
     { value: "", label: homeTeacherName ? `담임 · ${homeTeacherName}` : "담임 (미정)" },
     // 자리(LAB·JJ)를 사람 위에 둔다 — 영어는 이 배치가 흔해서 목록 아래로 밀면 매번 스크롤해야 한다.
-    ...(allowSeats
+    ...(allowSeats && showSeatOptions
       ? SPECIAL_SLOT_LABELS.map((s) => ({ value: seatSelectValue(s), label: `${s} (자리)` }))
       : []),
     ...teacherOptions.map((t) => ({ value: t.id, label: t.name })),
@@ -356,9 +357,23 @@ export function ScheduleGrid({
 
       {showAdvanced && rows.length > 0 ? (
         <div className="border-border space-y-2 rounded-md border p-3">
-          <p className="text-muted-foreground text-xs">
-            교시별로 담임과 다른 강사(부담임)·다른 강의실을 지정할 수 있습니다. 비워두면 반의 담임·기본 강의실을 따릅니다.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-muted-foreground text-xs">
+              교시별로 담임과 다른 강사(부담임)·다른 강의실을 지정할 수 있습니다. 비워두면 반의 담임·기본 강의실을 따릅니다.
+            </p>
+            {allowSeats ? (
+              <label className="text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium">
+                <input
+                  type="checkbox"
+                  checked={showSeatOptions}
+                  onChange={(e) => setShowSeatOptions(e.target.checked)}
+                  className="accent-primary"
+                  aria-label="LAB/JJ 자리 선택 표시"
+                />
+                LAB/JJ 자리 선택
+              </label>
+            ) : null}
+          </div>
           {rows.map((r) => (
             <div key={r.key} className="flex flex-wrap items-center gap-2">
               {/* 교시 이름이 길어질 수 있어(예 "EiE 4교시") 고정폭 대신 최소폭 + 줄바꿈 없음. */}

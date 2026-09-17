@@ -4,7 +4,8 @@ import { useActionState, useState } from "react";
 import { CalendarCheck, RotateCcw } from "@/components/icons/eywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
-import { endClassTerm, reopenClassTerm } from "@/features/classes/server/actions";
+import { endClassTerm, reopenClassTerm, type ClassTermState } from "@/features/classes/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * 종강/재개강 — 폐지(ArchiveClassButton, is_active)와 별개의 '운영 종료일'(closed_at).
@@ -19,8 +20,23 @@ export function ClassTermButton({
   className: string;
   closedAt: string | null;
 }) {
-  const [endState, endAction, endPending] = useActionState(endClassTerm, undefined);
-  const [reopenState, reopenAction, reopenPending] = useActionState(reopenClassTerm, undefined);
+  // 성공은 `undefined`로 온다(초기값과 같아 effect로 못 잡는다) — 결과를 받는 자리에서 바로 알린다.
+  const [endState, endAction, endPending] = useActionState(
+    async (prev: ClassTermState, formData: FormData) => {
+      const res = await endClassTerm(prev, formData);
+      if (!res?.error) notifyTermPlansChanged();
+      return res;
+    },
+    undefined,
+  );
+  const [reopenState, reopenAction, reopenPending] = useActionState(
+    async (prev: ClassTermState, formData: FormData) => {
+      const res = await reopenClassTerm(prev, formData);
+      if (!res?.error) notifyTermPlansChanged();
+      return res;
+    },
+    undefined,
+  );
   const [open, setOpen] = useState(false);
   const [today] = useState(() => kstToday());
 

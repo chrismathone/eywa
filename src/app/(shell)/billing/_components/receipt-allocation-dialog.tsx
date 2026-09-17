@@ -9,6 +9,9 @@ import { receiptGroupId, remapReceiptDraft } from "@/features/billing/session-te
 import { ReceiptMergeControls } from "./receipt-merge-controls";
 import { normalizeInvoiceLineItems } from "@/features/billing/invoice-line-items";
 import { MergedReceiptDetails } from "./merged-receipt-details";
+import { initialReceiptDraft } from "@/features/billing/session-terms/receipt-suggestion";
+import { ReceiptSuggestions } from "./receipt-suggestions";
+import { receiptRefundState } from "@/features/billing/session-terms/receipt-refund";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -20,7 +23,7 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
   const [reloadRequired, setReloadRequired] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ReceiptAllocationDraft>(() => Object.fromEntries(data.terms.map((term) => [term.id, { line: term.allocationStale || term.allocationLineIndex == null ? "" : String(term.allocationLineIndex), amount: String(term.allocatedAmount ?? term.amount ?? "") }])));
+  const [draft, setDraft] = useState<ReceiptAllocationDraft>(() => initialReceiptDraft(data.terms, data.suggestions));
   useEffect(() => { ref.current?.showModal(); }, []);
   const groups = data.lines.map((line) => {
     const terms = data.terms.filter((term) => draft[term.id]?.line === String(line.index));
@@ -68,9 +71,13 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
       <button type="button" disabled={pending} onClick={onClose} className="text-sm">닫기</button>
     </header>
     <p className="text-text-dim mb-3 text-xs">{data.period ? `${data.period} 청구월` : "청구월"}에 수강한 반을 표시합니다. 월중 종료·이동 전 반도 해당 월 정산에 포함됩니다.</p>
+    {data.terms.some((t) => t.refundState === "full") ? <p role="status" className="text-text-dim mb-3 text-sm">전액 환불한 수업의 배분·급여 기준은 0원입니다. 원 청구액과 할인·납부 기록은 보존됩니다.</p> : null}
+    {Array.isArray(data.source) && data.source.some((line) => receiptRefundState(line) === "partial") ? <p role="alert" className="text-amber mb-3 text-sm">부분 환불 항목은 급여 기준액 확인이 필요하여 자동 배분에서 제외했습니다.</p> : null}
+    {data.lines.some((line) => receiptGroupId(line) && receiptRefundState(line.source) === "mixed") ? <p role="alert" className="text-amber mb-3 text-sm">환불한 수업과 남은 수업이 함께 합산되어 있습니다. 아래 ‘합산 해제’ 후 항목별로 다시 배분해 주세요.</p> : null}
     <ReceiptMergeControls key={JSON.stringify(data.source)} lines={data.lines} disabled={pending || reloadRequired} onMerge={merge} />
     {notice ? <p role="status" className="text-green mb-3 text-sm">{notice}</p> : null}
     {data.terms.some((term) => term.allocationStale) ? <p role="alert" className="text-amber mb-3 text-sm">청구액이나 반 확정값이 바뀌었습니다. 연결과 배분을 다시 확인해 주세요.</p> : null}
+    <ReceiptSuggestions suggestions={data.suggestions} terms={data.terms} draft={draft} disabled={pending || reloadRequired} onChange={setDraft} />
     <div className="space-y-2">
       {groups.map(({ line, terms, base, total }) => <div key={line.index} className="border-line flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
         <div className="text-sm"><b>{line.description || `수납 항목 ${line.index + 1}`}</b>{receiptGroupId(line) ? <button type="button" disabled={pending || reloadRequired} className="text-primary ml-2 text-xs hover:underline" onClick={() => merge([], "", receiptGroupId(line)!)}>합산 해제</button> : null}<div className="text-text-dim mt-1">청구 {won(line.amount)} · 반 확정 합계 {won(base)} · 차액 {won(line.amount - base)}</div><div className={terms.length > 0 && total !== line.amount ? "text-amber" : "text-text-dim"}>연결 {terms.length}개 반 · 배분 합계 {won(total)} · 남은 금액 {won(line.amount - total)}</div><MergedReceiptDetails line={normalizeInvoiceLineItems([line.source])[0]} /></div>
@@ -96,7 +103,7 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
               setDraft((current) => connectReceiptTerm(current, term, target));
             }}>
               <option value="">연결 안 함</option>
-              {data.lines.map((row) => <option key={row.index} value={row.index}>{row.description || `항목 ${row.index + 1}`} · {won(row.amount)}</option>)}
+              {data.lines.map((row) => <option key={row.index} value={row.index}>{row.description || `항목 ${row.index + 1}`} · {won(row.amount)}{receiptRefundState(row.source) === "full" ? " · 전액 환불" : ""}</option>)}
             </select>
           </td>
           <td className="py-2">

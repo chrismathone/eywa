@@ -17,6 +17,7 @@ import {
 
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { endSingleEnrollment, holdSingleEnrollment } from "@/features/students/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";
 import {
   noteDragPointerDown,
@@ -318,6 +319,7 @@ function RosterMoveDialog({
       setError(res.error);
       return;
     }
+    notifyTermPlansChanged();
     onClose(true);
   }
 

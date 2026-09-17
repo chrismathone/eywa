@@ -4,6 +4,7 @@ import { isDirectEditClick } from "@/lib/direct-edit";
 
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import { Check, Loader2, TriangleAlert, X } from "@/components/icons/eywa-icon-compat";
 import {
   updateEnrollmentDates,
@@ -53,6 +54,7 @@ export function EditableDateCell({
     if (state?.ok && handled.current !== state) {
       handled.current = state;
       setEditing(false);
+      notifyTermPlansChanged();
       router.refresh();
     }
   }, [state, router]);

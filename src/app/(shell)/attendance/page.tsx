@@ -22,6 +22,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
 import { classWorkerLabel } from "@/features/attendance/class-worker";
+import { getAttendanceClassBilledAmounts } from "@/features/attendance/server/class-billing";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
@@ -407,7 +408,7 @@ export default async function AttendancePage({
         )
       : [];
   /**
-   * 금액 열은 **원장 전용**(급여 PII 규율) — 강사가 자기 학생들의 청구·납입을 보게 하지 않는다.
+   * 학생 전체 청구·납입 및 급여 정산은 **원장 전용**. 강사에게도 보이는 반별 청구액은 아래 별도 조회다.
    *
    * 🔴 **금액·정산액의 축은 담임 그대로다**(2026-08-18에 표시 축만 넓혔다). 위 `teacherClasses`가
    *    교시 담당 반까지 품게 됐으므로 여기서 다시 담임 반만 걸러낸다 — 안 걸러내면 남의 반 학생 청구서가
@@ -452,7 +453,17 @@ export default async function AttendancePage({
   const workerClassIds = (
     mode === "teacher" ? teacherClasses.map((c) => c.id) : effectiveClassId ? [effectiveClassId] : []
   ).filter(Boolean);
-  const workers = await getMonthlyClassWorkers(user.tenantId, month, workerClassIds);
+  const [workers, classBilledAmounts] = await Promise.all([
+    getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
+    getAttendanceClassBilledAmounts(
+      month,
+      mode === "teacher"
+        ? teacherClasses.map((c, i) => ({ classId: c.id, studentIds: teacherMatrices[i]!.students.map((s) => s.id) }))
+        : effectiveClassId
+          ? [{ classId: effectiveClassId, studentIds: matrix.students.map((s) => s.id) }]
+          : [],
+    ),
+  ]);
   const workerOf = (classId: string) => {
     const w = workers.get(classId) ?? null;
     return { workerLabel: classWorkerLabel(w, lang), workerSource: w?.source ?? null };
@@ -1046,6 +1057,7 @@ export default async function AttendancePage({
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
+            classBilledAmounts={classBilledAmounts}
             money={money}
             moneyNote={moneyNote}
             lang={lang}

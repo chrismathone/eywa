@@ -334,6 +334,53 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    case "session_term_monthly_units": {
+      const sessions = num(m.sessions);
+      const amount = won(m.amountPreserved);
+      return join(sessions === null ? null : `확정 ${sessions}시수`, amount ? `월 금액 ${amount} 유지` : null);
+    }
+    case "session_terms_refresh": {
+      const refreshed = num(m.refreshed);
+      const removed = num(m.removed);
+      const notes = arr(m.removedNotes)
+        .map((n) => (n && typeof n === "object" ? str((n as Meta).note) : null))
+        .filter((v): v is string => !!v);
+      return join(
+        refreshed === null ? null : `계획 ${refreshed}건 갱신`,
+        removed ? `빠진 반 ${removed}건 정리` : null,
+        notes.length ? `메모와 함께 지움: ${notes.slice(0, 3).map((n) => `"${n}"`).join(" · ")}${notes.length > 3 ? ` 외 ${notes.length - 3}건` : ""}` : null,
+      );
+    }
+    case "session_term_confirm_selected": {
+      // 학생마다 시수·단가가 다를 수 있다 — 같은 조합끼리 세어 한 줄로(`7시수 × 21,250원 5명 · 4시수 × 21,250원 1명`).
+      const combos = new Map<string, number>();
+      for (const it of arr(m.items)) {
+        if (!it || typeof it !== "object") continue;
+        const sessions = num((it as Meta).sessions);
+        const price = won((it as Meta).unitPrice);
+        if (sessions === null || !price) continue;
+        // 단위는 행마다(`items[].pricingMode`) — 옛 모양은 묶음에 하나(`pricingMode`)였다.
+        const mode = str((it as Meta).pricingMode) ?? str(m.pricingMode);
+        const key = mode === "monthly" ? `${sessions}시수 · 월 ${price}` : `${sessions}시수 × ${price}`;
+        combos.set(key, (combos.get(key) ?? 0) + 1);
+      }
+      const count = num(m.confirmedCount);
+      const skipped = num(m.skipped);
+      const failed = num(m.failedCount);
+      const comboText = [...combos].slice(0, 3).map(([k, n]) => `${k} ${n}명`).join(" · ");
+      return join(
+        count === null ? null : `선택 ${count}명 확정`,
+        comboText ? `${comboText}${combos.size > 3 ? ` 외 ${combos.size - 3}가지` : ""}` : null,
+        skipped ? `건너뜀 ${skipped}명` : null,
+        failed ? `실패 ${failed}명` : null,
+      );
+    }
+    case "session_term_note": {
+      const note = str(m.note);
+      const before = str(m.noteBefore);
+      if (note) return before ? `메모 "${before}" → "${note}"` : `메모 "${note}"`;
+      return before ? `메모 "${before}" 지움` : null;
+    }
     case "owner_settings_update": {
       const s = str(m.section);
       const label = s ? ((SECTION_LABELS as Record<string, string>)[s] ?? s) : null;
@@ -371,6 +418,10 @@ export function auditDetail(
     }
     case "integration_sync_now":
       return "지금 동기화 실행";
+    case "makeedu_paid_recovery": {
+      const count = num(m.count);
+      return count === null ? "수납 입력값 복구" : `수납 ${count}건 복구 · 환불·확정·배분값 보존`;
+    }
     case "sheets_sync_now": {
       const rows = num(m.rows);
       return rows === null ? "시트 내보내기 실행" : `시트 내보내기 실행 (${rows.toLocaleString("ko-KR")}행)`;

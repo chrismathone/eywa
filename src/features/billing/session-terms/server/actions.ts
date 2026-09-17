@@ -14,6 +14,7 @@ import { classifyVerification } from "../verification";
 import { maxCarryoverOut, maxCarryoverIn, validateCarryover } from "../carryover";
 import { isEieMonthlyClass, sessionPricingAmount, validSessionQuantity, type SessionPricingMode, type SessionQuantityBasis } from "@/features/billing/session-pricing";
 import { toAutoUnitsSchedule, type AutoUnitsSchedule } from "@/features/attendance/auto-units";
+import { loadLivePlans } from "./live-plans";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -68,11 +69,12 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     start_date: string;
     end_date: string | null;
     attendance_days: string[] | null;
+    is_transferred: boolean;
     class: { subject?: string; is_active?: boolean } | { subject?: string }[] | null;
   }>(studentIds, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("student_id, class_id, start_date, end_date, attendance_days, class:class_id!inner ( subject, is_active )")
+      .select("student_id, class_id, start_date, end_date, attendance_days, is_transferred, class:class_id!inner ( subject, is_active )")
       .in("student_id", chunk)
       .eq("on_hold", false)
       .eq("class.is_active", true)
@@ -108,6 +110,7 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
       subject: cls.subject,
       startDate: e.start_date,
       endDate: e.end_date,
+      isTransferred: e.is_transferred,
       weekdays: [...(daysByClass.get(e.class_id) ?? [])],
       attendanceDays: (e.attendance_days ?? []).map((day) => DOW[day]).filter((day) => day !== undefined),
       schedules: schedulesByClass.get(e.class_id) ?? [],
@@ -116,10 +119,10 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
 
   // 기존 term 로드(확정 보존·stale 판단)
   const invoiceIds = invoices.map((i) => i.id);
-  const existing = await fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null }>(
+  const existing = await fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null; note: string | null }>(
     invoiceIds,
     (chunk, from, to) =>
-      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index").in("invoice_id", chunk).order("id").range(from, to),
+      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index, note").in("invoice_id", chunk).order("id").range(from, to),
   );
 
   let refreshed = 0;
@@ -143,6 +146,8 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   }
   for (const t of existing) {
     // 시수 미확정이어도 사용자가 저장한 수납 배분은 계획 갱신으로 지우지 않는다.
+    // 🔴 메모는 삭제를 막지 않는다 — 메모 하나로 남긴 행은 계획 0·미확정으로 영영 남아 '확정 N/M'·미배분 수·시수 검증
+    //    미확정 수를 부풀린다(적대적 리뷰 2026-09-17). 대신 지운 메모 원문을 아래 감사로그에 남긴다.
     if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && t.confirmed_sessions === null && t.allocation_line_index == null) staleUnconfirmed.push(t.id);
   }
 
@@ -158,13 +163,32 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     if (error) return { error: `정리 실패: ${error.message}` };
   }
 
+  const removedIds = new Set(staleUnconfirmed);
+  const removedNotes = existing
+    .filter((t) => removedIds.has(t.id) && t.note)
+    .map((t) => ({ termId: t.id, invoiceId: t.invoice_id, classId: t.class_id, note: t.note }));
+
+  // 확정·배분 때문에 남겨 둔 종료반도 계획은 0이다. 예전 계획값을 남기지 않는다.
+  const staleRetained = existing.filter((t) => !plannedKeys.has(`${t.invoice_id}|${t.class_id}`)).map((t) => t.id);
+  for (let i = 0; i < staleRetained.length; i += 200) {
+    const { error } = await supabase.from("invoice_session_terms").update({ planned_sessions: 0 }).in("id", staleRetained.slice(i, i + 200));
+    if (error) return { error: `종료반 계획 저장 실패: ${error.message}` };
+  }
+
   // 한 달 전체를 다시 계산하고 **확정 안 된 stale 행을 지우는** 일이라 한 줄 남긴다(행마다가 아니라 실행 단위).
   // 확정값(confirmed_*)은 건드리지 않으므로 청구 금액은 안 변한다 — 그 사실이 로그에서도 읽히게 removed를 함께.
   await logAction({
     action: "session_terms_refresh",
     targetType: "invoice_session_term",
     targetLabel: `${period} 계획 갱신`,
-    metadata: { period, refreshed, removed: staleUnconfirmed.length, invoices: invoices.length },
+    metadata: {
+      period,
+      refreshed,
+      removed: staleUnconfirmed.length,
+      invoices: invoices.length,
+      // 지운 행에 적혀 있던 메모(특이사항) — 행과 함께 사라지므로 원문을 여기에만 남긴다.
+      ...(removedNotes.length ? { removedNotes } : {}),
+    },
   });
   revalidatePath("/billing");
   return { ok: true, refreshed };
@@ -180,12 +204,14 @@ export async function confirmClassTerms(
   classId: string,
   unitPriceRaw: number,
   sessionsOverride?: number | null,
+  visibleTermIds?: string[],
 ): Promise<{ error?: string; confirmed?: number; terms?: SessionTermPatch[] }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (!monthRange(period)) return { error: "청구월 형식이 올바르지 않습니다" };
   if (!classId) return { error: "반이 지정되지 않았습니다" };
+  if (visibleTermIds !== undefined && (!Array.isArray(visibleTermIds) || visibleTermIds.length === 0 || visibleTermIds.length > 1000 || visibleTermIds.some((id) => typeof id !== "string" || !id))) return { error: "확정할 학생을 확인해 주세요" };
   let unitPrice = Math.round(unitPriceRaw);
   if (!Number.isFinite(unitPrice) || unitPrice < 0) return { error: "회당 단가를 확인해 주세요" };
   const override = sessionsOverride ?? null;
@@ -202,19 +228,26 @@ export async function confirmClassTerms(
   if (pricingMode === "monthly") unitPrice = (await getTenantSettings()).billing.eieMonthlyPrice;
   const { data, error } = await supabase
     .from("invoice_session_terms")
-    .select("id, planned_sessions, invoice:invoice_id!inner ( period )")
+    .select("id, planned_sessions, invoice:invoice_id!inner ( period, student_id )")
     .eq("class_id", classId)
     .eq("invoice.period", period);
   if (error) return { error: error.message };
   // 회차 지정 시엔 계획 없어도 적용, 미지정 시엔 계획값 필요.
-  const targets = (data ?? []).filter((r) => pricingMode === "monthly" || override != null || r.planned_sessions !== null);
+  const targets = (data ?? []).filter((r) => (visibleTermIds === undefined || visibleTermIds.includes(r.id)) && (pricingMode === "monthly" || override != null || r.planned_sessions !== null));
   if (targets.length === 0) return { error: "확정할 대상이 없습니다 — 계획 갱신을 먼저 눌러주세요" };
 
   const now = new Date().toISOString();
+  const studentOf = (r: typeof targets[number]) => (Array.isArray(r.invoice) ? r.invoice[0] : r.invoice)?.student_id;
+  let liveMonthlyPlans: Awaited<ReturnType<typeof loadLivePlans>> | null = null;
+  if (pricingMode === "monthly" && override === null) {
+    const settings = await getTenantSettings();
+    const studentIds = [...new Set(targets.map(studentOf).filter((id): id is string => typeof id === "string"))];
+    liveMonthlyPlans = await loadLivePlans(supabase, period, studentIds, mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true));
+  }
   // amount = 회차 × 단가라 회차값마다 다름 → 회차별로 묶어 batch update(반 학생은 소수라 청크 불필요).
   const byN = new Map<number, string[]>();
   for (const r of targets) {
-    const n = override != null ? override : Number(r.planned_sessions ?? 0);
+    const n = override != null ? override : liveMonthlyPlans ? liveMonthlyPlans.plans.get(studentOf(r) ?? "")?.get(classId) ?? 0 : Number(r.planned_sessions ?? 0);
     (byN.get(n) ?? byN.set(n, []).get(n)!).push(r.id as string);
   }
   let confirmed = 0;

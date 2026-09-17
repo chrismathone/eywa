@@ -26,6 +26,27 @@ beforeEach(() => {
 });
 
 describe("수납 연결·배분", () => {
+  it("명확한 자동 제안은 열 때 선택되고 저장 전까지 DB에 쓰지 않는다", async () => {
+    const data = view(); data.terms = [data.terms[0]];
+    data.suggestions = [{ lineIndex: 0, kind: "match", reason: "반명 일치", rows: [{ termId: "term1", amount: 300000 }] }];
+    await open(data);
+    expect(screen.getByLabelText("수학1반 수납 항목")).toHaveValue("0");
+    expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(300000);
+    expect(saveReceiptAllocation).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "배분 저장" })).toBeEnabled();
+  });
+  it("저장된 0원은 보존하고 이력 제안을 누를 때만 입력값을 재배분한다", async () => {
+    const data = view();
+    Object.assign(data.terms[0], { allocationLineIndex: 0, allocatedAmount: 300000 });
+    Object.assign(data.terms[1], { allocationLineIndex: 0, allocatedAmount: 0 });
+    data.suggestions = [{ lineIndex: 0, kind: "transfer", reason: "반 이동 이력", rows: [{ termId: "term1", amount: 60000 }, { termId: "term2", amount: 240000 }] }];
+    await open(data);
+    expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(0);
+    fireEvent.click(screen.getByRole("button", { name: "이력대로 배분" }));
+    expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(60000);
+    expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(240000);
+    expect(saveReceiptAllocation).not.toHaveBeenCalled();
+  });
   it("이동 수납을 선택 합산하고 입력한 배분금액·종료일 표시를 유지한다", async () => {
     const data = view();
     const originals = [{ kind: "수업", description: "이전 반", amount: 100000, paid: 100000, unpaid: 0 }, { kind: "수업", description: "현재 반", amount: 200000, paid: 200000, unpaid: 0 }];
