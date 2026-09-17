@@ -1,5 +1,4 @@
 import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/features/attendance/server/queries";
-import type { StudentMoney } from "@/features/attendance/server/teacher-money";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
 // 🔴 서버 컴포넌트라 훅을 못 쓴다 — 언어는 `MatrixTable`이 prop으로 내려준다.
@@ -23,7 +22,6 @@ export function MatrixRow({
   days,
   holidays,
   classBilled,
-  money,
   lockBefore,
   classLabel,
   tierMissing,
@@ -42,8 +40,6 @@ export function MatrixRow({
   holidays: Record<string, string>;
   /** undefined = 열 없음, null = 미확정, 0 = 매칭된 0원. */
   classBilled?: number | null;
-  /** 원장 전용 금액 열(강사 전체 보기). undefined = 열 자체 없음. */
-  money?: StudentMoney | null;
   /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
   lockBefore?: string | null;
   /** 단가(수업 티어) 미지정 — 정산액에서 빠진 학생. 이름 칸 「단가」 라벨로 드러낸다. */
@@ -199,18 +195,6 @@ export function MatrixRow({
           </td>
         );
       })}
-      {money !== undefined ? (
-        <>
-          {/* 청구·납입은 **학생 단위 총액**(다른 과목 포함) — 반 몫이 아니다. 여러 강사에 걸친 학생은 '공유' 표식. */}
-          {/* '공유' 행 라벨은 제거(원장 2026-08-10) — 공유 규모는 합계 줄의 "공유 N명 포함"이 계속 알린다. */}
-          <td className="border-line text-text-dim num border-b border-l px-2 py-1 text-right text-xs whitespace-nowrap">
-            {formatMoney(money?.billed ?? null)}
-          </td>
-          <td className="border-line text-foreground num border-b px-2 py-1 text-right text-xs whitespace-nowrap">
-            {formatMoney(money?.paid ?? null)}
-          </td>
-        </>
-      ) : null}
       {/* 시수·출석률은 **입력을 즉시 따라간다**(클라 집계) — 서버 값은 첫 렌더 폴백. */}
       <RowTotalCells row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} />
     </tr>

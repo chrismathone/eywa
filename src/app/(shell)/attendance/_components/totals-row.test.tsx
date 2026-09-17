@@ -157,6 +157,15 @@ const type = (input: HTMLInputElement, v: string) => fireEvent.change(input, { t
 const flat = (el: HTMLElement) => el.textContent!.replace(/\s+/g, " ");
 
 describe("하단 합계 줄 — 검색 전에는 종전 표기 그대로", () => {
+  it("학생 행 맨 오른쪽 청구·납입 열은 없다 — 합계 줄의 청구·납입은 그대로(원장 2026-09-17)", () => {
+    const { container } = renderSheet();
+    expect(screen.queryByRole("columnheader", { name: "청구" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "납입" })).toBeNull();
+    // 이름·학교학년 + 날짜 + 시수·출석률 — 금액 칸 없음.
+    expect(screen.getByText("박서준").closest("tr")!.children).toHaveLength(DAYS.length + 4);
+    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 4));
+    expect(flat(container.querySelector("tfoot")!)).toContain("납입 400,000");
+  });
   it("라벨은 '합계'이고 병기(`/ 전체`)도 칩도 없다", () => {
     const { container } = renderSheet();
     const t = flat(container);

@@ -1404,22 +1404,15 @@ export const SHEET_DICT = {
   // ── 월별 출석부 격자(열 머리·도움말·범례·합계) ──────────────────
   "att.col.name": { ko: "이름", en: "Name" },
   "att.col.schoolGrade": { ko: "학교·학년", en: "School · grade" },
-  // ⚠️ `Billed`는 `att.col.billed`(그 학생의 이 달 청구서 총액)가 이미 쓴다 — 이쪽은 **이 반 몫**이라
-  //    같은 영어로 뭉치면 눌러 보기 전엔 두 열을 구분할 수 없다(`lang-wiring.test.ts` 가드).
+  // 이 반 몫 청구액. 학생 총액 '청구·납입' 열은 2026-09-17 원장 지시로 없앴다(합계 줄의 청구·납입은 `att.totals.*`).
   "att.col.classBilled": { ko: "청구액", en: "Class billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
   },
   "att.row.billingUnconfirmed": { ko: "미확정", en: "Pending" },
-  "att.col.billed": { ko: "청구", en: "Billed" },
-  "att.col.paid": { ko: "납입", en: "Paid" },
   "att.col.units": { ko: "시수", en: "Sessions" },
   "att.col.rate": { ko: "출석률", en: "Rate" },
-  "att.col.billedTitle": {
-    ko: "그 학생의 이 달 청구서 총액(다른 과목 포함) — 반별 배분이 아닙니다",
-    en: "That student's total invoice for the month (other subjects included) — not a per-class share",
-  },
   "att.group.slotTitle": {
     ko: "이 반의 담임은 다른 선생님이고, 교시(시간표 슬롯) 담당으로 배선돼 있어 이 목록에 있습니다.",
     en: "Another teacher is homeroom for this class; it is listed here because this teacher is assigned to a timetable period.",
