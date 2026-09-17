@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * 교재목록 쓰기 — 교재 등록/수정/폐지 + 차수 표 저장.
+ * 교재목록 쓰기 — 교재 등록/수정/삭제 + 차수 표 저장.
  *
  * 🔴 모든 액션이 첫 줄에서 [`requireTextbookWrite`](./access.ts)를 지난다([[#77]] — 화면 조건은 게이트가 아니다).
  * 🔴 admin 클라이언트(RLS 우회)라 **모든 쿼리에 `tenant_id` 명시 필터**.
@@ -9,6 +9,7 @@
  */
 import { revalidatePath, updateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MEDIA_KIND, removeObject } from "@/lib/storage/media-storage";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
@@ -87,7 +88,7 @@ export async function saveTextbook(input: TextbookInput): Promise<TextbookAction
       error: friendlyTextbookError(
         error ?? {},
         "교재를 등록하지 못했습니다",
-        "이미 같은 이름의 교재가 있습니다 — 폐지된 교재라면 '폐지 포함'을 켜고 되살리세요",
+        "이미 같은 이름의 교재가 있습니다",
       ),
     };
   }
@@ -97,21 +98,42 @@ export async function saveTextbook(input: TextbookInput): Promise<TextbookAction
 }
 
 /**
- * 폐지/되살리기 — 🔴 **지우지 않는다**(교재 단가표 0193a 선례). 목록에서는 사라지지만 되돌릴 수 있고,
- * 이미 시트에 적힌 교재명은 자유 텍스트라 어차피 그대로 남는다.
+ * 교재 삭제 — 🔴 **정말로 지운다**(원장 2026-09-16 *"여기 폐지말고 삭제로 변경"*).
+ *
+ * 🔑 소프트 폐지를 '삭제'라고 **부르기만** 하면 거짓말이 된다 — 행이 남아 같은 이름으로 다시 등록할 수
+ *    없고(유니크 인덱스), 사람은 지운 줄 알고 다시 만들다 막힌다. 그래서 라벨이 아니라 동작을 바꿨다.
+ *    (실제로 그렇게 됐다: 폐지 감사로그 1건 = 제목 `테스트`, 원장이 지우려다 폐지된 건이다.)
+ * 🔑 **지워도 되는 이유** = 시트는 교재명을 자유 텍스트로 든다(`class_sheet_plan_lines`에 이 표로 가는
+ *    FK가 없다) — 이미 기입된 진도·과제는 이 삭제로 한 글자도 안 바뀐다. 사라지는 것은 마스터(차수 표)와
+ *    반 배정뿐이고, 둘 다 0266a FK의 `on delete cascade`가 함께 지운다.
+ * ⚠️ 표지 사진만 FK 밖(스토리지)이라 여기서 지운다 — 안 지우면 버킷에 고아가 남는다(best-effort).
+ * ⚠️ 행이 사라지므로 **감사로그의 `targetLabel`(교재이름)이 유일한 흔적**이다 — 반드시 남긴다.
  */
-export async function setTextbookActive(id: string, active: boolean): Promise<TextbookSaveResult> {
+export async function deleteTextbook(id: string): Promise<TextbookSaveResult> {
   const ctx = await requireTextbookWrite();
   if ("error" in ctx) return { ok: false, error: ctx.error };
-  const { error } = await createAdminClient()
+  const admin = createAdminClient();
+
+  const { data: before, error: readErr } = await admin
     .from("textbooks")
-    .update({ is_active: active, updated_by: ctx.userId })
+    .select("title, cover_path")
     .eq("tenant_id", ctx.tenantId)
-    .eq("id", id);
-  if (error) return { ok: false, error: friendlyTextbookError(error, "상태를 바꾸지 못했습니다") };
+    .eq("id", id)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: friendlyTextbookError(readErr, "교재를 찾지 못했습니다") };
+  // 🔴 남의 테넌트 id를 넘기면 delete가 **0행이라 에러 없이 성공**한다 — 먼저 끊는다.
+  if (!before) return { ok: false, error: "교재를 찾을 수 없습니다" };
+
+  const { error } = await admin.from("textbooks").delete().eq("tenant_id", ctx.tenantId).eq("id", id);
+  if (error) return { ok: false, error: friendlyTextbookError(error, "교재를 삭제하지 못했습니다") };
+
+  const cover = (before.cover_path as string | null) ?? null;
+  if (cover) await removeObject(cover, { bucket: MEDIA_KIND.textbook_cover.supabaseBucket }).catch(() => {});
+
   await logAction({
-    action: active ? "textbook_restore" : "textbook_retire",
+    action: "textbook_delete",
     targetType: "textbook",
+    targetLabel: (before.title as string | undefined) ?? null,
     metadata: { id },
   });
   await afterWrite(ctx.tenantId);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Pill } from "@/components/atoms/pill";
-import { Toolbar, ToolbarButton, ToolbarChip, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { Toolbar, ToolbarButton, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { FIELD } from "./form-bits";
 import { TextbookDialog } from "./textbook-dialog";
 import { CoverThumb } from "./cover-thumb";
@@ -12,13 +12,15 @@ import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas
 import type { TextbookListItem } from "@/features/textbooks/types";
 
 /**
- * 교재 면 — 툴바(검색·구분 필터·폐지 포함) + 표.
+ * 교재 면 — 툴바(검색·구분 필터) + 표.
  *
  * 🔴 필터는 **주소(searchParams)** 로 건다 — 서버가 목록을 좁혀 내려주므로 클라 상태로 두면 페이지를
  *    넘길 때마다 조건이 사라진다. 툴바 부품은 규약대로 `<Toolbar>`/`<ToolbarSegment>`/`<ToolbarChip>`이고
  *    치수를 손으로 적지 않는다(toolbar-canon).
  * 🔴 목록에 **사진 + 교재이름**을 함께 세운다(원장 2026-09-16 *"목록에서 사진 교재이름 이런식으로
  *    목록에서 바로볼수있게"*).
+ * ⚠️ '폐지 포함' 토글은 없다 — 폐지(감추기)를 **삭제**로 바꿨다(원장 2026-09-16 *"여기 폐지말고 삭제로
+ *    변경"*). 감출 방법이 사라졌으니 목록은 **전부** 세운다(그래야 폐지로 남아 있던 옛 행도 지울 수 있다).
  */
 export function BooksFace({
   rows,
@@ -41,7 +43,6 @@ export function BooksFace({
 
   const area = sp.get("area") ?? "";
   const q = sp.get("q") ?? "";
-  const inactive = sp.get("inactive") === "1";
 
   function go(next: Record<string, string | null>) {
     const params = new URLSearchParams(sp.toString());
@@ -87,14 +88,6 @@ export function BooksFace({
           ))}
         </ToolbarSegment>
 
-        <ToolbarChip
-          active={inactive}
-          onClick={() => go({ inactive: inactive ? null : "1" })}
-          title="폐지한 교재까지 함께 봅니다 — 같은 이름으로 다시 등록할 수 없을 때 여기서 되살리세요"
-        >
-          폐지 포함
-        </ToolbarChip>
-
         {canWrite ? (
           <ToolbarButton variant="primary" className="ml-auto" onClick={() => setOpen({ mode: "create" })}>
             교재 등록
@@ -104,7 +97,7 @@ export function BooksFace({
 
       {rows.length === 0 ? (
         <p className="text-text-dim px-1 py-8 text-center text-xs">
-          {q || area || inactive ? "조건에 맞는 교재가 없습니다." : "등록된 교재가 없습니다."}
+          {q || area ? "조건에 맞는 교재가 없습니다." : "등록된 교재가 없습니다."}
         </p>
       ) : (
         <div className="overflow-x-auto px-1">
@@ -144,9 +137,6 @@ export function BooksFace({
                         <CoverThumb src={r.coverUrl} alt="" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-bold">{r.title}</span>
-                          {!r.isActive ? (
-                            <span className="text-text-faint text-xs font-semibold">폐지</span>
-                          ) : null}
                         </span>
                       </button>
                     </td>
@@ -212,6 +202,7 @@ export function BooksFace({
           textbookId={open.mode === "edit" ? open.id : null}
           skillAreas={skillAreas}
           canWrite={canWrite}
+          planCount={open.mode === "edit" ? (rows.find((r) => r.id === open.id)?.planCount ?? null) : null}
           onClose={() => setOpen(null)}
         />
       ) : null}

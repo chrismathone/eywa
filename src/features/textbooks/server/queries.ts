@@ -48,7 +48,6 @@ type TextbookDbRow = {
   page_time: string | null;
   session_count: number;
   cover_path: string | null;
-  is_active: boolean;
   updated_at: string;
 };
 
@@ -61,18 +60,18 @@ function toRow(r: TextbookDbRow): TextbookRow {
     pageTime: r.page_time,
     sessionCount: Number(r.session_count ?? 0),
     coverPath: r.cover_path,
-    isActive: r.is_active,
     updatedAt: r.updated_at,
   };
 }
 
-const LIST_COLS = "id, subject, skill_area, title, page_time, session_count, cover_path, is_active, updated_at";
+// ⚠️ `is_active`는 읽지 않는다 — 폐지를 삭제로 바꿔(원장 2026-09-16) 아무도 false로 만들지 않는다.
+//    컬럼은 0266a에 그대로 남기고(이미 적용된 표라 건드릴 이유가 없다) 화면은 그 칸을 보지 않는다.
+const LIST_COLS = "id, subject, skill_area, title, page_time, session_count, cover_path, updated_at";
 
 export async function getTextbooks(opts: {
   subject?: string | null;
   skillArea?: string | null;
   q?: string | null;
-  includeInactive?: boolean;
   page?: number;
 }): Promise<TextbookListResult> {
   const user = await getCurrentUser();
@@ -87,7 +86,8 @@ export async function getTextbooks(opts: {
     .eq("tenant_id", user.tenantId);
   if (opts.subject) query = query.eq("subject", opts.subject);
   if (opts.skillArea) query = query.eq("skill_area", opts.skillArea);
-  if (!opts.includeInactive) query = query.eq("is_active", true);
+  // ⚠️ `is_active`로 거르지 않는다 — 폐지(감추기)는 폐기된 개념이라(원장 2026-09-16 "폐지말고 삭제로")
+  //    거르면 그렇게 남은 옛 행이 **영영 안 보이고 지울 수도 없다**(게다가 이름을 계속 점유한다).
   const term = (opts.q ?? "").trim();
   // ⚠️ 콤마·괄호는 PostgREST 필터 문법에서 구분자라 떼어낸다(`PL (NTA)` 같은 실제 교재명 대응).
   //    `%`·`_`는 LIKE 와일드카드라 그대로 두면 `100%`가 아무거나 잡는다 — 문자로 escape한다.
@@ -267,7 +267,6 @@ export async function getTextbookOptions(tenantId: string, subject: string): Pro
         .select("title, page_time")
         .eq("tenant_id", tenantId)
         .eq("subject", subject)
-        .eq("is_active", true)
         .order("title", { ascending: true })
         .range(0, TEXTBOOK_OPTION_CAP - 1);
       // 🔴 **실패는 throw한다 — 절대 빈 배열로 캐시하지 말 것.** `unstable_cache`는 반환값만 저장하고
@@ -439,7 +438,7 @@ export async function getClassTextbookPlans(opts: {
   };
 }
 
-/** 배정 다이얼로그의 교재 선택지(활성·구분 있음·차수 ≥ 1인 것만 — 나머지는 어차피 배정이 거절된다). */
+/** 배정 다이얼로그의 교재 선택지(구분 있음·차수 ≥ 1인 것만 — 나머지는 어차피 배정이 거절된다). */
 export async function getAssignableTextbooks(): Promise<{
   status: TextbookTableStatus;
   rows: { id: string; title: string; skillArea: string | null; sessionCount: number }[];
@@ -451,7 +450,6 @@ export async function getAssignableTextbooks(): Promise<{
     .select("id, title, skill_area, session_count")
     .eq("tenant_id", user.tenantId)
     .eq("subject", "english")
-    .eq("is_active", true)
     .gte("session_count", 1)
     .not("skill_area", "is", null)
     .order("title", { ascending: true })

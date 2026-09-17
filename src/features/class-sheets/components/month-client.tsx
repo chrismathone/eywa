@@ -66,7 +66,8 @@ export function MonthClient({
 }) {
   const router = useRouter();
   const embed = useEmbed();
-  // 교재 깔기 창 — 월간 화면에서 교시를 고르고 교재를 고르면 차수가 쭈루룩 깔린다(원장 2026-09-16).
+  // 교재 배정 창 — 월간 화면에서 교시를 고르고 교재를 고르면 차수가 순서대로 들어간다(원장 2026-09-16).
+  // ⚠️ 이름은 '교재 깔기'였다 — 원장 2026-09-16 *"교재깔기라는 멘트가 부적절함"*로 바꿨다(사전 `fill.open`).
   const [fillOpen, setFillOpen] = useState(false);
   const [view, setView] = useState<EcsMonthView>(initialView);
   const [display, setDisplay] = useState(initialDisplay);

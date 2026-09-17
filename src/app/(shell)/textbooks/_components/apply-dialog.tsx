@@ -15,11 +15,6 @@ const OUTCOME: Record<ApplyPreviewRow["outcome"], { label: string; tone: string;
     tone: "text-text-faint",
     title: "이미 적혀 있어 손대지 않습니다 — 덮어쓰지 않습니다",
   },
-  "skip-empty-lesson": {
-    label: "차수 비어 있음",
-    tone: "text-amber",
-    title: "그 차수에 진도·과제가 없어 기입하지 않습니다 — 교재에서 먼저 적어 주세요",
-  },
   "skip-past": {
     label: "지난 날짜",
     tone: "text-text-faint",
@@ -68,7 +63,11 @@ export function ApplyDialog({ plan, onClose }: { plan: ClassTextbookPlanRow; onC
 
   const rows = preview?.rows ?? [];
   const willWrite = rows.filter((r) => r.outcome === "add" || r.outcome === "fill").length;
-  const emptyLessons = rows.filter((r) => r.outcome === "skip-empty-lesson").length;
+  // ⚠️ 진도가 아직 빈 차수 — 기입은 **된다**(교재·페이지/시간이 들어간다). 막지 않고 알리기만 한다.
+  // 🔑 **지금 쓰는 칸만** 센다 — 전체를 세면 지난 날짜·이미 적힌 칸까지 섞여 옆의 '기입 N칸'보다 큰 수가 된다.
+  const emptyLessons = rows.filter(
+    (r) => (r.outcome === "add" || r.outcome === "fill") && !r.progress && !r.homework,
+  ).length;
   const untouched = rows.filter((r) => r.outcome === "skip-filled").length;
   const full = rows.filter((r) => r.outcome === "skip-full").length;
   const past = rows.filter((r) => r.outcome === "skip-past").length;
@@ -96,8 +95,8 @@ export function ApplyDialog({ plan, onClose }: { plan: ClassTextbookPlanRow; onC
                 </span>
               ) : null}
               {emptyLessons > 0 ? (
-                <span className="text-amber font-semibold" title="교재의 그 차수에 진도·과제가 비어 있습니다">
-                  차수 비어 있음 <span className="num">{emptyLessons}</span>칸
+                <span className="text-text-dim" title="그 차수엔 교재·페이지/시간만 들어갑니다 — 진도는 나중에 적으면 됩니다">
+                  진도 아직 없음 <span className="num">{emptyLessons}</span>칸
                 </span>
               ) : null}
               {preview.skippedHolidays.length > 0 ? (

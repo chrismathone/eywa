@@ -52,27 +52,30 @@ export type EcsAccessResult =
 
 export async function requireEcsClassAccess(
   classId: string,
-  opts: { write?: boolean } = {},
+  opts: { write?: boolean; readOnly?: boolean } = {},
 ): Promise<EcsAccessResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
 
   const level = await accessLevelTenant(user.systemRole, "ecs");
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };
-  const canWrite = level === "full" || level === "scoped";
-  if (opts.write && !canWrite) return { ok: false, error: "편집 권한이 없습니다" };
+  let scopedClass = true;
 
   // 강사 스코프 상시 적용(실 강사 + 겸직 강사뷰) — 반담당·부담임(슬롯 강사)·임시 위임 셋 다 아니면 차단.
   // ⚠️ 이 세 갈래는 `ecsVisibleClassFilter`(랜딩 목록)와 **같아야** 한다 — 갈라지면 목록엔 뜨는데 열면 거절된다.
   const scope = await effectiveTeacherScope();
   if (scope && !scope.classIds.includes(classId)) {
     const [assistant, delegated] = await Promise.all([ecsAssistantClassIds(), ecsDelegatedClassIds()]);
-    if (!assistant.includes(classId) && !delegated.includes(classId)) {
+    scopedClass = assistant.includes(classId) || delegated.includes(classId);
+    if (!scopedClass && !opts.readOnly) {
       return { ok: false, error: "담당 반이 아닙니다" };
     }
   }
 
   // 반 실재 + 테넌트 일치. 서버 클라(RLS)라 타 테넌트 행은 애초에 안 보이지만 이중 확인.
+  const canWrite = (level === "full" || level === "scoped") && scopedClass;
+  if (opts.write && !canWrite) return { ok: false, error: "편집 권한이 없습니다" };
+
   const supabase = await createClient();
   const { data: cls } = await supabase
     .from("classes")
