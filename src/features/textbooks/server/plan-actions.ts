@@ -634,7 +634,13 @@ async function applyLoaded(loaded: LoadedPlan, planId?: string): Promise<PlanApp
     metadata: { planId: planId ?? null, textbook: computed.title, ...result, from: kstToday() },
   });
   revalidatePath("/textbooks");
-  revalidatePath(`/ecs/${plan.classId}`);
+  // 🔴 **`"layout"`이어야 한다** — 기입을 부르는 화면은 `/ecs/<반>/month`(월간)인데 기본값(`"page"`)은
+  //    부모 한 페이지만 무효화해서 **정작 보고 있는 화면이 안 바뀐다**. 원장 제보 2026-09-17:
+  //    *"교재 배정해도 입력에는 안되는데 … 새로고침 하면 들어가네"* — 값은 멀쩡히 들어가 있었다.
+  //    창의 `router.refresh()`만으로는 부족하다(서버 액션 응답이 무효화 안 된 옛 트리를 다시 덮는다, [[#102]] 계열).
+  revalidatePath(`/ecs/${plan.classId}`, "layout");
+  // 작성률·'계획 N/N'이 함께 움직이므로 목록(랜딩)도 무효화한다 — 안 하면 카드 숫자만 옛것으로 남는다.
+  revalidatePath("/ecs");
   return { ok: true, result };
 }
 
