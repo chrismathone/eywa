@@ -69,6 +69,13 @@ export const attendance: HelpManual = {
     },
     {
       n: 9,
+      key: "att-lesson-count",
+      label: "수업 차수 · 등록 차수",
+      zone: "row",
+      body: "**수업 차수**는 이 출석부에서 센 시수입니다(출석·지각·조퇴·보강 칸의 배수 합). **등록 차수**는 수납관리 ‘회차 확정’에서 확정한 시수라, 두 숫자가 다르면 확정을 다시 볼 자리입니다. 확정 전에는 ‘미확정’입니다. 옛 일수 기준으로 확정한 값은 붉은 숫자로 서고 마우스를 올리면 사유가 뜹니다.",
+    },
+    {
+      n: 10,
       key: "att-totals",
       label: "합계 줄",
       zone: "footer",

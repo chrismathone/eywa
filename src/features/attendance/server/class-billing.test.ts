@@ -32,7 +32,7 @@ beforeEach(() => {
 
 describe("강사 출석부 청구액 조회 범위", () => {
   it("강사도 허용된 반의 매칭 금액을 읽으며 월·테넌트·학생 및 void 제외를 적용한다", async () => {
-    const result = await getAttendanceClassBilledAmounts("2026-09", [
+    const { billed: result } = await getAttendanceClassBilledAmounts("2026-09", [
       { classId: "c1", studentIds: ["s1"] }, { classId: "forbidden", studentIds: ["other"] },
     ]);
     expect(result).toEqual({ [rowKey("c1", "s1")]: 210000 });
@@ -48,7 +48,7 @@ describe("강사 출석부 청구액 조회 범위", () => {
   });
 
   it("허용된 반이 없으면 청구서를 조회하지 않는다", async () => {
-    expect(await getAttendanceClassBilledAmounts("2026-09", [{ classId: "forbidden", studentIds: ["s1"] }])).toEqual({});
+    expect(await getAttendanceClassBilledAmounts("2026-09", [{ classId: "forbidden", studentIds: ["s1"] }])).toEqual({ billed: {}, confirmedSessions: {} });
     expect(mocks.from).not.toHaveBeenCalled();
   });
 

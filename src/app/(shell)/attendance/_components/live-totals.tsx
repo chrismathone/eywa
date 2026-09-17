@@ -23,22 +23,31 @@ function rateColorOf(rate: number | null): string {
   return rate >= 90 ? "text-green" : rate >= 80 ? "text-amber" : "text-danger";
 }
 
-/** 학생 행 끝의 고정 두 칸(시수·출석률). `<tr>` 안에 그대로 놓인다. */
+/**
+ * '수업 차수' 칸 — 출석부에서 센 시수(소비 상태 칸의 배수 합).
+ * 🔴 오른쪽 sticky가 아니라 **청구액 옆**이다(원장 2026-09-17 *"우측 시수를 청구액 우측으로 이동. 수업 차수로 이름 변경"*).
+ */
+export function RowLessonCountCell({ row, fallback }: { row: string; fallback: Counted }) {
+  const c = useRowCount(row) ?? fallback;
+  // 여백은 이웃(청구액·등록 차수)과 같은 `px-1 py-1` — 옛 오른쪽 sticky 자리의 `py-2`가 따라왔던 것이다.
+  return (
+    <td className="border-line text-foreground num border-b border-r px-1 py-1 text-right text-xs whitespace-nowrap">
+      {c.units > 0 ? formatSessionUnits(c.units) : "—"}
+    </td>
+  );
+}
+
+/** 맨 오른쪽 출석률 칸(가로 고정). 시수는 위 `RowLessonCountCell`로 옮겼다. */
 export function RowTotalCells({ row, fallback }: { row: string; fallback: Counted }) {
   const live = useRowCount(row);
   const c = live ?? fallback;
   const rate = ratePercent(c);
   return (
-    <>
-      <td className="border-line text-foreground num sm:sticky sm:right-[64px] z-10 w-[40px] min-w-[40px] border-b border-l bg-card px-1.5 py-2 text-right text-xs whitespace-nowrap">
-        {c.units > 0 ? formatSessionUnits(c.units) : "—"}
-      </td>
-      <td
-        className={`border-line num sm:sticky sm:right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-xs font-bold whitespace-nowrap ${rateColorOf(rate)}`}
-      >
-        {rate === null ? "—" : `${rate}%`}
-      </td>
-    </>
+    <td
+      className={`border-line num sm:sticky sm:right-0 z-10 w-[64px] min-w-[64px] border-b border-l bg-card px-2 py-2 text-right text-xs font-bold whitespace-nowrap ${rateColorOf(rate)}`}
+    >
+      {rate === null ? "—" : `${rate}%`}
+    </td>
   );
 }
 

@@ -1082,7 +1082,8 @@ export default async function AttendancePage({
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
-            classBilledAmounts={classBilledAmounts}
+            classBilledAmounts={classBilledAmounts.billed}
+            termSessionsByRow={classBilledAmounts.confirmedSessions}
             money={money}
             moneyNote={moneyNote}
             lang={lang}

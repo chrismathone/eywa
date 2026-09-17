@@ -1420,7 +1420,28 @@ export const SHEET_DICT = {
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
   },
   "att.row.billingUnconfirmed": { ko: "미확정", en: "Pending" },
-  "att.col.units": { ko: "시수", en: "Sessions" },
+  // 월별 출석부 열(원장 2026-09-17) — 출석부에서 센 '수업 차수'와 회차 확정에서 확정한 '등록 차수'를 나란히.
+  // ⚠️ 영어 라벨은 **열 폭 안에 들어가는 한 낱말**이다(가드 `name-wiring.test.ts`) — 뜻은 `*Title` 툴팁이 편다.
+  "att.col.lessonCount": { ko: "수업 차수", en: "Attended" },
+  "att.col.lessonCountTitle": {
+    ko: "출석부에서 센 시수입니다(출석·지각·조퇴·보강 칸의 배수 합).",
+    en: "Sessions counted from this sheet (present, late, early leave and make-up cells).",
+  },
+  "att.col.termSessions": { ko: "등록 차수", en: "Registered" },
+  "att.col.termSessionsTitle": {
+    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다.",
+    en: "Sessions confirmed in billing. Shown as unconfirmed until then.",
+  },
+  // 옛 일수 기준 확정 — 회차 확정 화면이 붉은 숫자 + 카드로 적는 그 사실(원장 2026-09-16).
+  "att.row.daysBasis": { ko: "일수 기준 확정", en: "Day-count basis" },
+  "att.row.daysBasisWhat": {
+    ko: "출석 일수로 확정한 값입니다(시수 기준 도입 전) — 이 숫자는 시수가 아닙니다.",
+    en: "Confirmed by counting attendance days (before the session-unit basis) — this number is not sessions.",
+  },
+  "att.row.daysBasisHow": {
+    ko: "수납관리 '회차 확정'에서 해제한 뒤 시수를 확인해 다시 확정하세요.",
+    en: "Release it in billing, check the sessions and confirm again.",
+  },
   "att.col.rate": { ko: "출석률", en: "Rate" },
   "att.group.slotTitle": {
     ko: "이 반의 담임은 다른 선생님이고, 교시(시간표 슬롯) 담당으로 배선돼 있어 이 목록에 있습니다.",
@@ -1431,7 +1452,6 @@ export const SHEET_DICT = {
     en: "Attendance from before this teacher took the class over (per the handover and homeroom-change log) belongs to the previous teacher, so it is left out of these totals — the records themselves remain and show in the class view.",
   },
   "att.group.students": { ko: "{n}명", en: "{n} students" },
-  "att.group.units": { ko: "시수 ", en: "Sessions " },
   "att.searchEmpty.where": { ko: "이 달 출석부", en: "this month's sheet" },
   // 강사 미니셸 머리 둘째 줄 — 지금 보는 것이 강사뷰라는 표시(원장 2026-09-14 *"강사뷰 라고 큼직하게"*).
   // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).

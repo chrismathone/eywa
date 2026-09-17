@@ -8,8 +8,11 @@ import { BADGE_BASE, BADGE_TONE, notMineCell } from "@/features/attendance/cell-
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
+import { formatSessionUnits } from "@/features/attendance/session-units";
+import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import { tipProps } from "@/components/hover-tip/tip";
 import { AttendanceCell } from "./attendance-cell";
-import { RowTotalCells } from "./live-totals";
+import { RowLessonCountCell, RowTotalCells } from "./live-totals";
 
 /**
  * 출석부 매트릭스의 학생 행 하나 — 반별 보기와 강사 전체 보기가 **같은 행 컴포넌트**를 쓴다.
@@ -22,6 +25,7 @@ export function MatrixRow({
   days,
   holidays,
   classBilled,
+  termSessions,
   lockBefore,
   classLabel,
   tierMissing,
@@ -40,6 +44,11 @@ export function MatrixRow({
   holidays: Record<string, string>;
   /** undefined = 열 없음, null = 미확정, 0 = 매칭된 0원. */
   classBilled?: number | null;
+  /**
+   * 회차 확정에서 **확정한 시수**(등록 차수) — undefined면 열 자체가 없다, null이면 미확정.
+   * 원장 2026-09-17 *"그 옆에 등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로 보여줄것"*.
+   */
+  termSessions?: AttendanceTermSessions | null;
   /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
   lockBefore?: string | null;
   /** 단가(수업 티어) 미지정 — 정산액에서 빠진 학생. 이름 칸 「단가」 라벨로 드러낸다. */
@@ -133,6 +142,31 @@ export function MatrixRow({
           {classBilled === null ? (
             <span className="text-text-faint">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
           ) : formatMoney(classBilled)}
+        </td>
+      ) : null}
+      {/* 수업 차수(출석부에서 센 시수) — 청구액 바로 옆(원장 2026-09-17). */}
+      <RowLessonCountCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} />
+      {/* 등록 차수 = 회차 확정의 확정 시수. **확정 전엔 숫자를 안 지어낸다**(미확정으로 적는다).
+          🔴 옛 **일수 기준** 확정은 단위가 달라(시수가 아니라 출석 일수) 회차 확정 화면이 붉게 칠하는 값이다
+             (원장 2026-09-16). 여기서도 점선 밑줄 + 마우스 오버 카드로 그 사실을 적는다 — 감추지 않는다. */}
+      {termSessions !== undefined ? (
+        <td className="border-line num border-b border-r px-1 py-1 text-right text-xs whitespace-nowrap">
+          {termSessions === null ? (
+            <span className="text-text-faint">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
+          ) : termSessions.daysBasis ? (
+            <span
+              className="text-danger cursor-help font-bold underline decoration-dotted underline-offset-4"
+              {...tipProps({
+                title: sheetT(lang, "att.row.daysBasis"),
+                lines: [sheetT(lang, "att.row.daysBasisWhat"), sheetT(lang, "att.row.daysBasisHow")],
+              })}
+            >
+              {formatSessionUnits(termSessions.units)}
+              <span className="sr-only"> · {sheetT(lang, "att.row.daysBasis")}</span>
+            </span>
+          ) : (
+            formatSessionUnits(termSessions.units)
+          )}
         </td>
       ) : null}
       {days.map((d) => {
