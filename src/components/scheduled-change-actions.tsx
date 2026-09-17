@@ -9,6 +9,7 @@ import {
   cancelScheduledEnrollment,
   rescheduleEnrollment,
 } from "@/features/enrollments/server/scheduled-actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * 예정된 변경의 **수정·취소** 버튼(원장 2026-08-28 스케치: 배너 우측 끝).
@@ -43,6 +44,7 @@ export function ScheduledChangeActions({
       if (res.error) setError(res.error);
       else {
         setOpen(false);
+        notifyTermPlansChanged();
         router.refresh();
       }
     });

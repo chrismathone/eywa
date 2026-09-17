@@ -8,6 +8,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { moveEnrollmentsBatch } from "@/features/enrollments/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import type { AssignDialogClass, AssignDialogStudent } from "@/components/enrollment-assign-dialog";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { kstToday } from "@/lib/date-kst";
@@ -160,6 +161,7 @@ function MoveDialog({
         conflictToast(msg);
         return;
       }
+      notifyTermPlansChanged();
       router.refresh();
       onClose();
     } catch {

@@ -17,12 +17,21 @@ export type SessionTermRow = {
   studentId: string;
   studentName: string;
   studentGrade: string | null;
+  /** 학교 원문 — 화면은 `schoolGradeLabel(studentSchool, studentGrade)`로 "칠성초6"처럼 붙여 쓴다. */
+  studentSchool?: string | null;
   subject: string;
   classId: string | null;
   className: string | null;
+  /**
+   * 그 반의 **현재 담임** 이름(`classes.teacher_id`) — 표시 전용. 시수 검증 면의 담당 강사·분배와 같은 축이다.
+   * ⚠️ 지난 달을 열어도 지금 담임이 나온다(담임엔 시간 축이 없다 — 되살리기는 teacher-as-of, 여기선 안 쓴다).
+   */
+  homeroomTeacherName?: string | null;
   monthlyPrice: number | null; // 현재 설정의 EiE 월 수강료. 기존 확정 스냅샷과 구분한다.
   pricingMode: SessionPricingMode; // 확정 시점 단위. 설정·반 구분을 바꿔도 과거 계산은 불변.
   plannedSessions: number | null;
+  /** 예정이 휴원·반 비활성(시간 축 없음) 때문에 실제보다 작을 수 있다 — 화면의 '확정 ≠ 예정' 표시를 끈다(`loadLivePlans.uncertain`). */
+  planUncertain?: boolean;
   confirmedSessions: number | null;
   unitPrice: number | null;
   amount: number | null;
@@ -33,10 +42,17 @@ export type SessionTermRow = {
   allocationLineIndex?: number | null;
   invoiceHasAllocations?: boolean;
   refundState?: ReceiptRefundState;
+  /** 회차 확정 표의 메모(특이사항) — 0102a부터 있던 칸. 쓰기는 `updateSessionTermNote` 한 곳. */
   note: string | null;
   // 참고 표시용 — 그 **반**의 청구액(line_items에서 반 매칭, 학생 전체 아님). 매칭 실패 시 null("—").
   // N2: 자동 일치화 금지 — 확정값(회차×단가)이 진실, 이 값은 makeedu 대조 힌트일 뿐.
   classAmount: number | null;
+};
+
+type TermClassEmbed = {
+  class_name?: string;
+  english_track?: string | null;
+  teacher?: { display_name?: string | null } | { display_name?: string | null }[] | null;
 };
 
 export type SessionTermsView = {
@@ -84,19 +100,19 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
     allocation_source: unknown;
     allocation_base_amount: number | null;
     note: string | null;
-    class: { class_name?: string; english_track?: string | null } | { class_name?: string; english_track?: string | null }[] | null;
+    class: TermClassEmbed | TermClassEmbed[] | null;
   }>(invoiceIds, (chunk) =>
     supabase
       .from("invoice_session_terms")
       .select(
-        "id, invoice_id, subject, class_id, planned_sessions, confirmed_sessions, unit_price, pricing_mode, amount, confirmed_at, quantity_basis, allocation_line_index, allocation_amount, allocation_source, allocation_base_amount, note, class:class_id ( class_name, english_track )",
+        "id, invoice_id, subject, class_id, planned_sessions, confirmed_sessions, unit_price, pricing_mode, amount, confirmed_at, quantity_basis, allocation_line_index, allocation_amount, allocation_source, allocation_base_amount, note, class:class_id ( class_name, english_track, teacher:teacher_id ( display_name ) )",
       )
       .in("invoice_id", chunk),
   );
 
   const studentIds = [...new Set(invoices.map((i) => i.student_id))];
-  const [students, live] = await Promise.all([fetchInChunks<{ id: string; name: string; grade: string | null }>(studentIds, (chunk) =>
-    supabase.from("students").select("id, name, grade").in("id", chunk),
+  const [students, live] = await Promise.all([fetchInChunks<{ id: string; name: string; grade: string | null; school: string | null }>(studentIds, (chunk) =>
+    supabase.from("students").select("id, name, grade, school").in("id", chunk),
   ), loadLivePlans(supabase, period, studentIds, mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true))]);
   const studentById = new Map(students.map((s) => [s.id, s]));
   const allocated = new Map<string, number>();
@@ -117,6 +133,7 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
       const stu = studentById.get(inv.student_id);
       const cls = Array.isArray(t.class) ? t.class[0] : t.class;
       const className = cls?.class_name ?? null;
+      const teacher = Array.isArray(cls?.teacher) ? cls.teacher[0] : cls?.teacher;
       const lineItems = (Array.isArray(inv.line_items) ? inv.line_items : []) as LineItemLike[];
       const matching = lineItems.flatMap(receiptOriginalItems).filter((line) => receiptMatchesClass(line, { classId: t.class_id, className }));
       const states = matching.map(receiptRefundState);
@@ -129,12 +146,15 @@ export async function getSessionTermsView(period: string, invoiceId?: string): P
         studentId: inv.student_id,
         studentName: stu?.name ?? "—",
         studentGrade: stu?.grade ?? null,
+        studentSchool: stu?.school ?? null,
         subject: t.subject,
         classId: t.class_id,
         className,
+        homeroomTeacherName: teacher?.display_name ?? null,
         monthlyPrice: isEieMonthlyClass(t.subject, cls?.english_track) ? settings.billing.eieMonthlyPrice : null,
         pricingMode: t.pricing_mode ?? "per_session",
         plannedSessions: t.class_id ? live.plans.get(inv.student_id)?.get(t.class_id) ?? 0 : t.planned_sessions === null ? null : Number(t.planned_sessions),
+        planUncertain: t.class_id ? live.uncertain.has(`${inv.student_id}|${t.class_id}`) : false,
         confirmedSessions: t.confirmed_sessions === null ? null : Number(t.confirmed_sessions),
         unitPrice: t.unit_price === null ? null : Number(t.unit_price),
         amount: t.amount === null ? null : Number(t.amount),

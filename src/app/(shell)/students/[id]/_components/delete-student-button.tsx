@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { deleteStudent } from "@/features/students/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * 학생 영구 삭제 — 잘못 추가한 경우 즉시 정정용. 2단계 확인(클릭 → '삭제 확정').
@@ -45,6 +46,7 @@ export function DeleteStudentButton({
     startTransition(async () => {
       const res = await deleteStudent(undefined, fd);
       if (res?.ok) {
+        notifyTermPlansChanged();
         // 죽은 상세 칸을 **덮어쓰며** 온 자리로(뒤로가기가 그 404에 걸리지 않게). 하드 내비라 목록은
         // 항상 새로 그려진다 = 방금 지운 학생이 남아 보이지 않는다.
         window.location.replace(inFrame ? withEmbed(backHref) : backHref);

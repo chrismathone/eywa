@@ -21,6 +21,7 @@ import {
   convertConsultationToStudent,
   type ConvertToStudentState,
 } from "@/features/enrollment/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 type ClassOption = {
   id: string;
@@ -142,6 +143,7 @@ export function ConvertToStudentDialog({
     const sid = success?.studentId;
     if (!sid || handledStudentId.current === sid) return;
     handledStudentId.current = sid;
+    if ((success?.assignedClassIds?.length ?? 0) > 0) notifyTermPlansChanged();
     // 동명이인이라 접미사가 붙었으면 **이동 전에** 알린다 — 조용히 이름을 바꾸면 직원이 나중에
     // "내가 넣은 이름이 아닌데?" 하고 헤맨다.
     if (success?.notice) toast.warning(success.notice, { duration: 8000 });

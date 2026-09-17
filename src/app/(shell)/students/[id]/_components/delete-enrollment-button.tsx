@@ -5,6 +5,7 @@ import { Trash2 } from "@/components/icons/eywa-icon-compat";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { deleteEnrollment } from "@/features/enrollments/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * 잘못 만든 **수업 이력 삭제**(원장·super_admin) — 학생 상세 '수업' 탭의 수강 행.
@@ -35,6 +36,7 @@ export function DeleteEnrollmentButton({
     if (state === notified.current) return;
     notified.current = state;
     if (state?.error) conflictToast(state.error);
+    else if (state?.ok) notifyTermPlansChanged();
   }, [state]);
 
   return (

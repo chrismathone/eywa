@@ -10,6 +10,7 @@ import {
   type ClassFormState,
 } from "@/features/classes/server/actions";
 import { overlapSummary } from "@/features/classes/overlap";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import {
   subjectWeekdayPeriods,
   subjectWeekendPeriods,
@@ -241,9 +242,11 @@ export function ClassForm({
       clearDraft();
       notifySaved();
       markSaved();
+      // 반 수정(요일·교시·운영 기간)은 회차 확정의 예정 시수를 바꾼다 — 새 반 만들기는 수강이 없어 무관.
+      if (mode === "edit") notifyTermPlansChanged();
       if ((state.overlaps?.length ?? 0) === 0 && state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, notifySaved, markSaved, router, clearDraft]);
+  }, [state, notifySaved, markSaved, router, clearDraft, mode]);
 
   // 폼 하단 인라인 알림을 놓치지 않게 가운데(top-center) 토스트 병행.
   // state 참조가 바뀔 때(=매 제출 결과)만 발화 → 같은 겹침으로 재저장해도 다시 알림.

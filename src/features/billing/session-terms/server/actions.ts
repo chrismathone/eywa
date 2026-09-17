@@ -119,10 +119,10 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
 
   // 기존 term 로드(확정 보존·stale 판단)
   const invoiceIds = invoices.map((i) => i.id);
-  const existing = await fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null }>(
+  const existing = await fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null; note: string | null }>(
     invoiceIds,
     (chunk, from, to) =>
-      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index").in("invoice_id", chunk).order("id").range(from, to),
+      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index, note").in("invoice_id", chunk).order("id").range(from, to),
   );
 
   let refreshed = 0;
@@ -146,6 +146,8 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   }
   for (const t of existing) {
     // 시수 미확정이어도 사용자가 저장한 수납 배분은 계획 갱신으로 지우지 않는다.
+    // 🔴 메모는 삭제를 막지 않는다 — 메모 하나로 남긴 행은 계획 0·미확정으로 영영 남아 '확정 N/M'·미배분 수·시수 검증
+    //    미확정 수를 부풀린다(적대적 리뷰 2026-09-17). 대신 지운 메모 원문을 아래 감사로그에 남긴다.
     if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && t.confirmed_sessions === null && t.allocation_line_index == null) staleUnconfirmed.push(t.id);
   }
 
@@ -161,6 +163,11 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     if (error) return { error: `정리 실패: ${error.message}` };
   }
 
+  const removedIds = new Set(staleUnconfirmed);
+  const removedNotes = existing
+    .filter((t) => removedIds.has(t.id) && t.note)
+    .map((t) => ({ termId: t.id, invoiceId: t.invoice_id, classId: t.class_id, note: t.note }));
+
   // 확정·배분 때문에 남겨 둔 종료반도 계획은 0이다. 예전 계획값을 남기지 않는다.
   const staleRetained = existing.filter((t) => !plannedKeys.has(`${t.invoice_id}|${t.class_id}`)).map((t) => t.id);
   for (let i = 0; i < staleRetained.length; i += 200) {
@@ -174,7 +181,14 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     action: "session_terms_refresh",
     targetType: "invoice_session_term",
     targetLabel: `${period} 계획 갱신`,
-    metadata: { period, refreshed, removed: staleUnconfirmed.length, invoices: invoices.length },
+    metadata: {
+      period,
+      refreshed,
+      removed: staleUnconfirmed.length,
+      invoices: invoices.length,
+      // 지운 행에 적혀 있던 메모(특이사항) — 행과 함께 사라지므로 원문을 여기에만 남긴다.
+      ...(removedNotes.length ? { removedNotes } : {}),
+    },
   });
   revalidatePath("/billing");
   return { ok: true, refreshed };

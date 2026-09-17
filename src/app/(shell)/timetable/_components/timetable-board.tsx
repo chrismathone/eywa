@@ -22,6 +22,7 @@ import {
   updateEnrollmentsAttendanceBatch,
 } from "@/features/enrollments/server/actions";
 import { endSingleEnrollment } from "@/features/students/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import { EndScopeNote } from "./end-scope-note";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
 import {
@@ -207,6 +208,7 @@ export function TimetableEditProvider({
       return;
     }
     setEndTarget(null);
+    notifyTermPlansChanged();
     router.refresh(); // endSingleEnrollment는 /timetable revalidate 안 함 → 클라 새로고침
   }
 
@@ -441,6 +443,8 @@ export function TimetableEditProvider({
     setSaving(true);
     setError(null);
     setFailed([]);
+    // 🔴 실패로 중간에 돌아서도 **이미 나간 쓰기**가 있으면 회차 확정 창에 알린다(성공분 기준, finally).
+    let changed = false;
     try {
       // 교차 반 이동 = move_enrollments_batch(적용일 split). 같은 반 요일 편집 = attendance_days 갱신(전입 플래그 없음).
       const moves = resolved.filter((m) => m.fromClassId !== m.toClassId);
@@ -483,6 +487,7 @@ export function TimetableEditProvider({
             continue;
           }
           for (const m of list) committed.add(m.enrollmentId);
+          if ((res.results ?? []).some((r) => r.ok)) changed = true;
           const fails = (res.results ?? []).filter((r) => !r.ok);
           if (fails.length > 0) groupFails.push(...fails.map((f) => f.error ?? f.enrollmentId));
         }
@@ -497,6 +502,7 @@ export function TimetableEditProvider({
         const r2 = await updateEnrollmentsAttendanceBatch(
           dayEdits.map((m) => ({ enrollmentId: m.enrollmentId, days: m.toDays ?? [] })),
         );
+        if ((r2.count ?? 0) > 0) changed = true;
         if (r2.error) {
           setError(r2.error);
           // 반 이동은 이미 나갔다 — 그 건들은 큐에서 뺀다(다시 저장해도 두 번 안 옮겨지게).
@@ -520,6 +526,8 @@ export function TimetableEditProvider({
           if (!res.ok) {
             failedMoves.push(`${m.className}: ${res.error}`);
             failedIds.add(m.slotId);
+          } else {
+            changed = true;
           }
         }
         if (failedMoves.length > 0) {
@@ -536,6 +544,7 @@ export function TimetableEditProvider({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      if (changed) notifyTermPlansChanged();
       setSaving(false);
     }
   }

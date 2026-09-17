@@ -8,6 +8,8 @@ import { confirmSessionTerm, unconfirmSessionTerm, confirmClassTerms } from "@/f
 import type { SessionTermActionState } from "@/features/billing/session-terms/server/actions";
 import { DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { updateMonthlyTermSessions } from "@/features/billing/session-terms/server/monthly-sessions";
+import { updateSessionTermNote } from "@/features/billing/session-terms/server/note-actions";
+import { confirmSelectedTerms } from "@/features/billing/session-terms/server/selected-confirm-actions";
 
 const h = vi.hoisted(() => ({ refresh: vi.fn(), saved: null as null | ((message: RecordSavedMessage) => void) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
@@ -19,6 +21,8 @@ vi.mock("@/features/billing/session-terms/server/actions", () => ({
   confirmSessionTerm: vi.fn(), unconfirmSessionTerm: vi.fn(), confirmClassTerms: vi.fn(), refreshPlannedTerms: vi.fn(),
 }));
 vi.mock("@/features/billing/session-terms/server/monthly-sessions", () => ({ updateMonthlyTermSessions: vi.fn() }));
+vi.mock("@/features/billing/session-terms/server/note-actions", () => ({ updateSessionTermNote: vi.fn() }));
+vi.mock("@/features/billing/session-terms/server/selected-confirm-actions", () => ({ confirmSelectedTerms: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn() }));
 vi.mock("@/components/ui/drag-scroll-area", () => ({ DragScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
@@ -225,12 +229,12 @@ describe("한 행 = 한 줄 (원장 2026-09-16)", () => {
   });
 
   it("시수 기준 확정값은 표시 없이 그대로", () => {
-    const { container } = render(<SessionTermGroups groups={[confirmedGroup({ quantityBasis: "attendance_units" })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const { container } = render(<SessionTermGroups groups={[confirmedGroup({ quantityBasis: "attendance_units", plannedSessions: 7 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     expect(container.querySelector("[data-tip]")).toBeNull();
     expect(container.textContent).not.toContain("재확정 필요");
   });
 
-  it("이 반 청구액은 금액 · 꼬리표 · 수납 연결을 한 줄에 — 배분 재확인은 꼬리표 자리에 앰버 + 카드", () => {
+  it("실납 청구액은 금액 · 꼬리표 · 수납 연결을 한 줄에 — 배분 재확인은 꼬리표 자리에 앰버 + 카드", () => {
     const { container, rerender } = render(<SessionTermGroups groups={[confirmedGroup({ allocatedAmount: 148750 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     const cell = () => screen.getByRole("button", { name: "수납 연결·배분" }).closest("td")!;
     expect(cell().textContent).toBe("148,750원배분 완료수납 연결·배분");
@@ -248,6 +252,174 @@ describe("한 행 = 한 줄 (원장 2026-09-16)", () => {
     // 학생 행의 칸은 줄바꿈하지 않는다 — 폭은 표의 최소 폭이 보장한다.
     const row = cell().closest("tr")!;
     expect(row.className).toContain("[&>td]:whitespace-nowrap");
-    expect(container.querySelector("table")!.className).toContain("min-w-[1130px]");
+    expect(container.querySelector("table")!.className).toContain("min-w-[1520px]");
+  });
+});
+
+describe("열 11개 — 선택·학교학년·담임·메모 (원장 2026-09-17)", () => {
+  const withInfo = () => {
+    const g = group("수학");
+    Object.assign(g.students[0], { studentSchool: "칠성초", studentGrade: "초6", homeroomTeacherName: "이수진" });
+    return g;
+  };
+
+  it("열 머리는 원장이 적은 순서 그대로이고 반 머리 줄이 열 전체를 덮는다", () => {
+    const { container } = render(<SessionTermGroups groups={[withInfo()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const heads = [...container.querySelectorAll("thead th")].map((th) => th.textContent);
+    expect(heads).toEqual(["선택", "이름", "학교학년", "담임", "예정 시수", "확정 시수", "단가 및 수강료", "예상 및 확정 청구액", "실납 청구액", "메모(특이사항)", "기타"]);
+    expect(container.querySelectorAll("colgroup col")).toHaveLength(11);
+    // 반 머리 줄 = 선택 칸 1 + 나머지 10칸을 덮는 칸.
+    const band = container.querySelector("tbody td[colspan]")!;
+    expect(band.getAttribute("colspan")).toBe("10");
+    expect(band.closest("tr")!.children).toHaveLength(2);
+    // 학생 행도 같은 11칸.
+    expect(screen.getByText("수학학생").closest("tr")!.children).toHaveLength(11);
+    // 오른쪽 끝 '기타' 열은 고정(불투명 바탕) — 표가 창보다 넓어도 확정·해제 버튼이 보인다.
+    expect(container.querySelector("thead th:last-child")!.className).toContain("sticky right-0");
+    expect(screen.getByText("수학학생").closest("tr")!.lastElementChild!.className).toMatch(/sticky right-0 .*bg-card/);
+  });
+
+  it("이름 옆 칸에 학교·학년을 붙여(칠성초6) 쓰고 담임 이름을 싣는다 — 모르면 —", () => {
+    const { rerender } = render(<SessionTermGroups groups={[withInfo()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const cells = () => [...screen.getByText("수학학생").closest("tr")!.children].map((td) => td.textContent);
+    expect(cells().slice(1, 4)).toEqual(["수학학생", "칠성초6", "이수진"]);
+    const g = group("수학");
+    Object.assign(g.students[0], { studentGrade: null });
+    rerender(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(cells().slice(1, 4)).toEqual(["수학학생", "—", "—"]);
+  });
+
+  it("메모를 누르면 그 자리에서 고치고 Enter로 저장 — 저장된 메모는 한 줄 + 마우스 오버 카드", async () => {
+    vi.mocked(updateSessionTermNote).mockResolvedValueOnce({ note: "10/5 보강 1회" });
+    render(<SessionTermGroups groups={[withInfo()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByRole("button", { name: "수학학생 메모 추가" }));
+    const input = screen.getByLabelText("수학학생 메모");
+    fireEvent.change(input, { target: { value: "10/5 보강 1회" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    const saved = await screen.findByRole("button", { name: "수학학생 메모 수정: 10/5 보강 1회" });
+    expect(updateSessionTermNote).toHaveBeenCalledTimes(1);
+    expect(updateSessionTermNote).toHaveBeenCalledWith("수학", "10/5 보강 1회");
+    expect(saved.getAttribute("data-tip")).toContain("10/5 보강 1회");
+    expect(saved).not.toHaveAttribute("title");
+    expect(saved.className).toContain("truncate");
+    // 메모는 확정 경로가 아니다 — 확정 수가 안 바뀐다.
+    expect(screen.getByTestId("confirmed-count")).toHaveTextContent("0");
+  });
+
+  it("Esc는 저장하지 않고 닫고, 바뀐 게 없으면 칸을 떠나도 저장하지 않는다", () => {
+    const g = withInfo();
+    g.students[0].note = "환불 문의";
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByRole("button", { name: "수학학생 메모 수정: 환불 문의" }));
+    const input = screen.getByLabelText("수학학생 메모");
+    expect(input).toHaveValue("환불 문의");
+    fireEvent.change(input, { target: { value: "바꿈" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "수학학생 메모 수정: 환불 문의" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "수학학생 메모 수정: 환불 문의" }));
+    fireEvent.blur(screen.getByLabelText("수학학생 메모"));
+    expect(updateSessionTermNote).not.toHaveBeenCalled();
+  });
+
+  it("저장 실패는 입력을 남기고 이유를 보여 준다", async () => {
+    vi.mocked(updateSessionTermNote).mockResolvedValueOnce({ error: "수납 관리 권한이 없습니다" });
+    render(<SessionTermGroups groups={[withInfo()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByRole("button", { name: "수학학생 메모 추가" }));
+    fireEvent.change(screen.getByLabelText("수학학생 메모"), { target: { value: "메모" } });
+    fireEvent.blur(screen.getByLabelText("수학학생 메모"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("수납 관리 권한이 없습니다");
+    expect(screen.getByLabelText("수학학생 메모")).toHaveValue("메모");
+  });
+});
+
+describe("선택 일괄 확정 · 확정≠예정 · 새 창 링크 (원장 2026-09-17)", () => {
+  const two = () => {
+    const g = group("수학");
+    g.students.push({ ...g.students[0], id: "수학2", studentId: "수학2", studentName: "둘째학생", plannedSessions: 4.5 });
+    return g;
+  };
+
+  it("단가 일괄 입력 → 체크한 학생만 → 선택 일괄 확정: 각 행에 보이는 시수 × 단가로 보낸다", async () => {
+    vi.mocked(confirmSelectedTerms).mockResolvedValueOnce({ confirmed: 1, skipped: 0, terms: [{ id: "수학2", confirmedSessions: 4.5, unitPrice: 24000, amount: 108000, pricingMode: "per_session", confirmedAt: "2026-09-17", quantityBasis: "attendance_units" }] });
+    render(<SessionTermGroups groups={[two()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const button = () => screen.getByRole("button", { name: /^선택 일괄 확정/ });
+    expect(button()).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByRole("button", { name: "단가 일괄 입력" }));
+    fireEvent.click(screen.getByLabelText("둘째학생 선택"));
+    expect(button()).toHaveTextContent("선택 일괄 확정 (1)");
+    // 버튼은 '단가 일괄 입력' 바로 오른쪽.
+    expect(screen.getByRole("button", { name: "단가 일괄 입력" }).nextElementSibling).toBe(button());
+    fireEvent.click(button());
+    await waitFor(() => expect(confirmSelectedTerms).toHaveBeenCalledWith("2026-09", "수학", [{ id: "수학2", sessions: 4.5, unitPrice: 24000, monthly: false }]));
+    // 확정되면 그 행은 해제 버튼 + 체크박스 잠금, 선택 수는 0.
+    expect(await screen.findByRole("button", { name: "해제" })).toBeEnabled();
+    expect(screen.getByLabelText("둘째학생 선택")).toBeDisabled();
+    expect(screen.getByLabelText("둘째학생 선택")).not.toBeChecked();
+    expect(button()).toHaveTextContent(/^선택 일괄 확정$/);
+    expect(screen.getByTestId("confirmed-count")).toHaveTextContent("1");
+  });
+
+  it("단가가 빈 학생이 섞이면 보내지 않고 이름을 알린다 · 반 전체 선택은 미확정 학생만 고른다", () => {
+    const g = two();
+    Object.assign(g.students[0], { confirmedSessions: 7, unitPrice: 21250, amount: 148750 });
+    g.students.push({ ...g.students[1], id: "수학3", studentId: "수학3", studentName: "셋째학생" });
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByLabelText("수학반 미확정 학생 전체 선택"));
+    expect(screen.getByLabelText("수학학생 선택")).not.toBeChecked();
+    expect(screen.getByLabelText("둘째학생 선택")).toBeChecked();
+    expect(screen.getByLabelText("셋째학생 선택")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "선택 일괄 확정 (2)" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("시수·단가를 확인해 주세요: 둘째학생, 셋째학생");
+    expect(confirmSelectedTerms).not.toHaveBeenCalled();
+    // 하나를 풀면 전체 선택 칸은 '일부'(indeterminate).
+    fireEvent.click(screen.getByLabelText("셋째학생 선택"));
+    expect((screen.getByLabelText("수학반 미확정 학생 전체 선택") as HTMLInputElement).indeterminate).toBe(true);
+  });
+
+  it("선택 확정에서 일부가 실패하면 그 학생 이름과 사유를 반 머리 줄 둘째 줄에 보여 준다 · 반이 없는 묶음엔 선택이 없다", async () => {
+    vi.mocked(confirmSelectedTerms).mockResolvedValueOnce({ confirmed: 1, skipped: 0, failedIds: ["수학2"], error: "1명은 확정하지 못했습니다 — 배분금액이 있는 반은 0시수로 확정할 수 없습니다", terms: [{ id: "수학", confirmedSessions: 9, unitPrice: 24000, amount: 216000, pricingMode: "per_session", confirmedAt: "2026-09-17", quantityBasis: "attendance_units" }] });
+    const g = two();
+    const noClass: ClassGroup = { ...group("수학"), classId: "noclass:?", className: "(반 미지정)", students: [{ ...group("수학").students[0], id: "고아", studentName: "고아학생", classId: null }] };
+    render(<SessionTermGroups groups={[g, noClass]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "단가 일괄 입력" })[0]!);
+    fireEvent.click(screen.getByLabelText("수학반 미확정 학생 전체 선택"));
+    fireEvent.click(screen.getByRole("button", { name: "선택 일괄 확정 (2)" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("배분금액이 있는 반은 0시수로 확정할 수 없습니다 (둘째학생)");
+    // 실패한 학생은 선택이 남는다(고쳐서 다시 누를 수 있게).
+    expect(screen.getByLabelText("둘째학생 선택")).toBeChecked();
+    expect(screen.queryByLabelText("(반 미지정) 미확정 학생 전체 선택")).toBeNull();
+    expect(screen.getByLabelText("고아학생 선택")).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: /^선택 일괄 확정/ })).toHaveLength(1);
+  });
+
+  it("확정 시수가 예정과 다르면 주황 숫자 + 카드, 같으면 그대로 · 월 정액은 칠하지 않는다", () => {
+    const g = group("수학");
+    Object.assign(g.students[0], { plannedSessions: 4.5, confirmedSessions: 6, unitPrice: 24000, amount: 144000, quantityBasis: "attendance_units" });
+    const { container, rerender } = render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const mark = container.querySelector("span.text-amber[data-tip]");
+    expect(mark).not.toBeNull();
+    expect(mark!.textContent).toContain("6");
+    expect(mark!.getAttribute("data-tip")).toContain("예정 4.5시수 · 확정 6시수");
+    const same = group("수학");
+    Object.assign(same.students[0], { plannedSessions: 4.5, confirmedSessions: 4.5, unitPrice: 24000, amount: 108000, quantityBasis: "attendance_units" });
+    rerender(<SessionTermGroups groups={[same]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(container.querySelector("span.text-amber[data-tip]")).toBeNull();
+    // 휴원·반 비활성으로 예정이 불확실한 행은 달라도 칠하지 않는다.
+    const uncertain = group("수학");
+    Object.assign(uncertain.students[0], { plannedSessions: 0, planUncertain: true, confirmedSessions: 8, unitPrice: 24000, amount: 192000, quantityBasis: "attendance_units" });
+    rerender(<SessionTermGroups groups={[uncertain]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(container.querySelector("span.text-amber[data-tip]")).toBeNull();
+    const eie = group("EiE", 290000);
+    Object.assign(eie.students[0], { plannedSessions: 20, confirmedSessions: 39, unitPrice: 270000, amount: 270000, pricingMode: "monthly", confirmedAt: "2026-09-16" });
+    rerender(<SessionTermGroups groups={[eie]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(container.querySelector("span.text-amber[data-tip]")).toBeNull();
+  });
+
+  it("학생 이름·반 이름은 원생·반 상세로 가는 링크다", () => {
+    render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByRole("link", { name: "수학학생" })).toHaveAttribute("href", "/students/수학");
+    expect(screen.getByRole("link", { name: "수학반" })).toHaveAttribute("href", "/classes/수학");
   });
 });

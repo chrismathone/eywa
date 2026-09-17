@@ -9,6 +9,7 @@ import {
   rollbackStructureImport,
 } from "@/features/timetable/server/structure-import-actions";
 import { applySheetImport, previewSheetImport } from "@/features/timetable/server/import-actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import type { DryRunReport, SchedulePlanItem } from "@/features/timetable/import/structure/types";
 import type { ImportDiff } from "@/features/timetable/import/types";
 import { conflictChecklist } from "@/features/timetable/import/structure/conflicts";
@@ -151,6 +152,8 @@ export function EnglishImportDialog({
       if (enroll && enrollChanges > 0) {
         if (!enrollHash) {
           setError("반이동 미리보기 정보가 없습니다 — 다시 불러오세요." + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+          // 배치가 이미 들어갔으면 회차 확정 창에 알린다(중간에 돌아서도 반영분 기준).
+          if (sRes) notifyTermPlansChanged();
           setStructRes(sRes);
           setConfirming(false);
           return;
@@ -166,6 +169,8 @@ export function EnglishImportDialog({
           } else {
             setError("학생 반이동 적용 실패: " + r.error + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
           }
+          // 배치 성공분 또는 스냅샷 뒤 중단(`snapshotId`, 일부 반영 가능)이면 회차 확정 창에 알린다.
+          if (sRes || r.snapshotId) notifyTermPlansChanged();
           setStructRes(sRes); // 구조는 성공했으면 결과·롤백 노출
           setConfirming(false);
           return;
@@ -175,6 +180,7 @@ export function EnglishImportDialog({
       setStructRes(sRes);
       setEnrollRes(eRes);
       setConfirming(false);
+      if (sRes || eRes) notifyTermPlansChanged();
       router.refresh(); // 기본뷰·통합뷰·강사뷰 자동 갱신.
     });
   }
@@ -187,6 +193,7 @@ export function EnglishImportDialog({
       else {
         setReverted(`배치 되돌리기 완료 — 삭제 ${res.reverted?.deleted ?? 0} · 복원 ${res.reverted?.restored ?? 0} · 반 ${res.reverted?.classReverted ?? 0}`);
         setSnapshotId(null);
+        notifyTermPlansChanged();
         router.refresh();
       }
     });

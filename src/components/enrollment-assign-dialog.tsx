@@ -14,6 +14,7 @@ import {
   createEnrollment,
   type CreateEnrollmentState,
 } from "@/features/enrollments/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABEL: Record<string, string> = {
@@ -151,6 +152,7 @@ export function EnrollmentAssignDialog({
       handledEnrollmentId.current !== state.enrollmentId
     ) {
       handledEnrollmentId.current = state.enrollmentId;
+      notifyTermPlansChanged();
       router.refresh();
       onClose(true);
     }

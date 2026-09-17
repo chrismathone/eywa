@@ -15,6 +15,7 @@ import {
   type StudentFormState,
 } from "@/features/students/server/actions";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
@@ -133,11 +134,13 @@ export function StudentForm({
       handledNonce.current = state.nonce;
       clearDraft();
       notifySaved();
+      // 수정 저장은 상태(퇴원·휴원·재원)를 바꾸며 수강을 닫거나 대기로 돌린다 — 열린 회차 확정 창의 예정 시수.
+      if (mode === "edit") notifyTermPlansChanged();
       markSaved(); // dirty 해제 → 저장 후 닫아도 확인 안 뜸
       if (state.notice) alert(state.notice); // 이름 중복으로 접미사(A·B·C) 강제된 경우 안내
       if (state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, notifySaved, markSaved, router, clearDraft]);
+  }, [state, notifySaved, markSaved, router, clearDraft, mode]);
 
   const v = initialValue ?? {
     name: "",

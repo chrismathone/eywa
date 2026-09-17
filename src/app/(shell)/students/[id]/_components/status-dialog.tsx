@@ -21,6 +21,7 @@ import {
   setStudentEnrollmentHolds,
   type ChangeStatusState,
 } from "@/features/students/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 type Target = "withdrawn" | "on_hold" | "enrolled";
 
@@ -174,6 +175,7 @@ export function StatusDialog({
       (holdState && !holdState.error);
     if (done && !closedRef.current) {
       closedRef.current = true;
+      notifyTermPlansChanged();
       onClose(true);
     }
   }, [state, partialState, holdState, onClose]);

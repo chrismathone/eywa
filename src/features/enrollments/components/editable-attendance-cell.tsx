@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import { updateEnrollmentsAttendanceBatch } from "@/features/enrollments/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 // 요일 글자는 앱 전역 `sheetDowLabel` 단일 소스 — 여기에 표를 다시 만들지 않는다.
 import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { sheetDowLabel } from "@/features/teacher-view/i18n";
@@ -87,6 +88,7 @@ export function EditableAttendanceCell({
       if (res.error) setErr(res.error);
       else {
         setEditing(false);
+        notifyTermPlansChanged();
         router.refresh();
       }
     });

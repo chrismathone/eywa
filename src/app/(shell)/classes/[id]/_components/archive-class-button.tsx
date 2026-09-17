@@ -3,7 +3,8 @@
 import { useActionState } from "react";
 import { Archive, RotateCcw } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
-import { archiveClass } from "@/features/classes/server/actions";
+import { archiveClass, type ArchiveClassState } from "@/features/classes/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * 반 폐지/재운영 토글 — is_active 반전 + 그 반 활성 수강 종료/복원(archiveClass).
@@ -22,7 +23,15 @@ export function ArchiveClassButton({
   /** 이 반의 활성 수강 학생 수 — 폐지 경고에 실제 영향 범위를 보여준다. */
   enrolledCount: number;
 }) {
-  const [state, formAction] = useActionState(archiveClass, undefined);
+  // 성공은 `undefined`로 온다(초기값과 같아 effect로 못 잡는다) — 결과를 받는 자리에서 바로 알린다.
+  const [state, formAction] = useActionState(
+    async (prev: ArchiveClassState, formData: FormData) => {
+      const res = await archiveClass(prev, formData);
+      if (!res?.error) notifyTermPlansChanged();
+      return res;
+    },
+    undefined,
+  );
   return (
     <form
       action={formAction}
