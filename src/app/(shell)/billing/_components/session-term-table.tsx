@@ -20,7 +20,9 @@ import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
 import { MonthlySessionEditor } from "./monthly-session-editor";
 import { TermNoteCell } from "./term-note-cell";
 import { SelectedConfirmButton, type TermDraft } from "./selected-confirm-button";
+import { ClassUnconfirmButton } from "./class-unconfirm-button";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { formatTermDays } from "@/features/billing/session-terms/term-days";
 import { WindowLink } from "@/components/workspace/window-link";
 
 const KRW = new Intl.NumberFormat("ko-KR");
@@ -58,7 +60,8 @@ export function RefreshPlanButton({ period }: { period: string }) {
 type Selection = { rows: Row[]; draftOf: (row: SessionTermRow) => TermDraft; onConfirmed: (ids: string[]) => void };
 
 /** 회차 없이 단가만 입력하면 미확정 학생의 입력칸만 채운다. */
-function ClassBatch({ period, group, listId, onPrice, onlyUnallocated, selection }: { period: string; group: ClassGroup; listId: string; onPrice: (price: string) => void; onlyUnallocated?: boolean; selection?: Selection }) {
+/** `visibleOnly` = 필터(미배분만 보기·검색)로 이 반의 일부만 보이는 중 — 반 일괄 확정도 보이는 학생에게만 보낸다. */
+function ClassBatch({ period, group, listId, onPrice, visibleOnly, selection }: { period: string; group: ClassGroup; listId: string; onPrice: (price: string) => void; visibleOnly?: boolean; selection?: Selection }) {
   const monthlyPrice = group.students[0]?.monthlyPrice ?? null;
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -95,9 +98,10 @@ function ClassBatch({ period, group, listId, onPrice, onlyUnallocated, selection
     setNotice(null);
     start(async () => {
       try {
-        const res = onlyUnallocated ? await confirmClassTerms(period, group.classId, price, sessions, group.students.map((r) => r.id)) : await confirmClassTerms(period, group.classId, price, sessions);
+        const res = visibleOnly ? await confirmClassTerms(period, group.classId, price, sessions, group.students.map((r) => r.id)) : await confirmClassTerms(period, group.classId, price, sessions);
         if (res.error) setErr(res.error);
         else if (res.terms) {
+          selection?.onConfirmed(res.terms.map((t) => t.id));
           apply(res.terms);
         }
       } catch { setErr("확정하지 못했습니다. 다시 시도해 주세요"); }
@@ -217,9 +221,10 @@ const planDiffTip = (r: Row) =>
 
 /**
  * 오른쪽 끝 '기타'(확정·해제) 열 고정 — 표가 창보다 넓어도(최소 폭 > 수납 창 기본 1,160) 버튼이 늘 보이게(원장 2026-09-17).
- * 불투명 바탕(마우스 오버 색은 바탕색 위에 그림으로 겹친다 — 반투명 색으로 칠하면 밀린 칸 글자가 비친다, [[#74]]) + 왼쪽 구분선·위 행 구분선은 가상 요소로 — 접힌 테두리 표에서 sticky 칸은 셀 테두리를 안 끌고 간다([[#71]]).
+ * 불투명 바탕(마우스 오버 색은 바탕색 위에 그림으로 겹친다 — 반투명 색으로 칠하면 밀린 칸 글자가 비친다, [[#74]]) + 위 행 구분선은 가상 요소로 — 접힌 테두리 표에서 sticky 칸은 셀 테두리를 안 끌고 간다([[#71]]).
+ * 🔴 왼쪽 세로 구분선은 없다(원장 2026-09-17 *"해제 옆에 세로선은 왜 있지? 제거"*) — 되살리지 말 것.
  */
-const STICKY_END = "sticky right-0 z-[1] before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border";
+const STICKY_END = "sticky right-0 z-[1]";
 const STICKY_END_ROW = `${STICKY_END} bg-card group-hover:bg-[linear-gradient(color-mix(in_oklab,var(--color-accent)_30%,transparent),color-mix(in_oklab,var(--color-accent)_30%,transparent))] after:absolute after:inset-x-0 after:top-0 after:h-px after:bg-border`;
 
 /**
@@ -234,6 +239,8 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
     try {
       const result = await confirmSessionTerm(prev, data);
       if (result?.terms) {
+        // 확정된 행의 체크는 버린다 — 남겨 두면 나중에 해제될 때 옛 입력값과 함께 되살아난다(리뷰 2026-09-17).
+        onSelect(false);
         apply(result.terms);
       }
       return result;
@@ -244,6 +251,8 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
       const result = await unconfirmSessionTerm(prev, data);
       if (result?.terms) {
         onDraft({ sessions: String(r.confirmedSessions ?? r.plannedSessions ?? ""), price: String(r.unitPrice ?? "") });
+        // 확정 전에 걸어 둔 체크가 해제와 함께 되살아나지 않게(되살아나면 옛 입력값으로 한 번에 확정된다 — 리뷰 2026-09-17).
+        onSelect(false);
         apply(result.terms);
       }
       return result;
@@ -277,11 +286,23 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
           className="accent-primary size-4 cursor-pointer align-middle disabled:cursor-default"
         />
       </td>
-      <td className="text-foreground px-3 py-2 font-medium" title={r.studentName}>
+      <td className="text-foreground px-3 py-2 font-medium">
         {/* 누르면 원생 상세를 **새 창**으로(원장 2026-09-17) — 회차 확정 창은 그대로 둔다. */}
-        <WindowLink href={`/students/${r.studentId}`} title={r.studentName} frameTarget="window" className="block truncate hover:underline">
-          {r.studentName}
-        </WindowLink>
+        {/* 반 요일과 다른 개별 등원 요일은 이름 옆에(원장 2026-09-17). 한 줄 flex — 인라인 링크의 말줄임은 안 먹는다([[#111]]). */}
+        <div className="flex min-w-0 items-center gap-1">
+          <WindowLink href={`/students/${r.studentId}`} title={r.studentName} frameTarget="window" className="min-w-0 truncate hover:underline">
+            {/* WindowLink의 title은 창 제목이라 속성으로 안 나간다 — 잘린 이름은 이 title로 끝까지 본다. */}
+            <span title={r.studentName}>{r.studentName}</span>
+          </WindowLink>
+          {r.attendDays?.length ? (
+            <span
+              className="text-amber shrink-0 text-xs font-bold"
+              {...tipProps({ title: "개별 등원 요일", lines: [`${formatTermDays(r.attendDays)} 등원`, r.classDays?.length ? `수업 요일 ${formatTermDays(r.classDays)}` : null] })}
+            >
+              {formatTermDays(r.attendDays)}
+            </span>
+          ) : null}
+        </div>
         {/* 미확정 행의 확정 폼(빈 폼) — 회차/단가 입력·확정 버튼이 form 속성으로 여기에 묶인다. */}
         {!confirmed ? (
           <form id={fid} action={confirmAction} className="hidden">
@@ -422,6 +443,9 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
   );
 }
 
+/** 반 머리 줄의 수업 요일 — 같은 반이라 행마다 같다(첫 값). */
+const classDaysText = (students: Row[]) => formatTermDays(students.find((s) => s.classDays?.length)?.classDays);
+
 /** 계획 회차 요약 — 반 전원 같으면 "N회", 다르면 "min~max회"(월중 등록/퇴원). */
 function plannedSummary(students: Row[]): string {
   const vals = students.map((s) => s.plannedSessions).filter((n): n is number => n !== null);
@@ -440,27 +464,36 @@ export function SessionTermGroups({
   groups,
   catalog,
   period,
-  onlyUnallocated = false,
+  visibleOnly = false,
 }: {
   groups: ClassGroup[];
   catalog: Catalog;
   period: string;
-  onlyUnallocated?: boolean;
+  /** 필터(미배분만 보기·검색)로 좁혀 보는 중 — 반 일괄 확정을 보이는 학생에게만. */
+  visibleOnly?: boolean;
 }) {
   const listId = useId();
   const { patches } = useSessionTermsState();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const draftOf = (row: SessionTermRow): Draft => drafts[row.id] ?? { sessions: String(row.plannedSessions ?? ""), price: "" };
   // 체크박스 선택(원장 2026-09-17) — 화면 메모리. 확정되면 대상에서 빠진다(체크박스가 잠긴다).
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  // 새 데이터(다른 창의 확정·새로고침)가 오면 그사이 확정된 행의 선택은 버린다 — 남겨 두면 나중에 해제될 때 체크가 옛 입력값과 함께
+  // 되살아난다(재리뷰 2026-09-17). 렌더 중 파생(SessionTermsState와 같은 방식 — effect로 setState 금지).
+  const [selection, setSelection] = useState<{ source: ClassGroup[]; ids: ReadonlySet<string> }>(() => ({ source: groups, ids: new Set() }));
+  let selected = selection.ids;
+  if (selection.source !== groups) {
+    const open = new Set(groups.flatMap((g) => g.students).filter((row) => row.confirmedSessions === null).map((row) => row.id));
+    selected = new Set([...selection.ids].filter((id) => open.has(id)));
+    setSelection({ source: groups, ids: selected });
+  }
   const setMany = (ids: string[], on: boolean) =>
-    setSelected((current) => {
-      const next = new Set(current);
+    setSelection((current) => {
+      const next = new Set(current.ids);
       for (const id of ids) {
         if (on) next.add(id);
         else next.delete(id);
       }
-      return next;
+      return { ...current, ids: next };
     });
   return (
     <DragScrollArea className="border-border rounded-2xl border">
@@ -473,22 +506,23 @@ export function SessionTermGroups({
           청구액 / 실납 청구액 / 메모(특이사항) / 기타"*. 한 행 = 한 줄(원장 2026-09-16)은 그대로 — 비율은 칸에 실제로 서는 내용 폭을
           Pretendard로 잰 값(2026-09-17, 칸 여백 포함: 선택 36 · 이름 4자 88 · 학교학년 6자 102 · 담임 70 · 시수 머리 94 · 단가 122 ·
           예상 `148,750원 예상 · 7시수 × 21,250원` 약 250~290 · 실납 `148,750원 배분 재확인 필요 수납 연결·배분` 약 306 ·
-          메모 머리 132 · 기타 `월 금액 확정` 134)에서 잡았고, 최소 폭 1,520px에서 각 칸이 제 한 줄을 담는다. 남는 폭은 메모에
+          메모 머리 132 · 기타 `월 금액 확정` 134)에서 잡았고, 이름 칸은 개별 등원 요일(4자 이름 약 62 + `월·수·금` 약 49)을 붙이며 최소 폭을
+          1,580px로 올리고 이름 9% · 실납 19.75% · 메모 8.5%로 옮겼다(2026-09-17), 최소 폭 1,580px에서 각 칸이 제 한 줄을 담는다(메모가 가장 빠듯하다 — 134 vs 132). 남는 폭은 메모에
           조금 더 준다. ⚠️ 수납 창 기본 크기(1,160)보다 넓다 — 그 크기에선 끌어서 가로로 민다(수납 15열 표와 같은 결정,
           원장 2026-09-04). 그래서 '기타' 열(확정·해제)은 오른쪽에, 반 머리 줄의 일괄 입력·확정 버튼은 보이는 오른쪽 끝에
           고정했다(원장 2026-09-17 승인). 열을 더하면 이 폭과 비율을 함께 다시 잴 것. */}
-      <table className="w-full min-w-[1520px] table-fixed text-sm">
+      <table className="w-full min-w-[1580px] table-fixed text-sm">
         <colgroup>
           <col className="w-[2.5%]" />
-          <col className="w-[6%]" />
+          <col className="w-[9%]" />
           <col className="w-[7%]" />
           <col className="w-[5%]" />
           <col className="w-[6.25%]" />
           <col className="w-[6.25%]" />
           <col className="w-[8%]" />
           <col className="w-[18.5%]" />
-          <col className="w-[20.25%]" />
-          <col className="w-[11%]" />
+          <col className="w-[19.75%]" />
+          <col className="w-[8.5%]" />
           <col className="w-[9.25%]" />
         </colgroup>
         <thead>
@@ -496,18 +530,19 @@ export function SessionTermGroups({
             <th className="px-2 py-2 text-center font-bold">
               <span className="sr-only">선택</span>
             </th>
-            <th className="px-3 py-2 text-left font-bold">이름</th>
-            <th className="px-3 py-2 text-left font-bold">학교학년</th>
-            <th className="px-3 py-2 text-left font-bold" title="반의 현재 담임 — 지난 달을 열어도 지금 담임이 보입니다">
+            {/* 열 제목은 전부 가운데(원장 2026-09-17) — 본문 값의 정렬(숫자 오른쪽 등)은 그대로. */}
+            <th className="px-3 py-2 text-center font-bold">이름</th>
+            <th className="px-3 py-2 text-center font-bold">학교학년</th>
+            <th className="px-3 py-2 text-center font-bold" title="반의 현재 담임 — 지난 달을 열어도 지금 담임이 보입니다">
               담임
             </th>
             <th className="px-3 py-2 text-center font-bold">예정 시수</th>
             <th className="px-3 py-2 text-center font-bold">확정 시수</th>
-            <th className="px-3 py-2 text-right font-bold">단가 및 수강료</th>
-            <th className="px-3 py-2 text-right font-bold">예상 및 확정 청구액</th>
-            <th className="px-3 py-2 text-right font-bold">실납 청구액</th>
-            <th className="px-3 py-2 text-left font-bold">메모(특이사항)</th>
-            <th className={`${STICKY_END} bg-bg-soft px-3 py-2 text-right font-bold`}>기타</th>
+            <th className="px-3 py-2 text-center font-bold">단가 및 수강료</th>
+            <th className="px-3 py-2 text-center font-bold">예상 및 확정 청구액</th>
+            <th className="px-3 py-2 text-center font-bold">실납 청구액</th>
+            <th className="px-3 py-2 text-center font-bold">메모(특이사항)</th>
+            <th className={`${STICKY_END} bg-bg-soft px-3 py-2 text-center font-bold`}>기타</th>
           </tr>
         </thead>
         <tbody>
@@ -550,6 +585,8 @@ export function SessionTermGroups({
                         ) : (
                           <span className="text-foreground text-sm font-bold">{g.className}</span>
                         )}
+                        {/* 이 반의 그 달 수업 요일(원장 2026-09-17) — 학생마다 다르면 학생 이름 옆에 따로 선다. */}
+                        {classDaysText(g.students) ? <span className="text-foreground text-xs font-medium">{classDaysText(g.students)}</span> : null}
                         <span className="text-text-dim text-xs">{g.subjectLabel}</span>
                         <span className="text-text-faint text-xs">
                           · {g.students.length}명 · 예정 {plannedSummary(g.students)}
@@ -558,11 +595,30 @@ export function SessionTermGroups({
                       </div>
                       {/* 불투명(반 머리 줄과 같은 색) — 좁은 창에서 왼쪽 반 정보 위로 겹칠 때 글자가 섞이지 않게. */}
                       <div className="bg-card bg-[linear-gradient(color-mix(in_oklab,var(--color-accent)_40%,transparent),color-mix(in_oklab,var(--color-accent)_40%,transparent))] sticky right-3 z-[1] rounded-md pl-2">
+                        {/* 보이는 학생이 전부 확정 → 입력칸·일괄 버튼 대신 '전체 확정 해제' 하나(원장 2026-09-17). 판정은 화면에 반영된
+                            확정 상태(patches)라 한 명만 해제해도 곧바로 입력칸이 돌아온다. 반이 없는 묶음은 서버가 반을 못 가려 종전대로. */}
+                        {allDone && hasClass && g.students.length > 0 ? (
+                          <ClassUnconfirmButton
+                            period={period}
+                            classId={g.classId}
+                            className={g.className}
+                            rows={g.students}
+                            monthlyPrice={monthlyPrice}
+                            onReleased={(released) => {
+                              setDrafts((current) => {
+                                const next = { ...current };
+                                for (const row of released) next[row.id] = { sessions: String(row.confirmedSessions ?? row.plannedSessions ?? ""), price: String(row.unitPrice ?? "") };
+                                return next;
+                              });
+                              setMany(released.map((row) => row.id), false);
+                            }}
+                          />
+                        ) : (
                         <ClassBatch
                           period={period}
                           group={g}
                           listId={listId}
-                          onlyUnallocated={onlyUnallocated}
+                          visibleOnly={visibleOnly}
                           onPrice={(price) =>
                             setDrafts((current) => {
                               const next = { ...current };
@@ -572,6 +628,7 @@ export function SessionTermGroups({
                           }
                           selection={hasClass ? { rows: openSelected, draftOf, onConfirmed: (ids) => setMany(ids, false) } : undefined}
                         />
+                        )}
                       </div>
                     </div>
                   </td>

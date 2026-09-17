@@ -92,6 +92,67 @@ describe("수납 연결·배분", () => {
     ]));
     expect(h.refresh).toHaveBeenCalledOnce();
   });
+  it("연결할 수납 항목이 없는 확정 반은 '연결 안 함'이면 0원으로 표시·저장한다 (원장 2026-09-17)", async () => {
+    const data = view();
+    const one = [{ kind: "수업", description: "수학1반", amount: 100000, discount: 0, paid: 100000 }];
+    Object.assign(data, { source: one, lines: [{ index: 0, kind: "수업", description: "수학1반", amount: 100000, source: one[0] }] });
+    await open(data);
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(100000);
+    // 수학2반은 연결 안 함 → 0원(입력은 잠김) · 저장 가능 · 무엇을 저장하는지 말한다.
+    expect(screen.getByLabelText("수학2반 수납 항목")).toHaveValue("");
+    expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(0);
+    expect(screen.getByLabelText("수학2반 배분금액")).toBeDisabled();
+    expect(screen.getByText(/연결하지 않은 확정 반 1개는 0원으로 저장합니다/)).toBeInTheDocument();
+    vi.mocked(saveReceiptAllocation).mockResolvedValueOnce({ ok: true });
+    fireEvent.click(screen.getByRole("button", { name: "배분 저장" }));
+    await waitFor(() => expect(saveReceiptAllocation).toHaveBeenCalledWith("invoice", one, [
+      { termId: "term1", lineIndex: 0, amount: 100000, baseAmount: 100000, confirmedAt: "2026-09-16" },
+      { termId: "term2", lineIndex: null, amount: 0, baseAmount: 200000, confirmedAt: "2026-09-16" },
+    ]));
+  });
+  const withLines = (descriptions: [string, number][]) => {
+    const data = view();
+    const lines = descriptions.map(([description, amount]) => ({ kind: "수업", description, amount }));
+    return Object.assign(data, { source: lines, lines: lines.map((l, index) => ({ index, kind: "수업", description: l.description, amount: l.amount, source: l })) });
+  };
+  it("0원이 빠뜨린 연결을 덮지 않는다 ① 이름이 맞는 수납 항목이 있는 반은 0원으로 저장하지 않는다", async () => {
+    await open(withLines([["수학1반", 100000], ["수학2반", 200000]]));
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "배분 저장" })).toBeDisabled();
+    expect(screen.getByText(/수학2반에 맞는 수납 항목이 있습니다/)).toBeInTheDocument();
+  });
+  it("0원이 빠뜨린 연결을 덮지 않는다 ② 어느 반에도 안 붙은 수업 항목이 남으면 보여 주고 저장할 때 확인받는다(취소하면 안 보낸다)", async () => {
+    await open(withLines([["수학1반", 100000], ["특강", 50000]]));
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    expect(screen.getByText(/어느 반에도 연결하지 않은 수업 항목이 남습니다\(특강 50,000원\)/)).toBeInTheDocument();
+    const ask = vi.fn(() => false);
+    vi.stubGlobal("confirm", ask);
+    fireEvent.click(screen.getByRole("button", { name: "배분 저장" }));
+    expect(ask).toHaveBeenCalledWith(expect.stringContaining("특강 50,000원"));
+    expect(saveReceiptAllocation).not.toHaveBeenCalled();
+    ask.mockReturnValue(true);
+    vi.mocked(saveReceiptAllocation).mockResolvedValueOnce({ ok: true });
+    fireEvent.click(screen.getByRole("button", { name: "배분 저장" }));
+    await waitFor(() => expect(saveReceiptAllocation).toHaveBeenCalledWith("invoice", expect.anything(), [
+      { termId: "term1", lineIndex: 0, amount: 100000, baseAmount: 100000, confirmedAt: "2026-09-16" },
+      { termId: "term2", lineIndex: null, amount: 0, baseAmount: 200000, confirmedAt: "2026-09-16", ackUnlinked: true },
+    ]));
+    vi.unstubAllGlobals();
+  });
+  it("차액 비례 배분은 눌러도 바뀌는 게 없으면(이미 그 비율) 잠기고, 입력이 비율과 어긋나면 다시 열린다", async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("수학2반 수납 항목"), { target: { value: "0" } });
+    const button = () => screen.getByRole("button", { name: "차액 비례 배분" });
+    expect(button()).toBeDisabled();
+    expect(button()).toHaveAttribute("title", "입력한 금액이 이미 나눈 결과와 같습니다");
+    fireEvent.change(screen.getByLabelText("수학1반 배분금액"), { target: { value: "120000" } });
+    expect(button()).toBeEnabled();
+    fireEvent.click(button());
+    expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(100000);
+    expect(button()).toBeDisabled();
+  });
   it("미확정 반도 선택할 수 있고 변경된 연결은 다시 선택하게 한다", async () => {
     const data = view();
     Object.assign(data.terms[0], { allocationLineIndex: 0, allocationStale: true });

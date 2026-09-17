@@ -372,6 +372,7 @@ export const AUDIT_ACTIONS = {
   session_term_monthly_units: "월 정액 수업 시수 수정",
   session_term_receipt_allocate: "수납 청구액 반별 배분",
   session_term_unconfirm: "청구 회차 확정 해제",
+  session_term_unconfirm_class: "청구 회차 반 전체 확정 해제",
   session_term_carryover: "청구 회차 이월",
   session_term_note: "청구 회차 메모 수정",
   // 🔴 급여는 **"무슨 일이 있었나"만** 남긴다 — 조정한 항목 이름조차 안 담는다("인센티브를 고쳤다"

@@ -10,6 +10,8 @@ import { getTeacherSettlementView } from "@/features/payroll/server/settlement-q
 import { updateMonthlyTermSessions } from "./monthly-sessions";
 import { updateSessionTermNote } from "./note-actions";
 import { confirmSelectedTerms } from "./selected-confirm-actions";
+import { unconfirmClassTerms } from "./class-unconfirm-actions";
+import { saveReceiptAllocation } from "./receipt-allocation-actions";
 
 const h = vi.hoisted(() => {
   const state = {
@@ -101,6 +103,28 @@ describe("설정 → 회차 화면 조회·확정", () => {
     expect((await getSessionVerificationView("2026-09")).rows[0]).toMatchObject({ allocatedAmount: 0 });
     expect(h.state.writes).toEqual([]);
   });
+  it("연결 없이 0원으로 저장한 확정 반은 배분 0원·재확인 아님, 청구 항목이 바뀌면 재확인 (0269a)", async () => {
+    const line = { kind: "수업", description: "수학반", amount: 148750, discount: 0, paid: 148750 };
+    h.state.tables.invoices[0].line_items = [line];
+    h.state.tables.invoice_session_terms.push({ ...h.state.tables.invoice_session_terms[0], id: "math", class_id: "math", amount: 148750, allocation_line_index: 0, allocation_amount: 148750, allocation_source: line, allocation_base_amount: 148750, class: { class_name: "수학반" } });
+    Object.assign(h.state.tables.invoice_session_terms[0], { allocation_line_index: null, allocation_amount: 0, allocation_source: [line], allocation_base_amount: 327000 });
+    const rows = (await getSessionTermsView("2026-09")).rows;
+    expect(rows.find((r) => r.id === "term")).toMatchObject({ allocatedAmount: 0, allocationStale: false, invoiceHasAllocations: true });
+    expect(rows.find((r) => r.id === "math")).toMatchObject({ allocatedAmount: 148750, allocationStale: false });
+    h.state.tables.invoices[0].line_items = [line, { kind: "수업", description: "영어반", amount: 327000 }];
+    expect((await getSessionTermsView("2026-09")).rows.find((r) => r.id === "term")).toMatchObject({ allocatedAmount: null, allocationStale: true });
+    // 서버 액션: 항목 없는 행은 0원만 · 한 반 이상 연결해야 · 남은 수업 항목이 있거나 이름이 맞는 항목이 있는 반은 0원 불가.
+    const linkedMath = { termId: "math", lineIndex: 0, amount: 148750, baseAmount: 148750, confirmedAt: "2026-09-01" };
+    const zeroTerm = { termId: "term", lineIndex: null, amount: 0, baseAmount: 327000, confirmedAt: "2026-09-01" };
+    expect(await saveReceiptAllocation("invoice", [line], [{ ...zeroTerm, amount: 5 }])).toEqual({ error: "배분금액과 연결 항목을 확인해 주세요" });
+    expect(await saveReceiptAllocation("invoice", [line], [zeroTerm])).toHaveProperty("error", expect.stringContaining("한 반 이상 연결"));
+    const english = { kind: "수업", description: "영어반", amount: 327000 };
+    expect(await saveReceiptAllocation("invoice", [line, english], [linkedMath, zeroTerm])).toHaveProperty("error", expect.stringContaining("영어반에 맞는 수납 항목이 있습니다"));
+    const other = { kind: "수업", description: "특강", amount: 50000 };
+    expect(await saveReceiptAllocation("invoice", [line, other], [linkedMath, zeroTerm])).toHaveProperty("error", expect.stringContaining("확인한 뒤 다시 저장"));
+    expect(await saveReceiptAllocation("invoice", [line, other], [linkedMath, { ...zeroTerm, ackUnlinked: true }])).toEqual({ ok: true });
+    expect(await saveReceiptAllocation("invoice", [line], [linkedMath, zeroTerm])).toEqual({ ok: true });
+  });
   it("EiE 확정 시수만 바꿀 때 월 단가·금액·배분 필드를 쓰지 않는다", async () => {
     Object.assign(h.state.tables.invoice_session_terms[0], { pricing_mode: "monthly", unit_price: 270000, amount: 270000, allocation_amount: 260000 });
     h.state.billing = { eieMonthlyPrice: 290000 };
@@ -117,6 +141,27 @@ describe("설정 → 회차 화면 조회·확정", () => {
     expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ plannedSessions: 0, confirmedSessions: 8, amount: 327000 });
     expect(h.state.writes).toEqual([]);
   });
+  it("조회 행에 반의 그 달 수업 요일과, 다를 때만 개별 등원 요일을 싣는다", async () => {
+    h.state.tables.enrollments = [{ student_id: "student", class_id: "class", start_date: "2026-01-01", end_date: null, attendance_days: ["thu"], on_hold: false, is_transferred: false, class: { subject: "english", is_active: true } }];
+    h.state.tables.class_schedules = [
+      { class_id: "class", day_of_week: "mon", start_time: "16:00", end_time: "16:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: null },
+      { class_id: "class", day_of_week: "thu", start_time: "16:00", end_time: "16:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: null },
+    ];
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-09-17T03:00:00Z"));
+      expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ classDays: [1, 4], attendDays: [4] });
+      // 등원 요일은 지금 값 하나라 지난 달 표엔 싣지 않는다(반 요일은 배치 이력이라 그대로).
+      vi.setSystemTime(new Date("2026-10-02T03:00:00Z"));
+      expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ classDays: [1, 4], attendDays: null });
+      vi.setSystemTime(new Date("2026-09-17T03:00:00Z"));
+      h.state.tables.enrollments[0].attendance_days = [];
+      expect((await getSessionTermsView("2026-09")).rows[0]).toMatchObject({ classDays: [1, 4], attendDays: null });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("계획 갱신은 개인 등원 요일을 지키고 JJ·LAB 교시를 포함한다", async () => {
     h.state.tables.enrollments = [{ student_id: "student", class_id: "class", start_date: "2026-01-01", end_date: null, attendance_days: ["mon"], class: { subject: "english", is_active: true } }];
     h.state.tables.class_schedules = [
@@ -280,6 +325,35 @@ describe("설정 → 회차 화면 조회·확정", () => {
     h.state.tables.invoice_session_terms[0].class = { class_name: "JP1", english_track: "eie" };
     h.state.billing = { eieMonthlyPrice: 280000 };
     expect(await confirmSelectedTerms("2026-09", CLASS, [{ id: "term", sessions: 12, unitPrice: 999999, monthly: true }])).toMatchObject({ terms: [{ unitPrice: 280000, amount: 280000, pricingMode: "monthly" }] });
+  });
+
+  it("전체 확정 해제 — 보낸 학생 중 확정된 행만 지우고, 지우기 전 값을 감사로그에 남긴다 · 한 명이 막혀도 나머지는 해제", async () => {
+    const CLASS = "00000000-0000-4000-8000-000000000001";
+    h.state.tables.invoice_session_terms.push(
+      { ...h.state.tables.invoice_session_terms[0], id: "term2", confirmed_sessions: 7, unit_price: 21250, amount: 148750 },
+      { ...h.state.tables.invoice_session_terms[0], id: "open", confirmed_sessions: null, unit_price: null, amount: null, confirmed_at: null },
+    );
+    const res = await unconfirmClassTerms("2026-09", CLASS, ["term", "term2", "open"]);
+    // 이미 미확정이던 행('open')도 화면 보정용으로 돌려주되 해제 수·감사로그엔 안 센다.
+    expect(res).toMatchObject({ unconfirmed: 2, skipped: 1, failedIds: [], terms: [{ id: "term", confirmedSessions: null, amount: null }, { id: "term2", confirmedSessions: null }, { id: "open", confirmedSessions: null }] });
+    expect(h.state.writes).toEqual([{ table: "invoice_session_terms", patch: { confirmed_sessions: null, unit_price: null, amount: null, confirmed_by: null, confirmed_at: null } }]);
+    expect(h.state.tables.invoice_session_terms.find((r) => r.id === "open")).toMatchObject({ confirmed_sessions: null });
+    await h.state.after[0]();
+    expect(logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "session_term_unconfirm_class", metadata: expect.objectContaining({ classId: CLASS, unconfirmedCount: 2, skipped: 1, items: [
+      { termId: "term", sessionsBefore: 8, unitPriceBefore: 40875, amountBefore: 327000, pricingMode: "per_session" },
+      { termId: "term2", sessionsBefore: 7, unitPriceBefore: 21250, amountBefore: 148750, pricingMode: "per_session" },
+    ] }) }));
+    // 반·청구월·입력 검증 — 아무것도 안 쓴다.
+    h.state.writes = [];
+    expect(await unconfirmClassTerms("2026-09", "noclass:반 미지정", ["term"])).toEqual({ error: "반이 지정되지 않았습니다" });
+    expect(await unconfirmClassTerms("2026-9", CLASS, ["term"])).toHaveProperty("error");
+    expect(await unconfirmClassTerms("2026-09", CLASS, [])).toHaveProperty("error");
+    expect(await unconfirmClassTerms("2026-09", CLASS, ["term", "term"])).toHaveProperty("error");
+    expect(h.state.writes).toEqual([]);
+    // 한 명이 막히면 그 사람만 골라내고 나머지는 해제한다.
+    for (const r of h.state.tables.invoice_session_terms) Object.assign(r, { confirmed_sessions: 7, unit_price: 21250, amount: 148750 });
+    h.state.failIds = ["term2"];
+    expect(await unconfirmClassTerms("2026-09", CLASS, ["term", "term2"])).toMatchObject({ unconfirmed: 1, failedIds: ["term2"], error: expect.stringContaining("1명은 해제하지 못했습니다") });
   });
 
   it("선택 일괄 확정 — 화면이 본 단위가 서버 판정과 다르면 그 행은 쓰지 않는다(낡은 화면의 월 금액 × 시수 방지)", async () => {

@@ -40,14 +40,16 @@ export function receiptLines(raw: unknown): ReceiptLine[] {
   });
 }
 
+/** 배분 근거가 되는 청구 항목의 모양(종류·항목명·급여 기준액·반·합산 묶음) — 할인·납부 기록·키 순서는 안 본다. */
+function billShape(value: unknown): string {
+  const row = receiptLines([value])[0];
+  const source = value && typeof value === "object" ? value as { receiptGroupId?: unknown; classId?: unknown } : {};
+  return JSON.stringify([row.kind, row.description, row.amount, source.classId ?? "", source.receiptGroupId ?? ""]);
+}
+
 /** 객체 키 순서나 할인·납부 기록 갱신은 배분 근거(청구액·항목명)를 바꾸지 않는다. */
 function sameBill(a: unknown, b: unknown): boolean {
-  const shape = (value: unknown) => {
-    const row = receiptLines([value])[0];
-    const source = value && typeof value === "object" ? value as { receiptGroupId?: unknown; classId?: unknown } : {};
-    return JSON.stringify([row.kind, row.description, row.amount, source.classId ?? "", source.receiptGroupId ?? ""]);
-  };
-  return a != null && b != null && shape(a) === shape(b);
+  return a != null && b != null && billShape(a) === billShape(b);
 }
 
 /** 합계는 정확히 총액과 일치한다. 원 미만 잔액은 나머지가 큰 반부터 1원씩 배정한다. */
@@ -65,6 +67,35 @@ export function distributeReceipt(total: number, rows: { id: string; amount: num
     row.amount++;
   }
   return Object.fromEntries(shares.map((row) => [row.id, row.amount]));
+}
+
+/**
+ * 연결할 수납 항목이 없어 **0원으로 저장한 확정 반**(원장 2026-09-17 *"배분 금액이 없으면 0으로 입력해서 저장할 수 있게"* ·
+ * *"연결 안함 처리시 자동으로 0"*) — 행은 `lineIndex = null · allocatedAmount = 0 · source = 저장 때의 청구 항목 전체(배열)`.
+ * 🔴 저장 뒤 **수업 수납 항목**이 바뀌면(새 수납이 들어오는 등) 0원을 그대로 믿지 않는다 — 연결한 반이 항목이 바뀌면 재확인으로 가는 것과 같은 결.
+ *    교재·셔틀 같은 수업 아닌 항목과 순서는 보지 않는다(그것만 바뀌어도 재확인이 되면 그 달 분배 저장이 통째로 막힌다 — 리뷰 2026-09-17).
+ */
+function sameTuitionLines(snapshot: unknown, lines: ReceiptLine[]): boolean {
+  if (!Array.isArray(snapshot)) return false;
+  const shapes = (values: unknown[]) => values.filter((v) => v != null && isTuitionReceipt(v)).map(billShape).sort();
+  const before = shapes(snapshot);
+  const now = shapes(lines.map((line) => line.source));
+  return before.length === now.length && before.every((shape, i) => shape === now[i]);
+}
+
+/** 화면 초안 → 저장 행. 수납 항목에 하나라도 연결했으면, 연결하지 않은 **확정** 반은 0원으로 함께 보낸다(`lineIndex: null`). */
+export function receiptAllocationSaveRows<T extends { id: string; amount: number | null; confirmedSessions: number | null; confirmedAt: string | null }>(
+  terms: T[],
+  draft: ReceiptAllocationDraft,
+  /** 어느 반에도 안 붙은 수업 항목이 남는다는 확인을 받았다 — 0원 행에 표식을 싣는다(0269a가 확인 없는 0원 행을 거절). */
+  ackUnlinked = false,
+): { termId: string; lineIndex: number | null; amount: number; baseAmount: number | null; confirmedAt: string | null; ackUnlinked?: boolean }[] {
+  const linked = terms.filter((term) => draft[term.id]?.line !== "" && draft[term.id]?.line !== undefined);
+  const zero = linked.length > 0 ? terms.filter((term) => term.confirmedSessions !== null && (draft[term.id]?.line ?? "") === "") : [];
+  return [
+    ...linked.map((term) => ({ termId: term.id, lineIndex: Number(draft[term.id].line), amount: Number(draft[term.id].amount), baseAmount: term.amount, confirmedAt: term.confirmedAt })),
+    ...zero.map((term) => ({ termId: term.id, lineIndex: null, amount: 0, baseAmount: term.amount, confirmedAt: term.confirmedAt, ...(ackUnlinked ? { ackUnlinked: true } : {}) })),
+  ];
 }
 
 /** 동기화·재확정으로 근거가 바뀌거나 그룹 합계가 깨졌으면 급여에서 사용하지 않는다. */
@@ -89,6 +120,12 @@ export function effectiveAllocations(lines: ReceiptLine[], terms: AllocationTerm
     if (group.some((term) => (term.confirmedSessions === null && term.amount !== null) || term.allocatedAmount === null || !Number.isSafeInteger(term.allocatedAmount) || term.allocatedAmount < 0 || term.baseAmount !== term.amount || !sameBill(term.source, line.source))) continue;
     if (group.reduce((sum, term) => sum + term.allocatedAmount!, 0) !== line.amount) continue;
     for (const term of group) out.set(term.id, term.allocatedAmount!);
+  }
+  // 연결 없이 0원으로 저장한 확정 반 — 확정금액·청구 항목이 저장 때 그대로일 때만.
+  for (const term of terms) {
+    if (term.lineIndex !== null || term.allocatedAmount !== 0 || term.confirmedSessions === null || term.amount === null) continue;
+    if (term.baseAmount !== term.amount || !sameTuitionLines(term.source, lines)) continue;
+    out.set(term.id, 0);
   }
   return out;
 }

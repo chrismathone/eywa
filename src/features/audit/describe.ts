@@ -375,6 +375,28 @@ export function auditDetail(
         failed ? `실패 ${failed}명` : null,
       );
     }
+    case "session_term_unconfirm_class": {
+      // 지우기 전 값을 조합별로 세어 한 줄로(`7시수 × 21,250원 5명 · 4시수 × 21,250원 1명`) — 무엇을 지웠는지가 이 로그의 전부다.
+      const combos = new Map<string, number>();
+      for (const it of arr(m.items)) {
+        if (!it || typeof it !== "object") continue;
+        const sessions = num((it as Meta).sessionsBefore);
+        const price = won((it as Meta).unitPriceBefore);
+        if (sessions === null || !price) continue;
+        const key = str((it as Meta).pricingMode) === "monthly" ? `${sessions}시수 · 월 ${price}` : `${sessions}시수 × ${price}`;
+        combos.set(key, (combos.get(key) ?? 0) + 1);
+      }
+      const count = num(m.unconfirmedCount);
+      const skipped = num(m.skipped);
+      const failed = num(m.failedCount);
+      const comboText = [...combos].slice(0, 3).map(([k, n]) => `${k} ${n}명`).join(" · ");
+      return join(
+        count === null ? null : `${count}명 확정 해제`,
+        comboText ? `해제 전 ${comboText}${combos.size > 3 ? ` 외 ${combos.size - 3}가지` : ""}` : null,
+        skipped ? `건너뜀 ${skipped}명` : null,
+        failed ? `실패 ${failed}명` : null,
+      );
+    }
     case "session_term_note": {
       const note = str(m.note);
       const before = str(m.noteBefore);
