@@ -10,9 +10,10 @@ import {
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
+import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context";
-import { LiveRecords, LiveUnits } from "./live-totals";
+import { LiveRecords } from "./live-totals";
 import { MatrixRow } from "./matrix-row";
 import { MatrixTotalsSummary } from "./totals-row";
 import { StickyFitRow } from "./sticky-fit-row";
@@ -44,19 +45,27 @@ const HEAD_CORNER_Z = "z-[60]";
  *
  * ⚠️ 날짜 칸만 폭을 **안 준다**(auto) — 남는 가로 폭을 날짜 칸들이 똑같이 나눠 갖는다. 표에 `minWidth`를
  *    걸어 두므로 아무리 좁아져도 한 칸 28px 아래로는 안 내려간다(좁으면 가로 스크롤).
- * ⚠️ 시수·출석률에 폭을 주는 건 sticky `right-[64px]`이 **출석률 폭과 짝**이기 때문 — 이 값이 늘면 두 열이 겹친다.
+ * ⚠️ 출석률(맨 오른쪽)에 폭을 주는 건 `sm:right-0` sticky라서다. 2026-09-17에 시수를 청구액 옆으로 옮기면서
+ *    옛 짝(`right-[64px]`)은 **사라졌다** — 되살리면 두 열이 겹친다(가드가 그 클래스가 없음을 잠근다).
  * ⚠️ 폭을 넘는 글자는 잘리고 `title`에 원문이 남는다(`truncate`) — 넓히면 그만큼 날짜 칸이 줄어든다.
  */
 // 학교·학년은 압축 표기("경명여중2", school-grade.ts) **한 열** — 두 열이던 것을 합쳐 날짜 칸에 폭을
 // 돌려줬다(원장 2026-08-10). 되돌려 나누지 말 것.
-// rate(64)는 시수 열의 sticky right-[64px]와 짝이라 함께 고치지 않으면 겹친다.
 // ⚠️ 폭은 **타입 스케일 v5(2026-09-08)** 기준 실측이다 — 글자 크기를 바꾸면 이 표도 함께 볼 것.
 //    (104/84는 12~13px 시절 값이라 16px에서 이름 4자 + 「반이동」 뱃지가 끊겼다.)
 // 이름은 148px을 유지하고 뱃지는 아랫줄에 둔다. 학교·학년은 압축 표기와 원문 툴팁을 사용한다.
 // 2026-09-17: 학교 88→80, 날짜 최소 30→28로 줄여 학교 오른쪽 청구액 열을 마련한다.
 // 2026-09-17: 맨 오른쪽 학생 총액 '청구·납입' 두 열은 없앴다(원장 *"이미 학교학년 옆에 청구액이 배정되어있으므로 의미없음"*) —
 //   합계 줄의 청구·납입 합과 정산액은 그대로다(같은 `money` 조회). 🔴 되살리지 말 것.
-const COL_W = { name: 148, school: 80, classBilled: 88, units: 40, rate: 64, day: 28 } as const;
+// 2026-09-17(2): 오른쪽 sticky였던 '시수'를 **청구액 옆**으로 옮기고 이름을 '수업 차수'로, 그 옆에 '등록 차수'
+//   (회차 확정의 확정 시수)를 더했다(원장 *"우측 시수를 청구액 우측으로 이동. 수업 차수로 이름 변경"* ·
+//   *"그 옆에 등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로"*). 오른쪽 고정은 이제 출석률 하나뿐이라
+//   `right-[64px]` 짝이 사라졌다.
+// ⚠️ 두 열의 88px은 **머리 글자 폭**이 정한다(폭을 줄이면 머리가 잘린다). 실측(`.micro` = Pretendard 500 · 14px):
+//    `수업 차수`·`등록 차수` **53.2px** · `Attended` 61.3px · `Registered` **71.5px** — 좌우 여백 8px을 빼면 80px이라
+//    가장 긴 `Registered`가 8.5px 남기고 들어간다. `name-wiring.test.ts`가 이 상수를 **읽어** 한·영 라벨을 잠근다.
+//    🔴 48px(옛 `시수` 두 글자 자리)로 되돌리지 말 것 — `th`엔 말줄임이 없어 넘친 글자가 옆 칸 머리에 덮여 **잘린 채** 보인다.
+const COL_W = { name: 148, school: 80, classBilled: 88, units: 88, termSessions: 88, rate: 64, day: 28 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -86,7 +95,10 @@ export type MatrixGroup = {
   sinceLabel?: string | null;
 };
 
-/** 그룹(반)의 집계 — 시수는 급여 계산의 기본 단위라 그룹 헤더에 그대로 노출한다. */
+/**
+ * 그룹(반)의 집계 — 표 전체 합(`totalCount`)의 재료다.
+ * ⚠️ 2026-09-17부터 **반 머리행엔 안 쓴다**(원장 *"정정. 반별 시수 삭제"*).
+ */
 function groupCount(matrix: AttendanceMatrix): Counted {
   return sumCounts(
     matrix.students.map((s) => countMarks(matrix.marks[s.id] ?? {}, matrix.units[s.id] ?? {})),
@@ -121,19 +133,11 @@ export function buildGridSource(
    *    같은 칸이 반별 보기에선 그대로 입력 가능하다(#103: 되돌릴 문을 아예 막지는 않는다).
    */
   // 값 = 막는 사유 — `"seat"`는 자리(JJ·랩실) 기록뿐인 칸(사유 문장이 다르다, 원장 2026-09-12), true는 그 밖.
-  // `"day"` = 그 강사가 이 반을 수업하지 않는 날(강사 전체 보기, 원장 2026-09-17 *"담당하는 날만 표시"* — 판정은 조회 `ownDates`).
-  // ⚠️ 수업하는 날인데 제 교시 기록 없이 남의 기록만 있는 칸은 막지 않는다(같은 날 원장 *"내 출석부 상에서 자유롭게 숫자
-  //    설정만 하는거야"*) — 빈칸이고, 저장이 남의 행은 두고 제 교시 행을 만든다.
+  // ⚠️ **날짜로 막지 않는다** — 강사 보기도 모든 날짜 칸이 열려 있다(원장 2026-09-17 저녁 *"다른 요일도 보강 등으로 수업할 수
+  //    있으니까 숫자 입력가능하게"*). 수업요일 색만 `ownDates`로 갈린다(matrix-row).
   const notMine: Record<string, NotMineReason> = {};
   for (const g of groups) {
-    const ownDates = g.matrix.ownDates ? new Set(g.matrix.ownDates) : null;
     for (const s of g.matrix.students) {
-      if (ownDates) {
-        for (const date of cols) {
-          const key = cellKey(rowKey(g.classId, s.id), date);
-          if (!ownDates.has(date)) notMine[key] = "day";
-        }
-      }
       const marks = g.matrix.marks[s.id] ?? {};
       const units = g.matrix.units[s.id] ?? {};
       const slots = g.matrix.slots[s.id] ?? {};
@@ -188,6 +192,7 @@ export function MatrixTable({
   holidays,
   showGroups,
   classBilledAmounts,
+  termSessionsByRow,
   money,
   moneyNote,
   lockBefore,
@@ -204,6 +209,11 @@ export function MatrixTable({
   showGroups: boolean;
   /** 학생×반별 청구액(회차 확정과 동일). 빈 객체도 열을 표시하고 미매칭은 '미확정'. */
   classBilledAmounts?: Record<string, number>;
+  /**
+   * 학생×반별 **등록 차수** — 회차 확정에서 확정한 시수(원장 2026-09-17). 청구액과 **같은 조회**에서 온다.
+   * 키가 없으면 '미확정'(0을 지어내지 않는다). `daysBasis`면 그 숫자는 시수가 아니라 옛 **출석 일수**다.
+   */
+  termSessionsByRow?: Record<string, AttendanceTermSessions>;
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
   money?: TeacherMoney | null;
   /**
@@ -236,7 +246,11 @@ export function MatrixTable({
       )
     : null;
   const showClassBilled = classBilledAmounts !== undefined;
-  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0);
+  // 🔴 열의 유무는 **제 데이터**가 정한다 — 청구액에 묶어 두면 등록 차수를 안 받은 호출부에서 열만 서고
+  //    전 행이 '미확정'이 된다("확정을 안 했다"는 거짓 사실). 지금 두 값은 같은 조회에서 함께 온다.
+  const showTermSessions = termSessionsByRow !== undefined;
+  // 이름·학교·수업 차수·출석률(4) + 날짜 + 청구액·등록 차수.
+  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (showTermSessions ? 1 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 학생 — 이름 칸 배경으로 행 단위 표시(합계 뱃지만으론 못 찾는다).
   const tierMissingIds = new Set(
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierStudentIds : [],
@@ -261,8 +275,9 @@ export function MatrixTable({
     COL_W.name +
     COL_W.school +
     (showClassBilled ? COL_W.classBilled : 0) +
-    days.length * COL_W.day +
     COL_W.units +
+    (showTermSessions ? COL_W.termSessions : 0) +
+    days.length * COL_W.day +
     COL_W.rate;
 
   return (
@@ -276,10 +291,11 @@ export function MatrixTable({
           <col style={{ width: COL_W.name }} />
           <col style={{ width: COL_W.school }} />
           {showClassBilled ? <col style={{ width: COL_W.classBilled }} /> : null}
+          <col style={{ width: COL_W.units }} />
+          {showTermSessions ? <col style={{ width: COL_W.termSessions }} /> : null}
           {days.map((d) => (
             <col key={d.date} />
           ))}
-          <col style={{ width: COL_W.units }} />
           <col style={{ width: COL_W.rate }} />
         </colgroup>
         <thead>
@@ -303,6 +319,22 @@ export function MatrixTable({
                 title={t("att.col.classBilledTitle")}
               >
                 <span className="micro">{t("att.col.classBilled")}</span>
+              </th>
+            ) : null}
+            {/* 수업 차수 = 출석부에서 센 시수(소비 상태 칸의 배수 합) · 등록 차수 = 회차 확정의 확정 시수(원장 2026-09-17). */}
+            <th
+              data-help="att-lesson-count"
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+              title={t("att.col.lessonCountTitle")}
+            >
+              <span className="micro">{t("att.col.lessonCount")}</span>
+            </th>
+            {showTermSessions ? (
+              <th
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+                title={t("att.col.termSessionsTitle")}
+              >
+                <span className="micro">{t("att.col.termSessions")}</span>
               </th>
             ) : null}
             {days.map((d) => {
@@ -357,14 +389,8 @@ export function MatrixTable({
               );
             })}
             {/* 폰에서는 합계 열의 가로 고정을 푼다 — 이름·우측 합계가 날짜 칸 전체를 덮어 터치할 수 없었다. */}
-            {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
             <th
-              className={`bg-bg-soft sticky top-0 sm:right-[64px] ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[40px] min-w-[40px] px-1.5 py-2 text-center whitespace-nowrap`}
-            >
-              <span className="micro">{t("att.col.units")}</span>
-            </th>
-            <th
-              className={`bg-bg-soft sticky top-0 sm:right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} w-[64px] min-w-[64px] px-2 py-2 text-center whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 sm:right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[64px] min-w-[64px] px-2 py-2 text-center whitespace-nowrap`}
             >
               <span className="micro">{t("att.col.rate")}</span>
             </th>
@@ -388,6 +414,7 @@ export function MatrixTable({
                     days={days}
                     holidays={holidays}
                     classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
+                    termSessions={showTermSessions ? termSessionsByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     lockBefore={lockBefore}
                     classLabel={g.className}
                     tierMissing={tierMissingIds.has(s.id)}
@@ -410,6 +437,7 @@ export function MatrixTable({
                 days={days}
                 holidays={holidays}
                 classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
+                termSessions={showTermSessions ? termSessionsByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 lockBefore={lockBefore}
                 classLabel={g.className}
                 tierMissing={tierMissingIds.has(s.id)}
@@ -463,12 +491,8 @@ export function MatrixTable({
                   </span>
                   {/* 검색 중이면 이 반에서 몇 명이 걸렸는지 — 머리행 인원(전체)만 두면 숫자가 거짓말한다. */}
                   <ClassSearchCount rowKeys={groupRowKeys} />
-                  {/* 검색 중이면 `시수 12 / 53`(검색분 / 전체) — 옆의 "검색 N명"과 같은 규약이다.
-                      한 머리행에서 인원만 검색 기준이고 시수는 전체이면 그게 제일 나쁘다. */}
-                  <span className="text-text-dim num text-xs">
-                    {t("att.group.units")}
-                    <LiveUnits rows={groupRowKeys} countByRow={countByRow} fallback={groupCount(g.matrix)} />
-                  </span>
+                  {/* 🔴 반 머리행의 시수 표기는 **없앴다**(원장 2026-09-17 *"정정. 반별 시수 삭제"*) —
+                      학생 줄의 '수업 차수'와 합계 줄이 같은 숫자를 이미 말한다. 되살리지 말 것. */}
                 </>
               }
             >

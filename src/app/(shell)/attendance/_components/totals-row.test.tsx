@@ -232,12 +232,14 @@ describe("🔴 검색을 걸면 하단 숫자가 검색 기준으로 바뀐다",
     expect(flat(container)).toContain("정산액 — / 300,000");
   });
 
-  it("반 머리행도 같은 규약 — `검색 1명 · 시수 3 / 4`", () => {
+  it("반 머리행은 '검색 N명'만 — 🔴 반별 시수 표기는 없앴다(원장 2026-09-17)", () => {
     const { container, input } = renderSheet();
     type(input, "이도");
     const t = flat(container);
     expect(t).toContain("검색 1명");
-    expect(t).toContain("시수 3 / 4"); // 가반 = 이도윤 3 + 박서준 1
+    // 🔴 문자열 하나가 아니라 **머리행 전체**를 본다(다른 수로 되살아나도 잡힌다).
+    const head = screen.getAllByText(/가반/)[0]!.closest("tr")!;
+    expect(head.textContent).not.toContain("시수");
   });
 
   it("금액 열이 없는 강사 화면에서도 시수만 같은 규약으로 좁는다", () => {

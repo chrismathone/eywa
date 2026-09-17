@@ -51,6 +51,8 @@ type Schedule = {
   classroomId?: string | null;
   /** 저장된 표시 라벨 — 자리(LAB·JJ)면 담당 드롭다운이 그 자리로 열린다. */
   slotTeacherLabel?: string | null;
+  /** LAB '따로 수업(*LAB)' 표식(0271a). */
+  labSeparate?: boolean;
 };
 
 export type ClassFormDefaults = {
@@ -74,6 +76,8 @@ export type ClassFormDefaults = {
   historyCount?: number;
   /** ⚠️ **현재 유효한 슬롯만** 넘길 것(만료 행을 섞으면 옛 배치가 되살아난다 — 편집 화면 주석 참조). */
   schedules: Schedule[];
+  /** '따로 수업(*LAB)' 표식을 읽었는가(getClassById `labSeparateKnown`) — false면 토글을 숨기고 값을 안 보낸다. */
+  labSeparateKnown?: boolean;
 };
 
 /**
@@ -210,6 +214,17 @@ export function ClassForm({
             endTime: vals[`${prefix}end_${i}`] ?? "",
             teacherId: vals[`${prefix}teacher_${i}`] || null,
             classroomId: vals[`${prefix}classroom_${i}`] || null,
+            // 표식 — 초안에 있으면 그 값, **없으면(표식이 없던 시절의 초안) 저장된 값**으로. 비워 두면 격자가 꺼진 채
+            // 열려 "0"을 보내 켜 둔 표식이 저장 한 번에 꺼진다(리뷰 2026-09-17).
+            labSeparate:
+              vals[`${prefix}labsep_${i}`] !== undefined
+                ? vals[`${prefix}labsep_${i}`] === "1"
+                : (defaults?.schedules ?? []).some(
+                    (d) =>
+                      d.labSeparate === true &&
+                      d.dayOfWeek === vals[`${prefix}day_${i}`] &&
+                      d.startTime.slice(0, 5) === (vals[`${prefix}start_${i}`] ?? "").slice(0, 5),
+                  ),
           });
         }
         return out;
@@ -424,6 +439,8 @@ export function ClassForm({
           classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
           bgColor={bgColor || null}
           allowSeats={subject === "english"}
+          // 생성 폼엔 표식을 안 연다 — 새 반 저장(createClass)은 자리 라벨 자체를 아직 안 쓴다.
+          labSeparateEnabled={mode === "edit" && defaults?.labSeparateKnown === true}
           outsideCount={customCount}
           onJumpToOutside={() =>
             document

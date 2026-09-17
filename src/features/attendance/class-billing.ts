@@ -1,5 +1,6 @@
 import { classInvoiceAmount, type LineItemLike } from "@/features/billing/session-terms/class-amount";
 import { effectiveAllocations, receiptLines } from "@/features/billing/session-terms/receipt-allocation";
+import { round1 } from "./session-units";
 import { rowKey } from "./grid/model";
 
 export type AttendanceInvoice = { id: string; student_id: string; line_items: unknown };
@@ -13,6 +14,10 @@ export type AttendanceBillingTerm = {
   allocation_amount: number | null;
   allocation_source: unknown;
   allocation_base_amount: number | null;
+  /** 확정 당시 세는 단위 — `attendance_units`(시수)가 아니면 **옛 일수 기준**이다(null도 일수, 회차 확정과 같은 폴백). */
+  quantity_basis: string | null;
+  /** 월 정액(EiE)은 일수·시수 축이 아예 없다 — 일수 기준 표식에서 뺀다(회차 확정 화면과 같은 규약). */
+  pricing_mode: string | null;
 };
 export type AttendanceBillingClass = { classId: string; className: string; studentIds: readonly string[] };
 
@@ -51,6 +56,53 @@ export function attendanceClassBilledAmounts(
       const key = rowKey(cls.classId, invoice.student_id);
       out[key] = (out[key] ?? 0) + amount;
     }
+  }
+  return out;
+}
+
+/**
+ * 학생×반 등록 차수 한 칸 — 값과 **그 값의 단위**.
+ * 🔴 `daysBasis`는 "이 숫자는 시수가 아니라 **출석 일수**"라는 뜻이다(회차 확정이 붉게 칠하는 그 값).
+ */
+export type AttendanceTermSessions = { units: number; daysBasis: boolean };
+
+/** 확정 당시 단위 — 회차 확정 화면과 **같은 폴백**(null이면 옛 일수 기준). 월 정액은 이 축이 없다. */
+function isDaysBasisTerm(term: AttendanceBillingTerm): boolean {
+  if (term.pricing_mode === "monthly") return false;
+  return (term.quantity_basis ?? "days") === "days";
+}
+
+/**
+ * 학생×반 **등록 차수** — 회차 확정(`invoice_session_terms.confirmed_sessions`)에서 확정한 시수(원장 2026-09-17
+ * *"등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로 보여줄것"*).
+ *
+ * 🔴 **확정한 것만** 담는다 — 미확정(null)은 키를 만들지 않는다(화면이 '미확정'으로 적는다). 0을 지어내면
+ *    "등록 0차수"가 확정된 사실처럼 읽힌다.
+ * 🔴 **옛 일수 기준 확정은 단위가 다르다** — 회차 확정 화면이 붉은 숫자 + 카드로 *"재확정 필요"*라 적는 그 값이라
+ *    (원장 2026-09-16), 여기서도 `daysBasis`로 표시해 넘긴다. 감추거나 '미확정'으로 바꾸지 말 것(둘 다 거짓이다).
+ * ⚠️ 같은 학생·반에 청구서가 둘이면(재발행·중복) **합친다** — 청구액과 같은 규약(위 함수도 더한다).
+ *    합은 `round1`을 지난다(1.1을 여러 번 더하면 꼬리가 남아 "1"이 "1.0"으로 찍힌다).
+ */
+export function attendanceClassConfirmedSessions(
+  classes: readonly AttendanceBillingClass[],
+  invoices: readonly AttendanceInvoice[],
+  terms: readonly AttendanceBillingTerm[],
+): Record<string, AttendanceTermSessions> {
+  const classById = new Map(classes.map((c) => [c.classId, { ...c, students: new Set(c.studentIds) }]));
+  const studentByInvoice = new Map(invoices.map((i) => [i.id, i.student_id]));
+  const out: Record<string, AttendanceTermSessions> = {};
+  for (const term of terms) {
+    if (term.confirmed_sessions === null || !term.class_id) continue;
+    const studentId = studentByInvoice.get(term.invoice_id);
+    const cls = classById.get(term.class_id);
+    if (!studentId || !cls?.students.has(studentId)) continue;
+    const key = rowKey(cls.classId, studentId);
+    const prev = out[key];
+    out[key] = {
+      units: round1((prev?.units ?? 0) + Number(term.confirmed_sessions)),
+      // 하나라도 옛 일수 기준이면 그 합은 단위가 섞였다 — 섞였다는 사실을 알린다.
+      daysBasis: (prev?.daysBasis ?? false) || isDaysBasisTerm(term),
+    };
   }
   return out;
 }

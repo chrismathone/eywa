@@ -377,8 +377,9 @@ export default async function AttendancePage({
   /**
    * 강사 계정의 **반별 보기**도 그 강사 출석부다(원장 2026-09-17 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건
    * 아니지. 그냥 내 출석부 상에서 자유롭게 숫자 설정만 하는거야."*) — 반 하나를 골라도 강사 전체 보기와 **같은 렌즈**
-   * (그 강사가 수업하는 날·맡은 교시만)로 그리고, 저장도 같은 판정을 지난다(`attendanceScope`). 그전엔 반별 보기로 바꾸면
-   * 날짜·교시 잠금이 없어 남의 교시 기록(ECS 입력 포함)을 그날 칸 저장으로 덮을 수 있었다.
+   * (그 강사가 맡은 교시의 기록만)로 그리고, 저장도 같은 판정을 지난다(`attendanceScope`). 그전엔 반별 보기로 바꾸면
+   * 그 렌즈가 없어 남의 교시 기록(ECS 입력 포함)을 그날 칸 저장으로 덮을 수 있었다.
+   * ⚠️ 입력은 **모든 날짜**에 열려 있다(원장 2026-09-17 저녁 — 보강). 수업요일은 색으로만 갈린다(`ownDates`).
    * ⚠️ 관리자가 강사 드롭다운으로 고른 반별 보기는 해당 없다(`myTeacherId`는 로그인한 강사 본인뿐 — 관리자는 반 전체).
    */
   const classScopeTeacher =
@@ -1082,7 +1083,8 @@ export default async function AttendancePage({
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
-            classBilledAmounts={classBilledAmounts}
+            classBilledAmounts={classBilledAmounts.billed}
+            termSessionsByRow={classBilledAmounts.confirmedSessions}
             money={money}
             moneyNote={moneyNote}
             lang={lang}

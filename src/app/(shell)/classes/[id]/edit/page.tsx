@@ -114,7 +114,9 @@ export default async function EditClassPage({
             teacherId: s.teacherId,
             classroomId: s.classroomId,
             slotTeacherLabel: s.slotTeacherLabel,
+            labSeparate: s.labSeparate,
           })),
+          labSeparateKnown: klass.labSeparateKnown,
         }}
         teacherOptions={teacherOptions}
         classroomOptions={classrooms}

@@ -1250,13 +1250,13 @@ export const SHEET_DICT = {
   "att.notice.scope.a": { ko: "칸 숫자는 ", en: "The number in each cell counts only " },
   "att.notice.scope.b": { ko: "이 선생님이 맡은 교시", en: "the periods this teacher takes" },
   "att.notice.scope.c": {
-    ko: "만 셉니다. 같은 반이라도 이 선생님이 수업하지 않는 날·다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체 숫자는 ",
-    en: ". Even in the same class, days this teacher doesn't teach, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use ",
+    ko: "만 셉니다. 같은 반이라도 다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 교시가 없는 기록(보강 등)은 그날 이 반을 맡은 선생님 모두에게 같은 값으로 잡힙니다 — 반 전체 숫자는 ",
+    en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. A record with no period (a makeup, say) counts for every teacher who takes this class that day — for the whole class, use ",
   },
   // 강사 계정용 — 그 계정은 반별 보기도 같은 렌즈라(원장 2026-09-17) "반 전체는 반별 보기에서"를 말하지 않는다.
   "att.notice.scope.cOwn": {
-    ko: "만 셉니다. 같은 반이라도 이 선생님이 수업하지 않는 날·다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 여기서 고쳐도 다른 선생님 기록은 바뀌지 않습니다.",
-    en: ". Even in the same class, days this teacher doesn't teach, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records.",
+    ko: "만 셉니다. 같은 반이라도 다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 여기서 고쳐도 다른 선생님 기록은 바뀌지 않습니다. 교시가 없는 기록(보강 등)은 그날 이 반을 맡은 선생님 모두에게 같은 값으로 잡힙니다.",
+    en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records. A record with no period (a makeup, say) counts for every teacher who takes this class that day.",
   },
   "att.notice.scope.d": { ko: "반별 보기", en: "the class view" },
   "att.notice.scope.e": { ko: "에서 봅니다.", en: " instead." },
@@ -1317,12 +1317,12 @@ export const SHEET_DICT = {
   "att.sort": { ko: "정렬", en: "Sort" },
   "att.sort.aria": { ko: "정렬 기준", en: "Sort by" },
   "att.scopeChip.title": {
-    ko: "이 선생님이 수업하는 날과 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체는 반별 보기에서 봅니다.",
-    en: "Only the days this teacher teaches and the periods they take are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use the class view.",
+    ko: "이 선생님이 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 색이 들어간 날이 원래 수업 요일이고, 다른 날에도 보강 출결을 넣을 수 있습니다 — 반 전체는 반별 보기에서 봅니다.",
+    en: "Only the periods this teacher takes are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Tinted days are the regular class days; makeup attendance can be entered on other days too — for the whole class, use the class view.",
   },
   "att.scopeChip.titleOwn": {
-    ko: "이 선생님이 수업하는 날과 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고, 여기서 고쳐도 바뀌지 않습니다.",
-    en: "Only the days this teacher teaches and the periods they take are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden, and editing here never changes them.",
+    ko: "이 선생님이 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고, 여기서 고쳐도 바뀌지 않습니다. 색이 들어간 날이 원래 수업 요일이고, 다른 날에도 보강 출결을 넣을 수 있습니다.",
+    en: "Only the periods this teacher takes are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and editing here never changes them. Tinted days are the regular class days; makeup attendance can be entered on other days too.",
   },
   "att.scopeChip": { ko: "칸 = 이 선생님 교시", en: "Cells = this teacher's periods" },
   "att.notices": { ko: "안내 {n}", en: "Notes {n}" },
@@ -1420,7 +1420,28 @@ export const SHEET_DICT = {
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
   },
   "att.row.billingUnconfirmed": { ko: "미확정", en: "Pending" },
-  "att.col.units": { ko: "시수", en: "Sessions" },
+  // 월별 출석부 열(원장 2026-09-17) — 출석부에서 센 '수업 차수'와 회차 확정에서 확정한 '등록 차수'를 나란히.
+  // ⚠️ 영어 라벨은 **열 폭 안에 들어가는 한 낱말**이다(가드 `name-wiring.test.ts`) — 뜻은 `*Title` 툴팁이 편다.
+  "att.col.lessonCount": { ko: "수업 차수", en: "Attended" },
+  "att.col.lessonCountTitle": {
+    ko: "출석부에서 센 시수입니다(출석·지각·조퇴·보강 칸의 배수 합).",
+    en: "Sessions counted from this sheet (present, late, early leave and make-up cells).",
+  },
+  "att.col.termSessions": { ko: "등록 차수", en: "Registered" },
+  "att.col.termSessionsTitle": {
+    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다.",
+    en: "Sessions confirmed in billing. Shown as unconfirmed until then.",
+  },
+  // 옛 일수 기준 확정 — 회차 확정 화면이 붉은 숫자 + 카드로 적는 그 사실(원장 2026-09-16).
+  "att.row.daysBasis": { ko: "일수 기준 확정", en: "Day-count basis" },
+  "att.row.daysBasisWhat": {
+    ko: "출석 일수로 확정한 값입니다(시수 기준 도입 전) — 이 숫자는 시수가 아닙니다.",
+    en: "Confirmed by counting attendance days (before the session-unit basis) — this number is not sessions.",
+  },
+  "att.row.daysBasisHow": {
+    ko: "수납관리 '회차 확정'에서 해제한 뒤 시수를 확인해 다시 확정하세요.",
+    en: "Release it in billing, check the sessions and confirm again.",
+  },
   "att.col.rate": { ko: "출석률", en: "Rate" },
   "att.group.slotTitle": {
     ko: "이 반의 담임은 다른 선생님이고, 교시(시간표 슬롯) 담당으로 배선돼 있어 이 목록에 있습니다.",
@@ -1431,7 +1452,6 @@ export const SHEET_DICT = {
     en: "Attendance from before this teacher took the class over (per the handover and homeroom-change log) belongs to the previous teacher, so it is left out of these totals — the records themselves remain and show in the class view.",
   },
   "att.group.students": { ko: "{n}명", en: "{n} students" },
-  "att.group.units": { ko: "시수 ", en: "Sessions " },
   "att.searchEmpty.where": { ko: "이 달 출석부", en: "this month's sheet" },
   // 강사 미니셸 머리 둘째 줄 — 지금 보는 것이 강사뷰라는 표시(원장 2026-09-14 *"강사뷰 라고 큼직하게"*).
   // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
@@ -1515,10 +1535,6 @@ export const SHEET_DICT = {
     en: "Entering here moves only the status onto that period's record (sessions unchanged, not counted in this table)",
   },
   // 🔴 강사 보기는 그 강사가 수업하는 날만 그린다(원장 2026-09-17 *"담당하지 않는 날은 표시할 이유도 없지"*) — 그 밖의 날 칸.
-  "att.lock.notOwnDay": {
-    ko: "이 선생님이 이 반을 수업하지 않는 날이라 선생님 출석부에서는 비워 둡니다 — 반 전체는 반별 보기에서 봅니다",
-    en: "This teacher doesn't teach this class on this day, so it stays empty in the teacher's register — see the class view for the whole class",
-  },
   // 🔴 자리(JJ·랩실) 기록뿐인 칸 — 강사 보기는 그 행을 안 쓴다(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지"*).
   "att.lock.seatOnly": {
     ko: "이 날은 자리(JJ·랩실) 기록뿐이라 선생님 출석부에서는 고치지 않습니다",
@@ -3654,6 +3670,14 @@ export const SHEET_DICT = {
   "cls.sch.startsFrom": { ko: "{md}부터", en: "From {md}" },
   "cls.sch.startsSoon": { ko: "시작 예정", en: "Starting soon" },
   "cls.sch.pastHidden": { ko: "지난 배치 {n}개는 숨김", en: "{n} past slots are hidden" },
+  // '따로 수업(*LAB)' 교시는 반 시간표 산정에서 뺀다(원장 2026-09-17) — 뺀 사실은 밝힌다.
+  "cls.sch.labSeparateHidden": { ko: "따로 수업(*LAB) 주 {n}회는 산정에서 뺌", en: "Separate LAB (*LAB): {n} a week left out" },
+  // 아직 시작 전인 교시만 있으면 주 회차가 0이라 "교시 N개"로 적는다 — 뺀 사실은 어느 쪽이든 밝힌다.
+  "cls.sch.labSeparateHiddenSlots": { ko: "따로 수업(*LAB) 교시 {n}개는 산정에서 뺌", en: "Separate LAB (*LAB): {n} slots left out" },
+  "cls.sch.labSeparateTitle": {
+    ko: "반 수정에서 '따로 수업'으로 켠 LAB 교시입니다. 반 전체가 앉는 시간이 아니라 요일·회차·주 시간에 넣지 않습니다.",
+    en: "LAB periods switched to 'separate' in class edit. They are not the whole class's time, so they are left out of days, sessions and weekly hours.",
+  },
   "cls.sch.pastTitle": {
     ko: "운영 종료일이 지난 시간표 행입니다. 기록으로 남아 있고 화면·편집에서는 빠집니다.",
     en: "These slots ran out before today. They stay on record but are left out of this screen and of editing.",

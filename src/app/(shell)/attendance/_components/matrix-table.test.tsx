@@ -157,17 +157,44 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
         groups={[GROUP]} days={DAYS} holidays={{}} showGroups={showGroups}
         ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
         classBilledAmounts={{ [rowKey(C, S1)]: 210000, [rowKey(C, S2)]: 0 }}
+        termSessionsByRow={{ [rowKey(C, S1)]: { units: 8, daysBasis: false } }}
       />,
     );
-    expect(screen.getAllByRole("columnheader").slice(0, 3).map((h) => h.textContent)).toEqual([
-      expect.stringContaining("이름"), "학교·학년", "청구액",
+    // 열 순서(원장 2026-09-17): 이름 · 학교학년 · 청구액 · 수업 차수 · 등록 차수 · 날짜… · 출석률
+    expect(screen.getAllByRole("columnheader").slice(0, 5).map((h) => h.textContent)).toEqual([
+      expect.stringContaining("이름"), "학교·학년", "청구액", "수업 차수", "등록 차수",
     ]);
     for (const [name, amount] of [["이도윤", "210,000"], ["박서준", "0"], ["한가온", "미확정"]]) {
       const row = screen.getByText(name!).closest("tr")!;
       expect(within(row).getAllByRole("cell")[2]).toHaveTextContent(amount!);
-      expect(row.children).toHaveLength(DAYS.length + 5);
+      expect(row.children).toHaveLength(DAYS.length + 6);
     }
-    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 5));
+    // 등록 차수 = 회차 확정의 확정 시수. 확정 전이면 '미확정'(0을 지어내지 않는다).
+    expect(within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("8");
+    expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("미확정");
+    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 6));
+  });
+
+  it("🔴 옛 일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 감추지도 '미확정'으로 바꾸지도 않는다", () => {
+    render(
+      <MatrixTable
+        groups={[GROUP]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        classBilledAmounts={{}}
+        termSessionsByRow={{ [rowKey(C, S1)]: { units: 6, daysBasis: true } }}
+      />,
+    );
+    const cell = within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell")[4]!;
+    const mark = cell.querySelector("span[data-tip]")!;
+    expect(mark).toBeTruthy();
+    expect(mark.textContent).toContain("6");
+    expect(mark.getAttribute("data-tip")).toContain("일수 기준 확정");
+    expect(mark.className).toContain("text-danger");
+    // 다른 행은 평범한 '미확정'(표식이 번지지 않는다).
+    expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("미확정");
     expect(screen.queryByRole("columnheader", { name: "납입" })).not.toBeInTheDocument();
   });
 });
@@ -378,19 +405,23 @@ describe("출석부 표 골격", () => {
     const table = container.querySelector("table")!;
     expect(table.className).toContain("table-fixed");
     const cols = container.querySelectorAll("colgroup col");
-    // 이름·학교·학년(압축 한 열, 2026-08-10) + 날짜 2 + 시수·출석률
-    expect(cols.length).toBe(2 + DAYS.length + 2);
+    // 이름 · 학교·학년(압축 한 열, 2026-08-10) · 수업 차수 + 날짜 2 + 출석률
+    //   (청구액·등록 차수는 금액을 보는 화면에서만 — 이 렌더는 안 넘겼다.)
+    expect(cols.length).toBe(3 + DAYS.length + 1);
     expect((cols[0] as HTMLElement).style.width).toBeTruthy(); // 이름
     expect((cols[1] as HTMLElement).style.width).toBeTruthy(); // 학교·학년
+    expect((cols[2] as HTMLElement).style.width).toBeTruthy(); // 수업 차수
     // 날짜 칸만 폭이 비어 있다 — 남는 가로 폭을 이 칸들이 나눠 갖는다.
-    expect((cols[2] as HTMLElement).style.width).toBe("");
+    expect((cols[3] as HTMLElement).style.width).toBe("");
   });
 
-  it("🔴 마지막 두 열(시수·출석률)은 sticky right 오프셋과 짝이라 폭이 고정이다", () => {
+  it("🔴 오른쪽 고정은 출석률 하나 — 시수를 청구액 옆으로 옮긴 뒤 짝(64px 오프셋)이 사라졌다", () => {
     const { container } = renderTable();
     const cols = container.querySelectorAll("colgroup col");
     expect((cols[cols.length - 1] as HTMLElement).style.width).toBe("64px"); // 출석률
-    expect(container.querySelector("th.sm\\:right-\\[64px\\]")).toBeTruthy(); // 넓은 화면에서 그 폭만큼 띄워 붙는다
+    expect(container.querySelector("th.sm\\:right-0")).toBeTruthy();
+    // 🔴 옛 짝(시수 열)이 되살아나면 두 열이 겹친다.
+    expect(container.querySelector("th.sm\\:right-\\[64px\\]")).toBeNull();
   });
 
   it("등원요일은 이름 **아래 줄**에 온다 — 한 줄에 이으면 이름 열이 그만큼 넓어져야 한다", () => {
@@ -508,9 +539,10 @@ describe("교시 롤업 칸", () => {
       { slot: "12:30:00", status: "present", units: null },
       { slot: "14:10:00", status: "present", units: null },
     ]);
-    // 마지막 두 열 = 시수·출석률. 시수 칸이 2를 말해야 한다.
-    const totals = [...container.querySelectorAll("tbody tr td")].slice(-2);
-    expect(totals[0]!.textContent).toContain("2");
+    // 수업 차수 칸(이름·학교학년 다음)이 2를 말해야 한다 — 마지막 칸은 출석률이다.
+    const row = [...container.querySelectorAll("tbody tr")].find((r) => r.querySelector('[role="gridcell"]'))!;
+    expect([...row.children][2]!.textContent).toContain("2");
+    expect([...row.children].at(-1)!.textContent).toContain("%");
   });
 
   it("교시가 하나면 종전과 같다 — 줄무늬도 '교시' 툴팁도 없다", () => {
@@ -552,7 +584,11 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     );
   }
   const cellOf = (c: HTMLElement) => c.querySelector<HTMLElement>(`[data-cell-key$="${D1}"]`)!;
-  const unitsOf = (c: HTMLElement) => [...c.querySelectorAll("tbody tr td")].slice(-2)[0]!.textContent;
+  // 수업 차수 칸 — 이름·학교학년 **다음**이다(2026-09-17 열 이동). 마지막 칸은 출석률.
+  //  ⚠️ 반 머리행도 tbody에 있어 표 전체 td를 세면 안 된다 — 학생 줄(칸이 있는 행)을 먼저 고른다.
+  const studentRow = (c: HTMLElement) =>
+    [...c.querySelectorAll("tbody tr")].find((r) => r.querySelector('[role="gridcell"]'))!;
+  const unitsOf = (c: HTMLElement) => [...studentRow(c).children][2]!.textContent;
 
   it("🔴 내 교시 1 + 남의 교시 2 = 칸도 행 시수도 **1**(3이 아니다)", () => {
     const { container } = renderScoped(
@@ -1019,12 +1055,11 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
 });
 
 /**
- * 🔴 원장 2026-09-17: *"그냥 출석부에 담당하는 날만 표시하면 된다. 담당하지 않는 날은 표시할 이유도 없지."* ·
- *    *"말그대로 내가 수업한 학생의 출석만 보고 싶은것."* — 조회가 `ownDates`(그 강사가 수업하는 날)를 싣고, 격자는 그 밖의 날을
- *    **빈칸으로 그리되 입력을 막는다**. 같은 날 *"내 출석부 상에서 자유롭게 숫자 설정만 하는거야"* — 수업하는 날 칸은 제 교시
- *    기록이 없어도(남의 기록뿐이어도) 열린다(저장이 제 교시 행을 만든다).
+ * 🔴 원장 2026-09-17: 낮엔 *"담당하는 날만 표시"*(값은 그 강사 몫만)였고, 저녁에 입력 규칙이 뒤집혔다 —
+ *    *"화요일은 원래 수업이라 이후에 관리자가 수정가능하고, 다른 요일도 보강 등으로 수업할 수 있으니까 숫자 입력가능하게"*.
+ *    그래서 **모든 날짜 칸이 열리고**, `ownDates`는 수업요일 **색**만 정한다(값은 여전히 그 강사 몫 기록만).
  */
-describe("강사 보기 — 그 강사가 수업하는 날만(원장 2026-09-17)", () => {
+describe("강사 보기 — 수업요일은 색으로, 입력은 모든 날에(원장 2026-09-17)", () => {
   const D1 = "2026-07-01"; // 수 — 이 강사가 수업하는 날
   const D2 = "2026-07-02"; // 목 — 수업하지 않는 날
   function renderOwnDays(opts: { lockBefore?: string | null } = {}) {
@@ -1052,27 +1087,26 @@ describe("강사 보기 — 그 강사가 수업하는 날만(원장 2026-09-17)
   }
   const cellAt = (c: HTMLElement, date: string) => c.querySelector<HTMLElement>(`[data-cell-key$="${date}"]`)!;
 
-  it("🔴 격자 잠금 사유 — 수업하지 않는 날 = day · 수업하는 날은 열린다", () => {
+  it("🔴 날짜로 잠그지 않는다 — 수업하는 날도, 수업하지 않는 날도 입력이 열린다(보강)", () => {
     const { src } = renderOwnDays();
-    expect(src.notMine[cellKey(rowKey(C, S1), D2)]).toBe("day");
+    expect(src.notMine[cellKey(rowKey(C, S1), D2)]).toBeUndefined();
     expect(src.notMine[cellKey(rowKey(C, S1), D1)]).toBeUndefined();
   });
 
-  it("🔴 수업하지 않는 날은 빈칸·수업요일 색 없음·잠금 — 숫자를 쳐도 저장이 안 나간다", async () => {
+  it("🔴 수업하지 않는 날 — 수업요일 색만 빠지고 입력은 된다(보강을 그 칸에 찍는다)", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValue({ ok: true } as never);
     const { container } = renderOwnDays();
     const cell = cellAt(container, D2);
-    expect(cell.className).toContain("cursor-not-allowed");
+    expect(cell.className).not.toContain("cursor-not-allowed");
     expect(cell.className).not.toContain("bg-att-classday");
     expect(cell.style.backgroundImage).toBe(""); // 빗금 없음
-    expect(tipOf(cell)).toContain("수업하지 않는 날");
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "1" });
     fireEvent.keyDown(cell, { key: "Enter" });
-    expect(setAttendanceCell).not.toHaveBeenCalled();
-    // 수업하는 날은 그대로 수업요일 색 + 열림
-    expect(cellAt(container, D1).className).not.toContain("cursor-not-allowed");
+    expect(setAttendanceCell).toHaveBeenCalledWith(expect.objectContaining({ sessionDate: D2 }));
+    // 수업하는 날은 수업요일 색이 남는다(두 날의 차이는 색뿐).
     expect(cellAt(container, D1).className).toContain("bg-att-classday");
   });
 
@@ -1105,14 +1139,13 @@ describe("강사 보기 — 그 강사가 수업하는 날만(원장 2026-09-17)
     );
   });
 
-  it("🔴 7일이 지난 칸이어도 '수업하지 않는 날'이 사유다 — 툴팁·타이핑 안내가 같은 순서(적대 재리뷰 2026-09-17)", () => {
+  it("7일이 지난 칸은 종전대로 수정 기간 잠금 — 사유도 그 문장 하나다", () => {
     const { container } = renderOwnDays({ lockBefore: "2026-07-10" });
-    const notOwn = cellAt(container, D2);
-    expect(tipOf(notOwn)).toContain("수업하지 않는 날");
-    expect(tipOf(notOwn)).not.toContain("7일");
-    fireEvent.mouseDown(notOwn, { button: 0 });
-    fireEvent.keyDown(notOwn, { key: "1" });
-    expect(container.textContent).toContain("수업하지 않는 날");
+    for (const date of [D1, D2]) {
+      const cell = cellAt(container, date);
+      expect(cell.className).toContain("cursor-not-allowed");
+      expect(tipOf(cell)).toContain("7일");
+    }
   });
 
   it("머리 줄도 수업하는 날만 수업요일 색 — 반 요일 합집합으로 칠하지 않는다", () => {

@@ -157,6 +157,31 @@ describe("🔴 시트 본문 문구가 사전을 탄다 — 화면 파일에 한
     }
   });
 
+  it("🔴 월별 출석부 '수업 차수·등록 차수' 머리는 열 폭 안에 든다(한·영 모두)", () => {
+    // `th`엔 말줄임이 없어 넘친 글자는 옆 칸 머리에 덮여 **잘린 채** 보인다(적대 리뷰 2026-09-17).
+    // 폭은 화면이 정하므로 상수를 **거기서 읽는다**(둘이 갈리면 가드가 거짓으로 통과한다).
+    const table = readFileSync(
+      join(process.cwd(), "src", "app", "(shell)", "attendance", "_components", "matrix-table.tsx"),
+      "utf8",
+    );
+    const widths = Object.fromEntries(
+      [...table.matchAll(/(units|termSessions): (\d+)/g)].map((m) => [m[1]!, Number(m[2])]),
+    );
+    const PAD = 8; // `px-1` 좌우
+    for (const [key, col] of [
+      ["att.col.lessonCount", "units"],
+      ["att.col.termSessions", "termSessions"],
+    ] as const) {
+      const room = widths[col]! - PAD;
+      expect(room, col).toBeGreaterThan(0);
+      // 글자당 폭은 **헤드리스 Chrome 실측**(Pretendard 500 · 14px · letter-spacing 0.02em = `.micro`).
+      // 실측 최대치: 한글 12.38px/자(`수업 차수` 53.22px) · 라틴 7.66px/자(`Attended` 61.28px).
+      // 🔴 라틴을 7px로 잡으면 대문자 섞인 11자 라벨이 **가드는 통과하고 화면에서 넘친다**(재리뷰 2026-09-17).
+      expect(SHEET_DICT[key].ko.length * 12.4, key).toBeLessThanOrEqual(room);
+      expect(SHEET_DICT[key].en.length * 7.7, key).toBeLessThanOrEqual(room);
+    }
+  });
+
   it("🔴 한국어에서는 자리(JJ) 출석부와 **글자가 같다** — 사전이 갈라 놓는 건 영어뿐", () => {
     // 자리 출석부는 비로그인 PIN으로도 열리는 한국어 표면이라 상수(`ROSTER_FIXED_LABEL`)를 계속 읽는다.
     // 두 표면이 한국어에서 다른 낱말을 쓰면 "한 화면에서 배운 이름이 다른 화면에서 안 통한다".

@@ -4,6 +4,7 @@
 // 셀 강사·특수자리·요일별 강의실은 슬롯 라벨(class_schedules.slot_teacher_label/slot_room_label, 0041a 백필)에서 온다.
 // ⚠️ server-only 금지 — 클라(rich-card-group)도 import. 순수·plain만.
 import { isSpecialSlotLabel } from "./teacher-label";
+import { isLabSeparateSlot } from "./lab-separate";
 import {
   slotPeriodRow,
   weekdayPeriodRowOrNull,
@@ -68,6 +69,8 @@ export type GridSlot = {
   teacherName: string | null; // 반 기본 강사(담임)
   classroomName: string | null; // 반 기본 강의실
   slotTeacherLabel: string | null; // 셀 강사/LAB(ijw slotTeachers)
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 켜진 LAB 교시에만 true. */
+  labSeparate?: true;
   slotRoomLabel: string | null; // 셀 강의실(ijw slotRooms)
   classBgColor: string | null;
   classTextColor: string | null;
@@ -81,7 +84,13 @@ export type GridSlot = {
  * 주말 셀은 평일 교시 행에 얹히거나(혼합 반) 1교시부터 시작하도록 당겨지므로(주말 전용 반,
  * 아래 `weekendSelfShift`) **행의 시각 ≠ 그 수업의 시각**이다. 잃으면 안 되는 사실이라 셀이 들고 간다.
  */
-export type GridCell = { label: string; isLab: boolean; time?: string };
+export type GridCell = {
+  label: string;
+  isLab: boolean;
+  time?: string;
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 켜진 LAB 칸에만 실린다. 표시 규약은 lab-separate.ts. */
+  labSeparate?: true;
+};
 export type GridPeriodRow = { order: number; label: string; time: string };
 
 /**
@@ -556,6 +565,8 @@ export function buildRichClassCards(slots: GridSlot[], config: PeriodsConfig): R
       cells[`${effWeekend.order}:${day}`] = {
         label: teacher,
         isLab: isSeat,
+        // '따로 수업(*LAB)' — **LAB 자리일 때만**(JJ·강사 교시에 남은 값은 안 읽는다, lab-separate.ts 단일 판정).
+        ...(isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) ? { labSeparate: true as const } : {}),
         // 주말 셀만 실제 시각을 들고 간다 — 행 라벨이 그 반의 시각이 아닐 수 있다(GridCell.time 주석).
         ...(isW ? { time: `${hhmm(s.startTime)}~${hhmm(s.endTime)}` } : null),
       };

@@ -35,6 +35,11 @@ export type IncomingSlot = {
   explicitTime?: boolean;
   /** 담당 칸에서 **자리(LAB·JJ)** 를 골랐으면 그 이름. 없으면 사람 담당이거나 담임 상속. */
   seatLabel?: string | null;
+  /**
+   * LAB 자리 교시의 '따로 수업(*LAB)' 표식(0271a) — **폼이 보냈을 때만** 값이 있다.
+   * undefined = 폼이 이 칸을 안 보냈다(옛 탭·다른 입력 경로) → 기존 행 값을 승계한다(`isSpecialProvided`와 같은 규약).
+   */
+  labSeparate?: boolean;
 };
 
 export type PriorSlot = {
@@ -50,6 +55,8 @@ export type PriorSlot = {
   slotRoomLabel: string | null;
   periodLabel: string | null;
   mergeGroup: string | null;
+  /** 0271a 표식. 칸을 못 읽었으면 undefined(= false로 본다 — 호출부가 그때는 쓰기에서 칸을 뺀다). */
+  labSeparate?: boolean;
 };
 
 /**
@@ -73,14 +80,35 @@ export type PeriodOverride = {
   keepValidTo?: boolean;
 };
 
-export type PreservedSlot = Omit<IncomingSlot, "explicitTime"> & {
+export type PreservedSlot = Omit<IncomingSlot, "explicitTime" | "labSeparate"> & {
   validFrom: string;
   validTo: string | null;
   slotTeacherLabel: string | null;
   slotRoomLabel: string | null;
   periodLabel: string | null;
   mergeGroup: string | null;
+  /** 최종 표식 — **LAB 자리 교시에서만** true일 수 있다(`resolveLabSeparate`). */
+  labSeparate: boolean;
 };
+
+/** 재삽입 라벨 규칙 — 자리를 골랐으면 그 자리, 자리였다가 풀었으면 null, 그 외엔 승계. */
+function resolveSlotTeacherLabel(s: IncomingSlot, prior: PriorSlot | undefined): string | null {
+  return s.seatLabel
+    ? s.seatLabel
+    : specialSlotLabel(prior?.slotTeacherLabel)
+      ? null
+      : (prior?.slotTeacherLabel ?? null);
+}
+
+/**
+ * '따로 수업(*LAB)' 표식의 최종 값 — 원장 2026-09-17 *"랩실 옆에 토글키를 두고 토글하게 되면 LAB -> *LAB"*.
+ * 🔴 **LAB 자리 교시에서만** 켜질 수 있다 — LAB을 JJ·강사로 바꾸면 표식도 꺼진다(남겨 두면 다시 LAB으로 되돌릴 때
+ *    예전 표식이 유령처럼 되살아난다). 폼이 값을 안 보냈으면(undefined) 기존 행 값을 승계한다.
+ */
+export function resolveLabSeparate(s: IncomingSlot, prior: PriorSlot | undefined): boolean {
+  if (specialSlotLabel(resolveSlotTeacherLabel(s, prior)) !== "LAB") return false;
+  return s.labSeparate ?? prior?.labSeparate ?? false;
+}
 
 const hm = (t: string) => String(t).slice(0, 5);
 const isWeekendDay = (d: string) => d === "sat" || d === "sun";
@@ -192,10 +220,13 @@ function matchIncomingToPrior(incoming: IncomingSlot[], prior: PriorSlot[]): (Pr
   return matched;
 }
 
-/** 이 슬롯의 **이력 있는 값**이 바뀌었나 — 담당·강의실·(폼 값이 이기는) 종료시각. */
+/** 이 슬롯의 **이력 있는 값**이 바뀌었나 — 담당·강의실·(폼 값이 이기는) 종료시각·'따로 수업' 표식. */
 function slotChanged(incoming: IncomingSlot, prior: PriorSlot, pairs?: PeriodPairs): boolean {
   if ((incoming.teacherId ?? null) !== (prior.teacherId ?? null)) return true;
   if ((incoming.classroomId ?? null) !== (prior.classroomId ?? null)) return true;
+  // 표식을 켜고 끄는 것도 **오늘부터 새 구간**이다 — 덮어쓰면 지난 주 시간표에도 `*LAB`이 뜬다(원장 2026-08-04
+  // "주차변경시에 실제로 일어났던 모든것이 반영되도록"). 판정은 재삽입 값과 **같은 함수**로 한다.
+  if (resolveLabSeparate(incoming, prior) !== (prior.labSeparate ?? false)) return true;
   // 종료시각은 **폼 값이 이길 때만** 실제로 바뀐다(formEndTimeWins) — 판정을 preserveScheduleFields와
   // 반드시 같은 함수로 할 것. 어긋나면 값은 바뀌는데 마감 행이 안 남거나(이력 구멍) 그 반대가 된다.
   if (formEndTimeWins(incoming, prior, pairs) && hm(incoming.endTime) !== hm(prior.endTime)) return true;
@@ -230,6 +261,12 @@ export function planSlotArchives(input: {
   today: string;
   /** 교시표의 (시작,종료) 짝 — 종료시각 변경 판정용(`formEndTimeWins`). 없으면 예전 동작. */
   periodPairs?: PeriodPairs;
+  /**
+   * 폼이 보낸 운영 **종료일**이 오늘보다 앞이면(= 이미 끝난 구간으로 저장) 값이 바뀐 짝은 **마감 행을 안 만든다**.
+   * 재삽입 행이 옛 시작일 그대로 그 구간을 덮으므로(`preserveScheduleFields`의 `endedBeforeToday`), 마감 행을
+   * 함께 만들면 같은 구간이 두 줄이 된다. 사라진 슬롯의 마감은 그대로다(그건 "어제까지 있었다"가 맞다).
+   */
+  periodValidTo?: string | null;
 }): (PriorSlot & { validTo: string })[] {
   const matched = matchIncomingToPrior(input.incoming, input.prior);
   const keptPairs = new Map<PriorSlot, IncomingSlot>();
@@ -238,6 +275,8 @@ export function planSlotArchives(input: {
     if (p) keptPairs.set(p, s);
   });
   const cutoff = dayBefore(input.today);
+  const endedBeforeToday =
+    !!input.periodValidTo && String(input.periodValidTo).slice(0, 10) < input.today;
   const out: (PriorSlot & { validTo: string })[] = [];
   for (const p of input.prior) {
     // 오늘 시작한 행은 과거가 없다 — 마감하면 거꾸로 된 구간이 된다.
@@ -245,6 +284,8 @@ export function planSlotArchives(input: {
     const pair = keptPairs.get(p);
     // 짝이 없으면 '사라진 슬롯'(그 배치는 어제까지 있었다), 짝이 있어도 값이 바뀌었으면 옛 값을 남긴다.
     if (pair && !slotChanged(pair, p, input.periodPairs)) continue;
+    // 이미 끝난 구간으로 저장하는 중이면 그 짝은 재삽입 행이 옛 시작일 그대로 덮는다 — 마감 행을 또 만들지 않는다.
+    if (pair && endedBeforeToday) continue;
     out.push({ ...p, validTo: cutoff });
   }
   return out;
@@ -275,14 +316,29 @@ export function preserveScheduleFields(input: {
       slotChanged(s, prior, input.periodPairs) &&
       !(prior.validFrom && String(prior.validFrom).slice(0, 10) >= input.today);
     const inheritedFrom = splitToday ? input.today : (prior?.validFrom ?? input.today);
-    const validFrom = input.period.provided
-      ? (input.period.validFrom ?? inheritedFrom)
-      : inheritedFrom;
+    // 🔴 가른 행은 **오늘부터**다 — 수정 폼은 늘 운영 기간을 보내고(교시 시작일이 같으면 그 날짜로 채운다),
+    //    그 값이 이기면 새 행이 9/1부터 시작해 **어제까지로 마감한 옛 행과 겹친다**. 토글을 누를 때마다 겹친 행이
+    //    하나씩 늘었다(적대적 리뷰 2026-09-17 — 담당·강의실 변경에도 있던 결함). 폼이 **오늘보다 뒤** 날짜를 보냈을
+    //    때만 그 날짜가 이긴다(개강을 미루는 명시 입력).
+    //    **오늘 이미 가른 행**(시작일 = 오늘)도 같다 — 같은 날 한 번 더 저장하면 splitToday는 거짓이지만, 그 행 뒤엔
+    //    어제까지로 마감한 옛 행이 있어 폼 시작일(9/1)로 늘리면 다시 겹친다.
+    const formFrom = input.period.provided ? input.period.validFrom : null;
+    const startedToday = !!prior?.validFrom && String(prior.validFrom).slice(0, 10) === input.today;
     // 종료일: 값이 들어오면 언제나 전 행에 적용(폼 안내 그대로). **비어 있을 때만** 해석이 갈린다 —
     // 평소엔 "명시적 무기한"(되돌리기), keepValidTo면 "안 정함"(교시별 기존값 유지).
     const keepTo = input.period.keepValidTo === true && input.period.validTo === null;
     const validTo =
       input.period.provided && !keepTo ? input.period.validTo : (prior?.validTo ?? null);
+    // 🔴 **이미 끝난 구간이면 오늘로 당기지 않는다**(재리뷰 2026-09-17) — "어제부로 반을 끝내며 담당도 바로잡는"
+    //    저장에서 시작일만 오늘이 되면 `시작 9/17 > 종료 8/31`인 **역전 행**이 되고, 그 행은 어떤 날짜 창 조회에도
+    //    안 걸려 화면에서 통째로 사라진다(다음 저장의 삭제 대상에서도 빠진다 — 유령 행).
+    const endedBeforeToday = !!validTo && String(validTo).slice(0, 10) < input.today;
+    const validFrom =
+      (splitToday || startedToday) && !endedBeforeToday
+        ? formFrom && String(formFrom).slice(0, 10) > input.today
+          ? formFrom
+          : input.today
+        : (formFrom ?? inheritedFrom);
     // 종료시각: 규칙은 `formEndTimeWins` 한 곳에 있다 — 기존 행이 교시표의 정확한 짝이면 폼 값(=사용자가
     // 고른 교시)이 이기고, 교시표 밖(그리드가 시작시각 폴백으로만 그린 행)이면 기존 행을 지킨다
     // (16:20~17:20 수업이 교시표 17:00으로 40분이 되면 급여 시수가 조용히 줄어든다).
@@ -301,14 +357,29 @@ export function preserveScheduleFields(input: {
       //    강사 닉네임 라벨(Anna·Elsa… 실측 492행)이 반 메모 한 줄 수정에 통째로 날아간다 — 이 모듈이
       //    존재하는 이유가 그 사고 방지다. 그래서 ① 자리를 골랐으면 그 자리로 ② 자리였는데 사람/담임으로
       //    바꿨으면 지우고(안 지우면 화면엔 사람인데 라벨은 LAB인 유령이 남는다) ③ 그 외엔 승계.
-      slotTeacherLabel: s.seatLabel
-        ? s.seatLabel
-        : specialSlotLabel(prior?.slotTeacherLabel)
-          ? null
-          : (prior?.slotTeacherLabel ?? null),
+      slotTeacherLabel: resolveSlotTeacherLabel(s, prior),
       slotRoomLabel: prior?.slotRoomLabel ?? null,
       periodLabel: prior?.periodLabel ?? null,
       mergeGroup: prior?.mergeGroup ?? null,
+      labSeparate: resolveLabSeparate(s, prior),
     } satisfies PreservedSlot;
   });
+}
+
+/**
+ * 감사로그용 — 이번 저장에서 '따로 수업(*LAB)' 표식이 **켜지거나 꺼진** 교시(`preserveScheduleFields`와 같은 짝).
+ * 새로 만든 LAB 교시를 켠 채로 넣은 것도 "켬"으로 센다(없던 표식이 생겼다).
+ */
+export function labSeparateChanges(
+  incoming: IncomingSlot[],
+  prior: PriorSlot[],
+): { dayOfWeek: string; startTime: string; on: boolean }[] {
+  const matched = matchIncomingToPrior(incoming, prior);
+  const out: { dayOfWeek: string; startTime: string; on: boolean }[] = [];
+  incoming.forEach((s, i) => {
+    const p = matched[i];
+    const next = resolveLabSeparate(s, p);
+    if (next !== (p?.labSeparate ?? false)) out.push({ dayOfWeek: s.dayOfWeek, startTime: hm(s.startTime), on: next });
+  });
+  return out;
 }

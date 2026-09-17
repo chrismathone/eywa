@@ -11,6 +11,7 @@ import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 import { listMakeupPoolClassIds } from "@/features/attendance/server/makeup-pool";
 import { canViewClassDetail } from "./class-scope";
+import { loadLabSeparateIds } from "./lab-separate";
 
 /**
  * "만료되지 않은 스케줄" PostgREST `or` 절 — `valid_to`가 무기한(null)이거나 오늘 이후(**포함**).
@@ -87,6 +88,8 @@ export type ClassScheduleSlot = {
   classroomId: string | null;
   /** 표시 라벨(시트 원문). 자리(LAB·JJ)는 `teacherId`가 비고 여기에만 있다. */
   slotTeacherLabel: string | null;
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 못 읽었으면 false(`ClassDetail.labSeparateKnown`으로 가른다). */
+  labSeparate: boolean;
 };
 
 export type ClassDetail = {
@@ -114,6 +117,8 @@ export type ClassDetail = {
   pendingTeacherDate: string | null;
   pendingTeacherReason: string | null;
   scheduleSlots: ClassScheduleSlot[];
+  /** '따로 수업(*LAB)' 표식을 읽었는가(0271a 미적용·조회 실패면 false — 수정 폼이 토글을 숨긴다). */
+  labSeparateKnown: boolean;
   /** **오늘** 명단에 있는 학생 수(휴원 포함, 미래 시작 제외). */
   studentCount: number;
   /** 아직 시작 안 한 수강 수 — 배너가 "N/N부터 합류 N명"으로 보여 준다(숫자를 잃지 않는다). */
@@ -738,7 +743,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   // ⚠️ 재원생 수는 `count:exact head:true`로 못 센다 — 전출 배타 판정(isEnrollmentEndedOn)이 행마다
   // `is_transferred`를 봐야 해서다. 대신 **한 반의 현재·미래 수강만** 좁게 받아 센다(집계용 전건 아님).
   // `is null`만 세던 옛 코드는 오늘이 마지막 날인 학생을 빠뜨려 `수강 중인 학생` 목록과 갈렸다.
-  const [{ data: schedules }, { data: enrollRows }] = await Promise.all([
+  const [{ data: schedules }, { data: enrollRows }, labSeparateIds] = await Promise.all([
     supabase
       .from("class_schedules")
       .select(
@@ -752,6 +757,9 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       .select("start_date, end_date, is_transferred")
       .eq("class_id", id)
       .or(`end_date.is.null,end_date.gte.${today}`),
+    // '따로 수업(*LAB)' 표식(0271a) — **따로 fail-soft로**. 위 교시 조회에 컬럼을 끼우면 0271a 전엔 오류가
+    // 삼켜져 수정 폼이 빈 격자로 열리고, 그대로 저장하면 그 반의 교시가 전부 마감된다([[#95]]).
+    loadLabSeparateIds(supabase, { kind: "class", classId: id }),
   ]);
   // 🔴 시작일도 봐야 한다(2026-08-29): 미래 시작 수강이 이미 DB에 있어서(실측 28건) 종료만 보면
   //    **9/1부터 올 학생이 오늘 재원생 수에 섞인다**. 판정은 enrollmentPhaseOn 단일 소스.
@@ -811,7 +819,13 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       classroomId: (s.classroom_id as string | null) ?? null,
       // 자리(LAB·JJ)는 teacher_id가 비고 이 라벨에만 있다 — 폼이 드롭다운을 그 자리로 열려면 필요.
       slotTeacherLabel: (s.slot_teacher_label as string | null) ?? null,
+      labSeparate: labSeparateIds?.has(String(s.id)) ?? false,
     })),
+    /**
+     * 표식을 읽었는가 — false면 수정 폼이 토글을 **숨기고 값을 안 보낸다**(서버가 기존 값을 승계).
+     * 모른 채로 "꺼짐"을 보내면 멀쩡히 켜 둔 표식이 저장 한 번에 꺼진다.
+     */
+    labSeparateKnown: labSeparateIds !== null,
     studentCount,
     upcomingCount,
   };

@@ -29,9 +29,11 @@ import {
   reopenClassEnrollments,
 } from "./enrollment-lifecycle";
 import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
+import { isMissingColumnError } from "./lab-separate";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
-import type { OverlapItem } from "../overlap";
+import { DAY_LABEL_KO, type OverlapItem } from "../overlap";
 import {
+  labSeparateChanges,
   periodPairKey,
   planSlotArchives,
   preserveScheduleFields,
@@ -80,6 +82,8 @@ type ScheduleInput = {
    * `teacher_id = null` + `slot_teacher_label = <자리>`로 저장한다(teacher-label.ts 규칙).
    */
   seatLabel?: string | null;
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 폼이 `*_labsep_i`를 보냈을 때만 값이 있다(없으면 기존 행 승계). */
+  labSeparate?: boolean;
 };
 
 /** DB 오류를 화면 문구로 — 영문 원문(PostgREST 메시지)을 그대로 내보내지 않는다(UI raw 노출 금지). */
@@ -165,7 +169,19 @@ function readSlotNamespace(
     const seatLabel = parseSeatValue(rawTeacher);
     const teacherId = seatLabel ? null : rawTeacher || null;
     const classroomId = String(formData.get(`${prefix}classroom_${i}`) ?? "").trim() || null;
-    result.push({ dayOfWeek, startTime, endTime, teacherId, classroomId, explicitTime, seatLabel });
+    // '따로 수업(*LAB)' 표식 — **보냈을 때만** 읽는다(옛 탭·자유 시각 행은 안 보낸다 = 기존 값 승계).
+    const rawLabSep = formData.get(`${prefix}labsep_${i}`);
+    const labSeparate = rawLabSep === null ? undefined : String(rawLabSep) === "1";
+    result.push({
+      dayOfWeek,
+      startTime,
+      endTime,
+      teacherId,
+      classroomId,
+      explicitTime,
+      seatLabel,
+      ...(labSeparate === undefined ? {} : { labSeparate }),
+    });
   }
   return result;
 }
@@ -347,6 +363,17 @@ export async function updateClass(
   // 라벨·기간을 전부 null로 덮어쓰는데 그땐 복구가 불가능하다(규칙 B3: error를 `?? []`로 삼키지 않는다).
   if (priorRes.error || !priorRes.rows) return { error: priorRes.error ?? SAVE_FAILED };
   const prior = priorRes.rows;
+  // 0271a '따로 수업(*LAB)' 칸을 못 읽었으면(미적용·조회 실패) 폼 값도 버리고 insert에서 칸을 뺀다([[#95]]) —
+  // 키를 실은 insert가 delete 뒤에 실패하면 그 반의 현재 교시가 사라진다.
+  const labSupported = priorRes.labSeparateSupported === true;
+  if (!labSupported) {
+    input.schedules = input.schedules.map((sch) => {
+      const rest = { ...sch };
+      delete rest.labSeparate;
+      return rest;
+    });
+  }
+  const labCol = (v: boolean | undefined) => (labSupported ? { lab_separate: v ?? false } : {});
 
   const { error } = await supabase
     .from("classes")
@@ -385,7 +412,14 @@ export async function updateClass(
   // 교시표의 (시작,종료) 짝 — **과목이 바뀌는 저장**도 있으므로 이전 과목·새 과목 표를 합집합으로 본다
   // (그리드는 마운트 시점 과목 표로 기존 슬롯을 복원하고, 제출은 화면의 현재 과목 표로 만든다).
   const periodPairs = buildPeriodPairs(settingsForPeriods, [before?.subject, input.subject]);
-  const archiveRows = planSlotArchives({ incoming: input.schedules, prior, today, periodPairs }).map((a) => ({
+  const archiveRows = planSlotArchives({
+    incoming: input.schedules,
+    prior,
+    today,
+    periodPairs,
+    // 이미 끝난 구간으로 저장하면 마감 행을 만들지 않는다(재삽입 행이 그 구간을 덮는다 — schedule-preserve 주석).
+    ...(input.periodProvided ? { periodValidTo: input.validTo } : {}),
+  }).map((a) => ({
     tenant_id: user.tenantId,
     class_id: id,
     day_of_week: a.dayOfWeek,
@@ -399,6 +433,7 @@ export async function updateClass(
     slot_room_label: a.slotRoomLabel,
     period_label: a.periodLabel,
     merge_group: a.mergeGroup,
+    ...labCol(a.labSeparate),
   }));
 
   // 새로 열린 구간 수 — 감사로그가 "수업 배치" 변경을 잡는 두 번째 근거다(아래 changes).
@@ -432,6 +467,7 @@ export async function updateClass(
       slot_room_label: s.slotRoomLabel,
       period_label: s.periodLabel,
       merge_group: s.mergeGroup,
+      ...labCol(s.labSeparate),
     }));
     // ⚠️ `rows`는 이미 **DB 컬럼명(snake_case)** 으로 변환된 뒤다 — 여기서 `r.validFrom`을 보면
     //    항상 undefined라 openedRows가 늘 0이었다(감사로그의 "수업 배치" 근거 하나가 조용히 죽는다).
@@ -442,7 +478,7 @@ export async function updateClass(
       //    메시지만 뜨고 시간표·출석부에서 반이 빈다). PostgREST insert는 한 문장이라 전부 실패했으므로,
       //    지우기 전에 읽어 둔 `prior`를 **그대로 되돌려** 원상복구를 시도한다(best-effort).
       //    ⚠️ 트랜잭션이 아니다 — 복구까지 실패하면 사용자에게 그 사실을 **말해야** 한다(조용한 소실 금지).
-      const restore = await supabase.from("class_schedules").insert(
+      const restoreRows = (withLab: boolean) =>
         prior.map((pr) => ({
           tenant_id: user.tenantId,
           class_id: id,
@@ -457,8 +493,16 @@ export async function updateClass(
           slot_room_label: pr.slotRoomLabel,
           period_label: pr.periodLabel,
           merge_group: pr.mergeGroup,
-        })),
-      );
+          ...(withLab ? labCol(pr.labSeparate) : {}),
+        }));
+      // 🔴 복구는 **행 보존이 표식 보존보다 먼저**다 — 칸 추가 직후 스키마 캐시가 늦어 키 때문에 insert가 실패했을 수
+      //    있다(적대적 리뷰 2026-09-17). 표식을 실은 복구가 실패하면 표식 없이 한 번 더 되살린다.
+      let restore = await supabase.from("class_schedules").insert(restoreRows(labSupported));
+      // ⚠️ 재시도는 **칸 때문일 때만** — 아무 오류에나 다시 넣으면, 1차가 서버에선 커밋됐는데 응답만 실패한 경우
+      //    같은 교시가 두 줄이 된다(`class_schedules`엔 유니크 제약이 없어 주 시수가 2배가 된다, 재리뷰 2026-09-17).
+      if (restore.error && labSupported && isMissingColumnError(restore.error)) {
+        restore = await supabase.from("class_schedules").insert(restoreRows(false));
+      }
       return {
         error: restore.error
           ? "스케줄 저장에 실패했고 되돌리기도 실패했습니다. 이 반의 교시를 확인해주세요."
@@ -501,6 +545,14 @@ export async function updateClass(
   // ⚠️ 마감 행(archiveRows)만 보면 **순수 추가**(없던 교시를 새로 켬)가 이력에서 통째로 빠진다 —
   //    마감할 옛 배치가 없기 때문이다. 오늘 새로 열린 구간(openedRows)도 같은 근거로 센다.
   if (archiveRows.length > 0 || openedRows > 0) changes.push({ field: "수업 배치" });
+  // '따로 수업(*LAB)' 켜기·끄기는 어느 교시인지까지 남긴다 — "수업 배치"만으로는 표식이 바뀐 줄 모른다.
+  const labToggles = labSupported ? labSeparateChanges(input.schedules, prior) : [];
+  if (labToggles.length > 0) {
+    // 짝(이전→이후)이 아니라 교시별 켬·끔 목록이라 이름 한 칸에 싣는다 — from/to로 두면 "없음 → …"으로 읽힌다(describe.ts).
+    changes.push({
+      field: `따로 수업(*LAB) ${labToggles.map((t) => `${DAY_LABEL_KO[t.dayOfWeek] ?? t.dayOfWeek} ${t.startTime} ${t.on ? "켬" : "끔"}`).join(", ")}`,
+    });
+  }
   if (teacherChanged)
     changes.push({
       field: "담임",

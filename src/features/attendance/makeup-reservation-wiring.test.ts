@@ -97,9 +97,8 @@ describe("③ 명단 표면이 예약 조회 한 벌을 읽는다", () => {
   it("월별 출석부 = 반·기간(칸 + 명단 합치기)", () => {
     const q = strip(read("features/attendance/server/queries.ts"));
     expect(q).toContain("getClassReservationsInRange(classId, startIso, endIso)");
-    // 강사 보기 + 담임 아닌 반은 그 강사가 수업하는 날의 예약만 명단에 합친다(2026-09-17) — 그 밖엔 전부(`extraReserved`).
-    expect(q).toContain("...extraReserved.map((r) => r.studentId)");
-    expect(q).toContain("reservedRows.filter((r) => ownDateSet!.has(r.makeupDate))");
+    // ⚠️ 예약은 **날짜로 좁히지 않는다**(원장 2026-09-17 저녁 — 입력이 모든 날에 열려 있어 그 학생 줄이 있어야 찍는다).
+    expect(q).toContain("...reservedRows.map((r) => r.studentId)");
     expect(q).toContain("reservations[r.studentId]");
   });
   it("일별 출석부 = 그날(행에 reserved + 명단 합치기)", () => {

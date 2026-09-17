@@ -35,6 +35,8 @@ import { useTimetableEdit, type IncomingStudent, type PendingTarget } from "./ed
 import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
+// '따로 수업(*LAB)' 표식(원장 2026-09-17) — 수업설정에 있는 LAB 교시. 아래 임시 칸과 글자는 같고 모양이 다르다.
+import { LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS, LAB_SEPARATE_TIP } from "@/features/timetable/lib/lab-separate";
 // *LAB 임시 칸(원장 2026-09-11) — 판정은 서버가 끝냈고 여기선 **어디에 그릴지**와 서식만(단일 소스).
 import {
   borrowFromRoster,
@@ -979,9 +981,15 @@ function Cell({
   // 특수 자리(사람 아님) — LAB(603호)=파랑, JJ(305호)=보라. 서로 다른 방이라 색까지 갈라 둔다.
   if (c.isLab) {
     const tone = c.label === LAB_ROOM_LABEL ? "bg-blue-soft text-blue" : "bg-purple-soft text-purple";
+    // '따로 수업(*LAB)'(원장 2026-09-17) — LAB 칸 그대로(파란 바탕) + 밑줄·이탤릭. 바탕 없는 점선 `*LAB`(임시 칸)과 다르다.
+    const separate = c.labSeparate === true && c.label === LAB_ROOM_LABEL;
+    const text = separate ? LAB_SEPARATE_LABEL : c.label;
     return (
-      <div className={`${base} ${tone} ${cellFont(c.label)} ${offAxisTime ? "relative" : ""}`} title={tip}>
-        {c.label}
+      <div
+        className={`${base} ${tone} ${cellFont(text)} ${separate ? LAB_SEPARATE_TEXT_CLASS : ""} ${offAxisTime ? "relative" : ""}`}
+        title={separate ? (c.time ? `${LAB_SEPARATE_TIP} · ${c.time}` : LAB_SEPARATE_TIP) : tip}
+      >
+        {text}
         {/* 자리 칸은 연한 틴트 바탕이라 테두리는 경계만 만들면 된다(빨강이 이미 또렷하다). */}
         {offAxisTime ? <OffAxisMark time={offAxisTime} edge="#ffffff" /> : null}
       </div>
