@@ -9,6 +9,18 @@ import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { DUPLICATE_REASON_LABEL } from "@/features/admin/duplicate-candidates";
 import { mergeStudents, type MergeStudentsState } from "@/features/admin/server/actions";
 import type { DuplicateGroup } from "@/features/admin/server/queries";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
+
+/**
+ * 병합은 수강(enrollments)을 남길 학생 앞으로 옮기고 다른 학생을 퇴원시킨다 — 끝나면 열린 회차 확정 창에 알린다
+ * (원장 2026-09-17 *"관리 도구 화면도 배선해"*). ⚠️ 오류로 끝나도 보낸다 — 표를 차례로 옮기다 멈추면 앞 표(수강이 첫 번째)는
+ * 이미 옮겨져 있다. 신호는 새로고침일 뿐이라 헛걸음이어도 해가 없다.
+ */
+async function mergeStudentsWithSignal(prev: MergeStudentsState, formData: FormData): Promise<MergeStudentsState> {
+  const result = await mergeStudents(prev, formData);
+  notifyTermPlansChanged();
+  return result;
+}
 
 const STATUS_LABEL: Record<string, string> = {
   prospect: "예비",
@@ -58,7 +70,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
   const [keeperId, setKeeperId] = useState(group.students[0].id);
   const [mergeeId, setMergeeId] = useState(group.students[1]?.id ?? "");
   const [state, action] = useActionState<MergeStudentsState, FormData>(
-    mergeStudents,
+    mergeStudentsWithSignal,
     undefined,
   );
 

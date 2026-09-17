@@ -328,21 +328,31 @@ function RosterMoveDialog({
       className="bg-ink/30 fixed inset-0 z-[70] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={isWithdraw ? "수강 종료 확인" : "대기 전환 확인"}
+      aria-label={isWithdraw ? "마지막 수업일 확인" : "대기 전환 확인"}
       onClick={() => (busy ? null : onClose(false))}
     >
       <div
         className="bg-card shadow-modal w-full max-w-sm rounded-xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-foreground text-base font-bold">{isWithdraw ? "수강 종료" : "대기 전환"}</p>
+        {/* 🔴 퇴원 칸 드롭은 '수강 종료'라 부르지 않는다 — 퇴원관리 유형(한 과목만 끝난 재원생)과
+            같은 글자라 고른 날짜가 그 유형인 것처럼 읽힌다. 여기는 그 반의 마지막 수업일이다. */}
+        <p className="text-foreground text-base font-bold">{isWithdraw ? "마지막 수업일" : "대기 전환"}</p>
         <p className="text-text-dim mt-2 text-sm">
-          <b className="text-foreground">{target.name}</b> 학생을{" "}
-          <b className="text-foreground">{target.className}</b>
-          {isWithdraw ? " 반에서 수강 종료할까요?" : " 반 대기로 옮길까요?"}
+          {isWithdraw ? (
+            <>
+              <b className="text-foreground">{target.name}</b> 학생의{" "}
+              <b className="text-foreground">{target.className}</b> 반 마지막 수업일을 정할까요?
+            </>
+          ) : (
+            <>
+              <b className="text-foreground">{target.name}</b> 학생을{" "}
+              <b className="text-foreground">{target.className}</b> 반 대기로 옮길까요?
+            </>
+          )}
         </p>
         <label className="mt-4 flex items-center gap-2 text-sm">
-          <span className="text-text-dim shrink-0">{isWithdraw ? "종료일" : "대기 시작일"}</span>
+          <span className="text-text-dim shrink-0">{isWithdraw ? "마지막 수업일" : "대기 시작일"}</span>
           <input
             type="date"
             value={date}
@@ -377,7 +387,7 @@ function RosterMoveDialog({
             }`}
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            {isWithdraw ? "수강 종료" : "대기로 옮기기"}
+            {isWithdraw ? "확인" : "대기로 옮기기"}
           </button>
         </div>
       </div>

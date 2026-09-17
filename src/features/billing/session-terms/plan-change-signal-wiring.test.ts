@@ -53,6 +53,11 @@ const PLAN_ACTIONS = [
   "reactivateStudent",
   // 원생 수정 폼 — 상태를 퇴원·휴원·재원으로 바꾸면 수강을 닫거나 대기로 돌린다(적대적 리뷰 2026-09-17).
   "updateStudent",
+  // 관리 도구(데이터 정리·중복 병합) — 수강 종료·학생 퇴원/삭제·수강 이전(원장 2026-09-17 *"관리 도구 화면도 배선해"*).
+  "closeOrphanEnrollments",
+  "bulkWithdrawStudents",
+  "bulkDeleteStudents",
+  "mergeStudents",
 ] as const;
 
 /**
