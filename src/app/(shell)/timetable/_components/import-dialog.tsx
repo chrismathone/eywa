@@ -16,6 +16,7 @@ import type { ImportDiff } from "@/features/timetable/import/types";
 import { effectiveDateLabel, isImmediate } from "@/features/timetable/import/effective-date";
 import { EffectiveDateField } from "./effective-date-field";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 const LARGE_CHANGE = 30;
 
@@ -174,6 +175,8 @@ export function TimetableImportDialog({
         return;
       }
       setResult(res);
+      // 스냅샷을 맨 뒤(`snapshotId`) 중단된 적용은 일부가 이미 반영됐을 수 있다 — 회차 확정 창에도 알린다.
+      if (!res.error || res.snapshotId) notifyTermPlansChanged();
       if (!res.error) {
         setDiff(null);
         setHash(null);

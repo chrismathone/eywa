@@ -6,6 +6,7 @@ import { LogOut, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import { endChoices, type EndChoice } from "../end-choices";
 import { endSingleEnrollment } from "@/features/students/server/actions";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 
 /**
  * 수강 종료 — 이 수강 **한 건**을 끝낸다(퇴원 아님·반 폐지 아님).
@@ -108,6 +109,7 @@ function EndDialog({
           setBusy(false);
           return;
         }
+        notifyTermPlansChanged();
         // 배경(반 상세·학생 상세)이 새 명단으로 다시 그려진 뒤 닫는다.
         startTransition(() => router.refresh());
         onClose();
