@@ -9,6 +9,11 @@ import {
   type SubjectPeriodGrid,
   type WeekGridRow,
 } from "@/features/students/lib/week-grid";
+import {
+  CELL_COL_W,
+  periodRowHeightsForGrid,
+  sumSpan,
+} from "@/features/students/lib/week-grid-row-height";
 
 const DAY_KO: Record<DayOfWeek, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -20,8 +25,8 @@ const GRID = "border-ink/20";
  * 단일 학생이라 한 칸 0/1개 수업. 연속 교시는 **보이는 내용(반·담당·자리·방)이 같고 시간이 이어질 때만**
  * 세로 rowSpan 병합(week-grid-merge.ts), 수학계열은 2교시 묶음 라벨.
  * 행 구성(rowMode)은 그 과목 시간표가 처음 여는 뷰의 규칙 — 통합뷰 과목(영어)은 수업 있는 교시만.
- * tableHeight = 카드 고정 총높이(실제로 그리는 행이 가장 많은 표 기준) — 표가 이 높이를 채우도록 행 높이를
- * 조정해 탭을 바꿔도 높이가 안 흔들린다(행 적은 과목은 행이 늘어남).
+ * tableHeight = 카드 고정 총높이(과목 표 내용 높이의 최댓값) — 칸 줄 수만큼 행을 키운 뒤, 표가 이
+ * 높이를 채우도록 남는 세로만 나눈다. 탭을 바꿔도 카드가 안 흔들린다(행 적은 과목은 행이 늘어남).
  */
 export function StudentPeriodGrid({
   rows,
@@ -74,8 +79,8 @@ function PeriodTable({
   tableHeight: number;
 }) {
   const { days, rows, cellAt, blocks } = grid;
-  // 이 표가 고정 총높이(tableHeight)를 채우도록 행 높이 = 총높이/행수. 교시 적은 과목일수록 행이 커진다.
-  const rowHeight = tableHeight / Math.max(1, rows.length);
+  // 칸 내용(반·담당/자리·방)이 들어가게 행을 키운 뒤, 카드 총높이(tableHeight)까지 남는 세로만 나눈다.
+  const heights = periodRowHeightsForGrid(grid, tableHeight);
   // 수학계열(평일·비영어)만 2교시 묶음 라벨(1교시=1·2교시 …). 영어·주말·폴백은 개별 교시 라벨.
   const isMathFamily = !weekend && subject !== "english";
   const labelCls = `bg-bg-soft/70 text-foreground ${GRID} border-b border-r px-2 py-1 align-top text-xs font-bold whitespace-nowrap`;
@@ -87,7 +92,7 @@ function PeriodTable({
             시간표 LABEL_W=104는 패딩 없는 레일 기준이라 여기선 px-2 만큼 더 잡는다. */}
         <col style={{ width: 112 }} />
         {days.map((_, i) => (
-          <col key={i} style={{ width: 104 }} />
+          <col key={i} style={{ width: CELL_COL_W }} />
         ))}
       </colgroup>
       <thead>
@@ -116,19 +121,21 @@ function PeriodTable({
           const isGroupSecond =
             mathN !== null && mathN % 2 === 0 && prevPid !== undefined && Number(prevPid) === mathN - 1;
           const oddPaired = mathN !== null && mathN % 2 === 1 && paired;
+          const rowH = heights[ri] ?? 0;
+          const labelSpan = oddPaired ? 2 : 1;
           return (
-            <tr key={row.key} style={{ height: rowHeight }}>
+            <tr key={row.key} style={{ height: rowH }}>
               {isGroupSecond ? null : mathN !== null ? (
                 // 묶음 병합(rowSpan=2)·시간범위 결합은 **홀수 앵커 + 실제 짝일 때만**. 짝수가 폴백으로
                 // 앵커가 된 퇴화 케이스는 개별 라벨(다음 홀수와 오병합 금지).
-                <td rowSpan={oddPaired ? 2 : 1} className={labelCls} style={{ height: rowHeight * (oddPaired ? 2 : 1) }}>
+                <td rowSpan={labelSpan} className={labelCls} style={{ height: sumSpan(heights, ri, labelSpan) }}>
                   {Math.ceil(mathN / 2)}교시
                   <div className="text-text-faint num mt-0.5 text-xs font-normal">
                     {oddPaired ? `${row.time.split("~")[0]}~${nextRow!.time.split("~")[1]}` : row.time}
                   </div>
                 </td>
               ) : (
-                <td className={labelCls} style={{ height: rowHeight }}>
+                <td className={labelCls} style={{ height: rowH }}>
                   {/* 교시 이름을 비운 학원은 시간대가 이름 자리로 올라온다(2026-08-13, periodListLabel). */}
                   {row.label ? (
                     <>
@@ -146,17 +153,17 @@ function PeriodTable({
                 const c = cellAt(ri, ci);
                 // 이 셀이 차지하는 총높이(연속 교시 병합 반영) — 색 블록이 셀 전체를 채우도록 명시.
                 // (h-full=height:100%는 table td에서 불안정해 하단 빈공간이 생김 → 실제 시간표처럼 명시 높이.)
-                const spanH = block.rowSpan * rowHeight;
+                const spanH = sumSpan(heights, ri, block.rowSpan);
                 return (
                   <td
                     key={d}
                     rowSpan={block.rowSpan > 1 ? block.rowSpan : undefined}
                     style={{ height: spanH }}
-                    className={`border-b border-r ${GRID} p-1 align-top ${c ? "" : "bg-ink/[0.03]"}`}
+                    className={`border-b border-r ${GRID} overflow-hidden p-1 align-top ${c ? "" : "bg-ink/[0.03]"}`}
                   >
                     {c ? (
                       <div
-                        className={`flex flex-col rounded-md px-1.5 py-1 ${cellColor}`}
+                        className={`flex min-w-0 flex-col rounded-md px-1.5 py-1 ${cellColor}`}
                         style={{ height: spanH - 8 }} // p-1(상하 8px) 보정 → 셀 전체 채움
                       >
                         <span className="text-foreground text-xs leading-tight font-bold break-keep">
