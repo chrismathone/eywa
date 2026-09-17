@@ -168,7 +168,10 @@ export async function closeOrphanEnrollments(
     }
   }
 
+  // 데이터 정리 UI는 /owner?tab=data(데이터 정리 면)에 있다 — /admin/cleanup은 넘기기만 하는 주소라 그것만 무효화하면
+  // 자동 종료 뒤에도 목록이 그대로 남는다(병합·일괄 퇴원과 같게 /owner를 함께).
   revalidatePath("/admin/cleanup");
+  revalidatePath("/owner");
   return { closedCount };
 }
 

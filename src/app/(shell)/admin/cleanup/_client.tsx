@@ -10,9 +10,27 @@ import {
   closeOrphanEnrollments,
   bulkWithdrawStudents,
   bulkDeleteStudents,
+  type BulkStudentState,
   type CleanupState,
 } from "@/features/admin/server/actions";
 import type { OrphanReport } from "@/features/admin/server/queries";
+import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
+
+/**
+ * 수강을 끝내거나 학생을 지우는 정리 작업 — 끝나면 열린 회차 확정 창에 알린다(원장 2026-09-17 *"관리 도구 화면도 배선해"*).
+ * ⚠️ 오류로 끝나도 보낸다 — 이 액션들은 100명씩 나눠 쓰다 중간에 멈추면 **앞 묶음은 이미 바뀐 채** 오류를 돌려준다.
+ *    신호는 새로고침일 뿐이라 헛걸음이어도 해가 없다. 액션 자체가 던지면(네트워크) 보내지 않는다.
+ */
+function withTermPlansSignal<S>(action: (prev: S, formData: FormData) => Promise<S>) {
+  return async (prev: S, formData: FormData): Promise<S> => {
+    const result = await action(prev, formData);
+    notifyTermPlansChanged();
+    return result;
+  };
+}
+const closeOrphanEnrollmentsWithSignal = withTermPlansSignal<CleanupState>(closeOrphanEnrollments);
+const bulkWithdrawStudentsWithSignal = withTermPlansSignal<BulkStudentState>(bulkWithdrawStudents);
+const bulkDeleteStudentsWithSignal = withTermPlansSignal<BulkStudentState>(bulkDeleteStudents);
 
 function CleanBtn() {
   const { pending } = useFormStatus();
@@ -26,7 +44,7 @@ function CleanBtn() {
 
 export function CleanupClient({ report }: { report: OrphanReport }) {
   const [state, action] = useActionState<CleanupState, FormData>(
-    closeOrphanEnrollments,
+    closeOrphanEnrollmentsWithSignal,
     undefined,
   );
 
@@ -128,8 +146,8 @@ function OrphanStudentManager({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [wState, withdrawAction, wPending] = useActionState(bulkWithdrawStudents, undefined);
-  const [dState, deleteAction, dPending] = useActionState(bulkDeleteStudents, undefined);
+  const [wState, withdrawAction, wPending] = useActionState(bulkWithdrawStudentsWithSignal, undefined);
+  const [dState, deleteAction, dPending] = useActionState(bulkDeleteStudentsWithSignal, undefined);
 
   const itemIds = new Set(items.map((i) => i.id));
   const live = [...selected].filter((id) => itemIds.has(id));
