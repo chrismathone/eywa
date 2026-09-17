@@ -95,6 +95,7 @@ describe("사전 — 값이 비거나 키가 새지 않는다", () => {
         "sched",
         // 드롭다운(FieldSelect) 공통 — 저장값은 그대로 두고 표시만 언어를 따른다.
         "select",
+        "slot",
         "strip",
         // 학생목록(/students) — 머리·툴바 필터·표.
         "stu",

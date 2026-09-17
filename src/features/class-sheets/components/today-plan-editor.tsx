@@ -265,11 +265,11 @@ export function TodayPlanEditor({
   useEffect(() => {
     store.setCallbacks({
       onError: (m) => toast.error(m),
-      onGone: () => toast.info("다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요"),
+      onGone: () => toast.info(t("plan.editor.gone")),
       // 칸 입력마다 편집 전 값 — 감사로그가 칸마다 첫 값만 잡는다.
       onEdit: (lineId, field, before) => audit.touch(classId, { kind: "plan", lineId, field }, before),
     });
-  }, [store, audit, classId]);
+  }, [store, audit, classId, t]);
   // canonical 시드 — 서버가 준 값이 CAS의 expected가 된다(이게 없으면 첫 저장이 무조건 충돌).
   useEffect(() => {
     for (const slot of slots) {
@@ -342,7 +342,9 @@ export function TodayPlanEditor({
                   disabled={!canEdit}
                   onChange={(e) => toggleShouting(slot.slotStart, e.target.checked)}
                 />
-                <span className={shouting[slot.slotStart] ? "text-primary" : "text-text-dim"}>Shouting</span>
+                <span className={shouting[slot.slotStart] ? "text-primary" : "text-text-dim"}>
+                  {t("landing.col.shouting")}
+                </span>
               </label>
             ) : null}
           </p>
@@ -352,7 +354,10 @@ export function TodayPlanEditor({
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {/* ⚠️ 읽기 전용 사용자에겐 지시문을 붙이지 않는다 — 권한상 할 수 없는 행동("주간 시트에서
                   추가하세요")을 시키는 거짓 안내가 된다(적대 리뷰 2026-08-11). */}
-              <p className="text-text-faint text-sm">계획 줄이 아직 없습니다{canEdit ? " —" : ""}</p>
+              <p className="text-text-faint text-sm">
+                {t("plan.editor.noLines")}
+                {canEdit ? " —" : ""}
+              </p>
               {canEdit ? (
                 <TodayCopySlot
                 classId={classId}

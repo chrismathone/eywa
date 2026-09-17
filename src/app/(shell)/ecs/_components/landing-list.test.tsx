@@ -79,7 +79,7 @@ function classNamesIn(el: HTMLElement) {
 describe("EcsLandingList — Shouting 구역", () => {
   it("EiE 반은 그 주 체크 수를 작성률과 **같은 분모**로 보여준다", () => {
     render(<EcsLandingList cards={[eie({ shoutingSlots: 4, totalSlots: 6 })]} weekMonday="2026-08-24" />);
-    expect(within(row("LS3b")).getByTitle("Shouting 체크 4/6교시 (이번 주)")).toHaveTextContent("4/6");
+    expect(within(row("LS3b")).getByTitle("샤우팅 4/6교시 (이번 주)")).toHaveTextContent("4/6");
   });
 
   it("EiE가 아닌 반엔 Shouting이 아예 안 붙는다 — `0/6`으로 그리면 '해야 하는데 안 했다'는 거짓말", () => {
@@ -136,8 +136,8 @@ describe("EcsLandingList — Shouting 구역", () => {
         weekMonday="2026-08-24"
       />,
     );
-    expect(within(row("JP2")).getByTitle(/Shouting/).className).toContain("text-green");
-    expect(within(row("PJ1")).getByTitle(/Shouting/).className).not.toContain("green");
+    expect(within(row("JP2")).getByTitle(/샤우팅/).className).toContain("text-green");
+    expect(within(row("PJ1")).getByTitle(/샤우팅/).className).not.toContain("green");
   });
 
   // ⚠️ 2026-09-09: 머리 **요약 줄**(반 N개·담임 N명·교시 작성·Shouting·미작성·완료)은 원장 지시로 걷었고,
@@ -156,7 +156,7 @@ describe("EcsLandingList — Shouting 구역", () => {
 
   it("스크린리더에도 되돌린다 — 행에는 열 머리가 없다", () => {
     render(<EcsLandingList cards={[eie({ shoutingSlots: 4 })]} weekMonday="2026-08-24" />);
-    expect(row("LS3b").getAttribute("aria-label")).toContain("Shouting 체크 4/6교시");
+    expect(row("LS3b").getAttribute("aria-label")).toContain("샤우팅 4/6교시");
   });
 });
 
