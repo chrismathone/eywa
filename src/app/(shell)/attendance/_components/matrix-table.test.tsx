@@ -1055,12 +1055,11 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
 });
 
 /**
- * 🔴 원장 2026-09-17: *"그냥 출석부에 담당하는 날만 표시하면 된다. 담당하지 않는 날은 표시할 이유도 없지."* ·
- *    *"말그대로 내가 수업한 학생의 출석만 보고 싶은것."* — 조회가 `ownDates`(그 강사가 수업하는 날)를 싣고, 격자는 그 밖의 날을
- *    **빈칸으로 그리되 입력을 막는다**. 같은 날 *"내 출석부 상에서 자유롭게 숫자 설정만 하는거야"* — 수업하는 날 칸은 제 교시
- *    기록이 없어도(남의 기록뿐이어도) 열린다(저장이 제 교시 행을 만든다).
+ * 🔴 원장 2026-09-17: 낮엔 *"담당하는 날만 표시"*(값은 그 강사 몫만)였고, 저녁에 입력 규칙이 뒤집혔다 —
+ *    *"화요일은 원래 수업이라 이후에 관리자가 수정가능하고, 다른 요일도 보강 등으로 수업할 수 있으니까 숫자 입력가능하게"*.
+ *    그래서 **모든 날짜 칸이 열리고**, `ownDates`는 수업요일 **색**만 정한다(값은 여전히 그 강사 몫 기록만).
  */
-describe("강사 보기 — 그 강사가 수업하는 날만(원장 2026-09-17)", () => {
+describe("강사 보기 — 수업요일은 색으로, 입력은 모든 날에(원장 2026-09-17)", () => {
   const D1 = "2026-07-01"; // 수 — 이 강사가 수업하는 날
   const D2 = "2026-07-02"; // 목 — 수업하지 않는 날
   function renderOwnDays(opts: { lockBefore?: string | null } = {}) {
@@ -1088,27 +1087,26 @@ describe("강사 보기 — 그 강사가 수업하는 날만(원장 2026-09-17)
   }
   const cellAt = (c: HTMLElement, date: string) => c.querySelector<HTMLElement>(`[data-cell-key$="${date}"]`)!;
 
-  it("🔴 격자 잠금 사유 — 수업하지 않는 날 = day · 수업하는 날은 열린다", () => {
+  it("🔴 날짜로 잠그지 않는다 — 수업하는 날도, 수업하지 않는 날도 입력이 열린다(보강)", () => {
     const { src } = renderOwnDays();
-    expect(src.notMine[cellKey(rowKey(C, S1), D2)]).toBe("day");
+    expect(src.notMine[cellKey(rowKey(C, S1), D2)]).toBeUndefined();
     expect(src.notMine[cellKey(rowKey(C, S1), D1)]).toBeUndefined();
   });
 
-  it("🔴 수업하지 않는 날은 빈칸·수업요일 색 없음·잠금 — 숫자를 쳐도 저장이 안 나간다", async () => {
+  it("🔴 수업하지 않는 날 — 수업요일 색만 빠지고 입력은 된다(보강을 그 칸에 찍는다)", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValue({ ok: true } as never);
     const { container } = renderOwnDays();
     const cell = cellAt(container, D2);
-    expect(cell.className).toContain("cursor-not-allowed");
+    expect(cell.className).not.toContain("cursor-not-allowed");
     expect(cell.className).not.toContain("bg-att-classday");
     expect(cell.style.backgroundImage).toBe(""); // 빗금 없음
-    expect(tipOf(cell)).toContain("수업하지 않는 날");
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "1" });
     fireEvent.keyDown(cell, { key: "Enter" });
-    expect(setAttendanceCell).not.toHaveBeenCalled();
-    // 수업하는 날은 그대로 수업요일 색 + 열림
-    expect(cellAt(container, D1).className).not.toContain("cursor-not-allowed");
+    expect(setAttendanceCell).toHaveBeenCalledWith(expect.objectContaining({ sessionDate: D2 }));
+    // 수업하는 날은 수업요일 색이 남는다(두 날의 차이는 색뿐).
     expect(cellAt(container, D1).className).toContain("bg-att-classday");
   });
 
@@ -1141,14 +1139,13 @@ describe("강사 보기 — 그 강사가 수업하는 날만(원장 2026-09-17)
     );
   });
 
-  it("🔴 7일이 지난 칸이어도 '수업하지 않는 날'이 사유다 — 툴팁·타이핑 안내가 같은 순서(적대 재리뷰 2026-09-17)", () => {
+  it("7일이 지난 칸은 종전대로 수정 기간 잠금 — 사유도 그 문장 하나다", () => {
     const { container } = renderOwnDays({ lockBefore: "2026-07-10" });
-    const notOwn = cellAt(container, D2);
-    expect(tipOf(notOwn)).toContain("수업하지 않는 날");
-    expect(tipOf(notOwn)).not.toContain("7일");
-    fireEvent.mouseDown(notOwn, { button: 0 });
-    fireEvent.keyDown(notOwn, { key: "1" });
-    expect(container.textContent).toContain("수업하지 않는 날");
+    for (const date of [D1, D2]) {
+      const cell = cellAt(container, date);
+      expect(cell.className).toContain("cursor-not-allowed");
+      expect(tipOf(cell)).toContain("7일");
+    }
   });
 
   it("머리 줄도 수업하는 날만 수업요일 색 — 반 요일 합집합으로 칠하지 않는다", () => {

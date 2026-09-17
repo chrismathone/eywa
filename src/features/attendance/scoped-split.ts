@@ -10,7 +10,6 @@
  * 상태·메모·삭제 대상도 `splitOutSeatRows`에서 본인 교시로 좁힌다(2026-09-17).
  * ⚠️ 반별 보기(`owns === null`)는 종전과 **같은 답**이다(전 행이 받는다).
  */
-import { sheetT } from "@/features/teacher-view/i18n";
 import { splitUnitsAcrossSlots, toStoredUnits } from "./session-units";
 
 /** 저장 대상 한 행 — `pickSaveTargets(rows, null)`이 고른 그날 교시별 최신 행. */
@@ -118,10 +117,5 @@ export const SCOPE_NOT_TAUGHT_MESSAGE =
 /** 판정 재료(반 담임·교시)를 못 읽었다 — 스코프 없이 나누면 이 버그가 그대로 나므로 저장하지 않는다. */
 export const SCOPE_LOAD_FAILED_MESSAGE =
   "선생님 몫 교시를 확인하지 못해 저장하지 않았습니다 — 잠시 후 다시 시도해 주세요";
-/**
- * 그 강사가 이 반에서 **수업하지 않는 날** 칸 — 강사 보기는 그 날을 그리지 않는다(원장 2026-09-17 *"담당하지 않는 날은
- * 표시할 이유도 없지"*). 격자·칸이 쓰는 **사전 문장 그대로**(누르기 전과 누른 뒤에 다른 이유를 대지 않게 — ghost-transfer 규약).
- */
-export const NOT_OWN_DAY_MESSAGE = sheetT("ko", "att.lock.notOwnDay");
 /** 스코프 id 형식이 아니다(화면이 만든 값이 아니다). */
 export const SCOPE_INVALID_MESSAGE = "잘못된 선생님 보기입니다 — 새로고침한 뒤 다시 시도해 주세요";
