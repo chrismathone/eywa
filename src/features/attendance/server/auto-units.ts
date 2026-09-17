@@ -12,7 +12,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
-import { autoUnitsKey, planAutoUnits, toAutoUnitsSchedule, type AutoUnitsSchedule } from "../auto-units";
+import {
+  autoUnitsKey,
+  planAutoUnits,
+  toAutoUnitsSchedule,
+  type AutoUnitsSchedule,
+  type AutoUnitsTrack,
+} from "../auto-units";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -43,8 +49,8 @@ export async function resolveAutoUnits(
   const to = dates[dates.length - 1]!;
   try {
     const [classes, schedules] = await Promise.all([
-      fetchInChunks<{ id: string; subject: string | null }>(classIds, (chunk) => {
-        const q = client.from("classes").select("id, subject").in("id", chunk);
+      fetchInChunks<{ id: string; subject: string | null; english_track: string | null }>(classIds, (chunk) => {
+        const q = client.from("classes").select("id, subject, english_track").in("id", chunk);
         return opts.tenantId ? q.eq("tenant_id", opts.tenantId) : q;
       }),
       fetchAllPagedInChunks<ScheduleRow>(classIds, (chunk, f, t) => {
@@ -60,13 +66,16 @@ export async function resolveAutoUnits(
       }),
     ]);
     const subjectOf = new Map(classes.map((c) => [c.id, c.subject ?? null] as const));
+    const trackOf = new Map<string, AutoUnitsTrack | null>(
+      classes.map((c) => [c.id, c.english_track === "eie" || c.english_track === "injaewon" ? c.english_track : null]),
+    );
     const schedulesOf = new Map<string, AutoUnitsSchedule[]>();
     for (const r of schedules) {
       const list = schedulesOf.get(r.class_id) ?? [];
       list.push(toAutoUnitsSchedule(r));
       schedulesOf.set(r.class_id, list);
     }
-    return planAutoUnits(valid, subjectOf, schedulesOf);
+    return planAutoUnits(valid, subjectOf, schedulesOf, trackOf);
   } catch (e) {
     console.error("[auto-units] 수업 길이 조회 실패 — 자동 시수 없이 저장합니다:", e);
     return new Map();

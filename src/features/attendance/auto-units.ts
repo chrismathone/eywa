@@ -24,6 +24,8 @@ import { COUNTABLE_STATUSES, MAX_SESSION_UNITS, isDefaultUnitsRaw } from "./sess
 /** 수업 길이로 시수를 자동으로 채우는 과목 키. 새 과목을 넣기 전에 원장 확인(돈 규칙이다). */
 export const AUTO_UNITS_SUBJECTS: ReadonlySet<string> = new Set(["math"]);
 
+export type AutoUnitsTrack = "math" | "eie" | "injaewon";
+
 export function isAutoUnitsSubject(subject: string | null | undefined): boolean {
   return !!subject && AUTO_UNITS_SUBJECTS.has(subject);
 }
@@ -40,9 +42,12 @@ export function isAutoUnitsSubject(subject: string | null | undefined): boolean 
  * 1이면 **null**(기본값 — 굳이 적지 않는다. 저장 규약 `parseSessionUnits`가 1을 null로 접는 것과 같다).
  * 수업이 없으면(0분) null = 자동 안 함.
  */
-export function unitsFromMinutes(minutes: number): number | null {
+export function unitsFromMinutes(minutes: number, track: AutoUnitsTrack = "math"): number | null {
   if (!Number.isFinite(minutes) || minutes <= 0) return null;
-  const units = Math.min(MAX_SESSION_UNITS, Math.ceil(minutes / 60) / 2);
+  const units =
+    track === "eie"
+      ? Math.min(MAX_SESSION_UNITS, Math.round((minutes / 40) * 2) / 2)
+      : Math.min(MAX_SESSION_UNITS, Math.ceil(minutes / 60) / 2);
   return units === 1 ? null : units;
 }
 
@@ -79,10 +84,14 @@ export function toAutoUnitsSchedule(row: {
  * 그 날짜 그 반의 자동 시수 — 그날 유효한 배치 중 **자리(LAB·JJ) 제외 · 같은 시작 시각은 한 번**으로 분을 더한다.
  * 분 계산은 ECS 유닛 자동값과 **같은 함수**(`liveSlotMinutesOn`)다. null = 자동 안 함(배치 없음·1).
  */
-export function autoUnitsOn(date: string, schedules: readonly AutoUnitsSchedule[]): number | null {
+export function autoUnitsOn(
+  date: string,
+  schedules: readonly AutoUnitsSchedule[],
+  track: AutoUnitsTrack = "math",
+): number | null {
   let total = 0;
   for (const m of liveSlotMinutesOn(date, schedules).values()) total += m;
-  return unitsFromMinutes(total);
+  return unitsFromMinutes(total, track);
 }
 
 /**
@@ -145,13 +154,15 @@ export function planAutoUnits(
   cells: readonly { classId: string; date: string }[],
   subjectOf: ReadonlyMap<string, string | null>,
   schedulesOf: ReadonlyMap<string, readonly AutoUnitsSchedule[]>,
+  trackOf: ReadonlyMap<string, AutoUnitsTrack | null> = new Map(),
 ): Map<string, number> {
   const out = new Map<string, number>();
   for (const c of cells) {
     const key = autoUnitsKey(c.classId, c.date);
     if (out.has(key)) continue;
-    if (!isAutoUnitsSubject(subjectOf.get(c.classId))) continue;
-    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? []);
+    const track = trackOf.get(c.classId) ?? null;
+    if (!isAutoUnitsSubject(subjectOf.get(c.classId)) && !track) continue;
+    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? [], track ?? "math");
     if (units !== null) out.set(key, units);
   }
   return out;
