@@ -515,6 +515,8 @@ export const classSchedules = pgTable(
     periodLabel: text("period_label"),
     // 합반(merged): schedules sharing one cell carry the same merge_group. Partial index in alpha SQL.
     mergeGroup: uuid("merge_group"),
+    // LAB 자리 교시의 '따로 수업(*LAB)' 표식(0270a) — LAB이 아닌 교시에선 의미 없음. NULL = 꺼짐(0270b: 옛 스냅샷 되살리기가 NULL을 넣는다).
+    labSeparate: boolean("lab_separate").default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

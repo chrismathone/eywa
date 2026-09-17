@@ -38,6 +38,8 @@ import { DelegateAction, DelegationBanner } from "./_components/class-delegation
 import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
+import { isLabSeparateSlot } from "@/features/timetable/lib/lab-separate";
+import { slotPhase } from "@/features/classes/schedule-summary";
 import { ClassHistorySection } from "./_components/history-section";
 import { getClassHistory } from "@/features/classes/server/history-queries";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -151,10 +153,26 @@ export default async function ClassDetailPage({
 
   // 시간표 요약 — `class_schedules`는 운영 이력을 함께 담는다(만료 행 480/1068). 전 행을 그리면
   // 이미 끝난 교시가 아직 있는 것처럼 보이고 줄 수도 폭발한다(DP5 실측 25줄 → 2줄). 상세 = schedule-summary.ts.
-  const schedule = summarizeSchedule(klass.scheduleSlots, today);
+  // 🔴 '따로 수업(*LAB)' 교시는 **산정에서 뺀다**(원장 2026-09-17 *"토글된 랩은 시간표에서 산정하지 않고 다른
+  //    시간표만 산정"*) — 반 전체가 앉는 시간이 아니라서 요일·회차·주 시간·등원 요일 후보에 넣지 않는다.
+  //    뺀 회차는 카드 아래에 밝힌다(조용히 숨기지 않는다 — schedule-summary.ts 규약).
+  //    ⚠️ **지난 배치(만료 행)는 빼지 않는다** — 그건 '지난 배치 N개는 숨김' 숫자의 재료라, 여기서 빼면 그 수가
+  //    조용히 줄어든다(재리뷰 2026-09-17). 표식을 끄면 켜진 채 마감된 행이 실제로 남는다.
+  const isLiveLabSeparate = (s: (typeof klass.scheduleSlots)[number]) =>
+    isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && slotPhase(s, today) !== "past";
+  const labSeparateSlots = klass.scheduleSlots.filter(isLiveLabSeparate);
+  const schedule = summarizeSchedule(
+    klass.scheduleSlots.filter((s) => !isLiveLabSeparate(s)),
+    today,
+  );
+  // 회차는 **오늘 유효한** 교시만 센다 — 아직 시작 전인 표식 교시뿐이면 0이라, 그땐 교시 수로 적는다(빼고 침묵 금지).
+  const labSeparateSessions = labSeparateSlots.length > 0 ? summarizeSchedule(labSeparateSlots, today).sessions : 0;
   // 반 운영 요일(분리등원 후보) — 배정 다이얼로그 + 학생별 등원요일 배지에 사용.
   // ⚠️ **현재 유효한 슬롯 기준**. 만료 요일까지 세면 이제 안 하는 요일이 등원 후보로 뜬다(실측 1반).
-  const classDays = schedule.days;
+  // ⚠️ 등원 요일 후보는 **전체 시간표**(따로 수업 LAB 포함) 기준 그대로 — 산정에서 뺀 건 요약 숫자뿐이다
+  //    (LAB으로만 도는 요일을 후보에서 지우면 그날 오는 학생의 등원 요일을 못 고른다, 리뷰 2026-09-17).
+  const classDays =
+    labSeparateSlots.length > 0 ? summarizeSchedule(klass.scheduleSlots, today).days : schedule.days;
   const attendanceBadge = (days: string[]) =>
     days.length > 0 && days.length < classDays.length
       ? sheetTf(lang, "cls.d.onlyDays", {
@@ -341,7 +359,12 @@ export default async function ClassDetailPage({
             <h2 className="text-foreground text-sm font-bold">{sheetT(lang, "cls.d.info")}</h2>
           </header>
           <Card title={sheetT(lang, "cls.d.timetable")} icon={<CalendarClock className="size-3.5" />}>
-            <ScheduleSummaryView schedule={schedule} lang={lang} />
+            <ScheduleSummaryView
+              schedule={schedule}
+              lang={lang}
+              labSeparateSessions={labSeparateSessions}
+              labSeparateSlots={labSeparateSlots.length}
+            />
           </Card>
 
           <Card title={sheetT(lang, "cls.d.att30")}>

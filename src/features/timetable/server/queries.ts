@@ -25,6 +25,8 @@ import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
 import { teachingClassIdsInWeek } from "../lib/teacher-classes";
+import { isLabSeparateSlot } from "../lib/lab-separate";
+import { loadLabSeparateIds } from "@/features/classes/server/lab-separate";
 import { reportError } from "@/lib/observability/report-error";
 import { pairScheduledMoves, type ScheduledMoveRow } from "../lib/scheduled-move";
 import type { TeacherColorMap } from "../lib/class-grid";
@@ -163,6 +165,8 @@ export type ScheduleSlot = {
   studentCount: number;
   // 셀 단위 라벨(ijw slotTeachers/slotRooms) — 통합뷰 미니그리드. null=반 기본 상속.
   slotTeacherLabel: string | null;
+  /** LAB '따로 수업(*LAB)' 표식(0270a) — **켜진 LAB 교시에만** true가 실린다(없으면 꺼짐). 표시 전용. */
+  labSeparate?: true;
   slotRoomLabel: string | null;
   // 강의실 FK(교실뷰 버킷팅) — 실효 강의실 = slotRoomId ?? classRoomId(overlap-detect와 같은 우선순위).
   // 표시 이름은 classroomName/slotRoomLabel이 계속 담당(라벨은 시트 원문이라 FK 이름과 다를 수 있다).
@@ -262,7 +266,7 @@ async function fetchSlots(
   // 🔴 라벨맵·스케줄·카운트는 서로 독립 → Promise.all(B4, 2026-07-27 성능 — 직렬이면 왕복이 합산된다).
   //    라벨맵은 강사 라벨 해석의 단일 지점(원장 2026-07-27) — 여기서 한글 이름으로 바꿔 내보내면
   //    기본뷰·통합뷰·강사뷰·hover가 전부 따라온다(컴포넌트별 해석 금지 — 열 식별자가 쪼개진다).
-  const [labelMap, data, enrollments] = await Promise.all([
+  const [labelMap, data, enrollments, labSeparateIds] = await Promise.all([
     getTeacherLabelMap(db),
     fetchAllPaged<SlotRow>((from, to) => {
       let q = supabase
@@ -298,6 +302,9 @@ async function fetchSlots(
           // order 없는 .range()는 OFFSET 페이지가 흔들려 행이 중복·누락될 수 있다(카운트가 틀어짐) → id tie-break.
           return q.order("id").range(from, to);
         }),
+    // LAB '따로 수업(*LAB)' 표식(0270a) — 🔴 **위 뿌리 조회에 컬럼을 끼우지 않는다**([[#95]]: 전원이 매일 여는
+    //    시간표다). 켜진 행 id만 따로·fail-soft로 받는다(null = 모름 → 표식 없이 그린다).
+    loadLabSeparateIds(supabase, { kind: "window", from: scheduleWeek.start, to: scheduleWeek.end, ...(db ? { tenantId: db.tenantId } : {}) }),
   ]);
 
   // 종강 반: closed_at < 기준일이면 그 주엔 이미 종강 → 제외(closed_at ≥ 기준일인 과거 주엔 표시).
@@ -408,6 +415,10 @@ async function fetchSlots(
       classroomName: room?.name ?? null,
       studentCount: counts.get(r.class_id) ?? 0,
       slotTeacherLabel: resolveTeacherLabel((r.slot_teacher_label as string | null) ?? null, labelMap),
+      // 켜진 교시에만 싣는다(시간표 페이로드는 전원이 매일 받는다 — 모든 슬롯에 false를 얹지 않는다).
+      ...(isLabSeparateSlot((r.slot_teacher_label as string | null) ?? null, labSeparateIds?.has(String(r.id)))
+        ? { labSeparate: true as const }
+        : {}),
       slotRoomLabel: (r.slot_room_label as string | null) ?? null,
       slotRoomId: (r.classroom_id as string | null) ?? null,
       classRoomId: (klass?.classroom_id as string | null) ?? null,

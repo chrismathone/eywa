@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { isMissingColumnError, lookupLabSeparateIds } from "@/features/classes/server/lab-separate";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import {
@@ -59,6 +60,11 @@ type SlotRow = {
   slot_room_label: string | null;
   period_label: string | null;
   merge_group: string | null;
+  /**
+   * LAB '따로 수업(*LAB)' 표식(0270a) — **따로 읽어 채운다**(아래 조회에 컬럼을 끼우면 0270a 전엔 드래그가 전부 막힌다).
+   * undefined = 못 읽었다 → insert에서 칸을 뺀다(칸 없는 DB에 키를 실으면 insert가 실패한다).
+   */
+  lab_separate?: boolean;
 };
 
 export async function moveClassSlots(input: {
@@ -85,15 +91,26 @@ export async function moveClassSlots(input: {
   }
 
   const admin = createAdminClient();
-  const { data: rows, error: readErr } = await admin
-    .from("class_schedules")
-    .select(
-      "id, tenant_id, class_id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label, period_label, merge_group",
-    )
-    .in("id", moves.map((m) => m.slotId))
-    .eq("tenant_id", user.tenantId);
-  if (readErr) return { ok: false, error: "배치를 읽지 못했습니다. 잠시 후 다시 시도해 주세요" };
-  const byId = new Map<string, SlotRow>((rows ?? []).map((r) => [String(r.id), r as SlotRow]));
+  const [{ data: rows, error: readErr }, labLookup] = await Promise.all([
+    admin
+      .from("class_schedules")
+      .select(
+        "id, tenant_id, class_id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label, period_label, merge_group",
+      )
+      .in("id", moves.map((m) => m.slotId))
+      .eq("tenant_id", user.tenantId),
+    // 옮긴 LAB 교시가 '따로 수업(*LAB)' 표식을 잃지 않게 — 새 행·되돌리기 행 모두 이 값을 싣는다.
+    lookupLabSeparateIds(admin, { kind: "ids", ids: moves.map((m) => m.slotId), tenantId: user.tenantId }),
+  ]);
+  // 표식 조회 실패도 멈춘다 — 모른 채 옮기면 새 행이 기본값(false)으로 들어가 표식이 사라진다. 칸이 없으면(missing) 키를 뺀다.
+  if (readErr || labLookup === "error") return { ok: false, error: "배치를 읽지 못했습니다. 잠시 후 다시 시도해 주세요" };
+  const labIds = labLookup === "missing" ? null : labLookup.ids;
+  const byId = new Map<string, SlotRow>(
+    (rows ?? []).map((r) => {
+      const row = r as SlotRow;
+      return [String(r.id), labIds ? { ...row, lab_separate: labIds.has(String(r.id)) } : row];
+    }),
+  );
   if (byId.size !== moves.length) {
     return { ok: false, error: "옮길 배치를 찾지 못했습니다(이미 바뀌었을 수 있습니다). 화면을 새로 고쳐 주세요" };
   }
@@ -228,7 +245,13 @@ export async function moveClassSlots(input: {
           .eq("tenant_id", user.tenantId);
       } else {
         // 🔴 id를 그대로 되살린다 — 예약 스냅샷·감사로그가 그 id를 가리킨다.
-        await admin.from("class_schedules").insert(j.row);
+        const { error } = await admin.from("class_schedules").insert(j.row);
+        // 칸이 없거나 스키마 캐시가 늦어 실패했으면 **표식 없이** 한 번 더 — 행 보존이 표식 보존보다 먼저다(재리뷰 2026-09-17).
+        if (error && isMissingColumnError(error)) {
+          const withoutLab = { ...j.row };
+          delete withoutLab.lab_separate;
+          await admin.from("class_schedules").insert(withoutLab);
+        }
       }
     }
   };
@@ -254,6 +277,7 @@ export async function moveClassSlots(input: {
         // 교시 이름은 시각을 따라가지 못하므로 버린다(옛 `3교시` 라벨이 새 시각에 남으면 거짓이 된다).
         period_label: null,
         merge_group: row.merge_group,
+        ...(row.lab_separate === undefined ? {} : { lab_separate: row.lab_separate }),
       })
       .select("id")
       .single();

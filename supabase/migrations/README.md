@@ -172,5 +172,9 @@ pnpm db:seed
 
 | `0268a_class_textbook_plan_slots` | **반 교재 배정에 고른 교시 목록** — `class_textbook_plans.slot_starts text[]`(`"HH:MM"`). 0266a는 교시를 **축**(정규/JJ)으로 뭉뚱그렸는데 사람이 고르는 건 **시각**이고(원장 2026-09-16 *"16시 수업 클릭 17시 수업 클릭"*), 같은 반 같은 시각이라도 자리·수업이 섞여 축으론 "이 두 칸만"을 표현할 수 없었다. 값이 있으면 그 시각만 차수를 태운다. 🔴 `slot_axis`는 **안 지운다**(옛 배정·적용 전 코드가 그걸로 읽는다 — expand/contract). 🔴 시각은 `time[]`이 아니라 **`text[]`** — 앱·RPC·화면이 내내 `"HH:MM"` 5자로 슬롯을 가리킨다(`time`이면 PostgREST가 `16:20:00`을 줘 한 글자 차이로 어긋난다). CHECK는 **개수만**(1~12, `coalesce(array_length…,0)` — 안 감싸면 빈 배열이 NULL 비교로 통과한다); 형식은 쓰기 경로가 하나뿐이라(쓰기 정책 0개) 앱이 지킨다. ⚠️ 적용 전에도 조회는 **폴백**으로 살고(그 배정은 옛 축), 교시를 고른 **저장만** 한글로 거절한다 — 조용히 축으로 떨어뜨리면 고르지도 않은 교시에 차수가 깔린다([[#95]]). |
 
+| `0270a_class_schedules_lab_separate` | **LAB 교시 '따로 수업(*LAB)' 표식** — `class_schedules.lab_separate boolean not null default false`. 원장 2026-09-17 *"랩실 옆에 토글키를 두고 토글하게 되면 LAB -> *LAB 밑줄 + 이탤릭체"*(따로 수업듣는 학생 분리). 🔴 라벨을 `*LAB`으로 바꾸지 않고 칸을 새로 둔 이유: LAB 판정(`specialSlotLabel`) 소비처가 시수(돈)·출결·자리 출석부·가져오기·SQL까지 수십 곳이라 라벨을 바꾸면 LAB이 '사람'이 된다. 🔴 LAB 전용 CHECK는 **안 건다**(가져오기 RPC가 라벨만 바꾸는 경로에서 제약에 걸려 가져오기 전체가 실패한다 — 앱이 LAB일 때만 읽는다). ⚠️ 1단계는 **표시만**(명단·출결·시수는 안 본다). ⚠️ 앱은 기존 `class_schedules` 조회에 이 칸을 **끼우지 않고** 켜진 행 id만 따로 fail-soft로 읽는다(`loadLabSeparateIds`) — 적용 전에도 시간표·반 수정이 산다([[#95]]). |
+
+| `0270b_lab_separate_nullable_and_enrollment_flag` | **0270a 후속** — ① `class_schedules.lab_separate` **not null 해제**: 옛 영어 시간표 가져오기 되돌리기(`rollback_english_structure`)가 `jsonb_populate_record`로 칸 없던 스냅샷을 되살리면 NULL이 들어가 되돌리기 전체가 실패한다(적대적 리뷰 2026-09-17). 앱은 `.eq(true)`로만 읽고 쓸 땐 늘 명시하므로 NULL = 꺼짐. ② `enrollments.lab_separate boolean default false`(**nullable**, 같은 이유) — EiE 반 학생 줄 '*LAB 교시 배정'(원장 2026-09-17: 켠 학생은 LAB실 출석부의 *LAB 교시에만, 즉시 적용). ③ `notify pgrst, 'reload schema'`. |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
