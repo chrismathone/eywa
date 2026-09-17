@@ -121,19 +121,11 @@ export function buildGridSource(
    *    같은 칸이 반별 보기에선 그대로 입력 가능하다(#103: 되돌릴 문을 아예 막지는 않는다).
    */
   // 값 = 막는 사유 — `"seat"`는 자리(JJ·랩실) 기록뿐인 칸(사유 문장이 다르다, 원장 2026-09-12), true는 그 밖.
-  // `"day"` = 그 강사가 이 반을 수업하지 않는 날(강사 전체 보기, 원장 2026-09-17 *"담당하는 날만 표시"* — 판정은 조회 `ownDates`).
-  // ⚠️ 수업하는 날인데 제 교시 기록 없이 남의 기록만 있는 칸은 막지 않는다(같은 날 원장 *"내 출석부 상에서 자유롭게 숫자
-  //    설정만 하는거야"*) — 빈칸이고, 저장이 남의 행은 두고 제 교시 행을 만든다.
+  // ⚠️ **날짜로 막지 않는다** — 강사 보기도 모든 날짜 칸이 열려 있다(원장 2026-09-17 저녁 *"다른 요일도 보강 등으로 수업할 수
+  //    있으니까 숫자 입력가능하게"*). 수업요일 색만 `ownDates`로 갈린다(matrix-row).
   const notMine: Record<string, NotMineReason> = {};
   for (const g of groups) {
-    const ownDates = g.matrix.ownDates ? new Set(g.matrix.ownDates) : null;
     for (const s of g.matrix.students) {
-      if (ownDates) {
-        for (const date of cols) {
-          const key = cellKey(rowKey(g.classId, s.id), date);
-          if (!ownDates.has(date)) notMine[key] = "day";
-        }
-      }
       const marks = g.matrix.marks[s.id] ?? {};
       const units = g.matrix.units[s.id] ?? {};
       const slots = g.matrix.slots[s.id] ?? {};

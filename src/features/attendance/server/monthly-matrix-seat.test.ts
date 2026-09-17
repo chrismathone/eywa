@@ -201,15 +201,17 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     expect(homeroom.marks[h.S1]?.[WED]).toBe("present");
   });
 
-  it("사람 교시가 없는 날(시간표 밖 보강)은 담임 화면에만 선다 — 교시 담당 화면엔 없다", async () => {
+  // ⚠️ 2026-09-17 저녁(원장 *"다른 요일도 보강 등으로 수업할 수 있으니까 숫자 입력가능하게"*)부터 날짜로 거르지 않는다 —
+  //    교시를 안 남긴 기록(보강)은 어느 강사 화면에도 값으로 선다(수업요일 색만 갈린다).
+  it("사람 교시가 없는 날(시간표 밖 보강)의 기록은 교시 담당 화면에도 값으로 선다 — 수업요일(ownDates)에서만 빠진다", async () => {
     h.state.records = [rec("r-makeup", null, { session_date: FRI, status: "makeup" })];
     expect((await matrixForHomeroom()).marks[h.S1]?.[FRI]).toBe("makeup");
     const charlie = await matrixForCharlie();
     expect(charlie.ownDates).not.toContain(FRI);
-    expect(charlie.marks[h.S1]?.[FRI]).toBeUndefined();
+    expect(charlie.marks[h.S1]?.[FRI]).toBe("makeup");
   });
 
-  it("보강 예약 칸도 그 강사가 수업하는 날에만 선다", async () => {
+  it("보강 예약 칸은 수업요일이 아니어도 선다 — 그 날 보강을 이 표에서 찍는다(원장 2026-09-17 저녁)", async () => {
     h.state.schedules = [...SCHEDULES, WED_HOMEROOM];
     h.state.reservations = [
       {
@@ -226,7 +228,7 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
         createdBy: null,
       },
     ];
-    expect((await matrixForCharlie()).reservations?.[h.S1]?.[WED]).toBeUndefined();
+    expect((await matrixForCharlie()).reservations?.[h.S1]?.[WED]).toBeDefined();
     expect((await matrixForHomeroom()).reservations?.[h.S1]?.[WED]).toBeDefined();
   });
 
@@ -271,22 +273,45 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     expect(m.notes[h.S1]?.[D]).toBeUndefined();
   });
 
-  it("🔴 '다른 선생님 화면에도 같은 값' 표식(dayAxis)은 그날을 그리는 강사가 둘 이상일 때만", async () => {
-    // 목요일 = JJ + Charlie뿐 → 담임은 목요일을 안 그린다 → 교시 없는 기록이어도 Charlie 혼자다.
+  /**
+   * 🔴 표식은 **그 반을 그 달에 둘 이상이 맡나**로 센다(적대 리뷰 2026-09-17 저녁) — 모든 날짜 칸이 열린 뒤로는 교시 없는 기록이
+   *    어느 날에 찍혀도 그 반 다른 강사 화면에 같은 값으로 선다. '그날 그리는 강사 수'로 세면 보강 날에 표식이 꺼져 사실이 숨는다.
+   */
+  it("🔴 '다른 선생님 화면에도 같은 값' 표식(dayAxis) — 교시 없는 기록 + 그 반을 둘 이상이 맡으면 어느 날이든 선다", async () => {
     h.state.records = [rec("r-day", null)];
-    expect((await matrixForCharlie()).dayAxis[h.S1]?.[D]).toBeUndefined();
-    // 담임 교시가 같은 날 있으면 둘 다 그린다 → 표식.
-    h.state.schedules = [...SCHEDULES, THU_HOMEROOM];
+    // 목요일(Charlie 교시) · 수요일(담임 교시 — Charlie에겐 수업요일이 아니다) 둘 다 표식.
     expect((await matrixForCharlie()).dayAxis[h.S1]?.[D]).toBe(true);
+    h.state.schedules = [...SCHEDULES, WED_HOMEROOM];
+    h.state.records = [rec("r-day-wed", null, { session_date: WED })];
+    expect((await matrixForCharlie()).dayAxis[h.S1]?.[WED]).toBe(true);
+    // 그 반을 혼자 맡으면 표식이 없다(남의 화면에 뜰 일이 없다).
+    h.state.schedules = [{ ...THU_HOMEROOM, teacher_id: null }];
+    h.state.records = [rec("r-day2", null)];
+    expect((await matrixForHomeroom()).dayAxis[h.S1]?.[D]).toBeUndefined();
   });
 
-  it("🔴 담임이 아닌 반은 남의 날에만 온 보강 방문자를 명단에 안 세운다 — 담임 반은 종전대로(금액 합계 명단)", async () => {
+  /**
+   * 🔴 방문자는 **이 보기에 값으로 서는 기록**이 있을 때만 세운다(적대 리뷰 2026-09-17 저녁) — 날짜로 좁히면 보강을 찍을 칸이
+   *    없어지고(원장 지시), 안 좁히고 전부 세우면 값 없는 빈 줄이 서서 총원·출석률 분모가 커진다.
+   */
+  it("보강 방문자 — 교시 없는 기록(보강)은 어느 날이든 명단에, 남의 교시 기록뿐이면 그 화면엔 안 선다", async () => {
     const S2 = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
     h.state.schedules = [...SCHEDULES, WED_HOMEROOM];
-    h.state.records = [rec("r-visit", "17:20:00", { student_id: S2, session_date: WED, status: "makeup" })];
     h.state.students = [{ id: S2, name: "방문", grade: "중1", school: "대구중" }];
+    // ① 수요일(담임 교시)에 찍힌 **담임 몫** 기록 — 담임 화면엔 서고 Charlie 화면엔 안 선다.
+    h.state.records = [rec("r-visit", "15:20:00", { student_id: S2, session_date: WED, status: "makeup" })];
     expect((await matrixForCharlie()).students.map((st) => st.id)).not.toContain(S2);
     expect((await matrixForHomeroom()).students.map((st) => st.id)).toContain(S2);
+    // ② 교시 없는 보강 기록 — 누구 화면에도 선다(그 값이 양쪽 칸에 서기 때문).
+    h.state.records = [rec("r-visit2", null, { student_id: S2, session_date: WED, status: "makeup" })];
+    expect((await matrixForCharlie()).students.map((st) => st.id)).toContain(S2);
+    expect((await matrixForHomeroom()).students.map((st) => st.id)).toContain(S2);
+    // 🔴 ③ 담임 반은 좁히지 않는다 — 자리(JJ) 기록뿐인 방문자도 명단에 남는다(원장 전용 금액 합계의 재료, 적대 재리뷰 2026-09-17).
+    h.state.records = [
+      rec("r-visit3", "16:20:00", { student_id: S2, session_date: D, status: "makeup", recorded_via: "seat" }),
+    ];
+    expect((await matrixForHomeroom()).students.map((st) => st.id)).toContain(S2);
+    expect((await matrixForCharlie()).students.map((st) => st.id)).not.toContain(S2);
   });
 
   it("반별 보기(스코프 없음)는 종전 그대로 — 모든 날·모든 교시가 그 반의 값이고 ownDates가 없다", async () => {

@@ -1250,13 +1250,13 @@ export const SHEET_DICT = {
   "att.notice.scope.a": { ko: "칸 숫자는 ", en: "The number in each cell counts only " },
   "att.notice.scope.b": { ko: "이 선생님이 맡은 교시", en: "the periods this teacher takes" },
   "att.notice.scope.c": {
-    ko: "만 셉니다. 같은 반이라도 이 선생님이 수업하지 않는 날·다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체 숫자는 ",
-    en: ". Even in the same class, days this teacher doesn't teach, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use ",
+    ko: "만 셉니다. 같은 반이라도 다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 교시가 없는 기록(보강 등)은 그날 이 반을 맡은 선생님 모두에게 같은 값으로 잡힙니다 — 반 전체 숫자는 ",
+    en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. A record with no period (a makeup, say) counts for every teacher who takes this class that day — for the whole class, use ",
   },
   // 강사 계정용 — 그 계정은 반별 보기도 같은 렌즈라(원장 2026-09-17) "반 전체는 반별 보기에서"를 말하지 않는다.
   "att.notice.scope.cOwn": {
-    ko: "만 셉니다. 같은 반이라도 이 선생님이 수업하지 않는 날·다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 여기서 고쳐도 다른 선생님 기록은 바뀌지 않습니다.",
-    en: ". Even in the same class, days this teacher doesn't teach, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records.",
+    ko: "만 셉니다. 같은 반이라도 다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 여기서 고쳐도 다른 선생님 기록은 바뀌지 않습니다. 교시가 없는 기록(보강 등)은 그날 이 반을 맡은 선생님 모두에게 같은 값으로 잡힙니다.",
+    en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Editing here never changes another teacher's records. A record with no period (a makeup, say) counts for every teacher who takes this class that day.",
   },
   "att.notice.scope.d": { ko: "반별 보기", en: "the class view" },
   "att.notice.scope.e": { ko: "에서 봅니다.", en: " instead." },
@@ -1317,12 +1317,12 @@ export const SHEET_DICT = {
   "att.sort": { ko: "정렬", en: "Sort" },
   "att.sort.aria": { ko: "정렬 기준", en: "Sort by" },
   "att.scopeChip.title": {
-    ko: "이 선생님이 수업하는 날과 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체는 반별 보기에서 봅니다.",
-    en: "Only the days this teacher teaches and the periods they take are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use the class view.",
+    ko: "이 선생님이 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다. 색이 들어간 날이 원래 수업 요일이고, 다른 날에도 보강 출결을 넣을 수 있습니다 — 반 전체는 반별 보기에서 봅니다.",
+    en: "Only the periods this teacher takes are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals. Tinted days are the regular class days; makeup attendance can be entered on other days too — for the whole class, use the class view.",
   },
   "att.scopeChip.titleOwn": {
-    ko: "이 선생님이 수업하는 날과 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고, 여기서 고쳐도 바뀌지 않습니다.",
-    en: "Only the days this teacher teaches and the periods they take are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden, and editing here never changes them.",
+    ko: "이 선생님이 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고, 여기서 고쳐도 바뀌지 않습니다. 색이 들어간 날이 원래 수업 요일이고, 다른 날에도 보강 출결을 넣을 수 있습니다.",
+    en: "Only the periods this teacher takes are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and editing here never changes them. Tinted days are the regular class days; makeup attendance can be entered on other days too.",
   },
   "att.scopeChip": { ko: "칸 = 이 선생님 교시", en: "Cells = this teacher's periods" },
   "att.notices": { ko: "안내 {n}", en: "Notes {n}" },
@@ -1515,10 +1515,6 @@ export const SHEET_DICT = {
     en: "Entering here moves only the status onto that period's record (sessions unchanged, not counted in this table)",
   },
   // 🔴 강사 보기는 그 강사가 수업하는 날만 그린다(원장 2026-09-17 *"담당하지 않는 날은 표시할 이유도 없지"*) — 그 밖의 날 칸.
-  "att.lock.notOwnDay": {
-    ko: "이 선생님이 이 반을 수업하지 않는 날이라 선생님 출석부에서는 비워 둡니다 — 반 전체는 반별 보기에서 봅니다",
-    en: "This teacher doesn't teach this class on this day, so it stays empty in the teacher's register — see the class view for the whole class",
-  },
   // 🔴 자리(JJ·랩실) 기록뿐인 칸 — 강사 보기는 그 행을 안 쓴다(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지"*).
   "att.lock.seatOnly": {
     ko: "이 날은 자리(JJ·랩실) 기록뿐이라 선생님 출석부에서는 고치지 않습니다",

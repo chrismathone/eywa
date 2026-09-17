@@ -155,7 +155,7 @@ export function MatrixRow({
           derivedValue: !!matrix.derived[student.id]?.[d.date],
           others: otherSlots,
         });
-        // 강사 전체 보기에서 그 강사가 수업하지 않는 날 — 값·메모·예약이 서지 않고(조회가 안 싣는다) 입력도 막는다.
+        // 강사 보기에서 그 강사가 **원래 수업하는 날**이 아니다 — 수업요일 색만 빠진다(입력은 열려 있다, 원장 2026-09-17 저녁).
         const notOwnDay = !!ownDates && !ownDates.has(d.date);
         // 등원요일 = 그 학생이 실제로 오는 날(분리등원 반영) — 공휴일은 휴원이라 제외. 강사 보기는 그 강사가 수업하는 날만.
         const attend = attendDows.has(d.dow) && !holiday && !outside && !notOwnDay;
@@ -178,19 +178,14 @@ export function MatrixRow({
               /* 🔴 문장이 아니라 **사유 코드**만 넘긴다 — 잠긴 칸마다 157B 문장을 서버가 만들어
                  내려보내면 그게 그대로 RSC 페이로드 곱이 된다(강사 전체 보기는 잠긴 칸이 수천 개).
                  문장은 칸이 grid-context의 `lockNoteOf`로 편다(판정·문구는 그대로 한 곳). */
-              /* 🔴 강사 보기의 '수업하지 않는 날'이 7일 잠금보다 **먼저**다 — 7일이 지난 그 칸에 "기록이 없는
-                 날이라…"(7일 잠금 팝오버 문장)가 뜨면 사실이 아니다(남의 기록이 이 보기에 안 실렸을 뿐, 적대 재리뷰 2026-09-17).
-                 격자 입력 안내(grid-context `blockNoteOf`)도 같은 순서다. */
               lockedReason={
-                notOwnDay
-                  ? "notOwnDay"
-                  : lockBefore && d.date < lockBefore
-                    ? "past"
-                    : locked === "seatOnly"
-                      ? "seatOnly"
-                      : locked
-                        ? "notMine"
-                        : null
+                lockBefore && d.date < lockBefore
+                  ? "past"
+                  : locked === "seatOnly"
+                    ? "seatOnly"
+                    : locked
+                      ? "notMine"
+                      : null
               }
               derived={!!matrix.derived[student.id]?.[d.date]}
               daySlots={matrix.slots[student.id]?.[d.date]}

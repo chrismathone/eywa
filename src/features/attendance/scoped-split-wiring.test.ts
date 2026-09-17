@@ -129,14 +129,20 @@ describe("강사 보기 시수 배분 — 배선", () => {
     );
   });
 
-  it("🔴 그리는 날 판정은 한 함수(teachesClassOn) — 화면(queries)·저장(scope-ownership → 셀·범위 액션)이 같은 답(원장 2026-09-17)", () => {
-    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("teachesClassOn(");
-    expect(stripComments(read("features", "attendance", "scope-ownership.ts"))).toMatch(
-      /export function scopeTeachesOn[\s\S]{0,200}teachesClassOn\(/,
-    );
-    // 셀 저장(세 갈래 공통 문 scopeShareOf)과 범위 저장이 둘 다 거른다 — 화면만 막으면 만든 요청이 남의 날에 쓴다(#77).
-    expect(bodyOf(actions, "setAttendanceCell")).toContain("scopeTeachesOn(");
-    expect(bodyOf(actions, "setAttendanceRange")).toContain("scopeTeachesOn(");
+  /**
+   * 🔴 원장 2026-09-17 저녁 *"화요일은 원래 수업이라 이후에 관리자가 수정가능하고, 다른 요일도 보강 등으로 수업할 수 있으니까
+   *    숫자 입력가능하게"* — 같은 날 낮의 '수업하지 않는 날 잠금'을 걷었다. **날짜로 막는 판정을 되살리지 말 것**(보강이 막힌다).
+   *    수업요일은 색으로만 갈린다(`ownDates` → matrix-row).
+   */
+  it("🔴 날짜로 입력을 막지 않는다 — 저장 어느 갈래에도 '수업하는 날' 게이트가 없다(원장 2026-09-17 저녁)", () => {
+    const queries = stripComments(read("features", "attendance", "server", "queries.ts"));
+    // 수업요일 색의 근거(ownDates)는 그대로 — 판정은 축 단일 소스.
+    expect(queries).toContain("teachesClassOn(");
+    for (const fn of ["setAttendanceCell", "setAttendanceRange"]) {
+      expect(bodyOf(actions, fn), fn).not.toContain("scopeTeachesOn(");
+    }
+    expect(stripComments(read("features", "attendance", "scope-ownership.ts"))).not.toContain("scopeTeachesOn");
+    expect(stripComments(read("features", "attendance", "scoped-split.ts"))).not.toContain("NOT_OWN_DAY_MESSAGE");
   });
 
   it("🔴 메모만 저장도 강사 보기를 보낸다 — 자리 행에 사유가 달리지 않게(팝오버가 그 유일한 문)", () => {
