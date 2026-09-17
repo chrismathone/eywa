@@ -100,7 +100,7 @@ describe("copyValueOf", () => {
   });
 
   it("출석·결석은 그대로 복사", () => {
-    expect(copyValueOf({ s: "present", u: null })).toEqual({ status: "present", units: "" });
+    expect(copyValueOf({ s: "present", u: null })).toEqual({ status: "present", units: "1" });
     expect(copyValueOf({ s: "present", u: 1.5 })).toEqual({ status: "present", units: "1.5" });
     expect(copyValueOf({ s: "absent", u: null })).toEqual({ status: "absent", units: "" });
   });

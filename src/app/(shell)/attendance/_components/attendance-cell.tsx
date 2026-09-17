@@ -236,11 +236,6 @@ export function AttendanceCell({
   //    **방금 지운 내 메모**를 남의 기록으로 그린다. 새로고침(900ms) 뒤 서버가 빗금으로 다시 그린다
   //    (적대적 리뷰 2026-08-19와 같은 결).
   const ghost = initialStatus === null && !status && !!otherSlots?.length;
-  /**
-   * 이 칸을 고치면 **함께 바뀌는** 세지 않는 교시(= 다른 선생님 교시)와, 그러지 않는 자리(JJ·랩실) 수.
-   * 🔴 격자의 `alsoWrites`·팝오버 지우기 막힘과 **같은 함수**(`sharedOtherSlots`)로 센다 — 따로 세면 같은 칸이
-   *    표면마다 다른 건수를 말한다(원장 2026-09-12: 강사 보기 저장은 자리 행을 안 건드린다).
-   */
   const sharedOthers = sharedOtherSlots(otherSlots);
   const seatOthers = (otherSlots?.length ?? 0) - sharedOthers.length;
   /**
@@ -292,10 +287,6 @@ export function AttendanceCell({
       noteVal || ghostNote ? [t("att.tip.memo"), noteVal || ghostNote] : null,
     ],
     lines: [
-      // ⚠️ 값이 **있는** 칸(내 교시 + 남의 교시가 같은 날)은 고치면 **다른 선생님 교시**까지 함께 바뀐다
-      //    (저장은 그날 교시에 간다, save-targets ①). 숫자가 1이라 사정거리가 안 보이므로 여기서 말한다.
-      // 🔴 자리(JJ·랩실) 행은 함께 **안** 바뀌므로(원장 2026-09-12) 한 문장에 뭉치지 않고 "그대로"라고 따로 적는다.
-      status && sharedOthers.length > 0 ? tf("att.cell.alsoWrites", { n: sharedOthers.length }) : null,
       status && seatOthers > 0 ? t("att.cell.seatKept") : null,
       transfer && !locked ? t("att.cell.ghostTransfer") : null,
       // 회색 칸의 뜻을 말해 준다 — 색만 다르면 "왜 여기만 회색이지"로 끝난다.
@@ -328,6 +319,7 @@ export function AttendanceCell({
         ref={ref}
         data-cell-key={key}
         role="gridcell"
+        aria-selected={state.selected || state.active}
         tabIndex={state.active || isFirst ? 0 : -1}
         aria-label={`${sessionDate} ${
           status ? statusTextOf(status, lang) : reservedShown ? t("att.cell.reserved") : t("att.cell.unmarked")
@@ -337,9 +329,17 @@ export function AttendanceCell({
         {...tip}
         // 색이 갈린 교시가 섞인 날만 — 인라인 배경이 클래스 배경을 이긴다(글자색은 클래스 그대로).
         style={display.style}
+        onPointerDown={(e) => {
+          if (e.pointerType !== "mouse" || e.button !== 0) return;
+          if (e.target instanceof Element && e.target.closest('button,input,a,[role="button"]')) return;
+          ctx?.startSelection(e.pointerId);
+        }}
         onMouseDown={(e) => {
           if (e.button !== 0) return;
+          if (e.target instanceof Element && e.target.closest('button,input,a,[role="button"]')) return;
+          e.preventDefault();
           ctx?.selectCell(row, sessionDate, e.shiftKey);
+          if (state.active) e.currentTarget.focus({ preventScroll: true });
         }}
         // ⚠️ 이 칸 **안의 입력칸**이 포커스를 받아도 여기로 버블한다 — 이미 활성이면 손대지 않는다
         //    (안 그러면 타이핑을 시작하는 순간 버퍼가 확정돼 버린다).
@@ -481,10 +481,7 @@ export function AttendanceCell({
           units={units}
           note={noteVal || ghostNote}
           locked={locked ?? null}
-          /* 🔴 두 수는 뜻이 다르다 — `otherCount`는 "이 날 기록이 있나"(자리 포함: 빗금 칸 안내가 읽는다),
-             `sharedCount`는 "고치면 함께 바뀌나"(자리 제외 — 강사 보기 저장은 자리 행을 안 건드린다, 원장 2026-09-12). */
           otherCount={otherSlots?.length ?? 0}
-          sharedCount={initialStatus !== null ? sharedOthers.length : 0}
           anchor={popover}
           // 값이 찍힌 칸(결석 등)에서도 예약 정보·취소가 보여야 한다(서버는 `reserved`만 내려준다 — 이행되면 사라진다).
           reservation={reservation}

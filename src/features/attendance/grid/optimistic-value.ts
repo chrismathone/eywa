@@ -30,7 +30,7 @@ export function isRecordless(v: GridValue): boolean {
  *    서버가 넣을 **자동 시수**(원장 2026-09-11 *"그날 수업 길이로 자동"*).
  * ② 친 숫자는 그날 합계 그대로(원장 2026-09-01 *"입력된 숫자가 입력되도록"*) — 1은 null로 접는다
  *    (`parseSessionUnits`와 같은 정규화).
- * ③ 기본(빈칸·1)인데 교시가 여럿이면 "교시마다 1" → 그날 합은 교시 수(원장 확정).
+ * ③ 숫자를 입력하지 않은 기본값만 교시 수를 따른다. 명시한 1은 합계 1이다.
  */
 /**
  * 빗금 칸(`g`)에 상태를 옮길 때 칠할 **표시 전용** 값(원장 2026-09-14 *"그 날의 해당 담당 출석으로 전부 이전"*) — 서버는
@@ -62,5 +62,6 @@ export function optimisticGridValue(
   const raw = parsed.ok ? parsed.value : null;
   if (slotCount <= 1 || !COUNTABLE_STATUSES.has(v.status)) return { s: v.status, u: raw };
   if (raw !== null) return { s: v.status, u: raw };
+  if (parsed.ok && !isDefaultUnitsRaw(v.units)) return { s: v.status, u: null };
   return { s: v.status, u: slotCount };
 }

@@ -713,6 +713,7 @@ export async function setAttendanceCell(input: {
   };
   /** 판정기 → "이 행이 자리(JJ·랩실)인가" — `splitOutSeatRows`에 넘긴다. */
   const seatOf = (share: ScopeShare) => (r: DayTargetRow) => share(classId, sessionDate, r) === "seat";
+  const ownerOf = (share: ScopeShare) => (r: DayTargetRow) => share(classId, sessionDate, r) === "mine";
 
   if (noteOnly) {
     let rowId: string | null = null;
@@ -721,11 +722,11 @@ export async function setAttendanceCell(input: {
     if (scopeTeacherId) {
       /**
        * 🔴 강사 보기의 메모(잠긴 칸) — 자리(JJ·랩실) 행에 달지 않는다(원장 2026-09-12). 종전 규약("그날 가장 최근 행")
-       *    그대로 고르되 자리 행만 건너뛴다 — 다른 선생님 교시 행은 종전대로 후보다.
+       *    본인 교시가 있으면 그 교시의 메모만 고친다.
        */
       const day = await loadScopedDay(scopeTeacherId);
       if ("error" in day) return day;
-      const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share));
+      const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share), ownerOf(day.share));
       // 그날 행이 자리 행뿐 = 강사 보기의 자리뿐인 빗금 칸 — 격자와 같은 문장(자리 사유)으로 거절한다.
       if (write.length === 0 && seat.length > 0) return { error: SCOPED_REJECT_MESSAGE.seatOnly };
       // 🔴 고칠 행 = 화면이 그 메모를 보여 준 행(교시별 최신 중 제 몫 → 남의 교시, 사유 있는 메모 우선 — 조회와 같은 규칙).
@@ -813,7 +814,7 @@ export async function setAttendanceCell(input: {
       /**
        * 🔴 강사 보기의 지우기 — **자리(JJ·랩실) 행은 남긴다**(원장 2026-09-12). (반·학생·날짜)로 칸을 통째로 지우면
        *    자리 담당이 JJ실에서 찍은 기록까지 사라진다. 그래서 그날 행(정정 이력 포함)을 받아 **자리 아닌 행만** id로 지운다.
-       * ⚠️ 다른 선생님 교시 행은 종전대로 함께 지운다 — 섞인 칸의 지우기를 막는 문은 화면(`sharedBlock`)이다.
+       * 본인 교시만 지우므로 다른 교시가 있는 칸도 이 화면에서 지울 수 있다.
        * ⚠️ 제 몫 행이 하나도 없는 칸(빗금 칸)의 지우기는 쓰기와 **같은 판정**(`planScopedDay`)으로 거절한다 — 자리뿐이면
        *    자리 사유, 다른 선생님 교시 기록이면 남의 기록 삭제라서(원장 2026-09-14 기본값 — 입력만 열고 지우기는 막는다).
        */
@@ -827,7 +828,7 @@ export async function setAttendanceCell(input: {
         clearing: true,
       });
       if (plan.kind === "reject") return { error: SCOPED_REJECT_MESSAGE[plan.reason] };
-      const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share));
+      const { write, seat } = splitOutSeatRows(day.rows, seatOf(day.share), ownerOf(day.share));
       skippedSeatRows = seat.length;
       if (write.length > 0) {
         const { error } = await supabase
@@ -919,7 +920,9 @@ export async function setAttendanceCell(input: {
    * ⚠️ 빗금 칸 거절(noneOwned)은 아래에서 **원래 대상**(`updateIds`)으로 판정한다 — 여기서 먼저 빼 버리면
    *    자리 행만 있는 칸이 "행 없음"이 되어 새 행을 만든다(`splitOutSeatRows` 주석).
    */
-  const { write: writeTargets, seat: seatTargets } = splitOutSeatRows(dayTargets, share ? seatOf(share) : null);
+  const { write: writeTargets, seat: seatTargets } = splitOutSeatRows(
+    dayTargets, share ? seatOf(share) : null, share ? ownerOf(share) : null,
+  );
   /**
    * 🔴 빗금 칸 입력(원장 2026-09-14 *"그냥 그 날의 해당 담당 출석으로 전부 이전시켜. 다른 사람이 대신 찍었어도."*) — 제 몫
    *    행이 없고 다른 선생님 교시 행이 있으면 그 행들에 **상태만** 쓴다(시수 불변 · 메모 끝에 `대신 입력` 한 줄). 자리뿐이면 거절.
@@ -995,11 +998,10 @@ export async function setAttendanceCell(input: {
      *    → 교시별로 **나눠 담아** 합이 정확히 친 숫자가 되게 한다(배분 규칙 = `planDayCellUnits` 한 곳, 범위 저장도 같은 함수).
      * 🔴 **강사 전체 보기에서 온 저장은 그 강사 몫 행에만 나눈다**(원장 제보 2026-09-11 *"새로고침하면 강제로
      *    어떤 숫자로 롤백"*) — 그 보기의 칸은 제 몫 교시의 합만 보여 주는데, 그날 모든 교시(자리 JJ·다른
-     *    선생님)에 나누면 다시 읽을 때 숫자가 준다(4 → 2.7). **다른 선생님 교시 행**은 시수를 그대로 두고
-     *    상태만 받고, **자리(JJ·랩실) 행은 아예 안 쓴다**(원장 2026-09-12 — 위 `writeIds`).
+     *    선생님)에 나누면 다시 읽을 때 숫자가 준다(4 → 2.7). 상태·시수·메모 모두 본인 교시만 받는다.
      * ⚠️ 나누는 건 **그날 칸(slot === null)일 때뿐**이다. 교시를 지정한 저장(ECS)의 대상 2건은
      *    "그 교시 + 옛 day-level 행"이라 **같은 한 수업**이다 — 거기서 나누면 진짜로 반이 된다.
-     * ⚠️ 빈칸·"1"(unitsVal === null)은 "교시마다 기본"이라는 뜻이라 종전 그대로 둔다(원장 확정).
+     * 명시한 "1"도 합계 1로 배분한다. 숫자를 입력하지 않은 기본값만 교시별 기본을 쓴다.
      */
     let dayPlan: DayUnitsPlan | null = null;
     // 빗금 칸 입력은 시수 계획이 없다(상태만 — 원장 결정 ①). 나누면 남의 교시 시수를 이 표 몫처럼 덮어쓴다.
@@ -1008,7 +1010,7 @@ export async function setAttendanceCell(input: {
       dayPlan = planDayCellUnits({
         targets: dayTargets,
         owns: share ? (r) => share(classId, sessionDate, r) === "mine" : null,
-        unitsVal: unitsProvided ? unitsVal : undefined,
+        unitsVal: unitsProvided ? unitsVal ?? (isDefaultUnitsRaw(input.units) ? null : 1) : undefined,
       });
       if (!dayPlan.ok) {
         // 강사 보기에서 그 강사 몫 행이 없다 = 화면의 빗금 칸 — 격자가 하는 말과 같은 문장으로 거절한다.
@@ -1043,7 +1045,7 @@ export async function setAttendanceCell(input: {
           units: (rowById.get(id)?.session_units as number | null | undefined) ?? null,
         })),
         status,
-        unitsVal,
+        unitsVal: slot === null ? unitsVal ?? (isDefaultUnitsRaw(input.units) ? null : 1) : unitsVal,
         spread: slot === null ? "split" : "each",
       });
     }
@@ -2097,7 +2099,7 @@ export async function setAttendanceRange(input: {
   if (status === null) {
     /**
      * 🔴 강사 보기의 지우기는 **자리(JJ·랩실) 행을 남긴다**(원장 2026-09-12) — 그 행은 자리 출석부(JJ실)의 진실이다.
-     *    다른 선생님 교시 행은 종전대로 함께 지운다(막는 문은 화면 `sharedBlock`). 빗금 칸은 채우기와 같은 문장으로 건너뛴다.
+     *    본인 교시만 삭제한다. 빗금 칸은 채우기와 같은 문장으로 건너뛴다.
      * ⚠️ 이력 행까지 지우므로 대상은 `cellSlotRows`(교시별 최신)가 아니라 **그 칸의 모든 행**이다.
      */
     const rowsByCell = new Map<string, typeof mine>();
@@ -2114,7 +2116,7 @@ export async function setAttendanceRange(input: {
         rejected[plan.reason] += 1;
         return false;
       }
-      const { write, seat } = splitOutSeatRows(rowsByCell.get(cellKeyOf(c)) ?? [], seatOf(c));
+      const { write, seat } = splitOutSeatRows(rowsByCell.get(cellKeyOf(c)) ?? [], seatOf(c), ownerOf(c));
       for (const r of write) ids.push(r.id);
       skippedSeatRows += seat.length;
       return true;
@@ -2185,7 +2187,7 @@ export async function setAttendanceRange(input: {
     const plan = planDayCellUnits({
       targets,
       owns: ownerOf(c),
-      unitsVal: unitsProvided ? unitsVal : undefined,
+      unitsVal: unitsProvided ? unitsVal ?? (isDefaultUnitsRaw(input.units) ? null : 1) : undefined,
     });
     if (!plan.ok && plan.reason === "noneOwned") {
       noneOwned += 1;
@@ -2210,7 +2212,7 @@ export async function setAttendanceRange(input: {
     const k = cellKeyOf(c);
     const targets = cellSlotRows.get(k);
     if (!targets) continue;
-    const { write, seat } = splitOutSeatRows(targets, seatOf(c));
+    const { write, seat } = splitOutSeatRows(targets, seatOf(c), ownerOf(c));
     writeIdsOf.set(
       k,
       write.map((r) => r.id),
@@ -2231,7 +2233,7 @@ export async function setAttendanceRange(input: {
     /**
      * 🔴 명시한 시수는 **그날 합계**다(원장 2026-09-01 확정) — 교시가 여럿인 칸은 나눠 담는다.
      *    단건 저장(setAttendanceCell)과 **같은 규칙**(`planDayCellUnits`)이어야 타이핑과 붙여넣기가 다른 숫자를 남기지 않는다.
-     * ⚠️ 빈칸·"1"(unitsVal === null)은 종전대로 "교시마다 기본".
+     * 명시한 1은 합계 1이고, 숫자를 입력하지 않은 기본값만 교시별 기본이다.
      * ⚠️ 교시당 0.1도 안 되게 쪼개야 하는 칸(`indivisible`)은 **시수만 건드리지 않는다**(상태는 넣는다) — 범위 작업은
      *    수십 칸을 한 번에 다루므로 한 칸 때문에 전부 거절하면 더 나쁘다. 값을 지어내지도 않는다.
      * ⚠️ 강사 보기에서 온 칸의 **남의 교시 행**(자리 JJ·다른 선생님)도 시수를 그대로 두고 상태만 받는다.
@@ -2359,7 +2361,7 @@ export async function setAttendanceRange(input: {
       const changed = unitsAuditFields({
         rows: cellRows as { status: string; units: number | null }[],
         status,
-        unitsVal,
+        unitsVal: unitsVal ?? (isDefaultUnitsRaw(input.units) ? null : 1),
         // 범위는 그날 칸만 다룬다(교시 지정이 없다) — 셀 저장의 그날 칸 갈래와 같은 규약.
         spread: "split",
       });

@@ -58,7 +58,6 @@ export function CellPopover({
   note,
   locked,
   otherCount = 0,
-  sharedCount = 0,
   anchor,
   reservation = null,
   onReserve,
@@ -87,16 +86,6 @@ export function CellPopover({
    * 0보다 크면 그 날 기록은 **있다**(남의 교시 것). 이걸 안 보면 아래 안내가 사실과 반대로 나간다.
    */
   otherCount?: number;
-  /**
-   * 이 칸을 고치면 **함께 바뀌는 다른 선생님 교시 기록 수**(0 = 없음) — 격자의 `alsoWrites`와 같은 정의
-   * (서버가 준 값이 있고 + 이 표가 안 세는 교시 중 자리가 아닌 것, `sharedOtherSlots`). 0보다 크면 지우기를 닫는다
-   * — 지우면 그 기록까지 사라진다. 자리(JJ·랩실) 행은 세지 않는다: 강사 보기 저장은 그 행을 안 건드린다(원장 2026-09-12).
-   *
-   * 🔴 격자에만 가드를 걸면 이 팝오버가 그 가드를 통째로 우회한다 — 여긴 서버 액션을 **직접** 부른다.
-   *    한 레코드의 모든 표면이 같은 게이트를 통과해야 한다(#77). 잠금(7일)과 달리 이 규칙은
-   *    `locked`로 표현되지 않아(값이 있는 칸이라 편집은 열려 있다) 따로 받는다.
-   */
-  sharedCount?: number;
   anchor: PopoverAnchor;
   onClose: () => void;
   /**
@@ -124,7 +113,9 @@ export function CellPopover({
   const lang = useSheetLang();
   const t = useSheetT();
   const tf = useSheetTf();
-  const [unitsDraft, setUnitsDraft] = useState(units !== null && units !== 1 ? String(units) : "");
+  const [unitsDraft, setUnitsDraft] = useState(
+    (recordedProp ?? status !== null) ? String(units ?? 1) : units !== null ? String(units) : "",
+  );
   /**
    * 🔴 **빈 칸**에서 시수를 비운 채 저장하면 서버가 수학 자동 시수(수업 길이, auto-units.ts)를 넣는다 —
    *    그 값을 기본값으로 보여 주고 격자에도 같은 숫자로 칠한다(보이는 기본값 = 저장될 값).
@@ -441,7 +432,7 @@ export function CellPopover({
                 {t("att.pop.save")}
               </button>
             </div>
-            {status && sharedCount === 0 ? (
+            {status ? (
               <button
                 type="button"
                 onClick={() => apply(null, false)}
@@ -449,15 +440,6 @@ export function CellPopover({
               >
                 {t("att.pop.clear")}
               </button>
-            ) : null}
-            {/* 🔴 사정거리도 격자와 **같은 말**로 알린다 — 저장은 교시를 못 가려 그날 **다른 선생님 교시**에도 가고,
-                지우기는 그 행까지 없앤다(그래서 저장은 열고 지우기만 닫는다). 자리(JJ·랩실) 행은 서버가 남기므로
-                이 셈에 안 든다(원장 2026-09-12) — 자리만 섞인 칸에선 지우기가 그대로 열려 있다. */}
-            {status && sharedCount > 0 ? (
-              <p className="text-text-dim border-t px-2 py-1 text-xs leading-tight break-keep">
-                {tf("att.pop.sharedWarn.a", { n: sharedCount })}
-                {t("att.pop.sharedWarn.b")}
-              </p>
             ) : null}
           </>
         )}

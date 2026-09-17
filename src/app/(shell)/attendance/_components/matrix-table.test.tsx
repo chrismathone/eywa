@@ -91,6 +91,64 @@ function renderTable() {
   );
 }
 
+describe("마우스 드래그 범위 선택", () => {
+  function renderEditable() {
+    const m = { ...GROUP.matrix, marks: { [S3]: { [DAYS[1]!.date]: "present" as const } } };
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = m.students.map((s) => ({ classId: C, studentId: s.id }));
+    const src = buildGridSource(groups, DAYS, ordered);
+    return render(
+      <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
+      </GridProvider>,
+    );
+  }
+
+  it("드래그한 사각형에 복사한 1을 한 번에 붙여넣고, 놓은 뒤에는 선택이 유지된다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    const { container } = renderEditable();
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[5]!, { button: 0 });
+    fireEvent.keyDown(cells[5]!, { key: "c", ctrlKey: true });
+    fireEvent.pointerDown(cells[0]!, { pointerType: "mouse", pointerId: 1, button: 0 });
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(cells[3]!);
+    try {
+      fireEvent.pointerMove(document, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 200, clientY: 160 });
+      expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(4);
+      fireEvent.pointerUp(document, { pointerType: "mouse", pointerId: 1 });
+      hit.mockReturnValue(cells[5]!);
+      fireEvent.pointerMove(document, { pointerType: "mouse", pointerId: 1, buttons: 1 });
+      expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(4);
+      fireEvent.keyDown(cells[0]!, { key: "v", ctrlKey: true });
+      await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]).toMatchObject({
+        units: "1", status: "present",
+        cells: [
+          { classId: C, studentId: S1, sessionDate: DAYS[0]!.date },
+          { classId: C, studentId: S1, sessionDate: DAYS[1]!.date },
+          { classId: C, studentId: S2, sessionDate: DAYS[0]!.date },
+          { classId: C, studentId: S2, sessionDate: DAYS[1]!.date },
+        ],
+      });
+      expect(container.querySelector(".cursor-grab")).toBeNull();
+    } finally { hit.mockRestore(); }
+  });
+
+  it("터치 드래그는 선택 영역을 만들지 않고 기본 스크롤에 맡긴다", () => {
+    renderEditable();
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(cells[3]!);
+    try {
+      fireEvent.pointerDown(cells[0]!, { pointerType: "touch", pointerId: 2, button: 0 });
+      fireEvent.pointerMove(document, { pointerType: "touch", pointerId: 2, buttons: 1 });
+      expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(1);
+    } finally { hit.mockRestore(); }
+  });
+});
+
 describe("학교·학년 오른쪽 반별 청구액", () => {
   it.each([true, false])("반별 정렬=%s에서도 금액·0원·미확정을 구분한다", (showGroups) => {
     const { container } = render(
@@ -166,7 +224,6 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={lockBefore}
       >
         {/* 잠금은 GridProvider와 MatrixTable **둘 다에** 넘긴다(page.tsx와 같은 배선 — matrix-lock.test.tsx 주석). */}
@@ -588,7 +645,6 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={null}
       >
         <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
@@ -596,7 +652,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     );
   }
 
-  it("🔴 섞인 칸의 **단건 Delete는 막는다** — 지우면 남의 교시·JJ 기록까지 함께 사라진다", async () => {
+  it("다른 교시 기록이 있어도 본인 칸은 지울 수 있다", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
     const { container } = renderInGrid(
@@ -609,9 +665,8 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const cell = cellOf(container);
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "Delete" });
-    // 저장(삭제) 액션이 아예 안 나가야 한다 — 나가면 그날 행이 통째로 지워진다(저장에 교시 축이 없다).
-    expect(setAttendanceCell).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("반별 보기에서 지우세요");
+    expect(setAttendanceCell).toHaveBeenCalledWith(expect.objectContaining({ status: null }));
+    expect(container.textContent).not.toContain("반별 보기에서 지우세요");
   });
 
   it("🔴 막는 빗금 칸(자리뿐)은 숫자를 쳐도 **버퍼가 안 열린다** — 열면 값이 보였다가 확정에서 거절돼 '쳤는데 사라졌다'가 된다", async () => {
@@ -626,7 +681,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(container.textContent).toContain("자리(JJ·랩실) 기록뿐");
   });
 
-  it("섞인 칸에 값을 쓰는 건 막지 않는다 — 대신 사정거리를 알린다", async () => {
+  it("본인 값을 수정할 때 다른 선생님 경고를 띄우지 않는다", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
     const { container } = renderInGrid(
@@ -638,10 +693,10 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.keyDown(cell, { key: "0" }); // 결석
     fireEvent.keyDown(cell, { key: "Enter" });
     expect(setAttendanceCell).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("함께 바뀝니다");
+    expect(container.textContent).not.toContain("함께 바뀝니다");
   });
 
-  it("🔴 **범위 Delete도** 섞인 칸을 지우지 않는다 — 1칸은 거절, 2칸은 실행이면 모순이다", async () => {
+  it("여러 날짜의 본인 칸도 한 번에 지울 수 있다", async () => {
     const actions = await import("@/features/attendance/server/actions");
     vi.mocked(actions.setAttendanceCell).mockClear();
     vi.mocked(actions.setAttendanceRange).mockClear();
@@ -654,9 +709,9 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "ArrowRight", shiftKey: true });
     fireEvent.keyDown(cell, { key: "Delete" });
-    expect(actions.setAttendanceRange).not.toHaveBeenCalled();
+    expect(actions.setAttendanceRange).toHaveBeenCalledWith(expect.objectContaining({ status: null }));
     expect(actions.setAttendanceCell).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("다른 교시 기록이 함께 있어");
+    expect(container.textContent).not.toContain("다른 교시 기록이 함께 있어");
   });
 
   it("🔴 앵커가 빗금이어도 **범위 입력은 죽지 않는다** — 함께 잡은 정상 칸엔 들어가야 한다", async () => {
@@ -675,20 +730,20 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(container.textContent).toContain("건너뛰었습니다");
   });
 
-  it("🔴 팝오버 '지우기'도 **같은 게이트**를 지난다 — 격자만 막으면 여기로 새어 나간다(#77)", () => {
+  it("팝오버에서도 본인 칸 지우기를 제공한다", () => {
     const { container } = renderInGrid(
       [{ slot: "17:20:00", status: "present", units: null }],
       [{ slot: "18:20:00", status: "present", units: null }],
     );
     fireEvent.contextMenu(cellOf(container)); // 우클릭 = 상세 팝오버
     expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.queryByText("지우기")).toBeNull();
-    expect(container.textContent).toContain("반별 보기에서 지우세요");
+    expect(screen.getByRole("button", { name: "지우기" })).toBeEnabled();
+    expect(container.textContent).not.toContain("반별 보기에서 지우세요");
     // 저장은 열려 있으므로 **사정거리**도 격자와 같은 말로 알려야 한다(닫은 건 지우기 하나뿐).
-    expect(container.textContent).toContain("함께 바뀝니다");
+    expect(container.textContent).not.toContain("함께 바뀝니다");
   });
 
-  it("🔴 범위 Delete가 섞인 칸을 뺐으면 **말해 준다** — 조용히 빠지면 다 지운 줄 안다", async () => {
+  it("범위 지우기는 다른 교시가 있어도 선택한 본인 칸을 모두 보낸다", async () => {
     const actions = await import("@/features/attendance/server/actions");
     vi.mocked(actions.setAttendanceRange).mockClear();
     const D2 = "2026-07-02";
@@ -715,7 +770,6 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={null}
       >
         <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
@@ -726,9 +780,8 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.keyDown(first, { key: "ArrowRight", shiftKey: true });
     fireEvent.keyDown(first, { key: "ArrowDown", shiftKey: true });
     fireEvent.keyDown(first, { key: "Delete" });
-    // 섞인 칸 1개는 빠지고 나머지 3칸만 지운다 — 그리고 그 사실을 알린다.
-    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]!.cells).toHaveLength(3);
-    await waitFor(() => expect(container.textContent).toContain("안 지웠습니다"));
+    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]!.cells).toHaveLength(4);
+    await waitFor(() => expect(container.textContent).not.toContain("안 지웠습니다"));
   });
 
   it("세지 않는 교시가 없으면 종전 그대로(빗금 없음)", () => {
@@ -763,7 +816,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(title).not.toContain("함께 바뀝니다");
   });
 
-  it("🔴 섞인 칸의 건수는 자리를 뺀 수 — 다른 선생님 교시 1건 + 자리 1건이면 '1건'", () => {
+  it("본인 기록을 지울 때 다른 교시 건수를 경고하지 않는다", () => {
     const { container } = renderInGrid(
       [{ slot: "17:20:00", status: "present", units: null }],
       [{ slot: "18:20:00", status: "present", units: null }, seatGhost("16:20:00")],
@@ -771,7 +824,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const cell = cellOf(container);
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "Delete" });
-    expect(container.textContent).toContain("다른 선생님 교시 기록 1건");
+    expect(container.textContent).not.toContain("다른 선생님 교시 기록 1건");
   });
 
   /**
@@ -798,7 +851,6 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={null}
       >
         <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
